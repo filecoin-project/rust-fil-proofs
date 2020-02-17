@@ -6,8 +6,8 @@ use anyhow::{ensure, Context, Result};
 use bincode::{deserialize, serialize};
 use log::info;
 use memmap::MmapOptions;
-use merkletree::merkle::{get_merkle_tree_leafs, MerkleTree};
-use merkletree::store::{DiskStore, Store, StoreConfig, DEFAULT_CACHED_ABOVE_BASE_LAYER};
+use merkletree::merkle::get_merkle_tree_leafs;
+use merkletree::store::{DiskStore, Store, StoreConfig};
 use paired::bls12_381::{Bls12, Fr};
 use storage_proofs::circuit::multi_proof::MultiProof;
 use storage_proofs::circuit::stacked::StackedCompound;
@@ -15,7 +15,7 @@ use storage_proofs::compound_proof::{self, CompoundProof};
 use storage_proofs::drgraph::Graph;
 use storage_proofs::hasher::{Domain, Hasher};
 use storage_proofs::measurements::{measure_op, Operation::CommD};
-use storage_proofs::merkle::create_merkle_tree;
+use storage_proofs::merkle::{create_merkle_tree, BinaryMerkleTree};
 use storage_proofs::proof::ProofScheme;
 use storage_proofs::sector::SectorId;
 use storage_proofs::stacked::{
@@ -160,6 +160,8 @@ where
 {
     info!("seal_pre_commit_phase2: start");
 
+    let sector_bytes = usize::from(PaddedBytesAmount::from(porep_config));
+
     let SealPreCommitPhase1Output {
         mut labels,
         config,
@@ -186,7 +188,7 @@ where
         let config = StoreConfig::new(
             cache_path.as_ref(),
             CacheKey::CommDTree.to_string(),
-            DEFAULT_CACHED_ABOVE_BASE_LAYER,
+            StoreConfig::default_cached_above_base_layer(sector_bytes, BINARY_ARITY),
         );
 
         let tree_size =
@@ -195,7 +197,7 @@ where
 
         let store: DiskStore<<DefaultPieceHasher as Hasher>::Domain> =
             DiskStore::new_from_disk(tree_size, BINARY_ARITY, &config)?;
-        MerkleTree::from_data_store(store, tree_leafs)
+        BinaryMerkleTree::from_data_store(store, tree_leafs)
     }?;
 
     let compound_setup_params = compound_proof::SetupParams {

@@ -328,7 +328,7 @@ mod tests {
     use storage_proofs::fr32::bytes_into_fr;
     use tempfile::NamedTempFile;
 
-    use crate::constants::{POREP_PARTITIONS, SECTOR_SIZE_ONE_KIB, SINGLE_PARTITION_PROOF_LEN};
+    use crate::constants::{POREP_PARTITIONS, SECTOR_SIZE_2_KIB, SINGLE_PARTITION_PROOF_LEN};
     use crate::types::{PoStConfig, SectorSize};
 
     static INIT_LOGGER: Once = Once::new();
@@ -351,12 +351,12 @@ mod tests {
         {
             let result = verify_seal(
                 PoRepConfig {
-                    sector_size: SectorSize(SECTOR_SIZE_ONE_KIB),
+                    sector_size: SectorSize(SECTOR_SIZE_2_KIB),
                     partitions: PoRepProofPartitions(
                         *POREP_PARTITIONS
                             .read()
                             .unwrap()
-                            .get(&SECTOR_SIZE_ONE_KIB)
+                            .get(&SECTOR_SIZE_2_KIB)
                             .unwrap(),
                     ),
                 },
@@ -385,12 +385,12 @@ mod tests {
         {
             let result = verify_seal(
                 PoRepConfig {
-                    sector_size: SectorSize(SECTOR_SIZE_ONE_KIB),
+                    sector_size: SectorSize(SECTOR_SIZE_2_KIB),
                     partitions: PoRepProofPartitions(
                         *POREP_PARTITIONS
                             .read()
                             .unwrap()
-                            .get(&SECTOR_SIZE_ONE_KIB)
+                            .get(&SECTOR_SIZE_2_KIB)
                             .unwrap(),
                     ),
                 },
@@ -439,7 +439,7 @@ mod tests {
 
         let result = verify_post(
             PoStConfig {
-                sector_size: SectorSize(SECTOR_SIZE_ONE_KIB),
+                sector_size: SectorSize(SECTOR_SIZE_2_KIB),
                 challenge_count: crate::constants::POST_CHALLENGE_COUNT,
                 challenged_nodes: crate::constants::POST_CHALLENGED_NODES,
             },
@@ -471,7 +471,7 @@ mod tests {
 
         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
 
-        let sector_size = SECTOR_SIZE_ONE_KIB;
+        let sector_size = SECTOR_SIZE_2_KIB;
 
         let number_of_bytes_in_piece =
             UnpaddedBytesAmount::from(PaddedBytesAmount(sector_size.clone()));

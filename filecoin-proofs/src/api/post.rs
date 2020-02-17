@@ -17,6 +17,7 @@ use storage_proofs::election_post;
 pub use storage_proofs::election_post::Candidate;
 use storage_proofs::fr32::bytes_into_fr;
 use storage_proofs::hasher::Hasher;
+use storage_proofs::merkle::QuadLCMerkleTree;
 use storage_proofs::proof::NoRequirements;
 use storage_proofs::sector::*;
 use storage_proofs::stacked::CacheKey;
@@ -107,8 +108,7 @@ impl PrivateReplicaInfo {
 
         let tree_r_last_store: LevelCacheStore<<DefaultTreeHasher as Hasher>::Domain, _> =
             LevelCacheStore::new_from_disk(tree_size, QUAD_ARITY, &config)?;
-        let tree_r_last: LCTree =
-            merkletree::merkle::MerkleTree::from_data_store(tree_r_last_store, tree_leafs)?;
+        let tree_r_last = QuadLCMerkleTree::from_data_store(tree_r_last_store, tree_leafs)?;
 
         Ok(tree_r_last)
     }

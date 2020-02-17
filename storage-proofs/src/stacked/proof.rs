@@ -23,9 +23,9 @@ use crate::stacked::{
     column::Column,
     graph::StackedBucketGraph,
     params::{
-        self, get_node, BinaryTree, CacheKey, Labels, LabelsCache, PersistentAux, Proof,
-        PublicInputs, PublicParams, ReplicaColumnProof, Tau, TemporaryAux, TemporaryAuxCache,
-        TransformedLayers,
+        get_node, BinaryTree, CacheKey, Labels, LabelsCache, PersistentAux, Proof, PublicInputs,
+        PublicParams, ReplicaColumnProof, Tau, TemporaryAux, TemporaryAuxCache, TransformedLayers,
+        BINARY_ARITY, QUAD_ARITY,
     },
     EncodingProof, LabelingProof,
 };
@@ -301,7 +301,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
             // Construct and persist the layer data.
             let layer_store: DiskStore<H::Domain> = DiskStore::new_from_slice_with_config(
                 graph.size(),
-                params::QUAD_ARITY,
+                QUAD_ARITY,
                 &layer_labels,
                 layer_config.clone(),
             )?;
@@ -392,12 +392,30 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
 
         // Generate all store configs that we need based on the
         // cache_path in the specified config.
-        let mut tree_d_config =
-            StoreConfig::from_config(&config, CacheKey::CommDTree.to_string(), None);
-        let mut tree_r_last_config =
-            StoreConfig::from_config(&config, CacheKey::CommRLastTree.to_string(), None);
-        let mut tree_c_config =
-            StoreConfig::from_config(&config, CacheKey::CommCTree.to_string(), None);
+        let mut tree_d_config = StoreConfig::from_config(
+            &config,
+            CacheKey::CommDTree.to_string(),
+            Some(StoreConfig::default_cached_above_base_layer(
+                data.len(),
+                BINARY_ARITY,
+            )),
+        );
+        let mut tree_r_last_config = StoreConfig::from_config(
+            &config,
+            CacheKey::CommRLastTree.to_string(),
+            Some(StoreConfig::default_cached_above_base_layer(
+                data.len(),
+                QUAD_ARITY,
+            )),
+        );
+        let mut tree_c_config = StoreConfig::from_config(
+            &config,
+            CacheKey::CommCTree.to_string(),
+            Some(StoreConfig::default_cached_above_base_layer(
+                data.len(),
+                QUAD_ARITY,
+            )),
+        );
 
         let labels = LabelsCache::new(&label_configs)?;
 
