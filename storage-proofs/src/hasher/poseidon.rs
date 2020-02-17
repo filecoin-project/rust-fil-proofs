@@ -3,8 +3,8 @@ use std::hash::Hasher as StdHasher;
 use crate::crypto::{create_label, sloth};
 use crate::error::{Error, Result};
 use crate::hasher::types::{
-    PoseidonEngine, POSEIDON_CONSTANTS_1, POSEIDON_CONSTANTS_2, POSEIDON_CONSTANTS_4,
-    POSEIDON_CONSTANTS_8,
+    PoseidonArity, PoseidonEngine, POSEIDON_CONSTANTS_1, POSEIDON_CONSTANTS_2,
+    POSEIDON_CONSTANTS_4, POSEIDON_CONSTANTS_8,
 };
 use crate::hasher::{Domain, HashFunction, Hasher};
 use anyhow::ensure;
@@ -282,9 +282,7 @@ impl HashFunction<PoseidonDomain> for PoseidonFunction {
         _params: &E::Params,
     ) -> ::std::result::Result<num::AllocatedNum<E>, SynthesisError>
     where
-        Arity: typenum::Unsigned
-            + std::ops::Add<typenum::B1>
-            + std::ops::Add<typenum::UInt<typenum::UTerm, typenum::B1>>,
+        Arity: PoseidonArity<E>,
         typenum::Add1<Arity>: generic_array::ArrayLength<E::Fr>,
     {
         let params = E::PARAMETERS();

@@ -20,7 +20,7 @@ use crate::drgraph;
 use crate::election_post::{self, ElectionPoSt};
 use crate::error::Result;
 use crate::fr32::fr_into_bytes;
-use crate::hasher::{HashFunction, Hasher, PoseidonEngine};
+use crate::hasher::{HashFunction, Hasher, PoseidonArity, PoseidonEngine};
 use crate::merklepor;
 use crate::parameter_cache::{CacheableParameters, ParameterSetMetadata};
 use crate::proof::ProofScheme;
@@ -194,6 +194,8 @@ impl<
         E: JubjubEngine + PoseidonEngine<typenum::U4> + PoseidonEngine<typenum::U2>,
         H: Hasher,
     > Circuit<E> for ElectionPoStCircuit<'a, E, H>
+where
+    typenum::U4: PoseidonArity<E>,
 {
     fn synthesize<CS: ConstraintSystem<E>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
         let params = self.params;

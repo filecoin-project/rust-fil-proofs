@@ -15,7 +15,7 @@ use crate::compound_proof::{CircuitComponent, CompoundProof};
 use crate::crypto::pedersen::JJ_PARAMS;
 use crate::drgraph::graph_height;
 use crate::error::Result;
-use crate::hasher::{HashFunction, Hasher, PoseidonEngine};
+use crate::hasher::{HashFunction, Hasher, PoseidonArity, PoseidonEngine};
 use crate::merklepor::MerklePoR;
 use crate::parameter_cache::{CacheableParameters, ParameterSetMetadata};
 use crate::proof::ProofScheme;
@@ -31,10 +31,7 @@ use crate::proof::ProofScheme;
 ///
 pub struct PoRCircuit<'a, U, E: JubjubEngine + PoseidonEngine<U>, H: Hasher>
 where
-    U: 'static
-        + typenum::Unsigned
-        + std::ops::Add<typenum::B1>
-        + std::ops::Add<typenum::UInt<typenum::UTerm, typenum::B1>>,
+    U: 'static + PoseidonArity<E>,
     typenum::Add1<U>: generic_array::ArrayLength<E::Fr>,
 {
     params: &'a E::Params,
@@ -50,9 +47,7 @@ where
 impl<'a, U, E: JubjubEngine + PoseidonEngine<U>, H: Hasher> CircuitComponent
     for PoRCircuit<'a, U, E, H>
 where
-    U: typenum::Unsigned
-        + std::ops::Add<typenum::B1>
-        + std::ops::Add<typenum::UInt<typenum::UTerm, typenum::B1>>,
+    U: PoseidonArity<E>,
     typenum::Add1<U>: generic_array::ArrayLength<E::Fr>,
 {
     type ComponentPrivateInputs = Option<Root<E>>;
@@ -102,13 +97,7 @@ impl<'a, H, U> CompoundProof<'a, Bls12, MerklePoR<H, U>, PoRCircuit<'a, U, Bls12
     for PoRCompound<H, U>
 where
     H: 'a + Hasher,
-    U: 'a
-        + Clone
-        + Sync
-        + Send
-        + typenum::Unsigned
-        + std::ops::Add<typenum::B1>
-        + std::ops::Add<typenum::UInt<typenum::UTerm, typenum::B1>>,
+    U: 'a + PoseidonArity<Bls12>,
     Bls12: PoseidonEngine<U>,
     typenum::Add1<U>: generic_array::ArrayLength<Fr>,
 {
@@ -181,9 +170,7 @@ where
 
 impl<'a, U, E: JubjubEngine + PoseidonEngine<U>, H: Hasher> Circuit<E> for PoRCircuit<'a, U, E, H>
 where
-    U: typenum::Unsigned
-        + std::ops::Add<typenum::B1>
-        + std::ops::Add<typenum::UInt<typenum::UTerm, typenum::B1>>,
+    U: PoseidonArity<E>,
     typenum::Add1<U>: generic_array::ArrayLength<E::Fr>,
 {
     /// # Public Inputs
@@ -277,10 +264,7 @@ where
 
 impl<'a, U, E: JubjubEngine + PoseidonEngine<U>, H: Hasher> PoRCircuit<'a, U, E, H>
 where
-    U: 'static
-        + typenum::Unsigned
-        + std::ops::Add<typenum::B1>
-        + std::ops::Add<typenum::UInt<typenum::UTerm, typenum::B1>>,
+    U: 'static + PoseidonArity<E>,
     typenum::Add1<U>: generic_array::ArrayLength<E::Fr>,
 {
     #[allow(clippy::type_complexity)]
@@ -465,13 +449,7 @@ mod tests {
 
     fn test_por_input_circuit_with_bls12_381<H: Hasher, U>(num_constraints: usize)
     where
-        U: typenum::Unsigned
-            + 'static
-            + Sync
-            + Send
-            + Clone
-            + std::ops::Add<typenum::B1>
-            + std::ops::Add<typenum::UInt<typenum::UTerm, typenum::B1>>,
+        U: 'static + PoseidonArity<Bls12>,
         Bls12: PoseidonEngine<U>,
         typenum::Add1<U>: generic_array::ArrayLength<Fr>,
     {
@@ -597,13 +575,7 @@ mod tests {
 
     fn private_por_test_compound<H: Hasher, U>()
     where
-        U: typenum::Unsigned
-            + 'static
-            + Sync
-            + Send
-            + Clone
-            + std::ops::Add<typenum::B1>
-            + std::ops::Add<typenum::UInt<typenum::UTerm, typenum::B1>>,
+        U: 'static + PoseidonArity<Bls12>,
         Bls12: PoseidonEngine<U>,
         typenum::Add1<U>: generic_array::ArrayLength<Fr>,
     {
@@ -728,13 +700,7 @@ mod tests {
 
     fn test_private_por_input_circuit_with_bls12_381<H: Hasher, U>(num_constraints: usize)
     where
-        U: typenum::Unsigned
-            + 'static
-            + Sync
-            + Send
-            + Clone
-            + std::ops::Add<typenum::B1>
-            + std::ops::Add<typenum::UInt<typenum::UTerm, typenum::B1>>,
+        U: 'static + PoseidonArity<Bls12>,
         Bls12: PoseidonEngine<U>,
         typenum::Add1<U>: generic_array::ArrayLength<Fr>,
     {

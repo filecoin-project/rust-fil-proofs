@@ -155,7 +155,7 @@ pub trait HashFunction<T: Domain>:
     }
 
     fn hash_multi_leaf_circuit<
-        Arity: 'static,
+        Arity: 'static + PoseidonArity<E>,
         E: JubjubEngine + PoseidonEngine<Arity>,
         CS: ConstraintSystem<E>,
     >(
@@ -165,9 +165,6 @@ pub trait HashFunction<T: Domain>:
         params: &E::Params,
     ) -> std::result::Result<num::AllocatedNum<E>, SynthesisError>
     where
-        Arity: typenum::Unsigned
-            + std::ops::Add<typenum::B1>
-            + std::ops::Add<typenum::UInt<typenum::UTerm, typenum::B1>>,
         typenum::Add1<Arity>: generic_array::ArrayLength<E::Fr>;
 
     fn hash_leaf_bits_circuit<E: JubjubEngine, CS: ConstraintSystem<E>>(

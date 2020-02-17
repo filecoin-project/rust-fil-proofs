@@ -148,9 +148,7 @@ impl<H: Hasher, G: Hasher> From<VanillaProof<H, G>> for Proof<H, G> {
 #[derive(Debug, Clone)]
 pub struct InclusionPath<E: Engine, H: Hasher, U>
 where
-    U: typenum::Unsigned
-        + std::ops::Add<typenum::B1>
-        + std::ops::Add<typenum::UInt<typenum::UTerm, typenum::B1>>,
+    U: PoseidonArity<E>,
     typenum::Add1<U>: generic_array::ArrayLength<E::Fr>,
 {
     value: Option<Fr>,
@@ -162,10 +160,7 @@ where
 
 impl<U, H: Hasher> InclusionPath<Bls12, H, U>
 where
-    U: 'static
-        + typenum::Unsigned
-        + std::ops::Add<typenum::B1>
-        + std::ops::Add<typenum::UInt<typenum::UTerm, typenum::B1>>,
+    U: 'static + PoseidonArity<Bls12>,
     Bls12: PoseidonEngine<U>,
     typenum::Add1<U>: generic_array::ArrayLength<Fr>,
 {
