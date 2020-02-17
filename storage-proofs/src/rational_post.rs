@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use crate::drgraph::graph_height;
 use crate::error::{Error, Result};
 use crate::hasher::{Domain, HashFunction, Hasher};
-use crate::merkle::{MerkleProof, QuadMerkleTree};
+use crate::merkle::{BinaryMerkleTree, MerkleProof};
 use crate::parameter_cache::ParameterSetMetadata;
 use crate::proof::{NoRequirements, ProofScheme};
 use crate::sector::*;
@@ -56,7 +56,7 @@ pub struct PublicInputs<'a, T: 'a + Domain> {
 
 #[derive(Debug, Clone)]
 pub struct PrivateInputs<'a, H: 'a + Hasher> {
-    pub trees: &'a BTreeMap<SectorId, &'a QuadMerkleTree<H::Domain, H::Function>>,
+    pub trees: &'a BTreeMap<SectorId, &'a BinaryMerkleTree<H::Domain, H::Function>>,
     pub comm_cs: &'a [H::Domain],
     pub comm_r_lasts: &'a [H::Domain],
 }
@@ -64,10 +64,10 @@ pub struct PrivateInputs<'a, H: 'a + Hasher> {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Proof<H: Hasher> {
     #[serde(bound(
-        serialize = "MerkleProof<H, typenum::U4>: Serialize",
-        deserialize = "MerkleProof<H, typenum::U4>: Deserialize<'de>"
+        serialize = "MerkleProof<H, typenum::U2>: Serialize",
+        deserialize = "MerkleProof<H, typenum::U2>: Deserialize<'de>"
     ))]
-    inclusion_proofs: Vec<MerkleProof<H, typenum::U4>>,
+    inclusion_proofs: Vec<MerkleProof<H, typenum::U2>>,
     pub comm_cs: Vec<H::Domain>,
 }
 
@@ -199,7 +199,7 @@ impl<'a, H: 'a + Hasher> ProofScheme<'a> for RationalPoSt<'a, H> {
 
             // validate the path length
             let expected_path_length =
-                graph_height::<typenum::U4>(pub_params.sector_size as usize / NODE_SIZE) - 1;
+                graph_height::<typenum::U2>(pub_params.sector_size as usize / NODE_SIZE) - 1;
 
             if expected_path_length != merkle_proof.path().len() {
                 return Ok(false);
@@ -435,7 +435,7 @@ mod tests {
             .collect();
 
         let graph = BucketGraph::<H>::new(leaves, BASE_DEGREE, 0, new_seed()).unwrap();
-        let tree: QuadMerkleTree<_, _> = graph.merkle_tree(None, data.as_slice()).unwrap();
+        let tree: BinaryMerkleTree<_, _> = graph.merkle_tree(None, data.as_slice()).unwrap();
         let seed = (0..leaves).map(|_| rng.gen()).collect::<Vec<u8>>();
 
         let faults = OrderedSectorSet::new();
@@ -463,8 +463,8 @@ mod tests {
 
         let bad_proof = Proof {
             inclusion_proofs: vec![
-                make_bogus_proof::<H, typenum::U4>(&pub_inputs, rng),
-                make_bogus_proof::<H, typenum::U4>(&pub_inputs, rng),
+                make_bogus_proof::<H, typenum::U2>(&pub_inputs, rng),
+                make_bogus_proof::<H, typenum::U2>(&pub_inputs, rng),
             ],
             comm_cs,
         };

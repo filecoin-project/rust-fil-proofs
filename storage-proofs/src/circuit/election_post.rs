@@ -361,26 +361,26 @@ mod tests {
 
     #[test]
     fn test_election_post_circuit_pedersen() {
-        test_election_post_circuit::<PedersenHasher>(333_750);
+        test_election_post_circuit::<PedersenHasher>(279_570);
     }
 
     #[test]
     fn test_election_post_circuit_poseidon() {
-        test_election_post_circuit::<PoseidonHasher>(143_805);
+        test_election_post_circuit::<PoseidonHasher>(67_785);
     }
 
     fn test_election_post_circuit<H: Hasher>(expected_constraints: usize) {
         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
 
-        let leaves = 32;
-        let sector_size = leaves * 32;
+        let leaves = 64;
+        let sector_size = leaves * NODE_SIZE;
 
         let randomness: [u8; 32] = rng.gen();
         let prover_id: [u8; 32] = rng.gen();
 
         let pub_params = election_post::PublicParams {
-            sector_size,
-            challenge_count: 40,
+            sector_size: sector_size as u64,
+            challenge_count: 20,
             challenged_nodes: 1,
         };
 
@@ -402,7 +402,7 @@ mod tests {
                 .flat_map(|_| fr_into_bytes::<Bls12>(&Fr::random(rng)))
                 .collect();
 
-            let graph = BucketGraph::<H>::new(32, BASE_DEGREE, 0, new_seed()).unwrap();
+            let graph = BucketGraph::<H>::new(leaves, BASE_DEGREE, 0, new_seed()).unwrap();
 
             let cur_config =
                 StoreConfig::from_config(&config, format!("test-lc-tree-v1-{}", i), None);
@@ -497,7 +497,7 @@ mod tests {
 
         assert!(cs.is_satisfied(), "constraints not satisfied");
 
-        assert_eq!(cs.num_inputs(), 43, "wrong number of inputs");
+        assert_eq!(cs.num_inputs(), 23, "wrong number of inputs");
         assert_eq!(
             cs.num_constraints(),
             expected_constraints,
@@ -538,15 +538,15 @@ mod tests {
     fn election_post_test_compound<H: Hasher>() {
         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
 
-        let leaves = 32;
-        let sector_size = leaves * 32;
+        let leaves = 64;
+        let sector_size = (leaves * NODE_SIZE) as u64;
         let randomness: [u8; 32] = rng.gen();
         let prover_id: [u8; 32] = rng.gen();
 
         let setup_params = compound_proof::SetupParams {
             vanilla_params: election_post::SetupParams {
                 sector_size,
-                challenge_count: 40,
+                challenge_count: 20,
                 challenged_nodes: 1,
             },
             partitions: None,

@@ -307,8 +307,8 @@ mod tests {
     fn test_rational_post_circuit<H: Hasher>(expected_constraints: usize) {
         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
 
-        let leaves = 16;
-        let sector_size = leaves as u64 * 32;
+        let leaves = 32;
+        let sector_size = (leaves * NODE_SIZE) as u64;
         let challenges_count = 2;
 
         let pub_params = rational_post::PublicParams {
@@ -324,10 +324,14 @@ mod tests {
             .collect();
 
         let graph1 = BucketGraph::<H>::new(leaves, BASE_DEGREE, 0, new_seed()).unwrap();
-        let tree1 = graph1.merkle_tree(None, data1.as_slice()).unwrap();
+        let tree1 = graph1
+            .merkle_tree::<typenum::U2>(None, data1.as_slice())
+            .unwrap();
 
         let graph2 = BucketGraph::<H>::new(leaves, BASE_DEGREE, 0, new_seed()).unwrap();
-        let tree2 = graph2.merkle_tree(None, data2.as_slice()).unwrap();
+        let tree2 = graph2
+            .merkle_tree::<typenum::U2>(None, data2.as_slice())
+            .unwrap();
 
         let faults = OrderedSectorSet::new();
         let mut sectors = OrderedSectorSet::new();
@@ -451,8 +455,8 @@ mod tests {
     fn rational_post_test_compound<H: Hasher>() {
         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
 
-        let leaves = 16;
-        let sector_size = leaves as u64 * 32;
+        let leaves = 32;
+        let sector_size = (leaves * NODE_SIZE) as u64;
         let challenges_count = 2;
 
         let setup_params = compound_proof::SetupParams {

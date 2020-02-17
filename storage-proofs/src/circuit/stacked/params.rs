@@ -202,8 +202,6 @@ where
         root: num::AllocatedNum<Bls12>,
         leaf: num::AllocatedNum<Bls12>,
     ) -> Result<(), SynthesisError> {
-        assert_eq!(U::to_usize(), 2, "only binary trees are supported atm");
-
         let InclusionPath { auth_path, .. } = self;
 
         let root = Root::from_allocated::<CS>(root);
