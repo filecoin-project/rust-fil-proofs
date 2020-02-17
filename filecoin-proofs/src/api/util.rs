@@ -23,9 +23,7 @@ pub(crate) fn commitment_from_fr<E: Engine>(fr: E::Fr) -> Commitment {
     commitment
 }
 
-pub(crate) fn get_tree_size<D: Domain>(sector_size: SectorSize) -> usize {
-    let sector_size = u64::from(sector_size);
-    let elems = sector_size as usize / D::byte_len();
-
-    2 * elems - 1
+pub(crate) fn get_tree_size<D: Domain>(sector_size: SectorSize, arity: usize) -> usize {
+    let leafs = u64::from(sector_size) as usize / D::byte_len();
+    merkletree::merkle::get_merkle_tree_len(leafs, arity)
 }

@@ -215,7 +215,8 @@ pub fn generate_candidates(
     unique_challenged_replicas.sort_unstable(); // dedup requires a sorted list
     unique_challenged_replicas.dedup();
 
-    let tree_size = get_tree_size::<<DefaultTreeHasher as Hasher>::Domain>(post_config.sector_size);
+    let tree_size =
+        get_tree_size::<<DefaultTreeHasher as Hasher>::Domain>(post_config.sector_size, QUAD_ARITY);
     let tree_leafs = get_merkle_tree_leafs(tree_size, QUAD_ARITY);
 
     let unique_trees_res: Vec<_> = unique_challenged_replicas
@@ -303,7 +304,8 @@ pub fn generate_post(
         ElectionPoStCompound::setup(&setup_params)?;
     let groth_params = get_post_params(post_config)?;
 
-    let tree_size = get_tree_size::<<DefaultTreeHasher as Hasher>::Domain>(post_config.sector_size);
+    let tree_size =
+        get_tree_size::<<DefaultTreeHasher as Hasher>::Domain>(post_config.sector_size, QUAD_ARITY);
     let tree_leafs = get_merkle_tree_leafs(tree_size, QUAD_ARITY);
 
     let mut proofs = Vec::with_capacity(winners.len());

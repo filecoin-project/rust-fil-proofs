@@ -104,8 +104,10 @@ where
 
     info!("building merkle tree for the original data");
     let (config, comm_d) = measure_op(CommD, || -> Result<_> {
-        let tree_size =
-            get_tree_size::<<DefaultPieceHasher as Hasher>::Domain>(porep_config.sector_size);
+        let tree_size = get_tree_size::<<DefaultPieceHasher as Hasher>::Domain>(
+            porep_config.sector_size,
+            BINARY_ARITY,
+        );
         let tree_leafs = get_merkle_tree_leafs(tree_size, BINARY_ARITY);
         ensure!(
             compound_public_params.vanilla_params.graph.size() == tree_leafs,
@@ -200,8 +202,10 @@ where
 
     // Load data tree from disk
     let data_tree = {
-        let tree_size =
-            get_tree_size::<<DefaultPieceHasher as Hasher>::Domain>(porep_config.sector_size);
+        let tree_size = get_tree_size::<<DefaultPieceHasher as Hasher>::Domain>(
+            porep_config.sector_size,
+            BINARY_ARITY,
+        );
         let tree_leafs = get_merkle_tree_leafs(tree_size, BINARY_ARITY);
 
         trace!(
