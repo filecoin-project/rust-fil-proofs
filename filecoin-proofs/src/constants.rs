@@ -5,7 +5,7 @@ use lazy_static::lazy_static;
 use storage_proofs::hasher::Hasher;
 use storage_proofs::util::NODE_SIZE;
 
-use crate::param::ParameterMap;
+use crate::param::{ParameterData, ParameterMap};
 use crate::types::UnpaddedBytesAmount;
 
 pub const SECTOR_SIZE_2_KIB: u64 = 2_048;
@@ -77,3 +77,16 @@ pub type DefaultPieceDomain = <DefaultPieceHasher as Hasher>::Domain;
 /// The default hasher for merkle trees currently in use.
 pub type DefaultTreeHasher = storage_proofs::hasher::PoseidonHasher;
 pub type DefaultTreeDomain = <DefaultTreeHasher as Hasher>::Domain;
+
+/// Get the correct parameter data for a given cache id.
+pub fn get_parameter_data(cache_id: &str) -> Option<&ParameterData> {
+    PARAMETERS.get(&parameter_id(cache_id))
+}
+
+fn parameter_id(cache_id: &str) -> String {
+    format!(
+        "v{}-{}.params",
+        storage_proofs::parameter_cache::VERSION,
+        cache_id
+    )
+}
