@@ -209,7 +209,7 @@ fn generate_candidate<H: Hasher>(
     .into();
 
     // ticket = sha256(partial_ticket)
-    let ticket = finalize_ticket(&partial_ticket.into());
+    let ticket = finalize_ticket(&partial_ticket);
 
     Ok(Candidate {
         sector_challenge_index,

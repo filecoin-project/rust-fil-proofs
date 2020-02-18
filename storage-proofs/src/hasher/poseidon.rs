@@ -336,7 +336,7 @@ impl HashFunction<PoseidonDomain> for PoseidonFunction {
                 preimage[i + 1] = elt.clone();
             }
             // any terminal padding
-            #[deny(clippy::needless_range_loop)]
+            #[allow(clippy::needless_range_loop)]
             for i in (elts.len() + 1)..arity {
                 preimage[i] =
                     num::AllocatedNum::alloc(cs.namespace(|| format!("padding {}", i)), || {
@@ -627,6 +627,5 @@ mod tests {
         assert_eq!(expected_constraints, actual_constraints);
 
         assert_eq!(hashed_fr, circuit_hashed.get_value().unwrap());
-        panic!();
     }
 }
