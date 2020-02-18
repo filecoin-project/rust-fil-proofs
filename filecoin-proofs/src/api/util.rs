@@ -7,7 +7,7 @@ use storage_proofs::hasher::Domain;
 use crate::types::{Commitment, SectorSize};
 
 pub(crate) fn as_safe_commitment<H: Domain, T: AsRef<str>>(
-    comm: &Commitment,
+    comm: &[u8; 32],
     commitment_name: T,
 ) -> Result<H> {
     bytes_into_fr::<Bls12>(comm)

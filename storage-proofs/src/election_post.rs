@@ -11,12 +11,14 @@ use paired::bls12_381::{Bls12, Fr};
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
+use typenum::Unsigned;
 
-use crate::crypto::pedersen::{pedersen_md_no_padding_bits, Bits};
 use crate::drgraph::graph_height;
 use crate::error::{Error, Result};
 use crate::fr32::fr_into_bytes;
-use crate::hasher::{Domain, HashFunction, Hasher};
+use crate::hasher::{
+    Domain, HashFunction, Hasher, PoseidonDomain, PoseidonFunction, PoseidonMDArity,
+};
 use crate::measurements::{measure_op, Operation};
 use crate::merkle::{MerkleProof, QuadLCMerkleTree};
 use crate::parameter_cache::ParameterSetMetadata;
@@ -58,9 +60,9 @@ impl ParameterSetMetadata for PublicParams {
 
 #[derive(Debug, Clone)]
 pub struct PublicInputs<T: Domain> {
-    pub randomness: [u8; 32],
+    pub randomness: T,
     pub sector_id: SectorId,
-    pub prover_id: [u8; 32],
+    pub prover_id: T,
     pub comm_r: T,
     pub partial_ticket: Fr,
     pub sector_challenge_index: u64,
@@ -144,8 +146,8 @@ pub fn generate_candidates<H: Hasher>(
     pub_params: &PublicParams,
     challenged_sectors: &[SectorId],
     trees: &BTreeMap<SectorId, QuadLCMerkleTree<H::Domain, H::Function>>,
-    prover_id: &[u8; 32],
-    randomness: &[u8; 32],
+    prover_id: H::Domain,
+    randomness: H::Domain,
 ) -> Result<Vec<Candidate>> {
     challenged_sectors
         .par_iter()
@@ -171,44 +173,43 @@ pub fn generate_candidates<H: Hasher>(
 fn generate_candidate<H: Hasher>(
     pub_params: &PublicParams,
     tree: &QuadLCMerkleTree<H::Domain, H::Function>,
-    prover_id: &[u8; 32],
+    prover_id: H::Domain,
     sector_id: SectorId,
-    randomness: &[u8; 32],
+    randomness: H::Domain,
     sector_challenge_index: u64,
 ) -> Result<Candidate> {
-    // 1. read the data for each challenge
-    let mut data = vec![0u8; pub_params.challenge_count * pub_params.challenged_nodes * NODE_SIZE];
+    let randomness_fr: Fr = randomness.into();
+    let prover_id_fr: Fr = prover_id.into();
+    let mut data: Vec<PoseidonDomain> = vec![
+        randomness_fr.into(),
+        prover_id_fr.into(),
+        Fr::from(sector_id).into(),
+    ];
+
     for n in 0..pub_params.challenge_count {
-        let challenge_start =
+        let challenge =
             generate_leaf_challenge(pub_params, randomness, sector_challenge_index, n as u64)?;
 
-        let start = challenge_start as usize;
-        let end = start + pub_params.challenged_nodes;
-
-        measure_op(Operation::PostReadChallengedRange, || {
-            tree.read_range_into(
-                start,
-                end,
-                &mut data[n * pub_params.challenged_nodes * NODE_SIZE
-                    ..(n + 1) * pub_params.challenged_nodes * NODE_SIZE],
-            )
-        })?;
+        let val: Fr = measure_op(Operation::PostReadChallengedRange, || {
+            tree.read_at(challenge as usize)
+        })?
+        .into();
+        data.push(val.into());
     }
 
-    // 2. Ticket generation
+    // pad for md
+    let arity = PoseidonMDArity::to_usize();
+    while data.len() % arity != 0 {
+        data.push(PoseidonDomain::default());
+    }
 
-    // partial_ticket = pedersen(randomness | data | prover_id | sector_id)
-    let mut sector_id_bytes = [0u8; 32];
-    sector_id_bytes[..8].copy_from_slice(&u64::from(sector_id).to_le_bytes()[..]);
-    let list: [&[u8]; 4] = [&randomness[..], &prover_id[..], &sector_id_bytes[..], &data];
-    let bits = Bits::new_many(list.iter());
-
-    let partial_ticket = measure_op(Operation::PostPartialTicketHash, || {
-        pedersen_md_no_padding_bits(bits)
-    });
+    let partial_ticket: Fr = measure_op(Operation::PostPartialTicketHash, || {
+        PoseidonFunction::hash_md(&data)
+    })
+    .into();
 
     // ticket = sha256(partial_ticket)
-    let ticket = finalize_ticket(&partial_ticket);
+    let ticket = finalize_ticket(&partial_ticket.into());
 
     Ok(Candidate {
         sector_challenge_index,
@@ -230,8 +231,8 @@ pub fn is_valid_sector_challenge_index(challenge_count: u64, index: u64) -> bool
     index < challenge_count
 }
 
-pub fn generate_sector_challenges(
-    randomness: &[u8; 32],
+pub fn generate_sector_challenges<T: Domain>(
+    randomness: T,
     challenge_count: u64,
     sectors: &OrderedSectorSet,
 ) -> Result<Vec<SectorId>> {
@@ -241,13 +242,13 @@ pub fn generate_sector_challenges(
         .collect()
 }
 
-pub fn generate_sector_challenge(
-    randomness: &[u8; 32],
+pub fn generate_sector_challenge<T: Domain>(
+    randomness: T,
     n: usize,
     sectors: &OrderedSectorSet,
 ) -> Result<SectorId> {
     let mut hasher = Sha256::new();
-    hasher.input(&randomness[..]);
+    hasher.input(AsRef::<[u8]>::as_ref(&randomness));
     hasher.input(&n.to_le_bytes()[..]);
     let hash = hasher.result();
 
@@ -262,9 +263,9 @@ pub fn generate_sector_challenge(
 }
 
 /// Generate all challenged leaf ranges for a single sector, such that the range fits into the sector.
-pub fn generate_leaf_challenges(
+pub fn generate_leaf_challenges<T: Domain>(
     pub_params: &PublicParams,
-    randomness: &[u8; 32],
+    randomness: T,
     sector_challenge_index: u64,
     challenge_count: usize,
 ) -> Result<Vec<u64>> {
@@ -284,9 +285,9 @@ pub fn generate_leaf_challenges(
 }
 
 /// Generates challenge, such that the range fits into the sector.
-pub fn generate_leaf_challenge(
+pub fn generate_leaf_challenge<T: Domain>(
     pub_params: &PublicParams,
-    randomness: &[u8; 32],
+    randomness: T,
     sector_challenge_index: u64,
     leaf_challenge_index: u64,
 ) -> Result<u64> {
@@ -297,7 +298,7 @@ pub fn generate_leaf_challenge(
     );
 
     let mut hasher = Sha256::new();
-    hasher.input(&randomness[..]);
+    hasher.input(AsRef::<[u8]>::as_ref(&randomness));
     hasher.input(&sector_challenge_index.to_le_bytes()[..]);
     hasher.input(&leaf_challenge_index.to_le_bytes()[..]);
     let hash = hasher.result();
@@ -348,7 +349,7 @@ impl<'a, H: 'a + Hasher> ProofScheme<'a> for ElectionPoSt<'a, H> {
                     // TODO: replace unwrap with proper error handling
                     let challenged_leaf_start = generate_leaf_challenge(
                         pub_params,
-                        &pub_inputs.randomness,
+                        pub_inputs.randomness,
                         pub_inputs.sector_challenge_index,
                         n as u64,
                     )
@@ -400,7 +401,7 @@ impl<'a, H: 'a + Hasher> ProofScheme<'a> for ElectionPoSt<'a, H> {
         for n in 0..pub_params.challenge_count {
             let challenged_leaf_start = generate_leaf_challenge(
                 pub_params,
-                &pub_inputs.randomness,
+                pub_inputs.randomness,
                 pub_inputs.sector_challenge_index,
                 n as u64,
             )?;
@@ -434,7 +435,7 @@ mod tests {
     use super::*;
     use ff::Field;
     use paired::bls12_381::{Bls12, Fr};
-    use rand::{Rng, SeedableRng};
+    use rand::SeedableRng;
     use rand_xorshift::XorShiftRng;
 
     use crate::drgraph::{new_seed, BucketGraph, Graph, BASE_DEGREE};
@@ -456,8 +457,8 @@ mod tests {
             challenged_nodes: 1,
         };
 
-        let randomness: [u8; 32] = rng.gen();
-        let prover_id: [u8; 32] = rng.gen();
+        let randomness = H::Domain::random(rng);
+        let prover_id = H::Domain::random(rng);
 
         let mut sectors: Vec<SectorId> = Vec::new();
         let mut trees = BTreeMap::new();
@@ -498,8 +499,7 @@ mod tests {
         }
 
         let candidates =
-            generate_candidates::<H>(&pub_params, &sectors, &trees, &prover_id, &randomness)
-                .unwrap();
+            generate_candidates::<H>(&pub_params, &sectors, &trees, prover_id, randomness).unwrap();
 
         let candidate = &candidates[0];
         let tree = trees.remove(&candidate.sector_id).unwrap();

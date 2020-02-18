@@ -1,30 +1,27 @@
 use std::marker::PhantomData;
 
-use bellperson::gadgets::{
-    boolean::{AllocatedBit, Boolean},
-    num,
-};
+use bellperson::gadgets::num;
 use bellperson::{Circuit, ConstraintSystem, SynthesisError};
+use ff::Field;
 use fil_sapling_crypto::jubjub::JubjubEngine;
 use generic_array::typenum;
 use paired::bls12_381::{Bls12, Fr};
+use typenum::marker_traits::Unsigned;
 
 use crate::circuit::constraint;
-use crate::circuit::pedersen::pedersen_md_no_padding;
 use crate::circuit::por::{PoRCircuit, PoRCompound};
-use crate::circuit::uint64::UInt64;
 use crate::circuit::variables::Root;
 use crate::compound_proof::{CircuitComponent, CompoundProof};
 use crate::crypto::pedersen::JJ_PARAMS;
 use crate::drgraph;
 use crate::election_post::{self, ElectionPoSt};
 use crate::error::Result;
-use crate::fr32::fr_into_bytes;
-use crate::hasher::{HashFunction, Hasher, PoseidonArity, PoseidonEngine};
+use crate::hasher::{
+    HashFunction, Hasher, PoseidonArity, PoseidonEngine, PoseidonFunction, PoseidonMDArity,
+};
 use crate::merklepor;
 use crate::parameter_cache::{CacheableParameters, ParameterSetMetadata};
 use crate::proof::ProofScheme;
-use crate::util::bytes_into_bits_opt;
 use crate::util::NODE_SIZE;
 
 /// This is the `ElectionPoSt` circuit.
@@ -38,9 +35,9 @@ pub struct ElectionPoStCircuit<'a, E: JubjubEngine, H: Hasher> {
     #[allow(clippy::type_complexity)]
     pub paths: Vec<Vec<(Vec<Option<E::Fr>>, Option<usize>)>>,
     pub partial_ticket: Option<E::Fr>,
-    pub randomness: Vec<Option<bool>>,
-    pub prover_id: Vec<Option<bool>>,
-    pub sector_id: Option<u64>,
+    pub randomness: Option<E::Fr>,
+    pub prover_id: Option<E::Fr>,
+    pub sector_id: Option<E::Fr>,
     _h: PhantomData<H>,
 }
 
@@ -92,7 +89,7 @@ where
         for n in 0..pub_params.challenge_count {
             let challenged_leaf_start = election_post::generate_leaf_challenge(
                 &pub_params,
-                &pub_inputs.randomness,
+                pub_inputs.randomness,
                 pub_inputs.sector_challenge_index,
                 n as u64,
             )?;
@@ -156,9 +153,9 @@ where
             comm_r_last: Some(comm_r_last),
             paths,
             partial_ticket: Some(pub_in.partial_ticket),
-            randomness: bytes_into_bits_opt(&pub_in.randomness[..]),
-            prover_id: bytes_into_bits_opt(&pub_in.prover_id[..]),
-            sector_id: Some(u64::from(pub_in.sector_id)),
+            randomness: Some(pub_in.randomness.into()),
+            prover_id: Some(pub_in.prover_id.into()),
+            sector_id: Some(pub_in.sector_id.into()),
             _h: PhantomData,
         })
     }
@@ -181,8 +178,8 @@ where
             partial_ticket: None,
             leafs,
             paths,
-            randomness: vec![None; 32 * 8],
-            prover_id: vec![None; 32 * 8],
+            randomness: None,
+            prover_id: None,
             sector_id: None,
             _h: PhantomData,
         }
@@ -191,7 +188,10 @@ where
 
 impl<
         'a,
-        E: JubjubEngine + PoseidonEngine<typenum::U4> + PoseidonEngine<typenum::U2>,
+        E: JubjubEngine
+            + PoseidonEngine<typenum::U4>
+            + PoseidonEngine<typenum::U2>
+            + PoseidonEngine<PoseidonMDArity>,
         H: Hasher,
     > Circuit<E> for ElectionPoStCircuit<'a, E, H>
 where
@@ -205,6 +205,9 @@ where
         let leafs = self.leafs;
         let paths = self.paths;
         let partial_ticket = self.partial_ticket;
+        let randomness = self.randomness;
+        let prover_id = self.prover_id;
+        let sector_id = self.sector_id;
 
         assert_eq!(paths.len(), leafs.len());
 
@@ -262,58 +265,50 @@ where
 
         // 3. Verify partial ticket
 
-        let mut partial_ticket_bits = Vec::new();
-
         // randomness
-        for (i, bit) in self.randomness.iter().enumerate() {
-            let bit_alloc = Boolean::from(AllocatedBit::alloc(
-                cs.namespace(|| format!("randomness_bit_{}", i)),
-                *bit,
-            )?);
-            partial_ticket_bits.push(bit_alloc);
-        }
+        let randomness_num = num::AllocatedNum::alloc(cs.namespace(|| "randomness"), || {
+            randomness
+                .map(Into::into)
+                .ok_or_else(|| SynthesisError::AssignmentMissing)
+        })?;
 
         // prover_id
-        for (i, bit) in self.prover_id.iter().enumerate() {
-            let bit_alloc = Boolean::from(AllocatedBit::alloc(
-                cs.namespace(|| format!("prover_id_bit_{}", i)),
-                *bit,
-            )?);
-            partial_ticket_bits.push(bit_alloc);
-        }
+        let prover_id_num = num::AllocatedNum::alloc(cs.namespace(|| "prover_id"), || {
+            prover_id
+                .map(Into::into)
+                .ok_or_else(|| SynthesisError::AssignmentMissing)
+        })?;
 
         // sector_id
-        let sector_id_num = UInt64::alloc(cs.namespace(|| "sector_id"), self.sector_id)?;
-        partial_ticket_bits.extend(sector_id_num.to_bits_le());
+        let sector_id_num = num::AllocatedNum::alloc(cs.namespace(|| "sector_id"), || {
+            sector_id
+                .map(Into::into)
+                .ok_or_else(|| SynthesisError::AssignmentMissing)
+        })?;
 
-        // pad to pedersen_md blocksize
-        while partial_ticket_bits.len() % crate::crypto::pedersen::PEDERSEN_BLOCK_SIZE != 0 {
-            partial_ticket_bits.push(Boolean::Constant(false));
+        let mut partial_ticket_nums = vec![randomness_num, prover_id_num, sector_id_num];
+        for (i, leaf) in leafs.iter().enumerate() {
+            let leaf_num =
+                num::AllocatedNum::alloc(cs.namespace(|| format!("leaf_{}", i)), || {
+                    leaf.map(Into::into)
+                        .ok_or_else(|| SynthesisError::AssignmentMissing)
+                })?;
+            partial_ticket_nums.push(leaf_num);
         }
 
-        // data
-        for (i, leaf) in leafs.iter().enumerate() {
-            let bits = match *leaf {
-                Some(leaf) => {
-                    let bytes = fr_into_bytes::<E>(&leaf);
-                    bytes_into_bits_opt(&bytes)
-                }
-                None => vec![None; 32 * 8],
-            };
-            for (j, bit) in bits.into_iter().enumerate() {
-                let bit_alloc = Boolean::from(AllocatedBit::alloc(
-                    cs.namespace(|| format!("data_bit_{}_{}", j, i)),
-                    bit,
-                )?);
-                partial_ticket_bits.push(bit_alloc);
-            }
+        // pad to a multiple of md arity
+        let arity = PoseidonMDArity::to_usize();
+        while partial_ticket_nums.len() % arity != 0 {
+            partial_ticket_nums.push(num::AllocatedNum::alloc(
+                cs.namespace(|| format!("padding_{}", partial_ticket_nums.len())),
+                || Ok(E::Fr::zero()),
+            )?);
         }
 
         // hash it
-        let partial_ticket_num = pedersen_md_no_padding(
-            cs.namespace(|| "partial_ticket_hash"),
-            self.params,
-            &partial_ticket_bits,
+        let partial_ticket_num = PoseidonFunction::hash_md_circuit::<E, _>(
+            &mut cs.namespace(|| "partial_ticket_hash"),
+            &partial_ticket_nums,
         )?;
 
         // allocate expected input
@@ -346,7 +341,7 @@ mod tests {
 
     use ff::Field;
     use merkletree::store::{StoreConfig, StoreConfigDataVersion};
-    use rand::{Rng, SeedableRng};
+    use rand::SeedableRng;
     use rand_xorshift::XorShiftRng;
 
     use crate::circuit::metric::MetricCS;
@@ -364,12 +359,12 @@ mod tests {
 
     #[test]
     fn test_election_post_circuit_pedersen() {
-        test_election_post_circuit::<PedersenHasher>(279_570);
+        test_election_post_circuit::<PedersenHasher>(253_159);
     }
 
     #[test]
     fn test_election_post_circuit_poseidon() {
-        test_election_post_circuit::<PoseidonHasher>(67_785);
+        test_election_post_circuit::<PoseidonHasher>(41_374);
     }
 
     fn test_election_post_circuit<H: Hasher>(expected_constraints: usize) {
@@ -378,8 +373,8 @@ mod tests {
         let leaves = 64;
         let sector_size = leaves * NODE_SIZE;
 
-        let randomness: [u8; 32] = rng.gen();
-        let prover_id: [u8; 32] = rng.gen();
+        let randomness = H::Domain::random(rng);
+        let prover_id = H::Domain::random(rng);
 
         let pub_params = election_post::PublicParams {
             sector_size: sector_size as u64,
@@ -427,8 +422,8 @@ mod tests {
             &pub_params,
             &sectors,
             &trees,
-            &prover_id,
-            &randomness,
+            prover_id,
+            randomness,
         )
         .unwrap();
 
@@ -488,9 +483,9 @@ mod tests {
             comm_c: Some(comm_c.into()),
             comm_r_last: Some(comm_r_last.into()),
             partial_ticket: Some(candidate.partial_ticket.into()),
-            randomness: bytes_into_bits_opt(&randomness[..]),
-            prover_id: bytes_into_bits_opt(&prover_id[..]),
-            sector_id: Some(u64::from(candidate.sector_id)),
+            randomness: Some(randomness.into()),
+            prover_id: Some(prover_id.into()),
+            sector_id: Some(candidate.sector_id.into()),
             _h: PhantomData,
         };
 
@@ -543,8 +538,8 @@ mod tests {
 
         let leaves = 64;
         let sector_size = (leaves * NODE_SIZE) as u64;
-        let randomness: [u8; 32] = rng.gen();
-        let prover_id: [u8; 32] = rng.gen();
+        let randomness = H::Domain::random(rng);
+        let prover_id = H::Domain::random(rng);
 
         let setup_params = compound_proof::SetupParams {
             vanilla_params: election_post::SetupParams {
@@ -598,8 +593,8 @@ mod tests {
             &pub_params.vanilla_params,
             &sectors,
             &trees,
-            &prover_id,
-            &randomness,
+            prover_id,
+            randomness,
         )
         .unwrap();
 

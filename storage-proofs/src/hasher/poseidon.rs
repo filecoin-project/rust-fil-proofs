@@ -17,7 +17,7 @@ use generic_array::typenum::marker_traits::Unsigned;
 use merkletree::hash::{Algorithm as LightAlgorithm, Hashable};
 use merkletree::merkle::Element;
 use neptune::circuit::poseidon_hash;
-use neptune::poseidon::{Poseidon, PoseidonConstants};
+use neptune::poseidon::Poseidon;
 use paired::bls12_381::{Bls12, Fr, FrRepr};
 use serde::{Deserialize, Serialize};
 
@@ -318,23 +318,14 @@ impl HashFunction<PoseidonDomain> for PoseidonFunction {
     }
 
     fn hash_md_circuit<
-        Arity: 'static,
-        E: JubjubEngine + PoseidonEngine<Arity>,
+        E: JubjubEngine + PoseidonEngine<PoseidonMDArity>,
         CS: ConstraintSystem<E>,
     >(
         cs: &mut CS,
         elements: &[num::AllocatedNum<E>],
-        params: &PoseidonConstants<E, Arity>,
-    ) -> ::std::result::Result<num::AllocatedNum<E>, SynthesisError>
-    where
-        Arity: typenum::Unsigned
-            + std::ops::Add<typenum::B1>
-            + std::ops::Add<typenum::UInt<typenum::UTerm, typenum::B1>>,
-        typenum::Add1<Arity>: generic_array::ArrayLength<E::Fr>,
-    {
-        let arity = Arity::to_usize();
-
-        assert_eq!(PoseidonMDArity::to_usize(), arity);
+    ) -> ::std::result::Result<num::AllocatedNum<E>, SynthesisError> {
+        let params = E::PARAMETERS();
+        let arity = PoseidonMDArity::to_usize();
 
         let mut hash = elements[0].clone();
         let mut preimage = vec![hash.clone(); arity]; // Allocate. This will be overwritten.
@@ -354,7 +345,7 @@ impl HashFunction<PoseidonDomain> for PoseidonFunction {
                     .unwrap();
             }
             let cs = cs.namespace(|| format!("hash md {}", hash_num));
-            hash = poseidon_hash::<_, E, Arity>(cs, preimage.clone(), params)?.clone();
+            hash = poseidon_hash::<_, E, PoseidonMDArity>(cs, preimage.clone(), params)?.clone();
             hash_num += 1;
         }
 
@@ -586,7 +577,7 @@ mod tests {
 
     #[test]
     fn test_hash_md() {
-        let arity = PoseidonMDArity::to_usize();
+        // let arity = PoseidonMDArity::to_usize();
         let n = 71;
         let data = vec![PoseidonDomain(Fr::one().into_repr()); n];
         let hashed = PoseidonFunction::hash_md(&data);
@@ -603,11 +594,11 @@ mod tests {
     }
     #[test]
     fn test_hash_md_circuit() {
-        let arity = PoseidonMDArity::to_usize();
+        // let arity = PoseidonMDArity::to_usize();
         let n = 71;
         let data = vec![PoseidonDomain(Fr::one().into_repr()); n];
 
-        let mut cs = TestConstraintSystem::new();
+        let mut cs = TestConstraintSystem::<Bls12>::new();
         let circuit_data = (0..n)
             .map(|n| {
                 num::AllocatedNum::alloc(cs.namespace(|| format!("input {}", n)), || Ok(Fr::one()))
@@ -618,12 +609,8 @@ mod tests {
         let hashed = PoseidonFunction::hash_md(&data);
         let hashed_fr = Fr::from_repr(hashed.0).unwrap();
 
-        let circuit_hashed = PoseidonFunction::hash_md_circuit(
-            &mut cs,
-            circuit_data.as_slice(),
-            &*POSEIDON_MD_CONSTANTS,
-        )
-        .unwrap();
+        let circuit_hashed =
+            PoseidonFunction::hash_md_circuit(&mut cs, circuit_data.as_slice()).unwrap();
         let hashed_alloc =
             &num::AllocatedNum::alloc(cs.namespace(|| "calculated"), || Ok(hashed_fr)).unwrap();
         constraint::equal(

@@ -203,20 +203,12 @@ pub trait HashFunction<T: Domain>:
         typenum::Add1<Arity>: generic_array::ArrayLength<E::Fr>;
 
     fn hash_md_circuit<
-        Arity: 'static,
-        E: JubjubEngine + PoseidonEngine<Arity>,
+        E: JubjubEngine + PoseidonEngine<PoseidonMDArity>,
         CS: ConstraintSystem<E>,
     >(
         _cs: &mut CS,
         _elements: &[num::AllocatedNum<E>],
-        _params: &PoseidonConstants<E, Arity>,
-    ) -> std::result::Result<num::AllocatedNum<E>, SynthesisError>
-    where
-        Arity: typenum::Unsigned
-            + std::ops::Add<typenum::B1>
-            + std::ops::Add<typenum::UInt<typenum::UTerm, typenum::B1>>,
-        typenum::Add1<Arity>: generic_array::ArrayLength<E::Fr>,
-    {
+    ) -> std::result::Result<num::AllocatedNum<E>, SynthesisError> {
         unimplemented!();
     }
 
