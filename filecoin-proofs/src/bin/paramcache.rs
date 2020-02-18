@@ -13,11 +13,10 @@ use storage_proofs::election_post::ElectionPoSt;
 use storage_proofs::parameter_cache::CacheableParameters;
 use storage_proofs::stacked::StackedDrg;
 
-const PUBLISHED_SECTOR_SIZES: [u64; 5] = [
-    SECTOR_SIZE_ONE_KIB,
-    SECTOR_SIZE_16_MIB,
-    SECTOR_SIZE_256_MIB,
-    SECTOR_SIZE_1_GIB,
+const PUBLISHED_SECTOR_SIZES: [u64; 4] = [
+    SECTOR_SIZE_2_KIB,
+    SECTOR_SIZE_8_MIB,
+    SECTOR_SIZE_512_MIB,
     SECTOR_SIZE_32_GIB,
 ];
 

@@ -4,6 +4,7 @@ use std::marker::PhantomData;
 
 use anyhow::{bail, ensure, Context};
 use byteorder::{ByteOrder, LittleEndian};
+use generic_array::typenum;
 use log::trace;
 use merkletree::store::StoreConfig;
 use paired::bls12_381::{Bls12, Fr};
@@ -17,10 +18,11 @@ use crate::error::{Error, Result};
 use crate::fr32::fr_into_bytes;
 use crate::hasher::{Domain, HashFunction, Hasher};
 use crate::measurements::{measure_op, Operation};
-use crate::merkle::{LCMerkleTree, MerkleProof};
+use crate::merkle::{MerkleProof, QuadLCMerkleTree};
 use crate::parameter_cache::ParameterSetMetadata;
 use crate::proof::{NoRequirements, ProofScheme};
 use crate::sector::*;
+use crate::stacked::QUAD_ARITY;
 use crate::util::NODE_SIZE;
 
 #[derive(Debug, Clone)]
@@ -66,7 +68,7 @@ pub struct PublicInputs<T: Domain> {
 
 #[derive(Debug)]
 pub struct PrivateInputs<H: Hasher> {
-    pub tree: LCMerkleTree<H::Domain, H::Function>,
+    pub tree: QuadLCMerkleTree<H::Domain, H::Function>,
     pub comm_c: H::Domain,
     pub comm_r_last: H::Domain,
 }
@@ -94,10 +96,10 @@ impl fmt::Debug for Candidate {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Proof<H: Hasher> {
     #[serde(bound(
-        serialize = "MerkleProof<H>: Serialize",
-        deserialize = "MerkleProof<H>: Deserialize<'de>"
+        serialize = "MerkleProof<H, typenum::U4>: Serialize",
+        deserialize = "MerkleProof<H, typenum::U4>: Deserialize<'de>"
     ))]
-    inclusion_proofs: Vec<MerkleProof<H>>,
+    inclusion_proofs: Vec<MerkleProof<H, typenum::U4>>,
     pub ticket: [u8; 32],
     pub comm_c: H::Domain,
 }
@@ -121,7 +123,8 @@ impl<H: Hasher> Proof<H> {
             .collect()
     }
 
-    pub fn paths(&self) -> Vec<&Vec<(H::Domain, bool)>> {
+    #[allow(clippy::type_complexity)]
+    pub fn paths(&self) -> Vec<&Vec<(Vec<H::Domain>, usize)>> {
         self.inclusion_proofs
             .iter()
             .map(MerkleProof::path)
@@ -140,7 +143,7 @@ where
 pub fn generate_candidates<H: Hasher>(
     pub_params: &PublicParams,
     challenged_sectors: &[SectorId],
-    trees: &BTreeMap<SectorId, LCMerkleTree<H::Domain, H::Function>>,
+    trees: &BTreeMap<SectorId, QuadLCMerkleTree<H::Domain, H::Function>>,
     prover_id: &[u8; 32],
     randomness: &[u8; 32],
 ) -> Result<Vec<Candidate>> {
@@ -167,7 +170,7 @@ pub fn generate_candidates<H: Hasher>(
 
 fn generate_candidate<H: Hasher>(
     pub_params: &PublicParams,
-    tree: &LCMerkleTree<H::Domain, H::Function>,
+    tree: &QuadLCMerkleTree<H::Domain, H::Function>,
     prover_id: &[u8; 32],
     sector_id: SectorId,
     randomness: &[u8; 32],
@@ -336,7 +339,7 @@ impl<'a, H: 'a + Hasher> ProofScheme<'a> for ElectionPoSt<'a, H> {
             "Generating proof for tree of len {} with leafs {}, and cached_layers {}",
             tree.len(),
             tree_leafs,
-            StoreConfig::default_cached_above_base_layer(tree_leafs)
+            StoreConfig::default_cached_above_base_layer(tree_leafs, QUAD_ARITY)
         );
         let inclusion_proofs = measure_op(Operation::PostInclusionProofs, || {
             (0..pub_params.challenge_count)
@@ -355,7 +358,9 @@ impl<'a, H: 'a + Hasher> ProofScheme<'a> for ElectionPoSt<'a, H> {
                         .map(move |i| {
                             let (proof, _) = tree.gen_proof_and_partial_tree(
                                 challenged_leaf_start as usize + i,
-                                StoreConfig::default_cached_above_base_layer(tree_leafs),
+                                StoreConfig::default_cached_above_base_layer(
+                                    tree_leafs, QUAD_ARITY,
+                                ),
                             )?;
                             Ok(MerkleProof::new_from_proof(&proof))
                         })
@@ -408,9 +413,9 @@ impl<'a, H: 'a + Hasher> ProofScheme<'a> for ElectionPoSt<'a, H> {
                 }
 
                 // validate the path length
-                if graph_height(pub_params.sector_size as usize / NODE_SIZE)
-                    != merkle_proof.path().len()
-                {
+                let expected_path_length =
+                    graph_height::<typenum::U4>(pub_params.sector_size as usize / NODE_SIZE) - 1;
+                if expected_path_length != merkle_proof.path().len() {
                     return Ok(false);
                 }
 
@@ -435,17 +440,18 @@ mod tests {
     use crate::drgraph::{new_seed, BucketGraph, Graph, BASE_DEGREE};
     use crate::fr32::fr_into_bytes;
     use crate::hasher::{PedersenHasher, PoseidonHasher};
+    use crate::merkle::QuadMerkleTree;
 
     fn test_election_post<H: Hasher>() {
-        use merkletree::store::{StoreConfig, StoreConfigDataVersion};
+        use merkletree::store::StoreConfigDataVersion;
 
         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
 
-        let leaves = 32;
-        let sector_size = leaves * 32;
+        let leaves = 64;
+        let sector_size = leaves * NODE_SIZE;
 
         let pub_params = PublicParams {
-            sector_size,
+            sector_size: sector_size as u64,
             challenge_count: 40,
             challenged_nodes: 1,
         };
@@ -456,13 +462,15 @@ mod tests {
         let mut sectors: Vec<SectorId> = Vec::new();
         let mut trees = BTreeMap::new();
 
+        // arity of the replica
+        let arity = 4;
         // Construct and store an MT using a named DiskStore.
         let temp_dir = tempdir::TempDir::new("level_cache_tree_v1").unwrap();
         let temp_path = temp_dir.path();
         let config = StoreConfig::new(
             &temp_path,
             String::from("test-lc-tree-v1"),
-            StoreConfig::default_cached_above_base_layer(leaves as usize),
+            StoreConfig::default_cached_above_base_layer(leaves as usize, arity),
         );
 
         for i in 0..5 {
@@ -471,11 +479,11 @@ mod tests {
                 .flat_map(|_| fr_into_bytes::<Bls12>(&Fr::random(rng)))
                 .collect();
 
-            let graph = BucketGraph::<H>::new(32, BASE_DEGREE, 0, new_seed()).unwrap();
+            let graph = BucketGraph::<H>::new(leaves, BASE_DEGREE, 0, new_seed()).unwrap();
 
             let cur_config =
                 StoreConfig::from_config(&config, format!("test-lc-tree-v1-{}", i), None);
-            let mut tree = graph
+            let mut tree: QuadMerkleTree<_, _> = graph
                 .merkle_tree(Some(cur_config.clone()), data.as_slice())
                 .unwrap();
             let c = tree
@@ -483,7 +491,7 @@ mod tests {
                 .unwrap();
             assert_eq!(c, true);
 
-            let lctree = graph
+            let lctree: QuadLCMerkleTree<_, _> = graph
                 .lcmerkle_tree(Some(cur_config), data.as_slice())
                 .unwrap();
             trees.insert(i.into(), lctree);

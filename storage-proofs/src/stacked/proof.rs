@@ -15,7 +15,7 @@ use crate::measurements::{
     measure_op,
     Operation::{CommD, EncodeWindowTimeAll, GenerateTreeC, GenerateTreeRLast},
 };
-use crate::merkle::{MerkleProof, MerkleTree, Store};
+use crate::merkle::{MerkleProof, MerkleTree, QuadMerkleTree, Store};
 use crate::porep::Data;
 use crate::porep::PoRep;
 use crate::stacked::{
@@ -23,8 +23,9 @@ use crate::stacked::{
     column::Column,
     graph::StackedBucketGraph,
     params::{
-        get_node, CacheKey, Labels, LabelsCache, PersistentAux, Proof, PublicInputs, PublicParams,
-        ReplicaColumnProof, Tau, TemporaryAux, TemporaryAuxCache, TransformedLayers, Tree,
+        get_node, BinaryTree, CacheKey, Labels, LabelsCache, PersistentAux, Proof, PublicInputs,
+        PublicParams, ReplicaColumnProof, Tau, TemporaryAux, TemporaryAuxCache, TransformedLayers,
+        BINARY_ARITY, QUAD_ARITY,
     },
     EncodingProof, LabelingProof,
 };
@@ -300,6 +301,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
             // Construct and persist the layer data.
             let layer_store: DiskStore<H::Domain> = DiskStore::new_from_slice_with_config(
                 graph.size(),
+                QUAD_ARITY,
                 &layer_labels,
                 layer_config.clone(),
             )?;
@@ -331,7 +333,10 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         ))
     }
 
-    fn build_tree<K: Hasher>(tree_data: &[u8], config: StoreConfig) -> Result<Tree<K>> {
+    fn build_binary_tree<K: Hasher>(
+        tree_data: &[u8],
+        config: StoreConfig,
+    ) -> Result<BinaryTree<K>> {
         trace!("building tree (size: {})", tree_data.len());
 
         let leafs = tree_data.len() / NODE_SIZE;
@@ -351,7 +356,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         layer_challenges: &LayerChallenges,
         replica_id: &<H as Hasher>::Domain,
         data: Data,
-        data_tree: Option<Tree<G>>,
+        data_tree: Option<BinaryTree<G>>,
         config: StoreConfig,
     ) -> Result<TransformedLayers<H, G>> {
         // Generate key layers.
@@ -373,7 +378,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         graph: &StackedBucketGraph<H>,
         layer_challenges: &LayerChallenges,
         mut data: Data,
-        data_tree: Option<Tree<G>>,
+        data_tree: Option<BinaryTree<G>>,
         config: StoreConfig,
         label_configs: Labels<H>,
     ) -> Result<TransformedLayers<H, G>> {
@@ -388,12 +393,30 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
 
         // Generate all store configs that we need based on the
         // cache_path in the specified config.
-        let mut tree_d_config =
-            StoreConfig::from_config(&config, CacheKey::CommDTree.to_string(), None);
-        let mut tree_r_last_config =
-            StoreConfig::from_config(&config, CacheKey::CommRLastTree.to_string(), None);
-        let mut tree_c_config =
-            StoreConfig::from_config(&config, CacheKey::CommCTree.to_string(), None);
+        let mut tree_d_config = StoreConfig::from_config(
+            &config,
+            CacheKey::CommDTree.to_string(),
+            Some(StoreConfig::default_cached_above_base_layer(
+                data.len(),
+                BINARY_ARITY,
+            )),
+        );
+        let mut tree_r_last_config = StoreConfig::from_config(
+            &config,
+            CacheKey::CommRLastTree.to_string(),
+            Some(StoreConfig::default_cached_above_base_layer(
+                data.len(),
+                QUAD_ARITY,
+            )),
+        );
+        let mut tree_c_config = StoreConfig::from_config(
+            &config,
+            CacheKey::CommCTree.to_string(),
+            Some(StoreConfig::default_cached_above_base_layer(
+                data.len(),
+                QUAD_ARITY,
+            )),
+        );
 
         let labels = LabelsCache::new(&label_configs)?;
 
@@ -435,7 +458,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
             });
 
             info!("building tree_c");
-            MerkleTree::<_, H::Function>::from_par_iter_with_config(
+            QuadMerkleTree::<_, H::Function>::from_par_iter_with_config(
                 hashes.into_par_iter(),
                 tree_c_config.clone(),
             )
@@ -454,7 +477,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
                 trace!("building merkle tree for the original data");
                 data.ensure_data()?;
                 measure_op(CommD, || {
-                    Self::build_tree::<G>(data.as_ref(), tree_d_config.clone())
+                    Self::build_binary_tree::<G>(data.as_ref(), tree_d_config.clone())
                 })?
             }
         };
@@ -476,7 +499,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
                     encode::<H::Domain>(key, data_node)
                 });
 
-            MerkleTree::<_, H::Function>::from_par_iter_with_config(
+            QuadMerkleTree::<_, H::Function>::from_par_iter_with_config(
                 encoded_data,
                 tree_r_last_config.clone(),
             )
@@ -491,8 +514,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         // comm_r = H(comm_c || comm_r_last)
         let comm_r: H::Domain = H::Function::hash2(&tree_c.root(), &tree_r_last.root());
 
-        assert_eq!(tree_d.len(), tree_r_last.len());
-        assert_eq!(tree_d.len(), tree_c.len());
+        assert_eq!(tree_r_last.len(), tree_c.len());
 
         tree_d_config.size = Some(tree_d.len());
         tree_r_last_config.size = Some(tree_r_last.len());
@@ -543,7 +565,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         pp: &'a PublicParams<H>,
         labels: Labels<H>,
         data: Data<'a>,
-        data_tree: Tree<G>,
+        data_tree: BinaryTree<G>,
         config: StoreConfig,
     ) -> Result<(
         <Self as PoRep<'a, H, G>>::Tau,
@@ -630,7 +652,7 @@ mod tests {
 
     use crate::drgraph::{new_seed, BASE_DEGREE};
     use crate::fr32::fr_into_bytes;
-    use crate::hasher::{Blake2sHasher, PedersenHasher, Sha256Hasher};
+    use crate::hasher::{Blake2sHasher, PedersenHasher, PoseidonHasher, Sha256Hasher};
     use crate::porep::PoRep;
     use crate::proof::ProofScheme;
     use crate::stacked::{PrivateInputs, SetupParams, EXP_DEGREE};
@@ -661,6 +683,11 @@ mod tests {
         test_extract_all::<Blake2sHasher>();
     }
 
+    #[test]
+    fn extract_all_poseidon() {
+        test_extract_all::<PoseidonHasher>();
+    }
+
     fn test_extract_all<H: 'static + Hasher>() {
         // femme::pretty::Logger::new()
         //     .start(log::LevelFilter::Trace)
@@ -668,7 +695,7 @@ mod tests {
 
         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
         let replica_id: H::Domain = H::Domain::random(rng);
-        let nodes = 8;
+        let nodes = 16;
 
         let data: Vec<u8> = (0..nodes)
             .flat_map(|_| {
@@ -697,7 +724,7 @@ mod tests {
         let config = StoreConfig::new(
             cache_dir.path(),
             CacheKey::CommDTree.to_string(),
-            StoreConfig::default_cached_above_base_layer(nodes),
+            StoreConfig::default_cached_above_base_layer(nodes, BINARY_ARITY),
         );
 
         StackedDrg::<H, Blake2sHasher>::replicate(
@@ -728,6 +755,7 @@ mod tests {
         test_prove_verify::<PedersenHasher>(n, challenges.clone());
         test_prove_verify::<Sha256Hasher>(n, challenges.clone());
         test_prove_verify::<Blake2sHasher>(n, challenges.clone());
+        test_prove_verify::<PoseidonHasher>(n, challenges.clone());
     }
 
     fn test_prove_verify<H: 'static + Hasher>(n: usize, challenges: LayerChallenges) {
@@ -763,7 +791,7 @@ mod tests {
         let config = StoreConfig::new(
             cache_dir.path(),
             CacheKey::CommDTree.to_string(),
-            StoreConfig::default_cached_above_base_layer(n),
+            StoreConfig::default_cached_above_base_layer(n, BINARY_ARITY),
         );
 
         let pp = StackedDrg::<H, Blake2sHasher>::setup(&sp).expect("setup failed");
@@ -813,7 +841,7 @@ mod tests {
 
     table_tests! {
         prove_verify_fixed{
-           prove_verify_fixed_32_4(4);
+           prove_verify_fixed_64_4(4);
         }
     }
 

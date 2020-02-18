@@ -6,6 +6,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{anyhow, ensure, Context, Result};
 use bincode::deserialize;
 use log::{info, trace};
+use merkletree::merkle::get_merkle_tree_leafs;
 use merkletree::store::{LevelCacheStore, Store, StoreConfig};
 use paired::bls12_381::Bls12;
 use rayon::prelude::*;
@@ -16,16 +17,18 @@ use storage_proofs::election_post;
 pub use storage_proofs::election_post::Candidate;
 use storage_proofs::fr32::bytes_into_fr;
 use storage_proofs::hasher::Hasher;
+use storage_proofs::merkle::QuadLCMerkleTree;
 use storage_proofs::proof::NoRequirements;
 use storage_proofs::sector::*;
 use storage_proofs::stacked::CacheKey;
 
-use crate::api::util::{as_safe_commitment, get_tree_leafs, get_tree_size};
+use crate::api::util::{as_safe_commitment, get_tree_size};
 use crate::caches::{get_post_params, get_post_verifying_key};
 use crate::constants::DefaultTreeHasher;
 use crate::parameters::post_setup_params;
 use crate::types::{
     ChallengeSeed, Commitment, LCTree, PersistentAux, PoStConfig, ProverId, TemporaryAux,
+    QUAD_ARITY,
 };
 
 /// The minimal information required about a replica, in order to be able to generate
@@ -100,19 +103,18 @@ impl PrivateReplicaInfo {
             "post: tree size {}, tree leafs {}, cached above base {}",
             tree_size,
             tree_leafs,
-            StoreConfig::default_cached_above_base_layer(tree_leafs)
+            StoreConfig::default_cached_above_base_layer(tree_leafs, QUAD_ARITY)
         );
         let mut config = StoreConfig::new(
             self.cache_dir_path(),
             CacheKey::CommRLastTree.to_string(),
-            StoreConfig::default_cached_above_base_layer(tree_leafs),
+            StoreConfig::default_cached_above_base_layer(tree_leafs, QUAD_ARITY),
         );
         config.size = Some(tree_size);
 
         let tree_r_last_store: LevelCacheStore<<DefaultTreeHasher as Hasher>::Domain, _> =
-            LevelCacheStore::new_from_disk(tree_size, &config)?;
-        let tree_r_last: LCTree =
-            merkletree::merkle::MerkleTree::from_data_store(tree_r_last_store, tree_leafs)?;
+            LevelCacheStore::new_from_disk(tree_size, QUAD_ARITY, &config)?;
+        let tree_r_last = QuadLCMerkleTree::from_data_store(tree_r_last_store, tree_leafs)?;
 
         Ok(tree_r_last)
     }
@@ -213,9 +215,9 @@ pub fn generate_candidates(
     unique_challenged_replicas.sort_unstable(); // dedup requires a sorted list
     unique_challenged_replicas.dedup();
 
-    let tree_size = get_tree_size::<<DefaultTreeHasher as Hasher>::Domain>(post_config.sector_size);
-    let tree_leafs =
-        get_tree_leafs::<<DefaultTreeHasher as Hasher>::Domain>(post_config.sector_size);
+    let tree_size =
+        get_tree_size::<<DefaultTreeHasher as Hasher>::Domain>(post_config.sector_size, QUAD_ARITY);
+    let tree_leafs = get_merkle_tree_leafs(tree_size, QUAD_ARITY);
 
     let unique_trees_res: Vec<_> = unique_challenged_replicas
         .into_par_iter()
@@ -302,9 +304,9 @@ pub fn generate_post(
         ElectionPoStCompound::setup(&setup_params)?;
     let groth_params = get_post_params(post_config)?;
 
-    let tree_size = get_tree_size::<<DefaultTreeHasher as Hasher>::Domain>(post_config.sector_size);
-    let tree_leafs =
-        get_tree_leafs::<<DefaultTreeHasher as Hasher>::Domain>(post_config.sector_size);
+    let tree_size =
+        get_tree_size::<<DefaultTreeHasher as Hasher>::Domain>(post_config.sector_size, QUAD_ARITY);
+    let tree_leafs = get_merkle_tree_leafs(tree_size, QUAD_ARITY);
 
     let mut proofs = Vec::with_capacity(winners.len());
 

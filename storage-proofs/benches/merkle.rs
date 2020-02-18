@@ -1,4 +1,5 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion, ParameterizedBenchmark};
+use generic_array::typenum;
 use rand::{thread_rng, Rng};
 use storage_proofs::drgraph::{new_seed, Graph, BASE_DEGREE};
 use storage_proofs::hasher::blake2s::Blake2sHasher;
@@ -12,7 +13,7 @@ fn merkle_benchmark(c: &mut Criterion) {
     let params = vec![128, 1024];
 
     c.bench(
-        "merkletree",
+        "merkletree-binary",
         ParameterizedBenchmark::new(
             "blake2s",
             move |b, n_nodes| {
@@ -26,7 +27,7 @@ fn merkle_benchmark(c: &mut Criterion) {
                 )
                 .unwrap();
 
-                b.iter(|| black_box(graph.merkle_tree(None, &data).unwrap()))
+                b.iter(|| black_box(graph.merkle_tree::<typenum::U2>(None, &data).unwrap()))
             },
             params,
         )
@@ -41,7 +42,7 @@ fn merkle_benchmark(c: &mut Criterion) {
             )
             .unwrap();
 
-            b.iter(|| black_box(graph.merkle_tree(None, &data).unwrap()))
+            b.iter(|| black_box(graph.merkle_tree::<typenum::U2>(None, &data).unwrap()))
         })
         .sample_size(20),
     );

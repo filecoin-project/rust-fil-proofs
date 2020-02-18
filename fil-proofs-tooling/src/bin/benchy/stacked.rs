@@ -23,7 +23,7 @@ use storage_proofs::porep::PoRep;
 use storage_proofs::proof::ProofScheme;
 use storage_proofs::stacked::{
     self, CacheKey, ChallengeRequirements, LayerChallenges, StackedDrg, TemporaryAuxCache,
-    EXP_DEGREE,
+    BINARY_ARITY, EXP_DEGREE,
 };
 use tempfile::TempDir;
 
@@ -130,7 +130,7 @@ where
         let store_config = StoreConfig::new(
             cache_dir.path(),
             CacheKey::CommDTree.to_string(),
-            StoreConfig::default_cached_above_base_layer(nodes),
+            StoreConfig::default_cached_above_base_layer(nodes, BINARY_ARITY),
         );
 
         let replica_id = H::Domain::random(rng);

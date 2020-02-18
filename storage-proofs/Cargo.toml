@@ -15,7 +15,7 @@ bench = false
 bitvec = "0.5"
 rand = "0.7"
 libc = "0.2"
-merkletree = "0.15.2"
+merkletree = "0.16.1"
 byteorder = "1"
 config = "0.9.3"
 crossbeam-utils = "0.6"
@@ -56,8 +56,6 @@ anyhow = "1.0.23"
 thiserror = "1.0.6"
 cpu-time = "1.0.0"
 neptune = "0.4.0"
-typenum = "1.11.2"
-
 
 [features]
 default = ["gpu"]

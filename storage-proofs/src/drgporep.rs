@@ -2,6 +2,7 @@ use std::marker::PhantomData;
 
 use anyhow::{ensure, Context};
 use byteorder::{LittleEndian, WriteBytesExt};
+use generic_array::typenum;
 use merkletree::store::StoreConfig;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -12,7 +13,7 @@ use crate::encode;
 use crate::error::Result;
 use crate::fr32::bytes_into_fr_repr_safe;
 use crate::hasher::{Domain, Hasher};
-use crate::merkle::{MerkleProof, MerkleTree};
+use crate::merkle::{BinaryMerkleTree, MerkleProof, MerkleTree};
 use crate::parameter_cache::ParameterSetMetadata;
 use crate::porep::{self, Data, PoRep};
 use crate::proof::{NoRequirements, ProofScheme};
@@ -27,8 +28,8 @@ pub struct PublicInputs<T: Domain> {
 
 #[derive(Debug)]
 pub struct PrivateInputs<'a, H: 'a + Hasher> {
-    pub tree_d: &'a MerkleTree<H::Domain, H::Function>,
-    pub tree_r: &'a MerkleTree<H::Domain, H::Function>,
+    pub tree_d: &'a BinaryMerkleTree<H::Domain, H::Function>,
+    pub tree_r: &'a BinaryMerkleTree<H::Domain, H::Function>,
 }
 
 #[derive(Clone, Debug)]
@@ -98,16 +99,16 @@ where
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DataProof<H: Hasher> {
+pub struct DataProof<H: Hasher, U: typenum::Unsigned> {
     #[serde(bound(
-        serialize = "MerkleProof<H>: Serialize",
-        deserialize = "MerkleProof<H>: Deserialize<'de>"
+        serialize = "MerkleProof<H, U>: Serialize",
+        deserialize = "MerkleProof<H, U>: Deserialize<'de>"
     ))]
-    pub proof: MerkleProof<H>,
+    pub proof: MerkleProof<H, U>,
     pub data: H::Domain,
 }
 
-impl<H: Hasher> DataProof<H> {
+impl<H: Hasher, U: typenum::Unsigned> DataProof<H, U> {
     pub fn new(n: usize) -> Self {
         DataProof {
             proof: MerkleProof::new(n),
@@ -132,7 +133,7 @@ impl<H: Hasher> DataProof<H> {
     }
 }
 
-pub type ReplicaParents<H> = Vec<(u32, DataProof<H>)>;
+pub type ReplicaParents<H> = Vec<(u32, DataProof<H, typenum::U2>)>;
 
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
 pub struct Proof<H: Hasher> {
@@ -147,10 +148,10 @@ pub struct Proof<H: Hasher> {
     ))]
     pub replica_root: H::Domain,
     #[serde(bound(
-        serialize = "DataProof<H>: Serialize",
-        deserialize = "DataProof<H>: Deserialize<'de>"
+        serialize = "DataProof<H, typenum::U2>: Serialize",
+        deserialize = "DataProof<H, typenum::U2>: Deserialize<'de>"
     ))]
-    pub replica_nodes: Vec<DataProof<H>>,
+    pub replica_nodes: Vec<DataProof<H, typenum::U2>>,
     #[serde(bound(
         serialize = "H::Domain: Serialize",
         deserialize = "H::Domain: Deserialize<'de>"
@@ -160,7 +161,7 @@ pub struct Proof<H: Hasher> {
         serialize = "H::Domain: Serialize",
         deserialize = "H::Domain: Deserialize<'de>"
     ))]
-    pub nodes: Vec<DataProof<H>>,
+    pub nodes: Vec<DataProof<H, typenum::U2>>,
 }
 
 impl<H: Hasher> Proof<H> {
@@ -199,9 +200,9 @@ impl<H: Hasher> Proof<H> {
     }
 
     pub fn new(
-        replica_nodes: Vec<DataProof<H>>,
+        replica_nodes: Vec<DataProof<H, typenum::U2>>,
         replica_parents: Vec<ReplicaParents<H>>,
-        nodes: Vec<DataProof<H>>,
+        nodes: Vec<DataProof<H, typenum::U2>>,
     ) -> Proof<H> {
         Proof {
             data_root: *nodes[0].proof.root(),
@@ -273,7 +274,7 @@ where
 
         let mut replica_nodes = Vec::with_capacity(len);
         let mut replica_parents = Vec::with_capacity(len);
-        let mut data_nodes: Vec<DataProof<H>> = Vec::with_capacity(len);
+        let mut data_nodes: Vec<DataProof<H, typenum::U2>> = Vec::with_capacity(len);
 
         for i in 0..len {
             let challenge = pub_inputs.challenges[i] % pub_params.graph.size();
@@ -435,7 +436,7 @@ where
         pp: &Self::PublicParams,
         replica_id: &H::Domain,
         mut data: Data<'a>,
-        data_tree: Option<MerkleTree<H::Domain, H::Function>>,
+        data_tree: Option<BinaryMerkleTree<H::Domain, H::Function>>,
         config: Option<StoreConfig>,
     ) -> Result<(porep::Tau<H::Domain>, porep::ProverAux<H>)> {
         use crate::stacked::CacheKey;
@@ -551,7 +552,7 @@ where
 
 pub fn decode_domain_block<H>(
     replica_id: &H::Domain,
-    tree: &MerkleTree<H::Domain, H::Function>,
+    tree: &BinaryMerkleTree<H::Domain, H::Function>,
     node: usize,
     node_data: <H as Hasher>::Domain,
     parents: &[u32],
@@ -559,7 +560,7 @@ pub fn decode_domain_block<H>(
 where
     H: Hasher,
 {
-    let key = create_key_from_tree::<H>(replica_id, node, parents, tree)?;
+    let key = create_key_from_tree::<H, _>(replica_id, node, parents, tree)?;
 
     Ok(encode::decode(key, node_data))
 }
@@ -567,11 +568,11 @@ where
 /// Creates the encoding key from a `MerkleTree`.
 /// The algorithm for that is `Blake2s(id | encodedParentNode1 | encodedParentNode1 | ...)`.
 /// It is only public so that it can be used for benchmarking
-pub fn create_key_from_tree<H: Hasher>(
+pub fn create_key_from_tree<H: Hasher, U: typenum::Unsigned>(
     id: &H::Domain,
     node: usize,
     parents: &[u32],
-    tree: &MerkleTree<H::Domain, H::Function>,
+    tree: &MerkleTree<H::Domain, H::Function, U>,
 ) -> Result<H::Domain> {
     let mut hasher = Sha256::new();
     hasher.input(AsRef::<[u8]>::as_ref(&id));
@@ -644,12 +645,12 @@ mod tests {
 
         // MT for original data is always named tree-d, and it will be
         // referenced later in the process as such.
-        use crate::stacked::CacheKey;
+        use crate::stacked::{CacheKey, BINARY_ARITY};
         let cache_dir = tempfile::tempdir().unwrap();
         let config = StoreConfig::new(
             cache_dir.path(),
             CacheKey::CommDTree.to_string(),
-            StoreConfig::default_cached_above_base_layer(data.len() / 32),
+            StoreConfig::default_cached_above_base_layer(data.len() / 32, BINARY_ARITY),
         );
 
         DrgPoRep::replicate(
@@ -718,12 +719,12 @@ mod tests {
 
         // MT for original data is always named tree-d, and it will be
         // referenced later in the process as such.
-        use crate::stacked::CacheKey;
+        use crate::stacked::{CacheKey, BINARY_ARITY};
         let cache_dir = tempfile::tempdir().unwrap();
         let config = StoreConfig::new(
             cache_dir.path(),
             CacheKey::CommDTree.to_string(),
-            StoreConfig::default_cached_above_base_layer(data.len() / 32),
+            StoreConfig::default_cached_above_base_layer(data.len() / 32, BINARY_ARITY),
         );
 
         DrgPoRep::replicate(
@@ -814,12 +815,12 @@ mod tests {
 
             // MT for original data is always named tree-d, and it will be
             // referenced later in the process as such.
-            use crate::stacked::CacheKey;
+            use crate::stacked::{CacheKey, BINARY_ARITY};
             let cache_dir = tempfile::tempdir().unwrap();
             let config = StoreConfig::new(
                 cache_dir.path(),
                 CacheKey::CommDTree.to_string(),
-                StoreConfig::default_cached_above_base_layer(nodes),
+                StoreConfig::default_cached_above_base_layer(nodes, BINARY_ARITY),
             );
 
             let (tau, aux) = DrgPoRep::<H, _>::replicate(

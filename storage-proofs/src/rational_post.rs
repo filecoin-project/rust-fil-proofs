@@ -3,12 +3,13 @@ use std::marker::PhantomData;
 
 use anyhow::{bail, ensure, Context};
 use byteorder::{ByteOrder, LittleEndian};
+use generic_array::typenum;
 use serde::{Deserialize, Serialize};
 
 use crate::drgraph::graph_height;
 use crate::error::{Error, Result};
 use crate::hasher::{Domain, HashFunction, Hasher};
-use crate::merkle::{MerkleProof, MerkleTree};
+use crate::merkle::{BinaryMerkleTree, MerkleProof};
 use crate::parameter_cache::ParameterSetMetadata;
 use crate::proof::{NoRequirements, ProofScheme};
 use crate::sector::*;
@@ -55,7 +56,7 @@ pub struct PublicInputs<'a, T: 'a + Domain> {
 
 #[derive(Debug, Clone)]
 pub struct PrivateInputs<'a, H: 'a + Hasher> {
-    pub trees: &'a BTreeMap<SectorId, &'a MerkleTree<H::Domain, H::Function>>,
+    pub trees: &'a BTreeMap<SectorId, &'a BinaryMerkleTree<H::Domain, H::Function>>,
     pub comm_cs: &'a [H::Domain],
     pub comm_r_lasts: &'a [H::Domain],
 }
@@ -63,10 +64,10 @@ pub struct PrivateInputs<'a, H: 'a + Hasher> {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Proof<H: Hasher> {
     #[serde(bound(
-        serialize = "MerkleProof<H>: Serialize",
-        deserialize = "MerkleProof<H>: Deserialize<'de>"
+        serialize = "MerkleProof<H, typenum::U2>: Serialize",
+        deserialize = "MerkleProof<H, typenum::U2>: Deserialize<'de>"
     ))]
-    inclusion_proofs: Vec<MerkleProof<H>>,
+    inclusion_proofs: Vec<MerkleProof<H, typenum::U2>>,
     pub comm_cs: Vec<H::Domain>,
 }
 
@@ -85,7 +86,8 @@ impl<H: Hasher> Proof<H> {
             .collect()
     }
 
-    pub fn paths(&self) -> Vec<&Vec<(H::Domain, bool)>> {
+    #[allow(clippy::type_complexity)]
+    pub fn paths(&self) -> Vec<&Vec<(Vec<H::Domain>, usize)>> {
         self.inclusion_proofs
             .iter()
             .map(MerkleProof::path)
@@ -197,9 +199,10 @@ impl<'a, H: 'a + Hasher> ProofScheme<'a> for RationalPoSt<'a, H> {
             }
 
             // validate the path length
-            if graph_height(pub_params.sector_size as usize / NODE_SIZE)
-                != merkle_proof.path().len()
-            {
+            let expected_path_length =
+                graph_height::<typenum::U2>(pub_params.sector_size as usize / NODE_SIZE) - 1;
+
+            if expected_path_length != merkle_proof.path().len() {
                 return Ok(false);
             }
 
@@ -298,8 +301,8 @@ mod tests {
     fn test_rational_post<H: Hasher>() {
         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
 
-        let leaves = 32;
-        let sector_size = leaves * 32;
+        let leaves = 64;
+        let sector_size = leaves as u64 * 32;
         let challenges_count = 8;
 
         let pub_params = PublicParams {
@@ -314,12 +317,12 @@ mod tests {
             .flat_map(|_| fr_into_bytes::<Bls12>(&Fr::random(rng)))
             .collect();
 
-        let graph1 = BucketGraph::<H>::new(32, BASE_DEGREE, 0, new_seed()).unwrap();
-        let graph2 = BucketGraph::<H>::new(32, BASE_DEGREE, 0, new_seed()).unwrap();
+        let graph1 = BucketGraph::<H>::new(leaves, BASE_DEGREE, 0, new_seed()).unwrap();
+        let graph2 = BucketGraph::<H>::new(leaves, BASE_DEGREE, 0, new_seed()).unwrap();
         let tree1 = graph1.merkle_tree(None, data1.as_slice()).unwrap();
         let tree2 = graph2.merkle_tree(None, data2.as_slice()).unwrap();
 
-        let seed = (0..32).map(|_| rng.gen()).collect::<Vec<u8>>();
+        let seed = (0..leaves).map(|_| rng.gen()).collect::<Vec<u8>>();
         let mut faults = OrderedSectorSet::new();
         faults.insert(139.into());
         faults.insert(1.into());
@@ -404,20 +407,24 @@ mod tests {
     // Proof root matches that requested in public inputs.
     // However, note that data has no relationship to anything,
     // and proof path does not actually prove that data was in the tree corresponding to expected root.
-    fn make_bogus_proof<H: Hasher>(
+    fn make_bogus_proof<H: Hasher, U: typenum::Unsigned>(
         pub_inputs: &PublicInputs<H::Domain>,
         rng: &mut XorShiftRng,
-    ) -> MerkleProof<H> {
+    ) -> MerkleProof<H, U> {
         let bogus_leaf: H::Domain = H::Domain::random(rng);
 
-        make_proof_for_test(pub_inputs.comm_rs[0], bogus_leaf, vec![(bogus_leaf, true)])
+        make_proof_for_test(
+            pub_inputs.comm_rs[0],
+            bogus_leaf,
+            vec![(vec![bogus_leaf; U::to_usize() - 1], 1)],
+        )
     }
 
     fn test_rational_post_validates<H: Hasher>() {
         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
 
-        let leaves = 32;
-        let sector_size = leaves * 32;
+        let leaves = 64;
+        let sector_size = leaves as u64 * 32;
         let challenges_count = 2;
         let pub_params = PublicParams {
             sector_size,
@@ -428,9 +435,9 @@ mod tests {
             .flat_map(|_| fr_into_bytes::<Bls12>(&Fr::random(rng)))
             .collect();
 
-        let graph = BucketGraph::<H>::new(32, BASE_DEGREE, 0, new_seed()).unwrap();
-        let tree = graph.merkle_tree(None, data.as_slice()).unwrap();
-        let seed = (0..32).map(|_| rng.gen()).collect::<Vec<u8>>();
+        let graph = BucketGraph::<H>::new(leaves, BASE_DEGREE, 0, new_seed()).unwrap();
+        let tree: BinaryMerkleTree<_, _> = graph.merkle_tree(None, data.as_slice()).unwrap();
+        let seed = (0..leaves).map(|_| rng.gen()).collect::<Vec<u8>>();
 
         let faults = OrderedSectorSet::new();
         let mut sectors = OrderedSectorSet::new();
@@ -457,8 +464,8 @@ mod tests {
 
         let bad_proof = Proof {
             inclusion_proofs: vec![
-                make_bogus_proof::<H>(&pub_inputs, rng),
-                make_bogus_proof::<H>(&pub_inputs, rng),
+                make_bogus_proof::<H, typenum::U2>(&pub_inputs, rng),
+                make_bogus_proof::<H, typenum::U2>(&pub_inputs, rng),
             ],
             comm_cs,
         };
@@ -493,8 +500,8 @@ mod tests {
     fn test_rational_post_validates_challenge_identity<H: Hasher>() {
         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
 
-        let leaves = 32;
-        let sector_size = leaves * 32;
+        let leaves = 64;
+        let sector_size = leaves as u64 * 32;
         let challenges_count = 2;
 
         let pub_params = PublicParams {
@@ -506,9 +513,9 @@ mod tests {
             .flat_map(|_| fr_into_bytes::<Bls12>(&Fr::random(rng)))
             .collect();
 
-        let graph = BucketGraph::<H>::new(32, BASE_DEGREE, 0, new_seed()).unwrap();
+        let graph = BucketGraph::<H>::new(leaves, BASE_DEGREE, 0, new_seed()).unwrap();
         let tree = graph.merkle_tree(None, data.as_slice()).unwrap();
-        let seed = (0..32).map(|_| rng.gen()).collect::<Vec<u8>>();
+        let seed = (0..leaves).map(|_| rng.gen()).collect::<Vec<u8>>();
         let mut faults = OrderedSectorSet::new();
         faults.insert(1.into());
         let mut sectors = OrderedSectorSet::new();
@@ -548,7 +555,7 @@ mod tests {
         let proof = RationalPoSt::<H>::prove(&pub_params, &pub_inputs, &priv_inputs)
             .expect("proving failed");
 
-        let seed = (0..32).map(|_| rng.gen()).collect::<Vec<u8>>();
+        let seed = (0..leaves).map(|_| rng.gen()).collect::<Vec<u8>>();
         let challenges =
             derive_challenges(challenges_count, sector_size, &sectors, &seed, &faults).unwrap();
         let comm_r_lasts = challenges.iter().map(|_c| tree.root()).collect::<Vec<_>>();

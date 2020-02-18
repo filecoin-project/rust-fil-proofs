@@ -6,6 +6,7 @@ use crate::error::Result;
 use crate::hasher::Hasher;
 use crate::merkle::{IncludedNode, MerkleProof};
 use crate::stacked::column::Column;
+use generic_array::typenum;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ColumnProof<H: Hasher> {
@@ -15,14 +16,17 @@ pub struct ColumnProof<H: Hasher> {
     ))]
     pub(crate) column: Column<H>,
     #[serde(bound(
-        serialize = "MerkleProof<H>: Serialize",
-        deserialize = "MerkleProof<H>: Deserialize<'de>"
+        serialize = "MerkleProof<H, typenum::U4>: Serialize",
+        deserialize = "MerkleProof<H, typenum::U4>: Deserialize<'de>"
     ))]
-    pub(crate) inclusion_proof: MerkleProof<H>,
+    pub(crate) inclusion_proof: MerkleProof<H, typenum::U4>,
 }
 
 impl<H: Hasher> ColumnProof<H> {
-    pub fn from_column(column: Column<H>, inclusion_proof: MerkleProof<H>) -> Result<Self> {
+    pub fn from_column(
+        column: Column<H>,
+        inclusion_proof: MerkleProof<H, typenum::U4>,
+    ) -> Result<Self> {
         Ok(ColumnProof {
             column,
             inclusion_proof,

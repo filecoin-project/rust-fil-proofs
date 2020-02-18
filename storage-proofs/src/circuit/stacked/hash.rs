@@ -1,5 +1,6 @@
 use bellperson::gadgets::num;
 use bellperson::{ConstraintSystem, SynthesisError};
+use generic_array::typenum;
 use neptune::circuit::poseidon_hash;
 use paired::bls12_381::{Bls12, Fr};
 
@@ -25,17 +26,17 @@ where
         1 => poseidon_hash::<CS, Bls12, typenum::U1>(
             cs,
             column,
-            &*crate::stacked::hash::POSEIDON_CONSTANTS_1,
+            &*crate::hasher::types::POSEIDON_CONSTANTS_1,
         ),
         2 => poseidon_hash::<CS, Bls12, typenum::U2>(
             cs,
             column,
-            &*crate::stacked::hash::POSEIDON_CONSTANTS_2,
+            &*crate::hasher::types::POSEIDON_CONSTANTS_2,
         ),
         11 => poseidon_hash::<CS, Bls12, typenum::U11>(
             cs,
             column,
-            &*crate::stacked::hash::POSEIDON_CONSTANTS_11,
+            &*crate::hasher::types::POSEIDON_CONSTANTS_11,
         ),
         _ => panic!("unsupported column size: {}", column.len()),
     }

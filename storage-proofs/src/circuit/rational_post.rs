@@ -4,6 +4,7 @@ use anyhow::ensure;
 use bellperson::gadgets::num;
 use bellperson::{Circuit, ConstraintSystem, SynthesisError};
 use fil_sapling_crypto::jubjub::JubjubEngine;
+use generic_array::typenum;
 use paired::bls12_381::{Bls12, Fr};
 
 use crate::circuit::constraint;
@@ -13,8 +14,7 @@ use crate::compound_proof::{CircuitComponent, CompoundProof};
 use crate::crypto::pedersen::JJ_PARAMS;
 use crate::drgraph;
 use crate::error::Result;
-use crate::hasher::types::PoseidonEngine;
-use crate::hasher::{HashFunction, Hasher};
+use crate::hasher::{HashFunction, Hasher, PoseidonArity, PoseidonEngine};
 use crate::merklepor;
 use crate::parameter_cache::{CacheableParameters, ParameterSetMetadata};
 use crate::proof::ProofScheme;
@@ -30,7 +30,7 @@ pub struct RationalPoStCircuit<'a, E: JubjubEngine, H: Hasher> {
     pub comm_r_lasts: Vec<Option<E::Fr>>,
     pub leafs: Vec<Option<E::Fr>>,
     #[allow(clippy::type_complexity)]
-    pub paths: Vec<Vec<Option<(E::Fr, bool)>>>,
+    pub paths: Vec<Vec<(Vec<Option<E::Fr>>, Option<usize>)>>,
     _h: PhantomData<H>,
 }
 
@@ -85,8 +85,11 @@ where
                 commitment: None,
                 challenge: challenge.leaf as usize,
             };
-            let por_inputs =
-                PoRCompound::<H>::generate_public_inputs(&por_pub_inputs, &por_pub_params, None)?;
+            let por_inputs = PoRCompound::<H, typenum::U2>::generate_public_inputs(
+                &por_pub_inputs,
+                &por_pub_params,
+                None,
+            )?;
 
             inputs.extend(por_inputs);
         }
@@ -122,7 +125,16 @@ where
         let paths: Vec<Vec<_>> = vanilla_proof
             .paths()
             .iter()
-            .map(|v| v.iter().map(|p| Some(((*p).0.into(), p.1))).collect())
+            .map(|v| {
+                v.iter()
+                    .map(|p| {
+                        (
+                            (*p).0.iter().copied().map(Into::into).map(Some).collect(),
+                            Some(p.1),
+                        )
+                    })
+                    .collect()
+            })
             .collect();
 
         Ok(RationalPoStCircuit {
@@ -140,13 +152,14 @@ where
         pub_params: &<RationalPoSt<'a, H> as ProofScheme<'a>>::PublicParams,
     ) -> RationalPoStCircuit<'a, Bls12, H> {
         let challenges_count = pub_params.challenges_count;
-        let height = drgraph::graph_height(pub_params.sector_size as usize / NODE_SIZE);
+        let height =
+            drgraph::graph_height::<typenum::U2>(pub_params.sector_size as usize / NODE_SIZE);
 
         let comm_rs = vec![None; challenges_count];
         let comm_cs = vec![None; challenges_count];
         let comm_r_lasts = vec![None; challenges_count];
         let leafs = vec![None; challenges_count];
-        let paths = vec![vec![None; height]; challenges_count];
+        let paths = vec![vec![(vec![None; 1], None); height - 1]; challenges_count];
 
         RationalPoStCircuit {
             params: &*JJ_PARAMS,
@@ -160,7 +173,11 @@ where
     }
 }
 
-impl<'a, E: JubjubEngine + PoseidonEngine, H: Hasher> Circuit<E> for RationalPoStCircuit<'a, E, H> {
+impl<'a, E: JubjubEngine + PoseidonEngine<typenum::U2>, H: Hasher> Circuit<E>
+    for RationalPoStCircuit<'a, E, H>
+where
+    typenum::U2: PoseidonArity<E>,
+{
     fn synthesize<CS: ConstraintSystem<E>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
         let params = self.params;
         let comm_rs = self.comm_rs;
@@ -221,7 +238,7 @@ impl<'a, E: JubjubEngine + PoseidonEngine, H: Hasher> Circuit<E> for RationalPoS
                 );
             }
 
-            PoRCircuit::<E, H>::synthesize(
+            PoRCircuit::<typenum::U2, E, H>::synthesize(
                 cs.namespace(|| format!("challenge_inclusion{}", i)),
                 &params,
                 Root::Val(leafs[i]),
@@ -235,7 +252,10 @@ impl<'a, E: JubjubEngine + PoseidonEngine, H: Hasher> Circuit<E> for RationalPoS
     }
 }
 
-impl<'a, E: JubjubEngine + PoseidonEngine, H: Hasher> RationalPoStCircuit<'a, E, H> {
+impl<'a, E: JubjubEngine + PoseidonEngine<typenum::U2>, H: Hasher> RationalPoStCircuit<'a, E, H>
+where
+    typenum::U2: PoseidonArity<E>,
+{
     #[allow(clippy::type_complexity)]
     pub fn synthesize<CS: ConstraintSystem<E>>(
         cs: &mut CS,
@@ -244,7 +264,7 @@ impl<'a, E: JubjubEngine + PoseidonEngine, H: Hasher> RationalPoStCircuit<'a, E,
         comm_rs: Vec<Option<E::Fr>>,
         comm_cs: Vec<Option<E::Fr>>,
         comm_r_lasts: Vec<Option<E::Fr>>,
-        paths: Vec<Vec<Option<(E::Fr, bool)>>>,
+        paths: Vec<Vec<(Vec<Option<E::Fr>>, Option<usize>)>>,
     ) -> Result<(), SynthesisError> {
         Self {
             params,
@@ -293,7 +313,7 @@ mod tests {
         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
 
         let leaves = 32;
-        let sector_size = leaves * 32;
+        let sector_size = (leaves * NODE_SIZE) as u64;
         let challenges_count = 2;
 
         let pub_params = rational_post::PublicParams {
@@ -301,25 +321,29 @@ mod tests {
             challenges_count,
         };
 
-        let data1: Vec<u8> = (0..32)
+        let data1: Vec<u8> = (0..leaves)
             .flat_map(|_| fr_into_bytes::<Bls12>(&Fr::random(rng)))
             .collect();
-        let data2: Vec<u8> = (0..32)
+        let data2: Vec<u8> = (0..leaves)
             .flat_map(|_| fr_into_bytes::<Bls12>(&Fr::random(rng)))
             .collect();
 
-        let graph1 = BucketGraph::<H>::new(32, BASE_DEGREE, 0, new_seed()).unwrap();
-        let tree1 = graph1.merkle_tree(None, data1.as_slice()).unwrap();
+        let graph1 = BucketGraph::<H>::new(leaves, BASE_DEGREE, 0, new_seed()).unwrap();
+        let tree1 = graph1
+            .merkle_tree::<typenum::U2>(None, data1.as_slice())
+            .unwrap();
 
-        let graph2 = BucketGraph::<H>::new(32, BASE_DEGREE, 0, new_seed()).unwrap();
-        let tree2 = graph2.merkle_tree(None, data2.as_slice()).unwrap();
+        let graph2 = BucketGraph::<H>::new(leaves, BASE_DEGREE, 0, new_seed()).unwrap();
+        let tree2 = graph2
+            .merkle_tree::<typenum::U2>(None, data2.as_slice())
+            .unwrap();
 
         let faults = OrderedSectorSet::new();
         let mut sectors = OrderedSectorSet::new();
         sectors.insert(0.into());
         sectors.insert(1.into());
 
-        let seed = (0..32).map(|_| rng.gen()).collect::<Vec<u8>>();
+        let seed = (0..leaves).map(|_| rng.gen()).collect::<Vec<u8>>();
         let challenges =
             derive_challenges(challenges_count, sector_size, &sectors, &seed, &faults).unwrap();
         let comm_r_lasts_raw = vec![tree1.root(), tree2.root()];
@@ -366,7 +390,12 @@ mod tests {
             .iter()
             .map(|p| {
                 p.iter()
-                    .map(|v| Some((v.0.into(), v.1)))
+                    .map(|v| {
+                        (
+                            v.0.iter().copied().map(Into::into).map(Some).collect(),
+                            Some(v.1),
+                        )
+                    })
                     .collect::<Vec<_>>()
             })
             .collect();
@@ -432,7 +461,7 @@ mod tests {
         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
 
         let leaves = 32;
-        let sector_size = leaves * 32;
+        let sector_size = (leaves * NODE_SIZE) as u64;
         let challenges_count = 2;
 
         let setup_params = compound_proof::SetupParams {
@@ -453,18 +482,22 @@ mod tests {
             .flat_map(|_| fr_into_bytes::<Bls12>(&Fr::random(rng)))
             .collect();
 
-        let graph1 = BucketGraph::<H>::new(32, BASE_DEGREE, 0, new_seed()).unwrap();
-        let tree1 = graph1.merkle_tree(None, data1.as_slice()).unwrap();
+        let graph1 = BucketGraph::<H>::new(leaves, BASE_DEGREE, 0, new_seed()).unwrap();
+        let tree1 = graph1
+            .merkle_tree::<typenum::U2>(None, data1.as_slice())
+            .unwrap();
 
-        let graph2 = BucketGraph::<H>::new(32, BASE_DEGREE, 0, new_seed()).unwrap();
-        let tree2 = graph2.merkle_tree(None, data2.as_slice()).unwrap();
+        let graph2 = BucketGraph::<H>::new(leaves, BASE_DEGREE, 0, new_seed()).unwrap();
+        let tree2 = graph2
+            .merkle_tree::<typenum::U2>(None, data2.as_slice())
+            .unwrap();
 
         let faults = OrderedSectorSet::new();
         let mut sectors = OrderedSectorSet::new();
         sectors.insert(0.into());
         sectors.insert(1.into());
 
-        let seed = (0..32).map(|_| rng.gen()).collect::<Vec<u8>>();
+        let seed = (0..leaves).map(|_| rng.gen()).collect::<Vec<u8>>();
         let challenges =
             derive_challenges(challenges_count, sector_size, &sectors, &seed, &faults).unwrap();
 

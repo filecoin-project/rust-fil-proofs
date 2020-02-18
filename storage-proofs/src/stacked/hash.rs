@@ -1,15 +1,6 @@
-use lazy_static::lazy_static;
-use neptune::poseidon::{Poseidon, PoseidonConstants};
+use crate::hasher::types::{POSEIDON_CONSTANTS_1, POSEIDON_CONSTANTS_11, POSEIDON_CONSTANTS_2};
+use neptune::poseidon::Poseidon;
 use paired::bls12_381::Fr;
-
-lazy_static! {
-    pub static ref POSEIDON_CONSTANTS_1: PoseidonConstants::<paired::bls12_381::Bls12, typenum::U1> =
-        PoseidonConstants::new();
-    pub static ref POSEIDON_CONSTANTS_2: PoseidonConstants::<paired::bls12_381::Bls12, typenum::U2> =
-        PoseidonConstants::new();
-    pub static ref POSEIDON_CONSTANTS_11: PoseidonConstants::<paired::bls12_381::Bls12, typenum::U11> =
-        PoseidonConstants::new();
-}
 
 /// Hash all elements in the given column.
 pub fn hash_single_column(column: &[Fr]) -> Fr {

@@ -8,10 +8,9 @@ use storage_proofs::util::NODE_SIZE;
 use crate::param::ParameterMap;
 use crate::types::UnpaddedBytesAmount;
 
-pub const SECTOR_SIZE_ONE_KIB: u64 = 1024;
-pub const SECTOR_SIZE_16_MIB: u64 = 1 << 24;
-pub const SECTOR_SIZE_256_MIB: u64 = 1 << 28;
-pub const SECTOR_SIZE_1_GIB: u64 = 1 << 30;
+pub const SECTOR_SIZE_2_KIB: u64 = 2_048;
+pub const SECTOR_SIZE_8_MIB: u64 = 1 << 23;
+pub const SECTOR_SIZE_512_MIB: u64 = 1 << 29;
 pub const SECTOR_SIZE_32_GIB: u64 = 1 << 35;
 
 pub const POST_CHALLENGE_COUNT: usize = 65;
@@ -26,10 +25,9 @@ lazy_static! {
         AtomicU64::new(storage_proofs::stacked::EXP_DEGREE as u64);
     pub static ref POREP_MINIMUM_CHALLENGES: RwLock<HashMap<u64, u64>> = RwLock::new(
         [
-            (SECTOR_SIZE_ONE_KIB, 2),
-            (SECTOR_SIZE_16_MIB, 2),
-            (SECTOR_SIZE_256_MIB, 2),
-            (SECTOR_SIZE_1_GIB, 2),
+            (SECTOR_SIZE_2_KIB, 2),
+            (SECTOR_SIZE_8_MIB, 2),
+            (SECTOR_SIZE_512_MIB, 2),
             (SECTOR_SIZE_32_GIB, 138)
         ]
         .iter()
@@ -38,10 +36,9 @@ lazy_static! {
     );
     pub static ref POREP_PARTITIONS: RwLock<HashMap<u64, u8>> = RwLock::new(
         [
-            (SECTOR_SIZE_ONE_KIB, 1),
-            (SECTOR_SIZE_16_MIB, 1),
-            (SECTOR_SIZE_256_MIB, 1),
-            (SECTOR_SIZE_1_GIB, 1),
+            (SECTOR_SIZE_2_KIB, 1),
+            (SECTOR_SIZE_8_MIB, 1),
+            (SECTOR_SIZE_512_MIB, 1),
             (SECTOR_SIZE_32_GIB, 9)
         ]
         .iter()
@@ -50,10 +47,9 @@ lazy_static! {
     );
     pub static ref LAYERS: RwLock<HashMap<u64, usize>> = RwLock::new(
         [
-            (SECTOR_SIZE_ONE_KIB, 1),
-            (SECTOR_SIZE_16_MIB, 2),
-            (SECTOR_SIZE_256_MIB, 2),
-            (SECTOR_SIZE_1_GIB, 2),
+            (SECTOR_SIZE_2_KIB, 1),
+            (SECTOR_SIZE_8_MIB, 2),
+            (SECTOR_SIZE_512_MIB, 2),
             (SECTOR_SIZE_32_GIB, 11)
         ]
         .iter()

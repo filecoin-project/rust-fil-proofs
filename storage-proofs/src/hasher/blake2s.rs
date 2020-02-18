@@ -224,6 +224,24 @@ impl HashFunction<Blake2sDomain> for Blake2sFunction {
             .into()
     }
 
+    fn hash_multi_leaf_circuit<Arity, E: JubjubEngine, CS: ConstraintSystem<E>>(
+        mut cs: CS,
+        leaves: &[num::AllocatedNum<E>],
+        _height: usize,
+        params: &E::Params,
+    ) -> std::result::Result<num::AllocatedNum<E>, SynthesisError> {
+        let mut bits = Vec::with_capacity(leaves.len() * E::Fr::CAPACITY as usize);
+        for (i, leaf) in leaves.iter().enumerate() {
+            bits.extend_from_slice(
+                &leaf.to_bits_le(cs.namespace(|| format!("{}_num_into_bits", i)))?,
+            );
+            while bits.len() % 8 != 0 {
+                bits.push(boolean::Boolean::Constant(false));
+            }
+        }
+        Self::hash_circuit(cs, &bits, params)
+    }
+
     fn hash_leaf_bits_circuit<E: JubjubEngine, CS: ConstraintSystem<E>>(
         cs: CS,
         left: &[boolean::Boolean],
@@ -306,6 +324,13 @@ impl Algorithm<Blake2sDomain> for Blake2sFunction {
     fn node(&mut self, left: Blake2sDomain, right: Blake2sDomain, _height: usize) -> Blake2sDomain {
         left.hash(self);
         right.hash(self);
+        self.hash()
+    }
+
+    fn multi_node(&mut self, parts: &[Blake2sDomain], _height: usize) -> Blake2sDomain {
+        for part in parts {
+            part.hash(self)
+        }
         self.hash()
     }
 }

@@ -6,6 +6,7 @@ use bellperson::gadgets::{
 };
 use bellperson::{Circuit, ConstraintSystem, SynthesisError};
 use fil_sapling_crypto::jubjub::JubjubEngine;
+use generic_array::typenum;
 use paired::bls12_381::{Bls12, Fr};
 
 use crate::circuit::constraint;
@@ -19,8 +20,7 @@ use crate::drgraph;
 use crate::election_post::{self, ElectionPoSt};
 use crate::error::Result;
 use crate::fr32::fr_into_bytes;
-use crate::hasher::types::PoseidonEngine;
-use crate::hasher::{HashFunction, Hasher};
+use crate::hasher::{HashFunction, Hasher, PoseidonArity, PoseidonEngine};
 use crate::merklepor;
 use crate::parameter_cache::{CacheableParameters, ParameterSetMetadata};
 use crate::proof::ProofScheme;
@@ -36,7 +36,7 @@ pub struct ElectionPoStCircuit<'a, E: JubjubEngine, H: Hasher> {
     pub comm_r_last: Option<E::Fr>,
     pub leafs: Vec<Option<E::Fr>>,
     #[allow(clippy::type_complexity)]
-    pub paths: Vec<Vec<Option<(E::Fr, bool)>>>,
+    pub paths: Vec<Vec<(Vec<Option<E::Fr>>, Option<usize>)>>,
     pub partial_ticket: Option<E::Fr>,
     pub randomness: Vec<Option<bool>>,
     pub prover_id: Vec<Option<bool>>,
@@ -101,7 +101,7 @@ where
                     commitment: None,
                     challenge: challenged_leaf_start as usize + i,
                 };
-                let por_inputs = PoRCompound::<H>::generate_public_inputs(
+                let por_inputs = PoRCompound::<H, typenum::U4>::generate_public_inputs(
                     &por_pub_inputs,
                     &por_pub_params,
                     None,
@@ -136,7 +136,16 @@ where
         let paths: Vec<Vec<_>> = vanilla_proof
             .paths()
             .iter()
-            .map(|v| v.iter().map(|p| Some(((*p).0.into(), p.1))).collect())
+            .map(|v| {
+                v.iter()
+                    .map(|p| {
+                        (
+                            (*p).0.iter().copied().map(Into::into).map(Some).collect(),
+                            Some(p.1),
+                        )
+                    })
+                    .collect()
+            })
             .collect();
 
         Ok(ElectionPoStCircuit {
@@ -158,10 +167,11 @@ where
         pub_params: &<ElectionPoSt<'a, H> as ProofScheme<'a>>::PublicParams,
     ) -> ElectionPoStCircuit<'a, Bls12, H> {
         let challenges_count = pub_params.challenged_nodes * pub_params.challenge_count;
-        let height = drgraph::graph_height(pub_params.sector_size as usize / NODE_SIZE);
+        let height =
+            drgraph::graph_height::<typenum::U4>(pub_params.sector_size as usize / NODE_SIZE);
 
         let leafs = vec![None; challenges_count];
-        let paths = vec![vec![None; height]; challenges_count];
+        let paths = vec![vec![(vec![None; 3], None); height - 1]; challenges_count];
 
         ElectionPoStCircuit {
             params: &*JJ_PARAMS,
@@ -179,7 +189,14 @@ where
     }
 }
 
-impl<'a, E: JubjubEngine + PoseidonEngine, H: Hasher> Circuit<E> for ElectionPoStCircuit<'a, E, H> {
+impl<
+        'a,
+        E: JubjubEngine + PoseidonEngine<typenum::U4> + PoseidonEngine<typenum::U2>,
+        H: Hasher,
+    > Circuit<E> for ElectionPoStCircuit<'a, E, H>
+where
+    typenum::U4: PoseidonArity<E>,
+{
     fn synthesize<CS: ConstraintSystem<E>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
         let params = self.params;
         let comm_r = self.comm_r;
@@ -233,7 +250,7 @@ impl<'a, E: JubjubEngine + PoseidonEngine, H: Hasher> Circuit<E> for ElectionPoS
 
         // 2. Verify Inclusion Paths
         for (i, (leaf, path)) in leafs.iter().zip(paths.iter()).enumerate() {
-            PoRCircuit::<E, H>::synthesize(
+            PoRCircuit::<typenum::U4, E, H>::synthesize(
                 cs.namespace(|| format!("challenge_inclusion{}", i)),
                 &params,
                 Root::Val(*leaf),
@@ -340,31 +357,33 @@ mod tests {
     use crate::election_post::{self, ElectionPoSt};
     use crate::fr32::fr_into_bytes;
     use crate::hasher::{Domain, HashFunction, Hasher, PedersenHasher, PoseidonHasher};
+    use crate::merkle::{QuadLCMerkleTree, QuadMerkleTree};
     use crate::proof::{NoRequirements, ProofScheme};
     use crate::sector::SectorId;
+    use crate::stacked::QUAD_ARITY;
 
     #[test]
     fn test_election_post_circuit_pedersen() {
-        test_election_post_circuit::<PedersenHasher>(333_750);
+        test_election_post_circuit::<PedersenHasher>(279_570);
     }
 
     #[test]
     fn test_election_post_circuit_poseidon() {
-        test_election_post_circuit::<PoseidonHasher>(143_805);
+        test_election_post_circuit::<PoseidonHasher>(67_785);
     }
 
     fn test_election_post_circuit<H: Hasher>(expected_constraints: usize) {
         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
 
-        let leaves = 32;
-        let sector_size = leaves * 32;
+        let leaves = 64;
+        let sector_size = leaves * NODE_SIZE;
 
         let randomness: [u8; 32] = rng.gen();
         let prover_id: [u8; 32] = rng.gen();
 
         let pub_params = election_post::PublicParams {
-            sector_size,
-            challenge_count: 40,
+            sector_size: sector_size as u64,
+            challenge_count: 20,
             challenged_nodes: 1,
         };
 
@@ -377,7 +396,7 @@ mod tests {
         let config = StoreConfig::new(
             &temp_path,
             String::from("test-lc-tree-v1"),
-            StoreConfig::default_cached_above_base_layer(leaves as usize),
+            StoreConfig::default_cached_above_base_layer(leaves as usize, QUAD_ARITY),
         );
 
         for i in 0..5 {
@@ -386,11 +405,11 @@ mod tests {
                 .flat_map(|_| fr_into_bytes::<Bls12>(&Fr::random(rng)))
                 .collect();
 
-            let graph = BucketGraph::<H>::new(32, BASE_DEGREE, 0, new_seed()).unwrap();
+            let graph = BucketGraph::<H>::new(leaves, BASE_DEGREE, 0, new_seed()).unwrap();
 
             let cur_config =
                 StoreConfig::from_config(&config, format!("test-lc-tree-v1-{}", i), None);
-            let mut tree = graph
+            let mut tree: QuadMerkleTree<_, _> = graph
                 .merkle_tree(Some(cur_config.clone()), data.as_slice())
                 .unwrap();
             let c = tree
@@ -398,7 +417,7 @@ mod tests {
                 .unwrap();
             assert_eq!(c, true);
 
-            let lctree = graph
+            let lctree: QuadLCMerkleTree<_, _> = graph
                 .lcmerkle_tree(Some(cur_config), data.as_slice())
                 .unwrap();
             trees.insert(i.into(), lctree);
@@ -443,12 +462,17 @@ mod tests {
 
         // actual circuit test
 
-        let paths: Vec<_> = proof
+        let paths = proof
             .paths()
             .iter()
             .map(|p| {
                 p.iter()
-                    .map(|v| Some((v.0.into(), v.1)))
+                    .map(|v| {
+                        (
+                            v.0.iter().copied().map(Into::into).map(Some).collect(),
+                            Some(v.1),
+                        )
+                    })
                     .collect::<Vec<_>>()
             })
             .collect();
@@ -476,7 +500,7 @@ mod tests {
 
         assert!(cs.is_satisfied(), "constraints not satisfied");
 
-        assert_eq!(cs.num_inputs(), 43, "wrong number of inputs");
+        assert_eq!(cs.num_inputs(), 23, "wrong number of inputs");
         assert_eq!(
             cs.num_constraints(),
             expected_constraints,
@@ -517,15 +541,15 @@ mod tests {
     fn election_post_test_compound<H: Hasher>() {
         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
 
-        let leaves = 32;
-        let sector_size = leaves * 32;
+        let leaves = 64;
+        let sector_size = (leaves * NODE_SIZE) as u64;
         let randomness: [u8; 32] = rng.gen();
         let prover_id: [u8; 32] = rng.gen();
 
         let setup_params = compound_proof::SetupParams {
             vanilla_params: election_post::SetupParams {
                 sector_size,
-                challenge_count: 40,
+                challenge_count: 20,
                 challenged_nodes: 1,
             },
             partitions: None,
@@ -541,7 +565,7 @@ mod tests {
         let config = StoreConfig::new(
             &temp_path,
             String::from("test-lc-tree-v1"),
-            StoreConfig::default_cached_above_base_layer(leaves as usize),
+            StoreConfig::default_cached_above_base_layer(leaves as usize, QUAD_ARITY),
         );
 
         for i in 0..5 {
@@ -550,11 +574,11 @@ mod tests {
                 .flat_map(|_| fr_into_bytes::<Bls12>(&Fr::random(rng)))
                 .collect();
 
-            let graph = BucketGraph::<H>::new(32, BASE_DEGREE, 0, new_seed()).unwrap();
+            let graph = BucketGraph::<H>::new(leaves, BASE_DEGREE, 0, new_seed()).unwrap();
 
             let cur_config =
                 StoreConfig::from_config(&config, format!("test-lc-tree-v1-{}", i), None);
-            let mut tree = graph
+            let mut tree: QuadMerkleTree<_, _> = graph
                 .merkle_tree(Some(cur_config.clone()), data.as_slice())
                 .unwrap();
             let c = tree
@@ -562,7 +586,7 @@ mod tests {
                 .unwrap();
             assert_eq!(c, true);
 
-            let lctree = graph
+            let lctree: QuadLCMerkleTree<_, _> = graph
                 .lcmerkle_tree(Some(cur_config), data.as_slice())
                 .unwrap();
             trees.insert(i.into(), lctree);

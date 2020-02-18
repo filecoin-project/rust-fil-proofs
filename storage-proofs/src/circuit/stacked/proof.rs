@@ -3,6 +3,7 @@ use std::marker::PhantomData;
 use bellperson::gadgets::num;
 use bellperson::{Circuit, ConstraintSystem, SynthesisError};
 use fil_sapling_crypto::jubjub::JubjubEngine;
+use generic_array::typenum;
 use paired::bls12_381::{Bls12, Fr};
 
 use crate::circuit::por::PoRCompound;
@@ -203,7 +204,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher>
         let comm_r = pub_in.tau.as_ref().expect("missing tau").comm_r;
         inputs.push(comm_r.into());
 
-        let por_params = merklepor::MerklePoR::<H>::setup(&merklepor::SetupParams {
+        let por_params = merklepor::MerklePoR::<H, typenum::U2>::setup(&merklepor::SetupParams {
             leaves: graph.size(),
             private: true,
         })?;
@@ -214,14 +215,23 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher>
                 commitment: None,
             };
 
-            PoRCompound::<H>::generate_public_inputs(&pub_inputs, &por_params, k)
+            PoRCompound::<H, typenum::U4>::generate_public_inputs(&pub_inputs, &por_params, k)
         };
 
         let all_challenges = pub_in.challenges(&pub_params.layer_challenges, graph.size(), k);
 
         for challenge in all_challenges.into_iter() {
             // comm_d_proof
-            inputs.extend(generate_inclusion_inputs(challenge)?);
+            let pub_inputs = merklepor::PublicInputs::<H::Domain> {
+                challenge,
+                commitment: None,
+            };
+
+            inputs.extend(PoRCompound::<H, typenum::U2>::generate_public_inputs(
+                &pub_inputs,
+                &por_params,
+                k,
+            )?);
 
             // replica column proof
             {
@@ -325,16 +335,16 @@ mod tests {
 
     #[test]
     fn stacked_input_circuit_pedersen() {
-        stacked_input_circuit::<PedersenHasher>(1_806_357);
+        stacked_input_circuit::<PedersenHasher>(1_918_139);
     }
 
     #[test]
     fn stacked_input_circuit_poseidon() {
-        stacked_input_circuit::<PoseidonHasher>(1_760_052);
+        stacked_input_circuit::<PoseidonHasher>(1_804_746);
     }
 
     fn stacked_input_circuit<H: Hasher + 'static>(expected_constraints: usize) {
-        let nodes = 8;
+        let nodes = 16;
         let degree = BASE_DEGREE;
         let expansion_degree = EXP_DEGREE;
         let num_layers = 2;
@@ -358,13 +368,13 @@ mod tests {
 
         // MT for original data is always named tree-d, and it will be
         // referenced later in the process as such.
-        use crate::stacked::CacheKey;
+        use crate::stacked::{CacheKey, BINARY_ARITY};
         use merkletree::store::StoreConfig;
         let cache_dir = tempfile::tempdir().unwrap();
         let config = StoreConfig::new(
             cache_dir.path(),
             CacheKey::CommDTree.to_string(),
-            StoreConfig::default_cached_above_base_layer(nodes),
+            StoreConfig::default_cached_above_base_layer(nodes, BINARY_ARITY),
         );
 
         let pp = StackedDrg::<H, Sha256Hasher>::setup(&sp).expect("setup failed");
@@ -485,7 +495,7 @@ mod tests {
     }
 
     fn stacked_test_compound<H: 'static + Hasher>() {
-        let nodes = 8;
+        let nodes = 16;
         let degree = 3;
         let expansion_degree = 2;
         let num_layers = 2;
@@ -515,13 +525,13 @@ mod tests {
 
         // MT for original data is always named tree-d, and it will be
         // referenced later in the process as such.
-        use crate::stacked::CacheKey;
+        use crate::stacked::{CacheKey, BINARY_ARITY};
         use merkletree::store::StoreConfig;
         let cache_dir = tempfile::tempdir().unwrap();
         let config = StoreConfig::new(
             cache_dir.path(),
             CacheKey::CommDTree.to_string(),
-            StoreConfig::default_cached_above_base_layer(nodes),
+            StoreConfig::default_cached_above_base_layer(nodes, BINARY_ARITY),
         );
 
         let public_params = StackedCompound::setup(&setup_params).expect("setup failed");

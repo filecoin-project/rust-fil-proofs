@@ -183,10 +183,7 @@ impl Element for PedersenDomain {
     }
 
     fn from_slice(bytes: &[u8]) -> Self {
-        match PedersenDomain::try_from_bytes(bytes) {
-            Ok(res) => res,
-            Err(err) => panic!(err),
-        }
+        PedersenDomain::try_from_bytes(bytes).expect("invalid bytes")
     }
 
     fn copy_to_slice(&self, bytes: &mut [u8]) {
@@ -226,6 +223,37 @@ impl HashFunction<PedersenDomain> for PedersenFunction {
             pedersen_hash::<Bls12, _>(Personalization::None, data, &pedersen::JJ_PARAMS)
         };
         digest.into_xy().0.into()
+    }
+
+    fn hash_multi_leaf_circuit<Arity, E: JubjubEngine, CS: ConstraintSystem<E>>(
+        mut cs: CS,
+        leaves: &[num::AllocatedNum<E>],
+        _height: usize,
+        params: &E::Params,
+    ) -> std::result::Result<num::AllocatedNum<E>, SynthesisError> {
+        let is_binary = leaves.len() == 2;
+
+        let mut bits = Vec::with_capacity(leaves.len() * E::Fr::CAPACITY as usize);
+        for (i, leaf) in leaves.iter().enumerate() {
+            bits.extend_from_slice(
+                &leaf.to_bits_le(cs.namespace(|| format!("{}_num_into_bits", i)))?,
+            );
+            if !is_binary {
+                while bits.len() % 8 != 0 {
+                    bits.push(boolean::Boolean::Constant(false));
+                }
+            }
+        }
+
+        if is_binary {
+            Ok(
+                pedersen_hash_circuit::pedersen_hash(cs, Personalization::None, &bits, params)?
+                    .get_x()
+                    .clone(),
+            )
+        } else {
+            Self::hash_circuit(cs, &bits, params)
+        }
     }
 
     fn hash_leaf_bits_circuit<E: JubjubEngine, CS: ConstraintSystem<E>>(
@@ -318,6 +346,17 @@ impl LightAlgorithm<PedersenDomain> for PedersenFunction {
 
         digest.into_xy().0.into()
     }
+
+    fn multi_node(&mut self, parts: &[PedersenDomain], height: usize) -> PedersenDomain {
+        match parts.len() {
+            2 => self.node(parts[0], parts[1], height),
+            _ => {
+                use crate::crypto::pedersen::*;
+
+                pedersen_md_no_padding_bits(Bits::new_many(parts.iter())).into()
+            }
+        }
+    }
 }
 
 /// Helper to iterate over a pair of `Fr`.
@@ -390,15 +429,16 @@ mod tests {
 
     use merkletree::hash::Hashable;
 
-    use crate::merkle::MerkleTree;
+    use crate::merkle::BinaryMerkleTree;
 
     #[test]
     fn test_path() {
         let values = ["hello", "world", "you", "two"];
-        let t = MerkleTree::<PedersenDomain, PedersenFunction>::from_data(values.iter()).unwrap();
+        let t =
+            BinaryMerkleTree::<PedersenDomain, PedersenFunction>::from_data(values.iter()).unwrap();
 
         let p = t.gen_proof(0).unwrap(); // create a proof for the first value = "hello"
-        assert_eq!(*p.path(), vec![true, true]);
+        assert_eq!(*p.path(), vec![0, 0]);
         assert_eq!(p.validate::<PedersenFunction>(), true);
     }
 
@@ -406,7 +446,8 @@ mod tests {
     fn test_pedersen_hasher() {
         let values = ["hello", "world", "you", "two"];
 
-        let t = MerkleTree::<PedersenDomain, PedersenFunction>::from_data(values.iter()).unwrap();
+        let t =
+            BinaryMerkleTree::<PedersenDomain, PedersenFunction>::from_data(values.iter()).unwrap();
 
         assert_eq!(t.leafs(), 4);
 

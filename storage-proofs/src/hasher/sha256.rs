@@ -61,10 +61,14 @@ impl StdHasher for Sha256Function {
     }
 }
 
-#[derive(
-    Copy, Clone, PartialEq, Eq, Debug, PartialOrd, Ord, Default, Serialize, Deserialize, Hash,
-)]
+#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Default, Serialize, Deserialize, Hash)]
 pub struct Sha256Domain(pub [u8; 32]);
+
+impl std::fmt::Debug for Sha256Domain {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Sha256Domain({})", hex::encode(&self.0))
+    }
+}
 
 impl AsRef<Sha256Domain> for Sha256Domain {
     fn as_ref(&self) -> &Self {
@@ -191,6 +195,29 @@ impl HashFunction<Sha256Domain> for Sha256Function {
         res
     }
 
+    fn hash_multi_leaf_circuit<Arity, E: JubjubEngine, CS: ConstraintSystem<E>>(
+        mut cs: CS,
+        leaves: &[num::AllocatedNum<E>],
+        _height: usize,
+        params: &E::Params,
+    ) -> std::result::Result<num::AllocatedNum<E>, SynthesisError> {
+        let mut bits = Vec::with_capacity(leaves.len() * E::Fr::CAPACITY as usize);
+        for (i, leaf) in leaves.iter().enumerate() {
+            let mut padded = leaf.to_bits_le(cs.namespace(|| format!("{}_num_into_bits", i)))?;
+            while padded.len() % 8 != 0 {
+                padded.push(boolean::Boolean::Constant(false));
+            }
+
+            bits.extend(
+                padded
+                    .chunks_exact(8)
+                    .flat_map(|chunk| chunk.iter().rev())
+                    .cloned(),
+            );
+        }
+        Self::hash_circuit(cs, &bits, params)
+    }
+
     fn hash_leaf_bits_circuit<E: JubjubEngine, CS: ConstraintSystem<E>>(
         cs: CS,
         left: &[boolean::Boolean],
@@ -308,6 +335,13 @@ impl Algorithm<Sha256Domain> for Sha256Function {
     fn node(&mut self, left: Sha256Domain, right: Sha256Domain, _height: usize) -> Sha256Domain {
         left.hash(self);
         right.hash(self);
+        self.hash()
+    }
+
+    fn multi_node(&mut self, parts: &[Sha256Domain], _height: usize) -> Sha256Domain {
+        for part in parts {
+            part.hash(self)
+        }
         self.hash()
     }
 }

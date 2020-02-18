@@ -1,15 +1,18 @@
 use std::hash::Hasher as StdHasher;
 
-use super::types::MERKLE_TREE_ARITY;
 use crate::crypto::{create_label, sloth};
 use crate::error::{Error, Result};
-use crate::hasher::types::{PoseidonArity, PoseidonEngine, POSEIDON_CONSTANTS};
+use crate::hasher::types::{
+    PoseidonArity, PoseidonEngine, POSEIDON_CONSTANTS_1, POSEIDON_CONSTANTS_2,
+    POSEIDON_CONSTANTS_4, POSEIDON_CONSTANTS_8,
+};
 use crate::hasher::{Domain, HashFunction, Hasher};
 use anyhow::ensure;
 use bellperson::gadgets::{boolean, num};
 use bellperson::{ConstraintSystem, SynthesisError};
 use ff::{Field, PrimeField, PrimeFieldRepr, ScalarEngine};
 use fil_sapling_crypto::jubjub::JubjubEngine;
+use generic_array::typenum;
 use merkletree::hash::{Algorithm as LightAlgorithm, Hashable};
 use merkletree::merkle::Element;
 use neptune::circuit::poseidon_hash;
@@ -219,9 +222,29 @@ fn shared_hash(data: &[u8]) -> PoseidonDomain {
 }
 
 fn shared_hash_frs(preimage: &[<Bls12 as ff::ScalarEngine>::Fr]) -> PoseidonDomain {
-    let mut p = Poseidon::new_with_preimage(&preimage, &*POSEIDON_CONSTANTS);
-    let fr: <Bls12 as ScalarEngine>::Fr = p.hash();
-    fr.into()
+    match preimage.len() {
+        1 => {
+            let mut p = Poseidon::new_with_preimage(&preimage, &*POSEIDON_CONSTANTS_1);
+            let fr: <Bls12 as ScalarEngine>::Fr = p.hash();
+            fr.into()
+        }
+        2 => {
+            let mut p = Poseidon::new_with_preimage(&preimage, &POSEIDON_CONSTANTS_2);
+            let fr: <Bls12 as ScalarEngine>::Fr = p.hash();
+            fr.into()
+        }
+        4 => {
+            let mut p = Poseidon::new_with_preimage(&preimage, &POSEIDON_CONSTANTS_4);
+            let fr: <Bls12 as ScalarEngine>::Fr = p.hash();
+            fr.into()
+        }
+        8 => {
+            let mut p = Poseidon::new_with_preimage(&preimage, &POSEIDON_CONSTANTS_8);
+            let fr: <Bls12 as ScalarEngine>::Fr = p.hash();
+            fr.into()
+        }
+        _ => panic!("Unsupported arity for Poseidon hasher: {}", preimage.len()),
+    }
 }
 
 impl HashFunction<PoseidonDomain> for PoseidonFunction {
@@ -231,12 +254,12 @@ impl HashFunction<PoseidonDomain> for PoseidonFunction {
 
     fn hash2(a: &PoseidonDomain, b: &PoseidonDomain) -> PoseidonDomain {
         let mut p =
-            Poseidon::new_with_preimage(&[(*a).into(), (*b).into()][..], &*POSEIDON_CONSTANTS);
+            Poseidon::new_with_preimage(&[(*a).into(), (*b).into()][..], &*POSEIDON_CONSTANTS_2);
         let fr: <Bls12 as ScalarEngine>::Fr = p.hash();
         fr.into()
     }
 
-    fn hash_leaf_circuit<E: JubjubEngine + PoseidonEngine, CS: ConstraintSystem<E>>(
+    fn hash_leaf_circuit<E: JubjubEngine + PoseidonEngine<typenum::U2>, CS: ConstraintSystem<E>>(
         cs: CS,
         left: &num::AllocatedNum<E>,
         right: &num::AllocatedNum<E>,
@@ -245,7 +268,25 @@ impl HashFunction<PoseidonDomain> for PoseidonFunction {
     ) -> ::std::result::Result<num::AllocatedNum<E>, SynthesisError> {
         let preimage = vec![left.clone(), right.clone()];
 
-        poseidon_hash::<CS, E, PoseidonArity>(cs, preimage, E::PARAMETERS(MERKLE_TREE_ARITY))
+        poseidon_hash::<CS, E, typenum::U2>(cs, preimage, E::PARAMETERS())
+    }
+
+    fn hash_multi_leaf_circuit<
+        Arity: 'static,
+        E: JubjubEngine + PoseidonEngine<Arity>,
+        CS: ConstraintSystem<E>,
+    >(
+        cs: CS,
+        leaves: &[num::AllocatedNum<E>],
+        _height: usize,
+        _params: &E::Params,
+    ) -> ::std::result::Result<num::AllocatedNum<E>, SynthesisError>
+    where
+        Arity: PoseidonArity<E>,
+        typenum::Add1<Arity>: generic_array::ArrayLength<E::Fr>,
+    {
+        let params = E::PARAMETERS();
+        poseidon_hash::<CS, E, Arity>(cs, leaves.to_vec(), params)
     }
 
     fn hash_circuit<E: JubjubEngine, CS: ConstraintSystem<E>>(
@@ -263,11 +304,11 @@ impl HashFunction<PoseidonDomain> for PoseidonFunction {
         _params: &E::Params,
     ) -> std::result::Result<num::AllocatedNum<E>, SynthesisError>
     where
-        E: JubjubEngine + PoseidonEngine,
+        E: JubjubEngine + PoseidonEngine<typenum::U2>,
         CS: ConstraintSystem<E>,
     {
         let preimage = vec![a.clone(), b.clone()];
-        poseidon_hash::<CS, E, PoseidonArity>(cs, preimage, E::PARAMETERS(MERKLE_TREE_ARITY))
+        poseidon_hash::<CS, E, typenum::U2>(cs, preimage, E::PARAMETERS())
     }
 }
 
@@ -296,6 +337,18 @@ impl LightAlgorithm<PoseidonDomain> for PoseidonFunction {
             <Bls12 as ff::ScalarEngine>::Fr::from_repr(left.0).unwrap(),
             <Bls12 as ff::ScalarEngine>::Fr::from_repr(right.0).unwrap(),
         ])
+    }
+
+    fn multi_node(&mut self, parts: &[PoseidonDomain], _height: usize) -> PoseidonDomain {
+        match parts.len() {
+            1 | 2 | 4 | 8 => shared_hash_frs(
+                &parts
+                    .iter()
+                    .map(|x| <Bls12 as ff::ScalarEngine>::Fr::from_repr(x.0).unwrap())
+                    .collect::<Vec<_>>(),
+            ),
+            arity => panic!("unsupported arity {}", arity),
+        }
     }
 }
 
@@ -336,12 +389,14 @@ mod tests {
             PoseidonDomain(Fr::one().into_repr()),
         ];
 
-        let t =
-            MerkleTree::<PoseidonDomain, PoseidonFunction>::new(values.iter().map(|x| *x)).unwrap();
+        let t = MerkleTree::<PoseidonDomain, PoseidonFunction, typenum::U2>::new(
+            values.iter().map(|x| *x),
+        )
+        .unwrap();
 
         let p = t.gen_proof(0).unwrap(); // create a proof for the first value =k Fr::one()
 
-        assert_eq!(*p.path(), vec![true, true]);
+        assert_eq!(*p.path(), vec![0, 0]);
         assert_eq!(p.validate::<PoseidonFunction>(), true);
     }
 
@@ -361,8 +416,10 @@ mod tests {
             PoseidonDomain(Fr::one().into_repr()),
         ];
 
-        let t =
-            MerkleTree::<PoseidonDomain, PoseidonFunction>::new(leaves.iter().map(|x| *x)).unwrap();
+        let t = MerkleTree::<PoseidonDomain, PoseidonFunction, typenum::U2>::new(
+            leaves.iter().map(|x| *x),
+        )
+        .unwrap();
 
         assert_eq!(t.leafs(), 4);
 

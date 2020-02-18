@@ -2,6 +2,7 @@ use std::cmp;
 use std::marker::PhantomData;
 
 use anyhow::ensure;
+use generic_array::typenum;
 use merkletree::store::StoreConfig;
 use rand::{rngs::OsRng, Rng, SeedableRng};
 use rand_chacha::ChaChaRng;
@@ -31,26 +32,26 @@ pub trait Graph<H: Hasher>: ::std::fmt::Debug + Clone + PartialEq + Eq {
     }
 
     /// Builds a merkle tree based on the given data.
-    fn merkle_tree<'a>(
+    fn merkle_tree<'a, U: typenum::Unsigned>(
         &self,
         config: Option<StoreConfig>,
         data: &'a [u8],
-    ) -> Result<MerkleTree<H::Domain, H::Function>> {
-        create_merkle_tree::<H>(config, self.size(), data)
+    ) -> Result<MerkleTree<H::Domain, H::Function, U>> {
+        create_merkle_tree::<H, U>(config, self.size(), data)
     }
 
     /// Builds a merkle tree based on the given level cache data.
-    fn lcmerkle_tree<'a>(
+    fn lcmerkle_tree<'a, U: typenum::Unsigned>(
         &self,
         config: Option<StoreConfig>,
         data: &'a [u8],
-    ) -> Result<LCMerkleTree<H::Domain, H::Function>> {
-        create_lcmerkle_tree::<H>(config, self.size(), data)
+    ) -> Result<LCMerkleTree<H::Domain, H::Function, U>> {
+        create_lcmerkle_tree::<H, U>(config, self.size(), data)
     }
 
     /// Returns the merkle tree depth.
-    fn merkle_tree_depth(&self) -> u64 {
-        graph_height(self.size()) as u64
+    fn merkle_tree_depth<U: typenum::Unsigned>(&self) -> u64 {
+        graph_height::<U>(self.size()) as u64
     }
 
     /// Returns a sorted list of all parents of this node. The parents may be repeated.
@@ -89,8 +90,8 @@ pub trait Graph<H: Hasher>: ::std::fmt::Debug + Clone + PartialEq + Eq {
     ) -> Result<Self::Key>;
 }
 
-pub fn graph_height(size: usize) -> usize {
-    (size as f64).log2().ceil() as usize
+pub fn graph_height<U: typenum::Unsigned>(number_of_leafs: usize) -> usize {
+    merkletree::merkle::get_merkle_tree_height(number_of_leafs, U::to_usize())
 }
 
 /// Bucket sampling algorithm.
@@ -306,35 +307,55 @@ mod tests {
         graph_bucket::<PedersenHasher>();
     }
 
-    fn gen_proof<H: Hasher>(config: Option<StoreConfig>) {
-        let leafs = 8;
+    fn gen_proof<H: Hasher, U: typenum::Unsigned>(config: Option<StoreConfig>) {
+        let leafs = 16;
         let g = BucketGraph::<H>::new(leafs, BASE_DEGREE, 0, new_seed()).unwrap();
         let data = vec![2u8; NODE_SIZE * leafs];
 
         let mmapped = &mmap_from(&data);
-        let tree = g.merkle_tree(config, mmapped).unwrap();
+        let tree = g.merkle_tree::<U>(config, mmapped).unwrap();
         let proof = tree.gen_proof(2).unwrap();
 
         assert!(proof.validate::<H::Function>());
     }
 
     #[test]
-    fn gen_proof_pedersen() {
-        gen_proof::<PedersenHasher>(None);
+    fn gen_proof_pedersen_binary() {
+        gen_proof::<PedersenHasher, typenum::U2>(None);
     }
 
     #[test]
-    fn gen_proof_poseidon() {
-        gen_proof::<PoseidonHasher>(None);
+    fn gen_proof_poseidon_binary() {
+        gen_proof::<PoseidonHasher, typenum::U2>(None);
     }
 
     #[test]
-    fn gen_proof_sha256() {
-        gen_proof::<Sha256Hasher>(None);
+    fn gen_proof_sha256_binary() {
+        gen_proof::<Sha256Hasher, typenum::U2>(None);
     }
 
     #[test]
-    fn gen_proof_blake2s() {
-        gen_proof::<Blake2sHasher>(None);
+    fn gen_proof_blake2s_binary() {
+        gen_proof::<Blake2sHasher, typenum::U2>(None);
+    }
+
+    #[test]
+    fn gen_proof_pedersen_quad() {
+        gen_proof::<PedersenHasher, typenum::U4>(None);
+    }
+
+    #[test]
+    fn gen_proof_poseidon_quad() {
+        gen_proof::<PoseidonHasher, typenum::U4>(None);
+    }
+
+    #[test]
+    fn gen_proof_sha256_quad() {
+        gen_proof::<Sha256Hasher, typenum::U4>(None);
+    }
+
+    #[test]
+    fn gen_proof_blake2s_quad() {
+        gen_proof::<Blake2sHasher, typenum::U4>(None);
     }
 }

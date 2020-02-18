@@ -3,7 +3,7 @@ use std::io::{Seek, SeekFrom, Write};
 use std::path::Path;
 
 use filecoin_proofs::constants::{
-    POREP_PARTITIONS, POST_CHALLENGED_NODES, POST_CHALLENGE_COUNT, SECTOR_SIZE_16_MIB,
+    POREP_PARTITIONS, POST_CHALLENGED_NODES, POST_CHALLENGE_COUNT, SECTOR_SIZE_8_MIB,
 };
 use filecoin_proofs::types::{
     PaddedBytesAmount, PieceInfo, PoRepConfig, PoRepProofPartitions, PoStConfig,
@@ -21,7 +21,7 @@ use tempfile::NamedTempFile;
 const CHALLENGE_SEED: [u8; 32] = [0; 32];
 const PROVER_ID: [u8; 32] = [0; 32];
 const SECTOR_ID: u64 = 0;
-const SECTOR_SIZE: u64 = SECTOR_SIZE_16_MIB;
+const SECTOR_SIZE: u64 = SECTOR_SIZE_8_MIB;
 //const SECTOR_SIZE: u64 = SECTOR_SIZE_ONE_KIB;
 const SEED: [u8; 32] = [0; 32];
 const TICKET: [u8; 32] = [0; 32];
