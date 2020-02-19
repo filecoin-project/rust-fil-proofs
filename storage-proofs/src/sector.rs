@@ -2,6 +2,8 @@ use std::collections::BTreeSet;
 use std::fmt;
 
 use byteorder::ByteOrder;
+use ff::PrimeField;
+use paired::bls12_381::{Fr, FrRepr};
 use serde::{Deserialize, Serialize};
 
 /// An ordered set of `SectorId`s.
@@ -22,6 +24,12 @@ impl From<u64> for SectorId {
 impl From<SectorId> for u64 {
     fn from(n: SectorId) -> Self {
         n.0
+    }
+}
+
+impl From<SectorId> for Fr {
+    fn from(n: SectorId) -> Self {
+        Fr::from_repr(FrRepr::from(n.0)).unwrap()
     }
 }
 

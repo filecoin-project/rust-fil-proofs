@@ -173,6 +173,9 @@ pub fn generate_candidates(
     ensure!(!replicas.is_empty(), "Replicas must not be empty");
     ensure!(challenge_count > 0, "Challenge count must be > 0");
 
+    let randomness_safe = as_safe_commitment(randomness, "randomness")?;
+    let prover_id_safe = as_safe_commitment(&prover_id, "randomness")?;
+
     let vanilla_params = post_setup_params(post_config);
     let setup_params = compound_proof::SetupParams {
         vanilla_params,
@@ -189,7 +192,7 @@ pub fn generate_candidates(
     let sectors = replicas.keys().copied().collect();
 
     let challenged_sectors =
-        election_post::generate_sector_challenges(randomness, challenge_count, &sectors)?;
+        election_post::generate_sector_challenges(randomness_safe, challenge_count, &sectors)?;
 
     // Match the replicas to the challenges, as these are the only ones required.
     let challenged_replicas: Vec<_> = challenged_sectors
@@ -252,8 +255,8 @@ pub fn generate_candidates(
         &public_params.vanilla_params,
         &challenged_sectors,
         &trees,
-        &prover_id,
-        randomness,
+        prover_id_safe,
+        randomness_safe,
     )?;
 
     info!("generate_candidates:finish");
@@ -294,6 +297,9 @@ pub fn generate_post(
     ensure!(!winners.is_empty(), "Winners must not be empty");
     ensure!(!replicas.is_empty(), "Replicas must not be empty");
 
+    let randomness_safe = as_safe_commitment(randomness, "randomness")?;
+    let prover_id_safe = as_safe_commitment(&prover_id, "randomness")?;
+
     let vanilla_params = post_setup_params(post_config);
     let setup_params = compound_proof::SetupParams {
         vanilla_params,
@@ -320,12 +326,12 @@ pub fn generate_post(
 
             let comm_r = replica.safe_comm_r()?;
             let pub_inputs = election_post::PublicInputs {
-                randomness: *randomness,
+                randomness: randomness_safe,
                 comm_r,
                 sector_id: winner.sector_id,
                 partial_ticket: winner.partial_ticket,
                 sector_challenge_index: winner.sector_challenge_index,
-                prover_id,
+                prover_id: prover_id_safe,
             };
 
             let comm_c = replica.safe_comm_c()?;
@@ -398,6 +404,9 @@ pub fn verify_post(
         "Mismatch between winners and proofs"
     );
 
+    let randomness_safe = as_safe_commitment(randomness, "randomness")?;
+    let prover_id_safe = as_safe_commitment(&prover_id, "randomness")?;
+
     let sectors = replicas.keys().copied().collect();
     let vanilla_params = post_setup_params(post_config);
     let setup_params = compound_proof::SetupParams {
@@ -424,7 +433,7 @@ pub fn verify_post(
         }
 
         let expected_sector_id = election_post::generate_sector_challenge(
-            randomness,
+            randomness_safe,
             winner.sector_challenge_index as usize,
             &sectors,
         )?;
@@ -434,12 +443,12 @@ pub fn verify_post(
 
         let proof = MultiProof::new_from_reader(None, &proof[..], &verifying_key)?;
         let pub_inputs = election_post::PublicInputs {
-            randomness: *randomness,
+            randomness: randomness_safe,
             comm_r,
             sector_id: winner.sector_id,
             partial_ticket: winner.partial_ticket,
             sector_challenge_index: winner.sector_challenge_index,
-            prover_id,
+            prover_id: prover_id_safe,
         };
 
         let is_valid =

@@ -3,8 +3,8 @@ use std::hash::Hasher as StdHasher;
 use crate::crypto::{create_label, sloth};
 use crate::error::{Error, Result};
 use crate::hasher::types::{
-    PoseidonArity, PoseidonEngine, POSEIDON_CONSTANTS_1, POSEIDON_CONSTANTS_2,
-    POSEIDON_CONSTANTS_4, POSEIDON_CONSTANTS_8,
+    PoseidonArity, PoseidonEngine, PoseidonMDArity, POSEIDON_CONSTANTS_1, POSEIDON_CONSTANTS_16,
+    POSEIDON_CONSTANTS_2, POSEIDON_CONSTANTS_4, POSEIDON_CONSTANTS_8, POSEIDON_MD_CONSTANTS,
 };
 use crate::hasher::{Domain, HashFunction, Hasher};
 use anyhow::ensure;
@@ -13,6 +13,7 @@ use bellperson::{ConstraintSystem, SynthesisError};
 use ff::{Field, PrimeField, PrimeFieldRepr, ScalarEngine};
 use fil_sapling_crypto::jubjub::JubjubEngine;
 use generic_array::typenum;
+use generic_array::typenum::marker_traits::Unsigned;
 use merkletree::hash::{Algorithm as LightAlgorithm, Hashable};
 use merkletree::merkle::Element;
 use neptune::circuit::poseidon_hash;
@@ -218,31 +219,34 @@ fn shared_hash(data: &[u8]) -> PoseidonDomain {
         })
         .collect::<Vec<_>>();
 
-    shared_hash_frs(&preimage)
+    shared_hash_frs(&preimage).into()
 }
 
-fn shared_hash_frs(preimage: &[<Bls12 as ff::ScalarEngine>::Fr]) -> PoseidonDomain {
+fn shared_hash_frs(
+    preimage: &[<Bls12 as ff::ScalarEngine>::Fr],
+) -> <Bls12 as ff::ScalarEngine>::Fr {
     match preimage.len() {
         1 => {
             let mut p = Poseidon::new_with_preimage(&preimage, &*POSEIDON_CONSTANTS_1);
-            let fr: <Bls12 as ScalarEngine>::Fr = p.hash();
-            fr.into()
+            p.hash()
         }
         2 => {
             let mut p = Poseidon::new_with_preimage(&preimage, &POSEIDON_CONSTANTS_2);
-            let fr: <Bls12 as ScalarEngine>::Fr = p.hash();
-            fr.into()
+            p.hash()
         }
         4 => {
             let mut p = Poseidon::new_with_preimage(&preimage, &POSEIDON_CONSTANTS_4);
-            let fr: <Bls12 as ScalarEngine>::Fr = p.hash();
-            fr.into()
+            p.hash()
         }
         8 => {
             let mut p = Poseidon::new_with_preimage(&preimage, &POSEIDON_CONSTANTS_8);
-            let fr: <Bls12 as ScalarEngine>::Fr = p.hash();
-            fr.into()
+            p.hash()
         }
+        16 => {
+            let mut p = Poseidon::new_with_preimage(&preimage, &POSEIDON_CONSTANTS_16);
+            p.hash()
+        }
+
         _ => panic!("Unsupported arity for Poseidon hasher: {}", preimage.len()),
     }
 }
@@ -257,6 +261,30 @@ impl HashFunction<PoseidonDomain> for PoseidonFunction {
             Poseidon::new_with_preimage(&[(*a).into(), (*b).into()][..], &*POSEIDON_CONSTANTS_2);
         let fr: <Bls12 as ScalarEngine>::Fr = p.hash();
         fr.into()
+    }
+
+    fn hash_md(input: &[PoseidonDomain]) -> PoseidonDomain {
+        assert!(input.len() > 1, "hash_md needs more than one element.");
+        let arity = PoseidonMDArity::to_usize();
+
+        let mut p = Poseidon::new(&*POSEIDON_MD_CONSTANTS);
+
+        let fr_input = input
+            .iter()
+            .map(|x| <Bls12 as ScalarEngine>::Fr::from_repr(x.0).unwrap())
+            .collect::<Vec<_>>();
+
+        fr_input[1..]
+            .chunks(arity - 1)
+            .fold(fr_input[0], |acc, elts| {
+                p.reset();
+                p.input(acc).unwrap(); // These unwraps will panic iff arity is incorrect, but it was checked above.
+                elts.iter().for_each(|elt| {
+                    let _ = p.input(*elt).unwrap();
+                });
+                p.hash()
+            })
+            .into()
     }
 
     fn hash_leaf_circuit<E: JubjubEngine + PoseidonEngine<typenum::U2>, CS: ConstraintSystem<E>>(
@@ -287,6 +315,41 @@ impl HashFunction<PoseidonDomain> for PoseidonFunction {
     {
         let params = E::PARAMETERS();
         poseidon_hash::<CS, E, Arity>(cs, leaves.to_vec(), params)
+    }
+
+    fn hash_md_circuit<
+        E: JubjubEngine + PoseidonEngine<PoseidonMDArity>,
+        CS: ConstraintSystem<E>,
+    >(
+        cs: &mut CS,
+        elements: &[num::AllocatedNum<E>],
+    ) -> ::std::result::Result<num::AllocatedNum<E>, SynthesisError> {
+        let params = E::PARAMETERS();
+        let arity = PoseidonMDArity::to_usize();
+
+        let mut hash = elements[0].clone();
+        let mut preimage = vec![hash.clone(); arity]; // Allocate. This will be overwritten.
+        let mut hash_num = 0;
+        for elts in elements[1..].chunks(arity - 1) {
+            preimage[0] = hash;
+            for (i, elt) in elts.iter().enumerate() {
+                preimage[i + 1] = elt.clone();
+            }
+            // any terminal padding
+            #[allow(clippy::needless_range_loop)]
+            for i in (elts.len() + 1)..arity {
+                preimage[i] =
+                    num::AllocatedNum::alloc(cs.namespace(|| format!("padding {}", i)), || {
+                        Ok(E::Fr::zero())
+                    })
+                    .unwrap();
+            }
+            let cs = cs.namespace(|| format!("hash md {}", hash_num));
+            hash = poseidon_hash::<_, E, PoseidonMDArity>(cs, preimage.clone(), params)?.clone();
+            hash_num += 1;
+        }
+
+        Ok(hash)
     }
 
     fn hash_circuit<E: JubjubEngine, CS: ConstraintSystem<E>>(
@@ -337,6 +400,7 @@ impl LightAlgorithm<PoseidonDomain> for PoseidonFunction {
             <Bls12 as ff::ScalarEngine>::Fr::from_repr(left.0).unwrap(),
             <Bls12 as ff::ScalarEngine>::Fr::from_repr(right.0).unwrap(),
         ])
+        .into()
     }
 
     fn multi_node(&mut self, parts: &[PoseidonDomain], _height: usize) -> PoseidonDomain {
@@ -346,7 +410,8 @@ impl LightAlgorithm<PoseidonDomain> for PoseidonFunction {
                     .iter()
                     .map(|x| <Bls12 as ff::ScalarEngine>::Fr::from_repr(x.0).unwrap())
                     .collect::<Vec<_>>(),
-            ),
+            )
+            .into(),
             arity => panic!("unsupported arity {}", arity),
         }
     }
@@ -378,8 +443,10 @@ mod tests {
     use super::*;
     use std::mem;
 
+    use crate::circuit::constraint;
+    use crate::circuit::test::*;
     use crate::merkle::MerkleTree;
-
+    use bellperson::gadgets::num;
     #[test]
     fn test_path() {
         let values = [
@@ -506,5 +573,59 @@ mod tests {
             .expect("Failed to deserialize JSON string to `PoseidonnDomain`");
 
         assert_eq!(val, val_back);
+    }
+
+    #[test]
+    fn test_hash_md() {
+        // let arity = PoseidonMDArity::to_usize();
+        let n = 71;
+        let data = vec![PoseidonDomain(Fr::one().into_repr()); n];
+        let hashed = PoseidonFunction::hash_md(&data);
+
+        assert_eq!(
+            hashed,
+            PoseidonDomain(FrRepr([
+                0x23ff11d2d2a54e3a,
+                0x1393376e3c10d281,
+                0xca9aed2681cc9081,
+                0x04f01dc7b8b9b562
+            ]))
+        );
+    }
+    #[test]
+    fn test_hash_md_circuit() {
+        // let arity = PoseidonMDArity::to_usize();
+        let n = 71;
+        let data = vec![PoseidonDomain(Fr::one().into_repr()); n];
+
+        let mut cs = TestConstraintSystem::<Bls12>::new();
+        let circuit_data = (0..n)
+            .map(|n| {
+                num::AllocatedNum::alloc(cs.namespace(|| format!("input {}", n)), || Ok(Fr::one()))
+                    .unwrap()
+            })
+            .collect::<Vec<_>>();
+
+        let hashed = PoseidonFunction::hash_md(&data);
+        let hashed_fr = Fr::from_repr(hashed.0).unwrap();
+
+        let circuit_hashed =
+            PoseidonFunction::hash_md_circuit(&mut cs, circuit_data.as_slice()).unwrap();
+        let hashed_alloc =
+            &num::AllocatedNum::alloc(cs.namespace(|| "calculated"), || Ok(hashed_fr)).unwrap();
+        constraint::equal(
+            &mut cs.namespace(|| "enforce correct"),
+            || "correct result",
+            &hashed_alloc,
+            &circuit_hashed,
+        );
+
+        assert!(cs.is_satisfied());
+        let expected_constraints = 7169;
+        let actual_constraints = cs.num_constraints();
+
+        assert_eq!(expected_constraints, actual_constraints);
+
+        assert_eq!(hashed_fr, circuit_hashed.get_value().unwrap());
     }
 }
