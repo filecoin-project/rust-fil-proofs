@@ -23,11 +23,12 @@ use crate::stacked::{
 use crate::util::data_at_node;
 
 pub type BinaryTree<H> = MerkleTree<<H as Hasher>::Domain, <H as Hasher>::Function, typenum::U2>;
-pub type QuadTree<H> = MerkleTree<<H as Hasher>::Domain, <H as Hasher>::Function, typenum::U4>;
-pub type QuadLCTree<H> = LCMerkleTree<<H as Hasher>::Domain, <H as Hasher>::Function, typenum::U4>;
+pub type OctTree<H> = MerkleTree<<H as Hasher>::Domain, <H as Hasher>::Function, typenum::U8>;
+pub type OctLCTree<H> = LCMerkleTree<<H as Hasher>::Domain, <H as Hasher>::Function, typenum::U8>;
 
 pub const BINARY_ARITY: usize = 2;
 pub const QUAD_ARITY: usize = 4;
+pub const OCT_ARITY: usize = 8;
 
 #[derive(Debug, Copy, Clone)]
 pub enum CacheKey {
@@ -156,10 +157,10 @@ pub struct Proof<H: Hasher, G: Hasher> {
     ))]
     pub comm_d_proofs: MerkleProof<G, typenum::U2>,
     #[serde(bound(
-        serialize = "MerkleProof<H, typenum::U4>: Serialize, ColumnProof<H>: Serialize",
-        deserialize = "MerkleProof<H, typenum::U4>: Deserialize<'de>, ColumnProof<H>: Deserialize<'de>"
+        serialize = "MerkleProof<H, typenum::U8>: Serialize, ColumnProof<H>: Serialize",
+        deserialize = "MerkleProof<H, typenum::U8>: Deserialize<'de>, ColumnProof<H>: Deserialize<'de>"
     ))]
-    pub comm_r_last_proof: MerkleProof<H, typenum::U4>,
+    pub comm_r_last_proof: MerkleProof<H, typenum::U8>,
     #[serde(bound(
         serialize = "ReplicaColumnProof<H>: Serialize",
         deserialize = "ReplicaColumnProof<H>: Deserialize<'de>"
@@ -391,10 +392,10 @@ impl<H: Hasher, G: Hasher> TemporaryAux<H, G> {
                 .size
                 .context("tree_r_last config has no size")?;
             let mut tree_r_last_store: DiskStore<G::Domain> =
-                DiskStore::new_from_disk(tree_r_last_size, QUAD_ARITY, &t_aux.tree_r_last_config)
+                DiskStore::new_from_disk(tree_r_last_size, OCT_ARITY, &t_aux.tree_r_last_config)
                     .context("tree_r_last")?;
             tree_r_last_store.compact(
-                QUAD_ARITY,
+                OCT_ARITY,
                 t_aux.tree_r_last_config.clone(),
                 StoreConfigDataVersion::One as u32,
             )?;
@@ -406,11 +407,11 @@ impl<H: Hasher, G: Hasher> TemporaryAux<H, G> {
                 .size
                 .context("tree_c config has no size")?;
             let tree_c_store: DiskStore<H::Domain> =
-                DiskStore::new_from_disk(tree_c_size, QUAD_ARITY, &t_aux.tree_c_config)
+                DiskStore::new_from_disk(tree_c_size, OCT_ARITY, &t_aux.tree_c_config)
                     .context("tree_c")?;
-            let tree_c: QuadTree<H> = MerkleTree::from_data_store(
+            let tree_c: OctTree<H> = MerkleTree::from_data_store(
                 tree_c_store,
-                get_merkle_tree_leafs(tree_c_size, QUAD_ARITY),
+                get_merkle_tree_leafs(tree_c_size, OCT_ARITY),
             )
             .context("tree_c")?;
             tree_c.delete(t_aux.tree_c_config).context("tree_c")?;
@@ -433,8 +434,8 @@ pub struct TemporaryAuxCache<H: Hasher, G: Hasher> {
     /// The encoded nodes for 1..layers.
     pub labels: LabelsCache<H>,
     pub tree_d: BinaryTree<G>,
-    pub tree_r_last: QuadTree<H>,
-    pub tree_c: QuadTree<H>,
+    pub tree_r_last: OctTree<H>,
+    pub tree_c: OctTree<H>,
     pub t_aux: TemporaryAux<H, G>,
 }
 
@@ -459,14 +460,14 @@ impl<H: Hasher, G: Hasher> TemporaryAuxCache<H, G> {
         trace!(
             "Instantiating Tree C with size {} and leafs {}",
             tree_c_size,
-            get_merkle_tree_leafs(tree_c_size, QUAD_ARITY)
+            get_merkle_tree_leafs(tree_c_size, OCT_ARITY)
         );
         let tree_c_store: DiskStore<H::Domain> =
-            DiskStore::new_from_disk(tree_c_size, QUAD_ARITY, &t_aux.tree_c_config)
+            DiskStore::new_from_disk(tree_c_size, OCT_ARITY, &t_aux.tree_c_config)
                 .context("tree_c_store")?;
-        let tree_c: QuadTree<H> = MerkleTree::from_data_store(
+        let tree_c: OctTree<H> = MerkleTree::from_data_store(
             tree_c_store,
-            get_merkle_tree_leafs(tree_c_size, QUAD_ARITY),
+            get_merkle_tree_leafs(tree_c_size, OCT_ARITY),
         )
         .context("tree_c")?;
 
@@ -474,14 +475,14 @@ impl<H: Hasher, G: Hasher> TemporaryAuxCache<H, G> {
         trace!(
             "Instantiating Tree R Last with size {} and leafs {}",
             tree_r_last_size,
-            get_merkle_tree_leafs(tree_r_last_size, QUAD_ARITY)
+            get_merkle_tree_leafs(tree_r_last_size, OCT_ARITY)
         );
         let tree_r_last_store: DiskStore<H::Domain> =
-            DiskStore::new_from_disk(tree_r_last_size, QUAD_ARITY, &t_aux.tree_r_last_config)
+            DiskStore::new_from_disk(tree_r_last_size, OCT_ARITY, &t_aux.tree_r_last_config)
                 .context("tree_r_last_store")?;
-        let tree_r_last: QuadTree<H> = MerkleTree::from_data_store(
+        let tree_r_last: OctTree<H> = MerkleTree::from_data_store(
             tree_r_last_store,
-            get_merkle_tree_leafs(tree_r_last_size, QUAD_ARITY),
+            get_merkle_tree_leafs(tree_r_last_size, OCT_ARITY),
         )
         .context("tree_r_last")?;
 
@@ -542,7 +543,7 @@ impl<H: Hasher> Labels<H> {
         let config = self.labels[row_index].clone();
         assert!(config.size.is_some());
 
-        DiskStore::new_from_disk(config.size.unwrap(), QUAD_ARITY, &config)
+        DiskStore::new_from_disk(config.size.unwrap(), OCT_ARITY, &config)
     }
 
     /// Returns label for the last layer.
@@ -562,7 +563,7 @@ impl<H: Hasher> Labels<H> {
             .iter()
             .map(|label| {
                 assert!(label.size.is_some());
-                let store = DiskStore::new_from_disk(label.size.unwrap(), QUAD_ARITY, &label)?;
+                let store = DiskStore::new_from_disk(label.size.unwrap(), OCT_ARITY, &label)?;
                 store.read_at(node as usize)
             })
             .collect::<Result<_>>()?;

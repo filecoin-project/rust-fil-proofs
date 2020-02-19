@@ -21,7 +21,7 @@ use crate::stacked::{
 #[derive(Debug, Clone)]
 pub struct Proof<H: Hasher, G: Hasher> {
     pub comm_d_proof: InclusionPath<Bls12, G, typenum::U2>,
-    pub comm_r_last_proof: InclusionPath<Bls12, H, typenum::U4>,
+    pub comm_r_last_proof: InclusionPath<Bls12, H, typenum::U8>,
     pub replica_column_proof: ReplicaColumnProof<H>,
     pub labeling_proofs: Vec<(usize, LabelingProof)>,
     pub encoding_proof: EncodingProof,

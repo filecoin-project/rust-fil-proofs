@@ -308,7 +308,7 @@ mod tests {
     }
 
     fn gen_proof<H: Hasher, U: typenum::Unsigned>(config: Option<StoreConfig>) {
-        let leafs = 16;
+        let leafs = 64;
         let g = BucketGraph::<H>::new(leafs, BASE_DEGREE, 0, new_seed()).unwrap();
         let data = vec![2u8; NODE_SIZE * leafs];
 
@@ -357,5 +357,15 @@ mod tests {
     #[test]
     fn gen_proof_blake2s_quad() {
         gen_proof::<Blake2sHasher, typenum::U4>(None);
+    }
+
+    #[test]
+    fn gen_proof_pedersen_oct() {
+        gen_proof::<PedersenHasher, typenum::U8>(None);
+    }
+
+    #[test]
+    fn gen_proof_poseidon_oct() {
+        gen_proof::<PoseidonHasher, typenum::U8>(None);
     }
 }

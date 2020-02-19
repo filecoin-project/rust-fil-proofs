@@ -98,7 +98,7 @@ where
                     commitment: None,
                     challenge: challenged_leaf_start as usize + i,
                 };
-                let por_inputs = PoRCompound::<H, typenum::U4>::generate_public_inputs(
+                let por_inputs = PoRCompound::<H, typenum::U8>::generate_public_inputs(
                     &por_pub_inputs,
                     &por_pub_params,
                     None,
@@ -165,7 +165,7 @@ where
     ) -> ElectionPoStCircuit<'a, Bls12, H> {
         let challenges_count = pub_params.challenged_nodes * pub_params.challenge_count;
         let height =
-            drgraph::graph_height::<typenum::U4>(pub_params.sector_size as usize / NODE_SIZE);
+            drgraph::graph_height::<typenum::U8>(pub_params.sector_size as usize / NODE_SIZE);
 
         let leafs = vec![None; challenges_count];
         let paths = vec![vec![(vec![None; 3], None); height - 1]; challenges_count];
@@ -189,13 +189,13 @@ where
 impl<
         'a,
         E: JubjubEngine
-            + PoseidonEngine<typenum::U4>
+            + PoseidonEngine<typenum::U8>
             + PoseidonEngine<typenum::U2>
             + PoseidonEngine<PoseidonMDArity>,
         H: Hasher,
     > Circuit<E> for ElectionPoStCircuit<'a, E, H>
 where
-    typenum::U4: PoseidonArity<E>,
+    typenum::U8: PoseidonArity<E>,
 {
     fn synthesize<CS: ConstraintSystem<E>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
         let params = self.params;
@@ -253,7 +253,7 @@ where
 
         // 2. Verify Inclusion Paths
         for (i, (leaf, path)) in leafs.iter().zip(paths.iter()).enumerate() {
-            PoRCircuit::<typenum::U4, E, H>::synthesize(
+            PoRCircuit::<typenum::U8, E, H>::synthesize(
                 cs.namespace(|| format!("challenge_inclusion{}", i)),
                 &params,
                 Root::Val(*leaf),
@@ -352,19 +352,19 @@ mod tests {
     use crate::election_post::{self, ElectionPoSt};
     use crate::fr32::fr_into_bytes;
     use crate::hasher::{Domain, HashFunction, Hasher, PedersenHasher, PoseidonHasher};
-    use crate::merkle::{QuadLCMerkleTree, QuadMerkleTree};
+    use crate::merkle::{OctLCMerkleTree, OctMerkleTree};
     use crate::proof::{NoRequirements, ProofScheme};
     use crate::sector::SectorId;
-    use crate::stacked::QUAD_ARITY;
+    use crate::stacked::OCT_ARITY;
 
     #[test]
     fn test_election_post_circuit_pedersen() {
-        test_election_post_circuit::<PedersenHasher>(253_159);
+        test_election_post_circuit::<PedersenHasher>(389_883);
     }
 
     #[test]
     fn test_election_post_circuit_poseidon() {
-        test_election_post_circuit::<PoseidonHasher>(41_374);
+        test_election_post_circuit::<PoseidonHasher>(24_426);
     }
 
     fn test_election_post_circuit<H: Hasher>(expected_constraints: usize) {
@@ -391,7 +391,7 @@ mod tests {
         let config = StoreConfig::new(
             &temp_path,
             String::from("test-lc-tree-v1"),
-            StoreConfig::default_cached_above_base_layer(leaves as usize, QUAD_ARITY),
+            StoreConfig::default_cached_above_base_layer(leaves as usize, OCT_ARITY),
         );
 
         for i in 0..5 {
@@ -404,7 +404,7 @@ mod tests {
 
             let cur_config =
                 StoreConfig::from_config(&config, format!("test-lc-tree-v1-{}", i), None);
-            let mut tree: QuadMerkleTree<_, _> = graph
+            let mut tree: OctMerkleTree<_, _> = graph
                 .merkle_tree(Some(cur_config.clone()), data.as_slice())
                 .unwrap();
             let c = tree
@@ -412,7 +412,7 @@ mod tests {
                 .unwrap();
             assert_eq!(c, true);
 
-            let lctree: QuadLCMerkleTree<_, _> = graph
+            let lctree: OctLCMerkleTree<_, _> = graph
                 .lcmerkle_tree(Some(cur_config), data.as_slice())
                 .unwrap();
             trees.insert(i.into(), lctree);
@@ -560,7 +560,7 @@ mod tests {
         let config = StoreConfig::new(
             &temp_path,
             String::from("test-lc-tree-v1"),
-            StoreConfig::default_cached_above_base_layer(leaves as usize, QUAD_ARITY),
+            StoreConfig::default_cached_above_base_layer(leaves as usize, OCT_ARITY),
         );
 
         for i in 0..5 {
@@ -573,7 +573,7 @@ mod tests {
 
             let cur_config =
                 StoreConfig::from_config(&config, format!("test-lc-tree-v1-{}", i), None);
-            let mut tree: QuadMerkleTree<_, _> = graph
+            let mut tree: OctMerkleTree<_, _> = graph
                 .merkle_tree(Some(cur_config.clone()), data.as_slice())
                 .unwrap();
             let c = tree
@@ -581,7 +581,7 @@ mod tests {
                 .unwrap();
             assert_eq!(c, true);
 
-            let lctree: QuadLCMerkleTree<_, _> = graph
+            let lctree: OctLCMerkleTree<_, _> = graph
                 .lcmerkle_tree(Some(cur_config), data.as_slice())
                 .unwrap();
             trees.insert(i.into(), lctree);

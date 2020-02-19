@@ -29,16 +29,16 @@ pub type TemporaryAux = stacked::TemporaryAux<DefaultTreeHasher, DefaultPieceHas
 pub type ProverId = [u8; 32];
 pub type Ticket = [u8; 32];
 
-pub type Tree = storage_proofs::stacked::QuadTree<DefaultTreeHasher>;
-pub type LCTree = storage_proofs::stacked::QuadLCTree<DefaultTreeHasher>;
+pub type Tree = storage_proofs::stacked::OctTree<DefaultTreeHasher>;
+pub type LCTree = storage_proofs::stacked::OctLCTree<DefaultTreeHasher>;
 
 pub type Labels = storage_proofs::stacked::Labels<DefaultTreeHasher>;
 pub type DataTree = storage_proofs::stacked::BinaryTree<DefaultPieceHasher>;
 
-/// Arity for quad trees, used for comm_r_last.
-pub const QUAD_ARITY: usize = 4;
+/// Arity for oct trees, used for comm_r_last.
+pub const OCT_ARITY: usize = 8;
 
-/// Arity for quad trees, used for comm_r_last.
+/// Arity for binary trees, used for comm_d.
 pub const BINARY_ARITY: usize = 2;
 
 #[derive(Debug, Clone)]

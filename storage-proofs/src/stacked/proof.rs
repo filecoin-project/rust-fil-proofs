@@ -15,7 +15,7 @@ use crate::measurements::{
     measure_op,
     Operation::{CommD, EncodeWindowTimeAll, GenerateTreeC, GenerateTreeRLast},
 };
-use crate::merkle::{MerkleProof, MerkleTree, QuadMerkleTree, Store};
+use crate::merkle::{MerkleProof, MerkleTree, OctMerkleTree, Store};
 use crate::porep::Data;
 use crate::porep::PoRep;
 use crate::stacked::{
@@ -25,7 +25,7 @@ use crate::stacked::{
     params::{
         get_node, BinaryTree, CacheKey, Labels, LabelsCache, PersistentAux, Proof, PublicInputs,
         PublicParams, ReplicaColumnProof, Tau, TemporaryAux, TemporaryAuxCache, TransformedLayers,
-        BINARY_ARITY, QUAD_ARITY,
+        BINARY_ARITY, OCT_ARITY,
     },
     EncodingProof, LabelingProof,
 };
@@ -301,7 +301,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
             // Construct and persist the layer data.
             let layer_store: DiskStore<H::Domain> = DiskStore::new_from_slice_with_config(
                 graph.size(),
-                QUAD_ARITY,
+                OCT_ARITY,
                 &layer_labels,
                 layer_config.clone(),
             )?;
@@ -406,7 +406,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
             CacheKey::CommRLastTree.to_string(),
             Some(StoreConfig::default_cached_above_base_layer(
                 data.len(),
-                QUAD_ARITY,
+                OCT_ARITY,
             )),
         );
         let mut tree_c_config = StoreConfig::from_config(
@@ -414,7 +414,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
             CacheKey::CommCTree.to_string(),
             Some(StoreConfig::default_cached_above_base_layer(
                 data.len(),
-                QUAD_ARITY,
+                OCT_ARITY,
             )),
         );
 
@@ -458,7 +458,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
             });
 
             info!("building tree_c");
-            QuadMerkleTree::<_, H::Function>::from_par_iter_with_config(
+            OctMerkleTree::<_, H::Function>::from_par_iter_with_config(
                 hashes.into_par_iter(),
                 tree_c_config.clone(),
             )
@@ -499,7 +499,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
                     encode::<H::Domain>(key, data_node)
                 });
 
-            QuadMerkleTree::<_, H::Function>::from_par_iter_with_config(
+            OctMerkleTree::<_, H::Function>::from_par_iter_with_config(
                 encoded_data,
                 tree_r_last_config.clone(),
             )
@@ -695,7 +695,7 @@ mod tests {
 
         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
         let replica_id: H::Domain = H::Domain::random(rng);
-        let nodes = 16;
+        let nodes = 64;
 
         let data: Vec<u8> = (0..nodes)
             .flat_map(|_| {
@@ -841,7 +841,7 @@ mod tests {
 
     table_tests! {
         prove_verify_fixed{
-           prove_verify_fixed_64_4(4);
+           prove_verify_fixed_64_4(64);
         }
     }
 
