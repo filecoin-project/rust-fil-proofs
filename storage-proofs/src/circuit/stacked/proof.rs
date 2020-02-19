@@ -335,16 +335,16 @@ mod tests {
 
     #[test]
     fn stacked_input_circuit_pedersen() {
-        stacked_input_circuit::<PedersenHasher>(1_916_459);
+        stacked_input_circuit::<PedersenHasher>(2_184_535);
     }
 
     #[test]
     fn stacked_input_circuit_poseidon() {
-        stacked_input_circuit::<PoseidonHasher>(1_795_658);
+        stacked_input_circuit::<PoseidonHasher>(1_891_958);
     }
 
     fn stacked_input_circuit<H: Hasher + 'static>(expected_constraints: usize) {
-        let nodes = 16;
+        let nodes = 64;
         let degree = BASE_DEGREE;
         let expansion_degree = EXP_DEGREE;
         let num_layers = 2;
@@ -495,7 +495,7 @@ mod tests {
     }
 
     fn stacked_test_compound<H: 'static + Hasher>() {
-        let nodes = 16;
+        let nodes = 64;
         let degree = 3;
         let expansion_degree = 2;
         let num_layers = 2;
