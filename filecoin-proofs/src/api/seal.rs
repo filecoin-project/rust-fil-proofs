@@ -26,7 +26,8 @@ use storage_proofs::sector::SectorId;
 use crate::api::util::{as_safe_commitment, commitment_from_fr, get_tree_size};
 use crate::caches::{get_stacked_params, get_stacked_verifying_key};
 use crate::constants::{
-    DefaultPieceHasher, DefaultTreeHasher, POREP_MINIMUM_CHALLENGES, SINGLE_PARTITION_PROOF_LEN,
+    DefaultPieceHasher, DefaultTreeHasher, DEGREE, POREP_MINIMUM_CHALLENGES,
+    SINGLE_PARTITION_PROOF_LEN,
 };
 use crate::parameters::setup_params;
 pub use crate::pieces;
@@ -98,7 +99,7 @@ where
     let compound_public_params =
         <StackedCompound<DefaultTreeHasher, DefaultPieceHasher> as CompoundProof<
             _,
-            StackedDrg<DefaultTreeHasher, DefaultPieceHasher>,
+            StackedDrg<DefaultTreeHasher, DefaultPieceHasher, DEGREE>,
             _,
         >>::setup(&compound_setup_params)?;
 
@@ -155,7 +156,7 @@ where
     let replica_id =
         generate_replica_id::<DefaultTreeHasher, _>(&prover_id, sector_id.into(), &ticket, comm_d);
 
-    let labels = StackedDrg::<DefaultTreeHasher, DefaultPieceHasher>::replicate_phase1(
+    let labels = StackedDrg::<DefaultTreeHasher, DefaultPieceHasher, DEGREE>::replicate_phase1(
         &compound_public_params.vanilla_params,
         &replica_id,
         config.clone(),
@@ -248,12 +249,12 @@ where
     let compound_public_params =
         <StackedCompound<DefaultTreeHasher, DefaultPieceHasher> as CompoundProof<
             _,
-            StackedDrg<DefaultTreeHasher, DefaultPieceHasher>,
+            StackedDrg<DefaultTreeHasher, DefaultPieceHasher, DEGREE>,
             _,
         >>::setup(&compound_setup_params)?;
 
     let (tau, (p_aux, t_aux)) =
-        StackedDrg::<DefaultTreeHasher, DefaultPieceHasher>::replicate_phase2(
+        StackedDrg::<DefaultTreeHasher, DefaultPieceHasher, DEGREE>::replicate_phase2(
             &compound_public_params.vanilla_params,
             labels,
             data,
@@ -374,7 +375,7 @@ pub fn seal_commit_phase1<T: AsRef<Path>>(
     let compound_public_params =
         <StackedCompound<DefaultTreeHasher, DefaultPieceHasher> as CompoundProof<
             _,
-            StackedDrg<DefaultTreeHasher, DefaultPieceHasher>,
+            StackedDrg<DefaultTreeHasher, DefaultPieceHasher, DEGREE>,
             _,
         >>::setup(&compound_setup_params)?;
 
@@ -457,7 +458,7 @@ pub fn seal_commit_phase2(
     let compound_public_params =
         <StackedCompound<DefaultTreeHasher, DefaultPieceHasher> as CompoundProof<
             _,
-            StackedDrg<DefaultTreeHasher, DefaultPieceHasher>,
+            StackedDrg<DefaultTreeHasher, DefaultPieceHasher, DEGREE>,
             _,
         >>::setup(&compound_setup_params)?;
 
@@ -552,7 +553,7 @@ pub fn verify_seal(
 
     let compound_public_params: compound_proof::PublicParams<
         '_,
-        StackedDrg<'_, DefaultTreeHasher, DefaultPieceHasher>,
+        StackedDrg<'_, DefaultTreeHasher, DefaultPieceHasher, DEGREE>,
     > = StackedCompound::setup(&compound_setup_params)?;
 
     let public_inputs = stacked::PublicInputs::<
@@ -658,7 +659,7 @@ pub fn verify_batch_seal(
 
     let compound_public_params: compound_proof::PublicParams<
         '_,
-        StackedDrg<'_, DefaultTreeHasher, DefaultPieceHasher>,
+        StackedDrg<'_, DefaultTreeHasher, DefaultPieceHasher, DEGREE>,
     > = StackedCompound::setup(&compound_setup_params)?;
 
     let mut public_inputs = Vec::with_capacity(l);

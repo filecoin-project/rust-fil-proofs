@@ -1,4 +1,5 @@
 use std::fs::{File, OpenOptions};
+use std::marker::PhantomData;
 use std::time::Duration;
 use std::{io, u32};
 
@@ -14,6 +15,7 @@ use rand::Rng;
 use serde::Serialize;
 
 use fil_proofs_tooling::{measure, FuncMeasurement, Metadata};
+use filecoin_proofs::constants::DEGREE;
 use storage_proofs::cache_key::CacheKey;
 use storage_proofs::compound_proof::{self, CompoundProof};
 use storage_proofs::drgraph::*;
@@ -141,9 +143,10 @@ where
             expansion_degree: EXP_DEGREE,
             seed: new_seed(),
             layer_challenges: layer_challenges.clone(),
+            _degree: PhantomData,
         };
 
-        let pp = StackedDrg::<H, Sha256Hasher>::setup(&sp)?;
+        let pp = StackedDrg::<H, Sha256Hasher, DEGREE>::setup(&sp)?;
 
         let (pub_in, priv_in, d) = if *bench_only {
             (None, None, None)
@@ -162,7 +165,7 @@ where
                 wall_time: replication_wall_time,
                 return_value: (pub_inputs, priv_inputs),
             } = measure(|| {
-                let (tau, (p_aux, t_aux)) = StackedDrg::<H, Sha256Hasher>::replicate(
+                let (tau, (p_aux, t_aux)) = StackedDrg::<H, Sha256Hasher, DEGREE>::replicate(
                     &pp,
                     &replica_id,
                     (&mut data[..]).into(),
@@ -217,7 +220,7 @@ where
                 wall_time: vanilla_proving_wall_time,
                 return_value: all_partition_proofs,
             } = measure(|| {
-                StackedDrg::<H, Sha256Hasher>::prove_all_partitions(
+                StackedDrg::<H, Sha256Hasher, DEGREE>::prove_all_partitions(
                     &pp,
                     &pub_inputs,
                     &priv_inputs,
@@ -245,7 +248,7 @@ where
 
             for _ in 0..*samples {
                 let m = measure(|| {
-                    let verified = StackedDrg::<H, Sha256Hasher>::verify_all_partitions(
+                    let verified = StackedDrg::<H, Sha256Hasher, DEGREE>::verify_all_partitions(
                         &pp,
                         &pub_inputs,
                         &all_partition_proofs,
@@ -292,7 +295,7 @@ where
         if let Some(data) = d {
             if *extract {
                 let m = measure(|| {
-                    StackedDrg::<H, Sha256Hasher>::extract_all(
+                    StackedDrg::<H, Sha256Hasher, DEGREE>::extract_all(
                         &pp,
                         &replica_id,
                         &data,
@@ -327,9 +330,9 @@ struct CircuitWorkMeasurement {
 }
 
 fn do_circuit_work<H: 'static + Hasher>(
-    pp: &<StackedDrg<H, Sha256Hasher> as ProofScheme>::PublicParams,
-    pub_in: Option<<StackedDrg<H, Sha256Hasher> as ProofScheme>::PublicInputs>,
-    priv_in: Option<<StackedDrg<H, Sha256Hasher> as ProofScheme>::PrivateInputs>,
+    pp: &<StackedDrg<H, Sha256Hasher, DEGREE> as ProofScheme>::PublicParams,
+    pub_in: Option<<StackedDrg<H, Sha256Hasher, DEGREE> as ProofScheme>::PublicInputs>,
+    priv_in: Option<<StackedDrg<H, Sha256Hasher, DEGREE> as ProofScheme>::PrivateInputs>,
     params: &Params,
     report: &mut Report,
 ) -> anyhow::Result<CircuitWorkMeasurement> {
@@ -355,7 +358,7 @@ fn do_circuit_work<H: 'static + Hasher>(
     if *bench || *circuit || *bench_only {
         info!("Generating blank circuit: start");
         let mut cs = BenchCS::<Bls12>::new();
-        <StackedCompound<_, _> as CompoundProof<_, StackedDrg<H, Sha256Hasher>, _>>::blank_circuit(
+        <StackedCompound<_, _> as CompoundProof<_, StackedDrg<H, Sha256Hasher, DEGREE>, _>>::blank_circuit(
             &pp,
         )
         .synthesize(&mut cs)?;
@@ -375,7 +378,7 @@ fn do_circuit_work<H: 'static + Hasher>(
         // and skip replication/vanilla-proving entirely.
         let gparams = <StackedCompound<_, _> as CompoundProof<
             _,
-            StackedDrg<H, Sha256Hasher>,
+            StackedDrg<H, Sha256Hasher, DEGREE>,
             _,
         >>::groth_params(&compound_public_params.vanilla_params)?;
 

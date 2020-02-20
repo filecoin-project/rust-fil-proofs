@@ -18,7 +18,9 @@ pub struct ColumnProof<H: Hasher> {
 
 impl<H: Hasher> ColumnProof<H> {
     /// Create an empty `ColumnProof`, used in `blank_circuit`s.
-    pub fn empty(params: &PublicParams<H>) -> Self {
+    pub fn empty<Degree: generic_array::ArrayLength<u32> + Clone + Sync + Send>(
+        params: &PublicParams<H, Degree>,
+    ) -> Self {
         ColumnProof {
             column: Column::empty(params),
             inclusion_path: InclusionPath::empty(&params.graph),

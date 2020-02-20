@@ -18,7 +18,7 @@ use storage_proofs::sector::SectorId;
 use crate::api::util::{as_safe_commitment, get_tree_size};
 use crate::commitment_reader::CommitmentReader;
 use crate::constants::{
-    DefaultPieceHasher, DefaultTreeHasher,
+    DefaultPieceHasher, DefaultTreeHasher, DEGREE,
     MINIMUM_RESERVED_BYTES_FOR_PIECE_IN_FULLY_ALIGNED_SECTOR as MINIMUM_PIECE_SIZE,
 };
 use crate::fr32::write_unpadded;
@@ -105,7 +105,7 @@ pub fn get_unsealed_range<T: Into<PathBuf> + AsRef<Path>>(
     let offset_padded: PaddedBytesAmount = UnpaddedBytesAmount::from(offset).into();
     let num_bytes_padded: PaddedBytesAmount = num_bytes.into();
 
-    let unsealed_all = StackedDrg::<DefaultTreeHasher, DefaultPieceHasher>::extract_all(
+    let unsealed_all = StackedDrg::<DefaultTreeHasher, DefaultPieceHasher, DEGREE>::extract_all(
         &pp,
         &replica_id,
         &data,

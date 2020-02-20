@@ -3,6 +3,7 @@ use std::marker::PhantomData;
 use std::sync::{Arc, RwLock};
 
 use anyhow::ensure;
+use generic_array::ArrayLength;
 use lazy_static::lazy_static;
 use log::info;
 use rayon::prelude::*;
@@ -17,6 +18,8 @@ use crate::util::{data_at_node_offset, NODE_SIZE};
 
 /// The expansion degree used for Stacked Graphs.
 pub const EXP_DEGREE: usize = 8;
+#[cfg(test)]
+pub type DEGREE = generic_array::typenum::U14;
 const FEISTEL_KEYS: [feistel::Index; 4] = [1, 2, 3, 4];
 
 lazy_static! {
@@ -36,13 +39,15 @@ struct ParentCache {
 }
 
 impl ParentCache {
-    pub fn new<H, G>(cache_entries: u32, graph: &StackedGraph<H, G>) -> Result<Self>
+    pub fn new<H, G, Degree>(cache_entries: u32, graph: &StackedGraph<H, G, Degree>) -> Result<Self>
     where
         H: Hasher,
         G: Graph<H> + ParameterSetMetadata + Send + Sync,
+        Degree: generic_array::ArrayLength<u32> + Sync + Send + Clone,
     {
         info!("filling parents cache");
         let degree = graph.degree();
+
         let mut cache = vec![0u32; degree * cache_entries as usize];
 
         let base_degree = graph.base_graph().degree();
@@ -78,11 +83,12 @@ impl ParentCache {
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct StackedGraph<H, G>
+#[derive(Clone)]
+pub struct StackedGraph<H, G, Degree>
 where
     H: Hasher,
     G: Graph<H> + 'static,
+    Degree: ArrayLength<u32>,
 {
     expansion_degree: usize,
     base_graph: G,
@@ -90,14 +96,34 @@ where
     id: String,
     use_cache: bool,
     _h: PhantomData<H>,
+    _degree: PhantomData<Degree>,
 }
 
-pub type StackedBucketGraph<H> = StackedGraph<H, BucketGraph<H>>;
+impl<H, G, Degree> std::fmt::Debug for StackedGraph<H, G, Degree>
+where
+    H: Hasher,
+    G: Graph<H> + 'static,
+    Degree: ArrayLength<u32>,
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("StackedGraph")
+            .field("expansion_degree", &self.expansion_degree)
+            .field("base_graph", &self.base_graph)
+            .field("feistel_precomputed", &self.feistel_precomputed)
+            .field("id", &self.id)
+            .field("use_cache", &self.use_cache)
+            .field("degree", &Degree::to_usize())
+            .finish()
+    }
+}
 
-impl<H, G> StackedGraph<H, G>
+pub type StackedBucketGraph<H, Degree> = StackedGraph<H, BucketGraph<H>, Degree>;
+
+impl<H, G, Degree> StackedGraph<H, G, Degree>
 where
     H: Hasher,
     G: Graph<H> + ParameterSetMetadata + Sync + Send,
+    Degree: ArrayLength<u32> + Sync + Send + Clone,
 {
     pub fn new(
         base_graph: Option<G>,
@@ -106,6 +132,8 @@ where
         expansion_degree: usize,
         seed: [u8; 28],
     ) -> Result<Self> {
+        assert_eq!(base_degree + expansion_degree, Degree::to_usize());
+
         let use_cache = settings::SETTINGS.lock().unwrap().maximize_caching;
 
         let base_graph = match base_graph {
@@ -124,6 +152,7 @@ where
             use_cache,
             feistel_precomputed: feistel::precompute((expansion_degree * nodes) as feistel::Index),
             _h: PhantomData,
+            _degree: PhantomData,
         };
 
         if use_cache {
@@ -195,10 +224,11 @@ where
     }
 }
 
-impl<H, G> ParameterSetMetadata for StackedGraph<H, G>
+impl<H, G, Degree> ParameterSetMetadata for StackedGraph<H, G, Degree>
 where
     H: Hasher,
     G: Graph<H> + ParameterSetMetadata,
+    Degree: generic_array::ArrayLength<u32> + Sync + Send + Clone,
 {
     fn identifier(&self) -> String {
         self.id.clone()
@@ -209,10 +239,11 @@ where
     }
 }
 
-impl<H, G> Graph<H> for StackedGraph<H, G>
+impl<H, G, Degree> Graph<H> for StackedGraph<H, G, Degree>
 where
     H: Hasher,
     G: Graph<H> + ParameterSetMetadata + Sync + Send,
+    Degree: generic_array::ArrayLength<u32> + Clone + Sync + Send,
 {
     type Key = Vec<u8>;
 
@@ -221,7 +252,7 @@ where
     }
 
     fn degree(&self) -> usize {
-        self.base_graph().degree() + self.expansion_degree()
+        Degree::to_usize()
     }
 
     #[inline]
@@ -274,10 +305,11 @@ where
     }
 }
 
-impl<'a, H, G> StackedGraph<H, G>
+impl<'a, H, G, Degree> StackedGraph<H, G, Degree>
 where
     H: Hasher,
     G: Graph<H> + ParameterSetMetadata + Sync + Send,
+    Degree: generic_array::ArrayLength<u32> + Sync + Send + Clone,
 {
     /// Assign one parent to `node` using a Chung's construction with a reversible
     /// permutation function from a Feistel cipher (controlled by `invert_permutation`).
@@ -383,20 +415,22 @@ where
     }
 }
 
-impl<H, G> PartialEq for StackedGraph<H, G>
+impl<H, G, Degree> PartialEq for StackedGraph<H, G, Degree>
 where
     H: Hasher,
     G: Graph<H>,
+    Degree: generic_array::ArrayLength<u32> + Sync + Send + Clone,
 {
-    fn eq(&self, other: &StackedGraph<H, G>) -> bool {
+    fn eq(&self, other: &StackedGraph<H, G, Degree>) -> bool {
         self.base_graph == other.base_graph && self.expansion_degree == other.expansion_degree
     }
 }
 
-impl<H, G> Eq for StackedGraph<H, G>
+impl<H, G, Degree> Eq for StackedGraph<H, G, Degree>
 where
     H: Hasher,
     G: Graph<H>,
+    Degree: generic_array::ArrayLength<u32> + Sync + Send + Clone,
 {
 }
 

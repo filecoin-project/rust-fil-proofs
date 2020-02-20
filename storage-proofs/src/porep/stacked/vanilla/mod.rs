@@ -21,3 +21,6 @@ pub use self::graph::{StackedBucketGraph, StackedGraph, EXP_DEGREE};
 pub use self::params::*;
 pub use self::proof::{create_key, StackedDrg, TOTAL_PARENTS};
 pub use labeling_proof::LabelingProof;
+
+#[cfg(test)]
+pub use self::graph::DEGREE;

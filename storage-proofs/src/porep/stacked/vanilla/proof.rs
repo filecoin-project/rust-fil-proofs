@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::marker::PhantomData;
 use std::path::PathBuf;
 
+use generic_array::{typenum, ArrayLength};
 use log::{info, trace};
 use merkletree::merkle::{
     get_merkle_tree_len, is_merkle_tree_size_valid, FromIndexedParallelIterator,
@@ -40,15 +41,29 @@ use crate::util::{data_at_node_offset, NODE_SIZE};
 pub const TOTAL_PARENTS: usize = 37;
 
 #[derive(Debug)]
-pub struct StackedDrg<'a, H: 'a + Hasher, G: 'a + Hasher> {
+pub struct StackedDrg<
+    'a,
+    H: 'a + Hasher,
+    G: 'a + Hasher,
+    Degree: generic_array::ArrayLength<u32> + Sync + Send + Clone,
+> {
     _a: PhantomData<&'a H>,
     _b: PhantomData<&'a G>,
+    _degree: PhantomData<Degree>,
 }
 
-impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
+impl<
+        'a,
+        H: 'static + Hasher,
+        G: 'static + Hasher,
+        Degree: generic_array::ArrayLength<u32> + Sync + Send + Clone + std::ops::Mul<typenum::U32>,
+    > StackedDrg<'a, H, G, Degree>
+where
+    typenum::Prod<Degree, typenum::U32>: ArrayLength<u8>,
+{
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn prove_layers(
-        graph: &StackedBucketGraph<H>,
+        graph: &StackedBucketGraph<H, Degree>,
         pub_inputs: &PublicInputs<<H as Hasher>::Domain, <G as Hasher>::Domain>,
         p_aux: &PersistentAux<H::Domain>,
         t_aux: &TemporaryAuxCache<H, G>,
@@ -225,7 +240,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
     }
 
     pub(crate) fn extract_and_invert_transform_layers(
-        graph: &StackedBucketGraph<H>,
+        graph: &StackedBucketGraph<H, Degree>,
         layer_challenges: &LayerChallenges,
         replica_id: &<H as Hasher>::Domain,
         data: &mut [u8],
@@ -259,7 +274,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
 
     #[allow(clippy::type_complexity)]
     fn generate_labels(
-        graph: &StackedBucketGraph<H>,
+        graph: &StackedBucketGraph<H, Degree>,
         layer_challenges: &LayerChallenges,
         replica_id: &<H as Hasher>::Domain,
         config: StoreConfig,
@@ -361,7 +376,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
     }
 
     pub(crate) fn transform_and_replicate_layers(
-        graph: &StackedBucketGraph<H>,
+        graph: &StackedBucketGraph<H, Degree>,
         layer_challenges: &LayerChallenges,
         replica_id: &<H as Hasher>::Domain,
         data: Data,
@@ -386,7 +401,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
     }
 
     pub(crate) fn transform_and_replicate_layers_inner(
-        graph: &StackedBucketGraph<H>,
+        graph: &StackedBucketGraph<H, Degree>,
         layer_challenges: &LayerChallenges,
         mut data: Data,
         data_tree: Option<BinaryTree<G>>,
@@ -588,7 +603,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
 
     /// Phase1 of replication.
     pub fn replicate_phase1(
-        pp: &'a PublicParams<H>,
+        pp: &'a PublicParams<H, Degree>,
         replica_id: &H::Domain,
         config: StoreConfig,
     ) -> Result<Labels<H>> {
@@ -605,7 +620,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
     /// Phase2 of replication.
     #[allow(clippy::type_complexity)]
     pub fn replicate_phase2(
-        pp: &'a PublicParams<H>,
+        pp: &'a PublicParams<H, Degree>,
         labels: Labels<H>,
         data: Data<'a>,
         data_tree: BinaryTree<G>,
@@ -631,13 +646,17 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
     }
 }
 
-pub fn create_key<H: Hasher>(
-    graph: &StackedBucketGraph<H>,
+pub fn create_key<H: Hasher, Degree>(
+    graph: &StackedBucketGraph<H, Degree>,
     mut hasher: Sha256,
     exp_parents_data: Option<&Vec<u8>>,
     layer_labels: &mut [u8],
     node: usize,
-) -> Result<()> {
+) -> Result<()>
+where
+    Degree: generic_array::ArrayLength<u32> + Sync + Send + Clone + std::ops::Mul<typenum::U32>,
+    typenum::Prod<Degree, typenum::U32>: ArrayLength<u8>,
+{
     #[cfg(target_arch = "x86")]
     use core::arch::x86::{_mm_prefetch, _MM_HINT_T0};
     #[cfg(target_arch = "x86_64")]
@@ -664,7 +683,9 @@ pub fn create_key<H: Hasher>(
             graph.base_graph().degree()
         };
 
-        let mut inputs = vec![0u8; NODE_SIZE * real_parents_count];
+        use generic_array::GenericArray;
+        let mut inputs = GenericArray::<u8, typenum::Prod<Degree, typenum::U32>>::default();
+
         graph.copy_parents_data(node as u32, layer_labels, exp_parents_data, &mut inputs);
 
         // repeat parents
@@ -677,7 +698,7 @@ pub fn create_key<H: Hasher>(
         }
 
         for _ in 0..num_inputs {
-            hasher.input(&inputs);
+            hasher.input(&inputs[..real_parents_count * NODE_SIZE]);
         }
         hasher.input(&inputs[..rest_inputs * NODE_SIZE]);
     }
@@ -705,7 +726,7 @@ mod tests {
     use crate::drgraph::{new_seed, BASE_DEGREE};
     use crate::fr32::fr_into_bytes;
     use crate::hasher::{Blake2sHasher, PedersenHasher, PoseidonHasher, Sha256Hasher};
-    use crate::porep::stacked::{PrivateInputs, SetupParams, EXP_DEGREE};
+    use crate::porep::stacked::{PrivateInputs, SetupParams, DEGREE, EXP_DEGREE};
     use crate::porep::PoRep;
     use crate::proof::ProofScheme;
 
@@ -761,15 +782,16 @@ mod tests {
         // create a copy, so we can compare roundtrips
         let mut data_copy = data.clone();
 
-        let sp = SetupParams {
+        let sp = SetupParams::<DEGREE> {
             nodes,
             degree: BASE_DEGREE,
             expansion_degree: EXP_DEGREE,
             seed: new_seed(),
             layer_challenges: challenges.clone(),
+            _degree: PhantomData,
         };
 
-        let pp = StackedDrg::<H, Blake2sHasher>::setup(&sp).expect("setup failed");
+        let pp = StackedDrg::<H, Blake2sHasher, DEGREE>::setup(&sp).expect("setup failed");
 
         // MT for original data is always named tree-d, and it will be
         // referenced later in the process as such.
@@ -785,7 +807,7 @@ mod tests {
         let temp_path = temp_dir.path();
         let replica_path = temp_path.join("replica-path");
 
-        StackedDrg::<H, Blake2sHasher>::replicate(
+        StackedDrg::<H, Blake2sHasher, DEGREE>::replicate(
             &pp,
             &replica_id,
             (&mut data_copy[..]).into(),
@@ -797,7 +819,7 @@ mod tests {
 
         assert_ne!(data, data_copy);
 
-        let decoded_data = StackedDrg::<H, Blake2sHasher>::extract_all(
+        let decoded_data = StackedDrg::<H, Blake2sHasher, DEGREE>::extract_all(
             &pp,
             &replica_id,
             data_copy.as_mut_slice(),
@@ -836,12 +858,13 @@ mod tests {
         let mut data_copy = data.clone();
         let partitions = 2;
 
-        let sp = SetupParams {
+        let sp = SetupParams::<DEGREE> {
             nodes: n,
             degree,
             expansion_degree,
             seed: new_seed(),
             layer_challenges: challenges.clone(),
+            _degree: PhantomData,
         };
 
         // MT for original data is always named tree-d, and it will be
@@ -858,8 +881,8 @@ mod tests {
         let temp_path = temp_dir.path();
         let replica_path = temp_path.join("replica-path");
 
-        let pp = StackedDrg::<H, Blake2sHasher>::setup(&sp).expect("setup failed");
-        let (tau, (p_aux, t_aux)) = StackedDrg::<H, Blake2sHasher>::replicate(
+        let pp = StackedDrg::<H, Blake2sHasher, DEGREE>::setup(&sp).expect("setup failed");
+        let (tau, (p_aux, t_aux)) = StackedDrg::<H, Blake2sHasher, DEGREE>::replicate(
             &pp,
             &replica_id,
             (&mut data_copy[..]).into(),
@@ -889,7 +912,7 @@ mod tests {
 
         let priv_inputs = PrivateInputs { p_aux, t_aux };
 
-        let all_partition_proofs = &StackedDrg::<H, Blake2sHasher>::prove_all_partitions(
+        let all_partition_proofs = &StackedDrg::<H, Blake2sHasher, DEGREE>::prove_all_partitions(
             &pp,
             &pub_inputs,
             &priv_inputs,
@@ -897,7 +920,7 @@ mod tests {
         )
         .expect("failed to generate partition proofs");
 
-        let proofs_are_valid = StackedDrg::<H, Blake2sHasher>::verify_all_partitions(
+        let proofs_are_valid = StackedDrg::<H, Blake2sHasher, DEGREE>::verify_all_partitions(
             &pp,
             &pub_inputs,
             all_partition_proofs,
@@ -924,16 +947,18 @@ mod tests {
         let expansion_degree = EXP_DEGREE;
         let nodes = 1024 * 1024 * 32 * 8; // This corresponds to 8GiB sectors (32-byte nodes)
         let layer_challenges = LayerChallenges::new(10, 333);
-        let sp = SetupParams {
+        let sp = SetupParams::<DEGREE> {
             nodes,
             degree,
             expansion_degree,
             seed: new_seed(),
             layer_challenges: layer_challenges.clone(),
+            _degree: PhantomData,
         };
 
         // When this fails, the call to setup should panic, but seems to actually hang (i.e. neither return nor panic) for some reason.
         // When working as designed, the call to setup returns without error.
-        let _pp = StackedDrg::<PedersenHasher, Blake2sHasher>::setup(&sp).expect("setup failed");
+        let _pp =
+            StackedDrg::<PedersenHasher, Blake2sHasher, DEGREE>::setup(&sp).expect("setup failed");
     }
 }

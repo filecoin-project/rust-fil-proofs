@@ -31,7 +31,7 @@ pub const QUAD_ARITY: usize = 4;
 pub const OCT_ARITY: usize = 8;
 
 #[derive(Debug, Clone)]
-pub struct SetupParams {
+pub struct SetupParams<Degree: generic_array::ArrayLength<u32> + Sync + Send + Clone> {
     // Number of nodes
     pub nodes: usize,
 
@@ -44,23 +44,27 @@ pub struct SetupParams {
     pub seed: [u8; 28],
 
     pub layer_challenges: LayerChallenges,
+
+    pub _degree: PhantomData<Degree>,
 }
 
 #[derive(Debug, Clone)]
-pub struct PublicParams<H>
+pub struct PublicParams<H, Degree>
 where
     H: 'static + Hasher,
+    Degree: generic_array::ArrayLength<u32>,
 {
-    pub graph: StackedBucketGraph<H>,
+    pub graph: StackedBucketGraph<H, Degree>,
     pub layer_challenges: LayerChallenges,
     _h: PhantomData<H>,
 }
 
-impl<H> PublicParams<H>
+impl<H, Degree> PublicParams<H, Degree>
 where
     H: Hasher,
+    Degree: generic_array::ArrayLength<u32>,
 {
-    pub fn new(graph: StackedBucketGraph<H>, layer_challenges: LayerChallenges) -> Self {
+    pub fn new(graph: StackedBucketGraph<H, Degree>, layer_challenges: LayerChallenges) -> Self {
         PublicParams {
             graph,
             layer_challenges,
@@ -69,9 +73,10 @@ where
     }
 }
 
-impl<H> ParameterSetMetadata for PublicParams<H>
+impl<H, Degree> ParameterSetMetadata for PublicParams<H, Degree>
 where
     H: Hasher,
+    Degree: generic_array::ArrayLength<u32> + Clone + Sync + Send,
 {
     fn identifier(&self) -> String {
         format!(
@@ -86,11 +91,12 @@ where
     }
 }
 
-impl<'a, H> From<&'a PublicParams<H>> for PublicParams<H>
+impl<'a, H, Degree> From<&'a PublicParams<H, Degree>> for PublicParams<H, Degree>
 where
     H: Hasher,
+    Degree: generic_array::ArrayLength<u32> + Sync + Send + Clone,
 {
-    fn from(other: &PublicParams<H>) -> PublicParams<H> {
+    fn from(other: &PublicParams<H, Degree>) -> PublicParams<H, Degree> {
         PublicParams::new(other.graph.clone(), other.layer_challenges.clone())
     }
 }
@@ -162,12 +168,12 @@ impl<H: Hasher, G: Hasher> Proof<H, G> {
     }
 
     /// Verify the full proof.
-    pub fn verify(
+    pub fn verify<Degree: generic_array::ArrayLength<u32> + Sync + Send + Clone>(
         &self,
-        pub_params: &PublicParams<H>,
+        pub_params: &PublicParams<H, Degree>,
         pub_inputs: &PublicInputs<<H as Hasher>::Domain, <G as Hasher>::Domain>,
         challenge: usize,
-        graph: &StackedBucketGraph<H>,
+        graph: &StackedBucketGraph<H, Degree>,
     ) -> bool {
         let replica_id = &pub_inputs.replica_id;
 

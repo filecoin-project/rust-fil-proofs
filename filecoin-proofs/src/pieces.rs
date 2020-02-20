@@ -699,12 +699,13 @@ mod tests {
         sector_size: SectorSize,
     ) -> Result<([u8; 32], Vec<PieceInfo>)> {
         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
-        let graph = StackedBucketGraph::<DefaultPieceHasher>::new_stacked(
-            u64::from(sector_size) as usize / NODE_SIZE,
-            DRG_DEGREE.load(Ordering::Relaxed) as usize,
-            EXP_DEGREE.load(Ordering::Relaxed) as usize,
-            new_seed(),
-        )?;
+        let graph =
+            StackedBucketGraph::<DefaultPieceHasher, crate::constants::DEGREE>::new_stacked(
+                u64::from(sector_size) as usize / NODE_SIZE,
+                DRG_DEGREE.load(Ordering::Relaxed) as usize,
+                EXP_DEGREE.load(Ordering::Relaxed) as usize,
+                new_seed(),
+            )?;
 
         let mut staged_sector = Vec::with_capacity(u64::from(sector_size) as usize);
         let mut staged_sector_io = std::io::Cursor::new(&mut staged_sector);

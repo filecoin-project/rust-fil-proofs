@@ -16,6 +16,8 @@ pub const SECTOR_SIZE_32_GIB: u64 = 1 << 35;
 pub const POST_CHALLENGE_COUNT: usize = 65;
 pub const POST_CHALLENGED_NODES: usize = 1;
 
+pub type DEGREE = typenum::U14;
+
 lazy_static! {
     pub static ref PARAMETERS: ParameterMap =
         serde_json::from_str(include_str!("../parameters.json")).expect("Invalid parameters.json");

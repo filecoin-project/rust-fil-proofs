@@ -27,7 +27,9 @@ impl<H: Hasher> From<VanillaColumn<H>> for Column {
 
 impl Column {
     /// Create an empty `Column`, used in `blank_circuit`s.
-    pub fn empty<H: Hasher>(params: &PublicParams<H>) -> Self {
+    pub fn empty<H: Hasher, Degree: generic_array::ArrayLength<u32>>(
+        params: &PublicParams<H, Degree>,
+    ) -> Self {
         Column {
             index: None,
             rows: vec![None; params.layer_challenges.layers()],

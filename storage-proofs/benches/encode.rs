@@ -2,6 +2,7 @@ use criterion::{
     black_box, criterion_group, criterion_main, Criterion, ParameterizedBenchmark, Throughput,
 };
 use ff::Field;
+use generic_array::typenum;
 use paired::bls12_381::{Bls12, Fr};
 use rand::thread_rng;
 use sha2::{Digest, Sha256};
@@ -14,17 +15,20 @@ use storage_proofs::porep::stacked::{create_key, StackedBucketGraph};
 struct Pregenerated<H: 'static + Hasher> {
     data: Vec<u8>,
     replica_id: H::Domain,
-    graph: StackedBucketGraph<H>,
+    graph: StackedBucketGraph<H, typenum::U14>,
 }
 
 fn pregenerate_data<H: Hasher>(degree: usize) -> Pregenerated<H> {
+    assert_eq!(degree, 14);
     let mut rng = thread_rng();
     let data: Vec<u8> = (0..(degree + 1))
         .flat_map(|_| fr_into_bytes::<Bls12>(&Fr::random(&mut rng)))
         .collect();
     let replica_id: H::Domain = H::Domain::random(&mut rng);
 
-    let graph = StackedBucketGraph::<H>::new_stacked(degree + 1, degree, 0, new_seed()).unwrap();
+    let graph =
+        StackedBucketGraph::<H, typenum::U14>::new_stacked(degree + 1, degree, 0, new_seed())
+            .unwrap();
 
     Pregenerated {
         data,
@@ -34,7 +38,7 @@ fn pregenerate_data<H: Hasher>(degree: usize) -> Pregenerated<H> {
 }
 
 fn kdf_benchmark(c: &mut Criterion) {
-    let degrees = vec![3, 5, 10, 14, 20];
+    let degrees = vec![14];
 
     c.bench(
         "kdf",

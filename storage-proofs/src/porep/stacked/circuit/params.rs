@@ -30,7 +30,9 @@ pub struct Proof<H: Hasher, G: Hasher> {
 
 impl<H: Hasher, G: Hasher> Proof<H, G> {
     /// Create an empty proof, used in `blank_circuit`s.
-    pub fn empty(params: &PublicParams<H>) -> Self {
+    pub fn empty<Degree: generic_array::ArrayLength<u32> + Sync + Send + Clone>(
+        params: &PublicParams<H, Degree>,
+    ) -> Self {
         let layers = params.layer_challenges.layers();
 
         let mut labeling_proofs = Vec::with_capacity(layers);
@@ -231,7 +233,9 @@ pub struct ReplicaColumnProof<H: Hasher> {
 
 impl<H: Hasher> ReplicaColumnProof<H> {
     /// Create an empty proof, used in `blank_circuit`s.
-    pub fn empty(params: &PublicParams<H>) -> Self {
+    pub fn empty<Degree: generic_array::ArrayLength<u32> + Sync + Send + Clone>(
+        params: &PublicParams<H, Degree>,
+    ) -> Self {
         ReplicaColumnProof {
             c_x: ColumnProof::empty(params),
             drg_parents: vec![ColumnProof::empty(params); params.graph.base_graph().degree()],

@@ -19,7 +19,7 @@ fn merkle_benchmark(c: &mut Criterion) {
             move |b, n_nodes| {
                 let mut rng = thread_rng();
                 let data: Vec<u8> = (0..32 * *n_nodes).map(|_| rng.gen()).collect();
-                let graph = StackedBucketGraph::<Blake2sHasher>::new_stacked(
+                let graph = StackedBucketGraph::<Blake2sHasher, typenum::U14>::new_stacked(
                     *n_nodes,
                     BASE_DEGREE,
                     EXP_DEGREE,
@@ -34,7 +34,7 @@ fn merkle_benchmark(c: &mut Criterion) {
         .with_function("pedersen", move |b, n_nodes| {
             let mut rng = thread_rng();
             let data: Vec<u8> = (0..32 * *n_nodes).map(|_| rng.gen()).collect();
-            let graph = StackedBucketGraph::<PedersenHasher>::new_stacked(
+            let graph = StackedBucketGraph::<PedersenHasher, typenum::U14>::new_stacked(
                 *n_nodes,
                 BASE_DEGREE,
                 EXP_DEGREE,
