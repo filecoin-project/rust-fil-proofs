@@ -168,7 +168,10 @@ where
             drgraph::graph_height::<typenum::U8>(pub_params.sector_size as usize / NODE_SIZE);
 
         let leafs = vec![None; challenges_count];
-        let paths = vec![vec![(vec![None; 3], None); height - 1]; challenges_count];
+        let paths = vec![
+            vec![(vec![None; typenum::U8::to_usize() - 1], None); height - 1];
+            challenges_count
+        ];
 
         ElectionPoStCircuit {
             params: &*JJ_PARAMS,
