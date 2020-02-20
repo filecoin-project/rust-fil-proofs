@@ -573,7 +573,7 @@ mod tests {
         let mut data_copy = data.clone();
 
         let setup_params = compound_proof::SetupParams {
-            vanilla_params: SetupParams::<DEGREE> {
+            vanilla_params: SetupParams::<typenum::U5> {
                 nodes,
                 degree,
                 expansion_degree,
