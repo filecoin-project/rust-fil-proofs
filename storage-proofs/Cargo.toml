@@ -28,7 +28,7 @@ clap = "2"
 colored = "1.6"
 aes = "0.3"
 block-modes = "0.3"
-sha2 = { git = "https://github.com/dignifiedquire/hashes", branch = "sha2-intrinsics" }
+sha2 = { version = "0.8.1", package = "sha2ni" }
 pbr = "1.0"
 tempfile = "3"
 tempdir = "0.3.7"
@@ -55,7 +55,7 @@ generic-array = "0.13.2"
 anyhow = "1.0.23"
 thiserror = "1.0.6"
 cpu-time = "1.0.0"
-neptune = "0.4.1"
+neptune = "0.5.1"
 
 [features]
 default = ["gpu"]

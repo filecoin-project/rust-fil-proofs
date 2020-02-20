@@ -32,6 +32,9 @@ pub type BinaryLCMerkleTree<T, A> = LCMerkleTree<T, A, typenum::U2>;
 pub type QuadMerkleTree<T, A> = MerkleTree<T, A, typenum::U4>;
 pub type QuadLCMerkleTree<T, A> = LCMerkleTree<T, A, typenum::U4>;
 
+pub type OctMerkleTree<T, A> = MerkleTree<T, A, typenum::U8>;
+pub type OctLCMerkleTree<T, A> = LCMerkleTree<T, A, typenum::U8>;
+
 pub type MerkleStore<T> = DiskStore<T>;
 
 /// Representation of a merkle proof.
@@ -325,7 +328,7 @@ mod tests {
     use crate::hasher::{Blake2sHasher, PedersenHasher, PoseidonHasher, Sha256Hasher};
 
     fn merklepath<H: Hasher, U: typenum::Unsigned>() {
-        let leafs = 16;
+        let leafs = 64;
         let g = BucketGraph::<H>::new(leafs, BASE_DEGREE, 0, new_seed()).unwrap();
         let mut rng = rand::thread_rng();
         let node_size = 32;
@@ -393,5 +396,15 @@ mod tests {
     #[test]
     fn merklepath_blake2s_quad() {
         merklepath::<Blake2sHasher, typenum::U4>();
+    }
+
+    #[test]
+    fn merklepath_poseidon_oct() {
+        merklepath::<PoseidonHasher, typenum::U8>();
+    }
+
+    #[test]
+    fn merklepath_pedersen_oct() {
+        merklepath::<PedersenHasher, typenum::U8>();
     }
 }

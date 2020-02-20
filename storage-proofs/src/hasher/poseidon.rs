@@ -621,7 +621,7 @@ mod tests {
         );
 
         assert!(cs.is_satisfied());
-        let expected_constraints = 7169;
+        let expected_constraints = 2_777;
         let actual_constraints = cs.num_constraints();
 
         assert_eq!(expected_constraints, actual_constraints);

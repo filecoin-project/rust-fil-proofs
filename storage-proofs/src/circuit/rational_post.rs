@@ -306,7 +306,7 @@ mod tests {
 
     #[test]
     fn test_rational_post_circuit_poseidon() {
-        test_rational_post_circuit::<PoseidonHasher>(5_150);
+        test_rational_post_circuit::<PoseidonHasher>(3_806);
     }
 
     fn test_rational_post_circuit<H: Hasher>(expected_constraints: usize) {

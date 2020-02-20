@@ -113,7 +113,7 @@ mod tests {
                 .expect("hash_single_column function failed");
 
             assert!(cs.is_satisfied(), "constraints not satisfied");
-            assert_eq!(cs.num_constraints(), 1_239);
+            assert_eq!(cs.num_constraints(), 601);
 
             let expected: Fr = vanilla_hash_single_column(&vals).into();
 

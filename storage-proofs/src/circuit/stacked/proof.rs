@@ -215,7 +215,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher>
                 commitment: None,
             };
 
-            PoRCompound::<H, typenum::U4>::generate_public_inputs(&pub_inputs, &por_params, k)
+            PoRCompound::<H, typenum::U8>::generate_public_inputs(&pub_inputs, &por_params, k)
         };
 
         let all_challenges = pub_in.challenges(&pub_params.layer_challenges, graph.size(), k);
@@ -335,16 +335,16 @@ mod tests {
 
     #[test]
     fn stacked_input_circuit_pedersen() {
-        stacked_input_circuit::<PedersenHasher>(1_918_139);
+        stacked_input_circuit::<PedersenHasher>(2_184_535);
     }
 
     #[test]
     fn stacked_input_circuit_poseidon() {
-        stacked_input_circuit::<PoseidonHasher>(1_804_746);
+        stacked_input_circuit::<PoseidonHasher>(1_891_958);
     }
 
     fn stacked_input_circuit<H: Hasher + 'static>(expected_constraints: usize) {
-        let nodes = 16;
+        let nodes = 64;
         let degree = BASE_DEGREE;
         let expansion_degree = EXP_DEGREE;
         let num_layers = 2;
@@ -495,7 +495,7 @@ mod tests {
     }
 
     fn stacked_test_compound<H: 'static + Hasher>() {
-        let nodes = 16;
+        let nodes = 64;
         let degree = 3;
         let expansion_degree = 2;
         let num_layers = 2;
