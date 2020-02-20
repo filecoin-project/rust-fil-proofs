@@ -638,41 +638,48 @@ pub fn create_key<H: Hasher>(
     layer_labels: &mut [u8],
     node: usize,
 ) -> Result<()> {
+    #[cfg(target_arch = "x86")]
+    use core::arch::x86::{_mm_prefetch, _MM_HINT_T0};
+    #[cfg(target_arch = "x86_64")]
+    use core::arch::x86_64::{_mm_prefetch, _MM_HINT_T0};
+
+    {
+        // hash node id
+        let node_bytes = (node as u64).to_be_bytes();
+
+        unsafe {
+            _mm_prefetch(node_bytes.as_ptr() as *const i8, _MM_HINT_T0);
+        }
+
+        hasher.input(&node_bytes);
+    }
+
     // hash parents for all non 0 nodes
     if node > 0 {
         let layer_labels = &*layer_labels;
 
-        let mut inputs = vec![0u8; NODE_SIZE * TOTAL_PARENTS + 8];
         let real_parents_count = if exp_parents_data.is_some() {
             graph.degree()
         } else {
             graph.base_graph().degree()
         };
 
-        // hash node id
-        inputs[..8].copy_from_slice(&(node as u64).to_be_bytes());
+        let mut inputs = vec![0u8; NODE_SIZE * real_parents_count];
+        graph.copy_parents_data(node as u32, layer_labels, exp_parents_data, &mut inputs);
 
-        graph.copy_parents_data(
-            node as u32,
-            layer_labels,
-            exp_parents_data,
-            &mut inputs[8..],
-        );
+        // repeat parents
+        let num_inputs = TOTAL_PARENTS / real_parents_count;
+        let rest_inputs = TOTAL_PARENTS % real_parents_count;
 
-        // Repeat parents
-        {
-            let (source, rest) = inputs.split_at_mut(NODE_SIZE * real_parents_count + 8);
-            let source = &source[8..];
-            debug_assert_eq!(source.len(), NODE_SIZE * real_parents_count);
-
-            for chunk in rest.chunks_mut(source.len()) {
-                chunk.copy_from_slice(&source[..chunk.len()]);
-            }
+        // prefetch input data, to make sure sha inputs are in cache
+        unsafe {
+            _mm_prefetch(inputs.as_ptr() as *const i8, _MM_HINT_T0);
         }
 
-        hasher.input(&inputs);
-    } else {
-        hasher.input(&(node as u64).to_be_bytes()[..]);
+        for _ in 0..num_inputs {
+            hasher.input(&inputs);
+        }
+        hasher.input(&inputs[..rest_inputs * NODE_SIZE]);
     }
 
     // store the newly generated key

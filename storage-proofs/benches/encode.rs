@@ -1,4 +1,6 @@
-use criterion::{black_box, criterion_group, criterion_main, Criterion, ParameterizedBenchmark};
+use criterion::{
+    black_box, criterion_group, criterion_main, Criterion, ParameterizedBenchmark, Throughput,
+};
 use ff::Field;
 use paired::bls12_381::{Bls12, Fr};
 use rand::thread_rng;
@@ -54,7 +56,8 @@ fn kdf_benchmark(c: &mut Criterion) {
                 })
             },
             degrees,
-        ),
+        )
+        .throughput(|_s| Throughput::Bytes(37 * 32 + 2 * 8)),
     );
 }
 
