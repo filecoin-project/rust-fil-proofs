@@ -4,15 +4,13 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{anyhow, ensure, Context, Result};
 use bincode::deserialize;
-use log::trace;
 use merkletree::merkle::get_merkle_tree_leafs;
 use merkletree::store::{DiskStore, LevelCacheStore, StoreConfig};
 use storage_proofs::hasher::Hasher;
 use storage_proofs::porep::PoRep;
 use storage_proofs::sector::SectorId;
 use storage_proofs::stacked::{
-    generate_replica_id, CacheKey, PersistentAux, StackedDrg, TemporaryAux, BINARY_ARITY,
-    QUAD_ARITY,
+    generate_replica_id, CacheKey, PersistentAux, StackedDrg, TemporaryAux, BINARY_ARITY, OCT_ARITY,
 };
 use tempfile::tempfile;
 
@@ -324,25 +322,27 @@ where
 }
 
 // Verifies if a DiskStore specified by a config is consistent.
-fn verify_store(config: &StoreConfig, arity: usize) -> bool {
+fn verify_store(config: &StoreConfig, arity: usize) -> Result<()> {
     let store_path = StoreConfig::data_path(&config.path, &config.id);
     if !Path::new(&store_path).exists() {
-        return false;
+        return Err(anyhow!("Missing store file: {:?}", store_path));
     }
 
     if config.size.is_none() {
-        return false;
+        return Err(anyhow!("Missing store size: {:?}", store_path));
     }
 
-    let res = DiskStore::<<DefaultPieceHasher as Hasher>::Domain>::is_consistent(
+    if DiskStore::<<DefaultPieceHasher as Hasher>::Domain>::is_consistent(
         config.size.unwrap(),
         arity,
         &config,
     )
-    .is_ok();
-    trace!("disk store {:?} is_consistent: {}", store_path, res);
+    .is_err()
+    {
+        return Err(anyhow!("Store is inconsistent: {:?}", store_path));
+    }
 
-    res
+    Ok(())
 }
 
 // Checks for the existence of the tree d store, the replica, and all generated labels.
@@ -350,48 +350,40 @@ pub fn validate_cache_for_precommit_phase2<R, T>(
     cache_path: R,
     replica_path: T,
     seal_precommit_phase1_output: &SealPreCommitPhase1Output,
-) -> Result<bool>
+) -> Result<()>
 where
     R: AsRef<Path>,
     T: AsRef<Path>,
 {
-    let replica = replica_path.as_ref().to_path_buf();
-    if !Path::new(&replica).exists() {
-        trace!("replica {:?} does not exist", &replica);
-        return Ok(false);
+    if !replica_path.as_ref().exists() {
+        return Err(anyhow!(
+            "Missing replica: {:?}",
+            replica_path.as_ref().to_path_buf()
+        ));
     }
 
-    for label in &seal_precommit_phase1_output.labels.labels {
-        let cache = cache_path.as_ref().to_path_buf();
-        let current_path = StoreConfig::data_path(&label.path, &label.id);
-        if !verify_store(label, BINARY_ARITY) || !current_path.starts_with(&cache) {
-            trace!(
-                "store path [{:?}] and cache_path [{:?}] do not match",
-                &current_path,
-                &cache
-            );
-            return Ok(false);
-        }
-    }
+    // Verify all stores/labels within the Labels object.
+    let cache = cache_path.as_ref().to_path_buf();
+    seal_precommit_phase1_output
+        .labels
+        .verify_stores(verify_store, &cache)?;
 
-    Ok(verify_store(
-        &seal_precommit_phase1_output.config,
-        BINARY_ARITY,
-    ))
+    verify_store(&seal_precommit_phase1_output.config, BINARY_ARITY)
 }
 
 // Checks for the existence of the replica data and t_aux, which in
 // turn allows us to verify the tree d, tree r, tree c, and the
 // labels.
-pub fn validate_cache_for_commit<R, T>(cache_path: R, replica_path: T) -> Result<bool>
+pub fn validate_cache_for_commit<R, T>(cache_path: R, replica_path: T) -> Result<()>
 where
     R: AsRef<Path>,
     T: AsRef<Path>,
 {
-    let replica = replica_path.as_ref().to_path_buf();
-    if !Path::new(&replica).exists() {
-        trace!("replica {:?} does not exist", &replica);
-        return Ok(false);
+    if !replica_path.as_ref().exists() {
+        return Err(anyhow!(
+            "Missing replica: {:?}",
+            replica_path.as_ref().to_path_buf()
+        ));
     }
 
     let cache = &cache_path.as_ref();
@@ -422,52 +414,36 @@ where
         res
     };
 
-    // Verify all labels.
-    for label in &t_aux.labels.labels {
-        let current_path = StoreConfig::data_path(&label.path, &label.id);
-        if !verify_store(label, BINARY_ARITY) || !current_path.starts_with(&cache.to_path_buf()) {
-            trace!(
-                "store path [{:?}] and cache_path [{:?}] do not match",
-                &current_path,
-                &cache.to_path_buf()
-            );
-            return Ok(false);
-        }
-    }
+    // Verify all stores/labels within the Labels object.
+    let cache = cache_path.as_ref().to_path_buf();
+    t_aux.labels.verify_stores(verify_store, &cache)?;
 
     // Verify each tree disk store.
-    if !verify_store(&t_aux.tree_d_config, BINARY_ARITY)
-        || !verify_store(&t_aux.tree_c_config, QUAD_ARITY)
-    {
-        return Ok(false);
-    }
+    verify_store(&t_aux.tree_d_config, BINARY_ARITY)?;
+    verify_store(&t_aux.tree_c_config, OCT_ARITY)?;
 
     let store_path =
         StoreConfig::data_path(&t_aux.tree_r_last_config.path, &t_aux.tree_r_last_config.id);
 
     if !Path::new(&store_path).exists() {
-        trace!(
-            "store does not exist {:?}",
-            &StoreConfig::data_path(&t_aux.tree_r_last_config.path, &t_aux.tree_r_last_config.id)
-        );
-        return Ok(false);
+        return Err(anyhow!("Missing store file: {:?}", store_path));
     }
 
     if t_aux.tree_r_last_config.size.is_none() {
-        trace!("tree r store size is unknown");
-        return Ok(false);
+        return Err(anyhow!("Missing store size: {:?}", store_path));
     }
 
-    let res =
-        LevelCacheStore::<<DefaultPieceHasher as Hasher>::Domain, std::fs::File>::is_consistent(
-            t_aux.tree_r_last_config.size.unwrap(),
-            QUAD_ARITY,
-            &t_aux.tree_r_last_config,
-        )
-        .is_ok();
-    trace!("level cache store {:?} is_consistent: {}", store_path, res);
+    if LevelCacheStore::<<DefaultPieceHasher as Hasher>::Domain, std::fs::File>::is_consistent(
+        t_aux.tree_r_last_config.size.unwrap(),
+        OCT_ARITY,
+        &t_aux.tree_r_last_config,
+    )
+    .is_err()
+    {
+        return Err(anyhow!("Store is inconsistent: {:?}", store_path));
+    }
 
-    Ok(res)
+    Ok(())
 }
 
 #[cfg(test)]
@@ -737,11 +713,11 @@ mod tests {
             &piece_infos,
         )?;
 
-        assert!(validate_cache_for_precommit_phase2(
+        validate_cache_for_precommit_phase2(
             cache_dir.path(),
             staged_sector_file.path(),
-            &phase1_output
-        )?);
+            &phase1_output,
+        )?;
 
         let pre_commit_output = seal_pre_commit_phase2(
             config,
@@ -753,10 +729,7 @@ mod tests {
         let comm_d = pre_commit_output.comm_d.clone();
         let comm_r = pre_commit_output.comm_r.clone();
 
-        assert!(validate_cache_for_commit(
-            cache_dir.path(),
-            staged_sector_file.path()
-        )?);
+        validate_cache_for_commit(cache_dir.path(), staged_sector_file.path())?;
 
         let phase1_output = seal_commit_phase1(
             config,
