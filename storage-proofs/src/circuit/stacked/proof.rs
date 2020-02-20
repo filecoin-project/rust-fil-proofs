@@ -215,7 +215,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher>
                 commitment: None,
             };
 
-            PoRCompound::<H, typenum::U4>::generate_public_inputs(&pub_inputs, &por_params, k)
+            PoRCompound::<H, typenum::U8>::generate_public_inputs(&pub_inputs, &por_params, k)
         };
 
         let all_challenges = pub_in.challenges(&pub_params.layer_challenges, graph.size(), k);
