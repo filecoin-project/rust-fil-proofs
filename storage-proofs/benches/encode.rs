@@ -21,13 +21,13 @@ struct Pregenerated<H: 'static + Hasher> {
 fn pregenerate_data<H: Hasher>(degree: usize) -> Pregenerated<H> {
     assert_eq!(degree, 14);
     let mut rng = thread_rng();
-    let data: Vec<u8> = (0..(degree + 1))
+    let data: Vec<u8> = (0..(degree * 10))
         .flat_map(|_| fr_into_bytes::<Bls12>(&Fr::random(&mut rng)))
         .collect();
     let replica_id: H::Domain = H::Domain::random(&mut rng);
 
     let graph =
-        StackedBucketGraph::<H, typenum::U14>::new_stacked(degree + 1, degree, 0, new_seed())
+        StackedBucketGraph::<H, typenum::U14>::new_stacked(degree * 10, degree, 0, new_seed())
             .unwrap();
 
     Pregenerated {
