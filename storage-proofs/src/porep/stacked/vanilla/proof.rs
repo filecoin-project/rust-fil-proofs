@@ -298,14 +298,20 @@ where
         for layer in 1..=layers {
             info!("generating layer: {}", layer);
 
-            for node in 0..graph.size() {
-                create_key(
-                    graph,
-                    base_hasher.clone(),
-                    exp_parents_data.as_ref(),
-                    &mut layer_labels,
-                    node,
-                )?;
+            if layer == 1 {
+                for node in 0..graph.size() {
+                    create_key(graph, base_hasher.clone(), &mut layer_labels, node)?;
+                }
+            } else {
+                for node in 0..graph.size() {
+                    create_key_exp(
+                        graph,
+                        base_hasher.clone(),
+                        exp_parents_data.as_ref().unwrap(),
+                        &mut layer_labels,
+                        node,
+                    )?;
+                }
             }
 
             info!("  setting exp parents");
@@ -649,7 +655,6 @@ where
 pub fn create_key<H: Hasher, Degree>(
     graph: &StackedBucketGraph<H, Degree>,
     mut hasher: Sha256,
-    exp_parents_data: Option<&Vec<u8>>,
     layer_labels: &mut [u8],
     node: usize,
 ) -> Result<()>
@@ -675,7 +680,50 @@ where
 
     // hash parents for all non 0 nodes
     if node > 0 {
-        graph.copy_parents_data(
+        graph.copy_parents_data(node as u32, &*layer_labels, &mut hasher, TOTAL_PARENTS);
+    }
+
+    // store the newly generated key
+    let start = data_at_node_offset(node);
+    let end = start + NODE_SIZE;
+    layer_labels[start..end].copy_from_slice(&hasher.result()[..]);
+
+    // strip last two bits, to ensure result is in Fr.
+    layer_labels[end - 1] &= 0b0011_1111;
+
+    Ok(())
+}
+
+pub fn create_key_exp<H: Hasher, Degree>(
+    graph: &StackedBucketGraph<H, Degree>,
+    mut hasher: Sha256,
+    exp_parents_data: &Vec<u8>,
+    layer_labels: &mut [u8],
+    node: usize,
+) -> Result<()>
+where
+    Degree: generic_array::ArrayLength<u32> + Sync + Send + Clone + std::ops::Mul<typenum::U32>,
+    typenum::Prod<Degree, typenum::U32>: ArrayLength<u8>,
+{
+    #[cfg(target_arch = "x86")]
+    use core::arch::x86::{_mm_prefetch, _MM_HINT_T0};
+    #[cfg(target_arch = "x86_64")]
+    use core::arch::x86_64::{_mm_prefetch, _MM_HINT_T0};
+
+    {
+        // hash node id
+        let node_bytes = (node as u64).to_be_bytes();
+
+        unsafe {
+            _mm_prefetch(node_bytes.as_ptr() as *const i8, _MM_HINT_T0);
+        }
+
+        hasher.input(&node_bytes);
+    }
+
+    // hash parents for all non 0 nodes
+    if node > 0 {
+        graph.copy_parents_data_exp(
             node as u32,
             &*layer_labels,
             exp_parents_data,

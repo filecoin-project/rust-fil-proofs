@@ -19,7 +19,7 @@ pub use self::column_proof::ColumnProof;
 pub use self::encoding_proof::EncodingProof;
 pub use self::graph::{StackedBucketGraph, StackedGraph, EXP_DEGREE};
 pub use self::params::*;
-pub use self::proof::{create_key, StackedDrg, TOTAL_PARENTS};
+pub use self::proof::{create_key, create_key_exp, StackedDrg, TOTAL_PARENTS};
 pub use labeling_proof::LabelingProof;
 
 #[cfg(test)]

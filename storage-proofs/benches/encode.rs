@@ -10,7 +10,7 @@ use storage_proofs::drgraph::new_seed;
 use storage_proofs::fr32::fr_into_bytes;
 use storage_proofs::hasher::sha256::Sha256Hasher;
 use storage_proofs::hasher::{Domain, Hasher};
-use storage_proofs::porep::stacked::{create_key, StackedBucketGraph};
+use storage_proofs::porep::stacked::{create_key_exp, StackedBucketGraph};
 
 struct Pregenerated<H: 'static + Hasher> {
     data: Vec<u8>,
@@ -51,12 +51,13 @@ fn kdf_benchmark(c: &mut Criterion) {
                     graph,
                 } = pregenerate_data::<Sha256Hasher>(*degree);
 
+                let exp_data = data.clone();
                 b.iter(|| {
                     let mut hasher = Sha256::new();
                     hasher.input(AsRef::<[u8]>::as_ref(&replica_id));
                     hasher.input(&(1u64).to_be_bytes()[..]);
 
-                    black_box(create_key(&graph, hasher, None, &mut data, 1))
+                    black_box(create_key_exp(&graph, hasher, &exp_data, &mut data, 1))
                 })
             },
             degrees,

@@ -23,6 +23,11 @@ pub const EXP_DEGREE: usize = 8;
 pub type DEGREE = generic_array::typenum::U14;
 const FEISTEL_KEYS: [feistel::Index; 4] = [1, 2, 3, 4];
 
+#[cfg(target_arch = "x86")]
+use core::arch::x86::{_mm_prefetch, _MM_HINT_T0};
+#[cfg(target_arch = "x86_64")]
+use core::arch::x86_64::{_mm_prefetch, _MM_HINT_T0};
+
 lazy_static! {
     // This parents cache is currently used for the full parents set.
     // It is indexed by the `sector size`, to ensure that the right cache is used.
@@ -175,11 +180,11 @@ where
         Ok(res)
     }
 
-    pub fn copy_parents_data(
+    pub fn copy_parents_data_exp(
         &self,
         node: u32,
         base_data: &[u8],
-        exp_data: Option<&Vec<u8>>,
+        exp_data: &Vec<u8>,
         hasher: &mut Sha256,
         total_parents: usize,
     ) {
@@ -189,7 +194,7 @@ where
                 .get(&self.sector_size())
                 .expect("Invalid cache construction");
             let cache_parents = cache.read(node as u32);
-            self.copy_parents_data_inner(
+            self.copy_parents_data_inner_exp(
                 &cache_parents,
                 base_data,
                 exp_data,
@@ -200,7 +205,7 @@ where
             let mut cache_parents = vec![0u32; self.degree()];
 
             self.parents(node as usize, &mut cache_parents[..]).unwrap();
-            self.copy_parents_data_inner(
+            self.copy_parents_data_inner_exp(
                 &cache_parents,
                 base_data,
                 exp_data,
@@ -210,64 +215,100 @@ where
         }
     }
 
+    pub fn copy_parents_data(
+        &self,
+        node: u32,
+        base_data: &[u8],
+        hasher: &mut Sha256,
+        total_parents: usize,
+    ) {
+        if self.use_cache {
+            let cache_lock = PARENT_CACHE.read().unwrap();
+            let cache = cache_lock
+                .get(&self.sector_size())
+                .expect("Invalid cache construction");
+            let cache_parents = cache.read(node as u32);
+            self.copy_parents_data_inner(&cache_parents, base_data, hasher, total_parents);
+        } else {
+            let mut cache_parents = vec![0u32; self.degree()];
+
+            self.parents(node as usize, &mut cache_parents[..]).unwrap();
+            self.copy_parents_data_inner(&cache_parents, base_data, hasher, total_parents);
+        }
+    }
+
+    fn copy_parents_data_inner_exp(
+        &self,
+        cache_parents: &[u32],
+        base_data: &[u8],
+        exp_data: &[u8],
+        hasher: &mut Sha256,
+        total_parents: usize,
+    ) {
+        let base_degree = self.base_graph().degree();
+        let degree = self.degree();
+
+        let num_inputs = total_parents / degree;
+        let rest_inputs = total_parents % degree;
+        let buffer = [0u8; 64];
+
+        for _ in 0..num_inputs {
+            for parents in cache_parents[..base_degree].chunks_exact(2) {
+                hash_multiple(hasher, buffer, parents, base_data);
+            }
+
+            for parents in cache_parents[base_degree..].chunks_exact(2) {
+                hash_multiple(hasher, buffer, parents, exp_data);
+            }
+        }
+
+        if rest_inputs < base_degree {
+            for parents in cache_parents[..rest_inputs].chunks(2) {
+                if parents.len() > 1 {
+                    hash_multiple(hasher, buffer, parents, base_data);
+                } else {
+                    hash_single(hasher, parents[0], base_data);
+                }
+            }
+        } else {
+            for parents in cache_parents[..base_degree].chunks_exact(2) {
+                hash_multiple(hasher, buffer, parents, base_data);
+            }
+            for parents in cache_parents[base_degree..rest_inputs].chunks(2) {
+                if parents.len() > 1 {
+                    hash_multiple(hasher, buffer, parents, exp_data);
+                } else {
+                    hash_single(hasher, parents[0], exp_data);
+                }
+            }
+        }
+    }
+
     fn copy_parents_data_inner(
         &self,
         cache_parents: &[u32],
         base_data: &[u8],
-        exp_data: Option<&Vec<u8>>,
         hasher: &mut Sha256,
         total_parents: usize,
     ) {
-        #[cfg(target_arch = "x86")]
-        use core::arch::x86::{_mm_prefetch, _MM_HINT_T0};
-        #[cfg(target_arch = "x86_64")]
-        use core::arch::x86_64::{_mm_prefetch, _MM_HINT_T0};
-
         let base_degree = self.base_graph().degree();
-        let real_parents_count = if exp_data.is_some() {
-            self.degree()
-        } else {
-            base_degree
-        };
+        assert_eq!(base_degree % 2, 0, "invalid base degree");
 
-        let num_inputs = total_parents / real_parents_count;
-        let rest_inputs = total_parents % real_parents_count;
+        let num_inputs = total_parents / base_degree;
+        let rest_inputs = total_parents % base_degree;
+        let buffer = [0u8; 64];
 
-        let mut buffer = [0u8; 64];
-        for i in 0..(num_inputs + 1) {
-            let len = if i == num_inputs {
-                rest_inputs
+        for _i in 0..num_inputs {
+            for parents in cache_parents[..base_degree].chunks_exact(2) {
+                hash_multiple(hasher, buffer, parents, base_data);
+            }
+        }
+
+        for parents in cache_parents[..rest_inputs].chunks(2) {
+            if parents.len() > 1 {
+                hash_multiple(hasher, buffer, parents, base_data);
             } else {
-                real_parents_count
-            };
-
-            for (i, parents) in cache_parents.chunks_exact(2).enumerate().take(len) {
-                let start0 = parents[0] as usize * NODE_SIZE;
-                let end0 = start0 + NODE_SIZE;
-                let start1 = parents[1] as usize * NODE_SIZE;
-                let end1 = start1 + NODE_SIZE;
-
-                if i * 2 < base_degree || exp_data.is_none() {
-                    // Base parents
-                    buffer[..32].copy_from_slice(&base_data[start0..end0]);
-                } else {
-                    // Expander parents
-                    buffer[..32].copy_from_slice(&exp_data.unwrap()[start0..end0]);
-                }
-
-                if (i * 2) + 1 < base_degree || exp_data.is_none() {
-                    // Base parents
-                    buffer[32..].copy_from_slice(&base_data[start1..end1]);
-                } else {
-                    // Expander parents
-                    buffer[32..].copy_from_slice(&exp_data.unwrap()[start1..end1]);
-                }
-
-                unsafe {
-                    _mm_prefetch(buffer.as_ptr() as *const i8, _MM_HINT_T0);
-                }
-
-                hasher.input(&buffer[..]);
+                hash_single(hasher, parents[0], base_data);
             }
         }
     }
@@ -481,6 +522,31 @@ where
     G: Graph<H>,
     Degree: generic_array::ArrayLength<u32> + Sync + Send + Clone,
 {
+}
+
+#[inline]
+fn hash_multiple(hasher: &mut Sha256, mut buffer: [u8; 64], parents: &[u32], data: &[u8]) {
+    let start0 = parents[0] as usize * NODE_SIZE;
+    let end0 = start0 + NODE_SIZE;
+    let start1 = parents[1] as usize * NODE_SIZE;
+    let end1 = start1 + NODE_SIZE;
+
+    buffer[..32].copy_from_slice(&data[start0..end0]);
+    buffer[32..].copy_from_slice(&data[start1..end1]);
+
+    unsafe {
+        _mm_prefetch(buffer.as_ptr() as *const i8, _MM_HINT_T0);
+    }
+
+    hasher.input(&buffer[..]);
+}
+
+#[inline]
+fn hash_single(hasher: &mut Sha256, parent: u32, data: &[u8]) {
+    let start0 = parent as usize * NODE_SIZE;
+    let end0 = start0 + NODE_SIZE;
+
+    hasher.input(&data[start0..end0]);
 }
 
 #[cfg(test)]
