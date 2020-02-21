@@ -15,7 +15,7 @@ use crate::error::Result;
 use crate::hasher::Hasher;
 use crate::parameter_cache::ParameterSetMetadata;
 use crate::settings;
-use crate::util::{data_at_node_offset, NODE_SIZE};
+use crate::util::NODE_SIZE;
 
 /// The expansion degree used for Stacked Graphs.
 pub const EXP_DEGREE: usize = 8;
@@ -233,6 +233,7 @@ where
         let num_inputs = total_parents / real_parents_count;
         let rest_inputs = total_parents % real_parents_count;
 
+        let mut buffer = [0u8; 64];
         for i in 0..(num_inputs + 1) {
             let len = if i == num_inputs {
                 rest_inputs
@@ -240,23 +241,33 @@ where
                 real_parents_count
             };
 
-            for (i, parent) in cache_parents.iter().enumerate().take(len) {
-                let start = *parent as usize * NODE_SIZE;
-                let end = start + NODE_SIZE;
+            for (i, parents) in cache_parents.chunks_exact(2).enumerate().take(len) {
+                let start0 = parents[0] as usize * NODE_SIZE;
+                let end0 = start0 + NODE_SIZE;
+                let start1 = parents[1] as usize * NODE_SIZE;
+                let end1 = start1 + NODE_SIZE;
 
-                let node = if i < base_degree || exp_data.is_none() {
+                if i * 2 < base_degree || exp_data.is_none() {
                     // Base parents
-                    &base_data[start..end]
+                    buffer[..32].copy_from_slice(&base_data[start0..end0]);
                 } else {
                     // Expander parents
-                    &exp_data.unwrap()[start..end]
-                };
-
-                unsafe {
-                    _mm_prefetch(node.as_ptr() as *const i8, _MM_HINT_T0);
+                    buffer[..32].copy_from_slice(&exp_data.unwrap()[start0..end0]);
                 }
 
-                hasher.input(node);
+                if (i * 2) + 1 < base_degree || exp_data.is_none() {
+                    // Base parents
+                    buffer[32..].copy_from_slice(&base_data[start1..end1]);
+                } else {
+                    // Expander parents
+                    buffer[32..].copy_from_slice(&exp_data.unwrap()[start1..end1]);
+                }
+
+                unsafe {
+                    _mm_prefetch(buffer.as_ptr() as *const i8, _MM_HINT_T0);
+                }
+
+                hasher.input(&buffer[..]);
             }
         }
     }

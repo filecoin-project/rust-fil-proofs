@@ -675,38 +675,13 @@ where
 
     // hash parents for all non 0 nodes
     if node > 0 {
-        let layer_labels = &*layer_labels;
-
-        // let real_parents_count = if exp_parents_data.is_some() {
-        //     graph.degree()
-        // } else {
-        //     graph.base_graph().degree()
-        // };
-
-        // use generic_array::GenericArray;
-        // let mut inputs = GenericArray::<u8, typenum::Prod<Degree, typenum::U32>>::default();
-
         graph.copy_parents_data(
             node as u32,
-            layer_labels,
+            &*layer_labels,
             exp_parents_data,
             &mut hasher,
             TOTAL_PARENTS,
         );
-
-        // // repeat parents
-        // let num_inputs = TOTAL_PARENTS / real_parents_count;
-        // let rest_inputs = TOTAL_PARENTS % real_parents_count;
-
-        // // prefetch input data, to make sure sha inputs are in cache
-        // unsafe {
-        //     _mm_prefetch(inputs.as_ptr() as *const i8, _MM_HINT_T0);
-        // }
-
-        // for _ in 0..num_inputs {
-        //     hasher.input(&inputs[..real_parents_count * NODE_SIZE]);
-        // }
-        // hasher.input(&inputs[..rest_inputs * NODE_SIZE]);
     }
 
     // store the newly generated key
