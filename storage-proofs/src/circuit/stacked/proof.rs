@@ -344,6 +344,9 @@ mod tests {
     }
 
     fn stacked_input_circuit<H: Hasher + 'static>(expected_constraints: usize) {
+        use crate::stacked::{CacheKey, TemporaryAux, TemporaryAuxCache, BINARY_ARITY};
+        use merkletree::store::StoreConfig;
+
         let nodes = 64;
         let degree = BASE_DEGREE;
         let expansion_degree = EXP_DEGREE;
@@ -356,6 +359,7 @@ mod tests {
         let data: Vec<u8> = (0..nodes)
             .flat_map(|_| fr_into_bytes::<Bls12>(&Fr::random(rng)))
             .collect();
+
         // create a copy, so we can compare roundtrips
         let mut data_copy = data.clone();
         let sp = SetupParams {
@@ -368,8 +372,6 @@ mod tests {
 
         // MT for original data is always named tree-d, and it will be
         // referenced later in the process as such.
-        use crate::stacked::{CacheKey, BINARY_ARITY};
-        use merkletree::store::StoreConfig;
         let cache_dir = tempfile::tempdir().unwrap();
         let config = StoreConfig::new(
             cache_dir.path(),
@@ -377,13 +379,19 @@ mod tests {
             StoreConfig::default_cached_above_base_layer(nodes, BINARY_ARITY),
         );
 
+        // Generate a replica path.
+        let temp_dir = tempdir::TempDir::new("stacked-input-circuit").unwrap();
+        let temp_path = temp_dir.path();
+        let replica_path = temp_path.join("replica-path");
+
         let pp = StackedDrg::<H, Sha256Hasher>::setup(&sp).expect("setup failed");
         let (tau, (p_aux, t_aux)) = StackedDrg::<H, Sha256Hasher>::replicate(
             &pp,
             &replica_id.into(),
             (&mut data_copy[..]).into(),
             None,
-            Some(config),
+            config,
+            replica_path.clone(),
         )
         .expect("replication failed");
         assert_ne!(data, data_copy);
@@ -397,10 +405,13 @@ mod tests {
             k: None,
         };
 
+        // Store copy of original t_aux for later resource deletion.
+        let t_aux_orig = t_aux.clone();
+
         // Convert TemporaryAux to TemporaryAuxCache, which instantiates all
         // elements based on the configs stored in TemporaryAux.
-        use crate::stacked::TemporaryAuxCache;
-        let t_aux = TemporaryAuxCache::new(&t_aux).expect("failed to restore contents of t_aux");
+        let t_aux = TemporaryAuxCache::new(&t_aux, replica_path.clone())
+            .expect("failed to restore contents of t_aux");
 
         let priv_inputs = PrivateInputs::<H, Sha256Hasher> {
             p_aux: p_aux.into(),
@@ -415,6 +426,9 @@ mod tests {
             .expect("failed to verify partition proofs");
 
         assert!(proofs_are_valid);
+
+        // Discard cached MTs that are no longer needed.
+        TemporaryAux::<H, Sha256Hasher>::clear_temp(t_aux_orig).expect("t_aux delete failed");
 
         let expected_inputs = 20;
 
@@ -496,6 +510,8 @@ mod tests {
 
     fn stacked_test_compound<H: 'static + Hasher>() {
         let nodes = 64;
+        use crate::stacked::{TemporaryAux, TemporaryAuxCache};
+
         let degree = 3;
         let expansion_degree = 2;
         let num_layers = 2;
@@ -508,6 +524,7 @@ mod tests {
         let data: Vec<u8> = (0..nodes)
             .flat_map(|_| fr_into_bytes::<Bls12>(&Fr::random(rng)))
             .collect();
+
         // create a copy, so we can compare roundtrips
         let mut data_copy = data.clone();
 
@@ -534,13 +551,19 @@ mod tests {
             StoreConfig::default_cached_above_base_layer(nodes, BINARY_ARITY),
         );
 
+        // Generate a replica path.
+        let temp_dir = tempdir::TempDir::new("stacked-test-compound").unwrap();
+        let temp_path = temp_dir.path();
+        let replica_path = temp_path.join("replica-path");
+
         let public_params = StackedCompound::setup(&setup_params).expect("setup failed");
         let (tau, (p_aux, t_aux)) = StackedDrg::replicate(
             &public_params.vanilla_params,
             &replica_id.into(),
             (&mut data_copy[..]).into(),
             None,
-            Some(config),
+            config,
+            replica_path.clone(),
         )
         .expect("replication failed");
 
@@ -555,10 +578,13 @@ mod tests {
             k: None,
         };
 
+        // Store a copy of the t_aux for later resource deletion.
+        let t_aux_orig = t_aux.clone();
+
         // Convert TemporaryAux to TemporaryAuxCache, which instantiates all
         // elements based on the configs stored in TemporaryAux.
-        use crate::stacked::TemporaryAuxCache;
-        let t_aux = TemporaryAuxCache::new(&t_aux).expect("failed to restore contents of t_aux");
+        let t_aux = TemporaryAuxCache::new(&t_aux, replica_path.clone())
+            .expect("failed to restore contents of t_aux");
 
         let private_inputs = PrivateInputs::<H, Sha256Hasher> { p_aux, t_aux };
 
@@ -616,6 +642,9 @@ mod tests {
             _,
         >>::groth_params(&public_params.vanilla_params)
         .expect("failed to generate groth params");
+
+        // Discard or compact cached MTs that are no longer needed.
+        TemporaryAux::<H, Sha256Hasher>::clear_temp(t_aux_orig).expect("t_aux delete failed");
 
         let proof = StackedCompound::prove(
             &public_params,

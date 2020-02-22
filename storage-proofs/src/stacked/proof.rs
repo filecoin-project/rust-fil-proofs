@@ -1,9 +1,10 @@
 use std::collections::HashMap;
 use std::marker::PhantomData;
+use std::path::PathBuf;
 
 use log::{info, trace};
 use merkletree::merkle::FromIndexedParallelIterator;
-use merkletree::store::{DiskStore, StoreConfig};
+use merkletree::store::{DiskStore, StoreConfig, StoreConfigDataVersion};
 use rayon::prelude::*;
 use sha2::{Digest, Sha256};
 
@@ -59,8 +60,8 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         // Sanity checks on restored trees.
         assert!(pub_inputs.tau.is_some());
         assert_eq!(pub_inputs.tau.as_ref().unwrap().comm_d, t_aux.tree_d.root());
-        assert_eq!(p_aux.comm_c, t_aux.tree_c.root());
         assert_eq!(p_aux.comm_r_last, t_aux.tree_r_last.root());
+        assert_eq!(p_aux.comm_c, t_aux.tree_c.root());
 
         let get_drg_parents_columns = |x: usize| -> Result<Vec<Column<H>>> {
             let base_degree = graph.base_graph().degree();
@@ -136,8 +137,11 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
 
                         // Final replica layer openings
                         trace!("final replica layer openings");
-                        let comm_r_last_proof =
-                            MerkleProof::new_from_proof(&t_aux.tree_r_last.gen_proof(challenge)?);
+                        let (tree_r_last_proof, _) = t_aux.tree_r_last.gen_proof_and_partial_tree(
+                            challenge,
+                            t_aux.tree_r_last_config_levels,
+                        )?;
+                        let comm_r_last_proof = MerkleProof::new_from_proof(&tree_r_last_proof);
                         assert!(comm_r_last_proof.validate(challenge));
 
                         // Labeling Proofs Layer 1..l
@@ -358,6 +362,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         data: Data,
         data_tree: Option<BinaryTree<G>>,
         config: StoreConfig,
+        replica_path: PathBuf,
     ) -> Result<TransformedLayers<H, G>> {
         // Generate key layers.
         let (_, labels) = measure_op(EncodeWindowTimeAll, || {
@@ -370,6 +375,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
             data,
             data_tree,
             config,
+            replica_path,
             labels,
         )
     }
@@ -380,6 +386,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         mut data: Data,
         data_tree: Option<BinaryTree<G>>,
         config: StoreConfig,
+        replica_path: PathBuf,
         label_configs: Labels<H>,
     ) -> Result<TransformedLayers<H, G>> {
         trace!("transform_and_replicate_layers");
@@ -484,7 +491,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
 
         // Encode original data into the last layer.
         info!("building tree_r_last");
-        let tree_r_last = measure_op(GenerateTreeRLast, || {
+        let mut tree_r_last = measure_op(GenerateTreeRLast, || {
             data.ensure_data()?;
 
             let last_layer_labels = labels.labels_for_last_layer()?;
@@ -506,15 +513,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         })?;
         info!("tree_r_last done");
 
-        // store encoded data.
-        tree_r_last.read_into(0, data.as_mut())?;
-
-        data.drop_data();
-
-        // comm_r = H(comm_c || comm_r_last)
-        let comm_r: H::Domain = H::Function::hash2(&tree_c.root(), &tree_r_last.root());
-
-        assert_eq!(tree_r_last.len(), tree_c.len());
+        assert_eq!(tree_c.len(), tree_r_last.len());
 
         tree_d_config.size = Some(tree_d.len());
         tree_r_last_config.size = Some(tree_r_last.len());
@@ -523,6 +522,32 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         trace!("tree d len {}", tree_d.len());
         trace!("tree c len {}", tree_c.len());
         trace!("tree r_last len {}", tree_r_last.len());
+
+        // Store and persist encoded replica data.
+        tree_r_last.read_into(0, data.as_mut())?;
+        {
+            use std::fs::OpenOptions;
+            use std::io::prelude::*;
+
+            let mut f = OpenOptions::new()
+                .write(true)
+                .create(true)
+                .open(&replica_path)?;
+
+            // Only write the replica's base layer of leaf data.
+            f.write_all(&data.as_ref()[0..tree_r_last.leafs() * NODE_SIZE])?;
+        }
+
+        // comm_r = H(comm_c || comm_r_last)
+        let comm_r: H::Domain = H::Function::hash2(&tree_c.root(), &tree_r_last.root());
+
+        // Compact tree_r_last.
+        tree_r_last.compact(
+            tree_r_last_config.clone(),
+            StoreConfigDataVersion::Two as u32,
+        )?;
+
+        data.drop_data();
 
         Ok((
             Tau {
@@ -567,6 +592,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         data: Data<'a>,
         data_tree: BinaryTree<G>,
         config: StoreConfig,
+        replica_path: PathBuf,
     ) -> Result<(
         <Self as PoRep<'a, H, G>>::Tau,
         <Self as PoRep<'a, H, G>>::ProverAux,
@@ -579,6 +605,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
             data,
             Some(data_tree),
             config,
+            replica_path,
             labels,
         )?;
 
@@ -703,6 +730,7 @@ mod tests {
                 v.into_bytes()
             })
             .collect();
+
         let challenges = LayerChallenges::new(DEFAULT_STACKED_LAYERS, 5);
 
         // create a copy, so we can compare roundtrips
@@ -727,12 +755,18 @@ mod tests {
             StoreConfig::default_cached_above_base_layer(nodes, BINARY_ARITY),
         );
 
+        // Generate a replica path.
+        let temp_dir = tempdir::TempDir::new("test-extract-all").unwrap();
+        let temp_path = temp_dir.path();
+        let replica_path = temp_path.join("replica-path");
+
         StackedDrg::<H, Blake2sHasher>::replicate(
             &pp,
             &replica_id,
             (&mut data_copy[..]).into(),
             None,
-            Some(config.clone()),
+            config.clone(),
+            replica_path.clone(),
         )
         .expect("replication failed");
 
@@ -794,13 +828,19 @@ mod tests {
             StoreConfig::default_cached_above_base_layer(n, BINARY_ARITY),
         );
 
+        // Generate a replica_path.
+        let temp_dir = tempdir::TempDir::new("test-prove-verify").unwrap();
+        let temp_path = temp_dir.path();
+        let replica_path = temp_path.join("replica-path");
+
         let pp = StackedDrg::<H, Blake2sHasher>::setup(&sp).expect("setup failed");
         let (tau, (p_aux, t_aux)) = StackedDrg::<H, Blake2sHasher>::replicate(
             &pp,
             &replica_id,
             (&mut data_copy[..]).into(),
             None,
-            Some(config),
+            config,
+            replica_path.clone(),
         )
         .expect("replication failed");
         assert_ne!(data, data_copy);
@@ -814,9 +854,12 @@ mod tests {
             k: None,
         };
 
+        // Store a copy of the t_aux for later resource deletion.
+        let t_aux_orig = t_aux.clone();
+
         // Convert TemporaryAux to TemporaryAuxCache, which instantiates all
         // elements based on the configs stored in TemporaryAux.
-        let t_aux = TemporaryAuxCache::<H, Blake2sHasher>::new(&t_aux)
+        let t_aux = TemporaryAuxCache::<H, Blake2sHasher>::new(&t_aux, replica_path)
             .expect("failed to restore contents of t_aux");
 
         let priv_inputs = PrivateInputs { p_aux, t_aux };
@@ -836,12 +879,15 @@ mod tests {
         )
         .expect("failed to verify partition proofs");
 
+        // Discard or compact cached MTs that are no longer needed.
+        TemporaryAux::<H, Blake2sHasher>::clear_temp(t_aux_orig).expect("t_aux delete failed");
+
         assert!(proofs_are_valid);
     }
 
     table_tests! {
-        prove_verify_fixed{
-           prove_verify_fixed_64_4(64);
+        prove_verify_fixed {
+           prove_verify_fixed_64_64(64);
         }
     }
 

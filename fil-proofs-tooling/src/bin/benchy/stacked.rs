@@ -148,6 +148,12 @@ where
             (None, None, None)
         } else {
             let mut data = file_backed_mmap_from_zeroes(nodes, *use_tmp)?;
+
+            // Generate a replica path.
+            let replica_dir = tempfile::tempdir().unwrap();
+            let temp_path = replica_dir.path();
+            let replica_path = temp_path.join("replica-path");
+
             let seed = rng.gen();
 
             let FuncMeasurement {
@@ -160,7 +166,8 @@ where
                     &replica_id,
                     (&mut data[..]).into(),
                     None,
-                    Some(store_config.clone()),
+                    store_config.clone(),
+                    replica_path.clone(),
                 )?;
 
                 let pb = stacked::PublicInputs::<H::Domain, <Sha256Hasher as Hasher>::Domain> {
@@ -172,8 +179,8 @@ where
 
                 // Convert TemporaryAux to TemporaryAuxCache, which instantiates all
                 // elements based on the configs stored in TemporaryAux.
-                let t_aux =
-                    TemporaryAuxCache::new(&t_aux).expect("failed to restore contents of t_aux");
+                let t_aux = TemporaryAuxCache::new(&t_aux, replica_path)
+                    .expect("failed to restore contents of t_aux");
 
                 let pv = stacked::PrivateInputs { p_aux, t_aux };
 

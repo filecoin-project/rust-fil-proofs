@@ -171,7 +171,8 @@ pub fn seal_pre_commit_phase2<R, S>(
     porep_config: PoRepConfig,
     phase1_output: SealPreCommitPhase1Output,
     cache_path: S,
-    out_path: R,
+    replica_path: R,
+    sealed_path: R,
 ) -> Result<SealPreCommitOutput>
 where
     R: AsRef<Path>,
@@ -191,14 +192,22 @@ where
     let f_data = OpenOptions::new()
         .read(true)
         .write(true)
-        .open(&out_path)
-        .with_context(|| format!("could not open out_path={:?}", out_path.as_ref().display()))?;
+        .open(&sealed_path)
+        .with_context(|| {
+            format!(
+                "could not open sealed_path={:?}",
+                sealed_path.as_ref().display()
+            )
+        })?;
     let data = unsafe {
-        MmapOptions::new()
-            .map_mut(&f_data)
-            .with_context(|| format!("could not mmap out_path={:?}", out_path.as_ref().display()))?
+        MmapOptions::new().map_mut(&f_data).with_context(|| {
+            format!(
+                "could not mmap sealed_path={:?}",
+                sealed_path.as_ref().display()
+            )
+        })?
     };
-    let data: storage_proofs::porep::Data<'_> = (data, PathBuf::from(out_path.as_ref())).into();
+    let data: storage_proofs::porep::Data<'_> = (data, PathBuf::from(sealed_path.as_ref())).into();
 
     // Load data tree from disk
     let data_tree = {
@@ -248,6 +257,7 @@ where
             data,
             data_tree,
             config,
+            replica_path.as_ref().to_path_buf(),
         )?;
 
     let comm_r = commitment_from_fr::<Bls12>(tau.comm_r.into());
@@ -276,6 +286,7 @@ where
 pub fn seal_commit_phase1<T: AsRef<Path>>(
     porep_config: PoRepConfig,
     cache_path: T,
+    replica_path: T,
     prover_id: ProverId,
     sector_id: SectorId,
     ticket: Ticket,
@@ -321,7 +332,8 @@ pub fn seal_commit_phase1<T: AsRef<Path>>(
     // Convert TemporaryAux to TemporaryAuxCache, which instantiates all
     // elements based on the configs stored in TemporaryAux.
     let t_aux_cache: TemporaryAuxCache<DefaultTreeHasher, DefaultPieceHasher> =
-        TemporaryAuxCache::new(&t_aux).context("failed to restore contents of t_aux")?;
+        TemporaryAuxCache::new(&t_aux, replica_path.as_ref().to_path_buf())
+            .context("failed to restore contents of t_aux")?;
 
     let comm_r_safe = as_safe_commitment(&comm_r, "comm_r")?;
     let comm_d_safe = <DefaultPieceHasher as Hasher>::Domain::try_from_bytes(&comm_d)?;
@@ -378,8 +390,8 @@ pub fn seal_commit_phase1<T: AsRef<Path>>(
     )?;
     ensure!(sanity_check, "Invalid vanilla proof generated");
 
-    // Discard or compact cached MTs that are no longer needed.
-    TemporaryAux::<DefaultTreeHasher, DefaultPieceHasher>::compact(t_aux)?;
+    // Discard cached MTs that are no longer needed.
+    TemporaryAux::<DefaultTreeHasher, DefaultPieceHasher>::clear_temp(t_aux)?;
 
     info!("seal_commit_phase1:end");
 

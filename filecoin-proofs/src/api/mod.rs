@@ -478,7 +478,7 @@ mod tests {
         let mut fr_bytes = [1; 32];
         fr_bytes[31] = 0;
 
-        let out = bytes_into_fr::<Bls12>(&fr_bytes);
+        let _out = bytes_into_fr::<Bls12>(&fr_bytes);
         let mut replicas = BTreeMap::new();
         replicas.insert(1.into(), PublicReplicaInfo::new(fr_bytes).unwrap());
         let winner = Candidate {
@@ -589,6 +589,7 @@ mod tests {
             config,
             phase1_output,
             cache_dir.path(),
+            staged_sector_file.path(),
             sealed_sector_file.path(),
         )?;
 
@@ -598,6 +599,7 @@ mod tests {
         let phase1_output = seal_commit_phase1(
             config,
             cache_dir.path(),
+            staged_sector_file.path(),
             prover_id,
             sector_id,
             ticket,
