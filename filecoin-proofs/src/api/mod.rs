@@ -3,12 +3,15 @@ use std::io::{BufWriter, Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 
 use anyhow::{anyhow, ensure, Context, Result};
+use bincode::deserialize;
 use merkletree::merkle::get_merkle_tree_leafs;
-use merkletree::store::StoreConfig;
+use merkletree::store::{DiskStore, LevelCacheStore, StoreConfig};
 use storage_proofs::hasher::Hasher;
 use storage_proofs::porep::PoRep;
 use storage_proofs::sector::SectorId;
-use storage_proofs::stacked::{generate_replica_id, CacheKey, StackedDrg, BINARY_ARITY};
+use storage_proofs::stacked::{
+    generate_replica_id, CacheKey, PersistentAux, StackedDrg, TemporaryAux, BINARY_ARITY, OCT_ARITY,
+};
 use tempfile::tempfile;
 
 use crate::api::util::{as_safe_commitment, get_tree_size};
@@ -20,8 +23,8 @@ use crate::fr32::{write_padded, write_unpadded};
 use crate::parameters::public_params;
 use crate::pieces::get_aligned_source;
 use crate::types::{
-    Commitment, PaddedBytesAmount, PieceInfo, PoRepConfig, PoRepProofPartitions, ProverId, Ticket,
-    UnpaddedByteIndex, UnpaddedBytesAmount,
+    Commitment, PaddedBytesAmount, PieceInfo, PoRepConfig, PoRepProofPartitions, ProverId,
+    SealPreCommitPhase1Output, Ticket, UnpaddedByteIndex, UnpaddedBytesAmount,
 };
 
 mod post;
@@ -318,6 +321,137 @@ where
     add_piece(source, target, piece_size, Default::default())
 }
 
+// Verifies if a DiskStore specified by a config is consistent.
+fn verify_store(config: &StoreConfig, arity: usize) -> Result<()> {
+    let store_path = StoreConfig::data_path(&config.path, &config.id);
+    ensure!(
+        Path::new(&store_path).exists(),
+        "Missing store file: {}",
+        store_path.display()
+    );
+
+    ensure!(
+        config.size.is_some(),
+        "Missing store size: {}",
+        store_path.display()
+    );
+
+    ensure!(
+        DiskStore::<<DefaultPieceHasher as Hasher>::Domain>::is_consistent(
+            config.size.unwrap(),
+            arity,
+            &config,
+        )?,
+        "Store is inconsistent: {:?}",
+        store_path
+    );
+
+    Ok(())
+}
+
+// Checks for the existence of the tree d store, the replica, and all generated labels.
+pub fn validate_cache_for_precommit_phase2<R, T>(
+    cache_path: R,
+    replica_path: T,
+    seal_precommit_phase1_output: &SealPreCommitPhase1Output,
+) -> Result<()>
+where
+    R: AsRef<Path>,
+    T: AsRef<Path>,
+{
+    ensure!(
+        replica_path.as_ref().exists(),
+        "Missing replica: {}",
+        replica_path.as_ref().to_path_buf().display()
+    );
+
+    // Verify all stores/labels within the Labels object.
+    let cache = cache_path.as_ref().to_path_buf();
+    seal_precommit_phase1_output
+        .labels
+        .verify_stores(verify_store, &cache)?;
+
+    verify_store(&seal_precommit_phase1_output.config, BINARY_ARITY)
+}
+
+// Checks for the existence of the replica data and t_aux, which in
+// turn allows us to verify the tree d, tree r, tree c, and the
+// labels.
+pub fn validate_cache_for_commit<R, T>(cache_path: R, replica_path: T) -> Result<()>
+where
+    R: AsRef<Path>,
+    T: AsRef<Path>,
+{
+    ensure!(
+        replica_path.as_ref().exists(),
+        "Missing replica: {}",
+        replica_path.as_ref().to_path_buf().display()
+    );
+
+    let cache = &cache_path.as_ref();
+
+    // Make sure p_aux exists and is valid.
+    let mut p_aux_bytes = vec![];
+    let p_aux_path = cache.join(CacheKey::PAux.to_string());
+    let mut f_p_aux = File::open(&p_aux_path)
+        .with_context(|| format!("could not open file p_aux={:?}", p_aux_path))?;
+    f_p_aux.read_to_end(&mut p_aux_bytes)?;
+
+    let _: PersistentAux<DefaultTreeHasher> = deserialize(&p_aux_bytes)?;
+    drop(p_aux_bytes);
+
+    // Make sure t_aux exists and is valid.
+    let t_aux = {
+        let mut t_aux_bytes = vec![];
+        let t_aux_path = cache.join(CacheKey::TAux.to_string());
+        let mut f_t_aux = File::open(&t_aux_path)
+            .with_context(|| format!("could not open file t_aux={:?}", t_aux_path))?;
+        f_t_aux.read_to_end(&mut t_aux_bytes)?;
+
+        let mut res: TemporaryAux<DefaultTreeHasher, DefaultPieceHasher> =
+            deserialize(&t_aux_bytes)?;
+
+        // Switch t_aux to the passed in cache_path
+        res.set_cache_path(&cache_path);
+        res
+    };
+
+    // Verify all stores/labels within the Labels object.
+    let cache = cache_path.as_ref().to_path_buf();
+    t_aux.labels.verify_stores(verify_store, &cache)?;
+
+    // Verify each tree disk store.
+    verify_store(&t_aux.tree_d_config, BINARY_ARITY)?;
+    verify_store(&t_aux.tree_c_config, OCT_ARITY)?;
+
+    let store_path =
+        StoreConfig::data_path(&t_aux.tree_r_last_config.path, &t_aux.tree_r_last_config.id);
+
+    ensure!(
+        Path::new(&store_path).exists(),
+        "Missing store file: {:?}",
+        store_path
+    );
+
+    ensure!(
+        t_aux.tree_r_last_config.size.is_some(),
+        "Missing store size: {:?}",
+        store_path
+    );
+
+    ensure!(
+        LevelCacheStore::<<DefaultPieceHasher as Hasher>::Domain, std::fs::File>::is_consistent(
+            t_aux.tree_r_last_config.size.unwrap(),
+            OCT_ARITY,
+            &t_aux.tree_r_last_config,
+        )?,
+        "Store is inconsistent: {:?}",
+        store_path
+    );
+
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -585,6 +719,12 @@ mod tests {
             &piece_infos,
         )?;
 
+        validate_cache_for_precommit_phase2(
+            cache_dir.path(),
+            staged_sector_file.path(),
+            &phase1_output,
+        )?;
+
         let pre_commit_output = seal_pre_commit_phase2(
             config,
             phase1_output,
@@ -594,6 +734,8 @@ mod tests {
 
         let comm_d = pre_commit_output.comm_d.clone();
         let comm_r = pre_commit_output.comm_r.clone();
+
+        validate_cache_for_commit(cache_dir.path(), staged_sector_file.path())?;
 
         let phase1_output = seal_commit_phase1(
             config,

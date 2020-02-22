@@ -3,7 +3,7 @@ use std::fmt;
 use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
 
-use anyhow::Context;
+use anyhow::{anyhow, Context};
 use generic_array::typenum;
 use log::trace;
 use merkletree::merkle::get_merkle_tree_leafs;
@@ -505,6 +505,8 @@ impl<H: Hasher, G: Hasher> TemporaryAuxCache<H, G> {
     }
 }
 
+type VerifyCallback = fn(&StoreConfig, usize) -> Result<()>;
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Labels<H: Hasher> {
     pub labels: Vec<StoreConfig>,
@@ -525,6 +527,23 @@ impl<H: Hasher> Labels<H> {
 
     pub fn is_empty(&self) -> bool {
         self.labels.is_empty()
+    }
+
+    pub fn verify_stores(&self, callback: VerifyCallback, cache_dir: &PathBuf) -> Result<()> {
+        for label in &self.labels {
+            callback(label, BINARY_ARITY)?;
+
+            let current_path = StoreConfig::data_path(&label.path, &label.id);
+            if !current_path.starts_with(&cache_dir) {
+                return Err(anyhow!(
+                    "Label path mis-match [label vs cache_dir: {:?}/{:?}]",
+                    current_path,
+                    cache_dir
+                ));
+            }
+        }
+
+        Ok(())
     }
 
     pub fn labels_for_layer(&self, layer: usize) -> Result<DiskStore<H::Domain>> {

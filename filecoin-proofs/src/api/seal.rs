@@ -124,7 +124,7 @@ where
 
         // MT for original data is always named tree-d, and it will be
         // referenced later in the process as such.
-        let config = StoreConfig::new(
+        let mut config = StoreConfig::new(
             cache_path.as_ref(),
             CacheKey::CommDTree.to_string(),
             StoreConfig::default_cached_above_base_layer(tree_leafs, BINARY_ARITY),
@@ -136,8 +136,10 @@ where
         )?;
         drop(data);
 
+        config.size = Some(data_tree.len());
         let comm_d_root: Fr = data_tree.root().into();
         let comm_d = commitment_from_fr::<Bls12>(comm_d_root);
+
         drop(data_tree);
 
         Ok((config, comm_d))
@@ -222,11 +224,12 @@ where
             tree_leafs,
             StoreConfig::default_cached_above_base_layer(tree_leafs, BINARY_ARITY)
         );
-        let config = StoreConfig::new(
+        let mut config = StoreConfig::new(
             cache_path.as_ref(),
             CacheKey::CommDTree.to_string(),
             StoreConfig::default_cached_above_base_layer(tree_leafs, BINARY_ARITY),
         );
+        config.size = Some(tree_size);
 
         let store: DiskStore<<DefaultPieceHasher as Hasher>::Domain> =
             DiskStore::new_from_disk(tree_size, BINARY_ARITY, &config)?;
