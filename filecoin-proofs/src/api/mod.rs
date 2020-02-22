@@ -324,23 +324,27 @@ where
 // Verifies if a DiskStore specified by a config is consistent.
 fn verify_store(config: &StoreConfig, arity: usize) -> Result<()> {
     let store_path = StoreConfig::data_path(&config.path, &config.id);
-    if !Path::new(&store_path).exists() {
-        return Err(anyhow!("Missing store file: {:?}", store_path));
-    }
+    ensure!(
+        Path::new(&store_path).exists(),
+        "Missing store file: {}",
+        store_path.display()
+    );
 
-    if config.size.is_none() {
-        return Err(anyhow!("Missing store size: {:?}", store_path));
-    }
+    ensure!(
+        config.size.is_some(),
+        "Missing store size: {}",
+        store_path.display()
+    );
 
-    if DiskStore::<<DefaultPieceHasher as Hasher>::Domain>::is_consistent(
-        config.size.unwrap(),
-        arity,
-        &config,
-    )
-    .is_err()
-    {
-        return Err(anyhow!("Store is inconsistent: {:?}", store_path));
-    }
+    ensure!(
+        DiskStore::<<DefaultPieceHasher as Hasher>::Domain>::is_consistent(
+            config.size.unwrap(),
+            arity,
+            &config,
+        )?,
+        "Store is inconsistent: {:?}",
+        store_path
+    );
 
     Ok(())
 }
@@ -355,12 +359,11 @@ where
     R: AsRef<Path>,
     T: AsRef<Path>,
 {
-    if !replica_path.as_ref().exists() {
-        return Err(anyhow!(
-            "Missing replica: {:?}",
-            replica_path.as_ref().to_path_buf()
-        ));
-    }
+    ensure!(
+        replica_path.as_ref().exists(),
+        "Missing replica: {}",
+        replica_path.as_ref().to_path_buf().display()
+    );
 
     // Verify all stores/labels within the Labels object.
     let cache = cache_path.as_ref().to_path_buf();
@@ -379,12 +382,11 @@ where
     R: AsRef<Path>,
     T: AsRef<Path>,
 {
-    if !replica_path.as_ref().exists() {
-        return Err(anyhow!(
-            "Missing replica: {:?}",
-            replica_path.as_ref().to_path_buf()
-        ));
-    }
+    ensure!(
+        replica_path.as_ref().exists(),
+        "Missing replica: {}",
+        replica_path.as_ref().to_path_buf().display()
+    );
 
     let cache = &cache_path.as_ref();
 
@@ -425,23 +427,27 @@ where
     let store_path =
         StoreConfig::data_path(&t_aux.tree_r_last_config.path, &t_aux.tree_r_last_config.id);
 
-    if !Path::new(&store_path).exists() {
-        return Err(anyhow!("Missing store file: {:?}", store_path));
-    }
+    ensure!(
+        Path::new(&store_path).exists(),
+        "Missing store file: {:?}",
+        store_path
+    );
 
-    if t_aux.tree_r_last_config.size.is_none() {
-        return Err(anyhow!("Missing store size: {:?}", store_path));
-    }
+    ensure!(
+        t_aux.tree_r_last_config.size.is_some(),
+        "Missing store size: {:?}",
+        store_path
+    );
 
-    if LevelCacheStore::<<DefaultPieceHasher as Hasher>::Domain, std::fs::File>::is_consistent(
-        t_aux.tree_r_last_config.size.unwrap(),
-        OCT_ARITY,
-        &t_aux.tree_r_last_config,
-    )
-    .is_err()
-    {
-        return Err(anyhow!("Store is inconsistent: {:?}", store_path));
-    }
+    ensure!(
+        LevelCacheStore::<<DefaultPieceHasher as Hasher>::Domain, std::fs::File>::is_consistent(
+            t_aux.tree_r_last_config.size.unwrap(),
+            OCT_ARITY,
+            &t_aux.tree_r_last_config,
+        )?,
+        "Store is inconsistent: {:?}",
+        store_path
+    );
 
     Ok(())
 }
