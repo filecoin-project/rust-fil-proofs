@@ -589,7 +589,6 @@ mod tests {
             config,
             phase1_output,
             cache_dir.path(),
-            staged_sector_file.path(),
             sealed_sector_file.path(),
         )?;
 

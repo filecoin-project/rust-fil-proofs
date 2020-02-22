@@ -101,7 +101,6 @@ pub fn generate_seal_fixture(cache_dir_path: &Path) -> (SealPreCommitOutput, Vec
         porep_config,
         phase1_output,
         cache_dir_path,
-        staged_file.path(),
         sealed_file.path(),
     )
     .expect("could not pre seal commit phase2");

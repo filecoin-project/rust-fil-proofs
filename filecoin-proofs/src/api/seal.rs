@@ -172,7 +172,6 @@ pub fn seal_pre_commit_phase2<R, S>(
     phase1_output: SealPreCommitPhase1Output,
     cache_path: S,
     replica_path: R,
-    sealed_path: R,
 ) -> Result<SealPreCommitOutput>
 where
     R: AsRef<Path>,
@@ -192,22 +191,22 @@ where
     let f_data = OpenOptions::new()
         .read(true)
         .write(true)
-        .open(&sealed_path)
+        .open(&replica_path)
         .with_context(|| {
             format!(
-                "could not open sealed_path={:?}",
-                sealed_path.as_ref().display()
+                "could not open replica_path={:?}",
+                replica_path.as_ref().display()
             )
         })?;
     let data = unsafe {
         MmapOptions::new().map_mut(&f_data).with_context(|| {
             format!(
-                "could not mmap sealed_path={:?}",
-                sealed_path.as_ref().display()
+                "could not mmap replica_path={:?}",
+                replica_path.as_ref().display()
             )
         })?
     };
-    let data: storage_proofs::porep::Data<'_> = (data, PathBuf::from(sealed_path.as_ref())).into();
+    let data: storage_proofs::porep::Data<'_> = (data, PathBuf::from(replica_path.as_ref())).into();
 
     // Load data tree from disk
     let data_tree = {
