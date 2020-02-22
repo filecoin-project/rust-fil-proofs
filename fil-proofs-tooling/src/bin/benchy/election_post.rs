@@ -122,7 +122,6 @@ pub fn run(sector_size: usize) -> anyhow::Result<()> {
         porep_config,
         phase1_output,
         cache_dir.path(),
-        staged_file.path(),
         sealed_file.path(),
     )?;
 

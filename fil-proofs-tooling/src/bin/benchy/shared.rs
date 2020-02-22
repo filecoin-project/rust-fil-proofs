@@ -165,13 +165,7 @@ pub fn create_replicas(
             .into_iter()
             .enumerate()
             .map(|(i, phase1)| {
-                seal_pre_commit_phase2(
-                    porep_config,
-                    phase1,
-                    &cache_dirs[i],
-                    &staged_files[i],
-                    &sealed_files[i],
-                )
+                seal_pre_commit_phase2(porep_config, phase1, &cache_dirs[i], &sealed_files[i])
             })
             .collect::<Result<Vec<_>, _>>()
     })
