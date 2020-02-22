@@ -39,20 +39,40 @@
     "digest": "c1750423edbd09ec94fcbc8538209f1a",
     "sector_size": 2048
   },
+  "v23-stacked-proof-of-replication-PoseidonHasher-Sha256Hasher-49442c8ce7545579cbd689d578301d0cc1e46e94e2499a0ec36de7ff4f4694a2.params": {
+    "cid": "QmdkRUVf7iBA5qYv5WFKdBN5fzsmGrKLRJs3F8PtR3azAc",
+    "digest": "d8a4f1ff91b7b0395bae850d1277fc74",
+    "sector_size": 8388608
+  },
   "v23-stacked-proof-of-replication-PoseidonHasher-Sha256Hasher-49442c8ce7545579cbd689d578301d0cc1e46e94e2499a0ec36de7ff4f4694a2.vk": {
     "cid": "Qmdmrp75NToB9b6vxh5gZcECEHiGxxP8NRLhcVt7B9SjqQ",
     "digest": "ad2d7a1931ffb996278245cda162a2ea",
     "sector_size": 8388608
+  },
+  "v23-stacked-proof-of-replication-PoseidonHasher-Sha256Hasher-d84aa4581c74190f845596893ebe5b71da32ecf16e1d151b9fff74ee8f94d77c.params": {
+    "cid": "QmcAn3A6iBPAcvHZWv4CG2KDg73T9kE5VvLYe9XrEmVQQd",
+    "digest": "dccdeb3bed61a7ca0184241c290970c9",
+    "sector_size": 536870912
   },
   "v23-stacked-proof-of-replication-PoseidonHasher-Sha256Hasher-d84aa4581c74190f845596893ebe5b71da32ecf16e1d151b9fff74ee8f94d77c.vk": {
     "cid": "QmWwLsV5wrkoWhrTmQCE62J5o3tmdvFDTznEy4N1Wsknqg",
     "digest": "ce3d9951ebde0b10419339f26d604ba7",
     "sector_size": 536870912
   },
+  "v23-stacked-proof-of-replication-PoseidonHasher-Sha256Hasher-fc32be6028c2398175466f36fa36810842ae8948fae15c84454af5b61ca99e15.params": {
+    "cid": "Qmama5rJYTHFQbjamAuv3nyrJ8TYwg38hyKTs5rHM4F1s5",
+    "digest": "d600e36f91e0ec5d1e44aa9de0cc2901",
+    "sector_size": 34359738368
+  },
   "v23-stacked-proof-of-replication-PoseidonHasher-Sha256Hasher-fc32be6028c2398175466f36fa36810842ae8948fae15c84454af5b61ca99e15.vk": {
     "cid": "QmXnCBjLn8mJhQibrmdzwD8LKWVJf8MZvqTNSYYBZnfC7M",
     "digest": "5fdf47c8b367f9dfa4d763eb70bef759",
     "sector_size": 34359738368
+  },
+  "v23-stacked-proof-of-replication-PoseidonHasher-Sha256Hasher-fe437922fe766f61b112750506d6be0e4ad5daa85ff9ce96549d99253ba61cbe.params": {
+    "cid": "QmPUL7h51m671KGZaKB6nruAXtzFbMVwHousSnrPP4QtCH",
+    "digest": "fcd772f59cdb2d1124fe0edc8b402bda",
+    "sector_size": 2048
   },
   "v23-stacked-proof-of-replication-PoseidonHasher-Sha256Hasher-fe437922fe766f61b112750506d6be0e4ad5daa85ff9ce96549d99253ba61cbe.vk": {
     "cid": "QmaBZ83AuRzWkAT3QNtt5H7kQMnf5YT66ah6Q7DDMy6N9K",
