@@ -598,7 +598,7 @@ mod tests {
         let phase1_output = seal_commit_phase1(
             config,
             cache_dir.path(),
-            staged_sector_file.path(),
+            sealed_sector_file.path(),
             prover_id,
             sector_id,
             ticket,
