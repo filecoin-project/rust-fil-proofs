@@ -7,7 +7,7 @@ use anyhow::{anyhow, ensure, Context, Result};
 use bincode::deserialize;
 use log::{info, trace};
 use merkletree::merkle::get_merkle_tree_leafs;
-use merkletree::store::{LevelCacheStore, Store, StoreConfig};
+use merkletree::store::{ExternalReader, LevelCacheStore, StoreConfig};
 use paired::bls12_381::Bls12;
 use rayon::prelude::*;
 use storage_proofs::circuit::election_post::ElectionPoStCompound;
@@ -35,15 +35,13 @@ use crate::types::{
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct PrivateReplicaInfo {
     /// Path to the replica.
-    access: String,
+    replica: PathBuf,
     /// The replica commitment.
     comm_r: Commitment,
     /// Persistent Aux.
     aux: PersistentAux,
     /// Contains sector-specific (e.g. merkle trees) assets
     cache_dir: PathBuf,
-    /// Contains sector-specific (e.g. base layer data) assets
-    replica_path: PathBuf,
 }
 
 impl std::cmp::Ord for PrivateReplicaInfo {
@@ -59,12 +57,7 @@ impl std::cmp::PartialOrd for PrivateReplicaInfo {
 }
 
 impl PrivateReplicaInfo {
-    pub fn new(
-        access: String,
-        comm_r: Commitment,
-        cache_dir: PathBuf,
-        replica_path: PathBuf,
-    ) -> Result<Self> {
+    pub fn new(replica: PathBuf, comm_r: Commitment, cache_dir: PathBuf) -> Result<Self> {
         ensure!(comm_r != [0; 32], "Invalid all zero commitment (comm_r)");
 
         let aux = {
@@ -79,12 +72,13 @@ impl PrivateReplicaInfo {
             deserialize(&aux_bytes)
         }?;
 
+        ensure!(replica.exists(), "Sealed replica does not exist");
+
         Ok(PrivateReplicaInfo {
-            access,
+            replica,
             comm_r,
             aux,
             cache_dir,
-            replica_path,
         })
     }
 
@@ -93,7 +87,7 @@ impl PrivateReplicaInfo {
     }
 
     pub fn replica_path(&self) -> &Path {
-        self.replica_path.as_path()
+        self.replica.as_path()
     }
 
     pub fn safe_comm_r(&self) -> Result<<DefaultTreeHasher as Hasher>::Domain> {
@@ -124,7 +118,12 @@ impl PrivateReplicaInfo {
         config.size = Some(tree_size);
 
         let tree_r_last_store: LevelCacheStore<<DefaultTreeHasher as Hasher>::Domain, _> =
-            LevelCacheStore::new_from_disk(tree_size, OCT_ARITY, &config)?;
+            LevelCacheStore::new_from_disk_with_reader(
+                tree_size,
+                OCT_ARITY,
+                &config,
+                ExternalReader::new_from_path(&self.replica_path().to_path_buf())?,
+            )?;
         let tree_r_last = OctLCMerkleTree::from_data_store(tree_r_last_store, tree_leafs)?;
 
         Ok(tree_r_last)

@@ -107,8 +107,10 @@ pub fn create_replicas(
 
         let sealed_file =
             NamedTempFile::new().expect("could not create temp file for sealed sector");
+        // Persist the sealed replica.
+        let (_, replica_path) = sealed_file.keep().expect("failed to persist replica");
 
-        sealed_files.push(sealed_file);
+        sealed_files.push(replica_path);
         staged_files.push(staged_file);
     }
 
@@ -177,18 +179,14 @@ pub fn create_replicas(
         .iter()
         .zip(seal_pre_commit_outputs.return_value.iter())
         .zip(cache_dirs.into_iter())
-        .zip(staged_files.into_iter())
-        .map(
-            |(((sealed_file, seal_pre_commit_output), cache_dir), staged_file)| {
-                PrivateReplicaInfo::new(
-                    sealed_file.path().to_str().unwrap().to_string(),
-                    seal_pre_commit_output.comm_r,
-                    cache_dir.into_path(),
-                    staged_file.as_ref().to_path_buf(),
-                )
-                .expect("failed to create PrivateReplicaInfo")
-            },
-        )
+        .map(|((sealed_file, seal_pre_commit_output), cache_dir)| {
+            PrivateReplicaInfo::new(
+                sealed_file.to_path_buf(),
+                seal_pre_commit_output.comm_r,
+                cache_dir.into_path(),
+            )
+            .expect("failed to create PrivateReplicaInfo")
+        })
         .collect::<Vec<_>>();
 
     let pub_infos = seal_pre_commit_outputs

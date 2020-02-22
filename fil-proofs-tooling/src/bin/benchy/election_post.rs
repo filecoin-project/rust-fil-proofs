@@ -64,12 +64,6 @@ pub fn run(sector_size: usize) -> anyhow::Result<()> {
 
     let sealed_file = NamedTempFile::new().expect("could not create temp file for sealed sector");
 
-    let sealed_path_string = sealed_file
-        .path()
-        .to_str()
-        .expect("file name is not a UTF-8 string")
-        .to_string();
-
     // Generate the data from which we will create a replica, we will then prove the continued
     // storage of that replica using the PoSt.
     let piece_bytes: Vec<u8> = (0..usize::from(sector_size_unpadded_bytes_ammount))
@@ -131,7 +125,7 @@ pub fn run(sector_size: usize) -> anyhow::Result<()> {
     let phase1_output = seal_commit_phase1(
         porep_config,
         cache_dir.path(),
-        staged_file.path(),
+        sealed_file.path(),
         PROVER_ID,
         sector_id,
         TICKET_BYTES,
@@ -152,10 +146,9 @@ pub fn run(sector_size: usize) -> anyhow::Result<()> {
     priv_replica_info.insert(
         sector_id,
         PrivateReplicaInfo::new(
-            sealed_path_string,
+            sealed_file.path().to_path_buf(),
             comm_r,
             cache_dir.into_path(),
-            staged_file.as_ref().to_path_buf(),
         )?,
     );
 
