@@ -248,40 +248,39 @@ where
         let base_degree = self.base_graph().degree();
         let degree = self.degree();
 
-        let num_inputs = total_parents / degree;
-        let rest_inputs = total_parents % degree;
+        assert_eq!(base_degree, 6);
+        assert_eq!(degree, 14);
+        assert_eq!(total_parents, 37);
+
         let buffer = [0u8; 64];
 
-        for _ in 0..num_inputs {
-            for parents in cache_parents[..base_degree].chunks_exact(2) {
-                hash_multiple(hasher, buffer, parents, base_data);
-            }
+        // round 1
+        hash_multiple(hasher, buffer, &cache_parents[0..2], base_data);
+        hash_multiple(hasher, buffer, &cache_parents[2..4], base_data);
+        hash_multiple(hasher, buffer, &cache_parents[4..6], base_data);
 
-            for parents in cache_parents[base_degree..].chunks_exact(2) {
-                hash_multiple(hasher, buffer, parents, exp_data);
-            }
-        }
+        hash_multiple(hasher, buffer, &cache_parents[6..8], exp_data);
+        hash_multiple(hasher, buffer, &cache_parents[8..10], exp_data);
+        hash_multiple(hasher, buffer, &cache_parents[10..12], exp_data);
+        hash_multiple(hasher, buffer, &cache_parents[12..14], exp_data);
 
-        if rest_inputs < base_degree {
-            for parents in cache_parents[..rest_inputs].chunks(2) {
-                if parents.len() > 1 {
-                    hash_multiple(hasher, buffer, parents, base_data);
-                } else {
-                    hash_single(hasher, parents[0], base_data);
-                }
-            }
-        } else {
-            for parents in cache_parents[..base_degree].chunks_exact(2) {
-                hash_multiple(hasher, buffer, parents, base_data);
-            }
-            for parents in cache_parents[base_degree..rest_inputs].chunks(2) {
-                if parents.len() > 1 {
-                    hash_multiple(hasher, buffer, parents, exp_data);
-                } else {
-                    hash_single(hasher, parents[0], exp_data);
-                }
-            }
-        }
+        // round 2
+        hash_multiple(hasher, buffer, &cache_parents[0..2], base_data);
+        hash_multiple(hasher, buffer, &cache_parents[2..4], base_data);
+        hash_multiple(hasher, buffer, &cache_parents[4..6], base_data);
+
+        hash_multiple(hasher, buffer, &cache_parents[6..8], exp_data);
+        hash_multiple(hasher, buffer, &cache_parents[8..10], exp_data);
+        hash_multiple(hasher, buffer, &cache_parents[10..12], exp_data);
+        hash_multiple(hasher, buffer, &cache_parents[12..14], exp_data);
+
+        // round 3
+        hash_multiple(hasher, buffer, &cache_parents[0..2], base_data);
+        hash_multiple(hasher, buffer, &cache_parents[2..4], base_data);
+        hash_multiple(hasher, buffer, &cache_parents[4..6], base_data);
+
+        hash_multiple(hasher, buffer, &cache_parents[6..8], exp_data);
+        hash_single(hasher, cache_parents[8], exp_data);
     }
 
     fn copy_parents_data_inner(
@@ -531,12 +530,13 @@ fn hash_multiple(hasher: &mut Sha256, mut buffer: [u8; 64], parents: &[u32], dat
     let start1 = parents[1] as usize * NODE_SIZE;
     let end1 = start1 + NODE_SIZE;
 
+    unsafe {
+        _mm_prefetch(data[start0..end0].as_ptr() as *const i8, _MM_HINT_T0);
+        _mm_prefetch(data[start1..end1].as_ptr() as *const i8, _MM_HINT_T0);
+    }
+
     buffer[..32].copy_from_slice(&data[start0..end0]);
     buffer[32..].copy_from_slice(&data[start1..end1]);
-
-    unsafe {
-        _mm_prefetch(buffer.as_ptr() as *const i8, _MM_HINT_T0);
-    }
 
     hasher.input(&buffer[..]);
 }
@@ -545,6 +545,10 @@ fn hash_multiple(hasher: &mut Sha256, mut buffer: [u8; 64], parents: &[u32], dat
 fn hash_single(hasher: &mut Sha256, parent: u32, data: &[u8]) {
     let start0 = parent as usize * NODE_SIZE;
     let end0 = start0 + NODE_SIZE;
+
+    unsafe {
+        _mm_prefetch(data[start0..end0].as_ptr() as *const i8, _MM_HINT_T0);
+    }
 
     hasher.input(&data[start0..end0]);
 }

@@ -2,6 +2,11 @@ use std::collections::HashMap;
 use std::marker::PhantomData;
 use std::path::PathBuf;
 
+#[cfg(target_arch = "x86")]
+use core::arch::x86::{_mm_prefetch, _MM_HINT_T0};
+#[cfg(target_arch = "x86_64")]
+use core::arch::x86_64::{_mm_prefetch, _MM_HINT_T0};
+
 use generic_array::{typenum, ArrayLength};
 use log::{info, trace};
 use merkletree::merkle::{
@@ -662,21 +667,14 @@ where
     Degree: generic_array::ArrayLength<u32> + Sync + Send + Clone + std::ops::Mul<typenum::U32>,
     typenum::Prod<Degree, typenum::U32>: ArrayLength<u8>,
 {
-    #[cfg(target_arch = "x86")]
-    use core::arch::x86::{_mm_prefetch, _MM_HINT_T0};
-    #[cfg(target_arch = "x86_64")]
-    use core::arch::x86_64::{_mm_prefetch, _MM_HINT_T0};
+    // hash node id
+    let node_bytes = (node as u64).to_be_bytes();
 
-    {
-        // hash node id
-        let node_bytes = (node as u64).to_be_bytes();
-
-        unsafe {
-            _mm_prefetch(node_bytes.as_ptr() as *const i8, _MM_HINT_T0);
-        }
-
-        hasher.input(&node_bytes);
+    unsafe {
+        _mm_prefetch(node_bytes.as_ptr() as *const i8, _MM_HINT_T0);
     }
+
+    hasher.input(&node_bytes);
 
     // hash parents for all non 0 nodes
     if node > 0 {
@@ -705,21 +703,14 @@ where
     Degree: generic_array::ArrayLength<u32> + Sync + Send + Clone + std::ops::Mul<typenum::U32>,
     typenum::Prod<Degree, typenum::U32>: ArrayLength<u8>,
 {
-    #[cfg(target_arch = "x86")]
-    use core::arch::x86::{_mm_prefetch, _MM_HINT_T0};
-    #[cfg(target_arch = "x86_64")]
-    use core::arch::x86_64::{_mm_prefetch, _MM_HINT_T0};
+    // hash node id
+    let node_bytes = (node as u64).to_be_bytes();
 
-    {
-        // hash node id
-        let node_bytes = (node as u64).to_be_bytes();
-
-        unsafe {
-            _mm_prefetch(node_bytes.as_ptr() as *const i8, _MM_HINT_T0);
-        }
-
-        hasher.input(&node_bytes);
+    unsafe {
+        _mm_prefetch(node_bytes.as_ptr() as *const i8, _MM_HINT_T0);
     }
+
+    hasher.input(&node_bytes);
 
     // hash parents for all non 0 nodes
     if node > 0 {
