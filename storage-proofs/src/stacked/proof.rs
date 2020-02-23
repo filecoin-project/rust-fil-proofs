@@ -3,7 +3,7 @@ use std::marker::PhantomData;
 use std::path::PathBuf;
 
 use log::{info, trace};
-use merkletree::merkle::FromIndexedParallelIterator;
+use merkletree::merkle::{is_merkle_tree_size_valid, FromIndexedParallelIterator};
 use merkletree::store::{DiskStore, StoreConfig, StoreConfigDataVersion};
 use rayon::prelude::*;
 use sha2::{Digest, Sha256};
@@ -302,6 +302,12 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
                 StoreConfig::from_config(&config, CacheKey::label_layer(layer), Some(graph.size()));
 
             info!("  storing labels on disk");
+            trace!(
+                "is_merkle_tree_size_valid({}, OCT_ARITY) = {}",
+                graph.size(),
+                is_merkle_tree_size_valid(graph.size(), OCT_ARITY)
+            );
+            assert!(is_merkle_tree_size_valid(graph.size(), OCT_ARITY));
             // Construct and persist the layer data.
             let layer_store: DiskStore<H::Domain> = DiskStore::new_from_slice_with_config(
                 graph.size(),
@@ -395,6 +401,20 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         assert_eq!(data.len(), nodes_count * NODE_SIZE);
         trace!("nodes count {}, data len {}", nodes_count, data.len());
 
+        // Ensure that the node count will work for binary and oct arities.
+        trace!(
+            "is_merkle_tree_size_valid({}, BINARY_ARITY) = {}",
+            nodes_count,
+            is_merkle_tree_size_valid(nodes_count, BINARY_ARITY)
+        );
+        trace!(
+            "is_merkle_tree_size_valid({}, OCT_ARITY) = {}",
+            nodes_count,
+            is_merkle_tree_size_valid(nodes_count, OCT_ARITY)
+        );
+        assert!(is_merkle_tree_size_valid(nodes_count, BINARY_ARITY));
+        assert!(is_merkle_tree_size_valid(nodes_count, OCT_ARITY));
+
         let layers = layer_challenges.layers();
         assert!(layers > 0);
 
@@ -404,7 +424,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
             &config,
             CacheKey::CommDTree.to_string(),
             Some(StoreConfig::default_cached_above_base_layer(
-                data.len(),
+                nodes_count,
                 BINARY_ARITY,
             )),
         );
@@ -412,7 +432,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
             &config,
             CacheKey::CommRLastTree.to_string(),
             Some(StoreConfig::default_cached_above_base_layer(
-                data.len(),
+                nodes_count,
                 OCT_ARITY,
             )),
         );
@@ -420,7 +440,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
             &config,
             CacheKey::CommCTree.to_string(),
             Some(StoreConfig::default_cached_above_base_layer(
-                data.len(),
+                nodes_count,
                 OCT_ARITY,
             )),
         );
