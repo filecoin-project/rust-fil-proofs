@@ -155,16 +155,10 @@ pub fn generate_priv_replica_info_fixture() -> BTreeMap<SectorId, PrivateReplica
     );
 
     let sealed_file = NamedTempFile::new().expect("could not create temp file for sealed sector");
-    let sealed_path_string = sealed_file
-        .path()
-        .to_str()
-        .expect("file name is not a UTF-8 string")
-        .to_string();
     let priv_replica_info = PrivateReplicaInfo::new(
-        sealed_path_string,
+        sealed_file.path().to_path_buf(),
         comm_r,
         cache_dir.into_path(),
-        replica_file.path().to_path_buf(),
     )
     .expect("could not create private replica info");
 

@@ -306,6 +306,12 @@ pub fn run(
         outputs.encoding_cpu_time_ms = encoding_cpu_time_ms;
     }
 
+    // Clean-up persisted replica files.
+    for (_, info) in &created {
+        std::fs::remove_file(info.private_replica_info.replica_path())
+            .expect("failed to remove sealed replica file");
+    }
+
     augment_with_op_measurements(&mut outputs);
     outputs.circuits = run_measure_circuits(&inputs);
 
