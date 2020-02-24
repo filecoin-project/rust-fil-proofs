@@ -302,12 +302,6 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
                 StoreConfig::from_config(&config, CacheKey::label_layer(layer), Some(graph.size()));
 
             info!("  storing labels on disk");
-            trace!(
-                "is_merkle_tree_size_valid({}, OCT_ARITY) = {}",
-                graph.size(),
-                is_merkle_tree_size_valid(graph.size(), OCT_ARITY)
-            );
-            assert!(is_merkle_tree_size_valid(graph.size(), OCT_ARITY));
             // Construct and persist the layer data.
             let layer_store: DiskStore<H::Domain> = DiskStore::new_from_slice_with_config(
                 graph.size(),
@@ -420,30 +414,22 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
 
         // Generate all store configs that we need based on the
         // cache_path in the specified config.
-        let mut tree_d_config = StoreConfig::from_config(
-            &config,
-            CacheKey::CommDTree.to_string(),
-            Some(StoreConfig::default_cached_above_base_layer(
-                nodes_count,
-                BINARY_ARITY,
-            )),
-        );
+        let mut tree_d_config =
+            StoreConfig::from_config(&config, CacheKey::CommDTree.to_string(), Some(nodes_count));
+        tree_d_config.levels =
+            StoreConfig::default_cached_above_base_layer(nodes_count, BINARY_ARITY);
+
         let mut tree_r_last_config = StoreConfig::from_config(
             &config,
             CacheKey::CommRLastTree.to_string(),
-            Some(StoreConfig::default_cached_above_base_layer(
-                nodes_count,
-                OCT_ARITY,
-            )),
+            Some(nodes_count),
         );
-        let mut tree_c_config = StoreConfig::from_config(
-            &config,
-            CacheKey::CommCTree.to_string(),
-            Some(StoreConfig::default_cached_above_base_layer(
-                nodes_count,
-                OCT_ARITY,
-            )),
-        );
+        tree_r_last_config.levels =
+            StoreConfig::default_cached_above_base_layer(nodes_count, OCT_ARITY);
+
+        let mut tree_c_config =
+            StoreConfig::from_config(&config, CacheKey::CommCTree.to_string(), Some(nodes_count));
+        tree_c_config.levels = StoreConfig::default_cached_above_base_layer(nodes_count, OCT_ARITY);
 
         let labels = LabelsCache::new(&label_configs)?;
 
