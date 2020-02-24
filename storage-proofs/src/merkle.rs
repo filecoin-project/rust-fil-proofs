@@ -8,7 +8,10 @@ use generic_array::typenum;
 use log::trace;
 use merkletree::hash::Algorithm;
 use merkletree::merkle;
-use merkletree::merkle::{get_merkle_tree_leafs, get_merkle_tree_len, FromIndexedParallelIterator};
+use merkletree::merkle::{
+    get_merkle_tree_leafs, get_merkle_tree_len, is_merkle_tree_size_valid,
+    FromIndexedParallelIterator,
+};
 use merkletree::proof;
 use merkletree::store::{LevelCacheStore, StoreConfig};
 use paired::bls12_381::Fr;
@@ -270,7 +273,15 @@ pub fn create_merkle_tree<H: Hasher, U: typenum::Unsigned>(
         data.len() == (NODE_SIZE * size) as usize,
         Error::InvalidMerkleTreeArgs(data.len(), NODE_SIZE, size)
     );
+
     trace!("create_merkle_tree called with size {}", size);
+    trace!(
+        "is_merkle_tree_size_valid({}, arity {}) = {}",
+        size,
+        U::to_usize(),
+        is_merkle_tree_size_valid(size, U::to_usize())
+    );
+    assert!(is_merkle_tree_size_valid(size, U::to_usize()));
 
     let f = |i| {
         // TODO Replace `expect()` with `context()` (problem is the parallel iterator)
@@ -297,6 +308,13 @@ pub fn create_lcmerkle_tree<H: Hasher, U: typenum::Unsigned>(
     size: usize,
 ) -> Result<LCMerkleTree<H::Domain, H::Function, U>> {
     trace!("create_lcmerkle_tree called with size {}", size);
+    trace!(
+        "is_merkle_tree_size_valid({}, arity {}) = {}",
+        size,
+        U::to_usize(),
+        is_merkle_tree_size_valid(size, U::to_usize())
+    );
+    assert!(is_merkle_tree_size_valid(size, U::to_usize()));
 
     // This method requires the entire tree length.
     let tree_size = get_merkle_tree_len(size, U::to_usize());

@@ -3,7 +3,9 @@ use std::marker::PhantomData;
 use std::path::PathBuf;
 
 use log::{info, trace};
-use merkletree::merkle::{is_merkle_tree_size_valid, FromIndexedParallelIterator};
+use merkletree::merkle::{
+    get_merkle_tree_len, is_merkle_tree_size_valid, FromIndexedParallelIterator,
+};
 use merkletree::store::{DiskStore, StoreConfig, StoreConfigDataVersion};
 use rayon::prelude::*;
 use sha2::{Digest, Sha256};
@@ -302,12 +304,6 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
                 StoreConfig::from_config(&config, CacheKey::label_layer(layer), Some(graph.size()));
 
             info!("  storing labels on disk");
-            trace!(
-                "is_merkle_tree_size_valid({}, OCT_ARITY) = {}",
-                graph.size(),
-                is_merkle_tree_size_valid(graph.size(), OCT_ARITY)
-            );
-            assert!(is_merkle_tree_size_valid(graph.size(), OCT_ARITY));
             // Construct and persist the layer data.
             let layer_store: DiskStore<H::Domain> = DiskStore::new_from_slice_with_config(
                 graph.size(),
@@ -423,27 +419,25 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         let mut tree_d_config = StoreConfig::from_config(
             &config,
             CacheKey::CommDTree.to_string(),
-            Some(StoreConfig::default_cached_above_base_layer(
-                nodes_count,
-                BINARY_ARITY,
-            )),
+            Some(get_merkle_tree_len(nodes_count, BINARY_ARITY)),
         );
+        tree_d_config.levels =
+            StoreConfig::default_cached_above_base_layer(nodes_count, BINARY_ARITY);
+
         let mut tree_r_last_config = StoreConfig::from_config(
             &config,
             CacheKey::CommRLastTree.to_string(),
-            Some(StoreConfig::default_cached_above_base_layer(
-                nodes_count,
-                OCT_ARITY,
-            )),
+            Some(get_merkle_tree_len(nodes_count, OCT_ARITY)),
         );
+        tree_r_last_config.levels =
+            StoreConfig::default_cached_above_base_layer(nodes_count, OCT_ARITY);
+
         let mut tree_c_config = StoreConfig::from_config(
             &config,
             CacheKey::CommCTree.to_string(),
-            Some(StoreConfig::default_cached_above_base_layer(
-                nodes_count,
-                OCT_ARITY,
-            )),
+            Some(get_merkle_tree_len(nodes_count, OCT_ARITY)),
         );
+        tree_c_config.levels = StoreConfig::default_cached_above_base_layer(nodes_count, OCT_ARITY);
 
         let labels = LabelsCache::new(&label_configs)?;
 
@@ -535,9 +529,9 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
 
         assert_eq!(tree_c.len(), tree_r_last.len());
 
-        tree_d_config.size = Some(tree_d.len());
-        tree_r_last_config.size = Some(tree_r_last.len());
-        tree_c_config.size = Some(tree_c.len());
+        assert_eq!(tree_d_config.size.unwrap(), tree_d.len());
+        assert_eq!(tree_r_last_config.size.unwrap(), tree_r_last.len());
+        assert_eq!(tree_c_config.size.unwrap(), tree_c.len());
 
         trace!("tree d len {}", tree_d.len());
         trace!("tree c len {}", tree_c.len());
