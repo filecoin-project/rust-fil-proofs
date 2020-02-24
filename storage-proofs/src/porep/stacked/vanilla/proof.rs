@@ -291,9 +291,8 @@ where
         let mut label_configs: Vec<StoreConfig> = Vec::with_capacity(layers);
 
         let layer_size = graph.size() * NODE_SIZE;
-        let mut layer_labels = vec![0u8; layer_size];
-
-        let mut exp_parents_data: Option<Vec<u8>> = None;
+        // NOTE: this means we currently keep 2x sector size around, to improve speed.
+        let mut labels_buffer = vec![0u8; 2 * layer_size];
 
         // setup hasher to reuse
         let mut base_hasher = Sha256::new();
@@ -304,29 +303,19 @@ where
             info!("generating layer: {}", layer);
 
             if layer == 1 {
+                let layer_labels = &mut labels_buffer[..layer_size];
                 for node in 0..graph.size() {
-                    create_key(graph, base_hasher.clone(), &mut layer_labels, node)?;
+                    create_key(graph, base_hasher.clone(), layer_labels, node)?;
                 }
             } else {
+                let (layer_labels, exp_labels) = labels_buffer.split_at_mut(layer_size);
                 for node in 0..graph.size() {
-                    create_key_exp(
-                        graph,
-                        base_hasher.clone(),
-                        exp_parents_data.as_ref().unwrap(),
-                        &mut layer_labels,
-                        node,
-                    )?;
+                    create_key_exp(graph, base_hasher.clone(), exp_labels, layer_labels, node)?;
                 }
             }
 
             info!("  setting exp parents");
-
-            // NOTE: this means we currently keep 2x sector size around, to improve speed.
-            if let Some(ref mut exp_parents_data) = exp_parents_data {
-                exp_parents_data.copy_from_slice(&layer_labels);
-            } else {
-                exp_parents_data = Some(layer_labels.clone());
-            }
+            labels_buffer.copy_within(..layer_size, layer_size);
 
             // Write the result to disk to avoid keeping it in memory all the time.
             let layer_config =
@@ -337,7 +326,7 @@ where
             let layer_store: DiskStore<H::Domain> = DiskStore::new_from_slice_with_config(
                 graph.size(),
                 OCT_ARITY,
-                &layer_labels,
+                &labels_buffer[..layer_size],
                 layer_config.clone(),
             )?;
             info!(
@@ -695,7 +684,7 @@ where
 pub fn create_key_exp<H: Hasher, Degree>(
     graph: &StackedBucketGraph<H, Degree>,
     mut hasher: Sha256,
-    exp_parents_data: &Vec<u8>,
+    exp_parents_data: &[u8],
     layer_labels: &mut [u8],
     node: usize,
 ) -> Result<()>

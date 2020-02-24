@@ -1,6 +1,4 @@
-use criterion::{
-    black_box, criterion_group, criterion_main, Criterion, ParameterizedBenchmark, Throughput,
-};
+use criterion::{black_box, criterion_group, criterion_main, Criterion, Throughput};
 use ff::Field;
 use generic_array::typenum;
 use paired::bls12_381::{Bls12, Fr};
@@ -37,50 +35,50 @@ fn pregenerate_data<H: Hasher>(degree: usize) -> Pregenerated<H> {
 }
 
 fn kdf_benchmark(c: &mut Criterion) {
-    let degrees = vec![14];
+    let degree = 14;
+    let Pregenerated {
+        data,
+        replica_id,
+        graph,
+    } = pregenerate_data::<Sha256Hasher>(degree);
 
-    c.bench(
-        "kdf",
-        ParameterizedBenchmark::new(
-            "exp",
-            |b, degree| {
-                let Pregenerated {
-                    mut data,
-                    replica_id,
-                    graph,
-                } = pregenerate_data::<Sha256Hasher>(*degree);
+    let mut group = c.benchmark_group("kdf");
+    group.sample_size(10);
+    group.throughput(Throughput::Bytes(
+        /* replica id + 37 parents + node id + */ 32 + 37 * 32 + 1 * 8,
+    ));
 
-                let exp_data = data.clone();
-                b.iter(|| {
-                    let mut hasher = Sha256::new();
-                    hasher.input(AsRef::<[u8]>::as_ref(&replica_id));
-                    hasher.input(&(1u64).to_be_bytes()[..]);
+    group.bench_function("exp", |b| {
+        let mut raw_data = data.clone();
+        raw_data.extend_from_slice(&data);
+        let (data, exp_data) = raw_data.split_at_mut(data.len());
 
-                    black_box(create_key_exp(&graph, hasher, &exp_data, &mut data, 1))
-                })
-            },
-            degrees,
-        )
-        .with_function("non-exp", move |b, degree| {
-            let Pregenerated {
-                mut data,
-                replica_id,
-                graph,
-            } = pregenerate_data::<Sha256Hasher>(*degree);
-            b.iter(|| {
-                let mut hasher = Sha256::new();
-                hasher.input(AsRef::<[u8]>::as_ref(&replica_id));
+        let graph = &graph;
+        let replica_id = replica_id.clone();
 
-                black_box(create_key(&graph, hasher, &mut data, 1))
-            })
+        b.iter(|| {
+            let mut hasher = Sha256::new();
+            hasher.input(AsRef::<[u8]>::as_ref(&replica_id));
+            hasher.input(&(1u64).to_be_bytes()[..]);
+
+            black_box(create_key_exp(graph, hasher, &*exp_data, data, 1))
         })
-        .sample_size(20)
-        .throughput(|_s| {
-            Throughput::Bytes(
-                /* replica id + 37 parents + node id + */ 32 + 37 * 32 + 1 * 8,
-            )
-        }),
-    );
+    });
+
+    group.bench_function("non-exp", |b| {
+        let mut data = data.clone();
+        let graph = &graph;
+        let replica_id = replica_id.clone();
+
+        b.iter(|| {
+            let mut hasher = Sha256::new();
+            hasher.input(AsRef::<[u8]>::as_ref(&replica_id));
+
+            black_box(create_key(graph, hasher, &mut data, 1))
+        })
+    });
+
+    group.finish();
 }
 
 criterion_group!(benches, kdf_benchmark);

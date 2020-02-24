@@ -125,6 +125,15 @@ where
 
 pub type StackedBucketGraph<H, Degree> = StackedGraph<H, BucketGraph<H>, Degree>;
 
+macro_rules! read {
+    ($i:expr, $parents:expr, $data:expr, $buffer:expr) => {
+        let start0 = $parents[$i] as usize * NODE_SIZE;
+        let end0 = start0 + NODE_SIZE;
+
+        $buffer[$i * NODE_SIZE..($i + 1) * NODE_SIZE].copy_from_slice(&$data[start0..end0]);
+    };
+}
+
 impl<H, G, Degree> StackedGraph<H, G, Degree>
 where
     H: Hasher,
@@ -184,7 +193,7 @@ where
         &self,
         node: u32,
         base_data: &[u8],
-        exp_data: &Vec<u8>,
+        exp_data: &[u8],
         hasher: &mut Sha256,
         total_parents: usize,
     ) {
@@ -250,37 +259,40 @@ where
 
         assert_eq!(base_degree, 6);
         assert_eq!(degree, 14);
+        assert_eq!(cache_parents.len(), 14);
         assert_eq!(total_parents, 37);
 
-        let buffer = [0u8; 64];
+        let mut buffer = [0u8; 14 * NODE_SIZE];
 
-        // round 1
-        hash_multiple(hasher, buffer, &cache_parents[0..2], base_data);
-        hash_multiple(hasher, buffer, &cache_parents[2..4], base_data);
-        hash_multiple(hasher, buffer, &cache_parents[4..6], base_data);
+        // fill buffer
+        read!(0, cache_parents, base_data, buffer);
+        read!(1, cache_parents, base_data, buffer);
+        read!(2, cache_parents, base_data, buffer);
+        read!(3, cache_parents, base_data, buffer);
+        read!(4, cache_parents, base_data, buffer);
+        read!(5, cache_parents, base_data, buffer);
 
-        hash_multiple(hasher, buffer, &cache_parents[6..8], exp_data);
-        hash_multiple(hasher, buffer, &cache_parents[8..10], exp_data);
-        hash_multiple(hasher, buffer, &cache_parents[10..12], exp_data);
-        hash_multiple(hasher, buffer, &cache_parents[12..14], exp_data);
+        read!(6, cache_parents, exp_data, buffer);
+        read!(7, cache_parents, exp_data, buffer);
+        read!(8, cache_parents, exp_data, buffer);
+        read!(9, cache_parents, exp_data, buffer);
+        read!(10, cache_parents, exp_data, buffer);
+        read!(11, cache_parents, exp_data, buffer);
+        read!(12, cache_parents, exp_data, buffer);
+        read!(13, cache_parents, exp_data, buffer);
 
-        // round 2
-        hash_multiple(hasher, buffer, &cache_parents[0..2], base_data);
-        hash_multiple(hasher, buffer, &cache_parents[2..4], base_data);
-        hash_multiple(hasher, buffer, &cache_parents[4..6], base_data);
+        unsafe {
+            _mm_prefetch(buffer.as_ptr() as *const i8, _MM_HINT_T0);
+        }
 
-        hash_multiple(hasher, buffer, &cache_parents[6..8], exp_data);
-        hash_multiple(hasher, buffer, &cache_parents[8..10], exp_data);
-        hash_multiple(hasher, buffer, &cache_parents[10..12], exp_data);
-        hash_multiple(hasher, buffer, &cache_parents[12..14], exp_data);
+        // round 1 (14)
+        hasher.input(&buffer[..]);
 
-        // round 3
-        hash_multiple(hasher, buffer, &cache_parents[0..2], base_data);
-        hash_multiple(hasher, buffer, &cache_parents[2..4], base_data);
-        hash_multiple(hasher, buffer, &cache_parents[4..6], base_data);
+        // round 2 (14)
+        hasher.input(&buffer[..]);
 
-        hash_multiple(hasher, buffer, &cache_parents[6..8], exp_data);
-        hash_single(hasher, cache_parents[8], exp_data);
+        // round 3 (9)
+        hasher.input(&buffer[..9 * NODE_SIZE]);
     }
 
     fn copy_parents_data_inner(
@@ -291,25 +303,44 @@ where
         total_parents: usize,
     ) {
         let base_degree = self.base_graph().degree();
-        assert_eq!(base_degree % 2, 0, "invalid base degree");
+        assert_eq!(base_degree, 6);
+        assert_eq!(cache_parents.len(), 14);
+        assert_eq!(total_parents, 37);
 
-        let num_inputs = total_parents / base_degree;
-        let rest_inputs = total_parents % base_degree;
-        let buffer = [0u8; 64];
+        let mut buffer = [0u8; 6 * NODE_SIZE];
 
-        for _i in 0..num_inputs {
-            for parents in cache_parents[..base_degree].chunks_exact(2) {
-                hash_multiple(hasher, buffer, parents, base_data);
-            }
+        // fill buffer
+        read!(0, cache_parents, base_data, buffer);
+        read!(1, cache_parents, base_data, buffer);
+        read!(2, cache_parents, base_data, buffer);
+        read!(3, cache_parents, base_data, buffer);
+        read!(4, cache_parents, base_data, buffer);
+        read!(5, cache_parents, base_data, buffer);
+
+        unsafe {
+            _mm_prefetch(buffer.as_ptr() as *const i8, _MM_HINT_T0);
         }
 
-        for parents in cache_parents[..rest_inputs].chunks(2) {
-            if parents.len() > 1 {
-                hash_multiple(hasher, buffer, parents, base_data);
-            } else {
-                hash_single(hasher, parents[0], base_data);
-            }
-        }
+        // round 1 (0..6)
+        hasher.input(&buffer[..]);
+
+        // round 2 (6..12)
+        hasher.input(&buffer[..]);
+
+        // round 3 (12..18)
+        hasher.input(&buffer[..]);
+
+        // round 4 (18..24)
+        hasher.input(&buffer[..]);
+
+        // round 5 (24..30)
+        hasher.input(&buffer[..]);
+
+        // round 6 (30..36)
+        hasher.input(&buffer[..]);
+
+        // round 7 (37)
+        hasher.input(&buffer[..1 * NODE_SIZE]);
     }
 }
 
@@ -521,36 +552,6 @@ where
     G: Graph<H>,
     Degree: generic_array::ArrayLength<u32> + Sync + Send + Clone,
 {
-}
-
-#[inline]
-fn hash_multiple(hasher: &mut Sha256, mut buffer: [u8; 64], parents: &[u32], data: &[u8]) {
-    let start0 = parents[0] as usize * NODE_SIZE;
-    let end0 = start0 + NODE_SIZE;
-    let start1 = parents[1] as usize * NODE_SIZE;
-    let end1 = start1 + NODE_SIZE;
-
-    unsafe {
-        _mm_prefetch(data[start0..end0].as_ptr() as *const i8, _MM_HINT_T0);
-        _mm_prefetch(data[start1..end1].as_ptr() as *const i8, _MM_HINT_T0);
-    }
-
-    buffer[..32].copy_from_slice(&data[start0..end0]);
-    buffer[32..].copy_from_slice(&data[start1..end1]);
-
-    hasher.input(&buffer[..]);
-}
-
-#[inline]
-fn hash_single(hasher: &mut Sha256, parent: u32, data: &[u8]) {
-    let start0 = parent as usize * NODE_SIZE;
-    let end0 = start0 + NODE_SIZE;
-
-    unsafe {
-        _mm_prefetch(data[start0..end0].as_ptr() as *const i8, _MM_HINT_T0);
-    }
-
-    hasher.input(&data[start0..end0]);
 }
 
 #[cfg(test)]
