@@ -735,7 +735,7 @@ mod tests {
         let comm_d = pre_commit_output.comm_d.clone();
         let comm_r = pre_commit_output.comm_r.clone();
 
-        validate_cache_for_commit(cache_dir.path(), staged_sector_file.path())?;
+        validate_cache_for_commit(cache_dir.path(), sealed_sector_file.path())?;
 
         let phase1_output = seal_commit_phase1(
             config,
