@@ -34,10 +34,14 @@ impl<H: Hasher> EncodingProof<H> {
 
         // node id
         hasher.input(&(self.node as u64).to_be_bytes());
+        hasher.input(&[0u8; 32 - 8][..]);
 
         // parents
         for parent in &self.parents {
             hasher.input(AsRef::<[u8]>::as_ref(parent));
+        }
+        if self.parents.len() % 2 != 0 {
+            hasher.input(&[0u8; 32]);
         }
 
         bytes_into_fr_repr_safe(hasher.result().as_ref()).into()
