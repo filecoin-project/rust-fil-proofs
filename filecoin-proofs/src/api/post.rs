@@ -161,6 +161,32 @@ impl PublicReplicaInfo {
     }
 }
 
+// Ensure that any associated cached data persisted is discarded.
+pub fn clear_cache(cache_dir: &Path) -> Result<()> {
+    let t_aux = {
+        let mut aux_bytes = vec![];
+        let f_aux_path = cache_dir.to_path_buf().join(CacheKey::TAux.to_string());
+        let mut f_aux = File::open(&f_aux_path)
+            .with_context(|| format!("could not open path={:?}", f_aux_path))?;
+        f_aux
+            .read_to_end(&mut aux_bytes)
+            .with_context(|| format!("could not read from path={:?}", f_aux_path))?;
+
+        deserialize(&aux_bytes)
+    }?;
+
+    TemporaryAux::clear_temp(t_aux)
+}
+
+// Ensure that any associated cached data persisted is discarded.
+pub fn clear_caches(replicas: &BTreeMap<SectorId, PrivateReplicaInfo>) -> Result<()> {
+    for replica in replicas.values() {
+        clear_cache(replica.cache_dir_path())?;
+    }
+
+    Ok(())
+}
+
 /// Generates proof-of-spacetime candidates for ElectionPoSt.
 ///
 /// # Arguments
@@ -235,21 +261,6 @@ pub fn generate_candidates(
     let unique_trees_res: Vec<_> = unique_challenged_replicas
         .into_par_iter()
         .map(|(id, replica)| {
-            // Ensure that any associated cached data persisted is discarded by this point.
-            let t_aux = {
-                let mut aux_bytes = vec![];
-                let f_aux_path = replica.cache_dir_path().join(CacheKey::TAux.to_string());
-                let mut f_aux = File::open(&f_aux_path)
-                    .with_context(|| format!("could not open path={:?}", f_aux_path))?;
-                f_aux
-                    .read_to_end(&mut aux_bytes)
-                    .with_context(|| format!("could not read from path={:?}", f_aux_path))?;
-
-                deserialize(&aux_bytes)
-            }?;
-
-            TemporaryAux::clear_temp(t_aux)?;
-
             replica
                 .merkle_tree(tree_size, tree_leafs)
                 .map(|tree| (*id, tree))

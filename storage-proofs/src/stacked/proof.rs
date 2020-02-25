@@ -549,6 +549,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
                 .open(&replica_path)?;
 
             // Only write the replica's base layer of leaf data.
+            trace!("Wrote replica data for {} nodes", tree_r_last.leafs());
             f.write_all(&data.as_ref()[0..tree_r_last.leafs() * NODE_SIZE])?;
         }
 

@@ -10,7 +10,8 @@ use filecoin_proofs::constants::POREP_PARTITIONS;
 use filecoin_proofs::types::{PaddedBytesAmount, PoRepConfig, SectorSize, UnpaddedBytesAmount};
 use filecoin_proofs::{
     add_piece, generate_piece_commitment, seal_pre_commit_phase1, seal_pre_commit_phase2,
-    PieceInfo, PoRepProofPartitions, PrivateReplicaInfo, PublicReplicaInfo, SealPreCommitOutput,
+    validate_cache_for_precommit_phase2, PieceInfo, PoRepProofPartitions, PrivateReplicaInfo,
+    PublicReplicaInfo, SealPreCommitOutput,
 };
 use storage_proofs::sector::SectorId;
 
@@ -167,6 +168,7 @@ pub fn create_replicas(
             .into_iter()
             .enumerate()
             .map(|(i, phase1)| {
+                validate_cache_for_precommit_phase2(&cache_dirs[i], &sealed_files[i], &phase1)?;
                 seal_pre_commit_phase2(porep_config, phase1, &cache_dirs[i], &sealed_files[i])
             })
             .collect::<Result<Vec<_>, _>>()

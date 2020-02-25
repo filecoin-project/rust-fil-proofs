@@ -10,9 +10,9 @@ use filecoin_proofs::types::{
     SealPreCommitOutput, SectorSize, UnpaddedBytesAmount,
 };
 use filecoin_proofs::{
-    add_piece, generate_candidates, generate_piece_commitment, generate_post, seal_commit_phase1,
-    seal_commit_phase2, seal_pre_commit_phase1, seal_pre_commit_phase2, Candidate,
-    PrivateReplicaInfo,
+    add_piece, clear_cache, generate_candidates, generate_piece_commitment, generate_post,
+    seal_commit_phase1, seal_commit_phase2, seal_pre_commit_phase1, seal_pre_commit_phase2,
+    validate_cache_for_commit, validate_cache_for_precommit_phase2, Candidate, PrivateReplicaInfo,
 };
 use storage_proofs::sector::SectorId;
 use tempfile::NamedTempFile;
@@ -74,9 +74,11 @@ fn generate_piece_infos(mut staged_file: &NamedTempFile) -> Vec<PieceInfo> {
     vec![piece_info]
 }
 
-pub fn generate_seal_fixture(cache_dir_path: &Path) -> (SealPreCommitOutput, Vec<PieceInfo>) {
+pub fn generate_seal_fixture(
+    cache_dir_path: &Path,
+    replica_path: &Path,
+) -> (SealPreCommitOutput, Vec<PieceInfo>) {
     let staged_file = NamedTempFile::new().expect("could not create temp file for staged sector");
-    let sealed_file = NamedTempFile::new().expect("could not create temp file for sealed sector");
 
     let piece_infos = generate_piece_infos(&staged_file);
 
@@ -90,20 +92,20 @@ pub fn generate_seal_fixture(cache_dir_path: &Path) -> (SealPreCommitOutput, Vec
         porep_config,
         cache_dir_path,
         staged_file.path(),
-        sealed_file.path(),
+        replica_path,
         PROVER_ID,
         SectorId::from(SECTOR_ID),
         TICKET,
         &piece_infos,
     )
     .expect("could not pre seal commit phase1");
-    let seal_pre_commit_output = seal_pre_commit_phase2(
-        porep_config,
-        phase1_output,
-        cache_dir_path,
-        sealed_file.path(),
-    )
-    .expect("could not pre seal commit phase2");
+
+    validate_cache_for_precommit_phase2(cache_dir_path, replica_path, &phase1_output)
+        .expect("could not validate cache for precommit phase2");
+
+    let seal_pre_commit_output =
+        seal_pre_commit_phase2(porep_config, phase1_output, cache_dir_path, replica_path)
+            .expect("could not pre seal commit phase2");
 
     (seal_pre_commit_output, piece_infos)
 }
@@ -120,6 +122,10 @@ pub fn do_generate_seal(
             *POREP_PARTITIONS.read().unwrap().get(&SECTOR_SIZE).unwrap(),
         ),
     };
+
+    validate_cache_for_commit(cache_dir_path, replica_path)
+        .expect("could not validate cache for commit");
+
     let phase1_output = seal_commit_phase1(
         porep_config,
         cache_dir_path,
@@ -132,6 +138,9 @@ pub fn do_generate_seal(
         &piece_infos,
     )
     .expect("could not seal commit phase1");
+
+    clear_cache(cache_dir_path).expect("could not clear cache");
+
     seal_commit_phase2(
         porep_config,
         phase1_output,
@@ -144,23 +153,21 @@ pub fn do_generate_seal(
 pub fn generate_priv_replica_info_fixture() -> BTreeMap<SectorId, PrivateReplicaInfo> {
     let cache_dir = tempfile::tempdir().expect("could not create temp dir for cache");
     let replica_file = NamedTempFile::new().expect("could not create temp file for replica");
+    // Persist the sealed replica.
+    let (_, replica_path) = replica_file.keep().expect("failed to persist replica");
 
-    let (seal_pre_commit_output, piece_infos) = generate_seal_fixture(cache_dir.path());
+    let (seal_pre_commit_output, piece_infos) =
+        generate_seal_fixture(cache_dir.path(), &replica_path);
     let comm_r = seal_pre_commit_output.comm_r;
     do_generate_seal(
         cache_dir.path(),
-        replica_file.path(),
+        &replica_path,
         seal_pre_commit_output,
         &piece_infos,
     );
 
-    let sealed_file = NamedTempFile::new().expect("could not create temp file for sealed sector");
-    let priv_replica_info = PrivateReplicaInfo::new(
-        sealed_file.path().to_path_buf(),
-        comm_r,
-        cache_dir.into_path(),
-    )
-    .expect("could not create private replica info");
+    let priv_replica_info = PrivateReplicaInfo::new(replica_path, comm_r, cache_dir.into_path())
+        .expect("could not create private replica info");
 
     let mut priv_replica_infos: BTreeMap<SectorId, PrivateReplicaInfo> = BTreeMap::new();
     priv_replica_infos.insert(SectorId::from(SECTOR_ID), priv_replica_info);

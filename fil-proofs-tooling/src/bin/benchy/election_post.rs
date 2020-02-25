@@ -8,8 +8,9 @@ use filecoin_proofs::types::{
     UnpaddedBytesAmount,
 };
 use filecoin_proofs::{
-    add_piece, generate_candidates, generate_piece_commitment, generate_post, seal_commit_phase1,
-    seal_commit_phase2, seal_pre_commit_phase1, seal_pre_commit_phase2, verify_post,
+    add_piece, clear_cache, generate_candidates, generate_piece_commitment, generate_post,
+    seal_commit_phase1, seal_commit_phase2, seal_pre_commit_phase1, seal_pre_commit_phase2,
+    validate_cache_for_commit, validate_cache_for_precommit_phase2, verify_post,
     PrivateReplicaInfo, PublicReplicaInfo,
 };
 use log::info;
@@ -112,6 +113,9 @@ pub fn run(sector_size: usize) -> anyhow::Result<()> {
         TICKET_BYTES,
         &piece_infos,
     )?;
+
+    validate_cache_for_precommit_phase2(cache_dir.path(), sealed_file.path(), &phase1_output)?;
+
     let seal_pre_commit_output = seal_pre_commit_phase2(
         porep_config,
         phase1_output,
@@ -121,6 +125,8 @@ pub fn run(sector_size: usize) -> anyhow::Result<()> {
 
     let seed = [0u8; 32];
     let comm_r = seal_pre_commit_output.comm_r;
+
+    validate_cache_for_commit(cache_dir.path(), sealed_file.path())?;
 
     let phase1_output = seal_commit_phase1(
         porep_config,
@@ -133,6 +139,8 @@ pub fn run(sector_size: usize) -> anyhow::Result<()> {
         seal_pre_commit_output,
         &piece_infos,
     )?;
+
+    clear_cache(cache_dir.path())?;
 
     let _seal_commit_output =
         seal_commit_phase2(porep_config, phase1_output, PROVER_ID, sector_id)?;
