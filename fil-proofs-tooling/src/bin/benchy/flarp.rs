@@ -8,8 +8,8 @@ use filecoin_proofs::types::PaddedBytesAmount;
 use filecoin_proofs::types::*;
 use filecoin_proofs::types::{PoStConfig, SectorSize};
 use filecoin_proofs::{
-    generate_candidates, generate_post, seal_commit_phase1, seal_commit_phase2, verify_post,
-    PoRepConfig,
+    clear_cache, generate_candidates, generate_post, seal_commit_phase1, seal_commit_phase2,
+    validate_cache_for_commit, verify_post, PoRepConfig,
 };
 use log::info;
 use paired::bls12_381::Bls12;
@@ -208,6 +208,11 @@ pub fn run(
             replica_measurement.return_value.iter().zip(created.iter())
         {
             let measured = measure(|| {
+                validate_cache_for_commit(
+                    &replica_info.private_replica_info.cache_dir_path(),
+                    &replica_info.private_replica_info.replica_path(),
+                )?;
+
                 let phase1_output = seal_commit_phase1(
                     cfg,
                     &replica_info.private_replica_info.cache_dir_path(),
@@ -219,6 +224,9 @@ pub fn run(
                     value.clone(),
                     &replica_info.piece_info,
                 )?;
+
+                clear_cache(&replica_info.private_replica_info.cache_dir_path())?;
+
                 seal_commit_phase2(cfg, phase1_output, PROVER_ID, *sector_id)
             })
             .expect("failed to prove sector");

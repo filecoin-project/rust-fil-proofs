@@ -382,9 +382,17 @@ where
     R: AsRef<Path>,
     T: AsRef<Path>,
 {
+    // Verify that the replica exists and is not empty.
     ensure!(
         replica_path.as_ref().exists(),
         "Missing replica: {}",
+        replica_path.as_ref().to_path_buf().display()
+    );
+
+    let metadata = File::open(&replica_path)?.metadata()?;
+    ensure!(
+        metadata.len() > 0,
+        "Replica {} exists, but is empty!",
         replica_path.as_ref().to_path_buf().display()
     );
 
@@ -735,7 +743,7 @@ mod tests {
         let comm_d = pre_commit_output.comm_d.clone();
         let comm_r = pre_commit_output.comm_r.clone();
 
-        validate_cache_for_commit(cache_dir.path(), staged_sector_file.path())?;
+        validate_cache_for_commit(cache_dir.path(), sealed_sector_file.path())?;
 
         let phase1_output = seal_commit_phase1(
             config,
@@ -748,6 +756,9 @@ mod tests {
             pre_commit_output,
             &piece_infos,
         )?;
+
+        clear_cache(cache_dir.path())?;
+
         let commit_output = seal_commit_phase2(config, phase1_output, prover_id, sector_id)?;
 
         let _ = get_unsealed_range(
