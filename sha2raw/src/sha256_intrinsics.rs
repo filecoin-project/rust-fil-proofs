@@ -41,9 +41,6 @@ pub unsafe fn compress256(state: &mut [u32; 8], blocks: &[&[u8]]) {
     state1 = _mm_blend_epi16(state1, tmp, 0xF0); // CDGH
 
     for i in 0..blocks.len() / 2 {
-        _mm_prefetch(blocks[i].as_ptr() as *const i8, _MM_HINT_T0);
-        _mm_prefetch(blocks[i + 1].as_ptr() as *const i8, _MM_HINT_T0);
-
         // Save current state
         abef_save = state0;
         cdgh_save = state1;
