@@ -7,7 +7,7 @@ use generic_array::ArrayLength;
 use lazy_static::lazy_static;
 use log::info;
 use rayon::prelude::*;
-use sha2::{Digest, Sha256};
+use sha2raw::Sha256;
 
 use crate::crypto::feistel::{self, FeistelPrecomputed};
 use crate::drgraph::{BucketGraph, Graph};
@@ -22,11 +22,6 @@ pub const EXP_DEGREE: usize = 8;
 #[cfg(test)]
 pub type DEGREE = generic_array::typenum::U14;
 const FEISTEL_KEYS: [feistel::Index; 4] = [1, 2, 3, 4];
-
-#[cfg(target_arch = "x86")]
-use core::arch::x86::{_mm_prefetch, _MM_HINT_T0};
-#[cfg(target_arch = "x86_64")]
-use core::arch::x86_64::{_mm_prefetch, _MM_HINT_T0};
 
 lazy_static! {
     // This parents cache is currently used for the full parents set.
@@ -129,10 +124,6 @@ macro_rules! read {
     ($i:expr, $parents:expr, $data:expr) => {{
         let start0 = $parents[$i] as usize * NODE_SIZE;
         let end0 = start0 + NODE_SIZE;
-
-        unsafe {
-            _mm_prefetch($data[start0..end0].as_ptr() as *const i8, _MM_HINT_T0);
-        }
 
         &$data[start0..end0]
     }};
@@ -285,19 +276,14 @@ where
         ];
 
         // round 1 (14)
-        for parent in &parents {
-            hasher.input(parent);
-        }
+        hasher.input(&parents);
 
         // round 2 (14)
-        for parent in &parents {
-            hasher.input(parent);
-        }
+        hasher.input(&parents);
 
         // round 3 (9)
-        for parent in &parents[..9] {
-            hasher.input(parent);
-        }
+        hasher.input(&parents[..8]);
+        hasher.input(&[parents[8], &[0u8; 32][..]]);
     }
 
     fn copy_parents_data_inner(
@@ -323,39 +309,25 @@ where
         ];
 
         // round 1 (0..6)
-        for parent in &parents {
-            hasher.input(parent);
-        }
+        hasher.input(&parents);
 
         // round 2 (6..12)
-        for parent in &parents {
-            hasher.input(parent);
-        }
+        hasher.input(&parents);
 
         // round 3 (12..18)
-        for parent in &parents {
-            hasher.input(parent);
-        }
+        hasher.input(&parents);
 
         // round 4 (18..24)
-        for parent in &parents {
-            hasher.input(parent);
-        }
+        hasher.input(&parents);
 
         // round 5 (24..30)
-        for parent in &parents {
-            hasher.input(parent);
-        }
+        hasher.input(&parents);
 
         // round 6 (30..36)
-        for parent in &parents {
-            hasher.input(parent);
-        }
+        hasher.input(&parents);
 
         // round 7 (37)
-        for parent in &parents[..1] {
-            hasher.input(parent);
-        }
+        hasher.input(&[parents[0], &[0u8; 32][..]][..]);
     }
 }
 

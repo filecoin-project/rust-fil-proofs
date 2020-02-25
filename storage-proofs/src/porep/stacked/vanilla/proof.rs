@@ -2,11 +2,6 @@ use std::collections::HashMap;
 use std::marker::PhantomData;
 use std::path::PathBuf;
 
-#[cfg(target_arch = "x86")]
-use core::arch::x86::{_mm_prefetch, _MM_HINT_T0};
-#[cfg(target_arch = "x86_64")]
-use core::arch::x86_64::{_mm_prefetch, _MM_HINT_T0};
-
 use generic_array::{typenum, ArrayLength};
 use log::{info, trace};
 use merkletree::merkle::{
@@ -14,7 +9,7 @@ use merkletree::merkle::{
 };
 use merkletree::store::{DiskStore, StoreConfig, StoreConfigDataVersion};
 use rayon::prelude::*;
-use sha2::{Digest, Sha256};
+use sha2raw::Sha256;
 
 use super::{
     challenges::LayerChallenges,
@@ -294,23 +289,18 @@ where
         // NOTE: this means we currently keep 2x sector size around, to improve speed.
         let mut labels_buffer = vec![0u8; 2 * layer_size];
 
-        // setup hasher to reuse
-        let mut base_hasher = Sha256::new();
-        // hash replica id
-        base_hasher.input(AsRef::<[u8]>::as_ref(replica_id));
-
         for layer in 1..=layers {
             info!("generating layer: {}", layer);
 
             if layer == 1 {
                 let layer_labels = &mut labels_buffer[..layer_size];
                 for node in 0..graph.size() {
-                    create_key(graph, base_hasher.clone(), layer_labels, node)?;
+                    create_key(graph, replica_id, layer_labels, node)?;
                 }
             } else {
                 let (layer_labels, exp_labels) = labels_buffer.split_at_mut(layer_size);
                 for node in 0..graph.size() {
-                    create_key_exp(graph, base_hasher.clone(), exp_labels, layer_labels, node)?;
+                    create_key_exp(graph, replica_id, exp_labels, layer_labels, node)?;
                 }
             }
 
@@ -648,7 +638,7 @@ where
 
 pub fn create_key<H: Hasher, Degree>(
     graph: &StackedBucketGraph<H, Degree>,
-    mut hasher: Sha256,
+    replica_id: &H::Domain,
     layer_labels: &mut [u8],
     node: usize,
 ) -> Result<()>
@@ -656,14 +646,11 @@ where
     Degree: generic_array::ArrayLength<u32> + Sync + Send + Clone + std::ops::Mul<typenum::U32>,
     typenum::Prod<Degree, typenum::U32>: ArrayLength<u8>,
 {
-    // hash node id
-    let node_bytes = (node as u64).to_be_bytes();
+    let mut hasher = Sha256::new();
+    let mut buffer = [0u8; 32];
 
-    unsafe {
-        _mm_prefetch(node_bytes.as_ptr() as *const i8, _MM_HINT_T0);
-    }
-
-    hasher.input(&node_bytes);
+    buffer[..8].copy_from_slice(&(node as u64).to_be_bytes());
+    hasher.input(&[AsRef::<[u8]>::as_ref(replica_id), &buffer[..]][..]);
 
     // hash parents for all non 0 nodes
     if node > 0 {
@@ -673,7 +660,7 @@ where
     // store the newly generated key
     let start = data_at_node_offset(node);
     let end = start + NODE_SIZE;
-    layer_labels[start..end].copy_from_slice(&hasher.result()[..]);
+    layer_labels[start..end].copy_from_slice(&hasher.finish()[..]);
 
     // strip last two bits, to ensure result is in Fr.
     layer_labels[end - 1] &= 0b0011_1111;
@@ -683,7 +670,7 @@ where
 
 pub fn create_key_exp<H: Hasher, Degree>(
     graph: &StackedBucketGraph<H, Degree>,
-    mut hasher: Sha256,
+    replica_id: &H::Domain,
     exp_parents_data: &[u8],
     layer_labels: &mut [u8],
     node: usize,
@@ -692,14 +679,11 @@ where
     Degree: generic_array::ArrayLength<u32> + Sync + Send + Clone + std::ops::Mul<typenum::U32>,
     typenum::Prod<Degree, typenum::U32>: ArrayLength<u8>,
 {
-    // hash node id
-    let node_bytes = (node as u64).to_be_bytes();
+    let mut hasher = Sha256::new();
+    let mut buffer = [0u8; 32];
 
-    unsafe {
-        _mm_prefetch(node_bytes.as_ptr() as *const i8, _MM_HINT_T0);
-    }
-
-    hasher.input(&node_bytes);
+    buffer[..8].copy_from_slice(&(node as u64).to_be_bytes());
+    hasher.input(&[AsRef::<[u8]>::as_ref(replica_id), &buffer[..]][..]);
 
     // hash parents for all non 0 nodes
     if node > 0 {
@@ -715,7 +699,7 @@ where
     // store the newly generated key
     let start = data_at_node_offset(node);
     let end = start + NODE_SIZE;
-    layer_labels[start..end].copy_from_slice(&hasher.result()[..]);
+    layer_labels[start..end].copy_from_slice(&hasher.finish()[..]);
 
     // strip last two bits, to ensure result is in Fr.
     layer_labels[end - 1] &= 0b0011_1111;

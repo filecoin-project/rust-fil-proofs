@@ -28,7 +28,8 @@ clap = "2"
 colored = "1.6"
 aes = "0.3"
 block-modes = "0.3"
-sha2 = { version = "0.8.1", package = "sha2ni" }
+sha2 = { version = "0.8.0", package = "sha2ni" }
+sha2raw = { version = "0.1.0", path = "../sha2raw" }
 pbr = "1.0"
 tempfile = "3"
 tempdir = "0.3.7"

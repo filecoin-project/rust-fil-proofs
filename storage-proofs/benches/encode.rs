@@ -3,7 +3,6 @@ use ff::Field;
 use generic_array::typenum;
 use paired::bls12_381::{Bls12, Fr};
 use rand::thread_rng;
-use sha2::{Digest, Sha256};
 use storage_proofs::drgraph::new_seed;
 use storage_proofs::fr32::fr_into_bytes;
 use storage_proofs::hasher::sha256::Sha256Hasher;
@@ -45,7 +44,7 @@ fn kdf_benchmark(c: &mut Criterion) {
     let mut group = c.benchmark_group("kdf");
     group.sample_size(10);
     group.throughput(Throughput::Bytes(
-        /* replica id + 37 parents + node id + */ 32 + 37 * 32 + 1 * 8,
+        /* replica id + 37 parents + node id + */ 40 * 32,
     ));
 
     group.bench_function("exp", |b| {
@@ -56,13 +55,7 @@ fn kdf_benchmark(c: &mut Criterion) {
         let graph = &graph;
         let replica_id = replica_id.clone();
 
-        b.iter(|| {
-            let mut hasher = Sha256::new();
-            hasher.input(AsRef::<[u8]>::as_ref(&replica_id));
-            hasher.input(&(1u64).to_be_bytes()[..]);
-
-            black_box(create_key_exp(graph, hasher, &*exp_data, data, 1))
-        })
+        b.iter(|| black_box(create_key_exp(graph, &replica_id, &*exp_data, data, 1)))
     });
 
     group.bench_function("non-exp", |b| {
@@ -70,12 +63,7 @@ fn kdf_benchmark(c: &mut Criterion) {
         let graph = &graph;
         let replica_id = replica_id.clone();
 
-        b.iter(|| {
-            let mut hasher = Sha256::new();
-            hasher.input(AsRef::<[u8]>::as_ref(&replica_id));
-
-            black_box(create_key(graph, hasher, &mut data, 1))
-        })
+        b.iter(|| black_box(create_key(graph, &replica_id, &mut data, 1)))
     });
 
     group.finish();
