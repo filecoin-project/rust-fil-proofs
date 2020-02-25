@@ -392,9 +392,6 @@ pub fn seal_commit_phase1<T: AsRef<Path>>(
     )?;
     ensure!(sanity_check, "Invalid vanilla proof generated");
 
-    // Discard cached MTs that are no longer needed.
-    TemporaryAux::<DefaultTreeHasher, DefaultPieceHasher>::clear_temp(t_aux)?;
-
     info!("seal_commit_phase1:end");
 
     Ok(SealCommitPhase1Output {
