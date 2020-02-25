@@ -1,10 +1,5 @@
 use block_buffer::byteorder::{ByteOrder, BE};
 
-#[cfg(target_arch = "x86")]
-use std::arch::x86::{_mm_prefetch, _MM_HINT_T0};
-#[cfg(target_arch = "x86_64")]
-use std::arch::x86_64::{_mm_prefetch, _MM_HINT_T0};
-
 use crate::consts::H256;
 use crate::platform::Implementation;
 
@@ -35,13 +30,7 @@ impl Sha256 {
     pub fn input(&mut self, blocks: &[&[u8]]) {
         assert_eq!(blocks.len() % 2, 0, "invalid block length");
 
-        self.len += blocks.len() as u64 * 256;
-
-        for block in blocks {
-            unsafe {
-                _mm_prefetch(block.as_ptr() as *const i8, _MM_HINT_T0);
-            }
-        }
+        self.len += (blocks.len() as u64) << 8;
 
         IMPL.compress256(&mut self.state, blocks);
     }
