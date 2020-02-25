@@ -126,11 +126,15 @@ where
 pub type StackedBucketGraph<H, Degree> = StackedGraph<H, BucketGraph<H>, Degree>;
 
 macro_rules! read {
-    ($i:expr, $parents:expr, $data:expr, $buffer:expr) => {
+    ($i:expr, $parents:expr, $data:expr, $hasher:expr) => {
         let start0 = $parents[$i] as usize * NODE_SIZE;
         let end0 = start0 + NODE_SIZE;
 
-        $buffer[$i * NODE_SIZE..($i + 1) * NODE_SIZE].copy_from_slice(&$data[start0..end0]);
+        unsafe {
+            _mm_prefetch($data[start0..end0].as_ptr() as *const i8, _MM_HINT_T0);
+        }
+
+        $hasher.input(&$data[start0..end0]);
     };
 }
 
@@ -262,37 +266,59 @@ where
         assert_eq!(cache_parents.len(), 14);
         assert_eq!(total_parents, 37);
 
-        let mut buffer = [0u8; 14 * NODE_SIZE];
+        // let mut buffer = [0u8; 14 * NODE_SIZE];
 
         // fill buffer
-        read!(0, cache_parents, base_data, buffer);
-        read!(1, cache_parents, base_data, buffer);
-        read!(2, cache_parents, base_data, buffer);
-        read!(3, cache_parents, base_data, buffer);
-        read!(4, cache_parents, base_data, buffer);
-        read!(5, cache_parents, base_data, buffer);
+        read!(0, cache_parents, base_data, hasher);
+        read!(1, cache_parents, base_data, hasher);
+        read!(2, cache_parents, base_data, hasher);
+        read!(3, cache_parents, base_data, hasher);
+        read!(4, cache_parents, base_data, hasher);
+        read!(5, cache_parents, base_data, hasher);
 
-        read!(6, cache_parents, exp_data, buffer);
-        read!(7, cache_parents, exp_data, buffer);
-        read!(8, cache_parents, exp_data, buffer);
-        read!(9, cache_parents, exp_data, buffer);
-        read!(10, cache_parents, exp_data, buffer);
-        read!(11, cache_parents, exp_data, buffer);
-        read!(12, cache_parents, exp_data, buffer);
-        read!(13, cache_parents, exp_data, buffer);
-
-        unsafe {
-            _mm_prefetch(buffer.as_ptr() as *const i8, _MM_HINT_T0);
-        }
+        read!(6, cache_parents, exp_data, hasher);
+        read!(7, cache_parents, exp_data, hasher);
+        read!(8, cache_parents, exp_data, hasher);
+        read!(9, cache_parents, exp_data, hasher);
+        read!(10, cache_parents, exp_data, hasher);
+        read!(11, cache_parents, exp_data, hasher);
+        read!(12, cache_parents, exp_data, hasher);
+        read!(13, cache_parents, exp_data, hasher);
 
         // round 1 (14)
-        hasher.input(&buffer[..]);
+        // hasher.input(&buffer[..]);
+        read!(0, cache_parents, base_data, hasher);
+        read!(1, cache_parents, base_data, hasher);
+        read!(2, cache_parents, base_data, hasher);
+        read!(3, cache_parents, base_data, hasher);
+        read!(4, cache_parents, base_data, hasher);
+        read!(5, cache_parents, base_data, hasher);
+
+        read!(6, cache_parents, exp_data, hasher);
+        read!(7, cache_parents, exp_data, hasher);
+        read!(8, cache_parents, exp_data, hasher);
+        read!(9, cache_parents, exp_data, hasher);
+        read!(10, cache_parents, exp_data, hasher);
+        read!(11, cache_parents, exp_data, hasher);
+        read!(12, cache_parents, exp_data, hasher);
+        read!(13, cache_parents, exp_data, hasher);
 
         // round 2 (14)
-        hasher.input(&buffer[..]);
+        // hasher.input(&buffer[..]);
 
         // round 3 (9)
-        hasher.input(&buffer[..9 * NODE_SIZE]);
+        read!(0, cache_parents, base_data, hasher);
+        read!(1, cache_parents, base_data, hasher);
+        read!(2, cache_parents, base_data, hasher);
+        read!(3, cache_parents, base_data, hasher);
+        read!(4, cache_parents, base_data, hasher);
+        read!(5, cache_parents, base_data, hasher);
+
+        read!(6, cache_parents, exp_data, hasher);
+        read!(7, cache_parents, exp_data, hasher);
+        read!(8, cache_parents, exp_data, hasher);
+
+        // hasher.input(&buffer[..9 * NODE_SIZE]);
     }
 
     fn copy_parents_data_inner(
@@ -307,40 +333,67 @@ where
         assert_eq!(cache_parents.len(), 14);
         assert_eq!(total_parents, 37);
 
-        let mut buffer = [0u8; 6 * NODE_SIZE];
+        // let mut buffer = [0u8; 6 * NODE_SIZE];
 
         // fill buffer
-        read!(0, cache_parents, base_data, buffer);
-        read!(1, cache_parents, base_data, buffer);
-        read!(2, cache_parents, base_data, buffer);
-        read!(3, cache_parents, base_data, buffer);
-        read!(4, cache_parents, base_data, buffer);
-        read!(5, cache_parents, base_data, buffer);
-
-        unsafe {
-            _mm_prefetch(buffer.as_ptr() as *const i8, _MM_HINT_T0);
-        }
+        read!(0, cache_parents, base_data, hasher);
+        read!(1, cache_parents, base_data, hasher);
+        read!(2, cache_parents, base_data, hasher);
+        read!(3, cache_parents, base_data, hasher);
+        read!(4, cache_parents, base_data, hasher);
+        read!(5, cache_parents, base_data, hasher);
 
         // round 1 (0..6)
-        hasher.input(&buffer[..]);
+        // hasher.input(&buffer[..]);
 
         // round 2 (6..12)
-        hasher.input(&buffer[..]);
+        // hasher.input(&buffer[..]);
+        read!(0, cache_parents, base_data, hasher);
+        read!(1, cache_parents, base_data, hasher);
+        read!(2, cache_parents, base_data, hasher);
+        read!(3, cache_parents, base_data, hasher);
+        read!(4, cache_parents, base_data, hasher);
+        read!(5, cache_parents, base_data, hasher);
 
         // round 3 (12..18)
-        hasher.input(&buffer[..]);
+        // hasher.input(&buffer[..]);
+        read!(0, cache_parents, base_data, hasher);
+        read!(1, cache_parents, base_data, hasher);
+        read!(2, cache_parents, base_data, hasher);
+        read!(3, cache_parents, base_data, hasher);
+        read!(4, cache_parents, base_data, hasher);
+        read!(5, cache_parents, base_data, hasher);
 
         // round 4 (18..24)
-        hasher.input(&buffer[..]);
+        // hasher.input(&buffer[..]);
+        read!(0, cache_parents, base_data, hasher);
+        read!(1, cache_parents, base_data, hasher);
+        read!(2, cache_parents, base_data, hasher);
+        read!(3, cache_parents, base_data, hasher);
+        read!(4, cache_parents, base_data, hasher);
+        read!(5, cache_parents, base_data, hasher);
 
         // round 5 (24..30)
-        hasher.input(&buffer[..]);
+        // hasher.input(&buffer[..]);
+        read!(0, cache_parents, base_data, hasher);
+        read!(1, cache_parents, base_data, hasher);
+        read!(2, cache_parents, base_data, hasher);
+        read!(3, cache_parents, base_data, hasher);
+        read!(4, cache_parents, base_data, hasher);
+        read!(5, cache_parents, base_data, hasher);
 
         // round 6 (30..36)
-        hasher.input(&buffer[..]);
+        // hasher.input(&buffer[..]);
+        read!(0, cache_parents, base_data, hasher);
+        read!(1, cache_parents, base_data, hasher);
+        read!(2, cache_parents, base_data, hasher);
+        read!(3, cache_parents, base_data, hasher);
+        read!(4, cache_parents, base_data, hasher);
+        read!(5, cache_parents, base_data, hasher);
 
         // round 7 (37)
-        hasher.input(&buffer[..1 * NODE_SIZE]);
+        // hasher.input(&buffer[..1 * NODE_SIZE]);
+        read!(0, cache_parents, base_data, hasher);
     }
 }
 
