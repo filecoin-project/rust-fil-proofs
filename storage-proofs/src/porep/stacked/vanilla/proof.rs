@@ -2,6 +2,11 @@ use std::collections::HashMap;
 use std::marker::PhantomData;
 use std::path::PathBuf;
 
+#[cfg(target_arch = "x86")]
+use std::arch::x86::*;
+#[cfg(target_arch = "x86_64")]
+use std::arch::x86_64::*;
+
 use generic_array::{typenum, ArrayLength};
 use log::{info, trace};
 use merkletree::merkle::{
@@ -654,6 +659,12 @@ where
 
     // hash parents for all non 0 nodes
     if node > 0 {
+        // prefetch previous node, which is always a parent
+        let prev = &layer_labels[(node - 1) * NODE_SIZE..node * NODE_SIZE];
+        unsafe {
+            _mm_prefetch(prev.as_ptr() as *const i8, _MM_HINT_T0);
+        }
+
         graph.copy_parents_data(node as u32, &*layer_labels, &mut hasher, TOTAL_PARENTS);
     }
 
@@ -687,6 +698,12 @@ where
 
     // hash parents for all non 0 nodes
     if node > 0 {
+        // prefetch previous node, which is always a parent
+        let prev = &layer_labels[(node - 1) * NODE_SIZE..node * NODE_SIZE];
+        unsafe {
+            _mm_prefetch(prev.as_ptr() as *const i8, _MM_HINT_T0);
+        }
+
         graph.copy_parents_data_exp(
             node as u32,
             &*layer_labels,

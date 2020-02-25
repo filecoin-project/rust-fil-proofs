@@ -2,6 +2,11 @@ use std::collections::HashMap;
 use std::marker::PhantomData;
 use std::sync::{Arc, RwLock};
 
+#[cfg(target_arch = "x86")]
+use std::arch::x86::*;
+#[cfg(target_arch = "x86_64")]
+use std::arch::x86_64::*;
+
 use anyhow::ensure;
 use generic_array::ArrayLength;
 use lazy_static::lazy_static;
@@ -125,7 +130,12 @@ macro_rules! read {
         let start0 = $parents[$i] as usize * NODE_SIZE;
         let end0 = start0 + NODE_SIZE;
 
-        &$data[start0..end0]
+        let res = &$data[start0..end0];
+        unsafe {
+            _mm_prefetch(res.as_ptr() as *const i8, _MM_HINT_T0);
+        }
+
+        res
     }};
 }
 
@@ -274,26 +284,6 @@ where
             read!(12, cache_parents, exp_data),
             read!(13, cache_parents, exp_data),
         ];
-        unsafe {
-            #[cfg(target_arch = "x86")]
-            use std::arch::x86::*;
-            #[cfg(target_arch = "x86_64")]
-            use std::arch::x86_64::*;
-
-            _mm_prefetch(parents[0].as_ptr() as *const i8, _MM_HINT_T0);
-            _mm_prefetch(parents[1].as_ptr() as *const i8, _MM_HINT_T0);
-            _mm_prefetch(parents[2].as_ptr() as *const i8, _MM_HINT_T0);
-            _mm_prefetch(parents[3].as_ptr() as *const i8, _MM_HINT_T0);
-            _mm_prefetch(parents[4].as_ptr() as *const i8, _MM_HINT_T0);
-            _mm_prefetch(parents[5].as_ptr() as *const i8, _MM_HINT_T0);
-            _mm_prefetch(parents[7].as_ptr() as *const i8, _MM_HINT_T0);
-            _mm_prefetch(parents[8].as_ptr() as *const i8, _MM_HINT_T0);
-            _mm_prefetch(parents[9].as_ptr() as *const i8, _MM_HINT_T0);
-            _mm_prefetch(parents[10].as_ptr() as *const i8, _MM_HINT_T0);
-            _mm_prefetch(parents[11].as_ptr() as *const i8, _MM_HINT_T0);
-            _mm_prefetch(parents[12].as_ptr() as *const i8, _MM_HINT_T0);
-            _mm_prefetch(parents[13].as_ptr() as *const i8, _MM_HINT_T0);
-        }
 
         // round 1 (14)
         hasher.input(&parents);
@@ -327,19 +317,6 @@ where
             read!(4, cache_parents, base_data),
             read!(5, cache_parents, base_data),
         ];
-        unsafe {
-            #[cfg(target_arch = "x86")]
-            use std::arch::x86::*;
-            #[cfg(target_arch = "x86_64")]
-            use std::arch::x86_64::*;
-
-            _mm_prefetch(parents[0].as_ptr() as *const i8, _MM_HINT_T0);
-            _mm_prefetch(parents[1].as_ptr() as *const i8, _MM_HINT_T0);
-            _mm_prefetch(parents[2].as_ptr() as *const i8, _MM_HINT_T0);
-            _mm_prefetch(parents[3].as_ptr() as *const i8, _MM_HINT_T0);
-            _mm_prefetch(parents[4].as_ptr() as *const i8, _MM_HINT_T0);
-            _mm_prefetch(parents[5].as_ptr() as *const i8, _MM_HINT_T0);
-        }
 
         // round 1 (0..6)
         hasher.input(&parents);
