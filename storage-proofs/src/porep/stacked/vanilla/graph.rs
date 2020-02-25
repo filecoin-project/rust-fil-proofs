@@ -125,17 +125,23 @@ where
 
 pub type StackedBucketGraph<H, Degree> = StackedGraph<H, BucketGraph<H>, Degree>;
 
+macro_rules! prefetch {
+    ($i:expr, $parents:expr, $data:expr) => {{
+        let start0 = $parents[$i] as usize * NODE_SIZE;
+        let end0 = start0 + NODE_SIZE;
+
+        unsafe {
+            _mm_prefetch($data[start0..end0].as_ptr() as *const i8, _MM_HINT_T0);
+        }
+    }};
+}
+
 macro_rules! read {
     ($i:expr, $parents:expr, $data:expr) => {{
         let start0 = $parents[$i] as usize * NODE_SIZE;
         let end0 = start0 + NODE_SIZE;
 
-        let res = &$data[start0..end0];
-        unsafe {
-            _mm_prefetch(res.as_ptr() as *const i8, _MM_HINT_T0);
-        }
-
-        res
+        &$data[start0..end0]
     }};
 }
 
@@ -267,6 +273,21 @@ where
         assert_eq!(cache_parents.len(), 14);
         assert_eq!(total_parents, 37);
 
+        prefetch!(0, cache_parents, base_data);
+        prefetch!(1, cache_parents, base_data);
+        prefetch!(2, cache_parents, base_data);
+        prefetch!(3, cache_parents, base_data);
+        prefetch!(4, cache_parents, base_data);
+        prefetch!(5, cache_parents, base_data);
+        prefetch!(6, cache_parents, exp_data);
+        prefetch!(7, cache_parents, exp_data);
+        prefetch!(8, cache_parents, exp_data);
+        prefetch!(9, cache_parents, exp_data);
+        prefetch!(10, cache_parents, exp_data);
+        prefetch!(11, cache_parents, exp_data);
+        prefetch!(12, cache_parents, exp_data);
+        prefetch!(13, cache_parents, exp_data);
+
         // fill buffer
         let parents = [
             read!(0, cache_parents, base_data),
@@ -307,6 +328,13 @@ where
         assert_eq!(base_degree, 6);
         assert_eq!(cache_parents.len(), 14);
         assert_eq!(total_parents, 37);
+
+        prefetch!(0, cache_parents, base_data);
+        prefetch!(1, cache_parents, base_data);
+        prefetch!(2, cache_parents, base_data);
+        prefetch!(3, cache_parents, base_data);
+        prefetch!(4, cache_parents, base_data);
+        prefetch!(5, cache_parents, base_data);
 
         // fill buffer
         let parents = [
