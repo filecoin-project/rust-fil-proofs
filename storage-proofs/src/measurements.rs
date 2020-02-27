@@ -38,6 +38,8 @@ pub struct OpMeasurement {
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum Operation {
+    AddPiece,
+    GeneratePieceCommitment,
     GenerateTreeC,
     GenerateTreeRLast,
     CommD,

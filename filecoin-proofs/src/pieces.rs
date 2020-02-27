@@ -1,8 +1,11 @@
-use std::io::Cursor;
+use std::collections::HashMap;
 use std::io::Read;
+use std::io::{self, Cursor};
 use std::iter::Iterator;
+use std::sync::Mutex;
 
 use anyhow::{ensure, Context, Result};
+use lazy_static::lazy_static;
 use log::info;
 use storage_proofs::hasher::{HashFunction, Hasher};
 use storage_proofs::util::NODE_SIZE;
@@ -26,9 +29,60 @@ pub fn verify_pieces(
     Ok(&comm_d_calculated == comm_d)
 }
 
+lazy_static! {
+    static ref COMMITMENTS: Mutex<HashMap<SectorSize, Commitment>> = Mutex::new(HashMap::new());
+}
+use crate::commitment_reader::CommitmentReader;
+use crate::pad_reader::PadReader;
+
+#[derive(Debug, Clone)]
+struct EmptySource {
+    size: usize,
+}
+
+impl EmptySource {
+    pub fn new(size: usize) -> Self {
+        EmptySource { size }
+    }
+}
+
+impl Read for EmptySource {
+    fn read(&mut self, target: &mut [u8]) -> io::Result<usize> {
+        let to_read = std::cmp::min(self.size, target.len());
+        self.size -= to_read;
+        for val in target {
+            *val = 0;
+        }
+
+        Ok(to_read)
+    }
+}
+
+fn empty_comm_d(sector_size: SectorSize) -> Commitment {
+    let map = &mut *COMMITMENTS.lock().unwrap();
+
+    *map.entry(sector_size).or_insert_with(|| {
+        let size: UnpaddedBytesAmount = sector_size.into();
+        let pad_reader = PadReader::new(EmptySource::new(size.into()));
+        let mut commitment_reader = CommitmentReader::new(pad_reader);
+        io::copy(&mut commitment_reader, &mut io::sink()).unwrap();
+
+        let mut comm = [0u8; 32];
+        comm.copy_from_slice(
+            commitment_reader
+                .finish()
+                .expect("failed to create commitment")
+                .as_ref(),
+        );
+        comm
+    })
+}
+
 pub fn compute_comm_d(sector_size: SectorSize, piece_infos: &[PieceInfo]) -> Result<Commitment> {
     info!("verifying {} pieces", piece_infos.len());
-    ensure!(!piece_infos.is_empty(), "Missing piece infos");
+    if piece_infos.is_empty() {
+        return Ok(empty_comm_d(sector_size));
+    }
 
     let unpadded_sector: UnpaddedBytesAmount = sector_size.into();
 
@@ -182,7 +236,7 @@ fn join_piece_infos(mut left: PieceInfo, right: PieceInfo) -> Result<PieceInfo> 
     Ok(left)
 }
 
-fn piece_hash(a: &[u8], b: &[u8]) -> <DefaultPieceHasher as Hasher>::Domain {
+pub(crate) fn piece_hash(a: &[u8], b: &[u8]) -> <DefaultPieceHasher as Hasher>::Domain {
     let mut buf = [0u8; NODE_SIZE * 2];
     buf[..NODE_SIZE].copy_from_slice(a);
     buf[NODE_SIZE..].copy_from_slice(b);
@@ -307,7 +361,31 @@ mod tests {
     use storage_proofs::drgraph::{new_seed, Graph};
     use storage_proofs::stacked::StackedBucketGraph;
 
-    use std::io::{Seek, SeekFrom};
+    #[test]
+    fn test_empty_source() {
+        let mut source = EmptySource::new(12);
+        let mut target = Vec::new();
+        source.read_to_end(&mut target).unwrap();
+        assert_eq!(target, vec![0u8; 12]);
+    }
+
+    #[test]
+    fn test_compute_comm_d_empty() {
+        let comm_d = compute_comm_d(SectorSize(2048), &[]).unwrap();
+        assert_eq!(
+            comm_d,
+            [
+                252, 126, 146, 130, 150, 229, 22, 250, 173, 233, 134, 178, 143, 146, 212, 74, 79,
+                36, 185, 53, 72, 82, 35, 55, 106, 121, 144, 39, 188, 24, 248, 51
+            ]
+        );
+
+        let comm_d = compute_comm_d(SectorSize(128), &[]).unwrap();
+        assert_eq!(
+            hex::encode(&comm_d),
+            "3731bb99ac689f66eef5973e4a94da188f4ddcae580724fc6f3fd60dfd488333",
+        );
+    }
 
     #[test]
     fn test_get_piece_alignment() {
@@ -634,15 +712,12 @@ mod tests {
 
         for (i, piece_size) in piece_sizes.iter().enumerate() {
             let piece_size_u = u64::from(*piece_size) as usize;
-            let mut piece_bytes = vec![1u8; piece_size_u];
+            let mut piece_bytes = vec![255u8; piece_size_u];
             rng.fill_bytes(&mut piece_bytes);
 
             let mut piece_file = std::io::Cursor::new(&mut piece_bytes);
 
-            let piece_info = crate::api::generate_piece_commitment(&mut piece_file, *piece_size)?;
-            piece_file.seek(SeekFrom::Start(0))?;
-
-            crate::api::add_piece(
+            let piece_info = crate::api::add_piece(
                 &mut piece_file,
                 &mut staged_sector_io,
                 *piece_size,

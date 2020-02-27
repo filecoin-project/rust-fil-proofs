@@ -89,6 +89,10 @@ pub struct FlarpOutputs {
     tree_r_last_wall_time_ms: u64,
     window_comm_leaves_time_cpu_time_ms: u64,
     window_comm_leaves_time_wall_time_ms: u64,
+    add_piece_cpu_time_ms: u64,
+    add_piece_wall_time_ms: u64,
+    generate_piece_commitment_cpu_time_ms: u64,
+    generate_piece_commitment_wall_time_ms: u64,
     #[serde(flatten)]
     circuits: CircuitOutputs,
 }
@@ -157,6 +161,14 @@ fn augment_with_op_measurements(mut output: &mut FlarpOutputs) {
                 output.post_partial_ticket_hash_cpu_time_ms = cpu_time;
                 output.post_partial_ticket_hash_time_ms = wall_time;
             }
+            AddPiece => {
+                output.add_piece_cpu_time_ms = cpu_time;
+                output.add_piece_wall_time_ms = wall_time;
+            }
+            GeneratePieceCommitment => {
+                output.generate_piece_commitment_cpu_time_ms = cpu_time;
+                output.generate_piece_commitment_wall_time_ms = wall_time;
+            }
         }
     }
 }
@@ -183,6 +195,7 @@ pub fn run(
     skip_seal_proof: bool,
     skip_post_proof: bool,
     only_replicate: bool,
+    only_add_piece: bool,
 ) -> Metadata<FlarpReport> {
     configure_global_config(&inputs);
 
@@ -192,15 +205,15 @@ pub fn run(
 
     assert!(inputs.num_sectors > 0, "Missing num_sectors");
 
-    let (cfg, created, replica_measurement) =
-        create_replicas(sector_size, inputs.num_sectors as usize);
+    let (cfg, repls) = create_replicas(sector_size, inputs.num_sectors as usize, only_add_piece);
 
-    if only_replicate {
+    if only_add_piece || only_replicate {
         augment_with_op_measurements(&mut outputs);
         return Metadata::wrap(FlarpReport { inputs, outputs })
             .expect("failed to retrieve metadata");
     }
 
+    let (created, replica_measurement) = repls.unwrap();
     generate_params(&inputs);
 
     if !skip_seal_proof {

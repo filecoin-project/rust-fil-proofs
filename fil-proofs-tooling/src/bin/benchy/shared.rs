@@ -9,9 +9,8 @@ use fil_proofs_tooling::{measure, FuncMeasurement};
 use filecoin_proofs::constants::POREP_PARTITIONS;
 use filecoin_proofs::types::{PaddedBytesAmount, PoRepConfig, SectorSize, UnpaddedBytesAmount};
 use filecoin_proofs::{
-    add_piece, generate_piece_commitment, seal_pre_commit_phase1, seal_pre_commit_phase2,
-    validate_cache_for_precommit_phase2, PieceInfo, PoRepProofPartitions, PrivateReplicaInfo,
-    PublicReplicaInfo, SealPreCommitOutput,
+    add_piece, seal_pre_commit_phase1, seal_pre_commit_phase2, validate_cache_for_precommit_phase2,
+    PieceInfo, PoRepProofPartitions, PrivateReplicaInfo, PublicReplicaInfo, SealPreCommitOutput,
 };
 use storage_proofs::sector::SectorId;
 
@@ -26,7 +25,7 @@ pub struct PreCommitReplicaOutput {
     pub public_replica_info: PublicReplicaInfo,
 }
 
-pub fn create_piece(piece_bytes: UnpaddedBytesAmount) -> (NamedTempFile, PieceInfo) {
+pub fn create_piece(piece_bytes: UnpaddedBytesAmount) -> NamedTempFile {
     info!("create_piece");
     let mut file = NamedTempFile::new().expect("failed to create piece file");
     {
@@ -57,24 +56,19 @@ pub fn create_piece(piece_bytes: UnpaddedBytesAmount) -> (NamedTempFile, PieceIn
         .seek(SeekFrom::Start(0))
         .expect("failed to seek to beginning of piece file");
 
-    info!("generating piece commitment");
-    let info = generate_piece_commitment(file.as_file_mut(), piece_bytes)
-        .expect("failed to generate piece commitment");
-
-    file.as_file_mut()
-        .seek(SeekFrom::Start(0))
-        .expect("failed to seek to beginning of piece file");
-
-    (file, info)
+    file
 }
 
 pub fn create_replicas(
     sector_size: SectorSize,
     qty_sectors: usize,
+    only_add: bool,
 ) -> (
     PoRepConfig,
-    Vec<(SectorId, PreCommitReplicaOutput)>,
-    FuncMeasurement<Vec<SealPreCommitOutput>>,
+    Option<(
+        Vec<(SectorId, PreCommitReplicaOutput)>,
+        FuncMeasurement<Vec<SealPreCommitOutput>>,
+    )>,
 ) {
     info!("creating replicas: {:?} - {}", sector_size, qty_sectors);
     let sector_size_unpadded_bytes_ammount =
@@ -115,30 +109,35 @@ pub fn create_replicas(
         staged_files.push(staged_file);
     }
 
-    let (piece_files, piece_infos): (Vec<_>, Vec<_>) = (0..qty_sectors)
+    let piece_files: Vec<_> = (0..qty_sectors)
         .into_par_iter()
         .map(|_i| {
-            let (piece_file, piece_info) = create_piece(UnpaddedBytesAmount::from(
-                PaddedBytesAmount::from(sector_size),
-            ));
-            (piece_file, vec![piece_info])
+            create_piece(UnpaddedBytesAmount::from(PaddedBytesAmount::from(
+                sector_size,
+            )))
         })
-        .unzip();
+        .collect();
 
     info!("adding pieces");
+    let mut piece_infos = Vec::new();
     for (i, (mut piece_file, mut staged_file)) in piece_files
         .into_iter()
         .zip(staged_files.iter_mut())
         .enumerate()
     {
         info!("add piece {}", i);
-        add_piece(
+        let info = add_piece(
             &mut piece_file,
             &mut staged_file,
             sector_size_unpadded_bytes_ammount,
             &[],
         )
         .unwrap();
+        piece_infos.push(vec![info]);
+    }
+
+    if only_add {
+        return (porep_config, None);
     }
 
     let seal_pre_commit_outputs = measure(|| {
@@ -213,5 +212,5 @@ pub fn create_replicas(
         ));
     }
 
-    (porep_config, out, seal_pre_commit_outputs)
+    (porep_config, Some((out, seal_pre_commit_outputs)))
 }
