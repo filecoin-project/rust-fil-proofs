@@ -126,7 +126,7 @@ pub fn create_replicas(
         .enumerate()
     {
         info!("add piece {}", i);
-        let info = add_piece(
+        let (info, _) = add_piece(
             &mut piece_file,
             &mut staged_file,
             sector_size_unpadded_bytes_ammount,
