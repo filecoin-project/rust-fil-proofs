@@ -1,7 +1,7 @@
 use crate::fr32::unpadded_bytes;
 use crate::types::*;
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct SectorSize(pub u64);
 
 impl From<SectorSize> for UnpaddedBytesAmount {
