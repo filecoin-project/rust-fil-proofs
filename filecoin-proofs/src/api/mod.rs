@@ -175,7 +175,7 @@ pub fn add_piece<R, W>(
     target: W,
     piece_size: UnpaddedBytesAmount,
     piece_lengths: &[UnpaddedBytesAmount],
-) -> Result<PieceInfo>
+) -> Result<(PieceInfo, UnpaddedBytesAmount)>
 where
     R: Read,
     W: Write,
@@ -214,7 +214,9 @@ where
         let mut comm = [0u8; 32];
         comm.copy_from_slice(commitment.as_ref());
 
-        PieceInfo::new(comm, n)
+        let written = piece_alignment.left_bytes + piece_alignment.right_bytes + piece_size;
+
+        Ok((PieceInfo::new(comm, n)?, written))
     })
 }
 
@@ -253,7 +255,7 @@ pub fn write_and_preprocess<R, W>(
     source: R,
     target: W,
     piece_size: UnpaddedBytesAmount,
-) -> Result<PieceInfo>
+) -> Result<(PieceInfo, UnpaddedBytesAmount)>
 where
     R: Read,
     W: Write,

@@ -717,7 +717,7 @@ mod tests {
 
             let mut piece_file = std::io::Cursor::new(&mut piece_bytes);
 
-            let piece_info = crate::api::add_piece(
+            let (piece_info, _) = crate::api::add_piece(
                 &mut piece_file,
                 &mut staged_sector_io,
                 *piece_size,
