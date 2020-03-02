@@ -2,6 +2,13 @@
 #![allow(clippy::unreadable_literal)]
 #![allow(clippy::type_repetition_in_bounds)]
 
+#[cfg(feature = "jemalloc")]
+use jemallocator::Jemalloc;
+
+#[cfg(feature = "jemalloc")]
+#[global_allocator]
+static GLOBAL: Jemalloc = Jemalloc;
+
 #[macro_use]
 pub mod test_helper;
 pub mod example_helper;
