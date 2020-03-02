@@ -59,17 +59,15 @@ cpu-time = "1.0.0"
 neptune = "0.5.1"
 quote = "=1.0.2"
 core_affinity = "0.5.10"
-jemallocator = { version = "0.3.2", optional = true }
 
 [features]
-default = ["gpu", "jemalloc"]
+default = ["gpu"]
 simd = []
 asm = ["sha2/sha2-asm"]
 big-sector-sizes-bench = []
 gpu = ["bellperson/gpu", "fil-sapling-crypto/gpu"]
 measurements = []
 profile = ["measurements"]
-jemalloc = ["jemallocator"]
 
 [dev-dependencies]
 proptest = "0.7"
