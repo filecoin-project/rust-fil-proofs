@@ -4,32 +4,30 @@
 
 #[macro_use]
 pub mod test_helper;
-
 pub mod example_helper;
 
-pub mod circuit;
+pub mod cache_key;
 pub mod compound_proof;
 pub mod crypto;
-pub mod drgporep;
 pub mod drgraph;
 pub mod error;
 pub mod fr32;
 pub mod hasher;
 pub mod measurements;
 pub mod merkle;
-pub mod merklepor;
 pub mod parameter_cache;
 pub mod partitions;
 pub mod pieces;
+pub mod por;
 pub mod porep;
 pub mod post;
 pub mod proof;
 pub mod sector;
 pub mod settings;
-pub mod stacked;
 pub mod util;
 
 pub mod gadgets;
+pub mod multi_proof;
 
 mod data;
 mod encode;

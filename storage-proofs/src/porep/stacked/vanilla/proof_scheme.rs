@@ -2,16 +2,17 @@ use anyhow::ensure;
 use log::trace;
 use rayon::prelude::*;
 
-use crate::drgraph::Graph;
-use crate::error::Result;
-use crate::hasher::{HashFunction, Hasher};
-use crate::proof::ProofScheme;
-use crate::stacked::{
+use super::{
     challenges::ChallengeRequirements,
     graph::StackedBucketGraph,
     params::{PrivateInputs, Proof, PublicInputs, PublicParams, SetupParams},
     proof::StackedDrg,
 };
+
+use crate::drgraph::Graph;
+use crate::error::Result;
+use crate::hasher::{HashFunction, Hasher};
+use crate::proof::ProofScheme;
 
 impl<'a, 'c, H: 'static + Hasher, G: 'static + Hasher> ProofScheme<'a> for StackedDrg<'c, H, G> {
     type PublicParams = PublicParams<H>;

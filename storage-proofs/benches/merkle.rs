@@ -4,7 +4,7 @@ use rand::{thread_rng, Rng};
 use storage_proofs::drgraph::{new_seed, Graph, BASE_DEGREE};
 use storage_proofs::hasher::blake2s::Blake2sHasher;
 use storage_proofs::hasher::pedersen::PedersenHasher;
-use storage_proofs::stacked::{StackedBucketGraph, EXP_DEGREE};
+use storage_proofs::porep::stacked::{StackedBucketGraph, EXP_DEGREE};
 
 fn merkle_benchmark(c: &mut Criterion) {
     #[cfg(feature = "big-sector-sizes-bench")]

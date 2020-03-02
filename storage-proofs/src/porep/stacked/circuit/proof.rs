@@ -6,18 +6,20 @@ use fil_sapling_crypto::jubjub::JubjubEngine;
 use generic_array::typenum;
 use paired::bls12_381::{Bls12, Fr};
 
-use crate::circuit::{por::PoRCompound, stacked::params::Proof};
+use super::params::Proof;
+
 use crate::compound_proof::{CircuitComponent, CompoundProof};
 use crate::crypto::pedersen::JJ_PARAMS;
 use crate::drgraph::Graph;
 use crate::error::Result;
 use crate::fr32::fr_into_bytes;
 use crate::gadgets::constraint;
+use crate::gadgets::por::PoRCompound;
 use crate::hasher::{HashFunction, Hasher};
-use crate::merklepor;
 use crate::parameter_cache::{CacheableParameters, ParameterSetMetadata};
+use crate::por;
+use crate::porep::stacked::StackedDrg;
 use crate::proof::ProofScheme;
-use crate::stacked::StackedDrg;
 use crate::util::bytes_into_boolean_vec_be;
 
 /// Stacked DRG based Proof of Replication.
@@ -204,13 +206,13 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher>
         let comm_r = pub_in.tau.as_ref().expect("missing tau").comm_r;
         inputs.push(comm_r.into());
 
-        let por_params = merklepor::MerklePoR::<H, typenum::U2>::setup(&merklepor::SetupParams {
+        let por_params = por::PoR::<H, typenum::U2>::setup(&por::SetupParams {
             leaves: graph.size(),
             private: true,
         })?;
 
         let generate_inclusion_inputs = |c: usize| {
-            let pub_inputs = merklepor::PublicInputs::<H::Domain> {
+            let pub_inputs = por::PublicInputs::<H::Domain> {
                 challenge: c,
                 commitment: None,
             };
@@ -222,7 +224,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher>
 
         for challenge in all_challenges.into_iter() {
             // comm_d_proof
-            let pub_inputs = merklepor::PublicInputs::<H::Domain> {
+            let pub_inputs = por::PublicInputs::<H::Domain> {
                 challenge,
                 commitment: None,
             };
@@ -316,19 +318,21 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher>
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::cache_key::CacheKey;
     use crate::compound_proof;
     use crate::drgraph::{new_seed, BASE_DEGREE};
     use crate::fr32::fr_into_bytes;
     use crate::gadgets::{MetricCS, TestConstraintSystem};
     use crate::hasher::{Hasher, PedersenHasher, PoseidonHasher, Sha256Hasher};
+    use crate::porep::stacked::{
+        ChallengeRequirements, LayerChallenges, PrivateInputs, PublicInputs, SetupParams,
+        TemporaryAux, TemporaryAuxCache, BINARY_ARITY, EXP_DEGREE,
+    };
     use crate::porep::PoRep;
     use crate::proof::ProofScheme;
-    use crate::stacked::{
-        ChallengeRequirements, LayerChallenges, PrivateInputs, PublicInputs, SetupParams,
-        EXP_DEGREE,
-    };
 
     use ff::Field;
+    use merkletree::store::StoreConfig;
     use rand::{Rng, SeedableRng};
     use rand_xorshift::XorShiftRng;
 
@@ -343,9 +347,6 @@ mod tests {
     }
 
     fn stacked_input_circuit<H: Hasher + 'static>(expected_constraints: usize) {
-        use crate::stacked::{CacheKey, TemporaryAux, TemporaryAuxCache, BINARY_ARITY};
-        use merkletree::store::StoreConfig;
-
         let nodes = 64;
         let degree = BASE_DEGREE;
         let expansion_degree = EXP_DEGREE;
@@ -509,7 +510,6 @@ mod tests {
 
     fn stacked_test_compound<H: 'static + Hasher>() {
         let nodes = 64;
-        use crate::stacked::{TemporaryAux, TemporaryAuxCache};
 
         let degree = 3;
         let expansion_degree = 2;
@@ -541,8 +541,6 @@ mod tests {
 
         // MT for original data is always named tree-d, and it will be
         // referenced later in the process as such.
-        use crate::stacked::{CacheKey, BINARY_ARITY};
-        use merkletree::store::StoreConfig;
         let cache_dir = tempfile::tempdir().unwrap();
         let config = StoreConfig::new(
             cache_dir.path(),

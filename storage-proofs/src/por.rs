@@ -90,13 +90,13 @@ pub struct SetupParams {
 
 /// Merkle tree based proof of retrievability.
 #[derive(Debug, Default)]
-pub struct MerklePoR<H: Hasher, U: typenum::Unsigned> {
+pub struct PoR<H: Hasher, U: typenum::Unsigned> {
     _h: PhantomData<H>,
     _u: PhantomData<U>,
 }
 
 impl<'a, H: 'a + Hasher, U: 'a + typenum::Unsigned + Sync + Send + Clone> ProofScheme<'a>
-    for MerklePoR<H, U>
+    for PoR<H, U>
 {
     type PublicParams = PublicParams;
     type SetupParams = SetupParams;
@@ -203,11 +203,11 @@ mod tests {
 
         let priv_inputs = PrivateInputs::<H, U>::new(leaf, &tree);
 
-        let proof = MerklePoR::<H, U>::prove(&pub_params, &pub_inputs, &priv_inputs)
-            .expect("proving failed");
+        let proof =
+            PoR::<H, U>::prove(&pub_params, &pub_inputs, &priv_inputs).expect("proving failed");
 
-        let is_valid = MerklePoR::<H, U>::verify(&pub_params, &pub_inputs, &proof)
-            .expect("verification failed");
+        let is_valid =
+            PoR::<H, U>::verify(&pub_params, &pub_inputs, &proof).expect("verification failed");
 
         assert!(is_valid);
     }
@@ -298,7 +298,7 @@ mod tests {
         let bad_proof = make_bogus_proof::<H, U>(&pub_inputs, rng);
 
         let verified =
-            MerklePoR::verify(&pub_params, &pub_inputs, &bad_proof).expect("verification failed");
+            PoR::verify(&pub_params, &pub_inputs, &bad_proof).expect("verification failed");
 
         // A bad proof should not be verified!
         assert!(!verified);
@@ -375,15 +375,15 @@ mod tests {
 
         let priv_inputs = PrivateInputs::<H, U>::new(leaf, &tree);
 
-        let proof = MerklePoR::<H, U>::prove(&pub_params, &pub_inputs, &priv_inputs)
-            .expect("proving failed");
+        let proof =
+            PoR::<H, U>::prove(&pub_params, &pub_inputs, &priv_inputs).expect("proving failed");
 
         let different_pub_inputs = PublicInputs {
             challenge: 999,
             commitment: Some(tree.root()),
         };
 
-        let verified = MerklePoR::<H, U>::verify(&pub_params, &different_pub_inputs, &proof)
+        let verified = PoR::<H, U>::verify(&pub_params, &different_pub_inputs, &proof)
             .expect("verification failed");
 
         // A proof created with a the wrong challenge not be verified!

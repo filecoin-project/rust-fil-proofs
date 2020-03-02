@@ -359,7 +359,7 @@ mod tests {
     use rand::{Rng, RngCore, SeedableRng};
     use rand_xorshift::XorShiftRng;
     use storage_proofs::drgraph::{new_seed, Graph};
-    use storage_proofs::stacked::StackedBucketGraph;
+    use storage_proofs::porep::stacked::StackedBucketGraph;
 
     #[test]
     fn test_empty_source() {

@@ -55,7 +55,7 @@ mod tests {
     use crate::crypto::pedersen::JJ_PARAMS;
     use crate::gadgets::TestConstraintSystem;
     use crate::hasher::{HashFunction, Hasher, PedersenHasher};
-    use crate::stacked::hash::hash_single_column as vanilla_hash_single_column;
+    use crate::porep::stacked::vanilla::hash::hash_single_column as vanilla_hash_single_column;
 
     #[test]
     fn test_hash2_circuit() {

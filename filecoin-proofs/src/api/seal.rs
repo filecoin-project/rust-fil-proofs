@@ -9,19 +9,19 @@ use memmap::MmapOptions;
 use merkletree::merkle::get_merkle_tree_leafs;
 use merkletree::store::{DiskStore, Store, StoreConfig};
 use paired::bls12_381::{Bls12, Fr};
-use storage_proofs::circuit::multi_proof::MultiProof;
-use storage_proofs::circuit::stacked::StackedCompound;
+use storage_proofs::cache_key::CacheKey;
 use storage_proofs::compound_proof::{self, CompoundProof};
 use storage_proofs::drgraph::Graph;
 use storage_proofs::hasher::{Domain, Hasher};
 use storage_proofs::measurements::{measure_op, Operation::CommD};
 use storage_proofs::merkle::{create_merkle_tree, BinaryMerkleTree};
+use storage_proofs::multi_proof::MultiProof;
+use storage_proofs::porep::stacked::{
+    self, generate_replica_id, ChallengeRequirements, StackedCompound, StackedDrg, Tau,
+    TemporaryAux, TemporaryAuxCache,
+};
 use storage_proofs::proof::ProofScheme;
 use storage_proofs::sector::SectorId;
-use storage_proofs::stacked::{
-    self, generate_replica_id, CacheKey, ChallengeRequirements, StackedDrg, Tau, TemporaryAux,
-    TemporaryAuxCache,
-};
 
 use crate::api::util::{as_safe_commitment, commitment_from_fr, get_tree_size};
 use crate::caches::{get_stacked_params, get_stacked_verifying_key};
@@ -208,7 +208,7 @@ where
             )
         })?
     };
-    let data: storage_proofs::porep::Data<'_> = (data, PathBuf::from(replica_path.as_ref())).into();
+    let data: storage_proofs::Data<'_> = (data, PathBuf::from(replica_path.as_ref())).into();
 
     // Load data tree from disk
     let data_tree = {

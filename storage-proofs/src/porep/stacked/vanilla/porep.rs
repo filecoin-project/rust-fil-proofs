@@ -1,12 +1,13 @@
 use std::path::PathBuf;
 
-use crate::error::Result;
-use crate::hasher::Hasher;
-use crate::porep::PoRep;
-use crate::stacked::{
+use super::{
     params::{BinaryTree, PersistentAux, PublicParams, Tau, TemporaryAux},
     proof::StackedDrg,
 };
+
+use crate::error::Result;
+use crate::hasher::Hasher;
+use crate::porep::PoRep;
 use crate::Data;
 
 use merkletree::store::StoreConfig;

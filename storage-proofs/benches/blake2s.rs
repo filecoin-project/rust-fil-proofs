@@ -5,7 +5,7 @@ use criterion::{black_box, criterion_group, criterion_main, Criterion, Parameter
 use fil_sapling_crypto::jubjub::JubjubEngine;
 use paired::bls12_381::Bls12;
 use rand::{thread_rng, Rng};
-use storage_proofs::circuit::bench::BenchCS;
+use storage_proofs::gadgets::BenchCS;
 
 struct Blake2sExample<'a> {
     data: &'a [Option<bool>],

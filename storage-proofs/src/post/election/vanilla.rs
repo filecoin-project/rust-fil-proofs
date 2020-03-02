@@ -22,9 +22,9 @@ use crate::hasher::{
 use crate::measurements::{measure_op, Operation};
 use crate::merkle::{MerkleProof, OctLCMerkleTree};
 use crate::parameter_cache::ParameterSetMetadata;
+use crate::porep::stacked::OCT_ARITY;
 use crate::proof::{NoRequirements, ProofScheme};
 use crate::sector::*;
-use crate::stacked::OCT_ARITY;
 use crate::util::NODE_SIZE;
 
 #[derive(Debug, Clone)]

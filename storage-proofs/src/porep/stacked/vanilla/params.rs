@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::fmt;
 use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
 
@@ -10,16 +9,17 @@ use merkletree::merkle::get_merkle_tree_leafs;
 use merkletree::store::{DiskStore, Store, StoreConfig};
 use serde::{Deserialize, Serialize};
 
+use super::{
+    column::Column, column_proof::ColumnProof, graph::StackedBucketGraph, EncodingProof,
+    LabelingProof, LayerChallenges,
+};
+
 use crate::drgraph::Graph;
 use crate::error::Result;
 use crate::fr32::bytes_into_fr_repr_safe;
 use crate::hasher::{Domain, Hasher};
 use crate::merkle::{create_lcmerkle_tree, LCMerkleTree, MerkleProof, MerkleTree};
 use crate::parameter_cache::ParameterSetMetadata;
-use crate::stacked::{
-    column::Column, column_proof::ColumnProof, graph::StackedBucketGraph, EncodingProof,
-    LabelingProof, LayerChallenges,
-};
 use crate::util::data_at_node;
 
 pub type BinaryTree<H> = MerkleTree<<H as Hasher>::Domain, <H as Hasher>::Function, typenum::U2>;
@@ -29,33 +29,6 @@ pub type OctLCTree<H> = LCMerkleTree<<H as Hasher>::Domain, <H as Hasher>::Funct
 pub const BINARY_ARITY: usize = 2;
 pub const QUAD_ARITY: usize = 4;
 pub const OCT_ARITY: usize = 8;
-
-#[derive(Debug, Copy, Clone)]
-pub enum CacheKey {
-    PAux,
-    TAux,
-    CommDTree,
-    CommCTree,
-    CommRLastTree,
-}
-
-impl fmt::Display for CacheKey {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match *self {
-            CacheKey::PAux => write!(f, "p_aux"),
-            CacheKey::TAux => write!(f, "t_aux"),
-            CacheKey::CommDTree => write!(f, "tree-d"),
-            CacheKey::CommCTree => write!(f, "tree-c"),
-            CacheKey::CommRLastTree => write!(f, "tree-r-last"),
-        }
-    }
-}
-
-impl CacheKey {
-    pub fn label_layer(layer: usize) -> String {
-        format!("layer-{}", layer)
-    }
-}
 
 #[derive(Debug, Clone)]
 pub struct SetupParams {

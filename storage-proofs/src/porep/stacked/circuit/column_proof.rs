@@ -4,10 +4,11 @@ use fil_sapling_crypto::jubjub::JubjubEngine;
 use generic_array::typenum;
 use paired::bls12_381::{Bls12, Fr};
 
-use crate::circuit::stacked::{column::Column, params::InclusionPath};
+use super::{column::Column, params::InclusionPath};
+
 use crate::gadgets::constraint;
 use crate::hasher::Hasher;
-use crate::stacked::{ColumnProof as VanillaColumnProof, PublicParams};
+use crate::porep::stacked::{ColumnProof as VanillaColumnProof, PublicParams};
 
 #[derive(Debug, Clone)]
 pub struct ColumnProof<H: Hasher> {

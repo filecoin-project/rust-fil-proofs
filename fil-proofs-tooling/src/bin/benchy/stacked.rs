@@ -14,17 +14,18 @@ use rand::Rng;
 use serde::Serialize;
 
 use fil_proofs_tooling::{measure, FuncMeasurement, Metadata};
-use storage_proofs::circuit::bench::BenchCS;
-use storage_proofs::circuit::stacked::StackedCompound;
+use storage_proofs::cache_key::CacheKey;
 use storage_proofs::compound_proof::{self, CompoundProof};
 use storage_proofs::drgraph::*;
+use storage_proofs::gadgets::BenchCS;
 use storage_proofs::hasher::{Blake2sHasher, Domain, Hasher, PedersenHasher, Sha256Hasher};
+use storage_proofs::porep::stacked::StackedCompound;
+use storage_proofs::porep::stacked::{
+    self, ChallengeRequirements, LayerChallenges, StackedDrg, TemporaryAuxCache, BINARY_ARITY,
+    EXP_DEGREE,
+};
 use storage_proofs::porep::PoRep;
 use storage_proofs::proof::ProofScheme;
-use storage_proofs::stacked::{
-    self, CacheKey, ChallengeRequirements, LayerChallenges, StackedDrg, TemporaryAuxCache,
-    BINARY_ARITY, EXP_DEGREE,
-};
 use tempfile::TempDir;
 
 fn file_backed_mmap_from_zeroes(n: usize, use_tmp: bool) -> anyhow::Result<MmapMut> {

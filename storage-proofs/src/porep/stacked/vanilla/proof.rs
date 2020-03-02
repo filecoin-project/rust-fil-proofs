@@ -10,6 +10,20 @@ use merkletree::store::{DiskStore, StoreConfig, StoreConfigDataVersion};
 use rayon::prelude::*;
 use sha2::{Digest, Sha256};
 
+use super::{
+    challenges::LayerChallenges,
+    column::Column,
+    graph::StackedBucketGraph,
+    hash::hash_single_column,
+    params::{
+        get_node, BinaryTree, Labels, LabelsCache, PersistentAux, Proof, PublicInputs,
+        PublicParams, ReplicaColumnProof, Tau, TemporaryAux, TemporaryAuxCache, TransformedLayers,
+        BINARY_ARITY, OCT_ARITY,
+    },
+    EncodingProof, LabelingProof,
+};
+
+use crate::cache_key::CacheKey;
 use crate::data::Data;
 use crate::drgraph::Graph;
 use crate::encode::{decode, encode};
@@ -21,17 +35,6 @@ use crate::measurements::{
 };
 use crate::merkle::{MerkleProof, MerkleTree, OctMerkleTree, Store};
 use crate::porep::PoRep;
-use crate::stacked::{
-    challenges::LayerChallenges,
-    column::Column,
-    graph::StackedBucketGraph,
-    params::{
-        get_node, BinaryTree, CacheKey, Labels, LabelsCache, PersistentAux, Proof, PublicInputs,
-        PublicParams, ReplicaColumnProof, Tau, TemporaryAux, TemporaryAuxCache, TransformedLayers,
-        BINARY_ARITY, OCT_ARITY,
-    },
-    EncodingProof, LabelingProof,
-};
 use crate::util::{data_at_node_offset, NODE_SIZE};
 
 pub const TOTAL_PARENTS: usize = 37;
@@ -472,7 +475,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
                                 })
                                 .collect();
 
-                            *hash = crate::stacked::hash::hash_single_column(&data).into();
+                            *hash = hash_single_column(&data).into();
                         }
                     });
                 }
@@ -695,9 +698,9 @@ mod tests {
     use crate::drgraph::{new_seed, BASE_DEGREE};
     use crate::fr32::fr_into_bytes;
     use crate::hasher::{Blake2sHasher, PedersenHasher, PoseidonHasher, Sha256Hasher};
+    use crate::porep::stacked::{PrivateInputs, SetupParams, EXP_DEGREE};
     use crate::porep::PoRep;
     use crate::proof::ProofScheme;
-    use crate::stacked::{PrivateInputs, SetupParams, EXP_DEGREE};
 
     const DEFAULT_STACKED_LAYERS: usize = 11;
 

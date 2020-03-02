@@ -5,10 +5,9 @@ use criterion::{black_box, criterion_group, criterion_main, Criterion, Parameter
 use fil_sapling_crypto::jubjub::JubjubEngine;
 use paired::bls12_381::Bls12;
 use rand::{thread_rng, Rng};
-use storage_proofs::circuit::bench::BenchCS;
-
-use storage_proofs::circuit;
 use storage_proofs::crypto::pedersen::{self, JJ_PARAMS};
+use storage_proofs::gadgets;
+use storage_proofs::gadgets::BenchCS;
 
 struct PedersenExample<'a, E: JubjubEngine> {
     params: &'a E::Params,
@@ -30,7 +29,7 @@ impl<'a, E: JubjubEngine> Circuit<E> for PedersenExample<'a, E> {
             .collect::<Result<Vec<_>, SynthesisError>>()?;
 
         let cs = cs.namespace(|| "pedersen");
-        let res = circuit::pedersen::pedersen_compression_num(cs, self.params, &data)?;
+        let res = gadgets::pedersen::pedersen_compression_num(cs, self.params, &data)?;
         // please compiler don't optimize the result away
         // only check if we actually have input data
         if self.data[0].is_some() {
@@ -61,7 +60,7 @@ impl<'a, E: JubjubEngine> Circuit<E> for PedersenMdExample<'a, E> {
             .collect::<Result<Vec<_>, SynthesisError>>()?;
 
         let cs = cs.namespace(|| "pedersen");
-        let res = circuit::pedersen::pedersen_md_no_padding(cs, self.params, &data)?;
+        let res = gadgets::pedersen::pedersen_md_no_padding(cs, self.params, &data)?;
         // please compiler don't optimize the result away
         // only check if we actually have input data
         if self.data[0].is_some() {

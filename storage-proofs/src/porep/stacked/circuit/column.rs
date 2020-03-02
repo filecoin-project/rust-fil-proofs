@@ -3,9 +3,10 @@ use bellperson::{ConstraintSystem, SynthesisError};
 use fil_sapling_crypto::jubjub::JubjubEngine;
 use paired::bls12_381::{Bls12, Fr};
 
-use crate::circuit::stacked::hash::hash_single_column;
+use super::hash::hash_single_column;
+
 use crate::hasher::Hasher;
-use crate::stacked::{Column as VanillaColumn, PublicParams};
+use crate::porep::stacked::{Column as VanillaColumn, PublicParams};
 
 #[derive(Debug, Clone)]
 pub struct Column {

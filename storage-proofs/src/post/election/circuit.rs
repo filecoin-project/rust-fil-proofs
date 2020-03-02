@@ -7,10 +7,10 @@ use fil_sapling_crypto::jubjub::JubjubEngine;
 use generic_array::typenum;
 use typenum::marker_traits::Unsigned;
 
-use crate::circuit::por::PoRCircuit;
 use crate::compound_proof::CircuitComponent;
 use crate::error::Result;
 use crate::gadgets::constraint;
+use crate::gadgets::por::PoRCircuit;
 use crate::gadgets::variables::Root;
 use crate::hasher::{
     HashFunction, Hasher, PoseidonArity, PoseidonEngine, PoseidonFunction, PoseidonMDArity,
@@ -206,10 +206,10 @@ mod tests {
     use crate::gadgets::TestConstraintSystem;
     use crate::hasher::{Domain, HashFunction, Hasher, PedersenHasher, PoseidonHasher};
     use crate::merkle::{OctLCMerkleTree, OctMerkleTree};
+    use crate::porep::stacked::OCT_ARITY;
     use crate::post::election::{self, ElectionPoSt, ElectionPoStCompound};
     use crate::proof::ProofScheme;
     use crate::sector::SectorId;
-    use crate::stacked::OCT_ARITY;
     use crate::util::NODE_SIZE;
 
     #[test]

@@ -6,14 +6,14 @@ use generic_array::typenum;
 use paired::bls12_381::{Bls12, Fr};
 use typenum::marker_traits::Unsigned;
 
-use crate::circuit::por::PoRCompound;
 use crate::compound_proof::{CircuitComponent, CompoundProof};
 use crate::crypto::pedersen::JJ_PARAMS;
 use crate::drgraph;
 use crate::error::Result;
+use crate::gadgets::por::PoRCompound;
 use crate::hasher::Hasher;
-use crate::merklepor;
 use crate::parameter_cache::{CacheableParameters, ParameterSetMetadata};
+use crate::por;
 use crate::post::election::{self, ElectionPoSt, ElectionPoStCircuit};
 use crate::proof::ProofScheme;
 use crate::util::NODE_SIZE;
@@ -45,7 +45,7 @@ where
     ) -> Result<Vec<Fr>> {
         let mut inputs = Vec::new();
 
-        let por_pub_params = merklepor::PublicParams {
+        let por_pub_params = por::PublicParams {
             leaves: (pub_params.sector_size as usize / NODE_SIZE),
             private: true,
         };
@@ -64,7 +64,7 @@ where
                 n as u64,
             )?;
             for i in 0..pub_params.challenged_nodes {
-                let por_pub_inputs = merklepor::PublicInputs {
+                let por_pub_inputs = por::PublicInputs {
                     commitment: None,
                     challenge: challenged_leaf_start as usize + i,
                 };
@@ -176,10 +176,10 @@ mod tests {
     use crate::gadgets::{MetricCS, TestConstraintSystem};
     use crate::hasher::{Domain, HashFunction, Hasher, PedersenHasher, PoseidonHasher};
     use crate::merkle::{OctLCMerkleTree, OctMerkleTree};
+    use crate::porep::stacked::OCT_ARITY;
     use crate::post::election;
     use crate::proof::NoRequirements;
     use crate::sector::SectorId;
-    use crate::stacked::OCT_ARITY;
 
     #[ignore] // Slow test – run only when compiled for release.
     #[test]

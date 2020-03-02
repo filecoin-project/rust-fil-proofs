@@ -6,13 +6,14 @@ use anyhow::{ensure, Context, Result};
 use bincode::deserialize;
 use merkletree::merkle::get_merkle_tree_leafs;
 use merkletree::store::{DiskStore, LevelCacheStore, StoreConfig};
+use storage_proofs::cache_key::CacheKey;
 use storage_proofs::hasher::Hasher;
 use storage_proofs::measurements::{measure_op, Operation};
+use storage_proofs::porep::stacked::{
+    generate_replica_id, PersistentAux, StackedDrg, TemporaryAux, BINARY_ARITY, OCT_ARITY,
+};
 use storage_proofs::porep::PoRep;
 use storage_proofs::sector::SectorId;
-use storage_proofs::stacked::{
-    generate_replica_id, CacheKey, PersistentAux, StackedDrg, TemporaryAux, BINARY_ARITY, OCT_ARITY,
-};
 
 use crate::api::util::{as_safe_commitment, get_tree_size};
 use crate::commitment_reader::CommitmentReader;
@@ -414,8 +415,8 @@ mod tests {
     use paired::bls12_381::{Bls12, Fr};
     use rand::{Rng, SeedableRng};
     use rand_xorshift::XorShiftRng;
-    use storage_proofs::election_post::Candidate;
     use storage_proofs::fr32::bytes_into_fr;
+    use storage_proofs::post::election::Candidate;
     use tempfile::NamedTempFile;
 
     use crate::constants::{POREP_PARTITIONS, SECTOR_SIZE_2_KIB, SINGLE_PARTITION_PROOF_LEN};

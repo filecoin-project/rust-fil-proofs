@@ -2,10 +2,11 @@ use paired::bls12_381::Fr;
 use serde::{Deserialize, Serialize};
 use std::marker::PhantomData;
 
+use super::{column_proof::ColumnProof, hash::hash_single_column, params::OctTree};
+
 use crate::error::Result;
 use crate::hasher::Hasher;
 use crate::merkle::MerkleProof;
-use crate::stacked::{column_proof::ColumnProof, hash::hash_single_column, params::OctTree};
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Column<H: Hasher> {

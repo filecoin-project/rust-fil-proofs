@@ -476,7 +476,8 @@ where
         config: StoreConfig,
         replica_path: PathBuf,
     ) -> Result<(Tau<H::Domain>, ProverAux<H>)> {
-        use crate::stacked::CacheKey;
+        use crate::cache_key::CacheKey;
+
         use std::io::prelude::*;
         use std::path::Path;
 
@@ -665,9 +666,11 @@ mod tests {
     use std::io::Write;
     use tempfile;
 
+    use crate::cache_key::CacheKey;
     use crate::drgraph::{new_seed, BucketGraph, BASE_DEGREE};
     use crate::fr32::fr_into_bytes;
     use crate::hasher::{Blake2sHasher, PedersenHasher, Sha256Hasher};
+    use crate::porep::stacked::BINARY_ARITY;
     use crate::util::data_at_node;
 
     pub fn file_backed_mmap_from(data: &[u8]) -> MmapMut {
@@ -707,7 +710,6 @@ mod tests {
 
         // MT for original data is always named tree-d, and it will be
         // referenced later in the process as such.
-        use crate::stacked::{CacheKey, BINARY_ARITY};
         let cache_dir = tempfile::tempdir().unwrap();
         let config = StoreConfig::new(
             cache_dir.path(),
@@ -787,7 +789,6 @@ mod tests {
 
         // MT for original data is always named tree-d, and it will be
         // referenced later in the process as such.
-        use crate::stacked::{CacheKey, BINARY_ARITY};
         let cache_dir = tempfile::tempdir().unwrap();
         let config = StoreConfig::new(
             cache_dir.path(),
@@ -889,7 +890,6 @@ mod tests {
 
             // MT for original data is always named tree-d, and it will be
             // referenced later in the process as such.
-            use crate::stacked::{CacheKey, BINARY_ARITY};
             let cache_dir = tempfile::tempdir().unwrap();
             let config = StoreConfig::new(
                 cache_dir.path(),

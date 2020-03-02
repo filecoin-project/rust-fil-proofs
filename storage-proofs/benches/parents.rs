@@ -4,7 +4,7 @@ use storage_proofs::hasher::blake2s::Blake2sHasher;
 use storage_proofs::hasher::pedersen::PedersenHasher;
 use storage_proofs::hasher::sha256::Sha256Hasher;
 use storage_proofs::hasher::Hasher;
-use storage_proofs::stacked::{StackedBucketGraph, EXP_DEGREE};
+use storage_proofs::porep::stacked::{StackedBucketGraph, EXP_DEGREE};
 
 #[cfg(feature = "cpu-profile")]
 #[inline(always)]

@@ -8,6 +8,9 @@ use crate::merkle::BinaryMerkleTree;
 use crate::proof::ProofScheme;
 use crate::Data;
 
+pub mod drg;
+pub mod stacked;
+
 pub trait PoRep<'a, H: Hasher, G: Hasher>: ProofScheme<'a> {
     type Tau;
     type ProverAux;

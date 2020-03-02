@@ -5,10 +5,10 @@ use bellperson::{Circuit, ConstraintSystem, SynthesisError};
 use fil_sapling_crypto::jubjub::JubjubEngine;
 use generic_array::typenum;
 
-use crate::circuit::por::PoRCircuit;
 use crate::compound_proof::CircuitComponent;
 use crate::error::Result;
 use crate::gadgets::constraint;
+use crate::gadgets::por::PoRCircuit;
 use crate::gadgets::variables::Root;
 use crate::hasher::{HashFunction, Hasher, PoseidonArity, PoseidonEngine};
 

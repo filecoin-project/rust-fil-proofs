@@ -6,7 +6,7 @@ use paired::bls12_381::{Bls12, Fr};
 use crate::fr32::fr_into_bytes;
 use crate::gadgets::{constraint, create_label::create_label, uint64};
 use crate::hasher::Hasher;
-use crate::stacked::{LabelingProof as VanillaLabelingProof, PublicParams, TOTAL_PARENTS};
+use crate::porep::stacked::{LabelingProof as VanillaLabelingProof, PublicParams, TOTAL_PARENTS};
 use crate::util::bytes_into_boolean_vec_be;
 
 #[derive(Debug, Clone)]

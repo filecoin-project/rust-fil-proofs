@@ -16,8 +16,8 @@ use crate::gadgets::constraint;
 use crate::gadgets::insertion::insert;
 use crate::gadgets::variables::Root;
 use crate::hasher::{HashFunction, Hasher, PoseidonArity, PoseidonEngine};
-use crate::merklepor::MerklePoR;
 use crate::parameter_cache::{CacheableParameters, ParameterSetMetadata};
+use crate::por::PoR;
 use crate::proof::ProofScheme;
 
 /// Proof of retrievability.
@@ -92,8 +92,8 @@ impl<E: JubjubEngine, C: Circuit<E>, P: ParameterSetMetadata, H: Hasher, U: type
     }
 }
 
-// can only implment for Bls12 because merklepor is not generic over the engine.
-impl<'a, H, U> CompoundProof<'a, Bls12, MerklePoR<H, U>, PoRCircuit<'a, U, Bls12, H>>
+// can only implment for Bls12 because por is not generic over the engine.
+impl<'a, H, U> CompoundProof<'a, Bls12, PoR<H, U>, PoRCircuit<'a, U, Bls12, H>>
     for PoRCompound<H, U>
 where
     H: 'a + Hasher,
@@ -102,10 +102,10 @@ where
     typenum::Add1<U>: generic_array::ArrayLength<Fr>,
 {
     fn circuit<'b>(
-        public_inputs: &<MerklePoR<H, U> as ProofScheme<'a>>::PublicInputs,
+        public_inputs: &<PoR<H, U> as ProofScheme<'a>>::PublicInputs,
         _component_private_inputs: <PoRCircuit<'a, U, Bls12, H> as CircuitComponent>::ComponentPrivateInputs,
-        proof: &'b <MerklePoR<H, U> as ProofScheme<'a>>::Proof,
-        public_params: &'b <MerklePoR<H, U> as ProofScheme<'a>>::PublicParams,
+        proof: &'b <PoR<H, U> as ProofScheme<'a>>::Proof,
+        public_params: &'b <PoR<H, U> as ProofScheme<'a>>::PublicParams,
     ) -> Result<PoRCircuit<'a, U, Bls12, H>> {
         let (root, private) = match (*public_inputs).commitment {
             None => (Root::Val(Some(proof.proof.root.into())), true),
@@ -129,7 +129,7 @@ where
     }
 
     fn blank_circuit(
-        public_params: &<MerklePoR<H, U> as ProofScheme<'a>>::PublicParams,
+        public_params: &<PoR<H, U> as ProofScheme<'a>>::PublicParams,
     ) -> PoRCircuit<'a, U, Bls12, H> {
         PoRCircuit::<U, Bls12, H> {
             params: &*JJ_PARAMS,
@@ -146,8 +146,8 @@ where
     }
 
     fn generate_public_inputs(
-        pub_inputs: &<MerklePoR<H, U> as ProofScheme<'a>>::PublicInputs,
-        pub_params: &<MerklePoR<H, U> as ProofScheme<'a>>::PublicParams,
+        pub_inputs: &<PoR<H, U> as ProofScheme<'a>>::PublicInputs,
+        pub_params: &<PoR<H, U> as ProofScheme<'a>>::PublicParams,
         _k: Option<usize>,
     ) -> Result<Vec<Fr>> {
         let auth_path_bits =
@@ -312,7 +312,7 @@ mod tests {
     use crate::hasher::{
         Blake2sHasher, Domain, Hasher, PedersenHasher, PoseidonHasher, Sha256Hasher,
     };
-    use crate::merklepor;
+    use crate::por;
     use crate::proof::ProofScheme;
     use crate::util::data_at_node;
 
@@ -328,13 +328,13 @@ mod tests {
         let graph = BucketGraph::<PedersenHasher>::new(leaves, BASE_DEGREE, 0, new_seed()).unwrap();
         let tree = graph.merkle_tree(None, data.as_slice()).unwrap();
 
-        let public_inputs = merklepor::PublicInputs {
+        let public_inputs = por::PublicInputs {
             challenge: 2,
             commitment: Some(tree.root()),
         };
 
         let setup_params = compound_proof::SetupParams {
-            vanilla_params: merklepor::SetupParams {
+            vanilla_params: por::SetupParams {
                 leaves,
                 private: false,
             },
@@ -344,7 +344,7 @@ mod tests {
         let public_params =
             PoRCompound::<PedersenHasher, typenum::U2>::setup(&setup_params).expect("setup failed");
 
-        let private_inputs = merklepor::PrivateInputs::<PedersenHasher, typenum::U2>::new(
+        let private_inputs = por::PrivateInputs::<PedersenHasher, typenum::U2>::new(
             bytes_into_fr::<Bls12>(data_at_node(data.as_slice(), public_inputs.challenge).unwrap())
                 .expect("failed to create Fr from node data")
                 .into(),
@@ -470,18 +470,18 @@ mod tests {
             let graph = BucketGraph::<H>::new(leaves, BASE_DEGREE, 0, new_seed()).unwrap();
             let tree = graph.merkle_tree::<U>(None, data.as_slice()).unwrap();
 
-            // -- MerklePoR
+            // -- PoR
 
-            let pub_params = merklepor::PublicParams {
+            let pub_params = por::PublicParams {
                 leaves,
                 private: true,
             };
-            let pub_inputs = merklepor::PublicInputs::<H::Domain> {
+            let pub_inputs = por::PublicInputs::<H::Domain> {
                 challenge: i,
                 commitment: Some(tree.root()),
             };
 
-            let priv_inputs = merklepor::PrivateInputs::<H, U>::new(
+            let priv_inputs = por::PrivateInputs::<H, U>::new(
                 H::Domain::try_from_bytes(
                     data_at_node(data.as_slice(), pub_inputs.challenge).unwrap(),
                 )
@@ -490,13 +490,13 @@ mod tests {
             );
 
             // create a non circuit proof
-            let proof = merklepor::MerklePoR::<H, U>::prove(&pub_params, &pub_inputs, &priv_inputs)
+            let proof = por::PoR::<H, U>::prove(&pub_params, &pub_inputs, &priv_inputs)
                 .expect("proving failed");
 
             // make sure it verifies
-            let is_valid = merklepor::MerklePoR::<H, U>::verify(&pub_params, &pub_inputs, &proof)
+            let is_valid = por::PoR::<H, U>::verify(&pub_params, &pub_inputs, &proof)
                 .expect("verification failed");
-            assert!(is_valid, "failed to verify merklepor proof");
+            assert!(is_valid, "failed to verify por proof");
 
             // -- Circuit
 
@@ -588,13 +588,13 @@ mod tests {
         let tree = graph.merkle_tree(None, data.as_slice()).unwrap();
 
         for i in 0..3 {
-            let public_inputs = merklepor::PublicInputs {
+            let public_inputs = por::PublicInputs {
                 challenge: i,
                 commitment: None,
             };
 
             let setup_params = compound_proof::SetupParams {
-                vanilla_params: merklepor::SetupParams {
+                vanilla_params: por::SetupParams {
                     leaves,
                     private: true,
                 },
@@ -603,7 +603,7 @@ mod tests {
             };
             let public_params = PoRCompound::<H, U>::setup(&setup_params).expect("setup failed");
 
-            let private_inputs = merklepor::PrivateInputs::<H, U>::new(
+            let private_inputs = por::PrivateInputs::<H, U>::new(
                 bytes_into_fr::<Bls12>(
                     data_at_node(data.as_slice(), public_inputs.challenge).unwrap(),
                 )
@@ -717,18 +717,18 @@ mod tests {
             let graph = BucketGraph::<H>::new(leaves, BASE_DEGREE, 0, new_seed()).unwrap();
             let tree = graph.merkle_tree(None, data.as_slice()).unwrap();
 
-            // -- MerklePoR
+            // -- PoR
 
-            let pub_params = merklepor::PublicParams {
+            let pub_params = por::PublicParams {
                 leaves,
                 private: true,
             };
-            let pub_inputs = merklepor::PublicInputs {
+            let pub_inputs = por::PublicInputs {
                 challenge: i,
                 commitment: None,
             };
 
-            let priv_inputs = merklepor::PrivateInputs::<H, U>::new(
+            let priv_inputs = por::PrivateInputs::<H, U>::new(
                 bytes_into_fr::<Bls12>(
                     data_at_node(data.as_slice(), pub_inputs.challenge).unwrap(),
                 )
@@ -738,13 +738,13 @@ mod tests {
             );
 
             // create a non circuit proof
-            let proof = merklepor::MerklePoR::<H, U>::prove(&pub_params, &pub_inputs, &priv_inputs)
+            let proof = por::PoR::<H, U>::prove(&pub_params, &pub_inputs, &priv_inputs)
                 .expect("proving failed");
 
             // make sure it verifies
-            let is_valid = merklepor::MerklePoR::<H, U>::verify(&pub_params, &pub_inputs, &proof)
+            let is_valid = por::PoR::<H, U>::verify(&pub_params, &pub_inputs, &proof)
                 .expect("verification failed");
-            assert!(is_valid, "failed to verify merklepor proof");
+            assert!(is_valid, "failed to verify por proof");
 
             // -- Circuit
 

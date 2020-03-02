@@ -6,14 +6,14 @@ use fil_sapling_crypto::jubjub::JubjubEngine;
 use generic_array::typenum;
 use paired::bls12_381::{Bls12, Fr};
 
-use crate::circuit::por::PoRCompound;
 use crate::compound_proof::{CircuitComponent, CompoundProof};
 use crate::crypto::pedersen::JJ_PARAMS;
 use crate::drgraph;
 use crate::error::Result;
+use crate::gadgets::por::PoRCompound;
 use crate::hasher::{Hasher, PoseidonArity, PoseidonEngine};
-use crate::merklepor;
 use crate::parameter_cache::{CacheableParameters, ParameterSetMetadata};
+use crate::por;
 use crate::post::rational::{RationalPoSt, RationalPoStCircuit};
 use crate::proof::ProofScheme;
 use crate::util::NODE_SIZE;
@@ -45,7 +45,7 @@ where
     ) -> Result<Vec<Fr>> {
         let mut inputs = Vec::new();
 
-        let por_pub_params = merklepor::PublicParams {
+        let por_pub_params = por::PublicParams {
             leaves: (pub_params.sector_size as usize / NODE_SIZE),
             private: true,
         };
@@ -58,7 +58,7 @@ where
         for (challenge, comm_r) in pub_in.challenges.iter().zip(pub_in.comm_rs.iter()) {
             inputs.push((*comm_r).into());
 
-            let por_pub_inputs = merklepor::PublicInputs {
+            let por_pub_inputs = por::PublicInputs {
                 commitment: None,
                 challenge: challenge.leaf as usize,
             };
