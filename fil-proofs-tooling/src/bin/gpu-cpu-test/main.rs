@@ -103,7 +103,7 @@ fn spawn_thread(
     (tx, handler)
 }
 
-fn threads_mode(parallel: bool, gpu_stealing: bool) {
+fn threads_mode(parallel: u8, gpu_stealing: bool) {
     // All channels we send a termination message to
     let mut senders = Vec::new();
     // All thread handles that get terminated
@@ -125,11 +125,13 @@ fn threads_mode(parallel: bool, gpu_stealing: bool) {
         threads.push(Some(handler));
     }
 
-    if parallel {
-        let (tx, handler) = spawn_thread("low", false, priv_replica_info, candidates);
+    (1..parallel).for_each(|ii| {
+        let name = format!("low-{:02}", ii);
+        let (tx, handler) =
+            spawn_thread(&name, false, priv_replica_info.clone(), candidates.clone());
         senders.push(tx);
         threads.push(Some(handler));
-    }
+    });
 
     // Terminate all threads after that amount of time
     let timeout = Duration::from_secs(TIMEOUT);
@@ -154,19 +156,21 @@ fn threads_mode(parallel: bool, gpu_stealing: bool) {
     }
 }
 
-fn processes_mode(parallel: bool, gpu_stealing: bool) {
+fn processes_mode(parallel: u8, gpu_stealing: bool) {
     let mut children = HashMap::new();
 
     // Put each process into it's own scope (the other one is due to the if statement)
     {
-        let child = spawn_process("high", gpu_stealing);
-        children.insert("high", child);
+        let name = "high";
+        let child = spawn_process(&name, gpu_stealing);
+        children.insert(name.to_string(), child);
     }
 
-    if parallel {
-        let child = spawn_process("low", false);
-        children.insert("low", child);
-    }
+    (1..parallel).for_each(|ii| {
+        let name = format!("low-{:02}", ii);
+        let child = spawn_process(&name, false);
+        children.insert(name, child);
+    });
 
     // Wait for all processes to finish and log their output
     for (name, child) in children {
@@ -188,7 +192,7 @@ fn spawn_process(name: &str, gpu_stealing: bool) -> Child {
         .args(&["--bin", "gpu-cpu-test"])
         .arg("--")
         .args(&["--gpu-stealing", &gpu_stealing.to_string()])
-        .args(&["--parallel", "false"])
+        .args(&["--parallel", "1"])
         .args(&["--mode", "threads"])
         // Print logging to the main process stderr
         .stderr(Stdio::inherit())
@@ -210,8 +214,8 @@ fn main() {
         .arg(
             Arg::with_name("parallel")
                 .long("parallel")
-                .help("Run proofs in parallel.")
-                .default_value("true"),
+                .help("Run multiple proofs in parallel.")
+                .default_value("2"),
         )
         .arg(
             Arg::with_name("gpu-stealing")
@@ -229,11 +233,11 @@ fn main() {
         )
         .get_matches();
 
-    let parallel = value_t!(matches, "parallel", bool).unwrap();
-    if parallel {
-        info!("Running high and low priority proofs in parallel")
+    let parallel = value_t!(matches, "parallel", u8).unwrap();
+    if parallel == 1 {
+        info!("Running high priority proof only")
     } else {
-        info!("Running high priority proofs only")
+        info!("Running high and low priority proofs in parallel")
     }
     let gpu_stealing = value_t!(matches, "gpu-stealing", bool).unwrap();
     if gpu_stealing {
