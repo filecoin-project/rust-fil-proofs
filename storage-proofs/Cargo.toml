@@ -58,6 +58,7 @@ thiserror = "1.0.6"
 cpu-time = "1.0.0"
 neptune = "0.5.1"
 quote = "=1.0.2"
+core_affinity = "0.5.10"
 
 [features]
 default = ["gpu"]
