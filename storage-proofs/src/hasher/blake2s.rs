@@ -16,6 +16,7 @@ use serde::{Deserialize, Serialize};
 use super::{Domain, HashFunction, Hasher};
 use crate::crypto::sloth;
 use crate::error::*;
+use crate::gadgets::multipack;
 
 #[derive(Default, Copy, Clone, PartialEq, Eq, Debug)]
 pub struct Blake2sHasher {}
@@ -273,7 +274,7 @@ impl HashFunction<Blake2sDomain> for Blake2sFunction {
         let alloc_bits =
             blake2s_circuit::blake2s(cs.namespace(|| "hash"), &bits[..], &personalization)?;
 
-        crate::circuit::multipack::pack_bits(cs.namespace(|| "pack"), &alloc_bits)
+        multipack::pack_bits(cs.namespace(|| "pack"), &alloc_bits)
     }
 
     fn hash2_circuit<E, CS>(

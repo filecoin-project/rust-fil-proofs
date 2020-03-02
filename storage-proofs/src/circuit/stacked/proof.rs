@@ -6,13 +6,13 @@ use fil_sapling_crypto::jubjub::JubjubEngine;
 use generic_array::typenum;
 use paired::bls12_381::{Bls12, Fr};
 
-use crate::circuit::por::PoRCompound;
-use crate::circuit::{constraint, stacked::params::Proof};
+use crate::circuit::{por::PoRCompound, stacked::params::Proof};
 use crate::compound_proof::{CircuitComponent, CompoundProof};
 use crate::crypto::pedersen::JJ_PARAMS;
 use crate::drgraph::Graph;
 use crate::error::Result;
 use crate::fr32::fr_into_bytes;
+use crate::gadgets::constraint;
 use crate::hasher::{HashFunction, Hasher};
 use crate::merklepor;
 use crate::parameter_cache::{CacheableParameters, ParameterSetMetadata};
@@ -316,11 +316,10 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher>
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::circuit::metric::*;
-    use crate::circuit::test::*;
     use crate::compound_proof;
     use crate::drgraph::{new_seed, BASE_DEGREE};
     use crate::fr32::fr_into_bytes;
+    use crate::gadgets::{MetricCS, TestConstraintSystem};
     use crate::hasher::{Hasher, PedersenHasher, PoseidonHasher, Sha256Hasher};
     use crate::porep::PoRep;
     use crate::proof::ProofScheme;

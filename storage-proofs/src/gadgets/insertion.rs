@@ -138,7 +138,8 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::circuit::test::*;
+
+    use crate::gadgets::TestConstraintSystem;
     use bellperson::gadgets::boolean::AllocatedBit;
     use ff::Field;
     use paired::bls12_381::{Bls12, Fr};

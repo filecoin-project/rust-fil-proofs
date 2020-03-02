@@ -2,7 +2,7 @@ use bellperson::gadgets::num;
 use bellperson::{ConstraintSystem, SynthesisError};
 use paired::Engine;
 
-use crate::circuit::constraint;
+use crate::gadgets::constraint;
 
 pub fn encode<E, CS>(
     mut cs: CS,

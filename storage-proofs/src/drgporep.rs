@@ -14,18 +14,46 @@ use crate::drgraph::Graph;
 use crate::encode;
 use crate::error::Result;
 use crate::fr32::bytes_into_fr_repr_safe;
-use crate::hasher::{Domain, Hasher};
+use crate::hasher::{Domain, HashFunction, Hasher};
 use crate::merkle::{BinaryLCMerkleTree, BinaryMerkleTree, LCMerkleTree, MerkleProof};
 use crate::parameter_cache::ParameterSetMetadata;
-use crate::porep::{self, Data, PoRep};
+use crate::porep::PoRep;
 use crate::proof::{NoRequirements, ProofScheme};
 use crate::util::{data_at_node, data_at_node_offset, NODE_SIZE};
+use crate::Data;
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+pub struct Tau<T> {
+    pub comm_r: T,
+    pub comm_d: T,
+}
+
+impl<T: Domain> Tau<T> {
+    pub fn new(comm_d: T, comm_r: T) -> Self {
+        Tau { comm_d, comm_r }
+    }
+}
+
+#[derive(Debug)]
+pub struct ProverAux<H: Hasher> {
+    pub tree_d: BinaryMerkleTree<H::Domain, H::Function>,
+    pub tree_r: BinaryLCMerkleTree<H::Domain, H::Function>,
+}
+
+impl<H: Hasher> ProverAux<H> {
+    pub fn new(
+        tree_d: BinaryMerkleTree<H::Domain, H::Function>,
+        tree_r: BinaryLCMerkleTree<H::Domain, H::Function>,
+    ) -> Self {
+        ProverAux { tree_d, tree_r }
+    }
+}
 
 #[derive(Debug, Clone)]
 pub struct PublicInputs<T: Domain> {
     pub replica_id: Option<T>,
     pub challenges: Vec<usize>,
-    pub tau: Option<porep::Tau<T>>,
+    pub tau: Option<Tau<T>>,
 }
 
 #[derive(Debug)]
@@ -437,8 +465,8 @@ where
     G::Key: AsRef<H::Domain>,
     G: 'a + Graph<H> + ParameterSetMetadata + Sync + Send,
 {
-    type Tau = porep::Tau<H::Domain>;
-    type ProverAux = porep::ProverAux<H>;
+    type Tau = Tau<H::Domain>;
+    type ProverAux = ProverAux<H>;
 
     fn replicate(
         pp: &Self::PublicParams,
@@ -447,7 +475,7 @@ where
         data_tree: Option<BinaryMerkleTree<H::Domain, H::Function>>,
         config: StoreConfig,
         replica_path: PathBuf,
-    ) -> Result<(porep::Tau<H::Domain>, porep::ProverAux<H>)> {
+    ) -> Result<(Tau<H::Domain>, ProverAux<H>)> {
         use crate::stacked::CacheKey;
         use std::io::prelude::*;
         use std::path::Path;
@@ -508,10 +536,7 @@ where
         let tree_r: BinaryLCMerkleTree<_, _> =
             pp.graph.lcmerkle_tree(tree_r_last_config, &replica_path)?;
 
-        Ok((
-            porep::Tau::new(comm_d, comm_r),
-            porep::ProverAux::new(tree_d, tree_r),
-        ))
+        Ok((Tau::new(comm_d, comm_r), ProverAux::new(tree_d, tree_r)))
     }
 
     fn extract_all<'b>(
@@ -616,6 +641,14 @@ pub fn create_key_from_tree<H: Hasher, U: typenum::Unsigned>(
 
     let hash = hasher.result();
     Ok(bytes_into_fr_repr_safe(hash.as_ref()).into())
+}
+
+pub fn replica_id<H: Hasher>(prover_id: [u8; 32], sector_id: [u8; 32]) -> H::Domain {
+    let mut to_hash = [0; 64];
+    to_hash[..32].copy_from_slice(&prover_id);
+    to_hash[32..].copy_from_slice(&sector_id);
+
+    H::Function::hash_leaf(&to_hash)
 }
 
 #[cfg(test)]

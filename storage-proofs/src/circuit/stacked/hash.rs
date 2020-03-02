@@ -52,8 +52,8 @@ mod tests {
     use rand::SeedableRng;
     use rand_xorshift::XorShiftRng;
 
-    use crate::circuit::test::TestConstraintSystem;
     use crate::crypto::pedersen::JJ_PARAMS;
+    use crate::gadgets::TestConstraintSystem;
     use crate::hasher::{HashFunction, Hasher, PedersenHasher};
     use crate::stacked::hash::hash_single_column as vanilla_hash_single_column;
 

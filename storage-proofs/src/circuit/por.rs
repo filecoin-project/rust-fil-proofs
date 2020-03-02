@@ -8,13 +8,13 @@ use fil_sapling_crypto::jubjub::JubjubEngine;
 use generic_array::typenum;
 use paired::bls12_381::{Bls12, Fr};
 
-use crate::circuit::constraint;
-use crate::circuit::insertion::insert;
-use crate::circuit::variables::Root;
 use crate::compound_proof::{CircuitComponent, CompoundProof};
 use crate::crypto::pedersen::JJ_PARAMS;
 use crate::drgraph::graph_height;
 use crate::error::Result;
+use crate::gadgets::constraint;
+use crate::gadgets::insertion::insert;
+use crate::gadgets::variables::Root;
 use crate::hasher::{HashFunction, Hasher, PoseidonArity, PoseidonEngine};
 use crate::merklepor::MerklePoR;
 use crate::parameter_cache::{CacheableParameters, ParameterSetMetadata};
@@ -304,12 +304,11 @@ mod tests {
     use rand::SeedableRng;
     use rand_xorshift::XorShiftRng;
 
-    use crate::circuit::metric::*;
-    use crate::circuit::test::*;
     use crate::compound_proof;
     use crate::crypto::pedersen::JJ_PARAMS;
     use crate::drgraph::{new_seed, BucketGraph, Graph, BASE_DEGREE};
     use crate::fr32::{bytes_into_fr, fr_into_bytes};
+    use crate::gadgets::{MetricCS, TestConstraintSystem};
     use crate::hasher::{
         Blake2sHasher, Domain, Hasher, PedersenHasher, PoseidonHasher, Sha256Hasher,
     };

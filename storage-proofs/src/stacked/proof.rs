@@ -10,6 +10,7 @@ use merkletree::store::{DiskStore, StoreConfig, StoreConfigDataVersion};
 use rayon::prelude::*;
 use sha2::{Digest, Sha256};
 
+use crate::data::Data;
 use crate::drgraph::Graph;
 use crate::encode::{decode, encode};
 use crate::error::Result;
@@ -19,7 +20,6 @@ use crate::measurements::{
     Operation::{CommD, EncodeWindowTimeAll, GenerateTreeC, GenerateTreeRLast},
 };
 use crate::merkle::{MerkleProof, MerkleTree, OctMerkleTree, Store};
-use crate::porep::Data;
 use crate::porep::PoRep;
 use crate::stacked::{
     challenges::LayerChallenges,

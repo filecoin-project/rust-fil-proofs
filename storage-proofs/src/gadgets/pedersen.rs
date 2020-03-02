@@ -82,9 +82,10 @@ pub fn pedersen_compression<E: JubjubEngine, CS: ConstraintSystem<E>>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::circuit::test::TestConstraintSystem;
+
     use crate::crypto;
     use crate::crypto::pedersen::JJ_PARAMS;
+    use crate::gadgets::TestConstraintSystem;
     use crate::util::bytes_into_boolean_vec;
     use bellperson::gadgets::boolean::Boolean;
     use bellperson::ConstraintSystem;

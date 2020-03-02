@@ -29,9 +29,10 @@ where
 
 #[cfg(test)]
 mod tests {
-    use super::xor;
-    use crate::circuit::test::TestConstraintSystem;
+    use super::*;
+
     use crate::crypto;
+    use crate::gadgets::TestConstraintSystem;
     use crate::util::{bits_to_bytes, bytes_into_boolean_vec};
     use bellperson::gadgets::boolean::Boolean;
     use bellperson::ConstraintSystem;

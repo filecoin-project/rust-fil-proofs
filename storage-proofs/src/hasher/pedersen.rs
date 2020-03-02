@@ -12,9 +12,9 @@ use merkletree::merkle::Element;
 use paired::bls12_381::{Bls12, Fr, FrRepr};
 use serde::{Deserialize, Serialize};
 
-use crate::circuit::pedersen::{pedersen_compression_num, pedersen_md_no_padding};
 use crate::crypto::{create_label, pedersen, sloth};
 use crate::error::{Error, Result};
+use crate::gadgets::pedersen::{pedersen_compression_num, pedersen_md_no_padding};
 use crate::hasher::{Domain, HashFunction, Hasher};
 
 #[derive(Default, Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

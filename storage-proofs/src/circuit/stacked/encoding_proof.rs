@@ -3,8 +3,8 @@ use bellperson::{ConstraintSystem, SynthesisError};
 use fil_sapling_crypto::jubjub::JubjubEngine;
 use paired::bls12_381::{Bls12, Fr};
 
-use crate::circuit::{constraint, create_label::create_label as kdf, encode::encode, uint64};
 use crate::fr32::fr_into_bytes;
+use crate::gadgets::{constraint, create_label::create_label as kdf, encode::encode, uint64};
 use crate::hasher::Hasher;
 use crate::stacked::{EncodingProof as VanillaEncodingProof, PublicParams, TOTAL_PARENTS};
 use crate::util::bytes_into_boolean_vec_be;

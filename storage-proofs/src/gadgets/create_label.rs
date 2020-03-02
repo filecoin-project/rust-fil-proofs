@@ -8,7 +8,7 @@ use ff::PrimeField;
 use fil_sapling_crypto::jubjub::JubjubEngine;
 use log::trace;
 
-use crate::circuit::uint64;
+use crate::gadgets::uint64;
 
 /// Key derivation function.
 pub fn create_label<E, CS>(
@@ -66,9 +66,10 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::circuit::test::TestConstraintSystem;
+
     use crate::crypto;
     use crate::fr32::fr_into_bytes;
+    use crate::gadgets::TestConstraintSystem;
     use crate::util::bytes_into_boolean_vec_be;
 
     use bellperson::gadgets::boolean::Boolean;

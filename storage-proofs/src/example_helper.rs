@@ -13,9 +13,8 @@ use pbr::ProgressBar;
 use rand::{Rng, SeedableRng};
 use rand_xorshift::XorShiftRng;
 
-use crate::circuit::bench::BenchCS;
-use crate::circuit::test::TestConstraintSystem;
 use crate::crypto::pedersen::JJ_PARAMS;
+use crate::gadgets::{BenchCS, TestConstraintSystem};
 
 pub fn prettyb(num: usize) -> String {
     let num = num as f64;

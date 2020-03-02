@@ -8,17 +8,17 @@ use fil_sapling_crypto::jubjub::JubjubEngine;
 use generic_array::typenum;
 use paired::bls12_381::{Bls12, Fr};
 
-use crate::circuit::constraint;
-use crate::circuit::create_label::create_label as kdf;
-use crate::circuit::encode;
 use crate::circuit::por::{PoRCircuit, PoRCompound};
-use crate::circuit::variables::Root;
 use crate::compound_proof::{CircuitComponent, CompoundProof};
 use crate::crypto::pedersen::JJ_PARAMS;
 use crate::drgporep::DrgPoRep;
 use crate::drgraph::Graph;
 use crate::error::Result;
 use crate::fr32::fr_into_bytes;
+use crate::gadgets::constraint;
+use crate::gadgets::create_label::create_label as kdf;
+use crate::gadgets::encode;
+use crate::gadgets::variables::Root;
 use crate::hasher::Hasher;
 use crate::merklepor;
 use crate::parameter_cache::{CacheableParameters, ParameterSetMetadata};
@@ -518,12 +518,11 @@ impl<'a, H: Hasher> Circuit<Bls12> for DrgPoRepCircuit<'a, H> {
 mod tests {
     use super::*;
 
-    use crate::circuit::metric::MetricCS;
-    use crate::circuit::test::*;
     use crate::compound_proof;
     use crate::drgporep;
     use crate::drgraph::{graph_height, new_seed, BucketGraph, BASE_DEGREE};
     use crate::fr32::{bytes_into_fr, fr_into_bytes};
+    use crate::gadgets::{MetricCS, TestConstraintSystem};
     use crate::hasher::{Hasher, PedersenHasher, PoseidonHasher};
     use crate::porep::PoRep;
     use crate::proof::{NoRequirements, ProofScheme};

@@ -7,11 +7,12 @@ use generic_array::typenum;
 use paired::bls12_381::{Bls12, Fr};
 use paired::Engine;
 
+use crate::circuit::por::PoRCircuit;
 use crate::circuit::stacked::{
     column_proof::ColumnProof, encoding_proof::EncodingProof, labeling_proof::LabelingProof,
 };
-use crate::circuit::{por::PoRCircuit, variables::Root};
 use crate::drgraph::Graph;
+use crate::gadgets::variables::Root;
 use crate::hasher::{Hasher, PoseidonArity, PoseidonEngine};
 use crate::merkle::MerkleProof;
 use crate::stacked::{

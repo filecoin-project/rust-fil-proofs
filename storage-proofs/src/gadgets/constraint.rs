@@ -118,7 +118,8 @@ pub fn difference<E: Engine, A, AR, CS: ConstraintSystem<E>>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::circuit::test::TestConstraintSystem;
+
+    use crate::gadgets::TestConstraintSystem;
     use paired::bls12_381::{Bls12, Fr};
     use rand::SeedableRng;
     use rand_xorshift::XorShiftRng;
