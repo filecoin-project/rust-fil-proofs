@@ -128,7 +128,8 @@ pub fn bits_to_bytes(bits: &[bool]) -> Vec<u8> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::circuit::test::*;
+
+    use crate::gadgets::TestConstraintSystem;
     use paired::bls12_381::*;
     use rand::{Rng, SeedableRng};
     use rand_xorshift::XorShiftRng;

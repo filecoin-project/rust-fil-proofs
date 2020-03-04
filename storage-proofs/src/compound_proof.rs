@@ -1,13 +1,12 @@
-use rayon::prelude::*;
-
 use anyhow::{ensure, Context};
 use bellperson::{groth16, Circuit};
 use fil_sapling_crypto::jubjub::JubjubEngine;
 use log::info;
 use rand::rngs::OsRng;
+use rayon::prelude::*;
 
-use crate::circuit::multi_proof::MultiProof;
 use crate::error::Result;
+use crate::multi_proof::MultiProof;
 use crate::parameter_cache::{CacheableParameters, ParameterSetMetadata};
 use crate::partitions;
 use crate::proof::ProofScheme;

@@ -6,12 +6,10 @@ use filecoin_proofs::constants::*;
 use filecoin_proofs::parameters::{post_public_params, public_params};
 use filecoin_proofs::types::*;
 use std::collections::HashSet;
-use storage_proofs::circuit::election_post::{ElectionPoStCircuit, ElectionPoStCompound};
-use storage_proofs::circuit::stacked::StackedCompound;
 use storage_proofs::compound_proof::CompoundProof;
-use storage_proofs::election_post::ElectionPoSt;
 use storage_proofs::parameter_cache::CacheableParameters;
-use storage_proofs::stacked::StackedDrg;
+use storage_proofs::porep::stacked::{StackedCompound, StackedDrg};
+use storage_proofs::post::election::{ElectionPoSt, ElectionPoStCircuit, ElectionPoStCompound};
 
 const PUBLISHED_SECTOR_SIZES: [u64; 4] = [
     SECTOR_SIZE_2_KIB,

@@ -14,16 +14,15 @@ use filecoin_proofs::{
 use log::info;
 use paired::bls12_381::Bls12;
 use serde::{Deserialize, Serialize};
-use storage_proofs::circuit::bench::BenchCS;
-use storage_proofs::circuit::election_post::{ElectionPoStCircuit, ElectionPoStCompound};
 use storage_proofs::compound_proof::CompoundProof;
-use storage_proofs::election_post::ElectionPoSt;
+use storage_proofs::gadgets::BenchCS;
 use storage_proofs::hasher::Sha256Hasher;
 #[cfg(feature = "measurements")]
 use storage_proofs::measurements::Operation;
 #[cfg(feature = "measurements")]
 use storage_proofs::measurements::OP_MEASUREMENTS;
 use storage_proofs::parameter_cache::CacheableParameters;
+use storage_proofs::post::election::{ElectionPoSt, ElectionPoStCircuit, ElectionPoStCompound};
 use storage_proofs::proof::ProofScheme;
 
 use crate::shared::{create_replicas, CHALLENGE_COUNT, PROVER_ID, RANDOMNESS, TICKET_BYTES};
@@ -371,9 +370,10 @@ fn run_measure_circuits(i: &FlarpInputs) -> CircuitOutputs {
 }
 
 fn measure_porep_circuit(i: &FlarpInputs) -> usize {
-    use storage_proofs::circuit::stacked::StackedCompound;
     use storage_proofs::drgraph::new_seed;
-    use storage_proofs::stacked::{LayerChallenges, SetupParams, StackedDrg};
+    use storage_proofs::porep::stacked::{
+        LayerChallenges, SetupParams, StackedCompound, StackedDrg,
+    };
 
     let layers = i.stacked_layers as usize;
     let challenge_count = i.porep_challenges as usize;
@@ -404,7 +404,7 @@ fn measure_porep_circuit(i: &FlarpInputs) -> usize {
 
 fn measure_post_circuit(i: &FlarpInputs) -> usize {
     use filecoin_proofs::parameters::post_setup_params;
-    use storage_proofs::election_post;
+    use storage_proofs::post::election;
 
     let post_config = PoStConfig {
         sector_size: SectorSize(i.sector_size_bytes()),
@@ -414,7 +414,7 @@ fn measure_post_circuit(i: &FlarpInputs) -> usize {
     };
 
     let vanilla_params = post_setup_params(post_config);
-    let pp = election_post::ElectionPoSt::<FlarpHasher>::setup(&vanilla_params).unwrap();
+    let pp = election::ElectionPoSt::<FlarpHasher>::setup(&vanilla_params).unwrap();
 
     let mut cs = BenchCS::<Bls12>::new();
     ElectionPoStCompound::<FlarpHasher>::blank_circuit(&pp)
@@ -430,8 +430,8 @@ fn measure_kdf_circuit(i: &FlarpInputs) -> usize {
     use ff::Field;
     use paired::bls12_381::Fr;
     use rand::thread_rng;
-    use storage_proofs::circuit::uint64;
     use storage_proofs::fr32::fr_into_bytes;
+    use storage_proofs::gadgets::uint64;
     use storage_proofs::util::bytes_into_boolean_vec_be;
 
     let mut cs = BenchCS::<Bls12>::new();
@@ -462,7 +462,7 @@ fn measure_kdf_circuit(i: &FlarpInputs) -> usize {
     let window_index = uint64::UInt64::constant(window_index_raw);
     let node = uint64::UInt64::constant(node_raw);
 
-    storage_proofs::circuit::create_label::create_label(
+    storage_proofs::gadgets::create_label::create_label(
         cs.namespace(|| "create_label"),
         &id_bits,
         parents_bits,
@@ -504,8 +504,7 @@ fn generate_params(i: &FlarpInputs) {
 
 fn cache_porep_params(porep_config: PoRepConfig) {
     use filecoin_proofs::parameters::public_params;
-    use storage_proofs::circuit::stacked::StackedCompound;
-    use storage_proofs::stacked::StackedDrg;
+    use storage_proofs::porep::stacked::{StackedCompound, StackedDrg};
 
     let public_params = public_params(
         PaddedBytesAmount::from(porep_config),

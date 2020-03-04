@@ -443,10 +443,10 @@ mod tests {
     use super::*;
     use std::mem;
 
-    use crate::circuit::constraint;
-    use crate::circuit::test::*;
+    use crate::gadgets::{constraint, TestConstraintSystem};
     use crate::merkle::MerkleTree;
     use bellperson::gadgets::num;
+
     #[test]
     fn test_path() {
         let values = [

@@ -1,9 +1,9 @@
 use std::sync::atomic::Ordering;
 
 use anyhow::{ensure, Result};
-use storage_proofs::election_post::{self, ElectionPoSt};
+use storage_proofs::porep::stacked::{self, LayerChallenges, StackedDrg};
+use storage_proofs::post::election::{self, ElectionPoSt};
 use storage_proofs::proof::ProofScheme;
-use storage_proofs::stacked::{self, LayerChallenges, StackedDrg};
 
 use crate::constants::{
     DefaultPieceHasher, DefaultTreeHasher, DRG_DEGREE, EXP_DEGREE, LAYERS, POREP_MINIMUM_CHALLENGES,
@@ -15,8 +15,8 @@ const DRG_SEED: [u8; 28] = [
     26, 27,
 ]; // Arbitrary, need a theory for how to vary this over time.
 
-type PostSetupParams = election_post::SetupParams;
-pub type PostPublicParams = election_post::PublicParams;
+type PostSetupParams = election::SetupParams;
+pub type PostPublicParams = election::PublicParams;
 
 pub fn public_params(
     sector_bytes: PaddedBytesAmount,
@@ -35,7 +35,7 @@ pub fn post_public_params(post_config: PoStConfig) -> Result<PostPublicParams> {
 pub fn post_setup_params(post_config: PoStConfig) -> PostSetupParams {
     let size = PaddedBytesAmount::from(post_config);
 
-    election_post::SetupParams {
+    election::SetupParams {
         sector_size: size.into(),
         challenge_count: post_config.challenge_count,
         challenged_nodes: post_config.challenged_nodes,

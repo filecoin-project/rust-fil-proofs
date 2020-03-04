@@ -15,21 +15,13 @@ const SETTINGS_PATH: &str = "./rust-fil-proofs.config.toml";
 #[serde(default)]
 pub struct Settings {
     pub maximize_caching: bool,
-    pub merkle_tree_path: String,
-    pub num_proving_threads: usize,
-    pub replicated_trees_dir: String,
     pub pedersen_hash_exp_window_size: u32,
-    // Generating MTs in parallel optimizes for speed while generating them
-    // in sequence (`false`) optimizes for memory.
 }
 
 impl Default for Settings {
     fn default() -> Self {
         Settings {
             maximize_caching: false,
-            merkle_tree_path: "/tmp/merkle-trees".into(),
-            num_proving_threads: 1,
-            replicated_trees_dir: "".into(),
             pedersen_hash_exp_window_size: 16,
         }
     }

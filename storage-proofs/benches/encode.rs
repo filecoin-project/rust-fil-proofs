@@ -7,7 +7,7 @@ use storage_proofs::drgraph::new_seed;
 use storage_proofs::fr32::fr_into_bytes;
 use storage_proofs::hasher::sha256::Sha256Hasher;
 use storage_proofs::hasher::{Domain, Hasher};
-use storage_proofs::stacked::{create_key, StackedBucketGraph};
+use storage_proofs::porep::stacked::{create_key, StackedBucketGraph};
 
 struct Pregenerated<H: 'static + Hasher> {
     data: Vec<u8>,

@@ -22,7 +22,7 @@ lazy_static! {
     pub static ref DRG_DEGREE: AtomicU64 =
         AtomicU64::new(storage_proofs::drgraph::BASE_DEGREE as u64);
     pub static ref EXP_DEGREE: AtomicU64 =
-        AtomicU64::new(storage_proofs::stacked::EXP_DEGREE as u64);
+        AtomicU64::new(storage_proofs::porep::stacked::EXP_DEGREE as u64);
     pub static ref POREP_MINIMUM_CHALLENGES: RwLock<HashMap<u64, u64>> = RwLock::new(
         [
             (SECTOR_SIZE_2_KIB, 2),

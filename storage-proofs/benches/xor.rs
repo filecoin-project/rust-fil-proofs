@@ -5,10 +5,10 @@ use criterion::{black_box, criterion_group, criterion_main, Criterion, Parameter
 use fil_sapling_crypto::jubjub::JubjubEngine;
 use paired::bls12_381::Bls12;
 use rand::{thread_rng, Rng};
-use storage_proofs::circuit::bench::BenchCS;
+use storage_proofs::gadgets::BenchCS;
 
-use storage_proofs::circuit;
 use storage_proofs::crypto::xor;
+use storage_proofs::gadgets;
 
 struct XorExample<'a> {
     key: &'a [Option<bool>],
@@ -41,7 +41,7 @@ impl<'a, E: JubjubEngine> Circuit<E> for XorExample<'a> {
             .collect::<Result<Vec<_>, SynthesisError>>()?;
 
         let mut cs = cs.namespace(|| "xor");
-        let _res = circuit::xor::xor(&mut cs, &key, &data)?;
+        let _res = gadgets::xor::xor(&mut cs, &key, &data)?;
 
         Ok(())
     }

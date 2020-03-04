@@ -1,5 +1,3 @@
-use sha2::{Digest, Sha256};
-
 use std::hash::Hasher as StdHasher;
 
 use anyhow::ensure;
@@ -12,10 +10,12 @@ use merkletree::merkle::Element;
 use paired::bls12_381::{Bls12, Fr, FrRepr};
 use rand::RngCore;
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 
 use super::{Domain, HashFunction, Hasher};
 use crate::crypto::sloth;
 use crate::error::*;
+use crate::gadgets::multipack;
 
 #[derive(Default, Copy, Clone, Debug, PartialEq, Eq)]
 pub struct Sha256Hasher {}
@@ -266,7 +266,7 @@ impl HashFunction<Sha256Domain> for Sha256Function {
             .cloned()
             .take(E::Fr::CAPACITY as usize)
             .collect::<Vec<_>>();
-        crate::circuit::multipack::pack_bits(cs.namespace(|| "pack_le"), &le_bits)
+        multipack::pack_bits(cs.namespace(|| "pack_le"), &le_bits)
     }
 
     fn hash2_circuit<E, CS>(
@@ -364,9 +364,9 @@ impl From<Sha256Domain> for [u8; 32] {
 mod tests {
     use super::*;
 
-    use crate::circuit::test::TestConstraintSystem;
     use crate::crypto;
     use crate::fr32::fr_into_bytes;
+    use crate::gadgets::TestConstraintSystem;
     use crate::util::bytes_into_boolean_vec;
 
     use bellperson::gadgets::boolean::Boolean;
