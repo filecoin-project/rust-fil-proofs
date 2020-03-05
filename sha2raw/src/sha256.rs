@@ -34,7 +34,7 @@ impl Sha256 {
     }
 
     pub fn input(&mut self, blocks: &[&[u8]]) {
-        assert_eq!(blocks.len() % 2, 0, "invalid block length");
+        debug_assert_eq!(blocks.len() % 2, 0, "invalid block length");
 
         self.len += (blocks.len() as u64) << 8;
 
@@ -60,7 +60,7 @@ impl Sha256 {
     }
 
     pub fn finish_with(mut self, block0: &[u8]) -> [u8; 32] {
-        assert_eq!(block0.len(), 32);
+        debug_assert_eq!(block0.len(), 32);
 
         let mut block1 = [0u8; 32];
 

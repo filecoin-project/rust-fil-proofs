@@ -9,7 +9,7 @@ use crate::error::Result;
 use crate::hasher::Hasher;
 use crate::util::{data_at_node_offset, NODE_SIZE};
 
-use super::{graph::StackedBucketGraph, proof::TOTAL_PARENTS};
+use super::graph::StackedBucketGraph;
 
 pub fn create_label<H: Hasher>(
     graph: &StackedBucketGraph<H>,
@@ -31,7 +31,7 @@ pub fn create_label<H: Hasher>(
             _mm_prefetch(prev.as_ptr() as *const i8, _MM_HINT_T0);
         }
 
-        graph.copy_parents_data(node as u32, &*layer_labels, hasher, TOTAL_PARENTS)
+        graph.copy_parents_data(node as u32, &*layer_labels, hasher)
     } else {
         hasher.finish()
     };
@@ -68,13 +68,7 @@ pub fn create_label_exp<H: Hasher>(
             _mm_prefetch(prev.as_ptr() as *const i8, _MM_HINT_T0);
         }
 
-        graph.copy_parents_data_exp(
-            node as u32,
-            &*layer_labels,
-            exp_parents_data,
-            hasher,
-            TOTAL_PARENTS,
-        )
+        graph.copy_parents_data_exp(node as u32, &*layer_labels, exp_parents_data, hasher)
     } else {
         hasher.finish()
     };
