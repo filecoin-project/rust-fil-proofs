@@ -1,18 +1,17 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion, Throughput};
 use ff::Field;
-use generic_array::typenum;
 use paired::bls12_381::{Bls12, Fr};
 use rand::thread_rng;
 use storage_proofs::drgraph::new_seed;
 use storage_proofs::fr32::fr_into_bytes;
 use storage_proofs::hasher::sha256::Sha256Hasher;
 use storage_proofs::hasher::{Domain, Hasher};
-use storage_proofs::porep::stacked::{create_key, create_key_exp, StackedBucketGraph};
+use storage_proofs::porep::stacked::{create_label, create_label_exp, StackedBucketGraph};
 
 struct Pregenerated<H: 'static + Hasher> {
     data: Vec<u8>,
     replica_id: H::Domain,
-    graph: StackedBucketGraph<H, typenum::U14>,
+    graph: StackedBucketGraph<H>,
 }
 
 fn pregenerate_data<H: Hasher>(degree: usize) -> Pregenerated<H> {
@@ -24,7 +23,7 @@ fn pregenerate_data<H: Hasher>(degree: usize) -> Pregenerated<H> {
         .collect();
     let replica_id: H::Domain = H::Domain::random(&mut rng);
 
-    let graph = StackedBucketGraph::<H, typenum::U14>::new_stacked(size, 6, 8, new_seed()).unwrap();
+    let graph = StackedBucketGraph::<H>::new_stacked(size, 6, 8, new_seed()).unwrap();
 
     Pregenerated {
         data,
@@ -44,7 +43,7 @@ fn kdf_benchmark(c: &mut Criterion) {
     let mut group = c.benchmark_group("kdf");
     group.sample_size(10);
     group.throughput(Throughput::Bytes(
-        /* replica id + 37 parents + node id + */ 40 * 32,
+        /* replica id + 37 parents + node id */ 39 * 32,
     ));
 
     group.bench_function("exp", |b| {
@@ -55,7 +54,7 @@ fn kdf_benchmark(c: &mut Criterion) {
         let graph = &graph;
         let replica_id = replica_id.clone();
 
-        b.iter(|| black_box(create_key_exp(graph, &replica_id, &*exp_data, data, 1)))
+        b.iter(|| black_box(create_label_exp(graph, &replica_id, &*exp_data, data, 1)))
     });
 
     group.bench_function("non-exp", |b| {
@@ -63,7 +62,7 @@ fn kdf_benchmark(c: &mut Criterion) {
         let graph = &graph;
         let replica_id = replica_id.clone();
 
-        b.iter(|| black_box(create_key(graph, &replica_id, &mut data, 1)))
+        b.iter(|| black_box(create_label(graph, &replica_id, &mut data, 1)))
     });
 
     group.finish();

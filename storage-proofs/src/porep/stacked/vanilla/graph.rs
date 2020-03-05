@@ -195,9 +195,9 @@ where
         node: u32,
         base_data: &[u8],
         exp_data: &[u8],
-        hasher: &mut Sha256,
+        hasher: Sha256,
         total_parents: usize,
-    ) {
+    ) -> [u8; 32] {
         if self.use_cache {
             let cache_lock = PARENT_CACHE.read().unwrap();
             let cache = cache_lock
@@ -210,7 +210,7 @@ where
                 exp_data,
                 hasher,
                 total_parents,
-            );
+            )
         } else {
             let mut cache_parents = vec![0u32; self.degree()];
 
@@ -221,7 +221,7 @@ where
                 exp_data,
                 hasher,
                 total_parents,
-            );
+            )
         }
     }
 
@@ -229,21 +229,21 @@ where
         &self,
         node: u32,
         base_data: &[u8],
-        hasher: &mut Sha256,
+        hasher: Sha256,
         total_parents: usize,
-    ) {
+    ) -> [u8; 32] {
         if self.use_cache {
             let cache_lock = PARENT_CACHE.read().unwrap();
             let cache = cache_lock
                 .get(&self.sector_size())
                 .expect("Invalid cache construction");
             let cache_parents = cache.read(node as u32);
-            self.copy_parents_data_inner(&cache_parents, base_data, hasher, total_parents);
+            self.copy_parents_data_inner(&cache_parents, base_data, hasher, total_parents)
         } else {
             let mut cache_parents = vec![0u32; self.degree()];
 
             self.parents(node as usize, &mut cache_parents[..]).unwrap();
-            self.copy_parents_data_inner(&cache_parents, base_data, hasher, total_parents);
+            self.copy_parents_data_inner(&cache_parents, base_data, hasher, total_parents)
         }
     }
 
@@ -252,9 +252,9 @@ where
         cache_parents: &[u32],
         base_data: &[u8],
         exp_data: &[u8],
-        hasher: &mut Sha256,
+        mut hasher: Sha256,
         total_parents: usize,
-    ) {
+    ) -> [u8; 32] {
         let base_degree = self.base_graph().degree();
         let degree = self.degree();
 
@@ -304,16 +304,16 @@ where
 
         // round 3 (9)
         hasher.input(&parents[..8]);
-        hasher.input(&[parents[8], &[0u8; 32][..]]);
+        hasher.finish_with(&parents[8])
     }
 
     fn copy_parents_data_inner(
         &self,
         cache_parents: &[u32],
         base_data: &[u8],
-        hasher: &mut Sha256,
+        mut hasher: Sha256,
         total_parents: usize,
-    ) {
+    ) -> [u8; 32] {
         let base_degree = self.base_graph().degree();
         assert_eq!(base_degree, 6);
         assert_eq!(cache_parents.len(), 14);
@@ -355,7 +355,7 @@ where
         hasher.input(&parents);
 
         // round 7 (37)
-        hasher.input(&[parents[0], &[0u8; 32][..]][..]);
+        hasher.finish_with(parents[0])
     }
 }
 

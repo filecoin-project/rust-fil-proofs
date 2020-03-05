@@ -12,7 +12,7 @@ use merkletree::merkle::Element;
 use paired::bls12_381::{Bls12, Fr, FrRepr};
 use serde::{Deserialize, Serialize};
 
-use crate::crypto::{create_label, pedersen, sloth};
+use crate::crypto::{pedersen, sloth};
 use crate::error::{Error, Result};
 use crate::gadgets::pedersen::{pedersen_compression_num, pedersen_md_no_padding};
 use crate::hasher::{Domain, HashFunction, Hasher};
@@ -26,10 +26,6 @@ impl Hasher for PedersenHasher {
 
     fn name() -> String {
         "PedersenHasher".into()
-    }
-
-    fn create_label(data: &[u8], m: usize) -> Result<Self::Domain> {
-        Ok(create_label::create_label(data, m)?.into())
     }
 
     #[inline]

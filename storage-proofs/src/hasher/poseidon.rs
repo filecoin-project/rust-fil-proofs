@@ -1,6 +1,6 @@
 use std::hash::Hasher as StdHasher;
 
-use crate::crypto::{create_label, sloth};
+use crate::crypto::sloth;
 use crate::error::{Error, Result};
 use crate::hasher::types::{
     PoseidonArity, PoseidonEngine, PoseidonMDArity, POSEIDON_CONSTANTS_1, POSEIDON_CONSTANTS_16,
@@ -30,10 +30,6 @@ impl Hasher for PoseidonHasher {
 
     fn name() -> String {
         "PoseidonHasher".into()
-    }
-
-    fn create_label(data: &[u8], m: usize) -> Result<Self::Domain> {
-        Ok(create_label::create_label(data, m)?.into())
     }
 
     #[inline]

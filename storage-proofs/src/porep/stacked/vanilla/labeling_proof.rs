@@ -39,9 +39,6 @@ impl<H: Hasher> LabelingProof<H> {
             let data = AsRef::<[u8]>::as_ref(parent);
             hasher.input(data);
         }
-        if self.parents.len() % 2 != 0 {
-            hasher.input(&[0u8; 32]);
-        }
 
         bytes_into_fr_repr_safe(hasher.result().as_ref()).into()
     }

@@ -338,12 +338,12 @@ mod tests {
 
     #[test]
     fn stacked_input_circuit_pedersen() {
-        stacked_input_circuit::<PedersenHasher>(2_184_535);
+        stacked_input_circuit::<PedersenHasher>(2_184_211);
     }
 
     #[test]
     fn stacked_input_circuit_poseidon() {
-        stacked_input_circuit::<PoseidonHasher>(1_891_958);
+        stacked_input_circuit::<PoseidonHasher>(1_891_634);
     }
 
     fn stacked_input_circuit<H: Hasher + 'static>(expected_constraints: usize) {

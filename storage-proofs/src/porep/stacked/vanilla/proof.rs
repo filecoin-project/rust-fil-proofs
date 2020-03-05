@@ -2,22 +2,17 @@ use std::collections::HashMap;
 use std::marker::PhantomData;
 use std::path::PathBuf;
 
-#[cfg(target_arch = "x86")]
-use std::arch::x86::*;
-#[cfg(target_arch = "x86_64")]
-use std::arch::x86_64::*;
-
 use log::{info, trace};
 use merkletree::merkle::{
     get_merkle_tree_len, is_merkle_tree_size_valid, FromIndexedParallelIterator,
 };
 use merkletree::store::{DiskStore, StoreConfig, StoreConfigDataVersion};
 use rayon::prelude::*;
-use sha2raw::Sha256;
 
 use super::{
     challenges::LayerChallenges,
     column::Column,
+    create_label, create_label_exp,
     graph::StackedBucketGraph,
     hash::hash_single_column,
     params::{
@@ -40,8 +35,7 @@ use crate::measurements::{
 };
 use crate::merkle::{MerkleProof, MerkleTree, OctMerkleTree, Store};
 use crate::porep::PoRep;
-use crate::util::{data_at_node_offset, NODE_SIZE};
-
+use crate::util::NODE_SIZE;
 pub const TOTAL_PARENTS: usize = 37;
 
 #[derive(Debug)]
@@ -294,12 +288,12 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
             if layer == 1 {
                 let layer_labels = &mut labels_buffer[..layer_size];
                 for node in 0..graph.size() {
-                    create_key(graph, replica_id, layer_labels, node)?;
+                    create_label(graph, replica_id, layer_labels, node)?;
                 }
             } else {
                 let (layer_labels, exp_labels) = labels_buffer.split_at_mut(layer_size);
                 for node in 0..graph.size() {
-                    create_key_exp(graph, replica_id, exp_labels, layer_labels, node)?;
+                    create_label_exp(graph, replica_id, exp_labels, layer_labels, node)?;
                 }
             }
 
@@ -633,81 +627,6 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
 
         Ok((tau, (paux, taux)))
     }
-}
-
-pub fn create_key<H: Hasher>(
-    graph: &StackedBucketGraph<H>,
-    replica_id: &H::Domain,
-    layer_labels: &mut [u8],
-    node: usize,
-) -> Result<()> {
-    let mut hasher = Sha256::new();
-    let mut buffer = [0u8; 32];
-
-    buffer[..8].copy_from_slice(&(node as u64).to_be_bytes());
-    hasher.input(&[AsRef::<[u8]>::as_ref(replica_id), &buffer[..]][..]);
-
-    // hash parents for all non 0 nodes
-    if node > 0 {
-        // prefetch previous node, which is always a parent
-        let prev = &layer_labels[(node - 1) * NODE_SIZE..node * NODE_SIZE];
-        unsafe {
-            _mm_prefetch(prev.as_ptr() as *const i8, _MM_HINT_T0);
-        }
-
-        graph.copy_parents_data(node as u32, &*layer_labels, &mut hasher, TOTAL_PARENTS);
-    }
-
-    // store the newly generated key
-    let start = data_at_node_offset(node);
-    let end = start + NODE_SIZE;
-    layer_labels[start..end].copy_from_slice(&hasher.finish()[..]);
-
-    // strip last two bits, to ensure result is in Fr.
-    layer_labels[end - 1] &= 0b0011_1111;
-
-    Ok(())
-}
-
-pub fn create_key_exp<H: Hasher>(
-    graph: &StackedBucketGraph<H>,
-    replica_id: &H::Domain,
-    exp_parents_data: &[u8],
-    layer_labels: &mut [u8],
-    node: usize,
-) -> Result<()> {
-    let mut hasher = Sha256::new();
-    let mut buffer = [0u8; 32];
-
-    buffer[..8].copy_from_slice(&(node as u64).to_be_bytes());
-    hasher.input(&[AsRef::<[u8]>::as_ref(replica_id), &buffer[..]][..]);
-
-    // hash parents for all non 0 nodes
-    if node > 0 {
-        // prefetch previous node, which is always a parent
-        let prev = &layer_labels[(node - 1) * NODE_SIZE..node * NODE_SIZE];
-        unsafe {
-            _mm_prefetch(prev.as_ptr() as *const i8, _MM_HINT_T0);
-        }
-
-        graph.copy_parents_data_exp(
-            node as u32,
-            &*layer_labels,
-            exp_parents_data,
-            &mut hasher,
-            TOTAL_PARENTS,
-        );
-    }
-
-    // store the newly generated key
-    let start = data_at_node_offset(node);
-    let end = start + NODE_SIZE;
-    layer_labels[start..end].copy_from_slice(&hasher.finish()[..]);
-
-    // strip last two bits, to ensure result is in Fr.
-    layer_labels[end - 1] &= 0b0011_1111;
-
-    Ok(())
 }
 
 #[cfg(test)]

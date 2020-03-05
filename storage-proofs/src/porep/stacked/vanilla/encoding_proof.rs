@@ -40,9 +40,6 @@ impl<H: Hasher> EncodingProof<H> {
         for parent in &self.parents {
             hasher.input(AsRef::<[u8]>::as_ref(parent));
         }
-        if self.parents.len() % 2 != 0 {
-            hasher.input(&[0u8; 32]);
-        }
 
         bytes_into_fr_repr_safe(hasher.result().as_ref()).into()
     }

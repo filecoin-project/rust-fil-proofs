@@ -4,6 +4,7 @@ mod macros;
 mod challenges;
 mod column;
 mod column_proof;
+mod create_label;
 mod encoding_proof;
 mod graph;
 pub(crate) mod hash;
@@ -16,11 +17,12 @@ mod proof_scheme;
 pub use self::challenges::{ChallengeRequirements, LayerChallenges};
 pub use self::column::Column;
 pub use self::column_proof::ColumnProof;
+pub use self::create_label::*;
 pub use self::encoding_proof::EncodingProof;
 pub use self::graph::{StackedBucketGraph, StackedGraph, EXP_DEGREE};
+pub use self::labeling_proof::LabelingProof;
 pub use self::params::*;
-pub use self::proof::{create_key, create_key_exp, StackedDrg, TOTAL_PARENTS};
-pub use labeling_proof::LabelingProof;
+pub use self::proof::{StackedDrg, TOTAL_PARENTS};
 
 #[cfg(test)]
 pub use self::graph::DEGREE;

@@ -1,8 +1,12 @@
 use std::marker::PhantomData;
 
-use bellperson::gadgets::boolean::Boolean;
-use bellperson::gadgets::num;
+use bellperson::gadgets::{
+    boolean::Boolean,
+    sha256::sha256 as sha256_circuit,
+    {multipack, num},
+};
 use bellperson::{Circuit, ConstraintSystem, SynthesisError};
+use ff::PrimeField;
 use fil_sapling_crypto::jubjub::JubjubEngine;
 use generic_array::typenum;
 use paired::bls12_381::{Bls12, Fr};
@@ -12,9 +16,9 @@ use crate::crypto::pedersen::JJ_PARAMS;
 use crate::error::Result;
 use crate::fr32::fr_into_bytes;
 use crate::gadgets::constraint;
-use crate::gadgets::create_label::create_label as kdf;
 use crate::gadgets::encode;
 use crate::gadgets::por::PoRCircuit;
+use crate::gadgets::uint64;
 use crate::gadgets::variables::Root;
 use crate::hasher::Hasher;
 use crate::util::bytes_into_boolean_vec_be;
@@ -265,6 +269,57 @@ impl<'a, H: Hasher> Circuit<Bls12> for DrgPoRepCircuit<'a, H> {
         // profit!
         Ok(())
     }
+}
+
+/// Key derivation function.
+fn kdf<E, CS>(
+    mut cs: CS,
+    id: &[Boolean],
+    parents: Vec<Vec<Boolean>>,
+    window_index: Option<uint64::UInt64>,
+    node: Option<uint64::UInt64>,
+) -> Result<num::AllocatedNum<E>, SynthesisError>
+where
+    E: JubjubEngine,
+    CS: ConstraintSystem<E>,
+{
+    // ciphertexts will become a buffer of the layout
+    // id | node | encodedParentNode1 | encodedParentNode1 | ...
+
+    let mut ciphertexts = id.to_vec();
+
+    if let Some(window_index) = window_index {
+        ciphertexts.extend_from_slice(&window_index.to_bits_be());
+    }
+
+    if let Some(node) = node {
+        ciphertexts.extend_from_slice(&node.to_bits_be());
+    }
+
+    for parent in parents.into_iter() {
+        ciphertexts.extend_from_slice(&parent);
+    }
+
+    let alloc_bits = sha256_circuit(cs.namespace(|| "hash"), &ciphertexts[..])?;
+    let fr = if alloc_bits[0].get_value().is_some() {
+        let be_bits = alloc_bits
+            .iter()
+            .map(|v| v.get_value().ok_or(SynthesisError::AssignmentMissing))
+            .collect::<Result<Vec<bool>, SynthesisError>>()?;
+
+        let le_bits = be_bits
+            .chunks(8)
+            .flat_map(|chunk| chunk.iter().rev())
+            .copied()
+            .take(E::Fr::CAPACITY as usize)
+            .collect::<Vec<bool>>();
+
+        Ok(multipack::compute_multipacking::<E>(&le_bits)[0])
+    } else {
+        Err(SynthesisError::AssignmentMissing)
+    };
+
+    num::AllocatedNum::<E>::alloc(cs.namespace(|| "result_num"), || fr)
 }
 
 #[cfg(test)]

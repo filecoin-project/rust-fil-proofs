@@ -1,5 +1,4 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion, ParameterizedBenchmark};
-use generic_array::typenum;
 use storage_proofs::drgraph::{Graph, BASE_DEGREE};
 use storage_proofs::hasher::blake2s::Blake2sHasher;
 use storage_proofs::hasher::pedersen::PedersenHasher;
@@ -35,9 +34,9 @@ fn stop_profile() {
 #[inline(always)]
 fn stop_profile() {}
 
-fn pregenerate_graph<H: Hasher>(size: usize) -> StackedBucketGraph<H, typenum::U14> {
+fn pregenerate_graph<H: Hasher>(size: usize) -> StackedBucketGraph<H> {
     let seed = [1u8; 28];
-    StackedBucketGraph::<H, typenum::U14>::new_stacked(size, BASE_DEGREE, EXP_DEGREE, seed).unwrap()
+    StackedBucketGraph::<H>::new_stacked(size, BASE_DEGREE, EXP_DEGREE, seed).unwrap()
 }
 
 fn parents_loop<H: Hasher, G: Graph<H>>(graph: &G, parents: &mut [u32]) {

@@ -29,17 +29,6 @@ impl Hasher for Blake2sHasher {
         "Blake2sHasher".into()
     }
 
-    fn create_label(data: &[u8], m: usize) -> Result<Self::Domain> {
-        ensure!(
-            data.len() == 32 * (1 + m),
-            "invalid input length: data.len(): {} m: {}",
-            data.len(),
-            m
-        );
-
-        Ok(<Self::Function as HashFunction<Self::Domain>>::hash(data))
-    }
-
     fn sloth_encode(key: &Self::Domain, ciphertext: &Self::Domain) -> Result<Self::Domain> {
         // TODO: validate this is how sloth should work in this case
         let k = (*key).into();
