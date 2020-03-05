@@ -1,4 +1,4 @@
-#![cfg_attr(feature = "cargo-clippy", allow(many_single_char_names))]
+#![allow(clippy::many_single_char_names)]
 
 use fake_simd::u32x4;
 

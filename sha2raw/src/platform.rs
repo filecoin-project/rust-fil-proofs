@@ -54,11 +54,11 @@ impl Implementation {
 
     #[cfg(feature = "asm")]
     pub fn asm_if_supported() -> Option<Self> {
-        return Some(Implementation(Platform::Asm));
+        Some(Implementation(Platform::Asm))
     }
 
     #[inline]
-    pub fn compress256(&self, state: &mut [u32; 8], blocks: &[&[u8]]) {
+    pub fn compress256(self, state: &mut [u32; 8], blocks: &[&[u8]]) {
         match self.0 {
             Platform::Portable => {
                 use crate::sha256_utils;

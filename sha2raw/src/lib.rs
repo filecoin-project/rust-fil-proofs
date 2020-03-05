@@ -2,6 +2,9 @@
 
 // Give relevant error messages if the user tries to enable AArch64 asm on unsupported platforms.
 
+#![deny(clippy::all, clippy::perf, clippy::correctness)]
+#![allow(clippy::unreadable_literal)]
+
 mod consts;
 
 mod platform;

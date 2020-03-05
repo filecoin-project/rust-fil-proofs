@@ -13,12 +13,18 @@ pub struct Sha256 {
     state: [u32; 8],
 }
 
-impl Sha256 {
-    pub fn new() -> Self {
+impl Default for Sha256 {
+    fn default() -> Self {
         Sha256 {
             len: 0,
             state: H256,
         }
+    }
+}
+
+impl Sha256 {
+    pub fn new() -> Self {
+        Sha256::default()
     }
 
     pub fn digest(blocks: &[&[u8]]) -> [u8; 32] {

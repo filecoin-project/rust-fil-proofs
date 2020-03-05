@@ -1,3 +1,5 @@
+#![allow(clippy::many_single_char_names)]
+
 #[cfg(target_arch = "x86")]
 use std::arch::x86::*;
 #[cfg(target_arch = "x86_64")]
@@ -7,6 +9,7 @@ use std::arch::x86_64::*;
 /// Based on https://github.com/noloader/SHA-Intrinsics/blob/master/sha256-x86.c
 #[inline]
 #[target_feature(enable = "sha")]
+#[allow(clippy::cast_ptr_alignment)] // Safe to cast without alignment checks as the loads and stores do not require alignment.
 pub unsafe fn compress256(state: &mut [u32; 8], blocks: &[&[u8]]) {
     assert_eq!(blocks.len() % 2, 0, "Blocks must be a multiple of 2");
 
