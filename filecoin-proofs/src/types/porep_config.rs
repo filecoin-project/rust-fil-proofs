@@ -54,7 +54,7 @@ impl PoRepConfig {
         Ok(
             <StackedCompound<DefaultTreeHasher, DefaultPieceHasher> as CacheableParameters<
                 Bls12,
-                StackedCircuit<_, DefaultTreeHasher, DefaultPieceHasher, crate::constants::DEGREE>,
+                StackedCircuit<_, DefaultTreeHasher, DefaultPieceHasher>,
                 _,
             >>::cache_identifier(&params),
         )

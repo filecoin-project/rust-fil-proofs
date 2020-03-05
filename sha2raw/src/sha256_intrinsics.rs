@@ -9,7 +9,6 @@ use std::arch::x86_64::*;
 #[target_feature(enable = "sha")]
 pub unsafe fn compress256(state: &mut [u32; 8], blocks: &[&[u8]]) {
     assert_eq!(blocks.len() % 2, 0, "Blocks must be a multiple of 2");
-    // TODO: Process multiple blocks
 
     let mut state0: __m128i;
     let mut state1: __m128i;

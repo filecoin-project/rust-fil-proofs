@@ -17,10 +17,7 @@ pub struct LabelingProof {
 
 impl LabelingProof {
     /// Create an empty proof, used in `blank_circuit`s.
-    pub fn empty<H: Hasher, Degree: generic_array::ArrayLength<u32>>(
-        _params: &PublicParams<H, Degree>,
-        _layer: usize,
-    ) -> Self {
+    pub fn empty<H: Hasher>(_params: &PublicParams<H>, _layer: usize) -> Self {
         LabelingProof {
             node: None,
             parents: vec![None; TOTAL_PARENTS],

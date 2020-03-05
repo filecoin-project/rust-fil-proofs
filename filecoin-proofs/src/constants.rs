@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::sync::{atomic::AtomicU64, RwLock};
+use std::sync::RwLock;
 
 use lazy_static::lazy_static;
 use storage_proofs::hasher::Hasher;
@@ -16,15 +16,12 @@ pub const SECTOR_SIZE_32_GIB: u64 = 1 << 35;
 pub const POST_CHALLENGE_COUNT: usize = 65;
 pub const POST_CHALLENGED_NODES: usize = 1;
 
-pub type DEGREE = typenum::U14;
+pub const DRG_DEGREE: usize = storage_proofs::drgraph::BASE_DEGREE;
+pub const EXP_DEGREE: usize = storage_proofs::porep::stacked::EXP_DEGREE;
 
 lazy_static! {
     pub static ref PARAMETERS: ParameterMap =
         serde_json::from_str(include_str!("../parameters.json")).expect("Invalid parameters.json");
-    pub static ref DRG_DEGREE: AtomicU64 =
-        AtomicU64::new(storage_proofs::drgraph::BASE_DEGREE as u64);
-    pub static ref EXP_DEGREE: AtomicU64 =
-        AtomicU64::new(storage_proofs::porep::stacked::EXP_DEGREE as u64);
     pub static ref POREP_MINIMUM_CHALLENGES: RwLock<HashMap<u64, u64>> = RwLock::new(
         [
             (SECTOR_SIZE_2_KIB, 2),

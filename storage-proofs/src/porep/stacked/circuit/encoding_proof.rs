@@ -17,9 +17,7 @@ pub struct EncodingProof {
 
 impl EncodingProof {
     /// Create an empty proof, used in `blank_circuit`s.
-    pub fn empty<H: Hasher, Degree: generic_array::ArrayLength<u32>>(
-        _params: &PublicParams<H, Degree>,
-    ) -> Self {
+    pub fn empty<H: Hasher>(_params: &PublicParams<H>) -> Self {
         EncodingProof {
             node: None,
             parents: vec![None; TOTAL_PARENTS],

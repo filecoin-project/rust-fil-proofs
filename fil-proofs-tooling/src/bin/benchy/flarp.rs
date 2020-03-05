@@ -1,9 +1,5 @@
-use std::marker::PhantomData;
-use std::sync::atomic::Ordering::Relaxed;
-
 use bellperson::Circuit;
 use fil_proofs_tooling::{measure, Metadata};
-use filecoin_proofs::constants::DEGREE;
 use filecoin_proofs::constants::{DefaultTreeHasher, POREP_PARTITIONS};
 use filecoin_proofs::parameters::post_public_params;
 use filecoin_proofs::types::PaddedBytesAmount;
@@ -41,8 +37,6 @@ pub struct FlarpReport {
 pub struct FlarpInputs {
     /// The size of sector.
     sector_size: String,
-    drg_parents: u64,
-    expander_parents: u64,
     porep_challenges: u64,
     porep_partitions: u8,
     post_challenges: u64,
@@ -183,8 +177,6 @@ fn configure_global_config(inputs: &FlarpInputs) {
         .write()
         .unwrap()
         .insert(inputs.sector_size_bytes(), inputs.porep_partitions);
-    filecoin_proofs::constants::EXP_DEGREE.store(inputs.expander_parents, Relaxed);
-    filecoin_proofs::constants::DRG_DEGREE.store(inputs.drg_parents, Relaxed);
     filecoin_proofs::constants::POREP_MINIMUM_CHALLENGES
         .write()
         .unwrap()
@@ -379,8 +371,8 @@ fn measure_porep_circuit(i: &FlarpInputs) -> usize {
 
     let layers = i.stacked_layers as usize;
     let challenge_count = i.porep_challenges as usize;
-    let drg_degree = i.drg_parents as usize;
-    let expansion_degree = i.expander_parents as usize;
+    let drg_degree = filecoin_proofs::constants::DRG_DEGREE;
+    let expansion_degree = filecoin_proofs::constants::EXP_DEGREE;
     let nodes = (i.sector_size_bytes() / 32) as usize;
     let layer_challenges = LayerChallenges::new(layers, challenge_count);
 
@@ -390,13 +382,12 @@ fn measure_porep_circuit(i: &FlarpInputs) -> usize {
         expansion_degree,
         seed: new_seed(),
         layer_challenges,
-        _degree: PhantomData,
     };
 
-    let pp = StackedDrg::<FlarpHasher, Sha256Hasher, DEGREE>::setup(&sp).unwrap();
+    let pp = StackedDrg::<FlarpHasher, Sha256Hasher>::setup(&sp).unwrap();
 
     let mut cs = BenchCS::<Bls12>::new();
-    <StackedCompound<_, _> as CompoundProof<_, StackedDrg<FlarpHasher, Sha256Hasher, DEGREE>, _>>::blank_circuit(
+    <StackedCompound<_, _> as CompoundProof<_, StackedDrg<FlarpHasher, Sha256Hasher>, _>>::blank_circuit(
         &pp,
     )
     .synthesize(&mut cs)
@@ -427,7 +418,7 @@ fn measure_post_circuit(i: &FlarpInputs) -> usize {
     cs.num_constraints()
 }
 
-fn measure_kdf_circuit(i: &FlarpInputs) -> usize {
+fn measure_kdf_circuit(_i: &FlarpInputs) -> usize {
     use bellperson::gadgets::boolean::Boolean;
     use bellperson::ConstraintSystem;
     use ff::Field;
@@ -440,7 +431,7 @@ fn measure_kdf_circuit(i: &FlarpInputs) -> usize {
     let mut cs = BenchCS::<Bls12>::new();
     let rng = &mut thread_rng();
 
-    let parents = i.drg_parents + i.expander_parents;
+    let parents = filecoin_proofs::constants::DRG_DEGREE + filecoin_proofs::constants::EXP_DEGREE;
 
     let id: Vec<u8> = fr_into_bytes::<Bls12>(&Fr::random(rng));
     let parents: Vec<Vec<u8>> = (0..parents)
@@ -518,7 +509,7 @@ fn cache_porep_params(porep_config: PoRepConfig) {
     {
         let circuit = <StackedCompound<_, _> as CompoundProof<
             _,
-            StackedDrg<FlarpHasher, Sha256Hasher, DEGREE>,
+            StackedDrg<FlarpHasher, Sha256Hasher>,
             _,
         >>::blank_circuit(&public_params);
         StackedCompound::<FlarpHasher, Sha256Hasher>::get_param_metadata(circuit, &public_params)
@@ -527,7 +518,7 @@ fn cache_porep_params(porep_config: PoRepConfig) {
     {
         let circuit = <StackedCompound<_, _> as CompoundProof<
             _,
-            StackedDrg<FlarpHasher, Sha256Hasher, DEGREE>,
+            StackedDrg<FlarpHasher, Sha256Hasher>,
             _,
         >>::blank_circuit(&public_params);
         StackedCompound::<FlarpHasher, Sha256Hasher>::get_groth_params(circuit, &public_params)
@@ -536,7 +527,7 @@ fn cache_porep_params(porep_config: PoRepConfig) {
     {
         let circuit = <StackedCompound<_, _> as CompoundProof<
             _,
-            StackedDrg<FlarpHasher, Sha256Hasher, DEGREE>,
+            StackedDrg<FlarpHasher, Sha256Hasher>,
             _,
         >>::blank_circuit(&public_params);
 

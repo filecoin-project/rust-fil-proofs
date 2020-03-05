@@ -34,7 +34,7 @@ fn cache_porep_params(porep_config: PoRepConfig) {
     {
         let circuit = <StackedCompound<DefaultTreeHasher, DefaultPieceHasher> as CompoundProof<
             _,
-            StackedDrg<DefaultTreeHasher, DefaultPieceHasher, DEGREE>,
+            StackedDrg<DefaultTreeHasher, DefaultPieceHasher>,
             _,
         >>::blank_circuit(&public_params);
         let _ = StackedCompound::<DefaultTreeHasher, DefaultPieceHasher>::get_param_metadata(
@@ -45,7 +45,7 @@ fn cache_porep_params(porep_config: PoRepConfig) {
     {
         let circuit = <StackedCompound<DefaultTreeHasher, DefaultPieceHasher> as CompoundProof<
             _,
-            StackedDrg<DefaultTreeHasher, DefaultPieceHasher, DEGREE>,
+            StackedDrg<DefaultTreeHasher, DefaultPieceHasher>,
             _,
         >>::blank_circuit(&public_params);
         StackedCompound::<DefaultTreeHasher, DefaultPieceHasher>::get_groth_params(
@@ -57,7 +57,7 @@ fn cache_porep_params(porep_config: PoRepConfig) {
     {
         let circuit = <StackedCompound<DefaultTreeHasher, DefaultPieceHasher> as CompoundProof<
             _,
-            StackedDrg<DefaultTreeHasher, DefaultPieceHasher, DEGREE>,
+            StackedDrg<DefaultTreeHasher, DefaultPieceHasher>,
             _,
         >>::blank_circuit(&public_params);
 

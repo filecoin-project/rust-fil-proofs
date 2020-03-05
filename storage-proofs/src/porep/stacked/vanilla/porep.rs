@@ -10,24 +10,14 @@ use crate::hasher::Hasher;
 use crate::porep::PoRep;
 use crate::Data;
 
-use generic_array::{typenum, ArrayLength};
 use merkletree::store::StoreConfig;
 
-impl<
-        'a,
-        'c,
-        H: 'static + Hasher,
-        G: 'static + Hasher,
-        Degree: generic_array::ArrayLength<u32> + Sync + Send + Clone + std::ops::Mul<typenum::U32>,
-    > PoRep<'a, H, G> for StackedDrg<'a, H, G, Degree>
-where
-    typenum::Prod<Degree, typenum::U32>: ArrayLength<u8>,
-{
+impl<'a, 'c, H: 'static + Hasher, G: 'static + Hasher> PoRep<'a, H, G> for StackedDrg<'a, H, G> {
     type Tau = Tau<<H as Hasher>::Domain, <G as Hasher>::Domain>;
     type ProverAux = (PersistentAux<H::Domain>, TemporaryAux<H, G>);
 
     fn replicate(
-        pp: &'a PublicParams<H, Degree>,
+        pp: &'a PublicParams<H>,
         replica_id: &H::Domain,
         data: Data<'a>,
         data_tree: Option<BinaryTree<G>>,
@@ -48,7 +38,7 @@ where
     }
 
     fn extract_all<'b>(
-        pp: &'b PublicParams<H, Degree>,
+        pp: &'b PublicParams<H>,
         replica_id: &'b <H as Hasher>::Domain,
         data: &'b [u8],
         config: Option<StoreConfig>,
@@ -67,7 +57,7 @@ where
     }
 
     fn extract(
-        _pp: &PublicParams<H, Degree>,
+        _pp: &PublicParams<H>,
         _replica_id: &<H as Hasher>::Domain,
         _data: &[u8],
         _node: usize,

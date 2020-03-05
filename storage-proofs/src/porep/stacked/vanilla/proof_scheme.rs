@@ -1,5 +1,4 @@
 use anyhow::ensure;
-use generic_array::{typenum, ArrayLength};
 use log::trace;
 use rayon::prelude::*;
 
@@ -15,25 +14,16 @@ use crate::error::Result;
 use crate::hasher::{HashFunction, Hasher};
 use crate::proof::ProofScheme;
 
-impl<
-        'a,
-        'c,
-        H: 'static + Hasher,
-        G: 'static + Hasher,
-        Degree: generic_array::ArrayLength<u32> + Sync + Send + Clone + std::ops::Mul<typenum::U32>,
-    > ProofScheme<'a> for StackedDrg<'c, H, G, Degree>
-where
-    typenum::Prod<Degree, typenum::U32>: ArrayLength<u8>,
-{
-    type PublicParams = PublicParams<H, Degree>;
-    type SetupParams = SetupParams<Degree>;
+impl<'a, 'c, H: 'static + Hasher, G: 'static + Hasher> ProofScheme<'a> for StackedDrg<'c, H, G> {
+    type PublicParams = PublicParams<H>;
+    type SetupParams = SetupParams;
     type PublicInputs = PublicInputs<<H as Hasher>::Domain, <G as Hasher>::Domain>;
     type PrivateInputs = PrivateInputs<H, G>;
     type Proof = Vec<Proof<H, G>>;
     type Requirements = ChallengeRequirements;
 
     fn setup(sp: &Self::SetupParams) -> Result<Self::PublicParams> {
-        let graph = StackedBucketGraph::<H, Degree>::new_stacked(
+        let graph = StackedBucketGraph::<H>::new_stacked(
             sp.nodes,
             sp.degree,
             sp.expansion_degree,
@@ -154,7 +144,7 @@ where
     }
 
     fn satisfies_requirements(
-        public_params: &PublicParams<H, Degree>,
+        public_params: &PublicParams<H>,
         requirements: &ChallengeRequirements,
         partitions: usize,
     ) -> bool {

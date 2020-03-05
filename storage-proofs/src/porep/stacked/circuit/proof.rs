@@ -3,7 +3,7 @@ use std::marker::PhantomData;
 use bellperson::gadgets::num;
 use bellperson::{Circuit, ConstraintSystem, SynthesisError};
 use fil_sapling_crypto::jubjub::JubjubEngine;
-use generic_array::{typenum, ArrayLength};
+use generic_array::typenum;
 use paired::bls12_381::{Bls12, Fr};
 
 use super::params::Proof;
@@ -28,17 +28,9 @@ use crate::util::bytes_into_boolean_vec_be;
 ///
 /// * `params` - parameters for the curve
 ///
-pub struct StackedCircuit<
-    'a,
-    E: JubjubEngine,
-    H: 'static + Hasher,
-    G: 'static + Hasher,
-    Degree: generic_array::ArrayLength<u32> + Sync + Send + Clone + std::ops::Mul<typenum::U32>,
-> where
-    typenum::Prod<Degree, typenum::U32>: ArrayLength<u8>,
-{
+pub struct StackedCircuit<'a, E: JubjubEngine, H: 'static + Hasher, G: 'static + Hasher> {
     params: &'a E::Params,
-    public_params: <StackedDrg<'a, H, G, Degree> as ProofScheme<'a>>::PublicParams,
+    public_params: <StackedDrg<'a, H, G> as ProofScheme<'a>>::PublicParams,
     replica_id: Option<H::Domain>,
     comm_d: Option<G::Domain>,
     comm_r: Option<H::Domain>,
@@ -51,33 +43,16 @@ pub struct StackedCircuit<
     _e: PhantomData<E>,
 }
 
-impl<
-        'a,
-        E: JubjubEngine,
-        H: Hasher,
-        G: Hasher,
-        Degree: generic_array::ArrayLength<u32> + Sync + Send + Clone + std::ops::Mul<typenum::U32>,
-    > CircuitComponent for StackedCircuit<'a, E, H, G, Degree>
-where
-    typenum::Prod<Degree, typenum::U32>: ArrayLength<u8>,
-{
+impl<'a, E: JubjubEngine, H: Hasher, G: Hasher> CircuitComponent for StackedCircuit<'a, E, H, G> {
     type ComponentPrivateInputs = ();
 }
 
-impl<
-        'a,
-        H: Hasher,
-        G: 'static + Hasher,
-        Degree: generic_array::ArrayLength<u32> + Sync + Send + Clone + std::ops::Mul<typenum::U32>,
-    > StackedCircuit<'a, Bls12, H, G, Degree>
-where
-    typenum::Prod<Degree, typenum::U32>: ArrayLength<u8>,
-{
+impl<'a, H: Hasher, G: 'static + Hasher> StackedCircuit<'a, Bls12, H, G> {
     #[allow(clippy::too_many_arguments)]
     pub fn synthesize<CS>(
         mut cs: CS,
         params: &'a <Bls12 as JubjubEngine>::Params,
-        public_params: <StackedDrg<'a, H, G, Degree> as ProofScheme<'a>>::PublicParams,
+        public_params: <StackedDrg<'a, H, G> as ProofScheme<'a>>::PublicParams,
         replica_id: Option<H::Domain>,
         comm_d: Option<G::Domain>,
         comm_r: Option<H::Domain>,
@@ -88,7 +63,7 @@ where
     where
         CS: ConstraintSystem<Bls12>,
     {
-        let circuit = StackedCircuit::<'a, Bls12, H, G, Degree> {
+        let circuit = StackedCircuit::<'a, Bls12, H, G> {
             params,
             public_params,
             replica_id,
@@ -104,15 +79,7 @@ where
     }
 }
 
-impl<
-        'a,
-        H: Hasher,
-        G: Hasher,
-        Degree: generic_array::ArrayLength<u32> + Sync + Send + Clone + std::ops::Mul<typenum::U32>,
-    > Circuit<Bls12> for StackedCircuit<'a, Bls12, H, G, Degree>
-where
-    typenum::Prod<Degree, typenum::U32>: ArrayLength<u8>,
-{
+impl<'a, H: Hasher, G: Hasher> Circuit<Bls12> for StackedCircuit<'a, Bls12, H, G> {
     fn synthesize<CS: ConstraintSystem<Bls12>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
         let StackedCircuit {
             public_params,
@@ -220,20 +187,13 @@ impl<E: JubjubEngine, C: Circuit<E>, P: ParameterSetMetadata, H: Hasher, G: Hash
     }
 }
 
-impl<
-        'a,
-        H: 'static + Hasher,
-        G: 'static + Hasher,
-        Degree: 'a + generic_array::ArrayLength<u32> + Sync + Send + Clone + std::ops::Mul<typenum::U32>,
-    >
-    CompoundProof<'a, Bls12, StackedDrg<'a, H, G, Degree>, StackedCircuit<'a, Bls12, H, G, Degree>>
+impl<'a, H: 'static + Hasher, G: 'static + Hasher>
+    CompoundProof<'a, Bls12, StackedDrg<'a, H, G>, StackedCircuit<'a, Bls12, H, G>>
     for StackedCompound<H, G>
-where
-    typenum::Prod<Degree, typenum::U32>: ArrayLength<u8>,
 {
     fn generate_public_inputs(
-        pub_in: &<StackedDrg<H, G, Degree> as ProofScheme>::PublicInputs,
-        pub_params: &<StackedDrg<H, G, Degree> as ProofScheme>::PublicParams,
+        pub_in: &<StackedDrg<H, G> as ProofScheme>::PublicInputs,
+        pub_params: &<StackedDrg<H, G> as ProofScheme>::PublicParams,
         k: Option<usize>,
     ) -> Result<Vec<Fr>> {
         let graph = &pub_params.graph;
@@ -304,11 +264,11 @@ where
     }
 
     fn circuit<'b>(
-        public_inputs: &'b <StackedDrg<H, G, Degree> as ProofScheme>::PublicInputs,
-        _component_private_inputs: <StackedCircuit<'a, Bls12, H, G, Degree> as CircuitComponent>::ComponentPrivateInputs,
-        vanilla_proof: &'b <StackedDrg<H, G, Degree> as ProofScheme>::Proof,
-        public_params: &'b <StackedDrg<H, G, Degree> as ProofScheme>::PublicParams,
-    ) -> Result<StackedCircuit<'a, Bls12, H, G, Degree>> {
+        public_inputs: &'b <StackedDrg<H, G> as ProofScheme>::PublicInputs,
+        _component_private_inputs: <StackedCircuit<'a, Bls12, H, G> as CircuitComponent>::ComponentPrivateInputs,
+        vanilla_proof: &'b <StackedDrg<H, G> as ProofScheme>::Proof,
+        public_params: &'b <StackedDrg<H, G> as ProofScheme>::PublicParams,
+    ) -> Result<StackedCircuit<'a, Bls12, H, G>> {
         assert!(
             !vanilla_proof.is_empty(),
             "Cannot create a circuit with no vanilla proofs"
@@ -337,8 +297,8 @@ where
     }
 
     fn blank_circuit(
-        public_params: &<StackedDrg<H, G, Degree> as ProofScheme>::PublicParams,
-    ) -> StackedCircuit<'a, Bls12, H, G, Degree> {
+        public_params: &<StackedDrg<H, G> as ProofScheme>::PublicParams,
+    ) -> StackedCircuit<'a, Bls12, H, G> {
         StackedCircuit {
             params: &*JJ_PARAMS,
             public_params: public_params.clone(),
@@ -366,7 +326,7 @@ mod tests {
     use crate::hasher::{Hasher, PedersenHasher, PoseidonHasher, Sha256Hasher};
     use crate::porep::stacked::{
         ChallengeRequirements, LayerChallenges, PrivateInputs, PublicInputs, SetupParams,
-        TemporaryAux, TemporaryAuxCache, BINARY_ARITY, DEGREE, EXP_DEGREE,
+        TemporaryAux, TemporaryAuxCache, BINARY_ARITY, EXP_DEGREE,
     };
     use crate::porep::PoRep;
     use crate::proof::ProofScheme;
@@ -402,13 +362,12 @@ mod tests {
 
         // create a copy, so we can compare roundtrips
         let mut data_copy = data.clone();
-        let sp = SetupParams::<DEGREE> {
+        let sp = SetupParams {
             nodes,
             degree,
             expansion_degree,
             seed: new_seed(),
             layer_challenges: layer_challenges.clone(),
-            _degree: PhantomData,
         };
 
         // MT for original data is always named tree-d, and it will be
@@ -425,8 +384,8 @@ mod tests {
         let temp_path = temp_dir.path();
         let replica_path = temp_path.join("replica-path");
 
-        let pp = StackedDrg::<H, Sha256Hasher, DEGREE>::setup(&sp).expect("setup failed");
-        let (tau, (p_aux, t_aux)) = StackedDrg::<H, Sha256Hasher, DEGREE>::replicate(
+        let pp = StackedDrg::<H, Sha256Hasher>::setup(&sp).expect("setup failed");
+        let (tau, (p_aux, t_aux)) = StackedDrg::<H, Sha256Hasher>::replicate(
             &pp,
             &replica_id.into(),
             (&mut data_copy[..]).into(),
@@ -459,13 +418,9 @@ mod tests {
             t_aux: t_aux.into(),
         };
 
-        let proofs = StackedDrg::<H, Sha256Hasher, _>::prove_all_partitions(
-            &pp,
-            &pub_inputs,
-            &priv_inputs,
-            1,
-        )
-        .expect("failed to generate partition proofs");
+        let proofs =
+            StackedDrg::<H, Sha256Hasher>::prove_all_partitions(&pp, &pub_inputs, &priv_inputs, 1)
+                .expect("failed to generate partition proofs");
 
         let proofs_are_valid = StackedDrg::verify_all_partitions(&pp, &pub_inputs, &proofs)
             .expect("failed to verify partition proofs");
@@ -483,7 +438,7 @@ mod tests {
 
             StackedCompound::circuit(
                 &pub_inputs,
-                <StackedCircuit<Bls12, H, Sha256Hasher, DEGREE> as CircuitComponent>::ComponentPrivateInputs::default(),
+                <StackedCircuit<Bls12, H, Sha256Hasher> as CircuitComponent>::ComponentPrivateInputs::default(),
                 &proofs[0],
                 &pp,
             )
@@ -502,7 +457,7 @@ mod tests {
 
         StackedCompound::circuit(
             &pub_inputs,
-            <StackedCircuit<Bls12, H, Sha256Hasher, DEGREE> as CircuitComponent>::ComponentPrivateInputs::default(),
+            <StackedCircuit<Bls12, H, Sha256Hasher> as CircuitComponent>::ComponentPrivateInputs::default(),
             &proofs[0],
             &pp,
         )
@@ -522,7 +477,7 @@ mod tests {
 
         let generated_inputs = <StackedCompound<H, Sha256Hasher> as CompoundProof<
             _,
-            StackedDrg<H, Sha256Hasher, _>,
+            StackedDrg<H, Sha256Hasher>,
             _,
         >>::generate_public_inputs(&pub_inputs, &pp, None)
         .expect("failed to generate public inputs");
@@ -573,13 +528,12 @@ mod tests {
         let mut data_copy = data.clone();
 
         let setup_params = compound_proof::SetupParams {
-            vanilla_params: SetupParams::<typenum::U5> {
+            vanilla_params: SetupParams {
                 nodes,
                 degree,
                 expansion_degree,
                 seed: new_seed(),
                 layer_challenges: layer_challenges.clone(),
-                _degree: PhantomData,
             },
             partitions: Some(partition_count),
             priority: false,
@@ -659,7 +613,7 @@ mod tests {
                     .unwrap();
             let blank_circuit = <StackedCompound<H, Sha256Hasher> as CompoundProof<
                 _,
-                StackedDrg<H, Sha256Hasher, _>,
+                StackedDrg<H, Sha256Hasher>,
                 _,
             >>::blank_circuit(&public_params.vanilla_params);
 
@@ -681,7 +635,7 @@ mod tests {
 
         let blank_groth_params = <StackedCompound<H, Sha256Hasher> as CompoundProof<
             _,
-            StackedDrg<H, Sha256Hasher, _>,
+            StackedDrg<H, Sha256Hasher>,
             _,
         >>::groth_params(&public_params.vanilla_params)
         .expect("failed to generate groth params");

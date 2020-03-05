@@ -1,15 +1,10 @@
-use std::marker::PhantomData;
-use std::sync::atomic::Ordering;
-
 use anyhow::{ensure, Result};
 use storage_proofs::porep::stacked::{self, LayerChallenges, StackedDrg};
 use storage_proofs::post::election::{self, ElectionPoSt};
 use storage_proofs::proof::ProofScheme;
-use typenum::Unsigned;
 
 use crate::constants::{
-    DefaultPieceHasher, DefaultTreeHasher, DEGREE, DRG_DEGREE, EXP_DEGREE, LAYERS,
-    POREP_MINIMUM_CHALLENGES,
+    DefaultPieceHasher, DefaultTreeHasher, DRG_DEGREE, EXP_DEGREE, LAYERS, POREP_MINIMUM_CHALLENGES,
 };
 use crate::types::{PaddedBytesAmount, PoStConfig};
 
@@ -24,8 +19,8 @@ pub type PostPublicParams = election::PublicParams;
 pub fn public_params(
     sector_bytes: PaddedBytesAmount,
     partitions: usize,
-) -> Result<stacked::PublicParams<DefaultTreeHasher, DEGREE>> {
-    StackedDrg::<DefaultTreeHasher, DefaultPieceHasher, DEGREE>::setup(&setup_params(
+) -> Result<stacked::PublicParams<DefaultTreeHasher>> {
+    StackedDrg::<DefaultTreeHasher, DefaultPieceHasher>::setup(&setup_params(
         sector_bytes,
         partitions,
     )?)
@@ -48,7 +43,7 @@ pub fn post_setup_params(post_config: PoStConfig) -> PostSetupParams {
 pub fn setup_params(
     sector_bytes: PaddedBytesAmount,
     partitions: usize,
-) -> Result<stacked::SetupParams<crate::constants::DEGREE>> {
+) -> Result<stacked::SetupParams> {
     let layer_challenges = select_challenges(
         partitions,
         *POREP_MINIMUM_CHALLENGES
@@ -71,9 +66,8 @@ pub fn setup_params(
     );
 
     let nodes = (sector_bytes / 32) as usize;
-    let degree = DRG_DEGREE.load(Ordering::Relaxed) as usize;
-    let expansion_degree = EXP_DEGREE.load(Ordering::Relaxed) as usize;
-    assert_eq!(DEGREE::to_usize(), degree + expansion_degree);
+    let degree = DRG_DEGREE;
+    let expansion_degree = EXP_DEGREE;
 
     Ok(stacked::SetupParams {
         nodes,
@@ -81,7 +75,6 @@ pub fn setup_params(
         expansion_degree,
         seed: DRG_SEED,
         layer_challenges,
-        _degree: PhantomData,
     })
 }
 
