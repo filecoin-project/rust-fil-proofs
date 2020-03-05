@@ -166,7 +166,7 @@ mod tests {
     use std::collections::BTreeMap;
 
     use ff::Field;
-    use merkletree::store::{StoreConfig, StoreConfigDataVersion};
+    use merkletree::store::StoreConfig;
     use rand::SeedableRng;
     use rand_xorshift::XorShiftRng;
 
@@ -175,7 +175,7 @@ mod tests {
     use crate::fr32::fr_into_bytes;
     use crate::gadgets::{MetricCS, TestConstraintSystem};
     use crate::hasher::{Domain, HashFunction, Hasher, PedersenHasher, PoseidonHasher};
-    use crate::merkle::{OctLCMerkleTree, OctMerkleTree};
+    use crate::merkle::OctLCMerkleTree;
     use crate::porep::stacked::OCT_ARITY;
     use crate::post::election;
     use crate::proof::NoRequirements;
@@ -239,18 +239,8 @@ mod tests {
             f.write_all(&data).unwrap();
 
             let cur_config = StoreConfig::from_config(&config, format!("test-lc-tree-{}", i), None);
-            let mut tree: OctMerkleTree<_, _> = graph
-                .merkle_tree(Some(cur_config.clone()), data.as_slice())
-                .unwrap();
-            if cur_config.levels != 0 {
-                let c = tree
-                    .compact(cur_config.clone(), StoreConfigDataVersion::Two as u32)
-                    .unwrap();
-                assert_eq!(c, true);
-            }
-
             let lctree: OctLCMerkleTree<_, _> = graph
-                .lcmerkle_tree(cur_config.clone(), &replica_path)
+                .lcmerkle_tree(cur_config.clone(), &data, &replica_path)
                 .unwrap();
             trees.insert(i.into(), lctree);
         }

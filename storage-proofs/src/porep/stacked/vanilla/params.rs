@@ -18,7 +18,7 @@ use crate::drgraph::Graph;
 use crate::error::Result;
 use crate::fr32::bytes_into_fr_repr_safe;
 use crate::hasher::{Domain, Hasher};
-use crate::merkle::{create_lcmerkle_tree, LCMerkleTree, MerkleProof, MerkleTree};
+use crate::merkle::{open_lcmerkle_tree, LCMerkleTree, MerkleProof, MerkleTree};
 use crate::parameter_cache::ParameterSetMetadata;
 use crate::util::data_at_node;
 
@@ -447,10 +447,10 @@ impl<H: Hasher, G: Hasher> TemporaryAuxCache<H, G> {
             get_merkle_tree_leafs(tree_r_last_size, OCT_ARITY)
         );
 
-        let tree_r_last: OctLCTree<H> = create_lcmerkle_tree::<H, typenum::U8>(
+        let tree_r_last: OctLCTree<H> = open_lcmerkle_tree::<H, typenum::U8>(
             t_aux.tree_r_last_config.clone(),
-            &replica_path,
             get_merkle_tree_leafs(tree_r_last_size, OCT_ARITY),
+            &replica_path,
         )?;
         let tree_r_last_config_levels = t_aux.tree_r_last_config.levels;
 

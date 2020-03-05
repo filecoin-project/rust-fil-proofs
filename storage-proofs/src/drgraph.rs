@@ -12,7 +12,9 @@ use sha2::{Digest, Sha256};
 use crate::error::*;
 use crate::fr32::bytes_into_fr_repr_safe;
 use crate::hasher::Hasher;
-use crate::merkle::{create_lcmerkle_tree, create_merkle_tree, LCMerkleTree, MerkleTree};
+use crate::merkle::{
+    create_lcmerkle_tree, create_merkle_tree, open_lcmerkle_tree, LCMerkleTree, MerkleTree,
+};
 use crate::parameter_cache::ParameterSetMetadata;
 use crate::util::{data_at_node_offset, NODE_SIZE};
 
@@ -41,13 +43,25 @@ pub trait Graph<H: Hasher>: ::std::fmt::Debug + Clone + PartialEq + Eq {
         create_merkle_tree::<H, U>(config, self.size(), data)
     }
 
-    /// Builds a merkle tree based on the given level cache data.
-    fn lcmerkle_tree<U: typenum::Unsigned>(
+    /// Builds a merkle tree based on the given data and level cache
+    /// data.
+    fn lcmerkle_tree<'a, U: typenum::Unsigned>(
+        &self,
+        config: StoreConfig,
+        data: &'a [u8],
+        replica_path: &PathBuf,
+    ) -> Result<LCMerkleTree<H::Domain, H::Function, U>> {
+        create_lcmerkle_tree::<H, U>(config, self.size(), data, replica_path)
+    }
+
+    /// Returns a merkle tree based on the given config, replica and
+    /// level cache data.
+    fn lcmerkle_open<U: typenum::Unsigned>(
         &self,
         config: StoreConfig,
         replica_path: &PathBuf,
     ) -> Result<LCMerkleTree<H::Domain, H::Function, U>> {
-        create_lcmerkle_tree::<H, U>(config, replica_path, self.size())
+        open_lcmerkle_tree::<H, U>(config, self.size(), replica_path)
     }
 
     /// Returns the merkle tree depth.

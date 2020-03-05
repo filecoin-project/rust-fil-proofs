@@ -453,11 +453,8 @@ mod tests {
     use crate::drgraph::{new_seed, BucketGraph, Graph, BASE_DEGREE};
     use crate::fr32::fr_into_bytes;
     use crate::hasher::{PedersenHasher, PoseidonHasher};
-    use crate::merkle::OctMerkleTree;
 
     fn test_election_post<H: Hasher>() {
-        use merkletree::store::StoreConfigDataVersion;
-
         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
 
         let leaves = 64;
@@ -497,18 +494,8 @@ mod tests {
             f.write_all(&data).unwrap();
 
             let cur_config = StoreConfig::from_config(&config, format!("test-lc-tree-{}", i), None);
-            let mut tree: OctMerkleTree<_, _> = graph
-                .merkle_tree(Some(cur_config.clone()), data.as_slice())
-                .unwrap();
-            if cur_config.levels != 0 {
-                let c = tree
-                    .compact(cur_config.clone(), StoreConfigDataVersion::Two as u32)
-                    .unwrap();
-                assert_eq!(c, true);
-            }
-
             let lctree: OctLCMerkleTree<_, _> = graph
-                .lcmerkle_tree(cur_config.clone(), &replica_path)
+                .lcmerkle_tree(cur_config.clone(), &data, &replica_path)
                 .unwrap();
             trees.insert(i.into(), lctree);
         }

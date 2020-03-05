@@ -40,7 +40,8 @@ blake2s_simd = "0.5.8"
 hex = "0.4.0"
 tee = "0.1.0"
 os_pipe = "0.9.1"
-merkletree = "0.16.3"
+#merkletree = "0.16.3"
+merkletree = { git = "https://github.com/filecoin-project/merkle_light", branch = "data-width-fix" }
 bincode = "1.1.2"
 anyhow = "1.0.23"
 rand_xorshift = "0.2.0"
@@ -57,7 +58,7 @@ features = ["default-tls-vendored"]
 criterion = "0.3"
 rexpect = "0.3.0"
 pretty_assertions = "0.6.1"
-failure = "0.1"
+failure = "0.1.7"
 tempfile = "3"
 
 [features]

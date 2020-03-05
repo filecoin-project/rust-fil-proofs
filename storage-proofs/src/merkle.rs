@@ -302,10 +302,16 @@ pub fn create_merkle_tree<H: Hasher, U: typenum::Unsigned>(
 
 /// Construct a new level cache merkle tree, given the specified
 /// config and replica_path.
+///
+/// Note that while we don't need to pass both the data AND the
+/// replica path (since the replica file will contain the same data),
+/// we pass both since we have access from all callers and this avoids
+/// reading that data from the replica_path here.
 pub fn create_lcmerkle_tree<H: Hasher, U: typenum::Unsigned>(
     config: StoreConfig,
-    replica_path: &PathBuf,
     size: usize,
+    data: &[u8],
+    replica_path: &PathBuf,
 ) -> Result<LCMerkleTree<H::Domain, H::Function, U>> {
     trace!("create_lcmerkle_tree called with size {}", size);
     trace!(
@@ -315,8 +321,46 @@ pub fn create_lcmerkle_tree<H: Hasher, U: typenum::Unsigned>(
         is_merkle_tree_size_valid(size, U::to_usize())
     );
     assert!(is_merkle_tree_size_valid(size, U::to_usize()));
+    assert_eq!(data.len(), size * std::mem::size_of::<H::Domain>());
 
-    // This method requires the entire tree length.
+    let f = |i| {
+        let d = data_at_node(&data, i)?;
+        H::Domain::try_from_bytes(d)
+    };
+
+    let mut lc_tree: LCMerkleTree<H::Domain, H::Function, U> =
+        LCMerkleTree::<H::Domain, H::Function, U>::try_from_iter_with_config(
+            (0..size).map(f),
+            config,
+        )?;
+
+    let store: &mut LevelCacheStore<_, std::fs::File> = lc_tree.data_mut();
+    store
+        .set_external_reader(
+            ExternalReader::new_from_path(replica_path)
+                .expect("Failed to create external reader from path"),
+        )
+        .expect("Failed to set external reader");
+
+    Ok(lc_tree)
+}
+
+/// Open an existing level cache merkle tree, given the specified
+/// config and replica_path.
+pub fn open_lcmerkle_tree<H: Hasher, U: typenum::Unsigned>(
+    config: StoreConfig,
+    size: usize,
+    replica_path: &PathBuf,
+) -> Result<LCMerkleTree<H::Domain, H::Function, U>> {
+    trace!("open_lcmerkle_tree called with size {}", size);
+    trace!(
+        "is_merkle_tree_size_valid({}, arity {}) = {}",
+        size,
+        U::to_usize(),
+        is_merkle_tree_size_valid(size, U::to_usize())
+    );
+    assert!(is_merkle_tree_size_valid(size, U::to_usize()));
+
     let tree_size = get_merkle_tree_len(size, U::to_usize());
     let tree_store: LevelCacheStore<H::Domain, _> = LevelCacheStore::new_from_disk_with_reader(
         tree_size,
@@ -330,7 +374,7 @@ pub fn create_lcmerkle_tree<H: Hasher, U: typenum::Unsigned>(
         "Inconsistent lcmerkle tree"
     );
 
-    LCMerkleTree::from_data_store(tree_store, get_merkle_tree_leafs(tree_size, U::to_usize()))
+    LCMerkleTree::from_data_store(tree_store, size)
 }
 
 #[cfg(test)]
