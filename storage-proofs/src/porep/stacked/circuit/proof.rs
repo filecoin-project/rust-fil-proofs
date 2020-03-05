@@ -511,8 +511,8 @@ mod tests {
     fn stacked_test_compound<H: 'static + Hasher>() {
         let nodes = 64;
 
-        let degree = 3;
-        let expansion_degree = 2;
+        let degree = BASE_DEGREE;
+        let expansion_degree = EXP_DEGREE;
         let num_layers = 2;
         let layer_challenges = LayerChallenges::new(num_layers, 3);
         let partition_count = 1;
