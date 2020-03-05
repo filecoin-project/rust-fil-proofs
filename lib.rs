@@ -205,6 +205,7 @@ use blake2b_simd::State as Blake2b;
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use ff::{Field, PrimeField};
 use groupy::{CurveAffine, CurveProjective, EncodedPoint, Wnaf};
+use log::{error, info};
 use paired::{
     bls12_381::{Bls12, Fr, G1Affine, G1Uncompressed, G2Affine, G2Uncompressed, G1, G2},
     Engine, PairingCurveAffine,
@@ -225,6 +226,43 @@ struct KeypairAssembly<E: Engine> {
     at_aux: Vec<Vec<(E::Fr, usize)>>,
     bt_aux: Vec<Vec<(E::Fr, usize)>>,
     ct_aux: Vec<Vec<(E::Fr, usize)>>,
+}
+
+impl<E: Engine> KeypairAssembly<E> {
+    /// Returns the size (stack plus heap) of the `KeypairAssembly` in bytes.
+    fn size(&self) -> usize {
+        use std::mem::{size_of, size_of_val};
+
+        let mut size = 3 * size_of::<usize>();
+        size += 6 * size_of::<Vec<Vec<(E::Fr, usize)>>>();
+        size += size_of_val::<[Vec<(E::Fr, usize)>]>(&self.at_inputs);
+        size += size_of_val::<[Vec<(E::Fr, usize)>]>(&self.bt_inputs);
+        size += size_of_val::<[Vec<(E::Fr, usize)>]>(&self.ct_inputs);
+        size += size_of_val::<[Vec<(E::Fr, usize)>]>(&self.at_aux);
+        size += size_of_val::<[Vec<(E::Fr, usize)>]>(&self.bt_aux);
+        size += size_of_val::<[Vec<(E::Fr, usize)>]>(&self.ct_aux);
+
+        for el in self.at_inputs.iter() {
+            size += size_of_val::<[(E::Fr, usize)]>(el);
+        }
+        for el in self.bt_inputs.iter() {
+            size += size_of_val::<[(E::Fr, usize)]>(el);
+        }
+        for el in self.ct_inputs.iter() {
+            size += size_of_val::<[(E::Fr, usize)]>(el);
+        }
+        for el in self.at_aux.iter() {
+            size += size_of_val::<[(E::Fr, usize)]>(el);
+        }
+        for el in self.bt_aux.iter() {
+            size += size_of_val::<[(E::Fr, usize)]>(el);
+        }
+        for el in self.ct_aux.iter() {
+            size += size_of_val::<[(E::Fr, usize)]>(el);
+        }
+
+        size
+    }
 }
 
 impl<E: Engine> ConstraintSystem<E> for KeypairAssembly<E> {
@@ -383,6 +421,14 @@ impl MPCParameters {
             );
         }
 
+        info!(
+            "phase2::MPCParameters::new() Constraint System: n_constraints={}, n_inputs={}, n_aux={}, size={}b",
+            assembly.num_constraints,
+            assembly.num_inputs,
+            assembly.num_aux,
+            assembly.size()
+        );
+
         // Compute the size of our evaluation domain
         let mut m = 1;
         let mut exp = 0;
@@ -397,6 +443,7 @@ impl MPCParameters {
         }
 
         // Try to load "phase1radix2m{}"
+        info!("phase2::MPCParameters::new() phase1.5_file=phase1radix2m{}", exp);
         let f = match File::open(format!("phase1radix2m{}", exp)) {
             Ok(f) => f,
             Err(e) => {
@@ -445,21 +492,25 @@ impl MPCParameters {
         let beta_g1 = read_g1(f)?;
         let beta_g2 = read_g2(f)?;
 
+        info!("phase2::MPCParameters::new() reading coeffs_g1 from phase1.5 file");
         let mut coeffs_g1 = Vec::with_capacity(m);
         for _ in 0..m {
             coeffs_g1.push(read_g1(f)?);
         }
 
+        info!("phase2::MPCParameters::new() reading coeffs_g2 from phase1.5 file");
         let mut coeffs_g2 = Vec::with_capacity(m);
         for _ in 0..m {
             coeffs_g2.push(read_g2(f)?);
         }
 
+        info!("phase2::MPCParameters::new() reading alpha_coeffs_g1 from phase1.5 file");
         let mut alpha_coeffs_g1 = Vec::with_capacity(m);
         for _ in 0..m {
             alpha_coeffs_g1.push(read_g1(f)?);
         }
 
+        info!("phase2::MPCParameters::new() reading beta_coeffs_g1 from phase1.5 file");
         let mut beta_coeffs_g1 = Vec::with_capacity(m);
         for _ in 0..m {
             beta_coeffs_g1.push(read_g1(f)?);
@@ -473,16 +524,16 @@ impl MPCParameters {
         let alpha_coeffs_g1 = Arc::new(alpha_coeffs_g1);
         let beta_coeffs_g1 = Arc::new(beta_coeffs_g1);
 
-        let mut h = Vec::with_capacity(m - 1);
-        for _ in 0..(m - 1) {
-            h.push(read_g1(f)?);
-        }
-
         let mut ic = vec![G1::zero(); assembly.num_inputs];
+        info!("phase2::MPCParameters::new() initialized ic vector");
         let mut l = vec![G1::zero(); assembly.num_aux];
+        info!("phase2::MPCParameters::new() initialized l vector");
         let mut a_g1 = vec![G1::zero(); assembly.num_inputs + assembly.num_aux];
+        info!("phase2::MPCParameters::new() initialized a_g1 vector");
         let mut b_g1 = vec![G1::zero(); assembly.num_inputs + assembly.num_aux];
+        info!("phase2::MPCParameters::new() initialized b_g1 vector");
         let mut b_g2 = vec![G2::zero(); assembly.num_inputs + assembly.num_aux];
+        info!("phase2::MPCParameters::new() initialized b_g2 vector");
 
         #[allow(clippy::too_many_arguments)]
         fn eval(
@@ -569,6 +620,7 @@ impl MPCParameters {
         let worker = Worker::new();
 
         // Evaluate for inputs.
+        info!("phase2::MPCParameters::new() evaluating polynomials for inputs");
         eval(
             coeffs_g1.clone(),
             coeffs_g2.clone(),
@@ -585,6 +637,7 @@ impl MPCParameters {
         );
 
         // Evaluate for auxillary variables.
+        info!("phase2::MPCParameters::new() evaluating polynomials for auxillary variables");
         eval(
             coeffs_g1.clone(),
             coeffs_g2.clone(),
@@ -617,6 +670,18 @@ impl MPCParameters {
             delta_g2: G2Affine::one(),
             ic: ic.into_par_iter().map(|e| e.into_affine()).collect(),
         };
+
+        // Reclaim the memory used by these vectors prior to reading in `h`.
+        drop(coeffs_g1);
+        drop(coeffs_g2);
+        drop(alpha_coeffs_g1);
+        drop(beta_coeffs_g1);
+
+        info!("phase2::MPCParameters::new() reading h from phase1.5 file");
+        let mut h = Vec::with_capacity(m - 1);
+        for _ in 0..(m - 1) {
+            h.push(read_g1(f)?);
+        }
 
         let params = Parameters {
             vk,
@@ -721,10 +786,15 @@ impl MPCParameters {
         }
 
         let delta_inv = privkey.delta.inverse().expect("nonzero");
+        info!("phase2::MPCParameters::contribute() cloning l");
         let mut l = (&self.params.l[..]).to_vec();
+        info!("phase2::MPCParameters::contribute() cloning h");
         let mut h = (&self.params.h[..]).to_vec();
+        info!("phase2::MPCParameters::contribute() performing batch exponentiation of l");
         batch_exp(&mut l, delta_inv);
+        info!("phase2::MPCParameters::contribute() performing batch exponentiation of h");
         batch_exp(&mut h, delta_inv);
+        info!("phase2::MPCParameters::contribute() finished batch exponentiations");
         self.params.l = Arc::new(l);
         self.params.h = Arc::new(h);
 
@@ -752,44 +822,55 @@ impl MPCParameters {
 
         // H/L will change, but should have same length
         if initial_params.params.h.len() != self.params.h.len() {
+            error!("phase2::MPCParameters::verify() h's length has changed");
             return Err(());
         }
         if initial_params.params.l.len() != self.params.l.len() {
+            error!("phase2::MPCParameters::verify() l's length has changed");
             return Err(());
         }
 
         // A/B_G1/B_G2 doesn't change at all
         if initial_params.params.a != self.params.a {
+            error!("phase2::MPCParameters::verify() evaluated QAP a polynomial has changed");
             return Err(());
         }
         if initial_params.params.b_g1 != self.params.b_g1 {
+            error!("phase2::MPCParameters::verify() evaluated QAP b_g1 polynomial has changed");
             return Err(());
         }
         if initial_params.params.b_g2 != self.params.b_g2 {
+            error!("phase2::MPCParameters::verify() evaluated QAP b_g2 polynomial has changed");
             return Err(());
         }
 
         // alpha/beta/gamma don't change
         if initial_params.params.vk.alpha_g1 != self.params.vk.alpha_g1 {
+            error!("phase2::MPCParameters::verify() vk's alpha has changed");
             return Err(());
         }
         if initial_params.params.vk.beta_g1 != self.params.vk.beta_g1 {
+            error!("phase2::MPCParameters::verify() vk's beta_g1 has changed");
             return Err(());
         }
         if initial_params.params.vk.beta_g2 != self.params.vk.beta_g2 {
+            error!("phase2::MPCParameters::verify() vk's beta_g2 has changed");
             return Err(());
         }
         if initial_params.params.vk.gamma_g2 != self.params.vk.gamma_g2 {
+            error!("phase2::MPCParameters::verify() vk's gamma has changed");
             return Err(());
         }
 
         // IC shouldn't change, as gamma doesn't change
         if initial_params.params.vk.ic != self.params.vk.ic {
+            error!("phase2::MPCParameters::verify() vk's ic has changed");
             return Err(());
         }
 
         // cs_hash should be the same
         if initial_params.cs_hash[..] != self.cs_hash[..] {
+            error!("phase2::MPCParameters::verify() cs_hash has changed");
             return Err(());
         }
 
@@ -815,6 +896,7 @@ impl MPCParameters {
 
             // The transcript must be consistent
             if &pubkey.transcript[..] != h.as_ref() {
+                error!("phase2::MPCParameters::verify() transcripts differ");
                 return Err(());
             }
 
@@ -822,11 +904,13 @@ impl MPCParameters {
 
             // Check the signature of knowledge
             if !same_ratio((r, pubkey.r_delta), (pubkey.s, pubkey.s_delta)) {
+                error!("phase2::MPCParameters::verify() pubkey's r and s were shifted by different deltas");
                 return Err(());
             }
 
             // Check the change from the old delta is consistent
             if !same_ratio((current_delta, pubkey.delta_after), (r, pubkey.r_delta)) {
+                error!("phase2::MPCParameters::verify() contribution's delta and r where shifted differently");
                 return Err(());
             }
 
@@ -842,6 +926,7 @@ impl MPCParameters {
 
         // Current parameters should have consistent delta in G1
         if current_delta != self.params.vk.delta_g1 {
+            error!("phase2::MPCParameters::verify() vk's delta_g1 differs from calculated delta");
             return Err(());
         }
 
@@ -850,6 +935,7 @@ impl MPCParameters {
             (G1Affine::one(), current_delta),
             (G2Affine::one(), self.params.vk.delta_g2),
         ) {
+            error!("phase2::MPCParameters::verify() shift in vk's delta_g2 is inconsistent with calculated delta");
             return Err(());
         }
 
@@ -858,6 +944,7 @@ impl MPCParameters {
             merge_pairs(&initial_params.params.h, &self.params.h),
             (self.params.vk.delta_g2, G2Affine::one()), // reversed for inverse
         ) {
+            error!("phase2::MPCParameters::verify() h queries have not shifted by delta^-1");
             return Err(());
         }
 
@@ -865,6 +952,7 @@ impl MPCParameters {
             merge_pairs(&initial_params.params.l, &self.params.l),
             (self.params.vk.delta_g2, G2Affine::one()), // reversed for inverse
         ) {
+            error!("phase2::MPCParameters::verify() l queries have not shifted by delta^-1");
             return Err(());
         }
 
@@ -1022,54 +1110,73 @@ impl PartialEq for PublicKey {
 pub fn verify_contribution(before: &MPCParameters, after: &MPCParameters) -> Result<[u8; 64], ()> {
     // Transformation involves a single new object
     if after.contributions.len() != (before.contributions.len() + 1) {
+        error!(
+            "phase2::verify_contribution() 'after' params do not contain exactly one more \
+            contribution than the 'before' params: n_contributions_before={}, \
+            n_contributions_after={}",
+            before.contributions.len(),
+            after.contributions.len()
+        );
         return Err(());
     }
 
     // None of the previous transformations should change
     if before.contributions[..] != after.contributions[0..before.contributions.len()] {
+        error!("phase2::verify_contribution() 'after' params contributions differ from 'before' params contributions");
         return Err(());
     }
 
     // H/L will change, but should have same length
     if before.params.h.len() != after.params.h.len() {
+        error!("phase2::verify_contribution() length of h has changed");
         return Err(());
     }
     if before.params.l.len() != after.params.l.len() {
+        error!("phase2::verify_contribution() length of l has changed");
         return Err(());
     }
 
     // A/B_G1/B_G2 doesn't change at all
     if before.params.a != after.params.a {
+        error!("phase2::verify_contribution() evaluated QAP a polynomial has changed");
         return Err(());
     }
     if before.params.b_g1 != after.params.b_g1 {
+        error!("phase2::verify_contribution() evaluated QAP b_g1 polynomial has changed");
         return Err(());
     }
     if before.params.b_g2 != after.params.b_g2 {
+        error!("phase2::verify_contribution() evaluated QAP b_g2 polynomial has changed");
         return Err(());
     }
 
     // alpha/beta/gamma don't change
     if before.params.vk.alpha_g1 != after.params.vk.alpha_g1 {
+        error!("phase2::verify_contribution() vk's alpha_g1 hash changed");
         return Err(());
     }
     if before.params.vk.beta_g1 != after.params.vk.beta_g1 {
+        error!("phase2::verify_contribution() vk's beta_g1 has changed");
         return Err(());
     }
     if before.params.vk.beta_g2 != after.params.vk.beta_g2 {
+        error!("phase2::verify_contribution() vk's beta_g2 changed");
         return Err(());
     }
     if before.params.vk.gamma_g2 != after.params.vk.gamma_g2 {
+        error!("phase2::verify_contribution() vk's gamma_g2 has changed");
         return Err(());
     }
 
     // IC shouldn't change, as gamma doesn't change
     if before.params.vk.ic != after.params.vk.ic {
+        error!("phase2::verify_contribution() vk's ic has changed");
         return Err(());
     }
 
     // cs_hash should be the same
     if before.cs_hash[..] != after.cs_hash[..] {
+        error!("phase2::verify_contribution() cs_hash has changed");
         return Err(());
     }
 
@@ -1091,6 +1198,7 @@ pub fn verify_contribution(before: &MPCParameters, after: &MPCParameters) -> Res
 
     // The transcript must be consistent
     if &pubkey.transcript[..] != h.as_ref() {
+        error!("phase2::verify_contribution() inconsistent transcript");
         return Err(());
     }
 
@@ -1098,6 +1206,7 @@ pub fn verify_contribution(before: &MPCParameters, after: &MPCParameters) -> Res
 
     // Check the signature of knowledge
     if !same_ratio((r, pubkey.r_delta), (pubkey.s, pubkey.s_delta)) {
+        error!("phase2::verify_contribution() contribution's r and s were shifted with different deltas");
         return Err(());
     }
 
@@ -1106,11 +1215,13 @@ pub fn verify_contribution(before: &MPCParameters, after: &MPCParameters) -> Res
         (before.params.vk.delta_g1, pubkey.delta_after),
         (r, pubkey.r_delta),
     ) {
+        error!("phase2::verify_contribution() contribution's delta and r where shifted with different delta");
         return Err(());
     }
 
     // Current parameters should have consistent delta in G1
     if pubkey.delta_after != after.params.vk.delta_g1 {
+        error!("phase2::verify_contribution() contribution's delta in G1 differs from vk's delta_g1");
         return Err(());
     }
 
@@ -1119,6 +1230,7 @@ pub fn verify_contribution(before: &MPCParameters, after: &MPCParameters) -> Res
         (G1Affine::one(), pubkey.delta_after),
         (G2Affine::one(), after.params.vk.delta_g2),
     ) {
+        error!("phase2::verify_contribution() contribution's shift in delta (G1) is inconsistent with vk's shift in delta (G2)");
         return Err(());
     }
 
@@ -1127,6 +1239,7 @@ pub fn verify_contribution(before: &MPCParameters, after: &MPCParameters) -> Res
         merge_pairs(&before.params.h, &after.params.h),
         (after.params.vk.delta_g2, before.params.vk.delta_g2), // reversed for inverse
     ) {
+        error!("phase2::verify_contribution() h was not updated by delta^-1");
         return Err(());
     }
 
@@ -1134,6 +1247,7 @@ pub fn verify_contribution(before: &MPCParameters, after: &MPCParameters) -> Res
         merge_pairs(&before.params.l, &after.params.l),
         (after.params.vk.delta_g2, before.params.vk.delta_g2), // reversed for inverse
     ) {
+        error!("phase2::verify_contribution() l was not updated by delta^-1");
         return Err(());
     }
 
