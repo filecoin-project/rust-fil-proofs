@@ -154,7 +154,6 @@ mod tests {
     }
 
     fn test_fallback_post_circuit<H: Hasher>(expected_constraints: usize) {
-        use rayon::prelude::*;
         use std::fs::File;
         use std::io::prelude::*;
 
@@ -187,7 +186,6 @@ mod tests {
             println!("sector {}", i);
             sectors.push(i.into());
             let data: Vec<u8> = (0..leaves)
-                .par_iter()
                 .flat_map(|_| fr_into_bytes::<Bls12>(&Fr::random(rng)))
                 .collect();
 
