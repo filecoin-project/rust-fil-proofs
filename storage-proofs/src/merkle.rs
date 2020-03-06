@@ -281,8 +281,10 @@ pub fn create_merkle_tree<H: Hasher, U: typenum::Unsigned>(
         U::to_usize(),
         is_merkle_tree_size_valid(size, U::to_usize())
     );
-    ensure!(is_merkle_tree_size_valid(size, U::to_usize()),
-            "Invalid merkle tree size given the arity");
+    ensure!(
+        is_merkle_tree_size_valid(size, U::to_usize()),
+        "Invalid merkle tree size given the arity"
+    );
 
     let f = |i| {
         // TODO Replace `expect()` with `context()` (problem is the parallel iterator)
@@ -321,8 +323,14 @@ pub fn create_lcmerkle_tree<H: Hasher, U: typenum::Unsigned>(
         U::to_usize(),
         is_merkle_tree_size_valid(size, U::to_usize())
     );
-    ensure!(is_merkle_tree_size_valid(size, U::to_usize()), "Invalid merkle tree size given the arity");
-    ensure!(data.len() == size * std::mem::size_of::<H::Domain>(), "Invalid data length for merkle tree");
+    ensure!(
+        is_merkle_tree_size_valid(size, U::to_usize()),
+        "Invalid merkle tree size given the arity"
+    );
+    ensure!(
+        data.len() == size * std::mem::size_of::<H::Domain>(),
+        "Invalid data length for merkle tree"
+    );
 
     let f = |i| {
         let d = data_at_node(&data, i)?;
@@ -360,7 +368,10 @@ pub fn open_lcmerkle_tree<H: Hasher, U: typenum::Unsigned>(
         U::to_usize(),
         is_merkle_tree_size_valid(size, U::to_usize())
     );
-    ensure!(is_merkle_tree_size_valid(size, U::to_usize()), "Invalid merkle tree size given the arity");
+    ensure!(
+        is_merkle_tree_size_valid(size, U::to_usize()),
+        "Invalid merkle tree size given the arity"
+    );
 
     let tree_size = get_merkle_tree_len(size, U::to_usize());
     let tree_store: LevelCacheStore<H::Domain, _> = LevelCacheStore::new_from_disk_with_reader(
