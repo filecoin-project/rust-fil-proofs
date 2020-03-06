@@ -357,10 +357,20 @@ impl<'a, H: 'a + Hasher> ProofScheme<'a> for ElectionPoSt<'a, H> {
                     (0..pub_params.challenged_nodes)
                         .into_par_iter()
                         .map(move |i| {
-                            let (proof, _) = tree.gen_proof_and_partial_tree(
-                                challenged_leaf_start as usize + i,
-                                StoreConfig::default_cached_above_base_layer(tree_leafs, OCT_ARITY),
-                            )?;
+                            let config_levels =
+                                StoreConfig::default_cached_above_base_layer(tree_leafs, OCT_ARITY);
+                            let proof = {
+                                if config_levels == 0 {
+                                    tree.gen_proof(challenged_leaf_start as usize + i)?
+                                } else {
+                                    let (proof, _) = tree.gen_proof_and_partial_tree(
+                                        challenged_leaf_start as usize + i,
+                                        config_levels,
+                                    )?;
+
+                                    proof
+                                }
+                            };
                             Ok(MerkleProof::new_from_proof(&proof))
                         })
                 })
@@ -490,10 +500,12 @@ mod tests {
             let mut tree: OctMerkleTree<_, _> = graph
                 .merkle_tree(Some(cur_config.clone()), data.as_slice())
                 .unwrap();
-            let c = tree
-                .compact(cur_config.clone(), StoreConfigDataVersion::Two as u32)
-                .unwrap();
-            assert_eq!(c, true);
+            if cur_config.levels != 0 {
+                let c = tree
+                    .compact(cur_config.clone(), StoreConfigDataVersion::Two as u32)
+                    .unwrap();
+                assert_eq!(c, true);
+            }
 
             let lctree: OctLCMerkleTree<_, _> = graph
                 .lcmerkle_tree(cur_config.clone(), &replica_path)

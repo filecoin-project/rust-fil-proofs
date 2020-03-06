@@ -268,10 +268,12 @@ mod tests {
             let mut tree: OctMerkleTree<_, _> = graph
                 .merkle_tree(Some(cur_config.clone()), data.as_slice())
                 .unwrap();
-            let c = tree
-                .compact(cur_config.clone(), StoreConfigDataVersion::Two as u32)
-                .unwrap();
-            assert_eq!(c, true);
+            if cur_config.levels != 0 {
+                let c = tree
+                    .compact(cur_config.clone(), StoreConfigDataVersion::Two as u32)
+                    .unwrap();
+                assert_eq!(c, true);
+            }
 
             let lctree: OctLCMerkleTree<_, _> = graph
                 .lcmerkle_tree(cur_config.clone(), &replica_path)

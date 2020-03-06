@@ -640,7 +640,7 @@ mod tests {
         >>::groth_params(&public_params.vanilla_params)
         .expect("failed to generate groth params");
 
-        // Discard or compact cached MTs that are no longer needed.
+        // Discard cached MTs that are no longer needed.
         TemporaryAux::<H, Sha256Hasher>::clear_temp(t_aux_orig).expect("t_aux delete failed");
 
         let proof = StackedCompound::prove(

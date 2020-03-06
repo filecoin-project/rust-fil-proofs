@@ -141,10 +141,18 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
 
                         // Final replica layer openings
                         trace!("final replica layer openings");
-                        let (tree_r_last_proof, _) = t_aux.tree_r_last.gen_proof_and_partial_tree(
-                            challenge,
-                            t_aux.tree_r_last_config_levels,
-                        )?;
+                        let tree_r_last_proof = {
+                            if t_aux.tree_r_last_config_levels == 0 {
+                                t_aux.tree_r_last.gen_proof(challenge)?
+                            } else {
+                                let (proof, _) = t_aux.tree_r_last.gen_proof_and_partial_tree(
+                                    challenge,
+                                    t_aux.tree_r_last_config_levels,
+                                )?;
+
+                                proof
+                            }
+                        };
                         let comm_r_last_proof = MerkleProof::new_from_proof(&tree_r_last_proof);
                         assert!(comm_r_last_proof.validate(challenge));
 
@@ -557,11 +565,13 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         // comm_r = H(comm_c || comm_r_last)
         let comm_r: H::Domain = H::Function::hash2(&tree_c.root(), &tree_r_last.root());
 
-        // Compact tree_r_last.
-        tree_r_last.compact(
-            tree_r_last_config.clone(),
-            StoreConfigDataVersion::Two as u32,
-        )?;
+        // Compact tree_r_last (if needed).
+        if tree_r_last_config.levels != 0 {
+            tree_r_last.compact(
+                tree_r_last_config.clone(),
+                StoreConfigDataVersion::Two as u32,
+            )?;
+        }
 
         data.drop_data();
 
@@ -840,7 +850,7 @@ mod tests {
         )
         .expect("failed to verify partition proofs");
 
-        // Discard or compact cached MTs that are no longer needed.
+        // Discard cached MTs that are no longer needed.
         TemporaryAux::<H, Blake2sHasher>::clear_temp(t_aux_orig).expect("t_aux delete failed");
 
         assert!(proofs_are_valid);
