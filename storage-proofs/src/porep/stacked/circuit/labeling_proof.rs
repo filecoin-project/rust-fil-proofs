@@ -4,10 +4,12 @@ use fil_sapling_crypto::jubjub::JubjubEngine;
 use paired::bls12_381::{Bls12, Fr};
 
 use crate::fr32::fr_into_bytes;
-use crate::gadgets::{constraint, create_label::create_label, uint64};
+use crate::gadgets::{constraint, uint64};
 use crate::hasher::Hasher;
 use crate::porep::stacked::{LabelingProof as VanillaLabelingProof, PublicParams, TOTAL_PARENTS};
 use crate::util::bytes_into_boolean_vec_be;
+
+use super::create_label_circuit;
 
 #[derive(Debug, Clone)]
 pub struct LabelingProof {
@@ -54,12 +56,11 @@ impl LabelingProof {
 
         let node_num = uint64::UInt64::alloc(cs.namespace(|| "node"), node)?;
 
-        create_label(
+        create_label_circuit(
             cs.namespace(|| "create_label"),
             replica_id,
             parents_bits,
-            None,
-            Some(node_num),
+            node_num,
         )
     }
 

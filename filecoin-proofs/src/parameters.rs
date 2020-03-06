@@ -1,5 +1,3 @@
-use std::sync::atomic::Ordering;
-
 use anyhow::{ensure, Result};
 use storage_proofs::porep::stacked::{self, LayerChallenges, StackedDrg};
 use storage_proofs::post::election::{self, ElectionPoSt};
@@ -68,10 +66,13 @@ pub fn setup_params(
     );
 
     let nodes = (sector_bytes / 32) as usize;
+    let degree = DRG_DEGREE;
+    let expansion_degree = EXP_DEGREE;
+
     Ok(stacked::SetupParams {
         nodes,
-        degree: DRG_DEGREE.load(Ordering::Relaxed) as usize,
-        expansion_degree: EXP_DEGREE.load(Ordering::Relaxed) as usize,
+        degree,
+        expansion_degree,
         seed: DRG_SEED,
         layer_challenges,
     })

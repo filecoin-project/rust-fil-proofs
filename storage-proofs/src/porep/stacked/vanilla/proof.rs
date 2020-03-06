@@ -8,11 +8,11 @@ use merkletree::merkle::{
 };
 use merkletree::store::{DiskStore, StoreConfig, StoreConfigDataVersion};
 use rayon::prelude::*;
-use sha2::{Digest, Sha256};
 
 use super::{
     challenges::LayerChallenges,
     column::Column,
+    create_label, create_label_exp,
     graph::StackedBucketGraph,
     hash::hash_single_column,
     params::{
@@ -35,8 +35,7 @@ use crate::measurements::{
 };
 use crate::merkle::{MerkleProof, MerkleTree, OctMerkleTree, Store};
 use crate::porep::PoRep;
-use crate::util::{data_at_node_offset, NODE_SIZE};
-
+use crate::util::NODE_SIZE;
 pub const TOTAL_PARENTS: usize = 37;
 
 #[derive(Debug)]
@@ -142,10 +141,18 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
 
                         // Final replica layer openings
                         trace!("final replica layer openings");
-                        let (tree_r_last_proof, _) = t_aux.tree_r_last.gen_proof_and_partial_tree(
-                            challenge,
-                            t_aux.tree_r_last_config_levels,
-                        )?;
+                        let tree_r_last_proof = {
+                            if t_aux.tree_r_last_config_levels == 0 {
+                                t_aux.tree_r_last.gen_proof(challenge)?
+                            } else {
+                                let (proof, _) = t_aux.tree_r_last.gen_proof_and_partial_tree(
+                                    challenge,
+                                    t_aux.tree_r_last_config_levels,
+                                )?;
+
+                                proof
+                            }
+                        };
                         let comm_r_last_proof = MerkleProof::new_from_proof(&tree_r_last_proof);
                         assert!(comm_r_last_proof.validate(challenge));
 
@@ -265,42 +272,33 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         config: StoreConfig,
     ) -> Result<(LabelsCache<H>, Labels<H>)> {
         info!("generate labels");
+
         let layers = layer_challenges.layers();
         // For now, we require it due to changes in encodings structure.
         let mut labels: Vec<DiskStore<H::Domain>> = Vec::with_capacity(layers);
         let mut label_configs: Vec<StoreConfig> = Vec::with_capacity(layers);
 
         let layer_size = graph.size() * NODE_SIZE;
-        let mut layer_labels = vec![0u8; layer_size];
-
-        let mut exp_parents_data: Option<Vec<u8>> = None;
-
-        // setup hasher to reuse
-        let mut base_hasher = Sha256::new();
-        // hash replica id
-        base_hasher.input(AsRef::<[u8]>::as_ref(replica_id));
+        // NOTE: this means we currently keep 2x sector size around, to improve speed.
+        let mut labels_buffer = vec![0u8; 2 * layer_size];
 
         for layer in 1..=layers {
             info!("generating layer: {}", layer);
 
-            for node in 0..graph.size() {
-                create_key(
-                    graph,
-                    base_hasher.clone(),
-                    exp_parents_data.as_ref(),
-                    &mut layer_labels,
-                    node,
-                )?;
+            if layer == 1 {
+                let layer_labels = &mut labels_buffer[..layer_size];
+                for node in 0..graph.size() {
+                    create_label(graph, replica_id, layer_labels, node)?;
+                }
+            } else {
+                let (layer_labels, exp_labels) = labels_buffer.split_at_mut(layer_size);
+                for node in 0..graph.size() {
+                    create_label_exp(graph, replica_id, exp_labels, layer_labels, node)?;
+                }
             }
 
             info!("  setting exp parents");
-
-            // NOTE: this means we currently keep 2x sector size around, to improve speed.
-            if let Some(ref mut exp_parents_data) = exp_parents_data {
-                exp_parents_data.copy_from_slice(&layer_labels);
-            } else {
-                exp_parents_data = Some(layer_labels.clone());
-            }
+            labels_buffer.copy_within(..layer_size, layer_size);
 
             // Write the result to disk to avoid keeping it in memory all the time.
             let layer_config =
@@ -311,7 +309,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
             let layer_store: DiskStore<H::Domain> = DiskStore::new_from_slice_with_config(
                 graph.size(),
                 OCT_ARITY,
-                &layer_labels,
+                &labels_buffer[..layer_size],
                 layer_config.clone(),
             )?;
             info!(
@@ -559,11 +557,13 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         // comm_r = H(comm_c || comm_r_last)
         let comm_r: H::Domain = H::Function::hash2(&tree_c.root(), &tree_r_last.root());
 
-        // Compact tree_r_last.
-        tree_r_last.compact(
-            tree_r_last_config.clone(),
-            StoreConfigDataVersion::Two as u32,
-        )?;
+        // Compact tree_r_last (if needed).
+        if tree_r_last_config.levels != 0 {
+            tree_r_last.compact(
+                tree_r_last_config.clone(),
+                StoreConfigDataVersion::Two as u32,
+            )?;
+        }
 
         data.drop_data();
 
@@ -629,61 +629,6 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
 
         Ok((tau, (paux, taux)))
     }
-}
-
-pub fn create_key<H: Hasher>(
-    graph: &StackedBucketGraph<H>,
-    mut hasher: Sha256,
-    exp_parents_data: Option<&Vec<u8>>,
-    layer_labels: &mut [u8],
-    node: usize,
-) -> Result<()> {
-    // hash parents for all non 0 nodes
-    if node > 0 {
-        let layer_labels = &*layer_labels;
-
-        let mut inputs = vec![0u8; NODE_SIZE * TOTAL_PARENTS + 8];
-        let real_parents_count = if exp_parents_data.is_some() {
-            graph.degree()
-        } else {
-            graph.base_graph().degree()
-        };
-
-        // hash node id
-        inputs[..8].copy_from_slice(&(node as u64).to_be_bytes());
-
-        graph.copy_parents_data(
-            node as u32,
-            layer_labels,
-            exp_parents_data,
-            &mut inputs[8..],
-        );
-
-        // Repeat parents
-        {
-            let (source, rest) = inputs.split_at_mut(NODE_SIZE * real_parents_count + 8);
-            let source = &source[8..];
-            debug_assert_eq!(source.len(), NODE_SIZE * real_parents_count);
-
-            for chunk in rest.chunks_mut(source.len()) {
-                chunk.copy_from_slice(&source[..chunk.len()]);
-            }
-        }
-
-        hasher.input(&inputs);
-    } else {
-        hasher.input(&(node as u64).to_be_bytes()[..]);
-    }
-
-    // store the newly generated key
-    let start = data_at_node_offset(node);
-    let end = start + NODE_SIZE;
-    layer_labels[start..end].copy_from_slice(&hasher.result()[..]);
-
-    // strip last two bits, to ensure result is in Fr.
-    layer_labels[end - 1] &= 0b0011_1111;
-
-    Ok(())
 }
 
 #[cfg(test)]
@@ -897,7 +842,7 @@ mod tests {
         )
         .expect("failed to verify partition proofs");
 
-        // Discard or compact cached MTs that are no longer needed.
+        // Discard cached MTs that are no longer needed.
         TemporaryAux::<H, Blake2sHasher>::clear_temp(t_aux_orig).expect("t_aux delete failed");
 
         assert!(proofs_are_valid);

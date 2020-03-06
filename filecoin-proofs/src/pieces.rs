@@ -353,8 +353,6 @@ mod tests {
     use crate::constants::{DRG_DEGREE, EXP_DEGREE};
     use crate::types::DataTree;
 
-    use std::sync::atomic::Ordering;
-
     use paired::bls12_381::{Bls12, Fr};
     use rand::{Rng, RngCore, SeedableRng};
     use rand_xorshift::XorShiftRng;
@@ -701,8 +699,8 @@ mod tests {
         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
         let graph = StackedBucketGraph::<DefaultPieceHasher>::new_stacked(
             u64::from(sector_size) as usize / NODE_SIZE,
-            DRG_DEGREE.load(Ordering::Relaxed) as usize,
-            EXP_DEGREE.load(Ordering::Relaxed) as usize,
+            DRG_DEGREE,
+            EXP_DEGREE,
             new_seed(),
         )?;
 

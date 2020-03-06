@@ -32,6 +32,7 @@ impl<H: Hasher> LabelingProof<H> {
 
         // node id
         hasher.input(&(self.node as u64).to_be_bytes());
+        hasher.input(&[0u8; 32 - 8][..]);
 
         // parents
         for parent in &self.parents {

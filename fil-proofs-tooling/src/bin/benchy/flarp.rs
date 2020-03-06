@@ -1,5 +1,3 @@
-use std::sync::atomic::Ordering::Relaxed;
-
 use bellperson::Circuit;
 use fil_proofs_tooling::{measure, Metadata};
 use filecoin_proofs::constants::{DefaultTreeHasher, POREP_PARTITIONS};
@@ -39,8 +37,6 @@ pub struct FlarpReport {
 pub struct FlarpInputs {
     /// The size of sector.
     sector_size: String,
-    drg_parents: u64,
-    expander_parents: u64,
     porep_challenges: u64,
     porep_partitions: u8,
     post_challenges: u64,
@@ -181,8 +177,6 @@ fn configure_global_config(inputs: &FlarpInputs) {
         .write()
         .unwrap()
         .insert(inputs.sector_size_bytes(), inputs.porep_partitions);
-    filecoin_proofs::constants::EXP_DEGREE.store(inputs.expander_parents, Relaxed);
-    filecoin_proofs::constants::DRG_DEGREE.store(inputs.drg_parents, Relaxed);
     filecoin_proofs::constants::POREP_MINIMUM_CHALLENGES
         .write()
         .unwrap()
@@ -351,7 +345,6 @@ struct CircuitOutputs {
     // replica_inclusion (constraints: single merkle path pedersen)
     // column_leaf_hash_constraints - (64 byte * stacked layers) pedersen_md
     // kdf_constraints
-    pub kdf_constraints: usize,
     // merkle_tree_datahash_constraints - sha2 constraints 64
     // merkle_tree_hash_constraints - 64 byte pedersen
     // ticket_proofs (constraints: pedersen_md inside the election post)
@@ -360,12 +353,10 @@ struct CircuitOutputs {
 fn run_measure_circuits(i: &FlarpInputs) -> CircuitOutputs {
     let porep_constraints = measure_porep_circuit(i);
     let post_constraints = measure_post_circuit(i);
-    let kdf_constraints = measure_kdf_circuit(i);
 
     CircuitOutputs {
         porep_constraints,
         post_constraints,
-        kdf_constraints,
     }
 }
 
@@ -377,8 +368,8 @@ fn measure_porep_circuit(i: &FlarpInputs) -> usize {
 
     let layers = i.stacked_layers as usize;
     let challenge_count = i.porep_challenges as usize;
-    let drg_degree = i.drg_parents as usize;
-    let expansion_degree = i.expander_parents as usize;
+    let drg_degree = filecoin_proofs::constants::DRG_DEGREE;
+    let expansion_degree = filecoin_proofs::constants::EXP_DEGREE;
     let nodes = (i.sector_size_bytes() / 32) as usize;
     let layer_challenges = LayerChallenges::new(layers, challenge_count);
 
@@ -420,56 +411,6 @@ fn measure_post_circuit(i: &FlarpInputs) -> usize {
     ElectionPoStCompound::<FlarpHasher>::blank_circuit(&pp)
         .synthesize(&mut cs)
         .unwrap();
-
-    cs.num_constraints()
-}
-
-fn measure_kdf_circuit(i: &FlarpInputs) -> usize {
-    use bellperson::gadgets::boolean::Boolean;
-    use bellperson::ConstraintSystem;
-    use ff::Field;
-    use paired::bls12_381::Fr;
-    use rand::thread_rng;
-    use storage_proofs::fr32::fr_into_bytes;
-    use storage_proofs::gadgets::uint64;
-    use storage_proofs::util::bytes_into_boolean_vec_be;
-
-    let mut cs = BenchCS::<Bls12>::new();
-    let rng = &mut thread_rng();
-
-    let parents = i.drg_parents + i.expander_parents;
-
-    let id: Vec<u8> = fr_into_bytes::<Bls12>(&Fr::random(rng));
-    let parents: Vec<Vec<u8>> = (0..parents)
-        .map(|_| fr_into_bytes::<Bls12>(&Fr::random(rng)))
-        .collect();
-
-    let id_bits: Vec<Boolean> = {
-        let mut cs = cs.namespace(|| "id");
-        bytes_into_boolean_vec_be(&mut cs, Some(id.as_slice()), id.len()).unwrap()
-    };
-    let parents_bits: Vec<Vec<Boolean>> = parents
-        .iter()
-        .enumerate()
-        .map(|(i, p)| {
-            let mut cs = cs.namespace(|| format!("parents {}", i));
-            bytes_into_boolean_vec_be(&mut cs, Some(p.as_slice()), p.len()).unwrap()
-        })
-        .collect();
-
-    let window_index_raw = 12u64;
-    let node_raw = 123_456_789u64;
-    let window_index = uint64::UInt64::constant(window_index_raw);
-    let node = uint64::UInt64::constant(node_raw);
-
-    storage_proofs::gadgets::create_label::create_label(
-        cs.namespace(|| "create_label"),
-        &id_bits,
-        parents_bits,
-        Some(window_index),
-        Some(node),
-    )
-    .expect("key derivation function failed");
 
     cs.num_constraints()
 }

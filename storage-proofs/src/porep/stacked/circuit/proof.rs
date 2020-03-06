@@ -338,12 +338,12 @@ mod tests {
 
     #[test]
     fn stacked_input_circuit_pedersen() {
-        stacked_input_circuit::<PedersenHasher>(2_184_535);
+        stacked_input_circuit::<PedersenHasher>(2_184_211);
     }
 
     #[test]
     fn stacked_input_circuit_poseidon() {
-        stacked_input_circuit::<PoseidonHasher>(1_891_958);
+        stacked_input_circuit::<PoseidonHasher>(1_891_634);
     }
 
     fn stacked_input_circuit<H: Hasher + 'static>(expected_constraints: usize) {
@@ -509,12 +509,12 @@ mod tests {
     }
 
     fn stacked_test_compound<H: 'static + Hasher>() {
-        let nodes = 64;
+        let nodes = 8;
 
-        let degree = 3;
-        let expansion_degree = 2;
+        let degree = BASE_DEGREE;
+        let expansion_degree = EXP_DEGREE;
         let num_layers = 2;
-        let layer_challenges = LayerChallenges::new(num_layers, 3);
+        let layer_challenges = LayerChallenges::new(num_layers, 1);
         let partition_count = 1;
 
         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
@@ -640,7 +640,7 @@ mod tests {
         >>::groth_params(&public_params.vanilla_params)
         .expect("failed to generate groth params");
 
-        // Discard or compact cached MTs that are no longer needed.
+        // Discard cached MTs that are no longer needed.
         TemporaryAux::<H, Sha256Hasher>::clear_temp(t_aux_orig).expect("t_aux delete failed");
 
         let proof = StackedCompound::prove(

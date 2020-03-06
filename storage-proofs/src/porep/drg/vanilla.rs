@@ -317,8 +317,16 @@ where
 
             let data = tree_r.read_at(challenge)?;
 
-            let (tree_proof, _) =
-                tree_r.gen_proof_and_partial_tree(challenge, tree_r_config_levels)?;
+            let tree_proof = {
+                if tree_r_config_levels == 0 {
+                    tree_r.gen_proof(challenge)?
+                } else {
+                    let (tree_proof, _) =
+                        tree_r.gen_proof_and_partial_tree(challenge, tree_r_config_levels)?;
+
+                    tree_proof
+                }
+            };
             replica_nodes.push(DataProof {
                 proof: MerkleProof::new_from_proof(&tree_proof),
                 data,
@@ -330,8 +338,16 @@ where
 
             for p in &parents {
                 replica_parentsi.push((*p, {
-                    let (proof, _) =
-                        tree_r.gen_proof_and_partial_tree(*p as usize, tree_r_config_levels)?;
+                    let proof = {
+                        if tree_r_config_levels == 0 {
+                            tree_r.gen_proof(*p as usize)?
+                        } else {
+                            let (proof, _) = tree_r
+                                .gen_proof_and_partial_tree(*p as usize, tree_r_config_levels)?;
+
+                            proof
+                        }
+                    };
                     DataProof {
                         proof: MerkleProof::new_from_proof(&proof),
                         data: tree_r.read_at(*p as usize)?,
@@ -341,8 +357,7 @@ where
 
             replica_parents.push(replica_parentsi);
 
-            let (node_proof, _) =
-                tree_d.gen_proof_and_partial_tree(challenge, tree_r_config_levels)?;
+            let node_proof = tree_d.gen_proof(challenge)?;
 
             {
                 // TODO: use this again, I can't make lifetimes work though atm and I do not know why
@@ -523,11 +538,13 @@ where
             .open(&replica_path)?;
         f.write_all(&data.as_ref())?;
 
-        // Compact tree_r here.
-        tree_r.compact(
-            tree_r_last_config.clone(),
-            StoreConfigDataVersion::Two as u32,
-        )?;
+        // Compact tree_r here (if needed).
+        if tree_r_last_config.levels != 0 {
+            tree_r.compact(
+                tree_r_last_config.clone(),
+                StoreConfigDataVersion::Two as u32,
+            )?;
+        }
 
         ensure!(
             Path::new(&replica_path).exists(),

@@ -1,7 +1,9 @@
 use bellperson::gadgets::boolean::{self, Boolean};
 use bellperson::groth16::*;
 use bellperson::{Circuit, ConstraintSystem, SynthesisError};
-use criterion::{black_box, criterion_group, criterion_main, Criterion, ParameterizedBenchmark};
+use criterion::{
+    black_box, criterion_group, criterion_main, Criterion, ParameterizedBenchmark, Throughput,
+};
 use fil_sapling_crypto::jubjub::JubjubEngine;
 use paired::bls12_381::Bls12;
 use rand::{thread_rng, Rng};
@@ -38,7 +40,7 @@ where
 }
 
 fn sha256_benchmark(c: &mut Criterion) {
-    let params = vec![32, 64, 10 * 32];
+    let params = vec![32, 64, 10 * 32, 37 * 32];
 
     c.bench(
         "hash-sha256",
@@ -51,7 +53,8 @@ fn sha256_benchmark(c: &mut Criterion) {
                 b.iter(|| black_box(Sha256::digest(&data)))
             },
             params,
-        ),
+        )
+        .throughput(|bytes| Throughput::Bytes(*bytes as u64)),
     );
 }
 

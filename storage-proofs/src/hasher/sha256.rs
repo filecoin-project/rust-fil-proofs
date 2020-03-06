@@ -28,10 +28,6 @@ impl Hasher for Sha256Hasher {
         "Sha256Hasher".into()
     }
 
-    fn create_label(data: &[u8], _m: usize) -> Result<Self::Domain> {
-        Ok(<Self::Function as HashFunction<Self::Domain>>::hash(data))
-    }
-
     fn sloth_encode(key: &Self::Domain, ciphertext: &Self::Domain) -> Result<Self::Domain> {
         // TODO: validate this is how sloth should work in this case
         let k = (*key).into();

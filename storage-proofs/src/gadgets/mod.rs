@@ -3,7 +3,6 @@ mod metric;
 mod test;
 
 pub mod constraint;
-pub mod create_label;
 pub mod encode;
 pub mod insertion;
 pub mod multipack;

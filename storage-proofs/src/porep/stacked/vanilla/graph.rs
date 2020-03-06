@@ -1,28 +1,40 @@
-use std::collections::HashMap;
 use std::marker::PhantomData;
-use std::sync::{Arc, RwLock};
+
+#[cfg(target_arch = "x86")]
+use std::arch::x86::*;
+#[cfg(target_arch = "x86_64")]
+use std::arch::x86_64::*;
 
 use anyhow::ensure;
-use lazy_static::lazy_static;
 use log::info;
+use once_cell::sync::OnceCell;
 use rayon::prelude::*;
+use sha2raw::Sha256;
 
 use crate::crypto::feistel::{self, FeistelPrecomputed};
+use crate::drgraph::BASE_DEGREE;
 use crate::drgraph::{BucketGraph, Graph};
 use crate::error::Result;
 use crate::hasher::Hasher;
 use crate::parameter_cache::ParameterSetMetadata;
 use crate::settings;
-use crate::util::{data_at_node_offset, NODE_SIZE};
+use crate::util::NODE_SIZE;
 
 /// The expansion degree used for Stacked Graphs.
 pub const EXP_DEGREE: usize = 8;
 const FEISTEL_KEYS: [feistel::Index; 4] = [1, 2, 3, 4];
 
-lazy_static! {
-    // This parents cache is currently used for the full parents set.
-    // It is indexed by the `sector size`, to ensure that the right cache is used.
-    static ref PARENT_CACHE: Arc<RwLock<HashMap<u64, ParentCache>>> = Arc::new(RwLock::new(HashMap::new()));
+const DEGREE: usize = BASE_DEGREE + EXP_DEGREE;
+
+/// Returns a reference to the parent cache, initializing it lazily the first time this is called.
+fn parent_cache<H, G>(cache_entries: u32, graph: &StackedGraph<H, G>) -> &'static ParentCache
+where
+    H: Hasher,
+    G: Graph<H> + ParameterSetMetadata + Send + Sync,
+{
+    static INSTANCE: OnceCell<ParentCache> = OnceCell::new();
+
+    INSTANCE.get_or_init(|| ParentCache::new(cache_entries, graph).expect("failed to fill cache"))
 }
 
 // StackedGraph will hold two different (but related) `ParentCache`,
@@ -31,8 +43,6 @@ struct ParentCache {
     /// This is a large list of fixed (parent) sized arrays.
     /// `Vec<Vec<u32>>` was showing quite a large memory overhead, so this is layed out as a fixed boxed slice of memory.
     cache: Box<[u32]>,
-    /// The size of a single slice in the cache.
-    degree: usize,
 }
 
 impl ParentCache {
@@ -42,14 +52,13 @@ impl ParentCache {
         G: Graph<H> + ParameterSetMetadata + Send + Sync,
     {
         info!("filling parents cache");
-        let degree = graph.degree();
-        let mut cache = vec![0u32; degree * cache_entries as usize];
+        let mut cache = vec![0u32; DEGREE * cache_entries as usize];
 
-        let base_degree = graph.base_graph().degree();
-        let exp_degree = graph.expansion_degree();
+        let base_degree = BASE_DEGREE;
+        let exp_degree = EXP_DEGREE;
 
         cache
-            .par_chunks_mut(degree)
+            .par_chunks_mut(DEGREE)
             .enumerate()
             .try_for_each(|(node, entry)| -> Result<()> {
                 graph
@@ -66,19 +75,19 @@ impl ParentCache {
 
         Ok(ParentCache {
             cache: cache.into_boxed_slice(),
-            degree,
         })
     }
 
     /// Read a single cache element at position `node`.
+    #[inline]
     pub fn read(&self, node: u32) -> &[u32] {
-        let start = node as usize * self.degree;
-        let end = start + self.degree;
+        let start = node as usize * DEGREE;
+        let end = start + DEGREE;
         &self.cache[start..end]
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct StackedGraph<H, G>
 where
     H: Hasher,
@@ -88,11 +97,46 @@ where
     base_graph: G,
     feistel_precomputed: FeistelPrecomputed,
     id: String,
-    use_cache: bool,
+    cache: Option<&'static ParentCache>,
     _h: PhantomData<H>,
 }
 
+impl<H, G> std::fmt::Debug for StackedGraph<H, G>
+where
+    H: Hasher,
+    G: Graph<H> + 'static,
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("StackedGraph")
+            .field("expansion_degree", &self.expansion_degree)
+            .field("base_graph", &self.base_graph)
+            .field("feistel_precomputed", &self.feistel_precomputed)
+            .field("id", &self.id)
+            .field("cache", &self.cache)
+            .finish()
+    }
+}
+
 pub type StackedBucketGraph<H> = StackedGraph<H, BucketGraph<H>>;
+
+#[inline]
+fn prefetch(parents: &[u32], data: &[u8]) {
+    for parent in parents {
+        let start = *parent as usize * NODE_SIZE;
+        let end = start + NODE_SIZE;
+
+        unsafe {
+            _mm_prefetch(data[start..end].as_ptr() as *const i8, _MM_HINT_T0);
+        }
+    }
+}
+
+#[inline]
+fn read_node<'a>(i: usize, parents: &[u32], data: &'a [u8]) -> &'a [u8] {
+    let start = parents[i] as usize * NODE_SIZE;
+    let end = start + NODE_SIZE;
+    &data[start..end]
+}
 
 impl<H, G> StackedGraph<H, G>
 where
@@ -106,6 +150,9 @@ where
         expansion_degree: usize,
         seed: [u8; 28],
     ) -> Result<Self> {
+        assert_eq!(base_degree, BASE_DEGREE);
+        assert_eq!(expansion_degree, EXP_DEGREE);
+
         let use_cache = settings::SETTINGS.lock().unwrap().maximize_caching;
 
         let base_graph = match base_graph {
@@ -114,14 +161,14 @@ where
         };
         let bg_id = base_graph.identifier();
 
-        let res = StackedGraph {
+        let mut res = StackedGraph {
             base_graph,
             id: format!(
                 "stacked_graph::StackedGraph{{expansion_degree: {} base_graph: {} }}",
                 expansion_degree, bg_id,
             ),
             expansion_degree,
-            use_cache,
+            cache: None,
             feistel_precomputed: feistel::precompute((expansion_degree * nodes) as feistel::Index),
             _h: PhantomData,
         };
@@ -129,69 +176,126 @@ where
         if use_cache {
             info!("using parents cache of unlimited size");
             ensure!(nodes <= std::u32::MAX as usize, "too many nodes");
+            assert_eq!(
+                nodes,
+                (32 * 1024 * 1024 * 1024) / NODE_SIZE,
+                "Cache is only available for 32GiB sectors"
+            );
 
-            if !PARENT_CACHE
-                .read()
-                .unwrap()
-                .contains_key(&res.sector_size())
-            {
-                PARENT_CACHE
-                    .write()
-                    .unwrap()
-                    .insert(res.sector_size(), ParentCache::new(nodes as u32, &res)?);
-            }
+            let cache = parent_cache(nodes as u32, &res);
+            res.cache = Some(cache);
         }
 
         Ok(res)
     }
 
-    pub fn copy_parents_data(
+    pub fn copy_parents_data_exp(
         &self,
         node: u32,
         base_data: &[u8],
-        exp_data: Option<&Vec<u8>>,
-        target: &mut [u8],
-    ) {
-        if self.use_cache {
-            let cache_lock = PARENT_CACHE.read().unwrap();
-            let cache = cache_lock
-                .get(&self.sector_size())
-                .expect("Invalid cache construction");
+        exp_data: &[u8],
+        hasher: Sha256,
+    ) -> [u8; 32] {
+        if let Some(cache) = self.cache {
             let cache_parents = cache.read(node as u32);
-            self.copy_parents_data_inner(&cache_parents, base_data, exp_data, target);
+            self.copy_parents_data_inner_exp(&cache_parents, base_data, exp_data, hasher)
         } else {
-            let mut cache_parents = vec![0u32; self.degree()];
-            self.parents(node as usize, &mut cache_parents).unwrap();
-            self.copy_parents_data_inner(&cache_parents, base_data, exp_data, target);
+            let mut cache_parents = [0u32; DEGREE];
+
+            self.parents(node as usize, &mut cache_parents[..]).unwrap();
+            self.copy_parents_data_inner_exp(&cache_parents, base_data, exp_data, hasher)
         }
+    }
+
+    pub fn copy_parents_data(&self, node: u32, base_data: &[u8], hasher: Sha256) -> [u8; 32] {
+        if let Some(cache) = self.cache {
+            let cache_parents = cache.read(node as u32);
+            self.copy_parents_data_inner(&cache_parents, base_data, hasher)
+        } else {
+            let mut cache_parents = [0u32; DEGREE];
+
+            self.parents(node as usize, &mut cache_parents[..]).unwrap();
+            self.copy_parents_data_inner(&cache_parents, base_data, hasher)
+        }
+    }
+
+    fn copy_parents_data_inner_exp(
+        &self,
+        cache_parents: &[u32],
+        base_data: &[u8],
+        exp_data: &[u8],
+        mut hasher: Sha256,
+    ) -> [u8; 32] {
+        prefetch(&cache_parents[..BASE_DEGREE], base_data);
+        prefetch(&cache_parents[BASE_DEGREE..], exp_data);
+
+        // fill buffer
+        let parents = [
+            read_node(0, cache_parents, base_data),
+            read_node(1, cache_parents, base_data),
+            read_node(2, cache_parents, base_data),
+            read_node(3, cache_parents, base_data),
+            read_node(4, cache_parents, base_data),
+            read_node(5, cache_parents, base_data),
+            read_node(6, cache_parents, exp_data),
+            read_node(7, cache_parents, exp_data),
+            read_node(8, cache_parents, exp_data),
+            read_node(9, cache_parents, exp_data),
+            read_node(10, cache_parents, exp_data),
+            read_node(11, cache_parents, exp_data),
+            read_node(12, cache_parents, exp_data),
+            read_node(13, cache_parents, exp_data),
+        ];
+
+        // round 1 (14)
+        hasher.input(&parents);
+
+        // round 2 (14)
+        hasher.input(&parents);
+
+        // round 3 (9)
+        hasher.input(&parents[..8]);
+        hasher.finish_with(&parents[8])
     }
 
     fn copy_parents_data_inner(
         &self,
         cache_parents: &[u32],
         base_data: &[u8],
-        exp_data: Option<&Vec<u8>>,
-        target: &mut [u8],
-    ) {
-        let base_degree = self.base_graph().degree();
+        mut hasher: Sha256,
+    ) -> [u8; 32] {
+        prefetch(&cache_parents[..BASE_DEGREE], base_data);
 
-        // Base parents
-        for (i, parent) in cache_parents.iter().enumerate().take(base_degree) {
-            let node_off = data_at_node_offset(*parent as usize);
-            let off = i * NODE_SIZE;
-            target[off..off + NODE_SIZE]
-                .copy_from_slice(&base_data[node_off..node_off + NODE_SIZE]);
-        }
+        // fill buffer
+        let parents = [
+            read_node(0, cache_parents, base_data),
+            read_node(1, cache_parents, base_data),
+            read_node(2, cache_parents, base_data),
+            read_node(3, cache_parents, base_data),
+            read_node(4, cache_parents, base_data),
+            read_node(5, cache_parents, base_data),
+        ];
 
-        // Expander parents
-        if let Some(ref parents_data) = exp_data {
-            for (i, parent) in cache_parents.iter().enumerate().skip(base_degree) {
-                let node_off = data_at_node_offset(*parent as usize);
-                let off = i * NODE_SIZE;
-                target[off..off + NODE_SIZE]
-                    .copy_from_slice(&parents_data[node_off..node_off + NODE_SIZE]);
-            }
-        }
+        // round 1 (0..6)
+        hasher.input(&parents);
+
+        // round 2 (6..12)
+        hasher.input(&parents);
+
+        // round 3 (12..18)
+        hasher.input(&parents);
+
+        // round 4 (18..24)
+        hasher.input(&parents);
+
+        // round 5 (24..30)
+        hasher.input(&parents);
+
+        // round 6 (30..36)
+        hasher.input(&parents);
+
+        // round 7 (37)
+        hasher.finish_with(parents[0])
     }
 }
 
@@ -221,12 +325,16 @@ where
     }
 
     fn degree(&self) -> usize {
-        self.base_graph().degree() + self.expansion_degree()
+        self.base_graph.degree() + self.expansion_degree
     }
 
     #[inline]
     fn parents(&self, node: usize, parents: &mut [u32]) -> Result<()> {
-        if !self.use_cache {
+        if let Some(cache) = self.cache {
+            // Read from the cache
+            let cache_parents = cache.read(node as u32);
+            parents.copy_from_slice(cache_parents);
+        } else {
             self.base_parents(node, &mut parents[..self.base_graph().degree()])?;
 
             // expanded_parents takes raw_node
@@ -235,17 +343,7 @@ where
                 &mut parents[self.base_graph().degree()
                     ..self.base_graph().degree() + self.expansion_degree()],
             );
-            return Ok(());
         }
-
-        // Read from the cache
-        let cache_lock = PARENT_CACHE.read().unwrap();
-        let cache = cache_lock
-            .get(&self.sector_size())
-            .expect("Invalid cache construction");
-
-        let cache_parents = cache.read(node as u32);
-        parents.copy_from_slice(cache_parents);
         Ok(())
     }
 
@@ -345,21 +443,15 @@ where
     }
 
     pub fn base_parents(&self, node: usize, parents: &mut [u32]) -> Result<()> {
-        if !self.use_cache {
+        if let Some(cache) = self.cache {
+            // Read from the cache
+            let cache_parents = cache.read(node as u32);
+            parents.copy_from_slice(&cache_parents[..self.base_graph().degree()]);
+            Ok(())
+        } else {
             // No cache usage, generate on demand.
-            return self.base_graph().parents(node, parents);
+            self.base_graph().parents(node, parents)
         }
-
-        // Read from the cache
-        let cache_lock = PARENT_CACHE.read().unwrap();
-        let cache = cache_lock
-            .get(&self.sector_size())
-            .expect("Invalid cache construction");
-
-        let cache_parents = cache.read(node as u32);
-        parents.copy_from_slice(&cache_parents[..self.base_graph().degree()]);
-
-        Ok(())
     }
 
     /// Assign `self.expansion_degree` parents to `node` using an invertible permutation
@@ -367,19 +459,14 @@ where
     /// ones.
     #[inline]
     pub fn expanded_parents(&self, node: usize, parents: &mut [u32]) {
-        if !self.use_cache {
+        if let Some(cache) = self.cache {
+            // Read from the cache
+            let cache_parents = cache.read(node as u32);
+            parents.copy_from_slice(&cache_parents[self.base_graph().degree()..]);
+        } else {
             // No cache usage, generate on demand.
-            return self.generate_expanded_parents(node, parents);
+            self.generate_expanded_parents(node, parents);
         }
-
-        // Read from the cache
-        let cache_lock = PARENT_CACHE.read().unwrap();
-        let cache = cache_lock
-            .get(&self.sector_size())
-            .expect("Invalid cache construction");
-
-        let cache_parents = cache.read(node as u32);
-        parents.copy_from_slice(&cache_parents[self.base_graph().degree()..]);
     }
 }
 

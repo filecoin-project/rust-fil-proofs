@@ -1,13 +1,12 @@
-use criterion::{black_box, criterion_group, criterion_main, Criterion, ParameterizedBenchmark};
+use criterion::{black_box, criterion_group, criterion_main, Criterion, Throughput};
 use ff::Field;
 use paired::bls12_381::{Bls12, Fr};
 use rand::thread_rng;
-use sha2::{Digest, Sha256};
 use storage_proofs::drgraph::new_seed;
 use storage_proofs::fr32::fr_into_bytes;
 use storage_proofs::hasher::sha256::Sha256Hasher;
 use storage_proofs::hasher::{Domain, Hasher};
-use storage_proofs::porep::stacked::{create_key, StackedBucketGraph};
+use storage_proofs::porep::stacked::{create_label, create_label_exp, StackedBucketGraph};
 
 struct Pregenerated<H: 'static + Hasher> {
     data: Vec<u8>,
@@ -16,13 +15,15 @@ struct Pregenerated<H: 'static + Hasher> {
 }
 
 fn pregenerate_data<H: Hasher>(degree: usize) -> Pregenerated<H> {
+    assert_eq!(degree, 6 + 8);
     let mut rng = thread_rng();
-    let data: Vec<u8> = (0..(degree + 1))
+    let size = degree * 4 * 1024 * 1024;
+    let data: Vec<u8> = (0..size)
         .flat_map(|_| fr_into_bytes::<Bls12>(&Fr::random(&mut rng)))
         .collect();
     let replica_id: H::Domain = H::Domain::random(&mut rng);
 
-    let graph = StackedBucketGraph::<H>::new_stacked(degree + 1, degree, 0, new_seed()).unwrap();
+    let graph = StackedBucketGraph::<H>::new_stacked(size, 6, 8, new_seed()).unwrap();
 
     Pregenerated {
         data,
@@ -32,30 +33,39 @@ fn pregenerate_data<H: Hasher>(degree: usize) -> Pregenerated<H> {
 }
 
 fn kdf_benchmark(c: &mut Criterion) {
-    let degrees = vec![3, 5, 10, 14, 20];
+    let degree = 14;
+    let Pregenerated {
+        data,
+        replica_id,
+        graph,
+    } = pregenerate_data::<Sha256Hasher>(degree);
 
-    c.bench(
-        "kdf",
-        ParameterizedBenchmark::new(
-            "sha256",
-            |b, degree| {
-                let Pregenerated {
-                    mut data,
-                    replica_id,
-                    graph,
-                } = pregenerate_data::<Sha256Hasher>(*degree);
+    let mut group = c.benchmark_group("kdf");
+    group.sample_size(10);
+    group.throughput(Throughput::Bytes(
+        /* replica id + 37 parents + node id */ 39 * 32,
+    ));
 
-                b.iter(|| {
-                    let mut hasher = Sha256::new();
-                    hasher.input(AsRef::<[u8]>::as_ref(&replica_id));
-                    hasher.input(&(1u64).to_be_bytes()[..]);
+    group.bench_function("exp", |b| {
+        let mut raw_data = data.clone();
+        raw_data.extend_from_slice(&data);
+        let (data, exp_data) = raw_data.split_at_mut(data.len());
 
-                    black_box(create_key(&graph, hasher, None, &mut data, 1))
-                })
-            },
-            degrees,
-        ),
-    );
+        let graph = &graph;
+        let replica_id = replica_id.clone();
+
+        b.iter(|| black_box(create_label_exp(graph, &replica_id, &*exp_data, data, 1)))
+    });
+
+    group.bench_function("non-exp", |b| {
+        let mut data = data.clone();
+        let graph = &graph;
+        let replica_id = replica_id.clone();
+
+        b.iter(|| black_box(create_label(graph, &replica_id, &mut data, 1)))
+    });
+
+    group.finish();
 }
 
 criterion_group!(benches, kdf_benchmark);
