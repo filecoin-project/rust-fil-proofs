@@ -273,14 +273,6 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
     ) -> Result<(LabelsCache<H>, Labels<H>)> {
         info!("generate labels");
 
-        // Pin this thread to a fixed core, to ensure we are not wasting anytime in switching.
-        if let Some(ids) = core_affinity::get_core_ids() {
-            if let Some(id) = ids.get(0) {
-                info!("setting core affinity {:?}", id);
-                core_affinity::set_for_current(*id);
-            }
-        }
-
         let layers = layer_challenges.layers();
         // For now, we require it due to changes in encodings structure.
         let mut labels: Vec<DiskStore<H::Domain>> = Vec::with_capacity(layers);

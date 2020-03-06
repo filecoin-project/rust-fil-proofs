@@ -514,7 +514,7 @@ mod tests {
         let degree = BASE_DEGREE;
         let expansion_degree = EXP_DEGREE;
         let num_layers = 2;
-        let layer_challenges = LayerChallenges::new(num_layers, 3);
+        let layer_challenges = LayerChallenges::new(num_layers, 1);
         let partition_count = 1;
 
         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
