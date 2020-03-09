@@ -6,7 +6,7 @@ use log::{info, trace};
 use merkletree::merkle::{
     get_merkle_tree_len, is_merkle_tree_size_valid, FromIndexedParallelIterator,
 };
-use merkletree::store::{DiskStore, StoreConfig, StoreConfigDataVersion};
+use merkletree::store::{DiskStore, StoreConfig};
 use rayon::prelude::*;
 
 use super::{
@@ -33,7 +33,7 @@ use crate::measurements::{
     measure_op,
     Operation::{CommD, EncodeWindowTimeAll, GenerateTreeC, GenerateTreeRLast},
 };
-use crate::merkle::{MerkleProof, MerkleTree, OctMerkleTree, Store};
+use crate::merkle::{MerkleProof, MerkleTree, OctLCMerkleTree, OctMerkleTree, Store};
 use crate::porep::PoRep;
 use crate::util::NODE_SIZE;
 pub const TOTAL_PARENTS: usize = 37;
@@ -506,7 +506,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
 
         // Encode original data into the last layer.
         info!("building tree_r_last");
-        let mut tree_r_last = measure_op(GenerateTreeRLast, || {
+        let tree_r_last = measure_op(GenerateTreeRLast, || {
             data.ensure_data()?;
 
             let last_layer_labels = labels.labels_for_last_layer()?;
@@ -515,13 +515,16 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
             let encoded_data = last_layer_labels
                 .read_range(0..size)?
                 .into_par_iter()
-                .zip(data.as_ref().par_chunks(NODE_SIZE))
+                .zip(data.as_mut().par_chunks_mut(NODE_SIZE))
                 .map(|(key, data_node_bytes)| {
                     let data_node = H::Domain::try_from_bytes(data_node_bytes).unwrap();
-                    encode::<H::Domain>(key, data_node)
+                    let encoded_node = encode::<H::Domain>(key, data_node);
+                    data_node_bytes.copy_from_slice(AsRef::<[u8]>::as_ref(&encoded_node));
+
+                    encoded_node
                 });
 
-            OctMerkleTree::<_, H::Function>::from_par_iter_with_config(
+            OctLCMerkleTree::<_, H::Function>::from_par_iter_with_config(
                 encoded_data,
                 tree_r_last_config.clone(),
             )
@@ -539,7 +542,6 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         trace!("tree r_last len {}", tree_r_last.len());
 
         // Store and persist encoded replica data.
-        tree_r_last.read_into(0, data.as_mut())?;
         {
             use std::fs::OpenOptions;
             use std::io::prelude::*;
@@ -554,18 +556,10 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
             f.write_all(&data.as_ref()[0..tree_r_last.leafs() * NODE_SIZE])?;
         }
 
+        data.drop_data();
+
         // comm_r = H(comm_c || comm_r_last)
         let comm_r: H::Domain = H::Function::hash2(&tree_c.root(), &tree_r_last.root());
-
-        // Compact tree_r_last (if needed).
-        if tree_r_last_config.levels != 0 {
-            tree_r_last.compact(
-                tree_r_last_config.clone(),
-                StoreConfigDataVersion::Two as u32,
-            )?;
-        }
-
-        data.drop_data();
 
         Ok((
             Tau {

@@ -5,7 +5,7 @@ use std::path::PathBuf;
 use anyhow::{ensure, Context};
 use byteorder::{LittleEndian, WriteBytesExt};
 use generic_array::typenum;
-use merkletree::store::{StoreConfig, StoreConfigDataVersion};
+use merkletree::store::StoreConfig;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -494,7 +494,6 @@ where
         use crate::cache_key::CacheKey;
 
         use std::io::prelude::*;
-        use std::path::Path;
 
         let tree_d = match data_tree {
             Some(tree) => tree,
@@ -522,15 +521,6 @@ where
             encoded.write_bytes(&mut data.as_mut()[start..end])?;
         }
 
-        let tree_r_last_config =
-            StoreConfig::from_config(&config, CacheKey::CommRLastTree.to_string(), None);
-
-        let comm_d = tree_d.root();
-        let mut tree_r: BinaryMerkleTree<_, _> = pp
-            .graph
-            .merkle_tree(Some(tree_r_last_config.clone()), data.as_ref())?;
-        let comm_r = tree_r.root();
-
         // Write out the encoded data here.
         let mut f = OpenOptions::new()
             .write(true)
@@ -538,21 +528,14 @@ where
             .open(&replica_path)?;
         f.write_all(&data.as_ref())?;
 
-        // Compact tree_r here (if needed).
-        if tree_r_last_config.levels != 0 {
-            tree_r.compact(
-                tree_r_last_config.clone(),
-                StoreConfigDataVersion::Two as u32,
-            )?;
-        }
-
-        ensure!(
-            Path::new(&replica_path).exists(),
-            "Replica data does not exist!"
-        );
-
+        let tree_r_last_config =
+            StoreConfig::from_config(&config, CacheKey::CommRLastTree.to_string(), None);
         let tree_r: BinaryLCMerkleTree<_, _> =
-            pp.graph.lcmerkle_tree(tree_r_last_config, &replica_path)?;
+            pp.graph
+                .lcmerkle_tree(tree_r_last_config, &data.as_ref(), &replica_path)?;
+
+        let comm_d = tree_d.root();
+        let comm_r = tree_r.root();
 
         Ok((Tau::new(comm_d, comm_r), ProverAux::new(tree_d, tree_r)))
     }
