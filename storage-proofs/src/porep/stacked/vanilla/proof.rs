@@ -558,6 +558,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
 
         data.drop_data();
 
+        // comm_r = H(comm_c || comm_r_last)
         let comm_r: H::Domain = H::Function::hash2(&tree_c.root(), &tree_r_last.root());
 
         Ok((

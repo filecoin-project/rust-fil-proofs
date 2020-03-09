@@ -344,12 +344,7 @@ pub fn create_lcmerkle_tree<H: Hasher, U: typenum::Unsigned>(
         )?;
 
     let store: &mut LevelCacheStore<_, std::fs::File> = lc_tree.data_mut();
-    store
-        .set_external_reader(
-            ExternalReader::new_from_path(replica_path)
-                .expect("Failed to create external reader from path"),
-        )
-        .expect("Failed to set external reader");
+    store.set_external_reader(ExternalReader::new_from_path(replica_path)?)?;
 
     Ok(lc_tree)
 }
