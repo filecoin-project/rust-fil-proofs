@@ -401,7 +401,7 @@ impl LightAlgorithm<PoseidonDomain> for PoseidonFunction {
 
     fn multi_node(&mut self, parts: &[PoseidonDomain], _height: usize) -> PoseidonDomain {
         match parts.len() {
-            1 | 2 | 4 | 8 => shared_hash_frs(
+            1 | 2 | 4 | 8 | 16 => shared_hash_frs(
                 &parts
                     .iter()
                     .map(|x| <Bls12 as ff::ScalarEngine>::Fr::from_repr(x.0).unwrap())
