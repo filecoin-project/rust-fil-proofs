@@ -165,6 +165,14 @@ fn main() -> Result<()> {
                 .required(true)
                 .help("How many proofs to generate")
                 .takes_value(true),
+        )
+        .arg(
+            Arg::with_name("validate")
+                .long("validate")
+                .required(false)
+                .default_value("false")
+                .help("Validate proofs if specified")
+                .takes_value(false),
         );
 
     let matches = App::new("benchy")
@@ -211,7 +219,7 @@ fn main() -> Result<()> {
 
             let proofs = value_t!(m, "proofs", usize)?;
             let arity = value_t!(m, "arity", usize)?;
-            merkleproofs::run(size, proofs, arity)?;
+            merkleproofs::run(size, proofs, arity, m.is_present("validate"))?;
         }
         ("flarp", Some(m)) => {
             let inputs: FlarpInputs = if m.is_present("config") {

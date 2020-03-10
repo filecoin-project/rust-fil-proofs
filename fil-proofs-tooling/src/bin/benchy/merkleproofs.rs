@@ -35,6 +35,7 @@ fn generate_proofs<R: Rng, U: Unsigned>(
     >,
     nodes: usize,
     proofs_count: usize,
+    validate: bool,
 ) -> Result<()> {
     info!("creating {} inclusion proofs", proofs_count);
 
@@ -42,16 +43,26 @@ fn generate_proofs<R: Rng, U: Unsigned>(
     for _ in 0..proofs_count {
         let challenge = rng.gen_range(0, nodes);
 
-        proofs.push(tree.gen_proof(challenge));
+        proofs.push(tree.gen_proof(challenge)?);
     }
     assert_eq!(proofs.len(), proofs_count);
 
     info!("proofs created");
 
+    if validate {
+        info!("validating proofs");
+
+        for proof in proofs {
+            assert!(proof.validate::<<PoseidonHasher as Hasher>::Function>());
+        }
+
+        info!("all proofs validated");
+    }
+
     Ok(())
 }
 
-pub fn run(size: usize, proofs_count: usize, arity: usize) -> Result<()> {
+pub fn run(size: usize, proofs_count: usize, arity: usize, validate: bool) -> Result<()> {
     let mut rng = thread_rng();
 
     let nodes = size / NODE_SIZE;
@@ -66,16 +77,16 @@ pub fn run(size: usize, proofs_count: usize, arity: usize) -> Result<()> {
 
     if arity == 2 {
         let tree = generate_tree::<_, U2>(&mut rng, nodes)?;
-        return generate_proofs::<_, U2>(&mut rng, tree, nodes, proofs_count);
+        return generate_proofs::<_, U2>(&mut rng, tree, nodes, proofs_count, validate);
     } else if arity == 4 {
         let tree = generate_tree::<_, U4>(&mut rng, nodes)?;
-        return generate_proofs::<_, U4>(&mut rng, tree, nodes, proofs_count);
+        return generate_proofs::<_, U4>(&mut rng, tree, nodes, proofs_count, validate);
     } else if arity == 8 {
         let tree = generate_tree::<_, U8>(&mut rng, nodes)?;
-        return generate_proofs::<_, U8>(&mut rng, tree, nodes, proofs_count);
+        return generate_proofs::<_, U8>(&mut rng, tree, nodes, proofs_count, validate);
     } else if arity == 16 {
         let tree = generate_tree::<_, U16>(&mut rng, nodes)?;
-        return generate_proofs::<_, U16>(&mut rng, tree, nodes, proofs_count);
+        return generate_proofs::<_, U16>(&mut rng, tree, nodes, proofs_count, validate);
     }
 
     panic!("Invalid arity specified")
