@@ -28,13 +28,15 @@ impl<H: Hasher> EncodingProof<H> {
 
     fn create_key(&self, replica_id: &H::Domain) -> H::Domain {
         let mut hasher = Sha256::new();
+        let mut buffer = [0u8; 64];
 
         // replica_id
-        hasher.input(AsRef::<[u8]>::as_ref(replica_id));
+        buffer[..32].copy_from_slice(AsRef::<[u8]>::as_ref(replica_id));
 
         // node id
-        hasher.input(&(self.node as u64).to_be_bytes());
-        hasher.input(&[0u8; 32 - 8][..]);
+        buffer[32..40].copy_from_slice(&(self.node as u64).to_be_bytes());
+
+        hasher.input(&buffer[..]);
 
         // parents
         for parent in &self.parents {

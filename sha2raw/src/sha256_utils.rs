@@ -203,7 +203,7 @@ fn sha256_digest_block_u32(state: &mut [u32; 8], block: &[u32; 16]) {
 /// digest calculation. The schedule-related instructions allow 4 rounds to be
 /// calculated as:
 ///
-/// ```ignore
+/// ```compile_fail
 /// use std::simd::u32x4;
 /// use self::crypto::sha2::{
 ///     sha256msg1,
@@ -231,7 +231,7 @@ fn sha256_digest_block_u32(state: &mut [u32; 8], block: &[u32; 16]) {
 ///
 /// instead of 4 rounds of:
 ///
-/// ```ignore
+/// ```compile_fail
 /// fn schedule_work(w: &mut [u32], t: usize) {
 ///     w[t] = sigma1!(w[t - 2]) + w[t - 7] + sigma0!(w[t - 15]) + w[t - 16];
 /// }
@@ -239,7 +239,7 @@ fn sha256_digest_block_u32(state: &mut [u32; 8], block: &[u32; 16]) {
 ///
 /// and the digest-related instructions allow 4 rounds to be calculated as:
 ///
-/// ```ignore
+/// ```compile_fail
 /// use std::simd::u32x4;
 /// use self::crypto::sha2::{K32X4,
 ///     sha256rnds2,
@@ -265,7 +265,7 @@ fn sha256_digest_block_u32(state: &mut [u32; 8], block: &[u32; 16]) {
 ///
 /// instead of 4 rounds of:
 ///
-/// ```ignore
+/// ```compile_fail
 /// fn round(state: &mut [u32; 8], w: &mut [u32], t: usize) {
 ///     let [a, b, c, mut d, e, f, g, mut h]: [u32; 8] = *state;
 ///

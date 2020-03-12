@@ -11,7 +11,7 @@ use std::arch::x86_64::*;
 #[target_feature(enable = "sha")]
 #[allow(clippy::cast_ptr_alignment)] // Safe to cast without alignment checks as the loads and stores do not require alignment.
 pub unsafe fn compress256(state: &mut [u32; 8], blocks: &[&[u8]]) {
-    assert_eq!(blocks.len() % 2, 0, "Blocks must be a multiple of 2");
+    assert_eq!(blocks.len() % 2, 0);
 
     let mut state0: __m128i;
     let mut state1: __m128i;
@@ -42,7 +42,7 @@ pub unsafe fn compress256(state: &mut [u32; 8], blocks: &[&[u8]]) {
     state0 = _mm_alignr_epi8(tmp, state1, 8); // ABEF
     state1 = _mm_blend_epi16(state1, tmp, 0xF0); // CDGH
 
-    for i in 0..blocks.len() / 2 {
+    for i in (0..blocks.len()).step_by(2) {
         // Save current state
         abef_save = state0;
         cdgh_save = state1;

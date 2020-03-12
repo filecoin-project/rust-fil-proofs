@@ -85,36 +85,54 @@ opaque_debug::impl_opaque_debug!(Sha256);
 mod tests {
     use super::*;
 
+    use rand::{RngCore, SeedableRng};
+    use rand_xorshift::XorShiftRng;
     use sha2::{Digest, Sha256 as Original};
 
     #[test]
-    fn test_matching_finish() {
-        for k in 1..10 {
-            for i in 0..255u8 {
-                let input = vec![i; 64 * k];
+    fn test_fuzz_simple() {
+        fuzz(10);
+    }
+
+    #[test]
+    #[ignore]
+    fn test_fuzz_long() {
+        fuzz(1_000);
+    }
+
+    fn fuzz(n: usize) {
+        let rng = &mut XorShiftRng::from_seed([
+            0x59, 0x62, 0xbe, 0x5d, 0x76, 0x3d, 0x31, 0x8d, 0x17, 0xdb, 0x37, 0x32, 0x54, 0x06,
+            0xbc, 0xe5,
+        ]);
+        for k in 1..n {
+            for _ in 0..100 {
+                let mut input = vec![0u8; 64 * k];
+                rng.fill_bytes(&mut input);
                 let chunked = input.chunks(32).collect::<Vec<_>>();
                 assert_eq!(&Sha256::digest(&chunked)[..], &Original::digest(&input)[..])
             }
         }
-    }
 
-    #[test]
-    fn test_matching_finish_with() {
-        for k in 1..10 {
-            for i in 0..255u8 {
-                let input = vec![i; 32 * k];
+        for k in (1..n).step_by(2) {
+            for _ in 0..100 {
+                let mut input = vec![0u8; 32 * k];
+                rng.fill_bytes(&mut input);
                 let mut hasher = Sha256::new();
                 for chunk in input.chunks(64) {
                     if chunk.len() == 64 {
                         hasher.input(&[&chunk[..32], &chunk[32..]]);
                     }
                 }
-                let hash = if input.len() % 64 != 0 {
-                    hasher.finish_with(&input[input.len() - 32..])
-                } else {
-                    hasher.finish()
-                };
-                assert_eq!(&hash[..], &Original::digest(&input)[..])
+                assert_eq!(input.len() % 64, 32);
+                let hash = hasher.finish_with(&input[input.len() - 32..]);
+
+                assert_eq!(
+                    &hash[..],
+                    &Original::digest(&input)[..],
+                    "input: {:?}",
+                    &input
+                );
             }
         }
     }
