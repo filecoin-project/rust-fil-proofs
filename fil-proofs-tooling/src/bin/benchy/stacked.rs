@@ -377,7 +377,9 @@ fn do_circuit_work<H: 'static + Hasher>(
             _,
             StackedDrg<H, Sha256Hasher>,
             _,
-        >>::groth_params(&compound_public_params.vanilla_params)?;
+        >>::groth_params::<rand::rngs::OsRng>(
+            None, &compound_public_params.vanilla_params
+        )?;
 
         let multi_proof = {
             let FuncMeasurement {

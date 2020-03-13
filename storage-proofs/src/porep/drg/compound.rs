@@ -434,8 +434,11 @@ mod tests {
         }
 
         {
-            let gparams = DrgPoRepCompound::<H, _>::groth_params(&public_params.vanilla_params)
-                .expect("failed to get groth params");
+            let gparams = DrgPoRepCompound::<H, _>::groth_params::<rand::rngs::OsRng>(
+                None,
+                &public_params.vanilla_params,
+            )
+            .expect("failed to get groth params");
 
             let proof = DrgPoRepCompound::<H, _>::prove(
                 &public_params,

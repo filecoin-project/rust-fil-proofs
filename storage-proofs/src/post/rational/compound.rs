@@ -282,8 +282,9 @@ mod tests {
             comm_cs: &comm_cs,
         };
 
-        let gparams = RationalPoStCompound::<H>::groth_params(&pub_params.vanilla_params)
-            .expect("failed to create groth params");
+        let gparams =
+            RationalPoStCompound::<H>::groth_params(Some(rng), &pub_params.vanilla_params)
+                .expect("failed to create groth params");
 
         let proof =
             RationalPoStCompound::<H>::prove(&pub_params, &pub_inputs, &priv_inputs, &gparams)

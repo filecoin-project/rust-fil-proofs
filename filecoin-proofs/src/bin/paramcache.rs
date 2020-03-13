@@ -1,6 +1,7 @@
 use clap::{values_t, App, Arg};
 use log::info;
 use paired::bls12_381::Bls12;
+use rand::rngs::OsRng;
 
 use filecoin_proofs::constants::*;
 use filecoin_proofs::parameters::{post_public_params, public_params};
@@ -49,6 +50,7 @@ fn cache_porep_params(porep_config: PoRepConfig) {
             _,
         >>::blank_circuit(&public_params);
         StackedCompound::<DefaultTreeHasher, DefaultPieceHasher>::get_groth_params(
+            Some(&mut OsRng),
             circuit,
             &public_params,
         )
@@ -62,6 +64,7 @@ fn cache_porep_params(porep_config: PoRepConfig) {
         >>::blank_circuit(&public_params);
 
         StackedCompound::<DefaultTreeHasher, DefaultPieceHasher>::get_verifying_key(
+            Some(&mut OsRng),
             circuit,
             &public_params,
         )
@@ -99,6 +102,7 @@ fn cache_post_params(post_config: PoStConfig) {
                 ElectionPoStCircuit<Bls12, DefaultTreeHasher>,
             >>::blank_circuit(&post_public_params);
         <ElectionPoStCompound<DefaultTreeHasher>>::get_groth_params(
+            Some(&mut OsRng),
             post_circuit,
             &post_public_params,
         )
@@ -113,6 +117,7 @@ fn cache_post_params(post_config: PoStConfig) {
             >>::blank_circuit(&post_public_params);
 
         <ElectionPoStCompound<DefaultTreeHasher>>::get_verifying_key(
+            Some(&mut OsRng),
             post_circuit,
             &post_public_params,
         )
