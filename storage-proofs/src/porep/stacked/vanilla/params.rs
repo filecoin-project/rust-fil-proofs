@@ -100,6 +100,7 @@ pub struct PublicInputs<T: Domain, S: Domain> {
     pub replica_id: T,
     pub seed: [u8; 32],
     pub tau: Option<Tau<T, S>>,
+    /// Partition index
     pub k: Option<usize>,
 }
 
