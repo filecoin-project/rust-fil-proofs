@@ -268,6 +268,11 @@ pub trait CompoundProof<
 
     fn blank_circuit(public_params: &S::PublicParams) -> C;
 
+    /// If the rng option argument is set, parameters will be
+    /// generated using it.  This is used for testing only, or where
+    /// parameters are otherwise unavailable (e.g. benches).  If rng
+    /// is not set, an error will result if parameters are not
+    /// present.
     fn groth_params<R: RngCore>(
         rng: Option<&mut R>,
         public_params: &S::PublicParams,
@@ -275,6 +280,11 @@ pub trait CompoundProof<
         Self::get_groth_params(rng, Self::blank_circuit(public_params), public_params)
     }
 
+    /// If the rng option argument is set, parameters will be
+    /// generated using it.  This is used for testing only, or where
+    /// parameters are otherwise unavailable (e.g. benches).  If rng
+    /// is not set, an error will result if parameters are not
+    /// present.
     fn verifying_key<R: RngCore>(
         rng: Option<&mut R>,
         public_params: &S::PublicParams,

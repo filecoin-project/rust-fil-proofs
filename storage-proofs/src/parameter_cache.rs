@@ -180,6 +180,11 @@ where
             .or_else(|_| write_cached_metadata(&meta_path, Self::cache_meta(pub_params)))
     }
 
+    /// If the rng option argument is set, parameters will be
+    /// generated using it.  This is used for testing only, or where
+    /// parameters are otherwise unavailable (e.g. benches).  If rng
+    /// is not set, an error will result if parameters are not
+    /// present.
     fn get_groth_params<R: RngCore>(
         rng: Option<&mut R>,
         circuit: C,
@@ -187,7 +192,6 @@ where
     ) -> Result<groth16::MappedParameters<E>> {
         let id = Self::cache_identifier(pub_params);
 
-        // This is used for testing only, if parameters are otherwise unavailable.
         let generate = || -> Result<_> {
             if let Some(rng) = rng {
                 use std::time::Instant;
@@ -219,6 +223,11 @@ where
         }
     }
 
+    /// If the rng option argument is set, parameters will be
+    /// generated using it.  This is used for testing only, or where
+    /// parameters are otherwise unavailable (e.g. benches).  If rng
+    /// is not set, an error will result if parameters are not
+    /// present.
     fn get_verifying_key<R: RngCore>(
         rng: Option<&mut R>,
         circuit: C,
