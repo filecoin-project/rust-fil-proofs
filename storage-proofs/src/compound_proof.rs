@@ -2,7 +2,7 @@ use anyhow::{ensure, Context};
 use bellperson::{groth16, Circuit};
 use fil_sapling_crypto::jubjub::JubjubEngine;
 use log::info;
-use rand::rngs::OsRng;
+use rand::{rngs::OsRng, RngCore};
 use rayon::prelude::*;
 
 use crate::error::Result;
@@ -268,12 +268,28 @@ pub trait CompoundProof<
 
     fn blank_circuit(public_params: &S::PublicParams) -> C;
 
-    fn groth_params(public_params: &S::PublicParams) -> Result<groth16::MappedParameters<E>> {
-        Self::get_groth_params(Self::blank_circuit(public_params), public_params)
+    /// If the rng option argument is set, parameters will be
+    /// generated using it.  This is used for testing only, or where
+    /// parameters are otherwise unavailable (e.g. benches).  If rng
+    /// is not set, an error will result if parameters are not
+    /// present.
+    fn groth_params<R: RngCore>(
+        rng: Option<&mut R>,
+        public_params: &S::PublicParams,
+    ) -> Result<groth16::MappedParameters<E>> {
+        Self::get_groth_params(rng, Self::blank_circuit(public_params), public_params)
     }
 
-    fn verifying_key(public_params: &S::PublicParams) -> Result<groth16::VerifyingKey<E>> {
-        Self::get_verifying_key(Self::blank_circuit(public_params), public_params)
+    /// If the rng option argument is set, parameters will be
+    /// generated using it.  This is used for testing only, or where
+    /// parameters are otherwise unavailable (e.g. benches).  If rng
+    /// is not set, an error will result if parameters are not
+    /// present.
+    fn verifying_key<R: RngCore>(
+        rng: Option<&mut R>,
+        public_params: &S::PublicParams,
+    ) -> Result<groth16::VerifyingKey<E>> {
+        Self::get_verifying_key(rng, Self::blank_circuit(public_params), public_params)
     }
 
     fn circuit_for_test(

@@ -322,7 +322,7 @@ mod tests {
             }
         }
         let blank_groth_params =
-            ElectionPoStCompound::<H>::groth_params(&pub_params.vanilla_params)
+            ElectionPoStCompound::<H>::groth_params(Some(rng), &pub_params.vanilla_params)
                 .expect("failed to generate groth params");
 
         let proof = ElectionPoStCompound::prove(

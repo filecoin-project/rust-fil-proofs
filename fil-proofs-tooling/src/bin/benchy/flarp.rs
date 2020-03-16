@@ -11,6 +11,8 @@ use filecoin_proofs::{
 };
 use log::info;
 use paired::bls12_381::Bls12;
+use rand::SeedableRng;
+use rand_xorshift::XorShiftRng;
 use serde::{Deserialize, Serialize};
 use storage_proofs::compound_proof::CompoundProof;
 use storage_proofs::gadgets::BenchCS;
@@ -24,6 +26,10 @@ use storage_proofs::post::election::{ElectionPoSt, ElectionPoStCircuit, Election
 use storage_proofs::proof::ProofScheme;
 
 use crate::shared::{create_replicas, CHALLENGE_COUNT, PROVER_ID, RANDOMNESS, TICKET_BYTES};
+
+const SEED: [u8; 16] = [
+    0x59, 0x62, 0xbe, 0x5d, 0x76, 0x3d, 0x31, 0x8d, 0x17, 0xdb, 0x37, 0x32, 0x54, 0x06, 0xbc, 0xe5,
+];
 
 type FlarpHasher = DefaultTreeHasher;
 
@@ -468,8 +474,12 @@ fn cache_porep_params(porep_config: PoRepConfig) {
             StackedDrg<FlarpHasher, Sha256Hasher>,
             _,
         >>::blank_circuit(&public_params);
-        StackedCompound::<FlarpHasher, Sha256Hasher>::get_groth_params(circuit, &public_params)
-            .expect("failed to get groth params");
+        StackedCompound::<FlarpHasher, Sha256Hasher>::get_groth_params(
+            Some(&mut XorShiftRng::from_seed(SEED)),
+            circuit,
+            &public_params,
+        )
+        .expect("failed to get groth params");
     }
     {
         let circuit = <StackedCompound<_, _> as CompoundProof<
@@ -478,8 +488,12 @@ fn cache_porep_params(porep_config: PoRepConfig) {
             _,
         >>::blank_circuit(&public_params);
 
-        StackedCompound::<FlarpHasher, Sha256Hasher>::get_verifying_key(circuit, &public_params)
-            .expect("failed to get verifying key");
+        StackedCompound::<FlarpHasher, Sha256Hasher>::get_verifying_key(
+            Some(&mut XorShiftRng::from_seed(SEED)),
+            circuit,
+            &public_params,
+        )
+        .expect("failed to get verifying key");
     }
 }
 
@@ -507,8 +521,12 @@ fn cache_post_params(post_config: PoStConfig) {
                 ElectionPoStCircuit<Bls12, FlarpHasher>,
             >>::blank_circuit(&post_public_params);
 
-        <ElectionPoStCompound<FlarpHasher>>::get_groth_params(post_circuit, &post_public_params)
-            .expect("failed to get groth params");
+        <ElectionPoStCompound<FlarpHasher>>::get_groth_params(
+            Some(&mut XorShiftRng::from_seed(SEED)),
+            post_circuit,
+            &post_public_params,
+        )
+        .expect("failed to get groth params");
     }
     {
         let post_circuit: ElectionPoStCircuit<Bls12, FlarpHasher> =
@@ -518,7 +536,11 @@ fn cache_post_params(post_config: PoStConfig) {
                 ElectionPoStCircuit<Bls12, FlarpHasher>,
             >>::blank_circuit(&post_public_params);
 
-        <ElectionPoStCompound<FlarpHasher>>::get_verifying_key(post_circuit, &post_public_params)
-            .expect("failed to get verifying key");
+        <ElectionPoStCompound<FlarpHasher>>::get_verifying_key(
+            Some(&mut XorShiftRng::from_seed(SEED)),
+            post_circuit,
+            &post_public_params,
+        )
+        .expect("failed to get verifying key");
     }
 }

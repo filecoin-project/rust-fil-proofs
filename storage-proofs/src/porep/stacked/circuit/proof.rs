@@ -638,7 +638,7 @@ mod tests {
             _,
             StackedDrg<H, Sha256Hasher>,
             _,
-        >>::groth_params(&public_params.vanilla_params)
+        >>::groth_params(Some(rng), &public_params.vanilla_params)
         .expect("failed to generate groth params");
 
         // Discard cached MTs that are no longer needed.

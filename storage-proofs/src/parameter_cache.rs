@@ -6,6 +6,7 @@ use fil_sapling_crypto::jubjub::JubjubEngine;
 use fs2::FileExt;
 use itertools::Itertools;
 use log::info;
+use rand::RngCore;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
@@ -179,23 +180,34 @@ where
             .or_else(|_| write_cached_metadata(&meta_path, Self::cache_meta(pub_params)))
     }
 
-    fn get_groth_params(circuit: C, pub_params: &P) -> Result<groth16::MappedParameters<E>> {
+    /// If the rng option argument is set, parameters will be
+    /// generated using it.  This is used for testing only, or where
+    /// parameters are otherwise unavailable (e.g. benches).  If rng
+    /// is not set, an error will result if parameters are not
+    /// present.
+    fn get_groth_params<R: RngCore>(
+        rng: Option<&mut R>,
+        circuit: C,
+        pub_params: &P,
+    ) -> Result<groth16::MappedParameters<E>> {
         let id = Self::cache_identifier(pub_params);
 
-        // This is used for testing only, if parameters are otherwise unavailable.
         let generate = || -> Result<_> {
-            use std::time::Instant;
+            if let Some(rng) = rng {
+                use std::time::Instant;
 
-            info!("Actually generating groth params. (id: {})", &id);
-            let mut rng = rand::thread_rng();
-            let start = Instant::now();
-            let parameters = groth16::generate_random_parameters::<E, _, _>(circuit, &mut rng)?;
-            let generation_time = start.elapsed();
-            info!(
-                "groth_parameter_generation_time: {:?} (id: {})",
-                generation_time, &id
-            );
-            Ok(parameters)
+                info!("Actually generating groth params. (id: {})", &id);
+                let start = Instant::now();
+                let parameters = groth16::generate_random_parameters::<E, _, _>(circuit, rng)?;
+                let generation_time = start.elapsed();
+                info!(
+                    "groth_parameter_generation_time: {:?} (id: {})",
+                    generation_time, &id
+                );
+                Ok(parameters)
+            } else {
+                bail!("No cached parameters found for {}", id);
+            }
         };
 
         // load or generate Groth parameter mappings
@@ -211,11 +223,20 @@ where
         }
     }
 
-    fn get_verifying_key(circuit: C, pub_params: &P) -> Result<groth16::VerifyingKey<E>> {
+    /// If the rng option argument is set, parameters will be
+    /// generated using it.  This is used for testing only, or where
+    /// parameters are otherwise unavailable (e.g. benches).  If rng
+    /// is not set, an error will result if parameters are not
+    /// present.
+    fn get_verifying_key<R: RngCore>(
+        rng: Option<&mut R>,
+        circuit: C,
+        pub_params: &P,
+    ) -> Result<groth16::VerifyingKey<E>> {
         let id = Self::cache_identifier(pub_params);
 
         let generate = || -> Result<groth16::VerifyingKey<E>> {
-            let groth_params = Self::get_groth_params(circuit, pub_params)?;
+            let groth_params = Self::get_groth_params(rng, circuit, pub_params)?;
             info!("Getting verifying key. (id: {})", &id);
             Ok(groth_params.vk)
         };

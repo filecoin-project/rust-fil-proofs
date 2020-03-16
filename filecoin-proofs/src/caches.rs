@@ -86,7 +86,7 @@ pub fn get_stacked_params(porep_config: PoRepConfig) -> Result<Arc<Bls12GrothPar
             _,
             StackedDrg<DefaultTreeHasher, DefaultPieceHasher>,
             _,
-        >>::groth_params(&public_params)
+        >>::groth_params::<rand::rngs::OsRng>(None, &public_params)
         .map_err(Into::into)
     };
 
@@ -107,7 +107,7 @@ pub fn get_post_params(post_config: PoStConfig) -> Result<Arc<Bls12GrothParams>>
             Bls12,
             ElectionPoSt<DefaultTreeHasher>,
             ElectionPoStCircuit<Bls12, DefaultTreeHasher>,
-        >>::groth_params(&post_public_params)
+        >>::groth_params::<rand::rngs::OsRng>(None, &post_public_params)
         .map_err(Into::into)
     };
 
@@ -131,7 +131,7 @@ pub fn get_stacked_verifying_key(porep_config: PoRepConfig) -> Result<Arc<Bls12V
             Bls12,
             StackedDrg<DefaultTreeHasher, DefaultPieceHasher>,
             _,
-        >>::verifying_key(&public_params)
+        >>::verifying_key::<rand::rngs::OsRng>(None, &public_params)
         .map_err(Into::into)
     };
 
@@ -152,7 +152,7 @@ pub fn get_post_verifying_key(post_config: PoStConfig) -> Result<Arc<Bls12Verify
             Bls12,
             ElectionPoSt<DefaultTreeHasher>,
             ElectionPoStCircuit<Bls12, DefaultTreeHasher>,
-        >>::verifying_key(&post_public_params)
+        >>::verifying_key::<rand::rngs::OsRng>(None, &post_public_params)
         .map_err(Into::into)
     };
 
