@@ -43,11 +43,8 @@ impl Implementation {
             return Some(Implementation(Platform::Sha));
         }
         // Otherwise dynamically check for support if we can.
-        #[cfg(feature = "std")]
-        {
-            if std::is_x86_feature_detected!("sha") {
-                return Some(Implementation(Platform::Sha));
-            }
+        if std::is_x86_feature_detected!("sha") {
+            return Some(Implementation(Platform::Sha));
         }
         None
     }
