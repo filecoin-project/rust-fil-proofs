@@ -1,3 +1,5 @@
+use raw_cpuid::CpuId;
+
 #[allow(dead_code)]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum Platform {
@@ -37,15 +39,26 @@ impl Implementation {
     #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
     #[allow(unreachable_code)]
     pub fn sha_if_supported() -> Option<Self> {
-        // Check whether sha support is assumed by the build.
+        // Use raw_cpuid instead of is_x86_feature_detected, to ensure the check
+        // never happens at compile time.
+        let cpuid = CpuId::new();
+        let is_runtime_ok = cpuid
+            .get_extended_feature_info()
+            .map(|info| info.has_sha())
+            .unwrap_or_default();
+
         #[cfg(target_feature = "sha")]
         {
+            if !is_runtime_ok {
+                println!("WARN: sha-ni not available, falling back");
+            }
+        }
+
+        // Make sure this computer actually supports it
+        if is_runtime_ok {
             return Some(Implementation(Platform::Sha));
         }
-        // Otherwise dynamically check for support if we can.
-        if std::is_x86_feature_detected!("sha") {
-            return Some(Implementation(Platform::Sha));
-        }
+
         None
     }
 
