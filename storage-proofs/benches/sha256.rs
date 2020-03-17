@@ -43,7 +43,7 @@ fn sha256_benchmark(c: &mut Criterion) {
     let params = vec![32, 64, 10 * 32, 37 * 32];
 
     c.bench(
-        "hash-sha256",
+        "hash-sha256-base",
         ParameterizedBenchmark::new(
             "non-circuit",
             |b, bytes| {
@@ -51,6 +51,28 @@ fn sha256_benchmark(c: &mut Criterion) {
                 let data: Vec<u8> = (0..*bytes).map(|_| rng.gen()).collect();
 
                 b.iter(|| black_box(Sha256::digest(&data)))
+            },
+            params,
+        )
+        .throughput(|bytes| Throughput::Bytes(*bytes as u64)),
+    );
+}
+
+fn sha256_raw_benchmark(c: &mut Criterion) {
+    let params = vec![64, 10 * 32, 38 * 32];
+
+    c.bench(
+        "hash-sha256-raw",
+        ParameterizedBenchmark::new(
+            "non-circuit",
+            |b, bytes| {
+                use sha2raw::Sha256;
+
+                let mut rng = thread_rng();
+                let data: Vec<u8> = (0..*bytes).map(|_| rng.gen()).collect();
+                let chunks = data.chunks(32).collect::<Vec<_>>();
+
+                b.iter(|| black_box(Sha256::digest(&chunks)))
             },
             params,
         )
@@ -113,5 +135,10 @@ fn sha256_circuit_benchmark(c: &mut Criterion) {
     );
 }
 
-criterion_group!(benches, sha256_benchmark, sha256_circuit_benchmark);
+criterion_group!(
+    benches,
+    sha256_benchmark,
+    sha256_raw_benchmark,
+    sha256_circuit_benchmark
+);
 criterion_main!(benches);
