@@ -3,10 +3,10 @@
 mod api;
 mod caches;
 mod commitment_reader;
-mod pad_reader;
 
 pub mod constants;
 pub mod fr32;
+pub mod pad_reader;
 pub mod param;
 pub mod parameters;
 pub mod pieces;
