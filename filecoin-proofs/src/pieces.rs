@@ -33,7 +33,7 @@ lazy_static! {
     static ref COMMITMENTS: Mutex<HashMap<SectorSize, Commitment>> = Mutex::new(HashMap::new());
 }
 use crate::commitment_reader::CommitmentReader;
-use crate::pad_reader::PadReader;
+use crate::fr32_reader::Fr32Reader;
 
 #[derive(Debug, Clone)]
 struct EmptySource {
@@ -63,8 +63,8 @@ fn empty_comm_d(sector_size: SectorSize) -> Commitment {
 
     *map.entry(sector_size).or_insert_with(|| {
         let size: UnpaddedBytesAmount = sector_size.into();
-        let pad_reader = PadReader::new(EmptySource::new(size.into()));
-        let mut commitment_reader = CommitmentReader::new(pad_reader);
+        let fr32_reader = Fr32Reader::new(EmptySource::new(size.into()));
+        let mut commitment_reader = CommitmentReader::new(fr32_reader);
         io::copy(&mut commitment_reader, &mut io::sink()).unwrap();
 
         let mut comm = [0u8; 32];

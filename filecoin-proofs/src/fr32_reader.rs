@@ -4,7 +4,7 @@ const DATA_BITS: u64 = 254;
 const TARGET_BITS: u64 = 256;
 
 #[derive(Debug)]
-pub struct PadReader<R> {
+pub struct Fr32Reader<R> {
     /// The source being padded.
     source: R,
     /// How much of the target already was `read` from, in bits.
@@ -15,9 +15,9 @@ pub struct PadReader<R> {
     done: bool,
 }
 
-impl<R: io::Read> PadReader<R> {
+impl<R: io::Read> Fr32Reader<R> {
     pub fn new(source: R) -> Self {
-        PadReader {
+        Fr32Reader {
             source,
             target_offset: 0,
             buffer: Default::default(),
@@ -154,7 +154,7 @@ impl<R: io::Read> PadReader<R> {
     }
 }
 
-impl<R: io::Read> io::Read for PadReader<R> {
+impl<R: io::Read> io::Read for Fr32Reader<R> {
     fn read(&mut self, target: &mut [u8]) -> io::Result<usize> {
         if self.done || target.is_empty() {
             return Ok(0);
@@ -375,7 +375,7 @@ mod tests {
     fn test_simple_short() {
         // Source is shorter than 1 padding cycle.
         let data = vec![3u8; 30];
-        let mut reader = PadReader::new(io::Cursor::new(&data));
+        let mut reader = Fr32Reader::new(io::Cursor::new(&data));
         let mut padded = Vec::new();
         reader.read_to_end(&mut padded).unwrap();
         assert_eq!(&data[..], &padded[..]);
@@ -387,7 +387,7 @@ mod tests {
     fn test_simple_single() {
         let data = vec![255u8; 32];
         let mut padded = Vec::new();
-        let mut reader = PadReader::new(io::Cursor::new(&data));
+        let mut reader = Fr32Reader::new(io::Cursor::new(&data));
         reader.read_to_end(&mut padded).unwrap();
 
         assert_eq!(&padded[0..31], &data[0..31]);
@@ -402,7 +402,7 @@ mod tests {
     fn test_simple_127() {
         let data = vec![255u8; 127];
         let mut padded = Vec::new();
-        let mut reader = PadReader::new(io::Cursor::new(&data));
+        let mut reader = Fr32Reader::new(io::Cursor::new(&data));
         reader.read_to_end(&mut padded).unwrap();
 
         assert_eq!(&padded[0..31], &data[0..31]);
@@ -422,7 +422,7 @@ mod tests {
         let output_x = {
             let input_x = io::Cursor::new(random_bytes.clone());
 
-            let mut reader = PadReader::new(input_x);
+            let mut reader = Fr32Reader::new(input_x);
             let mut buf_x = Vec::new();
             reader.read_to_end(&mut buf_x).expect("could not seek");
             buf_x
@@ -439,7 +439,7 @@ mod tests {
                             random_bytes.iter().skip(n).cloned().collect::<Vec<u8>>(),
                         ));
 
-                let mut reader = PadReader::new(input_y);
+                let mut reader = Fr32Reader::new(input_y);
                 let mut buf_y = Vec::new();
                 reader.read_to_end(&mut buf_y).expect("could not seek");
 
@@ -459,7 +459,7 @@ mod tests {
         let data = vec![255u8; 127];
 
         let mut buf = Vec::new();
-        let mut reader = PadReader::new(io::Cursor::new(&data));
+        let mut reader = Fr32Reader::new(io::Cursor::new(&data));
         reader.read_to_end(&mut buf).unwrap();
 
         assert_eq!(buf.clone().into_boxed_slice(), bit_vec_padding(data));
@@ -478,7 +478,7 @@ mod tests {
                 rng.fill_bytes(&mut data);
 
                 let mut buf = Vec::new();
-                let mut reader = PadReader::new(io::Cursor::new(&data));
+                let mut reader = Fr32Reader::new(io::Cursor::new(&data));
                 reader.read_to_end(&mut buf).unwrap();
 
                 assert_eq!(buf.clone().into_boxed_slice(), bit_vec_padding(data));
@@ -541,7 +541,7 @@ mod tests {
         source.extend(vec![9, 0xff]);
 
         let mut buf = Vec::new();
-        let mut reader = PadReader::new(io::Cursor::new(&source));
+        let mut reader = Fr32Reader::new(io::Cursor::new(&source));
         reader.read_to_end(&mut buf).unwrap();
 
         for i in 0..31 {

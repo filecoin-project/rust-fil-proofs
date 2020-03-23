@@ -970,7 +970,7 @@ mod tests {
         let len = 1016; // Use a multiple of 254.
         let data = vec![255u8; len];
         let mut padded = Vec::new();
-        let mut reader = crate::pad_reader::PadReader::new(io::Cursor::new(&data));
+        let mut reader = crate::fr32_reader::Fr32Reader::new(io::Cursor::new(&data));
         reader.read_to_end(&mut padded).unwrap();
 
         assert_eq!(
@@ -995,7 +995,7 @@ mod tests {
         let data: Vec<u8> = (0..len).map(|_| rng.gen()).collect();
 
         let mut padded = Vec::new();
-        let mut reader = crate::pad_reader::PadReader::new(io::Cursor::new(&data));
+        let mut reader = crate::fr32_reader::Fr32Reader::new(io::Cursor::new(&data));
         reader.read_to_end(&mut padded).unwrap();
 
         {
