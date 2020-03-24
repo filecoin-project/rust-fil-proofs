@@ -189,14 +189,14 @@ where
 
         let written_bytes = crate::pieces::sum_piece_bytes_with_alignment(&piece_lengths);
         let piece_alignment = crate::pieces::get_piece_alignment(written_bytes, piece_size);
-        let pad_reader = crate::fr32_reader::Fr32Reader::new(source);
+        let fr32_reader = crate::fr32_reader::Fr32Reader::new(source);
 
         // write left alignment
         for _ in 0..usize::from(PaddedBytesAmount::from(piece_alignment.left_bytes)) {
             target.write_all(&[0u8][..])?;
         }
 
-        let mut commitment_reader = CommitmentReader::new(pad_reader);
+        let mut commitment_reader = CommitmentReader::new(fr32_reader);
         let n = std::io::copy(&mut commitment_reader, &mut target)
             .context("failed to write and preprocess bytes")?;
 
