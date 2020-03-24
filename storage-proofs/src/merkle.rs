@@ -343,8 +343,7 @@ pub fn create_lcmerkle_tree<H: Hasher, U: typenum::Unsigned>(
             config,
         )?;
 
-    let store: &mut LevelCacheStore<_, std::fs::File> = lc_tree.data_mut();
-    store.set_external_reader(ExternalReader::new_from_path(replica_path)?)?;
+    lc_tree.set_external_reader_path(replica_path)?;
 
     Ok(lc_tree)
 }
@@ -368,7 +367,7 @@ pub fn open_lcmerkle_tree<H: Hasher, U: typenum::Unsigned>(
         "Invalid merkle tree size given the arity"
     );
 
-    let tree_size = get_merkle_tree_len(size, U::to_usize());
+    let tree_size = get_merkle_tree_len(size, U::to_usize())?;
     let tree_store: LevelCacheStore<H::Domain, _> = LevelCacheStore::new_from_disk_with_reader(
         tree_size,
         U::to_usize(),
@@ -410,7 +409,7 @@ mod tests {
         for i in 0..leafs {
             let proof = tree.gen_proof(i).unwrap();
 
-            assert!(proof.validate::<H::Function>());
+            assert!(proof.validate::<H::Function>().expect("failed to validate"));
             let len = proof.lemma().len();
             let mp = MerkleProof::<H, U>::new_from_proof(&proof);
 

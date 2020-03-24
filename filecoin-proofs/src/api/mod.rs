@@ -88,7 +88,7 @@ pub fn get_unsealed_range<T: Into<PathBuf> + AsRef<Path>>(
     let tree_size = get_tree_size::<<DefaultPieceHasher as Hasher>::Domain>(
         porep_config.sector_size,
         BINARY_ARITY,
-    );
+    )?;
     let tree_leafs = get_merkle_tree_leafs(tree_size, BINARY_ARITY);
     // MT for original data is always named tree-d, and it will be
     // referenced later in the process as such.

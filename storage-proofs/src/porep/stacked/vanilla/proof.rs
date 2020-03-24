@@ -143,16 +143,13 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
                         trace!("final replica layer openings");
                         let tree_r_last_proof = {
                             if t_aux.tree_r_last_config_levels == 0 {
-                                t_aux.tree_r_last.gen_proof(challenge)?
+                                t_aux.tree_r_last.gen_proof(challenge)
                             } else {
-                                let (proof, _) = t_aux.tree_r_last.gen_proof_and_partial_tree(
-                                    challenge,
-                                    t_aux.tree_r_last_config_levels,
-                                )?;
-
-                                proof
+                                t_aux
+                                    .tree_r_last
+                                    .gen_cached_proof(challenge, t_aux.tree_r_last_config_levels)
                             }
-                        };
+                        }?;
                         let comm_r_last_proof = MerkleProof::new_from_proof(&tree_r_last_proof);
                         assert!(comm_r_last_proof.validate(challenge));
 
@@ -420,7 +417,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         let mut tree_d_config = StoreConfig::from_config(
             &config,
             CacheKey::CommDTree.to_string(),
-            Some(get_merkle_tree_len(nodes_count, BINARY_ARITY)),
+            Some(get_merkle_tree_len(nodes_count, BINARY_ARITY)?),
         );
         tree_d_config.levels =
             StoreConfig::default_cached_above_base_layer(nodes_count, BINARY_ARITY);
@@ -428,7 +425,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         let mut tree_r_last_config = StoreConfig::from_config(
             &config,
             CacheKey::CommRLastTree.to_string(),
-            Some(get_merkle_tree_len(nodes_count, OCT_ARITY)),
+            Some(get_merkle_tree_len(nodes_count, OCT_ARITY)?),
         );
         tree_r_last_config.levels =
             StoreConfig::default_cached_above_base_layer(nodes_count, OCT_ARITY);
@@ -436,7 +433,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         let mut tree_c_config = StoreConfig::from_config(
             &config,
             CacheKey::CommCTree.to_string(),
-            Some(get_merkle_tree_len(nodes_count, OCT_ARITY)),
+            Some(get_merkle_tree_len(nodes_count, OCT_ARITY)?),
         );
         tree_c_config.levels = StoreConfig::default_cached_above_base_layer(nodes_count, OCT_ARITY);
 

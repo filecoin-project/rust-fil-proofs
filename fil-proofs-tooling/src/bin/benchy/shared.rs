@@ -59,6 +59,7 @@ pub fn create_piece(piece_bytes: UnpaddedBytesAmount) -> NamedTempFile {
     file
 }
 
+#[allow(clippy::type_complexity)]
 pub fn create_replicas(
     sector_size: SectorSize,
     qty_sectors: usize,
