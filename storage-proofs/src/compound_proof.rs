@@ -216,6 +216,10 @@ pub trait CompoundProof<
         priority: bool,
     ) -> Result<Vec<groth16::Proof<E>>> {
         let mut rng = OsRng;
+        ensure!(
+            !vanilla_proof.is_empty(),
+            "cannot create a circuit proof over missing vanilla proofs"
+        );
 
         let circuits = vanilla_proof
             .into_par_iter()
