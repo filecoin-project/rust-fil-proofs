@@ -208,11 +208,11 @@ where
     Ok(real_length)
 }
 
-pub fn unpadded_bytes(padded_bytes: u64) -> u64 {
+pub fn to_unpadded_bytes(padded_bytes: u64) -> u64 {
     FR32_PADDING_MAP.transform_byte_offset(padded_bytes as usize, false) as u64
 }
 
-pub fn padded_bytes(unpadded_bytes: usize) -> usize {
+pub fn to_padded_bytes(unpadded_bytes: usize) -> usize {
     FR32_PADDING_MAP.transform_byte_offset(unpadded_bytes, true)
 }
 
