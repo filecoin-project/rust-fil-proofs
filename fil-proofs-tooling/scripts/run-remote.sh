@@ -2,7 +2,6 @@
 
 CMDS=$(cat <<EOF
 
-export RUST_LOG=info
 set -e
 
 # Creates a temporary directory in which we build rust-fil-proofs and capture
