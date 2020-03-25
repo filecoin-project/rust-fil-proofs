@@ -4,6 +4,7 @@ use anyhow::Result;
 use paired::bls12_381::Bls12;
 use storage_proofs::parameter_cache::{self, CacheableParameters};
 use storage_proofs::post::election::{ElectionPoStCircuit, ElectionPoStCompound};
+use storage_proofs::post::fallback;
 
 use crate::constants::DefaultTreeHasher;
 use crate::types::*;
@@ -18,7 +19,7 @@ pub struct PoStConfig {
     pub priority: bool,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PoStType {
     Election,
     Winning,
@@ -64,7 +65,17 @@ impl PoStConfig {
                     >>::cache_identifier(&params),
                 )
             }
-            PoStType::Winning => unimplemented!(),
+            PoStType::Winning => {
+                let params = crate::parameters::winning_post_public_params(self)?;
+
+                Ok(
+                    <fallback::FallbackPoStCompound<DefaultTreeHasher> as CacheableParameters<
+                        Bls12,
+                        fallback::FallbackPoStCircuit<_, DefaultTreeHasher>,
+                        _,
+                    >>::cache_identifier(&params),
+                )
+            }
             PoStType::Window => unimplemented!(),
         }
     }

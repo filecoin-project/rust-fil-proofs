@@ -39,11 +39,10 @@ use std::thread::sleep;
 use std::time::{Duration, Instant};
 
 use clap::{App, AppSettings, Arg, ArgGroup, SubCommand};
-use filecoin_proofs::constants::{
-    POREP_PARTITIONS, POST_CHALLENGE_COUNT, SECTOR_SIZE_2_KIB, SECTOR_SIZE_32_GIB,
-    SECTOR_SIZE_512_MIB, /*SECTOR_SIZE_64_GIB,*/ SECTOR_SIZE_8_MIB,
+use filecoin_proofs::constants::*;
+use filecoin_proofs::parameters::{
+    election_post_public_params, setup_params, winning_post_public_params,
 };
-use filecoin_proofs::parameters::{election_post_public_params, setup_params};
 use filecoin_proofs::types::*;
 use log::info;
 use paired::bls12_381::Bls12;
@@ -54,12 +53,13 @@ use storage_proofs::compound_proof::{self, CompoundProof};
 use storage_proofs::hasher::{/*PedersenHasher,*/ PoseidonHasher, Sha256Hasher};
 use storage_proofs::porep::stacked::{StackedCircuit, StackedCompound, StackedDrg};
 use storage_proofs::post::election::{ElectionPoSt, ElectionPoStCircuit, ElectionPoStCompound};
+use storage_proofs::post::fallback::{FallbackPoSt, FallbackPoStCircuit, FallbackPoStCompound};
 
 #[derive(Clone, Copy)]
 enum Proof {
     Porep,
     ElectionPost,
-    // FallbackPost,
+    WinningPost,
 }
 
 impl Display for Proof {
@@ -67,7 +67,7 @@ impl Display for Proof {
         let s = match self {
             Proof::Porep => "PoRep",
             Proof::ElectionPost => "EPoSt",
-            // Proof::FallbackPost => "FPoSt",
+            Proof::WinningPost => "WinningPoSt",
         };
         write!(f, "{}", s)
     }
@@ -142,7 +142,7 @@ fn parse_params_filename(path: &str) -> (Proof, Hasher, u64, String, usize) {
     let proof = match split[0] {
         "porep" => Proof::Porep,
         "epost" => Proof::ElectionPost,
-        // "fpost" => Proof:FallbackPost,
+        "winningpost" => Proof::WinningPost,
         other => panic!("invalid proof id in filename: {}", other),
     };
 
@@ -244,7 +244,7 @@ fn blank_election_post_poseidon_circuit(
 ) -> ElectionPoStCircuit<'static, Bls12, PoseidonHasher> {
     let post_config = PoStConfig {
         sector_size: SectorSize(sector_size),
-        challenge_count: POST_CHALLENGE_COUNT,
+        challenge_count: ELECTION_POST_CHALLENGE_COUNT,
         sector_count: 1,
         typ: PoStType::Election,
         priority: false,
@@ -280,8 +280,26 @@ fn blank_election_post_sha_pedersen_circuit(
 }
 */
 
+fn blank_winning_post_poseidon_circuit(
+    sector_size: u64,
+) -> FallbackPoStCircuit<'static, Bls12, PoseidonHasher> {
+    let post_config = PoStConfig {
+        sector_size: SectorSize(sector_size),
+        challenge_count: WINNING_POST_CHALLENGE_COUNT,
+        sector_count: WINNING_POST_SECTOR_COUNT,
+        typ: PoStType::Winning,
+        priority: false,
+    };
+
+    let public_params = winning_post_public_params(&post_config).unwrap();
+
+    <FallbackPoStCompound<PoseidonHasher> as CompoundProof<
+        Bls12,
+        FallbackPoSt<PoseidonHasher>,
+        FallbackPoStCircuit<Bls12, PoseidonHasher>,
+    >>::blank_circuit(&public_params)
+}
 /*
-fn blank_fallback_post_poseidon_circuit(sector_size: u64) -> ... {}
 fn blank_fallback_post_sha_pedersen_circuit(sector_size: u64) -> ... {}
 */
 
@@ -334,20 +352,26 @@ fn create_initial_params(proof: Proof, hasher: Hasher, sector_size: u64) {
             dt_create_params = start.elapsed().as_secs();
             params
         } /*
-          (Proof::ElectionPost, Hasher::ShaPedersen) => {
-              let start = Instant::now();
-              let circuit = blank_post_sha_pedersen_circuit(sector_size);
-              dt_create_circuit = start.elapsed().as_secs();
-              let start = Instant::now();
-              let params = phase2::MPCParameters::new(circuit).unwrap();
-              dt_create_params = start.elapsed().as_secs();
-              params
-          }
-          */
-          /*
-          (Proof::FallbackPost, Hasher::Poseidon) => { ... }
-          (Proof::FallbackPost, Hasher::ShaPedersen) => { ... }
-          */
+        (Proof::ElectionPost, Hasher::ShaPedersen) => {
+        let start = Instant::now();
+        let circuit = blank_post_sha_pedersen_circuit(sector_size);
+        dt_create_circuit = start.elapsed().as_secs();
+        let start = Instant::now();
+        let params = phase2::MPCParameters::new(circuit).unwrap();
+        dt_create_params = start.elapsed().as_secs();
+        params
+        }
+         */
+        (Proof::WinningPost, Hasher::Poseidon) => {
+            let start = Instant::now();
+            let circuit = blank_winning_post_poseidon_circuit(sector_size);
+            dt_create_circuit = start.elapsed().as_secs();
+            let start = Instant::now();
+            let params = phase2::MPCParameters::new(circuit).unwrap();
+            dt_create_params = start.elapsed().as_secs();
+            params
+        } /*(Proof::FallbackPost, Hasher::ShaPedersen) => { ... }
+           */
     };
 
     info!(
@@ -783,20 +807,17 @@ fn main() {
         )
         .arg(
             Arg::with_name("election-post")
-                .long("--epost")
+                .long("epost")
                 .help("Generate ElectionPoSt parameters"),
         )
-        /*
         .arg(
-            Arg::with_name("fallback-post")
-                .long("--fpost")
-                .help("Generate FallbackPoSt parameters"),
+            Arg::with_name("winning-post")
+                .long("winning-post")
+                .help("Generate WinningPoSt parameters"),
         )
-        */
         .group(
             ArgGroup::with_name("proof")
-                .args(&["porep", "election-post"])
-                // .args(&["porep", "election-post", "fallback-post"])
+                .args(&["porep", "election-post", "winning-post"])
                 .required(true)
                 .multiple(false),
         )
@@ -902,20 +923,17 @@ fn main() {
         )
         .arg(
             Arg::with_name("election-post")
-                .long("--epost")
+                .long("epost")
                 .help("Generate ElectionPoSt parameters"),
         )
-        /*
         .arg(
-            Arg::with_name("fallback-post")
-                .long("--fpost")
-                .help("Generate FallbackPoSt parameters"),
+            Arg::with_name("winning-post")
+                .long("winning-post")
+                .help("Generate WinningPoSt parameters"),
         )
-        */
         .group(
             ArgGroup::with_name("proof")
-                .args(&["porep", "election-post"])
-                // .args(&["porep", "election-post", "fallback-post"])
+                .args(&["porep", "election-post", "winning-post"])
                 .required(true)
                 .multiple(false),
         )
@@ -990,19 +1008,11 @@ fn main() {
             "new" => {
                 let proof = if matches.is_present("porep") {
                     Proof::Porep
-                } else {
-                    Proof::ElectionPost
-                };
-
-                /*
-                let proof = if matches.is_present("porep") {
-                    Proof::Porep
                 } else if matches.is_present("election-post") {
                     Proof::ElectionPost
                 } else {
-                    Proof::FallbackPost
+                    Proof::WinningPost
                 };
-                */
 
                 // Default to using Poseidon for the hasher.
                 let hasher = Hasher::Poseidon;
@@ -1069,19 +1079,11 @@ fn main() {
             "verifyd" => {
                 let proof = if matches.is_present("porep") {
                     Proof::Porep
-                } else {
-                    Proof::ElectionPost
-                };
-
-                /*
-                let proof = if matches.is_present("porep") {
-                    Proof::Porep
                 } else if matches.is_present("election-post") {
                     Proof::ElectionPost
                 } else {
-                    Proof::FallbackPost
+                    Proof::WinningPost
                 };
-                */
 
                 // Default to using Poseidon for the hasher.
                 let hasher = Hasher::Poseidon;
