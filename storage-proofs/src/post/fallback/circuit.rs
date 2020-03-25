@@ -81,7 +81,6 @@ impl<'a, H: Hasher> Sector<'a, Bls12, H> {
         let height = graph_height::<U8>(pub_params.sector_size as usize / NODE_SIZE);
 
         let leafs = vec![None; challenges_count];
-        pub_params.sector_count;
         let paths =
             vec![vec![(vec![None; U8::to_usize() - 1], None); height - 1]; challenges_count];
 
@@ -213,7 +212,7 @@ mod tests {
     use super::*;
 
     use ff::Field;
-    use merkletree::store::{StoreConfig, StoreConfigDataVersion};
+    use merkletree::store::StoreConfig;
     use paired::bls12_381::{Bls12, Fr};
     use rand::SeedableRng;
     use rand_xorshift::XorShiftRng;
@@ -224,15 +223,13 @@ mod tests {
     use crate::fr32::fr_into_bytes;
     use crate::gadgets::TestConstraintSystem;
     use crate::hasher::{Domain, HashFunction, Hasher, PedersenHasher, PoseidonHasher};
-    use crate::merkle::{OctLCMerkleTree, OctMerkleTree};
-    use crate::porep::stacked::EXP_DEGREE;
+    use crate::merkle::OctLCMerkleTree;
     use crate::porep::stacked::OCT_ARITY;
     use crate::post::fallback::{
         self, FallbackPoSt, FallbackPoStCompound, PrivateInputs, PrivateSector, PublicInputs,
         PublicSector,
     };
     use crate::proof::ProofScheme;
-    use crate::sector::SectorId;
     use crate::util::NODE_SIZE;
 
     #[test]

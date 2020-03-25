@@ -365,11 +365,8 @@ mod tests {
     use crate::drgraph::{new_seed, BucketGraph, Graph, BASE_DEGREE};
     use crate::fr32::fr_into_bytes;
     use crate::hasher::{PedersenHasher, PoseidonHasher};
-    use crate::merkle::OctMerkleTree;
 
     fn test_fallback_post<H: Hasher>() {
-        use merkletree::store::StoreConfigDataVersion;
-
         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
 
         let leaves = 64;
