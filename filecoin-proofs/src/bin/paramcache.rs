@@ -5,7 +5,8 @@ use rand::rngs::OsRng;
 
 use filecoin_proofs::constants::*;
 use filecoin_proofs::parameters::{
-    election_post_public_params, public_params, winning_post_public_params,
+    election_post_public_params, public_params, window_post_public_params,
+    winning_post_public_params,
 };
 use filecoin_proofs::types::*;
 use filecoin_proofs::PoStType;
@@ -182,6 +183,59 @@ fn cache_winning_post_params(post_config: &PoStConfig) {
     }
 }
 
+fn cache_window_post_params(post_config: &PoStConfig) {
+    let n = u64::from(post_config.padded_sector_size());
+    info!(
+        "begin Window PoSt parameter-cache check/populate routine for {}-byte sectors",
+        n
+    );
+
+    let post_public_params = window_post_public_params(post_config).unwrap();
+
+    {
+        let post_circuit: FallbackPoStCircuit<Bls12, DefaultTreeHasher> =
+            <FallbackPoStCompound<DefaultTreeHasher> as CompoundProof<
+                Bls12,
+                FallbackPoSt<DefaultTreeHasher>,
+                FallbackPoStCircuit<Bls12, DefaultTreeHasher>,
+            >>::blank_circuit(&post_public_params);
+        let _ = <FallbackPoStCompound<DefaultTreeHasher>>::get_param_metadata(
+            post_circuit,
+            &post_public_params,
+        )
+        .expect("failed to get metadata");
+    }
+    {
+        let post_circuit: FallbackPoStCircuit<Bls12, DefaultTreeHasher> =
+            <FallbackPoStCompound<DefaultTreeHasher> as CompoundProof<
+                Bls12,
+                FallbackPoSt<DefaultTreeHasher>,
+                FallbackPoStCircuit<Bls12, DefaultTreeHasher>,
+            >>::blank_circuit(&post_public_params);
+        <FallbackPoStCompound<DefaultTreeHasher>>::get_groth_params(
+            Some(&mut OsRng),
+            post_circuit,
+            &post_public_params,
+        )
+        .expect("failed to get groth params");
+    }
+    {
+        let post_circuit: FallbackPoStCircuit<Bls12, DefaultTreeHasher> =
+            <FallbackPoStCompound<DefaultTreeHasher> as CompoundProof<
+                Bls12,
+                FallbackPoSt<DefaultTreeHasher>,
+                FallbackPoStCircuit<Bls12, DefaultTreeHasher>,
+            >>::blank_circuit(&post_public_params);
+
+        <FallbackPoStCompound<DefaultTreeHasher>>::get_verifying_key(
+            Some(&mut OsRng),
+            post_circuit,
+            &post_public_params,
+        )
+        .expect("failed to get verifying key");
+    }
+}
+
 // Run this from the command-line to pre-generate the groth parameters used by the API.
 pub fn main() {
     fil_logger::init();
@@ -231,6 +285,14 @@ pub fn main() {
             challenge_count: WINNING_POST_CHALLENGE_COUNT,
             sector_count: WINNING_POST_SECTOR_COUNT,
             typ: PoStType::Winning,
+            priority: true,
+        });
+
+        cache_window_post_params(&PoStConfig {
+            sector_size: SectorSize(sector_size),
+            challenge_count: WINDOW_POST_CHALLENGE_COUNT,
+            sector_count: WINDOW_POST_SECTOR_COUNT,
+            typ: PoStType::Window,
             priority: true,
         });
 
