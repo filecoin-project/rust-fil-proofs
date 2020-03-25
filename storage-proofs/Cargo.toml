@@ -15,8 +15,7 @@ bench = false
 bitvec = "0.5"
 rand = "0.7"
 libc = "0.2"
-#merkletree = "0.16.4"
-merkletree = { git = "https://github.com/filecoin-project/merkle_light", branch = "recursive-collapsed" }
+merkletree = "0.17.0"
 byteorder = "1"
 config = "0.9.3"
 crossbeam-utils = "0.6"
