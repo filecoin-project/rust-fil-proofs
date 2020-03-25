@@ -2,7 +2,7 @@ use std::marker::PhantomData;
 
 use anyhow::{ensure, Context};
 use byteorder::{ByteOrder, LittleEndian};
-use generic_array::typenum;
+use generic_array::typenum::{self, U8};
 use log::trace;
 use merkletree::store::StoreConfig;
 use rayon::prelude::*;
@@ -57,51 +57,70 @@ impl ParameterSetMetadata for PublicParams {
 #[derive(Debug, Clone)]
 pub struct PublicInputs<'a, T: Domain> {
     pub randomness: T,
-    pub sector_ids: &'a [SectorId],
     pub prover_id: T,
-    pub comm_rs: &'a [T],
+    pub sectors: &'a [PublicSector<T>],
+}
+
+#[derive(Debug, Clone)]
+pub struct PublicSector<T: Domain> {
+    pub id: SectorId,
+    pub comm_r: T,
+}
+
+#[derive(Debug)]
+pub struct PrivateSector<H: Hasher> {
+    pub tree: OctLCMerkleTree<H::Domain, H::Function>,
+    pub comm_c: H::Domain,
+    pub comm_r_last: H::Domain,
 }
 
 #[derive(Debug)]
 pub struct PrivateInputs<'a, H: Hasher> {
-    pub trees: &'a [OctLCMerkleTree<H::Domain, H::Function>],
-    pub comm_cs: &'a [H::Domain],
-    pub comm_r_lasts: &'a [H::Domain],
+    pub sectors: &'a [PrivateSector<H>],
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Proof<H: Hasher> {
     #[serde(bound(
-        serialize = "MerkleProof<H, typenum::U8>: Serialize",
-        deserialize = "MerkleProof<H, typenum::U8>: Deserialize<'de>"
+        serialize = "SectorProof<H>: Serialize",
+        deserialize = "SectorProof<H>: Deserialize<'de>"
     ))]
-    inclusion_proofs: Vec<Vec<MerkleProof<H, typenum::U8>>>,
-    pub comm_cs: Vec<H::Domain>,
-    pub comm_r_lasts: Vec<H::Domain>,
+    pub sectors: Vec<SectorProof<H>>,
 }
 
-impl<H: Hasher> Proof<H> {
-    pub fn leafs(&self, sector: usize) -> Vec<H::Domain> {
-        self.inclusion_proofs[sector]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SectorProof<H: Hasher> {
+    #[serde(bound(
+        serialize = "MerkleProof<H, U8>: Serialize",
+        deserialize = "MerkleProof<H, U8>: Deserialize<'de>"
+    ))]
+    inclusion_proofs: Vec<MerkleProof<H, U8>>,
+    pub comm_c: H::Domain,
+    pub comm_r_last: H::Domain,
+}
+
+impl<H: Hasher> SectorProof<H> {
+    pub fn leafs(&self) -> Vec<H::Domain> {
+        self.inclusion_proofs
             .iter()
             .map(MerkleProof::leaf)
             .collect()
     }
 
-    pub fn comm_r_last(&self, sector: usize) -> H::Domain {
-        *self.inclusion_proofs[sector][0].root()
+    pub fn comm_r_last(&self) -> H::Domain {
+        *self.inclusion_proofs[0].root()
     }
 
-    pub fn commitments(&self, sector: usize) -> Vec<&H::Domain> {
-        self.inclusion_proofs[sector]
+    pub fn commitments(&self) -> Vec<&H::Domain> {
+        self.inclusion_proofs
             .iter()
             .map(MerkleProof::root)
             .collect()
     }
 
     #[allow(clippy::type_complexity)]
-    pub fn paths(&self, sector: usize) -> Vec<&Vec<(Vec<H::Domain>, usize)>> {
-        self.inclusion_proofs[sector]
+    pub fn paths(&self) -> Vec<&Vec<(Vec<H::Domain>, usize)>> {
+        self.inclusion_proofs
             .iter()
             .map(MerkleProof::path)
             .collect()
@@ -116,6 +135,7 @@ where
     _h: PhantomData<&'a H>,
 }
 
+/// Generate `challenge_count` challenges for each of the passed in `sector`s.
 pub fn generate_sector_challenges<T: Domain>(
     randomness: T,
     challenge_count: u64,
@@ -127,6 +147,7 @@ pub fn generate_sector_challenges<T: Domain>(
         .collect()
 }
 
+/// Generate a single sector challenge.
 pub fn generate_sector_challenge<T: Domain>(
     randomness: T,
     n: usize,
@@ -213,25 +234,23 @@ impl<'a, H: 'a + Hasher> ProofScheme<'a> for FallbackPoSt<'a, H> {
         let num_sectors = pub_params.sector_count;
 
         ensure!(
-            num_sectors == pub_inputs.sector_ids.len(),
-            "inconsistent (pub) comm_rs"
+            num_sectors == pub_inputs.sectors.len(),
+            "inconsistent number of public sectors {} != {}",
+            num_sectors,
+            pub_inputs.sectors.len(),
         );
 
         ensure!(
-            num_sectors == pub_inputs.comm_rs.len(),
-            "inconsistent (pub) comm_rs"
-        );
-        ensure!(
-            num_sectors == priv_inputs.trees.len(),
-            "inconsistent (priv) trees"
-        );
-        ensure!(
-            num_sectors == priv_inputs.comm_r_lasts.len(),
-            "inconsistent (priv) comm_r_lasts"
+            num_sectors == priv_inputs.sectors.len(),
+            "inconsistent number of private sectors {} != {}",
+            num_sectors,
+            priv_inputs.sectors.len(),
         );
 
-        let mut inclusion_proofs = Vec::with_capacity(num_sectors);
-        for (sector_id, tree) in pub_inputs.sector_ids.iter().zip(priv_inputs.trees.iter()) {
+        let mut proofs = Vec::with_capacity(num_sectors);
+        for (pub_sector, priv_sector) in pub_inputs.sectors.iter().zip(priv_inputs.sectors.iter()) {
+            let tree = &priv_sector.tree;
+            let sector_id = pub_sector.id;
             let tree_leafs = tree.leafs();
 
             trace!(
@@ -240,17 +259,17 @@ impl<'a, H: 'a + Hasher> ProofScheme<'a> for FallbackPoSt<'a, H> {
                 tree_leafs,
                 StoreConfig::default_cached_above_base_layer(tree_leafs, OCT_ARITY)
             );
-            let proofs = (0..pub_params.challenge_count)
+
+            let inclusion_proofs = (0..pub_params.challenge_count)
                 .into_par_iter()
                 .map(|n| {
-                    // TODO: replace unwrap with proper error handling
                     let challenged_leaf_start = generate_leaf_challenge(
                         pub_params,
                         pub_inputs.randomness,
-                        (*sector_id).into(),
+                        sector_id.into(),
                         n as u64,
-                    )
-                    .unwrap();
+                    )?;
+
                     let (proof, _) = tree.gen_proof_and_partial_tree(
                         challenged_leaf_start as usize / NODE_SIZE,
                         StoreConfig::default_cached_above_base_layer(tree_leafs, OCT_ARITY),
@@ -259,14 +278,15 @@ impl<'a, H: 'a + Hasher> ProofScheme<'a> for FallbackPoSt<'a, H> {
                     Ok(MerkleProof::new_from_proof(&proof))
                 })
                 .collect::<Result<Vec<_>>>()?;
-            inclusion_proofs.push(proofs);
+
+            proofs.push(SectorProof {
+                inclusion_proofs,
+                comm_c: priv_sector.comm_c,
+                comm_r_last: priv_sector.comm_r_last,
+            });
         }
 
-        Ok(Proof {
-            inclusion_proofs,
-            comm_cs: priv_inputs.comm_cs.to_vec(),
-            comm_r_lasts: priv_inputs.comm_r_lasts.to_vec(),
-        })
+        Ok(Proof { sectors: proofs })
     }
 
     fn verify(
@@ -274,16 +294,18 @@ impl<'a, H: 'a + Hasher> ProofScheme<'a> for FallbackPoSt<'a, H> {
         pub_inputs: &Self::PublicInputs,
         proof: &Self::Proof,
     ) -> Result<bool> {
-        for (((sector_id, comm_r), proof), comm_c) in pub_inputs
-            .sector_ids
-            .iter()
-            .zip(pub_inputs.comm_rs.iter())
-            .zip(proof.inclusion_proofs.iter())
-            .zip(proof.comm_cs.iter())
-        {
-            // verify that H(Comm_c || Comm_r_last) == Comm_R
+        let challenge_count = pub_params.challenge_count;
+
+        for (pub_sector, sector_proof) in pub_inputs.sectors.iter().zip(proof.sectors.iter()) {
+            let sector_id = pub_sector.id;
+            let comm_r = &pub_sector.comm_r;
+            let comm_c = sector_proof.comm_c;
+            let inclusion_proofs = &sector_proof.inclusion_proofs;
+
+            // Verify that H(Comm_c || Comm_r_last) == Comm_R
+
             // comm_r_last is the root of the proof
-            let comm_r_last = proof[0].root();
+            let comm_r_last = inclusion_proofs[0].root();
 
             if AsRef::<[u8]>::as_ref(&H::Function::hash2(&comm_c, comm_r_last))
                 != AsRef::<[u8]>::as_ref(comm_r)
@@ -291,28 +313,34 @@ impl<'a, H: 'a + Hasher> ProofScheme<'a> for FallbackPoSt<'a, H> {
                 return Ok(false);
             }
 
-            for n in 0..pub_params.challenge_count {
+            ensure!(
+                challenge_count == inclusion_proofs.len(),
+                "unexpected umber of inclusion proofs: {} != {}",
+                challenge_count,
+                inclusion_proofs.len()
+            );
+
+            for (n, inclusion_proof) in inclusion_proofs.iter().enumerate() {
                 let challenged_leaf_start = generate_leaf_challenge(
                     pub_params,
                     pub_inputs.randomness,
-                    (*sector_id).into(),
+                    sector_id.into(),
                     n as u64,
                 )?;
-                let merkle_proof = &proof[n];
 
                 // validate all comm_r_lasts match
-                if merkle_proof.root() != comm_r_last {
+                if inclusion_proof.root() != comm_r_last {
                     return Ok(false);
                 }
 
                 // validate the path length
                 let expected_path_length =
                     graph_height::<typenum::U8>(pub_params.sector_size as usize / NODE_SIZE) - 1;
-                if expected_path_length != merkle_proof.path().len() {
+                if expected_path_length != inclusion_proof.path().len() {
                     return Ok(false);
                 }
 
-                if !merkle_proof.validate(challenged_leaf_start as usize / NODE_SIZE) {
+                if !inclusion_proof.validate(challenged_leaf_start as usize / NODE_SIZE) {
                     return Ok(false);
                 }
             }
@@ -346,18 +374,16 @@ mod tests {
 
         let leaves = 64;
         let sector_size = leaves * NODE_SIZE;
+        let sector_count = 5;
 
         let pub_params = PublicParams {
             sector_size: sector_size as u64,
             challenge_count: 40,
-            sector_count: 5,
+            sector_count,
         };
 
         let randomness = H::Domain::random(rng);
         let prover_id = H::Domain::random(rng);
-
-        let mut sectors: Vec<SectorId> = Vec::new();
-        let mut trees = Vec::new();
 
         // Construct and store an MT using a named DiskStore.
         let temp_dir = tempdir::TempDir::new("level_cache_tree").unwrap();
@@ -368,8 +394,10 @@ mod tests {
             StoreConfig::default_cached_above_base_layer(leaves as usize, OCT_ARITY),
         );
 
-        for i in 0..5 {
-            sectors.push(i.into());
+        let mut pub_sectors = Vec::new();
+        let mut priv_sectors = Vec::new();
+
+        for i in 0..sector_count {
             let data: Vec<u8> = (0..leaves)
                 .flat_map(|_| fr_into_bytes::<Bls12>(&Fr::random(rng)))
                 .collect();
@@ -381,38 +409,35 @@ mod tests {
             f.write_all(&data).unwrap();
 
             let cur_config = StoreConfig::from_config(&config, format!("test-lc-tree-{}", i), None);
-            let mut tree: OctMerkleTree<_, _> = graph
-                .merkle_tree(Some(cur_config.clone()), data.as_slice())
-                .unwrap();
-            let c = tree
-                .compact(cur_config.clone(), StoreConfigDataVersion::Two as u32)
-                .unwrap();
-            assert_eq!(c, true);
 
             let lctree: OctLCMerkleTree<_, _> = graph
-                .lcmerkle_tree(cur_config.clone(), &replica_path)
+                .lcmerkle_tree(cur_config.clone(), &data, &replica_path)
                 .unwrap();
-            trees.push(lctree);
+
+            let comm_c = H::Domain::random(rng);
+            let comm_r_last = lctree.root();
+
+            priv_sectors.push(PrivateSector {
+                tree: lctree,
+                comm_c,
+                comm_r_last,
+            });
+
+            let comm_r = H::Function::hash2(&comm_c, &comm_r_last);
+            pub_sectors.push(PublicSector {
+                id: (i as u64).into(),
+                comm_r,
+            });
         }
 
-        let comm_r_lasts = trees.iter().map(|tree| tree.root()).collect::<Vec<_>>();
-        let comm_cs = (0..5).map(|_| H::Domain::random(rng)).collect::<Vec<_>>();
-        let comm_rs = comm_r_lasts
-            .iter()
-            .zip(comm_cs.iter())
-            .map(|(comm_r_last, comm_c)| H::Function::hash2(&comm_c, &comm_r_last))
-            .collect::<Vec<_>>();
         let pub_inputs = PublicInputs {
             randomness,
-            sector_ids: &sectors,
             prover_id,
-            comm_rs: &comm_rs,
+            sectors: &pub_sectors,
         };
 
         let priv_inputs = PrivateInputs::<H> {
-            trees: &trees,
-            comm_cs: &comm_cs,
-            comm_r_lasts: &comm_r_lasts,
+            sectors: &priv_sectors,
         };
 
         let proof = FallbackPoSt::<H>::prove(&pub_params, &pub_inputs, &priv_inputs)

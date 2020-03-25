@@ -1,5 +1,6 @@
 use std::marker::PhantomData;
 
+use anyhow::ensure;
 use bellperson::Circuit;
 use fil_sapling_crypto::jubjub::JubjubEngine;
 use generic_array::typenum;
@@ -17,6 +18,8 @@ use crate::por;
 use crate::post::fallback::{self, FallbackPoSt, FallbackPoStCircuit};
 use crate::proof::ProofScheme;
 use crate::util::NODE_SIZE;
+
+use super::circuit::Sector;
 
 pub struct FallbackPoStCompound<H>
 where
@@ -50,10 +53,10 @@ where
             private: true,
         };
 
-        for (comm_r, sector_id) in pub_inputs.comm_rs.iter().zip(pub_inputs.sector_ids.iter()) {
+        for sector in pub_inputs.sectors.iter() {
             // 1. Inputs for verifying comm_r = H(comm_c || comm_r_last)
 
-            inputs.push((*comm_r).into());
+            inputs.push(sector.comm_r.into());
 
             // 2. Inputs for verifying inclusion paths
 
@@ -61,7 +64,7 @@ where
                 let challenged_leaf_start = fallback::generate_leaf_challenge(
                     &pub_params,
                     pub_inputs.randomness,
-                    (*sector_id).into(),
+                    sector.id.into(),
                     n as u64,
                 )?;
 
@@ -88,58 +91,25 @@ where
         vanilla_proof: &<FallbackPoSt<'a, H> as ProofScheme<'a>>::Proof,
         pub_params: &<FallbackPoSt<'a, H> as ProofScheme<'a>>::PublicParams,
     ) -> Result<FallbackPoStCircuit<'a, Bls12, H>> {
-        let mut leafs = Vec::new();
-        let mut paths = Vec::new();
+        ensure!(
+            pub_params.sector_count == pub_in.sectors.len(),
+            "invalid public inputs"
+        );
+        ensure!(
+            pub_params.sector_count == vanilla_proof.sectors.len(),
+            "invalid vanilla proofs"
+        );
 
-        for i in 0..pub_params.sector_count {
-            leafs.push(
-                vanilla_proof
-                    .leafs(i)
-                    .iter()
-                    .map(|c| Some((*c).into()))
-                    .collect(),
-            );
-
-            paths.push(
-                vanilla_proof
-                    .paths(i)
-                    .iter()
-                    .map(|v| {
-                        v.iter()
-                            .map(|p| {
-                                (
-                                    (*p).0.iter().copied().map(Into::into).map(Some).collect(),
-                                    Some(p.1),
-                                )
-                            })
-                            .collect()
-                    })
-                    .collect(),
-            );
-        }
+        let sectors = vanilla_proof
+            .sectors
+            .iter()
+            .zip(pub_in.sectors.iter())
+            .map(|(vanilla_proof, pub_sector)| Sector::circuit(pub_sector, vanilla_proof))
+            .collect::<Result<_>>()?;
 
         Ok(FallbackPoStCircuit {
-            params: &*JJ_PARAMS,
-            leafs,
-            comm_rs: pub_in.comm_rs.iter().map(|r| Some((*r).into())).collect(),
-            comm_cs: vanilla_proof
-                .comm_cs
-                .iter()
-                .map(|r| Some((*r).into()))
-                .collect(),
-            comm_r_lasts: vanilla_proof
-                .comm_r_lasts
-                .iter()
-                .map(|r| Some((*r).into()))
-                .collect(),
-            paths,
             prover_id: Some(pub_in.prover_id.into()),
-            sector_ids: pub_in
-                .sector_ids
-                .iter()
-                .map(|s| Some((*s).into()))
-                .collect(),
-            _h: PhantomData,
+            sectors,
         })
     }
 
@@ -147,33 +117,14 @@ where
         pub_params: &<FallbackPoSt<'a, H> as ProofScheme<'a>>::PublicParams,
     ) -> FallbackPoStCircuit<'a, Bls12, H> {
         let challenges_count = pub_params.challenge_count;
-        let height =
-            drgraph::graph_height::<typenum::U8>(pub_params.sector_size as usize / NODE_SIZE);
 
-        let leafs = vec![vec![None; challenges_count]; pub_params.sector_count];
-        let paths = vec![
-            vec![
-                vec![(vec![None; typenum::U8::to_usize() - 1], None); height - 1];
-                challenges_count
-            ];
-            pub_params.sector_count
-        ];
-
-        let comm_rs = vec![None; pub_params.sector_count];
-        let comm_cs = vec![None; pub_params.sector_count];
-        let comm_r_lasts = vec![None; pub_params.sector_count];
-        let sector_ids = vec![None; pub_params.sector_count];
+        let sectors = (0..challenges_count)
+            .map(|_| Sector::blank_circuit(pub_params))
+            .collect();
 
         FallbackPoStCircuit {
-            params: &*JJ_PARAMS,
-            comm_rs,
-            comm_cs,
-            comm_r_lasts,
-            leafs,
-            paths,
             prover_id: None,
-            sector_ids,
-            _h: PhantomData,
+            sectors,
         }
     }
 }
