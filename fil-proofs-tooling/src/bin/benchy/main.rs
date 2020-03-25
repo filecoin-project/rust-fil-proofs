@@ -43,7 +43,7 @@ fn main() -> Result<()> {
                     Arg::with_name("layers")
                         .long("layers")
                         .help("How many layers to use")
-                        .default_value("10")
+                        .default_value("11")
                         .takes_value(true),
                 )
                 .arg(
