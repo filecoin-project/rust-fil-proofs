@@ -189,30 +189,30 @@ jobs:
       - run:
           name: Ensure existence of Groth parameters and keys on remote host
           command: |
-            ./fil-proofs-tooling/scripts/paramcache-remote.sh "${CIRCLE_BRANCH}" "${BENCHMARK_SERVER_SSH_USERNAME}@${BENCHMARK_SERVER_IP_ADDR}" "-z=$((512*1024*1024))"
+            ./fil-proofs-tooling/scripts/run-remote.sh "${CIRCLE_BRANCH}" "${BENCHMARK_SERVER_SSH_USERNAME}@${BENCHMARK_SERVER_IP_ADDR}" cargo run --release --package filecoin-proofs --bin=paramcache -- --params-for-sector-sizes=$((512*1024*1024))
           no_output_timeout: 60m
       - run:
           name: Run hash-constraints benchmarks on remote host
           command: |
-            ./fil-proofs-tooling/scripts/benchy-remote.sh "${CIRCLE_BRANCH}" "${BENCHMARK_SERVER_SSH_USERNAME}@${BENCHMARK_SERVER_IP_ADDR}" hash-constraints > hash-constraints.json
+            ./fil-proofs-tooling/scripts/run-remote.sh "${CIRCLE_BRANCH}" "${BENCHMARK_SERVER_SSH_USERNAME}@${BENCHMARK_SERVER_IP_ADDR}" ./fil-proofs-tooling/scripts/benchy.sh hash-constraints > hash-constraints.json
             cat hash-constraints.json
           no_output_timeout: 60m
       - run:
           name: Run micro benchmarks
           command: |
-            ./fil-proofs-tooling/scripts/micro-remote.sh "${CIRCLE_BRANCH}" "${BENCHMARK_SERVER_SSH_USERNAME}@${BENCHMARK_SERVER_IP_ADDR}" > micro-benchmarks.json
+            ./fil-proofs-tooling/scripts/run-remote.sh "${CIRCLE_BRANCH}" "${BENCHMARK_SERVER_SSH_USERNAME}@${BENCHMARK_SERVER_IP_ADDR}" ./fil-proofs-tooling/scripts/micro.sh > micro-benchmarks.json
             cat micro-benchmarks.json
           no_output_timeout: 60m
       - run:
-          name: Run stacked benchmarks using 1GiB sectors
+          name: Run stacked benchmarks using 512MiB sectors
           command: |
-            ./fil-proofs-tooling/scripts/benchy-remote.sh "${CIRCLE_BRANCH}" "${BENCHMARK_SERVER_SSH_USERNAME}@${BENCHMARK_SERVER_IP_ADDR}" stacked --size=$((2*1024*1024)) > stacked-benchmarks.json
+            ./fil-proofs-tooling/scripts/run-remote.sh "${CIRCLE_BRANCH}" "${BENCHMARK_SERVER_SSH_USERNAME}@${BENCHMARK_SERVER_IP_ADDR}" ./fil-proofs-tooling/scripts/benchy.sh stacked --size=$((512*1024)) > stacked-benchmarks.json
             cat stacked-benchmarks.json
           no_output_timeout: 60m
       - run:
-          name: Run Election PoST benchmarks using a 1GiB sector
+          name: Run Election PoST benchmarks using a 512MiB sector
           command: |
-            ./fil-proofs-tooling/scripts/benchy-remote.sh "${CIRCLE_BRANCH}" "${BENCHMARK_SERVER_SSH_USERNAME}@${BENCHMARK_SERVER_IP_ADDR}" election-post --size=$((2*1024*1024)) > election-post-benchmarks.json
+            ./fil-proofs-tooling/scripts/run-remote.sh "${CIRCLE_BRANCH}" "${BENCHMARK_SERVER_SSH_USERNAME}@${BENCHMARK_SERVER_IP_ADDR}" ./fil-proofs-tooling/scripts/benchy.sh election-post --size=$((512*1024)) > election-post-benchmarks.json
             cat election-post-benchmarks.json
           no_output_timeout: 60m
       - run:
@@ -310,7 +310,7 @@ commands:
             || (cargo build --release --all && find . -type f -name paramcache | xargs -I {} mv {} ~/paramcache.awesome)
       - run:
           name: Obtain filecoin groth parameters
-          command: ~/paramcache.awesome --params-for-sector-sizes='2048' 
+          command: ~/paramcache.awesome --params-for-sector-sizes='2048'
           no_output_timeout: 60m
   save_parameter_cache:
     steps:
