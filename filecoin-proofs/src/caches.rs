@@ -13,7 +13,10 @@ use storage_proofs::post::election::{ElectionPoSt, ElectionPoStCircuit, Election
 use storage_proofs::post::fallback;
 
 use crate::constants::{DefaultPieceHasher, DefaultTreeHasher};
-use crate::parameters::{election_post_public_params, public_params, winning_post_public_params};
+use crate::parameters::{
+    election_post_public_params, public_params, window_post_public_params,
+    winning_post_public_params,
+};
 use crate::types::*;
 
 type Bls12GrothParams = groth16::MappedParameters<Bls12>;
@@ -142,7 +145,26 @@ pub fn get_post_params(post_config: &PoStConfig) -> Result<Arc<Bls12GrothParams>
                 parameters_generator,
             )?)
         }
-        PoStType::Window => unimplemented!(),
+        PoStType::Window => {
+            let post_public_params = window_post_public_params(post_config)?;
+
+            let parameters_generator = || {
+                <fallback::FallbackPoStCompound<DefaultTreeHasher> as CompoundProof<
+                    Bls12,
+                    fallback::FallbackPoSt<DefaultTreeHasher>,
+                    fallback::FallbackPoStCircuit<Bls12, DefaultTreeHasher>,
+                >>::groth_params::<rand::rngs::OsRng>(None, &post_public_params)
+                .map_err(Into::into)
+            };
+
+            Ok(lookup_groth_params(
+                format!(
+                    "Window_POST[{}]",
+                    usize::from(post_config.padded_sector_size())
+                ),
+                parameters_generator,
+            )?)
+        }
     }
 }
 
@@ -212,6 +234,25 @@ pub fn get_post_verifying_key(post_config: &PoStConfig) -> Result<Arc<Bls12Verif
                 vk_generator,
             )?)
         }
-        PoStType::Window => unimplemented!(),
+        PoStType::Window => {
+            let post_public_params = window_post_public_params(post_config)?;
+
+            let vk_generator = || {
+                <fallback::FallbackPoStCompound<DefaultTreeHasher> as CompoundProof<
+                    Bls12,
+                    fallback::FallbackPoSt<DefaultTreeHasher>,
+                    fallback::FallbackPoStCircuit<Bls12, DefaultTreeHasher>,
+                >>::verifying_key::<rand::rngs::OsRng>(None, &post_public_params)
+                .map_err(Into::into)
+            };
+
+            Ok(lookup_verifying_key(
+                format!(
+                    "WINDOW_POST[{}]",
+                    usize::from(post_config.padded_sector_size())
+                ),
+                vk_generator,
+            )?)
+        }
     }
 }

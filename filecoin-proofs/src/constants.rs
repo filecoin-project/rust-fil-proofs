@@ -19,6 +19,9 @@ pub const ELECTION_POST_CHALLENGED_NODES: usize = 1;
 pub const WINNING_POST_CHALLENGE_COUNT: usize = 1;
 pub const WINNING_POST_SECTOR_COUNT: usize = 65;
 
+pub const WINDOW_POST_CHALLENGE_COUNT: usize = 10;
+pub const WINDOW_POST_SECTOR_COUNT: usize = 65; // TODO: correct value
+
 pub const DRG_DEGREE: usize = storage_proofs::drgraph::BASE_DEGREE;
 pub const EXP_DEGREE: usize = storage_proofs::porep::stacked::EXP_DEGREE;
 

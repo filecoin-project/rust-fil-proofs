@@ -16,8 +16,12 @@ const DRG_SEED: [u8; 28] = [
 
 type ElectionPostSetupParams = election::SetupParams;
 pub type ElectionPostPublicParams = election::PublicParams;
+
 type WinningPostSetupParams = fallback::SetupParams;
 pub type WinningPostPublicParams = fallback::PublicParams;
+
+type WindowPostSetupParams = fallback::SetupParams;
+pub type WindowPostPublicParams = fallback::PublicParams;
 
 pub fn public_params(
     sector_bytes: PaddedBytesAmount,
@@ -46,6 +50,18 @@ pub fn winning_post_public_params(post_config: &PoStConfig) -> Result<WinningPos
 }
 
 pub fn winning_post_setup_params(post_config: &PoStConfig) -> WinningPostSetupParams {
+    fallback::SetupParams {
+        sector_size: post_config.padded_sector_size().into(),
+        challenge_count: post_config.challenge_count,
+        sector_count: post_config.sector_count,
+    }
+}
+
+pub fn window_post_public_params(post_config: &PoStConfig) -> Result<WindowPostPublicParams> {
+    fallback::FallbackPoSt::<DefaultTreeHasher>::setup(&window_post_setup_params(&post_config))
+}
+
+pub fn window_post_setup_params(post_config: &PoStConfig) -> WindowPostSetupParams {
     fallback::SetupParams {
         sector_size: post_config.padded_sector_size().into(),
         challenge_count: post_config.challenge_count,

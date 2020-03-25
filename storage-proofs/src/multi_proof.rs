@@ -49,4 +49,12 @@ impl<'a, E: Engine> MultiProof<'a, E> {
         self.write(&mut out).context("known allocation target")?;
         Ok(out)
     }
+
+    pub fn len(&self) -> usize {
+        self.circuit_proofs.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.circuit_proofs.is_empty()
+    }
 }

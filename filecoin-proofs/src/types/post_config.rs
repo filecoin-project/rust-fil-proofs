@@ -76,7 +76,17 @@ impl PoStConfig {
                     >>::cache_identifier(&params),
                 )
             }
-            PoStType::Window => unimplemented!(),
+            PoStType::Window => {
+                let params = crate::parameters::window_post_public_params(self)?;
+
+                Ok(
+                    <fallback::FallbackPoStCompound<DefaultTreeHasher> as CacheableParameters<
+                        Bls12,
+                        fallback::FallbackPoStCircuit<_, DefaultTreeHasher>,
+                        _,
+                    >>::cache_identifier(&params),
+                )
+            }
         }
     }
 
