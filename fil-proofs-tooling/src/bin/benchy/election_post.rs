@@ -2,15 +2,15 @@ use std::collections::BTreeMap;
 use std::io::{stdout, Seek, SeekFrom, Write};
 
 use fil_proofs_tooling::{measure, Metadata};
-use filecoin_proofs::constants::{POREP_PARTITIONS, POST_CHALLENGED_NODES, POST_CHALLENGE_COUNT};
+use filecoin_proofs::constants::{POREP_PARTITIONS, POST_CHALLENGE_COUNT};
 use filecoin_proofs::types::{
     PaddedBytesAmount, PoRepConfig, PoRepProofPartitions, PoStConfig, SectorSize,
     UnpaddedBytesAmount,
 };
 use filecoin_proofs::{
-    add_piece, clear_cache, generate_candidates, generate_piece_commitment, generate_post,
+    add_piece, clear_cache, generate_candidates, generate_election_post, generate_piece_commitment,
     seal_commit_phase1, seal_commit_phase2, seal_pre_commit_phase1, seal_pre_commit_phase2,
-    validate_cache_for_commit, validate_cache_for_precommit_phase2, verify_post,
+    validate_cache_for_commit, validate_cache_for_precommit_phase2, verify_election_post, PoStType,
     PrivateReplicaInfo, PublicReplicaInfo,
 };
 use log::info;
@@ -164,13 +164,14 @@ pub fn run(sector_size: usize) -> anyhow::Result<()> {
     let post_config = PoStConfig {
         sector_size: SectorSize(sector_size as u64),
         challenge_count: POST_CHALLENGE_COUNT,
-        challenged_nodes: POST_CHALLENGED_NODES,
+        sector_count: 1,
+        typ: PoStType::Election,
         priority: true,
     };
 
     let gen_candidates_measurement = measure(|| {
         generate_candidates(
-            post_config,
+            &post_config,
             &RANDOMNESS,
             CHALLENGE_COUNT,
             &priv_replica_info,
@@ -182,8 +183,8 @@ pub fn run(sector_size: usize) -> anyhow::Result<()> {
     let candidates = &gen_candidates_measurement.return_value;
 
     let gen_post_measurement = measure(|| {
-        generate_post(
-            post_config,
+        generate_election_post(
+            &post_config,
             &RANDOMNESS,
             &priv_replica_info,
             candidates
@@ -199,8 +200,8 @@ pub fn run(sector_size: usize) -> anyhow::Result<()> {
     let proof = &gen_post_measurement.return_value;
 
     let verify_post_measurement = measure(|| {
-        verify_post(
-            post_config,
+        verify_election_post(
+            &post_config,
             &RANDOMNESS,
             CHALLENGE_COUNT,
             proof,

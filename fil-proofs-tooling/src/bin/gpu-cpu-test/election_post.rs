@@ -2,17 +2,16 @@ use std::collections::BTreeMap;
 use std::io::{Seek, SeekFrom, Write};
 use std::path::Path;
 
-use filecoin_proofs::constants::{
-    POREP_PARTITIONS, POST_CHALLENGED_NODES, POST_CHALLENGE_COUNT, SECTOR_SIZE_8_MIB,
-};
+use filecoin_proofs::constants::{POREP_PARTITIONS, POST_CHALLENGE_COUNT, SECTOR_SIZE_8_MIB};
 use filecoin_proofs::types::{
     PaddedBytesAmount, PieceInfo, PoRepConfig, PoRepProofPartitions, PoStConfig,
     SealPreCommitOutput, SectorSize, UnpaddedBytesAmount,
 };
 use filecoin_proofs::{
-    add_piece, clear_cache, generate_candidates, generate_piece_commitment, generate_post,
+    add_piece, clear_cache, generate_candidates, generate_election_post, generate_piece_commitment,
     seal_commit_phase1, seal_commit_phase2, seal_pre_commit_phase1, seal_pre_commit_phase2,
-    validate_cache_for_commit, validate_cache_for_precommit_phase2, Candidate, PrivateReplicaInfo,
+    validate_cache_for_commit, validate_cache_for_precommit_phase2, Candidate, PoStType,
+    PrivateReplicaInfo,
 };
 use storage_proofs::sector::SectorId;
 use tempfile::NamedTempFile;
@@ -29,7 +28,8 @@ const CHALLENGE_COUNT: u64 = 1;
 const POST_CONFIG: PoStConfig = PoStConfig {
     sector_size: SectorSize(SECTOR_SIZE),
     challenge_count: POST_CHALLENGE_COUNT,
-    challenged_nodes: POST_CHALLENGED_NODES,
+    sector_count: 1,
+    typ: PoStType::Election,
     priority: false,
 };
 
@@ -178,7 +178,7 @@ pub fn generate_candidates_fixture(
     priv_replica_info: &BTreeMap<SectorId, PrivateReplicaInfo>,
 ) -> Vec<Candidate> {
     generate_candidates(
-        POST_CONFIG,
+        &POST_CONFIG,
         &CHALLENGE_SEED,
         CHALLENGE_COUNT,
         &priv_replica_info,
@@ -191,8 +191,8 @@ pub fn do_generate_post(
     priv_replica_info: &BTreeMap<SectorId, PrivateReplicaInfo>,
     candidates: &[Candidate],
 ) {
-    generate_post(
-        POST_CONFIG,
+    generate_election_post(
+        &POST_CONFIG,
         &CHALLENGE_SEED,
         &priv_replica_info,
         candidates
@@ -217,8 +217,8 @@ pub fn do_generate_post_in_priority(
     //    challenged_nodes: POST_CHALLENGED_NODES,
     //    priority: false,
     //};
-    generate_post(
-        post_config,
+    generate_election_post(
+        &post_config,
         &CHALLENGE_SEED,
         &priv_replica_info,
         candidates

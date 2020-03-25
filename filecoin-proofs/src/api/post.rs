@@ -25,7 +25,7 @@ use storage_proofs::sector::*;
 use crate::api::util::{as_safe_commitment, get_tree_size};
 use crate::caches::{get_post_params, get_post_verifying_key};
 use crate::constants::DefaultTreeHasher;
-use crate::parameters::post_setup_params;
+use crate::parameters::election_post_setup_params;
 use crate::types::{
     ChallengeSeed, Commitment, LCTree, PersistentAux, PoStConfig, ProverId, TemporaryAux, OCT_ARITY,
 };
@@ -198,7 +198,7 @@ pub fn clear_caches(replicas: &BTreeMap<SectorId, PrivateReplicaInfo>) -> Result
 /// * `replicas` - each sector's sector-id and associated replica info.
 /// * `prover_id` - the prover-id that is generating this post.
 pub fn generate_candidates(
-    post_config: PoStConfig,
+    post_config: &PoStConfig,
     randomness: &ChallengeSeed,
     challenge_count: u64,
     replicas: &BTreeMap<SectorId, PrivateReplicaInfo>,
@@ -212,7 +212,7 @@ pub fn generate_candidates(
     let randomness_safe = as_safe_commitment(randomness, "randomness")?;
     let prover_id_safe = as_safe_commitment(&prover_id, "randomness")?;
 
-    let vanilla_params = post_setup_params(post_config);
+    let vanilla_params = election_post_setup_params(&post_config);
     let setup_params = compound_proof::SetupParams {
         vanilla_params,
         partitions: None,
@@ -292,7 +292,7 @@ pub fn finalize_ticket(partial_ticket: &[u8; 32]) -> Result<[u8; 32]> {
     Ok(election::finalize_ticket(&partial_ticket))
 }
 
-/// Generates a proof-of-spacetime.
+/// Generates a Election proof-of-spacetime.
 ///
 /// # Arguments
 ///
@@ -302,8 +302,8 @@ pub fn finalize_ticket(partial_ticket: &[u8; 32]) -> Result<[u8; 32]> {
 /// * `replicas` - each sector's sector-id and associated replica info.
 /// * `winners` - a vector containing each winning ticket.
 /// * `prover_id` - the prover-id that is generating this post.
-pub fn generate_post(
-    post_config: PoStConfig,
+pub fn generate_election_post(
+    post_config: &PoStConfig,
     randomness: &ChallengeSeed,
     replicas: &BTreeMap<SectorId, PrivateReplicaInfo>,
     winners: Vec<Candidate>,
@@ -319,7 +319,7 @@ pub fn generate_post(
     let randomness_safe = as_safe_commitment(randomness, "randomness")?;
     let prover_id_safe = as_safe_commitment(&prover_id, "randomness")?;
 
-    let vanilla_params = post_setup_params(post_config);
+    let vanilla_params = election_post_setup_params(&post_config);
     let setup_params = compound_proof::SetupParams {
         vanilla_params,
         partitions: None,
@@ -327,7 +327,7 @@ pub fn generate_post(
     };
     let pub_params: compound_proof::PublicParams<election::ElectionPoSt<DefaultTreeHasher>> =
         ElectionPoStCompound::setup(&setup_params)?;
-    let groth_params = get_post_params(post_config)?;
+    let groth_params = get_post_params(&post_config)?;
 
     let tree_size =
         get_tree_size::<<DefaultTreeHasher as Hasher>::Domain>(post_config.sector_size, OCT_ARITY)?;
@@ -388,8 +388,8 @@ pub fn generate_post(
 /// * `replicas` - each sector's sector-id and associated replica info.
 /// * `winners` - a vector containing each winning ticket.
 /// * `prover_id` - the prover-id that generated this post.
-pub fn verify_post(
-    post_config: PoStConfig,
+pub fn verify_election_post(
+    post_config: &PoStConfig,
     randomness: &ChallengeSeed,
     challenge_count: u64,
     proofs: &[Vec<u8>],
@@ -427,7 +427,7 @@ pub fn verify_post(
     let prover_id_safe = as_safe_commitment(&prover_id, "randomness")?;
 
     let sectors = replicas.keys().copied().collect();
-    let vanilla_params = post_setup_params(post_config);
+    let vanilla_params = election_post_setup_params(&post_config);
     let setup_params = compound_proof::SetupParams {
         vanilla_params,
         partitions: None,
@@ -436,7 +436,7 @@ pub fn verify_post(
     let pub_params: compound_proof::PublicParams<election::ElectionPoSt<DefaultTreeHasher>> =
         ElectionPoStCompound::setup(&setup_params)?;
 
-    let verifying_key = get_post_verifying_key(post_config)?;
+    let verifying_key = get_post_verifying_key(&post_config)?;
 
     for (proof, winner) in proofs.iter().zip(winners.iter()) {
         let replica = replicas

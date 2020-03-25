@@ -12,7 +12,7 @@ use storage_proofs::porep::stacked::{StackedCompound, StackedDrg};
 use storage_proofs::post::election::{ElectionPoSt, ElectionPoStCircuit, ElectionPoStCompound};
 
 use crate::constants::{DefaultPieceHasher, DefaultTreeHasher};
-use crate::parameters::{post_public_params, public_params};
+use crate::parameters::{election_post_public_params, public_params};
 use crate::types::*;
 
 type Bls12GrothParams = groth16::MappedParameters<Bls12>;
@@ -99,25 +99,28 @@ pub fn get_stacked_params(porep_config: PoRepConfig) -> Result<Arc<Bls12GrothPar
     )?)
 }
 
-pub fn get_post_params(post_config: PoStConfig) -> Result<Arc<Bls12GrothParams>> {
-    let post_public_params = post_public_params(post_config)?;
+pub fn get_post_params(post_config: &PoStConfig) -> Result<Arc<Bls12GrothParams>> {
+    match post_config.typ {
+        PoStType::Election => {
+            let post_public_params = election_post_public_params(post_config)?;
 
-    let parameters_generator = || {
-        <ElectionPoStCompound<DefaultTreeHasher> as CompoundProof<
-            Bls12,
-            ElectionPoSt<DefaultTreeHasher>,
-            ElectionPoStCircuit<Bls12, DefaultTreeHasher>,
-        >>::groth_params::<rand::rngs::OsRng>(None, &post_public_params)
-        .map_err(Into::into)
-    };
+            let parameters_generator = || {
+                <ElectionPoStCompound<DefaultTreeHasher> as CompoundProof<
+                    Bls12,
+                    ElectionPoSt<DefaultTreeHasher>,
+                    ElectionPoStCircuit<Bls12, DefaultTreeHasher>,
+                >>::groth_params::<rand::rngs::OsRng>(None, &post_public_params)
+                .map_err(Into::into)
+            };
 
-    Ok(lookup_groth_params(
-        format!(
-            "POST[{}]",
-            usize::from(PaddedBytesAmount::from(post_config))
-        ),
-        parameters_generator,
-    )?)
+            Ok(lookup_groth_params(
+                format!("POST[{}]", usize::from(post_config.padded_sector_size())),
+                parameters_generator,
+            )?)
+        }
+        PoStType::Winning => unimplemented!(),
+        PoStType::Window => unimplemented!(),
+    }
 }
 
 pub fn get_stacked_verifying_key(porep_config: PoRepConfig) -> Result<Arc<Bls12VerifyingKey>> {
@@ -144,23 +147,26 @@ pub fn get_stacked_verifying_key(porep_config: PoRepConfig) -> Result<Arc<Bls12V
     )?)
 }
 
-pub fn get_post_verifying_key(post_config: PoStConfig) -> Result<Arc<Bls12VerifyingKey>> {
-    let post_public_params = post_public_params(post_config)?;
+pub fn get_post_verifying_key(post_config: &PoStConfig) -> Result<Arc<Bls12VerifyingKey>> {
+    match post_config.typ {
+        PoStType::Election => {
+            let post_public_params = election_post_public_params(post_config)?;
 
-    let vk_generator = || {
-        <ElectionPoStCompound<DefaultTreeHasher> as CompoundProof<
-            Bls12,
-            ElectionPoSt<DefaultTreeHasher>,
-            ElectionPoStCircuit<Bls12, DefaultTreeHasher>,
-        >>::verifying_key::<rand::rngs::OsRng>(None, &post_public_params)
-        .map_err(Into::into)
-    };
+            let vk_generator = || {
+                <ElectionPoStCompound<DefaultTreeHasher> as CompoundProof<
+                    Bls12,
+                    ElectionPoSt<DefaultTreeHasher>,
+                    ElectionPoStCircuit<Bls12, DefaultTreeHasher>,
+                >>::verifying_key::<rand::rngs::OsRng>(None, &post_public_params)
+                .map_err(Into::into)
+            };
 
-    Ok(lookup_verifying_key(
-        format!(
-            "POST[{}]",
-            usize::from(PaddedBytesAmount::from(post_config))
-        ),
-        vk_generator,
-    )?)
+            Ok(lookup_verifying_key(
+                format!("POST[{}]", usize::from(post_config.padded_sector_size())),
+                vk_generator,
+            )?)
+        }
+        PoStType::Winning => unimplemented!(),
+        PoStType::Window => unimplemented!(),
+    }
 }

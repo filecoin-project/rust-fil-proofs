@@ -4,8 +4,9 @@ use paired::bls12_381::Bls12;
 use rand::rngs::OsRng;
 
 use filecoin_proofs::constants::*;
-use filecoin_proofs::parameters::{post_public_params, public_params};
+use filecoin_proofs::parameters::{election_post_public_params, public_params};
 use filecoin_proofs::types::*;
+use filecoin_proofs::PoStType;
 use std::collections::HashSet;
 use storage_proofs::compound_proof::CompoundProof;
 use storage_proofs::parameter_cache::CacheableParameters;
@@ -72,14 +73,14 @@ fn cache_porep_params(porep_config: PoRepConfig) {
     }
 }
 
-fn cache_post_params(post_config: PoStConfig) {
-    let n = u64::from(PaddedBytesAmount::from(post_config));
+fn cache_election_post_params(post_config: &PoStConfig) {
+    let n = u64::from(post_config.padded_sector_size());
     info!(
         "begin PoSt parameter-cache check/populate routine for {}-byte sectors",
         n
     );
 
-    let post_public_params = post_public_params(post_config).unwrap();
+    let post_public_params = election_post_public_params(post_config).unwrap();
 
     {
         let post_circuit: ElectionPoStCircuit<Bls12, DefaultTreeHasher> =
@@ -161,10 +162,11 @@ pub fn main() {
     let only_election_post = matches.is_present("only-election-post");
 
     for sector_size in sizes {
-        cache_post_params(PoStConfig {
+        cache_election_post_params(&PoStConfig {
             sector_size: SectorSize(sector_size),
             challenge_count: POST_CHALLENGE_COUNT,
-            challenged_nodes: POST_CHALLENGED_NODES,
+            sector_count: 1,
+            typ: PoStType::Election,
             priority: true,
         });
 
