@@ -68,15 +68,15 @@ pub struct PublicSector<T: Domain> {
 }
 
 #[derive(Debug)]
-pub struct PrivateSector<H: Hasher> {
-    pub tree: OctLCMerkleTree<H::Domain, H::Function>,
+pub struct PrivateSector<'a, H: Hasher> {
+    pub tree: &'a OctLCMerkleTree<H::Domain, H::Function>,
     pub comm_c: H::Domain,
     pub comm_r_last: H::Domain,
 }
 
 #[derive(Debug)]
 pub struct PrivateInputs<'a, H: Hasher> {
-    pub sectors: &'a [PrivateSector<H>],
+    pub sectors: &'a [PrivateSector<'a, H>],
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -135,27 +135,14 @@ where
     _h: PhantomData<&'a H>,
 }
 
-/// Generate `challenge_count` challenges for each of the passed in `sector`s.
-pub fn generate_sector_challenges<T: Domain>(
-    randomness: T,
-    challenge_count: u64,
-    sectors: &OrderedSectorSet,
-) -> Result<Vec<SectorId>> {
-    (0..challenge_count)
-        .into_par_iter()
-        .map(|n| generate_sector_challenge(randomness, n as usize, sectors))
-        .collect()
-}
-
 /// Generate a single sector challenge.
 pub fn generate_sector_challenge<T: Domain>(
     randomness: T,
-    n: usize,
     sectors: &OrderedSectorSet,
 ) -> Result<SectorId> {
     let mut hasher = Sha256::new();
     hasher.input(AsRef::<[u8]>::as_ref(&randomness));
-    hasher.input(&n.to_le_bytes()[..]);
+
     let hash = hasher.result();
 
     let sector_challenge = LittleEndian::read_u64(&hash.as_ref()[..8]);
@@ -390,6 +377,7 @@ mod tests {
 
         let mut pub_sectors = Vec::new();
         let mut priv_sectors = Vec::new();
+        let mut trees = Vec::new();
 
         for i in 0..sector_count {
             let data: Vec<u8> = (0..leaves)
@@ -404,15 +392,18 @@ mod tests {
 
             let cur_config = StoreConfig::from_config(&config, format!("test-lc-tree-{}", i), None);
 
-            let lctree: OctLCMerkleTree<_, _> = graph
-                .lcmerkle_tree(cur_config.clone(), &data, &replica_path)
-                .unwrap();
-
+            trees.push(
+                graph
+                    .lcmerkle_tree(cur_config.clone(), &data, &replica_path)
+                    .unwrap(),
+            );
+        }
+        for (i, tree) in trees.iter().enumerate() {
             let comm_c = H::Domain::random(rng);
-            let comm_r_last = lctree.root();
+            let comm_r_last = tree.root();
 
             priv_sectors.push(PrivateSector {
-                tree: lctree,
+                tree,
                 comm_c,
                 comm_r_last,
             });

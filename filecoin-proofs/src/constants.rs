@@ -13,8 +13,11 @@ pub const SECTOR_SIZE_8_MIB: u64 = 1 << 23;
 pub const SECTOR_SIZE_512_MIB: u64 = 1 << 29;
 pub const SECTOR_SIZE_32_GIB: u64 = 1 << 35;
 
-pub const POST_CHALLENGE_COUNT: usize = 65;
-pub const POST_CHALLENGED_NODES: usize = 1;
+pub const ELECTION_POST_CHALLENGE_COUNT: usize = 65;
+pub const ELECTION_POST_CHALLENGED_NODES: usize = 1;
+
+pub const WINNING_POST_CHALLENGE_COUNT: usize = 1;
+pub const WINNING_POST_SECTOR_COUNT: usize = 65;
 
 pub const DRG_DEGREE: usize = storage_proofs::drgraph::BASE_DEGREE;
 pub const EXP_DEGREE: usize = storage_proofs::porep::stacked::EXP_DEGREE;

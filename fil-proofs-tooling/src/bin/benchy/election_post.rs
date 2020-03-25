@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 use std::io::{stdout, Seek, SeekFrom, Write};
 
 use fil_proofs_tooling::{measure, Metadata};
-use filecoin_proofs::constants::{POREP_PARTITIONS, POST_CHALLENGE_COUNT};
+use filecoin_proofs::constants::{ELECTION_POST_CHALLENGE_COUNT, POREP_PARTITIONS};
 use filecoin_proofs::types::{
     PaddedBytesAmount, PoRepConfig, PoRepProofPartitions, PoStConfig, SectorSize,
     UnpaddedBytesAmount,
@@ -163,7 +163,7 @@ pub fn run(sector_size: usize) -> anyhow::Result<()> {
     // Measure PoSt generation and verification.
     let post_config = PoStConfig {
         sector_size: SectorSize(sector_size as u64),
-        challenge_count: POST_CHALLENGE_COUNT,
+        challenge_count: ELECTION_POST_CHALLENGE_COUNT,
         sector_count: 1,
         typ: PoStType::Election,
         priority: true,

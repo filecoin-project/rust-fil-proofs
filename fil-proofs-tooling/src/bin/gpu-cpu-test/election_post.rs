@@ -2,7 +2,9 @@ use std::collections::BTreeMap;
 use std::io::{Seek, SeekFrom, Write};
 use std::path::Path;
 
-use filecoin_proofs::constants::{POREP_PARTITIONS, POST_CHALLENGE_COUNT, SECTOR_SIZE_8_MIB};
+use filecoin_proofs::constants::{
+    ELECTION_POST_CHALLENGE_COUNT, POREP_PARTITIONS, SECTOR_SIZE_8_MIB,
+};
 use filecoin_proofs::types::{
     PaddedBytesAmount, PieceInfo, PoRepConfig, PoRepProofPartitions, PoStConfig,
     SealPreCommitOutput, SectorSize, UnpaddedBytesAmount,
@@ -27,7 +29,7 @@ const TICKET: [u8; 32] = [0; 32];
 const CHALLENGE_COUNT: u64 = 1;
 const POST_CONFIG: PoStConfig = PoStConfig {
     sector_size: SectorSize(SECTOR_SIZE),
-    challenge_count: POST_CHALLENGE_COUNT,
+    challenge_count: ELECTION_POST_CHALLENGE_COUNT,
     sector_count: 1,
     typ: PoStType::Election,
     priority: false,

@@ -139,7 +139,6 @@ mod tests {
     use crate::fr32::fr_into_bytes;
     use crate::gadgets::{MetricCS, TestConstraintSystem};
     use crate::hasher::{Domain, HashFunction, Hasher, PedersenHasher, PoseidonHasher};
-    use crate::merkle::OctLCMerkleTree;
     use crate::porep::stacked::OCT_ARITY;
     use crate::post::fallback;
     use crate::proof::NoRequirements;
@@ -191,6 +190,7 @@ mod tests {
 
         let mut pub_sectors = Vec::new();
         let mut priv_sectors = Vec::new();
+        let mut trees = Vec::new();
 
         for i in 0..sector_count {
             let data: Vec<u8> = (0..leaves)
@@ -204,15 +204,18 @@ mod tests {
             f.write_all(&data).unwrap();
 
             let cur_config = StoreConfig::from_config(&config, format!("test-lc-tree-{}", i), None);
-            let lctree: OctLCMerkleTree<_, _> = graph
-                .lcmerkle_tree(cur_config.clone(), &data, &replica_path)
-                .unwrap();
-
+            trees.push(
+                graph
+                    .lcmerkle_tree(cur_config.clone(), &data, &replica_path)
+                    .unwrap(),
+            );
+        }
+        for (i, tree) in trees.iter().enumerate() {
             let comm_c = H::Domain::random(rng);
-            let comm_r_last = lctree.root();
+            let comm_r_last = tree.root();
 
             priv_sectors.push(PrivateSector {
-                tree: lctree,
+                tree,
                 comm_c,
                 comm_r_last,
             });

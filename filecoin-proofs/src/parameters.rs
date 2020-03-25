@@ -1,6 +1,7 @@
 use anyhow::{ensure, Result};
 use storage_proofs::porep::stacked::{self, LayerChallenges, StackedDrg};
 use storage_proofs::post::election::{self, ElectionPoSt};
+use storage_proofs::post::fallback;
 use storage_proofs::proof::ProofScheme;
 
 use crate::constants::{
@@ -15,6 +16,8 @@ const DRG_SEED: [u8; 28] = [
 
 type ElectionPostSetupParams = election::SetupParams;
 pub type ElectionPostPublicParams = election::PublicParams;
+type WinningPostSetupParams = fallback::SetupParams;
+pub type WinningPostPublicParams = fallback::PublicParams;
 
 pub fn public_params(
     sector_bytes: PaddedBytesAmount,
@@ -35,6 +38,18 @@ pub fn election_post_setup_params(post_config: &PoStConfig) -> ElectionPostSetup
         sector_size: post_config.padded_sector_size().into(),
         challenge_count: post_config.challenge_count,
         challenged_nodes: 1,
+    }
+}
+
+pub fn winning_post_public_params(post_config: &PoStConfig) -> Result<WinningPostPublicParams> {
+    fallback::FallbackPoSt::<DefaultTreeHasher>::setup(&winning_post_setup_params(&post_config))
+}
+
+pub fn winning_post_setup_params(post_config: &PoStConfig) -> WinningPostSetupParams {
+    fallback::SetupParams {
+        sector_size: post_config.padded_sector_size().into(),
+        challenge_count: post_config.challenge_count,
+        sector_count: post_config.sector_count,
     }
 }
 

@@ -541,7 +541,7 @@ mod tests {
         let result = verify_election_post(
             &PoStConfig {
                 sector_size: SectorSize(SECTOR_SIZE_2_KIB),
-                challenge_count: crate::constants::POST_CHALLENGE_COUNT,
+                challenge_count: crate::constants::ELECTION_POST_CHALLENGE_COUNT,
                 sector_count: 1,
                 typ: PoStType::Election,
                 priority: false,
@@ -587,7 +587,7 @@ mod tests {
         let result = verify_election_post(
             &PoStConfig {
                 sector_size: SectorSize(SECTOR_SIZE_2_KIB),
-                challenge_count: crate::constants::POST_CHALLENGE_COUNT,
+                challenge_count: crate::constants::ELECTION_POST_CHALLENGE_COUNT,
                 sector_count: 1,
                 typ: PoStType::Election,
                 priority: false,
