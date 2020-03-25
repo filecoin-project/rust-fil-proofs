@@ -4,7 +4,6 @@ use merkletree::merkle::{is_merkle_tree_size_valid, FromIndexedParallelIterator,
 use merkletree::store::DiskStore;
 use rand::{thread_rng, Rng};
 use rayon::prelude::*;
-use std::marker::Sync;
 use storage_proofs::hasher::{Domain, Hasher, PoseidonHasher};
 use storage_proofs::util::NODE_SIZE;
 use typenum::{Unsigned, U0, U1, U2, U8};
