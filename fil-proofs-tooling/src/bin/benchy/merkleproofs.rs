@@ -106,10 +106,7 @@ fn run_tree_bench<R: Rng, BaseTreeArity: Unsigned, SubTreeArity: Unsigned>(
 
     let mut trees = Vec::with_capacity(tree_count);
     for _ in 0..tree_count {
-        trees.push(generate_tree::<R, BaseTreeArity>(
-            rng,
-            nodes / tree_count,
-        )?);
+        trees.push(generate_tree::<R, BaseTreeArity>(rng, nodes / tree_count)?);
     }
 
     let tree: MerkleTree<
