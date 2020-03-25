@@ -93,16 +93,16 @@ mod tests {
     fn test_commitment_reader() {
         let piece_size = 127 * 8;
         let source = vec![255u8; piece_size];
-        let mut pad_reader = crate::pad_reader::PadReader::new(io::Cursor::new(&source));
+        let mut fr32_reader = crate::fr32_reader::Fr32Reader::new(io::Cursor::new(&source));
 
         let commitment1 = generate_piece_commitment_bytes_from_source::<DefaultPieceHasher>(
-            &mut pad_reader,
+            &mut fr32_reader,
             PaddedBytesAmount::from(UnpaddedBytesAmount(piece_size as u64)).into(),
         )
         .unwrap();
 
-        let pad_reader = crate::pad_reader::PadReader::new(io::Cursor::new(&source));
-        let mut commitment_reader = CommitmentReader::new(pad_reader);
+        let fr32_reader = crate::fr32_reader::Fr32Reader::new(io::Cursor::new(&source));
+        let mut commitment_reader = CommitmentReader::new(fr32_reader);
         io::copy(&mut commitment_reader, &mut io::sink()).unwrap();
 
         let commitment2 = commitment_reader.finish().unwrap();

@@ -6,7 +6,7 @@ mod commitment_reader;
 
 pub mod constants;
 pub mod fr32;
-pub mod pad_reader;
+pub mod fr32_reader;
 pub mod param;
 pub mod parameters;
 pub mod pieces;
@@ -17,7 +17,6 @@ pub mod types;
 pub use self::api::*;
 pub use self::commitment_reader::*;
 pub use self::constants::SINGLE_PARTITION_PROOF_LEN;
-pub use self::pad_reader::*;
 pub use self::param::{ParameterData, ParameterMap};
 pub use self::types::*;
 

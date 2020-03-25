@@ -2,6 +2,7 @@ use std::io::{self, Read};
 use std::time::Duration;
 
 use criterion::{criterion_group, criterion_main, Criterion, ParameterizedBenchmark, Throughput};
+use filecoin_proofs::fr32_reader::Fr32Reader;
 use rand::{thread_rng, Rng};
 
 #[cfg(feature = "cpu-profile")]
@@ -48,7 +49,7 @@ fn preprocessing_benchmark(c: &mut Criterion) {
 
                 start_profile(&format!("write_padded_{}", *size));
                 b.iter(|| {
-                    let mut reader = filecoin_proofs::PadReader::new(io::Cursor::new(&data));
+                    let mut reader = Fr32Reader::new(io::Cursor::new(&data));
                     reader.read_to_end(&mut buf).unwrap();
                     assert!(buf.len() >= data.len());
                 });
