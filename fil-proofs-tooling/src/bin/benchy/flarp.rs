@@ -1,13 +1,13 @@
 use bellperson::Circuit;
 use fil_proofs_tooling::{measure, Metadata};
 use filecoin_proofs::constants::{DefaultTreeHasher, POREP_PARTITIONS};
-use filecoin_proofs::parameters::post_public_params;
+use filecoin_proofs::parameters::election_post_public_params;
 use filecoin_proofs::types::PaddedBytesAmount;
 use filecoin_proofs::types::*;
 use filecoin_proofs::types::{PoStConfig, SectorSize};
 use filecoin_proofs::{
-    clear_cache, generate_candidates, generate_post, seal_commit_phase1, seal_commit_phase2,
-    validate_cache_for_commit, verify_post, PoRepConfig,
+    clear_cache, generate_candidates, generate_election_post, seal_commit_phase1,
+    seal_commit_phase2, validate_cache_for_commit, verify_election_post, PoRepConfig,
 };
 use log::info;
 use paired::bls12_381::Bls12;
@@ -259,13 +259,14 @@ pub fn run(
         let post_config = PoStConfig {
             sector_size,
             challenge_count: inputs.post_challenges as usize,
-            challenged_nodes: inputs.post_challenged_nodes as usize,
+            sector_count: 1,
+            typ: PoStType::Election,
             priority: true,
         };
 
         let gen_candidates_measurement = measure(|| {
             generate_candidates(
-                post_config,
+                &post_config,
                 &RANDOMNESS,
                 CHALLENGE_COUNT,
                 &vec![(*sector_id, replica_info.private_replica_info.clone())]
@@ -282,8 +283,8 @@ pub fn run(
         let candidates = &gen_candidates_measurement.return_value;
 
         let gen_post_measurement = measure(|| {
-            generate_post(
-                post_config,
+            generate_election_post(
+                &post_config,
                 &RANDOMNESS,
                 &vec![(*sector_id, replica_info.private_replica_info.clone())]
                     .into_iter()
@@ -300,8 +301,8 @@ pub fn run(
         let post_proof = &gen_post_measurement.return_value;
 
         let verify_post_measurement = measure(|| {
-            verify_post(
-                post_config,
+            verify_election_post(
+                &post_config,
                 &RANDOMNESS,
                 CHALLENGE_COUNT,
                 post_proof,
@@ -400,17 +401,18 @@ fn measure_porep_circuit(i: &FlarpInputs) -> usize {
 }
 
 fn measure_post_circuit(i: &FlarpInputs) -> usize {
-    use filecoin_proofs::parameters::post_setup_params;
+    use filecoin_proofs::parameters::election_post_setup_params;
     use storage_proofs::post::election;
 
     let post_config = PoStConfig {
         sector_size: SectorSize(i.sector_size_bytes()),
         challenge_count: i.post_challenges as usize,
-        challenged_nodes: i.post_challenged_nodes as usize,
+        sector_count: 1,
+        typ: PoStType::Election,
         priority: true,
     };
 
-    let vanilla_params = post_setup_params(post_config);
+    let vanilla_params = election_post_setup_params(&post_config);
     let pp = election::ElectionPoSt::<FlarpHasher>::setup(&vanilla_params).unwrap();
 
     let mut cs = BenchCS::<Bls12>::new();
@@ -441,10 +443,11 @@ fn generate_params(i: &FlarpInputs) {
     });
 
     info!("generating params: post");
-    cache_post_params(PoStConfig {
+    cache_post_params(&PoStConfig {
         sector_size,
         challenge_count: i.post_challenges as usize,
-        challenged_nodes: i.post_challenged_nodes as usize,
+        sector_count: 1,
+        typ: PoStType::Election,
         priority: true,
     });
 }
@@ -497,8 +500,8 @@ fn cache_porep_params(porep_config: PoRepConfig) {
     }
 }
 
-fn cache_post_params(post_config: PoStConfig) {
-    let post_public_params = post_public_params(post_config).unwrap();
+fn cache_post_params(post_config: &PoStConfig) {
+    let post_public_params = election_post_public_params(post_config).unwrap();
 
     {
         let post_circuit: ElectionPoStCircuit<Bls12, FlarpHasher> =

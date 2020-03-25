@@ -8,13 +8,21 @@ use storage_proofs::post::election::{ElectionPoStCircuit, ElectionPoStCompound};
 use crate::constants::DefaultTreeHasher;
 use crate::types::*;
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 pub struct PoStConfig {
     pub sector_size: SectorSize,
     pub challenge_count: usize,
-    pub challenged_nodes: usize,
+    pub sector_count: usize,
+    pub typ: PoStType,
     /// High priority (always runs on GPU) == true
     pub priority: bool,
+}
+
+#[derive(Debug, Clone)]
+pub enum PoStType {
+    Election,
+    Winning,
+    Window,
 }
 
 impl From<PoStConfig> for PaddedBytesAmount {
@@ -34,30 +42,44 @@ impl From<PoStConfig> for UnpaddedBytesAmount {
 }
 
 impl PoStConfig {
-    /// Returns the cache identifier as used by `storage-proofs::paramater_cache`.
-    pub fn get_cache_identifier(self) -> Result<String> {
-        let params = crate::parameters::post_public_params(self)?;
-
-        Ok(
-            <ElectionPoStCompound<DefaultTreeHasher> as CacheableParameters<
-                Bls12,
-                ElectionPoStCircuit<_, DefaultTreeHasher>,
-                _,
-            >>::cache_identifier(&params),
-        )
+    pub fn padded_sector_size(&self) -> PaddedBytesAmount {
+        PaddedBytesAmount::from(self.sector_size)
     }
 
-    pub fn get_cache_metadata_path(self) -> Result<PathBuf> {
+    pub fn unpadded_sector_size(&self) -> UnpaddedBytesAmount {
+        PaddedBytesAmount::from(self.sector_size).into()
+    }
+
+    /// Returns the cache identifier as used by `storage-proofs::paramater_cache`.
+    pub fn get_cache_identifier(&self) -> Result<String> {
+        match self.typ {
+            PoStType::Election => {
+                let params = crate::parameters::election_post_public_params(self)?;
+
+                Ok(
+                    <ElectionPoStCompound<DefaultTreeHasher> as CacheableParameters<
+                        Bls12,
+                        ElectionPoStCircuit<_, DefaultTreeHasher>,
+                        _,
+                    >>::cache_identifier(&params),
+                )
+            }
+            PoStType::Winning => unimplemented!(),
+            PoStType::Window => unimplemented!(),
+        }
+    }
+
+    pub fn get_cache_metadata_path(&self) -> Result<PathBuf> {
         let id = self.get_cache_identifier()?;
         Ok(parameter_cache::parameter_cache_metadata_path(&id))
     }
 
-    pub fn get_cache_verifying_key_path(self) -> Result<PathBuf> {
+    pub fn get_cache_verifying_key_path(&self) -> Result<PathBuf> {
         let id = self.get_cache_identifier()?;
         Ok(parameter_cache::parameter_cache_verifying_key_path(&id))
     }
 
-    pub fn get_cache_params_path(self) -> Result<PathBuf> {
+    pub fn get_cache_params_path(&self) -> Result<PathBuf> {
         let id = self.get_cache_identifier()?;
         Ok(parameter_cache::parameter_cache_params_path(&id))
     }

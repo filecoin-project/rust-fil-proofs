@@ -270,10 +270,7 @@ impl<'a, H: 'a + Hasher> ProofScheme<'a> for FallbackPoSt<'a, H> {
                         n as u64,
                     )?;
 
-                    let (proof, _) = tree.gen_proof_and_partial_tree(
-                        challenged_leaf_start as usize / NODE_SIZE,
-                        StoreConfig::default_cached_above_base_layer(tree_leafs, OCT_ARITY),
-                    )?;
+                    let proof = tree.gen_proof(challenged_leaf_start as usize / NODE_SIZE)?;
 
                     Ok(MerkleProof::new_from_proof(&proof))
                 })

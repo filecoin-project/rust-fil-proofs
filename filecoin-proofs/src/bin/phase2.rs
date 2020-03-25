@@ -40,10 +40,10 @@ use std::time::{Duration, Instant};
 
 use clap::{App, AppSettings, Arg, ArgGroup, SubCommand};
 use filecoin_proofs::constants::{
-    POREP_PARTITIONS, POST_CHALLENGED_NODES, POST_CHALLENGE_COUNT, SECTOR_SIZE_2_KIB,
-    SECTOR_SIZE_32_GIB, SECTOR_SIZE_512_MIB, /*SECTOR_SIZE_64_GIB,*/ SECTOR_SIZE_8_MIB,
+    POREP_PARTITIONS, POST_CHALLENGE_COUNT, SECTOR_SIZE_2_KIB, SECTOR_SIZE_32_GIB,
+    SECTOR_SIZE_512_MIB, /*SECTOR_SIZE_64_GIB,*/ SECTOR_SIZE_8_MIB,
 };
-use filecoin_proofs::parameters::{post_public_params, setup_params};
+use filecoin_proofs::parameters::{election_post_public_params, setup_params};
 use filecoin_proofs::types::*;
 use log::info;
 use paired::bls12_381::Bls12;
@@ -245,11 +245,12 @@ fn blank_election_post_poseidon_circuit(
     let post_config = PoStConfig {
         sector_size: SectorSize(sector_size),
         challenge_count: POST_CHALLENGE_COUNT,
-        challenged_nodes: POST_CHALLENGED_NODES,
+        sector_count: 1,
+        typ: PoStType::Election,
         priority: false,
     };
 
-    let public_params = post_public_params(post_config).unwrap();
+    let public_params = election_post_public_params(&post_config).unwrap();
 
     <ElectionPoStCompound<PoseidonHasher> as CompoundProof<
         Bls12,

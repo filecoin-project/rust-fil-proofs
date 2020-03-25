@@ -13,8 +13,8 @@ const DRG_SEED: [u8; 28] = [
     26, 27,
 ]; // Arbitrary, need a theory for how to vary this over time.
 
-type PostSetupParams = election::SetupParams;
-pub type PostPublicParams = election::PublicParams;
+type ElectionPostSetupParams = election::SetupParams;
+pub type ElectionPostPublicParams = election::PublicParams;
 
 pub fn public_params(
     sector_bytes: PaddedBytesAmount,
@@ -26,17 +26,15 @@ pub fn public_params(
     )?)
 }
 
-pub fn post_public_params(post_config: PoStConfig) -> Result<PostPublicParams> {
-    ElectionPoSt::<DefaultTreeHasher>::setup(&post_setup_params(post_config))
+pub fn election_post_public_params(post_config: &PoStConfig) -> Result<ElectionPostPublicParams> {
+    ElectionPoSt::<DefaultTreeHasher>::setup(&election_post_setup_params(&post_config))
 }
 
-pub fn post_setup_params(post_config: PoStConfig) -> PostSetupParams {
-    let size = PaddedBytesAmount::from(post_config);
-
+pub fn election_post_setup_params(post_config: &PoStConfig) -> ElectionPostSetupParams {
     election::SetupParams {
-        sector_size: size.into(),
+        sector_size: post_config.padded_sector_size().into(),
         challenge_count: post_config.challenge_count,
-        challenged_nodes: post_config.challenged_nodes,
+        challenged_nodes: 1,
     }
 }
 

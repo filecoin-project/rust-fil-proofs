@@ -430,6 +430,7 @@ mod tests {
 
     use crate::constants::{POREP_PARTITIONS, SECTOR_SIZE_2_KIB, SINGLE_PARTITION_PROOF_LEN};
     use crate::types::{PoStConfig, SectorSize};
+    use crate::PoStType;
 
     static INIT_LOGGER: Once = Once::new();
     fn init_logger() {
@@ -537,11 +538,12 @@ mod tests {
             sector_challenge_index: 0,
         };
 
-        let result = verify_post(
-            PoStConfig {
+        let result = verify_election_post(
+            &PoStConfig {
                 sector_size: SectorSize(SECTOR_SIZE_2_KIB),
                 challenge_count: crate::constants::POST_CHALLENGE_COUNT,
-                challenged_nodes: crate::constants::POST_CHALLENGED_NODES,
+                sector_count: 1,
+                typ: PoStType::Election,
                 priority: false,
             },
             &[0; 32],
@@ -582,11 +584,12 @@ mod tests {
             sector_challenge_index: 0,
         };
 
-        let result = verify_post(
-            PoStConfig {
+        let result = verify_election_post(
+            &PoStConfig {
                 sector_size: SectorSize(SECTOR_SIZE_2_KIB),
                 challenge_count: crate::constants::POST_CHALLENGE_COUNT,
-                challenged_nodes: crate::constants::POST_CHALLENGED_NODES,
+                sector_count: 1,
+                typ: PoStType::Election,
                 priority: false,
             },
             &[0; 32],
