@@ -331,7 +331,7 @@ mod tests {
         let tree = g.merkle_tree::<U>(config, mmapped).unwrap();
         let proof = tree.gen_proof(2).unwrap();
 
-        assert!(proof.validate::<H::Function>());
+        assert!(proof.validate::<H::Function>().expect("failed to validate"));
     }
 
     #[test]

@@ -361,16 +361,14 @@ impl<'a, H: 'a + Hasher> ProofScheme<'a> for ElectionPoSt<'a, H> {
                                 StoreConfig::default_cached_above_base_layer(tree_leafs, OCT_ARITY);
                             let proof = {
                                 if config_levels == 0 {
-                                    tree.gen_proof(challenged_leaf_start as usize + i)?
+                                    tree.gen_proof(challenged_leaf_start as usize + i)
                                 } else {
-                                    let (proof, _) = tree.gen_proof_and_partial_tree(
+                                    tree.gen_cached_proof(
                                         challenged_leaf_start as usize + i,
                                         config_levels,
-                                    )?;
-
-                                    proof
+                                    )
                                 }
-                            };
+                            }?;
                             Ok(MerkleProof::new_from_proof(&proof))
                         })
                 })

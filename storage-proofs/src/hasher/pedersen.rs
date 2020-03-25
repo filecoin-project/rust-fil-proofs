@@ -435,7 +435,11 @@ mod tests {
 
         let p = t.gen_proof(0).unwrap(); // create a proof for the first value = "hello"
         assert_eq!(*p.path(), vec![0, 0]);
-        assert_eq!(p.validate::<PedersenFunction>(), true);
+        assert_eq!(
+            p.validate::<PedersenFunction>()
+                .expect("failed to validate"),
+            true
+        );
     }
 
     #[test]

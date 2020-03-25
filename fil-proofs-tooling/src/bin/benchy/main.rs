@@ -152,18 +152,11 @@ fn main() -> Result<()> {
                 .takes_value(true),
         )
         .arg(
-            Arg::with_name("arity")
-                .long("arity")
-                .required(false)
-                .default_value("2")
-                .help("The arity of the merkletree")
-                .takes_value(true),
-        )
-        .arg(
             Arg::with_name("proofs")
                 .long("proofs")
-                .required(true)
-                .help("How many proofs to generate")
+                .default_value("0")
+                .required(false)
+                .help("How many proofs to generate (default is all)")
                 .takes_value(true),
         )
         .arg(
@@ -218,8 +211,7 @@ fn main() -> Result<()> {
             let size = size_kibs * 1024;
 
             let proofs = value_t!(m, "proofs", usize)?;
-            let arity = value_t!(m, "arity", usize)?;
-            merkleproofs::run(size, proofs, arity, m.is_present("validate"))?;
+            merkleproofs::run(size, proofs, m.is_present("validate"))?;
         }
         ("flarp", Some(m)) => {
             let inputs: FlarpInputs = if m.is_present("config") {

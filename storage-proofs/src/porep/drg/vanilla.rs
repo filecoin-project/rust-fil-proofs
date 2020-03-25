@@ -319,14 +319,11 @@ where
 
             let tree_proof = {
                 if tree_r_config_levels == 0 {
-                    tree_r.gen_proof(challenge)?
+                    tree_r.gen_proof(challenge)
                 } else {
-                    let (tree_proof, _) =
-                        tree_r.gen_proof_and_partial_tree(challenge, tree_r_config_levels)?;
-
-                    tree_proof
+                    tree_r.gen_cached_proof(challenge, tree_r_config_levels)
                 }
-            };
+            }?;
             replica_nodes.push(DataProof {
                 proof: MerkleProof::new_from_proof(&tree_proof),
                 data,
@@ -340,14 +337,11 @@ where
                 replica_parentsi.push((*p, {
                     let proof = {
                         if tree_r_config_levels == 0 {
-                            tree_r.gen_proof(*p as usize)?
+                            tree_r.gen_proof(*p as usize)
                         } else {
-                            let (proof, _) = tree_r
-                                .gen_proof_and_partial_tree(*p as usize, tree_r_config_levels)?;
-
-                            proof
+                            tree_r.gen_cached_proof(*p as usize, tree_r_config_levels)
                         }
-                    };
+                    }?;
                     DataProof {
                         proof: MerkleProof::new_from_proof(&proof),
                         data: tree_r.read_at(*p as usize)?,
@@ -969,7 +963,7 @@ mod tests {
                 if all_same {
                     println!("invalid test data can't scramble proofs with all same parents.");
 
-                    // If for some reason, we hit this condition because of the data passeed in,
+                    // If for some reason, we hit this condition because of the data passed in,
                     // try again.
                     continue;
                 }
