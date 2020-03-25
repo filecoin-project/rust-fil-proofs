@@ -5,11 +5,8 @@ use bellperson::Circuit;
 use fil_sapling_crypto::jubjub::JubjubEngine;
 use generic_array::typenum;
 use paired::bls12_381::{Bls12, Fr};
-use typenum::marker_traits::Unsigned;
 
 use crate::compound_proof::{CircuitComponent, CompoundProof};
-use crate::crypto::pedersen::JJ_PARAMS;
-use crate::drgraph;
 use crate::error::Result;
 use crate::gadgets::por::PoRCompound;
 use crate::hasher::Hasher;
@@ -116,9 +113,7 @@ where
     fn blank_circuit(
         pub_params: &<FallbackPoSt<'a, H> as ProofScheme<'a>>::PublicParams,
     ) -> FallbackPoStCircuit<'a, Bls12, H> {
-        let challenges_count = pub_params.challenge_count;
-
-        let sectors = (0..challenges_count)
+        let sectors = (0..pub_params.sector_count)
             .map(|_| Sector::blank_circuit(pub_params))
             .collect();
 
@@ -133,10 +128,9 @@ where
 mod tests {
     use super::*;
 
-    use std::collections::BTreeMap;
-
     use ff::Field;
-    use merkletree::store::{StoreConfig, StoreConfigDataVersion};
+    use merkletree::store::StoreConfig;
+    use pretty_assertions::assert_eq;
     use rand::SeedableRng;
     use rand_xorshift::XorShiftRng;
 
@@ -145,11 +139,12 @@ mod tests {
     use crate::fr32::fr_into_bytes;
     use crate::gadgets::{MetricCS, TestConstraintSystem};
     use crate::hasher::{Domain, HashFunction, Hasher, PedersenHasher, PoseidonHasher};
-    use crate::merkle::{OctLCMerkleTree, OctMerkleTree};
+    use crate::merkle::OctLCMerkleTree;
     use crate::porep::stacked::OCT_ARITY;
     use crate::post::fallback;
     use crate::proof::NoRequirements;
-    use crate::sector::SectorId;
+
+    use super::super::{PrivateInputs, PrivateSector, PublicInputs, PublicSector};
 
     #[ignore] // Slow test – run only when compiled for release.
     #[test]
@@ -164,157 +159,143 @@ mod tests {
     }
 
     fn fallback_post_test_compound<H: Hasher>() {
-        // use std::fs::File;
-        // use std::io::prelude::*;
+        use std::fs::File;
+        use std::io::prelude::*;
 
-        // let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
+        let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
 
-        // let leaves = 64;
-        // let sector_size = (leaves * NODE_SIZE) as u64;
-        // let randomness = H::Domain::random(rng);
-        // let prover_id = H::Domain::random(rng);
+        let leaves = 64;
+        let sector_size = (leaves * NODE_SIZE) as u64;
+        let randomness = H::Domain::random(rng);
+        let prover_id = H::Domain::random(rng);
+        let sector_count = 3;
 
-        // let setup_params = compound_proof::SetupParams {
-        //     vanilla_params: fallback::SetupParams {
-        //         sector_size,
-        //         challenge_count: 20,
-        //         challenged_nodes: 1,
-        //     },
-        //     partitions: None,
-        //     priority: true,
-        // };
+        let setup_params = compound_proof::SetupParams {
+            vanilla_params: fallback::SetupParams {
+                sector_size: sector_size as u64,
+                challenge_count: 5,
+                sector_count,
+            },
+            partitions: None,
+            priority: false,
+        };
 
-        // let mut sectors: Vec<SectorId> = Vec::new();
-        // let mut trees = BTreeMap::new();
+        // Construct and store an MT using a named DiskStore.
+        let temp_dir = tempdir::TempDir::new("level_cache_tree_v1").unwrap();
+        let temp_path = temp_dir.path();
+        let config = StoreConfig::new(
+            &temp_path,
+            String::from("test-lc-tree"),
+            StoreConfig::default_cached_above_base_layer(leaves as usize, OCT_ARITY),
+        );
 
-        // // Construct and store an MT using a named DiskStore.
-        // let temp_dir = tempdir::TempDir::new("level_cache_tree").unwrap();
-        // let temp_path = temp_dir.path();
-        // let config = StoreConfig::new(
-        //     &temp_path,
-        //     String::from("test-lc-tree"),
-        //     StoreConfig::default_cached_above_base_layer(leaves as usize, OCT_ARITY),
-        // );
+        let mut pub_sectors = Vec::new();
+        let mut priv_sectors = Vec::new();
 
-        // for i in 0..5 {
-        //     sectors.push(i.into());
-        //     let data: Vec<u8> = (0..leaves)
-        //         .flat_map(|_| fr_into_bytes::<Bls12>(&Fr::random(rng)))
-        //         .collect();
+        for i in 0..sector_count {
+            let data: Vec<u8> = (0..leaves)
+                .flat_map(|_| fr_into_bytes::<Bls12>(&Fr::random(rng)))
+                .collect();
 
-        //     let graph = BucketGraph::<H>::new(leaves, BASE_DEGREE, 0, new_seed()).unwrap();
+            let graph = BucketGraph::<H>::new(leaves, BASE_DEGREE, 0, new_seed()).unwrap();
 
-        //     let replica_path = temp_path.join(format!("replica-path-{}", i));
-        //     let mut f = File::create(&replica_path).unwrap();
-        //     f.write_all(&data).unwrap();
+            let replica_path = temp_path.join(format!("replica-path-{}", i));
+            let mut f = File::create(&replica_path).unwrap();
+            f.write_all(&data).unwrap();
 
-        //     let cur_config = StoreConfig::from_config(&config, format!("test-lc-tree-{}", i), None);
-        //     let mut tree: OctMerkleTree<_, _> = graph
-        //         .merkle_tree(Some(cur_config.clone()), data.as_slice())
-        //         .unwrap();
-        //     let c = tree
-        //         .compact(cur_config.clone(), StoreConfigDataVersion::Two as u32)
-        //         .unwrap();
-        //     assert_eq!(c, true);
+            let cur_config = StoreConfig::from_config(&config, format!("test-lc-tree-{}", i), None);
+            let lctree: OctLCMerkleTree<_, _> = graph
+                .lcmerkle_tree(cur_config.clone(), &data, &replica_path)
+                .unwrap();
 
-        //     let lctree: OctLCMerkleTree<_, _> = graph
-        //         .lcmerkle_tree(cur_config.clone(), &replica_path)
-        //         .unwrap();
-        //     trees.insert(i.into(), lctree);
-        // }
+            let comm_c = H::Domain::random(rng);
+            let comm_r_last = lctree.root();
 
-        // let pub_params = FallbackPoStCompound::<H>::setup(&setup_params).expect("setup failed");
+            priv_sectors.push(PrivateSector {
+                tree: lctree,
+                comm_c,
+                comm_r_last,
+            });
 
-        // let candidates = fallback::generate_candidates::<H>(
-        //     &pub_params.vanilla_params,
-        //     &sectors,
-        //     &trees,
-        //     prover_id,
-        //     randomness,
-        // )
-        // .unwrap();
+            let comm_r = H::Function::hash2(&comm_c, &comm_r_last);
+            pub_sectors.push(PublicSector {
+                id: (i as u64).into(),
+                comm_r,
+            });
+        }
 
-        // let candidate = &candidates[0];
-        // let tree = trees.remove(&candidate.sector_id).unwrap();
-        // let comm_r_last = tree.root();
-        // let comm_c = H::Domain::random(rng);
-        // let comm_r = H::Function::hash2(&comm_c, &comm_r_last);
+        let pub_params = FallbackPoStCompound::<H>::setup(&setup_params).expect("setup failed");
 
-        // let pub_inputs = fallback::PublicInputs {
-        //     randomness,
-        //     sector_id: candidate.sector_id,
-        //     prover_id,
-        //     comm_r,
-        //     partial_ticket: candidate.partial_ticket,
-        //     sector_challenge_index: 0,
-        // };
+        let pub_inputs = PublicInputs {
+            randomness,
+            prover_id,
+            sectors: &pub_sectors,
+        };
 
-        // let priv_inputs = fallback::PrivateInputs::<H> {
-        //     tree,
-        //     comm_c,
-        //     comm_r_last,
-        // };
+        let priv_inputs = PrivateInputs::<H> {
+            sectors: &priv_sectors,
+        };
 
-        // {
-        //     let (circuit, inputs) =
-        //         FallbackPoStCompound::circuit_for_test(&pub_params, &pub_inputs, &priv_inputs)
-        //             .unwrap();
+        {
+            let (circuit, inputs) =
+                FallbackPoStCompound::circuit_for_test(&pub_params, &pub_inputs, &priv_inputs)
+                    .unwrap();
 
-        //     let mut cs = TestConstraintSystem::new();
+            let mut cs = TestConstraintSystem::new();
 
-        //     circuit.synthesize(&mut cs).expect("failed to synthesize");
+            circuit.synthesize(&mut cs).expect("failed to synthesize");
 
-        //     if !cs.is_satisfied() {
-        //         panic!(
-        //             "failed to satisfy: {:?}",
-        //             cs.which_is_unsatisfied().unwrap()
-        //         );
-        //     }
-        //     assert!(
-        //         cs.verify(&inputs),
-        //         "verification failed with TestContraintSystem and generated inputs"
-        //     );
-        // }
+            if !cs.is_satisfied() {
+                panic!(
+                    "failed to satisfy: {:?}",
+                    cs.which_is_unsatisfied().unwrap()
+                );
+            }
+            assert!(
+                cs.verify(&inputs),
+                "verification failed with TestContraintSystem and generated inputs"
+            );
+        }
 
-        // // Use this to debug differences between blank and regular circuit generation.
-        // {
-        //     let (circuit1, _inputs) =
-        //         FallbackPoStCompound::circuit_for_test(&pub_params, &pub_inputs, &priv_inputs)
-        //             .unwrap();
-        //     let blank_circuit =
-        //         FallbackPoStCompound::<H>::blank_circuit(&pub_params.vanilla_params);
+        // Use this to debug differences between blank and regular circuit generation.
+        {
+            let (circuit1, _inputs) =
+                FallbackPoStCompound::circuit_for_test(&pub_params, &pub_inputs, &priv_inputs)
+                    .unwrap();
+            let blank_circuit =
+                FallbackPoStCompound::<H>::blank_circuit(&pub_params.vanilla_params);
 
-        //     let mut cs_blank = MetricCS::new();
-        //     blank_circuit
-        //         .synthesize(&mut cs_blank)
-        //         .expect("failed to synthesize");
+            let mut cs_blank = MetricCS::new();
+            blank_circuit
+                .synthesize(&mut cs_blank)
+                .expect("failed to synthesize");
 
-        //     let a = cs_blank.pretty_print_list();
+            let a = cs_blank.pretty_print_list();
 
-        //     let mut cs1 = TestConstraintSystem::new();
-        //     circuit1.synthesize(&mut cs1).expect("failed to synthesize");
-        //     let b = cs1.pretty_print_list();
+            let mut cs1 = TestConstraintSystem::new();
+            circuit1.synthesize(&mut cs1).expect("failed to synthesize");
+            let b = cs1.pretty_print_list();
 
-        //     for (i, (a, b)) in a.chunks(100).zip(b.chunks(100)).enumerate() {
-        //         assert_eq!(a, b, "failed at chunk {}", i);
-        //     }
-        // }
-        // let blank_groth_params =
-        //     FallbackPoStCompound::<H>::groth_params(&pub_params.vanilla_params)
-        //         .expect("failed to generate groth params");
+            for (i, (a, b)) in a.chunks(100).zip(b.chunks(100)).enumerate() {
+                assert_eq!(a, b, "failed at chunk {}", i);
+            }
+        }
+        let blank_groth_params =
+            FallbackPoStCompound::<H>::groth_params(Some(rng), &pub_params.vanilla_params)
+                .expect("failed to generate groth params");
 
-        // let proof = FallbackPoStCompound::prove(
-        //     &pub_params,
-        //     &pub_inputs,
-        //     &priv_inputs,
-        //     &blank_groth_params,
-        // )
-        // .expect("failed while proving");
+        let proof = FallbackPoStCompound::prove(
+            &pub_params,
+            &pub_inputs,
+            &priv_inputs,
+            &blank_groth_params,
+        )
+        .expect("failed while proving");
 
-        // let verified =
-        //     FallbackPoStCompound::verify(&pub_params, &pub_inputs, &proof, &NoRequirements)
-        //         .expect("failed while verifying");
+        let verified =
+            FallbackPoStCompound::verify(&pub_params, &pub_inputs, &proof, &NoRequirements)
+                .expect("failed while verifying");
 
-        // assert!(verified);
+        assert!(verified);
     }
 }
