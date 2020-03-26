@@ -183,12 +183,13 @@ where
 
     let SealPreCommitPhase1Output {
         mut labels,
-        config,
+        mut config,
         comm_d,
         ..
     } = phase1_output;
 
     labels.update_root(cache_path.as_ref());
+    config.path = cache_path.as_ref().into();
 
     let f_data = OpenOptions::new()
         .read(true)
@@ -224,12 +225,10 @@ where
             tree_leafs,
             StoreConfig::default_cached_above_base_layer(tree_leafs, BINARY_ARITY)
         );
-        let mut config = StoreConfig::new(
-            cache_path.as_ref(),
-            CacheKey::CommDTree.to_string(),
-            StoreConfig::default_cached_above_base_layer(tree_leafs, BINARY_ARITY),
+        ensure!(
+            config.levels == StoreConfig::default_cached_above_base_layer(tree_leafs, BINARY_ARITY),
+            "Invalid cache size specified"
         );
-        config.size = Some(tree_size);
 
         let store: DiskStore<<DefaultPieceHasher as Hasher>::Domain> =
             DiskStore::new_from_disk(tree_size, BINARY_ARITY, &config)?;

@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
 
-use anyhow::{anyhow, Context};
+use anyhow::Context;
 use generic_array::typenum;
 use log::trace;
 use merkletree::merkle::get_merkle_tree_leafs;
@@ -504,17 +504,10 @@ impl<H: Hasher> Labels<H> {
     }
 
     pub fn verify_stores(&self, callback: VerifyCallback, cache_dir: &PathBuf) -> Result<()> {
-        for label in &self.labels {
-            callback(label, BINARY_ARITY)?;
-
-            let current_path = StoreConfig::data_path(&label.path, &label.id);
-            if !current_path.starts_with(&cache_dir) {
-                return Err(anyhow!(
-                    "Label path mis-match [label vs cache_dir: {:?}/{:?}]",
-                    current_path,
-                    cache_dir
-                ));
-            }
+        let updated_path_labels = self.labels.clone();
+        for mut label in updated_path_labels {
+            label.path = cache_dir.to_path_buf();
+            callback(&label, BINARY_ARITY)?;
         }
 
         Ok(())
