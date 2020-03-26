@@ -103,7 +103,7 @@ pub fn run(sector_size: usize) -> anyhow::Result<()> {
     let cache_dir = tempfile::tempdir().unwrap();
     let sector_id = SectorId::from(SECTOR_ID);
 
-    let phase1_output = seal_pre_commit_phase1(
+    let mut phase1_output = seal_pre_commit_phase1(
         porep_config,
         cache_dir.path(),
         staged_file.path(),
@@ -114,7 +114,7 @@ pub fn run(sector_size: usize) -> anyhow::Result<()> {
         &piece_infos,
     )?;
 
-    validate_cache_for_precommit_phase2(cache_dir.path(), sealed_file.path(), &phase1_output)?;
+    validate_cache_for_precommit_phase2(cache_dir.path(), sealed_file.path(), &mut phase1_output)?;
 
     let seal_pre_commit_output = seal_pre_commit_phase2(
         porep_config,

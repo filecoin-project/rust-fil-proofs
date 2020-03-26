@@ -167,8 +167,8 @@ pub fn create_replicas(
         phase1s
             .into_iter()
             .enumerate()
-            .map(|(i, phase1)| {
-                validate_cache_for_precommit_phase2(&cache_dirs[i], &sealed_files[i], &phase1)?;
+            .map(|(i, mut phase1)| {
+                validate_cache_for_precommit_phase2(&cache_dirs[i], &sealed_files[i], &mut phase1)?;
                 seal_pre_commit_phase2(porep_config, phase1, &cache_dirs[i], &sealed_files[i])
             })
             .collect::<Result<Vec<_>, _>>()

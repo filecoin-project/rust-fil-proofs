@@ -292,11 +292,15 @@ fn verify_store(config: &StoreConfig, arity: usize) -> Result<()> {
     Ok(())
 }
 
-// Checks for the existence of the tree d store, the replica, and all generated labels.
+/// Checks for the existence of the tree d store, the replica, and all
+/// generated labels.
+///
+/// Modifies the label and tree_d store paths to match the specified
+/// cache_path.
 pub fn validate_cache_for_precommit_phase2<R, T>(
     cache_path: R,
     replica_path: T,
-    seal_precommit_phase1_output: &SealPreCommitPhase1Output,
+    seal_precommit_phase1_output: &mut SealPreCommitPhase1Output,
 ) -> Result<()>
 where
     R: AsRef<Path>,
@@ -308,21 +312,19 @@ where
         replica_path.as_ref().to_path_buf().display()
     );
 
-    // Verify all stores/labels within the Labels object.
-    let cache = cache_path.as_ref().to_path_buf();
+    // Verify all stores/labels within the Labels object, but
+    // respecting the current cache_path.
     seal_precommit_phase1_output
         .labels
-        .verify_stores(verify_store, &cache)?;
+        .update_root(cache_path.as_ref());
+    seal_precommit_phase1_output
+        .labels
+        .verify_stores(verify_store, &cache_path.as_ref().to_path_buf())?;
 
     // Update the previous phase store path to the current cache_path.
-    let mut config = StoreConfig::from_config(
-        &seal_precommit_phase1_output.config,
-        &seal_precommit_phase1_output.config.id,
-        seal_precommit_phase1_output.config.size,
-    );
-    config.path = cache_path.as_ref().into();
+    seal_precommit_phase1_output.config.path = cache_path.as_ref().into();
 
-    verify_store(&config, BINARY_ARITY)
+    verify_store(&seal_precommit_phase1_output.config, BINARY_ARITY)
 }
 
 // Checks for the existence of the replica data and t_aux, which in
@@ -667,7 +669,7 @@ mod tests {
         let seed = rng.gen();
         let sector_id = SectorId::from(12);
 
-        let phase1_output = seal_pre_commit_phase1(
+        let mut phase1_output = seal_pre_commit_phase1(
             config,
             cache_dir.path(),
             staged_sector_file.path(),
@@ -681,7 +683,7 @@ mod tests {
         validate_cache_for_precommit_phase2(
             cache_dir.path(),
             staged_sector_file.path(),
-            &phase1_output,
+            &mut phase1_output,
         )?;
 
         let pre_commit_output = seal_pre_commit_phase2(
