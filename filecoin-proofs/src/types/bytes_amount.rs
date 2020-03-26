@@ -2,8 +2,7 @@ use std::ops::{Add, Sub};
 
 use serde::{Deserialize, Serialize};
 
-use crate::fr32::padded_bytes;
-use crate::fr32::unpadded_bytes;
+use crate::fr32::{to_padded_bytes, to_unpadded_bytes};
 
 pub struct PoStProofBytesAmount(pub usize);
 
@@ -32,7 +31,7 @@ impl From<UnpaddedBytesAmount> for usize {
 
 impl From<UnpaddedBytesAmount> for PaddedBytesAmount {
     fn from(n: UnpaddedBytesAmount) -> Self {
-        PaddedBytesAmount(padded_bytes(n.0 as usize) as u64)
+        PaddedBytesAmount(to_padded_bytes(n.0 as usize) as u64)
     }
 }
 
@@ -50,7 +49,7 @@ impl From<PaddedBytesAmount> for usize {
 
 impl From<PaddedBytesAmount> for UnpaddedBytesAmount {
     fn from(n: PaddedBytesAmount) -> Self {
-        UnpaddedBytesAmount(unpadded_bytes(n.0))
+        UnpaddedBytesAmount(to_unpadded_bytes(n.0))
     }
 }
 

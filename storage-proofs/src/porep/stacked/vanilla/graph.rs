@@ -152,6 +152,7 @@ where
     ) -> Result<Self> {
         assert_eq!(base_degree, BASE_DEGREE);
         assert_eq!(expansion_degree, EXP_DEGREE);
+        ensure!(nodes <= std::u32::MAX as usize, "too many nodes");
 
         let use_cache = settings::SETTINGS.lock().unwrap().maximize_caching;
 
@@ -175,7 +176,6 @@ where
 
         if use_cache {
             info!("using parents cache of unlimited size");
-            ensure!(nodes <= std::u32::MAX as usize, "too many nodes");
             assert_eq!(
                 nodes,
                 (32 * 1024 * 1024 * 1024) / NODE_SIZE,

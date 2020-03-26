@@ -1,5 +1,6 @@
 use std::marker::PhantomData;
 
+use anyhow::ensure;
 use bellperson::gadgets::num;
 use bellperson::{Circuit, ConstraintSystem, SynthesisError};
 use fil_sapling_crypto::jubjub::JubjubEngine;
@@ -269,7 +270,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher>
         vanilla_proof: &'b <StackedDrg<H, G> as ProofScheme>::Proof,
         public_params: &'b <StackedDrg<H, G> as ProofScheme>::PublicParams,
     ) -> Result<StackedCircuit<'a, Bls12, H, G>> {
-        assert!(
+        ensure!(
             !vanilla_proof.is_empty(),
             "Cannot create a circuit with no vanilla proofs"
         );
@@ -278,10 +279,16 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher>
         let comm_c = *vanilla_proof[0].comm_c();
 
         // ensure consistency
-        assert!(vanilla_proof
-            .iter()
-            .all(|p| p.comm_r_last() == &comm_r_last));
-        assert!(vanilla_proof.iter().all(|p| p.comm_c() == &comm_c));
+        ensure!(
+            vanilla_proof
+                .iter()
+                .all(|p| p.comm_r_last() == &comm_r_last),
+            "inconsistent comm_r_lasts"
+        );
+        ensure!(
+            vanilla_proof.iter().all(|p| p.comm_c() == &comm_c),
+            "inconsistent comm_cs"
+        );
 
         Ok(StackedCircuit {
             params: &*JJ_PARAMS,
