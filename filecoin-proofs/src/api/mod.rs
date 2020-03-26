@@ -314,7 +314,15 @@ where
         .labels
         .verify_stores(verify_store, &cache)?;
 
-    verify_store(&seal_precommit_phase1_output.config, BINARY_ARITY)
+    // Update the previous phase store path to the current cache_path.
+    let mut config = StoreConfig::from_config(
+        &seal_precommit_phase1_output.config,
+        &seal_precommit_phase1_output.config.id,
+        seal_precommit_phase1_output.config.size,
+    );
+    config.path = cache_path.as_ref().into();
+
+    verify_store(&config, BINARY_ARITY)
 }
 
 // Checks for the existence of the replica data and t_aux, which in
