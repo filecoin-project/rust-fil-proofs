@@ -308,7 +308,8 @@ where
         replica_path.as_ref().to_path_buf().display()
     );
 
-    // Verify all stores/labels within the Labels object.
+    // Verify all stores/labels within the Labels object, but
+    // respecting the current cache_path.
     let cache = cache_path.as_ref().to_path_buf();
     seal_precommit_phase1_output
         .labels
