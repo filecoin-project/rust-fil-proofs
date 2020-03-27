@@ -205,8 +205,6 @@ pub fn generate_leaf_challenge<T: Domain>(
     let leaf_challenge = LittleEndian::read_u64(&hash.as_ref()[..8]);
 
     let challenged_range_index = leaf_challenge % (pub_params.sector_size / NODE_SIZE as u64);
-    dbg!(pub_params);
-    dbg!(challenged_range_index);
 
     Ok(challenged_range_index)
 }
@@ -278,10 +276,7 @@ impl<'a, H: 'a + Hasher> ProofScheme<'a> for FallbackPoSt<'a, H> {
                         challenge_index,
                     )?;
 
-                    dbg!(challenged_leaf_start);
-                    dbg!(tree_leafs);
                     let proof = tree.gen_cached_proof(challenged_leaf_start as usize, levels)?;
-
                     Ok(MerkleProof::new_from_proof(&proof))
                 })
                 .collect::<Result<Vec<_>>>()?;

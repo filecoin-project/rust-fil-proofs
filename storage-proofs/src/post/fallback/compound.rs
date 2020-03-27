@@ -50,7 +50,7 @@ where
             private: true,
         };
 
-        for sector in pub_inputs.sectors.iter() {
+        for (i, sector) in pub_inputs.sectors.iter().enumerate() {
             // 1. Inputs for verifying comm_r = H(comm_c || comm_r_last)
 
             inputs.push(sector.comm_r.into());
@@ -58,16 +58,17 @@ where
             // 2. Inputs for verifying inclusion paths
 
             for n in 0..pub_params.challenge_count {
+                let challenge_index = (i * pub_params.challenge_count + n) as u64;
                 let challenged_leaf_start = fallback::generate_leaf_challenge(
                     &pub_params,
                     pub_inputs.randomness,
                     sector.id.into(),
-                    n as u64,
+                    challenge_index,
                 )?;
 
                 let por_pub_inputs = por::PublicInputs {
                     commitment: None,
-                    challenge: challenged_leaf_start as usize / NODE_SIZE,
+                    challenge: challenged_leaf_start as usize,
                 };
                 let por_inputs = PoRCompound::<H, typenum::U8>::generate_public_inputs(
                     &por_pub_inputs,
