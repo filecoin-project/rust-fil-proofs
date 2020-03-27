@@ -498,14 +498,18 @@ pub fn verify_election_post(
 pub fn generate_winning_post(
     post_config: &PoStConfig,
     randomness: &ChallengeSeed,
-    winner_id: SectorId,
-    replica: PrivateReplicaInfo,
+    replicas: &[(SectorId, PrivateReplicaInfo)],
     prover_id: ProverId,
 ) -> Result<SnarkProof> {
     info!("generate_winning_post:start");
     ensure!(
         post_config.typ == PoStType::Winning,
         "invalid post config type"
+    );
+
+    ensure!(
+        replicas.len() == post_config.challenge_count,
+        "invalid amount of replicas"
     );
 
     let randomness_safe = as_safe_commitment(randomness, "randomness")?;
@@ -525,25 +529,34 @@ pub fn generate_winning_post(
         get_tree_size::<<DefaultTreeHasher as Hasher>::Domain>(post_config.sector_size, OCT_ARITY)?;
     let tree_leafs = get_merkle_tree_leafs(tree_size, OCT_ARITY);
 
-    let tree = replica.merkle_tree(tree_size, tree_leafs)?;
-    let comm_r = replica.safe_comm_r()?;
-    let comm_c = replica.safe_comm_c()?;
-    let comm_r_last = replica.safe_comm_r_last()?;
+    let trees = replicas
+        .iter()
+        .map(|(_, replica)| replica.merkle_tree(tree_size, tree_leafs))
+        .collect::<Result<Vec<_>>>()?;
 
-    let pub_sectors: Vec<_> = (0..post_config.sector_count)
-        .map(|_| fallback::PublicSector {
-            id: winner_id,
-            comm_r,
-        })
-        .collect();
+    ensure!(
+        post_config.challenge_count % post_config.sector_count == 0,
+        "sector count must divide challenge count"
+    );
+    let param_sector_count = post_config.challenge_count / post_config.sector_count;
 
-    let priv_sectors: Vec<_> = (0..post_config.sector_count)
-        .map(|_| fallback::PrivateSector {
-            tree: &tree,
-            comm_c,
-            comm_r_last,
-        })
-        .collect();
+    let mut pub_sectors = Vec::with_capacity(param_sector_count);
+    let mut priv_sectors = Vec::with_capacity(param_sector_count);
+
+    for _ in 0..param_sector_count {
+        for ((id, replica), tree) in replicas.iter().zip(trees.iter()) {
+            let comm_r = replica.safe_comm_r()?;
+            let comm_c = replica.safe_comm_c()?;
+            let comm_r_last = replica.safe_comm_r_last()?;
+
+            pub_sectors.push(fallback::PublicSector { id: *id, comm_r });
+            priv_sectors.push(fallback::PrivateSector {
+                tree,
+                comm_c,
+                comm_r_last,
+            });
+        }
+    }
 
     let pub_inputs = fallback::PublicInputs {
         randomness: randomness_safe,
@@ -573,7 +586,7 @@ pub fn generate_winning_post_sector_challenge(
     post_config: &PoStConfig,
     randomness: &ChallengeSeed,
     sector_set: &OrderedSectorSet,
-) -> Result<SectorId> {
+) -> Result<Vec<SectorId>> {
     ensure!(
         post_config.typ == PoStType::Winning,
         "invalid post config type"
@@ -581,15 +594,17 @@ pub fn generate_winning_post_sector_challenge(
 
     let randomness_safe =
         as_safe_commitment::<<DefaultTreeHasher as Hasher>::Domain, _>(randomness, "randomness")?;
-    fallback::generate_sector_challenge(randomness_safe, sector_set)
+    fallback::generate_sector_challenges(randomness_safe, post_config.challenge_count, sector_set)
 }
 
 /// Verifies a winning proof-of-spacetime.
+///
+///
+/// - `sector_set` list of all sectors committed by this miner, at the point of proof generation.
 pub fn verify_winning_post(
     post_config: &PoStConfig,
     randomness: &ChallengeSeed,
-    winner_id: SectorId,
-    replica: PublicReplicaInfo,
+    replicas: &[(SectorId, PrivateReplicaInfo)],
     prover_id: ProverId,
     sector_set: &OrderedSectorSet,
     proof: &[u8],
@@ -599,6 +614,10 @@ pub fn verify_winning_post(
     ensure!(
         post_config.typ == PoStType::Winning,
         "invalid post config type"
+    );
+    ensure!(
+        post_config.sector_count == replicas.len(),
+        "invalid amount of replicas provided"
     );
 
     let randomness_safe = as_safe_commitment(randomness, "randomness")?;
@@ -615,10 +634,17 @@ pub fn verify_winning_post(
 
     let verifying_key = get_post_verifying_key(&post_config)?;
 
-    let comm_r = replica.safe_comm_r()?;
+    let expected_sector_ids = fallback::generate_sector_challenges(
+        randomness_safe,
+        post_config.challenge_count,
+        sector_set,
+    )?;
 
-    let expected_sector_id = fallback::generate_sector_challenge(randomness_safe, sector_set)?;
-    if expected_sector_id != winner_id {
+    if !expected_sector_ids
+        .iter()
+        .zip(replicas.iter())
+        .all(|(x, (y, _))| x == y)
+    {
         return Ok(false);
     }
 
@@ -627,12 +653,19 @@ pub fn verify_winning_post(
         return Ok(false);
     }
 
-    let pub_sectors: Vec<_> = (0..post_config.sector_count)
-        .map(|_| fallback::PublicSector {
-            id: winner_id,
-            comm_r,
-        })
-        .collect();
+    ensure!(
+        post_config.challenge_count % post_config.sector_count == 0,
+        "sector count must divide challenge count"
+    );
+    let param_sector_count = post_config.challenge_count / post_config.sector_count;
+
+    let mut pub_sectors = Vec::with_capacity(param_sector_count);
+    for _ in 0..param_sector_count {
+        for (id, replica) in replicas.iter() {
+            let comm_r = replica.safe_comm_r()?;
+            pub_sectors.push(fallback::PublicSector { id: *id, comm_r });
+        }
+    }
 
     let pub_inputs = fallback::PublicInputs {
         randomness: randomness_safe,
@@ -669,6 +702,15 @@ pub fn generate_window_post(
     let prover_id_safe = as_safe_commitment(&prover_id, "randomness")?;
 
     let vanilla_params = window_post_setup_params(&post_config);
+
+    // TODO: Split proofs into partitions, at certain cut off points
+    // TODO: do we have max partitions? currently no, might change
+    // TODO: just repeat the last sector to fill up the snark
+
+    // sectors = 2000
+    // challs = 10
+    // sectors_per_partition = (sectors * challs) / MAX_CONSTRAINTS
+
     let setup_params = compound_proof::SetupParams {
         vanilla_params,
         partitions: None,
