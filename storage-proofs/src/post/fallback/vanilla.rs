@@ -258,12 +258,13 @@ impl<'a, H: 'a + Hasher> ProofScheme<'a> for FallbackPoSt<'a, H> {
             let tree = &priv_sector.tree;
             let sector_id = pub_sector.id;
             let tree_leafs = tree.leafs();
+            let levels = StoreConfig::default_cached_above_base_layer(tree_leafs, OCT_ARITY);
 
             trace!(
                 "Generating proof for tree of len {} with leafs {}, and cached_layers {}",
                 tree.len(),
                 tree_leafs,
-                StoreConfig::default_cached_above_base_layer(tree_leafs, OCT_ARITY)
+                levels,
             );
 
             let inclusion_proofs = (0..pub_params.challenge_count)
@@ -279,7 +280,7 @@ impl<'a, H: 'a + Hasher> ProofScheme<'a> for FallbackPoSt<'a, H> {
 
                     dbg!(challenged_leaf_start);
                     dbg!(tree_leafs);
-                    let proof = tree.gen_proof(challenged_leaf_start as usize)?;
+                    let proof = tree.gen_cached_proof(challenged_leaf_start as usize, levels)?;
 
                     Ok(MerkleProof::new_from_proof(&proof))
                 })
