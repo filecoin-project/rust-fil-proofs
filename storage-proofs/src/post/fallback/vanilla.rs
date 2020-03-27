@@ -135,13 +135,25 @@ where
     _h: PhantomData<&'a H>,
 }
 
+pub fn generate_sector_challenges<T: Domain>(
+    randomness: T,
+    challenge_count: usize,
+    sectors: &OrderedSectorSet,
+) -> Result<Vec<SectorId>> {
+    (0..challenge_count)
+        .map(|n| generate_sector_challenge(randomness, n, sectors))
+        .collect()
+}
+
 /// Generate a single sector challenge.
 pub fn generate_sector_challenge<T: Domain>(
     randomness: T,
+    n: usize,
     sectors: &OrderedSectorSet,
 ) -> Result<SectorId> {
     let mut hasher = Sha256::new();
     hasher.input(AsRef::<[u8]>::as_ref(&randomness));
+    hasher.input(&n.to_le_bytes()[..]);
 
     let hash = hasher.result();
 
@@ -193,8 +205,10 @@ pub fn generate_leaf_challenge<T: Domain>(
     let leaf_challenge = LittleEndian::read_u64(&hash.as_ref()[..8]);
 
     let challenged_range_index = leaf_challenge % (pub_params.sector_size / NODE_SIZE as u64);
+    dbg!(pub_params);
+    dbg!(challenged_range_index);
 
-    Ok(challenged_range_index * NODE_SIZE as u64)
+    Ok(challenged_range_index)
 }
 
 impl<'a, H: 'a + Hasher> ProofScheme<'a> for FallbackPoSt<'a, H> {
@@ -235,7 +249,12 @@ impl<'a, H: 'a + Hasher> ProofScheme<'a> for FallbackPoSt<'a, H> {
         );
 
         let mut proofs = Vec::with_capacity(num_sectors);
-        for (pub_sector, priv_sector) in pub_inputs.sectors.iter().zip(priv_inputs.sectors.iter()) {
+        for (i, (pub_sector, priv_sector)) in pub_inputs
+            .sectors
+            .iter()
+            .zip(priv_inputs.sectors.iter())
+            .enumerate()
+        {
             let tree = &priv_sector.tree;
             let sector_id = pub_sector.id;
             let tree_leafs = tree.leafs();
@@ -250,14 +269,17 @@ impl<'a, H: 'a + Hasher> ProofScheme<'a> for FallbackPoSt<'a, H> {
             let inclusion_proofs = (0..pub_params.challenge_count)
                 .into_par_iter()
                 .map(|n| {
+                    let challenge_index = (i * pub_params.challenge_count + n) as u64;
                     let challenged_leaf_start = generate_leaf_challenge(
                         pub_params,
                         pub_inputs.randomness,
                         sector_id.into(),
-                        n as u64,
+                        challenge_index,
                     )?;
 
-                    let proof = tree.gen_proof(challenged_leaf_start as usize / NODE_SIZE)?;
+                    dbg!(challenged_leaf_start);
+                    dbg!(tree_leafs);
+                    let proof = tree.gen_proof(challenged_leaf_start as usize)?;
 
                     Ok(MerkleProof::new_from_proof(&proof))
                 })
@@ -280,7 +302,12 @@ impl<'a, H: 'a + Hasher> ProofScheme<'a> for FallbackPoSt<'a, H> {
     ) -> Result<bool> {
         let challenge_count = pub_params.challenge_count;
 
-        for (pub_sector, sector_proof) in pub_inputs.sectors.iter().zip(proof.sectors.iter()) {
+        for (i, (pub_sector, sector_proof)) in pub_inputs
+            .sectors
+            .iter()
+            .zip(proof.sectors.iter())
+            .enumerate()
+        {
             let sector_id = pub_sector.id;
             let comm_r = &pub_sector.comm_r;
             let comm_c = sector_proof.comm_c;
@@ -305,11 +332,12 @@ impl<'a, H: 'a + Hasher> ProofScheme<'a> for FallbackPoSt<'a, H> {
             );
 
             for (n, inclusion_proof) in inclusion_proofs.iter().enumerate() {
+                let challenge_index = (i * pub_params.challenge_count + n) as u64;
                 let challenged_leaf_start = generate_leaf_challenge(
                     pub_params,
                     pub_inputs.randomness,
                     sector_id.into(),
-                    n as u64,
+                    challenge_index,
                 )?;
 
                 // validate all comm_r_lasts match
@@ -324,7 +352,7 @@ impl<'a, H: 'a + Hasher> ProofScheme<'a> for FallbackPoSt<'a, H> {
                     return Ok(false);
                 }
 
-                if !inclusion_proof.validate(challenged_leaf_start as usize / NODE_SIZE) {
+                if !inclusion_proof.validate(challenged_leaf_start as usize) {
                     return Ok(false);
                 }
             }

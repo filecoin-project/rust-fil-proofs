@@ -16,8 +16,8 @@ pub const SECTOR_SIZE_32_GIB: u64 = 1 << 35;
 pub const ELECTION_POST_CHALLENGE_COUNT: usize = 65;
 pub const ELECTION_POST_CHALLENGED_NODES: usize = 1;
 
-pub const WINNING_POST_CHALLENGE_COUNT: usize = 1;
-pub const WINNING_POST_SECTOR_COUNT: usize = 65;
+pub const WINNING_POST_CHALLENGE_COUNT: usize = 66;
+pub const WINNING_POST_SECTOR_COUNT: usize = 1;
 
 pub const WINDOW_POST_CHALLENGE_COUNT: usize = 10;
 pub const WINDOW_POST_SECTOR_COUNT: usize = 65; // TODO: correct value
