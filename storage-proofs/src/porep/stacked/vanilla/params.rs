@@ -18,13 +18,14 @@ use crate::drgraph::Graph;
 use crate::error::Result;
 use crate::fr32::bytes_into_fr_repr_safe;
 use crate::hasher::{Domain, Hasher};
-use crate::merkle::{open_lcmerkle_tree, LCMerkleTree, MerkleProof, MerkleTree};
+use crate::merkle::{
+    open_lcmerkle_tree, split_config, BinaryTree, MerkleProof, MerkleTree, OctLCSubTree, OctLCTree,
+    OctSubTree, OctTree, OctTreeData, SECTOR_SIZE_16_MIB, SECTOR_SIZE_1_GIB, SECTOR_SIZE_2_KIB,
+    SECTOR_SIZE_32_GIB, SECTOR_SIZE_4_KIB, SECTOR_SIZE_512_MIB, SECTOR_SIZE_64_GIB,
+    SECTOR_SIZE_8_MIB,
+};
 use crate::parameter_cache::ParameterSetMetadata;
 use crate::util::data_at_node;
-
-pub type BinaryTree<H> = MerkleTree<<H as Hasher>::Domain, <H as Hasher>::Function, typenum::U2>;
-pub type OctTree<H> = MerkleTree<<H as Hasher>::Domain, <H as Hasher>::Function, typenum::U8>;
-pub type OctLCTree<H> = LCMerkleTree<<H as Hasher>::Domain, <H as Hasher>::Function, typenum::U8>;
 
 pub const BINARY_ARITY: usize = 2;
 pub const QUAD_ARITY: usize = 4;
@@ -197,11 +198,25 @@ impl<H: Hasher, G: Hasher> Proof<H, G> {
         check!(self.verify_labels(replica_id, &pub_params.layer_challenges));
 
         trace!("verify encoding");
-        check!(self.encoding_proof.verify::<G>(
-            replica_id,
-            &self.comm_r_last_proof.leaf(),
-            &self.comm_d_proofs.leaf()
-        ));
+        let sector_size = (graph.size() * std::mem::size_of::<H::Domain>()) as u64;
+        match sector_size {
+            SECTOR_SIZE_2_KIB | SECTOR_SIZE_8_MIB | SECTOR_SIZE_512_MIB => {
+                check!(self.encoding_proof.verify::<G>(
+                    replica_id,
+                    &self.comm_r_last_proof.leaf(),
+                    &self.comm_d_proofs.leaf()
+                ));
+            }
+            // Compound tree handling: FIXME: move 32GB and 64GB as special case compound handling as well
+            SECTOR_SIZE_4_KIB | SECTOR_SIZE_16_MIB | SECTOR_SIZE_1_GIB => {
+                check!(self.encoding_proof.verify::<G>(
+                    replica_id,
+                    &self.comm_r_last_proof.sub_leaf.unwrap(),
+                    &self.comm_d_proofs.leaf()
+                ));
+            }
+            _ => panic!("Unsupported sector size"),
+        }
 
         true
     }
@@ -398,13 +413,13 @@ pub struct TemporaryAuxCache<H: Hasher, G: Hasher> {
     pub tree_d: BinaryTree<G>,
 
     // Notably this is a LevelCacheTree instead of a full merkle.
-    pub tree_r_last: OctLCTree<H>,
+    pub tree_r_last: OctTreeData<H>,
 
     // Store the 'cached_above_base layers' value from the tree_r_last
     // StoreConfig for later use (i.e. proof generation).
     pub tree_r_last_config_levels: usize,
 
-    pub tree_c: OctTree<H>,
+    pub tree_c: OctTreeData<H>,
     pub t_aux: TemporaryAux<H, G>,
     pub replica_path: PathBuf,
 }
@@ -426,44 +441,115 @@ impl<H: Hasher, G: Hasher> TemporaryAuxCache<H, G> {
         )
         .context("tree_d")?;
 
-        let tree_c_size = t_aux.tree_c_config.size.unwrap();
-        trace!(
-            "Instantiating tree c with size {} and leafs {}",
-            tree_c_size,
-            get_merkle_tree_leafs(tree_c_size, OCT_ARITY)
-        );
-        let tree_c_store: DiskStore<H::Domain> =
-            DiskStore::new_from_disk(tree_c_size, OCT_ARITY, &t_aux.tree_c_config)
-                .context("tree_c_store")?;
-        let tree_c: OctTree<H> = MerkleTree::from_data_store(
-            tree_c_store,
-            get_merkle_tree_leafs(tree_c_size, OCT_ARITY),
-        )
-        .context("tree_c")?;
+        let sector_size =
+            get_merkle_tree_leafs(tree_d_size, BINARY_ARITY) * std::mem::size_of::<G::Domain>();
 
-        let tree_r_last_size = t_aux.tree_r_last_config.size.unwrap();
-        trace!(
-            "Instantiating tree r last with size {} and leafs {}",
-            tree_r_last_size,
-            get_merkle_tree_leafs(tree_r_last_size, OCT_ARITY)
-        );
+        match sector_size as u64 {
+            SECTOR_SIZE_2_KIB | SECTOR_SIZE_8_MIB | SECTOR_SIZE_512_MIB => {
+                let tree_c_size = t_aux.tree_c_config.size.unwrap();
+                trace!(
+                    "Instantiating tree c with size {} and leafs {}",
+                    tree_c_size,
+                    get_merkle_tree_leafs(tree_c_size, OCT_ARITY)
+                );
+                let tree_c_store: DiskStore<H::Domain> =
+                    DiskStore::new_from_disk(tree_c_size, OCT_ARITY, &t_aux.tree_c_config)
+                        .context("tree_c_store")?;
+                let tree_c: OctTree<H> = MerkleTree::from_data_store(
+                    tree_c_store,
+                    get_merkle_tree_leafs(tree_c_size, OCT_ARITY),
+                )
+                .context("tree_c")?;
 
-        let tree_r_last: OctLCTree<H> = open_lcmerkle_tree::<H, typenum::U8>(
-            t_aux.tree_r_last_config.clone(),
-            get_merkle_tree_leafs(tree_r_last_size, OCT_ARITY),
-            &replica_path,
-        )?;
-        let tree_r_last_config_levels = t_aux.tree_r_last_config.levels;
+                let tree_r_last_size = t_aux.tree_r_last_config.size.unwrap();
+                trace!(
+                    "Instantiating tree r last with size {} and leafs {}",
+                    tree_r_last_size,
+                    get_merkle_tree_leafs(tree_r_last_size, OCT_ARITY)
+                );
 
-        Ok(TemporaryAuxCache {
-            labels: LabelsCache::new(&t_aux.labels).context("labels_cache")?,
-            tree_d,
-            tree_r_last,
-            tree_r_last_config_levels,
-            tree_c,
-            replica_path,
-            t_aux: t_aux.clone(),
-        })
+                let tree_r_last: OctLCTree<H> = open_lcmerkle_tree::<H, typenum::U8>(
+                    t_aux.tree_r_last_config.clone(),
+                    get_merkle_tree_leafs(tree_r_last_size, OCT_ARITY),
+                    &replica_path,
+                )?;
+                let tree_r_last_config_levels = t_aux.tree_r_last_config.levels;
+
+                Ok(TemporaryAuxCache {
+                    labels: LabelsCache::new(&t_aux.labels).context("labels_cache")?,
+                    tree_d,
+                    tree_r_last: OctTreeData::OctLC(tree_r_last),
+                    tree_r_last_config_levels,
+                    tree_c: OctTreeData::Oct(tree_c),
+                    replica_path,
+                    t_aux: t_aux.clone(),
+                })
+            }
+            // Compound tree handling: FIXME: move 32GB and 64GB as special case compound handling as well
+            SECTOR_SIZE_4_KIB | SECTOR_SIZE_16_MIB | SECTOR_SIZE_1_GIB => {
+                let tree_count = 2;
+
+                let configs = {
+                    let c = split_config(Some(t_aux.tree_c_config.clone()), tree_count)?;
+                    let mut configs = Vec::with_capacity(tree_count);
+
+                    for i in 0..tree_count {
+                        assert!(c[i].is_some());
+                        configs.push(c[i].as_ref().unwrap().clone());
+                    }
+
+                    configs
+                };
+
+                let tree_c_size = (t_aux.tree_c_config.size.unwrap() - 1) / tree_count;
+                let tree_c_leafs = get_merkle_tree_leafs(tree_c_size, OCT_ARITY);
+                let tree_c: OctSubTree<H> =
+                    merkletree::merkle::MerkleTree::from_store_configs(tree_c_leafs, &configs)?;
+
+                let tree_r_last_config_levels = t_aux.tree_r_last_config.levels;
+                let tree_r_last_size = (t_aux.tree_r_last_config.size.unwrap() - 1) / tree_count;
+                let tree_r_last_leafs = get_merkle_tree_leafs(tree_r_last_size, OCT_ARITY);
+
+                let (configs, replica_paths) = {
+                    let c = split_config(Some(t_aux.tree_r_last_config.clone()), tree_count)?;
+
+                    let mut configs = Vec::with_capacity(tree_count);
+                    let mut replica_paths = Vec::with_capacity(tree_count);
+
+                    for i in 0..tree_count {
+                        assert!(c[i].is_some());
+                        configs.push(c[i].as_ref().unwrap().clone());
+                        replica_paths.push(
+                            Path::new(
+                                format!("{:?}-{}", replica_path, i)
+                                    .replace("\"", "")
+                                    .as_str(),
+                            )
+                            .to_path_buf(),
+                        );
+                    }
+
+                    (configs, replica_paths)
+                };
+
+                let tree_r_last = OctLCSubTree::<H>::from_store_configs_and_replicas(
+                    tree_r_last_leafs,
+                    &configs,
+                    &replica_paths,
+                )?;
+
+                Ok(TemporaryAuxCache {
+                    labels: LabelsCache::new(&t_aux.labels).context("labels_cache")?,
+                    tree_d,
+                    tree_r_last: OctTreeData::OctLCSub(tree_r_last),
+                    tree_r_last_config_levels,
+                    tree_c: OctTreeData::OctSub(tree_c),
+                    replica_path,
+                    t_aux: t_aux.clone(),
+                })
+            }
+            _ => panic!("Unsupported sector size"),
+        }
     }
 
     pub fn labels_for_layer(&self, layer: usize) -> &DiskStore<H::Domain> {

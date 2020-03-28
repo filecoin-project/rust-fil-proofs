@@ -29,11 +29,11 @@ pub type TemporaryAux = stacked::TemporaryAux<DefaultTreeHasher, DefaultPieceHas
 pub type ProverId = [u8; 32];
 pub type Ticket = [u8; 32];
 
-pub type Tree = storage_proofs::porep::stacked::OctTree<DefaultTreeHasher>;
-pub type LCTree = storage_proofs::porep::stacked::OctLCTree<DefaultTreeHasher>;
+pub type Tree = storage_proofs::merkle::OctTree<DefaultTreeHasher>;
+pub type LCTree = storage_proofs::merkle::OctLCTree<DefaultTreeHasher>;
 
 pub type Labels = storage_proofs::porep::stacked::Labels<DefaultTreeHasher>;
-pub type DataTree = storage_proofs::porep::stacked::BinaryTree<DefaultPieceHasher>;
+pub type DataTree = storage_proofs::merkle::BinaryTree<DefaultPieceHasher>;
 
 /// Arity for oct trees, used for comm_r_last.
 pub const OCT_ARITY: usize = 8;

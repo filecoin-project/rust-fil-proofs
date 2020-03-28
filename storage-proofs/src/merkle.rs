@@ -22,6 +22,17 @@ use crate::error::*;
 use crate::hasher::{Domain, Hasher};
 use crate::util::{data_at_node, NODE_SIZE};
 
+// FIXME: Move from filecoin-proofs/src/constants to here?
+pub const SECTOR_SIZE_2_KIB: u64 = 2_048;
+pub const SECTOR_SIZE_8_MIB: u64 = 1 << 23;
+pub const SECTOR_SIZE_512_MIB: u64 = 1 << 29;
+pub const SECTOR_SIZE_32_GIB: u64 = 1 << 35;
+
+pub const SECTOR_SIZE_4_KIB: u64 = 2 * SECTOR_SIZE_2_KIB;
+pub const SECTOR_SIZE_16_MIB: u64 = 2 * SECTOR_SIZE_8_MIB;
+pub const SECTOR_SIZE_1_GIB: u64 = 2 * SECTOR_SIZE_512_MIB;
+pub const SECTOR_SIZE_64_GIB: u64 = 2 * SECTOR_SIZE_32_GIB;
+
 // Reexport here, so we don't depend on merkletree directly in other places.
 pub use merkletree::store::{ExternalReader, Store};
 
@@ -36,10 +47,78 @@ pub type BinaryLCMerkleTree<T, A> = LCMerkleTree<T, A, typenum::U2>;
 pub type QuadMerkleTree<T, A> = MerkleTree<T, A, typenum::U4>;
 pub type QuadLCMerkleTree<T, A> = LCMerkleTree<T, A, typenum::U4>;
 
-pub type OctMerkleTree<T, A> = MerkleTree<T, A, typenum::U8>;
-pub type OctLCMerkleTree<T, A> = LCMerkleTree<T, A, typenum::U8>;
+pub type OctMerkleTree<T, A> = merkle::MerkleTree<T, A, DiskStore<T>, typenum::U8>;
+pub type OctSubMerkleTree<T, A> = merkle::MerkleTree<T, A, DiskStore<T>, typenum::U8, typenum::U2>;
+pub type OctTopMerkleTree<T, A> =
+    merkle::MerkleTree<T, A, DiskStore<T>, typenum::U8, typenum::U8, typenum::U2>;
+
+pub type OctLCMerkleTree<T, A> =
+    merkle::MerkleTree<T, A, LevelCacheStore<T, std::fs::File>, typenum::U8>;
+pub type OctLCSubMerkleTree<T, A> =
+    merkle::MerkleTree<T, A, LevelCacheStore<T, std::fs::File>, typenum::U8, typenum::U2>;
+pub type OctLCTopMerkleTree<T, A> = merkle::MerkleTree<
+    T,
+    A,
+    LevelCacheStore<T, std::fs::File>,
+    typenum::U8,
+    typenum::U8,
+    typenum::U2,
+>;
 
 pub type MerkleStore<T> = DiskStore<T>;
+
+pub type BinaryTree<H> = BinaryMerkleTree<<H as Hasher>::Domain, <H as Hasher>::Function>;
+
+pub type OctTree<H> = OctMerkleTree<<H as Hasher>::Domain, <H as Hasher>::Function>;
+pub type OctSubTree<H> = OctSubMerkleTree<<H as Hasher>::Domain, <H as Hasher>::Function>;
+
+pub type OctLCTree<H> = OctLCMerkleTree<<H as Hasher>::Domain, <H as Hasher>::Function>;
+pub type OctLCSubTree<H> = OctLCSubMerkleTree<<H as Hasher>::Domain, <H as Hasher>::Function>;
+
+#[derive(Debug)]
+pub enum OctTreeData<H: Hasher> {
+    /// A BaseTree contains a single Store.
+    Oct(OctTree<H>),
+
+    /// A SubTree contains a list of BaseTrees.
+    OctSub(OctSubTree<H>),
+
+    /// A BaseTree contains a single Store.
+    OctLC(OctLCTree<H>),
+
+    /// A SubTree contains a list of BaseTrees.
+    OctLCSub(OctLCSubTree<H>),
+}
+
+impl<H: Hasher> OctTreeData<H> {
+    pub fn octtree(&self) -> Option<&OctTree<H>> {
+        match self {
+            OctTreeData::Oct(s) => Some(s),
+            _ => None,
+        }
+    }
+
+    pub fn octsubtree(&self) -> Option<&OctSubTree<H>> {
+        match self {
+            OctTreeData::OctSub(s) => Some(s),
+            _ => None,
+        }
+    }
+
+    pub fn octlctree(&self) -> Option<&OctLCTree<H>> {
+        match self {
+            OctTreeData::OctLC(s) => Some(s),
+            _ => None,
+        }
+    }
+
+    pub fn octlcsubtree(&self) -> Option<&OctLCSubTree<H>> {
+        match self {
+            OctTreeData::OctLCSub(s) => Some(s),
+            _ => None,
+        }
+    }
+}
 
 use generic_array::typenum::{UInt, UTerm, Unsigned, B1};
 use generic_array::ArrayLength;
@@ -81,10 +160,22 @@ pub struct MerkleTreeWrapper<H: Hasher, S: Store<<H as Hasher>::Domain>, U: Pose
 }
 
 /// Representation of a merkle proof.
-/// Each element in the `path` vector consists of a tuple `(hash, is_right)`, with `hash` being the the hash of the node at the current level and `is_right` a boolean indicating if the path is taking the right path.
+/// Each element in the 'path' vector consists of a tuple '(hash, index)', with 'hash' being the hash of the node at the current level and 'index' an index into the path (based on arity).
 /// The first element is the hash of leaf itself, and the last is the root hash.
 #[derive(Clone, Serialize, Deserialize)]
-pub struct MerkleProof<H: Hasher, U: typenum::Unsigned> {
+pub struct MerkleProof<H: Hasher, BaseTreeArity: typenum::Unsigned> {
+    pub top_root: Option<H::Domain>,
+    top_path: Option<Vec<(Vec<H::Domain>, usize)>>,
+    top_leaf: Option<H::Domain>,
+
+    pub sub_root: Option<H::Domain>,
+    sub_path: Option<Vec<(Vec<H::Domain>, usize)>>,
+    pub sub_leaf: Option<H::Domain>,
+    sub_leafs: usize,
+
+    top_layer_nodes: usize,
+    sub_layer_nodes: usize,
+
     pub root: H::Domain,
     path: Vec<(Vec<H::Domain>, usize)>,
     leaf: H::Domain,
@@ -92,59 +183,132 @@ pub struct MerkleProof<H: Hasher, U: typenum::Unsigned> {
     #[serde(skip)]
     _h: PhantomData<H>,
     #[serde(skip)]
-    _u: PhantomData<U>,
+    _bta: PhantomData<BaseTreeArity>,
 }
 
-impl<H: Hasher, U: typenum::Unsigned> std::fmt::Debug for MerkleProof<H, U> {
+impl<H: Hasher, BaseTreeArity: typenum::Unsigned> std::fmt::Debug
+    for MerkleProof<H, BaseTreeArity>
+{
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("MerkleProof")
+            .field("sub_root", &self.root)
+            .field("sub_path", &self.path)
+            .field("sub_leaf", &self.leaf)
             .field("root", &self.root)
             .field("path", &self.path)
             .field("leaf", &self.leaf)
             .field("H", &H::name())
-            .field("U", &U::to_usize())
+            .field("BaseTreeArity", &BaseTreeArity::to_usize())
             .finish()
     }
 }
 
-pub fn make_proof_for_test<H: Hasher, U: typenum::Unsigned>(
+pub fn make_proof_for_test<H: Hasher, BaseTreeArity: typenum::Unsigned>(
     root: H::Domain,
     leaf: H::Domain,
     path: Vec<(Vec<H::Domain>, usize)>,
-) -> MerkleProof<H, U> {
+) -> MerkleProof<H, BaseTreeArity> {
     MerkleProof {
+        top_root: None,
+        top_path: None,
+        top_leaf: None,
+        sub_root: None,
+        sub_path: None,
+        sub_leaf: None,
+        sub_leafs: 0,
+        top_layer_nodes: 0,
+        sub_layer_nodes: 0,
         path,
         root,
         leaf,
         _h: PhantomData,
-        _u: PhantomData,
+        _bta: PhantomData,
     }
 }
 
-impl<H: Hasher, U: typenum::Unsigned> MerkleProof<H, U> {
-    pub fn new(n: usize) -> MerkleProof<H, U> {
+impl<H: Hasher, BaseTreeArity: typenum::Unsigned> MerkleProof<H, BaseTreeArity> {
+    pub fn new(n: usize) -> MerkleProof<H, BaseTreeArity> {
         MerkleProof {
+            top_root: None,
+            top_path: None,
+            top_leaf: None,
+            sub_root: None,
+            sub_path: None,
+            sub_leaf: None,
+            sub_leafs: 0,
+            top_layer_nodes: 0,
+            sub_layer_nodes: 0,
             root: Default::default(),
             path: vec![(Default::default(), 0); n],
             leaf: Default::default(),
             _h: PhantomData,
-            _u: PhantomData,
+            _bta: PhantomData,
         }
     }
 
-    pub fn new_from_proof(p: &proof::Proof<H::Domain, U>) -> MerkleProof<H, U> {
+    pub fn new_from_proof(
+        p: &proof::Proof<H::Domain, BaseTreeArity>,
+    ) -> MerkleProof<H, BaseTreeArity> {
         let lemma = p.lemma();
 
         MerkleProof {
+            top_root: None,
+            top_path: None,
+            top_leaf: None,
+            sub_root: None,
+            sub_path: None,
+            sub_leaf: None,
+            sub_leafs: 0,
+            top_layer_nodes: 0,
+            sub_layer_nodes: 0,
             path: lemma[1..lemma.len() - 1]
-                .chunks(U::to_usize() - 1)
+                .chunks(BaseTreeArity::to_usize() - 1)
                 .map(|chunk| chunk.to_vec())
                 .zip(p.path().iter().copied())
                 .collect::<Vec<_>>(),
             root: p.root(),
             leaf: p.item(),
             _h: PhantomData,
-            _u: PhantomData,
+            _bta: PhantomData,
+        }
+    }
+
+    pub fn new_from_sub_proof<SubTreeArity: typenum::Unsigned>(
+        sub: &proof::Proof<H::Domain, SubTreeArity>,
+        sub_leafs: usize,
+        base: &proof::Proof<H::Domain, BaseTreeArity>,
+    ) -> MerkleProof<H, BaseTreeArity> {
+        MerkleProof {
+            top_root: None,
+            top_path: None,
+            top_leaf: None,
+            sub_root: Some(sub.root()),
+            sub_path: {
+                let lemma = sub.lemma();
+                Some(
+                    lemma[1..lemma.len() - 1]
+                        .chunks(SubTreeArity::to_usize() - 1)
+                        .map(|chunk| chunk.to_vec())
+                        .zip(sub.path().iter().copied())
+                        .collect::<Vec<_>>(),
+                )
+            },
+            sub_leaf: Some(sub.item()),
+            sub_leafs,
+            top_layer_nodes: 0,
+            sub_layer_nodes: SubTreeArity::to_usize(),
+            path: {
+                let lemma = base.lemma();
+                lemma[1..lemma.len() - 1]
+                    .chunks(BaseTreeArity::to_usize() - 1)
+                    .map(|chunk| chunk.to_vec())
+                    .zip(base.path().iter().copied())
+                    .collect::<Vec<_>>()
+            },
+            root: base.root(),
+            leaf: base.item(),
+            _h: PhantomData,
+            _bta: PhantomData,
         }
     }
 
@@ -189,22 +353,51 @@ impl<H: Hasher, U: typenum::Unsigned> MerkleProof<H, U> {
     fn verify(&self) -> bool {
         let mut a = H::Function::default();
 
-        let expected_root = (0..self.path.len()).fold(self.leaf, |h, i| {
-            a.reset();
+        if self.sub_root.is_some() {
+            let sub_path = self.sub_path.as_ref().unwrap();
+            let expected_root = (0..sub_path.len()).fold(self.sub_leaf.unwrap(), |h, i| {
+                a.reset();
 
-            let index = self.path[i].1;
-            let mut nodes = self.path[i].0.clone();
-            nodes.insert(index, h);
+                let index = sub_path[i].1;
+                let mut nodes = sub_path[i].0.clone();
+                nodes.insert(index, h);
 
-            a.multi_node(&nodes, i)
-        });
+                a.multi_node(&nodes, i)
+            });
 
-        self.root() == &expected_root
+            if self.sub_root.unwrap() != expected_root {
+                return false;
+            }
+
+            self.sub_root.unwrap() == expected_root
+        } else {
+            let expected_root = (0..self.path.len()).fold(self.leaf, |h, i| {
+                a.reset();
+
+                let index = self.path[i].1;
+                let mut nodes = self.path[i].0.clone();
+                nodes.insert(index, h);
+
+                a.multi_node(&nodes, i)
+            });
+
+            self.root() == &expected_root
+        }
     }
 
     /// Validates the MerkleProof and that it corresponds to the supplied node.
     pub fn validate(&self, node: usize) -> bool {
-        if self.path_index() != node {
+        if self.sub_root.is_some() {
+            let sub_path_index = if node < self.sub_leafs {
+                node % self.sub_leafs
+            } else {
+                self.sub_leafs + (node % self.sub_leafs)
+            };
+
+            if sub_path_index != node {
+                return false;
+            }
+        } else if self.path_index() != node {
             return false;
         }
 
@@ -217,7 +410,11 @@ impl<H: Hasher, U: typenum::Unsigned> MerkleProof<H, U> {
             return false;
         }
 
-        self.leaf() == data
+        if self.sub_root.is_some() {
+            self.sub_leaf.unwrap() == data
+        } else {
+            self.leaf() == data
+        }
     }
 
     /// Returns the hash of leaf that this MerkleProof represents.
@@ -237,7 +434,7 @@ impl<H: Hasher, U: typenum::Unsigned> MerkleProof<H, U> {
     /// Returns the length of the proof. That is all path elements plus 1 for the
     /// leaf and 1 for the root.
     pub fn len(&self) -> usize {
-        self.path.len() * (U::to_usize() - 1) + 2
+        self.path.len() * (BaseTreeArity::to_usize() - 1) + 2
     }
 
     /// Serialize into bytes.
@@ -257,21 +454,34 @@ impl<H: Hasher, U: typenum::Unsigned> MerkleProof<H, U> {
         out
     }
 
+    pub fn sub_path(&self) -> &Vec<(Vec<H::Domain>, usize)> {
+        &self.sub_path.as_ref().unwrap()
+    }
+
     pub fn path(&self) -> &Vec<(Vec<H::Domain>, usize)> {
         &self.path
     }
 
     pub fn path_index(&self) -> usize {
-        self.path
-            .iter()
-            .rev()
-            .fold(0, |acc, (_, index)| (acc * U::to_usize()) + index)
+        self.path.iter().rev().fold(0, |acc, (_, index)| {
+            (acc * BaseTreeArity::to_usize()) + index
+        })
     }
 
     /// proves_challenge returns true if this self.proof corresponds to challenge.
     /// This is useful for verifying that a supplied proof is actually relevant to a given challenge.
     pub fn proves_challenge(&self, challenge: usize) -> bool {
-        self.path_index() == challenge
+        if self.sub_root.is_some() {
+            let sub_path_index = if challenge < self.sub_leafs {
+                challenge % self.sub_leafs
+            } else {
+                self.sub_leafs + (challenge % self.sub_leafs)
+            };
+
+            sub_path_index == challenge
+        } else {
+            self.path_index() == challenge
+        }
     }
 }
 
@@ -302,12 +512,29 @@ impl<H: Hasher> std::ops::Deref for IncludedNode<H> {
     }
 }
 
+pub fn split_config(config: Option<StoreConfig>, count: usize) -> Result<Vec<Option<StoreConfig>>> {
+    match config {
+        Some(c) => {
+            let mut configs = Vec::with_capacity(count);
+            for i in 0..count {
+                configs.push(Some(StoreConfig::from_config(
+                    &c,
+                    format!("{}-{}", c.id, i),
+                    None,
+                )));
+            }
+            Ok(configs)
+        }
+        None => Ok(vec![None]),
+    }
+}
+
 /// Construct a new merkle tree.
-pub fn create_merkle_tree<H: Hasher, U: typenum::Unsigned>(
+pub fn create_merkle_tree<H: Hasher, BaseTreeArity: typenum::Unsigned>(
     config: Option<StoreConfig>,
     size: usize,
     data: &[u8],
-) -> Result<MerkleTree<H::Domain, H::Function, U>> {
+) -> Result<MerkleTree<H::Domain, H::Function, BaseTreeArity>> {
     ensure!(
         data.len() == (NODE_SIZE * size) as usize,
         Error::InvalidMerkleTreeArgs(data.len(), NODE_SIZE, size)
@@ -317,11 +544,11 @@ pub fn create_merkle_tree<H: Hasher, U: typenum::Unsigned>(
     trace!(
         "is_merkle_tree_size_valid({}, arity {}) = {}",
         size,
-        U::to_usize(),
-        is_merkle_tree_size_valid(size, U::to_usize())
+        BaseTreeArity::to_usize(),
+        is_merkle_tree_size_valid(size, BaseTreeArity::to_usize())
     );
     ensure!(
-        is_merkle_tree_size_valid(size, U::to_usize()),
+        is_merkle_tree_size_valid(size, BaseTreeArity::to_usize()),
         "Invalid merkle tree size given the arity"
     );
 
@@ -349,21 +576,21 @@ pub fn create_merkle_tree<H: Hasher, U: typenum::Unsigned>(
 /// replica path (since the replica file will contain the same data),
 /// we pass both since we have access from all callers and this avoids
 /// reading that data from the replica_path here.
-pub fn create_lcmerkle_tree<H: Hasher, U: typenum::Unsigned>(
+pub fn create_lcmerkle_tree<H: Hasher, BaseTreeArity: typenum::Unsigned>(
     config: StoreConfig,
     size: usize,
     data: &[u8],
     replica_path: &PathBuf,
-) -> Result<LCMerkleTree<H::Domain, H::Function, U>> {
+) -> Result<LCMerkleTree<H::Domain, H::Function, BaseTreeArity>> {
     trace!("create_lcmerkle_tree called with size {}", size);
     trace!(
         "is_merkle_tree_size_valid({}, arity {}) = {}",
         size,
-        U::to_usize(),
-        is_merkle_tree_size_valid(size, U::to_usize())
+        BaseTreeArity::to_usize(),
+        is_merkle_tree_size_valid(size, BaseTreeArity::to_usize())
     );
     ensure!(
-        is_merkle_tree_size_valid(size, U::to_usize()),
+        is_merkle_tree_size_valid(size, BaseTreeArity::to_usize()),
         "Invalid merkle tree size given the arity"
     );
     ensure!(
@@ -376,8 +603,8 @@ pub fn create_lcmerkle_tree<H: Hasher, U: typenum::Unsigned>(
         H::Domain::try_from_bytes(d)
     };
 
-    let mut lc_tree: LCMerkleTree<H::Domain, H::Function, U> =
-        LCMerkleTree::<H::Domain, H::Function, U>::try_from_iter_with_config(
+    let mut lc_tree: LCMerkleTree<H::Domain, H::Function, BaseTreeArity> =
+        LCMerkleTree::<H::Domain, H::Function, BaseTreeArity>::try_from_iter_with_config(
             (0..size).map(f),
             config,
         )?;
@@ -389,33 +616,33 @@ pub fn create_lcmerkle_tree<H: Hasher, U: typenum::Unsigned>(
 
 /// Open an existing level cache merkle tree, given the specified
 /// config and replica_path.
-pub fn open_lcmerkle_tree<H: Hasher, U: typenum::Unsigned>(
+pub fn open_lcmerkle_tree<H: Hasher, BaseTreeArity: typenum::Unsigned>(
     config: StoreConfig,
     size: usize,
     replica_path: &PathBuf,
-) -> Result<LCMerkleTree<H::Domain, H::Function, U>> {
+) -> Result<LCMerkleTree<H::Domain, H::Function, BaseTreeArity>> {
     trace!("open_lcmerkle_tree called with size {}", size);
     trace!(
         "is_merkle_tree_size_valid({}, arity {}) = {}",
         size,
-        U::to_usize(),
-        is_merkle_tree_size_valid(size, U::to_usize())
+        BaseTreeArity::to_usize(),
+        is_merkle_tree_size_valid(size, BaseTreeArity::to_usize())
     );
     ensure!(
-        is_merkle_tree_size_valid(size, U::to_usize()),
+        is_merkle_tree_size_valid(size, BaseTreeArity::to_usize()),
         "Invalid merkle tree size given the arity"
     );
 
-    let tree_size = get_merkle_tree_len(size, U::to_usize())?;
+    let tree_size = get_merkle_tree_len(size, BaseTreeArity::to_usize())?;
     let tree_store: LevelCacheStore<H::Domain, _> = LevelCacheStore::new_from_disk_with_reader(
         tree_size,
-        U::to_usize(),
+        BaseTreeArity::to_usize(),
         &config,
         ExternalReader::new_from_path(replica_path)?,
     )?;
 
     ensure!(
-        size == get_merkle_tree_leafs(tree_size, U::to_usize()),
+        size == get_merkle_tree_leafs(tree_size, BaseTreeArity::to_usize()),
         "Inconsistent lcmerkle tree"
     );
 
@@ -432,7 +659,7 @@ mod tests {
     use crate::drgraph::{new_seed, BucketGraph, Graph, BASE_DEGREE};
     use crate::hasher::{Blake2sHasher, PedersenHasher, PoseidonHasher, Sha256Hasher};
 
-    fn merklepath<H: Hasher, U: typenum::Unsigned>() {
+    fn merklepath<H: Hasher, BaseTreeArity: typenum::Unsigned>() {
         let leafs = 64;
         let g = BucketGraph::<H>::new(leafs, BASE_DEGREE, 0, new_seed()).unwrap();
         let mut rng = rand::thread_rng();
@@ -450,7 +677,7 @@ mod tests {
 
             assert!(proof.validate::<H::Function>().expect("failed to validate"));
             let len = proof.lemma().len();
-            let mp = MerkleProof::<H, U>::new_from_proof(&proof);
+            let mp = MerkleProof::<H, BaseTreeArity>::new_from_proof(&proof);
 
             assert_eq!(mp.len(), len, "invalid prof len");
 

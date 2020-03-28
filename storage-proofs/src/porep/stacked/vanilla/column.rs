@@ -2,11 +2,11 @@ use paired::bls12_381::Fr;
 use serde::{Deserialize, Serialize};
 use std::marker::PhantomData;
 
-use super::{column_proof::ColumnProof, hash::hash_single_column, params::OctTree};
+use super::{column_proof::ColumnProof, hash::hash_single_column};
 
 use crate::error::Result;
 use crate::hasher::Hasher;
-use crate::merkle::MerkleProof;
+use crate::merkle::{MerkleProof, OctSubTree, OctTree};
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Column<H: Hasher> {
@@ -59,6 +59,21 @@ impl<H: Hasher> Column<H> {
     pub fn into_proof(self, tree_c: &OctTree<H>) -> Result<ColumnProof<H>> {
         let inclusion_proof =
             MerkleProof::new_from_proof(&tree_c.gen_proof(self.index() as usize)?);
+        ColumnProof::<H>::from_column(self, inclusion_proof)
+    }
+
+    /// Create a column proof for this column.
+    pub fn into_proof_sub(
+        self,
+        tree_c: &OctSubTree<H>,
+        sub_tree_leafs: usize,
+    ) -> Result<ColumnProof<H>> {
+        let tree_c_proof = tree_c.gen_proof(self.index() as usize)?;
+        let inclusion_proof = MerkleProof::new_from_sub_proof::<_>(
+            tree_c_proof.clone().sub_tree_proof.unwrap().as_ref(),
+            sub_tree_leafs,
+            &tree_c_proof,
+        );
         ColumnProof::<H>::from_column(self, inclusion_proof)
     }
 }
