@@ -267,12 +267,6 @@ where
 // Verifies if a DiskStore specified by a config is consistent.
 fn verify_store(config: &StoreConfig, arity: usize) -> Result<()> {
     let store_path = StoreConfig::data_path(&config.path, &config.id);
-    println!(
-        "VERIFY STORE: CHECKING IF {:?} EXISTS: {} [Arity {}]",
-        store_path,
-        Path::new(&store_path).exists(),
-        arity
-    );
     if !Path::new(&store_path).exists() {
         // Configs may have split due to sector size, so we need to
         // check deterministic paths from here.
@@ -283,7 +277,6 @@ fn verify_store(config: &StoreConfig, arity: usize) -> Result<()> {
             let cur_path = orig_path
                 .clone()
                 .replace(".dat", format!("-{}.dat", i).as_str());
-            println!("CHECKING FOR {}", cur_path);
 
             if Path::new(&cur_path).exists() {
                 let path_str = cur_path.as_str();
@@ -301,7 +294,6 @@ fn verify_store(config: &StoreConfig, arity: usize) -> Result<()> {
             }
         }
 
-        println!("COUNT IS {}", configs.len());
         ensure!(
             configs.len() == 2 || configs.len() == 8,
             "Missing store file (or associated split paths): {}",
@@ -309,10 +301,6 @@ fn verify_store(config: &StoreConfig, arity: usize) -> Result<()> {
         );
 
         for i in 0..configs.len() {
-            println!(
-                "CURRENTLY CHECKING IF {:?} IS CONSISTENT",
-                StoreConfig::data_path(&configs[i].path, &configs[i].id)
-            );
             ensure!(
                 DiskStore::<<DefaultPieceHasher as Hasher>::Domain>::is_consistent(
                     configs[i].size.unwrap() / configs.len(),
@@ -341,12 +329,6 @@ fn verify_store(config: &StoreConfig, arity: usize) -> Result<()> {
 // Verifies if a LevelCacheStore specified by a config is consistent.
 fn verify_level_cache_store(config: &StoreConfig, arity: usize) -> Result<()> {
     let store_path = StoreConfig::data_path(&config.path, &config.id);
-    println!(
-        "VERIFY LEVEL CACHE STORE: CHECKING IF {:?} EXISTS: {} [Arity {}]",
-        store_path,
-        Path::new(&store_path).exists(),
-        arity
-    );
     if !Path::new(&store_path).exists() {
         // Configs may have split due to sector size, so we need to
         // check deterministic paths from here.
@@ -357,7 +339,6 @@ fn verify_level_cache_store(config: &StoreConfig, arity: usize) -> Result<()> {
             let cur_path = orig_path
                 .clone()
                 .replace(".dat", format!("-{}.dat", i).as_str());
-            println!("CHECKING FOR {}", cur_path);
 
             if Path::new(&cur_path).exists() {
                 let path_str = cur_path.as_str();
@@ -375,7 +356,6 @@ fn verify_level_cache_store(config: &StoreConfig, arity: usize) -> Result<()> {
             }
         }
 
-        println!("COUNT IS {}", configs.len());
         ensure!(
             configs.len() == 2 || configs.len() == 8,
             "Missing store file (or associated split paths): {}",
@@ -383,10 +363,6 @@ fn verify_level_cache_store(config: &StoreConfig, arity: usize) -> Result<()> {
         );
 
         for i in 0..configs.len() {
-            println!(
-                "CURRENTLY CHECKING IF {:?} IS CONSISTENT",
-                StoreConfig::data_path(&configs[i].path, &configs[i].id)
-            );
             ensure!(
                 LevelCacheStore::<<DefaultPieceHasher as Hasher>::Domain, std::fs::File>::is_consistent(
                     configs[i].size.unwrap() / configs.len(),
@@ -775,7 +751,6 @@ mod tests {
             &piece_infos,
         )?;
 
-        println!("ABOUT TO VALIDATE FOR PRECOMMIT PHASE 2");
         validate_cache_for_precommit_phase2(
             cache_dir.path(),
             staged_sector_file.path(),
@@ -792,7 +767,6 @@ mod tests {
         let comm_d = pre_commit_output.comm_d.clone();
         let comm_r = pre_commit_output.comm_r.clone();
 
-        println!("ABOUT TO VALIDATE FOR COMMIT");
         validate_cache_for_commit(cache_dir.path(), sealed_sector_file.path())?;
 
         let phase1_output = seal_commit_phase1(

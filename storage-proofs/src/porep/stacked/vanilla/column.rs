@@ -69,10 +69,10 @@ impl<H: Hasher> Column<H> {
         sub_tree_leafs: usize,
     ) -> Result<ColumnProof<H>> {
         let tree_c_proof = tree_c.gen_proof(self.index() as usize)?;
-        let inclusion_proof = MerkleProof::new_from_sub_proof::<_>(
-            tree_c_proof.clone().sub_tree_proof.unwrap().as_ref(),
-            sub_tree_leafs,
+        assert!(tree_c_proof.sub_tree_proof.is_some());
+        let inclusion_proof = MerkleProof::new_from_sub_proof::<typenum::U0, typenum::U2>(
             &tree_c_proof,
+            sub_tree_leafs,
         );
         ColumnProof::<H>::from_column(self, inclusion_proof)
     }

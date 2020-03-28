@@ -209,9 +209,15 @@ impl<H: Hasher, G: Hasher> Proof<H, G> {
             }
             // Compound tree handling: FIXME: move 32GB and 64GB as special case compound handling as well
             SECTOR_SIZE_4_KIB | SECTOR_SIZE_16_MIB | SECTOR_SIZE_1_GIB => {
+                assert!(self.comm_r_last_proof.sub_tree_proof.is_some());
                 check!(self.encoding_proof.verify::<G>(
                     replica_id,
-                    &self.comm_r_last_proof.sub_leaf.unwrap(),
+                    &self
+                        .comm_r_last_proof
+                        .sub_tree_proof
+                        .as_ref()
+                        .unwrap()
+                        .leaf(),
                     &self.comm_d_proofs.leaf()
                 ));
             }
