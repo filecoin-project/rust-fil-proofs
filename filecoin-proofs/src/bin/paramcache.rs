@@ -11,11 +11,15 @@ use storage_proofs::parameter_cache::CacheableParameters;
 use storage_proofs::porep::stacked::{StackedCompound, StackedDrg};
 use storage_proofs::post::election::{ElectionPoSt, ElectionPoStCircuit, ElectionPoStCompound};
 
-const PUBLISHED_SECTOR_SIZES: [u64; 4] = [
+const PUBLISHED_SECTOR_SIZES: [u64; 8] = [
     SECTOR_SIZE_2_KIB,
+    SECTOR_SIZE_4_KIB,
     SECTOR_SIZE_8_MIB,
+    SECTOR_SIZE_16_MIB,
     SECTOR_SIZE_512_MIB,
+    SECTOR_SIZE_1_GIB,
     SECTOR_SIZE_32_GIB,
+    SECTOR_SIZE_64_GIB,
 ];
 
 fn cache_porep_params(porep_config: PoRepConfig) {

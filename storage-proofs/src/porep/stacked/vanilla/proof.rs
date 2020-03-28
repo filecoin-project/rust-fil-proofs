@@ -121,11 +121,6 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
                         let rcp = {
                             let (c_x, drg_parents, exp_parents) = match sector_size {
                                 SECTOR_SIZE_2_KIB | SECTOR_SIZE_8_MIB | SECTOR_SIZE_512_MIB => {
-                                    assert!(t_aux.tree_r_last.octlctree().is_some());
-                                    assert_eq!(
-                                        p_aux.comm_r_last,
-                                        t_aux.tree_r_last.octlctree().unwrap().root()
-                                    );
                                     assert!(t_aux.tree_c.octtree().is_some());
                                     assert_eq!(
                                         p_aux.comm_c,
@@ -153,20 +148,17 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
 
                                     (c_x, drg_parents, exp_parents)
                                 }
-                                // Compound tree handling: FIXME: move 32GB and 64GB as special case compound handling as well
-                                SECTOR_SIZE_4_KIB | SECTOR_SIZE_16_MIB | SECTOR_SIZE_1_GIB => {
-                                    assert!(t_aux.tree_r_last.octlcsubtree().is_some());
-                                    assert_eq!(
-                                        p_aux.comm_r_last,
-                                        t_aux.tree_r_last.octlcsubtree().unwrap().root()
-                                    );
+                                SECTOR_SIZE_4_KIB | SECTOR_SIZE_16_MIB | SECTOR_SIZE_1_GIB
+                                | SECTOR_SIZE_32_GIB => {
                                     assert!(t_aux.tree_c.octsubtree().is_some());
                                     assert_eq!(
                                         p_aux.comm_c,
                                         t_aux.tree_c.octsubtree().unwrap().root()
                                     );
-
                                     let tree_c = t_aux.tree_c.octsubtree().unwrap();
+
+                                    // All labels in C_X
+                                    trace!("  c_x");
                                     let c_x = t_aux
                                         .column(challenge as u32)?
                                         .into_proof_sub(tree_c, sub_tree_leafs)?;
@@ -187,6 +179,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
 
                                     (c_x, drg_parents, exp_parents)
                                 }
+                                // Compound tree handling: FIXME: add 64GB as special case compound handling as well
                                 _ => panic!("Unsupported data len"),
                             };
 
@@ -218,8 +211,8 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
 
                                 comm_r_last_proof
                             }
-                            // Compound tree handling: FIXME: move 32GB and 64GB as special case compound handling as well
-                            SECTOR_SIZE_4_KIB | SECTOR_SIZE_16_MIB | SECTOR_SIZE_1_GIB => {
+                            SECTOR_SIZE_4_KIB | SECTOR_SIZE_16_MIB | SECTOR_SIZE_1_GIB
+                            | SECTOR_SIZE_32_GIB => {
                                 assert!(t_aux.tree_r_last.octlcsubtree().is_some());
                                 let tree_r_last = t_aux.tree_r_last.octlcsubtree().unwrap();
                                 let tree_r_last_proof = if t_aux.tree_r_last_config_levels == 0 {
@@ -234,16 +227,19 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
                                 assert!(tree_r_last_proof.validate::<H::Function>()?);
                                 assert!(tree_r_last_proof.sub_tree_proof.is_some());
 
-                                let comm_r_last_proof = MerkleProof::new_from_sub_proof::<_>(
-                                    tree_r_last_proof.clone().sub_tree_proof.unwrap().as_ref(),
-                                    sub_tree_leafs,
-                                    &tree_r_last_proof,
-                                );
-                                assert!(comm_r_last_proof.sub_root.is_some());
+                                let comm_r_last_proof =
+                                    MerkleProof::new_from_sub_proof::<typenum::U0, typenum::U2>(
+                                        &tree_r_last_proof,
+                                        sub_tree_leafs,
+                                    );
+
+                                // FIXME: Remove this assert and make sub_tree_proof member private?
+                                assert!(comm_r_last_proof.sub_tree_proof.is_some());
                                 assert!(comm_r_last_proof.validate(challenge));
 
                                 comm_r_last_proof
                             }
+                            // Compound tree handling: FIXME: add 64GB as special case compound handling as well
                             _ => panic!("Unsupported sector size"),
                         };
 
@@ -474,6 +470,68 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         )
     }
 
+    /// Writes out replica data, possibly splitting out replicas based
+    /// on how many sub-trees will require invidividual replica files.
+    /// Returns a list of replica paths written.
+    fn write_replica_data(
+        data: &Data,
+        tree_count: usize,
+        leafs: usize,
+        replica_path: &PathBuf,
+    ) -> Result<Vec<PathBuf>> {
+        use std::fs::OpenOptions;
+        use std::io::prelude::*;
+        use std::path::Path;
+
+        if tree_count == 1 {
+            // Store and persist encoded replica data.
+            let mut f = OpenOptions::new()
+                .write(true)
+                .create(true)
+                .open(&replica_path)?;
+
+            // Only write the replica's base layer of leaf data.
+            trace!("Writing replica data for {} nodes", leafs);
+
+            f.write_all(&data.as_ref()[0..leafs * NODE_SIZE])?;
+
+            Ok(vec![replica_path.to_path_buf()])
+        } else {
+            // Store and persist encoded replica data.
+            let mut replica_paths = Vec::with_capacity(tree_count);
+            let mut start = 0;
+            let mut end = leafs * NODE_SIZE;
+
+            for i in 0..tree_count {
+                replica_paths.push(
+                    Path::new(
+                        format!("{:?}-{}", replica_path, i)
+                            .replace("\"", "")
+                            .as_str(),
+                    )
+                    .to_path_buf(),
+                );
+                let mut f = OpenOptions::new()
+                    .write(true)
+                    .create(true)
+                    .open(&replica_paths[i])?;
+
+                // Only write the replica's base layer of leaf data.
+                trace!(
+                    "Writing replica data for {} nodes [{}-{}]",
+                    leafs,
+                    start,
+                    end
+                );
+                f.write_all(&data.as_ref()[start..end])?;
+                start = end;
+                end += leafs * NODE_SIZE;
+            }
+
+            Ok(replica_paths)
+        }
+    }
+
     pub(crate) fn transform_and_replicate_layers_inner(
         graph: &StackedBucketGraph<H>,
         layer_challenges: &LayerChallenges,
@@ -629,7 +687,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
             tree_d_config.size = Some(tree_d.len());
             assert_eq!(tree_d_config.size.unwrap(), tree_d.len());
             let tree_d_root = tree_d.root();
-            //drop(tree_d);
+            drop(tree_d);
 
             // Encode original data into the last layer.
             info!("building tree_r_last");
@@ -676,61 +734,23 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
                 }
 
                 if tree_count == 1 {
+                    // In this case, tree_r_last is already complete.
                     let tree_r_last = &trees[0];
                     tree_r_last_config.size = Some(tree_r_last.len());
                     assert_eq!(tree_r_last_config.size.unwrap(), tree_r_last.len());
 
-                    // Store and persist encoded replica data.
-                    {
-                        use std::fs::OpenOptions;
-                        use std::io::prelude::*;
-
-                        let mut f = OpenOptions::new()
-                            .write(true)
-                            .create(true)
-                            .open(&replica_path)?;
-
-                        // Only write the replica's base layer of leaf data.
-                        trace!("Wrote replica data for {} nodes", tree_r_last.leafs());
-                        f.write_all(&data.as_ref()[0..tree_r_last.leafs() * NODE_SIZE])?;
-                    }
+                    Self::write_replica_data(
+                        &data,
+                        tree_count,
+                        tree_r_last.leafs(),
+                        &replica_path,
+                    )?;
 
                     Ok(tree_r_last.root())
                 } else {
+                    // In this case, construct the compount tree_r_last from the sub-trees we have.
                     let leafs = trees[0].leafs();
                     assert_eq!((leafs * NODE_SIZE) * tree_count, data.len());
-
-                    // Store and persist encoded replica data.
-                    let mut replica_paths = Vec::with_capacity(tree_count);
-                    {
-                        use std::fs::OpenOptions;
-                        use std::io::prelude::*;
-                        use std::path::Path;
-
-                        let mut start = 0;
-                        let mut end = leafs * NODE_SIZE;
-
-                        for i in 0..tree_count {
-                            replica_paths.push(
-                                Path::new(
-                                    format!("{:?}-{}", replica_path, i)
-                                        .replace("\"", "")
-                                        .as_str(),
-                                )
-                                .to_path_buf(),
-                            );
-                            let mut f = OpenOptions::new()
-                                .write(true)
-                                .create(true)
-                                .open(&replica_paths[i])?;
-
-                            // Only write the replica's base layer of leaf data.
-                            trace!("Wrote replica data for {} nodes [{}-{}]", leafs, start, end);
-                            f.write_all(&data.as_ref()[start..end])?;
-                            start = end;
-                            end += leafs * NODE_SIZE;
-                        }
-                    }
 
                     let unwrapped_configs = {
                         let mut c = Vec::with_capacity(tree_count);
@@ -741,6 +761,8 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
 
                         c
                     };
+                    let replica_paths =
+                        Self::write_replica_data(&data, tree_count, leafs, &replica_path)?;
 
                     let tree_r_last = OctLCSubTree::<H>::from_store_configs_and_replicas(
                         leafs,
@@ -778,10 +800,11 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
             SECTOR_SIZE_2_KIB | SECTOR_SIZE_8_MIB | SECTOR_SIZE_512_MIB => {
                 transform_and_replicate(1)
             }
-            // Compound tree handling: FIXME: move 32GB and 64GB as special case compound handling as well
             SECTOR_SIZE_4_KIB | SECTOR_SIZE_16_MIB | SECTOR_SIZE_1_GIB => {
                 transform_and_replicate(2)
             }
+            SECTOR_SIZE_32_GIB => transform_and_replicate(8),
+            // Compound tree handling: FIXME: add 64GB as special case compound handling as well
             _ => panic!("Unsupported data len"),
         }?;
 
