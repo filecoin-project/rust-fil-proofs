@@ -1,12 +1,13 @@
 use std::path::PathBuf;
 
 use super::{
-    params::{BinaryTree, PersistentAux, PublicParams, Tau, TemporaryAux},
+    params::{PersistentAux, PublicParams, Tau, TemporaryAux},
     proof::StackedDrg,
 };
 
 use crate::error::Result;
 use crate::hasher::Hasher;
+use crate::merkle::BinaryTree;
 use crate::porep::PoRep;
 use crate::Data;
 

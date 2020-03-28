@@ -16,9 +16,9 @@ use super::{
     graph::StackedBucketGraph,
     hash::hash_single_column,
     params::{
-        get_node, BinaryTree, Labels, LabelsCache, PersistentAux, Proof, PublicInputs,
-        PublicParams, ReplicaColumnProof, Tau, TemporaryAux, TemporaryAuxCache, TransformedLayers,
-        BINARY_ARITY, OCT_ARITY,
+        get_node, Labels, LabelsCache, PersistentAux, Proof, PublicInputs, PublicParams,
+        ReplicaColumnProof, Tau, TemporaryAux, TemporaryAuxCache, TransformedLayers, BINARY_ARITY,
+        OCT_ARITY,
     },
     EncodingProof, LabelingProof,
 };
@@ -33,7 +33,11 @@ use crate::measurements::{
     measure_op,
     Operation::{CommD, EncodeWindowTimeAll, GenerateTreeC, GenerateTreeRLast},
 };
-use crate::merkle::{MerkleProof, MerkleTree, OctLCMerkleTree, OctMerkleTree, Store};
+use crate::merkle::{
+    split_config, BinaryTree, MerkleProof, MerkleTree, OctLCSubTree, OctLCTree, OctSubTree,
+    OctTree, Store, SECTOR_SIZE_16_MIB, SECTOR_SIZE_1_GIB, SECTOR_SIZE_2_KIB, SECTOR_SIZE_32_GIB,
+    SECTOR_SIZE_4_KIB, SECTOR_SIZE_512_MIB, SECTOR_SIZE_64_GIB, SECTOR_SIZE_8_MIB,
+};
 use crate::porep::PoRep;
 use crate::util::NODE_SIZE;
 pub const TOTAL_PARENTS: usize = 37;
@@ -64,8 +68,8 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         // Sanity checks on restored trees.
         assert!(pub_inputs.tau.is_some());
         assert_eq!(pub_inputs.tau.as_ref().unwrap().comm_d, t_aux.tree_d.root());
-        assert_eq!(p_aux.comm_r_last, t_aux.tree_r_last.root());
-        assert_eq!(p_aux.comm_c, t_aux.tree_c.root());
+
+        let sector_size = (graph.size() * std::mem::size_of::<H::Domain>()) as u64;
 
         let get_drg_parents_columns = |x: usize| -> Result<Vec<Column<H>>> {
             let base_degree = graph.base_graph().degree();
@@ -97,6 +101,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
 
                 // Derive the set of challenges we are proving over.
                 let challenges = pub_inputs.challenges(layer_challenges, graph_size, Some(k));
+                let sub_tree_leafs = (sector_size as usize / std::mem::size_of::<H::Domain>()) / 2;
 
                 // Stacked commitment specifics
                 challenges
@@ -113,24 +118,77 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
                         assert!(comm_d_proof.validate(challenge));
 
                         // Stacked replica column openings
-                        let rpc = {
-                            // All labels in C_X
-                            trace!("  c_x");
-                            let c_x = t_aux.column(challenge as u32)?.into_proof(&t_aux.tree_c)?;
+                        let rcp = {
+                            let (c_x, drg_parents, exp_parents) = match sector_size {
+                                SECTOR_SIZE_2_KIB | SECTOR_SIZE_8_MIB | SECTOR_SIZE_512_MIB => {
+                                    assert!(t_aux.tree_r_last.octlctree().is_some());
+                                    assert_eq!(
+                                        p_aux.comm_r_last,
+                                        t_aux.tree_r_last.octlctree().unwrap().root()
+                                    );
+                                    assert!(t_aux.tree_c.octtree().is_some());
+                                    assert_eq!(
+                                        p_aux.comm_c,
+                                        t_aux.tree_c.octtree().unwrap().root()
+                                    );
+                                    let tree_c = &t_aux.tree_c.octtree().unwrap();
 
-                            // All labels in the DRG parents.
-                            trace!("  drg_parents");
-                            let drg_parents = get_drg_parents_columns(challenge)?
-                                .into_iter()
-                                .map(|column| column.into_proof(&t_aux.tree_c))
-                                .collect::<Result<_>>()?;
+                                    // All labels in C_X
+                                    trace!("  c_x");
+                                    let c_x = t_aux.column(challenge as u32)?.into_proof(tree_c)?;
 
-                            // Labels for the expander parents
-                            trace!("  exp_parents");
-                            let exp_parents = get_exp_parents_columns(challenge)?
-                                .into_iter()
-                                .map(|column| column.into_proof(&t_aux.tree_c))
-                                .collect::<Result<_>>()?;
+                                    // All labels in the DRG parents.
+                                    trace!("  drg_parents");
+                                    let drg_parents = get_drg_parents_columns(challenge)?
+                                        .into_iter()
+                                        .map(|column| column.into_proof(tree_c))
+                                        .collect::<Result<_>>()?;
+
+                                    // Labels for the expander parents
+                                    trace!("  exp_parents");
+                                    let exp_parents = get_exp_parents_columns(challenge)?
+                                        .into_iter()
+                                        .map(|column| column.into_proof(tree_c))
+                                        .collect::<Result<_>>()?;
+
+                                    (c_x, drg_parents, exp_parents)
+                                }
+                                // Compound tree handling: FIXME: move 32GB and 64GB as special case compound handling as well
+                                SECTOR_SIZE_4_KIB | SECTOR_SIZE_16_MIB | SECTOR_SIZE_1_GIB => {
+                                    assert!(t_aux.tree_r_last.octlcsubtree().is_some());
+                                    assert_eq!(
+                                        p_aux.comm_r_last,
+                                        t_aux.tree_r_last.octlcsubtree().unwrap().root()
+                                    );
+                                    assert!(t_aux.tree_c.octsubtree().is_some());
+                                    assert_eq!(
+                                        p_aux.comm_c,
+                                        t_aux.tree_c.octsubtree().unwrap().root()
+                                    );
+
+                                    let tree_c = t_aux.tree_c.octsubtree().unwrap();
+                                    let c_x = t_aux
+                                        .column(challenge as u32)?
+                                        .into_proof_sub(tree_c, sub_tree_leafs)?;
+
+                                    // All labels in the DRG parents.
+                                    trace!("  drg_parents");
+                                    let drg_parents = get_drg_parents_columns(challenge)?
+                                        .into_iter()
+                                        .map(|column| column.into_proof_sub(tree_c, sub_tree_leafs))
+                                        .collect::<Result<_>>()?;
+
+                                    // Labels for the expander parents
+                                    trace!("  exp_parents");
+                                    let exp_parents = get_exp_parents_columns(challenge)?
+                                        .into_iter()
+                                        .map(|column| column.into_proof_sub(tree_c, sub_tree_leafs))
+                                        .collect::<Result<_>>()?;
+
+                                    (c_x, drg_parents, exp_parents)
+                                }
+                                _ => panic!("Unsupported data len"),
+                            };
 
                             ReplicaColumnProof {
                                 c_x,
@@ -141,17 +199,53 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
 
                         // Final replica layer openings
                         trace!("final replica layer openings");
-                        let tree_r_last_proof = {
-                            if t_aux.tree_r_last_config_levels == 0 {
-                                t_aux.tree_r_last.gen_proof(challenge)
-                            } else {
-                                t_aux
-                                    .tree_r_last
-                                    .gen_cached_proof(challenge, t_aux.tree_r_last_config_levels)
+                        let comm_r_last_proof = match sector_size {
+                            SECTOR_SIZE_2_KIB | SECTOR_SIZE_8_MIB | SECTOR_SIZE_512_MIB => {
+                                assert!(t_aux.tree_r_last.octlctree().is_some());
+                                let tree_r_last = t_aux.tree_r_last.octlctree().unwrap();
+                                let tree_r_last_proof = if t_aux.tree_r_last_config_levels == 0 {
+                                    tree_r_last.gen_proof(challenge)
+                                } else {
+                                    tree_r_last.gen_cached_proof(
+                                        challenge,
+                                        t_aux.tree_r_last_config_levels,
+                                    )
+                                }?;
+
+                                let comm_r_last_proof =
+                                    MerkleProof::new_from_proof(&tree_r_last_proof);
+                                assert!(comm_r_last_proof.validate(challenge));
+
+                                comm_r_last_proof
                             }
-                        }?;
-                        let comm_r_last_proof = MerkleProof::new_from_proof(&tree_r_last_proof);
-                        assert!(comm_r_last_proof.validate(challenge));
+                            // Compound tree handling: FIXME: move 32GB and 64GB as special case compound handling as well
+                            SECTOR_SIZE_4_KIB | SECTOR_SIZE_16_MIB | SECTOR_SIZE_1_GIB => {
+                                assert!(t_aux.tree_r_last.octlcsubtree().is_some());
+                                let tree_r_last = t_aux.tree_r_last.octlcsubtree().unwrap();
+                                let tree_r_last_proof = if t_aux.tree_r_last_config_levels == 0 {
+                                    tree_r_last.gen_proof(challenge)
+                                } else {
+                                    tree_r_last.gen_cached_proof(
+                                        challenge,
+                                        t_aux.tree_r_last_config_levels,
+                                    )
+                                }?;
+
+                                assert!(tree_r_last_proof.validate::<H::Function>()?);
+                                assert!(tree_r_last_proof.sub_tree_proof.is_some());
+
+                                let comm_r_last_proof = MerkleProof::new_from_sub_proof::<_>(
+                                    tree_r_last_proof.clone().sub_tree_proof.unwrap().as_ref(),
+                                    sub_tree_leafs,
+                                    &tree_r_last_proof,
+                                );
+                                assert!(comm_r_last_proof.sub_root.is_some());
+                                assert!(comm_r_last_proof.validate(challenge));
+
+                                comm_r_last_proof
+                            }
+                            _ => panic!("Unsupported sector size"),
+                        };
 
                         // Labeling Proofs Layer 1..l
                         let mut labeling_proofs = HashMap::with_capacity(layers);
@@ -199,7 +293,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
                             );
 
                             {
-                                let labeled_node = rpc.c_x.get_node_at_layer(layer)?;
+                                let labeled_node = rcp.c_x.get_node_at_layer(layer)?;
                                 assert!(
                                     proof.verify(&pub_inputs.replica_id, &labeled_node),
                                     format!("Invalid encoding proof generated at layer {}", layer)
@@ -217,7 +311,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
 
                         Ok(Proof {
                             comm_d_proofs: comm_d_proof,
-                            replica_column_proofs: rpc,
+                            replica_column_proofs: rcp,
                             comm_r_last_proof,
                             labeling_proofs,
                             encoding_proof: encoding_proof.expect("invalid tapering"),
@@ -395,177 +489,313 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         assert_eq!(data.len(), nodes_count * NODE_SIZE);
         trace!("nodes count {}, data len {}", nodes_count, data.len());
 
-        // Ensure that the node count will work for binary and oct arities.
-        trace!(
-            "is_merkle_tree_size_valid({}, BINARY_ARITY) = {}",
-            nodes_count,
-            is_merkle_tree_size_valid(nodes_count, BINARY_ARITY)
-        );
-        trace!(
-            "is_merkle_tree_size_valid({}, OCT_ARITY) = {}",
-            nodes_count,
-            is_merkle_tree_size_valid(nodes_count, OCT_ARITY)
-        );
-        assert!(is_merkle_tree_size_valid(nodes_count, BINARY_ARITY));
-        assert!(is_merkle_tree_size_valid(nodes_count, OCT_ARITY));
+        let transform_and_replicate = |tree_count| -> Result<(_, _, _, _, _, _)> {
+            let nodes_count = graph.size() / tree_count;
 
-        let layers = layer_challenges.layers();
-        assert!(layers > 0);
+            // Ensure that the node count will work for binary and oct arities.
+            trace!(
+                "is_merkle_tree_size_valid({}, BINARY_ARITY) = {}",
+                nodes_count,
+                is_merkle_tree_size_valid(nodes_count, BINARY_ARITY)
+            );
+            trace!(
+                "is_merkle_tree_size_valid({}, OCT_ARITY) = {}",
+                nodes_count,
+                is_merkle_tree_size_valid(nodes_count, OCT_ARITY)
+            );
+            assert!(is_merkle_tree_size_valid(nodes_count, BINARY_ARITY));
+            assert!(is_merkle_tree_size_valid(nodes_count, OCT_ARITY));
 
-        // Generate all store configs that we need based on the
-        // cache_path in the specified config.
-        let mut tree_d_config = StoreConfig::from_config(
-            &config,
-            CacheKey::CommDTree.to_string(),
-            Some(get_merkle_tree_len(nodes_count, BINARY_ARITY)?),
-        );
-        tree_d_config.levels =
-            StoreConfig::default_cached_above_base_layer(nodes_count, BINARY_ARITY);
+            let layers = layer_challenges.layers();
+            assert!(layers > 0);
 
-        let mut tree_r_last_config = StoreConfig::from_config(
-            &config,
-            CacheKey::CommRLastTree.to_string(),
-            Some(get_merkle_tree_len(nodes_count, OCT_ARITY)?),
-        );
-        tree_r_last_config.levels =
-            StoreConfig::default_cached_above_base_layer(nodes_count, OCT_ARITY);
+            // Generate all store configs that we need based on the
+            // cache_path in the specified config.
+            let mut tree_d_config = StoreConfig::from_config(
+                &config,
+                CacheKey::CommDTree.to_string(),
+                Some(get_merkle_tree_len(nodes_count, BINARY_ARITY)?),
+            );
+            tree_d_config.levels =
+                StoreConfig::default_cached_above_base_layer(nodes_count, BINARY_ARITY);
 
-        let mut tree_c_config = StoreConfig::from_config(
-            &config,
-            CacheKey::CommCTree.to_string(),
-            Some(get_merkle_tree_len(nodes_count, OCT_ARITY)?),
-        );
-        tree_c_config.levels = StoreConfig::default_cached_above_base_layer(nodes_count, OCT_ARITY);
+            let mut tree_r_last_config = StoreConfig::from_config(
+                &config,
+                CacheKey::CommRLastTree.to_string(),
+                Some(get_merkle_tree_len(nodes_count, OCT_ARITY)?),
+            );
+            tree_r_last_config.levels =
+                StoreConfig::default_cached_above_base_layer(nodes_count, OCT_ARITY);
 
-        let labels = LabelsCache::new(&label_configs)?;
+            let mut tree_c_config = StoreConfig::from_config(
+                &config,
+                CacheKey::CommCTree.to_string(),
+                Some(get_merkle_tree_len(nodes_count, OCT_ARITY)?),
+            );
+            tree_c_config.levels =
+                StoreConfig::default_cached_above_base_layer(nodes_count, OCT_ARITY);
 
-        // Build the tree for CommC
-        let tree_c = measure_op(GenerateTreeC, || {
-            info!("Building column hashes");
+            let labels = LabelsCache::new(&label_configs)?;
 
-            let gsize = graph.size();
+            // Build the tree for CommC
+            // FIXME: Removed "measure_op(GenerateTreeC" closure, as it wasn't building
+            let tree_c_root: Result<H::Domain> = {
+                info!("Building column hashes");
 
-            let mut hashes: Vec<H::Domain> = vec![H::Domain::default(); gsize];
+                let configs = split_config(Some(tree_c_config.clone()), tree_count)?;
+                let mut trees = Vec::with_capacity(tree_count);
 
-            rayon::scope(|s| {
-                // spawn n = num_cpus * 2 threads
-                let n = num_cpus::get() * 2;
+                for i in 0..tree_count {
+                    let mut hashes: Vec<H::Domain> = vec![H::Domain::default(); nodes_count];
 
-                // only split if we have at least two elements per thread
-                let num_chunks = if n > gsize * 2 { 1 } else { n };
+                    rayon::scope(|s| {
+                        // spawn n = num_cpus * 2 threads
+                        let n = num_cpus::get() * 2;
 
-                // chunk into n chunks
-                let chunk_size = (gsize as f64 / num_chunks as f64).ceil() as usize;
+                        // only split if we have at least two elements per thread
+                        let num_chunks = if n > nodes_count * 2 { 1 } else { n };
 
-                // calculate all n chunks in parallel
-                for (chunk, hashes_chunk) in hashes.chunks_mut(chunk_size).enumerate() {
-                    let labels = &labels;
+                        // chunk into n chunks
+                        let chunk_size = (nodes_count as f64 / num_chunks as f64).ceil() as usize;
 
-                    s.spawn(move |_| {
-                        for (i, hash) in hashes_chunk.iter_mut().enumerate() {
-                            let data: Vec<_> = (1..=layers)
-                                .map(|layer| {
-                                    let store = labels.labels_for_layer(layer);
-                                    store.read_at(i + chunk * chunk_size).unwrap().into()
-                                })
-                                .collect();
+                        // calculate all n chunks in parallel
+                        for (chunk, hashes_chunk) in hashes.chunks_mut(chunk_size).enumerate() {
+                            let labels = &labels;
 
-                            *hash = hash_single_column(&data).into();
+                            s.spawn(move |_| {
+                                for (j, hash) in hashes_chunk.iter_mut().enumerate() {
+                                    let data: Vec<_> = (1..=layers)
+                                        .map(|layer| {
+                                            let store = labels.labels_for_layer(layer);
+                                            store
+                                                .read_at((i * nodes_count) + j + chunk * chunk_size)
+                                                .unwrap()
+                                                .into()
+                                        })
+                                        .collect();
+
+                                    *hash = hash_single_column(&data).into();
+                                }
+                            });
                         }
                     });
+
+                    info!("building tree_c");
+                    assert!(configs[i].is_some());
+                    trees.push(OctTree::<H>::from_par_iter_with_config(
+                        hashes.into_par_iter(),
+                        if tree_count == 1 {
+                            tree_c_config.clone()
+                        } else {
+                            configs[i].as_ref().unwrap().clone()
+                        },
+                    )?);
                 }
-            });
 
-            info!("building tree_c");
-            OctMerkleTree::<_, H::Function>::from_par_iter_with_config(
-                hashes.into_par_iter(),
-                tree_c_config.clone(),
-            )
-        })?;
-        info!("tree_c done");
+                assert_eq!(tree_count, trees.len());
 
-        // Build the MerkleTree over the original data (if needed).
-        let tree_d = match data_tree {
-            Some(t) => {
-                trace!("using existing original data merkle tree");
-                assert_eq!(t.len(), 2 * (data.len() / NODE_SIZE) - 1);
+                if tree_count == 1 {
+                    let tree_c = &trees[0];
+                    tree_c_config.size = Some(tree_c.len());
+                    assert_eq!(tree_c_config.size.unwrap(), tree_c.len());
 
-                t
-            }
-            None => {
-                trace!("building merkle tree for the original data");
+                    Ok(tree_c.root())
+                } else {
+                    let tree_c = OctSubTree::<H>::from_trees(trees)?;
+                    tree_c_config.size = Some(tree_c.len());
+                    assert_eq!(tree_c_config.size.unwrap(), tree_c.len());
+
+                    Ok(tree_c.root())
+                }
+            };
+            info!("tree_c done");
+
+            // Build the MerkleTree over the original data (if needed).
+            let tree_d = match data_tree {
+                Some(t) => {
+                    trace!("using existing original data merkle tree");
+                    assert_eq!(t.len(), 2 * (data.len() / NODE_SIZE) - 1);
+
+                    t
+                }
+                None => {
+                    trace!("building merkle tree for the original data");
+                    data.ensure_data()?;
+                    measure_op(CommD, || {
+                        Self::build_binary_tree::<G>(data.as_ref(), tree_d_config.clone())
+                    })?
+                }
+            };
+            tree_d_config.size = Some(tree_d.len());
+            assert_eq!(tree_d_config.size.unwrap(), tree_d.len());
+            let tree_d_root = tree_d.root();
+            //drop(tree_d);
+
+            // Encode original data into the last layer.
+            info!("building tree_r_last");
+            // FIXME: Removed "measure_op(GenerateTreeRLast" closure, as it wasn't building
+            let tree_r_last_root: Result<H::Domain> = {
                 data.ensure_data()?;
-                measure_op(CommD, || {
-                    Self::build_binary_tree::<G>(data.as_ref(), tree_d_config.clone())
-                })?
-            }
+
+                let last_layer_labels = labels.labels_for_last_layer()?;
+                let size = Store::len(last_layer_labels);
+
+                let mut trees = Vec::with_capacity(tree_count);
+                let mut start = 0;
+                let mut end = size / tree_count;
+
+                let configs = split_config(Some(tree_r_last_config.clone()), tree_count)?;
+                for config in &configs {
+                    let encoded_data = last_layer_labels
+                        .read_range(start..end)?
+                        .into_par_iter()
+                        .zip(
+                            data.as_mut()[(start * NODE_SIZE)..(end * NODE_SIZE)]
+                                .par_chunks_mut(NODE_SIZE),
+                        )
+                        .map(|(key, data_node_bytes)| {
+                            let data_node = H::Domain::try_from_bytes(data_node_bytes).unwrap();
+                            let encoded_node = encode::<H::Domain>(key, data_node);
+                            data_node_bytes.copy_from_slice(AsRef::<[u8]>::as_ref(&encoded_node));
+
+                            encoded_node
+                        });
+
+                    assert!(config.is_some());
+                    trees.push(OctLCTree::<H>::from_par_iter_with_config(
+                        encoded_data,
+                        if tree_count == 1 {
+                            tree_r_last_config.clone()
+                        } else {
+                            config.as_ref().unwrap().clone()
+                        },
+                    )?);
+
+                    start = end;
+                    end += size / tree_count;
+                }
+
+                if tree_count == 1 {
+                    let tree_r_last = &trees[0];
+                    tree_r_last_config.size = Some(tree_r_last.len());
+                    assert_eq!(tree_r_last_config.size.unwrap(), tree_r_last.len());
+
+                    // Store and persist encoded replica data.
+                    {
+                        use std::fs::OpenOptions;
+                        use std::io::prelude::*;
+
+                        let mut f = OpenOptions::new()
+                            .write(true)
+                            .create(true)
+                            .open(&replica_path)?;
+
+                        // Only write the replica's base layer of leaf data.
+                        trace!("Wrote replica data for {} nodes", tree_r_last.leafs());
+                        f.write_all(&data.as_ref()[0..tree_r_last.leafs() * NODE_SIZE])?;
+                    }
+
+                    Ok(tree_r_last.root())
+                } else {
+                    let leafs = trees[0].leafs();
+                    assert_eq!((leafs * NODE_SIZE) * tree_count, data.len());
+
+                    // Store and persist encoded replica data.
+                    let mut replica_paths = Vec::with_capacity(tree_count);
+                    {
+                        use std::fs::OpenOptions;
+                        use std::io::prelude::*;
+                        use std::path::Path;
+
+                        let mut start = 0;
+                        let mut end = leafs * NODE_SIZE;
+
+                        for i in 0..tree_count {
+                            replica_paths.push(
+                                Path::new(
+                                    format!("{:?}-{}", replica_path, i)
+                                        .replace("\"", "")
+                                        .as_str(),
+                                )
+                                .to_path_buf(),
+                            );
+                            let mut f = OpenOptions::new()
+                                .write(true)
+                                .create(true)
+                                .open(&replica_paths[i])?;
+
+                            // Only write the replica's base layer of leaf data.
+                            trace!("Wrote replica data for {} nodes [{}-{}]", leafs, start, end);
+                            f.write_all(&data.as_ref()[start..end])?;
+                            start = end;
+                            end += leafs * NODE_SIZE;
+                        }
+                    }
+
+                    let unwrapped_configs = {
+                        let mut c = Vec::with_capacity(tree_count);
+                        for i in 0..tree_count {
+                            c.push(configs[i].as_ref().unwrap().clone());
+                            c[i].levels = configs[i].as_ref().unwrap().levels;
+                        }
+
+                        c
+                    };
+
+                    let tree_r_last = OctLCSubTree::<H>::from_store_configs_and_replicas(
+                        leafs,
+                        &unwrapped_configs,
+                        &replica_paths,
+                    )?;
+                    tree_r_last_config.size = Some(tree_r_last.len());
+
+                    Ok(tree_r_last.root())
+                }
+            };
+            info!("tree_r_last done");
+
+            data.drop_data();
+
+            Ok((
+                tree_d_config,
+                tree_c_config,
+                tree_r_last_config,
+                tree_d_root,
+                tree_c_root?,
+                tree_r_last_root?,
+            ))
         };
 
-        // Encode original data into the last layer.
-        info!("building tree_r_last");
-        let tree_r_last = measure_op(GenerateTreeRLast, || {
-            data.ensure_data()?;
-
-            let last_layer_labels = labels.labels_for_last_layer()?;
-            let size = Store::len(last_layer_labels);
-
-            let encoded_data = last_layer_labels
-                .read_range(0..size)?
-                .into_par_iter()
-                .zip(data.as_mut().par_chunks_mut(NODE_SIZE))
-                .map(|(key, data_node_bytes)| {
-                    let data_node = H::Domain::try_from_bytes(data_node_bytes).unwrap();
-                    let encoded_node = encode::<H::Domain>(key, data_node);
-                    data_node_bytes.copy_from_slice(AsRef::<[u8]>::as_ref(&encoded_node));
-
-                    encoded_node
-                });
-
-            OctLCMerkleTree::<_, H::Function>::from_par_iter_with_config(
-                encoded_data,
-                tree_r_last_config.clone(),
-            )
-        })?;
-        info!("tree_r_last done");
-
-        assert_eq!(tree_c.len(), tree_r_last.len());
-
-        assert_eq!(tree_d_config.size.unwrap(), tree_d.len());
-        assert_eq!(tree_r_last_config.size.unwrap(), tree_r_last.len());
-        assert_eq!(tree_c_config.size.unwrap(), tree_c.len());
-
-        trace!("tree d len {}", tree_d.len());
-        trace!("tree c len {}", tree_c.len());
-        trace!("tree r_last len {}", tree_r_last.len());
-
-        // Store and persist encoded replica data.
-        {
-            use std::fs::OpenOptions;
-            use std::io::prelude::*;
-
-            let mut f = OpenOptions::new()
-                .write(true)
-                .create(true)
-                .open(&replica_path)?;
-
-            // Only write the replica's base layer of leaf data.
-            trace!("Wrote replica data for {} nodes", tree_r_last.leafs());
-            f.write_all(&data.as_ref()[0..tree_r_last.leafs() * NODE_SIZE])?;
-        }
-
-        data.drop_data();
+        let sector_size = (nodes_count * NODE_SIZE) as u64;
+        let (
+            tree_d_config,
+            tree_c_config,
+            tree_r_last_config,
+            tree_d_root,
+            tree_c_root,
+            tree_r_last_root,
+        ) = match sector_size {
+            SECTOR_SIZE_2_KIB | SECTOR_SIZE_8_MIB | SECTOR_SIZE_512_MIB => {
+                transform_and_replicate(1)
+            }
+            // Compound tree handling: FIXME: move 32GB and 64GB as special case compound handling as well
+            SECTOR_SIZE_4_KIB | SECTOR_SIZE_16_MIB | SECTOR_SIZE_1_GIB => {
+                transform_and_replicate(2)
+            }
+            _ => panic!("Unsupported data len"),
+        }?;
 
         // comm_r = H(comm_c || comm_r_last)
-        let comm_r: H::Domain = H::Function::hash2(&tree_c.root(), &tree_r_last.root());
+        let comm_r: H::Domain = H::Function::hash2(&tree_c_root, &tree_r_last_root);
 
         Ok((
             Tau {
-                comm_d: tree_d.root(),
+                comm_d: tree_d_root,
                 comm_r,
             },
             PersistentAux {
-                comm_c: tree_c.root(),
-                comm_r_last: tree_r_last.root(),
+                comm_c: tree_c_root,
+                comm_r_last: tree_r_last_root,
             },
             TemporaryAux {
                 labels: label_configs,
