@@ -300,15 +300,15 @@ fn verify_store(config: &StoreConfig, arity: usize) -> Result<()> {
             store_path.display()
         );
 
-        for i in 0..configs.len() {
+        for config in &configs {
             ensure!(
                 DiskStore::<<DefaultPieceHasher as Hasher>::Domain>::is_consistent(
-                    configs[i].size.unwrap() / configs.len(),
+                    config.size.unwrap() / configs.len(),
                     arity,
-                    &configs[i],
+                    &config,
                 )?,
                 "Store is inconsistent: {:?}",
-                StoreConfig::data_path(&configs[i].path, &configs[i].id)
+                StoreConfig::data_path(&config.path, &config.id)
             );
         }
     } else {
@@ -362,15 +362,15 @@ fn verify_level_cache_store(config: &StoreConfig, arity: usize) -> Result<()> {
             store_path.display()
         );
 
-        for i in 0..configs.len() {
+        for config in &configs {
             ensure!(
                 LevelCacheStore::<<DefaultPieceHasher as Hasher>::Domain, std::fs::File>::is_consistent(
-                    configs[i].size.unwrap() / configs.len(),
+                    config.size.unwrap() / configs.len(),
                     arity,
-                    &configs[i],
+                    &config,
                 )?,
                 "Store is inconsistent: {:?}",
-                StoreConfig::data_path(&configs[i].path, &configs[i].id)
+                StoreConfig::data_path(&config.path, &config.id)
             );
         }
     } else {
