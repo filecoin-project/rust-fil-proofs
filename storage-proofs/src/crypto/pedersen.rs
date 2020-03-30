@@ -309,7 +309,7 @@ impl<T: AsRef<[u8]>, S: Iterator<Item = T>> Iterator for Bits<T, S> {
 mod tests {
     use super::*;
     use crate::util::bytes_into_bits;
-    use bitvec::{self, BitVec};
+    use bitvec::{bitvec, order::Lsb0};
     use ff::Field;
     use paired::bls12_381::Fr;
     use rand::{Rng, SeedableRng};
@@ -320,13 +320,10 @@ mod tests {
         let bytes = b"ABC";
         let bits = bytes_into_bits(bytes);
 
-        let mut bits2 = core::iter::repeat(false)
-            .take(bits.len())
-            .collect::<BitVec<bitvec::LittleEndian, u8>>();
+        let mut bits2 = bitvec![Lsb0, u8; 0; bits.len()];
+        bits2.as_mut_slice()[0..bytes.len()].copy_from_slice(&bytes[..]);
 
-        bits2.as_mut()[0..bytes.len()].copy_from_slice(&bytes[..]);
-
-        assert_eq!(bits, bits2.iter().collect::<Vec<bool>>());
+        assert_eq!(bits, bits2.iter().copied().collect::<Vec<bool>>());
     }
 
     #[test]

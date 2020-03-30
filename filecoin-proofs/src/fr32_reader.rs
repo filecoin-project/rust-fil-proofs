@@ -492,7 +492,7 @@ mod tests {
     // it for some corner cases, but since largely this implementation
     // has been replaced it seems reasonable.
     fn bit_vec_padding(raw_data: Vec<u8>) -> Box<[u8]> {
-        use bitvec::{BitVec, LittleEndian};
+        use bitvec::{order::Lsb0 as LittleEndian, vec::BitVec};
         use itertools::Itertools;
 
         let mut padded_data: BitVec<LittleEndian, u8> = BitVec::new();
