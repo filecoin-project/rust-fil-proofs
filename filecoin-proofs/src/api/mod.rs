@@ -426,9 +426,10 @@ mod tests {
     use rand_xorshift::XorShiftRng;
     use storage_proofs::fr32::bytes_into_fr;
     use storage_proofs::post::election::Candidate;
+    use storage_proofs::sector::*;
     use tempfile::NamedTempFile;
 
-    use crate::constants::{POREP_PARTITIONS, SECTOR_SIZE_2_KIB, SINGLE_PARTITION_PROOF_LEN};
+    use crate::constants::*;
     use crate::types::{PoStConfig, SectorSize};
     use crate::PoStType;
 
@@ -541,7 +542,7 @@ mod tests {
         let result = verify_election_post(
             &PoStConfig {
                 sector_size: SectorSize(SECTOR_SIZE_2_KIB),
-                challenge_count: crate::constants::ELECTION_POST_CHALLENGE_COUNT,
+                challenge_count: ELECTION_POST_CHALLENGE_COUNT,
                 sector_count: 1,
                 typ: PoStType::Election,
                 priority: false,
@@ -587,7 +588,7 @@ mod tests {
         let result = verify_election_post(
             &PoStConfig {
                 sector_size: SectorSize(SECTOR_SIZE_2_KIB),
-                challenge_count: crate::constants::ELECTION_POST_CHALLENGE_COUNT,
+                challenge_count: ELECTION_POST_CHALLENGE_COUNT,
                 sector_count: 1,
                 typ: PoStType::Election,
                 priority: false,
@@ -624,11 +625,84 @@ mod tests {
     #[test]
     #[ignore]
     fn test_seal_lifecycle() -> Result<()> {
-        init_logger();
+        create_seal(SECTOR_SIZE_2_KIB)?;
+        Ok(())
+    }
 
+    #[test]
+    fn test_random_domain_element() {
+        let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
+
+        for _ in 0..100 {
+            let random_el: DefaultTreeDomain = Fr::random(rng).into();
+            let mut randomness = [0u8; 32];
+            randomness.copy_from_slice(AsRef::<[u8]>::as_ref(&random_el));
+            let back: DefaultTreeDomain = as_safe_commitment(&randomness, "test").unwrap();
+            assert_eq!(back, random_el);
+        }
+    }
+
+    #[test]
+    #[ignore]
+    fn test_winning_post() -> Result<()> {
         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
 
         let sector_size = SECTOR_SIZE_2_KIB;
+        let (sector_id, replica, comm_r, cache_dir, prover_id) = create_seal(sector_size)?;
+        let sector_count = WINNING_POST_SECTOR_COUNT;
+        let mut sector_set = OrderedSectorSet::new();
+        sector_set.insert(sector_id);
+
+        let random_fr: DefaultTreeDomain = Fr::random(rng).into();
+        let mut randomness = [0u8; 32];
+        randomness.copy_from_slice(AsRef::<[u8]>::as_ref(&random_fr));
+
+        let config = PoStConfig {
+            sector_size: sector_size.into(),
+            sector_count,
+            challenge_count: WINNING_POST_CHALLENGE_COUNT,
+            typ: PoStType::Winning,
+            priority: false,
+        };
+
+        let challenged_sectors =
+            post::generate_winning_post_sector_challenge(&config, &randomness, &sector_set)?;
+        assert_eq!(challenged_sectors.len(), sector_count);
+        assert_eq!(challenged_sectors[0], sector_id);
+
+        let pub_replicas = vec![(sector_id, PublicReplicaInfo::new(comm_r)?)];
+        let priv_replicas = vec![(
+            sector_id,
+            PrivateReplicaInfo::new(replica.path().into(), comm_r, cache_dir.path().into())?,
+        )];
+
+        let proof =
+            post::generate_winning_post(&config, &randomness, &priv_replicas[..], prover_id)?;
+
+        let valid = post::verify_winning_post(
+            &config,
+            &randomness,
+            &pub_replicas[..],
+            prover_id,
+            &sector_set,
+            &proof,
+        )?;
+        assert!(valid, "proof did not verify");
+        Ok(())
+    }
+
+    fn create_seal(
+        sector_size: u64,
+    ) -> Result<(
+        SectorId,
+        NamedTempFile,
+        Commitment,
+        tempfile::TempDir,
+        ProverId,
+    )> {
+        init_logger();
+
+        let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
 
         let number_of_bytes_in_piece =
             UnpaddedBytesAmount::from(PaddedBytesAmount(sector_size.clone()));
@@ -666,7 +740,10 @@ mod tests {
         };
 
         let cache_dir = tempfile::tempdir().unwrap();
-        let prover_id = rng.gen();
+        let prover_fr: DefaultTreeDomain = Fr::random(rng).into();
+        let mut prover_id = [0u8; 32];
+        prover_id.copy_from_slice(AsRef::<[u8]>::as_ref(&prover_fr));
+
         let ticket = rng.gen();
         let seed = rng.gen();
         let sector_id = SectorId::from(12);
@@ -756,6 +833,6 @@ mod tests {
         )?;
         assert!(verified, "failed to verify valid seal");
 
-        Ok(())
+        Ok((sector_id, sealed_sector_file, comm_r, cache_dir, prover_id))
     }
 }

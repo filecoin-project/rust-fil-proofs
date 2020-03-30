@@ -25,7 +25,7 @@ use storage_proofs::sector::*;
 
 use crate::api::util::{as_safe_commitment, get_tree_size};
 use crate::caches::{get_post_params, get_post_verifying_key};
-use crate::constants::DefaultTreeHasher;
+use crate::constants::{DefaultTreeDomain, DefaultTreeHasher};
 use crate::parameters::{
     election_post_setup_params, window_post_setup_params, winning_post_setup_params,
 };
@@ -508,14 +508,16 @@ pub fn generate_winning_post(
     );
 
     ensure!(
-        replicas.len() == post_config.challenge_count,
+        replicas.len() == post_config.sector_count,
         "invalid amount of replicas"
     );
 
-    let randomness_safe = as_safe_commitment(randomness, "randomness")?;
-    let prover_id_safe = as_safe_commitment(&prover_id, "randomness")?;
+    let randomness_safe: DefaultTreeDomain = as_safe_commitment(randomness, "randomness")?;
+    let prover_id_safe: DefaultTreeDomain = as_safe_commitment(&prover_id, "prover_id")?;
 
-    let vanilla_params = winning_post_setup_params(&post_config);
+    let vanilla_params = winning_post_setup_params(&post_config)?;
+    let param_sector_count = vanilla_params.sector_count;
+
     let setup_params = compound_proof::SetupParams {
         vanilla_params,
         partitions: None,
@@ -533,12 +535,6 @@ pub fn generate_winning_post(
         .iter()
         .map(|(_, replica)| replica.merkle_tree(tree_size, tree_leafs))
         .collect::<Result<Vec<_>>>()?;
-
-    ensure!(
-        post_config.challenge_count % post_config.sector_count == 0,
-        "sector count must divide challenge count"
-    );
-    let param_sector_count = post_config.challenge_count / post_config.sector_count;
 
     let mut pub_sectors = Vec::with_capacity(param_sector_count);
     let mut priv_sectors = Vec::with_capacity(param_sector_count);
@@ -592,9 +588,8 @@ pub fn generate_winning_post_sector_challenge(
         "invalid post config type"
     );
 
-    let randomness_safe =
-        as_safe_commitment::<<DefaultTreeHasher as Hasher>::Domain, _>(randomness, "randomness")?;
-    fallback::generate_sector_challenges(randomness_safe, post_config.challenge_count, sector_set)
+    let randomness_safe: DefaultTreeDomain = as_safe_commitment(randomness, "randomness")?;
+    fallback::generate_sector_challenges(randomness_safe, post_config.sector_count, sector_set)
 }
 
 /// Verifies a winning proof-of-spacetime.
@@ -604,7 +599,7 @@ pub fn generate_winning_post_sector_challenge(
 pub fn verify_winning_post(
     post_config: &PoStConfig,
     randomness: &ChallengeSeed,
-    replicas: &[(SectorId, PrivateReplicaInfo)],
+    replicas: &[(SectorId, PublicReplicaInfo)],
     prover_id: ProverId,
     sector_set: &OrderedSectorSet,
     proof: &[u8],
@@ -620,10 +615,12 @@ pub fn verify_winning_post(
         "invalid amount of replicas provided"
     );
 
-    let randomness_safe = as_safe_commitment(randomness, "randomness")?;
-    let prover_id_safe = as_safe_commitment(&prover_id, "randomness")?;
+    let randomness_safe: DefaultTreeDomain = as_safe_commitment(randomness, "randomness")?;
+    let prover_id_safe: DefaultTreeDomain = as_safe_commitment(&prover_id, "prover_id")?;
 
-    let vanilla_params = winning_post_setup_params(&post_config);
+    let vanilla_params = winning_post_setup_params(&post_config)?;
+    let param_sector_count = vanilla_params.sector_count;
+
     let setup_params = compound_proof::SetupParams {
         vanilla_params,
         partitions: None,
@@ -652,12 +649,6 @@ pub fn verify_winning_post(
     if proof.len() != 1 {
         return Ok(false);
     }
-
-    ensure!(
-        post_config.challenge_count % post_config.sector_count == 0,
-        "sector count must divide challenge count"
-    );
-    let param_sector_count = post_config.challenge_count / post_config.sector_count;
 
     let mut pub_sectors = Vec::with_capacity(param_sector_count);
     for _ in 0..param_sector_count {
@@ -699,7 +690,7 @@ pub fn generate_window_post(
     );
 
     let randomness_safe = as_safe_commitment(randomness, "randomness")?;
-    let prover_id_safe = as_safe_commitment(&prover_id, "randomness")?;
+    let prover_id_safe = as_safe_commitment(&prover_id, "prover_id")?;
 
     let vanilla_params = window_post_setup_params(&post_config);
 
@@ -793,7 +784,7 @@ pub fn verify_window_post(
     );
 
     let randomness_safe = as_safe_commitment(randomness, "randomness")?;
-    let prover_id_safe = as_safe_commitment(&prover_id, "randomness")?;
+    let prover_id_safe = as_safe_commitment(&prover_id, "prover_id")?;
 
     let vanilla_params = window_post_setup_params(&post_config);
     let setup_params = compound_proof::SetupParams {

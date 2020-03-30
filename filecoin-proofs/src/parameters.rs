@@ -46,15 +46,31 @@ pub fn election_post_setup_params(post_config: &PoStConfig) -> ElectionPostSetup
 }
 
 pub fn winning_post_public_params(post_config: &PoStConfig) -> Result<WinningPostPublicParams> {
-    fallback::FallbackPoSt::<DefaultTreeHasher>::setup(&winning_post_setup_params(&post_config))
+    fallback::FallbackPoSt::<DefaultTreeHasher>::setup(&winning_post_setup_params(&post_config)?)
 }
 
-pub fn winning_post_setup_params(post_config: &PoStConfig) -> WinningPostSetupParams {
-    fallback::SetupParams {
+pub fn winning_post_setup_params(post_config: &PoStConfig) -> Result<WinningPostSetupParams> {
+    ensure!(
+        post_config.challenge_count % post_config.sector_count == 0,
+        "sector count must divide challenge count"
+    );
+
+    let param_sector_count = post_config.challenge_count / post_config.sector_count;
+    let param_challenge_count = post_config.challenge_count / param_sector_count;
+
+    ensure!(
+        param_sector_count * param_challenge_count == post_config.challenge_count,
+        "invald parameters calculated {} * {} != {}",
+        param_sector_count,
+        param_challenge_count,
+        post_config.challenge_count
+    );
+
+    Ok(fallback::SetupParams {
         sector_size: post_config.padded_sector_size().into(),
-        challenge_count: post_config.challenge_count,
-        sector_count: post_config.sector_count,
-    }
+        challenge_count: param_challenge_count,
+        sector_count: param_sector_count,
+    })
 }
 
 pub fn window_post_public_params(post_config: &PoStConfig) -> Result<WindowPostPublicParams> {
@@ -125,6 +141,8 @@ fn select_challenges(
 mod tests {
     use super::*;
 
+    use crate::types::PoStType;
+
     #[test]
     fn partition_layer_challenges_test() {
         let f = |partitions| {
@@ -138,5 +156,21 @@ mod tests {
         assert_eq!(12, f(1));
         assert_eq!(6, f(2));
         assert_eq!(3, f(4));
+    }
+
+    #[test]
+    fn test_winning_post_params() {
+        let config = PoStConfig {
+            typ: PoStType::Winning,
+            priority: false,
+            challenge_count: 66,
+            sector_count: 1,
+            sector_size: 2048u64.into(),
+        };
+
+        let params = winning_post_public_params(&config).unwrap();
+        assert_eq!(params.sector_count, 66);
+        assert_eq!(params.challenge_count, 1);
+        assert_eq!(params.sector_size, 2048);
     }
 }
