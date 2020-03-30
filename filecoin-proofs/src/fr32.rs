@@ -2,7 +2,7 @@ use std::cmp::min;
 use std::io::{self, Error, ErrorKind, Read, Seek, SeekFrom, Write};
 
 use anyhow::{ensure, Result};
-use bitvec::{BitVec, LittleEndian};
+use bitvec::{order::Lsb0 as LittleEndian, vec::BitVec};
 
 /** PaddingMap represents a mapping between data and its padded equivalent.
 
@@ -902,7 +902,7 @@ mod tests {
             let shifted_bv: BitVecLEu8 = bv >> new_offset;
 
             assert_eq!(
-                shifted_bv.as_ref(),
+                shifted_bv.as_slice(),
                 &extract_bits_and_shift(&data, pos, num_bits, new_offset)[..],
             );
         }
@@ -929,7 +929,7 @@ mod tests {
                 }
                 // We use the opposite shift notation (see `shift_bits`).
 
-                assert_eq!(bv.as_ref(), shifted_bits.as_slice());
+                assert_eq!(bv.as_slice(), shifted_bits.as_slice());
             }
         }
     }

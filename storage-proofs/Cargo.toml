@@ -12,7 +12,6 @@ readme = "README.md"
 bench = false
 
 [dependencies]
-bitvec = "0.5"
 rand = "0.7"
 libc = "0.2"
 merkletree = "0.17.0"
@@ -72,6 +71,7 @@ profile = ["measurements"]
 proptest = "0.7"
 criterion = "0.3"
 femme = "1.2.0"
+bitvec = "0.17"
 
 [[bench]]
 name = "pedersen"
