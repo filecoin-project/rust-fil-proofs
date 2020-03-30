@@ -4,9 +4,7 @@ use storage_proofs::post::election::{self, ElectionPoSt};
 use storage_proofs::post::fallback;
 use storage_proofs::proof::ProofScheme;
 
-use crate::constants::{
-    DefaultPieceHasher, DefaultTreeHasher, DRG_DEGREE, EXP_DEGREE, LAYERS, POREP_MINIMUM_CHALLENGES,
-};
+use crate::constants::*;
 use crate::types::{PaddedBytesAmount, PoStConfig};
 
 const DRG_SEED: [u8; 28] = [

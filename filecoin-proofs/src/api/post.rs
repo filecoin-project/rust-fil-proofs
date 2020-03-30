@@ -25,7 +25,7 @@ use storage_proofs::sector::*;
 
 use crate::api::util::{as_safe_commitment, get_tree_size};
 use crate::caches::{get_post_params, get_post_verifying_key};
-use crate::constants::{DefaultTreeDomain, DefaultTreeHasher};
+use crate::constants::*;
 use crate::parameters::{
     election_post_setup_params, window_post_setup_params, winning_post_setup_params,
 };
@@ -558,6 +558,7 @@ pub fn generate_winning_post(
         randomness: randomness_safe,
         prover_id: prover_id_safe,
         sectors: &pub_sectors,
+        k: None,
     };
 
     let priv_inputs = fallback::PrivateInputs::<DefaultTreeHasher> {
@@ -662,6 +663,7 @@ pub fn verify_winning_post(
         randomness: randomness_safe,
         prover_id: prover_id_safe,
         sectors: &pub_sectors,
+        k: None,
     };
 
     let is_valid =
@@ -693,26 +695,20 @@ pub fn generate_window_post(
     let prover_id_safe = as_safe_commitment(&prover_id, "prover_id")?;
 
     let vanilla_params = window_post_setup_params(&post_config);
+    let partitions = get_partitions_for_window_post(replicas.len(), &post_config);
 
-    // TODO: Split proofs into partitions, at certain cut off points
-    // TODO: do we have max partitions? currently no, might change
-    // TODO: just repeat the last sector to fill up the snark
-
-    // sectors = 2000
-    // challs = 10
-    // sectors_per_partition = (sectors * challs) / MAX_CONSTRAINTS
-
+    let sector_count = vanilla_params.sector_count;
     let setup_params = compound_proof::SetupParams {
         vanilla_params,
-        partitions: None,
+        partitions,
         priority: post_config.priority,
     };
+
     let pub_params: compound_proof::PublicParams<fallback::FallbackPoSt<DefaultTreeHasher>> =
         fallback::FallbackPoStCompound::setup(&setup_params)?;
     let groth_params = get_post_params(&post_config)?;
 
-    let tree_size =
-        get_tree_size::<<DefaultTreeHasher as Hasher>::Domain>(post_config.sector_size, OCT_ARITY)?;
+    let tree_size = get_tree_size::<DefaultTreeDomain>(post_config.sector_size, OCT_ARITY)?;
     let tree_leafs = get_merkle_tree_leafs(tree_size, OCT_ARITY);
 
     let trees: Vec<_> = replicas
@@ -720,36 +716,30 @@ pub fn generate_window_post(
         .map(|(_id, replica)| replica.merkle_tree(tree_size, tree_leafs))
         .collect::<Result<_>>()?;
 
-    let pub_sectors: Vec<_> = replicas
-        .iter()
-        .map(|(sector_id, replica)| {
-            let comm_r = replica.safe_comm_r()?;
-            Ok(fallback::PublicSector {
-                id: *sector_id,
-                comm_r,
-            })
-        })
-        .collect::<Result<_>>()?;
+    let mut pub_sectors = Vec::with_capacity(sector_count);
+    let mut priv_sectors = Vec::with_capacity(sector_count);
 
-    let priv_sectors: Vec<_> = replicas
-        .iter()
-        .zip(trees.iter())
-        .map(|((_sector_id, replica), tree)| {
-            let comm_c = replica.safe_comm_c()?;
-            let comm_r_last = replica.safe_comm_r_last()?;
+    for ((sector_id, replica), tree) in replicas.iter().zip(trees.iter()) {
+        let comm_r = replica.safe_comm_r()?;
+        let comm_c = replica.safe_comm_c()?;
+        let comm_r_last = replica.safe_comm_r_last()?;
 
-            Ok(fallback::PrivateSector {
-                tree,
-                comm_c,
-                comm_r_last,
-            })
-        })
-        .collect::<Result<_>>()?;
+        pub_sectors.push(fallback::PublicSector {
+            id: *sector_id,
+            comm_r,
+        });
+        priv_sectors.push(fallback::PrivateSector {
+            tree,
+            comm_c,
+            comm_r_last,
+        });
+    }
 
     let pub_inputs = fallback::PublicInputs {
         randomness: randomness_safe,
         prover_id: prover_id_safe,
         sectors: &pub_sectors,
+        k: None,
     };
 
     let priv_inputs = fallback::PrivateInputs::<DefaultTreeHasher> {
@@ -787,9 +777,11 @@ pub fn verify_window_post(
     let prover_id_safe = as_safe_commitment(&prover_id, "prover_id")?;
 
     let vanilla_params = window_post_setup_params(&post_config);
+    let partitions = get_partitions_for_window_post(replicas.len(), &post_config);
+
     let setup_params = compound_proof::SetupParams {
         vanilla_params,
-        partitions: None,
+        partitions,
         priority: false,
     };
     let pub_params: compound_proof::PublicParams<fallback::FallbackPoSt<DefaultTreeHasher>> =
@@ -797,10 +789,7 @@ pub fn verify_window_post(
 
     let verifying_key = get_post_verifying_key(&post_config)?;
 
-    let proof = MultiProof::new_from_reader(None, &proof[..], &verifying_key)?;
-    if proof.len() != 1 {
-        return Ok(false);
-    }
+    let proof = MultiProof::new_from_reader(partitions, &proof[..], &verifying_key)?;
 
     let pub_sectors: Vec<_> = replicas
         .iter()
@@ -817,6 +806,7 @@ pub fn verify_window_post(
         randomness: randomness_safe,
         prover_id: prover_id_safe,
         sectors: &pub_sectors,
+        k: None,
     };
 
     let is_valid =
@@ -829,4 +819,17 @@ pub fn verify_window_post(
     info!("verify_window_post:finish");
 
     Ok(true)
+}
+
+fn get_partitions_for_window_post(
+    total_sector_count: usize,
+    post_config: &PoStConfig,
+) -> Option<usize> {
+    let partitions = (total_sector_count as f32 / post_config.sector_count as f32).ceil() as usize;
+
+    if partitions > 1 {
+        Some(partitions)
+    } else {
+        None
+    }
 }

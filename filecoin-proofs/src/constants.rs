@@ -20,7 +20,6 @@ pub const WINNING_POST_CHALLENGE_COUNT: usize = 66;
 pub const WINNING_POST_SECTOR_COUNT: usize = 1;
 
 pub const WINDOW_POST_CHALLENGE_COUNT: usize = 10;
-pub const WINDOW_POST_SECTOR_COUNT: usize = 65; // TODO: correct value
 
 pub const DRG_DEGREE: usize = storage_proofs::drgraph::BASE_DEGREE;
 pub const EXP_DEGREE: usize = storage_proofs::porep::stacked::EXP_DEGREE;
@@ -56,6 +55,17 @@ lazy_static! {
             (SECTOR_SIZE_8_MIB, 2),
             (SECTOR_SIZE_512_MIB, 2),
             (SECTOR_SIZE_32_GIB, 11)
+        ]
+        .iter()
+        .copied()
+        .collect()
+    );
+    pub static ref WINDOW_POST_SECTOR_COUNT: RwLock<HashMap<u64, usize>> = RwLock::new(
+        [
+            (SECTOR_SIZE_2_KIB, 2),
+            (SECTOR_SIZE_8_MIB, 2),
+            (SECTOR_SIZE_512_MIB, 2),
+            (SECTOR_SIZE_32_GIB, 32) // TODO: correct value
         ]
         .iter()
         .copied()

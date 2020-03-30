@@ -291,7 +291,11 @@ pub fn main() {
         cache_window_post_params(&PoStConfig {
             sector_size: SectorSize(sector_size),
             challenge_count: WINDOW_POST_CHALLENGE_COUNT,
-            sector_count: WINDOW_POST_SECTOR_COUNT,
+            sector_count: *WINDOW_POST_SECTOR_COUNT
+                .read()
+                .unwrap()
+                .get(&sector_size)
+                .unwrap(),
             typ: PoStType::Window,
             priority: true,
         });

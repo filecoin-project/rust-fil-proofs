@@ -132,7 +132,6 @@ pub trait CompoundProof<
             requirements,
             multi_proof.circuit_proofs.len(),
         ) {
-            dbg!("invalid requirements");
             return Ok(false);
         }
 
@@ -142,14 +141,8 @@ pub trait CompoundProof<
             .collect::<Result<_>>()?;
         let proofs: Vec<_> = multi_proof.circuit_proofs.iter().collect();
 
-        let res1 =
-            groth16::verify_proofs_batch(&pvk, &mut rand::rngs::OsRng, &proofs[..1], &inputs[..1])?;
-        dbg!(&res1);
-        let res2 =
-            groth16::verify_proofs_batch(&pvk, &mut rand::rngs::OsRng, &proofs[1..], &inputs[1..])?;
-        dbg!(&res2);
-
-        Ok(res1 && res2)
+        let res = groth16::verify_proofs_batch(&pvk, &mut rand::rngs::OsRng, &proofs, &inputs)?;
+        Ok(res)
     }
 
     /// Efficiently verify multiple proofs.
