@@ -106,6 +106,7 @@ where
         _component_private_inputs: <PoRCircuit<'a, U, Bls12, H> as CircuitComponent>::ComponentPrivateInputs,
         proof: &'b <PoR<H, U> as ProofScheme<'a>>::Proof,
         public_params: &'b <PoR<H, U> as ProofScheme<'a>>::PublicParams,
+        _partition_k: Option<usize>,
     ) -> Result<PoRCircuit<'a, U, Bls12, H>> {
         let (root, private) = match (*public_inputs).commitment {
             None => (Root::Val(Some(proof.proof.root.into())), true),

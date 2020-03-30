@@ -79,6 +79,7 @@ where
         _priv_in: <RationalPoStCircuit<'a, Bls12, H> as CircuitComponent>::ComponentPrivateInputs,
         vanilla_proof: &<RationalPoSt<'a, H> as ProofScheme<'a>>::Proof,
         _pub_params: &<RationalPoSt<'a, H> as ProofScheme<'a>>::PublicParams,
+        _partition_k: Option<usize>,
     ) -> Result<RationalPoStCircuit<'a, Bls12, H>> {
         let comm_rs: Vec<_> = pub_in.comm_rs.iter().map(|c| Some((*c).into())).collect();
         let comm_cs: Vec<_> = vanilla_proof

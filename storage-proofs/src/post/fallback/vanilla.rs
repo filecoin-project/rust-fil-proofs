@@ -59,6 +59,8 @@ pub struct PublicInputs<'a, T: Domain> {
     pub randomness: T,
     pub prover_id: T,
     pub sectors: &'a [PublicSector<T>],
+    /// Partition index
+    pub k: Option<usize>,
 }
 
 #[derive(Debug, Clone)]
@@ -230,45 +232,178 @@ impl<'a, H: 'a + Hasher> ProofScheme<'a> for FallbackPoSt<'a, H> {
         pub_inputs: &'b Self::PublicInputs,
         priv_inputs: &'b Self::PrivateInputs,
     ) -> Result<Self::Proof> {
-        let num_sectors = pub_params.sector_count;
+        let proofs = Self::prove_all_partitions(pub_params, pub_inputs, priv_inputs, 1)?;
+        let k = match pub_inputs.k {
+            None => 0,
+            Some(k) => k,
+        };
+        // Because partition proofs require a common setup, the general ProofScheme implementation,
+        // which makes use of `ProofScheme::prove` cannot be used here. Instead, we need to prove all
+        // partitions in one pass, as implemented by `prove_all_partitions` below.
+        assert!(
+            k < 1,
+            "It is a programmer error to call StackedDrg::prove with more than one partition."
+        );
 
+        Ok(proofs[k].to_owned())
+    }
+
+    fn prove_all_partitions<'b>(
+        pub_params: &'b Self::PublicParams,
+        pub_inputs: &'b Self::PublicInputs,
+        priv_inputs: &'b Self::PrivateInputs,
+        partition_count: usize,
+    ) -> Result<Vec<Self::Proof>> {
         ensure!(
-            num_sectors == pub_inputs.sectors.len(),
-            "inconsistent number of public sectors {} != {}",
-            num_sectors,
+            priv_inputs.sectors.len() == pub_inputs.sectors.len(),
+            "inconsistent number of private and public sectors {} != {}",
+            priv_inputs.sectors.len(),
             pub_inputs.sectors.len(),
         );
 
+        let num_sectors_per_chunk = pub_params.sector_count;
+        let num_sectors = pub_inputs.sectors.len();
+
         ensure!(
-            num_sectors == priv_inputs.sectors.len(),
-            "inconsistent number of private sectors {} != {}",
+            num_sectors <= partition_count * num_sectors_per_chunk,
+            "cannot prove the provided number of sectors: {} > {} * {}",
             num_sectors,
-            priv_inputs.sectors.len(),
+            partition_count,
+            num_sectors_per_chunk,
         );
 
-        let mut proofs = Vec::with_capacity(num_sectors);
-        for (i, (pub_sector, priv_sector)) in pub_inputs
+        let mut partition_proofs = Vec::new();
+
+        for (j, (pub_sectors_chunk, priv_sectors_chunk)) in pub_inputs
             .sectors
-            .iter()
-            .zip(priv_inputs.sectors.iter())
+            .chunks(num_sectors_per_chunk)
+            .zip(priv_inputs.sectors.chunks(num_sectors_per_chunk))
             .enumerate()
         {
-            let tree = &priv_sector.tree;
-            let sector_id = pub_sector.id;
-            let tree_leafs = tree.leafs();
-            let levels = StoreConfig::default_cached_above_base_layer(tree_leafs, OCT_ARITY);
+            trace!("proving partition {}", j);
 
-            trace!(
-                "Generating proof for tree of len {} with leafs {}, and cached_layers {}",
-                tree.len(),
-                tree_leafs,
-                levels,
+            let mut proofs = Vec::with_capacity(num_sectors_per_chunk);
+
+            for (i, (pub_sector, priv_sector)) in pub_sectors_chunk
+                .iter()
+                .zip(priv_sectors_chunk.iter())
+                .enumerate()
+            {
+                let tree = &priv_sector.tree;
+                let sector_id = pub_sector.id;
+                let tree_leafs = tree.leafs();
+                let levels = StoreConfig::default_cached_above_base_layer(tree_leafs, OCT_ARITY);
+
+                trace!(
+                    "Generating proof for tree of len {} with leafs {}, and cached_layers {}",
+                    tree.len(),
+                    tree_leafs,
+                    levels,
+                );
+
+                let inclusion_proofs = (0..pub_params.challenge_count)
+                    .into_par_iter()
+                    .map(|n| {
+                        let challenge_index =
+                            (j * num_sectors_per_chunk + i * pub_params.challenge_count + n) as u64;
+                        let challenged_leaf_start = generate_leaf_challenge(
+                            pub_params,
+                            pub_inputs.randomness,
+                            sector_id.into(),
+                            challenge_index,
+                        )?;
+
+                        let proof =
+                            tree.gen_cached_proof(challenged_leaf_start as usize, levels)?;
+                        Ok(MerkleProof::new_from_proof(&proof))
+                    })
+                    .collect::<Result<Vec<_>>>()?;
+
+                proofs.push(SectorProof {
+                    inclusion_proofs,
+                    comm_c: priv_sector.comm_c,
+                    comm_r_last: priv_sector.comm_r_last,
+                });
+            }
+
+            // If there were less than the required number of sectors provided, we duplicate the last one
+            // to pad the proof out, such that it works in the circuit part.
+            while proofs.len() < num_sectors_per_chunk {
+                proofs.push(proofs[proofs.len() - 1].clone());
+            }
+
+            partition_proofs.push(Proof { sectors: proofs });
+        }
+
+        Ok(partition_proofs)
+    }
+
+    fn verify_all_partitions(
+        pub_params: &Self::PublicParams,
+        pub_inputs: &Self::PublicInputs,
+        partition_proofs: &[Self::Proof],
+    ) -> Result<bool> {
+        let challenge_count = pub_params.challenge_count;
+        let num_sectors_per_chunk = pub_params.sector_count;
+        let num_sectors = pub_inputs.sectors.len();
+
+        ensure!(
+            num_sectors <= num_sectors_per_chunk * partition_proofs.len(),
+            "inconsistent number of sectors: {} > {} * {}",
+            num_sectors,
+            num_sectors_per_chunk,
+            partition_proofs.len(),
+        );
+
+        for (j, (proof, pub_sectors_chunk)) in partition_proofs
+            .iter()
+            .zip(pub_inputs.sectors.chunks(num_sectors_per_chunk))
+            .enumerate()
+        {
+            ensure!(
+                pub_sectors_chunk.len() <= num_sectors_per_chunk,
+                "inconsistent number of public sectors: {} > {}",
+                pub_sectors_chunk.len(),
+                num_sectors_per_chunk,
             );
+            ensure!(
+                proof.sectors.len() == num_sectors_per_chunk,
+                "invalid number of sectors in the partition proof {}: {} != {}",
+                j,
+                proof.sectors.len(),
+                num_sectors_per_chunk,
+            );
+            for (i, (pub_sector, sector_proof)) in pub_sectors_chunk
+                .iter()
+                .zip(proof.sectors.iter())
+                .enumerate()
+            {
+                let sector_id = pub_sector.id;
+                let comm_r = &pub_sector.comm_r;
+                let comm_c = sector_proof.comm_c;
+                let inclusion_proofs = &sector_proof.inclusion_proofs;
 
-            let inclusion_proofs = (0..pub_params.challenge_count)
-                .into_par_iter()
-                .map(|n| {
-                    let challenge_index = (i * pub_params.challenge_count + n) as u64;
+                // Verify that H(Comm_c || Comm_r_last) == Comm_R
+
+                // comm_r_last is the root of the proof
+                let comm_r_last = inclusion_proofs[0].root();
+
+                if AsRef::<[u8]>::as_ref(&H::Function::hash2(&comm_c, comm_r_last))
+                    != AsRef::<[u8]>::as_ref(comm_r)
+                {
+                    return Ok(false);
+                }
+
+                ensure!(
+                    challenge_count == inclusion_proofs.len(),
+                    "unexpected umber of inclusion proofs: {} != {}",
+                    challenge_count,
+                    inclusion_proofs.len()
+                );
+
+                for (n, inclusion_proof) in inclusion_proofs.iter().enumerate() {
+                    let challenge_index =
+                        (j * num_sectors_per_chunk + i * pub_params.challenge_count + n) as u64;
                     let challenged_leaf_start = generate_leaf_challenge(
                         pub_params,
                         pub_inputs.randomness,
@@ -276,80 +411,22 @@ impl<'a, H: 'a + Hasher> ProofScheme<'a> for FallbackPoSt<'a, H> {
                         challenge_index,
                     )?;
 
-                    let proof = tree.gen_cached_proof(challenged_leaf_start as usize, levels)?;
-                    Ok(MerkleProof::new_from_proof(&proof))
-                })
-                .collect::<Result<Vec<_>>>()?;
+                    // validate all comm_r_lasts match
+                    if inclusion_proof.root() != comm_r_last {
+                        return Ok(false);
+                    }
 
-            proofs.push(SectorProof {
-                inclusion_proofs,
-                comm_c: priv_sector.comm_c,
-                comm_r_last: priv_sector.comm_r_last,
-            });
-        }
+                    // validate the path length
+                    let expected_path_length =
+                        graph_height::<typenum::U8>(pub_params.sector_size as usize / NODE_SIZE)
+                            - 1;
+                    if expected_path_length != inclusion_proof.path().len() {
+                        return Ok(false);
+                    }
 
-        Ok(Proof { sectors: proofs })
-    }
-
-    fn verify(
-        pub_params: &Self::PublicParams,
-        pub_inputs: &Self::PublicInputs,
-        proof: &Self::Proof,
-    ) -> Result<bool> {
-        let challenge_count = pub_params.challenge_count;
-
-        for (i, (pub_sector, sector_proof)) in pub_inputs
-            .sectors
-            .iter()
-            .zip(proof.sectors.iter())
-            .enumerate()
-        {
-            let sector_id = pub_sector.id;
-            let comm_r = &pub_sector.comm_r;
-            let comm_c = sector_proof.comm_c;
-            let inclusion_proofs = &sector_proof.inclusion_proofs;
-
-            // Verify that H(Comm_c || Comm_r_last) == Comm_R
-
-            // comm_r_last is the root of the proof
-            let comm_r_last = inclusion_proofs[0].root();
-
-            if AsRef::<[u8]>::as_ref(&H::Function::hash2(&comm_c, comm_r_last))
-                != AsRef::<[u8]>::as_ref(comm_r)
-            {
-                return Ok(false);
-            }
-
-            ensure!(
-                challenge_count == inclusion_proofs.len(),
-                "unexpected umber of inclusion proofs: {} != {}",
-                challenge_count,
-                inclusion_proofs.len()
-            );
-
-            for (n, inclusion_proof) in inclusion_proofs.iter().enumerate() {
-                let challenge_index = (i * pub_params.challenge_count + n) as u64;
-                let challenged_leaf_start = generate_leaf_challenge(
-                    pub_params,
-                    pub_inputs.randomness,
-                    sector_id.into(),
-                    challenge_index,
-                )?;
-
-                // validate all comm_r_lasts match
-                if inclusion_proof.root() != comm_r_last {
-                    return Ok(false);
-                }
-
-                // validate the path length
-                let expected_path_length =
-                    graph_height::<typenum::U8>(pub_params.sector_size as usize / NODE_SIZE) - 1;
-                if expected_path_length != inclusion_proof.path().len() {
-                    return Ok(false);
-                }
-
-                if !inclusion_proof.validate(challenged_leaf_start as usize) {
-                    return Ok(false);
+                    if !inclusion_proof.validate(challenged_leaf_start as usize) {
+                        return Ok(false);
+                    }
                 }
             }
         }
@@ -374,16 +451,19 @@ mod tests {
     use crate::fr32::fr_into_bytes;
     use crate::hasher::{PedersenHasher, PoseidonHasher};
 
-    fn test_fallback_post<H: Hasher>() {
+    fn test_fallback_post<H: Hasher>(
+        total_sector_count: usize,
+        sector_count: usize,
+        partitions: usize,
+    ) {
         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
 
         let leaves = 64;
         let sector_size = leaves * NODE_SIZE;
-        let sector_count = 5;
 
         let pub_params = PublicParams {
             sector_size: sector_size as u64,
-            challenge_count: 40,
+            challenge_count: 10,
             sector_count,
         };
 
@@ -403,7 +483,7 @@ mod tests {
         let mut priv_sectors = Vec::new();
         let mut trees = Vec::new();
 
-        for i in 0..sector_count {
+        for i in 0..total_sector_count {
             let data: Vec<u8> = (0..leaves)
                 .flat_map(|_| fr_into_bytes::<Bls12>(&Fr::random(rng)))
                 .collect();
@@ -443,28 +523,49 @@ mod tests {
             randomness,
             prover_id,
             sectors: &pub_sectors,
+            k: None,
         };
 
         let priv_inputs = PrivateInputs::<H> {
             sectors: &priv_sectors,
         };
 
-        let proof = FallbackPoSt::<H>::prove(&pub_params, &pub_inputs, &priv_inputs)
-            .expect("proving failed");
+        let proof = FallbackPoSt::<H>::prove_all_partitions(
+            &pub_params,
+            &pub_inputs,
+            &priv_inputs,
+            partitions,
+        )
+        .expect("proving failed");
 
-        let is_valid = FallbackPoSt::<H>::verify(&pub_params, &pub_inputs, &proof)
+        let is_valid = FallbackPoSt::<H>::verify_all_partitions(&pub_params, &pub_inputs, &proof)
             .expect("verification failed");
 
         assert!(is_valid);
     }
 
     #[test]
-    fn fallback_post_pedersen() {
-        test_fallback_post::<PedersenHasher>();
+    fn fallback_post_pedersen_single_partition_matching() {
+        test_fallback_post::<PedersenHasher>(5, 5, 1);
     }
 
     #[test]
-    fn fallback_post_poseidon() {
-        test_fallback_post::<PoseidonHasher>();
+    fn fallback_post_poseidon_single_partition_matching() {
+        test_fallback_post::<PoseidonHasher>(5, 5, 1);
+    }
+
+    #[test]
+    fn fallback_post_poseidon_single_partition_smaller() {
+        test_fallback_post::<PoseidonHasher>(3, 5, 1);
+    }
+
+    #[test]
+    fn fallback_post_poseidon_two_partitions_matching() {
+        test_fallback_post::<PoseidonHasher>(4, 2, 2);
+    }
+
+    #[test]
+    fn fallback_post_poseidon_two_partitions_smaller() {
+        test_fallback_post::<PoseidonHasher>(5, 3, 2);
     }
 }

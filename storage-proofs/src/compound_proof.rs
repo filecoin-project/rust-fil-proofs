@@ -80,15 +80,18 @@ pub trait CompoundProof<
     where
         E::Params: Sync,
     {
-        let partitions = Self::partition_count(pub_params);
         let partition_count = Self::partition_count(pub_params);
 
         // This will always run at least once, since there cannot be zero partitions.
         ensure!(partition_count > 0, "There must be partitions");
 
         info!("vanilla_proof:start");
-        let vanilla_proofs =
-            S::prove_all_partitions(&pub_params.vanilla_params, &pub_in, priv_in, partitions)?;
+        let vanilla_proofs = S::prove_all_partitions(
+            &pub_params.vanilla_params,
+            &pub_in,
+            priv_in,
+            partition_count,
+        )?;
 
         info!("vanilla_proof:finish");
 
@@ -129,6 +132,7 @@ pub trait CompoundProof<
             requirements,
             multi_proof.circuit_proofs.len(),
         ) {
+            dbg!("invalid requirements");
             return Ok(false);
         }
 
@@ -138,9 +142,14 @@ pub trait CompoundProof<
             .collect::<Result<_>>()?;
         let proofs: Vec<_> = multi_proof.circuit_proofs.iter().collect();
 
-        let res = groth16::verify_proofs_batch(&pvk, &mut rand::rngs::OsRng, &proofs, &inputs)?;
+        let res1 =
+            groth16::verify_proofs_batch(&pvk, &mut rand::rngs::OsRng, &proofs[..1], &inputs[..1])?;
+        dbg!(&res1);
+        let res2 =
+            groth16::verify_proofs_batch(&pvk, &mut rand::rngs::OsRng, &proofs[1..], &inputs[1..])?;
+        dbg!(&res2);
 
-        Ok(res)
+        Ok(res1 && res2)
     }
 
     /// Efficiently verify multiple proofs.
@@ -223,12 +232,14 @@ pub trait CompoundProof<
 
         let circuits = vanilla_proof
             .into_par_iter()
-            .map(|vanilla_proof| {
+            .enumerate()
+            .map(|(k, vanilla_proof)| {
                 Self::circuit(
                     &pub_in,
                     C::ComponentPrivateInputs::default(),
                     &vanilla_proof,
                     &pub_params,
+                    Some(k),
                 )
             })
             .collect::<Result<Vec<_>>>()?;
@@ -268,6 +279,7 @@ pub trait CompoundProof<
         component_private_inputs: C::ComponentPrivateInputs,
         vanilla_proof: &S::Proof,
         public_param: &S::PublicParams,
+        partition_k: Option<usize>,
     ) -> Result<C>;
 
     fn blank_circuit(public_params: &S::PublicParams) -> C;
@@ -333,8 +345,54 @@ pub trait CompoundProof<
             C::ComponentPrivateInputs::default(),
             &vanilla_proofs[0],
             vanilla_params,
+            Some(0),
         )?;
 
         Ok((circuit, inputs))
+    }
+
+    /// Like circuit_for_test but returns values for all partitions.
+    fn circuit_for_test_all(
+        public_parameters: &PublicParams<'a, S>,
+        public_inputs: &S::PublicInputs,
+        private_inputs: &S::PrivateInputs,
+    ) -> Result<Vec<(C, Vec<E::Fr>)>> {
+        let vanilla_params = &public_parameters.vanilla_params;
+        let partition_count = partitions::partition_count(public_parameters.partitions);
+        let vanilla_proofs = S::prove_all_partitions(
+            vanilla_params,
+            public_inputs,
+            private_inputs,
+            partition_count,
+        )
+        .context("failed to generate partition proofs")?;
+
+        ensure!(
+            vanilla_proofs.len() == partition_count,
+            "Vanilla proofs didn't match number of partitions."
+        );
+
+        let partitions_are_verified =
+            S::verify_all_partitions(vanilla_params, &public_inputs, &vanilla_proofs)
+                .context("failed to verify partition proofs")?;
+
+        ensure!(partitions_are_verified, "Vanilla proof didn't verify.");
+
+        let mut res = Vec::with_capacity(partition_count);
+        for partition in 0..partition_count {
+            let partition_pub_in = S::with_partition(public_inputs.clone(), Some(partition));
+            let inputs =
+                Self::generate_public_inputs(&partition_pub_in, vanilla_params, Some(partition))?;
+
+            let circuit = Self::circuit(
+                &partition_pub_in,
+                C::ComponentPrivateInputs::default(),
+                &vanilla_proofs[partition],
+                vanilla_params,
+                Some(partition),
+            )?;
+            res.push((circuit, inputs));
+        }
+        Ok(res)
     }
 }

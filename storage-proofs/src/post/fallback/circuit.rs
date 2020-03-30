@@ -40,38 +40,38 @@ pub struct Sector<'a, E: JubjubEngine, H: Hasher> {
 
 impl<'a, H: Hasher> Sector<'a, Bls12, H> {
     pub fn circuit(
-        pub_in: &PublicSector<H::Domain>,
+        sector: &PublicSector<H::Domain>,
         vanilla_proof: &SectorProof<H>,
     ) -> Result<Self> {
         let leafs = vanilla_proof
             .leafs()
             .iter()
-            .map(|c| Some((*c).into()))
+            .map(|l| Some((*l).into()))
             .collect();
 
         let paths = vanilla_proof
             .paths()
             .iter()
-            .map(|v| {
-                v.iter()
-                    .map(|p| {
+            .map(|p| {
+                p.iter()
+                    .map(|v| {
                         (
-                            (*p).0.iter().copied().map(Into::into).map(Some).collect(),
-                            Some(p.1),
+                            v.0.iter().copied().map(Into::into).map(Some).collect(),
+                            Some(v.1),
                         )
                     })
-                    .collect()
+                    .collect::<Vec<_>>()
             })
             .collect();
 
         Ok(Sector {
             params: &*JJ_PARAMS,
             leafs,
-            comm_r: Some(pub_in.comm_r.into()),
+            id: Some(sector.id.into()),
+            comm_r: Some(sector.comm_r.into()),
             comm_c: Some(vanilla_proof.comm_c.into()),
             comm_r_last: Some(vanilla_proof.comm_r_last.into()),
             paths,
-            id: Some(pub_in.id.into()),
             _h: PhantomData,
         })
     }
@@ -123,7 +123,6 @@ where
         assert_eq!(paths.len(), leafs.len());
 
         // 1. Verify comm_r
-
         let comm_r_last_num = num::AllocatedNum::alloc(cs.namespace(|| "comm_r_last"), || {
             comm_r_last
                 .map(Into::into)
@@ -218,7 +217,6 @@ mod tests {
     use rand_xorshift::XorShiftRng;
 
     use crate::compound_proof::CompoundProof;
-    use crate::crypto::pedersen::JJ_PARAMS;
     use crate::drgraph::{new_seed, BucketGraph, Graph, BASE_DEGREE};
     use crate::fr32::fr_into_bytes;
     use crate::gadgets::TestConstraintSystem;
@@ -232,13 +230,28 @@ mod tests {
     use crate::util::NODE_SIZE;
 
     #[test]
-    fn test_fallback_post_circuit_pedersen() {
-        test_fallback_post_circuit::<PedersenHasher>(294_459);
+    fn fallback_post_pedersen_single_partition_matching() {
+        fallback_post::<PedersenHasher>(3, 3, 1, 19, 294_459);
     }
 
     #[test]
-    fn test_fallback_post_circuit_poseidon() {
-        test_fallback_post_circuit::<PoseidonHasher>(17_988);
+    fn fallback_post_poseidon_single_partition_matching() {
+        fallback_post::<PoseidonHasher>(3, 3, 1, 19, 17_988);
+    }
+
+    #[test]
+    fn fallback_post_poseidon_single_partition_smaller() {
+        fallback_post::<PoseidonHasher>(2, 3, 1, 19, 17_988);
+    }
+
+    #[test]
+    fn fallback_post_poseidon_two_partitions_matching() {
+        fallback_post::<PoseidonHasher>(4, 2, 2, 13, 11_992);
+    }
+
+    #[test]
+    fn fallback_post_poseidon_two_partitions_smaller() {
+        fallback_post::<PoseidonHasher>(5, 3, 2, 19, 17_988);
     }
 
     #[test]
@@ -262,7 +275,13 @@ mod tests {
         assert_eq!(cs.num_constraints(), 285_180);
     }
 
-    fn test_fallback_post_circuit<H: Hasher>(expected_constraints: usize) {
+    fn fallback_post<H: Hasher>(
+        total_sector_count: usize,
+        sector_count: usize,
+        partitions: usize,
+        expected_num_inputs: usize,
+        expected_constraints: usize,
+    ) {
         use std::fs::File;
         use std::io::prelude::*;
 
@@ -272,7 +291,6 @@ mod tests {
         let sector_size = leaves * NODE_SIZE;
         let randomness = H::Domain::random(rng);
         let prover_id = H::Domain::random(rng);
-        let sector_count = 3;
 
         let pub_params = fallback::PublicParams {
             sector_size: sector_size as u64,
@@ -293,7 +311,7 @@ mod tests {
         let mut priv_sectors = Vec::new();
         let mut trees = Vec::new();
 
-        for i in 0..sector_count {
+        for i in 0..total_sector_count {
             let data: Vec<u8> = (0..leaves)
                 .flat_map(|_| fr_into_bytes::<Bls12>(&Fr::random(rng)))
                 .collect();
@@ -333,90 +351,130 @@ mod tests {
             randomness,
             prover_id,
             sectors: &pub_sectors,
+            k: None,
         };
 
         let priv_inputs = PrivateInputs::<H> {
             sectors: &priv_sectors,
         };
 
-        let proof = FallbackPoSt::<H>::prove(&pub_params, &pub_inputs, &priv_inputs)
-            .expect("proving failed");
+        let proofs = FallbackPoSt::<H>::prove_all_partitions(
+            &pub_params,
+            &pub_inputs,
+            &priv_inputs,
+            partitions,
+        )
+        .expect("proving failed");
+        assert_eq!(proofs.len(), partitions);
 
-        let is_valid = FallbackPoSt::<H>::verify(&pub_params, &pub_inputs, &proof)
+        let is_valid = FallbackPoSt::<H>::verify_all_partitions(&pub_params, &pub_inputs, &proofs)
             .expect("verification failed");
         assert!(is_valid);
 
         // actual circuit test
-        let circuit_sectors = proof
-            .sectors
-            .iter()
-            .enumerate()
-            .map(|(i, proof)| {
-                let paths = proof
-                    .paths()
-                    .iter()
-                    .map(|p| {
-                        p.iter()
-                            .map(|v| {
-                                (
-                                    v.0.iter().copied().map(Into::into).map(Some).collect(),
-                                    Some(v.1),
-                                )
-                            })
-                            .collect::<Vec<_>>()
-                    })
-                    .collect();
-                let leafs = proof.leafs().iter().map(|l| Some((*l).into())).collect();
 
-                Sector {
-                    params: &*JJ_PARAMS,
-                    id: Some(pub_sectors[i].id.into()),
-                    leafs,
-                    paths,
-                    comm_r: Some(pub_sectors[i].comm_r.into()),
-                    comm_c: Some(priv_sectors[i].comm_c.into()),
-                    comm_r_last: Some(priv_sectors[i].comm_r_last.into()),
-                    _h: PhantomData,
-                }
-            })
-            .collect();
+        //     let paths = proof
+        //     .paths()
+        //     .iter()
+        //     .map(|p| {
+        //         p.iter()
+        //             .map(|v| {
+        //                 (
+        //                     v.0.iter().copied().map(Into::into).map(Some).collect(),
+        //                     Some(v.1),
+        //                 )
+        //             })
+        //             .collect::<Vec<_>>()
+        //     })
+        //     .collect();
+        // let leafs = proof.leafs().iter().map(|l| Some((*l).into())).collect();
+        //     (
+        //         Some(pub_sectors[i].id.into()),
+        //         Some(pub_sectors[i].comm_r.into()),
+        //         Some(priv_sectors[i].comm_c.into()),
+        //         Some(priv_sectors[i].comm_r_last.into()),
+        //     )
+        // Sector {
+        //     params: &*JJ_PARAMS,
+        //     id,
+        //     leafs,
+        //     paths,
+        //     comm_r,
+        //     comm_c,
+        //     comm_r_last,
+        //     _h: PhantomData,
+        // }
 
-        let mut cs = TestConstraintSystem::<Bls12>::new();
+        for (j, proof) in proofs.iter().enumerate() {
+            // iterates over each partition
+            let circuit_sectors = proof
+                .sectors
+                .iter()
+                .enumerate()
+                .map(|(i, proof)| {
+                    // index into sectors by the correct offset
+                    let i = j * sector_count + i;
 
-        let instance = FallbackPoStCircuit::<_, H> {
-            sectors: circuit_sectors,
-            prover_id: Some(prover_id.into()),
-        };
-
-        instance
-            .synthesize(&mut cs)
-            .expect("failed to synthesize circuit");
-
-        assert!(cs.is_satisfied(), "constraints not satisfied");
-
-        assert_eq!(cs.num_inputs(), 19, "wrong number of inputs");
-        assert_eq!(
-            cs.num_constraints(),
-            expected_constraints,
-            "wrong number of constraints"
-        );
-        assert_eq!(cs.get_input(0, "ONE"), Fr::one());
-
-        let generated_inputs =
-            FallbackPoStCompound::<H>::generate_public_inputs(&pub_inputs, &pub_params, None)
+                    if i < pub_sectors.len() {
+                        Sector::circuit(&pub_sectors[i], proof)
+                    } else {
+                        // duplicated last one
+                        let k = pub_sectors.len() - 1;
+                        Sector::circuit(&pub_sectors[k], proof)
+                    }
+                })
+                .collect::<Result<_>>()
                 .unwrap();
-        let expected_inputs = cs.get_inputs();
 
-        for ((input, label), generated_input) in
-            expected_inputs.iter().skip(1).zip(generated_inputs.iter())
-        {
-            assert_eq!(input, generated_input, "{}", label);
+            let mut cs = TestConstraintSystem::<Bls12>::new();
+
+            let instance = FallbackPoStCircuit::<_, H> {
+                sectors: circuit_sectors,
+                prover_id: Some(prover_id.into()),
+            };
+
+            instance
+                .synthesize(&mut cs)
+                .expect("failed to synthesize circuit");
+
+            assert!(cs.is_satisfied(), "constraints not satisfied");
+
+            assert_eq!(
+                cs.num_inputs(),
+                expected_num_inputs,
+                "wrong number of inputs"
+            );
+            assert_eq!(
+                cs.num_constraints(),
+                expected_constraints,
+                "wrong number of constraints"
+            );
+            assert_eq!(cs.get_input(0, "ONE"), Fr::one());
+
+            let generated_inputs = FallbackPoStCompound::<H>::generate_public_inputs(
+                &pub_inputs,
+                &pub_params,
+                Some(j),
+            )
+            .unwrap();
+            let expected_inputs = cs.get_inputs();
+
+            for ((input, label), generated_input) in
+                expected_inputs.iter().skip(1).zip(generated_inputs.iter())
+            {
+                assert_eq!(input, generated_input, "{}", label);
+            }
+
+            assert_eq!(
+                generated_inputs.len(),
+                expected_inputs.len() - 1,
+                "inputs are not the same length"
+            );
+
+            assert!(
+                cs.verify(&generated_inputs),
+                "verification failed with TestContraintSystem and generated inputs"
+            );
         }
-
-        assert_eq!(
-            generated_inputs.len(),
-            expected_inputs.len() - 1,
-            "inputs are not the same length"
-        );
     }
 }
