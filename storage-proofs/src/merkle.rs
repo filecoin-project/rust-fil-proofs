@@ -129,6 +129,12 @@ pub struct MerkleProof<H: Hasher, BaseTreeArity: typenum::Unsigned> {
     top_path: Option<Vec<(Vec<H::Domain>, usize)>>,
     top_leaf: Option<H::Domain>,
 
+    #[serde(bound(
+        serialize = "H::Domain: Serialize",
+        deserialize = "H::Domain: Deserialize<'de>"
+    ))]
+    sub_tree_proof: Option<Box<MerkleProof<H, BaseTreeArity>>>,
+
     pub sub_root: Option<H::Domain>,
     sub_path: Option<Vec<(Vec<H::Domain>, usize)>>,
     pub sub_leaf: Option<H::Domain>,
@@ -176,6 +182,7 @@ pub fn make_proof_for_test<H: Hasher, BaseTreeArity: typenum::Unsigned>(
         sub_root: None,
         sub_path: None,
         sub_leaf: None,
+        sub_tree_proof: None,
         sub_leafs: 0,
         top_layer_nodes: 0,
         sub_layer_nodes: 0,
@@ -190,6 +197,7 @@ pub fn make_proof_for_test<H: Hasher, BaseTreeArity: typenum::Unsigned>(
 impl<H: Hasher, BaseTreeArity: typenum::Unsigned> MerkleProof<H, BaseTreeArity> {
     pub fn new(n: usize) -> MerkleProof<H, BaseTreeArity> {
         MerkleProof {
+            sub_tree_proof: None,
             top_root: None,
             top_path: None,
             top_leaf: None,
@@ -213,6 +221,7 @@ impl<H: Hasher, BaseTreeArity: typenum::Unsigned> MerkleProof<H, BaseTreeArity> 
         let lemma = p.lemma();
 
         MerkleProof {
+            sub_tree_proof: None,
             top_root: None,
             top_path: None,
             top_leaf: None,
@@ -240,6 +249,7 @@ impl<H: Hasher, BaseTreeArity: typenum::Unsigned> MerkleProof<H, BaseTreeArity> 
         base: &proof::Proof<H::Domain, BaseTreeArity>,
     ) -> MerkleProof<H, BaseTreeArity> {
         MerkleProof {
+            sub_tree_proof: None,
             top_root: None,
             top_path: None,
             top_leaf: None,
