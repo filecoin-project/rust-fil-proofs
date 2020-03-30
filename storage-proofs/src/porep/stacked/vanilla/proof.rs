@@ -748,7 +748,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
 
                     Ok(tree_r_last.root())
                 } else {
-                    // In this case, construct the compount tree_r_last from the sub-trees we have.
+                    // In this case, construct the compound tree_r_last from the sub-trees we have.
                     let leafs = trees[0].leafs();
                     assert_eq!((leafs * NODE_SIZE) * tree_count, data.len());
 

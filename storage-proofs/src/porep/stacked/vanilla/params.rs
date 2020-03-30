@@ -207,7 +207,6 @@ impl<H: Hasher, G: Hasher> Proof<H, G> {
                     &self.comm_d_proofs.leaf()
                 ));
             }
-            // Compound tree handling: FIXME: move 32GB and 64GB as special case compound handling as well
             SECTOR_SIZE_4_KIB | SECTOR_SIZE_16_MIB | SECTOR_SIZE_1_GIB => {
                 assert!(self.comm_r_last_proof.sub_tree_proof.is_some());
                 check!(self.encoding_proof.verify::<G>(
@@ -221,6 +220,20 @@ impl<H: Hasher, G: Hasher> Proof<H, G> {
                     &self.comm_d_proofs.leaf()
                 ));
             }
+            SECTOR_SIZE_32_GIB => {
+                assert!(self.comm_r_last_proof.sub_tree_proof.is_some());
+                check!(self.encoding_proof.verify::<G>(
+                    replica_id,
+                    &self
+                        .comm_r_last_proof
+                        .sub_tree_proof
+                        .as_ref()
+                        .unwrap()
+                        .leaf(),
+                    &self.comm_d_proofs.leaf()
+                ));
+            }
+            // Compound tree handling: FIXME: add 64GB as special case compound handling as well
             _ => panic!("Unsupported sector size"),
         }
 
@@ -491,9 +504,12 @@ impl<H: Hasher, G: Hasher> TemporaryAuxCache<H, G> {
                     t_aux: t_aux.clone(),
                 })
             }
-            // Compound tree handling: FIXME: move 32GB and 64GB as special case compound handling as well
-            SECTOR_SIZE_4_KIB | SECTOR_SIZE_16_MIB | SECTOR_SIZE_1_GIB => {
-                let tree_count = 2;
+            SECTOR_SIZE_4_KIB | SECTOR_SIZE_16_MIB | SECTOR_SIZE_1_GIB | SECTOR_SIZE_32_GIB => {
+                let tree_count = if sector_size as u64 == SECTOR_SIZE_32_GIB {
+                    8
+                } else {
+                    2
+                };
 
                 let configs = {
                     let c = split_config(Some(t_aux.tree_c_config.clone()), tree_count)?;
@@ -554,6 +570,7 @@ impl<H: Hasher, G: Hasher> TemporaryAuxCache<H, G> {
                     t_aux: t_aux.clone(),
                 })
             }
+            // Compound tree handling: FIXME: add 64GB as special case compound handling as well
             _ => panic!("Unsupported sector size"),
         }
     }

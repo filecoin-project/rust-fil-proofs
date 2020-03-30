@@ -163,12 +163,12 @@ pub struct MerkleTreeWrapper<H: Hasher, S: Store<<H as Hasher>::Domain>, U: Pose
 /// Each element in the 'path' vector consists of a tuple '(hash, index)', with 'hash' being the hash of the node at the current level and 'index' an index into the path (based on arity).
 /// The first element is the hash of leaf itself, and the last is the root hash.
 #[derive(Clone, Serialize, Deserialize)]
-pub struct MerkleProof<H: Hasher, BaseTreeArity: typenum::Unsigned> {
+pub struct MerkleProof<H: Hasher, Arity: typenum::Unsigned> {
     #[serde(bound(
         serialize = "H::Domain: Serialize",
         deserialize = "H::Domain: Deserialize<'de>"
     ))]
-    pub sub_tree_proof: Option<Box<MerkleProof<H, BaseTreeArity>>>,
+    pub sub_tree_proof: Option<Box<MerkleProof<H, Arity>>>,
     sub_tree_leafs: usize,
 
     top_layer_nodes: usize,
@@ -181,11 +181,11 @@ pub struct MerkleProof<H: Hasher, BaseTreeArity: typenum::Unsigned> {
     #[serde(skip)]
     _h: PhantomData<H>,
     #[serde(skip)]
-    _bta: PhantomData<BaseTreeArity>,
+    _a: PhantomData<Arity>,
 }
 
-impl<H: Hasher, BaseTreeArity: typenum::Unsigned> std::fmt::Debug
-    for MerkleProof<H, BaseTreeArity>
+impl<H: Hasher, Arity: typenum::Unsigned> std::fmt::Debug
+    for MerkleProof<H, Arity>
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("MerkleProof")
@@ -194,16 +194,16 @@ impl<H: Hasher, BaseTreeArity: typenum::Unsigned> std::fmt::Debug
             .field("path", &self.path)
             .field("leaf", &self.leaf)
             .field("H", &H::name())
-            .field("BaseTreeArity", &BaseTreeArity::to_usize())
+            .field("Arity", &Arity::to_usize())
             .finish()
     }
 }
 
-pub fn make_proof_for_test<H: Hasher, BaseTreeArity: typenum::Unsigned>(
+pub fn make_proof_for_test<H: Hasher, Arity: typenum::Unsigned>(
     root: H::Domain,
     leaf: H::Domain,
     path: Vec<(Vec<H::Domain>, usize)>,
-) -> MerkleProof<H, BaseTreeArity> {
+) -> MerkleProof<H, Arity> {
     MerkleProof {
         sub_tree_proof: None,
         sub_tree_leafs: 0,
@@ -213,12 +213,12 @@ pub fn make_proof_for_test<H: Hasher, BaseTreeArity: typenum::Unsigned>(
         root,
         leaf,
         _h: PhantomData,
-        _bta: PhantomData,
+        _a: PhantomData,
     }
 }
 
-impl<H: Hasher, BaseTreeArity: typenum::Unsigned> MerkleProof<H, BaseTreeArity> {
-    pub fn new(n: usize) -> MerkleProof<H, BaseTreeArity> {
+impl<H: Hasher, Arity: typenum::Unsigned> MerkleProof<H, Arity> {
+    pub fn new(n: usize) -> MerkleProof<H, Arity> {
         MerkleProof {
             sub_tree_proof: None,
             sub_tree_leafs: 0,
@@ -228,13 +228,13 @@ impl<H: Hasher, BaseTreeArity: typenum::Unsigned> MerkleProof<H, BaseTreeArity> 
             path: vec![(Default::default(), 0); n],
             leaf: Default::default(),
             _h: PhantomData,
-            _bta: PhantomData,
+            _a: PhantomData,
         }
     }
 
     pub fn new_from_proof(
-        p: &proof::Proof<H::Domain, BaseTreeArity>,
-    ) -> MerkleProof<H, BaseTreeArity> {
+        p: &proof::Proof<H::Domain, Arity>,
+    ) -> MerkleProof<H, Arity> {
         let lemma = p.lemma();
 
         MerkleProof {
@@ -243,21 +243,21 @@ impl<H: Hasher, BaseTreeArity: typenum::Unsigned> MerkleProof<H, BaseTreeArity> 
             top_layer_nodes: 0,
             sub_layer_nodes: 0,
             path: lemma[1..lemma.len() - 1]
-                .chunks(BaseTreeArity::to_usize() - 1)
+                .chunks(Arity::to_usize() - 1)
                 .map(|chunk| chunk.to_vec())
                 .zip(p.path().iter().copied())
                 .collect::<Vec<_>>(),
             root: p.root(),
             leaf: p.item(),
             _h: PhantomData,
-            _bta: PhantomData,
+            _a: PhantomData,
         }
     }
 
     pub fn new_from_sub_proof<TopTreeArity: typenum::Unsigned, SubTreeArity: typenum::Unsigned>(
-        p: &proof::Proof<H::Domain, BaseTreeArity>,
+        p: &proof::Proof<H::Domain, Arity>,
         sub_tree_leafs: usize,
-    ) -> MerkleProof<H, BaseTreeArity> {
+    ) -> MerkleProof<H, Arity> {
         let sub_tree_proof = if p.sub_tree_proof.is_some() {
             if TopTreeArity::to_usize() > 0 {
                 Some(Box::new(Self::new_from_sub_proof::<
@@ -284,7 +284,7 @@ impl<H: Hasher, BaseTreeArity: typenum::Unsigned> MerkleProof<H, BaseTreeArity> 
             path: {
                 let lemma = p.lemma();
                 lemma[1..lemma.len() - 1]
-                    .chunks(BaseTreeArity::to_usize() - 1)
+                    .chunks(Arity::to_usize() - 1)
                     .map(|chunk| chunk.to_vec())
                     .zip(p.path().iter().copied())
                     .collect::<Vec<_>>()
@@ -292,7 +292,7 @@ impl<H: Hasher, BaseTreeArity: typenum::Unsigned> MerkleProof<H, BaseTreeArity> 
             root: p.root(),
             leaf: p.item(),
             _h: PhantomData,
-            _bta: PhantomData,
+            _a: PhantomData,
         }
     }
 
@@ -436,7 +436,7 @@ impl<H: Hasher, BaseTreeArity: typenum::Unsigned> MerkleProof<H, BaseTreeArity> 
     /// Returns the length of the proof. That is all path elements plus 1 for the
     /// leaf and 1 for the root.
     pub fn len(&self) -> usize {
-        self.path.len() * (BaseTreeArity::to_usize() - 1) + 2
+        self.path.len() * (Arity::to_usize() - 1) + 2
     }
 
     /// Serialize into bytes.
@@ -473,7 +473,7 @@ impl<H: Hasher, BaseTreeArity: typenum::Unsigned> MerkleProof<H, BaseTreeArity> 
 
     pub fn path_index(&self) -> usize {
         self.path.iter().rev().fold(0, |acc, (_, index)| {
-            (acc * BaseTreeArity::to_usize()) + index
+            (acc * Arity::to_usize()) + index
         })
     }
 
