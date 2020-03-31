@@ -65,7 +65,7 @@ lazy_static! {
             (SECTOR_SIZE_2_KIB, 2),
             (SECTOR_SIZE_8_MIB, 2),
             (SECTOR_SIZE_512_MIB, 2),
-            (SECTOR_SIZE_32_GIB, 32) // TODO: correct value
+            (SECTOR_SIZE_32_GIB, 2349) // this gives 133,977,564 constraints, fitting just in a single partition
         ]
         .iter()
         .copied()
