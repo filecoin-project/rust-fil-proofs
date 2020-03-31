@@ -34,9 +34,10 @@ use crate::measurements::{
     Operation::{CommD, EncodeWindowTimeAll, GenerateTreeC, GenerateTreeRLast},
 };
 use crate::merkle::{
-    split_config, BinaryTree, MerkleProof, MerkleTree, OctLCSubTree, OctLCTree, OctSubTree,
-    OctTree, Store, SECTOR_SIZE_16_MIB, SECTOR_SIZE_1_GIB, SECTOR_SIZE_2_KIB, SECTOR_SIZE_32_GIB,
-    SECTOR_SIZE_4_KIB, SECTOR_SIZE_512_MIB, SECTOR_SIZE_64_GIB, SECTOR_SIZE_8_MIB,
+    split_config, BinaryTree, MerkleProof, MerkleTree, OctLCSubTree, OctLCTopTree, OctLCTree,
+    OctSubTree, OctTopTree, OctTree, Store, SECTOR_SIZE_16_MIB, SECTOR_SIZE_1_GIB,
+    SECTOR_SIZE_2_KIB, SECTOR_SIZE_32_GIB, SECTOR_SIZE_32_KIB, SECTOR_SIZE_4_KIB,
+    SECTOR_SIZE_512_MIB, SECTOR_SIZE_64_GIB, SECTOR_SIZE_8_MIB,
 };
 use crate::porep::PoRep;
 use crate::util::NODE_SIZE;
@@ -101,7 +102,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
 
                 // Derive the set of challenges we are proving over.
                 let challenges = pub_inputs.challenges(layer_challenges, graph_size, Some(k));
-                let sub_tree_leafs = (sector_size as usize / std::mem::size_of::<H::Domain>()) / 2;
+                let base_tree_leafs = sector_size as usize / std::mem::size_of::<H::Domain>();
 
                 // Stacked commitment specifics
                 challenges
@@ -150,6 +151,9 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
                                 }
                                 SECTOR_SIZE_4_KIB | SECTOR_SIZE_16_MIB | SECTOR_SIZE_1_GIB
                                 | SECTOR_SIZE_32_GIB => {
+                                    let sub_tree_count = 2;
+                                    let base_tree_leafs = base_tree_leafs / sub_tree_count;
+
                                     assert!(t_aux.tree_c.octsubtree().is_some());
                                     assert_eq!(
                                         p_aux.comm_c,
@@ -161,25 +165,67 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
                                     trace!("  c_x");
                                     let c_x = t_aux
                                         .column(challenge as u32)?
-                                        .into_proof_sub(tree_c, sub_tree_leafs)?;
+                                        .into_proof_sub(tree_c, base_tree_leafs)?;
 
                                     // All labels in the DRG parents.
                                     trace!("  drg_parents");
                                     let drg_parents = get_drg_parents_columns(challenge)?
                                         .into_iter()
-                                        .map(|column| column.into_proof_sub(tree_c, sub_tree_leafs))
+                                        .map(|column| {
+                                            column.into_proof_sub(tree_c, base_tree_leafs)
+                                        })
                                         .collect::<Result<_>>()?;
 
                                     // Labels for the expander parents
                                     trace!("  exp_parents");
                                     let exp_parents = get_exp_parents_columns(challenge)?
                                         .into_iter()
-                                        .map(|column| column.into_proof_sub(tree_c, sub_tree_leafs))
+                                        .map(|column| {
+                                            column.into_proof_sub(tree_c, base_tree_leafs)
+                                        })
                                         .collect::<Result<_>>()?;
 
                                     (c_x, drg_parents, exp_parents)
                                 }
-                                // Compound tree handling: FIXME: add 64GB as special case compound handling as well
+                                SECTOR_SIZE_32_KIB | SECTOR_SIZE_64_GIB => {
+                                    let top_tree_count = 2;
+                                    let sub_tree_count = 8;
+                                    let base_tree_leafs =
+                                        base_tree_leafs / (top_tree_count * sub_tree_count);
+
+                                    assert!(t_aux.tree_c.octtoptree().is_some());
+                                    assert_eq!(
+                                        p_aux.comm_c,
+                                        t_aux.tree_c.octtoptree().unwrap().root()
+                                    );
+                                    let tree_c = t_aux.tree_c.octtoptree().unwrap();
+
+                                    // All labels in C_X
+                                    trace!("  c_x");
+                                    let c_x = t_aux
+                                        .column(challenge as u32)?
+                                        .into_proof_top(tree_c, base_tree_leafs)?;
+
+                                    // All labels in the DRG parents.
+                                    trace!("  drg_parents");
+                                    let drg_parents = get_drg_parents_columns(challenge)?
+                                        .into_iter()
+                                        .map(|column| {
+                                            column.into_proof_top(tree_c, base_tree_leafs)
+                                        })
+                                        .collect::<Result<_>>()?;
+
+                                    // Labels for the expander parents
+                                    trace!("  exp_parents");
+                                    let exp_parents = get_exp_parents_columns(challenge)?
+                                        .into_iter()
+                                        .map(|column| {
+                                            column.into_proof_top(tree_c, base_tree_leafs)
+                                        })
+                                        .collect::<Result<_>>()?;
+
+                                    (c_x, drg_parents, exp_parents)
+                                }
                                 _ => panic!("Unsupported data len"),
                             };
 
@@ -213,6 +259,9 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
                             }
                             SECTOR_SIZE_4_KIB | SECTOR_SIZE_16_MIB | SECTOR_SIZE_1_GIB
                             | SECTOR_SIZE_32_GIB => {
+                                let sub_tree_count = 2;
+                                let base_tree_leafs = base_tree_leafs / sub_tree_count;
+
                                 assert!(t_aux.tree_r_last.octlcsubtree().is_some());
                                 let tree_r_last = t_aux.tree_r_last.octlcsubtree().unwrap();
                                 let tree_r_last_proof = if t_aux.tree_r_last_config_levels == 0 {
@@ -230,7 +279,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
                                 let comm_r_last_proof =
                                     MerkleProof::new_from_sub_proof::<typenum::U0, typenum::U2>(
                                         &tree_r_last_proof,
-                                        sub_tree_leafs,
+                                        base_tree_leafs,
                                     );
 
                                 // FIXME: Remove this assert and make sub_tree_proof member private?
@@ -239,7 +288,38 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
 
                                 comm_r_last_proof
                             }
-                            // Compound tree handling: FIXME: add 64GB as special case compound handling as well
+                            SECTOR_SIZE_32_KIB | SECTOR_SIZE_64_GIB => {
+                                let top_tree_count = 2;
+                                let sub_tree_count = 8;
+                                let base_tree_leafs =
+                                    base_tree_leafs / (top_tree_count * sub_tree_count);
+
+                                assert!(t_aux.tree_r_last.octlctoptree().is_some());
+                                let tree_r_last = t_aux.tree_r_last.octlctoptree().unwrap();
+                                let tree_r_last_proof = if t_aux.tree_r_last_config_levels == 0 {
+                                    tree_r_last.gen_proof(challenge)
+                                } else {
+                                    tree_r_last.gen_cached_proof(
+                                        challenge,
+                                        t_aux.tree_r_last_config_levels,
+                                    )
+                                }?;
+
+                                assert!(tree_r_last_proof.validate::<H::Function>()?);
+                                assert!(tree_r_last_proof.sub_tree_proof.is_some());
+
+                                let comm_r_last_proof =
+                                    MerkleProof::new_from_sub_proof::<typenum::U2, typenum::U8>(
+                                        &tree_r_last_proof,
+                                        base_tree_leafs,
+                                    );
+
+                                // FIXME: Remove this assert and make sub_tree_proof member private?
+                                assert!(comm_r_last_proof.sub_tree_proof.is_some());
+                                assert!(comm_r_last_proof.validate(challenge));
+
+                                comm_r_last_proof
+                            }
                             _ => panic!("Unsupported sector size"),
                         };
 
@@ -655,13 +735,19 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
                 if tree_count == 1 {
                     let tree_c = &trees[0];
                     tree_c_config.size = Some(tree_c.len());
-                    assert_eq!(tree_c_config.size.unwrap(), tree_c.len());
+
+                    Ok(tree_c.root())
+                } else if tree_count == 16 {
+                    tree_c_config.size = Some(trees[0].len());
+
+                    // Build a top level tree consisting of sub_tree_count (i.e. 2) sub_trees, each of (tree_count / sub_tree_count) base layer trees.
+                    let tree_c = OctTopTree::<H>::from_sub_trees_as_trees(trees)?;
 
                     Ok(tree_c.root())
                 } else {
+                    assert!(tree_count == 2 || tree_count == 8 || tree_count == 16);
+                    tree_c_config.size = Some(trees[0].len());
                     let tree_c = OctSubTree::<H>::from_trees(trees)?;
-                    tree_c_config.size = Some(tree_c.len());
-                    assert_eq!(tree_c_config.size.unwrap(), tree_c.len());
 
                     Ok(tree_c.root())
                 }
@@ -747,10 +833,39 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
                     )?;
 
                     Ok(tree_r_last.root())
-                } else {
-                    // In this case, construct the compound tree_r_last from the sub-trees we have.
+                } else if tree_count == 16 {
+                    // Note: Given the shape of OctLCTopTree, a tree count
+                    // of 16 will yield 2 top layer trees, each consisting
+                    // of 8 sub layer trees.
                     let leafs = trees[0].leafs();
                     assert_eq!((leafs * NODE_SIZE) * tree_count, data.len());
+                    tree_r_last_config.size = Some(trees[0].len());
+
+                    let unwrapped_configs = {
+                        let mut c = Vec::with_capacity(tree_count);
+                        for i in 0..tree_count {
+                            c.push(configs[i].as_ref().unwrap().clone());
+                            c[i].levels = configs[i].as_ref().unwrap().levels;
+                        }
+
+                        c
+                    };
+                    let replica_paths =
+                        Self::write_replica_data(&data, tree_count, leafs, &replica_path)?;
+
+                    let tree_r_last = OctLCTopTree::<H>::from_sub_tree_store_configs_and_replicas(
+                        leafs,
+                        &unwrapped_configs,
+                        &replica_paths,
+                    )?;
+
+                    Ok(tree_r_last.root())
+                } else {
+                    // In this case, construct the compound tree_r_last from the sub-trees we have.
+                    assert!(tree_count == 2 || tree_count == 8);
+                    let leafs = trees[0].leafs();
+                    assert_eq!((leafs * NODE_SIZE) * tree_count, data.len());
+                    tree_r_last_config.size = Some(trees[0].len());
 
                     let unwrapped_configs = {
                         let mut c = Vec::with_capacity(tree_count);
@@ -769,7 +884,6 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
                         &unwrapped_configs,
                         &replica_paths,
                     )?;
-                    tree_r_last_config.size = Some(tree_r_last.len());
 
                     Ok(tree_r_last.root())
                 }
@@ -804,7 +918,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
                 transform_and_replicate(2)
             }
             SECTOR_SIZE_32_GIB => transform_and_replicate(8),
-            // Compound tree handling: FIXME: add 64GB as special case compound handling as well
+            SECTOR_SIZE_32_KIB | SECTOR_SIZE_64_GIB => transform_and_replicate(16),
             _ => panic!("Unsupported data len"),
         }?;
 

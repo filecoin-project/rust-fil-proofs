@@ -18,6 +18,10 @@ pub const SECTOR_SIZE_16_MIB: u64 = 2 * SECTOR_SIZE_8_MIB;
 pub const SECTOR_SIZE_1_GIB: u64 = 2 * SECTOR_SIZE_512_MIB;
 pub const SECTOR_SIZE_64_GIB: u64 = 2 * SECTOR_SIZE_32_GIB;
 
+// FIXME: Unsupported size, but used for quickly testing a top level
+// tree consisting of 8x 4 KIB trees (each consisting of 2x 2 KIB trees)
+pub const SECTOR_SIZE_32_KIB: u64 = 8 * SECTOR_SIZE_4_KIB;
+
 pub const POST_CHALLENGE_COUNT: usize = 65;
 pub const POST_CHALLENGED_NODES: usize = 1;
 
@@ -31,6 +35,7 @@ lazy_static! {
         [
             (SECTOR_SIZE_2_KIB, 2),
             (SECTOR_SIZE_4_KIB, 2),
+            (SECTOR_SIZE_32_KIB, 2),
             (SECTOR_SIZE_8_MIB, 2),
             (SECTOR_SIZE_16_MIB, 2),
             (SECTOR_SIZE_512_MIB, 2),
@@ -46,6 +51,7 @@ lazy_static! {
         [
             (SECTOR_SIZE_2_KIB, 1),
             (SECTOR_SIZE_4_KIB, 1),
+            (SECTOR_SIZE_32_KIB, 1),
             (SECTOR_SIZE_8_MIB, 1),
             (SECTOR_SIZE_16_MIB, 1),
             (SECTOR_SIZE_512_MIB, 1),
@@ -61,6 +67,7 @@ lazy_static! {
         [
             (SECTOR_SIZE_2_KIB, 1),
             (SECTOR_SIZE_4_KIB, 1),
+            (SECTOR_SIZE_32_KIB, 1),
             (SECTOR_SIZE_8_MIB, 2),
             (SECTOR_SIZE_16_MIB, 2),
             (SECTOR_SIZE_512_MIB, 2),
