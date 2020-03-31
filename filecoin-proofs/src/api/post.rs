@@ -611,7 +611,6 @@ pub fn verify_winning_post(
 
     let vanilla_params = winning_post_setup_params(&post_config)?;
     let param_sector_count = vanilla_params.sector_count;
-    let param_challenge_count = vanilla_params.challenge_count;
 
     let setup_params = compound_proof::SetupParams {
         vanilla_params,
@@ -662,7 +661,7 @@ pub fn verify_winning_post(
         &pub_inputs,
         &proof,
         &fallback::ChallengeRequirements {
-            challenge_count: post_config.challenge_count * replicas.len(),
+            minimum_challenge_count: post_config.challenge_count * post_config.sector_count,
         },
     )?;
 
@@ -811,7 +810,7 @@ pub fn verify_window_post(
         &pub_inputs,
         &proof,
         &fallback::ChallengeRequirements {
-            challenge_count: post_config.challenge_count * replicas.len(),
+            minimum_challenge_count: post_config.challenge_count * post_config.sector_count,
         },
     )?;
 

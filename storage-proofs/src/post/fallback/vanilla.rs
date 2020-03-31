@@ -42,7 +42,7 @@ pub struct PublicParams {
 #[derive(Debug, Default)]
 pub struct ChallengeRequirements {
     /// The sum of challenges across all challenged sectors. (even across partitions)
-    pub challenge_count: usize,
+    pub minimum_challenge_count: usize,
 }
 
 impl ParameterSetMetadata for PublicParams {
@@ -447,7 +447,7 @@ impl<'a, H: 'a + Hasher> ProofScheme<'a> for FallbackPoSt<'a, H> {
         partitions: usize,
     ) -> bool {
         partitions * public_params.sector_count * public_params.challenge_count
-            >= requirements.challenge_count
+            >= requirements.minimum_challenge_count
     }
 }
 
