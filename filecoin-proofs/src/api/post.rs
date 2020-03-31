@@ -662,7 +662,7 @@ pub fn verify_winning_post(
         &pub_inputs,
         &proof,
         &fallback::ChallengeRequirements {
-            challenge_count: param_challenge_count,
+            challenge_count: post_config.challenge_count * replicas.len(),
         },
     )?;
 
@@ -811,7 +811,7 @@ pub fn verify_window_post(
         &pub_inputs,
         &proof,
         &fallback::ChallengeRequirements {
-            challenge_count: post_config.challenge_count,
+            challenge_count: post_config.challenge_count * replicas.len(),
         },
     )?;
 

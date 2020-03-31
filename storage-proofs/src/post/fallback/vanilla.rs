@@ -41,6 +41,7 @@ pub struct PublicParams {
 
 #[derive(Debug, Default)]
 pub struct ChallengeRequirements {
+    /// The sum of challenges across all challenged sectors. (even across partitions)
     pub challenge_count: usize,
 }
 
@@ -443,12 +444,10 @@ impl<'a, H: 'a + Hasher> ProofScheme<'a> for FallbackPoSt<'a, H> {
     fn satisfies_requirements(
         public_params: &Self::PublicParams,
         requirements: &Self::Requirements,
-        _partitions: usize,
+        partitions: usize,
     ) -> bool {
-        dbg!(&requirements);
-        dbg!(&public_params);
-        // Every partition must have the exact same number of challenges.
-        requirements.challenge_count == public_params.challenge_count
+        partitions * public_params.sector_count * public_params.challenge_count
+            >= requirements.challenge_count
     }
 }
 

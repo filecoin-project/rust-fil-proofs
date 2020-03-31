@@ -358,7 +358,9 @@ mod tests {
             &pub_params,
             &pub_inputs,
             &proof,
-            &ChallengeRequirements { challenge_count },
+            &ChallengeRequirements {
+                challenge_count: total_sector_count * challenge_count,
+            },
         )
         .expect("failed while verifying");
 
