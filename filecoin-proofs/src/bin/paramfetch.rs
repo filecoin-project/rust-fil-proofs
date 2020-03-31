@@ -10,7 +10,6 @@ use std::{fs, io};
 
 use anyhow::{bail, ensure, Context, Result};
 use clap::{values_t, App, Arg, ArgMatches};
-use env_proxy;
 use flate2::read::GzDecoder;
 use itertools::Itertools;
 use pbr::{ProgressBar, Units};

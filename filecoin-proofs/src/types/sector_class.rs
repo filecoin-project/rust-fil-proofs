@@ -8,14 +8,13 @@ pub struct SectorClass {
 
 impl From<SectorClass> for PoRepConfig {
     fn from(x: SectorClass) -> Self {
-        match x {
-            SectorClass {
-                sector_size,
-                partitions,
-            } => PoRepConfig {
-                sector_size,
-                partitions,
-            },
+        let SectorClass {
+            sector_size,
+            partitions,
+        } = x;
+        PoRepConfig {
+            sector_size,
+            partitions,
         }
     }
 }

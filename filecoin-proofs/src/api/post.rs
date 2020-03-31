@@ -1,6 +1,4 @@
 use std::collections::{BTreeMap, HashSet};
-use std::fs::File;
-use std::io::prelude::*;
 use std::path::{Path, PathBuf};
 
 use anyhow::{anyhow, ensure, Context, Result};
@@ -65,12 +63,8 @@ impl PrivateReplicaInfo {
         ensure!(comm_r != [0; 32], "Invalid all zero commitment (comm_r)");
 
         let aux = {
-            let mut aux_bytes = vec![];
             let f_aux_path = cache_dir.join(CacheKey::PAux.to_string());
-            let mut f_aux = File::open(&f_aux_path)
-                .with_context(|| format!("could not open path={:?}", f_aux_path))?;
-            f_aux
-                .read_to_end(&mut aux_bytes)
+            let aux_bytes = std::fs::read(&f_aux_path)
                 .with_context(|| format!("could not read from path={:?}", f_aux_path))?;
 
             deserialize(&aux_bytes)
@@ -168,12 +162,8 @@ impl PublicReplicaInfo {
 // Ensure that any associated cached data persisted is discarded.
 pub fn clear_cache(cache_dir: &Path) -> Result<()> {
     let t_aux = {
-        let mut aux_bytes = vec![];
         let f_aux_path = cache_dir.to_path_buf().join(CacheKey::TAux.to_string());
-        let mut f_aux = File::open(&f_aux_path)
-            .with_context(|| format!("could not open path={:?}", f_aux_path))?;
-        f_aux
-            .read_to_end(&mut aux_bytes)
+        let aux_bytes = std::fs::read(&f_aux_path)
             .with_context(|| format!("could not read from path={:?}", f_aux_path))?;
 
         deserialize(&aux_bytes)

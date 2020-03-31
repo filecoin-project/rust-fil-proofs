@@ -75,11 +75,8 @@ pub fn get_unsealed_range<T: Into<PathBuf> + AsRef<Path>>(
     let replica_id =
         generate_replica_id::<DefaultTreeHasher, _>(&prover_id, sector_id.into(), &ticket, comm_d);
 
-    let f_in = File::open(&sealed_path)
-        .with_context(|| format!("could not open sealed_path={:?}", sealed_path.as_ref()))?;
-    let mut data = Vec::new();
-    f_in.take(u64::from(PaddedBytesAmount::from(porep_config)))
-        .read_to_end(&mut data)?;
+    let data = std::fs::read(&sealed_path)
+        .with_context(|| format!("could not read sealed_path={:?}", sealed_path.as_ref()))?;
 
     let f_out = File::create(&output_path)
         .with_context(|| format!("could not create output_path={:?}", output_path.as_ref()))?;
@@ -351,22 +348,18 @@ where
     let cache = &cache_path.as_ref();
 
     // Make sure p_aux exists and is valid.
-    let mut p_aux_bytes = vec![];
     let p_aux_path = cache.join(CacheKey::PAux.to_string());
-    let mut f_p_aux = File::open(&p_aux_path)
-        .with_context(|| format!("could not open file p_aux={:?}", p_aux_path))?;
-    f_p_aux.read_to_end(&mut p_aux_bytes)?;
+    let p_aux_bytes = std::fs::read(&p_aux_path)
+        .with_context(|| format!("could not read file p_aux={:?}", p_aux_path))?;
 
     let _: PersistentAux<DefaultTreeHasher> = deserialize(&p_aux_bytes)?;
     drop(p_aux_bytes);
 
     // Make sure t_aux exists and is valid.
     let t_aux = {
-        let mut t_aux_bytes = vec![];
         let t_aux_path = cache.join(CacheKey::TAux.to_string());
-        let mut f_t_aux = File::open(&t_aux_path)
-            .with_context(|| format!("could not open file t_aux={:?}", t_aux_path))?;
-        f_t_aux.read_to_end(&mut t_aux_bytes)?;
+        let t_aux_bytes = std::fs::read(&t_aux_path)
+            .with_context(|| format!("could not read file t_aux={:?}", t_aux_path))?;
 
         let mut res: TemporaryAux<DefaultTreeHasher, DefaultPieceHasher> =
             deserialize(&t_aux_bytes)?;

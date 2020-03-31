@@ -139,8 +139,8 @@ fn initial_params_filename(proof: Proof, hasher: Hasher, sector_size: u64) -> St
 /// containing the proof, hasher, sector-size, shortened head commit, and contribution number (e.g.
 /// `(Proof::Porep, Hasher::Poseidon, SECTOR_SIZE_32_GIB, "abcdef1", 0)`).
 fn parse_params_filename(path: &str) -> (Proof, Hasher, u64, String, usize) {
-    let filename = path.rsplitn(2, "/").nth(0).unwrap();
-    let split: Vec<&str> = filename.split("_").collect();
+    let filename = path.rsplitn(2, '/').next().unwrap();
+    let split: Vec<&str> = filename.split('_').collect();
 
     let proof = match split[0] {
         "porep" => Proof::Porep,
@@ -169,7 +169,7 @@ fn parse_params_filename(path: &str) -> (Proof, Hasher, u64, String, usize) {
     let head = split[3].to_string();
 
     let param_number = usize::from_str(split[4])
-        .expect(&format!("invalid param number in filename: {}", split[3]));
+        .unwrap_or_else(|_| panic!("invalid param number in filename: {}", split[3]));
 
     (proof, hasher, sector_size, head, param_number)
 }
@@ -683,10 +683,9 @@ fn verify_param_transistions_daemon(proof: Proof, hasher: Hasher, sector_size: u
 
         let provided_contribution_hash = {
             let mut arr = [0u8; 64];
-            let vec = hex::decode(&hex_str).expect(&format!(
-                "contribution hash is not a valid hex string: {}",
-                hex_str
-            ));
+            let vec = hex::decode(&hex_str).unwrap_or_else(|_| {
+                panic!("contribution hash is not a valid hex string: {}", hex_str)
+            });
             info!("parsed contribution hash");
             arr.copy_from_slice(&vec[..]);
             arr
@@ -728,8 +727,8 @@ fn setup_new_logger(proof: Proof, hasher: Hasher, sector_size: u64) {
         initial_params_filename(proof, hasher, sector_size)
     );
 
-    let log_file =
-        File::create(&log_filename).expect(&format!("failed to create log file: {}", log_filename));
+    let log_file = File::create(&log_filename)
+        .unwrap_or_else(|_| panic!("failed to create log file: {}", log_filename));
 
     CombinedLogger::init(vec![
         TermLogger::new(
@@ -755,8 +754,8 @@ fn setup_contribute_logger(path_before: &str) {
 
     log_filename.push_str(".log");
 
-    let log_file =
-        File::create(&log_filename).expect(&format!("failed to create log file: {}", log_filename));
+    let log_file = File::create(&log_filename)
+        .unwrap_or_else(|_| panic!("failed to create log file: {}", log_filename));
 
     CombinedLogger::init(vec![
         TermLogger::new(
@@ -791,8 +790,8 @@ fn setup_verify_logger(param_paths: &[&str]) {
     log_filename.make_ascii_lowercase();
     let log_filename = log_filename.replace("-", "_");
 
-    let log_file =
-        File::create(&log_filename).expect(&format!("failed to create log file: {}", log_filename));
+    let log_file = File::create(&log_filename)
+        .unwrap_or_else(|_| panic!("failed to create log file: {}", log_filename));
 
     CombinedLogger::init(vec![
         TermLogger::new(
@@ -819,8 +818,8 @@ fn setup_verifyd_logger(proof: Proof, hasher: Hasher, sector_size: u64) {
     log_filename.make_ascii_lowercase();
     let log_filename = log_filename.replace("-", "_");
 
-    let log_file =
-        File::create(&log_filename).expect(&format!("failed to create log file: {}", log_filename));
+    let log_file = File::create(&log_filename)
+        .unwrap_or_else(|_| panic!("failed to create log file: {}", log_filename));
 
     CombinedLogger::init(vec![
         TermLogger::new(
@@ -1113,10 +1112,9 @@ fn main() {
                     .unwrap()
                     .map(|hex_str| {
                         let mut digest_bytes_arr = [0u8; 64];
-                        let digest_bytes_vec = hex::decode(hex_str).expect(&format!(
-                            "contribution hash is not a valid hex string: {}",
-                            hex_str
-                        ));
+                        let digest_bytes_vec = hex::decode(hex_str).unwrap_or_else(|_| {
+                            panic!("contribution hash is not a valid hex string: {}", hex_str)
+                        });
                         digest_bytes_arr.copy_from_slice(&digest_bytes_vec[..]);
                         digest_bytes_arr
                     })

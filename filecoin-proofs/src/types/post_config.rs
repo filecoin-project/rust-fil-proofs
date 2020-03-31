@@ -28,17 +28,15 @@ pub enum PoStType {
 
 impl From<PoStConfig> for PaddedBytesAmount {
     fn from(x: PoStConfig) -> Self {
-        match x {
-            PoStConfig { sector_size, .. } => PaddedBytesAmount::from(sector_size),
-        }
+        let PoStConfig { sector_size, .. } = x;
+        PaddedBytesAmount::from(sector_size)
     }
 }
 
 impl From<PoStConfig> for UnpaddedBytesAmount {
     fn from(x: PoStConfig) -> Self {
-        match x {
-            PoStConfig { sector_size, .. } => PaddedBytesAmount::from(sector_size).into(),
-        }
+        let PoStConfig { sector_size, .. } = x;
+        PaddedBytesAmount::from(sector_size).into()
     }
 }
 
