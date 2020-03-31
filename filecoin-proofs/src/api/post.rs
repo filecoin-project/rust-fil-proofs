@@ -621,6 +621,7 @@ pub fn verify_winning_post(
 
     let vanilla_params = winning_post_setup_params(&post_config)?;
     let param_sector_count = vanilla_params.sector_count;
+    let param_challenge_count = vanilla_params.challenge_count;
 
     let setup_params = compound_proof::SetupParams {
         vanilla_params,
@@ -666,8 +667,14 @@ pub fn verify_winning_post(
         k: None,
     };
 
-    let is_valid =
-        fallback::FallbackPoStCompound::verify(&pub_params, &pub_inputs, &proof, &NoRequirements)?;
+    let is_valid = fallback::FallbackPoStCompound::verify(
+        &pub_params,
+        &pub_inputs,
+        &proof,
+        &fallback::ChallengeRequirements {
+            challenge_count: param_challenge_count,
+        },
+    )?;
 
     if !is_valid {
         return Ok(false);
@@ -809,8 +816,14 @@ pub fn verify_window_post(
         k: None,
     };
 
-    let is_valid =
-        fallback::FallbackPoStCompound::verify(&pub_params, &pub_inputs, &proof, &NoRequirements)?;
+    let is_valid = fallback::FallbackPoStCompound::verify(
+        &pub_params,
+        &pub_inputs,
+        &proof,
+        &fallback::ChallengeRequirements {
+            challenge_count: post_config.challenge_count,
+        },
+    )?;
 
     if !is_valid {
         return Ok(false);

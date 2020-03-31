@@ -66,8 +66,8 @@ where
 
             // 2. Inputs for verifying inclusion paths
             for n in 0..pub_params.challenge_count {
-                let challenge_index = (partition_index * pub_params.sector_count
-                    + i * pub_params.challenge_count
+                let challenge_index = ((partition_index * pub_params.sector_count + i)
+                    * pub_params.challenge_count
                     + n) as u64;
                 let challenged_leaf_start = fallback::generate_leaf_challenge(
                     &pub_params,
@@ -91,7 +91,7 @@ where
         }
         let num_inputs_per_sector = inputs.len() / sectors.len();
 
-        // dupliate last one if too little sectors available
+        // uplicate last one if too little sectors available
         while inputs.len() / num_inputs_per_sector < num_sectors_per_chunk {
             let s = inputs[inputs.len() - num_inputs_per_sector..].to_vec();
             inputs.extend_from_slice(&s);
@@ -175,9 +175,10 @@ mod tests {
     use crate::hasher::{Domain, HashFunction, Hasher, PedersenHasher, PoseidonHasher};
     use crate::porep::stacked::OCT_ARITY;
     use crate::post::fallback;
-    use crate::proof::NoRequirements;
 
-    use super::super::{PrivateInputs, PrivateSector, PublicInputs, PublicSector};
+    use super::super::{
+        ChallengeRequirements, PrivateInputs, PrivateSector, PublicInputs, PublicSector,
+    };
 
     #[ignore]
     #[test]
@@ -219,11 +220,12 @@ mod tests {
         let sector_size = (leaves * NODE_SIZE) as u64;
         let randomness = H::Domain::random(rng);
         let prover_id = H::Domain::random(rng);
+        let challenge_count = 2;
 
         let setup_params = compound_proof::SetupParams {
             vanilla_params: fallback::SetupParams {
                 sector_size: sector_size as u64,
-                challenge_count: 2,
+                challenge_count,
                 sector_count,
             },
             partitions: Some(partitions),
@@ -352,9 +354,13 @@ mod tests {
         )
         .expect("failed while proving");
 
-        let verified =
-            FallbackPoStCompound::verify(&pub_params, &pub_inputs, &proof, &NoRequirements)
-                .expect("failed while verifying");
+        let verified = FallbackPoStCompound::verify(
+            &pub_params,
+            &pub_inputs,
+            &proof,
+            &ChallengeRequirements { challenge_count },
+        )
+        .expect("failed while verifying");
 
         assert!(verified);
     }

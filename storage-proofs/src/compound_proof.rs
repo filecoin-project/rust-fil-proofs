@@ -372,7 +372,7 @@ pub trait CompoundProof<
         ensure!(partitions_are_verified, "Vanilla proof didn't verify.");
 
         let mut res = Vec::with_capacity(partition_count);
-        for partition in 0..partition_count {
+        for (partition, vanilla_proof) in vanilla_proofs.iter().enumerate() {
             let partition_pub_in = S::with_partition(public_inputs.clone(), Some(partition));
             let inputs =
                 Self::generate_public_inputs(&partition_pub_in, vanilla_params, Some(partition))?;
@@ -380,7 +380,7 @@ pub trait CompoundProof<
             let circuit = Self::circuit(
                 &partition_pub_in,
                 C::ComponentPrivateInputs::default(),
-                &vanilla_proofs[partition],
+                vanilla_proof,
                 vanilla_params,
                 Some(partition),
             )?;

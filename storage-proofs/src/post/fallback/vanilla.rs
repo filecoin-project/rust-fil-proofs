@@ -15,7 +15,7 @@ use crate::hasher::{Domain, HashFunction, Hasher};
 use crate::merkle::{MerkleProof, OctLCMerkleTree};
 use crate::parameter_cache::ParameterSetMetadata;
 use crate::porep::stacked::OCT_ARITY;
-use crate::proof::{NoRequirements, ProofScheme};
+use crate::proof::ProofScheme;
 use crate::sector::*;
 use crate::util::NODE_SIZE;
 
@@ -37,6 +37,11 @@ pub struct PublicParams {
     pub challenge_count: usize,
     /// Number of challenged sectors.
     pub sector_count: usize,
+}
+
+#[derive(Debug, Default)]
+pub struct ChallengeRequirements {
+    pub challenge_count: usize,
 }
 
 impl ParameterSetMetadata for PublicParams {
@@ -217,7 +222,7 @@ impl<'a, H: 'a + Hasher> ProofScheme<'a> for FallbackPoSt<'a, H> {
     type PublicInputs = PublicInputs<'a, H::Domain>;
     type PrivateInputs = PrivateInputs<'a, H>;
     type Proof = Proof<H>;
-    type Requirements = NoRequirements;
+    type Requirements = ChallengeRequirements;
 
     fn setup(sp: &Self::SetupParams) -> Result<Self::PublicParams> {
         Ok(PublicParams {
@@ -304,8 +309,9 @@ impl<'a, H: 'a + Hasher> ProofScheme<'a> for FallbackPoSt<'a, H> {
                 let inclusion_proofs = (0..pub_params.challenge_count)
                     .into_par_iter()
                     .map(|n| {
-                        let challenge_index =
-                            (j * num_sectors_per_chunk + i * pub_params.challenge_count + n) as u64;
+                        let challenge_index = ((j * num_sectors_per_chunk + i)
+                            * pub_params.challenge_count
+                            + n) as u64;
                         let challenged_leaf_start = generate_leaf_challenge(
                             pub_params,
                             pub_inputs.randomness,
@@ -403,7 +409,7 @@ impl<'a, H: 'a + Hasher> ProofScheme<'a> for FallbackPoSt<'a, H> {
 
                 for (n, inclusion_proof) in inclusion_proofs.iter().enumerate() {
                     let challenge_index =
-                        (j * num_sectors_per_chunk + i * pub_params.challenge_count + n) as u64;
+                        ((j * num_sectors_per_chunk + i) * pub_params.challenge_count + n) as u64;
                     let challenged_leaf_start = generate_leaf_challenge(
                         pub_params,
                         pub_inputs.randomness,
@@ -432,6 +438,17 @@ impl<'a, H: 'a + Hasher> ProofScheme<'a> for FallbackPoSt<'a, H> {
         }
 
         Ok(true)
+    }
+
+    fn satisfies_requirements(
+        public_params: &Self::PublicParams,
+        requirements: &Self::Requirements,
+        _partitions: usize,
+    ) -> bool {
+        dbg!(&requirements);
+        dbg!(&public_params);
+        // Every partition must have the exact same number of challenges.
+        requirements.challenge_count == public_params.challenge_count
     }
 }
 
