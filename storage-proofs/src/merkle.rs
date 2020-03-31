@@ -33,6 +33,10 @@ pub const SECTOR_SIZE_16_MIB: u64 = 2 * SECTOR_SIZE_8_MIB;
 pub const SECTOR_SIZE_1_GIB: u64 = 2 * SECTOR_SIZE_512_MIB;
 pub const SECTOR_SIZE_64_GIB: u64 = 2 * SECTOR_SIZE_32_GIB;
 
+// FIXME: Unsupported size, but used for quickly testing a top level
+// tree consisting of 8x 4 KIB trees (each consisting of 2x 2 KIB trees)
+pub const SECTOR_SIZE_32_KIB: u64 = 8 * SECTOR_SIZE_4_KIB;
+
 // Reexport here, so we don't depend on merkletree directly in other places.
 pub use merkletree::store::{ExternalReader, Store};
 
@@ -71,9 +75,11 @@ pub type BinaryTree<H> = BinaryMerkleTree<<H as Hasher>::Domain, <H as Hasher>::
 
 pub type OctTree<H> = OctMerkleTree<<H as Hasher>::Domain, <H as Hasher>::Function>;
 pub type OctSubTree<H> = OctSubMerkleTree<<H as Hasher>::Domain, <H as Hasher>::Function>;
+pub type OctTopTree<H> = OctTopMerkleTree<<H as Hasher>::Domain, <H as Hasher>::Function>;
 
 pub type OctLCTree<H> = OctLCMerkleTree<<H as Hasher>::Domain, <H as Hasher>::Function>;
 pub type OctLCSubTree<H> = OctLCSubMerkleTree<<H as Hasher>::Domain, <H as Hasher>::Function>;
+pub type OctLCTopTree<H> = OctLCTopMerkleTree<<H as Hasher>::Domain, <H as Hasher>::Function>;
 
 #[derive(Debug)]
 pub enum OctTreeData<H: Hasher> {
@@ -83,11 +89,17 @@ pub enum OctTreeData<H: Hasher> {
     /// A SubTree contains a list of BaseTrees.
     OctSub(OctSubTree<H>),
 
+    /// A TopTree contains a list of SubTrees.
+    OctTop(OctTopTree<H>),
+
     /// A BaseTree contains a single Store.
     OctLC(OctLCTree<H>),
 
     /// A SubTree contains a list of BaseTrees.
     OctLCSub(OctLCSubTree<H>),
+
+    /// A TopTree contains a list of SubTrees.
+    OctLCTop(OctLCTopTree<H>),
 }
 
 impl<H: Hasher> OctTreeData<H> {
@@ -105,6 +117,13 @@ impl<H: Hasher> OctTreeData<H> {
         }
     }
 
+    pub fn octtoptree(&self) -> Option<&OctTopTree<H>> {
+        match self {
+            OctTreeData::OctTop(s) => Some(s),
+            _ => None,
+        }
+    }
+
     pub fn octlctree(&self) -> Option<&OctLCTree<H>> {
         match self {
             OctTreeData::OctLC(s) => Some(s),
@@ -115,6 +134,13 @@ impl<H: Hasher> OctTreeData<H> {
     pub fn octlcsubtree(&self) -> Option<&OctLCSubTree<H>> {
         match self {
             OctTreeData::OctLCSub(s) => Some(s),
+            _ => None,
+        }
+    }
+
+    pub fn octlctoptree(&self) -> Option<&OctLCTopTree<H>> {
+        match self {
+            OctTreeData::OctLCTop(s) => Some(s),
             _ => None,
         }
     }
@@ -169,10 +195,10 @@ pub struct MerkleProof<H: Hasher, Arity: typenum::Unsigned> {
         deserialize = "H::Domain: Deserialize<'de>"
     ))]
     pub sub_tree_proof: Option<Box<MerkleProof<H, Arity>>>,
-    sub_tree_leafs: usize,
 
     top_layer_nodes: usize,
     sub_layer_nodes: usize,
+    base_layer_nodes: usize,
 
     pub root: H::Domain,
     path: Vec<(Vec<H::Domain>, usize)>,
@@ -184,9 +210,7 @@ pub struct MerkleProof<H: Hasher, Arity: typenum::Unsigned> {
     _a: PhantomData<Arity>,
 }
 
-impl<H: Hasher, Arity: typenum::Unsigned> std::fmt::Debug
-    for MerkleProof<H, Arity>
-{
+impl<H: Hasher, Arity: typenum::Unsigned> std::fmt::Debug for MerkleProof<H, Arity> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("MerkleProof")
             .field("sub_tree_proof", &self.sub_tree_proof)
@@ -206,7 +230,7 @@ pub fn make_proof_for_test<H: Hasher, Arity: typenum::Unsigned>(
 ) -> MerkleProof<H, Arity> {
     MerkleProof {
         sub_tree_proof: None,
-        sub_tree_leafs: 0,
+        base_layer_nodes: 0,
         top_layer_nodes: 0,
         sub_layer_nodes: 0,
         path,
@@ -221,7 +245,7 @@ impl<H: Hasher, Arity: typenum::Unsigned> MerkleProof<H, Arity> {
     pub fn new(n: usize) -> MerkleProof<H, Arity> {
         MerkleProof {
             sub_tree_proof: None,
-            sub_tree_leafs: 0,
+            base_layer_nodes: 0,
             top_layer_nodes: 0,
             sub_layer_nodes: 0,
             root: Default::default(),
@@ -232,14 +256,12 @@ impl<H: Hasher, Arity: typenum::Unsigned> MerkleProof<H, Arity> {
         }
     }
 
-    pub fn new_from_proof(
-        p: &proof::Proof<H::Domain, Arity>,
-    ) -> MerkleProof<H, Arity> {
+    pub fn new_from_proof(p: &proof::Proof<H::Domain, Arity>) -> MerkleProof<H, Arity> {
         let lemma = p.lemma();
 
         MerkleProof {
             sub_tree_proof: None,
-            sub_tree_leafs: 0,
+            base_layer_nodes: 0,
             top_layer_nodes: 0,
             sub_layer_nodes: 0,
             path: lemma[1..lemma.len() - 1]
@@ -256,38 +278,54 @@ impl<H: Hasher, Arity: typenum::Unsigned> MerkleProof<H, Arity> {
 
     pub fn new_from_sub_proof<TopTreeArity: typenum::Unsigned, SubTreeArity: typenum::Unsigned>(
         p: &proof::Proof<H::Domain, Arity>,
-        sub_tree_leafs: usize,
+        base_layer_nodes: usize,
     ) -> MerkleProof<H, Arity> {
-        let sub_tree_proof = if p.sub_tree_proof.is_some() {
-            if TopTreeArity::to_usize() > 0 {
-                Some(Box::new(Self::new_from_sub_proof::<
-                    typenum::U0,
-                    SubTreeArity,
-                >(
-                    p.sub_tree_proof.as_ref().unwrap(),
-                    sub_tree_leafs,
-                )))
-            } else {
-                Some(Box::new(Self::new_from_proof(
-                    p.sub_tree_proof.as_ref().unwrap(),
-                )))
-            }
+        if p.sub_tree_proof.is_none() {
+            let mut proof = Self::new_from_proof(p);
+            proof.base_layer_nodes = base_layer_nodes;
+
+            return proof;
+        }
+
+        assert!(p.sub_tree_proof.is_some());
+        let sub_tree_proof = if SubTreeArity::to_usize() > 0 {
+            Some(Box::new(Self::new_from_sub_proof::<
+                typenum::U0,
+                SubTreeArity,
+            >(
+                p.sub_tree_proof.as_ref().unwrap(),
+                base_layer_nodes,
+            )))
         } else {
             None
         };
 
         MerkleProof {
             sub_tree_proof,
-            sub_tree_leafs,
+            base_layer_nodes,
             top_layer_nodes: TopTreeArity::to_usize(),
             sub_layer_nodes: SubTreeArity::to_usize(),
             path: {
                 let lemma = p.lemma();
-                lemma[1..lemma.len() - 1]
-                    .chunks(Arity::to_usize() - 1)
-                    .map(|chunk| chunk.to_vec())
-                    .zip(p.path().iter().copied())
-                    .collect::<Vec<_>>()
+                if TopTreeArity::to_usize() > 0 {
+                    lemma[0..lemma.len() - 1]
+                        .chunks(TopTreeArity::to_usize() - 1)
+                        .map(|chunk| chunk.to_vec())
+                        .zip(p.path().iter().copied())
+                        .collect::<Vec<_>>()
+                } else if SubTreeArity::to_usize() > 0 {
+                    lemma[0..lemma.len()]
+                        .chunks(SubTreeArity::to_usize())
+                        .map(|chunk| chunk.to_vec())
+                        .zip(p.path().iter().copied())
+                        .collect::<Vec<_>>()
+                } else {
+                    lemma[1..lemma.len() - 1]
+                        .chunks(Arity::to_usize() - 1)
+                        .map(|chunk| chunk.to_vec())
+                        .zip(p.path().iter().copied())
+                        .collect::<Vec<_>>()
+                }
             },
             root: p.root(),
             leaf: p.item(),
@@ -334,30 +372,44 @@ impl<H: Hasher, Arity: typenum::Unsigned> MerkleProof<H, Arity> {
             .collect::<Vec<_>>()
     }
 
-    fn verify_sub_tree(&self) -> bool {
+    fn verify_sub_tree(&self, top_layer: bool) -> bool {
+        assert!(self.sub_tree_proof.is_some());
         let sub_tree = self.sub_tree_proof.as_ref().unwrap();
         if !sub_tree.verify() {
             return false;
         }
 
         let mut a = H::Function::default();
-        let expected_root = (0..sub_tree.path.len()).fold(sub_tree.leaf, |h, i| {
-            a.reset();
+        if top_layer {
+            let expected_root = (0..self.path.len()).fold(sub_tree.root().clone(), |h, i| {
+                a.reset();
 
-            let index = sub_tree.path[i].1;
-            let mut nodes = sub_tree.path[i].0.clone();
-            nodes.insert(index, h);
+                let index = self.path[i].1;
+                let mut nodes = self.path[i].0.clone();
+                nodes.insert(index, h);
 
-            a.multi_node(&nodes, i)
-        });
+                a.multi_node(&nodes, i)
+            });
 
-        sub_tree.root() == &expected_root
+            self.root() == &expected_root
+        } else {
+            let expected_root = (0..sub_tree.path.len()).fold(sub_tree.leaf, |h, i| {
+                a.reset();
+
+                let index = sub_tree.path[i].1;
+                let mut nodes = sub_tree.path[i].0.clone();
+                nodes.insert(index, h);
+
+                a.multi_node(&nodes, i)
+            });
+
+            sub_tree.root() == &expected_root
+        }
     }
 
     fn verify(&self) -> bool {
-        if self.top_layer_nodes > 0 || self.sub_layer_nodes > 0 {
-            assert!(self.sub_tree_proof.is_some());
-            return self.verify_sub_tree();
+        if self.sub_tree_proof.is_some() {
+            return self.verify_sub_tree(self.top_layer_nodes > 0);
         }
 
         let mut a = H::Function::default();
@@ -376,29 +428,19 @@ impl<H: Hasher, Arity: typenum::Unsigned> MerkleProof<H, Arity> {
 
     /// Validates the MerkleProof and that it corresponds to the supplied node.
     pub fn validate(&self, node: usize) -> bool {
-        if self.top_layer_nodes > 0 {
+        if self.top_layer_nodes > 0 || self.sub_layer_nodes > 0 {
             assert!(self.sub_tree_proof.is_some());
-            let sub_path_index = if node < self.sub_tree_leafs {
-                node % self.sub_tree_leafs
+            let sub_path_index = if node < self.base_layer_nodes {
+                node % self.base_layer_nodes
             } else {
-                (self.top_layer_nodes - 1) * self.sub_tree_leafs + (node % self.sub_tree_leafs)
+                ((node / self.base_layer_nodes) * self.base_layer_nodes)
+                    + (node % self.base_layer_nodes)
             };
 
-            return sub_path_index == node;
-        }
-
-        if self.sub_layer_nodes > 0 {
-            assert!(self.sub_tree_proof.is_some());
-            let sub_path_index = if node < self.sub_tree_leafs {
-                node % self.sub_tree_leafs
-            } else {
-                (self.sub_layer_nodes - 1) * self.sub_tree_leafs + (node % self.sub_tree_leafs)
-            };
-
-            return sub_path_index == node;
-        }
-
-        if self.path_index() != node {
+            if sub_path_index != node {
+                return false;
+            }
+        } else if self.path_index() != node {
             return false;
         }
 
@@ -460,45 +502,22 @@ impl<H: Hasher, Arity: typenum::Unsigned> MerkleProof<H, Arity> {
         &self.path
     }
 
-    pub fn sub_path_index(&self, arity: usize) -> usize {
-        assert!(self.sub_tree_proof.is_some());
-        self.sub_tree_proof
-            .as_ref()
-            .unwrap()
-            .path
+    pub fn path_index(&self) -> usize {
+        self.path
             .iter()
             .rev()
-            .fold(0, |acc, (_, index)| (acc * arity) + index)
-    }
-
-    pub fn path_index(&self) -> usize {
-        self.path.iter().rev().fold(0, |acc, (_, index)| {
-            (acc * Arity::to_usize()) + index
-        })
+            .fold(0, |acc, (_, index)| (acc * Arity::to_usize()) + index)
     }
 
     /// proves_challenge returns true if this self.proof corresponds to challenge.
     /// This is useful for verifying that a supplied proof is actually relevant to a given challenge.
     pub fn proves_challenge(&self, challenge: usize) -> bool {
-        if self.top_layer_nodes > 0 {
-            //assert!(self.sub_tree_proof.is_some());
-            //return self.sub_path_index(self.top_layer_nodes) == challenge;
-            let sub_path_index = if challenge < self.sub_tree_leafs {
-                challenge % self.sub_tree_leafs
+        if self.top_layer_nodes > 0 || self.sub_layer_nodes > 0 {
+            let sub_path_index = if challenge < self.base_layer_nodes {
+                challenge % self.base_layer_nodes
             } else {
-                self.sub_tree_leafs + (challenge % self.sub_tree_leafs)
-            };
-
-            return sub_path_index == challenge;
-        }
-
-        if self.sub_layer_nodes > 0 {
-            //assert!(self.sub_tree_proof.is_some());
-            //return self.sub_path_index(self.sub_layer_nodes) == challenge;
-            let sub_path_index = if challenge < self.sub_tree_leafs {
-                challenge % self.sub_tree_leafs
-            } else {
-                self.sub_tree_leafs + (challenge % self.sub_tree_leafs)
+                ((challenge / self.base_layer_nodes) * self.base_layer_nodes)
+                    + (challenge % self.base_layer_nodes)
             };
 
             return sub_path_index == challenge;

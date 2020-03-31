@@ -40,7 +40,8 @@ fil_logger = "0.1"
 log = "0.4.8"
 uom = "0.26"
 #merkletree = "0.17.0"
-merkletree = { git = "https://github.com/filecoin-project/merkle_light", branch = "update-merkle-trees" }
+#merkletree = { git = "https://github.com/filecoin-project/merkle_light", branch = "update-merkle-trees" }
+merkletree = { path = "/home/nemo/pl/merkle_light" }
 bincode = "1.1.2"
 anyhow = "1.0.23"
 ff = { version = "0.2.0", package = "fff" }

@@ -267,13 +267,14 @@ where
 // Verifies if a DiskStore specified by a config is consistent.
 fn verify_store(config: &StoreConfig, arity: usize) -> Result<()> {
     let store_path = StoreConfig::data_path(&config.path, &config.id);
+    println!("VERIFYING STORE {:?}", store_path);
     if !Path::new(&store_path).exists() {
         // Configs may have split due to sector size, so we need to
         // check deterministic paths from here.
         let orig_path = store_path.clone().into_os_string().into_string().unwrap();
-        // At most 8 can exist, at fewest, 2 must exist.
-        let mut configs: Vec<StoreConfig> = Vec::with_capacity(8);
-        for i in 0..8 {
+        // At most 16 can exist, at fewest 2 must exist.
+        let mut configs: Vec<StoreConfig> = Vec::with_capacity(16);
+        for i in 0..16 {
             let cur_path = orig_path
                 .clone()
                 .replace(".dat", format!("-{}.dat", i).as_str());
@@ -295,17 +296,19 @@ fn verify_store(config: &StoreConfig, arity: usize) -> Result<()> {
         }
 
         ensure!(
-            configs.len() == 2 || configs.len() == 8,
+            configs.len() == 2 || configs.len() == 8 || configs.len() == 16,
             "Missing store file (or associated split paths): {}",
             store_path.display()
         );
 
+        let store_len = config.size.unwrap();
         for config in &configs {
+            let len = File::open(StoreConfig::data_path(&config.path, &config.id))?
+                .metadata()?
+                .len();
             ensure!(
                 DiskStore::<<DefaultPieceHasher as Hasher>::Domain>::is_consistent(
-                    config.size.unwrap() / configs.len(),
-                    arity,
-                    &config,
+                    store_len, arity, &config,
                 )?,
                 "Store is inconsistent: {:?}",
                 StoreConfig::data_path(&config.path, &config.id)
@@ -333,9 +336,9 @@ fn verify_level_cache_store(config: &StoreConfig, arity: usize) -> Result<()> {
         // Configs may have split due to sector size, so we need to
         // check deterministic paths from here.
         let orig_path = store_path.clone().into_os_string().into_string().unwrap();
-        // At most 8 can exist, at fewest, 2 must exist.
-        let mut configs: Vec<StoreConfig> = Vec::with_capacity(8);
-        for i in 0..8 {
+        // At most 16 can exist, at fewest 2 must exist.
+        let mut configs: Vec<StoreConfig> = Vec::with_capacity(16);
+        for i in 0..16 {
             let cur_path = orig_path
                 .clone()
                 .replace(".dat", format!("-{}.dat", i).as_str());
@@ -357,15 +360,16 @@ fn verify_level_cache_store(config: &StoreConfig, arity: usize) -> Result<()> {
         }
 
         ensure!(
-            configs.len() == 2 || configs.len() == 8,
+            configs.len() == 2 || configs.len() == 8 || configs.len() == 16,
             "Missing store file (or associated split paths): {}",
             store_path.display()
         );
 
+        let store_len = config.size.unwrap();
         for config in &configs {
             ensure!(
                 LevelCacheStore::<<DefaultPieceHasher as Hasher>::Domain, std::fs::File>::is_consistent(
-                    config.size.unwrap() / configs.len(),
+                    store_len,
                     arity,
                     &config,
                 )?,

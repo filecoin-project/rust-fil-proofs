@@ -6,7 +6,7 @@ use super::{column_proof::ColumnProof, hash::hash_single_column};
 
 use crate::error::Result;
 use crate::hasher::Hasher;
-use crate::merkle::{MerkleProof, OctSubTree, OctTree};
+use crate::merkle::{MerkleProof, OctSubTree, OctTopTree, OctTree};
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Column<H: Hasher> {
@@ -71,6 +71,21 @@ impl<H: Hasher> Column<H> {
         let tree_c_proof = tree_c.gen_proof(self.index() as usize)?;
         assert!(tree_c_proof.sub_tree_proof.is_some());
         let inclusion_proof = MerkleProof::new_from_sub_proof::<typenum::U0, typenum::U2>(
+            &tree_c_proof,
+            sub_tree_leafs,
+        );
+        ColumnProof::<H>::from_column(self, inclusion_proof)
+    }
+
+    /// Create a column proof for this column.
+    pub fn into_proof_top(
+        self,
+        tree_c: &OctTopTree<H>,
+        sub_tree_leafs: usize,
+    ) -> Result<ColumnProof<H>> {
+        let tree_c_proof = tree_c.gen_proof(self.index() as usize)?;
+        assert!(tree_c_proof.sub_tree_proof.is_some());
+        let inclusion_proof = MerkleProof::new_from_sub_proof::<typenum::U2, typenum::U8>(
             &tree_c_proof,
             sub_tree_leafs,
         );
