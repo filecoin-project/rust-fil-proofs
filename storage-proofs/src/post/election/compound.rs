@@ -10,6 +10,7 @@ use crate::drgraph;
 use crate::error::Result;
 use crate::gadgets::por::PoRCompound;
 use crate::hasher::Hasher;
+use crate::merkle::{DiskStore, MerkleTreeWrapper};
 use crate::parameter_cache::{CacheableParameters, ParameterSetMetadata};
 use crate::por;
 use crate::post::election::{self, ElectionPoSt, ElectionPoStCircuit};
@@ -66,10 +67,16 @@ where
                     commitment: None,
                     challenge: challenged_leaf_start as usize + i,
                 };
-                let por_inputs = PoRCompound::<H, typenum::U8>::generate_public_inputs(
-                    &por_pub_inputs,
-                    &por_pub_params,
-                    None,
+                let por_inputs = PoRCompound::<
+                    MerkleTreeWrapper<
+                        H,
+                        DiskStore<H::Domain>,
+                        typenum::U8,
+                        typenum::U0,
+                        typenum::U0,
+                    >,
+                >::generate_public_inputs(
+                    &por_pub_inputs, &por_pub_params, None
                 )?;
 
                 inputs.extend(por_inputs);

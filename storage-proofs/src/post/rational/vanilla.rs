@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use crate::drgraph::graph_height;
 use crate::error::{Error, Result};
 use crate::hasher::{Domain, HashFunction, Hasher};
-use crate::merkle::{BinaryMerkleTree, MerkleProof, MerkleProofTrait};
+use crate::merkle::{BinaryTree, MerkleProof, MerkleProofTrait};
 use crate::parameter_cache::ParameterSetMetadata;
 use crate::proof::{NoRequirements, ProofScheme};
 use crate::sector::*;
@@ -56,7 +56,7 @@ pub struct PublicInputs<'a, T: 'a + Domain> {
 
 #[derive(Debug, Clone)]
 pub struct PrivateInputs<'a, H: 'a + Hasher> {
-    pub trees: &'a BTreeMap<SectorId, &'a BinaryMerkleTree<H::Domain, H::Function>>,
+    pub trees: &'a BTreeMap<SectorId, &'a BinaryTree<H>>,
     pub comm_cs: &'a [H::Domain],
     pub comm_r_lasts: &'a [H::Domain],
 }
@@ -293,8 +293,10 @@ mod tests {
 
     use crate::drgraph::{new_seed, BucketGraph, Graph, BASE_DEGREE};
     use crate::fr32::fr_into_bytes;
-    use crate::hasher::{Blake2sHasher, PedersenHasher, PoseidonHasher, Sha256Hasher};
-    use crate::merkle::make_proof_for_test;
+    use crate::hasher::{
+        Blake2sHasher, PedersenHasher, PoseidonArity, PoseidonHasher, Sha256Hasher,
+    };
+    use crate::merkle::{make_proof_for_test, MerkleProof};
 
     fn test_rational_post<H: Hasher>() {
         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
@@ -317,8 +319,12 @@ mod tests {
 
         let graph1 = BucketGraph::<H>::new(leaves, BASE_DEGREE, 0, new_seed()).unwrap();
         let graph2 = BucketGraph::<H>::new(leaves, BASE_DEGREE, 0, new_seed()).unwrap();
-        let tree1 = graph1.merkle_tree(None, data1.as_slice()).unwrap();
-        let tree2 = graph2.merkle_tree(None, data2.as_slice()).unwrap();
+        let tree1 = graph1
+            .merkle_tree::<BinaryTree<H>>(None, data1.as_slice())
+            .unwrap();
+        let tree2 = graph2
+            .merkle_tree::<BinaryTree<H>>(None, data2.as_slice())
+            .unwrap();
 
         let seed = (0..leaves).map(|_| rng.gen()).collect::<Vec<u8>>();
         let mut faults = OrderedSectorSet::new();
@@ -405,13 +411,13 @@ mod tests {
     // Proof root matches that requested in public inputs.
     // However, note that data has no relationship to anything,
     // and proof path does not actually prove that data was in the tree corresponding to expected root.
-    fn make_bogus_proof<H: Hasher, U: typenum::Unsigned>(
+    fn make_bogus_proof<H: Hasher, U: 'static + PoseidonArity>(
         pub_inputs: &PublicInputs<H::Domain>,
         rng: &mut XorShiftRng,
     ) -> MerkleProof<H, U> {
         let bogus_leaf: H::Domain = H::Domain::random(rng);
 
-        make_proof_for_test(
+        make_proof_for_test::<MerkleProof<H, U, typenum::U0, typenum::U0>>(
             pub_inputs.comm_rs[0],
             bogus_leaf,
             vec![(vec![bogus_leaf; U::to_usize() - 1], 1)],
@@ -434,7 +440,7 @@ mod tests {
             .collect();
 
         let graph = BucketGraph::<H>::new(leaves, BASE_DEGREE, 0, new_seed()).unwrap();
-        let tree: BinaryMerkleTree<_, _> = graph.merkle_tree(None, data.as_slice()).unwrap();
+        let tree: BinaryTree<H> = graph.merkle_tree(None, data.as_slice()).unwrap();
         let seed = (0..leaves).map(|_| rng.gen()).collect::<Vec<u8>>();
 
         let faults = OrderedSectorSet::new();
@@ -512,7 +518,9 @@ mod tests {
             .collect();
 
         let graph = BucketGraph::<H>::new(leaves, BASE_DEGREE, 0, new_seed()).unwrap();
-        let tree = graph.merkle_tree(None, data.as_slice()).unwrap();
+        let tree = graph
+            .merkle_tree::<BinaryTree<H>>(None, data.as_slice())
+            .unwrap();
         let seed = (0..leaves).map(|_| rng.gen()).collect::<Vec<u8>>();
         let mut faults = OrderedSectorSet::new();
         faults.insert(1.into());

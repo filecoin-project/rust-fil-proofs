@@ -11,6 +11,7 @@ use crate::gadgets::constraint;
 use crate::gadgets::por::PoRCircuit;
 use crate::gadgets::variables::Root;
 use crate::hasher::{HashFunction, Hasher};
+use crate::merkle::{DiskStore, MerkleTreeWrapper};
 
 /// This is the `RationalPoSt` circuit.
 pub struct RationalPoStCircuit<H: Hasher> {
@@ -90,7 +91,9 @@ impl<'a, H: Hasher> Circuit<Bls12> for RationalPoStCircuit<H> {
                 );
             }
 
-            PoRCircuit::<typenum::U2, H>::synthesize(
+            PoRCircuit::<
+                MerkleTreeWrapper<H, DiskStore<H::Domain>, typenum::U2, typenum::U0, typenum::U0>,
+            >::synthesize(
                 cs.namespace(|| format!("challenge_inclusion{}", i)),
                 Root::Val(leafs[i]),
                 paths[i].clone(),
@@ -119,6 +122,7 @@ mod tests {
     use crate::fr32::fr_into_bytes;
     use crate::gadgets::TestConstraintSystem;
     use crate::hasher::{Domain, HashFunction, Hasher, PedersenHasher, PoseidonHasher};
+    use crate::merkle::BinaryTree;
     use crate::post::rational::{self, derive_challenges, RationalPoSt, RationalPoStCompound};
     use crate::proof::ProofScheme;
     use crate::sector::OrderedSectorSet;
@@ -155,12 +159,12 @@ mod tests {
 
         let graph1 = BucketGraph::<H>::new(leaves, BASE_DEGREE, 0, new_seed()).unwrap();
         let tree1 = graph1
-            .merkle_tree::<typenum::U2>(None, data1.as_slice())
+            .merkle_tree::<BinaryTree<H>>(None, data1.as_slice())
             .unwrap();
 
         let graph2 = BucketGraph::<H>::new(leaves, BASE_DEGREE, 0, new_seed()).unwrap();
         let tree2 = graph2
-            .merkle_tree::<typenum::U2>(None, data2.as_slice())
+            .merkle_tree::<BinaryTree<H>>(None, data2.as_slice())
             .unwrap();
 
         let faults = OrderedSectorSet::new();

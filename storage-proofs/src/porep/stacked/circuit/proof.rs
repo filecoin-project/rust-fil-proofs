@@ -15,6 +15,7 @@ use crate::fr32::fr_into_bytes;
 use crate::gadgets::constraint;
 use crate::gadgets::por::PoRCompound;
 use crate::hasher::{HashFunction, Hasher};
+use crate::merkle::{DiskStore, MerkleTreeWrapper};
 use crate::parameter_cache::{CacheableParameters, ParameterSetMetadata};
 use crate::por;
 use crate::porep::stacked::StackedDrg;
@@ -194,7 +195,9 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher>
         let comm_r = pub_in.tau.as_ref().expect("missing tau").comm_r;
         inputs.push(comm_r.into());
 
-        let por_params = por::PoR::<H, typenum::U2>::setup(&por::SetupParams {
+        let por_params = por::PoR::<
+            MerkleTreeWrapper<H, DiskStore<H::Domain>, typenum::U2, typenum::U0, typenum::U0>,
+        >::setup(&por::SetupParams {
             leaves: graph.size(),
             private: true,
         })?;
@@ -205,7 +208,9 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher>
                 commitment: None,
             };
 
-            PoRCompound::<H, typenum::U8>::generate_public_inputs(&pub_inputs, &por_params, k)
+            PoRCompound::<
+                MerkleTreeWrapper<H, DiskStore<H::Domain>, typenum::U8, typenum::U0, typenum::U0>,
+            >::generate_public_inputs(&pub_inputs, &por_params, k)
         };
 
         let all_challenges = pub_in.challenges(&pub_params.layer_challenges, graph.size(), k);
@@ -217,10 +222,10 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher>
                 commitment: None,
             };
 
-            inputs.extend(PoRCompound::<H, typenum::U2>::generate_public_inputs(
-                &pub_inputs,
-                &por_params,
-                k,
+            inputs.extend(PoRCompound::<
+                MerkleTreeWrapper<H, DiskStore<H::Domain>, typenum::U2, typenum::U0, typenum::U0>,
+            >::generate_public_inputs(
+                &pub_inputs, &por_params, k
             )?);
 
             // replica column proof

@@ -12,7 +12,7 @@ use crate::drgraph::Graph;
 use crate::gadgets::por::PoRCircuit;
 use crate::gadgets::variables::Root;
 use crate::hasher::{Hasher, PoseidonArity};
-use crate::merkle::{MerkleProof, MerkleProofTrait};
+use crate::merkle::{DiskStore, MerkleProof, MerkleProofTrait, MerkleTreeWrapper};
 use crate::porep::stacked::{
     Proof as VanillaProof, PublicParams, ReplicaColumnProof as VanillaReplicaColumnProof,
 };
@@ -188,7 +188,7 @@ where
 
         let root = Root::from_allocated::<CS>(root);
         let value = Root::from_allocated::<CS>(leaf);
-        PoRCircuit::<U, H>::synthesize(cs, value, auth_path, root, true)
+        PoRCircuit::<MerkleTreeWrapper<H, DiskStore<H::Domain>, U, typenum::U0, typenum::U0>>::synthesize(cs, value, auth_path, root, true)
     }
 }
 

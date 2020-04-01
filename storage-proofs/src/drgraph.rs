@@ -14,6 +14,7 @@ use crate::fr32::bytes_into_fr_repr_safe;
 use crate::hasher::Hasher;
 use crate::merkle::{
     create_lcmerkle_tree, create_merkle_tree, open_lcmerkle_tree, LCMerkleTree, MerkleTree,
+    MerkleTreeTrait,
 };
 use crate::parameter_cache::ParameterSetMetadata;
 use crate::util::{data_at_node_offset, NODE_SIZE};
@@ -35,12 +36,12 @@ pub trait Graph<H: Hasher>: ::std::fmt::Debug + Clone + PartialEq + Eq {
     }
 
     /// Builds a merkle tree based on the given data.
-    fn merkle_tree<'a, U: typenum::Unsigned>(
+    fn merkle_tree<'a, Tree: MerkleTreeTrait>(
         &self,
         config: Option<StoreConfig>,
         data: &'a [u8],
-    ) -> Result<MerkleTree<H::Domain, H::Function, U>> {
-        create_merkle_tree::<H, U>(config, self.size(), data)
+    ) -> Result<Tree> {
+        create_merkle_tree::<Tree>(config, self.size(), data)
     }
 
     /// Builds a merkle tree based on the given data and level cache
@@ -258,7 +259,10 @@ mod tests {
     use memmap::MmapOptions;
 
     use crate::drgraph::new_seed;
-    use crate::hasher::{Blake2sHasher, PedersenHasher, PoseidonHasher, Sha256Hasher};
+    use crate::hasher::{
+        Blake2sHasher, PedersenHasher, PoseidonArity, PoseidonHasher, Sha256Hasher,
+    };
+    use crate::merkle::{DiskStore, MerkleProofTrait, MerkleTreeWrapper};
 
     // Create and return an object of MmapMut backed by in-memory copy of data.
     pub fn mmap_from(data: &[u8]) -> MmapMut {
@@ -322,16 +326,20 @@ mod tests {
         graph_bucket::<PedersenHasher>();
     }
 
-    fn gen_proof<H: Hasher, U: typenum::Unsigned>(config: Option<StoreConfig>) {
+    fn gen_proof<H: Hasher, U: 'static + PoseidonArity>(config: Option<StoreConfig>) {
         let leafs = 64;
         let g = BucketGraph::<H>::new(leafs, BASE_DEGREE, 0, new_seed()).unwrap();
         let data = vec![2u8; NODE_SIZE * leafs];
 
         let mmapped = &mmap_from(&data);
-        let tree = g.merkle_tree::<U>(config, mmapped).unwrap();
+        let tree = g
+            .merkle_tree::<MerkleTreeWrapper<H, DiskStore<H::Domain>, U, typenum::U0, typenum::U0>>(
+                config, mmapped,
+            )
+            .unwrap();
         let proof = tree.gen_proof(2).unwrap();
 
-        assert!(proof.validate::<H::Function>().expect("failed to validate"));
+        assert!(proof.verify());
     }
 
     #[test]

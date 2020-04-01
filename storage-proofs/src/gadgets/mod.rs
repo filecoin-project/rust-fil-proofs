@@ -8,7 +8,6 @@ pub mod insertion;
 pub mod multipack;
 pub mod pedersen;
 pub mod por;
-pub mod por2;
 pub mod uint64;
 pub mod variables;
 pub mod xor;

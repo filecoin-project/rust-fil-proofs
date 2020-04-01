@@ -20,8 +20,8 @@ use crate::fr32::bytes_into_fr_repr_safe;
 use crate::hasher::{Domain, Hasher};
 use crate::merkle::{
     open_lcmerkle_tree, split_config, BinaryTree, MerkleProof, MerkleProofTrait, MerkleTree,
-    OctLCSubTree, OctLCTopTree, OctLCTree, OctSubTree, OctTopTree, OctTree, OctTreeData,
-    SECTOR_SIZE_16_MIB, SECTOR_SIZE_1_GIB, SECTOR_SIZE_2_KIB, SECTOR_SIZE_32_GIB,
+    MerkleTreeTrait, OctLCSubTree, OctLCTopTree, OctLCTree, OctSubTree, OctTopTree, OctTree,
+    OctTreeData, SECTOR_SIZE_16_MIB, SECTOR_SIZE_1_GIB, SECTOR_SIZE_2_KIB, SECTOR_SIZE_32_GIB,
     SECTOR_SIZE_32_KIB, SECTOR_SIZE_4_KIB, SECTOR_SIZE_512_MIB, SECTOR_SIZE_64_GIB,
     SECTOR_SIZE_8_MIB,
 };
@@ -397,11 +397,13 @@ impl<H: Hasher, G: Hasher> TemporaryAux<H, G> {
             let tree_d_store: DiskStore<G::Domain> =
                 DiskStore::new_from_disk(tree_d_size, BINARY_ARITY, &t_aux.tree_d_config)
                     .context("tree_d")?;
-            let tree_d: BinaryTree<G> = MerkleTree::from_data_store(
-                tree_d_store,
-                get_merkle_tree_leafs(tree_d_size, BINARY_ARITY),
-            )
-            .context("tree_d")?;
+            let tree_d: BinaryTree<G> = BinaryTree::from_merkle(
+                MerkleTree::from_data_store(
+                    tree_d_store,
+                    get_merkle_tree_leafs(tree_d_size, BINARY_ARITY),
+                )
+                .context("tree_d")?,
+            );
             tree_d.delete(t_aux.tree_d_config).context("tree_d")?;
             trace!("tree d deleted");
         }
@@ -465,11 +467,13 @@ impl<H: Hasher, G: Hasher> TemporaryAuxCache<H, G> {
         let tree_d_store: DiskStore<G::Domain> =
             DiskStore::new_from_disk(tree_d_size, BINARY_ARITY, &t_aux.tree_d_config)
                 .context("tree_d_store")?;
-        let tree_d: BinaryTree<G> = MerkleTree::from_data_store(
-            tree_d_store,
-            get_merkle_tree_leafs(tree_d_size, BINARY_ARITY),
-        )
-        .context("tree_d")?;
+        let tree_d: BinaryTree<G> = BinaryTree::from_merkle(
+            MerkleTree::from_data_store(
+                tree_d_store,
+                get_merkle_tree_leafs(tree_d_size, BINARY_ARITY),
+            )
+            .context("tree_d")?,
+        );
 
         let sector_size =
             get_merkle_tree_leafs(tree_d_size, BINARY_ARITY) * std::mem::size_of::<G::Domain>();

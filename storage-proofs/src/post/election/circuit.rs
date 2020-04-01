@@ -13,6 +13,7 @@ use crate::gadgets::constraint;
 use crate::gadgets::por::PoRCircuit;
 use crate::gadgets::variables::Root;
 use crate::hasher::{HashFunction, Hasher, PoseidonFunction, PoseidonMDArity};
+use crate::merkle::{DiskStore, MerkleTreeWrapper};
 
 /// This is the `ElectionPoSt` circuit.
 pub struct ElectionPoStCircuit<H: Hasher> {
@@ -91,7 +92,9 @@ impl<'a, H: Hasher> Circuit<Bls12> for ElectionPoStCircuit<H> {
 
         // 2. Verify Inclusion Paths
         for (i, (leaf, path)) in leafs.iter().zip(paths.iter()).enumerate() {
-            PoRCircuit::<typenum::U8, H>::synthesize(
+            PoRCircuit::<
+                MerkleTreeWrapper<H, DiskStore<H::Domain>, typenum::U8, typenum::U0, typenum::U0>,
+            >::synthesize(
                 cs.namespace(|| format!("challenge_inclusion{}", i)),
                 Root::Val(*leaf),
                 path.clone(),

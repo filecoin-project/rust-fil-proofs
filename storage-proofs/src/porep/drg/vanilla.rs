@@ -16,7 +16,8 @@ use crate::error::Result;
 use crate::fr32::bytes_into_fr_repr_safe;
 use crate::hasher::{Domain, HashFunction, Hasher, PoseidonArity};
 use crate::merkle::{
-    BinaryLCMerkleTree, BinaryMerkleTree, LCMerkleTree, MerkleProof, MerkleProofTrait,
+    BinaryLCMerkleTree, BinaryTree, DiskStore, LCMerkleTree, MerkleProof, MerkleProofTrait,
+    MerkleTreeTrait, MerkleTreeWrapper,
 };
 use crate::parameter_cache::ParameterSetMetadata;
 use crate::porep::PoRep;
@@ -38,15 +39,12 @@ impl<T: Domain> Tau<T> {
 
 #[derive(Debug)]
 pub struct ProverAux<H: Hasher> {
-    pub tree_d: BinaryMerkleTree<H::Domain, H::Function>,
+    pub tree_d: BinaryTree<H>,
     pub tree_r: BinaryLCMerkleTree<H::Domain, H::Function>,
 }
 
 impl<H: Hasher> ProverAux<H> {
-    pub fn new(
-        tree_d: BinaryMerkleTree<H::Domain, H::Function>,
-        tree_r: BinaryLCMerkleTree<H::Domain, H::Function>,
-    ) -> Self {
+    pub fn new(tree_d: BinaryTree<H>, tree_r: BinaryLCMerkleTree<H::Domain, H::Function>) -> Self {
         ProverAux { tree_d, tree_r }
     }
 }
@@ -60,7 +58,7 @@ pub struct PublicInputs<T: Domain> {
 
 #[derive(Debug)]
 pub struct PrivateInputs<'a, H: 'a + Hasher> {
-    pub tree_d: &'a BinaryMerkleTree<H::Domain, H::Function>,
+    pub tree_d: &'a BinaryTree<H>,
     pub tree_r: &'a BinaryLCMerkleTree<H::Domain, H::Function>,
     pub tree_r_config_levels: usize,
 }
@@ -374,7 +372,7 @@ where
                 )?;
                 data_nodes.push(DataProof {
                     data: extracted,
-                    proof: MerkleProof::new_from_proof(&node_proof)?,
+                    proof: node_proof,
                 });
             }
         }
@@ -484,7 +482,7 @@ where
         pp: &Self::PublicParams,
         replica_id: &H::Domain,
         mut data: Data<'a>,
-        data_tree: Option<BinaryMerkleTree<H::Domain, H::Function>>,
+        data_tree: Option<BinaryTree<H>>,
         config: StoreConfig,
         replica_path: PathBuf,
     ) -> Result<(Tau<H::Domain>, ProverAux<H>)> {
@@ -494,7 +492,9 @@ where
 
         let tree_d = match data_tree {
             Some(tree) => tree,
-            None => pp.graph.merkle_tree(Some(config.clone()), data.as_ref())?,
+            None => pp
+                .graph
+                .merkle_tree::<BinaryTree<H>>(Some(config.clone()), data.as_ref())?,
         };
 
         let graph = &pp.graph;

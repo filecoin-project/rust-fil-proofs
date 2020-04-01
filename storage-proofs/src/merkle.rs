@@ -75,7 +75,8 @@ pub type OctLCTopMerkleTree<T, A> = merkle::MerkleTree<
 
 pub type MerkleStore<T> = DiskStore<T>;
 
-pub type BinaryTree<H> = BinaryMerkleTree<<H as Hasher>::Domain, <H as Hasher>::Function>;
+pub type BinaryTree<H> =
+    MerkleTreeWrapper<H, DiskStore<<H as Hasher>::Domain>, typenum::U2, typenum::U0, typenum::U0>;
 
 pub type OctTree<H> = OctMerkleTree<<H as Hasher>::Domain, <H as Hasher>::Function>;
 pub type OctSubTree<H> = OctSubMerkleTree<<H as Hasher>::Domain, <H as Hasher>::Function>;
@@ -90,6 +91,7 @@ pub trait MerkleTreeTrait: Send + Sync {
     type SubTreeArity: 'static + PoseidonArity;
     type TopTreeArity: 'static + PoseidonArity;
     type Hasher: Hasher;
+    type Store: Store<<Self::Hasher as Hasher>::Domain>;
     type Proof: MerkleProofTrait<
         Hasher = Self::Hasher,
         Arity = Self::Arity,
@@ -100,6 +102,16 @@ pub trait MerkleTreeTrait: Send + Sync {
     fn display() -> String;
     fn root(&self) -> <Self::Hasher as Hasher>::Domain;
     fn gen_proof(&self, i: usize) -> Result<Self::Proof>;
+    fn from_merkle(
+        tree: merkle::MerkleTree<
+            <Self::Hasher as Hasher>::Domain,
+            <Self::Hasher as Hasher>::Function,
+            Self::Store,
+            Self::Arity,
+            Self::SubTreeArity,
+            Self::TopTreeArity,
+        >,
+    ) -> Self;
 }
 
 pub trait MerkleProofTrait:
@@ -110,6 +122,9 @@ pub trait MerkleProofTrait:
     type SubTreeArity: 'static + PoseidonArity;
     type TopTreeArity: 'static + PoseidonArity;
 
+    fn new_from_proof(
+        p: &proof::Proof<<Self::Hasher as Hasher>::Domain, Self::Arity>,
+    ) -> Result<Self>;
     fn as_options(&self) -> Vec<(Vec<Option<Fr>>, Option<usize>)>;
     fn into_options_with_leaf(self) -> (Option<Fr>, Vec<(Vec<Option<Fr>>, Option<usize>)>);
     fn as_pairs(&self) -> Vec<(Vec<Fr>, usize)>;
@@ -136,6 +151,7 @@ impl<
     type SubTreeArity = V;
     type TopTreeArity = W;
     type Hasher = H;
+    type Store = S;
     type Proof = MerkleProof<Self::Hasher, Self::Arity, Self::SubTreeArity, Self::TopTreeArity>;
 
     fn display() -> String {
@@ -149,6 +165,22 @@ impl<
     fn gen_proof(&self, i: usize) -> Result<Self::Proof> {
         let proof = self.inner.gen_proof(i)?;
         MerkleProof::new_from_proof(&proof)
+    }
+
+    fn from_merkle(
+        tree: merkle::MerkleTree<
+            <Self::Hasher as Hasher>::Domain,
+            <Self::Hasher as Hasher>::Function,
+            Self::Store,
+            Self::Arity,
+            Self::SubTreeArity,
+            Self::TopTreeArity,
+        >,
+    ) -> Self {
+        MerkleTreeWrapper {
+            inner: tree,
+            h: Default::default(),
+        }
     }
 }
 
@@ -169,11 +201,11 @@ macro_rules! forward_method {
     };
 }
 
-pub fn make_proof_for_test<H: Hasher, U: typenum::Unsigned>(
-    root: H::Domain,
-    leaf: H::Domain,
-    path: Vec<(Vec<H::Domain>, usize)>,
-) -> MerkleProof<H, U> {
+pub fn make_proof_for_test<Proof: MerkleProofTrait>(
+    root: <Proof::Hasher as Hasher>::Domain,
+    leaf: <Proof::Hasher as Hasher>::Domain,
+    path: Vec<(Vec<<Proof::Hasher as Hasher>::Domain>, usize)>,
+) -> Proof {
     todo!()
 }
 
@@ -188,6 +220,64 @@ impl<
     type Arity = Arity;
     type SubTreeArity = SubTreeArity;
     type TopTreeArity = TopTreeArity;
+
+    fn new_from_proof(
+        p: &proof::Proof<<Self::Hasher as Hasher>::Domain, Self::Arity>,
+    ) -> Result<Self> {
+        ensure!(
+            p.top_layer_nodes == Self::TopTreeArity::to_usize(),
+            "top arity mis-match"
+        );
+        ensure!(
+            p.sub_tree_layer_nodes == Self::SubTreeArity::to_usize(),
+            "sub arity mis-match"
+        );
+
+        if p.top_layer_nodes > 0 {
+            ensure!(
+                p.sub_tree_proof.is_some(),
+                "Cannot generate top proof without a sub-proof"
+            );
+            let sub_p = p.sub_tree_proof.as_ref().unwrap();
+
+            ensure!(
+                sub_p.sub_tree_proof.is_some(),
+                "Cannot generate top proof without a base-proof"
+            );
+            let base_p = sub_p.sub_tree_proof.as_ref().unwrap();
+
+            // Generate TopProof
+            let base_proof = proof_to_single(base_p);
+            let sub_proof = proof_to_single::<Self::Hasher, Self::Arity, Self::SubTreeArity>(sub_p);
+            let top_proof = proof_to_single::<Self::Hasher, Self::Arity, Self::TopTreeArity>(p);
+            let proof = TopProof::new(base_proof, sub_proof, top_proof);
+
+            Ok(MerkleProof {
+                data: ProofData::Top(proof),
+            })
+        } else if p.sub_tree_layer_nodes > 0 {
+            ensure!(
+                p.sub_tree_proof.is_some(),
+                "Cannot generate sub proof without a base-proof"
+            );
+            let base_p = p.sub_tree_proof.as_ref().unwrap();
+
+            // Generate SubProof
+            let base_proof = proof_to_single(base_p);
+            let sub_proof = proof_to_single(p);
+            let proof = SubProof::new(base_proof, sub_proof);
+
+            Ok(MerkleProof {
+                data: ProofData::Sub(proof),
+            })
+        } else {
+            // Generate SingleProof
+            let proof = proof_to_single(p);
+            Ok(MerkleProof {
+                data: ProofData::Single(proof),
+            })
+        }
+    }
 
     fn as_options(&self) -> Vec<(Vec<Option<Fr>>, Option<usize>)> {
         forward_method!(&self.data, as_options)
@@ -252,6 +342,56 @@ pub struct MerkleTreeWrapper<
 > {
     pub inner: merkle::MerkleTree<<H as Hasher>::Domain, <H as Hasher>::Function, S, U, V, W>,
     pub h: PhantomData<H>,
+}
+
+impl<
+        H: Hasher,
+        S: Store<<H as Hasher>::Domain>,
+        U: PoseidonArity,
+        V: PoseidonArity,
+        W: PoseidonArity,
+    > MerkleTreeWrapper<H, S, U, V, W>
+{
+    pub fn new(
+        tree: merkle::MerkleTree<<H as Hasher>::Domain, <H as Hasher>::Function, S, U, V, W>,
+    ) -> Self {
+        Self {
+            inner: tree,
+            h: Default::default(),
+        }
+    }
+}
+
+impl<
+        H: Hasher,
+        S: Store<<H as Hasher>::Domain>,
+        BaseArity: PoseidonArity,
+        SubTreeArity: PoseidonArity,
+        TopTreeArity: PoseidonArity,
+    > std::fmt::Debug for MerkleTreeWrapper<H, S, BaseArity, SubTreeArity, TopTreeArity>
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("MerkleTreeWrapper")
+            .field("inner", &"MerkleTree") // TODO: proper implementation in MerkleLight
+            .field("Hasher", &H::name())
+            .finish()
+    }
+}
+
+impl<
+        H: Hasher,
+        S: Store<<H as Hasher>::Domain>,
+        BaseArity: PoseidonArity,
+        SubTreeArity: PoseidonArity,
+        TopTreeArity: PoseidonArity,
+    > std::ops::Deref for MerkleTreeWrapper<H, S, BaseArity, SubTreeArity, TopTreeArity>
+{
+    type Target =
+        merkle::MerkleTree<H::Domain, H::Function, S, BaseArity, SubTreeArity, TopTreeArity>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.inner
+    }
 }
 
 #[derive(Debug)]
@@ -541,62 +681,6 @@ impl<
     pub fn new(n: usize) -> Self {
         todo!()
     }
-
-    pub fn new_from_proof(p: &proof::Proof<H::Domain, BaseArity>) -> Result<Self> {
-        ensure!(
-            p.top_layer_nodes == TopTreeArity::to_usize(),
-            "top arity mis-match"
-        );
-        ensure!(
-            p.sub_tree_layer_nodes == SubTreeArity::to_usize(),
-            "sub arity mis-match"
-        );
-
-        if p.top_layer_nodes > 0 {
-            ensure!(
-                p.sub_tree_proof.is_some(),
-                "Cannot generate top proof without a sub-proof"
-            );
-            let sub_p = p.sub_tree_proof.as_ref().unwrap();
-
-            ensure!(
-                sub_p.sub_tree_proof.is_some(),
-                "Cannot generate top proof without a base-proof"
-            );
-            let base_p = sub_p.sub_tree_proof.as_ref().unwrap();
-
-            // Generate TopProof
-            let base_proof = proof_to_single(base_p);
-            let sub_proof = proof_to_single::<H, BaseArity, SubTreeArity>(sub_p);
-            let top_proof = proof_to_single::<H, BaseArity, TopTreeArity>(p);
-            let proof = TopProof::new(base_proof, sub_proof, top_proof);
-
-            Ok(MerkleProof {
-                data: ProofData::Top(proof),
-            })
-        } else if p.sub_tree_layer_nodes > 0 {
-            ensure!(
-                p.sub_tree_proof.is_some(),
-                "Cannot generate sub proof without a base-proof"
-            );
-            let base_p = p.sub_tree_proof.as_ref().unwrap();
-
-            // Generate SubProof
-            let base_proof = proof_to_single(base_p);
-            let sub_proof = proof_to_single(p);
-            let proof = SubProof::new(base_proof, sub_proof);
-
-            Ok(MerkleProof {
-                data: ProofData::Sub(proof),
-            })
-        } else {
-            // Generate SingleProof
-            let proof = proof_to_single(p);
-            Ok(MerkleProof {
-                data: ProofData::Single(proof),
-            })
-        }
-    }
 }
 
 /// Converts a merkle_light proof to a SingleProof
@@ -629,6 +713,12 @@ impl<H: Hasher, Arity: 'static + PoseidonArity> MerkleProofTrait for SingleProof
     type Arity = Arity;
     type SubTreeArity = typenum::U0;
     type TopTreeArity = typenum::U0;
+
+    fn new_from_proof(
+        p: &proof::Proof<<Self::Hasher as Hasher>::Domain, Self::Arity>,
+    ) -> Result<Self> {
+        todo!()
+    }
 
     fn as_options(&self) -> Vec<(Vec<Option<Fr>>, Option<usize>)> {
         todo!()
@@ -774,6 +864,12 @@ impl<H: Hasher, BaseArity: 'static + PoseidonArity, SubTreeArity: 'static + Pose
     type SubTreeArity = SubTreeArity;
     type TopTreeArity = typenum::U0;
 
+    fn new_from_proof(
+        p: &proof::Proof<<Self::Hasher as Hasher>::Domain, Self::Arity>,
+    ) -> Result<Self> {
+        todo!()
+    }
+
     fn as_options(&self) -> Vec<(Vec<Option<Fr>>, Option<usize>)> {
         todo!()
     }
@@ -835,6 +931,12 @@ impl<
     type Arity = BaseArity;
     type SubTreeArity = SubTreeArity;
     type TopTreeArity = TopTreeArity;
+
+    fn new_from_proof(
+        p: &proof::Proof<<Self::Hasher as Hasher>::Domain, Self::Arity>,
+    ) -> Result<Self> {
+        todo!()
+    }
 
     fn as_options(&self) -> Vec<(Vec<Option<Fr>>, Option<usize>)> {
         todo!()
@@ -931,11 +1033,11 @@ pub fn split_config(config: Option<StoreConfig>, count: usize) -> Result<Vec<Opt
 }
 
 /// Construct a new merkle tree.
-pub fn create_merkle_tree<H: Hasher, BaseTreeArity: typenum::Unsigned>(
+pub fn create_merkle_tree<Tree: MerkleTreeTrait>(
     config: Option<StoreConfig>,
     size: usize,
     data: &[u8],
-) -> Result<MerkleTree<H::Domain, H::Function, BaseTreeArity>> {
+) -> Result<Tree> {
     ensure!(
         data.len() == (NODE_SIZE * size) as usize,
         Error::InvalidMerkleTreeArgs(data.len(), NODE_SIZE, size)
@@ -945,11 +1047,11 @@ pub fn create_merkle_tree<H: Hasher, BaseTreeArity: typenum::Unsigned>(
     trace!(
         "is_merkle_tree_size_valid({}, arity {}) = {}",
         size,
-        BaseTreeArity::to_usize(),
-        is_merkle_tree_size_valid(size, BaseTreeArity::to_usize())
+        Tree::Arity::to_usize(),
+        is_merkle_tree_size_valid(size, Tree::Arity::to_usize())
     );
     ensure!(
-        is_merkle_tree_size_valid(size, BaseTreeArity::to_usize()),
+        is_merkle_tree_size_valid(size, Tree::Arity::to_usize()),
         "Invalid merkle tree size given the arity"
     );
 
@@ -961,13 +1063,30 @@ pub fn create_merkle_tree<H: Hasher, BaseTreeArity: typenum::Unsigned>(
         // that isn't caught by the FPS API.
         // Unfortunately, it's not clear how to perform this error-handling in the parallel
         // iterator case.
-        H::Domain::try_from_bytes(d).expect("failed to convert node data to domain element")
+        <Tree::Hasher as Hasher>::Domain::try_from_bytes(d)
+            .expect("failed to convert node data to domain element")
     };
 
-    match config {
-        Some(x) => MerkleTree::from_par_iter_with_config((0..size).into_par_iter().map(f), x),
-        None => MerkleTree::from_par_iter((0..size).into_par_iter().map(f)),
-    }
+    let tree = match config {
+        Some(x) => merkle::MerkleTree::<
+            <Tree::Hasher as Hasher>::Domain,
+            <Tree::Hasher as Hasher>::Function,
+            Tree::Store,
+            Tree::Arity,
+            Tree::SubTreeArity,
+            Tree::TopTreeArity,
+        >::from_par_iter_with_config((0..size).into_par_iter().map(f), x),
+        None => merkle::MerkleTree::<
+            <Tree::Hasher as Hasher>::Domain,
+            <Tree::Hasher as Hasher>::Function,
+            Tree::Store,
+            Tree::Arity,
+            Tree::SubTreeArity,
+            Tree::TopTreeArity,
+        >::from_par_iter((0..size).into_par_iter().map(f)),
+    }?;
+
+    Ok(Tree::from_merkle(tree))
 }
 
 /// Construct a new level cache merkle tree, given the specified
@@ -1073,20 +1192,21 @@ mod tests {
             data.write(&bytes).unwrap();
         }
 
-        let tree = g.merkle_tree(None, data.as_slice()).unwrap();
+        let tree = g
+            .merkle_tree::<MerkleTreeWrapper<H, DiskStore<H::Domain>, BaseTreeArity, typenum::U0, typenum::U0>>(
+                None,
+                data.as_slice(),
+            )
+            .unwrap();
         for i in 0..leafs {
             let proof = tree.gen_proof(i).unwrap();
 
-            assert!(proof.validate::<H::Function>().expect("failed to validate"));
-            let len = proof.lemma().len();
-            let mp = MerkleProof::<H, BaseTreeArity>::new_from_proof(&proof).unwrap();
+            assert!(proof.verify(), "failed to validate");
 
-            assert_eq!(mp.len(), len, "invalid prof len");
-
-            assert!(mp.validate(i), "failed to validate valid merkle path");
+            assert!(proof.validate(i), "failed to validate valid merkle path");
             let data_slice = &data[i * node_size..(i + 1) * node_size].to_vec();
             assert!(
-                mp.validate_data(H::Domain::try_from_bytes(data_slice).unwrap()),
+                proof.validate_data(H::Domain::try_from_bytes(data_slice).unwrap()),
                 "failed to validate valid data"
             );
         }

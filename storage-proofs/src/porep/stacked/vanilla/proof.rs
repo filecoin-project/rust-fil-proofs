@@ -34,10 +34,11 @@ use crate::measurements::{
     Operation::{CommD, EncodeWindowTimeAll},
 };
 use crate::merkle::{
-    split_config, BinaryTree, MerkleProof, MerkleProofTrait, MerkleTree, OctLCSubTree,
-    OctLCTopTree, OctLCTree, OctSubTree, OctTopTree, OctTree, Store, SECTOR_SIZE_16_MIB,
-    SECTOR_SIZE_1_GIB, SECTOR_SIZE_2_KIB, SECTOR_SIZE_32_GIB, SECTOR_SIZE_32_KIB,
-    SECTOR_SIZE_4_KIB, SECTOR_SIZE_512_MIB, SECTOR_SIZE_64_GIB, SECTOR_SIZE_8_MIB,
+    split_config, BinaryTree, MerkleProof, MerkleProofTrait, MerkleTree, MerkleTreeTrait,
+    OctLCSubTree, OctLCTopTree, OctLCTree, OctSubTree, OctTopTree, OctTree, Store,
+    SECTOR_SIZE_16_MIB, SECTOR_SIZE_1_GIB, SECTOR_SIZE_2_KIB, SECTOR_SIZE_32_GIB,
+    SECTOR_SIZE_32_KIB, SECTOR_SIZE_4_KIB, SECTOR_SIZE_512_MIB, SECTOR_SIZE_64_GIB,
+    SECTOR_SIZE_8_MIB,
 };
 use crate::porep::PoRep;
 use crate::util::NODE_SIZE;
@@ -114,8 +115,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
                         assert!(challenge > 0, "Invalid challenge");
 
                         // Initial data layer openings (c_X in Comm_D)
-                        let comm_d_proof =
-                            MerkleProof::new_from_proof(&t_aux.tree_d.gen_proof(challenge)?)?;
+                        let comm_d_proof = t_aux.tree_d.gen_proof(challenge)?;
                         assert!(comm_d_proof.validate(challenge));
 
                         // Stacked replica column openings
@@ -506,13 +506,14 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
         let leafs = tree_data.len() / NODE_SIZE;
         assert_eq!(tree_data.len() % NODE_SIZE, 0);
 
-        MerkleTree::from_par_iter_with_config(
+        let tree = MerkleTree::from_par_iter_with_config(
             (0..leafs)
                 .into_par_iter()
                 // TODO: proper error handling instead of `unwrap()`
                 .map(|i| get_node::<K>(tree_data, i).unwrap()),
             config,
-        )
+        )?;
+        Ok(BinaryTree::from_merkle(tree))
     }
 
     pub(crate) fn transform_and_replicate_layers(

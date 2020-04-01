@@ -10,6 +10,7 @@ use crate::drgraph;
 use crate::error::Result;
 use crate::gadgets::por::PoRCompound;
 use crate::hasher::Hasher;
+use crate::merkle::{DiskStore, MerkleTreeWrapper};
 use crate::parameter_cache::{CacheableParameters, ParameterSetMetadata};
 use crate::por;
 use crate::post::rational::{RationalPoSt, RationalPoStCircuit};
@@ -60,10 +61,10 @@ where
                 commitment: None,
                 challenge: challenge.leaf as usize,
             };
-            let por_inputs = PoRCompound::<H, typenum::U2>::generate_public_inputs(
-                &por_pub_inputs,
-                &por_pub_params,
-                None,
+            let por_inputs = PoRCompound::<
+                MerkleTreeWrapper<H, DiskStore<H::Domain>, typenum::U2, typenum::U0, typenum::U0>,
+            >::generate_public_inputs(
+                &por_pub_inputs, &por_pub_params, None
             )?;
 
             inputs.extend(por_inputs);
@@ -183,6 +184,7 @@ mod tests {
     use crate::fr32::fr_into_bytes;
     use crate::gadgets::TestConstraintSystem;
     use crate::hasher::{Domain, HashFunction, Hasher, PedersenHasher, PoseidonHasher};
+    use crate::merkle::BinaryTree;
     use crate::post::rational::{self, derive_challenges};
     use crate::proof::NoRequirements;
     use crate::sector::OrderedSectorSet;
@@ -226,12 +228,12 @@ mod tests {
 
         let graph1 = BucketGraph::<H>::new(leaves, BASE_DEGREE, 0, new_seed()).unwrap();
         let tree1 = graph1
-            .merkle_tree::<typenum::U2>(None, data1.as_slice())
+            .merkle_tree::<BinaryTree<H>>(None, data1.as_slice())
             .unwrap();
 
         let graph2 = BucketGraph::<H>::new(leaves, BASE_DEGREE, 0, new_seed()).unwrap();
         let tree2 = graph2
-            .merkle_tree::<typenum::U2>(None, data2.as_slice())
+            .merkle_tree::<BinaryTree<H>>(None, data2.as_slice())
             .unwrap();
 
         let faults = OrderedSectorSet::new();

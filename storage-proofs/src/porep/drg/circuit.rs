@@ -8,7 +8,6 @@ use bellperson::gadgets::{
 use bellperson::{Circuit, ConstraintSystem, SynthesisError};
 use ff::PrimeField;
 use fil_sapling_crypto::jubjub::JubjubEngine;
-use generic_array::typenum;
 use paired::bls12_381::{Bls12, Fr};
 
 use crate::compound_proof::CircuitComponent;
@@ -20,6 +19,7 @@ use crate::gadgets::por::PoRCircuit;
 use crate::gadgets::uint64;
 use crate::gadgets::variables::Root;
 use crate::hasher::Hasher;
+use crate::merkle::BinaryTree;
 use crate::util::bytes_into_boolean_vec_be;
 
 /// DRG based Proof of Replication.
@@ -179,7 +179,7 @@ impl<'a, H: Hasher> Circuit<Bls12> for DrgPoRepCircuit<'a, H> {
             // Inclusion checks
             {
                 let mut cs = cs.namespace(|| "inclusion_checks");
-                PoRCircuit::<typenum::U2, H>::synthesize(
+                PoRCircuit::<BinaryTree<H>>::synthesize(
                     cs.namespace(|| "replica_inclusion"),
                     Root::Val(*replica_node),
                     replica_node_path.clone(),
@@ -189,7 +189,7 @@ impl<'a, H: Hasher> Circuit<Bls12> for DrgPoRepCircuit<'a, H> {
 
                 // validate each replica_parents merkle proof
                 for j in 0..replica_parents.len() {
-                    PoRCircuit::<typenum::U2, H>::synthesize(
+                    PoRCircuit::<BinaryTree<H>>::synthesize(
                         cs.namespace(|| format!("parents_inclusion_{}", j)),
                         Root::Val(replica_parents[j]),
                         replica_parents_paths[j].clone(),
@@ -199,7 +199,7 @@ impl<'a, H: Hasher> Circuit<Bls12> for DrgPoRepCircuit<'a, H> {
                 }
 
                 // validate data node commitment
-                PoRCircuit::<typenum::U2, H>::synthesize(
+                PoRCircuit::<BinaryTree<H>>::synthesize(
                     cs.namespace(|| "data_inclusion"),
                     Root::Val(*data_node),
                     data_node_path.clone(),
