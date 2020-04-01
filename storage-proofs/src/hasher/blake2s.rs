@@ -6,7 +6,6 @@ use bellperson::gadgets::{blake2s as blake2s_circuit, boolean, num};
 use bellperson::{ConstraintSystem, SynthesisError};
 use blake2s_simd::{Hash as Blake2sHash, Params as Blake2s, State};
 use ff::{Field, PrimeField, PrimeFieldRepr};
-use fil_sapling_crypto::jubjub::JubjubEngine;
 use merkletree::hash::{Algorithm, Hashable};
 use merkletree::merkle::Element;
 use paired::bls12_381::{Bls12, Fr, FrRepr};
@@ -34,12 +33,12 @@ impl Hasher for Blake2sHasher {
         let k = (*key).into();
         let c = (*ciphertext).into();
 
-        Ok(sloth::encode::<Bls12>(&k, &c).into())
+        Ok(sloth::encode(&k, &c).into())
     }
 
     fn sloth_decode(key: &Self::Domain, ciphertext: &Self::Domain) -> Result<Self::Domain> {
         // TODO: validate this is how sloth should work in this case
-        Ok(sloth::decode::<Bls12>(&(*key).into(), &(*ciphertext).into()).into())
+        Ok(sloth::decode(&(*key).into(), &(*ciphertext).into()).into())
     }
 }
 
@@ -214,13 +213,12 @@ impl HashFunction<Blake2sDomain> for Blake2sFunction {
             .into()
     }
 
-    fn hash_multi_leaf_circuit<Arity, E: JubjubEngine, CS: ConstraintSystem<E>>(
+    fn hash_multi_leaf_circuit<Arity, CS: ConstraintSystem<Bls12>>(
         mut cs: CS,
-        leaves: &[num::AllocatedNum<E>],
+        leaves: &[num::AllocatedNum<Bls12>],
         _height: usize,
-        params: &E::Params,
-    ) -> std::result::Result<num::AllocatedNum<E>, SynthesisError> {
-        let mut bits = Vec::with_capacity(leaves.len() * E::Fr::CAPACITY as usize);
+    ) -> std::result::Result<num::AllocatedNum<Bls12>, SynthesisError> {
+        let mut bits = Vec::with_capacity(leaves.len() * Fr::CAPACITY as usize);
         for (i, leaf) in leaves.iter().enumerate() {
             bits.extend_from_slice(
                 &leaf.to_bits_le(cs.namespace(|| format!("{}_num_into_bits", i)))?,
@@ -229,16 +227,15 @@ impl HashFunction<Blake2sDomain> for Blake2sFunction {
                 bits.push(boolean::Boolean::Constant(false));
             }
         }
-        Self::hash_circuit(cs, &bits, params)
+        Self::hash_circuit(cs, &bits)
     }
 
-    fn hash_leaf_bits_circuit<E: JubjubEngine, CS: ConstraintSystem<E>>(
+    fn hash_leaf_bits_circuit<CS: ConstraintSystem<Bls12>>(
         cs: CS,
         left: &[boolean::Boolean],
         right: &[boolean::Boolean],
         _height: usize,
-        params: &E::Params,
-    ) -> std::result::Result<num::AllocatedNum<E>, SynthesisError> {
+    ) -> std::result::Result<num::AllocatedNum<Bls12>, SynthesisError> {
         let mut preimage: Vec<boolean::Boolean> = vec![];
 
         preimage.extend_from_slice(left);
@@ -251,14 +248,13 @@ impl HashFunction<Blake2sDomain> for Blake2sFunction {
             preimage.push(boolean::Boolean::Constant(false));
         }
 
-        Self::hash_circuit(cs, &preimage[..], params)
+        Self::hash_circuit(cs, &preimage[..])
     }
 
-    fn hash_circuit<E: JubjubEngine, CS: ConstraintSystem<E>>(
+    fn hash_circuit<CS: ConstraintSystem<Bls12>>(
         mut cs: CS,
         bits: &[boolean::Boolean],
-        _params: &E::Params,
-    ) -> std::result::Result<num::AllocatedNum<E>, SynthesisError> {
+    ) -> std::result::Result<num::AllocatedNum<Bls12>, SynthesisError> {
         let personalization = vec![0u8; 8];
         let alloc_bits =
             blake2s_circuit::blake2s(cs.namespace(|| "hash"), &bits[..], &personalization)?;
@@ -266,15 +262,13 @@ impl HashFunction<Blake2sDomain> for Blake2sFunction {
         multipack::pack_bits(cs.namespace(|| "pack"), &alloc_bits)
     }
 
-    fn hash2_circuit<E, CS>(
+    fn hash2_circuit<CS>(
         mut cs: CS,
-        a_num: &num::AllocatedNum<E>,
-        b_num: &num::AllocatedNum<E>,
-        params: &E::Params,
-    ) -> std::result::Result<num::AllocatedNum<E>, SynthesisError>
+        a_num: &num::AllocatedNum<Bls12>,
+        b_num: &num::AllocatedNum<Bls12>,
+    ) -> std::result::Result<num::AllocatedNum<Bls12>, SynthesisError>
     where
-        E: JubjubEngine,
-        CS: ConstraintSystem<E>,
+        CS: ConstraintSystem<Bls12>,
     {
         // Allocate as booleans
         let a = a_num.to_bits_le(cs.namespace(|| "a_bits"))?;
@@ -292,7 +286,7 @@ impl HashFunction<Blake2sDomain> for Blake2sFunction {
             preimage.push(boolean::Boolean::Constant(false));
         }
 
-        Self::hash_circuit(cs, &preimage[..], params)
+        Self::hash_circuit(cs, &preimage[..])
     }
 }
 

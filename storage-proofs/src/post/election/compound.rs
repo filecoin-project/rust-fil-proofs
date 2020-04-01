@@ -1,13 +1,11 @@
 use std::marker::PhantomData;
 
 use bellperson::Circuit;
-use fil_sapling_crypto::jubjub::JubjubEngine;
 use generic_array::typenum;
 use paired::bls12_381::{Bls12, Fr};
 use typenum::marker_traits::Unsigned;
 
 use crate::compound_proof::{CircuitComponent, CompoundProof};
-use crate::crypto::pedersen::JJ_PARAMS;
 use crate::drgraph;
 use crate::error::Result;
 use crate::gadgets::por::PoRCompound;
@@ -25,15 +23,15 @@ where
     _h: PhantomData<H>,
 }
 
-impl<E: JubjubEngine, C: Circuit<E>, P: ParameterSetMetadata, H: Hasher>
-    CacheableParameters<E, C, P> for ElectionPoStCompound<H>
+impl<C: Circuit<Bls12>, P: ParameterSetMetadata, H: Hasher> CacheableParameters<C, P>
+    for ElectionPoStCompound<H>
 {
     fn cache_prefix() -> String {
         format!("proof-of-spacetime-election-{}", H::name())
     }
 }
 
-impl<'a, H> CompoundProof<'a, Bls12, ElectionPoSt<'a, H>, ElectionPoStCircuit<'a, Bls12, H>>
+impl<'a, H> CompoundProof<'a, ElectionPoSt<'a, H>, ElectionPoStCircuit<H>>
     for ElectionPoStCompound<H>
 where
     H: 'a + Hasher,
@@ -86,10 +84,10 @@ where
 
     fn circuit(
         pub_in: &<ElectionPoSt<'a, H> as ProofScheme<'a>>::PublicInputs,
-        _priv_in: <ElectionPoStCircuit<'a, Bls12, H> as CircuitComponent>::ComponentPrivateInputs,
+        _priv_in: <ElectionPoStCircuit<H> as CircuitComponent>::ComponentPrivateInputs,
         vanilla_proof: &<ElectionPoSt<'a, H> as ProofScheme<'a>>::Proof,
         _pub_params: &<ElectionPoSt<'a, H> as ProofScheme<'a>>::PublicParams,
-    ) -> Result<ElectionPoStCircuit<'a, Bls12, H>> {
+    ) -> Result<ElectionPoStCircuit<H>> {
         let comm_r = pub_in.comm_r.into();
         let comm_c = vanilla_proof.comm_c.into();
         let comm_r_last = vanilla_proof.comm_r_last().into();
@@ -116,7 +114,6 @@ where
             .collect();
 
         Ok(ElectionPoStCircuit {
-            params: &*JJ_PARAMS,
             leafs,
             comm_r: Some(comm_r),
             comm_c: Some(comm_c),
@@ -132,7 +129,7 @@ where
 
     fn blank_circuit(
         pub_params: &<ElectionPoSt<'a, H> as ProofScheme<'a>>::PublicParams,
-    ) -> ElectionPoStCircuit<'a, Bls12, H> {
+    ) -> ElectionPoStCircuit<H> {
         let challenges_count = pub_params.challenged_nodes * pub_params.challenge_count;
         let height =
             drgraph::graph_height::<typenum::U8>(pub_params.sector_size as usize / NODE_SIZE);
@@ -144,7 +141,6 @@ where
         ];
 
         ElectionPoStCircuit {
-            params: &*JJ_PARAMS,
             comm_r: None,
             comm_c: None,
             comm_r_last: None,
@@ -229,7 +225,7 @@ mod tests {
         for i in 0..5 {
             sectors.push(i.into());
             let data: Vec<u8> = (0..leaves)
-                .flat_map(|_| fr_into_bytes::<Bls12>(&Fr::random(rng)))
+                .flat_map(|_| fr_into_bytes(&Fr::random(rng)))
                 .collect();
 
             let graph = BucketGraph::<H>::new(leaves, BASE_DEGREE, 0, new_seed()).unwrap();

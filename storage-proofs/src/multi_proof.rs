@@ -2,18 +2,18 @@ use bellperson::groth16;
 
 use crate::error::Result;
 use anyhow::Context;
-use paired::Engine;
+use paired::bls12_381::Bls12;
 use std::io::{self, Read, Write};
 
-pub struct MultiProof<'a, E: Engine> {
-    pub circuit_proofs: Vec<groth16::Proof<E>>,
-    pub verifying_key: &'a groth16::VerifyingKey<E>,
+pub struct MultiProof<'a> {
+    pub circuit_proofs: Vec<groth16::Proof<Bls12>>,
+    pub verifying_key: &'a groth16::VerifyingKey<Bls12>,
 }
 
-impl<'a, E: Engine> MultiProof<'a, E> {
+impl<'a> MultiProof<'a> {
     pub fn new(
-        groth_proofs: Vec<groth16::Proof<E>>,
-        verifying_key: &'a groth16::VerifyingKey<E>,
+        groth_proofs: Vec<groth16::Proof<Bls12>>,
+        verifying_key: &'a groth16::VerifyingKey<Bls12>,
     ) -> Self {
         MultiProof {
             circuit_proofs: groth_proofs,
@@ -24,7 +24,7 @@ impl<'a, E: Engine> MultiProof<'a, E> {
     pub fn new_from_reader<R: Read>(
         partitions: Option<usize>,
         mut reader: R,
-        verifying_key: &'a groth16::VerifyingKey<E>,
+        verifying_key: &'a groth16::VerifyingKey<Bls12>,
     ) -> Result<Self> {
         let num_proofs = match partitions {
             Some(n) => n,

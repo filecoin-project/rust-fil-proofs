@@ -2,10 +2,10 @@ use crate::error::*;
 use anyhow::bail;
 use bellperson::groth16::Parameters;
 use bellperson::{groth16, Circuit};
-use fil_sapling_crypto::jubjub::JubjubEngine;
 use fs2::FileExt;
 use itertools::Itertools;
 use log::info;
+use paired::bls12_381::Bls12;
 use rand::RngCore;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -144,10 +144,9 @@ pub struct CacheEntryMetadata {
     pub sector_size: u64,
 }
 
-pub trait CacheableParameters<E, C, P>
+pub trait CacheableParameters<C, P>
 where
-    C: Circuit<E>,
-    E: JubjubEngine,
+    C: Circuit<Bls12>,
     P: ParameterSetMetadata,
 {
     fn cache_prefix() -> String;
@@ -189,7 +188,7 @@ where
         rng: Option<&mut R>,
         circuit: C,
         pub_params: &P,
-    ) -> Result<groth16::MappedParameters<E>> {
+    ) -> Result<groth16::MappedParameters<Bls12>> {
         let id = Self::cache_identifier(pub_params);
 
         let generate = || -> Result<_> {
@@ -198,7 +197,7 @@ where
 
                 info!("Actually generating groth params. (id: {})", &id);
                 let start = Instant::now();
-                let parameters = groth16::generate_random_parameters::<E, _, _>(circuit, rng)?;
+                let parameters = groth16::generate_random_parameters::<Bls12, _, _>(circuit, rng)?;
                 let generation_time = start.elapsed();
                 info!(
                     "groth_parameter_generation_time: {:?} (id: {})",
@@ -232,10 +231,10 @@ where
         rng: Option<&mut R>,
         circuit: C,
         pub_params: &P,
-    ) -> Result<groth16::VerifyingKey<E>> {
+    ) -> Result<groth16::VerifyingKey<Bls12>> {
         let id = Self::cache_identifier(pub_params);
 
-        let generate = || -> Result<groth16::VerifyingKey<E>> {
+        let generate = || -> Result<groth16::VerifyingKey<Bls12>> {
             let groth_params = Self::get_groth_params(rng, circuit, pub_params)?;
             info!("Getting verifying key. (id: {})", &id);
             Ok(groth_params.vk)
@@ -260,9 +259,7 @@ fn ensure_parent(path: &PathBuf) -> Result<()> {
 
 // Reads parameter mappings using mmap so that they can be lazily
 // loaded later.
-fn read_cached_params<E: JubjubEngine>(
-    cache_entry_path: &PathBuf,
-) -> Result<groth16::MappedParameters<E>> {
+fn read_cached_params(cache_entry_path: &PathBuf) -> Result<groth16::MappedParameters<Bls12>> {
     info!("checking cache_path: {:?} for parameters", cache_entry_path);
     with_exclusive_read_lock(cache_entry_path, |_| {
         let params = Parameters::build_mapped_parameters(cache_entry_path.to_path_buf(), false)?;
@@ -272,9 +269,7 @@ fn read_cached_params<E: JubjubEngine>(
     })
 }
 
-fn read_cached_verifying_key<E: JubjubEngine>(
-    cache_entry_path: &PathBuf,
-) -> Result<groth16::VerifyingKey<E>> {
+fn read_cached_verifying_key(cache_entry_path: &PathBuf) -> Result<groth16::VerifyingKey<Bls12>> {
     info!(
         "checking cache_path: {:?} for verifying key",
         cache_entry_path
@@ -309,10 +304,10 @@ fn write_cached_metadata(
     })
 }
 
-fn write_cached_verifying_key<E: JubjubEngine>(
+fn write_cached_verifying_key(
     cache_entry_path: &PathBuf,
-    value: groth16::VerifyingKey<E>,
-) -> Result<groth16::VerifyingKey<E>> {
+    value: groth16::VerifyingKey<Bls12>,
+) -> Result<groth16::VerifyingKey<Bls12>> {
     with_exclusive_lock(cache_entry_path, |file| {
         value.write(file)?;
         info!("wrote verifying key to cache {:?} ", cache_entry_path);
@@ -321,10 +316,10 @@ fn write_cached_verifying_key<E: JubjubEngine>(
     })
 }
 
-fn write_cached_params<E: JubjubEngine>(
+fn write_cached_params(
     cache_entry_path: &PathBuf,
-    value: groth16::Parameters<E>,
-) -> Result<groth16::Parameters<E>> {
+    value: groth16::Parameters<Bls12>,
+) -> Result<groth16::Parameters<Bls12>> {
     with_exclusive_lock(cache_entry_path, |file| {
         value.write(file)?;
         info!("wrote groth parameters to cache {:?} ", cache_entry_path);

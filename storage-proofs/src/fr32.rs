@@ -2,9 +2,8 @@ use crate::error::*;
 
 use anyhow::{ensure, Context};
 use byteorder::{ByteOrder, LittleEndian, WriteBytesExt};
-use ff::{PrimeField, PrimeFieldRepr, ScalarEngine};
-use paired::bls12_381::FrRepr;
-use paired::Engine;
+use ff::{PrimeField, PrimeFieldRepr};
+use paired::bls12_381::{Fr, FrRepr};
 
 // Contains 32 bytes whose little-endian value represents an Fr.
 // Invariants:
@@ -26,13 +25,13 @@ pub type Fr32Ary = [u8; 32];
 
 // Takes a slice of bytes and returns an Fr if byte slice is exactly 32 bytes and does not overflow.
 // Otherwise, returns a BadFrBytesError.
-pub fn bytes_into_fr<E: Engine>(bytes: &[u8]) -> Result<E::Fr> {
+pub fn bytes_into_fr(bytes: &[u8]) -> Result<Fr> {
     ensure!(bytes.len() == 32, Error::BadFrBytes);
 
-    let mut fr_repr = <<<E as ScalarEngine>::Fr as PrimeField>::Repr as Default>::default();
+    let mut fr_repr = <<Fr as PrimeField>::Repr as Default>::default();
     fr_repr.read_le(bytes).context(Error::BadFrBytes)?;
 
-    E::Fr::from_repr(fr_repr).map_err(|_| Error::BadFrBytes.into())
+    Fr::from_repr(fr_repr).map_err(|_| Error::BadFrBytes.into())
 }
 
 #[inline]
@@ -66,7 +65,7 @@ pub fn bytes_into_fr_repr_safe(r: &[u8]) -> FrRepr {
 }
 
 // Takes an Fr and returns a vector of exactly 32 bytes guaranteed to contain a valid Fr.
-pub fn fr_into_bytes<E: Engine>(fr: &E::Fr) -> Fr32Vec {
+pub fn fr_into_bytes(fr: &Fr) -> Fr32Vec {
     let mut out = Vec::with_capacity(32);
     fr.into_repr().write_le(&mut out).unwrap();
     out
@@ -74,26 +73,26 @@ pub fn fr_into_bytes<E: Engine>(fr: &E::Fr) -> Fr32Vec {
 
 // Takes a slice of bytes and returns a vector of Fr -- or an error if either bytes is not a multiple of 32 bytes
 // or any 32-byte chunk overflows and does not contain a valid Fr.
-pub fn bytes_into_frs<E: Engine>(bytes: &[u8]) -> Result<Vec<E::Fr>> {
+pub fn bytes_into_frs(bytes: &[u8]) -> Result<Vec<Fr>> {
     bytes
         .chunks(32)
-        .map(|ref chunk| bytes_into_fr::<E>(chunk))
+        .map(|ref chunk| bytes_into_fr(chunk))
         .collect()
 }
 
 // Takes a slice of Frs and returns a vector of bytes, guaranteed to have a size which is a multiple of 32,
 // with every 32-byte chunk representing a valid Fr.
-pub fn frs_into_bytes<E: Engine>(frs: &[E::Fr]) -> Fr32Vec {
-    frs.iter().flat_map(|fr| fr_into_bytes::<E>(fr)).collect()
+pub fn frs_into_bytes(frs: &[Fr]) -> Fr32Vec {
+    frs.iter().flat_map(|fr| fr_into_bytes(fr)).collect()
 }
 
 // Takes a u32 and returns an Fr.
-pub fn u32_into_fr<E: Engine>(n: u32) -> E::Fr {
+pub fn u32_into_fr(n: u32) -> Fr {
     let mut buf: Fr32Vec = vec![0u8; 32];
     let mut w = &mut buf[0..4];
     w.write_u32::<LittleEndian>(n).unwrap();
 
-    bytes_into_fr::<E>(&buf).expect("should never fail since u32 is in the field")
+    bytes_into_fr(&buf).expect("should never fail since u32 is in the field")
 }
 
 #[cfg(test)]
@@ -101,12 +100,12 @@ mod tests {
     use super::*;
     use paired::bls12_381::Bls12;
 
-    fn bytes_fr_test<E: Engine>(bytes: Fr32Ary, expect_success: bool) {
+    fn bytes_fr_test(bytes: Fr32Ary, expect_success: bool) {
         let mut b = &bytes[..];
-        let fr_result = bytes_into_fr::<E>(&mut b);
+        let fr_result = bytes_into_fr(&mut b);
         if expect_success {
             let f = fr_result.expect("Failed to convert bytes to `Fr`");
-            let b2 = fr_into_bytes::<E>(&f);
+            let b2 = fr_into_bytes(&f);
 
             assert_eq!(bytes.to_vec(), b2);
         } else {
@@ -115,14 +114,14 @@ mod tests {
     }
     #[test]
     fn test_bytes_into_fr_into_bytes() {
-        bytes_fr_test::<Bls12>(
+        bytes_fr_test(
             [
                 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22,
                 23, 24, 25, 26, 27, 28, 29, 30, 31,
             ],
             true,
         );
-        bytes_fr_test::<Bls12>(
+        bytes_fr_test(
             // Some bytes fail because they are not in the field.
             [
                 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
@@ -130,7 +129,7 @@ mod tests {
             ],
             false,
         );
-        bytes_fr_test::<Bls12>(
+        bytes_fr_test(
             // This is okay.
             [
                 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
@@ -138,7 +137,7 @@ mod tests {
             ],
             true,
         );
-        bytes_fr_test::<Bls12>(
+        bytes_fr_test(
             // So is this.
             [
                 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
@@ -146,7 +145,7 @@ mod tests {
             ],
             true,
         );
-        bytes_fr_test::<Bls12>(
+        bytes_fr_test(
             // But not this.
             [
                 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
@@ -156,22 +155,21 @@ mod tests {
         );
     }
 
-    fn bytes_into_frs_into_bytes_test<E: Engine>(bytes: &Fr32) {
+    fn bytes_into_frs_into_bytes_test(bytes: &Fr32) {
         let mut bytes = bytes.clone();
-        let frs =
-            bytes_into_frs::<E>(&mut bytes).expect("Failed to convert bytes into a `Vec<Fr>`");
+        let frs = bytes_into_frs(&mut bytes).expect("Failed to convert bytes into a `Vec<Fr>`");
         assert!(frs.len() == 3);
-        let bytes_back = frs_into_bytes::<E>(&frs);
+        let bytes_back = frs_into_bytes(&frs);
         assert!(bytes.to_vec() == bytes_back);
     }
 
     #[test]
     fn test_bytes_into_frs_into_bytes() {
         let bytes = b"012345678901234567890123456789--012345678901234567890123456789--012345678901234567890123456789--";
-        bytes_into_frs_into_bytes_test::<Bls12>(&bytes[..]);
+        bytes_into_frs_into_bytes_test(&bytes[..]);
 
         let _short_bytes = b"012345678901234567890123456789--01234567890123456789";
         // This will panic because _short_bytes is not a multiple of 32 bytes.
-        // bytes_into_frs_into_bytes_test::<Bls12>(&_short_bytes[..]);
+        // bytes_into_frs_into_bytes_test(&_short_bytes[..]);
     }
 }

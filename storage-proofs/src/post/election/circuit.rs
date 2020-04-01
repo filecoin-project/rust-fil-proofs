@@ -3,8 +3,8 @@ use std::marker::PhantomData;
 use bellperson::gadgets::num;
 use bellperson::{Circuit, ConstraintSystem, SynthesisError};
 use ff::Field;
-use fil_sapling_crypto::jubjub::JubjubEngine;
 use generic_array::typenum;
+use paired::bls12_381::{Bls12, Fr};
 use typenum::marker_traits::Unsigned;
 
 use crate::compound_proof::CircuitComponent;
@@ -17,42 +17,29 @@ use crate::hasher::{
 };
 
 /// This is the `ElectionPoSt` circuit.
-pub struct ElectionPoStCircuit<'a, E: JubjubEngine, H: Hasher> {
-    /// Paramters for the engine.
-    pub params: &'a E::Params,
-    pub comm_r: Option<E::Fr>,
-    pub comm_c: Option<E::Fr>,
-    pub comm_r_last: Option<E::Fr>,
-    pub leafs: Vec<Option<E::Fr>>,
+pub struct ElectionPoStCircuit<H: Hasher> {
+    pub comm_r: Option<Fr>,
+    pub comm_c: Option<Fr>,
+    pub comm_r_last: Option<Fr>,
+    pub leafs: Vec<Option<Fr>>,
     #[allow(clippy::type_complexity)]
-    pub paths: Vec<Vec<(Vec<Option<E::Fr>>, Option<usize>)>>,
-    pub partial_ticket: Option<E::Fr>,
-    pub randomness: Option<E::Fr>,
-    pub prover_id: Option<E::Fr>,
-    pub sector_id: Option<E::Fr>,
+    pub paths: Vec<Vec<(Vec<Option<Fr>>, Option<usize>)>>,
+    pub partial_ticket: Option<Fr>,
+    pub randomness: Option<Fr>,
+    pub prover_id: Option<Fr>,
+    pub sector_id: Option<Fr>,
     pub _h: PhantomData<H>,
 }
 
 #[derive(Clone, Default)]
 pub struct ComponentPrivateInputs {}
 
-impl<'a, E: JubjubEngine, H: Hasher> CircuitComponent for ElectionPoStCircuit<'a, E, H> {
+impl<'a, H: Hasher> CircuitComponent for ElectionPoStCircuit<H> {
     type ComponentPrivateInputs = ComponentPrivateInputs;
 }
 
-impl<
-        'a,
-        E: JubjubEngine
-            + PoseidonEngine<typenum::U8>
-            + PoseidonEngine<typenum::U2>
-            + PoseidonEngine<PoseidonMDArity>,
-        H: Hasher,
-    > Circuit<E> for ElectionPoStCircuit<'a, E, H>
-where
-    typenum::U8: PoseidonArity<E>,
-{
-    fn synthesize<CS: ConstraintSystem<E>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
-        let params = self.params;
+impl<'a, H: Hasher> Circuit<Bls12> for ElectionPoStCircuit<H> {
+    fn synthesize<CS: ConstraintSystem<Bls12>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
         let comm_r = self.comm_r;
         let comm_c = self.comm_c;
         let comm_r_last = self.comm_r_last;
@@ -93,7 +80,6 @@ where
                 cs.namespace(|| "H_comm_c_comm_r_last"),
                 &comm_c_num,
                 &comm_r_last_num,
-                params,
             )?;
 
             // Check actual equality
@@ -107,9 +93,8 @@ where
 
         // 2. Verify Inclusion Paths
         for (i, (leaf, path)) in leafs.iter().zip(paths.iter()).enumerate() {
-            PoRCircuit::<typenum::U8, E, H>::synthesize(
+            PoRCircuit::<typenum::U8, H>::synthesize(
                 cs.namespace(|| format!("challenge_inclusion{}", i)),
-                &params,
                 Root::Val(*leaf),
                 path.clone(),
                 Root::from_allocated::<CS>(comm_r_last_num.clone()),
@@ -155,12 +140,12 @@ where
         while partial_ticket_nums.len() % arity != 0 {
             partial_ticket_nums.push(num::AllocatedNum::alloc(
                 cs.namespace(|| format!("padding_{}", partial_ticket_nums.len())),
-                || Ok(E::Fr::zero()),
+                || Ok(Fr::zero()),
             )?);
         }
 
         // hash it
-        let partial_ticket_num = PoseidonFunction::hash_md_circuit::<E, _>(
+        let partial_ticket_num = PoseidonFunction::hash_md_circuit::<_>(
             &mut cs.namespace(|| "partial_ticket_hash"),
             &partial_ticket_nums,
         )?;
@@ -255,7 +240,7 @@ mod tests {
         for i in 0..5 {
             sectors.push(i.into());
             let data: Vec<u8> = (0..leaves)
-                .flat_map(|_| fr_into_bytes::<Bls12>(&Fr::random(rng)))
+                .flat_map(|_| fr_into_bytes(&Fr::random(rng)))
                 .collect();
 
             let graph = BucketGraph::<H>::new(leaves, BASE_DEGREE, 0, new_seed()).unwrap();
@@ -328,8 +313,7 @@ mod tests {
 
         let mut cs = TestConstraintSystem::<Bls12>::new();
 
-        let instance = ElectionPoStCircuit::<_, H> {
-            params: &*JJ_PARAMS,
+        let instance = ElectionPoStCircuit::<H> {
             leafs,
             paths,
             comm_r: Some(comm_r.into()),

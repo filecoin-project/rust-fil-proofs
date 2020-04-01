@@ -311,10 +311,10 @@ mod tests {
         };
 
         let data1: Vec<u8> = (0..leaves)
-            .flat_map(|_| fr_into_bytes::<Bls12>(&Fr::random(rng)))
+            .flat_map(|_| fr_into_bytes(&Fr::random(rng)))
             .collect();
         let data2: Vec<u8> = (0..leaves)
-            .flat_map(|_| fr_into_bytes::<Bls12>(&Fr::random(rng)))
+            .flat_map(|_| fr_into_bytes(&Fr::random(rng)))
             .collect();
 
         let graph1 = BucketGraph::<H>::new(leaves, BASE_DEGREE, 0, new_seed()).unwrap();
@@ -432,7 +432,7 @@ mod tests {
         };
 
         let data: Vec<u8> = (0..leaves)
-            .flat_map(|_| fr_into_bytes::<Bls12>(&Fr::random(rng)))
+            .flat_map(|_| fr_into_bytes(&Fr::random(rng)))
             .collect();
 
         let graph = BucketGraph::<H>::new(leaves, BASE_DEGREE, 0, new_seed()).unwrap();
@@ -510,7 +510,7 @@ mod tests {
         };
 
         let data: Vec<u8> = (0..leaves)
-            .flat_map(|_| fr_into_bytes::<Bls12>(&Fr::random(rng)))
+            .flat_map(|_| fr_into_bytes(&Fr::random(rng)))
             .collect();
 
         let graph = BucketGraph::<H>::new(leaves, BASE_DEGREE, 0, new_seed()).unwrap();

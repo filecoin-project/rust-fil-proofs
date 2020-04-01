@@ -4,7 +4,6 @@
 
 #[macro_use]
 pub mod test_helper;
-pub mod example_helper;
 
 pub mod cache_key;
 pub mod compound_proof;

@@ -4,7 +4,6 @@ use anyhow::ensure;
 use bellperson::gadgets::{boolean, num, sha256::sha256 as sha256_circuit};
 use bellperson::{ConstraintSystem, SynthesisError};
 use ff::{Field, PrimeField, PrimeFieldRepr};
-use fil_sapling_crypto::jubjub::JubjubEngine;
 use merkletree::hash::{Algorithm, Hashable};
 use merkletree::merkle::Element;
 use paired::bls12_381::{Bls12, Fr, FrRepr};
@@ -33,12 +32,12 @@ impl Hasher for Sha256Hasher {
         let k = (*key).into();
         let c = (*ciphertext).into();
 
-        Ok(sloth::encode::<Bls12>(&k, &c).into())
+        Ok(sloth::encode(&k, &c).into())
     }
 
     fn sloth_decode(key: &Self::Domain, ciphertext: &Self::Domain) -> Result<Self::Domain> {
         // TODO: validate this is how sloth should work in this case
-        Ok(sloth::decode::<Bls12>(&(*key).into(), &(*ciphertext).into()).into())
+        Ok(sloth::decode(&(*key).into(), &(*ciphertext).into()).into())
     }
 }
 
@@ -191,13 +190,12 @@ impl HashFunction<Sha256Domain> for Sha256Function {
         res
     }
 
-    fn hash_multi_leaf_circuit<Arity, E: JubjubEngine, CS: ConstraintSystem<E>>(
+    fn hash_multi_leaf_circuit<Arity, CS: ConstraintSystem<Bls12>>(
         mut cs: CS,
-        leaves: &[num::AllocatedNum<E>],
+        leaves: &[num::AllocatedNum<Bls12>],
         _height: usize,
-        params: &E::Params,
-    ) -> std::result::Result<num::AllocatedNum<E>, SynthesisError> {
-        let mut bits = Vec::with_capacity(leaves.len() * E::Fr::CAPACITY as usize);
+    ) -> std::result::Result<num::AllocatedNum<Bls12>, SynthesisError> {
+        let mut bits = Vec::with_capacity(leaves.len() * Fr::CAPACITY as usize);
         for (i, leaf) in leaves.iter().enumerate() {
             let mut padded = leaf.to_bits_le(cs.namespace(|| format!("{}_num_into_bits", i)))?;
             while padded.len() % 8 != 0 {
@@ -211,16 +209,15 @@ impl HashFunction<Sha256Domain> for Sha256Function {
                     .cloned(),
             );
         }
-        Self::hash_circuit(cs, &bits, params)
+        Self::hash_circuit(cs, &bits)
     }
 
-    fn hash_leaf_bits_circuit<E: JubjubEngine, CS: ConstraintSystem<E>>(
+    fn hash_leaf_bits_circuit<CS: ConstraintSystem<Bls12>>(
         cs: CS,
         left: &[boolean::Boolean],
         right: &[boolean::Boolean],
         _height: usize,
-        params: &E::Params,
-    ) -> std::result::Result<num::AllocatedNum<E>, SynthesisError> {
+    ) -> std::result::Result<num::AllocatedNum<Bls12>, SynthesisError> {
         let mut preimage: Vec<boolean::Boolean> = vec![];
 
         let mut left_padded = left.to_vec();
@@ -247,33 +244,30 @@ impl HashFunction<Sha256Domain> for Sha256Function {
                 .cloned(),
         );
 
-        Self::hash_circuit(cs, &preimage[..], params)
+        Self::hash_circuit(cs, &preimage[..])
     }
 
-    fn hash_circuit<E: JubjubEngine, CS: ConstraintSystem<E>>(
+    fn hash_circuit<CS: ConstraintSystem<Bls12>>(
         mut cs: CS,
         bits: &[boolean::Boolean],
-        _params: &E::Params,
-    ) -> std::result::Result<num::AllocatedNum<E>, SynthesisError> {
+    ) -> std::result::Result<num::AllocatedNum<Bls12>, SynthesisError> {
         let be_bits = sha256_circuit(cs.namespace(|| "hash"), &bits[..])?;
         let le_bits = be_bits
             .chunks(8)
             .flat_map(|chunk| chunk.iter().rev())
             .cloned()
-            .take(E::Fr::CAPACITY as usize)
+            .take(Fr::CAPACITY as usize)
             .collect::<Vec<_>>();
         multipack::pack_bits(cs.namespace(|| "pack_le"), &le_bits)
     }
 
-    fn hash2_circuit<E, CS>(
+    fn hash2_circuit<CS>(
         mut cs: CS,
-        a_num: &num::AllocatedNum<E>,
-        b_num: &num::AllocatedNum<E>,
-        params: &E::Params,
-    ) -> std::result::Result<num::AllocatedNum<E>, SynthesisError>
+        a_num: &num::AllocatedNum<Bls12>,
+        b_num: &num::AllocatedNum<Bls12>,
+    ) -> std::result::Result<num::AllocatedNum<Bls12>, SynthesisError>
     where
-        E: JubjubEngine,
-        CS: ConstraintSystem<E>,
+        CS: ConstraintSystem<Bls12>,
     {
         // Allocate as booleans
         let a = a_num.to_bits_le(cs.namespace(|| "a_bits"))?;
@@ -305,7 +299,7 @@ impl HashFunction<Sha256Domain> for Sha256Function {
                 .cloned(),
         );
 
-        Self::hash_circuit(cs, &preimage[..], params)
+        Self::hash_circuit(cs, &preimage[..])
     }
 }
 
@@ -380,8 +374,8 @@ mod tests {
 
         let left_fr = Fr::random(rng);
         let right_fr = Fr::random(rng);
-        let left: Vec<u8> = fr_into_bytes::<Bls12>(&left_fr);
-        let right: Vec<u8> = fr_into_bytes::<Bls12>(&right_fr);
+        let left: Vec<u8> = fr_into_bytes(&left_fr);
+        let right: Vec<u8> = fr_into_bytes(&right_fr);
         let height = 1;
 
         let left_bits: Vec<Boolean> = {
@@ -399,7 +393,6 @@ mod tests {
             &left_bits,
             &right_bits,
             height,
-            &crypto::pedersen::JJ_PARAMS,
         )
         .expect("key derivation function failed");
 

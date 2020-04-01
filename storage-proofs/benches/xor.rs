@@ -2,21 +2,20 @@ use bellperson::gadgets::boolean::{self, Boolean};
 use bellperson::groth16::*;
 use bellperson::{Circuit, ConstraintSystem, SynthesisError};
 use criterion::{black_box, criterion_group, criterion_main, Criterion, ParameterizedBenchmark};
-use fil_sapling_crypto::jubjub::JubjubEngine;
 use paired::bls12_381::Bls12;
 use rand::{thread_rng, Rng};
 use storage_proofs::gadgets::BenchCS;
 
-use storage_proofs::crypto::xor;
-use storage_proofs::gadgets;
+use crate::crypto::xor;
+use crate::gadgets;
 
 struct XorExample<'a> {
     key: &'a [Option<bool>],
     data: &'a [Option<bool>],
 }
 
-impl<'a, E: JubjubEngine> Circuit<E> for XorExample<'a> {
-    fn synthesize<CS: ConstraintSystem<E>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
+impl<'a> Circuit<Bls12> for XorExample<'a> {
+    fn synthesize<CS: ConstraintSystem<Bls12>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
         let key: Vec<Boolean> = self
             .key
             .into_iter()

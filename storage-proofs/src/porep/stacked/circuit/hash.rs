@@ -81,7 +81,6 @@ mod tests {
                 cs.namespace(|| "hash2"),
                 &a_num,
                 &b_num,
-                &JJ_PARAMS,
             )
             .expect("hash2 function failed");
 

@@ -2,43 +2,37 @@ use std::marker::PhantomData;
 
 use bellperson::gadgets::num;
 use bellperson::{Circuit, ConstraintSystem, SynthesisError};
-use fil_sapling_crypto::jubjub::JubjubEngine;
 use generic_array::typenum;
+use paired::bls12_381::{Bls12, Fr};
 
 use crate::compound_proof::CircuitComponent;
 use crate::error::Result;
 use crate::gadgets::constraint;
 use crate::gadgets::por::PoRCircuit;
 use crate::gadgets::variables::Root;
-use crate::hasher::{HashFunction, Hasher, PoseidonArity, PoseidonEngine};
+use crate::hasher::{HashFunction, Hasher};
 
 /// This is the `RationalPoSt` circuit.
-pub struct RationalPoStCircuit<'a, E: JubjubEngine, H: Hasher> {
+pub struct RationalPoStCircuit<H: Hasher> {
     /// Paramters for the engine.
-    pub params: &'a E::Params,
-    pub comm_rs: Vec<Option<E::Fr>>,
-    pub comm_cs: Vec<Option<E::Fr>>,
-    pub comm_r_lasts: Vec<Option<E::Fr>>,
-    pub leafs: Vec<Option<E::Fr>>,
+    pub comm_rs: Vec<Option<Fr>>,
+    pub comm_cs: Vec<Option<Fr>>,
+    pub comm_r_lasts: Vec<Option<Fr>>,
+    pub leafs: Vec<Option<Fr>>,
     #[allow(clippy::type_complexity)]
-    pub paths: Vec<Vec<(Vec<Option<E::Fr>>, Option<usize>)>>,
+    pub paths: Vec<Vec<(Vec<Option<Fr>>, Option<usize>)>>,
     pub _h: PhantomData<H>,
 }
 
 #[derive(Clone, Default)]
 pub struct ComponentPrivateInputs {}
 
-impl<'a, E: JubjubEngine, H: Hasher> CircuitComponent for RationalPoStCircuit<'a, E, H> {
+impl<'a, H: Hasher> CircuitComponent for RationalPoStCircuit<H> {
     type ComponentPrivateInputs = ComponentPrivateInputs;
 }
 
-impl<'a, E: JubjubEngine + PoseidonEngine<typenum::U2>, H: Hasher> Circuit<E>
-    for RationalPoStCircuit<'a, E, H>
-where
-    typenum::U2: PoseidonArity<E>,
-{
-    fn synthesize<CS: ConstraintSystem<E>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
-        let params = self.params;
+impl<'a, H: Hasher> Circuit<Bls12> for RationalPoStCircuit<H> {
+    fn synthesize<CS: ConstraintSystem<Bls12>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
         let comm_rs = self.comm_rs;
         let comm_cs = self.comm_cs;
         let comm_r_lasts = self.comm_r_lasts;
@@ -85,7 +79,6 @@ where
                     cs.namespace(|| format!("H_comm_c_comm_r_last_{}", i)),
                     &comm_c_num,
                     &comm_r_last_num,
-                    params,
                 )?;
 
                 // Check actual equality
@@ -97,9 +90,8 @@ where
                 );
             }
 
-            PoRCircuit::<typenum::U2, E, H>::synthesize(
+            PoRCircuit::<typenum::U2, H>::synthesize(
                 cs.namespace(|| format!("challenge_inclusion{}", i)),
-                &params,
                 Root::Val(leafs[i]),
                 paths[i].clone(),
                 Root::from_allocated::<CS>(comm_r_last_num),
@@ -123,7 +115,6 @@ mod tests {
     use rand_xorshift::XorShiftRng;
 
     use crate::compound_proof::CompoundProof;
-    use crate::crypto::pedersen::JJ_PARAMS;
     use crate::drgraph::{new_seed, BucketGraph, Graph, BASE_DEGREE};
     use crate::fr32::fr_into_bytes;
     use crate::gadgets::TestConstraintSystem;
@@ -156,10 +147,10 @@ mod tests {
         };
 
         let data1: Vec<u8> = (0..leaves)
-            .flat_map(|_| fr_into_bytes::<Bls12>(&Fr::random(rng)))
+            .flat_map(|_| fr_into_bytes(&Fr::random(rng)))
             .collect();
         let data2: Vec<u8> = (0..leaves)
-            .flat_map(|_| fr_into_bytes::<Bls12>(&Fr::random(rng)))
+            .flat_map(|_| fr_into_bytes(&Fr::random(rng)))
             .collect();
 
         let graph1 = BucketGraph::<H>::new(leaves, BASE_DEGREE, 0, new_seed()).unwrap();
@@ -237,8 +228,7 @@ mod tests {
 
         let mut cs = TestConstraintSystem::<Bls12>::new();
 
-        let instance = RationalPoStCircuit::<_, H> {
-            params: &*JJ_PARAMS,
+        let instance = RationalPoStCircuit::<H> {
             leafs,
             paths,
             comm_rs: comm_rs.iter().copied().map(|c| Some(c.into())).collect(),

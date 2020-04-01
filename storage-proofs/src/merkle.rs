@@ -14,7 +14,7 @@ use merkletree::merkle::{
 };
 use merkletree::proof;
 use merkletree::store::{LevelCacheStore, StoreConfig};
-use paired::bls12_381::Fr;
+use paired::bls12_381::{Bls12, Fr};
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 
@@ -40,6 +40,22 @@ pub type OctMerkleTree<T, A> = MerkleTree<T, A, typenum::U8>;
 pub type OctLCMerkleTree<T, A> = LCMerkleTree<T, A, typenum::U8>;
 
 pub type MerkleStore<T> = DiskStore<T>;
+
+use generic_array::typenum::{Add1, UInt, UTerm, Unsigned, B1};
+use generic_array::ArrayLength;
+
+use crate::hasher::types::PoseidonArity;
+use std::ops::Add;
+
+pub trait MerkleTreeTrait {
+    type Arity: 'static + Unsigned;
+    type Hasher: Hasher;
+    type Proof: MerkleProofTrait<Arity = Self::Arity>;
+}
+
+pub trait MerkleProofTrait: Clone + Serialize + serde::de::DeserializeOwned {
+    type Arity: Unsigned;
+}
 
 /// Representation of a merkle proof.
 /// Each element in the `path` vector consists of a tuple `(hash, is_right)`, with `hash` being the the hash of the node at the current level and `is_right` a boolean indicating if the path is taking the right path.

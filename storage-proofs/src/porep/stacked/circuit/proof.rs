@@ -3,14 +3,12 @@ use std::marker::PhantomData;
 use anyhow::ensure;
 use bellperson::gadgets::num;
 use bellperson::{Circuit, ConstraintSystem, SynthesisError};
-use fil_sapling_crypto::jubjub::JubjubEngine;
 use generic_array::typenum;
 use paired::bls12_381::{Bls12, Fr};
 
 use super::params::Proof;
 
 use crate::compound_proof::{CircuitComponent, CompoundProof};
-use crate::crypto::pedersen::JJ_PARAMS;
 use crate::drgraph::Graph;
 use crate::error::Result;
 use crate::fr32::fr_into_bytes;
@@ -29,8 +27,7 @@ use crate::util::bytes_into_boolean_vec_be;
 ///
 /// * `params` - parameters for the curve
 ///
-pub struct StackedCircuit<'a, E: JubjubEngine, H: 'static + Hasher, G: 'static + Hasher> {
-    params: &'a E::Params,
+pub struct StackedCircuit<'a, H: 'static + Hasher, G: 'static + Hasher> {
     public_params: <StackedDrg<'a, H, G> as ProofScheme<'a>>::PublicParams,
     replica_id: Option<H::Domain>,
     comm_d: Option<G::Domain>,
@@ -40,19 +37,16 @@ pub struct StackedCircuit<'a, E: JubjubEngine, H: 'static + Hasher, G: 'static +
 
     // one proof per challenge
     proofs: Vec<Proof<H, G>>,
-
-    _e: PhantomData<E>,
 }
 
-impl<'a, E: JubjubEngine, H: Hasher, G: Hasher> CircuitComponent for StackedCircuit<'a, E, H, G> {
+impl<'a, H: Hasher, G: Hasher> CircuitComponent for StackedCircuit<'a, H, G> {
     type ComponentPrivateInputs = ();
 }
 
-impl<'a, H: Hasher, G: 'static + Hasher> StackedCircuit<'a, Bls12, H, G> {
+impl<'a, H: Hasher, G: 'static + Hasher> StackedCircuit<'a, H, G> {
     #[allow(clippy::too_many_arguments)]
     pub fn synthesize<CS>(
         mut cs: CS,
-        params: &'a <Bls12 as JubjubEngine>::Params,
         public_params: <StackedDrg<'a, H, G> as ProofScheme<'a>>::PublicParams,
         replica_id: Option<H::Domain>,
         comm_d: Option<G::Domain>,
@@ -64,8 +58,7 @@ impl<'a, H: Hasher, G: 'static + Hasher> StackedCircuit<'a, Bls12, H, G> {
     where
         CS: ConstraintSystem<Bls12>,
     {
-        let circuit = StackedCircuit::<'a, Bls12, H, G> {
-            params,
+        let circuit = StackedCircuit::<'a, H, G> {
             public_params,
             replica_id,
             comm_d,
@@ -73,14 +66,13 @@ impl<'a, H: Hasher, G: 'static + Hasher> StackedCircuit<'a, Bls12, H, G> {
             comm_r_last,
             comm_c,
             proofs,
-            _e: PhantomData,
         };
 
         circuit.synthesize(&mut cs)
     }
 }
 
-impl<'a, H: Hasher, G: Hasher> Circuit<Bls12> for StackedCircuit<'a, Bls12, H, G> {
+impl<'a, H: Hasher, G: Hasher> Circuit<Bls12> for StackedCircuit<'a, H, G> {
     fn synthesize<CS: ConstraintSystem<Bls12>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
         let StackedCircuit {
             public_params,
@@ -93,13 +85,11 @@ impl<'a, H: Hasher, G: Hasher> Circuit<Bls12> for StackedCircuit<'a, Bls12, H, G
             ..
         } = self;
 
-        let params = &self.params;
-
         // Allocate replica_id
         let replica_id_fr: Option<Fr> = replica_id.map(Into::into);
         let replica_id_bits = match replica_id_fr {
             Some(val) => {
-                let bytes = fr_into_bytes::<Bls12>(&val);
+                let bytes = fr_into_bytes(&val);
                 bytes_into_boolean_vec_be(cs.namespace(|| "replica_id_bits"), Some(&bytes), 256)
             }
             None => bytes_into_boolean_vec_be(cs.namespace(|| "replica_id_bits"), None, 256),
@@ -145,7 +135,6 @@ impl<'a, H: Hasher, G: Hasher> Circuit<Bls12> for StackedCircuit<'a, Bls12, H, G
                 cs.namespace(|| "H_comm_c_comm_r_last"),
                 &comm_c_num,
                 &comm_r_last_num,
-                params,
             )?;
 
             // Check actual equality
@@ -160,7 +149,6 @@ impl<'a, H: Hasher, G: Hasher> Circuit<Bls12> for StackedCircuit<'a, Bls12, H, G
         for (i, proof) in proofs.into_iter().enumerate() {
             proof.synthesize(
                 &mut cs.namespace(|| format!("challenge_{}", i)),
-                &self.params,
                 public_params.layer_challenges.layers(),
                 &comm_d_num,
                 &comm_c_num,
@@ -180,8 +168,8 @@ pub struct StackedCompound<H: Hasher, G: Hasher> {
     _g: PhantomData<G>,
 }
 
-impl<E: JubjubEngine, C: Circuit<E>, P: ParameterSetMetadata, H: Hasher, G: Hasher>
-    CacheableParameters<E, C, P> for StackedCompound<H, G>
+impl<C: Circuit<Bls12>, P: ParameterSetMetadata, H: Hasher, G: Hasher> CacheableParameters<C, P>
+    for StackedCompound<H, G>
 {
     fn cache_prefix() -> String {
         format!("stacked-proof-of-replication-{}-{}", H::name(), G::name())
@@ -189,8 +177,7 @@ impl<E: JubjubEngine, C: Circuit<E>, P: ParameterSetMetadata, H: Hasher, G: Hash
 }
 
 impl<'a, H: 'static + Hasher, G: 'static + Hasher>
-    CompoundProof<'a, Bls12, StackedDrg<'a, H, G>, StackedCircuit<'a, Bls12, H, G>>
-    for StackedCompound<H, G>
+    CompoundProof<'a, StackedDrg<'a, H, G>, StackedCircuit<'a, H, G>> for StackedCompound<H, G>
 {
     fn generate_public_inputs(
         pub_in: &<StackedDrg<H, G> as ProofScheme>::PublicInputs,
@@ -266,10 +253,10 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher>
 
     fn circuit<'b>(
         public_inputs: &'b <StackedDrg<H, G> as ProofScheme>::PublicInputs,
-        _component_private_inputs: <StackedCircuit<'a, Bls12, H, G> as CircuitComponent>::ComponentPrivateInputs,
+        _component_private_inputs: <StackedCircuit<'a, H, G> as CircuitComponent>::ComponentPrivateInputs,
         vanilla_proof: &'b <StackedDrg<H, G> as ProofScheme>::Proof,
         public_params: &'b <StackedDrg<H, G> as ProofScheme>::PublicParams,
-    ) -> Result<StackedCircuit<'a, Bls12, H, G>> {
+    ) -> Result<StackedCircuit<'a, H, G>> {
         ensure!(
             !vanilla_proof.is_empty(),
             "Cannot create a circuit with no vanilla proofs"
@@ -291,7 +278,6 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher>
         );
 
         Ok(StackedCircuit {
-            params: &*JJ_PARAMS,
             public_params: public_params.clone(),
             replica_id: Some(public_inputs.replica_id),
             comm_d: public_inputs.tau.as_ref().map(|t| t.comm_d),
@@ -299,15 +285,13 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher>
             comm_r_last: Some(comm_r_last),
             comm_c: Some(comm_c),
             proofs: vanilla_proof.iter().cloned().map(|p| p.into()).collect(),
-            _e: PhantomData,
         })
     }
 
     fn blank_circuit(
         public_params: &<StackedDrg<H, G> as ProofScheme>::PublicParams,
-    ) -> StackedCircuit<'a, Bls12, H, G> {
+    ) -> StackedCircuit<'a, H, G> {
         StackedCircuit {
-            params: &*JJ_PARAMS,
             public_params: public_params.clone(),
             replica_id: None,
             comm_d: None,
@@ -317,7 +301,6 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher>
             proofs: (0..public_params.layer_challenges.challenges_count_all())
                 .map(|_challenge_index| Proof::empty(public_params))
                 .collect(),
-            _e: PhantomData,
         }
     }
 }
@@ -365,7 +348,7 @@ mod tests {
 
         let replica_id: Fr = Fr::random(rng);
         let data: Vec<u8> = (0..nodes)
-            .flat_map(|_| fr_into_bytes::<Bls12>(&Fr::random(rng)))
+            .flat_map(|_| fr_into_bytes(&Fr::random(rng)))
             .collect();
 
         // create a copy, so we can compare roundtrips
@@ -446,7 +429,7 @@ mod tests {
 
             StackedCompound::circuit(
                 &pub_inputs,
-                <StackedCircuit<Bls12, H, Sha256Hasher> as CircuitComponent>::ComponentPrivateInputs::default(),
+                <StackedCircuit<H, Sha256Hasher> as CircuitComponent>::ComponentPrivateInputs::default(),
                 &proofs[0],
                 &pp,
             )
@@ -465,7 +448,8 @@ mod tests {
 
         StackedCompound::circuit(
             &pub_inputs,
-            <StackedCircuit<Bls12, H, Sha256Hasher> as CircuitComponent>::ComponentPrivateInputs::default(),
+            <StackedCircuit<H, Sha256Hasher> as CircuitComponent>::ComponentPrivateInputs::default(
+            ),
             &proofs[0],
             &pp,
         )
@@ -484,7 +468,6 @@ mod tests {
         assert_eq!(cs.get_input(0, "ONE"), Fr::one());
 
         let generated_inputs = <StackedCompound<H, Sha256Hasher> as CompoundProof<
-            _,
             StackedDrg<H, Sha256Hasher>,
             _,
         >>::generate_public_inputs(&pub_inputs, &pp, None)
@@ -529,7 +512,7 @@ mod tests {
 
         let replica_id: Fr = Fr::random(rng);
         let data: Vec<u8> = (0..nodes)
-            .flat_map(|_| fr_into_bytes::<Bls12>(&Fr::random(rng)))
+            .flat_map(|_| fr_into_bytes(&Fr::random(rng)))
             .collect();
 
         // create a copy, so we can compare roundtrips
@@ -620,7 +603,6 @@ mod tests {
                 StackedCompound::circuit_for_test(&public_params, &public_inputs, &private_inputs)
                     .unwrap();
             let blank_circuit = <StackedCompound<H, Sha256Hasher> as CompoundProof<
-                _,
                 StackedDrg<H, Sha256Hasher>,
                 _,
             >>::blank_circuit(&public_params.vanilla_params);
@@ -642,7 +624,6 @@ mod tests {
         }
 
         let blank_groth_params = <StackedCompound<H, Sha256Hasher> as CompoundProof<
-            _,
             StackedDrg<H, Sha256Hasher>,
             _,
         >>::groth_params(Some(rng), &public_params.vanilla_params)

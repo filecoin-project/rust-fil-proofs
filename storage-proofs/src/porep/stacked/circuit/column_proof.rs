@@ -1,6 +1,5 @@
 use bellperson::gadgets::num;
 use bellperson::{ConstraintSystem, SynthesisError};
-use fil_sapling_crypto::jubjub::JubjubEngine;
 use generic_array::typenum;
 use paired::bls12_381::{Bls12, Fr};
 
@@ -32,7 +31,6 @@ impl<H: Hasher> ColumnProof<H> {
     pub fn synthesize<CS: ConstraintSystem<Bls12>>(
         self,
         mut cs: CS,
-        params: &<Bls12 as JubjubEngine>::Params,
         comm_c: &num::AllocatedNum<Bls12>,
     ) -> Result<(), SynthesisError> {
         let ColumnProof {
@@ -40,7 +38,7 @@ impl<H: Hasher> ColumnProof<H> {
             column,
         } = self;
 
-        let c_i = column.hash(cs.namespace(|| "column_hash"), params)?;
+        let c_i = column.hash(cs.namespace(|| "column_hash"))?;
 
         let leaf_num = inclusion_path.alloc_value(cs.namespace(|| "leaf"))?;
 
@@ -49,7 +47,6 @@ impl<H: Hasher> ColumnProof<H> {
         // TODO: currently allocating the leaf twice, inclusion path should take the already allocated leaf.
         inclusion_path.synthesize(
             cs.namespace(|| "column_proof_all_inclusion"),
-            params,
             comm_c.clone(),
             leaf_num,
         )?;

@@ -2,7 +2,6 @@ use std::marker::PhantomData;
 
 use anyhow::{ensure, Context};
 use bellperson::Circuit;
-use fil_sapling_crypto::jubjub::JubjubEngine;
 use generic_array::typenum;
 use paired::bls12_381::{Bls12, Fr};
 
@@ -53,8 +52,8 @@ where
     _g: PhantomData<G>,
 }
 
-impl<E: JubjubEngine, C: Circuit<E>, H: Hasher, G: Graph<H>, P: ParameterSetMetadata>
-    CacheableParameters<E, C, P> for DrgPoRepCompound<H, G>
+impl<C: Circuit<Bls12>, H: Hasher, G: Graph<H>, P: ParameterSetMetadata> CacheableParameters<C, P>
+    for DrgPoRepCompound<H, G>
 where
     G::Key: AsRef<H::Domain>,
 {
@@ -63,7 +62,7 @@ where
     }
 }
 
-impl<'a, H, G> CompoundProof<'a, Bls12, DrgPoRep<'a, H, G>, DrgPoRepCircuit<'a, H>>
+impl<'a, H, G> CompoundProof<'a, DrgPoRep<'a, H, G>, DrgPoRepCircuit<'a, H>>
     for DrgPoRepCompound<H, G>
 where
     H: 'a + Hasher,
@@ -137,7 +136,7 @@ where
 
     fn circuit(
         public_inputs: &<DrgPoRep<'a, H, G> as ProofScheme<'a>>::PublicInputs,
-        component_private_inputs: <DrgPoRepCircuit<'a, H> as CircuitComponent>::ComponentPrivateInputs,
+        component_private_inputs: <DrgPoRepCircuit<H> as CircuitComponent>::ComponentPrivateInputs,
         proof: &<DrgPoRep<'a, H, G> as ProofScheme<'a>>::Proof,
         public_params: &<DrgPoRep<'a, H, G> as ProofScheme<'a>>::PublicParams,
     ) -> Result<DrgPoRepCircuit<'a, H>> {
@@ -223,7 +222,6 @@ where
         );
 
         Ok(DrgPoRepCircuit {
-            params: &*JJ_PARAMS,
             replica_nodes,
             replica_nodes_paths,
             replica_root,
@@ -261,7 +259,6 @@ where
         let data_root = Root::Val(None);
 
         DrgPoRepCircuit {
-            params: &*JJ_PARAMS,
             replica_nodes,
             replica_nodes_paths,
             replica_root,
@@ -322,7 +319,7 @@ mod tests {
 
         let replica_id: Fr = Fr::random(rng);
         let mut data: Vec<u8> = (0..nodes)
-            .flat_map(|_| fr_into_bytes::<Bls12>(&Fr::random(rng)))
+            .flat_map(|_| fr_into_bytes(&Fr::random(rng)))
             .collect();
 
         // Only generate seed once. It would be bad if we used different seeds in the same test.
@@ -416,7 +413,7 @@ mod tests {
             assert!(cs.is_satisfied());
             assert!(cs.verify(&inputs));
 
-            let blank_circuit = <DrgPoRepCompound<_, _> as CompoundProof<_, _, _>>::blank_circuit(
+            let blank_circuit = <DrgPoRepCompound<_, _> as CompoundProof<_, _>>::blank_circuit(
                 &public_params.vanilla_params,
             );
 

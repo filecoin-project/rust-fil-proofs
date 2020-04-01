@@ -758,7 +758,7 @@ mod tests {
         let expansion_degree = EXP_DEGREE;
         let replica_id: H::Domain = H::Domain::random(rng);
         let data: Vec<u8> = (0..n)
-            .flat_map(|_| fr_into_bytes::<Bls12>(&Fr::random(rng)))
+            .flat_map(|_| fr_into_bytes(&Fr::random(rng)))
             .collect();
 
         // create a copy, so we can compare roundtrips

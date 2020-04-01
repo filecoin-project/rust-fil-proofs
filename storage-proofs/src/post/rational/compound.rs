@@ -2,16 +2,14 @@ use std::marker::PhantomData;
 
 use anyhow::ensure;
 use bellperson::{Circuit, ConstraintSystem, SynthesisError};
-use fil_sapling_crypto::jubjub::JubjubEngine;
 use generic_array::typenum;
 use paired::bls12_381::{Bls12, Fr};
 
 use crate::compound_proof::{CircuitComponent, CompoundProof};
-use crate::crypto::pedersen::JJ_PARAMS;
 use crate::drgraph;
 use crate::error::Result;
 use crate::gadgets::por::PoRCompound;
-use crate::hasher::{Hasher, PoseidonArity, PoseidonEngine};
+use crate::hasher::Hasher;
 use crate::parameter_cache::{CacheableParameters, ParameterSetMetadata};
 use crate::por;
 use crate::post::rational::{RationalPoSt, RationalPoStCircuit};
@@ -25,15 +23,15 @@ where
     _h: PhantomData<H>,
 }
 
-impl<E: JubjubEngine, C: Circuit<E>, P: ParameterSetMetadata, H: Hasher>
-    CacheableParameters<E, C, P> for RationalPoStCompound<H>
+impl<C: Circuit<Bls12>, P: ParameterSetMetadata, H: Hasher> CacheableParameters<C, P>
+    for RationalPoStCompound<H>
 {
     fn cache_prefix() -> String {
         format!("proof-of-spacetime-rational-{}", H::name())
     }
 }
 
-impl<'a, H> CompoundProof<'a, Bls12, RationalPoSt<'a, H>, RationalPoStCircuit<'a, Bls12, H>>
+impl<'a, H> CompoundProof<'a, RationalPoSt<'a, H>, RationalPoStCircuit<H>>
     for RationalPoStCompound<H>
 where
     H: 'a + Hasher,
@@ -76,10 +74,10 @@ where
 
     fn circuit(
         pub_in: &<RationalPoSt<'a, H> as ProofScheme<'a>>::PublicInputs,
-        _priv_in: <RationalPoStCircuit<'a, Bls12, H> as CircuitComponent>::ComponentPrivateInputs,
+        _priv_in: <RationalPoStCircuit<H> as CircuitComponent>::ComponentPrivateInputs,
         vanilla_proof: &<RationalPoSt<'a, H> as ProofScheme<'a>>::Proof,
         _pub_params: &<RationalPoSt<'a, H> as ProofScheme<'a>>::PublicParams,
-    ) -> Result<RationalPoStCircuit<'a, Bls12, H>> {
+    ) -> Result<RationalPoStCircuit<H>> {
         let comm_rs: Vec<_> = pub_in.comm_rs.iter().map(|c| Some((*c).into())).collect();
         let comm_cs: Vec<_> = vanilla_proof
             .comm_cs
@@ -115,7 +113,6 @@ where
             .collect();
 
         Ok(RationalPoStCircuit {
-            params: &*JJ_PARAMS,
             leafs,
             comm_rs,
             comm_cs,
@@ -127,7 +124,7 @@ where
 
     fn blank_circuit(
         pub_params: &<RationalPoSt<'a, H> as ProofScheme<'a>>::PublicParams,
-    ) -> RationalPoStCircuit<'a, Bls12, H> {
+    ) -> RationalPoStCircuit<H> {
         let challenges_count = pub_params.challenges_count;
         let height =
             drgraph::graph_height::<typenum::U2>(pub_params.sector_size as usize / NODE_SIZE);
@@ -139,7 +136,6 @@ where
         let paths = vec![vec![(vec![None; 1], None); height - 1]; challenges_count];
 
         RationalPoStCircuit {
-            params: &*JJ_PARAMS,
             comm_rs,
             comm_cs,
             comm_r_lasts,
@@ -150,22 +146,17 @@ where
     }
 }
 
-impl<'a, E: JubjubEngine + PoseidonEngine<typenum::U2>, H: Hasher> RationalPoStCircuit<'a, E, H>
-where
-    typenum::U2: PoseidonArity<E>,
-{
+impl<'a, H: Hasher> RationalPoStCircuit<H> {
     #[allow(clippy::type_complexity)]
-    pub fn synthesize<CS: ConstraintSystem<E>>(
+    pub fn synthesize<CS: ConstraintSystem<Bls12>>(
         cs: &mut CS,
-        params: &'a E::Params,
-        leafs: Vec<Option<E::Fr>>,
-        comm_rs: Vec<Option<E::Fr>>,
-        comm_cs: Vec<Option<E::Fr>>,
-        comm_r_lasts: Vec<Option<E::Fr>>,
-        paths: Vec<Vec<(Vec<Option<E::Fr>>, Option<usize>)>>,
+        leafs: Vec<Option<Fr>>,
+        comm_rs: Vec<Option<Fr>>,
+        comm_cs: Vec<Option<Fr>>,
+        comm_r_lasts: Vec<Option<Fr>>,
+        paths: Vec<Vec<(Vec<Option<Fr>>, Option<usize>)>>,
     ) -> Result<(), SynthesisError> {
         Self {
-            params,
             leafs,
             comm_rs,
             comm_cs,
@@ -227,10 +218,10 @@ mod tests {
         let pub_params = RationalPoStCompound::<H>::setup(&setup_params).expect("setup failed");
 
         let data1: Vec<u8> = (0..leaves)
-            .flat_map(|_| fr_into_bytes::<Bls12>(&Fr::random(rng)))
+            .flat_map(|_| fr_into_bytes(&Fr::random(rng)))
             .collect();
         let data2: Vec<u8> = (0..leaves)
-            .flat_map(|_| fr_into_bytes::<Bls12>(&Fr::random(rng)))
+            .flat_map(|_| fr_into_bytes(&Fr::random(rng)))
             .collect();
 
         let graph1 = BucketGraph::<H>::new(leaves, BASE_DEGREE, 0, new_seed()).unwrap();

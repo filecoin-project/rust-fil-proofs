@@ -2,7 +2,6 @@ use std::marker::PhantomData;
 
 use bellperson::gadgets::{boolean::Boolean, num};
 use bellperson::{ConstraintSystem, SynthesisError};
-use fil_sapling_crypto::jubjub::JubjubEngine;
 use generic_array::typenum;
 use paired::bls12_381::{Bls12, Fr};
 use paired::Engine;
@@ -52,7 +51,6 @@ impl<H: Hasher, G: Hasher> Proof<H, G> {
     pub fn synthesize<CS: ConstraintSystem<Bls12>>(
         self,
         mut cs: CS,
-        params: &<Bls12 as JubjubEngine>::Params,
         layers: usize,
         comm_d: &num::AllocatedNum<Bls12>,
         comm_c: &num::AllocatedNum<Bls12>,
@@ -71,7 +69,6 @@ impl<H: Hasher, G: Hasher> Proof<H, G> {
         let comm_d_leaf = comm_d_proof.alloc_value(cs.namespace(|| "comm_d_leaf"))?;
         comm_d_proof.synthesize(
             cs.namespace(|| "comm_d_inclusion"),
-            params,
             comm_d.clone(),
             comm_d_leaf.clone(),
         )?;
@@ -90,7 +87,6 @@ impl<H: Hasher, G: Hasher> Proof<H, G> {
 
             proof.synthesize(
                 cs.namespace(|| format!("labeling_proof_{}", layer)),
-                params,
                 replica_id,
                 &labeled_node,
             )?;
@@ -98,19 +94,17 @@ impl<H: Hasher, G: Hasher> Proof<H, G> {
 
         encoding_proof.synthesize(
             cs.namespace(|| format!("encoding_proof_{}", layers)),
-            params,
             replica_id,
             &comm_r_last_data_leaf,
             &comm_d_leaf,
         )?;
 
         // verify replica column openings
-        replica_column_proof.synthesize(cs.namespace(|| "replica_column_proof"), params, comm_c)?;
+        replica_column_proof.synthesize(cs.namespace(|| "replica_column_proof"), comm_c)?;
 
         // verify final replica layer
         comm_r_last_proof.synthesize(
             cs.namespace(|| "comm_r_last_data_inclusion"),
-            params,
             comm_r_last.clone(),
             comm_r_last_data_leaf,
         )?;
@@ -193,7 +187,6 @@ where
     pub fn synthesize<CS: ConstraintSystem<Bls12>>(
         self,
         cs: CS,
-        params: &<Bls12 as JubjubEngine>::Params,
         root: num::AllocatedNum<Bls12>,
         leaf: num::AllocatedNum<Bls12>,
     ) -> Result<(), SynthesisError> {
@@ -201,7 +194,7 @@ where
 
         let root = Root::from_allocated::<CS>(root);
         let value = Root::from_allocated::<CS>(leaf);
-        PoRCircuit::<U, Bls12, H>::synthesize(cs, params, value, auth_path, root, true)
+        PoRCircuit::<U, H>::synthesize(cs, value, auth_path, root, true)
     }
 }
 
@@ -242,7 +235,6 @@ impl<H: Hasher> ReplicaColumnProof<H> {
     pub fn synthesize<CS: ConstraintSystem<Bls12>>(
         self,
         mut cs: CS,
-        params: &<Bls12 as JubjubEngine>::Params,
         comm_c: &num::AllocatedNum<Bls12>,
     ) -> Result<(), SynthesisError> {
         let ReplicaColumnProof {
@@ -252,16 +244,16 @@ impl<H: Hasher> ReplicaColumnProof<H> {
         } = self;
 
         // c_x
-        c_x.synthesize(cs.namespace(|| "c_x"), params, comm_c)?;
+        c_x.synthesize(cs.namespace(|| "c_x"), comm_c)?;
 
         // drg parents
         for (i, parent) in drg_parents.into_iter().enumerate() {
-            parent.synthesize(cs.namespace(|| format!("drg_parent_{}", i)), params, comm_c)?;
+            parent.synthesize(cs.namespace(|| format!("drg_parent_{}", i)), comm_c)?;
         }
 
         // exp parents
         for (i, parent) in exp_parents.into_iter().enumerate() {
-            parent.synthesize(cs.namespace(|| format!("exp_parent_{}", i)), params, comm_c)?;
+            parent.synthesize(cs.namespace(|| format!("exp_parent_{}", i)), comm_c)?;
         }
 
         Ok(())

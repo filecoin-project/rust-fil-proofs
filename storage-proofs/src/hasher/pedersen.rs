@@ -5,7 +5,6 @@ use bellperson::gadgets::{boolean, num};
 use bellperson::{ConstraintSystem, SynthesisError};
 use ff::{Field, PrimeField, PrimeFieldRepr};
 use fil_sapling_crypto::circuit::pedersen_hash as pedersen_hash_circuit;
-use fil_sapling_crypto::jubjub::JubjubEngine;
 use fil_sapling_crypto::pedersen_hash::Personalization;
 use merkletree::hash::{Algorithm as LightAlgorithm, Hashable};
 use merkletree::merkle::Element;
@@ -33,7 +32,7 @@ impl Hasher for PedersenHasher {
         // Unrapping here is safe; `Fr` elements and hash domain elements are the same byte length.
         let key = Fr::from_repr(key.0)?;
         let ciphertext = Fr::from_repr(ciphertext.0)?;
-        Ok(sloth::encode::<Bls12>(&key, &ciphertext).into())
+        Ok(sloth::encode(&key, &ciphertext).into())
     }
 
     #[inline]
@@ -42,7 +41,7 @@ impl Hasher for PedersenHasher {
         let key = Fr::from_repr(key.0)?;
         let ciphertext = Fr::from_repr(ciphertext.0)?;
 
-        Ok(sloth::decode::<Bls12>(&key, &ciphertext).into())
+        Ok(sloth::decode(&key, &ciphertext).into())
     }
 }
 
@@ -221,15 +220,14 @@ impl HashFunction<PedersenDomain> for PedersenFunction {
         digest.into_xy().0.into()
     }
 
-    fn hash_multi_leaf_circuit<Arity, E: JubjubEngine, CS: ConstraintSystem<E>>(
+    fn hash_multi_leaf_circuit<Arity, CS: ConstraintSystem<Bls12>>(
         mut cs: CS,
-        leaves: &[num::AllocatedNum<E>],
+        leaves: &[num::AllocatedNum<Bls12>],
         _height: usize,
-        params: &E::Params,
-    ) -> std::result::Result<num::AllocatedNum<E>, SynthesisError> {
+    ) -> std::result::Result<num::AllocatedNum<Bls12>, SynthesisError> {
         let is_binary = leaves.len() == 2;
 
-        let mut bits = Vec::with_capacity(leaves.len() * E::Fr::CAPACITY as usize);
+        let mut bits = Vec::with_capacity(leaves.len() * Fr::CAPACITY as usize);
         for (i, leaf) in leaves.iter().enumerate() {
             bits.extend_from_slice(
                 &leaf.to_bits_le(cs.namespace(|| format!("{}_num_into_bits", i)))?,
@@ -242,51 +240,53 @@ impl HashFunction<PedersenDomain> for PedersenFunction {
         }
 
         if is_binary {
-            Ok(
-                pedersen_hash_circuit::pedersen_hash(cs, Personalization::None, &bits, params)?
-                    .get_x()
-                    .clone(),
-            )
+            Ok(pedersen_hash_circuit::pedersen_hash(
+                cs,
+                Personalization::None,
+                &bits,
+                &*pedersen::JJ_PARAMS,
+            )?
+            .get_x()
+            .clone())
         } else {
-            Self::hash_circuit(cs, &bits, params)
+            Self::hash_circuit(cs, &bits)
         }
     }
 
-    fn hash_leaf_bits_circuit<E: JubjubEngine, CS: ConstraintSystem<E>>(
+    fn hash_leaf_bits_circuit<CS: ConstraintSystem<Bls12>>(
         cs: CS,
         left: &[boolean::Boolean],
         right: &[boolean::Boolean],
         _height: usize,
-        params: &E::Params,
-    ) -> ::std::result::Result<num::AllocatedNum<E>, SynthesisError> {
+    ) -> ::std::result::Result<num::AllocatedNum<Bls12>, SynthesisError> {
         let mut preimage: Vec<boolean::Boolean> = vec![];
         preimage.extend_from_slice(left);
         preimage.extend_from_slice(right);
 
-        Ok(
-            pedersen_hash_circuit::pedersen_hash(cs, Personalization::None, &preimage, params)?
-                .get_x()
-                .clone(),
-        )
+        Ok(pedersen_hash_circuit::pedersen_hash(
+            cs,
+            Personalization::None,
+            &preimage,
+            &*pedersen::JJ_PARAMS,
+        )?
+        .get_x()
+        .clone())
     }
 
-    fn hash_circuit<E: JubjubEngine, CS: ConstraintSystem<E>>(
+    fn hash_circuit<CS: ConstraintSystem<Bls12>>(
         cs: CS,
         bits: &[boolean::Boolean],
-        params: &E::Params,
-    ) -> std::result::Result<num::AllocatedNum<E>, SynthesisError> {
-        pedersen_md_no_padding(cs, params, bits)
+    ) -> std::result::Result<num::AllocatedNum<Bls12>, SynthesisError> {
+        pedersen_md_no_padding(cs, bits)
     }
 
-    fn hash2_circuit<E, CS>(
+    fn hash2_circuit<CS>(
         mut cs: CS,
-        a_num: &num::AllocatedNum<E>,
-        b_num: &num::AllocatedNum<E>,
-        params: &E::Params,
-    ) -> std::result::Result<num::AllocatedNum<E>, SynthesisError>
+        a_num: &num::AllocatedNum<Bls12>,
+        b_num: &num::AllocatedNum<Bls12>,
+    ) -> std::result::Result<num::AllocatedNum<Bls12>, SynthesisError>
     where
-        E: JubjubEngine,
-        CS: ConstraintSystem<E>,
+        CS: ConstraintSystem<Bls12>,
     {
         // Allocate as booleans
         let a = a_num.to_bits_le(cs.namespace(|| "a_bits"))?;
@@ -298,9 +298,9 @@ impl HashFunction<PedersenDomain> for PedersenFunction {
 
         if values.is_empty() {
             // can happen with small layers
-            num::AllocatedNum::alloc(cs.namespace(|| "pedersen_hash1"), || Ok(E::Fr::zero()))
+            num::AllocatedNum::alloc(cs.namespace(|| "pedersen_hash1"), || Ok(Fr::zero()))
         } else {
-            pedersen_compression_num(cs.namespace(|| "pedersen_hash1"), params, &values)
+            pedersen_compression_num(cs.namespace(|| "pedersen_hash1"), &values)
         }
     }
 }

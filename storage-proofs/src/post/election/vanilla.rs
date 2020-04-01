@@ -220,7 +220,7 @@ fn generate_candidate<H: Hasher>(
 }
 
 pub fn finalize_ticket(partial_ticket: &Fr) -> [u8; 32] {
-    let bytes = fr_into_bytes::<Bls12>(partial_ticket);
+    let bytes = fr_into_bytes(partial_ticket);
     let ticket_hash = Sha256::digest(&bytes);
     let mut ticket = [0u8; 32];
     ticket.copy_from_slice(&ticket_hash[..]);
@@ -482,7 +482,7 @@ mod tests {
         for i in 0..5 {
             sectors.push(i.into());
             let data: Vec<u8> = (0..leaves)
-                .flat_map(|_| fr_into_bytes::<Bls12>(&Fr::random(rng)))
+                .flat_map(|_| fr_into_bytes(&Fr::random(rng)))
                 .collect();
 
             let graph = BucketGraph::<H>::new(leaves, BASE_DEGREE, 0, new_seed()).unwrap();

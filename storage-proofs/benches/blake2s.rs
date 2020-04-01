@@ -2,7 +2,6 @@ use bellperson::gadgets::boolean::{self, Boolean};
 use bellperson::groth16::*;
 use bellperson::{Circuit, ConstraintSystem, SynthesisError};
 use criterion::{black_box, criterion_group, criterion_main, Criterion, ParameterizedBenchmark};
-use fil_sapling_crypto::jubjub::JubjubEngine;
 use paired::bls12_381::Bls12;
 use rand::{thread_rng, Rng};
 use storage_proofs::gadgets::BenchCS;
@@ -11,11 +10,8 @@ struct Blake2sExample<'a> {
     data: &'a [Option<bool>],
 }
 
-impl<'a, E> Circuit<E> for Blake2sExample<'a>
-where
-    E: JubjubEngine,
-{
-    fn synthesize<CS: ConstraintSystem<E>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
+impl<'a, Bls12> Circuit<Bls12> for Blake2sExample<'a> {
+    fn synthesize<CS: ConstraintSystem<Bls12>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
         let data: Vec<Boolean> = self
             .data
             .into_iter()
