@@ -262,8 +262,6 @@ struct SingleProof<H: Hasher, Arity: Unsigned> {
     leaf: H::Domain,
     /// The path from leaf to root.
     path: Vec<PathElement<H>>,
-    /// Total number of leafs in the merkle tree.
-    leaf_count: usize,
     #[serde(skip)]
     h: PhantomData<H>,
     #[serde(skip)]
@@ -271,17 +269,11 @@ struct SingleProof<H: Hasher, Arity: Unsigned> {
 }
 
 impl<H: Hasher, Arity: Unsigned> SingleProof<H, Arity> {
-    pub fn new(
-        root: H::Domain,
-        leaf: H::Domain,
-        path: Vec<PathElement<H>>,
-        leaf_count: usize,
-    ) -> Self {
+    pub fn new(root: H::Domain, leaf: H::Domain, path: Vec<PathElement<H>>) -> Self {
         SingleProof {
             root,
             leaf,
             path,
-            leaf_count,
             h: Default::default(),
             a: Default::default(),
         }
@@ -291,7 +283,7 @@ impl<H: Hasher, Arity: Unsigned> SingleProof<H, Arity> {
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
 struct SubProof<H: Hasher, BaseArity: Unsigned, SubTreeArity: Unsigned> {
     base_proof: SingleProof<H, BaseArity>,
-    top_proof: SingleProof<H, SubTreeArity>,
+    sub_proof: SingleProof<H, SubTreeArity>,
     #[serde(skip)]
     h: PhantomData<H>,
     #[serde(skip)]
@@ -301,11 +293,11 @@ struct SubProof<H: Hasher, BaseArity: Unsigned, SubTreeArity: Unsigned> {
 impl<H: Hasher, BaseArity: Unsigned, SubTreeArity: Unsigned> SubProof<H, BaseArity, SubTreeArity> {
     pub fn new(
         base_proof: SingleProof<H, BaseArity>,
-        top_proof: SingleProof<H, SubTreeArity>,
+        sub_proof: SingleProof<H, SubTreeArity>,
     ) -> Self {
         Self {
             base_proof,
-            top_proof,
+            sub_proof,
             h: Default::default(),
             b: Default::default(),
         }
@@ -341,74 +333,6 @@ impl<H: Hasher, BaseArity: Unsigned, SubTreeArity: Unsigned, TopTreeArity: Unsig
     }
 }
 
-// #[derive(Clone, Serialize, Deserialize)]
-// pub struct MerkleProof<
-//     H: Hasher,
-//     Arity: typenum::Unsigned,
-//     U: typenum::Unsigned = U0,
-//     V: typenum::Unsigned = U0,
-// > {
-//     #[serde(bound(
-//         serialize = "H::Domain: Serialize",
-//         deserialize = "H::Domain: Deserialize<'de>"
-//     ))]
-//     pub sub_tree_proof: Option<Box<MerkleProof<H, Arity, U, V>>>,
-
-//     top_layer_nodes: usize,
-//     sub_layer_nodes: usize,
-//     base_layer_nodes: usize,
-
-//     pub root: H::Domain,
-//     path: Vec<(Vec<H::Domain>, usize)>,
-//     leaf: H::Domain,
-
-//     #[serde(skip)]
-//     _h: PhantomData<H>,
-//     #[serde(skip)]
-//     _a: PhantomData<Arity>,
-//     #[serde(skip)]
-//     _u: PhantomData<U>,
-//     #[serde(skip)]
-//     _v: PhantomData<V>,
-// }
-
-// impl<H: Hasher, Arity: typenum::Unsigned, U: typenum::Unsigned, V: typenum::Unsigned>
-//     std::fmt::Debug for MerkleProof<H, Arity, U, V>
-// {
-//     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-//         f.debug_struct("MerkleProof")
-//             .field("sub_tree_proof", &self.sub_tree_proof)
-//             .field("root", &self.root)
-//             .field("path", &self.path)
-//             .field("leaf", &self.leaf)
-//             .field("H", &H::name())
-//             .field("Arity", &Arity::to_usize())
-//             .field("SubTreeArity", &U::to_usize())
-//             .field("TopTreeArity", &V::to_usize())
-//             .finish()
-//     }
-// }
-
-// pub fn make_proof_for_test<H: Hasher, Arity: typenum::Unsigned>(
-//     root: H::Domain,
-//     leaf: H::Domain,
-//     path: Vec<(Vec<H::Domain>, usize)>,
-// ) -> MerkleProof<H, Arity> {
-//     MerkleProof {
-//         sub_tree_proof: None,
-//         base_layer_nodes: 0,
-//         top_layer_nodes: 0,
-//         sub_layer_nodes: 0,
-//         path,
-//         root,
-//         leaf,
-//         _h: PhantomData,
-//         _a: PhantomData,
-//         _u: PhantomData,
-//         _v: PhantomData,
-//     }
-// }
-
 impl<
         H: Hasher,
         BaseArity: typenum::Unsigned,
@@ -416,43 +340,52 @@ impl<
         TopTreeArity: typenum::Unsigned,
     > MerkleProof<H, BaseArity, SubTreeArity, TopTreeArity>
 {
-    // pub fn new(n: usize) -> Self {
-    //     MerkleProof {
-    //         sub_tree_proof: None,
-    //         base_layer_nodes: 0,
-    //         top_layer_nodes: 0,
-    //         sub_layer_nodes: 0,
-    //         root: Default::default(),
-    //         path: vec![(Default::default(), 0); n],
-    //         leaf: Default::default(),
-    //         _h: PhantomData,
-    //         _a: PhantomData,
-    //         _u: PhantomData,
-    //         _v: PhantomData,
-    //     }
-    // }
+    pub fn new_from_proof(p: &proof::Proof<H::Domain, BaseArity>) -> Self {
+        let extract_path = |lemma, path| {
+            lemma[1..lemma.len() - 1]
+                .chunks(BaseArity::to_usize() - 1)
+                .zip(path.iter())
+                .map(|(hashes, index)| PathElement {
+                    hashes: hashes.to_vec(),
+                    index: *index,
+                })
+                .collect::<Vec<_>>()
+        };
 
-    // pub fn new_from_proof(p: &proof::Proof<H::Domain, Arity>) -> Self {
-    //     let lemma = p.lemma();
+        if p.top_layer_nodes > 0 {
+            // Generate TopProof
 
-    //     MerkleProof {
-    //         sub_tree_proof: None,
-    //         base_layer_nodes: 0,
-    //         top_layer_nodes: 0,
-    //         sub_layer_nodes: 0,
-    //         path: lemma[1..lemma.len() - 1]
-    //             .chunks(Arity::to_usize() - 1)
-    //             .map(|chunk| chunk.to_vec())
-    //             .zip(p.path().iter().copied())
-    //             .collect::<Vec<_>>(),
-    //         root: p.root(),
-    //         leaf: p.item(),
-    //         _h: PhantomData,
-    //         _a: PhantomData,
-    //         _u: PhantomData,
-    //         _v: PhantomData,
-    //     }
-    // }
+            // TODO:
+            let base_proof = SingleProof::new(root, leaf, path);
+            let sub_proof = SingleProof::new(root, leaf, path);
+            let top_proof = SingleProof::new(root, leaf, path);
+            let proof = TopProof::new(base_proof, sub_proof, top_proof);
+            MerkleProof {
+                data: ProofData::Top(proof),
+            }
+        } else if p.sub_tree_layer_nodes > 0 {
+            // Generate SubProof
+
+            // TODO:
+            let base_proof = SingleProof::new(root, leaf, path);
+            let sub_proof = SingleProof::new(root, leaf, path);
+
+            let proof = SubProof::new(base_proof, sub_proof);
+
+            MerkleProof {
+                data: ProofData::Sub(proof),
+            }
+        } else {
+            // Generate SingleProof
+            let root = p.root();
+            let leaf = p.item();
+            let path = extract_path(p.lemma(), p.path);
+            let proof = SingleProof::new(root, leaf, path);
+            MerkleProof {
+                data: ProofData::Single(proof),
+            }
+        }
+    }
 
     // pub fn new_from_sub_proof(
     //     p: &proof::Proof<H::Domain, Arity>,
