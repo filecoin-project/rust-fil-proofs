@@ -3,7 +3,7 @@ use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
 
 use anyhow::Context;
-use generic_array::typenum;
+use generic_array::typenum::{self, Unsigned};
 use log::trace;
 use merkletree::merkle::get_merkle_tree_leafs;
 use merkletree::store::{DiskStore, Store, StoreConfig};
@@ -18,13 +18,9 @@ use crate::drgraph::Graph;
 use crate::error::Result;
 use crate::fr32::bytes_into_fr_repr_safe;
 use crate::hasher::{Domain, Hasher};
-use crate::merkle::{open_lcmerkle_tree, LCMerkleTree, MerkleProof, MerkleTree};
+use crate::merkle::*;
 use crate::parameter_cache::ParameterSetMetadata;
 use crate::util::data_at_node;
-
-pub type BinaryTree<H> = MerkleTree<<H as Hasher>::Domain, <H as Hasher>::Function, typenum::U2>;
-pub type OctTree<H> = MerkleTree<<H as Hasher>::Domain, <H as Hasher>::Function, typenum::U8>;
-pub type OctLCTree<H> = LCMerkleTree<<H as Hasher>::Domain, <H as Hasher>::Function, typenum::U8>;
 
 pub const BINARY_ARITY: usize = 2;
 pub const QUAD_ARITY: usize = 4;
@@ -46,38 +42,52 @@ pub struct SetupParams {
     pub layer_challenges: LayerChallenges,
 }
 
-#[derive(Debug, Clone)]
-pub struct PublicParams<H>
+#[derive(Debug)]
+pub struct PublicParams<Tree>
 where
-    H: 'static + Hasher,
+    Tree: 'static + MerkleTreeTrait,
 {
-    pub graph: StackedBucketGraph<H>,
+    pub graph: StackedBucketGraph<Tree::Hasher>,
     pub layer_challenges: LayerChallenges,
-    _h: PhantomData<H>,
+    _t: PhantomData<Tree>,
 }
 
-impl<H> PublicParams<H>
+impl<Tree> Clone for PublicParams<Tree>
 where
-    H: Hasher,
+    Tree: MerkleTreeTrait,
 {
-    pub fn new(graph: StackedBucketGraph<H>, layer_challenges: LayerChallenges) -> Self {
-        PublicParams {
-            graph,
-            layer_challenges,
-            _h: PhantomData,
+    fn clone(&self) -> Self {
+        Self {
+            graph: self.graph.clone(),
+            layer_challenges: self.layer_challenges.clone(),
+            _t: Default::default(),
         }
     }
 }
 
-impl<H> ParameterSetMetadata for PublicParams<H>
+impl<Tree> PublicParams<Tree>
 where
-    H: Hasher,
+    Tree: MerkleTreeTrait,
+{
+    pub fn new(graph: StackedBucketGraph<Tree::Hasher>, layer_challenges: LayerChallenges) -> Self {
+        PublicParams {
+            graph,
+            layer_challenges,
+            _t: PhantomData,
+        }
+    }
+}
+
+impl<Tree> ParameterSetMetadata for PublicParams<Tree>
+where
+    Tree: MerkleTreeTrait,
 {
     fn identifier(&self) -> String {
         format!(
-            "layered_drgporep::PublicParams{{ graph: {}, challenges: {:?} }}",
+            "layered_drgporep::PublicParams{{ graph: {}, challenges: {:?}, tree: {} }}",
             self.graph.identifier(),
             self.layer_challenges,
+            Tree::display()
         )
     }
 
@@ -86,11 +96,11 @@ where
     }
 }
 
-impl<'a, H> From<&'a PublicParams<H>> for PublicParams<H>
+impl<'a, Tree> From<&'a PublicParams<Tree>> for PublicParams<Tree>
 where
-    H: Hasher,
+    Tree: MerkleTreeTrait,
 {
-    fn from(other: &PublicParams<H>) -> PublicParams<H> {
+    fn from(other: &PublicParams<Tree>) -> PublicParams<Tree> {
         PublicParams::new(other.graph.clone(), other.layer_challenges.clone())
     }
 }
@@ -118,57 +128,72 @@ impl<T: Domain, S: Domain> PublicInputs<T, S> {
 }
 
 #[derive(Debug)]
-pub struct PrivateInputs<H: Hasher, G: Hasher> {
-    pub p_aux: PersistentAux<H::Domain>,
-    pub t_aux: TemporaryAuxCache<H, G>,
+pub struct PrivateInputs<Tree: MerkleTreeTrait, G: Hasher> {
+    pub p_aux: PersistentAux<<Tree::Hasher as Hasher>::Domain>,
+    pub t_aux: TemporaryAuxCache<Tree, G>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Proof<H: Hasher, G: Hasher> {
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Proof<Tree: MerkleTreeTrait, G: Hasher> {
     #[serde(bound(
         serialize = "MerkleProof<G, typenum::U2>: Serialize",
         deserialize = "MerkleProof<G, typenum::U2>: Deserialize<'de>"
     ))]
     pub comm_d_proofs: MerkleProof<G, typenum::U2>,
     #[serde(bound(
-        serialize = "MerkleProof<H, typenum::U8>: Serialize, ColumnProof<H>: Serialize",
-        deserialize = "MerkleProof<H, typenum::U8>: Deserialize<'de>, ColumnProof<H>: Deserialize<'de>"
+        serialize = "MerkleProof<Tree::Hasher, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>: Serialize",
+        deserialize = "MerkleProof<Tree::Hasher, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>: Deserialize<'de>"
     ))]
-    pub comm_r_last_proof: MerkleProof<H, typenum::U8>,
+    pub comm_r_last_proof:
+        MerkleProof<Tree::Hasher, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>,
     #[serde(bound(
-        serialize = "ReplicaColumnProof<H>: Serialize",
-        deserialize = "ReplicaColumnProof<H>: Deserialize<'de>"
+        serialize = "ReplicaColumnProof<MerkleProof<Tree::Hasher, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>,>: Serialize",
+        deserialize = "ReplicaColumnProof<MerkleProof<Tree::Hasher, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>>: Deserialize<'de>"
     ))]
-    pub replica_column_proofs: ReplicaColumnProof<H>,
+    pub replica_column_proofs: ReplicaColumnProof<
+        MerkleProof<Tree::Hasher, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>,
+    >,
     #[serde(bound(
-        serialize = "LabelingProof<H>: Serialize",
-        deserialize = "LabelingProof<H>: Deserialize<'de>"
+        serialize = "LabelingProof<Tree::Hasher>: Serialize",
+        deserialize = "LabelingProof<Tree::Hasher>: Deserialize<'de>"
     ))]
     /// Indexed by layer in 1..layers.
-    pub labeling_proofs: HashMap<usize, LabelingProof<H>>,
+    pub labeling_proofs: HashMap<usize, LabelingProof<Tree::Hasher>>,
     #[serde(bound(
-        serialize = "EncodingProof<H>: Serialize",
-        deserialize = "EncodingProof<H>: Deserialize<'de>"
+        serialize = "EncodingProof<Tree::Hasher>: Serialize",
+        deserialize = "EncodingProof<Tree::Hasher>: Deserialize<'de>"
     ))]
-    pub encoding_proof: EncodingProof<H>,
+    pub encoding_proof: EncodingProof<Tree::Hasher>,
 }
 
-impl<H: Hasher, G: Hasher> Proof<H, G> {
-    pub fn comm_r_last(&self) -> &H::Domain {
+impl<Tree: MerkleTreeTrait, G: Hasher> Clone for Proof<Tree, G> {
+    fn clone(&self) -> Self {
+        Self {
+            comm_d_proofs: self.comm_d_proofs.clone(),
+            comm_r_last_proof: self.comm_r_last_proof.clone(),
+            replica_column_proofs: self.replica_column_proofs.clone(),
+            labeling_proofs: self.labeling_proofs.clone(),
+            encoding_proof: self.encoding_proof.clone(),
+        }
+    }
+}
+
+impl<Tree: MerkleTreeTrait, G: Hasher> Proof<Tree, G> {
+    pub fn comm_r_last(&self) -> <Tree::Hasher as Hasher>::Domain {
         self.comm_r_last_proof.root()
     }
 
-    pub fn comm_c(&self) -> &H::Domain {
+    pub fn comm_c(&self) -> <Tree::Hasher as Hasher>::Domain {
         self.replica_column_proofs.c_x.root()
     }
 
     /// Verify the full proof.
     pub fn verify(
         &self,
-        pub_params: &PublicParams<H>,
-        pub_inputs: &PublicInputs<<H as Hasher>::Domain, <G as Hasher>::Domain>,
+        pub_params: &PublicParams<Tree>,
+        pub_inputs: &PublicInputs<<Tree::Hasher as Hasher>::Domain, <G as Hasher>::Domain>,
         challenge: usize,
-        graph: &StackedBucketGraph<H>,
+        graph: &StackedBucketGraph<Tree::Hasher>,
     ) -> bool {
         let replica_id = &pub_inputs.replica_id;
 
@@ -181,7 +206,7 @@ impl<H: Hasher, G: Hasher> Proof<H, G> {
         check!(self.comm_d_proofs.proves_challenge(challenge));
 
         if let Some(ref tau) = pub_inputs.tau {
-            check_eq!(self.comm_d_proofs.root(), &tau.comm_d);
+            check_eq!(&self.comm_d_proofs.root(), &tau.comm_d);
         } else {
             return false;
         }
@@ -197,6 +222,7 @@ impl<H: Hasher, G: Hasher> Proof<H, G> {
         check!(self.verify_labels(replica_id, &pub_params.layer_challenges));
 
         trace!("verify encoding");
+
         check!(self.encoding_proof.verify::<G>(
             replica_id,
             &self.comm_r_last_proof.leaf(),
@@ -207,7 +233,11 @@ impl<H: Hasher, G: Hasher> Proof<H, G> {
     }
 
     /// Verify all labels.
-    fn verify_labels(&self, replica_id: &H::Domain, layer_challenges: &LayerChallenges) -> bool {
+    fn verify_labels(
+        &self,
+        replica_id: &<Tree::Hasher as Hasher>::Domain,
+        layer_challenges: &LayerChallenges,
+    ) -> bool {
         // Verify Labels Layer 1..layers
         for layer in 1..=layer_challenges.layers() {
             trace!("verify labeling (layer: {})", layer,);
@@ -235,25 +265,25 @@ impl<H: Hasher, G: Hasher> Proof<H, G> {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ReplicaColumnProof<H: Hasher> {
+pub struct ReplicaColumnProof<Proof: MerkleProofTrait> {
     #[serde(bound(
-        serialize = "ColumnProof<H>: Serialize",
-        deserialize = "ColumnProof<H>: Deserialize<'de>"
+        serialize = "ColumnProof<Proof>: Serialize",
+        deserialize = "ColumnProof<Proof>: Deserialize<'de>"
     ))]
-    pub c_x: ColumnProof<H>,
+    pub c_x: ColumnProof<Proof>,
     #[serde(bound(
-        serialize = "ColumnProof<H>: Serialize",
-        deserialize = "ColumnProof<H>: Deserialize<'de>"
+        serialize = "ColumnProof<Proof>: Serialize",
+        deserialize = "ColumnProof<Proof>: Deserialize<'de>"
     ))]
-    pub drg_parents: Vec<ColumnProof<H>>,
+    pub drg_parents: Vec<ColumnProof<Proof>>,
     #[serde(bound(
-        serialize = "ColumnProof<H>: Serialize",
-        deserialize = "ColumnProof<H>: Deserialize<'de>"
+        serialize = "ColumnProof<Proof>: Serialize",
+        deserialize = "ColumnProof<Proof>: Deserialize<'de>"
     ))]
-    pub exp_parents: Vec<ColumnProof<H>>,
+    pub exp_parents: Vec<ColumnProof<Proof>>,
 }
 
-impl<H: Hasher> ReplicaColumnProof<H> {
+impl<Proof: MerkleProofTrait> ReplicaColumnProof<Proof> {
     pub fn verify(&self, challenge: usize, parents: &[u32]) -> bool {
         let expected_comm_c = self.c_x.root();
 
@@ -278,16 +308,10 @@ impl<H: Hasher> ReplicaColumnProof<H> {
     }
 }
 
-impl<H: Hasher, G: Hasher> Proof<H, G> {
-    pub fn serialize(&self) -> Vec<u8> {
-        unimplemented!();
-    }
-}
-
-pub type TransformedLayers<H, G> = (
-    Tau<<H as Hasher>::Domain, <G as Hasher>::Domain>,
-    PersistentAux<<H as Hasher>::Domain>,
-    TemporaryAux<H, G>,
+pub type TransformedLayers<Tree, G> = (
+    Tau<<<Tree as MerkleTreeTrait>::Hasher as Hasher>::Domain, <G as Hasher>::Domain>,
+    PersistentAux<<<Tree as MerkleTreeTrait>::Hasher as Hasher>::Domain>,
+    TemporaryAux<Tree, G>,
 );
 
 /// Tau for a single parition.
@@ -304,17 +328,33 @@ pub struct PersistentAux<D> {
     pub comm_r_last: D,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TemporaryAux<H: Hasher, G: Hasher> {
+#[derive(Debug, Serialize, Deserialize)]
+pub struct TemporaryAux<Tree: MerkleTreeTrait, G: Hasher> {
     /// The encoded nodes for 1..layers.
-    pub labels: Labels<H>,
+    #[serde(bound(
+        serialize = "StoreConfig: Serialize",
+        deserialize = "StoreConfig: Deserialize<'de>"
+    ))]
+    pub labels: Labels<Tree>,
     pub tree_d_config: StoreConfig,
     pub tree_r_last_config: StoreConfig,
     pub tree_c_config: StoreConfig,
     pub _g: PhantomData<G>,
 }
 
-impl<H: Hasher, G: Hasher> TemporaryAux<H, G> {
+impl<Tree: MerkleTreeTrait, G: Hasher> Clone for TemporaryAux<Tree, G> {
+    fn clone(&self) -> Self {
+        Self {
+            labels: self.labels.clone(),
+            tree_d_config: self.tree_d_config.clone(),
+            tree_r_last_config: self.tree_r_last_config.clone(),
+            tree_c_config: self.tree_c_config.clone(),
+            _g: Default::default(),
+        }
+    }
+}
+
+impl<Tree: MerkleTreeTrait, G: Hasher> TemporaryAux<Tree, G> {
     pub fn set_cache_path<P: AsRef<Path>>(&mut self, cache_path: P) {
         let cp = cache_path.as_ref().to_path_buf();
         for label in self.labels.labels.iter_mut() {
@@ -325,21 +365,28 @@ impl<H: Hasher, G: Hasher> TemporaryAux<H, G> {
         self.tree_c_config.path = cp;
     }
 
-    pub fn labels_for_layer(&self, layer: usize) -> Result<DiskStore<H::Domain>> {
+    pub fn labels_for_layer(
+        &self,
+        layer: usize,
+    ) -> Result<DiskStore<<Tree::Hasher as Hasher>::Domain>> {
         self.labels.labels_for_layer(layer)
     }
 
-    pub fn domain_node_at_layer(&self, layer: usize, node_index: u32) -> Result<H::Domain> {
+    pub fn domain_node_at_layer(
+        &self,
+        layer: usize,
+        node_index: u32,
+    ) -> Result<<Tree::Hasher as Hasher>::Domain> {
         Ok(self.labels_for_layer(layer)?.read_at(node_index as usize)?)
     }
 
-    pub fn column(&self, column_index: u32) -> Result<Column<H>> {
+    pub fn column(&self, column_index: u32) -> Result<Column<Tree::Hasher>> {
         self.labels.column(column_index)
     }
 
     // 'clear_temp' will discard all persisted merkle and layer data
     // that is no longer required.
-    pub fn clear_temp(t_aux: TemporaryAux<H, G>) -> Result<()> {
+    pub fn clear_temp(t_aux: TemporaryAux<Tree, G>) -> Result<()> {
         let cached = |config: &StoreConfig| {
             Path::new(&StoreConfig::data_path(&config.path, &config.id)).exists()
         };
@@ -352,11 +399,13 @@ impl<H: Hasher, G: Hasher> TemporaryAux<H, G> {
             let tree_d_store: DiskStore<G::Domain> =
                 DiskStore::new_from_disk(tree_d_size, BINARY_ARITY, &t_aux.tree_d_config)
                     .context("tree_d")?;
-            let tree_d: BinaryTree<G> = MerkleTree::from_data_store(
+            // Note: from_data_store requires the base tree leaf count
+            let tree_d = BinaryMerkleTree::<G>::from_data_store(
                 tree_d_store,
                 get_merkle_tree_leafs(tree_d_size, BINARY_ARITY),
             )
             .context("tree_d")?;
+
             tree_d.delete(t_aux.tree_d_config).context("tree_d")?;
             trace!("tree d deleted");
         }
@@ -366,22 +415,36 @@ impl<H: Hasher, G: Hasher> TemporaryAux<H, G> {
                 .tree_c_config
                 .size
                 .context("tree_c config has no size")?;
-            let tree_c_store: DiskStore<H::Domain> =
-                DiskStore::new_from_disk(tree_c_size, OCT_ARITY, &t_aux.tree_c_config)
-                    .context("tree_c")?;
-            let tree_c: OctTree<H> = MerkleTree::from_data_store(
-                tree_c_store,
-                get_merkle_tree_leafs(tree_c_size, OCT_ARITY),
-            )
-            .context("tree_c")?;
-            tree_c.delete(t_aux.tree_c_config).context("tree_c")?;
+
+            let tree_count = get_base_tree_count::<Tree>();
+            let configs = split_config(t_aux.tree_c_config.clone(), tree_count)?;
+            for config in &configs {
+                let tree_c_store = DiskStore::<<Tree::Hasher as Hasher>::Domain>::new_from_disk(
+                    tree_c_size,
+                    Tree::Arity::to_usize(),
+                    &config,
+                )
+                .context("tree_c")?;
+                // Note: from_data_store requires the base tree leaf count
+                let tree_c = DiskTree::<
+                    Tree::Hasher,
+                    Tree::Arity,
+                    Tree::SubTreeArity,
+                    Tree::TopTreeArity,
+                >::from_data_store(
+                    tree_c_store,
+                    get_merkle_tree_leafs(tree_c_size, Tree::Arity::to_usize()),
+                )
+                .context("tree_c")?;
+                tree_c.delete(config.clone()).context("tree_c")?;
+            }
             trace!("tree c deleted");
         }
 
         for i in 0..t_aux.labels.labels.len() {
             let cur_config = t_aux.labels.labels[i].clone();
             if cached(&cur_config) {
-                DiskStore::<H::Domain>::delete(cur_config)
+                DiskStore::<<Tree::Hasher as Hasher>::Domain>::delete(cur_config)
                     .with_context(|| format!("labels {}", i))?;
                 trace!("layer {} deleted", i);
             }
@@ -392,68 +455,74 @@ impl<H: Hasher, G: Hasher> TemporaryAux<H, G> {
 }
 
 #[derive(Debug)]
-pub struct TemporaryAuxCache<H: Hasher, G: Hasher> {
+pub struct TemporaryAuxCache<Tree: MerkleTreeTrait, G: Hasher> {
     /// The encoded nodes for 1..layers.
-    pub labels: LabelsCache<H>,
-    pub tree_d: BinaryTree<G>,
+    pub labels: LabelsCache<Tree>,
+    pub tree_d: BinaryMerkleTree<G>,
 
     // Notably this is a LevelCacheTree instead of a full merkle.
-    pub tree_r_last: OctLCTree<H>,
+    pub tree_r_last: LCTree<Tree::Hasher, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>,
 
     // Store the 'cached_above_base layers' value from the tree_r_last
     // StoreConfig for later use (i.e. proof generation).
     pub tree_r_last_config_levels: usize,
 
-    pub tree_c: OctTree<H>,
-    pub t_aux: TemporaryAux<H, G>,
+    pub tree_c: DiskTree<Tree::Hasher, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>,
+    pub t_aux: TemporaryAux<Tree, G>,
     pub replica_path: PathBuf,
 }
 
-impl<H: Hasher, G: Hasher> TemporaryAuxCache<H, G> {
-    pub fn new(t_aux: &TemporaryAux<H, G>, replica_path: PathBuf) -> Result<Self> {
+impl<Tree: MerkleTreeTrait, G: Hasher> TemporaryAuxCache<Tree, G> {
+    pub fn new(t_aux: &TemporaryAux<Tree, G>, replica_path: PathBuf) -> Result<Self> {
+        // tree_d_size stored in the config is the base tree size
         let tree_d_size = t_aux.tree_d_config.size.unwrap();
+        let tree_d_leafs = get_merkle_tree_leafs(tree_d_size, BINARY_ARITY);
         trace!(
             "Instantiating tree d with size {} and leafs {}",
             tree_d_size,
-            get_merkle_tree_leafs(tree_d_size, BINARY_ARITY)
+            tree_d_leafs,
         );
         let tree_d_store: DiskStore<G::Domain> =
             DiskStore::new_from_disk(tree_d_size, BINARY_ARITY, &t_aux.tree_d_config)
                 .context("tree_d_store")?;
-        let tree_d: BinaryTree<G> = MerkleTree::from_data_store(
-            tree_d_store,
-            get_merkle_tree_leafs(tree_d_size, BINARY_ARITY),
-        )
-        .context("tree_d")?;
+        let tree_d =
+            BinaryMerkleTree::<G>::from_data_store(tree_d_store, tree_d_leafs).context("tree_d")?;
 
+        let tree_count = get_base_tree_count::<Tree>();
+        let configs = split_config(t_aux.tree_c_config.clone(), tree_count)?;
+
+        // tree_c_size stored in the config is the base tree size
         let tree_c_size = t_aux.tree_c_config.size.unwrap();
         trace!(
-            "Instantiating tree c with size {} and leafs {}",
+            "Instantiating tree c [count {}] with size {} and arity {}",
+            tree_count,
             tree_c_size,
-            get_merkle_tree_leafs(tree_c_size, OCT_ARITY)
+            Tree::Arity::to_usize(),
         );
-        let tree_c_store: DiskStore<H::Domain> =
-            DiskStore::new_from_disk(tree_c_size, OCT_ARITY, &t_aux.tree_c_config)
-                .context("tree_c_store")?;
-        let tree_c: OctTree<H> = MerkleTree::from_data_store(
-            tree_c_store,
-            get_merkle_tree_leafs(tree_c_size, OCT_ARITY),
-        )
-        .context("tree_c")?;
+        let tree_c = create_disk_tree::<
+            DiskTree<Tree::Hasher, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>,
+        >(tree_c_size, &configs)?;
 
-        let tree_r_last_size = t_aux.tree_r_last_config.size.unwrap();
-        trace!(
-            "Instantiating tree r last with size {} and leafs {}",
-            tree_r_last_size,
-            get_merkle_tree_leafs(tree_r_last_size, OCT_ARITY)
-        );
-
-        let tree_r_last: OctLCTree<H> = open_lcmerkle_tree::<H, typenum::U8>(
+        let (configs, replica_paths) = split_config_and_replica(
             t_aux.tree_r_last_config.clone(),
-            get_merkle_tree_leafs(tree_r_last_size, OCT_ARITY),
-            &replica_path,
+            replica_path.clone(),
+            tree_count,
         )?;
+
+        // tree_c_size stored in the config is the base tree size
+        let tree_r_last_size = t_aux.tree_r_last_config.size.unwrap();
         let tree_r_last_config_levels = t_aux.tree_r_last_config.levels;
+        trace!(
+            "Instantiating tree r last [count {}] with size {} and arity {}, {}, {}",
+            tree_count,
+            tree_r_last_size,
+            Tree::Arity::to_usize(),
+            Tree::SubTreeArity::to_usize(),
+            Tree::TopTreeArity::to_usize(),
+        );
+        let tree_r_last = create_lc_tree::<
+            LCTree<Tree::Hasher, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>,
+        >(tree_r_last_size, &configs, &replica_paths)?;
 
         Ok(TemporaryAuxCache {
             labels: LabelsCache::new(&t_aux.labels).context("labels_cache")?,
@@ -466,28 +535,45 @@ impl<H: Hasher, G: Hasher> TemporaryAuxCache<H, G> {
         })
     }
 
-    pub fn labels_for_layer(&self, layer: usize) -> &DiskStore<H::Domain> {
+    pub fn labels_for_layer(&self, layer: usize) -> &DiskStore<<Tree::Hasher as Hasher>::Domain> {
         self.labels.labels_for_layer(layer)
     }
 
-    pub fn domain_node_at_layer(&self, layer: usize, node_index: u32) -> Result<H::Domain> {
+    pub fn domain_node_at_layer(
+        &self,
+        layer: usize,
+        node_index: u32,
+    ) -> Result<<Tree::Hasher as Hasher>::Domain> {
         Ok(self.labels_for_layer(layer).read_at(node_index as usize)?)
     }
 
-    pub fn column(&self, column_index: u32) -> Result<Column<H>> {
+    pub fn column(&self, column_index: u32) -> Result<Column<Tree::Hasher>> {
         self.labels.column(column_index)
     }
 }
 
 type VerifyCallback = fn(&StoreConfig, usize) -> Result<()>;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Labels<H: Hasher> {
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Labels<Tree: MerkleTreeTrait> {
+    #[serde(bound(
+        serialize = "StoreConfig: Serialize",
+        deserialize = "StoreConfig: Deserialize<'de>"
+    ))]
     pub labels: Vec<StoreConfig>,
-    pub _h: PhantomData<H>,
+    pub _h: PhantomData<Tree>,
 }
 
-impl<H: Hasher> Labels<H> {
+impl<Tree: MerkleTreeTrait> Clone for Labels<Tree> {
+    fn clone(&self) -> Self {
+        Self {
+            labels: self.labels.clone(),
+            _h: Default::default(),
+        }
+    }
+}
+
+impl<Tree: MerkleTreeTrait> Labels<Tree> {
     pub fn new(labels: Vec<StoreConfig>) -> Self {
         Labels {
             labels,
@@ -513,7 +599,10 @@ impl<H: Hasher> Labels<H> {
         Ok(())
     }
 
-    pub fn labels_for_layer(&self, layer: usize) -> Result<DiskStore<H::Domain>> {
+    pub fn labels_for_layer(
+        &self,
+        layer: usize,
+    ) -> Result<DiskStore<<Tree::Hasher as Hasher>::Domain>> {
         assert!(layer != 0, "Layer cannot be 0");
         assert!(
             layer <= self.layers(),
@@ -526,11 +615,11 @@ impl<H: Hasher> Labels<H> {
         let config = self.labels[row_index].clone();
         assert!(config.size.is_some());
 
-        DiskStore::new_from_disk(config.size.unwrap(), OCT_ARITY, &config)
+        DiskStore::new_from_disk(config.size.unwrap(), Tree::Arity::to_usize(), &config)
     }
 
     /// Returns label for the last layer.
-    pub fn labels_for_last_layer(&self) -> Result<DiskStore<H::Domain>> {
+    pub fn labels_for_last_layer(&self) -> Result<DiskStore<<Tree::Hasher as Hasher>::Domain>> {
         self.labels_for_layer(self.labels.len() - 1)
     }
 
@@ -540,13 +629,14 @@ impl<H: Hasher> Labels<H> {
     }
 
     /// Build the column for the given node.
-    pub fn column(&self, node: u32) -> Result<Column<H>> {
+    pub fn column(&self, node: u32) -> Result<Column<Tree::Hasher>> {
         let rows = self
             .labels
             .iter()
             .map(|label| {
                 assert!(label.size.is_some());
-                let store = DiskStore::new_from_disk(label.size.unwrap(), OCT_ARITY, &label)?;
+                let store =
+                    DiskStore::new_from_disk(label.size.unwrap(), Tree::Arity::to_usize(), &label)?;
                 store.read_at(node as usize)
             })
             .collect::<Result<_>>()?;
@@ -563,21 +653,20 @@ impl<H: Hasher> Labels<H> {
 }
 
 #[derive(Debug)]
-pub struct LabelsCache<H: Hasher> {
-    pub labels: Vec<DiskStore<H::Domain>>,
-    pub _h: PhantomData<H>,
+pub struct LabelsCache<Tree: MerkleTreeTrait> {
+    pub labels: Vec<DiskStore<<Tree::Hasher as Hasher>::Domain>>,
 }
 
-impl<H: Hasher> LabelsCache<H> {
-    pub fn new(labels: &Labels<H>) -> Result<Self> {
-        let mut disk_store_labels: Vec<DiskStore<H::Domain>> = Vec::with_capacity(labels.len());
+impl<Tree: MerkleTreeTrait> LabelsCache<Tree> {
+    pub fn new(labels: &Labels<Tree>) -> Result<Self> {
+        let mut disk_store_labels: Vec<DiskStore<<Tree::Hasher as Hasher>::Domain>> =
+            Vec::with_capacity(labels.len());
         for i in 0..labels.len() {
             disk_store_labels.push(labels.labels_for_layer(i + 1)?);
         }
 
         Ok(LabelsCache {
             labels: disk_store_labels,
-            _h: PhantomData,
         })
     }
 
@@ -589,7 +678,7 @@ impl<H: Hasher> LabelsCache<H> {
         self.labels.is_empty()
     }
 
-    pub fn labels_for_layer(&self, layer: usize) -> &DiskStore<H::Domain> {
+    pub fn labels_for_layer(&self, layer: usize) -> &DiskStore<<Tree::Hasher as Hasher>::Domain> {
         assert!(layer != 0, "Layer cannot be 0");
         assert!(
             layer <= self.layers(),
@@ -603,7 +692,7 @@ impl<H: Hasher> LabelsCache<H> {
     }
 
     /// Returns the labels on the last layer.
-    pub fn labels_for_last_layer(&self) -> Result<&DiskStore<H::Domain>> {
+    pub fn labels_for_last_layer(&self) -> Result<&DiskStore<<Tree::Hasher as Hasher>::Domain>> {
         Ok(&self.labels[self.labels.len() - 1])
     }
 
@@ -613,7 +702,7 @@ impl<H: Hasher> LabelsCache<H> {
     }
 
     /// Build the column for the given node.
-    pub fn column(&self, node: u32) -> Result<Column<H>> {
+    pub fn column(&self, node: u32) -> Result<Column<Tree::Hasher>> {
         let rows = self
             .labels
             .iter()

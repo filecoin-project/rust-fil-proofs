@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use storage_proofs::hasher::Hasher;
 use storage_proofs::porep::stacked;
 
-use crate::constants::{DefaultPieceHasher, DefaultTreeDomain, DefaultTreeHasher};
+use crate::constants::*;
 
 mod bytes_amount;
 mod piece_info;
@@ -24,16 +24,18 @@ pub use self::sector_size::*;
 
 pub type Commitment = [u8; 32];
 pub type ChallengeSeed = [u8; 32];
-pub type PersistentAux = stacked::PersistentAux<DefaultTreeDomain>;
-pub type TemporaryAux = stacked::TemporaryAux<DefaultTreeHasher, DefaultPieceHasher>;
+pub use stacked::PersistentAux;
+pub use stacked::TemporaryAux;
 pub type ProverId = [u8; 32];
 pub type Ticket = [u8; 32];
 
-pub type Tree = storage_proofs::porep::stacked::OctTree<DefaultTreeHasher>;
-pub type LCTree = storage_proofs::porep::stacked::OctLCTree<DefaultTreeHasher>;
+pub type Tree = storage_proofs::merkle::OctMerkleTree<DefaultTreeHasher>;
+pub type LCTree = storage_proofs::merkle::OctLCMerkleTree<DefaultTreeHasher>;
 
-pub type Labels = storage_proofs::porep::stacked::Labels<DefaultTreeHasher>;
-pub type DataTree = storage_proofs::porep::stacked::BinaryTree<DefaultPieceHasher>;
+pub use storage_proofs::porep::stacked::Labels;
+pub type DataTree = storage_proofs::merkle::BinaryMerkleTree<DefaultPieceHasher>;
+
+pub use storage_proofs::merkle::MerkleTreeTrait;
 
 /// Arity for oct trees, used for comm_r_last.
 pub const OCT_ARITY: usize = 8;
@@ -47,15 +49,14 @@ pub struct SealPreCommitOutput {
     pub comm_d: Commitment,
 }
 
-pub type VanillaSealProof =
-    storage_proofs::porep::stacked::Proof<DefaultTreeHasher, DefaultPieceHasher>;
+pub type VanillaSealProof<Tree> = storage_proofs::porep::stacked::Proof<Tree, DefaultPieceHasher>;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct SealCommitPhase1Output {
-    pub vanilla_proofs: Vec<Vec<VanillaSealProof>>,
+pub struct SealCommitPhase1Output<Tree: MerkleTreeTrait> {
+    pub vanilla_proofs: Vec<Vec<VanillaSealProof<Tree>>>,
     pub comm_r: Commitment,
     pub comm_d: Commitment,
-    pub replica_id: <DefaultTreeHasher as Hasher>::Domain,
+    pub replica_id: <Tree::Hasher as Hasher>::Domain,
     pub seed: Ticket,
     pub ticket: Ticket,
 }
@@ -68,8 +69,8 @@ pub struct SealCommitOutput {
 pub use merkletree::store::StoreConfig;
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct SealPreCommitPhase1Output {
-    pub labels: Labels,
+pub struct SealPreCommitPhase1Output<Tree: MerkleTreeTrait> {
+    pub labels: Labels<Tree>,
     pub config: StoreConfig,
     pub comm_d: Commitment,
 }

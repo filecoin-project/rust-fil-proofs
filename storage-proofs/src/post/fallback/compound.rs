@@ -2,14 +2,12 @@ use std::marker::PhantomData;
 
 use anyhow::{anyhow, ensure};
 use bellperson::Circuit;
-use fil_sapling_crypto::jubjub::JubjubEngine;
-use generic_array::typenum;
 use paired::bls12_381::{Bls12, Fr};
 
 use crate::compound_proof::{CircuitComponent, CompoundProof};
 use crate::error::Result;
 use crate::gadgets::por::PoRCompound;
-use crate::hasher::Hasher;
+use crate::merkle::MerkleTreeTrait;
 use crate::parameter_cache::{CacheableParameters, ParameterSetMetadata};
 use crate::por;
 use crate::post::fallback::{self, FallbackPoSt, FallbackPoStCircuit};
@@ -18,29 +16,28 @@ use crate::util::NODE_SIZE;
 
 use super::circuit::Sector;
 
-pub struct FallbackPoStCompound<H>
+pub struct FallbackPoStCompound<Tree>
 where
-    H: Hasher,
+    Tree: MerkleTreeTrait,
 {
-    _h: PhantomData<H>,
+    _t: PhantomData<Tree>,
 }
 
-impl<E: JubjubEngine, C: Circuit<E>, P: ParameterSetMetadata, H: Hasher>
-    CacheableParameters<E, C, P> for FallbackPoStCompound<H>
+impl<C: Circuit<Bls12>, P: ParameterSetMetadata, Tree: MerkleTreeTrait> CacheableParameters<C, P>
+    for FallbackPoStCompound<Tree>
 {
     fn cache_prefix() -> String {
-        format!("proof-of-spacetime-fallback-{}", H::name())
+        format!("proof-of-spacetime-fallback-{}", Tree::display())
     }
 }
 
-impl<'a, H> CompoundProof<'a, Bls12, FallbackPoSt<'a, H>, FallbackPoStCircuit<'a, Bls12, H>>
-    for FallbackPoStCompound<H>
-where
-    H: 'a + Hasher,
+impl<'a, Tree: 'static + MerkleTreeTrait>
+    CompoundProof<'a, FallbackPoSt<'a, Tree>, FallbackPoStCircuit<Tree>>
+    for FallbackPoStCompound<Tree>
 {
     fn generate_public_inputs(
-        pub_inputs: &<FallbackPoSt<'a, H> as ProofScheme<'a>>::PublicInputs,
-        pub_params: &<FallbackPoSt<'a, H> as ProofScheme<'a>>::PublicParams,
+        pub_inputs: &<FallbackPoSt<'a, Tree> as ProofScheme<'a>>::PublicInputs,
+        pub_params: &<FallbackPoSt<'a, Tree> as ProofScheme<'a>>::PublicParams,
         partition_k: Option<usize>,
     ) -> Result<Vec<Fr>> {
         let mut inputs = Vec::new();
@@ -80,7 +77,7 @@ where
                     commitment: None,
                     challenge: challenged_leaf_start as usize,
                 };
-                let por_inputs = PoRCompound::<H, typenum::U8>::generate_public_inputs(
+                let por_inputs = PoRCompound::<Tree>::generate_public_inputs(
                     &por_pub_inputs,
                     &por_pub_params,
                     partition_k,
@@ -91,7 +88,7 @@ where
         }
         let num_inputs_per_sector = inputs.len() / sectors.len();
 
-        // uplicate last one if too little sectors available
+        // duplicate last one if too little sectors available
         while inputs.len() / num_inputs_per_sector < num_sectors_per_chunk {
             let s = inputs[inputs.len() - num_inputs_per_sector..].to_vec();
             inputs.extend_from_slice(&s);
@@ -102,12 +99,12 @@ where
     }
 
     fn circuit(
-        pub_in: &<FallbackPoSt<'a, H> as ProofScheme<'a>>::PublicInputs,
-        _priv_in: <FallbackPoStCircuit<'a, Bls12, H> as CircuitComponent>::ComponentPrivateInputs,
-        vanilla_proof: &<FallbackPoSt<'a, H> as ProofScheme<'a>>::Proof,
-        pub_params: &<FallbackPoSt<'a, H> as ProofScheme<'a>>::PublicParams,
+        pub_in: &<FallbackPoSt<'a, Tree> as ProofScheme<'a>>::PublicInputs,
+        _priv_in: <FallbackPoStCircuit<Tree> as CircuitComponent>::ComponentPrivateInputs,
+        vanilla_proof: &<FallbackPoSt<'a, Tree> as ProofScheme<'a>>::Proof,
+        pub_params: &<FallbackPoSt<'a, Tree> as ProofScheme<'a>>::PublicParams,
         partition_k: Option<usize>,
-    ) -> Result<FallbackPoStCircuit<'a, Bls12, H>> {
+    ) -> Result<FallbackPoStCircuit<Tree>> {
         let num_sectors_per_chunk = pub_params.sector_count;
         ensure!(
             pub_params.sector_count == vanilla_proof.sectors.len(),
@@ -145,8 +142,8 @@ where
     }
 
     fn blank_circuit(
-        pub_params: &<FallbackPoSt<'a, H> as ProofScheme<'a>>::PublicParams,
-    ) -> FallbackPoStCircuit<'a, Bls12, H> {
+        pub_params: &<FallbackPoSt<'a, Tree> as ProofScheme<'a>>::PublicParams,
+    ) -> FallbackPoStCircuit<Tree> {
         let sectors = (0..pub_params.sector_count)
             .map(|_| Sector::blank_circuit(pub_params))
             .collect();
@@ -162,18 +159,15 @@ where
 mod tests {
     use super::*;
 
-    use ff::Field;
-    use merkletree::store::StoreConfig;
     use pretty_assertions::assert_eq;
     use rand::SeedableRng;
     use rand_xorshift::XorShiftRng;
+    use typenum::{U0, U2, U4, U8};
 
     use crate::compound_proof;
-    use crate::drgraph::{new_seed, BucketGraph, Graph, BASE_DEGREE};
-    use crate::fr32::fr_into_bytes;
     use crate::gadgets::{MetricCS, TestConstraintSystem};
     use crate::hasher::{Domain, HashFunction, Hasher, PedersenHasher, PoseidonHasher};
-    use crate::porep::stacked::OCT_ARITY;
+    use crate::merkle::{generate_tree, get_base_tree_count, LCTree, MerkleTreeTrait};
     use crate::post::fallback;
 
     use super::super::{
@@ -182,44 +176,59 @@ mod tests {
 
     #[ignore]
     #[test]
-    fn fallback_post_pedersen_single_partition_matching() {
-        fallback_post::<PedersenHasher>(3, 3, 1);
+    fn fallback_post_pedersen_single_partition_matching_base_8() {
+        fallback_post::<LCTree<PedersenHasher, U8, U0, U0>>(3, 3, 1);
     }
 
     #[ignore]
     #[test]
-    fn fallback_post_poseidon_single_partition_matching() {
-        fallback_post::<PoseidonHasher>(3, 3, 1);
+    fn fallback_post_poseidon_single_partition_matching_base_8() {
+        fallback_post::<LCTree<PoseidonHasher, U8, U0, U0>>(3, 3, 1);
     }
 
     #[ignore]
     #[test]
-    fn fallback_post_poseidon_single_partition_smaller() {
-        fallback_post::<PoseidonHasher>(2, 3, 1);
+    fn fallback_post_poseidon_single_partition_matching_sub_8_4() {
+        fallback_post::<LCTree<PoseidonHasher, U8, U4, U0>>(3, 3, 1);
     }
 
     #[ignore]
     #[test]
-    fn fallback_post_poseidon_two_partitions_matching() {
-        fallback_post::<PoseidonHasher>(4, 2, 2);
+    fn fallback_post_poseidon_single_partition_matching_top_8_4_2() {
+        fallback_post::<LCTree<PoseidonHasher, U8, U4, U2>>(3, 3, 1);
     }
 
     #[ignore]
     #[test]
-    fn fallback_post_poseidon_two_partitions_smaller() {
-        fallback_post::<PoseidonHasher>(5, 3, 2);
+    fn fallback_post_poseidon_single_partition_smaller_base_8() {
+        fallback_post::<LCTree<PoseidonHasher, U8, U0, U0>>(2, 3, 1);
     }
 
-    fn fallback_post<H: Hasher>(total_sector_count: usize, sector_count: usize, partitions: usize) {
-        use std::fs::File;
-        use std::io::prelude::*;
+    #[ignore]
+    #[test]
+    fn fallback_post_poseidon_two_partitions_matching_base_8() {
+        fallback_post::<LCTree<PoseidonHasher, U8, U0, U0>>(4, 2, 2);
+    }
 
+    #[ignore]
+    #[test]
+    fn fallback_post_poseidon_two_partitions_smaller_base_8() {
+        fallback_post::<LCTree<PoseidonHasher, U8, U0, U0>>(5, 3, 2);
+    }
+
+    fn fallback_post<Tree: 'static + MerkleTreeTrait>(
+        total_sector_count: usize,
+        sector_count: usize,
+        partitions: usize,
+    ) where
+        Tree::Store: 'static,
+    {
         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
 
-        let leaves = 64;
+        let leaves = 64 * get_base_tree_count::<Tree>();
         let sector_size = (leaves * NODE_SIZE) as u64;
-        let randomness = H::Domain::random(rng);
-        let prover_id = H::Domain::random(rng);
+        let randomness = <Tree::Hasher as Hasher>::Domain::random(rng);
+        let prover_id = <Tree::Hasher as Hasher>::Domain::random(rng);
         let challenge_count = 2;
 
         let setup_params = compound_proof::SetupParams {
@@ -235,36 +244,18 @@ mod tests {
         // Construct and store an MT using a named DiskStore.
         let temp_dir = tempdir::TempDir::new("level_cache_tree_v1").unwrap();
         let temp_path = temp_dir.path();
-        let config = StoreConfig::new(
-            &temp_path,
-            String::from("test-lc-tree"),
-            StoreConfig::default_cached_above_base_layer(leaves as usize, OCT_ARITY),
-        );
 
         let mut pub_sectors = Vec::new();
         let mut priv_sectors = Vec::new();
         let mut trees = Vec::new();
 
-        for i in 0..total_sector_count {
-            let data: Vec<u8> = (0..leaves)
-                .flat_map(|_| fr_into_bytes::<Bls12>(&Fr::random(rng)))
-                .collect();
-
-            let graph = BucketGraph::<H>::new(leaves, BASE_DEGREE, 0, new_seed()).unwrap();
-
-            let replica_path = temp_path.join(format!("replica-path-{}", i));
-            let mut f = File::create(&replica_path).unwrap();
-            f.write_all(&data).unwrap();
-
-            let cur_config = StoreConfig::from_config(&config, format!("test-lc-tree-{}", i), None);
-            trees.push(
-                graph
-                    .lcmerkle_tree(cur_config.clone(), &data, &replica_path)
-                    .unwrap(),
-            );
+        for _i in 0..total_sector_count {
+            let (_data, tree) =
+                generate_tree::<Tree, _>(rng, leaves, Some(temp_path.to_path_buf()));
+            trees.push(tree);
         }
         for (i, tree) in trees.iter().enumerate() {
-            let comm_c = H::Domain::random(rng);
+            let comm_c = <Tree::Hasher as Hasher>::Domain::random(rng);
             let comm_r_last = tree.root();
 
             priv_sectors.push(PrivateSector {
@@ -273,14 +264,14 @@ mod tests {
                 comm_r_last,
             });
 
-            let comm_r = H::Function::hash2(&comm_c, &comm_r_last);
+            let comm_r = <Tree::Hasher as Hasher>::Function::hash2(&comm_c, &comm_r_last);
             pub_sectors.push(PublicSector {
                 id: (i as u64).into(),
                 comm_r,
             });
         }
 
-        let pub_params = FallbackPoStCompound::<H>::setup(&setup_params).expect("setup failed");
+        let pub_params = FallbackPoStCompound::<Tree>::setup(&setup_params).expect("setup failed");
 
         let pub_inputs = PublicInputs {
             randomness,
@@ -289,7 +280,7 @@ mod tests {
             k: None,
         };
 
-        let priv_inputs = PrivateInputs::<H> {
+        let priv_inputs = PrivateInputs::<Tree> {
             sectors: &priv_sectors,
         };
 
@@ -299,7 +290,7 @@ mod tests {
                 FallbackPoStCompound::circuit_for_test_all(&pub_params, &pub_inputs, &priv_inputs)
                     .unwrap();
             let blank_circuit =
-                FallbackPoStCompound::<H>::blank_circuit(&pub_params.vanilla_params);
+                FallbackPoStCompound::<Tree>::blank_circuit(&pub_params.vanilla_params);
 
             let mut cs_blank = MetricCS::new();
             blank_circuit
@@ -343,7 +334,7 @@ mod tests {
         }
 
         let blank_groth_params =
-            FallbackPoStCompound::<H>::groth_params(Some(rng), &pub_params.vanilla_params)
+            FallbackPoStCompound::<Tree>::groth_params(Some(rng), &pub_params.vanilla_params)
                 .expect("failed to generate groth params");
 
         let proof = FallbackPoStCompound::prove(

@@ -8,11 +8,9 @@ use bellperson::gadgets::{
 use bellperson::{Circuit, ConstraintSystem, SynthesisError};
 use ff::PrimeField;
 use fil_sapling_crypto::jubjub::JubjubEngine;
-use generic_array::typenum;
 use paired::bls12_381::{Bls12, Fr};
 
 use crate::compound_proof::CircuitComponent;
-use crate::crypto::pedersen::JJ_PARAMS;
 use crate::error::Result;
 use crate::fr32::fr_into_bytes;
 use crate::gadgets::constraint;
@@ -21,6 +19,7 @@ use crate::gadgets::por::PoRCircuit;
 use crate::gadgets::uint64;
 use crate::gadgets::variables::Root;
 use crate::hasher::Hasher;
+use crate::merkle::BinaryMerkleTree;
 use crate::util::bytes_into_boolean_vec_be;
 
 /// DRG based Proof of Replication.
@@ -46,7 +45,6 @@ use crate::util::bytes_into_boolean_vec_be;
 ///
 
 pub struct DrgPoRepCircuit<'a, H: Hasher> {
-    pub params: &'a <Bls12 as JubjubEngine>::Params,
     pub replica_nodes: Vec<Option<Fr>>,
     #[allow(clippy::type_complexity)]
     pub replica_nodes_paths: Vec<Vec<(Vec<Option<Fr>>, Option<usize>)>>,
@@ -60,10 +58,10 @@ pub struct DrgPoRepCircuit<'a, H: Hasher> {
     pub data_root: Root<Bls12>,
     pub replica_id: Option<Fr>,
     pub private: bool,
-    pub _h: PhantomData<H>,
+    pub _h: PhantomData<&'a H>,
 }
 
-impl<'a, H: Hasher> DrgPoRepCircuit<'a, H> {
+impl<'a, H: 'static + Hasher> DrgPoRepCircuit<'a, H> {
     #[allow(clippy::type_complexity, clippy::too_many_arguments)]
     pub fn synthesize<CS>(
         mut cs: CS,
@@ -82,7 +80,6 @@ impl<'a, H: Hasher> DrgPoRepCircuit<'a, H> {
         CS: ConstraintSystem<Bls12>,
     {
         DrgPoRepCircuit::<H> {
-            params: &*JJ_PARAMS,
             replica_nodes,
             replica_nodes_paths,
             replica_root,
@@ -132,10 +129,8 @@ impl<'a, H: Hasher> CircuitComponent for DrgPoRepCircuit<'a, H> {
 ///
 /// Total = 2 + replica_parents.len()
 ///
-impl<'a, H: Hasher> Circuit<Bls12> for DrgPoRepCircuit<'a, H> {
+impl<'a, H: 'static + Hasher> Circuit<Bls12> for DrgPoRepCircuit<'a, H> {
     fn synthesize<CS: ConstraintSystem<Bls12>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
-        let params = self.params;
-
         let replica_id = self.replica_id;
         let replica_root = self.replica_root;
         let data_root = self.data_root;
@@ -151,7 +146,7 @@ impl<'a, H: Hasher> Circuit<Bls12> for DrgPoRepCircuit<'a, H> {
         // get the replica_id in bits
         let replica_id_bits = match replica_id {
             Some(id) => {
-                let raw_bytes = fr_into_bytes::<Bls12>(&id);
+                let raw_bytes = fr_into_bytes(&id);
                 bytes_into_boolean_vec_be(cs.namespace(|| "replica_id_bits"), Some(&raw_bytes), 256)
             }
             None => bytes_into_boolean_vec_be(cs.namespace(|| "replica_id_bits"), None, 256),
@@ -184,33 +179,30 @@ impl<'a, H: Hasher> Circuit<Bls12> for DrgPoRepCircuit<'a, H> {
             // Inclusion checks
             {
                 let mut cs = cs.namespace(|| "inclusion_checks");
-                PoRCircuit::<typenum::U2, Bls12, H>::synthesize(
+                PoRCircuit::<BinaryMerkleTree<H>>::synthesize(
                     cs.namespace(|| "replica_inclusion"),
-                    &params,
                     Root::Val(*replica_node),
-                    replica_node_path.clone(),
+                    replica_node_path.clone().into(),
                     replica_root_var.clone(),
                     self.private,
                 )?;
 
                 // validate each replica_parents merkle proof
                 for j in 0..replica_parents.len() {
-                    PoRCircuit::<typenum::U2, Bls12, H>::synthesize(
+                    PoRCircuit::<BinaryMerkleTree<H>>::synthesize(
                         cs.namespace(|| format!("parents_inclusion_{}", j)),
-                        &params,
                         Root::Val(replica_parents[j]),
-                        replica_parents_paths[j].clone(),
+                        replica_parents_paths[j].clone().into(),
                         replica_root_var.clone(),
                         self.private,
                     )?;
                 }
 
                 // validate data node commitment
-                PoRCircuit::<typenum::U2, Bls12, H>::synthesize(
+                PoRCircuit::<BinaryMerkleTree<H>>::synthesize(
                     cs.namespace(|| "data_inclusion"),
-                    &params,
                     Root::Val(*data_node),
-                    data_node_path.clone(),
+                    data_node_path.clone().into(),
                     data_root_var.clone(),
                     self.private,
                 )?;
@@ -225,7 +217,7 @@ impl<'a, H: Hasher> Circuit<Bls12> for DrgPoRepCircuit<'a, H> {
                     .enumerate()
                     .map(|(i, val)| match val {
                         Some(val) => {
-                            let bytes = fr_into_bytes::<Bls12>(val);
+                            let bytes = fr_into_bytes(val);
                             bytes_into_boolean_vec_be(
                                 cs.namespace(|| format!("parents_{}_bits", i)),
                                 Some(&bytes),
@@ -332,6 +324,7 @@ mod tests {
     use crate::fr32::{bytes_into_fr, fr_into_bytes};
     use crate::gadgets::TestConstraintSystem;
     use crate::hasher::PedersenHasher;
+    use crate::merkle::MerkleProofTrait;
     use crate::porep::drg;
     use crate::porep::stacked::BINARY_ARITY;
     use crate::porep::PoRep;
@@ -357,13 +350,13 @@ mod tests {
         let replica_id: Fr = Fr::random(rng);
 
         let mut data: Vec<u8> = (0..nodes)
-            .flat_map(|_| fr_into_bytes::<Bls12>(&Fr::random(rng)))
+            .flat_map(|_| fr_into_bytes(&Fr::random(rng)))
             .collect();
 
         // TODO: don't clone everything
         let original_data = data.clone();
         let data_node: Option<Fr> = Some(
-            bytes_into_fr::<Bls12>(
+            bytes_into_fr(
                 data_at_node(&original_data, challenge).expect("failed to read original data"),
             )
             .unwrap(),
@@ -500,12 +493,12 @@ mod tests {
         );
 
         let generated_inputs =
-            <DrgPoRepCompound<_, _> as compound_proof::CompoundProof<_, _, _>>::generate_public_inputs(
-                &pub_inputs,
-                &pp,
-                None,
-            )
-            .unwrap();
+                <DrgPoRepCompound<_, _> as compound_proof::CompoundProof<_, _>>::generate_public_inputs(
+                    &pub_inputs,
+                    &pp,
+                    None,
+                )
+                .unwrap();
         let expected_inputs = cs.get_inputs();
 
         for ((input, label), generated_input) in

@@ -101,7 +101,7 @@ benchy-remote.sh script:
 }
 ```
 
-Run benchy in "flarp" mode with custom input and detailed metrics.
+Run benchy in "prodbench" mode with custom input and detailed metrics.
 
 ```shell
 > echo '{
@@ -117,7 +117,7 @@ Run benchy in "flarp" mode with custom input and detailed metrics.
     "window_size_bytes": 512,
     "wrapper_parents_all": 8
 }' > config.json
-> cat config.json|RUST_LOG=info ./target/release/benchy flarp|jq '.'
+> cat config.json|RUST_LOG=info ./target/release/benchy prodbench|jq '.'
 …
 {
   "git": {

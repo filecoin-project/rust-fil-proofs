@@ -9,14 +9,10 @@ use log::info;
 use paired::bls12_381::Bls12;
 use storage_proofs::compound_proof::CompoundProof;
 use storage_proofs::porep::stacked::{StackedCompound, StackedDrg};
-use storage_proofs::post::election::{ElectionPoSt, ElectionPoStCircuit, ElectionPoStCompound};
 use storage_proofs::post::fallback;
 
-use crate::constants::{DefaultPieceHasher, DefaultTreeHasher};
-use crate::parameters::{
-    election_post_public_params, public_params, window_post_public_params,
-    winning_post_public_params,
-};
+use crate::constants::DefaultPieceHasher;
+use crate::parameters::{public_params, window_post_public_params, winning_post_public_params};
 use crate::types::*;
 
 type Bls12GrothParams = groth16::MappedParameters<Bls12>;
@@ -79,16 +75,17 @@ where
     cache_lookup(&*VERIFYING_KEY_MEMORY_CACHE, vk_identifier, generator)
 }
 
-pub fn get_stacked_params(porep_config: PoRepConfig) -> Result<Arc<Bls12GrothParams>> {
-    let public_params = public_params(
+pub fn get_stacked_params<Tree: 'static + MerkleTreeTrait>(
+    porep_config: PoRepConfig,
+) -> Result<Arc<Bls12GrothParams>> {
+    let public_params = public_params::<Tree>(
         PaddedBytesAmount::from(porep_config),
         usize::from(PoRepProofPartitions::from(porep_config)),
     )?;
 
     let parameters_generator = || {
-        <StackedCompound<DefaultTreeHasher, DefaultPieceHasher> as CompoundProof<
-            _,
-            StackedDrg<DefaultTreeHasher, DefaultPieceHasher>,
+        <StackedCompound<Tree, DefaultPieceHasher> as CompoundProof<
+            StackedDrg<Tree, DefaultPieceHasher>,
             _,
         >>::groth_params::<rand::rngs::OsRng>(None, &public_params)
         .map_err(Into::into)
@@ -103,36 +100,17 @@ pub fn get_stacked_params(porep_config: PoRepConfig) -> Result<Arc<Bls12GrothPar
     )?)
 }
 
-pub fn get_post_params(post_config: &PoStConfig) -> Result<Arc<Bls12GrothParams>> {
+pub fn get_post_params<Tree: 'static + MerkleTreeTrait>(
+    post_config: &PoStConfig,
+) -> Result<Arc<Bls12GrothParams>> {
     match post_config.typ {
-        PoStType::Election => {
-            let post_public_params = election_post_public_params(post_config)?;
-
-            let parameters_generator = || {
-                <ElectionPoStCompound<DefaultTreeHasher> as CompoundProof<
-                    Bls12,
-                    ElectionPoSt<DefaultTreeHasher>,
-                    ElectionPoStCircuit<Bls12, DefaultTreeHasher>,
-                >>::groth_params::<rand::rngs::OsRng>(None, &post_public_params)
-                .map_err(Into::into)
-            };
-
-            Ok(lookup_groth_params(
-                format!(
-                    "ELECTION_POST[{}]",
-                    usize::from(post_config.padded_sector_size())
-                ),
-                parameters_generator,
-            )?)
-        }
         PoStType::Winning => {
-            let post_public_params = winning_post_public_params(post_config)?;
+            let post_public_params = winning_post_public_params::<Tree>(post_config)?;
 
             let parameters_generator = || {
-                <fallback::FallbackPoStCompound<DefaultTreeHasher> as CompoundProof<
-                    Bls12,
-                    fallback::FallbackPoSt<DefaultTreeHasher>,
-                    fallback::FallbackPoStCircuit<Bls12, DefaultTreeHasher>,
+                <fallback::FallbackPoStCompound<Tree> as CompoundProof<
+                    fallback::FallbackPoSt<Tree>,
+                    fallback::FallbackPoStCircuit<Tree>,
                 >>::groth_params::<rand::rngs::OsRng>(None, &post_public_params)
                 .map_err(Into::into)
             };
@@ -146,13 +124,12 @@ pub fn get_post_params(post_config: &PoStConfig) -> Result<Arc<Bls12GrothParams>
             )?)
         }
         PoStType::Window => {
-            let post_public_params = window_post_public_params(post_config)?;
+            let post_public_params = window_post_public_params::<Tree>(post_config)?;
 
             let parameters_generator = || {
-                <fallback::FallbackPoStCompound<DefaultTreeHasher> as CompoundProof<
-                    Bls12,
-                    fallback::FallbackPoSt<DefaultTreeHasher>,
-                    fallback::FallbackPoStCircuit<Bls12, DefaultTreeHasher>,
+                <fallback::FallbackPoStCompound<Tree> as CompoundProof<
+                    fallback::FallbackPoSt<Tree>,
+                    fallback::FallbackPoStCircuit<Tree>,
                 >>::groth_params::<rand::rngs::OsRng>(None, &post_public_params)
                 .map_err(Into::into)
             };
@@ -168,16 +145,17 @@ pub fn get_post_params(post_config: &PoStConfig) -> Result<Arc<Bls12GrothParams>
     }
 }
 
-pub fn get_stacked_verifying_key(porep_config: PoRepConfig) -> Result<Arc<Bls12VerifyingKey>> {
+pub fn get_stacked_verifying_key<Tree: 'static + MerkleTreeTrait>(
+    porep_config: PoRepConfig,
+) -> Result<Arc<Bls12VerifyingKey>> {
     let public_params = public_params(
         PaddedBytesAmount::from(porep_config),
         usize::from(PoRepProofPartitions::from(porep_config)),
     )?;
 
     let vk_generator = || {
-        <StackedCompound<DefaultTreeHasher, DefaultPieceHasher> as CompoundProof<
-            Bls12,
-            StackedDrg<DefaultTreeHasher, DefaultPieceHasher>,
+        <StackedCompound<Tree, DefaultPieceHasher> as CompoundProof<
+            StackedDrg<Tree, DefaultPieceHasher>,
             _,
         >>::verifying_key::<rand::rngs::OsRng>(None, &public_params)
         .map_err(Into::into)
@@ -192,36 +170,17 @@ pub fn get_stacked_verifying_key(porep_config: PoRepConfig) -> Result<Arc<Bls12V
     )?)
 }
 
-pub fn get_post_verifying_key(post_config: &PoStConfig) -> Result<Arc<Bls12VerifyingKey>> {
+pub fn get_post_verifying_key<Tree: 'static + MerkleTreeTrait>(
+    post_config: &PoStConfig,
+) -> Result<Arc<Bls12VerifyingKey>> {
     match post_config.typ {
-        PoStType::Election => {
-            let post_public_params = election_post_public_params(post_config)?;
-
-            let vk_generator = || {
-                <ElectionPoStCompound<DefaultTreeHasher> as CompoundProof<
-                    Bls12,
-                    ElectionPoSt<DefaultTreeHasher>,
-                    ElectionPoStCircuit<Bls12, DefaultTreeHasher>,
-                >>::verifying_key::<rand::rngs::OsRng>(None, &post_public_params)
-                .map_err(Into::into)
-            };
-
-            Ok(lookup_verifying_key(
-                format!(
-                    "ELECTION_POST[{}]",
-                    usize::from(post_config.padded_sector_size())
-                ),
-                vk_generator,
-            )?)
-        }
         PoStType::Winning => {
-            let post_public_params = winning_post_public_params(post_config)?;
+            let post_public_params = winning_post_public_params::<Tree>(post_config)?;
 
             let vk_generator = || {
-                <fallback::FallbackPoStCompound<DefaultTreeHasher> as CompoundProof<
-                    Bls12,
-                    fallback::FallbackPoSt<DefaultTreeHasher>,
-                    fallback::FallbackPoStCircuit<Bls12, DefaultTreeHasher>,
+                <fallback::FallbackPoStCompound<Tree> as CompoundProof<
+                    fallback::FallbackPoSt<Tree>,
+                    fallback::FallbackPoStCircuit<Tree>,
                 >>::verifying_key::<rand::rngs::OsRng>(None, &post_public_params)
                 .map_err(Into::into)
             };
@@ -235,13 +194,12 @@ pub fn get_post_verifying_key(post_config: &PoStConfig) -> Result<Arc<Bls12Verif
             )?)
         }
         PoStType::Window => {
-            let post_public_params = window_post_public_params(post_config)?;
+            let post_public_params = window_post_public_params::<Tree>(post_config)?;
 
             let vk_generator = || {
-                <fallback::FallbackPoStCompound<DefaultTreeHasher> as CompoundProof<
-                    Bls12,
-                    fallback::FallbackPoSt<DefaultTreeHasher>,
-                    fallback::FallbackPoStCircuit<Bls12, DefaultTreeHasher>,
+                <fallback::FallbackPoStCompound<Tree> as CompoundProof<
+                    fallback::FallbackPoSt<Tree>,
+                    fallback::FallbackPoStCircuit<Tree>,
                 >>::verifying_key::<rand::rngs::OsRng>(None, &post_public_params)
                 .map_err(Into::into)
             };

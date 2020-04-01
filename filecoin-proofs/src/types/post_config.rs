@@ -1,12 +1,9 @@
 use std::path::PathBuf;
 
 use anyhow::Result;
-use paired::bls12_381::Bls12;
 use storage_proofs::parameter_cache::{self, CacheableParameters};
-use storage_proofs::post::election::{ElectionPoStCircuit, ElectionPoStCompound};
 use storage_proofs::post::fallback;
 
-use crate::constants::DefaultTreeHasher;
 use crate::types::*;
 
 #[derive(Clone, Debug)]
@@ -21,7 +18,6 @@ pub struct PoStConfig {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PoStType {
-    Election,
     Winning,
     Window,
 }
@@ -50,37 +46,24 @@ impl PoStConfig {
     }
 
     /// Returns the cache identifier as used by `storage-proofs::paramater_cache`.
-    pub fn get_cache_identifier(&self) -> Result<String> {
+    pub fn get_cache_identifier<Tree: 'static + MerkleTreeTrait>(&self) -> Result<String> {
         match self.typ {
-            PoStType::Election => {
-                let params = crate::parameters::election_post_public_params(self)?;
-
-                Ok(
-                    <ElectionPoStCompound<DefaultTreeHasher> as CacheableParameters<
-                        Bls12,
-                        ElectionPoStCircuit<_, DefaultTreeHasher>,
-                        _,
-                    >>::cache_identifier(&params),
-                )
-            }
             PoStType::Winning => {
-                let params = crate::parameters::winning_post_public_params(self)?;
+                let params = crate::parameters::winning_post_public_params::<Tree>(self)?;
 
                 Ok(
-                    <fallback::FallbackPoStCompound<DefaultTreeHasher> as CacheableParameters<
-                        Bls12,
-                        fallback::FallbackPoStCircuit<_, DefaultTreeHasher>,
+                    <fallback::FallbackPoStCompound<Tree> as CacheableParameters<
+                        fallback::FallbackPoStCircuit<Tree>,
                         _,
                     >>::cache_identifier(&params),
                 )
             }
             PoStType::Window => {
-                let params = crate::parameters::window_post_public_params(self)?;
+                let params = crate::parameters::window_post_public_params::<Tree>(self)?;
 
                 Ok(
-                    <fallback::FallbackPoStCompound<DefaultTreeHasher> as CacheableParameters<
-                        Bls12,
-                        fallback::FallbackPoStCircuit<_, DefaultTreeHasher>,
+                    <fallback::FallbackPoStCompound<Tree> as CacheableParameters<
+                        fallback::FallbackPoStCircuit<Tree>,
                         _,
                     >>::cache_identifier(&params),
                 )
@@ -88,18 +71,18 @@ impl PoStConfig {
         }
     }
 
-    pub fn get_cache_metadata_path(&self) -> Result<PathBuf> {
-        let id = self.get_cache_identifier()?;
+    pub fn get_cache_metadata_path<Tree: 'static + MerkleTreeTrait>(&self) -> Result<PathBuf> {
+        let id = self.get_cache_identifier::<Tree>()?;
         Ok(parameter_cache::parameter_cache_metadata_path(&id))
     }
 
-    pub fn get_cache_verifying_key_path(&self) -> Result<PathBuf> {
-        let id = self.get_cache_identifier()?;
+    pub fn get_cache_verifying_key_path<Tree: 'static + MerkleTreeTrait>(&self) -> Result<PathBuf> {
+        let id = self.get_cache_identifier::<Tree>()?;
         Ok(parameter_cache::parameter_cache_verifying_key_path(&id))
     }
 
-    pub fn get_cache_params_path(&self) -> Result<PathBuf> {
-        let id = self.get_cache_identifier()?;
+    pub fn get_cache_params_path<Tree: 'static + MerkleTreeTrait>(&self) -> Result<PathBuf> {
+        let id = self.get_cache_identifier::<Tree>()?;
         Ok(parameter_cache::parameter_cache_params_path(&id))
     }
 }

@@ -3,20 +3,18 @@ use std::marker::PhantomData;
 use anyhow::ensure;
 use bellperson::gadgets::num;
 use bellperson::{Circuit, ConstraintSystem, SynthesisError};
-use fil_sapling_crypto::jubjub::JubjubEngine;
-use generic_array::typenum;
 use paired::bls12_381::{Bls12, Fr};
 
 use super::params::Proof;
 
 use crate::compound_proof::{CircuitComponent, CompoundProof};
-use crate::crypto::pedersen::JJ_PARAMS;
 use crate::drgraph::Graph;
 use crate::error::Result;
 use crate::fr32::fr_into_bytes;
 use crate::gadgets::constraint;
 use crate::gadgets::por::PoRCompound;
 use crate::hasher::{HashFunction, Hasher};
+use crate::merkle::MerkleTreeTrait;
 use crate::parameter_cache::{CacheableParameters, ParameterSetMetadata};
 use crate::por;
 use crate::porep::stacked::StackedDrg;
@@ -29,43 +27,38 @@ use crate::util::bytes_into_boolean_vec_be;
 ///
 /// * `params` - parameters for the curve
 ///
-pub struct StackedCircuit<'a, E: JubjubEngine, H: 'static + Hasher, G: 'static + Hasher> {
-    params: &'a E::Params,
-    public_params: <StackedDrg<'a, H, G> as ProofScheme<'a>>::PublicParams,
-    replica_id: Option<H::Domain>,
+pub struct StackedCircuit<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> {
+    public_params: <StackedDrg<'a, Tree, G> as ProofScheme<'a>>::PublicParams,
+    replica_id: Option<<Tree::Hasher as Hasher>::Domain>,
     comm_d: Option<G::Domain>,
-    comm_r: Option<H::Domain>,
-    comm_r_last: Option<H::Domain>,
-    comm_c: Option<H::Domain>,
+    comm_r: Option<<Tree::Hasher as Hasher>::Domain>,
+    comm_r_last: Option<<Tree::Hasher as Hasher>::Domain>,
+    comm_c: Option<<Tree::Hasher as Hasher>::Domain>,
 
     // one proof per challenge
-    proofs: Vec<Proof<H, G>>,
-
-    _e: PhantomData<E>,
+    proofs: Vec<Proof<Tree, G>>,
 }
 
-impl<'a, E: JubjubEngine, H: Hasher, G: Hasher> CircuitComponent for StackedCircuit<'a, E, H, G> {
+impl<'a, Tree: MerkleTreeTrait, G: Hasher> CircuitComponent for StackedCircuit<'a, Tree, G> {
     type ComponentPrivateInputs = ();
 }
 
-impl<'a, H: Hasher, G: 'static + Hasher> StackedCircuit<'a, Bls12, H, G> {
+impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedCircuit<'a, Tree, G> {
     #[allow(clippy::too_many_arguments)]
     pub fn synthesize<CS>(
         mut cs: CS,
-        params: &'a <Bls12 as JubjubEngine>::Params,
-        public_params: <StackedDrg<'a, H, G> as ProofScheme<'a>>::PublicParams,
-        replica_id: Option<H::Domain>,
+        public_params: <StackedDrg<'a, Tree, G> as ProofScheme<'a>>::PublicParams,
+        replica_id: Option<<Tree::Hasher as Hasher>::Domain>,
         comm_d: Option<G::Domain>,
-        comm_r: Option<H::Domain>,
-        comm_r_last: Option<H::Domain>,
-        comm_c: Option<H::Domain>,
-        proofs: Vec<Proof<H, G>>,
+        comm_r: Option<<Tree::Hasher as Hasher>::Domain>,
+        comm_r_last: Option<<Tree::Hasher as Hasher>::Domain>,
+        comm_c: Option<<Tree::Hasher as Hasher>::Domain>,
+        proofs: Vec<Proof<Tree, G>>,
     ) -> Result<(), SynthesisError>
     where
         CS: ConstraintSystem<Bls12>,
     {
-        let circuit = StackedCircuit::<'a, Bls12, H, G> {
-            params,
+        let circuit = StackedCircuit::<'a, Tree, G> {
             public_params,
             replica_id,
             comm_d,
@@ -73,14 +66,13 @@ impl<'a, H: Hasher, G: 'static + Hasher> StackedCircuit<'a, Bls12, H, G> {
             comm_r_last,
             comm_c,
             proofs,
-            _e: PhantomData,
         };
 
         circuit.synthesize(&mut cs)
     }
 }
 
-impl<'a, H: Hasher, G: Hasher> Circuit<Bls12> for StackedCircuit<'a, Bls12, H, G> {
+impl<'a, Tree: MerkleTreeTrait, G: Hasher> Circuit<Bls12> for StackedCircuit<'a, Tree, G> {
     fn synthesize<CS: ConstraintSystem<Bls12>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
         let StackedCircuit {
             public_params,
@@ -93,13 +85,11 @@ impl<'a, H: Hasher, G: Hasher> Circuit<Bls12> for StackedCircuit<'a, Bls12, H, G
             ..
         } = self;
 
-        let params = &self.params;
-
         // Allocate replica_id
         let replica_id_fr: Option<Fr> = replica_id.map(Into::into);
         let replica_id_bits = match replica_id_fr {
             Some(val) => {
-                let bytes = fr_into_bytes::<Bls12>(&val);
+                let bytes = fr_into_bytes(&val);
                 bytes_into_boolean_vec_be(cs.namespace(|| "replica_id_bits"), Some(&bytes), 256)
             }
             None => bytes_into_boolean_vec_be(cs.namespace(|| "replica_id_bits"), None, 256),
@@ -141,11 +131,10 @@ impl<'a, H: Hasher, G: Hasher> Circuit<Bls12> for StackedCircuit<'a, Bls12, H, G
 
         // Verify comm_r = H(comm_c || comm_r_last)
         {
-            let hash_num = H::Function::hash2_circuit(
+            let hash_num = <Tree::Hasher as Hasher>::Function::hash2_circuit(
                 cs.namespace(|| "H_comm_c_comm_r_last"),
                 &comm_c_num,
                 &comm_r_last_num,
-                params,
             )?;
 
             // Check actual equality
@@ -160,7 +149,6 @@ impl<'a, H: Hasher, G: Hasher> Circuit<Bls12> for StackedCircuit<'a, Bls12, H, G
         for (i, proof) in proofs.into_iter().enumerate() {
             proof.synthesize(
                 &mut cs.namespace(|| format!("challenge_{}", i)),
-                &self.params,
                 public_params.layer_challenges.layers(),
                 &comm_d_num,
                 &comm_c_num,
@@ -174,27 +162,31 @@ impl<'a, H: Hasher, G: Hasher> Circuit<Bls12> for StackedCircuit<'a, Bls12, H, G
 }
 
 #[allow(dead_code)]
-pub struct StackedCompound<H: Hasher, G: Hasher> {
+pub struct StackedCompound<Tree: MerkleTreeTrait, G: Hasher> {
     partitions: Option<usize>,
-    _h: PhantomData<H>,
+    _t: PhantomData<Tree>,
     _g: PhantomData<G>,
 }
 
-impl<E: JubjubEngine, C: Circuit<E>, P: ParameterSetMetadata, H: Hasher, G: Hasher>
-    CacheableParameters<E, C, P> for StackedCompound<H, G>
+impl<C: Circuit<Bls12>, P: ParameterSetMetadata, Tree: MerkleTreeTrait, G: Hasher>
+    CacheableParameters<C, P> for StackedCompound<Tree, G>
 {
     fn cache_prefix() -> String {
-        format!("stacked-proof-of-replication-{}-{}", H::name(), G::name())
+        format!(
+            "stacked-proof-of-replication-{}-{}",
+            Tree::display(),
+            G::name()
+        )
     }
 }
 
-impl<'a, H: 'static + Hasher, G: 'static + Hasher>
-    CompoundProof<'a, Bls12, StackedDrg<'a, H, G>, StackedCircuit<'a, Bls12, H, G>>
-    for StackedCompound<H, G>
+impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher>
+    CompoundProof<'a, StackedDrg<'a, Tree, G>, StackedCircuit<'a, Tree, G>>
+    for StackedCompound<Tree, G>
 {
     fn generate_public_inputs(
-        pub_in: &<StackedDrg<H, G> as ProofScheme>::PublicInputs,
-        pub_params: &<StackedDrg<H, G> as ProofScheme>::PublicParams,
+        pub_in: &<StackedDrg<Tree, G> as ProofScheme>::PublicInputs,
+        pub_params: &<StackedDrg<Tree, G> as ProofScheme>::PublicParams,
         k: Option<usize>,
     ) -> Result<Vec<Fr>> {
         let graph = &pub_params.graph;
@@ -207,30 +199,30 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher>
         let comm_r = pub_in.tau.as_ref().expect("missing tau").comm_r;
         inputs.push(comm_r.into());
 
-        let por_params = por::PoR::<H, typenum::U2>::setup(&por::SetupParams {
+        let por_params = por::PoR::<Tree>::setup(&por::SetupParams {
             leaves: graph.size(),
             private: true,
         })?;
 
         let generate_inclusion_inputs = |c: usize| {
-            let pub_inputs = por::PublicInputs::<H::Domain> {
+            let pub_inputs = por::PublicInputs::<<Tree::Hasher as Hasher>::Domain> {
                 challenge: c,
                 commitment: None,
             };
 
-            PoRCompound::<H, typenum::U8>::generate_public_inputs(&pub_inputs, &por_params, k)
+            PoRCompound::<Tree>::generate_public_inputs(&pub_inputs, &por_params, k)
         };
 
         let all_challenges = pub_in.challenges(&pub_params.layer_challenges, graph.size(), k);
 
         for challenge in all_challenges.into_iter() {
             // comm_d_proof
-            let pub_inputs = por::PublicInputs::<H::Domain> {
+            let pub_inputs = por::PublicInputs::<<Tree::Hasher as Hasher>::Domain> {
                 challenge,
                 commitment: None,
             };
 
-            inputs.extend(PoRCompound::<H, typenum::U2>::generate_public_inputs(
+            inputs.extend(PoRCompound::<Tree>::generate_public_inputs(
                 &pub_inputs,
                 &por_params,
                 k,
@@ -265,34 +257,31 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher>
     }
 
     fn circuit<'b>(
-        public_inputs: &'b <StackedDrg<H, G> as ProofScheme>::PublicInputs,
-        _component_private_inputs: <StackedCircuit<'a, Bls12, H, G> as CircuitComponent>::ComponentPrivateInputs,
-        vanilla_proof: &'b <StackedDrg<H, G> as ProofScheme>::Proof,
-        public_params: &'b <StackedDrg<H, G> as ProofScheme>::PublicParams,
+        public_inputs: &'b <StackedDrg<Tree, G> as ProofScheme>::PublicInputs,
+        _component_private_inputs: <StackedCircuit<'a, Tree, G> as CircuitComponent>::ComponentPrivateInputs,
+        vanilla_proof: &'b <StackedDrg<Tree, G> as ProofScheme>::Proof,
+        public_params: &'b <StackedDrg<Tree, G> as ProofScheme>::PublicParams,
         _partition_k: Option<usize>,
-    ) -> Result<StackedCircuit<'a, Bls12, H, G>> {
+    ) -> Result<StackedCircuit<'a, Tree, G>> {
         ensure!(
             !vanilla_proof.is_empty(),
             "Cannot create a circuit with no vanilla proofs"
         );
 
-        let comm_r_last = *vanilla_proof[0].comm_r_last();
-        let comm_c = *vanilla_proof[0].comm_c();
+        let comm_r_last = vanilla_proof[0].comm_r_last();
+        let comm_c = vanilla_proof[0].comm_c();
 
         // ensure consistency
         ensure!(
-            vanilla_proof
-                .iter()
-                .all(|p| p.comm_r_last() == &comm_r_last),
+            vanilla_proof.iter().all(|p| p.comm_r_last() == comm_r_last),
             "inconsistent comm_r_lasts"
         );
         ensure!(
-            vanilla_proof.iter().all(|p| p.comm_c() == &comm_c),
+            vanilla_proof.iter().all(|p| p.comm_c() == comm_c),
             "inconsistent comm_cs"
         );
 
         Ok(StackedCircuit {
-            params: &*JJ_PARAMS,
             public_params: public_params.clone(),
             replica_id: Some(public_inputs.replica_id),
             comm_d: public_inputs.tau.as_ref().map(|t| t.comm_d),
@@ -300,15 +289,13 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher>
             comm_r_last: Some(comm_r_last),
             comm_c: Some(comm_c),
             proofs: vanilla_proof.iter().cloned().map(|p| p.into()).collect(),
-            _e: PhantomData,
         })
     }
 
     fn blank_circuit(
-        public_params: &<StackedDrg<H, G> as ProofScheme>::PublicParams,
-    ) -> StackedCircuit<'a, Bls12, H, G> {
+        public_params: &<StackedDrg<Tree, G> as ProofScheme>::PublicParams,
+    ) -> StackedCircuit<'a, Tree, G> {
         StackedCircuit {
-            params: &*JJ_PARAMS,
             public_params: public_params.clone(),
             replica_id: None,
             comm_d: None,
@@ -318,7 +305,6 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher>
             proofs: (0..public_params.layer_challenges.challenges_count_all())
                 .map(|_challenge_index| Proof::empty(public_params))
                 .collect(),
-            _e: PhantomData,
         }
     }
 }
@@ -333,6 +319,7 @@ mod tests {
     use crate::fr32::fr_into_bytes;
     use crate::gadgets::{MetricCS, TestConstraintSystem};
     use crate::hasher::{Hasher, PedersenHasher, PoseidonHasher, Sha256Hasher};
+    use crate::merkle::{get_base_tree_count, BinaryMerkleTree, DiskTree, MerkleTreeTrait};
     use crate::porep::stacked::{
         ChallengeRequirements, LayerChallenges, PrivateInputs, PublicInputs, SetupParams,
         TemporaryAux, TemporaryAuxCache, BINARY_ARITY, EXP_DEGREE,
@@ -341,22 +328,41 @@ mod tests {
     use crate::proof::ProofScheme;
 
     use ff::Field;
+    use generic_array::typenum::{U0, U2, U4, U8};
     use merkletree::store::StoreConfig;
     use rand::{Rng, SeedableRng};
     use rand_xorshift::XorShiftRng;
 
     #[test]
-    fn stacked_input_circuit_pedersen() {
-        stacked_input_circuit::<PedersenHasher>(2_184_211);
+    fn stacked_input_circuit_pedersen_base_2() {
+        stacked_input_circuit::<DiskTree<PedersenHasher, U2, U0, U0>>(20, 1_804_353);
     }
 
     #[test]
-    fn stacked_input_circuit_poseidon() {
-        stacked_input_circuit::<PoseidonHasher>(1_891_634);
+    fn stacked_input_circuit_poseidon_base_2() {
+        stacked_input_circuit::<DiskTree<PoseidonHasher, U2, U0, U0>>(20, 1_752_560);
     }
 
-    fn stacked_input_circuit<H: Hasher + 'static>(expected_constraints: usize) {
-        let nodes = 64;
+    #[test]
+    fn stacked_input_circuit_poseidon_base_8() {
+        stacked_input_circuit::<DiskTree<PoseidonHasher, U8, U0, U0>>(20, 1_746_416);
+    }
+
+    #[test]
+    fn stacked_input_circuit_poseidon_sub_8_4() {
+        stacked_input_circuit::<DiskTree<PoseidonHasher, U8, U4, U0>>(20, 1_843_484);
+    }
+
+    #[test]
+    fn stacked_input_circuit_poseidon_top_8_4_2() {
+        stacked_input_circuit::<DiskTree<PoseidonHasher, U8, U4, U2>>(20, 1_893_938);
+    }
+
+    fn stacked_input_circuit<Tree: MerkleTreeTrait + 'static>(
+        expected_inputs: usize,
+        expected_constraints: usize,
+    ) {
+        let nodes = 8 * get_base_tree_count::<Tree>();
         let degree = BASE_DEGREE;
         let expansion_degree = EXP_DEGREE;
         let num_layers = 2;
@@ -366,7 +372,7 @@ mod tests {
 
         let replica_id: Fr = Fr::random(rng);
         let data: Vec<u8> = (0..nodes)
-            .flat_map(|_| fr_into_bytes::<Bls12>(&Fr::random(rng)))
+            .flat_map(|_| fr_into_bytes(&Fr::random(rng)))
             .collect();
 
         // create a copy, so we can compare roundtrips
@@ -393,8 +399,8 @@ mod tests {
         let temp_path = temp_dir.path();
         let replica_path = temp_path.join("replica-path");
 
-        let pp = StackedDrg::<H, Sha256Hasher>::setup(&sp).expect("setup failed");
-        let (tau, (p_aux, t_aux)) = StackedDrg::<H, Sha256Hasher>::replicate(
+        let pp = StackedDrg::<Tree, Sha256Hasher>::setup(&sp).expect("setup failed");
+        let (tau, (p_aux, t_aux)) = StackedDrg::<Tree, Sha256Hasher>::replicate(
             &pp,
             &replica_id.into(),
             (&mut data_copy[..]).into(),
@@ -407,47 +413,51 @@ mod tests {
 
         let seed = rng.gen();
 
-        let pub_inputs = PublicInputs::<<H as Hasher>::Domain, <Sha256Hasher as Hasher>::Domain> {
-            replica_id: replica_id.into(),
-            seed,
-            tau: Some(tau.into()),
-            k: None,
-        };
+        let pub_inputs =
+            PublicInputs::<<Tree::Hasher as Hasher>::Domain, <Sha256Hasher as Hasher>::Domain> {
+                replica_id: replica_id.into(),
+                seed,
+                tau: Some(tau.into()),
+                k: None,
+            };
 
         // Store copy of original t_aux for later resource deletion.
         let t_aux_orig = t_aux.clone();
 
         // Convert TemporaryAux to TemporaryAuxCache, which instantiates all
         // elements based on the configs stored in TemporaryAux.
-        let t_aux = TemporaryAuxCache::new(&t_aux, replica_path.clone())
+        let t_aux = TemporaryAuxCache::<Tree, Sha256Hasher>::new(&t_aux, replica_path.clone())
             .expect("failed to restore contents of t_aux");
 
-        let priv_inputs = PrivateInputs::<H, Sha256Hasher> {
+        let priv_inputs = PrivateInputs::<Tree, Sha256Hasher> {
             p_aux: p_aux.into(),
             t_aux: t_aux.into(),
         };
 
-        let proofs =
-            StackedDrg::<H, Sha256Hasher>::prove_all_partitions(&pp, &pub_inputs, &priv_inputs, 1)
-                .expect("failed to generate partition proofs");
+        let proofs = StackedDrg::<Tree, Sha256Hasher>::prove_all_partitions(
+            &pp,
+            &pub_inputs,
+            &priv_inputs,
+            1,
+        )
+        .expect("failed to generate partition proofs");
 
-        let proofs_are_valid = StackedDrg::verify_all_partitions(&pp, &pub_inputs, &proofs)
-            .expect("failed to verify partition proofs");
+        let proofs_are_valid =
+            StackedDrg::<Tree, Sha256Hasher>::verify_all_partitions(&pp, &pub_inputs, &proofs)
+                .expect("failed to verify partition proofs");
 
         assert!(proofs_are_valid);
 
         // Discard cached MTs that are no longer needed.
-        TemporaryAux::<H, Sha256Hasher>::clear_temp(t_aux_orig).expect("t_aux delete failed");
-
-        let expected_inputs = 20;
+        TemporaryAux::<Tree, Sha256Hasher>::clear_temp(t_aux_orig).expect("t_aux delete failed");
 
         {
             // Verify that MetricCS returns the same metrics as TestConstraintSystem.
             let mut cs = MetricCS::<Bls12>::new();
 
-            StackedCompound::circuit(
+            StackedCompound::<Tree, Sha256Hasher>::circuit(
                 &pub_inputs,
-                <StackedCircuit<Bls12, H, Sha256Hasher> as CircuitComponent>::ComponentPrivateInputs::default(),
+                <StackedCircuit<Tree, Sha256Hasher> as CircuitComponent>::ComponentPrivateInputs::default(),
                 &proofs[0],
                 &pp,
                 None,
@@ -465,9 +475,10 @@ mod tests {
         }
         let mut cs = TestConstraintSystem::<Bls12>::new();
 
-        StackedCompound::circuit(
+        StackedCompound::<Tree, Sha256Hasher>::circuit(
             &pub_inputs,
-            <StackedCircuit<Bls12, H, Sha256Hasher> as CircuitComponent>::ComponentPrivateInputs::default(),
+            <StackedCircuit<Tree, Sha256Hasher> as CircuitComponent>::ComponentPrivateInputs::default(
+            ),
             &proofs[0],
             &pp,
             None,
@@ -486,9 +497,8 @@ mod tests {
 
         assert_eq!(cs.get_input(0, "ONE"), Fr::one());
 
-        let generated_inputs = <StackedCompound<H, Sha256Hasher> as CompoundProof<
-            _,
-            StackedDrg<H, Sha256Hasher>,
+        let generated_inputs = <StackedCompound<Tree, Sha256Hasher> as CompoundProof<
+            StackedDrg<Tree, Sha256Hasher>,
             _,
         >>::generate_public_inputs(&pub_inputs, &pp, None)
         .expect("failed to generate public inputs");
@@ -508,19 +518,31 @@ mod tests {
     }
 
     #[test]
-    #[ignore] // Slow test – run only when compiled for release.
+    #[ignore]
     fn test_stacked_compound_pedersen() {
-        stacked_test_compound::<PedersenHasher>();
+        stacked_test_compound::<BinaryMerkleTree<PedersenHasher>>();
     }
 
     #[test]
-    #[ignore] // Slow test – run only when compiled for release.
-    fn test_stacked_compound_poseidon() {
-        stacked_test_compound::<PoseidonHasher>();
+    #[ignore]
+    fn test_stacked_compound_poseidon_base_8() {
+        stacked_test_compound::<DiskTree<PoseidonHasher, U8, U0, U0>>();
     }
 
-    fn stacked_test_compound<H: 'static + Hasher>() {
-        let nodes = 8;
+    #[test]
+    #[ignore]
+    fn test_stacked_compound_poseidon_sub_8_4() {
+        stacked_test_compound::<DiskTree<PoseidonHasher, U8, U4, U0>>();
+    }
+
+    #[test]
+    #[ignore]
+    fn test_stacked_compound_poseidon_top_8_4_2() {
+        stacked_test_compound::<DiskTree<PoseidonHasher, U8, U4, U2>>();
+    }
+
+    fn stacked_test_compound<Tree: 'static + MerkleTreeTrait>() {
+        let nodes = 8 * get_base_tree_count::<Tree>();
 
         let degree = BASE_DEGREE;
         let expansion_degree = EXP_DEGREE;
@@ -532,7 +554,7 @@ mod tests {
 
         let replica_id: Fr = Fr::random(rng);
         let data: Vec<u8> = (0..nodes)
-            .flat_map(|_| fr_into_bytes::<Bls12>(&Fr::random(rng)))
+            .flat_map(|_| fr_into_bytes(&Fr::random(rng)))
             .collect();
 
         // create a copy, so we can compare roundtrips
@@ -565,7 +587,7 @@ mod tests {
         let replica_path = temp_path.join("replica-path");
 
         let public_params = StackedCompound::setup(&setup_params).expect("setup failed");
-        let (tau, (p_aux, t_aux)) = StackedDrg::replicate(
+        let (tau, (p_aux, t_aux)) = StackedDrg::<Tree, _>::replicate(
             &public_params.vanilla_params,
             &replica_id.into(),
             (&mut data_copy[..]).into(),
@@ -579,22 +601,23 @@ mod tests {
 
         let seed = rng.gen();
 
-        let public_inputs = PublicInputs::<H::Domain, <Sha256Hasher as Hasher>::Domain> {
-            replica_id: replica_id.into(),
-            seed,
-            tau: Some(tau),
-            k: None,
-        };
+        let public_inputs =
+            PublicInputs::<<Tree::Hasher as Hasher>::Domain, <Sha256Hasher as Hasher>::Domain> {
+                replica_id: replica_id.into(),
+                seed,
+                tau: Some(tau),
+                k: None,
+            };
 
         // Store a copy of the t_aux for later resource deletion.
         let t_aux_orig = t_aux.clone();
 
         // Convert TemporaryAux to TemporaryAuxCache, which instantiates all
         // elements based on the configs stored in TemporaryAux.
-        let t_aux = TemporaryAuxCache::new(&t_aux, replica_path.clone())
+        let t_aux = TemporaryAuxCache::<Tree, _>::new(&t_aux, replica_path.clone())
             .expect("failed to restore contents of t_aux");
 
-        let private_inputs = PrivateInputs::<H, Sha256Hasher> { p_aux, t_aux };
+        let private_inputs = PrivateInputs::<Tree, Sha256Hasher> { p_aux, t_aux };
 
         {
             let (circuit, inputs) =
@@ -622,9 +645,8 @@ mod tests {
             let (circuit1, _inputs) =
                 StackedCompound::circuit_for_test(&public_params, &public_inputs, &private_inputs)
                     .unwrap();
-            let blank_circuit = <StackedCompound<H, Sha256Hasher> as CompoundProof<
-                _,
-                StackedDrg<H, Sha256Hasher>,
+            let blank_circuit = <StackedCompound<Tree, Sha256Hasher> as CompoundProof<
+                StackedDrg<Tree, Sha256Hasher>,
                 _,
             >>::blank_circuit(&public_params.vanilla_params);
 
@@ -644,15 +666,14 @@ mod tests {
             }
         }
 
-        let blank_groth_params = <StackedCompound<H, Sha256Hasher> as CompoundProof<
-            _,
-            StackedDrg<H, Sha256Hasher>,
+        let blank_groth_params = <StackedCompound<Tree, Sha256Hasher> as CompoundProof<
+            StackedDrg<Tree, Sha256Hasher>,
             _,
         >>::groth_params(Some(rng), &public_params.vanilla_params)
         .expect("failed to generate groth params");
 
         // Discard cached MTs that are no longer needed.
-        TemporaryAux::<H, Sha256Hasher>::clear_temp(t_aux_orig).expect("t_aux delete failed");
+        TemporaryAux::<Tree, Sha256Hasher>::clear_temp(t_aux_orig).expect("t_aux delete failed");
 
         let proof = StackedCompound::prove(
             &public_params,

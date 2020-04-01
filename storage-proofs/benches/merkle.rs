@@ -1,9 +1,7 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion, ParameterizedBenchmark};
-use generic_array::typenum;
 use rand::{thread_rng, Rng};
-use storage_proofs::drgraph::{new_seed, Graph, BASE_DEGREE};
-use storage_proofs::hasher::blake2s::Blake2sHasher;
-use storage_proofs::hasher::pedersen::PedersenHasher;
+use storage_proofs::hasher::{PoseidonHasher, Sha256Hasher};
+use storage_proofs::merkle::{create_base_merkle_tree, BinaryMerkleTree};
 use storage_proofs::porep::stacked::{StackedBucketGraph, EXP_DEGREE};
 
 fn merkle_benchmark(c: &mut Criterion) {
@@ -15,34 +13,33 @@ fn merkle_benchmark(c: &mut Criterion) {
     c.bench(
         "merkletree-binary",
         ParameterizedBenchmark::new(
-            "blake2s",
+            "sha256",
             move |b, n_nodes| {
                 let mut rng = thread_rng();
                 let data: Vec<u8> = (0..32 * *n_nodes).map(|_| rng.gen()).collect();
-                let graph = StackedBucketGraph::<Blake2sHasher>::new_stacked(
-                    *n_nodes,
-                    BASE_DEGREE,
-                    EXP_DEGREE,
-                    new_seed(),
-                )
-                .unwrap();
-
-                b.iter(|| black_box(graph.merkle_tree::<typenum::U2>(None, &data).unwrap()))
+                b.iter(|| {
+                    black_box(
+                        create_base_merkle_tree::<BinaryMerkleTree<Sha256Hasher>>(
+                            None, *n_nodes, &data,
+                        )
+                        .unwrap(),
+                    )
+                })
             },
             params,
         )
-        .with_function("pedersen", move |b, n_nodes| {
+        .with_function("poseidon", move |b, n_nodes| {
             let mut rng = thread_rng();
             let data: Vec<u8> = (0..32 * *n_nodes).map(|_| rng.gen()).collect();
-            let graph = StackedBucketGraph::<PedersenHasher>::new_stacked(
-                *n_nodes,
-                BASE_DEGREE,
-                EXP_DEGREE,
-                new_seed(),
-            )
-            .unwrap();
 
-            b.iter(|| black_box(graph.merkle_tree::<typenum::U2>(None, &data).unwrap()))
+            b.iter(|| {
+                black_box(
+                    create_base_merkle_tree::<BinaryMerkleTree<PoseidonHasher>>(
+                        None, *n_nodes, &data,
+                    )
+                    .unwrap(),
+                )
+            })
         })
         .sample_size(20),
     );

@@ -1,6 +1,6 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion, Throughput};
 use ff::Field;
-use paired::bls12_381::{Bls12, Fr};
+use paired::bls12_381::Fr;
 use rand::thread_rng;
 use storage_proofs::drgraph::new_seed;
 use storage_proofs::fr32::fr_into_bytes;
@@ -19,7 +19,7 @@ fn pregenerate_data<H: Hasher>(degree: usize) -> Pregenerated<H> {
     let mut rng = thread_rng();
     let size = degree * 4 * 1024 * 1024;
     let data: Vec<u8> = (0..size)
-        .flat_map(|_| fr_into_bytes::<Bls12>(&Fr::random(&mut rng)))
+        .flat_map(|_| fr_into_bytes(&Fr::random(&mut rng)))
         .collect();
     let replica_id: H::Domain = H::Domain::random(&mut rng);
 

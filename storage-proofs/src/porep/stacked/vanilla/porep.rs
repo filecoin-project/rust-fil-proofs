@@ -1,26 +1,32 @@
 use std::path::PathBuf;
 
 use super::{
-    params::{BinaryTree, PersistentAux, PublicParams, Tau, TemporaryAux},
+    params::{PersistentAux, PublicParams, Tau, TemporaryAux},
     proof::StackedDrg,
 };
 
 use crate::error::Result;
 use crate::hasher::Hasher;
+use crate::merkle::{BinaryMerkleTree, MerkleTreeTrait};
 use crate::porep::PoRep;
 use crate::Data;
 
 use merkletree::store::StoreConfig;
 
-impl<'a, 'c, H: 'static + Hasher, G: 'static + Hasher> PoRep<'a, H, G> for StackedDrg<'a, H, G> {
-    type Tau = Tau<<H as Hasher>::Domain, <G as Hasher>::Domain>;
-    type ProverAux = (PersistentAux<H::Domain>, TemporaryAux<H, G>);
+impl<'a, 'c, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> PoRep<'a, Tree::Hasher, G>
+    for StackedDrg<'a, Tree, G>
+{
+    type Tau = Tau<<Tree::Hasher as Hasher>::Domain, <G as Hasher>::Domain>;
+    type ProverAux = (
+        PersistentAux<<Tree::Hasher as Hasher>::Domain>,
+        TemporaryAux<Tree, G>,
+    );
 
     fn replicate(
-        pp: &'a PublicParams<H>,
-        replica_id: &H::Domain,
+        pp: &'a PublicParams<Tree>,
+        replica_id: &<Tree::Hasher as Hasher>::Domain,
         data: Data<'a>,
-        data_tree: Option<BinaryTree<G>>,
+        data_tree: Option<BinaryMerkleTree<G>>,
         config: StoreConfig,
         replica_path: PathBuf,
     ) -> Result<(Self::Tau, Self::ProverAux)> {
@@ -38,8 +44,8 @@ impl<'a, 'c, H: 'static + Hasher, G: 'static + Hasher> PoRep<'a, H, G> for Stack
     }
 
     fn extract_all<'b>(
-        pp: &'b PublicParams<H>,
-        replica_id: &'b <H as Hasher>::Domain,
+        pp: &'b PublicParams<Tree>,
+        replica_id: &'b <Tree::Hasher as Hasher>::Domain,
         data: &'b [u8],
         config: Option<StoreConfig>,
     ) -> Result<Vec<u8>> {
@@ -57,8 +63,8 @@ impl<'a, 'c, H: 'static + Hasher, G: 'static + Hasher> PoRep<'a, H, G> for Stack
     }
 
     fn extract(
-        _pp: &PublicParams<H>,
-        _replica_id: &<H as Hasher>::Domain,
+        _pp: &PublicParams<Tree>,
+        _replica_id: &<Tree::Hasher as Hasher>::Domain,
         _data: &[u8],
         _node: usize,
         _config: Option<StoreConfig>,

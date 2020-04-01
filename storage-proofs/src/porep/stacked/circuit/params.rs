@@ -2,35 +2,36 @@ use std::marker::PhantomData;
 
 use bellperson::gadgets::{boolean::Boolean, num};
 use bellperson::{ConstraintSystem, SynthesisError};
-use fil_sapling_crypto::jubjub::JubjubEngine;
 use generic_array::typenum;
 use paired::bls12_381::{Bls12, Fr};
-use paired::Engine;
 
 use super::{
     column_proof::ColumnProof, encoding_proof::EncodingProof, labeling_proof::LabelingProof,
 };
 use crate::drgraph::Graph;
-use crate::gadgets::por::PoRCircuit;
+use crate::gadgets::por::{AuthPath, PoRCircuit};
 use crate::gadgets::variables::Root;
-use crate::hasher::{Hasher, PoseidonArity, PoseidonEngine};
-use crate::merkle::MerkleProof;
+use crate::hasher::{Hasher, PoseidonArity};
+use crate::merkle::{DiskStore, MerkleProofTrait, MerkleTreeTrait, MerkleTreeWrapper, Store};
 use crate::porep::stacked::{
     Proof as VanillaProof, PublicParams, ReplicaColumnProof as VanillaReplicaColumnProof,
 };
 
 #[derive(Debug, Clone)]
-pub struct Proof<H: Hasher, G: Hasher> {
-    pub comm_d_proof: InclusionPath<Bls12, G, typenum::U2>,
-    pub comm_r_last_proof: InclusionPath<Bls12, H, typenum::U8>,
-    pub replica_column_proof: ReplicaColumnProof<H>,
+pub struct Proof<Tree: MerkleTreeTrait, G: Hasher> {
+    pub comm_d_proof: InclusionPath<G, typenum::U2, typenum::U0, typenum::U0>,
+    pub comm_r_last_proof:
+        InclusionPath<Tree::Hasher, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>,
+    pub replica_column_proof:
+        ReplicaColumnProof<Tree::Hasher, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>,
     pub labeling_proofs: Vec<(usize, LabelingProof)>,
     pub encoding_proof: EncodingProof,
+    _t: PhantomData<Tree>,
 }
 
-impl<H: Hasher, G: Hasher> Proof<H, G> {
+impl<Tree: MerkleTreeTrait, G: 'static + Hasher> Proof<Tree, G> {
     /// Create an empty proof, used in `blank_circuit`s.
-    pub fn empty(params: &PublicParams<H>) -> Self {
+    pub fn empty(params: &PublicParams<Tree>) -> Self {
         let layers = params.layer_challenges.layers();
 
         let mut labeling_proofs = Vec::with_capacity(layers);
@@ -44,6 +45,7 @@ impl<H: Hasher, G: Hasher> Proof<H, G> {
             replica_column_proof: ReplicaColumnProof::empty(params),
             labeling_proofs,
             encoding_proof: EncodingProof::empty(params),
+            _t: PhantomData,
         }
     }
 
@@ -52,7 +54,6 @@ impl<H: Hasher, G: Hasher> Proof<H, G> {
     pub fn synthesize<CS: ConstraintSystem<Bls12>>(
         self,
         mut cs: CS,
-        params: &<Bls12 as JubjubEngine>::Params,
         layers: usize,
         comm_d: &num::AllocatedNum<Bls12>,
         comm_c: &num::AllocatedNum<Bls12>,
@@ -65,13 +66,13 @@ impl<H: Hasher, G: Hasher> Proof<H, G> {
             replica_column_proof,
             labeling_proofs,
             encoding_proof,
+            ..
         } = self;
 
         // verify initial data layer
         let comm_d_leaf = comm_d_proof.alloc_value(cs.namespace(|| "comm_d_leaf"))?;
         comm_d_proof.synthesize(
             cs.namespace(|| "comm_d_inclusion"),
-            params,
             comm_d.clone(),
             comm_d_leaf.clone(),
         )?;
@@ -90,7 +91,6 @@ impl<H: Hasher, G: Hasher> Proof<H, G> {
 
             proof.synthesize(
                 cs.namespace(|| format!("labeling_proof_{}", layer)),
-                params,
                 replica_id,
                 &labeled_node,
             )?;
@@ -98,19 +98,17 @@ impl<H: Hasher, G: Hasher> Proof<H, G> {
 
         encoding_proof.synthesize(
             cs.namespace(|| format!("encoding_proof_{}", layers)),
-            params,
             replica_id,
             &comm_r_last_data_leaf,
             &comm_d_leaf,
         )?;
 
         // verify replica column openings
-        replica_column_proof.synthesize(cs.namespace(|| "replica_column_proof"), params, comm_c)?;
+        replica_column_proof.synthesize(cs.namespace(|| "replica_column_proof"), comm_c)?;
 
         // verify final replica layer
         comm_r_last_proof.synthesize(
             cs.namespace(|| "comm_r_last_data_inclusion"),
-            params,
             comm_r_last.clone(),
             comm_r_last_data_leaf,
         )?;
@@ -119,8 +117,11 @@ impl<H: Hasher, G: Hasher> Proof<H, G> {
     }
 }
 
-impl<H: Hasher, G: Hasher> From<VanillaProof<H, G>> for Proof<H, G> {
-    fn from(vanilla_proof: VanillaProof<H, G>) -> Self {
+impl<Tree: MerkleTreeTrait, G: Hasher> From<VanillaProof<Tree, G>> for Proof<Tree, G>
+where
+    Tree::Hasher: 'static,
+{
+    fn from(vanilla_proof: VanillaProof<Tree, G>) -> Self {
         let VanillaProof {
             comm_d_proofs,
             comm_r_last_proof,
@@ -142,40 +143,34 @@ impl<H: Hasher, G: Hasher> From<VanillaProof<H, G>> for Proof<H, G> {
             replica_column_proof: replica_column_proofs.into(),
             labeling_proofs,
             encoding_proof: encoding_proof.into(),
+            _t: PhantomData,
         }
     }
 }
 
 #[derive(Debug, Clone)]
-pub struct InclusionPath<E: Engine, H: Hasher, U>
+pub struct InclusionPath<H: Hasher, U, V, W>
 where
-    U: PoseidonArity<E>,
-    typenum::Add1<U>: generic_array::ArrayLength<E::Fr>,
+    U: 'static + PoseidonArity,
+    V: 'static + PoseidonArity,
+    W: 'static + PoseidonArity,
 {
     value: Option<Fr>,
-    auth_path: Vec<(Vec<Option<Fr>>, Option<usize>)>,
-    _e: PhantomData<E>,
-    _h: PhantomData<H>,
-    _u: PhantomData<U>,
+    auth_path: AuthPath<H, U, V, W>,
 }
 
-impl<U, H: Hasher> InclusionPath<Bls12, H, U>
+impl<H: Hasher, U, V, W> InclusionPath<H, U, V, W>
 where
-    U: 'static + PoseidonArity<Bls12>,
-    Bls12: PoseidonEngine<U>,
-    typenum::Add1<U>: generic_array::ArrayLength<Fr>,
+    H: 'static,
+    U: 'static + PoseidonArity,
+    V: 'static + PoseidonArity,
+    W: 'static + PoseidonArity,
 {
     /// Create an empty proof, used in `blank_circuit`s.
     pub fn empty<G: Hasher>(graph: &impl Graph<G>) -> Self {
         InclusionPath {
             value: None,
-            auth_path: vec![
-                (vec![None; U::to_usize() - 1], None);
-                graph.merkle_tree_depth::<U>() as usize - 1
-            ],
-            _e: PhantomData,
-            _h: PhantomData,
-            _u: PhantomData,
+            auth_path: AuthPath::blank(graph.size()),
         }
     }
 
@@ -193,7 +188,6 @@ where
     pub fn synthesize<CS: ConstraintSystem<Bls12>>(
         self,
         cs: CS,
-        params: &<Bls12 as JubjubEngine>::Params,
         root: num::AllocatedNum<Bls12>,
         leaf: num::AllocatedNum<Bls12>,
     ) -> Result<(), SynthesisError> {
@@ -201,37 +195,55 @@ where
 
         let root = Root::from_allocated::<CS>(root);
         let value = Root::from_allocated::<CS>(leaf);
-        PoRCircuit::<U, Bls12, H>::synthesize(cs, params, value, auth_path, root, true)
+        PoRCircuit::<MerkleTreeWrapper<H, DiskStore<H::Domain>, U, V, W>>::synthesize(
+            cs, value, auth_path, root, true,
+        )
     }
 }
 
-impl<E: Engine, H: Hasher, U: PoseidonArity<E>> From<MerkleProof<H, U>> for InclusionPath<E, H, U>
-where
-    typenum::Add1<U>: generic_array::ArrayLength<E::Fr>,
+impl<
+        H: Hasher,
+        U: 'static + PoseidonArity,
+        V: 'static + PoseidonArity,
+        W: 'static + PoseidonArity,
+        X: MerkleProofTrait<Hasher = H, Arity = U, SubTreeArity = V, TopTreeArity = W>,
+    > From<X> for InclusionPath<H, U, V, W>
 {
-    fn from(other: MerkleProof<H, U>) -> Self {
+    fn from(other: X) -> Self {
         let (value, auth_path) = other.into_options_with_leaf();
 
         InclusionPath {
             value,
-            auth_path,
-            _e: PhantomData,
-            _h: PhantomData,
-            _u: PhantomData,
+            auth_path: auth_path.into(),
         }
     }
 }
 
 #[derive(Debug, Clone)]
-pub struct ReplicaColumnProof<H: Hasher> {
-    c_x: ColumnProof<H>,
-    drg_parents: Vec<ColumnProof<H>>,
-    exp_parents: Vec<ColumnProof<H>>,
+pub struct ReplicaColumnProof<
+    H: Hasher,
+    U: 'static + PoseidonArity,
+    V: 'static + PoseidonArity,
+    W: 'static + PoseidonArity,
+> {
+    c_x: ColumnProof<H, U, V, W>,
+    drg_parents: Vec<ColumnProof<H, U, V, W>>,
+    exp_parents: Vec<ColumnProof<H, U, V, W>>,
 }
 
-impl<H: Hasher> ReplicaColumnProof<H> {
+impl<
+        H: 'static + Hasher,
+        U: 'static + PoseidonArity,
+        V: 'static + PoseidonArity,
+        W: 'static + PoseidonArity,
+    > ReplicaColumnProof<H, U, V, W>
+{
     /// Create an empty proof, used in `blank_circuit`s.
-    pub fn empty(params: &PublicParams<H>) -> Self {
+    pub fn empty<S, Tree>(params: &PublicParams<Tree>) -> Self
+    where
+        S: Store<H::Domain>,
+        Tree: MerkleTreeTrait<Hasher = H, Store = S, Arity = U, SubTreeArity = V, TopTreeArity = W>,
+    {
         ReplicaColumnProof {
             c_x: ColumnProof::empty(params),
             drg_parents: vec![ColumnProof::empty(params); params.graph.base_graph().degree()],
@@ -242,7 +254,6 @@ impl<H: Hasher> ReplicaColumnProof<H> {
     pub fn synthesize<CS: ConstraintSystem<Bls12>>(
         self,
         mut cs: CS,
-        params: &<Bls12 as JubjubEngine>::Params,
         comm_c: &num::AllocatedNum<Bls12>,
     ) -> Result<(), SynthesisError> {
         let ReplicaColumnProof {
@@ -252,24 +263,31 @@ impl<H: Hasher> ReplicaColumnProof<H> {
         } = self;
 
         // c_x
-        c_x.synthesize(cs.namespace(|| "c_x"), params, comm_c)?;
+        c_x.synthesize(cs.namespace(|| "c_x"), comm_c)?;
 
         // drg parents
         for (i, parent) in drg_parents.into_iter().enumerate() {
-            parent.synthesize(cs.namespace(|| format!("drg_parent_{}", i)), params, comm_c)?;
+            parent.synthesize(cs.namespace(|| format!("drg_parent_{}", i)), comm_c)?;
         }
 
         // exp parents
         for (i, parent) in exp_parents.into_iter().enumerate() {
-            parent.synthesize(cs.namespace(|| format!("exp_parent_{}", i)), params, comm_c)?;
+            parent.synthesize(cs.namespace(|| format!("exp_parent_{}", i)), comm_c)?;
         }
 
         Ok(())
     }
 }
 
-impl<H: Hasher> From<VanillaReplicaColumnProof<H>> for ReplicaColumnProof<H> {
-    fn from(vanilla_proof: VanillaReplicaColumnProof<H>) -> Self {
+impl<
+        H: 'static + Hasher,
+        U: 'static + PoseidonArity,
+        V: 'static + PoseidonArity,
+        W: 'static + PoseidonArity,
+        X: MerkleProofTrait<Hasher = H, Arity = U, SubTreeArity = V, TopTreeArity = W>,
+    > From<VanillaReplicaColumnProof<X>> for ReplicaColumnProof<H, U, V, W>
+{
+    fn from(vanilla_proof: VanillaReplicaColumnProof<X>) -> Self {
         let VanillaReplicaColumnProof {
             c_x,
             drg_parents,

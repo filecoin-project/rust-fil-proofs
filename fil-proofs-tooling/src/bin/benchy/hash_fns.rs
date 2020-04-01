@@ -5,7 +5,6 @@ use paired::bls12_381::Bls12;
 use rand::RngCore;
 use serde::Serialize;
 use storage_proofs::crypto;
-use storage_proofs::crypto::pedersen::JJ_PARAMS;
 use storage_proofs::gadgets::pedersen::{pedersen_compression_num, pedersen_md_no_padding};
 use storage_proofs::gadgets::TestConstraintSystem;
 use storage_proofs::util::{bits_to_bytes, bytes_into_boolean_vec, bytes_into_boolean_vec_be};
@@ -84,7 +83,7 @@ fn pedersen_count(bytes: usize) -> anyhow::Result<Report> {
     };
 
     if bytes < 128 {
-        let out = pedersen_compression_num(&mut cs, &JJ_PARAMS, &data_bits)?;
+        let out = pedersen_compression_num(&mut cs, &data_bits)?;
         assert!(cs.is_satisfied(), "constraints not satisfied");
 
         let expected = crypto::pedersen::pedersen(data.as_slice());
@@ -94,7 +93,7 @@ fn pedersen_count(bytes: usize) -> anyhow::Result<Report> {
             "circuit and non circuit do not match"
         );
     } else {
-        let out = pedersen_md_no_padding(cs.namespace(|| "pedersen"), &JJ_PARAMS, &data_bits)
+        let out = pedersen_md_no_padding(cs.namespace(|| "pedersen"), &data_bits)
             .expect("pedersen hashing failed");
         assert!(cs.is_satisfied(), "constraints not satisfied");
         let expected = crypto::pedersen::pedersen_md_no_padding(data.as_slice());

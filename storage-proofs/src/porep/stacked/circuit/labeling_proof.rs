@@ -1,11 +1,11 @@
 use bellperson::gadgets::{boolean::Boolean, num};
 use bellperson::{ConstraintSystem, SynthesisError};
-use fil_sapling_crypto::jubjub::JubjubEngine;
 use paired::bls12_381::{Bls12, Fr};
 
 use crate::fr32::fr_into_bytes;
 use crate::gadgets::{constraint, uint64};
 use crate::hasher::Hasher;
+use crate::merkle::{MerkleTreeTrait, Store};
 use crate::porep::stacked::{LabelingProof as VanillaLabelingProof, PublicParams, TOTAL_PARENTS};
 use crate::util::bytes_into_boolean_vec_be;
 
@@ -19,7 +19,13 @@ pub struct LabelingProof {
 
 impl LabelingProof {
     /// Create an empty proof, used in `blank_circuit`s.
-    pub fn empty<H: Hasher>(_params: &PublicParams<H>, _layer: usize) -> Self {
+    pub fn empty<S: Store<H::Domain>, Tree, H: 'static + Hasher>(
+        _params: &PublicParams<Tree>,
+        _layer: usize,
+    ) -> Self
+    where
+        Tree: MerkleTreeTrait<Hasher = H, Store = S>,
+    {
         LabelingProof {
             node: None,
             parents: vec![None; TOTAL_PARENTS],
@@ -28,7 +34,6 @@ impl LabelingProof {
 
     fn create_label<CS: ConstraintSystem<Bls12>>(
         mut cs: CS,
-        _params: &<Bls12 as JubjubEngine>::Params,
         replica_id: &[Boolean],
         node: Option<u64>,
         parents: Vec<Option<Fr>>,
@@ -39,7 +44,7 @@ impl LabelingProof {
             .enumerate()
             .map(|(i, val)| match val {
                 Some(val) => {
-                    let bytes = fr_into_bytes::<Bls12>(&val);
+                    let bytes = fr_into_bytes(&val);
                     bytes_into_boolean_vec_be(
                         cs.namespace(|| format!("parents_{}_bits", i)),
                         Some(&bytes),
@@ -67,19 +72,12 @@ impl LabelingProof {
     pub fn synthesize<CS: ConstraintSystem<Bls12>>(
         self,
         mut cs: CS,
-        params: &<Bls12 as JubjubEngine>::Params,
         replica_id: &[Boolean],
         exp_encoded_node: &num::AllocatedNum<Bls12>,
     ) -> Result<(), SynthesisError> {
         let LabelingProof { node, parents } = self;
 
-        let key = Self::create_label(
-            cs.namespace(|| "create_label"),
-            params,
-            replica_id,
-            node,
-            parents,
-        )?;
+        let key = Self::create_label(cs.namespace(|| "create_label"), replica_id, node, parents)?;
 
         // enforce equality
         constraint::equal(&mut cs, || "equality_key", &exp_encoded_node, &key);

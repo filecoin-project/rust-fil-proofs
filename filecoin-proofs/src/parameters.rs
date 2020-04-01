@@ -1,19 +1,15 @@
 use anyhow::{ensure, Result};
 use storage_proofs::porep::stacked::{self, LayerChallenges, StackedDrg};
-use storage_proofs::post::election::{self, ElectionPoSt};
 use storage_proofs::post::fallback;
 use storage_proofs::proof::ProofScheme;
 
 use crate::constants::*;
-use crate::types::{PaddedBytesAmount, PoStConfig};
+use crate::types::{MerkleTreeTrait, PaddedBytesAmount, PoStConfig};
 
 const DRG_SEED: [u8; 28] = [
     0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25,
     26, 27,
 ]; // Arbitrary, need a theory for how to vary this over time.
-
-type ElectionPostSetupParams = election::SetupParams;
-pub type ElectionPostPublicParams = election::PublicParams;
 
 type WinningPostSetupParams = fallback::SetupParams;
 pub type WinningPostPublicParams = fallback::PublicParams;
@@ -21,30 +17,17 @@ pub type WinningPostPublicParams = fallback::PublicParams;
 type WindowPostSetupParams = fallback::SetupParams;
 pub type WindowPostPublicParams = fallback::PublicParams;
 
-pub fn public_params(
+pub fn public_params<Tree: 'static + MerkleTreeTrait>(
     sector_bytes: PaddedBytesAmount,
     partitions: usize,
-) -> Result<stacked::PublicParams<DefaultTreeHasher>> {
-    StackedDrg::<DefaultTreeHasher, DefaultPieceHasher>::setup(&setup_params(
-        sector_bytes,
-        partitions,
-    )?)
+) -> Result<stacked::PublicParams<Tree>> {
+    StackedDrg::<Tree, DefaultPieceHasher>::setup(&setup_params(sector_bytes, partitions)?)
 }
 
-pub fn election_post_public_params(post_config: &PoStConfig) -> Result<ElectionPostPublicParams> {
-    ElectionPoSt::<DefaultTreeHasher>::setup(&election_post_setup_params(&post_config))
-}
-
-pub fn election_post_setup_params(post_config: &PoStConfig) -> ElectionPostSetupParams {
-    election::SetupParams {
-        sector_size: post_config.padded_sector_size().into(),
-        challenge_count: post_config.challenge_count,
-        challenged_nodes: 1,
-    }
-}
-
-pub fn winning_post_public_params(post_config: &PoStConfig) -> Result<WinningPostPublicParams> {
-    fallback::FallbackPoSt::<DefaultTreeHasher>::setup(&winning_post_setup_params(&post_config)?)
+pub fn winning_post_public_params<Tree: 'static + MerkleTreeTrait>(
+    post_config: &PoStConfig,
+) -> Result<WinningPostPublicParams> {
+    fallback::FallbackPoSt::<Tree>::setup(&winning_post_setup_params(&post_config)?)
 }
 
 pub fn winning_post_setup_params(post_config: &PoStConfig) -> Result<WinningPostSetupParams> {
@@ -71,8 +54,10 @@ pub fn winning_post_setup_params(post_config: &PoStConfig) -> Result<WinningPost
     })
 }
 
-pub fn window_post_public_params(post_config: &PoStConfig) -> Result<WindowPostPublicParams> {
-    fallback::FallbackPoSt::<DefaultTreeHasher>::setup(&window_post_setup_params(&post_config))
+pub fn window_post_public_params<Tree: 'static + MerkleTreeTrait>(
+    post_config: &PoStConfig,
+) -> Result<WindowPostPublicParams> {
+    fallback::FallbackPoSt::<Tree>::setup(&window_post_setup_params(&post_config))
 }
 
 pub fn window_post_setup_params(post_config: &PoStConfig) -> WindowPostSetupParams {
@@ -166,7 +151,7 @@ mod tests {
             sector_size: 2048u64.into(),
         };
 
-        let params = winning_post_public_params(&config).unwrap();
+        let params = winning_post_public_params::<DefaultOctLCTree>(&config).unwrap();
         assert_eq!(params.sector_count, 66);
         assert_eq!(params.challenge_count, 1);
         assert_eq!(params.sector_size, 2048);

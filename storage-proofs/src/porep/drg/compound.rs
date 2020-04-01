@@ -2,17 +2,16 @@ use std::marker::PhantomData;
 
 use anyhow::{ensure, Context};
 use bellperson::Circuit;
-use fil_sapling_crypto::jubjub::JubjubEngine;
 use generic_array::typenum;
 use paired::bls12_381::{Bls12, Fr};
 
 use crate::compound_proof::{CircuitComponent, CompoundProof};
-use crate::crypto::pedersen::JJ_PARAMS;
 use crate::drgraph::Graph;
 use crate::error::Result;
 use crate::gadgets::por::PoRCompound;
 use crate::gadgets::variables::Root;
 use crate::hasher::Hasher;
+use crate::merkle::{BinaryMerkleTree, MerkleProofTrait};
 use crate::parameter_cache::{CacheableParameters, ParameterSetMetadata};
 use crate::por;
 use crate::porep::drg::DrgPoRep;
@@ -53,8 +52,8 @@ where
     _g: PhantomData<G>,
 }
 
-impl<E: JubjubEngine, C: Circuit<E>, H: Hasher, G: Graph<H>, P: ParameterSetMetadata>
-    CacheableParameters<E, C, P> for DrgPoRepCompound<H, G>
+impl<C: Circuit<Bls12>, H: Hasher, G: Graph<H>, P: ParameterSetMetadata> CacheableParameters<C, P>
+    for DrgPoRepCompound<H, G>
 where
     G::Key: AsRef<H::Domain>,
 {
@@ -63,11 +62,11 @@ where
     }
 }
 
-impl<'a, H, G> CompoundProof<'a, Bls12, DrgPoRep<'a, H, G>, DrgPoRepCircuit<'a, H>>
+impl<'a, H, G> CompoundProof<'a, DrgPoRep<'a, H, G>, DrgPoRepCircuit<'a, H>>
     for DrgPoRepCompound<H, G>
 where
-    H: 'a + Hasher,
-    G::Key: AsRef<H::Domain>,
+    H: 'static + Hasher,
+    G::Key: AsRef<<H as Hasher>::Domain>,
     G: 'a + Graph<H> + ParameterSetMetadata + Sync + Send,
 {
     fn generate_public_inputs(
@@ -111,7 +110,7 @@ where
                     commitment: comm_r,
                     challenge: node as usize,
                 };
-                let por_inputs = PoRCompound::<H, typenum::U2>::generate_public_inputs(
+                let por_inputs = PoRCompound::<BinaryMerkleTree<H>>::generate_public_inputs(
                     &por_pub_inputs,
                     &por_pub_params,
                     None,
@@ -125,7 +124,7 @@ where
                 challenge: *challenge,
             };
 
-            let por_inputs = PoRCompound::<H, typenum::U2>::generate_public_inputs(
+            let por_inputs = PoRCompound::<BinaryMerkleTree<H>>::generate_public_inputs(
                 &por_pub_inputs,
                 &por_pub_params,
                 None,
@@ -137,7 +136,7 @@ where
 
     fn circuit(
         public_inputs: &<DrgPoRep<'a, H, G> as ProofScheme<'a>>::PublicInputs,
-        component_private_inputs: <DrgPoRepCircuit<'a, H> as CircuitComponent>::ComponentPrivateInputs,
+        component_private_inputs: <DrgPoRepCircuit<H> as CircuitComponent>::ComponentPrivateInputs,
         proof: &<DrgPoRep<'a, H, G> as ProofScheme<'a>>::Proof,
         public_params: &<DrgPoRep<'a, H, G> as ProofScheme<'a>>::PublicParams,
         _partition_k: Option<usize>,
@@ -224,7 +223,6 @@ where
         );
 
         Ok(DrgPoRepCircuit {
-            params: &*JJ_PARAMS,
             replica_nodes,
             replica_nodes_paths,
             replica_root,
@@ -262,7 +260,6 @@ where
         let data_root = Root::Val(None);
 
         DrgPoRepCircuit {
-            params: &*JJ_PARAMS,
             replica_nodes,
             replica_nodes_paths,
             replica_root,
@@ -288,6 +285,7 @@ mod tests {
     use crate::fr32::fr_into_bytes;
     use crate::gadgets::{MetricCS, TestConstraintSystem};
     use crate::hasher::{Hasher, PedersenHasher, PoseidonHasher};
+    use crate::merkle::{BinaryMerkleTree, MerkleTreeTrait};
     use crate::porep::stacked::BINARY_ARITY;
     use crate::porep::{drg, PoRep};
     use crate::proof::NoRequirements;
@@ -301,16 +299,16 @@ mod tests {
     #[test]
     #[ignore] // Slow test – run only when compiled for release.
     fn test_drgporep_compound_pedersen() {
-        drgporep_test_compound::<PedersenHasher>();
+        drgporep_test_compound::<BinaryMerkleTree<PedersenHasher>>();
     }
 
     #[test]
     #[ignore] // Slow test – run only when compiled for release.
     fn test_drgporep_compound_poseidon() {
-        drgporep_test_compound::<PoseidonHasher>();
+        drgporep_test_compound::<BinaryMerkleTree<PoseidonHasher>>();
     }
 
-    fn drgporep_test_compound<H: Hasher>() {
+    fn drgporep_test_compound<Tree: 'static + MerkleTreeTrait>() {
         // femme::pretty::Logger::new()
         //     .start(log::LevelFilter::Trace)
         //     .ok();
@@ -323,7 +321,7 @@ mod tests {
 
         let replica_id: Fr = Fr::random(rng);
         let mut data: Vec<u8> = (0..nodes)
-            .flat_map(|_| fr_into_bytes::<Bls12>(&Fr::random(rng)))
+            .flat_map(|_| fr_into_bytes(&Fr::random(rng)))
             .collect();
 
         // Only generate seed once. It would be bad if we used different seeds in the same test.
@@ -345,7 +343,8 @@ mod tests {
         };
 
         let public_params =
-            DrgPoRepCompound::<H, BucketGraph<_>>::setup(&setup_params).expect("setup failed");
+            DrgPoRepCompound::<Tree::Hasher, BucketGraph<Tree::Hasher>>::setup(&setup_params)
+                .expect("setup failed");
 
         // MT for original data is always named tree-d, and it will be
         // referenced later in the process as such.
@@ -361,17 +360,18 @@ mod tests {
         let temp_path = temp_dir.path();
         let replica_path = temp_path.join("replica-path");
 
-        let (tau, aux) = drg::DrgPoRep::<H, _>::replicate(
+        let data_tree: Option<BinaryMerkleTree<Tree::Hasher>> = None;
+        let (tau, aux) = drg::DrgPoRep::<Tree::Hasher, BucketGraph<_>>::replicate(
             &public_params.vanilla_params,
             &replica_id.into(),
             (&mut data[..]).into(),
-            None,
+            data_tree,
             config,
             replica_path.clone(),
         )
         .expect("failed to replicate");
 
-        let public_inputs = drg::PublicInputs::<H::Domain> {
+        let public_inputs = drg::PublicInputs::<<Tree::Hasher as Hasher>::Domain> {
             replica_id: Some(replica_id.into()),
             challenges,
             tau: Some(tau),
@@ -399,10 +399,11 @@ mod tests {
         };
 
         let public_params =
-            DrgPoRepCompound::<H, BucketGraph<_>>::setup(&setup_params).expect("setup failed");
+            DrgPoRepCompound::<Tree::Hasher, BucketGraph<Tree::Hasher>>::setup(&setup_params)
+                .expect("setup failed");
 
         {
-            let (circuit, inputs) = DrgPoRepCompound::<H, _>::circuit_for_test(
+            let (circuit, inputs) = DrgPoRepCompound::<Tree::Hasher, _>::circuit_for_test(
                 &public_params,
                 &public_inputs,
                 &private_inputs,
@@ -417,7 +418,7 @@ mod tests {
             assert!(cs.is_satisfied());
             assert!(cs.verify(&inputs));
 
-            let blank_circuit = <DrgPoRepCompound<_, _> as CompoundProof<_, _, _>>::blank_circuit(
+            let blank_circuit = <DrgPoRepCompound<_, _> as CompoundProof<_, _>>::blank_circuit(
                 &public_params.vanilla_params,
             );
 
@@ -435,11 +436,13 @@ mod tests {
         }
 
         {
-            let gparams =
-                DrgPoRepCompound::<H, _>::groth_params(Some(rng), &public_params.vanilla_params)
-                    .expect("failed to get groth params");
+            let gparams = DrgPoRepCompound::<Tree::Hasher, _>::groth_params(
+                Some(rng),
+                &public_params.vanilla_params,
+            )
+            .expect("failed to get groth params");
 
-            let proof = DrgPoRepCompound::<H, _>::prove(
+            let proof = DrgPoRepCompound::<Tree::Hasher, _>::prove(
                 &public_params,
                 &public_inputs,
                 &private_inputs,
@@ -447,7 +450,7 @@ mod tests {
             )
             .expect("failed while proving");
 
-            let verified = DrgPoRepCompound::<H, _>::verify(
+            let verified = DrgPoRepCompound::<Tree::Hasher, _>::verify(
                 &public_params,
                 &public_inputs,
                 &proof,
