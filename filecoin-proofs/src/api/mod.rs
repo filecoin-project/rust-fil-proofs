@@ -303,9 +303,6 @@ fn verify_store(config: &StoreConfig, arity: usize) -> Result<()> {
 
         let store_len = config.size.unwrap();
         for config in &configs {
-            let len = File::open(StoreConfig::data_path(&config.path, &config.id))?
-                .metadata()?
-                .len();
             ensure!(
                 DiskStore::<<DefaultPieceHasher as Hasher>::Domain>::is_consistent(
                     store_len, arity, &config,
