@@ -22,6 +22,12 @@ use crate::error::*;
 use crate::hasher::{Domain, Hasher};
 use crate::util::{data_at_node, NODE_SIZE};
 
+use generic_array::typenum::{UInt, UTerm, Unsigned, B1};
+use generic_array::ArrayLength;
+
+use crate::hasher::types::PoseidonArity;
+use std::ops::Add;
+
 // FIXME: Move from filecoin-proofs/src/constants to here?
 pub const SECTOR_SIZE_2_KIB: u64 = 2_048;
 pub const SECTOR_SIZE_8_MIB: u64 = 1 << 23;
@@ -80,6 +86,39 @@ pub type OctTopTree<H> = OctTopMerkleTree<<H as Hasher>::Domain, <H as Hasher>::
 pub type OctLCTree<H> = OctLCMerkleTree<<H as Hasher>::Domain, <H as Hasher>::Function>;
 pub type OctLCSubTree<H> = OctLCSubMerkleTree<<H as Hasher>::Domain, <H as Hasher>::Function>;
 pub type OctLCTopTree<H> = OctLCTopMerkleTree<<H as Hasher>::Domain, <H as Hasher>::Function>;
+
+pub trait MerkleTreeTrait: Send + Sync {
+    type Arity: 'static + PoseidonArity;
+    type Hasher: Hasher;
+    type Proof: MerkleProofTrait<Arity = Self::Arity>;
+
+    fn display() -> String;
+}
+
+pub trait MerkleProofTrait: Clone + Serialize + serde::de::DeserializeOwned {
+    type Arity: 'static + PoseidonArity;
+}
+
+impl<H: Hasher, S: Store<<H as Hasher>::Domain>, U: 'static + PoseidonArity> MerkleTreeTrait
+    for MerkleTreeWrapper<H, S, U>
+{
+    type Arity = U;
+    type Hasher = H;
+    type Proof = MerkleProof<Self::Hasher, U>;
+
+    fn display() -> String {
+        format!("MerkleTree<{}>", U::to_usize())
+    }
+}
+
+impl<H: Hasher, U: 'static + PoseidonArity> MerkleProofTrait for MerkleProof<H, U> {
+    type Arity = U;
+}
+
+pub struct MerkleTreeWrapper<H: Hasher, S: Store<<H as Hasher>::Domain>, U: PoseidonArity> {
+    pub inner: merkle::MerkleTree<<H as Hasher>::Domain, <H as Hasher>::Function, S, U>,
+    pub h: PhantomData<H>,
+}
 
 #[derive(Debug)]
 pub enum OctTreeData<H: Hasher> {
@@ -144,45 +183,6 @@ impl<H: Hasher> OctTreeData<H> {
             _ => None,
         }
     }
-}
-
-use generic_array::typenum::{UInt, UTerm, Unsigned, B1};
-use generic_array::ArrayLength;
-
-use crate::hasher::types::PoseidonArity;
-use std::ops::Add;
-
-pub trait MerkleTreeTrait: Send + Sync {
-    type Arity: 'static + PoseidonArity;
-    type Hasher: Hasher;
-    type Proof: MerkleProofTrait<Arity = Self::Arity>;
-
-    fn display() -> String;
-}
-
-pub trait MerkleProofTrait: Clone + Serialize + serde::de::DeserializeOwned {
-    type Arity: 'static + PoseidonArity;
-}
-
-impl<H: Hasher, S: Store<<H as Hasher>::Domain>, U: 'static + PoseidonArity> MerkleTreeTrait
-    for MerkleTreeWrapper<H, S, U>
-{
-    type Arity = U;
-    type Hasher = H;
-    type Proof = MerkleProof<Self::Hasher, U>;
-
-    fn display() -> String {
-        format!("MerkleTree<{}>", U::to_usize())
-    }
-}
-
-impl<H: Hasher, U: 'static + PoseidonArity> MerkleProofTrait for MerkleProof<H, U> {
-    type Arity = U;
-}
-
-pub struct MerkleTreeWrapper<H: Hasher, S: Store<<H as Hasher>::Domain>, U: PoseidonArity> {
-    pub inner: merkle::MerkleTree<<H as Hasher>::Domain, <H as Hasher>::Function, S, U>,
-    pub h: PhantomData<H>,
 }
 
 /// Representation of a merkle proof.
