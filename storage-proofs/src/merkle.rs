@@ -340,7 +340,7 @@ impl<
         TopTreeArity: typenum::Unsigned,
     > MerkleProof<H, BaseArity, SubTreeArity, TopTreeArity>
 {
-    pub fn new_from_proof(p: &proof::Proof<H::Domain, BaseArity>) -> Self {
+    pub fn new_from_proof(p: &proof::Proof<H::Domain, BaseArity>) -> Result<Self> {
         let extract_path = |lemma, path| {
             lemma[1..lemma.len() - 1]
                 .chunks(BaseArity::to_usize() - 1)
@@ -352,38 +352,51 @@ impl<
                 .collect::<Vec<_>>()
         };
 
+        // Converts a merkle_light proof to a SingleProof
+        let proof_to_single = |proof| {
+            let root = proof.root();
+            let leaf = proof.item();
+            let path = extract_path(proof.lemma(), proof.path);
+
+            SingleProof::new(root, leaf, path)
+        };
+
         if p.top_layer_nodes > 0 {
+            ensure!(p.top_layer_nodes == TopTreeArity::to_usize(), "top arity mis-match");
+            ensure!(p.sub_tree_proof.is_some(), "Cannot generate top proof without a sub-proof");
+            let sub_p = p.sub_tree_proof.as_ref().unwrap();
+
+            ensure!(sub_p.sub_tree_proof.is_some(), "Cannot generate top proof without a base-proof");
+            let base_p = sub_p.sub_tree_proof.as_ref().unwrap();
+
             // Generate TopProof
-
-            // TODO:
-            let base_proof = SingleProof::new(root, leaf, path);
-            let sub_proof = SingleProof::new(root, leaf, path);
-            let top_proof = SingleProof::new(root, leaf, path);
+            let base_proof = proof_to_single(base_p);
+            let sub_proof = proof_to_single(sub_p);
+            let top_proof = proof_to_single(p);
             let proof = TopProof::new(base_proof, sub_proof, top_proof);
-            MerkleProof {
+
+            Ok(MerkleProof {
                 data: ProofData::Top(proof),
-            }
+            })
         } else if p.sub_tree_layer_nodes > 0 {
+            ensure!(p.sub_layer_nodes == SubTreeArity::to_usize(), "sub arity mis-match");
+            ensure!(p.sub_tree_proof.is_some(), "Cannot generate sub proof without a base-proof");
+            let base_p = p.sub_tree_proof.as_ref().unwrap();
+
             // Generate SubProof
-
-            // TODO:
-            let base_proof = SingleProof::new(root, leaf, path);
-            let sub_proof = SingleProof::new(root, leaf, path);
-
+            let base_proof = proof_to_single(base_p);
+            let sub_proof = proof_to_single(p);
             let proof = SubProof::new(base_proof, sub_proof);
 
-            MerkleProof {
+            Ok(MerkleProof {
                 data: ProofData::Sub(proof),
-            }
+            })
         } else {
             // Generate SingleProof
-            let root = p.root();
-            let leaf = p.item();
-            let path = extract_path(p.lemma(), p.path);
-            let proof = SingleProof::new(root, leaf, path);
-            MerkleProof {
+            let proof = proof_to_single(p);
+            Ok(MerkleProof {
                 data: ProofData::Single(proof),
-            }
+            })
         }
     }
 
