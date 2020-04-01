@@ -29,28 +29,26 @@ use crate::merkle::*;
 /// * `auth_path` - The authentication path of the leaf in the tree.
 /// * `root` - The merkle root of the tree.
 ///
-pub struct PoRCircuit<Tree, H: Hasher>
+pub struct PoRCircuit<Tree>
 where
-    Tree: MerkleTreeTrait<Hasher = H>,
+    Tree: MerkleTreeTrait,
 {
     value: Root<Bls12>,
     #[allow(clippy::type_complexity)]
     auth_path: Vec<(Vec<Option<Fr>>, Option<usize>)>,
     root: Root<Bls12>,
     private: bool,
-    _h: PhantomData<H>,
     _u: PhantomData<Tree>,
 }
 
-impl<Tree, H: Hasher> CircuitComponent for PoRCircuit<Tree, H>
+impl<Tree> CircuitComponent for PoRCircuit<Tree>
 where
-    Tree: MerkleTreeTrait<Hasher = H>,
+    Tree: MerkleTreeTrait,
 {
     type ComponentPrivateInputs = Option<Root<Bls12>>;
 }
 
-pub struct PoRCompound<Tree: MerkleTreeTrait<Hasher = H>, H: Hasher> {
-    _h: PhantomData<H>,
+pub struct PoRCompound<Tree: MerkleTreeTrait> {
     _u: PhantomData<Tree>,
 }
 
@@ -77,27 +75,26 @@ pub fn challenge_into_auth_path_bits<U: Unsigned>(challenge: usize, leaves: usiz
     bits
 }
 
-impl<C: Circuit<Bls12>, P: ParameterSetMetadata, H: Hasher, Tree: MerkleTreeTrait<Hasher = H>>
-    CacheableParameters<C, P> for PoRCompound<Tree, H>
+impl<C: Circuit<Bls12>, P: ParameterSetMetadata, Tree: MerkleTreeTrait> CacheableParameters<C, P>
+    for PoRCompound<Tree>
 {
     fn cache_prefix() -> String {
-        format!("proof-of-retrievability-{}-{}", H::name(), Tree::display())
+        format!("proof-of-retrievability-{}", Tree::display())
     }
 }
 
 // can only implment for Bls12 because por is not generic over the engine.
-impl<'a, Tree, H> CompoundProof<'a, PoR<H, Tree::Arity>, PoRCircuit<Tree, H>>
-    for PoRCompound<Tree, H>
+impl<'a, Tree> CompoundProof<'a, PoR<Tree::Hasher, Tree::Arity>, PoRCircuit<Tree>>
+    for PoRCompound<Tree>
 where
-    Tree: 'a + MerkleTreeTrait<Hasher = H>,
-    H: 'a + Hasher,
+    Tree: 'a + MerkleTreeTrait,
 {
     fn circuit<'b>(
-        public_inputs: &<PoR<H, Tree::Arity> as ProofScheme<'a>>::PublicInputs,
-        _component_private_inputs: <PoRCircuit<Tree, H> as CircuitComponent>::ComponentPrivateInputs,
-        proof: &'b <PoR<H, Tree::Arity> as ProofScheme<'a>>::Proof,
-        public_params: &'b <PoR<H, Tree::Arity> as ProofScheme<'a>>::PublicParams,
-    ) -> Result<PoRCircuit<Tree, H>> {
+        public_inputs: &<PoR<Tree::Hasher, Tree::Arity> as ProofScheme<'a>>::PublicInputs,
+        _component_private_inputs: <PoRCircuit<Tree> as CircuitComponent>::ComponentPrivateInputs,
+        proof: &'b <PoR<Tree::Hasher, Tree::Arity> as ProofScheme<'a>>::Proof,
+        public_params: &'b <PoR<Tree::Hasher, Tree::Arity> as ProofScheme<'a>>::PublicParams,
+    ) -> Result<PoRCircuit<Tree>> {
         let (root, private) = match (*public_inputs).commitment {
             None => (Root::Val(Some(proof.proof.root.into())), true),
             Some(commitment) => (Root::Val(Some(commitment.into())), false),
@@ -108,20 +105,19 @@ where
             "Inputs must be consistent with public params"
         );
 
-        Ok(PoRCircuit::<Tree, H> {
+        Ok(PoRCircuit::<Tree> {
             value: Root::Val(Some(proof.data.into())),
             auth_path: proof.proof.as_options(),
             root,
             private,
-            _h: PhantomData,
             _u: PhantomData,
         })
     }
 
     fn blank_circuit(
-        public_params: &<PoR<H, Tree::Arity> as ProofScheme<'a>>::PublicParams,
-    ) -> PoRCircuit<Tree, H> {
-        PoRCircuit::<Tree, H> {
+        public_params: &<PoR<Tree::Hasher, Tree::Arity> as ProofScheme<'a>>::PublicParams,
+    ) -> PoRCircuit<Tree> {
+        PoRCircuit::<Tree> {
             value: Root::Val(None),
             auth_path: vec![
                 (vec![None; Tree::Arity::to_usize() - 1], None);
@@ -129,14 +125,13 @@ where
             ],
             root: Root::Val(None),
             private: public_params.private,
-            _h: PhantomData,
             _u: PhantomData,
         }
     }
 
     fn generate_public_inputs(
-        pub_inputs: &<PoR<H, Tree::Arity> as ProofScheme<'a>>::PublicInputs,
-        pub_params: &<PoR<H, Tree::Arity> as ProofScheme<'a>>::PublicParams,
+        pub_inputs: &<PoR<Tree::Hasher, Tree::Arity> as ProofScheme<'a>>::PublicInputs,
+        pub_params: &<PoR<Tree::Hasher, Tree::Arity> as ProofScheme<'a>>::PublicParams,
         _k: Option<usize>,
     ) -> Result<Vec<Fr>> {
         let auth_path_bits =
@@ -157,9 +152,9 @@ where
     }
 }
 
-impl<'a, Tree, H: Hasher> Circuit<Bls12> for PoRCircuit<Tree, H>
+impl<'a, Tree> Circuit<Bls12> for PoRCircuit<Tree>
 where
-    Tree: MerkleTreeTrait<Hasher = H>,
+    Tree: MerkleTreeTrait,
 {
     /// # Public Inputs
     ///
@@ -219,7 +214,7 @@ where
                 let inserted = insert(cs, &cur, &index_bits, &path_elements)?;
 
                 // Compute the new subtree value
-                cur = H::Function::hash_multi_leaf_circuit::<Tree::Arity, _>(
+                cur = <Tree::Hasher as Hasher>::Function::hash_multi_leaf_circuit::<Tree::Arity, _>(
                     cs.namespace(|| "computation of commitment hash"),
                     &inserted,
                     i,
@@ -245,9 +240,9 @@ where
     }
 }
 
-impl<'a, Tree, H: Hasher> PoRCircuit<Tree, H>
+impl<'a, Tree> PoRCircuit<Tree>
 where
-    Tree: MerkleTreeTrait<Hasher = H>,
+    Tree: MerkleTreeTrait,
 {
     #[allow(clippy::type_complexity)]
     pub fn synthesize<CS>(
@@ -260,12 +255,11 @@ where
     where
         CS: ConstraintSystem<Bls12>,
     {
-        let por = PoRCircuit::<Tree, H> {
+        let por = PoRCircuit::<Tree> {
             value,
             auth_path,
             root,
             private,
-            _h: PhantomData,
             _u: PhantomData,
         };
 
@@ -326,8 +320,7 @@ mod tests {
             typenum::U2,
         >;
 
-        let public_params =
-            PoRCompound::<Tree, PedersenHasher>::setup(&setup_params).expect("setup failed");
+        let public_params = PoRCompound::<Tree>::setup(&setup_params).expect("setup failed");
 
         let private_inputs = por::PrivateInputs::<PedersenHasher, typenum::U2>::new(
             bytes_into_fr(data_at_node(data.as_slice(), public_inputs.challenge).unwrap())
@@ -336,35 +329,21 @@ mod tests {
             &tree,
         );
 
-        let gparams = PoRCompound::<Tree, PedersenHasher>::groth_params(
-            Some(rng),
-            &public_params.vanilla_params,
-        )
-        .expect("failed to generate groth params");
+        let gparams = PoRCompound::<Tree>::groth_params(Some(rng), &public_params.vanilla_params)
+            .expect("failed to generate groth params");
 
-        let proof = PoRCompound::<Tree, PedersenHasher>::prove(
-            &public_params,
-            &public_inputs,
-            &private_inputs,
-            &gparams,
-        )
-        .expect("failed while proving");
+        let proof =
+            PoRCompound::<Tree>::prove(&public_params, &public_inputs, &private_inputs, &gparams)
+                .expect("failed while proving");
 
-        let verified = PoRCompound::<Tree, PedersenHasher>::verify(
-            &public_params,
-            &public_inputs,
-            &proof,
-            &NoRequirements,
-        )
-        .expect("failed while verifying");
+        let verified =
+            PoRCompound::<Tree>::verify(&public_params, &public_inputs, &proof, &NoRequirements)
+                .expect("failed while verifying");
         assert!(verified);
 
-        let (circuit, inputs) = PoRCompound::<Tree, PedersenHasher>::circuit_for_test(
-            &public_params,
-            &public_inputs,
-            &private_inputs,
-        )
-        .unwrap();
+        let (circuit, inputs) =
+            PoRCompound::<Tree>::circuit_for_test(&public_params, &public_inputs, &private_inputs)
+                .unwrap();
 
         let mut cs = TestConstraintSystem::new();
 
