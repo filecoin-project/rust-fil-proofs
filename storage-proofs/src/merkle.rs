@@ -125,9 +125,39 @@ pub trait MerkleProofTrait:
     fn new_from_proof(
         p: &proof::Proof<<Self::Hasher as Hasher>::Domain, Self::Arity>,
     ) -> Result<Self>;
-    fn as_options(&self) -> Vec<(Vec<Option<Fr>>, Option<usize>)>;
-    fn into_options_with_leaf(self) -> (Option<Fr>, Vec<(Vec<Option<Fr>>, Option<usize>)>);
-    fn as_pairs(&self) -> Vec<(Vec<Fr>, usize)>;
+    fn as_options(&self) -> Vec<(Vec<Option<Fr>>, Option<usize>)> {
+        self.path()
+            .iter()
+            .map(|v| {
+                (
+                    v.0.iter().copied().map(Into::into).map(Some).collect(),
+                    Some(v.1),
+                )
+            })
+            .collect::<Vec<_>>()
+    }
+
+    fn into_options_with_leaf(self) -> (Option<Fr>, Vec<(Vec<Option<Fr>>, Option<usize>)>) {
+        let leaf = self.leaf();
+        let path = self.path();
+        (
+            Some(leaf.into()),
+            path.into_iter()
+                .map(|(a, b)| {
+                    (
+                        a.iter().copied().map(Into::into).map(Some).collect(),
+                        Some(*b),
+                    )
+                })
+                .collect::<Vec<_>>(),
+        )
+    }
+    fn as_pairs(&self) -> Vec<(Vec<Fr>, usize)> {
+        self.path()
+            .iter()
+            .map(|v| (v.0.iter().copied().map(Into::into).collect(), v.1))
+            .collect::<Vec<_>>()
+    }
     fn verify(&self) -> bool;
     fn validate(&self, node: usize) -> bool;
     fn validate_data(&self, data: <Self::Hasher as Hasher>::Domain) -> bool;
@@ -135,7 +165,12 @@ pub trait MerkleProofTrait:
     fn root(&self) -> &<Self::Hasher as Hasher>::Domain;
     fn len(&self) -> usize;
     fn path(&self) -> &Vec<(Vec<<Self::Hasher as Hasher>::Domain>, usize)>;
-    fn path_index(&self) -> usize;
+    fn path_index(&self) -> usize {
+        self.path()
+            .iter()
+            .rev()
+            .fold(0, |acc, (_, index)| (acc * Self::Arity::to_usize()) + index)
+    }
     fn proves_challenge(&self, challenge: usize) -> bool;
 }
 
@@ -279,23 +314,6 @@ impl<
         }
     }
 
-    fn as_options(&self) -> Vec<(Vec<Option<Fr>>, Option<usize>)> {
-        forward_method!(&self.data, as_options)
-    }
-
-    #[allow(clippy::type_complexity)]
-    fn into_options_with_leaf(self) -> (Option<Fr>, Vec<(Vec<Option<Fr>>, Option<usize>)>) {
-        match self.data {
-            ProofData::Single(proof) => proof.into_options_with_leaf(),
-            ProofData::Sub(proof) => proof.into_options_with_leaf(),
-            ProofData::Top(proof) => proof.into_options_with_leaf(),
-        }
-    }
-
-    fn as_pairs(&self) -> Vec<(Vec<Fr>, usize)> {
-        forward_method!(self.data, as_pairs)
-    }
-
     fn verify(&self) -> bool {
         forward_method!(self.data, verify)
     }
@@ -322,10 +340,6 @@ impl<
 
     fn path(&self) -> &Vec<(Vec<H::Domain>, usize)> {
         forward_method!(self.data, path)
-    }
-
-    fn path_index(&self) -> usize {
-        forward_method!(self.data, path_index)
     }
 
     fn proves_challenge(&self, challenge: usize) -> bool {
@@ -720,45 +734,6 @@ impl<H: Hasher, Arity: 'static + PoseidonArity> MerkleProofTrait for SingleProof
         todo!()
     }
 
-    fn as_options(&self) -> Vec<(Vec<Option<Fr>>, Option<usize>)> {
-        todo!()
-        // self.path
-        //     .iter()
-        //     .map(|v| {
-        //         (
-        //             v.0.iter().copied().map(Into::into).map(Some).collect(),
-        //             Some(v.1),
-        //         )
-        //     })
-        //     .collect::<Vec<_>>()
-    }
-
-    #[allow(clippy::type_complexity)]
-    fn into_options_with_leaf(self) -> (Option<Fr>, Vec<(Vec<Option<Fr>>, Option<usize>)>) {
-        todo!()
-        // let MerkleProof { leaf, path, .. } = self;
-
-        // (
-        //     Some(leaf.into()),
-        //     path.into_iter()
-        //         .map(|(a, b)| {
-        //             (
-        //                 a.iter().copied().map(Into::into).map(Some).collect(),
-        //                 Some(b),
-        //             )
-        //         })
-        //         .collect(),
-        // )
-    }
-
-    fn as_pairs(&self) -> Vec<(Vec<Fr>, usize)> {
-        todo!()
-        // self.path
-        //     .iter()
-        //     .map(|v| (v.0.iter().copied().map(Into::into).collect(), v.1))
-        //     .collect::<Vec<_>>()
-    }
-
     fn verify(&self) -> bool {
         todo!()
         // if self.sub_tree_proof.is_some() {
@@ -831,14 +806,6 @@ impl<H: Hasher, Arity: 'static + PoseidonArity> MerkleProofTrait for SingleProof
         // &self.path
     }
 
-    fn path_index(&self) -> usize {
-        todo!()
-        // self.path
-        //     .iter()
-        //     .rev()
-        //     .fold(0, |acc, (_, index)| (acc * Arity::to_usize()) + index)
-    }
-
     fn proves_challenge(&self, challenge: usize) -> bool {
         todo!()
         // if self.top_layer_nodes > 0 || self.sub_layer_nodes > 0 {
@@ -870,19 +837,6 @@ impl<H: Hasher, BaseArity: 'static + PoseidonArity, SubTreeArity: 'static + Pose
         todo!()
     }
 
-    fn as_options(&self) -> Vec<(Vec<Option<Fr>>, Option<usize>)> {
-        todo!()
-    }
-
-    #[allow(clippy::type_complexity)]
-    fn into_options_with_leaf(self) -> (Option<Fr>, Vec<(Vec<Option<Fr>>, Option<usize>)>) {
-        todo!()
-    }
-
-    fn as_pairs(&self) -> Vec<(Vec<Fr>, usize)> {
-        todo!()
-    }
-
     fn verify(&self) -> bool {
         todo!()
     }
@@ -908,10 +862,6 @@ impl<H: Hasher, BaseArity: 'static + PoseidonArity, SubTreeArity: 'static + Pose
     }
 
     fn path(&self) -> &Vec<(Vec<H::Domain>, usize)> {
-        todo!()
-    }
-
-    fn path_index(&self) -> usize {
         todo!()
     }
 
@@ -938,19 +888,6 @@ impl<
         todo!()
     }
 
-    fn as_options(&self) -> Vec<(Vec<Option<Fr>>, Option<usize>)> {
-        todo!()
-    }
-
-    #[allow(clippy::type_complexity)]
-    fn into_options_with_leaf(self) -> (Option<Fr>, Vec<(Vec<Option<Fr>>, Option<usize>)>) {
-        todo!()
-    }
-
-    fn as_pairs(&self) -> Vec<(Vec<Fr>, usize)> {
-        todo!()
-    }
-
     fn verify(&self) -> bool {
         todo!()
     }
@@ -976,10 +913,6 @@ impl<
     }
 
     fn path(&self) -> &Vec<(Vec<H::Domain>, usize)> {
-        todo!()
-    }
-
-    fn path_index(&self) -> usize {
         todo!()
     }
 
