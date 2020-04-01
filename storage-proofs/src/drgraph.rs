@@ -6,7 +6,7 @@ use anyhow::ensure;
 use generic_array::typenum;
 use merkletree::store::StoreConfig;
 use rand::{rngs::OsRng, Rng, SeedableRng};
-use rand_chacha::ChaChaRng;
+use rand_chacha::ChaCha8Rng;
 use sha2::{Digest, Sha256};
 
 use crate::error::*;
@@ -176,33 +176,44 @@ impl<H: Hasher> Graph<H> for BucketGraph<H> {
                 Ok(())
             }
             _ => {
+                // DRG node indexes are guaranteed to fit within a `u32`.
+                let node = node as u32;
+
                 let mut seed = [0u8; 32];
                 seed[..28].copy_from_slice(&self.seed);
-                seed[28..].copy_from_slice(&(node as u32).to_le_bytes());
-                let mut rng = ChaChaRng::from_seed(seed);
+                seed[28..].copy_from_slice(&node.to_le_bytes());
+                let mut rng = ChaCha8Rng::from_seed(seed);
 
                 let m_prime = m - 1;
-                let metagraph_node_start = node * m_prime;
-                let n_buckets = (metagraph_node_start as f32).log2().floor() as usize;
+                // Large sector sizes require that metagraph node indexes are `u64`.
+                let metagraph_node = node as u64 * m_prime as u64;
+                let n_buckets = (metagraph_node as f64).log2().ceil() as u64;
 
-                for k in 0..m_prime {
-                    let metagraph_node_k = metagraph_node_start + k;
-                    let bucket_index = (rng.gen::<usize>() % n_buckets) + 1;
-                    let largest_distance_in_bucket = min(metagraph_node_k, 1 << bucket_index);
+                for parent in parents.iter_mut().take(m_prime) {
+                    let bucket_index = (rng.gen::<u64>() % n_buckets) + 1;
+                    let largest_distance_in_bucket = min(metagraph_node, 1 << bucket_index);
                     let smallest_distance_in_bucket = max(2, largest_distance_in_bucket >> 1);
-                    let distance =
-                        rng.gen_range(smallest_distance_in_bucket, largest_distance_in_bucket + 1);
-                    let metagraph_parent = metagraph_node_k - distance;
-                    let mapped_parent = metagraph_parent / m_prime;
 
-                    parents[k] = if mapped_parent == node {
-                        node as u32 - 1
+                    // Add 1 becuase the number of distances in the bucket is inclusive.
+                    let n_distances_in_bucket =
+                        largest_distance_in_bucket - smallest_distance_in_bucket + 1;
+
+                    let distance =
+                        smallest_distance_in_bucket + (rng.gen::<u64>() % n_distances_in_bucket);
+
+                    let metagraph_parent = metagraph_node - distance;
+
+                    // Any metagraph node mapped onto the DRG can be safely cast back to `u32`.
+                    let mapped_parent = (metagraph_parent / m_prime as u64) as u32;
+
+                    *parent = if mapped_parent == node {
+                        node - 1
                     } else {
-                        mapped_parent as u32
+                        mapped_parent
                     };
                 }
 
-                parents[m_prime] = node as u32 - 1;
+                parents[m_prime] = node - 1;
                 Ok(())
             }
         }
@@ -230,6 +241,15 @@ impl<H: Hasher> Graph<H> for BucketGraph<H> {
         seed: [u8; 28],
     ) -> Result<Self> {
         ensure!(expansion_degree == 0, "Expension degree must be zero.");
+
+        // The number of metagraph nodes must be less than `2u64^54` as to not incur rounding errors
+        // when casting metagraph node indexes from `u64` to `f64` during parent generation.
+        let m_prime = base_degree - 1;
+        let n_metagraph_nodes = nodes as u64 * m_prime as u64;
+        ensure!(
+            n_metagraph_nodes <= 1u64 << 54,
+            "The number of metagraph nodes must be precisely castable to `f64`"
+        );
 
         Ok(BucketGraph {
             nodes,
