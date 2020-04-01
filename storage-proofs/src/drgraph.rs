@@ -1,4 +1,4 @@
-use std::cmp;
+use std::cmp::{max, min};
 use std::marker::PhantomData;
 use std::path::PathBuf;
 
@@ -176,39 +176,33 @@ impl<H: Hasher> Graph<H> for BucketGraph<H> {
                 Ok(())
             }
             _ => {
-                // The degree `m` minus 1; the degree without the immediate predecessor node.
-                let m_prime = m - 1;
-
-                // seed = self.seed | node
                 let mut seed = [0u8; 32];
                 seed[..28].copy_from_slice(&self.seed);
                 seed[28..].copy_from_slice(&(node as u32).to_le_bytes());
                 let mut rng = ChaChaRng::from_seed(seed);
 
-                for (k, parent) in parents.iter_mut().take(m_prime).enumerate() {
-                    // Iterate over `m_prime` number of meta nodes for the i-th real node. Simulate
-                    // the edges that we would add from previous graph nodes. If any edge is added
-                    // from a meta node of j-th real node then add edge (j,i).
-                    let logi = ((node * m_prime) as f32).log2().floor() as usize;
-                    let j = rng.gen::<usize>() % logi;
-                    let jj = cmp::min(node * m_prime + k, 1 << (j + 1));
-                    let back_dist = rng.gen_range(cmp::max(jj >> 1, 2), jj + 1);
-                    let out = (node * m_prime + k - back_dist) / m_prime;
+                let m_prime = m - 1;
+                let metagraph_node_start = node * m_prime;
+                let n_buckets = (metagraph_node_start as f32).log2().floor() as usize;
 
-                    // remove self references and replace with reference to previous node
-                    if out == node {
-                        *parent = (node - 1) as u32;
+                for k in 0..m_prime {
+                    let metagraph_node_k = metagraph_node_start + k;
+                    let bucket_index = (rng.gen::<usize>() % n_buckets) + 1;
+                    let largest_distance_in_bucket = min(metagraph_node_k, 1 << bucket_index);
+                    let smallest_distance_in_bucket = max(2, largest_distance_in_bucket >> 1);
+                    let distance =
+                        rng.gen_range(smallest_distance_in_bucket, largest_distance_in_bucket + 1);
+                    let metagraph_parent = metagraph_node_k - distance;
+                    let mapped_parent = metagraph_parent / m_prime;
+
+                    parents[k] = if mapped_parent == node {
+                        node as u32 - 1
                     } else {
-                        ensure!(
-                            out <= node,
-                            "Parent node must be smaller than current node."
-                        );
-                        *parent = out as u32;
-                    }
+                        mapped_parent as u32
+                    };
                 }
 
-                // Add the immediate predecessor as a parent to ensure unique topological ordering.
-                parents[m_prime] = (node - 1) as u32;
+                parents[m_prime] = node as u32 - 1;
                 Ok(())
             }
         }
