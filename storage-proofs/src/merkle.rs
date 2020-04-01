@@ -47,14 +47,37 @@ use generic_array::ArrayLength;
 use crate::hasher::types::PoseidonArity;
 use std::ops::Add;
 
-pub trait MerkleTreeTrait {
-    type Arity: 'static + Unsigned;
+pub trait MerkleTreeTrait: Send + Sync {
+    type Arity: 'static + PoseidonArity;
     type Hasher: Hasher;
     type Proof: MerkleProofTrait<Arity = Self::Arity>;
+
+    fn display() -> String;
 }
 
 pub trait MerkleProofTrait: Clone + Serialize + serde::de::DeserializeOwned {
-    type Arity: Unsigned;
+    type Arity: 'static + PoseidonArity;
+}
+
+impl<H: Hasher, S: Store<<H as Hasher>::Domain>, U: 'static + PoseidonArity> MerkleTreeTrait
+    for MerkleTreeWrapper<H, S, U>
+{
+    type Arity = U;
+    type Hasher = H;
+    type Proof = MerkleProof<Self::Hasher, U>;
+
+    fn display() -> String {
+        format!("MerkleTree<{}>", U::to_usize())
+    }
+}
+
+impl<H: Hasher, U: 'static + PoseidonArity> MerkleProofTrait for MerkleProof<H, U> {
+    type Arity = U;
+}
+
+pub struct MerkleTreeWrapper<H: Hasher, S: Store<<H as Hasher>::Domain>, U: PoseidonArity> {
+    pub inner: merkle::MerkleTree<<H as Hasher>::Domain, <H as Hasher>::Function, S, U>,
+    pub h: PhantomData<H>,
 }
 
 /// Representation of a merkle proof.
