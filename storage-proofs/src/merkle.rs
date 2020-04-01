@@ -4,7 +4,7 @@ use std::marker::PhantomData;
 use std::path::PathBuf;
 
 use anyhow::ensure;
-use generic_array::typenum;
+use generic_array::typenum::{self, U0};
 use log::trace;
 use merkletree::hash::Algorithm;
 use merkletree::merkle;
@@ -89,34 +89,63 @@ pub type OctLCTopTree<H> = OctLCTopMerkleTree<<H as Hasher>::Domain, <H as Hashe
 
 pub trait MerkleTreeTrait: Send + Sync {
     type Arity: 'static + PoseidonArity;
+    type SubTreeArity: 'static + PoseidonArity;
+    type TopTreeArity: 'static + PoseidonArity;
     type Hasher: Hasher;
-    type Proof: MerkleProofTrait<Arity = Self::Arity>;
+    type Proof: MerkleProofTrait<
+        Arity = Self::Arity,
+        SubTreeArity = Self::SubTreeArity,
+        TopTreeArity = Self::TopTreeArity,
+    >;
 
     fn display() -> String;
 }
 
 pub trait MerkleProofTrait: Clone + Serialize + serde::de::DeserializeOwned {
     type Arity: 'static + PoseidonArity;
+    type SubTreeArity: 'static + PoseidonArity;
+    type TopTreeArity: 'static + PoseidonArity;
 }
 
-impl<H: Hasher, S: Store<<H as Hasher>::Domain>, U: 'static + PoseidonArity> MerkleTreeTrait
-    for MerkleTreeWrapper<H, S, U>
+impl<
+        H: Hasher,
+        S: Store<<H as Hasher>::Domain>,
+        U: 'static + PoseidonArity,
+        V: 'static + PoseidonArity,
+        W: 'static + PoseidonArity,
+    > MerkleTreeTrait for MerkleTreeWrapper<H, S, U, V, W>
 {
     type Arity = U;
+    type SubTreeArity = V;
+    type TopTreeArity = W;
     type Hasher = H;
-    type Proof = MerkleProof<Self::Hasher, U>;
+    type Proof = MerkleProof<Self::Hasher, Self::Arity, Self::SubTreeArity, Self::TopTreeArity>;
 
     fn display() -> String {
         format!("MerkleTree<{}>", U::to_usize())
     }
 }
 
-impl<H: Hasher, U: 'static + PoseidonArity> MerkleProofTrait for MerkleProof<H, U> {
-    type Arity = U;
+impl<
+        H: Hasher,
+        Arity: 'static + PoseidonArity,
+        SubTreeArity: 'static + PoseidonArity,
+        TopTreeArity: 'static + PoseidonArity,
+    > MerkleProofTrait for MerkleProof<H, Arity, SubTreeArity, TopTreeArity>
+{
+    type Arity = Arity;
+    type SubTreeArity = SubTreeArity;
+    type TopTreeArity = TopTreeArity;
 }
 
-pub struct MerkleTreeWrapper<H: Hasher, S: Store<<H as Hasher>::Domain>, U: PoseidonArity> {
-    pub inner: merkle::MerkleTree<<H as Hasher>::Domain, <H as Hasher>::Function, S, U>,
+pub struct MerkleTreeWrapper<
+    H: Hasher,
+    S: Store<<H as Hasher>::Domain>,
+    U: PoseidonArity,
+    V: PoseidonArity = typenum::U0,
+    W: PoseidonArity = typenum::U0,
+> {
+    pub inner: merkle::MerkleTree<<H as Hasher>::Domain, <H as Hasher>::Function, S, U, V, W>,
     pub h: PhantomData<H>,
 }
 
@@ -189,12 +218,17 @@ impl<H: Hasher> OctTreeData<H> {
 /// Each element in the 'path' vector consists of a tuple '(hash, index)', with 'hash' being the hash of the node at the current level and 'index' an index into the path (based on arity).
 /// The first element is the hash of leaf itself, and the last is the root hash.
 #[derive(Clone, Serialize, Deserialize)]
-pub struct MerkleProof<H: Hasher, Arity: typenum::Unsigned> {
+pub struct MerkleProof<
+    H: Hasher,
+    Arity: typenum::Unsigned,
+    U: typenum::Unsigned = U0,
+    V: typenum::Unsigned = U0,
+> {
     #[serde(bound(
         serialize = "H::Domain: Serialize",
         deserialize = "H::Domain: Deserialize<'de>"
     ))]
-    pub sub_tree_proof: Option<Box<MerkleProof<H, Arity>>>,
+    pub sub_tree_proof: Option<Box<MerkleProof<H, Arity, U, V>>>,
 
     top_layer_nodes: usize,
     sub_layer_nodes: usize,
@@ -208,6 +242,10 @@ pub struct MerkleProof<H: Hasher, Arity: typenum::Unsigned> {
     _h: PhantomData<H>,
     #[serde(skip)]
     _a: PhantomData<Arity>,
+    #[serde(skip)]
+    _u: PhantomData<U>,
+    #[serde(skip)]
+    _v: PhantomData<V>,
 }
 
 impl<H: Hasher, Arity: typenum::Unsigned> std::fmt::Debug for MerkleProof<H, Arity> {
@@ -238,6 +276,8 @@ pub fn make_proof_for_test<H: Hasher, Arity: typenum::Unsigned>(
         leaf,
         _h: PhantomData,
         _a: PhantomData,
+        _u: PhantomData,
+        _v: PhantomData,
     }
 }
 
@@ -253,6 +293,8 @@ impl<H: Hasher, Arity: typenum::Unsigned> MerkleProof<H, Arity> {
             leaf: Default::default(),
             _h: PhantomData,
             _a: PhantomData,
+            _u: PhantomData,
+            _v: PhantomData,
         }
     }
 
@@ -273,6 +315,8 @@ impl<H: Hasher, Arity: typenum::Unsigned> MerkleProof<H, Arity> {
             leaf: p.item(),
             _h: PhantomData,
             _a: PhantomData,
+            _u: PhantomData,
+            _v: PhantomData,
         }
     }
 
@@ -331,6 +375,8 @@ impl<H: Hasher, Arity: typenum::Unsigned> MerkleProof<H, Arity> {
             leaf: p.item(),
             _h: PhantomData,
             _a: PhantomData,
+            _u: PhantomData,
+            _v: PhantomData,
         }
     }
 

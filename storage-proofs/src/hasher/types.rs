@@ -4,7 +4,7 @@ use crate::error::Result;
 use bellperson::gadgets::{boolean, num};
 use bellperson::{ConstraintSystem, SynthesisError};
 use generic_array::typenum;
-use generic_array::typenum::{U1, U11, U16, U2, U24, U36, U4, U8};
+use generic_array::typenum::{U0, U1, U11, U16, U2, U24, U36, U4, U8};
 use merkletree::hash::{Algorithm as LightAlgorithm, Hashable as LightHashable};
 use merkletree::merkle::Element;
 use neptune::poseidon::PoseidonConstants;
@@ -24,6 +24,7 @@ pub type PoseidonMDArity = U36;
 pub const MERKLE_TREE_ARITY: usize = 2;
 
 lazy_static! {
+    pub static ref POSEIDON_CONSTANTS_0: PoseidonConstants::<Bls12, U0> = PoseidonConstants::new();
     pub static ref POSEIDON_CONSTANTS_1: PoseidonConstants::<Bls12, U1> = PoseidonConstants::new();
     pub static ref POSEIDON_CONSTANTS_2: PoseidonConstants::<Bls12, U2> = PoseidonConstants::new();
     pub static ref POSEIDON_CONSTANTS_4: PoseidonConstants::<Bls12, U4> = PoseidonConstants::new();
@@ -52,6 +53,11 @@ pub trait PoseidonArity:
     fn PARAMETERS() -> &'static PoseidonConstants<Bls12, Self>;
 }
 
+impl PoseidonArity for U0 {
+    fn PARAMETERS() -> &'static PoseidonConstants<Bls12, Self> {
+        &*POSEIDON_CONSTANTS_0
+    }
+}
 impl PoseidonArity for U1 {
     fn PARAMETERS() -> &'static PoseidonConstants<Bls12, Self> {
         &*POSEIDON_CONSTANTS_1
