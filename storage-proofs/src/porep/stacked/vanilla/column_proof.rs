@@ -7,7 +7,7 @@ use super::column::Column;
 
 use crate::error::Result;
 use crate::hasher::Hasher;
-use crate::merkle::{IncludedNode, MerkleProof};
+use crate::merkle::{IncludedNode, MerkleProof, MerkleProofTrait};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ColumnProof<H: Hasher> {

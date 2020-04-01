@@ -11,6 +11,7 @@ use crate::error::Result;
 use crate::gadgets::por::PoRCompound;
 use crate::gadgets::variables::Root;
 use crate::hasher::Hasher;
+use crate::merkle::MerkleProofTrait;
 use crate::parameter_cache::{CacheableParameters, ParameterSetMetadata};
 use crate::por;
 use crate::porep::drg::DrgPoRep;

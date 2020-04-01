@@ -22,11 +22,9 @@ use crate::error::*;
 use crate::hasher::{Domain, Hasher};
 use crate::util::{data_at_node, NODE_SIZE};
 
-use generic_array::typenum::{UInt, UTerm, Unsigned, B1};
-use generic_array::ArrayLength;
+use generic_array::typenum::Unsigned;
 
 use crate::hasher::types::PoseidonArity;
-use std::ops::Add;
 
 // FIXME: Move from filecoin-proofs/src/constants to here?
 pub const SECTOR_SIZE_2_KIB: u64 = 2_048;
@@ -115,15 +113,12 @@ pub trait MerkleProofTrait:
     fn as_options(&self) -> Vec<(Vec<Option<Fr>>, Option<usize>)>;
     fn into_options_with_leaf(self) -> (Option<Fr>, Vec<(Vec<Option<Fr>>, Option<usize>)>);
     fn as_pairs(&self) -> Vec<(Vec<Fr>, usize)>;
-    fn verify_sub_tree(&self, top_layer: bool) -> bool;
     fn verify(&self) -> bool;
     fn validate(&self, node: usize) -> bool;
     fn validate_data(&self, data: <Self::Hasher as Hasher>::Domain) -> bool;
     fn leaf(&self) -> <Self::Hasher as Hasher>::Domain;
     fn root(&self) -> &<Self::Hasher as Hasher>::Domain;
-    fn verified_leaf(&self) -> IncludedNode<Self::Hasher>;
     fn len(&self) -> usize;
-    fn serialize(&self) -> Vec<u8>;
     fn path(&self) -> &Vec<(Vec<<Self::Hasher as Hasher>::Domain>, usize)>;
     fn path_index(&self) -> usize;
     fn proves_challenge(&self, challenge: usize) -> bool;
@@ -153,25 +148,33 @@ impl<
 
     fn gen_proof(&self, i: usize) -> Result<Self::Proof> {
         let proof = self.inner.gen_proof(i)?;
-        Ok(MerkleProof::new_from_proof(&proof))
+        MerkleProof::new_from_proof(&proof)
     }
 }
 
 macro_rules! forward_method {
     ($caller:expr, $name:ident) => {
         match $caller {
-            ProofData::Single(proof) => proof.$name(),
-            ProofData::Sub(proof) => proof.$name(),
-            ProofData::Top(proof) => proof.$name(),
+            ProofData::Single(ref proof) => proof.$name(),
+            ProofData::Sub(ref proof) => proof.$name(),
+            ProofData::Top(ref proof) => proof.$name(),
         }
     };
     ($caller:expr, $name:ident, $( $args:expr ),+) => {
         match $caller {
-            ProofData::Single(proof) => proof.$name($($args),+),
-            ProofData::Sub(proof) => proof.$name($($args),+),
-            ProofData::Top(proof) => proof.$name($($args),+),
+            ProofData::Single(ref proof) => proof.$name($($args),+),
+            ProofData::Sub(ref proof) => proof.$name($($args),+),
+            ProofData::Top(ref proof) => proof.$name($($args),+),
         }
     };
+}
+
+pub fn make_proof_for_test<H: Hasher, U: typenum::Unsigned>(
+    root: H::Domain,
+    leaf: H::Domain,
+    path: Vec<(Vec<H::Domain>, usize)>,
+) -> MerkleProof<H, U> {
+    todo!()
 }
 
 impl<
@@ -187,12 +190,16 @@ impl<
     type TopTreeArity = TopTreeArity;
 
     fn as_options(&self) -> Vec<(Vec<Option<Fr>>, Option<usize>)> {
-        forward_method!(self.data, as_options)
+        forward_method!(&self.data, as_options)
     }
 
     #[allow(clippy::type_complexity)]
     fn into_options_with_leaf(self) -> (Option<Fr>, Vec<(Vec<Option<Fr>>, Option<usize>)>) {
-        forward_method!(self.data, into_options_with_leaf)
+        match self.data {
+            ProofData::Single(proof) => proof.into_options_with_leaf(),
+            ProofData::Sub(proof) => proof.into_options_with_leaf(),
+            ProofData::Top(proof) => proof.into_options_with_leaf(),
+        }
     }
 
     fn as_pairs(&self) -> Vec<(Vec<Fr>, usize)> {
@@ -223,10 +230,6 @@ impl<
         forward_method!(self.data, len)
     }
 
-    fn serialize(&self) -> Vec<u8> {
-        forward_method!(self.data, serialize)
-    }
-
     fn path(&self) -> &Vec<(Vec<H::Domain>, usize)> {
         forward_method!(self.data, path)
     }
@@ -236,7 +239,7 @@ impl<
     }
 
     fn proves_challenge(&self, challenge: usize) -> bool {
-        forward_method!(self.data, proves_challenge)
+        forward_method!(self.data, proves_challenge, challenge)
     }
 }
 
@@ -318,40 +321,106 @@ impl<H: Hasher> OctTreeData<H> {
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct PathElement<H: Hasher> {
+    #[serde(bound(
+        serialize = "H::Domain: Serialize",
+        deserialize = "H::Domain: Deserialize<'de>"
+    ))]
     hashes: Vec<H::Domain>,
     index: usize,
 }
 
 /// Representation of a merkle proof.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct MerkleProof<
     H: Hasher,
     BaseArity: Unsigned,
     SubTreeArity: Unsigned = U0,
     TopTreeArity: Unsigned = U0,
 > {
+    #[serde(bound(
+        serialize = "H::Domain: Serialize",
+        deserialize = "H::Domain: Deserialize<'de>"
+    ))]
     data: ProofData<H, BaseArity, SubTreeArity, TopTreeArity>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+impl<H: Hasher, BaseArity: Unsigned, SubTreeArity: Unsigned, TopTreeArity: Unsigned> std::fmt::Debug
+    for MerkleProof<H, BaseArity, SubTreeArity, TopTreeArity>
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("MerkleProof")
+            .field("data", &self.data)
+            .finish()
+    }
+}
+
+#[derive(Clone, Serialize, Deserialize)]
 enum ProofData<H: Hasher, BaseArity: Unsigned, SubTreeArity: Unsigned, TopTreeArity: Unsigned> {
+    #[serde(bound(
+        serialize = "H::Domain: Serialize",
+        deserialize = "H::Domain: Deserialize<'de>"
+    ))]
     Single(SingleProof<H, BaseArity>),
+    #[serde(bound(
+        serialize = "H::Domain: Serialize",
+        deserialize = "H::Domain: Deserialize<'de>"
+    ))]
     Sub(SubProof<H, BaseArity, SubTreeArity>),
+    #[serde(bound(
+        serialize = "H::Domain: Serialize",
+        deserialize = "H::Domain: Deserialize<'de>"
+    ))]
     Top(TopProof<H, BaseArity, SubTreeArity, TopTreeArity>),
 }
 
-#[derive(Debug, Default, Clone, Serialize, Deserialize)]
+impl<H: Hasher, BaseArity: Unsigned, SubTreeArity: Unsigned, TopTreeArity: Unsigned> std::fmt::Debug
+    for ProofData<H, BaseArity, SubTreeArity, TopTreeArity>
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ProofData::Single(ref proof) => write!(f, "ProofData::Single({:?})", proof),
+            ProofData::Sub(ref proof) => write!(f, "ProofData::Sub({:?})", proof),
+            ProofData::Top(ref proof) => write!(f, "ProofData::Top({:?})", proof),
+        }
+    }
+}
+
+#[derive(Default, Clone, Serialize, Deserialize)]
 struct SingleProof<H: Hasher, Arity: Unsigned> {
     /// Root of the merkle tree.
+    #[serde(bound(
+        serialize = "H::Domain: Serialize",
+        deserialize = "H::Domain: Deserialize<'de>"
+    ))]
     root: H::Domain,
     /// The original leaf data for this prof.
+    #[serde(bound(
+        serialize = "H::Domain: Serialize",
+        deserialize = "H::Domain: Deserialize<'de>"
+    ))]
     leaf: H::Domain,
     /// The path from leaf to root.
+    #[serde(bound(
+        serialize = "H::Domain: Serialize",
+        deserialize = "H::Domain: Deserialize<'de>"
+    ))]
     path: Vec<PathElement<H>>,
     #[serde(skip)]
     h: PhantomData<H>,
     #[serde(skip)]
     a: PhantomData<Arity>,
+}
+
+impl<H: Hasher, Arity: Unsigned> std::fmt::Debug for SingleProof<H, Arity> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("SingleProof")
+            .field("root", &self.root)
+            .field("leaf", &self.leaf)
+            .field("path", &self.path)
+            .field("Hasher", &H::name())
+            .field("Arity", &Arity::to_usize())
+            .finish()
+    }
 }
 
 impl<H: Hasher, Arity: Unsigned> SingleProof<H, Arity> {
@@ -366,14 +435,33 @@ impl<H: Hasher, Arity: Unsigned> SingleProof<H, Arity> {
     }
 }
 
-#[derive(Debug, Default, Clone, Serialize, Deserialize)]
+#[derive(Default, Clone, Serialize, Deserialize)]
 struct SubProof<H: Hasher, BaseArity: Unsigned, SubTreeArity: Unsigned> {
+    #[serde(bound(
+        serialize = "H::Domain: Serialize",
+        deserialize = "H::Domain: Deserialize<'de>"
+    ))]
     base_proof: SingleProof<H, BaseArity>,
+    #[serde(bound(
+        serialize = "H::Domain: Serialize",
+        deserialize = "H::Domain: Deserialize<'de>"
+    ))]
     sub_proof: SingleProof<H, SubTreeArity>,
     #[serde(skip)]
     h: PhantomData<H>,
     #[serde(skip)]
     b: PhantomData<SubTreeArity>,
+}
+
+impl<H: Hasher, BaseArity: Unsigned, SubTreeArity: Unsigned> std::fmt::Debug
+    for SubProof<H, BaseArity, SubTreeArity>
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("SubProof")
+            .field("base_proof", &self.base_proof)
+            .field("sub_proof", &self.sub_proof)
+            .finish()
+    }
 }
 
 impl<H: Hasher, BaseArity: Unsigned, SubTreeArity: Unsigned> SubProof<H, BaseArity, SubTreeArity> {
@@ -390,15 +478,39 @@ impl<H: Hasher, BaseArity: Unsigned, SubTreeArity: Unsigned> SubProof<H, BaseAri
     }
 }
 
-#[derive(Debug, Default, Clone, Serialize, Deserialize)]
+#[derive(Default, Clone, Serialize, Deserialize)]
 struct TopProof<H: Hasher, BaseArity: Unsigned, SubTreeArity: Unsigned, TopTreeArity: Unsigned> {
+    #[serde(bound(
+        serialize = "H::Domain: Serialize",
+        deserialize = "H::Domain: Deserialize<'de>"
+    ))]
     base_proof: SingleProof<H, BaseArity>,
+    #[serde(bound(
+        serialize = "H::Domain: Serialize",
+        deserialize = "H::Domain: Deserialize<'de>"
+    ))]
     sub_proof: SingleProof<H, SubTreeArity>,
+    #[serde(bound(
+        serialize = "H::Domain: Serialize",
+        deserialize = "H::Domain: Deserialize<'de>"
+    ))]
     top_proof: SingleProof<H, TopTreeArity>,
     #[serde(skip)]
     h: PhantomData<H>,
     #[serde(skip)]
     c: PhantomData<TopTreeArity>,
+}
+
+impl<H: Hasher, BaseArity: Unsigned, SubTreeArity: Unsigned, TopTreeArity: Unsigned> std::fmt::Debug
+    for TopProof<H, BaseArity, SubTreeArity, TopTreeArity>
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("TopProof")
+            .field("base_proof", &self.base_proof)
+            .field("sub_proof", &self.sub_proof)
+            .field("top_proof", &self.top_proof)
+            .finish()
+    }
 }
 
 impl<H: Hasher, BaseArity: Unsigned, SubTreeArity: Unsigned, TopTreeArity: Unsigned>
@@ -426,35 +538,19 @@ impl<
         TopTreeArity: typenum::Unsigned,
     > MerkleProof<H, BaseArity, SubTreeArity, TopTreeArity>
 {
+    pub fn new(n: usize) -> Self {
+        todo!()
+    }
+
     pub fn new_from_proof(p: &proof::Proof<H::Domain, BaseArity>) -> Result<Self> {
         ensure!(
             p.top_layer_nodes == TopTreeArity::to_usize(),
             "top arity mis-match"
         );
         ensure!(
-            p.sub_layer_nodes == SubTreeArity::to_usize(),
+            p.sub_tree_layer_nodes == SubTreeArity::to_usize(),
             "sub arity mis-match"
         );
-
-        let extract_path = |lemma, path| {
-            lemma[1..lemma.len() - 1]
-                .chunks(BaseArity::to_usize() - 1)
-                .zip(path.iter())
-                .map(|(hashes, index)| PathElement {
-                    hashes: hashes.to_vec(),
-                    index: *index,
-                })
-                .collect::<Vec<_>>()
-        };
-
-        // Converts a merkle_light proof to a SingleProof
-        let proof_to_single = |proof| {
-            let root = proof.root();
-            let leaf = proof.item();
-            let path = extract_path(proof.lemma(), proof.path);
-
-            SingleProof::new(root, leaf, path)
-        };
 
         if p.top_layer_nodes > 0 {
             ensure!(
@@ -471,8 +567,8 @@ impl<
 
             // Generate TopProof
             let base_proof = proof_to_single(base_p);
-            let sub_proof = proof_to_single(sub_p);
-            let top_proof = proof_to_single(p);
+            let sub_proof = proof_to_single::<H, BaseArity, SubTreeArity>(sub_p);
+            let top_proof = proof_to_single::<H, BaseArity, TopTreeArity>(p);
             let proof = TopProof::new(base_proof, sub_proof, top_proof);
 
             Ok(MerkleProof {
@@ -503,6 +599,31 @@ impl<
     }
 }
 
+/// Converts a merkle_light proof to a SingleProof
+fn proof_to_single<H: Hasher, Arity: Unsigned, TargetArity: Unsigned>(
+    proof: &proof::Proof<H::Domain, Arity>,
+) -> SingleProof<H, TargetArity> {
+    let root = proof.root();
+    let leaf = proof.item();
+    let path = extract_path::<H, TargetArity>(proof.lemma(), proof.path());
+
+    SingleProof::new(root, leaf, path)
+}
+
+fn extract_path<H: Hasher, Arity: Unsigned>(
+    lemma: &Vec<H::Domain>,
+    path: &Vec<usize>,
+) -> Vec<PathElement<H>> {
+    lemma[1..lemma.len() - 1]
+        .chunks(Arity::to_usize() - 1)
+        .zip(path.iter())
+        .map(|(hashes, index)| PathElement {
+            hashes: hashes.to_vec(),
+            index: *index,
+        })
+        .collect::<Vec<_>>()
+}
+
 impl<H: Hasher, Arity: 'static + PoseidonArity> MerkleProofTrait for SingleProof<H, Arity> {
     type Hasher = H;
     type Arity = Arity;
@@ -510,111 +631,81 @@ impl<H: Hasher, Arity: 'static + PoseidonArity> MerkleProofTrait for SingleProof
     type TopTreeArity = typenum::U0;
 
     fn as_options(&self) -> Vec<(Vec<Option<Fr>>, Option<usize>)> {
-        self.path
-            .iter()
-            .map(|v| {
-                (
-                    v.0.iter().copied().map(Into::into).map(Some).collect(),
-                    Some(v.1),
-                )
-            })
-            .collect::<Vec<_>>()
+        todo!()
+        // self.path
+        //     .iter()
+        //     .map(|v| {
+        //         (
+        //             v.0.iter().copied().map(Into::into).map(Some).collect(),
+        //             Some(v.1),
+        //         )
+        //     })
+        //     .collect::<Vec<_>>()
     }
 
     #[allow(clippy::type_complexity)]
     fn into_options_with_leaf(self) -> (Option<Fr>, Vec<(Vec<Option<Fr>>, Option<usize>)>) {
-        let MerkleProof { leaf, path, .. } = self;
+        todo!()
+        // let MerkleProof { leaf, path, .. } = self;
 
-        (
-            Some(leaf.into()),
-            path.into_iter()
-                .map(|(a, b)| {
-                    (
-                        a.iter().copied().map(Into::into).map(Some).collect(),
-                        Some(b),
-                    )
-                })
-                .collect(),
-        )
+        // (
+        //     Some(leaf.into()),
+        //     path.into_iter()
+        //         .map(|(a, b)| {
+        //             (
+        //                 a.iter().copied().map(Into::into).map(Some).collect(),
+        //                 Some(b),
+        //             )
+        //         })
+        //         .collect(),
+        // )
     }
 
     fn as_pairs(&self) -> Vec<(Vec<Fr>, usize)> {
-        self.path
-            .iter()
-            .map(|v| (v.0.iter().copied().map(Into::into).collect(), v.1))
-            .collect::<Vec<_>>()
-    }
-
-    fn verify_sub_tree(&self, top_layer: bool) -> bool {
-        assert!(self.sub_tree_proof.is_some());
-        let sub_tree = self.sub_tree_proof.as_ref().unwrap();
-        if !sub_tree.verify() {
-            return false;
-        }
-
-        let mut a = H::Function::default();
-        if top_layer {
-            let expected_root = (0..self.path.len()).fold(sub_tree.root().clone(), |h, i| {
-                a.reset();
-
-                let index = self.path[i].1;
-                let mut nodes = self.path[i].0.clone();
-                nodes.insert(index, h);
-
-                a.multi_node(&nodes, i)
-            });
-
-            self.root() == &expected_root
-        } else {
-            let expected_root = (0..sub_tree.path.len()).fold(sub_tree.leaf, |h, i| {
-                a.reset();
-
-                let index = sub_tree.path[i].1;
-                let mut nodes = sub_tree.path[i].0.clone();
-                nodes.insert(index, h);
-
-                a.multi_node(&nodes, i)
-            });
-
-            sub_tree.root() == &expected_root
-        }
+        todo!()
+        // self.path
+        //     .iter()
+        //     .map(|v| (v.0.iter().copied().map(Into::into).collect(), v.1))
+        //     .collect::<Vec<_>>()
     }
 
     fn verify(&self) -> bool {
-        if self.sub_tree_proof.is_some() {
-            return self.verify_sub_tree(self.top_layer_nodes > 0);
-        }
+        todo!()
+        // if self.sub_tree_proof.is_some() {
+        // return self.verify_sub_tree(self.top_layer_nodes > 0);
+        // }
 
-        let mut a = H::Function::default();
-        let expected_root = (0..self.path.len()).fold(self.leaf, |h, i| {
-            a.reset();
+        // let mut a = H::Function::default();
+        // let expected_root = (0..self.path.len()).fold(self.leaf, |h, i| {
+        //     a.reset();
 
-            let index = self.path[i].1;
-            let mut nodes = self.path[i].0.clone();
-            nodes.insert(index, h);
+        //     let index = self.path[i].1;
+        //     let mut nodes = self.path[i].0.clone();
+        //     nodes.insert(index, h);
 
-            a.multi_node(&nodes, i)
-        });
+        //     a.multi_node(&nodes, i)
+        // });
 
-        self.root() == &expected_root
+        // self.root() == &expected_root
     }
 
     fn validate(&self, node: usize) -> bool {
-        if self.top_layer_nodes > 0 || self.sub_layer_nodes > 0 {
-            assert!(self.sub_tree_proof.is_some());
-            let sub_path_index = if node < self.base_layer_nodes {
-                node % self.base_layer_nodes
-            } else {
-                ((node / self.base_layer_nodes) * self.base_layer_nodes)
-                    + (node % self.base_layer_nodes)
-            };
+        todo!();
+        // if self.top_layer_nodes > 0 || self.sub_layer_nodes > 0 {
+        //     assert!(self.sub_tree_proof.is_some());
+        //     let sub_path_index = if node < self.base_layer_nodes {
+        //         node % self.base_layer_nodes
+        //     } else {
+        //         ((node / self.base_layer_nodes) * self.base_layer_nodes)
+        //             + (node % self.base_layer_nodes)
+        //     };
 
-            if sub_path_index != node {
-                return false;
-            }
-        } else if self.path_index() != node {
-            return false;
-        }
+        //     if sub_path_index != node {
+        //         return false;
+        //     }
+        // } else if self.path_index() != node {
+        //     return false;
+        // }
 
         self.verify()
     }
@@ -624,10 +715,11 @@ impl<H: Hasher, Arity: 'static + PoseidonArity> MerkleProofTrait for SingleProof
             return false;
         }
 
-        if self.top_layer_nodes > 0 || self.sub_layer_nodes > 0 {
-            assert!(self.sub_tree_proof.is_some());
-            return self.sub_tree_proof.as_ref().unwrap().validate_data(data);
-        }
+        todo!();
+        // if self.top_layer_nodes > 0 || self.sub_layer_nodes > 0 {
+        //     assert!(self.sub_tree_proof.is_some());
+        //     return self.sub_tree_proof.as_ref().unwrap().validate_data(data);
+        // }
 
         self.leaf() == data
     }
@@ -640,53 +732,37 @@ impl<H: Hasher, Arity: 'static + PoseidonArity> MerkleProofTrait for SingleProof
         &self.root
     }
 
-    fn verified_leaf(&self) -> IncludedNode<H> {
-        IncludedNode::new(self.leaf())
-    }
-
     fn len(&self) -> usize {
         self.path.len() * (Arity::to_usize() - 1) + 2
     }
 
-    fn serialize(&self) -> Vec<u8> {
-        let mut out = Vec::new();
-
-        for (hashes, is_right) in &self.path {
-            for hash in hashes {
-                out.extend(Domain::serialize(hash));
-            }
-            out.push(*is_right as u8);
-        }
-        out.extend(Domain::serialize(&self.leaf()));
-        out.extend(Domain::serialize(self.root()));
-
-        out
-    }
-
     fn path(&self) -> &Vec<(Vec<H::Domain>, usize)> {
-        &self.path
+        todo!()
+        // &self.path
     }
 
     fn path_index(&self) -> usize {
-        self.path
-            .iter()
-            .rev()
-            .fold(0, |acc, (_, index)| (acc * Arity::to_usize()) + index)
+        todo!()
+        // self.path
+        //     .iter()
+        //     .rev()
+        //     .fold(0, |acc, (_, index)| (acc * Arity::to_usize()) + index)
     }
 
     fn proves_challenge(&self, challenge: usize) -> bool {
-        if self.top_layer_nodes > 0 || self.sub_layer_nodes > 0 {
-            let sub_path_index = if challenge < self.base_layer_nodes {
-                challenge % self.base_layer_nodes
-            } else {
-                ((challenge / self.base_layer_nodes) * self.base_layer_nodes)
-                    + (challenge % self.base_layer_nodes)
-            };
+        todo!()
+        // if self.top_layer_nodes > 0 || self.sub_layer_nodes > 0 {
+        //     let sub_path_index = if challenge < self.base_layer_nodes {
+        //         challenge % self.base_layer_nodes
+        //     } else {
+        //         ((challenge / self.base_layer_nodes) * self.base_layer_nodes)
+        //             + (challenge % self.base_layer_nodes)
+        //     };
 
-            return sub_path_index == challenge;
-        }
+        //     return sub_path_index == challenge;
+        // }
 
-        self.path_index() == challenge
+        // self.path_index() == challenge
     }
 }
 
@@ -711,10 +787,6 @@ impl<H: Hasher, BaseArity: 'static + PoseidonArity, SubTreeArity: 'static + Pose
         todo!()
     }
 
-    fn verify_sub_tree(&self, top_layer: bool) -> bool {
-        todo!()
-    }
-
     fn verify(&self) -> bool {
         todo!()
     }
@@ -735,15 +807,7 @@ impl<H: Hasher, BaseArity: 'static + PoseidonArity, SubTreeArity: 'static + Pose
         todo!()
     }
 
-    fn verified_leaf(&self) -> IncludedNode<H> {
-        todo!()
-    }
-
     fn len(&self) -> usize {
-        todo!()
-    }
-
-    fn serialize(&self) -> Vec<u8> {
         todo!()
     }
 
@@ -785,10 +849,6 @@ impl<
         todo!()
     }
 
-    fn verify_sub_tree(&self, top_layer: bool) -> bool {
-        todo!()
-    }
-
     fn verify(&self) -> bool {
         todo!()
     }
@@ -809,15 +869,7 @@ impl<
         todo!()
     }
 
-    fn verified_leaf(&self) -> IncludedNode<H> {
-        todo!()
-    }
-
     fn len(&self) -> usize {
-        todo!()
-    }
-
-    fn serialize(&self) -> Vec<u8> {
         todo!()
     }
 
@@ -1007,8 +1059,9 @@ mod tests {
 
     use crate::drgraph::{new_seed, BucketGraph, Graph, BASE_DEGREE};
     use crate::hasher::{Blake2sHasher, PedersenHasher, PoseidonHasher, Sha256Hasher};
+    use crate::merkle::MerkleProofTrait;
 
-    fn merklepath<H: Hasher, BaseTreeArity: typenum::Unsigned>() {
+    fn merklepath<H: Hasher, BaseTreeArity: 'static + PoseidonArity>() {
         let leafs = 64;
         let g = BucketGraph::<H>::new(leafs, BASE_DEGREE, 0, new_seed()).unwrap();
         let mut rng = rand::thread_rng();
@@ -1026,7 +1079,7 @@ mod tests {
 
             assert!(proof.validate::<H::Function>().expect("failed to validate"));
             let len = proof.lemma().len();
-            let mp = MerkleProof::<H, BaseTreeArity>::new_from_proof(&proof);
+            let mp = MerkleProof::<H, BaseTreeArity>::new_from_proof(&proof).unwrap();
 
             assert_eq!(mp.len(), len, "invalid prof len");
 

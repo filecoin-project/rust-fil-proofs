@@ -31,13 +31,13 @@ use crate::error::Result;
 use crate::hasher::{Domain, HashFunction, Hasher};
 use crate::measurements::{
     measure_op,
-    Operation::{CommD, EncodeWindowTimeAll, GenerateTreeC, GenerateTreeRLast},
+    Operation::{CommD, EncodeWindowTimeAll},
 };
 use crate::merkle::{
-    split_config, BinaryTree, MerkleProof, MerkleTree, OctLCSubTree, OctLCTopTree, OctLCTree,
-    OctSubTree, OctTopTree, OctTree, Store, SECTOR_SIZE_16_MIB, SECTOR_SIZE_1_GIB,
-    SECTOR_SIZE_2_KIB, SECTOR_SIZE_32_GIB, SECTOR_SIZE_32_KIB, SECTOR_SIZE_4_KIB,
-    SECTOR_SIZE_512_MIB, SECTOR_SIZE_64_GIB, SECTOR_SIZE_8_MIB,
+    split_config, BinaryTree, MerkleProof, MerkleProofTrait, MerkleTree, OctLCSubTree,
+    OctLCTopTree, OctLCTree, OctSubTree, OctTopTree, OctTree, Store, SECTOR_SIZE_16_MIB,
+    SECTOR_SIZE_1_GIB, SECTOR_SIZE_2_KIB, SECTOR_SIZE_32_GIB, SECTOR_SIZE_32_KIB,
+    SECTOR_SIZE_4_KIB, SECTOR_SIZE_512_MIB, SECTOR_SIZE_64_GIB, SECTOR_SIZE_8_MIB,
 };
 use crate::porep::PoRep;
 use crate::util::NODE_SIZE;
@@ -115,7 +115,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
 
                         // Initial data layer openings (c_X in Comm_D)
                         let comm_d_proof =
-                            MerkleProof::new_from_proof(&t_aux.tree_d.gen_proof(challenge)?);
+                            MerkleProof::new_from_proof(&t_aux.tree_d.gen_proof(challenge)?)?;
                         assert!(comm_d_proof.validate(challenge));
 
                         // Stacked replica column openings
@@ -252,7 +252,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
                                 }?;
 
                                 let comm_r_last_proof =
-                                    MerkleProof::new_from_proof(&tree_r_last_proof);
+                                    MerkleProof::new_from_proof(&tree_r_last_proof)?;
                                 assert!(comm_r_last_proof.validate(challenge));
 
                                 comm_r_last_proof
@@ -277,13 +277,8 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
                                 assert!(tree_r_last_proof.sub_tree_proof.is_some());
 
                                 let comm_r_last_proof =
-                                    MerkleProof::new_from_sub_proof::<typenum::U0, typenum::U2>(
-                                        &tree_r_last_proof,
-                                        base_tree_leafs,
-                                    );
+                                    MerkleProof::new_from_proof(&tree_r_last_proof)?;
 
-                                // FIXME: Remove this assert and make sub_tree_proof member private?
-                                assert!(comm_r_last_proof.sub_tree_proof.is_some());
                                 assert!(comm_r_last_proof.validate(challenge));
 
                                 comm_r_last_proof
@@ -309,13 +304,8 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
                                 assert!(tree_r_last_proof.sub_tree_proof.is_some());
 
                                 let comm_r_last_proof =
-                                    MerkleProof::new_from_sub_proof::<typenum::U2, typenum::U8>(
-                                        &tree_r_last_proof,
-                                        base_tree_leafs,
-                                    );
+                                    MerkleProof::new_from_proof(&tree_r_last_proof)?;
 
-                                // FIXME: Remove this assert and make sub_tree_proof member private?
-                                assert!(comm_r_last_proof.sub_tree_proof.is_some());
                                 assert!(comm_r_last_proof.validate(challenge));
 
                                 comm_r_last_proof

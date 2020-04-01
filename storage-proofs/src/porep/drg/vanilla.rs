@@ -14,8 +14,10 @@ use crate::drgraph::Graph;
 use crate::encode;
 use crate::error::Result;
 use crate::fr32::bytes_into_fr_repr_safe;
-use crate::hasher::{Domain, HashFunction, Hasher};
-use crate::merkle::{BinaryLCMerkleTree, BinaryMerkleTree, LCMerkleTree, MerkleProof};
+use crate::hasher::{Domain, HashFunction, Hasher, PoseidonArity};
+use crate::merkle::{
+    BinaryLCMerkleTree, BinaryMerkleTree, LCMerkleTree, MerkleProof, MerkleProofTrait,
+};
 use crate::parameter_cache::ParameterSetMetadata;
 use crate::porep::PoRep;
 use crate::proof::{NoRequirements, ProofScheme};
@@ -139,7 +141,7 @@ pub struct DataProof<H: Hasher, U: typenum::Unsigned> {
     pub data: H::Domain,
 }
 
-impl<H: Hasher, U: typenum::Unsigned> DataProof<H, U> {
+impl<H: Hasher, U: 'static + PoseidonArity> DataProof<H, U> {
     pub fn new(n: usize) -> Self {
         DataProof {
             proof: MerkleProof::new(n),
@@ -148,13 +150,14 @@ impl<H: Hasher, U: typenum::Unsigned> DataProof<H, U> {
     }
 
     pub fn serialize(&self) -> Vec<u8> {
-        let mut out = self.proof.serialize();
-        let len = out.len();
-        out.resize(len + 32, 0u8);
-        // Unwrapping here is safe, all hash domain elements are 32 bytes long.
-        self.data.write_bytes(&mut out[len..]).unwrap();
+        todo!()
+        // let mut out = self.proof.serialize();
+        // let len = out.len();
+        // out.resize(len + 32, 0u8);
+        // // Unwrapping here is safe, all hash domain elements are 32 bytes long.
+        // self.data.write_bytes(&mut out[len..]).unwrap();
 
-        out
+        // out
     }
 
     /// proves_challenge returns true if this self.proof corresponds to challenge.
@@ -325,7 +328,7 @@ where
                 }
             }?;
             replica_nodes.push(DataProof {
-                proof: MerkleProof::new_from_proof(&tree_proof),
+                proof: MerkleProof::new_from_proof(&tree_proof)?,
                 data,
             });
 
@@ -343,7 +346,7 @@ where
                         }
                     }?;
                     DataProof {
-                        proof: MerkleProof::new_from_proof(&proof),
+                        proof: MerkleProof::new_from_proof(&proof)?,
                         data: tree_r.read_at(*p as usize)?,
                     }
                 }));
@@ -371,7 +374,7 @@ where
                 )?;
                 data_nodes.push(DataProof {
                     data: extracted,
-                    proof: MerkleProof::new_from_proof(&node_proof),
+                    proof: MerkleProof::new_from_proof(&node_proof)?,
                 });
             }
         }
@@ -653,7 +656,7 @@ mod tests {
     use ff::Field;
     use memmap::MmapMut;
     use memmap::MmapOptions;
-    use paired::bls12_381::{Bls12, Fr};
+    use paired::bls12_381::Fr;
     use rand::SeedableRng;
     use rand_xorshift::XorShiftRng;
     use std::fs::File;

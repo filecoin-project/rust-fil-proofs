@@ -12,7 +12,7 @@ use crate::drgraph::Graph;
 use crate::gadgets::por::PoRCircuit;
 use crate::gadgets::variables::Root;
 use crate::hasher::{Hasher, PoseidonArity};
-use crate::merkle::MerkleProof;
+use crate::merkle::{MerkleProof, MerkleProofTrait};
 use crate::porep::stacked::{
     Proof as VanillaProof, PublicParams, ReplicaColumnProof as VanillaReplicaColumnProof,
 };
@@ -192,7 +192,7 @@ where
     }
 }
 
-impl<H: Hasher, U: PoseidonArity> From<MerkleProof<H, U>> for InclusionPath<H, U> {
+impl<H: Hasher, U: 'static + PoseidonArity> From<MerkleProof<H, U>> for InclusionPath<H, U> {
     fn from(other: MerkleProof<H, U>) -> Self {
         let (value, auth_path) = other.into_options_with_leaf();
 

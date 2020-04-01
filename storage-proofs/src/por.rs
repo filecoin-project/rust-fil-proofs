@@ -1,12 +1,11 @@
-use std::marker::PhantomData;
-
 use anyhow::ensure;
 use serde::{Deserialize, Serialize};
+use std::marker::PhantomData;
 
 use crate::drgraph::graph_height;
 use crate::error::*;
 use crate::hasher::{Domain, Hasher, PoseidonArity};
-use crate::merkle::{MerkleProof, MerkleTree};
+use crate::merkle::{MerkleProof, MerkleProofTrait, MerkleTree};
 use crate::parameter_cache::ParameterSetMetadata;
 use crate::proof::{NoRequirements, ProofScheme};
 
@@ -94,7 +93,7 @@ pub struct PoR<H: Hasher, U: PoseidonArity> {
     _u: PhantomData<U>,
 }
 
-impl<'a, H: 'a + Hasher, U: 'a + PoseidonArity> ProofScheme<'a> for PoR<H, U> {
+impl<'a, H: 'a + Hasher, U: 'static + 'a + PoseidonArity> ProofScheme<'a> for PoR<H, U> {
     type PublicParams = PublicParams;
     type SetupParams = SetupParams;
     type PublicInputs = PublicInputs<H::Domain>;
@@ -124,7 +123,7 @@ impl<'a, H: 'a + Hasher, U: 'a + PoseidonArity> ProofScheme<'a> for PoR<H, U> {
         let proof = tree.gen_proof(challenge)?;
 
         Ok(DataProof {
-            proof: MerkleProof::new_from_proof(&proof),
+            proof: MerkleProof::new_from_proof(&proof)?,
             data: priv_inputs.leaf,
         })
     }
@@ -272,7 +271,7 @@ mod tests {
         }
     }
 
-    fn test_merklepor_validates<H: Hasher, U: PoseidonArity>() {
+    fn test_merklepor_validates<H: Hasher, U: 'static + PoseidonArity>() {
         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
 
         let leaves = 64;
@@ -342,7 +341,7 @@ mod tests {
         test_merklepor_validates::<PoseidonHasher, typenum::U4>();
     }
 
-    fn test_merklepor_validates_challenge_identity<H: Hasher, U: PoseidonArity>() {
+    fn test_merklepor_validates_challenge_identity<H: Hasher, U: 'static + PoseidonArity>() {
         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
 
         let leaves = 64;

@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use crate::drgraph::graph_height;
 use crate::error::{Error, Result};
 use crate::hasher::{Domain, HashFunction, Hasher};
-use crate::merkle::{BinaryMerkleTree, MerkleProof};
+use crate::merkle::{BinaryMerkleTree, MerkleProof, MerkleProofTrait};
 use crate::parameter_cache::ParameterSetMetadata;
 use crate::proof::{NoRequirements, ProofScheme};
 use crate::sector::*;
@@ -146,9 +146,7 @@ impl<'a, H: 'a + Hasher> ProofScheme<'a> for RationalPoSt<'a, H> {
                 if let Some(tree) = priv_inputs.trees.get(&challenge.sector) {
                     ensure!(comm_r_last == &tree.root(), Error::InvalidCommitment);
 
-                    Ok(MerkleProof::new_from_proof(
-                        &tree.gen_proof(challenged_leaf as usize)?,
-                    ))
+                    MerkleProof::new_from_proof(&tree.gen_proof(challenged_leaf as usize)?)
                 } else {
                     bail!(Error::MalformedInput);
                 }
@@ -289,7 +287,7 @@ fn derive_challenge(
 mod tests {
     use super::*;
     use ff::Field;
-    use paired::bls12_381::{Bls12, Fr};
+    use paired::bls12_381::Fr;
     use rand::{Rng, SeedableRng};
     use rand_xorshift::XorShiftRng;
 

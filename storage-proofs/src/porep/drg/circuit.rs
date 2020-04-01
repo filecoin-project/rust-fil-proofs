@@ -324,6 +324,7 @@ mod tests {
     use crate::fr32::{bytes_into_fr, fr_into_bytes};
     use crate::gadgets::TestConstraintSystem;
     use crate::hasher::PedersenHasher;
+    use crate::merkle::MerkleProofTrait;
     use crate::porep::drg;
     use crate::porep::stacked::BINARY_ARITY;
     use crate::porep::PoRep;

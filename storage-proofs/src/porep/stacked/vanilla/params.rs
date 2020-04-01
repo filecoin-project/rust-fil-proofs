@@ -19,10 +19,11 @@ use crate::error::Result;
 use crate::fr32::bytes_into_fr_repr_safe;
 use crate::hasher::{Domain, Hasher};
 use crate::merkle::{
-    open_lcmerkle_tree, split_config, BinaryTree, MerkleProof, MerkleTree, OctLCSubTree,
-    OctLCTopTree, OctLCTree, OctSubTree, OctTopTree, OctTree, OctTreeData, SECTOR_SIZE_16_MIB,
-    SECTOR_SIZE_1_GIB, SECTOR_SIZE_2_KIB, SECTOR_SIZE_32_GIB, SECTOR_SIZE_32_KIB,
-    SECTOR_SIZE_4_KIB, SECTOR_SIZE_512_MIB, SECTOR_SIZE_64_GIB, SECTOR_SIZE_8_MIB,
+    open_lcmerkle_tree, split_config, BinaryTree, MerkleProof, MerkleProofTrait, MerkleTree,
+    OctLCSubTree, OctLCTopTree, OctLCTree, OctSubTree, OctTopTree, OctTree, OctTreeData,
+    SECTOR_SIZE_16_MIB, SECTOR_SIZE_1_GIB, SECTOR_SIZE_2_KIB, SECTOR_SIZE_32_GIB,
+    SECTOR_SIZE_32_KIB, SECTOR_SIZE_4_KIB, SECTOR_SIZE_512_MIB, SECTOR_SIZE_64_GIB,
+    SECTOR_SIZE_8_MIB,
 };
 use crate::parameter_cache::ParameterSetMetadata;
 use crate::util::data_at_node;
@@ -199,52 +200,53 @@ impl<H: Hasher, G: Hasher> Proof<H, G> {
 
         trace!("verify encoding");
         let sector_size = (graph.size() * std::mem::size_of::<H::Domain>()) as u64;
-        match sector_size {
-            SECTOR_SIZE_2_KIB | SECTOR_SIZE_8_MIB | SECTOR_SIZE_512_MIB => {
-                check!(self.encoding_proof.verify::<G>(
-                    replica_id,
-                    &self.comm_r_last_proof.leaf(),
-                    &self.comm_d_proofs.leaf()
-                ));
-            }
-            SECTOR_SIZE_4_KIB | SECTOR_SIZE_16_MIB | SECTOR_SIZE_1_GIB | SECTOR_SIZE_32_GIB => {
-                assert!(self.comm_r_last_proof.sub_tree_proof.is_some());
-                check!(self.encoding_proof.verify::<G>(
-                    replica_id,
-                    &self
-                        .comm_r_last_proof
-                        .sub_tree_proof
-                        .as_ref()
-                        .unwrap()
-                        .leaf(),
-                    &self.comm_d_proofs.leaf()
-                ));
-            }
-            SECTOR_SIZE_32_KIB | SECTOR_SIZE_64_GIB => {
-                assert!(self.comm_r_last_proof.sub_tree_proof.is_some());
-                assert!(self
-                    .comm_r_last_proof
-                    .sub_tree_proof
-                    .as_ref()
-                    .unwrap()
-                    .sub_tree_proof
-                    .is_some());
-                check!(self.encoding_proof.verify::<G>(
-                    replica_id,
-                    &self
-                        .comm_r_last_proof
-                        .sub_tree_proof
-                        .as_ref()
-                        .unwrap()
-                        .sub_tree_proof
-                        .as_ref()
-                        .unwrap()
-                        .leaf(),
-                    &self.comm_d_proofs.leaf()
-                ));
-            }
-            _ => panic!("Unsupported sector size"),
-        }
+        todo!();
+        // match sector_size {
+        //     SECTOR_SIZE_2_KIB | SECTOR_SIZE_8_MIB | SECTOR_SIZE_512_MIB => {
+        //         check!(self.encoding_proof.verify::<G>(
+        //             replica_id,
+        //             &self.comm_r_last_proof.leaf(),
+        //             &self.comm_d_proofs.leaf()
+        //         ));
+        //     }
+        //     SECTOR_SIZE_4_KIB | SECTOR_SIZE_16_MIB | SECTOR_SIZE_1_GIB | SECTOR_SIZE_32_GIB => {
+        //         assert!(self.comm_r_last_proof.sub_tree_proof.is_some());
+        //         check!(self.encoding_proof.verify::<G>(
+        //             replica_id,
+        //             &self
+        //                 .comm_r_last_proof
+        //                 .sub_tree_proof
+        //                 .as_ref()
+        //                 .unwrap()
+        //                 .leaf(),
+        //             &self.comm_d_proofs.leaf()
+        //         ));
+        //     }
+        //     SECTOR_SIZE_32_KIB | SECTOR_SIZE_64_GIB => {
+        //         assert!(self.comm_r_last_proof.sub_tree_proof.is_some());
+        //         assert!(self
+        //             .comm_r_last_proof
+        //             .sub_tree_proof
+        //             .as_ref()
+        //             .unwrap()
+        //             .sub_tree_proof
+        //             .is_some());
+        //         check!(self.encoding_proof.verify::<G>(
+        //             replica_id,
+        //             &self
+        //                 .comm_r_last_proof
+        //                 .sub_tree_proof
+        //                 .as_ref()
+        //                 .unwrap()
+        //                 .sub_tree_proof
+        //                 .as_ref()
+        //                 .unwrap()
+        //                 .leaf(),
+        //             &self.comm_d_proofs.leaf()
+        //         ));
+        //     }
+        //     _ => panic!("Unsupported sector size"),
+        // }
 
         true
     }

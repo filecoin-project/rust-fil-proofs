@@ -20,7 +20,7 @@ use crate::hasher::{
     Domain, HashFunction, Hasher, PoseidonDomain, PoseidonFunction, PoseidonMDArity,
 };
 use crate::measurements::{measure_op, Operation};
-use crate::merkle::{MerkleProof, OctLCMerkleTree};
+use crate::merkle::{MerkleProof, MerkleProofTrait, OctLCMerkleTree};
 use crate::parameter_cache::ParameterSetMetadata;
 use crate::porep::stacked::OCT_ARITY;
 use crate::proof::{NoRequirements, ProofScheme};
@@ -369,7 +369,7 @@ impl<'a, H: 'a + Hasher> ProofScheme<'a> for ElectionPoSt<'a, H> {
                                     )
                                 }
                             }?;
-                            Ok(MerkleProof::new_from_proof(&proof))
+                            MerkleProof::new_from_proof(&proof)
                         })
                 })
                 .collect::<Result<Vec<_>>>()

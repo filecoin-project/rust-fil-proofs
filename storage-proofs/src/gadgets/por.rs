@@ -14,6 +14,7 @@ use crate::gadgets::constraint;
 use crate::gadgets::insertion::insert;
 use crate::gadgets::variables::Root;
 use crate::hasher::{HashFunction, Hasher, PoseidonArity};
+use crate::merkle::MerkleProofTrait;
 use crate::parameter_cache::{CacheableParameters, ParameterSetMetadata};
 use crate::por::PoR;
 use crate::proof::ProofScheme;
@@ -90,7 +91,7 @@ impl<C: Circuit<Bls12>, P: ParameterSetMetadata, H: Hasher, U: typenum::Unsigned
 impl<'a, H, U> CompoundProof<'a, PoR<H, U>, PoRCircuit<U, H>> for PoRCompound<H, U>
 where
     H: 'a + Hasher,
-    U: 'a + PoseidonArity,
+    U: 'static + PoseidonArity,
 {
     fn circuit<'b>(
         public_inputs: &<PoR<H, U> as ProofScheme<'a>>::PublicInputs,
@@ -99,7 +100,7 @@ where
         public_params: &'b <PoR<H, U> as ProofScheme<'a>>::PublicParams,
     ) -> Result<PoRCircuit<U, H>> {
         let (root, private) = match (*public_inputs).commitment {
-            None => (Root::Val(Some(proof.proof.root.into())), true),
+            None => (Root::Val(Some((*proof.proof.root()).into())), true),
             Some(commitment) => (Root::Val(Some(commitment.into())), false),
         };
 
@@ -284,13 +285,13 @@ mod tests {
     use rand_xorshift::XorShiftRng;
 
     use crate::compound_proof;
-    use crate::crypto::pedersen::JJ_PARAMS;
     use crate::drgraph::{new_seed, BucketGraph, Graph, BASE_DEGREE};
     use crate::fr32::{bytes_into_fr, fr_into_bytes};
     use crate::gadgets::{MetricCS, TestConstraintSystem};
     use crate::hasher::{
         Blake2sHasher, Domain, Hasher, PedersenHasher, PoseidonHasher, Sha256Hasher,
     };
+    use crate::merkle::MerkleProofTrait;
     use crate::por;
     use crate::proof::ProofScheme;
     use crate::util::data_at_node;

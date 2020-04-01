@@ -4,7 +4,7 @@ use anyhow::ensure;
 use bellperson::gadgets::boolean::{AllocatedBit, Boolean};
 use bellperson::gadgets::{multipack, num};
 use bellperson::{Circuit, ConstraintSystem, SynthesisError};
-use generic_array::typenum::{self, Unsigned};
+use generic_array::typenum::Unsigned;
 use paired::bls12_381::{Bls12, Fr};
 
 use crate::compound_proof::{CircuitComponent, CompoundProof};
@@ -13,7 +13,7 @@ use crate::error::Result;
 use crate::gadgets::constraint;
 use crate::gadgets::insertion::insert;
 use crate::gadgets::variables::Root;
-use crate::hasher::{HashFunction, Hasher, PoseidonArity};
+use crate::hasher::{HashFunction, Hasher};
 use crate::parameter_cache::{CacheableParameters, ParameterSetMetadata};
 use crate::por::PoR;
 use crate::proof::ProofScheme;
@@ -96,7 +96,7 @@ where
         public_params: &'b <PoR<Tree::Hasher, Tree::Arity> as ProofScheme<'a>>::PublicParams,
     ) -> Result<PoRCircuit<Tree>> {
         let (root, private) = match (*public_inputs).commitment {
-            None => (Root::Val(Some(proof.proof.root.into())), true),
+            None => (Root::Val(Some((*proof.proof.root()).into())), true),
             Some(commitment) => (Root::Val(Some(commitment.into())), false),
         };
 
@@ -272,19 +272,15 @@ mod tests {
     use super::*;
 
     use crate::proof::NoRequirements;
-    use bellperson::gadgets::multipack;
     use ff::Field;
     use rand::SeedableRng;
     use rand_xorshift::XorShiftRng;
 
     use crate::compound_proof;
-    use crate::crypto::pedersen::JJ_PARAMS;
     use crate::drgraph::{new_seed, BucketGraph, Graph, BASE_DEGREE};
     use crate::fr32::{bytes_into_fr, fr_into_bytes};
-    use crate::gadgets::{MetricCS, TestConstraintSystem};
-    use crate::hasher::{
-        Blake2sHasher, Domain, Hasher, PedersenHasher, PoseidonHasher, Sha256Hasher,
-    };
+    use crate::gadgets::TestConstraintSystem;
+    use crate::hasher::{Domain, Hasher, PedersenHasher};
     use crate::por;
     use crate::proof::ProofScheme;
     use crate::util::data_at_node;

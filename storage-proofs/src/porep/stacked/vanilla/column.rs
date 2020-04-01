@@ -58,7 +58,7 @@ impl<H: Hasher> Column<H> {
     /// Create a column proof for this column.
     pub fn into_proof(self, tree_c: &OctTree<H>) -> Result<ColumnProof<H>> {
         let inclusion_proof =
-            MerkleProof::new_from_proof(&tree_c.gen_proof(self.index() as usize)?);
+            MerkleProof::new_from_proof(&tree_c.gen_proof(self.index() as usize)?)?;
         ColumnProof::<H>::from_column(self, inclusion_proof)
     }
 
@@ -70,10 +70,7 @@ impl<H: Hasher> Column<H> {
     ) -> Result<ColumnProof<H>> {
         let tree_c_proof = tree_c.gen_proof(self.index() as usize)?;
         assert!(tree_c_proof.sub_tree_proof.is_some());
-        let inclusion_proof = MerkleProof::new_from_sub_proof::<typenum::U0, typenum::U2>(
-            &tree_c_proof,
-            sub_tree_leafs,
-        );
+        let inclusion_proof = MerkleProof::new_from_proof(&tree_c_proof)?;
         ColumnProof::<H>::from_column(self, inclusion_proof)
     }
 
@@ -85,10 +82,7 @@ impl<H: Hasher> Column<H> {
     ) -> Result<ColumnProof<H>> {
         let tree_c_proof = tree_c.gen_proof(self.index() as usize)?;
         assert!(tree_c_proof.sub_tree_proof.is_some());
-        let inclusion_proof = MerkleProof::new_from_sub_proof::<typenum::U2, typenum::U8>(
-            &tree_c_proof,
-            sub_tree_leafs,
-        );
+        let inclusion_proof = MerkleProof::new_from_proof(&tree_c_proof)?;
         ColumnProof::<H>::from_column(self, inclusion_proof)
     }
 }
