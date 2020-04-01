@@ -307,21 +307,17 @@ pub fn seal_commit_phase1<T: AsRef<Path>>(
     );
 
     let p_aux = {
-        let mut p_aux_bytes = vec![];
         let p_aux_path = cache_path.as_ref().join(CacheKey::PAux.to_string());
-        let mut f_p_aux = File::open(&p_aux_path)
-            .with_context(|| format!("could not open file p_aux={:?}", p_aux_path))?;
-        f_p_aux.read_to_end(&mut p_aux_bytes)?;
+        let p_aux_bytes = std::fs::read(&p_aux_path)
+            .with_context(|| format!("could not read file p_aux={:?}", p_aux_path))?;
 
         deserialize(&p_aux_bytes)
     }?;
 
     let t_aux = {
-        let mut t_aux_bytes = vec![];
         let t_aux_path = cache_path.as_ref().join(CacheKey::TAux.to_string());
-        let mut f_t_aux = File::open(&t_aux_path)
-            .with_context(|| format!("could not open file t_aux={:?}", t_aux_path))?;
-        f_t_aux.read_to_end(&mut t_aux_bytes)?;
+        let t_aux_bytes = std::fs::read(&t_aux_path)
+            .with_context(|| format!("could not read file t_aux={:?}", t_aux_path))?;
 
         let mut res: TemporaryAux<_, _> = deserialize(&t_aux_bytes)?;
 

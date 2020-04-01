@@ -140,6 +140,7 @@ where
         component_private_inputs: <DrgPoRepCircuit<'a, H> as CircuitComponent>::ComponentPrivateInputs,
         proof: &<DrgPoRep<'a, H, G> as ProofScheme<'a>>::Proof,
         public_params: &<DrgPoRep<'a, H, G> as ProofScheme<'a>>::PublicParams,
+        _partition_k: Option<usize>,
     ) -> Result<DrgPoRepCircuit<'a, H>> {
         let challenges = public_params.challenges_count;
         let len = proof.nodes.len();

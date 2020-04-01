@@ -1,11 +1,10 @@
 use anyhow::{ensure, Result};
 use storage_proofs::porep::stacked::{self, LayerChallenges, StackedDrg};
 use storage_proofs::post::election::{self, ElectionPoSt};
+use storage_proofs::post::fallback;
 use storage_proofs::proof::ProofScheme;
 
-use crate::constants::{
-    DefaultPieceHasher, DefaultTreeHasher, DRG_DEGREE, EXP_DEGREE, LAYERS, POREP_MINIMUM_CHALLENGES,
-};
+use crate::constants::*;
 use crate::types::{PaddedBytesAmount, PoStConfig};
 
 const DRG_SEED: [u8; 28] = [
@@ -13,8 +12,14 @@ const DRG_SEED: [u8; 28] = [
     26, 27,
 ]; // Arbitrary, need a theory for how to vary this over time.
 
-type PostSetupParams = election::SetupParams;
-pub type PostPublicParams = election::PublicParams;
+type ElectionPostSetupParams = election::SetupParams;
+pub type ElectionPostPublicParams = election::PublicParams;
+
+type WinningPostSetupParams = fallback::SetupParams;
+pub type WinningPostPublicParams = fallback::PublicParams;
+
+type WindowPostSetupParams = fallback::SetupParams;
+pub type WindowPostPublicParams = fallback::PublicParams;
 
 pub fn public_params(
     sector_bytes: PaddedBytesAmount,
@@ -26,17 +31,55 @@ pub fn public_params(
     )?)
 }
 
-pub fn post_public_params(post_config: PoStConfig) -> Result<PostPublicParams> {
-    ElectionPoSt::<DefaultTreeHasher>::setup(&post_setup_params(post_config))
+pub fn election_post_public_params(post_config: &PoStConfig) -> Result<ElectionPostPublicParams> {
+    ElectionPoSt::<DefaultTreeHasher>::setup(&election_post_setup_params(&post_config))
 }
 
-pub fn post_setup_params(post_config: PoStConfig) -> PostSetupParams {
-    let size = PaddedBytesAmount::from(post_config);
-
+pub fn election_post_setup_params(post_config: &PoStConfig) -> ElectionPostSetupParams {
     election::SetupParams {
-        sector_size: size.into(),
+        sector_size: post_config.padded_sector_size().into(),
         challenge_count: post_config.challenge_count,
-        challenged_nodes: post_config.challenged_nodes,
+        challenged_nodes: 1,
+    }
+}
+
+pub fn winning_post_public_params(post_config: &PoStConfig) -> Result<WinningPostPublicParams> {
+    fallback::FallbackPoSt::<DefaultTreeHasher>::setup(&winning_post_setup_params(&post_config)?)
+}
+
+pub fn winning_post_setup_params(post_config: &PoStConfig) -> Result<WinningPostSetupParams> {
+    ensure!(
+        post_config.challenge_count % post_config.sector_count == 0,
+        "sector count must divide challenge count"
+    );
+
+    let param_sector_count = post_config.challenge_count / post_config.sector_count;
+    let param_challenge_count = post_config.challenge_count / param_sector_count;
+
+    ensure!(
+        param_sector_count * param_challenge_count == post_config.challenge_count,
+        "invald parameters calculated {} * {} != {}",
+        param_sector_count,
+        param_challenge_count,
+        post_config.challenge_count
+    );
+
+    Ok(fallback::SetupParams {
+        sector_size: post_config.padded_sector_size().into(),
+        challenge_count: param_challenge_count,
+        sector_count: param_sector_count,
+    })
+}
+
+pub fn window_post_public_params(post_config: &PoStConfig) -> Result<WindowPostPublicParams> {
+    fallback::FallbackPoSt::<DefaultTreeHasher>::setup(&window_post_setup_params(&post_config))
+}
+
+pub fn window_post_setup_params(post_config: &PoStConfig) -> WindowPostSetupParams {
+    fallback::SetupParams {
+        sector_size: post_config.padded_sector_size().into(),
+        challenge_count: post_config.challenge_count,
+        sector_count: post_config.sector_count,
     }
 }
 
@@ -96,6 +139,8 @@ fn select_challenges(
 mod tests {
     use super::*;
 
+    use crate::types::PoStType;
+
     #[test]
     fn partition_layer_challenges_test() {
         let f = |partitions| {
@@ -109,5 +154,21 @@ mod tests {
         assert_eq!(12, f(1));
         assert_eq!(6, f(2));
         assert_eq!(3, f(4));
+    }
+
+    #[test]
+    fn test_winning_post_params() {
+        let config = PoStConfig {
+            typ: PoStType::Winning,
+            priority: false,
+            challenge_count: 66,
+            sector_count: 1,
+            sector_size: 2048u64.into(),
+        };
+
+        let params = winning_post_public_params(&config).unwrap();
+        assert_eq!(params.sector_count, 66);
+        assert_eq!(params.challenge_count, 1);
+        assert_eq!(params.sector_size, 2048);
     }
 }

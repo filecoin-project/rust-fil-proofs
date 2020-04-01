@@ -13,8 +13,13 @@ pub const SECTOR_SIZE_8_MIB: u64 = 1 << 23;
 pub const SECTOR_SIZE_512_MIB: u64 = 1 << 29;
 pub const SECTOR_SIZE_32_GIB: u64 = 1 << 35;
 
-pub const POST_CHALLENGE_COUNT: usize = 65;
-pub const POST_CHALLENGED_NODES: usize = 1;
+pub const ELECTION_POST_CHALLENGE_COUNT: usize = 65;
+pub const ELECTION_POST_CHALLENGED_NODES: usize = 1;
+
+pub const WINNING_POST_CHALLENGE_COUNT: usize = 66;
+pub const WINNING_POST_SECTOR_COUNT: usize = 1;
+
+pub const WINDOW_POST_CHALLENGE_COUNT: usize = 10;
 
 pub const DRG_DEGREE: usize = storage_proofs::drgraph::BASE_DEGREE;
 pub const EXP_DEGREE: usize = storage_proofs::porep::stacked::EXP_DEGREE;
@@ -50,6 +55,17 @@ lazy_static! {
             (SECTOR_SIZE_8_MIB, 2),
             (SECTOR_SIZE_512_MIB, 2),
             (SECTOR_SIZE_32_GIB, 11)
+        ]
+        .iter()
+        .copied()
+        .collect()
+    );
+    pub static ref WINDOW_POST_SECTOR_COUNT: RwLock<HashMap<u64, usize>> = RwLock::new(
+        [
+            (SECTOR_SIZE_2_KIB, 2),
+            (SECTOR_SIZE_8_MIB, 2),
+            (SECTOR_SIZE_512_MIB, 2),
+            (SECTOR_SIZE_32_GIB, 2349) // this gives 133,977,564 constraints, fitting just in a single partition
         ]
         .iter()
         .copied()

@@ -39,11 +39,11 @@ use std::thread::sleep;
 use std::time::{Duration, Instant};
 
 use clap::{App, AppSettings, Arg, ArgGroup, SubCommand};
-use filecoin_proofs::constants::{
-    POREP_PARTITIONS, POST_CHALLENGED_NODES, POST_CHALLENGE_COUNT, SECTOR_SIZE_2_KIB,
-    SECTOR_SIZE_32_GIB, SECTOR_SIZE_512_MIB, /*SECTOR_SIZE_64_GIB,*/ SECTOR_SIZE_8_MIB,
+use filecoin_proofs::constants::*;
+use filecoin_proofs::parameters::{
+    election_post_public_params, setup_params, window_post_public_params,
+    winning_post_public_params,
 };
-use filecoin_proofs::parameters::{post_public_params, setup_params};
 use filecoin_proofs::types::*;
 use log::info;
 use paired::bls12_381::Bls12;
@@ -54,12 +54,14 @@ use storage_proofs::compound_proof::{self, CompoundProof};
 use storage_proofs::hasher::{/*PedersenHasher,*/ PoseidonHasher, Sha256Hasher};
 use storage_proofs::porep::stacked::{StackedCircuit, StackedCompound, StackedDrg};
 use storage_proofs::post::election::{ElectionPoSt, ElectionPoStCircuit, ElectionPoStCompound};
+use storage_proofs::post::fallback::{FallbackPoSt, FallbackPoStCircuit, FallbackPoStCompound};
 
 #[derive(Clone, Copy)]
 enum Proof {
     Porep,
     ElectionPost,
-    // FallbackPost,
+    WinningPost,
+    WindowPost,
 }
 
 impl Display for Proof {
@@ -67,7 +69,8 @@ impl Display for Proof {
         let s = match self {
             Proof::Porep => "PoRep",
             Proof::ElectionPost => "EPoSt",
-            // Proof::FallbackPost => "FPoSt",
+            Proof::WinningPost => "WinningPoSt",
+            Proof::WindowPost => "WindowPoSt",
         };
         write!(f, "{}", s)
     }
@@ -136,13 +139,14 @@ fn initial_params_filename(proof: Proof, hasher: Hasher, sector_size: u64) -> St
 /// containing the proof, hasher, sector-size, shortened head commit, and contribution number (e.g.
 /// `(Proof::Porep, Hasher::Poseidon, SECTOR_SIZE_32_GIB, "abcdef1", 0)`).
 fn parse_params_filename(path: &str) -> (Proof, Hasher, u64, String, usize) {
-    let filename = path.rsplitn(2, "/").nth(0).unwrap();
-    let split: Vec<&str> = filename.split("_").collect();
+    let filename = path.rsplitn(2, '/').next().unwrap();
+    let split: Vec<&str> = filename.split('_').collect();
 
     let proof = match split[0] {
         "porep" => Proof::Porep,
         "epost" => Proof::ElectionPost,
-        // "fpost" => Proof:FallbackPost,
+        "winning-post" => Proof::WinningPost,
+        "window-post" => Proof::WindowPost,
         other => panic!("invalid proof id in filename: {}", other),
     };
 
@@ -165,7 +169,7 @@ fn parse_params_filename(path: &str) -> (Proof, Hasher, u64, String, usize) {
     let head = split[3].to_string();
 
     let param_number = usize::from_str(split[4])
-        .expect(&format!("invalid param number in filename: {}", split[3]));
+        .unwrap_or_else(|_| panic!("invalid param number in filename: {}", split[3]));
 
     (proof, hasher, sector_size, head, param_number)
 }
@@ -244,12 +248,13 @@ fn blank_election_post_poseidon_circuit(
 ) -> ElectionPoStCircuit<'static, Bls12, PoseidonHasher> {
     let post_config = PoStConfig {
         sector_size: SectorSize(sector_size),
-        challenge_count: POST_CHALLENGE_COUNT,
-        challenged_nodes: POST_CHALLENGED_NODES,
+        challenge_count: ELECTION_POST_CHALLENGE_COUNT,
+        sector_count: 1,
+        typ: PoStType::Election,
         priority: false,
     };
 
-    let public_params = post_public_params(post_config).unwrap();
+    let public_params = election_post_public_params(&post_config).unwrap();
 
     <ElectionPoStCompound<PoseidonHasher> as CompoundProof<
         Bls12,
@@ -279,8 +284,50 @@ fn blank_election_post_sha_pedersen_circuit(
 }
 */
 
+fn blank_winning_post_poseidon_circuit(
+    sector_size: u64,
+) -> FallbackPoStCircuit<'static, Bls12, PoseidonHasher> {
+    let post_config = PoStConfig {
+        sector_size: SectorSize(sector_size),
+        challenge_count: WINNING_POST_CHALLENGE_COUNT,
+        sector_count: WINNING_POST_SECTOR_COUNT,
+        typ: PoStType::Winning,
+        priority: false,
+    };
+
+    let public_params = winning_post_public_params(&post_config).unwrap();
+
+    <FallbackPoStCompound<PoseidonHasher> as CompoundProof<
+        Bls12,
+        FallbackPoSt<PoseidonHasher>,
+        FallbackPoStCircuit<Bls12, PoseidonHasher>,
+    >>::blank_circuit(&public_params)
+}
+
+fn blank_window_post_poseidon_circuit(
+    sector_size: u64,
+) -> FallbackPoStCircuit<'static, Bls12, PoseidonHasher> {
+    let post_config = PoStConfig {
+        sector_size: SectorSize(sector_size),
+        challenge_count: WINDOW_POST_CHALLENGE_COUNT,
+        sector_count: *WINDOW_POST_SECTOR_COUNT
+            .read()
+            .unwrap()
+            .get(&sector_size)
+            .unwrap(),
+        typ: PoStType::Window,
+        priority: false,
+    };
+
+    let public_params = window_post_public_params(&post_config).unwrap();
+
+    <FallbackPoStCompound<PoseidonHasher> as CompoundProof<
+        Bls12,
+        FallbackPoSt<PoseidonHasher>,
+        FallbackPoStCircuit<Bls12, PoseidonHasher>,
+    >>::blank_circuit(&public_params)
+}
 /*
-fn blank_fallback_post_poseidon_circuit(sector_size: u64) -> ... {}
 fn blank_fallback_post_sha_pedersen_circuit(sector_size: u64) -> ... {}
 */
 
@@ -333,20 +380,35 @@ fn create_initial_params(proof: Proof, hasher: Hasher, sector_size: u64) {
             dt_create_params = start.elapsed().as_secs();
             params
         } /*
-          (Proof::ElectionPost, Hasher::ShaPedersen) => {
-              let start = Instant::now();
-              let circuit = blank_post_sha_pedersen_circuit(sector_size);
-              dt_create_circuit = start.elapsed().as_secs();
-              let start = Instant::now();
-              let params = phase2::MPCParameters::new(circuit).unwrap();
-              dt_create_params = start.elapsed().as_secs();
-              params
-          }
-          */
-          /*
-          (Proof::FallbackPost, Hasher::Poseidon) => { ... }
-          (Proof::FallbackPost, Hasher::ShaPedersen) => { ... }
-          */
+        (Proof::ElectionPost, Hasher::ShaPedersen) => {
+        let start = Instant::now();
+        let circuit = blank_post_sha_pedersen_circuit(sector_size);
+        dt_create_circuit = start.elapsed().as_secs();
+        let start = Instant::now();
+        let params = phase2::MPCParameters::new(circuit).unwrap();
+        dt_create_params = start.elapsed().as_secs();
+        params
+        }
+         */
+        (Proof::WinningPost, Hasher::Poseidon) => {
+            let start = Instant::now();
+            let circuit = blank_winning_post_poseidon_circuit(sector_size);
+            dt_create_circuit = start.elapsed().as_secs();
+            let start = Instant::now();
+            let params = phase2::MPCParameters::new(circuit).unwrap();
+            dt_create_params = start.elapsed().as_secs();
+            params
+        }
+        (Proof::WindowPost, Hasher::Poseidon) => {
+            let start = Instant::now();
+            let circuit = blank_window_post_poseidon_circuit(sector_size);
+            dt_create_circuit = start.elapsed().as_secs();
+            let start = Instant::now();
+            let params = phase2::MPCParameters::new(circuit).unwrap();
+            dt_create_params = start.elapsed().as_secs();
+            params
+        } /*(Proof::FallbackPost, Hasher::ShaPedersen) => { ... }
+           */
     };
 
     info!(
@@ -621,10 +683,9 @@ fn verify_param_transistions_daemon(proof: Proof, hasher: Hasher, sector_size: u
 
         let provided_contribution_hash = {
             let mut arr = [0u8; 64];
-            let vec = hex::decode(&hex_str).expect(&format!(
-                "contribution hash is not a valid hex string: {}",
-                hex_str
-            ));
+            let vec = hex::decode(&hex_str).unwrap_or_else(|_| {
+                panic!("contribution hash is not a valid hex string: {}", hex_str)
+            });
             info!("parsed contribution hash");
             arr.copy_from_slice(&vec[..]);
             arr
@@ -666,8 +727,8 @@ fn setup_new_logger(proof: Proof, hasher: Hasher, sector_size: u64) {
         initial_params_filename(proof, hasher, sector_size)
     );
 
-    let log_file =
-        File::create(&log_filename).expect(&format!("failed to create log file: {}", log_filename));
+    let log_file = File::create(&log_filename)
+        .unwrap_or_else(|_| panic!("failed to create log file: {}", log_filename));
 
     CombinedLogger::init(vec![
         TermLogger::new(
@@ -693,8 +754,8 @@ fn setup_contribute_logger(path_before: &str) {
 
     log_filename.push_str(".log");
 
-    let log_file =
-        File::create(&log_filename).expect(&format!("failed to create log file: {}", log_filename));
+    let log_file = File::create(&log_filename)
+        .unwrap_or_else(|_| panic!("failed to create log file: {}", log_filename));
 
     CombinedLogger::init(vec![
         TermLogger::new(
@@ -729,8 +790,8 @@ fn setup_verify_logger(param_paths: &[&str]) {
     log_filename.make_ascii_lowercase();
     let log_filename = log_filename.replace("-", "_");
 
-    let log_file =
-        File::create(&log_filename).expect(&format!("failed to create log file: {}", log_filename));
+    let log_file = File::create(&log_filename)
+        .unwrap_or_else(|_| panic!("failed to create log file: {}", log_filename));
 
     CombinedLogger::init(vec![
         TermLogger::new(
@@ -757,8 +818,8 @@ fn setup_verifyd_logger(proof: Proof, hasher: Hasher, sector_size: u64) {
     log_filename.make_ascii_lowercase();
     let log_filename = log_filename.replace("-", "_");
 
-    let log_file =
-        File::create(&log_filename).expect(&format!("failed to create log file: {}", log_filename));
+    let log_file = File::create(&log_filename)
+        .unwrap_or_else(|_| panic!("failed to create log file: {}", log_filename));
 
     CombinedLogger::init(vec![
         TermLogger::new(
@@ -782,20 +843,22 @@ fn main() {
         )
         .arg(
             Arg::with_name("election-post")
-                .long("--epost")
+                .long("epost")
                 .help("Generate ElectionPoSt parameters"),
         )
-        /*
         .arg(
-            Arg::with_name("fallback-post")
-                .long("--fpost")
-                .help("Generate FallbackPoSt parameters"),
+            Arg::with_name("winning-post")
+                .long("winning-post")
+                .help("Generate WinningPoSt parameters"),
         )
-        */
+        .arg(
+            Arg::with_name("window-post")
+                .long("window-post")
+                .help("Generate WindowPoSt parameters"),
+        )
         .group(
             ArgGroup::with_name("proof")
-                .args(&["porep", "election-post"])
-                // .args(&["porep", "election-post", "fallback-post"])
+                .args(&["porep", "election-post", "winning-post", "window-post"])
                 .required(true)
                 .multiple(false),
         )
@@ -901,20 +964,22 @@ fn main() {
         )
         .arg(
             Arg::with_name("election-post")
-                .long("--epost")
+                .long("epost")
                 .help("Generate ElectionPoSt parameters"),
         )
-        /*
         .arg(
-            Arg::with_name("fallback-post")
-                .long("--fpost")
-                .help("Generate FallbackPoSt parameters"),
+            Arg::with_name("winning-post")
+                .long("winning-post")
+                .help("Generate WinningPoSt parameters"),
         )
-        */
+        .arg(
+            Arg::with_name("window-post")
+                .long("window-post")
+                .help("Generate WindowPoSt parameters"),
+        )
         .group(
             ArgGroup::with_name("proof")
-                .args(&["porep", "election-post"])
-                // .args(&["porep", "election-post", "fallback-post"])
+                .args(&["porep", "election-post", "winning-post", "window-post"])
                 .required(true)
                 .multiple(false),
         )
@@ -989,19 +1054,13 @@ fn main() {
             "new" => {
                 let proof = if matches.is_present("porep") {
                     Proof::Porep
-                } else {
-                    Proof::ElectionPost
-                };
-
-                /*
-                let proof = if matches.is_present("porep") {
-                    Proof::Porep
                 } else if matches.is_present("election-post") {
                     Proof::ElectionPost
+                } else if matches.is_present("winning-post") {
+                    Proof::WinningPost
                 } else {
-                    Proof::FallbackPost
+                    Proof::WindowPost
                 };
-                */
 
                 // Default to using Poseidon for the hasher.
                 let hasher = Hasher::Poseidon;
@@ -1053,10 +1112,9 @@ fn main() {
                     .unwrap()
                     .map(|hex_str| {
                         let mut digest_bytes_arr = [0u8; 64];
-                        let digest_bytes_vec = hex::decode(hex_str).expect(&format!(
-                            "contribution hash is not a valid hex string: {}",
-                            hex_str
-                        ));
+                        let digest_bytes_vec = hex::decode(hex_str).unwrap_or_else(|_| {
+                            panic!("contribution hash is not a valid hex string: {}", hex_str)
+                        });
                         digest_bytes_arr.copy_from_slice(&digest_bytes_vec[..]);
                         digest_bytes_arr
                     })
@@ -1068,19 +1126,13 @@ fn main() {
             "verifyd" => {
                 let proof = if matches.is_present("porep") {
                     Proof::Porep
-                } else {
-                    Proof::ElectionPost
-                };
-
-                /*
-                let proof = if matches.is_present("porep") {
-                    Proof::Porep
                 } else if matches.is_present("election-post") {
                     Proof::ElectionPost
+                } else if matches.is_present("winning-post") {
+                    Proof::WinningPost
                 } else {
-                    Proof::FallbackPost
+                    Proof::WindowPost
                 };
-                */
 
                 // Default to using Poseidon for the hasher.
                 let hasher = Hasher::Poseidon;

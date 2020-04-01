@@ -269,6 +269,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher>
         _component_private_inputs: <StackedCircuit<'a, Bls12, H, G> as CircuitComponent>::ComponentPrivateInputs,
         vanilla_proof: &'b <StackedDrg<H, G> as ProofScheme>::Proof,
         public_params: &'b <StackedDrg<H, G> as ProofScheme>::PublicParams,
+        _partition_k: Option<usize>,
     ) -> Result<StackedCircuit<'a, Bls12, H, G>> {
         ensure!(
             !vanilla_proof.is_empty(),
@@ -449,6 +450,7 @@ mod tests {
                 <StackedCircuit<Bls12, H, Sha256Hasher> as CircuitComponent>::ComponentPrivateInputs::default(),
                 &proofs[0],
                 &pp,
+                None,
             )
             .expect("circuit failed")
             .synthesize(&mut cs.namespace(|| "stacked drgporep"))
@@ -468,6 +470,7 @@ mod tests {
             <StackedCircuit<Bls12, H, Sha256Hasher> as CircuitComponent>::ComponentPrivateInputs::default(),
             &proofs[0],
             &pp,
+            None,
         )
         .expect("circuit failed")
         .synthesize(&mut cs.namespace(|| "stacked drgporep"))

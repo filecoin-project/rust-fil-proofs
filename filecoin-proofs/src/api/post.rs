@@ -1,6 +1,4 @@
 use std::collections::{BTreeMap, HashSet};
-use std::fs::File;
-use std::io::prelude::*;
 use std::path::{Path, PathBuf};
 
 use anyhow::{anyhow, ensure, Context, Result};
@@ -19,16 +17,20 @@ use storage_proofs::multi_proof::MultiProof;
 use storage_proofs::post::election;
 pub use storage_proofs::post::election::Candidate;
 use storage_proofs::post::election::ElectionPoStCompound;
+use storage_proofs::post::fallback;
 use storage_proofs::proof::NoRequirements;
 use storage_proofs::sector::*;
 
 use crate::api::util::{as_safe_commitment, get_tree_size};
 use crate::caches::{get_post_params, get_post_verifying_key};
-use crate::constants::DefaultTreeHasher;
-use crate::parameters::post_setup_params;
+use crate::constants::*;
+use crate::parameters::{
+    election_post_setup_params, window_post_setup_params, winning_post_setup_params,
+};
 use crate::types::{
     ChallengeSeed, Commitment, LCTree, PersistentAux, PoStConfig, ProverId, TemporaryAux, OCT_ARITY,
 };
+use crate::PoStType;
 
 /// The minimal information required about a replica, in order to be able to generate
 /// a PoSt over it.
@@ -61,12 +63,8 @@ impl PrivateReplicaInfo {
         ensure!(comm_r != [0; 32], "Invalid all zero commitment (comm_r)");
 
         let aux = {
-            let mut aux_bytes = vec![];
             let f_aux_path = cache_dir.join(CacheKey::PAux.to_string());
-            let mut f_aux = File::open(&f_aux_path)
-                .with_context(|| format!("could not open path={:?}", f_aux_path))?;
-            f_aux
-                .read_to_end(&mut aux_bytes)
+            let aux_bytes = std::fs::read(&f_aux_path)
                 .with_context(|| format!("could not read from path={:?}", f_aux_path))?;
 
             deserialize(&aux_bytes)
@@ -164,12 +162,8 @@ impl PublicReplicaInfo {
 // Ensure that any associated cached data persisted is discarded.
 pub fn clear_cache(cache_dir: &Path) -> Result<()> {
     let t_aux = {
-        let mut aux_bytes = vec![];
         let f_aux_path = cache_dir.to_path_buf().join(CacheKey::TAux.to_string());
-        let mut f_aux = File::open(&f_aux_path)
-            .with_context(|| format!("could not open path={:?}", f_aux_path))?;
-        f_aux
-            .read_to_end(&mut aux_bytes)
+        let aux_bytes = std::fs::read(&f_aux_path)
             .with_context(|| format!("could not read from path={:?}", f_aux_path))?;
 
         deserialize(&aux_bytes)
@@ -198,7 +192,7 @@ pub fn clear_caches(replicas: &BTreeMap<SectorId, PrivateReplicaInfo>) -> Result
 /// * `replicas` - each sector's sector-id and associated replica info.
 /// * `prover_id` - the prover-id that is generating this post.
 pub fn generate_candidates(
-    post_config: PoStConfig,
+    post_config: &PoStConfig,
     randomness: &ChallengeSeed,
     challenge_count: u64,
     replicas: &BTreeMap<SectorId, PrivateReplicaInfo>,
@@ -212,7 +206,7 @@ pub fn generate_candidates(
     let randomness_safe = as_safe_commitment(randomness, "randomness")?;
     let prover_id_safe = as_safe_commitment(&prover_id, "randomness")?;
 
-    let vanilla_params = post_setup_params(post_config);
+    let vanilla_params = election_post_setup_params(&post_config);
     let setup_params = compound_proof::SetupParams {
         vanilla_params,
         partitions: None,
@@ -292,7 +286,7 @@ pub fn finalize_ticket(partial_ticket: &[u8; 32]) -> Result<[u8; 32]> {
     Ok(election::finalize_ticket(&partial_ticket))
 }
 
-/// Generates a proof-of-spacetime.
+/// Generates a Election proof-of-spacetime.
 ///
 /// # Arguments
 ///
@@ -302,14 +296,18 @@ pub fn finalize_ticket(partial_ticket: &[u8; 32]) -> Result<[u8; 32]> {
 /// * `replicas` - each sector's sector-id and associated replica info.
 /// * `winners` - a vector containing each winning ticket.
 /// * `prover_id` - the prover-id that is generating this post.
-pub fn generate_post(
-    post_config: PoStConfig,
+pub fn generate_election_post(
+    post_config: &PoStConfig,
     randomness: &ChallengeSeed,
     replicas: &BTreeMap<SectorId, PrivateReplicaInfo>,
     winners: Vec<Candidate>,
     prover_id: ProverId,
 ) -> Result<Vec<SnarkProof>> {
-    info!("generate_post:start");
+    info!("generate_election_post:start");
+    ensure!(
+        post_config.typ == PoStType::Election,
+        "invalid post config type"
+    );
 
     let sector_count = replicas.len() as u64;
     ensure!(sector_count > 0, "Must supply at least one replica");
@@ -319,7 +317,7 @@ pub fn generate_post(
     let randomness_safe = as_safe_commitment(randomness, "randomness")?;
     let prover_id_safe = as_safe_commitment(&prover_id, "randomness")?;
 
-    let vanilla_params = post_setup_params(post_config);
+    let vanilla_params = election_post_setup_params(&post_config);
     let setup_params = compound_proof::SetupParams {
         vanilla_params,
         partitions: None,
@@ -327,7 +325,7 @@ pub fn generate_post(
     };
     let pub_params: compound_proof::PublicParams<election::ElectionPoSt<DefaultTreeHasher>> =
         ElectionPoStCompound::setup(&setup_params)?;
-    let groth_params = get_post_params(post_config)?;
+    let groth_params = get_post_params(&post_config)?;
 
     let tree_size =
         get_tree_size::<<DefaultTreeHasher as Hasher>::Domain>(post_config.sector_size, OCT_ARITY)?;
@@ -371,12 +369,12 @@ pub fn generate_post(
         proofs.push(proof.to_vec()?);
     }
 
-    info!("generate_post:finish");
+    info!("generate_election_post:finish");
 
     Ok(proofs)
 }
 
-/// Verifies a proof-of-spacetime.
+/// Verifies a election proof-of-spacetime.
 ///
 /// # Arguments
 ///
@@ -388,16 +386,20 @@ pub fn generate_post(
 /// * `replicas` - each sector's sector-id and associated replica info.
 /// * `winners` - a vector containing each winning ticket.
 /// * `prover_id` - the prover-id that generated this post.
-pub fn verify_post(
-    post_config: PoStConfig,
+pub fn verify_election_post(
+    post_config: &PoStConfig,
     randomness: &ChallengeSeed,
     challenge_count: u64,
-    proofs: &[Vec<u8>],
+    proofs: &[SnarkProof],
     replicas: &BTreeMap<SectorId, PublicReplicaInfo>,
     winners: &[Candidate],
     prover_id: ProverId,
 ) -> Result<bool> {
-    info!("verify_post:start");
+    info!("verify_election_post:start");
+    ensure!(
+        post_config.typ == PoStType::Election,
+        "invalid post config type"
+    );
 
     let mut challenge_indexes: HashSet<_> = HashSet::new();
 
@@ -427,7 +429,7 @@ pub fn verify_post(
     let prover_id_safe = as_safe_commitment(&prover_id, "randomness")?;
 
     let sectors = replicas.keys().copied().collect();
-    let vanilla_params = post_setup_params(post_config);
+    let vanilla_params = election_post_setup_params(&post_config);
     let setup_params = compound_proof::SetupParams {
         vanilla_params,
         partitions: None,
@@ -436,7 +438,7 @@ pub fn verify_post(
     let pub_params: compound_proof::PublicParams<election::ElectionPoSt<DefaultTreeHasher>> =
         ElectionPoStCompound::setup(&setup_params)?;
 
-    let verifying_key = get_post_verifying_key(post_config)?;
+    let verifying_key = get_post_verifying_key(&post_config)?;
 
     for (proof, winner) in proofs.iter().zip(winners.iter()) {
         let replica = replicas
@@ -477,7 +479,359 @@ pub fn verify_post(
         }
     }
 
-    info!("verify_post:finish");
+    info!("verify_election_post:finish");
 
     Ok(true)
+}
+
+/// Generates a Winning proof-of-spacetime.
+pub fn generate_winning_post(
+    post_config: &PoStConfig,
+    randomness: &ChallengeSeed,
+    replicas: &[(SectorId, PrivateReplicaInfo)],
+    prover_id: ProverId,
+) -> Result<SnarkProof> {
+    info!("generate_winning_post:start");
+    ensure!(
+        post_config.typ == PoStType::Winning,
+        "invalid post config type"
+    );
+
+    ensure!(
+        replicas.len() == post_config.sector_count,
+        "invalid amount of replicas"
+    );
+
+    let randomness_safe: DefaultTreeDomain = as_safe_commitment(randomness, "randomness")?;
+    let prover_id_safe: DefaultTreeDomain = as_safe_commitment(&prover_id, "prover_id")?;
+
+    let vanilla_params = winning_post_setup_params(&post_config)?;
+    let param_sector_count = vanilla_params.sector_count;
+
+    let setup_params = compound_proof::SetupParams {
+        vanilla_params,
+        partitions: None,
+        priority: post_config.priority,
+    };
+    let pub_params: compound_proof::PublicParams<fallback::FallbackPoSt<DefaultTreeHasher>> =
+        fallback::FallbackPoStCompound::setup(&setup_params)?;
+    let groth_params = get_post_params(&post_config)?;
+
+    let tree_size =
+        get_tree_size::<<DefaultTreeHasher as Hasher>::Domain>(post_config.sector_size, OCT_ARITY)?;
+    let tree_leafs = get_merkle_tree_leafs(tree_size, OCT_ARITY);
+
+    let trees = replicas
+        .iter()
+        .map(|(_, replica)| replica.merkle_tree(tree_size, tree_leafs))
+        .collect::<Result<Vec<_>>>()?;
+
+    let mut pub_sectors = Vec::with_capacity(param_sector_count);
+    let mut priv_sectors = Vec::with_capacity(param_sector_count);
+
+    for _ in 0..param_sector_count {
+        for ((id, replica), tree) in replicas.iter().zip(trees.iter()) {
+            let comm_r = replica.safe_comm_r()?;
+            let comm_c = replica.safe_comm_c()?;
+            let comm_r_last = replica.safe_comm_r_last()?;
+
+            pub_sectors.push(fallback::PublicSector { id: *id, comm_r });
+            priv_sectors.push(fallback::PrivateSector {
+                tree,
+                comm_c,
+                comm_r_last,
+            });
+        }
+    }
+
+    let pub_inputs = fallback::PublicInputs {
+        randomness: randomness_safe,
+        prover_id: prover_id_safe,
+        sectors: &pub_sectors,
+        k: None,
+    };
+
+    let priv_inputs = fallback::PrivateInputs::<DefaultTreeHasher> {
+        sectors: &priv_sectors,
+    };
+
+    let proof = fallback::FallbackPoStCompound::prove(
+        &pub_params,
+        &pub_inputs,
+        &priv_inputs,
+        &groth_params,
+    )?;
+    let proof = proof.to_vec()?;
+
+    info!("generate_winning_post:finish");
+
+    Ok(proof)
+}
+
+/// Given some randomness and a list of sectors, generates the challenged sector.
+pub fn generate_winning_post_sector_challenge(
+    post_config: &PoStConfig,
+    randomness: &ChallengeSeed,
+    sector_set: &OrderedSectorSet,
+) -> Result<Vec<SectorId>> {
+    ensure!(
+        post_config.typ == PoStType::Winning,
+        "invalid post config type"
+    );
+
+    let randomness_safe: DefaultTreeDomain = as_safe_commitment(randomness, "randomness")?;
+    fallback::generate_sector_challenges(randomness_safe, post_config.sector_count, sector_set)
+}
+
+/// Verifies a winning proof-of-spacetime.
+///
+///
+/// - `sector_set` list of all sectors committed by this miner, at the point of proof generation.
+pub fn verify_winning_post(
+    post_config: &PoStConfig,
+    randomness: &ChallengeSeed,
+    replicas: &[(SectorId, PublicReplicaInfo)],
+    prover_id: ProverId,
+    sector_set: &OrderedSectorSet,
+    proof: &[u8],
+) -> Result<bool> {
+    info!("verify_winning_post:start");
+
+    ensure!(
+        post_config.typ == PoStType::Winning,
+        "invalid post config type"
+    );
+    ensure!(
+        post_config.sector_count == replicas.len(),
+        "invalid amount of replicas provided"
+    );
+
+    let randomness_safe: DefaultTreeDomain = as_safe_commitment(randomness, "randomness")?;
+    let prover_id_safe: DefaultTreeDomain = as_safe_commitment(&prover_id, "prover_id")?;
+
+    let vanilla_params = winning_post_setup_params(&post_config)?;
+    let param_sector_count = vanilla_params.sector_count;
+
+    let setup_params = compound_proof::SetupParams {
+        vanilla_params,
+        partitions: None,
+        priority: false,
+    };
+    let pub_params: compound_proof::PublicParams<fallback::FallbackPoSt<DefaultTreeHasher>> =
+        fallback::FallbackPoStCompound::setup(&setup_params)?;
+
+    let verifying_key = get_post_verifying_key(&post_config)?;
+
+    let expected_sector_ids = fallback::generate_sector_challenges(
+        randomness_safe,
+        post_config.challenge_count,
+        sector_set,
+    )?;
+
+    if !expected_sector_ids
+        .iter()
+        .zip(replicas.iter())
+        .all(|(x, (y, _))| x == y)
+    {
+        return Ok(false);
+    }
+
+    let proof = MultiProof::new_from_reader(None, &proof[..], &verifying_key)?;
+    if proof.len() != 1 {
+        return Ok(false);
+    }
+
+    let mut pub_sectors = Vec::with_capacity(param_sector_count);
+    for _ in 0..param_sector_count {
+        for (id, replica) in replicas.iter() {
+            let comm_r = replica.safe_comm_r()?;
+            pub_sectors.push(fallback::PublicSector { id: *id, comm_r });
+        }
+    }
+
+    let pub_inputs = fallback::PublicInputs {
+        randomness: randomness_safe,
+        prover_id: prover_id_safe,
+        sectors: &pub_sectors,
+        k: None,
+    };
+
+    let is_valid = fallback::FallbackPoStCompound::verify(
+        &pub_params,
+        &pub_inputs,
+        &proof,
+        &fallback::ChallengeRequirements {
+            minimum_challenge_count: post_config.challenge_count * post_config.sector_count,
+        },
+    )?;
+
+    if !is_valid {
+        return Ok(false);
+    }
+
+    info!("verify_winning_post:finish");
+
+    Ok(true)
+}
+
+/// Generates a Window proof-of-spacetime.
+pub fn generate_window_post(
+    post_config: &PoStConfig,
+    randomness: &ChallengeSeed,
+    replicas: &BTreeMap<SectorId, PrivateReplicaInfo>,
+    prover_id: ProverId,
+) -> Result<SnarkProof> {
+    info!("generate_window_post:start");
+    ensure!(
+        post_config.typ == PoStType::Window,
+        "invalid post config type"
+    );
+
+    let randomness_safe = as_safe_commitment(randomness, "randomness")?;
+    let prover_id_safe = as_safe_commitment(&prover_id, "prover_id")?;
+
+    let vanilla_params = window_post_setup_params(&post_config);
+    let partitions = get_partitions_for_window_post(replicas.len(), &post_config);
+
+    let sector_count = vanilla_params.sector_count;
+    let setup_params = compound_proof::SetupParams {
+        vanilla_params,
+        partitions,
+        priority: post_config.priority,
+    };
+
+    let pub_params: compound_proof::PublicParams<fallback::FallbackPoSt<DefaultTreeHasher>> =
+        fallback::FallbackPoStCompound::setup(&setup_params)?;
+    let groth_params = get_post_params(&post_config)?;
+
+    let tree_size = get_tree_size::<DefaultTreeDomain>(post_config.sector_size, OCT_ARITY)?;
+    let tree_leafs = get_merkle_tree_leafs(tree_size, OCT_ARITY);
+
+    let trees: Vec<_> = replicas
+        .iter()
+        .map(|(_id, replica)| replica.merkle_tree(tree_size, tree_leafs))
+        .collect::<Result<_>>()?;
+
+    let mut pub_sectors = Vec::with_capacity(sector_count);
+    let mut priv_sectors = Vec::with_capacity(sector_count);
+
+    for ((sector_id, replica), tree) in replicas.iter().zip(trees.iter()) {
+        let comm_r = replica.safe_comm_r()?;
+        let comm_c = replica.safe_comm_c()?;
+        let comm_r_last = replica.safe_comm_r_last()?;
+
+        pub_sectors.push(fallback::PublicSector {
+            id: *sector_id,
+            comm_r,
+        });
+        priv_sectors.push(fallback::PrivateSector {
+            tree,
+            comm_c,
+            comm_r_last,
+        });
+    }
+
+    let pub_inputs = fallback::PublicInputs {
+        randomness: randomness_safe,
+        prover_id: prover_id_safe,
+        sectors: &pub_sectors,
+        k: None,
+    };
+
+    let priv_inputs = fallback::PrivateInputs::<DefaultTreeHasher> {
+        sectors: &priv_sectors,
+    };
+
+    let proof = fallback::FallbackPoStCompound::prove(
+        &pub_params,
+        &pub_inputs,
+        &priv_inputs,
+        &groth_params,
+    )?;
+
+    info!("generate_window_post:finish");
+
+    Ok(proof.to_vec()?)
+}
+
+/// Verifies a window proof-of-spacetime.
+pub fn verify_window_post(
+    post_config: &PoStConfig,
+    randomness: &ChallengeSeed,
+    replicas: &BTreeMap<SectorId, PublicReplicaInfo>,
+    prover_id: ProverId,
+    proof: &[u8],
+) -> Result<bool> {
+    info!("verify_window_post:start");
+
+    ensure!(
+        post_config.typ == PoStType::Window,
+        "invalid post config type"
+    );
+
+    let randomness_safe = as_safe_commitment(randomness, "randomness")?;
+    let prover_id_safe = as_safe_commitment(&prover_id, "prover_id")?;
+
+    let vanilla_params = window_post_setup_params(&post_config);
+    let partitions = get_partitions_for_window_post(replicas.len(), &post_config);
+
+    let setup_params = compound_proof::SetupParams {
+        vanilla_params,
+        partitions,
+        priority: false,
+    };
+    let pub_params: compound_proof::PublicParams<fallback::FallbackPoSt<DefaultTreeHasher>> =
+        fallback::FallbackPoStCompound::setup(&setup_params)?;
+
+    let verifying_key = get_post_verifying_key(&post_config)?;
+
+    let proof = MultiProof::new_from_reader(partitions, &proof[..], &verifying_key)?;
+
+    let pub_sectors: Vec<_> = replicas
+        .iter()
+        .map(|(sector_id, replica)| {
+            let comm_r = replica.safe_comm_r()?;
+            Ok(fallback::PublicSector {
+                id: *sector_id,
+                comm_r,
+            })
+        })
+        .collect::<Result<_>>()?;
+
+    let pub_inputs = fallback::PublicInputs {
+        randomness: randomness_safe,
+        prover_id: prover_id_safe,
+        sectors: &pub_sectors,
+        k: None,
+    };
+
+    let is_valid = fallback::FallbackPoStCompound::verify(
+        &pub_params,
+        &pub_inputs,
+        &proof,
+        &fallback::ChallengeRequirements {
+            minimum_challenge_count: post_config.challenge_count * post_config.sector_count,
+        },
+    )?;
+
+    if !is_valid {
+        return Ok(false);
+    }
+
+    info!("verify_window_post:finish");
+
+    Ok(true)
+}
+
+fn get_partitions_for_window_post(
+    total_sector_count: usize,
+    post_config: &PoStConfig,
+) -> Option<usize> {
+    let partitions = (total_sector_count as f32 / post_config.sector_count as f32).ceil() as usize;
+
+    if partitions > 1 {
+        Some(partitions)
+    } else {
+        None
+    }
 }

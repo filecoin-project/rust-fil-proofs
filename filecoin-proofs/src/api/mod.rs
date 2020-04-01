@@ -75,11 +75,8 @@ pub fn get_unsealed_range<T: Into<PathBuf> + AsRef<Path>>(
     let replica_id =
         generate_replica_id::<DefaultTreeHasher, _>(&prover_id, sector_id.into(), &ticket, comm_d);
 
-    let f_in = File::open(&sealed_path)
-        .with_context(|| format!("could not open sealed_path={:?}", sealed_path.as_ref()))?;
-    let mut data = Vec::new();
-    f_in.take(u64::from(PaddedBytesAmount::from(porep_config)))
-        .read_to_end(&mut data)?;
+    let data = std::fs::read(&sealed_path)
+        .with_context(|| format!("could not read sealed_path={:?}", sealed_path.as_ref()))?;
 
     let f_out = File::create(&output_path)
         .with_context(|| format!("could not create output_path={:?}", output_path.as_ref()))?;
@@ -351,22 +348,18 @@ where
     let cache = &cache_path.as_ref();
 
     // Make sure p_aux exists and is valid.
-    let mut p_aux_bytes = vec![];
     let p_aux_path = cache.join(CacheKey::PAux.to_string());
-    let mut f_p_aux = File::open(&p_aux_path)
-        .with_context(|| format!("could not open file p_aux={:?}", p_aux_path))?;
-    f_p_aux.read_to_end(&mut p_aux_bytes)?;
+    let p_aux_bytes = std::fs::read(&p_aux_path)
+        .with_context(|| format!("could not read file p_aux={:?}", p_aux_path))?;
 
     let _: PersistentAux<DefaultTreeHasher> = deserialize(&p_aux_bytes)?;
     drop(p_aux_bytes);
 
     // Make sure t_aux exists and is valid.
     let t_aux = {
-        let mut t_aux_bytes = vec![];
         let t_aux_path = cache.join(CacheKey::TAux.to_string());
-        let mut f_t_aux = File::open(&t_aux_path)
-            .with_context(|| format!("could not open file t_aux={:?}", t_aux_path))?;
-        f_t_aux.read_to_end(&mut t_aux_bytes)?;
+        let t_aux_bytes = std::fs::read(&t_aux_path)
+            .with_context(|| format!("could not read file t_aux={:?}", t_aux_path))?;
 
         let mut res: TemporaryAux<DefaultTreeHasher, DefaultPieceHasher> =
             deserialize(&t_aux_bytes)?;
@@ -426,10 +419,12 @@ mod tests {
     use rand_xorshift::XorShiftRng;
     use storage_proofs::fr32::bytes_into_fr;
     use storage_proofs::post::election::Candidate;
+    use storage_proofs::sector::*;
     use tempfile::NamedTempFile;
 
-    use crate::constants::{POREP_PARTITIONS, SECTOR_SIZE_2_KIB, SINGLE_PARTITION_PROOF_LEN};
+    use crate::constants::*;
     use crate::types::{PoStConfig, SectorSize};
+    use crate::PoStType;
 
     static INIT_LOGGER: Once = Once::new();
     fn init_logger() {
@@ -537,11 +532,12 @@ mod tests {
             sector_challenge_index: 0,
         };
 
-        let result = verify_post(
-            PoStConfig {
+        let result = verify_election_post(
+            &PoStConfig {
                 sector_size: SectorSize(SECTOR_SIZE_2_KIB),
-                challenge_count: crate::constants::POST_CHALLENGE_COUNT,
-                challenged_nodes: crate::constants::POST_CHALLENGED_NODES,
+                challenge_count: ELECTION_POST_CHALLENGE_COUNT,
+                sector_count: 1,
+                typ: PoStType::Election,
                 priority: false,
             },
             &[0; 32],
@@ -582,11 +578,12 @@ mod tests {
             sector_challenge_index: 0,
         };
 
-        let result = verify_post(
-            PoStConfig {
+        let result = verify_election_post(
+            &PoStConfig {
                 sector_size: SectorSize(SECTOR_SIZE_2_KIB),
-                challenge_count: crate::constants::POST_CHALLENGE_COUNT,
-                challenged_nodes: crate::constants::POST_CHALLENGED_NODES,
+                challenge_count: ELECTION_POST_CHALLENGE_COUNT,
+                sector_count: 1,
+                typ: PoStType::Election,
                 priority: false,
             },
             &[0; 32],
@@ -621,11 +618,186 @@ mod tests {
     #[test]
     #[ignore]
     fn test_seal_lifecycle() -> Result<()> {
-        init_logger();
+        let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
+        let prover_fr: DefaultTreeDomain = Fr::random(rng).into();
+        let mut prover_id = [0u8; 32];
+        prover_id.copy_from_slice(AsRef::<[u8]>::as_ref(&prover_fr));
 
+        create_seal(rng, SECTOR_SIZE_2_KIB, prover_id, false)?;
+        Ok(())
+    }
+
+    #[test]
+    fn test_random_domain_element() {
+        let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
+
+        for _ in 0..100 {
+            let random_el: DefaultTreeDomain = Fr::random(rng).into();
+            let mut randomness = [0u8; 32];
+            randomness.copy_from_slice(AsRef::<[u8]>::as_ref(&random_el));
+            let back: DefaultTreeDomain = as_safe_commitment(&randomness, "test").unwrap();
+            assert_eq!(back, random_el);
+        }
+    }
+
+    #[test]
+    #[ignore]
+    fn test_winning_post() -> Result<()> {
         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
 
         let sector_size = SECTOR_SIZE_2_KIB;
+        let prover_fr: DefaultTreeDomain = Fr::random(rng).into();
+        let mut prover_id = [0u8; 32];
+        prover_id.copy_from_slice(AsRef::<[u8]>::as_ref(&prover_fr));
+
+        let (sector_id, replica, comm_r, cache_dir) =
+            create_seal(rng, sector_size, prover_id, true)?;
+        let sector_count = WINNING_POST_SECTOR_COUNT;
+        let mut sector_set = OrderedSectorSet::new();
+        sector_set.insert(sector_id);
+
+        let random_fr: DefaultTreeDomain = Fr::random(rng).into();
+        let mut randomness = [0u8; 32];
+        randomness.copy_from_slice(AsRef::<[u8]>::as_ref(&random_fr));
+
+        let config = PoStConfig {
+            sector_size: sector_size.into(),
+            sector_count,
+            challenge_count: WINNING_POST_CHALLENGE_COUNT,
+            typ: PoStType::Winning,
+            priority: false,
+        };
+
+        let challenged_sectors =
+            post::generate_winning_post_sector_challenge(&config, &randomness, &sector_set)?;
+        assert_eq!(challenged_sectors.len(), sector_count);
+        assert_eq!(challenged_sectors[0], sector_id);
+
+        let pub_replicas = vec![(sector_id, PublicReplicaInfo::new(comm_r)?)];
+        let priv_replicas = vec![(
+            sector_id,
+            PrivateReplicaInfo::new(replica.path().into(), comm_r, cache_dir.path().into())?,
+        )];
+
+        let proof =
+            post::generate_winning_post(&config, &randomness, &priv_replicas[..], prover_id)?;
+
+        let valid = post::verify_winning_post(
+            &config,
+            &randomness,
+            &pub_replicas[..],
+            prover_id,
+            &sector_set,
+            &proof,
+        )?;
+        assert!(valid, "proof did not verify");
+        Ok(())
+    }
+
+    #[test]
+    #[ignore]
+    fn test_window_post_single_partition_smaller() -> Result<()> {
+        let sector_size = SECTOR_SIZE_2_KIB;
+        let sector_count = *WINDOW_POST_SECTOR_COUNT
+            .read()
+            .unwrap()
+            .get(&sector_size)
+            .unwrap();
+
+        window_post(sector_size, sector_count / 2, sector_count)
+    }
+
+    #[test]
+    #[ignore]
+    fn test_window_post_two_partitions_matching() -> Result<()> {
+        let sector_size = SECTOR_SIZE_2_KIB;
+        let sector_count = *WINDOW_POST_SECTOR_COUNT
+            .read()
+            .unwrap()
+            .get(&sector_size)
+            .unwrap();
+
+        window_post(sector_size, 2 * sector_count, sector_count)
+    }
+
+    #[test]
+    #[ignore]
+    fn test_window_post_two_partitions_smaller() -> Result<()> {
+        let sector_size = SECTOR_SIZE_2_KIB;
+        let sector_count = *WINDOW_POST_SECTOR_COUNT
+            .read()
+            .unwrap()
+            .get(&sector_size)
+            .unwrap();
+
+        window_post(sector_size, 2 * sector_count - 1, sector_count)
+    }
+
+    #[test]
+    #[ignore]
+    fn test_window_post_single_partition_matching() -> Result<()> {
+        let sector_size = SECTOR_SIZE_2_KIB;
+        let sector_count = *WINDOW_POST_SECTOR_COUNT
+            .read()
+            .unwrap()
+            .get(&sector_size)
+            .unwrap();
+
+        window_post(sector_size, sector_count, sector_count)
+    }
+
+    fn window_post(sector_size: u64, total_sector_count: usize, sector_count: usize) -> Result<()> {
+        let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
+
+        let mut sectors = Vec::with_capacity(total_sector_count);
+        let mut pub_replicas = BTreeMap::new();
+        let mut priv_replicas = BTreeMap::new();
+
+        let prover_fr: DefaultTreeDomain = Fr::random(rng).into();
+        let mut prover_id = [0u8; 32];
+        prover_id.copy_from_slice(AsRef::<[u8]>::as_ref(&prover_fr));
+
+        for _ in 0..total_sector_count {
+            let (sector_id, replica, comm_r, cache_dir) =
+                create_seal(rng, sector_size, prover_id, true)?;
+            priv_replicas.insert(
+                sector_id,
+                PrivateReplicaInfo::new(replica.path().into(), comm_r, cache_dir.path().into())?,
+            );
+            pub_replicas.insert(sector_id, PublicReplicaInfo::new(comm_r)?);
+            sectors.push((sector_id, replica, comm_r, cache_dir, prover_id));
+        }
+        assert_eq!(priv_replicas.len(), total_sector_count);
+        assert_eq!(pub_replicas.len(), total_sector_count);
+        assert_eq!(sectors.len(), total_sector_count);
+
+        let random_fr: DefaultTreeDomain = Fr::random(rng).into();
+        let mut randomness = [0u8; 32];
+        randomness.copy_from_slice(AsRef::<[u8]>::as_ref(&random_fr));
+
+        let config = PoStConfig {
+            sector_size: sector_size.into(),
+            sector_count,
+            challenge_count: WINDOW_POST_CHALLENGE_COUNT,
+            typ: PoStType::Window,
+            priority: false,
+        };
+
+        let proof = post::generate_window_post(&config, &randomness, &priv_replicas, prover_id)?;
+
+        let valid =
+            post::verify_window_post(&config, &randomness, &pub_replicas, prover_id, &proof)?;
+        assert!(valid, "proof did not verify");
+        Ok(())
+    }
+
+    fn create_seal<R: Rng>(
+        rng: &mut R,
+        sector_size: u64,
+        prover_id: ProverId,
+        skip_proof: bool,
+    ) -> Result<(SectorId, NamedTempFile, Commitment, tempfile::TempDir)> {
+        init_logger();
 
         let number_of_bytes_in_piece =
             UnpaddedBytesAmount::from(PaddedBytesAmount(sector_size.clone()));
@@ -663,10 +835,10 @@ mod tests {
         };
 
         let cache_dir = tempfile::tempdir().unwrap();
-        let prover_id = rng.gen();
+
         let ticket = rng.gen();
         let seed = rng.gen();
-        let sector_id = SectorId::from(12);
+        let sector_id = rng.gen::<u64>().into();
 
         let phase1_output = seal_pre_commit_phase1(
             config,
@@ -697,62 +869,66 @@ mod tests {
 
         validate_cache_for_commit(cache_dir.path(), sealed_sector_file.path())?;
 
-        let phase1_output = seal_commit_phase1(
-            config,
-            cache_dir.path(),
-            sealed_sector_file.path(),
-            prover_id,
-            sector_id,
-            ticket,
-            seed,
-            pre_commit_output,
-            &piece_infos,
-        )?;
+        if skip_proof {
+            clear_cache(cache_dir.path())?;
+        } else {
+            let phase1_output = seal_commit_phase1(
+                config,
+                cache_dir.path(),
+                sealed_sector_file.path(),
+                prover_id,
+                sector_id,
+                ticket,
+                seed,
+                pre_commit_output,
+                &piece_infos,
+            )?;
 
-        clear_cache(cache_dir.path())?;
+            clear_cache(cache_dir.path())?;
 
-        let commit_output = seal_commit_phase2(config, phase1_output, prover_id, sector_id)?;
+            let commit_output = seal_commit_phase2(config, phase1_output, prover_id, sector_id)?;
 
-        let _ = get_unsealed_range(
-            config,
-            cache_dir.path(),
-            &sealed_sector_file.path(),
-            &unseal_file.path(),
-            prover_id,
-            sector_id,
-            comm_d,
-            ticket,
-            UnpaddedByteIndex(508),
-            UnpaddedBytesAmount(508),
-        )?;
+            let _ = get_unsealed_range(
+                config,
+                cache_dir.path(),
+                &sealed_sector_file.path(),
+                &unseal_file.path(),
+                prover_id,
+                sector_id,
+                comm_d,
+                ticket,
+                UnpaddedByteIndex(508),
+                UnpaddedBytesAmount(508),
+            )?;
 
-        let mut contents = vec![];
-        assert!(
-            unseal_file.read_to_end(&mut contents).is_ok(),
-            "failed to populate buffer with unsealed bytes"
-        );
-        assert_eq!(contents.len(), 508);
-        assert_eq!(&piece_bytes[508..508 + 508], &contents[..]);
+            let mut contents = vec![];
+            assert!(
+                unseal_file.read_to_end(&mut contents).is_ok(),
+                "failed to populate buffer with unsealed bytes"
+            );
+            assert_eq!(contents.len(), 508);
+            assert_eq!(&piece_bytes[508..508 + 508], &contents[..]);
 
-        let computed_comm_d = compute_comm_d(config.sector_size, &piece_infos)?;
+            let computed_comm_d = compute_comm_d(config.sector_size, &piece_infos)?;
 
-        assert_eq!(
-            comm_d, computed_comm_d,
-            "Computed and expected comm_d don't match."
-        );
+            assert_eq!(
+                comm_d, computed_comm_d,
+                "Computed and expected comm_d don't match."
+            );
 
-        let verified = verify_seal(
-            config,
-            comm_r,
-            comm_d,
-            prover_id,
-            sector_id,
-            ticket,
-            seed,
-            &commit_output.proof,
-        )?;
-        assert!(verified, "failed to verify valid seal");
+            let verified = verify_seal(
+                config,
+                comm_r,
+                comm_d,
+                prover_id,
+                sector_id,
+                ticket,
+                seed,
+                &commit_output.proof,
+            )?;
+            assert!(verified, "failed to verify valid seal");
+        }
 
-        Ok(())
+        Ok((sector_id, sealed_sector_file, comm_r, cache_dir))
     }
 }

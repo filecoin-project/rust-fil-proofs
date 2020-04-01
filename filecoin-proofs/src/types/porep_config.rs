@@ -16,25 +16,22 @@ pub struct PoRepConfig {
 
 impl From<PoRepConfig> for PaddedBytesAmount {
     fn from(x: PoRepConfig) -> Self {
-        match x {
-            PoRepConfig { sector_size, .. } => PaddedBytesAmount::from(sector_size),
-        }
+        let PoRepConfig { sector_size, .. } = x;
+        PaddedBytesAmount::from(sector_size)
     }
 }
 
 impl From<PoRepConfig> for UnpaddedBytesAmount {
     fn from(x: PoRepConfig) -> Self {
-        match x {
-            PoRepConfig { sector_size, .. } => PaddedBytesAmount::from(sector_size).into(),
-        }
+        let PoRepConfig { sector_size, .. } = x;
+        PaddedBytesAmount::from(sector_size).into()
     }
 }
 
 impl From<PoRepConfig> for PoRepProofPartitions {
     fn from(x: PoRepConfig) -> Self {
-        match x {
-            PoRepConfig { partitions, .. } => partitions,
-        }
+        let PoRepConfig { partitions, .. } = x;
+        partitions
     }
 }
 
