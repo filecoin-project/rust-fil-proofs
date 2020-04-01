@@ -12,7 +12,7 @@ use crate::porep::stacked::{ColumnProof as VanillaColumnProof, PublicParams};
 #[derive(Debug, Clone)]
 pub struct ColumnProof<H: Hasher> {
     column: Column,
-    inclusion_path: InclusionPath<Bls12, H, typenum::U8>,
+    inclusion_path: InclusionPath<H, typenum::U8>,
 }
 
 impl<H: Hasher> ColumnProof<H> {

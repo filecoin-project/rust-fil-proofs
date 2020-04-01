@@ -390,7 +390,7 @@ fn measure_porep_circuit(i: &FlarpInputs) -> usize {
     let pp = StackedDrg::<FlarpHasher, Sha256Hasher>::setup(&sp).unwrap();
 
     let mut cs = BenchCS::<Bls12>::new();
-    <StackedCompound<_, _> as CompoundProof<_, StackedDrg<FlarpHasher, Sha256Hasher>, _>>::blank_circuit(
+    <StackedCompound<_, _> as CompoundProof<StackedDrg<FlarpHasher, Sha256Hasher>, _>>::blank_circuit(
         &pp,
     )
     .synthesize(&mut cs)
@@ -461,7 +461,6 @@ fn cache_porep_params(porep_config: PoRepConfig) {
 
     {
         let circuit = <StackedCompound<_, _> as CompoundProof<
-            _,
             StackedDrg<FlarpHasher, Sha256Hasher>,
             _,
         >>::blank_circuit(&public_params);
@@ -470,7 +469,6 @@ fn cache_porep_params(porep_config: PoRepConfig) {
     }
     {
         let circuit = <StackedCompound<_, _> as CompoundProof<
-            _,
             StackedDrg<FlarpHasher, Sha256Hasher>,
             _,
         >>::blank_circuit(&public_params);
@@ -483,7 +481,6 @@ fn cache_porep_params(porep_config: PoRepConfig) {
     }
     {
         let circuit = <StackedCompound<_, _> as CompoundProof<
-            _,
             StackedDrg<FlarpHasher, Sha256Hasher>,
             _,
         >>::blank_circuit(&public_params);
@@ -501,11 +498,10 @@ fn cache_post_params(post_config: PoStConfig) {
     let post_public_params = post_public_params(post_config).unwrap();
 
     {
-        let post_circuit: ElectionPoStCircuit<Bls12, FlarpHasher> =
+        let post_circuit: ElectionPoStCircuit<FlarpHasher> =
             <ElectionPoStCompound<FlarpHasher> as CompoundProof<
-                Bls12,
                 ElectionPoSt<FlarpHasher>,
-                ElectionPoStCircuit<Bls12, FlarpHasher>,
+                ElectionPoStCircuit<FlarpHasher>,
             >>::blank_circuit(&post_public_params);
         let _ = <ElectionPoStCompound<FlarpHasher>>::get_param_metadata(
             post_circuit,
@@ -514,11 +510,10 @@ fn cache_post_params(post_config: PoStConfig) {
         .expect("failed to get metadata");
     }
     {
-        let post_circuit: ElectionPoStCircuit<Bls12, FlarpHasher> =
+        let post_circuit: ElectionPoStCircuit<FlarpHasher> =
             <ElectionPoStCompound<FlarpHasher> as CompoundProof<
-                Bls12,
                 ElectionPoSt<FlarpHasher>,
-                ElectionPoStCircuit<Bls12, FlarpHasher>,
+                ElectionPoStCircuit<FlarpHasher>,
             >>::blank_circuit(&post_public_params);
 
         <ElectionPoStCompound<FlarpHasher>>::get_groth_params(
@@ -529,11 +524,10 @@ fn cache_post_params(post_config: PoStConfig) {
         .expect("failed to get groth params");
     }
     {
-        let post_circuit: ElectionPoStCircuit<Bls12, FlarpHasher> =
+        let post_circuit: ElectionPoStCircuit<FlarpHasher> =
             <ElectionPoStCompound<FlarpHasher> as CompoundProof<
-                Bls12,
                 ElectionPoSt<FlarpHasher>,
-                ElectionPoStCircuit<Bls12, FlarpHasher>,
+                ElectionPoStCircuit<FlarpHasher>,
             >>::blank_circuit(&post_public_params);
 
         <ElectionPoStCompound<FlarpHasher>>::get_verifying_key(

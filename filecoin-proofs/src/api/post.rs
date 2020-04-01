@@ -8,7 +8,6 @@ use bincode::deserialize;
 use log::{info, trace};
 use merkletree::merkle::get_merkle_tree_leafs;
 use merkletree::store::{ExternalReader, LevelCacheStore, StoreConfig};
-use paired::bls12_381::Bls12;
 use rayon::prelude::*;
 use storage_proofs::cache_key::CacheKey;
 use storage_proofs::compound_proof::{self, CompoundProof};
@@ -287,8 +286,7 @@ pub type SnarkProof = Vec<u8>;
 
 /// Generates a ticket from a partial_ticket.
 pub fn finalize_ticket(partial_ticket: &[u8; 32]) -> Result<[u8; 32]> {
-    let partial_ticket =
-        bytes_into_fr::<Bls12>(partial_ticket).context("Invalid partial_ticket")?;
+    let partial_ticket = bytes_into_fr(partial_ticket).context("Invalid partial_ticket")?;
     Ok(election::finalize_ticket(&partial_ticket))
 }
 

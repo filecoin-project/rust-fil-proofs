@@ -353,7 +353,7 @@ mod tests {
     use crate::constants::{DRG_DEGREE, EXP_DEGREE};
     use crate::types::DataTree;
 
-    use paired::bls12_381::{Bls12, Fr};
+    use paired::bls12_381::Fr;
     use rand::{Rng, RngCore, SeedableRng};
     use rand_xorshift::XorShiftRng;
     use storage_proofs::drgraph::{new_seed, Graph};
@@ -728,7 +728,7 @@ mod tests {
 
         let data_tree: DataTree = graph.merkle_tree(None, &staged_sector)?;
         let comm_d_root: Fr = data_tree.root().into();
-        let comm_d = commitment_from_fr::<Bls12>(comm_d_root);
+        let comm_d = commitment_from_fr(comm_d_root);
 
         Ok((comm_d, piece_infos))
     }

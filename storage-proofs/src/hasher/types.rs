@@ -9,7 +9,6 @@ use merkletree::hash::{Algorithm as LightAlgorithm, Hashable as LightHashable};
 use merkletree::merkle::Element;
 use neptune::poseidon::PoseidonConstants;
 use paired::bls12_381::{Bls12, Fr, FrRepr};
-use paired::Engine;
 use serde::de::DeserializeOwned;
 use serde::ser::Serialize;
 
@@ -41,83 +40,60 @@ lazy_static! {
         PoseidonConstants::new();
 }
 
-pub trait PoseidonArity<E: Engine>:
+pub trait PoseidonArity:
     typenum::Unsigned
     + Send
     + Sync
     + Clone
     + std::ops::Add<typenum::B1>
     + std::ops::Add<typenum::UInt<typenum::UTerm, typenum::B1>>
-where
-    typenum::Add1<Self>: generic_array::ArrayLength<E::Fr>,
 {
     #[allow(non_snake_case)]
-    fn PARAMETERS() -> &'static PoseidonConstants<E, Self>;
+    fn PARAMETERS() -> &'static PoseidonConstants<Bls12, Self>;
 }
 
-impl PoseidonArity<Bls12> for U1 {
+impl PoseidonArity for U1 {
     fn PARAMETERS() -> &'static PoseidonConstants<Bls12, Self> {
         &*POSEIDON_CONSTANTS_1
     }
 }
-impl PoseidonArity<Bls12> for U2 {
+impl PoseidonArity for U2 {
     fn PARAMETERS() -> &'static PoseidonConstants<Bls12, Self> {
         &*POSEIDON_CONSTANTS_2
     }
 }
 
-impl PoseidonArity<Bls12> for U4 {
+impl PoseidonArity for U4 {
     fn PARAMETERS() -> &'static PoseidonConstants<Bls12, Self> {
         &*POSEIDON_CONSTANTS_4
     }
 }
 
-impl PoseidonArity<Bls12> for U8 {
+impl PoseidonArity for U8 {
     fn PARAMETERS() -> &'static PoseidonConstants<Bls12, Self> {
         &*POSEIDON_CONSTANTS_8
     }
 }
 
-impl PoseidonArity<Bls12> for U11 {
+impl PoseidonArity for U11 {
     fn PARAMETERS() -> &'static PoseidonConstants<Bls12, Self> {
         &*POSEIDON_CONSTANTS_11
     }
 }
 
-impl PoseidonArity<Bls12> for U16 {
+impl PoseidonArity for U16 {
     fn PARAMETERS() -> &'static PoseidonConstants<Bls12, Self> {
         &*POSEIDON_CONSTANTS_16
     }
 }
-impl PoseidonArity<Bls12> for U24 {
+impl PoseidonArity for U24 {
     fn PARAMETERS() -> &'static PoseidonConstants<Bls12, Self> {
         &*POSEIDON_CONSTANTS_24
     }
 }
-impl PoseidonArity<Bls12> for U36 {
+impl PoseidonArity for U36 {
     fn PARAMETERS() -> &'static PoseidonConstants<Bls12, Self> {
         &*POSEIDON_CONSTANTS_36
-    }
-}
-
-pub trait PoseidonEngine<Arity>: Engine
-where
-    Arity: 'static
-        + typenum::Unsigned
-        + std::ops::Add<typenum::B1>
-        + std::ops::Add<typenum::UInt<typenum::UTerm, typenum::B1>>,
-    typenum::Add1<Arity>: generic_array::ArrayLength<Self::Fr>,
-{
-    #[allow(non_snake_case)]
-    fn PARAMETERS() -> &'static PoseidonConstants<Self, Arity>;
-}
-
-impl<E: Engine, U: 'static + PoseidonArity<E>> PoseidonEngine<U> for E
-where
-    typenum::Add1<U>: generic_array::ArrayLength<E::Fr>,
-{
-    fn PARAMETERS() -> &'static PoseidonConstants<Self, U> {
-        PoseidonArity::PARAMETERS()
     }
 }
 
@@ -187,13 +163,11 @@ pub trait HashFunction<T: Domain>:
         Self::hash_leaf_bits_circuit(cs, &left_bits, &right_bits, height)
     }
 
-    fn hash_multi_leaf_circuit<Arity: 'static + PoseidonArity<Bls12>, CS: ConstraintSystem<Bls12>>(
+    fn hash_multi_leaf_circuit<Arity: 'static + PoseidonArity, CS: ConstraintSystem<Bls12>>(
         cs: CS,
         leaves: &[num::AllocatedNum<Bls12>],
         height: usize,
-    ) -> std::result::Result<num::AllocatedNum<Bls12>, SynthesisError>
-    where
-        typenum::Add1<Arity>: generic_array::ArrayLength<Fr>;
+    ) -> std::result::Result<num::AllocatedNum<Bls12>, SynthesisError>;
 
     fn hash_md_circuit<CS: ConstraintSystem<Bls12>>(
         _cs: &mut CS,

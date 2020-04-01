@@ -1,18 +1,17 @@
 use std::marker::PhantomData;
 
 use anyhow::ensure;
-use generic_array::typenum;
 use serde::{Deserialize, Serialize};
 
 use crate::drgraph::graph_height;
 use crate::error::*;
-use crate::hasher::{Domain, Hasher};
+use crate::hasher::{Domain, Hasher, PoseidonArity};
 use crate::merkle::{MerkleProof, MerkleTree};
 use crate::parameter_cache::ParameterSetMetadata;
 use crate::proof::{NoRequirements, ProofScheme};
 
 #[derive(Clone, Serialize, Deserialize)]
-pub struct DataProof<H: Hasher, U: typenum::Unsigned> {
+pub struct DataProof<H: Hasher, U: PoseidonArity> {
     #[serde(bound(
         serialize = "MerkleProof<H, U>: Serialize",
         deserialize = "MerkleProof<H, U>: Deserialize<'de>"
@@ -21,7 +20,7 @@ pub struct DataProof<H: Hasher, U: typenum::Unsigned> {
     pub data: H::Domain,
 }
 
-impl<H: Hasher, U: typenum::Unsigned> std::fmt::Debug for DataProof<H, U> {
+impl<H: Hasher, U: PoseidonArity> std::fmt::Debug for DataProof<H, U> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("MerkleProof")
             .field("proof", &self.proof)
@@ -64,7 +63,7 @@ pub struct PublicInputs<T: Domain> {
 
 /// The inputs that are only available to the prover.
 #[derive(Debug)]
-pub struct PrivateInputs<'a, H: 'a + Hasher, U: typenum::Unsigned> {
+pub struct PrivateInputs<'a, H: 'a + Hasher, U: PoseidonArity> {
     /// The data of the leaf.
     pub leaf: H::Domain,
     /// The underlying merkle tree.
@@ -72,7 +71,7 @@ pub struct PrivateInputs<'a, H: 'a + Hasher, U: typenum::Unsigned> {
     _h: PhantomData<H>,
 }
 
-impl<'a, H: Hasher, U: typenum::Unsigned> PrivateInputs<'a, H, U> {
+impl<'a, H: Hasher, U: PoseidonArity> PrivateInputs<'a, H, U> {
     pub fn new(leaf: H::Domain, tree: &'a MerkleTree<H::Domain, H::Function, U>) -> Self {
         PrivateInputs {
             leaf,
@@ -90,14 +89,12 @@ pub struct SetupParams {
 
 /// Merkle tree based proof of retrievability.
 #[derive(Debug, Default)]
-pub struct PoR<H: Hasher, U: typenum::Unsigned> {
+pub struct PoR<H: Hasher, U: PoseidonArity> {
     _h: PhantomData<H>,
     _u: PhantomData<U>,
 }
 
-impl<'a, H: 'a + Hasher, U: 'a + typenum::Unsigned + Sync + Send + Clone> ProofScheme<'a>
-    for PoR<H, U>
-{
+impl<'a, H: 'a + Hasher, U: 'a + PoseidonArity> ProofScheme<'a> for PoR<H, U> {
     type PublicParams = PublicParams;
     type SetupParams = SetupParams;
     type PublicInputs = PublicInputs<H::Domain>;
@@ -164,7 +161,8 @@ mod tests {
     use super::*;
 
     use ff::Field;
-    use paired::bls12_381::{Bls12, Fr};
+    use generic_array::typenum;
+    use paired::bls12_381::Fr;
     use rand::SeedableRng;
     use rand_xorshift::XorShiftRng;
 
@@ -176,7 +174,7 @@ mod tests {
     use crate::merkle::make_proof_for_test;
     use crate::util::data_at_node;
 
-    fn test_merklepor<H: Hasher, U: 'static + typenum::Unsigned + Clone + Send + Sync>() {
+    fn test_merklepor<H: Hasher, U: 'static + PoseidonArity>() {
         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
 
         let leaves = 16;
@@ -257,7 +255,7 @@ mod tests {
     // Proof root matches that requested in public inputs.
     // However, note that data has no relationship to anything,
     // and proof path does not actually prove that data was in the tree corresponding to expected root.
-    fn make_bogus_proof<H: Hasher, U: typenum::Unsigned>(
+    fn make_bogus_proof<H: Hasher, U: PoseidonArity>(
         pub_inputs: &PublicInputs<H::Domain>,
         rng: &mut XorShiftRng,
     ) -> DataProof<H, U> {
@@ -274,7 +272,7 @@ mod tests {
         }
     }
 
-    fn test_merklepor_validates<H: Hasher, U: typenum::Unsigned + 'static + Clone + Sync + Send>() {
+    fn test_merklepor_validates<H: Hasher, U: PoseidonArity>() {
         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
 
         let leaves = 64;
@@ -344,10 +342,7 @@ mod tests {
         test_merklepor_validates::<PoseidonHasher, typenum::U4>();
     }
 
-    fn test_merklepor_validates_challenge_identity<
-        H: Hasher,
-        U: typenum::Unsigned + 'static + Clone + Send + Sync,
-    >() {
+    fn test_merklepor_validates_challenge_identity<H: Hasher, U: PoseidonArity>() {
         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
 
         let leaves = 64;

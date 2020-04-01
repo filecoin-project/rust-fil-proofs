@@ -1,7 +1,6 @@
 use std::path::PathBuf;
 
 use anyhow::Result;
-use paired::bls12_381::Bls12;
 use storage_proofs::parameter_cache::{self, CacheableParameters};
 use storage_proofs::post::election::{ElectionPoStCircuit, ElectionPoStCompound};
 
@@ -40,8 +39,7 @@ impl PoStConfig {
 
         Ok(
             <ElectionPoStCompound<DefaultTreeHasher> as CacheableParameters<
-                Bls12,
-                ElectionPoStCircuit<_, DefaultTreeHasher>,
+                ElectionPoStCircuit<DefaultTreeHasher>,
                 _,
             >>::cache_identifier(&params),
         )

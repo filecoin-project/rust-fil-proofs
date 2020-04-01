@@ -24,7 +24,7 @@ pub fn decode(key: &Fr, ciphertext: &Fr) -> Fr {
 mod tests {
     use super::*;
     use ff::PrimeField;
-    use paired::bls12_381::{Bls12, Fr, FrRepr};
+    use paired::bls12_381::{Fr, FrRepr};
     use proptest::{prop_compose, proptest, proptest_helper};
 
     // the modulus from `bls12_381::Fr`

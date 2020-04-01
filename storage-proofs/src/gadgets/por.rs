@@ -29,8 +29,7 @@ use crate::proof::ProofScheme;
 ///
 pub struct PoRCircuit<U, H: Hasher>
 where
-    U: 'static + PoseidonArity<Bls12>,
-    typenum::Add1<U>: generic_array::ArrayLength<Fr>,
+    U: 'static + PoseidonArity,
 {
     value: Root<Bls12>,
     #[allow(clippy::type_complexity)]
@@ -43,8 +42,7 @@ where
 
 impl<U, H: Hasher> CircuitComponent for PoRCircuit<U, H>
 where
-    U: PoseidonArity<Bls12>,
-    typenum::Add1<U>: generic_array::ArrayLength<Fr>,
+    U: PoseidonArity,
 {
     type ComponentPrivateInputs = Option<Root<Bls12>>;
 }
@@ -92,8 +90,7 @@ impl<C: Circuit<Bls12>, P: ParameterSetMetadata, H: Hasher, U: typenum::Unsigned
 impl<'a, H, U> CompoundProof<'a, PoR<H, U>, PoRCircuit<U, H>> for PoRCompound<H, U>
 where
     H: 'a + Hasher,
-    U: 'a + PoseidonArity<Bls12>,
-    typenum::Add1<U>: generic_array::ArrayLength<Fr>,
+    U: 'a + PoseidonArity,
 {
     fn circuit<'b>(
         public_inputs: &<PoR<H, U> as ProofScheme<'a>>::PublicInputs,
@@ -162,8 +159,7 @@ where
 
 impl<'a, U, H: Hasher> Circuit<Bls12> for PoRCircuit<U, H>
 where
-    U: PoseidonArity<Bls12>,
-    typenum::Add1<U>: generic_array::ArrayLength<Fr>,
+    U: PoseidonArity,
 {
     /// # Public Inputs
     ///
@@ -251,8 +247,7 @@ where
 
 impl<'a, U, H: Hasher> PoRCircuit<U, H>
 where
-    U: 'static + PoseidonArity<Bls12>,
-    typenum::Add1<U>: generic_array::ArrayLength<Fr>,
+    U: 'static + PoseidonArity,
 {
     #[allow(clippy::type_complexity)]
     pub fn synthesize<CS>(
@@ -294,7 +289,7 @@ mod tests {
     use crate::fr32::{bytes_into_fr, fr_into_bytes};
     use crate::gadgets::{MetricCS, TestConstraintSystem};
     use crate::hasher::{
-        Blake2sHasher, Domain, Hasher, PedersenHasher, PoseidonEngine, PoseidonHasher, Sha256Hasher,
+        Blake2sHasher, Domain, Hasher, PedersenHasher, PoseidonHasher, Sha256Hasher,
     };
     use crate::por;
     use crate::proof::ProofScheme;
@@ -434,9 +429,7 @@ mod tests {
 
     fn test_por_input_circuit_with_bls12_381<H: Hasher, U>(num_constraints: usize)
     where
-        U: 'static + PoseidonArity<Bls12>,
-        Bls12: PoseidonEngine<U>,
-        typenum::Add1<U>: generic_array::ArrayLength<Fr>,
+        U: 'static + PoseidonArity,
     {
         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
 
@@ -559,9 +552,7 @@ mod tests {
 
     fn private_por_test_compound<H: Hasher, U>()
     where
-        U: 'static + PoseidonArity<Bls12>,
-        Bls12: PoseidonEngine<U>,
-        typenum::Add1<U>: generic_array::ArrayLength<Fr>,
+        U: 'static + PoseidonArity,
     {
         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
         let leaves = 64; // good for 2, 4 and 8
@@ -682,9 +673,7 @@ mod tests {
 
     fn test_private_por_input_circuit_with_bls12_381<H: Hasher, U>(num_constraints: usize)
     where
-        U: 'static + PoseidonArity<Bls12>,
-        Bls12: PoseidonEngine<U>,
-        typenum::Add1<U>: generic_array::ArrayLength<Fr>,
+        U: 'static + PoseidonArity,
     {
         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
 

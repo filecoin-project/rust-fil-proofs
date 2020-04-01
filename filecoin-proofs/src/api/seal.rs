@@ -8,7 +8,7 @@ use log::{info, trace};
 use memmap::MmapOptions;
 use merkletree::merkle::get_merkle_tree_leafs;
 use merkletree::store::{DiskStore, Store, StoreConfig};
-use paired::bls12_381::{Bls12, Fr};
+use paired::bls12_381::Fr;
 use storage_proofs::cache_key::CacheKey;
 use storage_proofs::compound_proof::{self, CompoundProof};
 use storage_proofs::drgraph::Graph;
@@ -97,7 +97,6 @@ where
 
     let compound_public_params =
         <StackedCompound<DefaultTreeHasher, DefaultPieceHasher> as CompoundProof<
-            _,
             StackedDrg<DefaultTreeHasher, DefaultPieceHasher>,
             _,
         >>::setup(&compound_setup_params)?;
@@ -138,7 +137,7 @@ where
 
         config.size = Some(data_tree.len());
         let comm_d_root: Fr = data_tree.root().into();
-        let comm_d = commitment_from_fr::<Bls12>(comm_d_root);
+        let comm_d = commitment_from_fr(comm_d_root);
 
         drop(data_tree);
 
@@ -246,7 +245,6 @@ where
 
     let compound_public_params =
         <StackedCompound<DefaultTreeHasher, DefaultPieceHasher> as CompoundProof<
-            _,
             StackedDrg<DefaultTreeHasher, DefaultPieceHasher>,
             _,
         >>::setup(&compound_setup_params)?;
@@ -261,7 +259,7 @@ where
             replica_path.as_ref().to_path_buf(),
         )?;
 
-    let comm_r = commitment_from_fr::<Bls12>(tau.comm_r.into());
+    let comm_r = commitment_from_fr(tau.comm_r.into());
 
     // Persist p_aux and t_aux here
     let p_aux_path = cache_path.as_ref().join(CacheKey::PAux.to_string());
@@ -372,7 +370,6 @@ pub fn seal_commit_phase1<T: AsRef<Path>>(
 
     let compound_public_params =
         <StackedCompound<DefaultTreeHasher, DefaultPieceHasher> as CompoundProof<
-            _,
             StackedDrg<DefaultTreeHasher, DefaultPieceHasher>,
             _,
         >>::setup(&compound_setup_params)?;
@@ -455,7 +452,6 @@ pub fn seal_commit_phase2(
 
     let compound_public_params =
         <StackedCompound<DefaultTreeHasher, DefaultPieceHasher> as CompoundProof<
-            _,
             StackedDrg<DefaultTreeHasher, DefaultPieceHasher>,
             _,
         >>::setup(&compound_setup_params)?;

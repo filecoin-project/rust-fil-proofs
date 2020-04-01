@@ -84,7 +84,7 @@ fn pedersen_count(bytes: usize) -> anyhow::Result<Report> {
     };
 
     if bytes < 128 {
-        let out = pedersen_compression_num(&mut cs, &JJ_PARAMS, &data_bits)?;
+        let out = pedersen_compression_num(&mut cs, &data_bits)?;
         assert!(cs.is_satisfied(), "constraints not satisfied");
 
         let expected = crypto::pedersen::pedersen(data.as_slice());
@@ -94,7 +94,7 @@ fn pedersen_count(bytes: usize) -> anyhow::Result<Report> {
             "circuit and non circuit do not match"
         );
     } else {
-        let out = pedersen_md_no_padding(cs.namespace(|| "pedersen"), &JJ_PARAMS, &data_bits)
+        let out = pedersen_md_no_padding(cs.namespace(|| "pedersen"), &data_bits)
             .expect("pedersen hashing failed");
         assert!(cs.is_satisfied(), "constraints not satisfied");
         let expected = crypto::pedersen::pedersen_md_no_padding(data.as_slice());

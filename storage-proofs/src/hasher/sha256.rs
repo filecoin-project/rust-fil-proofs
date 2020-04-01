@@ -354,7 +354,6 @@ impl From<Sha256Domain> for [u8; 32] {
 mod tests {
     use super::*;
 
-    use crate::crypto;
     use crate::fr32::fr_into_bytes;
     use crate::gadgets::TestConstraintSystem;
     use crate::util::bytes_into_boolean_vec;

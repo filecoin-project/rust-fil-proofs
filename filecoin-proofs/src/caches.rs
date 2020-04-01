@@ -83,7 +83,6 @@ pub fn get_stacked_params(porep_config: PoRepConfig) -> Result<Arc<Bls12GrothPar
 
     let parameters_generator = || {
         <StackedCompound<DefaultTreeHasher, DefaultPieceHasher> as CompoundProof<
-            _,
             StackedDrg<DefaultTreeHasher, DefaultPieceHasher>,
             _,
         >>::groth_params::<rand::rngs::OsRng>(None, &public_params)
@@ -104,9 +103,8 @@ pub fn get_post_params(post_config: PoStConfig) -> Result<Arc<Bls12GrothParams>>
 
     let parameters_generator = || {
         <ElectionPoStCompound<DefaultTreeHasher> as CompoundProof<
-            Bls12,
             ElectionPoSt<DefaultTreeHasher>,
-            ElectionPoStCircuit<Bls12, DefaultTreeHasher>,
+            ElectionPoStCircuit<DefaultTreeHasher>,
         >>::groth_params::<rand::rngs::OsRng>(None, &post_public_params)
         .map_err(Into::into)
     };
@@ -128,7 +126,6 @@ pub fn get_stacked_verifying_key(porep_config: PoRepConfig) -> Result<Arc<Bls12V
 
     let vk_generator = || {
         <StackedCompound<DefaultTreeHasher, DefaultPieceHasher> as CompoundProof<
-            Bls12,
             StackedDrg<DefaultTreeHasher, DefaultPieceHasher>,
             _,
         >>::verifying_key::<rand::rngs::OsRng>(None, &public_params)
@@ -149,9 +146,8 @@ pub fn get_post_verifying_key(post_config: PoStConfig) -> Result<Arc<Bls12Verify
 
     let vk_generator = || {
         <ElectionPoStCompound<DefaultTreeHasher> as CompoundProof<
-            Bls12,
             ElectionPoSt<DefaultTreeHasher>,
-            ElectionPoStCircuit<Bls12, DefaultTreeHasher>,
+            ElectionPoStCircuit<DefaultTreeHasher>,
         >>::verifying_key::<rand::rngs::OsRng>(None, &post_public_params)
         .map_err(Into::into)
     };

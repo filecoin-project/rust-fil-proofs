@@ -15,7 +15,7 @@ use crate::error::Result;
 use crate::gadgets::constraint;
 use crate::gadgets::insertion::insert;
 use crate::gadgets::variables::Root;
-use crate::hasher::{HashFunction, Hasher, PoseidonArity, PoseidonEngine};
+use crate::hasher::{HashFunction, Hasher, PoseidonArity};
 use crate::parameter_cache::{CacheableParameters, ParameterSetMetadata};
 use crate::por::PoR;
 use crate::proof::ProofScheme;
@@ -95,7 +95,6 @@ where
 //     H: 'a + Hasher,
 //     U: 'a + PoseidonArity<Bls12>,
 //     Bls12: PoseidonEngine<U>,
-//     typenum::Add1<U>: generic_array::ArrayLength<Fr>,
 // {
 //     fn circuit<'b>(
 //         public_inputs: &<PoR<H, U> as ProofScheme<'a>>::PublicInputs,
@@ -167,7 +166,6 @@ where
 // impl<'a, U, E: JubjubEngine + PoseidonEngine<U>, H: Hasher> Circuit<E> for PoRCircuit<'a, U, E, H>
 // where
 //     U: PoseidonArity<E>,
-//     typenum::Add1<U>: generic_array::ArrayLength<E::Fr>,
 // {
 //     # Public Inputs
 
@@ -261,7 +259,6 @@ where
 // impl<'a, U, E: JubjubEngine + PoseidonEngine<U>, H: Hasher> PoRCircuit<'a, U, E, H>
 // where
 //     U: 'static + PoseidonArity<E>,
-//     typenum::Add1<U>: generic_array::ArrayLength<E::Fr>,
 // {
 //     #[allow(clippy::type_complexity)]
 //     pub fn synthesize<CS>(
@@ -448,7 +445,6 @@ where
 //     where
 //         U: 'static + PoseidonArity<Bls12>,
 //         Bls12: PoseidonEngine<U>,
-//         typenum::Add1<U>: generic_array::ArrayLength<Fr>,
 //     {
 //         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
 
@@ -574,7 +570,6 @@ where
 //     where
 //         U: 'static + PoseidonArity<Bls12>,
 //         Bls12: PoseidonEngine<U>,
-//         typenum::Add1<U>: generic_array::ArrayLength<Fr>,
 //     {
 //         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
 //         let leaves = 64; good for 2, 4 and 8
@@ -699,7 +694,6 @@ where
 //     where
 //         U: 'static + PoseidonArity<Bls12>,
 //         Bls12: PoseidonEngine<U>,
-//         typenum::Add1<U>: generic_array::ArrayLength<Fr>,
 //     {
 //         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
 

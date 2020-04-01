@@ -14,7 +14,7 @@ use merkletree::merkle::{
 };
 use merkletree::proof;
 use merkletree::store::{LevelCacheStore, StoreConfig};
-use paired::bls12_381::{Bls12, Fr};
+use paired::bls12_381::Fr;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 
@@ -41,7 +41,7 @@ pub type OctLCMerkleTree<T, A> = LCMerkleTree<T, A, typenum::U8>;
 
 pub type MerkleStore<T> = DiskStore<T>;
 
-use generic_array::typenum::{Add1, UInt, UTerm, Unsigned, B1};
+use generic_array::typenum::{UInt, UTerm, Unsigned, B1};
 use generic_array::ArrayLength;
 
 use crate::hasher::types::PoseidonArity;

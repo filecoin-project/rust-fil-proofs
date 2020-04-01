@@ -3,7 +3,7 @@ use std::hash::Hasher as StdHasher;
 use crate::crypto::sloth;
 use crate::error::{Error, Result};
 use crate::hasher::types::{
-    PoseidonArity, PoseidonEngine, PoseidonMDArity, POSEIDON_CONSTANTS_1, POSEIDON_CONSTANTS_16,
+    PoseidonArity, PoseidonMDArity, POSEIDON_CONSTANTS_1, POSEIDON_CONSTANTS_16,
     POSEIDON_CONSTANTS_2, POSEIDON_CONSTANTS_4, POSEIDON_CONSTANTS_8, POSEIDON_MD_CONSTANTS,
 };
 use crate::hasher::{Domain, HashFunction, Hasher};
@@ -290,19 +290,15 @@ impl HashFunction<PoseidonDomain> for PoseidonFunction {
     ) -> ::std::result::Result<num::AllocatedNum<Bls12>, SynthesisError> {
         let preimage = vec![left.clone(), right.clone()];
 
-        poseidon_hash::<CS, Bls12, typenum::U2>(cs, preimage, Bls12::PARAMETERS())
+        poseidon_hash::<CS, Bls12, typenum::U2>(cs, preimage, typenum::U2::PARAMETERS())
     }
 
-    fn hash_multi_leaf_circuit<Arity: 'static, CS: ConstraintSystem<Bls12>>(
+    fn hash_multi_leaf_circuit<Arity: 'static + PoseidonArity, CS: ConstraintSystem<Bls12>>(
         cs: CS,
         leaves: &[num::AllocatedNum<Bls12>],
         _height: usize,
-    ) -> ::std::result::Result<num::AllocatedNum<Bls12>, SynthesisError>
-    where
-        Arity: PoseidonArity<Bls12>,
-        typenum::Add1<Arity>: generic_array::ArrayLength<Fr>,
-    {
-        let params = Bls12::PARAMETERS();
+    ) -> ::std::result::Result<num::AllocatedNum<Bls12>, SynthesisError> {
+        let params = Arity::PARAMETERS();
         poseidon_hash::<CS, Bls12, Arity>(cs, leaves.to_vec(), params)
     }
 
@@ -310,7 +306,7 @@ impl HashFunction<PoseidonDomain> for PoseidonFunction {
         cs: &mut CS,
         elements: &[num::AllocatedNum<Bls12>],
     ) -> ::std::result::Result<num::AllocatedNum<Bls12>, SynthesisError> {
-        let params = Bls12::PARAMETERS();
+        let params = PoseidonMDArity::PARAMETERS();
         let arity = PoseidonMDArity::to_usize();
 
         let mut hash = elements[0].clone();
@@ -355,7 +351,7 @@ impl HashFunction<PoseidonDomain> for PoseidonFunction {
         CS: ConstraintSystem<Bls12>,
     {
         let preimage = vec![a.clone(), b.clone()];
-        poseidon_hash::<CS, Bls12, typenum::U2>(cs, preimage, Bls12::PARAMETERS())
+        poseidon_hash::<CS, Bls12, typenum::U2>(cs, preimage, typenum::U2::PARAMETERS())
     }
 }
 

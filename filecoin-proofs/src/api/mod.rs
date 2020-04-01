@@ -441,11 +441,11 @@ mod tests {
     #[test]
     fn test_verify_seal_fr32_validation() {
         let convertible_to_fr_bytes = [0; 32];
-        let out = bytes_into_fr::<Bls12>(&convertible_to_fr_bytes);
+        let out = bytes_into_fr(&convertible_to_fr_bytes);
         assert!(out.is_ok(), "tripwire");
 
         let not_convertible_to_fr_bytes = [255; 32];
-        let out = bytes_into_fr::<Bls12>(&not_convertible_to_fr_bytes);
+        let out = bytes_into_fr(&not_convertible_to_fr_bytes);
         assert!(out.is_err(), "tripwire");
 
         {
@@ -523,7 +523,7 @@ mod tests {
         init_logger();
 
         let not_convertible_to_fr_bytes = [255; 32];
-        let out = bytes_into_fr::<Bls12>(&not_convertible_to_fr_bytes);
+        let out = bytes_into_fr(&not_convertible_to_fr_bytes);
         assert!(out.is_err(), "tripwire");
         let mut replicas = BTreeMap::new();
         replicas.insert(
@@ -572,7 +572,7 @@ mod tests {
         let mut fr_bytes = [1; 32];
         fr_bytes[31] = 0;
 
-        let _out = bytes_into_fr::<Bls12>(&fr_bytes);
+        let _out = bytes_into_fr(&fr_bytes);
         let mut replicas = BTreeMap::new();
         replicas.insert(1.into(), PublicReplicaInfo::new(fr_bytes).unwrap());
         let winner = Candidate {

@@ -46,7 +46,6 @@ use filecoin_proofs::constants::{
 use filecoin_proofs::parameters::{post_public_params, setup_params};
 use filecoin_proofs::types::*;
 use log::info;
-use paired::bls12_381::Bls12;
 use phase2::{verify_contribution, MPCParameters};
 use rand::SeedableRng;
 use simplelog::{self, CombinedLogger, LevelFilter, TermLogger, TerminalMode, WriteLogger};
@@ -172,7 +171,7 @@ fn parse_params_filename(path: &str) -> (Proof, Hasher, u64, String, usize) {
 
 fn blank_porep_poseidon_circuit(
     sector_size: u64,
-) -> StackedCircuit<'static, Bls12, PoseidonHasher, Sha256Hasher> {
+) -> StackedCircuit<'static, PoseidonHasher, Sha256Hasher> {
     let n_partitions = *POREP_PARTITIONS.read().unwrap().get(&sector_size).unwrap();
 
     let porep_config = PoRepConfig {
@@ -191,14 +190,12 @@ fn blank_porep_poseidon_circuit(
     };
 
     let public_params = <StackedCompound<PoseidonHasher, Sha256Hasher> as CompoundProof<
-        _,
         StackedDrg<PoseidonHasher, Sha256Hasher>,
         _,
     >>::setup(&setup_params)
     .unwrap();
 
     <StackedCompound<PoseidonHasher, Sha256Hasher> as CompoundProof<
-        _,
         StackedDrg<PoseidonHasher, Sha256Hasher>,
         _,
     >>::blank_circuit(&public_params.vanilla_params)
@@ -239,9 +236,7 @@ fn blank_porep_sha_pedersen_circuit(
 }
 */
 
-fn blank_election_post_poseidon_circuit(
-    sector_size: u64,
-) -> ElectionPoStCircuit<'static, Bls12, PoseidonHasher> {
+fn blank_election_post_poseidon_circuit(sector_size: u64) -> ElectionPoStCircuit<PoseidonHasher> {
     let post_config = PoStConfig {
         sector_size: SectorSize(sector_size),
         challenge_count: POST_CHALLENGE_COUNT,
@@ -252,9 +247,8 @@ fn blank_election_post_poseidon_circuit(
     let public_params = post_public_params(post_config).unwrap();
 
     <ElectionPoStCompound<PoseidonHasher> as CompoundProof<
-        Bls12,
         ElectionPoSt<PoseidonHasher>,
-        ElectionPoStCircuit<Bls12, PoseidonHasher>,
+        ElectionPoStCircuit<PoseidonHasher>,
     >>::blank_circuit(&public_params)
 }
 

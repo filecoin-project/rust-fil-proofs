@@ -2,19 +2,17 @@ use bellperson::gadgets::boolean::{self, Boolean};
 use bellperson::groth16::*;
 use bellperson::{Circuit, ConstraintSystem, SynthesisError};
 use criterion::{black_box, criterion_group, criterion_main, Criterion, ParameterizedBenchmark};
-use fil_sapling_crypto::jubjub::JubjubEngine;
 use paired::bls12_381::Bls12;
 use rand::{thread_rng, Rng};
 use storage_proofs::crypto::pedersen::{self, JJ_PARAMS};
 use storage_proofs::gadgets;
 use storage_proofs::gadgets::BenchCS;
 
-struct PedersenExample<'a, E: JubjubEngine> {
-    params: &'a E::Params,
+struct PedersenExample<'a> {
     data: &'a [Option<bool>],
 }
 
-impl<'a, E: JubjubEngine> Circuit<E> for PedersenExample<'a, E> {
+impl<'a> Circuit<Bls12> for PedersenExample<'a> {
     fn synthesize<CS: ConstraintSystem<E>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
         let data: Vec<Boolean> = self
             .data
@@ -29,7 +27,7 @@ impl<'a, E: JubjubEngine> Circuit<E> for PedersenExample<'a, E> {
             .collect::<Result<Vec<_>, SynthesisError>>()?;
 
         let cs = cs.namespace(|| "pedersen");
-        let res = gadgets::pedersen::pedersen_compression_num(cs, self.params, &data)?;
+        let res = gadgets::pedersen::pedersen_compression_num(cs, &*JJ_PARAMS, &data)?;
         // please compiler don't optimize the result away
         // only check if we actually have input data
         if self.data[0].is_some() {
@@ -40,12 +38,11 @@ impl<'a, E: JubjubEngine> Circuit<E> for PedersenExample<'a, E> {
     }
 }
 
-struct PedersenMdExample<'a, E: JubjubEngine> {
-    params: &'a E::Params,
+struct PedersenMdExample<'a> {
     data: &'a [Option<bool>],
 }
 
-impl<'a, E: JubjubEngine> Circuit<E> for PedersenMdExample<'a, E> {
+impl<'a> Circuit<Bls12> for PedersenMdExample<'a> {
     fn synthesize<CS: ConstraintSystem<E>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
         let data: Vec<Boolean> = self
             .data
@@ -60,7 +57,7 @@ impl<'a, E: JubjubEngine> Circuit<E> for PedersenMdExample<'a, E> {
             .collect::<Result<Vec<_>, SynthesisError>>()?;
 
         let cs = cs.namespace(|| "pedersen");
-        let res = gadgets::pedersen::pedersen_md_no_padding(cs, self.params, &data)?;
+        let res = gadgets::pedersen::pedersen_md_no_padding(cs, &*JJ_PARAMS, &data)?;
         // please compiler don't optimize the result away
         // only check if we actually have input data
         if self.data[0].is_some() {
@@ -111,7 +108,6 @@ fn pedersen_circuit_benchmark(c: &mut Criterion) {
     let mut rng1 = thread_rng();
     let groth_params = generate_random_parameters::<Bls12, _, _>(
         PedersenExample {
-            params: &*JJ_PARAMS,
             data: &vec![None; 256],
         },
         &mut rng1,
@@ -131,7 +127,6 @@ fn pedersen_circuit_benchmark(c: &mut Criterion) {
                 b.iter(|| {
                     let proof = create_random_proof(
                         PedersenExample {
-                            params: &*JJ_PARAMS,
                             data: data.as_slice(),
                         },
                         &groth_params,
@@ -151,7 +146,6 @@ fn pedersen_circuit_benchmark(c: &mut Criterion) {
             b.iter(|| {
                 let mut cs = BenchCS::<Bls12>::new();
                 PedersenExample {
-                    params: &*JJ_PARAMS,
                     data: data.as_slice(),
                 }
                 .synthesize(&mut cs)
@@ -168,7 +162,6 @@ fn pedersen_md_circuit_benchmark(c: &mut Criterion) {
     let mut rng1 = thread_rng();
     let groth_params = generate_random_parameters::<Bls12, _, _>(
         PedersenMdExample {
-            params: &*JJ_PARAMS,
             data: &vec![None; 256],
         },
         &mut rng1,
@@ -188,7 +181,6 @@ fn pedersen_md_circuit_benchmark(c: &mut Criterion) {
                 b.iter(|| {
                     let proof = create_random_proof(
                         PedersenMdExample {
-                            params: &*JJ_PARAMS,
                             data: data.as_slice(),
                         },
                         &groth_params,
@@ -208,7 +200,6 @@ fn pedersen_md_circuit_benchmark(c: &mut Criterion) {
             b.iter(|| {
                 let mut cs = BenchCS::<Bls12>::new();
                 PedersenMdExample {
-                    params: &*JJ_PARAMS,
                     data: data.as_slice(),
                 }
                 .synthesize(&mut cs)

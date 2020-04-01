@@ -12,9 +12,7 @@ use crate::error::Result;
 use crate::gadgets::constraint;
 use crate::gadgets::por::PoRCircuit;
 use crate::gadgets::variables::Root;
-use crate::hasher::{
-    HashFunction, Hasher, PoseidonArity, PoseidonEngine, PoseidonFunction, PoseidonMDArity,
-};
+use crate::hasher::{HashFunction, Hasher, PoseidonFunction, PoseidonMDArity};
 
 /// This is the `ElectionPoSt` circuit.
 pub struct ElectionPoStCircuit<H: Hasher> {
@@ -185,7 +183,6 @@ mod tests {
     use rand_xorshift::XorShiftRng;
 
     use crate::compound_proof::CompoundProof;
-    use crate::crypto::pedersen::JJ_PARAMS;
     use crate::drgraph::{new_seed, BucketGraph, Graph, BASE_DEGREE};
     use crate::fr32::fr_into_bytes;
     use crate::gadgets::TestConstraintSystem;

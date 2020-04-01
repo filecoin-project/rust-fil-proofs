@@ -12,7 +12,6 @@ use generic_array::typenum;
 use paired::bls12_381::{Bls12, Fr};
 
 use crate::compound_proof::CircuitComponent;
-use crate::crypto::pedersen::JJ_PARAMS;
 use crate::error::Result;
 use crate::fr32::fr_into_bytes;
 use crate::gadgets::constraint;

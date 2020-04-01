@@ -4,7 +4,6 @@ use bellperson::gadgets::{boolean::Boolean, num};
 use bellperson::{ConstraintSystem, SynthesisError};
 use generic_array::typenum;
 use paired::bls12_381::{Bls12, Fr};
-use paired::Engine;
 
 use super::{
     column_proof::ColumnProof, encoding_proof::EncodingProof, labeling_proof::LabelingProof,
@@ -12,7 +11,7 @@ use super::{
 use crate::drgraph::Graph;
 use crate::gadgets::por::PoRCircuit;
 use crate::gadgets::variables::Root;
-use crate::hasher::{Hasher, PoseidonArity, PoseidonEngine};
+use crate::hasher::{Hasher, PoseidonArity};
 use crate::merkle::MerkleProof;
 use crate::porep::stacked::{
     Proof as VanillaProof, PublicParams, ReplicaColumnProof as VanillaReplicaColumnProof,
@@ -20,8 +19,8 @@ use crate::porep::stacked::{
 
 #[derive(Debug, Clone)]
 pub struct Proof<H: Hasher, G: Hasher> {
-    pub comm_d_proof: InclusionPath<Bls12, G, typenum::U2>,
-    pub comm_r_last_proof: InclusionPath<Bls12, H, typenum::U8>,
+    pub comm_d_proof: InclusionPath<G, typenum::U2>,
+    pub comm_r_last_proof: InclusionPath<H, typenum::U8>,
     pub replica_column_proof: ReplicaColumnProof<H>,
     pub labeling_proofs: Vec<(usize, LabelingProof)>,
     pub encoding_proof: EncodingProof,
@@ -141,23 +140,19 @@ impl<H: Hasher, G: Hasher> From<VanillaProof<H, G>> for Proof<H, G> {
 }
 
 #[derive(Debug, Clone)]
-pub struct InclusionPath<E: Engine, H: Hasher, U>
+pub struct InclusionPath<H: Hasher, U>
 where
-    U: PoseidonArity<E>,
-    typenum::Add1<U>: generic_array::ArrayLength<E::Fr>,
+    U: PoseidonArity,
 {
     value: Option<Fr>,
     auth_path: Vec<(Vec<Option<Fr>>, Option<usize>)>,
-    _e: PhantomData<E>,
     _h: PhantomData<H>,
     _u: PhantomData<U>,
 }
 
-impl<U, H: Hasher> InclusionPath<Bls12, H, U>
+impl<U, H: Hasher> InclusionPath<H, U>
 where
-    U: 'static + PoseidonArity<Bls12>,
-    Bls12: PoseidonEngine<U>,
-    typenum::Add1<U>: generic_array::ArrayLength<Fr>,
+    U: 'static + PoseidonArity,
 {
     /// Create an empty proof, used in `blank_circuit`s.
     pub fn empty<G: Hasher>(graph: &impl Graph<G>) -> Self {
@@ -167,7 +162,6 @@ where
                 (vec![None; U::to_usize() - 1], None);
                 graph.merkle_tree_depth::<U>() as usize - 1
             ],
-            _e: PhantomData,
             _h: PhantomData,
             _u: PhantomData,
         }
@@ -198,17 +192,13 @@ where
     }
 }
 
-impl<E: Engine, H: Hasher, U: PoseidonArity<E>> From<MerkleProof<H, U>> for InclusionPath<E, H, U>
-where
-    typenum::Add1<U>: generic_array::ArrayLength<E::Fr>,
-{
+impl<H: Hasher, U: PoseidonArity> From<MerkleProof<H, U>> for InclusionPath<H, U> {
     fn from(other: MerkleProof<H, U>) -> Self {
         let (value, auth_path) = other.into_options_with_leaf();
 
         InclusionPath {
             value,
             auth_path,
-            _e: PhantomData,
             _h: PhantomData,
             _u: PhantomData,
         }

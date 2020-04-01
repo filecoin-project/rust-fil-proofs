@@ -1,7 +1,6 @@
 use std::path::PathBuf;
 
 use anyhow::Result;
-use paired::bls12_381::Bls12;
 use storage_proofs::parameter_cache::{self, CacheableParameters};
 use storage_proofs::porep::stacked::{StackedCircuit, StackedCompound};
 
@@ -53,8 +52,7 @@ impl PoRepConfig {
 
         Ok(
             <StackedCompound<DefaultTreeHasher, DefaultPieceHasher> as CacheableParameters<
-                Bls12,
-                StackedCircuit<_, DefaultTreeHasher, DefaultPieceHasher>,
+                StackedCircuit<DefaultTreeHasher, DefaultPieceHasher>,
                 _,
             >>::cache_identifier(&params),
         )

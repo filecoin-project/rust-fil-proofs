@@ -98,7 +98,6 @@ pub fn u32_into_fr(n: u32) -> Fr {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use paired::bls12_381::Bls12;
 
     fn bytes_fr_test(bytes: Fr32Ary, expect_success: bool) {
         let mut b = &bytes[..];

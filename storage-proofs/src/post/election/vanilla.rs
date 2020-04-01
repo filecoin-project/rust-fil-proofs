@@ -7,7 +7,7 @@ use byteorder::{ByteOrder, LittleEndian};
 use generic_array::typenum;
 use log::trace;
 use merkletree::store::StoreConfig;
-use paired::bls12_381::{Bls12, Fr};
+use paired::bls12_381::Fr;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -444,7 +444,7 @@ mod tests {
     use std::io::prelude::*;
 
     use ff::Field;
-    use paired::bls12_381::{Bls12, Fr};
+    use paired::bls12_381::Fr;
     use rand::SeedableRng;
     use rand_xorshift::XorShiftRng;
 
