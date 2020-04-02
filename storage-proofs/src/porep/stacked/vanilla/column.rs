@@ -66,7 +66,6 @@ impl<H: Hasher> Column<H> {
     pub fn into_proof_sub(
         self,
         tree_c: &OctSubTree<H>,
-        sub_tree_leafs: usize,
     ) -> Result<ColumnProof<H>> {
         let tree_c_proof = tree_c.gen_proof(self.index() as usize)?;
         assert!(tree_c_proof.sub_tree_proof.is_some());
@@ -78,7 +77,6 @@ impl<H: Hasher> Column<H> {
     pub fn into_proof_top(
         self,
         tree_c: &OctTopTree<H>,
-        sub_tree_leafs: usize,
     ) -> Result<ColumnProof<H>> {
         let tree_c_proof = tree_c.gen_proof(self.index() as usize)?;
         assert!(tree_c_proof.sub_tree_proof.is_some());

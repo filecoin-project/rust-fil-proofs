@@ -126,7 +126,7 @@ impl<H: Hasher> Proof<H> {
     }
 
     #[allow(clippy::type_complexity)]
-    pub fn paths(&self) -> Vec<&Vec<(Vec<H::Domain>, usize)>> {
+    pub fn paths(&self) -> Vec<Vec<(Vec<H::Domain>, usize)>> {
         self.inclusion_proofs
             .iter()
             .map(MerkleProof::path)

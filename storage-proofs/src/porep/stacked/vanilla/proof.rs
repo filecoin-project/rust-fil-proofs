@@ -165,14 +165,14 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
                                     trace!("  c_x");
                                     let c_x = t_aux
                                         .column(challenge as u32)?
-                                        .into_proof_sub(tree_c, base_tree_leafs)?;
+                                        .into_proof_sub(tree_c)?;
 
                                     // All labels in the DRG parents.
                                     trace!("  drg_parents");
                                     let drg_parents = get_drg_parents_columns(challenge)?
                                         .into_iter()
                                         .map(|column| {
-                                            column.into_proof_sub(tree_c, base_tree_leafs)
+                                            column.into_proof_sub(tree_c)
                                         })
                                         .collect::<Result<_>>()?;
 
@@ -181,7 +181,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
                                     let exp_parents = get_exp_parents_columns(challenge)?
                                         .into_iter()
                                         .map(|column| {
-                                            column.into_proof_sub(tree_c, base_tree_leafs)
+                                            column.into_proof_sub(tree_c)
                                         })
                                         .collect::<Result<_>>()?;
 
@@ -204,14 +204,14 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
                                     trace!("  c_x");
                                     let c_x = t_aux
                                         .column(challenge as u32)?
-                                        .into_proof_top(tree_c, base_tree_leafs)?;
+                                        .into_proof_top(tree_c)?;
 
                                     // All labels in the DRG parents.
                                     trace!("  drg_parents");
                                     let drg_parents = get_drg_parents_columns(challenge)?
                                         .into_iter()
                                         .map(|column| {
-                                            column.into_proof_top(tree_c, base_tree_leafs)
+                                            column.into_proof_top(tree_c)
                                         })
                                         .collect::<Result<_>>()?;
 
@@ -220,7 +220,7 @@ impl<'a, H: 'static + Hasher, G: 'static + Hasher> StackedDrg<'a, H, G> {
                                     let exp_parents = get_exp_parents_columns(challenge)?
                                         .into_iter()
                                         .map(|column| {
-                                            column.into_proof_top(tree_c, base_tree_leafs)
+                                            column.into_proof_top(tree_c)
                                         })
                                         .collect::<Result<_>>()?;
 
