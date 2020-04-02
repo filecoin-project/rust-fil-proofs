@@ -284,16 +284,17 @@ mod tests {
     use rand_xorshift::XorShiftRng;
 
     use merkletree::merkle::{is_merkle_tree_size_valid, FromIndexedParallelIterator, MerkleTree};
-    use merkletree::store::VecStore;
+    use merkletree::store::{Store, VecStore};
 
     use crate::compound_proof;
     use crate::drgraph::{new_seed, BucketGraph, Graph, BASE_DEGREE};
     use crate::fr32::{bytes_into_fr, fr_into_bytes};
     use crate::gadgets::{MetricCS, TestConstraintSystem};
     use crate::hasher::{
-        Blake2sHasher, Domain, Hasher, PedersenHasher, PoseidonDomain, PoseidonHasher, Sha256Hasher,
+        Blake2sHasher, Domain, Hasher, PedersenHasher, PoseidonArity, PoseidonDomain,
+        PoseidonHasher, Sha256Hasher,
     };
-    use crate::merkle::{BinaryTree, MerkleProofTrait, MerkleTreeWrapper};
+    use crate::merkle::{BinaryTree, DiskStore, MerkleProofTrait, MerkleTreeWrapper};
     use crate::por;
     use crate::proof::ProofScheme;
     use crate::util::data_at_node;
@@ -302,21 +303,21 @@ mod tests {
         MerkleTreeWrapper<H, VecStore<<H as Hasher>::Domain>, A, typenum::U0, typenum::U0>;
 
     #[allow(clippy::type_complexity)]
-    fn generate_tree<R: Rng, BaseTreeArity: typenum::Unsigned>(
+    fn generate_tree<
+        R: Rng,
+        H: Hasher,
+        BaseTreeArity: 'static + PoseidonArity,
+        S: Store<H::Domain>,
+    >(
         rng: &mut R,
         size: usize,
     ) -> (
         Vec<u8>,
-        MerkleTree<
-            <PoseidonHasher as Hasher>::Domain,
-            <PoseidonHasher as Hasher>::Function,
-            VecStore<<PoseidonHasher as Hasher>::Domain>,
-            BaseTreeArity,
-        >,
+        MerkleTree<H::Domain, H::Function, S, BaseTreeArity>,
     ) {
-        let el = <PoseidonHasher as Hasher>::Domain::random(rng);
+        let el = H::Domain::random(rng);
         let elements = (0..size).map(|_| el).collect::<Vec<_>>();
-        let data = Vec::new();
+        let mut data = Vec::new();
         elements
             .iter()
             .for_each(|elt| data.extend(elt.into_bytes()));
@@ -324,62 +325,68 @@ mod tests {
     }
 
     #[allow(clippy::type_complexity)]
-    fn generate_sub_tree<
-        R: Rng,
-        BaseTreeArity: typenum::Unsigned,
-        SubTreeArity: typenum::Unsigned,
-    >(
+    fn generate_sub_tree<R: Rng, Tree: MerkleTreeTrait>(
         rng: &mut R,
         size: usize,
     ) -> (
         Vec<u8>,
         MerkleTree<
-            <PoseidonHasher as Hasher>::Domain,
-            <PoseidonHasher as Hasher>::Function,
-            VecStore<<PoseidonHasher as Hasher>::Domain>,
-            BaseTreeArity,
-            SubTreeArity,
+            <Tree::Hasher as Hasher>::Domain,
+            <Tree::Hasher as Hasher>::Function,
+            Tree::Store,
+            Tree::Arity,
+            Tree::SubTreeArity,
         >,
     ) {
-        let base_tree_count = BaseTreeArity::to_usize();
+        let base_tree_count = Tree::Arity::to_usize();
         let mut trees = Vec::with_capacity(base_tree_count);
         let mut data = Vec::new();
         for _ in 0..base_tree_count {
-            let (data, tree) = generate_tree::<R, BaseTreeArity>(rng, size / base_tree_count);
+            let (inner_data, tree) = generate_tree::<R, Tree::Hasher, Tree::Arity, Tree::Store>(
+                rng,
+                size / base_tree_count,
+            );
             trees.push(tree);
-            data.extend(data);
+            data.extend(inner_data);
         }
-        (data, MerkleTree::from_trees(trees).unwrap())
+        (
+            data,
+            MerkleTree::<
+                <Tree::Hasher as Hasher>::Domain,
+                <Tree::Hasher as Hasher>::Function,
+                Tree::Store,
+                Tree::Arity,
+                Tree::SubTreeArity,
+            >::from_trees(trees)
+            .unwrap(),
+        )
     }
 
-    fn generate_top_tree<
-        Tree: MerkleTreeTrait<Hasher = PoseidonHasher>,
-        R: Rng,
-        BaseTreeArity: typenum::Unsigned,
-        SubTreeArity: typenum::Unsigned,
-        TopTreeArity: typenum::Unsigned,
-    >(
+    fn generate_top_tree<Tree: MerkleTreeTrait, R: Rng>(
         rng: &mut R,
         nodes: usize,
-    ) -> (Vec<u8>, Tree)
-    where
-        <Tree as MerkleTreeTrait>::Store: merkletree::store::Store<PoseidonDomain>,
-    {
-        let base_tree_count = BaseTreeArity::to_usize();
-        let sub_tree_count = SubTreeArity::to_usize();
-        let top_tree_count = TopTreeArity::to_usize();
+    ) -> (Vec<u8>, Tree) {
+        let base_tree_count = Tree::Arity::to_usize();
+        let sub_tree_count = Tree::SubTreeArity::to_usize();
+        let top_tree_count = Tree::TopTreeArity::to_usize();
 
         let mut sub_trees = Vec::with_capacity(sub_tree_count);
         let mut data = Vec::new();
         for i in 0..top_tree_count {
-            let (data, tree) =
-                generate_sub_tree::<R, BaseTreeArity, SubTreeArity>(rng, nodes / top_tree_count);
+            let (inner_data, tree) = generate_sub_tree::<R, Tree>(rng, nodes / top_tree_count);
             sub_trees.push(tree);
-            data.extend(data);
+            data.extend(inner_data);
         }
 
-        let tree: MerkleTree<_, _, _, BaseTreeArity, SubTreeArity, TopTreeArity> =
-            MerkleTree::from_sub_trees(sub_trees).unwrap();
+        let tree = MerkleTree::<
+            <Tree::Hasher as Hasher>::Domain,
+            <Tree::Hasher as Hasher>::Function,
+            Tree::Store,
+            Tree::Arity,
+            Tree::SubTreeArity,
+            Tree::TopTreeArity,
+        >::from_sub_trees(sub_trees)
+        .unwrap();
 
         (data, Tree::from_merkle(tree))
     }
@@ -521,11 +528,7 @@ mod tests {
         test_por_input_circuit_with_bls12_381::<TestTree<PoseidonHasher, typenum::U8>>(1_137);
     }
 
-    fn test_por_input_circuit_with_bls12_381<Tree: MerkleTreeTrait<Hasher = PoseidonHasher>>(
-        num_constraints: usize,
-    ) where
-        <Tree as MerkleTreeTrait>::Store: merkletree::store::Store<PoseidonDomain>,
-    {
+    fn test_por_input_circuit_with_bls12_381<Tree: MerkleTreeTrait>(num_constraints: usize) {
         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
 
         let arity = Tree::Arity::to_usize();
@@ -545,10 +548,7 @@ mod tests {
             //     BucketGraph::<Tree::Hasher>::new(leaves, BASE_DEGREE, 0, new_seed()).unwrap();
             // let tree = graph.merkle_tree::<Tree>(None, data.as_slice()).unwrap();
 
-            let (data, tree) =
-                generate_top_tree::<Tree, _, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>(
-                    rng, leaves,
-                );
+            let (data, tree) = generate_top_tree::<Tree, _>(rng, leaves);
             // -- PoR
 
             let pub_params = por::PublicParams {
