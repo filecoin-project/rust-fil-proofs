@@ -1,4 +1,4 @@
-use std::cmp;
+use std::cmp::{max, min};
 use std::marker::PhantomData;
 use std::path::PathBuf;
 
@@ -6,7 +6,7 @@ use anyhow::ensure;
 use generic_array::typenum;
 use merkletree::store::StoreConfig;
 use rand::{rngs::OsRng, Rng, SeedableRng};
-use rand_chacha::ChaChaRng;
+use rand_chacha::ChaCha8Rng;
 use sha2::{Digest, Sha256};
 
 use crate::error::*;
@@ -176,39 +176,44 @@ impl<H: Hasher> Graph<H> for BucketGraph<H> {
                 Ok(())
             }
             _ => {
-                // The degree `m` minus 1; the degree without the immediate predecessor node.
-                let m_prime = m - 1;
+                // DRG node indexes are guaranteed to fit within a `u32`.
+                let node = node as u32;
 
-                // seed = self.seed | node
                 let mut seed = [0u8; 32];
                 seed[..28].copy_from_slice(&self.seed);
-                seed[28..].copy_from_slice(&(node as u32).to_le_bytes());
-                let mut rng = ChaChaRng::from_seed(seed);
+                seed[28..].copy_from_slice(&node.to_le_bytes());
+                let mut rng = ChaCha8Rng::from_seed(seed);
 
-                for (k, parent) in parents.iter_mut().take(m_prime).enumerate() {
-                    // Iterate over `m_prime` number of meta nodes for the i-th real node. Simulate
-                    // the edges that we would add from previous graph nodes. If any edge is added
-                    // from a meta node of j-th real node then add edge (j,i).
-                    let logi = ((node * m_prime) as f32).log2().floor() as usize;
-                    let j = rng.gen::<usize>() % logi;
-                    let jj = cmp::min(node * m_prime + k, 1 << (j + 1));
-                    let back_dist = rng.gen_range(cmp::max(jj >> 1, 2), jj + 1);
-                    let out = (node * m_prime + k - back_dist) / m_prime;
+                let m_prime = m - 1;
+                // Large sector sizes require that metagraph node indexes are `u64`.
+                let metagraph_node = node as u64 * m_prime as u64;
+                let n_buckets = (metagraph_node as f64).log2().ceil() as u64;
 
-                    // remove self references and replace with reference to previous node
-                    if out == node {
-                        *parent = (node - 1) as u32;
+                for parent in parents.iter_mut().take(m_prime) {
+                    let bucket_index = (rng.gen::<u64>() % n_buckets) + 1;
+                    let largest_distance_in_bucket = min(metagraph_node, 1 << bucket_index);
+                    let smallest_distance_in_bucket = max(2, largest_distance_in_bucket >> 1);
+
+                    // Add 1 becuase the number of distances in the bucket is inclusive.
+                    let n_distances_in_bucket =
+                        largest_distance_in_bucket - smallest_distance_in_bucket + 1;
+
+                    let distance =
+                        smallest_distance_in_bucket + (rng.gen::<u64>() % n_distances_in_bucket);
+
+                    let metagraph_parent = metagraph_node - distance;
+
+                    // Any metagraph node mapped onto the DRG can be safely cast back to `u32`.
+                    let mapped_parent = (metagraph_parent / m_prime as u64) as u32;
+
+                    *parent = if mapped_parent == node {
+                        node - 1
                     } else {
-                        ensure!(
-                            out <= node,
-                            "Parent node must be smaller than current node."
-                        );
-                        *parent = out as u32;
-                    }
+                        mapped_parent
+                    };
                 }
 
-                // Add the immediate predecessor as a parent to ensure unique topological ordering.
-                parents[m_prime] = (node - 1) as u32;
+                parents[m_prime] = node - 1;
                 Ok(())
             }
         }
@@ -236,6 +241,15 @@ impl<H: Hasher> Graph<H> for BucketGraph<H> {
         seed: [u8; 28],
     ) -> Result<Self> {
         ensure!(expansion_degree == 0, "Expension degree must be zero.");
+
+        // The number of metagraph nodes must be less than `2u64^54` as to not incur rounding errors
+        // when casting metagraph node indexes from `u64` to `f64` during parent generation.
+        let m_prime = base_degree - 1;
+        let n_metagraph_nodes = nodes as u64 * m_prime as u64;
+        ensure!(
+            n_metagraph_nodes <= 1u64 << 54,
+            "The number of metagraph nodes must be precisely castable to `f64`"
+        );
 
         Ok(BucketGraph {
             nodes,
