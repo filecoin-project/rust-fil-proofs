@@ -13,11 +13,11 @@ use storage_proofs_core::{
     gadgets::por::PoRCircuit,
     gadgets::variables::Root,
     hasher::{HashFunction, Hasher, PoseidonFunction, PoseidonMDArity},
-    merkle::{DiskStore, MerkleTreeWrapper},
+    merkle::MerkleTreeTrait,
 };
 
 /// This is the `ElectionPoSt` circuit.
-pub struct ElectionPoStCircuit<H: Hasher> {
+pub struct ElectionPoStCircuit<Tree: MerkleTreeTrait> {
     pub comm_r: Option<Fr>,
     pub comm_c: Option<Fr>,
     pub comm_r_last: Option<Fr>,
@@ -28,17 +28,17 @@ pub struct ElectionPoStCircuit<H: Hasher> {
     pub randomness: Option<Fr>,
     pub prover_id: Option<Fr>,
     pub sector_id: Option<Fr>,
-    pub _h: PhantomData<H>,
+    pub _t: PhantomData<Tree>,
 }
 
 #[derive(Clone, Default)]
 pub struct ComponentPrivateInputs {}
 
-impl<'a, H: Hasher> CircuitComponent for ElectionPoStCircuit<H> {
+impl<'a, Tree: MerkleTreeTrait> CircuitComponent for ElectionPoStCircuit<Tree> {
     type ComponentPrivateInputs = ComponentPrivateInputs;
 }
 
-impl<'a, H: 'static + Hasher> Circuit<Bls12> for ElectionPoStCircuit<H> {
+impl<'a, Tree: 'static + MerkleTreeTrait> Circuit<Bls12> for ElectionPoStCircuit<Tree> {
     fn synthesize<CS: ConstraintSystem<Bls12>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
         let comm_r = self.comm_r;
         let comm_c = self.comm_c;
@@ -76,7 +76,7 @@ impl<'a, H: 'static + Hasher> Circuit<Bls12> for ElectionPoStCircuit<H> {
 
         // Verify H(Comm_C || comm_r_last) == comm_r
         {
-            let hash_num = H::Function::hash2_circuit(
+            let hash_num = <Tree::Hasher as Hasher>::Function::hash2_circuit(
                 cs.namespace(|| "H_comm_c_comm_r_last"),
                 &comm_c_num,
                 &comm_r_last_num,
@@ -93,9 +93,7 @@ impl<'a, H: 'static + Hasher> Circuit<Bls12> for ElectionPoStCircuit<H> {
 
         // 2. Verify Inclusion Paths
         for (i, (leaf, path)) in leafs.iter().zip(paths.iter()).enumerate() {
-            PoRCircuit::<
-                MerkleTreeWrapper<H, DiskStore<H::Domain>, typenum::U8, typenum::U0, typenum::U0>,
-            >::synthesize(
+            PoRCircuit::<Tree>::synthesize(
                 cs.namespace(|| format!("challenge_inclusion{}", i)),
                 Root::Val(*leaf),
                 path.clone().into(),
@@ -138,7 +136,7 @@ impl<'a, H: 'static + Hasher> Circuit<Bls12> for ElectionPoStCircuit<H> {
         }
 
         // pad to a multiple of md arity
-        let arity = PoseidonMDArity::to_usize();
+        let arity = Tree::Arity::to_usize();
         while partial_ticket_nums.len() % arity != 0 {
             partial_ticket_nums.push(num::AllocatedNum::alloc(
                 cs.namespace(|| format!("padding_{}", partial_ticket_nums.len())),
@@ -147,7 +145,7 @@ impl<'a, H: 'static + Hasher> Circuit<Bls12> for ElectionPoStCircuit<H> {
         }
 
         // hash it
-        let partial_ticket_num = PoseidonFunction::hash_md_circuit::<_>(
+        let partial_ticket_num = <Tree::Hasher as Hasher>::Function::hash_md_circuit::<_>(
             &mut cs.namespace(|| "partial_ticket_hash"),
             &partial_ticket_nums,
         )?;
@@ -181,7 +179,6 @@ mod tests {
     use std::collections::BTreeMap;
 
     use ff::Field;
-    use merkletree::store::StoreConfig;
     use paired::bls12_381::{Bls12, Fr};
     use rand::SeedableRng;
     use rand_xorshift::XorShiftRng;
@@ -190,7 +187,7 @@ mod tests {
         fr32::fr_into_bytes,
         gadgets::TestConstraintSystem,
         hasher::{Domain, HashFunction, Hasher, PedersenHasher, PoseidonHasher},
-        merkle::{create_base_lcmerkle_tree, MerkleTreeTrait, OctLCMerkleTree},
+        merkle::{generate_tree, get_base_tree_count, MerkleTreeTrait, OctLCMerkleTree};
         proof::ProofScheme,
         sector::SectorId,
         util::NODE_SIZE,
@@ -198,27 +195,25 @@ mod tests {
 
     use crate::election::{self, ElectionPoSt, ElectionPoStCompound};
 
-    #[test]
-    fn test_election_post_circuit_pedersen() {
-        test_election_post_circuit::<PedersenHasher>(389_883);
-    }
+    // Not implemented
+    //#[test]
+    //fn test_election_post_circuit_pedersen() {
+    //    test_election_post_circuit::<OctLCMerkleTree<PedersenHasher>>(389_883);
+    //}
 
     #[test]
     fn test_election_post_circuit_poseidon() {
-        test_election_post_circuit::<PoseidonHasher>(24_426);
+        test_election_post_circuit::<OctLCMerkleTree<PoseidonHasher>>(24_426);
     }
 
-    fn test_election_post_circuit<H: 'static + Hasher>(expected_constraints: usize) {
-        use std::fs::File;
-        use std::io::prelude::*;
-
+    fn test_election_post_circuit<Tree: 'static + MerkleTreeTrait>(expected_constraints: usize) {
         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
 
-        let leaves = 64;
+        let leaves = 64 * get_base_tree_count::<Tree>();
         let sector_size = leaves * NODE_SIZE;
 
-        let randomness = H::Domain::random(rng);
-        let prover_id = H::Domain::random(rng);
+        let randomness = <Tree::Hasher as Hasher>::Domain::random(rng);
+        let prover_id = <Tree::Hasher as Hasher>::Domain::random(rng);
 
         let pub_params = election::PublicParams {
             sector_size: sector_size as u64,
@@ -229,35 +224,18 @@ mod tests {
         let mut sectors: Vec<SectorId> = Vec::new();
         let mut trees = BTreeMap::new();
 
-        // Construct and store an MT using a named DiskStore.
-        let temp_dir = tempdir::TempDir::new("level_cache_tree_v1").unwrap();
+        // Construct and store an MT using a named store.
+        let temp_dir = tempdir::TempDir::new("tree").unwrap();
         let temp_path = temp_dir.path();
-        let config = StoreConfig::new(
-            &temp_path,
-            String::from("test-lc-tree"),
-            StoreConfig::default_cached_above_base_layer(leaves as usize, 8),
-        );
 
         for i in 0..5 {
             sectors.push(i.into());
-            let data: Vec<u8> = (0..leaves)
-                .flat_map(|_| fr_into_bytes(&Fr::random(rng)))
-                .collect();
-
-            let replica_path = temp_path.join(format!("replica-path-{}", i));
-            let mut f = File::create(&replica_path).unwrap();
-            f.write_all(&data).unwrap();
-
-            let cur_config = StoreConfig::from_config(&config, format!("test-lc-tree-{}", i), None);
-            let lctree = create_base_lcmerkle_tree::<
-                H,
-                <OctLCMerkleTree<H> as MerkleTreeTrait>::Arity,
-            >(cur_config.clone(), leaves, &data, &replica_path)
-            .unwrap();
-            trees.insert(i.into(), lctree);
+            let (_data, tree) =
+                generate_tree::<Tree, _>(rng, leaves, Some(temp_path.to_path_buf()));
+            trees.insert(i.into(), tree);
         }
 
-        let candidates = election::generate_candidates::<H>(
+        let candidates = election::generate_candidates::<Tree>(
             &pub_params,
             &sectors,
             &trees,
@@ -269,8 +247,8 @@ mod tests {
         let candidate = &candidates[0];
         let tree = trees.remove(&candidate.sector_id).unwrap();
         let comm_r_last = tree.root();
-        let comm_c = H::Domain::random(rng);
-        let comm_r = H::Function::hash2(&comm_c, &comm_r_last);
+        let comm_c = <Tree::Hasher as Hasher>::Domain::random(rng);
+        let comm_r = <Tree::Hasher as Hasher>::Function::hash2(&comm_c, &comm_r_last);
 
         let pub_inputs = election::PublicInputs {
             randomness,
@@ -281,16 +259,16 @@ mod tests {
             sector_challenge_index: 0,
         };
 
-        let priv_inputs = election::PrivateInputs::<H> {
+        let priv_inputs = election::PrivateInputs::<Tree> {
             tree,
             comm_c,
             comm_r_last,
         };
 
-        let proof = ElectionPoSt::<H>::prove(&pub_params, &pub_inputs, &priv_inputs)
+        let proof = ElectionPoSt::<Tree>::prove(&pub_params, &pub_inputs, &priv_inputs)
             .expect("proving failed");
 
-        let is_valid = ElectionPoSt::<H>::verify(&pub_params, &pub_inputs, &proof)
+        let is_valid = ElectionPoSt::<Tree>::verify(&pub_params, &pub_inputs, &proof)
             .expect("verification failed");
         assert!(is_valid);
 
@@ -314,7 +292,7 @@ mod tests {
 
         let mut cs = TestConstraintSystem::<Bls12>::new();
 
-        let instance = ElectionPoStCircuit::<H> {
+        let instance = ElectionPoStCircuit::<Tree> {
             leafs,
             paths,
             comm_r: Some(comm_r.into()),
@@ -324,7 +302,7 @@ mod tests {
             randomness: Some(randomness.into()),
             prover_id: Some(prover_id.into()),
             sector_id: Some(candidate.sector_id.into()),
-            _h: PhantomData,
+            _t: PhantomData,
         };
 
         instance
@@ -342,7 +320,7 @@ mod tests {
         assert_eq!(cs.get_input(0, "ONE"), Fr::one());
 
         let generated_inputs =
-            ElectionPoStCompound::<H>::generate_public_inputs(&pub_inputs, &pub_params, None)
+            ElectionPoStCompound::<Tree>::generate_public_inputs(&pub_inputs, &pub_params, None)
                 .unwrap();
         let expected_inputs = cs.get_inputs();
 

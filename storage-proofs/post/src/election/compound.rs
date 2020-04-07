@@ -11,7 +11,7 @@ use storage_proofs_core::{
     error::Result,
     gadgets::por::PoRCompound,
     hasher::Hasher,
-    merkle::{DiskStore, MerkleTreeWrapper},
+    merkle::MerkleTreeTrait,
     parameter_cache::{CacheableParameters, ParameterSetMetadata},
     por,
     proof::ProofScheme,
@@ -20,29 +20,29 @@ use storage_proofs_core::{
 
 use crate::election::{self, ElectionPoSt, ElectionPoStCircuit};
 
-pub struct ElectionPoStCompound<H>
+pub struct ElectionPoStCompound<Tree>
 where
-    H: Hasher,
+    Tree: MerkleTreeTrait,
 {
-    _h: PhantomData<H>,
+    _t: PhantomData<Tree>,
 }
 
-impl<C: Circuit<Bls12>, P: ParameterSetMetadata, H: Hasher> CacheableParameters<C, P>
-    for ElectionPoStCompound<H>
+impl<C: Circuit<Bls12>, P: ParameterSetMetadata, Tree: MerkleTreeTrait> CacheableParameters<C, P>
+    for ElectionPoStCompound<Tree>
 {
     fn cache_prefix() -> String {
-        format!("proof-of-spacetime-election-{}", H::name())
+        format!("proof-of-spacetime-election-{}", Tree::display())
     }
 }
 
-impl<'a, H> CompoundProof<'a, ElectionPoSt<'a, H>, ElectionPoStCircuit<H>>
-    for ElectionPoStCompound<H>
+impl<'a, Tree> CompoundProof<'a, ElectionPoSt<'a, Tree>, ElectionPoStCircuit<Tree>>
+    for ElectionPoStCompound<Tree>
 where
-    H: 'static + Hasher,
+    Tree: 'static + MerkleTreeTrait,
 {
     fn generate_public_inputs(
-        pub_inputs: &<ElectionPoSt<'a, H> as ProofScheme<'a>>::PublicInputs,
-        pub_params: &<ElectionPoSt<'a, H> as ProofScheme<'a>>::PublicParams,
+        pub_inputs: &<ElectionPoSt<'a, Tree> as ProofScheme<'a>>::PublicInputs,
+        pub_params: &<ElectionPoSt<'a, Tree> as ProofScheme<'a>>::PublicParams,
         _partition_k: Option<usize>,
     ) -> Result<Vec<Fr>> {
         let mut inputs = Vec::new();
@@ -70,16 +70,10 @@ where
                     commitment: None,
                     challenge: challenged_leaf_start as usize + i,
                 };
-                let por_inputs = PoRCompound::<
-                    MerkleTreeWrapper<
-                        H,
-                        DiskStore<H::Domain>,
-                        typenum::U8,
-                        typenum::U0,
-                        typenum::U0,
-                    >,
-                >::generate_public_inputs(
-                    &por_pub_inputs, &por_pub_params, None
+                let por_inputs = PoRCompound::<Tree>::generate_public_inputs(
+                    &por_pub_inputs,
+                    &por_pub_params,
+                    None,
                 )?;
 
                 inputs.extend(por_inputs);
@@ -93,12 +87,12 @@ where
     }
 
     fn circuit(
-        pub_in: &<ElectionPoSt<'a, H> as ProofScheme<'a>>::PublicInputs,
-        _priv_in: <ElectionPoStCircuit<H> as CircuitComponent>::ComponentPrivateInputs,
-        vanilla_proof: &<ElectionPoSt<'a, H> as ProofScheme<'a>>::Proof,
-        _pub_params: &<ElectionPoSt<'a, H> as ProofScheme<'a>>::PublicParams,
+        pub_in: &<ElectionPoSt<'a, Tree> as ProofScheme<'a>>::PublicInputs,
+        _priv_in: <ElectionPoStCircuit<Tree> as CircuitComponent>::ComponentPrivateInputs,
+        vanilla_proof: &<ElectionPoSt<'a, Tree> as ProofScheme<'a>>::Proof,
+        _pub_params: &<ElectionPoSt<'a, Tree> as ProofScheme<'a>>::PublicParams,
         _partition_k: Option<usize>,
-    ) -> Result<ElectionPoStCircuit<H>> {
+    ) -> Result<ElectionPoStCircuit<Tree>> {
         let comm_r = pub_in.comm_r.into();
         let comm_c = vanilla_proof.comm_c.into();
         let comm_r_last = vanilla_proof.comm_r_last().into();
@@ -134,20 +128,20 @@ where
             randomness: Some(pub_in.randomness.into()),
             prover_id: Some(pub_in.prover_id.into()),
             sector_id: Some(pub_in.sector_id.into()),
-            _h: PhantomData,
+            _t: PhantomData,
         })
     }
 
     fn blank_circuit(
-        pub_params: &<ElectionPoSt<'a, H> as ProofScheme<'a>>::PublicParams,
-    ) -> ElectionPoStCircuit<H> {
+        pub_params: &<ElectionPoSt<'a, Tree> as ProofScheme<'a>>::PublicParams,
+    ) -> ElectionPoStCircuit<Tree> {
         let challenges_count = pub_params.challenged_nodes * pub_params.challenge_count;
         let height =
-            drgraph::graph_height::<typenum::U8>(pub_params.sector_size as usize / NODE_SIZE);
+            drgraph::graph_height::<Tree::Arity>(pub_params.sector_size as usize / NODE_SIZE);
 
         let leafs = vec![None; challenges_count];
         let paths = vec![
-            vec![(vec![None; typenum::U8::to_usize() - 1], None); height - 1];
+            vec![(vec![None; Tree::Arity::to_usize() - 1], None); height - 1];
             challenges_count
         ];
 
@@ -161,7 +155,7 @@ where
             randomness: None,
             prover_id: None,
             sector_id: None,
-            _h: PhantomData,
+            _t: PhantomData,
         }
     }
 }
@@ -172,8 +166,6 @@ mod tests {
 
     use std::collections::BTreeMap;
 
-    use ff::Field;
-    use merkletree::store::StoreConfig;
     use rand::SeedableRng;
     use rand_xorshift::XorShiftRng;
 
@@ -182,7 +174,7 @@ mod tests {
         fr32::fr_into_bytes,
         gadgets::{MetricCS, TestConstraintSystem},
         hasher::{Domain, HashFunction, Hasher, PedersenHasher, PoseidonHasher},
-        merkle::{create_base_lcmerkle_tree, MerkleTreeTrait, OctLCMerkleTree},
+        merkle::{generate_tree, get_base_tree_count, MerkleTreeTrait, OctLCMerkleTree},
         proof::NoRequirements,
         sector::SectorId,
     };
@@ -192,25 +184,22 @@ mod tests {
     #[ignore] // Slow test – run only when compiled for release.
     #[test]
     fn election_post_test_compound_pedersen() {
-        election_post_test_compound::<PedersenHasher>();
+        election_post_test_compound::<OctLCMerkleTree<PedersenHasher>>();
     }
 
     #[ignore] // Slow test – run only when compiled for release.
     #[test]
     fn election_post_test_compound_poseidon() {
-        election_post_test_compound::<PoseidonHasher>();
+        election_post_test_compound::<OctLCMerkleTree<PoseidonHasher>>();
     }
 
-    fn election_post_test_compound<H: 'static + Hasher>() {
-        use std::fs::File;
-        use std::io::prelude::*;
-
+    fn election_post_test_compound<Tree: 'static + MerkleTreeTrait>() {
         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
 
-        let leaves = 64;
+        let leaves = 32 * get_base_tree_count::<Tree>();
         let sector_size = (leaves * NODE_SIZE) as u64;
-        let randomness = H::Domain::random(rng);
-        let prover_id = H::Domain::random(rng);
+        let randomness = <Tree::Hasher as Hasher>::Domain::random(rng);
+        let prover_id = <Tree::Hasher as Hasher>::Domain::random(rng);
 
         let setup_params = compound_proof::SetupParams {
             vanilla_params: election::SetupParams {
@@ -225,37 +214,20 @@ mod tests {
         let mut sectors: Vec<SectorId> = Vec::new();
         let mut trees = BTreeMap::new();
 
-        // Construct and store an MT using a named DiskStore.
-        let temp_dir = tempdir::TempDir::new("level_cache_tree").unwrap();
+        // Construct and store an MT using a named store.
+        let temp_dir = tempdir::TempDir::new("tree").unwrap();
         let temp_path = temp_dir.path();
-        let config = StoreConfig::new(
-            &temp_path,
-            String::from("test-lc-tree"),
-            StoreConfig::default_cached_above_base_layer(leaves as usize, 8),
-        );
 
         for i in 0..5 {
             sectors.push(i.into());
-            let data: Vec<u8> = (0..leaves)
-                .flat_map(|_| fr_into_bytes(&Fr::random(rng)))
-                .collect();
-
-            let replica_path = temp_path.join(format!("replica-path-{}", i));
-            let mut f = File::create(&replica_path).unwrap();
-            f.write_all(&data).unwrap();
-
-            let cur_config = StoreConfig::from_config(&config, format!("test-lc-tree-{}", i), None);
-            let lctree = create_base_lcmerkle_tree::<
-                H,
-                <OctLCMerkleTree<H> as MerkleTreeTrait>::Arity,
-            >(cur_config.clone(), leaves, &data, &replica_path)
-            .unwrap();
-            trees.insert(i.into(), lctree);
+            let (_data1, tree) =
+                generate_tree::<Tree, _>(rng, leaves, Some(temp_path.to_path_buf()));
+            trees.insert(i.into(), tree);
         }
 
-        let pub_params = ElectionPoStCompound::<H>::setup(&setup_params).expect("setup failed");
+        let pub_params = ElectionPoStCompound::<Tree>::setup(&setup_params).expect("setup failed");
 
-        let candidates = election::generate_candidates::<H>(
+        let candidates = election::generate_candidates::<Tree>(
             &pub_params.vanilla_params,
             &sectors,
             &trees,
@@ -267,8 +239,8 @@ mod tests {
         let candidate = &candidates[0];
         let tree = trees.remove(&candidate.sector_id).unwrap();
         let comm_r_last = tree.root();
-        let comm_c = H::Domain::random(rng);
-        let comm_r = H::Function::hash2(&comm_c, &comm_r_last);
+        let comm_c = <Tree::Hasher as Hasher>::Domain::random(rng);
+        let comm_r = <Tree::Hasher as Hasher>::Function::hash2(&comm_c, &comm_r_last);
 
         let pub_inputs = election::PublicInputs {
             randomness,
@@ -279,7 +251,7 @@ mod tests {
             sector_challenge_index: 0,
         };
 
-        let priv_inputs = election::PrivateInputs::<H> {
+        let priv_inputs = election::PrivateInputs::<Tree> {
             tree,
             comm_c,
             comm_r_last,
@@ -312,7 +284,7 @@ mod tests {
                 ElectionPoStCompound::circuit_for_test(&pub_params, &pub_inputs, &priv_inputs)
                     .unwrap();
             let blank_circuit =
-                ElectionPoStCompound::<H>::blank_circuit(&pub_params.vanilla_params);
+                ElectionPoStCompound::<Tree>::blank_circuit(&pub_params.vanilla_params);
 
             let mut cs_blank = MetricCS::new();
             blank_circuit
@@ -330,7 +302,7 @@ mod tests {
             }
         }
         let blank_groth_params =
-            ElectionPoStCompound::<H>::groth_params(Some(rng), &pub_params.vanilla_params)
+            ElectionPoStCompound::<Tree>::groth_params(Some(rng), &pub_params.vanilla_params)
                 .expect("failed to generate groth params");
 
         let proof = ElectionPoStCompound::prove(

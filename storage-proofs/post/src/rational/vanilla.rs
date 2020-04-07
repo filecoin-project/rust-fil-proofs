@@ -81,7 +81,6 @@ pub struct Proof<P: MerkleProofTrait> {
     ))]
     inclusion_proofs: Vec<MerkleProof<P::Hasher, P::Arity, P::SubTreeArity, P::TopTreeArity>>,
     pub comm_cs: Vec<<P::Hasher as Hasher>::Domain>,
-    //pub comm_r_last: <P::Hasher as Hasher>::Domain,
 }
 
 impl<P: MerkleProofTrait> Proof<P> {
