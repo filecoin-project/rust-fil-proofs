@@ -4,7 +4,6 @@ use bellperson::{Circuit, ConstraintSystem, SynthesisError};
 use criterion::{
     black_box, criterion_group, criterion_main, Criterion, ParameterizedBenchmark, Throughput,
 };
-use fil_sapling_crypto::jubjub::JubjubEngine;
 use paired::bls12_381::Bls12;
 use rand::{thread_rng, Rng};
 use storage_proofs::gadgets::BenchCS;
@@ -15,11 +14,8 @@ struct Sha256Example<'a> {
     data: &'a [Option<bool>],
 }
 
-impl<'a, E> Circuit<E> for Sha256Example<'a>
-where
-    E: JubjubEngine,
-{
-    fn synthesize<CS: ConstraintSystem<E>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
+impl<'a> Circuit<Bls12> for Sha256Example<'a> {
+    fn synthesize<CS: ConstraintSystem<Bls12>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
         let data: Vec<Boolean> = self
             .data
             .into_iter()

@@ -2,45 +2,44 @@ use std::marker::PhantomData;
 
 use anyhow::ensure;
 use bellperson::{Circuit, ConstraintSystem, SynthesisError};
-use fil_sapling_crypto::jubjub::JubjubEngine;
 use generic_array::typenum;
 use paired::bls12_381::{Bls12, Fr};
 
 use crate::compound_proof::{CircuitComponent, CompoundProof};
-use crate::crypto::pedersen::JJ_PARAMS;
 use crate::drgraph;
 use crate::error::Result;
 use crate::gadgets::por::PoRCompound;
-use crate::hasher::{Hasher, PoseidonArity, PoseidonEngine};
+use crate::merkle::MerkleTreeTrait;
 use crate::parameter_cache::{CacheableParameters, ParameterSetMetadata};
 use crate::por;
 use crate::post::rational::{RationalPoSt, RationalPoStCircuit};
 use crate::proof::ProofScheme;
 use crate::util::NODE_SIZE;
 
-pub struct RationalPoStCompound<H>
+pub struct RationalPoStCompound<Tree>
 where
-    H: Hasher,
+    Tree: MerkleTreeTrait,
 {
-    _h: PhantomData<H>,
+    _t: PhantomData<Tree>,
 }
 
-impl<E: JubjubEngine, C: Circuit<E>, P: ParameterSetMetadata, H: Hasher>
-    CacheableParameters<E, C, P> for RationalPoStCompound<H>
+impl<C: Circuit<Bls12>, P: ParameterSetMetadata, Tree: MerkleTreeTrait> CacheableParameters<C, P>
+    for RationalPoStCompound<Tree>
 {
     fn cache_prefix() -> String {
-        format!("proof-of-spacetime-rational-{}", H::name())
+        format!("proof-of-spacetime-rational-{}", Tree::display())
     }
 }
 
-impl<'a, H> CompoundProof<'a, Bls12, RationalPoSt<'a, H>, RationalPoStCircuit<'a, Bls12, H>>
-    for RationalPoStCompound<H>
+impl<'a, Tree: 'static + MerkleTreeTrait>
+    CompoundProof<'a, RationalPoSt<'a, Tree>, RationalPoStCircuit<Tree>>
+    for RationalPoStCompound<Tree>
 where
-    H: 'a + Hasher,
+    Tree: 'static + MerkleTreeTrait,
 {
     fn generate_public_inputs(
-        pub_in: &<RationalPoSt<'a, H> as ProofScheme<'a>>::PublicInputs,
-        pub_params: &<RationalPoSt<'a, H> as ProofScheme<'a>>::PublicParams,
+        pub_in: &<RationalPoSt<'a, Tree> as ProofScheme<'a>>::PublicInputs,
+        pub_params: &<RationalPoSt<'a, Tree> as ProofScheme<'a>>::PublicParams,
         _partition_k: Option<usize>,
     ) -> Result<Vec<Fr>> {
         let mut inputs = Vec::new();
@@ -62,7 +61,7 @@ where
                 commitment: None,
                 challenge: challenge.leaf as usize,
             };
-            let por_inputs = PoRCompound::<H, typenum::U2>::generate_public_inputs(
+            let por_inputs = PoRCompound::<Tree>::generate_public_inputs(
                 &por_pub_inputs,
                 &por_pub_params,
                 None,
@@ -75,12 +74,12 @@ where
     }
 
     fn circuit(
-        pub_in: &<RationalPoSt<'a, H> as ProofScheme<'a>>::PublicInputs,
-        _priv_in: <RationalPoStCircuit<'a, Bls12, H> as CircuitComponent>::ComponentPrivateInputs,
-        vanilla_proof: &<RationalPoSt<'a, H> as ProofScheme<'a>>::Proof,
-        _pub_params: &<RationalPoSt<'a, H> as ProofScheme<'a>>::PublicParams,
+        pub_in: &<RationalPoSt<'a, Tree> as ProofScheme<'a>>::PublicInputs,
+        _priv_in: <RationalPoStCircuit<Tree> as CircuitComponent>::ComponentPrivateInputs,
+        vanilla_proof: &<RationalPoSt<'a, Tree> as ProofScheme<'a>>::Proof,
+        _pub_params: &<RationalPoSt<'a, Tree> as ProofScheme<'a>>::PublicParams,
         _partition_k: Option<usize>,
-    ) -> Result<RationalPoStCircuit<'a, Bls12, H>> {
+    ) -> Result<RationalPoStCircuit<Tree>> {
         let comm_rs: Vec<_> = pub_in.comm_rs.iter().map(|c| Some((*c).into())).collect();
         let comm_cs: Vec<_> = vanilla_proof
             .comm_cs
@@ -91,7 +90,7 @@ where
         let comm_r_lasts: Vec<_> = vanilla_proof
             .commitments()
             .into_iter()
-            .map(|c| Some((*c).into()))
+            .map(|c| Some(c.into()))
             .collect();
 
         let leafs: Vec<_> = vanilla_proof
@@ -116,19 +115,18 @@ where
             .collect();
 
         Ok(RationalPoStCircuit {
-            params: &*JJ_PARAMS,
             leafs,
             comm_rs,
             comm_cs,
             comm_r_lasts,
             paths,
-            _h: PhantomData,
+            _t: PhantomData,
         })
     }
 
     fn blank_circuit(
-        pub_params: &<RationalPoSt<'a, H> as ProofScheme<'a>>::PublicParams,
-    ) -> RationalPoStCircuit<'a, Bls12, H> {
+        pub_params: &<RationalPoSt<'a, Tree> as ProofScheme<'a>>::PublicParams,
+    ) -> RationalPoStCircuit<Tree> {
         let challenges_count = pub_params.challenges_count;
         let height =
             drgraph::graph_height::<typenum::U2>(pub_params.sector_size as usize / NODE_SIZE);
@@ -140,39 +138,33 @@ where
         let paths = vec![vec![(vec![None; 1], None); height - 1]; challenges_count];
 
         RationalPoStCircuit {
-            params: &*JJ_PARAMS,
             comm_rs,
             comm_cs,
             comm_r_lasts,
             leafs,
             paths,
-            _h: PhantomData,
+            _t: PhantomData,
         }
     }
 }
 
-impl<'a, E: JubjubEngine + PoseidonEngine<typenum::U2>, H: Hasher> RationalPoStCircuit<'a, E, H>
-where
-    typenum::U2: PoseidonArity<E>,
-{
+impl<'a, Tree: 'static + MerkleTreeTrait> RationalPoStCircuit<Tree> {
     #[allow(clippy::type_complexity)]
-    pub fn synthesize<CS: ConstraintSystem<E>>(
+    pub fn synthesize<CS: ConstraintSystem<Bls12>>(
         cs: &mut CS,
-        params: &'a E::Params,
-        leafs: Vec<Option<E::Fr>>,
-        comm_rs: Vec<Option<E::Fr>>,
-        comm_cs: Vec<Option<E::Fr>>,
-        comm_r_lasts: Vec<Option<E::Fr>>,
-        paths: Vec<Vec<(Vec<Option<E::Fr>>, Option<usize>)>>,
+        leafs: Vec<Option<Fr>>,
+        comm_rs: Vec<Option<Fr>>,
+        comm_cs: Vec<Option<Fr>>,
+        comm_r_lasts: Vec<Option<Fr>>,
+        paths: Vec<Vec<(Vec<Option<Fr>>, Option<usize>)>>,
     ) -> Result<(), SynthesisError> {
         Self {
-            params,
             leafs,
             comm_rs,
             comm_cs,
             comm_r_lasts,
             paths,
-            _h: PhantomData,
+            _t: PhantomData,
         }
         .synthesize(cs)
     }
@@ -184,15 +176,13 @@ mod tests {
 
     use std::collections::BTreeMap;
 
-    use ff::Field;
     use rand::{Rng, SeedableRng};
     use rand_xorshift::XorShiftRng;
 
     use crate::compound_proof;
-    use crate::drgraph::{new_seed, BucketGraph, Graph, BASE_DEGREE};
-    use crate::fr32::fr_into_bytes;
     use crate::gadgets::TestConstraintSystem;
     use crate::hasher::{Domain, HashFunction, Hasher, PedersenHasher, PoseidonHasher};
+    use crate::merkle::{generate_tree, get_base_tree_count, BinaryMerkleTree};
     use crate::post::rational::{self, derive_challenges};
     use crate::proof::NoRequirements;
     use crate::sector::OrderedSectorSet;
@@ -200,19 +190,19 @@ mod tests {
     #[ignore] // Slow test – run only when compiled for release.
     #[test]
     fn rational_post_test_compound_pedersen() {
-        rational_post_test_compound::<PedersenHasher>();
+        rational_post_test_compound::<BinaryMerkleTree<PedersenHasher>>();
     }
 
     #[ignore] // Slow test – run only when compiled for release.
     #[test]
     fn rational_post_test_compound_poseidon() {
-        rational_post_test_compound::<PoseidonHasher>();
+        rational_post_test_compound::<BinaryMerkleTree<PoseidonHasher>>();
     }
 
-    fn rational_post_test_compound<H: Hasher>() {
+    fn rational_post_test_compound<Tree: 'static + MerkleTreeTrait>() {
         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
 
-        let leaves = 32;
+        let leaves = 32 * get_base_tree_count::<Tree>();
         let sector_size = (leaves * NODE_SIZE) as u64;
         let challenges_count = 2;
 
@@ -225,24 +215,14 @@ mod tests {
             priority: true,
         };
 
-        let pub_params = RationalPoStCompound::<H>::setup(&setup_params).expect("setup failed");
+        let pub_params = RationalPoStCompound::<Tree>::setup(&setup_params).expect("setup failed");
 
-        let data1: Vec<u8> = (0..leaves)
-            .flat_map(|_| fr_into_bytes::<Bls12>(&Fr::random(rng)))
-            .collect();
-        let data2: Vec<u8> = (0..leaves)
-            .flat_map(|_| fr_into_bytes::<Bls12>(&Fr::random(rng)))
-            .collect();
+        // Construct and store an MT using a named DiskStore.
+        let temp_dir = tempdir::TempDir::new("tree").unwrap();
+        let temp_path = temp_dir.path();
 
-        let graph1 = BucketGraph::<H>::new(leaves, BASE_DEGREE, 0, new_seed()).unwrap();
-        let tree1 = graph1
-            .merkle_tree::<typenum::U2>(None, data1.as_slice())
-            .unwrap();
-
-        let graph2 = BucketGraph::<H>::new(leaves, BASE_DEGREE, 0, new_seed()).unwrap();
-        let tree2 = graph2
-            .merkle_tree::<typenum::U2>(None, data2.as_slice())
-            .unwrap();
+        let (_data1, tree1) = generate_tree::<Tree, _>(rng, leaves, Some(temp_path.to_path_buf()));
+        let (_data2, tree2) = generate_tree::<Tree, _>(rng, leaves, Some(temp_path.to_path_buf()));
 
         let faults = OrderedSectorSet::new();
         let mut sectors = OrderedSectorSet::new();
@@ -259,12 +239,17 @@ mod tests {
             .map(|c| comm_r_lasts_raw[u64::from(c.sector) as usize])
             .collect();
 
-        let comm_cs: Vec<H::Domain> = challenges.iter().map(|_c| H::Domain::random(rng)).collect();
+        let comm_cs: Vec<<Tree::Hasher as Hasher>::Domain> = challenges
+            .iter()
+            .map(|_c| <Tree::Hasher as Hasher>::Domain::random(rng))
+            .collect();
 
         let comm_rs: Vec<_> = comm_cs
             .iter()
             .zip(comm_r_lasts.iter())
-            .map(|(comm_c, comm_r_last)| H::Function::hash2(comm_c, comm_r_last))
+            .map(|(comm_c, comm_r_last)| {
+                <Tree::Hasher as Hasher>::Function::hash2(comm_c, comm_r_last)
+            })
             .collect();
 
         let pub_inputs = rational::PublicInputs {
@@ -277,22 +262,22 @@ mod tests {
         trees.insert(0.into(), &tree1);
         trees.insert(1.into(), &tree2);
 
-        let priv_inputs = rational::PrivateInputs::<H> {
+        let priv_inputs = rational::PrivateInputs::<Tree> {
             trees: &trees,
             comm_r_lasts: &comm_r_lasts,
             comm_cs: &comm_cs,
         };
 
         let gparams =
-            RationalPoStCompound::<H>::groth_params(Some(rng), &pub_params.vanilla_params)
+            RationalPoStCompound::<Tree>::groth_params(Some(rng), &pub_params.vanilla_params)
                 .expect("failed to create groth params");
 
         let proof =
-            RationalPoStCompound::<H>::prove(&pub_params, &pub_inputs, &priv_inputs, &gparams)
+            RationalPoStCompound::<Tree>::prove(&pub_params, &pub_inputs, &priv_inputs, &gparams)
                 .expect("proving failed");
 
         let (circuit, inputs) =
-            RationalPoStCompound::<H>::circuit_for_test(&pub_params, &pub_inputs, &priv_inputs)
+            RationalPoStCompound::<Tree>::circuit_for_test(&pub_params, &pub_inputs, &priv_inputs)
                 .unwrap();
 
         {
@@ -304,7 +289,7 @@ mod tests {
         }
 
         let verified =
-            RationalPoStCompound::<H>::verify(&pub_params, &pub_inputs, &proof, &NoRequirements)
+            RationalPoStCompound::<Tree>::verify(&pub_params, &pub_inputs, &proof, &NoRequirements)
                 .expect("failed while verifying");
 
         assert!(verified);

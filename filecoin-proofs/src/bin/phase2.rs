@@ -41,25 +41,23 @@ use std::time::{Duration, Instant};
 use clap::{App, AppSettings, Arg, ArgGroup, SubCommand};
 use filecoin_proofs::constants::*;
 use filecoin_proofs::parameters::{
-    election_post_public_params, setup_params, window_post_public_params,
-    winning_post_public_params,
+    setup_params, window_post_public_params, winning_post_public_params,
 };
 use filecoin_proofs::types::*;
+use filecoin_proofs::with_shape;
 use log::info;
-use paired::bls12_381::Bls12;
 use phase2::{verify_contribution, MPCParameters};
 use rand::SeedableRng;
 use simplelog::{self, CombinedLogger, LevelFilter, TermLogger, TerminalMode, WriteLogger};
 use storage_proofs::compound_proof::{self, CompoundProof};
-use storage_proofs::hasher::{/*PedersenHasher,*/ PoseidonHasher, Sha256Hasher};
+use storage_proofs::hasher::Sha256Hasher;
+use storage_proofs::merkle::MerkleTreeTrait;
 use storage_proofs::porep::stacked::{StackedCircuit, StackedCompound, StackedDrg};
-use storage_proofs::post::election::{ElectionPoSt, ElectionPoStCircuit, ElectionPoStCompound};
 use storage_proofs::post::fallback::{FallbackPoSt, FallbackPoStCircuit, FallbackPoStCompound};
 
 #[derive(Clone, Copy)]
 enum Proof {
     Porep,
-    ElectionPost,
     WinningPost,
     WindowPost,
 }
@@ -68,7 +66,6 @@ impl Display for Proof {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         let s = match self {
             Proof::Porep => "PoRep",
-            Proof::ElectionPost => "EPoSt",
             Proof::WinningPost => "WinningPoSt",
             Proof::WindowPost => "WindowPoSt",
         };
@@ -98,7 +95,7 @@ fn display_sector_size(sector_size: u64) -> String {
         SECTOR_SIZE_8_MIB => "8MiB".to_string(),
         SECTOR_SIZE_512_MIB => "512MiB".to_string(),
         SECTOR_SIZE_32_GIB => "32GiB".to_string(),
-        // SECTOR_SIZE_64_GIB => "64GiB".to_string(),
+        SECTOR_SIZE_64_GIB => "64GiB".to_string(),
         _ => unreachable!(),
     }
 }
@@ -144,7 +141,6 @@ fn parse_params_filename(path: &str) -> (Proof, Hasher, u64, String, usize) {
 
     let proof = match split[0] {
         "porep" => Proof::Porep,
-        "epost" => Proof::ElectionPost,
         "winning-post" => Proof::WinningPost,
         "window-post" => Proof::WindowPost,
         other => panic!("invalid proof id in filename: {}", other),
@@ -162,7 +158,7 @@ fn parse_params_filename(path: &str) -> (Proof, Hasher, u64, String, usize) {
         "8mib" => SECTOR_SIZE_8_MIB,
         "512mib" => SECTOR_SIZE_512_MIB,
         "32gib" => SECTOR_SIZE_32_GIB,
-        // "64gib" => SECTOR_SIZE_64_GIB,
+        "64gib" => SECTOR_SIZE_64_GIB,
         other => panic!("invalid sector-size id in filename: {}", other),
     };
 
@@ -174,9 +170,9 @@ fn parse_params_filename(path: &str) -> (Proof, Hasher, u64, String, usize) {
     (proof, hasher, sector_size, head, param_number)
 }
 
-fn blank_porep_poseidon_circuit(
+fn blank_porep_poseidon_circuit<Tree: MerkleTreeTrait>(
     sector_size: u64,
-) -> StackedCircuit<'static, Bls12, PoseidonHasher, Sha256Hasher> {
+) -> StackedCircuit<'static, Tree, Sha256Hasher> {
     let n_partitions = *POREP_PARTITIONS.read().unwrap().get(&sector_size).unwrap();
 
     let porep_config = PoRepConfig {
@@ -194,16 +190,14 @@ fn blank_porep_poseidon_circuit(
         priority: false,
     };
 
-    let public_params = <StackedCompound<PoseidonHasher, Sha256Hasher> as CompoundProof<
-        _,
-        StackedDrg<PoseidonHasher, Sha256Hasher>,
+    let public_params = <StackedCompound<Tree, Sha256Hasher> as CompoundProof<
+        StackedDrg<Tree, Sha256Hasher>,
         _,
     >>::setup(&setup_params)
     .unwrap();
 
-    <StackedCompound<PoseidonHasher, Sha256Hasher> as CompoundProof<
-        _,
-        StackedDrg<PoseidonHasher, Sha256Hasher>,
+    <StackedCompound<Tree, Sha256Hasher> as CompoundProof<
+        StackedDrg<Tree, Sha256Hasher>,
         _,
     >>::blank_circuit(&public_params.vanilla_params)
 }
@@ -211,7 +205,7 @@ fn blank_porep_poseidon_circuit(
 /*
 fn blank_porep_sha_pedersen_circuit(
     sector_size: u64,
-) -> StackedCircuit<'static, Bls12, PedersenHasher, Sha256Hasher> {
+) -> StackedCircuit<'static, PedersenHasher, Sha256Hasher> {
     let	n_partitions = *POREP_PARTITIONS.read().unwrap().get(&sector_size).unwrap();
 
     let porep_config = PoRepConfig {
@@ -243,50 +237,9 @@ fn blank_porep_sha_pedersen_circuit(
 }
 */
 
-fn blank_election_post_poseidon_circuit(
+fn blank_winning_post_poseidon_circuit<Tree: 'static + MerkleTreeTrait>(
     sector_size: u64,
-) -> ElectionPoStCircuit<'static, Bls12, PoseidonHasher> {
-    let post_config = PoStConfig {
-        sector_size: SectorSize(sector_size),
-        challenge_count: ELECTION_POST_CHALLENGE_COUNT,
-        sector_count: 1,
-        typ: PoStType::Election,
-        priority: false,
-    };
-
-    let public_params = election_post_public_params(&post_config).unwrap();
-
-    <ElectionPoStCompound<PoseidonHasher> as CompoundProof<
-        Bls12,
-        ElectionPoSt<PoseidonHasher>,
-        ElectionPoStCircuit<Bls12, PoseidonHasher>,
-    >>::blank_circuit(&public_params)
-}
-
-/*
-fn blank_election_post_sha_pedersen_circuit(
-    sector_size: u64,
-) -> ElectionPoStCircuit<'static, Bls12, PedersenHasher> {
-    let post_config = PoStConfig {
-        sector_size: SectorSize(sector_size),
-        challenge_count: POST_CHALLENGE_COUNT,
-        challenged_nodes: POST_CHALLENGED_NODES,
-        priority: false,
-    };
-
-    let public_params = post_public_params(post_config).unwrap();
-
-    <ElectionPoStCompound<PedersenHasher> as CompoundProof<
-        Bls12,
-        ElectionPoSt<PedersenHasher>,
-        ElectionPoStCircuit<Bls12, PedersenHasher>,
-    >>::blank_circuit(&public_params)
-}
-*/
-
-fn blank_winning_post_poseidon_circuit(
-    sector_size: u64,
-) -> FallbackPoStCircuit<'static, Bls12, PoseidonHasher> {
+) -> FallbackPoStCircuit<Tree> {
     let post_config = PoStConfig {
         sector_size: SectorSize(sector_size),
         challenge_count: WINNING_POST_CHALLENGE_COUNT,
@@ -295,18 +248,17 @@ fn blank_winning_post_poseidon_circuit(
         priority: false,
     };
 
-    let public_params = winning_post_public_params(&post_config).unwrap();
+    let public_params = winning_post_public_params::<Tree>(&post_config).unwrap();
 
-    <FallbackPoStCompound<PoseidonHasher> as CompoundProof<
-        Bls12,
-        FallbackPoSt<PoseidonHasher>,
-        FallbackPoStCircuit<Bls12, PoseidonHasher>,
+    <FallbackPoStCompound<Tree> as CompoundProof<
+        FallbackPoSt<Tree>,
+        FallbackPoStCircuit<Tree>,
     >>::blank_circuit(&public_params)
 }
 
-fn blank_window_post_poseidon_circuit(
+fn blank_window_post_poseidon_circuit<Tree: 'static + MerkleTreeTrait>(
     sector_size: u64,
-) -> FallbackPoStCircuit<'static, Bls12, PoseidonHasher> {
+) -> FallbackPoStCircuit<Tree> {
     let post_config = PoStConfig {
         sector_size: SectorSize(sector_size),
         challenge_count: WINDOW_POST_CHALLENGE_COUNT,
@@ -319,12 +271,11 @@ fn blank_window_post_poseidon_circuit(
         priority: false,
     };
 
-    let public_params = window_post_public_params(&post_config).unwrap();
+    let public_params = window_post_public_params::<Tree>(&post_config).unwrap();
 
-    <FallbackPoStCompound<PoseidonHasher> as CompoundProof<
-        Bls12,
-        FallbackPoSt<PoseidonHasher>,
-        FallbackPoStCircuit<Bls12, PoseidonHasher>,
+    <FallbackPoStCompound<Tree> as CompoundProof<
+        FallbackPoSt<Tree>,
+        FallbackPoStCircuit<Tree>,
     >>::blank_circuit(&public_params)
 }
 /*
@@ -332,7 +283,11 @@ fn blank_fallback_post_sha_pedersen_circuit(sector_size: u64) -> ... {}
 */
 
 /// Creates the first phase2 parameters for a circuit and writes them to a file.
-fn create_initial_params(proof: Proof, hasher: Hasher, sector_size: u64) {
+fn create_initial_params<Tree: 'static + MerkleTreeTrait>(
+    proof: Proof,
+    hasher: Hasher,
+    sector_size: u64,
+) {
     let start_total = Instant::now();
 
     info!(
@@ -353,7 +308,7 @@ fn create_initial_params(proof: Proof, hasher: Hasher, sector_size: u64) {
     let params = match (proof, hasher) {
         (Proof::Porep, Hasher::Poseidon) => {
             let start = Instant::now();
-            let circuit = blank_porep_poseidon_circuit(sector_size);
+            let circuit = blank_porep_poseidon_circuit::<Tree>(sector_size);
             dt_create_circuit = start.elapsed().as_secs();
             let start = Instant::now();
             let params = phase2::MPCParameters::new(circuit).unwrap();
@@ -371,28 +326,9 @@ fn create_initial_params(proof: Proof, hasher: Hasher, sector_size: u64) {
             params
         }
         */
-        (Proof::ElectionPost, Hasher::Poseidon) => {
-            let start = Instant::now();
-            let circuit = blank_election_post_poseidon_circuit(sector_size);
-            dt_create_circuit = start.elapsed().as_secs();
-            let start = Instant::now();
-            let params = phase2::MPCParameters::new(circuit).unwrap();
-            dt_create_params = start.elapsed().as_secs();
-            params
-        } /*
-        (Proof::ElectionPost, Hasher::ShaPedersen) => {
-        let start = Instant::now();
-        let circuit = blank_post_sha_pedersen_circuit(sector_size);
-        dt_create_circuit = start.elapsed().as_secs();
-        let start = Instant::now();
-        let params = phase2::MPCParameters::new(circuit).unwrap();
-        dt_create_params = start.elapsed().as_secs();
-        params
-        }
-         */
         (Proof::WinningPost, Hasher::Poseidon) => {
             let start = Instant::now();
-            let circuit = blank_winning_post_poseidon_circuit(sector_size);
+            let circuit = blank_winning_post_poseidon_circuit::<Tree>(sector_size);
             dt_create_circuit = start.elapsed().as_secs();
             let start = Instant::now();
             let params = phase2::MPCParameters::new(circuit).unwrap();
@@ -401,7 +337,7 @@ fn create_initial_params(proof: Proof, hasher: Hasher, sector_size: u64) {
         }
         (Proof::WindowPost, Hasher::Poseidon) => {
             let start = Instant::now();
-            let circuit = blank_window_post_poseidon_circuit(sector_size);
+            let circuit = blank_window_post_poseidon_circuit::<Tree>(sector_size);
             dt_create_circuit = start.elapsed().as_secs();
             let start = Instant::now();
             let params = phase2::MPCParameters::new(circuit).unwrap();
@@ -842,11 +778,6 @@ fn main() {
                 .help("Generate PoRep parameters"),
         )
         .arg(
-            Arg::with_name("election-post")
-                .long("epost")
-                .help("Generate ElectionPoSt parameters"),
-        )
-        .arg(
             Arg::with_name("winning-post")
                 .long("winning-post")
                 .help("Generate WinningPoSt parameters"),
@@ -858,7 +789,7 @@ fn main() {
         )
         .group(
             ArgGroup::with_name("proof")
-                .args(&["porep", "election-post", "winning-post", "window-post"])
+                .args(&["porep", "winning-post", "window-post"])
                 .required(true)
                 .multiple(false),
         )
@@ -903,17 +834,14 @@ fn main() {
                 .long("32gib")
                 .help("Use circuits with 32GiB sector sizes"),
         )
-        /*
         .arg(
             Arg::with_name("64gib")
                 .long("64gib")
                 .help("Use circuits with 64GiB sector sizes"),
         )
-        */
         .group(
             ArgGroup::with_name("sector-size")
-                .args(&["2kib", "8mib", "512mib", "32gib"])
-                // .args(&["2kib", "8mib", "512mib", "32gib", "64gib"])
+                .args(&["2kib", "8mib", "512mib", "32gib", "64gib"])
                 .required(true)
                 .multiple(false),
         );
@@ -963,11 +891,6 @@ fn main() {
                 .help("Generate PoRep parameters"),
         )
         .arg(
-            Arg::with_name("election-post")
-                .long("epost")
-                .help("Generate ElectionPoSt parameters"),
-        )
-        .arg(
             Arg::with_name("winning-post")
                 .long("winning-post")
                 .help("Generate WinningPoSt parameters"),
@@ -979,7 +902,7 @@ fn main() {
         )
         .group(
             ArgGroup::with_name("proof")
-                .args(&["porep", "election-post", "winning-post", "window-post"])
+                .args(&["porep", "winning-post", "window-post"])
                 .required(true)
                 .multiple(false),
         )
@@ -1024,17 +947,14 @@ fn main() {
                 .long("32gib")
                 .help("Use circuits with 32GiB sector sizes"),
         )
-        /*
         .arg(
             Arg::with_name("64gib")
                 .long("64gib")
                 .help("Use circuits with 64GiB sector sizes"),
         )
-        */
         .group(
             ArgGroup::with_name("sector-size")
-                .args(&["2kib", "8mib", "512mib", "32gib"])
-                // .args(&["2kib", "8mib", "512mib", "32gib", "64gib"])
+                .args(&["2kib", "8mib", "512mib", "32gib", "64gib"])
                 .required(true)
                 .multiple(false),
         );
@@ -1054,8 +974,6 @@ fn main() {
             "new" => {
                 let proof = if matches.is_present("porep") {
                     Proof::Porep
-                } else if matches.is_present("election-post") {
-                    Proof::ElectionPost
                 } else if matches.is_present("winning-post") {
                     Proof::WinningPost
                 } else {
@@ -1078,26 +996,20 @@ fn main() {
                     SECTOR_SIZE_8_MIB
                 } else if matches.is_present("512mib") {
                     SECTOR_SIZE_512_MIB
-                } else {
-                    SECTOR_SIZE_32_GIB
-                };
-
-                /*
-                let sector_size = if matches.is_present("2kib") {
-                    SECTOR_SIZE_2_KIB
-                } else if matches.is_present("8mib") {
-                    SECTOR_SIZE_8_MIB
-                } else if matches.is_present("512mib") {
-                    SECTOR_SIZE_512_MIB
                 } else if matches.is_present("32gib") {
                     SECTOR_SIZE_32_GIB
                 } else {
                     SECTOR_SIZE_64_GIB
                 };
-                */
 
                 setup_new_logger(proof, hasher, sector_size);
-                create_initial_params(proof, hasher, sector_size);
+                with_shape!(
+                    sector_size,
+                    create_initial_params,
+                    proof,
+                    hasher,
+                    sector_size
+                );
             }
             "contribute" => {
                 let path_before = matches.value_of("path-before").unwrap();
@@ -1126,8 +1038,6 @@ fn main() {
             "verifyd" => {
                 let proof = if matches.is_present("porep") {
                     Proof::Porep
-                } else if matches.is_present("election-post") {
-                    Proof::ElectionPost
                 } else if matches.is_present("winning-post") {
                     Proof::WinningPost
                 } else {
@@ -1150,23 +1060,11 @@ fn main() {
                     SECTOR_SIZE_8_MIB
                 } else if matches.is_present("512mib") {
                     SECTOR_SIZE_512_MIB
-                } else {
-                    SECTOR_SIZE_32_GIB
-                };
-
-                /*
-                let sector_size = if matches.is_present("2kib") {
-                    SECTOR_SIZE_2_KIB
-                } else if matches.is_present("8mib") {
-                    SECTOR_SIZE_8_MIB
-                } else if matches.is_present("512mib") {
-                    SECTOR_SIZE_512_MIB
                 } else if matches.is_present("32gib") {
                     SECTOR_SIZE_32_GIB
                 } else {
                     SECTOR_SIZE_64_GIB
                 };
-                */
 
                 setup_verifyd_logger(proof, hasher, sector_size);
                 verify_param_transistions_daemon(proof, hasher, sector_size);

@@ -115,11 +115,11 @@ mod tests {
         .unwrap();
 
         let id_fr = Fr::random(rng);
-        let id: Vec<u8> = fr_into_bytes::<Bls12>(&id_fr);
+        let id: Vec<u8> = fr_into_bytes(&id_fr);
         let node = 22;
 
         let mut data: Vec<u8> = (0..2 * size)
-            .flat_map(|_| fr_into_bytes::<Bls12>(&Fr::random(rng)))
+            .flat_map(|_| fr_into_bytes(&Fr::random(rng)))
             .collect();
 
         let mut parents = vec![0; BASE_DEGREE + EXP_DEGREE];
@@ -179,7 +179,7 @@ mod tests {
         super::super::super::vanilla::create_label_exp(&graph, &id_fr.into(), &*l2, l1, node)
             .unwrap();
         let expected_raw = data_at_node(&l1, node).unwrap();
-        let expected = bytes_into_fr::<Bls12>(expected_raw).unwrap();
+        let expected = bytes_into_fr(expected_raw).unwrap();
 
         assert_eq!(
             expected,

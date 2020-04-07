@@ -1,35 +1,25 @@
+use anyhow::ensure;
+use serde::{Deserialize, Serialize};
 use std::marker::PhantomData;
 
-use anyhow::ensure;
-use generic_array::typenum;
-use serde::{Deserialize, Serialize};
-
-use crate::drgraph::graph_height;
 use crate::error::*;
 use crate::hasher::{Domain, Hasher};
-use crate::merkle::{MerkleProof, MerkleTree};
+use crate::merkle::{MerkleProofTrait, MerkleTreeTrait};
 use crate::parameter_cache::ParameterSetMetadata;
 use crate::proof::{NoRequirements, ProofScheme};
 
-#[derive(Clone, Serialize, Deserialize)]
-pub struct DataProof<H: Hasher, U: typenum::Unsigned> {
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DataProof<Proof: MerkleProofTrait> {
     #[serde(bound(
-        serialize = "MerkleProof<H, U>: Serialize",
-        deserialize = "MerkleProof<H, U>: Deserialize<'de>"
+        serialize = "<Proof::Hasher as Hasher>::Domain: Serialize",
+        deserialize = "<Proof::Hasher as Hasher>::Domain: Deserialize<'de>"
     ))]
-    pub proof: MerkleProof<H, U>,
-    pub data: H::Domain,
-}
-
-impl<H: Hasher, U: typenum::Unsigned> std::fmt::Debug for DataProof<H, U> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("MerkleProof")
-            .field("proof", &self.proof)
-            .field("data", &self.data)
-            .field("H", &H::name())
-            .field("U", &U::to_usize())
-            .finish()
-    }
+    pub proof: Proof,
+    #[serde(bound(
+        serialize = "<Proof::Hasher as Hasher>::Domain: Serialize",
+        deserialize = "<Proof::Hasher as Hasher>::Domain: Deserialize<'de>"
+    ))]
+    pub data: <Proof::Hasher as Hasher>::Domain,
 }
 
 /// The parameters shared between the prover and verifier.
@@ -64,21 +54,16 @@ pub struct PublicInputs<T: Domain> {
 
 /// The inputs that are only available to the prover.
 #[derive(Debug)]
-pub struct PrivateInputs<'a, H: 'a + Hasher, U: typenum::Unsigned> {
+pub struct PrivateInputs<'a, Tree: 'a + MerkleTreeTrait> {
     /// The data of the leaf.
-    pub leaf: H::Domain,
+    pub leaf: <Tree::Hasher as Hasher>::Domain,
     /// The underlying merkle tree.
-    pub tree: &'a MerkleTree<H::Domain, H::Function, U>,
-    _h: PhantomData<H>,
+    pub tree: &'a Tree,
 }
 
-impl<'a, H: Hasher, U: typenum::Unsigned> PrivateInputs<'a, H, U> {
-    pub fn new(leaf: H::Domain, tree: &'a MerkleTree<H::Domain, H::Function, U>) -> Self {
-        PrivateInputs {
-            leaf,
-            tree,
-            _h: PhantomData,
-        }
+impl<'a, Tree: MerkleTreeTrait> PrivateInputs<'a, Tree> {
+    pub fn new(leaf: <Tree::Hasher as Hasher>::Domain, tree: &'a Tree) -> Self {
+        PrivateInputs { leaf, tree }
     }
 }
 
@@ -90,19 +75,16 @@ pub struct SetupParams {
 
 /// Merkle tree based proof of retrievability.
 #[derive(Debug, Default)]
-pub struct PoR<H: Hasher, U: typenum::Unsigned> {
-    _h: PhantomData<H>,
-    _u: PhantomData<U>,
+pub struct PoR<Tree: MerkleTreeTrait> {
+    _tree: PhantomData<Tree>,
 }
 
-impl<'a, H: 'a + Hasher, U: 'a + typenum::Unsigned + Sync + Send + Clone> ProofScheme<'a>
-    for PoR<H, U>
-{
+impl<'a, Tree: 'a + MerkleTreeTrait> ProofScheme<'a> for PoR<Tree> {
     type PublicParams = PublicParams;
     type SetupParams = SetupParams;
-    type PublicInputs = PublicInputs<H::Domain>;
-    type PrivateInputs = PrivateInputs<'a, H, U>;
-    type Proof = DataProof<H, U>;
+    type PublicInputs = PublicInputs<<Tree::Hasher as Hasher>::Domain>;
+    type PrivateInputs = PrivateInputs<'a, Tree>;
+    type Proof = DataProof<Tree::Proof>;
     type Requirements = NoRequirements;
 
     fn setup(sp: &SetupParams) -> Result<PublicParams> {
@@ -125,9 +107,8 @@ impl<'a, H: 'a + Hasher, U: 'a + typenum::Unsigned + Sync + Send + Clone> ProofS
             ensure!(commitment == &tree.root(), Error::InvalidCommitment);
         }
         let proof = tree.gen_proof(challenge)?;
-
-        Ok(DataProof {
-            proof: MerkleProof::new_from_proof(&proof),
+        Ok(Self::Proof {
+            proof,
             data: priv_inputs.leaf,
         })
     }
@@ -140,14 +121,20 @@ impl<'a, H: 'a + Hasher, U: 'a + typenum::Unsigned + Sync + Send + Clone> ProofS
         {
             // This was verify_proof_meta.
             let commitments_match = match pub_inputs.commitment {
-                Some(ref commitment) => commitment == proof.proof.root(),
+                Some(ref commitment) => commitment == &proof.proof.root(),
                 None => true,
             };
 
-            let expected_path_length = graph_height::<U>(pub_params.leaves) - 1;
+            let expected_path_length = proof.proof.expected_len(pub_params.leaves);
             let path_length_match = expected_path_length == proof.proof.path().len();
 
             if !(commitments_match && path_length_match) {
+                dbg!(
+                    commitments_match,
+                    path_length_match,
+                    expected_path_length,
+                    proof.proof.path().len()
+                );
                 return Ok(false);
             }
         }
@@ -164,19 +151,18 @@ mod tests {
     use super::*;
 
     use ff::Field;
-    use paired::bls12_381::{Bls12, Fr};
+    use generic_array::typenum;
+    use paired::bls12_381::Fr;
     use rand::SeedableRng;
     use rand_xorshift::XorShiftRng;
 
     use crate::drgraph::{new_seed, BucketGraph, Graph, BASE_DEGREE};
     use crate::fr32::fr_into_bytes;
-    use crate::hasher::{
-        Blake2sHasher, HashFunction, PedersenHasher, PoseidonHasher, Sha256Hasher,
-    };
-    use crate::merkle::make_proof_for_test;
+    use crate::hasher::{Blake2sHasher, PedersenHasher, PoseidonHasher, Sha256Hasher};
+    use crate::merkle::{create_base_merkle_tree, DiskStore, MerkleProofTrait, MerkleTreeWrapper};
     use crate::util::data_at_node;
 
-    fn test_merklepor<H: Hasher, U: 'static + typenum::Unsigned + Clone + Send + Sync>() {
+    fn test_merklepor<Tree: MerkleTreeTrait>() {
         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
 
         let leaves = 16;
@@ -186,95 +172,87 @@ mod tests {
         };
 
         let data: Vec<u8> = (0..leaves)
-            .flat_map(|_| fr_into_bytes::<Bls12>(&Fr::random(rng)))
+            .flat_map(|_| fr_into_bytes(&Fr::random(rng)))
             .collect();
 
-        let graph = BucketGraph::<H>::new(leaves, BASE_DEGREE, 0, new_seed()).unwrap();
-        let tree = graph.merkle_tree(None, data.as_slice()).unwrap();
+        let graph = BucketGraph::<Tree::Hasher>::new(leaves, BASE_DEGREE, 0, new_seed()).unwrap();
+        let tree = create_base_merkle_tree::<Tree>(None, graph.size(), data.as_slice()).unwrap();
 
         let pub_inputs = PublicInputs {
             challenge: 3,
             commitment: Some(tree.root()),
         };
 
-        let leaf =
-            H::Domain::try_from_bytes(data_at_node(data.as_slice(), pub_inputs.challenge).unwrap())
-                .unwrap();
+        let leaf = <Tree::Hasher as Hasher>::Domain::try_from_bytes(
+            data_at_node(data.as_slice(), pub_inputs.challenge).unwrap(),
+        )
+        .unwrap();
 
-        let priv_inputs = PrivateInputs::<H, U>::new(leaf, &tree);
+        let priv_inputs = PrivateInputs::new(leaf, &tree);
 
         let proof =
-            PoR::<H, U>::prove(&pub_params, &pub_inputs, &priv_inputs).expect("proving failed");
+            PoR::<Tree>::prove(&pub_params, &pub_inputs, &priv_inputs).expect("proving failed");
 
         let is_valid =
-            PoR::<H, U>::verify(&pub_params, &pub_inputs, &proof).expect("verification failed");
+            PoR::<Tree>::verify(&pub_params, &pub_inputs, &proof).expect("verification failed");
 
         assert!(is_valid);
     }
 
+    type TestTree<H, U> =
+        MerkleTreeWrapper<H, DiskStore<<H as Hasher>::Domain>, U, typenum::U0, typenum::U0>;
+
     #[test]
     fn merklepor_pedersen_binary() {
-        test_merklepor::<PedersenHasher, typenum::U2>();
+        test_merklepor::<TestTree<PedersenHasher, typenum::U2>>();
     }
 
     #[test]
     fn merklepor_poseidon_binary() {
-        test_merklepor::<PoseidonHasher, typenum::U2>();
+        test_merklepor::<TestTree<PoseidonHasher, typenum::U2>>();
     }
 
     #[test]
     fn merklepor_sha256_binary() {
-        test_merklepor::<Sha256Hasher, typenum::U2>();
+        test_merklepor::<TestTree<Sha256Hasher, typenum::U2>>();
     }
 
     #[test]
     fn merklepor_blake2s_binary() {
-        test_merklepor::<Blake2sHasher, typenum::U2>();
+        test_merklepor::<TestTree<Blake2sHasher, typenum::U2>>();
     }
 
     #[test]
     fn merklepor_pedersen_quad() {
-        test_merklepor::<PedersenHasher, typenum::U4>();
+        test_merklepor::<TestTree<PedersenHasher, typenum::U4>>();
     }
 
     #[test]
     fn merklepor_poseidon_quad() {
-        test_merklepor::<PoseidonHasher, typenum::U4>();
+        test_merklepor::<TestTree<PoseidonHasher, typenum::U4>>();
     }
 
     #[test]
     fn merklepor_sha256_quad() {
-        test_merklepor::<Sha256Hasher, typenum::U4>();
+        test_merklepor::<TestTree<Sha256Hasher, typenum::U4>>();
     }
 
     #[test]
     fn merklepor_blake2s_quad() {
-        test_merklepor::<Blake2sHasher, typenum::U4>();
+        test_merklepor::<TestTree<Blake2sHasher, typenum::U4>>();
     }
 
-    // Construct a proof that satisfies a cursory validation:
-    // Data and proof are minimally consistent.
-    // Proof root matches that requested in public inputs.
-    // However, note that data has no relationship to anything,
-    // and proof path does not actually prove that data was in the tree corresponding to expected root.
-    fn make_bogus_proof<H: Hasher, U: typenum::Unsigned>(
-        pub_inputs: &PublicInputs<H::Domain>,
+    // Takes a valid proof and breaks it.
+    fn make_bogus_proof<Proof: MerkleProofTrait>(
         rng: &mut XorShiftRng,
-    ) -> DataProof<H, U> {
-        let bogus_leaf: H::Domain = H::Domain::random(rng);
-        let hashed_leaf = H::Function::hash_leaf(&bogus_leaf);
-
-        DataProof {
-            data: bogus_leaf,
-            proof: make_proof_for_test(
-                pub_inputs.commitment.unwrap(),
-                hashed_leaf,
-                vec![(vec![hashed_leaf; U::to_usize() - 1], 1)],
-            ),
-        }
+        mut proof: DataProof<Proof>,
+    ) -> DataProof<Proof> {
+        let bogus_leaf = <Proof::Hasher as Hasher>::Domain::random(rng);
+        proof.proof.break_me(bogus_leaf);
+        proof
     }
 
-    fn test_merklepor_validates<H: Hasher, U: typenum::Unsigned + 'static + Clone + Sync + Send>() {
+    fn test_merklepor_validates<Tree: MerkleTreeTrait>() {
         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
 
         let leaves = 64;
@@ -284,21 +262,35 @@ mod tests {
         };
 
         let data: Vec<u8> = (0..leaves)
-            .flat_map(|_| fr_into_bytes::<Bls12>(&Fr::random(rng)))
+            .flat_map(|_| fr_into_bytes(&Fr::random(rng)))
             .collect();
 
-        let graph = BucketGraph::<H>::new(leaves, BASE_DEGREE, 0, new_seed()).unwrap();
-        let tree: MerkleTree<_, _, U> = graph.merkle_tree(None, data.as_slice()).unwrap();
+        let graph = BucketGraph::<Tree::Hasher>::new(leaves, BASE_DEGREE, 0, new_seed()).unwrap();
+        let tree = create_base_merkle_tree::<Tree>(None, graph.size(), data.as_slice()).unwrap();
 
         let pub_inputs = PublicInputs {
             challenge: 3,
             commitment: Some(tree.root()),
         };
 
-        let bad_proof = make_bogus_proof::<H, U>(&pub_inputs, rng);
+        let leaf = <Tree::Hasher as Hasher>::Domain::try_from_bytes(
+            data_at_node(data.as_slice(), pub_inputs.challenge).unwrap(),
+        )
+        .unwrap();
+
+        let priv_inputs = PrivateInputs::<Tree>::new(leaf, &tree);
+
+        let good_proof =
+            PoR::<Tree>::prove(&pub_params, &pub_inputs, &priv_inputs).expect("proving failed");
+
+        let verified = PoR::<Tree>::verify(&pub_params, &pub_inputs, &good_proof)
+            .expect("verification failed");
+        assert!(verified);
+
+        let bad_proof = make_bogus_proof::<Tree::Proof>(rng, good_proof);
 
         let verified =
-            PoR::verify(&pub_params, &pub_inputs, &bad_proof).expect("verification failed");
+            PoR::<Tree>::verify(&pub_params, &pub_inputs, &bad_proof).expect("verification failed");
 
         // A bad proof should not be verified!
         assert!(!verified);
@@ -306,48 +298,45 @@ mod tests {
 
     #[test]
     fn merklepor_actually_validates_sha256_binary() {
-        test_merklepor_validates::<Sha256Hasher, typenum::U2>();
+        test_merklepor_validates::<TestTree<Sha256Hasher, typenum::U2>>();
     }
 
     #[test]
     fn merklepor_actually_validates_blake2s_binary() {
-        test_merklepor_validates::<Blake2sHasher, typenum::U2>();
+        test_merklepor_validates::<TestTree<Blake2sHasher, typenum::U2>>();
     }
 
     #[test]
     fn merklepor_actually_validates_pedersen_binary() {
-        test_merklepor_validates::<PedersenHasher, typenum::U2>();
+        test_merklepor_validates::<TestTree<PedersenHasher, typenum::U2>>();
     }
 
     #[test]
     fn merklepor_actually_validates_poseidon_binary() {
-        test_merklepor_validates::<PoseidonHasher, typenum::U2>();
+        test_merklepor_validates::<TestTree<PoseidonHasher, typenum::U2>>();
     }
 
     #[test]
     fn merklepor_actually_validates_sha256_quad() {
-        test_merklepor_validates::<Sha256Hasher, typenum::U4>();
+        test_merklepor_validates::<TestTree<Sha256Hasher, typenum::U4>>();
     }
 
     #[test]
     fn merklepor_actually_validates_blake2s_quad() {
-        test_merklepor_validates::<Blake2sHasher, typenum::U4>();
+        test_merklepor_validates::<TestTree<Blake2sHasher, typenum::U4>>();
     }
 
     #[test]
     fn merklepor_actually_validates_pedersen_quad() {
-        test_merklepor_validates::<PedersenHasher, typenum::U4>();
+        test_merklepor_validates::<TestTree<PedersenHasher, typenum::U4>>();
     }
 
     #[test]
     fn merklepor_actually_validates_poseidon_quad() {
-        test_merklepor_validates::<PoseidonHasher, typenum::U4>();
+        test_merklepor_validates::<TestTree<PoseidonHasher, typenum::U4>>();
     }
 
-    fn test_merklepor_validates_challenge_identity<
-        H: Hasher,
-        U: typenum::Unsigned + 'static + Clone + Send + Sync,
-    >() {
+    fn test_merklepor_validates_challenge_identity<Tree: MerkleTreeTrait>() {
         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
 
         let leaves = 64;
@@ -358,32 +347,33 @@ mod tests {
         };
 
         let data: Vec<u8> = (0..leaves)
-            .flat_map(|_| fr_into_bytes::<Bls12>(&Fr::random(rng)))
+            .flat_map(|_| fr_into_bytes(&Fr::random(rng)))
             .collect();
 
-        let graph = BucketGraph::<H>::new(leaves, BASE_DEGREE, 0, new_seed()).unwrap();
-        let tree = graph.merkle_tree(None, data.as_slice()).unwrap();
+        let graph = BucketGraph::<Tree::Hasher>::new(leaves, BASE_DEGREE, 0, new_seed()).unwrap();
+        let tree = create_base_merkle_tree::<Tree>(None, graph.size(), data.as_slice()).unwrap();
 
         let pub_inputs = PublicInputs {
             challenge: 3,
             commitment: Some(tree.root()),
         };
 
-        let leaf =
-            H::Domain::try_from_bytes(data_at_node(data.as_slice(), pub_inputs.challenge).unwrap())
-                .unwrap();
+        let leaf = <Tree::Hasher as Hasher>::Domain::try_from_bytes(
+            data_at_node(data.as_slice(), pub_inputs.challenge).unwrap(),
+        )
+        .unwrap();
 
-        let priv_inputs = PrivateInputs::<H, U>::new(leaf, &tree);
+        let priv_inputs = PrivateInputs::<Tree>::new(leaf, &tree);
 
         let proof =
-            PoR::<H, U>::prove(&pub_params, &pub_inputs, &priv_inputs).expect("proving failed");
+            PoR::<Tree>::prove(&pub_params, &pub_inputs, &priv_inputs).expect("proving failed");
 
         let different_pub_inputs = PublicInputs {
             challenge: 999,
             commitment: Some(tree.root()),
         };
 
-        let verified = PoR::<H, U>::verify(&pub_params, &different_pub_inputs, &proof)
+        let verified = PoR::<Tree>::verify(&pub_params, &different_pub_inputs, &proof)
             .expect("verification failed");
 
         // A proof created with a the wrong challenge not be verified!
@@ -392,41 +382,41 @@ mod tests {
 
     #[test]
     fn merklepor_actually_validates_challenge_identity_sha256_binary() {
-        test_merklepor_validates_challenge_identity::<Sha256Hasher, typenum::U2>();
+        test_merklepor_validates_challenge_identity::<TestTree<Sha256Hasher, typenum::U2>>();
     }
 
     #[test]
     fn merklepor_actually_validates_challenge_identity_blake2s_binary() {
-        test_merklepor_validates_challenge_identity::<Blake2sHasher, typenum::U2>();
+        test_merklepor_validates_challenge_identity::<TestTree<Blake2sHasher, typenum::U2>>();
     }
 
     #[test]
     fn merklepor_actually_validates_challenge_identity_pedersen_binary() {
-        test_merklepor_validates_challenge_identity::<PedersenHasher, typenum::U2>();
+        test_merklepor_validates_challenge_identity::<TestTree<PedersenHasher, typenum::U2>>();
     }
 
     #[test]
     fn merklepor_actually_validates_challenge_identity_poseidon_binary() {
-        test_merklepor_validates_challenge_identity::<PoseidonHasher, typenum::U2>();
+        test_merklepor_validates_challenge_identity::<TestTree<PoseidonHasher, typenum::U2>>();
     }
 
     #[test]
     fn merklepor_actually_validates_challenge_identity_sha256_quad() {
-        test_merklepor_validates_challenge_identity::<Sha256Hasher, typenum::U4>();
+        test_merklepor_validates_challenge_identity::<TestTree<Sha256Hasher, typenum::U4>>();
     }
 
     #[test]
     fn merklepor_actually_validates_challenge_identity_blake2s_quad() {
-        test_merklepor_validates_challenge_identity::<Blake2sHasher, typenum::U4>();
+        test_merklepor_validates_challenge_identity::<TestTree<Blake2sHasher, typenum::U4>>();
     }
 
     #[test]
     fn merklepor_actually_validates_challenge_identity_pedersen_quad() {
-        test_merklepor_validates_challenge_identity::<PedersenHasher, typenum::U4>();
+        test_merklepor_validates_challenge_identity::<TestTree<PedersenHasher, typenum::U4>>();
     }
 
     #[test]
     fn merklepor_actually_validates_challenge_identity_poseidon_quad() {
-        test_merklepor_validates_challenge_identity::<PoseidonHasher, typenum::U4>();
+        test_merklepor_validates_challenge_identity::<TestTree<PoseidonHasher, typenum::U4>>();
     }
 }

@@ -3,7 +3,7 @@ use std::hash::Hasher as StdHasher;
 use crate::crypto::sloth;
 use crate::error::{Error, Result};
 use crate::hasher::types::{
-    PoseidonArity, PoseidonEngine, PoseidonMDArity, POSEIDON_CONSTANTS_1, POSEIDON_CONSTANTS_16,
+    PoseidonArity, PoseidonMDArity, POSEIDON_CONSTANTS_1, POSEIDON_CONSTANTS_16,
     POSEIDON_CONSTANTS_2, POSEIDON_CONSTANTS_4, POSEIDON_CONSTANTS_8, POSEIDON_MD_CONSTANTS,
 };
 use crate::hasher::{Domain, HashFunction, Hasher};
@@ -11,7 +11,6 @@ use anyhow::ensure;
 use bellperson::gadgets::{boolean, num};
 use bellperson::{ConstraintSystem, SynthesisError};
 use ff::{Field, PrimeField, PrimeFieldRepr, ScalarEngine};
-use fil_sapling_crypto::jubjub::JubjubEngine;
 use generic_array::typenum;
 use generic_array::typenum::marker_traits::Unsigned;
 use merkletree::hash::{Algorithm as LightAlgorithm, Hashable};
@@ -37,7 +36,7 @@ impl Hasher for PoseidonHasher {
         // Unrapping here is safe; `Fr` elements and hash domain elements are the same byte length.
         let key = Fr::from_repr(key.0)?;
         let ciphertext = Fr::from_repr(ciphertext.0)?;
-        Ok(sloth::encode::<Bls12>(&key, &ciphertext).into())
+        Ok(sloth::encode(&key, &ciphertext).into())
     }
 
     #[inline]
@@ -46,7 +45,7 @@ impl Hasher for PoseidonHasher {
         let key = Fr::from_repr(key.0)?;
         let ciphertext = Fr::from_repr(ciphertext.0)?;
 
-        Ok(sloth::decode::<Bls12>(&key, &ciphertext).into())
+        Ok(sloth::decode(&key, &ciphertext).into())
     }
 }
 
@@ -143,13 +142,6 @@ fn as_ref<'a>(src: &'a [u64; 4]) -> &'a [u8] {
 }
 
 impl Domain for PoseidonDomain {
-    // QUESTION: When, if ever, should serialize and into_bytes return different results?
-    // The definitions here at least are equivalent.
-    // I'm taking one step toward resolving this by formalizing that equivalence while copying this base implementation from perdersen.rs. -porcuquine.
-    fn serialize(&self) -> Vec<u8> {
-        self.into_bytes()
-    }
-
     fn into_bytes(&self) -> Vec<u8> {
         let mut out = Vec::with_capacity(PoseidonDomain::byte_len());
         self.0.write_le(&mut out).unwrap();
@@ -283,44 +275,31 @@ impl HashFunction<PoseidonDomain> for PoseidonFunction {
             .into()
     }
 
-    fn hash_leaf_circuit<E: JubjubEngine + PoseidonEngine<typenum::U2>, CS: ConstraintSystem<E>>(
+    fn hash_leaf_circuit<CS: ConstraintSystem<Bls12>>(
         cs: CS,
-        left: &num::AllocatedNum<E>,
-        right: &num::AllocatedNum<E>,
+        left: &num::AllocatedNum<Bls12>,
+        right: &num::AllocatedNum<Bls12>,
         _height: usize,
-        _params: &E::Params,
-    ) -> ::std::result::Result<num::AllocatedNum<E>, SynthesisError> {
+    ) -> ::std::result::Result<num::AllocatedNum<Bls12>, SynthesisError> {
         let preimage = vec![left.clone(), right.clone()];
 
-        poseidon_hash::<CS, E, typenum::U2>(cs, preimage, E::PARAMETERS())
+        poseidon_hash::<CS, Bls12, typenum::U2>(cs, preimage, typenum::U2::PARAMETERS())
     }
 
-    fn hash_multi_leaf_circuit<
-        Arity: 'static,
-        E: JubjubEngine + PoseidonEngine<Arity>,
-        CS: ConstraintSystem<E>,
-    >(
+    fn hash_multi_leaf_circuit<Arity: 'static + PoseidonArity, CS: ConstraintSystem<Bls12>>(
         cs: CS,
-        leaves: &[num::AllocatedNum<E>],
+        leaves: &[num::AllocatedNum<Bls12>],
         _height: usize,
-        _params: &E::Params,
-    ) -> ::std::result::Result<num::AllocatedNum<E>, SynthesisError>
-    where
-        Arity: PoseidonArity<E>,
-        typenum::Add1<Arity>: generic_array::ArrayLength<E::Fr>,
-    {
-        let params = E::PARAMETERS();
-        poseidon_hash::<CS, E, Arity>(cs, leaves.to_vec(), params)
+    ) -> ::std::result::Result<num::AllocatedNum<Bls12>, SynthesisError> {
+        let params = Arity::PARAMETERS();
+        poseidon_hash::<CS, Bls12, Arity>(cs, leaves.to_vec(), params)
     }
 
-    fn hash_md_circuit<
-        E: JubjubEngine + PoseidonEngine<PoseidonMDArity>,
-        CS: ConstraintSystem<E>,
-    >(
+    fn hash_md_circuit<CS: ConstraintSystem<Bls12>>(
         cs: &mut CS,
-        elements: &[num::AllocatedNum<E>],
-    ) -> ::std::result::Result<num::AllocatedNum<E>, SynthesisError> {
-        let params = E::PARAMETERS();
+        elements: &[num::AllocatedNum<Bls12>],
+    ) -> ::std::result::Result<num::AllocatedNum<Bls12>, SynthesisError> {
+        let params = PoseidonMDArity::PARAMETERS();
         let arity = PoseidonMDArity::to_usize();
 
         let mut hash = elements[0].clone();
@@ -336,38 +315,36 @@ impl HashFunction<PoseidonDomain> for PoseidonFunction {
             for i in (elts.len() + 1)..arity {
                 preimage[i] =
                     num::AllocatedNum::alloc(cs.namespace(|| format!("padding {}", i)), || {
-                        Ok(E::Fr::zero())
+                        Ok(Fr::zero())
                     })
                     .unwrap();
             }
             let cs = cs.namespace(|| format!("hash md {}", hash_num));
-            hash = poseidon_hash::<_, E, PoseidonMDArity>(cs, preimage.clone(), params)?.clone();
+            hash =
+                poseidon_hash::<_, Bls12, PoseidonMDArity>(cs, preimage.clone(), params)?.clone();
             hash_num += 1;
         }
 
         Ok(hash)
     }
 
-    fn hash_circuit<E: JubjubEngine, CS: ConstraintSystem<E>>(
+    fn hash_circuit<CS: ConstraintSystem<Bls12>>(
         _cs: CS,
         _bits: &[boolean::Boolean],
-        _params: &E::Params,
-    ) -> std::result::Result<num::AllocatedNum<E>, SynthesisError> {
+    ) -> std::result::Result<num::AllocatedNum<Bls12>, SynthesisError> {
         unimplemented!();
     }
 
-    fn hash2_circuit<E, CS>(
+    fn hash2_circuit<CS>(
         cs: CS,
-        a: &num::AllocatedNum<E>,
-        b: &num::AllocatedNum<E>,
-        _params: &E::Params,
-    ) -> std::result::Result<num::AllocatedNum<E>, SynthesisError>
+        a: &num::AllocatedNum<Bls12>,
+        b: &num::AllocatedNum<Bls12>,
+    ) -> std::result::Result<num::AllocatedNum<Bls12>, SynthesisError>
     where
-        E: JubjubEngine + PoseidonEngine<typenum::U2>,
-        CS: ConstraintSystem<E>,
+        CS: ConstraintSystem<Bls12>,
     {
         let preimage = vec![a.clone(), b.clone()];
-        poseidon_hash::<CS, E, typenum::U2>(cs, preimage, E::PARAMETERS())
+        poseidon_hash::<CS, Bls12, typenum::U2>(cs, preimage, typenum::U2::PARAMETERS())
     }
 }
 
@@ -452,10 +429,7 @@ mod tests {
             PoseidonDomain(Fr::one().into_repr()),
         ];
 
-        let t = MerkleTree::<PoseidonDomain, PoseidonFunction, typenum::U2>::new(
-            values.iter().map(|x| *x),
-        )
-        .unwrap();
+        let t = MerkleTree::<PoseidonHasher, typenum::U2>::new(values.iter().map(|x| *x)).unwrap();
 
         let p = t.gen_proof(0).unwrap(); // create a proof for the first value =k Fr::one()
 
@@ -483,10 +457,7 @@ mod tests {
             PoseidonDomain(Fr::one().into_repr()),
         ];
 
-        let t = MerkleTree::<PoseidonDomain, PoseidonFunction, typenum::U2>::new(
-            leaves.iter().map(|x| *x),
-        )
-        .unwrap();
+        let t = MerkleTree::<PoseidonHasher, typenum::U2>::new(leaves.iter().map(|x| *x)).unwrap();
 
         assert_eq!(t.leafs(), 4);
 

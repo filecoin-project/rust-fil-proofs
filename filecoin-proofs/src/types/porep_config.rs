@@ -1,11 +1,10 @@
 use std::path::PathBuf;
 
 use anyhow::Result;
-use paired::bls12_381::Bls12;
 use storage_proofs::parameter_cache::{self, CacheableParameters};
 use storage_proofs::porep::stacked::{StackedCircuit, StackedCompound};
 
-use crate::constants::{DefaultPieceHasher, DefaultTreeHasher};
+use crate::constants::DefaultPieceHasher;
 use crate::types::*;
 
 #[derive(Clone, Copy, Debug)]
@@ -44,31 +43,32 @@ impl From<PoRepConfig> for SectorSize {
 
 impl PoRepConfig {
     /// Returns the cache identifier as used by `storage-proofs::paramater_cache`.
-    pub fn get_cache_identifier(&self) -> Result<String> {
-        let params =
-            crate::parameters::public_params(self.sector_size.into(), self.partitions.into())?;
+    pub fn get_cache_identifier<Tree: 'static + MerkleTreeTrait>(&self) -> Result<String> {
+        let params = crate::parameters::public_params::<Tree>(
+            self.sector_size.into(),
+            self.partitions.into(),
+        )?;
 
         Ok(
-            <StackedCompound<DefaultTreeHasher, DefaultPieceHasher> as CacheableParameters<
-                Bls12,
-                StackedCircuit<_, DefaultTreeHasher, DefaultPieceHasher>,
+            <StackedCompound<Tree, DefaultPieceHasher> as CacheableParameters<
+                StackedCircuit<Tree, DefaultPieceHasher>,
                 _,
             >>::cache_identifier(&params),
         )
     }
 
-    pub fn get_cache_metadata_path(&self) -> Result<PathBuf> {
-        let id = self.get_cache_identifier()?;
+    pub fn get_cache_metadata_path<Tree: 'static + MerkleTreeTrait>(&self) -> Result<PathBuf> {
+        let id = self.get_cache_identifier::<Tree>()?;
         Ok(parameter_cache::parameter_cache_metadata_path(&id))
     }
 
-    pub fn get_cache_verifying_key_path(&self) -> Result<PathBuf> {
-        let id = self.get_cache_identifier()?;
+    pub fn get_cache_verifying_key_path<Tree: 'static + MerkleTreeTrait>(&self) -> Result<PathBuf> {
+        let id = self.get_cache_identifier::<Tree>()?;
         Ok(parameter_cache::parameter_cache_verifying_key_path(&id))
     }
 
-    pub fn get_cache_params_path(&self) -> Result<PathBuf> {
-        let id = self.get_cache_identifier()?;
+    pub fn get_cache_params_path<Tree: 'static + MerkleTreeTrait>(&self) -> Result<PathBuf> {
+        let id = self.get_cache_identifier::<Tree>()?;
         Ok(parameter_cache::parameter_cache_params_path(&id))
     }
 }

@@ -19,7 +19,7 @@ pub trait PoRep<'a, H: Hasher, G: Hasher>: ProofScheme<'a> {
         pub_params: &'a Self::PublicParams,
         replica_id: &H::Domain,
         data: Data<'a>,
-        data_tree: Option<BinaryMerkleTree<G::Domain, G::Function>>,
+        data_tree: Option<BinaryMerkleTree<G>>,
         config: StoreConfig,
         replica_path: PathBuf,
     ) -> Result<(Self::Tau, Self::ProverAux)>;

@@ -2,43 +2,37 @@ use std::marker::PhantomData;
 
 use bellperson::gadgets::num;
 use bellperson::{Circuit, ConstraintSystem, SynthesisError};
-use fil_sapling_crypto::jubjub::JubjubEngine;
-use generic_array::typenum;
+use paired::bls12_381::{Bls12, Fr};
 
 use crate::compound_proof::CircuitComponent;
 use crate::error::Result;
 use crate::gadgets::constraint;
 use crate::gadgets::por::PoRCircuit;
 use crate::gadgets::variables::Root;
-use crate::hasher::{HashFunction, Hasher, PoseidonArity, PoseidonEngine};
+use crate::hasher::{HashFunction, Hasher};
+use crate::merkle::MerkleTreeTrait;
 
 /// This is the `RationalPoSt` circuit.
-pub struct RationalPoStCircuit<'a, E: JubjubEngine, H: Hasher> {
+pub struct RationalPoStCircuit<Tree: MerkleTreeTrait> {
     /// Paramters for the engine.
-    pub params: &'a E::Params,
-    pub comm_rs: Vec<Option<E::Fr>>,
-    pub comm_cs: Vec<Option<E::Fr>>,
-    pub comm_r_lasts: Vec<Option<E::Fr>>,
-    pub leafs: Vec<Option<E::Fr>>,
+    pub comm_rs: Vec<Option<Fr>>,
+    pub comm_cs: Vec<Option<Fr>>,
+    pub comm_r_lasts: Vec<Option<Fr>>,
+    pub leafs: Vec<Option<Fr>>,
     #[allow(clippy::type_complexity)]
-    pub paths: Vec<Vec<(Vec<Option<E::Fr>>, Option<usize>)>>,
-    pub _h: PhantomData<H>,
+    pub paths: Vec<Vec<(Vec<Option<Fr>>, Option<usize>)>>,
+    pub _t: PhantomData<Tree>,
 }
 
 #[derive(Clone, Default)]
 pub struct ComponentPrivateInputs {}
 
-impl<'a, E: JubjubEngine, H: Hasher> CircuitComponent for RationalPoStCircuit<'a, E, H> {
+impl<'a, Tree: MerkleTreeTrait> CircuitComponent for RationalPoStCircuit<Tree> {
     type ComponentPrivateInputs = ComponentPrivateInputs;
 }
 
-impl<'a, E: JubjubEngine + PoseidonEngine<typenum::U2>, H: Hasher> Circuit<E>
-    for RationalPoStCircuit<'a, E, H>
-where
-    typenum::U2: PoseidonArity<E>,
-{
-    fn synthesize<CS: ConstraintSystem<E>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
-        let params = self.params;
+impl<'a, Tree: 'static + MerkleTreeTrait> Circuit<Bls12> for RationalPoStCircuit<Tree> {
+    fn synthesize<CS: ConstraintSystem<Bls12>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
         let comm_rs = self.comm_rs;
         let comm_cs = self.comm_cs;
         let comm_r_lasts = self.comm_r_lasts;
@@ -81,11 +75,10 @@ where
 
             // Verify H(Comm_C || comm_r_last) == comm_r
             {
-                let hash_num = H::Function::hash2_circuit(
+                let hash_num = <Tree::Hasher as Hasher>::Function::hash2_circuit(
                     cs.namespace(|| format!("H_comm_c_comm_r_last_{}", i)),
                     &comm_c_num,
                     &comm_r_last_num,
-                    params,
                 )?;
 
                 // Check actual equality
@@ -97,11 +90,10 @@ where
                 );
             }
 
-            PoRCircuit::<typenum::U2, E, H>::synthesize(
+            PoRCircuit::<Tree>::synthesize(
                 cs.namespace(|| format!("challenge_inclusion{}", i)),
-                &params,
                 Root::Val(leafs[i]),
-                paths[i].clone(),
+                paths[i].clone().into(),
                 Root::from_allocated::<CS>(comm_r_last_num),
                 true,
             )?;
@@ -123,11 +115,9 @@ mod tests {
     use rand_xorshift::XorShiftRng;
 
     use crate::compound_proof::CompoundProof;
-    use crate::crypto::pedersen::JJ_PARAMS;
-    use crate::drgraph::{new_seed, BucketGraph, Graph, BASE_DEGREE};
-    use crate::fr32::fr_into_bytes;
     use crate::gadgets::TestConstraintSystem;
     use crate::hasher::{Domain, HashFunction, Hasher, PedersenHasher, PoseidonHasher};
+    use crate::merkle::{generate_tree, get_base_tree_count, BinaryMerkleTree};
     use crate::post::rational::{self, derive_challenges, RationalPoSt, RationalPoStCompound};
     use crate::proof::ProofScheme;
     use crate::sector::OrderedSectorSet;
@@ -135,18 +125,18 @@ mod tests {
 
     #[test]
     fn test_rational_post_circuit_pedersen() {
-        test_rational_post_circuit::<PedersenHasher>(16_490);
+        test_rational_post_circuit::<BinaryMerkleTree<PedersenHasher>>(16_490);
     }
 
     #[test]
     fn test_rational_post_circuit_poseidon() {
-        test_rational_post_circuit::<PoseidonHasher>(3_806);
+        test_rational_post_circuit::<BinaryMerkleTree<PoseidonHasher>>(3_806);
     }
 
-    fn test_rational_post_circuit<H: Hasher>(expected_constraints: usize) {
+    fn test_rational_post_circuit<Tree: 'static + MerkleTreeTrait>(expected_constraints: usize) {
         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
 
-        let leaves = 32;
+        let leaves = 32 * get_base_tree_count::<Tree>();
         let sector_size = (leaves * NODE_SIZE) as u64;
         let challenges_count = 2;
 
@@ -155,22 +145,12 @@ mod tests {
             challenges_count,
         };
 
-        let data1: Vec<u8> = (0..leaves)
-            .flat_map(|_| fr_into_bytes::<Bls12>(&Fr::random(rng)))
-            .collect();
-        let data2: Vec<u8> = (0..leaves)
-            .flat_map(|_| fr_into_bytes::<Bls12>(&Fr::random(rng)))
-            .collect();
+        // Construct and store an MT using a named DiskStore.
+        let temp_dir = tempdir::TempDir::new("tree").unwrap();
+        let temp_path = temp_dir.path();
 
-        let graph1 = BucketGraph::<H>::new(leaves, BASE_DEGREE, 0, new_seed()).unwrap();
-        let tree1 = graph1
-            .merkle_tree::<typenum::U2>(None, data1.as_slice())
-            .unwrap();
-
-        let graph2 = BucketGraph::<H>::new(leaves, BASE_DEGREE, 0, new_seed()).unwrap();
-        let tree2 = graph2
-            .merkle_tree::<typenum::U2>(None, data2.as_slice())
-            .unwrap();
+        let (_data1, tree1) = generate_tree::<Tree, _>(rng, leaves, Some(temp_path.to_path_buf()));
+        let (_data2, tree2) = generate_tree::<Tree, _>(rng, leaves, Some(temp_path.to_path_buf()));
 
         let faults = OrderedSectorSet::new();
         let mut sectors = OrderedSectorSet::new();
@@ -186,12 +166,17 @@ mod tests {
             .map(|c| comm_r_lasts_raw[u64::from(c.sector) as usize])
             .collect();
 
-        let comm_cs: Vec<H::Domain> = challenges.iter().map(|_c| H::Domain::random(rng)).collect();
+        let comm_cs: Vec<<Tree::Hasher as Hasher>::Domain> = challenges
+            .iter()
+            .map(|_c| <Tree::Hasher as Hasher>::Domain::random(rng))
+            .collect();
 
         let comm_rs: Vec<_> = comm_cs
             .iter()
             .zip(comm_r_lasts.iter())
-            .map(|(comm_c, comm_r_last)| H::Function::hash2(comm_c, comm_r_last))
+            .map(|(comm_c, comm_r_last)| {
+                <Tree::Hasher as Hasher>::Function::hash2(comm_c, comm_r_last)
+            })
             .collect();
 
         let pub_inputs = rational::PublicInputs {
@@ -204,16 +189,16 @@ mod tests {
         trees.insert(0.into(), &tree1);
         trees.insert(1.into(), &tree2);
 
-        let priv_inputs = rational::PrivateInputs::<H> {
+        let priv_inputs = rational::PrivateInputs::<Tree> {
             trees: &trees,
             comm_cs: &comm_cs,
             comm_r_lasts: &comm_r_lasts,
         };
 
-        let proof = RationalPoSt::<H>::prove(&pub_params, &pub_inputs, &priv_inputs)
+        let proof = RationalPoSt::<Tree>::prove(&pub_params, &pub_inputs, &priv_inputs)
             .expect("proving failed");
 
-        let is_valid = RationalPoSt::<H>::verify(&pub_params, &pub_inputs, &proof)
+        let is_valid = RationalPoSt::<Tree>::verify(&pub_params, &pub_inputs, &proof)
             .expect("verification failed");
         assert!(is_valid);
 
@@ -237,14 +222,13 @@ mod tests {
 
         let mut cs = TestConstraintSystem::<Bls12>::new();
 
-        let instance = RationalPoStCircuit::<_, H> {
-            params: &*JJ_PARAMS,
+        let instance = RationalPoStCircuit::<Tree> {
             leafs,
             paths,
             comm_rs: comm_rs.iter().copied().map(|c| Some(c.into())).collect(),
             comm_cs: comm_cs.into_iter().map(|c| Some(c.into())).collect(),
             comm_r_lasts: comm_r_lasts.into_iter().map(|c| Some(c.into())).collect(),
-            _h: PhantomData,
+            _t: PhantomData,
         };
 
         instance
@@ -262,7 +246,7 @@ mod tests {
         assert_eq!(cs.get_input(0, "ONE"), Fr::one());
 
         let generated_inputs =
-            RationalPoStCompound::<H>::generate_public_inputs(&pub_inputs, &pub_params, None)
+            RationalPoStCompound::<Tree>::generate_public_inputs(&pub_inputs, &pub_params, None)
                 .unwrap();
         let expected_inputs = cs.get_inputs();
 

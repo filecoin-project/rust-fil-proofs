@@ -1,35 +1,35 @@
-use clap::{values_t, App, Arg};
-use log::info;
-use paired::bls12_381::Bls12;
+use log::{info, warn};
 use rand::rngs::OsRng;
+use structopt::StructOpt;
 
 use filecoin_proofs::constants::*;
 use filecoin_proofs::parameters::{
-    election_post_public_params, public_params, window_post_public_params,
-    winning_post_public_params,
+    public_params, window_post_public_params, winning_post_public_params,
 };
 use filecoin_proofs::types::*;
+use filecoin_proofs::with_shape;
 use filecoin_proofs::PoStType;
 use std::collections::HashSet;
 use storage_proofs::compound_proof::CompoundProof;
 use storage_proofs::parameter_cache::CacheableParameters;
 use storage_proofs::porep::stacked::{StackedCompound, StackedDrg};
-use storage_proofs::post::election::{ElectionPoSt, ElectionPoStCircuit, ElectionPoStCompound};
 use storage_proofs::post::fallback::{FallbackPoSt, FallbackPoStCircuit, FallbackPoStCompound};
 
-const PUBLISHED_SECTOR_SIZES: [u64; 4] = [
+const PUBLISHED_SECTOR_SIZES: [u64; 10] = [
     SECTOR_SIZE_2_KIB,
+    SECTOR_SIZE_4_KIB,
+    SECTOR_SIZE_16_KIB,
+    SECTOR_SIZE_32_KIB,
     SECTOR_SIZE_8_MIB,
+    SECTOR_SIZE_16_MIB,
     SECTOR_SIZE_512_MIB,
+    SECTOR_SIZE_1_GIB,
     SECTOR_SIZE_32_GIB,
+    SECTOR_SIZE_64_GIB,
 ];
 
-fn cache_porep_params(porep_config: PoRepConfig) {
-    let n = u64::from(PaddedBytesAmount::from(porep_config));
-    info!(
-        "begin PoRep parameter-cache check/populate routine for {}-byte sectors",
-        n
-    );
+fn cache_porep_params<Tree: 'static + MerkleTreeTrait>(porep_config: PoRepConfig) {
+    info!("PoRep params");
 
     let public_params = public_params(
         PaddedBytesAmount::from(porep_config),
@@ -38,23 +38,21 @@ fn cache_porep_params(porep_config: PoRepConfig) {
     .unwrap();
 
     {
-        let circuit = <StackedCompound<DefaultTreeHasher, DefaultPieceHasher> as CompoundProof<
-            _,
-            StackedDrg<DefaultTreeHasher, DefaultPieceHasher>,
+        let circuit = <StackedCompound<Tree, DefaultPieceHasher> as CompoundProof<
+            StackedDrg<Tree, DefaultPieceHasher>,
             _,
         >>::blank_circuit(&public_params);
-        let _ = StackedCompound::<DefaultTreeHasher, DefaultPieceHasher>::get_param_metadata(
+        let _ = StackedCompound::<Tree, DefaultPieceHasher>::get_param_metadata(
             circuit,
             &public_params,
         );
     }
     {
-        let circuit = <StackedCompound<DefaultTreeHasher, DefaultPieceHasher> as CompoundProof<
-            _,
-            StackedDrg<DefaultTreeHasher, DefaultPieceHasher>,
+        let circuit = <StackedCompound<Tree, DefaultPieceHasher> as CompoundProof<
+            StackedDrg<Tree, DefaultPieceHasher>,
             _,
         >>::blank_circuit(&public_params);
-        StackedCompound::<DefaultTreeHasher, DefaultPieceHasher>::get_groth_params(
+        StackedCompound::<Tree, DefaultPieceHasher>::get_groth_params(
             Some(&mut OsRng),
             circuit,
             &public_params,
@@ -62,13 +60,12 @@ fn cache_porep_params(porep_config: PoRepConfig) {
         .expect("failed to get groth params");
     }
     {
-        let circuit = <StackedCompound<DefaultTreeHasher, DefaultPieceHasher> as CompoundProof<
-            _,
-            StackedDrg<DefaultTreeHasher, DefaultPieceHasher>,
+        let circuit = <StackedCompound<Tree, DefaultPieceHasher> as CompoundProof<
+            StackedDrg<Tree, DefaultPieceHasher>,
             _,
         >>::blank_circuit(&public_params);
 
-        StackedCompound::<DefaultTreeHasher, DefaultPieceHasher>::get_verifying_key(
+        StackedCompound::<Tree, DefaultPieceHasher>::get_verifying_key(
             Some(&mut OsRng),
             circuit,
             &public_params,
@@ -77,36 +74,27 @@ fn cache_porep_params(porep_config: PoRepConfig) {
     }
 }
 
-fn cache_election_post_params(post_config: &PoStConfig) {
-    let n = u64::from(post_config.padded_sector_size());
-    info!(
-        "begin Election PoSt parameter-cache check/populate routine for {}-byte sectors",
-        n
-    );
+fn cache_winning_post_params<Tree: 'static + MerkleTreeTrait>(post_config: &PoStConfig) {
+    info!("Winning PoSt params");
 
-    let post_public_params = election_post_public_params(post_config).unwrap();
+    let post_public_params = winning_post_public_params::<Tree>(post_config).unwrap();
 
     {
-        let post_circuit: ElectionPoStCircuit<Bls12, DefaultTreeHasher> =
-            <ElectionPoStCompound<DefaultTreeHasher> as CompoundProof<
-                Bls12,
-                ElectionPoSt<DefaultTreeHasher>,
-                ElectionPoStCircuit<Bls12, DefaultTreeHasher>,
+        let post_circuit: FallbackPoStCircuit<Tree> =
+            <FallbackPoStCompound<Tree> as CompoundProof<
+                FallbackPoSt<Tree>,
+                FallbackPoStCircuit<Tree>,
             >>::blank_circuit(&post_public_params);
-        let _ = <ElectionPoStCompound<DefaultTreeHasher>>::get_param_metadata(
-            post_circuit,
-            &post_public_params,
-        )
-        .expect("failed to get metadata");
+        let _ = <FallbackPoStCompound<Tree>>::get_param_metadata(post_circuit, &post_public_params)
+            .expect("failed to get metadata");
     }
     {
-        let post_circuit: ElectionPoStCircuit<Bls12, DefaultTreeHasher> =
-            <ElectionPoStCompound<DefaultTreeHasher> as CompoundProof<
-                Bls12,
-                ElectionPoSt<DefaultTreeHasher>,
-                ElectionPoStCircuit<Bls12, DefaultTreeHasher>,
+        let post_circuit: FallbackPoStCircuit<Tree> =
+            <FallbackPoStCompound<Tree> as CompoundProof<
+                FallbackPoSt<Tree>,
+                FallbackPoStCircuit<Tree>,
             >>::blank_circuit(&post_public_params);
-        <ElectionPoStCompound<DefaultTreeHasher>>::get_groth_params(
+        <FallbackPoStCompound<Tree>>::get_groth_params(
             Some(&mut OsRng),
             post_circuit,
             &post_public_params,
@@ -114,14 +102,13 @@ fn cache_election_post_params(post_config: &PoStConfig) {
         .expect("failed to get groth params");
     }
     {
-        let post_circuit: ElectionPoStCircuit<Bls12, DefaultTreeHasher> =
-            <ElectionPoStCompound<DefaultTreeHasher> as CompoundProof<
-                Bls12,
-                ElectionPoSt<DefaultTreeHasher>,
-                ElectionPoStCircuit<Bls12, DefaultTreeHasher>,
+        let post_circuit: FallbackPoStCircuit<Tree> =
+            <FallbackPoStCompound<Tree> as CompoundProof<
+                FallbackPoSt<Tree>,
+                FallbackPoStCircuit<Tree>,
             >>::blank_circuit(&post_public_params);
 
-        <ElectionPoStCompound<DefaultTreeHasher>>::get_verifying_key(
+        <FallbackPoStCompound<Tree>>::get_verifying_key(
             Some(&mut OsRng),
             post_circuit,
             &post_public_params,
@@ -130,36 +117,27 @@ fn cache_election_post_params(post_config: &PoStConfig) {
     }
 }
 
-fn cache_winning_post_params(post_config: &PoStConfig) {
-    let n = u64::from(post_config.padded_sector_size());
-    info!(
-        "begin Winning PoSt parameter-cache check/populate routine for {}-byte sectors",
-        n
-    );
+fn cache_window_post_params<Tree: 'static + MerkleTreeTrait>(post_config: &PoStConfig) {
+    info!("Window PoSt params");
 
-    let post_public_params = winning_post_public_params(post_config).unwrap();
+    let post_public_params = window_post_public_params::<Tree>(post_config).unwrap();
 
     {
-        let post_circuit: FallbackPoStCircuit<Bls12, DefaultTreeHasher> =
-            <FallbackPoStCompound<DefaultTreeHasher> as CompoundProof<
-                Bls12,
-                FallbackPoSt<DefaultTreeHasher>,
-                FallbackPoStCircuit<Bls12, DefaultTreeHasher>,
+        let post_circuit: FallbackPoStCircuit<Tree> =
+            <FallbackPoStCompound<Tree> as CompoundProof<
+                FallbackPoSt<Tree>,
+                FallbackPoStCircuit<Tree>,
             >>::blank_circuit(&post_public_params);
-        let _ = <FallbackPoStCompound<DefaultTreeHasher>>::get_param_metadata(
-            post_circuit,
-            &post_public_params,
-        )
-        .expect("failed to get metadata");
+        let _ = <FallbackPoStCompound<Tree>>::get_param_metadata(post_circuit, &post_public_params)
+            .expect("failed to get metadata");
     }
     {
-        let post_circuit: FallbackPoStCircuit<Bls12, DefaultTreeHasher> =
-            <FallbackPoStCompound<DefaultTreeHasher> as CompoundProof<
-                Bls12,
-                FallbackPoSt<DefaultTreeHasher>,
-                FallbackPoStCircuit<Bls12, DefaultTreeHasher>,
+        let post_circuit: FallbackPoStCircuit<Tree> =
+            <FallbackPoStCompound<Tree> as CompoundProof<
+                FallbackPoSt<Tree>,
+                FallbackPoStCircuit<Tree>,
             >>::blank_circuit(&post_public_params);
-        <FallbackPoStCompound<DefaultTreeHasher>>::get_groth_params(
+        <FallbackPoStCompound<Tree>>::get_groth_params(
             Some(&mut OsRng),
             post_circuit,
             &post_public_params,
@@ -167,14 +145,13 @@ fn cache_winning_post_params(post_config: &PoStConfig) {
         .expect("failed to get groth params");
     }
     {
-        let post_circuit: FallbackPoStCircuit<Bls12, DefaultTreeHasher> =
-            <FallbackPoStCompound<DefaultTreeHasher> as CompoundProof<
-                Bls12,
-                FallbackPoSt<DefaultTreeHasher>,
-                FallbackPoStCircuit<Bls12, DefaultTreeHasher>,
+        let post_circuit: FallbackPoStCircuit<Tree> =
+            <FallbackPoStCompound<Tree> as CompoundProof<
+                FallbackPoSt<Tree>,
+                FallbackPoStCircuit<Tree>,
             >>::blank_circuit(&post_public_params);
 
-        <FallbackPoStCompound<DefaultTreeHasher>>::get_verifying_key(
+        <FallbackPoStCompound<Tree>>::get_verifying_key(
             Some(&mut OsRng),
             post_circuit,
             &post_public_params,
@@ -183,112 +160,34 @@ fn cache_winning_post_params(post_config: &PoStConfig) {
     }
 }
 
-fn cache_window_post_params(post_config: &PoStConfig) {
-    let n = u64::from(post_config.padded_sector_size());
-    info!(
-        "begin Window PoSt parameter-cache check/populate routine for {}-byte sectors",
-        n
-    );
-
-    let post_public_params = window_post_public_params(post_config).unwrap();
-
-    {
-        let post_circuit: FallbackPoStCircuit<Bls12, DefaultTreeHasher> =
-            <FallbackPoStCompound<DefaultTreeHasher> as CompoundProof<
-                Bls12,
-                FallbackPoSt<DefaultTreeHasher>,
-                FallbackPoStCircuit<Bls12, DefaultTreeHasher>,
-            >>::blank_circuit(&post_public_params);
-        let _ = <FallbackPoStCompound<DefaultTreeHasher>>::get_param_metadata(
-            post_circuit,
-            &post_public_params,
-        )
-        .expect("failed to get metadata");
-    }
-    {
-        let post_circuit: FallbackPoStCircuit<Bls12, DefaultTreeHasher> =
-            <FallbackPoStCompound<DefaultTreeHasher> as CompoundProof<
-                Bls12,
-                FallbackPoSt<DefaultTreeHasher>,
-                FallbackPoStCircuit<Bls12, DefaultTreeHasher>,
-            >>::blank_circuit(&post_public_params);
-        <FallbackPoStCompound<DefaultTreeHasher>>::get_groth_params(
-            Some(&mut OsRng),
-            post_circuit,
-            &post_public_params,
-        )
-        .expect("failed to get groth params");
-    }
-    {
-        let post_circuit: FallbackPoStCircuit<Bls12, DefaultTreeHasher> =
-            <FallbackPoStCompound<DefaultTreeHasher> as CompoundProof<
-                Bls12,
-                FallbackPoSt<DefaultTreeHasher>,
-                FallbackPoStCircuit<Bls12, DefaultTreeHasher>,
-            >>::blank_circuit(&post_public_params);
-
-        <FallbackPoStCompound<DefaultTreeHasher>>::get_verifying_key(
-            Some(&mut OsRng),
-            post_circuit,
-            &post_public_params,
-        )
-        .expect("failed to get verifying key");
-    }
+/// Generate and persist Groth parameters and verifying keys for filecoin-proofs.
+#[derive(Debug, StructOpt)]
+#[structopt(name = "paramcache")]
+struct Opt {
+    /// Only generate parameters for post.
+    #[structopt(long)]
+    only_post: bool,
+    #[structopt(short = "z", long, use_delimiter = true)]
+    params_for_sector_sizes: Vec<u64>,
 }
 
-// Run this from the command-line to pre-generate the groth parameters used by the API.
-pub fn main() {
-    fil_logger::init();
-
-    let matches = App::new("paramcache")
-        .version("0.1")
-        .about("Generate and persist Groth parameters and verifying keys")
-        .arg(
-            Arg::with_name("params-for-sector-sizes")
-                .short("z")
-                .long("params-for-sector-sizes")
-                .conflicts_with("all")
-                .require_delimiter(true)
-                .value_delimiter(",")
-                .multiple(true)
-                .help("A comma-separated list of sector sizes, in bytes, for which Groth parameters will be generated")
-        )
-        .arg(
-            Arg::with_name("only-post")
-                .long("only-post")
-                .help("Only generate parameters for post")
-        )
-        .get_matches();
-
-    let sizes: HashSet<u64> = if matches.is_present("params-for-sector-sizes") {
-        values_t!(matches.values_of("params-for-sector-sizes"), u64)
-            .unwrap()
-            .into_iter()
-            .collect()
-    } else {
-        PUBLISHED_SECTOR_SIZES.iter().cloned().collect()
-    };
-
-    let only_post = matches.is_present("only-post");
-
-    for sector_size in sizes {
-        cache_election_post_params(&PoStConfig {
-            sector_size: SectorSize(sector_size),
-            challenge_count: ELECTION_POST_CHALLENGE_COUNT,
-            sector_count: 1,
-            typ: PoStType::Election,
-            priority: true,
-        });
-
-        cache_winning_post_params(&PoStConfig {
+fn generate_params_post(sector_size: u64) {
+    with_shape!(
+        sector_size,
+        cache_winning_post_params,
+        &PoStConfig {
             sector_size: SectorSize(sector_size),
             challenge_count: WINNING_POST_CHALLENGE_COUNT,
             sector_count: WINNING_POST_SECTOR_COUNT,
             typ: PoStType::Winning,
             priority: true,
-        });
+        }
+    );
 
-        cache_window_post_params(&PoStConfig {
+    with_shape!(
+        sector_size,
+        cache_window_post_params,
+        &PoStConfig {
             sector_size: SectorSize(sector_size),
             challenge_count: WINDOW_POST_CHALLENGE_COUNT,
             sector_count: *WINDOW_POST_SECTOR_COUNT
@@ -298,19 +197,58 @@ pub fn main() {
                 .unwrap(),
             typ: PoStType::Window,
             priority: true,
-        });
+        }
+    );
+}
+
+fn generate_params_porep(sector_size: u64) {
+    with_shape!(
+        sector_size,
+        cache_porep_params,
+        PoRepConfig {
+            sector_size: SectorSize(sector_size),
+            partitions: PoRepProofPartitions(
+                *POREP_PARTITIONS
+                    .read()
+                    .unwrap()
+                    .get(&sector_size)
+                    .expect("missing sector size"),
+            ),
+        }
+    );
+}
+
+// Run this from the command-line to pre-generate the groth parameters used by the API.
+pub fn main() {
+    fil_logger::init();
+
+    let opts = Opt::from_args();
+
+    let sizes: HashSet<u64> = if opts.params_for_sector_sizes.is_empty() {
+        PUBLISHED_SECTOR_SIZES.iter().cloned().collect()
+    } else {
+        opts.params_for_sector_sizes
+            .into_iter()
+            .filter(|size| {
+                if PUBLISHED_SECTOR_SIZES.contains(size) {
+                    return true;
+                }
+
+                warn!("ignoring invalid sector size: {}", size);
+                false
+            })
+            .collect()
+    };
+
+    let only_post = opts.only_post;
+
+    for sector_size in sizes {
+        info!("Sector Size: {}", sector_size);
+
+        generate_params_post(sector_size);
 
         if !only_post {
-            cache_porep_params(PoRepConfig {
-                sector_size: SectorSize(sector_size),
-                partitions: PoRepProofPartitions(
-                    *POREP_PARTITIONS
-                        .read()
-                        .unwrap()
-                        .get(&sector_size)
-                        .expect("missing sector size"),
-                ),
-            });
+            generate_params_porep(sector_size);
         }
     }
 }

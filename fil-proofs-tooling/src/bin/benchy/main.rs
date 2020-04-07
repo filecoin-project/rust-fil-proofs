@@ -3,12 +3,11 @@ use std::io::{stdin, stdout};
 use anyhow::Result;
 use clap::{value_t, App, Arg, SubCommand};
 
-use crate::flarp::FlarpInputs;
+use crate::prodbench::ProdbenchInputs;
 
-mod election_post;
-mod flarp;
 mod hash_fns;
 mod merkleproofs;
+mod prodbench;
 mod shared;
 mod stacked;
 
@@ -95,21 +94,11 @@ fn main() -> Result<()> {
                         .help("Extract data after proving and verifying.")
                 );
 
-    let election_post_cmd = SubCommand::with_name("election-post")
-        .about("Benchmark Election PoST")
-        .arg(
-            Arg::with_name("size")
-                .long("size")
-                .required(true)
-                .help("The data size in KiB")
-                .takes_value(true),
-        );
-
     let hash_cmd = SubCommand::with_name("hash-constraints")
         .about("Benchmark hash function inside of a circuit");
 
-    let flarp_cmd = SubCommand::with_name("flarp")
-        .about("Benchmark flarpy")
+    let prodbench_cmd = SubCommand::with_name("prodbench")
+        .about("Benchmark prodbench")
         .arg(
             Arg::with_name("config")
                 .long("config")
@@ -171,9 +160,8 @@ fn main() -> Result<()> {
     let matches = App::new("benchy")
         .version("0.1")
         .subcommand(stacked_cmd)
-        .subcommand(election_post_cmd)
         .subcommand(hash_cmd)
-        .subcommand(flarp_cmd)
+        .subcommand(prodbench_cmd)
         .subcommand(merkleproof_cmd)
         .get_matches();
 
@@ -197,12 +185,6 @@ fn main() -> Result<()> {
                 size: value_t!(m, "size", usize)?,
             })?;
         }
-        ("election-post", Some(m)) => {
-            let sector_size_kibs = value_t!(m, "size", usize)
-                .expect("could not convert `size` CLI argument to `usize`");
-            let sector_size = sector_size_kibs * 1024;
-            election_post::run(sector_size)?;
-        }
         ("hash-constraints", Some(_m)) => {
             hash_fns::run()?;
         }
@@ -213,8 +195,8 @@ fn main() -> Result<()> {
             let proofs = value_t!(m, "proofs", usize)?;
             merkleproofs::run(size, proofs, m.is_present("validate"))?;
         }
-        ("flarp", Some(m)) => {
-            let inputs: FlarpInputs = if m.is_present("config") {
+        ("prodbench", Some(m)) => {
+            let inputs: ProdbenchInputs = if m.is_present("config") {
                 let file = value_t!(m, "config", String).unwrap();
                 serde_json::from_reader(
                     std::fs::File::open(&file)
@@ -223,9 +205,9 @@ fn main() -> Result<()> {
             } else {
                 serde_json::from_reader(stdin())
             }
-            .expect("failed to deserialize stdin to FlarpInputs");
+            .expect("failed to deserialize stdin to ProdbenchInputs");
 
-            let outputs = flarp::run(
+            let outputs = prodbench::run(
                 inputs,
                 m.is_present("skip-seal-proof"),
                 m.is_present("skip-post-proof"),
@@ -234,7 +216,7 @@ fn main() -> Result<()> {
             );
 
             serde_json::to_writer(stdout(), &outputs)
-                .expect("failed to write FlarpOutput to stdout")
+                .expect("failed to write ProdbenchOutput to stdout")
         }
         _ => panic!("carnation"),
     }

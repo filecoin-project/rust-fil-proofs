@@ -1,18 +1,17 @@
 use bellperson::gadgets::{boolean::Boolean, num};
 use bellperson::{ConstraintSystem, SynthesisError};
-use fil_sapling_crypto::{circuit::pedersen_hash, jubjub::JubjubEngine};
+use fil_sapling_crypto::circuit::pedersen_hash;
+use paired::bls12_381::Bls12;
 
-use crate::crypto::pedersen::PEDERSEN_BLOCK_SIZE;
+use crate::crypto::pedersen::{JJ_PARAMS, PEDERSEN_BLOCK_SIZE};
 
 /// Pedersen hashing for inputs with length multiple of the block size. Based on a Merkle-Damgard construction.
-pub fn pedersen_md_no_padding<E, CS>(
+pub fn pedersen_md_no_padding<CS>(
     mut cs: CS,
-    params: &E::Params,
     data: &[Boolean],
-) -> Result<num::AllocatedNum<E>, SynthesisError>
+) -> Result<num::AllocatedNum<Bls12>, SynthesisError>
 where
-    E: JubjubEngine,
-    CS: ConstraintSystem<E>,
+    CS: ConstraintSystem<Bls12>,
 {
     assert!(
         data.len() >= 2 * PEDERSEN_BLOCK_SIZE,
@@ -40,35 +39,33 @@ where
         if i == chunks_len - 1 {
             // last round, skip
         } else {
-            cur = pedersen_compression(cs.namespace(|| "hash"), params, &cur)?;
+            cur = pedersen_compression(cs.namespace(|| "hash"), &cur)?;
         }
     }
 
     // hash and return a num at the end
-    pedersen_compression_num(cs.namespace(|| "last hash"), params, &cur)
+    pedersen_compression_num(cs.namespace(|| "last hash"), &cur)
 }
 
-pub fn pedersen_compression_num<E: JubjubEngine, CS: ConstraintSystem<E>>(
+pub fn pedersen_compression_num<CS: ConstraintSystem<Bls12>>(
     mut cs: CS,
-    params: &E::Params,
     bits: &[Boolean],
-) -> Result<num::AllocatedNum<E>, SynthesisError> {
+) -> Result<num::AllocatedNum<Bls12>, SynthesisError> {
     Ok(pedersen_hash::pedersen_hash(
         cs.namespace(|| "inner hash"),
         pedersen_hash::Personalization::None,
         &bits,
-        params,
+        &*JJ_PARAMS,
     )?
     .get_x()
     .clone())
 }
 
-pub fn pedersen_compression<E: JubjubEngine, CS: ConstraintSystem<E>>(
+pub fn pedersen_compression<CS: ConstraintSystem<Bls12>>(
     mut cs: CS,
-    params: &E::Params,
     bits: &[Boolean],
 ) -> Result<Vec<Boolean>, SynthesisError> {
-    let h = pedersen_compression_num(cs.namespace(|| "compression"), params, bits)?;
+    let h = pedersen_compression_num(cs.namespace(|| "compression"), bits)?;
     let mut out = h.to_bits_le(cs.namespace(|| "h into bits"))?;
 
     // needs padding, because x does not always translate to exactly 256 bits
@@ -84,7 +81,6 @@ mod tests {
     use super::*;
 
     use crate::crypto;
-    use crate::crypto::pedersen::JJ_PARAMS;
     use crate::gadgets::TestConstraintSystem;
     use crate::util::bytes_into_boolean_vec;
     use bellperson::gadgets::boolean::Boolean;
@@ -107,8 +103,8 @@ mod tests {
                 let mut cs = cs.namespace(|| "data");
                 bytes_into_boolean_vec(&mut cs, Some(data.as_slice()), data.len()).unwrap()
             };
-            let out = pedersen_compression_num(&mut cs, &JJ_PARAMS, &data_bits)
-                .expect("pedersen hashing failed");
+            let out =
+                pedersen_compression_num(&mut cs, &data_bits).expect("pedersen hashing failed");
 
             assert!(cs.is_satisfied(), "constraints not satisfied");
             assert_eq!(
@@ -149,7 +145,7 @@ mod tests {
                 let mut cs = cs.namespace(|| "data");
                 bytes_into_boolean_vec(&mut cs, Some(data.as_slice()), data.len()).unwrap()
             };
-            let out = pedersen_md_no_padding(cs.namespace(|| "pedersen"), &JJ_PARAMS, &data_bits)
+            let out = pedersen_md_no_padding(cs.namespace(|| "pedersen"), &data_bits)
                 .expect("pedersen hashing failed");
 
             assert!(cs.is_satisfied(), "constraints not satisfied");

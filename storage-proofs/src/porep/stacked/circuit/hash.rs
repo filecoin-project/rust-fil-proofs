@@ -52,7 +52,6 @@ mod tests {
     use rand::SeedableRng;
     use rand_xorshift::XorShiftRng;
 
-    use crate::crypto::pedersen::JJ_PARAMS;
     use crate::gadgets::TestConstraintSystem;
     use crate::hasher::{HashFunction, Hasher, PedersenHasher};
     use crate::porep::stacked::vanilla::hash::hash_single_column as vanilla_hash_single_column;
@@ -81,7 +80,6 @@ mod tests {
                 cs.namespace(|| "hash2"),
                 &a_num,
                 &b_num,
-                &JJ_PARAMS,
             )
             .expect("hash2 function failed");
 

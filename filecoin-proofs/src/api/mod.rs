@@ -4,28 +4,28 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{ensure, Context, Result};
 use bincode::deserialize;
-use merkletree::merkle::get_merkle_tree_leafs;
 use merkletree::store::{DiskStore, LevelCacheStore, StoreConfig};
 use storage_proofs::cache_key::CacheKey;
 use storage_proofs::hasher::Hasher;
 use storage_proofs::measurements::{measure_op, Operation};
 use storage_proofs::porep::stacked::{
-    generate_replica_id, PersistentAux, StackedDrg, TemporaryAux, BINARY_ARITY, OCT_ARITY,
+    generate_replica_id, PersistentAux, StackedDrg, TemporaryAux,
 };
 use storage_proofs::porep::PoRep;
 use storage_proofs::sector::SectorId;
+use typenum::Unsigned;
 
-use crate::api::util::{as_safe_commitment, get_tree_size};
+use crate::api::util::{as_safe_commitment, get_base_tree_leafs, get_base_tree_size};
 use crate::commitment_reader::CommitmentReader;
 use crate::constants::{
-    DefaultPieceHasher, DefaultTreeHasher,
+    DefaultBinaryTree, DefaultOctTree, DefaultPieceDomain, DefaultPieceHasher,
     MINIMUM_RESERVED_BYTES_FOR_PIECE_IN_FULLY_ALIGNED_SECTOR as MINIMUM_PIECE_SIZE,
 };
 use crate::fr32::write_unpadded;
 use crate::parameters::public_params;
 use crate::types::{
-    Commitment, PaddedBytesAmount, PieceInfo, PoRepConfig, PoRepProofPartitions, ProverId,
-    SealPreCommitPhase1Output, Ticket, UnpaddedByteIndex, UnpaddedBytesAmount,
+    Commitment, MerkleTreeTrait, PaddedBytesAmount, PieceInfo, PoRepConfig, PoRepProofPartitions,
+    ProverId, SealPreCommitPhase1Output, Ticket, UnpaddedByteIndex, UnpaddedBytesAmount,
 };
 
 mod post;
@@ -55,7 +55,7 @@ use storage_proofs::pieces::generate_piece_commitment_bytes_from_source;
 /// * `offset` - the byte index in the unsealed sector of the first byte that we want to read.
 /// * `num_bytes` - the number of bytes that we want to read.
 #[allow(clippy::too_many_arguments)]
-pub fn get_unsealed_range<T: Into<PathBuf> + AsRef<Path>>(
+pub fn get_unsealed_range<T: Into<PathBuf> + AsRef<Path>, Tree: 'static + MerkleTreeTrait>(
     porep_config: PoRepConfig,
     cache_path: T,
     sealed_path: T,
@@ -73,7 +73,7 @@ pub fn get_unsealed_range<T: Into<PathBuf> + AsRef<Path>>(
         as_safe_commitment::<<DefaultPieceHasher as Hasher>::Domain, _>(&comm_d, "comm_d")?;
 
     let replica_id =
-        generate_replica_id::<DefaultTreeHasher, _>(&prover_id, sector_id.into(), &ticket, comm_d);
+        generate_replica_id::<Tree::Hasher, _>(&prover_id, sector_id.into(), &ticket, comm_d);
 
     let data = std::fs::read(&sealed_path)
         .with_context(|| format!("could not read sealed_path={:?}", sealed_path.as_ref()))?;
@@ -82,17 +82,17 @@ pub fn get_unsealed_range<T: Into<PathBuf> + AsRef<Path>>(
         .with_context(|| format!("could not create output_path={:?}", output_path.as_ref()))?;
     let mut buf_writer = BufWriter::new(f_out);
 
-    let tree_size = get_tree_size::<<DefaultPieceHasher as Hasher>::Domain>(
-        porep_config.sector_size,
-        BINARY_ARITY,
-    )?;
-    let tree_leafs = get_merkle_tree_leafs(tree_size, BINARY_ARITY);
+    let base_tree_size = get_base_tree_size::<DefaultBinaryTree>(porep_config.sector_size)?;
+    let base_tree_leafs = get_base_tree_leafs::<DefaultBinaryTree>(base_tree_size)?;
     // MT for original data is always named tree-d, and it will be
     // referenced later in the process as such.
     let config = StoreConfig::new(
         cache_path.as_ref(),
         CacheKey::CommDTree.to_string(),
-        StoreConfig::default_cached_above_base_layer(tree_leafs, BINARY_ARITY),
+        StoreConfig::default_cached_above_base_layer(
+            base_tree_leafs,
+            <DefaultBinaryTree as MerkleTreeTrait>::Arity::to_usize(),
+        ),
     );
     let pp = public_params(
         PaddedBytesAmount::from(porep_config),
@@ -102,12 +102,8 @@ pub fn get_unsealed_range<T: Into<PathBuf> + AsRef<Path>>(
     let offset_padded: PaddedBytesAmount = UnpaddedBytesAmount::from(offset).into();
     let num_bytes_padded: PaddedBytesAmount = num_bytes.into();
 
-    let unsealed_all = StackedDrg::<DefaultTreeHasher, DefaultPieceHasher>::extract_all(
-        &pp,
-        &replica_id,
-        &data,
-        Some(config),
-    )?;
+    let unsealed_all =
+        StackedDrg::<Tree, DefaultPieceHasher>::extract_all(&pp, &replica_id, &data, Some(config))?;
     let start: usize = offset_padded.into();
     let end = start + usize::from(num_bytes_padded);
     let unsealed = &unsealed_all[start..end];
@@ -264,36 +260,126 @@ where
 // Verifies if a DiskStore specified by a config is consistent.
 fn verify_store(config: &StoreConfig, arity: usize) -> Result<()> {
     let store_path = StoreConfig::data_path(&config.path, &config.id);
-    ensure!(
-        Path::new(&store_path).exists(),
-        "Missing store file: {}",
-        store_path.display()
-    );
+    if !Path::new(&store_path).exists() {
+        // Configs may have split due to sector size, so we need to
+        // check deterministic paths from here.
+        let orig_path = store_path.clone().into_os_string().into_string().unwrap();
+        // At most 16 can exist, at fewest 2 must exist.
+        let mut configs: Vec<StoreConfig> = Vec::with_capacity(16);
+        for i in 0..16 {
+            let cur_path = orig_path
+                .clone()
+                .replace(".dat", format!("-{}.dat", i).as_str());
 
-    ensure!(
-        config.size.is_some(),
-        "Missing store size: {}",
-        store_path.display()
-    );
+            if Path::new(&cur_path).exists() {
+                let path_str = cur_path.as_str();
+                let tree_names = vec!["tree-d", "tree-c", "tree-r-last"];
+                for name in tree_names {
+                    if path_str.find(name).is_some() {
+                        configs.push(StoreConfig::from_config(
+                            config,
+                            format!("{}-{}", name, i),
+                            None,
+                        ));
+                        break;
+                    }
+                }
+            }
+        }
 
-    ensure!(
-        DiskStore::<<DefaultPieceHasher as Hasher>::Domain>::is_consistent(
-            config.size.unwrap(),
-            arity,
-            &config,
-        )?,
-        "Store is inconsistent: {:?}",
-        store_path
-    );
+        ensure!(
+            configs.len() == 2 || configs.len() == 8 || configs.len() == 16,
+            "Missing store file (or associated split paths): {}",
+            store_path.display()
+        );
+
+        let store_len = config.size.unwrap();
+        for config in &configs {
+            ensure!(
+                DiskStore::<DefaultPieceDomain>::is_consistent(store_len, arity, &config,)?,
+                "Store is inconsistent: {:?}",
+                StoreConfig::data_path(&config.path, &config.id)
+            );
+        }
+    } else {
+        ensure!(
+            DiskStore::<DefaultPieceDomain>::is_consistent(config.size.unwrap(), arity, &config,)?,
+            "Store is inconsistent: {:?}",
+            store_path
+        );
+    }
+
+    Ok(())
+}
+
+// Verifies if a LevelCacheStore specified by a config is consistent.
+fn verify_level_cache_store<Tree: MerkleTreeTrait>(config: &StoreConfig) -> Result<()> {
+    let store_path = StoreConfig::data_path(&config.path, &config.id);
+    if !Path::new(&store_path).exists() {
+        // Configs may have split due to sector size, so we need to
+        // check deterministic paths from here.
+        let orig_path = store_path.clone().into_os_string().into_string().unwrap();
+        // At most 16 can exist, at fewest 2 must exist.
+        let mut configs: Vec<StoreConfig> = Vec::with_capacity(16);
+        for i in 0..16 {
+            let cur_path = orig_path
+                .clone()
+                .replace(".dat", format!("-{}.dat", i).as_str());
+
+            if Path::new(&cur_path).exists() {
+                let path_str = cur_path.as_str();
+                let tree_names = vec!["tree-d", "tree-c", "tree-r-last"];
+                for name in tree_names {
+                    if path_str.find(name).is_some() {
+                        configs.push(StoreConfig::from_config(
+                            config,
+                            format!("{}-{}", name, i),
+                            None,
+                        ));
+                        break;
+                    }
+                }
+            }
+        }
+
+        ensure!(
+            configs.len() == 2 || configs.len() == 8 || configs.len() == 16,
+            "Missing store file (or associated split paths): {}",
+            store_path.display()
+        );
+
+        let store_len = config.size.unwrap();
+        for config in &configs {
+            ensure!(
+                LevelCacheStore::<DefaultPieceDomain, std::fs::File>::is_consistent(
+                    store_len,
+                    Tree::Arity::to_usize(),
+                    &config,
+                )?,
+                "Store is inconsistent: {:?}",
+                StoreConfig::data_path(&config.path, &config.id)
+            );
+        }
+    } else {
+        ensure!(
+            LevelCacheStore::<DefaultPieceDomain, std::fs::File>::is_consistent(
+                config.size.unwrap(),
+                Tree::Arity::to_usize(),
+                &config,
+            )?,
+            "Store is inconsistent: {:?}",
+            store_path
+        );
+    }
 
     Ok(())
 }
 
 // Checks for the existence of the tree d store, the replica, and all generated labels.
-pub fn validate_cache_for_precommit_phase2<R, T>(
+pub fn validate_cache_for_precommit_phase2<R, T, Tree: MerkleTreeTrait>(
     cache_path: R,
     replica_path: T,
-    seal_precommit_phase1_output: &SealPreCommitPhase1Output,
+    seal_precommit_phase1_output: &SealPreCommitPhase1Output<Tree>,
 ) -> Result<()>
 where
     R: AsRef<Path>,
@@ -320,13 +406,19 @@ where
     );
     config.path = cache_path.as_ref().into();
 
-    verify_store(&config, BINARY_ARITY)
+    verify_store(
+        &config,
+        <DefaultBinaryTree as MerkleTreeTrait>::Arity::to_usize(),
+    )
 }
 
 // Checks for the existence of the replica data and t_aux, which in
 // turn allows us to verify the tree d, tree r, tree c, and the
 // labels.
-pub fn validate_cache_for_commit<R, T>(cache_path: R, replica_path: T) -> Result<()>
+pub fn validate_cache_for_commit<R, T, Tree: MerkleTreeTrait>(
+    cache_path: R,
+    replica_path: T,
+) -> Result<()>
 where
     R: AsRef<Path>,
     T: AsRef<Path>,
@@ -352,7 +444,7 @@ where
     let p_aux_bytes = std::fs::read(&p_aux_path)
         .with_context(|| format!("could not read file p_aux={:?}", p_aux_path))?;
 
-    let _: PersistentAux<DefaultTreeHasher> = deserialize(&p_aux_bytes)?;
+    let _: PersistentAux<<Tree::Hasher as Hasher>::Domain> = deserialize(&p_aux_bytes)?;
     drop(p_aux_bytes);
 
     // Make sure t_aux exists and is valid.
@@ -361,8 +453,7 @@ where
         let t_aux_bytes = std::fs::read(&t_aux_path)
             .with_context(|| format!("could not read file t_aux={:?}", t_aux_path))?;
 
-        let mut res: TemporaryAux<DefaultTreeHasher, DefaultPieceHasher> =
-            deserialize(&t_aux_bytes)?;
+        let mut res: TemporaryAux<Tree, DefaultPieceHasher> = deserialize(&t_aux_bytes)?;
 
         // Switch t_aux to the passed in cache_path
         res.set_cache_path(&cache_path);
@@ -374,33 +465,15 @@ where
     t_aux.labels.verify_stores(verify_store, &cache)?;
 
     // Verify each tree disk store.
-    verify_store(&t_aux.tree_d_config, BINARY_ARITY)?;
-    verify_store(&t_aux.tree_c_config, OCT_ARITY)?;
-
-    let store_path =
-        StoreConfig::data_path(&t_aux.tree_r_last_config.path, &t_aux.tree_r_last_config.id);
-
-    ensure!(
-        Path::new(&store_path).exists(),
-        "Missing store file: {:?}",
-        store_path
-    );
-
-    ensure!(
-        t_aux.tree_r_last_config.size.is_some(),
-        "Missing store size: {:?}",
-        store_path
-    );
-
-    ensure!(
-        LevelCacheStore::<<DefaultPieceHasher as Hasher>::Domain, std::fs::File>::is_consistent(
-            t_aux.tree_r_last_config.size.unwrap(),
-            OCT_ARITY,
-            &t_aux.tree_r_last_config,
-        )?,
-        "Store is inconsistent: {:?}",
-        store_path
-    );
+    verify_store(
+        &t_aux.tree_d_config,
+        <DefaultBinaryTree as MerkleTreeTrait>::Arity::to_usize(),
+    )?;
+    verify_store(
+        &t_aux.tree_c_config,
+        <DefaultOctTree as MerkleTreeTrait>::Arity::to_usize(),
+    )?;
+    verify_level_cache_store::<DefaultOctTree>(&t_aux.tree_r_last_config)?;
 
     Ok(())
 }
@@ -409,42 +482,27 @@ where
 mod tests {
     use super::*;
 
-    use std::collections::BTreeMap;
-    use std::io::{Seek, SeekFrom, Write};
-    use std::sync::Once;
-
     use ff::Field;
-    use paired::bls12_381::{Bls12, Fr};
-    use rand::{Rng, SeedableRng};
+    use paired::bls12_381::Fr;
+    use rand::SeedableRng;
     use rand_xorshift::XorShiftRng;
     use storage_proofs::fr32::bytes_into_fr;
-    use storage_proofs::post::election::Candidate;
-    use storage_proofs::sector::*;
-    use tempfile::NamedTempFile;
 
     use crate::constants::*;
-    use crate::types::{PoStConfig, SectorSize};
-    use crate::PoStType;
-
-    static INIT_LOGGER: Once = Once::new();
-    fn init_logger() {
-        INIT_LOGGER.call_once(|| {
-            fil_logger::init();
-        });
-    }
+    use crate::types::SectorSize;
 
     #[test]
     fn test_verify_seal_fr32_validation() {
         let convertible_to_fr_bytes = [0; 32];
-        let out = bytes_into_fr::<Bls12>(&convertible_to_fr_bytes);
+        let out = bytes_into_fr(&convertible_to_fr_bytes);
         assert!(out.is_ok(), "tripwire");
 
         let not_convertible_to_fr_bytes = [255; 32];
-        let out = bytes_into_fr::<Bls12>(&not_convertible_to_fr_bytes);
+        let out = bytes_into_fr(&not_convertible_to_fr_bytes);
         assert!(out.is_err(), "tripwire");
 
         {
-            let result = verify_seal(
+            let result = verify_seal::<DefaultOctLCTree>(
                 PoRepConfig {
                     sector_size: SectorSize(SECTOR_SIZE_2_KIB),
                     partitions: PoRepProofPartitions(
@@ -478,7 +536,7 @@ mod tests {
         }
 
         {
-            let result = verify_seal(
+            let result = verify_seal::<DefaultOctLCTree>(
                 PoRepConfig {
                     sector_size: SectorSize(SECTOR_SIZE_2_KIB),
                     partitions: PoRepProofPartitions(
@@ -513,121 +571,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
-    fn test_verify_post_fr32_validation() {
-        init_logger();
-
-        let not_convertible_to_fr_bytes = [255; 32];
-        let out = bytes_into_fr::<Bls12>(&not_convertible_to_fr_bytes);
-        assert!(out.is_err(), "tripwire");
-        let mut replicas = BTreeMap::new();
-        replicas.insert(
-            1.into(),
-            PublicReplicaInfo::new(not_convertible_to_fr_bytes).unwrap(),
-        );
-        let winner = Candidate {
-            sector_id: 1.into(),
-            partial_ticket: Fr::zero(),
-            ticket: [0; 32],
-            sector_challenge_index: 0,
-        };
-
-        let result = verify_election_post(
-            &PoStConfig {
-                sector_size: SectorSize(SECTOR_SIZE_2_KIB),
-                challenge_count: ELECTION_POST_CHALLENGE_COUNT,
-                sector_count: 1,
-                typ: PoStType::Election,
-                priority: false,
-            },
-            &[0; 32],
-            1,
-            &[vec![0u8; SINGLE_PARTITION_PROOF_LEN]][..],
-            &replicas,
-            &[winner][..],
-            [0; 32],
-        );
-
-        if let Err(err) = result {
-            let needle = "Invalid commitment (comm_r)";
-            let haystack = format!("{}", err);
-
-            assert!(
-                haystack.contains(needle),
-                format!("\"{}\" did not contain \"{}\"", haystack, needle)
-            );
-        } else {
-            panic!("should have failed comm_r to Fr32 conversion");
-        }
-    }
-
-    #[test]
-    fn test_verify_post_duplicate_checking() {
-        init_logger();
-
-        let mut fr_bytes = [1; 32];
-        fr_bytes[31] = 0;
-
-        let _out = bytes_into_fr::<Bls12>(&fr_bytes);
-        let mut replicas = BTreeMap::new();
-        replicas.insert(1.into(), PublicReplicaInfo::new(fr_bytes).unwrap());
-        let winner = Candidate {
-            sector_id: 1.into(),
-            partial_ticket: Fr::zero(),
-            ticket: [0; 32],
-            sector_challenge_index: 0,
-        };
-
-        let result = verify_election_post(
-            &PoStConfig {
-                sector_size: SectorSize(SECTOR_SIZE_2_KIB),
-                challenge_count: ELECTION_POST_CHALLENGE_COUNT,
-                sector_count: 1,
-                typ: PoStType::Election,
-                priority: false,
-            },
-            &[0; 32],
-            1,
-            &[
-                vec![0u8; SINGLE_PARTITION_PROOF_LEN],
-                vec![0u8; SINGLE_PARTITION_PROOF_LEN],
-            ][..],
-            &replicas,
-            &[winner.clone(), winner][..],
-            [0; 32],
-        );
-
-        assert!(
-            result.is_err(),
-            "expected error when passing duplicate winner"
-        );
-
-        if let Err(err) = result {
-            let message = "duplicate sector_challenge_index";
-            let error_string = format!("{}", err);
-
-            assert!(
-                error_string.contains(message),
-                format!("\"{}\" did not contain \"{}\"", error_string, message)
-            );
-        } else {
-            panic!("should have failed comm_r to Fr32 conversion");
-        }
-    }
-
-    #[test]
-    #[ignore]
-    fn test_seal_lifecycle() -> Result<()> {
-        let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
-        let prover_fr: DefaultTreeDomain = Fr::random(rng).into();
-        let mut prover_id = [0u8; 32];
-        prover_id.copy_from_slice(AsRef::<[u8]>::as_ref(&prover_fr));
-
-        create_seal(rng, SECTOR_SIZE_2_KIB, prover_id, false)?;
-        Ok(())
-    }
-
-    #[test]
     fn test_random_domain_element() {
         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
 
@@ -638,297 +581,5 @@ mod tests {
             let back: DefaultTreeDomain = as_safe_commitment(&randomness, "test").unwrap();
             assert_eq!(back, random_el);
         }
-    }
-
-    #[test]
-    #[ignore]
-    fn test_winning_post() -> Result<()> {
-        let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
-
-        let sector_size = SECTOR_SIZE_2_KIB;
-        let prover_fr: DefaultTreeDomain = Fr::random(rng).into();
-        let mut prover_id = [0u8; 32];
-        prover_id.copy_from_slice(AsRef::<[u8]>::as_ref(&prover_fr));
-
-        let (sector_id, replica, comm_r, cache_dir) =
-            create_seal(rng, sector_size, prover_id, true)?;
-        let sector_count = WINNING_POST_SECTOR_COUNT;
-        let mut sector_set = OrderedSectorSet::new();
-        sector_set.insert(sector_id);
-
-        let random_fr: DefaultTreeDomain = Fr::random(rng).into();
-        let mut randomness = [0u8; 32];
-        randomness.copy_from_slice(AsRef::<[u8]>::as_ref(&random_fr));
-
-        let config = PoStConfig {
-            sector_size: sector_size.into(),
-            sector_count,
-            challenge_count: WINNING_POST_CHALLENGE_COUNT,
-            typ: PoStType::Winning,
-            priority: false,
-        };
-
-        let challenged_sectors =
-            post::generate_winning_post_sector_challenge(&config, &randomness, &sector_set)?;
-        assert_eq!(challenged_sectors.len(), sector_count);
-        assert_eq!(challenged_sectors[0], sector_id);
-
-        let pub_replicas = vec![(sector_id, PublicReplicaInfo::new(comm_r)?)];
-        let priv_replicas = vec![(
-            sector_id,
-            PrivateReplicaInfo::new(replica.path().into(), comm_r, cache_dir.path().into())?,
-        )];
-
-        let proof =
-            post::generate_winning_post(&config, &randomness, &priv_replicas[..], prover_id)?;
-
-        let valid = post::verify_winning_post(
-            &config,
-            &randomness,
-            &pub_replicas[..],
-            prover_id,
-            &sector_set,
-            &proof,
-        )?;
-        assert!(valid, "proof did not verify");
-        Ok(())
-    }
-
-    #[test]
-    #[ignore]
-    fn test_window_post_single_partition_smaller() -> Result<()> {
-        let sector_size = SECTOR_SIZE_2_KIB;
-        let sector_count = *WINDOW_POST_SECTOR_COUNT
-            .read()
-            .unwrap()
-            .get(&sector_size)
-            .unwrap();
-
-        window_post(sector_size, sector_count / 2, sector_count)
-    }
-
-    #[test]
-    #[ignore]
-    fn test_window_post_two_partitions_matching() -> Result<()> {
-        let sector_size = SECTOR_SIZE_2_KIB;
-        let sector_count = *WINDOW_POST_SECTOR_COUNT
-            .read()
-            .unwrap()
-            .get(&sector_size)
-            .unwrap();
-
-        window_post(sector_size, 2 * sector_count, sector_count)
-    }
-
-    #[test]
-    #[ignore]
-    fn test_window_post_two_partitions_smaller() -> Result<()> {
-        let sector_size = SECTOR_SIZE_2_KIB;
-        let sector_count = *WINDOW_POST_SECTOR_COUNT
-            .read()
-            .unwrap()
-            .get(&sector_size)
-            .unwrap();
-
-        window_post(sector_size, 2 * sector_count - 1, sector_count)
-    }
-
-    #[test]
-    #[ignore]
-    fn test_window_post_single_partition_matching() -> Result<()> {
-        let sector_size = SECTOR_SIZE_2_KIB;
-        let sector_count = *WINDOW_POST_SECTOR_COUNT
-            .read()
-            .unwrap()
-            .get(&sector_size)
-            .unwrap();
-
-        window_post(sector_size, sector_count, sector_count)
-    }
-
-    fn window_post(sector_size: u64, total_sector_count: usize, sector_count: usize) -> Result<()> {
-        let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
-
-        let mut sectors = Vec::with_capacity(total_sector_count);
-        let mut pub_replicas = BTreeMap::new();
-        let mut priv_replicas = BTreeMap::new();
-
-        let prover_fr: DefaultTreeDomain = Fr::random(rng).into();
-        let mut prover_id = [0u8; 32];
-        prover_id.copy_from_slice(AsRef::<[u8]>::as_ref(&prover_fr));
-
-        for _ in 0..total_sector_count {
-            let (sector_id, replica, comm_r, cache_dir) =
-                create_seal(rng, sector_size, prover_id, true)?;
-            priv_replicas.insert(
-                sector_id,
-                PrivateReplicaInfo::new(replica.path().into(), comm_r, cache_dir.path().into())?,
-            );
-            pub_replicas.insert(sector_id, PublicReplicaInfo::new(comm_r)?);
-            sectors.push((sector_id, replica, comm_r, cache_dir, prover_id));
-        }
-        assert_eq!(priv_replicas.len(), total_sector_count);
-        assert_eq!(pub_replicas.len(), total_sector_count);
-        assert_eq!(sectors.len(), total_sector_count);
-
-        let random_fr: DefaultTreeDomain = Fr::random(rng).into();
-        let mut randomness = [0u8; 32];
-        randomness.copy_from_slice(AsRef::<[u8]>::as_ref(&random_fr));
-
-        let config = PoStConfig {
-            sector_size: sector_size.into(),
-            sector_count,
-            challenge_count: WINDOW_POST_CHALLENGE_COUNT,
-            typ: PoStType::Window,
-            priority: false,
-        };
-
-        let proof = post::generate_window_post(&config, &randomness, &priv_replicas, prover_id)?;
-
-        let valid =
-            post::verify_window_post(&config, &randomness, &pub_replicas, prover_id, &proof)?;
-        assert!(valid, "proof did not verify");
-        Ok(())
-    }
-
-    fn create_seal<R: Rng>(
-        rng: &mut R,
-        sector_size: u64,
-        prover_id: ProverId,
-        skip_proof: bool,
-    ) -> Result<(SectorId, NamedTempFile, Commitment, tempfile::TempDir)> {
-        init_logger();
-
-        let number_of_bytes_in_piece =
-            UnpaddedBytesAmount::from(PaddedBytesAmount(sector_size.clone()));
-
-        let piece_bytes: Vec<u8> = (0..number_of_bytes_in_piece.0)
-            .map(|_| rand::random::<u8>())
-            .collect();
-
-        let mut piece_file = NamedTempFile::new()?;
-        piece_file.write_all(&piece_bytes)?;
-        piece_file.as_file_mut().sync_all()?;
-        piece_file.as_file_mut().seek(SeekFrom::Start(0))?;
-
-        let piece_info =
-            generate_piece_commitment(piece_file.as_file_mut(), number_of_bytes_in_piece)?;
-        piece_file.as_file_mut().seek(SeekFrom::Start(0))?;
-
-        let mut staged_sector_file = NamedTempFile::new()?;
-        add_piece(
-            &mut piece_file,
-            &mut staged_sector_file,
-            number_of_bytes_in_piece,
-            &[],
-        )?;
-
-        let piece_infos = vec![piece_info];
-
-        let sealed_sector_file = NamedTempFile::new()?;
-        let mut unseal_file = NamedTempFile::new()?;
-        let config = PoRepConfig {
-            sector_size: SectorSize(sector_size.clone()),
-            partitions: PoRepProofPartitions(
-                *POREP_PARTITIONS.read().unwrap().get(&sector_size).unwrap(),
-            ),
-        };
-
-        let cache_dir = tempfile::tempdir().unwrap();
-
-        let ticket = rng.gen();
-        let seed = rng.gen();
-        let sector_id = rng.gen::<u64>().into();
-
-        let phase1_output = seal_pre_commit_phase1(
-            config,
-            cache_dir.path(),
-            staged_sector_file.path(),
-            sealed_sector_file.path(),
-            prover_id,
-            sector_id,
-            ticket,
-            &piece_infos,
-        )?;
-
-        validate_cache_for_precommit_phase2(
-            cache_dir.path(),
-            staged_sector_file.path(),
-            &phase1_output,
-        )?;
-
-        let pre_commit_output = seal_pre_commit_phase2(
-            config,
-            phase1_output,
-            cache_dir.path(),
-            sealed_sector_file.path(),
-        )?;
-
-        let comm_d = pre_commit_output.comm_d.clone();
-        let comm_r = pre_commit_output.comm_r.clone();
-
-        validate_cache_for_commit(cache_dir.path(), sealed_sector_file.path())?;
-
-        if skip_proof {
-            clear_cache(cache_dir.path())?;
-        } else {
-            let phase1_output = seal_commit_phase1(
-                config,
-                cache_dir.path(),
-                sealed_sector_file.path(),
-                prover_id,
-                sector_id,
-                ticket,
-                seed,
-                pre_commit_output,
-                &piece_infos,
-            )?;
-
-            clear_cache(cache_dir.path())?;
-
-            let commit_output = seal_commit_phase2(config, phase1_output, prover_id, sector_id)?;
-
-            let _ = get_unsealed_range(
-                config,
-                cache_dir.path(),
-                &sealed_sector_file.path(),
-                &unseal_file.path(),
-                prover_id,
-                sector_id,
-                comm_d,
-                ticket,
-                UnpaddedByteIndex(508),
-                UnpaddedBytesAmount(508),
-            )?;
-
-            let mut contents = vec![];
-            assert!(
-                unseal_file.read_to_end(&mut contents).is_ok(),
-                "failed to populate buffer with unsealed bytes"
-            );
-            assert_eq!(contents.len(), 508);
-            assert_eq!(&piece_bytes[508..508 + 508], &contents[..]);
-
-            let computed_comm_d = compute_comm_d(config.sector_size, &piece_infos)?;
-
-            assert_eq!(
-                comm_d, computed_comm_d,
-                "Computed and expected comm_d don't match."
-            );
-
-            let verified = verify_seal(
-                config,
-                comm_r,
-                comm_d,
-                prover_id,
-                sector_id,
-                ticket,
-                seed,
-                &commit_output.proof,
-            )?;
-            assert!(verified, "failed to verify valid seal");
-        }
-
-        Ok((sector_id, sealed_sector_file, comm_r, cache_dir))
     }
 }

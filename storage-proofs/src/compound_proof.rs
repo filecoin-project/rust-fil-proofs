@@ -1,7 +1,7 @@
 use anyhow::{ensure, Context};
 use bellperson::{groth16, Circuit};
-use fil_sapling_crypto::jubjub::JubjubEngine;
 use log::info;
+use paired::bls12_381::{Bls12, Fr};
 use rand::{rngs::OsRng, RngCore};
 use rayon::prelude::*;
 
@@ -39,22 +39,15 @@ pub trait CircuitComponent {
 /// See documentation at proof::ProofScheme for details.
 /// Implementations should generally only need to supply circuit and generate_public_inputs.
 /// The remaining trait methods are used internally and implement the necessary plumbing.
-pub trait CompoundProof<
-    'a,
-    E: JubjubEngine,
-    S: ProofScheme<'a>,
-    C: Circuit<E> + CircuitComponent + Send,
-> where
+pub trait CompoundProof<'a, S: ProofScheme<'a>, C: Circuit<Bls12> + CircuitComponent + Send>
+where
     S::Proof: Sync + Send,
     S::PublicParams: ParameterSetMetadata + Sync + Send,
     S::PublicInputs: Clone + Sync,
-    Self: CacheableParameters<E, C, S::PublicParams>,
+    Self: CacheableParameters<C, S::PublicParams>,
 {
     // setup is equivalent to ProofScheme::setup.
-    fn setup(sp: &SetupParams<'a, S>) -> Result<PublicParams<'a, S>>
-    where
-        E::Params: Sync,
-    {
+    fn setup(sp: &SetupParams<'a, S>) -> Result<PublicParams<'a, S>> {
         Ok(PublicParams {
             vanilla_params: S::setup(&sp.vanilla_params)?,
             partitions: sp.partitions,
@@ -75,11 +68,8 @@ pub trait CompoundProof<
         pub_params: &PublicParams<'a, S>,
         pub_in: &S::PublicInputs,
         priv_in: &S::PrivateInputs,
-        groth_params: &'b groth16::MappedParameters<E>,
-    ) -> Result<MultiProof<'b, E>>
-    where
-        E::Params: Sync,
-    {
+        groth_params: &'b groth16::MappedParameters<Bls12>,
+    ) -> Result<MultiProof<'b>> {
         let partition_count = Self::partition_count(pub_params);
 
         // This will always run at least once, since there cannot be zero partitions.
@@ -116,7 +106,7 @@ pub trait CompoundProof<
     fn verify<'b>(
         public_params: &PublicParams<'a, S>,
         public_inputs: &S::PublicInputs,
-        multi_proof: &MultiProof<'b, E>,
+        multi_proof: &MultiProof<'b>,
         requirements: &S::Requirements,
     ) -> Result<bool> {
         ensure!(
@@ -149,7 +139,7 @@ pub trait CompoundProof<
     fn batch_verify<'b>(
         public_params: &PublicParams<'a, S>,
         public_inputs: &[S::PublicInputs],
-        multi_proofs: &[MultiProof<'b, E>],
+        multi_proofs: &[MultiProof<'b>],
         requirements: &S::Requirements,
     ) -> Result<bool> {
         ensure!(
@@ -214,9 +204,9 @@ pub trait CompoundProof<
         pub_in: &S::PublicInputs,
         vanilla_proof: Vec<S::Proof>,
         pub_params: &S::PublicParams,
-        groth_params: &groth16::MappedParameters<E>,
+        groth_params: &groth16::MappedParameters<Bls12>,
         priority: bool,
-    ) -> Result<Vec<groth16::Proof<E>>> {
+    ) -> Result<Vec<groth16::Proof<Bls12>>> {
         let mut rng = OsRng;
         ensure!(
             !vanilla_proof.is_empty(),
@@ -248,7 +238,7 @@ pub trait CompoundProof<
             .map(|groth_proof| {
                 let mut proof_vec = vec![];
                 groth_proof.write(&mut proof_vec)?;
-                let gp = groth16::Proof::<E>::read(&proof_vec[..])?;
+                let gp = groth16::Proof::<Bls12>::read(&proof_vec[..])?;
                 Ok(gp)
             })
             .collect()
@@ -261,7 +251,7 @@ pub trait CompoundProof<
         pub_in: &S::PublicInputs,
         pub_params: &S::PublicParams,
         partition_k: Option<usize>,
-    ) -> Result<Vec<E::Fr>>;
+    ) -> Result<Vec<Fr>>;
 
     /// circuit constructs an instance of this CompoundProof's bellperson::Circuit.
     /// circuit takes PublicInputs, PublicParams, and Proof from this CompoundProof's proof::ProofScheme (S)
@@ -285,7 +275,7 @@ pub trait CompoundProof<
     fn groth_params<R: RngCore>(
         rng: Option<&mut R>,
         public_params: &S::PublicParams,
-    ) -> Result<groth16::MappedParameters<E>> {
+    ) -> Result<groth16::MappedParameters<Bls12>> {
         Self::get_groth_params(rng, Self::blank_circuit(public_params), public_params)
     }
 
@@ -297,7 +287,7 @@ pub trait CompoundProof<
     fn verifying_key<R: RngCore>(
         rng: Option<&mut R>,
         public_params: &S::PublicParams,
-    ) -> Result<groth16::VerifyingKey<E>> {
+    ) -> Result<groth16::VerifyingKey<Bls12>> {
         Self::get_verifying_key(rng, Self::blank_circuit(public_params), public_params)
     }
 
@@ -305,7 +295,7 @@ pub trait CompoundProof<
         public_parameters: &PublicParams<'a, S>,
         public_inputs: &S::PublicInputs,
         private_inputs: &S::PrivateInputs,
-    ) -> Result<(C, Vec<E::Fr>)> {
+    ) -> Result<(C, Vec<Fr>)> {
         let vanilla_params = &public_parameters.vanilla_params;
         let partition_count = partitions::partition_count(public_parameters.partitions);
         let vanilla_proofs = S::prove_all_partitions(
@@ -349,7 +339,7 @@ pub trait CompoundProof<
         public_parameters: &PublicParams<'a, S>,
         public_inputs: &S::PublicInputs,
         private_inputs: &S::PrivateInputs,
-    ) -> Result<Vec<(C, Vec<E::Fr>)>> {
+    ) -> Result<Vec<(C, Vec<Fr>)>> {
         let vanilla_params = &public_parameters.vanilla_params;
         let partition_count = partitions::partition_count(public_parameters.partitions);
         let vanilla_proofs = S::prove_all_partitions(

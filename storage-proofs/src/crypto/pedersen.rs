@@ -61,7 +61,7 @@ pub fn pedersen_md_no_padding_bits<T: AsRef<[u8]>, S: Iterator<Item = T>>(
         x.write_le(&mut cur).expect("failed to write result hash");
     }
 
-    let frs = bytes_into_frs::<Bls12>(&cur).expect("pedersen must generate valid fr elements");
+    let frs = bytes_into_frs(&cur).expect("pedersen must generate valid fr elements");
     assert_eq!(frs.len(), 1);
     frs[0]
 }
@@ -126,7 +126,7 @@ impl Hasher {
     }
 
     pub fn finalize(self) -> Result<Fr> {
-        let frs = bytes_into_frs::<Bls12>(&self.curr.expect("missed init"))
+        let frs = bytes_into_frs(&self.curr.expect("missed init"))
             .context("pedersen must generate valid fr elements")?;
         ensure!(frs.len() == 1, "There must be a single fr element.");
         Ok(frs[0])

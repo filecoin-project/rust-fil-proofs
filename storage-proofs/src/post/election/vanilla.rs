@@ -7,7 +7,7 @@ use byteorder::{ByteOrder, LittleEndian};
 use generic_array::typenum;
 use log::trace;
 use merkletree::store::StoreConfig;
-use paired::bls12_381::{Bls12, Fr};
+use paired::bls12_381::Fr;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -20,7 +20,7 @@ use crate::hasher::{
     Domain, HashFunction, Hasher, PoseidonDomain, PoseidonFunction, PoseidonMDArity,
 };
 use crate::measurements::{measure_op, Operation};
-use crate::merkle::{MerkleProof, OctLCMerkleTree};
+use crate::merkle::{MerkleProof, MerkleProofTrait, MerkleTreeTrait, OctLCMerkleTree};
 use crate::parameter_cache::ParameterSetMetadata;
 use crate::porep::stacked::OCT_ARITY;
 use crate::proof::{NoRequirements, ProofScheme};
@@ -70,7 +70,7 @@ pub struct PublicInputs<T: Domain> {
 
 #[derive(Debug)]
 pub struct PrivateInputs<H: Hasher> {
-    pub tree: OctLCMerkleTree<H::Domain, H::Function>,
+    pub tree: OctLCMerkleTree<H>,
     pub comm_c: H::Domain,
     pub comm_r_last: H::Domain,
 }
@@ -115,10 +115,10 @@ impl<H: Hasher> Proof<H> {
     }
 
     pub fn comm_r_last(&self) -> H::Domain {
-        *self.inclusion_proofs[0].root()
+        self.inclusion_proofs[0].root()
     }
 
-    pub fn commitments(&self) -> Vec<&H::Domain> {
+    pub fn commitments(&self) -> Vec<H::Domain> {
         self.inclusion_proofs
             .iter()
             .map(MerkleProof::root)
@@ -126,7 +126,7 @@ impl<H: Hasher> Proof<H> {
     }
 
     #[allow(clippy::type_complexity)]
-    pub fn paths(&self) -> Vec<&Vec<(Vec<H::Domain>, usize)>> {
+    pub fn paths(&self) -> Vec<Vec<(Vec<H::Domain>, usize)>> {
         self.inclusion_proofs
             .iter()
             .map(MerkleProof::path)
@@ -145,7 +145,7 @@ where
 pub fn generate_candidates<H: Hasher>(
     pub_params: &PublicParams,
     challenged_sectors: &[SectorId],
-    trees: &BTreeMap<SectorId, OctLCMerkleTree<H::Domain, H::Function>>,
+    trees: &BTreeMap<SectorId, OctLCMerkleTree<H>>,
     prover_id: H::Domain,
     randomness: H::Domain,
 ) -> Result<Vec<Candidate>> {
@@ -172,7 +172,7 @@ pub fn generate_candidates<H: Hasher>(
 
 fn generate_candidate<H: Hasher>(
     pub_params: &PublicParams,
-    tree: &OctLCMerkleTree<H::Domain, H::Function>,
+    tree: &OctLCMerkleTree<H>,
     prover_id: H::Domain,
     sector_id: SectorId,
     randomness: H::Domain,
@@ -220,7 +220,7 @@ fn generate_candidate<H: Hasher>(
 }
 
 pub fn finalize_ticket(partial_ticket: &Fr) -> [u8; 32] {
-    let bytes = fr_into_bytes::<Bls12>(partial_ticket);
+    let bytes = fr_into_bytes(partial_ticket);
     let ticket_hash = Sha256::digest(&bytes);
     let mut ticket = [0u8; 32];
     ticket.copy_from_slice(&ticket_hash[..]);
@@ -311,7 +311,7 @@ pub fn generate_leaf_challenge<T: Domain>(
     Ok(challenged_range_index * pub_params.challenged_nodes as u64)
 }
 
-impl<'a, H: 'a + Hasher> ProofScheme<'a> for ElectionPoSt<'a, H> {
+impl<'a, H: 'static + Hasher> ProofScheme<'a> for ElectionPoSt<'a, H> {
     type PublicParams = PublicParams;
     type SetupParams = SetupParams;
     type PublicInputs = PublicInputs<H::Domain>;
@@ -369,7 +369,7 @@ impl<'a, H: 'a + Hasher> ProofScheme<'a> for ElectionPoSt<'a, H> {
                                     )
                                 }
                             }?;
-                            Ok(MerkleProof::new_from_proof(&proof))
+                            Ok(proof)
                         })
                 })
                 .collect::<Result<Vec<_>>>()
@@ -398,7 +398,7 @@ impl<'a, H: 'a + Hasher> ProofScheme<'a> for ElectionPoSt<'a, H> {
         let comm_c = proof.comm_c;
         let comm_r = &pub_inputs.comm_r;
 
-        if AsRef::<[u8]>::as_ref(&H::Function::hash2(&comm_c, comm_r_last))
+        if AsRef::<[u8]>::as_ref(&H::Function::hash2(&comm_c, &comm_r_last))
             != AsRef::<[u8]>::as_ref(comm_r)
         {
             return Ok(false);
@@ -444,15 +444,15 @@ mod tests {
     use std::io::prelude::*;
 
     use ff::Field;
-    use paired::bls12_381::{Bls12, Fr};
+    use paired::bls12_381::Fr;
     use rand::SeedableRng;
     use rand_xorshift::XorShiftRng;
 
-    use crate::drgraph::{new_seed, BucketGraph, Graph, BASE_DEGREE};
     use crate::fr32::fr_into_bytes;
     use crate::hasher::{PedersenHasher, PoseidonHasher};
+    use crate::merkle::create_base_lcmerkle_tree;
 
-    fn test_election_post<H: Hasher>() {
+    fn test_election_post<H: 'static + Hasher>() {
         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
 
         let leaves = 64;
@@ -482,19 +482,19 @@ mod tests {
         for i in 0..5 {
             sectors.push(i.into());
             let data: Vec<u8> = (0..leaves)
-                .flat_map(|_| fr_into_bytes::<Bls12>(&Fr::random(rng)))
+                .flat_map(|_| fr_into_bytes(&Fr::random(rng)))
                 .collect();
-
-            let graph = BucketGraph::<H>::new(leaves, BASE_DEGREE, 0, new_seed()).unwrap();
 
             let replica_path = temp_path.join(format!("replica-path-{}", i));
             let mut f = File::create(&replica_path).unwrap();
             f.write_all(&data).unwrap();
 
             let cur_config = StoreConfig::from_config(&config, format!("test-lc-tree-{}", i), None);
-            let lctree: OctLCMerkleTree<_, _> = graph
-                .lcmerkle_tree(cur_config.clone(), &data, &replica_path)
-                .unwrap();
+            let lctree = create_base_lcmerkle_tree::<
+                H,
+                <OctLCMerkleTree<H> as MerkleTreeTrait>::Arity,
+            >(cur_config.clone(), leaves, &data, &replica_path)
+            .unwrap();
             trees.insert(i.into(), lctree);
         }
 

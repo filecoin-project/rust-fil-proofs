@@ -2,19 +2,18 @@ use std::marker::PhantomData;
 
 use anyhow::{ensure, Context};
 use byteorder::{ByteOrder, LittleEndian};
-use generic_array::typenum::{self, U8};
+use generic_array::typenum::Unsigned;
 use log::trace;
 use merkletree::store::StoreConfig;
+use paired::bls12_381::Fr;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
-use crate::drgraph::graph_height;
 use crate::error::Result;
 use crate::hasher::{Domain, HashFunction, Hasher};
-use crate::merkle::{MerkleProof, OctLCMerkleTree};
+use crate::merkle::{MerkleProof, MerkleProofTrait, MerkleTreeTrait, MerkleTreeWrapper};
 use crate::parameter_cache::ParameterSetMetadata;
-use crate::porep::stacked::OCT_ARITY;
 use crate::proof::ProofScheme;
 use crate::sector::*;
 use crate::util::NODE_SIZE;
@@ -76,80 +75,95 @@ pub struct PublicSector<T: Domain> {
 }
 
 #[derive(Debug)]
-pub struct PrivateSector<'a, H: Hasher> {
-    pub tree: &'a OctLCMerkleTree<H::Domain, H::Function>,
-    pub comm_c: H::Domain,
-    pub comm_r_last: H::Domain,
+pub struct PrivateSector<'a, Tree: MerkleTreeTrait> {
+    pub tree: &'a MerkleTreeWrapper<
+        Tree::Hasher,
+        Tree::Store,
+        Tree::Arity,
+        Tree::SubTreeArity,
+        Tree::TopTreeArity,
+    >,
+    pub comm_c: <Tree::Hasher as Hasher>::Domain,
+    pub comm_r_last: <Tree::Hasher as Hasher>::Domain,
 }
 
 #[derive(Debug)]
-pub struct PrivateInputs<'a, H: Hasher> {
-    pub sectors: &'a [PrivateSector<'a, H>],
+pub struct PrivateInputs<'a, Tree: MerkleTreeTrait> {
+    pub sectors: &'a [PrivateSector<'a, Tree>],
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Proof<H: Hasher> {
+pub struct Proof<P: MerkleProofTrait> {
     #[serde(bound(
-        serialize = "SectorProof<H>: Serialize",
-        deserialize = "SectorProof<H>: Deserialize<'de>"
+        serialize = "SectorProof<P>: Serialize",
+        deserialize = "SectorProof<P>: Deserialize<'de>"
     ))]
-    pub sectors: Vec<SectorProof<H>>,
+    pub sectors: Vec<SectorProof<P>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SectorProof<H: Hasher> {
+pub struct SectorProof<Proof: MerkleProofTrait> {
     #[serde(bound(
-        serialize = "MerkleProof<H, U8>: Serialize",
-        deserialize = "MerkleProof<H, U8>: Deserialize<'de>"
+        serialize = "MerkleProof<Proof::Hasher, Proof::Arity, Proof::SubTreeArity, Proof::TopTreeArity>: Serialize",
+        deserialize = "MerkleProof<Proof::Hasher, Proof::Arity, Proof::SubTreeArity, Proof::TopTreeArity>: serde::de::DeserializeOwned"
     ))]
-    inclusion_proofs: Vec<MerkleProof<H, U8>>,
-    pub comm_c: H::Domain,
-    pub comm_r_last: H::Domain,
+    inclusion_proofs:
+        Vec<MerkleProof<Proof::Hasher, Proof::Arity, Proof::SubTreeArity, Proof::TopTreeArity>>,
+    pub comm_c: <Proof::Hasher as Hasher>::Domain,
+    pub comm_r_last: <Proof::Hasher as Hasher>::Domain,
 }
 
-impl<H: Hasher> SectorProof<H> {
-    pub fn leafs(&self) -> Vec<H::Domain> {
+impl<P: MerkleProofTrait> SectorProof<P> {
+    pub fn leafs(&self) -> Vec<<P::Hasher as Hasher>::Domain> {
         self.inclusion_proofs
             .iter()
-            .map(MerkleProof::leaf)
+            .map(MerkleProofTrait::leaf)
             .collect()
     }
 
-    pub fn comm_r_last(&self) -> H::Domain {
-        *self.inclusion_proofs[0].root()
+    pub fn comm_r_last(&self) -> <P::Hasher as Hasher>::Domain {
+        self.inclusion_proofs[0].root()
     }
 
-    pub fn commitments(&self) -> Vec<&H::Domain> {
+    pub fn commitments(&self) -> Vec<<P::Hasher as Hasher>::Domain> {
         self.inclusion_proofs
             .iter()
-            .map(MerkleProof::root)
+            .map(MerkleProofTrait::root)
             .collect()
     }
 
     #[allow(clippy::type_complexity)]
-    pub fn paths(&self) -> Vec<&Vec<(Vec<H::Domain>, usize)>> {
+    pub fn paths(&self) -> Vec<Vec<(Vec<<P::Hasher as Hasher>::Domain>, usize)>> {
         self.inclusion_proofs
             .iter()
-            .map(MerkleProof::path)
+            .map(MerkleProofTrait::path)
+            .collect()
+    }
+
+    pub fn as_options(&self) -> Vec<Vec<(Vec<Option<Fr>>, Option<usize>)>> {
+        self.inclusion_proofs
+            .iter()
+            .map(MerkleProofTrait::as_options)
             .collect()
     }
 }
 
 #[derive(Debug, Clone)]
-pub struct FallbackPoSt<'a, H>
+pub struct FallbackPoSt<'a, Tree>
 where
-    H: 'a + Hasher,
+    Tree: 'a + MerkleTreeTrait,
 {
-    _h: PhantomData<&'a H>,
+    _t: PhantomData<&'a Tree>,
 }
 
 pub fn generate_sector_challenges<T: Domain>(
     randomness: T,
     challenge_count: usize,
     sectors: &OrderedSectorSet,
+    prover_id: T,
 ) -> Result<Vec<SectorId>> {
     (0..challenge_count)
-        .map(|n| generate_sector_challenge(randomness, n, sectors))
+        .map(|n| generate_sector_challenge(randomness, n, sectors, prover_id))
         .collect()
 }
 
@@ -158,8 +172,10 @@ pub fn generate_sector_challenge<T: Domain>(
     randomness: T,
     n: usize,
     sectors: &OrderedSectorSet,
+    prover_id: T,
 ) -> Result<SectorId> {
     let mut hasher = Sha256::new();
+    hasher.input(AsRef::<[u8]>::as_ref(&prover_id));
     hasher.input(AsRef::<[u8]>::as_ref(&randomness));
     hasher.input(&n.to_le_bytes()[..]);
 
@@ -217,12 +233,12 @@ pub fn generate_leaf_challenge<T: Domain>(
     Ok(challenged_range_index)
 }
 
-impl<'a, H: 'a + Hasher> ProofScheme<'a> for FallbackPoSt<'a, H> {
+impl<'a, Tree: 'a + MerkleTreeTrait> ProofScheme<'a> for FallbackPoSt<'a, Tree> {
     type PublicParams = PublicParams;
     type SetupParams = SetupParams;
-    type PublicInputs = PublicInputs<'a, H::Domain>;
-    type PrivateInputs = PrivateInputs<'a, H>;
-    type Proof = Proof<H>;
+    type PublicInputs = PublicInputs<'a, <Tree::Hasher as Hasher>::Domain>;
+    type PrivateInputs = PrivateInputs<'a, Tree>;
+    type Proof = Proof<Tree::Proof>;
     type Requirements = ChallengeRequirements;
 
     fn setup(sp: &Self::SetupParams) -> Result<Self::PublicParams> {
@@ -295,14 +311,16 @@ impl<'a, H: 'a + Hasher> ProofScheme<'a> for FallbackPoSt<'a, H> {
                 .zip(priv_sectors_chunk.iter())
                 .enumerate()
             {
-                let tree = &priv_sector.tree;
+                let tree = priv_sector.tree;
                 let sector_id = pub_sector.id;
                 let tree_leafs = tree.leafs();
-                let levels = StoreConfig::default_cached_above_base_layer(tree_leafs, OCT_ARITY);
+                let levels = StoreConfig::default_cached_above_base_layer(
+                    tree_leafs,
+                    Tree::Arity::to_usize(),
+                );
 
                 trace!(
-                    "Generating proof for tree of len {} with leafs {}, and cached_layers {}",
-                    tree.len(),
+                    "Generating proof for tree leafs {}, and cached_layers {}",
                     tree_leafs,
                     levels,
                 );
@@ -320,9 +338,7 @@ impl<'a, H: 'a + Hasher> ProofScheme<'a> for FallbackPoSt<'a, H> {
                             challenge_index,
                         )?;
 
-                        let proof =
-                            tree.gen_cached_proof(challenged_leaf_start as usize, levels)?;
-                        Ok(MerkleProof::new_from_proof(&proof))
+                        tree.gen_cached_proof(challenged_leaf_start as usize, levels)
                     })
                     .collect::<Result<Vec<_>>>()?;
 
@@ -395,8 +411,10 @@ impl<'a, H: 'a + Hasher> ProofScheme<'a> for FallbackPoSt<'a, H> {
                 // comm_r_last is the root of the proof
                 let comm_r_last = inclusion_proofs[0].root();
 
-                if AsRef::<[u8]>::as_ref(&H::Function::hash2(&comm_c, comm_r_last))
-                    != AsRef::<[u8]>::as_ref(comm_r)
+                if AsRef::<[u8]>::as_ref(&<Tree::Hasher as Hasher>::Function::hash2(
+                    &comm_c,
+                    &comm_r_last,
+                )) != AsRef::<[u8]>::as_ref(comm_r)
                 {
                     return Ok(false);
                 }
@@ -425,8 +443,8 @@ impl<'a, H: 'a + Hasher> ProofScheme<'a> for FallbackPoSt<'a, H> {
 
                     // validate the path length
                     let expected_path_length =
-                        graph_height::<typenum::U8>(pub_params.sector_size as usize / NODE_SIZE)
-                            - 1;
+                        inclusion_proof.expected_len(pub_params.sector_size as usize / NODE_SIZE);
+
                     if expected_path_length != inclusion_proof.path().len() {
                         return Ok(false);
                     }
@@ -455,26 +473,22 @@ impl<'a, H: 'a + Hasher> ProofScheme<'a> for FallbackPoSt<'a, H> {
 mod tests {
     use super::*;
 
-    use std::fs::File;
-    use std::io::prelude::*;
-
-    use ff::Field;
-    use paired::bls12_381::{Bls12, Fr};
     use rand::SeedableRng;
     use rand_xorshift::XorShiftRng;
 
-    use crate::drgraph::{new_seed, BucketGraph, Graph, BASE_DEGREE};
-    use crate::fr32::fr_into_bytes;
     use crate::hasher::{PedersenHasher, PoseidonHasher};
+    use crate::merkle::{generate_tree, get_base_tree_count, LCTree, MerkleTreeTrait};
 
-    fn test_fallback_post<H: Hasher>(
+    fn test_fallback_post<Tree: MerkleTreeTrait>(
         total_sector_count: usize,
         sector_count: usize,
         partitions: usize,
-    ) {
+    ) where
+        Tree::Store: 'static,
+    {
         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
 
-        let leaves = 64;
+        let leaves = 64 * get_base_tree_count::<Tree>();
         let sector_size = leaves * NODE_SIZE;
 
         let pub_params = PublicParams {
@@ -483,43 +497,24 @@ mod tests {
             sector_count,
         };
 
-        let randomness = H::Domain::random(rng);
-        let prover_id = H::Domain::random(rng);
+        let randomness = <Tree::Hasher as Hasher>::Domain::random(rng);
+        let prover_id = <Tree::Hasher as Hasher>::Domain::random(rng);
 
         // Construct and store an MT using a named DiskStore.
         let temp_dir = tempdir::TempDir::new("level_cache_tree").unwrap();
         let temp_path = temp_dir.path();
-        let config = StoreConfig::new(
-            &temp_path,
-            String::from("test-lc-tree"),
-            StoreConfig::default_cached_above_base_layer(leaves as usize, OCT_ARITY),
-        );
 
         let mut pub_sectors = Vec::new();
         let mut priv_sectors = Vec::new();
         let mut trees = Vec::new();
 
-        for i in 0..total_sector_count {
-            let data: Vec<u8> = (0..leaves)
-                .flat_map(|_| fr_into_bytes::<Bls12>(&Fr::random(rng)))
-                .collect();
-
-            let graph = BucketGraph::<H>::new(leaves, BASE_DEGREE, 0, new_seed()).unwrap();
-
-            let replica_path = temp_path.join(format!("replica-path-{}", i));
-            let mut f = File::create(&replica_path).unwrap();
-            f.write_all(&data).unwrap();
-
-            let cur_config = StoreConfig::from_config(&config, format!("test-lc-tree-{}", i), None);
-
-            trees.push(
-                graph
-                    .lcmerkle_tree(cur_config.clone(), &data, &replica_path)
-                    .unwrap(),
-            );
+        for _i in 0..total_sector_count {
+            let (_data, tree) =
+                generate_tree::<Tree, _>(rng, leaves, Some(temp_path.to_path_buf()));
+            trees.push(tree);
         }
         for (i, tree) in trees.iter().enumerate() {
-            let comm_c = H::Domain::random(rng);
+            let comm_c = <Tree::Hasher as Hasher>::Domain::random(rng);
             let comm_r_last = tree.root();
 
             priv_sectors.push(PrivateSector {
@@ -528,7 +523,7 @@ mod tests {
                 comm_r_last,
             });
 
-            let comm_r = H::Function::hash2(&comm_c, &comm_r_last);
+            let comm_r = <Tree::Hasher as Hasher>::Function::hash2(&comm_c, &comm_r_last);
             pub_sectors.push(PublicSector {
                 id: (i as u64).into(),
                 comm_r,
@@ -542,11 +537,11 @@ mod tests {
             k: None,
         };
 
-        let priv_inputs = PrivateInputs::<H> {
-            sectors: &priv_sectors,
+        let priv_inputs = PrivateInputs::<Tree> {
+            sectors: &priv_sectors[..],
         };
 
-        let proof = FallbackPoSt::<H>::prove_all_partitions(
+        let proof = FallbackPoSt::<Tree>::prove_all_partitions(
             &pub_params,
             &pub_inputs,
             &priv_inputs,
@@ -554,34 +549,87 @@ mod tests {
         )
         .expect("proving failed");
 
-        let is_valid = FallbackPoSt::<H>::verify_all_partitions(&pub_params, &pub_inputs, &proof)
-            .expect("verification failed");
+        let is_valid =
+            FallbackPoSt::<Tree>::verify_all_partitions(&pub_params, &pub_inputs, &proof)
+                .expect("verification failed");
 
         assert!(is_valid);
     }
 
+    use typenum::{U0, U2, U4, U8};
+
     #[test]
-    fn fallback_post_pedersen_single_partition_matching() {
-        test_fallback_post::<PedersenHasher>(5, 5, 1);
+    fn fallback_post_pedersen_single_partition_matching_base_8() {
+        test_fallback_post::<LCTree<PedersenHasher, U8, U0, U0>>(5, 5, 1);
     }
 
     #[test]
-    fn fallback_post_poseidon_single_partition_matching() {
-        test_fallback_post::<PoseidonHasher>(5, 5, 1);
+    fn fallback_post_poseidon_single_partition_matching_base_8() {
+        test_fallback_post::<LCTree<PoseidonHasher, U8, U0, U0>>(5, 5, 1);
     }
 
     #[test]
-    fn fallback_post_poseidon_single_partition_smaller() {
-        test_fallback_post::<PoseidonHasher>(3, 5, 1);
+    fn fallback_post_poseidon_single_partition_smaller_base_8() {
+        test_fallback_post::<LCTree<PoseidonHasher, U8, U0, U0>>(3, 5, 1);
     }
 
     #[test]
-    fn fallback_post_poseidon_two_partitions_matching() {
-        test_fallback_post::<PoseidonHasher>(4, 2, 2);
+    fn fallback_post_poseidon_two_partitions_matching_base_8() {
+        test_fallback_post::<LCTree<PoseidonHasher, U8, U0, U0>>(4, 2, 2);
     }
 
     #[test]
-    fn fallback_post_poseidon_two_partitions_smaller() {
-        test_fallback_post::<PoseidonHasher>(5, 3, 2);
+    fn fallback_post_poseidon_two_partitions_smaller_base_8() {
+        test_fallback_post::<LCTree<PoseidonHasher, U8, U0, U0>>(5, 3, 2);
+    }
+
+    #[test]
+    fn fallback_post_pedersen_single_partition_matching_sub_8_4() {
+        test_fallback_post::<LCTree<PedersenHasher, U8, U4, U0>>(5, 5, 1);
+    }
+
+    #[test]
+    fn fallback_post_poseidon_single_partition_matching_sub_8_4() {
+        test_fallback_post::<LCTree<PoseidonHasher, U8, U4, U0>>(5, 5, 1);
+    }
+
+    #[test]
+    fn fallback_post_poseidon_single_partition_smaller_sub_8_4() {
+        test_fallback_post::<LCTree<PoseidonHasher, U8, U4, U0>>(3, 5, 1);
+    }
+
+    #[test]
+    fn fallback_post_poseidon_two_partitions_matching_sub_8_4() {
+        test_fallback_post::<LCTree<PoseidonHasher, U8, U4, U0>>(4, 2, 2);
+    }
+
+    #[test]
+    fn fallback_post_poseidon_two_partitions_smaller_sub_8_4() {
+        test_fallback_post::<LCTree<PoseidonHasher, U8, U4, U0>>(5, 3, 2);
+    }
+
+    #[test]
+    fn fallback_post_pedersen_single_partition_matching_top_8_4_2() {
+        test_fallback_post::<LCTree<PedersenHasher, U8, U4, U2>>(5, 5, 1);
+    }
+
+    #[test]
+    fn fallback_post_poseidon_single_partition_matching_top_8_4_2() {
+        test_fallback_post::<LCTree<PoseidonHasher, U8, U4, U2>>(5, 5, 1);
+    }
+
+    #[test]
+    fn fallback_post_poseidon_single_partition_smaller_top_8_4_2() {
+        test_fallback_post::<LCTree<PoseidonHasher, U8, U4, U2>>(3, 5, 1);
+    }
+
+    #[test]
+    fn fallback_post_poseidon_two_partitions_matching_top_8_4_2() {
+        test_fallback_post::<LCTree<PoseidonHasher, U8, U4, U2>>(4, 2, 2);
+    }
+
+    #[test]
+    fn fallback_post_poseidon_two_partitions_smaller_top_8_4_2() {
+        test_fallback_post::<LCTree<PoseidonHasher, U8, U4, U2>>(5, 3, 2);
     }
 }

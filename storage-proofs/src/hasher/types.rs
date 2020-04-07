@@ -3,14 +3,12 @@ use lazy_static::lazy_static;
 use crate::error::Result;
 use bellperson::gadgets::{boolean, num};
 use bellperson::{ConstraintSystem, SynthesisError};
-use fil_sapling_crypto::jubjub::JubjubEngine;
 use generic_array::typenum;
-use generic_array::typenum::{U1, U11, U16, U2, U24, U36, U4, U8};
+use generic_array::typenum::{U0, U1, U11, U16, U2, U24, U36, U4, U8};
 use merkletree::hash::{Algorithm as LightAlgorithm, Hashable as LightHashable};
 use merkletree::merkle::Element;
 use neptune::poseidon::PoseidonConstants;
 use paired::bls12_381::{Bls12, Fr, FrRepr};
-use paired::Engine;
 use serde::de::DeserializeOwned;
 use serde::ser::Serialize;
 
@@ -42,83 +40,66 @@ lazy_static! {
         PoseidonConstants::new();
 }
 
-pub trait PoseidonArity<E: Engine>:
+pub trait PoseidonArity:
     typenum::Unsigned
     + Send
     + Sync
     + Clone
+    + std::fmt::Debug
     + std::ops::Add<typenum::B1>
     + std::ops::Add<typenum::UInt<typenum::UTerm, typenum::B1>>
-where
-    typenum::Add1<Self>: generic_array::ArrayLength<E::Fr>,
 {
     #[allow(non_snake_case)]
-    fn PARAMETERS() -> &'static PoseidonConstants<E, Self>;
+    fn PARAMETERS() -> &'static PoseidonConstants<Bls12, Self>;
 }
 
-impl PoseidonArity<Bls12> for U1 {
+impl PoseidonArity for U0 {
+    fn PARAMETERS() -> &'static PoseidonConstants<Bls12, Self> {
+        unreachable!("dummy implementation, do not ever call me")
+    }
+}
+impl PoseidonArity for U1 {
     fn PARAMETERS() -> &'static PoseidonConstants<Bls12, Self> {
         &*POSEIDON_CONSTANTS_1
     }
 }
-impl PoseidonArity<Bls12> for U2 {
+impl PoseidonArity for U2 {
     fn PARAMETERS() -> &'static PoseidonConstants<Bls12, Self> {
         &*POSEIDON_CONSTANTS_2
     }
 }
 
-impl PoseidonArity<Bls12> for U4 {
+impl PoseidonArity for U4 {
     fn PARAMETERS() -> &'static PoseidonConstants<Bls12, Self> {
         &*POSEIDON_CONSTANTS_4
     }
 }
 
-impl PoseidonArity<Bls12> for U8 {
+impl PoseidonArity for U8 {
     fn PARAMETERS() -> &'static PoseidonConstants<Bls12, Self> {
         &*POSEIDON_CONSTANTS_8
     }
 }
 
-impl PoseidonArity<Bls12> for U11 {
+impl PoseidonArity for U11 {
     fn PARAMETERS() -> &'static PoseidonConstants<Bls12, Self> {
         &*POSEIDON_CONSTANTS_11
     }
 }
 
-impl PoseidonArity<Bls12> for U16 {
+impl PoseidonArity for U16 {
     fn PARAMETERS() -> &'static PoseidonConstants<Bls12, Self> {
         &*POSEIDON_CONSTANTS_16
     }
 }
-impl PoseidonArity<Bls12> for U24 {
+impl PoseidonArity for U24 {
     fn PARAMETERS() -> &'static PoseidonConstants<Bls12, Self> {
         &*POSEIDON_CONSTANTS_24
     }
 }
-impl PoseidonArity<Bls12> for U36 {
+impl PoseidonArity for U36 {
     fn PARAMETERS() -> &'static PoseidonConstants<Bls12, Self> {
         &*POSEIDON_CONSTANTS_36
-    }
-}
-
-pub trait PoseidonEngine<Arity>: Engine
-where
-    Arity: 'static
-        + typenum::Unsigned
-        + std::ops::Add<typenum::B1>
-        + std::ops::Add<typenum::UInt<typenum::UTerm, typenum::B1>>,
-    typenum::Add1<Arity>: generic_array::ArrayLength<Self::Fr>,
-{
-    #[allow(non_snake_case)]
-    fn PARAMETERS() -> &'static PoseidonConstants<Self, Arity>;
-}
-
-impl<E: Engine, U: 'static + PoseidonArity<E>> PoseidonEngine<U> for E
-where
-    typenum::Add1<U>: generic_array::ArrayLength<E::Fr>,
-{
-    fn PARAMETERS() -> &'static PoseidonConstants<Self, U> {
-        PoseidonArity::PARAMETERS()
     }
 }
 
@@ -140,7 +121,6 @@ pub trait Domain:
     + Element
     + std::hash::Hash
 {
-    fn serialize(&self) -> Vec<u8>;
     fn into_bytes(&self) -> Vec<u8>;
     fn try_from_bytes(raw: &[u8]) -> Result<Self>;
     /// Write itself into the given slice, LittleEndian bytes.
@@ -176,67 +156,52 @@ pub trait HashFunction<T: Domain>:
         a.hash()
     }
 
-    fn hash_leaf_circuit<E: JubjubEngine + PoseidonEngine<typenum::U2>, CS: ConstraintSystem<E>>(
+    fn hash_leaf_circuit<CS: ConstraintSystem<Bls12>>(
         mut cs: CS,
-        left: &num::AllocatedNum<E>,
-        right: &num::AllocatedNum<E>,
+        left: &num::AllocatedNum<Bls12>,
+        right: &num::AllocatedNum<Bls12>,
         height: usize,
-        params: &E::Params,
-    ) -> std::result::Result<num::AllocatedNum<E>, SynthesisError> {
+    ) -> std::result::Result<num::AllocatedNum<Bls12>, SynthesisError> {
         let left_bits = left.to_bits_le(cs.namespace(|| "left num into bits"))?;
         let right_bits = right.to_bits_le(cs.namespace(|| "right num into bits"))?;
 
-        Self::hash_leaf_bits_circuit(cs, &left_bits, &right_bits, height, params)
+        Self::hash_leaf_bits_circuit(cs, &left_bits, &right_bits, height)
     }
 
-    fn hash_multi_leaf_circuit<
-        Arity: 'static + PoseidonArity<E>,
-        E: JubjubEngine + PoseidonEngine<Arity>,
-        CS: ConstraintSystem<E>,
-    >(
+    fn hash_multi_leaf_circuit<Arity: 'static + PoseidonArity, CS: ConstraintSystem<Bls12>>(
         cs: CS,
-        leaves: &[num::AllocatedNum<E>],
+        leaves: &[num::AllocatedNum<Bls12>],
         height: usize,
-        params: &E::Params,
-    ) -> std::result::Result<num::AllocatedNum<E>, SynthesisError>
-    where
-        typenum::Add1<Arity>: generic_array::ArrayLength<E::Fr>;
+    ) -> std::result::Result<num::AllocatedNum<Bls12>, SynthesisError>;
 
-    fn hash_md_circuit<
-        E: JubjubEngine + PoseidonEngine<PoseidonMDArity>,
-        CS: ConstraintSystem<E>,
-    >(
+    fn hash_md_circuit<CS: ConstraintSystem<Bls12>>(
         _cs: &mut CS,
-        _elements: &[num::AllocatedNum<E>],
-    ) -> std::result::Result<num::AllocatedNum<E>, SynthesisError> {
+        _elements: &[num::AllocatedNum<Bls12>],
+    ) -> std::result::Result<num::AllocatedNum<Bls12>, SynthesisError> {
         unimplemented!();
     }
 
-    fn hash_leaf_bits_circuit<E: JubjubEngine, CS: ConstraintSystem<E>>(
+    fn hash_leaf_bits_circuit<CS: ConstraintSystem<Bls12>>(
         _cs: CS,
         _left: &[boolean::Boolean],
         _right: &[boolean::Boolean],
         _height: usize,
-        _params: &E::Params,
-    ) -> std::result::Result<num::AllocatedNum<E>, SynthesisError> {
+    ) -> std::result::Result<num::AllocatedNum<Bls12>, SynthesisError> {
         unimplemented!();
     }
 
-    fn hash_circuit<E: JubjubEngine, CS: ConstraintSystem<E>>(
+    fn hash_circuit<CS: ConstraintSystem<Bls12>>(
         cs: CS,
         bits: &[boolean::Boolean],
-        params: &E::Params,
-    ) -> std::result::Result<num::AllocatedNum<E>, SynthesisError>;
+    ) -> std::result::Result<num::AllocatedNum<Bls12>, SynthesisError>;
 
-    fn hash2_circuit<E, CS>(
+    fn hash2_circuit<CS>(
         cs: CS,
-        a: &num::AllocatedNum<E>,
-        b: &num::AllocatedNum<E>,
-        params: &E::Params,
-    ) -> std::result::Result<num::AllocatedNum<E>, SynthesisError>
+        a: &num::AllocatedNum<Bls12>,
+        b: &num::AllocatedNum<Bls12>,
+    ) -> std::result::Result<num::AllocatedNum<Bls12>, SynthesisError>
     where
-        E: JubjubEngine + PoseidonEngine<typenum::U2>,
-        CS: ConstraintSystem<E>;
+        CS: ConstraintSystem<Bls12>;
 }
 
 pub trait Hasher: Clone + ::std::fmt::Debug + Eq + Default + Send + Sync {

@@ -1,24 +1,39 @@
 use bellperson::gadgets::num;
 use bellperson::{ConstraintSystem, SynthesisError};
-use fil_sapling_crypto::jubjub::JubjubEngine;
-use generic_array::typenum;
 use paired::bls12_381::{Bls12, Fr};
 
 use super::{column::Column, params::InclusionPath};
 
 use crate::gadgets::constraint;
-use crate::hasher::Hasher;
+use crate::hasher::{Hasher, PoseidonArity};
+use crate::merkle::{MerkleProofTrait, MerkleTreeTrait, Store};
 use crate::porep::stacked::{ColumnProof as VanillaColumnProof, PublicParams};
 
 #[derive(Debug, Clone)]
-pub struct ColumnProof<H: Hasher> {
+pub struct ColumnProof<
+    H: Hasher,
+    U: 'static + PoseidonArity,
+    V: 'static + PoseidonArity,
+    W: 'static + PoseidonArity,
+> {
     column: Column,
-    inclusion_path: InclusionPath<Bls12, H, typenum::U8>,
+    inclusion_path: InclusionPath<H, U, V, W>,
 }
 
-impl<H: Hasher> ColumnProof<H> {
+impl<
+        H: 'static + Hasher,
+        U: 'static + PoseidonArity,
+        V: 'static + PoseidonArity,
+        W: 'static + PoseidonArity,
+    > ColumnProof<H, U, V, W>
+{
     /// Create an empty `ColumnProof`, used in `blank_circuit`s.
-    pub fn empty(params: &PublicParams<H>) -> Self {
+    pub fn empty<
+        S: Store<H::Domain>,
+        Tree: MerkleTreeTrait<Hasher = H, Store = S, Arity = U, SubTreeArity = V, TopTreeArity = W>,
+    >(
+        params: &PublicParams<Tree>,
+    ) -> Self {
         ColumnProof {
             column: Column::empty(params),
             inclusion_path: InclusionPath::empty(&params.graph),
@@ -32,7 +47,6 @@ impl<H: Hasher> ColumnProof<H> {
     pub fn synthesize<CS: ConstraintSystem<Bls12>>(
         self,
         mut cs: CS,
-        params: &<Bls12 as JubjubEngine>::Params,
         comm_c: &num::AllocatedNum<Bls12>,
     ) -> Result<(), SynthesisError> {
         let ColumnProof {
@@ -40,7 +54,7 @@ impl<H: Hasher> ColumnProof<H> {
             column,
         } = self;
 
-        let c_i = column.hash(cs.namespace(|| "column_hash"), params)?;
+        let c_i = column.hash(cs.namespace(|| "column_hash"))?;
 
         let leaf_num = inclusion_path.alloc_value(cs.namespace(|| "leaf"))?;
 
@@ -49,7 +63,6 @@ impl<H: Hasher> ColumnProof<H> {
         // TODO: currently allocating the leaf twice, inclusion path should take the already allocated leaf.
         inclusion_path.synthesize(
             cs.namespace(|| "column_proof_all_inclusion"),
-            params,
             comm_c.clone(),
             leaf_num,
         )?;
@@ -58,8 +71,10 @@ impl<H: Hasher> ColumnProof<H> {
     }
 }
 
-impl<H: Hasher> From<VanillaColumnProof<H>> for ColumnProof<H> {
-    fn from(vanilla_proof: VanillaColumnProof<H>) -> Self {
+impl<Proof: MerkleProofTrait> From<VanillaColumnProof<Proof>>
+    for ColumnProof<Proof::Hasher, Proof::Arity, Proof::SubTreeArity, Proof::TopTreeArity>
+{
+    fn from(vanilla_proof: VanillaColumnProof<Proof>) -> Self {
         let VanillaColumnProof {
             column,
             inclusion_proof,

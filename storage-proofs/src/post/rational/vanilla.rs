@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use crate::drgraph::graph_height;
 use crate::error::{Error, Result};
 use crate::hasher::{Domain, HashFunction, Hasher};
-use crate::merkle::{BinaryMerkleTree, MerkleProof};
+use crate::merkle::{MerkleProof, MerkleProofTrait, MerkleTreeTrait, MerkleTreeWrapper};
 use crate::parameter_cache::ParameterSetMetadata;
 use crate::proof::{NoRequirements, ProofScheme};
 use crate::sector::*;
@@ -55,31 +55,42 @@ pub struct PublicInputs<'a, T: 'a + Domain> {
 }
 
 #[derive(Debug, Clone)]
-pub struct PrivateInputs<'a, H: 'a + Hasher> {
-    pub trees: &'a BTreeMap<SectorId, &'a BinaryMerkleTree<H::Domain, H::Function>>,
-    pub comm_cs: &'a [H::Domain],
-    pub comm_r_lasts: &'a [H::Domain],
+#[allow(clippy::type_complexity)]
+pub struct PrivateInputs<'a, Tree: 'a + MerkleTreeTrait> {
+    pub trees: &'a BTreeMap<
+        SectorId,
+        &'a MerkleTreeWrapper<
+            Tree::Hasher,
+            Tree::Store,
+            Tree::Arity,
+            Tree::SubTreeArity,
+            Tree::TopTreeArity,
+        >,
+    >,
+    pub comm_cs: &'a Vec<<Tree::Hasher as Hasher>::Domain>,
+    pub comm_r_lasts: &'a Vec<<Tree::Hasher as Hasher>::Domain>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Proof<H: Hasher> {
+pub struct Proof<P: MerkleProofTrait> {
     #[serde(bound(
-        serialize = "MerkleProof<H, typenum::U2>: Serialize",
-        deserialize = "MerkleProof<H, typenum::U2>: Deserialize<'de>"
+        serialize = "MerkleProof<P::Hasher, P::Arity, P::SubTreeArity, P::TopTreeArity>: Serialize",
+        deserialize = "MerkleProof<P::Hasher, P::Arity, P::SubTreeArity, P::TopTreeArity>: serde::de::DeserializeOwned"
     ))]
-    inclusion_proofs: Vec<MerkleProof<H, typenum::U2>>,
-    pub comm_cs: Vec<H::Domain>,
+    inclusion_proofs: Vec<MerkleProof<P::Hasher, P::Arity, P::SubTreeArity, P::TopTreeArity>>,
+    pub comm_cs: Vec<<P::Hasher as Hasher>::Domain>,
+    //pub comm_r_last: <P::Hasher as Hasher>::Domain,
 }
 
-impl<H: Hasher> Proof<H> {
-    pub fn leafs(&self) -> Vec<H::Domain> {
+impl<P: MerkleProofTrait> Proof<P> {
+    pub fn leafs(&self) -> Vec<<P::Hasher as Hasher>::Domain> {
         self.inclusion_proofs
             .iter()
             .map(MerkleProof::leaf)
             .collect()
     }
 
-    pub fn commitments(&self) -> Vec<&H::Domain> {
+    pub fn commitments(&self) -> Vec<<P::Hasher as Hasher>::Domain> {
         self.inclusion_proofs
             .iter()
             .map(MerkleProof::root)
@@ -87,7 +98,7 @@ impl<H: Hasher> Proof<H> {
     }
 
     #[allow(clippy::type_complexity)]
-    pub fn paths(&self) -> Vec<&Vec<(Vec<H::Domain>, usize)>> {
+    pub fn paths(&self) -> Vec<Vec<(Vec<<P::Hasher as Hasher>::Domain>, usize)>> {
         self.inclusion_proofs
             .iter()
             .map(MerkleProof::path)
@@ -96,19 +107,19 @@ impl<H: Hasher> Proof<H> {
 }
 
 #[derive(Debug, Clone)]
-pub struct RationalPoSt<'a, H>
+pub struct RationalPoSt<'a, Tree>
 where
-    H: 'a + Hasher,
+    Tree: 'a + MerkleTreeTrait,
 {
-    _h: PhantomData<&'a H>,
+    _t: PhantomData<&'a Tree>,
 }
 
-impl<'a, H: 'a + Hasher> ProofScheme<'a> for RationalPoSt<'a, H> {
+impl<'a, Tree: 'a + MerkleTreeTrait> ProofScheme<'a> for RationalPoSt<'a, Tree> {
     type PublicParams = PublicParams;
     type SetupParams = SetupParams;
-    type PublicInputs = PublicInputs<'a, H::Domain>;
-    type PrivateInputs = PrivateInputs<'a, H>;
-    type Proof = Proof<H>;
+    type PublicInputs = PublicInputs<'a, <Tree::Hasher as Hasher>::Domain>;
+    type PrivateInputs = PrivateInputs<'a, Tree>;
+    type Proof = Proof<Tree::Proof>;
     type Requirements = NoRequirements;
 
     fn setup(sp: &Self::SetupParams) -> Result<Self::PublicParams> {
@@ -146,9 +157,7 @@ impl<'a, H: 'a + Hasher> ProofScheme<'a> for RationalPoSt<'a, H> {
                 if let Some(tree) = priv_inputs.trees.get(&challenge.sector) {
                     ensure!(comm_r_last == &tree.root(), Error::InvalidCommitment);
 
-                    Ok(MerkleProof::new_from_proof(
-                        &tree.gen_proof(challenged_leaf as usize)?,
-                    ))
+                    tree.gen_proof(challenged_leaf as usize)
                 } else {
                     bail!(Error::MalformedInput);
                 }
@@ -192,8 +201,10 @@ impl<'a, H: 'a + Hasher> ProofScheme<'a> for RationalPoSt<'a, H> {
             // comm_r_last is the root of the proof
             let comm_r_last = merkle_proof.root();
 
-            if AsRef::<[u8]>::as_ref(&H::Function::hash2(comm_c, &comm_r_last))
-                != AsRef::<[u8]>::as_ref(&comm_r)
+            if AsRef::<[u8]>::as_ref(&<Tree::Hasher as Hasher>::Function::hash2(
+                comm_c,
+                &comm_r_last,
+            )) != AsRef::<[u8]>::as_ref(&comm_r)
             {
                 return Ok(false);
             }
@@ -288,20 +299,21 @@ fn derive_challenge(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ff::Field;
-    use paired::bls12_381::{Bls12, Fr};
     use rand::{Rng, SeedableRng};
     use rand_xorshift::XorShiftRng;
 
-    use crate::drgraph::{new_seed, BucketGraph, Graph, BASE_DEGREE};
-    use crate::fr32::fr_into_bytes;
-    use crate::hasher::{Blake2sHasher, PedersenHasher, PoseidonHasher, Sha256Hasher};
-    use crate::merkle::make_proof_for_test;
+    use crate::hasher::{
+        Blake2sHasher, Domain, Hasher, PedersenHasher, PoseidonHasher, Sha256Hasher,
+    };
+    use crate::merkle::{generate_tree, get_base_tree_count, BinaryMerkleTree, MerkleTreeTrait};
 
-    fn test_rational_post<H: Hasher>() {
+    fn test_rational_post<Tree: MerkleTreeTrait>()
+    where
+        Tree::Store: 'static,
+    {
         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
 
-        let leaves = 64;
+        let leaves = 64 * get_base_tree_count::<Tree>();
         let sector_size = leaves as u64 * 32;
         let challenges_count = 8;
 
@@ -310,17 +322,12 @@ mod tests {
             challenges_count,
         };
 
-        let data1: Vec<u8> = (0..leaves)
-            .flat_map(|_| fr_into_bytes::<Bls12>(&Fr::random(rng)))
-            .collect();
-        let data2: Vec<u8> = (0..leaves)
-            .flat_map(|_| fr_into_bytes::<Bls12>(&Fr::random(rng)))
-            .collect();
+        // Construct and store an MT using a named DiskStore.
+        let temp_dir = tempdir::TempDir::new("tree").unwrap();
+        let temp_path = temp_dir.path();
 
-        let graph1 = BucketGraph::<H>::new(leaves, BASE_DEGREE, 0, new_seed()).unwrap();
-        let graph2 = BucketGraph::<H>::new(leaves, BASE_DEGREE, 0, new_seed()).unwrap();
-        let tree1 = graph1.merkle_tree(None, data1.as_slice()).unwrap();
-        let tree2 = graph2.merkle_tree(None, data2.as_slice()).unwrap();
+        let (_data1, tree1) = generate_tree::<Tree, _>(rng, leaves, Some(temp_path.to_path_buf()));
+        let (_data2, tree2) = generate_tree::<Tree, _>(rng, leaves, Some(temp_path.to_path_buf()));
 
         let seed = (0..leaves).map(|_| rng.gen()).collect::<Vec<u8>>();
         let mut faults = OrderedSectorSet::new();
@@ -353,12 +360,17 @@ mod tests {
             .map(|c| trees.get(&c.sector).unwrap().root())
             .collect::<Vec<_>>();
 
-        let comm_cs: Vec<H::Domain> = challenges.iter().map(|_c| H::Domain::random(rng)).collect();
+        let comm_cs: Vec<<Tree::Hasher as Hasher>::Domain> = challenges
+            .iter()
+            .map(|_c| <Tree::Hasher as Hasher>::Domain::random(rng))
+            .collect();
 
-        let comm_rs: Vec<H::Domain> = comm_cs
+        let comm_rs: Vec<<Tree::Hasher as Hasher>::Domain> = comm_cs
             .iter()
             .zip(comm_r_lasts.iter())
-            .map(|(comm_c, comm_r_last)| H::Function::hash2(comm_c, comm_r_last))
+            .map(|(comm_c, comm_r_last)| {
+                <Tree::Hasher as Hasher>::Function::hash2(comm_c, comm_r_last)
+            })
             .collect();
 
         let pub_inputs = PublicInputs {
@@ -367,16 +379,16 @@ mod tests {
             faults: &faults,
         };
 
-        let priv_inputs = PrivateInputs::<H> {
+        let priv_inputs = PrivateInputs::<Tree> {
             trees: &trees,
             comm_cs: &comm_cs,
             comm_r_lasts: &comm_r_lasts,
         };
 
-        let proof = RationalPoSt::<H>::prove(&pub_params, &pub_inputs, &priv_inputs)
+        let proof = RationalPoSt::<Tree>::prove(&pub_params, &pub_inputs, &priv_inputs)
             .expect("proving failed");
 
-        let is_valid = RationalPoSt::<H>::verify(&pub_params, &pub_inputs, &proof)
+        let is_valid = RationalPoSt::<Tree>::verify(&pub_params, &pub_inputs, &proof)
             .expect("verification failed");
 
         assert!(is_valid);
@@ -384,123 +396,28 @@ mod tests {
 
     #[test]
     fn rational_post_pedersen() {
-        test_rational_post::<PedersenHasher>();
+        test_rational_post::<BinaryMerkleTree<PedersenHasher>>();
     }
 
     #[test]
     fn rational_post_sha256() {
-        test_rational_post::<Sha256Hasher>();
+        test_rational_post::<BinaryMerkleTree<Sha256Hasher>>();
     }
 
     #[test]
     fn rational_post_blake2s() {
-        test_rational_post::<Blake2sHasher>();
+        test_rational_post::<BinaryMerkleTree<Blake2sHasher>>();
     }
 
     #[test]
     fn rational_post_poseidon() {
-        test_rational_post::<PoseidonHasher>();
+        test_rational_post::<BinaryMerkleTree<PoseidonHasher>>();
     }
 
-    // Construct a proof that satisfies a cursory validation:
-    // Data and proof are minimally consistent.
-    // Proof root matches that requested in public inputs.
-    // However, note that data has no relationship to anything,
-    // and proof path does not actually prove that data was in the tree corresponding to expected root.
-    fn make_bogus_proof<H: Hasher, U: typenum::Unsigned>(
-        pub_inputs: &PublicInputs<H::Domain>,
-        rng: &mut XorShiftRng,
-    ) -> MerkleProof<H, U> {
-        let bogus_leaf: H::Domain = H::Domain::random(rng);
-
-        make_proof_for_test(
-            pub_inputs.comm_rs[0],
-            bogus_leaf,
-            vec![(vec![bogus_leaf; U::to_usize() - 1], 1)],
-        )
-    }
-
-    fn test_rational_post_validates<H: Hasher>() {
+    fn test_rational_post_validates_challenge_identity<Tree: 'static + MerkleTreeTrait>() {
         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
 
-        let leaves = 64;
-        let sector_size = leaves as u64 * 32;
-        let challenges_count = 2;
-        let pub_params = PublicParams {
-            sector_size,
-            challenges_count,
-        };
-
-        let data: Vec<u8> = (0..leaves)
-            .flat_map(|_| fr_into_bytes::<Bls12>(&Fr::random(rng)))
-            .collect();
-
-        let graph = BucketGraph::<H>::new(leaves, BASE_DEGREE, 0, new_seed()).unwrap();
-        let tree: BinaryMerkleTree<_, _> = graph.merkle_tree(None, data.as_slice()).unwrap();
-        let seed = (0..leaves).map(|_| rng.gen()).collect::<Vec<u8>>();
-
-        let faults = OrderedSectorSet::new();
-        let mut sectors = OrderedSectorSet::new();
-        sectors.insert(0.into());
-        sectors.insert(1.into());
-
-        let challenges =
-            derive_challenges(challenges_count, sector_size, &sectors, &seed, &faults).unwrap();
-        let comm_r_lasts = challenges.iter().map(|_c| tree.root()).collect::<Vec<_>>();
-
-        let comm_cs: Vec<H::Domain> = challenges.iter().map(|_c| H::Domain::random(rng)).collect();
-
-        let comm_rs: Vec<H::Domain> = comm_cs
-            .iter()
-            .zip(comm_r_lasts.iter())
-            .map(|(comm_c, comm_r_last)| H::Function::hash2(comm_c, comm_r_last))
-            .collect();
-
-        let pub_inputs = PublicInputs::<H::Domain> {
-            challenges: &challenges,
-            faults: &faults,
-            comm_rs: &comm_rs,
-        };
-
-        let bad_proof = Proof {
-            inclusion_proofs: vec![
-                make_bogus_proof::<H, typenum::U2>(&pub_inputs, rng),
-                make_bogus_proof::<H, typenum::U2>(&pub_inputs, rng),
-            ],
-            comm_cs,
-        };
-
-        let verified = RationalPoSt::verify(&pub_params, &pub_inputs, &bad_proof)
-            .expect("verification failed");
-
-        // A bad proof should not be verified!
-        assert!(!verified);
-    }
-
-    #[test]
-    fn rational_post_actually_validates_sha256() {
-        test_rational_post_validates::<Sha256Hasher>();
-    }
-
-    #[test]
-    fn rational_post_actually_validates_blake2s() {
-        test_rational_post_validates::<Blake2sHasher>();
-    }
-
-    #[test]
-    fn rational_post_actually_validates_pedersen() {
-        test_rational_post_validates::<PedersenHasher>();
-    }
-
-    #[test]
-    fn rational_post_actually_validates_poseidon() {
-        test_rational_post_validates::<PoseidonHasher>();
-    }
-
-    fn test_rational_post_validates_challenge_identity<H: Hasher>() {
-        let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
-
-        let leaves = 64;
+        let leaves = 64 * get_base_tree_count::<Tree>();
         let sector_size = leaves as u64 * 32;
         let challenges_count = 2;
 
@@ -509,12 +426,11 @@ mod tests {
             challenges_count,
         };
 
-        let data: Vec<u8> = (0..leaves)
-            .flat_map(|_| fr_into_bytes::<Bls12>(&Fr::random(rng)))
-            .collect();
+        // Construct and store an MT using a named DiskStore.
+        let temp_dir = tempdir::TempDir::new("tree").unwrap();
+        let temp_path = temp_dir.path();
 
-        let graph = BucketGraph::<H>::new(leaves, BASE_DEGREE, 0, new_seed()).unwrap();
-        let tree = graph.merkle_tree(None, data.as_slice()).unwrap();
+        let (_data, tree) = generate_tree::<Tree, _>(rng, leaves, Some(temp_path.to_path_buf()));
         let seed = (0..leaves).map(|_| rng.gen()).collect::<Vec<u8>>();
         let mut faults = OrderedSectorSet::new();
         faults.insert(1.into());
@@ -532,12 +448,17 @@ mod tests {
             .map(|c| trees.get(&c.sector).unwrap().root())
             .collect::<Vec<_>>();
 
-        let comm_cs: Vec<H::Domain> = challenges.iter().map(|_c| H::Domain::random(rng)).collect();
+        let comm_cs: Vec<<Tree::Hasher as Hasher>::Domain> = challenges
+            .iter()
+            .map(|_c| <Tree::Hasher as Hasher>::Domain::random(rng))
+            .collect();
 
-        let comm_rs: Vec<H::Domain> = comm_cs
+        let comm_rs: Vec<<Tree::Hasher as Hasher>::Domain> = comm_cs
             .iter()
             .zip(comm_r_lasts.iter())
-            .map(|(comm_c, comm_r_last)| H::Function::hash2(comm_c, comm_r_last))
+            .map(|(comm_c, comm_r_last)| {
+                <Tree::Hasher as Hasher>::Function::hash2(comm_c, comm_r_last)
+            })
             .collect();
 
         let pub_inputs = PublicInputs {
@@ -546,13 +467,13 @@ mod tests {
             comm_rs: &comm_rs,
         };
 
-        let priv_inputs = PrivateInputs::<H> {
+        let priv_inputs = PrivateInputs::<Tree> {
             trees: &trees,
             comm_cs: &comm_cs,
             comm_r_lasts: &comm_r_lasts,
         };
 
-        let proof = RationalPoSt::<H>::prove(&pub_params, &pub_inputs, &priv_inputs)
+        let proof = RationalPoSt::<Tree>::prove(&pub_params, &pub_inputs, &priv_inputs)
             .expect("proving failed");
 
         let seed = (0..leaves).map(|_| rng.gen()).collect::<Vec<u8>>();
@@ -560,12 +481,17 @@ mod tests {
             derive_challenges(challenges_count, sector_size, &sectors, &seed, &faults).unwrap();
         let comm_r_lasts = challenges.iter().map(|_c| tree.root()).collect::<Vec<_>>();
 
-        let comm_cs: Vec<H::Domain> = challenges.iter().map(|_c| H::Domain::random(rng)).collect();
+        let comm_cs: Vec<<Tree::Hasher as Hasher>::Domain> = challenges
+            .iter()
+            .map(|_c| <Tree::Hasher as Hasher>::Domain::random(rng))
+            .collect();
 
-        let comm_rs: Vec<H::Domain> = comm_cs
+        let comm_rs: Vec<<Tree::Hasher as Hasher>::Domain> = comm_cs
             .iter()
             .zip(comm_r_lasts.iter())
-            .map(|(comm_c, comm_r_last)| H::Function::hash2(comm_c, comm_r_last))
+            .map(|(comm_c, comm_r_last)| {
+                <Tree::Hasher as Hasher>::Function::hash2(comm_c, comm_r_last)
+            })
             .collect();
 
         let different_pub_inputs = PublicInputs {
@@ -574,7 +500,7 @@ mod tests {
             comm_rs: &comm_rs,
         };
 
-        let verified = RationalPoSt::<H>::verify(&pub_params, &different_pub_inputs, &proof)
+        let verified = RationalPoSt::<Tree>::verify(&pub_params, &different_pub_inputs, &proof)
             .expect("verification failed");
 
         // A proof created with a the wrong challenge not be verified!
@@ -583,22 +509,22 @@ mod tests {
 
     #[test]
     fn rational_post_actually_validates_challenge_identity_sha256() {
-        test_rational_post_validates_challenge_identity::<Sha256Hasher>();
+        test_rational_post_validates_challenge_identity::<BinaryMerkleTree<Sha256Hasher>>();
     }
 
     #[test]
     fn rational_post_actually_validates_challenge_identity_blake2s() {
-        test_rational_post_validates_challenge_identity::<Blake2sHasher>();
+        test_rational_post_validates_challenge_identity::<BinaryMerkleTree<Blake2sHasher>>();
     }
 
     #[test]
     fn rational_post_actually_validates_challenge_identity_pedersen() {
-        test_rational_post_validates_challenge_identity::<PedersenHasher>();
+        test_rational_post_validates_challenge_identity::<BinaryMerkleTree<PedersenHasher>>();
     }
 
     #[test]
     fn rational_post_actually_validates_challenge_identity_poseidon() {
-        test_rational_post_validates_challenge_identity::<PoseidonHasher>();
+        test_rational_post_validates_challenge_identity::<BinaryMerkleTree<PoseidonHasher>>();
     }
 
     #[test]

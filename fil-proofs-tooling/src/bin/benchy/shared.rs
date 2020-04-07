@@ -7,21 +7,23 @@ use tempfile::NamedTempFile;
 
 use fil_proofs_tooling::{measure, FuncMeasurement};
 use filecoin_proofs::constants::POREP_PARTITIONS;
-use filecoin_proofs::types::{PaddedBytesAmount, PoRepConfig, SectorSize, UnpaddedBytesAmount};
+use filecoin_proofs::types::{
+    MerkleTreeTrait, PaddedBytesAmount, PoRepConfig, SectorSize, UnpaddedBytesAmount,
+};
 use filecoin_proofs::{
-    add_piece, seal_pre_commit_phase1, seal_pre_commit_phase2, validate_cache_for_precommit_phase2,
-    PieceInfo, PoRepProofPartitions, PrivateReplicaInfo, PublicReplicaInfo, SealPreCommitOutput,
+    add_piece, constants::DefaultOctLCTree, seal_pre_commit_phase1, seal_pre_commit_phase2,
+    validate_cache_for_precommit_phase2, PieceInfo, PoRepProofPartitions, PrivateReplicaInfo,
+    PublicReplicaInfo, SealPreCommitOutput,
 };
 use storage_proofs::sector::SectorId;
 
-pub(super) const CHALLENGE_COUNT: u64 = 1;
 pub(super) const PROVER_ID: [u8; 32] = [9; 32];
 pub(super) const RANDOMNESS: [u8; 32] = [44; 32];
 pub(super) const TICKET_BYTES: [u8; 32] = [1; 32];
 
-pub struct PreCommitReplicaOutput {
+pub struct PreCommitReplicaOutput<Tree: 'static + MerkleTreeTrait> {
     pub piece_info: Vec<PieceInfo>,
-    pub private_replica_info: PrivateReplicaInfo,
+    pub private_replica_info: PrivateReplicaInfo<Tree>,
     pub public_replica_info: PublicReplicaInfo,
 }
 
@@ -67,7 +69,7 @@ pub fn create_replicas(
 ) -> (
     PoRepConfig,
     Option<(
-        Vec<(SectorId, PreCommitReplicaOutput)>,
+        Vec<(SectorId, PreCommitReplicaOutput<DefaultOctLCTree>)>,
         FuncMeasurement<Vec<SealPreCommitOutput>>,
     )>,
 ) {
@@ -86,7 +88,7 @@ pub fn create_replicas(
         ),
     };
 
-    let mut out: Vec<(SectorId, PreCommitReplicaOutput)> = Default::default();
+    let mut out: Vec<(SectorId, PreCommitReplicaOutput<DefaultOctLCTree>)> = Default::default();
     let mut sector_ids = Vec::new();
     let mut cache_dirs = Vec::new();
     let mut staged_files = Vec::new();
@@ -168,7 +170,11 @@ pub fn create_replicas(
             .into_iter()
             .enumerate()
             .map(|(i, phase1)| {
-                validate_cache_for_precommit_phase2(&cache_dirs[i], &sealed_files[i], &phase1)?;
+                validate_cache_for_precommit_phase2::<_, _, DefaultOctLCTree>(
+                    &cache_dirs[i],
+                    &sealed_files[i],
+                    &phase1,
+                )?;
                 seal_pre_commit_phase2(porep_config, phase1, &cache_dirs[i], &sealed_files[i])
             })
             .collect::<Result<Vec<_>, _>>()
