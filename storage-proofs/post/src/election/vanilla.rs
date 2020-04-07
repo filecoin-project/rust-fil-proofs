@@ -13,7 +13,6 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use typenum::Unsigned;
 
-<<<<<<< HEAD:storage-proofs/post/src/election/vanilla.rs
 use storage_proofs_core::{
     drgraph::graph_height,
     error::{Error, Result},
@@ -26,21 +25,6 @@ use storage_proofs_core::{
     sector::*,
     util::NODE_SIZE,
 };
-
-const OCT_ARITY: usize = 8;
-=======
-use crate::drgraph::graph_height;
-use crate::error::{Error, Result};
-use crate::fr32::fr_into_bytes;
-use crate::hasher::{Domain, HashFunction, Hasher};
-use crate::measurements::{measure_op, Operation};
-use crate::merkle::{MerkleProof, MerkleProofTrait, MerkleTreeTrait, MerkleTreeWrapper};
-use crate::parameter_cache::ParameterSetMetadata;
-use crate::porep::stacked::OCT_ARITY;
-use crate::proof::{NoRequirements, ProofScheme};
-use crate::sector::*;
-use crate::util::NODE_SIZE;
->>>>>>> feat: update election post:storage-proofs/src/post/election/vanilla.rs
 
 #[derive(Debug, Clone)]
 pub struct SetupParams {
@@ -217,7 +201,7 @@ fn generate_candidate<Tree: MerkleTreeTrait>(
 ) -> Result<Candidate> {
     let randomness_fr: Fr = randomness.into();
     let prover_id_fr: Fr = prover_id.into();
-    let mut data: Vec<<Tree::Hasher as Hasher>::Domain> = vec![
+    let mut data: Vec<PoseidonDomain> = vec![
         randomness_fr.into(),
         prover_id_fr.into(),
         Fr::from(sector_id).into(),
@@ -235,13 +219,13 @@ fn generate_candidate<Tree: MerkleTreeTrait>(
     }
 
     // pad for md
-    let arity = Tree::Arity::to_usize();
+    let arity = PoseidonMDArity::to_usize();
     while data.len() % arity != 0 {
-        data.push(<Tree::Hasher as Hasher>::Domain::default());
+        data.push(PoseidonDomain::default());
     }
 
     let partial_ticket: Fr = measure_op(Operation::PostPartialTicketHash, || {
-        <Tree::Hasher as Hasher>::Function::hash_md(&data)
+        PoseidonFunction::hash_md(&data)
     })
     .into();
 
@@ -373,12 +357,16 @@ impl<'a, Tree: 'static + MerkleTreeTrait> ProofScheme<'a> for ElectionPoSt<'a, T
         let tree = &priv_inputs.tree;
         let tree_leafs = tree.leafs();
 
+        let config_levels =
+            StoreConfig::default_cached_above_base_layer(tree_leafs, Tree::Arity::to_usize());
+
         trace!(
-            "Generating proof for tree of len {} with leafs {}, and cached_layers {}",
+            "Generating proof for tree of len {} with leafs {}, and cached_above_base_layers {}",
             tree.len(),
             tree_leafs,
-            StoreConfig::default_cached_above_base_layer(tree_leafs, OCT_ARITY)
+            config_levels,
         );
+
         let inclusion_proofs = measure_op(Operation::PostInclusionProofs, || {
             (0..pub_params.challenge_count)
                 .into_par_iter()
@@ -394,11 +382,6 @@ impl<'a, Tree: 'static + MerkleTreeTrait> ProofScheme<'a> for ElectionPoSt<'a, T
                     (0..pub_params.challenged_nodes)
                         .into_par_iter()
                         .map(move |i| {
-                            let config_levels = StoreConfig::default_cached_above_base_layer(
-                                tree_leafs,
-                                Tree::Arity::to_usize(),
-                            );
-
                             tree.gen_cached_proof(challenged_leaf_start as usize + i, config_levels)
                         })
                 })
@@ -453,7 +436,8 @@ impl<'a, Tree: 'static + MerkleTreeTrait> ProofScheme<'a> for ElectionPoSt<'a, T
 
                 // validate the path length
                 let expected_path_length =
-                    graph_height::<Tree::Arity>(pub_params.sector_size as usize / NODE_SIZE) - 1;
+                    merkle_proof.expected_len(pub_params.sector_size as usize / NODE_SIZE);
+
                 if expected_path_length != merkle_proof.path().len() {
                     return Ok(false);
                 }
@@ -475,21 +459,16 @@ mod tests {
     use rand::SeedableRng;
     use rand_xorshift::XorShiftRng;
 
-<<<<<<< HEAD:storage-proofs/post/src/election/vanilla.rs
     use storage_proofs_core::{
         fr32::fr_into_bytes,
         hasher::{PedersenHasher, PoseidonHasher},
         merkle::create_base_lcmerkle_tree,
     };
-=======
-    use crate::hasher::{PedersenHasher, PoseidonHasher};
-    use crate::merkle::{generate_tree, OctLCMerkleTree};
->>>>>>> feat: update election post:storage-proofs/src/post/election/vanilla.rs
 
     fn test_election_post<Tree: 'static + MerkleTreeTrait>() {
         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
 
-        let leaves = 64;
+        let leaves = 64 * get_base_tree_count::<Tree>();
         let sector_size = leaves * NODE_SIZE;
 
         let pub_params = PublicParams {
@@ -557,5 +536,15 @@ mod tests {
     #[test]
     fn election_post_poseidon() {
         test_election_post::<OctLCMerkleTree<PoseidonHasher>>();
+    }
+
+    #[test]
+    fn election_post_poseidon_8_2() {
+        test_election_post::<LCTree<PoseidonHasher, U8, U2, U0>>();
+    }
+
+    #[test]
+    fn election_post_poseidon_8_8_2() {
+        test_election_post::<LCTree<PoseidonHasher, U8, U8, U2>>();
     }
 }

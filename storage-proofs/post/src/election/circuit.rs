@@ -136,7 +136,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait> Circuit<Bls12> for ElectionPoStCircuit
         }
 
         // pad to a multiple of md arity
-        let arity = Tree::Arity::to_usize();
+        let arity = PoseidonMDArity::to_usize();
         while partial_ticket_nums.len() % arity != 0 {
             partial_ticket_nums.push(num::AllocatedNum::alloc(
                 cs.namespace(|| format!("padding_{}", partial_ticket_nums.len())),
@@ -145,7 +145,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait> Circuit<Bls12> for ElectionPoStCircuit
         }
 
         // hash it
-        let partial_ticket_num = <Tree::Hasher as Hasher>::Function::hash_md_circuit::<_>(
+        let partial_ticket_num = PoseidonFunction::hash_md_circuit::<_>(
             &mut cs.namespace(|| "partial_ticket_hash"),
             &partial_ticket_nums,
         )?;
@@ -195,11 +195,10 @@ mod tests {
 
     use crate::election::{self, ElectionPoSt, ElectionPoStCompound};
 
-    // Not implemented
-    //#[test]
-    //fn test_election_post_circuit_pedersen() {
-    //    test_election_post_circuit::<OctLCMerkleTree<PedersenHasher>>(389_883);
-    //}
+    #[test]
+    fn test_election_post_circuit_pedersen() {
+        test_election_post_circuit::<OctLCMerkleTree<PedersenHasher>>(389_883);
+    }
 
     #[test]
     fn test_election_post_circuit_poseidon() {

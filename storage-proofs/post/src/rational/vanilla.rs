@@ -3,7 +3,6 @@ use std::marker::PhantomData;
 
 use anyhow::{bail, ensure, Context};
 use byteorder::{ByteOrder, LittleEndian};
-use generic_array::typenum;
 use serde::{Deserialize, Serialize};
 
 use storage_proofs_core::{
@@ -212,7 +211,7 @@ impl<'a, Tree: 'a + MerkleTreeTrait> ProofScheme<'a> for RationalPoSt<'a, Tree> 
 
             // validate the path length
             let expected_path_length =
-                graph_height::<typenum::U2>(pub_params.sector_size as usize / NODE_SIZE) - 1;
+                merkle_proof.expected_len(pub_params.sector_size as usize / NODE_SIZE);
 
             if expected_path_length != merkle_proof.path().len() {
                 return Ok(false);
@@ -305,7 +304,7 @@ mod tests {
 
     use storage_proofs_core::{
         hasher::{Blake2sHasher, Domain, Hasher, PedersenHasher, PoseidonHasher, Sha256Hasher},
-        merkle::{generate_tree, get_base_tree_count, BinaryMerkleTree, MerkleTreeTrait},
+        merkle::{generate_tree, get_base_tree_count, BinaryMerkleTree, DiskTree, MerkleTreeTrait},
     };
 
     fn test_rational_post<Tree: MerkleTreeTrait>()
@@ -323,7 +322,7 @@ mod tests {
             challenges_count,
         };
 
-        // Construct and store an MT using a named DiskStore.
+        // Construct and store an MT using a named store.
         let temp_dir = tempdir::TempDir::new("tree").unwrap();
         let temp_path = temp_dir.path();
 
@@ -415,6 +414,16 @@ mod tests {
         test_rational_post::<BinaryMerkleTree<PoseidonHasher>>();
     }
 
+    #[test]
+    fn rational_post_poseidon_8_2() {
+        test_rational_post::<DiskTree<PoseidonHasher, U8, U2, U0>>();
+    }
+
+    #[test]
+    fn rational_post_poseidon_8_8_2() {
+        test_rational_post::<DiskTree<PoseidonHasher, U8, U8, U2>>();
+    }
+
     fn test_rational_post_validates_challenge_identity<Tree: 'static + MerkleTreeTrait>() {
         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
 
@@ -427,7 +436,7 @@ mod tests {
             challenges_count,
         };
 
-        // Construct and store an MT using a named DiskStore.
+        // Construct and store an MT using a named store.
         let temp_dir = tempdir::TempDir::new("tree").unwrap();
         let temp_path = temp_dir.path();
 

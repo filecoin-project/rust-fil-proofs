@@ -196,7 +196,7 @@ mod tests {
     fn election_post_test_compound<Tree: 'static + MerkleTreeTrait>() {
         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
 
-        let leaves = 32 * get_base_tree_count::<Tree>();
+        let leaves = 64 * get_base_tree_count::<Tree>();
         let sector_size = (leaves * NODE_SIZE) as u64;
         let randomness = <Tree::Hasher as Hasher>::Domain::random(rng);
         let prover_id = <Tree::Hasher as Hasher>::Domain::random(rng);
