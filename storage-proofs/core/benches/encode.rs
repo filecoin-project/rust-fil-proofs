@@ -2,11 +2,11 @@ use criterion::{black_box, criterion_group, criterion_main, Criterion, Throughpu
 use ff::Field;
 use paired::bls12_381::Fr;
 use rand::thread_rng;
-use storage_proofs::drgraph::new_seed;
-use storage_proofs::fr32::fr_into_bytes;
-use storage_proofs::hasher::sha256::Sha256Hasher;
-use storage_proofs::hasher::{Domain, Hasher};
-use storage_proofs::porep::stacked::{create_label, create_label_exp, StackedBucketGraph};
+use storage_proofs_core::drgraph::new_seed;
+use storage_proofs_core::fr32::fr_into_bytes;
+use storage_proofs_core::hasher::sha256::Sha256Hasher;
+use storage_proofs_core::hasher::{Domain, Hasher};
+use storage_proofs_porep::stacked::{create_label, create_label_exp, StackedBucketGraph};
 
 struct Pregenerated<H: 'static + Hasher> {
     data: Vec<u8>,

@@ -6,9 +6,8 @@ use criterion::{
 };
 use paired::bls12_381::Bls12;
 use rand::{thread_rng, Rng};
-use storage_proofs::gadgets::BenchCS;
-
 use sha2::{Digest, Sha256};
+use storage_proofs_core::gadgets::BenchCS;
 
 struct Sha256Example<'a> {
     data: &'a [Option<bool>],

@@ -1,8 +1,7 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion, ParameterizedBenchmark};
 use rand::{thread_rng, Rng};
-use storage_proofs::hasher::{PoseidonHasher, Sha256Hasher};
-use storage_proofs::merkle::{create_base_merkle_tree, BinaryMerkleTree};
-use storage_proofs::porep::stacked::{StackedBucketGraph, EXP_DEGREE};
+use storage_proofs_core::hasher::{PoseidonHasher, Sha256Hasher};
+use storage_proofs_core::merkle::{create_base_merkle_tree, BinaryMerkleTree};
 
 fn merkle_benchmark(c: &mut Criterion) {
     #[cfg(feature = "big-sector-sizes-bench")]

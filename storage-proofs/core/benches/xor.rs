@@ -4,10 +4,9 @@ use bellperson::{Circuit, ConstraintSystem, SynthesisError};
 use criterion::{black_box, criterion_group, criterion_main, Criterion, ParameterizedBenchmark};
 use paired::bls12_381::Bls12;
 use rand::{thread_rng, Rng};
-use storage_proofs::gadgets::BenchCS;
-
-use storage_proofs::crypto::xor;
-use storage_proofs::gadgets;
+use storage_proofs_core::crypto::xor;
+use storage_proofs_core::gadgets;
+use storage_proofs_core::gadgets::BenchCS;
 
 struct XorExample<'a> {
     key: &'a [Option<bool>],
