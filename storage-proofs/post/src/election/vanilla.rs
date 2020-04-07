@@ -14,12 +14,11 @@ use sha2::{Digest, Sha256};
 use typenum::Unsigned;
 
 use storage_proofs_core::{
-    drgraph::graph_height,
     error::{Error, Result},
     fr32::fr_into_bytes,
     hasher::{Domain, HashFunction, Hasher, PoseidonDomain, PoseidonFunction, PoseidonMDArity},
     measurements::{measure_op, Operation},
-    merkle::{MerkleProof, MerkleProofTrait, MerkleTreeTrait, OctLCMerkleTree},
+    merkle::{MerkleProof, MerkleProofTrait, MerkleTreeTrait, MerkleTreeWrapper},
     parameter_cache::ParameterSetMetadata,
     proof::{NoRequirements, ProofScheme},
     sector::*,
@@ -458,11 +457,11 @@ mod tests {
 
     use rand::SeedableRng;
     use rand_xorshift::XorShiftRng;
+    use typenum::{U0, U2, U8};
 
     use storage_proofs_core::{
-        fr32::fr_into_bytes,
         hasher::{PedersenHasher, PoseidonHasher},
-        merkle::create_base_lcmerkle_tree,
+        merkle::{generate_tree, get_base_tree_count, LCTree},
     };
 
     fn test_election_post<Tree: 'static + MerkleTreeTrait>() {
@@ -530,17 +529,17 @@ mod tests {
 
     #[test]
     fn election_post_pedersen() {
-        test_election_post::<OctLCMerkleTree<PedersenHasher>>();
+        test_election_post::<LCTree<PedersenHasher, U8, U0, U0>>();
     }
 
     #[test]
     fn election_post_poseidon() {
-        test_election_post::<OctLCMerkleTree<PoseidonHasher>>();
+        test_election_post::<LCTree<PoseidonHasher, U8, U0, U0>>();
     }
 
     #[test]
-    fn election_post_poseidon_8_2() {
-        test_election_post::<LCTree<PoseidonHasher, U8, U2, U0>>();
+    fn election_post_poseidon_8_8() {
+        test_election_post::<LCTree<PoseidonHasher, U8, U8, U0>>();
     }
 
     #[test]

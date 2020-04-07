@@ -3,10 +3,12 @@ use std::marker::PhantomData;
 
 use anyhow::{bail, ensure, Context};
 use byteorder::{ByteOrder, LittleEndian};
+use generic_array::typenum;
+use merkletree::store::StoreConfig;
 use serde::{Deserialize, Serialize};
+use typenum::Unsigned;
 
 use storage_proofs_core::{
-    drgraph::graph_height,
     error::{Error, Result},
     hasher::{Domain, HashFunction, Hasher},
     merkle::{MerkleProof, MerkleProofTrait, MerkleTreeTrait, MerkleTreeWrapper},
@@ -156,8 +158,12 @@ impl<'a, Tree: 'a + MerkleTreeTrait> ProofScheme<'a> for RationalPoSt<'a, Tree> 
 
                 if let Some(tree) = priv_inputs.trees.get(&challenge.sector) {
                     ensure!(comm_r_last == &tree.root(), Error::InvalidCommitment);
+                    let config_levels = StoreConfig::default_cached_above_base_layer(
+                        tree.leafs(),
+                        Tree::Arity::to_usize(),
+                    );
 
-                    tree.gen_proof(challenged_leaf as usize)
+                    tree.gen_cached_proof(challenged_leaf as usize, config_levels)
                 } else {
                     bail!(Error::MalformedInput);
                 }
@@ -301,10 +307,11 @@ mod tests {
     use super::*;
     use rand::{Rng, SeedableRng};
     use rand_xorshift::XorShiftRng;
+    use typenum::{U0, U2, U8};
 
     use storage_proofs_core::{
         hasher::{Blake2sHasher, Domain, Hasher, PedersenHasher, PoseidonHasher, Sha256Hasher},
-        merkle::{generate_tree, get_base_tree_count, BinaryMerkleTree, DiskTree, MerkleTreeTrait},
+        merkle::{generate_tree, get_base_tree_count, LCTree, MerkleTreeTrait},
     };
 
     fn test_rational_post<Tree: MerkleTreeTrait>()
@@ -396,32 +403,32 @@ mod tests {
 
     #[test]
     fn rational_post_pedersen() {
-        test_rational_post::<BinaryMerkleTree<PedersenHasher>>();
+        test_rational_post::<LCTree<PedersenHasher, U8, U0, U0>>();
     }
 
     #[test]
     fn rational_post_sha256() {
-        test_rational_post::<BinaryMerkleTree<Sha256Hasher>>();
+        test_rational_post::<LCTree<Sha256Hasher, U8, U0, U0>>();
     }
 
     #[test]
     fn rational_post_blake2s() {
-        test_rational_post::<BinaryMerkleTree<Blake2sHasher>>();
+        test_rational_post::<LCTree<Blake2sHasher, U8, U0, U0>>();
     }
 
     #[test]
     fn rational_post_poseidon() {
-        test_rational_post::<BinaryMerkleTree<PoseidonHasher>>();
+        test_rational_post::<LCTree<PoseidonHasher, U8, U0, U0>>();
     }
 
     #[test]
-    fn rational_post_poseidon_8_2() {
-        test_rational_post::<DiskTree<PoseidonHasher, U8, U2, U0>>();
+    fn rational_post_poseidon_8_8() {
+        test_rational_post::<LCTree<PoseidonHasher, U8, U8, U0>>();
     }
 
     #[test]
     fn rational_post_poseidon_8_8_2() {
-        test_rational_post::<DiskTree<PoseidonHasher, U8, U8, U2>>();
+        test_rational_post::<LCTree<PoseidonHasher, U8, U8, U2>>();
     }
 
     fn test_rational_post_validates_challenge_identity<Tree: 'static + MerkleTreeTrait>() {
@@ -519,22 +526,32 @@ mod tests {
 
     #[test]
     fn rational_post_actually_validates_challenge_identity_sha256() {
-        test_rational_post_validates_challenge_identity::<BinaryMerkleTree<Sha256Hasher>>();
+        test_rational_post_validates_challenge_identity::<LCTree<Sha256Hasher, U8, U0, U0>>();
     }
 
     #[test]
     fn rational_post_actually_validates_challenge_identity_blake2s() {
-        test_rational_post_validates_challenge_identity::<BinaryMerkleTree<Blake2sHasher>>();
+        test_rational_post_validates_challenge_identity::<LCTree<Blake2sHasher, U8, U0, U0>>();
     }
 
     #[test]
     fn rational_post_actually_validates_challenge_identity_pedersen() {
-        test_rational_post_validates_challenge_identity::<BinaryMerkleTree<PedersenHasher>>();
+        test_rational_post_validates_challenge_identity::<LCTree<PedersenHasher, U8, U0, U0>>();
     }
 
     #[test]
     fn rational_post_actually_validates_challenge_identity_poseidon() {
-        test_rational_post_validates_challenge_identity::<BinaryMerkleTree<PoseidonHasher>>();
+        test_rational_post_validates_challenge_identity::<LCTree<PoseidonHasher, U8, U0, U0>>();
+    }
+
+    #[test]
+    fn rational_post_actually_validates_challenge_identity_poseidon_8_8() {
+        test_rational_post_validates_challenge_identity::<LCTree<PoseidonHasher, U8, U8, U0>>();
+    }
+
+    #[test]
+    fn rational_post_actually_validates_challenge_identity_poseidon_8_8_2() {
+        test_rational_post_validates_challenge_identity::<LCTree<PoseidonHasher, U8, U8, U2>>();
     }
 
     #[test]

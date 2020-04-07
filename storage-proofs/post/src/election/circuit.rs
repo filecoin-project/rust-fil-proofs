@@ -184,25 +184,25 @@ mod tests {
     use rand_xorshift::XorShiftRng;
     use storage_proofs_core::{
         compound_proof::CompoundProof,
-        fr32::fr_into_bytes,
         gadgets::TestConstraintSystem,
         hasher::{Domain, HashFunction, Hasher, PedersenHasher, PoseidonHasher},
-        merkle::{generate_tree, get_base_tree_count, MerkleTreeTrait, OctLCMerkleTree};
+        merkle::{generate_tree, get_base_tree_count, LCTree, MerkleTreeTrait},
         proof::ProofScheme,
         sector::SectorId,
         util::NODE_SIZE,
     };
+    use typenum::{U0, U8};
 
     use crate::election::{self, ElectionPoSt, ElectionPoStCompound};
 
     #[test]
     fn test_election_post_circuit_pedersen() {
-        test_election_post_circuit::<OctLCMerkleTree<PedersenHasher>>(389_883);
+        test_election_post_circuit::<LCTree<PedersenHasher, U8, U0, U0>>(389_883);
     }
 
     #[test]
     fn test_election_post_circuit_poseidon() {
-        test_election_post_circuit::<OctLCMerkleTree<PoseidonHasher>>(24_426);
+        test_election_post_circuit::<LCTree<PoseidonHasher, U8, U0, U0>>(24_426);
     }
 
     fn test_election_post_circuit<Tree: 'static + MerkleTreeTrait>(expected_constraints: usize) {

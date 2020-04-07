@@ -10,7 +10,6 @@ use storage_proofs_core::{
     drgraph,
     error::Result,
     gadgets::por::PoRCompound,
-    hasher::Hasher,
     merkle::MerkleTreeTrait,
     parameter_cache::{CacheableParameters, ParameterSetMetadata},
     por,
@@ -171,26 +170,26 @@ mod tests {
 
     use storage_proofs_core::{
         compound_proof,
-        fr32::fr_into_bytes,
         gadgets::{MetricCS, TestConstraintSystem},
         hasher::{Domain, HashFunction, Hasher, PedersenHasher, PoseidonHasher},
-        merkle::{generate_tree, get_base_tree_count, MerkleTreeTrait, OctLCMerkleTree},
+        merkle::{generate_tree, get_base_tree_count, LCTree, MerkleTreeTrait},
         proof::NoRequirements,
         sector::SectorId,
     };
+    use typenum::{U0, U8};
 
     use crate::election;
 
     #[ignore] // Slow test – run only when compiled for release.
     #[test]
     fn election_post_test_compound_pedersen() {
-        election_post_test_compound::<OctLCMerkleTree<PedersenHasher>>();
+        election_post_test_compound::<LCTree<PedersenHasher, U8, U0, U0>>();
     }
 
     #[ignore] // Slow test – run only when compiled for release.
     #[test]
     fn election_post_test_compound_poseidon() {
-        election_post_test_compound::<OctLCMerkleTree<PoseidonHasher>>();
+        election_post_test_compound::<LCTree<PoseidonHasher, U8, U0, U0>>();
     }
 
     fn election_post_test_compound<Tree: 'static + MerkleTreeTrait>() {
@@ -220,7 +219,7 @@ mod tests {
 
         for i in 0..5 {
             sectors.push(i.into());
-            let (_data1, tree) =
+            let (_data, tree) =
                 generate_tree::<Tree, _>(rng, leaves, Some(temp_path.to_path_buf()));
             trees.insert(i.into(), tree);
         }

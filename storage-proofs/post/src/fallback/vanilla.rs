@@ -607,18 +607,37 @@ mod tests {
     }
 
     #[test]
+    fn fallback_post_poseidon_two_partitions_matching_sub_8_8() {
+        test_fallback_post::<LCTree<PoseidonHasher, U8, U8, U0>>(4, 2, 2);
+    }
+
+    #[test]
     fn fallback_post_poseidon_two_partitions_smaller_sub_8_4() {
         test_fallback_post::<LCTree<PoseidonHasher, U8, U4, U0>>(5, 3, 2);
+    }
+
+    #[test]
+    fn fallback_post_poseidon_two_partitions_smaller_sub_8_8() {
+        test_fallback_post::<LCTree<PoseidonHasher, U8, U8, U0>>(5, 3, 2);
     }
 
     #[test]
     fn fallback_post_pedersen_single_partition_matching_top_8_4_2() {
         test_fallback_post::<LCTree<PedersenHasher, U8, U4, U2>>(5, 5, 1);
     }
+    #[test]
+    fn fallback_post_pedersen_single_partition_matching_top_8_8_2() {
+        test_fallback_post::<LCTree<PedersenHasher, U8, U8, U2>>(5, 5, 1);
+    }
 
     #[test]
     fn fallback_post_poseidon_single_partition_matching_top_8_4_2() {
         test_fallback_post::<LCTree<PoseidonHasher, U8, U4, U2>>(5, 5, 1);
+    }
+
+    #[test]
+    fn fallback_post_poseidon_single_partition_matching_top_8_8_2() {
+        test_fallback_post::<LCTree<PoseidonHasher, U8, U8, U2>>(5, 5, 1);
     }
 
     #[test]
@@ -634,5 +653,10 @@ mod tests {
     #[test]
     fn fallback_post_poseidon_two_partitions_smaller_top_8_4_2() {
         test_fallback_post::<LCTree<PoseidonHasher, U8, U4, U2>>(5, 3, 2);
+    }
+
+    #[test]
+    fn fallback_post_poseidon_two_partitions_smaller_top_8_8_2() {
+        test_fallback_post::<LCTree<PoseidonHasher, U8, U8, U2>>(5, 3, 2);
     }
 }

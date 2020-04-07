@@ -769,6 +769,7 @@ fn setup_verifyd_logger(proof: Proof, hasher: Hasher, sector_size: u64) {
     .expect("failed to setup logger");
 }
 
+#[allow(clippy::cognitive_complexity)]
 fn main() {
     let new_command = SubCommand::with_name("new")
         .about("Create parameters")
