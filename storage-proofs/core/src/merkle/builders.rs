@@ -507,11 +507,9 @@ where
             data.extend(inner_data);
         }
         (data, MerkleTreeWrapper::from_sub_trees(sub_trees).unwrap())
+    } else if sub_tree_arity > 0 {
+        generate_sub_tree::<R, Tree>(rng, nodes, temp_path)
     } else {
-        if sub_tree_arity > 0 {
-            generate_sub_tree::<R, Tree>(rng, nodes, temp_path)
-        } else {
-            generate_base_tree::<R, Tree>(rng, nodes, temp_path)
-        }
+        generate_base_tree::<R, Tree>(rng, nodes, temp_path)
     }
 }
