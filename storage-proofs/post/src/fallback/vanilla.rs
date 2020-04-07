@@ -475,6 +475,7 @@ impl<'a, Tree: 'a + MerkleTreeTrait> ProofScheme<'a> for FallbackPoSt<'a, Tree> 
 mod tests {
     use super::*;
 
+    use generic_array::typenum::{U0, U2, U4, U8};
     use rand::SeedableRng;
     use rand_xorshift::XorShiftRng;
 
@@ -559,8 +560,6 @@ mod tests {
 
         assert!(is_valid);
     }
-
-    use typenum::{U0, U2, U4, U8};
 
     #[test]
     fn fallback_post_pedersen_single_partition_matching_base_8() {

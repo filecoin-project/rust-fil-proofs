@@ -161,6 +161,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait>
 mod tests {
     use super::*;
 
+    use generic_array::typenum::{U0, U2, U4, U8};
     use pretty_assertions::assert_eq;
     use rand::SeedableRng;
     use rand_xorshift::XorShiftRng;
@@ -170,7 +171,6 @@ mod tests {
         hasher::{Domain, HashFunction, Hasher, PedersenHasher, PoseidonHasher},
         merkle::{generate_tree, get_base_tree_count, LCTree, MerkleTreeTrait},
     };
-    use typenum::{U0, U2, U4, U8};
 
     use crate::fallback::{
         self, ChallengeRequirements, PrivateInputs, PrivateSector, PublicInputs, PublicSector,

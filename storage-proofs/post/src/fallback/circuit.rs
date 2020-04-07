@@ -171,6 +171,7 @@ mod tests {
     use super::*;
 
     use ff::Field;
+    use generic_array::typenum::{U0, U2, U4, U8};
     use paired::bls12_381::{Bls12, Fr};
     use rand::SeedableRng;
     use rand_xorshift::XorShiftRng;
@@ -182,7 +183,6 @@ mod tests {
         proof::ProofScheme,
         util::NODE_SIZE,
     };
-    use typenum::{U0, U2, U4, U8};
 
     use crate::fallback::{
         self, FallbackPoSt, FallbackPoStCompound, PrivateInputs, PrivateSector, PublicInputs,
