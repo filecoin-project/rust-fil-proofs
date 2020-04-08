@@ -1,4 +1,3 @@
-use std::collections::BTreeSet;
 use std::io::{stdout, Seek, SeekFrom, Write};
 
 use fil_proofs_tooling::{measure, Metadata};
@@ -107,6 +106,7 @@ pub fn run_fallback_post_bench<Tree: 'static + MerkleTreeTrait>(
     };
     let cache_dir = tempfile::tempdir().unwrap();
     let sector_id = SectorId::from(SECTOR_ID);
+    let sector_count = WINNING_POST_SECTOR_COUNT;
 
     let phase1_output = seal_pre_commit_phase1::<_, _, _, Tree>(
         porep_config,
@@ -152,9 +152,6 @@ pub fn run_fallback_post_bench<Tree: 'static + MerkleTreeTrait>(
     let _seal_commit_output =
         seal_commit_phase2::<Tree>(porep_config, phase1_output, PROVER_ID, sector_id)?;
 
-    let mut sector_set = BTreeSet::<SectorId>::new();
-    sector_set.insert(sector_id);
-
     let pub_replica = PublicReplicaInfo::new(comm_r).expect("failed to create public replica info");
 
     let priv_replica = PrivateReplicaInfo::<Tree>::new(
@@ -170,7 +167,7 @@ pub fn run_fallback_post_bench<Tree: 'static + MerkleTreeTrait>(
 
     let post_config = PoStConfig {
         sector_size: sector_size.into(),
-        sector_count: WINNING_POST_SECTOR_COUNT,
+        sector_count,
         challenge_count: WINNING_POST_CHALLENGE_COUNT,
         typ: PoStType::Winning,
         priority: true,
@@ -180,15 +177,11 @@ pub fn run_fallback_post_bench<Tree: 'static + MerkleTreeTrait>(
         generate_winning_post_sector_challenge::<Tree>(
             &post_config,
             &RANDOMNESS,
-            &sector_set,
+            sector_count as u64,
             PROVER_ID,
         )
     })
     .expect("failed to generate winning post sector challenge");
-
-    let challenged_sectors = &gen_winning_post_sector_challenge_measurement.return_value;
-    assert_eq!(challenged_sectors.len(), sector_set.len());
-    assert_eq!(challenged_sectors[0], sector_id);
 
     let gen_winning_post_measurement = measure(|| {
         generate_winning_post::<Tree>(&post_config, &RANDOMNESS, &priv_replica_info[..], PROVER_ID)
@@ -203,7 +196,6 @@ pub fn run_fallback_post_bench<Tree: 'static + MerkleTreeTrait>(
             &RANDOMNESS,
             &pub_replica_info[..],
             PROVER_ID,
-            &sector_set,
             &proof,
         )
     })
