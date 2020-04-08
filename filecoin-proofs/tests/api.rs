@@ -92,8 +92,6 @@ fn winning_post<Tree: 'static + MerkleTreeTrait>(sector_size: u64) -> Result<()>
     let (sector_id, replica, comm_r, cache_dir) =
         create_seal::<_, Tree>(rng, sector_size, prover_id, true)?;
     let sector_count = WINNING_POST_SECTOR_COUNT;
-    let mut sector_set = OrderedSectorSet::new();
-    sector_set.insert(sector_id);
 
     let random_fr: DefaultTreeDomain = Fr::random(rng).into();
     let mut randomness = [0u8; 32];
@@ -110,11 +108,11 @@ fn winning_post<Tree: 'static + MerkleTreeTrait>(sector_size: u64) -> Result<()>
     let challenged_sectors = generate_winning_post_sector_challenge::<Tree>(
         &config,
         &randomness,
-        &sector_set,
+        sector_count as u64,
         prover_id,
     )?;
     assert_eq!(challenged_sectors.len(), sector_count);
-    assert_eq!(challenged_sectors[0], sector_id);
+    assert_eq!(challenged_sectors[0], 0); // with a sector_count of 1, the only valid index is 0
 
     let pub_replicas = vec![(sector_id, PublicReplicaInfo::new(comm_r)?)];
     let priv_replicas = vec![(
@@ -124,14 +122,8 @@ fn winning_post<Tree: 'static + MerkleTreeTrait>(sector_size: u64) -> Result<()>
 
     let proof = generate_winning_post::<Tree>(&config, &randomness, &priv_replicas[..], prover_id)?;
 
-    let valid = verify_winning_post::<Tree>(
-        &config,
-        &randomness,
-        &pub_replicas[..],
-        prover_id,
-        &sector_set,
-        &proof,
-    )?;
+    let valid =
+        verify_winning_post::<Tree>(&config, &randomness, &pub_replicas[..], prover_id, &proof)?;
     assert!(valid, "proof did not verify");
     Ok(())
 }

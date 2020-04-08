@@ -1,6 +1,6 @@
 use std::marker::PhantomData;
 
-use anyhow::{ensure, Context};
+use anyhow::ensure;
 use byteorder::{ByteOrder, LittleEndian};
 use generic_array::typenum::Unsigned;
 use log::trace;
@@ -161,11 +161,11 @@ where
 pub fn generate_sector_challenges<T: Domain>(
     randomness: T,
     challenge_count: usize,
-    sectors: &OrderedSectorSet,
+    sector_set_len: u64,
     prover_id: T,
-) -> Result<Vec<SectorId>> {
+) -> Result<Vec<u64>> {
     (0..challenge_count)
-        .map(|n| generate_sector_challenge(randomness, n, sectors, prover_id))
+        .map(|n| generate_sector_challenge(randomness, n, sector_set_len, prover_id))
         .collect()
 }
 
@@ -173,9 +173,9 @@ pub fn generate_sector_challenges<T: Domain>(
 pub fn generate_sector_challenge<T: Domain>(
     randomness: T,
     n: usize,
-    sectors: &OrderedSectorSet,
+    sector_set_len: u64,
     prover_id: T,
-) -> Result<SectorId> {
+) -> Result<u64> {
     let mut hasher = Sha256::new();
     hasher.input(AsRef::<[u8]>::as_ref(&prover_id));
     hasher.input(AsRef::<[u8]>::as_ref(&randomness));
@@ -184,13 +184,9 @@ pub fn generate_sector_challenge<T: Domain>(
     let hash = hasher.result();
 
     let sector_challenge = LittleEndian::read_u64(&hash.as_ref()[..8]);
-    let sector_index = (sector_challenge % sectors.len() as u64) as usize;
-    let sector = *sectors
-        .iter()
-        .nth(sector_index)
-        .context("invalid challenge generated")?;
+    let sector_index = sector_challenge % sector_set_len;
 
-    Ok(sector)
+    Ok(sector_index)
 }
 
 /// Generate all challenged leaf ranges for a single sector, such that the range fits into the sector.
