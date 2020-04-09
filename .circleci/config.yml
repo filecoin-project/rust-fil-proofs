@@ -278,7 +278,8 @@ jobs:
       - run: rustup default $(cat rust-toolchain)
       - run: cargo update
       - run: cargo fetch
-      - run: ulimit -n 512
+      - run: sudo ulimit -n 20000
+      - run: sudo ulimit -u 20000
       - run:
           name: Test (nightly, Darwin)
           command: cargo +$(cat rust-toolchain) test --release --verbose --all
