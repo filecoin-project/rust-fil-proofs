@@ -278,10 +278,12 @@ jobs:
       - run: rustup default $(cat rust-toolchain)
       - run: cargo update
       - run: cargo fetch
-      - run: sudo ulimit -n 49000
       - run:
           name: Test (nightly, Darwin)
-          command: cargo +$(cat rust-toolchain) test --release --verbose --all
+          command: |
+            ulimit -n 20000
+            ulimit -u 20000
+            cargo +$(cat rust-toolchain) test --release --verbose --all
           no_output_timeout: 2h
 
   validate_commit_msg:
