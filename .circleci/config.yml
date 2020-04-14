@@ -280,7 +280,11 @@ jobs:
       - run: cargo fetch
       - run:
           name: Test (nightly, Darwin)
-          command: cargo +$(cat rust-toolchain) test --release --verbose --all
+          command: |
+            sudo ulimit -n 20000
+            sudo ulimit -u 20000
+            ulimit -n 20000
+            cargo +$(cat rust-toolchain) test --release --verbose --all
           no_output_timeout: 2h
 
   validate_commit_msg:
