@@ -34,8 +34,5 @@ pub(crate) fn get_base_tree_size<Tree: MerkleTreeTrait>(sector_size: SectorSize)
 }
 
 pub(crate) fn get_base_tree_leafs<Tree: MerkleTreeTrait>(base_tree_size: usize) -> Result<usize> {
-    Ok(get_merkle_tree_leafs(
-        base_tree_size,
-        Tree::Arity::to_usize(),
-    ))
+    get_merkle_tree_leafs(base_tree_size, Tree::Arity::to_usize())
 }

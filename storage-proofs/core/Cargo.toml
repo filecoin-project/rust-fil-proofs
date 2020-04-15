@@ -12,7 +12,8 @@ bench = false
 
 [dependencies]
 rand = "0.7"
-merkletree = "0.17.1"
+#merkletree = "0.17.1"
+merkletree = { git = "https://github.com/filecoin-project/merkle_light", branch = "improve-tree-leafs" }
 byteorder = "1"
 config = "0.9.3"
 itertools = "0.8"
