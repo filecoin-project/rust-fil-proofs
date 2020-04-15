@@ -10,6 +10,8 @@ mod merkleproofs;
 mod prodbench;
 mod shared;
 mod stacked;
+mod window_post;
+mod winning_post;
 
 fn main() -> Result<()> {
     fil_logger::init();
@@ -94,6 +96,26 @@ fn main() -> Result<()> {
                         .help("Extract data after proving and verifying.")
                 );
 
+    let window_post_cmd = SubCommand::with_name("window-post")
+        .about("Benchmark Window PoST")
+        .arg(
+            Arg::with_name("size")
+                .long("size")
+                .required(true)
+                .help("The data size in KiB")
+                .takes_value(true),
+        );
+
+    let winning_post_cmd = SubCommand::with_name("winning-post")
+        .about("Benchmark Winning PoST")
+        .arg(
+            Arg::with_name("size")
+                .long("size")
+                .required(true)
+                .help("The data size in KiB")
+                .takes_value(true),
+        );
+
     let hash_cmd = SubCommand::with_name("hash-constraints")
         .about("Benchmark hash function inside of a circuit");
 
@@ -160,6 +182,8 @@ fn main() -> Result<()> {
     let matches = App::new("benchy")
         .version("0.1")
         .subcommand(stacked_cmd)
+        .subcommand(window_post_cmd)
+        .subcommand(winning_post_cmd)
         .subcommand(hash_cmd)
         .subcommand(prodbench_cmd)
         .subcommand(merkleproof_cmd)
@@ -184,6 +208,18 @@ fn main() -> Result<()> {
                 partitions: value_t!(m, "partitions", usize)?,
                 size: value_t!(m, "size", usize)?,
             })?;
+        }
+        ("window-post", Some(m)) => {
+            let sector_size_kibs = value_t!(m, "size", usize)
+                .expect("could not convert `size` CLI argument to `usize`");
+            let sector_size = sector_size_kibs * 1024;
+            window_post::run(sector_size)?;
+        }
+        ("winning-post", Some(m)) => {
+            let sector_size_kibs = value_t!(m, "size", usize)
+                .expect("could not convert `size` CLI argument to `usize`");
+            let sector_size = sector_size_kibs * 1024;
+            winning_post::run(sector_size)?;
         }
         ("hash-constraints", Some(_m)) => {
             hash_fns::run()?;
