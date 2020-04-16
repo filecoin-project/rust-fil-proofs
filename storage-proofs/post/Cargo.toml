@@ -25,7 +25,8 @@ log = "0.4.7"
 hex = "0.4.0"
 generic-array = "0.13.2"
 anyhow = "1.0.23"
-neptune = "0.5.4"
+#neptune = "0.5.4"
+neptune = { git = "https://github.com/filecoin-project/neptune", branch = "column-tree-builder" }
 
 [dev-dependencies]
 tempdir = "0.3.7"

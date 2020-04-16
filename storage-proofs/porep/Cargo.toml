@@ -27,7 +27,8 @@ pretty_assertions = "0.6.1"
 generic-array = "0.13.2"
 anyhow = "1.0.23"
 once_cell = "1.3.1"
-neptune = "0.5.4"
+#neptune = "0.5.4"
+neptune = { git = "https://github.com/filecoin-project/neptune", branch = "column-tree-builder" }
 num_cpus = "1.10.1"
 
 [dev-dependencies]
