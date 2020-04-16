@@ -39,7 +39,8 @@ hex = "0.4.0"
 generic-array = "0.13.2"
 anyhow = "1.0.23"
 thiserror = "1.0.6"
-neptune = "0.5.4"
+#neptune = "0.5.4"
+neptune = { git = "https://github.com/filecoin-project/neptune", branch = "column-tree-builder" }
 cpu-time = { version = "1.0", optional = true }
 
 [dev-dependencies]
