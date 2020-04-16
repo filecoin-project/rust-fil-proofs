@@ -10,8 +10,7 @@ readme = "README.md"
 [dependencies]
 storage-proofs-core = { path = "../core", version = "1.0.0-alpha.0" }
 rand = "0.7"
-#merkletree = "0.17.1"
-merkletree = { git = "https://github.com/filecoin-project/merkle_light" }
+merkletree = "0.18.0"
 memmap = "0.7"
 num-bigint = "0.2"
 num-traits = "0.2"
