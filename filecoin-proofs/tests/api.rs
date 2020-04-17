@@ -54,11 +54,11 @@ fn test_seal_lifecycle_32kib_top_8_8_2() -> Result<()> {
     seal_lifecycle::<SectorShape32KiB>(SECTOR_SIZE_32_KIB)
 }
 
-#[test]
-#[ignore]
-fn test_seal_lifecycle_32gib_top_8_8_2() -> Result<()> {
-    seal_lifecycle::<SectorShape32GiB>(SECTOR_SIZE_32_GIB)
-}
+//#[test]
+//#[ignore]
+//fn test_seal_lifecycle_32gib_top_8_8_2() -> Result<()> {
+//    seal_lifecycle::<SectorShape32GiB>(SECTOR_SIZE_32_GIB)
+//}
 
 fn seal_lifecycle<Tree: 'static + MerkleTreeTrait>(sector_size: u64) -> Result<()> {
     let rng = &mut XorShiftRng::from_seed(TEST_SEED);
