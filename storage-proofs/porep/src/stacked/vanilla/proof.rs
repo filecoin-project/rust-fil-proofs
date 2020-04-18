@@ -13,7 +13,7 @@ use ff::Field;
 use log::{info, trace};
 use merkletree::merkle::{get_merkle_tree_len, is_merkle_tree_size_valid, next_pow2};
 use merkletree::store::{DiskStore, StoreConfig};
-use neptune::column_tree_builder::ColumnTreeBuilder;
+use neptune::column_tree_builder::{ColumnTreeBuilder, ColumnTreeBuilderTrait};
 use paired::bls12_381::{Bls12, Fr};
 use rayon::prelude::*;
 use storage_proofs_core::{
