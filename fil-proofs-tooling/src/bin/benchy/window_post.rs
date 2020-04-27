@@ -34,6 +34,18 @@ struct Inputs {
 #[derive(Serialize)]
 #[serde(rename_all = "kebab-case")]
 struct Outputs {
+    seal_pre_commit_phase1_cpu_time_ms: u64,
+    seal_pre_commit_phase1_wall_time_ms: u64,
+    validate_cache_for_precommit_phase2_cpu_time_ms: u64,
+    validate_cache_for_precommit_phase2_wall_time_ms: u64,
+    seal_pre_commit_phase2_cpu_time_ms: u64,
+    seal_pre_commit_phase2_wall_time_ms: u64,
+    validate_cache_for_commit_cpu_time_ms: u64,
+    validate_cache_for_commit_wall_time_ms: u64,
+    seal_commit_phase1_cpu_time_ms: u64,
+    seal_commit_phase1_wall_time_ms: u64,
+    seal_commit_phase2_cpu_time_ms: u64,
+    seal_commit_phase2_wall_time_ms: u64,
     gen_window_post_cpu_time_ms: u64,
     gen_window_post_wall_time_ms: u64,
     verify_window_post_cpu_time_ms: u64,
@@ -105,49 +117,67 @@ pub fn run_window_post_bench<Tree: 'static + MerkleTreeTrait>(
     let cache_dir = tempfile::tempdir().unwrap();
     let sector_id = SectorId::from(SECTOR_ID);
 
-    let phase1_output = seal_pre_commit_phase1::<_, _, _, Tree>(
-        porep_config,
-        cache_dir.path(),
-        staged_file.path(),
-        sealed_file.path(),
-        PROVER_ID,
-        sector_id,
-        TICKET_BYTES,
-        &piece_infos,
-    )?;
+    let seal_pre_commit_phase1_measurement = measure(|| {
+        seal_pre_commit_phase1::<_, _, _, Tree>(
+            porep_config,
+            cache_dir.path(),
+            staged_file.path(),
+            sealed_file.path(),
+            PROVER_ID,
+            sector_id,
+            TICKET_BYTES,
+            &piece_infos,
+        )
+    })
+    .expect("failed in seal_pre_commit_phase1");
+    let phase1_output = seal_pre_commit_phase1_measurement.return_value;
 
-    validate_cache_for_precommit_phase2::<_, _, Tree>(
-        cache_dir.path(),
-        sealed_file.path(),
-        &phase1_output,
-    )?;
+    let validate_cache_for_precommit_phase2_measurement = measure(|| {
+        validate_cache_for_precommit_phase2::<_, _, Tree>(
+            cache_dir.path(),
+            sealed_file.path(),
+            &phase1_output,
+        )
+    })
+    .expect("failed to validate cache for precommit phase2");
 
-    let seal_pre_commit_output = seal_pre_commit_phase2::<_, _, Tree>(
-        porep_config,
-        phase1_output,
-        cache_dir.path(),
-        sealed_file.path(),
-    )?;
+    let seal_pre_commit_phase2_measurement = measure(|| {
+        seal_pre_commit_phase2::<_, _, Tree>(
+            porep_config,
+            phase1_output,
+            cache_dir.path(),
+            sealed_file.path(),
+        )
+    })
+    .expect("failed in seal_pre_commit_phase2");
+    let seal_pre_commit_output = seal_pre_commit_phase2_measurement.return_value;
 
     let seed = [0u8; 32];
     let comm_r = seal_pre_commit_output.comm_r;
 
-    validate_cache_for_commit::<_, _, Tree>(cache_dir.path(), sealed_file.path())?;
+    let validate_cache_for_commit_measurement =
+        measure(|| validate_cache_for_commit::<_, _, Tree>(cache_dir.path(), sealed_file.path()))
+            .expect("failed to validate cache for commit");
 
-    let phase1_output = seal_commit_phase1::<_, Tree>(
-        porep_config,
-        cache_dir.path(),
-        sealed_file.path(),
-        PROVER_ID,
-        sector_id,
-        TICKET_BYTES,
-        seed,
-        seal_pre_commit_output,
-        &piece_infos,
-    )?;
+    let seal_commit_phase1_measurement = measure(|| {
+        seal_commit_phase1::<_, Tree>(
+            porep_config,
+            cache_dir.path(),
+            sealed_file.path(),
+            PROVER_ID,
+            sector_id,
+            TICKET_BYTES,
+            seed,
+            seal_pre_commit_output,
+            &piece_infos,
+        )
+    })
+    .expect("failed in seal_commit_phase1");
+    let phase1_output = seal_commit_phase1_measurement.return_value;
 
-    let _seal_commit_output =
-        seal_commit_phase2::<Tree>(porep_config, phase1_output, PROVER_ID, sector_id)?;
+    let seal_commit_phase2_measurement =
+        measure(|| seal_commit_phase2::<Tree>(porep_config, phase1_output, PROVER_ID, sector_id))
+            .expect("failed in seal_commit_phase2");
 
     let pub_replica = PublicReplicaInfo::new(comm_r).expect("failed to create public replica info");
 
@@ -199,6 +229,40 @@ pub fn run_window_post_bench<Tree: 'static + MerkleTreeTrait>(
     let report = Report {
         inputs: Inputs { sector_size },
         outputs: Outputs {
+            seal_pre_commit_phase1_cpu_time_ms: seal_pre_commit_phase1_measurement
+                .cpu_time
+                .as_millis() as u64,
+            seal_pre_commit_phase1_wall_time_ms: seal_pre_commit_phase1_measurement
+                .wall_time
+                .as_millis() as u64,
+            validate_cache_for_precommit_phase2_cpu_time_ms:
+                validate_cache_for_precommit_phase2_measurement
+                    .cpu_time
+                    .as_millis() as u64,
+            validate_cache_for_precommit_phase2_wall_time_ms:
+                validate_cache_for_precommit_phase2_measurement
+                    .wall_time
+                    .as_millis() as u64,
+            seal_pre_commit_phase2_cpu_time_ms: seal_pre_commit_phase2_measurement
+                .cpu_time
+                .as_millis() as u64,
+            seal_pre_commit_phase2_wall_time_ms: seal_pre_commit_phase2_measurement
+                .wall_time
+                .as_millis() as u64,
+            validate_cache_for_commit_cpu_time_ms: validate_cache_for_commit_measurement
+                .cpu_time
+                .as_millis() as u64,
+            validate_cache_for_commit_wall_time_ms: validate_cache_for_commit_measurement
+                .wall_time
+                .as_millis() as u64,
+            seal_commit_phase1_cpu_time_ms: seal_commit_phase1_measurement.cpu_time.as_millis()
+                as u64,
+            seal_commit_phase1_wall_time_ms: seal_commit_phase1_measurement.wall_time.as_millis()
+                as u64,
+            seal_commit_phase2_cpu_time_ms: seal_commit_phase2_measurement.cpu_time.as_millis()
+                as u64,
+            seal_commit_phase2_wall_time_ms: seal_commit_phase2_measurement.wall_time.as_millis()
+                as u64,
             gen_window_post_cpu_time_ms: gen_window_post_measurement.cpu_time.as_millis() as u64,
             gen_window_post_wall_time_ms: gen_window_post_measurement.wall_time.as_millis() as u64,
             verify_window_post_cpu_time_ms: verify_window_post_measurement.cpu_time.as_millis()
@@ -215,8 +279,7 @@ pub fn run_window_post_bench<Tree: 'static + MerkleTreeTrait>(
 }
 
 pub fn run(sector_size: usize) -> anyhow::Result<()> {
-    println!("Benchy Fallback PoSt: sector-size={}", sector_size,);
-    info!("Benchy Fallback PoSt: sector-size={}", sector_size,);
+    info!("Benchy Window PoSt: sector-size={}", sector_size,);
 
     with_shape!(
         sector_size as u64,
