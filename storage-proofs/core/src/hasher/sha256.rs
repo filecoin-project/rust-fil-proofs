@@ -24,7 +24,7 @@ impl Hasher for Sha256Hasher {
     type Function = Sha256Function;
 
     fn name() -> String {
-        "sha256hasher".into()
+        "sha256_hasher".into()
     }
 
     fn sloth_encode(key: &Self::Domain, ciphertext: &Self::Domain) -> Result<Self::Domain> {
