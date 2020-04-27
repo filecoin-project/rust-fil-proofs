@@ -32,12 +32,6 @@ fn test_seal_lifecycle_2kib_base_8() -> Result<()> {
 
 #[test]
 #[ignore]
-fn test_seal_lifecycle_4gib_base_8() -> Result<()> {
-    seal_lifecycle::<SectorShape4GiB>(SECTOR_SIZE_4_GIB)
-}
-
-#[test]
-#[ignore]
 fn test_seal_lifecycle_4kib_sub_8_2() -> Result<()> {
     seal_lifecycle::<SectorShape4KiB>(SECTOR_SIZE_4_KIB)
 }
@@ -53,6 +47,14 @@ fn test_seal_lifecycle_16kib_sub_8_2() -> Result<()> {
 fn test_seal_lifecycle_32kib_top_8_8_2() -> Result<()> {
     seal_lifecycle::<SectorShape32KiB>(SECTOR_SIZE_32_KIB)
 }
+
+// These tests are good to run, but take a long time.
+
+//#[test]
+//#[ignore]
+//fn test_seal_lifecycle_4gib_base_8() -> Result<()> {
+//    seal_lifecycle::<SectorShape4GiB>(SECTOR_SIZE_4_GIB)
+//}
 
 //#[test]
 //#[ignore]
