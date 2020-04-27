@@ -14,7 +14,7 @@ use log::{info, trace};
 use merkletree::merkle::{get_merkle_tree_len, is_merkle_tree_size_valid, next_pow2};
 use merkletree::store::{DiskStore, StoreConfig};
 use neptune::column_tree_builder::{ColumnTreeBuilder, ColumnTreeBuilderTrait};
-use paired::bls12_381::{Bls12, Fr};
+use paired::bls12_381::Fr;
 use rayon::prelude::*;
 use storage_proofs_core::{
     cache_key::CacheKey,
@@ -399,9 +399,14 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
             // RAM as more data is shuttled in on each iteration.
             let segments = next_pow2(layers);
             let chunked_nodes_count = nodes_count / segments;
+            assert!(chunked_nodes_count <= (1 << 27));
 
-            let mut column_tree_builder =
-                ColumnTreeBuilder::<Bls12, ColumnArity, TreeArity>::new(nodes_count);
+            let mut column_tree_builder = ColumnTreeBuilder::<ColumnArity, TreeArity>::new(
+                None,
+                nodes_count,
+                chunked_nodes_count,
+                chunked_nodes_count,
+            )?;
 
             for (i, config) in configs.iter().enumerate() {
                 let mut remaining_iterations = segments;
@@ -450,8 +455,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
 
                     remaining_iterations -= 1;
                     if remaining_iterations != 0 {
-                        let remaining = column_tree_builder.add_columns(&columns)?;
-                        assert_eq!(remaining, remaining_iterations * chunked_nodes_count);
+                        column_tree_builder.add_columns(&columns)?;
                     } else {
                         let tree_data = column_tree_builder.add_final_columns(&columns)?;
                         let tree_data_len = tree_data.len();
