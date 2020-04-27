@@ -78,7 +78,7 @@ impl<
 
     fn display() -> String {
         format!(
-            "MerkleTree<{}, {}, {}, {}>",
+            "merkletree-{}-{}-{}-{}",
             H::name(),
             U::to_usize(),
             V::to_usize(),
