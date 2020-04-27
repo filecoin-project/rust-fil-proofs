@@ -403,7 +403,7 @@ impl<Tree: MerkleTreeTrait, G: Hasher> TemporaryAux<Tree, G> {
             // Note: from_data_store requires the base tree leaf count
             let tree_d = BinaryMerkleTree::<G>::from_data_store(
                 tree_d_store,
-                get_merkle_tree_leafs(tree_d_size, BINARY_ARITY),
+                get_merkle_tree_leafs(tree_d_size, BINARY_ARITY)?,
             )
             .context("tree_d")?;
 
@@ -434,7 +434,7 @@ impl<Tree: MerkleTreeTrait, G: Hasher> TemporaryAux<Tree, G> {
                     Tree::TopTreeArity,
                 >::from_data_store(
                     tree_c_store,
-                    get_merkle_tree_leafs(tree_c_size, Tree::Arity::to_usize()),
+                    get_merkle_tree_leafs(tree_c_size, Tree::Arity::to_usize())?,
                 )
                 .context("tree_c")?;
                 tree_c.delete(config.clone()).context("tree_c")?;
@@ -477,7 +477,7 @@ impl<Tree: MerkleTreeTrait, G: Hasher> TemporaryAuxCache<Tree, G> {
     pub fn new(t_aux: &TemporaryAux<Tree, G>, replica_path: PathBuf) -> Result<Self> {
         // tree_d_size stored in the config is the base tree size
         let tree_d_size = t_aux.tree_d_config.size.unwrap();
-        let tree_d_leafs = get_merkle_tree_leafs(tree_d_size, BINARY_ARITY);
+        let tree_d_leafs = get_merkle_tree_leafs(tree_d_size, BINARY_ARITY)?;
         trace!(
             "Instantiating tree d with size {} and leafs {}",
             tree_d_size,

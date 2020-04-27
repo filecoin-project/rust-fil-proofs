@@ -23,7 +23,7 @@ pub fn create_disk_tree<Tree: MerkleTreeTrait>(
     base_tree_len: usize,
     configs: &[StoreConfig],
 ) -> Result<DiskTree<Tree::Hasher, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>> {
-    let base_tree_leafs = get_merkle_tree_leafs(base_tree_len, Tree::Arity::to_usize());
+    let base_tree_leafs = get_merkle_tree_leafs(base_tree_len, Tree::Arity::to_usize())?;
 
     if Tree::TopTreeArity::to_usize() > 0 {
         ensure!(
@@ -53,7 +53,7 @@ pub fn create_lc_tree<Tree: MerkleTreeTrait>(
     configs: &[StoreConfig],
     replica_paths: &[PathBuf],
 ) -> Result<LCTree<Tree::Hasher, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>> {
-    let base_tree_leafs = get_merkle_tree_leafs(base_tree_len, Tree::Arity::to_usize());
+    let base_tree_leafs = get_merkle_tree_leafs(base_tree_len, Tree::Arity::to_usize())?;
 
     if Tree::TopTreeArity::to_usize() > 0 {
         ensure!(
@@ -367,10 +367,7 @@ pub fn get_base_tree_count<Tree: MerkleTreeTrait>() -> usize {
 }
 
 pub fn get_base_tree_leafs<Tree: MerkleTreeTrait>(base_tree_size: usize) -> Result<usize> {
-    Ok(get_merkle_tree_leafs(
-        base_tree_size,
-        Tree::Arity::to_usize(),
-    ))
+    get_merkle_tree_leafs(base_tree_size, Tree::Arity::to_usize())
 }
 
 pub type ResTree<Tree> = MerkleTreeWrapper<
