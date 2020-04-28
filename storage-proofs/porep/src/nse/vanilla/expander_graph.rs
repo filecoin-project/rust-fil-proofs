@@ -1,6 +1,7 @@
 use sha2raw::Sha256;
 
 use super::config::Config;
+use super::Parent;
 
 /// The expander graph which provides the parents for the expander layers.
 #[derive(Debug)]
@@ -13,20 +14,16 @@ pub struct ExpanderGraph {
     pub degree: usize,
 }
 
-/// A single parent index.
-pub type Parent = u32;
-
 /// Expanded parent, alwas of length `k`.
 pub type ExpandedParent = Vec<Parent>;
 
 impl ExpanderGraph {
     /// Calculates the parents for the node at the given `index`.
-    ///
-    /// Fails if the index is not in the range of `0..degree`.
     pub fn parents(&self, index: u32) -> ExpanderGraphParentsIter {
         ExpanderGraphParentsIter::new(self, index)
     }
 
+    /// Calculates the expanded parents for the node at the given `index`.
     pub fn expanded_parents(&self, index: u32) -> ExpanderGraphExpandedParentsIter {
         ExpanderGraphExpandedParentsIter::new(self, index)
     }
