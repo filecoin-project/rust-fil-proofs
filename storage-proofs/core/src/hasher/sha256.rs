@@ -72,7 +72,7 @@ impl AsRef<Sha256Domain> for Sha256Domain {
 }
 
 impl Sha256Domain {
-    fn trim_to_fr32(&mut self) {
+    pub fn trim_to_fr32(&mut self) {
         // strip last two bits, to ensure result is in Fr.
         self.0[31] &= 0b0011_1111;
     }
