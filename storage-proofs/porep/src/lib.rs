@@ -2,6 +2,7 @@
 //#![warn(clippy::unwrap_used)]
 
 pub mod drg;
+pub mod nse;
 pub mod stacked;
 
 mod encode;
