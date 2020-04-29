@@ -96,6 +96,15 @@ impl<'a, Tree: MerkleTreeTrait, G: Hasher> Circuit<Bls12> for StackedCircuit<'a,
             None => bytes_into_boolean_vec_be(cs.namespace(|| "replica_id_bits"), None, 256),
         }?;
 
+        let replica_id_num = num::AllocatedNum::alloc(cs.namespace(|| "replica_id"), || {
+            replica_id
+                .map(Into::into)
+                .ok_or_else(|| SynthesisError::AssignmentMissing)
+        })?;
+
+        // make replica_id a public input
+        replica_id_num.inputize(cs.namespace(|| "replica_id_input"))?;
+
         // Allocate comm_d as Fr
         let comm_d_num = num::AllocatedNum::alloc(cs.namespace(|| "comm_d"), || {
             comm_d
@@ -193,6 +202,9 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher>
         let graph = &pub_params.graph;
 
         let mut inputs = Vec::new();
+
+        let replica_id = pub_in.replica_id;
+        inputs.push(replica_id.into());
 
         let comm_d = pub_in.tau.as_ref().expect("missing tau").comm_d;
         inputs.push(comm_d.into());
@@ -338,27 +350,27 @@ mod tests {
 
     #[test]
     fn stacked_input_circuit_pedersen_base_2() {
-        stacked_input_circuit::<DiskTree<PedersenHasher, U2, U0, U0>>(20, 1_804_353);
+        stacked_input_circuit::<DiskTree<PedersenHasher, U2, U0, U0>>(21, 1_804_354);
     }
 
     #[test]
     fn stacked_input_circuit_poseidon_base_2() {
-        stacked_input_circuit::<DiskTree<PoseidonHasher, U2, U0, U0>>(20, 1_752_560);
+        stacked_input_circuit::<DiskTree<PoseidonHasher, U2, U0, U0>>(21, 1_752_561);
     }
 
     #[test]
     fn stacked_input_circuit_poseidon_base_8() {
-        stacked_input_circuit::<DiskTree<PoseidonHasher, U8, U0, U0>>(20, 1_746_416);
+        stacked_input_circuit::<DiskTree<PoseidonHasher, U8, U0, U0>>(21, 1_746_417);
     }
 
     #[test]
     fn stacked_input_circuit_poseidon_sub_8_4() {
-        stacked_input_circuit::<DiskTree<PoseidonHasher, U8, U4, U0>>(20, 1_843_484);
+        stacked_input_circuit::<DiskTree<PoseidonHasher, U8, U4, U0>>(21, 1_843_485);
     }
 
     #[test]
     fn stacked_input_circuit_poseidon_top_8_4_2() {
-        stacked_input_circuit::<DiskTree<PoseidonHasher, U8, U4, U2>>(20, 1_893_938);
+        stacked_input_circuit::<DiskTree<PoseidonHasher, U8, U4, U2>>(21, 1_893_939);
     }
 
     fn stacked_input_circuit<Tree: MerkleTreeTrait + 'static>(
