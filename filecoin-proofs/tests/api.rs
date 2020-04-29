@@ -50,16 +50,22 @@ fn test_seal_lifecycle_32kib_top_8_8_2() -> Result<()> {
 
 // These tests are good to run, but take a long time.
 
+#[test]
+#[ignore]
+fn test_seal_lifecycle_4gib_base_8() -> Result<()> {
+    seal_lifecycle::<SectorShape4GiB>(SECTOR_SIZE_4_GIB)
+}
+
 //#[test]
 //#[ignore]
-//fn test_seal_lifecycle_4gib_base_8() -> Result<()> {
-//    seal_lifecycle::<SectorShape4GiB>(SECTOR_SIZE_4_GIB)
+//fn test_seal_lifecycle_32gib_top_8_8_0() -> Result<()> {
+//    seal_lifecycle::<SectorShape32GiB>(SECTOR_SIZE_32_GIB)
 //}
 
 //#[test]
 //#[ignore]
-//fn test_seal_lifecycle_32gib_top_8_8_2() -> Result<()> {
-//    seal_lifecycle::<SectorShape32GiB>(SECTOR_SIZE_32_GIB)
+//fn test_seal_lifecycle_64gib_top_8_8_2() -> Result<()> {
+//    seal_lifecycle::<SectorShape64GiB>(SECTOR_SIZE_64_GIB)
 //}
 
 fn seal_lifecycle<Tree: 'static + MerkleTreeTrait>(sector_size: u64) -> Result<()> {

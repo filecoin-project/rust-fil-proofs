@@ -4,16 +4,10 @@ use std::ops::Add;
 use std::path::PathBuf;
 
 use generic_array::typenum::{self, Unsigned};
-use generic_array::{sequence::GenericSequence, ArrayLength, GenericArray};
-use typenum::bit::B1;
-use typenum::uint::{UInt, UTerm};
-use typenum::{U1, U11, U2, U4, U8};
-
-use ff::Field;
+use generic_array::ArrayLength;
 use log::{info, trace};
-use merkletree::merkle::{get_merkle_tree_len, is_merkle_tree_size_valid, next_pow2};
+use merkletree::merkle::{get_merkle_tree_len, is_merkle_tree_size_valid};
 use merkletree::store::{DiskStore, StoreConfig};
-use neptune::column_tree_builder::{ColumnTreeBuilder, ColumnTreeBuilderTrait};
 use paired::bls12_381::Fr;
 use rayon::prelude::*;
 use storage_proofs_core::{
@@ -21,7 +15,6 @@ use storage_proofs_core::{
     data::Data,
     drgraph::Graph,
     error::Result,
-    fr32::fr_into_bytes,
     hasher::{Domain, HashFunction, Hasher},
     measurements::{
         measure_op,
@@ -30,6 +23,9 @@ use storage_proofs_core::{
     merkle::*,
     util::NODE_SIZE,
 };
+use typenum::bit::B1;
+use typenum::uint::{UInt, UTerm};
+use typenum::{U11, U2, U4, U8};
 
 use super::{
     challenges::LayerChallenges,
@@ -42,6 +38,20 @@ use super::{
     },
     EncodingProof, LabelingProof,
 };
+
+#[cfg(all(feature = "column-builder-gpu"))]
+use ff::Field;
+#[cfg(all(feature = "column-builder-gpu"))]
+use generic_array::{sequence::GenericSequence, GenericArray};
+#[cfg(all(feature = "column-builder-gpu"))]
+use neptune::batch_hasher::BatcherType;
+#[cfg(all(feature = "column-builder-gpu"))]
+use neptune::column_tree_builder::{ColumnTreeBuilder, ColumnTreeBuilderTrait};
+#[cfg(all(feature = "column-builder-gpu"))]
+use storage_proofs_core::fr32::fr_into_bytes;
+
+#[cfg(not(all(feature = "column-builder-gpu")))]
+use super::hash::hash_single_column;
 
 use crate::encode::{decode, encode};
 use crate::PoRep;
@@ -366,6 +376,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         Ok(tree)
     }
 
+    #[cfg(all(feature = "column-builder-gpu"))]
     fn generate_tree_c<ColumnArity, TreeArity>(
         layers: usize,
         nodes_count: usize,
@@ -379,38 +390,47 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         TreeArity: ArrayLength<Fr> + Add<B1> + Add<UInt<UTerm, B1>>,
         <TreeArity as Add<B1>>::Output: ArrayLength<Fr>,
     {
+        info!("generating tree c using the GPU");
         // Build the tree for CommC
-        let tree_c = measure_op(GenerateTreeC, || {
+        measure_op(GenerateTreeC, || {
             info!("Building column hashes");
 
-            // NOTE: The max we can send to the GPU at once is 4GiB
-            // (as a conservative soft-limit discussed), which means
-            // the most number of nodes that we can process at once is
-            // 134217728 (1 << 27).  Given that layers multiply this
-            // value, we calculate a segment, which is a subset of
-            // nodes (guaranteed to be smalller than 4GiB of data,
-            // given that the max layer count is 11) to generate
-            // columns for and pass those to calls of the Column Tree
-            // Builder's add_column method.  When we have the last
-            // segment, we call the add_final_column method.
+            // NOTE: The max number of columns we recommend sending to
+            // the GPU at once is 400000 for columns and 700000 for
+            // trees (conservative soft-limits discussed; advanced
+            // user's can override with caution).
             //
-            // The assumption is that the GPU builder will
-            // process/hash each segment it receives to conserve GPU
-            // RAM as more data is shuttled in on each iteration.
-            let segments = next_pow2(layers);
-            let chunked_nodes_count = nodes_count / segments;
-            assert!(chunked_nodes_count <= (1 << 27));
+            // Override these values using environment variables:
+            // MAX_COLUMN_BATCH_SIZE and MAX_TREE_BATCH_SIZE, respectively.
+            let max_column_batch_size = if std::env::var("MAX_COLUMN_BATCH_SIZE").is_ok() {
+                std::env::var("MAX_COLUMN_BATCH_SIZE")?.parse::<usize>()?
+            } else {
+                400_000
+            };
+            let max_tree_batch_size = if std::env::var("MAX_TREE_BATCH_SIZE").is_ok() {
+                std::env::var("MAX_TREE_BATCH_SIZE")?.parse::<usize>()?
+            } else {
+                700_000
+            };
 
             let mut column_tree_builder = ColumnTreeBuilder::<ColumnArity, TreeArity>::new(
-                None,
+                Some(BatcherType::GPU),
                 nodes_count,
-                chunked_nodes_count,
-                chunked_nodes_count,
+                max_column_batch_size,
+                max_tree_batch_size,
             )?;
 
             for (i, config) in configs.iter().enumerate() {
-                let mut remaining_iterations = segments;
-                while remaining_iterations != 0 {
+                let mut node_index = 0;
+                while node_index != nodes_count {
+                    let chunked_nodes_count =
+                        std::cmp::min(nodes_count - node_index, max_column_batch_size);
+                    trace!(
+                        "processing config {}/{} with colum nodes {}",
+                        i + 1,
+                        tree_count,
+                        chunked_nodes_count,
+                    );
                     let mut columns: Vec<GenericArray<Fr, ColumnArity>> =
                         vec![
                             GenericArray::<Fr, ColumnArity>::generate(|_i: usize| Fr::zero());
@@ -439,8 +459,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                                         let el: <Tree::Hasher as Hasher>::Domain = store
                                             .read_at(
                                                 (i * nodes_count)
-                                                    + ((segments - remaining_iterations)
-                                                        * chunked_nodes_count)
+                                                    + node_index
                                                     + j
                                                     + chunk * chunk_size,
                                             )
@@ -453,10 +472,18 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                         }
                     });
 
-                    remaining_iterations -= 1;
-                    if remaining_iterations != 0 {
+                    node_index += chunked_nodes_count;
+                    trace!(
+                        "node index {}/{}/{}",
+                        node_index,
+                        chunked_nodes_count,
+                        nodes_count,
+                    );
+
+                    if node_index != nodes_count {
                         column_tree_builder.add_columns(&columns)?;
                     } else {
+                        assert_eq!(node_index, nodes_count);
                         let tree_data = column_tree_builder.add_final_columns(&columns)?;
                         let tree_data_len = tree_data.len();
                         info!(
@@ -492,9 +519,80 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
             create_disk_tree::<
                 DiskTree<Tree::Hasher, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>,
             >(configs[0].size.unwrap(), &configs)
-        });
+        })
+    }
 
-        tree_c
+    #[cfg(not(all(feature = "column-builder-gpu")))]
+    fn generate_tree_c<ColumnArity, TreeArity>(
+        layers: usize,
+        nodes_count: usize,
+        tree_count: usize,
+        configs: Vec<StoreConfig>,
+        labels: &LabelsCache<Tree>,
+    ) -> Result<DiskTree<Tree::Hasher, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>>
+    where
+        ColumnArity: ArrayLength<Fr> + Add<B1> + Add<UInt<UTerm, B1>>,
+        <ColumnArity as Add<B1>>::Output: ArrayLength<Fr>,
+        TreeArity: ArrayLength<Fr> + Add<B1> + Add<UInt<UTerm, B1>>,
+        <TreeArity as Add<B1>>::Output: ArrayLength<Fr>,
+    {
+        info!("generating tree c using the CPU");
+        measure_op(GenerateTreeC, || {
+            info!("Building column hashes");
+
+            let mut trees = Vec::with_capacity(tree_count);
+            for (i, config) in configs.iter().enumerate() {
+                let mut hashes: Vec<<Tree::Hasher as Hasher>::Domain> =
+                    vec![<Tree::Hasher as Hasher>::Domain::default(); nodes_count];
+
+                rayon::scope(|s| {
+                    // spawn n = num_cpus * 2 threads
+                    let n = num_cpus::get() * 2;
+
+                    // only split if we have at least two elements per thread
+                    let num_chunks = if n > nodes_count * 2 { 1 } else { n };
+
+                    // chunk into n chunks
+                    let chunk_size = (nodes_count as f64 / num_chunks as f64).ceil() as usize;
+
+                    // calculate all n chunks in parallel
+                    for (chunk, hashes_chunk) in hashes.chunks_mut(chunk_size).enumerate() {
+                        let labels = &labels;
+
+                        s.spawn(move |_| {
+                            for (j, hash) in hashes_chunk.iter_mut().enumerate() {
+                                let data: Vec<_> = (1..=layers)
+                                    .map(|layer| {
+                                        let store = labels.labels_for_layer(layer);
+                                        let el: <Tree::Hasher as Hasher>::Domain = store
+                                            .read_at((i * nodes_count) + j + chunk * chunk_size)
+                                            .unwrap();
+                                        el.into()
+                                    })
+                                    .collect();
+
+                                *hash = hash_single_column(&data).into();
+                            }
+                        });
+                    }
+                });
+
+                info!("building base tree_c {}/{}", i + 1, tree_count);
+                trees.push(DiskTree::<
+                    Tree::Hasher,
+                    Tree::Arity,
+                    typenum::U0,
+                    typenum::U0,
+                >::from_par_iter_with_config(
+                    hashes.into_par_iter(), config.clone()
+                ));
+            }
+
+            assert_eq!(tree_count, trees.len());
+            create_disk_tree::<
+                DiskTree<Tree::Hasher, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>,
+            >(configs[0].size.unwrap(), &configs)
+        })
     }
 
     pub(crate) fn transform_and_replicate_layers(
@@ -572,22 +670,21 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         let nodes_count = graph.size() / tree_count;
 
         // Ensure that the node count will work for binary and oct arities.
+        let binary_arity_valid = is_merkle_tree_size_valid(nodes_count, BINARY_ARITY);
+        let other_arity_valid = is_merkle_tree_size_valid(nodes_count, Tree::Arity::to_usize());
         trace!(
             "is_merkle_tree_size_valid({}, BINARY_ARITY) = {}",
             nodes_count,
-            is_merkle_tree_size_valid(nodes_count, BINARY_ARITY)
+            binary_arity_valid
         );
         trace!(
             "is_merkle_tree_size_valid({}, {}) = {}",
             nodes_count,
             Tree::Arity::to_usize(),
-            is_merkle_tree_size_valid(nodes_count, Tree::Arity::to_usize())
+            other_arity_valid
         );
-        assert!(is_merkle_tree_size_valid(nodes_count, BINARY_ARITY));
-        assert!(is_merkle_tree_size_valid(
-            nodes_count,
-            Tree::Arity::to_usize()
-        ));
+        assert!(binary_arity_valid);
+        assert!(other_arity_valid);
 
         let layers = layer_challenges.layers();
         assert!(layers > 0);
@@ -622,37 +719,6 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         let configs = split_config(tree_c_config.clone(), tree_count)?;
 
         let tree_c_root = match layers {
-            1 => {
-                // NOTE: This additional Arity match could go away if
-                // we could get the constraints of Tree::Arity to
-                // match what is needed by the ColumnTreeBuilder's
-                // TreeArity.
-                let tree_c = match Tree::Arity::to_usize() {
-                    2 => Self::generate_tree_c::<U1, U2>(
-                        layers,
-                        nodes_count,
-                        tree_count,
-                        configs,
-                        &labels,
-                    ),
-                    4 => Self::generate_tree_c::<U1, U4>(
-                        layers,
-                        nodes_count,
-                        tree_count,
-                        configs,
-                        &labels,
-                    ),
-                    8 => Self::generate_tree_c::<U1, U8>(
-                        layers,
-                        nodes_count,
-                        tree_count,
-                        configs,
-                        &labels,
-                    ),
-                    _ => panic!("Unsupported tree arity"),
-                }?;
-                tree_c.root()
-            }
             2 => {
                 // NOTE: This additional Arity match could go away if
                 // we could get the constraints of Tree::Arity to
@@ -674,6 +740,37 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                         &labels,
                     ),
                     8 => Self::generate_tree_c::<U2, U8>(
+                        layers,
+                        nodes_count,
+                        tree_count,
+                        configs,
+                        &labels,
+                    ),
+                    _ => panic!("Unsupported tree arity"),
+                }?;
+                tree_c.root()
+            }
+            8 => {
+                // NOTE: This additional Arity match could go away if
+                // we could get the constraints of Tree::Arity to
+                // match what is needed by the ColumnTreeBuilder's
+                // TreeArity.
+                let tree_c = match Tree::Arity::to_usize() {
+                    2 => Self::generate_tree_c::<U8, U2>(
+                        layers,
+                        nodes_count,
+                        tree_count,
+                        configs,
+                        &labels,
+                    ),
+                    4 => Self::generate_tree_c::<U8, U4>(
+                        layers,
+                        nodes_count,
+                        tree_count,
+                        configs,
+                        &labels,
+                    ),
+                    8 => Self::generate_tree_c::<U8, U8>(
                         layers,
                         nodes_count,
                         tree_count,
