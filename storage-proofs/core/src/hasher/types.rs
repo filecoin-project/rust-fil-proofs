@@ -3,8 +3,8 @@ use lazy_static::lazy_static;
 use crate::error::Result;
 use bellperson::gadgets::{boolean, num};
 use bellperson::{ConstraintSystem, SynthesisError};
-use generic_array::typenum;
 use generic_array::typenum::{U0, U1, U11, U16, U2, U24, U36, U4, U8};
+use generic_array::{typenum, ArrayLength};
 use merkletree::hash::{Algorithm as LightAlgorithm, Hashable as LightHashable};
 use merkletree::merkle::Element;
 use neptune::poseidon::PoseidonConstants;
@@ -46,6 +46,7 @@ pub trait PoseidonArity:
     + Sync
     + Clone
     + std::fmt::Debug
+    + ArrayLength<Fr>
     + std::ops::Add<typenum::B1>
     + std::ops::Add<typenum::UInt<typenum::UTerm, typenum::B1>>
 {

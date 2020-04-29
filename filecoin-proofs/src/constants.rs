@@ -70,12 +70,12 @@ lazy_static! {
     );
     pub static ref LAYERS: RwLock<HashMap<u64, usize>> = RwLock::new(
         [
-            (SECTOR_SIZE_2_KIB, 1),
-            (SECTOR_SIZE_4_KIB, 1),
-            (SECTOR_SIZE_16_KIB, 1),
-            (SECTOR_SIZE_32_KIB, 1),
-            (SECTOR_SIZE_8_MIB, 2),
-            (SECTOR_SIZE_16_MIB, 2),
+            (SECTOR_SIZE_2_KIB, 2),
+            (SECTOR_SIZE_4_KIB, 2),
+            (SECTOR_SIZE_16_KIB, 2),
+            (SECTOR_SIZE_32_KIB, 2),
+            (SECTOR_SIZE_8_MIB, 8),
+            (SECTOR_SIZE_16_MIB, 8),
             (SECTOR_SIZE_512_MIB, 2),
             (SECTOR_SIZE_1_GIB, 2),
             (SECTOR_SIZE_4_GIB, 11),
@@ -88,7 +88,7 @@ lazy_static! {
     );
     pub static ref WINDOW_POST_SECTOR_COUNT: RwLock<HashMap<u64, usize>> = RwLock::new(
         [
-            (SECTOR_SIZE_2_KIB, 1),
+            (SECTOR_SIZE_2_KIB, 2),
             (SECTOR_SIZE_4_KIB, 2),
             (SECTOR_SIZE_16_KIB, 2),
             (SECTOR_SIZE_32_KIB, 2),
