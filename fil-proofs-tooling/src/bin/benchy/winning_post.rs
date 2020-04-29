@@ -228,8 +228,7 @@ pub fn run_fallback_post_bench<Tree: 'static + MerkleTreeTrait>(
 }
 
 pub fn run(sector_size: usize) -> anyhow::Result<()> {
-    println!("Benchy Fallback PoSt: sector-size={}", sector_size,);
-    info!("Benchy Fallback PoSt: sector-size={}", sector_size,);
+    info!("Benchy Winning PoSt: sector-size={}", sector_size,);
 
     with_shape!(
         sector_size as u64,
