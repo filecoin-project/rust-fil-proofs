@@ -8,6 +8,7 @@ use std::process::{exit, Command};
 
 use anyhow::{ensure, Context, Result};
 use clap::{App, Arg, ArgMatches};
+use dialoguer::{theme::ColorfulTheme, Select};
 use itertools::Itertools;
 
 use filecoin_proofs::param::{
@@ -72,7 +73,7 @@ Defaults to '{}'
 fn publish(matches: &ArgMatches) -> Result<()> {
     let ipfs_bin_path = matches.value_of("ipfs-bin").unwrap_or("ipfs");
 
-    let mut filenames = get_filenames_in_cache_dir()?
+    let filenames = get_filenames_in_cache_dir()?
         .into_iter()
         .filter(|f| {
             has_extension(f, GROTH_PARAMETER_EXT)
@@ -84,11 +85,10 @@ fn publish(matches: &ArgMatches) -> Result<()> {
     // build a mapping from parameter id to metadata
     let meta_map = parameter_id_to_metadata_map(&filenames)?;
 
-    // exclude parameter metadata files, which should not be published
-    filenames = filenames
+    // split off parameter metadata files, which should not be published
+    let (meta_filenames, mut filenames): (Vec<_>, Vec<_>) = filenames
         .into_iter()
-        .filter(|f| !has_extension(f, PARAMETER_METADATA_EXT))
-        .collect_vec();
+        .partition(|f| has_extension(f, PARAMETER_METADATA_EXT));
 
     if !matches.is_present("all") {
         filenames = choose_from(&filenames, |filename| {
@@ -97,7 +97,36 @@ fn publish(matches: &ArgMatches) -> Result<()> {
                 .and_then(|p_id| meta_map.get(p_id).map(|x| x.sector_size))
         })?;
         println!();
-    };
+    } else {
+        // `--all` let's you select a specific version
+
+        // Only consider files where there is also a corresponding meta file
+        let versions: Vec<String> = meta_filenames
+            .into_iter()
+            // Split off the version of the parameters
+            .map(|name| name.split('-').into_iter().next().unwrap().to_string())
+            // Sort by descending order, newest parameter first
+            .sorted_by(|a, b| Ord::cmp(&b, &a))
+            .dedup()
+            .collect();
+        let selected_version = Select::with_theme(&ColorfulTheme::default())
+            .with_prompt("Select a version (press 'q' to quit)")
+            .default(0)
+            .items(&versions[..])
+            .interact_opt()
+            .unwrap();
+        let version = match selected_version {
+            Some(index) => &versions[index],
+            None => {
+                println!("Aborted.");
+                std::process::exit(1)
+            }
+        };
+        filenames = filenames
+            .into_iter()
+            .filter(|name| name.starts_with(version))
+            .collect_vec();
+    }
 
     let json = PathBuf::from(matches.value_of("json").unwrap_or("./parameters.json"));
     let mut parameter_map: ParameterMap = BTreeMap::new();
