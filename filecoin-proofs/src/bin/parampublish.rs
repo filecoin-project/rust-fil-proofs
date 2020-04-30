@@ -73,14 +73,44 @@ Defaults to '{}'
 fn publish(matches: &ArgMatches) -> Result<()> {
     let ipfs_bin_path = matches.value_of("ipfs-bin").unwrap_or("ipfs");
 
-    let filenames = get_filenames_in_cache_dir()?
+    let (mut filenames, counter) = get_filenames_in_cache_dir()?
         .into_iter()
         .filter(|f| {
             has_extension(f, GROTH_PARAMETER_EXT)
                 || has_extension(f, VERIFYING_KEY_EXT)
                 || has_extension(f, PARAMETER_METADATA_EXT)
         })
-        .collect_vec();
+        .sorted()
+        // Don't take filenames into account, which don't have all three files, `.meta`,
+        // `.params and `.vk`
+        .fold((Vec::new(), 0), |(mut result, mut counter), filename| {
+            let parameter_id = filename_to_parameter_id(&filename).unwrap();
+            if !result.is_empty()
+                && parameter_id == filename_to_parameter_id(result.last().unwrap()).unwrap()
+            {
+                counter += 1
+            } else {
+                // There weren't three files for the same parameter ID, hence remove them from
+                // the list of filenames
+                if counter < 3 {
+                    result.truncate(result.len() - counter);
+                }
+
+                // It's a new parameter ID, hence reset the counter
+                counter = 1
+            }
+
+            // Always push the current filename to the result, if there aren't the three
+            // corresponding files, they will be removed later
+            result.push(filename);
+
+            (result, counter)
+        });
+
+    // There might be lef-overs from the last fold iterations
+    if counter < 3 {
+        filenames.truncate(filenames.len() - counter);
+    }
 
     // build a mapping from parameter id to metadata
     let meta_map = parameter_id_to_metadata_map(&filenames)?;
@@ -99,8 +129,6 @@ fn publish(matches: &ArgMatches) -> Result<()> {
         println!();
     } else {
         // `--all` let's you select a specific version
-
-        // Only consider files where there is also a corresponding meta file
         let versions: Vec<String> = meta_filenames
             .into_iter()
             // Split off the version of the parameters
