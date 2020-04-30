@@ -2,11 +2,10 @@ use bellperson::gadgets::{boolean::Boolean, num};
 use bellperson::{ConstraintSystem, SynthesisError};
 use paired::bls12_381::{Bls12, Fr};
 use storage_proofs_core::{
-    fr32::fr_into_bytes,
     gadgets::{constraint, encode::encode, uint64},
     hasher::Hasher,
     merkle::MerkleTreeTrait,
-    util::bytes_into_boolean_vec_be,
+    util::fixup_bits,
 };
 
 use super::create_label_circuit;
@@ -37,20 +36,18 @@ impl EncodingProof {
         let parents_bits: Vec<Vec<Boolean>> = parents
             .into_iter()
             .enumerate()
-            .map(|(i, val)| match val {
-                Some(val) => {
-                    let bytes = fr_into_bytes(&val);
-                    bytes_into_boolean_vec_be(
-                        cs.namespace(|| format!("parents_{}_bits", i)),
-                        Some(&bytes),
-                        256,
-                    )
-                }
-                None => bytes_into_boolean_vec_be(
+            .map(|(i, val)| {
+                let num = num::AllocatedNum::alloc(
+                    cs.namespace(|| format!("parents_{}_num", i)),
+                    || {
+                        val.map(Into::into)
+                            .ok_or_else(|| SynthesisError::AssignmentMissing)
+                    },
+                )?;
+
+                Ok(fixup_bits(num.to_bits_le(
                     cs.namespace(|| format!("parents_{}_bits", i)),
-                    None,
-                    256,
-                ),
+                )?))
             })
             .collect::<Result<Vec<Vec<Boolean>>, SynthesisError>>()?;
 

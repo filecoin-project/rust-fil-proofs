@@ -11,9 +11,9 @@ use fil_sapling_crypto::jubjub::JubjubEngine;
 use paired::bls12_381::{Bls12, Fr};
 
 use storage_proofs_core::{
-    compound_proof::CircuitComponent, error::Result, fr32::fr_into_bytes, gadgets::constraint,
-    gadgets::encode, gadgets::por::PoRCircuit, gadgets::uint64, gadgets::variables::Root,
-    hasher::Hasher, merkle::BinaryMerkleTree, util::bytes_into_boolean_vec_be,
+    compound_proof::CircuitComponent, error::Result, gadgets::constraint, gadgets::encode,
+    gadgets::por::PoRCircuit, gadgets::uint64, gadgets::variables::Root, hasher::Hasher,
+    merkle::BinaryMerkleTree, util::fixup_bits,
 };
 
 /// DRG based Proof of Replication.
@@ -137,20 +137,15 @@ impl<'a, H: 'static + Hasher> Circuit<Bls12> for DrgPoRepCircuit<'a, H> {
         assert_eq!(self.replica_parents_paths.len(), nodes);
         assert_eq!(self.data_nodes_paths.len(), nodes);
 
-        // get the replica_id in bits
-        let replica_id_bits = match replica_id {
-            Some(id) => {
-                let raw_bytes = fr_into_bytes(&id);
-                bytes_into_boolean_vec_be(cs.namespace(|| "replica_id_bits"), Some(&raw_bytes), 256)
-            }
-            None => bytes_into_boolean_vec_be(cs.namespace(|| "replica_id_bits"), None, 256),
-        }?;
-
         let replica_node_num = num::AllocatedNum::alloc(cs.namespace(|| "replica_id_num"), || {
             replica_id.ok_or_else(|| SynthesisError::AssignmentMissing)
         })?;
 
         replica_node_num.inputize(cs.namespace(|| "replica_id"))?;
+
+        // get the replica_id in bits
+        let replica_id_bits =
+            fixup_bits(replica_node_num.to_bits_le(cs.namespace(|| "replica_id_bits"))?);
 
         let replica_root_var = Root::Var(replica_root.allocated(cs.namespace(|| "replica_root"))?);
         let data_root_var = Root::Var(data_root.allocated(cs.namespace(|| "data_root"))?);
@@ -209,20 +204,17 @@ impl<'a, H: 'static + Hasher> Circuit<Bls12> for DrgPoRepCircuit<'a, H> {
                 let parents_bits: Vec<Vec<Boolean>> = replica_parents
                     .iter()
                     .enumerate()
-                    .map(|(i, val)| match val {
-                        Some(val) => {
-                            let bytes = fr_into_bytes(val);
-                            bytes_into_boolean_vec_be(
-                                cs.namespace(|| format!("parents_{}_bits", i)),
-                                Some(&bytes),
-                                256,
-                            )
-                        }
-                        None => bytes_into_boolean_vec_be(
+                    .map(|(i, val)| {
+                        let num = num::AllocatedNum::alloc(
+                            cs.namespace(|| format!("parents_{}_num", i)),
+                            || {
+                                val.map(Into::into)
+                                    .ok_or_else(|| SynthesisError::AssignmentMissing)
+                            },
+                        )?;
+                        Ok(fixup_bits(num.to_bits_le(
                             cs.namespace(|| format!("parents_{}_bits", i)),
-                            None,
-                            256,
-                        ),
+                        )?))
                     })
                     .collect::<Result<Vec<Vec<Boolean>>, SynthesisError>>()?;
 
@@ -480,7 +472,7 @@ mod tests {
 
         assert!(cs.is_satisfied(), "constraints not satisfied");
         assert_eq!(cs.num_inputs(), 18, "wrong number of inputs");
-        assert_eq!(cs.num_constraints(), 149607, "wrong number of constraints");
+        assert_eq!(cs.num_constraints(), 149_580, "wrong number of constraints");
 
         assert_eq!(cs.get_input(0, "ONE"), Fr::one());
 
@@ -537,6 +529,6 @@ mod tests {
         .expect("failed to synthesize circuit");
 
         assert_eq!(cs.num_inputs(), 18, "wrong number of inputs");
-        assert_eq!(cs.num_constraints(), 391_431, "wrong number of constraints");
+        assert_eq!(cs.num_constraints(), 391_404, "wrong number of constraints");
     }
 }
