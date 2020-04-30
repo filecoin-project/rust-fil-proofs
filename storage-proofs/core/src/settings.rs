@@ -16,6 +16,9 @@ const SETTINGS_PATH: &str = "./rust-fil-proofs.config.toml";
 pub struct Settings {
     pub maximize_caching: bool,
     pub pedersen_hash_exp_window_size: u32,
+    pub use_gpu_column_builder: bool,
+    pub max_gpu_column_batch_size: u32,
+    pub max_gpu_tree_batch_size: u32,
 }
 
 impl Default for Settings {
@@ -23,6 +26,9 @@ impl Default for Settings {
         Settings {
             maximize_caching: false,
             pedersen_hash_exp_window_size: 16,
+            use_gpu_column_builder: false,
+            max_gpu_column_batch_size: 400_000,
+            max_gpu_tree_batch_size: 700_000,
         }
     }
 }
