@@ -28,7 +28,7 @@ impl Hasher for PoseidonHasher {
     type Function = PoseidonFunction;
 
     fn name() -> String {
-        "PoseidonHasher".into()
+        "poseidon_hasher".into()
     }
 
     #[inline]
