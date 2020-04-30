@@ -21,6 +21,7 @@ use storage_proofs_core::{
         Operation::{CommD, EncodeWindowTimeAll, GenerateTreeC, GenerateTreeRLast},
     },
     merkle::*,
+    settings,
     util::NODE_SIZE,
 };
 use typenum::bit::B1;
@@ -32,6 +33,7 @@ use super::{
     column::Column,
     create_label, create_label_exp,
     graph::StackedBucketGraph,
+    hash::hash_single_column,
     params::{
         get_node, Labels, LabelsCache, PersistentAux, Proof, PublicInputs, PublicParams,
         ReplicaColumnProof, Tau, TemporaryAux, TemporaryAuxCache, TransformedLayers, BINARY_ARITY,
@@ -39,19 +41,11 @@ use super::{
     EncodingProof, LabelingProof,
 };
 
-#[cfg(all(feature = "column-builder-gpu"))]
 use ff::Field;
-#[cfg(all(feature = "column-builder-gpu"))]
 use generic_array::{sequence::GenericSequence, GenericArray};
-#[cfg(all(feature = "column-builder-gpu"))]
 use neptune::batch_hasher::BatcherType;
-#[cfg(all(feature = "column-builder-gpu"))]
 use neptune::column_tree_builder::{ColumnTreeBuilder, ColumnTreeBuilderTrait};
-#[cfg(all(feature = "column-builder-gpu"))]
 use storage_proofs_core::fr32::fr_into_bytes;
-
-#[cfg(not(all(feature = "column-builder-gpu")))]
-use super::hash::hash_single_column;
 
 use crate::encode::{decode, encode};
 use crate::PoRep;
@@ -376,8 +370,39 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         Ok(tree)
     }
 
-    #[cfg(all(feature = "column-builder-gpu"))]
     fn generate_tree_c<ColumnArity, TreeArity>(
+        layers: usize,
+        nodes_count: usize,
+        tree_count: usize,
+        configs: Vec<StoreConfig>,
+        labels: &LabelsCache<Tree>,
+    ) -> Result<DiskTree<Tree::Hasher, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>>
+    where
+        ColumnArity: ArrayLength<Fr> + Add<B1> + Add<UInt<UTerm, B1>>,
+        <ColumnArity as Add<B1>>::Output: ArrayLength<Fr>,
+        TreeArity: ArrayLength<Fr> + Add<B1> + Add<UInt<UTerm, B1>>,
+        <TreeArity as Add<B1>>::Output: ArrayLength<Fr>,
+    {
+        if settings::SETTINGS.lock().unwrap().use_gpu_column_builder {
+            Self::generate_tree_c_gpu::<ColumnArity, TreeArity>(
+                layers,
+                nodes_count,
+                tree_count,
+                configs,
+                labels,
+            )
+        } else {
+            Self::generate_tree_c_cpu::<ColumnArity, TreeArity>(
+                layers,
+                nodes_count,
+                tree_count,
+                configs,
+                labels,
+            )
+        }
+    }
+
+    fn generate_tree_c_gpu<ColumnArity, TreeArity>(
         layers: usize,
         nodes_count: usize,
         tree_count: usize,
@@ -397,36 +422,30 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
 
             // NOTE: The max number of columns we recommend sending to
             // the GPU at once is 400000 for columns and 700000 for
-            // trees (conservative soft-limits discussed; advanced
-            // user's can override with caution).
+            // trees (conservative soft-limits discussed).
             //
-            // Override these values using environment variables:
-            // MAX_COLUMN_BATCH_SIZE and MAX_TREE_BATCH_SIZE, respectively.
-            let max_column_batch_size = if std::env::var("MAX_COLUMN_BATCH_SIZE").is_ok() {
-                std::env::var("MAX_COLUMN_BATCH_SIZE")?.parse::<usize>()?
-            } else {
-                400_000
-            };
-            let max_tree_batch_size = if std::env::var("MAX_TREE_BATCH_SIZE").is_ok() {
-                std::env::var("MAX_TREE_BATCH_SIZE")?.parse::<usize>()?
-            } else {
-                700_000
-            };
+            // Override these values with care using environment
+            // variables: FIL_PROOFS_MAX_COLUMN_BATCH_SIZE and
+            // FIL_PROOFS_MAX_TREE_BATCH_SIZE, respectively.
+            let max_gpu_column_batch_size =
+                settings::SETTINGS.lock().unwrap().max_gpu_column_batch_size as usize;
+            let max_gpu_tree_batch_size =
+                settings::SETTINGS.lock().unwrap().max_gpu_tree_batch_size as usize;
 
             let mut column_tree_builder = ColumnTreeBuilder::<ColumnArity, TreeArity>::new(
                 Some(BatcherType::GPU),
                 nodes_count,
-                max_column_batch_size,
-                max_tree_batch_size,
+                max_gpu_column_batch_size,
+                max_gpu_tree_batch_size,
             )?;
 
             for (i, config) in configs.iter().enumerate() {
                 let mut node_index = 0;
                 while node_index != nodes_count {
                     let chunked_nodes_count =
-                        std::cmp::min(nodes_count - node_index, max_column_batch_size);
+                        std::cmp::min(nodes_count - node_index, max_gpu_column_batch_size);
                     trace!(
-                        "processing config {}/{} with colum nodes {}",
+                        "processing config {}/{} with column nodes {}",
                         i + 1,
                         tree_count,
                         chunked_nodes_count,
@@ -522,8 +541,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         })
     }
 
-    #[cfg(not(all(feature = "column-builder-gpu")))]
-    fn generate_tree_c<ColumnArity, TreeArity>(
+    fn generate_tree_c_cpu<ColumnArity, TreeArity>(
         layers: usize,
         nodes_count: usize,
         tree_count: usize,
