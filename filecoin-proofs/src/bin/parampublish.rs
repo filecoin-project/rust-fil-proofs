@@ -10,7 +10,11 @@ use anyhow::{ensure, Context, Result};
 use clap::{App, Arg, ArgMatches};
 use itertools::Itertools;
 
-use filecoin_proofs::param::*;
+use filecoin_proofs::param::{
+    choose_from, filename_to_parameter_id, get_digest_for_file_within_cache,
+    get_full_path_for_file_within_cache, has_extension, parameter_id_to_metadata_map,
+    ParameterData, ParameterMap,
+};
 use storage_proofs::parameter_cache::{
     parameter_cache_dir, CacheEntryMetadata, GROTH_PARAMETER_EXT, PARAMETER_CACHE_DIR,
     PARAMETER_METADATA_EXT, VERIFYING_KEY_EXT,
