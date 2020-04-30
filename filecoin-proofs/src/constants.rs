@@ -82,6 +82,9 @@ lazy_static! {
         .copied()
         .collect()
     );
+    // These numbers must match those used for Window PoSt scheduling in the miner actor.
+    // Please coordinate changes with actor code.
+    // https://github.com/filecoin-project/specs-actors/blob/master/actors/abi/sector.go
     pub static ref WINDOW_POST_SECTOR_COUNT: RwLock<HashMap<u64, usize>> = RwLock::new(
         [
             (SECTOR_SIZE_2_KIB, 2),
