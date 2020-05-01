@@ -8,13 +8,17 @@ use std::process::{exit, Command};
 
 use anyhow::{ensure, Context, Result};
 use clap::{App, Arg, ArgMatches};
-use dialoguer::{theme::ColorfulTheme, Select};
+use dialoguer::{theme::ColorfulTheme, MultiSelect, Select};
+use humansize::{file_size_opts, FileSize};
 use itertools::Itertools;
 
 use filecoin_proofs::param::{
     add_extension, choose_from, filename_to_parameter_id, get_digest_for_file_within_cache,
     get_full_path_for_file_within_cache, has_extension, parameter_id_to_metadata_map,
     ParameterData, ParameterMap,
+};
+use filecoin_proofs::{
+    SECTOR_SIZE_2_KIB, SECTOR_SIZE_32_GIB, SECTOR_SIZE_512_MIB, SECTOR_SIZE_8_MIB,
 };
 use storage_proofs::parameter_cache::{
     parameter_cache_dir, CacheEntryMetadata, GROTH_PARAMETER_EXT, PARAMETER_CACHE_DIR,
@@ -23,6 +27,12 @@ use storage_proofs::parameter_cache::{
 
 const ERROR_IPFS_COMMAND: &str = "failed to run ipfs";
 const ERROR_IPFS_PUBLISH: &str = "failed to publish via ipfs";
+const PUBLISH_SECTOR_SIZES: [u64; 4] = [
+    SECTOR_SIZE_2_KIB,
+    SECTOR_SIZE_8_MIB,
+    SECTOR_SIZE_512_MIB,
+    SECTOR_SIZE_32_GIB,
+];
 
 pub fn main() {
     fil_logger::init();
@@ -162,11 +172,75 @@ fn publish(matches: &ArgMatches) -> Result<()> {
             }
         };
 
-        // Generate filenames based on their parameter IDs
-        meta_map
+        // The parameter IDs that should bet published
+        let mut parameter_ids = meta_map
             .keys()
             // Filter out all that don't match the selected version
             .filter(|parameter_id| parameter_id.starts_with(version))
+            .collect_vec();
+
+        // Display the sector sizes
+        let sector_sizes_iter = parameter_ids
+            .iter()
+            // Get sector size and parameter ID
+            .map(|&parameter_id| {
+                meta_map
+                    .get(parameter_id)
+                    .map(|x| (x.sector_size, parameter_id))
+                    .unwrap()
+            })
+            // Sort it ascending by sector size
+            .sorted_by(|a, b| Ord::cmp(&a.0, &b.0));
+
+        // The parameters IDs need to be sorted the same way as the menu we display, else
+        // the selected items won't match the list we select from
+        parameter_ids = sector_sizes_iter
+            .clone()
+            .map(|(_, parameter_id)| parameter_id)
+            .collect_vec();
+
+        let sector_sizes = sector_sizes_iter
+            .clone()
+            // Format them
+            .map(|(sector_size, parameter_id)| {
+                format!(
+                    "({:?}) {:?}",
+                    sector_size.file_size(file_size_opts::BINARY).unwrap(),
+                    parameter_id
+                )
+            })
+            .collect_vec();
+        // Set the default, pre-selected sizes
+        let default_sector_sizes = sector_sizes_iter
+            .map(|(sector_size, _)| PUBLISH_SECTOR_SIZES.contains(&sector_size))
+            .collect_vec();
+        let selected_sector_sizes = MultiSelect::with_theme(&ColorfulTheme::default())
+            .with_prompt("Select the sizes to publish")
+            .items(&sector_sizes[..])
+            .defaults(&default_sector_sizes)
+            .interact()
+            .unwrap();
+
+        if selected_sector_sizes.is_empty() {
+            println!("Nothing selected. Abort.");
+        } else {
+            // Filter out the selected ones
+            parameter_ids = parameter_ids
+                .into_iter()
+                .enumerate()
+                .filter_map(|(index, parameter_id)| {
+                    if selected_sector_sizes.contains(&index) {
+                        Some(parameter_id)
+                    } else {
+                        None
+                    }
+                })
+                .collect_vec();
+        }
+
+        // Generate filenames based on their parameter IDs
+        parameter_ids
+            .iter()
             .flat_map(|parameter_id| {
                 vec![
                     add_extension(parameter_id, GROTH_PARAMETER_EXT),

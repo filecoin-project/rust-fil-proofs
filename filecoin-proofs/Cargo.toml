@@ -53,6 +53,7 @@ rand_chacha = "0.2.1"
 dialoguer = "0.6.2"
 generic-array = "0.13.2"
 structopt = "0.3.12"
+humansize = "1.1.0"
 
 [dependencies.reqwest]
 version = "0.9"
