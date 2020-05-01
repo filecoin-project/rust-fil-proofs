@@ -3,8 +3,7 @@ use lazy_static::lazy_static;
 use crate::error::Result;
 use bellperson::gadgets::{boolean, num};
 use bellperson::{ConstraintSystem, SynthesisError};
-use generic_array::typenum::{U0, U1, U11, U16, U2, U24, U36, U4, U8};
-use generic_array::{typenum, ArrayLength};
+use generic_array::typenum::{U0, U11, U16, U2, U24, U36, U4, U8};
 use merkletree::hash::{Algorithm as LightAlgorithm, Hashable as LightHashable};
 use merkletree::merkle::Element;
 use neptune::poseidon::PoseidonConstants;
@@ -24,7 +23,6 @@ pub type PoseidonMDArity = U36;
 pub const MERKLE_TREE_ARITY: usize = 2;
 
 lazy_static! {
-    pub static ref POSEIDON_CONSTANTS_1: PoseidonConstants::<Bls12, U1> = PoseidonConstants::new();
     pub static ref POSEIDON_CONSTANTS_2: PoseidonConstants::<Bls12, U2> = PoseidonConstants::new();
     pub static ref POSEIDON_CONSTANTS_4: PoseidonConstants::<Bls12, U4> = PoseidonConstants::new();
     pub static ref POSEIDON_CONSTANTS_8: PoseidonConstants::<Bls12, U8> = PoseidonConstants::new();
@@ -40,30 +38,17 @@ lazy_static! {
         PoseidonConstants::new();
 }
 
-pub trait PoseidonArity:
-    typenum::Unsigned
-    + Send
-    + Sync
-    + Clone
-    + std::fmt::Debug
-    + ArrayLength<Fr>
-    + std::ops::Add<typenum::B1>
-    + std::ops::Add<typenum::UInt<typenum::UTerm, typenum::B1>>
-{
+pub trait PoseidonArity: neptune::Arity<Fr> + Send + Sync + Clone + std::fmt::Debug {
     #[allow(non_snake_case)]
     fn PARAMETERS() -> &'static PoseidonConstants<Bls12, Self>;
 }
 
 impl PoseidonArity for U0 {
     fn PARAMETERS() -> &'static PoseidonConstants<Bls12, Self> {
-        unreachable!("dummy implementation, do not ever call me")
+        unreachable!("dummy implementation, do not cal me")
     }
 }
-impl PoseidonArity for U1 {
-    fn PARAMETERS() -> &'static PoseidonConstants<Bls12, Self> {
-        &*POSEIDON_CONSTANTS_1
-    }
-}
+
 impl PoseidonArity for U2 {
     fn PARAMETERS() -> &'static PoseidonConstants<Bls12, Self> {
         &*POSEIDON_CONSTANTS_2
