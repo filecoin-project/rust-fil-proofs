@@ -50,7 +50,7 @@ gperftools = { version = "0.2", optional = true }
 phase2 = { package = "phase21", version = "0.4.0" }
 simplelog = "0.7.4"
 rand_chacha = "0.2.1"
-dialoguer = "0.5.0"
+dialoguer = "0.6.2"
 generic-array = "0.13.2"
 structopt = "0.3.12"
 

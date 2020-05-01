@@ -368,9 +368,9 @@ fn create_initial_params<Tree: 'static + MerkleTreeTrait>(
 
 /// Prompt the user to mash on their keyboard to gather entropy.
 fn prompt_for_randomness() -> [u8; 32] {
-    use dialoguer::{theme::ColorfulTheme, PasswordInput};
+    use dialoguer::{theme::ColorfulTheme, Password};
 
-    let raw = PasswordInput::with_theme(&ColorfulTheme::default())
+    let raw = Password::with_theme(&ColorfulTheme::default())
         .with_prompt(
             "Please randomly press your keyboard for entropy (press Return/Enter when finished)",
         )
