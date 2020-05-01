@@ -8,6 +8,7 @@ use std::process::{exit, Command};
 
 use anyhow::{ensure, Context, Result};
 use clap::{App, Arg, ArgMatches};
+use dialoguer::{theme::ColorfulTheme, Select};
 use itertools::Itertools;
 
 use filecoin_proofs::param::{
@@ -138,10 +139,34 @@ fn publish(matches: &ArgMatches) -> Result<()> {
                 .and_then(|p_id| meta_map.get(p_id).map(|x| x.sector_size))
         })?
     } else {
-        // Generate filenames based on their parameter IDs, previous steps made sure
-        // that those files actually exist
+        // `--all` let's you select a specific version
+        let versions: Vec<String> = meta_map
+            .keys()
+            // Split off the version of the parameters
+            .map(|parameter_id| parameter_id.split('-').next().unwrap().to_string())
+            // Sort by descending order, newest parameter first
+            .sorted_by(|a, b| Ord::cmp(&b, &a))
+            .dedup()
+            .collect();
+        let selected_version = Select::with_theme(&ColorfulTheme::default())
+            .with_prompt("Select a version (press 'q' to quit)")
+            .default(0)
+            .items(&versions[..])
+            .interact_opt()
+            .unwrap();
+        let version = match selected_version {
+            Some(index) => &versions[index],
+            None => {
+                println!("Aborted.");
+                std::process::exit(1)
+            }
+        };
+
+        // Generate filenames based on their parameter IDs
         meta_map
             .keys()
+            // Filter out all that don't match the selected version
+            .filter(|parameter_id| parameter_id.starts_with(version))
             .flat_map(|parameter_id| {
                 vec![
                     add_extension(parameter_id, GROTH_PARAMETER_EXT),
