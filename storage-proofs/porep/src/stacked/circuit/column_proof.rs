@@ -1,13 +1,13 @@
-use bellperson::gadgets::num;
 use bellperson::{ConstraintSystem, SynthesisError};
-use paired::bls12_381::{Bls12, Fr};
+use paired::bls12_381::Bls12;
 use storage_proofs_core::{
-    gadgets::constraint,
+    drgraph::Graph,
+    gadgets::por::AuthPath,
     hasher::{Hasher, PoseidonArity},
     merkle::{MerkleProofTrait, MerkleTreeTrait, Store},
 };
 
-use super::{column::Column, params::InclusionPath};
+use super::column::{AllocatedColumn, Column};
 use crate::stacked::{ColumnProof as VanillaColumnProof, PublicParams};
 
 #[derive(Debug, Clone)]
@@ -18,7 +18,7 @@ pub struct ColumnProof<
     W: 'static + PoseidonArity,
 > {
     column: Column,
-    inclusion_path: InclusionPath<H, U, V, W>,
+    inclusion_path: AuthPath<H, U, V, W>,
 }
 
 impl<
@@ -37,38 +37,23 @@ impl<
     ) -> Self {
         ColumnProof {
             column: Column::empty(params),
-            inclusion_path: InclusionPath::empty(&params.graph),
+            inclusion_path: AuthPath::blank(params.graph.size()),
         }
     }
 
-    pub fn get_node_at_layer(&self, layer: usize) -> &Option<Fr> {
-        self.column.get_node_at_layer(layer)
-    }
-
-    pub fn synthesize<CS: ConstraintSystem<Bls12>>(
+    /// Allocate the private inputs for this column proof, and return the inclusion path for verification.
+    pub fn alloc<CS: ConstraintSystem<Bls12>>(
         self,
         mut cs: CS,
-        comm_c: &num::AllocatedNum<Bls12>,
-    ) -> Result<(), SynthesisError> {
+    ) -> Result<(AllocatedColumn, AuthPath<H, U, V, W>), SynthesisError> {
         let ColumnProof {
             inclusion_path,
             column,
         } = self;
 
-        let c_i = column.hash(cs.namespace(|| "column_hash"))?;
+        let column = column.alloc(cs.namespace(|| "column"))?;
 
-        let leaf_num = inclusion_path.alloc_value(cs.namespace(|| "leaf"))?;
-
-        constraint::equal(&mut cs, || "enforce column_hash = leaf", &c_i, &leaf_num);
-
-        // TODO: currently allocating the leaf twice, inclusion path should take the already allocated leaf.
-        inclusion_path.synthesize(
-            cs.namespace(|| "column_proof_all_inclusion"),
-            comm_c.clone(),
-            leaf_num,
-        )?;
-
-        Ok(())
+        Ok((column, inclusion_path))
     }
 }
 
@@ -83,7 +68,7 @@ impl<Proof: MerkleProofTrait> From<VanillaColumnProof<Proof>>
 
         ColumnProof {
             column: column.into(),
-            inclusion_path: inclusion_proof.into(),
+            inclusion_path: inclusion_proof.as_options().into(),
         }
     }
 }

@@ -236,9 +236,6 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher>
 
             // replica column proof
             {
-                // c_x
-                inputs.extend(generate_inclusion_inputs(challenge)?);
-
                 // drg parents
                 let mut drg_parents = vec![0; graph.base_graph().degree()];
                 graph.base_graph().parents(challenge, &mut drg_parents)?;
@@ -256,6 +253,9 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher>
             }
 
             // final replica layer
+            inputs.extend(generate_inclusion_inputs(challenge)?);
+
+            // c_x
             inputs.extend(generate_inclusion_inputs(challenge)?);
         }
 
@@ -343,27 +343,27 @@ mod tests {
 
     #[test]
     fn stacked_input_circuit_pedersen_base_2() {
-        stacked_input_circuit::<DiskTree<PedersenHasher, U2, U0, U0>>(21, 1_803_904);
+        stacked_input_circuit::<DiskTree<PedersenHasher, U2, U0, U0>>(21, 1_258_258);
     }
 
     #[test]
     fn stacked_input_circuit_poseidon_base_2() {
-        stacked_input_circuit::<DiskTree<PoseidonHasher, U2, U0, U0>>(21, 1_752_111);
+        stacked_input_circuit::<DiskTree<PoseidonHasher, U2, U0, U0>>(21, 1_206_465);
     }
 
     #[test]
     fn stacked_input_circuit_poseidon_base_8() {
-        stacked_input_circuit::<DiskTree<PoseidonHasher, U8, U0, U0>>(21, 1_745_967);
+        stacked_input_circuit::<DiskTree<PoseidonHasher, U8, U0, U0>>(21, 1_200_321);
     }
 
     #[test]
     fn stacked_input_circuit_poseidon_sub_8_4() {
-        stacked_input_circuit::<DiskTree<PoseidonHasher, U8, U4, U0>>(21, 1_843_035);
+        stacked_input_circuit::<DiskTree<PoseidonHasher, U8, U4, U0>>(21, 1_297_389);
     }
 
     #[test]
     fn stacked_input_circuit_poseidon_top_8_4_2() {
-        stacked_input_circuit::<DiskTree<PoseidonHasher, U8, U4, U2>>(21, 1_893_489);
+        stacked_input_circuit::<DiskTree<PoseidonHasher, U8, U4, U2>>(21, 1_347_843);
     }
 
     fn stacked_input_circuit<Tree: MerkleTreeTrait + 'static>(
@@ -485,8 +485,7 @@ mod tests {
 
         StackedCompound::<Tree, Sha256Hasher>::circuit(
             &pub_inputs,
-            <StackedCircuit<Tree, Sha256Hasher> as CircuitComponent>::ComponentPrivateInputs::default(
-            ),
+            <StackedCircuit<Tree, Sha256Hasher> as CircuitComponent>::ComponentPrivateInputs::default(),
             &proofs[0],
             &pp,
             None,
