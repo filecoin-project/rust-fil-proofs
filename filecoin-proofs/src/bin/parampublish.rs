@@ -111,6 +111,14 @@ fn publish(matches: &ArgMatches) -> Result<()> {
         filenames.truncate(filenames.len() - counter);
     }
 
+    if parameter_ids.is_empty() {
+        println!(
+            "No valid parameters in directory {:?} found.",
+            parameter_cache_dir()
+        );
+        std::process::exit(1)
+    }
+
     // build a mapping from parameter id to metadata
     let meta_map = parameter_id_to_metadata_map(&filenames)?;
 
