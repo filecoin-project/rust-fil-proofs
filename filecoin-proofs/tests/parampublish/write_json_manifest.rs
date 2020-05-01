@@ -12,7 +12,7 @@ use crate::support::{tmp_manifest, FakeIpfsBin};
 
 #[test]
 fn writes_json_manifest() -> Result<(), FailureError> {
-    let filenames = vec!["aaa.vk", "aaa.params"];
+    let filenames = vec!["v10-aaa.vk", "v10-aaa.params"];
 
     let manifest_path = tmp_manifest(None)?;
 
@@ -21,7 +21,7 @@ fn writes_json_manifest() -> Result<(), FailureError> {
     let (mut session, files_in_cache) = ParamPublishSessionBuilder::new()
         .with_session_timeout_ms(1000)
         .with_files(&filenames)
-        .with_metadata("aaa.meta", &CacheEntryMetadata { sector_size: 1234 })
+        .with_metadata("v10-aaa.meta", &CacheEntryMetadata { sector_size: 1234 })
         .write_manifest_to(manifest_path.clone())
         .with_ipfs_bin(&ipfs)
         .with_prompt_disabled()
@@ -30,6 +30,14 @@ fn writes_json_manifest() -> Result<(), FailureError> {
     // compute checksums from files added to cache to compare with
     // manifest entries after publishing completes
     let cache_checksums = filename_to_checksum(&ipfs, files_in_cache.as_ref());
+
+    session.exp_string("Select a version")?;
+    // There is only one version of parameters, accept that one
+    session.send_line("")?;
+    //session.exp_regex(".*Select the sizes to publish.*")?;
+    session.exp_string("Select the sizes to publish")?;
+    // There is only one size, accept that one
+    session.send_line("")?;
 
     // wait for confirmation...
     session.exp_string("publishing 2 files")?;

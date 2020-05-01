@@ -5,7 +5,7 @@ use crate::parampublish::support::session::ParamPublishSessionBuilder;
 #[test]
 fn fails_if_missing_metadata_file() -> Result<(), FailureError> {
     // missing the corresponding .meta file
-    let filenames = vec!["aaa.vk", "aaa.params"];
+    let filenames = vec!["v12-aaa.vk", "v12-aaa.params"];
 
     let (mut session, _) = ParamPublishSessionBuilder::new()
         .with_session_timeout_ms(1000)
@@ -14,7 +14,7 @@ fn fails_if_missing_metadata_file() -> Result<(), FailureError> {
         .build();
 
     // error!
-    session.exp_string("no metadata found for parameter id aaa")?;
+    session.exp_string("No valid parameters in directory")?;
 
     Ok(())
 }
@@ -25,8 +25,8 @@ fn fails_if_malformed_metadata_file() -> Result<(), FailureError> {
 
     let (mut session, _) = ParamPublishSessionBuilder::new()
         .with_session_timeout_ms(1000)
-        .with_files(&vec!["aaa.vk", "aaa.params"])
-        .with_file_and_bytes("aaa.meta", &mut malformed)
+        .with_files(&vec!["v11-aaa.vk", "v11-aaa.params"])
+        .with_file_and_bytes("v11-aaa.meta", &mut malformed)
         .with_prompt_disabled()
         .build();
 
