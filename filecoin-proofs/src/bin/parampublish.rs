@@ -11,7 +11,7 @@ use clap::{App, Arg, ArgMatches};
 use itertools::Itertools;
 
 use filecoin_proofs::param::{
-    choose_from, filename_to_parameter_id, get_digest_for_file_within_cache,
+    add_extension, choose_from, filename_to_parameter_id, get_digest_for_file_within_cache,
     get_full_path_for_file_within_cache, has_extension, parameter_id_to_metadata_map,
     ParameterData, ParameterMap,
 };
@@ -72,43 +72,43 @@ Defaults to '{}'
 fn publish(matches: &ArgMatches) -> Result<()> {
     let ipfs_bin_path = matches.value_of("ipfs-bin").unwrap_or("ipfs");
 
-    let (mut filenames, counter) = get_filenames_in_cache_dir()?
-        .into_iter()
+    // Get all valid parameter IDs which have all three files, `.meta`, `.params and `.vk`
+    // associated with them. If one of the files is missing, it won't show up in the selection.
+    let (mut parameter_ids, counter) = get_filenames_in_cache_dir()?
+        .iter()
         .filter(|f| {
             has_extension(f, GROTH_PARAMETER_EXT)
                 || has_extension(f, VERIFYING_KEY_EXT)
                 || has_extension(f, PARAMETER_METADATA_EXT)
         })
         .sorted()
-        // Don't take filenames into account, which don't have all three files, `.meta`,
-        // `.params and `.vk`
-        .fold((Vec::new(), 0), |(mut result, mut counter), filename| {
-            let parameter_id = filename_to_parameter_id(&filename).unwrap();
-            if !result.is_empty()
-                && parameter_id == filename_to_parameter_id(result.last().unwrap()).unwrap()
-            {
-                counter += 1
-            } else {
-                // There weren't three files for the same parameter ID, hence remove them from
-                // the list of filenames
-                if counter < 3 {
-                    result.truncate(result.len() - counter);
+        // Make sure there are always three files per parameter ID
+        .fold(
+            (Vec::new(), 0),
+            |(mut result, mut counter): (std::vec::Vec<String>, u8), filename| {
+                let parameter_id = filename_to_parameter_id(&filename).unwrap();
+                // Check if previous file had the same parameter ID
+                if !result.is_empty() && &parameter_id == result.last().unwrap() {
+                    counter += 1;
+                } else {
+                    // There weren't three files for the same parameter ID, hence remove it from
+                    // the list
+                    if counter < 3 {
+                        result.pop();
+                    }
+
+                    // It's a new parameter ID, hence reset the counter and add it to the list
+                    counter = 1;
+                    result.push(parameter_id);
                 }
 
-                // It's a new parameter ID, hence reset the counter
-                counter = 1
-            }
-
-            // Always push the current filename to the result, if there aren't the three
-            // corresponding files, they will be removed later
-            result.push(filename);
-
-            (result, counter)
-        });
+                (result, counter)
+            },
+        );
 
     // There might be lef-overs from the last fold iterations
     if counter < 3 {
-        filenames.truncate(filenames.len() - counter);
+        parameter_ids.pop();
     }
 
     if parameter_ids.is_empty() {
@@ -120,22 +120,37 @@ fn publish(matches: &ArgMatches) -> Result<()> {
     }
 
     // build a mapping from parameter id to metadata
-    let meta_map = parameter_id_to_metadata_map(&filenames)?;
+    let meta_map = parameter_id_to_metadata_map(&parameter_ids)?;
 
-    // exclude parameter metadata files, which should not be published
-    filenames = filenames
-        .into_iter()
-        .filter(|f| !has_extension(f, PARAMETER_METADATA_EXT))
-        .collect_vec();
-
-    if !matches.is_present("all") {
-        filenames = choose_from(&filenames, |filename| {
+    let filenames = if !matches.is_present("all") {
+        let tmp_filenames = meta_map
+            .keys()
+            .flat_map(|parameter_id| {
+                vec![
+                    add_extension(parameter_id, GROTH_PARAMETER_EXT),
+                    add_extension(parameter_id, VERIFYING_KEY_EXT),
+                ]
+            })
+            .collect_vec();
+        choose_from(&tmp_filenames, |filename| {
             filename_to_parameter_id(PathBuf::from(filename))
                 .as_ref()
                 .and_then(|p_id| meta_map.get(p_id).map(|x| x.sector_size))
-        })?;
-        println!();
+        })?
+    } else {
+        // Generate filenames based on their parameter IDs, previous steps made sure
+        // that those files actually exist
+        meta_map
+            .keys()
+            .flat_map(|parameter_id| {
+                vec![
+                    add_extension(parameter_id, GROTH_PARAMETER_EXT),
+                    add_extension(parameter_id, VERIFYING_KEY_EXT),
+                ]
+            })
+            .collect_vec()
     };
+    println!();
 
     let json = PathBuf::from(matches.value_of("json").unwrap_or("./parameters.json"));
     let mut parameter_map: ParameterMap = BTreeMap::new();
