@@ -177,10 +177,10 @@ where
 
         if use_cache {
             info!("using parents cache of unlimited size");
-            assert_eq!(
-                nodes,
-                (32 * 1024 * 1024 * 1024) / NODE_SIZE,
-                "Cache is only available for 32GiB sectors"
+            const GIB: usize = 1024 * 1024 * 1024;
+            ensure!(
+                ((nodes * NODE_SIZE == 32 * GIB) || (nodes * NODE_SIZE == 64 * GIB)),
+                "Cache is only available for 32GiB and 64GiB sectors"
             );
 
             let cache = parent_cache(nodes as u32, &res);
