@@ -1,10 +1,8 @@
 use std::collections::HashMap;
 use std::marker::PhantomData;
-use std::ops::Add;
 use std::path::PathBuf;
 
 use generic_array::typenum::{self, Unsigned};
-use generic_array::ArrayLength;
 use log::{info, trace};
 use merkletree::merkle::{get_merkle_tree_len, is_merkle_tree_size_valid};
 use merkletree::store::{DiskStore, StoreConfig};
@@ -15,7 +13,7 @@ use storage_proofs_core::{
     data::Data,
     drgraph::Graph,
     error::Result,
-    hasher::{Domain, HashFunction, Hasher},
+    hasher::{Domain, HashFunction, Hasher, PoseidonArity},
     measurements::{
         measure_op,
         Operation::{CommD, EncodeWindowTimeAll, GenerateTreeC, GenerateTreeRLast},
@@ -24,9 +22,7 @@ use storage_proofs_core::{
     settings,
     util::NODE_SIZE,
 };
-use typenum::bit::B1;
-use typenum::uint::{UInt, UTerm};
-use typenum::{U11, U2, U4, U8};
+use typenum::{U11, U2, U8};
 
 use super::{
     challenges::LayerChallenges,
@@ -378,10 +374,8 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         labels: &LabelsCache<Tree>,
     ) -> Result<DiskTree<Tree::Hasher, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>>
     where
-        ColumnArity: ArrayLength<Fr> + Add<B1> + Add<UInt<UTerm, B1>>,
-        <ColumnArity as Add<B1>>::Output: ArrayLength<Fr>,
-        TreeArity: ArrayLength<Fr> + Add<B1> + Add<UInt<UTerm, B1>>,
-        <TreeArity as Add<B1>>::Output: ArrayLength<Fr>,
+        ColumnArity: PoseidonArity,
+        TreeArity: PoseidonArity,
     {
         if settings::SETTINGS.lock().unwrap().use_gpu_column_builder {
             Self::generate_tree_c_gpu::<ColumnArity, TreeArity>(
@@ -410,10 +404,8 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         labels: &LabelsCache<Tree>,
     ) -> Result<DiskTree<Tree::Hasher, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>>
     where
-        ColumnArity: ArrayLength<Fr> + Add<B1> + Add<UInt<UTerm, B1>>,
-        <ColumnArity as Add<B1>>::Output: ArrayLength<Fr>,
-        TreeArity: ArrayLength<Fr> + Add<B1> + Add<UInt<UTerm, B1>>,
-        <TreeArity as Add<B1>>::Output: ArrayLength<Fr>,
+        ColumnArity: PoseidonArity,
+        TreeArity: PoseidonArity,
     {
         info!("generating tree c using the GPU");
         // Build the tree for CommC
@@ -549,10 +541,8 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         labels: &LabelsCache<Tree>,
     ) -> Result<DiskTree<Tree::Hasher, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>>
     where
-        ColumnArity: ArrayLength<Fr> + Add<B1> + Add<UInt<UTerm, B1>>,
-        <ColumnArity as Add<B1>>::Output: ArrayLength<Fr>,
-        TreeArity: ArrayLength<Fr> + Add<B1> + Add<UInt<UTerm, B1>>,
-        <TreeArity as Add<B1>>::Output: ArrayLength<Fr>,
+        ColumnArity: PoseidonArity,
+        TreeArity: PoseidonArity,
     {
         info!("generating tree c using the CPU");
         measure_op(GenerateTreeC, || {
@@ -738,96 +728,33 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
 
         let tree_c_root = match layers {
             2 => {
-                // NOTE: This additional Arity match could go away if
-                // we could get the constraints of Tree::Arity to
-                // match what is needed by the ColumnTreeBuilder's
-                // TreeArity.
-                let tree_c = match Tree::Arity::to_usize() {
-                    2 => Self::generate_tree_c::<U2, U2>(
-                        layers,
-                        nodes_count,
-                        tree_count,
-                        configs,
-                        &labels,
-                    ),
-                    4 => Self::generate_tree_c::<U2, U4>(
-                        layers,
-                        nodes_count,
-                        tree_count,
-                        configs,
-                        &labels,
-                    ),
-                    8 => Self::generate_tree_c::<U2, U8>(
-                        layers,
-                        nodes_count,
-                        tree_count,
-                        configs,
-                        &labels,
-                    ),
-                    _ => panic!("Unsupported tree arity"),
-                }?;
+                let tree_c = Self::generate_tree_c::<U2, Tree::Arity>(
+                    layers,
+                    nodes_count,
+                    tree_count,
+                    configs,
+                    &labels,
+                )?;
                 tree_c.root()
             }
             8 => {
-                // NOTE: This additional Arity match could go away if
-                // we could get the constraints of Tree::Arity to
-                // match what is needed by the ColumnTreeBuilder's
-                // TreeArity.
-                let tree_c = match Tree::Arity::to_usize() {
-                    2 => Self::generate_tree_c::<U8, U2>(
-                        layers,
-                        nodes_count,
-                        tree_count,
-                        configs,
-                        &labels,
-                    ),
-                    4 => Self::generate_tree_c::<U8, U4>(
-                        layers,
-                        nodes_count,
-                        tree_count,
-                        configs,
-                        &labels,
-                    ),
-                    8 => Self::generate_tree_c::<U8, U8>(
-                        layers,
-                        nodes_count,
-                        tree_count,
-                        configs,
-                        &labels,
-                    ),
-                    _ => panic!("Unsupported tree arity"),
-                }?;
+                let tree_c = Self::generate_tree_c::<U8, Tree::Arity>(
+                    layers,
+                    nodes_count,
+                    tree_count,
+                    configs,
+                    &labels,
+                )?;
                 tree_c.root()
             }
             11 => {
-                // NOTE: This additional Arity match could go away if
-                // we could get the constraints of Tree::Arity to
-                // match what is needed by the ColumnTreeBuilder's
-                // TreeArity.
-                let tree_c = match Tree::Arity::to_usize() {
-                    2 => Self::generate_tree_c::<U11, U2>(
-                        layers,
-                        nodes_count,
-                        tree_count,
-                        configs,
-                        &labels,
-                    ),
-                    4 => Self::generate_tree_c::<U11, U4>(
-                        layers,
-                        nodes_count,
-                        tree_count,
-                        configs,
-                        &labels,
-                    ),
-                    8 => Self::generate_tree_c::<U11, U8>(
-                        layers,
-                        nodes_count,
-                        tree_count,
-                        configs,
-                        &labels,
-                    ),
-                    _ => panic!("Unsupported tree arity"),
-                }?;
+                let tree_c = Self::generate_tree_c::<U11, Tree::Arity>(
+                    layers,
+                    nodes_count,
+                    tree_count,
+                    configs,
+                    &labels,
+                )?;
                 tree_c.root()
             }
             _ => panic!("Unsupported column arity"),
