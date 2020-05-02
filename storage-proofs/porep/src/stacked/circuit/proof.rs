@@ -11,7 +11,7 @@ use storage_proofs_core::{
     gadgets::constraint,
     gadgets::por::PoRCompound,
     hasher::{HashFunction, Hasher},
-    merkle::MerkleTreeTrait,
+    merkle::{BinaryMerkleTree, MerkleTreeTrait},
     parameter_cache::{CacheableParameters, ParameterSetMetadata},
     por,
     proof::ProofScheme,
@@ -205,58 +205,63 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher>
         let comm_r = pub_in.tau.as_ref().expect("missing tau").comm_r;
         inputs.push(comm_r.into());
 
-        let por_params = por::PoR::<Tree>::setup(&por::SetupParams {
+        let por_setup_params = por::SetupParams {
             leaves: graph.size(),
             private: true,
-        })?;
-
-        let generate_inclusion_inputs = |c: usize| {
-            let pub_inputs = por::PublicInputs::<<Tree::Hasher as Hasher>::Domain> {
-                challenge: c,
-                commitment: None,
-            };
-
-            PoRCompound::<Tree>::generate_public_inputs(&pub_inputs, &por_params, k)
         };
+
+        let por_params = por::PoR::<Tree>::setup(&por_setup_params)?;
+        let por_params_d = por::PoR::<BinaryMerkleTree<G>>::setup(&por_setup_params)?;
 
         let all_challenges = pub_in.challenges(&pub_params.layer_challenges, graph.size(), k);
 
         for challenge in all_challenges.into_iter() {
-            // comm_d_proof
-            let pub_inputs = por::PublicInputs::<<Tree::Hasher as Hasher>::Domain> {
+            // comm_d inclusion proof for the data leaf
+            inputs.extend(generate_inclusion_inputs::<BinaryMerkleTree<G>>(
+                &por_params_d,
                 challenge,
-                commitment: None,
-            };
-
-            inputs.extend(PoRCompound::<Tree>::generate_public_inputs(
-                &pub_inputs,
-                &por_params,
                 k,
             )?);
 
-            // replica column proof
-            {
-                // drg parents
-                let mut drg_parents = vec![0; graph.base_graph().degree()];
-                graph.base_graph().parents(challenge, &mut drg_parents)?;
+            // drg parents
+            let mut drg_parents = vec![0; graph.base_graph().degree()];
+            graph.base_graph().parents(challenge, &mut drg_parents)?;
 
-                for parent in drg_parents.into_iter() {
-                    inputs.extend(generate_inclusion_inputs(parent as usize)?);
-                }
-
-                // exp parents
-                let mut exp_parents = vec![0; graph.expansion_degree()];
-                graph.expanded_parents(challenge, &mut exp_parents);
-                for parent in exp_parents.into_iter() {
-                    inputs.extend(generate_inclusion_inputs(parent as usize)?);
-                }
+            // Inclusion Proofs: drg parent node in comm_c
+            for parent in drg_parents.into_iter() {
+                inputs.extend(generate_inclusion_inputs::<Tree>(
+                    &por_params,
+                    parent as usize,
+                    k,
+                )?);
             }
 
-            // final replica layer
-            inputs.extend(generate_inclusion_inputs(challenge)?);
+            // exp parents
+            let mut exp_parents = vec![0; graph.expansion_degree()];
+            graph.expanded_parents(challenge, &mut exp_parents);
 
-            // c_x
-            inputs.extend(generate_inclusion_inputs(challenge)?);
+            // Inclusion Proofs: expander parent node in comm_c
+            for parent in exp_parents.into_iter() {
+                inputs.extend(generate_inclusion_inputs::<Tree>(
+                    &por_params,
+                    parent as usize,
+                    k,
+                )?);
+            }
+
+            // Inclusion Proof: encoded node in comm_r_last
+            inputs.extend(generate_inclusion_inputs::<Tree>(
+                &por_params,
+                challenge,
+                k,
+            )?);
+
+            // Inclusion Proof: column hash of the challenged node in comm_c
+            inputs.extend(generate_inclusion_inputs::<Tree>(
+                &por_params,
+                challenge,
+                k,
+            )?);
         }
 
         Ok(inputs)
@@ -313,6 +318,20 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher>
                 .collect(),
         }
     }
+}
+
+/// Helper to generate public inputs for inclusion proofs.
+fn generate_inclusion_inputs<Tree: 'static + MerkleTreeTrait>(
+    por_params: &por::PublicParams,
+    challenge: usize,
+    k: Option<usize>,
+) -> Result<Vec<Fr>> {
+    let pub_inputs = por::PublicInputs::<<Tree::Hasher as Hasher>::Domain> {
+        challenge,
+        commitment: None,
+    };
+
+    PoRCompound::<Tree>::generate_public_inputs(&pub_inputs, por_params, k)
 }
 
 #[cfg(test)]
