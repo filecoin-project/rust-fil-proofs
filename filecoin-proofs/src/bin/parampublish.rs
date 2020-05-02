@@ -18,7 +18,8 @@ use filecoin_proofs::param::{
     ParameterData, ParameterMap,
 };
 use filecoin_proofs::{
-    SECTOR_SIZE_2_KIB, SECTOR_SIZE_32_GIB, SECTOR_SIZE_512_MIB, SECTOR_SIZE_8_MIB,
+    SECTOR_SIZE_2_KIB, SECTOR_SIZE_32_GIB, SECTOR_SIZE_512_MIB, SECTOR_SIZE_64_GIB,
+    SECTOR_SIZE_8_MIB,
 };
 use storage_proofs::parameter_cache::{
     parameter_cache_dir, CacheEntryMetadata, GROTH_PARAMETER_EXT, PARAMETER_CACHE_DIR,
@@ -27,11 +28,12 @@ use storage_proofs::parameter_cache::{
 
 const ERROR_IPFS_COMMAND: &str = "failed to run ipfs";
 const ERROR_IPFS_PUBLISH: &str = "failed to publish via ipfs";
-const PUBLISH_SECTOR_SIZES: [u64; 4] = [
+const PUBLISH_SECTOR_SIZES: [u64; 5] = [
     SECTOR_SIZE_2_KIB,
     SECTOR_SIZE_8_MIB,
     SECTOR_SIZE_512_MIB,
     SECTOR_SIZE_32_GIB,
+    SECTOR_SIZE_64_GIB,
 ];
 
 pub fn main() {
