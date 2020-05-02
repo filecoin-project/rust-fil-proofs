@@ -67,10 +67,10 @@ lazy_static! {
     );
     pub static ref LAYERS: RwLock<HashMap<u64, usize>> = RwLock::new(
         [
-            (SECTOR_SIZE_2_KIB, 1),
-            (SECTOR_SIZE_4_KIB, 1),
-            (SECTOR_SIZE_16_KIB, 1),
-            (SECTOR_SIZE_32_KIB, 1),
+            (SECTOR_SIZE_2_KIB, 2),
+            (SECTOR_SIZE_4_KIB, 2),
+            (SECTOR_SIZE_16_KIB, 2),
+            (SECTOR_SIZE_32_KIB, 2),
             (SECTOR_SIZE_8_MIB, 2),
             (SECTOR_SIZE_16_MIB, 2),
             (SECTOR_SIZE_512_MIB, 2),
