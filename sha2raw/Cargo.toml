@@ -1,11 +1,11 @@
 [package]
 name = "sha2raw"
 version = "0.1.0"
-authors = ["RustCrypto Developers"]
+authors = ["RustCrypto Developers", "Friedel Ziegelmayer <me@dignifiedquire.com>"]
 license = "MIT OR Apache-2.0"
-description = "SHA-2 hash functions"
-documentation = "https://docs.rs/sha2"
-repository = "https://github.com/RustCrypto/hashes"
+description = "SHA-2 hash function"
+documentation = "https://docs.rs/sha2raw"
+repository = "https://github.com/filecoin-project/rust-fil-proofs"
 keywords = ["crypto", "sha2", "hash", "digest"]
 categories = ["cryptography", "no-std"]
 edition = "2018"

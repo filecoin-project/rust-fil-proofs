@@ -1,7 +1,7 @@
 [package]
 name = "fil-proofs-tooling"
 description = "Tooling for rust-fil-proofs"
-version = "0.6.1"
+version = "1.0.0-alpha.0"
 authors = ["dignifiedquire <dignifiedquire@gmail.com>"]
 license = "MIT OR Apache-2.0"
 publish = false
@@ -23,9 +23,9 @@ regex = "1.1.6"
 commandspec = "0.12.2"
 chrono = { version = "0.4.7", features = ["serde"] }
 memmap = "0.7.0"
-bellperson = "0.6.2"
-paired = "0.18.0"
-fil-sapling-crypto = "0.4.0"
+bellperson = "0.7.0"
+paired = "0.19.0"
+fil-sapling-crypto = "0.5.1"
 rand = "0.7"
 storage-proofs = { path = "../storage-proofs"}
 filecoin-proofs = { path = "../filecoin-proofs"}
