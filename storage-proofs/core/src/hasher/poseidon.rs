@@ -3,8 +3,8 @@ use std::hash::Hasher as StdHasher;
 use crate::crypto::sloth;
 use crate::error::{Error, Result};
 use crate::hasher::types::{
-    PoseidonArity, PoseidonMDArity, POSEIDON_CONSTANTS_1, POSEIDON_CONSTANTS_16,
-    POSEIDON_CONSTANTS_2, POSEIDON_CONSTANTS_4, POSEIDON_CONSTANTS_8, POSEIDON_MD_CONSTANTS,
+    PoseidonArity, PoseidonMDArity, POSEIDON_CONSTANTS_16, POSEIDON_CONSTANTS_2,
+    POSEIDON_CONSTANTS_4, POSEIDON_CONSTANTS_8, POSEIDON_MD_CONSTANTS,
 };
 use crate::hasher::{Domain, HashFunction, Hasher};
 use anyhow::ensure;
@@ -214,10 +214,6 @@ fn shared_hash_frs(
     preimage: &[<Bls12 as ff::ScalarEngine>::Fr],
 ) -> <Bls12 as ff::ScalarEngine>::Fr {
     match preimage.len() {
-        1 => {
-            let mut p = Poseidon::new_with_preimage(&preimage, &*POSEIDON_CONSTANTS_1);
-            p.hash()
-        }
         2 => {
             let mut p = Poseidon::new_with_preimage(&preimage, &POSEIDON_CONSTANTS_2);
             p.hash()
