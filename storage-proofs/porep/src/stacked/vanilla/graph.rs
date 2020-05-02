@@ -28,14 +28,32 @@ const FEISTEL_KEYS: [feistel::Index; 4] = [1, 2, 3, 4];
 const DEGREE: usize = BASE_DEGREE + EXP_DEGREE;
 
 /// Returns a reference to the parent cache, initializing it lazily the first time this is called.
-fn parent_cache<H, G>(cache_entries: u32, graph: &StackedGraph<H, G>) -> &'static ParentCache
+fn parent_cache<H, G>(
+    cache_entries: u32,
+    graph: &StackedGraph<H, G>,
+) -> Result<&'static ParentCache>
 where
     H: Hasher,
     G: Graph<H> + ParameterSetMetadata + Send + Sync,
 {
-    static INSTANCE: OnceCell<ParentCache> = OnceCell::new();
+    static INSTANCE_32_GIB: OnceCell<ParentCache> = OnceCell::new();
+    static INSTANCE_64_GIB: OnceCell<ParentCache> = OnceCell::new();
 
-    INSTANCE.get_or_init(|| ParentCache::new(cache_entries, graph).expect("failed to fill cache"))
+    const NODE_GIB: u32 = (1024 * 1024 * 1024) / NODE_SIZE as u32;
+    ensure!(
+        ((cache_entries == 32 * NODE_GIB) || (cache_entries == 64 * NODE_GIB)),
+        "Cache is only available for 32GiB and 64GiB sectors"
+    );
+    info!("using parent_cache[{}]", cache_entries);
+    if cache_entries == 32 * NODE_GIB {
+        Ok(INSTANCE_32_GIB.get_or_init(|| {
+            ParentCache::new(cache_entries, graph).expect("failed to fill 32GiB cache")
+        }))
+    } else {
+        Ok(INSTANCE_64_GIB.get_or_init(|| {
+            ParentCache::new(cache_entries, graph).expect("failed to fill 64GiB cache")
+        }))
+    }
 }
 
 // StackedGraph will hold two different (but related) `ParentCache`,
@@ -177,13 +195,8 @@ where
 
         if use_cache {
             info!("using parents cache of unlimited size");
-            const GIB: usize = 1024 * 1024 * 1024;
-            ensure!(
-                ((nodes * NODE_SIZE == 32 * GIB) || (nodes * NODE_SIZE == 64 * GIB)),
-                "Cache is only available for 32GiB and 64GiB sectors"
-            );
 
-            let cache = parent_cache(nodes as u32, &res);
+            let cache = parent_cache(nodes as u32, &res)?;
             res.cache = Some(cache);
         }
 
