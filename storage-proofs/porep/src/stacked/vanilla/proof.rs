@@ -6,20 +6,23 @@ use generic_array::typenum::{self, Unsigned};
 use log::{info, trace};
 use merkletree::merkle::{get_merkle_tree_len, is_merkle_tree_size_valid};
 use merkletree::store::{DiskStore, StoreConfig};
+use paired::bls12_381::Fr;
 use rayon::prelude::*;
 use storage_proofs_core::{
     cache_key::CacheKey,
     data::Data,
     drgraph::Graph,
     error::Result,
-    hasher::{Domain, HashFunction, Hasher},
+    hasher::{Domain, HashFunction, Hasher, PoseidonArity},
     measurements::{
         measure_op,
         Operation::{CommD, EncodeWindowTimeAll, GenerateTreeC, GenerateTreeRLast},
     },
     merkle::*,
+    settings,
     util::NODE_SIZE,
 };
+use typenum::{U11, U2, U8};
 
 use super::{
     challenges::LayerChallenges,
@@ -33,6 +36,13 @@ use super::{
     },
     EncodingProof, LabelingProof,
 };
+
+use ff::Field;
+use generic_array::{sequence::GenericSequence, GenericArray};
+use neptune::batch_hasher::BatcherType;
+use neptune::column_tree_builder::{ColumnTreeBuilder, ColumnTreeBuilderTrait};
+use storage_proofs_core::fr32::fr_into_bytes;
+
 use crate::encode::{decode, encode};
 use crate::PoRep;
 
@@ -356,6 +366,241 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         Ok(tree)
     }
 
+    fn generate_tree_c<ColumnArity, TreeArity>(
+        layers: usize,
+        nodes_count: usize,
+        tree_count: usize,
+        configs: Vec<StoreConfig>,
+        labels: &LabelsCache<Tree>,
+    ) -> Result<DiskTree<Tree::Hasher, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>>
+    where
+        ColumnArity: PoseidonArity,
+        TreeArity: PoseidonArity,
+    {
+        if settings::SETTINGS.lock().unwrap().use_gpu_column_builder {
+            Self::generate_tree_c_gpu::<ColumnArity, TreeArity>(
+                layers,
+                nodes_count,
+                tree_count,
+                configs,
+                labels,
+            )
+        } else {
+            Self::generate_tree_c_cpu::<ColumnArity, TreeArity>(
+                layers,
+                nodes_count,
+                tree_count,
+                configs,
+                labels,
+            )
+        }
+    }
+
+    fn generate_tree_c_gpu<ColumnArity, TreeArity>(
+        layers: usize,
+        nodes_count: usize,
+        tree_count: usize,
+        configs: Vec<StoreConfig>,
+        labels: &LabelsCache<Tree>,
+    ) -> Result<DiskTree<Tree::Hasher, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>>
+    where
+        ColumnArity: PoseidonArity,
+        TreeArity: PoseidonArity,
+    {
+        info!("generating tree c using the GPU");
+        // Build the tree for CommC
+        measure_op(GenerateTreeC, || {
+            info!("Building column hashes");
+
+            // NOTE: The max number of columns we recommend sending to
+            // the GPU at once is 400000 for columns and 700000 for
+            // trees (conservative soft-limits discussed).
+            //
+            // Override these values with care using environment
+            // variables: FIL_PROOFS_MAX_COLUMN_BATCH_SIZE and
+            // FIL_PROOFS_MAX_TREE_BATCH_SIZE, respectively.
+            let max_gpu_column_batch_size =
+                settings::SETTINGS.lock().unwrap().max_gpu_column_batch_size as usize;
+            let max_gpu_tree_batch_size =
+                settings::SETTINGS.lock().unwrap().max_gpu_tree_batch_size as usize;
+
+            let mut column_tree_builder = ColumnTreeBuilder::<ColumnArity, TreeArity>::new(
+                Some(BatcherType::GPU),
+                nodes_count,
+                max_gpu_column_batch_size,
+                max_gpu_tree_batch_size,
+            )?;
+
+            for (i, config) in configs.iter().enumerate() {
+                let mut node_index = 0;
+                while node_index != nodes_count {
+                    let chunked_nodes_count =
+                        std::cmp::min(nodes_count - node_index, max_gpu_column_batch_size);
+                    trace!(
+                        "processing config {}/{} with column nodes {}",
+                        i + 1,
+                        tree_count,
+                        chunked_nodes_count,
+                    );
+                    let mut columns: Vec<GenericArray<Fr, ColumnArity>> =
+                        vec![
+                            GenericArray::<Fr, ColumnArity>::generate(|_i: usize| Fr::zero());
+                            chunked_nodes_count
+                        ];
+
+                    rayon::scope(|s| {
+                        let n = num_cpus::get();
+
+                        // only split if we have at least two elements per thread
+                        let num_chunks = if n > chunked_nodes_count * 2 { 1 } else { n };
+
+                        // chunk into n chunks
+                        let chunk_size =
+                            (chunked_nodes_count as f64 / num_chunks as f64).ceil() as usize;
+
+                        // gather all n chunks in parallel
+                        for (chunk, columns_chunk) in columns.chunks_mut(chunk_size).enumerate() {
+                            let labels = &labels;
+
+                            s.spawn(move |_| {
+                                for (j, hash) in columns_chunk.iter_mut().enumerate() {
+                                    for k in 1..=layers {
+                                        let store = labels.labels_for_layer(k);
+                                        let el: <Tree::Hasher as Hasher>::Domain = store
+                                            .read_at(
+                                                (i * nodes_count)
+                                                    + node_index
+                                                    + j
+                                                    + chunk * chunk_size,
+                                            )
+                                            .unwrap();
+
+                                        hash[k - 1] = el.into();
+                                    }
+                                }
+                            });
+                        }
+                    });
+
+                    node_index += chunked_nodes_count;
+                    trace!(
+                        "node index {}/{}/{}",
+                        node_index,
+                        chunked_nodes_count,
+                        nodes_count,
+                    );
+
+                    if node_index != nodes_count {
+                        column_tree_builder.add_columns(&columns)?;
+                    } else {
+                        assert_eq!(node_index, nodes_count);
+                        let tree_data = column_tree_builder.add_final_columns(&columns)?;
+                        let tree_data_len = tree_data.len();
+                        info!(
+                            "persisting base tree_c {}/{} of length {}",
+                            i + 1,
+                            tree_count,
+                            tree_data_len
+                        );
+                        assert_eq!(tree_data_len, config.size.unwrap());
+
+                        // FIXME: Add store method to take iter for persisting elements directly?
+                        // FIXME: Or have neptune return this as [u8]?
+                        let mut flat_tree_data = Vec::with_capacity(
+                            tree_data_len * std::mem::size_of::<<Tree::Hasher as Hasher>::Domain>(),
+                        );
+                        for el in &tree_data {
+                            let cur = fr_into_bytes(&el);
+                            flat_tree_data.extend(&cur);
+                        }
+                        drop(tree_data);
+
+                        // Persist the data to the store based on the current config.
+                        DiskStore::<<Tree::Hasher as Hasher>::Domain>::new_from_slice_with_config(
+                            tree_data_len,
+                            Tree::Arity::to_usize(),
+                            &flat_tree_data,
+                            config.clone(),
+                        )?;
+                    }
+                }
+            }
+
+            create_disk_tree::<
+                DiskTree<Tree::Hasher, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>,
+            >(configs[0].size.unwrap(), &configs)
+        })
+    }
+
+    fn generate_tree_c_cpu<ColumnArity, TreeArity>(
+        layers: usize,
+        nodes_count: usize,
+        tree_count: usize,
+        configs: Vec<StoreConfig>,
+        labels: &LabelsCache<Tree>,
+    ) -> Result<DiskTree<Tree::Hasher, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>>
+    where
+        ColumnArity: PoseidonArity,
+        TreeArity: PoseidonArity,
+    {
+        info!("generating tree c using the CPU");
+        measure_op(GenerateTreeC, || {
+            info!("Building column hashes");
+
+            let mut trees = Vec::with_capacity(tree_count);
+            for (i, config) in configs.iter().enumerate() {
+                let mut hashes: Vec<<Tree::Hasher as Hasher>::Domain> =
+                    vec![<Tree::Hasher as Hasher>::Domain::default(); nodes_count];
+
+                rayon::scope(|s| {
+                    let n = num_cpus::get();
+
+                    // only split if we have at least two elements per thread
+                    let num_chunks = if n > nodes_count * 2 { 1 } else { n };
+
+                    // chunk into n chunks
+                    let chunk_size = (nodes_count as f64 / num_chunks as f64).ceil() as usize;
+
+                    // calculate all n chunks in parallel
+                    for (chunk, hashes_chunk) in hashes.chunks_mut(chunk_size).enumerate() {
+                        let labels = &labels;
+
+                        s.spawn(move |_| {
+                            for (j, hash) in hashes_chunk.iter_mut().enumerate() {
+                                let data: Vec<_> = (1..=layers)
+                                    .map(|layer| {
+                                        let store = labels.labels_for_layer(layer);
+                                        let el: <Tree::Hasher as Hasher>::Domain = store
+                                            .read_at((i * nodes_count) + j + chunk * chunk_size)
+                                            .unwrap();
+                                        el.into()
+                                    })
+                                    .collect();
+
+                                *hash = hash_single_column(&data).into();
+                            }
+                        });
+                    }
+                });
+
+                info!("building base tree_c {}/{}", i + 1, tree_count);
+                trees.push(DiskTree::<
+                    Tree::Hasher,
+                    Tree::Arity,
+                    typenum::U0,
+                    typenum::U0,
+                >::from_par_iter_with_config(
+                    hashes.into_par_iter(), config.clone()
+                ));
+            }
+
+            assert_eq!(tree_count, trees.len());
+            create_disk_tree::<
+                DiskTree<Tree::Hasher, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>,
+            >(configs[0].size.unwrap(), &configs)
+        })
+    }
+
     pub(crate) fn transform_and_replicate_layers(
         graph: &StackedBucketGraph<Tree::Hasher>,
         layer_challenges: &LayerChallenges,
@@ -431,22 +676,21 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         let nodes_count = graph.size() / tree_count;
 
         // Ensure that the node count will work for binary and oct arities.
+        let binary_arity_valid = is_merkle_tree_size_valid(nodes_count, BINARY_ARITY);
+        let other_arity_valid = is_merkle_tree_size_valid(nodes_count, Tree::Arity::to_usize());
         trace!(
             "is_merkle_tree_size_valid({}, BINARY_ARITY) = {}",
             nodes_count,
-            is_merkle_tree_size_valid(nodes_count, BINARY_ARITY)
+            binary_arity_valid
         );
         trace!(
             "is_merkle_tree_size_valid({}, {}) = {}",
             nodes_count,
             Tree::Arity::to_usize(),
-            is_merkle_tree_size_valid(nodes_count, Tree::Arity::to_usize())
+            other_arity_valid
         );
-        assert!(is_merkle_tree_size_valid(nodes_count, BINARY_ARITY));
-        assert!(is_merkle_tree_size_valid(
-            nodes_count,
-            Tree::Arity::to_usize()
-        ));
+        assert!(binary_arity_valid);
+        assert!(other_arity_valid);
 
         let layers = layer_challenges.layers();
         assert!(layers > 0);
@@ -480,66 +724,40 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         let labels = LabelsCache::<Tree>::new(&label_configs)?;
         let configs = split_config(tree_c_config.clone(), tree_count)?;
 
-        // Build the tree for CommC
-        let tree_c = measure_op(GenerateTreeC, || {
-            info!("Building column hashes");
-
-            let mut trees = Vec::with_capacity(tree_count);
-            for (i, config) in configs.iter().enumerate() {
-                let mut hashes: Vec<<Tree::Hasher as Hasher>::Domain> =
-                    vec![<Tree::Hasher as Hasher>::Domain::default(); nodes_count];
-
-                rayon::scope(|s| {
-                    // spawn n = num_cpus * 2 threads
-                    let n = num_cpus::get() * 2;
-
-                    // only split if we have at least two elements per thread
-                    let num_chunks = if n > nodes_count * 2 { 1 } else { n };
-
-                    // chunk into n chunks
-                    let chunk_size = (nodes_count as f64 / num_chunks as f64).ceil() as usize;
-
-                    // calculate all n chunks in parallel
-                    for (chunk, hashes_chunk) in hashes.chunks_mut(chunk_size).enumerate() {
-                        let labels = &labels;
-
-                        s.spawn(move |_| {
-                            for (j, hash) in hashes_chunk.iter_mut().enumerate() {
-                                let data: Vec<_> = (1..=layers)
-                                    .map(|layer| {
-                                        let store = labels.labels_for_layer(layer);
-                                        let el: <Tree::Hasher as Hasher>::Domain = store
-                                            .read_at((i * nodes_count) + j + chunk * chunk_size)
-                                            .unwrap();
-                                        el.into()
-                                    })
-                                    .collect();
-
-                                *hash = hash_single_column(&data).into();
-                            }
-                        });
-                    }
-                });
-
-                info!("building base tree_c {}/{}", i + 1, tree_count);
-                trees.push(DiskTree::<
-                    Tree::Hasher,
-                    Tree::Arity,
-                    typenum::U0,
-                    typenum::U0,
-                >::from_par_iter_with_config(
-                    hashes.into_par_iter(), config.clone()
-                )?);
+        let tree_c_root = match layers {
+            2 => {
+                let tree_c = Self::generate_tree_c::<U2, Tree::Arity>(
+                    layers,
+                    nodes_count,
+                    tree_count,
+                    configs,
+                    &labels,
+                )?;
+                tree_c.root()
             }
-
-            assert_eq!(tree_count, trees.len());
-            create_disk_tree::<
-                DiskTree<Tree::Hasher, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>,
-            >(tree_c_config.size.unwrap(), &configs)
-        })?;
+            8 => {
+                let tree_c = Self::generate_tree_c::<U8, Tree::Arity>(
+                    layers,
+                    nodes_count,
+                    tree_count,
+                    configs,
+                    &labels,
+                )?;
+                tree_c.root()
+            }
+            11 => {
+                let tree_c = Self::generate_tree_c::<U11, Tree::Arity>(
+                    layers,
+                    nodes_count,
+                    tree_count,
+                    configs,
+                    &labels,
+                )?;
+                tree_c.root()
+            }
+            _ => panic!("Unsupported column arity"),
+        };
         info!("tree_c done");
-        let tree_c_root = tree_c.root();
-        drop(tree_c);
 
         // Build the MerkleTree over the original data (if needed).
         let tree_d = match data_tree {

@@ -48,6 +48,20 @@ fn test_seal_lifecycle_32kib_top_8_8_2() -> Result<()> {
     seal_lifecycle::<SectorShape32KiB>(SECTOR_SIZE_32_KIB)
 }
 
+// These tests are good to run, but take a long time.
+
+//#[test]
+//#[ignore]
+//fn test_seal_lifecycle_32gib_top_8_8_0() -> Result<()> {
+//    seal_lifecycle::<SectorShape32GiB>(SECTOR_SIZE_32_GIB)
+//}
+
+//#[test]
+//#[ignore]
+//fn test_seal_lifecycle_64gib_top_8_8_2() -> Result<()> {
+//    seal_lifecycle::<SectorShape64GiB>(SECTOR_SIZE_64_GIB)
+//}
+
 fn seal_lifecycle<Tree: 'static + MerkleTreeTrait>(sector_size: u64) -> Result<()> {
     let rng = &mut XorShiftRng::from_seed(TEST_SEED);
     let prover_fr: DefaultTreeDomain = Fr::random(rng).into();
