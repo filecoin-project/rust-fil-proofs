@@ -362,27 +362,27 @@ mod tests {
 
     #[test]
     fn stacked_input_circuit_pedersen_base_2() {
-        stacked_input_circuit::<DiskTree<PedersenHasher, U2, U0, U0>>(21, 1_258_258);
+        stacked_input_circuit::<DiskTree<PedersenHasher, U2, U0, U0>>(21, 1_258_194);
     }
 
     #[test]
     fn stacked_input_circuit_poseidon_base_2() {
-        stacked_input_circuit::<DiskTree<PoseidonHasher, U2, U0, U0>>(21, 1_206_465);
+        stacked_input_circuit::<DiskTree<PoseidonHasher, U2, U0, U0>>(21, 1_206_401);
     }
 
     #[test]
     fn stacked_input_circuit_poseidon_base_8() {
-        stacked_input_circuit::<DiskTree<PoseidonHasher, U8, U0, U0>>(21, 1_200_321);
+        stacked_input_circuit::<DiskTree<PoseidonHasher, U8, U0, U0>>(21, 1_200_257);
     }
 
     #[test]
     fn stacked_input_circuit_poseidon_sub_8_4() {
-        stacked_input_circuit::<DiskTree<PoseidonHasher, U8, U4, U0>>(21, 1_297_389);
+        stacked_input_circuit::<DiskTree<PoseidonHasher, U8, U4, U0>>(21, 1_297_325);
     }
 
     #[test]
     fn stacked_input_circuit_poseidon_top_8_4_2() {
-        stacked_input_circuit::<DiskTree<PoseidonHasher, U8, U4, U2>>(21, 1_347_843);
+        stacked_input_circuit::<DiskTree<PoseidonHasher, U8, U4, U2>>(21, 1_347_779);
     }
 
     fn stacked_input_circuit<Tree: MerkleTreeTrait + 'static>(

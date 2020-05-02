@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
 
@@ -159,7 +158,7 @@ pub struct Proof<Tree: MerkleTreeTrait, G: Hasher> {
         deserialize = "LabelingProof<Tree::Hasher>: Deserialize<'de>"
     ))]
     /// Indexed by layer in 1..layers.
-    pub labeling_proofs: HashMap<usize, LabelingProof<Tree::Hasher>>,
+    pub labeling_proofs: Vec<LabelingProof<Tree::Hasher>>,
     #[serde(bound(
         serialize = "EncodingProof<Tree::Hasher>: Serialize",
         deserialize = "EncodingProof<Tree::Hasher>: Deserialize<'de>"
@@ -243,8 +242,8 @@ impl<Tree: MerkleTreeTrait, G: Hasher> Proof<Tree, G> {
         for layer in 1..=layer_challenges.layers() {
             trace!("verify labeling (layer: {})", layer,);
 
-            check!(self.labeling_proofs.contains_key(&layer));
-            let labeling_proof = &self.labeling_proofs.get(&layer).unwrap();
+            check!(self.labeling_proofs.get(layer - 1).is_some());
+            let labeling_proof = &self.labeling_proofs.get(layer - 1).unwrap();
             let labeled_node = self
                 .replica_column_proofs
                 .c_x

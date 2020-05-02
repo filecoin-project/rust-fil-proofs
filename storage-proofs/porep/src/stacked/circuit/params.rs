@@ -9,51 +9,65 @@ use storage_proofs_core::{
     gadgets::por::{AuthPath, PoRCircuit},
     gadgets::{encode::encode, uint64, variables::Root},
     hasher::{Hasher, PoseidonArity},
-    merkle::{DiskStore, MerkleProofTrait, MerkleTreeTrait, MerkleTreeWrapper, Store},
+    merkle::{DiskStore, MerkleProofTrait, MerkleTreeTrait, MerkleTreeWrapper},
     util::fixup_bits,
 };
 
 use super::{
-    column::AllocatedColumn, column_proof::ColumnProof, create_label_circuit as create_label,
-    hash::hash_single_column,
+    column_proof::ColumnProof, create_label_circuit as create_label, hash::hash_single_column,
 };
 use crate::stacked::{
     Proof as VanillaProof, PublicParams, ReplicaColumnProof as VanillaReplicaColumnProof,
 };
 
+type TreeAuthPath<T> = AuthPath<
+    <T as MerkleTreeTrait>::Hasher,
+    <T as MerkleTreeTrait>::Arity,
+    <T as MerkleTreeTrait>::SubTreeArity,
+    <T as MerkleTreeTrait>::TopTreeArity,
+>;
+
+type TreeColumnProof<T> = ColumnProof<
+    <T as MerkleTreeTrait>::Hasher,
+    <T as MerkleTreeTrait>::Arity,
+    <T as MerkleTreeTrait>::SubTreeArity,
+    <T as MerkleTreeTrait>::TopTreeArity,
+>;
+
 /// Proof for a single challenge.
 #[derive(Debug)]
 pub struct Proof<Tree: MerkleTreeTrait, G: Hasher> {
-    /// Inclusion path for the data_leaf in tree D.
+    /// Inclusion path for the challenged data node in tree D.
     pub comm_d_path: AuthPath<G, U2, U0, U0>,
-    /// The original value of the challenged node.
+    /// The value of the challenged data node.
     pub data_leaf: Option<Fr>,
-    /// Inclusion path of the replica node in tree R.
-    pub comm_r_last_path:
-        AuthPath<Tree::Hasher, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>,
-    pub replica_column_proof:
-        ReplicaColumnProof<Tree::Hasher, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>,
-    /// Labeling proofs consist of `(layer_index, node_index)`
-    pub labeling_proofs: Vec<(usize, Option<u64>)>,
+    /// The index of the challenged node.
+    pub challenge: Option<u64>,
+    /// Inclusion path of the challenged replica node in tree R.
+    pub comm_r_last_path: TreeAuthPath<Tree>,
+    /// Inclusion path of the column hash of the challenged node  in tree C.
+    pub comm_c_path: TreeAuthPath<Tree>,
+    /// Column proofs for the drg parents.
+    pub drg_parents_proofs: Vec<TreeColumnProof<Tree>>,
+    /// Column proofs for the expander parents.
+    pub exp_parents_proofs: Vec<TreeColumnProof<Tree>>,
     _t: PhantomData<Tree>,
 }
 
 impl<Tree: MerkleTreeTrait, G: 'static + Hasher> Proof<Tree, G> {
     /// Create an empty proof, used in `blank_circuit`s.
     pub fn empty(params: &PublicParams<Tree>) -> Self {
-        let layers = params.layer_challenges.layers();
-
-        let mut labeling_proofs = Vec::with_capacity(layers);
-        for layer in 1..=layers {
-            labeling_proofs.push((layer, None));
-        }
-
         Proof {
             comm_d_path: AuthPath::blank(params.graph.size()),
             data_leaf: None,
+            challenge: None,
             comm_r_last_path: AuthPath::blank(params.graph.size()),
-            replica_column_proof: ReplicaColumnProof::empty(params),
-            labeling_proofs,
+            comm_c_path: AuthPath::blank(params.graph.size()),
+            drg_parents_proofs: vec![
+                ColumnProof::empty(params);
+                params.graph.base_graph().degree()
+            ],
+            exp_parents_proofs: vec![ColumnProof::empty(params); params.graph.expansion_degree()],
             _t: PhantomData,
         }
     }
@@ -72,17 +86,13 @@ impl<Tree: MerkleTreeTrait, G: 'static + Hasher> Proof<Tree, G> {
         let Proof {
             comm_d_path,
             data_leaf,
+            challenge,
             comm_r_last_path,
-            replica_column_proof,
-            labeling_proofs,
+            comm_c_path,
+            drg_parents_proofs,
+            exp_parents_proofs,
             ..
         } = self;
-
-        assert_eq!(
-            layers,
-            labeling_proofs.len(),
-            "invalid number of labeling proofs"
-        );
 
         // -- verify initial data layer
 
@@ -101,100 +111,137 @@ impl<Tree: MerkleTreeTrait, G: 'static + Hasher> Proof<Tree, G> {
 
         // -- verify replica column openings
 
-        // allocate the private inputs in the replica column proof
-        let replica_column_proof =
-            replica_column_proof.alloc(cs.namespace(|| "replica_column_proof"))?;
+        // Private Inputs for the DRG parent nodes.
+        let mut drg_parents = Vec::new();
 
-        // enforce the replica column proof
-        replica_column_proof.enforce(cs.namespace(|| "replica_column_proof_constraint"), comm_c)?;
+        for (i, parent) in drg_parents_proofs.into_iter().enumerate() {
+            let (parent_col, inclusion_path) =
+                parent.alloc(cs.namespace(|| format!("drg_parent_{}_num", i)))?;
+
+            // calculate column hash
+            let val = parent_col.hash(cs.namespace(|| format!("drg_parent_{}_constraint", i)))?;
+            // enforce inclusion of the column hash in the tree C
+            enforce_inclusion(
+                cs.namespace(|| format!("drg_parent_{}_inclusion", i)),
+                inclusion_path,
+                comm_c,
+                &val,
+            )?;
+            drg_parents.push(parent_col);
+        }
+
+        // Private Inputs for the Expander parent nodes.
+        let mut exp_parents = Vec::new();
+
+        for (i, parent) in exp_parents_proofs.into_iter().enumerate() {
+            let (parent_col, inclusion_path) =
+                parent.alloc(cs.namespace(|| format!("exp_parent_{}_num", i)))?;
+
+            // calculate column hash
+            let val = parent_col.hash(cs.namespace(|| format!("exp_parent_{}_constraint", i)))?;
+            // enforce inclusion of the column hash in the tree C
+            enforce_inclusion(
+                cs.namespace(|| format!("exp_parent_{}_inclusion", i)),
+                inclusion_path,
+                comm_c,
+                &val,
+            )?;
+            exp_parents.push(parent_col);
+        }
 
         // -- Verify labeling and encoding
 
         // stores the labels of the challenged column
         let mut column_labels = Vec::new();
 
-        for (layer, node_index) in labeling_proofs.into_iter() {
-            let mut cs = cs.namespace(|| format!("labeling_proof_{}", layer));
+        // PrivateInput: challenge index
+        let challenge_num = uint64::UInt64::alloc(cs.namespace(|| "challenge"), challenge)?;
+
+        for layer in 1..=layers {
+            let mut cs = cs.namespace(|| format!("labeling_{}", layer));
 
             // Collect the parents
             let mut parents = Vec::new();
-            for (parent, _) in &replica_column_proof.drg_parents {
-                let val_num = parent.get_value(layer);
-                let val_bits = fixup_bits(val_num.to_bits_le(
-                    cs.namespace(|| format!("drg_parent_value_num_{}", parents.len())),
-                )?);
-                parents.push(val_bits);
+
+            // all layers have drg parents
+            for parent_col in &drg_parents {
+                let parent_val_num = parent_col.get_value(layer);
+                let parent_val_bits =
+                    fixup_bits(parent_val_num.to_bits_le(
+                        cs.namespace(|| format!("drg_parent_{}_bits", parents.len())),
+                    )?);
+                parents.push(parent_val_bits);
             }
 
-            let expanded_parents = if layer > 1 {
-                for (parent, _) in &replica_column_proof.exp_parents {
+            // the first layer does not contain expander parents
+            if layer > 1 {
+                for parent_col in &exp_parents {
                     // subtract 1 from the layer index, as the exp parents, are shifted by one, as they
                     // do not store a value for the first layer
-                    let val_num = parent.get_value(layer - 1);
-                    let val_bits = fixup_bits(val_num.to_bits_le(
-                        cs.namespace(|| format!("exp_parent_value_num_{}", parents.len())),
+                    let parent_val_num = parent_col.get_value(layer - 1);
+                    let parent_val_bits = fixup_bits(parent_val_num.to_bits_le(
+                        cs.namespace(|| format!("exp_parent_{}_bits", parents.len())),
                     )?);
-                    parents.push(val_bits);
+                    parents.push(parent_val_bits);
                 }
+            }
 
-                // duplicate parents, according to the hashing algorithm
-                // TODO: verify this is okay
-                let mut expanded_parents = parents.clone(); // 14
+            // Duplicate parents, according to the hashing algorithm.
+            let mut expanded_parents = parents.clone();
+            if layer > 1 {
                 expanded_parents.extend_from_slice(&parents); // 28
                 expanded_parents.extend_from_slice(&parents[..9]); // 37
-                expanded_parents
             } else {
                 // layer 1 only has drg parents
-                let mut expanded_parents = parents.clone(); // 6
                 expanded_parents.extend_from_slice(&parents); // 12
                 expanded_parents.extend_from_slice(&parents); // 18
                 expanded_parents.extend_from_slice(&parents); // 24
                 expanded_parents.extend_from_slice(&parents); // 30
                 expanded_parents.extend_from_slice(&parents); // 36
                 expanded_parents.push(parents[0].clone()); // 37
-                expanded_parents
             };
 
-            let node_num = uint64::UInt64::alloc(cs.namespace(|| "node"), node_index)?;
-
-            // reconstruct the label
+            // Reconstruct the label
             let label = create_label(
                 cs.namespace(|| "create_label"),
                 replica_id,
                 expanded_parents,
-                node_num,
+                challenge_num.clone(),
             )?;
-
-            if layer == layers {
-                // -- encoding layer
-
-                // encode the node
-                let encoded_node = encode(cs.namespace(|| "encode_node"), &label, &data_leaf_num)?;
-
-                // verify inclusion of the encoded node
-                enforce_inclusion(
-                    cs.namespace(|| "comm_r_last_data_inclusion"),
-                    comm_r_last_path.clone(),
-                    comm_r_last,
-                    &encoded_node,
-                )?;
-            }
-
             column_labels.push(label);
         }
 
+        // -- encoding node
+        {
+            // encode the node
+
+            // key is the last label
+            let key = &column_labels[column_labels.len() - 1];
+            let encoded_node = encode(cs.namespace(|| "encode_node"), key, &data_leaf_num)?;
+
+            // verify inclusion of the encoded node
+            enforce_inclusion(
+                cs.namespace(|| "comm_r_last_data_inclusion"),
+                comm_r_last_path.clone(),
+                comm_r_last,
+                &encoded_node,
+            )?;
+        }
+
         // -- ensure the column hash of the labels is included
+        {
+            // calculate column_hash
+            let column_hash =
+                hash_single_column(cs.namespace(|| "c_x_column_hash"), &column_labels)?;
 
-        // calculate column_hash
-        let column_hash = hash_single_column(cs.namespace(|| "c_x_column_hash"), &column_labels)?;
-
-        // enforce inclusion of the column hash in the tree C
-        enforce_inclusion(
-            cs.namespace(|| "c_x_inclusion"),
-            replica_column_proof.c_x_path,
-            comm_c,
-            &column_hash,
-        )?;
+            // enforce inclusion of the column hash in the tree C
+            enforce_inclusion(
+                cs.namespace(|| "c_x_inclusion"),
+                comm_c_path,
+                comm_c,
+                &column_hash,
+            )?;
+        }
 
         Ok(())
     }
@@ -212,21 +259,22 @@ where
             labeling_proofs,
             ..
         } = vanilla_proof;
+        let VanillaReplicaColumnProof {
+            c_x,
+            drg_parents,
+            exp_parents,
+        } = replica_column_proofs;
 
-        let mut labeling_proofs: Vec<_> = labeling_proofs
-            .into_iter()
-            .map(|(layer, p)| (layer, Some(p.node)))
-            .collect();
-
-        labeling_proofs.sort_by_cached_key(|(k, _)| *k);
         let data_leaf = Some(comm_d_proofs.leaf().into());
 
         Proof {
             comm_d_path: comm_d_proofs.as_options().into(),
             data_leaf,
+            challenge: Some(labeling_proofs[0].node.clone()),
             comm_r_last_path: comm_r_last_proof.as_options().into(),
-            replica_column_proof: replica_column_proofs.into(),
-            labeling_proofs,
+            comm_c_path: c_x.inclusion_proof.as_options().into(),
+            drg_parents_proofs: drg_parents.into_iter().map(|p| p.into()).collect(),
+            exp_parents_proofs: exp_parents.into_iter().map(|p| p.into()).collect(),
             _t: PhantomData,
         }
     }
@@ -253,147 +301,4 @@ where
     )?;
 
     Ok(())
-}
-
-#[derive(Debug)]
-pub struct ReplicaColumnProof<
-    H: Hasher,
-    U: 'static + PoseidonArity,
-    V: 'static + PoseidonArity,
-    W: 'static + PoseidonArity,
-> {
-    c_x_path: AuthPath<H, U, V, W>,
-    drg_parents: Vec<ColumnProof<H, U, V, W>>,
-    exp_parents: Vec<ColumnProof<H, U, V, W>>,
-}
-
-pub struct AllocatedReplicaColumnProof<H, U, V, W>
-where
-    H: Hasher,
-    U: 'static + PoseidonArity,
-    V: 'static + PoseidonArity,
-    W: 'static + PoseidonArity,
-{
-    c_x_path: AuthPath<H, U, V, W>,
-    drg_parents: Vec<(AllocatedColumn, AuthPath<H, U, V, W>)>,
-    exp_parents: Vec<(AllocatedColumn, AuthPath<H, U, V, W>)>,
-}
-
-impl<H, U, V, W> AllocatedReplicaColumnProof<H, U, V, W>
-where
-    H: 'static + Hasher,
-    U: 'static + PoseidonArity,
-    V: 'static + PoseidonArity,
-    W: 'static + PoseidonArity,
-{
-    /// Enforces constraints on the parts.
-    pub fn enforce<CS: ConstraintSystem<Bls12>>(
-        &self,
-        mut cs: CS,
-        comm_c: &num::AllocatedNum<Bls12>,
-    ) -> Result<(), SynthesisError> {
-        for (i, (parent, inclusion_path)) in self.drg_parents.iter().enumerate() {
-            // calculate column hash
-            let val = parent.hash(cs.namespace(|| format!("drg_parent_{}_constraint", i)))?;
-
-            // enforce inclusion of the column hash in the tree C
-            enforce_inclusion(
-                cs.namespace(|| format!("drg_parent_{}_inclusion", i)),
-                inclusion_path.clone(),
-                comm_c,
-                &val,
-            )?;
-        }
-
-        for (i, (parent, inclusion_path)) in self.exp_parents.iter().enumerate() {
-            // calculate column hash
-            let val = parent.hash(cs.namespace(|| format!("exp_parent_{}_constraint", i)))?;
-
-            // enforce inclusion of the column hash in the tree C
-            enforce_inclusion(
-                cs.namespace(|| format!("exp_parent_{}_inclusion", i)),
-                inclusion_path.clone(),
-                comm_c,
-                &val,
-            )?;
-        }
-
-        Ok(())
-    }
-}
-
-impl<
-        H: 'static + Hasher,
-        U: 'static + PoseidonArity,
-        V: 'static + PoseidonArity,
-        W: 'static + PoseidonArity,
-    > ReplicaColumnProof<H, U, V, W>
-{
-    /// Create an empty proof, used in `blank_circuit`s.
-    pub fn empty<S, Tree>(params: &PublicParams<Tree>) -> Self
-    where
-        S: Store<H::Domain>,
-        Tree: MerkleTreeTrait<Hasher = H, Store = S, Arity = U, SubTreeArity = V, TopTreeArity = W>,
-    {
-        ReplicaColumnProof {
-            c_x_path: AuthPath::blank(params.graph.size()),
-            drg_parents: vec![ColumnProof::empty(params); params.graph.base_graph().degree()],
-            exp_parents: vec![ColumnProof::empty(params); params.graph.expansion_degree()],
-        }
-    }
-
-    /// Allocates all the private inputs of the ReplicaColumnProof.
-    pub fn alloc<CS: ConstraintSystem<Bls12>>(
-        self,
-        mut cs: CS,
-    ) -> Result<AllocatedReplicaColumnProof<H, U, V, W>, SynthesisError> {
-        let Self {
-            c_x_path,
-            drg_parents,
-            exp_parents,
-        } = self;
-
-        // Private Inputs for the DRG parent nodes.
-        let drg_parents = drg_parents
-            .into_iter()
-            .enumerate()
-            .map(|(i, parent)| parent.alloc(cs.namespace(|| format!("drg_parents_{}", i))))
-            .collect::<Result<_, _>>()?;
-
-        // Private Inputs for the Expander Parent nodes.
-        let exp_parents = exp_parents
-            .into_iter()
-            .enumerate()
-            .map(|(i, parent)| parent.alloc(cs.namespace(|| format!("exp_parents_{}", i))))
-            .collect::<Result<_, _>>()?;
-
-        Ok(AllocatedReplicaColumnProof {
-            c_x_path,
-            drg_parents,
-            exp_parents,
-        })
-    }
-}
-
-impl<
-        H: 'static + Hasher,
-        U: 'static + PoseidonArity,
-        V: 'static + PoseidonArity,
-        W: 'static + PoseidonArity,
-        X: MerkleProofTrait<Hasher = H, Arity = U, SubTreeArity = V, TopTreeArity = W>,
-    > From<VanillaReplicaColumnProof<X>> for ReplicaColumnProof<H, U, V, W>
-{
-    fn from(vanilla_proof: VanillaReplicaColumnProof<X>) -> Self {
-        let VanillaReplicaColumnProof {
-            c_x,
-            drg_parents,
-            exp_parents,
-        } = vanilla_proof;
-
-        ReplicaColumnProof {
-            c_x_path: c_x.inclusion_proof.as_options().into(),
-            drg_parents: drg_parents.into_iter().map(|p| p.into()).collect(),
-            exp_parents: exp_parents.into_iter().map(|p| p.into()).collect(),
-        }
-    }
 }
