@@ -23,11 +23,6 @@ where
         .collect::<Result<Vec<_>, _>>()?;
 
     match column.len() {
-        1 => poseidon_hash::<CS, Bls12, typenum::U1>(
-            cs,
-            column,
-            &*storage_proofs_core::hasher::types::POSEIDON_CONSTANTS_1,
-        ),
         2 => poseidon_hash::<CS, Bls12, typenum::U2>(
             cs,
             column,
