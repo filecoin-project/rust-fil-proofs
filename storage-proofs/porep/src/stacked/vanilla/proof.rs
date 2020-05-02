@@ -449,8 +449,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                         ];
 
                     rayon::scope(|s| {
-                        // spawn n = num_cpus * 2 threads
-                        let n = num_cpus::get() * 2;
+                        let n = num_cpus::get();
 
                         // only split if we have at least two elements per thread
                         let num_chunks = if n > chunked_nodes_count * 2 { 1 } else { n };
@@ -554,8 +553,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                     vec![<Tree::Hasher as Hasher>::Domain::default(); nodes_count];
 
                 rayon::scope(|s| {
-                    // spawn n = num_cpus * 2 threads
-                    let n = num_cpus::get() * 2;
+                    let n = num_cpus::get();
 
                     // only split if we have at least two elements per thread
                     let num_chunks = if n > nodes_count * 2 { 1 } else { n };

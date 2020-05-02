@@ -52,12 +52,6 @@ fn test_seal_lifecycle_32kib_top_8_8_2() -> Result<()> {
 
 //#[test]
 //#[ignore]
-//fn test_seal_lifecycle_4gib_base_8() -> Result<()> {
-//    seal_lifecycle::<SectorShape4GiB>(SECTOR_SIZE_4_GIB)
-//}
-
-//#[test]
-//#[ignore]
 //fn test_seal_lifecycle_32gib_top_8_8_0() -> Result<()> {
 //    seal_lifecycle::<SectorShape32GiB>(SECTOR_SIZE_32_GIB)
 //}

@@ -17,7 +17,6 @@ pub const SECTOR_SIZE_8_MIB: u64 = 1 << 23;
 pub const SECTOR_SIZE_16_MIB: u64 = 1 << 24;
 pub const SECTOR_SIZE_512_MIB: u64 = 1 << 29;
 pub const SECTOR_SIZE_1_GIB: u64 = 1 << 30;
-pub const SECTOR_SIZE_4_GIB: u64 = 1 << 32;
 pub const SECTOR_SIZE_32_GIB: u64 = 1 << 35;
 pub const SECTOR_SIZE_64_GIB: u64 = 1 << 36;
 
@@ -42,7 +41,6 @@ lazy_static! {
             (SECTOR_SIZE_16_MIB, 2),
             (SECTOR_SIZE_512_MIB, 2),
             (SECTOR_SIZE_1_GIB, 2),
-            (SECTOR_SIZE_4_GIB, 2),
             (SECTOR_SIZE_32_GIB, 138),
             (SECTOR_SIZE_64_GIB, 138),
         ]
@@ -60,7 +58,6 @@ lazy_static! {
             (SECTOR_SIZE_16_MIB, 1),
             (SECTOR_SIZE_512_MIB, 1),
             (SECTOR_SIZE_1_GIB, 1),
-            (SECTOR_SIZE_4_GIB, 1),
             (SECTOR_SIZE_32_GIB, 9),
             (SECTOR_SIZE_64_GIB, 9),
         ]
@@ -78,7 +75,6 @@ lazy_static! {
             (SECTOR_SIZE_16_MIB, 8),
             (SECTOR_SIZE_512_MIB, 2),
             (SECTOR_SIZE_1_GIB, 2),
-            (SECTOR_SIZE_4_GIB, 11),
             (SECTOR_SIZE_32_GIB, 11),
             (SECTOR_SIZE_64_GIB, 11),
         ]
@@ -96,7 +92,6 @@ lazy_static! {
             (SECTOR_SIZE_16_MIB, 2),
             (SECTOR_SIZE_512_MIB, 2),
             (SECTOR_SIZE_1_GIB, 2),
-            (SECTOR_SIZE_4_GIB, 2),
             (SECTOR_SIZE_32_GIB, 2349), // this gives 133,977,564 constraints, fitting just in a single partition
             (SECTOR_SIZE_64_GIB, 2300), // this gives 131,182,800 constraints, fitting just in a single partition
         ]
@@ -138,7 +133,6 @@ pub type SectorShape8MiB = LCTree<DefaultTreeHasher, U8, U0, U0>;
 pub type SectorShape16MiB = LCTree<DefaultTreeHasher, U8, U2, U0>;
 pub type SectorShape512MiB = LCTree<DefaultTreeHasher, U8, U0, U0>;
 pub type SectorShape1GiB = LCTree<DefaultTreeHasher, U8, U2, U0>;
-pub type SectorShape4GiB = LCTree<DefaultTreeHasher, U8, U0, U0>;
 pub type SectorShape32GiB = LCTree<DefaultTreeHasher, U8, U8, U0>;
 pub type SectorShape64GiB = LCTree<DefaultTreeHasher, U8, U8, U2>;
 
@@ -189,9 +183,6 @@ macro_rules! with_shape {
             },
             _x if $size == $crate::constants::SECTOR_SIZE_1_GIB => {
               $f::<$crate::constants::SectorShape1GiB>($($args),*)
-            },
-            _x if $size == $crate::constants::SECTOR_SIZE_4_GIB => {
-              $f::<$crate::constants::SectorShape4GiB>($($args),*)
             },
             _x if $size == $crate::constants::SECTOR_SIZE_32_GIB => {
               $f::<$crate::constants::SectorShape32GiB>($($args),*)
@@ -279,7 +270,6 @@ mod tests {
         test_with_shape_macro_aux(SECTOR_SIZE_16_MIB);
         test_with_shape_macro_aux(SECTOR_SIZE_512_MIB);
         test_with_shape_macro_aux(SECTOR_SIZE_1_GIB);
-        test_with_shape_macro_aux(SECTOR_SIZE_4_GIB);
         test_with_shape_macro_aux(SECTOR_SIZE_32_GIB);
         test_with_shape_macro_aux(SECTOR_SIZE_64_GIB);
     }

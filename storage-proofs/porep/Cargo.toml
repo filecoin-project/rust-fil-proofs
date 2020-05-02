@@ -36,6 +36,4 @@ tempfile = "3"
 rand_xorshift = "0.2.0"
 
 [features]
-default = ["column-builder-gpu"]
-#default = []
-column-builder-gpu = []
+default = []
