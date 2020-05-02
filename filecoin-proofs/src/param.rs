@@ -67,25 +67,26 @@ pub fn has_extension<S: AsRef<str>, P: AsRef<Path>>(filename: P, ext: S) -> bool
         .unwrap_or(false)
 }
 
-/// Builds a map from filename (in cache) to metadata.
-pub fn parameter_id_to_metadata_map<S: AsRef<str>>(
-    filenames: &[S],
+// Adds a file extension to the given filename
+pub fn add_extension(filename: &str, ext: &str) -> String {
+    format!("{}.{}", filename, ext)
+}
+
+/// Builds a map from a parameter_id (file in cache) to metadata.
+pub fn parameter_id_to_metadata_map(
+    parameter_ids: &[String],
 ) -> Result<BTreeMap<String, CacheEntryMetadata>> {
     let mut map: BTreeMap<String, CacheEntryMetadata> = Default::default();
 
-    for filename in filenames {
-        if has_extension(PathBuf::from(filename.as_ref()), PARAMETER_METADATA_EXT) {
-            let file_path = get_full_path_for_file_within_cache(filename.as_ref());
-            let file = File::open(&file_path)
-                .with_context(|| format!("could not open path={:?}", file_path))?;
+    for parameter_id in parameter_ids {
+        let filename = add_extension(parameter_id, PARAMETER_METADATA_EXT);
+        let file_path = get_full_path_for_file_within_cache(&filename);
+        let file = File::open(&file_path)
+            .with_context(|| format!("could not open path={:?}", file_path))?;
 
-            let meta = serde_json::from_reader(file)?;
+        let meta = serde_json::from_reader(file)?;
 
-            let p_id = filename_to_parameter_id(PathBuf::from(filename.as_ref()))
-                .context("could not map filename to parameter id")?;
-
-            map.insert(p_id, meta);
-        }
+        map.insert(parameter_id.to_string(), meta);
     }
 
     Ok(map)

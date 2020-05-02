@@ -74,30 +74,12 @@ fn displays_sector_size_in_prompt() {
 }
 
 #[test]
-fn all_flag_disables_prompt() -> Result<(), FailureError> {
-    let filenames = vec!["aaa.vk", "aaa.params"];
-
-    let (mut session, _) = ParamPublishSessionBuilder::new()
-        .with_session_timeout_ms(1000)
-        .with_prompt_disabled()
-        .with_files(&filenames)
-        .with_metadata("aaa.meta", &CacheEntryMetadata { sector_size: 1234 })
-        .build();
-
-    session.exp_string("publishing 2 files")?;
-    session.exp_string("done")?;
-
-    Ok(())
-}
-
-#[test]
 fn no_assets_no_prompt() -> Result<(), FailureError> {
     let (mut session, _) = ParamPublishSessionBuilder::new()
         .with_session_timeout_ms(1000)
         .build();
 
-    session.exp_string("no files to publish")?;
-    session.exp_string("done")?;
+    session.exp_string("No valid parameters in directory")?;
 
     Ok(())
 }
