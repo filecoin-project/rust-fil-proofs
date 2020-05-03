@@ -1,9 +1,8 @@
+use crate::error;
 use anyhow::ensure;
 use bellperson::gadgets::boolean::{self, AllocatedBit, Boolean};
 use bellperson::{ConstraintSystem, SynthesisError};
 use paired::Engine;
-
-use crate::error;
 
 pub const NODE_SIZE: usize = 32;
 
@@ -125,11 +124,29 @@ pub fn bits_to_bytes(bits: &[bool]) -> Vec<u8> {
         .collect()
 }
 
+/// Adds a padding bit and reverses the byte order in the list of bits, and adds a padding bit.
+/// This is used to transform the output from `AllocatedNum::to_bits_le` into the matching format
+/// needed to match the way an `Fr` is hashed with sha256.
+pub fn fixup_bits(mut bits: Vec<boolean::Boolean>) -> Vec<boolean::Boolean> {
+    assert_eq!(bits.len(), 255, "invalid bit length");
+    // add padding
+    bits.push(boolean::Boolean::Constant(false));
+
+    bits.chunks(8)
+        .map(|chunk| chunk.iter().rev())
+        .flatten()
+        .cloned()
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
+    use crate::fr32::fr_into_bytes;
     use crate::gadgets::TestConstraintSystem;
+    use bellperson::gadgets::num;
+    use ff::Field;
     use paired::bls12_381::*;
     use rand::{Rng, SeedableRng};
     use rand_xorshift::XorShiftRng;
@@ -192,6 +209,35 @@ mod tests {
 
             let bits = bytes_into_bits(bytes.as_slice());
             assert_eq!(bits_to_bytes(bits.as_slice()), bytes);
+        }
+    }
+
+    #[test]
+    fn test_fixup_bits() {
+        for _ in 0..100 {
+            let mut cs = TestConstraintSystem::<Bls12>::new();
+            let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
+
+            let val_fr = Fr::random(rng);
+            let val_vec = fr_into_bytes(&val_fr);
+
+            let val_num =
+                num::AllocatedNum::alloc(cs.namespace(|| "val_num"), || Ok(val_fr.into())).unwrap();
+            let val_num_bits = val_num.to_bits_le(cs.namespace(|| "val_bits")).unwrap();
+
+            let bits =
+                bytes_into_boolean_vec_be(cs.namespace(|| "val_bits_2"), Some(&val_vec), 256)
+                    .unwrap();
+
+            let val_num_fixed_bits = fixup_bits(val_num_bits);
+
+            let a_values: Vec<bool> = val_num_fixed_bits
+                .iter()
+                .map(|v| v.get_value().unwrap())
+                .collect();
+
+            let b_values: Vec<bool> = bits.iter().map(|v| v.get_value().unwrap()).collect();
+            assert_eq!(&a_values[..], &b_values[..]);
         }
     }
 }

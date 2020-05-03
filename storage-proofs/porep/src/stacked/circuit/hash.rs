@@ -2,35 +2,25 @@ use bellperson::gadgets::num;
 use bellperson::{ConstraintSystem, SynthesisError};
 use generic_array::typenum;
 use neptune::circuit::poseidon_hash;
-use paired::bls12_381::{Bls12, Fr};
+use paired::bls12_381::Bls12;
 
 /// Hash a list of bits.
 pub fn hash_single_column<CS>(
-    mut cs: CS,
-    column: &[Option<Fr>],
+    cs: CS,
+    column: &[num::AllocatedNum<Bls12>],
 ) -> Result<num::AllocatedNum<Bls12>, SynthesisError>
 where
     CS: ConstraintSystem<Bls12>,
 {
-    let column = column
-        .iter()
-        .enumerate()
-        .map(|(i, val)| {
-            num::AllocatedNum::alloc(cs.namespace(|| format!("hash_num_row_{}", i)), || {
-                val.ok_or_else(|| SynthesisError::AssignmentMissing)
-            })
-        })
-        .collect::<Result<Vec<_>, _>>()?;
-
     match column.len() {
         2 => poseidon_hash::<CS, Bls12, typenum::U2>(
             cs,
-            column,
+            column.to_vec(),
             &*storage_proofs_core::hasher::types::POSEIDON_CONSTANTS_2,
         ),
         11 => poseidon_hash::<CS, Bls12, typenum::U11>(
             cs,
-            column,
+            column.to_vec(),
             &*storage_proofs_core::hasher::types::POSEIDON_CONSTANTS_11,
         ),
         _ => panic!("unsupported column size: {}", column.len()),
@@ -100,7 +90,14 @@ mod tests {
             let mut cs = TestConstraintSystem::<Bls12>::new();
 
             let vals = vec![Fr::random(rng); 11];
-            let vals_opt = vals.iter().map(|v| Some(*v)).collect::<Vec<_>>();
+            let vals_opt = vals
+                .iter()
+                .enumerate()
+                .map(|(i, v)| {
+                    num::AllocatedNum::alloc(cs.namespace(|| format!("num_{}", i)), || Ok(*v))
+                        .unwrap()
+                })
+                .collect::<Vec<_>>();
 
             let out = hash_single_column(cs.namespace(|| "hash_single_column"), &vals_opt)
                 .expect("hash_single_column function failed");

@@ -95,6 +95,15 @@ pub fn u32_into_fr(n: u32) -> Fr {
     bytes_into_fr(&buf).expect("should never fail since u32 is in the field")
 }
 
+// Takes a u64 and returns an Fr.
+pub fn u64_into_fr(n: u64) -> Fr {
+    let mut buf: Fr32Vec = vec![0u8; 32];
+    let mut w = &mut buf[0..8];
+    w.write_u64::<LittleEndian>(n).unwrap();
+
+    bytes_into_fr(&buf).expect("should never fail since u64 is in the field")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

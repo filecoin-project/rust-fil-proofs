@@ -8,15 +8,15 @@ use storage_proofs_core::{
     compound_proof::{CircuitComponent, CompoundProof},
     drgraph::Graph,
     error::Result,
-    fr32::fr_into_bytes,
+    fr32::u64_into_fr,
     gadgets::constraint,
     gadgets::por::PoRCompound,
     hasher::{HashFunction, Hasher},
-    merkle::MerkleTreeTrait,
+    merkle::{BinaryMerkleTree, MerkleTreeTrait},
     parameter_cache::{CacheableParameters, ParameterSetMetadata},
     por,
     proof::ProofScheme,
-    util::bytes_into_boolean_vec_be,
+    util::fixup_bits,
 };
 
 use super::params::Proof;
@@ -87,14 +87,17 @@ impl<'a, Tree: MerkleTreeTrait, G: Hasher> Circuit<Bls12> for StackedCircuit<'a,
         } = self;
 
         // Allocate replica_id
-        let replica_id_fr: Option<Fr> = replica_id.map(Into::into);
-        let replica_id_bits = match replica_id_fr {
-            Some(val) => {
-                let bytes = fr_into_bytes(&val);
-                bytes_into_boolean_vec_be(cs.namespace(|| "replica_id_bits"), Some(&bytes), 256)
-            }
-            None => bytes_into_boolean_vec_be(cs.namespace(|| "replica_id_bits"), None, 256),
-        }?;
+        let replica_id_num = num::AllocatedNum::alloc(cs.namespace(|| "replica_id"), || {
+            replica_id
+                .map(Into::into)
+                .ok_or_else(|| SynthesisError::AssignmentMissing)
+        })?;
+
+        // make replica_id a public input
+        replica_id_num.inputize(cs.namespace(|| "replica_id_input"))?;
+
+        let replica_id_bits =
+            fixup_bits(replica_id_num.to_bits_le(cs.namespace(|| "replica_id_bits"))?);
 
         // Allocate comm_d as Fr
         let comm_d_num = num::AllocatedNum::alloc(cs.namespace(|| "comm_d"), || {
@@ -194,64 +197,74 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher>
 
         let mut inputs = Vec::new();
 
+        let replica_id = pub_in.replica_id;
+        inputs.push(replica_id.into());
+
         let comm_d = pub_in.tau.as_ref().expect("missing tau").comm_d;
         inputs.push(comm_d.into());
 
         let comm_r = pub_in.tau.as_ref().expect("missing tau").comm_r;
         inputs.push(comm_r.into());
 
-        let por_params = por::PoR::<Tree>::setup(&por::SetupParams {
+        let por_setup_params = por::SetupParams {
             leaves: graph.size(),
             private: true,
-        })?;
-
-        let generate_inclusion_inputs = |c: usize| {
-            let pub_inputs = por::PublicInputs::<<Tree::Hasher as Hasher>::Domain> {
-                challenge: c,
-                commitment: None,
-            };
-
-            PoRCompound::<Tree>::generate_public_inputs(&pub_inputs, &por_params, k)
         };
+
+        let por_params = por::PoR::<Tree>::setup(&por_setup_params)?;
+        let por_params_d = por::PoR::<BinaryMerkleTree<G>>::setup(&por_setup_params)?;
 
         let all_challenges = pub_in.challenges(&pub_params.layer_challenges, graph.size(), k);
 
         for challenge in all_challenges.into_iter() {
-            // comm_d_proof
-            let pub_inputs = por::PublicInputs::<<Tree::Hasher as Hasher>::Domain> {
+            // comm_d inclusion proof for the data leaf
+            inputs.extend(generate_inclusion_inputs::<BinaryMerkleTree<G>>(
+                &por_params_d,
                 challenge,
-                commitment: None,
-            };
-
-            inputs.extend(PoRCompound::<Tree>::generate_public_inputs(
-                &pub_inputs,
-                &por_params,
                 k,
             )?);
 
-            // replica column proof
-            {
-                // c_x
-                inputs.extend(generate_inclusion_inputs(challenge)?);
+            // drg parents
+            let mut drg_parents = vec![0; graph.base_graph().degree()];
+            graph.base_graph().parents(challenge, &mut drg_parents)?;
 
-                // drg parents
-                let mut drg_parents = vec![0; graph.base_graph().degree()];
-                graph.base_graph().parents(challenge, &mut drg_parents)?;
-
-                for parent in drg_parents.into_iter() {
-                    inputs.extend(generate_inclusion_inputs(parent as usize)?);
-                }
-
-                // exp parents
-                let mut exp_parents = vec![0; graph.expansion_degree()];
-                graph.expanded_parents(challenge, &mut exp_parents);
-                for parent in exp_parents.into_iter() {
-                    inputs.extend(generate_inclusion_inputs(parent as usize)?);
-                }
+            // Inclusion Proofs: drg parent node in comm_c
+            for parent in drg_parents.into_iter() {
+                inputs.extend(generate_inclusion_inputs::<Tree>(
+                    &por_params,
+                    parent as usize,
+                    k,
+                )?);
             }
 
-            // final replica layer
-            inputs.extend(generate_inclusion_inputs(challenge)?);
+            // exp parents
+            let mut exp_parents = vec![0; graph.expansion_degree()];
+            graph.expanded_parents(challenge, &mut exp_parents);
+
+            // Inclusion Proofs: expander parent node in comm_c
+            for parent in exp_parents.into_iter() {
+                inputs.extend(generate_inclusion_inputs::<Tree>(
+                    &por_params,
+                    parent as usize,
+                    k,
+                )?);
+            }
+
+            inputs.push(u64_into_fr(challenge as u64));
+
+            // Inclusion Proof: encoded node in comm_r_last
+            inputs.extend(generate_inclusion_inputs::<Tree>(
+                &por_params,
+                challenge,
+                k,
+            )?);
+
+            // Inclusion Proof: column hash of the challenged node in comm_c
+            inputs.extend(generate_inclusion_inputs::<Tree>(
+                &por_params,
+                challenge,
+                k,
+            )?);
         }
 
         Ok(inputs)
@@ -310,6 +323,20 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher>
     }
 }
 
+/// Helper to generate public inputs for inclusion proofs.
+fn generate_inclusion_inputs<Tree: 'static + MerkleTreeTrait>(
+    por_params: &por::PublicParams,
+    challenge: usize,
+    k: Option<usize>,
+) -> Result<Vec<Fr>> {
+    let pub_inputs = por::PublicInputs::<<Tree::Hasher as Hasher>::Domain> {
+        challenge,
+        commitment: None,
+    };
+
+    PoRCompound::<Tree>::generate_public_inputs(&pub_inputs, por_params, k)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -338,27 +365,27 @@ mod tests {
 
     #[test]
     fn stacked_input_circuit_pedersen_base_2() {
-        stacked_input_circuit::<DiskTree<PedersenHasher, U2, U0, U0>>(20, 1_804_353);
+        stacked_input_circuit::<DiskTree<PedersenHasher, U2, U0, U0>>(22, 1_258_195);
     }
 
     #[test]
     fn stacked_input_circuit_poseidon_base_2() {
-        stacked_input_circuit::<DiskTree<PoseidonHasher, U2, U0, U0>>(20, 1_752_560);
+        stacked_input_circuit::<DiskTree<PoseidonHasher, U2, U0, U0>>(22, 1_206_402);
     }
 
     #[test]
     fn stacked_input_circuit_poseidon_base_8() {
-        stacked_input_circuit::<DiskTree<PoseidonHasher, U8, U0, U0>>(20, 1_746_416);
+        stacked_input_circuit::<DiskTree<PoseidonHasher, U8, U0, U0>>(22, 1_200_258);
     }
 
     #[test]
     fn stacked_input_circuit_poseidon_sub_8_4() {
-        stacked_input_circuit::<DiskTree<PoseidonHasher, U8, U4, U0>>(20, 1_843_484);
+        stacked_input_circuit::<DiskTree<PoseidonHasher, U8, U4, U0>>(22, 1_297_326);
     }
 
     #[test]
     fn stacked_input_circuit_poseidon_top_8_4_2() {
-        stacked_input_circuit::<DiskTree<PoseidonHasher, U8, U4, U2>>(20, 1_893_938);
+        stacked_input_circuit::<DiskTree<PoseidonHasher, U8, U4, U2>>(22, 1_347_780);
     }
 
     fn stacked_input_circuit<Tree: MerkleTreeTrait + 'static>(
@@ -480,8 +507,7 @@ mod tests {
 
         StackedCompound::<Tree, Sha256Hasher>::circuit(
             &pub_inputs,
-            <StackedCircuit<Tree, Sha256Hasher> as CircuitComponent>::ComponentPrivateInputs::default(
-            ),
+            <StackedCircuit<Tree, Sha256Hasher> as CircuitComponent>::ComponentPrivateInputs::default(),
             &proofs[0],
             &pp,
             None,

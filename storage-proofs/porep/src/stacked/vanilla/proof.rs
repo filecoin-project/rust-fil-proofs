@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::marker::PhantomData;
 use std::path::PathBuf;
 
@@ -163,7 +162,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                         assert!(comm_r_last_proof.validate(challenge));
 
                         // Labeling Proofs Layer 1..l
-                        let mut labeling_proofs = HashMap::with_capacity(layers);
+                        let mut labeling_proofs = Vec::with_capacity(layers);
                         let mut encoding_proof = None;
 
                         for layer in 1..=layers {
@@ -217,7 +216,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                                 trace!("Valid encoding proof generated at layer {}", layer);
                             }
 
-                            labeling_proofs.insert(layer, proof);
+                            labeling_proofs.push(proof);
 
                             if layer == layers {
                                 encoding_proof =

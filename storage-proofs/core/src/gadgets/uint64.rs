@@ -1,4 +1,5 @@
 use bellperson::gadgets::boolean::{AllocatedBit, Boolean};
+use bellperson::gadgets::multipack::pack_into_inputs;
 use bellperson::{ConstraintSystem, SynthesisError};
 use paired::Engine;
 
@@ -34,6 +35,14 @@ impl UInt64 {
 
     pub fn get_value(&self) -> Option<u64> {
         self.value
+    }
+
+    pub fn pack_into_input<E, CS>(&self, cs: CS) -> Result<(), SynthesisError>
+    where
+        E: Engine,
+        CS: ConstraintSystem<E>,
+    {
+        pack_into_inputs(cs, &self.bits)
     }
 
     /// Allocate a `UInt64` in the constraint system
