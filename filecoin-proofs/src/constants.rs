@@ -58,8 +58,8 @@ lazy_static! {
             (SECTOR_SIZE_16_MIB, 1),
             (SECTOR_SIZE_512_MIB, 1),
             (SECTOR_SIZE_1_GIB, 1),
-            (SECTOR_SIZE_32_GIB, 9),
-            (SECTOR_SIZE_64_GIB, 9),
+            (SECTOR_SIZE_32_GIB, 8),
+            (SECTOR_SIZE_64_GIB, 8),
         ]
         .iter()
         .copied()
