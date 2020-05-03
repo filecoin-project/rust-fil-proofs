@@ -1,9 +1,8 @@
+use crate::error;
 use anyhow::ensure;
 use bellperson::gadgets::boolean::{self, AllocatedBit, Boolean};
 use bellperson::{ConstraintSystem, SynthesisError};
 use paired::Engine;
-
-use crate::error;
 
 pub const NODE_SIZE: usize = 32;
 

@@ -154,8 +154,9 @@ impl<Tree: MerkleTreeTrait, G: 'static + Hasher> Proof<Tree, G> {
         // stores the labels of the challenged column
         let mut column_labels = Vec::new();
 
-        // PrivateInput: challenge index
+        // PublicInput: challenge index
         let challenge_num = uint64::UInt64::alloc(cs.namespace(|| "challenge"), challenge)?;
+        challenge_num.pack_into_input(cs.namespace(|| "challenge input"))?;
 
         for layer in 1..=layers {
             let mut cs = cs.namespace(|| format!("labeling_{}", layer));
