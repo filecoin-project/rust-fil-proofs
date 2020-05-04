@@ -1,6 +1,7 @@
 //! Implementation of batched hashing using Sha256.
 
 use ff::Field;
+use itertools::Itertools;
 use paired::bls12_381::Fr;
 use sha2raw::Sha256;
 use storage_proofs_core::fr32::bytes_into_fr;
@@ -13,34 +14,38 @@ use super::Parent;
 ///
 /// The provided data must be such that the parents expanded by `k` can not overreach
 /// and alread bit padded, such that each 32 byte chunk is a valid Fr.
-pub fn batch_hash(k: usize, degree: usize, parents: &[Parent], data: &[u8]) -> Sha256Domain {
+pub fn batch_hash(
+    k: usize,
+    degree: usize,
+    mut hasher: Sha256,
+    parents: &[Parent],
+    data: &[u8],
+) -> [u8; 32] {
     assert!(parents.len() % 2 == 0, "number of parents must be even");
     assert_eq!(parents.len(), degree * k, "invalid number of parents");
 
-    let mut hasher = Sha256::new();
-
-    let mut tmp = Sha256Domain::default();
-
-    for i in 0..degree {
-        let mut el = Fr::zero();
+    for (i, j) in (0..degree).tuples() {
+        let mut el1 = Fr::zero();
+        let mut el2 = Fr::zero();
 
         for l in 0..k {
-            let parent = parents[i + l * degree];
-            let current = read_at(data, parent as usize);
-            el.add_assign(&current);
+            let parent1 = parents[i + l * degree];
+            let current1 = read_at(data, parent1 as usize);
+            el1.add_assign(&current1);
+
+            let parent2 = parents[j + l * degree];
+            let current2 = read_at(data, parent2 as usize);
+            el2.add_assign(&current2);
         }
 
         // hash two 32 byte chunks at once
-        if i % 2 == 0 {
-            tmp = el.into();
-        } else {
-            let el: Sha256Domain = el.into();
-            hasher.input(&[AsRef::<[u8]>::as_ref(&tmp), AsRef::<[u8]>::as_ref(&el)]);
-        }
+        let el1: Sha256Domain = el1.into();
+        let el2: Sha256Domain = el2.into();
+        hasher.input(&[AsRef::<[u8]>::as_ref(&el1), AsRef::<[u8]>::as_ref(&el2)]);
     }
 
-    let mut hash = Sha256Domain(hasher.finish());
-    hash.trim_to_fr32();
+    let mut hash = hasher.finish();
+    truncate_hash(&mut hash);
 
     hash
 }
@@ -49,6 +54,12 @@ pub fn batch_hash(k: usize, degree: usize, parents: &[Parent], data: &[u8]) -> S
 fn read_at(data: &[u8], index: usize) -> Fr {
     let slice = &data[index * NODE_SIZE..(index + 1) * NODE_SIZE];
     bytes_into_fr(slice).expect("invalid data")
+}
+
+pub fn truncate_hash(hash: &mut [u8]) {
+    assert_eq!(hash.len(), 32);
+    // strip last two bits, to ensure result is in Fr.
+    hash[31] &= 0b0011_1111;
 }
 
 #[cfg(test)]
