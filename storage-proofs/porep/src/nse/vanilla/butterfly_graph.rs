@@ -1,12 +1,14 @@
 use super::config::Config;
 use super::Parent;
 
+use storage_proofs_core::util::NODE_SIZE;
+
 /// The butterfly graph which provides the parents for the butterfly layers.
 #[derive(Debug)]
 pub struct ButterflyGraph {
     /// The degree of the graph.
     pub degree: usize,
-    /// The number of bytes in a window. Must be a power of 2.
+    /// The number of nodes in a window. Must be a power of 2.
     pub n: u32,
     /// Total number of layers.
     pub num_layers: u32,
@@ -73,7 +75,8 @@ impl<'a> Iterator for ButterflyGraphParentsIter<'a> {
 impl From<&Config> for ButterflyGraph {
     fn from(config: &Config) -> Self {
         assert!(config.n < std::u32::MAX as usize);
-        assert!(config.n.is_power_of_two());
+        let n = config.n / NODE_SIZE;
+        assert!(n.is_power_of_two());
 
         let num_layers = config.num_butterfly_layers + config.num_expander_layers;
         assert!(num_layers < std::u32::MAX as usize);
@@ -82,7 +85,7 @@ impl From<&Config> for ButterflyGraph {
 
         Self {
             degree: config.degree_butterfly,
-            n: config.n as u32,
+            n: n as u32,
             num_layers: num_layers as u32,
             num_butterfly_layers: num_butterfly_layers as u32,
         }
@@ -144,9 +147,9 @@ mod tests {
             .zip(parents1_9.iter())
             .zip(parents0_15.iter())
         {
-            assert!(*a < graph.n);
-            assert!(*b < graph.n);
-            assert!(*c < graph.n);
+            assert!(*a < graph.n / (NODE_SIZE as u32));
+            assert!(*b < graph.n / (NODE_SIZE as u32));
+            assert!(*c < graph.n / (NODE_SIZE as u32));
         }
     }
 }
