@@ -25,4 +25,8 @@ impl CacheKey {
     pub fn label_layer(layer: usize) -> String {
         format!("layer-{}", layer)
     }
+
+    pub fn label_layer_with_window(layer: u32, window: u32) -> String {
+        format!("layer-{}-window-{}", layer, window)
+    }
 }
