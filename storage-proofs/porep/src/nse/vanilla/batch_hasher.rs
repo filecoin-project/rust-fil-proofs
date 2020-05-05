@@ -22,18 +22,19 @@ pub fn batch_hash(
     data: &[u8],
 ) -> [u8; 32] {
     assert!(parents.len() % 2 == 0, "number of parents must be even");
-    assert_eq!(parents.len(), degree * k, "invalid number of parents");
+    assert_eq!(parents.len(), degree, "invalid number of parents");
 
     for (i, j) in (0..degree).tuples() {
         let mut el1 = Fr::zero();
         let mut el2 = Fr::zero();
+        let degree = degree as u32;
 
-        for l in 0..k {
-            let parent1 = parents[i + l * degree];
+        for l in 0..(k as u32) {
+            let parent1 = parents[i] * degree + l;
             let current1 = read_at(data, parent1 as usize);
             el1.add_assign(&current1);
 
-            let parent2 = parents[j + l * degree];
+            let parent2 = parents[j] * degree + l;
             let current2 = read_at(data, parent2 as usize);
             el2.add_assign(&current2);
         }
@@ -66,6 +67,9 @@ pub fn truncate_hash(hash: &mut [u8]) {
 mod tests {
     use super::*;
 
+    use rand::{Rng, SeedableRng};
+    use rand_xorshift::XorShiftRng;
+
     #[test]
     fn test_read_at() {
         let data = [0u8; 64];
@@ -74,5 +78,19 @@ mod tests {
         assert_eq!(v0, Fr::zero());
         let v1 = read_at(&data, 1);
         assert_eq!(v1, Fr::zero());
+    }
+
+    #[test]
+    fn test_truncate_hash() {
+        let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
+
+        for _ in 0..1000 {
+            // random bytes
+            let mut input: [u8; 32] = rng.gen();
+            truncate_hash(&mut input);
+
+            // check for valid Fr
+            bytes_into_fr(&input).expect("invalid fr created");
+        }
     }
 }

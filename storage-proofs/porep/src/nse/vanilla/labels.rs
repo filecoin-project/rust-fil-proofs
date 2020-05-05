@@ -10,6 +10,7 @@ use super::{
     expander_graph::ExpanderGraph,
     Config,
 };
+use crate::encode;
 
 /// Generate the mask layer, for one window.
 pub fn mask_layer<D: Domain>(
@@ -57,6 +58,11 @@ pub fn expander_layer<D: Domain>(
         "layer_out must be of size {}, got {}",
         config.n,
         layer_out.len()
+    );
+    ensure!(
+        layer_index > 1 && layer_index as usize <= config.num_expander_layers,
+        "layer index must be in range (1, {}]",
+        config.num_expander_layers,
     );
 
     let graph: ExpanderGraph = config.into();
@@ -108,6 +114,13 @@ pub fn butterfly_layer<D: Domain>(
         config.n,
         layer_out.len()
     );
+    ensure!(
+        layer_index as usize > config.num_expander_layers
+            && (layer_index as usize) < config.num_expander_layers + config.num_butterfly_layers,
+        "layer index must be in range ({}, {})",
+        config.num_expander_layers,
+        config.num_expander_layers + config.num_butterfly_layers
+    );
 
     let graph: ButterflyGraph = config.into();
 
@@ -123,6 +136,7 @@ pub fn butterfly_layer<D: Domain>(
 
         // Compute hash of the parents.
         for (parent_a, parent_b) in graph.parents(node_index, layer_index).tuples() {
+            dbg!(parent_a, parent_b, node_index, layer_index);
             let parent_a = parent_a as usize;
             let parent_b = parent_b as usize;
             let parent_a_value = &layer_in[parent_a * NODE_SIZE..(parent_a + 1) * NODE_SIZE];
@@ -146,8 +160,53 @@ pub fn butterfly_encode_layer<D: Domain>(
     replica_id: &D,
     layer_index: u32,
     layer_in: &[u8],
+    data: &[u8],
+    layer_out: &mut [u8],
+) -> Result<()> {
+    butterfly_encode_decode_layer(
+        config,
+        window_index,
+        replica_id,
+        layer_index,
+        layer_in,
+        data,
+        layer_out,
+        encode::encode,
+    )
+}
+
+/// Generate a butterfly layer which additionally decodes using the data.
+pub fn butterfly_decode_layer<D: Domain>(
+    config: &Config,
+    window_index: u32,
+    replica_id: &D,
+    layer_index: u32,
+    layer_in: &[u8],
+    data: &[u8],
+    layer_out: &mut [u8],
+) -> Result<()> {
+    butterfly_encode_decode_layer(
+        config,
+        window_index,
+        replica_id,
+        layer_index,
+        layer_in,
+        data,
+        layer_out,
+        encode::decode,
+    )
+}
+
+/// Generate a butterfly layer which additionally encodes or decodes using the data.
+fn butterfly_encode_decode_layer<D: Domain, F: Fn(D, D) -> D>(
+    config: &Config,
+    window_index: u32,
+    replica_id: &D,
+    layer_index: u32,
+    layer_in: &[u8],
     data: &[u8], // TODO: might want to overwrite the data
     layer_out: &mut [u8],
+    op: F,
 ) -> Result<()> {
     ensure!(
         layer_in.len() == layer_out.len(),
@@ -158,6 +217,10 @@ pub fn butterfly_encode_layer<D: Domain>(
         "layer_out must be of size {}, got {}",
         config.n,
         layer_out.len()
+    );
+    ensure!(
+        layer_index as usize == config.num_expander_layers + config.num_butterfly_layers,
+        "encoding must be on the last layer"
     );
 
     let graph: ButterflyGraph = config.into();
@@ -190,13 +253,12 @@ pub fn butterfly_encode_layer<D: Domain>(
         truncate_hash(&mut key);
 
         // encode
-        let key = bytes_into_fr(&key)?;
-        let mut encoded_node = bytes_into_fr(data_node)?;
-        encoded_node.add_assign(&key);
-        let domain_encoded_node: D = encoded_node.into();
+        let key = D::try_from_bytes(&key)?;
+        let data_node = D::try_from_bytes(data_node)?;
+        let encoded_node = op(key, data_node);
 
         // write result
-        node.copy_from_slice(AsRef::<[u8]>::as_ref(&domain_encoded_node));
+        node.copy_from_slice(AsRef::<[u8]>::as_ref(&encoded_node));
     }
 
     Ok(())
@@ -214,4 +276,164 @@ pub fn hash_prefix(layer: u32, node_index: u32, window_index: u32) -> [u8; 32] {
     // 0 padding for the rest
 
     prefix
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use paired::bls12_381::Fr;
+    use rand::{Rng, SeedableRng};
+    use rand_xorshift::XorShiftRng;
+    use storage_proofs_core::{fr32::fr_into_bytes, hasher::Sha256Domain};
+
+    fn sample_config() -> Config {
+        Config {
+            k: 8,
+            n: 1024,
+            degree_expander: 4,
+            degree_butterfly: 4,
+            num_expander_layers: 6,
+            num_butterfly_layers: 4,
+        }
+    }
+
+    #[test]
+    fn test_mask_layer() {
+        let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
+
+        let config = sample_config();
+        let replica_id: Sha256Domain = Fr::random(rng).into();
+        let window_index = rng.gen();
+
+        let mut layer: Vec<u8> = (0..config.n).map(|_| rng.gen()).collect();
+
+        mask_layer(&config, window_index, &replica_id, &mut layer).unwrap();
+
+        assert!(!layer.iter().all(|&byte| byte == 0), "must not all be zero");
+    }
+
+    #[test]
+    fn test_expander_layer() {
+        let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
+
+        let config = sample_config();
+        let replica_id: Sha256Domain = Fr::random(rng).into();
+        let window_index = rng.gen();
+        let layer_index = rng.gen_range(2, config.num_expander_layers as u32);
+
+        let layer_in: Vec<u8> = (0..config.n / 32)
+            .flat_map(|_| fr_into_bytes(&Fr::random(rng)))
+            .collect();
+        let mut layer_out = vec![0u8; config.n];
+
+        expander_layer(
+            &config,
+            window_index,
+            &replica_id,
+            layer_index,
+            &layer_in,
+            &mut layer_out,
+        )
+        .unwrap();
+
+        assert!(
+            !layer_out.iter().all(|&byte| byte == 0),
+            "must not all be zero"
+        );
+    }
+
+    #[test]
+    fn test_butterfly_layer() {
+        let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
+
+        let config = sample_config();
+        let replica_id: Sha256Domain = Fr::random(rng).into();
+        let window_index = rng.gen();
+        let layer_index = rng.gen_range(
+            config.num_expander_layers,
+            config.num_expander_layers + config.num_butterfly_layers,
+        ) as u32;
+
+        let layer_in: Vec<u8> = (0..config.n / 32)
+            .flat_map(|_| fr_into_bytes(&Fr::random(rng)))
+            .collect();
+        let mut layer_out = vec![0u8; config.n];
+
+        butterfly_layer(
+            &config,
+            window_index,
+            &replica_id,
+            layer_index,
+            &layer_in,
+            &mut layer_out,
+        )
+        .unwrap();
+
+        assert!(
+            !layer_out.iter().all(|&byte| byte == 0),
+            "must not all be zero"
+        );
+    }
+
+    #[test]
+    fn test_butterfly_encode_decode_layer() {
+        let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
+
+        let config = sample_config();
+        let replica_id: Sha256Domain = Fr::random(rng).into();
+        let window_index = rng.gen();
+        let layer_index = (config.num_expander_layers + config.num_butterfly_layers) as u32;
+
+        let data: Vec<u8> = (0..config.n / 32)
+            .flat_map(|_| fr_into_bytes(&Fr::random(rng)))
+            .collect();
+
+        let layer_in: Vec<u8> = (0..config.n / 32)
+            .flat_map(|_| fr_into_bytes(&Fr::random(rng)))
+            .collect();
+
+        let mut layer_out = vec![0u8; config.n];
+
+        butterfly_encode_layer(
+            &config,
+            window_index,
+            &replica_id,
+            layer_index,
+            &layer_in,
+            &data,
+            &mut layer_out,
+        )
+        .unwrap();
+
+        assert!(
+            !layer_out.iter().all(|&byte| byte == 0),
+            "must not all be zero"
+        );
+
+        let mut data_back = vec![0u8; config.n];
+        butterfly_decode_layer(
+            &config,
+            window_index,
+            &replica_id,
+            layer_index,
+            &layer_in,
+            &layer_out,
+            &mut data_back,
+        )
+        .unwrap();
+        assert_eq!(data, data_back, "failed to decode");
+    }
+
+    #[test]
+    fn test_hash_prefix() {
+        assert_eq!(hash_prefix(0, 0, 0), [0u8; 32]);
+        assert_eq!(
+            hash_prefix(1, 2, 3),
+            [
+                0, 0, 0, 1, 0, 0, 0, 2, 0, 0, 0, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 0
+            ]
+        );
+    }
 }
