@@ -1,8 +1,16 @@
-use anyhow::{ensure, Result};
+use anyhow::{ensure, Context, Result};
 use ff::Field;
+use generic_array::typenum::Unsigned;
 use itertools::Itertools;
+use merkletree::{merkle::get_merkle_tree_len, store::StoreConfig};
+use rayon::prelude::*;
 use sha2raw::Sha256;
-use storage_proofs_core::{fr32::bytes_into_fr, hasher::Domain, util::NODE_SIZE};
+use storage_proofs_core::{
+    cache_key::CacheKey,
+    hasher::{Domain, Hasher},
+    merkle::{MerkleTreeTrait, OctLCMerkleTree},
+    util::NODE_SIZE,
+};
 
 use super::{
     batch_hasher::{batch_hash, truncate_hash},
@@ -11,6 +19,186 @@ use super::{
     Config,
 };
 use crate::encode;
+
+/// Encodes the provided data and returns the replica and a list of merkle trees for each layer.
+pub fn encode_with_trees<H: 'static + Hasher>(
+    config: &Config,
+    store_config: StoreConfig,
+    window_index: u32,
+    replica_id: &H::Domain,
+    data: &[u8],
+) -> Result<(Vec<u8>, Vec<OctLCMerkleTree<H>>)> {
+    let num_layers = config.num_layers();
+    let num_leafs = config.n / NODE_SIZE;
+    let mut trees = Vec::with_capacity(num_layers);
+    let tree_len = Some(get_merkle_tree_len(
+        num_leafs,
+        <OctLCMerkleTree<H> as MerkleTreeTrait>::Arity::to_usize(),
+    )?);
+
+    let mut previous_layer = vec![0u8; config.n];
+    let mut current_layer = vec![0u8; config.n];
+
+    // 1. Construct the mask
+    const MASK_LAYER_INDEX: u32 = 1;
+    mask_layer(config, window_index, replica_id, &mut previous_layer)
+        .context("failed to construct the mask layer")?;
+    let mask_config = StoreConfig::from_config(
+        &store_config,
+        CacheKey::label_layer_with_window(MASK_LAYER_INDEX, window_index),
+        tree_len,
+    );
+    let mask_tree = lc_tree_from_slice(&previous_layer, mask_config)
+        .context("failed to construct merkle tree for the mask layer")?;
+    trees.push(mask_tree);
+
+    // 2. Construct expander layers
+    for layer_index in 2..=(config.num_expander_layers as u32) {
+        expander_layer(
+            config,
+            window_index,
+            replica_id,
+            layer_index,
+            &previous_layer,
+            &mut current_layer,
+        )
+        .context("failed to construct expander layer")?;
+
+        let store_config = StoreConfig::from_config(
+            &store_config,
+            CacheKey::label_layer_with_window(layer_index, window_index),
+            tree_len,
+        );
+        let tree = lc_tree_from_slice(&current_layer, store_config)
+            .context("failed to construct merkle tree for expander layer")?;
+        trees.push(tree);
+
+        // swap layers to reuse memory
+        std::mem::swap(&mut previous_layer, &mut current_layer);
+    }
+
+    // 3. Construct butterfly layers
+    for layer_index in (1 + config.num_expander_layers as u32)..(num_layers as u32) {
+        butterfly_layer(
+            config,
+            window_index,
+            replica_id,
+            layer_index,
+            &previous_layer,
+            &mut current_layer,
+        )
+        .context("failed to construct butterfly layer")?;
+
+        let store_config = StoreConfig::from_config(
+            &store_config,
+            CacheKey::label_layer_with_window(layer_index, window_index),
+            tree_len,
+        );
+        let tree = lc_tree_from_slice(&current_layer, store_config)
+            .context("failed to construct merkle tree for butterfly layer")?;
+        trees.push(tree);
+
+        // swap layers to reuse memory
+        std::mem::swap(&mut previous_layer, &mut current_layer);
+    }
+
+    // 4. Construct butterfly encoding layer
+    {
+        let layer_index = num_layers as u32;
+
+        butterfly_encode_layer(
+            config,
+            window_index,
+            replica_id,
+            layer_index,
+            &previous_layer,
+            data,
+            &mut current_layer,
+        )
+        .context("failed to construct butterfly encoding layer")?;
+
+        // drop previous, to reduce memory usage immediately
+        drop(previous_layer);
+
+        let store_config = StoreConfig::from_config(
+            &store_config,
+            CacheKey::label_layer_with_window(layer_index, window_index),
+            tree_len,
+        );
+        let tree = lc_tree_from_slice(&current_layer, store_config)
+            .context("failed to construct merkle tree for butterfly encoding layer")?;
+        trees.push(tree);
+    }
+
+    Ok((current_layer, trees))
+}
+
+/// Decodes the provided `encoded_data`, returning the decoded data.
+pub fn decode<H: Hasher>(
+    config: &Config,
+    window_index: u32,
+    replica_id: &H::Domain,
+    encoded_data: &[u8],
+) -> Result<Vec<u8>> {
+    let num_layers = config.num_layers();
+
+    let mut previous_layer = vec![0u8; config.n];
+    let mut current_layer = vec![0u8; config.n];
+
+    // 1. Construct the mask
+    mask_layer(config, window_index, replica_id, &mut previous_layer)
+        .context("failed to construct mask")?;
+
+    // 2. Construct expander layers
+    for layer_index in 2..=(config.num_expander_layers as u32) {
+        expander_layer(
+            config,
+            window_index,
+            replica_id,
+            layer_index,
+            &previous_layer,
+            &mut current_layer,
+        )
+        .context("failed to construct expander layer")?;
+
+        // swap layers to reuse memory
+        std::mem::swap(&mut previous_layer, &mut current_layer);
+    }
+
+    // 3. Construct butterfly layers
+    for layer_index in (1 + config.num_expander_layers as u32)..(num_layers as u32) {
+        butterfly_layer(
+            config,
+            window_index,
+            replica_id,
+            layer_index,
+            &previous_layer,
+            &mut current_layer,
+        )
+        .context("failed to construct butterfly layer")?;
+
+        // swap layers to reuse memory
+        std::mem::swap(&mut previous_layer, &mut current_layer);
+    }
+
+    // 4. Construct butterfly encoding layer
+    {
+        let layer_index = num_layers as u32;
+
+        butterfly_decode_layer(
+            config,
+            window_index,
+            replica_id,
+            layer_index,
+            &previous_layer,
+            encoded_data,
+            &mut current_layer,
+        )
+        .context("failed to construct butterfly decoding layer")?;
+    }
+
+    Ok(current_layer)
+}
 
 /// Generate the mask layer, for one window.
 pub fn mask_layer<D: Domain>(
@@ -61,8 +249,9 @@ pub fn expander_layer<D: Domain>(
     );
     ensure!(
         layer_index > 1 && layer_index as usize <= config.num_expander_layers,
-        "layer index must be in range (1, {}]",
+        "layer index must be in range (1, {}], got {}",
         config.num_expander_layers,
+        layer_index,
     );
 
     let graph: ExpanderGraph = config.into();
@@ -117,9 +306,10 @@ pub fn butterfly_layer<D: Domain>(
     ensure!(
         layer_index as usize > config.num_expander_layers
             && (layer_index as usize) < config.num_expander_layers + config.num_butterfly_layers,
-        "layer index must be in range ({}, {})",
+        "layer index must be in range ({}, {}), got {}",
         config.num_expander_layers,
-        config.num_expander_layers + config.num_butterfly_layers
+        config.num_expander_layers + config.num_butterfly_layers,
+        layer_index,
     );
 
     let graph: ButterflyGraph = config.into();
@@ -278,6 +468,18 @@ pub fn hash_prefix(layer: u32, node_index: u32, window_index: u32) -> [u8; 32] {
     prefix
 }
 
+/// Construct an oct level cache tree from the given byte slice.
+fn lc_tree_from_slice<H: 'static + Hasher>(
+    data: &[u8],
+    config: StoreConfig,
+) -> Result<OctLCMerkleTree<H>> {
+    OctLCMerkleTree::<H>::from_par_iter_with_config(
+        data.par_chunks(NODE_SIZE)
+            .map(|node| H::Domain::try_from_bytes(node).expect("invalid data")),
+        config,
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -285,13 +487,16 @@ mod tests {
     use paired::bls12_381::Fr;
     use rand::{Rng, SeedableRng};
     use rand_xorshift::XorShiftRng;
-    use storage_proofs_core::{fr32::fr_into_bytes, hasher::Sha256Domain};
+    use storage_proofs_core::{
+        fr32::fr_into_bytes,
+        hasher::{PoseidonDomain, PoseidonHasher, Sha256Domain},
+    };
 
     fn sample_config() -> Config {
         Config {
             k: 8,
-            n: 1024,
-            degree_expander: 4,
+            n: 2048,
+            degree_expander: 12,
             degree_butterfly: 4,
             num_expander_layers: 6,
             num_butterfly_layers: 4,
@@ -422,6 +627,43 @@ mod tests {
             &mut data_back,
         )
         .unwrap();
+        assert_eq!(data, data_back, "failed to decode");
+    }
+
+    #[test]
+    fn test_encode_decode_layer() {
+        let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
+
+        let config = sample_config();
+        let replica_id: PoseidonDomain = Fr::random(rng).into();
+        let window_index = rng.gen();
+
+        let data: Vec<u8> = (0..config.n / 32)
+            .flat_map(|_| fr_into_bytes(&Fr::random(rng)))
+            .collect();
+
+        let cache_dir = tempfile::tempdir().unwrap();
+        let store_config = StoreConfig::new(
+            cache_dir.path(),
+            CacheKey::CommDTree.to_string(),
+            StoreConfig::default_cached_above_base_layer(config.n / NODE_SIZE, 8),
+        );
+        let (encoded_data, trees) = encode_with_trees::<PoseidonHasher>(
+            &config,
+            store_config,
+            window_index,
+            &replica_id,
+            &data,
+        )
+        .unwrap();
+        assert_eq!(
+            trees.len(),
+            config.num_expander_layers + config.num_butterfly_layers
+        );
+        assert_ne!(data, encoded_data, "failed to encode");
+
+        let data_back =
+            decode::<PoseidonHasher>(&config, window_index, &replica_id, &encoded_data).unwrap();
         assert_eq!(data, data_back, "failed to decode");
     }
 
