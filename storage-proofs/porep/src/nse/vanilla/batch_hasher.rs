@@ -27,14 +27,14 @@ pub fn batch_hash(
     for (i, j) in (0..degree).tuples() {
         let mut el1 = Fr::zero();
         let mut el2 = Fr::zero();
-        let degree = degree as u32;
+        let k = k as u32;
 
-        for l in 0..(k as u32) {
-            let parent1 = parents[i] * degree + l;
+        for l in 0..k {
+            let parent1 = parents[i] * k + l;
             let current1 = read_at(data, parent1 as usize);
             el1.add_assign(&current1);
 
-            let parent2 = parents[j] * degree + l;
+            let parent2 = parents[j] * k + l;
             let current2 = read_at(data, parent2 as usize);
             el2.add_assign(&current2);
         }
