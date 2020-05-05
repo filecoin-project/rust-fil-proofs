@@ -1,4 +1,5 @@
 use sha2raw::Sha256;
+use storage_proofs_core::util::NODE_SIZE;
 
 use super::config::Config;
 use super::Parent;
@@ -175,7 +176,7 @@ impl<'a> Iterator for ExpanderGraphParentsIter<'a> {
 impl From<&Config> for ExpanderGraph {
     fn from(config: &Config) -> Self {
         Self {
-            bits: (config.n as f64 / config.k as f64).log2() as u32,
+            bits: ((config.n as f64 / NODE_SIZE as f64) / config.k as f64).log2() as u32,
             k: config.k,
             degree: config.degree_expander,
         }
@@ -207,7 +208,7 @@ mod tests {
 
         assert_eq!(egraph.k, 8, "invalid k");
         assert_eq!(egraph.degree, 384, "invalid degree");
-        assert_eq!(egraph.bits, 24, "invalid bits");
+        assert_eq!(egraph.bits, 19, "invalid bits");
     }
 
     #[test]

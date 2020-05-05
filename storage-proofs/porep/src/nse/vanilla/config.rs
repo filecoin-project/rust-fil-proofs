@@ -14,3 +14,10 @@ pub struct Config {
     /// Number of butterfly layers.
     pub num_butterfly_layers: usize,
 }
+
+impl Config {
+    /// Total number of layers.
+    pub fn num_layers(&self) -> usize {
+        self.num_expander_layers + self.num_butterfly_layers
+    }
+}
