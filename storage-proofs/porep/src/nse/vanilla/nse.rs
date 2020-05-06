@@ -78,8 +78,8 @@ impl<D: Domain> PersistentAux<D> {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct TemporaryAux<Tree: MerkleTreeTrait, G: Hasher> {
-    /// List of layer trees configs.
-    pub layer_configs: Vec<StoreConfig>,
+    /// List of layer trees configs. Stores a config for each subtree.
+    pub layer_configs: Vec<Vec<StoreConfig>>,
     /// Data tree config.
     pub tree_d_config: StoreConfig,
     _tree: PhantomData<Tree>,
@@ -87,8 +87,18 @@ pub struct TemporaryAux<Tree: MerkleTreeTrait, G: Hasher> {
 }
 
 impl<Tree: MerkleTreeTrait, G: Hasher> TemporaryAux<Tree, G> {
-    /// The store config of the replica.
-    pub fn replica_config(&self) -> &StoreConfig {
+    /// Create a new TemporaryAux from the required store configs.
+    pub fn new(layer_configs: Vec<Vec<StoreConfig>>, tree_d_config: StoreConfig) -> Self {
+        Self {
+            layer_configs,
+            tree_d_config,
+            _tree: Default::default(),
+            _g: Default::default(),
+        }
+    }
+
+    /// The store config of the replica subtrees.
+    pub fn replica_config(&self) -> &[StoreConfig] {
         &self.layer_configs[self.layer_configs.len() - 1]
     }
 }
