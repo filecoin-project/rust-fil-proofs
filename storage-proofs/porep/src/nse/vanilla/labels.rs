@@ -21,7 +21,7 @@ use crate::encode;
 /// Encodes the provided data and returns the replica and a list of merkle trees for each layer.
 pub fn encode_with_trees<H: 'static + Hasher>(
     config: &Config,
-    store_config: StoreConfig,
+    mut store_config: StoreConfig,
     window_index: u32,
     replica_id: &H::Domain,
     data: &mut [u8],
@@ -29,13 +29,15 @@ pub fn encode_with_trees<H: 'static + Hasher>(
     let num_layers = config.num_layers();
     let num_leafs = config.num_nodes_window;
     let mut trees = Vec::with_capacity(num_layers);
-    let tree_len = Some(get_merkle_tree_len(
-        num_leafs as usize,
-        <OctLCMerkleTree<H> as MerkleTreeTrait>::Arity::to_usize(),
-    )?);
+    let arity = <OctLCMerkleTree<H> as MerkleTreeTrait>::Arity::to_usize();
+    let tree_len = Some(get_merkle_tree_len(num_leafs as usize, arity)?);
 
     let mut previous_layer = vec![0u8; config.window_size()];
     let mut current_layer = vec![0u8; config.window_size()];
+
+    // Ensure the right levels are set for the config.
+    store_config.levels =
+        StoreConfig::default_cached_above_base_layer(config.num_nodes_window, arity);
 
     // 1. Construct the mask
     const MASK_LAYER_INDEX: u32 = 1;
@@ -325,7 +327,6 @@ pub fn butterfly_layer<D: Domain>(
 
         // Compute hash of the parents.
         for (parent_a, parent_b) in graph.parents(node_index, layer_index).tuples() {
-            dbg!(parent_a, parent_b, node_index, layer_index);
             let parent_a = parent_a as usize;
             let parent_b = parent_b as usize;
             let parent_a_value = &layer_in[parent_a * NODE_SIZE..(parent_a + 1) * NODE_SIZE];
