@@ -474,6 +474,7 @@ fn lc_tree_from_slice<H: 'static + Hasher>(
 mod tests {
     use super::*;
 
+    use ff::Field;
     use paired::bls12_381::Fr;
     use rand::{Rng, SeedableRng};
     use rand_xorshift::XorShiftRng;
