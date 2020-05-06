@@ -34,4 +34,8 @@ impl Config {
     pub fn num_windows(&self) -> usize {
         self.sector_size / self.window_size()
     }
+
+    pub fn num_nodes_sector(&self) -> usize {
+        self.sector_size / NODE_SIZE
+    }
 }
