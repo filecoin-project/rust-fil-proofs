@@ -112,9 +112,19 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> PoRep<'a, Tree::H
         pp: &'b PublicParams<Tree>,
         replica_id: &'b <Tree::Hasher as Hasher>::Domain,
         data: &'b [u8],
-        config: Option<StoreConfig>,
+        _config: Option<StoreConfig>,
     ) -> Result<Vec<u8>> {
-        todo!()
+        let config = &pp.config;
+        let mut result = data.to_vec();
+
+        result
+            .par_chunks_mut(config.window_size())
+            .enumerate()
+            .try_for_each(|(window_index, window_data)| {
+                labels::decode::<Tree::Hasher>(config, window_index as u32, replica_id, window_data)
+            })?;
+
+        Ok(result)
     }
 
     fn extract(
