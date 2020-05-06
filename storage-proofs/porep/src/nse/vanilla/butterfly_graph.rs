@@ -1,15 +1,13 @@
 use super::config::Config;
 use super::Parent;
 
-use storage_proofs_core::util::NODE_SIZE;
-
 /// The butterfly graph which provides the parents for the butterfly layers.
 #[derive(Debug)]
 pub struct ButterflyGraph {
     /// The degree of the graph.
     pub degree: usize,
     /// The number of nodes in a window. Must be a power of 2.
-    pub n: u32,
+    pub num_nodes_window: u32,
     /// Total number of layers.
     pub num_layers: u32,
     /// Number of butterfly layers.
@@ -61,7 +59,7 @@ impl<'a> Iterator for ButterflyGraphParentsIter<'a> {
 
         let parent_raw = self.node + self.pos * self.factor;
         // mod N
-        let parent = parent_raw & (self.graph.n - 1);
+        let parent = parent_raw & (self.graph.num_nodes_window - 1);
 
         self.pos += 1;
         Some(parent)
@@ -74,9 +72,8 @@ impl<'a> Iterator for ButterflyGraphParentsIter<'a> {
 
 impl From<&Config> for ButterflyGraph {
     fn from(config: &Config) -> Self {
-        assert!(config.n < std::u32::MAX as usize);
-        let n = config.n / NODE_SIZE;
-        assert!(n.is_power_of_two());
+        assert!(config.num_nodes_window < std::u32::MAX as usize);
+        assert!(config.num_nodes_window.is_power_of_two());
 
         let num_layers = config.num_butterfly_layers + config.num_expander_layers;
         assert!(num_layers < std::u32::MAX as usize);
@@ -85,7 +82,7 @@ impl From<&Config> for ButterflyGraph {
 
         Self {
             degree: config.degree_butterfly,
-            n: n as u32,
+            num_nodes_window: config.num_nodes_window as u32,
             num_layers: num_layers as u32,
             num_butterfly_layers: num_butterfly_layers as u32,
         }
@@ -106,11 +103,12 @@ mod tests {
     fn test_from_config() {
         let config = Config {
             k: 8,
-            n: (4 * 1024 * 1024 * 1024) / 32,
+            num_nodes_window: (4 * 1024 * 1024 * 1024) / 32,
             degree_expander: 384,
             degree_butterfly: 16,
             num_expander_layers: 8,
             num_butterfly_layers: 7,
+            sector_size: 1024 * 1024 * 1024 * 1024,
         };
 
         let graph: ButterflyGraph = config.into();
@@ -123,11 +121,12 @@ mod tests {
     fn test_parents() {
         let config = Config {
             k: 8,
-            n: (4 * 1024 * 1024 * 1024) / 32,
+            num_nodes_window: (4 * 1024 * 1024 * 1024) / 32,
             degree_expander: 384,
             degree_butterfly: 16,
             num_expander_layers: 8,
             num_butterfly_layers: 7,
+            sector_size: 1024 * 1024 * 1024 * 1024,
         };
 
         let graph: ButterflyGraph = config.into();
@@ -147,9 +146,9 @@ mod tests {
             .zip(parents1_9.iter())
             .zip(parents0_15.iter())
         {
-            assert!(*a < graph.n / (NODE_SIZE as u32));
-            assert!(*b < graph.n / (NODE_SIZE as u32));
-            assert!(*c < graph.n / (NODE_SIZE as u32));
+            assert!(*a < graph.num_nodes_window);
+            assert!(*b < graph.num_nodes_window);
+            assert!(*c < graph.num_nodes_window);
         }
     }
 }
