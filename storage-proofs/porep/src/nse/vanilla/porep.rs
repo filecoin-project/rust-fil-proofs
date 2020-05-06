@@ -62,19 +62,26 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> PoRep<'a, Tree::H
         // phase 1
         // replicate each window and build its tree
 
-        let mut layered_trees: Vec<Vec<_>> = (0..config.num_layers()).map(|_| Vec::new()).collect();
+        let trees = data
+            .as_mut()
+            .par_chunks_mut(config.window_size())
+            .enumerate()
+            .map(|(window_index, window_data)| {
+                labels::encode_with_trees::<Tree::Hasher>(
+                    config,
+                    store_config.clone(),
+                    window_index as u32,
+                    replica_id,
+                    window_data,
+                )
+            })
+            .collect::<Result<Vec<Vec<(_, _)>>>>()?;
 
-        for (window_index, window_data) in
-            data.as_mut().chunks_mut(config.window_size()).enumerate()
-        {
-            let window_trees = labels::encode_with_trees::<Tree::Hasher>(
-                config,
-                store_config.clone(),
-                window_index as u32,
-                replica_id,
-                window_data,
-            )?;
+        let mut layered_trees: Vec<Vec<(_, _)>> = (0..config.num_layers())
+            .map(|_| Vec::with_capacity(config.num_windows()))
+            .collect();
 
+        for window_trees in trees.into_iter() {
             for (layer, el) in window_trees.into_iter().enumerate() {
                 layered_trees[layer].push(el);
             }
