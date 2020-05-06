@@ -29,15 +29,15 @@ pub fn encode_with_trees<H: 'static + Hasher>(
     data: &[u8],
 ) -> Result<(Vec<u8>, Vec<OctLCMerkleTree<H>>)> {
     let num_layers = config.num_layers();
-    let num_leafs = config.n / NODE_SIZE;
+    let num_leafs = config.num_nodes_window;
     let mut trees = Vec::with_capacity(num_layers);
     let tree_len = Some(get_merkle_tree_len(
-        num_leafs,
+        num_leafs as usize,
         <OctLCMerkleTree<H> as MerkleTreeTrait>::Arity::to_usize(),
     )?);
 
-    let mut previous_layer = vec![0u8; config.n];
-    let mut current_layer = vec![0u8; config.n];
+    let mut previous_layer = vec![0u8; config.window_size()];
+    let mut current_layer = vec![0u8; config.window_size()];
 
     // 1. Construct the mask
     const MASK_LAYER_INDEX: u32 = 1;
@@ -142,8 +142,8 @@ pub fn decode<H: Hasher>(
 ) -> Result<Vec<u8>> {
     let num_layers = config.num_layers();
 
-    let mut previous_layer = vec![0u8; config.n];
-    let mut current_layer = vec![0u8; config.n];
+    let mut previous_layer = vec![0u8; config.window_size()];
+    let mut current_layer = vec![0u8; config.window_size()];
 
     // 1. Construct the mask
     mask_layer(config, window_index, replica_id, &mut previous_layer)
@@ -208,9 +208,9 @@ pub fn mask_layer<D: Domain>(
     layer_out: &mut [u8],
 ) -> Result<()> {
     ensure!(
-        layer_out.len() == config.n,
+        layer_out.len() == config.window_size(),
         "layer_out must be of size {}, got {}",
-        config.n,
+        config.window_size(),
         layer_out.len()
     );
 
@@ -242,9 +242,9 @@ pub fn expander_layer<D: Domain>(
         "layer_in and layer_out must of the same size"
     );
     ensure!(
-        layer_out.len() == config.n,
+        layer_out.len() == config.window_size(),
         "layer_out must be of size {}, got {}",
-        config.n,
+        config.window_size(),
         layer_out.len()
     );
     ensure!(
@@ -298,9 +298,9 @@ pub fn butterfly_layer<D: Domain>(
         "layer_in and layer_out must of the same size"
     );
     ensure!(
-        layer_out.len() == config.n,
+        layer_out.len() == config.window_size(),
         "layer_out must be of size {}, got {}",
-        config.n,
+        config.window_size(),
         layer_out.len()
     );
     ensure!(
@@ -403,9 +403,9 @@ fn butterfly_encode_decode_layer<D: Domain, F: Fn(D, D) -> D>(
         "layer_in and layer_out must of the same size"
     );
     ensure!(
-        layer_out.len() == config.n,
+        layer_out.len() == config.window_size(),
         "layer_out must be of size {}, got {}",
-        config.n,
+        config.window_size(),
         layer_out.len()
     );
     ensure!(
@@ -495,11 +495,12 @@ mod tests {
     fn sample_config() -> Config {
         Config {
             k: 8,
-            n: 2048,
+            num_nodes_window: 2048 / 32,
             degree_expander: 12,
             degree_butterfly: 4,
             num_expander_layers: 6,
             num_butterfly_layers: 4,
+            sector_size: 2048 * 8,
         }
     }
 
@@ -511,7 +512,7 @@ mod tests {
         let replica_id: Sha256Domain = Fr::random(rng).into();
         let window_index = rng.gen();
 
-        let mut layer: Vec<u8> = (0..config.n).map(|_| rng.gen()).collect();
+        let mut layer: Vec<u8> = (0..config.window_size()).map(|_| rng.gen()).collect();
 
         mask_layer(&config, window_index, &replica_id, &mut layer).unwrap();
 
@@ -527,10 +528,10 @@ mod tests {
         let window_index = rng.gen();
         let layer_index = rng.gen_range(2, config.num_expander_layers as u32);
 
-        let layer_in: Vec<u8> = (0..config.n / 32)
+        let layer_in: Vec<u8> = (0..config.num_nodes_window)
             .flat_map(|_| fr_into_bytes(&Fr::random(rng)))
             .collect();
-        let mut layer_out = vec![0u8; config.n];
+        let mut layer_out = vec![0u8; config.window_size()];
 
         expander_layer(
             &config,
@@ -560,10 +561,10 @@ mod tests {
             config.num_expander_layers + config.num_butterfly_layers,
         ) as u32;
 
-        let layer_in: Vec<u8> = (0..config.n / 32)
+        let layer_in: Vec<u8> = (0..config.num_nodes_window)
             .flat_map(|_| fr_into_bytes(&Fr::random(rng)))
             .collect();
-        let mut layer_out = vec![0u8; config.n];
+        let mut layer_out = vec![0u8; config.window_size()];
 
         butterfly_layer(
             &config,
@@ -590,15 +591,15 @@ mod tests {
         let window_index = rng.gen();
         let layer_index = (config.num_expander_layers + config.num_butterfly_layers) as u32;
 
-        let data: Vec<u8> = (0..config.n / 32)
+        let data: Vec<u8> = (0..config.num_nodes_window)
             .flat_map(|_| fr_into_bytes(&Fr::random(rng)))
             .collect();
 
-        let layer_in: Vec<u8> = (0..config.n / 32)
+        let layer_in: Vec<u8> = (0..config.num_nodes_window)
             .flat_map(|_| fr_into_bytes(&Fr::random(rng)))
             .collect();
 
-        let mut layer_out = vec![0u8; config.n];
+        let mut layer_out = vec![0u8; config.window_size()];
 
         butterfly_encode_layer(
             &config,
@@ -616,7 +617,7 @@ mod tests {
             "must not all be zero"
         );
 
-        let mut data_back = vec![0u8; config.n];
+        let mut data_back = vec![0u8; config.window_size()];
         butterfly_decode_layer(
             &config,
             window_index,
@@ -638,7 +639,7 @@ mod tests {
         let replica_id: PoseidonDomain = Fr::random(rng).into();
         let window_index = rng.gen();
 
-        let data: Vec<u8> = (0..config.n / 32)
+        let data: Vec<u8> = (0..config.num_nodes_window)
             .flat_map(|_| fr_into_bytes(&Fr::random(rng)))
             .collect();
 
@@ -646,7 +647,7 @@ mod tests {
         let store_config = StoreConfig::new(
             cache_dir.path(),
             CacheKey::CommDTree.to_string(),
-            StoreConfig::default_cached_above_base_layer(config.n / NODE_SIZE, 8),
+            StoreConfig::default_cached_above_base_layer(config.num_nodes_window as usize, 8),
         );
         let (encoded_data, trees) = encode_with_trees::<PoseidonHasher>(
             &config,
