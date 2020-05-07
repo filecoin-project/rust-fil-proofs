@@ -1,5 +1,6 @@
 use std::path::PathBuf;
 
+use anyhow::Context;
 use generic_array::typenum::{Unsigned, U2};
 use merkletree::{merkle::get_merkle_tree_len, store::StoreConfig};
 use rayon::prelude::*;
@@ -7,7 +8,7 @@ use storage_proofs_core::{
     cache_key::CacheKey,
     error::Result,
     hasher::{Domain, Hasher},
-    merkle::{BinaryMerkleTree, LCTree, MerkleTreeTrait, MerkleTreeWrapper},
+    merkle::{BinaryMerkleTree, DiskStore, MerkleTreeTrait, MerkleTreeWrapper},
     util::NODE_SIZE,
     Data,
 };
@@ -30,7 +31,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> PoRep<'a, Tree::H
         mut data: Data<'a>,
         data_tree: Option<BinaryMerkleTree<G>>,
         store_config: StoreConfig,
-        _replica_path: PathBuf,
+        replica_path: PathBuf,
     ) -> Result<(Self::Tau, Self::ProverAux)> {
         let config = &pp.config;
         let num_nodes_sector = config.num_nodes_sector();
@@ -67,15 +68,25 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> PoRep<'a, Tree::H
             .par_chunks_mut(config.window_size())
             .enumerate()
             .map(|(window_index, window_data)| {
-                labels::encode_with_trees::<Tree>(
+                let tree = labels::encode_with_trees::<Tree>(
                     config,
                     store_config.clone(),
                     window_index as u32,
                     replica_id,
                     window_data,
+                )?;
+
+                // write replica
+                std::fs::write(
+                    replica_path.with_extension(format!("w{}", window_index)),
+                    window_data.as_ref(),
                 )
+                .context("failed to write replica data")?;
+                Ok(tree)
             })
             .collect::<Result<Vec<Vec<(_, _)>>>>()?;
+
+        data.drop_data();
 
         let mut layered_trees: Vec<Vec<(_, _)>> = (0..config.num_layers())
             .map(|_| Vec::with_capacity(config.num_windows()))
@@ -97,7 +108,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> PoRep<'a, Tree::H
 
             trees_layers.push(MerkleTreeWrapper::<
                 Tree::Hasher,
-                Tree::Store,
+                _,
                 Tree::Arity,
                 Tree::SubTreeArity,
                 Tree::TopTreeArity,
@@ -158,6 +169,7 @@ mod tests {
     use rand_xorshift::XorShiftRng;
     use storage_proofs_core::{
         hasher::{PoseidonHasher, Sha256Hasher},
+        merkle::LCTree,
         proof::ProofScheme,
     };
 
@@ -194,6 +206,7 @@ mod tests {
 
         let sp = SetupParams {
             config: config.clone(),
+            num_challenges_window: 2,
         };
 
         let pp = NarrowStackedExpander::<Tree, Sha256Hasher>::setup(&sp).expect("setup failed");
@@ -212,7 +225,7 @@ mod tests {
         let temp_path = temp_dir.path();
         let replica_path = temp_path.join("replica-path");
 
-        NarrowStackedExpander::<Tree, PoseidonHasher>::replicate(
+        NarrowStackedExpander::<Tree, Sha256Hasher>::replicate(
             &pp,
             &replica_id,
             (&mut data_copy[..]).into(),
@@ -224,7 +237,7 @@ mod tests {
 
         assert_ne!(data, data_copy);
 
-        let decoded_data = NarrowStackedExpander::<Tree, PoseidonHasher>::extract_all(
+        let decoded_data = NarrowStackedExpander::<Tree, Sha256Hasher>::extract_all(
             &pp,
             &replica_id,
             data_copy.as_mut_slice(),
