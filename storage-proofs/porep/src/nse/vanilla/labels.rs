@@ -6,7 +6,7 @@ use sha2raw::Sha256;
 use storage_proofs_core::{
     cache_key::CacheKey,
     hasher::{Domain, Hasher},
-    merkle::{MerkleTreeTrait, MerkleTreeWrapper},
+    merkle::{LCTree, MerkleTreeTrait, MerkleTreeWrapper},
     util::NODE_SIZE,
 };
 
@@ -18,13 +18,8 @@ use super::{
 };
 use crate::encode;
 
-pub type MerkleTree<Tree> = MerkleTreeWrapper<
-    <Tree as MerkleTreeTrait>::Hasher,
-    <Tree as MerkleTreeTrait>::Store,
-    <Tree as MerkleTreeTrait>::Arity,
-    U0,
-    U0,
->;
+pub type MerkleTree<Tree> =
+    LCTree<<Tree as MerkleTreeTrait>::Hasher, <Tree as MerkleTreeTrait>::Arity, U0, U0>;
 
 /// Encodes the provided data and returns the replica and a list of merkle trees for each layer.
 pub fn encode_with_trees<Tree: 'static + MerkleTreeTrait>(
