@@ -73,9 +73,14 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> ProofScheme<'a>
                 .context("failed to create data proof")?;
 
             // Layer Inclusion Proof
-            let layer_tree = &priv_inputs.t_aux.layers[challenge.layer];
+            let layer_tree = if challenge.layer == config.num_layers() - 1 {
+                &priv_inputs.t_aux.tree_replica
+            } else {
+                &priv_inputs.t_aux.layers[challenge.layer]
+            };
+            let levels = priv_inputs.t_aux.tree_config_levels;
             let layer_proof = layer_tree
-                .gen_proof(challenge.node)
+                .gen_cached_proof(challenge.node, levels)
                 .context("failed to create layer proof")?;
 
             // TODO: Labeling Proofs
@@ -200,7 +205,7 @@ mod tests {
 
         // Convert TemporaryAux to TemporaryAuxCache, which instantiates all
         // elements based on the configs stored in TemporaryAux.
-        let t_aux = TemporaryAuxCache::<Tree, Sha256Hasher>::new(&t_aux, replica_path)
+        let t_aux = TemporaryAuxCache::<Tree, Sha256Hasher>::new(&config, &t_aux, replica_path)
             .expect("failed to restore contents of t_aux");
 
         let priv_inputs = PrivateInputs { p_aux, t_aux };

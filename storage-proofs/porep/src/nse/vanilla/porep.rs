@@ -8,7 +8,10 @@ use storage_proofs_core::{
     cache_key::CacheKey,
     error::Result,
     hasher::{Domain, Hasher},
-    merkle::{BinaryMerkleTree, DiskStore, MerkleTreeTrait, MerkleTreeWrapper},
+    merkle::{
+        split_config, split_config_and_replica, BinaryMerkleTree, DiskStore, MerkleTreeTrait,
+        MerkleTreeWrapper,
+    },
     util::NODE_SIZE,
     Data,
 };
@@ -61,51 +64,94 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> PoRep<'a, Tree::H
         };
 
         // phase 1
-        // replicate each window and build its tree
+
+        let mut layer_store_config = StoreConfig::from_config(
+            &store_config,
+            CacheKey::LabelLayer.to_string(),
+            Some(get_merkle_tree_len(
+                config.num_nodes_window as usize,
+                Tree::Arity::to_usize(),
+            )?),
+        );
+        // Ensure the right levels are set for the config.
+        layer_store_config.levels = StoreConfig::default_cached_above_base_layer(
+            config.num_nodes_window,
+            Tree::Arity::to_usize(),
+        );
+
+        let layered_store_configs = split_config(layer_store_config.clone(), config.num_layers())?;
+
+        let mut windowed_store_configs =
+            vec![Vec::with_capacity(config.num_layers()); config.num_windows()];
+
+        let mut windowed_replica_paths = None;
+
+        for (layer_index, store_config) in layered_store_configs.into_iter().enumerate() {
+            if layer_index < config.num_layers() - 1 {
+                let configs = split_config(store_config, config.num_windows())?;
+                for (window_index, store_config) in configs.into_iter().enumerate() {
+                    windowed_store_configs[window_index].push(store_config);
+                }
+            } else {
+                // create replica paths for the last one
+                let (configs, paths) = split_config_and_replica(
+                    store_config,
+                    replica_path.clone(),
+                    config.num_windows(),
+                )?;
+                windowed_replica_paths = Some(paths);
+                for (window_index, store_config) in configs.into_iter().enumerate() {
+                    windowed_store_configs[window_index].push(store_config);
+                }
+            }
+        }
 
         let trees = data
             .as_mut()
             .par_chunks_mut(config.window_size())
             .enumerate()
-            .map(|(window_index, window_data)| {
-                let tree = labels::encode_with_trees::<Tree>(
-                    config,
-                    store_config.clone(),
-                    window_index as u32,
-                    replica_id,
-                    window_data,
-                )?;
+            .zip(windowed_store_configs.into_par_iter())
+            .zip(windowed_replica_paths.unwrap().into_par_iter())
+            .map(
+                |(((window_index, window_data), store_configs), replica_path)| {
+                    let (trees, replica_tree) = labels::encode_with_trees::<Tree>(
+                        config,
+                        store_configs,
+                        window_index as u32,
+                        replica_id,
+                        window_data,
+                    )?;
 
-                // write replica
-                std::fs::write(
-                    replica_path.with_extension(format!("w{}", window_index)),
-                    window_data.as_ref(),
-                )
-                .context("failed to write replica data")?;
-                Ok(tree)
-            })
-            .collect::<Result<Vec<Vec<(_, _)>>>>()?;
+                    // write replica
+                    std::fs::write(replica_path, window_data.as_ref())
+                        .context("failed to write replica data")?;
+                    Ok((trees, replica_tree))
+                },
+            )
+            .collect::<Result<Vec<(Vec<_>, _)>>>()?;
 
+        debug_assert_eq!(trees.len(), config.num_windows());
         data.drop_data();
 
-        let mut layered_trees: Vec<Vec<(_, _)>> = (0..config.num_layers())
+        let mut layered_trees: Vec<Vec<_>> = (0..config.num_layers() - 1)
             .map(|_| Vec::with_capacity(config.num_windows()))
             .collect();
+        let mut replica_trees = Vec::with_capacity(config.num_windows());
 
-        for window_trees in trees.into_iter() {
-            for (layer, el) in window_trees.into_iter().enumerate() {
-                layered_trees[layer].push(el);
+        for (window_trees, replica_tree) in trees.into_iter() {
+            debug_assert_eq!(window_trees.len(), config.num_layers() - 1);
+            for (layer_index, trees) in window_trees.into_iter().enumerate() {
+                layered_trees[layer_index].push(trees);
             }
+            replica_trees.push(replica_tree);
         }
 
         // phase 2
 
         // build main trees for each layer
         let mut trees_layers = Vec::new();
-        let mut layer_configs = Vec::new();
-        for trees_configs in layered_trees.into_iter() {
-            let (trees, configs): (Vec<_>, Vec<_>) = trees_configs.into_iter().unzip();
-
+        for trees in layered_trees.into_iter() {
+            debug_assert_eq!(trees.len(), config.num_windows());
             trees_layers.push(MerkleTreeWrapper::<
                 Tree::Hasher,
                 _,
@@ -113,19 +159,27 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> PoRep<'a, Tree::H
                 Tree::SubTreeArity,
                 Tree::TopTreeArity,
             >::from_trees(trees)?);
-            layer_configs.push(configs);
         }
+
+        let replica_tree = MerkleTreeWrapper::<
+            Tree::Hasher,
+            _,
+            Tree::Arity,
+            Tree::SubTreeArity,
+            Tree::TopTreeArity,
+        >::from_trees(replica_trees)?;
 
         let p_aux = PersistentAux {
             comm_layers: trees_layers.iter().map(|tree| tree.root()).collect(),
+            comm_replica: replica_tree.root(),
         };
 
         let tau = Tau::<<Tree::Hasher as Hasher>::Domain, G::Domain> {
             comm_d: data_tree.root(),
-            comm_r: *p_aux.comm_replica(),
+            comm_r: p_aux.comm_replica,
         };
 
-        let t_aux = TemporaryAux::new(layer_configs, data_tree_config);
+        let t_aux = TemporaryAux::new(layer_store_config, data_tree_config);
 
         Ok((tau, (p_aux, t_aux)))
     }
