@@ -1,13 +1,13 @@
 use std::path::PathBuf;
 
-use generic_array::typenum::{Unsigned, U2, U8};
+use generic_array::typenum::{Unsigned, U2};
 use merkletree::{merkle::get_merkle_tree_len, store::StoreConfig};
 use rayon::prelude::*;
 use storage_proofs_core::{
     cache_key::CacheKey,
     error::Result,
     hasher::{Domain, Hasher},
-    merkle::{BinaryMerkleTree, LCTree, MerkleTreeTrait},
+    merkle::{BinaryMerkleTree, LCTree, MerkleTreeTrait, MerkleTreeWrapper},
     util::NODE_SIZE,
     Data,
 };
@@ -67,7 +67,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> PoRep<'a, Tree::H
             .par_chunks_mut(config.window_size())
             .enumerate()
             .map(|(window_index, window_data)| {
-                labels::encode_with_trees::<Tree::Hasher>(
+                labels::encode_with_trees::<Tree>(
                     config,
                     store_config.clone(),
                     window_index as u32,
@@ -95,9 +95,10 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> PoRep<'a, Tree::H
         for trees_configs in layered_trees.into_iter() {
             let (trees, configs): (Vec<_>, Vec<_>) = trees_configs.into_iter().unzip();
 
-            trees_layers.push(LCTree::<
+            trees_layers.push(MerkleTreeWrapper::<
                 Tree::Hasher,
-                U8,
+                Tree::Store,
+                Tree::Arity,
                 Tree::SubTreeArity,
                 Tree::TopTreeArity,
             >::from_trees(trees)?);
@@ -152,7 +153,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> PoRep<'a, Tree::H
 mod tests {
     use super::*;
 
-    use generic_array::typenum::U0;
+    use generic_array::typenum::{U0, U8};
     use rand::SeedableRng;
     use rand_xorshift::XorShiftRng;
     use storage_proofs_core::{
