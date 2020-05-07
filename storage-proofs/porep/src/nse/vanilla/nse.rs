@@ -9,7 +9,8 @@ use serde::{Deserialize, Serialize};
 use storage_proofs_core::{
     hasher::{Domain, Hasher},
     merkle::{
-        BinaryMerkleTree, DiskStore, LCStore, MerkleProof, MerkleTreeTrait, MerkleTreeWrapper,
+        split_config, split_config_and_replica, BinaryMerkleTree, DiskStore, LCStore, MerkleProof,
+        MerkleTreeTrait, MerkleTreeWrapper,
     },
     parameter_cache::ParameterSetMetadata,
 };
@@ -78,19 +79,13 @@ impl<Tree: MerkleTreeTrait> ParameterSetMetadata for PublicParams<Tree> {
 pub struct PersistentAux<D> {
     /// The commitments for the individual layers.
     pub comm_layers: Vec<D>,
-}
-
-impl<D: Domain> PersistentAux<D> {
     /// The commitment of the replica.
-    pub fn comm_replica(&self) -> &D {
-        &self.comm_layers[self.comm_layers.len() - 1]
-    }
+    pub comm_replica: D,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct TemporaryAux<Tree: MerkleTreeTrait, G: Hasher> {
-    /// List of layer trees configs. Stores a config for each subtree.
-    pub layer_configs: Vec<Vec<StoreConfig>>,
+    pub layer_config: StoreConfig,
     /// Data tree config.
     pub tree_d_config: StoreConfig,
     _tree: PhantomData<Tree>,
@@ -100,7 +95,7 @@ pub struct TemporaryAux<Tree: MerkleTreeTrait, G: Hasher> {
 impl<Tree: MerkleTreeTrait, G: Hasher> Clone for TemporaryAux<Tree, G> {
     fn clone(&self) -> Self {
         Self {
-            layer_configs: self.layer_configs.clone(),
+            layer_config: self.layer_config.clone(),
             tree_d_config: self.tree_d_config.clone(),
             _tree: Default::default(),
             _g: Default::default(),
@@ -110,18 +105,13 @@ impl<Tree: MerkleTreeTrait, G: Hasher> Clone for TemporaryAux<Tree, G> {
 
 impl<Tree: MerkleTreeTrait, G: Hasher> TemporaryAux<Tree, G> {
     /// Create a new TemporaryAux from the required store configs.
-    pub fn new(layer_configs: Vec<Vec<StoreConfig>>, tree_d_config: StoreConfig) -> Self {
+    pub fn new(layer_config: StoreConfig, tree_d_config: StoreConfig) -> Self {
         Self {
-            layer_configs,
+            layer_config,
             tree_d_config,
             _tree: Default::default(),
             _g: Default::default(),
         }
-    }
-
-    /// The store config of the replica subtrees.
-    pub fn replica_config(&self) -> &[StoreConfig] {
-        &self.layer_configs[self.layer_configs.len() - 1]
     }
 
     // Discards all persisted merkle and layer data that is no longer required.
@@ -148,13 +138,14 @@ impl<Tree: MerkleTreeTrait, G: Hasher> TemporaryAux<Tree, G> {
             tree_d.delete(self.tree_d_config).context("tree_d")?;
         }
 
-        for configs in self.layer_configs.into_iter() {
-            for config in configs.into_iter() {
-                if cached(&config) {
-                    DiskStore::<<Tree::Hasher as Hasher>::Domain>::delete(config)?;
-                }
-            }
-        }
+        // TODO: use split
+        // for configs in self.layer_configs.into_iter() {
+        //     for config in configs.into_iter() {
+        //         if cached(&config) {
+        //             DiskStore::<<Tree::Hasher as Hasher>::Domain>::delete(config)?;
+        //         }
+        //     }
+        // }
 
         Ok(())
     }
@@ -197,6 +188,14 @@ pub struct TemporaryAuxCache<Tree: MerkleTreeTrait, G: Hasher> {
         >,
     >,
 
+    pub tree_replica: MerkleTreeWrapper<
+        Tree::Hasher,
+        LCStore<<Tree::Hasher as Hasher>::Domain>,
+        Tree::Arity,
+        Tree::SubTreeArity,
+        Tree::TopTreeArity,
+    >,
+
     /// The merkle tree for the original data .
     pub tree_d: BinaryMerkleTree<G>,
 
@@ -210,7 +209,11 @@ pub struct TemporaryAuxCache<Tree: MerkleTreeTrait, G: Hasher> {
 }
 
 impl<Tree: MerkleTreeTrait, G: Hasher> TemporaryAuxCache<Tree, G> {
-    pub fn new(t_aux: &TemporaryAux<Tree, G>, replica_path: PathBuf) -> Result<Self> {
+    pub fn new(
+        config: &Config,
+        t_aux: &TemporaryAux<Tree, G>,
+        replica_path: PathBuf,
+    ) -> Result<Self> {
         // tree_d_size stored in the config is the base tree size
         let tree_d_size = t_aux.tree_d_config.size.unwrap();
         let tree_d_leafs = get_merkle_tree_leafs(tree_d_size, U2::to_usize())?;
@@ -221,60 +224,64 @@ impl<Tree: MerkleTreeTrait, G: Hasher> TemporaryAuxCache<Tree, G> {
         let tree_d =
             BinaryMerkleTree::<G>::from_data_store(tree_d_store, tree_d_leafs).context("tree_d")?;
 
-        let layers = t_aux
-            .layer_configs
-            .iter()
-            .map(|store_configs| {
-                let trees: Vec<_> = store_configs
-                    .iter()
-                    .enumerate()
-                    .map(|(window_index, store_config)| {
-                        restore_lc_tree::<Tree>(window_index, store_config, &replica_path)
-                    })
-                    .collect::<Result<_>>()?;
+        // split configs for layer level
+        let store_configs = split_config(t_aux.layer_config.clone(), config.num_layers())?;
 
-                MerkleTreeWrapper::<
-                    Tree::Hasher,
-                    LCStore<<Tree::Hasher as Hasher>::Domain>,
-                    Tree::Arity,
-                    Tree::SubTreeArity,
-                    Tree::TopTreeArity,
-                >::from_trees(trees)
+        let mut layers = store_configs
+            .into_iter()
+            .enumerate()
+            .map(|(layer_index, store_config)| {
+                if layer_index < config.num_layers() - 1 {
+                    // split for window level
+                    let store_configs = split_config(store_config, config.num_windows())?;
+
+                    // create tree for this layer
+                    MerkleTreeWrapper::<
+                        Tree::Hasher,
+                        LCStore<<Tree::Hasher as Hasher>::Domain>,
+                        Tree::Arity,
+                        Tree::SubTreeArity,
+                        Tree::TopTreeArity,
+                    >::from_store_configs(
+                        config.num_nodes_window, &store_configs
+                    )
+                } else {
+                    // with replica, last layer
+                    // split for window level
+                    let (store_configs, replica_paths) = split_config_and_replica(
+                        store_config,
+                        replica_path.clone(),
+                        config.num_windows(),
+                    )?;
+
+                    // create tree for this layer
+                    MerkleTreeWrapper::<
+                        Tree::Hasher,
+                        LCStore<<Tree::Hasher as Hasher>::Domain>,
+                        Tree::Arity,
+                        Tree::SubTreeArity,
+                        Tree::TopTreeArity,
+                    >::from_store_configs_and_replicas(
+                        config.num_nodes_window,
+                        &store_configs,
+                        &replica_paths,
+                    )
+                }
             })
             .collect::<Result<Vec<_>>>()?;
 
-        let tree_config_levels = t_aux.layer_configs[0][0].levels;
+        let tree_replica = layers.pop().unwrap(); // replica tree is the last one
+        let tree_config_levels = t_aux.layer_config.levels;
 
         Ok(TemporaryAuxCache {
             layers,
+            tree_replica,
             tree_d,
             tree_config_levels,
             replica_path,
             t_aux: t_aux.clone(),
         })
     }
-}
-
-fn restore_lc_tree<Tree: MerkleTreeTrait>(
-    window_index: usize,
-    store_config: &StoreConfig,
-    replica_path: &PathBuf,
-) -> Result<MerkleTreeWrapper<Tree::Hasher, LCStore<<Tree::Hasher as Hasher>::Domain>, Tree::Arity>>
-{
-    let size = store_config.size.unwrap();
-    let branches = Tree::Arity::to_usize();
-    let num_leafs = get_merkle_tree_leafs(size, branches)?;
-    let len = get_merkle_tree_len(num_leafs, branches)?;
-
-    let data = LCStore::new_from_disk_with_reader(
-        len,
-        branches,
-        store_config,
-        ExternalReader::new_from_path(&replica_path.with_extension(format!("w{}", window_index)))?,
-    )
-    .context("failed to instantiate levelcache store")?;
-
-    MerkleTreeWrapper::from_data_store(data, num_leafs)
 }
 
 #[derive(Debug, Serialize, Deserialize)]

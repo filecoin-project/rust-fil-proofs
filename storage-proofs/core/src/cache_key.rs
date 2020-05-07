@@ -7,6 +7,7 @@ pub enum CacheKey {
     CommDTree,
     CommCTree,
     CommRLastTree,
+    LabelLayer,
 }
 
 impl fmt::Display for CacheKey {
@@ -17,6 +18,7 @@ impl fmt::Display for CacheKey {
             CacheKey::CommDTree => write!(f, "tree-d"),
             CacheKey::CommCTree => write!(f, "tree-c"),
             CacheKey::CommRLastTree => write!(f, "tree-r-last"),
+            CacheKey::LabelLayer => write!(f, "label-layer"),
         }
     }
 }
