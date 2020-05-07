@@ -7,7 +7,6 @@ mod labels;
 mod nse;
 mod porep;
 mod proof_scheme;
-mod replicate;
 
 /// A single parent index.
 pub type Parent = u32;
