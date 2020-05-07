@@ -55,8 +55,12 @@ impl<D: Domain> Challenges<D> {
 
 #[derive(Debug)]
 pub struct Challenge {
+    /// Index for the challenged window.
     pub window: usize,
+    /// Index for the challenge node.
     pub node: usize,
+    /// Index for the challenged layer.
+    pub layer: usize,
 }
 
 impl<D: Domain> Iterator for Challenges<D> {
@@ -93,12 +97,15 @@ impl<D: Domain> Iterator for Challenges<D> {
             .to_usize()
             .expect("`big_mod_challenge` exceeds size of `usize`");
         let challenged_node = big_mod_challenge + 1;
+        let layer = challenged_node / self.num_nodes_window;
+        let node = challenged_node % self.num_nodes_window;
 
         self.current_challenge += 1;
 
         Some(Challenge {
             window: self.current_window,
-            node: challenged_node,
+            node,
+            layer,
         })
     }
 
@@ -138,12 +145,20 @@ mod tests {
         let list: Vec<_> = challenges.collect();
         assert_eq!(list.len(), num_challenges_per_window * config.num_windows());
 
-        let num_nodes = config.num_layers() * config.num_nodes_window;
         for (window, chunk) in list.chunks(num_challenges_per_window).enumerate() {
             for challenge in chunk {
                 assert_eq!(challenge.window, window, "incorrect window");
+                assert!(
+                    challenge.layer < config.num_layers(),
+                    "layer too large: {}, {}",
+                    challenge.layer,
+                    config.num_layers()
+                );
                 assert!(challenge.node > 1, "cannot challenge node 0");
-                assert!(challenge.node < num_nodes, "challenge too large");
+                assert!(
+                    challenge.node < config.num_nodes_window,
+                    "challenge too large"
+                );
             }
         }
     }
