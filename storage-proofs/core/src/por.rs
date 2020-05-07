@@ -129,12 +129,6 @@ impl<'a, Tree: 'a + MerkleTreeTrait> ProofScheme<'a> for PoR<Tree> {
             let path_length_match = expected_path_length == proof.proof.path().len();
 
             if !(commitments_match && path_length_match) {
-                dbg!(
-                    commitments_match,
-                    path_length_match,
-                    expected_path_length,
-                    proof.proof.path().len()
-                );
                 return Ok(false);
             }
         }
