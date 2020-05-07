@@ -1,12 +1,12 @@
 use anyhow::{ensure, Context, Result};
-use generic_array::typenum::Unsigned;
+use generic_array::typenum::{Unsigned, U0};
 use itertools::Itertools;
 use merkletree::{merkle::get_merkle_tree_len, store::StoreConfig};
 use sha2raw::Sha256;
 use storage_proofs_core::{
     cache_key::CacheKey,
     hasher::{Domain, Hasher},
-    merkle::{MerkleTreeTrait, OctLCMerkleTree},
+    merkle::{MerkleTreeTrait, MerkleTreeWrapper},
     util::NODE_SIZE,
 };
 
@@ -18,18 +18,26 @@ use super::{
 };
 use crate::encode;
 
+pub type MerkleTree<Tree> = MerkleTreeWrapper<
+    <Tree as MerkleTreeTrait>::Hasher,
+    <Tree as MerkleTreeTrait>::Store,
+    <Tree as MerkleTreeTrait>::Arity,
+    U0,
+    U0,
+>;
+
 /// Encodes the provided data and returns the replica and a list of merkle trees for each layer.
-pub fn encode_with_trees<H: 'static + Hasher>(
+pub fn encode_with_trees<Tree: 'static + MerkleTreeTrait>(
     config: &Config,
     mut store_config: StoreConfig,
     window_index: u32,
-    replica_id: &H::Domain,
+    replica_id: &<Tree::Hasher as Hasher>::Domain,
     data: &mut [u8],
-) -> Result<Vec<(OctLCMerkleTree<H>, StoreConfig)>> {
+) -> Result<Vec<(MerkleTree<Tree>, StoreConfig)>> {
     let num_layers = config.num_layers();
     let num_leafs = config.num_nodes_window;
     let mut trees = Vec::with_capacity(num_layers);
-    let arity = <OctLCMerkleTree<H> as MerkleTreeTrait>::Arity::to_usize();
+    let arity = Tree::Arity::to_usize();
     let tree_len = Some(get_merkle_tree_len(num_leafs as usize, arity)?);
 
     let mut previous_layer = vec![0u8; config.window_size()];
@@ -48,7 +56,7 @@ pub fn encode_with_trees<H: 'static + Hasher>(
         CacheKey::label_layer_with_window(MASK_LAYER_INDEX, window_index),
         tree_len,
     );
-    let mask_tree = lc_tree_from_slice(&previous_layer, mask_config.clone())
+    let mask_tree = tree_from_slice::<Tree>(&previous_layer, mask_config.clone())
         .context("failed to construct merkle tree for the mask layer")?;
     trees.push((mask_tree, mask_config));
 
@@ -69,7 +77,7 @@ pub fn encode_with_trees<H: 'static + Hasher>(
             CacheKey::label_layer_with_window(layer_index, window_index),
             tree_len,
         );
-        let tree = lc_tree_from_slice(&current_layer, store_config.clone())
+        let tree = tree_from_slice::<Tree>(&current_layer, store_config.clone())
             .context("failed to construct merkle tree for expander layer")?;
         trees.push((tree, store_config));
 
@@ -94,7 +102,7 @@ pub fn encode_with_trees<H: 'static + Hasher>(
             CacheKey::label_layer_with_window(layer_index, window_index),
             tree_len,
         );
-        let tree = lc_tree_from_slice(&current_layer, store_config.clone())
+        let tree = tree_from_slice::<Tree>(&current_layer, store_config.clone())
             .context("failed to construct merkle tree for butterfly layer")?;
         trees.push((tree, store_config));
 
@@ -127,7 +135,7 @@ pub fn encode_with_trees<H: 'static + Hasher>(
             CacheKey::label_layer_with_window(layer_index, window_index),
             tree_len,
         );
-        let tree = lc_tree_from_slice(data, store_config.clone())
+        let tree = tree_from_slice::<Tree>(data, store_config.clone())
             .context("failed to construct merkle tree for butterfly encoding layer")?;
         trees.push((tree, store_config));
     }
@@ -459,14 +467,14 @@ pub fn hash_prefix(layer: u32, node_index: u32, window_index: u32) -> [u8; 32] {
     prefix
 }
 
-/// Construct an oct level cache tree from the given byte slice.
-fn lc_tree_from_slice<H: 'static + Hasher>(
+/// Construct a tree from the given byte slice.
+fn tree_from_slice<Tree: 'static + MerkleTreeTrait>(
     data: &[u8],
     config: StoreConfig,
-) -> Result<OctLCMerkleTree<H>> {
-    OctLCMerkleTree::<H>::try_from_iter_with_config(
+) -> Result<MerkleTree<Tree>> {
+    MerkleTreeWrapper::try_from_iter_with_config(
         data.chunks(NODE_SIZE)
-            .map(|node| H::Domain::try_from_bytes(node)),
+            .map(|node| <Tree::Hasher as Hasher>::Domain::try_from_bytes(node)),
         config,
     )
 }
@@ -482,6 +490,7 @@ mod tests {
     use storage_proofs_core::{
         fr32::fr_into_bytes,
         hasher::{PoseidonDomain, PoseidonHasher, Sha256Domain},
+        merkle::OctLCMerkleTree,
     };
 
     fn sample_config() -> Config {
@@ -639,7 +648,7 @@ mod tests {
             StoreConfig::default_cached_above_base_layer(config.num_nodes_window as usize, 8),
         );
         let mut encoded_data = data.clone();
-        let trees = encode_with_trees::<PoseidonHasher>(
+        let trees = encode_with_trees::<OctLCMerkleTree<PoseidonHasher>>(
             &config,
             store_config,
             window_index,
