@@ -2,6 +2,9 @@
 #![warn(clippy::unwrap_used)]
 #![cfg_attr(target_arch = "aarch64", feature(stdsimd))]
 
+#[macro_use]
+mod macros;
+
 pub mod drg;
 pub mod nse;
 pub mod stacked;

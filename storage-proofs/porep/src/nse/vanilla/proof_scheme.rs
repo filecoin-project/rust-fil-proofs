@@ -7,8 +7,8 @@ use storage_proofs_core::{
 };
 
 use super::{
-    ChallengeRequirements, Challenges, NarrowStackedExpander, PrivateInputs, Proof, PublicInputs,
-    PublicParams, SetupParams,
+    ChallengeRequirements, Challenges, NarrowStackedExpander, Parent, PrivateInputs, Proof,
+    PublicInputs, PublicParams, SetupParams,
 };
 
 impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> ProofScheme<'a>
@@ -67,6 +67,9 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> ProofScheme<'a>
 
         let mut proofs = Vec::new();
 
+        let butterfly_parents = super::ButterflyGraph::from(config);
+        let exp_parents = super::ExpanderGraph::from(config);
+
         for challenge in challenges {
             // Data Inclusion Proof
             let data_proof = priv_inputs
@@ -76,46 +79,73 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> ProofScheme<'a>
                 .context("failed to create data proof")?;
 
             // Layer Inclusion Proof
-            let layer_tree = if challenge.layer == config.num_layers() - 1 {
+            let layer_tree = if challenge.layer == config.num_layers() {
                 &priv_inputs.t_aux.tree_replica
             } else {
-                &priv_inputs.t_aux.layers[challenge.layer]
+                &priv_inputs.t_aux.layers[challenge.layer - 1]
             };
             let levels = priv_inputs.t_aux.tree_config_levels;
             let layer_proof = layer_tree
                 .gen_cached_proof(challenge.node, levels)
                 .context("failed to create layer proof")?;
 
-            // TODO: Labeling Proofs
+            // Labeling Proofs
+            let parents: Vec<Parent> = if config.is_layer_expander(challenge.layer) {
+                exp_parents
+                    .expanded_parents(challenge.node as u32)
+                    .flatten()
+                    .collect()
+            } else {
+                butterfly_parents
+                    .parents(challenge.node as u32, challenge.layer as u32)
+                    .collect()
+            };
 
-            proofs.push(Proof::new(data_proof, layer_proof));
+            let parents_proofs = parents
+                .iter()
+                .map(|parent| {
+                    layer_tree
+                        .gen_cached_proof(*parent as usize, levels)
+                        .context("failed to create parent proof")
+                })
+                .collect::<Result<_>>()?;
+
+            proofs.push(Proof::new(data_proof, layer_proof, parents, parents_proofs));
         }
 
         Ok(vec![proofs])
     }
 
     fn verify_all_partitions(
-        pub_params: &Self::PublicParams,
+        _pub_params: &Self::PublicParams,
         pub_inputs: &Self::PublicInputs,
         partition_proofs: &[Self::Proof],
     ) -> Result<bool> {
-        for (k, proofs) in partition_proofs.iter().enumerate() {
+        let is_valid = partition_proofs.iter().enumerate().all(|(k, proofs)| {
+            let pub_inputs = Self::with_partition(pub_inputs.clone(), Some(k));
+            let tau = pub_inputs.tau.as_ref().expect("missing tau");
+
             for proof in proofs {
                 // verify data inclusion
-                if !proof.data_proof.verify() {
-                    return Ok(false);
-                }
+                check!(proof.data_proof.verify());
+                check_eq!(proof.data_proof.root(), tau.comm_d);
 
                 // verify layer inclusion
-                if !proof.layer_proof.verify() {
-                    return Ok(false);
+                check!(proof.layer_proof.verify());
+
+                // Verify labeling
+                // TODO: verify number of proofs
+                for parents_proof in &proof.parents_proofs {
+                    check!(parents_proof.verify());
                 }
 
-                // TODO: verify labeling
+                // TODO: actual labeling
             }
-        }
 
-        Ok(true)
+            true
+        });
+
+        Ok(is_valid)
     }
 
     fn with_partition(mut pub_in: Self::PublicInputs, k: Option<usize>) -> Self::PublicInputs {
@@ -124,9 +154,9 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> ProofScheme<'a>
     }
 
     fn satisfies_requirements(
-        public_params: &PublicParams<Tree>,
-        requirements: &ChallengeRequirements,
-        partitions: usize,
+        _public_params: &PublicParams<Tree>,
+        _requirements: &ChallengeRequirements,
+        _partitions: usize,
     ) -> bool {
         todo!()
     }
