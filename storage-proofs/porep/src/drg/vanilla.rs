@@ -4,7 +4,7 @@ use std::path::PathBuf;
 
 use anyhow::{ensure, Context};
 use generic_array::typenum;
-use merkletree::store::StoreConfig;
+use merkletree::store::{ReplicaConfig, StoreConfig};
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -493,6 +493,10 @@ where
             .open(&replica_path)?;
         f.write_all(&data.as_ref())?;
 
+        let replica_config = ReplicaConfig {
+            path: replica_path,
+            offsets: vec![0],
+        };
         let tree_r_last_config =
             StoreConfig::from_config(&config, CacheKey::CommRLastTree.to_string(), None);
         let tree_r =
@@ -500,7 +504,7 @@ where
                 tree_r_last_config,
                 pp.graph.size(),
                 &data.as_ref(),
-                &replica_path,
+                &replica_config,
             )?;
 
         let comm_d = tree_d.root();
