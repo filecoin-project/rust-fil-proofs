@@ -5,9 +5,10 @@ use anyhow::{Context, Result};
 use generic_array::typenum::{Unsigned, U2};
 use merkletree::merkle::get_merkle_tree_leafs;
 use merkletree::store::{Store, StoreConfig};
+use paired::bls12_381::Fr;
 use serde::{Deserialize, Serialize};
 use storage_proofs_core::{
-    hasher::{Domain, Hasher},
+    hasher::{Domain, HashFunction, Hasher, PoseidonDomain, PoseidonFunction, PoseidonMDArity},
     merkle::{
         split_config, split_config_and_replica, BinaryMerkleTree, DiskStore, LCStore, MerkleProof,
         MerkleTreeTrait, MerkleTreeWrapper,
@@ -303,6 +304,8 @@ pub struct Proof<Tree: MerkleTreeTrait, G: Hasher> {
     ))]
     pub parents_proofs:
         Vec<MerkleProof<Tree::Hasher, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>>,
+    /// The roots of the merkle tree layers, including the replica layer.
+    pub comm_layers: Vec<<Tree::Hasher as Hasher>::Domain>,
     _tree: PhantomData<Tree>,
     _g: PhantomData<G>,
 }
@@ -315,12 +318,14 @@ impl<Tree: MerkleTreeTrait, G: Hasher> Proof<Tree, G> {
         parents_proofs: Vec<
             MerkleProof<Tree::Hasher, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>,
         >,
+        comm_layers: Vec<<Tree::Hasher as Hasher>::Domain>,
     ) -> Self {
         Self {
             data_proof,
             layer_proof,
             parents,
             parents_proofs,
+            comm_layers,
             _tree: Default::default(),
             _g: Default::default(),
         }
@@ -334,8 +339,29 @@ impl<Tree: MerkleTreeTrait, G: Hasher> Clone for Proof<Tree, G> {
             layer_proof: self.layer_proof.clone(),
             parents: self.parents.clone(),
             parents_proofs: self.parents_proofs.clone(),
+            comm_layers: self.comm_layers.clone(),
             _tree: Default::default(),
             _g: Default::default(),
         }
     }
+}
+
+/// Calculate the comm_r hash.
+pub fn hash_comm_r<D: Domain>(comm_layers: &[D], comm_replica: D) -> Fr {
+    let arity = PoseidonMDArity::to_usize();
+    let mut data: Vec<PoseidonDomain> = Vec::with_capacity(arity);
+    data.extend(comm_layers.iter().map(|v| {
+        let fr: Fr = (*v).into();
+        let d: PoseidonDomain = fr.into();
+        d
+    }));
+    let comm_replica_fr: Fr = comm_replica.into();
+    data.push(comm_replica_fr.into());
+
+    // pad for MD
+    while data.len() % arity != 0 {
+        data.push(PoseidonDomain::default());
+    }
+
+    PoseidonFunction::hash_md(&data).into()
 }
