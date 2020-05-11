@@ -1,10 +1,7 @@
 use anyhow::{ensure, Context, Result};
-use generic_array::typenum::{Unsigned, U0};
+use generic_array::typenum::U0;
 use itertools::Itertools;
-use merkletree::{
-    merkle::get_merkle_tree_len,
-    store::{StoreConfig, StoreConfigDataVersion},
-};
+use merkletree::store::{StoreConfig, StoreConfigDataVersion};
 use sha2raw::Sha256;
 use storage_proofs_core::{
     cache_key::CacheKey,
@@ -644,7 +641,7 @@ mod tests {
 
         let store_configs = split_config(store_config.clone(), config.num_layers()).unwrap();
 
-        let (trees, replica_tree) = encode_with_trees::<OctLCMerkleTree<PoseidonHasher>>(
+        let (trees, _replica_tree) = encode_with_trees::<OctLCMerkleTree<PoseidonHasher>>(
             &config,
             store_configs,
             window_index,

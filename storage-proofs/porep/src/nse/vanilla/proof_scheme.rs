@@ -7,8 +7,8 @@ use storage_proofs_core::{
 };
 
 use super::{
-    ChallengeRequirements, Challenges, NarrowStackedExpander, Parent, PrivateInputs, Proof,
-    PublicInputs, PublicParams, SetupParams,
+    hash_comm_r, ChallengeRequirements, Challenges, NarrowStackedExpander, Parent, PrivateInputs,
+    Proof, PublicInputs, PublicParams, SetupParams,
 };
 
 impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> ProofScheme<'a>
@@ -110,33 +110,62 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> ProofScheme<'a>
                 })
                 .collect::<Result<_>>()?;
 
-            proofs.push(Proof::new(data_proof, layer_proof, parents, parents_proofs));
+            // roots for the layers
+            let mut comm_layers = priv_inputs.p_aux.comm_layers.clone();
+            comm_layers.push(priv_inputs.p_aux.comm_replica);
+
+            proofs.push(Proof::new(
+                data_proof,
+                layer_proof,
+                parents,
+                parents_proofs,
+                comm_layers,
+            ));
         }
 
         Ok(vec![proofs])
     }
 
     fn verify_all_partitions(
-        _pub_params: &Self::PublicParams,
+        pub_params: &Self::PublicParams,
         pub_inputs: &Self::PublicInputs,
         partition_proofs: &[Self::Proof],
     ) -> Result<bool> {
+        let config = &pub_params.config;
         let is_valid = partition_proofs.iter().enumerate().all(|(k, proofs)| {
             let pub_inputs = Self::with_partition(pub_inputs.clone(), Some(k));
             let tau = pub_inputs.tau.as_ref().expect("missing tau");
 
-            for proof in proofs {
+            let challenges = Challenges::new(
+                config,
+                pub_params.num_challenges_window,
+                &pub_inputs.replica_id,
+                pub_inputs.seed,
+            );
+
+            for (proof, challenge) in proofs.iter().zip(challenges) {
+                // verify comm_r
+                let last = proof.comm_layers.len() - 1;
+                let comm_r: <Tree::Hasher as Hasher>::Domain =
+                    hash_comm_r(&proof.comm_layers[..last], proof.comm_layers[last]).into();
+                check_eq!(comm_r, tau.comm_r);
+
                 // verify data inclusion
                 check!(proof.data_proof.verify());
                 check_eq!(proof.data_proof.root(), tau.comm_d);
 
                 // verify layer inclusion
                 check!(proof.layer_proof.verify());
+                check_eq!(
+                    proof.layer_proof.root(),
+                    proof.comm_layers[challenge.layer - 1]
+                );
 
                 // Verify labeling
                 // TODO: verify number of proofs
                 for parents_proof in &proof.parents_proofs {
                     check!(parents_proof.verify());
+                    check_eq!(parents_proof.root(), proof.comm_layers[challenge.layer - 1]);
                 }
 
                 // TODO: actual labeling
