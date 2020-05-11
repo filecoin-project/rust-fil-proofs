@@ -503,7 +503,7 @@ impl<Tree: MerkleTreeTrait, G: Hasher> TemporaryAuxCache<Tree, G> {
             DiskTree<Tree::Hasher, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>,
         >(tree_c_size, &configs)?;
 
-        // tree_c_size stored in the config is the base tree size
+        // tree_r_last_size stored in the config is the base tree size
         let tree_r_last_size = t_aux.tree_r_last_config.size.unwrap();
         let tree_r_last_config_levels = t_aux.tree_r_last_config.levels;
         let (configs, replica_config) = split_config_and_replica(
