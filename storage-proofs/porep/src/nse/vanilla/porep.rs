@@ -9,14 +9,16 @@ use storage_proofs_core::{
     error::Result,
     hasher::{Domain, Hasher},
     merkle::{
-        split_config, split_config_and_replica, BinaryMerkleTree, DiskStore, MerkleTreeTrait,
+        split_config, split_config_and_replica, BinaryMerkleTree, MerkleTreeTrait,
         MerkleTreeWrapper,
     },
     util::NODE_SIZE,
     Data,
 };
 
-use super::{labels, NarrowStackedExpander, PersistentAux, PublicParams, Tau, TemporaryAux};
+use super::{
+    hash_comm_r, labels, NarrowStackedExpander, PersistentAux, PublicParams, Tau, TemporaryAux,
+};
 use crate::PoRep;
 
 impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> PoRep<'a, Tree::Hasher, G>
@@ -174,9 +176,10 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> PoRep<'a, Tree::H
             comm_replica: replica_tree.root(),
         };
 
+        let comm_r = hash_comm_r(&p_aux.comm_layers, p_aux.comm_replica);
         let tau = Tau::<<Tree::Hasher as Hasher>::Domain, G::Domain> {
             comm_d: data_tree.root(),
-            comm_r: p_aux.comm_replica,
+            comm_r: comm_r.into(),
         };
 
         let t_aux = TemporaryAux::new(layer_store_config, data_tree_config);
