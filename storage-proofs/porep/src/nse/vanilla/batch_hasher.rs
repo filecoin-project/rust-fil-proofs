@@ -5,7 +5,7 @@ use itertools::Itertools;
 use paired::bls12_381::Fr;
 use sha2raw::Sha256;
 use storage_proofs_core::fr32::bytes_into_fr;
-use storage_proofs_core::hasher::Sha256Domain;
+use storage_proofs_core::hasher::{Domain, Sha256Domain};
 use storage_proofs_core::util::NODE_SIZE;
 
 use super::Parent;
@@ -42,6 +42,46 @@ pub fn batch_hash(
             // then expands the non expanded parent on the fly to retrieve it.
             let parent2 = parents[y2 / k as usize] * k + (y2 as u32) % k;
             let current2 = read_at(data, parent2 as usize);
+            el2.add_assign(&current2);
+        }
+
+        // hash two 32 byte chunks at once
+        let el1: Sha256Domain = el1.into();
+        let el2: Sha256Domain = el2.into();
+        hasher.input(&[AsRef::<[u8]>::as_ref(&el1), AsRef::<[u8]>::as_ref(&el2)]);
+    }
+
+    let mut hash = hasher.finish();
+    truncate_hash(&mut hash);
+
+    hash
+}
+
+/// Hashes the provided, expanded, parents.
+pub fn batch_hash_expanded<D: Domain>(
+    k: usize,
+    degree: usize,
+    mut hasher: Sha256,
+    parents_data: &[D],
+) -> [u8; 32] {
+    assert!(
+        parents_data.len() % 2 == 0,
+        "number of parents must be even"
+    );
+    assert_eq!(parents_data.len(), degree * k, "invalid number of parents");
+
+    for (i, j) in (0..degree).tuples() {
+        let mut el1 = Fr::zero();
+        let mut el2 = Fr::zero();
+        let k = k as u32;
+
+        for l in 0..k {
+            let y1 = i + (l as usize * degree as usize);
+            let current1 = parents_data[y1].into();
+            el1.add_assign(&current1);
+
+            let y2 = j + (l as usize * degree as usize);
+            let current2 = parents_data[y2].into();
             el2.add_assign(&current2);
         }
 
