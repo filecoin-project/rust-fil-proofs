@@ -43,4 +43,9 @@ impl Config {
     pub fn is_layer_expander(&self, layer: usize) -> bool {
         layer <= self.num_expander_layers
     }
+
+    /// Returns `true` if the passed in layer index is the last layer, `false` otherwise.
+    pub fn is_layer_replica(&self, layer: usize) -> bool {
+        layer == self.num_layers()
+    }
 }
