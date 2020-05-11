@@ -16,7 +16,7 @@ use storage_proofs_core::{
     parameter_cache::ParameterSetMetadata,
 };
 
-use super::{Config, Parent};
+use super::Config;
 
 /// Implementation of  Narrow Stacked Expander PoRep (NSE).
 #[derive(Debug, Default)]
@@ -297,7 +297,6 @@ pub struct Proof<Tree: MerkleTreeTrait, G: Hasher> {
         deserialize = "MerkleProof<Tree::Hasher, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>: Deserialize<'de>"
     ))]
     pub layer_proof: MerkleProof<Tree::Hasher, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>,
-    pub parents: Vec<Parent>,
     #[serde(bound(
         serialize = "MerkleProof<Tree::Hasher, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>: Serialize",
         deserialize = "MerkleProof<Tree::Hasher, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>: Deserialize<'de>"
@@ -314,7 +313,6 @@ impl<Tree: MerkleTreeTrait, G: Hasher> Proof<Tree, G> {
     pub fn new(
         data_proof: MerkleProof<G, U2>,
         layer_proof: MerkleProof<Tree::Hasher, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>,
-        parents: Vec<Parent>,
         parents_proofs: Vec<
             MerkleProof<Tree::Hasher, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>,
         >,
@@ -323,7 +321,6 @@ impl<Tree: MerkleTreeTrait, G: Hasher> Proof<Tree, G> {
         Self {
             data_proof,
             layer_proof,
-            parents,
             parents_proofs,
             comm_layers,
             _tree: Default::default(),
@@ -337,7 +334,6 @@ impl<Tree: MerkleTreeTrait, G: Hasher> Clone for Proof<Tree, G> {
         Self {
             data_proof: self.data_proof.clone(),
             layer_proof: self.layer_proof.clone(),
-            parents: self.parents.clone(),
             parents_proofs: self.parents_proofs.clone(),
             comm_layers: self.comm_layers.clone(),
             _tree: Default::default(),

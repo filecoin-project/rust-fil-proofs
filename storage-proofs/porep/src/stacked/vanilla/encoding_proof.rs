@@ -1,4 +1,3 @@
-use log::trace;
 use std::marker::PhantomData;
 
 use bellperson::bls::Fr;
