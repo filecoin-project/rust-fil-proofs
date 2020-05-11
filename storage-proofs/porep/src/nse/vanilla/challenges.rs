@@ -105,7 +105,7 @@ impl<D: Domain> Iterator for Challenges<D> {
         Some(Challenge {
             window: self.current_window,
             node,
-            layer,
+            layer: layer + 1, // layers are 1-indexed
         })
     }
 
@@ -148,8 +148,9 @@ mod tests {
         for (window, chunk) in list.chunks(num_challenges_per_window).enumerate() {
             for challenge in chunk {
                 assert_eq!(challenge.window, window, "incorrect window");
+                assert!(challenge.layer > 0, "layers are 1-indexed");
                 assert!(
-                    challenge.layer < config.num_layers(),
+                    challenge.layer <= config.num_layers(),
                     "layer too large: {}, {}",
                     challenge.layer,
                     config.num_layers()
