@@ -1,4 +1,4 @@
-/// Checks that the two passed values are equal. If they are not equal it prints a trace and returns `false`.
+/// Checks that the two passed values are equal. If they are not equal it prints a debug and returns `false`.
 macro_rules! check_eq {
     ($left:expr , $right:expr,) => ({
         check_eq!($left, $right)
@@ -7,7 +7,7 @@ macro_rules! check_eq {
         match (&($left), &($right)) {
             (left_val, right_val) => {
                 if !(*left_val == *right_val) {
-                    log::trace!("check failed: `(left == right)`\
+                    log::debug!("check failed: `(left == right)`\
                           \n\
                           \n{}\
                           \n",
@@ -21,7 +21,7 @@ macro_rules! check_eq {
         match (&($left), &($right)) {
             (left_val, right_val) => {
                 if !(*left_val == *right_val) {
-                    log::trace!("check failed: `(left == right)`: {}\
+                    log::debug!("check failed: `(left == right)`: {}\
                           \n\
                           \n{}\
                           \n",
@@ -34,11 +34,11 @@ macro_rules! check_eq {
     });
 }
 
-/// Checks that the passed in value is true. If they are not equal it prints a trace and returns `false`.
+/// Checks that the passed in value is true. If they are not equal it prints a debug and returns `false`.
 macro_rules! check {
     ($val:expr) => {
         if !$val {
-            log::trace!("expected {:?} to be true", dbg!($val));
+            log::debug!("expected {:?} to be true", dbg!($val));
             return false;
         }
     };
