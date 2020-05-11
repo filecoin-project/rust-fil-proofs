@@ -274,4 +274,26 @@ mod tests {
             assert_eq!(ep.len(), graph.k as usize);
         }
     }
+
+    #[test]
+    fn test_expand_flatten() {
+        let graph = ExpanderGraph {
+            k: 8,
+            bits: 24,
+            degree: 384,
+        };
+
+        for i in 0..graph.degree {
+            let parents: Vec<Parent> = graph.parents(i as u32).collect();
+            let exp_parents: Vec<Parent> = graph.expanded_parents(i as u32).flatten().collect();
+
+            let m = graph.degree as usize;
+            let k = graph.k as usize;
+
+            for j in 0..k {
+                let y = i + (j * m);
+                assert_eq!(parents[y / k] as usize * k + y % k, exp_parents[y] as usize);
+            }
+        }
+    }
 }
