@@ -38,4 +38,9 @@ impl Config {
     pub fn num_nodes_sector(&self) -> usize {
         self.sector_size / NODE_SIZE
     }
+
+    /// Returns `true` if the passed in layer index is an expander layer, `false` otherwise.
+    pub fn is_layer_expander(&self, layer: usize) -> bool {
+        layer <= self.num_expander_layers
+    }
 }
