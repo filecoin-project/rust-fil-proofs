@@ -3,8 +3,8 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 use generic_array::typenum::{Unsigned, U2};
-use merkletree::merkle::{get_merkle_tree_leafs, get_merkle_tree_len, MerkleTree};
-use merkletree::store::{ExternalReader, LevelCacheStore, Store, StoreConfig};
+use merkletree::merkle::get_merkle_tree_leafs;
+use merkletree::store::{Store, StoreConfig};
 use serde::{Deserialize, Serialize};
 use storage_proofs_core::{
     hasher::{Domain, Hasher},
