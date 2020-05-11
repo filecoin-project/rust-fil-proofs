@@ -1,5 +1,5 @@
 use std::io::Write;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use anyhow::{ensure, Result};
 use generic_array::typenum::{self, Unsigned};
@@ -8,8 +8,7 @@ use merkletree::merkle;
 use merkletree::merkle::{
     get_merkle_tree_leafs, is_merkle_tree_size_valid, FromIndexedParallelIterator,
 };
-use merkletree::store::StoreConfig;
-use merkletree::store::{ExternalReader, Store};
+use merkletree::store::{ExternalReader, ReplicaConfig, Store, StoreConfig};
 use rayon::prelude::*;
 
 use crate::error::*;
@@ -51,7 +50,7 @@ pub fn create_disk_tree<Tree: MerkleTreeTrait>(
 pub fn create_lc_tree<Tree: MerkleTreeTrait>(
     base_tree_len: usize,
     configs: &[StoreConfig],
-    replica_paths: &[PathBuf],
+    replica_config: &ReplicaConfig,
 ) -> Result<LCTree<Tree::Hasher, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>> {
     let base_tree_leafs = get_merkle_tree_leafs(base_tree_len, Tree::Arity::to_usize())?;
 
@@ -61,33 +60,33 @@ pub fn create_lc_tree<Tree: MerkleTreeTrait>(
             "Invalid top arity specified without sub arity"
         );
 
-        LCTree::from_sub_tree_store_configs_and_replicas(base_tree_leafs, configs, replica_paths)
+        LCTree::from_sub_tree_store_configs_and_replica(base_tree_leafs, configs, replica_config)
     } else if Tree::SubTreeArity::to_usize() > 0 {
         ensure!(
             !configs.is_empty(),
             "Cannot create sub-tree with a single tree config"
         );
 
-        LCTree::from_store_configs_and_replicas(base_tree_leafs, configs, replica_paths)
+        LCTree::from_store_configs_and_replica(base_tree_leafs, configs, replica_config)
     } else {
         ensure!(configs.len() == 1, "Invalid tree-shape specified");
         let store = LCStore::new_from_disk_with_reader(
             base_tree_len,
             Tree::Arity::to_usize(),
             &configs[0],
-            ExternalReader::new_from_path(&replica_paths[0])?,
+            ExternalReader::new_from_path(&replica_config.path)?,
         )?;
 
         LCTree::from_data_store(store, base_tree_leafs)
     }
 }
 
-// Given base tree configs and optionally replica_paths, returns
+// Given base tree configs and optionally a replica_config, returns
 // either a disktree or an lctree, specified by Tree.
 pub fn create_tree<Tree: MerkleTreeTrait>(
     base_tree_len: usize,
     configs: &[StoreConfig],
-    replica_paths: Option<&[PathBuf]>,
+    replica_config: Option<&ReplicaConfig>,
 ) -> Result<
     MerkleTreeWrapper<
         <Tree as MerkleTreeTrait>::Hasher,
@@ -115,11 +114,11 @@ where
         >(&mut store)
         {
             ensure!(
-                replica_paths.is_some(),
+                replica_config.is_some(),
                 "Cannot create LCTree without replica paths"
             );
-            lc_store
-                .set_external_reader(ExternalReader::new_from_path(&replica_paths.unwrap()[i])?)?;
+            let replica_config = replica_config.unwrap();
+            lc_store.set_external_reader(ExternalReader::new_from_config(&replica_config, i)?)?;
         }
 
         if configs.len() == 1 {
@@ -225,17 +224,17 @@ pub fn create_base_merkle_tree<Tree: MerkleTreeTrait>(
 }
 
 /// Construct a new level cache merkle tree, given the specified
-/// config and replica_path.
+/// config.
 ///
 /// Note that while we don't need to pass both the data AND the
 /// replica path (since the replica file will contain the same data),
 /// we pass both since we have access from all callers and this avoids
-/// reading that data from the replica_path here.
+/// reading that data from the replica_config here.
 pub fn create_base_lcmerkle_tree<H: Hasher, BaseTreeArity: 'static + PoseidonArity>(
     config: StoreConfig,
     size: usize,
     data: &[u8],
-    replica_path: &PathBuf,
+    replica_config: &ReplicaConfig,
 ) -> Result<LCMerkleTree<H, BaseTreeArity>> {
     trace!("create_base_lcmerkle_tree called with size {}", size);
     trace!(
@@ -261,7 +260,7 @@ pub fn create_base_lcmerkle_tree<H: Hasher, BaseTreeArity: 'static + PoseidonAri
     let mut lc_tree: LCMerkleTree<H, BaseTreeArity> =
         LCMerkleTree::<H, BaseTreeArity>::try_from_iter_with_config((0..size).map(f), config)?;
 
-    lc_tree.set_external_reader_path(replica_path)?;
+    lc_tree.set_external_reader_path(&replica_config.path)?;
 
     Ok(lc_tree)
 }
@@ -316,20 +315,30 @@ pub fn split_config_wrapped(
     }
 }
 
-// Given a StoreConfig and replica path, append numbers to each to
-// uniquely identify them and return the results.  If count is 1, the
-// original config and replica path are not modified.
+// Given a StoreConfig, replica path and tree_width (leaf nodes),
+// append numbers to each StoreConfig to uniquely identify them and
+// return the results along with a ReplicaConfig using calculated
+// offsets into the single replica path specified for later use with
+// external readers.  If count is 1, the original config is not
+// modified.
 pub fn split_config_and_replica(
     config: StoreConfig,
     replica_path: PathBuf,
+    sub_tree_width: usize, // nodes, not bytes
     count: usize,
-) -> Result<(Vec<StoreConfig>, Vec<PathBuf>)> {
+) -> Result<(Vec<StoreConfig>, ReplicaConfig)> {
     if count == 1 {
-        return Ok((vec![config], vec![replica_path]));
+        return Ok((
+            vec![config],
+            ReplicaConfig {
+                path: replica_path,
+                offsets: vec![0],
+            },
+        ));
     }
 
     let mut configs = Vec::with_capacity(count);
-    let mut replica_paths = Vec::with_capacity(count);
+    let mut replica_offsets = Vec::with_capacity(count);
 
     for i in 0..count {
         configs.push(StoreConfig::from_config(
@@ -339,17 +348,16 @@ pub fn split_config_and_replica(
         ));
         configs[i].levels = config.levels;
 
-        replica_paths.push(
-            Path::new(
-                format!("{:?}-{}", replica_path, i)
-                    .replace("\"", "")
-                    .as_str(),
-            )
-            .to_path_buf(),
-        );
+        replica_offsets.push(i * sub_tree_width * NODE_SIZE);
     }
 
-    Ok((configs, replica_paths))
+    Ok((
+        configs,
+        ReplicaConfig {
+            path: replica_path,
+            offsets: replica_offsets,
+        },
+    ))
 }
 
 pub fn get_base_tree_count<Tree: MerkleTreeTrait>() -> usize {

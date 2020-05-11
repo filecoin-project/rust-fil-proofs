@@ -1,14 +1,13 @@
 #![allow(clippy::len_without_is_empty)]
 
 use std::marker::PhantomData;
-use std::path::PathBuf;
 
 use anyhow::Result;
 use generic_array::typenum::{self, U0};
 use merkletree::hash::Hashable;
 use merkletree::merkle;
 use merkletree::merkle::FromIndexedParallelIterator;
-use merkletree::store::StoreConfig;
+use merkletree::store::{ReplicaConfig, StoreConfig};
 use rayon::prelude::*;
 
 use crate::hasher::{Hasher, PoseidonArity};
@@ -248,13 +247,13 @@ impl<
         Ok(tree.into())
     }
 
-    pub fn from_store_configs_and_replicas(
+    pub fn from_store_configs_and_replica(
         leafs: usize,
         configs: &[StoreConfig],
-        replica_paths: &[PathBuf],
+        replica_config: &ReplicaConfig,
     ) -> Result<LCTree<H, U, V, W>> {
         let tree =
-            merkle::MerkleTree::from_store_configs_and_replicas(leafs, configs, replica_paths)?;
+            merkle::MerkleTree::from_store_configs_and_replica(leafs, configs, replica_config)?;
         Ok(tree.into())
     }
 
@@ -268,15 +267,15 @@ impl<
         Ok(tree.into())
     }
 
-    pub fn from_sub_tree_store_configs_and_replicas(
+    pub fn from_sub_tree_store_configs_and_replica(
         leafs: usize,
         configs: &[StoreConfig],
-        replica_paths: &[PathBuf],
+        replica_config: &ReplicaConfig,
     ) -> Result<LCTree<H, U, V, W>> {
-        let tree = merkle::MerkleTree::from_sub_tree_store_configs_and_replicas(
+        let tree = merkle::MerkleTree::from_sub_tree_store_configs_and_replica(
             leafs,
             configs,
-            replica_paths,
+            replica_config,
         )?;
         Ok(tree.into())
     }

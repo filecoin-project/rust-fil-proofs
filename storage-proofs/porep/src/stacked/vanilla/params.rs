@@ -503,15 +503,16 @@ impl<Tree: MerkleTreeTrait, G: Hasher> TemporaryAuxCache<Tree, G> {
             DiskTree<Tree::Hasher, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>,
         >(tree_c_size, &configs)?;
 
-        let (configs, replica_paths) = split_config_and_replica(
+        // tree_r_last_size stored in the config is the base tree size
+        let tree_r_last_size = t_aux.tree_r_last_config.size.unwrap();
+        let tree_r_last_config_levels = t_aux.tree_r_last_config.levels;
+        let (configs, replica_config) = split_config_and_replica(
             t_aux.tree_r_last_config.clone(),
             replica_path.clone(),
+            get_merkle_tree_leafs(tree_r_last_size, Tree::Arity::to_usize())?,
             tree_count,
         )?;
 
-        // tree_c_size stored in the config is the base tree size
-        let tree_r_last_size = t_aux.tree_r_last_config.size.unwrap();
-        let tree_r_last_config_levels = t_aux.tree_r_last_config.levels;
         trace!(
             "Instantiating tree r last [count {}] with size {} and arity {}, {}, {}",
             tree_count,
@@ -522,7 +523,7 @@ impl<Tree: MerkleTreeTrait, G: Hasher> TemporaryAuxCache<Tree, G> {
         );
         let tree_r_last = create_lc_tree::<
             LCTree<Tree::Hasher, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>,
-        >(tree_r_last_size, &configs, &replica_paths)?;
+        >(tree_r_last_size, &configs, &replica_config)?;
 
         Ok(TemporaryAuxCache {
             labels: LabelsCache::new(&t_aux.labels).context("labels_cache")?,

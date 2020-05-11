@@ -625,37 +625,6 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         )
     }
 
-    /// Writes out replica data, possibly splitting out replicas based
-    /// on how many sub-trees will require invidividual replica files.
-    /// Returns a list of replica paths written.
-    fn write_replica_data(
-        data: &Data,
-        tree_count: usize,
-        leafs: usize,
-        replica_paths: &[PathBuf],
-    ) -> Result<()> {
-        use std::fs::OpenOptions;
-        use std::io::prelude::*;
-
-        let mut start = 0;
-        let mut end = leafs * NODE_SIZE;
-
-        assert_eq!(replica_paths.len(), tree_count);
-
-        // Store and persist encoded replica data.
-        for path in replica_paths {
-            let mut f = OpenOptions::new().write(true).create(true).open(path)?;
-
-            // Only write the replica's base layer of leaf data.
-            trace!("Writing replica data for {} nodes {}-{}", leafs, start, end);
-            f.write_all(&data.as_ref()[start..end])?;
-            start = end;
-            end += leafs * NODE_SIZE;
-        }
-
-        Ok(())
-    }
-
     pub(crate) fn transform_and_replicate_layers_inner(
         graph: &StackedBucketGraph<Tree::Hasher>,
         layer_challenges: &LayerChallenges,
@@ -781,8 +750,12 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
 
         // Encode original data into the last layer.
         info!("building tree_r_last");
-        let (configs, replica_paths) =
-            split_config_and_replica(tree_r_last_config.clone(), replica_path, tree_count)?;
+        let (configs, replica_config) = split_config_and_replica(
+            tree_r_last_config.clone(),
+            replica_path.clone(),
+            nodes_count,
+            tree_count,
+        )?;
 
         let tree_r_last = measure_op(GenerateTreeRLast, || {
             data.ensure_data()?;
@@ -822,12 +795,21 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
 
             assert_eq!(tree_count, trees.len());
 
-            let leafs = trees[0].leafs();
-            Self::write_replica_data(&data, tree_count, leafs, &replica_paths)?;
+            // Write out replica data.
+            {
+                use std::fs::OpenOptions;
+                use std::io::prelude::*;
+
+                let mut f = OpenOptions::new()
+                    .write(true)
+                    .create(true)
+                    .open(replica_path)?;
+                f.write_all(&data.as_ref())?;
+            }
 
             create_lc_tree::<
                 LCTree<Tree::Hasher, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>,
-            >(tree_r_last_config.size.unwrap(), &configs, &replica_paths)
+            >(tree_r_last_config.size.unwrap(), &configs, &replica_config)
         })?;
         info!("tree_r_last done");
 
