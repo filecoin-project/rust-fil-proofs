@@ -35,6 +35,7 @@ itertools = "0.9.0"
 tempdir = "0.3.7"
 tempfile = "3"
 rand_xorshift = "0.2.0"
+femme = "1.3.0"
 
 [features]
 default = []
