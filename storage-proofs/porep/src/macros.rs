@@ -7,7 +7,7 @@ macro_rules! check_eq {
         match (&($left), &($right)) {
             (left_val, right_val) => {
                 if !(*left_val == *right_val) {
-                    trace!("check failed: `(left == right)`\
+                    log::trace!("check failed: `(left == right)`\
                           \n\
                           \n{}\
                           \n",
@@ -21,7 +21,7 @@ macro_rules! check_eq {
         match (&($left), &($right)) {
             (left_val, right_val) => {
                 if !(*left_val == *right_val) {
-                    trace!("check failed: `(left == right)`: {}\
+                    log::trace!("check failed: `(left == right)`: {}\
                           \n\
                           \n{}\
                           \n",
@@ -38,7 +38,7 @@ macro_rules! check_eq {
 macro_rules! check {
     ($val:expr) => {
         if !$val {
-            trace!("expected {:?} to be true", dbg!($val));
+            log::trace!("expected {:?} to be true", dbg!($val));
             return false;
         }
     };
