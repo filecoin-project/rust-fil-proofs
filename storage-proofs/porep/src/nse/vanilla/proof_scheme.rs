@@ -1,6 +1,9 @@
 use anyhow::{ensure, Context};
 use storage_proofs_core::{
-    error::Result, hasher::Hasher, merkle::MerkleTreeTrait, proof::ProofScheme,
+    error::Result,
+    hasher::Hasher,
+    merkle::{MerkleProofTrait, MerkleTreeTrait},
+    proof::ProofScheme,
 };
 
 use super::{
@@ -96,11 +99,28 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> ProofScheme<'a>
         pub_inputs: &Self::PublicInputs,
         partition_proofs: &[Self::Proof],
     ) -> Result<bool> {
-        todo!()
+        for (k, proofs) in partition_proofs.iter().enumerate() {
+            for proof in proofs {
+                // verify data inclusion
+                if !proof.data_proof.verify() {
+                    return Ok(false);
+                }
+
+                // verify layer inclusion
+                if !proof.layer_proof.verify() {
+                    return Ok(false);
+                }
+
+                // TODO: verify labeling
+            }
+        }
+
+        Ok(true)
     }
 
-    fn with_partition(pub_in: Self::PublicInputs, k: Option<usize>) -> Self::PublicInputs {
-        todo!()
+    fn with_partition(mut pub_in: Self::PublicInputs, k: Option<usize>) -> Self::PublicInputs {
+        pub_in.k = k;
+        pub_in
     }
 
     fn satisfies_requirements(
