@@ -1,6 +1,3 @@
-#[macro_use]
-mod macros;
-
 mod challenges;
 mod column;
 mod column_proof;
