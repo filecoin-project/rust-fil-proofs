@@ -1,3 +1,6 @@
+#[macro_use]
+mod macros;
+
 pub mod drg;
 pub mod nse;
 pub mod stacked;
