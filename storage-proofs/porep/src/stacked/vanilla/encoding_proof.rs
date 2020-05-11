@@ -1,4 +1,3 @@
-use log::trace;
 use std::marker::PhantomData;
 
 use paired::bls12_381::Fr;
