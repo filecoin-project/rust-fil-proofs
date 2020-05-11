@@ -30,11 +30,17 @@ pub fn batch_hash(
         let k = k as u32;
 
         for l in 0..k {
-            let parent1 = parents[i] * k + l;
+            // First calculates the index required for the batch hashing
+            let y1 = i + (l as usize * degree as usize);
+            // then expands the non expanded parent on the fly to retrieve it.
+            let parent1 = parents[y1 / k as usize] * k + (y1 as u32) % k;
             let current1 = read_at(data, parent1 as usize);
             el1.add_assign(&current1);
 
-            let parent2 = parents[j] * k + l;
+            // First calculates the index required for the batch hashing
+            let y2 = j + (l as usize * degree as usize);
+            // then expands the non expanded parent on the fly to retrieve it.
+            let parent2 = parents[y2 / k as usize] * k + (y2 as u32) % k;
             let current2 = read_at(data, parent2 as usize);
             el2.add_assign(&current2);
         }
