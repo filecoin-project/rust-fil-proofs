@@ -1,15 +1,20 @@
 use anyhow::{ensure, Context};
+use log::trace;
+use paired::bls12_381::Fr;
+use sha2raw::Sha256;
 use storage_proofs_core::{
     error::Result,
-    hasher::Hasher,
+    hasher::{Domain, Hasher},
     merkle::{MerkleProofTrait, MerkleTreeTrait},
     proof::ProofScheme,
 };
 
 use super::{
-    hash_comm_r, ChallengeRequirements, Challenges, NarrowStackedExpander, Parent, PrivateInputs,
-    Proof, PublicInputs, PublicParams, SetupParams,
+    batch_hasher::{batch_hash_expanded, truncate_hash},
+    hash_comm_r, hash_prefix, ChallengeRequirements, Challenges, NarrowStackedExpander, Parent,
+    PrivateInputs, Proof, PublicInputs, PublicParams, SetupParams,
 };
+use crate::encode;
 
 impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> ProofScheme<'a>
     for NarrowStackedExpander<'a, Tree, G>
@@ -71,11 +76,14 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> ProofScheme<'a>
         let exp_parents = super::ExpanderGraph::from(config);
 
         for challenge in challenges {
+            // the index of the challenge is adjusted, as the trees span the whole sector, not just a single window.
+            let absolute_challenge = challenge.window * config.num_nodes_window + challenge.node;
+
             // Data Inclusion Proof
             let data_proof = priv_inputs
                 .t_aux
                 .tree_d
-                .gen_proof(challenge.node)
+                .gen_proof(absolute_challenge)
                 .context("failed to create data proof")?;
 
             // Layer Inclusion Proof
@@ -86,7 +94,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> ProofScheme<'a>
             };
             let levels = priv_inputs.t_aux.tree_config_levels;
             let layer_proof = layer_tree
-                .gen_cached_proof(challenge.node, levels)
+                .gen_cached_proof(absolute_challenge, levels)
                 .context("failed to create layer proof")?;
 
             // Labeling Proofs
@@ -101,14 +109,24 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> ProofScheme<'a>
                     .collect()
             };
 
-            let parents_proofs = parents
-                .iter()
-                .map(|parent| {
-                    layer_tree
-                        .gen_cached_proof(*parent as usize, levels)
-                        .context("failed to create parent proof")
-                })
-                .collect::<Result<_>>()?;
+            let parents_proofs = if challenge.layer == 1 {
+                // no parents for layer 1
+                Vec::new()
+            } else {
+                let parents_tree = &priv_inputs.t_aux.layers[challenge.layer - 2];
+                parents
+                    .iter()
+                    .map(|parent| {
+                        // challenge is adjusted as the trees span all windows
+                        parents_tree
+                            .gen_cached_proof(
+                                challenge.window * config.num_nodes_window + *parent as usize,
+                                levels,
+                            )
+                            .context("failed to create parent proof")
+                    })
+                    .collect::<Result<_>>()?
+            };
 
             // roots for the layers
             let mut comm_layers = priv_inputs.p_aux.comm_layers.clone();
@@ -117,7 +135,6 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> ProofScheme<'a>
             proofs.push(Proof::new(
                 data_proof,
                 layer_proof,
-                parents,
                 parents_proofs,
                 comm_layers,
             ));
@@ -132,6 +149,10 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> ProofScheme<'a>
         partition_proofs: &[Self::Proof],
     ) -> Result<bool> {
         let config = &pub_params.config;
+
+        let butterfly_parents = super::ButterflyGraph::from(config);
+        let exp_parents = super::ExpanderGraph::from(config);
+
         let is_valid = partition_proofs.iter().enumerate().all(|(k, proofs)| {
             let pub_inputs = Self::with_partition(pub_inputs.clone(), Some(k));
             let tau = pub_inputs.tau.as_ref().expect("missing tau");
@@ -144,6 +165,8 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> ProofScheme<'a>
             );
 
             for (proof, challenge) in proofs.iter().zip(challenges) {
+                trace!("verifying challenge {:?}", challenge);
+
                 // verify comm_r
                 let last = proof.comm_layers.len() - 1;
                 let comm_r: <Tree::Hasher as Hasher>::Domain =
@@ -162,13 +185,108 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> ProofScheme<'a>
                 );
 
                 // Verify labeling
-                // TODO: verify number of proofs
-                for parents_proof in &proof.parents_proofs {
-                    check!(parents_proof.verify());
-                    check_eq!(parents_proof.root(), proof.comm_layers[challenge.layer - 1]);
+                for parent_proof in &proof.parents_proofs {
+                    check!(parent_proof.verify());
+                    check_eq!(parent_proof.root(), proof.comm_layers[challenge.layer - 2]);
+                }
+                let parent_indices = proof
+                    .parents_proofs
+                    .iter()
+                    .map(|p| p.path_index())
+                    .collect::<Vec<usize>>();
+
+                if challenge.layer == 1 {
+                    // no parents for the mask layer
+                    check_eq!(proof.parents_proofs.len(), 0, "mask parents length");
+                } else if config.is_layer_expander(challenge.layer) {
+                    check_eq!(
+                        proof.parents_proofs.len(),
+                        config.k as usize * config.degree_expander,
+                        "expander parents length"
+                    );
+                    check_eq!(
+                        &parent_indices,
+                        &exp_parents
+                            .expanded_parents(challenge.node as u32)
+                            .flatten()
+                            .map(|p| challenge.window * config.num_nodes_window + p as usize)
+                            .collect::<Vec<_>>(),
+                        "expander parent indices"
+                    );
+                } else {
+                    check_eq!(
+                        proof.parents_proofs.len(),
+                        config.degree_butterfly,
+                        "butterfly parents length"
+                    );
+                    check_eq!(
+                        &parent_indices,
+                        &butterfly_parents
+                            .parents(challenge.node as u32, challenge.layer as u32)
+                            .map(|p| challenge.window * config.num_nodes_window + p as usize)
+                            .collect::<Vec<_>>(),
+                        "butterfly parent indices"
+                    );
                 }
 
-                // TODO: actual labeling
+                // actual labeling
+                let data: Vec<_> = proof
+                    .parents_proofs
+                    .iter()
+                    .map(|parent_proof| parent_proof.leaf())
+                    .collect();
+                let prefix = hash_prefix(
+                    challenge.layer as u32,
+                    challenge.node as u32,
+                    challenge.window as u32,
+                );
+
+                let mut hasher = Sha256::new();
+                // Hash prefix + replica id, each 32 bytes.
+                hasher.input(&[&prefix[..], AsRef::<[u8]>::as_ref(&pub_inputs.replica_id)]);
+
+                let label = if challenge.layer == 1 {
+                    // Mask layer hashing
+                    let mut label = hasher.finish();
+                    truncate_hash(&mut label);
+                    label
+                } else if config.is_layer_expander(challenge.layer) {
+                    // Expander "batch" hashing
+                    batch_hash_expanded(config.k as usize, config.degree_expander, hasher, &data)
+                } else {
+                    // Butterfly hashing
+                    for chunk in data.chunks(2) {
+                        hasher.input(&[
+                            AsRef::<[u8]>::as_ref(&chunk[0]),
+                            AsRef::<[u8]>::as_ref(&chunk[1]),
+                        ]);
+                    }
+                    let mut label = hasher.finish();
+                    truncate_hash(&mut label);
+                    label
+                };
+
+                let expected_value = proof.layer_proof.leaf();
+                if config.is_layer_replica(challenge.layer) {
+                    let key = <Tree::Hasher as Hasher>::Domain::try_from_bytes(&label).unwrap();
+                    let data_node_fr: Fr = proof.data_proof.leaf().into();
+                    let data_node = data_node_fr.into();
+
+                    let encoded = encode::encode(key, data_node);
+                    check_eq!(
+                        AsRef::<[u8]>::as_ref(&encoded),
+                        AsRef::<[u8]>::as_ref(&expected_value),
+                        "encoding check: {:?}",
+                        challenge,
+                    );
+                } else {
+                    check_eq!(
+                        &label,
+                        AsRef::<[u8]>::as_ref(&expected_value),
+                        "labeling check: {:?}",
+                        challenge,
+                    );
+                }
             }
 
             true
@@ -211,16 +329,20 @@ mod tests {
 
     #[test]
     fn test_prove_verify() {
+        // femme::pretty::Logger::new()
+        //     .start(log::LevelFilter::Debug)
+        //     .ok();
+
         type Tree = LCTree<PoseidonHasher, U8, U8, U0>;
 
         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
         let replica_id = <PoseidonHasher as Hasher>::Domain::random(rng);
         let config = Config {
-            k: 8,
+            k: 4,
             num_nodes_window: 64,
             degree_expander: 12,
             degree_butterfly: 8,
-            num_expander_layers: 3,
+            num_expander_layers: 4,
             num_butterfly_layers: 3,
             sector_size: 64 * 32 * 8,
         };

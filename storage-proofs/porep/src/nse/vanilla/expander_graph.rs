@@ -122,7 +122,8 @@ impl<'a> Iterator for ExpanderGraphParentsIter<'a> {
 
         const INDEX_BYTES: usize = 4;
         const HASH_BYTES: usize = 32;
-        let parent_bytes = self.graph.bits as usize / 8;
+        let parent_bytes = (self.graph.bits as usize / 8).max(1);
+        debug_assert!(parent_bytes > 0);
         debug_assert!(parent_bytes <= INDEX_BYTES);
 
         // Need more bits, all in the next hash.
@@ -132,14 +133,13 @@ impl<'a> Iterator for ExpanderGraphParentsIter<'a> {
 
         let hash_end = HASH_BYTES - self.hash_index;
 
-        let parent = if parent_bytes <= hash_end {
+        let mut parent = if parent_bytes <= hash_end {
             // Enough bits in the current hash.
             let mut parent = [0u8; INDEX_BYTES];
 
             parent[..parent_bytes]
                 .copy_from_slice(&self.hash[self.hash_index..self.hash_index + parent_bytes]);
             self.hash_index += parent_bytes;
-
             u32::from_le_bytes(parent)
         } else {
             let mut parent = [0u8; INDEX_BYTES];
@@ -155,12 +155,21 @@ impl<'a> Iterator for ExpanderGraphParentsIter<'a> {
             let len = parent_bytes - hash_end;
             parent[hash_end..parent_bytes].copy_from_slice(&self.hash[..len]);
             self.hash_index += len;
-
             u32::from_le_bytes(parent)
         };
 
+        if self.graph.bits < 8 {
+            // Smaller than 1 byte, need to manually mod
+            parent = parent % (2u64.pow(self.graph.bits) as u32);
+        }
+
         // The parent should already be in the correct range based on the construction.
-        debug_assert!(parent < (2u64.pow(self.graph.bits) - 1) as u32);
+        debug_assert!(
+            parent <= (2u64.pow(self.graph.bits) - 1) as u32,
+            "{} <= {}",
+            parent,
+            (2u64.pow(self.graph.bits) - 1) as u32
+        );
 
         self.pos += 1;
 
@@ -174,8 +183,10 @@ impl<'a> Iterator for ExpanderGraphParentsIter<'a> {
 
 impl From<&Config> for ExpanderGraph {
     fn from(config: &Config) -> Self {
+        let bits = (config.num_nodes_window as f64 / config.k as f64).log2() as u32;
+        assert!(bits > 0);
         Self {
-            bits: (config.num_nodes_window as f64 / config.k as f64).log2() as u32,
+            bits,
             k: config.k,
             degree: config.degree_expander,
         }
@@ -277,22 +288,41 @@ mod tests {
 
     #[test]
     fn test_expand_flatten() {
-        let graph = ExpanderGraph {
-            k: 8,
-            bits: 24,
-            degree: 384,
-        };
+        let graphs = [
+            ExpanderGraph {
+                k: 8,
+                bits: 24,
+                degree: 384,
+            },
+            ExpanderGraph {
+                k: 2,
+                bits: 8,
+                degree: 12,
+            },
+        ];
+        for graph in &graphs {
+            for i in 0..graph.degree {
+                let parents: Vec<Parent> = graph.parents(i as u32).collect();
+                let exp_parents: Vec<Parent> = graph.expanded_parents(i as u32).flatten().collect();
 
-        for i in 0..graph.degree {
-            let parents: Vec<Parent> = graph.parents(i as u32).collect();
-            let exp_parents: Vec<Parent> = graph.expanded_parents(i as u32).flatten().collect();
+                let m = graph.degree as usize;
+                let k = graph.k as usize;
 
-            let m = graph.degree as usize;
-            let k = graph.k as usize;
+                for j in 0..k {
+                    let y = i + (j * m);
+                    assert_eq!(parents[y / k] as usize * k + y % k, exp_parents[y] as usize);
+                }
 
-            for j in 0..k {
-                let y = i + (j * m);
-                assert_eq!(parents[y / k] as usize * k + y % k, exp_parents[y] as usize);
+                assert!(
+                    !parents.iter().all(|p| p == &0),
+                    "parents must not be all 0"
+                );
+                assert!(
+                    !graph
+                        .expanded_parents(i as u32)
+                        .any(|p| p.iter().all(|p| p == &0)),
+                    "exp parents must not be all 0"
+                );
             }
         }
     }
