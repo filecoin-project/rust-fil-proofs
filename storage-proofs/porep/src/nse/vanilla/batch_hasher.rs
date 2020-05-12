@@ -33,11 +33,11 @@ pub fn batch_hash(
                 let y1 = i + (l as usize * degree as usize);
                 let parent1 = parents[y1 as usize];
                 let current1 = read_at(data, parent1 as usize);
-                add_assign(&mut el1, &current1, &modulus);
-
                 let y2 = j + (l as usize * degree as usize);
                 let parent2 = parents[y2 as usize];
                 let current2 = read_at(data, parent2 as usize);
+
+                add_assign(&mut el1, &current1, &modulus);
                 add_assign(&mut el2, &current2, &modulus);
 
                 (el1, el2)
