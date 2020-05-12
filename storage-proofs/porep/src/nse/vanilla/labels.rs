@@ -1,7 +1,7 @@
 use anyhow::{ensure, Context, Result};
 use generic_array::typenum::U0;
 use itertools::Itertools;
-use log::trace;
+use log::debug;
 use merkletree::store::{StoreConfig, StoreConfigDataVersion};
 use sha2raw::Sha256;
 use storage_proofs_core::{
@@ -39,19 +39,20 @@ pub fn encode_with_trees<Tree: 'static + MerkleTreeTrait>(
     let mut current_layer = vec![0u8; config.window_size()];
 
     // 1. Construct the mask
-    trace!("mask layer: {}", 1);
+    debug!("mask layer: {}", 1);
     mask_layer(config, window_index, replica_id, &mut previous_layer)
         .context("failed to construct the mask layer")?;
 
     let mask_config = store_configs.remove(0);
 
+    debug!("mask layer tree");
     let mask_tree = tree_from_slice::<Tree>(&previous_layer, mask_config)
         .context("failed to construct merkle tree for the mask layer")?;
     trees.push(mask_tree);
 
     // 2. Construct expander layers
     for layer_index in 2..=(config.num_expander_layers as u32) {
-        trace!("expander layer: {}", layer_index);
+        debug!("expander layer: {}", layer_index);
         expander_layer(
             config,
             window_index,
@@ -63,6 +64,7 @@ pub fn encode_with_trees<Tree: 'static + MerkleTreeTrait>(
         .context("failed to construct expander layer")?;
 
         let store_config = store_configs.remove(0);
+        debug!("expander layer tree");
         let tree = tree_from_slice::<Tree>(&current_layer, store_config)
             .context("failed to construct merkle tree for expander layer")?;
         trees.push(tree);
@@ -73,7 +75,7 @@ pub fn encode_with_trees<Tree: 'static + MerkleTreeTrait>(
 
     // 3. Construct butterfly layers
     for layer_index in (1 + config.num_expander_layers as u32)..(num_layers as u32) {
-        trace!("butterfly layer: {}", layer_index);
+        debug!("butterfly layer: {}", layer_index);
         butterfly_layer(
             config,
             window_index,
@@ -85,6 +87,7 @@ pub fn encode_with_trees<Tree: 'static + MerkleTreeTrait>(
         .context("failed to construct butterfly layer")?;
 
         let store_config = store_configs.remove(0);
+        debug!("butterfly layer tree");
         let tree = tree_from_slice::<Tree>(&current_layer, store_config)
             .context("failed to construct merkle tree for butterfly layer")?;
         trees.push(tree);
@@ -99,7 +102,7 @@ pub fn encode_with_trees<Tree: 'static + MerkleTreeTrait>(
     // 4. Construct butterfly encoding layer
     let layer_index = num_layers as u32;
 
-    trace!("replica layer: {}", layer_index);
+    debug!("replica layer: {}", layer_index);
 
     butterfly_encode_layer(
         config,
@@ -115,6 +118,7 @@ pub fn encode_with_trees<Tree: 'static + MerkleTreeTrait>(
     drop(previous_layer);
 
     let store_config = store_configs.remove(0);
+    debug!("replica layer tree");
     let replica_tree = lc_tree_from_slice::<Tree>(data, store_config)
         .context("failed to construct merkle tree for butterfly encoding layer")?;
 
@@ -242,13 +246,20 @@ pub fn expander_layer<D: Domain>(
     );
 
     let graph: ExpanderGraph = config.into();
-
+    let mut parents = Vec::with_capacity(config.degree_expander * config.k as usize);
     // Iterate over each node.
     for (node_index, node) in layer_out.chunks_mut(NODE_SIZE).enumerate() {
+        if node_index % (256 * 1024) == 0 {
+            debug!(
+                "expander {} - {}/{}",
+                layer_index, node_index, config.num_nodes_window
+            );
+        }
         let node_index = node_index as u32;
 
         // Compute the parents for this node.
-        let parents: Vec<_> = graph.expanded_parents(node_index).flatten().collect();
+        parents.clear();
+        parents.extend(graph.expanded_parents(node_index));
 
         let mut hasher = Sha256::new();
 
