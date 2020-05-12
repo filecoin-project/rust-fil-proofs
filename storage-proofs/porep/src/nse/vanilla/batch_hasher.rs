@@ -1,10 +1,11 @@
 //! Implementation of batched hashing using Sha256.
 
+use byteorder::{ByteOrder, LittleEndian};
 use ff::{PrimeField, PrimeFieldRepr};
 use itertools::Itertools;
 use paired::bls12_381::{Fr, FrRepr};
 use sha2raw::Sha256;
-use storage_proofs_core::{fr32::bytes_into_fr_repr_safe, hasher::Domain, util::NODE_SIZE};
+use storage_proofs_core::{hasher::Domain, util::NODE_SIZE};
 
 use super::Parent;
 
@@ -116,11 +117,25 @@ pub fn batch_hash_expanded<D: Domain>(
     hash
 }
 
-/// Read an `Fr` at the given index.
+/// Read an `FrRepr` at the given index.
 #[inline]
 fn read_at(data: &[u8], index: usize) -> FrRepr {
     let slice = &data[index * NODE_SIZE..(index + 1) * NODE_SIZE];
-    bytes_into_fr_repr_safe(slice)
+    fr_repr_from_slice(slice)
+}
+
+/// Reads the first 32 bytes from the given slice and
+/// processes them as `FrRepr`. Does not validate that
+/// they are valid FrReprs.
+#[inline]
+fn fr_repr_from_slice(r: &[u8]) -> FrRepr {
+    let repr = [
+        LittleEndian::read_u64(&r[..8]),
+        LittleEndian::read_u64(&r[8..16]),
+        LittleEndian::read_u64(&r[16..24]),
+        LittleEndian::read_u64(&r[24..]),
+    ];
+    FrRepr(repr)
 }
 
 pub fn truncate_hash(hash: &mut [u8]) {
@@ -136,7 +151,7 @@ mod tests {
     use ff::Field;
     use rand::{Rng, SeedableRng};
     use rand_xorshift::XorShiftRng;
-    use storage_proofs_core::fr32::bytes_into_fr;
+    use storage_proofs_core::fr32::{bytes_into_fr, fr_into_bytes};
 
     #[test]
     fn test_read_at() {
@@ -178,6 +193,20 @@ mod tests {
 
             let a_back = Fr::from_repr(a_repr).unwrap();
             assert_eq!(a, a_back);
+        }
+    }
+
+    #[test]
+    fn test_fr_repr_from_slice() {
+        let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
+
+        for _ in 0..1000 {
+            let a = Fr::random(rng);
+            let a_repr = a.clone().into_repr();
+            let slice = fr_into_bytes(&a);
+
+            let a_repr_back = fr_repr_from_slice(&slice);
+            assert_eq!(a_repr, a_repr_back);
         }
     }
 }
