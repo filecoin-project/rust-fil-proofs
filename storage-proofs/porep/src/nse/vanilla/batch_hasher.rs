@@ -1,7 +1,7 @@
 //! Implementation of batched hashing using Sha256.
 
 use byteorder::{ByteOrder, LittleEndian};
-use ff::{PrimeField, PrimeFieldRepr};
+use ff::PrimeField;
 use itertools::Itertools;
 use paired::bls12_381::{Fr, FrRepr};
 use sha2raw::Sha256;
@@ -22,6 +22,7 @@ pub fn batch_hash(
 ) -> [u8; 32] {
     assert!(parents.len() % 2 == 0, "number of parents must be even");
     assert_eq!(parents.len(), degree * k, "invalid number of parents");
+    let modulus = Fr::char();
 
     for (i, j) in (0..degree).tuples() {
         let k = k as u32;
@@ -32,12 +33,12 @@ pub fn batch_hash(
                 let y1 = i + (l as usize * degree as usize);
                 let parent1 = parents[y1 as usize];
                 let current1 = read_at(data, parent1 as usize);
-                add_assign(&mut el1, &current1);
+                add_assign(&mut el1, &current1, &modulus);
 
                 let y2 = j + (l as usize * degree as usize);
                 let parent2 = parents[y2 as usize];
                 let current2 = read_at(data, parent2 as usize);
-                add_assign(&mut el2, &current2);
+                add_assign(&mut el2, &current2, &modulus);
 
                 (el1, el2)
             },
@@ -57,14 +58,13 @@ pub fn batch_hash(
 /// This avoids converting to Montgomery form, which is only needed to do multiplications, and
 /// happens when converting into and from an `Fr`.
 #[inline]
-fn add_assign(a: &mut FrRepr, b: &FrRepr) {
+#[cfg(not(target_arch = "x86_64"))]
+fn add_assign(a: &mut FrRepr, b: &FrRepr, modulus: &FrRepr) {
     debug_assert_eq!(a.0.len(), 4);
 
     a.add_nocarry(b);
 
     // check if we need to reduce by the modulus
-    let modulus = Fr::char();
-
     // TODO: Port this check back to fff
     let is_valid = (a.0[3] < modulus.0[3])
         || (a.0[3] == modulus.0[3]
@@ -75,6 +75,37 @@ fn add_assign(a: &mut FrRepr, b: &FrRepr) {
 
     if !is_valid {
         a.sub_noborrow(&Fr::char());
+    }
+}
+
+#[inline]
+#[cfg(target_arch = "x86_64")]
+fn add_assign(a: &mut FrRepr, b: &FrRepr, modulus: &FrRepr) {
+    use std::arch::x86_64::*;
+    use std::mem;
+
+    unsafe {
+        let mut carry = _addcarry_u64(0, a.0[0], b.0[0], &mut a.0[0]);
+        carry = _addcarry_u64(carry, a.0[1], b.0[1], &mut a.0[1]);
+        carry = _addcarry_u64(carry, a.0[2], b.0[2], &mut a.0[2]);
+        _addcarry_u64(carry, a.0[3], b.0[3], &mut a.0[3]);
+
+        let mut s_sub: [u64; 4] = mem::uninitialized();
+
+        carry = _subborrow_u64(0, a.0[0], modulus.0[0], &mut s_sub[0]);
+        carry = _subborrow_u64(carry, a.0[1], modulus.0[1], &mut s_sub[1]);
+        carry = _subborrow_u64(carry, a.0[2], modulus.0[2], &mut s_sub[2]);
+        carry = _subborrow_u64(carry, a.0[3], modulus.0[3], &mut s_sub[3]);
+
+        if carry == 0 {
+            // Direct assign fails since size can be 4 or 6
+            // Obviously code doesn't work at all for size 6
+            // (a).0 = s_sub;
+            a.0[0] = s_sub[0];
+            a.0[1] = s_sub[1];
+            a.0[2] = s_sub[2];
+            a.0[3] = s_sub[3];
+        }
     }
 }
 
@@ -104,6 +135,7 @@ pub fn batch_hash_expanded<D: Domain>(
         "number of parents must be even"
     );
     assert_eq!(parents_data.len(), degree * k, "invalid number of parents");
+    let modulus = Fr::char();
 
     for (i, j) in (0..degree).tuples() {
         let mut el1 = FrRepr::from(0);
@@ -113,11 +145,11 @@ pub fn batch_hash_expanded<D: Domain>(
         for l in 0..k {
             let y1 = i + (l as usize * degree as usize);
             let current1 = parents_data[y1].into_repr();
-            add_assign(&mut el1, &current1);
+            add_assign(&mut el1, &current1, &modulus);
 
             let y2 = j + (l as usize * degree as usize);
             let current2 = parents_data[y2].into_repr();
-            add_assign(&mut el2, &current2);
+            add_assign(&mut el2, &current2, &modulus);
         }
 
         // hash two 32 byte chunks at once
@@ -193,7 +225,7 @@ mod tests {
     #[test]
     fn test_add_assign() {
         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
-
+        let modulus = Fr::char();
         for _ in 0..1000 {
             let mut a = Fr::random(rng);
             let b = Fr::random(rng);
@@ -201,7 +233,7 @@ mod tests {
             let mut a_repr = a.clone().into_repr();
             let b_repr = b.clone().into_repr();
 
-            add_assign(&mut a_repr, &b_repr);
+            add_assign(&mut a_repr, &b_repr, &modulus);
             a.add_assign(&b);
 
             let a_back = Fr::from_repr(a_repr).unwrap();
