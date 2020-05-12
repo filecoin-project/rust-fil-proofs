@@ -210,12 +210,15 @@ fn mask_layer<D: Domain>(
     const LAYER_INDEX: u32 = 1;
 
     // Construct the mask
-    for (node_index, node) in layer_out.chunks_mut(NODE_SIZE).enumerate() {
-        let prefix = hash_prefix(LAYER_INDEX, node_index as u32, window_index);
-        let hash = Sha256::digest(&[&prefix[..], AsRef::<[u8]>::as_ref(replica_id)]);
-        node.copy_from_slice(&hash);
-        truncate_hash(node);
-    }
+    layer_out
+        .par_chunks_mut(NODE_SIZE)
+        .enumerate()
+        .for_each(|(node_index, node)| {
+            let prefix = hash_prefix(LAYER_INDEX, node_index as u32, window_index);
+            let hash = Sha256::digest(&[&prefix[..], AsRef::<[u8]>::as_ref(replica_id)]);
+            node.copy_from_slice(&hash);
+            truncate_hash(node);
+        });
 
     Ok(())
 }
