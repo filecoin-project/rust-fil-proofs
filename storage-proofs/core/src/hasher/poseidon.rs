@@ -166,6 +166,10 @@ impl Domain for PoseidonDomain {
         // generating an Fr and converting it, to ensure we stay in the field
         Fr::random(rng).into()
     }
+
+    fn into_repr(self) -> FrRepr {
+        self.0
+    }
 }
 
 impl Element for PoseidonDomain {
