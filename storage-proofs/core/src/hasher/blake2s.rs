@@ -177,6 +177,10 @@ impl Domain for Blake2sDomain {
         // generating an Fr and converting it, to ensure we stay in the field
         Fr::random(rng).into()
     }
+
+    fn into_repr(self) -> FrRepr {
+        crate::fr32::bytes_into_fr_repr_safe(&self.0)
+    }
 }
 
 impl Into<Blake2sDomain> for Blake2sHash {
