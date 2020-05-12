@@ -320,7 +320,7 @@ impl<E: Engine> ConstraintSystem<E> for KeypairAssembly<E> {
             aux: &mut [Vec<(E::Fr, usize)>],
             this_constraint: usize,
         ) {
-            for &(var, coeff) in l.as_ref() {
+            for (&var, &coeff) in l.iter() {
                 match var.get_unchecked() {
                     Index::Input(id) => inputs[id].push((coeff, this_constraint)),
                     Index::Aux(id) => aux[id].push((coeff, this_constraint)),
@@ -443,7 +443,10 @@ impl MPCParameters {
         }
 
         // Try to load "phase1radix2m{}"
-        info!("phase2::MPCParameters::new() phase1.5_file=phase1radix2m{}", exp);
+        info!(
+            "phase2::MPCParameters::new() phase1.5_file=phase1radix2m{}",
+            exp
+        );
         let f = match File::open(format!("phase1radix2m{}", exp)) {
             Ok(f) => f,
             Err(e) => {
@@ -1221,7 +1224,9 @@ pub fn verify_contribution(before: &MPCParameters, after: &MPCParameters) -> Res
 
     // Current parameters should have consistent delta in G1
     if pubkey.delta_after != after.params.vk.delta_g1 {
-        error!("phase2::verify_contribution() contribution's delta in G1 differs from vk's delta_g1");
+        error!(
+            "phase2::verify_contribution() contribution's delta in G1 differs from vk's delta_g1"
+        );
         return Err(());
     }
 
