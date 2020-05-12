@@ -125,7 +125,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> PoRep<'a, Tree::H
                     )?;
 
                     // write replica
-                    std::fs::write(replica_path, window_data.as_ref())
+                    std::fs::write(replica_path, window_data)
                         .context("failed to write replica data")?;
                     Ok((trees, replica_tree))
                 },

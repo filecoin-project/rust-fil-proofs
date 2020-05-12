@@ -98,13 +98,7 @@ fn add_assign(a: &mut FrRepr, b: &FrRepr, modulus: &FrRepr) {
         carry = _subborrow_u64(carry, a.0[3], modulus.0[3], &mut s_sub[3]);
 
         if carry == 0 {
-            // Direct assign fails since size can be 4 or 6
-            // Obviously code doesn't work at all for size 6
-            // (a).0 = s_sub;
-            a.0[0] = s_sub[0];
-            a.0[1] = s_sub[1];
-            a.0[2] = s_sub[2];
-            a.0[3] = s_sub[3];
+            a.0 = s_sub;
         }
     }
 }
