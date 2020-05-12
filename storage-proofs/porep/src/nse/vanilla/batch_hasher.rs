@@ -90,7 +90,7 @@ fn add_assign(a: &mut FrRepr, b: &FrRepr, modulus: &FrRepr) {
         carry = _addcarry_u64(carry, a.0[2], b.0[2], &mut a.0[2]);
         _addcarry_u64(carry, a.0[3], b.0[3], &mut a.0[3]);
 
-        let mut s_sub: [u64; 4] = mem::uninitialized();
+        let mut s_sub = [0u64; 4];
 
         carry = _subborrow_u64(0, a.0[0], modulus.0[0], &mut s_sub[0]);
         carry = _subborrow_u64(carry, a.0[1], modulus.0[1], &mut s_sub[1]);
