@@ -8,3 +8,4 @@ heaptrack*
 *.profile
 *.heap
 rust-fil-proofs.config.toml
+storage-proofs/porep/target
