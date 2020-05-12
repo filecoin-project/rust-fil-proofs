@@ -228,9 +228,84 @@ mod tests {
         hasher::{PoseidonHasher, Sha256Hasher},
         merkle::LCTree,
         proof::ProofScheme,
+        util::NODE_SIZE,
     };
 
     use super::super::{Config, SetupParams};
+
+    #[test]
+    fn test_bench_encode() {
+        type Tree = LCTree<PoseidonHasher, U8, U8, U0>;
+        // femme::pretty::Logger::new()
+        //     .start(log::LevelFilter::Trace)
+        //     .ok();
+
+        let sector_size = 1024 * 1024 * 512; //1024 * 1; // 1GiB
+        let num_windows = 1;
+
+        let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
+        let replica_id = <PoseidonHasher as Hasher>::Domain::random(rng);
+        let config = Config {
+            k: 8,
+            num_nodes_window: (sector_size / num_windows) / NODE_SIZE,
+            degree_expander: 384,
+            degree_butterfly: 16,
+            num_expander_layers: 8,
+            num_butterfly_layers: 7,
+            sector_size,
+        };
+        assert_eq!(config.num_windows(), num_windows);
+
+        let data: Vec<u8> = (0..config.num_nodes_sector())
+            .flat_map(|_| {
+                let v = <PoseidonHasher as Hasher>::Domain::random(rng);
+                v.into_bytes()
+            })
+            .collect();
+
+        // create a copy, so we can compare roundtrips
+        let mut data_copy = data.clone();
+
+        let sp = SetupParams {
+            config: config.clone(),
+            num_challenges_window: 2,
+        };
+
+        let pp = NarrowStackedExpander::<Tree, Sha256Hasher>::setup(&sp).expect("setup failed");
+
+        // MT for original data is always named tree-d, and it will be
+        // referenced later in the process as such.
+        let cache_dir = tempfile::tempdir().unwrap();
+        let config = StoreConfig::new(
+            cache_dir.path(),
+            CacheKey::CommDTree.to_string(),
+            StoreConfig::default_cached_above_base_layer(config.num_nodes_sector(), U2::to_usize()),
+        );
+
+        // Generate a replica path.
+        let temp_dir = tempdir::TempDir::new("test-extract-all").unwrap();
+        let temp_path = temp_dir.path();
+        let replica_path = temp_path.join("replica-path");
+
+        println!("replication start");
+        let now = std::time::Instant::now();
+        NarrowStackedExpander::<Tree, Sha256Hasher>::replicate(
+            &pp,
+            &replica_id,
+            (&mut data_copy[..]).into(),
+            None,
+            config.clone(),
+            replica_path.clone(),
+        )
+        .expect("replication failed");
+
+        println!(
+            "replicated {:02}GiB in {:04}s",
+            sector_size as f64 / 1024. / 1024. / 1024.,
+            now.elapsed().as_millis() as f64 / 1000.
+        );
+        assert_ne!(data, data_copy);
+    }
 
     #[test]
     fn test_extract_all() {
