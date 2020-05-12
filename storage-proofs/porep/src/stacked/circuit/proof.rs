@@ -353,7 +353,7 @@ mod tests {
         fr32::fr_into_bytes,
         gadgets::{MetricCS, TestConstraintSystem},
         hasher::{Hasher, PedersenHasher, PoseidonHasher, Sha256Hasher},
-        merkle::{get_base_tree_count, BinaryMerkleTree, DiskTree, MerkleTreeTrait},
+        merkle::{get_base_tree_count, DiskTree, MerkleTreeTrait},
         proof::ProofScheme,
         test_helper::setup_replica,
     };
@@ -366,27 +366,27 @@ mod tests {
 
     #[test]
     fn stacked_input_circuit_pedersen_base_2() {
-        stacked_input_circuit::<DiskTree<PedersenHasher, U2, U0, U0>>(22, 1_258_197);
+        stacked_input_circuit::<DiskTree<PedersenHasher, U2, U0, U0>>(22, 1_258_150);
     }
 
     #[test]
     fn stacked_input_circuit_poseidon_base_2() {
-        stacked_input_circuit::<DiskTree<PoseidonHasher, U2, U0, U0>>(22, 1_206_404);
+        stacked_input_circuit::<DiskTree<PoseidonHasher, U2, U0, U0>>(22, 1_206_210);
     }
 
     #[test]
     fn stacked_input_circuit_poseidon_base_8() {
-        stacked_input_circuit::<DiskTree<PoseidonHasher, U8, U0, U0>>(22, 1_199_716);
+        stacked_input_circuit::<DiskTree<PoseidonHasher, U8, U0, U0>>(22, 1_199_618);
     }
 
     #[test]
     fn stacked_input_circuit_poseidon_sub_8_4() {
-        stacked_input_circuit::<DiskTree<PoseidonHasher, U8, U4, U0>>(22, 1_296_720);
+        stacked_input_circuit::<DiskTree<PoseidonHasher, U8, U4, U0>>(22, 1_296_574);
     }
 
     #[test]
     fn stacked_input_circuit_poseidon_top_8_4_2() {
-        stacked_input_circuit::<DiskTree<PoseidonHasher, U8, U4, U2>>(22, 1_347_174);
+        stacked_input_circuit::<DiskTree<PoseidonHasher, U8, U4, U2>>(22, 1_346_980);
     }
 
     fn stacked_input_circuit<Tree: MerkleTreeTrait + 'static>(
@@ -553,7 +553,7 @@ mod tests {
     #[test]
     #[ignore]
     fn test_stacked_compound_pedersen() {
-        stacked_test_compound::<BinaryMerkleTree<PedersenHasher>>();
+        stacked_test_compound::<DiskTree<PedersenHasher, U2, U0, U0>>();
     }
 
     #[test]
@@ -613,8 +613,6 @@ mod tests {
 
         // Generate a replica path.
         let replica_path = cache_dir.path().join("replica-path");
-
-        // create a copy, so we can compare roundtrips
         let mut mmapped_data = setup_replica(&data, &replica_path);
 
         let public_params = StackedCompound::setup(&setup_params).expect("setup failed");

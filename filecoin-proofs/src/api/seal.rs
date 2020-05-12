@@ -113,7 +113,7 @@ where
         );
 
         trace!(
-            "seal phase 1: sector_size {}, base tree size {}, base tree leafs {}, cached above base {}",
+            "seal phase 1: sector_size {}, base tree size {}, base tree leafs {}, rows to discard {}",
             u64::from(porep_config.sector_size),
             base_tree_size,
             base_tree_leafs,
@@ -220,7 +220,7 @@ where
         let base_tree_leafs = get_base_tree_leafs::<DefaultBinaryTree>(base_tree_size)?;
 
         trace!(
-            "seal phase 2: base tree size {}, base tree leafs {}, cached above base {}",
+            "seal phase 2: base tree size {}, base tree leafs {}, rows to discard {}",
             base_tree_size,
             base_tree_leafs,
             StoreConfig::default_rows_to_discard(base_tree_leafs, BINARY_ARITY)

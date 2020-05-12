@@ -242,7 +242,7 @@ mod tests {
             .synthesize(&mut cs)
             .unwrap();
 
-        assert_eq!(cs.num_constraints(), 268_180);
+        assert_eq!(cs.num_constraints(), 266_665);
     }
 
     fn fallback_post<Tree: 'static + MerkleTreeTrait>(
