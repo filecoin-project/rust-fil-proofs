@@ -53,3 +53,6 @@ harness = false
 name = "parents"
 harness = false
 
+[[bench]]
+name = "batch_hasher"
+harness = false
