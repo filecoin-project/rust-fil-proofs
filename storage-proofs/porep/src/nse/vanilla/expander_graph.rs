@@ -14,9 +14,6 @@ pub struct ExpanderGraph {
     pub degree: usize,
 }
 
-/// Expanded parent, alwas of length `k`.
-pub type ExpandedParent = Vec<Parent>;
-
 impl ExpanderGraph {
     /// Calculates the parents for the node at the given `index`.
     pub fn parents(&self, index: u32) -> ExpanderGraphParentsIter {
@@ -24,8 +21,10 @@ impl ExpanderGraph {
     }
 
     /// Calculates the expanded parents for the node at the given `index`.
-    pub fn expanded_parents(&self, index: u32) -> ExpanderGraphExpandedParentsIter {
-        ExpanderGraphExpandedParentsIter::new(self, index)
+    pub fn expanded_parents(&self, index: u32) -> impl Iterator<Item = Parent> + '_ {
+        let k = self.k;
+        let p = self.parents(index);
+        p.flat_map(move |parent| (0..k).map(move |i| parent * k + i))
     }
 }
 
@@ -33,29 +32,8 @@ impl ExpanderGraph {
 #[derive(Debug)]
 pub struct ExpanderGraphExpandedParentsIter<'a> {
     parents: ExpanderGraphParentsIter<'a>,
-}
-
-impl<'a> ExpanderGraphExpandedParentsIter<'a> {
-    fn new(graph: &'a ExpanderGraph, node: u32) -> Self {
-        Self {
-            parents: ExpanderGraphParentsIter::new(graph, node),
-        }
-    }
-}
-
-impl<'a> Iterator for ExpanderGraphExpandedParentsIter<'a> {
-    type Item = ExpandedParent;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        match self.parents.next() {
-            Some(parent) => {
-                let k = self.parents.graph.k;
-                let expanded = (0..k).map(|i| parent * k + i).collect();
-                Some(expanded)
-            }
-            None => None,
-        }
-    }
+    current: Option<Parent>,
+    i: usize,
 }
 
 /// Iterator created by the [`parents`] method.
@@ -270,20 +248,12 @@ mod tests {
             degree: 384,
         };
 
-        let parents0: Vec<ExpandedParent> = graph.expanded_parents(0).collect();
-        let parents1: Vec<ExpandedParent> = graph.expanded_parents(1).collect();
+        let parents0: Vec<Parent> = graph.expanded_parents(0).collect();
+        let parents1: Vec<Parent> = graph.expanded_parents(1).collect();
 
-        assert_eq!(parents0.len(), graph.degree);
-        assert_eq!(parents1.len(), graph.degree);
+        assert_eq!(parents0.len(), graph.degree * graph.k as usize);
+        assert_eq!(parents1.len(), graph.degree * graph.k as usize);
         assert_ne!(&parents0, &parents1, "must not be equal");
-
-        for ep in parents0 {
-            assert_eq!(ep.len(), graph.k as usize);
-        }
-
-        for ep in parents1 {
-            assert_eq!(ep.len(), graph.k as usize);
-        }
     }
 
     #[test]
@@ -303,7 +273,7 @@ mod tests {
         for graph in &graphs {
             for i in 0..graph.degree {
                 let parents: Vec<Parent> = graph.parents(i as u32).collect();
-                let exp_parents: Vec<Parent> = graph.expanded_parents(i as u32).flatten().collect();
+                let exp_parents: Vec<Parent> = graph.expanded_parents(i as u32).collect();
 
                 let m = graph.degree as usize;
                 let k = graph.k as usize;
@@ -318,9 +288,7 @@ mod tests {
                     "parents must not be all 0"
                 );
                 assert!(
-                    !graph
-                        .expanded_parents(i as u32)
-                        .any(|p| p.iter().all(|p| p == &0)),
+                    !graph.expanded_parents(i as u32).all(|p| p == 0),
                     "exp parents must not be all 0"
                 );
             }

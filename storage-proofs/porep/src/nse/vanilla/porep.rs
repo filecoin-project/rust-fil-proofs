@@ -236,11 +236,9 @@ mod tests {
     #[test]
     fn test_bench_encode() {
         type Tree = LCTree<PoseidonHasher, U8, U8, U0>;
-        // femme::pretty::Logger::new()
-        //     .start(log::LevelFilter::Trace)
-        //     .ok();
+        femme::start(log::LevelFilter::Debug).ok();
 
-        let sector_size = 1024 * 1024 * 512; //1024 * 1; // 1GiB
+        let sector_size = 1024 * 1024 * 1024 * 4;
         let num_windows = 1;
 
         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
@@ -256,15 +254,13 @@ mod tests {
         };
         assert_eq!(config.num_windows(), num_windows);
 
-        let data: Vec<u8> = (0..config.num_nodes_sector())
+        let mut data: Vec<u8> = (0..config.num_nodes_sector())
             .flat_map(|_| {
                 let v = <PoseidonHasher as Hasher>::Domain::random(rng);
                 v.into_bytes()
             })
             .collect();
-
-        // create a copy, so we can compare roundtrips
-        let mut data_copy = data.clone();
+        assert_eq!(config.sector_size, data.len());
 
         let sp = SetupParams {
             config: config.clone(),
@@ -276,7 +272,7 @@ mod tests {
         // MT for original data is always named tree-d, and it will be
         // referenced later in the process as such.
         let cache_dir = tempfile::tempdir().unwrap();
-        let config = StoreConfig::new(
+        let store_config = StoreConfig::new(
             cache_dir.path(),
             CacheKey::CommDTree.to_string(),
             StoreConfig::default_cached_above_base_layer(config.num_nodes_sector(), U2::to_usize()),
@@ -287,24 +283,26 @@ mod tests {
         let temp_path = temp_dir.path();
         let replica_path = temp_path.join("replica-path");
 
-        println!("replication start");
+        println!(
+            "replication start: {}GiB",
+            config.sector_size / 1024 / 1024 / 1024
+        );
         let now = std::time::Instant::now();
         NarrowStackedExpander::<Tree, Sha256Hasher>::replicate(
             &pp,
             &replica_id,
-            (&mut data_copy[..]).into(),
+            (&mut data[..]).into(),
             None,
-            config.clone(),
+            store_config.clone(),
             replica_path.clone(),
         )
         .expect("replication failed");
 
         println!(
             "replicated {:02}GiB in {:04}s",
-            sector_size as f64 / 1024. / 1024. / 1024.,
+            config.sector_size as f64 / 1024. / 1024. / 1024.,
             now.elapsed().as_millis() as f64 / 1000.
         );
-        assert_ne!(data, data_copy);
     }
 
     #[test]
