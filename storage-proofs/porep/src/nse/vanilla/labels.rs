@@ -248,7 +248,7 @@ pub fn expander_layer<D: Domain>(
         let node_index = node_index as u32;
 
         // Compute the parents for this node.
-        let parents: Vec<_> = graph.parents(node_index).collect();
+        let parents: Vec<_> = graph.expanded_parents(node_index).flatten().collect();
 
         let mut hasher = Sha256::new();
 
