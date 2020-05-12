@@ -256,8 +256,7 @@ pub fn expander_layer<D: Domain>(
         .par_chunks_mut(NODE_SIZE)
         .enumerate()
         .for_each(|(node_index, node)| {
-            let mut parents = Vec::with_capacity(config.degree_expander * config.k as usize);
-            if node_index % (256 * 1024) == 0 {
+            if node_index % (1024 * 1024) == 0 {
                 debug!(
                     "expander {} - {}/{}",
                     layer_index, node_index, config.num_nodes_window
@@ -266,8 +265,7 @@ pub fn expander_layer<D: Domain>(
             let node_index = node_index as u32;
 
             // Compute the parents for this node.
-            parents.clear();
-            parents.extend(graph.expanded_parents(node_index));
+            let parents: Vec<_> = graph.expanded_parents(node_index).collect();
 
             let mut hasher = Sha256::new();
 
