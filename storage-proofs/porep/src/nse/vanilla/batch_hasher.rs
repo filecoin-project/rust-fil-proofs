@@ -1,12 +1,10 @@
 //! Implementation of batched hashing using Sha256.
 
-use ff::Field;
+use ff::{PrimeField, PrimeFieldRepr};
 use itertools::Itertools;
-use paired::bls12_381::Fr;
+use paired::bls12_381::{Fr, FrRepr};
 use sha2raw::Sha256;
-use storage_proofs_core::fr32::bytes_into_fr;
-use storage_proofs_core::hasher::{Domain, Sha256Domain};
-use storage_proofs_core::util::NODE_SIZE;
+use storage_proofs_core::{fr32::bytes_into_fr_repr_safe, hasher::Domain, util::NODE_SIZE};
 
 use super::Parent;
 
@@ -25,8 +23,8 @@ pub fn batch_hash(
     assert_eq!(parents.len(), degree, "invalid number of parents");
 
     for (i, j) in (0..degree).tuples() {
-        let mut el1 = Fr::zero();
-        let mut el2 = Fr::zero();
+        let mut el1 = FrRepr::from(0);
+        let mut el2 = FrRepr::from(0);
         let k = k as u32;
 
         for l in 0..k {
@@ -35,26 +33,49 @@ pub fn batch_hash(
             // then expands the non expanded parent on the fly to retrieve it.
             let parent1 = parents[y1 / k as usize] * k + (y1 as u32) % k;
             let current1 = read_at(data, parent1 as usize);
-            el1.add_assign(&current1);
+            add_assign(&mut el1, &current1);
 
             // First calculates the index required for the batch hashing
             let y2 = j + (l as usize * degree as usize);
             // then expands the non expanded parent on the fly to retrieve it.
             let parent2 = parents[y2 / k as usize] * k + (y2 as u32) % k;
             let current2 = read_at(data, parent2 as usize);
-            el2.add_assign(&current2);
+            add_assign(&mut el2, &current2);
         }
 
         // hash two 32 byte chunks at once
-        let el1: Sha256Domain = el1.into();
-        let el2: Sha256Domain = el2.into();
-        hasher.input(&[AsRef::<[u8]>::as_ref(&el1), AsRef::<[u8]>::as_ref(&el2)]);
+        hasher.input(&[fr_repr_as_slice(&el1), fr_repr_as_slice(&el2)]);
     }
 
     let mut hash = hasher.finish();
     truncate_hash(&mut hash);
 
     hash
+}
+
+/// Adds two `FrRepr`.
+/// This avoids converting to Montgomery form, which is only needed to do multiplications, and
+/// happens when converting into and from an `Fr`.
+fn add_assign(a: &mut FrRepr, b: &FrRepr) {
+    a.add_nocarry(b);
+    // check if we need to reduce by the modulus
+    if !(&*a < &Fr::char()) {
+        a.sub_noborrow(&Fr::char());
+    }
+}
+
+// TODO: move back to core
+// TODO: panic if not on the right endianess
+// TODO: figure out if we can use write_le instead
+#[inline(always)]
+#[allow(clippy::needless_lifetimes)]
+fn fr_repr_as_slice<'a>(a: &'a FrRepr) -> &'a [u8] {
+    unsafe {
+        std::slice::from_raw_parts(
+            a.0.as_ptr() as *const u8,
+            a.0.len() * std::mem::size_of::<u64>(),
+        )
+    }
 }
 
 /// Hashes the provided, expanded, parents.
@@ -71,24 +92,22 @@ pub fn batch_hash_expanded<D: Domain>(
     assert_eq!(parents_data.len(), degree * k, "invalid number of parents");
 
     for (i, j) in (0..degree).tuples() {
-        let mut el1 = Fr::zero();
-        let mut el2 = Fr::zero();
+        let mut el1 = FrRepr::from(0);
+        let mut el2 = FrRepr::from(0);
         let k = k as u32;
 
         for l in 0..k {
             let y1 = i + (l as usize * degree as usize);
-            let current1 = parents_data[y1].into();
-            el1.add_assign(&current1);
+            let current1 = parents_data[y1].into_repr();
+            add_assign(&mut el1, &current1);
 
             let y2 = j + (l as usize * degree as usize);
-            let current2 = parents_data[y2].into();
-            el2.add_assign(&current2);
+            let current2 = parents_data[y2].into_repr();
+            add_assign(&mut el2, &current2);
         }
 
         // hash two 32 byte chunks at once
-        let el1: Sha256Domain = el1.into();
-        let el2: Sha256Domain = el2.into();
-        hasher.input(&[AsRef::<[u8]>::as_ref(&el1), AsRef::<[u8]>::as_ref(&el2)]);
+        hasher.input(&[fr_repr_as_slice(&el1), fr_repr_as_slice(&el2)]);
     }
 
     let mut hash = hasher.finish();
@@ -98,9 +117,10 @@ pub fn batch_hash_expanded<D: Domain>(
 }
 
 /// Read an `Fr` at the given index.
-fn read_at(data: &[u8], index: usize) -> Fr {
+#[inline]
+fn read_at(data: &[u8], index: usize) -> FrRepr {
     let slice = &data[index * NODE_SIZE..(index + 1) * NODE_SIZE];
-    bytes_into_fr(slice).expect("invalid data")
+    bytes_into_fr_repr_safe(slice)
 }
 
 pub fn truncate_hash(hash: &mut [u8]) {
@@ -113,17 +133,19 @@ pub fn truncate_hash(hash: &mut [u8]) {
 mod tests {
     use super::*;
 
+    use ff::Field;
     use rand::{Rng, SeedableRng};
     use rand_xorshift::XorShiftRng;
+    use storage_proofs_core::fr32::bytes_into_fr;
 
     #[test]
     fn test_read_at() {
         let data = [0u8; 64];
 
         let v0 = read_at(&data, 0);
-        assert_eq!(v0, Fr::zero());
+        assert_eq!(v0, FrRepr::from(0));
         let v1 = read_at(&data, 1);
-        assert_eq!(v1, Fr::zero());
+        assert_eq!(v1, FrRepr::from(0));
     }
 
     #[test]
@@ -137,6 +159,25 @@ mod tests {
 
             // check for valid Fr
             bytes_into_fr(&input).expect("invalid fr created");
+        }
+    }
+
+    #[test]
+    fn test_add_assign() {
+        let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
+
+        for _ in 0..1000 {
+            let mut a = Fr::random(rng);
+            let b = Fr::random(rng);
+
+            let mut a_repr = a.clone().into_repr();
+            let b_repr = b.clone().into_repr();
+
+            add_assign(&mut a_repr, &b_repr);
+            a.add_assign(&b);
+
+            let a_back = Fr::from_repr(a_repr).unwrap();
+            assert_eq!(a, a_back);
         }
     }
 }
