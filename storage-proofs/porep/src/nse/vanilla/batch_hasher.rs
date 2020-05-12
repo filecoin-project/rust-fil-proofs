@@ -21,28 +21,27 @@ pub fn batch_hash(
     data: &[u8],
 ) -> [u8; 32] {
     assert!(parents.len() % 2 == 0, "number of parents must be even");
-    assert_eq!(parents.len(), degree, "invalid number of parents");
+    assert_eq!(parents.len(), degree * k, "invalid number of parents");
 
     for (i, j) in (0..degree).tuples() {
-        let mut el1 = FrRepr::from(0);
-        let mut el2 = FrRepr::from(0);
         let k = k as u32;
 
-        for l in 0..k {
-            // First calculates the index required for the batch hashing
-            let y1 = i + (l as usize * degree as usize);
-            // then expands the non expanded parent on the fly to retrieve it.
-            let parent1 = parents[y1 / k as usize] * k + (y1 as u32) % k;
-            let current1 = read_at(data, parent1 as usize);
-            add_assign(&mut el1, &current1);
+        let (el1, el2) = (0..k).fold(
+            (FrRepr::from(0), FrRepr::from(0)),
+            |(mut el1, mut el2), l| {
+                let y1 = i + (l as usize * degree as usize);
+                let parent1 = parents[y1 as usize];
+                let current1 = read_at(data, parent1 as usize);
+                add_assign(&mut el1, &current1);
 
-            // First calculates the index required for the batch hashing
-            let y2 = j + (l as usize * degree as usize);
-            // then expands the non expanded parent on the fly to retrieve it.
-            let parent2 = parents[y2 / k as usize] * k + (y2 as u32) % k;
-            let current2 = read_at(data, parent2 as usize);
-            add_assign(&mut el2, &current2);
-        }
+                let y2 = j + (l as usize * degree as usize);
+                let parent2 = parents[y2 as usize];
+                let current2 = read_at(data, parent2 as usize);
+                add_assign(&mut el2, &current2);
+
+                (el1, el2)
+            },
+        );
 
         // hash two 32 byte chunks at once
         hasher.input(&[fr_repr_as_slice(&el1), fr_repr_as_slice(&el2)]);
