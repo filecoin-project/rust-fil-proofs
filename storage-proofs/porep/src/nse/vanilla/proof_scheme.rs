@@ -101,7 +101,6 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> ProofScheme<'a>
             let parents: Vec<Parent> = if config.is_layer_expander(challenge.layer) {
                 exp_parents
                     .expanded_parents(challenge.node as u32)
-                    .flatten()
                     .collect()
             } else {
                 butterfly_parents
@@ -208,7 +207,6 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> ProofScheme<'a>
                         &parent_indices,
                         &exp_parents
                             .expanded_parents(challenge.node as u32)
-                            .flatten()
                             .map(|p| challenge.window * config.num_nodes_window + p as usize)
                             .collect::<Vec<_>>(),
                         "expander parent indices"
