@@ -3,6 +3,7 @@ use generic_array::typenum::U0;
 use itertools::Itertools;
 use log::debug;
 use merkletree::store::{StoreConfig, StoreConfigDataVersion};
+use rayon::prelude::*;
 use sha2raw::Sha256;
 use storage_proofs_core::{
     hasher::{Domain, Hasher},
@@ -246,37 +247,41 @@ pub fn expander_layer<D: Domain>(
     );
 
     let graph: ExpanderGraph = config.into();
-    let mut parents = Vec::with_capacity(config.degree_expander * config.k as usize);
+
     // Iterate over each node.
-    for (node_index, node) in layer_out.chunks_mut(NODE_SIZE).enumerate() {
-        if node_index % (256 * 1024) == 0 {
-            debug!(
-                "expander {} - {}/{}",
-                layer_index, node_index, config.num_nodes_window
+    layer_out
+        .par_chunks_mut(NODE_SIZE)
+        .enumerate()
+        .for_each(|(node_index, node)| {
+            let mut parents = Vec::with_capacity(config.degree_expander * config.k as usize);
+            if node_index % (256 * 1024) == 0 {
+                debug!(
+                    "expander {} - {}/{}",
+                    layer_index, node_index, config.num_nodes_window
+                );
+            }
+            let node_index = node_index as u32;
+
+            // Compute the parents for this node.
+            parents.clear();
+            parents.extend(graph.expanded_parents(node_index));
+
+            let mut hasher = Sha256::new();
+
+            // Hash prefix + replica id, each 32 bytes.
+            let prefix = hash_prefix(layer_index, node_index, window_index);
+            hasher.input(&[&prefix[..], AsRef::<[u8]>::as_ref(replica_id)]);
+
+            // Compute batch hash of the parents.
+            let hash = batch_hash(
+                config.k as usize,
+                config.degree_expander,
+                hasher,
+                &parents,
+                layer_in,
             );
-        }
-        let node_index = node_index as u32;
-
-        // Compute the parents for this node.
-        parents.clear();
-        parents.extend(graph.expanded_parents(node_index));
-
-        let mut hasher = Sha256::new();
-
-        // Hash prefix + replica id, each 32 bytes.
-        let prefix = hash_prefix(layer_index, node_index, window_index);
-        hasher.input(&[&prefix[..], AsRef::<[u8]>::as_ref(replica_id)]);
-
-        // Compute batch hash of the parents.
-        let hash = batch_hash(
-            config.k as usize,
-            config.degree_expander,
-            hasher,
-            &parents,
-            layer_in,
-        );
-        node.copy_from_slice(&hash);
-    }
+            node.copy_from_slice(&hash);
+        });
 
     Ok(())
 }
@@ -312,29 +317,32 @@ pub fn butterfly_layer<D: Domain>(
     let graph: ButterflyGraph = config.into();
 
     // Iterate over each node.
-    for (node_index, node) in layer_out.chunks_mut(NODE_SIZE).enumerate() {
-        let node_index = node_index as u32;
+    layer_out
+        .par_chunks_mut(NODE_SIZE)
+        .enumerate()
+        .for_each(|(node_index, node)| {
+            let node_index = node_index as u32;
 
-        let mut hasher = Sha256::new();
+            let mut hasher = Sha256::new();
 
-        // Hash prefix + replica id, each 32 bytes.
-        let prefix = hash_prefix(layer_index, node_index, window_index);
-        hasher.input(&[&prefix[..], AsRef::<[u8]>::as_ref(replica_id)]);
+            // Hash prefix + replica id, each 32 bytes.
+            let prefix = hash_prefix(layer_index, node_index, window_index);
+            hasher.input(&[&prefix[..], AsRef::<[u8]>::as_ref(replica_id)]);
 
-        // Compute hash of the parents.
-        for (parent_a, parent_b) in graph.parents(node_index, layer_index).tuples() {
-            let parent_a = parent_a as usize;
-            let parent_b = parent_b as usize;
-            let parent_a_value = &layer_in[parent_a * NODE_SIZE..(parent_a + 1) * NODE_SIZE];
-            let parent_b_value = &layer_in[parent_b * NODE_SIZE..(parent_b + 1) * NODE_SIZE];
+            // Compute hash of the parents.
+            for (parent_a, parent_b) in graph.parents(node_index, layer_index).tuples() {
+                let parent_a = parent_a as usize;
+                let parent_b = parent_b as usize;
+                let parent_a_value = &layer_in[parent_a * NODE_SIZE..(parent_a + 1) * NODE_SIZE];
+                let parent_b_value = &layer_in[parent_b * NODE_SIZE..(parent_b + 1) * NODE_SIZE];
 
-            hasher.input(&[parent_a_value, parent_b_value]);
-        }
+                hasher.input(&[parent_a_value, parent_b_value]);
+            }
 
-        let hash = hasher.finish();
-        node.copy_from_slice(&hash);
-        truncate_hash(node);
-    }
+            let hash = hasher.finish();
+            node.copy_from_slice(&hash);
+            truncate_hash(node);
+        });
 
     Ok(())
 }
@@ -460,9 +468,9 @@ fn lc_tree_from_slice<Tree: MerkleTreeTrait>(
     data: &[u8],
     config: StoreConfig,
 ) -> Result<LCMerkleTree<Tree>> {
-    MerkleTreeWrapper::try_from_iter_with_config(
-        data.chunks(NODE_SIZE)
-            .map(|node| <Tree::Hasher as Hasher>::Domain::try_from_bytes(node)),
+    MerkleTreeWrapper::from_par_iter_with_config(
+        data.par_chunks(NODE_SIZE)
+            .map(|node| <Tree::Hasher as Hasher>::Domain::try_from_bytes(node).unwrap()),
         config,
     )
 }
@@ -472,9 +480,9 @@ fn tree_from_slice<Tree: MerkleTreeTrait>(
     data: &[u8],
     config: StoreConfig,
 ) -> Result<MerkleTree<Tree>> {
-    let mut tree = MerkleTreeWrapper::try_from_iter_with_config(
-        data.chunks(NODE_SIZE)
-            .map(|node| <Tree::Hasher as Hasher>::Domain::try_from_bytes(node)),
+    let mut tree = MerkleTreeWrapper::from_par_iter_with_config(
+        data.par_chunks(NODE_SIZE)
+            .map(|node| <Tree::Hasher as Hasher>::Domain::try_from_bytes(node).unwrap()),
         config.clone(),
     )?;
 
