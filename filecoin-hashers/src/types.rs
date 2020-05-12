@@ -34,6 +34,7 @@ pub trait Domain:
     fn write_bytes(&self, _: &mut [u8]) -> Result<()>;
 
     fn random<R: rand::RngCore>(rng: &mut R) -> Self;
+    fn into_repr(self) -> FrRepr;
 }
 
 pub trait HashFunction<T: Domain>:
