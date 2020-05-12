@@ -372,7 +372,7 @@ mod tests {
         );
 
         // Generate a replica path.
-        let temp_dir = tempdir::TempDir::new("test-extract-all").unwrap();
+        let temp_dir = tempdir::TempDir::new("test-prove-verify").unwrap();
         let temp_path = temp_dir.path();
         let replica_path = temp_path.join("replica-path");
 
