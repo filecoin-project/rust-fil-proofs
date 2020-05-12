@@ -57,10 +57,24 @@ pub fn batch_hash(
 /// Adds two `FrRepr`.
 /// This avoids converting to Montgomery form, which is only needed to do multiplications, and
 /// happens when converting into and from an `Fr`.
+#[inline]
 fn add_assign(a: &mut FrRepr, b: &FrRepr) {
+    debug_assert_eq!(a.0.len(), 4);
+
     a.add_nocarry(b);
+
     // check if we need to reduce by the modulus
-    if !(&*a < &Fr::char()) {
+    let modulus = Fr::char();
+
+    // TODO: Port this check back to fff
+    let is_valid = (a.0[3] < modulus.0[3])
+        || (a.0[3] == modulus.0[3]
+            && ((a.0[2] < modulus.0[2])
+                || (a.0[2] == modulus.0[2]
+                    && ((a.0[1] < modulus.0[1])
+                        || (a.0[1] == modulus.0[1] && (a.0[0] < modulus.0[0]))))));
+
+    if !is_valid {
         a.sub_noborrow(&Fr::char());
     }
 }
