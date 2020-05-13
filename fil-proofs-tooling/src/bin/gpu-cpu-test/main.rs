@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, HashMap};
+use std::collections::HashMap;
 use std::process::{self, Child, Command, Stdio};
 use std::str;
 use std::sync::mpsc::{self, Receiver, Sender, TryRecvError};
@@ -6,13 +6,26 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use clap::{arg_enum, value_t, App, Arg};
-use filecoin_proofs::{constants::DefaultOctLCTree, PrivateReplicaInfo};
+use fil_proofs_tooling::shared::{create_replica, PROVER_ID, RANDOMNESS};
+use filecoin_proofs::constants::{SectorShape8MiB, SECTOR_SIZE_8_MIB};
+use filecoin_proofs::types::{PoStConfig, SectorSize};
+use filecoin_proofs::{
+    generate_winning_post, PoStType, PrivateReplicaInfo, WINNING_POST_CHALLENGE_COUNT,
+    WINNING_POST_SECTOR_COUNT,
+};
 use log::{debug, info};
 use storage_proofs::sector::SectorId;
 
-mod election_post;
-
+type MerkleTree = SectorShape8MiB;
+const SECTOR_SIZE: u64 = SECTOR_SIZE_8_MIB;
 const TIMEOUT: u64 = 5 * 60;
+const POST_CONFIG: PoStConfig = PoStConfig {
+    sector_size: SectorSize(SECTOR_SIZE),
+    challenge_count: WINNING_POST_CHALLENGE_COUNT,
+    sector_count: WINNING_POST_SECTOR_COUNT,
+    typ: PoStType::Winning,
+    priority: false,
+};
 
 arg_enum! {
     #[derive(Debug)]
@@ -48,11 +61,22 @@ pub fn colored_with_thread(
     )
 }
 
+fn generate_post(priv_replica_info: &[(SectorId, PrivateReplicaInfo<MerkleTree>)]) {
+    generate_winning_post::<MerkleTree>(&POST_CONFIG, &RANDOMNESS, priv_replica_info, PROVER_ID)
+        .expect("failed to generate PoSt");
+}
+
+fn generate_post_in_priority(priv_replica_info: &[(SectorId, PrivateReplicaInfo<MerkleTree>)]) {
+    let mut post_config = POST_CONFIG;
+    post_config.priority = true;
+    generate_winning_post::<MerkleTree>(&post_config, &RANDOMNESS, priv_replica_info, PROVER_ID)
+        .expect("failed to generate PoSt with high priority");
+}
+
 fn thread_fun(
     rx: Receiver<()>,
     gpu_stealing: bool,
-    priv_replica_infos: &BTreeMap<SectorId, PrivateReplicaInfo<DefaultOctLCTree>>,
-    candidates: &[Candidate],
+    priv_replica_infos: &[(SectorId, PrivateReplicaInfo<MerkleTree>)],
 ) -> RunInfo {
     let timing = Instant::now();
     let mut iteration = 0;
@@ -63,10 +87,10 @@ fn thread_fun(
         // already there
         if gpu_stealing {
             // Run the actual proof
-            election_post::do_generate_post_in_priority(&priv_replica_infos, &candidates);
+            generate_post_in_priority(&priv_replica_infos);
         } else {
             // Run the actual proof
-            election_post::do_generate_post(&priv_replica_infos, &candidates);
+            generate_post(&priv_replica_infos);
         }
 
         // Waiting for this thread to be killed
@@ -88,16 +112,13 @@ fn thread_fun(
 fn spawn_thread(
     name: &str,
     gpu_stealing: bool,
-    priv_replica_infos: BTreeMap<SectorId, PrivateReplicaInfo<DefaultOctLCTree>>,
-    candidates: Vec<Candidate>,
+    priv_replica_info: (SectorId, PrivateReplicaInfo<MerkleTree>),
 ) -> (Sender<()>, thread::JoinHandle<RunInfo>) {
     let (tx, rx) = mpsc::channel();
 
     let thread_config = thread::Builder::new().name(name.to_string());
     let handler = thread_config
-        .spawn(move || -> RunInfo {
-            thread_fun(rx, gpu_stealing, &priv_replica_infos, &candidates)
-        })
+        .spawn(move || -> RunInfo { thread_fun(rx, gpu_stealing, &[priv_replica_info]) })
         .expect("Could not spawn thread");
 
     (tx, handler)
@@ -110,25 +131,19 @@ fn threads_mode(parallel: u8, gpu_stealing: bool) {
     let mut threads: Vec<Option<thread::JoinHandle<_>>> = Vec::new();
 
     // Create fixtures only once for both threads
-    let priv_replica_info = election_post::generate_priv_replica_info_fixture();
-    let candidates = election_post::generate_candidates_fixture(&priv_replica_info);
+    let (sector_id, replica_output) = create_replica::<MerkleTree>(SECTOR_SIZE);
+    let priv_replica_info = (sector_id, replica_output.private_replica_info);
 
     // Put each proof into it's own scope (the other one is due to the if statement)
     {
-        let (tx, handler) = spawn_thread(
-            "high",
-            gpu_stealing,
-            priv_replica_info.clone(),
-            candidates.clone(),
-        );
+        let (tx, handler) = spawn_thread("high", gpu_stealing, priv_replica_info.clone());
         senders.push(tx);
         threads.push(Some(handler));
     }
 
     (1..parallel).for_each(|ii| {
         let name = format!("low-{:02}", ii);
-        let (tx, handler) =
-            spawn_thread(&name, false, priv_replica_info.clone(), candidates.clone());
+        let (tx, handler) = spawn_thread(&name, false, priv_replica_info.clone());
         senders.push(tx);
         threads.push(Some(handler));
     });
@@ -151,7 +166,7 @@ fn threads_mode(parallel: u8, gpu_stealing: bool) {
             let run_info = handler.join().unwrap();
             info!("Thread {} info: {:?}", thread_name, run_info);
             // Also print it, so that we can get that information in processes mode
-            print!("Thread {} info: {:?}", thread_name, run_info);
+            println!("Thread {} info: {:?}", thread_name, run_info);
         }
     }
 }
@@ -203,8 +218,6 @@ fn spawn_process(name: &str, gpu_stealing: bool) -> Child {
 }
 
 fn main() {
-    unimplemented!("election post is no more, needs to switch to winning post");
-
     flexi_logger::Logger::with_env()
         .format(colored_with_thread)
         .start()
@@ -217,7 +230,7 @@ fn main() {
             Arg::with_name("parallel")
                 .long("parallel")
                 .help("Run multiple proofs in parallel.")
-                .default_value("2"),
+                .default_value("3"),
         )
         .arg(
             Arg::with_name("gpu-stealing")
