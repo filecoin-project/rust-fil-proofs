@@ -60,6 +60,19 @@ pub fn create_piece(piece_bytes: UnpaddedBytesAmount) -> NamedTempFile {
     file
 }
 
+/// Create a replica for a single sector
+pub fn create_replica<Tree: 'static + MerkleTreeTrait>(
+    sector_size: u64,
+) -> (SectorId, PreCommitReplicaOutput<Tree>) {
+    let (_porep_config, result) = create_replicas::<Tree>(SectorSize(sector_size), 1, false);
+    // Extract the sector ID and replica output out of the result
+    result
+        .unwrap()
+        .0
+        .pop()
+        .expect("failed to create replica outputs")
+}
+
 #[allow(clippy::type_complexity)]
 pub fn create_replicas<Tree: 'static + MerkleTreeTrait>(
     sector_size: SectorSize,
