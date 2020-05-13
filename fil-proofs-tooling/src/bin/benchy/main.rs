@@ -8,7 +8,6 @@ use crate::prodbench::ProdbenchInputs;
 mod hash_fns;
 mod merkleproofs;
 mod prodbench;
-mod shared;
 mod stacked;
 mod window_post;
 mod winning_post;
