@@ -5,7 +5,6 @@ use rand::RngCore;
 use rayon::prelude::*;
 use tempfile::NamedTempFile;
 
-use fil_proofs_tooling::{measure, FuncMeasurement};
 use filecoin_proofs::constants::POREP_PARTITIONS;
 use filecoin_proofs::types::{
     MerkleTreeTrait, PaddedBytesAmount, PoRepConfig, SectorSize, UnpaddedBytesAmount,
@@ -16,9 +15,11 @@ use filecoin_proofs::{
 };
 use storage_proofs::sector::SectorId;
 
-pub(super) const PROVER_ID: [u8; 32] = [9; 32];
-pub(super) const RANDOMNESS: [u8; 32] = [44; 32];
-pub(super) const TICKET_BYTES: [u8; 32] = [1; 32];
+use crate::{measure, FuncMeasurement};
+
+pub const PROVER_ID: [u8; 32] = [9; 32];
+pub const RANDOMNESS: [u8; 32] = [44; 32];
+pub const TICKET_BYTES: [u8; 32] = [1; 32];
 
 pub struct PreCommitReplicaOutput<Tree: 'static + MerkleTreeTrait> {
     pub piece_info: Vec<PieceInfo>,

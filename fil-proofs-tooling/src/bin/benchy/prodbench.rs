@@ -1,4 +1,5 @@
 use bellperson::Circuit;
+use fil_proofs_tooling::shared::{create_replicas, PROVER_ID, RANDOMNESS, TICKET_BYTES};
 use fil_proofs_tooling::{measure, Metadata};
 use filecoin_proofs::constants::{DefaultOctTree, POREP_PARTITIONS};
 use filecoin_proofs::types::PaddedBytesAmount;
@@ -22,8 +23,6 @@ use storage_proofs::measurements::Operation;
 use storage_proofs::measurements::OP_MEASUREMENTS;
 use storage_proofs::parameter_cache::CacheableParameters;
 use storage_proofs::proof::ProofScheme;
-
-use crate::shared::{create_replicas, PROVER_ID, RANDOMNESS, TICKET_BYTES};
 
 const SEED: [u8; 16] = [
     0x59, 0x62, 0xbe, 0x5d, 0x76, 0x3d, 0x31, 0x8d, 0x17, 0xdb, 0x37, 0x32, 0x54, 0x06, 0xbc, 0xe5,

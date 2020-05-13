@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
 use std::io::{stdout, Seek, SeekFrom, Write};
 
+use fil_proofs_tooling::shared::{PROVER_ID, RANDOMNESS, TICKET_BYTES};
 use fil_proofs_tooling::{measure, Metadata};
 use filecoin_proofs::constants::{
     POREP_PARTITIONS, WINDOW_POST_CHALLENGE_COUNT, WINDOW_POST_SECTOR_COUNT,
@@ -20,8 +21,6 @@ use serde::Serialize;
 use storage_proofs::merkle::MerkleTreeTrait;
 use storage_proofs::sector::SectorId;
 use tempfile::NamedTempFile;
-
-use crate::shared::{PROVER_ID, RANDOMNESS, TICKET_BYTES};
 
 const SECTOR_ID: u64 = 0;
 
