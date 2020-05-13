@@ -11,9 +11,8 @@ use filecoin_proofs::types::{
     MerkleTreeTrait, PaddedBytesAmount, PoRepConfig, SectorSize, UnpaddedBytesAmount,
 };
 use filecoin_proofs::{
-    add_piece, constants::DefaultOctLCTree, seal_pre_commit_phase1, seal_pre_commit_phase2,
-    validate_cache_for_precommit_phase2, PieceInfo, PoRepProofPartitions, PrivateReplicaInfo,
-    PublicReplicaInfo, SealPreCommitOutput,
+    add_piece, seal_pre_commit_phase1, seal_pre_commit_phase2, validate_cache_for_precommit_phase2,
+    PieceInfo, PoRepProofPartitions, PrivateReplicaInfo, PublicReplicaInfo, SealPreCommitOutput,
 };
 use storage_proofs::sector::SectorId;
 
@@ -62,14 +61,14 @@ pub fn create_piece(piece_bytes: UnpaddedBytesAmount) -> NamedTempFile {
 }
 
 #[allow(clippy::type_complexity)]
-pub fn create_replicas(
+pub fn create_replicas<Tree: 'static + MerkleTreeTrait>(
     sector_size: SectorSize,
     qty_sectors: usize,
     only_add: bool,
 ) -> (
     PoRepConfig,
     Option<(
-        Vec<(SectorId, PreCommitReplicaOutput<DefaultOctLCTree>)>,
+        Vec<(SectorId, PreCommitReplicaOutput<Tree>)>,
         FuncMeasurement<Vec<SealPreCommitOutput>>,
     )>,
 ) {
@@ -88,7 +87,7 @@ pub fn create_replicas(
         ),
     };
 
-    let mut out: Vec<(SectorId, PreCommitReplicaOutput<DefaultOctLCTree>)> = Default::default();
+    let mut out: Vec<(SectorId, PreCommitReplicaOutput<Tree>)> = Default::default();
     let mut sector_ids = Vec::new();
     let mut cache_dirs = Vec::new();
     let mut staged_files = Vec::new();
@@ -105,10 +104,12 @@ pub fn create_replicas(
 
         let sealed_file =
             NamedTempFile::new().expect("could not create temp file for sealed sector");
-        // Persist the sealed replica.
-        let (_, replica_path) = sealed_file.keep().expect("failed to persist replica");
+        // Prevent that the sealed sector file gets deleted when `sealed_file` runs out of scope
+        let (_, sealed_path) = sealed_file
+            .keep()
+            .expect("failed to leep sealed sector file around");
 
-        sealed_files.push(replica_path);
+        sealed_files.push(sealed_path);
         staged_files.push(staged_file);
     }
 
@@ -170,7 +171,7 @@ pub fn create_replicas(
             .into_iter()
             .enumerate()
             .map(|(i, phase1)| {
-                validate_cache_for_precommit_phase2::<_, _, DefaultOctLCTree>(
+                validate_cache_for_precommit_phase2::<_, _, Tree>(
                     &cache_dirs[i],
                     &sealed_files[i],
                     &phase1,

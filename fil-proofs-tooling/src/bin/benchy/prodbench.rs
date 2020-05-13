@@ -183,7 +183,11 @@ pub fn run(
 
     assert!(inputs.num_sectors > 0, "Missing num_sectors");
 
-    let (cfg, repls) = create_replicas(sector_size, inputs.num_sectors as usize, only_add_piece);
+    let (cfg, repls) = create_replicas::<DefaultOctLCTree>(
+        sector_size,
+        inputs.num_sectors as usize,
+        only_add_piece,
+    );
 
     if only_add_piece || only_replicate {
         augment_with_op_measurements(&mut outputs);
