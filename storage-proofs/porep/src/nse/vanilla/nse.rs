@@ -249,9 +249,10 @@ impl<Tree: MerkleTreeTrait, G: Hasher> TemporaryAuxCache<Tree, G> {
                 } else {
                     // with replica, last layer
                     // split for window level
-                    let (store_configs, replica_paths) = split_config_and_replica(
+                    let (store_configs, replica_config) = split_config_and_replica(
                         store_config,
                         replica_path.clone(),
+                        config.num_nodes_window,
                         config.num_windows(),
                     )?;
 
@@ -262,10 +263,10 @@ impl<Tree: MerkleTreeTrait, G: Hasher> TemporaryAuxCache<Tree, G> {
                         Tree::Arity,
                         Tree::SubTreeArity,
                         Tree::TopTreeArity,
-                    >::from_store_configs_and_replicas(
+                    >::from_store_configs_and_replica(
                         config.num_nodes_window,
                         &store_configs,
-                        &replica_paths,
+                        &replica_config,
                     )
                 }
             })
