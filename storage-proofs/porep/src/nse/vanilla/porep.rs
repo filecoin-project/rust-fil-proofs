@@ -3,6 +3,7 @@ use std::path::PathBuf;
 use anyhow::Context;
 use generic_array::typenum::{Unsigned, U2};
 use merkletree::{merkle::get_merkle_tree_len, store::StoreConfig};
+use positioned_io::WriteAt;
 use rayon::prelude::*;
 use storage_proofs_core::{
     cache_key::CacheKey,
@@ -86,7 +87,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> PoRep<'a, Tree::H
         let mut windowed_store_configs =
             vec![Vec::with_capacity(config.num_layers()); config.num_windows()];
 
-        let mut windowed_replica_paths = None;
+        let mut windowed_replica_config = None;
 
         for (layer_index, store_config) in layered_store_configs.into_iter().enumerate() {
             if layer_index < config.num_layers() - 1 {
@@ -96,40 +97,46 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> PoRep<'a, Tree::H
                 }
             } else {
                 // create replica paths for the last one
-                let (configs, paths) = split_config_and_replica(
+                let (configs, replica_config) = split_config_and_replica(
                     store_config,
                     replica_path.clone(),
+                    config.num_nodes_window,
                     config.num_windows(),
                 )?;
-                windowed_replica_paths = Some(paths);
+                windowed_replica_config = Some(replica_config);
                 for (window_index, store_config) in configs.into_iter().enumerate() {
                     windowed_store_configs[window_index].push(store_config);
                 }
             }
         }
 
+        let windowed_replica_config = windowed_replica_config.unwrap();
+        debug_assert_eq!(windowed_replica_config.offsets.len(), config.num_windows());
+
         let trees = data
             .as_mut()
             .par_chunks_mut(config.window_size())
             .enumerate()
             .zip(windowed_store_configs.into_par_iter())
-            .zip(windowed_replica_paths.unwrap().into_par_iter())
-            .map(
-                |(((window_index, window_data), store_configs), replica_path)| {
-                    let (trees, replica_tree) = labels::encode_with_trees::<Tree>(
-                        config,
-                        store_configs,
-                        window_index as u32,
-                        replica_id,
-                        window_data,
-                    )?;
+            .map(|((window_index, window_data), store_configs)| {
+                let (trees, replica_tree) = labels::encode_with_trees::<Tree>(
+                    config,
+                    store_configs,
+                    window_index as u32,
+                    replica_id,
+                    window_data,
+                )?;
 
-                    // write replica
-                    std::fs::write(replica_path, window_data)
-                        .context("failed to write replica data")?;
-                    Ok((trees, replica_tree))
-                },
-            )
+                // write replica
+                let offset = windowed_replica_config.offsets[window_index];
+                let mut file = std::fs::OpenOptions::new()
+                    .create(true)
+                    .write(true)
+                    .open(&windowed_replica_config.path)?;
+                file.write_all_at(offset as u64, window_data)
+                    .context("failed to write replica data")?;
+                Ok((trees, replica_tree))
+            })
             .collect::<Result<Vec<(Vec<_>, _)>>>()?;
 
         debug_assert_eq!(trees.len(), config.num_windows());
