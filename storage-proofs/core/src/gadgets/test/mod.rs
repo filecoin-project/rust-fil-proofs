@@ -59,9 +59,9 @@ impl Ord for OrderedVariable {
     }
 }
 
-fn proc_lc<E: Engine>(terms: &[(Variable, E::Fr)]) -> BTreeMap<OrderedVariable, E::Fr> {
+fn proc_lc<E: Engine>(terms: &LinearCombination<E>) -> BTreeMap<OrderedVariable, E::Fr> {
     let mut map = BTreeMap::new();
-    for &(var, coeff) in terms {
+    for (&var, &coeff) in terms.iter() {
         map.entry(OrderedVariable(var))
             .or_insert_with(E::Fr::zero)
             .add_assign(&coeff);
@@ -82,7 +82,7 @@ fn proc_lc<E: Engine>(terms: &[(Variable, E::Fr)]) -> BTreeMap<OrderedVariable, 
     map
 }
 
-fn hash_lc<E: Engine>(terms: &[(Variable, E::Fr)], h: &mut Blake2s) {
+fn hash_lc<E: Engine>(terms: &LinearCombination<E>, h: &mut Blake2s) {
     let map = proc_lc::<E>(terms);
 
     let mut buf = [0u8; 9 + 32];
@@ -110,10 +110,10 @@ fn hash_lc<E: Engine>(terms: &[(Variable, E::Fr)], h: &mut Blake2s) {
     }
 }
 
-fn _eval_lc2<E: Engine>(terms: &[(Variable, E::Fr)], inputs: &[E::Fr], aux: &[E::Fr]) -> E::Fr {
+fn _eval_lc2<E: Engine>(terms: &LinearCombination<E>, inputs: &[E::Fr], aux: &[E::Fr]) -> E::Fr {
     let mut acc = E::Fr::zero();
 
-    for &(var, ref coeff) in terms {
+    for (&var, coeff) in terms.iter() {
         let mut tmp = match var.get_unchecked() {
             Index::Input(index) => inputs[index],
             Index::Aux(index) => aux[index],
@@ -127,13 +127,13 @@ fn _eval_lc2<E: Engine>(terms: &[(Variable, E::Fr)], inputs: &[E::Fr], aux: &[E:
 }
 
 fn eval_lc<E: Engine>(
-    terms: &[(Variable, E::Fr)],
+    terms: &LinearCombination<E>,
     inputs: &[(E::Fr, String)],
     aux: &[(E::Fr, String)],
 ) -> E::Fr {
     let mut acc = E::Fr::zero();
 
-    for &(var, ref coeff) in terms {
+    for (&var, coeff) in terms.iter() {
         let mut tmp = match var.get_unchecked() {
             Index::Input(index) => inputs[index].0,
             Index::Aux(index) => aux[index].0,
@@ -204,9 +204,9 @@ impl<E: Engine> TestConstraintSystem<E> {
         }
 
         for constraint in &self.constraints {
-            hash_lc::<E>(constraint.0.as_ref(), &mut h);
-            hash_lc::<E>(constraint.1.as_ref(), &mut h);
-            hash_lc::<E>(constraint.2.as_ref(), &mut h);
+            hash_lc::<E>(&constraint.0, &mut h);
+            hash_lc::<E>(&constraint.1, &mut h);
+            hash_lc::<E>(&constraint.2, &mut h);
         }
 
         let mut s = String::new();
@@ -219,9 +219,9 @@ impl<E: Engine> TestConstraintSystem<E> {
 
     pub fn which_is_unsatisfied(&self) -> Option<&str> {
         for &(ref a, ref b, ref c, ref path) in &self.constraints {
-            let mut a = eval_lc::<E>(a.as_ref(), &self.inputs, &self.aux);
-            let b = eval_lc::<E>(b.as_ref(), &self.inputs, &self.aux);
-            let c = eval_lc::<E>(c.as_ref(), &self.inputs, &self.aux);
+            let mut a = eval_lc::<E>(a, &self.inputs, &self.aux);
+            let b = eval_lc::<E>(b, &self.inputs, &self.aux);
+            let c = eval_lc::<E>(c, &self.inputs, &self.aux);
 
             a.mul_assign(&b);
 

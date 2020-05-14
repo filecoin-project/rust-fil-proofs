@@ -25,9 +25,9 @@ serde_json = "1.0"
 regex = "1"
 ff = { version = "0.2.1", package = "fff" }
 blake2b_simd = "0.5"
-bellperson = "0.7.0"
+bellperson = "0.8.0"
 paired = "0.19.0"
-fil-sapling-crypto = "0.5.1"
+fil-sapling-crypto = "0.6.0"
 clap = "2"
 log = "0.4.7"
 fil_logger = "0.1"
@@ -47,7 +47,7 @@ rand_xorshift = "0.2.0"
 typenum = "1.11.2"
 bitintr = "0.3.0"
 gperftools = { version = "0.2", optional = true }
-phase2 = { package = "phase21", version = "0.5.0" }
+phase2 = { package = "phase21", version = "0.6.0" }
 simplelog = "0.7.4"
 rand_chacha = "0.2.1"
 dialoguer = "0.6.2"
