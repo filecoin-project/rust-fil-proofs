@@ -1,52 +1,29 @@
 use std::path::PathBuf;
 
-use anyhow::Context;
 use generic_array::typenum::{Unsigned, U2};
 use merkletree::{merkle::get_merkle_tree_len, store::StoreConfig};
-use positioned_io::WriteAt;
 use rayon::prelude::*;
 use storage_proofs_core::{
     cache_key::CacheKey,
     error::Result,
     hasher::{Domain, Hasher},
-    merkle::{
-        split_config, split_config_and_replica, BinaryMerkleTree, MerkleTreeTrait,
-        MerkleTreeWrapper,
-    },
+    merkle::{split_config, BinaryMerkleTree, MerkleTreeTrait, MerkleTreeWrapper},
     util::NODE_SIZE,
     Data,
 };
 
 use super::{
-    hash_comm_r, labels, NarrowStackedExpander, PersistentAux, PublicParams, Tau, TemporaryAux,
+    hash_comm_r, labels, Config, NarrowStackedExpander, PersistentAux, PublicParams, Tau,
+    TemporaryAux,
 };
 use crate::PoRep;
 
-impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> PoRep<'a, Tree::Hasher, G>
-    for NarrowStackedExpander<'a, Tree, G>
-{
-    type Tau = Tau<<Tree::Hasher as Hasher>::Domain, <G as Hasher>::Domain>;
-    type ProverAux = (
-        PersistentAux<<Tree::Hasher as Hasher>::Domain>,
-        TemporaryAux<Tree, G>,
-    );
-
-    fn replicate(
-        pp: &'a PublicParams<Tree>,
-        replica_id: &<Tree::Hasher as Hasher>::Domain,
-        mut data: Data<'a>,
-        data_tree: Option<BinaryMerkleTree<G>>,
-        store_config: StoreConfig,
-        replica_path: PathBuf,
-    ) -> Result<(Self::Tau, Self::ProverAux)> {
-        let config = &pp.config;
+impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> NarrowStackedExpander<'a, Tree, G> {
+    fn generate_data_tree_config(
+        config: &Config,
+        store_config: &StoreConfig,
+    ) -> Result<StoreConfig> {
         let num_nodes_sector = config.num_nodes_sector();
-
-        assert_eq!(num_nodes_sector % config.num_nodes_window, 0);
-        assert_eq!(data.len(), config.sector_size);
-        assert_eq!(config.sector_size % config.window_size(), 0);
-
-        // ensure there is a data tree
         let mut data_tree_config = StoreConfig::from_config(
             &store_config,
             CacheKey::CommDTree.to_string(),
@@ -54,20 +31,23 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> PoRep<'a, Tree::H
         );
         data_tree_config.levels =
             StoreConfig::default_cached_above_base_layer(num_nodes_sector, U2::to_usize());
-        data.ensure_data()?;
 
-        let data_tree = match data_tree {
-            Some(tree) => tree,
-            None => BinaryMerkleTree::from_par_iter_with_config(
-                data.as_ref()
-                    .par_chunks(NODE_SIZE)
-                    .map(|chunk| G::Domain::try_from_bytes(chunk).expect("invalid data")),
-                data_tree_config.clone(),
-            )?,
-        };
+        Ok(data_tree_config)
+    }
 
-        // phase 1
+    /// Construct the merkle tree for the orginal data, for the whole sector.
+    fn build_data_tree(data: &[u8], data_tree_config: StoreConfig) -> Result<BinaryMerkleTree<G>> {
+        BinaryMerkleTree::from_par_iter_with_config(
+            data.par_chunks(NODE_SIZE)
+                .map(|chunk| G::Domain::try_from_bytes(chunk).expect("invalid data")),
+            data_tree_config,
+        )
+    }
 
+    fn generate_store_configs(
+        config: &Config,
+        store_config: &StoreConfig,
+    ) -> Result<(Vec<Vec<StoreConfig>>, StoreConfig)> {
         let mut layer_store_config = StoreConfig::from_config(
             &store_config,
             CacheKey::LabelLayer.to_string(),
@@ -87,31 +67,54 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> PoRep<'a, Tree::H
         let mut windowed_store_configs =
             vec![Vec::with_capacity(config.num_layers()); config.num_windows()];
 
-        let mut windowed_replica_config = None;
-
-        for (layer_index, store_config) in layered_store_configs.into_iter().enumerate() {
-            if layer_index < config.num_layers() - 1 {
-                let configs = split_config(store_config, config.num_windows())?;
-                for (window_index, store_config) in configs.into_iter().enumerate() {
-                    windowed_store_configs[window_index].push(store_config);
-                }
-            } else {
-                // create replica paths for the last one
-                let (configs, replica_config) = split_config_and_replica(
-                    store_config,
-                    replica_path.clone(),
-                    config.num_nodes_window,
-                    config.num_windows(),
-                )?;
-                windowed_replica_config = Some(replica_config);
-                for (window_index, store_config) in configs.into_iter().enumerate() {
-                    windowed_store_configs[window_index].push(store_config);
-                }
+        for store_config in layered_store_configs.into_iter() {
+            let configs = split_config(store_config, config.num_windows())?;
+            for (window_index, store_config) in configs.into_iter().enumerate() {
+                windowed_store_configs[window_index].push(store_config);
             }
         }
 
-        let windowed_replica_config = windowed_replica_config.unwrap();
-        debug_assert_eq!(windowed_replica_config.offsets.len(), config.num_windows());
+        Ok((windowed_store_configs, layer_store_config))
+    }
+}
+
+impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> PoRep<'a, Tree::Hasher, G>
+    for NarrowStackedExpander<'a, Tree, G>
+{
+    type Tau = Tau<<Tree::Hasher as Hasher>::Domain, <G as Hasher>::Domain>;
+    type ProverAux = (
+        PersistentAux<<Tree::Hasher as Hasher>::Domain>,
+        TemporaryAux<Tree, G>,
+    );
+
+    fn replicate(
+        pp: &'a PublicParams<Tree>,
+        replica_id: &<Tree::Hasher as Hasher>::Domain,
+        mut data: Data<'a>,
+        data_tree: Option<BinaryMerkleTree<G>>,
+        store_config: StoreConfig,
+        _replica_path: PathBuf,
+    ) -> Result<(Self::Tau, Self::ProverAux)> {
+        let config = &pp.config;
+        let num_nodes_sector = config.num_nodes_sector();
+
+        assert_eq!(num_nodes_sector % config.num_nodes_window, 0);
+        assert_eq!(data.len(), config.sector_size);
+        assert_eq!(config.sector_size % config.window_size(), 0);
+
+        data.ensure_data()?;
+
+        // Construct the data tree.
+        let data_tree_config = Self::generate_data_tree_config(config, &store_config)?;
+        let data_tree = match data_tree {
+            Some(tree) => tree,
+            None => Self::build_data_tree(data.as_ref(), data_tree_config.clone())?,
+        };
+
+        // Generate labeling layers and encode the data.
+
+        let (windowed_store_configs, layer_store_config) =
+            Self::generate_store_configs(config, &store_config)?;
 
         let trees = data
             .as_mut()
@@ -126,15 +129,6 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> PoRep<'a, Tree::H
                     replica_id,
                     window_data,
                 )?;
-
-                // write replica
-                let offset = windowed_replica_config.offsets[window_index];
-                let mut file = std::fs::OpenOptions::new()
-                    .create(true)
-                    .write(true)
-                    .open(&windowed_replica_config.path)?;
-                file.write_all_at(offset as u64, window_data)
-                    .context("failed to write replica data")?;
                 Ok((trees, replica_tree))
             })
             .collect::<Result<Vec<(Vec<_>, _)>>>()?;
@@ -155,9 +149,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> PoRep<'a, Tree::H
             replica_trees.push(replica_tree);
         }
 
-        // phase 2
-
-        // build main trees for each layer
+        // Build main trees for each layer
         let mut trees_layers = Vec::new();
         for trees in layered_trees.into_iter() {
             debug_assert_eq!(trees.len(), config.num_windows());
@@ -170,6 +162,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> PoRep<'a, Tree::H
             >::from_trees(trees)?);
         }
 
+        // Build main tree for the replica layer
         let replica_tree = MerkleTreeWrapper::<
             Tree::Hasher,
             _,
@@ -183,7 +176,9 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> PoRep<'a, Tree::H
             comm_replica: replica_tree.root(),
         };
 
+        // Calculate comm_r
         let comm_r = hash_comm_r(&p_aux.comm_layers, p_aux.comm_replica);
+
         let tau = Tau::<<Tree::Hasher as Hasher>::Domain, G::Domain> {
             comm_d: data_tree.root(),
             comm_r: comm_r.into(),

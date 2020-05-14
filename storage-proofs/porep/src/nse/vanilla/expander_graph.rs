@@ -28,14 +28,6 @@ impl ExpanderGraph {
     }
 }
 
-/// Iterator created by the [`expanded_parents`] method.
-#[derive(Debug)]
-pub struct ExpanderGraphExpandedParentsIter<'a> {
-    parents: ExpanderGraphParentsIter<'a>,
-    current: Option<Parent>,
-    i: usize,
-}
-
 /// Iterator created by the [`parents`] method.
 #[derive(Debug)]
 pub struct ExpanderGraphParentsIter<'a> {
