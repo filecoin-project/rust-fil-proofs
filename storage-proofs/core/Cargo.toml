@@ -13,7 +13,8 @@ bench = false
 
 [dependencies]
 rand = "0.7"
-merkletree = "0.19.0"
+#merkletree = "0.19.0"
+merkletree = { git = "https://github.com/filecoin-project/merkle_light", branch = "rename-fix-ob1" }
 byteorder = "1"
 config = "0.9.3"
 itertools = "0.9"

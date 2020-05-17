@@ -280,7 +280,7 @@ pub fn split_config(config: StoreConfig, count: usize) -> Result<Vec<StoreConfig
             format!("{}-{}", config.id, i),
             None,
         ));
-        configs[i].levels = config.levels;
+        configs[i].rows_to_discard = config.rows_to_discard;
     }
 
     Ok(configs)
@@ -346,7 +346,7 @@ pub fn split_config_and_replica(
             format!("{}-{}", config.id, i),
             None,
         ));
-        configs[i].levels = config.levels;
+        configs[i].rows_to_discard = config.rows_to_discard;
 
         replica_offsets.push(i * sub_tree_width * NODE_SIZE);
     }
@@ -409,7 +409,7 @@ where
         let config = StoreConfig::new(
             &temp_path,
             format!("test-lc-tree-{}", id),
-            StoreConfig::default_cached_above_base_layer(nodes, Tree::Arity::to_usize()),
+            StoreConfig::default_rows_to_discard(nodes, Tree::Arity::to_usize()),
         );
 
         let mut tree =

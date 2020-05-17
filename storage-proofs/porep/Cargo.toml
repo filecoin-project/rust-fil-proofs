@@ -12,7 +12,8 @@ readme = "README.md"
 storage-proofs-core = { path = "../core", version = "1.0.0" }
 sha2raw = { path = "../../sha2raw", version = "1.0.0" }
 rand = "0.7"
-merkletree = "0.19.0"
+#merkletree = "0.19.0"
+merkletree = { git = "https://github.com/filecoin-project/merkle_light", branch = "rename-fix-ob1" }
 memmap = "0.7"
 num-bigint = "0.2"
 num-traits = "0.2"

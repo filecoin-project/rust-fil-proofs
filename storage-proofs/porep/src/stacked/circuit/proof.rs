@@ -412,7 +412,7 @@ mod tests {
         let config = StoreConfig::new(
             cache_dir.path(),
             CacheKey::CommDTree.to_string(),
-            StoreConfig::default_cached_above_base_layer(nodes, BINARY_ARITY),
+            StoreConfig::default_rows_to_discard(nodes, BINARY_ARITY),
         );
 
         // Generate a replica path.
@@ -607,7 +607,7 @@ mod tests {
         let config = StoreConfig::new(
             cache_dir.path(),
             CacheKey::CommDTree.to_string(),
-            StoreConfig::default_cached_above_base_layer(nodes, BINARY_ARITY),
+            StoreConfig::default_rows_to_discard(nodes, BINARY_ARITY),
         );
 
         // Generate a replica path.

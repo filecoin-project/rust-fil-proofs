@@ -143,7 +143,7 @@ where
     let config = StoreConfig::new(
         cache_path.as_ref(),
         CacheKey::CommDTree.to_string(),
-        StoreConfig::default_cached_above_base_layer(
+        StoreConfig::default_rows_to_discard(
             base_tree_leafs,
             <DefaultBinaryTree as MerkleTreeTrait>::Arity::to_usize(),
         ),

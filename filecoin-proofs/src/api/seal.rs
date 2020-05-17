@@ -116,7 +116,7 @@ where
             u64::from(porep_config.sector_size),
             base_tree_size,
             base_tree_leafs,
-            StoreConfig::default_cached_above_base_layer(base_tree_leafs, BINARY_ARITY)
+            StoreConfig::default_rows_to_discard(base_tree_leafs, BINARY_ARITY)
         );
 
         // MT for original data is always named tree-d, and it will be
@@ -124,7 +124,7 @@ where
         let mut config = StoreConfig::new(
             cache_path.as_ref(),
             CacheKey::CommDTree.to_string(),
-            StoreConfig::default_cached_above_base_layer(base_tree_leafs, BINARY_ARITY),
+            StoreConfig::default_rows_to_discard(base_tree_leafs, BINARY_ARITY),
         );
         let data_tree = create_base_merkle_tree::<BinaryMerkleTree<DefaultPieceHasher>>(
             Some(config.clone()),
@@ -217,11 +217,11 @@ where
             "seal phase 2: base tree size {}, base tree leafs {}, cached above base {}",
             base_tree_size,
             base_tree_leafs,
-            StoreConfig::default_cached_above_base_layer(base_tree_leafs, BINARY_ARITY)
+            StoreConfig::default_rows_to_discard(base_tree_leafs, BINARY_ARITY)
         );
         ensure!(
-            config.levels
-                == StoreConfig::default_cached_above_base_layer(base_tree_leafs, BINARY_ARITY),
+            config.rows_to_discard
+                == StoreConfig::default_rows_to_discard(base_tree_leafs, BINARY_ARITY),
             "Invalid cache size specified"
         );
 
