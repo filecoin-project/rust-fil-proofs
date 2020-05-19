@@ -343,14 +343,9 @@ mod tests {
 
     use ff::Field;
     use generic_array::typenum::{U0, U2, U4, U8};
-    use memmap::MmapMut;
-    use memmap::MmapOptions;
     use merkletree::store::StoreConfig;
     use rand::{Rng, SeedableRng};
     use rand_xorshift::XorShiftRng;
-    use std::fs::OpenOptions;
-    use std::io::Write;
-    use std::path::Path;
     use storage_proofs_core::{
         cache_key::CacheKey,
         compound_proof,
@@ -360,6 +355,7 @@ mod tests {
         hasher::{Hasher, PedersenHasher, PoseidonHasher, Sha256Hasher},
         merkle::{get_base_tree_count, BinaryMerkleTree, DiskTree, MerkleTreeTrait},
         proof::ProofScheme,
+        test_helper::setup_replica,
     };
 
     use crate::stacked::{
@@ -367,22 +363,6 @@ mod tests {
         TemporaryAux, TemporaryAuxCache, BINARY_ARITY, EXP_DEGREE,
     };
     use crate::PoRep;
-
-    pub fn setup_replica(data: &[u8], replica_path: &Path) -> MmapMut {
-        let mut f = OpenOptions::new()
-            .read(true)
-            .write(true)
-            .create(true)
-            .open(replica_path)
-            .expect("Failed to create replica");
-        f.write_all(data).expect("Failed to write data to replica");
-
-        unsafe {
-            MmapOptions::new()
-                .map_mut(&f)
-                .expect("Failed to back memory map with tempfile")
-        }
-    }
 
     #[test]
     fn stacked_input_circuit_pedersen_base_2() {

@@ -282,15 +282,10 @@ mod tests {
     use super::*;
 
     use ff::Field;
-    use memmap::MmapMut;
-    use memmap::MmapOptions;
     use merkletree::store::StoreConfig;
     use pretty_assertions::assert_eq;
     use rand::SeedableRng;
     use rand_xorshift::XorShiftRng;
-    use std::fs::OpenOptions;
-    use std::io::Write;
-    use std::path::Path;
     use storage_proofs_core::{
         cache_key::CacheKey,
         compound_proof,
@@ -300,26 +295,11 @@ mod tests {
         hasher::{Hasher, PedersenHasher, PoseidonHasher},
         merkle::{BinaryMerkleTree, MerkleTreeTrait},
         proof::NoRequirements,
+        test_helper::setup_replica,
     };
 
     use crate::stacked::BINARY_ARITY;
     use crate::{drg, PoRep};
-
-    pub fn setup_replica(data: &[u8], replica_path: &Path) -> MmapMut {
-        let mut f = OpenOptions::new()
-            .read(true)
-            .write(true)
-            .create(true)
-            .open(replica_path)
-            .expect("Failed to create replica");
-        f.write_all(data).expect("Failed to write data to replica");
-
-        unsafe {
-            MmapOptions::new()
-                .map_mut(&f)
-                .expect("Failed to back memory map with tempfile")
-        }
-    }
 
     #[test]
     #[ignore] // Slow test – run only when compiled for release.

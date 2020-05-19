@@ -620,14 +620,9 @@ mod tests {
     use super::*;
 
     use ff::Field;
-    use memmap::MmapMut;
-    use memmap::MmapOptions;
     use paired::bls12_381::Fr;
     use rand::SeedableRng;
     use rand_xorshift::XorShiftRng;
-    use std::fs::OpenOptions;
-    use std::io::Write;
-    use std::path::Path;
     use storage_proofs_core::{
         cache_key::CacheKey,
         drgraph::{new_seed, BucketGraph, BASE_DEGREE},
@@ -635,27 +630,12 @@ mod tests {
         hasher::{Blake2sHasher, PedersenHasher, Sha256Hasher},
         merkle::{BinaryMerkleTree, MerkleTreeTrait},
         table_tests,
+        test_helper::setup_replica,
         util::data_at_node,
     };
     use tempfile;
 
     use crate::stacked::BINARY_ARITY;
-
-    pub fn setup_replica(data: &[u8], replica_path: &Path) -> MmapMut {
-        let mut f = OpenOptions::new()
-            .read(true)
-            .write(true)
-            .create(true)
-            .open(replica_path)
-            .expect("Failed to create replica");
-        f.write_all(data).expect("Failed to write data to replica");
-
-        unsafe {
-            MmapOptions::new()
-                .map_mut(&f)
-                .expect("Failed to back memory map with tempfile")
-        }
-    }
 
     fn test_extract_all<Tree: MerkleTreeTrait>() {
         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);

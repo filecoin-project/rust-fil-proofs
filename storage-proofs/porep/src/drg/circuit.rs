@@ -307,15 +307,10 @@ mod tests {
 
     use ff::Field;
     use generic_array::typenum;
-    use memmap::MmapMut;
-    use memmap::MmapOptions;
     use merkletree::store::StoreConfig;
     use pretty_assertions::assert_eq;
     use rand::SeedableRng;
     use rand_xorshift::XorShiftRng;
-    use std::fs::OpenOptions;
-    use std::io::Write;
-    use std::path::Path;
     use storage_proofs_core::{
         cache_key::CacheKey,
         compound_proof,
@@ -325,6 +320,7 @@ mod tests {
         hasher::PedersenHasher,
         merkle::MerkleProofTrait,
         proof::ProofScheme,
+        test_helper::setup_replica,
         util::data_at_node,
     };
 
@@ -332,22 +328,6 @@ mod tests {
     use crate::drg;
     use crate::stacked::BINARY_ARITY;
     use crate::PoRep;
-
-    pub fn setup_replica(data: &[u8], replica_path: &Path) -> MmapMut {
-        let mut f = OpenOptions::new()
-            .read(true)
-            .write(true)
-            .create(true)
-            .open(replica_path)
-            .expect("Failed to create replica");
-        f.write_all(data).expect("Failed to write data to replica");
-
-        unsafe {
-            MmapOptions::new()
-                .map_mut(&f)
-                .expect("Failed to back memory map with tempfile")
-        }
-    }
 
     #[test]
     fn drgporep_input_circuit_with_bls12_381() {

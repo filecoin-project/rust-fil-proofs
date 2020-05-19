@@ -873,14 +873,9 @@ mod tests {
     use super::*;
 
     use ff::Field;
-    use memmap::MmapMut;
-    use memmap::MmapOptions;
     use paired::bls12_381::Fr;
     use rand::{Rng, SeedableRng};
     use rand_xorshift::XorShiftRng;
-    use std::fs::OpenOptions;
-    use std::io::Write;
-    use std::path::Path;
     use storage_proofs_core::{
         drgraph::{new_seed, BASE_DEGREE},
         fr32::fr_into_bytes,
@@ -888,28 +883,13 @@ mod tests {
         merkle::MerkleTreeTrait,
         proof::ProofScheme,
         table_tests,
+        test_helper::setup_replica,
     };
 
     use crate::stacked::{PrivateInputs, SetupParams, EXP_DEGREE};
     use crate::PoRep;
 
     const DEFAULT_STACKED_LAYERS: usize = 11;
-
-    pub fn setup_replica(data: &[u8], replica_path: &Path) -> MmapMut {
-        let mut f = OpenOptions::new()
-            .read(true)
-            .write(true)
-            .create(true)
-            .open(replica_path)
-            .expect("Failed to create replica");
-        f.write_all(data).expect("Failed to write data to replica");
-
-        unsafe {
-            MmapOptions::new()
-                .map_mut(&f)
-                .expect("Failed to back memory map with tempfile")
-        }
-    }
 
     #[test]
     fn test_calculate_fixed_challenges() {
