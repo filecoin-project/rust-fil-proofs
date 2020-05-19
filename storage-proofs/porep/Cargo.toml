@@ -34,6 +34,16 @@ num_cpus = "1.10.1"
 tempdir = "0.3.7"
 tempfile = "3"
 rand_xorshift = "0.2.0"
+criterion = "0.3.2"
 
 [features]
 default = []
+
+[[bench]]
+name = "encode"
+harness = false
+
+[[bench]]
+name = "parents"
+harness = false
+

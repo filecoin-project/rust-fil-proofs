@@ -49,7 +49,6 @@ femme = "1.2.0"
 bitvec = "0.17"
 rand_xorshift = "0.2.0"
 pretty_assertions = "0.6.1"
-storage-proofs-porep = { path = "../porep", version = "1.0.0" }
 sha2raw = { path = "../../sha2raw", version = "1.0.0" }
 
 [features]
@@ -75,14 +74,6 @@ harness = false
 
 [[bench]]
 name = "drgraph"
-harness = false
-
-[[bench]]
-name = "encode"
-harness = false
-
-[[bench]]
-name = "parents"
 harness = false
 
 [[bench]]
