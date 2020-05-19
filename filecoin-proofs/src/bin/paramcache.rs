@@ -1,3 +1,6 @@
+use dialoguer::{theme::ColorfulTheme, MultiSelect};
+use humansize::{file_size_opts, FileSize};
+use indicatif::ProgressBar;
 use log::{info, warn};
 use rand::rngs::OsRng;
 use structopt::StructOpt;
@@ -9,7 +12,6 @@ use filecoin_proofs::parameters::{
 use filecoin_proofs::types::*;
 use filecoin_proofs::with_shape;
 use filecoin_proofs::PoStType;
-use std::collections::HashSet;
 use storage_proofs::compound_proof::CompoundProof;
 use storage_proofs::parameter_cache::CacheableParameters;
 use storage_proofs::porep::stacked::{StackedCompound, StackedDrg};
@@ -220,12 +222,44 @@ fn generate_params_porep(sector_size: u64) {
 
 // Run this from the command-line to pre-generate the groth parameters used by the API.
 pub fn main() {
+    // The logger is used and every message from this tool is also logged into those logs.
+    // Though the information is also printed to stdout, so that users who haven't set the
+    // `RUST_LOG` environment variable also see warngings/progress.
     fil_logger::init();
 
     let opts = Opt::from_args();
 
-    let sizes: HashSet<u64> = if opts.params_for_sector_sizes.is_empty() {
-        PUBLISHED_SECTOR_SIZES.iter().cloned().collect()
+    // Display interactive menu if no sizes are given
+    let sizes: Vec<u64> = if opts.params_for_sector_sizes.is_empty() {
+        let sector_sizes = PUBLISHED_SECTOR_SIZES
+            .iter()
+            .map(|sector_size| {
+                // Right aligning the numbers makes them easier to read
+                format!(
+                    "{: >7}",
+                    sector_size.file_size(file_size_opts::BINARY).unwrap(),
+                )
+            })
+            .collect::<Vec<_>>();
+
+        let selected_sector_sizes = MultiSelect::with_theme(&ColorfulTheme::default())
+            .with_prompt("Select the sizes that should be generated if not already cached")
+            .items(&sector_sizes[..])
+            .interact()
+            .unwrap();
+
+        // Extract the selected sizes
+        PUBLISHED_SECTOR_SIZES
+            .iter()
+            .enumerate()
+            .filter_map(|(index, size)| {
+                if selected_sector_sizes.contains(&index) {
+                    Some(*size)
+                } else {
+                    None
+                }
+            })
+            .collect()
     } else {
         opts.params_for_sector_sizes
             .into_iter()
@@ -235,20 +269,33 @@ pub fn main() {
                 }
 
                 warn!("ignoring invalid sector size: {}", size);
+                println!("ignoring invalid sector size: {}", size);
                 false
             })
             .collect()
     };
 
+    if sizes.is_empty() {
+        info!("No valid sector sizes given. Abort.");
+        println!("No valid sector sizes given. Abort.");
+    }
+
     let only_post = opts.only_post;
 
     for sector_size in sizes {
-        info!("Sector Size: {}", sector_size);
+        let human_size = sector_size.file_size(file_size_opts::BINARY).unwrap();
+        let message = format!("Generating sector size: {}", human_size);
+        info!("{}", &message);
+
+        let spinner = ProgressBar::new_spinner();
+        spinner.set_message(&message);
+        spinner.enable_steady_tick(100);
 
         generate_params_post(sector_size);
 
         if !only_post {
             generate_params_porep(sector_size);
         }
+        spinner.finish_with_message(&format!("✔ {}", &message));
     }
 }
