@@ -157,7 +157,6 @@ fn pedersen_circuit_benchmark(c: &mut Criterion) {
     );
 }
 
-#[allow(dead_code)]
 fn pedersen_md_circuit_benchmark(c: &mut Criterion) {
     let mut rng1 = thread_rng();
     let groth_params = generate_random_parameters::<Bls12, _, _>(
