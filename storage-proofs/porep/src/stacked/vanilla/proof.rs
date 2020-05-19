@@ -494,7 +494,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                     } else {
                         assert_eq!(node_index, nodes_count);
                         let tree_data = column_tree_builder.add_final_columns(&columns)?;
-                        let tree_data_len = tree_data.len();
+                        let tree_data_len = tree_data.1.len(); // WARN: Or tree_data.0?
                         info!(
                             "persisting base tree_c {}/{} of length {}",
                             i + 1,
@@ -508,7 +508,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                         let mut flat_tree_data = Vec::with_capacity(
                             tree_data_len * std::mem::size_of::<<Tree::Hasher as Hasher>::Domain>(),
                         );
-                        for el in &tree_data {
+                        for el in &tree_data.1 {  // WARN: Or tree_data.0?
                             let cur = fr_into_bytes(&el);
                             flat_tree_data.extend(&cur);
                         }
