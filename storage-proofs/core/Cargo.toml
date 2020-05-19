@@ -2,6 +2,7 @@
 name = "storage-proofs-core"
 version = "1.0.0"
 authors = ["dignifiedquire <me@dignifiedquire.com>"]
+description = "Core parts for proofs of storage"
 license = "MIT OR Apache-2.0"
 edition = "2018"
 repository = "https://github.com/filecoin-project/rust-fil-proofs"

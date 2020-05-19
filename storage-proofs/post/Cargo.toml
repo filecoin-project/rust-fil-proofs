@@ -3,6 +3,7 @@ name = "storage-proofs-post"
 version = "1.0.0"
 authors = ["dignifiedquire <me@dignifiedquire.com>"]
 license = "MIT OR Apache-2.0"
+description = "Proofs of Space Time"
 edition = "2018"
 repository = "https://github.com/filecoin-project/rust-fil-proofs"
 readme = "README.md"
