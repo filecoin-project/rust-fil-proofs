@@ -48,6 +48,8 @@ Configure to use nightly:
 
 **NOTE:** `rust-fil-proofs` can only be built for and run on 64-bit platforms; building will panic if the target architecture is not 64-bits.
 
+Before building you will need OpenCL to be installed, on Ubuntu this can be achieved with `apt install ocl-icd-opencl-dev`.
+
 ```
 > cargo build --release --all
 ```
