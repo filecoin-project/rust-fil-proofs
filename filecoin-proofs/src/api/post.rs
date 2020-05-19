@@ -326,6 +326,7 @@ pub fn generate_winning_post_sector_challenge<Tree: MerkleTreeTrait>(
     sector_set_size: u64,
     prover_id: Commitment,
 ) -> Result<Vec<u64>> {
+    ensure!(sector_set_size != 0, "empty sector set is invalid");
     ensure!(
         post_config.typ == PoStType::Winning,
         "invalid post config type"
