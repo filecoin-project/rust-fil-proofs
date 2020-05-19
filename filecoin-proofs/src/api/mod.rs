@@ -110,8 +110,8 @@ pub fn get_unsealed_range<T: Into<PathBuf> + AsRef<Path>, Tree: 'static + Merkle
 pub fn unseal_range<P, R, W, Tree>(
     porep_config: PoRepConfig,
     cache_path: P,
-    sealed_sector: R,
-    unsealed_output: W,
+    mut sealed_sector: R,
+    mut unsealed_output: W,
     prover_id: ProverId,
     sector_id: SectorId,
     comm_d: Commitment,
@@ -126,9 +126,6 @@ where
     Tree: 'static + MerkleTreeTrait,
 {
     ensure!(comm_d != [0; 32], "Invalid all zero commitment (comm_d)");
-
-    let mut sealed_sector = sealed_sector;
-    let mut unsealed_output = unsealed_output;
 
     let comm_d =
         as_safe_commitment::<<DefaultPieceHasher as Hasher>::Domain, _>(&comm_d, "comm_d")?;
