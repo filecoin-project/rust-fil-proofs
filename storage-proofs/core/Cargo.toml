@@ -1,6 +1,6 @@
 [package]
 name = "storage-proofs-core"
-version = "1.0.0-alpha.0"
+version = "1.0.0"
 authors = ["dignifiedquire <me@dignifiedquire.com>"]
 license = "MIT OR Apache-2.0"
 edition = "2018"
@@ -49,8 +49,8 @@ femme = "1.2.0"
 bitvec = "0.17"
 rand_xorshift = "0.2.0"
 pretty_assertions = "0.6.1"
-storage-proofs-porep = { path = "../porep", version = "1.0.0-alpha.0" }
-sha2raw = { path = "../../sha2raw" }
+storage-proofs-porep = { path = "../porep", version = "1.0.0" }
+sha2raw = { path = "../../sha2raw", version = "1.0.0" }
 
 [features]
 default = ["gpu"]
