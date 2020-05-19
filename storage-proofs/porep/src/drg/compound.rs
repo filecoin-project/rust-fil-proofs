@@ -282,10 +282,15 @@ mod tests {
     use super::*;
 
     use ff::Field;
+    use memmap::MmapMut;
+    use memmap::MmapOptions;
     use merkletree::store::StoreConfig;
     use pretty_assertions::assert_eq;
     use rand::SeedableRng;
     use rand_xorshift::XorShiftRng;
+    use std::fs::OpenOptions;
+    use std::io::Write;
+    use std::path::Path;
     use storage_proofs_core::{
         cache_key::CacheKey,
         compound_proof,
@@ -299,6 +304,22 @@ mod tests {
 
     use crate::stacked::BINARY_ARITY;
     use crate::{drg, PoRep};
+
+    pub fn setup_replica(data: &[u8], replica_path: &Path) -> MmapMut {
+        let mut f = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .open(replica_path)
+            .expect("Failed to create replica");
+        f.write_all(data).expect("Failed to write data to replica");
+
+        unsafe {
+            MmapOptions::new()
+                .map_mut(&f)
+                .expect("Failed to back memory map with tempfile")
+        }
+    }
 
     #[test]
     #[ignore] // Slow test – run only when compiled for release.
@@ -324,9 +345,22 @@ mod tests {
         let challenges = vec![1, 3];
 
         let replica_id: Fr = Fr::random(rng);
-        let mut data: Vec<u8> = (0..nodes)
+        let data: Vec<u8> = (0..nodes)
             .flat_map(|_| fr_into_bytes(&Fr::random(rng)))
             .collect();
+
+        // MT for original data is always named tree-d, and it will be
+        // referenced later in the process as such.
+        let cache_dir = tempfile::tempdir().unwrap();
+        let config = StoreConfig::new(
+            cache_dir.path(),
+            CacheKey::CommDTree.to_string(),
+            StoreConfig::default_cached_above_base_layer(nodes, BINARY_ARITY),
+        );
+
+        // Generate a replica path.
+        let replica_path = cache_dir.path().join("replica-path");
+        let mut mmapped_data = setup_replica(&data, &replica_path);
 
         // Only generate seed once. It would be bad if we used different seeds in the same test.
         let seed = new_seed();
@@ -350,25 +384,11 @@ mod tests {
             DrgPoRepCompound::<Tree::Hasher, BucketGraph<Tree::Hasher>>::setup(&setup_params)
                 .expect("setup failed");
 
-        // MT for original data is always named tree-d, and it will be
-        // referenced later in the process as such.
-        let cache_dir = tempfile::tempdir().unwrap();
-        let config = StoreConfig::new(
-            cache_dir.path(),
-            CacheKey::CommDTree.to_string(),
-            StoreConfig::default_cached_above_base_layer(nodes, BINARY_ARITY),
-        );
-
-        // Generate a replica path.
-        let temp_dir = tempdir::TempDir::new("drgporep-test-compound").unwrap();
-        let temp_path = temp_dir.path();
-        let replica_path = temp_path.join("replica-path");
-
         let data_tree: Option<BinaryMerkleTree<Tree::Hasher>> = None;
         let (tau, aux) = drg::DrgPoRep::<Tree::Hasher, BucketGraph<_>>::replicate(
             &public_params.vanilla_params,
             &replica_id.into(),
-            (&mut data[..]).into(),
+            (mmapped_data.as_mut()).into(),
             data_tree,
             config,
             replica_path.clone(),
@@ -464,5 +484,7 @@ mod tests {
 
             assert!(verified);
         }
+
+        cache_dir.close().expect("Failed to remove cache dir");
     }
 }
