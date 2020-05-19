@@ -413,11 +413,11 @@ fn create_seal<R: Rng, Tree: 'static + MerkleTreeTrait>(
 
         let commit_output = seal_commit_phase2(config, phase1_output, prover_id, sector_id)?;
 
-        let _ = get_unsealed_range::<_, Tree>(
+        let _ = unseal_range::<_, _, _, Tree>(
             config,
             cache_dir.path(),
-            &sealed_sector_file.path(),
-            &unseal_file.path(),
+            &sealed_sector_file,
+            &unseal_file,
             prover_id,
             sector_id,
             comm_d,
@@ -425,6 +425,8 @@ fn create_seal<R: Rng, Tree: 'static + MerkleTreeTrait>(
             UnpaddedByteIndex(508),
             UnpaddedBytesAmount(508),
         )?;
+
+        unseal_file.seek(SeekFrom::Start(0))?;
 
         let mut contents = vec![];
         assert!(

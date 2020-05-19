@@ -37,17 +37,17 @@ pub use self::seal::*;
 
 use storage_proofs::pieces::generate_piece_commitment_bytes_from_source;
 
-/// Unseals the sector at `sealed_path` and returns the bytes for a piece
-/// whose first (unpadded) byte begins at `offset` and ends at `offset` plus
-/// `num_bytes`, inclusive. Note that the entire sector is unsealed each time
-/// this function is called.
+/// Unseals the sector read from `sealed_sector` and returns the bytes for a
+/// piece whose first (unpadded) byte begins at `offset` and ends at `offset`
+/// plus `num_bytes`, inclusive. Note that the entire sector is unsealed each
+/// time this function is called.
 ///
 /// # Arguments
 ///
 /// * `porep_config` - porep configuration containing the sector size.
 /// * `cache_path` - path to the directory in which the sector data's Merkle Tree is written.
-/// * `sealed_path` - path to the sealed sector file that we will unseal and read a byte range.
-/// * `output_path` - path to a file that we will write the requested byte range to.
+/// * `sealed_sector` - a byte source from which we read sealed sector data.
+/// * `unsealed_output` - a byte sink to which we write unsealed, un-bit-padded sector bytes.
 /// * `prover_id` - the prover-id that sealed the sector.
 /// * `sector_id` - the sector-id of the sealed sector.
 /// * `comm_d` - the commitment to the sector's data.
@@ -55,19 +55,28 @@ use storage_proofs::pieces::generate_piece_commitment_bytes_from_source;
 /// * `offset` - the byte index in the unsealed sector of the first byte that we want to read.
 /// * `num_bytes` - the number of bytes that we want to read.
 #[allow(clippy::too_many_arguments)]
-pub fn get_unsealed_range<T: Into<PathBuf> + AsRef<Path>, Tree: 'static + MerkleTreeTrait>(
+pub fn unseal_range<P, R, W, Tree>(
     porep_config: PoRepConfig,
-    cache_path: T,
-    sealed_path: T,
-    output_path: T,
+    cache_path: P,
+    sealed_sector: R,
+    unsealed_output: W,
     prover_id: ProverId,
     sector_id: SectorId,
     comm_d: Commitment,
     ticket: Ticket,
     offset: UnpaddedByteIndex,
     num_bytes: UnpaddedBytesAmount,
-) -> Result<UnpaddedBytesAmount> {
+) -> Result<UnpaddedBytesAmount>
+where
+    P: Into<PathBuf> + AsRef<Path>,
+    R: Read,
+    W: Write,
+    Tree: 'static + MerkleTreeTrait,
+{
     ensure!(comm_d != [0; 32], "Invalid all zero commitment (comm_d)");
+
+    let mut sealed_sector = sealed_sector;
+    let mut unsealed_output = unsealed_output;
 
     let comm_d =
         as_safe_commitment::<<DefaultPieceHasher as Hasher>::Domain, _>(&comm_d, "comm_d")?;
@@ -75,12 +84,8 @@ pub fn get_unsealed_range<T: Into<PathBuf> + AsRef<Path>, Tree: 'static + Merkle
     let replica_id =
         generate_replica_id::<Tree::Hasher, _>(&prover_id, sector_id.into(), &ticket, comm_d);
 
-    let data = std::fs::read(&sealed_path)
-        .with_context(|| format!("could not read sealed_path={:?}", sealed_path.as_ref()))?;
-
-    let f_out = File::create(&output_path)
-        .with_context(|| format!("could not create output_path={:?}", output_path.as_ref()))?;
-    let mut buf_writer = BufWriter::new(f_out);
+    let mut data = Vec::new();
+    sealed_sector.read_to_end(&mut data)?;
 
     let base_tree_size = get_base_tree_size::<DefaultBinaryTree>(porep_config.sector_size)?;
     let base_tree_leafs = get_base_tree_leafs::<DefaultBinaryTree>(base_tree_size)?;
@@ -111,10 +116,62 @@ pub fn get_unsealed_range<T: Into<PathBuf> + AsRef<Path>, Tree: 'static + Merkle
     // If the call to `extract_range` was successful, the `unsealed` vector must
     // have a length which equals `num_bytes_padded`. The byte at its 0-index
     // byte will be the the byte at index `offset_padded` in the sealed sector.
-    let written = write_unpadded(unsealed, &mut buf_writer, 0, num_bytes.into())
-        .with_context(|| format!("could not write to output_path={:?}", output_path.as_ref()))?;
+    let written = write_unpadded(unsealed, &mut unsealed_output, 0, num_bytes.into())
+        .with_context(|| "write_unpadded failed")?;
 
     Ok(UnpaddedBytesAmount(written as u64))
+}
+
+/// Unseals the sector at `sealed_path` and returns the bytes for a piece
+/// whose first (unpadded) byte begins at `offset` and ends at `offset` plus
+/// `num_bytes`, inclusive. Note that the entire sector is unsealed each time
+/// this function is called.
+///
+/// # Arguments
+///
+/// * `porep_config` - porep configuration containing the sector size.
+/// * `cache_path` - path to the directory in which the sector data's Merkle Tree is written.
+/// * `sealed_path` - path to the sealed sector file that we will unseal and read a byte range.
+/// * `output_path` - path to a file that we will write the requested byte range to.
+/// * `prover_id` - the prover-id that sealed the sector.
+/// * `sector_id` - the sector-id of the sealed sector.
+/// * `comm_d` - the commitment to the sector's data.
+/// * `ticket` - the ticket that was used to generate the sector's replica-id.
+/// * `offset` - the byte index in the unsealed sector of the first byte that we want to read.
+/// * `num_bytes` - the number of bytes that we want to read.
+#[allow(clippy::too_many_arguments)]
+pub fn get_unsealed_range<T: Into<PathBuf> + AsRef<Path>, Tree: 'static + MerkleTreeTrait>(
+    porep_config: PoRepConfig,
+    cache_path: T,
+    sealed_path: T,
+    output_path: T,
+    prover_id: ProverId,
+    sector_id: SectorId,
+    comm_d: Commitment,
+    ticket: Ticket,
+    offset: UnpaddedByteIndex,
+    num_bytes: UnpaddedBytesAmount,
+) -> Result<UnpaddedBytesAmount> {
+    let f_in = File::open(&sealed_path)
+        .with_context(|| format!("could not open sealed_path={:?}", sealed_path.as_ref()))?;
+
+    let f_out = File::create(&output_path)
+        .with_context(|| format!("could not create output_path={:?}", output_path.as_ref()))?;
+
+    let buf_f_out = BufWriter::new(f_out);
+
+    unseal_range::<_, _, _, Tree>(
+        porep_config,
+        cache_path,
+        f_in,
+        buf_f_out,
+        prover_id,
+        sector_id,
+        comm_d,
+        ticket,
+        offset,
+        num_bytes,
+    )
 }
 
 /// Generates a piece commitment for the provided byte source. Returns an error
