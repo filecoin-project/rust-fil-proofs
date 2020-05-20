@@ -482,18 +482,18 @@ mod tests {
         assert_eq!(
             t.read_at(4).unwrap().0,
             FrRepr([
-                0xf8a4092bef029be0,
-                0x2deffc4feff5a3e0,
-                0x60949ee3e7f39a7d,
-                0x2df335798cd6ce2e
+                0x0074c5df8d1409d6,
+                0xec350e05f426fe9f,
+                0xf4ff46924ed13c3b,
+                0x26f151b2da64551c
             ])
         );
 
         let expected = FrRepr([
-            0x7f422271ae4eac64,
-            0x767b7565e9472cdd,
-            0x0354271e16d4c223,
-            0x5acce8e6359804c0,
+            0xc799a0ef93d38c97,
+            0x2046c1ad563008c1,
+            0xac1b4efc5caeca2e,
+            0x7214887233dae5bb,
         ]);
         let actual = t.read_at(6).unwrap().0;
 
@@ -556,10 +556,10 @@ mod tests {
         assert_eq!(
             hashed,
             PoseidonDomain(FrRepr([
-                0x23ff11d2d2a54e3a,
-                0x1393376e3c10d281,
-                0xca9aed2681cc9081,
-                0x04f01dc7b8b9b562
+                0x20439c7814ace1c3,
+                0x2d09a34b3f2a80a1,
+                0xd0417bf72eaaf267,
+                0x59168209179c3a5a
             ]))
         );
     }
