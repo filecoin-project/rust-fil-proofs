@@ -508,7 +508,8 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                         let mut flat_tree_data = Vec::with_capacity(
                             tree_data_len * std::mem::size_of::<<Tree::Hasher as Hasher>::Domain>(),
                         );
-                        for el in &tree_data.1 {  // WARN: Or tree_data.0?
+                        for el in &tree_data.1 {
+                            // WARN: Or tree_data.0?
                             let cur = fr_into_bytes(&el);
                             flat_tree_data.extend(&cur);
                         }
