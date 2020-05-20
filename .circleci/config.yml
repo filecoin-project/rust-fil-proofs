@@ -26,7 +26,7 @@ jobs:
           no_output_timeout: 30m
       - restore_cache:
           keys:
-            - cargo-v26d-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
+            - cargo-v26e-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
       - run: rustup install $(cat rust-toolchain)
       - run: rustup default $(cat rust-toolchain)
       - run: rustup component add rustfmt-preview
@@ -40,7 +40,7 @@ jobs:
           paths:
             - Cargo.lock
       - save_cache:
-          key: cargo-v26d-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
+          key: cargo-v26e-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
           paths:
             - /root/.cargo
             - /root/.rustup
@@ -56,7 +56,7 @@ jobs:
           at: "."
       - restore_cache:
           keys:
-            - cargo-v26d-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
+            - cargo-v26e-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
       - restore_parameter_cache
       - run:
           name: Test (stable)
@@ -85,7 +85,7 @@ jobs:
           at: "."
       - restore_cache:
           keys:
-            - cargo-v26d-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
+            - cargo-v26e-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
       - restore_parameter_cache
       - run:
           name: Test (stable) in release profile
@@ -111,7 +111,7 @@ jobs:
           at: "."
       - restore_cache:
           keys:
-            - cargo-v26d-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
+            - cargo-v26e-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
       - restore_parameter_cache
       - run:
           name: Test ignored in release profile
@@ -134,7 +134,7 @@ jobs:
           at: "."
       - restore_cache:
           keys:
-            - cargo-v26d-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
+            - cargo-v26e-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
       - restore_parameter_cache
       - run:
           name: Test (nightly)
@@ -153,7 +153,7 @@ jobs:
           at: "."
       - restore_cache:
           keys:
-            - cargo-v26d-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
+            - cargo-v26e-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
       - restore_parameter_cache
       - run:
           name: Benchmarks (nightly)
@@ -241,7 +241,7 @@ jobs:
           at: "."
       - restore_cache:
           keys:
-            - cargo-v26d-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
+            - cargo-v26e-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
       - run:
           name: Run cargo fmt
           command: cargo fmt --all -- --check
@@ -258,7 +258,7 @@ jobs:
           at: "."
       - restore_cache:
           keys:
-            - cargo-v26d-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
+            - cargo-v26e-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
       - run:
           name: Run cargo clippy
           command: cargo +$(cat rust-toolchain) clippy --all
@@ -319,7 +319,7 @@ commands:
   save_parameter_cache:
     steps:
       - save_cache:
-          key: proof-params-v26d-{{ checksum "filecoin-proofs/parameters.json" }}-{{ arch }}
+          key: proof-params-v26e-{{ checksum "filecoin-proofs/parameters.json" }}-{{ arch }}
           paths:
             - "~/paramcache.awesome"
             - "~/filecoin-proof-parameters/"
@@ -328,7 +328,7 @@ commands:
       - configure_environment_variables
       - restore_cache:
          keys:
-            - proof-params-v26d-{{ checksum "filecoin-proofs/parameters.json" }}-{{ arch }}
+            - proof-params-v26e-{{ checksum "filecoin-proofs/parameters.json" }}-{{ arch }}
   configure_environment_variables:
     steps:
       - run:
