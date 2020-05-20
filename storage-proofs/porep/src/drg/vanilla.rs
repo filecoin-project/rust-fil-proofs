@@ -1,4 +1,3 @@
-use std::fs::OpenOptions;
 use std::marker::PhantomData;
 use std::path::PathBuf;
 
@@ -454,8 +453,6 @@ where
     ) -> Result<(Self::Tau, Self::ProverAux)> {
         use storage_proofs_core::cache_key::CacheKey;
 
-        use std::io::prelude::*;
-
         let tree_d = match data_tree {
             Some(tree) => tree,
             None => create_base_merkle_tree::<BinaryMerkleTree<H>>(
@@ -485,13 +482,6 @@ where
 
             encoded.write_bytes(&mut data.as_mut()[start..end])?;
         }
-
-        // Write out the encoded data here.
-        let mut f = OpenOptions::new()
-            .write(true)
-            .create(true)
-            .open(&replica_path)?;
-        f.write_all(&data.as_ref())?;
 
         let replica_config = ReplicaConfig {
             path: replica_path,
@@ -630,13 +620,9 @@ mod tests {
     use super::*;
 
     use ff::Field;
-    use memmap::MmapMut;
-    use memmap::MmapOptions;
     use paired::bls12_381::Fr;
     use rand::SeedableRng;
     use rand_xorshift::XorShiftRng;
-    use std::fs::File;
-    use std::io::Write;
     use storage_proofs_core::{
         cache_key::CacheKey,
         drgraph::{new_seed, BucketGraph, BASE_DEGREE},
@@ -644,38 +630,37 @@ mod tests {
         hasher::{Blake2sHasher, PedersenHasher, Sha256Hasher},
         merkle::{BinaryMerkleTree, MerkleTreeTrait},
         table_tests,
+        test_helper::setup_replica,
         util::data_at_node,
     };
     use tempfile;
 
     use crate::stacked::BINARY_ARITY;
 
-    pub fn file_backed_mmap_from(data: &[u8]) -> MmapMut {
-        let mut tmpfile: File = tempfile::tempfile().expect("Failed to create tempfile");
-        tmpfile
-            .write_all(data)
-            .expect("Failed to write data to tempfile");
-
-        unsafe {
-            MmapOptions::new()
-                .map_mut(&tmpfile)
-                .expect("Failed to back memory map with tempfile")
-        }
-    }
-
     fn test_extract_all<Tree: MerkleTreeTrait>() {
         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
 
         let replica_id: <Tree::Hasher as Hasher>::Domain =
             <Tree::Hasher as Hasher>::Domain::random(rng);
-        let data = vec![2u8; 32 * 4];
+        let nodes = 4;
+        let data = vec![2u8; 32 * nodes];
 
-        // create a copy, so we can compare roundtrips
-        let mut mmapped_data_copy = file_backed_mmap_from(&data);
+        // MT for original data is always named tree-d, and it will be
+        // referenced later in the process as such.
+        let cache_dir = tempfile::tempdir().unwrap();
+        let config = StoreConfig::new(
+            cache_dir.path(),
+            CacheKey::CommDTree.to_string(),
+            StoreConfig::default_cached_above_base_layer(nodes, BINARY_ARITY),
+        );
+
+        // Generate a replica path.
+        let replica_path = cache_dir.path().join("replica-path");
+        let mut mmapped_data = setup_replica(&data, &replica_path);
 
         let sp = SetupParams {
             drg: DrgParams {
-                nodes: data.len() / 32,
+                nodes,
                 degree: BASE_DEGREE,
                 expansion_degree: 0,
                 seed: new_seed(),
@@ -687,24 +672,10 @@ mod tests {
         let pp: PublicParams<Tree::Hasher, BucketGraph<Tree::Hasher>> =
             DrgPoRep::setup(&sp).expect("setup failed");
 
-        // MT for original data is always named tree-d, and it will be
-        // referenced later in the process as such.
-        let cache_dir = tempfile::tempdir().unwrap();
-        let config = StoreConfig::new(
-            cache_dir.path(),
-            CacheKey::CommDTree.to_string(),
-            StoreConfig::default_cached_above_base_layer(data.len() / 32, BINARY_ARITY),
-        );
-
-        // Generate a replica path.
-        let temp_dir = tempdir::TempDir::new("test-extract-all").unwrap();
-        let temp_path = temp_dir.path();
-        let replica_path = temp_path.join("replica-path");
-
         DrgPoRep::replicate(
             &pp,
             &replica_id,
-            (mmapped_data_copy.as_mut()).into(),
+            (mmapped_data.as_mut()).into(),
             None,
             config.clone(),
             replica_path.clone(),
@@ -712,13 +683,13 @@ mod tests {
         .expect("replication failed");
 
         let mut copied = vec![0; data.len()];
-        copied.copy_from_slice(&mmapped_data_copy);
+        copied.copy_from_slice(&mmapped_data);
         assert_ne!(data, copied, "replication did not change data");
 
         let decoded_data = DrgPoRep::<Tree::Hasher, _>::extract_all(
             &pp,
             &replica_id,
-            &mut mmapped_data_copy,
+            mmapped_data.as_mut(),
             Some(config.clone()),
         )
         .unwrap_or_else(|e| {
@@ -726,6 +697,8 @@ mod tests {
         });
 
         assert_eq!(data, decoded_data.as_slice(), "failed to extract data");
+
+        cache_dir.close().expect("Failed to remove cache dir");
     }
 
     #[test]
@@ -751,8 +724,18 @@ mod tests {
         let nodes = 4;
         let data = vec![2u8; 32 * nodes];
 
-        // create a copy, so we can compare roundtrips
-        let mut mmapped_data_copy = file_backed_mmap_from(&data);
+        // MT for original data is always named tree-d, and it will be
+        // referenced later in the process as such.
+        let cache_dir = tempfile::tempdir().unwrap();
+        let config = StoreConfig::new(
+            cache_dir.path(),
+            CacheKey::CommDTree.to_string(),
+            StoreConfig::default_cached_above_base_layer(nodes, BINARY_ARITY),
+        );
+
+        // Generate a replica path.
+        let replica_path = cache_dir.path().join("replica-path");
+        let mut mmapped_data = setup_replica(&data, &replica_path);
 
         let sp = SetupParams {
             drg: DrgParams {
@@ -768,24 +751,10 @@ mod tests {
         let pp =
             DrgPoRep::<Tree::Hasher, BucketGraph<Tree::Hasher>>::setup(&sp).expect("setup failed");
 
-        // MT for original data is always named tree-d, and it will be
-        // referenced later in the process as such.
-        let cache_dir = tempfile::tempdir().unwrap();
-        let config = StoreConfig::new(
-            cache_dir.path(),
-            CacheKey::CommDTree.to_string(),
-            StoreConfig::default_cached_above_base_layer(data.len() / 32, BINARY_ARITY),
-        );
-
-        // Generate a replica path.
-        let temp_dir = tempdir::TempDir::new("test-extract").unwrap();
-        let temp_path = temp_dir.path();
-        let replica_path = temp_path.join("replica-path");
-
         DrgPoRep::replicate(
             &pp,
             &replica_id,
-            (mmapped_data_copy.as_mut()).into(),
+            (mmapped_data.as_mut()).into(),
             None,
             config.clone(),
             replica_path.clone(),
@@ -793,18 +762,13 @@ mod tests {
         .expect("replication failed");
 
         let mut copied = vec![0; data.len()];
-        copied.copy_from_slice(&mmapped_data_copy);
+        copied.copy_from_slice(&mmapped_data);
         assert_ne!(data, copied, "replication did not change data");
 
         for i in 0..nodes {
-            let decoded_data = DrgPoRep::extract(
-                &pp,
-                &replica_id,
-                &mmapped_data_copy,
-                i,
-                Some(config.clone()),
-            )
-            .expect("failed to extract node data from PoRep");
+            let decoded_data =
+                DrgPoRep::extract(&pp, &replica_id, &mmapped_data, i, Some(config.clone()))
+                    .expect("failed to extract node data from PoRep");
 
             let original_data = data_at_node(&data, i).unwrap();
 
@@ -852,8 +816,18 @@ mod tests {
                 .flat_map(|_| fr_into_bytes(&Fr::random(rng)))
                 .collect();
 
-            // create a copy, so we can comare roundtrips
-            let mut mmapped_data_copy = file_backed_mmap_from(&data);
+            // MT for original data is always named tree-d, and it will be
+            // referenced later in the process as such.
+            let cache_dir = tempfile::tempdir().unwrap();
+            let config = StoreConfig::new(
+                cache_dir.path(),
+                CacheKey::CommDTree.to_string(),
+                StoreConfig::default_cached_above_base_layer(nodes, BINARY_ARITY),
+            );
+
+            // Generate a replica path.
+            let replica_path = cache_dir.path().join("replica-path");
+            let mut mmapped_data = setup_replica(&data, &replica_path);
 
             let challenge = i;
 
@@ -870,24 +844,10 @@ mod tests {
 
             let pp = DrgPoRep::<Tree::Hasher, BucketGraph<_>>::setup(&sp).expect("setup failed");
 
-            // MT for original data is always named tree-d, and it will be
-            // referenced later in the process as such.
-            let cache_dir = tempfile::tempdir().unwrap();
-            let config = StoreConfig::new(
-                cache_dir.path(),
-                CacheKey::CommDTree.to_string(),
-                StoreConfig::default_cached_above_base_layer(nodes, BINARY_ARITY),
-            );
-
-            // Generate a replica path.
-            let temp_dir = tempdir::TempDir::new("prove-verify-aux").unwrap();
-            let temp_path = temp_dir.path();
-            let replica_path = temp_path.join("replica-path");
-
             let (tau, aux) = DrgPoRep::<Tree::Hasher, _>::replicate(
                 &pp,
                 &replica_id,
-                (mmapped_data_copy.as_mut()).into(),
+                (mmapped_data.as_mut()).into(),
                 None,
                 config,
                 replica_path.clone(),
@@ -895,8 +855,7 @@ mod tests {
             .expect("replication failed");
 
             let mut copied = vec![0; data.len()];
-            copied.copy_from_slice(&mmapped_data_copy);
-
+            copied.copy_from_slice(&mmapped_data);
             assert_ne!(data, copied, "replication did not change data");
 
             let pub_inputs = PublicInputs::<<Tree::Hasher as Hasher>::Domain> {
@@ -1013,6 +972,8 @@ mod tests {
                     "failed to verify"
                 );
             }
+
+            cache_dir.close().expect("Failed to remove cache dir");
 
             // Normally, just run once.
             break;

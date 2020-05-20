@@ -503,22 +503,16 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                         );
                         assert_eq!(tree_data_len, config.size.unwrap());
 
-                        // FIXME: Add store method to take iter for persisting elements directly?
-                        // FIXME: Or have neptune return this as [u8]?
-                        let mut flat_tree_data = Vec::with_capacity(
-                            tree_data_len * std::mem::size_of::<<Tree::Hasher as Hasher>::Domain>(),
-                        );
-                        for el in &tree_data {
-                            let cur = fr_into_bytes(&el);
-                            flat_tree_data.extend(&cur);
-                        }
-                        drop(tree_data);
+                        let flat_tree_data: Vec<_> = tree_data
+                            .into_par_iter()
+                            .flat_map(|el| fr_into_bytes(&el))
+                            .collect();
 
                         // Persist the data to the store based on the current config.
                         DiskStore::<<Tree::Hasher as Hasher>::Domain>::new_from_slice_with_config(
                             tree_data_len,
                             Tree::Arity::to_usize(),
-                            &flat_tree_data,
+                            &flat_tree_data[..],
                             config.clone(),
                         )?;
                     }
@@ -752,7 +746,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         info!("building tree_r_last");
         let (configs, replica_config) = split_config_and_replica(
             tree_r_last_config.clone(),
-            replica_path.clone(),
+            replica_path,
             nodes_count,
             tree_count,
         )?;
@@ -794,18 +788,6 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
             }
 
             assert_eq!(tree_count, trees.len());
-
-            // Write out replica data.
-            {
-                use std::fs::OpenOptions;
-                use std::io::prelude::*;
-
-                let mut f = OpenOptions::new()
-                    .write(true)
-                    .create(true)
-                    .open(replica_path)?;
-                f.write_all(&data.as_ref())?;
-            }
 
             create_lc_tree::<
                 LCTree<Tree::Hasher, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>,
@@ -901,6 +883,7 @@ mod tests {
         merkle::MerkleTreeTrait,
         proof::ProofScheme,
         table_tests,
+        test_helper::setup_replica,
     };
 
     use crate::stacked::{PrivateInputs, SetupParams, EXP_DEGREE};
@@ -995,10 +978,20 @@ mod tests {
             })
             .collect();
 
-        let challenges = LayerChallenges::new(DEFAULT_STACKED_LAYERS, 5);
+        // MT for original data is always named tree-d, and it will be
+        // referenced later in the process as such.
+        let cache_dir = tempfile::tempdir().unwrap();
+        let config = StoreConfig::new(
+            cache_dir.path(),
+            CacheKey::CommDTree.to_string(),
+            StoreConfig::default_cached_above_base_layer(nodes, BINARY_ARITY),
+        );
 
-        // create a copy, so we can compare roundtrips
-        let mut data_copy = data.clone();
+        // Generate a replica path.
+        let replica_path = cache_dir.path().join("replica-path");
+        let mut mmapped_data = setup_replica(&data, &replica_path);
+
+        let challenges = LayerChallenges::new(DEFAULT_STACKED_LAYERS, 5);
 
         let sp = SetupParams {
             nodes,
@@ -1010,41 +1003,31 @@ mod tests {
 
         let pp = StackedDrg::<Tree, Blake2sHasher>::setup(&sp).expect("setup failed");
 
-        // MT for original data is always named tree-d, and it will be
-        // referenced later in the process as such.
-        let cache_dir = tempfile::tempdir().unwrap();
-        let config = StoreConfig::new(
-            cache_dir.path(),
-            CacheKey::CommDTree.to_string(),
-            StoreConfig::default_cached_above_base_layer(nodes, BINARY_ARITY),
-        );
-
-        // Generate a replica path.
-        let temp_dir = tempdir::TempDir::new("test-extract-all").unwrap();
-        let temp_path = temp_dir.path();
-        let replica_path = temp_path.join("replica-path");
-
         StackedDrg::<Tree, Blake2sHasher>::replicate(
             &pp,
             &replica_id,
-            (&mut data_copy[..]).into(),
+            (mmapped_data.as_mut()).into(),
             None,
             config.clone(),
             replica_path.clone(),
         )
         .expect("replication failed");
 
-        assert_ne!(data, data_copy);
+        let mut copied = vec![0; data.len()];
+        copied.copy_from_slice(&mmapped_data);
+        assert_ne!(data, copied, "replication did not change data");
 
         let decoded_data = StackedDrg::<Tree, Blake2sHasher>::extract_all(
             &pp,
             &replica_id,
-            data_copy.as_mut_slice(),
+            mmapped_data.as_mut(),
             Some(config.clone()),
         )
         .expect("failed to extract data");
 
         assert_eq!(data, decoded_data);
+
+        cache_dir.close().expect("Failed to remove cache dir");
     }
 
     fn prove_verify_fixed(n: usize) {
@@ -1161,28 +1144,16 @@ mod tests {
         //     .start(log::LevelFilter::Trace)
         //     .ok();
 
-        let n = n * get_base_tree_count::<Tree>();
+        let nodes = n * get_base_tree_count::<Tree>();
         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
 
         let degree = BASE_DEGREE;
         let expansion_degree = EXP_DEGREE;
         let replica_id: <Tree::Hasher as Hasher>::Domain =
             <Tree::Hasher as Hasher>::Domain::random(rng);
-        let data: Vec<u8> = (0..n)
+        let data: Vec<u8> = (0..nodes)
             .flat_map(|_| fr_into_bytes(&Fr::random(rng)))
             .collect();
-
-        // create a copy, so we can compare roundtrips
-        let mut data_copy = data.clone();
-        let partitions = 2;
-
-        let sp = SetupParams {
-            nodes: n,
-            degree,
-            expansion_degree,
-            seed: new_seed(),
-            layer_challenges: challenges.clone(),
-        };
 
         // MT for original data is always named tree-d, and it will be
         // referenced later in the process as such.
@@ -1190,25 +1161,37 @@ mod tests {
         let config = StoreConfig::new(
             cache_dir.path(),
             CacheKey::CommDTree.to_string(),
-            StoreConfig::default_cached_above_base_layer(n, BINARY_ARITY),
+            StoreConfig::default_cached_above_base_layer(nodes, BINARY_ARITY),
         );
 
-        // Generate a replica_path.
-        let temp_dir = tempdir::TempDir::new("test-prove-verify").unwrap();
-        let temp_path = temp_dir.path();
-        let replica_path = temp_path.join("replica-path");
+        // Generate a replica path.
+        let replica_path = cache_dir.path().join("replica-path");
+        let mut mmapped_data = setup_replica(&data, &replica_path);
+
+        let partitions = 2;
+
+        let sp = SetupParams {
+            nodes,
+            degree,
+            expansion_degree,
+            seed: new_seed(),
+            layer_challenges: challenges.clone(),
+        };
 
         let pp = StackedDrg::<Tree, Blake2sHasher>::setup(&sp).expect("setup failed");
         let (tau, (p_aux, t_aux)) = StackedDrg::<Tree, Blake2sHasher>::replicate(
             &pp,
             &replica_id,
-            (&mut data_copy[..]).into(),
+            (mmapped_data.as_mut()).into(),
             None,
             config,
             replica_path.clone(),
         )
         .expect("replication failed");
-        assert_ne!(data, data_copy);
+
+        let mut copied = vec![0; data.len()];
+        copied.copy_from_slice(&mmapped_data);
+        assert_ne!(data, copied, "replication did not change data");
 
         let seed = rng.gen();
 
@@ -1249,6 +1232,8 @@ mod tests {
         TemporaryAux::<Tree, Blake2sHasher>::clear_temp(t_aux_orig).expect("t_aux delete failed");
 
         assert!(proofs_are_valid);
+
+        cache_dir.close().expect("Failed to remove cache dir");
     }
 
     table_tests! {

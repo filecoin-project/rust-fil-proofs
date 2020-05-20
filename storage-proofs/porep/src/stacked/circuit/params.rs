@@ -223,7 +223,7 @@ impl<Tree: MerkleTreeTrait, G: 'static + Hasher> Proof<Tree, G> {
             // verify inclusion of the encoded node
             enforce_inclusion(
                 cs.namespace(|| "comm_r_last_data_inclusion"),
-                comm_r_last_path.clone(),
+                comm_r_last_path,
                 comm_r_last,
                 &encoded_node,
             )?;
@@ -271,7 +271,7 @@ where
         Proof {
             comm_d_path: comm_d_proofs.as_options().into(),
             data_leaf,
-            challenge: Some(labeling_proofs[0].node.clone()),
+            challenge: Some(labeling_proofs[0].node),
             comm_r_last_path: comm_r_last_proof.as_options().into(),
             comm_c_path: c_x.inclusion_proof.as_options().into(),
             drg_parents_proofs: drg_parents.into_iter().map(|p| p.into()).collect(),

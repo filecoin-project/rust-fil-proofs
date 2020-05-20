@@ -355,6 +355,7 @@ mod tests {
         hasher::{Hasher, PedersenHasher, PoseidonHasher, Sha256Hasher},
         merkle::{get_base_tree_count, BinaryMerkleTree, DiskTree, MerkleTreeTrait},
         proof::ProofScheme,
+        test_helper::setup_replica,
     };
 
     use crate::stacked::{
@@ -405,16 +406,6 @@ mod tests {
             .flat_map(|_| fr_into_bytes(&Fr::random(rng)))
             .collect();
 
-        // create a copy, so we can compare roundtrips
-        let mut data_copy = data.clone();
-        let sp = SetupParams {
-            nodes,
-            degree,
-            expansion_degree,
-            seed: new_seed(),
-            layer_challenges: layer_challenges.clone(),
-        };
-
         // MT for original data is always named tree-d, and it will be
         // referenced later in the process as such.
         let cache_dir = tempfile::tempdir().unwrap();
@@ -425,21 +416,31 @@ mod tests {
         );
 
         // Generate a replica path.
-        let temp_dir = tempdir::TempDir::new("stacked-input-circuit").unwrap();
-        let temp_path = temp_dir.path();
-        let replica_path = temp_path.join("replica-path");
+        let replica_path = cache_dir.path().join("replica-path");
+        let mut mmapped_data = setup_replica(&data, &replica_path);
+
+        let sp = SetupParams {
+            nodes,
+            degree,
+            expansion_degree,
+            seed: new_seed(),
+            layer_challenges: layer_challenges.clone(),
+        };
 
         let pp = StackedDrg::<Tree, Sha256Hasher>::setup(&sp).expect("setup failed");
         let (tau, (p_aux, t_aux)) = StackedDrg::<Tree, Sha256Hasher>::replicate(
             &pp,
             &replica_id.into(),
-            (&mut data_copy[..]).into(),
+            (mmapped_data.as_mut()).into(),
             None,
             config,
             replica_path.clone(),
         )
         .expect("replication failed");
-        assert_ne!(data, data_copy);
+
+        let mut copied = vec![0; data.len()];
+        copied.copy_from_slice(&mmapped_data);
+        assert_ne!(data, copied, "replication did not change data");
 
         let seed = rng.gen();
 
@@ -544,6 +545,8 @@ mod tests {
             expected_inputs.len() - 1,
             "inputs are not the same length"
         );
+
+        cache_dir.close().expect("Failed to remove cache dir");
     }
 
     #[test]
@@ -586,9 +589,6 @@ mod tests {
             .flat_map(|_| fr_into_bytes(&Fr::random(rng)))
             .collect();
 
-        // create a copy, so we can compare roundtrips
-        let mut data_copy = data.clone();
-
         let setup_params = compound_proof::SetupParams {
             vanilla_params: SetupParams {
                 nodes,
@@ -611,22 +611,25 @@ mod tests {
         );
 
         // Generate a replica path.
-        let temp_dir = tempdir::TempDir::new("stacked-test-compound").unwrap();
-        let temp_path = temp_dir.path();
-        let replica_path = temp_path.join("replica-path");
+        let replica_path = cache_dir.path().join("replica-path");
+
+        // create a copy, so we can compare roundtrips
+        let mut mmapped_data = setup_replica(&data, &replica_path);
 
         let public_params = StackedCompound::setup(&setup_params).expect("setup failed");
         let (tau, (p_aux, t_aux)) = StackedDrg::<Tree, _>::replicate(
             &public_params.vanilla_params,
             &replica_id.into(),
-            (&mut data_copy[..]).into(),
+            (mmapped_data.as_mut()).into(),
             None,
             config,
             replica_path.clone(),
         )
         .expect("replication failed");
 
-        assert_ne!(data, data_copy);
+        let mut copied = vec![0; data.len()];
+        copied.copy_from_slice(&mmapped_data);
+        assert_ne!(data, copied, "replication did not change data");
 
         let seed = rng.gen();
 
@@ -723,5 +726,7 @@ mod tests {
         .expect("failed while verifying");
 
         assert!(verified);
+
+        cache_dir.close().expect("Failed to remove cache dir");
     }
 }

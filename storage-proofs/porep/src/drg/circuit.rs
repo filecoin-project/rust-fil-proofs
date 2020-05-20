@@ -320,6 +320,7 @@ mod tests {
         hasher::PedersenHasher,
         merkle::MerkleProofTrait,
         proof::ProofScheme,
+        test_helper::setup_replica,
         util::data_at_node,
     };
 
@@ -338,15 +339,26 @@ mod tests {
 
         let replica_id: Fr = Fr::random(rng);
 
-        let mut data: Vec<u8> = (0..nodes)
+        let data: Vec<u8> = (0..nodes)
             .flat_map(|_| fr_into_bytes(&Fr::random(rng)))
             .collect();
 
-        // TODO: don't clone everything
-        let original_data = data.clone();
+        // MT for original data is always named tree-d, and it will be
+        // referenced later in the process as such.
+        let cache_dir = tempfile::tempdir().unwrap();
+        let config = StoreConfig::new(
+            cache_dir.path(),
+            CacheKey::CommDTree.to_string(),
+            StoreConfig::default_cached_above_base_layer(nodes, BINARY_ARITY),
+        );
+
+        // Generate a replica path.
+        let replica_path = cache_dir.path().join("replica-path");
+        let mut mmapped_data = setup_replica(&data, &replica_path);
+
         let data_node: Option<Fr> = Some(
             bytes_into_fr(
-                data_at_node(&original_data, challenge).expect("failed to read original data"),
+                data_at_node(&mmapped_data, challenge).expect("failed to read original data"),
             )
             .unwrap(),
         );
@@ -362,26 +374,12 @@ mod tests {
             challenges_count: 1,
         };
 
-        // MT for original data is always named tree-d, and it will be
-        // referenced later in the process as such.
-        let cache_dir = tempfile::tempdir().unwrap();
-        let config = StoreConfig::new(
-            cache_dir.path(),
-            CacheKey::CommDTree.to_string(),
-            StoreConfig::default_cached_above_base_layer(nodes, BINARY_ARITY),
-        );
-
-        // Generate a replica path.
-        let temp_dir = tempdir::TempDir::new("drgporep-input-circuit-with-bls12-381").unwrap();
-        let temp_path = temp_dir.path();
-        let replica_path = temp_path.join("replica-path");
-
         let pp = drg::DrgPoRep::<PedersenHasher, BucketGraph<_>>::setup(&sp)
             .expect("failed to create drgporep setup");
         let (tau, aux) = drg::DrgPoRep::<PedersenHasher, _>::replicate(
             &pp,
             &replica_id.into(),
-            (&mut data[..]).into(),
+            (mmapped_data.as_mut()).into(),
             None,
             config,
             replica_path.clone(),
@@ -501,6 +499,8 @@ mod tests {
             expected_inputs.len() - 1,
             "inputs are not the same length"
         );
+
+        cache_dir.close().expect("Failed to remove cache dir");
     }
 
     #[test]
