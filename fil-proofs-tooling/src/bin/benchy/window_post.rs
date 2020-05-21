@@ -89,9 +89,9 @@ fn get_porep_config(sector_size: u64) -> PoRepConfig {
         partitions: PoRepProofPartitions(
             *POREP_PARTITIONS
                 .read()
-                .unwrap()
+                .expect("POREP_PARTITONS poisoned")
                 .get(&(sector_size))
-                .unwrap(),
+                .expect("unknown sector size"),
         ),
         porep_id: arbitrary_porep_id,
     }
@@ -462,9 +462,9 @@ pub fn run_window_post_bench<Tree: 'static + MerkleTreeTrait>(
         challenge_count: WINDOW_POST_CHALLENGE_COUNT,
         sector_count: *WINDOW_POST_SECTOR_COUNT
             .read()
-            .unwrap()
+            .expect("WINDOW_POST_SECTOR_COUNT poisoned")
             .get(&sector_size)
-            .unwrap(),
+            .expect("unknown sector size"),
         typ: PoStType::Window,
         priority: true,
     };

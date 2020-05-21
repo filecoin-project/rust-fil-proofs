@@ -132,7 +132,7 @@ mod tests {
 
     #[test]
     fn test_metadata() {
-        let m = Metadata::wrap(()).unwrap();
+        let m = Metadata::wrap(()).expect("failed to create metadata");
         println!("{:#?}", m);
 
         assert!(m.system.memory_total_bytes > 0);
