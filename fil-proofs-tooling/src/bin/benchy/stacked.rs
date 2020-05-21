@@ -35,7 +35,7 @@ fn dump_proof_bytes<Tree: MerkleTreeTrait>(
         .write(true)
         .create(true)
         .open(format!("./proofs-{:?}", Utc::now()))
-        .unwrap();
+        .expect("failed to create file ./proofs-XXX");
 
     serde_json::to_writer(file, all_partition_proofs)?;
 
@@ -506,7 +506,7 @@ pub fn run(opts: RunOpts) -> anyhow::Result<()> {
 
     info!("Benchy Stacked: {:?}", &params);
 
-    let cache_dir = tempfile::tempdir().unwrap();
+    let cache_dir = tempfile::tempdir().expect("failed to create temp dir");
 
     let report = match params.hasher.as_ref() {
         "pedersen" => generate_report::<PedersenHasher>(params, &cache_dir)?,

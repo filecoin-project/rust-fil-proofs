@@ -108,12 +108,12 @@ pub fn run_window_post_bench<Tree: 'static + MerkleTreeTrait>(
         partitions: PoRepProofPartitions(
             *POREP_PARTITIONS
                 .read()
-                .unwrap()
+                .expect("POREP_PARTITONS poisoned")
                 .get(&(sector_size))
-                .unwrap(),
+                .expect("unknown sector size"),
         ),
     };
-    let cache_dir = tempfile::tempdir().unwrap();
+    let cache_dir = tempfile::tempdir().expect("failed to create temp dir");
     let sector_id = SectorId::from(SECTOR_ID);
 
     let seal_pre_commit_phase1_measurement = measure(|| {
@@ -200,9 +200,9 @@ pub fn run_window_post_bench<Tree: 'static + MerkleTreeTrait>(
         challenge_count: WINDOW_POST_CHALLENGE_COUNT,
         sector_count: *WINDOW_POST_SECTOR_COUNT
             .read()
-            .unwrap()
+            .expect("WINDOW_POST_SECTOR_COUNT poisoned")
             .get(&sector_size)
-            .unwrap(),
+            .expect("unknown sector size"),
         typ: PoStType::Window,
         priority: true,
     };

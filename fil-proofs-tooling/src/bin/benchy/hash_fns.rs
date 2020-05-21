@@ -18,14 +18,15 @@ fn blake2s_count(bytes: usize) -> anyhow::Result<Report> {
 
     let data_bits: Vec<Boolean> = {
         let mut cs = cs.namespace(|| "data");
-        bytes_into_boolean_vec(&mut cs, Some(data.as_slice()), data.len()).unwrap()
+        bytes_into_boolean_vec(&mut cs, Some(data.as_slice()), data.len())
+            .expect("failed to convert to boolean vector")
     };
 
     let personalization = vec![0u8; 8];
     let out: Vec<bool> =
         bellperson::gadgets::blake2s::blake2s(&mut cs, &data_bits, &personalization)?
             .into_iter()
-            .map(|b| b.get_value().unwrap())
+            .map(|b| b.get_value().expect("failed to get bool value"))
             .collect();
 
     assert!(cs.is_satisfied(), "constraints not satisfied");
@@ -53,12 +54,13 @@ fn sha256_count(bytes: usize) -> anyhow::Result<Report> {
 
     let data_bits: Vec<Boolean> = {
         let mut cs = cs.namespace(|| "data");
-        bytes_into_boolean_vec_be(&mut cs, Some(data.as_slice()), data.len()).unwrap()
+        bytes_into_boolean_vec_be(&mut cs, Some(data.as_slice()), data.len())
+            .expect("failed to convert bytes into boolean vector big endian")
     };
 
     let _out: Vec<bool> = bellperson::gadgets::sha256::sha256(&mut cs, &data_bits)?
         .into_iter()
-        .map(|b| b.get_value().unwrap())
+        .map(|b| b.get_value().expect("failed to get bool value"))
         .collect();
 
     assert!(cs.is_satisfied(), "constraints not satisfied");
@@ -79,7 +81,8 @@ fn pedersen_count(bytes: usize) -> anyhow::Result<Report> {
 
     let data_bits: Vec<Boolean> = {
         let mut cs = cs.namespace(|| "data");
-        bytes_into_boolean_vec(&mut cs, Some(data.as_slice()), data.len()).unwrap()
+        bytes_into_boolean_vec(&mut cs, Some(data.as_slice()), data.len())
+            .expect("failed to convert bytes into boolean vector")
     };
 
     if bytes < 128 {
@@ -89,7 +92,8 @@ fn pedersen_count(bytes: usize) -> anyhow::Result<Report> {
         let expected = crypto::pedersen::pedersen(data.as_slice());
         assert_eq!(
             expected,
-            out.get_value().unwrap(),
+            out.get_value()
+                .expect("failed to get value from pedersen num"),
             "circuit and non circuit do not match"
         );
     } else {
@@ -99,7 +103,8 @@ fn pedersen_count(bytes: usize) -> anyhow::Result<Report> {
         let expected = crypto::pedersen::pedersen_md_no_padding(data.as_slice());
         assert_eq!(
             expected,
-            out.get_value().unwrap(),
+            out.get_value()
+                .expect("failed to get value from pedersen md"),
             "circuit and non circuit do not match"
         );
     }

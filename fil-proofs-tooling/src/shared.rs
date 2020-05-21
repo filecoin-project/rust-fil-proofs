@@ -47,7 +47,10 @@ pub fn create_piece(piece_bytes: UnpaddedBytesAmount) -> NamedTempFile {
     }
     assert_eq!(
         u64::from(piece_bytes),
-        file.as_file().metadata().unwrap().len()
+        file.as_file()
+            .metadata()
+            .expect("failed to get file metadata")
+            .len()
     );
 
     file.as_file_mut()
@@ -68,7 +71,7 @@ pub fn create_replica<Tree: 'static + MerkleTreeTrait>(
     let (_porep_config, result) = create_replicas::<Tree>(SectorSize(sector_size), 1, false);
     // Extract the sector ID and replica output out of the result
     result
-        .unwrap()
+        .expect("create_replicas() failed when called with only_add==false")
         .0
         .pop()
         .expect("failed to create replica outputs")
@@ -95,7 +98,7 @@ pub fn create_replicas<Tree: 'static + MerkleTreeTrait>(
         partitions: PoRepProofPartitions(
             *POREP_PARTITIONS
                 .read()
-                .unwrap()
+                .expect("poisoned read access")
                 .get(&u64::from(sector_size))
                 .expect("unknown sector size"),
         ),
@@ -150,7 +153,7 @@ pub fn create_replicas<Tree: 'static + MerkleTreeTrait>(
             sector_size_unpadded_bytes_ammount,
             &[],
         )
-        .unwrap();
+        .expect("failed to add piece");
         piece_infos.push(vec![info]);
     }
 

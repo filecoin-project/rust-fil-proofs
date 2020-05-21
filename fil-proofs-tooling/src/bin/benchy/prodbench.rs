@@ -51,7 +51,7 @@ pub struct ProdbenchInputs {
 
 impl ProdbenchInputs {
     pub fn sector_size_bytes(&self) -> u64 {
-        bytefmt::parse(&self.sector_size).unwrap()
+        bytefmt::parse(&self.sector_size).expect("failed to parse sector size")
     }
 }
 
@@ -155,15 +155,15 @@ fn augment_with_op_measurements(mut output: &mut ProdbenchOutputs) {
 fn configure_global_config(inputs: &ProdbenchInputs) {
     filecoin_proofs::constants::LAYERS
         .write()
-        .unwrap()
+        .expect("LAYERS poisoned")
         .insert(inputs.sector_size_bytes(), inputs.stacked_layers as usize);
     filecoin_proofs::constants::POREP_PARTITIONS
         .write()
-        .unwrap()
+        .expect("POREP_PARTITIONS poisoned")
         .insert(inputs.sector_size_bytes(), inputs.porep_partitions);
     filecoin_proofs::constants::POREP_MINIMUM_CHALLENGES
         .write()
-        .unwrap()
+        .expect("POREP_MINIMUM_CHALLENGES poisoned")
         .insert(inputs.sector_size_bytes(), inputs.porep_challenges);
 }
 
@@ -194,7 +194,7 @@ pub fn run(
             .expect("failed to retrieve metadata");
     }
 
-    let (created, replica_measurement) = repls.unwrap();
+    let (created, replica_measurement) = repls.expect("unreachable: only_add_piece==false");
     generate_params(&inputs);
 
     if !skip_seal_proof {
@@ -290,14 +290,14 @@ fn measure_porep_circuit(i: &ProdbenchInputs) -> usize {
         layer_challenges,
     };
 
-    let pp = StackedDrg::<ProdbenchTree, Sha256Hasher>::setup(&sp).unwrap();
+    let pp = StackedDrg::<ProdbenchTree, Sha256Hasher>::setup(&sp).expect("failed to setup DRG");
 
     let mut cs = BenchCS::<Bls12>::new();
     <StackedCompound<_, _> as CompoundProof<StackedDrg<ProdbenchTree, Sha256Hasher>, _>>::blank_circuit(
         &pp,
     )
-    .synthesize(&mut cs)
-    .unwrap();
+        .synthesize(&mut cs)
+        .expect("failed to synthesize stacked compound");
 
     cs.num_constraints()
 }
@@ -307,7 +307,7 @@ fn generate_params(i: &ProdbenchInputs) {
     let partitions = PoRepProofPartitions(
         *POREP_PARTITIONS
             .read()
-            .unwrap()
+            .expect("POREP_PARTITIONS poisoned")
             .get(&i.sector_size_bytes())
             .expect("unknown sector size"),
     );
@@ -330,7 +330,7 @@ fn cache_porep_params(porep_config: PoRepConfig) {
         PaddedBytesAmount::from(porep_config),
         usize::from(PoRepProofPartitions::from(porep_config)),
     )
-    .unwrap();
+    .expect("failed to get public_params");
 
     {
         let circuit = <StackedCompound<ProdbenchTree, _> as CompoundProof<
