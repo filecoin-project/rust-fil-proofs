@@ -1,4 +1,4 @@
-use std::fs::{File, OpenOptions};
+use std::fs::OpenOptions;
 use std::time::Duration;
 use std::{io, u32};
 
@@ -6,8 +6,6 @@ use anyhow::bail;
 use bellperson::Circuit;
 use chrono::Utc;
 use log::info;
-use memmap::MmapMut;
-use memmap::MmapOptions;
 use merkletree::store::StoreConfig;
 use paired::bls12_381::Bls12;
 use rand::Rng;
@@ -27,26 +25,8 @@ use storage_proofs::porep::stacked::{
 };
 use storage_proofs::porep::PoRep;
 use storage_proofs::proof::ProofScheme;
+use storage_proofs::test_helper::setup_replica;
 use tempfile::TempDir;
-
-fn file_backed_mmap_from_zeroes(n: usize, use_tmp: bool) -> anyhow::Result<MmapMut> {
-    let file: File = if use_tmp {
-        tempfile::tempfile().unwrap()
-    } else {
-        OpenOptions::new()
-            .read(true)
-            .write(true)
-            .create(true)
-            .open(format!("./stacked-data-{:?}", Utc::now()))
-            .unwrap()
-    };
-
-    file.set_len(32 * n as u64).unwrap();
-
-    let map = unsafe { MmapOptions::new().map_mut(&file) }?;
-
-    Ok(map)
-}
 
 fn dump_proof_bytes<Tree: MerkleTreeTrait>(
     all_partition_proofs: &[Vec<stacked::Proof<Tree, Sha256Hasher>>],
@@ -72,7 +52,6 @@ struct Params {
     groth: bool,
     bench: bool,
     extract: bool,
-    use_tmp: bool,
     dump_proofs: bool,
     bench_only: bool,
     hasher: String,
@@ -114,7 +93,6 @@ where
             groth,
             bench,
             extract,
-            use_tmp,
             dump_proofs,
             bench_only,
             layer_challenges,
@@ -126,10 +104,16 @@ where
 
         let rng = &mut rand::thread_rng();
         let nodes = data_size / 32;
+        let data: Vec<u8> = (0..nodes)
+            .flat_map(|_| {
+                let v: H::Domain = H::Domain::random(rng);
+                v.into_bytes()
+            })
+            .collect();
 
         // MT for original data is always named tree-d, and it will be
         // referenced later in the process as such.
-        let store_config = StoreConfig::new(
+        let config = StoreConfig::new(
             cache_dir.path(),
             CacheKey::CommDTree.to_string(),
             StoreConfig::default_cached_above_base_layer(nodes, BINARY_ARITY),
@@ -149,12 +133,9 @@ where
         let (pub_in, priv_in, d) = if *bench_only {
             (None, None, None)
         } else {
-            let mut data = file_backed_mmap_from_zeroes(nodes, *use_tmp)?;
-
             // Generate a replica path.
-            let replica_dir = tempfile::tempdir().unwrap();
-            let temp_path = replica_dir.path();
-            let replica_path = temp_path.join("replica-path");
+            let replica_path = cache_dir.path().join("replica-path");
+            let mut mmapped_data = setup_replica(&data, &replica_path);
 
             let seed = rng.gen();
 
@@ -167,9 +148,9 @@ where
                     StackedDrg::<BinaryMerkleTree<H>, Sha256Hasher>::replicate(
                         &pp,
                         &replica_id,
-                        (&mut data[..]).into(),
+                        (&mut mmapped_data[..]).into(),
                         None,
-                        store_config.clone(),
+                        config.clone(),
                         replica_path.clone(),
                     )?;
 
@@ -299,7 +280,7 @@ where
                         &pp,
                         &replica_id,
                         &data,
-                        Some(store_config.clone()),
+                        Some(config.clone()),
                     )
                 })?;
 
@@ -513,7 +494,6 @@ pub fn run(opts: RunOpts) -> anyhow::Result<()> {
         data_size: opts.size * 1024,
         partitions: opts.partitions,
         layer_challenges,
-        use_tmp: !opts.no_tmp,
         dump_proofs: opts.dump,
         groth: opts.groth,
         bench: !opts.no_bench && opts.bench,
