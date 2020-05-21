@@ -35,7 +35,7 @@ pub trait MerkleTreeTrait: Send + Sync + std::fmt::Debug {
     /// Creates a merkle proof of the node at the given index.
     fn gen_proof(&self, index: usize) -> Result<Self::Proof>;
     fn gen_cached_proof(&self, i: usize, rows_to_discard: Option<usize>) -> Result<Self::Proof>;
-    fn height(&self) -> usize;
+    fn row_count(&self) -> usize;
     fn leaves(&self) -> usize;
     fn from_merkle(
         tree: merkle::MerkleTree<
@@ -111,8 +111,8 @@ impl<
         MerkleProof::try_from_proof(proof)
     }
 
-    fn height(&self) -> usize {
-        self.inner.height()
+    fn row_count(&self) -> usize {
+        self.inner.row_count()
     }
 
     fn leaves(&self) -> usize {
