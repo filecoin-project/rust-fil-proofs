@@ -3,10 +3,7 @@ use std::marker::PhantomData;
 
 use anyhow::{bail, ensure, Context};
 use byteorder::{ByteOrder, LittleEndian};
-use generic_array::typenum;
-use merkletree::store::StoreConfig;
 use serde::{Deserialize, Serialize};
-use typenum::Unsigned;
 
 use storage_proofs_core::{
     error::{Error, Result},
@@ -158,12 +155,8 @@ impl<'a, Tree: 'a + MerkleTreeTrait> ProofScheme<'a> for RationalPoSt<'a, Tree> 
 
                 if let Some(tree) = priv_inputs.trees.get(&challenge.sector) {
                     ensure!(comm_r_last == &tree.root(), Error::InvalidCommitment);
-                    let config_levels = StoreConfig::default_cached_above_base_layer(
-                        tree.leafs(),
-                        Tree::Arity::to_usize(),
-                    );
 
-                    tree.gen_cached_proof(challenged_leaf as usize, config_levels)
+                    tree.gen_cached_proof(challenged_leaf as usize, None)
                 } else {
                     bail!(Error::MalformedInput);
                 }
@@ -305,6 +298,7 @@ fn derive_challenge(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use generic_array::typenum;
     use rand::{Rng, SeedableRng};
     use rand_xorshift::XorShiftRng;
     use typenum::{U0, U2, U8};

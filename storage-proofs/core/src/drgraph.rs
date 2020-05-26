@@ -71,7 +71,7 @@ pub trait Graph<H: Hasher>: ::std::fmt::Debug + Clone + PartialEq + Eq {
 }
 
 pub fn graph_height<U: typenum::Unsigned>(number_of_leafs: usize) -> usize {
-    merkletree::merkle::get_merkle_tree_height(number_of_leafs, U::to_usize())
+    merkletree::merkle::get_merkle_tree_row_count(number_of_leafs, U::to_usize())
 }
 
 /// Bucket sampling algorithm.

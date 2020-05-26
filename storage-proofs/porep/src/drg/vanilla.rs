@@ -60,7 +60,7 @@ pub struct PublicInputs<T: Domain> {
 pub struct PrivateInputs<'a, H: 'a + Hasher> {
     pub tree_d: &'a BinaryMerkleTree<H>,
     pub tree_r: &'a BinaryLCMerkleTree<H>,
-    pub tree_r_config_levels: usize,
+    pub tree_r_config_rows_to_discard: usize,
 }
 
 #[derive(Clone, Debug)]
@@ -279,17 +279,11 @@ where
 
             let tree_d = &priv_inputs.tree_d;
             let tree_r = &priv_inputs.tree_r;
-            let tree_r_config_levels = priv_inputs.tree_r_config_levels;
+            let tree_r_config_rows_to_discard = priv_inputs.tree_r_config_rows_to_discard;
 
             let data = tree_r.read_at(challenge)?;
-
-            let tree_proof = {
-                if tree_r_config_levels == 0 {
-                    tree_r.gen_proof(challenge)
-                } else {
-                    tree_r.gen_cached_proof(challenge, tree_r_config_levels)
-                }
-            }?;
+            let tree_proof =
+                tree_r.gen_cached_proof(challenge, Some(tree_r_config_rows_to_discard))?;
             replica_nodes.push(DataProof {
                 proof: tree_proof,
                 data,
@@ -301,13 +295,8 @@ where
 
             for p in &parents {
                 replica_parentsi.push((*p, {
-                    let proof = {
-                        if tree_r_config_levels == 0 {
-                            tree_r.gen_proof(*p as usize)
-                        } else {
-                            tree_r.gen_cached_proof(*p as usize, tree_r_config_levels)
-                        }
-                    }?;
+                    let proof = tree_r
+                        .gen_cached_proof(*p as usize, Some(tree_r_config_rows_to_discard))?;
                     DataProof {
                         proof,
                         data: tree_r.read_at(*p as usize)?,
@@ -651,7 +640,7 @@ mod tests {
         let config = StoreConfig::new(
             cache_dir.path(),
             CacheKey::CommDTree.to_string(),
-            StoreConfig::default_cached_above_base_layer(nodes, BINARY_ARITY),
+            StoreConfig::default_rows_to_discard(nodes, BINARY_ARITY),
         );
 
         // Generate a replica path.
@@ -730,7 +719,7 @@ mod tests {
         let config = StoreConfig::new(
             cache_dir.path(),
             CacheKey::CommDTree.to_string(),
-            StoreConfig::default_cached_above_base_layer(nodes, BINARY_ARITY),
+            StoreConfig::default_rows_to_discard(nodes, BINARY_ARITY),
         );
 
         // Generate a replica path.
@@ -822,7 +811,7 @@ mod tests {
             let config = StoreConfig::new(
                 cache_dir.path(),
                 CacheKey::CommDTree.to_string(),
-                StoreConfig::default_cached_above_base_layer(nodes, BINARY_ARITY),
+                StoreConfig::default_rows_to_discard(nodes, BINARY_ARITY),
             );
 
             // Generate a replica path.
@@ -867,7 +856,7 @@ mod tests {
             let priv_inputs = PrivateInputs::<Tree::Hasher> {
                 tree_d: &aux.tree_d,
                 tree_r: &aux.tree_r,
-                tree_r_config_levels: StoreConfig::default_cached_above_base_layer(
+                tree_r_config_rows_to_discard: StoreConfig::default_rows_to_discard(
                     nodes,
                     BINARY_ARITY,
                 ),

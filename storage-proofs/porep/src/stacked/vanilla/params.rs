@@ -463,9 +463,9 @@ pub struct TemporaryAuxCache<Tree: MerkleTreeTrait, G: Hasher> {
     // Notably this is a LevelCacheTree instead of a full merkle.
     pub tree_r_last: LCTree<Tree::Hasher, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>,
 
-    // Store the 'cached_above_base layers' value from the tree_r_last
+    // Store the 'rows_to_discard' value from the tree_r_last
     // StoreConfig for later use (i.e. proof generation).
-    pub tree_r_last_config_levels: usize,
+    pub tree_r_last_config_rows_to_discard: usize,
 
     pub tree_c: DiskTree<Tree::Hasher, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>,
     pub t_aux: TemporaryAux<Tree, G>,
@@ -505,7 +505,7 @@ impl<Tree: MerkleTreeTrait, G: Hasher> TemporaryAuxCache<Tree, G> {
 
         // tree_r_last_size stored in the config is the base tree size
         let tree_r_last_size = t_aux.tree_r_last_config.size.unwrap();
-        let tree_r_last_config_levels = t_aux.tree_r_last_config.levels;
+        let tree_r_last_config_rows_to_discard = t_aux.tree_r_last_config.rows_to_discard;
         let (configs, replica_config) = split_config_and_replica(
             t_aux.tree_r_last_config.clone(),
             replica_path.clone(),
@@ -529,7 +529,7 @@ impl<Tree: MerkleTreeTrait, G: Hasher> TemporaryAuxCache<Tree, G> {
             labels: LabelsCache::new(&t_aux.labels).context("labels_cache")?,
             tree_d,
             tree_r_last,
-            tree_r_last_config_levels,
+            tree_r_last_config_rows_to_discard,
             tree_c,
             replica_path,
             t_aux: t_aux.clone(),

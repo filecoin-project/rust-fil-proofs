@@ -34,8 +34,8 @@ pub trait MerkleTreeTrait: Send + Sync + std::fmt::Debug {
     fn root(&self) -> <Self::Hasher as Hasher>::Domain;
     /// Creates a merkle proof of the node at the given index.
     fn gen_proof(&self, index: usize) -> Result<Self::Proof>;
-    fn gen_cached_proof(&self, i: usize, levels: usize) -> Result<Self::Proof>;
-    fn height(&self) -> usize;
+    fn gen_cached_proof(&self, i: usize, rows_to_discard: Option<usize>) -> Result<Self::Proof>;
+    fn row_count(&self) -> usize;
     fn leaves(&self) -> usize;
     fn from_merkle(
         tree: merkle::MerkleTree<
@@ -93,26 +93,26 @@ impl<
         let proof = self.inner.gen_proof(i)?;
 
         // For development and debugging.
-        assert!(proof.validate::<H::Function>().unwrap());
+        //assert!(proof.validate::<H::Function>().unwrap());
 
         MerkleProof::try_from_proof(proof)
     }
 
-    fn gen_cached_proof(&self, i: usize, levels: usize) -> Result<Self::Proof> {
-        if levels == 0 {
+    fn gen_cached_proof(&self, i: usize, rows_to_discard: Option<usize>) -> Result<Self::Proof> {
+        if rows_to_discard.is_some() && rows_to_discard.unwrap() == 0 {
             return self.gen_proof(i);
         }
 
-        let proof = self.inner.gen_cached_proof(i, levels)?;
+        let proof = self.inner.gen_cached_proof(i, rows_to_discard)?;
 
         // For development and debugging.
-        assert!(proof.validate::<H::Function>().unwrap());
+        //assert!(proof.validate::<H::Function>().unwrap());
 
         MerkleProof::try_from_proof(proof)
     }
 
-    fn height(&self) -> usize {
-        self.inner.height()
+    fn row_count(&self) -> usize {
+        self.inner.row_count()
     }
 
     fn leaves(&self) -> usize {

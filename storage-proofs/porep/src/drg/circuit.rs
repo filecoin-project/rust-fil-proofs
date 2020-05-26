@@ -349,7 +349,7 @@ mod tests {
         let config = StoreConfig::new(
             cache_dir.path(),
             CacheKey::CommDTree.to_string(),
-            StoreConfig::default_cached_above_base_layer(nodes, BINARY_ARITY),
+            StoreConfig::default_rows_to_discard(nodes, BINARY_ARITY),
         );
 
         // Generate a replica path.
@@ -395,7 +395,10 @@ mod tests {
         let priv_inputs = drg::PrivateInputs::<PedersenHasher> {
             tree_d: &aux.tree_d,
             tree_r: &aux.tree_r,
-            tree_r_config_levels: StoreConfig::default_cached_above_base_layer(nodes, BINARY_ARITY),
+            tree_r_config_rows_to_discard: StoreConfig::default_rows_to_discard(
+                nodes,
+                BINARY_ARITY,
+            ),
         };
 
         let proof_nc = drg::DrgPoRep::<PedersenHasher, _>::prove(&pp, &pub_inputs, &priv_inputs)

@@ -146,10 +146,10 @@ impl<Tree: 'static + MerkleTreeTrait> PrivateReplicaInfo<Tree> {
         let base_tree_size = get_base_tree_size::<Tree>(sector_size)?;
         let base_tree_leafs = get_base_tree_leafs::<Tree>(base_tree_size)?;
         trace!(
-            "post: base tree size {}, base tree leafs {}, cached above base {}, arities [{}, {}, {}]",
+            "post: base tree size {}, base tree leafs {}, rows_to_discard {}, arities [{}, {}, {}]",
             base_tree_size,
             base_tree_leafs,
-            StoreConfig::default_cached_above_base_layer(base_tree_leafs, Tree::Arity::to_usize()),
+            StoreConfig::default_rows_to_discard(base_tree_leafs, Tree::Arity::to_usize()),
             Tree::Arity::to_usize(),
             Tree::SubTreeArity::to_usize(),
             Tree::TopTreeArity::to_usize(),
@@ -158,7 +158,7 @@ impl<Tree: 'static + MerkleTreeTrait> PrivateReplicaInfo<Tree> {
         let mut config = StoreConfig::new(
             self.cache_dir_path(),
             CacheKey::CommRLastTree.to_string(),
-            StoreConfig::default_cached_above_base_layer(base_tree_leafs, Tree::Arity::to_usize()),
+            StoreConfig::default_rows_to_discard(base_tree_leafs, Tree::Arity::to_usize()),
         );
         config.size = Some(base_tree_size);
 
