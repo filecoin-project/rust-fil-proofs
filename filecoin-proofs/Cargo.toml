@@ -32,7 +32,6 @@ clap = "2"
 log = "0.4.7"
 fil_logger = "0.1"
 env_proxy = "0.4"
-os_type = "2.2.0"
 flate2 = { version = "1.0.9", features = ["rust_backend"]}
 tar = "0.4.26"
 rayon = "1.1.0"
