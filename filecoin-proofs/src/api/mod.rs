@@ -8,6 +8,7 @@ use merkletree::store::{DiskStore, LevelCacheStore, StoreConfig};
 use storage_proofs::cache_key::CacheKey;
 use storage_proofs::hasher::Hasher;
 use storage_proofs::measurements::{measure_op, Operation};
+use storage_proofs::merkle::get_base_tree_count;
 use storage_proofs::porep::stacked::{
     generate_replica_id, PersistentAux, StackedDrg, TemporaryAux,
 };
@@ -311,16 +312,15 @@ where
     add_piece(source, target, piece_size, Default::default())
 }
 
-// Verifies if a DiskStore specified by a config is consistent.
-fn verify_store(config: &StoreConfig, arity: usize) -> Result<()> {
+// Verifies if a DiskStore specified by a config (or set of 'required_configs' is consistent).
+fn verify_store(config: &StoreConfig, arity: usize, required_configs: usize) -> Result<()> {
     let store_path = StoreConfig::data_path(&config.path, &config.id);
     if !Path::new(&store_path).exists() {
         // Configs may have split due to sector size, so we need to
         // check deterministic paths from here.
         let orig_path = store_path.clone().into_os_string().into_string().unwrap();
-        // At most 16 can exist, at fewest 2 must exist.
-        let mut configs: Vec<StoreConfig> = Vec::with_capacity(16);
-        for i in 0..16 {
+        let mut configs: Vec<StoreConfig> = Vec::with_capacity(required_configs);
+        for i in 0..required_configs {
             let cur_path = orig_path
                 .clone()
                 .replace(".dat", format!("-{}.dat", i).as_str());
@@ -342,7 +342,7 @@ fn verify_store(config: &StoreConfig, arity: usize) -> Result<()> {
         }
 
         ensure!(
-            configs.len() == 2 || configs.len() == 8 || configs.len() == 16,
+            configs.len() == required_configs,
             "Missing store file (or associated split paths): {}",
             store_path.display()
         );
@@ -370,12 +370,13 @@ fn verify_store(config: &StoreConfig, arity: usize) -> Result<()> {
 fn verify_level_cache_store<Tree: MerkleTreeTrait>(config: &StoreConfig) -> Result<()> {
     let store_path = StoreConfig::data_path(&config.path, &config.id);
     if !Path::new(&store_path).exists() {
+        let required_configs = get_base_tree_count::<Tree>();
+
         // Configs may have split due to sector size, so we need to
         // check deterministic paths from here.
         let orig_path = store_path.clone().into_os_string().into_string().unwrap();
-        // At most 16 can exist, at fewest 2 must exist.
-        let mut configs: Vec<StoreConfig> = Vec::with_capacity(16);
-        for i in 0..16 {
+        let mut configs: Vec<StoreConfig> = Vec::with_capacity(required_configs);
+        for i in 0..required_configs {
             let cur_path = orig_path
                 .clone()
                 .replace(".dat", format!("-{}.dat", i).as_str());
@@ -397,7 +398,7 @@ fn verify_level_cache_store<Tree: MerkleTreeTrait>(config: &StoreConfig) -> Resu
         }
 
         ensure!(
-            configs.len() == 2 || configs.len() == 8 || configs.len() == 16,
+            configs.len() == required_configs,
             "Missing store file (or associated split paths): {}",
             store_path.display()
         );
@@ -463,6 +464,7 @@ where
     verify_store(
         &config,
         <DefaultBinaryTree as MerkleTreeTrait>::Arity::to_usize(),
+        get_base_tree_count::<Tree>(),
     )
 }
 
@@ -522,10 +524,12 @@ where
     verify_store(
         &t_aux.tree_d_config,
         <DefaultBinaryTree as MerkleTreeTrait>::Arity::to_usize(),
+        get_base_tree_count::<Tree>(),
     )?;
     verify_store(
         &t_aux.tree_c_config,
         <DefaultOctTree as MerkleTreeTrait>::Arity::to_usize(),
+        get_base_tree_count::<Tree>(),
     )?;
     verify_level_cache_store::<DefaultOctTree>(&t_aux.tree_r_last_config)?;
 

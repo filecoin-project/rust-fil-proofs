@@ -553,7 +553,7 @@ impl<Tree: MerkleTreeTrait, G: Hasher> TemporaryAuxCache<Tree, G> {
     }
 }
 
-type VerifyCallback = fn(&StoreConfig, usize) -> Result<()>;
+type VerifyCallback = fn(&StoreConfig, usize, usize) -> Result<()>;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Labels<Tree: MerkleTreeTrait> {
@@ -592,9 +592,10 @@ impl<Tree: MerkleTreeTrait> Labels<Tree> {
 
     pub fn verify_stores(&self, callback: VerifyCallback, cache_dir: &PathBuf) -> Result<()> {
         let updated_path_labels = self.labels.clone();
+        let required_configs = get_base_tree_count::<Tree>();
         for mut label in updated_path_labels {
             label.path = cache_dir.to_path_buf();
-            callback(&label, BINARY_ARITY)?;
+            callback(&label, BINARY_ARITY, required_configs)?;
         }
 
         Ok(())
