@@ -67,15 +67,14 @@ pub struct SystemMetadata {
 
 impl SystemMetadata {
     pub fn new() -> Result<Self> {
-        let host = futures::executor::block_on(heim::host::platform())
+        use async_std::task::block_on;
+        let host = block_on(async { heim::host::platform().await })
             .map_err(|_| anyhow!("Failed to retrieve host information"))?;
-
-        let memory = futures::executor::block_on(heim::memory::memory())
+        let memory = block_on(async { heim::memory::memory().await })
             .map_err(|_| anyhow!("Failed to retrieve memory information"))?;
-        let cpu_logical = futures::executor::block_on(heim::cpu::logical_count())
+        let cpu_logical = block_on(async { heim::cpu::logical_count().await })
             .map_err(|_| anyhow!("Failed to retrieve cpu logical count information"))?;
-
-        let cpu_physical = futures::executor::block_on(heim::cpu::physical_count())
+        let cpu_physical = block_on(async { heim::cpu::physical_count().await })
             .map_err(|_| anyhow!("Failed to retrieve cpu physical count information"))?;
 
         let cpuid = raw_cpuid::CpuId::new();

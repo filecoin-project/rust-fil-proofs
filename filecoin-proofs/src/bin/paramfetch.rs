@@ -13,7 +13,7 @@ use clap::{values_t, App, Arg, ArgMatches};
 use flate2::read::GzDecoder;
 use itertools::Itertools;
 use pbr::{ProgressBar, Units};
-use reqwest::{header, Client, Proxy, Url};
+use reqwest::{blocking::Client, header, Proxy, Url};
 use tar::Archive;
 
 use filecoin_proofs::param::*;

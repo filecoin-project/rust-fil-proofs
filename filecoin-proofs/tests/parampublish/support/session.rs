@@ -4,7 +4,8 @@ use std::path::{Path, PathBuf};
 
 use failure::SyncFailure;
 use rand::Rng;
-use rexpect::session::PtyBashSession;
+use rexpect::session::PtyReplSession;
+use tempfile;
 use tempfile::TempDir;
 
 use storage_proofs::parameter_cache::{CacheEntryMetadata, PARAMETER_CACHE_ENV_VAR};
@@ -154,7 +155,7 @@ impl ParamPublishSessionBuilder {
 
 /// An active pseudoterminal (pty) used to interact with parampublish.
 pub struct ParamPublishSession {
-    pty_session: PtyBashSession,
+    pty_session: PtyReplSession,
     _cache_dir: TempDir,
 }
 
