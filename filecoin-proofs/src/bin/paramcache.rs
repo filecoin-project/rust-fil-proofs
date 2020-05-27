@@ -37,7 +37,7 @@ fn cache_porep_params<Tree: 'static + MerkleTreeTrait>(porep_config: PoRepConfig
         PaddedBytesAmount::from(porep_config),
         usize::from(PoRepProofPartitions::from(porep_config)),
     )
-    .unwrap();
+    .expect("failed to get public params from config");
 
     {
         let circuit = <StackedCompound<Tree, DefaultPieceHasher> as CompoundProof<
@@ -79,7 +79,8 @@ fn cache_porep_params<Tree: 'static + MerkleTreeTrait>(porep_config: PoRepConfig
 fn cache_winning_post_params<Tree: 'static + MerkleTreeTrait>(post_config: &PoStConfig) {
     info!("Winning PoSt params");
 
-    let post_public_params = winning_post_public_params::<Tree>(post_config).unwrap();
+    let post_public_params = winning_post_public_params::<Tree>(post_config)
+        .expect("failed to get public params from config");
 
     {
         let post_circuit: FallbackPoStCircuit<Tree> =
@@ -122,7 +123,8 @@ fn cache_winning_post_params<Tree: 'static + MerkleTreeTrait>(post_config: &PoSt
 fn cache_window_post_params<Tree: 'static + MerkleTreeTrait>(post_config: &PoStConfig) {
     info!("Window PoSt params");
 
-    let post_public_params = window_post_public_params::<Tree>(post_config).unwrap();
+    let post_public_params = window_post_public_params::<Tree>(post_config)
+        .expect("failed to get public params from config");
 
     {
         let post_circuit: FallbackPoStCircuit<Tree> =
@@ -194,9 +196,9 @@ fn generate_params_post(sector_size: u64) {
             challenge_count: WINDOW_POST_CHALLENGE_COUNT,
             sector_count: *WINDOW_POST_SECTOR_COUNT
                 .read()
-                .unwrap()
+                .expect("WINDOW_POST_SECTOR_COUNT poisoned")
                 .get(&sector_size)
-                .unwrap(),
+                .expect("unknown sector size"),
             typ: PoStType::Window,
             priority: true,
         }
@@ -212,9 +214,9 @@ fn generate_params_porep(sector_size: u64) {
             partitions: PoRepProofPartitions(
                 *POREP_PARTITIONS
                     .read()
-                    .unwrap()
+                    .expect("POREP_PARTITIONS poisoned")
                     .get(&sector_size)
-                    .expect("missing sector size"),
+                    .expect("unknown sector size"),
             ),
         }
     );
@@ -237,7 +239,9 @@ pub fn main() {
                 // Right aligning the numbers makes them easier to read
                 format!(
                     "{: >7}",
-                    sector_size.file_size(file_size_opts::BINARY).unwrap(),
+                    sector_size
+                        .file_size(file_size_opts::BINARY)
+                        .expect("failed to format sector size"),
                 )
             })
             .collect::<Vec<_>>();
@@ -246,7 +250,7 @@ pub fn main() {
             .with_prompt("Select the sizes that should be generated if not already cached")
             .items(&sector_sizes[..])
             .interact()
-            .unwrap();
+            .expect("interaction failed");
 
         // Extract the selected sizes
         PUBLISHED_SECTOR_SIZES
@@ -283,7 +287,9 @@ pub fn main() {
     let only_post = opts.only_post;
 
     for sector_size in sizes {
-        let human_size = sector_size.file_size(file_size_opts::BINARY).unwrap();
+        let human_size = sector_size
+            .file_size(file_size_opts::BINARY)
+            .expect("failed to format sector size");
         let message = format!("Generating sector size: {}", human_size);
         info!("{}", &message);
 

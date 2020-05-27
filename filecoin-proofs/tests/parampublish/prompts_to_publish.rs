@@ -64,7 +64,10 @@ fn displays_sector_size_in_prompt() {
                 session.exp_string("[y/n] (sector size: ")?;
                 let prompt_sector_size: &str = &session.exp_string("B) ")?;
                 let prompt_filename: &str = &session.exp_string(": ")?;
-                assert_eq!(map.get(prompt_filename).unwrap(), prompt_sector_size);
+                assert_eq!(
+                    map.get(prompt_filename).expect("missing prompt filename"),
+                    prompt_sector_size
+                );
                 session.send_line("n")?;
             }
 

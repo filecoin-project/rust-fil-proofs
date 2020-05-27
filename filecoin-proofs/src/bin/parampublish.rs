@@ -99,9 +99,12 @@ fn publish(matches: &ArgMatches) -> Result<()> {
         .fold(
             (Vec::new(), 0),
             |(mut result, mut counter): (std::vec::Vec<String>, u8), filename| {
-                let parameter_id = filename_to_parameter_id(&filename).unwrap();
+                let parameter_id =
+                    filename_to_parameter_id(&filename).expect("failed to get paramater id");
                 // Check if previous file had the same parameter ID
-                if !result.is_empty() && &parameter_id == result.last().unwrap() {
+                if !result.is_empty()
+                    && &parameter_id == result.last().expect("unreachable: is_empty()")
+                {
                     counter += 1;
                 } else {
                     // There weren't three files for the same parameter ID, hence remove it from
@@ -155,7 +158,13 @@ fn publish(matches: &ArgMatches) -> Result<()> {
         let versions: Vec<String> = meta_map
             .keys()
             // Split off the version of the parameters
-            .map(|parameter_id| parameter_id.split('-').next().unwrap().to_string())
+            .map(|parameter_id| {
+                parameter_id
+                    .split('-')
+                    .next()
+                    .expect("paramater id to contain a '-'")
+                    .to_string()
+            })
             // Sort by descending order, newest parameter first
             .sorted_by(|a, b| Ord::cmp(&b, &a))
             .dedup()
@@ -165,7 +174,7 @@ fn publish(matches: &ArgMatches) -> Result<()> {
             .default(0)
             .items(&versions[..])
             .interact_opt()
-            .unwrap();
+            .expect("interact_opt failed");
         let version = match selected_version {
             Some(index) => &versions[index],
             None => {
@@ -189,7 +198,7 @@ fn publish(matches: &ArgMatches) -> Result<()> {
                 meta_map
                     .get(parameter_id)
                     .map(|x| (x.sector_size, parameter_id))
-                    .unwrap()
+                    .expect("unreachable: key came from map")
             })
             // Sort it ascending by sector size
             .sorted_by(|a, b| Ord::cmp(&a.0, &b.0));
@@ -207,7 +216,9 @@ fn publish(matches: &ArgMatches) -> Result<()> {
             .map(|(sector_size, parameter_id)| {
                 format!(
                     "({:?}) {:?}",
-                    sector_size.file_size(file_size_opts::BINARY).unwrap(),
+                    sector_size
+                        .file_size(file_size_opts::BINARY)
+                        .expect("failed to format sector_size"),
                     parameter_id
                 )
             })
@@ -221,7 +232,7 @@ fn publish(matches: &ArgMatches) -> Result<()> {
             .items(&sector_sizes[..])
             .defaults(&default_sector_sizes)
             .interact()
-            .unwrap();
+            .expect("interaction failed");
 
         if selected_sector_sizes.is_empty() {
             println!("Nothing selected. Abort.");
@@ -270,13 +281,13 @@ fn publish(matches: &ArgMatches) -> Result<()> {
 
             println!("publishing: {}", filename);
             print!("publishing to ipfs... ");
-            io::stdout().flush().unwrap();
+            io::stdout().flush().expect("failed to flush stdout");
 
             match publish_parameter_file(&ipfs_bin_path, &filename) {
                 Ok(cid) => {
                     println!("ok");
                     print!("generating digest... ");
-                    io::stdout().flush().unwrap();
+                    io::stdout().flush().expect("failed to flush stdout");
 
                     let digest = get_digest_for_file_within_cache(&filename)?;
                     let data = ParameterData {
@@ -308,21 +319,23 @@ fn get_filenames_in_cache_dir() -> Result<Vec<String>> {
 
     if path.exists() {
         Ok(read_dir(path)?
-            .map(|f| f.unwrap().path())
+            .map(|f| f.expect("failed to get directory entry").path())
             .filter(|p| p.is_file())
             .map(|p| {
                 p.as_path()
                     .file_name()
-                    .unwrap()
+                    .expect("failed to get file name from path")
                     .to_str()
-                    .unwrap()
+                    .expect("failed to get valid Unicode filename")
                     .to_string()
             })
             .collect())
     } else {
         println!(
             "parameter directory '{}' does not exist",
-            path.as_path().to_str().unwrap()
+            path.as_path()
+                .to_str()
+                .expect("failed to get valid Unicode path")
         );
 
         Ok(Vec::new())
