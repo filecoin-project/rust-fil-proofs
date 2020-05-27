@@ -1,4 +1,5 @@
 #![deny(clippy::all, clippy::perf, clippy::correctness)]
+#![allow(clippy::many_single_char_names)]
 #![allow(clippy::unreadable_literal)]
 #![allow(clippy::type_repetition_in_bounds)]
 
