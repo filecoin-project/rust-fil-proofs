@@ -7,7 +7,10 @@ and this project adheres to [Semantic Versioning](https://book.async.rs/overview
 
 ## Unreleased
 
+## 2.0.0 - 2020-05-27
 
-## 1.0.0 - 2020-05-1901
+- Adds a method 'unseal_range' to unseal a sector to a file descriptor
 
-- Initial stable release 
+## 1.0.0 - 2020-05-19
+
+- Initial stable release
