@@ -188,6 +188,7 @@ impl ParamSize {
         }
     }
 
+<<<<<<< HEAD
     fn lowercase(&self) -> &str {
         match self {
             ParamSize::Large => "large",
@@ -202,6 +203,12 @@ impl ParamSize {
     fn is_large(self) -> bool {
         self == ParamSize::Large
     }
+=======
+    str::from_utf8(&output.stdout)
+        .expect("failed to convert to string")
+        .trim()
+        .to_string()
+>>>>>>> refactor(filecoin-proofs): remove all uses of unwrap()
 }
 
 fn params_filename(
@@ -225,11 +232,23 @@ fn params_filename(
     )
 }
 
+<<<<<<< HEAD
 // Parses a phase2 parameters filename into the tuple:
 // (proof, hasher, sector-size, head, param-number, param-size, is-raw).
 fn parse_params_filename(path: &str) -> (Proof, Hasher, Sector, String, usize, ParamSize, bool) {
     // Remove directories from the path.
     let filename = path.rsplitn(2, '/').next().unwrap();
+=======
+fn initial_params_filename(proof: Proof, hasher: Hasher, sector_size: u64) -> String {
+    params_filename(proof, hasher, sector_size, &get_head_commit(), 0)
+}
+
+/// Parses a phase2 parameters filename `path` (e.g. "porep_poseidon_32gib_abcdef_0") to a tuple
+/// containing the proof, hasher, sector-size, shortened head commit, and contribution number (e.g.
+/// `(Proof::Porep, Hasher::Poseidon, SECTOR_SIZE_32_GIB, "abcdef1", 0)`).
+fn parse_params_filename(path: &str) -> (Proof, Hasher, u64, String, usize) {
+    let filename = path.rsplitn(2, '/').next().expect("path string is empty");
+>>>>>>> refactor(filecoin-proofs): remove all uses of unwrap()
     let split: Vec<&str> = filename.split('_').collect();
 
     let proof = match split[0] {
@@ -287,8 +306,19 @@ fn parse_params_filename(path: &str) -> (Proof, Hasher, Sector, String, usize, P
     )
 }
 
+<<<<<<< HEAD
 fn blank_sdr_poseidon_params<Tree: MerkleTreeTrait>(sector_size: u64) -> PoRepPublicParams<Tree> {
     let n_partitions = *POREP_PARTITIONS.read().unwrap().get(&sector_size).unwrap();
+=======
+fn blank_porep_poseidon_circuit<Tree: MerkleTreeTrait>(
+    sector_size: u64,
+) -> StackedCircuit<'static, Tree, Sha256Hasher> {
+    let n_partitions = *POREP_PARTITIONS
+        .read()
+        .expect("POREP_PARTITIONS poisoned")
+        .get(&sector_size)
+        .expect("unknown sector size");
+>>>>>>> refactor(filecoin-proofs): remove all uses of unwrap()
 
     let porep_config = PoRepConfig {
         sector_size: SectorSize(sector_size),
@@ -302,7 +332,7 @@ fn blank_sdr_poseidon_params<Tree: MerkleTreeTrait>(sector_size: u64) -> PoRepPu
             usize::from(PoRepProofPartitions::from(porep_config)),
             porep_config.porep_id,
         )
-        .unwrap(),
+        .expect("failed to setup params from config"),
         partitions: Some(usize::from(PoRepProofPartitions::from(porep_config))),
         priority: false,
     };
@@ -311,8 +341,17 @@ fn blank_sdr_poseidon_params<Tree: MerkleTreeTrait>(sector_size: u64) -> PoRepPu
         StackedDrg<Tree, Sha256Hasher>,
         _,
     >>::setup(&setup_params)
+<<<<<<< HEAD
     .unwrap();
     public_params.vanilla_params
+=======
+    .expect("failed to setup public params from setup_params");
+
+    <StackedCompound<Tree, Sha256Hasher> as CompoundProof<
+        StackedDrg<Tree, Sha256Hasher>,
+        _,
+    >>::blank_circuit(&public_params.vanilla_params)
+>>>>>>> refactor(filecoin-proofs): remove all uses of unwrap()
 }
 
 /*
@@ -361,7 +400,17 @@ fn blank_winning_post_poseidon_params<Tree: 'static + MerkleTreeTrait>(
         priority: false,
     };
 
+<<<<<<< HEAD
     winning_post_public_params::<Tree>(&post_config).unwrap()
+=======
+    let public_params = winning_post_public_params::<Tree>(&post_config)
+        .expect("failed to get public params from config");
+
+    <FallbackPoStCompound<Tree> as CompoundProof<
+        FallbackPoSt<Tree>,
+        FallbackPoStCircuit<Tree>,
+    >>::blank_circuit(&public_params)
+>>>>>>> refactor(filecoin-proofs): remove all uses of unwrap()
 }
 
 fn blank_window_post_poseidon_params<Tree: 'static + MerkleTreeTrait>(
@@ -372,14 +421,24 @@ fn blank_window_post_poseidon_params<Tree: 'static + MerkleTreeTrait>(
         challenge_count: WINDOW_POST_CHALLENGE_COUNT,
         sector_count: *WINDOW_POST_SECTOR_COUNT
             .read()
-            .unwrap()
+            .expect("WINDOW_POST_SECTOR_COUNT poisoned")
             .get(&sector_size)
-            .unwrap(),
+            .expect("unknown sector size"),
         typ: PoStType::Window,
         priority: false,
     };
 
+<<<<<<< HEAD
     window_post_public_params::<Tree>(&post_config).unwrap()
+=======
+    let public_params = window_post_public_params::<Tree>(&post_config)
+        .expect("failed to get public params from config");
+
+    <FallbackPoStCompound<Tree> as CompoundProof<
+        FallbackPoSt<Tree>,
+        FallbackPoStCircuit<Tree>,
+    >>::blank_circuit(&public_params)
+>>>>>>> refactor(filecoin-proofs): remove all uses of unwrap()
 }
 
 /// Creates the first phase2 parameters for a circuit and writes them to a file.
@@ -398,7 +457,14 @@ fn create_initial_params<Tree: 'static + MerkleTreeTrait>(
         head,
     );
 
+<<<<<<< HEAD
     let start_total = Instant::now();
+=======
+    let params_path = initial_params_filename(proof, hasher, sector_size);
+    let params_file = File::create(&params_path).expect("failed to create params file");
+    let mut params_writer = BufWriter::with_capacity(1024 * 1024, params_file);
+
+>>>>>>> refactor(filecoin-proofs): remove all uses of unwrap()
     let dt_create_circuit: u64;
     let dt_create_params: u64;
 
@@ -412,7 +478,12 @@ fn create_initial_params<Tree: 'static + MerkleTreeTrait>(
             >>::blank_circuit(&public_params);
             dt_create_circuit = start.elapsed().as_secs();
             let start = Instant::now();
+<<<<<<< HEAD
             let params = MPCParameters::new(circuit).unwrap();
+=======
+            let params =
+                phase2::MPCParameters::new(circuit).expect("failed to create MPC parameters");
+>>>>>>> refactor(filecoin-proofs): remove all uses of unwrap()
             dt_create_params = start.elapsed().as_secs();
             params
         }
@@ -438,10 +509,29 @@ fn create_initial_params<Tree: 'static + MerkleTreeTrait>(
             >>::blank_circuit(&public_params);
             dt_create_circuit = start.elapsed().as_secs();
             let start = Instant::now();
+<<<<<<< HEAD
             let params = MPCParameters::new(circuit).unwrap();
             dt_create_params = start.elapsed().as_secs();
             params
         }
+=======
+            let params =
+                phase2::MPCParameters::new(circuit).expect("failed to create MPC parameters");
+            dt_create_params = start.elapsed().as_secs();
+            params
+        }
+        (Proof::WindowPost, Hasher::Poseidon) => {
+            let start = Instant::now();
+            let circuit = blank_window_post_poseidon_circuit::<Tree>(sector_size);
+            dt_create_circuit = start.elapsed().as_secs();
+            let start = Instant::now();
+            let params =
+                phase2::MPCParameters::new(circuit).expect("failed to create MPC parameters");
+            dt_create_params = start.elapsed().as_secs();
+            params
+        } /*(Proof::FallbackPost, Hasher::ShaPedersen) => { ... }
+           */
+>>>>>>> refactor(filecoin-proofs): remove all uses of unwrap()
     };
 
     info!(
@@ -450,7 +540,17 @@ fn create_initial_params<Tree: 'static + MerkleTreeTrait>(
         dt_create_params
     );
 
+<<<<<<< HEAD
     let large_path = params_filename(
+=======
+    info!("writing initial params to file: {}", params_path);
+    params
+        .write(&mut params_writer)
+        .expect("failed to writ params to file");
+
+    info!(
+        "successfully created initial params for circuit: {} {} {} {}, dt_total={}s",
+>>>>>>> refactor(filecoin-proofs): remove all uses of unwrap()
         proof,
         hasher,
         sector_size,
@@ -505,7 +605,7 @@ fn get_mixed_entropy() -> [u8; 32] {
     let user_input = Password::with_theme(&ColorfulTheme::default())
         .with_prompt("Please randomly press your keyboard (press Return/Enter when finished)")
         .interact()
-        .unwrap();
+        .expect("interaction failed");
 
     let mut blake2b = blake2b_simd::Params::default();
     blake2b.hash_length(32);
@@ -548,6 +648,7 @@ fn contribute_to_params(path_before: &str, seed: Option<[u8; 32]>) {
     };
     let mut rng = ChaChaRng::from_seed(seed);
 
+<<<<<<< HEAD
     // Write small-raw contributions.
     let path_after = params_filename(
         proof,
@@ -557,6 +658,17 @@ fn contribute_to_params(path_before: &str, seed: Option<[u8; 32]>) {
         param_number,
         ParamSize::Small,
         true,
+=======
+    info!("reading 'before' params from disk: {}", path_before);
+    let file_before = File::open(path_before).expect("failed to open path_before");
+    let mut params_reader = BufReader::with_capacity(1024 * 1024, file_before);
+    let start = Instant::now();
+    let mut params = phase2::MPCParameters::read(&mut params_reader, true)
+        .expect("failed to create MPCParameters");
+    info!(
+        "successfully read 'before' params from disk, dt_read={}s",
+        start.elapsed().as_secs()
+>>>>>>> refactor(filecoin-proofs): remove all uses of unwrap()
     );
 
     let start_total = Instant::now();
@@ -599,6 +711,7 @@ fn contribute_to_params(path_before: &str, seed: Option<[u8; 32]>) {
         start_contrib.elapsed().as_secs()
     );
 
+<<<<<<< HEAD
     let contrib_path = format!("{}.contrib", path_after);
     info!("writing contribution hash to file: {}", contrib_path);
     fs::write(&contrib_path, contrib_str).unwrap_or_else(|e| {
@@ -608,6 +721,15 @@ fn contribute_to_params(path_before: &str, seed: Option<[u8; 32]>) {
         );
     });
 
+=======
+    let path_after = params_filename(proof, hasher, sector_size, &head, param_number_before + 1);
+    info!("writing 'after' params to file: {}", path_after);
+    let file_after = File::create(path_after).expect("failed to open path_after");
+    let mut params_writer = BufWriter::with_capacity(1024 * 1024, file_after);
+    params
+        .write(&mut params_writer)
+        .expect("failed to writ params to file");
+>>>>>>> refactor(filecoin-proofs): remove all uses of unwrap()
     info!(
         "successfully made contribution, dt_total={}s",
         start_total.elapsed().as_secs()
@@ -637,6 +759,7 @@ fn convert_small(path_before: &str) {
         param_size = param_size.pretty_print(),
     );
 
+<<<<<<< HEAD
     // Default to small params for first participant.
     let path_after = params_filename(
         proof,
@@ -649,6 +772,42 @@ fn convert_small(path_before: &str) {
     );
 
     let start_total = Instant::now();
+=======
+        // If we are verifying the first contribution read both `path_before` and `path_after`
+        // files. For every subsequent verification, move the previous loop's "after" params to this
+        // loop's "before" params then read this loop's "after" params file. This will minimize the
+        // number of expensive parameter file reads.
+        let params_before = match next_params_before.take() {
+            Some(params_before) => params_before,
+            None => {
+                info!("reading 'before' params from disk: {}", path_before);
+                let file = File::open(path_before).expect("failed to open path_before");
+                let mut reader = BufReader::with_capacity(1024 * 1024, file);
+                let start = Instant::now();
+                let params_before = phase2::MPCParameters::read(&mut reader, true)
+                    .expect("failed to read MPCParameters");
+                info!(
+                    "successfully read 'before' params from disk, dt_read={}s",
+                    start.elapsed().as_secs()
+                );
+                params_before
+            }
+        };
+
+        let params_after = {
+            info!("reading 'after' params from disk: {}", path_after);
+            let file = File::open(path_after).expect("failed to open path_before");
+            let mut reader = BufReader::with_capacity(1024 * 1024, file);
+            let start = Instant::now();
+            let params_after = phase2::MPCParameters::read(&mut reader, true)
+                .expect("failed to read MPCParameters");
+            info!(
+                "successfully read 'after' params from disk, dt_read={}s",
+                start.elapsed().as_secs()
+            );
+            params_after
+        };
+>>>>>>> refactor(filecoin-proofs): remove all uses of unwrap()
 
     info!("converting");
 
@@ -720,6 +879,7 @@ fn verify_contribution(
     let (before_tx, before_rx) = channel::<Message>();
     let (after_tx, after_rx) = channel::<Message>();
 
+<<<<<<< HEAD
     let path_before = path_before.to_string();
     let path_after = path_after.to_string();
 
@@ -743,6 +903,33 @@ fn verify_contribution(
             );
             read_small_params_from_large_file(&path_before)
         } else {
+=======
+    loop {
+        let (before_params, before_filename) = if next_before_params.is_some() {
+            let before_params = next_before_params
+                .take()
+                .expect("next_before_params is None");
+            let before_filename = next_before_filename
+                .take()
+                .expect("next_before_filename is None");
+            (before_params, before_filename)
+        } else {
+            let before_filename = params_filename(proof, hasher, sector_size, &head, param_number);
+            let before_path = Path::new(&before_filename);
+            if !before_path.exists() {
+                info!("waiting for params file: {}", before_filename);
+                while !before_path.exists() {
+                    sleep(Duration::from_secs(SLEEP_SECS));
+                }
+            }
+            info!("found file: {}", before_filename);
+            info!("reading params file: {}", before_filename);
+            let file = File::open(&before_path).expect("failed to open file");
+            let mut reader = BufReader::with_capacity(1024 * 1024, file);
+            let read_start = Instant::now();
+            let before_params =
+                MPCParameters::read(&mut reader, true).expect("failed to read MPCParameters");
+>>>>>>> refactor(filecoin-proofs): remove all uses of unwrap()
             info!(
                 "reading small 'before' params as `MPCSmall`: {}",
                 path_before
@@ -763,6 +950,25 @@ fn verify_contribution(
                 error!("failed to read 'before' params: {}", e);
                 before_tx.send(Message::Error(e)).unwrap();
             }
+<<<<<<< HEAD
+=======
+        }
+        info!("found file: {}", after_filename);
+
+        let after_params = {
+            info!("reading params file: {}", after_filename);
+            let file = File::open(&after_path).expect("failed to open file");
+            let mut reader = BufReader::with_capacity(1024 * 1024, file);
+            let read_start = Instant::now();
+            let params =
+                MPCParameters::read(&mut reader, true).expect("failed to read MPCParameters");
+            info!(
+                "successfully read params, dt_read={}s",
+                read_start.elapsed().as_secs()
+            );
+            param_number += 1;
+            params
+>>>>>>> refactor(filecoin-proofs): remove all uses of unwrap()
         };
     });
 
@@ -844,6 +1050,7 @@ fn verify_contribution(
     info!("verifying contribution");
     let start_verification = Instant::now();
 
+<<<<<<< HEAD
     let calculated_contrib =
         phase2::small::verify_contribution_small(&before_params.unwrap(), &after_params.unwrap())
             .expect("failed to calculate expected contribution");
@@ -862,6 +1069,18 @@ fn verify_contribution(
         start_verification.elapsed().as_secs(),
         start_total.elapsed().as_secs()
     );
+=======
+    CombinedLogger::init(vec![
+        TermLogger::new(
+            LevelFilter::Info,
+            simplelog::Config::default(),
+            TerminalMode::Mixed,
+        )
+        .expect("failed to create TermLogger"),
+        WriteLogger::new(LevelFilter::Info, simplelog::Config::default(), log_file),
+    ])
+    .expect("failed to setup logger");
+>>>>>>> refactor(filecoin-proofs): remove all uses of unwrap()
 }
 
 // Non-raw only.
@@ -928,6 +1147,7 @@ struct FileInfo {
     contributions_len: u64,
 }
 
+<<<<<<< HEAD
 impl Debug for FileInfo {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         f.debug_struct("FileInfo")
@@ -1067,6 +1287,29 @@ impl FileInfo {
         }
     }
 }
+=======
+    CombinedLogger::init(vec![
+        TermLogger::new(
+            LevelFilter::Info,
+            simplelog::Config::default(),
+            TerminalMode::Mixed,
+        )
+        .expect("failed to create TermLogger"),
+        WriteLogger::new(LevelFilter::Info, simplelog::Config::default(), log_file),
+    ])
+    .expect("failed to setup logger");
+}
+
+/// Creates the logger for the "contribute" CLI subcommand. Writes info logs to stdout, error logs
+/// to stderr, and all logs to the file:
+/// <proof>_<hasher>_<sector-size>_<head>_verify_<first param number>_<last param number>.log
+fn setup_verify_logger(param_paths: &[&str]) {
+    let (proof, hasher, sector_size, head, first_param_number) =
+        parse_params_filename(param_paths.first().expect("param_paths is empty"));
+
+    let last_param_number =
+        parse_params_filename(param_paths.last().expect("param_paths is empty")).4;
+>>>>>>> refactor(filecoin-proofs): remove all uses of unwrap()
 
 // Writes info logs to stdout, error logs to stderr, and all logs to the file `log_filename` in
 // `rust-fil-proofs`'s top-level directory.
@@ -1082,9 +1325,22 @@ fn setup_logger(log_filename: &str) {
 
     let file_logger = WriteLogger::new(LevelFilter::Info, simplelog::Config::default(), log_file);
 
+<<<<<<< HEAD
     CombinedLogger::init(vec![term_logger, file_logger]).unwrap_or_else(|e| {
         panic!("failed to create `CombinedLogger`: {}", e);
     });
+=======
+    CombinedLogger::init(vec![
+        TermLogger::new(
+            LevelFilter::Info,
+            simplelog::Config::default(),
+            TerminalMode::Mixed,
+        )
+        .expect("failed to create TermLogger"),
+        WriteLogger::new(LevelFilter::Info, simplelog::Config::default(), log_file),
+    ])
+    .expect("failed to setup logger");
+>>>>>>> refactor(filecoin-proofs): remove all uses of unwrap()
 }
 
 fn parameter_identifier<Tree: 'static + MerkleTreeTrait>(sector_size: u64, proof: Proof) -> String {
@@ -1092,6 +1348,7 @@ fn parameter_identifier<Tree: 'static + MerkleTreeTrait>(sector_size: u64, proof
         Proof::Sdr => {
             let public_params = blank_sdr_poseidon_params::<Tree>(sector_size);
 
+<<<<<<< HEAD
             <StackedCompound<Tree, Sha256Hasher> as CacheableParameters<
                 StackedCircuit<Tree, Sha256Hasher>,
                 _,
@@ -1112,6 +1369,18 @@ fn parameter_identifier<Tree: 'static + MerkleTreeTrait>(sector_size: u64, proof
                         >>::cache_identifier(&public_params)
         }
     }
+=======
+    CombinedLogger::init(vec![
+        TermLogger::new(
+            LevelFilter::Info,
+            simplelog::Config::default(),
+            TerminalMode::Mixed,
+        )
+        .expect("failed to create TermLogger"),
+        WriteLogger::new(LevelFilter::Info, simplelog::Config::default(), log_file),
+    ])
+    .expect("failed to setup logger");
+>>>>>>> refactor(filecoin-proofs): remove all uses of unwrap()
 }
 
 #[allow(clippy::cognitive_complexity)]
@@ -1353,6 +1622,7 @@ fn main() {
                 );
             }
             "contribute" => {
+<<<<<<< HEAD
                 let path_before = matches.value_of("path-before").unwrap();
 
                 let seed: Option<[u8; 32]> = matches.value_of("seed").map(|hex_str| {
@@ -1393,6 +1663,32 @@ fn main() {
             "verify" => {
                 let path_after = matches.value_of("path-after").unwrap();
                 let raw_subgroup_checks = !matches.is_present("skip-raw-subgroup-checks");
+=======
+                let path_before = matches
+                    .value_of("path-before")
+                    .expect("failed to get value of --path-before");
+                setup_contribute_logger(path_before);
+                contribute_to_params(path_before);
+            }
+            "verify" => {
+                let param_paths: Vec<&str> = matches
+                    .values_of("paths")
+                    .expect("failed to get values of --paths")
+                    .collect();
+
+                let contribution_hashes: Vec<[u8; 64]> = matches
+                    .values_of("contributions")
+                    .expect("failed to get value of --contributions")
+                    .map(|hex_str| {
+                        let mut digest_bytes_arr = [0u8; 64];
+                        let digest_bytes_vec = hex::decode(hex_str).unwrap_or_else(|_| {
+                            panic!("contribution hash is not a valid hex string: {}", hex_str)
+                        });
+                        digest_bytes_arr.copy_from_slice(&digest_bytes_vec[..]);
+                        digest_bytes_arr
+                    })
+                    .collect();
+>>>>>>> refactor(filecoin-proofs): remove all uses of unwrap()
 
                 assert!(
                     Path::new(&path_after).exists(),

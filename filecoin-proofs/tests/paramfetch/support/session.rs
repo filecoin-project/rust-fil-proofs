@@ -80,7 +80,7 @@ impl ParamFetchSessionBuilder {
             .unwrap_or_else(|| "".to_string());
 
         let json_argument = if self.manifest.is_some() {
-            format!("--json={:?}", self.manifest.unwrap())
+            format!("--json={:?}", self.manifest.expect("missing manifest"))
         } else {
             "".to_string()
         };

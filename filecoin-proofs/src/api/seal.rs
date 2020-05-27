@@ -629,7 +629,7 @@ pub fn verify_seal<Tree: 'static + MerkleTreeTrait>(
         &ChallengeRequirements {
             minimum_challenges: *POREP_MINIMUM_CHALLENGES
                 .read()
-                .unwrap()
+                .expect("POREP_MINIMUM_CHALLENGES poisoned")
                 .get(&u64::from(SectorSize::from(porep_config)))
                 .expect("unknown sector size") as usize,
         },
@@ -748,7 +748,7 @@ pub fn verify_batch_seal<Tree: 'static + MerkleTreeTrait>(
         &ChallengeRequirements {
             minimum_challenges: *POREP_MINIMUM_CHALLENGES
                 .read()
-                .unwrap()
+                .expect("POREP_MINIMUM_CHALLENGES poisoned")
                 .get(&u64::from(SectorSize::from(porep_config)))
                 .expect("unknown sector size") as usize,
         },

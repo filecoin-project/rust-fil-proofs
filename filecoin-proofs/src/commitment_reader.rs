@@ -56,7 +56,10 @@ impl<R: Read> CommitmentReader<R> {
         }
         debug_assert_eq!(current_row.len(), 1);
 
-        Ok(current_row.into_iter().next().unwrap())
+        Ok(current_row
+            .into_iter()
+            .next()
+            .expect("should have been caught by debug build: len==1"))
     }
 }
 
@@ -99,13 +102,13 @@ mod tests {
             &mut fr32_reader,
             PaddedBytesAmount::from(UnpaddedBytesAmount(piece_size as u64)).into(),
         )
-        .unwrap();
+        .expect("failed to generate piece commitment bytes from source");
 
         let fr32_reader = crate::fr32_reader::Fr32Reader::new(io::Cursor::new(&source));
         let mut commitment_reader = CommitmentReader::new(fr32_reader);
-        io::copy(&mut commitment_reader, &mut io::sink()).unwrap();
+        io::copy(&mut commitment_reader, &mut io::sink()).expect("io copy failed");
 
-        let commitment2 = commitment_reader.finish().unwrap();
+        let commitment2 = commitment_reader.finish().expect("failed to finish");
 
         assert_eq!(&commitment1[..], AsRef::<[u8]>::as_ref(&commitment2));
     }

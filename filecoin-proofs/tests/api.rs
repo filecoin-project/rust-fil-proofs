@@ -197,9 +197,9 @@ fn test_window_post_single_partition_smaller_2kib_base_8() -> Result<()> {
     let sector_size = SECTOR_SIZE_2_KIB;
     let sector_count = *WINDOW_POST_SECTOR_COUNT
         .read()
-        .unwrap()
+        .expect("WINDOW_POST_SECTOR_COUNT poisoned")
         .get(&sector_size)
-        .unwrap();
+        .expect("unknown sector size");
 
     window_post::<SectorShape2KiB>(sector_size, sector_count / 2, sector_count, false)?;
     window_post::<SectorShape2KiB>(sector_size, sector_count / 2, sector_count, true)
@@ -211,9 +211,9 @@ fn test_window_post_two_partitions_matching_2kib_base_8() -> Result<()> {
     let sector_size = SECTOR_SIZE_2_KIB;
     let sector_count = *WINDOW_POST_SECTOR_COUNT
         .read()
-        .unwrap()
+        .expect("WINDOW_POST_SECTOR_COUNT poisoned")
         .get(&sector_size)
-        .unwrap();
+        .expect("unknown sector size");
 
     window_post::<SectorShape2KiB>(sector_size, 2 * sector_count, sector_count, false)?;
     window_post::<SectorShape2KiB>(sector_size, 2 * sector_count, sector_count, true)
@@ -225,9 +225,9 @@ fn test_window_post_two_partitions_matching_4kib_sub_8_2() -> Result<()> {
     let sector_size = SECTOR_SIZE_4_KIB;
     let sector_count = *WINDOW_POST_SECTOR_COUNT
         .read()
-        .unwrap()
+        .expect("WINDOW_POST_SECTOR_COUNT poisoned")
         .get(&sector_size)
-        .unwrap();
+        .expect("unknown sector size");
 
     window_post::<SectorShape4KiB>(sector_size, 2 * sector_count, sector_count, false)?;
     window_post::<SectorShape4KiB>(sector_size, 2 * sector_count, sector_count, true)
@@ -239,9 +239,9 @@ fn test_window_post_two_partitions_matching_16kib_sub_8_8() -> Result<()> {
     let sector_size = SECTOR_SIZE_16_KIB;
     let sector_count = *WINDOW_POST_SECTOR_COUNT
         .read()
-        .unwrap()
+        .expect("WINDOW_POST_SECTOR_COUNT poisoned")
         .get(&sector_size)
-        .unwrap();
+        .expect("unknown sector size");
 
     window_post::<SectorShape16KiB>(sector_size, 2 * sector_count, sector_count, false)?;
     window_post::<SectorShape16KiB>(sector_size, 2 * sector_count, sector_count, true)
@@ -253,9 +253,9 @@ fn test_window_post_two_partitions_matching_32kib_top_8_8_2() -> Result<()> {
     let sector_size = SECTOR_SIZE_32_KIB;
     let sector_count = *WINDOW_POST_SECTOR_COUNT
         .read()
-        .unwrap()
+        .expect("WINDOW_POST_SECTOR_COUNT poisoned")
         .get(&sector_size)
-        .unwrap();
+        .expect("unknown sector size");
 
     window_post::<SectorShape32KiB>(sector_size, 2 * sector_count, sector_count, false)?;
     window_post::<SectorShape32KiB>(sector_size, 2 * sector_count, sector_count, true)
@@ -267,9 +267,9 @@ fn test_window_post_two_partitions_smaller_2kib_base_8() -> Result<()> {
     let sector_size = SECTOR_SIZE_2_KIB;
     let sector_count = *WINDOW_POST_SECTOR_COUNT
         .read()
-        .unwrap()
+        .expect("WINDOW_POST_SECTOR_COUNT poisoned")
         .get(&sector_size)
-        .unwrap();
+        .expect("unknown sector size");
 
     window_post::<SectorShape2KiB>(sector_size, 2 * sector_count - 1, sector_count, false)?;
     window_post::<SectorShape2KiB>(sector_size, 2 * sector_count - 1, sector_count, true)
@@ -281,9 +281,9 @@ fn test_window_post_single_partition_matching_2kib_base_8() -> Result<()> {
     let sector_size = SECTOR_SIZE_2_KIB;
     let sector_count = *WINDOW_POST_SECTOR_COUNT
         .read()
-        .unwrap()
+        .expect("WINDOW_POST_SECTOR_COUNT poisoned")
         .get(&sector_size)
-        .unwrap();
+        .expect("unknown sector size");
 
     window_post::<SectorShape2KiB>(sector_size, sector_count, sector_count, false)?;
     window_post::<SectorShape2KiB>(sector_size, sector_count, sector_count, true)
@@ -378,12 +378,16 @@ fn create_seal<R: Rng, Tree: 'static + MerkleTreeTrait>(
     let config = PoRepConfig {
         sector_size: SectorSize(sector_size),
         partitions: PoRepProofPartitions(
-            *POREP_PARTITIONS.read().unwrap().get(&sector_size).unwrap(),
+            *POREP_PARTITIONS
+                .read()
+                .expect("POREM_PARTITIONS poisoned")
+                .get(&sector_size)
+                .expect("unknown sector size"),
         ),
         porep_id: arbitrary_porep_id,
     };
 
-    let cache_dir = tempfile::tempdir().unwrap();
+    let cache_dir = tempfile::tempdir().expect("failed to create temp dir");
 
     let ticket = rng.gen();
     let seed = rng.gen();
