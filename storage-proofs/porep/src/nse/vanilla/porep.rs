@@ -131,7 +131,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> PoRep<'a, Tree::H
                     // write replica
                     let mut writer = OpenOptions::new().write(true).open(&replica_path)?;
                     writer
-                        .write_at(replica_offset as u64, window_data.as_ref())
+                        .write_at(replica_offset as u64, window_data)
                         .context("failed to write replica data")?;
                     Ok((trees, replica_tree))
                 },
