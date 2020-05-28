@@ -3,7 +3,6 @@ use std::path::PathBuf;
 use generic_array::typenum::{Unsigned, U2};
 use merkletree::{merkle::get_merkle_tree_len, store::StoreConfig};
 use rayon::prelude::*;
-use std::fs::OpenOptions;
 use storage_proofs_core::{
     cache_key::CacheKey,
     error::Result,
