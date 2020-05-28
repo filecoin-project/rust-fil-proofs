@@ -1,10 +1,10 @@
 use anyhow::{ensure, Context, Result};
 use generic_array::typenum::U0;
 use itertools::Itertools;
+use log::trace;
 use merkletree::store::{StoreConfig, StoreConfigDataVersion};
 use sha2raw::Sha256;
 use storage_proofs_core::{
-    cache_key::CacheKey,
     hasher::{Domain, Hasher},
     merkle::{DiskTree, LCTree, MerkleTreeTrait, MerkleTreeWrapper},
     util::NODE_SIZE,
@@ -39,6 +39,7 @@ pub fn encode_with_trees<Tree: 'static + MerkleTreeTrait>(
     let mut current_layer = vec![0u8; config.window_size()];
 
     // 1. Construct the mask
+    trace!("mask layer: {}", 1);
     mask_layer(config, window_index, replica_id, &mut previous_layer)
         .context("failed to construct the mask layer")?;
 
@@ -50,6 +51,7 @@ pub fn encode_with_trees<Tree: 'static + MerkleTreeTrait>(
 
     // 2. Construct expander layers
     for layer_index in 2..=(config.num_expander_layers as u32) {
+        trace!("expander layer: {}", layer_index);
         expander_layer(
             config,
             window_index,
@@ -71,6 +73,7 @@ pub fn encode_with_trees<Tree: 'static + MerkleTreeTrait>(
 
     // 3. Construct butterfly layers
     for layer_index in (1 + config.num_expander_layers as u32)..(num_layers as u32) {
+        trace!("butterfly layer: {}", layer_index);
         butterfly_layer(
             config,
             window_index,
@@ -95,6 +98,8 @@ pub fn encode_with_trees<Tree: 'static + MerkleTreeTrait>(
 
     // 4. Construct butterfly encoding layer
     let layer_index = num_layers as u32;
+
+    trace!("replica layer: {}", layer_index);
 
     butterfly_encode_layer(
         config,
@@ -260,7 +265,6 @@ pub fn expander_layer<D: Domain>(
             layer_in,
         );
         node.copy_from_slice(&hash);
-        truncate_hash(node);
     }
 
     Ok(())
@@ -478,6 +482,7 @@ mod tests {
     use rand::{Rng, SeedableRng};
     use rand_xorshift::XorShiftRng;
     use storage_proofs_core::{
+        cache_key::CacheKey,
         fr32::fr_into_bytes,
         hasher::{PoseidonDomain, PoseidonHasher, Sha256Domain},
         merkle::{split_config, OctLCMerkleTree},
