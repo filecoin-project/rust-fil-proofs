@@ -387,6 +387,8 @@ mod tests {
         .expect("replication failed");
         assert_ne!(data, data_copy);
 
+        std::fs::write(&replica_path, &data_copy).expect("failed to store replica");
+
         let seed = rng.gen();
 
         let pub_inputs = PublicInputs::<
