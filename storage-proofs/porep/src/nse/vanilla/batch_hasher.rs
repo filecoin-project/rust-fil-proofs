@@ -82,7 +82,6 @@ fn add_assign(a: &mut FrRepr, b: &FrRepr, modulus: &FrRepr) {
 #[cfg(target_arch = "x86_64")]
 fn add_assign(a: &mut FrRepr, b: &FrRepr, modulus: &FrRepr) {
     use std::arch::x86_64::*;
-    use std::mem;
 
     unsafe {
         let mut carry = _addcarry_u64(0, a.0[0], b.0[0], &mut a.0[0]);
