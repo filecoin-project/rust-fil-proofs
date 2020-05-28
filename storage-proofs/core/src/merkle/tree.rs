@@ -92,8 +92,7 @@ impl<
     fn gen_proof(&self, i: usize) -> Result<Self::Proof> {
         let proof = self.inner.gen_proof(i)?;
 
-        // For development and debugging.
-        //assert!(proof.validate::<H::Function>().unwrap());
+        debug_assert!(proof.validate::<H::Function>().expect("validate failed"));
 
         MerkleProof::try_from_proof(proof)
     }
@@ -105,8 +104,7 @@ impl<
 
         let proof = self.inner.gen_cached_proof(i, rows_to_discard)?;
 
-        // For development and debugging.
-        //assert!(proof.validate::<H::Function>().unwrap());
+        debug_assert!(proof.validate::<H::Function>().expect("validate failed"));
 
         MerkleProof::try_from_proof(proof)
     }
