@@ -52,12 +52,14 @@ mod tests {
 
             let key_bits: Vec<Boolean> = {
                 let mut cs = cs.namespace(|| "key");
-                bytes_into_boolean_vec(&mut cs, Some(key.as_slice()), key.len()).unwrap()
+                bytes_into_boolean_vec(&mut cs, Some(key.as_slice()), key.len())
+                    .expect("conversion failed: key")
             };
 
             let data_bits: Vec<Boolean> = {
                 let mut cs = cs.namespace(|| "data bits");
-                bytes_into_boolean_vec(&mut cs, Some(data.as_slice()), data.len()).unwrap()
+                bytes_into_boolean_vec(&mut cs, Some(data.as_slice()), data.len())
+                    .expect("conversion failed: data bits")
             };
 
             let out_bits =
@@ -70,25 +72,26 @@ mod tests {
             let actual = bits_to_bytes(
                 out_bits
                     .iter()
-                    .map(|v| v.get_value().unwrap())
+                    .map(|v| v.get_value().expect("get_value failed"))
                     .collect::<Vec<bool>>()
                     .as_slice(),
             );
 
-            let expected = crypto::xor::encode(key.as_slice(), data.as_slice()).unwrap();
+            let expected =
+                crypto::xor::encode(key.as_slice(), data.as_slice()).expect("encode failed");
 
             assert_eq!(expected, actual, "circuit and non circuit do not match");
 
             // -- roundtrip
             let roundtrip_bits = {
                 let mut cs = cs.namespace(|| "roundtrip");
-                xor(&mut cs, key_bits.as_slice(), out_bits.as_slice()).expect("xor faield")
+                xor(&mut cs, key_bits.as_slice(), out_bits.as_slice()).expect("xor failed")
             };
 
             let roundtrip = bits_to_bytes(
                 roundtrip_bits
                     .iter()
-                    .map(|v| v.get_value().unwrap())
+                    .map(|v| v.get_value().expect("get_value failed"))
                     .collect::<Vec<bool>>()
                     .as_slice(),
             );

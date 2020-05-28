@@ -21,7 +21,7 @@ fn merkle_benchmark(c: &mut Criterion) {
                         create_base_merkle_tree::<BinaryMerkleTree<Sha256Hasher>>(
                             None, *n_nodes, &data,
                         )
-                        .unwrap(),
+                        .expect("failed to create base merkle tree: Sha256Hasher"),
                     )
                 })
             },
@@ -36,7 +36,7 @@ fn merkle_benchmark(c: &mut Criterion) {
                     create_base_merkle_tree::<BinaryMerkleTree<PoseidonHasher>>(
                         None, *n_nodes, &data,
                     )
-                    .unwrap(),
+                    .expect("failed to create base merkle tree: PoseidonHasher"),
                 )
             })
         })

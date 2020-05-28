@@ -235,12 +235,13 @@ mod tests {
             sector_count: 5,
         };
 
-        let pp = FallbackPoSt::<OctMerkleTree<PoseidonHasher>>::setup(&params).unwrap();
+        let pp =
+            FallbackPoSt::<OctMerkleTree<PoseidonHasher>>::setup(&params).expect("setup failed");
 
         let mut cs = BenchCS::<Bls12>::new();
         FallbackPoStCompound::<OctMerkleTree<PoseidonHasher>>::blank_circuit(&pp)
             .synthesize(&mut cs)
-            .unwrap();
+            .expect("black_circuit failed");
 
         assert_eq!(cs.num_constraints(), 268_180);
     }
@@ -268,7 +269,8 @@ mod tests {
         };
 
         // Construct and store an MT using a named DiskStore.
-        let temp_dir = tempdir::TempDir::new("level_cache_tree_v1").unwrap();
+        let temp_dir =
+            tempdir::TempDir::new("level_cache_tree_v1").expect("failed to create new tempdir");
         let temp_path = temp_dir.path();
 
         let mut pub_sectors = Vec::new();
@@ -344,7 +346,7 @@ mod tests {
                     }
                 })
                 .collect::<Result<_>>()
-                .unwrap();
+                .expect("failed to get circuit sectors");
 
             let mut cs = TestConstraintSystem::<Bls12>::new();
 
@@ -376,7 +378,7 @@ mod tests {
                 &pub_params,
                 Some(j),
             )
-            .unwrap();
+            .expect("generate_public_inputs failed");
             let expected_inputs = cs.get_inputs();
 
             for ((input, label), generated_input) in

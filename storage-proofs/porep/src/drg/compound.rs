@@ -331,7 +331,7 @@ mod tests {
 
         // MT for original data is always named tree-d, and it will be
         // referenced later in the process as such.
-        let cache_dir = tempfile::tempdir().unwrap();
+        let cache_dir = tempfile::tempdir().expect("tempdir failed");
         let config = StoreConfig::new(
             cache_dir.path(),
             CacheKey::CommDTree.to_string(),
@@ -415,7 +415,7 @@ mod tests {
                 &public_inputs,
                 &private_inputs,
             )
-            .unwrap();
+            .expect("circuit_for_test failed");
 
             let mut cs = TestConstraintSystem::new();
 

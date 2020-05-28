@@ -345,7 +345,7 @@ mod tests {
 
         // MT for original data is always named tree-d, and it will be
         // referenced later in the process as such.
-        let cache_dir = tempfile::tempdir().unwrap();
+        let cache_dir = tempfile::tempdir().expect("tempdir failed");
         let config = StoreConfig::new(
             cache_dir.path(),
             CacheKey::CommDTree.to_string(),
@@ -360,7 +360,7 @@ mod tests {
             bytes_into_fr(
                 data_at_node(&mmapped_data, challenge).expect("failed to read original data"),
             )
-            .unwrap(),
+            .expect("bytes_into_fr failed"),
         );
 
         let sp = drg::SetupParams {
@@ -444,7 +444,7 @@ mod tests {
         assert!(
             proof_nc.nodes[0]
                 .proof
-                .validate_data(data_node.unwrap().into()),
+                .validate_data(data_node.expect("data_node is None").into()),
             "failed to verify data commitment with data"
         );
 
@@ -467,7 +467,7 @@ mod tests {
         if !cs.is_satisfied() {
             println!(
                 "failed to satisfy: {:?}",
-                cs.which_is_unsatisfied().unwrap()
+                cs.which_is_unsatisfied().expect("satisfied")
             );
         }
 
@@ -479,7 +479,7 @@ mod tests {
 
         assert_eq!(
             cs.get_input(1, "drgporep/replica_id/input variable"),
-            replica_id.unwrap()
+            replica_id.expect("replica_id is None")
         );
 
         let generated_inputs =
@@ -488,7 +488,7 @@ mod tests {
                     &pp,
                     None,
                 )
-                .unwrap();
+                .expect("");
         let expected_inputs = cs.get_inputs();
 
         for ((input, label), generated_input) in

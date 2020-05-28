@@ -30,7 +30,7 @@ impl<'a> Circuit<Bls12> for PedersenExample<'a> {
         // please compiler don't optimize the result away
         // only check if we actually have input data
         if self.data[0].is_some() {
-            res.get_value().unwrap();
+            res.get_value().expect("get_value failed");
         }
 
         Ok(())
@@ -60,7 +60,7 @@ impl<'a> Circuit<Bls12> for PedersenMdExample<'a> {
         // please compiler don't optimize the result away
         // only check if we actually have input data
         if self.data[0].is_some() {
-            res.get_value().unwrap();
+            res.get_value().expect("get_value failed");
         }
 
         Ok(())
@@ -111,7 +111,7 @@ fn pedersen_circuit_benchmark(c: &mut Criterion) {
         },
         &mut rng1,
     )
-    .unwrap();
+    .expect("failed to generate random params");
 
     let params = vec![32];
 
@@ -131,7 +131,7 @@ fn pedersen_circuit_benchmark(c: &mut Criterion) {
                         &groth_params,
                         &mut rng,
                     )
-                    .unwrap();
+                    .expect("failed to create random proof");
 
                     black_box(proof)
                 });
@@ -148,7 +148,7 @@ fn pedersen_circuit_benchmark(c: &mut Criterion) {
                     data: data.as_slice(),
                 }
                 .synthesize(&mut cs)
-                .unwrap();
+                .expect("synthesis error");
 
                 black_box(cs)
             });
@@ -165,7 +165,7 @@ fn pedersen_md_circuit_benchmark(c: &mut Criterion) {
         },
         &mut rng1,
     )
-    .unwrap();
+    .expect("failed to generate random params");
 
     let params = vec![64];
 
@@ -185,7 +185,7 @@ fn pedersen_md_circuit_benchmark(c: &mut Criterion) {
                         &groth_params,
                         &mut rng,
                     )
-                    .unwrap();
+                    .expect("failed to create random proof");
 
                     black_box(proof)
                 });
@@ -202,7 +202,7 @@ fn pedersen_md_circuit_benchmark(c: &mut Criterion) {
                     data: data.as_slice(),
                 }
                 .synthesize(&mut cs)
-                .unwrap();
+                .expect("synthesis error");
 
                 black_box(cs)
             });

@@ -160,13 +160,14 @@ mod tests {
             let data: Vec<u8> = (0..i + 10).map(|_| rng.gen()).collect();
             let bools = {
                 let mut cs = cs.namespace(|| format!("round: {}", i));
-                bytes_into_boolean_vec(&mut cs, Some(data.as_slice()), 8).unwrap()
+                bytes_into_boolean_vec(&mut cs, Some(data.as_slice()), 8)
+                    .expect("conversion failed")
             };
 
             let bytes_actual: Vec<u8> = bits_to_bytes(
                 bools
                     .iter()
-                    .map(|b| b.get_value().unwrap())
+                    .map(|b| b.get_value().expect("get_value failed"))
                     .collect::<Vec<bool>>()
                     .as_slice(),
             );
@@ -222,21 +223,27 @@ mod tests {
             let val_vec = fr_into_bytes(&val_fr);
 
             let val_num =
-                num::AllocatedNum::alloc(cs.namespace(|| "val_num"), || Ok(val_fr.into())).unwrap();
-            let val_num_bits = val_num.to_bits_le(cs.namespace(|| "val_bits")).unwrap();
+                num::AllocatedNum::alloc(cs.namespace(|| "val_num"), || Ok(val_fr.into()))
+                    .expect("alloc failed");
+            let val_num_bits = val_num
+                .to_bits_le(cs.namespace(|| "val_bits"))
+                .expect("to_bits_le failed");
 
             let bits =
                 bytes_into_boolean_vec_be(cs.namespace(|| "val_bits_2"), Some(&val_vec), 256)
-                    .unwrap();
+                    .expect("conversion failed");
 
             let val_num_fixed_bits = fixup_bits(val_num_bits);
 
             let a_values: Vec<bool> = val_num_fixed_bits
                 .iter()
-                .map(|v| v.get_value().unwrap())
+                .map(|v| v.get_value().expect("get_value failed: a"))
                 .collect();
 
-            let b_values: Vec<bool> = bits.iter().map(|v| v.get_value().unwrap()).collect();
+            let b_values: Vec<bool> = bits
+                .iter()
+                .map(|v| v.get_value().expect("get_value failed: b"))
+                .collect();
             assert_eq!(&a_values[..], &b_values[..]);
         }
     }

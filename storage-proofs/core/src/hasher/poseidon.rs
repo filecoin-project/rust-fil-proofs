@@ -61,7 +61,9 @@ impl Default for PoseidonFunction {
 impl Hashable<PoseidonFunction> for Fr {
     fn hash(&self, state: &mut PoseidonFunction) {
         let mut bytes = Vec::with_capacity(32);
-        self.into_repr().write_le(&mut bytes).unwrap();
+        self.into_repr()
+            .write_le(&mut bytes)
+            .expect("conversion into_repr failed");
         state.write(&bytes);
     }
 }
@@ -144,7 +146,7 @@ fn as_ref<'a>(src: &'a [u64; 4]) -> &'a [u8] {
 impl Domain for PoseidonDomain {
     fn into_bytes(&self) -> Vec<u8> {
         let mut out = Vec::with_capacity(PoseidonDomain::byte_len());
-        self.0.write_le(&mut out).unwrap();
+        self.0.write_le(&mut out).expect("in-memory write failed");
 
         out
     }
@@ -188,7 +190,7 @@ impl Element for PoseidonDomain {
 impl StdHasher for PoseidonFunction {
     #[inline]
     fn write(&mut self, msg: &[u8]) {
-        self.0 = Fr::from_repr(shared_hash(msg).0).unwrap();
+        self.0 = Fr::from_repr(shared_hash(msg).0).expect("conversion from_repr failed");
     }
 
     #[inline]
@@ -203,7 +205,8 @@ fn shared_hash(data: &[u8]) -> PoseidonDomain {
     let preimage = data
         .chunks(32)
         .map(|ref chunk| {
-            <Bls12 as ff::ScalarEngine>::Fr::from_repr(PoseidonDomain::from_slice(chunk).0).unwrap()
+            <Bls12 as ff::ScalarEngine>::Fr::from_repr(PoseidonDomain::from_slice(chunk).0)
+                .expect("conversion from_repr failed")
         })
         .collect::<Vec<_>>();
 
@@ -255,16 +258,18 @@ impl HashFunction<PoseidonDomain> for PoseidonFunction {
 
         let fr_input = input
             .iter()
-            .map(|x| <Bls12 as ScalarEngine>::Fr::from_repr(x.0).unwrap())
+            .map(|x| {
+                <Bls12 as ScalarEngine>::Fr::from_repr(x.0).expect("conversion from_repr failed")
+            })
             .collect::<Vec<_>>();
 
         fr_input[1..]
             .chunks(arity - 1)
             .fold(fr_input[0], |acc, elts| {
                 p.reset();
-                p.input(acc).unwrap(); // These unwraps will panic iff arity is incorrect, but it was checked above.
+                p.input(acc).expect("unreachable: arity checked above");
                 elts.iter().for_each(|elt| {
-                    let _ = p.input(*elt).unwrap();
+                    let _ = p.input(*elt).expect("unreachable: as above");
                 });
                 p.hash()
             })
@@ -313,7 +318,7 @@ impl HashFunction<PoseidonDomain> for PoseidonFunction {
                     num::AllocatedNum::alloc(cs.namespace(|| format!("padding {}", i)), || {
                         Ok(Fr::zero())
                     })
-                    .unwrap();
+                    .expect("failed to alloc num");
             }
             let cs = cs.namespace(|| format!("hash md {}", hash_num));
             hash =
@@ -366,8 +371,10 @@ impl LightAlgorithm<PoseidonDomain> for PoseidonFunction {
         _height: usize,
     ) -> PoseidonDomain {
         shared_hash_frs(&[
-            <Bls12 as ff::ScalarEngine>::Fr::from_repr(left.0).unwrap(),
-            <Bls12 as ff::ScalarEngine>::Fr::from_repr(right.0).unwrap(),
+            <Bls12 as ff::ScalarEngine>::Fr::from_repr(left.0)
+                .expect("conversion from_repr failed: left"),
+            <Bls12 as ff::ScalarEngine>::Fr::from_repr(right.0)
+                .expect("conversion from_repr failed: right"),
         ])
         .into()
     }
@@ -377,7 +384,10 @@ impl LightAlgorithm<PoseidonDomain> for PoseidonFunction {
             1 | 2 | 4 | 8 | 16 => shared_hash_frs(
                 &parts
                     .iter()
-                    .map(|x| <Bls12 as ff::ScalarEngine>::Fr::from_repr(x.0).unwrap())
+                    .map(|x| {
+                        <Bls12 as ff::ScalarEngine>::Fr::from_repr(x.0)
+                            .expect("conversion from_repr failed")
+                    })
                     .collect::<Vec<_>>(),
             )
             .into(),
@@ -403,7 +413,7 @@ impl From<FrRepr> for PoseidonDomain {
 impl From<PoseidonDomain> for Fr {
     #[inline]
     fn from(val: PoseidonDomain) -> Self {
-        Fr::from_repr(val.0).unwrap()
+        Fr::from_repr(val.0).expect("conversion from_repr failed")
     }
 }
 
@@ -425,9 +435,10 @@ mod tests {
             PoseidonDomain(Fr::one().into_repr()),
         ];
 
-        let t = MerkleTree::<PoseidonHasher, typenum::U2>::new(values.iter().map(|x| *x)).unwrap();
+        let t = MerkleTree::<PoseidonHasher, typenum::U2>::new(values.iter().map(|x| *x))
+            .expect("failed to create merkle tree");
 
-        let p = t.gen_proof(0).unwrap(); // create a proof for the first value =k Fr::one()
+        let p = t.gen_proof(0).expect("gen_proof failed"); // create a proof for the first value =k Fr::one()
 
         assert_eq!(*p.path(), vec![0, 0]);
         assert_eq!(
@@ -453,30 +464,31 @@ mod tests {
             PoseidonDomain(Fr::one().into_repr()),
         ];
 
-        let t = MerkleTree::<PoseidonHasher, typenum::U2>::new(leaves.iter().map(|x| *x)).unwrap();
+        let t = MerkleTree::<PoseidonHasher, typenum::U2>::new(leaves.iter().map(|x| *x))
+            .expect("failed to create merkle tree");
 
         assert_eq!(t.leafs(), 4);
 
         let mut a = PoseidonFunction::default();
 
-        assert_eq!(t.read_at(0).unwrap(), leaves[0]);
-        assert_eq!(t.read_at(1).unwrap(), leaves[1]);
-        assert_eq!(t.read_at(2).unwrap(), leaves[2]);
-        assert_eq!(t.read_at(3).unwrap(), leaves[3]);
+        assert_eq!(t.read_at(0).expect("read_at 0 failed"), leaves[0]);
+        assert_eq!(t.read_at(1).expect("read_at 1 failed"), leaves[1]);
+        assert_eq!(t.read_at(2).expect("read_at 2 failed"), leaves[2]);
+        assert_eq!(t.read_at(3).expect("read_at 3 failed"), leaves[3]);
 
         let i1 = a.node(leaves[0], leaves[1], 0);
         a.reset();
         let i2 = a.node(leaves[2], leaves[3], 0);
         a.reset();
 
-        assert_eq!(t.read_at(4).unwrap(), i1);
-        assert_eq!(t.read_at(5).unwrap(), i2);
+        assert_eq!(t.read_at(4).expect("read_at 4 failed"), i1);
+        assert_eq!(t.read_at(5).expect("read_at 5 failed"), i2);
 
         let root = a.node(i1, i2, 1);
         a.reset();
 
         assert_eq!(
-            t.read_at(4).unwrap().0,
+            t.read_at(4).expect("read_at 4 failed").0,
             FrRepr([
                 0xf8a4092bef029be0,
                 0x2deffc4feff5a3e0,
@@ -491,10 +503,10 @@ mod tests {
             0x0354271e16d4c223,
             0x5acce8e6359804c0,
         ]);
-        let actual = t.read_at(6).unwrap().0;
+        let actual = t.read_at(6).expect("read_at 6 failed").0;
 
         assert_eq!(actual, expected);
-        assert_eq!(t.read_at(6).unwrap(), root);
+        assert_eq!(t.read_at(6).expect("read_at 6 failed"), root);
     }
 
     #[test]
@@ -569,17 +581,18 @@ mod tests {
         let circuit_data = (0..n)
             .map(|n| {
                 num::AllocatedNum::alloc(cs.namespace(|| format!("input {}", n)), || Ok(Fr::one()))
-                    .unwrap()
+                    .expect("failed to alloc num: input")
             })
             .collect::<Vec<_>>();
 
         let hashed = PoseidonFunction::hash_md(&data);
-        let hashed_fr = Fr::from_repr(hashed.0).unwrap();
+        let hashed_fr = Fr::from_repr(hashed.0).expect("from_repr failed");
 
-        let circuit_hashed =
-            PoseidonFunction::hash_md_circuit(&mut cs, circuit_data.as_slice()).unwrap();
+        let circuit_hashed = PoseidonFunction::hash_md_circuit(&mut cs, circuit_data.as_slice())
+            .expect("faild to hash");
         let hashed_alloc =
-            &num::AllocatedNum::alloc(cs.namespace(|| "calculated"), || Ok(hashed_fr)).unwrap();
+            &num::AllocatedNum::alloc(cs.namespace(|| "calculated"), || Ok(hashed_fr))
+                .expect("failed to alloc num: calculated");
         constraint::equal(
             &mut cs.namespace(|| "enforce correct"),
             || "correct result",
@@ -593,6 +606,9 @@ mod tests {
 
         assert_eq!(expected_constraints, actual_constraints);
 
-        assert_eq!(hashed_fr, circuit_hashed.get_value().unwrap());
+        assert_eq!(
+            hashed_fr,
+            circuit_hashed.get_value().expect("get_value failed")
+        );
     }
 }

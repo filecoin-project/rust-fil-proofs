@@ -1,7 +1,7 @@
 use std::io::Write;
 use std::path::PathBuf;
 
-use anyhow::{ensure, Result};
+use anyhow::{bail, ensure, Result};
 use generic_array::typenum::{self, Unsigned};
 use log::trace;
 use merkletree::merkle;
@@ -113,11 +113,10 @@ where
             merkletree::store::LevelCacheStore<<Tree::Hasher as Hasher>::Domain, std::fs::File>,
         >(&mut store)
         {
-            ensure!(
-                replica_config.is_some(),
-                "Cannot create LCTree without replica paths"
-            );
-            let replica_config = replica_config.unwrap();
+            let replica_config = match replica_config {
+                Some(config) => config,
+                None => bail!("Cannot create LCTree without replica paths"),
+            };
             lc_store.set_external_reader(ExternalReader::new_from_config(&replica_config, i)?)?;
         }
 
@@ -414,11 +413,11 @@ where
 
         let mut tree =
             MerkleTreeWrapper::try_from_iter_with_config(elements.iter().map(|v| (Ok(*v))), config)
-                .unwrap();
+                .expect("failed to create merkle tree");
 
         // Write out the replica data.
-        let mut f = std::fs::File::create(&replica_path).unwrap();
-        f.write_all(&data).unwrap();
+        let mut f = std::fs::File::create(&replica_path).expect("failed to create file");
+        f.write_all(&data).expect("write to replica_path failed");
 
         {
             // Beware: evil dynamic downcasting RUST MAGIC down below.
@@ -438,7 +437,9 @@ where
                 >,
             >(&mut tree.inner)
             {
-                lc_tree.set_external_reader_path(&replica_path).unwrap();
+                lc_tree
+                    .set_external_reader_path(&replica_path)
+                    .expect("failed to set external reader path");
             }
         }
 
@@ -446,7 +447,8 @@ where
     } else {
         (
             data,
-            MerkleTreeWrapper::try_from_iter(elements.iter().map(|v| Ok(*v))).unwrap(),
+            MerkleTreeWrapper::try_from_iter(elements.iter().map(|v| Ok(*v)))
+                .expect("try_from_iter failed"),
         )
     }
 }
@@ -473,7 +475,10 @@ where
         data.extend(inner_data);
     }
 
-    (data, MerkleTreeWrapper::from_trees(trees).unwrap())
+    (
+        data,
+        MerkleTreeWrapper::from_trees(trees).expect("failed to create merkle tree"),
+    )
 }
 
 /// Only used for testing, but can't cfg-test it as that stops exports.
@@ -511,7 +516,10 @@ where
             sub_trees.push(tree);
             data.extend(inner_data);
         }
-        (data, MerkleTreeWrapper::from_sub_trees(sub_trees).unwrap())
+        (
+            data,
+            MerkleTreeWrapper::from_sub_trees(sub_trees).expect("failed to create merkle tree"),
+        )
     } else if sub_tree_arity > 0 {
         generate_sub_tree::<R, Tree>(rng, nodes, temp_path)
     } else {

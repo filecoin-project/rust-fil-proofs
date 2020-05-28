@@ -13,9 +13,9 @@ use storage_proofs_porep::stacked::{StackedBucketGraph, EXP_DEGREE};
 fn start_profile(stage: &str) {
     gperftools::profiler::PROFILER
         .lock()
-        .unwrap()
+        .expect("PROFILER poisoned")
         .start(format!("./{}.profile", stage))
-        .unwrap();
+        .expect("failed to start profiler");
 }
 
 #[cfg(not(feature = "cpu-profile"))]
@@ -27,9 +27,9 @@ fn start_profile(_stage: &str) {}
 fn stop_profile() {
     gperftools::profiler::PROFILER
         .lock()
-        .unwrap()
+        .expect("PROFILER poisoned")
         .stop()
-        .unwrap();
+        .expect("failed to stop profiler");
 }
 
 #[cfg(not(feature = "cpu-profile"))]
@@ -38,12 +38,13 @@ fn stop_profile() {}
 
 fn pregenerate_graph<H: Hasher>(size: usize) -> StackedBucketGraph<H> {
     let seed = [1u8; 28];
-    StackedBucketGraph::<H>::new_stacked(size, BASE_DEGREE, EXP_DEGREE, seed).unwrap()
+    StackedBucketGraph::<H>::new_stacked(size, BASE_DEGREE, EXP_DEGREE, seed)
+        .expect("new_stacked failed")
 }
 
 fn parents_loop<H: Hasher, G: Graph<H>>(graph: &G, parents: &mut [u32]) {
     (0..graph.size())
-        .map(|node| graph.parents(node, parents).unwrap())
+        .map(|node| graph.parents(node, parents).expect("parents failed"))
         .collect()
 }
 

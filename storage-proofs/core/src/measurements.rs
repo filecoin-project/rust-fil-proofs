@@ -63,16 +63,16 @@ where
     #[cfg(feature = "profile")]
     gperftools::profiler::PROFILER
         .lock()
-        .unwrap()
+        .expect("PROFILER poisoned")
         .start(format!("./{:?}.profile", op))
-        .unwrap();
+        .expect("failed to start profiler");
     let x = f();
     #[cfg(feature = "profile")]
     gperftools::profiler::PROFILER
         .lock()
-        .unwrap()
+        .expect("PROFILER poisoned")
         .stop()
-        .unwrap();
+        .expect("failed to stop profiler");
 
     let opt_tx = OP_MEASUREMENTS
         .0

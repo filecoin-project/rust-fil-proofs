@@ -244,7 +244,8 @@ mod tests {
         };
 
         // Construct and store an MT using a named DiskStore.
-        let temp_dir = tempdir::TempDir::new("level_cache_tree_v1").unwrap();
+        let temp_dir =
+            tempdir::TempDir::new("level_cache_tree_v1").expect("failed to create tempdir");
         let temp_path = temp_dir.path();
 
         let mut pub_sectors = Vec::new();
@@ -290,7 +291,7 @@ mod tests {
         {
             let circuits =
                 FallbackPoStCompound::circuit_for_test_all(&pub_params, &pub_inputs, &priv_inputs)
-                    .unwrap();
+                    .expect("circuit_for_test_all failed");
             let blank_circuit =
                 FallbackPoStCompound::<Tree>::blank_circuit(&pub_params.vanilla_params);
 
@@ -315,7 +316,7 @@ mod tests {
         {
             let circuits =
                 FallbackPoStCompound::circuit_for_test_all(&pub_params, &pub_inputs, &priv_inputs)
-                    .unwrap();
+                    .expect("circuit_for_test_all failed");
 
             for (circuit, inputs) in circuits.into_iter() {
                 let mut cs = TestConstraintSystem::new();
@@ -325,7 +326,7 @@ mod tests {
                 if !cs.is_satisfied() {
                     panic!(
                         "failed to satisfy: {:?}",
-                        cs.which_is_unsatisfied().unwrap()
+                        cs.which_is_unsatisfied().expect("satisfied")
                     );
                 }
                 assert!(

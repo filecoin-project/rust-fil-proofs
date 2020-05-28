@@ -259,30 +259,31 @@ mod tests {
         let degree = BASE_DEGREE;
 
         for size in vec![4, 16, 256, 2048] {
-            let g = BucketGraph::<H>::new(size, degree, 0, new_seed()).unwrap();
+            let g = BucketGraph::<H>::new(size, degree, 0, new_seed())
+                .expect("failed to create bucket graph");
 
             assert_eq!(g.size(), size, "wrong nodes count");
 
             let mut parents = vec![0; degree];
-            g.parents(0, &mut parents).unwrap();
+            g.parents(0, &mut parents).expect("parents never fail");
             assert_eq!(parents, vec![0; degree as usize]);
             parents = vec![0; degree];
-            g.parents(1, &mut parents).unwrap();
+            g.parents(1, &mut parents).expect("parents never fail");
             assert_eq!(parents, vec![0; degree as usize]);
 
             for i in 2..size {
                 let mut pa1 = vec![0; degree];
-                g.parents(i, &mut pa1).unwrap();
+                g.parents(i, &mut pa1).expect("parents never fail");
                 let mut pa2 = vec![0; degree];
-                g.parents(i, &mut pa2).unwrap();
+                g.parents(i, &mut pa2).expect("parents never fail");
 
                 assert_eq!(pa1.len(), degree);
                 assert_eq!(pa1, pa2, "different parents on the same node");
 
                 let mut p1 = vec![0; degree];
-                g.parents(i, &mut p1).unwrap();
+                g.parents(i, &mut p1).expect("parents never fail");
                 let mut p2 = vec![0; degree];
-                g.parents(i, &mut p2).unwrap();
+                g.parents(i, &mut p2).expect("parents never fail");
 
                 for parent in p1 {
                     // TODO: fix me
@@ -309,15 +310,16 @@ mod tests {
 
     fn gen_proof<H: 'static + Hasher, U: 'static + PoseidonArity>(config: Option<StoreConfig>) {
         let leafs = 64;
-        let g = BucketGraph::<H>::new(leafs, BASE_DEGREE, 0, new_seed()).unwrap();
+        let g = BucketGraph::<H>::new(leafs, BASE_DEGREE, 0, new_seed())
+            .expect("failed to create bucket graph");
         let data = vec![2u8; NODE_SIZE * leafs];
 
         let mmapped = &mmap_from(&data);
         let tree = create_base_merkle_tree::<
             MerkleTreeWrapper<H, DiskStore<H::Domain>, U, typenum::U0, typenum::U0>,
         >(config, g.size(), mmapped)
-        .unwrap();
-        let proof = tree.gen_proof(2).unwrap();
+        .expect("failed to create merkle tree wrapper");
+        let proof = tree.gen_proof(2).expect("gen_proof failed");
 
         assert!(proof.verify());
     }

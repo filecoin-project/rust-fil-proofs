@@ -324,7 +324,7 @@ mod tests {
         };
 
         // Construct and store an MT using a named store.
-        let temp_dir = tempdir::TempDir::new("tree").unwrap();
+        let temp_dir = tempdir::TempDir::new("tree").expect("failed to create tempdir");
         let temp_path = temp_dir.path();
 
         let (_data1, tree1) = generate_tree::<Tree, _>(rng, leaves, Some(temp_path.to_path_buf()));
@@ -347,8 +347,8 @@ mod tests {
         trees.insert(891.into(), &tree2);
         // other two faults don't have a tree available
 
-        let challenges =
-            derive_challenges(challenges_count, sector_size, &sectors, &seed, &faults).unwrap();
+        let challenges = derive_challenges(challenges_count, sector_size, &sectors, &seed, &faults)
+            .expect("derive_challenges failed");
 
         // the only valid sector to challenge is 891
         assert!(
@@ -358,7 +358,7 @@ mod tests {
 
         let comm_r_lasts = challenges
             .iter()
-            .map(|c| trees.get(&c.sector).unwrap().root())
+            .map(|c| trees.get(&c.sector).expect("trees is empty").root())
             .collect::<Vec<_>>();
 
         let comm_cs: Vec<<Tree::Hasher as Hasher>::Domain> = challenges
@@ -438,7 +438,7 @@ mod tests {
         };
 
         // Construct and store an MT using a named store.
-        let temp_dir = tempdir::TempDir::new("tree").unwrap();
+        let temp_dir = tempdir::TempDir::new("tree").expect("failed to create new tempdir");
         let temp_path = temp_dir.path();
 
         let (_data, tree) = generate_tree::<Tree, _>(rng, leaves, Some(temp_path.to_path_buf()));
@@ -452,11 +452,11 @@ mod tests {
         let mut trees = BTreeMap::new();
         trees.insert(0.into(), &tree);
 
-        let challenges =
-            derive_challenges(challenges_count, sector_size, &sectors, &seed, &faults).unwrap();
+        let challenges = derive_challenges(challenges_count, sector_size, &sectors, &seed, &faults)
+            .expect("derive_challenges failed");
         let comm_r_lasts = challenges
             .iter()
-            .map(|c| trees.get(&c.sector).unwrap().root())
+            .map(|c| trees.get(&c.sector).expect("trees is empty").root())
             .collect::<Vec<_>>();
 
         let comm_cs: Vec<<Tree::Hasher as Hasher>::Domain> = challenges
@@ -488,8 +488,8 @@ mod tests {
             .expect("proving failed");
 
         let seed = (0..leaves).map(|_| rng.gen()).collect::<Vec<u8>>();
-        let challenges =
-            derive_challenges(challenges_count, sector_size, &sectors, &seed, &faults).unwrap();
+        let challenges = derive_challenges(challenges_count, sector_size, &sectors, &seed, &faults)
+            .expect("derive_challenges failed");
         let comm_r_lasts = challenges.iter().map(|_c| tree.root()).collect::<Vec<_>>();
 
         let comm_cs: Vec<<Tree::Hasher as Hasher>::Domain> = challenges

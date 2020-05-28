@@ -151,7 +151,7 @@ mod tests {
         };
 
         // Construct and store an MT using a named DiskStore.
-        let temp_dir = tempdir::TempDir::new("tree").unwrap();
+        let temp_dir = tempdir::TempDir::new("tree").expect("failed to create tempdir");
         let temp_path = temp_dir.path();
 
         let (_data1, tree1) = generate_tree::<Tree, _>(rng, leaves, Some(temp_path.to_path_buf()));
@@ -163,8 +163,8 @@ mod tests {
         sectors.insert(1.into());
 
         let seed = (0..leaves).map(|_| rng.gen()).collect::<Vec<u8>>();
-        let challenges =
-            derive_challenges(challenges_count, sector_size, &sectors, &seed, &faults).unwrap();
+        let challenges = derive_challenges(challenges_count, sector_size, &sectors, &seed, &faults)
+            .expect("derive_challenges failed");
         let comm_r_lasts_raw = vec![tree1.root(), tree2.root()];
         let comm_r_lasts: Vec<_> = challenges
             .iter()
@@ -252,7 +252,7 @@ mod tests {
 
         let generated_inputs =
             RationalPoStCompound::<Tree>::generate_public_inputs(&pub_inputs, &pub_params, None)
-                .unwrap();
+                .expect("generate_public_inputs failed");
         let expected_inputs = cs.get_inputs();
 
         for ((input, label), generated_input) in

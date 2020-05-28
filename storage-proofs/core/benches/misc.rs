@@ -15,14 +15,14 @@ fn read_bytes_benchmark(c: &mut Criterion) {
                 let mut rng = thread_rng();
                 let data: Vec<u8> = (0..*bytes).map(|_| rng.gen()).collect();
 
-                let mut f = tempfile().unwrap();
-                f.write_all(&data).unwrap();
-                f.sync_all().unwrap();
+                let mut f = tempfile().expect("tempfile failed");
+                f.write_all(&data).expect("write_all failed");
+                f.sync_all().expect("sync_all failed");
 
                 b.iter(|| {
                     let mut res = vec![0u8; *bytes];
-                    f.seek(std::io::SeekFrom::Start(0)).unwrap();
-                    f.read_exact(&mut res).unwrap();
+                    f.seek(std::io::SeekFrom::Start(0)).expect("seek failed");
+                    f.read_exact(&mut res).expect("read_exact failed");
 
                     black_box(res)
                 })

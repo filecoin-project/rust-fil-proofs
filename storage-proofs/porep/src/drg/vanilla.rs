@@ -528,7 +528,7 @@ where
         .into_par_iter()
         .flat_map(|i| {
             decode_block::<H, G>(graph, replica_id, data, exp_parents_data, i)
-                .unwrap()
+                .expect("decode_block failed")
                 .into_bytes()
         })
         .collect();
@@ -636,7 +636,7 @@ mod tests {
 
         // MT for original data is always named tree-d, and it will be
         // referenced later in the process as such.
-        let cache_dir = tempfile::tempdir().unwrap();
+        let cache_dir = tempfile::tempdir().expect("tempdir failed");
         let config = StoreConfig::new(
             cache_dir.path(),
             CacheKey::CommDTree.to_string(),
@@ -715,7 +715,7 @@ mod tests {
 
         // MT for original data is always named tree-d, and it will be
         // referenced later in the process as such.
-        let cache_dir = tempfile::tempdir().unwrap();
+        let cache_dir = tempfile::tempdir().expect("tempdir failed");
         let config = StoreConfig::new(
             cache_dir.path(),
             CacheKey::CommDTree.to_string(),
@@ -759,7 +759,7 @@ mod tests {
                 DrgPoRep::extract(&pp, &replica_id, &mmapped_data, i, Some(config.clone()))
                     .expect("failed to extract node data from PoRep");
 
-            let original_data = data_at_node(&data, i).unwrap();
+            let original_data = data_at_node(&data, i).expect("data_at_node failed");
 
             assert_eq!(
                 original_data,
@@ -807,7 +807,7 @@ mod tests {
 
             // MT for original data is always named tree-d, and it will be
             // referenced later in the process as such.
-            let cache_dir = tempfile::tempdir().unwrap();
+            let cache_dir = tempfile::tempdir().expect("tempdir failed");
             let config = StoreConfig::new(
                 cache_dir.path(),
                 CacheKey::CommDTree.to_string(),

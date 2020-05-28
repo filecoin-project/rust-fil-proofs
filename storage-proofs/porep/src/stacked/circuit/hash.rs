@@ -53,12 +53,12 @@ mod tests {
 
             let a_num = {
                 let mut cs = cs.namespace(|| "a");
-                num::AllocatedNum::alloc(&mut cs, || Ok(a)).unwrap()
+                num::AllocatedNum::alloc(&mut cs, || Ok(a)).expect("alloc failed: a")
             };
 
             let b_num = {
                 let mut cs = cs.namespace(|| "b");
-                num::AllocatedNum::alloc(&mut cs, || Ok(b)).unwrap()
+                num::AllocatedNum::alloc(&mut cs, || Ok(b)).expect("alloc failed: a")
             };
 
             let out = <PedersenHasher as Hasher>::Function::hash2_circuit(
@@ -76,7 +76,7 @@ mod tests {
 
             assert_eq!(
                 expected,
-                out.get_value().unwrap(),
+                out.get_value().expect("get_value failed"),
                 "circuit and non circuit do not match"
             );
         }
@@ -95,7 +95,7 @@ mod tests {
                 .enumerate()
                 .map(|(i, v)| {
                     num::AllocatedNum::alloc(cs.namespace(|| format!("num_{}", i)), || Ok(*v))
-                        .unwrap()
+                        .expect("alloc num failed")
                 })
                 .collect::<Vec<_>>();
 
@@ -109,7 +109,7 @@ mod tests {
 
             assert_eq!(
                 expected,
-                out.get_value().unwrap(),
+                out.get_value().expect("get_value failed"),
                 "circuit and non circuit do not match"
             );
         }

@@ -497,7 +497,8 @@ mod tests {
         let prover_id = <Tree::Hasher as Hasher>::Domain::random(rng);
 
         // Construct and store an MT using a named DiskStore.
-        let temp_dir = tempdir::TempDir::new("level_cache_tree").unwrap();
+        let temp_dir =
+            tempdir::TempDir::new("level_cache_tree").expect("failed to create new tempdir");
         let temp_path = temp_dir.path();
 
         let mut pub_sectors = Vec::new();

@@ -175,8 +175,10 @@ mod tests {
             .flat_map(|_| fr_into_bytes(&Fr::random(rng)))
             .collect();
 
-        let graph = BucketGraph::<Tree::Hasher>::new(leaves, BASE_DEGREE, 0, new_seed()).unwrap();
-        let tree = create_base_merkle_tree::<Tree>(None, graph.size(), data.as_slice()).unwrap();
+        let graph = BucketGraph::<Tree::Hasher>::new(leaves, BASE_DEGREE, 0, new_seed())
+            .expect("failed to create bucket graph");
+        let tree = create_base_merkle_tree::<Tree>(None, graph.size(), data.as_slice())
+            .expect("failed to create merkle tree");
 
         let pub_inputs = PublicInputs {
             challenge: 3,
@@ -184,9 +186,9 @@ mod tests {
         };
 
         let leaf = <Tree::Hasher as Hasher>::Domain::try_from_bytes(
-            data_at_node(data.as_slice(), pub_inputs.challenge).unwrap(),
+            data_at_node(data.as_slice(), pub_inputs.challenge).expect("data_at_node failed"),
         )
-        .unwrap();
+        .expect("try_from_bytes failed");
 
         let priv_inputs = PrivateInputs::new(leaf, &tree);
 
@@ -265,8 +267,10 @@ mod tests {
             .flat_map(|_| fr_into_bytes(&Fr::random(rng)))
             .collect();
 
-        let graph = BucketGraph::<Tree::Hasher>::new(leaves, BASE_DEGREE, 0, new_seed()).unwrap();
-        let tree = create_base_merkle_tree::<Tree>(None, graph.size(), data.as_slice()).unwrap();
+        let graph = BucketGraph::<Tree::Hasher>::new(leaves, BASE_DEGREE, 0, new_seed())
+            .expect("failed to create bucket graph");
+        let tree = create_base_merkle_tree::<Tree>(None, graph.size(), data.as_slice())
+            .expect("failed to create merkle tree");
 
         let pub_inputs = PublicInputs {
             challenge: 3,
@@ -274,9 +278,9 @@ mod tests {
         };
 
         let leaf = <Tree::Hasher as Hasher>::Domain::try_from_bytes(
-            data_at_node(data.as_slice(), pub_inputs.challenge).unwrap(),
+            data_at_node(data.as_slice(), pub_inputs.challenge).expect("data_at_node failed"),
         )
-        .unwrap();
+        .expect("try_from_bytes failed");
 
         let priv_inputs = PrivateInputs::<Tree>::new(leaf, &tree);
 
@@ -350,8 +354,10 @@ mod tests {
             .flat_map(|_| fr_into_bytes(&Fr::random(rng)))
             .collect();
 
-        let graph = BucketGraph::<Tree::Hasher>::new(leaves, BASE_DEGREE, 0, new_seed()).unwrap();
-        let tree = create_base_merkle_tree::<Tree>(None, graph.size(), data.as_slice()).unwrap();
+        let graph = BucketGraph::<Tree::Hasher>::new(leaves, BASE_DEGREE, 0, new_seed())
+            .expect("failed to create bucket graph");
+        let tree = create_base_merkle_tree::<Tree>(None, graph.size(), data.as_slice())
+            .expect("failed to create merkle tree");
 
         let pub_inputs = PublicInputs {
             challenge: 3,
@@ -359,9 +365,9 @@ mod tests {
         };
 
         let leaf = <Tree::Hasher as Hasher>::Domain::try_from_bytes(
-            data_at_node(data.as_slice(), pub_inputs.challenge).unwrap(),
+            data_at_node(data.as_slice(), pub_inputs.challenge).expect("data_at_node failed"),
         )
-        .unwrap();
+        .expect("try_from_bytes failed");
 
         let priv_inputs = PrivateInputs::<Tree>::new(leaf, &tree);
 

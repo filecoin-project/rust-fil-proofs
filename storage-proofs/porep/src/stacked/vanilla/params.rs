@@ -1,7 +1,7 @@
 use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
 
-use anyhow::Context;
+use anyhow::{bail, Context};
 use generic_array::typenum::{self, Unsigned};
 use log::trace;
 use merkletree::merkle::get_merkle_tree_leafs;
@@ -214,7 +214,9 @@ impl<Tree: MerkleTreeTrait, G: Hasher> Proof<Tree, G> {
         // Verify replica column openings
         trace!("verify replica column openings");
         let mut parents = vec![0; graph.degree()];
-        graph.parents(challenge, &mut parents).unwrap(); // FIXME: error handling
+        graph
+            .parents(challenge, &mut parents)
+            .expect("parents failed"); // FIXME: error handling
         check!(self.replica_column_proofs.verify(challenge, &parents));
 
         check!(self.verify_final_replica_layer(challenge));
@@ -243,12 +245,12 @@ impl<Tree: MerkleTreeTrait, G: Hasher> Proof<Tree, G> {
             trace!("verify labeling (layer: {})", layer,);
 
             check!(self.labeling_proofs.get(layer - 1).is_some());
-            let labeling_proof = &self.labeling_proofs.get(layer - 1).unwrap();
+            let labeling_proof = &self.labeling_proofs.get(layer - 1).expect("");
             let labeled_node = self
                 .replica_column_proofs
                 .c_x
                 .get_node_at_layer(layer)
-                .unwrap(); // FIXME: error handling
+                .expect("get_node_at_layer failed"); // FIXME: error handling
             check!(labeling_proof.verify(replica_id, labeled_node));
         }
 
@@ -475,7 +477,10 @@ pub struct TemporaryAuxCache<Tree: MerkleTreeTrait, G: Hasher> {
 impl<Tree: MerkleTreeTrait, G: Hasher> TemporaryAuxCache<Tree, G> {
     pub fn new(t_aux: &TemporaryAux<Tree, G>, replica_path: PathBuf) -> Result<Self> {
         // tree_d_size stored in the config is the base tree size
-        let tree_d_size = t_aux.tree_d_config.size.unwrap();
+        let tree_d_size = match t_aux.tree_d_config.size {
+            Some(size) => size,
+            None => bail!("tree_d_config size is None"),
+        };
         let tree_d_leafs = get_merkle_tree_leafs(tree_d_size, BINARY_ARITY)?;
         trace!(
             "Instantiating tree d with size {} and leafs {}",
@@ -492,7 +497,10 @@ impl<Tree: MerkleTreeTrait, G: Hasher> TemporaryAuxCache<Tree, G> {
         let configs = split_config(t_aux.tree_c_config.clone(), tree_count)?;
 
         // tree_c_size stored in the config is the base tree size
-        let tree_c_size = t_aux.tree_c_config.size.unwrap();
+        let tree_c_size = match t_aux.tree_c_config.size {
+            Some(size) => size,
+            None => bail!("tree_c_config size is None"),
+        };
         trace!(
             "Instantiating tree c [count {}] with size {} and arity {}",
             tree_count,
@@ -504,7 +512,11 @@ impl<Tree: MerkleTreeTrait, G: Hasher> TemporaryAuxCache<Tree, G> {
         >(tree_c_size, &configs)?;
 
         // tree_r_last_size stored in the config is the base tree size
-        let tree_r_last_size = t_aux.tree_r_last_config.size.unwrap();
+        let tree_r_last_size = match t_aux.tree_r_last_config.size {
+            Some(size) => size,
+            None => bail!("tree_r_last_config is None"),
+        };
+
         let tree_r_last_config_rows_to_discard = t_aux.tree_r_last_config.rows_to_discard;
         let (configs, replica_config) = split_config_and_replica(
             t_aux.tree_r_last_config.clone(),
@@ -617,7 +629,11 @@ impl<Tree: MerkleTreeTrait> Labels<Tree> {
         let config = self.labels[row_index].clone();
         assert!(config.size.is_some());
 
-        DiskStore::new_from_disk(config.size.unwrap(), Tree::Arity::to_usize(), &config)
+        let size = match config.size {
+            Some(size) => size,
+            None => bail!("config size is None"),
+        };
+        DiskStore::new_from_disk(size, Tree::Arity::to_usize(), &config)
     }
 
     /// Returns label for the last layer.
@@ -636,9 +652,11 @@ impl<Tree: MerkleTreeTrait> Labels<Tree> {
             .labels
             .iter()
             .map(|label| {
-                assert!(label.size.is_some());
-                let store =
-                    DiskStore::new_from_disk(label.size.unwrap(), Tree::Arity::to_usize(), &label)?;
+                let size = match label.size {
+                    Some(size) => size,
+                    None => bail!("label size is None"),
+                };
+                let store = DiskStore::new_from_disk(size, Tree::Arity::to_usize(), &label)?;
                 store.read_at(node as usize)
             })
             .collect::<Result<_>>()?;

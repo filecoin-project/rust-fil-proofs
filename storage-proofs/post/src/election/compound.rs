@@ -214,7 +214,7 @@ mod tests {
         let mut trees = BTreeMap::new();
 
         // Construct and store an MT using a named store.
-        let temp_dir = tempdir::TempDir::new("tree").unwrap();
+        let temp_dir = tempdir::TempDir::new("tree").expect("failed to create tempdir");
         let temp_path = temp_dir.path();
 
         for i in 0..5 {
@@ -233,10 +233,10 @@ mod tests {
             prover_id,
             randomness,
         )
-        .unwrap();
+        .expect("generate_candidates failed");
 
         let candidate = &candidates[0];
-        let tree = trees.remove(&candidate.sector_id).unwrap();
+        let tree = trees.remove(&candidate.sector_id).expect("trees is empty");
         let comm_r_last = tree.root();
         let comm_c = <Tree::Hasher as Hasher>::Domain::random(rng);
         let comm_r = <Tree::Hasher as Hasher>::Function::hash2(&comm_c, &comm_r_last);
@@ -259,7 +259,7 @@ mod tests {
         {
             let (circuit, inputs) =
                 ElectionPoStCompound::circuit_for_test(&pub_params, &pub_inputs, &priv_inputs)
-                    .unwrap();
+                    .expect("circuit_for_test failed");
 
             let mut cs = TestConstraintSystem::new();
 
@@ -268,7 +268,7 @@ mod tests {
             if !cs.is_satisfied() {
                 panic!(
                     "failed to satisfy: {:?}",
-                    cs.which_is_unsatisfied().unwrap()
+                    cs.which_is_unsatisfied().expect("satisfied")
                 );
             }
             assert!(
@@ -281,7 +281,7 @@ mod tests {
         {
             let (circuit1, _inputs) =
                 ElectionPoStCompound::circuit_for_test(&pub_params, &pub_inputs, &priv_inputs)
-                    .unwrap();
+                    .expect("circuit_for_test failed");
             let blank_circuit =
                 ElectionPoStCompound::<Tree>::blank_circuit(&pub_params.vanilla_params);
 

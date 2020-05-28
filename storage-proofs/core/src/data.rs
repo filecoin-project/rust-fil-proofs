@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use anyhow::{ensure, Context, Result};
+use anyhow::{bail, Context, Result};
 use log::info;
 
 /// A wrapper around data either on disk or a slice in memory, that can be dropped and read back into memory,
@@ -112,8 +112,10 @@ impl<'a> Data<'a> {
         match self.raw {
             Some(..) => {}
             None => {
-                ensure!(self.path.is_some(), "Missing path");
-                let path = self.path.as_ref().unwrap();
+                let path = match &self.path {
+                    None => bail!("Missing path"),
+                    Some(path) => path,
+                };
 
                 info!("restoring {}", path.display());
 

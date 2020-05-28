@@ -57,7 +57,7 @@ fn blake2s_circuit_benchmark(c: &mut Criterion) {
         },
         &mut rng1,
     )
-    .unwrap();
+    .expect("failed to generate random reference string");
 
     let params = vec![32];
 
@@ -77,7 +77,7 @@ fn blake2s_circuit_benchmark(c: &mut Criterion) {
                         &groth_params,
                         &mut rng,
                     )
-                    .unwrap();
+                    .expect("failed to create random proof");
 
                     black_box(proof)
                 });
@@ -94,7 +94,7 @@ fn blake2s_circuit_benchmark(c: &mut Criterion) {
                     data: data.as_slice(),
                 }
                 .synthesize(&mut cs)
-                .unwrap();
+                .expect("synthesis error");
 
                 black_box(cs)
             });

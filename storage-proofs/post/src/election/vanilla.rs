@@ -372,7 +372,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait> ProofScheme<'a> for ElectionPoSt<'a, T
                         pub_inputs.sector_challenge_index,
                         n as u64,
                     )
-                    .unwrap();
+                    .expect("generate_lead_challenge failed");
                     (0..pub_params.challenged_nodes)
                         .into_par_iter()
                         .map(move |i| {
@@ -478,7 +478,7 @@ mod tests {
         let mut trees = BTreeMap::new();
 
         // Construct and store an MT using a named store.
-        let temp_dir = tempdir::TempDir::new("tree").unwrap();
+        let temp_dir = tempdir::TempDir::new("tree").expect("failed to create new tempdir");
         let temp_path = temp_dir.path();
 
         for i in 0..5 {
@@ -490,10 +490,10 @@ mod tests {
 
         let candidates =
             generate_candidates::<Tree>(&pub_params, &sectors, &trees, prover_id, randomness)
-                .unwrap();
+                .expect("generate_candidates failed");
 
         let candidate = &candidates[0];
-        let tree = trees.remove(&candidate.sector_id).unwrap();
+        let tree = trees.remove(&candidate.sector_id).expect("trees is empty");
         let comm_r_last = tree.root();
         let comm_c = <Tree::Hasher as Hasher>::Domain::random(rng);
         let comm_r = <Tree::Hasher as Hasher>::Function::hash2(&comm_c, &comm_r_last);

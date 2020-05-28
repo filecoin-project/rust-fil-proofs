@@ -110,7 +110,9 @@ impl Hashable<Blake2sFunction> for Blake2sDomain {
 impl From<Fr> for Blake2sDomain {
     fn from(val: Fr) -> Self {
         let mut res = Self::default();
-        val.into_repr().write_le(&mut res.0[0..32]).unwrap();
+        val.into_repr()
+            .write_le(&mut res.0[0..32])
+            .expect("in-memory write failed");
 
         res
     }
@@ -119,7 +121,8 @@ impl From<Fr> for Blake2sDomain {
 impl From<FrRepr> for Blake2sDomain {
     fn from(val: FrRepr) -> Self {
         let mut res = Self::default();
-        val.write_le(&mut res.0[0..32]).unwrap();
+        val.write_le(&mut res.0[0..32])
+            .expect("in-memory write failed");
 
         res
     }
@@ -145,9 +148,9 @@ impl Element for Blake2sDomain {
 impl From<Blake2sDomain> for Fr {
     fn from(val: Blake2sDomain) -> Self {
         let mut res = FrRepr::default();
-        res.read_le(&val.0[0..32]).unwrap();
+        res.read_le(&val.0[0..32]).expect("in-memory write failed");
 
-        Fr::from_repr(res).unwrap()
+        Fr::from_repr(res).expect("conversion from_repr failed")
     }
 }
 

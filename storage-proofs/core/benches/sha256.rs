@@ -91,7 +91,7 @@ fn sha256_circuit_benchmark(c: &mut Criterion) {
                     },
                     &mut rng1,
                 )
-                .unwrap();
+                .expect("failed to generate random params");
 
                 let mut rng = thread_rng();
                 let data: Vec<Option<bool>> = (0..bytes * 8).map(|_| Some(rng.gen())).collect();
@@ -104,7 +104,7 @@ fn sha256_circuit_benchmark(c: &mut Criterion) {
                         &groth_params,
                         &mut rng,
                     )
-                    .unwrap();
+                    .expect("failed to create random proof");
 
                     black_box(proof)
                 });
@@ -121,7 +121,7 @@ fn sha256_circuit_benchmark(c: &mut Criterion) {
                     data: data.as_slice(),
                 }
                 .synthesize(&mut cs)
-                .unwrap();
+                .expect("synthesis error");
 
                 black_box(cs)
             });

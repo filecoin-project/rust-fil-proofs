@@ -131,15 +131,17 @@ mod tests {
         for _ in 0..100 {
             let mut cs = TestConstraintSystem::<Bls12>::new();
 
-            let a = num::AllocatedNum::alloc(cs.namespace(|| "a"), || Ok(Fr::random(rng))).unwrap();
-            let b = num::AllocatedNum::alloc(cs.namespace(|| "b"), || Ok(Fr::random(rng))).unwrap();
+            let a = num::AllocatedNum::alloc(cs.namespace(|| "a"), || Ok(Fr::random(rng)))
+                .expect("failed to alloc a");
+            let b = num::AllocatedNum::alloc(cs.namespace(|| "b"), || Ok(Fr::random(rng)))
+                .expect("failed to alloc b");
 
             let res = add(cs.namespace(|| "a+b"), &a, &b).expect("add failed");
 
-            let mut tmp = a.get_value().unwrap().clone();
-            tmp.add_assign(&b.get_value().unwrap());
+            let mut tmp = a.get_value().expect("get_value failed for a").clone();
+            tmp.add_assign(&b.get_value().expect("get_value failed for b"));
 
-            assert_eq!(res.get_value().unwrap(), tmp);
+            assert_eq!(res.get_value().expect("get_vaule failed for res"), tmp);
             assert!(cs.is_satisfied());
         }
     }
@@ -151,15 +153,17 @@ mod tests {
         for _ in 0..100 {
             let mut cs = TestConstraintSystem::<Bls12>::new();
 
-            let a = num::AllocatedNum::alloc(cs.namespace(|| "a"), || Ok(Fr::random(rng))).unwrap();
-            let b = num::AllocatedNum::alloc(cs.namespace(|| "b"), || Ok(Fr::random(rng))).unwrap();
+            let a = num::AllocatedNum::alloc(cs.namespace(|| "a"), || Ok(Fr::random(rng)))
+                .expect("failed to alloc a");
+            let b = num::AllocatedNum::alloc(cs.namespace(|| "b"), || Ok(Fr::random(rng)))
+                .expect("failed to alloc b");
 
             let res = sub(cs.namespace(|| "a-b"), &a, &b).expect("subtraction failed");
 
-            let mut tmp = a.get_value().unwrap().clone();
-            tmp.sub_assign(&b.get_value().unwrap());
+            let mut tmp = a.get_value().expect("get_value failed for a").clone();
+            tmp.sub_assign(&b.get_value().expect("get_value failed for b"));
 
-            assert_eq!(res.get_value().unwrap(), tmp);
+            assert_eq!(res.get_value().expect("get_vaule failed for res"), tmp);
             assert!(cs.is_satisfied());
         }
     }

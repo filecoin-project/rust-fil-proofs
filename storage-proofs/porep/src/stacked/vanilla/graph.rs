@@ -173,7 +173,10 @@ where
         assert_eq!(expansion_degree, EXP_DEGREE);
         ensure!(nodes <= std::u32::MAX as usize, "too many nodes");
 
-        let use_cache = settings::SETTINGS.lock().unwrap().maximize_caching;
+        let use_cache = settings::SETTINGS
+            .lock()
+            .expect("SETTINGS poisoned")
+            .maximize_caching;
 
         let base_graph = match base_graph {
             Some(graph) => graph,
@@ -216,7 +219,8 @@ where
         } else {
             let mut cache_parents = [0u32; DEGREE];
 
-            self.parents(node as usize, &mut cache_parents[..]).unwrap();
+            self.parents(node as usize, &mut cache_parents[..])
+                .expect("parents failed");
             self.copy_parents_data_inner_exp(&cache_parents, base_data, exp_data, hasher)
         }
     }
@@ -228,7 +232,8 @@ where
         } else {
             let mut cache_parents = [0u32; DEGREE];
 
-            self.parents(node as usize, &mut cache_parents[..]).unwrap();
+            self.parents(node as usize, &mut cache_parents[..])
+                .expect("parents failed");
             self.copy_parents_data_inner(&cache_parents, base_data, hasher)
         }
     }

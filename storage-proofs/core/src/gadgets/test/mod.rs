@@ -427,21 +427,32 @@ mod tests {
         assert_eq!(cs.num_constraints(), 0);
         let a = cs
             .namespace(|| "a")
-            .alloc(|| "var", || Ok(Fr::from_str("10").unwrap()))
-            .unwrap();
+            .alloc(
+                || "var",
+                || Ok(Fr::from_str("10").expect("failed to parse 10")),
+            )
+            .expect("alloc failed: namespace a");
+
         let b = cs
             .namespace(|| "b")
-            .alloc(|| "var", || Ok(Fr::from_str("4").unwrap()))
-            .unwrap();
+            .alloc(
+                || "var",
+                || Ok(Fr::from_str("4").expect("failed to parse 4")),
+            )
+            .expect("alloc failed: namespace b");
+
         let c = cs
-            .alloc(|| "product", || Ok(Fr::from_str("40").unwrap()))
-            .unwrap();
+            .alloc(
+                || "product",
+                || Ok(Fr::from_str("40").expect("failed to parse 40")),
+            )
+            .expect("alloc failed: namespace product");
 
         cs.enforce(|| "mult", |lc| lc + a, |lc| lc + b, |lc| lc + c);
         assert!(cs.is_satisfied());
         assert_eq!(cs.num_constraints(), 1);
 
-        cs.set("a/var", Fr::from_str("4").unwrap());
+        cs.set("a/var", Fr::from_str("4").expect("failed to parse 4"));
 
         let one = TestConstraintSystem::<Bls12>::one();
         cs.enforce(|| "eq", |lc| lc + a, |lc| lc + one, |lc| lc + b);
@@ -449,15 +460,16 @@ mod tests {
         assert!(!cs.is_satisfied());
         assert!(cs.which_is_unsatisfied() == Some("mult"));
 
-        assert!(cs.get("product") == Fr::from_str("40").unwrap());
+        assert!(cs.get("product") == Fr::from_str("40").expect("failed to parse 40"));
 
-        cs.set("product", Fr::from_str("16").unwrap());
+        cs.set("product", Fr::from_str("16").expect("failed to parse 16"));
         assert!(cs.is_satisfied());
 
         {
             let mut cs = cs.namespace(|| "test1");
             let mut cs = cs.namespace(|| "test2");
-            cs.alloc(|| "hehe", || Ok(Fr::one())).unwrap();
+            cs.alloc(|| "hehe", || Ok(Fr::one()))
+                .expect("alloc failed hehe");
         }
 
         assert!(cs.get("test1/test2/hehe") == Fr::one());

@@ -224,7 +224,7 @@ mod tests {
         let mut trees = BTreeMap::new();
 
         // Construct and store an MT using a named store.
-        let temp_dir = tempdir::TempDir::new("tree").unwrap();
+        let temp_dir = tempdir::TempDir::new("tree").expect("failed to cerate tempdir");
         let temp_path = temp_dir.path();
 
         for i in 0..5 {
@@ -241,10 +241,10 @@ mod tests {
             prover_id,
             randomness,
         )
-        .unwrap();
+        .expect("generate_candidates failed");
 
         let candidate = &candidates[0];
-        let tree = trees.remove(&candidate.sector_id).unwrap();
+        let tree = trees.remove(&candidate.sector_id).expect("trees is empty");
         let comm_r_last = tree.root();
         let comm_c = <Tree::Hasher as Hasher>::Domain::random(rng);
         let comm_r = <Tree::Hasher as Hasher>::Function::hash2(&comm_c, &comm_r_last);
@@ -320,7 +320,7 @@ mod tests {
 
         let generated_inputs =
             ElectionPoStCompound::<Tree>::generate_public_inputs(&pub_inputs, &pub_params, None)
-                .unwrap();
+                .expect("generate_public_inputs failed");
         let expected_inputs = cs.get_inputs();
 
         for ((input, label), generated_input) in

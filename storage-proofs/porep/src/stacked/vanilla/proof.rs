@@ -72,7 +72,14 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
 
         // Sanity checks on restored trees.
         assert!(pub_inputs.tau.is_some());
-        assert_eq!(pub_inputs.tau.as_ref().unwrap().comm_d, t_aux.tree_d.root());
+        assert_eq!(
+            pub_inputs
+                .tau
+                .as_ref()
+                .expect("unreachable: is_some()")
+                .comm_d,
+            t_aux.tree_d.root()
+        );
 
         let get_drg_parents_columns = |x: usize| -> Result<Vec<Column<Tree::Hasher>>> {
             let base_degree = graph.base_graph().degree();
@@ -359,8 +366,8 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         let tree = MerkleTree::from_par_iter_with_config(
             (0..leafs)
                 .into_par_iter()
-                // TODO: proper error handling instead of `unwrap()`
-                .map(|i| get_node::<K>(tree_data, i).unwrap()),
+                // TODO: proper error handling instead of `expect()`
+                .map(|i| get_node::<K>(tree_data, i).expect("get_node failed")),
             config,
         )?;
         Ok(tree)
@@ -377,7 +384,11 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         ColumnArity: PoseidonArity,
         TreeArity: PoseidonArity,
     {
-        if settings::SETTINGS.lock().unwrap().use_gpu_column_builder {
+        if settings::SETTINGS
+            .lock()
+            .expect("SETTINGS poisoned")
+            .use_gpu_column_builder
+        {
             Self::generate_tree_c_gpu::<ColumnArity, TreeArity>(
                 layers,
                 nodes_count,
@@ -419,10 +430,14 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
             // Override these values with care using environment
             // variables: FIL_PROOFS_MAX_COLUMN_BATCH_SIZE and
             // FIL_PROOFS_MAX_TREE_BATCH_SIZE, respectively.
-            let max_gpu_column_batch_size =
-                settings::SETTINGS.lock().unwrap().max_gpu_column_batch_size as usize;
-            let max_gpu_tree_batch_size =
-                settings::SETTINGS.lock().unwrap().max_gpu_tree_batch_size as usize;
+            let max_gpu_column_batch_size = settings::SETTINGS
+                .lock()
+                .expect("SETTINGS poisoned")
+                .max_gpu_column_batch_size as usize;
+            let max_gpu_tree_batch_size = settings::SETTINGS
+                .lock()
+                .expect("SETTINGS poisoned")
+                .max_gpu_tree_batch_size as usize;
 
             let mut column_tree_builder = ColumnTreeBuilder::<ColumnArity, TreeArity>::new(
                 Some(BatcherType::GPU),
@@ -473,7 +488,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                                                     + j
                                                     + chunk * chunk_size,
                                             )
-                                            .unwrap();
+                                            .expect("read_at failed");
 
                                         hash[k - 1] = el.into();
                                     }
@@ -502,7 +517,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                             tree_count,
                             tree_data_len
                         );
-                        assert_eq!(tree_data_len, config.size.unwrap());
+                        assert_eq!(tree_data_len, config.size.expect("size is None"));
 
                         let flat_tree_data: Vec<_> = tree_data
                             .into_par_iter()
@@ -522,7 +537,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
 
             create_disk_tree::<
                 DiskTree<Tree::Hasher, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>,
-            >(configs[0].size.unwrap(), &configs)
+            >(configs[0].size.expect("size is None"), &configs)
         })
     }
 
@@ -566,7 +581,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                                         let store = labels.labels_for_layer(layer);
                                         let el: <Tree::Hasher as Hasher>::Domain = store
                                             .read_at((i * nodes_count) + j + chunk * chunk_size)
-                                            .unwrap();
+                                            .expect("read_at failed");
                                         el.into()
                                     })
                                     .collect();
@@ -591,7 +606,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
             assert_eq!(tree_count, trees.len());
             create_disk_tree::<
                 DiskTree<Tree::Hasher, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>,
-            >(configs[0].size.unwrap(), &configs)
+            >(configs[0].size.expect("size is None"), &configs)
         })
     }
 
@@ -749,7 +764,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
             }
         };
         tree_d_config.size = Some(tree_d.len());
-        assert_eq!(tree_d_config.size.unwrap(), tree_d.len());
+        assert_eq!(tree_d_config.size.expect("size is None"), tree_d.len());
         let tree_d_root = tree_d.root();
         drop(tree_d);
 
@@ -783,7 +798,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                     .map(|(key, data_node_bytes)| {
                         let data_node =
                             <Tree::Hasher as Hasher>::Domain::try_from_bytes(data_node_bytes)
-                                .unwrap();
+                                .expect("try_from_bytes failed");
                         let encoded_node =
                             encode::<<Tree::Hasher as Hasher>::Domain>(key, data_node);
                         data_node_bytes.copy_from_slice(AsRef::<[u8]>::as_ref(&encoded_node));
@@ -802,7 +817,11 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
 
             create_lc_tree::<
                 LCTree<Tree::Hasher, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>,
-            >(tree_r_last_config.size.unwrap(), &configs, &replica_config)
+            >(
+                tree_r_last_config.size.expect("size is None"),
+                &configs,
+                &replica_config,
+            )
         })?;
         info!("tree_r_last done");
 
@@ -991,7 +1010,7 @@ mod tests {
 
         // MT for original data is always named tree-d, and it will be
         // referenced later in the process as such.
-        let cache_dir = tempfile::tempdir().unwrap();
+        let cache_dir = tempfile::tempdir().expect("tempdir failed");
         let config = StoreConfig::new(
             cache_dir.path(),
             CacheKey::CommDTree.to_string(),
@@ -1168,7 +1187,7 @@ mod tests {
 
         // MT for original data is always named tree-d, and it will be
         // referenced later in the process as such.
-        let cache_dir = tempfile::tempdir().unwrap();
+        let cache_dir = tempfile::tempdir().expect("tempdir failed");
         let config = StoreConfig::new(
             cache_dir.path(),
             CacheKey::CommDTree.to_string(),

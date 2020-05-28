@@ -10,12 +10,16 @@ fn drgraph(c: &mut Criterion) {
         ParameterizedBenchmark::new(
             "bucket/m=6",
             |b, n| {
-                let graph =
-                    BucketGraph::<PedersenHasher>::new(*n, BASE_DEGREE, 0, new_seed()).unwrap();
+                let graph = BucketGraph::<PedersenHasher>::new(*n, BASE_DEGREE, 0, new_seed())
+                    .expect("failed to create bucket graph");
 
                 b.iter(|| {
                     let mut parents = vec![0; 6];
-                    black_box(graph.parents(2, &mut parents).unwrap());
+                    black_box(
+                        graph
+                            .parents(2, &mut parents)
+                            .expect("unreachable: parents never fail"),
+                    );
                 })
             },
             params,

@@ -17,7 +17,7 @@ fn fr_benchmark(c: &mut Criterion) {
         let fr = Fr::random(&mut rng);
         let bytes = fr_into_bytes(&fr);
 
-        b.iter(|| black_box(bytes_into_fr(&bytes).unwrap()))
+        b.iter(|| black_box(bytes_into_fr(&bytes).expect("failed to turn bytes into fr")))
     });
 }
 

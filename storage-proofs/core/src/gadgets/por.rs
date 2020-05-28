@@ -79,7 +79,7 @@ impl<
             .collect();
 
         let top = if has_top {
-            let (hashes, index) = opts.pop().unwrap();
+            let (hashes, index) = opts.pop().expect("unreachable: has_top");
             vec![PathElement {
                 hashes,
                 index,
@@ -91,7 +91,7 @@ impl<
         };
 
         let sub = if has_sub {
-            let (hashes, index) = opts.pop().unwrap();
+            let (hashes, index) = opts.pop().expect("unreachable: has_sub");
             vec![PathElement {
                 hashes,
                 index,
@@ -477,7 +477,8 @@ mod tests {
         let data: Vec<u8> = (0..leaves)
             .flat_map(|_| fr_into_bytes(&Fr::random(rng)))
             .collect();
-        let tree = create_base_merkle_tree::<Tree>(None, leaves, data.as_slice()).unwrap();
+        let tree = create_base_merkle_tree::<Tree>(None, leaves, data.as_slice())
+            .expect("failed to create base merkle tree");
 
         let public_inputs = por::PublicInputs {
             challenge: 2,
@@ -495,9 +496,12 @@ mod tests {
         let public_params = PoRCompound::<Tree>::setup(&setup_params).expect("setup failed");
 
         let private_inputs = por::PrivateInputs::<Tree>::new(
-            bytes_into_fr(data_at_node(data.as_slice(), public_inputs.challenge).unwrap())
-                .expect("failed to create Fr from node data")
-                .into(),
+            bytes_into_fr(
+                data_at_node(data.as_slice(), public_inputs.challenge)
+                    .expect("data_at_node failed"),
+            )
+            .expect("failed to create Fr from node data")
+            .into(),
             &tree,
         );
 
@@ -515,7 +519,7 @@ mod tests {
 
         let (circuit, inputs) =
             PoRCompound::<Tree>::circuit_for_test(&public_params, &public_inputs, &private_inputs)
-                .unwrap();
+                .expect("circuit_for_test failed");
 
         let mut cs = TestConstraintSystem::new();
 
@@ -663,10 +667,12 @@ mod tests {
                 challenge: i,
                 commitment: Some(tree.root()),
             };
-            let leaf = data_at_node(data.as_slice(), pub_inputs.challenge).unwrap();
-            let leaf_element = <Tree::Hasher as Hasher>::Domain::try_from_bytes(leaf).unwrap();
+            let leaf =
+                data_at_node(data.as_slice(), pub_inputs.challenge).expect("data_at_node failed");
+            let leaf_element = <Tree::Hasher as Hasher>::Domain::try_from_bytes(leaf)
+                .expect("try_from_bytes failed");
             let priv_inputs = por::PrivateInputs::<ResTree<Tree>>::new(leaf_element, &tree);
-            let p = tree.gen_proof(i).unwrap();
+            let p = tree.gen_proof(i).expect("gen_proof failed");
             assert!(p.verify());
 
             // create a non circuit proof
@@ -684,7 +690,9 @@ mod tests {
             let por = PoRCircuit::<ResTree<Tree>> {
                 value: Root::Val(Some(proof.data.into())),
                 auth_path: proof.proof.as_options().into(),
-                root: Root::Val(Some(pub_inputs.commitment.unwrap().into())),
+                root: Root::Val(Some(
+                    pub_inputs.commitment.expect("commitment failed").into(),
+                )),
                 private: false,
                 _tree: PhantomData,
             };
@@ -704,7 +712,7 @@ mod tests {
                 &pub_params,
                 None,
             )
-            .unwrap();
+            .expect("generate_public_inputs failed");
 
             let expected_inputs = cs.get_inputs();
 
@@ -808,16 +816,19 @@ mod tests {
                 PoRCompound::<ResTree<Tree>>::setup(&setup_params).expect("setup failed");
 
             let private_inputs = por::PrivateInputs::<ResTree<Tree>>::new(
-                bytes_into_fr(data_at_node(data.as_slice(), public_inputs.challenge).unwrap())
-                    .expect("failed to create Fr from node data")
-                    .into(),
+                bytes_into_fr(
+                    data_at_node(data.as_slice(), public_inputs.challenge)
+                        .expect("conversion failed"),
+                )
+                .expect("failed to create Fr from node data")
+                .into(),
                 &tree,
             );
 
             {
                 let (circuit, inputs) =
                     PoRCompound::circuit_for_test(&public_params, &public_inputs, &private_inputs)
-                        .unwrap();
+                        .expect("circuit_for_test failed");
 
                 let mut cs = TestConstraintSystem::new();
 
@@ -826,7 +837,7 @@ mod tests {
                 if !cs.is_satisfied() {
                     panic!(
                         "failed to satisfy: {:?}",
-                        cs.which_is_unsatisfied().unwrap()
+                        cs.which_is_unsatisfied().expect("all satisfied")
                     );
                 }
                 assert!(
@@ -839,7 +850,7 @@ mod tests {
             {
                 let (circuit1, _inputs) =
                     PoRCompound::circuit_for_test(&public_params, &public_inputs, &private_inputs)
-                        .unwrap();
+                        .expect("circuit_for_test failed: _inputs");
                 let blank_circuit =
                     PoRCompound::<ResTree<Tree>>::blank_circuit(&public_params.vanilla_params);
 
@@ -912,7 +923,8 @@ mod tests {
                 .flat_map(|_| fr_into_bytes(&Fr::random(rng)))
                 .collect();
 
-            let tree = create_base_merkle_tree::<Tree>(None, leaves, data.as_slice()).unwrap();
+            let tree = create_base_merkle_tree::<Tree>(None, leaves, data.as_slice())
+                .expect("failed to create merkle tree");
 
             // -- PoR
 
@@ -926,9 +938,12 @@ mod tests {
             };
 
             let priv_inputs = por::PrivateInputs::<Tree>::new(
-                bytes_into_fr(data_at_node(data.as_slice(), pub_inputs.challenge).unwrap())
-                    .unwrap()
-                    .into(),
+                bytes_into_fr(
+                    data_at_node(data.as_slice(), pub_inputs.challenge)
+                        .expect("data_at_node failed"),
+                )
+                .expect("failed to convert to fr")
+                .into(),
                 &tree,
             );
 

@@ -347,7 +347,7 @@ mod tests {
                                 Ok(elt)
                             },
                         )
-                        .unwrap()
+                        .expect("alloc element failed")
                     })
                     .collect();
 
@@ -358,7 +358,7 @@ mod tests {
                                 let bit = ((index >> i) & 1) == 1;
                                 Some(bit)
                             })
-                            .unwrap(),
+                            .expect("alloc index bit failed"),
                         )
                     })
                     .collect::<Vec<_>>();
@@ -366,7 +366,8 @@ mod tests {
                 let test_constraints = cs.num_constraints();
                 assert_eq!(log_size, test_constraints);
 
-                let selected = select(cs.namespace(|| "select"), &elements, &path_bits).unwrap();
+                let selected = select(cs.namespace(|| "select"), &elements, &path_bits)
+                    .expect("select failed");
 
                 assert!(cs.is_satisfied());
                 assert_eq!(elements[index].get_value(), selected.get_value());
@@ -398,7 +399,7 @@ mod tests {
                                 Ok(elt)
                             },
                         )
-                        .unwrap()
+                        .expect("alloc element failed")
                     })
                     .collect();
 
@@ -407,7 +408,7 @@ mod tests {
                         let elt_to_insert = <Fr as Field>::random(rng);
                         Ok(elt_to_insert)
                     })
-                    .unwrap();
+                    .expect("alloc insert failed");
 
                 let index_bits = (0..log_size)
                     .map(|i| {
@@ -416,7 +417,7 @@ mod tests {
                                 let bit = ((index >> i) & 1) == 1;
                                 Some(bit)
                             })
-                            .unwrap(),
+                            .expect("alloc index bit failed"),
                         )
                     })
                     .collect::<Vec<_>>();
@@ -430,7 +431,7 @@ mod tests {
                     index_bits.as_slice(),
                     &elements.as_slice(),
                 )
-                .unwrap();
+                .expect("insert failed");
 
                 assert!(cs.is_satisfied());
 

@@ -408,7 +408,7 @@ mod tests {
 
         // MT for original data is always named tree-d, and it will be
         // referenced later in the process as such.
-        let cache_dir = tempfile::tempdir().unwrap();
+        let cache_dir = tempfile::tempdir().expect("tempdir failed");
         let config = StoreConfig::new(
             cache_dir.path(),
             CacheKey::CommDTree.to_string(),
@@ -603,7 +603,7 @@ mod tests {
 
         // MT for original data is always named tree-d, and it will be
         // referenced later in the process as such.
-        let cache_dir = tempfile::tempdir().unwrap();
+        let cache_dir = tempfile::tempdir().expect("tempdir failed");
         let config = StoreConfig::new(
             cache_dir.path(),
             CacheKey::CommDTree.to_string(),
@@ -654,7 +654,7 @@ mod tests {
         {
             let (circuit, inputs) =
                 StackedCompound::circuit_for_test(&public_params, &public_inputs, &private_inputs)
-                    .unwrap();
+                    .expect("circuit_for_test failed");
 
             let mut cs = TestConstraintSystem::new();
 
@@ -663,7 +663,7 @@ mod tests {
             if !cs.is_satisfied() {
                 panic!(
                     "failed to satisfy: {:?}",
-                    cs.which_is_unsatisfied().unwrap()
+                    cs.which_is_unsatisfied().expect("satisfied")
                 );
             }
             assert!(
@@ -676,7 +676,7 @@ mod tests {
         {
             let (circuit1, _inputs) =
                 StackedCompound::circuit_for_test(&public_params, &public_inputs, &private_inputs)
-                    .unwrap();
+                    .expect("circuit_for_test failed");
             let blank_circuit = <StackedCompound<Tree, Sha256Hasher> as CompoundProof<
                 StackedDrg<Tree, Sha256Hasher>,
                 _,

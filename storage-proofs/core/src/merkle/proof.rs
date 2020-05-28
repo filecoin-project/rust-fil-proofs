@@ -2,7 +2,7 @@
 
 use std::marker::PhantomData;
 
-use anyhow::{ensure, Result};
+use anyhow::{bail, ensure, Result};
 use generic_array::typenum::{Unsigned, U0};
 use merkletree::hash::Algorithm;
 use merkletree::proof;
@@ -574,11 +574,10 @@ impl<H: Hasher, Arity: 'static + PoseidonArity, SubTreeArity: 'static + Poseidon
             p.sub_layer_nodes() == SubTreeArity::to_usize(),
             "sub arity mismatch"
         );
-        ensure!(
-            p.sub_tree_proof.is_some(),
-            "Cannot generate sub proof without a base-proof"
-        );
-        let base_p = p.sub_tree_proof.as_ref().unwrap();
+        let base_p = match &p.sub_tree_proof {
+            Some(proof) => proof,
+            None => bail!("Cannot generate sub proof without a base-proof"),
+        };
 
         // Generate SubProof
         let root = p.root();
@@ -645,17 +644,15 @@ impl<
             "sub arity mismatch"
         );
 
-        ensure!(
-            p.sub_tree_proof.is_some(),
-            "Cannot generate top proof without a sub-proof"
-        );
-        let sub_p = p.sub_tree_proof.as_ref().unwrap();
+        let sub_p = match &p.sub_tree_proof {
+            Some(proof) => proof,
+            None => bail!("Cannot generate top proof without a sub-proof"),
+        };
 
-        ensure!(
-            sub_p.sub_tree_proof.is_some(),
-            "Cannot generate top proof without a base-proof"
-        );
-        let base_p = sub_p.sub_tree_proof.as_ref().unwrap();
+        let base_p = match &sub_p.sub_tree_proof {
+            Some(proof) => proof,
+            None => bail!("Cannot generate top proof without a base-proof"),
+        };
 
         let root = p.root();
         let leaf = base_p.item();
@@ -731,7 +728,7 @@ mod tests {
         let (data, tree) = generate_tree::<Tree, _>(&mut rng, nodes, None);
 
         for i in 0..nodes {
-            let proof = tree.gen_proof(i).unwrap();
+            let proof = tree.gen_proof(i).expect("gen_proof failed");
 
             assert!(proof.verify(), "failed to validate");
 
@@ -739,7 +736,8 @@ mod tests {
             let data_slice = &data[i * node_size..(i + 1) * node_size].to_vec();
             assert!(
                 proof.validate_data(
-                    <Tree::Hasher as Hasher>::Domain::try_from_bytes(data_slice).unwrap()
+                    <Tree::Hasher as Hasher>::Domain::try_from_bytes(data_slice)
+                        .expect("try_from_bytes failed")
                 ),
                 "failed to validate valid data"
             );
