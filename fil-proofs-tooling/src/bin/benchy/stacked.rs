@@ -545,7 +545,11 @@ pub fn run(opts: RunOpts) -> anyhow::Result<()> {
         _ => bail!("invalid hasher: {}", params.hasher),
     };
 
-    report.print();
+    if opts.print_circuit {
+        print!("{}", report.outputs.circuit_pretty_print.unwrap())
+    } else {
+        report.print();
+    }
 
     Ok(())
 }

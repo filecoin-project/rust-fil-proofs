@@ -1,7 +1,9 @@
 use bellperson::{ConstraintSystem, Index, LinearCombination, SynthesisError, Variable};
+use ff::{Field, PrimeField, PrimeFieldRepr, ScalarEngine};
 use paired::Engine;
 use std::cmp::Ordering;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
+use std::fmt::Write;
 
 #[derive(Clone, Copy)]
 struct OrderedVariable(Variable);
@@ -53,6 +55,29 @@ pub struct MetricCS<E: Engine> {
     aux: Vec<String>,
 }
 
+fn proc_lc<E: ScalarEngine>(terms: &LinearCombination<E>) -> BTreeMap<OrderedVariable, E::Fr> {
+    let mut map = BTreeMap::new();
+    for (&var, &coeff) in terms.iter() {
+        map.entry(OrderedVariable(var))
+            .or_insert_with(E::Fr::zero)
+            .add_assign(&coeff);
+    }
+
+    // Remove terms that have a zero coefficient to normalize
+    let mut to_remove = vec![];
+    for (var, coeff) in map.iter() {
+        if coeff.is_zero() {
+            to_remove.push(var.clone())
+        }
+    }
+
+    for var in to_remove {
+        map.remove(&var);
+    }
+
+    map
+}
+
 impl<E: Engine> MetricCS<E> {
     pub fn new() -> Self {
         MetricCS::default()
@@ -83,10 +108,88 @@ impl<E: Engine> MetricCS<E> {
         result
     }
 
-    pub fn pretty_print(&self) -> String {
-        let res = self.pretty_print_list();
+    pub fn pretty_print_witnesses(&self) -> Vec<String> {
+        let mut result = Vec::new();
 
-        res.join("\n")
+        for input in &self.inputs {
+            result.push(format!("INPUT {}", input));
+        }
+        // for aux in &self.aux {
+        //     result.push(format!("AUX {}", aux));
+        // }
+
+        result
+    }
+
+    pub fn pretty_print(&self) -> String {
+        let mut s = String::new();
+
+        for input in &self.inputs {
+            write!(s, "INPUT {}\n", &input).unwrap();
+        }
+
+        let negone = {
+            let mut tmp = E::Fr::one();
+            tmp.negate();
+            tmp
+        };
+
+        let powers_of_two = (0..E::Fr::NUM_BITS)
+            .map(|i| E::Fr::from_str("2").unwrap().pow(&[u64::from(i)]))
+            .collect::<Vec<_>>();
+
+        let pp = |s: &mut String, lc: &LinearCombination<E>| {
+            write!(s, "(").unwrap();
+            let mut is_first = true;
+            for (var, coeff) in proc_lc::<E>(&lc) {
+                if coeff == negone {
+                    write!(s, " - ").unwrap();
+                } else if !is_first {
+                    write!(s, " + ").unwrap();
+                }
+                is_first = false;
+
+                if coeff != E::Fr::one() && coeff != negone {
+                    for (i, x) in powers_of_two.iter().enumerate() {
+                        if x == &coeff {
+                            write!(s, "2^{} . ", i).unwrap();
+                            break;
+                        }
+                    }
+
+                    write!(s, "{} . ", coeff).unwrap();
+                }
+
+                match var.0.get_unchecked() {
+                    Index::Input(i) => {
+                        write!(s, "`{}`", &self.inputs[i]).unwrap();
+                    }
+                    Index::Aux(i) => {
+                        write!(s, "`{}`", &self.aux[i]).unwrap();
+                    }
+                }
+            }
+            if is_first {
+                // Nothing was visited, print 0.
+                write!(s, "0").unwrap();
+            }
+            write!(s, ")").unwrap();
+        };
+
+        for &(ref a, ref b, ref c, ref name) in &self.constraints {
+            write!(&mut s, "\n").unwrap();
+
+            write!(&mut s, "{}: ", name).unwrap();
+            pp(&mut s, a);
+            write!(&mut s, " * ").unwrap();
+            pp(&mut s, b);
+            write!(&mut s, " = ").unwrap();
+            pp(&mut s, c);
+        }
+
+        write!(&mut s, "\n").unwrap();
+
+        s
     }
 
     fn set_named_obj(&mut self, path: String, to: NamedObject) {
