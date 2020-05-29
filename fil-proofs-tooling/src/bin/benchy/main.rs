@@ -87,7 +87,12 @@ fn main() -> Result<()> {
                 .arg(
                     Arg::with_name("circuit")
                         .long("circuit")
-                        .help("Print the constraint system.")
+                        .help("Get metrics on the circuit.")
+                )
+                .arg(
+                    Arg::with_name("print-circuit")
+                        .long("print-circuit")
+                        .help("Print circuit constraints.")
                 )
                 .arg(
                     Arg::with_name("extract")
@@ -206,6 +211,7 @@ fn main() -> Result<()> {
                 no_tmp: m.is_present("no-tmp"),
                 partitions: value_t!(m, "partitions", usize)?,
                 size: value_t!(m, "size", usize)?,
+                print_circuit: m.is_present("print-circuit"),
             })?;
         }
         ("window-post", Some(m)) => {

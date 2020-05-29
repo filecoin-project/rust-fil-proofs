@@ -15,8 +15,10 @@ use fil_proofs_tooling::{measure, FuncMeasurement, Metadata};
 use storage_proofs::cache_key::CacheKey;
 use storage_proofs::compound_proof::{self, CompoundProof};
 use storage_proofs::drgraph::*;
-use storage_proofs::gadgets::BenchCS;
-use storage_proofs::hasher::{Blake2sHasher, Domain, Hasher, PedersenHasher, Sha256Hasher};
+use storage_proofs::gadgets::{BenchCS, MetricCS};
+use storage_proofs::hasher::{
+    Blake2sHasher, Domain, Hasher, PedersenHasher, PoseidonHasher, Sha256Hasher,
+};
 use storage_proofs::merkle::{BinaryMerkleTree, MerkleTreeTrait};
 use storage_proofs::porep::stacked::StackedCompound;
 use storage_proofs::porep::stacked::{
@@ -55,6 +57,7 @@ struct Params {
     dump_proofs: bool,
     bench_only: bool,
     hasher: String,
+    print_circuit: bool,
 }
 
 impl From<Params> for Inputs {
@@ -96,6 +99,7 @@ where
             dump_proofs,
             bench_only,
             layer_challenges,
+            print_circuit,
             ..
         } = &params;
 
@@ -268,7 +272,7 @@ where
             (Some(pub_inputs), Some(priv_inputs), Some(data))
         };
 
-        if *circuit || *groth || *bench || *bench_only {
+        if *circuit || *groth || *bench || *bench_only || *print_circuit {
             let CircuitWorkMeasurement {
                 cpu_time,
                 wall_time,
@@ -331,6 +335,7 @@ fn do_circuit_work<Tree: 'static + MerkleTreeTrait>(
         groth,
         bench,
         bench_only,
+        print_circuit,
         ..
     } = params;
 
@@ -343,6 +348,7 @@ fn do_circuit_work<Tree: 'static + MerkleTreeTrait>(
     if *bench || *circuit || *bench_only {
         info!("Generating blank circuit: start");
         let mut cs = BenchCS::<Bls12>::new();
+
         <StackedCompound<_, _> as CompoundProof<StackedDrg<Tree, Sha256Hasher>, _>>::blank_circuit(
             &pp,
         )
@@ -350,6 +356,22 @@ fn do_circuit_work<Tree: 'static + MerkleTreeTrait>(
 
         report.outputs.circuit_num_inputs = Some(cs.num_inputs() as u64);
         report.outputs.circuit_num_constraints = Some(cs.num_constraints() as u64);
+
+        info!("Generating blank circuit: done");
+    }
+
+    if *print_circuit {
+        info!("Generating blank circuit: start");
+        let mut cs = MetricCS::<Bls12>::new();
+
+        <StackedCompound<_, _> as CompoundProof<StackedDrg<Tree, Sha256Hasher>, _>>::blank_circuit(
+            &pp,
+        )
+        .synthesize(&mut cs)?;
+
+        report.outputs.circuit_num_inputs = Some(cs.num_inputs() as u64);
+        report.outputs.circuit_num_constraints = Some(cs.num_constraints() as u64);
+        report.outputs.circuit_pretty_print = Some(cs.pretty_print());
         info!("Generating blank circuit: done");
     }
 
@@ -458,6 +480,7 @@ struct Outputs {
     vanilla_verification_cpu_time_us: Option<u64>,
     verifying_wall_time_avg_ms: Option<u64>,
     verifying_cpu_time_avg_ms: Option<u64>,
+    circuit_pretty_print: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -489,6 +512,7 @@ pub struct RunOpts {
     pub no_tmp: bool,
     pub partitions: usize,
     pub size: usize,
+    pub print_circuit: bool,
 }
 
 pub fn run(opts: RunOpts) -> anyhow::Result<()> {
@@ -505,6 +529,7 @@ pub fn run(opts: RunOpts) -> anyhow::Result<()> {
         circuit: opts.circuit,
         extract: opts.extract,
         hasher: opts.hasher,
+        print_circuit: opts.print_circuit,
         samples: 5,
     };
 
@@ -514,6 +539,7 @@ pub fn run(opts: RunOpts) -> anyhow::Result<()> {
 
     let report = match params.hasher.as_ref() {
         "pedersen" => generate_report::<PedersenHasher>(params, &cache_dir)?,
+        "poseidon" => generate_report::<PoseidonHasher>(params, &cache_dir)?,
         "sha256" => generate_report::<Sha256Hasher>(params, &cache_dir)?,
         "blake2s" => generate_report::<Blake2sHasher>(params, &cache_dir)?,
         _ => bail!("invalid hasher: {}", params.hasher),
