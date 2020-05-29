@@ -197,12 +197,12 @@ mod tests {
 
     #[test]
     fn test_election_post_circuit_pedersen() {
-        test_election_post_circuit::<LCTree<PedersenHasher, U8, U0, U0>>(389_883);
+        test_election_post_circuit::<LCTree<PedersenHasher, U8, U0, U0>>(388_523);
     }
 
     #[test]
     fn test_election_post_circuit_poseidon() {
-        test_election_post_circuit::<LCTree<PoseidonHasher, U8, U0, U0>>(24_426);
+        test_election_post_circuit::<LCTree<PoseidonHasher, U8, U0, U0>>(23_066);
     }
 
     fn test_election_post_circuit<Tree: 'static + MerkleTreeTrait>(expected_constraints: usize) {
