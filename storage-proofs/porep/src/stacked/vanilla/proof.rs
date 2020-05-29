@@ -494,7 +494,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                         column_tree_builder.add_columns(&columns)?;
                     } else {
                         assert_eq!(node_index, nodes_count);
-                        let tree_data = column_tree_builder.add_final_columns(&columns)?;
+                        let (_, tree_data) = column_tree_builder.add_final_columns(&columns)?;
                         let tree_data_len = tree_data.len();
                         info!(
                             "persisting base tree_c {}/{} of length {}",

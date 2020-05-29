@@ -541,7 +541,7 @@ mod tests {
 
     #[test]
     fn test_por_circuit_poseidon_base_2() {
-        test_por_circuit::<TestTree<PoseidonHasher, typenum::U2>>(3, 1_905);
+        test_por_circuit::<TestTree<PoseidonHasher, typenum::U2>>(3, 2_241);
     }
 
     #[test]
@@ -582,7 +582,7 @@ mod tests {
 
     #[test]
     fn test_por_circuit_poseidon_base_4() {
-        test_por_circuit::<TestTree<PoseidonHasher, typenum::U4>>(3, 1_173);
+        test_por_circuit::<TestTree<PoseidonHasher, typenum::U4>>(3, 1_341);
     }
 
     #[test]
@@ -602,31 +602,31 @@ mod tests {
 
     #[test]
     fn test_por_circuit_poseidon_base_8() {
-        test_por_circuit::<TestTree<PoseidonHasher, typenum::U8>>(3, 1_069);
+        test_por_circuit::<TestTree<PoseidonHasher, typenum::U8>>(3, 1_189);
     }
 
     #[test]
     fn test_por_circuit_poseidon_sub_8_2() {
-        test_por_circuit::<TestTree2<PoseidonHasher, typenum::U8, typenum::U2>>(3, 1_386);
+        test_por_circuit::<TestTree2<PoseidonHasher, typenum::U8, typenum::U2>>(3, 1_562);
     }
 
     #[test]
     fn test_por_circuit_poseidon_top_8_4_2() {
         test_por_circuit::<TestTree3<PoseidonHasher, typenum::U8, typenum::U4, typenum::U2>>(
-            3, 1_776,
+            3, 2_008,
         );
     }
 
     #[test]
     fn test_por_circuit_poseidon_top_8_8() {
         // This is the shape we want for 32GiB sectors.
-        test_por_circuit::<TestTree2<PoseidonHasher, typenum::U8, typenum::U8>>(3, 1_602);
+        test_por_circuit::<TestTree2<PoseidonHasher, typenum::U8, typenum::U8>>(3, 1_782);
     }
     #[test]
     fn test_por_circuit_poseidon_top_8_8_2() {
         // This is the shape we want for 64GiB secotrs.
         test_por_circuit::<TestTree3<PoseidonHasher, typenum::U8, typenum::U8, typenum::U2>>(
-            3, 1_919,
+            3, 2_155,
         );
     }
 
@@ -635,7 +635,7 @@ mod tests {
         // We can handle top-heavy trees with a non-zero subtree arity.
         // These should never be produced, though.
         test_por_circuit::<TestTree3<PoseidonHasher, typenum::U8, typenum::U2, typenum::U4>>(
-            3, 1_776,
+            3, 2_008,
         );
     }
 
@@ -888,7 +888,7 @@ mod tests {
 
     #[test]
     fn test_private_por_input_circuit_poseidon_binary() {
-        test_private_por_input_circuit::<TestTree<PoseidonHasher, typenum::U2>>(1_904);
+        test_private_por_input_circuit::<TestTree<PoseidonHasher, typenum::U2>>(2_240);
     }
 
     #[test]
@@ -898,7 +898,7 @@ mod tests {
 
     #[test]
     fn test_private_por_input_circuit_poseidon_quad() {
-        test_private_por_input_circuit::<TestTree<PoseidonHasher, typenum::U4>>(1_172);
+        test_private_por_input_circuit::<TestTree<PoseidonHasher, typenum::U4>>(1_340);
     }
 
     fn test_private_por_input_circuit<Tree: MerkleTreeTrait>(num_constraints: usize) {
