@@ -1,12 +1,18 @@
+use std::fs::{File, OpenOptions};
+use std::io::{Seek, SeekFrom};
 use std::marker::PhantomData;
+use std::ops::Range;
+use std::path::{Path, PathBuf};
 
 #[cfg(target_arch = "x86")]
 use std::arch::x86::*;
 #[cfg(target_arch = "x86_64")]
 use std::arch::x86_64::*;
 
-use anyhow::ensure;
-use log::info;
+use anyhow::{anyhow, ensure, Context};
+use byteorder::{ByteOrder, LittleEndian, ReadBytesExt};
+use log::{debug, info, trace};
+use memmap::MmapOptions;
 use once_cell::sync::OnceCell;
 use rayon::prelude::*;
 use sha2raw::Sha256;
@@ -16,16 +22,18 @@ use storage_proofs_core::{
     drgraph::{BucketGraph, Graph},
     error::Result,
     hasher::Hasher,
-    parameter_cache::ParameterSetMetadata,
+    parameter_cache::{ParameterSetMetadata, VERSION},
     settings,
     util::NODE_SIZE,
 };
+
+use super::cache::file_path as cache_file_path;
 
 /// The expansion degree used for Stacked Graphs.
 pub const EXP_DEGREE: usize = 8;
 const FEISTEL_KEYS: [feistel::Index; 4] = [1, 2, 3, 4];
 
-const DEGREE: usize = BASE_DEGREE + EXP_DEGREE;
+pub const DEGREE: usize = BASE_DEGREE + EXP_DEGREE;
 
 /// Returns a reference to the parent cache, initializing it lazily the first time this is called.
 fn parent_cache<H, G>(
@@ -106,6 +114,173 @@ impl ParentCache {
     }
 }
 
+fn partial_parent_cache<H, G>(
+    cache_entries: u32,
+    graph: &StackedGraph<H, G>,
+    partial_num: usize,
+) -> Result<&'static PartialParentCacheConfig>
+where
+    H: Hasher,
+    G: Graph<H> + ParameterSetMetadata + Send + Sync,
+{
+    static INSTANCE_32_GIB: OnceCell<PartialParentCacheConfig> = OnceCell::new();
+    static INSTANCE_64_GIB: OnceCell<PartialParentCacheConfig> = OnceCell::new();
+
+    const NODE_GIB: u32 = (1024 * 1024 * 1024) / NODE_SIZE as u32;
+    ensure!(
+        ((cache_entries == 32 * NODE_GIB) || (cache_entries == 64 * NODE_GIB)),
+        "PartialParentCache is only available for 32GiB and 64GiB sectors"
+    );
+
+    ensure!(
+        (cache_entries as usize % partial_num == 0),
+        format!("cache entries can not be sliced into {} parts", partial_num),
+    );
+
+    let fpath = cache_file_path(format!(
+        "v{}-sdr-parent-h-{}-n-{}-s-{}-b-{}-e-{}.cache",
+        VERSION,
+        H::name(),
+        hex::encode(graph.base_graph.seed()),
+        cache_entries,
+        BASE_DEGREE,
+        EXP_DEGREE
+    ));
+
+    info!("preparing partial parent cache file: {:?}", fpath);
+
+    let partial_nodes = cache_entries as usize / partial_num;
+    if cache_entries == 32 * NODE_GIB {
+        Ok(INSTANCE_32_GIB.get_or_init(|| {
+            if !fpath.exists() {
+                PartialParentCache::generate(cache_entries, graph, fpath.as_path())
+                    .expect("failed to generate 32GiB partial parent cache");
+            }
+
+            PartialParentCacheConfig {
+                path: fpath,
+                partial_nodes,
+            }
+        }))
+    } else {
+        Ok(INSTANCE_64_GIB.get_or_init(|| {
+            if !fpath.exists() {
+                PartialParentCache::generate(cache_entries, graph, fpath.as_path())
+                    .expect("failed to generate 64GiB partial parent cache");
+            }
+
+            PartialParentCacheConfig {
+                path: fpath,
+                partial_nodes,
+            }
+        }))
+    }
+}
+
+#[derive(Debug, Clone)]
+struct PartialParentCacheConfig {
+    path: PathBuf,
+    partial_nodes: usize,
+}
+
+pub struct PartialParentCache {
+    f: File,
+    partial_idx: usize,
+    partial_nodes: usize,
+    partial_range: Range<usize>,
+    partial_cache: Vec<u32>,
+}
+
+impl PartialParentCache {
+    pub fn generate<H, G, P: AsRef<Path>>(
+        cache_entries: u32,
+        graph: &StackedGraph<H, G>,
+        cache_file_path: P,
+    ) -> Result<()>
+    where
+        H: Hasher,
+        G: Graph<H> + ParameterSetMetadata + Send + Sync,
+    {
+        let parent_cache = ParentCache::new(cache_entries, graph)?;
+
+        debug!("writing parent cache into {:?}", cache_file_path.as_ref());
+        let f = OpenOptions::new()
+            .create(true)
+            .read(true)
+            .write(true)
+            .open(cache_file_path)
+            .context("open parent cache file for writing")?;
+        f.set_len(parent_cache.cache.len() as u64 * 4)
+            .context("set length for parent cache file")?;
+
+        let mut mmapped = unsafe { MmapOptions::new().map_mut(&f)? };
+        LittleEndian::write_u32_into(&parent_cache.cache, mmapped.as_mut());
+        mmapped
+            .flush()
+            .context("flush mmap data for parent cache")?;
+
+        Ok(())
+    }
+
+    fn open<P: AsRef<Path>>(cache_file_path: P, partial_nodes: usize) -> Result<Self> {
+        let f = OpenOptions::new()
+            .read(true)
+            .open(cache_file_path)
+            .context("open partial parent cache file")?;
+
+        let mut ppc = PartialParentCache {
+            f,
+            partial_idx: 0,
+            partial_nodes,
+            partial_range: (0..partial_nodes),
+            partial_cache: vec![0u32; partial_nodes * DEGREE],
+        };
+
+        ppc.reset()?;
+
+        Ok(ppc)
+    }
+
+    pub fn read(&mut self, node: u32) -> Result<&[u32]> {
+        let node = node as usize;
+        if !self.partial_range.contains(&node) {
+            let expected_idx = node / self.partial_nodes;
+            ensure!(
+                (expected_idx == self.partial_idx + 1),
+                "expected to load partial parent cache in order",
+            );
+            self.f
+                .read_u32_into::<LittleEndian>(self.partial_cache.as_mut())?;
+            self.partial_idx = expected_idx;
+            let partial_range_start = expected_idx * self.partial_nodes;
+            let partial_range_end = partial_range_start + self.partial_nodes;
+            self.partial_range = partial_range_start..partial_range_end;
+            trace!(
+                "load partial parent cache for nodes within [{}, {})",
+                partial_range_start,
+                partial_range_end
+            );
+        }
+
+        let start = (node - self.partial_range.start) * DEGREE;
+        let end = start + DEGREE;
+        Ok(&self.partial_cache[start..end])
+    }
+
+    pub fn reset(&mut self) -> Result<()> {
+        debug!(
+            "realod partial parent cache within [0. {})",
+            self.partial_nodes
+        );
+        self.f.seek(SeekFrom::Start(0))?;
+        self.f
+            .read_u32_into::<LittleEndian>(self.partial_cache.as_mut())?;
+        self.partial_idx = 0;
+        self.partial_range = 0..self.partial_nodes;
+        Ok(())
+    }
+}
+
 #[derive(Clone)]
 pub struct StackedGraph<H, G>
 where
@@ -117,6 +292,7 @@ where
     feistel_precomputed: FeistelPrecomputed,
     id: String,
     cache: Option<&'static ParentCache>,
+    partial_cache_cfg: Option<&'static PartialParentCacheConfig>,
     _h: PhantomData<H>,
 }
 
@@ -189,6 +365,7 @@ where
             ),
             expansion_degree,
             cache: None,
+            partial_cache_cfg: None,
             feistel_precomputed: feistel::precompute((expansion_degree * nodes) as feistel::Index),
             _h: PhantomData,
         };
@@ -198,9 +375,24 @@ where
 
             let cache = parent_cache(nodes as u32, &res)?;
             res.cache = Some(cache);
+        } else if let Some(partial_num) = settings::SETTINGS.lock().unwrap().partial_parent_num {
+            ensure!(
+                partial_num >= 2,
+                "parent cache should be sliced into at least 2 partitions"
+            );
+
+            let partial_cfg = partial_parent_cache(nodes as u32, &res, partial_num)?;
+            res.partial_cache_cfg = Some(partial_cfg);
         }
 
         Ok(res)
+    }
+
+    pub fn partial_parent_cache(&self) -> Result<PartialParentCache> {
+        match self.partial_cache_cfg {
+            Some(cfg) => PartialParentCache::open(cfg.path.as_path(), cfg.partial_nodes),
+            None => Err(anyhow!("partial parent cache not enabled")),
+        }
     }
 
     pub fn copy_parents_data_exp(
@@ -231,6 +423,29 @@ where
             self.parents(node as usize, &mut cache_parents[..]).unwrap();
             self.copy_parents_data_inner(&cache_parents, base_data, hasher)
         }
+    }
+
+    pub fn copy_parents_data_exp_mixed(
+        &self,
+        parents: &mut PartialParentCache,
+        node: u32,
+        base_data: &[u8],
+        exp_data: &[u8],
+        hasher: Sha256,
+    ) -> Result<[u8; 32]> {
+        let cache_parents = parents.read(node)?;
+        Ok(self.copy_parents_data_inner_exp(cache_parents, base_data, exp_data, hasher))
+    }
+
+    pub fn copy_parents_data_mixed(
+        &self,
+        parents: &mut PartialParentCache,
+        node: u32,
+        base_data: &[u8],
+        hasher: Sha256,
+    ) -> Result<[u8; 32]> {
+        let cache_parents = parents.read(node)?;
+        Ok(self.copy_parents_data_inner(&cache_parents, base_data, hasher))
     }
 
     fn copy_parents_data_inner_exp(

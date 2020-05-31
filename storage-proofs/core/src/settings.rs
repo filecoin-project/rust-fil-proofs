@@ -15,6 +15,8 @@ const SETTINGS_PATH: &str = "./rust-fil-proofs.config.toml";
 #[serde(default)]
 pub struct Settings {
     pub maximize_caching: bool,
+    pub partial_parent_num: Option<usize>,
+    pub base_nodes_on_disk: usize,
     pub pedersen_hash_exp_window_size: u32,
     pub use_gpu_column_builder: bool,
     pub max_gpu_column_batch_size: u32,
@@ -26,6 +28,8 @@ impl Default for Settings {
     fn default() -> Self {
         Settings {
             maximize_caching: false,
+            partial_parent_num: None,
+            base_nodes_on_disk: 0,
             pedersen_hash_exp_window_size: 16,
             use_gpu_column_builder: false,
             max_gpu_column_batch_size: 400_000,

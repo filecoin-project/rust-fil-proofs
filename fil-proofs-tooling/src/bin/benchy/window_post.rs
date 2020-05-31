@@ -88,7 +88,9 @@ pub fn run_window_post_bench<Tree: 'static + MerkleTreeTrait>(
     piece_file.write_all(&piece_bytes)?;
     piece_file.as_file_mut().sync_all()?;
     piece_file.as_file_mut().seek(SeekFrom::Start(0))?;
+    drop(piece_bytes);
 
+    info!("generate piece commitment");
     let piece_info =
         generate_piece_commitment(piece_file.as_file_mut(), sector_size_unpadded_bytes_ammount)?;
     piece_file.as_file_mut().seek(SeekFrom::Start(0))?;
@@ -101,6 +103,7 @@ pub fn run_window_post_bench<Tree: 'static + MerkleTreeTrait>(
     )?;
 
     let piece_infos = vec![piece_info];
+    info!("piece info: {:?}", piece_infos[0]);
 
     // Replicate the staged sector, write the replica file to `sealed_path`.
     let porep_config = PoRepConfig {
@@ -115,6 +118,13 @@ pub fn run_window_post_bench<Tree: 'static + MerkleTreeTrait>(
     };
     let cache_dir = tempfile::tempdir().unwrap();
     let sector_id = SectorId::from(SECTOR_ID);
+
+    info!(
+        "staged: {:?}, sealed: {:?}, cache_dir: {:?}",
+        staged_file.path(),
+        sealed_file.path(),
+        cache_dir.path()
+    );
 
     let seal_pre_commit_phase1_measurement = measure(|| {
         seal_pre_commit_phase1::<_, _, _, Tree>(

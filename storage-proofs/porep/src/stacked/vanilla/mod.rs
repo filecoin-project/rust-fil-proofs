@@ -1,10 +1,12 @@
 #[macro_use]
 mod macros;
 
+mod cache;
 mod challenges;
 mod column;
 mod column_proof;
 mod create_label;
+mod create_label_mixed;
 mod encoding_proof;
 mod graph;
 pub(crate) mod hash;

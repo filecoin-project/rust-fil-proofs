@@ -27,6 +27,7 @@ use super::{
     challenges::LayerChallenges,
     column::Column,
     create_label, create_label_exp,
+    create_label_mixed::{create_label_exp_mixed, create_label_mixed},
     graph::StackedBucketGraph,
     hash::hash_single_column,
     params::{
@@ -330,6 +331,96 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
             // Track the layer specific store and StoreConfig for later retrieval.
             labels.push(layer_store);
             label_configs.push(layer_config);
+        }
+
+        assert_eq!(
+            labels.len(),
+            layers,
+            "Invalid amount of layers encoded expected"
+        );
+
+        Ok((
+            LabelsCache::<Tree> { labels },
+            Labels::<Tree> {
+                labels: label_configs,
+                _h: PhantomData,
+            },
+        ))
+    }
+
+    #[allow(clippy::type_complexity)]
+    fn generate_labels_mixed(
+        graph: &StackedBucketGraph<Tree::Hasher>,
+        layer_challenges: &LayerChallenges,
+        replica_id: &<Tree::Hasher as Hasher>::Domain,
+        config: StoreConfig,
+    ) -> Result<(LabelsCache<Tree>, Labels<Tree>)> {
+        info!("generate labels in mixed mode");
+
+        let layer_size = graph.size() * NODE_SIZE;
+
+        let mut partial_cache = graph.partial_parent_cache()?;
+
+        let layers = layer_challenges.layers();
+        // For now, we require it due to changes in encodings structure.
+        let mut labels: Vec<DiskStore<<Tree::Hasher as Hasher>::Domain>> =
+            Vec::with_capacity(layers);
+        let mut label_configs: Vec<StoreConfig> = Vec::with_capacity(layers);
+
+        // NOTE: this means we currently keep 2x sector size around, to improve speed.
+
+        let first_layer_size = layer_size;
+        let mut labels_buffer = vec![0u8; first_layer_size + layer_size];
+
+        for layer in 1..=layers {
+            info!("generating layer: {}", layer);
+
+            if layer == 1 {
+                let layer_labels = &mut labels_buffer[..layer_size];
+                for node in 0..graph.size() {
+                    create_label_mixed(&mut partial_cache, graph, replica_id, layer_labels, node)?;
+                }
+            } else {
+                let (layer_labels, exp_labels) = labels_buffer.split_at_mut(layer_size);
+                for node in 0..graph.size() {
+                    create_label_exp_mixed(
+                        &mut partial_cache,
+                        graph,
+                        replica_id,
+                        exp_labels,
+                        layer_labels,
+                        node,
+                    )?;
+                }
+            }
+
+            info!("  setting exp parents");
+            labels_buffer.copy_within(..layer_size, layer_size);
+
+            // Write the result to disk to avoid keeping it in memory all the time.
+            let layer_config =
+                StoreConfig::from_config(&config, CacheKey::label_layer(layer), Some(graph.size()));
+
+            info!("  storing labels on disk");
+            // Construct and persist the layer data.
+            let layer_store: DiskStore<<Tree::Hasher as Hasher>::Domain> =
+                DiskStore::new_from_slice_with_config(
+                    graph.size(),
+                    Tree::Arity::to_usize(),
+                    &labels_buffer[layer_size..],
+                    layer_config.clone(),
+                )?;
+            info!(
+                "  generated layer {} store with id {}",
+                layer, layer_config.id
+            );
+
+            // Track the layer specific store and StoreConfig for later retrieval.
+            labels.push(layer_store);
+            label_configs.push(layer_config);
+
+            info!("  reset partial parent cache");
+            partial_cache.reset()?;
         }
 
         assert_eq!(
@@ -843,7 +934,11 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         info!("replicate_phase1");
 
         let (_, labels) = measure_op(EncodeWindowTimeAll, || {
-            Self::generate_labels(&pp.graph, &pp.layer_challenges, replica_id, config)
+            if let Some(_) = settings::SETTINGS.lock().unwrap().partial_parent_num {
+                Self::generate_labels_mixed(&pp.graph, &pp.layer_challenges, replica_id, config)
+            } else {
+                Self::generate_labels(&pp.graph, &pp.layer_challenges, replica_id, config)
+            }
         })?;
 
         Ok(labels)
