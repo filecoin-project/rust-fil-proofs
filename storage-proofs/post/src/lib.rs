@@ -1,3 +1,5 @@
+#![warn(clippy::unwrap_used)]
+
 pub mod election;
 pub mod fallback;
 pub mod rational;

@@ -1,3 +1,5 @@
+#![warn(clippy::unwrap_used)]
+
 pub mod drg;
 pub mod stacked;
 
