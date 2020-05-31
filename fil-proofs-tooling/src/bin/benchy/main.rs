@@ -1,3 +1,4 @@
+#![warn(clippy::unwrap_used)]
 use std::io::{stdin, stdout};
 
 use anyhow::Result;
