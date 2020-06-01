@@ -1,20 +1,21 @@
 use bellperson::gadgets::{
     boolean::Boolean,
     sha256::sha256 as sha256_circuit,
-    {multipack, num},
+    uint32, {multipack, num},
 };
 use bellperson::{ConstraintSystem, SynthesisError};
 use ff::PrimeField;
 use fil_sapling_crypto::jubjub::JubjubEngine;
 use storage_proofs_core::gadgets::uint64;
 
-use super::super::vanilla::TOTAL_PARENTS;
+use crate::stacked::vanilla::TOTAL_PARENTS;
 
 /// Compute a single label.
 pub fn create_label_circuit<E, CS>(
     mut cs: CS,
     replica_id: &[Boolean],
     parents: Vec<Vec<Boolean>>,
+    layer_index: uint32::UInt32,
     node: uint64::UInt64,
 ) -> Result<num::AllocatedNum<E>, SynthesisError>
 where
@@ -34,6 +35,7 @@ where
         ciphertexts.push(Boolean::constant(false));
     }
 
+    ciphertexts.extend_from_slice(&layer_index.into_bits_be());
     ciphertexts.extend_from_slice(&node.to_bits_be());
     // pad to 64 bytes
     while ciphertexts.len() < 512 {
@@ -50,7 +52,7 @@ where
     }
 
     // 32b replica id
-    // 32b node
+    // 32b layer_index + node
     // 37 * 32b  = 1184b parents
     assert_eq!(ciphertexts.len(), (1 + 1 + TOTAL_PARENTS) * 32 * 8);
 
@@ -98,7 +100,9 @@ mod tests {
         util::{data_at_node, NODE_SIZE},
     };
 
-    use crate::stacked::vanilla::{StackedBucketGraph, EXP_DEGREE, TOTAL_PARENTS};
+    use crate::stacked::vanilla::{
+        create_label_exp, StackedBucketGraph, EXP_DEGREE, TOTAL_PARENTS,
+    };
 
     #[test]
     fn test_create_label() {
@@ -117,6 +121,7 @@ mod tests {
 
         let id_fr = Fr::random(rng);
         let id: Vec<u8> = fr_into_bytes(&id_fr);
+        let layer = 3;
         let node = 22;
 
         let mut data: Vec<u8> = (0..2 * size)
@@ -163,12 +168,14 @@ mod tests {
             bytes_into_boolean_vec_be(&mut cs, Some(id.as_slice()), id.len()).unwrap()
         };
 
+        let layer_alloc = uint32::UInt32::constant(layer as u32);
         let node_alloc = uint64::UInt64::constant(node as u64);
 
         let out = create_label_circuit(
             cs.namespace(|| "create_label"),
             &id_bits,
             parents_bits.clone(),
+            layer_alloc,
             node_alloc,
         )
         .expect("key derivation function failed");
@@ -177,8 +184,7 @@ mod tests {
         assert_eq!(cs.num_constraints(), 532_024);
 
         let (l1, l2) = data.split_at_mut(size * NODE_SIZE);
-        super::super::super::vanilla::create_label_exp(&graph, &id_fr.into(), &*l2, l1, node)
-            .unwrap();
+        create_label_exp(&graph, &id_fr.into(), &*l2, l1, layer, node).unwrap();
         let expected_raw = data_at_node(&l1, node).unwrap();
         let expected = bytes_into_fr(expected_raw).unwrap();
 

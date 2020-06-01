@@ -1,6 +1,6 @@
 use std::marker::PhantomData;
 
-use bellperson::gadgets::{boolean::Boolean, num};
+use bellperson::gadgets::{boolean::Boolean, num, uint32};
 use bellperson::{ConstraintSystem, SynthesisError};
 use generic_array::typenum::{U0, U2};
 use paired::bls12_381::{Bls12, Fr};
@@ -159,6 +159,8 @@ impl<Tree: MerkleTreeTrait, G: 'static + Hasher> Proof<Tree, G> {
         challenge_num.pack_into_input(cs.namespace(|| "challenge input"))?;
 
         for layer in 1..=layers {
+            let layer_num = uint32::UInt32::constant(layer as u32);
+
             let mut cs = cs.namespace(|| format!("labeling_{}", layer));
 
             // Collect the parents
@@ -207,6 +209,7 @@ impl<Tree: MerkleTreeTrait, G: 'static + Hasher> Proof<Tree, G> {
                 cs.namespace(|| "create_label"),
                 replica_id,
                 expanded_parents,
+                layer_num,
                 challenge_num.clone(),
             )?;
             column_labels.push(label);

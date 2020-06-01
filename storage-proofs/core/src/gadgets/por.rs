@@ -901,6 +901,11 @@ mod tests {
         test_private_por_input_circuit::<TestTree<PoseidonHasher, typenum::U4>>(1_172);
     }
 
+    #[test]
+    fn test_private_por_input_circuit_poseidon_oct() {
+        test_private_por_input_circuit::<TestTree<PoseidonHasher, typenum::U8>>(1_068);
+    }
+
     fn test_private_por_input_circuit<Tree: MerkleTreeTrait>(num_constraints: usize) {
         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
 

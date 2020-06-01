@@ -203,6 +203,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                             }
 
                             let proof = LabelingProof::<Tree::Hasher>::new(
+                                layer as u32,
                                 challenge as u64,
                                 parents_data_full.clone(),
                             );
@@ -219,8 +220,11 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                             labeling_proofs.push(proof);
 
                             if layer == layers {
-                                encoding_proof =
-                                    Some(EncodingProof::new(challenge as u64, parents_data_full));
+                                encoding_proof = Some(EncodingProof::new(
+                                    layer as u32,
+                                    challenge as u64,
+                                    parents_data_full,
+                                ));
                             }
                         }
 
@@ -296,12 +300,12 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
             if layer == 1 {
                 let layer_labels = &mut labels_buffer[..layer_size];
                 for node in 0..graph.size() {
-                    create_label(graph, replica_id, layer_labels, node)?;
+                    create_label(graph, replica_id, layer_labels, layer, node)?;
                 }
             } else {
                 let (layer_labels, exp_labels) = labels_buffer.split_at_mut(layer_size);
                 for node in 0..graph.size() {
-                    create_label_exp(graph, replica_id, exp_labels, layer_labels, node)?;
+                    create_label_exp(graph, replica_id, exp_labels, layer_labels, layer, node)?;
                 }
             }
 

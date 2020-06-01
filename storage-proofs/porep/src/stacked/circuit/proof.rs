@@ -475,7 +475,7 @@ mod tests {
 
         let proofs_are_valid =
             StackedDrg::<Tree, Sha256Hasher>::verify_all_partitions(&pp, &pub_inputs, &proofs)
-                .expect("failed to verify partition proofs");
+                .expect("failed while trying to verify partition proofs");
 
         assert!(proofs_are_valid);
 

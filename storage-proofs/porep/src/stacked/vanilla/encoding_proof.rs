@@ -11,14 +11,16 @@ use crate::encode::encode;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EncodingProof<H: Hasher> {
     pub(crate) parents: Vec<H::Domain>,
+    pub(crate) layer_index: u32,
     pub(crate) node: u64,
     #[serde(skip)]
     _h: PhantomData<H>,
 }
 
 impl<H: Hasher> EncodingProof<H> {
-    pub fn new(node: u64, parents: Vec<H::Domain>) -> Self {
+    pub fn new(layer_index: u32, node: u64, parents: Vec<H::Domain>) -> Self {
         EncodingProof {
+            layer_index,
             node,
             parents,
             _h: PhantomData,
@@ -32,8 +34,10 @@ impl<H: Hasher> EncodingProof<H> {
         // replica_id
         buffer[..32].copy_from_slice(AsRef::<[u8]>::as_ref(replica_id));
 
+        // layer index
+        buffer[32..36].copy_from_slice(&(self.layer_index as u32).to_be_bytes());
         // node id
-        buffer[32..40].copy_from_slice(&(self.node as u64).to_be_bytes());
+        buffer[36..44].copy_from_slice(&(self.node as u64).to_be_bytes());
 
         hasher.input(&buffer[..]);
 
