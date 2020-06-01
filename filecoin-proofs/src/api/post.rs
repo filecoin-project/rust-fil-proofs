@@ -208,6 +208,8 @@ impl PublicReplicaInfo {
 
 // Ensure that any associated cached data persisted is discarded.
 pub fn clear_cache<Tree: MerkleTreeTrait>(cache_dir: &Path) -> Result<()> {
+    info!("clear_cache:start");
+
     let t_aux = {
         let f_aux_path = cache_dir.to_path_buf().join(CacheKey::TAux.to_string());
         let aux_bytes = std::fs::read(&f_aux_path)
@@ -216,16 +218,24 @@ pub fn clear_cache<Tree: MerkleTreeTrait>(cache_dir: &Path) -> Result<()> {
         deserialize(&aux_bytes)
     }?;
 
-    TemporaryAux::<Tree, DefaultPieceHasher>::clear_temp(t_aux)
+    let result = TemporaryAux::<Tree, DefaultPieceHasher>::clear_temp(t_aux);
+
+    info!("clear_cache:finish");
+
+    result
 }
 
 // Ensure that any associated cached data persisted is discarded.
 pub fn clear_caches<Tree: MerkleTreeTrait>(
     replicas: &BTreeMap<SectorId, PrivateReplicaInfo<Tree>>,
 ) -> Result<()> {
+    info!("clear_caches:start");
+
     for replica in replicas.values() {
         clear_cache::<Tree>(&replica.cache_dir.as_path())?;
     }
+
+    info!("clear_caches:finish");
 
     Ok(())
 }
@@ -327,6 +337,7 @@ pub fn generate_winning_post_sector_challenge<Tree: MerkleTreeTrait>(
     sector_set_size: u64,
     prover_id: Commitment,
 ) -> Result<Vec<u64>> {
+    info!("generate_winning_post_sector_challenge:start");
     ensure!(sector_set_size != 0, "empty sector set is invalid");
     ensure!(
         post_config.typ == PoStType::Winning,
@@ -338,12 +349,16 @@ pub fn generate_winning_post_sector_challenge<Tree: MerkleTreeTrait>(
 
     let randomness_safe: <Tree::Hasher as Hasher>::Domain =
         as_safe_commitment(randomness, "randomness")?;
-    fallback::generate_sector_challenges(
+    let result = fallback::generate_sector_challenges(
         randomness_safe,
         post_config.sector_count,
         sector_set_size,
         prover_id_safe,
-    )
+    );
+
+    info!("generate_winning_post_sector_challenge:finish");
+
+    result
 }
 
 /// Verifies a winning proof-of-spacetime.

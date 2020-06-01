@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{ensure, Context, Result};
 use bincode::deserialize;
+use log::info;
 use merkletree::store::{DiskStore, LevelCacheStore, StoreConfig};
 use storage_proofs::cache_key::CacheKey;
 use storage_proofs::hasher::Hasher;
@@ -69,6 +70,8 @@ pub fn get_unsealed_range<T: Into<PathBuf> + AsRef<Path>, Tree: 'static + Merkle
     offset: UnpaddedByteIndex,
     num_bytes: UnpaddedBytesAmount,
 ) -> Result<UnpaddedBytesAmount> {
+    info!("get_unsealed_range:start");
+
     let f_in = File::open(&sealed_path)
         .with_context(|| format!("could not open sealed_path={:?}", sealed_path.as_ref()))?;
 
@@ -77,7 +80,7 @@ pub fn get_unsealed_range<T: Into<PathBuf> + AsRef<Path>, Tree: 'static + Merkle
 
     let buf_f_out = BufWriter::new(f_out);
 
-    unseal_range::<_, _, _, Tree>(
+    let result = unseal_range::<_, _, _, Tree>(
         porep_config,
         cache_path,
         f_in,
@@ -88,7 +91,10 @@ pub fn get_unsealed_range<T: Into<PathBuf> + AsRef<Path>, Tree: 'static + Merkle
         ticket,
         offset,
         num_bytes,
-    )
+    );
+
+    info!("get_unsealed_range:finish");
+    result
 }
 
 /// Unseals the sector read from `sealed_sector` and returns the bytes for a
@@ -127,6 +133,7 @@ where
     W: Write,
     Tree: 'static + MerkleTreeTrait,
 {
+    info!("unseal_range:start");
     ensure!(comm_d != [0; 32], "Invalid all zero commitment (comm_d)");
 
     let comm_d =
@@ -176,7 +183,10 @@ where
     let written = write_unpadded(unsealed, &mut unsealed_output, 0, num_bytes.into())
         .context("write_unpadded failed")?;
 
-    Ok(UnpaddedBytesAmount(written as u64))
+    let amount = UnpaddedBytesAmount(written as u64);
+
+    info!("unseal_range:finish");
+    Ok(amount)
 }
 
 /// Generates a piece commitment for the provided byte source. Returns an error
@@ -191,7 +201,9 @@ pub fn generate_piece_commitment<T: std::io::Read>(
     source: T,
     piece_size: UnpaddedBytesAmount,
 ) -> Result<PieceInfo> {
-    measure_op(Operation::GeneratePieceCommitment, || {
+    info!("generate_piece_commitment:start");
+
+    let result = measure_op(Operation::GeneratePieceCommitment, || {
         ensure_piece_size(piece_size)?;
 
         // send the source through the preprocessor
@@ -204,7 +216,10 @@ pub fn generate_piece_commitment<T: std::io::Read>(
         )?;
 
         PieceInfo::new(commitment, piece_size)
-    })
+    });
+
+    info!("generate_piece_commitment:finish");
+    result
 }
 
 /// Computes a NUL-byte prefix and/or suffix for `source` using the provided
@@ -236,7 +251,9 @@ where
     R: Read,
     W: Write,
 {
-    measure_op(Operation::AddPiece, || {
+    info!("add_piece:start");
+
+    let result = measure_op(Operation::AddPiece, || {
         ensure_piece_size(piece_size)?;
 
         let source = std::io::BufReader::new(source);
@@ -273,7 +290,10 @@ where
         let written = piece_alignment.left_bytes + piece_alignment.right_bytes + piece_size;
 
         Ok((PieceInfo::new(comm, n)?, written))
-    })
+    });
+
+    info!("add_piece:finish");
+    result
 }
 
 fn ensure_piece_size(piece_size: UnpaddedBytesAmount) -> Result<()> {
@@ -447,6 +467,8 @@ where
     R: AsRef<Path>,
     T: AsRef<Path>,
 {
+    info!("validate_cache_for_precommit_phase2:start");
+
     ensure!(
         replica_path.as_ref().exists(),
         "Missing replica: {}",
@@ -468,11 +490,14 @@ where
     );
     config.path = cache_path.as_ref().into();
 
-    verify_store(
+    let result = verify_store(
         &config,
         <DefaultBinaryTree as MerkleTreeTrait>::Arity::to_usize(),
         get_base_tree_count::<Tree>(),
-    )
+    );
+
+    info!("validate_cache_for_precommit_phase2:finish");
+    result
 }
 
 // Checks for the existence of the replica data and t_aux, which in
@@ -486,6 +511,8 @@ where
     R: AsRef<Path>,
     T: AsRef<Path>,
 {
+    info!("validate_cache_for_precommit:start");
+
     // Verify that the replica exists and is not empty.
     ensure!(
         replica_path.as_ref().exists(),
@@ -540,6 +567,7 @@ where
     )?;
     verify_level_cache_store::<DefaultOctTree>(&t_aux.tree_r_last_config)?;
 
+    info!("validate_cache_for_precommit:finish");
     Ok(())
 }
 

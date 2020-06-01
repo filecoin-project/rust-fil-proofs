@@ -56,7 +56,7 @@ where
     S: AsRef<Path>,
     T: AsRef<Path>,
 {
-    info!("seal_pre_commit_phase1: start");
+    info!("seal_pre_commit_phase1:start");
 
     // Sanity check all input path types.
     ensure!(
@@ -178,11 +178,14 @@ where
         config.clone(),
     )?;
 
-    Ok(SealPreCommitPhase1Output {
+    let out = SealPreCommitPhase1Output {
         labels,
         config,
         comm_d,
-    })
+    };
+
+    info!("seal_pre_commit_phase1:finish");
+    Ok(out)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -196,7 +199,7 @@ where
     R: AsRef<Path>,
     S: AsRef<Path>,
 {
-    info!("seal_pre_commit_phase2: start");
+    info!("seal_pre_commit_phase2:start");
 
     // Sanity check all input path types.
     ensure!(
@@ -302,7 +305,10 @@ where
         .write_all(&t_aux_bytes)
         .with_context(|| format!("could not write to file t_aux={:?}", t_aux_path))?;
 
-    Ok(SealPreCommitOutput { comm_r, comm_d })
+    let out = SealPreCommitOutput { comm_r, comm_d };
+
+    info!("seal_pre_commit_phase2:finish");
+    Ok(out)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -419,16 +425,17 @@ pub fn seal_commit_phase1<T: AsRef<Path>, Tree: 'static + MerkleTreeTrait>(
     )?;
     ensure!(sanity_check, "Invalid vanilla proof generated");
 
-    info!("seal_commit_phase1:end");
-
-    Ok(SealCommitPhase1Output {
+    let out = SealCommitPhase1Output {
         vanilla_proofs,
         comm_r,
         comm_d,
         replica_id,
         seed,
         ticket,
-    })
+    };
+
+    info!("seal_commit_phase1:finish");
+    Ok(out)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -519,9 +526,10 @@ pub fn seal_commit_phase2<Tree: 'static + MerkleTreeTrait>(
     )
     .context("post-seal verification sanity check failed")?;
 
-    info!("seal_commit_phase2:end");
+    let out = SealCommitOutput { proof: buf };
 
-    Ok(SealCommitOutput { proof: buf })
+    info!("seal_commit_phase2:finish");
+    Ok(out)
 }
 
 /// Computes a sectors's `comm_d` given its pieces.
@@ -531,7 +539,12 @@ pub fn seal_commit_phase2<Tree: 'static + MerkleTreeTrait>(
 /// * `porep_config` - this sector's porep config that contains the number of bytes in the sector.
 /// * `piece_infos` - the piece info (commitment and byte length) for each piece in this sector.
 pub fn compute_comm_d(sector_size: SectorSize, piece_infos: &[PieceInfo]) -> Result<Commitment> {
-    pieces::compute_comm_d(sector_size, piece_infos)
+    info!("compute_comm_d:start");
+
+    let result = pieces::compute_comm_d(sector_size, piece_infos);
+
+    info!("compute_comm_d:finish");
+    result
 }
 
 /// Verifies the output of some previously-run seal operation.
@@ -557,6 +570,7 @@ pub fn verify_seal<Tree: 'static + MerkleTreeTrait>(
     seed: Ticket,
     proof_vec: &[u8],
 ) -> Result<bool> {
+    info!("verify_seal:start");
     ensure!(comm_d_in != [0; 32], "Invalid all zero commitment (comm_d)");
     ensure!(comm_r_in != [0; 32], "Invalid all zero commitment (comm_r)");
 
@@ -608,7 +622,7 @@ pub fn verify_seal<Tree: 'static + MerkleTreeTrait>(
         &verifying_key,
     )?;
 
-    StackedCompound::verify(
+    let result = StackedCompound::verify(
         &compound_public_params,
         &public_inputs,
         &proof,
@@ -620,7 +634,10 @@ pub fn verify_seal<Tree: 'static + MerkleTreeTrait>(
                 .expect("unknown sector size") as usize,
         },
     )
-    .map_err(Into::into)
+    .map_err(Into::into);
+
+    info!("verify_seal:finish");
+    result
 }
 
 /// Verifies a batch of outputs of some previously-run seal operations.
@@ -646,6 +663,7 @@ pub fn verify_batch_seal<Tree: 'static + MerkleTreeTrait>(
     seeds: &[Ticket],
     proof_vecs: &[&[u8]],
 ) -> Result<bool> {
+    info!("verify_batch_seal:start");
     ensure!(!comm_r_ins.is_empty(), "Cannot prove empty batch");
     let l = comm_r_ins.len();
     ensure!(l == comm_d_ins.len(), "Inconsistent inputs");
@@ -723,7 +741,7 @@ pub fn verify_batch_seal<Tree: 'static + MerkleTreeTrait>(
         )?);
     }
 
-    StackedCompound::<Tree, DefaultPieceHasher>::batch_verify(
+    let result = StackedCompound::<Tree, DefaultPieceHasher>::batch_verify(
         &compound_public_params,
         &public_inputs,
         &proofs,
@@ -735,5 +753,8 @@ pub fn verify_batch_seal<Tree: 'static + MerkleTreeTrait>(
                 .expect("unknown sector size") as usize,
         },
     )
-    .map_err(Into::into)
+    .map_err(Into::into);
+
+    info!("verify_batch_seal:finish");
+    result
 }
