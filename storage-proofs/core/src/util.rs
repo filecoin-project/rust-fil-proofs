@@ -124,15 +124,18 @@ pub fn bits_to_bytes(bits: &[bool]) -> Vec<u8> {
         .collect()
 }
 
-/// Adds a padding bit and reverses the byte order in the list of bits, and adds a padding bit.
-/// This is used to transform the output from `AllocatedNum::to_bits_le` into the matching format
-/// needed to match the way an `Fr` is hashed with sha256.
-pub fn fixup_bits(mut bits: Vec<boolean::Boolean>) -> Vec<boolean::Boolean> {
-    assert_eq!(bits.len(), 255, "invalid bit length");
-    // add padding
-    bits.push(boolean::Boolean::Constant(false));
+/// Reverse the order of bits within each byte (bit numbering), but without altering the order of bytes
+/// within the array (endianness) — when bit array is viewed as a flattened sequence of octets.
+/// Before intra-byte bit reversal begins, zero-bit padding is added so every byte is full.
+pub fn reverse_bit_numbering(bits: Vec<boolean::Boolean>) -> Vec<boolean::Boolean> {
+    let mut padded_bits = bits;
+    // Pad partial bytes
+    while padded_bits.len() % 8 != 0 {
+        padded_bits.push(boolean::Boolean::Constant(false));
+    }
 
-    bits.chunks(8)
+    padded_bits
+        .chunks(8)
         .map(|chunk| chunk.iter().rev())
         .flatten()
         .cloned()
@@ -213,7 +216,7 @@ mod tests {
     }
 
     #[test]
-    fn test_fixup_bits() {
+    fn test_reverse_bit_numbering() {
         for _ in 0..100 {
             let mut cs = TestConstraintSystem::<Bls12>::new();
             let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
@@ -229,9 +232,9 @@ mod tests {
                 bytes_into_boolean_vec_be(cs.namespace(|| "val_bits_2"), Some(&val_vec), 256)
                     .unwrap();
 
-            let val_num_fixed_bits = fixup_bits(val_num_bits);
+            let val_num_reversed_bit_numbering = reverse_bit_numbering(val_num_bits);
 
-            let a_values: Vec<bool> = val_num_fixed_bits
+            let a_values: Vec<bool> = val_num_reversed_bit_numbering
                 .iter()
                 .map(|v| v.get_value().unwrap())
                 .collect();

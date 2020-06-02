@@ -13,7 +13,7 @@ use paired::bls12_381::{Bls12, Fr};
 use storage_proofs_core::{
     compound_proof::CircuitComponent, error::Result, gadgets::constraint, gadgets::encode,
     gadgets::por::PoRCircuit, gadgets::uint64, gadgets::variables::Root, hasher::Hasher,
-    merkle::BinaryMerkleTree, util::fixup_bits,
+    merkle::BinaryMerkleTree, util::reverse_bit_numbering,
 };
 
 /// DRG based Proof of Replication.
@@ -145,7 +145,7 @@ impl<'a, H: 'static + Hasher> Circuit<Bls12> for DrgPoRepCircuit<'a, H> {
 
         // get the replica_id in bits
         let replica_id_bits =
-            fixup_bits(replica_node_num.to_bits_le(cs.namespace(|| "replica_id_bits"))?);
+            reverse_bit_numbering(replica_node_num.to_bits_le(cs.namespace(|| "replica_id_bits"))?);
 
         let replica_root_var = Root::Var(replica_root.allocated(cs.namespace(|| "replica_root"))?);
         let data_root_var = Root::Var(data_root.allocated(cs.namespace(|| "data_root"))?);
@@ -212,7 +212,7 @@ impl<'a, H: 'static + Hasher> Circuit<Bls12> for DrgPoRepCircuit<'a, H> {
                                     .ok_or_else(|| SynthesisError::AssignmentMissing)
                             },
                         )?;
-                        Ok(fixup_bits(num.to_bits_le(
+                        Ok(reverse_bit_numbering(num.to_bits_le(
                             cs.namespace(|| format!("parents_{}_bits", i)),
                         )?))
                     })

@@ -16,7 +16,7 @@ use storage_proofs_core::{
     parameter_cache::{CacheableParameters, ParameterSetMetadata},
     por,
     proof::ProofScheme,
-    util::fixup_bits,
+    util::reverse_bit_numbering,
 };
 
 use super::params::Proof;
@@ -97,7 +97,7 @@ impl<'a, Tree: MerkleTreeTrait, G: Hasher> Circuit<Bls12> for StackedCircuit<'a,
         replica_id_num.inputize(cs.namespace(|| "replica_id_input"))?;
 
         let replica_id_bits =
-            fixup_bits(replica_id_num.to_bits_le(cs.namespace(|| "replica_id_bits"))?);
+            reverse_bit_numbering(replica_id_num.to_bits_le(cs.namespace(|| "replica_id_bits"))?);
 
         // Allocate comm_d as Fr
         let comm_d_num = num::AllocatedNum::alloc(cs.namespace(|| "comm_d"), || {
@@ -366,27 +366,27 @@ mod tests {
 
     #[test]
     fn stacked_input_circuit_pedersen_base_2() {
-        stacked_input_circuit::<DiskTree<PedersenHasher, U2, U0, U0>>(22, 1_258_195);
+        stacked_input_circuit::<DiskTree<PedersenHasher, U2, U0, U0>>(22, 1_258_197);
     }
 
     #[test]
     fn stacked_input_circuit_poseidon_base_2() {
-        stacked_input_circuit::<DiskTree<PoseidonHasher, U2, U0, U0>>(22, 1_206_402);
+        stacked_input_circuit::<DiskTree<PoseidonHasher, U2, U0, U0>>(22, 1_206_404);
     }
 
     #[test]
     fn stacked_input_circuit_poseidon_base_8() {
-        stacked_input_circuit::<DiskTree<PoseidonHasher, U8, U0, U0>>(22, 1_199_714);
+        stacked_input_circuit::<DiskTree<PoseidonHasher, U8, U0, U0>>(22, 1_199_716);
     }
 
     #[test]
     fn stacked_input_circuit_poseidon_sub_8_4() {
-        stacked_input_circuit::<DiskTree<PoseidonHasher, U8, U4, U0>>(22, 1_296_718);
+        stacked_input_circuit::<DiskTree<PoseidonHasher, U8, U4, U0>>(22, 1_296_720);
     }
 
     #[test]
     fn stacked_input_circuit_poseidon_top_8_4_2() {
-        stacked_input_circuit::<DiskTree<PoseidonHasher, U8, U4, U2>>(22, 1_347_172);
+        stacked_input_circuit::<DiskTree<PoseidonHasher, U8, U4, U2>>(22, 1_347_174);
     }
 
     fn stacked_input_circuit<Tree: MerkleTreeTrait + 'static>(
