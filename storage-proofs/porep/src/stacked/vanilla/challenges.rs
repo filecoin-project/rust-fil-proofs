@@ -59,7 +59,7 @@ impl LayerChallenges {
 
                 let big_challenge = BigUint::from_bytes_le(hash.as_ref());
 
-                // For now, we cannot try to prove the first or last node, so make sure the challenge
+                // We cannot try to prove the first node, so make sure the challenge
                 // can never be 0.
                 let big_mod_challenge = big_challenge % (leaves - 1);
                 let big_mod_challenge = big_mod_challenge
@@ -117,9 +117,9 @@ mod test {
 
         // If we generate 100 layers with 1,000 challenges in each, at most two layers can contain
         // any duplicates for this assertion to succeed.
-        // assert!(layers_with_duplicates < 3);
-        // TODO: verify why this now fails
-        println!("duplicates: {}", layers_with_duplicates);
+        //
+        // This test could randomly fail (anything's possible), but if it happens regularly something is wrong.
+        assert!(layers_with_duplicates < 3);
     }
 
     #[test]
