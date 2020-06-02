@@ -16,12 +16,14 @@ pub fn create_label<H: Hasher>(
     graph: &StackedBucketGraph<H>,
     replica_id: &H::Domain,
     layer_labels: &mut [u8],
+    layer_index: usize,
     node: usize,
 ) -> Result<()> {
     let mut hasher = Sha256::new();
     let mut buffer = [0u8; 32];
 
-    buffer[..8].copy_from_slice(&(node as u64).to_be_bytes());
+    buffer[..4].copy_from_slice(&(layer_index as u32).to_be_bytes());
+    buffer[4..12].copy_from_slice(&(node as u64).to_be_bytes());
     hasher.input(&[AsRef::<[u8]>::as_ref(replica_id), &buffer[..]][..]);
 
     // hash parents for all non 0 nodes
@@ -53,12 +55,14 @@ pub fn create_label_exp<H: Hasher>(
     replica_id: &H::Domain,
     exp_parents_data: &[u8],
     layer_labels: &mut [u8],
+    layer_index: usize,
     node: usize,
 ) -> Result<()> {
     let mut hasher = Sha256::new();
     let mut buffer = [0u8; 32];
 
-    buffer[..8].copy_from_slice(&(node as u64).to_be_bytes());
+    buffer[0..4].copy_from_slice(&(layer_index as u32).to_be_bytes());
+    buffer[4..12].copy_from_slice(&(node as u64).to_be_bytes());
     hasher.input(&[AsRef::<[u8]>::as_ref(replica_id), &buffer[..]][..]);
 
     // hash parents for all non 0 nodes
