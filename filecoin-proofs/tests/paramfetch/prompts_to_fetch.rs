@@ -7,8 +7,7 @@ use failure::Error as FailureError;
 
 use crate::paramfetch::support::session::ParamFetchSessionBuilder;
 use crate::support::tmp_manifest;
-use blake2b_simd::State as Blake2b;
-use filecoin_proofs::param::{ParameterData, ParameterMap};
+use filecoin_proofs::param::{hasher, ParameterData, ParameterMap};
 use rand::Rng;
 
 /// Produce a random sequence of bytes and first 32 characters of hex encoded
@@ -16,8 +15,7 @@ use rand::Rng;
 /// parampublish implementation.
 fn rand_bytes_with_blake2b() -> Result<(Vec<u8>, String), FailureError> {
     let bytes = rand::thread_rng().gen::<[u8; 32]>();
-
-    let mut hasher = Blake2b::new();
+    let mut hasher = hasher();
 
     let mut as_slice = &bytes[..];
 
@@ -25,7 +23,7 @@ fn rand_bytes_with_blake2b() -> Result<(Vec<u8>, String), FailureError> {
 
     Ok((
         bytes.iter().cloned().collect(),
-        hasher.finalize().to_hex()[..32].into(),
+        hasher.finalize().to_hex().to_string(),
     ))
 }
 

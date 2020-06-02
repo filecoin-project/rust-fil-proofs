@@ -5,13 +5,14 @@ use std::io::{stdin, stdout, Write};
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
-use blake2b_simd::State as Blake2b;
+use blake2b_simd::{Params, State as Blake2b};
 use serde::{Deserialize, Serialize};
 use storage_proofs::parameter_cache::{
     parameter_cache_dir, CacheEntryMetadata, PARAMETER_METADATA_EXT,
 };
 
 const ERROR_STRING: &str = "invalid string";
+const BLAKE2_DIGEST_LENGTH: usize = 16;
 
 pub type ParameterMap = BTreeMap<String, ParameterData>;
 
@@ -33,11 +34,18 @@ pub fn get_full_path_for_file_within_cache(filename: &str) -> PathBuf {
 pub fn get_digest_for_file_within_cache(filename: &str) -> Result<String> {
     let path = get_full_path_for_file_within_cache(filename);
     let mut file = File::open(&path).with_context(|| format!("could not open path={:?}", path))?;
-    let mut hasher = Blake2b::new();
+    let mut hasher = hasher();
 
     std::io::copy(&mut file, &mut hasher)?;
 
-    Ok(hasher.finalize().to_hex()[..32].into())
+    Ok(hasher.finalize().to_hex().to_string())
+}
+
+/// Creates a blake2 hasher with a configured hash_length.
+pub fn hasher() -> Blake2b {
+    let mut params = Params::new();
+    params.hash_length(BLAKE2_DIGEST_LENGTH);
+    params.to_state()
 }
 
 // Prompts the user to approve/reject the message
