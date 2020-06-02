@@ -159,8 +159,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                             Some(t_aux.tree_r_last_config_rows_to_discard),
                         )?;
 
-                        // For development and debugging.
-                        assert!(comm_r_last_proof.validate(challenge));
+                        debug_assert!(comm_r_last_proof.validate(challenge));
 
                         // Labeling Proofs Layer 1..l
                         let mut labeling_proofs = Vec::with_capacity(layers);
