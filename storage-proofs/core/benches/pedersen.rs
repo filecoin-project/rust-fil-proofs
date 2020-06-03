@@ -15,7 +15,7 @@ impl<'a> Circuit<Bls12> for PedersenExample<'a> {
     fn synthesize<CS: ConstraintSystem<Bls12>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
         let data: Vec<Boolean> = self
             .data
-            .into_iter()
+            .iter()
             .enumerate()
             .map(|(i, b)| {
                 Ok(Boolean::from(boolean::AllocatedBit::alloc(
@@ -45,7 +45,7 @@ impl<'a> Circuit<Bls12> for PedersenMdExample<'a> {
     fn synthesize<CS: ConstraintSystem<Bls12>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
         let data: Vec<Boolean> = self
             .data
-            .into_iter()
+            .iter()
             .enumerate()
             .map(|(i, b)| {
                 Ok(Boolean::from(boolean::AllocatedBit::alloc(

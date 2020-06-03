@@ -17,7 +17,7 @@ impl<'a> Circuit<Bls12> for XorExample<'a> {
     fn synthesize<CS: ConstraintSystem<Bls12>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
         let key: Vec<Boolean> = self
             .key
-            .into_iter()
+            .iter()
             .enumerate()
             .map(|(i, b)| {
                 Ok(Boolean::from(boolean::AllocatedBit::alloc(
@@ -28,7 +28,7 @@ impl<'a> Circuit<Bls12> for XorExample<'a> {
             .collect::<Result<Vec<_>, SynthesisError>>()?;
         let data: Vec<Boolean> = self
             .data
-            .into_iter()
+            .iter()
             .enumerate()
             .map(|(i, b)| {
                 Ok(Boolean::from(boolean::AllocatedBit::alloc(
