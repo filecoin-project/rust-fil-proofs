@@ -2,6 +2,7 @@ use std::fs::OpenOptions;
 use std::io::Write;
 use std::marker::PhantomData;
 use std::path::PathBuf;
+use std::sync::{Arc, RwLock};
 
 use generic_array::typenum::{self, Unsigned};
 use log::{info, trace};
@@ -421,17 +422,21 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         measure_op(GenerateTreeC, || {
             info!("Building column hashes");
 
-            // NOTE: The max number of columns we recommend sending to
-            // the GPU at once is 400000 for columns and 700000 for
-            // trees (conservative soft-limits discussed).
+            // NOTE: The max number of columns we recommend sending to the GPU at once is
+            // 400000 for columns and 700000 for trees (conservative soft-limits discussed).
             //
-            // Override these values with care using environment
-            // variables: FIL_PROOFS_MAX_COLUMN_BATCH_SIZE and
-            // FIL_PROOFS_MAX_TREE_BATCH_SIZE, respectively.
+            // 'column_write_batch_size' is how many nodes to chunk the base layer of data
+            // into when persisting to disk.
+            //
+            // Override these values with care using environment variables:
+            // FIL_PROOFS_MAX_COLUMN_BATCH_SIZE, FIL_PROOFS_MAX_TREE_BATCH_SIZE, and
+            // FIL_PROOFS_COLUMN_WRITE_BATCH_SIZE respectively.
             let max_gpu_column_batch_size =
                 settings::SETTINGS.lock().unwrap().max_gpu_column_batch_size as usize;
             let max_gpu_tree_batch_size =
                 settings::SETTINGS.lock().unwrap().max_gpu_tree_batch_size as usize;
+            let column_write_batch_size =
+                settings::SETTINGS.lock().unwrap().column_write_batch_size as usize;
 
             let mut column_tree_builder = ColumnTreeBuilder::<ColumnArity, TreeArity>::new(
                 Some(BatcherType::GPU),
@@ -485,13 +490,11 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                     });
 
                     // Copy out all layer data arranged into columns.
-                    trace!("re-arranging layer data into columns");
                     for layer_index in 0..layers {
                         for index in 0..chunked_nodes_count {
                             columns[index][layer_index] = layer_data[layer_index][index];
                         }
                     }
-                    trace!("done re-arranging layer data into columns");
 
                     drop(layer_data);
 
@@ -524,35 +527,61 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                         assert_eq!(base_data.len(), nodes_count);
                         assert_eq!(tree_len, config.size.unwrap());
 
-                        // Persist the data to disk based on the current store config.
-                        let tree_c_path = StoreConfig::data_path(&config.path, &config.id);
-                        let mut f = OpenOptions::new()
-                            .create(true)
-                            .write(true)
-                            .open(&tree_c_path)?;
+                        // Persist the base and tree data to disk based using the current store config.
+                        let tree_c_store =
+                            DiskStore::<<Tree::Hasher as Hasher>::Domain>::new_with_config(
+                                tree_len,
+                                Tree::Arity::to_usize(),
+                                config.clone(),
+                            )?;
 
-                        trace!("flattening tree_c base data of {} nodes", base_data.len());
-                        let flat_base_data: Vec<_> = base_data
+                        let store = Arc::new(RwLock::new(tree_c_store));
+
+                        let base_offset = base_data.len();
+                        let batch_size = std::cmp::min(base_data.len(), column_write_batch_size);
+                        trace!(
+                            "flattening tree_c base data of {} nodes using batch size {}",
+                            base_data.len(),
+                            batch_size
+                        );
+                        base_data
                             .into_par_iter()
-                            .flat_map(|el| fr_into_bytes(&el))
-                            .collect();
+                            .chunks(column_write_batch_size)
+                            .enumerate()
+                            .try_for_each(|(index, fr_elements)| {
+                                let mut buf = Vec::with_capacity(batch_size * NODE_SIZE);
+
+                                for fr in fr_elements {
+                                    buf.extend(fr_into_bytes(&fr));
+                                }
+                                store
+                                    .write()
+                                    .unwrap()
+                                    .copy_from_slice(&buf[..], batch_size * index)
+                            })?;
                         trace!("done flattening tree_c base data");
 
-                        trace!("writing tree_c base data");
-                        f.write_all(&flat_base_data)?;
-                        trace!("done writing tree_c base data");
-                        drop(flat_base_data);
-
                         trace!("flattening tree_c tree data of {} nodes", tree_data.len());
-                        let flat_tree_data: Vec<_> = tree_data
+                        tree_data
                             .into_par_iter()
-                            .flat_map(|el| fr_into_bytes(&el))
-                            .collect();
+                            .chunks(column_write_batch_size)
+                            .enumerate()
+                            .try_for_each(|(index, fr_elements)| {
+                                let mut buf = Vec::with_capacity(batch_size * NODE_SIZE);
+
+                                for fr in fr_elements {
+                                    buf.extend(fr_into_bytes(&fr));
+                                }
+                                store
+                                    .write()
+                                    .unwrap()
+                                    .copy_from_slice(&buf[..], base_offset + (batch_size * index))
+                            })?;
                         trace!("done flattening tree_c tree data");
 
-                        trace!("writing tree_c tree data");
-                        f.write_all(&flat_tree_data)?;
-                        trace!("done writing tree_c tree data");
+                        trace!("writing tree_c store data");
+                        store.write().unwrap().sync()?;
+                        trace!("done writing tree_c store data");
                     }
                 }
             }
