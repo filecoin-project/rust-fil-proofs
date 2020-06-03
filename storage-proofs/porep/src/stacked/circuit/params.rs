@@ -10,7 +10,7 @@ use storage_proofs_core::{
     gadgets::{encode::encode, uint64, variables::Root},
     hasher::{Hasher, PoseidonArity},
     merkle::{DiskStore, MerkleProofTrait, MerkleTreeTrait, MerkleTreeWrapper},
-    util::fixup_bits,
+    util::reverse_bit_numbering,
 };
 
 use super::{
@@ -170,7 +170,7 @@ impl<Tree: MerkleTreeTrait, G: 'static + Hasher> Proof<Tree, G> {
             for parent_col in &drg_parents {
                 let parent_val_num = parent_col.get_value(layer);
                 let parent_val_bits =
-                    fixup_bits(parent_val_num.to_bits_le(
+                    reverse_bit_numbering(parent_val_num.to_bits_le(
                         cs.namespace(|| format!("drg_parent_{}_bits", parents.len())),
                     )?);
                 parents.push(parent_val_bits);
@@ -182,7 +182,7 @@ impl<Tree: MerkleTreeTrait, G: 'static + Hasher> Proof<Tree, G> {
                     // subtract 1 from the layer index, as the exp parents, are shifted by one, as they
                     // do not store a value for the first layer
                     let parent_val_num = parent_col.get_value(layer - 1);
-                    let parent_val_bits = fixup_bits(parent_val_num.to_bits_le(
+                    let parent_val_bits = reverse_bit_numbering(parent_val_num.to_bits_le(
                         cs.namespace(|| format!("exp_parent_{}_bits", parents.len())),
                     )?);
                     parents.push(parent_val_bits);

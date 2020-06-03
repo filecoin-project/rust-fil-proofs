@@ -1,12 +1,8 @@
-use bellperson::gadgets::{
-    boolean::Boolean,
-    sha256::sha256 as sha256_circuit,
-    uint32, {multipack, num},
-};
+use bellperson::gadgets::{boolean::Boolean, num, sha256::sha256 as sha256_circuit, uint32};
 use bellperson::{ConstraintSystem, SynthesisError};
 use ff::PrimeField;
 use fil_sapling_crypto::jubjub::JubjubEngine;
-use storage_proofs_core::gadgets::uint64;
+use storage_proofs_core::{gadgets::multipack, gadgets::uint64, util::reverse_bit_numbering};
 
 use crate::stacked::vanilla::TOTAL_PARENTS;
 
@@ -60,25 +56,11 @@ where
     let alloc_bits = sha256_circuit(cs.namespace(|| "hash"), &ciphertexts[..])?;
 
     // Convert the hash result into a single Fr.
-    let fr = if alloc_bits[0].get_value().is_some() {
-        let be_bits = alloc_bits
-            .iter()
-            .map(|v| v.get_value().ok_or(SynthesisError::AssignmentMissing))
-            .collect::<Result<Vec<bool>, SynthesisError>>()?;
-
-        let le_bits = be_bits
-            .chunks(8)
-            .flat_map(|chunk| chunk.iter().rev())
-            .copied()
-            .take(E::Fr::CAPACITY as usize)
-            .collect::<Vec<bool>>();
-
-        Ok(multipack::compute_multipacking::<E>(&le_bits)[0])
-    } else {
-        Err(SynthesisError::AssignmentMissing)
-    };
-
-    num::AllocatedNum::<E>::alloc(cs.namespace(|| "result_num"), || fr)
+    let bits = reverse_bit_numbering(alloc_bits);
+    multipack::pack_bits(
+        cs.namespace(|| "result_num"),
+        &bits[0..(E::Fr::CAPACITY as usize)],
+    )
 }
 
 #[cfg(test)]
@@ -181,7 +163,7 @@ mod tests {
         .expect("key derivation function failed");
 
         assert!(cs.is_satisfied(), "constraints not satisfied");
-        assert_eq!(cs.num_constraints(), 532_024);
+        assert_eq!(cs.num_constraints(), 532_025);
 
         let (l1, l2) = data.split_at_mut(size * NODE_SIZE);
         create_label_exp(&graph, &id_fr.into(), &*l2, l1, layer, node).unwrap();
