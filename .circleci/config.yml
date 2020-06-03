@@ -33,7 +33,6 @@ jobs:
       - run: rustup component add clippy
       - run: cargo update
       - run: cargo fetch
-      - run: rustc +stable --version
       - run: rustc +$(cat rust-toolchain) --version
       - persist_to_workspace:
           root: "."
@@ -59,8 +58,8 @@ jobs:
             - cargo-v27g-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
       - restore_parameter_cache
       - run:
-          name: Test (stable)
-          command: cargo +stable test --verbose --all
+          name: Test
+          command: cargo +$(cat rust-toolchain) test --verbose --workspace
           no_output_timeout: 15m
       - run:
           name: Prune the output files
@@ -88,10 +87,10 @@ jobs:
             - cargo-v27g-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
       - restore_parameter_cache
       - run:
-          name: Test (stable) in release profile
+          name: Test in release profile
           command: |
-            cargo +stable test --verbose --release --all
-            RUSTFLAGS="-D warnings" cargo +stable build --examples --release --all
+            cargo +$(cat rust-toolchain) test --verbose --release --workspace
+            RUSTFLAGS="-D warnings" cargo +$(cat rust-toolchain) build --examples --release --workspace
 
   test_ignored_release:
     docker:
@@ -122,7 +121,7 @@ jobs:
             RUST_TEST_THREADS: 1
           no_output_timeout: 30m
 
-  test_nightly:
+  bench:
     docker:
       - image: filecoin/rust:latest
     working_directory: /mnt/crate
@@ -137,27 +136,8 @@ jobs:
             - cargo-v27g-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
       - restore_parameter_cache
       - run:
-          name: Test (nightly)
-          command: cargo +$(cat rust-toolchain) test --verbose --all
-          no_output_timeout: 15m
-
-  bench_nightly:
-    docker:
-      - image: filecoin/rust:latest
-    working_directory: /mnt/crate
-    resource_class: 2xlarge+
-    steps:
-      - configure_environment_variables
-      - checkout
-      - attach_workspace:
-          at: "."
-      - restore_cache:
-          keys:
-            - cargo-v27g-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
-      - restore_parameter_cache
-      - run:
-          name: Benchmarks (nightly)
-          command: cargo +$(cat rust-toolchain) build --benches --verbose --all
+          name: Benchmarks
+          command: cargo +$(cat rust-toolchain) build --benches --verbose --workspace
           no_output_timeout: 15m
 
   metrics_capture:
@@ -261,8 +241,8 @@ jobs:
             - cargo-v27g-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
       - run:
           name: Run cargo clippy
-          command: cargo +$(cat rust-toolchain) clippy --all
-  test_nightly_darwin:
+          command: cargo +$(cat rust-toolchain) clippy --workspace
+  test_darwin:
     macos:
       xcode: "10.0.0"
     working_directory: ~/crate
@@ -279,12 +259,12 @@ jobs:
       - run: cargo update
       - run: cargo fetch
       - run:
-          name: Test (nightly, Darwin)
+          name: Test Darwin
           command: |
             sudo ulimit -n 20000
             sudo ulimit -u 20000
             ulimit -n 20000
-            cargo +$(cat rust-toolchain) test --release --verbose --all
+            cargo +$(cat rust-toolchain) test --release --verbose --workspace
           no_output_timeout: 2h
 
   validate_commit_msg:
@@ -311,7 +291,7 @@ commands:
           name: Build paramcache if it doesn't already exist
           command: |
             set -x; test -f ~/paramcache.awesome \
-            || (cargo build --release --all && find . -type f -name paramcache | xargs -I {} mv {} ~/paramcache.awesome)
+            || (cargo build --release --workspace && find . -type f -name paramcache | xargs -I {} mv {} ~/paramcache.awesome)
       - run:
           name: Obtain filecoin groth parameters
           command: ~/paramcache.awesome --params-for-sector-sizes='2048,4096,16384,32768'
@@ -382,16 +362,12 @@ workflows:
           requires:
             - cargo_fetch
             - ensure_groth_parameters_and_keys_linux
-      - test_nightly:
-          requires:
-            - cargo_fetch
-            - ensure_groth_parameters_and_keys_linux
-      - bench_nightly:
+      - bench:
           requires:
             - cargo_fetch
             - ensure_groth_parameters_and_keys_linux
       - validate_commit_msg
-      - test_nightly_darwin
+      - test_darwin
       - metrics_capture:
           requires:
             - cargo_fetch
