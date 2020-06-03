@@ -434,7 +434,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                 settings::SETTINGS.lock().unwrap().max_gpu_tree_batch_size as usize;
 
             let mut column_tree_builder = ColumnTreeBuilder::<ColumnArity, TreeArity>::new(
-                Some(BatcherType::CPU),
+                Some(BatcherType::GPU),
                 nodes_count,
                 max_gpu_column_batch_size,
                 max_gpu_tree_batch_size,
@@ -654,11 +654,12 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         let last_layer_labels = labels.labels_for_last_layer()?;
 
         if settings::SETTINGS.lock().unwrap().use_gpu_tree_builder {
+            info!("generating tree r last using the GPU");
             let max_gpu_tree_batch_size =
                 settings::SETTINGS.lock().unwrap().max_gpu_tree_batch_size as usize;
 
             let mut tree_builder = TreeBuilder::<Tree::Arity>::new(
-                Some(BatcherType::CPU),
+                Some(BatcherType::GPU),
                 nodes_count,
                 max_gpu_tree_batch_size,
                 tree_r_last_config.rows_to_discard,
@@ -749,6 +750,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                 }
             }
         } else {
+            info!("generating tree r last using the CPU");
             let size = Store::len(last_layer_labels);
 
             let mut start = 0;

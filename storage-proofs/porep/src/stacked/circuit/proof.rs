@@ -371,22 +371,22 @@ mod tests {
 
     #[test]
     fn stacked_input_circuit_poseidon_base_2() {
-        stacked_input_circuit::<DiskTree<PoseidonHasher, U2, U0, U0>>(22, 1_206_210);
+        stacked_input_circuit::<DiskTree<PoseidonHasher, U2, U0, U0>>(22, 1_206_212);
     }
 
     #[test]
     fn stacked_input_circuit_poseidon_base_8() {
-        stacked_input_circuit::<DiskTree<PoseidonHasher, U8, U0, U0>>(22, 1_199_618);
+        stacked_input_circuit::<DiskTree<PoseidonHasher, U8, U0, U0>>(22, 1_199_620);
     }
 
     #[test]
     fn stacked_input_circuit_poseidon_sub_8_4() {
-        stacked_input_circuit::<DiskTree<PoseidonHasher, U8, U4, U0>>(22, 1_296_574);
+        stacked_input_circuit::<DiskTree<PoseidonHasher, U8, U4, U0>>(22, 1_296_576);
     }
 
     #[test]
     fn stacked_input_circuit_poseidon_top_8_4_2() {
-        stacked_input_circuit::<DiskTree<PoseidonHasher, U8, U4, U2>>(22, 1_346_980);
+        stacked_input_circuit::<DiskTree<PoseidonHasher, U8, U4, U2>>(22, 1_346_982);
     }
 
     fn stacked_input_circuit<Tree: MerkleTreeTrait + 'static>(
