@@ -426,7 +426,7 @@ mod tests {
             degree,
             expansion_degree,
             porep_id: arbitrary_porep_id,
-            layer_challenges: layer_challenges.clone(),
+            layer_challenges,
         };
 
         let pp = StackedDrg::<Tree, Sha256Hasher>::setup(&sp).expect("setup failed");
@@ -458,7 +458,7 @@ mod tests {
 
         // Convert TemporaryAux to TemporaryAuxCache, which instantiates all
         // elements based on the configs stored in TemporaryAux.
-        let t_aux = TemporaryAuxCache::<Tree, Sha256Hasher>::new(&t_aux, replica_path.clone())
+        let t_aux = TemporaryAuxCache::<Tree, Sha256Hasher>::new(&t_aux, replica_path)
             .expect("failed to restore contents of t_aux");
 
         let priv_inputs = PrivateInputs::<Tree, Sha256Hasher> { p_aux, t_aux };
@@ -594,7 +594,7 @@ mod tests {
                 degree,
                 expansion_degree,
                 porep_id: arbitrary_porep_id,
-                layer_challenges: layer_challenges.clone(),
+                layer_challenges,
             },
             partitions: Some(partition_count),
             priority: false,
@@ -642,7 +642,7 @@ mod tests {
 
         // Convert TemporaryAux to TemporaryAuxCache, which instantiates all
         // elements based on the configs stored in TemporaryAux.
-        let t_aux = TemporaryAuxCache::<Tree, _>::new(&t_aux, replica_path.clone())
+        let t_aux = TemporaryAuxCache::<Tree, _>::new(&t_aux, replica_path)
             .expect("failed to restore contents of t_aux");
 
         let private_inputs = PrivateInputs::<Tree, Sha256Hasher> { p_aux, t_aux };

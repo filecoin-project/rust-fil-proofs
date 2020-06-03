@@ -382,7 +382,7 @@ mod tests {
             (mmapped_data.as_mut()).into(),
             None,
             config,
-            replica_path.clone(),
+            replica_path,
         )
         .expect("failed to replicate");
 

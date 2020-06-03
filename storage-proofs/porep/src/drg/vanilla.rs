@@ -666,7 +666,7 @@ mod tests {
             (mmapped_data.as_mut()).into(),
             None,
             config.clone(),
-            replica_path.clone(),
+            replica_path,
         )
         .expect("replication failed");
 
@@ -678,7 +678,7 @@ mod tests {
             &pp,
             &replica_id,
             mmapped_data.as_mut(),
-            Some(config.clone()),
+            Some(config),
         )
         .unwrap_or_else(|e| {
             panic!("Failed to extract data from `DrgPoRep`: {}", e);
@@ -745,7 +745,7 @@ mod tests {
             (mmapped_data.as_mut()).into(),
             None,
             config.clone(),
-            replica_path.clone(),
+            replica_path,
         )
         .expect("replication failed");
 
@@ -848,7 +848,7 @@ mod tests {
             let pub_inputs = PublicInputs::<<Tree::Hasher as Hasher>::Domain> {
                 replica_id: Some(replica_id),
                 challenges: vec![challenge, challenge],
-                tau: Some(tau.clone()),
+                tau: Some(tau),
             };
 
             let priv_inputs = PrivateInputs::<Tree::Hasher> {

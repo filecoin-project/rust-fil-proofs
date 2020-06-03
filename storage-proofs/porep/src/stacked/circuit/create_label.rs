@@ -157,7 +157,7 @@ mod tests {
         let out = create_label_circuit(
             cs.namespace(|| "create_label"),
             &id_bits,
-            parents_bits.clone(),
+            parents_bits,
             layer_alloc,
             node_alloc,
         )
