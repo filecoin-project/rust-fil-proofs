@@ -109,8 +109,8 @@ mod tests {
     use super::*;
 
     fn bytes_fr_test(bytes: Fr32Ary, expect_success: bool) {
-        let mut b = &bytes[..];
-        let fr_result = bytes_into_fr(&mut b);
+        let b = &bytes[..];
+        let fr_result = bytes_into_fr(&b);
         if expect_success {
             let f = fr_result.expect("Failed to convert bytes to `Fr`");
             let b2 = fr_into_bytes(&f);
@@ -164,8 +164,7 @@ mod tests {
     }
 
     fn bytes_into_frs_into_bytes_test(bytes: &Fr32) {
-        let mut bytes = bytes.clone();
-        let frs = bytes_into_frs(&mut bytes).expect("Failed to convert bytes into a `Vec<Fr>`");
+        let frs = bytes_into_frs(bytes).expect("Failed to convert bytes into a `Vec<Fr>`");
         assert!(frs.len() == 3);
         let bytes_back = frs_into_bytes(&frs);
         assert!(bytes.to_vec() == bytes_back);
