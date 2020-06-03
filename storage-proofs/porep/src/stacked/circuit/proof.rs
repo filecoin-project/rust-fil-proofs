@@ -349,7 +349,7 @@ mod tests {
     use storage_proofs_core::{
         cache_key::CacheKey,
         compound_proof,
-        drgraph::{new_seed, BASE_DEGREE},
+        drgraph::BASE_DEGREE,
         fr32::fr_into_bytes,
         gadgets::{MetricCS, TestConstraintSystem},
         hasher::{Hasher, PedersenHasher, PoseidonHasher, Sha256Hasher},
@@ -423,7 +423,7 @@ mod tests {
             nodes,
             degree,
             expansion_degree,
-            seed: new_seed(),
+            porep_id: [32; 32],
             layer_challenges: layer_challenges.clone(),
         };
 
@@ -443,10 +443,11 @@ mod tests {
         assert_ne!(data, copied, "replication did not change data");
 
         let seed = rng.gen();
-
+        let arbitrary_porep_id = [44; 32];
         let pub_inputs =
             PublicInputs::<<Tree::Hasher as Hasher>::Domain, <Sha256Hasher as Hasher>::Domain> {
                 replica_id: replica_id.into(),
+                porep_id: arbitrary_porep_id,
                 seed,
                 tau: Some(tau.into()),
                 k: None,
@@ -594,7 +595,7 @@ mod tests {
                 nodes,
                 degree,
                 expansion_degree,
-                seed: new_seed(),
+                porep_id: [32; 32],
                 layer_challenges: layer_challenges.clone(),
             },
             partitions: Some(partition_count),
@@ -632,10 +633,11 @@ mod tests {
         assert_ne!(data, copied, "replication did not change data");
 
         let seed = rng.gen();
-
+        let arbitrary_porep_id = [55; 32];
         let public_inputs =
             PublicInputs::<<Tree::Hasher as Hasher>::Domain, <Sha256Hasher as Hasher>::Domain> {
                 replica_id: replica_id.into(),
+                porep_id: arbitrary_porep_id,
                 seed,
                 tau: Some(tau),
                 k: None,

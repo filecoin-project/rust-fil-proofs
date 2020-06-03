@@ -44,6 +44,7 @@ merkletree = "0.20.0"
 bincode = "1.1.2"
 anyhow = "1.0.23"
 rand_xorshift = "0.2.0"
+sha2 = { version = "0.8.3", package = "sha2ni" }
 typenum = "1.11.2"
 bitintr = "0.3.0"
 gperftools = { version = "0.2", optional = true }

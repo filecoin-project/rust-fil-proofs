@@ -102,6 +102,8 @@ pub fn run_window_post_bench<Tree: 'static + MerkleTreeTrait>(
 
     let piece_infos = vec![piece_info];
 
+    let arbitrary_porep_id = [99; 32];
+
     // Replicate the staged sector, write the replica file to `sealed_path`.
     let porep_config = PoRepConfig {
         sector_size: SectorSize(sector_size),
@@ -112,6 +114,7 @@ pub fn run_window_post_bench<Tree: 'static + MerkleTreeTrait>(
                 .get(&(sector_size))
                 .unwrap(),
         ),
+        porep_id: arbitrary_porep_id,
     };
     let cache_dir = tempfile::tempdir().unwrap();
     let sector_id = SectorId::from(SECTOR_ID);

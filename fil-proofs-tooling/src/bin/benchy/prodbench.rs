@@ -179,6 +179,7 @@ pub fn run(
     let mut outputs = ProdbenchOutputs::default();
 
     let sector_size = SectorSize(inputs.sector_size_bytes());
+    let arbitrary_porep_id = [123; 32];
 
     assert!(inputs.num_sectors > 0, "Missing num_sectors");
 
@@ -186,6 +187,7 @@ pub fn run(
         sector_size,
         inputs.num_sectors as usize,
         only_add_piece,
+        arbitrary_porep_id,
     );
 
     if only_add_piece || only_replicate {
@@ -270,7 +272,6 @@ fn run_measure_circuits(i: &ProdbenchInputs) -> CircuitOutputs {
 }
 
 fn measure_porep_circuit(i: &ProdbenchInputs) -> usize {
-    use storage_proofs::drgraph::new_seed;
     use storage_proofs::porep::stacked::{
         LayerChallenges, SetupParams, StackedCompound, StackedDrg,
     };
@@ -282,11 +283,12 @@ fn measure_porep_circuit(i: &ProdbenchInputs) -> usize {
     let nodes = (i.sector_size_bytes() / 32) as usize;
     let layer_challenges = LayerChallenges::new(layers, challenge_count);
 
+    let arbitrary_porep_id = [222; 32];
     let sp = SetupParams {
         nodes,
         degree: drg_degree,
         expansion_degree,
-        seed: new_seed(),
+        porep_id: arbitrary_porep_id,
         layer_challenges,
     };
 
@@ -315,10 +317,12 @@ fn generate_params(i: &ProdbenchInputs) {
         "generating params: porep: (size: {:?}, partitions: {:?})",
         &sector_size, &partitions
     );
+    let dummy_porep_id = [0; 32];
 
     cache_porep_params(PoRepConfig {
         sector_size,
         partitions,
+        porep_id: dummy_porep_id,
     });
 }
 
@@ -326,9 +330,11 @@ fn cache_porep_params(porep_config: PoRepConfig) {
     use filecoin_proofs::parameters::public_params;
     use storage_proofs::porep::stacked::{StackedCompound, StackedDrg};
 
+    let dummy_porep_id = [0; 32];
     let public_params = public_params(
         PaddedBytesAmount::from(porep_config),
         usize::from(PoRepProofPartitions::from(porep_config)),
+        dummy_porep_id,
     )
     .unwrap();
 

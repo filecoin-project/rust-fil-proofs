@@ -6,11 +6,6 @@ use storage_proofs::proof::ProofScheme;
 use crate::constants::*;
 use crate::types::{MerkleTreeTrait, PaddedBytesAmount, PoStConfig};
 
-const DRG_SEED: [u8; 28] = [
-    0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25,
-    26, 27,
-]; // Arbitrary, need a theory for how to vary this over time.
-
 type WinningPostSetupParams = fallback::SetupParams;
 pub type WinningPostPublicParams = fallback::PublicParams;
 
@@ -20,8 +15,13 @@ pub type WindowPostPublicParams = fallback::PublicParams;
 pub fn public_params<Tree: 'static + MerkleTreeTrait>(
     sector_bytes: PaddedBytesAmount,
     partitions: usize,
+    porep_id: [u8; 32],
 ) -> Result<stacked::PublicParams<Tree>> {
-    StackedDrg::<Tree, DefaultPieceHasher>::setup(&setup_params(sector_bytes, partitions)?)
+    StackedDrg::<Tree, DefaultPieceHasher>::setup(&setup_params(
+        sector_bytes,
+        partitions,
+        porep_id,
+    )?)
 }
 
 pub fn winning_post_public_params<Tree: 'static + MerkleTreeTrait>(
@@ -71,6 +71,7 @@ pub fn window_post_setup_params(post_config: &PoStConfig) -> WindowPostSetupPara
 pub fn setup_params(
     sector_bytes: PaddedBytesAmount,
     partitions: usize,
+    porep_id: [u8; 32],
 ) -> Result<stacked::SetupParams> {
     let layer_challenges = select_challenges(
         partitions,
@@ -101,7 +102,7 @@ pub fn setup_params(
         nodes,
         degree,
         expansion_degree,
-        seed: DRG_SEED,
+        porep_id,
         layer_challenges,
     })
 }
