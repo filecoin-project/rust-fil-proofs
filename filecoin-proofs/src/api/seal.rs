@@ -1,4 +1,4 @@
-use std::fs::{self, File, OpenOptions};
+use std::fs::{self, metadata, File, OpenOptions};
 use std::io::prelude::*;
 use std::path::{Path, PathBuf};
 
@@ -56,6 +56,20 @@ where
     T: AsRef<Path>,
 {
     info!("seal_pre_commit_phase1: start");
+
+    // Sanity check all input path types.
+    ensure!(
+        metadata(in_path.as_ref())?.is_file(),
+        "in_path must be a file"
+    );
+    ensure!(
+        metadata(out_path.as_ref())?.is_file(),
+        "out_path must be a file"
+    );
+    ensure!(
+        metadata(cache_path.as_ref())?.is_dir(),
+        "cache_path must be a directory"
+    );
 
     let sector_bytes = usize::from(PaddedBytesAmount::from(porep_config));
     fs::metadata(&in_path)
@@ -184,6 +198,16 @@ where
 {
     info!("seal_pre_commit_phase2: start");
 
+    // Sanity check all input path types.
+    ensure!(
+        metadata(cache_path.as_ref())?.is_dir(),
+        "cache_path must be a directory"
+    );
+    ensure!(
+        metadata(replica_path.as_ref())?.is_file(),
+        "replica_path must be a file"
+    );
+
     let SealPreCommitPhase1Output {
         mut labels,
         mut config,
@@ -295,6 +319,16 @@ pub fn seal_commit_phase1<T: AsRef<Path>, Tree: 'static + MerkleTreeTrait>(
     piece_infos: &[PieceInfo],
 ) -> Result<SealCommitPhase1Output<Tree>> {
     info!("seal_commit_phase1:start");
+
+    // Sanity check all input path types.
+    ensure!(
+        metadata(cache_path.as_ref())?.is_dir(),
+        "cache_path must be a directory"
+    );
+    ensure!(
+        metadata(replica_path.as_ref())?.is_file(),
+        "replica_path must be a file"
+    );
 
     let SealPreCommitOutput { comm_d, comm_r } = pre_commit;
 
