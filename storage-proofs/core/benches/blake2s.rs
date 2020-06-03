@@ -51,13 +51,9 @@ fn blake2s_benchmark(c: &mut Criterion) {
 
 fn blake2s_circuit_benchmark(c: &mut Criterion) {
     let mut rng1 = thread_rng();
-    let groth_params = generate_random_parameters::<Bls12, _, _>(
-        Blake2sExample {
-            data: &vec![None; 256],
-        },
-        &mut rng1,
-    )
-    .unwrap();
+    let groth_params =
+        generate_random_parameters::<Bls12, _, _>(Blake2sExample { data: &[None; 256] }, &mut rng1)
+            .unwrap();
 
     let params = vec![32];
 

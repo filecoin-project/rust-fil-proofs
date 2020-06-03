@@ -68,8 +68,8 @@ fn xor_circuit_benchmark(c: &mut Criterion) {
     let mut rng1 = thread_rng();
     let groth_params = generate_random_parameters::<Bls12, _, _>(
         XorExample {
-            key: &vec![None; 8 * 32],
-            data: &vec![None; 256],
+            key: &[None; 8 * 32],
+            data: &[None; 256],
         },
         &mut rng1,
     )
