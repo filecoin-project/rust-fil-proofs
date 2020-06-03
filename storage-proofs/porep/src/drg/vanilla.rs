@@ -848,7 +848,7 @@ mod tests {
             let pub_inputs = PublicInputs::<<Tree::Hasher as Hasher>::Domain> {
                 replica_id: Some(replica_id),
                 challenges: vec![challenge, challenge],
-                tau: Some(tau.clone().into()),
+                tau: Some(tau.clone()),
             };
 
             let priv_inputs = PrivateInputs::<Tree::Hasher> {
@@ -876,7 +876,7 @@ mod tests {
                 let proof = Proof::new(
                     real_proof.replica_nodes.clone(),
                     fake_parents,
-                    real_proof.nodes.clone().into(),
+                    real_proof.nodes.clone(),
                 );
 
                 let is_valid =
@@ -915,7 +915,7 @@ mod tests {
                 let proof2 = Proof::new(
                     real_proof.replica_nodes,
                     fake_proof_parents,
-                    real_proof.nodes.into(),
+                    real_proof.nodes,
                 );
 
                 assert!(
@@ -937,7 +937,7 @@ mod tests {
                     PublicInputs::<<Tree::Hasher as Hasher>::Domain> {
                         replica_id: Some(replica_id),
                         challenges: vec![if challenge == 1 { 2 } else { 1 }],
-                        tau: Some(tau.into()),
+                        tau: Some(tau),
                     };
                 let verified = DrgPoRep::<Tree::Hasher, _>::verify(
                     &pp,

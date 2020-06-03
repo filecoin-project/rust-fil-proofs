@@ -389,7 +389,7 @@ mod tests {
         let pub_inputs = drg::PublicInputs {
             replica_id: Some(replica_id.into()),
             challenges: vec![challenge],
-            tau: Some(tau.into()),
+            tau: Some(tau),
         };
 
         let priv_inputs = drg::PrivateInputs::<PedersenHasher> {

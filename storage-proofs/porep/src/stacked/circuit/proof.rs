@@ -449,7 +449,7 @@ mod tests {
             PublicInputs::<<Tree::Hasher as Hasher>::Domain, <Sha256Hasher as Hasher>::Domain> {
                 replica_id: replica_id.into(),
                 seed,
-                tau: Some(tau.into()),
+                tau: Some(tau),
                 k: None,
             };
 
@@ -461,10 +461,7 @@ mod tests {
         let t_aux = TemporaryAuxCache::<Tree, Sha256Hasher>::new(&t_aux, replica_path.clone())
             .expect("failed to restore contents of t_aux");
 
-        let priv_inputs = PrivateInputs::<Tree, Sha256Hasher> {
-            p_aux: p_aux.into(),
-            t_aux: t_aux.into(),
-        };
+        let priv_inputs = PrivateInputs::<Tree, Sha256Hasher> { p_aux, t_aux };
 
         let proofs = StackedDrg::<Tree, Sha256Hasher>::prove_all_partitions(
             &pp,

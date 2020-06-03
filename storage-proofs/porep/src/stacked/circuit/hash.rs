@@ -105,7 +105,7 @@ mod tests {
             assert!(cs.is_satisfied(), "constraints not satisfied");
             assert_eq!(cs.num_constraints(), 598);
 
-            let expected: Fr = vanilla_hash_single_column(&vals).into();
+            let expected: Fr = vanilla_hash_single_column(&vals);
 
             assert_eq!(
                 expected,
