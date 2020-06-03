@@ -144,9 +144,9 @@ impl<H: Hasher, Arity: 'static + PoseidonArity> SubPath<H, Arity> {
 
         let mut auth_path_bits = Vec::with_capacity(self.path.len());
 
-        for (i, path) in self.path.into_iter().enumerate() {
-            let elements = path.hashes;
-            let indexes = path.index;
+        for (i, path_element) in self.path.into_iter().enumerate() {
+            let path_hashes = path_element.hashes;
+            let optional_index = path_element.index; // Optional because of Bellman blank-circuit construction mechanics.
 
             let cs = &mut cs.namespace(|| format!("merkle tree hash {}", i));
 
@@ -154,7 +154,7 @@ impl<H: Hasher, Arity: 'static + PoseidonArity> SubPath<H, Arity> {
 
             for i in 0..index_bit_count {
                 let bit = AllocatedBit::alloc(cs.namespace(|| format!("index bit {}", i)), {
-                    indexes.map(|index| ((index >> i) & 1) == 1)
+                    optional_index.map(|index| ((index >> i) & 1) == 1)
                 })?;
 
                 index_bits.push(Boolean::from(bit));
@@ -163,7 +163,7 @@ impl<H: Hasher, Arity: 'static + PoseidonArity> SubPath<H, Arity> {
             auth_path_bits.extend_from_slice(&index_bits);
 
             // Witness the authentication path elements adjacent at this depth.
-            let path_elements = elements
+            let path_hash_nums = path_hashes
                 .iter()
                 .enumerate()
                 .map(|(i, elt)| {
@@ -173,7 +173,7 @@ impl<H: Hasher, Arity: 'static + PoseidonArity> SubPath<H, Arity> {
                 })
                 .collect::<Result<Vec<_>, _>>()?;
 
-            let inserted = insert(cs, &cur, &index_bits, &path_elements)?;
+            let inserted = insert(cs, &cur, &index_bits, &path_hash_nums)?;
 
             // Compute the new subtree value
             cur = H::Function::hash_multi_leaf_circuit::<Arity, _>(
