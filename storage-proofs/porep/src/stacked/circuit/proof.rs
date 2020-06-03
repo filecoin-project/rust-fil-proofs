@@ -366,7 +366,7 @@ mod tests {
 
     #[test]
     fn stacked_input_circuit_pedersen_base_2() {
-        stacked_input_circuit::<DiskTree<PedersenHasher, U2, U0, U0>>(22, 1_258_150);
+        stacked_input_circuit::<DiskTree<PedersenHasher, U2, U0, U0>>(22, 1_258_152);
     }
 
     #[test]

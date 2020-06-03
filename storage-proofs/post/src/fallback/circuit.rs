@@ -196,32 +196,32 @@ mod tests {
 
     #[test]
     fn fallback_post_poseidon_single_partition_matching_base_8() {
-        fallback_post::<LCTree<PoseidonHasher, U8, U0, U0>>(3, 3, 1, 19, 16_968);
+        fallback_post::<LCTree<PoseidonHasher, U8, U0, U0>>(3, 3, 1, 19, 16_869);
     }
 
     #[test]
     fn fallback_post_poseidon_single_partition_matching_sub_8_4() {
-        fallback_post::<LCTree<PoseidonHasher, U8, U4, U0>>(3, 3, 1, 19, 22_818);
+        fallback_post::<LCTree<PoseidonHasher, U8, U4, U0>>(3, 3, 1, 19, 22_674);
     }
 
     #[test]
     fn fallback_post_poseidon_single_partition_matching_top_8_4_2() {
-        fallback_post::<LCTree<PoseidonHasher, U8, U4, U2>>(3, 3, 1, 19, 27_573);
+        fallback_post::<LCTree<PoseidonHasher, U8, U4, U2>>(3, 3, 1, 19, 27_384);
     }
 
     #[test]
     fn fallback_post_poseidon_single_partition_smaller_base_8() {
-        fallback_post::<LCTree<PoseidonHasher, U8, U0, U0>>(2, 3, 1, 19, 16_968);
+        fallback_post::<LCTree<PoseidonHasher, U8, U0, U0>>(2, 3, 1, 19, 16_869);
     }
 
     #[test]
     fn fallback_post_poseidon_two_partitions_matching_base_8() {
-        fallback_post::<LCTree<PoseidonHasher, U8, U0, U0>>(4, 2, 2, 13, 11_312);
+        fallback_post::<LCTree<PoseidonHasher, U8, U0, U0>>(4, 2, 2, 13, 11_246);
     }
 
     #[test]
     fn fallback_post_poseidon_two_partitions_smaller_base_8() {
-        fallback_post::<LCTree<PoseidonHasher, U8, U0, U0>>(5, 3, 2, 19, 16_968);
+        fallback_post::<LCTree<PoseidonHasher, U8, U0, U0>>(5, 3, 2, 19, 16_869);
     }
 
     #[test]

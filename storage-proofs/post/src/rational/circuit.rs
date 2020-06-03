@@ -135,7 +135,7 @@ mod tests {
 
     #[test]
     fn test_rational_post_circuit_poseidon() {
-        test_rational_post_circuit::<BinaryMerkleTree<PoseidonHasher>>(3_806);
+        test_rational_post_circuit::<BinaryMerkleTree<PoseidonHasher>>(3_770);
     }
 
     fn test_rational_post_circuit<Tree: 'static + MerkleTreeTrait>(expected_constraints: usize) {
