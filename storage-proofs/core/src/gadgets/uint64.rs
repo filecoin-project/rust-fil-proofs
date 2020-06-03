@@ -184,8 +184,8 @@ mod test {
             let b = UInt64::from_bits_be(&v);
 
             for (i, bit) in b.bits.iter().enumerate() {
-                match bit {
-                    &Boolean::Constant(bit) => {
+                match *bit {
+                    Boolean::Constant(bit) => {
                         assert!(bit == ((b.value.unwrap() >> i) & 1 == 1));
                     }
                     _ => unreachable!(),
@@ -216,8 +216,8 @@ mod test {
             let b = UInt64::from_bits(&v);
 
             for (i, bit) in b.bits.iter().enumerate() {
-                match bit {
-                    &Boolean::Constant(bit) => {
+                match *bit {
+                    Boolean::Constant(bit) => {
                         assert!(bit == ((b.value.unwrap() >> i) & 1 == 1));
                     }
                     _ => unreachable!(),
