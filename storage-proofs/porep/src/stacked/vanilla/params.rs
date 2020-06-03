@@ -36,9 +36,7 @@ pub struct SetupParams {
 
     pub expansion_degree: usize,
 
-    // Random seed
-    pub seed: [u8; 28],
-
+    pub porep_id: [u8; 32],
     pub layer_challenges: LayerChallenges,
 }
 
@@ -109,6 +107,7 @@ where
 pub struct PublicInputs<T: Domain, S: Domain> {
     pub replica_id: T,
     pub seed: [u8; 32],
+    pub porep_id: [u8; 32],
     pub tau: Option<Tau<T, S>>,
     /// Partition index
     pub k: Option<usize>,
@@ -725,6 +724,7 @@ pub fn generate_replica_id<H: Hasher, T: AsRef<[u8]>>(
     sector_id: u64,
     ticket: &[u8; 32],
     comm_d: T,
+    porep_seed: &[u8; 32],
 ) -> H::Domain {
     use sha2::{Digest, Sha256};
 
@@ -733,6 +733,7 @@ pub fn generate_replica_id<H: Hasher, T: AsRef<[u8]>>(
         .chain(&sector_id.to_be_bytes()[..])
         .chain(ticket)
         .chain(AsRef::<[u8]>::as_ref(&comm_d))
+        .chain(porep_seed)
         .result();
 
     bytes_into_fr_repr_safe(hash.as_ref()).into()

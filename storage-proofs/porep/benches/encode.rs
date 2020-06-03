@@ -23,7 +23,7 @@ fn pregenerate_data<H: Hasher>(degree: usize) -> Pregenerated<H> {
         .collect();
     let replica_id: H::Domain = H::Domain::random(&mut rng);
 
-    let graph = StackedBucketGraph::<H>::new_stacked(size, 6, 8, new_seed()).unwrap();
+    let graph = StackedBucketGraph::<H>::new_stacked(size, 6, 8, [32; 32]).unwrap();
 
     Pregenerated {
         data,

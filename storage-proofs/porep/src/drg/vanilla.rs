@@ -80,8 +80,7 @@ pub struct DrgParams {
 
     pub expansion_degree: usize,
 
-    // Random seed
-    pub seed: [u8; 28],
+    pub porep_id: [u8; 32],
 }
 
 #[derive(Debug, Clone)]
@@ -250,7 +249,7 @@ where
             sp.drg.nodes,
             sp.drg.degree,
             sp.drg.expansion_degree,
-            sp.drg.seed,
+            sp.drg.porep_id,
         )?;
 
         Ok(PublicParams::new(graph, sp.private, sp.challenges_count))
@@ -652,7 +651,7 @@ mod tests {
                 nodes,
                 degree: BASE_DEGREE,
                 expansion_degree: 0,
-                seed: new_seed(),
+                porep_id: [32; 32],
             },
             private: false,
             challenges_count: 1,
@@ -731,7 +730,7 @@ mod tests {
                 nodes: data.len() / 32,
                 degree: BASE_DEGREE,
                 expansion_degree: 0,
-                seed: new_seed(),
+                porep_id: [32; 32],
             },
             private: false,
             challenges_count: 1,
@@ -797,7 +796,6 @@ mod tests {
             let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
             let degree = BASE_DEGREE;
             let expansion_degree = 0;
-            let seed = new_seed();
 
             let replica_id: <Tree::Hasher as Hasher>::Domain =
                 <Tree::Hasher as Hasher>::Domain::random(rng);
@@ -825,7 +823,7 @@ mod tests {
                     nodes,
                     degree,
                     expansion_degree,
-                    seed,
+                    porep_id: [32; 32],
                 },
                 private: false,
                 challenges_count: 2,

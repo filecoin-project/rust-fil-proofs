@@ -289,7 +289,7 @@ mod tests {
     use storage_proofs_core::{
         cache_key::CacheKey,
         compound_proof,
-        drgraph::{new_seed, BucketGraph, BASE_DEGREE},
+        drgraph::{BucketGraph, BASE_DEGREE},
         fr32::fr_into_bytes,
         gadgets::{MetricCS, TestConstraintSystem},
         hasher::{Hasher, PedersenHasher, PoseidonHasher},
@@ -342,16 +342,13 @@ mod tests {
         let replica_path = cache_dir.path().join("replica-path");
         let mut mmapped_data = setup_replica(&data, &replica_path);
 
-        // Only generate seed once. It would be bad if we used different seeds in the same test.
-        let seed = new_seed();
-
         let setup_params = compound_proof::SetupParams {
             vanilla_params: drg::SetupParams {
                 drg: drg::DrgParams {
                     nodes,
                     degree,
                     expansion_degree: 0,
-                    seed,
+                    porep_id: [32; 32],
                 },
                 private: false,
                 challenges_count: 2,
@@ -396,7 +393,7 @@ mod tests {
                     nodes,
                     degree,
                     expansion_degree: 0,
-                    seed,
+                    porep_id: [32; 32],
                 },
                 private: false,
                 challenges_count: 2,

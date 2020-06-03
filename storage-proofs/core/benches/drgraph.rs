@@ -11,7 +11,7 @@ fn drgraph(c: &mut Criterion) {
             "bucket/m=6",
             |b, n| {
                 let graph =
-                    BucketGraph::<PedersenHasher>::new(*n, BASE_DEGREE, 0, new_seed()).unwrap();
+                    BucketGraph::<PedersenHasher>::new(*n, BASE_DEGREE, 0, [32; 32]).unwrap();
 
                 b.iter(|| {
                     let mut parents = vec![0; 6];

@@ -74,7 +74,7 @@ mod tests {
     use rand::SeedableRng;
     use rand_xorshift::XorShiftRng;
     use storage_proofs_core::{
-        drgraph::{new_seed, Graph, BASE_DEGREE},
+        drgraph::{Graph, BASE_DEGREE},
         fr32::{bytes_into_fr, fr_into_bytes},
         gadgets::TestConstraintSystem,
         hasher::Sha256Hasher,
@@ -92,12 +92,13 @@ mod tests {
         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
 
         let size = 64;
+        let porep_id = [32; 32];
 
         let graph = StackedBucketGraph::<Sha256Hasher>::new_stacked(
             size,
             BASE_DEGREE,
             EXP_DEGREE,
-            new_seed(),
+            porep_id,
         )
         .unwrap();
 

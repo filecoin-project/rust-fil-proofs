@@ -64,8 +64,10 @@ pub fn create_piece(piece_bytes: UnpaddedBytesAmount) -> NamedTempFile {
 /// Create a replica for a single sector
 pub fn create_replica<Tree: 'static + MerkleTreeTrait>(
     sector_size: u64,
+    porep_id: [u8; 32],
 ) -> (SectorId, PreCommitReplicaOutput<Tree>) {
-    let (_porep_config, result) = create_replicas::<Tree>(SectorSize(sector_size), 1, false);
+    let (_porep_config, result) =
+        create_replicas::<Tree>(SectorSize(sector_size), 1, false, porep_id);
     // Extract the sector ID and replica output out of the result
     result
         .unwrap()
@@ -79,6 +81,7 @@ pub fn create_replicas<Tree: 'static + MerkleTreeTrait>(
     sector_size: SectorSize,
     qty_sectors: usize,
     only_add: bool,
+    porep_id: [u8; 32],
 ) -> (
     PoRepConfig,
     Option<(
@@ -99,6 +102,7 @@ pub fn create_replicas<Tree: 'static + MerkleTreeTrait>(
                 .get(&u64::from(sector_size))
                 .expect("unknown sector size"),
         ),
+        porep_id,
     };
 
     let mut out: Vec<(SectorId, PreCommitReplicaOutput<Tree>)> = Default::default();

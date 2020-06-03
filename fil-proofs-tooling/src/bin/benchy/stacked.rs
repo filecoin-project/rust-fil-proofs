@@ -120,11 +120,12 @@ where
         );
 
         let replica_id = H::Domain::random(rng);
+        let arbitrary_porep_id = [11; 32];
         let sp = stacked::SetupParams {
             nodes,
             degree: BASE_DEGREE,
             expansion_degree: EXP_DEGREE,
-            seed: new_seed(),
+            porep_id: arbitrary_porep_id,
             layer_challenges: layer_challenges.clone(),
         };
 
@@ -154,11 +155,14 @@ where
                         replica_path.clone(),
                     )?;
 
+                let arbitrary_porep_id = [88; 32];
+
                 let pb = stacked::PublicInputs::<H::Domain, <Sha256Hasher as Hasher>::Domain> {
                     replica_id,
                     seed,
                     tau: Some(tau),
                     k: Some(0),
+                    porep_id: arbitrary_porep_id,
                 };
 
                 // Convert TemporaryAux to TemporaryAuxCache, which instantiates all

@@ -349,7 +349,7 @@ fn create_seal<R: Rng, Tree: 'static + MerkleTreeTrait>(
     )?;
 
     let piece_infos = vec![piece_info];
-
+    let arbitrary_porep_id = [28; 32];
     let sealed_sector_file = NamedTempFile::new()?;
     let mut unseal_file = NamedTempFile::new()?;
     let config = PoRepConfig {
@@ -357,6 +357,7 @@ fn create_seal<R: Rng, Tree: 'static + MerkleTreeTrait>(
         partitions: PoRepProofPartitions(
             *POREP_PARTITIONS.read().unwrap().get(&sector_size).unwrap(),
         ),
+        porep_id: arbitrary_porep_id,
     };
 
     let cache_dir = tempfile::tempdir().unwrap();

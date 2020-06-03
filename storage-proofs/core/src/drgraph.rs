@@ -7,6 +7,7 @@ use rand::{rngs::OsRng, Rng, SeedableRng};
 use rand_chacha::ChaCha8Rng;
 use sha2::{Digest, Sha256};
 
+use crate::crypto::{derive_porep_domain_seed, DRSAMPLE_DST};
 use crate::error::*;
 use crate::fr32::bytes_into_fr_repr_safe;
 use crate::hasher::{Hasher, PoseidonArity};
@@ -54,7 +55,7 @@ pub trait Graph<H: Hasher>: ::std::fmt::Debug + Clone + PartialEq + Eq {
         nodes: usize,
         base_degree: usize,
         expansion_degree: usize,
-        seed: [u8; 28],
+        porep_id: [u8; 32],
     ) -> Result<Self>;
     fn seed(&self) -> [u8; 28];
 
@@ -203,7 +204,7 @@ impl<H: Hasher> Graph<H> for BucketGraph<H> {
         nodes: usize,
         base_degree: usize,
         expansion_degree: usize,
-        seed: [u8; 28],
+        porep_id: [u8; 32],
     ) -> Result<Self> {
         ensure!(expansion_degree == 0, "Expension degree must be zero.");
 
@@ -216,10 +217,14 @@ impl<H: Hasher> Graph<H> for BucketGraph<H> {
             "The number of metagraph nodes must be precisely castable to `f64`"
         );
 
+        let mut drg_seed = [0; 28];
+        let raw_seed = derive_porep_domain_seed(DRSAMPLE_DST, porep_id);
+        drg_seed.copy_from_slice(&raw_seed[..28]);
+
         Ok(BucketGraph {
             nodes,
             base_degree,
-            seed,
+            seed: drg_seed,
             _h: PhantomData,
         })
     }
@@ -237,7 +242,6 @@ mod tests {
     use memmap::MmapOptions;
     use merkletree::store::StoreConfig;
 
-    use crate::drgraph::new_seed;
     use crate::hasher::{
         Blake2sHasher, PedersenHasher, PoseidonArity, PoseidonHasher, Sha256Hasher,
     };
@@ -257,9 +261,10 @@ mod tests {
 
     fn graph_bucket<H: Hasher>() {
         let degree = BASE_DEGREE;
+        let porep_id = [123; 32];
 
         for size in vec![4, 16, 256, 2048] {
-            let g = BucketGraph::<H>::new(size, degree, 0, new_seed()).unwrap();
+            let g = BucketGraph::<H>::new(size, degree, 0, porep_id).unwrap();
 
             assert_eq!(g.size(), size, "wrong nodes count");
 
@@ -309,7 +314,8 @@ mod tests {
 
     fn gen_proof<H: 'static + Hasher, U: 'static + PoseidonArity>(config: Option<StoreConfig>) {
         let leafs = 64;
-        let g = BucketGraph::<H>::new(leafs, BASE_DEGREE, 0, new_seed()).unwrap();
+        let porep_id = [1; 32];
+        let g = BucketGraph::<H>::new(leafs, BASE_DEGREE, 0, porep_id).unwrap();
         let data = vec![2u8; NODE_SIZE * leafs];
 
         let mmapped = &mmap_from(&data);

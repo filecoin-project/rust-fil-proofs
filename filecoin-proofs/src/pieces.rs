@@ -356,7 +356,7 @@ mod tests {
     use paired::bls12_381::Fr;
     use rand::{Rng, RngCore, SeedableRng};
     use rand_xorshift::XorShiftRng;
-    use storage_proofs::drgraph::{new_seed, Graph};
+    use storage_proofs::drgraph::Graph;
     use storage_proofs::merkle::create_base_merkle_tree;
     use storage_proofs::porep::stacked::StackedBucketGraph;
 
@@ -698,11 +698,12 @@ mod tests {
         sector_size: SectorSize,
     ) -> Result<([u8; 32], Vec<PieceInfo>)> {
         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
+        let porep_id = [32; 32];
         let graph = StackedBucketGraph::<DefaultPieceHasher>::new_stacked(
             u64::from(sector_size) as usize / NODE_SIZE,
             DRG_DEGREE,
             EXP_DEGREE,
-            new_seed(),
+            porep_id,
         )?;
 
         let mut staged_sector = Vec::with_capacity(u64::from(sector_size) as usize);

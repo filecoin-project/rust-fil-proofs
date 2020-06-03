@@ -314,7 +314,7 @@ mod tests {
     use storage_proofs_core::{
         cache_key::CacheKey,
         compound_proof,
-        drgraph::{graph_height, new_seed, BucketGraph, BASE_DEGREE},
+        drgraph::{graph_height, BucketGraph, BASE_DEGREE},
         fr32::{bytes_into_fr, fr_into_bytes},
         gadgets::TestConstraintSystem,
         hasher::PedersenHasher,
@@ -368,7 +368,7 @@ mod tests {
                 nodes,
                 degree,
                 expansion_degree: 0,
-                seed: new_seed(),
+                porep_id: [32; 32],
             },
             private: false,
             challenges_count: 1,

@@ -81,6 +81,7 @@ pub fn get_stacked_params<Tree: 'static + MerkleTreeTrait>(
     let public_params = public_params::<Tree>(
         PaddedBytesAmount::from(porep_config),
         usize::from(PoRepProofPartitions::from(porep_config)),
+        porep_config.porep_id,
     )?;
 
     let parameters_generator = || {
@@ -151,6 +152,7 @@ pub fn get_stacked_verifying_key<Tree: 'static + MerkleTreeTrait>(
     let public_params = public_params(
         PaddedBytesAmount::from(porep_config),
         usize::from(PoRepProofPartitions::from(porep_config)),
+        porep_config.porep_id,
     )?;
 
     let vk_generator = || {
