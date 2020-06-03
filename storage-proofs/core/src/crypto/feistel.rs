@@ -183,10 +183,8 @@ mod tests {
             if expect_success {
                 assert!(equal, "failed to permute (n = {})", n);
                 assert!(in_range, "output number is too big (n = {})", n);
-            } else {
-                if !equal || !in_range {
-                    failed = true;
-                }
+            } else if !equal || !in_range {
+                failed = true;
             }
         }
         if !expect_success {
