@@ -31,7 +31,9 @@ pub fn insert<E: Engine, CS: ConstraintSystem<E>>(
     //
     // Future work: In theory, we could compile arbitrary lookup tables to minimize constraints and avoid
     // the most general case except when actually required — which it never is for simple insertion.
-    if size == 4 {
+    if size == 2 {
+        return insert_2(cs, element, bits, elements);
+    } else if size == 4 {
         return insert_4(cs, element, bits, elements);
     } else if size == 8 {
         return insert_8(cs, element, bits, elements);
@@ -83,6 +85,31 @@ pub fn insert<E: Engine, CS: ConstraintSystem<E>>(
     }
 
     Ok(result)
+}
+
+pub fn insert_2<E: Engine, CS: ConstraintSystem<E>>(
+    cs: &mut CS,
+    element: &AllocatedNum<E>,
+    bits: &[Boolean],
+    elements: &[AllocatedNum<E>],
+) -> Result<Vec<AllocatedNum<E>>, SynthesisError> {
+    assert_eq!(elements.len() + 1, 2);
+    assert_eq!(bits.len(), 1);
+
+    Ok(vec![
+        pick(
+            cs.namespace(|| "binary insert 0"),
+            &bits[0],
+            &elements[0],
+            &element,
+        )?,
+        pick(
+            cs.namespace(|| "binary insert 1"),
+            &bits[0],
+            &element,
+            &elements[0],
+        )?,
+    ])
 }
 
 pub fn insert_4<E: Engine, CS: ConstraintSystem<E>>(
@@ -381,7 +408,7 @@ mod tests {
 
     #[test]
     fn test_insert() {
-        for log_size in 1..=3 {
+        for log_size in 1..=4 {
             let size = 1 << log_size;
             for index in 0..size {
                 // Initialize rng in loop to simplify debugging with consistent elements.
