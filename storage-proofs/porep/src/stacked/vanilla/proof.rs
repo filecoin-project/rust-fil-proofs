@@ -463,10 +463,8 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                         ];
 
                     // Allocate layer data array and insert a placeholder for each layer.
-                    let mut layer_data = Vec::with_capacity(layers);
-                    for _ in 0..layers {
-                        layer_data.push(Vec::new());
-                    }
+                    let mut layer_data: Vec<Vec<Fr>> =
+                        vec![Vec::with_capacity(chunked_nodes_count); layers];
 
                     rayon::scope(|s| {
                         // capture a shadowed version of layer_data.
@@ -475,16 +473,13 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                         // gather all layer data in parallel.
                         s.spawn(move |_| {
                             let labels = &labels;
-                            for k in 1..=layers {
-                                let store = labels.labels_for_layer(k);
+                            for (layer_index, layer_elements) in layer_data.iter_mut().enumerate() {
+                                let store = labels.labels_for_layer(layer_index + 1);
                                 let start = (i * nodes_count) + node_index;
                                 let end = start + chunked_nodes_count;
                                 let elements: Vec<<Tree::Hasher as Hasher>::Domain> =
                                     store.read_range(std::ops::Range { start, end }).unwrap();
-
-                                let fr_elements: Vec<_> =
-                                    elements.into_iter().map(|el| el.into()).collect();
-                                layer_data[k - 1] = fr_elements;
+                                layer_elements.extend(elements.into_iter().map(Into::into));
                             }
                         });
                     });
@@ -536,47 +531,35 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                             )?;
 
                         let store = Arc::new(RwLock::new(tree_c_store));
-
-                        let base_offset = base_data.len();
                         let batch_size = std::cmp::min(base_data.len(), column_write_batch_size);
+                        let flatten_and_write_store = |data: &Vec<Fr>, offset| {
+                            data.into_par_iter()
+                                .chunks(column_write_batch_size)
+                                .enumerate()
+                                .try_for_each(|(index, fr_elements)| {
+                                    let mut buf = Vec::with_capacity(batch_size * NODE_SIZE);
+
+                                    for fr in fr_elements {
+                                        buf.extend(fr_into_bytes(&fr));
+                                    }
+                                    store
+                                        .write()
+                                        .unwrap()
+                                        .copy_from_slice(&buf[..], offset + (batch_size * index))
+                                })
+                        };
+
                         trace!(
                             "flattening tree_c base data of {} nodes using batch size {}",
                             base_data.len(),
                             batch_size
                         );
-                        base_data
-                            .into_par_iter()
-                            .chunks(column_write_batch_size)
-                            .enumerate()
-                            .try_for_each(|(index, fr_elements)| {
-                                let mut buf = Vec::with_capacity(batch_size * NODE_SIZE);
-
-                                for fr in fr_elements {
-                                    buf.extend(fr_into_bytes(&fr));
-                                }
-                                store
-                                    .write()
-                                    .unwrap()
-                                    .copy_from_slice(&buf[..], batch_size * index)
-                            })?;
+                        flatten_and_write_store(&base_data, 0)?;
                         trace!("done flattening tree_c base data");
 
-                        trace!("flattening tree_c tree data of {} nodes", tree_data.len());
-                        tree_data
-                            .into_par_iter()
-                            .chunks(column_write_batch_size)
-                            .enumerate()
-                            .try_for_each(|(index, fr_elements)| {
-                                let mut buf = Vec::with_capacity(batch_size * NODE_SIZE);
-
-                                for fr in fr_elements {
-                                    buf.extend(fr_into_bytes(&fr));
-                                }
-                                store
-                                    .write()
-                                    .unwrap()
-                                    .copy_from_slice(&buf[..], base_offset + (batch_size * index))
-                            })?;
+                        let base_offset = base_data.len();
+                        trace!("flattening tree_c tree data of {} nodes using batch size {} and base offset {}", tree_data.len(), batch_size, base_offset);
+                        flatten_and_write_store(&tree_data, base_offset)?;
                         trace!("done flattening tree_c tree data");
 
                         trace!("writing tree_c store data");
