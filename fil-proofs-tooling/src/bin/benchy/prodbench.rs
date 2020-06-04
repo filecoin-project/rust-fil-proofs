@@ -175,6 +175,7 @@ pub fn run(
     only_add_piece: bool,
 ) -> Metadata<ProdbenchReport> {
     configure_global_config(&inputs);
+    run_measure_circuits(&inputs);
 
     let mut outputs = ProdbenchOutputs::default();
 
@@ -224,7 +225,7 @@ pub fn run(
                 clear_cache::<DefaultOctLCTree>(
                     &replica_info.private_replica_info.cache_dir_path(),
                 )?;
-
+                println!("Starting precommit phase 2");
                 seal_commit_phase2(cfg, phase1_output, PROVER_ID, *sector_id)
             })
             .expect("failed to prove sector");
@@ -267,6 +268,8 @@ struct CircuitOutputs {
 
 fn run_measure_circuits(i: &ProdbenchInputs) -> CircuitOutputs {
     let porep_constraints = measure_porep_circuit(i);
+    dbg!(porep_constraints);
+    panic!("STOP");
 
     CircuitOutputs { porep_constraints }
 }

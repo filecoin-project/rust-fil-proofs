@@ -369,6 +369,9 @@ impl<'a, Tree: MerkleTreeTrait> Circuit<Bls12> for PoRCircuit<Tree> {
             let cur = value_num;
 
             // Ascend the merkle tree authentication path
+            dbg!(&auth_path.base.path.len());
+            dbg!(&auth_path.sub.path.len());
+            dbg!(&auth_path.top.path.len());
 
             // base tree
             let (cur, base_auth_path_bits) =
@@ -386,6 +389,8 @@ impl<'a, Tree: MerkleTreeTrait> Circuit<Bls12> for PoRCircuit<Tree> {
             auth_path_bits.extend(base_auth_path_bits);
             auth_path_bits.extend(sub_auth_path_bits);
             auth_path_bits.extend(top_auth_path_bits);
+
+            dbg!(&auth_path_bits.len());
 
             multipack::pack_into_inputs(cs.namespace(|| "path"), &auth_path_bits)?;
             {

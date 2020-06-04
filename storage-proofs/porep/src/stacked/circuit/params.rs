@@ -114,6 +114,7 @@ impl<Tree: MerkleTreeTrait, G: 'static + Hasher> Proof<Tree, G> {
         // Private Inputs for the DRG parent nodes.
         let mut drg_parents = Vec::new();
 
+        dbg!(&drg_parents_proofs.len());
         for (i, parent) in drg_parents_proofs.into_iter().enumerate() {
             let (parent_col, inclusion_path) =
                 parent.alloc(cs.namespace(|| format!("drg_parent_{}_num", i)))?;
@@ -133,6 +134,7 @@ impl<Tree: MerkleTreeTrait, G: 'static + Hasher> Proof<Tree, G> {
         // Private Inputs for the Expander parent nodes.
         let mut exp_parents = Vec::new();
 
+        dbg!(&exp_parents_proofs.len());
         for (i, parent) in exp_parents_proofs.into_iter().enumerate() {
             let (parent_col, inclusion_path) =
                 parent.alloc(cs.namespace(|| format!("exp_parent_{}_num", i)))?;
@@ -158,6 +160,7 @@ impl<Tree: MerkleTreeTrait, G: 'static + Hasher> Proof<Tree, G> {
         let challenge_num = uint64::UInt64::alloc(cs.namespace(|| "challenge"), challenge)?;
         challenge_num.pack_into_input(cs.namespace(|| "challenge input"))?;
 
+        dbg!(&layers);
         for layer in 1..=layers {
             let layer_num = uint32::UInt32::constant(layer as u32);
 
@@ -167,6 +170,7 @@ impl<Tree: MerkleTreeTrait, G: 'static + Hasher> Proof<Tree, G> {
             let mut parents = Vec::new();
 
             // all layers have drg parents
+            dbg!(&drg_parents.len());
             for parent_col in &drg_parents {
                 let parent_val_num = parent_col.get_value(layer);
                 let parent_val_bits =
@@ -178,6 +182,7 @@ impl<Tree: MerkleTreeTrait, G: 'static + Hasher> Proof<Tree, G> {
 
             // the first layer does not contain expander parents
             if layer > 1 {
+                dbg!(&exp_parents.len());
                 for parent_col in &exp_parents {
                     // subtract 1 from the layer index, as the exp parents, are shifted by one, as they
                     // do not store a value for the first layer
@@ -203,6 +208,7 @@ impl<Tree: MerkleTreeTrait, G: 'static + Hasher> Proof<Tree, G> {
                 expanded_parents.extend_from_slice(&parents); // 36
                 expanded_parents.push(parents[0].clone()); // 37
             };
+            dbg!(&expanded_parents.len());
 
             // Reconstruct the label
             let label = create_label(

@@ -133,6 +133,7 @@ impl<Tree: 'static + MerkleTreeTrait> Circuit<Bls12> for &Sector<Tree> {
         }
 
         // 2. Verify Inclusion Paths
+        dbg!("CHALL PER SECTOR", leafs.len());
         for (i, (leaf, path)) in leafs.iter().zip(paths.iter()).enumerate() {
             PoRCircuit::<Tree>::synthesize(
                 cs.namespace(|| format!("challenge_inclusion_{}", i)),
@@ -156,6 +157,7 @@ impl<Tree: MerkleTreeTrait> CircuitComponent for FallbackPoStCircuit<Tree> {
 
 impl<Tree: 'static + MerkleTreeTrait> Circuit<Bls12> for FallbackPoStCircuit<Tree> {
     fn synthesize<CS: ConstraintSystem<Bls12>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
+        dbg!("SECTORS TO CHALLENGE", &self.sectors.len());
         for (i, sector) in self.sectors.iter().enumerate() {
             let cs = &mut cs.namespace(|| format!("sector_{}", i));
 
