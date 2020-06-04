@@ -245,7 +245,7 @@ pub fn main() {
             .collect::<Vec<_>>();
 
         let selected_sector_sizes = MultiSelect::with_theme(&ColorfulTheme::default())
-            .with_prompt("Select the sizes that should be generated if not already cached")
+            .with_prompt("Select the sizes that should be generated if not already cached [use space key to select]")
             .items(&sector_sizes[..])
             .interact()
             .unwrap();
