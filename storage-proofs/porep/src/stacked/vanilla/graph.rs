@@ -28,7 +28,6 @@ use storage_proofs_core::{
 
 /// The expansion degree used for Stacked Graphs.
 pub const EXP_DEGREE: usize = 8;
-const FEISTEL_KEYS: [feistel::Index; 4] = [1, 2, 3, 4];
 
 const DEGREE: usize = BASE_DEGREE + EXP_DEGREE;
 
@@ -437,7 +436,7 @@ where
         let transformed = feistel::permute(
             self.size() as feistel::Index * self.expansion_degree as feistel::Index,
             a,
-            &FEISTEL_KEYS,
+            &self.feistel_keys,
             self.feistel_precomputed,
         );
         transformed as u32 / self.expansion_degree as u32

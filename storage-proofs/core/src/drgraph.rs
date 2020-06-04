@@ -3,7 +3,7 @@ use std::marker::PhantomData;
 
 use anyhow::ensure;
 use generic_array::typenum;
-use rand::{rngs::OsRng, Rng, SeedableRng};
+use rand::{Rng, SeedableRng};
 use rand_chacha::ChaCha8Rng;
 use sha2::{Digest, Sha256};
 
@@ -228,10 +228,6 @@ impl<H: Hasher> Graph<H> for BucketGraph<H> {
             _h: PhantomData,
         })
     }
-}
-
-pub fn new_seed() -> [u8; 28] {
-    OsRng.gen()
 }
 
 #[cfg(test)]

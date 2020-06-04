@@ -613,7 +613,7 @@ mod tests {
     use rand_xorshift::XorShiftRng;
     use storage_proofs_core::{
         cache_key::CacheKey,
-        drgraph::{new_seed, BucketGraph, BASE_DEGREE},
+        drgraph::{BucketGraph, BASE_DEGREE},
         fr32::fr_into_bytes,
         hasher::{Blake2sHasher, PedersenHasher, Sha256Hasher},
         merkle::{BinaryMerkleTree, MerkleTreeTrait},
