@@ -1,0 +1,9 @@
+{
+  "sector_size": "68719476736",
+  "porep_challenges": 1,
+  "porep_partitions": 1,
+  "post_challenges": 1,
+  "post_challenged_nodes": 10,
+  "stacked_layers": 11,
+  "num_sectors": 1
+}
