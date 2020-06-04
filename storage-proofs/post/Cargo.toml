@@ -26,8 +26,7 @@ log = "0.4.7"
 hex = "0.4.0"
 generic-array = "0.13.2"
 anyhow = "1.0.23"
-#neptune = { version = "0.7.1", features = ["gpu"] }
-neptune = { git = "https://github.com/filecoin-project/neptune", branch = "v1-0-candidate", features = ["gpu"] }
+neptune = { version = "1.0.0", features = ["gpu"] }
 
 [dev-dependencies]
 tempdir = "0.3.7"
