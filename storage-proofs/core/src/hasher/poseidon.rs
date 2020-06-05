@@ -478,18 +478,18 @@ mod tests {
         assert_eq!(
             t.read_at(4).unwrap().0,
             FrRepr([
-                0xf8a4092bef029be0,
-                0x2deffc4feff5a3e0,
-                0x60949ee3e7f39a7d,
-                0x2df335798cd6ce2e
+                0xb339ff6079800b5e,
+                0xec5907b3dc3094af,
+                0x93c003cc74a24f26,
+                0x042f94ffbe786bc3,
             ])
         );
 
         let expected = FrRepr([
-            0x7f422271ae4eac64,
-            0x767b7565e9472cdd,
-            0x0354271e16d4c223,
-            0x5acce8e6359804c0,
+            0xefbb8be3e291e671,
+            0x77cc72b8cb2b5ad2,
+            0x30eb6385ae6b74ae,
+            0x1effebb7b26ad9eb,
         ]);
         let actual = t.read_at(6).unwrap().0;
 
@@ -552,10 +552,10 @@ mod tests {
         assert_eq!(
             hashed,
             PoseidonDomain(FrRepr([
-                0x23ff11d2d2a54e3a,
-                0x1393376e3c10d281,
-                0xca9aed2681cc9081,
-                0x04f01dc7b8b9b562
+                0x351c54133b332c90,
+                0xc26f6d625f4e8195,
+                0x5fd9623643ed9622,
+                0x59f42220e09ff6f7,
             ]))
         );
     }
@@ -588,7 +588,7 @@ mod tests {
         );
 
         assert!(cs.is_satisfied());
-        let expected_constraints = 2_777;
+        let expected_constraints = 2_771;
         let actual_constraints = cs.num_constraints();
 
         assert_eq!(expected_constraints, actual_constraints);

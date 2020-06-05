@@ -1,4 +1,4 @@
-use std::fs::{self, File, OpenOptions};
+use std::fs::{self, metadata, File, OpenOptions};
 use std::io::prelude::*;
 use std::path::{Path, PathBuf};
 
@@ -57,6 +57,20 @@ where
 {
     info!("seal_pre_commit_phase1: start");
 
+    // Sanity check all input path types.
+    ensure!(
+        metadata(in_path.as_ref())?.is_file(),
+        "in_path must be a file"
+    );
+    ensure!(
+        metadata(out_path.as_ref())?.is_file(),
+        "out_path must be a file"
+    );
+    ensure!(
+        metadata(cache_path.as_ref())?.is_dir(),
+        "cache_path must be a directory"
+    );
+
     let sector_bytes = usize::from(PaddedBytesAmount::from(porep_config));
     fs::metadata(&in_path)
         .with_context(|| format!("could not read in_path={:?})", in_path.as_ref().display()))?;
@@ -113,7 +127,7 @@ where
         );
 
         trace!(
-            "seal phase 1: sector_size {}, base tree size {}, base tree leafs {}, cached above base {}",
+            "seal phase 1: sector_size {}, base tree size {}, base tree leafs {}, rows to discard {}",
             u64::from(porep_config.sector_size),
             base_tree_size,
             base_tree_leafs,
@@ -184,6 +198,16 @@ where
 {
     info!("seal_pre_commit_phase2: start");
 
+    // Sanity check all input path types.
+    ensure!(
+        metadata(cache_path.as_ref())?.is_dir(),
+        "cache_path must be a directory"
+    );
+    ensure!(
+        metadata(replica_path.as_ref())?.is_file(),
+        "replica_path must be a file"
+    );
+
     let SealPreCommitPhase1Output {
         mut labels,
         mut config,
@@ -220,7 +244,7 @@ where
         let base_tree_leafs = get_base_tree_leafs::<DefaultBinaryTree>(base_tree_size)?;
 
         trace!(
-            "seal phase 2: base tree size {}, base tree leafs {}, cached above base {}",
+            "seal phase 2: base tree size {}, base tree leafs {}, rows to discard {}",
             base_tree_size,
             base_tree_leafs,
             StoreConfig::default_rows_to_discard(base_tree_leafs, BINARY_ARITY)
@@ -295,6 +319,16 @@ pub fn seal_commit_phase1<T: AsRef<Path>, Tree: 'static + MerkleTreeTrait>(
     piece_infos: &[PieceInfo],
 ) -> Result<SealCommitPhase1Output<Tree>> {
     info!("seal_commit_phase1:start");
+
+    // Sanity check all input path types.
+    ensure!(
+        metadata(cache_path.as_ref())?.is_dir(),
+        "cache_path must be a directory"
+    );
+    ensure!(
+        metadata(replica_path.as_ref())?.is_file(),
+        "replica_path must be a file"
+    );
 
     let SealPreCommitOutput { comm_d, comm_r } = pre_commit;
 
