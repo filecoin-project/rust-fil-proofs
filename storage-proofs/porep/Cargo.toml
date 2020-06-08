@@ -1,6 +1,6 @@
 [package]
 name = "storage-proofs-porep"
-version = "2.0.0"
+version = "3.0.0"
 authors = ["dignifiedquire <me@dignifiedquire.com>"]
 description = "Proofs of replication"
 license = "MIT OR Apache-2.0"
@@ -9,7 +9,7 @@ repository = "https://github.com/filecoin-project/rust-fil-proofs"
 readme = "README.md"
 
 [dependencies]
-storage-proofs-core = { path = "../core", version = "2.0.0" }
+storage-proofs-core = { path = "../core", version = "3.0.0" }
 sha2raw = { path = "../../sha2raw", version = "1.0.0" }
 rand = "0.7"
 merkletree = "0.20.0"
