@@ -9,17 +9,18 @@ and this project adheres to [Semantic Versioning](https://book.async.rs/overview
 
 ## 3.0.0 - 2020-06-08
 
-- Publish v27 parameters
-- Allow tree_r_last to be built on the GPU
-- Improve performance of building tree_c on the GPU
-- Properly remove tree_c when no longer needed
-- Update neptune dependency version
-- Update circuit test constraints
-- Update total challenge count and increase partitions
-- Improve UX of paramcache
-- Add porep_id to construct replica_id and graph seeds
-- Include layer index before node when creating label preimage
-- Circuit optimizations for oct/quad insertion
+- Publish v27 parameters: https://github.com/filecoin-project/rust-fil-proofs/pull/1158
+- Update toolchain to rust stable: https://github.com/filecoin-project/rust-fil-proofs/pull/1149
+- Allow tree_r_last to be built on the GPU: https://github.com/filecoin-project/rust-fil-proofs/pull/1138
+  - Improve performance of building tree_c on the GPU
+  - Properly remove tree_c when no longer needed
+  - Update circuit test constraints
+- Update neptune dependency version: https://github.com/filecoin-project/rust-fil-proofs/pull/1159
+- Update total challenge count and increase partitions: https://github.com/filecoin-project/rust-fil-proofs/pull/1153
+- Improve UX of paramcache: https://github.com/filecoin-project/rust-fil-proofs/pull/1152
+- Add porep_id to construct replica_id and graph seeds: https://github.com/filecoin-project/rust-fil-proofs/pull/1144
+- Include layer index before node when creating label preimage: https://github.com/filecoin-project/rust-fil-proofs/pull/1139
+- Circuit optimizations for oct/quad insertion: https://github.com/filecoin-project/rust-fil-proofs/pull/1125
 
 ## 2.0.0 - 2020-05-27
 
