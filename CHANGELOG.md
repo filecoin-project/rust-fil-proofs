@@ -9,18 +9,18 @@ and this project adheres to [Semantic Versioning](https://book.async.rs/overview
 
 ## 3.0.0 - 2020-06-08
 
-- Publish v27 parameters: https://github.com/filecoin-project/rust-fil-proofs/pull/1158
-- Update toolchain to rust stable: https://github.com/filecoin-project/rust-fil-proofs/pull/1149
-- Allow tree_r_last to be built on the GPU: https://github.com/filecoin-project/rust-fil-proofs/pull/1138
+- Publish v27 parameters: [#1158](https://github.com/filecoin-project/rust-fil-proofs/pull/1158)
+- Update toolchain to rust stable: [#1149](https://github.com/filecoin-project/rust-fil-proofs/pull/1149)
+- Allow tree_r_last to be built on the GPU: [#1138](https://github.com/filecoin-project/rust-fil-proofs/pull/1138)
   - Improve performance of building tree_c on the GPU
   - Properly remove tree_c when no longer needed
   - Update circuit test constraints
-- Update neptune dependency version: https://github.com/filecoin-project/rust-fil-proofs/pull/1159
-- Update total challenge count and increase partitions: https://github.com/filecoin-project/rust-fil-proofs/pull/1153
-- Improve UX of paramcache: https://github.com/filecoin-project/rust-fil-proofs/pull/1152
-- Add porep_id to construct replica_id and graph seeds: https://github.com/filecoin-project/rust-fil-proofs/pull/1144
-- Include layer index before node when creating label preimage: https://github.com/filecoin-project/rust-fil-proofs/pull/1139
-- Circuit optimizations for oct/quad insertion: https://github.com/filecoin-project/rust-fil-proofs/pull/1125
+- Update neptune dependency version: [#1159](https://github.com/filecoin-project/rust-fil-proofs/pull/1159)
+- Update total challenge count and increase partitions: [#1153](https://github.com/filecoin-project/rust-fil-proofs/pull/1153)
+- Improve UX of paramcache: [#1152](https://github.com/filecoin-project/rust-fil-proofs/pull/1152)
+- Add porep_id to construct replica_id and graph seeds: [#1144](https://github.com/filecoin-project/rust-fil-proofs/pull/1144)
+- Include layer index before node when creating label preimage: [#1139](https://github.com/filecoin-project/rust-fil-proofs/pull/1139)
+- Circuit optimizations for oct/quad insertion: [#1125](https://github.com/filecoin-project/rust-fil-proofs/pull/1125)
 
 ## 2.0.0 - 2020-05-27
 
