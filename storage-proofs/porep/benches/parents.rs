@@ -37,7 +37,6 @@ fn stop_profile() {
 fn stop_profile() {}
 
 fn pregenerate_graph<H: Hasher>(size: usize) -> StackedBucketGraph<H> {
-    let seed = [1u8; 28];
     StackedBucketGraph::<H>::new_stacked(size, BASE_DEGREE, EXP_DEGREE, [32; 32]).unwrap()
 }
 
