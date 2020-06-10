@@ -926,7 +926,7 @@ mod tests {
                     "verified in error -- with wrong parent proofs"
                 );
 
-                return ();
+                return;
             }
 
             let proof = real_proof;
