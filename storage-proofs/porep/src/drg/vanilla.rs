@@ -621,7 +621,6 @@ mod tests {
         test_helper::setup_replica,
         util::{data_at_node, default_rows_to_discard},
     };
-    use tempfile;
 
     use crate::stacked::BINARY_ARITY;
 
