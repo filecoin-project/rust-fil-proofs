@@ -108,19 +108,6 @@ impl<E: Engine> MetricCS<E> {
         result
     }
 
-    pub fn pretty_print_witnesses(&self) -> Vec<String> {
-        let mut result = Vec::new();
-
-        for input in &self.inputs {
-            result.push(format!("INPUT {}", input));
-        }
-        // for aux in &self.aux {
-        //     result.push(format!("AUX {}", aux));
-        // }
-
-        result
-    }
-
     pub fn pretty_print(&self) -> String {
         let mut s = String::new();
 
