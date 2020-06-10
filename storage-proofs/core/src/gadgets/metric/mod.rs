@@ -1,9 +1,8 @@
 use bellperson::{ConstraintSystem, Index, LinearCombination, SynthesisError, Variable};
-use ff::{Field, PrimeField, PrimeFieldRepr, ScalarEngine};
+use ff::{Field, PrimeField, ScalarEngine};
 use paired::Engine;
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, HashMap};
-use std::fmt::Write;
 
 #[derive(Clone, Copy)]
 struct OrderedVariable(Variable);
@@ -112,7 +111,7 @@ impl<E: Engine> MetricCS<E> {
         let mut s = String::new();
 
         for input in &self.inputs {
-            write!(s, "INPUT {}\n", &input).unwrap();
+            s.push_str(&format!("INPUT {}\n", &input))
         }
 
         let negone = {
@@ -126,55 +125,55 @@ impl<E: Engine> MetricCS<E> {
             .collect::<Vec<_>>();
 
         let pp = |s: &mut String, lc: &LinearCombination<E>| {
-            write!(s, "(").unwrap();
+            s.push('(');
             let mut is_first = true;
             for (var, coeff) in proc_lc::<E>(&lc) {
                 if coeff == negone {
-                    write!(s, " - ").unwrap();
+                    s.push_str(" - ")
                 } else if !is_first {
-                    write!(s, " + ").unwrap();
+                    s.push_str(" + ")
                 }
                 is_first = false;
 
                 if coeff != E::Fr::one() && coeff != negone {
                     for (i, x) in powers_of_two.iter().enumerate() {
                         if x == &coeff {
-                            write!(s, "2^{} . ", i).unwrap();
+                            s.push_str(&format!("2^{} . ", i));
                             break;
                         }
                     }
 
-                    write!(s, "{} . ", coeff).unwrap();
+                    s.push_str(&format!("{} . ", coeff))
                 }
 
                 match var.0.get_unchecked() {
                     Index::Input(i) => {
-                        write!(s, "`{}`", &self.inputs[i]).unwrap();
+                        s.push_str(&format!("`{}`", &self.inputs[i]));
                     }
                     Index::Aux(i) => {
-                        write!(s, "`{}`", &self.aux[i]).unwrap();
+                        s.push_str(&format!("`{}`", &self.aux[i]));
                     }
                 }
             }
             if is_first {
                 // Nothing was visited, print 0.
-                write!(s, "0").unwrap();
+                s.push('0');
             }
-            write!(s, ")").unwrap();
+            s.push(')');
         };
 
         for &(ref a, ref b, ref c, ref name) in &self.constraints {
-            write!(&mut s, "\n").unwrap();
+            s.push('\n');
 
-            write!(&mut s, "{}: ", name).unwrap();
+            s.push_str(&format!("{}: ", name));
             pp(&mut s, a);
-            write!(&mut s, " * ").unwrap();
+            s.push_str(" * ");
             pp(&mut s, b);
-            write!(&mut s, " = ").unwrap();
+            s.push_str(" = ");
             pp(&mut s, c);
         }
 
-        write!(&mut s, "\n").unwrap();
+        s.push('\n');
 
         s
     }
