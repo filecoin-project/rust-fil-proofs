@@ -1,10 +1,11 @@
 use std::fmt;
 
 use anyhow::{ensure, Result};
+use serde::{Deserialize, Serialize};
 
 use crate::types::{Commitment, UnpaddedBytesAmount};
 
-#[derive(Clone, Default, PartialEq, Eq)]
+#[derive(Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PieceInfo {
     pub commitment: Commitment,
     pub size: UnpaddedBytesAmount,

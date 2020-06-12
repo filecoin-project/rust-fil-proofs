@@ -98,6 +98,57 @@ fn main() -> Result<()> {
     let window_post_cmd = SubCommand::with_name("window-post")
         .about("Benchmark Window PoST")
         .arg(
+            Arg::with_name("preserve-cache")
+                .long("preserve-cache")
+                .required(false)
+                .help("Preserve the directory where cached files are persisted")
+                .takes_value(false),
+        )
+        /*
+        .arg(
+            Arg::with_name("skip-precommit-phase1")
+                .long("skip-precommit-phase1")
+                .required(false)
+                .help("Skip precommit phase 1")
+                .takes_value(false),
+        )
+        .arg(
+            Arg::with_name("skip-precommit-phase2")
+                .long("skip-precommit-phase2")
+                .required(false)
+                .help("Skip precommit phase 2")
+                .takes_value(false),
+        )*/
+        .arg(
+            Arg::with_name("skip-precommit")
+                .long("skip-precommit")
+                .required(false)
+                .help("Skip precommit phase 1 & 2")
+                .takes_value(false),
+        )
+        .arg(
+            Arg::with_name("skip-commit-phase1")
+                .long("skip-commit-phase1")
+                .required(false)
+                .help("Skip commit phase 1")
+                .takes_value(false),
+        )
+        .arg(
+            Arg::with_name("skip-commit-phase2")
+                .long("skip-commit-phase2")
+                .required(false)
+                .help("Skip commit phase 2")
+                .takes_value(false),
+        )
+        .arg(
+            Arg::with_name("cache")
+                .long("cache")
+                .required(false)
+                .help("The directory where cached files are persisted")
+                .default_value("")
+                .takes_value(true),
+        )
+        .arg(
             Arg::with_name("size")
                 .long("size")
                 .required(true)
@@ -209,10 +260,25 @@ fn main() -> Result<()> {
             })?;
         }
         ("window-post", Some(m)) => {
+            let preserve_cache = m.is_present("preserve-cache");
+            // For now these options are combined.
+            let skip_precommit_phase1 = m.is_present("skip-precommit");
+            let skip_precommit_phase2 = m.is_present("skip-precommit");
+            let skip_commit_phase1 = m.is_present("skip-commit-phase1");
+            let skip_commit_phase2 = m.is_present("skip-commit-phase2");
+            let cache_dir = value_t!(m, "cache", String)?;
             let sector_size_kibs = value_t!(m, "size", usize)
                 .expect("could not convert `size` CLI argument to `usize`");
             let sector_size = sector_size_kibs * 1024;
-            window_post::run(sector_size)?;
+            window_post::run(
+                sector_size,
+                cache_dir,
+                preserve_cache,
+                skip_precommit_phase1,
+                skip_precommit_phase2,
+                skip_commit_phase1,
+                skip_commit_phase2,
+            )?;
         }
         ("winning-post", Some(m)) => {
             let sector_size_kibs = value_t!(m, "size", usize)
