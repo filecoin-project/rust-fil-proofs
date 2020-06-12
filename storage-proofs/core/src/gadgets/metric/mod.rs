@@ -148,10 +148,10 @@ impl<E: Engine> MetricCS<E> {
 
                 match var.0.get_unchecked() {
                     Index::Input(i) => {
-                        s.push_str(&format!("`{}`", &self.inputs[i]));
+                        s.push_str(&format!("`I{}`", &self.inputs[i]));
                     }
                     Index::Aux(i) => {
-                        s.push_str(&format!("`{}`", &self.aux[i]));
+                        s.push_str(&format!("`A{}`", &self.aux[i]));
                     }
                 }
             }
