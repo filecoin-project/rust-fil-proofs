@@ -515,6 +515,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::identity_op)]
     fn test_verify_padded_pieces() {
         // [
         //   {(A0 00) (BB BB)} -> A(1) P(1) P(1) P(1) B(4)
