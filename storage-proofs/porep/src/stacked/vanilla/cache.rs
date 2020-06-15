@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use anyhow::{bail, ensure, Context};
-use byteorder::{BigEndian, ByteOrder};
+use byteorder::{ByteOrder, LittleEndian};
 use log::info;
 use rayon::prelude::*;
 use sha2::{Digest, Sha256};
@@ -83,7 +83,7 @@ impl CacheData {
         let end = start + DEGREE * NODE_BYTES;
 
         let mut res = [0u32; DEGREE];
-        BigEndian::read_u32_into(&self.data[start..end], &mut res);
+        LittleEndian::read_u32_into(&self.data[start..end], &mut res);
         res
     }
 
@@ -199,7 +199,7 @@ impl ParentCache {
                     .parents(node, &mut parents[..BASE_DEGREE])?;
                 graph.generate_expanded_parents(node, &mut parents[BASE_DEGREE..]);
 
-                BigEndian::write_u32_into(&parents, entry);
+                LittleEndian::write_u32_into(&parents, entry);
                 Ok(())
             })?;
 
@@ -254,6 +254,9 @@ where
 
     hasher.input(H::name());
     hasher.input(graph.identifier());
+    for key in &graph.feistel_keys {
+        hasher.input(key.to_le_bytes());
+    }
     hasher.input(cache_entries.to_le_bytes());
     let h = hasher.result();
     PathBuf::from(PARENT_CACHE_DIR).join(format!(
