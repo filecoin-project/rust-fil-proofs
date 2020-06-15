@@ -122,7 +122,7 @@ impl ParamPublishSessionBuilder {
         let cache_dir_path = format!("{:?}", self.cache_dir.path());
 
         let cache_contents: Vec<PathBuf> = std::fs::read_dir(&self.cache_dir)
-            .expect(&format!("failed to read cache dir {:?}", self.cache_dir))
+            .unwrap_or_else(|_| panic!("failed to read cache dir {:?}", self.cache_dir))
             .map(|x| x.expect("failed to get dir entry"))
             .map(|x| x.path())
             .collect();
