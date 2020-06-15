@@ -13,7 +13,7 @@ use rayon::prelude::*;
 
 use crate::error::*;
 use crate::hasher::{Domain, Hasher, PoseidonArity};
-use crate::util::{data_at_node, NODE_SIZE};
+use crate::util::{data_at_node, default_rows_to_discard, NODE_SIZE};
 
 use super::*;
 
@@ -409,7 +409,7 @@ where
         let config = StoreConfig::new(
             &temp_path,
             format!("test-lc-tree-{}", id),
-            StoreConfig::default_rows_to_discard(nodes, Tree::Arity::to_usize()),
+            default_rows_to_discard(nodes, Tree::Arity::to_usize()),
         );
 
         let mut tree =

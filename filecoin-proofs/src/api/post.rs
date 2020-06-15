@@ -17,6 +17,7 @@ use storage_proofs::merkle::{
 use storage_proofs::multi_proof::MultiProof;
 use storage_proofs::post::fallback;
 use storage_proofs::sector::*;
+use storage_proofs::util::default_rows_to_discard;
 
 use crate::api::util::{as_safe_commitment, get_base_tree_leafs, get_base_tree_size};
 use crate::caches::{get_post_params, get_post_verifying_key};
@@ -149,7 +150,7 @@ impl<Tree: 'static + MerkleTreeTrait> PrivateReplicaInfo<Tree> {
             "post: base tree size {}, base tree leafs {}, rows_to_discard {}, arities [{}, {}, {}]",
             base_tree_size,
             base_tree_leafs,
-            StoreConfig::default_rows_to_discard(base_tree_leafs, Tree::Arity::to_usize()),
+            default_rows_to_discard(base_tree_leafs, Tree::Arity::to_usize()),
             Tree::Arity::to_usize(),
             Tree::SubTreeArity::to_usize(),
             Tree::TopTreeArity::to_usize(),
@@ -158,7 +159,7 @@ impl<Tree: 'static + MerkleTreeTrait> PrivateReplicaInfo<Tree> {
         let mut config = StoreConfig::new(
             self.cache_dir_path(),
             CacheKey::CommRLastTree.to_string(),
-            StoreConfig::default_rows_to_discard(base_tree_leafs, Tree::Arity::to_usize()),
+            default_rows_to_discard(base_tree_leafs, Tree::Arity::to_usize()),
         );
         config.size = Some(base_tree_size);
 

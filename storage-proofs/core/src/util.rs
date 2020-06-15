@@ -2,7 +2,10 @@ use crate::error;
 use anyhow::ensure;
 use bellperson::gadgets::boolean::{self, AllocatedBit, Boolean};
 use bellperson::{ConstraintSystem, SynthesisError};
+use merkletree::merkle::get_merkle_tree_row_count;
 use paired::Engine;
+
+use super::settings;
 
 pub const NODE_SIZE: usize = 32;
 
@@ -140,6 +143,36 @@ pub fn reverse_bit_numbering(bits: Vec<boolean::Boolean>) -> Vec<boolean::Boolea
         .flatten()
         .cloned()
         .collect()
+}
+
+// If the tree is large enough to use the default value (per-arity), use it.  If it's too small to cache anything (i.e. not enough rows), don't discard any.
+pub fn default_rows_to_discard(leafs: usize, arity: usize) -> usize {
+    let row_count = get_merkle_tree_row_count(leafs, arity);
+    if row_count <= 2 {
+        // If a tree only has a root row and/or base, there is
+        // nothing to discard.
+        return 0;
+    } else if row_count == 3 {
+        // If a tree only has 1 row between the base and root,
+        // it's all that can be discarded.
+        return 1;
+    }
+
+    // row_count - 2 discounts the base layer (1) and root (1)
+    let max_rows_to_discard = row_count - 2;
+
+    // This configurable setting is for a default oct-tree
+    // rows_to_discard value, which defaults to 2.
+    let rows_to_discard = settings::SETTINGS.lock().unwrap().rows_to_discard as usize;
+
+    // Discard at most 'constant value' rows (coded below,
+    // differing by arity) while respecting the max number that
+    // the tree can support discarding.
+    match arity {
+        2 => std::cmp::min(max_rows_to_discard, 7),
+        4 => std::cmp::min(max_rows_to_discard, 5),
+        _ => std::cmp::min(max_rows_to_discard, rows_to_discard),
+    }
 }
 
 #[cfg(test)]

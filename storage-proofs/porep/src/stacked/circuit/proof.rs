@@ -356,6 +356,7 @@ mod tests {
         merkle::{get_base_tree_count, DiskTree, MerkleTreeTrait},
         proof::ProofScheme,
         test_helper::setup_replica,
+        util::default_rows_to_discard,
     };
 
     use crate::stacked::{
@@ -412,7 +413,7 @@ mod tests {
         let config = StoreConfig::new(
             cache_dir.path(),
             CacheKey::CommDTree.to_string(),
-            StoreConfig::default_rows_to_discard(nodes, BINARY_ARITY),
+            default_rows_to_discard(nodes, BINARY_ARITY),
         );
 
         // Generate a replica path.
@@ -608,7 +609,7 @@ mod tests {
         let config = StoreConfig::new(
             cache_dir.path(),
             CacheKey::CommDTree.to_string(),
-            StoreConfig::default_rows_to_discard(nodes, BINARY_ARITY),
+            default_rows_to_discard(nodes, BINARY_ARITY),
         );
 
         // Generate a replica path.

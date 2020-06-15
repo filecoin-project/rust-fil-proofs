@@ -14,6 +14,7 @@ use storage_proofs::porep::stacked::{
 };
 use storage_proofs::porep::PoRep;
 use storage_proofs::sector::SectorId;
+use storage_proofs::util::default_rows_to_discard;
 use typenum::Unsigned;
 
 use crate::api::util::{as_safe_commitment, get_base_tree_leafs, get_base_tree_size};
@@ -149,7 +150,7 @@ where
     let config = StoreConfig::new(
         cache_path.as_ref(),
         CacheKey::CommDTree.to_string(),
-        StoreConfig::default_rows_to_discard(
+        default_rows_to_discard(
             base_tree_leafs,
             <DefaultBinaryTree as MerkleTreeTrait>::Arity::to_usize(),
         ),

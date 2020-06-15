@@ -34,7 +34,7 @@ impl Default for Settings {
             column_write_batch_size: 262_144,
             use_gpu_tree_builder: false,
             max_gpu_tree_batch_size: 700_000,
-            rows_to_discard: 0,
+            rows_to_discard: 2,
         }
     }
 }

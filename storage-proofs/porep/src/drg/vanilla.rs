@@ -619,7 +619,7 @@ mod tests {
         merkle::{BinaryMerkleTree, MerkleTreeTrait},
         table_tests,
         test_helper::setup_replica,
-        util::data_at_node,
+        util::{data_at_node, default_rows_to_discard},
     };
     use tempfile;
 
@@ -639,7 +639,7 @@ mod tests {
         let config = StoreConfig::new(
             cache_dir.path(),
             CacheKey::CommDTree.to_string(),
-            StoreConfig::default_rows_to_discard(nodes, BINARY_ARITY),
+            default_rows_to_discard(nodes, BINARY_ARITY),
         );
 
         // Generate a replica path.
@@ -718,7 +718,7 @@ mod tests {
         let config = StoreConfig::new(
             cache_dir.path(),
             CacheKey::CommDTree.to_string(),
-            StoreConfig::default_rows_to_discard(nodes, BINARY_ARITY),
+            default_rows_to_discard(nodes, BINARY_ARITY),
         );
 
         // Generate a replica path.
@@ -809,7 +809,7 @@ mod tests {
             let config = StoreConfig::new(
                 cache_dir.path(),
                 CacheKey::CommDTree.to_string(),
-                StoreConfig::default_rows_to_discard(nodes, BINARY_ARITY),
+                default_rows_to_discard(nodes, BINARY_ARITY),
             );
 
             // Generate a replica path.
@@ -854,10 +854,7 @@ mod tests {
             let priv_inputs = PrivateInputs::<Tree::Hasher> {
                 tree_d: &aux.tree_d,
                 tree_r: &aux.tree_r,
-                tree_r_config_rows_to_discard: StoreConfig::default_rows_to_discard(
-                    nodes,
-                    BINARY_ARITY,
-                ),
+                tree_r_config_rows_to_discard: default_rows_to_discard(nodes, BINARY_ARITY),
             };
 
             let real_proof = DrgPoRep::<Tree::Hasher, _>::prove(&pp, &pub_inputs, &priv_inputs)
