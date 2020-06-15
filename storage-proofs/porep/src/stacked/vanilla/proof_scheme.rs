@@ -142,7 +142,6 @@ impl<'a, 'c, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> ProofScheme<'
         self::PublicInputs {
             replica_id: pub_in.replica_id,
             seed: pub_in.seed,
-            porep_id: pub_in.porep_id,
             tau: pub_in.tau,
             k,
         }

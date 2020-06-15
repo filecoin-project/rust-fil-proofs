@@ -377,7 +377,6 @@ pub fn seal_commit_phase1<T: AsRef<Path>, Tree: 'static + MerkleTreeTrait>(
 
     let public_inputs = stacked::PublicInputs {
         replica_id,
-        porep_id: porep_config.porep_id,
         tau: Some(stacked::Tau {
             comm_d: comm_d_safe,
             comm_r: comm_r_safe,
@@ -458,7 +457,6 @@ pub fn seal_commit_phase2<Tree: 'static + MerkleTreeTrait>(
 
     let public_inputs = stacked::PublicInputs {
         replica_id,
-        porep_id: porep_config.porep_id,
         tau: Some(stacked::Tau {
             comm_d: comm_d_safe,
             comm_r: comm_r_safe,
@@ -592,7 +590,6 @@ pub fn verify_seal<Tree: 'static + MerkleTreeTrait>(
     let public_inputs =
         stacked::PublicInputs::<<Tree::Hasher as Hasher>::Domain, DefaultPieceDomain> {
             replica_id,
-            porep_id: porep_config.porep_id,
             tau: Some(Tau { comm_r, comm_d }),
             seed,
             k: None,
@@ -715,7 +712,6 @@ pub fn verify_batch_seal<Tree: 'static + MerkleTreeTrait>(
             DefaultPieceDomain,
         > {
             replica_id,
-            porep_id: porep_config.porep_id,
             tau: Some(Tau { comm_r, comm_d }),
             seed: seeds[i],
             k: None,
