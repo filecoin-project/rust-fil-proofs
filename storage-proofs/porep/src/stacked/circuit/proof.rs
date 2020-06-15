@@ -484,16 +484,10 @@ mod tests {
             // Verify that MetricCS returns the same metrics as TestConstraintSystem.
             let mut cs = MetricCS::<Bls12>::new();
 
-            StackedCompound::<Tree, Sha256Hasher>::circuit(
-                &pub_inputs,
-                <StackedCircuit<Tree, Sha256Hasher> as CircuitComponent>::ComponentPrivateInputs::default(),
-                &proofs[0],
-                &pp,
-                None,
-            )
-            .expect("circuit failed")
-            .synthesize(&mut cs.namespace(|| "stacked drgporep"))
-            .expect("failed to synthesize circuit");
+            StackedCompound::<Tree, Sha256Hasher>::circuit(&pub_inputs, (), &proofs[0], &pp, None)
+                .expect("circuit failed")
+                .synthesize(&mut cs.namespace(|| "stacked drgporep"))
+                .expect("failed to synthesize circuit");
 
             assert_eq!(cs.num_inputs(), expected_inputs, "wrong number of inputs");
             assert_eq!(
@@ -504,16 +498,10 @@ mod tests {
         }
         let mut cs = TestConstraintSystem::<Bls12>::new();
 
-        StackedCompound::<Tree, Sha256Hasher>::circuit(
-            &pub_inputs,
-            <StackedCircuit<Tree, Sha256Hasher> as CircuitComponent>::ComponentPrivateInputs::default(),
-            &proofs[0],
-            &pp,
-            None,
-        )
-        .expect("circuit failed")
-        .synthesize(&mut cs.namespace(|| "stacked drgporep"))
-        .expect("failed to synthesize circuit");
+        StackedCompound::<Tree, Sha256Hasher>::circuit(&pub_inputs, (), &proofs[0], &pp, None)
+            .expect("circuit failed")
+            .synthesize(&mut cs.namespace(|| "stacked drgporep"))
+            .expect("failed to synthesize circuit");
 
         assert!(cs.is_satisfied(), "constraints not satisfied");
         assert_eq!(cs.num_inputs(), expected_inputs, "wrong number of inputs");
