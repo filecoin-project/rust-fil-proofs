@@ -187,8 +187,6 @@ impl ParentCache {
 
         let mut data = unsafe {
             memmap::MmapOptions::new()
-                .offset(0)
-                .len(len as usize * DEGREE * NODE_BYTES)
                 .map_mut(&file)
                 .with_context(|| format!("could not mmap path={}", path.display()))?
         };
@@ -208,16 +206,12 @@ impl ParentCache {
 
         info!("parent cache: generated");
         data.flush().context("failed to flush parent cache")?;
+        drop(data);
 
         info!("parent cache: written to disk");
 
         Ok(ParentCache {
-            cache: RwLock::new(CacheData {
-                data: data.make_read_only()?,
-                len,
-                offset: 0,
-                file,
-            }),
+            cache: RwLock::new(CacheData::open(0, len, &path)?),
             path,
             num_cache_entries: cache_entries,
         })
@@ -303,7 +297,7 @@ mod tests {
 
     #[test]
     fn test_read_partial_range() {
-        let nodes = 24u32;
+        let nodes = 48u32;
         let graph = StackedBucketGraph::<PoseidonHasher>::new_stacked(
             nodes as usize,
             BASE_DEGREE,
