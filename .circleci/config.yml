@@ -267,22 +267,6 @@ jobs:
             cargo +$(cat rust-toolchain) test --release --verbose --workspace
           no_output_timeout: 2h
 
-  validate_commit_msg:
-    docker:
-      - image: circleci/node:latest
-    resource_class: xlarge
-    steps:
-      - configure_environment_variables
-      - checkout
-      - attach_workspace:
-          at: "."
-      - run:
-          name: Install dependencies
-          command: npm i @commitlint/config-angular @commitlint/cli
-      - run:
-          name: Validate Commit Messages
-          command: |
-              npx commitlint --extends @commitlint/config-angular --from origin/master --to $CIRCLE_SHA1
 commands:
   ensure_filecoin_parameters:
     steps:
@@ -366,7 +350,6 @@ workflows:
           requires:
             - cargo_fetch
             - ensure_groth_parameters_and_keys_linux
-      - validate_commit_msg
       - test_darwin
       - metrics_capture:
           requires:
