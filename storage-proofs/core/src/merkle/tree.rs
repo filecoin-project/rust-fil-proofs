@@ -184,6 +184,11 @@ impl<
         Ok(tree.into())
     }
 
+    pub fn from_byte_slice_with_config(data: &[u8], config: StoreConfig) -> Result<Self> {
+        let tree = merkle::MerkleTree::from_byte_slice_with_config(data, config)?;
+        Ok(tree.into())
+    }
+
     pub fn from_tree_slice(data: &[u8], leafs: usize) -> Result<Self> {
         let tree = merkle::MerkleTree::from_tree_slice(data, leafs)?;
         Ok(tree.into())
