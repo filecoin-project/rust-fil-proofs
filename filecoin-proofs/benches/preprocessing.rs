@@ -55,7 +55,7 @@ fn preprocessing_benchmark(c: &mut Criterion) {
                 });
                 stop_profile();
             },
-            vec![128, 256, 512, 256_000, 512_000, 1024_000, 2048_000],
+            vec![128, 256, 512, 256_000, 512_000, 1_024_000, 2_048_000],
         )
         .sample_size(10)
         .throughput(|s| Throughput::Bytes(*s as u64))
