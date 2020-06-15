@@ -499,7 +499,7 @@ mod tests {
         let raw_data: BitVec<LittleEndian, u8> = BitVec::from(raw_data);
 
         for data_unit in raw_data.into_iter().chunks(DATA_BITS as usize).into_iter() {
-            padded_data.extend(data_unit.into_iter());
+            padded_data.extend(data_unit);
 
             // To avoid reconverting the iterator, we deduce if we need the padding
             // by the length of `padded_data`: a full data unit would not leave the
