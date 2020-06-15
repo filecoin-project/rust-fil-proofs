@@ -141,6 +141,15 @@ where
         Ok(res)
     }
 
+    /// Resets the parent cache if one exists.
+    pub fn reset_parent_cache(&self) -> Result<()> {
+        if let Some(ref cache) = self.cache {
+            return cache.reset();
+        }
+
+        Ok(())
+    }
+
     /// Returns a reference to the parent cache, initializing it lazily the first time this is called.
     fn parent_cache(&mut self, cache_entries: u32) -> Result<()> {
         const NODE_GIB: u32 = (1024 * 1024 * 1024) / NODE_SIZE as u32;
@@ -157,17 +166,20 @@ where
         );
         info!("using parent_cache[{}]", cache_entries);
 
-        if cache_entries == 32 * NODE_GIB {
-            self.cache = Some(INSTANCE_32_GIB.get_or_init(|| {
+        let cache = if cache_entries == 32 * NODE_GIB {
+            INSTANCE_32_GIB.get_or_init(|| {
                 ParentCache::new(DEFAULT_CACHE_SIZE, cache_entries, self)
                     .expect("failed to fill 32GiB cache")
-            }));
+            })
         } else {
-            self.cache = Some(INSTANCE_64_GIB.get_or_init(|| {
+            INSTANCE_64_GIB.get_or_init(|| {
                 ParentCache::new(DEFAULT_CACHE_SIZE, cache_entries, self)
                     .expect("failed to fill 64GiB cache")
-            }));
-        }
+            })
+        };
+
+        cache.reset()?;
+        self.cache = Some(cache);
 
         Ok(())
     }

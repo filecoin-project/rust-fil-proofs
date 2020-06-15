@@ -303,6 +303,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
 
         for layer in 1..=layers {
             info!("generating layer: {}", layer);
+            graph.reset_parent_cache()?;
 
             if layer == 1 {
                 let layer_labels = &mut labels_buffer[..layer_size];

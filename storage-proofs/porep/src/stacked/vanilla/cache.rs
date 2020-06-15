@@ -15,7 +15,7 @@ use storage_proofs_core::{
     parameter_cache::{ParameterSetMetadata, VERSION},
 };
 
-use super::graph::{StackedGraph, DEGREE, EXP_DEGREE};
+use super::graph::{StackedGraph, DEGREE};
 
 /// Path in which to store the parents caches.
 const PARENT_CACHE_DIR: &str = "/var/tmp/filecoin-parents";
@@ -86,6 +86,14 @@ impl CacheData {
         let mut res = [0u32; DEGREE];
         BigEndian::read_u32_into(&self.data[start..end], &mut res);
         res
+    }
+
+    fn reset(&mut self) -> Result<()> {
+        if self.offset == 0 {
+            return Ok(());
+        }
+
+        self.shift(0)
     }
 
     fn open(offset: u32, len: u32, path: &PathBuf) -> Result<Self> {
@@ -239,6 +247,11 @@ impl ParentCache {
 
         Ok(cache.read(node))
     }
+
+    /// Resets the partial cache to the beginning.
+    pub fn reset(&self) -> Result<()> {
+        self.cache.write().unwrap().reset()
+    }
 }
 
 fn cache_path<H, G>(cache_entries: u32, graph: &StackedGraph<H, G>) -> PathBuf
@@ -321,6 +334,20 @@ mod tests {
                 quarter_cache.cache.read().unwrap().data.len() / DEGREE / NODE_BYTES,
                 nodes as usize / 4
             );
+        }
+
+        half_cache.reset().unwrap();
+        quarter_cache.reset().unwrap();
+
+        for node in 0..nodes {
+            let mut expected_parents = [0; DEGREE];
+            graph.parents(node as usize, &mut expected_parents).unwrap();
+
+            let parents = half_cache.read(node).unwrap();
+            assert_eq!(expected_parents, parents);
+
+            let parents = quarter_cache.read(node).unwrap();
+            assert_eq!(expected_parents, parents);
         }
     }
 }
