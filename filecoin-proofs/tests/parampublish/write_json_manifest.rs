@@ -79,7 +79,7 @@ fn filename_to_checksum<P: AsRef<Path>>(
                 .file_name()
                 .and_then(|os_str| os_str.to_str())
                 .map(|s| s.to_string())
-                .unwrap_or("".to_string()),
+                .unwrap_or_else(|| "".to_string()),
             ipfs_bin
                 .compute_checksum(item)
                 .expect("failed to compute checksum"),
