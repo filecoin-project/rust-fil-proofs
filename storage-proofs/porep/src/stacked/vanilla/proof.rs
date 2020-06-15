@@ -25,7 +25,7 @@ use storage_proofs_core::{
     },
     merkle::*,
     settings,
-    util::NODE_SIZE,
+    util::{default_rows_to_discard, NODE_SIZE},
 };
 use typenum::{U11, U2, U8};
 
@@ -973,8 +973,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
             CacheKey::CommDTree.to_string(),
             Some(get_merkle_tree_len(nodes_count, BINARY_ARITY)?),
         );
-        tree_d_config.rows_to_discard =
-            StoreConfig::default_rows_to_discard(nodes_count, BINARY_ARITY);
+        tree_d_config.rows_to_discard = default_rows_to_discard(nodes_count, BINARY_ARITY);
 
         let mut tree_r_last_config = StoreConfig::from_config(
             &config,
@@ -982,17 +981,15 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
             Some(get_merkle_tree_len(nodes_count, Tree::Arity::to_usize())?),
         );
 
-        // A default 'rows_to_discard' value will be chosen for
-        // tree_r_last, unless the user overrides this value via the
-        // environment setting (FIL_PROOFS_ROWS_TO_DISCARD).  If this
-        // value is specified, no checking is done on it and it may
+        // A default 'rows_to_discard' value will be chosen for tree_r_last, unless the user overrides this value via the
+        // environment setting (FIL_PROOFS_ROWS_TO_DISCARD).  If this value is specified, no checking is done on it and it may
         // result in a broken configuration.  Use with caution.
-        let env_rows_to_discard = settings::SETTINGS.lock().unwrap().rows_to_discard as usize;
-        tree_r_last_config.rows_to_discard = if env_rows_to_discard != 0 {
-            env_rows_to_discard
-        } else {
-            StoreConfig::default_rows_to_discard(nodes_count, Tree::Arity::to_usize())
-        };
+        tree_r_last_config.rows_to_discard =
+            default_rows_to_discard(nodes_count, Tree::Arity::to_usize());
+        trace!(
+            "tree_r_last using rows_to_discard={}",
+            tree_r_last_config.rows_to_discard
+        );
 
         let mut tree_c_config = StoreConfig::from_config(
             &config,
@@ -1000,7 +997,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
             Some(get_merkle_tree_len(nodes_count, Tree::Arity::to_usize())?),
         );
         tree_c_config.rows_to_discard =
-            StoreConfig::default_rows_to_discard(nodes_count, Tree::Arity::to_usize());
+            default_rows_to_discard(nodes_count, Tree::Arity::to_usize());
 
         let labels = LabelsCache::<Tree>::new(&label_configs)?;
         let configs = split_config(tree_c_config.clone(), tree_count)?;
@@ -1264,7 +1261,7 @@ mod tests {
         let config = StoreConfig::new(
             cache_dir.path(),
             CacheKey::CommDTree.to_string(),
-            StoreConfig::default_rows_to_discard(nodes, BINARY_ARITY),
+            default_rows_to_discard(nodes, BINARY_ARITY),
         );
 
         // Generate a replica path.
@@ -1441,7 +1438,7 @@ mod tests {
         let config = StoreConfig::new(
             cache_dir.path(),
             CacheKey::CommDTree.to_string(),
-            StoreConfig::default_rows_to_discard(nodes, BINARY_ARITY),
+            default_rows_to_discard(nodes, BINARY_ARITY),
         );
 
         // Generate a replica path.

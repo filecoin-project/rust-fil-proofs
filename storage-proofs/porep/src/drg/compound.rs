@@ -296,6 +296,7 @@ mod tests {
         merkle::{BinaryMerkleTree, MerkleTreeTrait},
         proof::NoRequirements,
         test_helper::setup_replica,
+        util::default_rows_to_discard,
     };
 
     use crate::stacked::BINARY_ARITY;
@@ -335,7 +336,7 @@ mod tests {
         let config = StoreConfig::new(
             cache_dir.path(),
             CacheKey::CommDTree.to_string(),
-            StoreConfig::default_rows_to_discard(nodes, BINARY_ARITY),
+            default_rows_to_discard(nodes, BINARY_ARITY),
         );
 
         // Generate a replica path.
@@ -380,10 +381,7 @@ mod tests {
         let private_inputs = drg::PrivateInputs {
             tree_d: &aux.tree_d,
             tree_r: &aux.tree_r,
-            tree_r_config_rows_to_discard: StoreConfig::default_rows_to_discard(
-                nodes,
-                BINARY_ARITY,
-            ),
+            tree_r_config_rows_to_discard: default_rows_to_discard(nodes, BINARY_ARITY),
         };
 
         // This duplication is necessary so public_params don't outlive public_inputs and private_inputs.

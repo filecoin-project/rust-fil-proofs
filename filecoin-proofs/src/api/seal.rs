@@ -21,6 +21,7 @@ use storage_proofs::porep::stacked::{
 };
 use storage_proofs::proof::ProofScheme;
 use storage_proofs::sector::SectorId;
+use storage_proofs::util::default_rows_to_discard;
 
 use crate::api::util::{
     as_safe_commitment, commitment_from_fr, get_base_tree_leafs, get_base_tree_size,
@@ -127,11 +128,10 @@ where
         );
 
         trace!(
-            "seal phase 1: sector_size {}, base tree size {}, base tree leafs {}, rows to discard {}",
+            "seal phase 1: sector_size {}, base tree size {}, base tree leafs {}",
             u64::from(porep_config.sector_size),
             base_tree_size,
             base_tree_leafs,
-            StoreConfig::default_rows_to_discard(base_tree_leafs, BINARY_ARITY)
         );
 
         // MT for original data is always named tree-d, and it will be
@@ -139,7 +139,7 @@ where
         let mut config = StoreConfig::new(
             cache_path.as_ref(),
             CacheKey::CommDTree.to_string(),
-            StoreConfig::default_rows_to_discard(base_tree_leafs, BINARY_ARITY),
+            default_rows_to_discard(base_tree_leafs, BINARY_ARITY),
         );
         let data_tree = create_base_merkle_tree::<BinaryMerkleTree<DefaultPieceHasher>>(
             Some(config.clone()),
@@ -247,11 +247,10 @@ where
             "seal phase 2: base tree size {}, base tree leafs {}, rows to discard {}",
             base_tree_size,
             base_tree_leafs,
-            StoreConfig::default_rows_to_discard(base_tree_leafs, BINARY_ARITY)
+            default_rows_to_discard(base_tree_leafs, BINARY_ARITY)
         );
         ensure!(
-            config.rows_to_discard
-                == StoreConfig::default_rows_to_discard(base_tree_leafs, BINARY_ARITY),
+            config.rows_to_discard == default_rows_to_discard(base_tree_leafs, BINARY_ARITY),
             "Invalid cache size specified"
         );
 
