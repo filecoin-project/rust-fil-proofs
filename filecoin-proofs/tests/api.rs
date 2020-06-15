@@ -331,8 +331,7 @@ fn create_seal<R: Rng, Tree: 'static + MerkleTreeTrait>(
 ) -> Result<(SectorId, NamedTempFile, Commitment, tempfile::TempDir)> {
     init_logger();
 
-    let number_of_bytes_in_piece =
-        UnpaddedBytesAmount::from(PaddedBytesAmount(sector_size.clone()));
+    let number_of_bytes_in_piece = UnpaddedBytesAmount::from(PaddedBytesAmount(sector_size));
 
     let piece_bytes: Vec<u8> = (0..number_of_bytes_in_piece.0)
         .map(|_| rand::random::<u8>())
@@ -359,7 +358,7 @@ fn create_seal<R: Rng, Tree: 'static + MerkleTreeTrait>(
     let sealed_sector_file = NamedTempFile::new()?;
     let mut unseal_file = NamedTempFile::new()?;
     let config = PoRepConfig {
-        sector_size: SectorSize(sector_size.clone()),
+        sector_size: SectorSize(sector_size),
         partitions: PoRepProofPartitions(
             *POREP_PARTITIONS.read().unwrap().get(&sector_size).unwrap(),
         ),
@@ -396,8 +395,8 @@ fn create_seal<R: Rng, Tree: 'static + MerkleTreeTrait>(
         sealed_sector_file.path(),
     )?;
 
-    let comm_d = pre_commit_output.comm_d.clone();
-    let comm_r = pre_commit_output.comm_r.clone();
+    let comm_d = pre_commit_output.comm_d;
+    let comm_r = pre_commit_output.comm_r;
 
     validate_cache_for_commit::<_, _, Tree>(cache_dir.path(), sealed_sector_file.path())?;
 

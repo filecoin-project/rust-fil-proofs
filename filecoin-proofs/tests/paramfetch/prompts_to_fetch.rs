@@ -41,7 +41,7 @@ fn nothing_to_fetch_if_cache_fully_hydrated() -> Result<(), FailureError> {
         "aaa.vk".to_string(),
         ParameterData {
             cid: "".to_string(),
-            digest: aaa_checksum.clone(),
+            digest: aaa_checksum,
             sector_size: 1234,
         },
     );

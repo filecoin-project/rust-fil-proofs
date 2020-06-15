@@ -491,19 +491,17 @@ mod tests {
         );
 
         assert!(
-            verify_pieces(&comm_d, &[e.clone(), c.clone(), d.clone()], sector_size)
-                .expect("failed to verify"),
+            verify_pieces(&comm_d, &[e.clone(), c, d], sector_size).expect("failed to verify"),
             "[e, c, d]"
         );
 
         assert!(
-            verify_pieces(&comm_d, &[e.clone(), f.clone()], sector_size).expect("failed to verify"),
+            verify_pieces(&comm_d, &[e, f.clone()], sector_size).expect("failed to verify"),
             "[e, f]"
         );
 
         assert!(
-            verify_pieces(&comm_d, &[a.clone(), b.clone(), f.clone()], sector_size)
-                .expect("failed to verify"),
+            verify_pieces(&comm_d, &[a, b, f], sector_size).expect("failed to verify"),
             "[a, b, f]"
         );
 
@@ -556,7 +554,7 @@ mod tests {
             pad.clone(),
             pad.clone(),
             pad.clone(),
-            pad.clone(),
+            pad,
         ];
 
         let hash = |a, b| {
