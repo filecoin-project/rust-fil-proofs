@@ -4,7 +4,6 @@ use std::path::{Path, PathBuf};
 
 use failure::SyncFailure;
 use rexpect::session::PtyBashSession;
-use tempfile;
 use tempfile::TempDir;
 
 use crate::support::{cargo_bin, spawn_bash_with_retries};

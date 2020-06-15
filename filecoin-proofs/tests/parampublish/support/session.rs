@@ -5,7 +5,6 @@ use std::path::{Path, PathBuf};
 use failure::SyncFailure;
 use rand::Rng;
 use rexpect::session::PtyBashSession;
-use tempfile;
 use tempfile::TempDir;
 
 use storage_proofs::parameter_cache::{CacheEntryMetadata, PARAMETER_CACHE_ENV_VAR};
