@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://book.async.rs/overview
 
 ## Unreleased
 
+## 4.0.0 - 2020-06-15
+
+- Change default rows_to_discard for cached oct-trees [1165](https://github.com/filecoin-project/rust-fil-proofs/pull/1165)
+- Remove validate commit message [1164](https://github.com/filecoin-project/rust-fil-proofs/pull/1164)
+- Modularized window-post bench [1162](https://github.com/filecoin-project/rust-fil-proofs/pull/1162)
+- Updated reported PoSt constraints (in comments) [1161](https://github.com/filecoin-project/rust-fil-proofs/pull/1161)
+
 ## 3.0.0 - 2020-06-08
 
 - Publish v27 parameters: [#1158](https://github.com/filecoin-project/rust-fil-proofs/pull/1158)
@@ -34,8 +41,8 @@ and this project adheres to [Semantic Versioning](https://book.async.rs/overview
 
 - Initial stable release
 
-[Unreleased]:
-https://github.com/filecoin-project/rust-fil-proofs/compare/v3.0.0...HEAD
+[Unreleased]: https://github.com/filecoin-project/rust-fil-proofs/compare/v4.0.0...HEAD
+[4.0.0]: https://github.com/filecoin-project/rust-fil-proofs/tree/v4.0.0
 [3.0.0]: https://github.com/filecoin-project/rust-fil-proofs/tree/v3.0.0
 [2.0.0]: https://github.com/filecoin-project/rust-fil-proofs/tree/v2.0.0
 [1.0.0]: https://github.com/filecoin-project/rust-fil-proofs/tree/v1.0.0
