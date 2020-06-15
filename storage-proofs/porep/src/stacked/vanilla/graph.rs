@@ -134,10 +134,11 @@ where
         // Number of nodes to be cached in memory
         const DEFAULT_CACHE_SIZE: u32 = 2048;
         let cache_entries = self.size() as u32;
+        let cache_size = cache_entries.min(DEFAULT_CACHE_SIZE);
 
-        info!("using parent_cache[{}]", cache_entries);
+        info!("using parent_cache[{} / {}]", cache_size, cache_entries);
 
-        ParentCache::new(DEFAULT_CACHE_SIZE, cache_entries, self)
+        ParentCache::new(cache_size, cache_entries, self)
     }
 
     pub fn copy_parents_data_exp(
