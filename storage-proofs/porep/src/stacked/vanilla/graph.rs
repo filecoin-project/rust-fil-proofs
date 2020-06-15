@@ -8,7 +8,6 @@ use std::arch::x86_64::*;
 
 use anyhow::ensure;
 use log::info;
-use once_cell::sync::OnceCell;
 use sha2raw::Sha256;
 use storage_proofs_core::{
     crypto::{
@@ -21,7 +20,6 @@ use storage_proofs_core::{
     error::Result,
     hasher::Hasher,
     parameter_cache::ParameterSetMetadata,
-    settings,
     util::NODE_SIZE,
 };
 
@@ -43,7 +41,6 @@ where
     pub(crate) feistel_keys: [feistel::Index; 4],
     feistel_precomputed: FeistelPrecomputed,
     id: String,
-    cache: Option<&'static ParentCache>,
     _h: PhantomData<H>,
 }
 
@@ -58,7 +55,6 @@ where
             .field("base_graph", &self.base_graph)
             .field("feistel_precomputed", &self.feistel_precomputed)
             .field("id", &self.id)
-            .field("cache", &self.cache)
             .finish()
     }
 }
@@ -110,8 +106,6 @@ where
         assert_eq!(expansion_degree, EXP_DEGREE);
         ensure!(nodes <= std::u32::MAX as usize, "too many nodes");
 
-        let use_cache = settings::SETTINGS.lock().unwrap().maximize_caching;
-
         let base_graph = match base_graph {
             Some(graph) => graph,
             None => G::new(nodes, base_degree, 0, porep_id)?,
@@ -120,68 +114,30 @@ where
 
         let feistel_keys = derive_feistel_keys(porep_id);
 
-        let mut res = StackedGraph {
+        let res = StackedGraph {
             base_graph,
             id: format!(
                 "stacked_graph::StackedGraph{{expansion_degree: {} base_graph: {} }}",
                 expansion_degree, bg_id,
             ),
             expansion_degree,
-            cache: None,
             feistel_keys,
             feistel_precomputed: feistel::precompute((expansion_degree * nodes) as feistel::Index),
             _h: PhantomData,
         };
 
-        if use_cache {
-            info!("using parents cache");
-            res.parent_cache(nodes as u32)?;
-        }
-
         Ok(res)
     }
 
-    /// Resets the parent cache if one exists.
-    pub fn reset_parent_cache(&self) -> Result<()> {
-        if let Some(ref cache) = self.cache {
-            return cache.reset();
-        }
-
-        Ok(())
-    }
-
-    /// Returns a reference to the parent cache, initializing it lazily the first time this is called.
-    fn parent_cache(&mut self, cache_entries: u32) -> Result<()> {
-        const NODE_GIB: u32 = (1024 * 1024 * 1024) / NODE_SIZE as u32;
-
+    /// Returns a reference to the parent cache.
+    pub fn parent_cache(&self) -> Result<ParentCache> {
         // Number of nodes to be cached in memory
         const DEFAULT_CACHE_SIZE: u32 = 2048;
+        let cache_entries = self.size() as u32;
 
-        static INSTANCE_32_GIB: OnceCell<ParentCache> = OnceCell::new();
-        static INSTANCE_64_GIB: OnceCell<ParentCache> = OnceCell::new();
-
-        ensure!(
-            ((cache_entries == 32 * NODE_GIB) || (cache_entries == 64 * NODE_GIB)),
-            "Cache is only available for 32GiB and 64GiB sectors"
-        );
         info!("using parent_cache[{}]", cache_entries);
 
-        let cache = if cache_entries == 32 * NODE_GIB {
-            INSTANCE_32_GIB.get_or_init(|| {
-                ParentCache::new(DEFAULT_CACHE_SIZE, cache_entries, self)
-                    .expect("failed to fill 32GiB cache")
-            })
-        } else {
-            INSTANCE_64_GIB.get_or_init(|| {
-                ParentCache::new(DEFAULT_CACHE_SIZE, cache_entries, self)
-                    .expect("failed to fill 64GiB cache")
-            })
-        };
-
-        cache.reset()?;
-        self.cache = Some(cache);
-
-        Ok(())
+        ParentCache::new(DEFAULT_CACHE_SIZE, cache_entries, self)
     }
 
     pub fn copy_parents_data_exp(
@@ -190,8 +146,9 @@ where
         base_data: &[u8],
         exp_data: &[u8],
         hasher: Sha256,
+        mut cache: Option<&mut ParentCache>,
     ) -> Result<[u8; 32]> {
-        if let Some(cache) = self.cache {
+        if let Some(ref mut cache) = cache {
             let cache_parents = cache.read(node as u32)?;
             Ok(self.copy_parents_data_inner_exp(&cache_parents, base_data, exp_data, hasher))
         } else {
@@ -207,8 +164,9 @@ where
         node: u32,
         base_data: &[u8],
         hasher: Sha256,
+        mut cache: Option<&mut ParentCache>,
     ) -> Result<[u8; 32]> {
-        if let Some(cache) = self.cache {
+        if let Some(ref mut cache) = cache {
             let cache_parents = cache.read(node as u32)?;
             Ok(self.copy_parents_data_inner(&cache_parents, base_data, hasher))
         } else {
@@ -330,20 +288,15 @@ where
 
     #[inline]
     fn parents(&self, node: usize, parents: &mut [u32]) -> Result<()> {
-        if let Some(cache) = self.cache {
-            // Read from the cache
-            let cache_parents = cache.read(node as u32)?;
-            parents.copy_from_slice(&cache_parents);
-        } else {
-            self.base_parents(node, &mut parents[..self.base_graph().degree()])?;
+        self.base_parents(node, &mut parents[..self.base_graph().degree()])?;
 
-            // expanded_parents takes raw_node
-            self.expanded_parents(
-                node,
-                &mut parents[self.base_graph().degree()
-                    ..self.base_graph().degree() + self.expansion_degree()],
-            )?;
-        }
+        // expanded_parents takes raw_node
+        self.expanded_parents(
+            node,
+            &mut parents
+                [self.base_graph().degree()..self.base_graph().degree() + self.expansion_degree()],
+        )?;
+
         Ok(())
     }
 
@@ -443,15 +396,8 @@ where
     }
 
     pub fn base_parents(&self, node: usize, parents: &mut [u32]) -> Result<()> {
-        if let Some(cache) = self.cache {
-            // Read from the cache
-            let cache_parents = cache.read(node as u32)?;
-            parents.copy_from_slice(&cache_parents[..self.base_graph().degree()]);
-            Ok(())
-        } else {
-            // No cache usage, generate on demand.
-            self.base_graph().parents(node, parents)
-        }
+        // No cache usage, generate on demand.
+        self.base_graph().parents(node, parents)
     }
 
     /// Assign `self.expansion_degree` parents to `node` using an invertible permutation
@@ -459,15 +405,8 @@ where
     /// ones.
     #[inline]
     pub fn expanded_parents(&self, node: usize, parents: &mut [u32]) -> Result<()> {
-        if let Some(cache) = self.cache {
-            // Read from the cache
-            let cache_parents = cache.read(node as u32)?;
-            parents.copy_from_slice(&cache_parents[self.base_graph().degree()..]);
-        } else {
-            // No cache usage, generate on demand.
-            self.generate_expanded_parents(node, parents);
-        }
-
+        // No cache usage, generate on demand.
+        self.generate_expanded_parents(node, parents);
         Ok(())
     }
 }

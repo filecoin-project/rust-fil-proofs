@@ -167,7 +167,7 @@ mod tests {
         assert_eq!(cs.num_constraints(), 532_025);
 
         let (l1, l2) = data.split_at_mut(size * NODE_SIZE);
-        create_label_exp(&graph, &id_fr.into(), &*l2, l1, layer, node).unwrap();
+        create_label_exp(&graph, None, &id_fr.into(), &*l2, l1, layer, node).unwrap();
         let expected_raw = data_at_node(&l1, node).unwrap();
         let expected = bytes_into_fr(expected_raw).unwrap();
 

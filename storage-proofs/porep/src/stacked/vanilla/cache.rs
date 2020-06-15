@@ -1,5 +1,4 @@
 use std::path::PathBuf;
-use std::sync::RwLock;
 
 use anyhow::{bail, ensure, Context};
 use byteorder::{BigEndian, ByteOrder};
@@ -30,7 +29,7 @@ pub struct ParentCache {
     path: PathBuf,
     /// The total number of cache entries.
     num_cache_entries: u32,
-    cache: RwLock<CacheData>,
+    cache: CacheData,
 }
 
 #[derive(Debug)]
@@ -153,7 +152,7 @@ impl ParentCache {
         info!("parent cache: opened");
 
         Ok(ParentCache {
-            cache: RwLock::new(cache),
+            cache,
             path,
             num_cache_entries: cache_entries,
         })
@@ -211,40 +210,38 @@ impl ParentCache {
         info!("parent cache: written to disk");
 
         Ok(ParentCache {
-            cache: RwLock::new(CacheData::open(0, len, &path)?),
+            cache: CacheData::open(0, len, &path)?,
             path,
             num_cache_entries: cache_entries,
         })
     }
 
     /// Read a single cache element at position `node`.
-    pub fn read(&self, node: u32) -> Result<[u32; DEGREE]> {
-        let cache = self.cache.read().unwrap();
-        if cache.contains(node) {
-            return Ok(cache.read(node));
+    pub fn read(&mut self, node: u32) -> Result<[u32; DEGREE]> {
+        if self.cache.contains(node) {
+            return Ok(self.cache.read(node));
         }
 
         // not in memory, shift cache
-        drop(cache);
-        let cache = &mut *self.cache.write().unwrap();
         ensure!(
-            node >= cache.offset + cache.len,
+            node >= self.cache.offset + self.cache.len,
             "cache must be read in ascending order {} < {} + {}",
             node,
-            cache.offset,
-            cache.len,
+            self.cache.offset,
+            self.cache.len,
         );
 
         // Shift cache by its current size.
-        let new_offset = (self.num_cache_entries - cache.len).min(cache.offset + cache.len);
-        cache.shift(new_offset)?;
+        let new_offset =
+            (self.num_cache_entries - self.cache.len).min(self.cache.offset + self.cache.len);
+        self.cache.shift(new_offset)?;
 
-        Ok(cache.read(node))
+        Ok(self.cache.read(node))
     }
 
     /// Resets the partial cache to the beginning.
-    pub fn reset(&self) -> Result<()> {
-        self.cache.write().unwrap().reset()
+    pub fn reset(&mut self) -> Result<()> {
+        self.cache.reset()
     }
 }
 
@@ -284,7 +281,7 @@ mod tests {
         )
         .unwrap();
 
-        let cache = ParentCache::new(nodes, nodes, &graph).unwrap();
+        let mut cache = ParentCache::new(nodes, nodes, &graph).unwrap();
 
         for node in 0..nodes {
             let mut expected_parents = [0; DEGREE];
@@ -306,8 +303,8 @@ mod tests {
         )
         .unwrap();
 
-        let half_cache = ParentCache::new(nodes / 2, nodes, &graph).unwrap();
-        let quarter_cache = ParentCache::new(nodes / 4, nodes, &graph).unwrap();
+        let mut half_cache = ParentCache::new(nodes / 2, nodes, &graph).unwrap();
+        let mut quarter_cache = ParentCache::new(nodes / 4, nodes, &graph).unwrap();
 
         for node in 0..nodes {
             let mut expected_parents = [0; DEGREE];
@@ -321,11 +318,11 @@ mod tests {
 
             // some internal checks to make sure the cache works as expected
             assert_eq!(
-                half_cache.cache.read().unwrap().data.len() / DEGREE / NODE_BYTES,
+                half_cache.cache.data.len() / DEGREE / NODE_BYTES,
                 nodes as usize / 2
             );
             assert_eq!(
-                quarter_cache.cache.read().unwrap().data.len() / DEGREE / NODE_BYTES,
+                quarter_cache.cache.data.len() / DEGREE / NODE_BYTES,
                 nodes as usize / 4
             );
         }
