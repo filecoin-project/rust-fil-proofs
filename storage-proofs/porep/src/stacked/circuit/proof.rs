@@ -239,7 +239,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher>
 
             // exp parents
             let mut exp_parents = vec![0; graph.expansion_degree()];
-            graph.expanded_parents(challenge, &mut exp_parents);
+            graph.expanded_parents(challenge, &mut exp_parents)?;
 
             // Inclusion Proofs: expander parent node in comm_c
             for parent in exp_parents.into_iter() {

@@ -100,7 +100,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
 
         let get_exp_parents_columns = |x: usize| -> Result<Vec<Column<Tree::Hasher>>> {
             let mut parents = vec![0; graph.expansion_degree()];
-            graph.expanded_parents(x, &mut parents);
+            graph.expanded_parents(x, &mut parents)?;
 
             parents.iter().map(|parent| t_aux.column(*parent)).collect()
         };

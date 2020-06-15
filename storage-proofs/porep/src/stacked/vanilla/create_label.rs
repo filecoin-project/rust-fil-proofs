@@ -34,7 +34,7 @@ pub fn create_label<H: Hasher>(
             _mm_prefetch(prev.as_ptr() as *const i8, _MM_HINT_T0);
         }
 
-        graph.copy_parents_data(node as u32, &*layer_labels, hasher)
+        graph.copy_parents_data(node as u32, &*layer_labels, hasher)?
     } else {
         hasher.finish()
     };
@@ -73,7 +73,7 @@ pub fn create_label_exp<H: Hasher>(
             _mm_prefetch(prev.as_ptr() as *const i8, _MM_HINT_T0);
         }
 
-        graph.copy_parents_data_exp(node as u32, &*layer_labels, exp_parents_data, hasher)
+        graph.copy_parents_data_exp(node as u32, &*layer_labels, exp_parents_data, hasher)?
     } else {
         hasher.finish()
     };
