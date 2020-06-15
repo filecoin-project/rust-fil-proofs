@@ -142,11 +142,15 @@ where
     }
 
     /// Returns a reference to the parent cache, initializing it lazily the first time this is called.
-    pub fn parent_cache(&mut self, cache_entries: u32) -> Result<()> {
+    fn parent_cache(&mut self, cache_entries: u32) -> Result<()> {
+        const NODE_GIB: u32 = (1024 * 1024 * 1024) / NODE_SIZE as u32;
+
+        // Number of nodes to be cached in memory
+        const DEFAULT_CACHE_SIZE: u32 = 2048;
+
         static INSTANCE_32_GIB: OnceCell<ParentCache> = OnceCell::new();
         static INSTANCE_64_GIB: OnceCell<ParentCache> = OnceCell::new();
 
-        const NODE_GIB: u32 = (1024 * 1024 * 1024) / NODE_SIZE as u32;
         ensure!(
             ((cache_entries == 32 * NODE_GIB) || (cache_entries == 64 * NODE_GIB)),
             "Cache is only available for 32GiB and 64GiB sectors"
@@ -155,12 +159,12 @@ where
 
         if cache_entries == 32 * NODE_GIB {
             self.cache = Some(INSTANCE_32_GIB.get_or_init(|| {
-                ParentCache::new(0..cache_entries, cache_entries, self)
+                ParentCache::new(DEFAULT_CACHE_SIZE, cache_entries, self)
                     .expect("failed to fill 32GiB cache")
             }));
         } else {
             self.cache = Some(INSTANCE_64_GIB.get_or_init(|| {
-                ParentCache::new(0..cache_entries, cache_entries, self)
+                ParentCache::new(DEFAULT_CACHE_SIZE, cache_entries, self)
                     .expect("failed to fill 64GiB cache")
             }));
         }

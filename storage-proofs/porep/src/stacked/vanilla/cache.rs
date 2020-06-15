@@ -1,4 +1,3 @@
-use std::ops::Range;
 use std::path::PathBuf;
 use std::sync::RwLock;
 
@@ -6,6 +5,7 @@ use anyhow::{bail, ensure, Context};
 use byteorder::{BigEndian, ByteOrder};
 use log::info;
 use rayon::prelude::*;
+use sha2::{Digest, Sha256};
 
 use storage_proofs_core::{
     drgraph::Graph,
@@ -13,11 +13,12 @@ use storage_proofs_core::{
     error::Result,
     hasher::Hasher,
     parameter_cache::{ParameterSetMetadata, VERSION},
-    settings,
-    util::NODE_SIZE,
 };
 
 use super::graph::{StackedGraph, DEGREE, EXP_DEGREE};
+
+/// Path in which to store the parents caches.
+const PARENT_CACHE_DIR: &str = "/var/tmp/filecoin-parents";
 
 /// u32 = 4 bytes
 const NODE_BYTES: usize = 4;
@@ -36,45 +37,59 @@ pub struct ParentCache {
 struct CacheData {
     /// This is a large list of fixed (parent) sized arrays.
     data: memmap::Mmap,
-    /// The range of the stored data
-    range: Range<u32>,
+    /// Offset in nodes.
+    offset: u32,
+    /// Len in nodes.
+    len: u32,
     /// The underlyling file.
     file: std::fs::File,
 }
 
 impl CacheData {
-    /// Change the cache to point to the newly passed in range.
-    fn shift(&mut self, new_range: Range<u32>) -> Result<()> {
-        if self.range == new_range {
+    /// Change the cache to point to the newly passed in offset.
+    ///
+    /// The `new_offset` must be set, such that `new_offset + len` does not
+    /// overflow the underlying data.
+    fn shift(&mut self, new_offset: u32) -> Result<()> {
+        if self.offset == new_offset {
             return Ok(());
         }
 
+        let offset = new_offset as usize * DEGREE * NODE_BYTES;
+        let len = self.len as usize * DEGREE * NODE_BYTES;
+
         self.data = unsafe {
             memmap::MmapOptions::new()
-                .offset(new_range.start as u64)
-                .len(new_range.end as usize - new_range.start as usize)
+                .offset(offset as u64)
+                .len(len)
                 .map(&self.file)
                 .context("could not shift mmap}")?
         };
-        self.range = new_range;
+        self.offset = new_offset;
 
         Ok(())
     }
 
+    /// Returns true if this node is in the cached range.
+    fn contains(&self, node: u32) -> bool {
+        node >= self.offset && node < self.offset + self.len
+    }
+
     /// Read the parents for the given node from cache.
     ///
-    /// Panics if node is not in the cache.
+    /// Panics if the `node` is not in the cache.
     fn read(&self, node: u32) -> [u32; DEGREE] {
-        let start = node as usize * DEGREE;
-        let end = start + DEGREE;
+        assert!(node >= self.offset, "node not in cache");
+        let start = (node - self.offset) as usize * DEGREE * NODE_BYTES;
+        let end = start + DEGREE * NODE_BYTES;
 
         let mut res = [0u32; DEGREE];
         BigEndian::read_u32_into(&self.data[start..end], &mut res);
         res
     }
 
-    fn open(range: Range<u32>, path: &PathBuf) -> Result<Self> {
-        let min_cache_size = DEGREE * (range.end as usize - range.start as usize);
+    fn open(offset: u32, len: u32, path: &PathBuf) -> Result<Self> {
+        let min_cache_size = (offset + len) as usize * DEGREE * NODE_BYTES;
 
         let file = std::fs::OpenOptions::new()
             .read(true)
@@ -93,39 +108,40 @@ impl CacheData {
 
         let data = unsafe {
             memmap::MmapOptions::new()
-                .offset(range.start as u64)
-                .len(range.end as usize - range.start as usize)
+                .offset((offset as usize * DEGREE * NODE_BYTES) as u64)
+                .len(len as usize * DEGREE * NODE_BYTES)
                 .map(&file)
                 .with_context(|| format!("could not mmap path={}", path.display()))?
         };
 
-        Ok(Self { data, file, range })
+        Ok(Self {
+            data,
+            file,
+            len,
+            offset,
+        })
     }
 }
 
 impl ParentCache {
-    pub fn new<H, G>(
-        range: Range<u32>,
-        cache_entries: u32,
-        graph: &StackedGraph<H, G>,
-    ) -> Result<Self>
+    pub fn new<H, G>(len: u32, cache_entries: u32, graph: &StackedGraph<H, G>) -> Result<Self>
     where
         H: Hasher,
         G: Graph<H> + ParameterSetMetadata + Send + Sync,
     {
         let path = cache_path(cache_entries, graph);
         if path.exists() {
-            Self::open(range, cache_entries, path)
+            Self::open(len, cache_entries, path)
         } else {
-            Self::generate(range, cache_entries, graph, path)
+            Self::generate(len, cache_entries, graph, path)
         }
     }
 
     /// Opens an existing cache from disk.
-    pub fn open(range: Range<u32>, cache_entries: u32, path: PathBuf) -> Result<Self> {
+    pub fn open(len: u32, cache_entries: u32, path: PathBuf) -> Result<Self> {
         info!("parent cache: opening {}", path.display());
 
-        let cache = CacheData::open(range, &path)?;
+        let cache = CacheData::open(0, len, &path)?;
         info!("parent cache: opened");
 
         Ok(ParentCache {
@@ -137,7 +153,7 @@ impl ParentCache {
 
     /// Generates a new cache and stores it on disk.
     pub fn generate<H, G>(
-        range: Range<u32>,
+        len: u32,
         cache_entries: u32,
         graph: &StackedGraph<H, G>,
         path: PathBuf,
@@ -148,7 +164,7 @@ impl ParentCache {
     {
         info!("parent cache: generating {}", path.display());
 
-        let cache_size = DEGREE * cache_entries as usize;
+        std::fs::create_dir_all(PARENT_CACHE_DIR).context("unable to crate parent cache dir")?;
 
         let file = std::fs::OpenOptions::new()
             .read(true)
@@ -156,13 +172,15 @@ impl ParentCache {
             .create(true)
             .open(&path)
             .with_context(|| format!("could not open path={}", path.display()))?;
-        file.set_len((NODE_BYTES * cache_size) as u64)
+
+        let cache_size = cache_entries as usize * NODE_BYTES * DEGREE;
+        file.set_len(cache_size as u64)
             .with_context(|| format!("failed to set length: {}", cache_size))?;
 
         let mut data = unsafe {
             memmap::MmapOptions::new()
-                .offset(range.start as u64)
-                .len(range.end as usize - range.start as usize)
+                .offset(0)
+                .len(len as usize * DEGREE * NODE_BYTES)
                 .map_mut(&file)
                 .with_context(|| format!("could not mmap path={}", path.display()))?
         };
@@ -170,14 +188,13 @@ impl ParentCache {
         data.par_chunks_mut(DEGREE * NODE_BYTES)
             .enumerate()
             .try_for_each(|(node, entry)| -> Result<()> {
-                let mut parents = [0u32; BASE_DEGREE + EXP_DEGREE];
+                let mut parents = [0u32; DEGREE];
                 graph
                     .base_graph()
                     .parents(node, &mut parents[..BASE_DEGREE])?;
                 graph.generate_expanded_parents(node, &mut parents[BASE_DEGREE..]);
 
                 BigEndian::write_u32_into(&parents, entry);
-
                 Ok(())
             })?;
 
@@ -189,7 +206,8 @@ impl ParentCache {
         Ok(ParentCache {
             cache: RwLock::new(CacheData {
                 data: data.make_read_only()?,
-                range,
+                len,
+                offset: 0,
                 file,
             }),
             path,
@@ -198,33 +216,28 @@ impl ParentCache {
     }
 
     /// Read a single cache element at position `node`.
-    #[inline]
     pub fn read(&self, node: u32) -> Result<[u32; DEGREE]> {
         let cache = self.cache.read().unwrap();
-        if cache.range.contains(&node) {
-            Ok(cache.read(node))
-        } else {
-            // not in memory, shift cache
-            drop(cache);
-            let cache = &mut *self.cache.write().unwrap();
-            ensure!(
-                node >= cache.range.end,
-                "cache must be read in ascending order"
-            );
-
-            // TODO: shift by more than 1 entry to reduce changing the mapping continously.
-            // Idea: move cache by the range size.
-            let end = node + 1;
-            let start = if end > self.num_cache_entries {
-                end - self.num_cache_entries as u32
-            } else {
-                0
-            };
-            let new_range = start..node + 1;
-            cache.shift(new_range)?;
-
-            Ok(cache.read(node))
+        if cache.contains(node) {
+            return Ok(cache.read(node));
         }
+
+        // not in memory, shift cache
+        drop(cache);
+        let cache = &mut *self.cache.write().unwrap();
+        ensure!(
+            node >= cache.offset + cache.len,
+            "cache must be read in ascending order {} < {} + {}",
+            node,
+            cache.offset,
+            cache.len,
+        );
+
+        // Shift cache by its current size.
+        let new_offset = (self.num_cache_entries - cache.len).min(cache.offset + cache.len);
+        cache.shift(new_offset)?;
+
+        Ok(cache.read(node))
     }
 }
 
@@ -233,11 +246,81 @@ where
     H: Hasher,
     G: Graph<H> + ParameterSetMetadata + Send + Sync,
 {
-    PathBuf::from(format!(
-        "v{}-sdr-parent-h{}-{}-e{}.cache",
+    let mut hasher = Sha256::default();
+
+    hasher.input(H::name());
+    hasher.input(graph.identifier());
+    hasher.input(cache_entries.to_le_bytes());
+    let h = hasher.result();
+    PathBuf::from(PARENT_CACHE_DIR).join(format!(
+        "v{}-sdr-parent-{}.cache",
         VERSION,
-        H::name(),
-        hex::encode(graph.identifier()),
-        cache_entries,
+        hex::encode(h),
     ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use crate::stacked::vanilla::graph::StackedBucketGraph;
+    use storage_proofs_core::hasher::PoseidonHasher;
+
+    #[test]
+    fn test_read_full_range() {
+        let nodes = 24u32;
+        let graph = StackedBucketGraph::<PoseidonHasher>::new_stacked(
+            nodes as usize,
+            BASE_DEGREE,
+            EXP_DEGREE,
+            [0u8; 32],
+        )
+        .unwrap();
+
+        let cache = ParentCache::new(nodes, nodes, &graph).unwrap();
+
+        for node in 0..nodes {
+            let mut expected_parents = [0; DEGREE];
+            graph.parents(node as usize, &mut expected_parents).unwrap();
+            let parents = cache.read(node).unwrap();
+
+            assert_eq!(expected_parents, parents);
+        }
+    }
+
+    #[test]
+    fn test_read_partial_range() {
+        let nodes = 24u32;
+        let graph = StackedBucketGraph::<PoseidonHasher>::new_stacked(
+            nodes as usize,
+            BASE_DEGREE,
+            EXP_DEGREE,
+            [0u8; 32],
+        )
+        .unwrap();
+
+        let half_cache = ParentCache::new(nodes / 2, nodes, &graph).unwrap();
+        let quarter_cache = ParentCache::new(nodes / 4, nodes, &graph).unwrap();
+
+        for node in 0..nodes {
+            let mut expected_parents = [0; DEGREE];
+            graph.parents(node as usize, &mut expected_parents).unwrap();
+
+            let parents = half_cache.read(node).unwrap();
+            assert_eq!(expected_parents, parents);
+
+            let parents = quarter_cache.read(node).unwrap();
+            assert_eq!(expected_parents, parents);
+
+            // some internal checks to make sure the cache works as expected
+            assert_eq!(
+                half_cache.cache.read().unwrap().data.len() / DEGREE / NODE_BYTES,
+                nodes as usize / 2
+            );
+            assert_eq!(
+                quarter_cache.cache.read().unwrap().data.len() / DEGREE / NODE_BYTES,
+                nodes as usize / 4
+            );
+        }
+    }
 }
