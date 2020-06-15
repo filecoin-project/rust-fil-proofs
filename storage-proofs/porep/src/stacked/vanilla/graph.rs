@@ -9,7 +9,6 @@ use std::arch::x86_64::*;
 use anyhow::ensure;
 use log::info;
 use once_cell::sync::OnceCell;
-use rayon::prelude::*;
 use sha2raw::Sha256;
 use storage_proofs_core::{
     crypto::{
@@ -26,10 +25,12 @@ use storage_proofs_core::{
     util::NODE_SIZE,
 };
 
+use super::cache::ParentCache;
+
 /// The expansion degree used for Stacked Graphs.
 pub const EXP_DEGREE: usize = 8;
 
-const DEGREE: usize = BASE_DEGREE + EXP_DEGREE;
+pub(crate) const DEGREE: usize = BASE_DEGREE + EXP_DEGREE;
 
 /// Returns a reference to the parent cache, initializing it lazily the first time this is called.
 fn parent_cache<H, G>(
@@ -57,56 +58,6 @@ where
         Ok(INSTANCE_64_GIB.get_or_init(|| {
             ParentCache::new(cache_entries, graph).expect("failed to fill 64GiB cache")
         }))
-    }
-}
-
-// StackedGraph will hold two different (but related) `ParentCache`,
-#[derive(Debug, Clone)]
-struct ParentCache {
-    /// This is a large list of fixed (parent) sized arrays.
-    /// `Vec<Vec<u32>>` was showing quite a large memory overhead, so this is layed out as a fixed boxed slice of memory.
-    cache: Box<[u32]>,
-}
-
-impl ParentCache {
-    pub fn new<H, G>(cache_entries: u32, graph: &StackedGraph<H, G>) -> Result<Self>
-    where
-        H: Hasher,
-        G: Graph<H> + ParameterSetMetadata + Send + Sync,
-    {
-        info!("filling parents cache");
-        let mut cache = vec![0u32; DEGREE * cache_entries as usize];
-
-        let base_degree = BASE_DEGREE;
-        let exp_degree = EXP_DEGREE;
-
-        cache
-            .par_chunks_mut(DEGREE)
-            .enumerate()
-            .try_for_each(|(node, entry)| -> Result<()> {
-                graph
-                    .base_graph()
-                    .parents(node, &mut entry[..base_degree])?;
-                graph.generate_expanded_parents(
-                    node,
-                    &mut entry[base_degree..base_degree + exp_degree],
-                );
-                Ok(())
-            })?;
-
-        info!("cache filled");
-
-        Ok(ParentCache {
-            cache: cache.into_boxed_slice(),
-        })
-    }
-
-    /// Read a single cache element at position `node`.
-    #[inline]
-    pub fn read(&self, node: u32) -> &[u32] {
-        let start = node as usize * DEGREE;
-        let end = start + DEGREE;
-        &self.cache[start..end]
     }
 }
 
@@ -365,7 +316,7 @@ where
         if let Some(cache) = self.cache {
             // Read from the cache
             let cache_parents = cache.read(node as u32);
-            parents.copy_from_slice(cache_parents);
+            parents.copy_from_slice(&cache_parents);
         } else {
             self.base_parents(node, &mut parents[..self.base_graph().degree()])?;
 
@@ -450,7 +401,7 @@ where
         // back this function in the `reversed` direction).
     }
 
-    fn generate_expanded_parents(&self, node: usize, expanded_parents: &mut [u32]) {
+    pub fn generate_expanded_parents(&self, node: usize, expanded_parents: &mut [u32]) {
         debug_assert_eq!(expanded_parents.len(), self.expansion_degree);
         for (i, el) in expanded_parents.iter_mut().enumerate() {
             *el = self.correspondent(node, i);
