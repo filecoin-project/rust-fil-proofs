@@ -48,9 +48,7 @@ impl ParamPublishSessionBuilder {
 
     /// Create empty files with the given names in the cache directory.
     pub fn with_files<P: AsRef<Path>>(self, filenames: &[P]) -> ParamPublishSessionBuilder {
-        filenames
-            .into_iter()
-            .fold(self, |acc, item| acc.with_file(item))
+        filenames.iter().fold(self, |acc, item| acc.with_file(item))
     }
 
     /// Create a file containing 32 random bytes with the given name in the
