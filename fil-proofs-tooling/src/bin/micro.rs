@@ -371,8 +371,8 @@ median [138.33 us 143.23 us] med. abs. dev. [1.7507 ms 8.4109 ms]";
                     unit: Some("us".to_string())
                 }),
                 r_2: Some(Interval {
-                    start: 0.8124914,
-                    end: 0.8320154,
+                    start: 0.812_491_4,
+                    end: 0.832_015_4,
                     unit: None
                 }),
                 std_dev: Some(Interval {
@@ -449,8 +449,8 @@ median [138.33 us 143.23 us] med. abs. dev. [1.7507 ms 8.4109 ms]";
                     unit: Some("us".to_string())
                 }),
                 r_2: Some(Interval {
-                    start: 0.8124914,
-                    end: 0.8320154,
+                    start: 0.812_491_4,
+                    end: 0.832_015_4,
                     unit: None
                 }),
                 std_dev: Some(Interval {
