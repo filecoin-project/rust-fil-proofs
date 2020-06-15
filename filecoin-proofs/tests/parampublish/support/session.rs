@@ -24,7 +24,7 @@ impl ParamPublishSessionBuilder {
     pub fn new() -> ParamPublishSessionBuilder {
         let temp_dir = tempfile::tempdir().expect("could not create temp dir");
 
-        let mut pbuf = temp_dir.path().clone().to_path_buf();
+        let mut pbuf = temp_dir.path().to_path_buf();
         pbuf.push("parameters.json");
 
         File::create(&pbuf).expect("failed to create file in temp dir");
@@ -56,7 +56,7 @@ impl ParamPublishSessionBuilder {
     /// Create a file containing 32 random bytes with the given name in the
     /// cache directory.
     pub fn with_file<P: AsRef<Path>>(mut self, filename: P) -> ParamPublishSessionBuilder {
-        let mut pbuf = self.cache_dir.path().clone().to_path_buf();
+        let mut pbuf = self.cache_dir.path().to_path_buf();
         pbuf.push(filename.as_ref());
 
         let mut file = File::create(&pbuf).expect("failed to create file in temp dir");
@@ -74,7 +74,7 @@ impl ParamPublishSessionBuilder {
         filename: P,
         r: &mut R,
     ) -> ParamPublishSessionBuilder {
-        let mut pbuf = self.cache_dir.path().clone().to_path_buf();
+        let mut pbuf = self.cache_dir.path().to_path_buf();
         pbuf.push(filename.as_ref());
 
         let mut file = File::create(&pbuf).expect("failed to create file in temp dir");

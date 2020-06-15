@@ -51,7 +51,7 @@ impl ParamFetchSessionBuilder {
         filename: P,
         r: &mut R,
     ) -> ParamFetchSessionBuilder {
-        let mut pbuf = self.cache_dir.path().clone().to_path_buf();
+        let mut pbuf = self.cache_dir.path().to_path_buf();
         pbuf.push(filename.as_ref());
 
         let mut file = File::create(&pbuf).expect("failed to create file in temp dir");
