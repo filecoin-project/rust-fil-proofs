@@ -328,9 +328,9 @@ mod tests {
         buffer.copy_from_slice(&val[..]);
         buffer.reset_available(64);
 
-        for i in 0..8 {
+        for (i, &byte) in val.iter().enumerate().take(8) {
             let read = buffer.read_u8();
-            assert_eq!(read, val[i], "failed to read byte {}", i);
+            assert_eq!(read, byte, "failed to read byte {}", i);
         }
     }
 
@@ -542,13 +542,13 @@ mod tests {
         let mut reader = Fr32Reader::new(io::Cursor::new(&source));
         reader.read_to_end(&mut buf).unwrap();
 
-        for i in 0..31 {
-            assert_eq!(buf[i], i as u8 + 1);
+        for (i, &byte) in buf.iter().enumerate().take(31) {
+            assert_eq!(byte, i as u8 + 1);
         }
         assert_eq!(buf[31], 63); // Six least significant bits of 0xff
         assert_eq!(buf[32], (1 << 2) | 0b11); // 7
-        for i in 33..63 {
-            assert_eq!(buf[i], (i as u8 - 31) << 2);
+        for (i, &byte) in buf.iter().enumerate().skip(33).take(30) {
+            assert_eq!(byte, (i as u8 - 31) << 2);
         }
         assert_eq!(buf[63], (0x0f << 2)); // 4-bits of ones, half of 0xff, shifted by two, followed by two bits of 0-padding.
         assert_eq!(buf[64], 0x0f | 9 << 4); // The last half of 0xff, 'followed' by 9.
