@@ -60,7 +60,8 @@ impl ParamPublishSessionBuilder {
         let mut file = File::create(&pbuf).expect("failed to create file in temp dir");
 
         let random_bytes = rand::thread_rng().gen::<[u8; 32]>();
-        file.write(&random_bytes).expect("failed to write bytes");
+        file.write_all(&random_bytes)
+            .expect("failed to write bytes");
 
         self.cached_file_pbufs.push(pbuf);
         self
