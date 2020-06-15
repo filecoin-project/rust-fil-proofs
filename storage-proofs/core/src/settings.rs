@@ -21,7 +21,7 @@ pub struct Settings {
     pub column_write_batch_size: u32,
     pub use_gpu_tree_builder: bool,
     pub max_gpu_tree_batch_size: u32,
-    pub oct_rows_to_discard: u32,
+    pub rows_to_discard: u32,
 }
 
 impl Default for Settings {
@@ -34,7 +34,7 @@ impl Default for Settings {
             column_write_batch_size: 262_144,
             use_gpu_tree_builder: false,
             max_gpu_tree_batch_size: 700_000,
-            oct_rows_to_discard: 2,
+            rows_to_discard: 2,
         }
     }
 }

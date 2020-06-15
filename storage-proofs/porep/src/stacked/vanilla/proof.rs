@@ -982,7 +982,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         );
 
         // A default 'rows_to_discard' value will be chosen for tree_r_last, unless the user overrides this value via the
-        // environment setting (FIL_PROOFS_OCT_ROWS_TO_DISCARD).  If this value is specified, no checking is done on it and it may
+        // environment setting (FIL_PROOFS_ROWS_TO_DISCARD).  If this value is specified, no checking is done on it and it may
         // result in a broken configuration.  Use with caution.
         tree_r_last_config.rows_to_discard =
             default_rows_to_discard(nodes_count, Tree::Arity::to_usize());
