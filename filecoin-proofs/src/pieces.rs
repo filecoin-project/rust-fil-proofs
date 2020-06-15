@@ -483,7 +483,7 @@ mod tests {
         assert!(
             verify_pieces(
                 &comm_d,
-                &vec![a.clone(), b.clone(), c.clone(), d.clone()],
+                &[a.clone(), b.clone(), c.clone(), d.clone()],
                 sector_size
             )
             .expect("failed to verify"),
@@ -491,25 +491,24 @@ mod tests {
         );
 
         assert!(
-            verify_pieces(&comm_d, &vec![e.clone(), c.clone(), d.clone()], sector_size)
+            verify_pieces(&comm_d, &[e.clone(), c.clone(), d.clone()], sector_size)
                 .expect("failed to verify"),
             "[e, c, d]"
         );
 
         assert!(
-            verify_pieces(&comm_d, &vec![e.clone(), f.clone()], sector_size)
-                .expect("failed to verify"),
+            verify_pieces(&comm_d, &[e.clone(), f.clone()], sector_size).expect("failed to verify"),
             "[e, f]"
         );
 
         assert!(
-            verify_pieces(&comm_d, &vec![a.clone(), b.clone(), f.clone()], sector_size)
+            verify_pieces(&comm_d, &[a.clone(), b.clone(), f.clone()], sector_size)
                 .expect("failed to verify"),
             "[a, b, f]"
         );
 
         assert!(
-            verify_pieces(&comm_d, &vec![g], sector_size).expect("failed to verify"),
+            verify_pieces(&comm_d, &[g], sector_size).expect("failed to verify"),
             "[g]"
         );
     }

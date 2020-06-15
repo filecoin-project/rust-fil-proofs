@@ -21,11 +21,11 @@ fn fails_if_missing_metadata_file() -> Result<(), FailureError> {
 
 #[test]
 fn fails_if_malformed_metadata_file() -> Result<(), FailureError> {
-    let mut malformed: &[u8] = &vec![42];
+    let mut malformed: &[u8] = &[42];
 
     let (mut session, _) = ParamPublishSessionBuilder::new()
         .with_session_timeout_ms(1000)
-        .with_files(&vec!["v11-aaa.vk", "v11-aaa.params"])
+        .with_files(&["v11-aaa.vk", "v11-aaa.params"])
         .with_file_and_bytes("v11-aaa.meta", &mut malformed)
         .with_prompt_disabled()
         .build();
