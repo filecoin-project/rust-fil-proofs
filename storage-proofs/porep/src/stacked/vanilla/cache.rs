@@ -276,7 +276,7 @@ where
 mod tests {
     use super::*;
 
-    use crate::stacked::vanilla::graph::StackedBucketGraph;
+    use crate::stacked::vanilla::graph::{StackedBucketGraph, EXP_DEGREE};
     use storage_proofs_core::hasher::PoseidonHasher;
 
     #[test]
