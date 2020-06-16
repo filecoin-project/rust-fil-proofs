@@ -92,9 +92,9 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> ProofScheme<'a>
             } else {
                 &priv_inputs.t_aux.layers[challenge.layer - 1]
             };
-            let levels = priv_inputs.t_aux.tree_config_levels;
+            let rows_to_discard = priv_inputs.t_aux.tree_config_rows_to_discard;
             let layer_proof = layer_tree
-                .gen_cached_proof(absolute_challenge, levels)
+                .gen_cached_proof(absolute_challenge, Some(rows_to_discard))
                 .context("failed to create layer proof")?;
 
             // Labeling Proofs
@@ -120,7 +120,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> ProofScheme<'a>
                         parents_tree
                             .gen_cached_proof(
                                 challenge.window * config.num_nodes_window + *parent as usize,
-                                levels,
+                                Some(rows_to_discard),
                             )
                             .context("failed to create parent proof")
                     })
@@ -368,7 +368,7 @@ mod tests {
         let store_config = StoreConfig::new(
             cache_dir.path(),
             CacheKey::CommDTree.to_string(),
-            StoreConfig::default_cached_above_base_layer(config.num_nodes_sector(), U2::to_usize()),
+            StoreConfig::default_rows_to_discard(config.num_nodes_sector(), U2::to_usize()),
         );
 
         // Generate a replica path.
