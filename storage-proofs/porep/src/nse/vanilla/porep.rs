@@ -114,22 +114,19 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> PoRep<'a, Tree::H
         let (windowed_store_configs, layer_store_config) =
             Self::generate_store_configs(config, &store_config)?;
 
-        let trees = data
-            .as_mut()
-            .par_chunks_mut(config.window_size())
-            .enumerate()
-            .zip(windowed_store_configs.into_par_iter())
-            .map(|((window_index, window_data), store_configs)| {
-                let (trees, replica_tree) = labels::encode_with_trees::<Tree>(
-                    config,
-                    store_configs,
-                    window_index as u32,
-                    replica_id,
-                    window_data,
-                )?;
-                Ok((trees, replica_tree))
-            })
-            .collect::<Result<Vec<(Vec<_>, _)>>>()?;
+        let trees = labels::encode_with_trees_all::<Tree>(
+            config,
+            store_config.rows_to_discard,
+            *replica_id,
+            data.as_mut()
+                .chunks_mut(config.window_size())
+                .enumerate()
+                .zip(windowed_store_configs.into_iter())
+                .map(|((window_index, window_data), store_configs)| {
+                    (store_configs, window_index as u32, window_data)
+                })
+                .collect::<Vec<_>>(),
+        )?;
 
         debug_assert_eq!(trees.len(), config.num_windows());
         data.drop_data();
