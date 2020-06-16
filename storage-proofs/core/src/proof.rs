@@ -34,6 +34,7 @@ pub trait ProofScheme<'a> {
     ) -> Result<Vec<Self::Proof>> {
         info!("groth_proof_count: {}", partition_count);
         info!("generating {} groth proofs.", partition_count);
+
         let start = Instant::now();
 
         let result = (0..partition_count)

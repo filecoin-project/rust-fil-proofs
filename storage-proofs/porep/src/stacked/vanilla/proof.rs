@@ -1447,11 +1447,12 @@ mod tests {
 
         let partitions = 2;
 
+        let arbitrary_porep_id = [92; 32];
         let sp = SetupParams {
             nodes,
             degree,
             expansion_degree,
-            porep_id: [32; 32],
+            porep_id: arbitrary_porep_id,
             layer_challenges: challenges.clone(),
         };
 
@@ -1471,11 +1472,9 @@ mod tests {
         assert_ne!(data, copied, "replication did not change data");
 
         let seed = rng.gen();
-        let arbitrary_porep_id = [92; 32];
         let pub_inputs =
             PublicInputs::<<Tree::Hasher as Hasher>::Domain, <Blake2sHasher as Hasher>::Domain> {
                 replica_id,
-                porep_id: arbitrary_porep_id,
                 seed,
                 tau: Some(tau),
                 k: None,

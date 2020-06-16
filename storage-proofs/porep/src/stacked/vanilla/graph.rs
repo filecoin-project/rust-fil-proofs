@@ -118,7 +118,7 @@ where
 {
     expansion_degree: usize,
     base_graph: G,
-    feistel_keys: [feistel::Index; 4],
+    pub(crate) feistel_keys: [feistel::Index; 4],
     feistel_precomputed: FeistelPrecomputed,
     id: String,
     cache: Option<&'static ParentCache>,
@@ -162,6 +162,16 @@ fn read_node<'a>(i: usize, parents: &[u32], data: &'a [u8]) -> &'a [u8] {
     &data[start..end]
 }
 
+pub fn derive_feistel_keys(porep_id: [u8; 32]) -> [u64; 4] {
+    let mut feistel_keys = [0u64; 4];
+    let raw_seed = derive_porep_domain_seed(FEISTEL_DST, porep_id);
+    feistel_keys[0] = u64::from_le_bytes(raw_seed[0..8].try_into().unwrap());
+    feistel_keys[1] = u64::from_le_bytes(raw_seed[8..16].try_into().unwrap());
+    feistel_keys[2] = u64::from_le_bytes(raw_seed[16..24].try_into().unwrap());
+    feistel_keys[3] = u64::from_le_bytes(raw_seed[24..32].try_into().unwrap());
+    feistel_keys
+}
+
 impl<H, G> StackedGraph<H, G>
 where
     H: Hasher,
@@ -186,12 +196,7 @@ where
         };
         let bg_id = base_graph.identifier();
 
-        let mut feistel_keys = [0u64; 4];
-        let raw_seed = derive_porep_domain_seed(FEISTEL_DST, porep_id);
-        feistel_keys[0] = u64::from_le_bytes(raw_seed[0..8].try_into().unwrap());
-        feistel_keys[1] = u64::from_le_bytes(raw_seed[8..16].try_into().unwrap());
-        feistel_keys[2] = u64::from_le_bytes(raw_seed[16..24].try_into().unwrap());
-        feistel_keys[3] = u64::from_le_bytes(raw_seed[24..32].try_into().unwrap());
+        let feistel_keys = derive_feistel_keys(porep_id);
 
         let mut res = StackedGraph {
             base_graph,

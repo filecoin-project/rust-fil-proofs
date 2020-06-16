@@ -156,14 +156,11 @@ where
                         replica_path.clone(),
                     )?;
 
-                let arbitrary_porep_id = [88; 32];
-
                 let pb = stacked::PublicInputs::<H::Domain, <Sha256Hasher as Hasher>::Domain> {
                     replica_id,
                     seed,
                     tau: Some(tau),
                     k: Some(0),
-                    porep_id: arbitrary_porep_id,
                 };
 
                 // Convert TemporaryAux to TemporaryAuxCache, which instantiates all

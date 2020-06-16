@@ -420,11 +420,12 @@ mod tests {
         let replica_path = cache_dir.path().join("replica-path");
         let mut mmapped_data = setup_replica(&data, &replica_path);
 
+        let arbitrary_porep_id = [44; 32];
         let sp = SetupParams {
             nodes,
             degree,
             expansion_degree,
-            porep_id: [32; 32],
+            porep_id: arbitrary_porep_id,
             layer_challenges: layer_challenges.clone(),
         };
 
@@ -444,11 +445,9 @@ mod tests {
         assert_ne!(data, copied, "replication did not change data");
 
         let seed = rng.gen();
-        let arbitrary_porep_id = [44; 32];
         let pub_inputs =
             PublicInputs::<<Tree::Hasher as Hasher>::Domain, <Sha256Hasher as Hasher>::Domain> {
                 replica_id: replica_id.into(),
-                porep_id: arbitrary_porep_id,
                 seed,
                 tau: Some(tau.into()),
                 k: None,
@@ -591,12 +590,13 @@ mod tests {
             .flat_map(|_| fr_into_bytes(&Fr::random(rng)))
             .collect();
 
+        let arbitrary_porep_id = [55; 32];
         let setup_params = compound_proof::SetupParams {
             vanilla_params: SetupParams {
                 nodes,
                 degree,
                 expansion_degree,
-                porep_id: [32; 32],
+                porep_id: arbitrary_porep_id,
                 layer_challenges: layer_challenges.clone(),
             },
             partitions: Some(partition_count),
@@ -632,11 +632,9 @@ mod tests {
         assert_ne!(data, copied, "replication did not change data");
 
         let seed = rng.gen();
-        let arbitrary_porep_id = [55; 32];
         let public_inputs =
             PublicInputs::<<Tree::Hasher as Hasher>::Domain, <Sha256Hasher as Hasher>::Domain> {
                 replica_id: replica_id.into(),
-                porep_id: arbitrary_porep_id,
                 seed,
                 tau: Some(tau),
                 k: None,
