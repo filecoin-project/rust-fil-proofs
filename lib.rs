@@ -190,7 +190,10 @@
 //! just as before.
 #![deny(clippy::all, clippy::perf, clippy::correctness)]
 
+pub mod small;
+
 use std::{
+    fmt::{self, Debug, Formatter},
     fs::File,
     io::{self, BufReader, Read, Write},
     sync::Arc,
@@ -213,6 +216,8 @@ use paired::{
 use rand::{Rng, SeedableRng};
 use rand_chacha::ChaChaRng;
 use rayon::prelude::*;
+
+use crate::small::MPCSmall;
 
 /// This is our assembly structure that we'll use to synthesize the
 /// circuit into a QAP.
@@ -376,6 +381,17 @@ pub struct MPCParameters {
     contributions: Vec<PublicKey>,
 }
 
+// Required by `assert_eq!()`.
+impl Debug for MPCParameters {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        f.debug_struct("MPCParameters")
+            .field("params", &"<bellman::groth16::Parameters>")
+            .field("cs_hash", &self.cs_hash.to_vec())
+            .field("contributions", &self.contributions.to_vec())
+            .finish()
+    }
+}
+
 impl PartialEq for MPCParameters {
     fn eq(&self, other: &MPCParameters) -> bool {
         self.params == other.params
@@ -422,14 +438,14 @@ impl MPCParameters {
         }
 
         info!(
-            "phase2::MPCParameters::new() Constraint System: n_constraints={}, n_inputs={}, n_aux={}, size={}b",
+            "phase2::MPCParameters::new() Constraint System: n_constraints={}, n_inputs={}, n_aux={}, memsize={}b",
             assembly.num_constraints,
             assembly.num_inputs,
             assembly.num_aux,
             assembly.size()
         );
 
-        // Compute the size of our evaluation domain
+        // Compute the size of our evaluation domain, `m = 2^exp`.
         let mut m = 1;
         let mut exp = 0;
         while m < assembly.num_constraints {
@@ -712,6 +728,16 @@ impl MPCParameters {
             ),
         };
 
+        info!(
+            "phase2::MPCParameters::new() vector lengths: ic={}, h={}, l={}, a={}, b_g1={}, b_g2={}",
+            params.vk.ic.len(),
+            params.h.len(),
+            params.l.len(),
+            params.a.len(),
+            params.b_g1.len(),
+            params.b_g2.len()
+        );
+
         let cs_hash = {
             let sink = io::sink();
             let mut sink = HashWriter::new(sink);
@@ -731,6 +757,10 @@ impl MPCParameters {
     /// Get the underlying Groth16 `Parameters`
     pub fn get_params(&self) -> &Parameters<Bls12> {
         &self.params
+    }
+
+    pub fn n_contributions(&self) -> usize {
+        self.contributions.len()
     }
 
     /// Contributes some randomness to the parameters. Only one
@@ -789,9 +819,9 @@ impl MPCParameters {
         }
 
         let delta_inv = privkey.delta.inverse().expect("nonzero");
-        info!("phase2::MPCParameters::contribute() cloning l");
+        info!("phase2::MPCParameters::contribute() copying l");
         let mut l = (&self.params.l[..]).to_vec();
-        info!("phase2::MPCParameters::contribute() cloning h");
+        info!("phase2::MPCParameters::contribute() copying h");
         let mut h = (&self.params.h[..]).to_vec();
         info!("phase2::MPCParameters::contribute() performing batch exponentiation of l");
         batch_exp(&mut l, delta_inv);
@@ -976,6 +1006,31 @@ impl MPCParameters {
         Ok(())
     }
 
+    /// Serializes these parameters as `MPCSmall`.
+    pub fn write_small<W: Write>(&self, mut writer: W) -> io::Result<()> {
+        writer.write_all(self.params.vk.delta_g1.into_uncompressed().as_ref())?;
+        writer.write_all(self.params.vk.delta_g2.into_uncompressed().as_ref())?;
+
+        writer.write_u32::<BigEndian>(self.params.h.len() as u32)?;
+        for h in &*self.params.h {
+            writer.write_all(h.into_uncompressed().as_ref())?;
+        }
+
+        writer.write_u32::<BigEndian>(self.params.l.len() as u32)?;
+        for l in &*self.params.l {
+            writer.write_all(l.into_uncompressed().as_ref())?;
+        }
+
+        writer.write_all(&self.cs_hash)?;
+
+        writer.write_u32::<BigEndian>(self.contributions.len() as u32)?;
+        for pubkey in &self.contributions {
+            pubkey.write(&mut writer)?;
+        }
+
+        Ok(())
+    }
+
     /// Deserialize these parameters. If `checked` is false,
     /// we won't perform curve validity and group order
     /// checks.
@@ -992,11 +1047,108 @@ impl MPCParameters {
             contributions.push(PublicKey::read(&mut reader)?);
         }
 
+        info!(
+            "phase2::MPCParameters::read() vector lengths: ic={}, h={}, l={}, a={}, b_g1={}, \
+            b_g2={}, contributions={}",
+            params.vk.ic.len(),
+            params.h.len(),
+            params.l.len(),
+            params.a.len(),
+            params.b_g1.len(),
+            params.b_g2.len(),
+            contributions.len(),
+        );
+
         Ok(MPCParameters {
             params,
             cs_hash,
             contributions,
         })
+    }
+
+    // memcpy's the potentially large vectors behind Arc's (duplicates the arrays on the stack,
+    // does not increment ref-counts in `self`).
+    pub fn copy(&self) -> Self {
+        let mut params = self.clone();
+        params.params.h = Arc::new((*self.params.h).clone());
+        params.params.l = Arc::new((*self.params.l).clone());
+        params.params.a = Arc::new((*self.params.a).clone());
+        params.params.b_g1 = Arc::new((*self.params.b_g1).clone());
+        params.params.b_g2 = Arc::new((*self.params.b_g2).clone());
+        params
+    }
+
+    // memcpy's the potentially large h and l vectors behind Arc's into a new `MPCSmall` (duplicates
+    // the h and l arrays on the stack, does not increment ref-counts for the h and l Arc's in `self`).
+    pub fn copy_small(&self) -> MPCSmall {
+        MPCSmall {
+            delta_g1: self.params.vk.delta_g1,
+            delta_g2: self.params.vk.delta_g2,
+            h: (*self.params.h).clone(),
+            l: (*self.params.l).clone(),
+            cs_hash: self.cs_hash,
+            contributions: self.contributions.clone(),
+        }
+    }
+
+    // Updates `self` with a contribution (or contributions) that is in the `MPCSmall` params form.
+    // `MPCSmall` must contain at least one new contribution. This decrements the strong ref-counts
+    // by one for any Arc clones that were made from `self.h` and `self.l`. If either of `self`'s h
+    // and l Arc's have ref-count 1, then they will be dropped.
+    pub fn add_contrib(&mut self, contrib: MPCSmall) {
+        assert_eq!(
+            self.cs_hash[..],
+            contrib.cs_hash[..],
+            "large and small params have different cs_hash"
+        );
+
+        assert_eq!(
+            self.params.h.len(),
+            contrib.h.len(),
+            "large and small params have different h length"
+        );
+        assert_eq!(
+            self.params.l.len(),
+            contrib.l.len(),
+            "large and small params have different l length"
+        );
+
+        assert!(
+            self.contributions.len() < contrib.contributions.len(),
+            "small params do not contain additional contributions"
+        );
+        assert_eq!(
+            &self.contributions[..],
+            &contrib.contributions[..self.contributions.len()],
+            "small params cannot change prior contributions in large params"
+        );
+
+        // Unwrapping here is safe because we have already asserted that `contrib` contains at least
+        // one (new) contribution.
+        assert_eq!(
+            contrib.delta_g1,
+            contrib.contributions.last().unwrap().delta_after,
+            "small params are internally inconsistent wrt. G1 deltas"
+        );
+
+        let MPCSmall { delta_g1, delta_g2, h, l, contributions, .. } = contrib;
+        self.params.vk.delta_g1 = delta_g1;
+        self.params.vk.delta_g2 = delta_g2;
+        self.params.h = Arc::new(h);
+        self.params.l = Arc::new(l);
+        self.contributions = contributions;
+    }
+
+    // Returns true if a pair of large and small MPC params contain equal values. It is not required
+    // that `self`'s h and l Arc's point to the same memory locations as `small`'s non-Arc h and l
+    // vectors.
+    pub fn has_last_contrib(&self, small: &MPCSmall) -> bool {
+        self.params.vk.delta_g1 == small.delta_g1
+            && self.params.vk.delta_g2 == small.delta_g2
+            && *self.params.h == small.h
+            && *self.params.l == small.l
+            && self.cs_hash[..] == small.cs_hash[..]
+            && self.contributions == small.contributions
     }
 }
 
@@ -1020,6 +1172,19 @@ struct PublicKey {
 
     /// Hash of the transcript (used for mapping to r)
     transcript: [u8; 64],
+}
+
+// Required by `assert_eq!()`.
+impl Debug for PublicKey {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        f.debug_struct("PublicKey")
+            .field("delta_after", &self.delta_after)
+            .field("s", &self.s)
+            .field("s_delta", &self.s_delta)
+            .field("r_delta", &self.r_delta)
+            .field("transcript", &self.transcript.to_vec())
+            .finish()
+    }
 }
 
 impl PublicKey {
@@ -1111,7 +1276,6 @@ impl PartialEq for PublicKey {
 /// Verify a contribution, given the old parameters and
 /// the new parameters. Returns the hash of the contribution.
 pub fn verify_contribution(before: &MPCParameters, after: &MPCParameters) -> Result<[u8; 64], ()> {
-    // Transformation involves a single new object
     if after.contributions.len() != (before.contributions.len() + 1) {
         error!(
             "phase2::verify_contribution() 'after' params do not contain exactly one more \
@@ -1247,7 +1411,6 @@ pub fn verify_contribution(before: &MPCParameters, after: &MPCParameters) -> Res
         error!("phase2::verify_contribution() h was not updated by delta^-1");
         return Err(());
     }
-
     if !same_ratio(
         merge_pairs(&before.params.l, &after.params.l),
         (after.params.vk.delta_g2, before.params.vk.delta_g2), // reversed for inverse
@@ -1264,7 +1427,7 @@ pub fn verify_contribution(before: &MPCParameters, after: &MPCParameters) -> Res
 }
 
 /// Checks if pairs have the same ratio.
-fn same_ratio<G1: PairingCurveAffine>(g1: (G1, G1), g2: (G1::Pair, G1::Pair)) -> bool {
+pub(crate) fn same_ratio<G1: PairingCurveAffine>(g1: (G1, G1), g2: (G1::Pair, G1::Pair)) -> bool {
     g1.0.pairing_with(&g2.1) == g1.1.pairing_with(&g2.0)
 }
 
@@ -1281,7 +1444,7 @@ fn same_ratio<G1: PairingCurveAffine>(g1: (G1, G1), g2: (G1::Pair, G1::Pair)) ->
 /// e(g, (as)*r1 + (bs)*r2 + (cs)*r3) = e(g^s, a*r1 + b*r2 + c*r3)
 ///
 /// ... with high probability.
-fn merge_pairs<G: CurveAffine>(v1: &[G], v2: &[G]) -> (G, G) {
+pub(crate) fn merge_pairs<G: CurveAffine>(v1: &[G], v2: &[G]) -> (G, G) {
     use rand::thread_rng;
     use std::sync::Mutex;
 
@@ -1384,7 +1547,7 @@ fn keypair<R: Rng>(rng: &mut R, current: &MPCParameters) -> (PublicKey, PrivateK
 
 /// Hashes to G2 using the first 32 bytes of `digest`. Panics if `digest` is less
 /// than 32 bytes.
-fn hash_to_g2(digest: &[u8]) -> G2 {
+pub(crate) fn hash_to_g2(digest: &[u8]) -> G2 {
     assert!(digest.len() >= 32);
 
     let mut seed = [0u8; 32];
@@ -1394,7 +1557,7 @@ fn hash_to_g2(digest: &[u8]) -> G2 {
 }
 
 /// Abstraction over a writer which hashes the data being written.
-struct HashWriter<W: Write> {
+pub(crate) struct HashWriter<W: Write> {
     writer: W,
     hasher: Blake2b,
 }
