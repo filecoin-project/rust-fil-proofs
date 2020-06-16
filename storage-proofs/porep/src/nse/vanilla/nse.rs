@@ -20,7 +20,7 @@ use super::Config;
 
 /// Implementation of  Narrow Stacked Expander PoRep (NSE).
 #[derive(Debug, Default)]
-pub struct NarrowStackedExpander<'a, Tree: MerkleTreeTrait, G: Hasher> {
+pub struct NarrowStackedExpander<'a, Tree: 'a + MerkleTreeTrait, G: 'a + Hasher> {
     _tree: PhantomData<&'a Tree>,
     _g: PhantomData<G>,
 }
