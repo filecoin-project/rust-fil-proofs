@@ -660,7 +660,7 @@ mod tests {
         let store_config = StoreConfig::new(
             cache_dir.path(),
             CacheKey::CommDTree.to_string(),
-            StoreConfig::default_cached_above_base_layer(config.num_nodes_window as usize, 8),
+            StoreConfig::default_rows_to_discard(config.num_nodes_window as usize, 8),
         );
         let mut encoded_data = data.clone();
 
