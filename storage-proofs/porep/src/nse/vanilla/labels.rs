@@ -4,6 +4,8 @@ use itertools::Itertools;
 use log::debug;
 use merkletree::store::{StoreConfig, StoreConfigDataVersion};
 use rayon::prelude::*;
+use rust_fil_nse_gpu as gpu;
+use rust_fil_nse_gpu::NarrowStackedExpander;
 use sha2raw::Sha256;
 use storage_proofs_core::{
     hasher::{Domain, Hasher},
@@ -499,6 +501,66 @@ fn tree_from_slice<Tree: MerkleTreeTrait>(
     Ok(tree)
 }
 
+fn to_gpu_config(conf: &Config) -> gpu::Config {
+    gpu::Config {
+        num_nodes_window: conf.num_nodes_window,
+        num_butterfly_layers: conf.num_butterfly_layers,
+        num_expander_layers: conf.num_expander_layers,
+        degree_expander: conf.degree_expander,
+        degree_butterfly: conf.degree_butterfly,
+        k: conf.k,
+    }
+}
+
+type GPUHasherDomain = storage_proofs_core::hasher::PoseidonDomain;
+type GPUHasher = storage_proofs_core::hasher::PoseidonHasher;
+type GPUTree = storage_proofs_core::merkle::OctLCMerkleTree<GPUHasher>;
+pub fn encode_with_oct_lc_poseidon_trees_gpu(
+    conf: &Config,
+    mut store_configs: Vec<StoreConfig>,
+    window_index: u32,
+    replica_id: &GPUHasherDomain,
+    data: &mut [u8],
+) -> gpu::NSEResult<(Vec<MerkleTree<GPUTree>>, Option<LCMerkleTree<GPUTree>>)> {
+    use storage_proofs_core::fr32::fr_into_bytes;
+    let gpu_conf = to_gpu_config(conf);
+    let mut context = gpu::GPU::new(gpu_conf)?;
+    let sealer = gpu::Sealer::new(
+        gpu_conf,
+        unsafe { std::mem::transmute::<_, gpu::ReplicaId>(*replica_id) },
+        window_index as usize,
+        gpu::Layer::from(&data.to_vec()),
+        &mut context,
+        true,
+        0,
+    )?;
+    let layers = sealer
+        .map(|v| v)
+        .collect::<gpu::NSEResult<Vec<gpu::LayerOutput>>>()?;
+    data.copy_from_slice(Vec::<u8>::from(&layers.last().unwrap().base).as_slice());
+    let mut trees = Vec::new();
+    for lo in layers.iter() {
+        let store_config = store_configs.remove(0);
+        let tree_data: Vec<u8> = lo
+            .base
+            .0
+            .iter()
+            .chain(lo.tree.iter())
+            .flat_map(|node| fr_into_bytes(&node.0))
+            .collect();
+        trees.push(
+            MerkleTree::<GPUTree>::from_tree_slice_with_config(
+                &tree_data[..],
+                conf.num_nodes_window,
+                store_config,
+            )
+            .unwrap(),
+        );
+    }
+    let replica_tree = trees.pop();
+    Ok((trees, None))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -700,5 +762,76 @@ mod tests {
                 0, 0, 0, 0
             ]
         );
+    }
+
+    #[test]
+    fn test_gpu_cpu_consistency() {
+        let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
+
+        let config = Config {
+            k: 2,
+            num_nodes_window: 512,
+            degree_expander: 96,
+            degree_butterfly: 4,
+            num_expander_layers: 4,
+            num_butterfly_layers: 3,
+            sector_size: 2048 * 8,
+        };
+
+        let replica_id: PoseidonDomain = Fr::random(rng).into();
+        let window_index = rng.gen();
+
+        let data: Vec<u8> = (0..config.num_nodes_window)
+            .flat_map(|_| fr_into_bytes(&Fr::random(rng)))
+            .collect();
+
+        let cpu_cache_dir = tempfile::tempdir().unwrap();
+        let cpu_store_config = StoreConfig::new(
+            cpu_cache_dir.path(),
+            CacheKey::CommDTree.to_string(),
+            StoreConfig::default_rows_to_discard(config.num_nodes_window as usize, 8),
+        );
+        let mut cpu_encoded_data = data.clone();
+
+        let cpu_store_configs =
+            split_config(cpu_store_config.clone(), config.num_layers()).unwrap();
+
+        let (cpu_trees, cpu_replica_tree) = encode_with_trees::<OctLCMerkleTree<PoseidonHasher>>(
+            &config,
+            cpu_store_configs,
+            window_index,
+            &replica_id,
+            &mut cpu_encoded_data,
+        )
+        .unwrap();
+        let cpu_roots = cpu_trees.into_iter().map(|t| t.root()).collect::<Vec<_>>();
+        let cpu_replica_root = cpu_replica_tree.root();
+
+        let gpu_cache_dir = tempfile::tempdir().unwrap();
+        let gpu_store_config = StoreConfig::new(
+            gpu_cache_dir.path(),
+            CacheKey::CommDTree.to_string(),
+            StoreConfig::default_rows_to_discard(config.num_nodes_window as usize, 8),
+        );
+        let mut gpu_encoded_data = data.clone();
+
+        let gpu_store_configs =
+            split_config(gpu_store_config.clone(), config.num_layers()).unwrap();
+
+        let (gpu_trees, gpu_replica_tree) = encode_with_oct_lc_poseidon_trees_gpu(
+            &config,
+            gpu_store_configs,
+            window_index,
+            &replica_id,
+            &mut gpu_encoded_data,
+        )
+        .unwrap();
+
+        let gpu_roots = gpu_trees.into_iter().map(|t| t.root()).collect::<Vec<_>>();
+        //let gpu_replica_root = gpu_replica_tree.root();
+
+        assert_eq!(cpu_roots, gpu_roots);
+        //assert_eq!(cpu_replica_root, gpu_replica_root);
+        assert_eq!(cpu_encoded_data, gpu_encoded_data);
     }
 }
