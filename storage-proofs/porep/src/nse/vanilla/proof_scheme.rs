@@ -16,8 +16,8 @@ use super::{
 };
 use crate::encode;
 
-impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> ProofScheme<'a>
-    for NarrowStackedExpander<'a, Tree, G>
+impl<'a, 'c, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> ProofScheme<'a>
+    for NarrowStackedExpander<'c, Tree, G>
 {
     type PublicParams = PublicParams<Tree>;
     type SetupParams = SetupParams;
