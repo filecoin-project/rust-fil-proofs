@@ -40,6 +40,7 @@ libc = "0.2"
 fdlimit = "0.2.0"
 itertools = "0.9.0"
 positioned-io = "0.2.2"
+rust-fil-nse-gpu = "0.2.0"
 
 [dev-dependencies]
 tempfile = "3"
@@ -54,6 +55,7 @@ default = ["pairing", "gpu"]
 gpu = ["storage-proofs-core/gpu"]
 pairing = ["storage-proofs-core/pairing", "bellperson/pairing", "neptune/pairing"]
 blst = ["storage-proofs-core/blst", "bellperson/blst", "neptune/blst"]
+gpu-tests = []
 
 [[bench]]
 name = "encode"
@@ -66,4 +68,3 @@ harness = false
 [[bench]]
 name = "batch_hasher"
 harness = false
-
