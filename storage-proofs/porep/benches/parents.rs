@@ -46,6 +46,7 @@ fn parents_loop<H: Hasher, G: Graph<H>>(graph: &G, parents: &mut [u32]) {
         .collect()
 }
 
+#[allow(clippy::unit_arg)]
 fn parents_loop_benchmark(cc: &mut Criterion) {
     let sizes = vec![10, 50, 1000];
 
