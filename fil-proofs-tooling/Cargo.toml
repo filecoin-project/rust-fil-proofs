@@ -48,6 +48,7 @@ bytefmt = "0.1.7"
 rayon = "1.3.0"
 flexi_logger = "0.14.7"
 typenum = "1.11.2"
+generic-array = "0.13.2"
 
 [features]
 default = ["gpu", "measurements"]
