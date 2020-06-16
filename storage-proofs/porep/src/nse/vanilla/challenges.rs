@@ -13,7 +13,7 @@ pub struct ChallengeRequirements {
 /// An iterator which yields a fixed number of challenges over all windows.
 ///
 /// Each challenge, challenges across all layers in the selected window.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Challenges<D: Domain> {
     /// The number of layers.
     num_layers: usize,
@@ -50,6 +50,11 @@ impl<D: Domain> Challenges<D> {
             current_window: 0,
             current_challenge: 0,
         }
+    }
+
+    /// Returns the number of challenges.
+    pub fn len(&self) -> usize {
+        self.num_challenges_per_window
     }
 }
 

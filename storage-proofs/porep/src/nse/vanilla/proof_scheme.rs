@@ -65,81 +65,83 @@ impl<'a, 'c, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> ProofScheme<'
             pub_inputs.seed,
         );
 
-        assert_eq!(
-            partition_count, 1,
-            "multiple partitions are not implemented yet"
-        );
+        let mut partition_proofs = Vec::with_capacity(partition_count);
+        for partition in 0..partition_count {
+            trace!("proving {} partition", partition);
 
-        let mut proofs = Vec::new();
+            let mut proofs = Vec::with_capacity(challenges.len());
 
-        let butterfly_parents = super::ButterflyGraph::from(config);
-        let exp_parents = super::ExpanderGraph::from(config);
+            let butterfly_parents = super::ButterflyGraph::from(config);
+            let exp_parents = super::ExpanderGraph::from(config);
 
-        for challenge in challenges {
-            // the index of the challenge is adjusted, as the trees span the whole sector, not just a single window.
-            let absolute_challenge = challenge.window * config.num_nodes_window + challenge.node;
+            for challenge in challenges.clone() {
+                // the index of the challenge is adjusted, as the trees span the whole sector, not just a single window.
+                let absolute_challenge =
+                    challenge.window * config.num_nodes_window + challenge.node;
 
-            // Data Inclusion Proof
-            let data_proof = priv_inputs
-                .t_aux
-                .tree_d
-                .gen_proof(absolute_challenge)
-                .context("failed to create data proof")?;
+                // Data Inclusion Proof
+                let data_proof = priv_inputs
+                    .t_aux
+                    .tree_d
+                    .gen_proof(absolute_challenge)
+                    .context("failed to create data proof")?;
 
-            // Layer Inclusion Proof
-            let layer_tree = if challenge.layer == config.num_layers() {
-                &priv_inputs.t_aux.tree_replica
-            } else {
-                &priv_inputs.t_aux.layers[challenge.layer - 1]
-            };
-            let rows_to_discard = priv_inputs.t_aux.tree_config_rows_to_discard;
-            let layer_proof = layer_tree
-                .gen_cached_proof(absolute_challenge, Some(rows_to_discard))
-                .context("failed to create layer proof")?;
+                // Layer Inclusion Proof
+                let layer_tree = if challenge.layer == config.num_layers() {
+                    &priv_inputs.t_aux.tree_replica
+                } else {
+                    &priv_inputs.t_aux.layers[challenge.layer - 1]
+                };
+                let rows_to_discard = priv_inputs.t_aux.tree_config_rows_to_discard;
+                let layer_proof = layer_tree
+                    .gen_cached_proof(absolute_challenge, Some(rows_to_discard))
+                    .context("failed to create layer proof")?;
 
-            // Labeling Proofs
-            let parents: Vec<Parent> = if config.is_layer_expander(challenge.layer) {
-                exp_parents
-                    .expanded_parents(challenge.node as u32)
-                    .collect()
-            } else {
-                butterfly_parents
-                    .parents(challenge.node as u32, challenge.layer as u32)
-                    .collect()
-            };
+                // Labeling Proofs
+                let parents: Vec<Parent> = if config.is_layer_expander(challenge.layer) {
+                    exp_parents
+                        .expanded_parents(challenge.node as u32)
+                        .collect()
+                } else {
+                    butterfly_parents
+                        .parents(challenge.node as u32, challenge.layer as u32)
+                        .collect()
+                };
 
-            let parents_proofs = if challenge.layer == 1 {
-                // no parents for layer 1
-                Vec::new()
-            } else {
-                let parents_tree = &priv_inputs.t_aux.layers[challenge.layer - 2];
-                parents
-                    .iter()
-                    .map(|parent| {
-                        // challenge is adjusted as the trees span all windows
-                        parents_tree
-                            .gen_cached_proof(
-                                challenge.window * config.num_nodes_window + *parent as usize,
-                                Some(rows_to_discard),
-                            )
-                            .context("failed to create parent proof")
-                    })
-                    .collect::<Result<_>>()?
-            };
+                let parents_proofs = if challenge.layer == 1 {
+                    // no parents for layer 1
+                    Vec::new()
+                } else {
+                    let parents_tree = &priv_inputs.t_aux.layers[challenge.layer - 2];
+                    parents
+                        .iter()
+                        .map(|parent| {
+                            // challenge is adjusted as the trees span all windows
+                            parents_tree
+                                .gen_cached_proof(
+                                    challenge.window * config.num_nodes_window + *parent as usize,
+                                    Some(rows_to_discard),
+                                )
+                                .context("failed to create parent proof")
+                        })
+                        .collect::<Result<_>>()?
+                };
 
-            // roots for the layers
-            let mut comm_layers = priv_inputs.p_aux.comm_layers.clone();
-            comm_layers.push(priv_inputs.p_aux.comm_replica);
+                // roots for the layers
+                let mut comm_layers = priv_inputs.p_aux.comm_layers.clone();
+                comm_layers.push(priv_inputs.p_aux.comm_replica);
 
-            proofs.push(Proof::new(
-                data_proof,
-                layer_proof,
-                parents_proofs,
-                comm_layers,
-            ));
+                proofs.push(Proof::new(
+                    data_proof,
+                    layer_proof,
+                    parents_proofs,
+                    comm_layers,
+                ));
+            }
+            partition_proofs.push(proofs);
         }
 
-        Ok(vec![proofs])
+        Ok(partition_proofs)
     }
 
     fn verify_all_partitions(
