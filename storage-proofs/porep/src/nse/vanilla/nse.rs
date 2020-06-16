@@ -201,7 +201,7 @@ pub struct TemporaryAuxCache<Tree: MerkleTreeTrait, G: Hasher> {
     pub tree_d: BinaryMerkleTree<G>,
 
     // Store the 'cached_above_base layers' value from the `StoreConfig` for later use (i.e. proof generation).
-    pub tree_config_levels: usize,
+    pub tree_config_rows_to_discard: usize,
 
     pub t_aux: TemporaryAux<Tree, G>,
 
@@ -273,13 +273,13 @@ impl<Tree: MerkleTreeTrait, G: Hasher> TemporaryAuxCache<Tree, G> {
             .collect::<Result<Vec<_>>>()?;
 
         let tree_replica = layers.pop().unwrap(); // replica tree is the last one
-        let tree_config_levels = t_aux.layer_config.levels;
+        let tree_config_rows_to_discard = t_aux.layer_config.rows_to_discard;
 
         Ok(TemporaryAuxCache {
             layers,
             tree_replica,
             tree_d,
-            tree_config_levels,
+            tree_config_rows_to_discard,
             replica_path,
             t_aux: t_aux.clone(),
         })

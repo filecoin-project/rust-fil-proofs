@@ -29,8 +29,8 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> NarrowStackedExpa
             CacheKey::CommDTree.to_string(),
             Some(get_merkle_tree_len(num_nodes_sector, U2::to_usize())?),
         );
-        data_tree_config.levels =
-            StoreConfig::default_cached_above_base_layer(num_nodes_sector, U2::to_usize());
+        data_tree_config.rows_to_discard =
+            StoreConfig::default_rows_to_discard(num_nodes_sector, U2::to_usize());
 
         Ok(data_tree_config)
     }
@@ -56,11 +56,9 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> NarrowStackedExpa
                 Tree::Arity::to_usize(),
             )?),
         );
-        // Ensure the right levels are set for the config.
-        layer_store_config.levels = StoreConfig::default_cached_above_base_layer(
-            config.num_nodes_window,
-            Tree::Arity::to_usize(),
-        );
+        // Ensure the right rows_to_discard are set for the config.
+        layer_store_config.rows_to_discard =
+            StoreConfig::default_rows_to_discard(config.num_nodes_window, Tree::Arity::to_usize());
 
         let layered_store_configs = split_config(layer_store_config.clone(), config.num_layers())?;
 
@@ -278,7 +276,7 @@ mod tests {
         let store_config = StoreConfig::new(
             cache_dir.path(),
             CacheKey::CommDTree.to_string(),
-            StoreConfig::default_cached_above_base_layer(config.num_nodes_sector(), U2::to_usize()),
+            StoreConfig::default_rows_to_discard(config.num_nodes_sector(), U2::to_usize()),
         );
 
         // Generate a replica path.
@@ -350,7 +348,7 @@ mod tests {
         let config = StoreConfig::new(
             cache_dir.path(),
             CacheKey::CommDTree.to_string(),
-            StoreConfig::default_cached_above_base_layer(config.num_nodes_sector(), U2::to_usize()),
+            StoreConfig::default_rows_to_discard(config.num_nodes_sector(), U2::to_usize()),
         );
 
         // Generate a replica path.
