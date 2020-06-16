@@ -311,9 +311,10 @@ mod tests {
     use super::*;
 
     #[test]
+    #[allow(clippy::float_cmp)]
     fn test_time_to_us() {
-        assert_eq!(time_to_us("123.12 us"), 123.12);
-        assert_eq!(time_to_us("1.0 s"), 1_000_000.);
+        assert_eq!(time_to_us("123.12 us"), 123.12); // No math done on 'us' so strict float cmp is ok.
+        assert_eq!(time_to_us("1.0 s"), 1_000_000.); // Multiplication, so strict float cmp is ok.
     }
 
     #[test]
