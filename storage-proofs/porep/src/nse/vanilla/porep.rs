@@ -114,22 +114,22 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> PoRep<'a, Tree::H
         let (windowed_store_configs, layer_store_config) =
             Self::generate_store_configs(config, &store_config)?;
 
-        let trees = data
-            .as_mut()
-            .par_chunks_mut(config.window_size())
-            .enumerate()
-            .zip(windowed_store_configs.into_par_iter())
-            .map(|((window_index, window_data), store_configs)| {
-                let (trees, replica_tree) = labels::encode_with_trees::<Tree>(
-                    config,
-                    store_configs,
-                    window_index as u32,
-                    replica_id,
-                    window_data,
-                )?;
-                Ok((trees, replica_tree))
-            })
-            .collect::<Result<Vec<(Vec<_>, _)>>>()?;
+        let trees = labels::encode_with_trees_all::<Tree>(
+            config,
+            *replica_id,
+            data.as_mut()
+                .chunks_mut(config.window_size())
+                .enumerate()
+                .zip(windowed_store_configs.into_iter())
+                .map(
+                    |((window_index, window_data), store_configs)| labels::Window {
+                        store_configs,
+                        window_index: window_index as u32,
+                        data: window_data,
+                    },
+                )
+                .collect::<Vec<_>>(),
+        )?;
 
         debug_assert_eq!(trees.len(), config.num_windows());
         data.drop_data();
@@ -234,18 +234,18 @@ mod tests {
     use super::super::{Config, SetupParams};
 
     #[test]
-    #[ignore]
-    fn test_bench_encode() {
+    #[cfg(feature = "gpu-tests")]
+    fn test_gpu_bench_encode() {
         type Tree = LCTree<PoseidonHasher, U8, U8, U0>;
         // femme::start(log::LevelFilter::Debug).ok();
 
         let sector_size = 1024 * 1024 * 1024 * 4;
-        let num_windows = 1;
+        let num_windows = 8;
 
         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
         let replica_id = <PoseidonHasher as Hasher>::Domain::random(rng);
         let config = Config {
-            k: 8,
+            k: 1,
             num_nodes_window: (sector_size / num_windows) / NODE_SIZE,
             degree_expander: 384,
             degree_butterfly: 16,
@@ -316,13 +316,13 @@ mod tests {
         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
         let replica_id = <PoseidonHasher as Hasher>::Domain::random(rng);
         let config = Config {
-            k: 8,
-            num_nodes_window: 64,
+            k: 2,
+            num_nodes_window: 512,
             degree_expander: 12,
             degree_butterfly: 8,
             num_expander_layers: 3,
             num_butterfly_layers: 3,
-            sector_size: 64 * 32 * 8,
+            sector_size: 512 * 32 * 8,
         };
 
         let data: Vec<u8> = (0..config.num_nodes_sector())
