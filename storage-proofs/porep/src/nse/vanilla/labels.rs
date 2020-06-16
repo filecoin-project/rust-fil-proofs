@@ -1,13 +1,19 @@
+use std::fs::OpenOptions;
+use std::io::Write;
+
 use anyhow::{ensure, Context, Result};
-use generic_array::typenum::U0;
+use generic_array::typenum::{Unsigned, U0};
 use itertools::Itertools;
-use log::debug;
-use merkletree::store::{StoreConfig, StoreConfigDataVersion};
+use log::{debug, error};
+use merkletree::merkle::{get_merkle_tree_leafs, get_merkle_tree_len};
+use merkletree::store::{Store, StoreConfig, StoreConfigDataVersion};
 use rayon::prelude::*;
+use rust_fil_nse_gpu as gpu;
 use sha2raw::Sha256;
 use storage_proofs_core::{
     hasher::{Domain, Hasher},
-    merkle::{DiskTree, LCTree, MerkleTreeTrait, MerkleTreeWrapper},
+    merkle::{DiskTree, LCStore, LCTree, MerkleTreeTrait, MerkleTreeWrapper},
+    settings,
     util::NODE_SIZE,
 };
 
@@ -31,7 +37,7 @@ pub fn encode_with_trees<Tree: 'static + MerkleTreeTrait>(
     window_index: u32,
     replica_id: &<Tree::Hasher as Hasher>::Domain,
     data: &mut [u8],
-) -> Result<(Vec<MerkleTree<Tree>>, LCMerkleTree<Tree>)> {
+) -> Result<(Vec<LCMerkleTree<Tree>>, LCMerkleTree<Tree>)> {
     let num_layers = config.num_layers();
     let mut trees = Vec::with_capacity(num_layers);
 
@@ -119,7 +125,10 @@ pub fn encode_with_trees<Tree: 'static + MerkleTreeTrait>(
     drop(previous_layer);
 
     let store_config = store_configs.remove(0);
-    debug!("replica layer tree");
+    debug!(
+        "replica layer tree [rows_to_discard {}]",
+        store_config.rows_to_discard
+    );
     let replica_tree = lc_tree_from_slice::<Tree>(data, store_config)
         .context("failed to construct merkle tree for butterfly encoding layer")?;
 
@@ -486,17 +495,174 @@ fn lc_tree_from_slice<Tree: MerkleTreeTrait>(
 fn tree_from_slice<Tree: MerkleTreeTrait>(
     data: &[u8],
     config: StoreConfig,
-) -> Result<MerkleTree<Tree>> {
-    let mut tree = MerkleTreeWrapper::from_par_iter_with_config(
+) -> Result<LCMerkleTree<Tree>> {
+    let mut tree: MerkleTree<Tree> = MerkleTreeWrapper::from_par_iter_with_config(
         data.par_chunks(NODE_SIZE)
             .map(|node| <Tree::Hasher as Hasher>::Domain::try_from_bytes(node).unwrap()),
         config.clone(),
     )?;
+    let tree_len = tree.len();
+    let leafs = get_merkle_tree_leafs(tree_len, Tree::Arity::to_usize())?;
 
-    // compact the thing
-    tree.compact(config, StoreConfigDataVersion::One as u32)?;
+    // 'v1' compact the existing tree store
+    tree.compact(config.clone(), StoreConfigDataVersion::One as u32)?;
 
-    Ok(tree)
+    // Re-instantiate the 'v1' compacted store as an lc tree.
+    let store = LCStore::new_from_disk(tree_len, Tree::Arity::to_usize(), &config)?;
+    MerkleTreeWrapper::from_data_store(store, leafs)
+}
+
+impl From<Config> for gpu::Config {
+    fn from(conf: Config) -> gpu::Config {
+        gpu::Config {
+            num_nodes_window: conf.num_nodes_window,
+            num_butterfly_layers: conf.num_butterfly_layers,
+            num_expander_layers: conf.num_expander_layers,
+            degree_expander: conf.degree_expander,
+            degree_butterfly: conf.degree_butterfly,
+            k: conf.k,
+        }
+    }
+}
+
+pub struct Window<'a> {
+    pub store_configs: Vec<StoreConfig>,
+    pub window_index: u32,
+    pub data: &'a mut [u8],
+}
+
+pub fn encode_with_trees_all_cpu<'a, Tree: 'static + MerkleTreeTrait>(
+    conf: &Config,
+    replica_id: <Tree::Hasher as Hasher>::Domain,
+    inps: &mut Vec<Window<'a>>,
+) -> Result<Vec<(Vec<LCMerkleTree<Tree>>, LCMerkleTree<Tree>)>> {
+    inps.into_par_iter()
+        .map(|window| {
+            encode_with_trees::<Tree>(
+                conf,
+                window.store_configs.clone(),
+                window.window_index,
+                &replica_id,
+                window.data,
+            )
+        })
+        .collect()
+}
+
+type GPUHasher = storage_proofs_core::hasher::PoseidonHasher;
+pub fn encode_with_trees_all_gpu<'a, Tree: 'static + MerkleTreeTrait>(
+    conf: &Config,
+    replica_id: <Tree::Hasher as Hasher>::Domain,
+    inps: &mut Vec<Window<'a>>,
+) -> Result<Vec<(Vec<LCMerkleTree<Tree>>, LCMerkleTree<Tree>)>> {
+    use storage_proofs_core::fr32::fr_into_bytes;
+
+    let rows_to_discard = inps[0].store_configs[0].rows_to_discard;
+
+    let gpu_conf: gpu::Config = conf.clone().into();
+    let mut pool = gpu::SealerPool::new(
+        gpu::utils::all_devices()?,
+        gpu_conf,
+        gpu::TreeOptions::Enabled { rows_to_discard },
+    )?;
+
+    let mut replica_id_bytes = [0u8; 32];
+    replica_id_bytes.copy_from_slice(&replica_id.into_bytes()[..]);
+
+    let outputs = inps
+        .into_iter()
+        .map(|window| {
+            assert!(window.store_configs.iter().all(|c|c.rows_to_discard == rows_to_discard));
+            let inp = gpu::SealerInput {
+                replica_id: gpu::ReplicaId(replica_id_bytes),
+                window_index: window.window_index as usize,
+                original_data: gpu::Layer::from(&window.data.to_vec()),
+            };
+            (window.store_configs.clone(), &mut window.data, pool.seal_on_gpu(inp))
+        })
+        .collect::<Vec<_>>()
+        .into_iter()
+        .map(
+            |(store_configs, data, layers)| -> Result<(Vec<LCMerkleTree<Tree>>, LCMerkleTree<Tree>)> {
+                let mut store_configs = store_configs.clone();
+                let mut trees = Vec::with_capacity(conf.num_layers());
+                for (layer_index, layer_output_result) in layers.iter().enumerate() {
+                    let lo = layer_output_result?;
+                    debug!("layer: {}", layer_index);
+
+                    let tree_data: Vec<u8> = lo
+                        .base
+                        .0
+                        .iter()
+                        .chain(lo.tree.iter())
+                        .flat_map(|node| fr_into_bytes(&node.0))
+                        .collect();
+
+                    // Write out tree element data in a 'v1' compacted format.
+                    let store_config = store_configs.remove(0);
+                    let store_path = StoreConfig::data_path(&store_config.path, &store_config.id);
+                    let mut f = OpenOptions::new()
+                        .write(true)
+                        .read(true)
+                        .create_new(true)
+                        .open(store_path)
+                        .context("failed to open store path")?;
+                    f.write_all(&tree_data)
+                        .context("failed to write out gpu tree data")?;
+
+                    // Re-instantiate the 'v1' compacted store as an lc tree.
+                    let full_tree_len =
+                        get_merkle_tree_len(lo.base.0.len(), Tree::Arity::to_usize())
+                            .context("failed to calculate tree length from the base length")?;
+                    let store = LCStore::new_from_disk(
+                        full_tree_len,
+                        Tree::Arity::to_usize(),
+                        &store_config,
+                    )
+                    .context("failed to open store from disk")?;
+                    trees.push(LCMerkleTree::<Tree>::from_data_store(
+                        store,
+                        conf.num_nodes_window,
+                    )?);
+
+                    if layer_index == conf.num_layers() - 1 {
+                        data.copy_from_slice(Vec::<u8>::from(&lo.base).as_slice());
+                    }
+                }
+
+                assert!(trees.last().is_some());
+                let replica_tree = trees.pop().unwrap();
+
+                Ok((trees, replica_tree))
+            },
+        )
+        .collect::<Result<Vec<_>>>()?;
+
+    Ok(outputs)
+}
+
+pub fn encode_with_trees_all<'a, Tree: 'static + MerkleTreeTrait>(
+    conf: &Config,
+    replica_id: <Tree::Hasher as Hasher>::Domain,
+    mut inps: Vec<Window<'a>>,
+) -> Result<Vec<(Vec<LCMerkleTree<Tree>>, LCMerkleTree<Tree>)>> {
+    if settings::SETTINGS.use_gpu_nse
+        && std::any::TypeId::of::<Tree::Hasher>() == std::any::TypeId::of::<GPUHasher>()
+        && Tree::Arity::to_usize() == 8
+        && ExpanderGraph::from(conf).bits % 8 == 0
+    {
+        let gpu_result = encode_with_trees_all_gpu::<Tree>(conf, replica_id, &mut inps);
+        match gpu_result {
+            Ok(result) => {
+                return Ok(result);
+            }
+            Err(e) => {
+                error!("GPU labeling failed! Error: {}", e);
+            }
+        }
+    }
+
+    encode_with_trees_all_cpu::<Tree>(conf, replica_id, &mut inps)
 }
 
 #[cfg(test)]
@@ -700,5 +866,92 @@ mod tests {
                 0, 0, 0, 0
             ]
         );
+    }
+
+    #[cfg(feature = "gpu-tests")]
+    fn run_encode_with_trees<Tree: 'static + MerkleTreeTrait>(
+        config: Config,
+        data: Vec<u8>,
+        window_index: u32,
+        replica_id: <Tree::Hasher as Hasher>::Domain,
+        gpu: bool,
+    ) -> (
+        Vec<u8>,
+        Vec<<Tree::Hasher as Hasher>::Domain>,
+        <Tree::Hasher as Hasher>::Domain,
+    ) {
+        let cache_dir = tempfile::tempdir().unwrap();
+        let store_config = StoreConfig::new(
+            cache_dir.path(),
+            CacheKey::CommDTree.to_string(),
+            StoreConfig::default_rows_to_discard(config.num_nodes_window as usize, 8),
+        );
+        let mut encoded_data = data.clone();
+
+        let store_configs = split_config(store_config.clone(), config.num_layers()).unwrap();
+
+        let (trees, replica_tree) = &if gpu {
+            encode_with_trees_all_gpu::<Tree>
+        } else {
+            encode_with_trees_all_cpu::<Tree>
+        }(
+            &config,
+            replica_id,
+            &mut vec![Window {
+                store_configs,
+                window_index,
+                data: &mut encoded_data[..],
+            }],
+        )
+        .unwrap()[0];
+
+        let roots = trees.into_iter().map(|t| t.root()).collect::<Vec<_>>();
+        let replica_root = replica_tree.root();
+        (encoded_data, roots, replica_root)
+    }
+
+    #[test]
+    #[cfg(feature = "gpu-tests")]
+    fn test_gpu_cpu_consistency() {
+        let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
+
+        let config = Config {
+            k: 2,
+            num_nodes_window: 512,
+            degree_expander: 96,
+            degree_butterfly: 4,
+            num_expander_layers: 4,
+            num_butterfly_layers: 3,
+            sector_size: 2048 * 8,
+        };
+
+        let replica_id: PoseidonDomain = Fr::random(rng).into();
+        let window_index = rng.gen();
+
+        let data: Vec<u8> = (0..config.num_nodes_window)
+            .flat_map(|_| fr_into_bytes(&Fr::random(rng)))
+            .collect();
+
+        let (cpu_encoded_data, cpu_roots, cpu_replica_root) =
+            run_encode_with_trees::<OctLCMerkleTree<PoseidonHasher>>(
+                config.clone(),
+                data.clone(),
+                window_index,
+                replica_id.clone(),
+                false, // CPU
+            );
+
+        let (gpu_encoded_data, gpu_roots, gpu_replica_root) =
+            run_encode_with_trees::<OctLCMerkleTree<PoseidonHasher>>(
+                config.clone(),
+                data.clone(),
+                window_index,
+                replica_id.clone(),
+                true, // GPU
+            );
+
+        assert_eq!(cpu_encoded_data, gpu_encoded_data);
+        assert_eq!(cpu_roots, gpu_roots);
+        assert_eq!(cpu_replica_root, gpu_replica_root);
     }
 }
