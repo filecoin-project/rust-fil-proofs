@@ -10,10 +10,11 @@ use storage_proofs_core::{
     util::{data_at_node_offset, NODE_SIZE},
 };
 
-use super::graph::StackedBucketGraph;
+use super::{cache::ParentCache, graph::StackedBucketGraph};
 
 pub fn create_label<H: Hasher>(
     graph: &StackedBucketGraph<H>,
+    cache: Option<&mut ParentCache>,
     replica_id: &H::Domain,
     layer_labels: &mut [u8],
     layer_index: usize,
@@ -34,7 +35,7 @@ pub fn create_label<H: Hasher>(
             _mm_prefetch(prev.as_ptr() as *const i8, _MM_HINT_T0);
         }
 
-        graph.copy_parents_data(node as u32, &*layer_labels, hasher)
+        graph.copy_parents_data(node as u32, &*layer_labels, hasher, cache)?
     } else {
         hasher.finish()
     };
@@ -52,6 +53,7 @@ pub fn create_label<H: Hasher>(
 
 pub fn create_label_exp<H: Hasher>(
     graph: &StackedBucketGraph<H>,
+    cache: Option<&mut ParentCache>,
     replica_id: &H::Domain,
     exp_parents_data: &[u8],
     layer_labels: &mut [u8],
@@ -73,7 +75,7 @@ pub fn create_label_exp<H: Hasher>(
             _mm_prefetch(prev.as_ptr() as *const i8, _MM_HINT_T0);
         }
 
-        graph.copy_parents_data_exp(node as u32, &*layer_labels, exp_parents_data, hasher)
+        graph.copy_parents_data_exp(node as u32, &*layer_labels, exp_parents_data, hasher, cache)?
     } else {
         hasher.finish()
     };

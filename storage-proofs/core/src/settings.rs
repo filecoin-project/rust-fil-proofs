@@ -22,12 +22,13 @@ pub struct Settings {
     pub use_gpu_tree_builder: bool,
     pub max_gpu_tree_batch_size: u32,
     pub rows_to_discard: u32,
+    pub sdr_parents_cache_size: u32,
 }
 
 impl Default for Settings {
     fn default() -> Self {
         Settings {
-            maximize_caching: false,
+            maximize_caching: true,
             pedersen_hash_exp_window_size: 16,
             use_gpu_column_builder: false,
             max_gpu_column_batch_size: 400_000,
@@ -35,6 +36,7 @@ impl Default for Settings {
             use_gpu_tree_builder: false,
             max_gpu_tree_batch_size: 700_000,
             rows_to_discard: 2,
+            sdr_parents_cache_size: 2048,
         }
     }
 }

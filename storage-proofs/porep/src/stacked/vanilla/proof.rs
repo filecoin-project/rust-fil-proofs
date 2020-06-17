@@ -100,7 +100,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
 
         let get_exp_parents_columns = |x: usize| -> Result<Vec<Column<Tree::Hasher>>> {
             let mut parents = vec![0; graph.expansion_degree()];
-            graph.expanded_parents(x, &mut parents);
+            graph.expanded_parents(x, &mut parents)?;
 
             parents.iter().map(|parent| t_aux.column(*parent)).collect()
         };
@@ -301,18 +301,36 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         // NOTE: this means we currently keep 2x sector size around, to improve speed.
         let mut labels_buffer = vec![0u8; 2 * layer_size];
 
+        let use_cache = settings::SETTINGS.lock().unwrap().maximize_caching;
+        let mut cache = if use_cache {
+            Some(graph.parent_cache()?)
+        } else {
+            None
+        };
+
         for layer in 1..=layers {
             info!("generating layer: {}", layer);
+            if let Some(ref mut cache) = cache {
+                cache.reset()?;
+            }
 
             if layer == 1 {
                 let layer_labels = &mut labels_buffer[..layer_size];
                 for node in 0..graph.size() {
-                    create_label(graph, replica_id, layer_labels, layer, node)?;
+                    create_label(graph, cache.as_mut(), replica_id, layer_labels, layer, node)?;
                 }
             } else {
                 let (layer_labels, exp_labels) = labels_buffer.split_at_mut(layer_size);
                 for node in 0..graph.size() {
-                    create_label_exp(graph, replica_id, exp_labels, layer_labels, layer, node)?;
+                    create_label_exp(
+                        graph,
+                        cache.as_mut(),
+                        replica_id,
+                        exp_labels,
+                        layer_labels,
+                        layer,
+                        node,
+                    )?;
                 }
             }
 

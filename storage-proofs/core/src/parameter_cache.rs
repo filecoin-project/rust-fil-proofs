@@ -134,7 +134,7 @@ fn ensure_ancestor_dirs_exist(cache_entry_path: PathBuf) -> Result<PathBuf> {
     Ok(cache_entry_path)
 }
 
-pub trait ParameterSetMetadata: Clone {
+pub trait ParameterSetMetadata {
     fn identifier(&self) -> String;
     fn sector_size(&self) -> u64;
 }
