@@ -1,6 +1,5 @@
 use std::collections::HashSet;
 use std::fs::{create_dir_all, rename, File};
-use std::io::copy;
 use std::io::prelude::*;
 use std::io::{BufReader, Stdout};
 use std::path::{Path, PathBuf};
@@ -342,10 +341,10 @@ fn download_file(url: Url, target: impl AsRef<Path>, is_verbose: bool) -> Result
             progress_bar: pb,
         };
 
-        let _ = copy(&mut source, &mut file)?;
+        let _ = std::io::copy(&mut source, &mut file)?;
     } else {
         let mut source = req.send()?;
-        let _ = copy(&mut source, &mut file)?;
+        let _ = std::io::copy(&mut source, &mut file)?;
     }
 
     Ok(())

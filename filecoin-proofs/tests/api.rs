@@ -8,6 +8,7 @@ use paired::bls12_381::Fr;
 use rand::{Rng, SeedableRng};
 use rand_xorshift::XorShiftRng;
 use storage_proofs::hasher::Hasher;
+use storage_proofs::safe_write::SafeFileExt;
 use storage_proofs::sector::*;
 use tempfile::NamedTempFile;
 
@@ -339,7 +340,7 @@ fn create_seal<R: Rng, Tree: 'static + MerkleTreeTrait>(
         .collect();
 
     let mut piece_file = NamedTempFile::new()?;
-    piece_file.write_all(&piece_bytes)?;
+    piece_file.safe_write_all(&piece_bytes)?;
     piece_file.as_file_mut().sync_all()?;
     piece_file.as_file_mut().seek(SeekFrom::Start(0))?;
 

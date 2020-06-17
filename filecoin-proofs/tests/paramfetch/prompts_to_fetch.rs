@@ -10,6 +10,7 @@ use crate::support::tmp_manifest;
 use blake2b_simd::State as Blake2b;
 use filecoin_proofs::param::{ParameterData, ParameterMap};
 use rand::Rng;
+use storage_proofs::safe_write::{self, SafeFileExt};
 
 /// Produce a random sequence of bytes and first 32 characters of hex encoded
 /// BLAKE2b checksum. This helper function must be kept up-to-date with the
@@ -21,7 +22,7 @@ fn rand_bytes_with_blake2b() -> Result<(Vec<u8>, String), FailureError> {
 
     let mut as_slice = &bytes[..];
 
-    std::io::copy(&mut as_slice, &mut hasher)?;
+    safe_write::safe_copy(&mut as_slice, &mut hasher)?;
 
     Ok((
         bytes.iter().cloned().collect(),
@@ -172,7 +173,7 @@ fn invalid_json_produces_error() -> Result<(), FailureError> {
     let manifest_pbuf = tmp_manifest(None)?;
 
     let mut file = File::create(&manifest_pbuf)?;
-    file.write_all(b"invalid json")?;
+    file.safe_write_all(b"invalid json")?;
 
     let mut session = ParamFetchSessionBuilder::new(Some(manifest_pbuf))
         .with_session_timeout_ms(1000)

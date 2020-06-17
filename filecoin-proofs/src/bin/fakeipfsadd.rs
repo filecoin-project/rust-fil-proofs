@@ -8,7 +8,7 @@ pub fn main() {
         .about(
             "
 This program is used to simulate the `ipfs add` command while testing. It
-accepts a path to a file and writes 32 characters of its hex-encoded BLAKE2b 
+accepts a path to a file and writes 32 characters of its hex-encoded BLAKE2b
 checksum to stdout. Note: The real `ipfs add` command computes and emits a CID.
 ",
         )

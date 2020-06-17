@@ -88,6 +88,7 @@ mod tests {
     use crate::types::*;
 
     use storage_proofs::pieces::generate_piece_commitment_bytes_from_source;
+    use storage_proofs::safe_write;
 
     #[test]
     fn test_commitment_reader() {
@@ -103,7 +104,7 @@ mod tests {
 
         let fr32_reader = crate::fr32_reader::Fr32Reader::new(io::Cursor::new(&source));
         let mut commitment_reader = CommitmentReader::new(fr32_reader);
-        io::copy(&mut commitment_reader, &mut io::sink()).unwrap();
+        safe_write::safe_copy(&mut commitment_reader, &mut io::sink()).unwrap();
 
         let commitment2 = commitment_reader.finish().unwrap();
 

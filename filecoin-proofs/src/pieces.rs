@@ -65,7 +65,7 @@ fn empty_comm_d(sector_size: SectorSize) -> Commitment {
         let size: UnpaddedBytesAmount = sector_size.into();
         let fr32_reader = Fr32Reader::new(EmptySource::new(size.into()));
         let mut commitment_reader = CommitmentReader::new(fr32_reader);
-        io::copy(&mut commitment_reader, &mut io::sink()).unwrap();
+        std::io::copy(&mut commitment_reader, &mut io::sink()).unwrap();
 
         let mut comm = [0u8; 32];
         comm.copy_from_slice(

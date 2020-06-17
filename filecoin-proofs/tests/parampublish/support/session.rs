@@ -9,6 +9,7 @@ use tempfile;
 use tempfile::TempDir;
 
 use storage_proofs::parameter_cache::{CacheEntryMetadata, PARAMETER_CACHE_ENV_VAR};
+use storage_proofs::safe_write;
 
 use crate::support::{cargo_bin, spawn_bash_with_retries, FakeIpfsBin};
 
@@ -80,7 +81,7 @@ impl ParamPublishSessionBuilder {
 
         let mut file = File::create(&pbuf).expect("failed to create file in temp dir");
 
-        std::io::copy(r, &mut file).expect("failed to copy bytes to file");
+        safe_write::safe_copy(r, &mut file).expect("failed to copy bytes to file");
 
         self.cached_file_pbufs.push(pbuf);
         self

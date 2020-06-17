@@ -1,5 +1,4 @@
 use std::fs::{self, metadata, File, OpenOptions};
-use std::io::prelude::*;
 use std::path::{Path, PathBuf};
 
 use anyhow::{ensure, Context, Result};
@@ -20,6 +19,7 @@ use storage_proofs::porep::stacked::{
     TemporaryAux, TemporaryAuxCache,
 };
 use storage_proofs::proof::ProofScheme;
+use storage_proofs::safe_write::{self, SafeFileExt};
 use storage_proofs::sector::SectorId;
 use storage_proofs::util::default_rows_to_discard;
 
@@ -80,7 +80,7 @@ where
         .with_context(|| format!("could not read out_path={:?}", out_path.as_ref().display()))?;
 
     // Copy unsealed data to output location, where it will be sealed in place.
-    fs::copy(&in_path, &out_path).with_context(|| {
+    safe_write::safe_copy(&in_path, &out_path).with_context(|| {
         format!(
             "could not copy in_path={:?} to out_path={:?}",
             in_path.as_ref().display(),
@@ -95,7 +95,7 @@ where
         .with_context(|| format!("could not open out_path={:?}", out_path.as_ref().display()))?;
 
     // Zero-pad the data to the requested size by extending the underlying file if needed.
-    f_data.set_len(sector_bytes as u64)?;
+    f_data.safe_set_len(sector_bytes as u64)?;
 
     let data = unsafe {
         MmapOptions::new()
@@ -291,7 +291,7 @@ where
         .with_context(|| format!("could not create file p_aux={:?}", p_aux_path))?;
     let p_aux_bytes = serialize(&p_aux)?;
     f_p_aux
-        .write_all(&p_aux_bytes)
+        .safe_write_all(&p_aux_bytes)
         .with_context(|| format!("could not write to file p_aux={:?}", p_aux_path))?;
 
     let t_aux_path = cache_path.as_ref().join(CacheKey::TAux.to_string());
@@ -299,7 +299,7 @@ where
         .with_context(|| format!("could not create file t_aux={:?}", t_aux_path))?;
     let t_aux_bytes = serialize(&t_aux)?;
     f_t_aux
-        .write_all(&t_aux_bytes)
+        .safe_write_all(&t_aux_bytes)
         .with_context(|| format!("could not write to file t_aux={:?}", t_aux_path))?;
 
     Ok(SealPreCommitOutput { comm_r, comm_d })

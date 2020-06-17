@@ -9,6 +9,7 @@ use tempfile::TempDir;
 
 use crate::support::{cargo_bin, spawn_bash_with_retries};
 use storage_proofs::parameter_cache::PARAMETER_CACHE_ENV_VAR;
+use storage_proofs::safe_write;
 
 pub struct ParamFetchSessionBuilder {
     cache_dir: TempDir,
@@ -57,7 +58,7 @@ impl ParamFetchSessionBuilder {
 
         let mut file = File::create(&pbuf).expect("failed to create file in temp dir");
 
-        std::io::copy(r, &mut file).expect("failed to copy bytes to file");
+        safe_write::safe_copy(r, &mut file).expect("failed to copy bytes to file");
 
         self
     }
