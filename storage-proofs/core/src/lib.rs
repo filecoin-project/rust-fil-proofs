@@ -23,6 +23,7 @@ pub mod partitions;
 pub mod pieces;
 pub mod por;
 pub mod proof;
+pub mod safe_write;
 pub mod sector;
 pub mod settings;
 pub mod util;

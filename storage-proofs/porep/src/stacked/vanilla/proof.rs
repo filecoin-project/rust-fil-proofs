@@ -1,5 +1,4 @@
 use std::fs::OpenOptions;
-use std::io::Write;
 use std::marker::PhantomData;
 use std::path::PathBuf;
 use std::sync::{mpsc, Arc, RwLock};
@@ -24,6 +23,7 @@ use storage_proofs_core::{
         Operation::{CommD, EncodeWindowTimeAll, GenerateTreeC, GenerateTreeRLast},
     },
     merkle::*,
+    safe_write::SafeFileExt,
     settings,
     util::{default_rows_to_discard, NODE_SIZE},
 };
@@ -845,7 +845,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                                 .write(true)
                                 .open(&tree_r_last_path)
                                 .expect("failed to open file for tree_r_last");
-                            f.write_all(&flat_tree_data)
+                            f.safe_write_all(&flat_tree_data)
                                 .expect("failed to wrote tree_r_last data");
 
                             // Move on to the next config.

@@ -1,7 +1,8 @@
-use std::io::{Read, Seek, Write};
+use std::io::{Read, Seek};
 
 use criterion::{black_box, criterion_group, criterion_main, Criterion, ParameterizedBenchmark};
 use rand::{thread_rng, Rng};
+use storage_proofs::safe_write::SafeFileExt;
 use tempfile::tempfile;
 
 fn read_bytes_benchmark(c: &mut Criterion) {
@@ -16,7 +17,7 @@ fn read_bytes_benchmark(c: &mut Criterion) {
                 let data: Vec<u8> = (0..*bytes).map(|_| rng.gen()).collect();
 
                 let mut f = tempfile().unwrap();
-                f.write_all(&data).unwrap();
+                f.safe_write_all(&data).unwrap();
                 f.sync_all().unwrap();
 
                 b.iter(|| {

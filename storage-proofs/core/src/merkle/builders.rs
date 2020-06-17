@@ -1,4 +1,3 @@
-use std::io::Write;
 use std::path::PathBuf;
 
 use anyhow::{ensure, Result};
@@ -13,6 +12,7 @@ use rayon::prelude::*;
 
 use crate::error::*;
 use crate::hasher::{Domain, Hasher, PoseidonArity};
+use crate::safe_write::SafeFileExt;
 use crate::util::{data_at_node, default_rows_to_discard, NODE_SIZE};
 
 use super::*;
@@ -418,7 +418,7 @@ where
 
         // Write out the replica data.
         let mut f = std::fs::File::create(&replica_path).unwrap();
-        f.write_all(&data).unwrap();
+        f.safe_write_all(&data).unwrap();
 
         {
             // Beware: evil dynamic downcasting RUST MAGIC down below.

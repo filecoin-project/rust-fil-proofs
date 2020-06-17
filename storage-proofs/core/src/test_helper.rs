@@ -1,8 +1,9 @@
 use memmap::MmapMut;
 use memmap::MmapOptions;
 use std::fs::OpenOptions;
-use std::io::Write;
 use std::path::Path;
+
+use crate::safe_write::SafeFileExt;
 
 pub fn setup_replica(data: &[u8], replica_path: &Path) -> MmapMut {
     let mut f = OpenOptions::new()
@@ -11,7 +12,8 @@ pub fn setup_replica(data: &[u8], replica_path: &Path) -> MmapMut {
         .create(true)
         .open(replica_path)
         .expect("Failed to create replica");
-    f.write_all(data).expect("Failed to write data to replica");
+    f.safe_write_all(data)
+        .expect("Failed to write data to replica");
 
     unsafe {
         MmapOptions::new()
