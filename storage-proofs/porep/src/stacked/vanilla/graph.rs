@@ -20,6 +20,7 @@ use storage_proofs_core::{
     error::Result,
     hasher::Hasher,
     parameter_cache::ParameterSetMetadata,
+    settings,
     util::NODE_SIZE,
 };
 
@@ -132,9 +133,9 @@ where
     /// Returns a reference to the parent cache.
     pub fn parent_cache(&self) -> Result<ParentCache> {
         // Number of nodes to be cached in memory
-        const DEFAULT_CACHE_SIZE: u32 = 2048;
+        let default_cache_size = settings::SETTINGS.lock().unwrap().sdr_parents_cache_size;
         let cache_entries = self.size() as u32;
-        let cache_size = cache_entries.min(DEFAULT_CACHE_SIZE);
+        let cache_size = cache_entries.min(default_cache_size);
 
         info!("using parent_cache[{} / {}]", cache_size, cache_entries);
 

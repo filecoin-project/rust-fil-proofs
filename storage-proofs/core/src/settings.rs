@@ -22,6 +22,7 @@ pub struct Settings {
     pub use_gpu_tree_builder: bool,
     pub max_gpu_tree_batch_size: u32,
     pub rows_to_discard: u32,
+    pub sdr_parents_cache_size: u32,
 }
 
 impl Default for Settings {
@@ -35,6 +36,7 @@ impl Default for Settings {
             use_gpu_tree_builder: false,
             max_gpu_tree_batch_size: 700_000,
             rows_to_discard: 2,
+            sdr_parents_cache_size: 2048,
         }
     }
 }
