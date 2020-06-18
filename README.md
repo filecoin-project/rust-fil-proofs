@@ -165,6 +165,44 @@ To check that it's working you can inspect the replication log to find `using pa
 
 **Speed Optimized Pedersen Hashing** - we use Pedersen hashing to generate Merkle Trees and verify Merkle proofs. Batched Pedersen hashing has the property that we can pre-compute known intermediary values intrinsic to the Pedersen hashing process that will be reused across hashes in the batch. By pre-computing and cacheing these intermediary values, we decrease the runtime per Pedersen hash at the cost of increasing memory usage. We optimize for this speed-memory trade-off by varying the cache size via a Pedersen Hash parameter known as the "window-size". This window-size parameter is configured via the [`pedersen_hash_exp_window_size` setting in `storage-proofs`](https://github.com/filecoin-project/rust-fil-proofs/blob/master/storage-proofs/src/settings.rs). By default, Bellman has a cache size of 256 values (a window-size of 8 bits), we increase the cache size to 65,536 values (a window-size of 16 bits) which results in a roughly 40% decrease in Pedersen Hash runtime at the cost of a 9% increase in memory usage. See the [Pedersen cache issue](https://github.com/filecoin-project/rust-fil-proofs/issues/697) for more benchmarks and expected performance effects.
 
+### GPU Usage
+
+We can now optionally build the column hashed tree 'tree_c' using the GPU with noticeable speed-up over the CPU.  To activate the GPU for this, use the environment variable
+
+```
+FIL_PROOFS_USE_GPU_COLUMN_BUILDER=1
+```
+
+We can optionally also build 'tree_r_last' using the GPU, which provides at least a 2x speed-up over the CPU.  To activate the GPU for this, use the environment variable
+
+```
+FIL_PROOFS_USE_GPU_TREE_BUILDER=1
+```
+
+Note that *both* of these GPU options can and should be enabled if a supported GPU is available.
+
+### Advanced GPU Usage
+
+If using the GPU to build tree_c (using `FIL_PROOFS_USE_GPU_COLUMN_BUILDER=1`), two experimental variables can be tested for local optimization of your hardware.  First, you can set
+
+```
+FIL_PROOFS_MAX_GPU_COLUMN_BATCH_SIZE=X
+```
+
+The default value for this is 400,000, which means that we compile 400,000 columns at once and pass them in batches to the GPU.  Each column is a "single node x the number of layers" (e.g. a 32GiB sector has 11 layers, so each column consists of 11 nodes).  This value is used as both a reasonable default, but it's also measured that it takes about as much time to compile this size batch as it does for the GPU to consume it (using the 2080ti for testing), which we do in parallel for maximized throughput.  Changing this value may exhaust GPU RAM if set too large, or may decrease performance if set too low.  This setting is made available for your experimentation during this step.
+
+The second variable that may affect performance is the size of the parallel write buffers when storing the tree data returned from the GPU.  This value is set to a reasonable default of 262,144, but you may adjust it as needed if an individual performance benefit can be achieved.  To adjust this value, use the environment variable
+
+```
+FIL_PROOFS_COLUMN_WRITE_BATCH_SIZE=Y
+```
+
+A similar option for building 'tree_r_last' exists.  The default batch size is 700,000 tree nodes.  To adjust this, use the environment variable
+
+```
+FIL_PROOFS_MAX_GPU_TREE_BATCH_SIZE=Z
+```
+
 ### Memory
 
 At the moment the default configuration is set to reduce memory consumption as much as possible so there's not much to do from the user side. (We are now storing MTs on disk, which were the main source of memory consumption.) You should expect a maximum RSS between 1-2 sector sizes, if you experience peaks beyond that range please report an issue (you can check the max RSS with the `/usr/bin/time -v` command).
@@ -187,6 +225,14 @@ Maximum resident set size (kbytes): 1061564
 ```
 
 Note that for a window-size of 16 bits the runtime for replication is 30% faster while the maximum RSS is about 40% higher compared to a window-size of 8 bits.
+
+### Storage
+
+With respect to the 'tree_r_last' cached Merkle Trees persisted on disk, a value is exposed for tuning the amount of storage space required.  Cached merkle trees are like normal merkle trees, except we discard some number of rows above the base level.  There is a trade-off in discarding too much data, which may result in rebuilding almost the entire tree when it's needed.  The other extreme is discarding too few rows, which results in higher utilization of disk space.  The default value is chosen to carefully balance this trade-off, but you may tune it as needed for your local hardware configuration.  To adjust this value, use the environment variable
+
+```
+FIL_PROOFS_ROWS_TO_DISCARD=N
+```
 
 ## Generate Documentation
 
