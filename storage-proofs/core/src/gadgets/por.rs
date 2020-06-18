@@ -414,7 +414,7 @@ impl<'a, Tree: MerkleTreeTrait> PoRCircuit<Tree> {
         private: bool,
     ) -> Result<(), SynthesisError>
     where
-        CS: ConstraintSystem<Bls12>,
+        CS: ConstraintSystem<Bls12> + Send,
     {
         let por = Self {
             value,

@@ -20,14 +20,18 @@ sha2 = { version = "0.8.3", package = "sha2ni" }
 rayon = "1.0.0"
 serde = { version = "1.0", features = ["derive"]}
 ff = { version = "0.2.1", package = "fff" }
-bellperson = "0.8.0"
+#bellperson = "0.8.0"
+bellperson = { path = "../../../bellman" }
 paired = { version = "0.19.0", features = ["serde"] }
-fil-sapling-crypto = "0.6.0"
+#fil-sapling-crypto = "0.6.0"
+fil-sapling-crypto = { path = "../../../sapling-crypto" }
 log = "0.4.7"
 pretty_assertions = "0.6.1"
 generic-array = "0.13.2"
 anyhow = "1.0.23"
-neptune = { version = "1.0.1", features = ["gpu"] }
+once_cell = "1.3.1"
+#neptune = { version = "1.0.1", features = ["gpu"] }
+neptune = { path = "../../../neptune", features = ["gpu"] }
 num_cpus = "1.10.1"
 hex = "0.4.2"
 byteorder = "1.3.4"

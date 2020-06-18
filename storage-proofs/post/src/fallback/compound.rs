@@ -185,7 +185,7 @@ mod tests {
     #[ignore]
     #[test]
     fn fallback_post_poseidon_single_partition_matching_base_8() {
-        fallback_post::<LCTree<PoseidonHasher, U8, U0, U0>>(3, 3, 1);
+        fallback_post::<LCTree<PoseidonHasher, U8, U0, U0>>(15, 15, 1);
     }
 
     #[ignore]

@@ -1,5 +1,6 @@
 use bellperson::gadgets::num;
 use bellperson::{Circuit, ConstraintSystem, SynthesisError};
+use ff::Field;
 use paired::bls12_381::{Bls12, Fr};
 
 use storage_proofs_core::{
@@ -10,7 +11,7 @@ use storage_proofs_core::{
     gadgets::variables::Root,
     hasher::{HashFunction, Hasher},
     merkle::MerkleTreeTrait,
-    por,
+    por, settings,
     util::NODE_SIZE,
 };
 
@@ -155,13 +156,77 @@ impl<Tree: MerkleTreeTrait> CircuitComponent for FallbackPoStCircuit<Tree> {
 }
 
 impl<Tree: 'static + MerkleTreeTrait> Circuit<Bls12> for FallbackPoStCircuit<Tree> {
-    fn synthesize<CS: ConstraintSystem<Bls12>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
-        for (i, sector) in self.sectors.iter().enumerate() {
-            let cs = &mut cs.namespace(|| format!("sector_{}", i));
+    fn synthesize<CS: ConstraintSystem<Bls12>>(self, cs: &mut CS) -> Result<(), SynthesisError>
+    where
+        CS: Send,
+    {
+        if CS::is_extensible() {
+            let FallbackPoStCircuit { sectors, .. } = self;
 
-            sector.synthesize(cs)?;
+            let num_cpus = settings::SETTINGS
+                .lock()
+                .unwrap()
+                .window_post_synthesis_num_cpus as usize;
+
+            let cpu_sector_count = sectors.len() / num_cpus;
+            let remainder = sectors.len() % num_cpus;
+            assert_eq!(sectors.len(), cpu_sector_count * num_cpus + remainder);
+
+            let first_cpu_sector_count = cpu_sector_count + remainder;
+            let mut sector_groups = Vec::new();
+
+            let mut start = 0;
+            let mut end = first_cpu_sector_count;
+            for _ in 0..num_cpus {
+                let group = &sectors[start..end];
+                sector_groups.push(group);
+                start = end;
+                end += cpu_sector_count;
+            }
+
+            let mut css = Vec::new();
+
+            crossbeam::scope(|scope| {
+                let mut handles: Vec<
+                    crossbeam::thread::ScopedJoinHandle<Result<CS, SynthesisError>>,
+                > = Vec::new();
+                for sector_group in sector_groups.iter() {
+                    handles.push(scope.spawn(move |_| {
+                        let mut cs = CS::new();
+                        cs.alloc_input(|| "temp ONE", || Ok(Fr::one()))?;
+
+                        for (i, sector) in sector_group.iter().enumerate() {
+                            let cs = &mut cs.namespace(|| format!("sector_{}", i));
+
+                            sector.synthesize(cs).unwrap(); // FIXME: unwrap
+                        }
+                        Ok(cs)
+                    }));
+                }
+
+                for handle in handles {
+                    let x = handle.join().unwrap();
+                    if let Ok(cs) = x {
+                        css.push(cs);
+                    }
+                }
+            })
+            .unwrap(); // FIXME: unwrap
+
+            let _combined_cs = css
+                .iter_mut()
+                .fold(cs, |acc: &mut CS, c: &mut CS| -> &mut CS {
+                    acc.extend(&mut *c);
+                    acc
+                });
+        } else {
+            let cs = &mut cs.namespace(|| format!("outer namespace"));
+
+            for (i, sector) in self.sectors.iter().enumerate() {
+                let cs = &mut cs.namespace(|| format!("sector_{}", i));
+                sector.synthesize(cs)?;
+            }
         }
-
         Ok(())
     }
 }

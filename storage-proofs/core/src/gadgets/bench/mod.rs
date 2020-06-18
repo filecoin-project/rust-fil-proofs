@@ -40,6 +40,8 @@ impl<E: Engine> Default for BenchCS<E> {
     }
 }
 
+unsafe impl<E: Engine> Send for BenchCS<E> {}
+
 impl<E: Engine> ConstraintSystem<E> for BenchCS<E> {
     type Root = Self;
 
