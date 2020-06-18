@@ -2,6 +2,7 @@ use bellperson::gadgets::num;
 use bellperson::{Circuit, ConstraintSystem, SynthesisError};
 use ff::Field;
 use paired::bls12_381::{Bls12, Fr};
+use rayon::prelude::*;
 
 use storage_proofs_core::{
     compound_proof::CircuitComponent,
@@ -185,35 +186,44 @@ impl<Tree: 'static + MerkleTreeTrait> FallbackPoStCircuit<Tree> {
     ) -> Result<(), SynthesisError> {
         let FallbackPoStCircuit { sectors, .. } = self;
 
-        let num_cpus = settings::SETTINGS
+        let num_chunks = settings::SETTINGS
             .lock()
             .unwrap()
             .window_post_synthesis_num_cpus as usize;
 
-        let cpu_sector_count = (sectors.len() / num_cpus).max(1);
+        let chunk_size = (sectors.len() / num_chunks).max(1);
+        // let num_cpus = num_chunks;
+        // let cpu_sector_count = sectors.len() / num_cpus;
+        // let remainder = sectors.len() % num_cpus;
+        // assert_eq!(sectors.len(), cpu_sector_count * num_cpus + remainder);
 
-        let css: Vec<_> = crossbeam::scope(|scope| {
-            use crossbeam::thread::ScopedJoinHandle;
+        // let first_cpu_sector_count = cpu_sector_count + remainder;
+        // let mut sector_groups = Vec::new();
+        // dbg!(sectors.len(), num_cpus);
+        // let mut start = 0;
+        // let mut end = first_cpu_sector_count;
+        // for i in 0..num_cpus {
+        //     dbg!(i, start, end);
+        //     let group = &sectors[start..end];
+        //     sector_groups.push(group);
+        //     start = end;
+        //     end += cpu_sector_count;
+        // }
 
-            sectors
-                .chunks(cpu_sector_count)
-                .map(|sector_group| {
-                    scope.spawn(move |_| {
-                        let mut cs = CS::new();
-                        cs.alloc_input(|| "temp ONE", || Ok(Fr::one()))?;
+        let css = sectors
+            .par_chunks(chunk_size)
+            .map(|sector_group| {
+                let mut cs = CS::new();
+                cs.alloc_input(|| "temp ONE", || Ok(Fr::one()))?;
 
-                        for (i, sector) in sector_group.iter().enumerate() {
-                            let mut cs = cs.namespace(|| format!("sector_{}", i));
+                for (i, sector) in sector_group.iter().enumerate() {
+                    let mut cs = cs.namespace(|| format!("sector_{}", i));
 
-                            sector.synthesize(&mut cs)?;
-                        }
-                        Ok(cs)
-                    })
-                })
-                .map(|handle: ScopedJoinHandle<Result<CS, SynthesisError>>| handle.join().unwrap())
-                .collect::<Result<Vec<_>, _>>()
-        })
-        .unwrap()?;
+                    sector.synthesize(&mut cs)?;
+                }
+                Ok(cs)
+            })
+            .collect::<Result<Vec<_>, SynthesisError>>()?;
 
         for sector_cs in css.into_iter() {
             cs.extend(sector_cs);
