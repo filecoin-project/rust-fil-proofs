@@ -28,7 +28,7 @@ pub struct Settings {
 impl Default for Settings {
     fn default() -> Self {
         Settings {
-            maximize_caching: true,
+            maximize_caching: false,
             pedersen_hash_exp_window_size: 16,
             use_gpu_column_builder: false,
             max_gpu_column_batch_size: 400_000,
