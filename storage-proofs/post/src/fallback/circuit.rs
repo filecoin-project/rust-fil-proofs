@@ -1,6 +1,8 @@
 use bellperson::gadgets::num;
 use bellperson::{Circuit, ConstraintSystem, SynthesisError};
+use ff::Field;
 use paired::bls12_381::{Bls12, Fr};
+use rayon::prelude::*;
 
 use storage_proofs_core::{
     compound_proof::CircuitComponent,
@@ -10,7 +12,7 @@ use storage_proofs_core::{
     gadgets::variables::Root,
     hasher::{HashFunction, Hasher},
     merkle::MerkleTreeTrait,
-    por,
+    por, settings,
     util::NODE_SIZE,
 };
 
@@ -156,20 +158,67 @@ impl<Tree: MerkleTreeTrait> CircuitComponent for FallbackPoStCircuit<Tree> {
 
 impl<Tree: 'static + MerkleTreeTrait> Circuit<Bls12> for FallbackPoStCircuit<Tree> {
     fn synthesize<CS: ConstraintSystem<Bls12>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
+        if CS::is_extensible() {
+            return self.synthesize_extendable(cs);
+        }
+
+        self.synthesize_default(cs)
+    }
+}
+
+impl<Tree: 'static + MerkleTreeTrait> FallbackPoStCircuit<Tree> {
+    fn synthesize_default<CS: ConstraintSystem<Bls12>>(
+        self,
+        cs: &mut CS,
+    ) -> Result<(), SynthesisError> {
+        let cs = &mut cs.namespace(|| format!("outer namespace"));
+
         for (i, sector) in self.sectors.iter().enumerate() {
             let cs = &mut cs.namespace(|| format!("sector_{}", i));
-
             sector.synthesize(cs)?;
+        }
+        Ok(())
+    }
+
+    fn synthesize_extendable<CS: ConstraintSystem<Bls12>>(
+        self,
+        cs: &mut CS,
+    ) -> Result<(), SynthesisError> {
+        let FallbackPoStCircuit { sectors, .. } = self;
+
+        let num_chunks = settings::SETTINGS
+            .lock()
+            .unwrap()
+            .window_post_synthesis_num_cpus as usize;
+
+        let chunk_size = (sectors.len() / num_chunks).max(1);
+        let css = sectors
+            .par_chunks(chunk_size)
+            .map(|sector_group| {
+                let mut cs = CS::new();
+                cs.alloc_input(|| "temp ONE", || Ok(Fr::one()))?;
+
+                for (i, sector) in sector_group.iter().enumerate() {
+                    let mut cs = cs.namespace(|| format!("sector_{}", i));
+
+                    sector.synthesize(&mut cs)?;
+                }
+                Ok(cs)
+            })
+            .collect::<Result<Vec<_>, SynthesisError>>()?;
+
+        for sector_cs in css.into_iter() {
+            cs.extend(sector_cs);
         }
 
         Ok(())
     }
 }
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
+    use bellperson::util_cs::test_cs::TestConstraintSystem;
     use ff::Field;
     use generic_array::typenum::{U0, U2, U4, U8};
     use paired::bls12_381::{Bls12, Fr};
@@ -177,7 +226,6 @@ mod tests {
     use rand_xorshift::XorShiftRng;
     use storage_proofs_core::{
         compound_proof::CompoundProof,
-        gadgets::TestConstraintSystem,
         hasher::{Domain, HashFunction, Hasher, PedersenHasher, PoseidonHasher},
         merkle::{generate_tree, get_base_tree_count, LCTree, MerkleTreeTrait, OctMerkleTree},
         proof::ProofScheme,
@@ -227,8 +275,7 @@ mod tests {
     #[test]
     #[ignore]
     fn metric_fallback_post_circuit_poseidon() {
-        use storage_proofs_core::gadgets::BenchCS;
-
+        use bellperson::util_cs::bench_cs::BenchCS;
         let params = fallback::SetupParams {
             sector_size: 1024 * 1024 * 1024 * 32 as u64,
             challenge_count: 10,

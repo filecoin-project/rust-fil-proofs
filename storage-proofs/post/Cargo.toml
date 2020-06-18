@@ -13,13 +13,14 @@ storage-proofs-core = { path = "../core", version = "4.0.0" }
 rand = "0.7"
 merkletree = "0.20.0"
 byteorder = "1"
+crossbeam = "0.7.3"
 sha2 = { version = "0.8.3", package = "sha2ni" }
 rayon = "1.0.0"
 serde = { version = "1.0", features = ["derive"]}
 blake2b_simd = "0.5"
 blake2s_simd = "0.5"
 ff = { version = "0.2.1", package = "fff" }
-bellperson = "0.8.0"
+bellperson = "0.9.1"
 paired = { version = "0.19.0", features = ["serde"] }
 fil-sapling-crypto = "0.6.0"
 log = "0.4.7"
@@ -27,6 +28,7 @@ hex = "0.4.0"
 generic-array = "0.13.2"
 anyhow = "1.0.23"
 neptune = { version = "1.0.1", features = ["gpu"] }
+num_cpus = "1.10.1"
 
 [dev-dependencies]
 tempdir = "0.3.7"

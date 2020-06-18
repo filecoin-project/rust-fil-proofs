@@ -341,6 +341,7 @@ fn generate_inclusion_inputs<Tree: 'static + MerkleTreeTrait>(
 mod tests {
     use super::*;
 
+    use bellperson::util_cs::{metric_cs::MetricCS, test_cs::TestConstraintSystem};
     use ff::Field;
     use generic_array::typenum::{U0, U2, U4, U8};
     use merkletree::store::StoreConfig;
@@ -351,7 +352,6 @@ mod tests {
         compound_proof,
         drgraph::BASE_DEGREE,
         fr32::fr_into_bytes,
-        gadgets::{MetricCS, TestConstraintSystem},
         hasher::{Hasher, PedersenHasher, PoseidonHasher, Sha256Hasher},
         merkle::{get_base_tree_count, DiskTree, MerkleTreeTrait},
         proof::ProofScheme,

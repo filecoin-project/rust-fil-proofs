@@ -1,10 +1,10 @@
 use bellperson::gadgets::boolean::{self, Boolean};
 use bellperson::groth16::*;
+use bellperson::util_cs::bench_cs::BenchCS;
 use bellperson::{Circuit, ConstraintSystem, SynthesisError};
 use criterion::{black_box, criterion_group, criterion_main, Criterion, ParameterizedBenchmark};
 use paired::bls12_381::Bls12;
 use rand::{thread_rng, Rng};
-use storage_proofs_core::gadgets::BenchCS;
 
 struct Blake2sExample<'a> {
     data: &'a [Option<bool>],

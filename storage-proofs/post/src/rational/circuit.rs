@@ -116,9 +116,9 @@ mod tests {
     use rand::{Rng, SeedableRng};
     use rand_xorshift::XorShiftRng;
 
+    use bellperson::util_cs::test_cs::TestConstraintSystem;
     use storage_proofs_core::{
         compound_proof::CompoundProof,
-        gadgets::TestConstraintSystem,
         hasher::{Domain, HashFunction, Hasher, PedersenHasher, PoseidonHasher},
         merkle::{generate_tree, get_base_tree_count, BinaryMerkleTree},
         proof::ProofScheme,

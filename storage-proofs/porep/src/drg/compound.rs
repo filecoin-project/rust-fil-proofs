@@ -281,6 +281,7 @@ where
 mod tests {
     use super::*;
 
+    use bellperson::util_cs::{metric_cs::MetricCS, test_cs::TestConstraintSystem};
     use ff::Field;
     use merkletree::store::StoreConfig;
     use pretty_assertions::assert_eq;
@@ -291,7 +292,6 @@ mod tests {
         compound_proof,
         drgraph::{BucketGraph, BASE_DEGREE},
         fr32::fr_into_bytes,
-        gadgets::{MetricCS, TestConstraintSystem},
         hasher::{Hasher, PedersenHasher, PoseidonHasher},
         merkle::{BinaryMerkleTree, MerkleTreeTrait},
         proof::NoRequirements,

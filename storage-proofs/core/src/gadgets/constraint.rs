@@ -119,7 +119,7 @@ pub fn difference<E: Engine, A, AR, CS: ConstraintSystem<E>>(
 mod tests {
     use super::*;
 
-    use crate::gadgets::TestConstraintSystem;
+    use bellperson::util_cs::test_cs::TestConstraintSystem;
     use paired::bls12_381::{Bls12, Fr};
     use rand::SeedableRng;
     use rand_xorshift::XorShiftRng;

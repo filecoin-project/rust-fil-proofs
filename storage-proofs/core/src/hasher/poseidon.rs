@@ -412,9 +412,10 @@ mod tests {
     use super::*;
     use std::mem;
 
-    use crate::gadgets::{constraint, TestConstraintSystem};
+    use crate::gadgets::constraint;
     use crate::merkle::MerkleTree;
     use bellperson::gadgets::num;
+    use bellperson::util_cs::test_cs::TestConstraintSystem;
 
     #[test]
     fn test_path() {

@@ -1,4 +1,5 @@
 use bellperson::gadgets::boolean::Boolean;
+use bellperson::util_cs::test_cs::TestConstraintSystem;
 use bellperson::ConstraintSystem;
 use fil_proofs_tooling::metadata::Metadata;
 use paired::bls12_381::Bls12;
@@ -6,7 +7,6 @@ use rand::RngCore;
 use serde::Serialize;
 use storage_proofs::crypto;
 use storage_proofs::gadgets::pedersen::{pedersen_compression_num, pedersen_md_no_padding};
-use storage_proofs::gadgets::TestConstraintSystem;
 use storage_proofs::util::{bits_to_bytes, bytes_into_boolean_vec, bytes_into_boolean_vec_be};
 
 fn blake2s_count(bytes: usize) -> anyhow::Result<Report> {

@@ -442,7 +442,6 @@ mod tests {
 
     use crate::compound_proof;
     use crate::fr32::{bytes_into_fr, fr_into_bytes};
-    use crate::gadgets::{MetricCS, TestConstraintSystem};
     use crate::hasher::{
         Blake2sHasher, Domain, Hasher, PedersenHasher, PoseidonHasher, Sha256Hasher,
     };
@@ -454,6 +453,8 @@ mod tests {
     use crate::proof::NoRequirements;
     use crate::proof::ProofScheme;
     use crate::util::data_at_node;
+    use bellperson::util_cs::metric_cs::MetricCS;
+    use bellperson::util_cs::test_cs::TestConstraintSystem;
 
     type TestTree<H, A> =
         MerkleTreeWrapper<H, VecStore<<H as Hasher>::Domain>, A, typenum::U0, typenum::U0>;

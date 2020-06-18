@@ -1,3 +1,4 @@
+use bellperson::util_cs::bench_cs::BenchCS;
 use bellperson::Circuit;
 use fil_proofs_tooling::shared::{create_replicas, PROVER_ID, RANDOMNESS, TICKET_BYTES};
 use fil_proofs_tooling::{measure, Metadata};
@@ -15,7 +16,6 @@ use rand::SeedableRng;
 use rand_xorshift::XorShiftRng;
 use serde::{Deserialize, Serialize};
 use storage_proofs::compound_proof::CompoundProof;
-use storage_proofs::gadgets::BenchCS;
 use storage_proofs::hasher::Sha256Hasher;
 #[cfg(feature = "measurements")]
 use storage_proofs::measurements::Operation;
