@@ -15,7 +15,7 @@ bench = false
 rand = "0.7"
 merkletree = "0.20.0"
 byteorder = "1"
-config = "0.9.3"
+config = { version = "0.10.1", default-features = false, features = ["toml"] }
 itertools = "0.9"
 lazy_static = "1.2"
 memmap = "0.7"
@@ -45,9 +45,9 @@ cpu-time = { version = "1.0", optional = true }
 gperftools = { version = "0.2", optional = true }
 
 [dev-dependencies]
-proptest = "0.7"
+proptest = "0.10"
 criterion = "0.3"
-femme = "1.2.0"
+femme = "2.1.0"
 bitvec = "0.17"
 rand_xorshift = "0.2.0"
 pretty_assertions = "0.6.1"

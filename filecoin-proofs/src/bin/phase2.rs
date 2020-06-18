@@ -673,8 +673,7 @@ fn setup_new_logger(proof: Proof, hasher: Hasher, sector_size: u64) {
             LevelFilter::Info,
             simplelog::Config::default(),
             TerminalMode::Mixed,
-        )
-        .unwrap(),
+        ),
         WriteLogger::new(LevelFilter::Info, simplelog::Config::default(), log_file),
     ])
     .expect("failed to setup logger");
@@ -700,8 +699,7 @@ fn setup_contribute_logger(path_before: &str) {
             LevelFilter::Info,
             simplelog::Config::default(),
             TerminalMode::Mixed,
-        )
-        .unwrap(),
+        ),
         WriteLogger::new(LevelFilter::Info, simplelog::Config::default(), log_file),
     ])
     .expect("failed to setup logger");
@@ -736,8 +734,7 @@ fn setup_verify_logger(param_paths: &[&str]) {
             LevelFilter::Info,
             simplelog::Config::default(),
             TerminalMode::Mixed,
-        )
-        .unwrap(),
+        ),
         WriteLogger::new(LevelFilter::Info, simplelog::Config::default(), log_file),
     ])
     .expect("failed to setup logger");
@@ -764,8 +761,7 @@ fn setup_verifyd_logger(proof: Proof, hasher: Hasher, sector_size: u64) {
             LevelFilter::Info,
             simplelog::Config::default(),
             TerminalMode::Mixed,
-        )
-        .unwrap(),
+        ),
         WriteLogger::new(LevelFilter::Info, simplelog::Config::default(), log_file),
     ])
     .expect("failed to setup logger");

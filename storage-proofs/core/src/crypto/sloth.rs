@@ -25,7 +25,7 @@ mod tests {
     use super::*;
     use ff::PrimeField;
     use paired::bls12_381::{Fr, FrRepr};
-    use proptest::{prop_compose, proptest, proptest_helper};
+    use proptest::{prop_compose, proptest};
 
     // the modulus from `bls12_381::Fr`
     // The definition of MODULUS and comment defining r come from paired/src/bls_12_381/fr.rs.

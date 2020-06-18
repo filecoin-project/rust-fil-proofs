@@ -3,7 +3,8 @@ use std::io::Read;
 use std::path::{Path, PathBuf};
 
 use failure::SyncFailure;
-use rexpect::session::PtyBashSession;
+use rexpect::session::PtyReplSession;
+use tempfile;
 use tempfile::TempDir;
 
 use crate::support::{cargo_bin, spawn_bash_with_retries};
@@ -107,7 +108,7 @@ impl ParamFetchSessionBuilder {
 
 /// An active pseudoterminal (pty) used to interact with paramfetch.
 pub struct ParamFetchSession {
-    pty_session: PtyBashSession,
+    pty_session: PtyReplSession,
     _cache_dir: TempDir,
 }
 
