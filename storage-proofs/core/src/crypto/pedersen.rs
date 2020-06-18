@@ -405,8 +405,8 @@ mod tests {
             let hashed = pedersen_md_no_padding(&flat);
 
             let mut hasher = Hasher::new(&x[0]).unwrap();
-            for k in 1..5 {
-                hasher.update(&x[k]).unwrap();
+            for val in x.iter().skip(1).take(4) {
+                hasher.update(&val).unwrap();
             }
 
             let hasher_final = hasher.finalize().unwrap();

@@ -483,7 +483,7 @@ mod tests {
         assert!(
             verify_pieces(
                 &comm_d,
-                &vec![a.clone(), b.clone(), c.clone(), d.clone()],
+                &[a.clone(), b.clone(), c.clone(), d.clone()],
                 sector_size
             )
             .expect("failed to verify"),
@@ -491,30 +491,28 @@ mod tests {
         );
 
         assert!(
-            verify_pieces(&comm_d, &vec![e.clone(), c.clone(), d.clone()], sector_size)
-                .expect("failed to verify"),
+            verify_pieces(&comm_d, &[e.clone(), c, d], sector_size).expect("failed to verify"),
             "[e, c, d]"
         );
 
         assert!(
-            verify_pieces(&comm_d, &vec![e.clone(), f.clone()], sector_size)
-                .expect("failed to verify"),
+            verify_pieces(&comm_d, &[e, f.clone()], sector_size).expect("failed to verify"),
             "[e, f]"
         );
 
         assert!(
-            verify_pieces(&comm_d, &vec![a.clone(), b.clone(), f.clone()], sector_size)
-                .expect("failed to verify"),
+            verify_pieces(&comm_d, &[a, b, f], sector_size).expect("failed to verify"),
             "[a, b, f]"
         );
 
         assert!(
-            verify_pieces(&comm_d, &vec![g], sector_size).expect("failed to verify"),
+            verify_pieces(&comm_d, &[g], sector_size).expect("failed to verify"),
             "[g]"
         );
     }
 
     #[test]
+    #[allow(clippy::identity_op)]
     fn test_verify_padded_pieces() {
         // [
         //   {(A0 00) (BB BB)} -> A(1) P(1) P(1) P(1) B(4)
@@ -556,7 +554,7 @@ mod tests {
             pad.clone(),
             pad.clone(),
             pad.clone(),
-            pad.clone(),
+            pad,
         ];
 
         let hash = |a, b| {

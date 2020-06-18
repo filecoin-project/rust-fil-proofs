@@ -17,7 +17,7 @@ impl<'a> Circuit<Bls12> for XorExample<'a> {
     fn synthesize<CS: ConstraintSystem<Bls12>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
         let key: Vec<Boolean> = self
             .key
-            .into_iter()
+            .iter()
             .enumerate()
             .map(|(i, b)| {
                 Ok(Boolean::from(boolean::AllocatedBit::alloc(
@@ -28,7 +28,7 @@ impl<'a> Circuit<Bls12> for XorExample<'a> {
             .collect::<Result<Vec<_>, SynthesisError>>()?;
         let data: Vec<Boolean> = self
             .data
-            .into_iter()
+            .iter()
             .enumerate()
             .map(|(i, b)| {
                 Ok(Boolean::from(boolean::AllocatedBit::alloc(
@@ -68,8 +68,8 @@ fn xor_circuit_benchmark(c: &mut Criterion) {
     let mut rng1 = thread_rng();
     let groth_params = generate_random_parameters::<Bls12, _, _>(
         XorExample {
-            key: &vec![None; 8 * 32],
-            data: &vec![None; 256],
+            key: &[None; 8 * 32],
+            data: &[None; 256],
         },
         &mut rng1,
     )

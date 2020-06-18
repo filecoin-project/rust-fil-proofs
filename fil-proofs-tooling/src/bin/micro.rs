@@ -311,9 +311,10 @@ mod tests {
     use super::*;
 
     #[test]
+    #[allow(clippy::float_cmp)]
     fn test_time_to_us() {
-        assert_eq!(time_to_us("123.12 us"), 123.12);
-        assert_eq!(time_to_us("1.0 s"), 1_000_000.);
+        assert_eq!(time_to_us("123.12 us"), 123.12); // No math done on 'us' so strict float cmp is ok.
+        assert_eq!(time_to_us("1.0 s"), 1_000_000.); // Multiplication, so strict float cmp is ok.
     }
 
     #[test]
@@ -371,8 +372,8 @@ median [138.33 us 143.23 us] med. abs. dev. [1.7507 ms 8.4109 ms]";
                     unit: Some("us".to_string())
                 }),
                 r_2: Some(Interval {
-                    start: 0.8124914,
-                    end: 0.8320154,
+                    start: 0.812_491_4,
+                    end: 0.832_015_4,
                     unit: None
                 }),
                 std_dev: Some(Interval {
@@ -449,8 +450,8 @@ median [138.33 us 143.23 us] med. abs. dev. [1.7507 ms 8.4109 ms]";
                     unit: Some("us".to_string())
                 }),
                 r_2: Some(Interval {
-                    start: 0.8124914,
-                    end: 0.8320154,
+                    start: 0.812_491_4,
+                    end: 0.832_015_4,
                     unit: None
                 }),
                 std_dev: Some(Interval {

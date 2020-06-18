@@ -37,7 +37,6 @@ fn stop_profile() {
 fn stop_profile() {}
 
 fn pregenerate_graph<H: Hasher>(size: usize) -> StackedBucketGraph<H> {
-    let seed = [1u8; 28];
     StackedBucketGraph::<H>::new_stacked(size, BASE_DEGREE, EXP_DEGREE, [32; 32]).unwrap()
 }
 
@@ -47,6 +46,7 @@ fn parents_loop<H: Hasher, G: Graph<H>>(graph: &G, parents: &mut [u32]) {
         .collect()
 }
 
+#[allow(clippy::unit_arg)]
 fn parents_loop_benchmark(cc: &mut Criterion) {
     let sizes = vec![10, 50, 1000];
 

@@ -5,7 +5,6 @@ use std::path::{Path, PathBuf};
 use failure::SyncFailure;
 use rand::Rng;
 use rexpect::session::PtyBashSession;
-use tempfile;
 use tempfile::TempDir;
 
 use storage_proofs::parameter_cache::{CacheEntryMetadata, PARAMETER_CACHE_ENV_VAR};
@@ -25,7 +24,7 @@ impl ParamPublishSessionBuilder {
     pub fn new() -> ParamPublishSessionBuilder {
         let temp_dir = tempfile::tempdir().expect("could not create temp dir");
 
-        let mut pbuf = temp_dir.path().clone().to_path_buf();
+        let mut pbuf = temp_dir.path().to_path_buf();
         pbuf.push("parameters.json");
 
         File::create(&pbuf).expect("failed to create file in temp dir");
@@ -49,21 +48,20 @@ impl ParamPublishSessionBuilder {
 
     /// Create empty files with the given names in the cache directory.
     pub fn with_files<P: AsRef<Path>>(self, filenames: &[P]) -> ParamPublishSessionBuilder {
-        filenames
-            .into_iter()
-            .fold(self, |acc, item| acc.with_file(item))
+        filenames.iter().fold(self, |acc, item| acc.with_file(item))
     }
 
     /// Create a file containing 32 random bytes with the given name in the
     /// cache directory.
     pub fn with_file<P: AsRef<Path>>(mut self, filename: P) -> ParamPublishSessionBuilder {
-        let mut pbuf = self.cache_dir.path().clone().to_path_buf();
+        let mut pbuf = self.cache_dir.path().to_path_buf();
         pbuf.push(filename.as_ref());
 
         let mut file = File::create(&pbuf).expect("failed to create file in temp dir");
 
         let random_bytes = rand::thread_rng().gen::<[u8; 32]>();
-        file.write(&random_bytes).expect("failed to write bytes");
+        file.write_all(&random_bytes)
+            .expect("failed to write bytes");
 
         self.cached_file_pbufs.push(pbuf);
         self
@@ -75,7 +73,7 @@ impl ParamPublishSessionBuilder {
         filename: P,
         r: &mut R,
     ) -> ParamPublishSessionBuilder {
-        let mut pbuf = self.cache_dir.path().clone().to_path_buf();
+        let mut pbuf = self.cache_dir.path().to_path_buf();
         pbuf.push(filename.as_ref());
 
         let mut file = File::create(&pbuf).expect("failed to create file in temp dir");
@@ -124,8 +122,7 @@ impl ParamPublishSessionBuilder {
         let cache_dir_path = format!("{:?}", self.cache_dir.path());
 
         let cache_contents: Vec<PathBuf> = std::fs::read_dir(&self.cache_dir)
-            .expect(&format!("failed to read cache dir {:?}", self.cache_dir))
-            .into_iter()
+            .unwrap_or_else(|_| panic!("failed to read cache dir {:?}", self.cache_dir))
             .map(|x| x.expect("failed to get dir entry"))
             .map(|x| x.path())
             .collect();

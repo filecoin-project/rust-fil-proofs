@@ -297,7 +297,7 @@ mod tests {
             comm_r: Some(comm_r.into()),
             comm_c: Some(comm_c.into()),
             comm_r_last: Some(comm_r_last.into()),
-            partial_ticket: Some(candidate.partial_ticket.into()),
+            partial_ticket: Some(candidate.partial_ticket),
             randomness: Some(randomness.into()),
             prover_id: Some(prover_id.into()),
             sector_id: Some(candidate.sector_id.into()),

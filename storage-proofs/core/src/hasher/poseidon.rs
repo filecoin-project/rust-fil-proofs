@@ -425,7 +425,7 @@ mod tests {
             PoseidonDomain(Fr::one().into_repr()),
         ];
 
-        let t = MerkleTree::<PoseidonHasher, typenum::U2>::new(values.iter().map(|x| *x)).unwrap();
+        let t = MerkleTree::<PoseidonHasher, typenum::U2>::new(values.iter().copied()).unwrap();
 
         let p = t.gen_proof(0).unwrap(); // create a proof for the first value =k Fr::one()
 
@@ -453,7 +453,7 @@ mod tests {
             PoseidonDomain(Fr::one().into_repr()),
         ];
 
-        let t = MerkleTree::<PoseidonHasher, typenum::U2>::new(leaves.iter().map(|x| *x)).unwrap();
+        let t = MerkleTree::<PoseidonHasher, typenum::U2>::new(leaves.iter().copied()).unwrap();
 
         assert_eq!(t.leafs(), 4);
 

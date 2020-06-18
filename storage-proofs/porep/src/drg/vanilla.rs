@@ -621,7 +621,6 @@ mod tests {
         test_helper::setup_replica,
         util::{data_at_node, default_rows_to_discard},
     };
-    use tempfile;
 
     use crate::stacked::BINARY_ARITY;
 
@@ -666,7 +665,7 @@ mod tests {
             (mmapped_data.as_mut()).into(),
             None,
             config.clone(),
-            replica_path.clone(),
+            replica_path,
         )
         .expect("replication failed");
 
@@ -678,7 +677,7 @@ mod tests {
             &pp,
             &replica_id,
             mmapped_data.as_mut(),
-            Some(config.clone()),
+            Some(config),
         )
         .unwrap_or_else(|e| {
             panic!("Failed to extract data from `DrgPoRep`: {}", e);
@@ -745,7 +744,7 @@ mod tests {
             (mmapped_data.as_mut()).into(),
             None,
             config.clone(),
-            replica_path.clone(),
+            replica_path,
         )
         .expect("replication failed");
 
@@ -848,7 +847,7 @@ mod tests {
             let pub_inputs = PublicInputs::<<Tree::Hasher as Hasher>::Domain> {
                 replica_id: Some(replica_id),
                 challenges: vec![challenge, challenge],
-                tau: Some(tau.clone().into()),
+                tau: Some(tau),
             };
 
             let priv_inputs = PrivateInputs::<Tree::Hasher> {
@@ -876,7 +875,7 @@ mod tests {
                 let proof = Proof::new(
                     real_proof.replica_nodes.clone(),
                     fake_parents,
-                    real_proof.nodes.clone().into(),
+                    real_proof.nodes.clone(),
                 );
 
                 let is_valid =
@@ -915,7 +914,7 @@ mod tests {
                 let proof2 = Proof::new(
                     real_proof.replica_nodes,
                     fake_proof_parents,
-                    real_proof.nodes.into(),
+                    real_proof.nodes,
                 );
 
                 assert!(
@@ -927,7 +926,7 @@ mod tests {
                     "verified in error -- with wrong parent proofs"
                 );
 
-                return ();
+                return;
             }
 
             let proof = real_proof;
@@ -937,7 +936,7 @@ mod tests {
                     PublicInputs::<<Tree::Hasher as Hasher>::Domain> {
                         replica_id: Some(replica_id),
                         challenges: vec![if challenge == 1 { 2 } else { 1 }],
-                        tau: Some(tau.into()),
+                        tau: Some(tau),
                     };
                 let verified = DrgPoRep::<Tree::Hasher, _>::verify(
                     &pp,

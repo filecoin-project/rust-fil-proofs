@@ -15,7 +15,7 @@ impl<'a> Circuit<Bls12> for PedersenExample<'a> {
     fn synthesize<CS: ConstraintSystem<Bls12>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
         let data: Vec<Boolean> = self
             .data
-            .into_iter()
+            .iter()
             .enumerate()
             .map(|(i, b)| {
                 Ok(Boolean::from(boolean::AllocatedBit::alloc(
@@ -45,7 +45,7 @@ impl<'a> Circuit<Bls12> for PedersenMdExample<'a> {
     fn synthesize<CS: ConstraintSystem<Bls12>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
         let data: Vec<Boolean> = self
             .data
-            .into_iter()
+            .iter()
             .enumerate()
             .map(|(i, b)| {
                 Ok(Boolean::from(boolean::AllocatedBit::alloc(
@@ -106,9 +106,7 @@ fn pedersen_md_benchmark(c: &mut Criterion) {
 fn pedersen_circuit_benchmark(c: &mut Criterion) {
     let mut rng1 = thread_rng();
     let groth_params = generate_random_parameters::<Bls12, _, _>(
-        PedersenExample {
-            data: &vec![None; 256],
-        },
+        PedersenExample { data: &[None; 256] },
         &mut rng1,
     )
     .unwrap();
@@ -160,9 +158,7 @@ fn pedersen_circuit_benchmark(c: &mut Criterion) {
 fn pedersen_md_circuit_benchmark(c: &mut Criterion) {
     let mut rng1 = thread_rng();
     let groth_params = generate_random_parameters::<Bls12, _, _>(
-        PedersenMdExample {
-            data: &vec![None; 256],
-        },
+        PedersenMdExample { data: &[None; 256] },
         &mut rng1,
     )
     .unwrap();
@@ -216,5 +212,6 @@ criterion_group!(
     pedersen_benchmark,
     pedersen_md_benchmark,
     pedersen_circuit_benchmark,
+    pedersen_md_circuit_benchmark,
 );
 criterion_main!(benches);

@@ -948,7 +948,7 @@ mod tests {
             .chunks(FR32_PADDING_MAP.data_bits)
             .into_iter()
         {
-            padded_data.extend(data_unit.into_iter());
+            padded_data.extend(data_unit);
 
             // To avoid reconverting the iterator, we deduce if we need the padding
             // by the length of `padded_data`: a full data unit would not leave the

@@ -136,7 +136,7 @@ mod tests {
 
             let res = add(cs.namespace(|| "a+b"), &a, &b).expect("add failed");
 
-            let mut tmp = a.get_value().unwrap().clone();
+            let mut tmp = a.get_value().unwrap();
             tmp.add_assign(&b.get_value().unwrap());
 
             assert_eq!(res.get_value().unwrap(), tmp);
@@ -156,7 +156,7 @@ mod tests {
 
             let res = sub(cs.namespace(|| "a-b"), &a, &b).expect("subtraction failed");
 
-            let mut tmp = a.get_value().unwrap().clone();
+            let mut tmp = a.get_value().unwrap();
             tmp.sub_assign(&b.get_value().unwrap());
 
             assert_eq!(res.get_value().unwrap(), tmp);

@@ -718,7 +718,6 @@ mod tests {
     use super::super::*;
 
     use generic_array::typenum;
-    use rand;
 
     use crate::hasher::{Blake2sHasher, Domain, PedersenHasher, PoseidonHasher, Sha256Hasher};
     use crate::merkle::{generate_tree, MerkleProofTrait};

@@ -426,7 +426,7 @@ mod tests {
             degree,
             expansion_degree,
             porep_id: arbitrary_porep_id,
-            layer_challenges: layer_challenges.clone(),
+            layer_challenges,
         };
 
         let pp = StackedDrg::<Tree, Sha256Hasher>::setup(&sp).expect("setup failed");
@@ -449,7 +449,7 @@ mod tests {
             PublicInputs::<<Tree::Hasher as Hasher>::Domain, <Sha256Hasher as Hasher>::Domain> {
                 replica_id: replica_id.into(),
                 seed,
-                tau: Some(tau.into()),
+                tau: Some(tau),
                 k: None,
             };
 
@@ -458,13 +458,10 @@ mod tests {
 
         // Convert TemporaryAux to TemporaryAuxCache, which instantiates all
         // elements based on the configs stored in TemporaryAux.
-        let t_aux = TemporaryAuxCache::<Tree, Sha256Hasher>::new(&t_aux, replica_path.clone())
+        let t_aux = TemporaryAuxCache::<Tree, Sha256Hasher>::new(&t_aux, replica_path)
             .expect("failed to restore contents of t_aux");
 
-        let priv_inputs = PrivateInputs::<Tree, Sha256Hasher> {
-            p_aux: p_aux.into(),
-            t_aux: t_aux.into(),
-        };
+        let priv_inputs = PrivateInputs::<Tree, Sha256Hasher> { p_aux, t_aux };
 
         let proofs = StackedDrg::<Tree, Sha256Hasher>::prove_all_partitions(
             &pp,
@@ -487,16 +484,10 @@ mod tests {
             // Verify that MetricCS returns the same metrics as TestConstraintSystem.
             let mut cs = MetricCS::<Bls12>::new();
 
-            StackedCompound::<Tree, Sha256Hasher>::circuit(
-                &pub_inputs,
-                <StackedCircuit<Tree, Sha256Hasher> as CircuitComponent>::ComponentPrivateInputs::default(),
-                &proofs[0],
-                &pp,
-                None,
-            )
-            .expect("circuit failed")
-            .synthesize(&mut cs.namespace(|| "stacked drgporep"))
-            .expect("failed to synthesize circuit");
+            StackedCompound::<Tree, Sha256Hasher>::circuit(&pub_inputs, (), &proofs[0], &pp, None)
+                .expect("circuit failed")
+                .synthesize(&mut cs.namespace(|| "stacked drgporep"))
+                .expect("failed to synthesize circuit");
 
             assert_eq!(cs.num_inputs(), expected_inputs, "wrong number of inputs");
             assert_eq!(
@@ -507,16 +498,10 @@ mod tests {
         }
         let mut cs = TestConstraintSystem::<Bls12>::new();
 
-        StackedCompound::<Tree, Sha256Hasher>::circuit(
-            &pub_inputs,
-            <StackedCircuit<Tree, Sha256Hasher> as CircuitComponent>::ComponentPrivateInputs::default(),
-            &proofs[0],
-            &pp,
-            None,
-        )
-        .expect("circuit failed")
-        .synthesize(&mut cs.namespace(|| "stacked drgporep"))
-        .expect("failed to synthesize circuit");
+        StackedCompound::<Tree, Sha256Hasher>::circuit(&pub_inputs, (), &proofs[0], &pp, None)
+            .expect("circuit failed")
+            .synthesize(&mut cs.namespace(|| "stacked drgporep"))
+            .expect("failed to synthesize circuit");
 
         assert!(cs.is_satisfied(), "constraints not satisfied");
         assert_eq!(cs.num_inputs(), expected_inputs, "wrong number of inputs");
@@ -597,7 +582,7 @@ mod tests {
                 degree,
                 expansion_degree,
                 porep_id: arbitrary_porep_id,
-                layer_challenges: layer_challenges.clone(),
+                layer_challenges,
             },
             partitions: Some(partition_count),
             priority: false,
@@ -645,7 +630,7 @@ mod tests {
 
         // Convert TemporaryAux to TemporaryAuxCache, which instantiates all
         // elements based on the configs stored in TemporaryAux.
-        let t_aux = TemporaryAuxCache::<Tree, _>::new(&t_aux, replica_path.clone())
+        let t_aux = TemporaryAuxCache::<Tree, _>::new(&t_aux, replica_path)
             .expect("failed to restore contents of t_aux");
 
         let private_inputs = PrivateInputs::<Tree, Sha256Hasher> { p_aux, t_aux };

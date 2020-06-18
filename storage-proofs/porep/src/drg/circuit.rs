@@ -382,14 +382,14 @@ mod tests {
             (mmapped_data.as_mut()).into(),
             None,
             config,
-            replica_path.clone(),
+            replica_path,
         )
         .expect("failed to replicate");
 
         let pub_inputs = drg::PublicInputs {
             replica_id: Some(replica_id.into()),
             challenges: vec![challenge],
-            tau: Some(tau.into()),
+            tau: Some(tau),
         };
 
         let priv_inputs = drg::PrivateInputs::<PedersenHasher> {

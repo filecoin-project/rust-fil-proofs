@@ -4,7 +4,6 @@ use std::path::{Path, PathBuf};
 
 use failure::SyncFailure;
 use rexpect::session::PtyBashSession;
-use tempfile;
 use tempfile::TempDir;
 
 use crate::support::{cargo_bin, spawn_bash_with_retries};
@@ -52,7 +51,7 @@ impl ParamFetchSessionBuilder {
         filename: P,
         r: &mut R,
     ) -> ParamFetchSessionBuilder {
-        let mut pbuf = self.cache_dir.path().clone().to_path_buf();
+        let mut pbuf = self.cache_dir.path().to_path_buf();
         pbuf.push(filename.as_ref());
 
         let mut file = File::create(&pbuf).expect("failed to create file in temp dir");
@@ -78,7 +77,7 @@ impl ParamFetchSessionBuilder {
                 s.push_str(&wl.join(","));
                 s
             })
-            .unwrap_or("".to_string());
+            .unwrap_or_else(|| "".to_string());
 
         let json_argument = if self.manifest.is_some() {
             format!("--json={:?}", self.manifest.unwrap())

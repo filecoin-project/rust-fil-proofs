@@ -264,7 +264,7 @@ mod tests {
         let degree = BASE_DEGREE;
         let porep_id = [123; 32];
 
-        for size in vec![4, 16, 256, 2048] {
+        for &size in &[4, 16, 256, 2048] {
             let g = BucketGraph::<H>::new(size, degree, 0, porep_id).unwrap();
 
             assert_eq!(g.size(), size, "wrong nodes count");

@@ -5,7 +5,7 @@ use storage_proofs_core::merkle::{create_base_merkle_tree, BinaryMerkleTree};
 
 fn merkle_benchmark(c: &mut Criterion) {
     #[cfg(feature = "big-sector-sizes-bench")]
-    let params = vec![128, 1024, 1048576];
+    let params = vec![128, 1024, 1_048_576];
     #[cfg(not(feature = "big-sector-sizes-bench"))]
     let params = vec![128, 1024];
 

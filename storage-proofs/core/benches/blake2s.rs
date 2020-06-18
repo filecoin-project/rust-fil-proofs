@@ -14,7 +14,7 @@ impl<'a> Circuit<Bls12> for Blake2sExample<'a> {
     fn synthesize<CS: ConstraintSystem<Bls12>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
         let data: Vec<Boolean> = self
             .data
-            .into_iter()
+            .iter()
             .enumerate()
             .map(|(i, b)| {
                 Ok(Boolean::from(boolean::AllocatedBit::alloc(
@@ -51,13 +51,9 @@ fn blake2s_benchmark(c: &mut Criterion) {
 
 fn blake2s_circuit_benchmark(c: &mut Criterion) {
     let mut rng1 = thread_rng();
-    let groth_params = generate_random_parameters::<Bls12, _, _>(
-        Blake2sExample {
-            data: &vec![None; 256],
-        },
-        &mut rng1,
-    )
-    .unwrap();
+    let groth_params =
+        generate_random_parameters::<Bls12, _, _>(Blake2sExample { data: &[None; 256] }, &mut rng1)
+            .unwrap();
 
     let params = vec![32];
 

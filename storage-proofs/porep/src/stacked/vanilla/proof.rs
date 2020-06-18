@@ -1286,14 +1286,14 @@ mod tests {
         let replica_path = cache_dir.path().join("replica-path");
         let mut mmapped_data = setup_replica(&data, &replica_path);
 
-        let challenges = LayerChallenges::new(DEFAULT_STACKED_LAYERS, 5);
+        let layer_challenges = LayerChallenges::new(DEFAULT_STACKED_LAYERS, 5);
 
         let sp = SetupParams {
             nodes,
             degree: BASE_DEGREE,
             expansion_degree: EXP_DEGREE,
             porep_id: [32; 32],
-            layer_challenges: challenges.clone(),
+            layer_challenges,
         };
 
         let pp = StackedDrg::<Tree, Blake2sHasher>::setup(&sp).expect("setup failed");
@@ -1304,7 +1304,7 @@ mod tests {
             (mmapped_data.as_mut()).into(),
             None,
             config.clone(),
-            replica_path.clone(),
+            replica_path,
         )
         .expect("replication failed");
 
@@ -1316,7 +1316,7 @@ mod tests {
             &pp,
             &replica_id,
             mmapped_data.as_mut(),
-            Some(config.clone()),
+            Some(config),
         )
         .expect("failed to extract data");
 
@@ -1428,8 +1428,7 @@ mod tests {
             challenges.clone(),
         );
         test_prove_verify::<DiskTree<PoseidonHasher, typenum::U8, typenum::U8, typenum::U2>>(
-            n,
-            challenges.clone(),
+            n, challenges,
         );
     }
 
@@ -1471,7 +1470,7 @@ mod tests {
             degree,
             expansion_degree,
             porep_id: arbitrary_porep_id,
-            layer_challenges: challenges.clone(),
+            layer_challenges: challenges,
         };
 
         let pp = StackedDrg::<Tree, Blake2sHasher>::setup(&sp).expect("setup failed");
@@ -1550,7 +1549,7 @@ mod tests {
             degree,
             expansion_degree,
             porep_id: [32; 32],
-            layer_challenges: layer_challenges.clone(),
+            layer_challenges,
         };
 
         // When this fails, the call to setup should panic, but seems to actually hang (i.e. neither return nor panic) for some reason.
