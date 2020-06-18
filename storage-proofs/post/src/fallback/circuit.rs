@@ -156,81 +156,72 @@ impl<Tree: MerkleTreeTrait> CircuitComponent for FallbackPoStCircuit<Tree> {
 }
 
 impl<Tree: 'static + MerkleTreeTrait> Circuit<Bls12> for FallbackPoStCircuit<Tree> {
-    fn synthesize<CS: ConstraintSystem<Bls12>>(self, cs: &mut CS) -> Result<(), SynthesisError>
-    where
-        CS: Send,
-    {
+    fn synthesize<CS: ConstraintSystem<Bls12>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
         if CS::is_extensible() {
-            let FallbackPoStCircuit { sectors, .. } = self;
+            return self.synthesize_extendable(cs);
+        }
 
-            let num_cpus = settings::SETTINGS
-                .lock()
-                .unwrap()
-                .window_post_synthesis_num_cpus as usize;
+        self.synthesize_default(cs)
+    }
+}
 
-            let cpu_sector_count = sectors.len() / num_cpus;
-            let remainder = sectors.len() % num_cpus;
-            assert_eq!(sectors.len(), cpu_sector_count * num_cpus + remainder);
+impl<Tree: 'static + MerkleTreeTrait> FallbackPoStCircuit<Tree> {
+    fn synthesize_default<CS: ConstraintSystem<Bls12>>(
+        self,
+        cs: &mut CS,
+    ) -> Result<(), SynthesisError> {
+        let cs = &mut cs.namespace(|| format!("outer namespace"));
 
-            let first_cpu_sector_count = cpu_sector_count + remainder;
-            let mut sector_groups = Vec::new();
+        for (i, sector) in self.sectors.iter().enumerate() {
+            let cs = &mut cs.namespace(|| format!("sector_{}", i));
+            sector.synthesize(cs)?;
+        }
+        Ok(())
+    }
 
-            let mut start = 0;
-            let mut end = first_cpu_sector_count;
-            for _ in 0..num_cpus {
-                let group = &sectors[start..end];
-                sector_groups.push(group);
-                start = end;
-                end += cpu_sector_count;
-            }
+    fn synthesize_extendable<CS: ConstraintSystem<Bls12>>(
+        self,
+        cs: &mut CS,
+    ) -> Result<(), SynthesisError> {
+        let FallbackPoStCircuit { sectors, .. } = self;
 
-            let mut css = Vec::new();
+        let num_cpus = settings::SETTINGS
+            .lock()
+            .unwrap()
+            .window_post_synthesis_num_cpus as usize;
 
-            crossbeam::scope(|scope| {
-                let mut handles: Vec<
-                    crossbeam::thread::ScopedJoinHandle<Result<CS, SynthesisError>>,
-                > = Vec::new();
-                for sector_group in sector_groups.iter() {
-                    handles.push(scope.spawn(move |_| {
+        let cpu_sector_count = (sectors.len() / num_cpus).max(1);
+
+        let css: Vec<_> = crossbeam::scope(|scope| {
+            use crossbeam::thread::ScopedJoinHandle;
+
+            sectors
+                .chunks(cpu_sector_count)
+                .map(|sector_group| {
+                    scope.spawn(move |_| {
                         let mut cs = CS::new();
                         cs.alloc_input(|| "temp ONE", || Ok(Fr::one()))?;
 
                         for (i, sector) in sector_group.iter().enumerate() {
-                            let cs = &mut cs.namespace(|| format!("sector_{}", i));
+                            let mut cs = cs.namespace(|| format!("sector_{}", i));
 
-                            sector.synthesize(cs).unwrap(); // FIXME: unwrap
+                            sector.synthesize(&mut cs)?;
                         }
                         Ok(cs)
-                    }));
-                }
+                    })
+                })
+                .map(|handle: ScopedJoinHandle<Result<CS, SynthesisError>>| handle.join().unwrap())
+                .collect::<Result<Vec<_>, _>>()
+        })
+        .unwrap()?;
 
-                for handle in handles {
-                    let x = handle.join().unwrap();
-                    if let Ok(cs) = x {
-                        css.push(cs);
-                    }
-                }
-            })
-            .unwrap(); // FIXME: unwrap
-
-            let _combined_cs = css
-                .iter_mut()
-                .fold(cs, |acc: &mut CS, c: &mut CS| -> &mut CS {
-                    acc.extend(&mut *c);
-                    acc
-                });
-        } else {
-            let cs = &mut cs.namespace(|| format!("outer namespace"));
-
-            for (i, sector) in self.sectors.iter().enumerate() {
-                let cs = &mut cs.namespace(|| format!("sector_{}", i));
-                sector.synthesize(cs)?;
-            }
+        for sector_cs in css.into_iter() {
+            cs.extend(sector_cs);
         }
+
         Ok(())
     }
 }
-
 #[cfg(test)]
 mod tests {
     use super::*;

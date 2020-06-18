@@ -9,3 +9,8 @@ members = [
   "fil-proofs-tooling",
   "sha2raw"
 ]
+
+
+[patch.crates-io]
+bellperson = { path = "../../../opensource/bellperson" }
+neptune = { path = "../neptune" }

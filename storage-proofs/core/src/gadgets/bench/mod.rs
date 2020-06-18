@@ -45,10 +45,6 @@ unsafe impl<E: Engine> Send for BenchCS<E> {}
 impl<E: Engine> ConstraintSystem<E> for BenchCS<E> {
     type Root = Self;
 
-    fn new() -> Self {
-        unimplemented!("BenchCS::new is not implemented");
-    }
-
     fn alloc<F, A, AR>(&mut self, _: A, _f: F) -> Result<Variable, SynthesisError>
     where
         F: FnOnce() -> Result<E::Fr, SynthesisError>,
