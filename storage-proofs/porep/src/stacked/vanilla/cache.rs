@@ -11,7 +11,7 @@ use storage_proofs_core::{
     drgraph::BASE_DEGREE,
     error::Result,
     hasher::Hasher,
-    parameter_cache::{ParameterSetMetadata, VERSION},
+    parameter_cache::{with_exclusive_lock, LockedFile, ParameterSetMetadata, VERSION},
 };
 
 use super::graph::{StackedGraph, DEGREE};
@@ -41,7 +41,7 @@ struct CacheData {
     /// Len in nodes.
     len: u32,
     /// The underlyling file.
-    file: std::fs::File,
+    file: LockedFile,
 }
 
 impl CacheData {
@@ -61,7 +61,7 @@ impl CacheData {
             memmap::MmapOptions::new()
                 .offset(offset as u64)
                 .len(len)
-                .map(&self.file)
+                .map(self.file.as_ref())
                 .context("could not shift mmap}")?
         };
         self.offset = new_offset;
@@ -98,12 +98,10 @@ impl CacheData {
     fn open(offset: u32, len: u32, path: &PathBuf) -> Result<Self> {
         let min_cache_size = (offset + len) as usize * DEGREE * NODE_BYTES;
 
-        let file = std::fs::OpenOptions::new()
-            .read(true)
-            .open(&path)
+        let file = LockedFile::open_shared_read(path)
             .with_context(|| format!("could not open path={}", path.display()))?;
 
-        let actual_len = file.metadata()?.len();
+        let actual_len = file.as_ref().metadata()?.len();
         if actual_len < min_cache_size as u64 {
             bail!(
                 "corrupted cache: {}, expected at least {}, got {} bytes",
@@ -117,7 +115,7 @@ impl CacheData {
             memmap::MmapOptions::new()
                 .offset((offset as usize * DEGREE * NODE_BYTES) as u64)
                 .len(len as usize * DEGREE * NODE_BYTES)
-                .map(&file)
+                .map(file.as_ref())
                 .with_context(|| format!("could not mmap path={}", path.display()))?
         };
 
@@ -171,43 +169,38 @@ impl ParentCache {
     {
         info!("parent cache: generating {}", path.display());
 
-        std::fs::create_dir_all(PARENT_CACHE_DIR).context("unable to crate parent cache dir")?;
+        with_exclusive_lock(&path.clone(), |file| {
+            let cache_size = cache_entries as usize * NODE_BYTES * DEGREE;
+            file.as_ref()
+                .set_len(cache_size as u64)
+                .with_context(|| format!("failed to set length: {}", cache_size))?;
 
-        let file = std::fs::OpenOptions::new()
-            .read(true)
-            .write(true)
-            .create(true)
-            .open(&path)
-            .with_context(|| format!("could not open path={}", path.display()))?;
+            let mut data = unsafe {
+                memmap::MmapOptions::new()
+                    .map_mut(file.as_ref())
+                    .with_context(|| format!("could not mmap path={}", path.display()))?
+            };
 
-        let cache_size = cache_entries as usize * NODE_BYTES * DEGREE;
-        file.set_len(cache_size as u64)
-            .with_context(|| format!("failed to set length: {}", cache_size))?;
+            data.par_chunks_mut(DEGREE * NODE_BYTES)
+                .enumerate()
+                .try_for_each(|(node, entry)| -> Result<()> {
+                    let mut parents = [0u32; DEGREE];
+                    graph
+                        .base_graph()
+                        .parents(node, &mut parents[..BASE_DEGREE])?;
+                    graph.generate_expanded_parents(node, &mut parents[BASE_DEGREE..]);
 
-        let mut data = unsafe {
-            memmap::MmapOptions::new()
-                .map_mut(&file)
-                .with_context(|| format!("could not mmap path={}", path.display()))?
-        };
+                    LittleEndian::write_u32_into(&parents, entry);
+                    Ok(())
+                })?;
 
-        data.par_chunks_mut(DEGREE * NODE_BYTES)
-            .enumerate()
-            .try_for_each(|(node, entry)| -> Result<()> {
-                let mut parents = [0u32; DEGREE];
-                graph
-                    .base_graph()
-                    .parents(node, &mut parents[..BASE_DEGREE])?;
-                graph.generate_expanded_parents(node, &mut parents[BASE_DEGREE..]);
+            info!("parent cache: generated");
+            data.flush().context("failed to flush parent cache")?;
+            drop(data);
 
-                LittleEndian::write_u32_into(&parents, entry);
-                Ok(())
-            })?;
-
-        info!("parent cache: generated");
-        data.flush().context("failed to flush parent cache")?;
-        drop(data);
-
-        info!("parent cache: written to disk");
+            info!("parent cache: written to disk");
+            Ok(())
+        })?;
 
         Ok(ParentCache {
             cache: CacheData::open(0, len, &path)?,
