@@ -25,7 +25,7 @@ pub const PARAMETER_METADATA_EXT: &str = "meta";
 pub const VERIFYING_KEY_EXT: &str = "vk";
 
 #[derive(Debug)]
-struct LockedFile(File);
+pub struct LockedFile(File);
 
 // TODO: use in memory lock as well, as file locks do not guarantee exclusive access across OSes.
 
@@ -46,6 +46,19 @@ impl LockedFile {
         f.lock_exclusive()?;
 
         Ok(LockedFile(f))
+    }
+
+    pub fn open_shared_read<P: AsRef<Path>>(p: P) -> io::Result<Self> {
+        let f = fs::OpenOptions::new().read(true).open(p)?;
+        f.lock_shared()?;
+
+        Ok(LockedFile(f))
+    }
+}
+
+impl AsRef<File> for LockedFile {
+    fn as_ref(&self) -> &File {
+        &self.0
     }
 }
 
@@ -328,21 +341,21 @@ fn write_cached_params(
     })
 }
 
-fn with_exclusive_lock<T>(
+pub fn with_exclusive_lock<T>(
     file_path: &PathBuf,
     f: impl FnOnce(&mut LockedFile) -> Result<T>,
 ) -> Result<T> {
     with_open_file(file_path, LockedFile::open_exclusive, f)
 }
 
-fn with_exclusive_read_lock<T>(
+pub fn with_exclusive_read_lock<T>(
     file_path: &PathBuf,
     f: impl FnOnce(&mut LockedFile) -> Result<T>,
 ) -> Result<T> {
     with_open_file(file_path, LockedFile::open_exclusive_read, f)
 }
 
-fn with_open_file<'a, T>(
+pub fn with_open_file<'a, T>(
     file_path: &'a PathBuf,
     open_file: impl FnOnce(&'a PathBuf) -> io::Result<LockedFile>,
     f: impl FnOnce(&mut LockedFile) -> Result<T>,
