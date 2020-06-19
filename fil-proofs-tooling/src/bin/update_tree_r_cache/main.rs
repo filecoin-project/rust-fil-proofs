@@ -13,7 +13,9 @@ use typenum::{U0, U8};
 
 use filecoin_proofs::constants::*;
 use filecoin_proofs::types::*;
+use filecoin_proofs::with_shape;
 use storage_proofs::cache_key::CacheKey;
+use storage_proofs::hasher::Hasher;
 use storage_proofs::merkle::{create_lc_tree, get_base_tree_count, split_config_and_replica};
 use storage_proofs::merkle::{LCStore, LCTree, MerkleTreeTrait};
 use storage_proofs::util::{default_rows_to_discard, NODE_SIZE};
@@ -23,16 +25,7 @@ fn get_tree_r_info(
     cache: &PathBuf,
     replica_path: &PathBuf,
 ) -> Result<(usize, usize, Vec<StoreConfig>, ReplicaConfig)> {
-    let tree_count = match sector_size as u64 {
-        SECTOR_SIZE_2_KIB => get_base_tree_count::<SectorShape2KiB>(),
-        SECTOR_SIZE_4_KIB => get_base_tree_count::<SectorShape4KiB>(),
-        SECTOR_SIZE_16_KIB => get_base_tree_count::<SectorShape16KiB>(),
-        SECTOR_SIZE_32_KIB => get_base_tree_count::<SectorShape32KiB>(),
-        SECTOR_SIZE_512_MIB => get_base_tree_count::<SectorShape512MiB>(),
-        SECTOR_SIZE_32_GIB => get_base_tree_count::<SectorShape32GiB>(),
-        SECTOR_SIZE_64_GIB => get_base_tree_count::<SectorShape64GiB>(),
-        _ => panic!("Unsupported sector size"),
-    };
+    let tree_count = with_shape!(sector_size as u64, get_base_tree_count);
 
     // Number of nodes per base tree
     let base_tree_leafs = sector_size / NODE_SIZE / tree_count;
@@ -62,37 +55,45 @@ fn get_tree_r_info(
 
 fn get_tree_r_last_root(
     base_tree_leafs: usize,
-    sector_size: usize,
+    sector_size: u64,
     configs: &[StoreConfig],
     replica_config: &ReplicaConfig,
 ) -> Result<DefaultTreeDomain> {
     let base_tree_len = get_merkle_tree_len(base_tree_leafs, OCT_ARITY)?;
-    let tree_r_last_root = match sector_size as u64 {
-        SECTOR_SIZE_2_KIB | SECTOR_SIZE_8_MIB | SECTOR_SIZE_512_MIB => {
-            ensure!(configs.len() == 1, "Invalid tree-shape specified");
-            let store = LCStore::<DefaultTreeDomain>::new_from_disk_with_reader(
-                base_tree_len,
-                OCT_ARITY,
-                &configs[0],
-                ExternalReader::new_from_path(&replica_config.path)?,
-            )?;
+    let tree_r_last_root = if is_sector_shape_base(sector_size) {
+        ensure!(configs.len() == 1, "Invalid tree-shape specified");
+        let store = LCStore::<DefaultTreeDomain>::new_from_disk_with_reader(
+            base_tree_len,
+            OCT_ARITY,
+            &configs[0],
+            ExternalReader::new_from_path(&replica_config.path)?,
+        )?;
 
-            let tree_r_last = LCTree::<DefaultTreeHasher, typenum::U8, typenum::U0, typenum::U0>::from_data_store(store, base_tree_leafs)?;
-            tree_r_last.root()
-        }
-        SECTOR_SIZE_4_KIB | SECTOR_SIZE_16_MIB | SECTOR_SIZE_1_GIB => {
-            let tree_r_last = LCTree::<DefaultTreeHasher, typenum::U8, typenum::U2, typenum::U0>::from_store_configs_and_replica(base_tree_leafs, &configs, &replica_config)?;
-            tree_r_last.root()
-        }
-        SECTOR_SIZE_16_KIB | SECTOR_SIZE_32_GIB => {
-            let tree_r_last = LCTree::<DefaultTreeHasher, typenum::U8, typenum::U8, typenum::U0>::from_store_configs_and_replica(base_tree_leafs, &configs, &replica_config)?;
-            tree_r_last.root()
-        }
-        SECTOR_SIZE_32_KIB | SECTOR_SIZE_64_GIB => {
-            let tree_r_last = LCTree::<DefaultTreeHasher, typenum::U8, typenum::U8, typenum::U2>::from_sub_tree_store_configs_and_replica(base_tree_leafs, &configs, &replica_config)?;
-            tree_r_last.root()
-        }
-        _ => panic!("Unsupported sector size"),
+        let tree_r_last = SectorShapeBase::from_data_store(store, base_tree_leafs)?;
+        tree_r_last.root()
+    } else if is_sector_shape_sub2(sector_size) {
+        let tree_r_last = SectorShapeSub2::from_store_configs_and_replica(
+            base_tree_leafs,
+            &configs,
+            &replica_config,
+        )?;
+        tree_r_last.root()
+    } else if is_sector_shape_sub8(sector_size) {
+        let tree_r_last = SectorShapeSub8::from_store_configs_and_replica(
+            base_tree_leafs,
+            &configs,
+            &replica_config,
+        )?;
+        tree_r_last.root()
+    } else if is_sector_shape_top2(sector_size) {
+        let tree_r_last = SectorShapeTop2::from_sub_tree_store_configs_and_replica(
+            base_tree_leafs,
+            &configs,
+            &replica_config,
+        )?;
+        tree_r_last.root()
+    } else {
+        panic!("Unsupported sector size");
     };
 
     Ok(tree_r_last_root)
@@ -114,10 +115,7 @@ fn build_tree_r_last<Tree: MerkleTreeTrait>(
     sector_size: usize,
     cache: &PathBuf,
     replica_path: &PathBuf,
-) -> Result<(
-    LCTree<Tree::Hasher, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>,
-    Vec<DefaultTreeDomain>,
-)> {
+) -> Result<(<Tree::Hasher as Hasher>::Domain, Vec<DefaultTreeDomain>)> {
     let (tree_count, base_tree_leafs, configs, replica_config) =
         get_tree_r_info(sector_size, &cache, &replica_path)?;
 
@@ -164,7 +162,7 @@ fn build_tree_r_last<Tree: MerkleTreeTrait>(
         &replica_config,
     )?;
 
-    Ok((tree_r_last, base_tree_roots))
+    Ok((tree_r_last.root(), base_tree_roots))
 }
 
 fn run_rebuild(
@@ -172,53 +170,24 @@ fn run_rebuild(
     cache: PathBuf,
     replica_path: PathBuf,
 ) -> Result<(DefaultTreeDomain, Vec<DefaultTreeDomain>)> {
-    let (tree_r_last_root, base_tree_roots) = match sector_size as u64 {
-        SECTOR_SIZE_2_KIB => {
-            let (tree_r_last, base_tree_roots) =
-                build_tree_r_last::<SectorShape2KiB>(sector_size, &cache, &replica_path)?;
-            (tree_r_last.root(), base_tree_roots)
-        }
-        SECTOR_SIZE_4_KIB => {
-            let (tree_r_last, base_tree_roots) =
-                build_tree_r_last::<SectorShape4KiB>(sector_size, &cache, &replica_path)?;
-            (tree_r_last.root(), base_tree_roots)
-        }
-        SECTOR_SIZE_16_KIB => {
-            let (tree_r_last, base_tree_roots) =
-                build_tree_r_last::<SectorShape16KiB>(sector_size, &cache, &replica_path)?;
-            (tree_r_last.root(), base_tree_roots)
-        }
-        SECTOR_SIZE_32_KIB => {
-            let (tree_r_last, base_tree_roots) =
-                build_tree_r_last::<SectorShape32KiB>(sector_size, &cache, &replica_path)?;
-            (tree_r_last.root(), base_tree_roots)
-        }
-        SECTOR_SIZE_512_MIB => {
-            let (tree_r_last, base_tree_roots) =
-                build_tree_r_last::<SectorShape512MiB>(sector_size, &cache, &replica_path)?;
-            (tree_r_last.root(), base_tree_roots)
-        }
-        SECTOR_SIZE_32_GIB => {
-            let (tree_r_last, base_tree_roots) =
-                build_tree_r_last::<SectorShape32GiB>(sector_size, &cache, &replica_path)?;
-            (tree_r_last.root(), base_tree_roots)
-        }
-        SECTOR_SIZE_64_GIB => {
-            let (tree_r_last, base_tree_roots) =
-                build_tree_r_last::<SectorShape64GiB>(sector_size, &cache, &replica_path)?;
-            (tree_r_last.root(), base_tree_roots)
-        }
-        _ => panic!("Unsupported sector size"),
-    };
-
-    Ok((tree_r_last_root, base_tree_roots))
+    with_shape!(
+        sector_size as u64,
+        build_tree_r_last,
+        sector_size,
+        &cache,
+        &replica_path
+    )
 }
 
 fn run_inspect(sector_size: usize, cache: PathBuf, replica_path: PathBuf) -> Result<()> {
     let (_tree_count, base_tree_leafs, configs, replica_config) =
         get_tree_r_info(sector_size, &cache, &replica_path)?;
-    let tree_r_last_root =
-        get_tree_r_last_root(base_tree_leafs, sector_size, &configs, &replica_config)?;
+    let tree_r_last_root = get_tree_r_last_root(
+        base_tree_leafs,
+        sector_size as u64,
+        &configs,
+        &replica_config,
+    )?;
     let p_aux = get_persistent_aux(&cache)?;
 
     println!("CommRLast from p_aux: {:?}", p_aux.comm_r_last);
@@ -229,7 +198,7 @@ fn run_inspect(sector_size: usize, cache: PathBuf, replica_path: PathBuf) -> Res
     let status = if tree_r_last_root == p_aux.comm_r_last {
         "MATCH"
     } else {
-        "MIS-MATCH"
+        "MISMATCH"
     };
     println!("Cached inspection shows a {} of CommRLast", status);
 
@@ -245,7 +214,7 @@ fn run_verify(sector_size: usize, cache: PathBuf, replica_path: PathBuf) -> Resu
         if a == b {
             "MATCH"
         } else {
-            "MIS-MATCH"
+            "MISMATCH"
         }
     };
 
@@ -262,8 +231,12 @@ fn run_verify(sector_size: usize, cache: PathBuf, replica_path: PathBuf) -> Resu
     }
 
     // Retrieve the tree_r_last root from the cached trees on disk.
-    let tree_r_last_root =
-        get_tree_r_last_root(base_tree_leafs, sector_size, &configs, &replica_config)?;
+    let tree_r_last_root = get_tree_r_last_root(
+        base_tree_leafs,
+        sector_size as u64,
+        &configs,
+        &replica_config,
+    )?;
 
     // Read comm_r_last from the persistent aux in the cache dir
     let p_aux: PersistentAux<DefaultTreeDomain> = {
