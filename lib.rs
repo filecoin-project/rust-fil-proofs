@@ -799,23 +799,18 @@ impl MPCParameters {
                         for (base, projective) in bases.iter_mut().zip(projective.iter_mut()) {
                             *projective = wnaf.base(base.into_projective(), 1).scalar(coeff);
                         }
+
+                        C::Projective::batch_normalization(projective);
+                        projective
+                            .iter()
+                            .zip(bases.iter_mut())
+                            .for_each(|(projective, affine)| {
+                                *affine = projective.into_affine();
+                            });
                     });
                 }
             })
             .unwrap();
-
-            // Perform batch normalization
-            projective
-                .par_chunks_mut(chunk_size)
-                .for_each(|p| C::Projective::batch_normalization(p));
-
-            // Turn it all back into affine points
-            projective
-                .par_iter()
-                .zip(bases.par_iter_mut())
-                .for_each(|(projective, affine)| {
-                    *affine = projective.into_affine();
-                });
         }
 
         let delta_inv = privkey.delta.inverse().expect("nonzero");
@@ -1131,7 +1126,14 @@ impl MPCParameters {
             "small params are internally inconsistent wrt. G1 deltas"
         );
 
-        let MPCSmall { delta_g1, delta_g2, h, l, contributions, .. } = contrib;
+        let MPCSmall {
+            delta_g1,
+            delta_g2,
+            h,
+            l,
+            contributions,
+            ..
+        } = contrib;
         self.params.vk.delta_g1 = delta_g1;
         self.params.vk.delta_g2 = delta_g2;
         self.params.h = Arc::new(h);
