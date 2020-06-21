@@ -48,8 +48,8 @@ sha2 = { version = "0.8.3", package = "sha2ni" }
 typenum = "1.11.2"
 bitintr = "0.3.0"
 gperftools = { version = "0.2", optional = true }
-phase2 = { package = "phase21", version = "0.6.0" }
-simplelog = "0.8.0"
+phase2 = { git = "https://github.com/filecoin-project/phase2", package = "phase21", branch = "feat/stream-contrib" }
+simplelog = "0.7.4"
 rand_chacha = "0.2.1"
 dialoguer = "0.6.2"
 generic-array = "0.13.2"

@@ -8,6 +8,9 @@ use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
 use clap::{App, AppSettings, Arg, ArgGroup, SubCommand};
+
+use paired::bls12_381::G1Affine;
+
 use filecoin_proofs::constants::*;
 use filecoin_proofs::parameters::{
     setup_params, window_post_public_params, winning_post_public_params,
@@ -17,8 +20,8 @@ use filecoin_proofs::types::{
 };
 use filecoin_proofs::with_shape;
 use log::{error, info};
-use phase2::small::{read_small_params_from_large_file, MPCSmall};
-use phase2::{verify_contribution, MPCParameters};
+use phase2::small::{read_small_params_from_large_file, MPCSmall, Streamer};
+use phase2::MPCParameters;
 use rand::rngs::OsRng;
 use rand::{RngCore, SeedableRng};
 use rand_chacha::ChaChaRng;
@@ -477,6 +480,112 @@ fn get_mixed_entropy() -> [u8; 32] {
 
 /// Contributes entropy to the current phase2 parameters for a circuit, then writes the updated
 /// parameters to a new file.
+fn contribute_to_params_streaming(path_before: &str) {
+    let (proof, hasher, sector_size, head, prev_param_number, param_size) =
+        parse_params_filename(path_before);
+
+    let param_number = prev_param_number + 1;
+
+    info!(
+        "contributing to params for circuit: {}-{}-{}-{}-{} {}->{}",
+        proof.pretty_print(),
+        hasher.pretty_print(),
+        sector_size.pretty_print(),
+        head,
+        param_size.pretty_print(),
+        prev_param_number,
+        param_number
+    );
+
+    // Get OS entropy prior to deserialization the previous participant's params.
+    let seed = get_mixed_entropy();
+    let mut rng = ChaChaRng::from_seed(seed);
+
+    // Default to small params for first participant.
+    let path_after = params_filename(
+        proof,
+        hasher,
+        sector_size,
+        &head,
+        param_number,
+        ParamSize::Small,
+    );
+
+    let start_total = Instant::now();
+    // let start_read = Instant::now();
+
+    let chunk_size = 10_000; // FIXME: make a parameter
+    let buf_size = chunk_size * std::mem::size_of::<G1Affine>();
+
+    let file_before = File::open(path_before).unwrap();
+    let reader = BufReader::with_capacity(buf_size, file_before);
+
+    // info!(
+    //     "successfully read 'before' params, dt_read={}s",
+    //     start_read.elapsed().as_secs()
+    // );
+
+    info!("making contribution");
+    let start_contrib = Instant::now();
+
+    info!(
+        "making streamer from small 'before' params: {}",
+        path_before
+    );
+
+    let mut streamer = if param_size.is_large() {
+        Streamer::new_from_large_file(reader).unwrap_or_else(|e| {
+            panic!(
+                "failed to make streamer from large `{}`: {}",
+                path_before, e
+            );
+        })
+    } else {
+        Streamer::new(reader).unwrap_or_else(|e| {
+            panic!(
+                "failed to make streamer from small `{}`: {}",
+                path_before, e
+            );
+        })
+    };
+
+    info!("writing small 'after' params to file: {}", path_after);
+    let file_after = File::create(&path_after).unwrap_or_else(|e| {
+        panic!(
+            "failed to create 'after' params file `{}`: {}",
+            path_after, e
+        );
+    });
+    let mut writer = BufWriter::with_capacity(1024 * 1024, file_after);
+
+    let contrib = streamer
+        .contribute(&mut rng, &mut writer, chunk_size)
+        .expect("failed to make contribution");
+
+    let contrib_str = hex_string(&contrib);
+    info!(
+        "successfully made contribution: {}, dt_contribute={}s",
+        contrib_str,
+        start_contrib.elapsed().as_secs()
+    );
+
+    let contrib_path = format!("{}.contrib", path_after);
+    info!("writing contribution hash to file: {}", contrib_path);
+    fs::write(&contrib_path, contrib_str).unwrap_or_else(|e| {
+        panic!(
+            "failed to write contribution to file `{}`: {}",
+            contrib_path, e
+        );
+    });
+
+    info!(
+        "successfully made contribution, dt_total={}s",
+        start_total.elapsed().as_secs()
+    );
+}
+
+/// Contributes entropy to the current phase2 parameters for a circuit, then writes the updated
+/// parameters to a new file.
 fn contribute_to_params(path_before: &str) {
     let (proof, hasher, sector_size, head, prev_param_number, param_size) =
         parse_params_filename(path_before);
@@ -689,7 +798,7 @@ fn verify_contribution_small(path_before: &str, path_after: &str, participant_co
             info!("reading large 'before' params as small: {}", path_before);
             read_small_params_from_large_file(&path_before)
         } else {
-            info!("reading small 'before' params as small: {}", path_before);
+            info!("reading (small) 'before' params as small: {}", path_before);
             File::open(path_before).and_then(|file| {
                 let mut reader = BufReader::with_capacity(1024 * 1024, file);
                 MPCSmall::read(&mut reader)
@@ -714,7 +823,7 @@ fn verify_contribution_small(path_before: &str, path_after: &str, participant_co
             info!("reading large 'after' params as small: {}", path_after);
             read_small_params_from_large_file(&path_after)
         } else {
-            info!("reading small 'after' params as small: {}", path_after);
+            info!("reading (small) 'after' params as small: {}", path_after);
             File::open(path_after).and_then(|file| {
                 let mut reader = BufReader::with_capacity(1024 * 1024, file);
                 MPCSmall::read(&mut reader)
@@ -907,6 +1016,11 @@ fn main() {
             Arg::with_name("path-before")
                 .required(true)
                 .help("The path to the previous participant's params file"),
+        )
+        .arg(
+            Arg::with_name("no-streaming")
+                .takes_value(false)
+                .help("Suppress streaming (greatly increases memory usage)"),
         );
 
     let verify_command = SubCommand::with_name("verify")
@@ -992,6 +1106,7 @@ fn main() {
             }
             "contribute" => {
                 let path_before = matches.value_of("path-before").unwrap();
+                let streaming = !matches.is_present("no-streaming");
 
                 let (proof, hasher, sector_size, head, param_num_before, _param_size) =
                     parse_params_filename(path_before);
@@ -1012,7 +1127,11 @@ fn main() {
                 log_filename.push_str(".log");
                 setup_logger(&log_filename);
 
-                contribute_to_params(path_before);
+                if streaming {
+                    contribute_to_params_streaming(path_before);
+                } else {
+                    contribute_to_params(path_before);
+                }
             }
             "verify" => {
                 let use_large_params = matches.is_present("large");
