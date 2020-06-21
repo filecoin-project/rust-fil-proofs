@@ -1,15 +1,15 @@
 mod mimc;
 
-use std::fs::{File, remove_file};
+use std::fs::{remove_file, File};
 use std::io::{BufReader, BufWriter};
 use std::path::Path;
 
 use bellperson::groth16::{create_random_proof, prepare_verifying_key, verify_proof};
 use ff::Field;
 use paired::bls12_381::{Bls12, Fr};
-use phase21::{MPCParameters, verify_contribution};
-use phase21::small::{MPCSmall, read_small_params_from_large_file, verify_contribution_small};
-use rand::{SeedableRng, thread_rng};
+use phase21::small::{read_small_params_from_large_file, verify_contribution_small, MPCSmall};
+use phase21::{verify_contribution, MPCParameters};
+use rand::{thread_rng, SeedableRng};
 use rand_chacha::ChaChaRng;
 
 use mimc::{mimc as mimc_hash, MiMCDemo, MIMC_ROUNDS};
@@ -203,12 +203,12 @@ fn test_small_file_io() {
         let mut writer = BufWriter::with_capacity(1024 * 1024, file);
         small_params.write(&mut writer).unwrap();
     }
-    
+
     // Test small param deserialisation.
     {
         let file = File::open(SMALL_PATH).unwrap();
         let mut reader = BufReader::with_capacity(1024 * 1024, file);
-        let small_read = MPCSmall::read(&mut reader).unwrap();
+        let small_read = MPCSmall::read(&mut reader, false).unwrap();
         assert_eq!(small_read, small_params);
         assert!(large_params.has_last_contrib(&small_read));
     };
