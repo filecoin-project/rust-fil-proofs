@@ -32,9 +32,9 @@ mod tests {
     use super::*;
 
     use crate::crypto;
-    use crate::gadgets::TestConstraintSystem;
     use crate::util::{bits_to_bytes, bytes_into_boolean_vec};
     use bellperson::gadgets::boolean::Boolean;
+    use bellperson::util_cs::test_cs::TestConstraintSystem;
     use bellperson::ConstraintSystem;
     use paired::bls12_381::Bls12;
     use rand::{Rng, SeedableRng};

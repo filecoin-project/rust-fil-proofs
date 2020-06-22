@@ -179,11 +179,11 @@ mod tests {
 
     use std::collections::BTreeMap;
 
+    use bellperson::util_cs::test_cs::TestConstraintSystem;
     use rand::{Rng, SeedableRng};
     use rand_xorshift::XorShiftRng;
     use storage_proofs_core::{
         compound_proof,
-        gadgets::TestConstraintSystem,
         hasher::{Domain, HashFunction, Hasher, PedersenHasher, PoseidonHasher},
         merkle::{generate_tree, get_base_tree_count, BinaryMerkleTree},
         proof::NoRequirements,

@@ -161,13 +161,13 @@ impl<'a, Tree: 'static + MerkleTreeTrait>
 mod tests {
     use super::*;
 
+    use bellperson::util_cs::{metric_cs::MetricCS, test_cs::TestConstraintSystem};
     use generic_array::typenum::{U0, U2, U4, U8};
     use pretty_assertions::assert_eq;
     use rand::SeedableRng;
     use rand_xorshift::XorShiftRng;
     use storage_proofs_core::{
         compound_proof,
-        gadgets::{MetricCS, TestConstraintSystem},
         hasher::{Domain, HashFunction, Hasher, PedersenHasher, PoseidonHasher},
         merkle::{generate_tree, get_base_tree_count, LCTree, MerkleTreeTrait},
     };
@@ -185,7 +185,7 @@ mod tests {
     #[ignore]
     #[test]
     fn fallback_post_poseidon_single_partition_matching_base_8() {
-        fallback_post::<LCTree<PoseidonHasher, U8, U0, U0>>(3, 3, 1);
+        fallback_post::<LCTree<PoseidonHasher, U8, U0, U0>>(15, 15, 1);
     }
 
     #[ignore]

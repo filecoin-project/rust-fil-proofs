@@ -305,6 +305,7 @@ mod tests {
 
     use super::*;
 
+    use bellperson::util_cs::test_cs::TestConstraintSystem;
     use ff::Field;
     use generic_array::typenum;
     use merkletree::store::StoreConfig;
@@ -316,7 +317,6 @@ mod tests {
         compound_proof,
         drgraph::{graph_height, BucketGraph, BASE_DEGREE},
         fr32::{bytes_into_fr, fr_into_bytes},
-        gadgets::TestConstraintSystem,
         hasher::PedersenHasher,
         merkle::MerkleProofTrait,
         proof::ProofScheme,

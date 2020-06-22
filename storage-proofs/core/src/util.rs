@@ -180,8 +180,8 @@ mod tests {
     use super::*;
 
     use crate::fr32::fr_into_bytes;
-    use crate::gadgets::TestConstraintSystem;
     use bellperson::gadgets::num;
+    use bellperson::util_cs::test_cs::TestConstraintSystem;
     use ff::Field;
     use paired::bls12_381::*;
     use rand::{Rng, SeedableRng};

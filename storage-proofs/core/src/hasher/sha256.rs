@@ -351,8 +351,8 @@ mod tests {
     use super::*;
 
     use crate::fr32::fr_into_bytes;
-    use crate::gadgets::TestConstraintSystem;
     use crate::util::bytes_into_boolean_vec;
+    use bellperson::util_cs::test_cs::TestConstraintSystem;
 
     use bellperson::gadgets::boolean::Boolean;
     use bellperson::ConstraintSystem;

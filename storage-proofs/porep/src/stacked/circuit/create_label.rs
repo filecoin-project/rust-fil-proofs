@@ -68,7 +68,7 @@ mod tests {
     use super::*;
 
     use bellperson::gadgets::boolean::Boolean;
-    use bellperson::ConstraintSystem;
+    use bellperson::util_cs::test_cs::TestConstraintSystem;
     use ff::Field;
     use paired::bls12_381::{Bls12, Fr};
     use rand::SeedableRng;
@@ -76,7 +76,6 @@ mod tests {
     use storage_proofs_core::{
         drgraph::{Graph, BASE_DEGREE},
         fr32::{bytes_into_fr, fr_into_bytes},
-        gadgets::TestConstraintSystem,
         hasher::Sha256Hasher,
         util::bytes_into_boolean_vec_be,
         util::{data_at_node, NODE_SIZE},
