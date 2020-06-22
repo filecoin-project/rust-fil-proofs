@@ -4,12 +4,11 @@ use std::path::{Path, PathBuf};
 use anyhow::{ensure, Context, Result};
 use bincode::deserialize;
 use clap::{value_t, App, Arg, SubCommand};
-use generic_array::typenum::{self, Unsigned};
+use generic_array::typenum::Unsigned;
 use memmap::MmapOptions;
 use merkletree::merkle::get_merkle_tree_len;
 use merkletree::store::{ExternalReader, ReplicaConfig, Store, StoreConfig};
 use tempdir::TempDir;
-use typenum::{U0, U8};
 
 use filecoin_proofs::constants::*;
 use filecoin_proofs::types::*;
@@ -147,10 +146,7 @@ fn build_tree_r_last<Tree: MerkleTreeTrait>(
             (offset + (sector_size / tree_count)),
             &store_path
         );
-        let tree = LCTree::<DefaultTreeHasher, U8, U0, U0>::from_byte_slice_with_config(
-            slice,
-            config.clone(),
-        )?;
+        let tree = SectorShapeBase::from_byte_slice_with_config(slice, config.clone())?;
         base_tree_roots.push(tree.root());
     }
 

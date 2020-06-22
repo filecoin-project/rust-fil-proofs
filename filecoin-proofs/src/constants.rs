@@ -134,17 +134,20 @@ pub type SectorShapeSub2 = LCTree<DefaultTreeHasher, U8, U2, U0>;
 pub type SectorShapeSub8 = LCTree<DefaultTreeHasher, U8, U8, U0>;
 pub type SectorShapeTop2 = LCTree<DefaultTreeHasher, U8, U8, U2>;
 
-// Specific shapes
-pub type SectorShape2KiB = LCTree<DefaultTreeHasher, U8, U0, U0>;
-pub type SectorShape4KiB = LCTree<DefaultTreeHasher, U8, U2, U0>;
-pub type SectorShape16KiB = LCTree<DefaultTreeHasher, U8, U8, U0>;
-pub type SectorShape32KiB = LCTree<DefaultTreeHasher, U8, U8, U2>;
-pub type SectorShape8MiB = LCTree<DefaultTreeHasher, U8, U0, U0>;
-pub type SectorShape16MiB = LCTree<DefaultTreeHasher, U8, U2, U0>;
-pub type SectorShape512MiB = LCTree<DefaultTreeHasher, U8, U0, U0>;
-pub type SectorShape1GiB = LCTree<DefaultTreeHasher, U8, U2, U0>;
-pub type SectorShape32GiB = LCTree<DefaultTreeHasher, U8, U8, U0>;
-pub type SectorShape64GiB = LCTree<DefaultTreeHasher, U8, U8, U2>;
+// Specific size constants by shape
+pub type SectorShape2KiB = SectorShapeBase;
+pub type SectorShape8MiB = SectorShapeBase;
+pub type SectorShape512MiB = SectorShapeBase;
+
+pub type SectorShape4KiB = SectorShapeSub2;
+pub type SectorShape16MiB = SectorShapeSub2;
+pub type SectorShape1GiB = SectorShapeSub2;
+
+pub type SectorShape16KiB = SectorShapeSub8;
+pub type SectorShape32GiB = SectorShapeSub8;
+
+pub type SectorShape32KiB = SectorShapeTop2;
+pub type SectorShape64GiB = SectorShapeTop2;
 
 pub fn is_sector_shape_base(sector_size: u64) -> bool {
     match sector_size {
