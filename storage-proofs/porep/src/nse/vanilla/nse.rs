@@ -28,15 +28,15 @@ pub struct NarrowStackedExpander<'a, Tree: 'a + MerkleTreeTrait, G: 'a + Hasher>
 #[derive(Debug, Clone)]
 pub struct SetupParams {
     pub config: Config,
-    /// Number of challengs per window.
-    pub num_challenges_window: usize,
+    /// Number of layer challenges.
+    pub num_layer_challenges: usize,
 }
 
 #[derive(Debug)]
 pub struct PublicParams<Tree> {
     pub config: Config,
-    /// Number of challengs per window.
-    pub num_challenges_window: usize,
+    /// Number of layer challenges.
+    pub num_layer_challenges: usize,
     _tree: PhantomData<Tree>,
 }
 
@@ -44,7 +44,7 @@ impl<Tree> Clone for PublicParams<Tree> {
     fn clone(&self) -> Self {
         Self {
             config: self.config.clone(),
-            num_challenges_window: self.num_challenges_window,
+            num_layer_challenges: self.num_layer_challenges,
             _tree: Default::default(),
         }
     }
@@ -54,7 +54,7 @@ impl<Tree> From<SetupParams> for PublicParams<Tree> {
     fn from(setup_params: SetupParams) -> Self {
         Self {
             config: setup_params.config,
-            num_challenges_window: setup_params.num_challenges_window,
+            num_layer_challenges: setup_params.num_layer_challenges,
             _tree: Default::default(),
         }
     }
@@ -63,9 +63,9 @@ impl<Tree> From<SetupParams> for PublicParams<Tree> {
 impl<Tree: MerkleTreeTrait> ParameterSetMetadata for PublicParams<Tree> {
     fn identifier(&self) -> String {
         format!(
-            "nse::PublicParams{{ config: {:?}, challenges/window {}, tree: {} }}",
+            "nse::PublicParams{{ config: {:?}, layer_challenges {}, tree: {} }}",
             self.config,
-            self.num_challenges_window,
+            self.num_layer_challenges,
             Tree::display()
         )
     }
@@ -283,6 +283,41 @@ impl<Tree: MerkleTreeTrait, G: Hasher> TemporaryAuxCache<Tree, G> {
             replica_path,
             t_aux: t_aux.clone(),
         })
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct LayerProof<Tree: MerkleTreeTrait, G: Hasher> {
+    #[serde(bound(
+        serialize = "Proof<Tree, G>: Serialize",
+        deserialize = "Proof<Tree, G>: Deserialize<'de>"
+    ))]
+    pub first_layer_proof: Proof<Tree, G>,
+    #[serde(bound(
+        serialize = "Proof<Tree, G>: Serialize",
+        deserialize = "Proof<Tree, G>: Deserialize<'de>"
+    ))]
+    pub expander_layer_proofs: Vec<Proof<Tree, G>>,
+    #[serde(bound(
+        serialize = "Proof<Tree, G>: Serialize",
+        deserialize = "Proof<Tree, G>: Deserialize<'de>"
+    ))]
+    pub butterfly_layer_proofs: Vec<Proof<Tree, G>>,
+    #[serde(bound(
+        serialize = "Proof<Tree, G>: Serialize",
+        deserialize = "Proof<Tree, G>: Deserialize<'de>"
+    ))]
+    pub last_layer_proof: Proof<Tree, G>,
+}
+
+impl<Tree: MerkleTreeTrait, G: Hasher> Clone for LayerProof<Tree, G> {
+    fn clone(&self) -> Self {
+        Self {
+            first_layer_proof: self.first_layer_proof.clone(),
+            expander_layer_proofs: self.expander_layer_proofs.clone(),
+            butterfly_layer_proofs: self.butterfly_layer_proofs.clone(),
+            last_layer_proof: self.last_layer_proof.clone(),
+        }
     }
 }
 

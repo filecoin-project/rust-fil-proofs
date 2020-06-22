@@ -265,7 +265,7 @@ mod tests {
 
         let sp = SetupParams {
             config: config.clone(),
-            num_challenges_window: 2,
+            num_layer_challenges: 2,
         };
 
         let pp = NarrowStackedExpander::<Tree, Sha256Hasher>::setup(&sp).expect("setup failed");
@@ -337,7 +337,7 @@ mod tests {
 
         let sp = SetupParams {
             config: config.clone(),
-            num_challenges_window: 2,
+            num_layer_challenges: 2,
         };
 
         let pp = NarrowStackedExpander::<Tree, Sha256Hasher>::setup(&sp).expect("setup failed");
