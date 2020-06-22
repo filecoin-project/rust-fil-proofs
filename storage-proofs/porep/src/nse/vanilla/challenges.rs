@@ -1,5 +1,5 @@
-use num_bigint::BigUint;
-use num_traits::cast::ToPrimitive;
+use std::convert::TryFrom;
+
 use sha2::{Digest, Sha256};
 use storage_proofs_core::hasher::Domain;
 
@@ -15,107 +15,135 @@ pub struct ChallengeRequirements {
 /// Each challenge, challenges across all layers in the selected window.
 #[derive(Debug, Clone)]
 pub struct Challenges<D: Domain> {
-    /// The number of layers.
-    num_layers: usize,
+    /// The number expander of layers.
+    num_expander_layers: usize,
+    /// The number butterfl of layers.
+    num_butterfly_layers: usize,
     /// The number of windows.
     num_windows: usize,
-    /// The number of challenges per window.
-    num_challenges_per_window: usize,
-    /// Number of nodes in a single window.
+    /// The number of layer challenges.
+    num_layer_challenges: usize,
+    /// Number of nodes per sector
+    num_nodes_sector: usize,
+    /// Number of nodes per window
     num_nodes_window: usize,
     /// Replica ID, to make the challenges unique to the replica.
     replica_id: D,
     /// Randomness seed
     seed: [u8; 32],
-    /// Currently challenged window index.
-    current_window: usize,
-    /// Currently challenged node index for the window.
+    /// Currently challenged node index. Goes from 0 to `num_layer_challenges` * `num_layers`.
     current_challenge: usize,
 }
 
 impl<D: Domain> Challenges<D> {
     pub fn new(
         config: &Config,
-        num_challenges_per_window: usize,
+        num_layer_challenges: usize,
         replica_id: &D,
         seed: [u8; 32],
     ) -> Self {
         Self {
-            num_layers: config.num_layers(),
+            num_expander_layers: config.num_expander_layers,
+            num_butterfly_layers: config.num_butterfly_layers,
             num_windows: config.num_windows(),
-            num_challenges_per_window,
+            num_layer_challenges,
+            num_nodes_sector: config.num_nodes_sector(),
             num_nodes_window: config.num_nodes_window,
             replica_id: *replica_id,
             seed,
-            current_window: 0,
             current_challenge: 0,
         }
     }
 
-    /// Returns the number of challenges.
+    /// Returns the number of layer challenges.
     pub fn len(&self) -> usize {
-        self.num_challenges_per_window
+        self.num_layer_challenges
+    }
+
+    fn num_layers(&self) -> usize {
+        self.num_expander_layers + self.num_butterfly_layers
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
+pub struct LayerChallenge {
+    /// Challenges the first layer, which has no parents.
+    pub first_layer_challenge: Challenge,
+    pub expander_challenges: Vec<Challenge>,
+    pub butterfly_challenges: Vec<Challenge>,
+    /// Challenges the last layer which is butterfly + encoding.
+    pub last_layer_challenge: Challenge,
+}
+
+#[derive(Debug, Clone)]
 pub struct Challenge {
     /// Index for the challenged window.
-    pub window: usize,
-    /// Index for the challenge node.
-    pub node: usize,
-    /// Index for the challenged layer.
-    pub layer: usize,
+    pub window: u64,
+    /// Index for the challenge node (absolute in the sector).
+    pub absolute_index: u64,
+    /// Index for the challenge node (relative in the window).
+    pub relative_index: u32,
+}
+
+impl<D: Domain> Challenges<D> {
+    fn next_node_challenge(&mut self) -> Challenge {
+        let randomness = self.randomness(self.current_challenge as u64);
+        let absolute_index = randomness % self.num_nodes_sector as u64;
+        let window = absolute_index / self.num_nodes_window as u64;
+        let relative_index = u32::try_from(absolute_index % self.num_nodes_window as u64)
+            .expect("invalid sector/window size");
+
+        // increase challenge index
+        self.current_challenge += 1;
+
+        Challenge {
+            window,
+            absolute_index,
+            relative_index,
+        }
+    }
+
+    fn randomness(&self, index: u64) -> u64 {
+        let bytes = Sha256::new()
+            .chain(self.replica_id.into_bytes())
+            .chain(self.seed)
+            .chain(&(index as u64).to_le_bytes())
+            .result();
+
+        let mut partial_bytes = [0u8; 8];
+        partial_bytes.copy_from_slice(&bytes[..8]);
+
+        u64::from_le_bytes(partial_bytes)
+    }
 }
 
 impl<D: Domain> Iterator for Challenges<D> {
-    type Item = Challenge;
+    type Item = LayerChallenge;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.current_challenge == self.num_challenges_per_window
-            && self.current_window == self.num_windows - 1
-        {
+        if self.current_challenge >= self.num_layer_challenges * self.num_layers() {
             return None;
         }
 
-        if self.current_challenge == self.num_challenges_per_window
-            && self.current_window <= self.num_windows
-        {
-            self.current_challenge = 0;
-            self.current_window += 1;
-        }
+        let first_layer_challenge = self.next_node_challenge();
+        let expander_challenges = (0..self.num_expander_layers - 1)
+            .map(|_| self.next_node_challenge())
+            .collect();
+        let butterfly_challenges = (0..self.num_butterfly_layers - 1)
+            .map(|_| self.next_node_challenge())
+            .collect();
+        let last_layer_challenge = self.next_node_challenge();
 
-        // Generate a challenge into any layer of the current window.
-        let range = self.num_nodes_window * self.num_layers;
-        let challenge_index = self.current_window * self.num_nodes_window + self.current_challenge;
-        let hash = Sha256::new()
-            .chain(self.replica_id.into_bytes())
-            .chain(self.seed)
-            .chain(&(challenge_index as u64).to_le_bytes())
-            .result();
-
-        let big_challenge = BigUint::from_bytes_le(hash.as_ref());
-
-        // For now, we cannot try to prove the first or last node, so make sure the challenge can never be 0.
-        let big_mod_challenge = big_challenge % (range - 1);
-        let big_mod_challenge = big_mod_challenge
-            .to_usize()
-            .expect("`big_mod_challenge` exceeds size of `usize`");
-        let challenged_node = big_mod_challenge + 1;
-        let layer = challenged_node / self.num_nodes_window;
-        let node = challenged_node % self.num_nodes_window;
-
-        self.current_challenge += 1;
-
-        Some(Challenge {
-            window: self.current_window,
-            node,
-            layer: layer + 1, // layers are 1-indexed
+        Some(LayerChallenge {
+            first_layer_challenge,
+            expander_challenges,
+            butterfly_challenges,
+            last_layer_challenge,
         })
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
-        let size = self.num_windows * self.num_challenges_per_window;
+        let size = self.len();
         (size, Some(size))
     }
 }
@@ -144,28 +172,52 @@ mod tests {
 
         let replica_id = <PoseidonHasher as Hasher>::Domain::random(rng);
         let seed = rng.gen();
-        let num_challenges_per_window = 2;
-        let challenges = Challenges::new(&config, num_challenges_per_window, &replica_id, seed);
+        let num_layer_challenges = 2;
+        let challenges = Challenges::new(&config, num_layer_challenges, &replica_id, seed);
 
         let list: Vec<_> = challenges.collect();
-        assert_eq!(list.len(), num_challenges_per_window * config.num_windows());
+        assert_eq!(list.len(), num_layer_challenges);
 
-        for (window, chunk) in list.chunks(num_challenges_per_window).enumerate() {
-            for challenge in chunk {
-                assert_eq!(challenge.window, window, "incorrect window");
-                assert!(challenge.layer > 0, "layers are 1-indexed");
-                assert!(
-                    challenge.layer <= config.num_layers(),
-                    "layer too large: {}, {}",
-                    challenge.layer,
-                    config.num_layers()
-                );
-                assert!(challenge.node > 1, "cannot challenge node 0");
-                assert!(
-                    challenge.node < config.num_nodes_window,
-                    "challenge too large"
-                );
+        for layer_challenge in list.iter() {
+            assert_eq!(
+                layer_challenge.butterfly_challenges.len(),
+                config.num_butterfly_layers - 1
+            );
+            assert_eq!(
+                layer_challenge.expander_challenges.len(),
+                config.num_expander_layers - 1
+            );
+
+            assert!(layer_challenge.first_layer_challenge.window < config.num_windows() as u64);
+            assert!(
+                layer_challenge.first_layer_challenge.absolute_index
+                    < config.num_nodes_sector() as u64
+            );
+            assert!(
+                layer_challenge.first_layer_challenge.relative_index
+                    < config.num_nodes_window as u32
+            );
+
+            for challenge in &layer_challenge.expander_challenges {
+                assert!(challenge.window < config.num_windows() as u64);
+                assert!(challenge.absolute_index < config.num_nodes_sector() as u64);
+                assert!(challenge.relative_index < config.num_nodes_window as u32);
             }
+
+            for challenge in &layer_challenge.butterfly_challenges {
+                assert!(challenge.window < config.num_windows() as u64);
+                assert!(challenge.absolute_index < config.num_nodes_sector() as u64);
+                assert!(challenge.relative_index < config.num_nodes_window as u32);
+            }
+            assert!(layer_challenge.last_layer_challenge.window < config.num_windows() as u64);
+            assert!(
+                layer_challenge.last_layer_challenge.absolute_index
+                    < config.num_nodes_sector() as u64
+            );
+            assert!(
+                layer_challenge.last_layer_challenge.relative_index
+                    < config.num_nodes_window as u32
+            );
         }
     }
 }
