@@ -42,6 +42,17 @@ macro_rules! check {
             return false;
         }
     };
+    ($val:expr, $($arg:tt)*) => ({
+        if !$val {
+            log::debug!("expected {:?} to be true`\
+                         \n\
+                         \n{}\
+                         \n",
+                        dbg!($val),
+                        format_args!($($arg)*));
+            return false;
+        }
+    });
 }
 
 macro_rules! prefetch {
