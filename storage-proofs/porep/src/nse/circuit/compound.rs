@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{ensure, Result};
 use bellperson::Circuit;
 use paired::bls12_381::{Bls12, Fr};
 use storage_proofs_core::{
@@ -9,7 +9,7 @@ use storage_proofs_core::{
     proof::ProofScheme,
 };
 
-use super::NseCircuit;
+use super::{LayerProof, NseCircuit};
 use crate::nse::NarrowStackedExpander;
 
 #[derive(Debug)]
@@ -29,7 +29,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher>
         pub_params: &<NarrowStackedExpander<Tree, G> as ProofScheme>::PublicParams,
         k: Option<usize>,
     ) -> Result<Vec<Fr>> {
-        todo!();
+        todo!()
     }
 
     fn circuit<'b>(
@@ -39,12 +39,29 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher>
         public_params: &'b <NarrowStackedExpander<Tree, G> as ProofScheme>::PublicParams,
         _partition_k: Option<usize>,
     ) -> Result<NseCircuit<'a, Tree, G>> {
-        todo!()
+        ensure!(
+            !vanilla_proof.is_empty(),
+            "Cannot create a circuit with no vanilla proofs"
+        );
+
+        Ok(NseCircuit {
+            public_params: public_params.clone(),
+            replica_id: Some(public_inputs.replica_id),
+            proofs: vanilla_proof.iter().cloned().map(Into::into).collect(),
+        })
     }
 
     fn blank_circuit(
         public_params: &<NarrowStackedExpander<Tree, G> as ProofScheme>::PublicParams,
     ) -> NseCircuit<'a, Tree, G> {
-        todo!()
+        let config = &public_params.config;
+
+        NseCircuit {
+            public_params: public_params.clone(),
+            replica_id: None,
+            proofs: (0..public_params.num_layer_challenges)
+                .map(|_| LayerProof::blank(config))
+                .collect(),
+        }
     }
 }

@@ -9,10 +9,10 @@ use crate::nse::NarrowStackedExpander;
 
 /// NSE Circuit.
 pub struct NseCircuit<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> {
-    public_params: <NarrowStackedExpander<'a, Tree, G> as ProofScheme<'a>>::PublicParams,
-    replica_id: Option<<Tree::Hasher as Hasher>::Domain>,
+    pub(crate) public_params: <NarrowStackedExpander<'a, Tree, G> as ProofScheme<'a>>::PublicParams,
+    pub(crate) replica_id: Option<<Tree::Hasher as Hasher>::Domain>,
 
-    proofs: Vec<LayerProof<Tree, G>>,
+    pub(crate) proofs: Vec<LayerProof<Tree, G>>,
 }
 
 impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> CircuitComponent

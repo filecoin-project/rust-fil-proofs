@@ -8,7 +8,7 @@ use storage_proofs_core::{
     merkle::{DiskStore, MerkleProofTrait, MerkleTreeTrait, MerkleTreeWrapper},
 };
 
-use super::super::vanilla::{LayerProof as VanillaLayerProof, Proof as VanillaProof};
+use super::super::vanilla::{Config, LayerProof as VanillaLayerProof, Proof as VanillaProof};
 
 pub struct LayerProof<Tree: MerkleTreeTrait, G: Hasher> {
     pub first_layer_proof: Proof<Tree, G>,
@@ -38,6 +38,21 @@ pub struct Proof<Tree: MerkleTreeTrait, G: Hasher> {
     _t: PhantomData<Tree>,
 }
 
+impl<Tree: MerkleTreeTrait, G: Hasher> LayerProof<Tree, G> {
+    pub fn blank(config: &Config) -> Self {
+        LayerProof {
+            first_layer_proof: Proof::blank(config, 0),
+            expander_layer_proofs: (0..config.num_expander_layers - 1)
+                .map(|_| Proof::blank(config, config.degree_expander))
+                .collect(),
+            butterfly_layer_proofs: (0..config.num_butterfly_layers - 1)
+                .map(|_| Proof::blank(config, config.degree_butterfly))
+                .collect(),
+            last_layer_proof: Proof::blank(config, config.degree_butterfly),
+        }
+    }
+}
+
 impl<Tree: MerkleTreeTrait, G: Hasher> From<VanillaLayerProof<Tree, G>> for LayerProof<Tree, G> {
     fn from(vanilla_proof: VanillaLayerProof<Tree, G>) -> Self {
         let VanillaLayerProof {
@@ -52,6 +67,21 @@ impl<Tree: MerkleTreeTrait, G: Hasher> From<VanillaLayerProof<Tree, G>> for Laye
             butterfly_layer_proofs: butterfly_layer_proofs.into_iter().map(Into::into).collect(),
             expander_layer_proofs: expander_layer_proofs.into_iter().map(Into::into).collect(),
             last_layer_proof: last_layer_proof.into(),
+        }
+    }
+}
+
+impl<Tree: MerkleTreeTrait, G: Hasher> Proof<Tree, G> {
+    pub fn blank(config: &Config, num_parents: usize) -> Self {
+        Proof {
+            data_path: AuthPath::blank(config.num_nodes_sector()),
+            data_leaf: None,
+            challenge: None,
+            layer_path: TreeAuthPath::<Tree>::blank(config.num_nodes_sector()),
+            parents_paths: (0..num_parents)
+                .map(|_| TreeAuthPath::<Tree>::blank(config.num_nodes_sector()))
+                .collect(),
+            _t: PhantomData,
         }
     }
 }
