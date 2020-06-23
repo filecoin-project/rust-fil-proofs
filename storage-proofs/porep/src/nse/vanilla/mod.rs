@@ -11,7 +11,7 @@ mod proof_scheme;
 /// A single parent index.
 pub type Parent = u32;
 
-pub use self::batch_hasher::batch_hash;
+pub use self::batch_hasher::{batch_hash, truncate_hash};
 pub use self::butterfly_graph::*;
 pub use self::challenges::*;
 pub use self::config::Config;
