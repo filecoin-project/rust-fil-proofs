@@ -15,9 +15,11 @@ use crate::error::Result;
 use crate::gadgets::constraint;
 use crate::gadgets::insertion::insert;
 use crate::gadgets::variables::Root;
-use crate::merkle::{base_path_length, MerkleProofTrait, MerkleTreeTrait};
+use crate::merkle::{
+    base_path_length, DiskStore, MerkleProofTrait, MerkleTreeTrait, MerkleTreeWrapper,
+};
 use crate::parameter_cache::{CacheableParameters, ParameterSetMetadata};
-use crate::por::PoR;
+use crate::por::{PoR, PublicInputs, PublicParams};
 use crate::proof::ProofScheme;
 
 /// Proof of retrievability.
@@ -437,6 +439,43 @@ impl<'a, Tree: MerkleTreeTrait> PoRCircuit<Tree> {
 
         por.synthesize(&mut cs)
     }
+}
+
+/// Helper to generate public inputs for inclusion proofs.
+pub fn generate_inclusion_inputs<Tree: 'static + MerkleTreeTrait>(
+    por_params: &PublicParams,
+    challenge: usize,
+    k: Option<usize>,
+) -> Result<Vec<Fr>> {
+    let pub_inputs = PublicInputs::<<Tree::Hasher as Hasher>::Domain> {
+        challenge,
+        commitment: None,
+    };
+
+    PoRCompound::<Tree>::generate_public_inputs(&pub_inputs, por_params, k)
+}
+
+/// Enforce the inclusion of the given path, to the given leaf and the root.
+pub fn enforce_inclusion<H, U, V, W, CS: ConstraintSystem<Bls12>>(
+    cs: CS,
+    path: AuthPath<H, U, V, W>,
+    root: &num::AllocatedNum<Bls12>,
+    leaf: &num::AllocatedNum<Bls12>,
+) -> Result<(), SynthesisError>
+where
+    H: 'static + Hasher,
+    U: 'static + PoseidonArity,
+    V: 'static + PoseidonArity,
+    W: 'static + PoseidonArity,
+{
+    let root = Root::from_allocated::<CS>(root.clone());
+    let leaf = Root::from_allocated::<CS>(leaf.clone());
+
+    PoRCircuit::<MerkleTreeWrapper<H, DiskStore<H::Domain>, U, V, W>>::synthesize(
+        cs, leaf, path, root, true,
+    )?;
+
+    Ok(())
 }
 
 #[cfg(test)]
