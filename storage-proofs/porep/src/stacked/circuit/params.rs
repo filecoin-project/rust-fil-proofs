@@ -6,10 +6,10 @@ use bellperson::{ConstraintSystem, SynthesisError};
 use generic_array::typenum::{U0, U2};
 use storage_proofs_core::{
     drgraph::Graph,
-    gadgets::por::{AuthPath, PoRCircuit},
-    gadgets::{encode::encode, uint64, variables::Root},
-    hasher::{Hasher, PoseidonArity},
-    merkle::{DiskStore, MerkleProofTrait, MerkleTreeTrait, MerkleTreeWrapper},
+    gadgets::por::{enforce_inclusion, AuthPath},
+    gadgets::{encode::encode, uint64},
+    hasher::Hasher,
+    merkle::{MerkleProofTrait, MerkleTreeTrait},
     util::reverse_bit_numbering,
 };
 
@@ -287,27 +287,4 @@ where
             _t: PhantomData,
         }
     }
-}
-
-/// Enforce the inclusion of the given path, to the given leaf and the root.
-fn enforce_inclusion<H, U, V, W, CS: ConstraintSystem<Bls12>>(
-    cs: CS,
-    path: AuthPath<H, U, V, W>,
-    root: &num::AllocatedNum<Bls12>,
-    leaf: &num::AllocatedNum<Bls12>,
-) -> Result<(), SynthesisError>
-where
-    H: 'static + Hasher,
-    U: 'static + PoseidonArity,
-    V: 'static + PoseidonArity,
-    W: 'static + PoseidonArity,
-{
-    let root = Root::from_allocated::<CS>(root.clone());
-    let leaf = Root::from_allocated::<CS>(leaf.clone());
-
-    PoRCircuit::<MerkleTreeWrapper<H, DiskStore<H::Domain>, U, V, W>>::synthesize(
-        cs, leaf, path, root, true,
-    )?;
-
-    Ok(())
 }
