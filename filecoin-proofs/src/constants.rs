@@ -128,16 +128,54 @@ pub type DefaultBinaryTree = storage_proofs::merkle::BinaryMerkleTree<DefaultTre
 pub type DefaultOctTree = storage_proofs::merkle::OctMerkleTree<DefaultTreeHasher>;
 pub type DefaultOctLCTree = storage_proofs::merkle::OctLCMerkleTree<DefaultTreeHasher>;
 
-pub type SectorShape2KiB = LCTree<DefaultTreeHasher, U8, U0, U0>;
-pub type SectorShape4KiB = LCTree<DefaultTreeHasher, U8, U2, U0>;
-pub type SectorShape16KiB = LCTree<DefaultTreeHasher, U8, U8, U0>;
-pub type SectorShape32KiB = LCTree<DefaultTreeHasher, U8, U8, U2>;
-pub type SectorShape8MiB = LCTree<DefaultTreeHasher, U8, U0, U0>;
-pub type SectorShape16MiB = LCTree<DefaultTreeHasher, U8, U2, U0>;
-pub type SectorShape512MiB = LCTree<DefaultTreeHasher, U8, U0, U0>;
-pub type SectorShape1GiB = LCTree<DefaultTreeHasher, U8, U2, U0>;
-pub type SectorShape32GiB = LCTree<DefaultTreeHasher, U8, U8, U0>;
-pub type SectorShape64GiB = LCTree<DefaultTreeHasher, U8, U8, U2>;
+// Generic shapes
+pub type SectorShapeBase = LCTree<DefaultTreeHasher, U8, U0, U0>;
+pub type SectorShapeSub2 = LCTree<DefaultTreeHasher, U8, U2, U0>;
+pub type SectorShapeSub8 = LCTree<DefaultTreeHasher, U8, U8, U0>;
+pub type SectorShapeTop2 = LCTree<DefaultTreeHasher, U8, U8, U2>;
+
+// Specific size constants by shape
+pub type SectorShape2KiB = SectorShapeBase;
+pub type SectorShape8MiB = SectorShapeBase;
+pub type SectorShape512MiB = SectorShapeBase;
+
+pub type SectorShape4KiB = SectorShapeSub2;
+pub type SectorShape16MiB = SectorShapeSub2;
+pub type SectorShape1GiB = SectorShapeSub2;
+
+pub type SectorShape16KiB = SectorShapeSub8;
+pub type SectorShape32GiB = SectorShapeSub8;
+
+pub type SectorShape32KiB = SectorShapeTop2;
+pub type SectorShape64GiB = SectorShapeTop2;
+
+pub fn is_sector_shape_base(sector_size: u64) -> bool {
+    match sector_size {
+        SECTOR_SIZE_2_KIB | SECTOR_SIZE_8_MIB | SECTOR_SIZE_512_MIB => true,
+        _ => false,
+    }
+}
+
+pub fn is_sector_shape_sub2(sector_size: u64) -> bool {
+    match sector_size {
+        SECTOR_SIZE_4_KIB | SECTOR_SIZE_16_MIB | SECTOR_SIZE_1_GIB => true,
+        _ => false,
+    }
+}
+
+pub fn is_sector_shape_sub8(sector_size: u64) -> bool {
+    match sector_size {
+        SECTOR_SIZE_16_KIB | SECTOR_SIZE_32_GIB => true,
+        _ => false,
+    }
+}
+
+pub fn is_sector_shape_top2(sector_size: u64) -> bool {
+    match sector_size {
+        SECTOR_SIZE_32_KIB | SECTOR_SIZE_64_GIB => true,
+        _ => false,
+    }
+}
 
 pub use storage_proofs::merkle::{DiskTree, LCTree};
 
