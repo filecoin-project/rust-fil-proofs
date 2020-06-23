@@ -21,12 +21,12 @@ blake2s_simd = "0.5"
 ff = { version = "0.2.1", package = "fff" }
 bellperson = "0.8.0"
 paired = { version = "0.19.0", features = ["serde"] }
-fil-sapling-crypto = "0.6.0"
+fil-sapling-crypto = "=0.6.0"
 log = "0.4.7"
 hex = "0.4.0"
 generic-array = "0.13.2"
 anyhow = "1.0.23"
-neptune = { version = "1.0.1", features = ["gpu"] }
+neptune = { version = "=1.0.1", features = ["gpu"] }
 
 [dev-dependencies]
 tempdir = "0.3.7"
