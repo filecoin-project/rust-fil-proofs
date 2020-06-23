@@ -286,6 +286,7 @@ impl<Tree: MerkleTreeTrait, G: Hasher> TemporaryAuxCache<Tree, G> {
     }
 }
 
+/// A proof of a single `LayerChallenge`.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct LayerProof<Tree: MerkleTreeTrait, G: Hasher> {
     #[serde(bound(
@@ -321,6 +322,7 @@ impl<Tree: MerkleTreeTrait, G: Hasher> Clone for LayerProof<Tree, G> {
     }
 }
 
+/// A proof of a single `Challenge`.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Proof<Tree: MerkleTreeTrait, G: Hasher> {
     #[serde(bound(

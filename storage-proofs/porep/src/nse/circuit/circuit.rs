@@ -6,9 +6,14 @@ use storage_proofs_core::{
 
 use crate::nse::NarrowStackedExpander;
 
+use super::LayerProof;
+
 /// NSE Circuit.
 pub struct NseCircuit<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> {
     public_params: <NarrowStackedExpander<'a, Tree, G> as ProofScheme<'a>>::PublicParams,
+    replica_id: Option<<Tree::Hasher as Hasher>::Domain>,
+
+    proofs: Vec<LayerProof<Tree, G>>,
 }
 
 impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> CircuitComponent
