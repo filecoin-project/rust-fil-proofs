@@ -11,7 +11,8 @@ use storage_proofs_core::{
     error::Result,
     fr32::u64_into_fr,
     gadgets::constraint,
-    gadgets::por::PoRCompound,
+    gadgets::por::generate_inclusion_inputs,
+    hasher::{HashFunction, Hasher},
     merkle::{BinaryMerkleTree, MerkleTreeTrait},
     parameter_cache::{CacheableParameters, ParameterSetMetadata},
     por,
@@ -321,20 +322,6 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher>
                 .collect(),
         }
     }
-}
-
-/// Helper to generate public inputs for inclusion proofs.
-fn generate_inclusion_inputs<Tree: 'static + MerkleTreeTrait>(
-    por_params: &por::PublicParams,
-    challenge: usize,
-    k: Option<usize>,
-) -> Result<Vec<Fr>> {
-    let pub_inputs = por::PublicInputs::<<Tree::Hasher as Hasher>::Domain> {
-        challenge,
-        commitment: None,
-    };
-
-    PoRCompound::<Tree>::generate_public_inputs(&pub_inputs, por_params, k)
 }
 
 #[cfg(test)]
