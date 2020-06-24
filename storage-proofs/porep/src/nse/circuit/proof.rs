@@ -8,13 +8,15 @@ use storage_proofs_core::{
     merkle::{DiskStore, MerkleProofTrait, MerkleTreeTrait, MerkleTreeWrapper},
 };
 
-use super::super::vanilla::{Config, LayerProof as VanillaLayerProof, Proof as VanillaProof};
+use super::super::vanilla::{
+    Config, LayerProof as VanillaLayerProof, NodeProof as VanillaNodeProof,
+};
 
 pub struct LayerProof<Tree: MerkleTreeTrait, G: Hasher> {
-    pub first_layer_proof: Proof<Tree, G>,
-    pub expander_layer_proofs: Vec<Proof<Tree, G>>,
-    pub butterfly_layer_proofs: Vec<Proof<Tree, G>>,
-    pub last_layer_proof: Proof<Tree, G>,
+    pub first_layer_proof: NodeProof<Tree, G>,
+    pub expander_layer_proofs: Vec<NodeProof<Tree, G>>,
+    pub butterfly_layer_proofs: Vec<NodeProof<Tree, G>>,
+    pub last_layer_proof: NodeProof<Tree, G>,
 }
 
 type TreeAuthPath<T> = AuthPath<
@@ -24,7 +26,7 @@ type TreeAuthPath<T> = AuthPath<
     <T as MerkleTreeTrait>::TopTreeArity,
 >;
 
-pub struct Proof<Tree: MerkleTreeTrait, G: Hasher> {
+pub struct NodeProof<Tree: MerkleTreeTrait, G: Hasher> {
     /// Inclusion path for the challenged data node in tree D.
     pub data_path: AuthPath<G, U2, U0, U0>,
     /// The value of the challenged data node.
@@ -41,14 +43,14 @@ pub struct Proof<Tree: MerkleTreeTrait, G: Hasher> {
 impl<Tree: MerkleTreeTrait, G: Hasher> LayerProof<Tree, G> {
     pub fn blank(config: &Config) -> Self {
         LayerProof {
-            first_layer_proof: Proof::blank(config, 0),
+            first_layer_proof: NodeProof::blank(config, 0),
             expander_layer_proofs: (0..config.num_expander_layers - 1)
-                .map(|_| Proof::blank(config, config.degree_expander))
+                .map(|_| NodeProof::blank(config, config.degree_expander))
                 .collect(),
             butterfly_layer_proofs: (0..config.num_butterfly_layers - 1)
-                .map(|_| Proof::blank(config, config.degree_butterfly))
+                .map(|_| NodeProof::blank(config, config.degree_butterfly))
                 .collect(),
-            last_layer_proof: Proof::blank(config, config.degree_butterfly),
+            last_layer_proof: NodeProof::blank(config, config.degree_butterfly),
         }
     }
 }
@@ -71,9 +73,9 @@ impl<Tree: MerkleTreeTrait, G: Hasher> From<VanillaLayerProof<Tree, G>> for Laye
     }
 }
 
-impl<Tree: MerkleTreeTrait, G: Hasher> Proof<Tree, G> {
+impl<Tree: MerkleTreeTrait, G: Hasher> NodeProof<Tree, G> {
     pub fn blank(config: &Config, num_parents: usize) -> Self {
-        Proof {
+        NodeProof {
             data_path: AuthPath::blank(config.num_nodes_sector()),
             data_leaf: None,
             challenge: None,
@@ -86,9 +88,9 @@ impl<Tree: MerkleTreeTrait, G: Hasher> Proof<Tree, G> {
     }
 }
 
-impl<Tree: MerkleTreeTrait, G: Hasher> From<VanillaProof<Tree, G>> for Proof<Tree, G> {
-    fn from(vanilla_proof: VanillaProof<Tree, G>) -> Self {
-        let VanillaProof {
+impl<Tree: MerkleTreeTrait, G: Hasher> From<VanillaNodeProof<Tree, G>> for NodeProof<Tree, G> {
+    fn from(vanilla_proof: VanillaNodeProof<Tree, G>) -> Self {
+        let VanillaNodeProof {
             data_proof,
             layer_proof,
             parents_proofs,
@@ -97,7 +99,7 @@ impl<Tree: MerkleTreeTrait, G: Hasher> From<VanillaProof<Tree, G>> for Proof<Tre
 
         let data_leaf = Some(data_proof.leaf().into());
 
-        Proof {
+        NodeProof {
             data_path: data_proof.as_options().into(),
             data_leaf,
             challenge: Some(layer_proof.path_index() as u64),

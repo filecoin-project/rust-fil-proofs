@@ -40,14 +40,26 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher>
         _partition_k: Option<usize>,
     ) -> Result<NseCircuit<'a, Tree, G>> {
         ensure!(
-            !vanilla_proof.is_empty(),
+            !vanilla_proof.layer_proofs.is_empty(),
             "Cannot create a circuit with no vanilla proofs"
         );
 
         Ok(NseCircuit {
             public_params: public_params.clone(),
             replica_id: Some(public_inputs.replica_id),
-            proofs: vanilla_proof.iter().cloned().map(Into::into).collect(),
+            comm_r: Some(public_inputs.tau.comm_r),
+            layer_proofs: vanilla_proof
+                .layer_proofs
+                .iter()
+                .cloned()
+                .map(Into::into)
+                .collect(),
+            comm_layers: vanilla_proof
+                .comm_layers
+                .iter()
+                .cloned()
+                .map(Some)
+                .collect(),
         })
     }
 
@@ -59,9 +71,11 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher>
         NseCircuit {
             public_params: public_params.clone(),
             replica_id: None,
-            proofs: (0..public_params.num_layer_challenges)
+            comm_r: None,
+            layer_proofs: (0..public_params.num_layer_challenges)
                 .map(|_| LayerProof::blank(config))
                 .collect(),
+            comm_layers: (0..config.num_layers()).map(|_| None).collect(),
         }
     }
 }
