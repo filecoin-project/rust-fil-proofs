@@ -1,3 +1,4 @@
+use std::env;
 use std::path::PathBuf;
 
 use anyhow::{bail, ensure, Context};
@@ -17,6 +18,7 @@ use storage_proofs_core::{
 use super::graph::{StackedGraph, DEGREE};
 
 /// Path in which to store the parents caches.
+pub const PARENT_CACHE_ENV_VAR: &str = "FIL_PROOFS_PARENT_CACHE";
 const PARENT_CACHE_DIR: &str = "/var/tmp/filecoin-parents";
 
 /// u32 = 4 bytes
@@ -238,6 +240,13 @@ impl ParentCache {
     }
 }
 
+fn parent_cache_dir_name() -> String {
+    match env::var(PARENT_CACHE_ENV_VAR) {
+        Ok(dir) => dir,
+        Err(_) => String::from(PARENT_CACHE_DIR),
+    }
+}
+
 fn cache_path<H, G>(cache_entries: u32, graph: &StackedGraph<H, G>) -> PathBuf
 where
     H: Hasher,
@@ -252,7 +261,7 @@ where
     }
     hasher.input(cache_entries.to_le_bytes());
     let h = hasher.result();
-    PathBuf::from(PARENT_CACHE_DIR).join(format!(
+    PathBuf::from(parent_cache_dir_name()).join(format!(
         "v{}-sdr-parent-{}.cache",
         VERSION,
         hex::encode(h),

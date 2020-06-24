@@ -120,6 +120,11 @@ and then when running the code setting
 
 will enable all logging.
 
+For advanced/verbose/debug logging, you can use the code setting
+
+```sh
+> RUST_LOG=trace
+```
 
 ## Memory Leak Detection
 
@@ -147,6 +152,14 @@ docker build -t foo -f ./Dockerfile-ci . && \
     cargo run --release --package filecoin-proofs --example ffi --target x86_64-unknown-linux-gnu
 ```
 
+## Parameter File Location
+
+Filecoin proof parameter files are expected to be located in `/var/tmp/filecoin-proof-parameters`.  If they are located in an alternate location, you can point the system to that location using an environment variable
+
+```
+FIL_PROOFS_PARAMETER_CACHE=/path/to/parameters
+```
+
 ## Optimizing for either speed or memory during replication
 
 While replicating and generating the Merkle Trees (MT) for the proof at the same time there will always be a time-memory trade-off to consider, we present here strategies to optimize one at the cost of the other.
@@ -159,11 +172,25 @@ One of the most computational expensive operations during replication (besides t
 FIL_PROOFS_MAXIMIZE_CACHING=1
 ```
 
-To check that it's working you can inspect the replication log to find `using parents cache of unlimited size`. As the log indicates, we don't have a fine grain control at the moment so it either stores all parents or none. This cache can add almost an entire sector size to the memory used during replication, if you can spare it though this setting is _very recommended_ as it has a considerable impact on replication time.
+To check that it's working you can inspect the replication log to find `using parents cache of unlimited size`. As the log indicates, we don't have a fine grain control at the moment so it either stores all parents or none. This cache will add about 1.5x the entire sector size to the disk cache used during replication, and a configurable sliding window of cached data is used as memory overhead.  This setting is _very recommended_ as it has a considerable impact on replication time.
 
-(You can also verify if the cache is working by inspecting the time each layer takes to encode, `encoding, layer:` in the log, where the first two layers, forward and reverse, will take more time than the rest to populate the cache while the remaining 8 should see a considerable time drop.)
+You can also verify if the cache is working by inspecting the time each layer takes to encode, `encoding, layer:` in the log, where the first two layers, forward and reverse, will take more time than the rest to populate the cache while the remaining 8 should see a considerable time drop.
 
-**Speed Optimized Pedersen Hashing** - we use Pedersen hashing to generate Merkle Trees and verify Merkle proofs. Batched Pedersen hashing has the property that we can pre-compute known intermediary values intrinsic to the Pedersen hashing process that will be reused across hashes in the batch. By pre-computing and cacheing these intermediary values, we decrease the runtime per Pedersen hash at the cost of increasing memory usage. We optimize for this speed-memory trade-off by varying the cache size via a Pedersen Hash parameter known as the "window-size". This window-size parameter is configured via the [`pedersen_hash_exp_window_size` setting in `storage-proofs`](https://github.com/filecoin-project/rust-fil-proofs/blob/master/storage-proofs/src/settings.rs). By default, Bellman has a cache size of 256 values (a window-size of 8 bits), we increase the cache size to 65,536 values (a window-size of 16 bits) which results in a roughly 40% decrease in Pedersen Hash runtime at the cost of a 9% increase in memory usage. See the [Pedersen cache issue](https://github.com/filecoin-project/rust-fil-proofs/issues/697) for more benchmarks and expected performance effects.
+Note that this setting is enabled by default.  It can be disabled by setting the value to 0.
+
+A related setting that can also be tuned is the SDR parents cache size.  This value is defaulted to 2048 nodes, which is the equivalent of 384KiB of resident memory (where each cached node is (6 * 32) = 192 bytes in length).  Given that the cache is now located on disk, it is memory mapped when accessed in window sizes related to this variable.  This default was chosen to minimize memory while still allowing efficient access to the cache.  If you would like to experiment with alternate sizes, you can modify the environment variable
+
+```
+FIL_PROOFS_SDR_PARENTS_CACHE_SIZE=2048
+```
+
+Increasing this value will increase the amount of resident RAM used.
+
+Lastly, the parent's cache data is located on disk by default in `/var/tmp/filecoin-parents`.  To modify this location, use the environment variable
+
+```
+FIL_PROOFS_PARENT_CACHE=/path/to/parent/cache
+```
 
 ### GPU Usage
 
@@ -205,34 +232,19 @@ FIL_PROOFS_MAX_GPU_TREE_BATCH_SIZE=Z
 
 ### Memory
 
-At the moment the default configuration is set to reduce memory consumption as much as possible so there's not much to do from the user side. (We are now storing MTs on disk, which were the main source of memory consumption.) You should expect a maximum RSS between 1-2 sector sizes, if you experience peaks beyond that range please report an issue (you can check the max RSS with the `/usr/bin/time -v` command).
+At the moment the default configuration is set to reduce memory consumption as much as possible so there's not much to do from the user side. We are now storing Merkle trees on disk, which were the main source of memory consumption.  You should expect a maximum RSS between 1-2 sector sizes, if you experience peaks beyond that range please report an issue (you can check the max RSS with the `/usr/bin/time -v` command).
 
-**Memory Optimized Pedersen Hashing** - for consumers of `storage-proofs` concerned with memory usage, the memory usage of Pedersen hashing can be reduced by lowering the Pederen Hash `window-size` parameter (i.e. its cache size). Reducing the cache size will reduce memory usage while increasing the runtime per Pedersen hash. The Pedersen Hash window-size can be changed via the setting `pedersen_hash_exp_window_size` in [`settings.rs`](https://github.com/filecoin-project/rust-fil-proofs/blob/master/storage-proofs/src/settings.rs). See the [Pedersen cache issue](https://github.com/filecoin-project/rust-fil-proofs/issues/697) for more benchmarks and expected performance effects.
-
-The following benchmarks were observed when running replication on 1MiB (1024 kibibytes) of data on a new m5a.2xlarge EC2 instance with 32GB of RAM for Pedersen Hash window-sizes of 16 (the current default) and 8 bits:
-
-```
-$ cargo build --bin benchy --release
-$ env time -v cargo run --bin benchy --release -- stacked --size=1024
-
-window-size: 16
-User time (seconds): 87.82
-Maximum resident set size (kbytes): 1712320
-
-window-size: 8
-User time (seconds): 128.85
-Maximum resident set size (kbytes): 1061564
-```
-
-Note that for a window-size of 16 bits the runtime for replication is 30% faster while the maximum RSS is about 40% higher compared to a window-size of 8 bits.
-
-### Storage
+### Advanced Storage Tuning
 
 With respect to the 'tree_r_last' cached Merkle Trees persisted on disk, a value is exposed for tuning the amount of storage space required.  Cached merkle trees are like normal merkle trees, except we discard some number of rows above the base level.  There is a trade-off in discarding too much data, which may result in rebuilding almost the entire tree when it's needed.  The other extreme is discarding too few rows, which results in higher utilization of disk space.  The default value is chosen to carefully balance this trade-off, but you may tune it as needed for your local hardware configuration.  To adjust this value, use the environment variable
 
 ```
 FIL_PROOFS_ROWS_TO_DISCARD=N
 ```
+
+Note that if you modify this value and seal sectors using it, it CANNOT be modified without updating all previously sealed sectors (or alternatively, discarding all previously sealed sectors).  A tool is provided for this conversion, but it's considered an expensive operation and should be carefully planned and completed before restarting any nodes with the new setting.  The reason for this is because all 'tree_r_last' trees must be rebuilt from the sealed replica file(s) with the new target value of FIL_PROOFS_ROWS_TO_DISCARD in order to make sure that the system is consistent.
+
+Adjusting this setting is NOT recommended unless you understand the implications of modification.
 
 ## Generate Documentation
 
