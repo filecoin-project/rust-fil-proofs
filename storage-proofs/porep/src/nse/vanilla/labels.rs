@@ -9,7 +9,7 @@ use rust_fil_nse_gpu::NarrowStackedExpander;
 use sha2raw::Sha256;
 use storage_proofs_core::{
     hasher::{Domain, Hasher},
-    merkle::{DiskStore, DiskTree, LCStore, LCTree, MerkleTreeTrait, MerkleTreeWrapper},
+    merkle::{DiskStore, DiskTree, LCTree, MerkleTreeTrait, MerkleTreeWrapper},
     util::NODE_SIZE,
 };
 
@@ -566,11 +566,12 @@ pub fn encode_with_oct_lc_poseidon_trees_gpu(
     }
 
     let store_config = store_configs.remove(0);
-    let mut store =
-        LCStore::<GPUHasherDomain>::new_with_config(tree_len, 8, store_config.clone()).unwrap();
-    store.copy_from_slice(&replica_data[..], 0).unwrap();
-    let replica_tree =
-        LCMerkleTree::<GPUTree>::from_data_store(store, conf.num_nodes_window).unwrap();
+    let replica_tree = lc_tree_from_slice::<GPUTree>(&data, store_config).unwrap();
+    //let mut store =
+    //    LCStore::<GPUHasherDomain>::new_with_config(tree_len, 8, store_config.clone()).unwrap();
+    //store.copy_from_slice(&replica_data[..], 0).unwrap();
+    //let replica_tree =
+    //    LCMerkleTree::<GPUTree>::from_data_store(store, conf.num_nodes_window).unwrap();
 
     Ok((trees, replica_tree))
 }
