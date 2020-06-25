@@ -1,6 +1,6 @@
 [package]
 name = "storage-proofs-post"
-version = "4.0.0"
+version = "4.0.1"
 authors = ["dignifiedquire <me@dignifiedquire.com>"]
 license = "MIT OR Apache-2.0"
 description = "Proofs of Space Time"
@@ -9,7 +9,7 @@ repository = "https://github.com/filecoin-project/rust-fil-proofs"
 readme = "README.md"
 
 [dependencies]
-storage-proofs-core = { path = "../core", version = "4.0.0" }
+storage-proofs-core = { path = "../core", version = "4.0.1" }
 rand = "0.7"
 merkletree = "0.20.0"
 byteorder = "1"
