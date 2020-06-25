@@ -10,16 +10,15 @@ use rand::RngCore;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
-use std::env;
 use std::fs::{self, create_dir_all, File};
 use std::io::{self, SeekFrom};
 use std::path::{Path, PathBuf};
 
+use super::settings;
+
 /// Bump this when circuits change to invalidate the cache.
 pub const VERSION: usize = 27;
 
-pub const PARAMETER_CACHE_ENV_VAR: &str = "FIL_PROOFS_PARAMETER_CACHE";
-pub const PARAMETER_CACHE_DIR: &str = "/var/tmp/filecoin-proof-parameters/";
 pub const GROTH_PARAMETER_EXT: &str = "params";
 pub const PARAMETER_METADATA_EXT: &str = "meta";
 pub const VERIFYING_KEY_EXT: &str = "vk";
@@ -92,11 +91,8 @@ impl Drop for LockedFile {
     }
 }
 
-fn parameter_cache_dir_name() -> String {
-    match env::var(PARAMETER_CACHE_ENV_VAR) {
-        Ok(dir) => dir,
-        Err(_) => String::from(PARAMETER_CACHE_DIR),
-    }
+pub fn parameter_cache_dir_name() -> String {
+    settings::SETTINGS.lock().unwrap().parameter_cache.clone()
 }
 
 pub fn parameter_cache_dir() -> PathBuf {

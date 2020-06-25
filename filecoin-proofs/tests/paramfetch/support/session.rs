@@ -8,7 +8,6 @@ use tempfile;
 use tempfile::TempDir;
 
 use crate::support::{cargo_bin, spawn_bash_with_retries};
-use storage_proofs::parameter_cache::PARAMETER_CACHE_ENV_VAR;
 
 pub struct ParamFetchSessionBuilder {
     cache_dir: TempDir,
@@ -88,7 +87,7 @@ impl ParamFetchSessionBuilder {
 
         let cmd = format!(
             "{}={} {:?} {} {} {} --ipget-bin={:?}",
-            PARAMETER_CACHE_ENV_VAR,
+            "FIL_PROOFS_PARAMETER_CACHE", // related to var name in core/src/settings.rs
             cache_dir_path,
             paramfetch_path,
             if self.prompt_enabled { "" } else { "--all" },

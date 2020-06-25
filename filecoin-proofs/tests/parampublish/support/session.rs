@@ -8,7 +8,7 @@ use rexpect::session::PtyReplSession;
 use tempfile;
 use tempfile::TempDir;
 
-use storage_proofs::parameter_cache::{CacheEntryMetadata, PARAMETER_CACHE_ENV_VAR};
+use storage_proofs::parameter_cache::CacheEntryMetadata;
 
 use crate::support::{cargo_bin, spawn_bash_with_retries, FakeIpfsBin};
 
@@ -132,7 +132,7 @@ impl ParamPublishSessionBuilder {
 
         let cmd = format!(
             "{}={} {:?} {} --ipfs-bin={:?} --json={:?}",
-            PARAMETER_CACHE_ENV_VAR,
+            "FIL_PROOFS_PARAMETER_CACHE", // related to var name in core/src/settings.rs
             cache_dir_path,
             parampublish_path,
             if self.prompt_enabled { "" } else { "--all" },

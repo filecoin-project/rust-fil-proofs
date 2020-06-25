@@ -24,7 +24,7 @@ commandspec = "0.12.2"
 chrono = { version = "0.4.7", features = ["serde"] }
 memmap = "0.7.0"
 bellperson = "0.9.1"
-paired = "0.19.0"
+paired = "0.20.0"
 fil-sapling-crypto = "0.6.0"
 rand = "0.7"
 storage-proofs = { path = "../storage-proofs"}
