@@ -193,21 +193,23 @@ fn params_filename(
     head: &str,
     param_number: usize,
     param_size: ParamSize,
+    raw: bool,
 ) -> String {
     format!(
-        "{proof}_{hasher}_{sector}_{head}_{number}_{size}",
+        "{proof}_{hasher}_{sector}_{head}_{number}_{size}{maybe_fmt}",
         proof = proof.lowercase(),
         hasher = hasher.lowercase(),
         sector = sector_size.lowercase(),
         head = head,
         number = param_number,
-        size = param_size.lowercase()
+        size = param_size.lowercase(),
+        maybe_fmt = if raw { "_raw" } else { "" },
     )
 }
 
 // Parses a phase2 parameters filename into the tuple:
 // (proof, hasher, sector-size, head, param-number, param-size).
-fn parse_params_filename(path: &str) -> (Proof, Hasher, Sector, String, usize, ParamSize) {
+fn parse_params_filename(path: &str) -> (Proof, Hasher, Sector, String, usize, ParamSize, bool) {
     // Remove directories from the path.
     let filename = path.rsplitn(2, '/').next().unwrap();
     let split: Vec<&str> = filename.split('_').collect();
@@ -250,7 +252,21 @@ fn parse_params_filename(path: &str) -> (Proof, Hasher, Sector, String, usize, P
         other => panic!("invalid param-size in params filename: {}", other),
     };
 
-    (proof, hasher, sector_size, head, param_number, param_size)
+    let raw_fmt = if split.len() > 6 && split[6] == "raw" {
+        true
+    } else {
+        false
+    };
+
+    (
+        proof,
+        hasher,
+        sector_size,
+        head,
+        param_number,
+        param_size,
+        raw_fmt,
+    )
 }
 
 fn blank_sdr_poseidon_circuit<Tree: MerkleTreeTrait>(
@@ -420,8 +436,16 @@ fn create_initial_params<Tree: 'static + MerkleTreeTrait>(
         dt_create_params
     );
 
-    let large_path = params_filename(proof, hasher, sector_size, &head, 0, ParamSize::Large);
-    let small_path = params_filename(proof, hasher, sector_size, &head, 0, ParamSize::Small);
+    let large_path = params_filename(
+        proof,
+        hasher,
+        sector_size,
+        &head,
+        0,
+        ParamSize::Large,
+        false,
+    );
+    let small_path = params_filename(proof, hasher, sector_size, &head, 0, ParamSize::Small, true);
 
     {
         info!("writing large initial params to file: {}", large_path);
@@ -481,7 +505,9 @@ fn get_mixed_entropy() -> [u8; 32] {
 /// Contributes entropy to the current phase2 parameters for a circuit, then writes the updated
 /// parameters to a new file.
 fn contribute_to_params_streaming(path_before: &str) {
-    let (proof, hasher, sector_size, head, prev_param_number, param_size) =
+    let write_raw = true;
+
+    let (proof, hasher, sector_size, head, prev_param_number, param_size, read_raw) =
         parse_params_filename(path_before);
 
     let param_number = prev_param_number + 1;
@@ -509,21 +535,16 @@ fn contribute_to_params_streaming(path_before: &str) {
         &head,
         param_number,
         ParamSize::Small,
+        write_raw,
     );
 
     let start_total = Instant::now();
-    // let start_read = Instant::now();
 
     let chunk_size = 10_000; // FIXME: make a parameter
     let buf_size = chunk_size * std::mem::size_of::<G1Affine>();
 
     let file_before = File::open(path_before).unwrap();
     let reader = BufReader::with_capacity(buf_size, file_before);
-
-    // info!(
-    //     "successfully read 'before' params, dt_read={}s",
-    //     start_read.elapsed().as_secs()
-    // );
 
     info!("making contribution");
     let start_contrib = Instant::now();
@@ -534,14 +555,14 @@ fn contribute_to_params_streaming(path_before: &str) {
     );
 
     let mut streamer = if param_size.is_large() {
-        Streamer::new_from_large_file(reader).unwrap_or_else(|e| {
+        Streamer::new_from_large_file(reader, read_raw, write_raw).unwrap_or_else(|e| {
             panic!(
                 "failed to make streamer from large `{}`: {}",
                 path_before, e
             );
         })
     } else {
-        Streamer::new(reader).unwrap_or_else(|e| {
+        Streamer::new(reader, read_raw, write_raw).unwrap_or_else(|e| {
             panic!(
                 "failed to make streamer from small `{}`: {}",
                 path_before, e
@@ -556,7 +577,7 @@ fn contribute_to_params_streaming(path_before: &str) {
             path_after, e
         );
     });
-    let mut writer = BufWriter::with_capacity(1024 * 1024, file_after);
+    let mut writer = BufWriter::with_capacity(buf_size, file_after);
 
     let contrib = streamer
         .contribute(&mut rng, &mut writer, chunk_size)
@@ -584,11 +605,87 @@ fn contribute_to_params_streaming(path_before: &str) {
     );
 }
 
+fn convert_small(path_before: &str) {
+    let (proof, hasher, sector_size, head, param_number, param_size, read_raw) =
+        parse_params_filename(path_before);
+
+    let write_raw = !read_raw;
+
+    info!(
+        "converting params for circuit: {}-{}-{}-{}-{} {}->{}",
+        proof.pretty_print(),
+        hasher.pretty_print(),
+        sector_size.pretty_print(),
+        head,
+        param_size.pretty_print(),
+        param_number,
+        if write_raw { "raw" } else { "xxx" } // FIXME
+    );
+
+    // Default to small params for first participant.
+    let path_after = params_filename(
+        proof,
+        hasher,
+        sector_size,
+        &head,
+        param_number,
+        ParamSize::Small,
+        write_raw,
+    );
+
+    let start_total = Instant::now();
+
+    let chunk_size = 10_000; // FIXME: make a parameter
+    let buf_size = chunk_size * std::mem::size_of::<G1Affine>();
+
+    let file_before = File::open(path_before).unwrap();
+    let reader = BufReader::with_capacity(buf_size, file_before);
+
+    info!("converting");
+
+    info!(
+        "making streamer from small 'before' params: {}",
+        path_before
+    );
+
+    let mut streamer = if param_size.is_large() {
+        panic!("cannot convert large param format");
+    } else {
+        Streamer::new(reader, read_raw, write_raw).unwrap_or_else(|e| {
+            panic!(
+                "failed to make streamer from small `{}`: {}",
+                path_before, e
+            );
+        })
+    };
+
+    info!("writing small 'after' params to file: {}", path_after);
+    let file_after = File::create(&path_after).unwrap_or_else(|e| {
+        panic!(
+            "failed to create 'after' params file `{}`: {}",
+            path_after, e
+        );
+    });
+    let mut writer = BufWriter::with_capacity(buf_size, file_after);
+
+    streamer
+        .process(&mut writer, chunk_size)
+        .expect("failed to convert");
+
+    info!(
+        "successfully converted, dt_total={}s",
+        start_total.elapsed().as_secs()
+    );
+}
+
 /// Contributes entropy to the current phase2 parameters for a circuit, then writes the updated
 /// parameters to a new file.
 fn contribute_to_params(path_before: &str) {
-    let (proof, hasher, sector_size, head, prev_param_number, param_size) =
+    let (proof, hasher, sector_size, head, prev_param_number, param_size, read_raw) =
         parse_params_filename(path_before);
+
+    dbg!("in contribute_to_params");
+    assert_eq!(false, read_raw, "Raw format only supported when streaming.");
 
     let param_number = prev_param_number + 1;
 
@@ -623,6 +720,7 @@ fn contribute_to_params(path_before: &str) {
         &head,
         param_number,
         ParamSize::Small,
+        false,
     );
 
     let start_total = Instant::now();
@@ -640,7 +738,8 @@ fn contribute_to_params(path_before: &str) {
         info!("reading small 'before' params as small: {}", path_before);
         let file_before = File::open(path_before).unwrap();
         let mut reader = BufReader::with_capacity(1024 * 1024, file_before);
-        MPCSmall::read(&mut reader).unwrap_or_else(|e| {
+        let read_raw_affine = false; // FIXME: need to support the true path also.
+        MPCSmall::read(&mut reader, read_raw_affine).unwrap_or_else(|e| {
             panic!(
                 "failed to read small param file `{}` as small: {}",
                 path_before, e
@@ -756,7 +855,12 @@ fn contribute_to_params(path_before: &str) {
     */
 }
 
-fn verify_contribution_small(path_before: &str, path_after: &str, participant_contrib: [u8; 64]) {
+fn verify_contribution_small(
+    path_before: &str,
+    path_after: &str,
+    participant_contrib: [u8; 64],
+    read_raw: bool,
+) {
     enum Message {
         Done(MPCSmall),
         Error(io::Error),
@@ -801,7 +905,7 @@ fn verify_contribution_small(path_before: &str, path_after: &str, participant_co
             info!("reading (small) 'before' params as small: {}", path_before);
             File::open(path_before).and_then(|file| {
                 let mut reader = BufReader::with_capacity(1024 * 1024, file);
-                MPCSmall::read(&mut reader)
+                MPCSmall::read(&mut reader, read_raw)
             })
         };
         match read_res {
@@ -826,7 +930,7 @@ fn verify_contribution_small(path_before: &str, path_after: &str, participant_co
             info!("reading (small) 'after' params as small: {}", path_after);
             File::open(path_after).and_then(|file| {
                 let mut reader = BufReader::with_capacity(1024 * 1024, file);
-                MPCSmall::read(&mut reader)
+                MPCSmall::read(&mut reader, read_raw)
             })
         };
         match read_res {
@@ -1044,6 +1148,14 @@ fn main() {
                 .help("The path to the large params file"),
         );
 
+    let convert_command = SubCommand::with_name("convert")
+        .about("Converts a small params file to and from raw format")
+        .arg(
+            Arg::with_name("path-before")
+                .required(true)
+                .help("The path to the small params file to convert."),
+        );
+
     let matches = App::new("phase2")
         .version("1.0")
         .setting(AppSettings::ArgRequiredElseHelp)
@@ -1052,6 +1164,7 @@ fn main() {
         .subcommand(contribute_command)
         .subcommand(verify_command)
         .subcommand(small_command)
+        .subcommand(convert_command)
         .get_matches();
 
     if let (subcommand, Some(matches)) = matches.subcommand() {
@@ -1091,8 +1204,15 @@ fn main() {
                 };
 
                 let head = get_head_commit();
-                let mut log_filename =
-                    params_filename(proof, hasher, sector_size, &head, 0, ParamSize::Large);
+                let mut log_filename = params_filename(
+                    proof,
+                    hasher,
+                    sector_size,
+                    &head,
+                    0,
+                    ParamSize::Large,
+                    false,
+                );
                 log_filename.push_str(".log");
                 setup_logger(&log_filename);
 
@@ -1108,7 +1228,7 @@ fn main() {
                 let path_before = matches.value_of("path-before").unwrap();
                 let streaming = !matches.is_present("no-streaming");
 
-                let (proof, hasher, sector_size, head, param_num_before, _param_size) =
+                let (proof, hasher, sector_size, head, param_num_before, _param_size, read_raw) =
                     parse_params_filename(path_before);
                 let param_num = param_num_before + 1;
                 // Default to small contributions.
@@ -1123,6 +1243,7 @@ fn main() {
                     &head,
                     param_num,
                     ParamSize::Small,
+                    true,
                 );
                 log_filename.push_str(".log");
                 setup_logger(&log_filename);
@@ -1146,7 +1267,7 @@ fn main() {
                 let log_filename = format!("{}_verify.log", path_after);
                 setup_logger(&log_filename);
 
-                let (proof, hasher, sector_size, head, param_num, param_size) =
+                let (proof, hasher, sector_size, head, param_num, param_size, read_raw) =
                     parse_params_filename(path_after);
 
                 // TODO: in the future, allow for large before params.
@@ -1170,6 +1291,7 @@ fn main() {
                     &head,
                     param_num - 1,
                     ParamSize::Small,
+                    read_raw,
                 );
 
                 if !Path::new(&path_before).exists() {
@@ -1180,6 +1302,7 @@ fn main() {
                         &head,
                         param_num - 1,
                         ParamSize::Large,
+                        false,
                     );
                     info!(
                         "small 'before' params not found `{}`, attempting to fall back to large 'before' params `{}`",
@@ -1229,16 +1352,17 @@ fn main() {
                 if use_large_params {
                     unimplemented!("large param verification is unimplemented");
                 } else {
-                    verify_contribution_small(&path_before, &path_after, contrib);
+                    verify_contribution_small(&path_before, &path_after, contrib, read_raw);
                 }
             }
             "small" => {
                 let large_path = matches.value_of("large-path").unwrap();
 
-                let (proof, hasher, sector_size, head, param_num, param_size) =
+                let (proof, hasher, sector_size, head, param_num, param_size, read_raw) =
                     parse_params_filename(large_path);
 
                 assert!(param_size.is_large(), "param file is not in large format");
+                assert!(!read_raw, "param file is in raw format");
 
                 let small_path = params_filename(
                     proof,
@@ -1247,6 +1371,7 @@ fn main() {
                     &head,
                     param_num,
                     ParamSize::Small,
+                    false,
                 );
 
                 println!("reading small params from large file: {}", large_path);
@@ -1275,6 +1400,10 @@ fn main() {
                 });
 
                 println!("successfully wrote small params");
+            }
+            "convert" => {
+                let path_before = matches.value_of("path-before").unwrap();
+                convert_small(path_before)
             }
             _ => unreachable!(),
         }

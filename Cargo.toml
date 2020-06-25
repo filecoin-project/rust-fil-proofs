@@ -9,3 +9,9 @@ members = [
   "fil-proofs-tooling",
   "sha2raw"
 ]
+
+
+[patch.crates-io]
+phase2 = { package = "phase21", path = "../phase2" }
+paired = { path = "../pairing" }
+
