@@ -237,7 +237,7 @@ mod tests {
     #[ignore]
     fn test_bench_encode() {
         type Tree = LCTree<PoseidonHasher, U8, U8, U0>;
-        femme::start(log::LevelFilter::Debug).ok();
+        // femme::start(log::LevelFilter::Debug).ok();
 
         let sector_size = 1024 * 1024 * 1024 * 4;
         let num_windows = 1;

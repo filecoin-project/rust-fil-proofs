@@ -99,8 +99,8 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> Circuit<Bls12>
         }
 
         // Verify each layer proof
-        for layer_proof in layer_proofs.into_iter() {
-            layer_proof.synthesize(cs)?;
+        for (i, layer_proof) in layer_proofs.into_iter().enumerate() {
+            layer_proof.synthesize(&mut cs.namespace(|| format!("layer_proof_{}", i)))?;
         }
 
         Ok(())
@@ -134,6 +134,204 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> LayerProof<Tree, 
 
 impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> NodeProof<Tree, G> {
     fn synthesize<CS: ConstraintSystem<Bls12>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
-        todo!()
+        // TODO
+
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use bellperson::util_cs::{metric_cs::MetricCS, test_cs::TestConstraintSystem};
+    use ff::Field;
+    use generic_array::typenum::{U0, U2, U4, U8};
+    use merkletree::store::StoreConfig;
+    use rand::{Rng, SeedableRng};
+    use rand_xorshift::XorShiftRng;
+    use storage_proofs_core::{
+        cache_key::CacheKey,
+        compound_proof::CompoundProof,
+        fr32::fr_into_bytes,
+        hasher::{Hasher, PoseidonHasher, Sha256Hasher},
+        merkle::{get_base_tree_count, DiskTree, MerkleTreeTrait},
+        proof::ProofScheme,
+        test_helper::setup_replica,
+    };
+
+    use crate::nse::{
+        circuit::NseCompound, Config, PrivateInputs, PublicInputs, SetupParams, TemporaryAux,
+        TemporaryAuxCache,
+    };
+    use crate::PoRep;
+
+    #[test]
+    fn nse_input_circuit_poseidon_sub_8_2() {
+        nse_input_circuit::<DiskTree<PoseidonHasher, U8, U2, U0>>(3, 1_388);
+    }
+
+    #[test]
+    fn nse_input_circuit_poseidon_sub_8_4() {
+        nse_input_circuit::<DiskTree<PoseidonHasher, U8, U4, U0>>(3, 1_388);
+    }
+
+    #[test]
+    fn nse_input_circuit_poseidon_sub_8_8() {
+        nse_input_circuit::<DiskTree<PoseidonHasher, U8, U8, U0>>(3, 1_388);
+    }
+
+    fn nse_input_circuit<Tree: MerkleTreeTrait + 'static>(
+        expected_inputs: usize,
+        expected_constraints: usize,
+    ) {
+        let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
+        let nodes = 8 * get_base_tree_count::<Tree>();
+        let windows = Tree::SubTreeArity::to_usize();
+
+        let replica_id: Fr = Fr::random(rng);
+        let config = Config {
+            k: 4,
+            num_nodes_window: nodes / windows,
+            degree_expander: 6,
+            degree_butterfly: 4,
+            num_expander_layers: 3,
+            num_butterfly_layers: 2,
+            sector_size: nodes * 32,
+        };
+
+        let data: Vec<u8> = (0..config.num_nodes_sector())
+            .flat_map(|_| fr_into_bytes(&Fr::random(rng)))
+            .collect();
+
+        // MT for original data is always named tree-d, and it will be
+        // referenced later in the process as such.
+        let cache_dir = tempfile::tempdir().unwrap();
+        let store_config = StoreConfig::new(
+            cache_dir.path(),
+            CacheKey::CommDTree.to_string(),
+            StoreConfig::default_rows_to_discard(config.num_nodes_sector(), U2::to_usize()),
+        );
+
+        // Generate a replica path.
+        let temp_dir = tempdir::TempDir::new("test-extract-all").unwrap();
+        let temp_path = temp_dir.path();
+        let replica_path = temp_path.join("replica-path");
+
+        let mut mmapped_data = setup_replica(&data, &replica_path);
+
+        // TODO: add porepid to NSE
+        // let arbitrary_porep_id = [44; 32];
+        let sp = SetupParams {
+            config: config.clone(),
+            num_layer_challenges: 2,
+        };
+        let pp = NarrowStackedExpander::<Tree, Sha256Hasher>::setup(&sp).expect("setup failed");
+
+        let (tau, (p_aux, t_aux)) = NarrowStackedExpander::<Tree, Sha256Hasher>::replicate(
+            &pp,
+            &replica_id.into(),
+            (mmapped_data.as_mut()).into(),
+            None,
+            store_config.clone(),
+            replica_path.clone(),
+        )
+        .expect("replication failed");
+
+        let copied = mmapped_data.to_vec();
+        assert_ne!(data, copied, "replication did not change data");
+
+        let seed = rng.gen();
+        let pub_inputs =
+            PublicInputs::<<Tree::Hasher as Hasher>::Domain, <Sha256Hasher as Hasher>::Domain> {
+                replica_id: replica_id.into(),
+                seed,
+                tau,
+                k: None,
+            };
+
+        // Store copy of original t_aux for later resource deletion.
+        let t_aux_orig = t_aux.clone();
+
+        // Convert TemporaryAux to TemporaryAuxCache, which instantiates all
+        // elements based on the configs stored in TemporaryAux.
+        let t_aux = TemporaryAuxCache::<Tree, Sha256Hasher>::new(&config, &t_aux, replica_path)
+            .expect("failed to restore contents of t_aux");
+
+        let priv_inputs = PrivateInputs::<Tree, Sha256Hasher> { p_aux, t_aux };
+
+        let proofs = NarrowStackedExpander::<Tree, Sha256Hasher>::prove_all_partitions(
+            &pp,
+            &pub_inputs,
+            &priv_inputs,
+            1,
+        )
+        .expect("failed to generate partition proofs");
+
+        let proofs_are_valid = NarrowStackedExpander::<Tree, Sha256Hasher>::verify_all_partitions(
+            &pp,
+            &pub_inputs,
+            &proofs,
+        )
+        .expect("failed while trying to verify partition proofs");
+
+        assert!(proofs_are_valid);
+
+        // Discard cached MTs that are no longer needed.
+        TemporaryAux::<Tree, Sha256Hasher>::clear_temp(t_aux_orig).expect("t_aux delete failed");
+
+        {
+            // Verify that MetricCS returns the same metrics as TestConstraintSystem.
+            let mut cs = MetricCS::<Bls12>::new();
+
+            NseCompound::circuit(&pub_inputs, (), &proofs[0], &pp, None)
+                .expect("circuit failed")
+                .synthesize(&mut cs.namespace(|| "nse drgporep"))
+                .expect("failed to synthesize circuit");
+
+            assert_eq!(cs.num_inputs(), expected_inputs, "wrong number of inputs");
+            assert_eq!(
+                cs.num_constraints(),
+                expected_constraints,
+                "wrong number of constraints"
+            );
+        }
+        let mut cs = TestConstraintSystem::<Bls12>::new();
+
+        NseCompound::circuit(&pub_inputs, (), &proofs[0], &pp, None)
+            .expect("circuit failed")
+            .synthesize(&mut cs.namespace(|| "nse drgporep"))
+            .expect("failed to synthesize circuit");
+
+        assert!(cs.is_satisfied(), "constraints not satisfied");
+        assert_eq!(cs.num_inputs(), expected_inputs, "wrong number of inputs");
+        assert_eq!(
+            cs.num_constraints(),
+            expected_constraints,
+            "wrong number of constraints"
+        );
+
+        assert_eq!(cs.get_input(0, "ONE"), Fr::one());
+
+        let generated_inputs = <NseCompound as CompoundProof<
+            NarrowStackedExpander<Tree, Sha256Hasher>,
+            _,
+        >>::generate_public_inputs(&pub_inputs, &pp, None)
+        .expect("failed to generate public inputs");
+        let expected_inputs = cs.get_inputs();
+
+        for ((input, label), generated_input) in
+            expected_inputs.iter().skip(1).zip(generated_inputs.iter())
+        {
+            assert_eq!(input, generated_input, "{}", label);
+        }
+
+        assert_eq!(
+            generated_inputs.len(),
+            expected_inputs.len() - 1,
+            "inputs are not the same length"
+        );
+
+        cache_dir.close().expect("Failed to remove cache dir");
     }
 }

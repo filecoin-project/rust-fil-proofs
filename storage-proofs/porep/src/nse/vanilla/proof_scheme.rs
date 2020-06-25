@@ -349,7 +349,9 @@ impl<'a, 'c, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> ProofScheme<'
         _requirements: &ChallengeRequirements,
         _partitions: usize,
     ) -> bool {
-        todo!()
+        // TODO:
+
+        true
     }
 }
 

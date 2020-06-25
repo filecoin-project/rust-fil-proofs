@@ -3,9 +3,9 @@ use std::marker::PhantomData;
 use generic_array::typenum::{U0, U2};
 use paired::bls12_381::Fr;
 use storage_proofs_core::{
-    gadgets::por::{AuthPath, PoRCircuit},
+    gadgets::por::AuthPath,
     hasher::Hasher,
-    merkle::{DiskStore, MerkleProofTrait, MerkleTreeTrait, MerkleTreeWrapper},
+    merkle::{MerkleProofTrait, MerkleTreeTrait},
 };
 
 use super::super::vanilla::{
