@@ -18,7 +18,7 @@ use tar::Archive;
 
 use filecoin_proofs::param::*;
 use storage_proofs::parameter_cache::{
-    parameter_cache_dir, GROTH_PARAMETER_EXT, PARAMETER_CACHE_DIR, PARAMETER_CACHE_ENV_VAR,
+    parameter_cache_dir, parameter_cache_dir_name, GROTH_PARAMETER_EXT,
 };
 
 const ERROR_PARAMETER_FILE: &str = "failed to find file in cache";
@@ -53,8 +53,8 @@ pub fn main() {
 Set {} to specify Groth parameter and verifying key-cache directory.
 Defaults to '{}'
 ",
-                PARAMETER_CACHE_ENV_VAR,
-                PARAMETER_CACHE_DIR
+                "FIL_PROOFS_PARAMETER_CACHE", // related to var name in core/src/settings.rs
+                parameter_cache_dir_name(),
             )[..],
         )
         .arg(

@@ -12,12 +12,10 @@ use storage_proofs_core::{
     error::Result,
     hasher::Hasher,
     parameter_cache::{with_exclusive_lock, LockedFile, ParameterSetMetadata, VERSION},
+    settings,
 };
 
 use super::graph::{StackedGraph, DEGREE};
-
-/// Path in which to store the parents caches.
-const PARENT_CACHE_DIR: &str = "/var/tmp/filecoin-parents";
 
 /// u32 = 4 bytes
 const NODE_BYTES: usize = 4;
@@ -238,6 +236,10 @@ impl ParentCache {
     }
 }
 
+fn parent_cache_dir_name() -> String {
+    settings::SETTINGS.lock().unwrap().parent_cache.clone()
+}
+
 fn cache_path<H, G>(cache_entries: u32, graph: &StackedGraph<H, G>) -> PathBuf
 where
     H: Hasher,
@@ -252,7 +254,7 @@ where
     }
     hasher.input(cache_entries.to_le_bytes());
     let h = hasher.result();
-    PathBuf::from(PARENT_CACHE_DIR).join(format!(
+    PathBuf::from(parent_cache_dir_name()).join(format!(
         "v{}-sdr-parent-{}.cache",
         VERSION,
         hex::encode(h),

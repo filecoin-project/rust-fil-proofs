@@ -171,7 +171,7 @@ impl<Tree: 'static + MerkleTreeTrait> FallbackPoStCircuit<Tree> {
         self,
         cs: &mut CS,
     ) -> Result<(), SynthesisError> {
-        let cs = &mut cs.namespace(|| format!("outer namespace"));
+        let cs = &mut cs.namespace(|| "outer namespace".to_string());
 
         for (i, sector) in self.sectors.iter().enumerate() {
             let cs = &mut cs.namespace(|| format!("sector_{}", i));

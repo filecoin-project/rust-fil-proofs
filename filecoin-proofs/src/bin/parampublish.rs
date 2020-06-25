@@ -22,7 +22,7 @@ use filecoin_proofs::{
     SECTOR_SIZE_8_MIB,
 };
 use storage_proofs::parameter_cache::{
-    parameter_cache_dir, CacheEntryMetadata, GROTH_PARAMETER_EXT, PARAMETER_CACHE_DIR,
+    parameter_cache_dir, parameter_cache_dir_name, CacheEntryMetadata, GROTH_PARAMETER_EXT,
     PARAMETER_METADATA_EXT, VERIFYING_KEY_EXT,
 };
 
@@ -47,7 +47,7 @@ pub fn main() {
 Set $FIL_PROOFS_PARAMETER_CACHE to specify parameter directory.
 Defaults to '{}'
 ",
-                PARAMETER_CACHE_DIR
+                parameter_cache_dir_name()
             )[..],
         )
         .arg(
