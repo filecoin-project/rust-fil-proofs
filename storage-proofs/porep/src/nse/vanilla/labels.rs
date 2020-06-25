@@ -2,14 +2,14 @@ use anyhow::{ensure, Context, Result};
 use generic_array::typenum::U0;
 use itertools::Itertools;
 use log::debug;
-use merkletree::store::{StoreConfig, StoreConfigDataVersion};
+use merkletree::store::{Store, StoreConfig, StoreConfigDataVersion};
 use rayon::prelude::*;
 use rust_fil_nse_gpu as gpu;
 use rust_fil_nse_gpu::NarrowStackedExpander;
 use sha2raw::Sha256;
 use storage_proofs_core::{
     hasher::{Domain, Hasher},
-    merkle::{DiskTree, LCTree, MerkleTreeTrait, MerkleTreeWrapper},
+    merkle::{DiskStore, DiskTree, LCStore, LCTree, MerkleTreeTrait, MerkleTreeWrapper},
     util::NODE_SIZE,
 };
 
@@ -521,7 +521,7 @@ pub fn encode_with_oct_lc_poseidon_trees_gpu(
     window_index: u32,
     replica_id: &GPUHasherDomain,
     data: &mut [u8],
-) -> gpu::NSEResult<(Vec<MerkleTree<GPUTree>>, Option<LCMerkleTree<GPUTree>>)> {
+) -> gpu::NSEResult<(Vec<MerkleTree<GPUTree>>, LCMerkleTree<GPUTree>)> {
     use storage_proofs_core::fr32::fr_into_bytes;
     let gpu_conf = to_gpu_config(conf);
     let mut context = gpu::GPU::new(gpu_conf)?;
@@ -538,27 +538,41 @@ pub fn encode_with_oct_lc_poseidon_trees_gpu(
         .map(|v| v)
         .collect::<gpu::NSEResult<Vec<gpu::LayerOutput>>>()?;
     data.copy_from_slice(Vec::<u8>::from(&layers.last().unwrap().base).as_slice());
-    let mut trees = Vec::new();
+
+    let tree_len = layers[0].tree.len() + layers[0].base.0.len();
+
+    let mut tree_data = Vec::new();
     for lo in layers.iter() {
-        let store_config = store_configs.remove(0);
-        let tree_data: Vec<u8> = lo
+        let data: Vec<u8> = lo
             .base
             .0
             .iter()
             .chain(lo.tree.iter())
             .flat_map(|node| fr_into_bytes(&node.0))
             .collect();
-        trees.push(
-            MerkleTree::<GPUTree>::from_tree_slice_with_config(
-                &tree_data[..],
-                conf.num_nodes_window,
-                store_config,
-            )
-            .unwrap(),
-        );
+        tree_data.push(data);
     }
-    let replica_tree = trees.pop();
-    Ok((trees, None))
+
+    let replica_data = tree_data.pop().unwrap();
+
+    let mut trees = Vec::new();
+    for data in tree_data {
+        let store_config = store_configs.remove(0);
+        let mut store =
+            DiskStore::<GPUHasherDomain>::new_with_config(tree_len, 8, store_config.clone())
+                .unwrap();
+        store.copy_from_slice(&data[..], 0).unwrap();
+        trees.push(MerkleTree::<GPUTree>::from_data_store(store, conf.num_nodes_window).unwrap());
+    }
+
+    let store_config = store_configs.remove(0);
+    let mut store =
+        LCStore::<GPUHasherDomain>::new_with_config(tree_len, 8, store_config.clone()).unwrap();
+    store.copy_from_slice(&replica_data[..], 0).unwrap();
+    let replica_tree =
+        LCMerkleTree::<GPUTree>::from_data_store(store, conf.num_nodes_window).unwrap();
+
+    Ok((trees, replica_tree))
 }
 
 #[cfg(test)]
@@ -828,10 +842,10 @@ mod tests {
         .unwrap();
 
         let gpu_roots = gpu_trees.into_iter().map(|t| t.root()).collect::<Vec<_>>();
-        //let gpu_replica_root = gpu_replica_tree.root();
+        let gpu_replica_root = gpu_replica_tree.root();
 
-        assert_eq!(cpu_roots, gpu_roots);
-        //assert_eq!(cpu_replica_root, gpu_replica_root);
         assert_eq!(cpu_encoded_data, gpu_encoded_data);
+        assert_eq!(cpu_roots, gpu_roots);
+        assert_eq!(cpu_replica_root, gpu_replica_root);
     }
 }
