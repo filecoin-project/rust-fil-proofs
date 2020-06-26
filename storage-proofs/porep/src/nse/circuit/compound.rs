@@ -3,14 +3,16 @@ use bellperson::Circuit;
 use paired::bls12_381::{Bls12, Fr};
 use storage_proofs_core::{
     compound_proof::{CircuitComponent, CompoundProof},
+    gadgets::por::generate_inclusion_inputs,
     hasher::Hasher,
-    merkle::MerkleTreeTrait,
+    merkle::{BinaryMerkleTree, MerkleTreeTrait},
     parameter_cache::{CacheableParameters, ParameterSetMetadata},
+    por,
     proof::ProofScheme,
 };
 
 use super::{LayerProof, NseCircuit};
-use crate::nse::NarrowStackedExpander;
+use crate::nse::{Challenges, NarrowStackedExpander};
 
 #[derive(Debug)]
 pub struct NseCompound {}
@@ -29,13 +31,73 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher>
         public_params: &<NarrowStackedExpander<Tree, G> as ProofScheme>::PublicParams,
         k: Option<usize>,
     ) -> Result<Vec<Fr>> {
+        let config = &public_params.config;
+
         let mut inputs = Vec::new();
 
         // replica id
         inputs.push(public_inputs.replica_id.into());
 
+        // comm_d
+        inputs.push(public_inputs.tau.comm_d.into());
+
         // comm_r
         inputs.push(public_inputs.tau.comm_r.into());
+
+        let por_setup_params = por::SetupParams {
+            leaves: config.num_nodes_sector(),
+            private: true,
+        };
+        let por_params_d = por::PoR::<BinaryMerkleTree<G>>::setup(&por_setup_params)?;
+        let challenges = Challenges::new(
+            config,
+            public_params.num_layer_challenges,
+            &public_inputs.replica_id,
+            public_inputs.seed,
+        );
+
+        // layer proofs
+        for layer_challenge in challenges {
+            // -- first layer
+            {
+                // comm_d inclusion proof for the data leaf
+                inputs.extend(generate_inclusion_inputs::<BinaryMerkleTree<G>>(
+                    &por_params_d,
+                    layer_challenge.first_layer_challenge.absolute_index as usize,
+                    k,
+                )?);
+            }
+
+            // -- expander layers
+            for challenge in &layer_challenge.expander_challenges {
+                // comm_d inclusion proof for the data leaf
+                inputs.extend(generate_inclusion_inputs::<BinaryMerkleTree<G>>(
+                    &por_params_d,
+                    challenge.absolute_index as usize,
+                    k,
+                )?);
+            }
+
+            // -- butterfly layers
+            for challenge in &layer_challenge.butterfly_challenges {
+                // comm_d inclusion proof for the data leaf
+                inputs.extend(generate_inclusion_inputs::<BinaryMerkleTree<G>>(
+                    &por_params_d,
+                    challenge.absolute_index as usize,
+                    k,
+                )?);
+            }
+
+            // -- last layer
+            {
+                // comm_d inclusion proof for the data leaf
+                inputs.extend(generate_inclusion_inputs::<BinaryMerkleTree<G>>(
+                    &por_params_d,
+                    layer_challenge.last_layer_challenge.absolute_index as usize,
+                    k,
+                )?);
+            }
+        }
 
         Ok(inputs)
     }
@@ -56,6 +118,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher>
             public_params: public_params.clone(),
             replica_id: Some(public_inputs.replica_id),
             comm_r: Some(public_inputs.tau.comm_r),
+            comm_d: Some(public_inputs.tau.comm_d),
             layer_proofs: vanilla_proof
                 .layer_proofs
                 .iter()
@@ -80,6 +143,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher>
             public_params: public_params.clone(),
             replica_id: None,
             comm_r: None,
+            comm_d: None,
             layer_proofs: (0..public_params.num_layer_challenges)
                 .map(|_| LayerProof::blank(config))
                 .collect(),
@@ -134,10 +198,10 @@ mod tests {
 
         let replica_id: Fr = Fr::random(rng);
         let config = Config {
-            k: 4,
+            k: 2,
             num_nodes_window: nodes / windows,
-            degree_expander: 6,
-            degree_butterfly: 4,
+            degree_expander: 3,
+            degree_butterfly: 2,
             num_expander_layers: 3,
             num_butterfly_layers: 2,
             sector_size: nodes * 32,

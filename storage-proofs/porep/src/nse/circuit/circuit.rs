@@ -4,7 +4,7 @@ use generic_array::typenum::Unsigned;
 use paired::bls12_381::{Bls12, Fr};
 use storage_proofs_core::{
     compound_proof::CircuitComponent,
-    gadgets::constraint,
+    gadgets::{constraint, por::enforce_inclusion},
     hasher::{HashFunction, Hasher, PoseidonFunction, PoseidonMDArity},
     merkle::MerkleTreeTrait,
     proof::ProofScheme,
@@ -18,6 +18,7 @@ pub struct NseCircuit<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> 
     pub(crate) public_params: <NarrowStackedExpander<'a, Tree, G> as ProofScheme<'a>>::PublicParams,
     pub(crate) replica_id: Option<<Tree::Hasher as Hasher>::Domain>,
     pub(crate) comm_r: Option<<Tree::Hasher as Hasher>::Domain>,
+    pub(crate) comm_d: Option<G::Domain>,
 
     pub(crate) layer_proofs: Vec<LayerProof<Tree, G>>,
     pub(crate) comm_layers: Vec<Option<<Tree::Hasher as Hasher>::Domain>>,
@@ -36,6 +37,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> Circuit<Bls12>
         let Self {
             replica_id,
             comm_r,
+            comm_d,
             layer_proofs,
             comm_layers,
             ..
@@ -52,7 +54,15 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> Circuit<Bls12>
         replica_id_num.inputize(cs.namespace(|| "replica_id_input"))?;
 
         // comm_d
-        // TODO
+        // Allocate comm_d as Fr
+        let comm_d_num = num::AllocatedNum::alloc(cs.namespace(|| "comm_d"), || {
+            comm_d
+                .map(Into::into)
+                .ok_or_else(|| SynthesisError::AssignmentMissing)
+        })?;
+
+        // make comm_d a public input
+        comm_d_num.inputize(cs.namespace(|| "comm_d_input"))?;
 
         // Allocate comm_r as Fr
         let comm_r_num = num::AllocatedNum::alloc(cs.namespace(|| "comm_r"), || {
@@ -100,7 +110,10 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> Circuit<Bls12>
 
         // Verify each layer proof
         for (i, layer_proof) in layer_proofs.into_iter().enumerate() {
-            layer_proof.synthesize(&mut cs.namespace(|| format!("layer_proof_{}", i)))?;
+            layer_proof.synthesize(
+                &mut cs.namespace(|| format!("layer_proof_{}", i)),
+                &comm_d_num,
+            )?;
         }
 
         Ok(())
@@ -108,7 +121,11 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> Circuit<Bls12>
 }
 
 impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> LayerProof<Tree, G> {
-    fn synthesize<CS: ConstraintSystem<Bls12>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
+    fn synthesize<CS: ConstraintSystem<Bls12>>(
+        self,
+        cs: &mut CS,
+        comm_d: &num::AllocatedNum<Bls12>,
+    ) -> Result<(), SynthesisError> {
         let Self {
             first_layer_proof,
             expander_layer_proofs,
@@ -116,25 +133,66 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> LayerProof<Tree, 
             last_layer_proof,
         } = self;
 
-        first_layer_proof.synthesize(&mut cs.namespace(|| "first_layer"))?;
+        first_layer_proof.synthesize(&mut cs.namespace(|| "first_layer"), comm_d, false)?;
 
         for (i, proof) in expander_layer_proofs.into_iter().enumerate() {
-            proof.synthesize(&mut cs.namespace(|| format!("expander_layer_{}", i)))?;
+            proof.synthesize(
+                &mut cs.namespace(|| format!("expander_layer_{}", i)),
+                comm_d,
+                true,
+            )?;
         }
 
         for (i, proof) in butterfly_layer_proofs.into_iter().enumerate() {
-            proof.synthesize(&mut cs.namespace(|| format!("butterfly_layer_{}", i)))?;
+            proof.synthesize(
+                &mut cs.namespace(|| format!("butterfly_layer_{}", i)),
+                comm_d,
+                true,
+            )?;
         }
 
-        last_layer_proof.synthesize(&mut cs.namespace(|| "last_layer"))?;
+        last_layer_proof.synthesize(&mut cs.namespace(|| "last_layer"), comm_d, true)?;
 
         Ok(())
     }
 }
 
 impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> NodeProof<Tree, G> {
-    fn synthesize<CS: ConstraintSystem<Bls12>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
-        // TODO
+    fn synthesize<CS: ConstraintSystem<Bls12>>(
+        self,
+        cs: &mut CS,
+        comm_d: &num::AllocatedNum<Bls12>,
+        with_parents: bool,
+    ) -> Result<(), SynthesisError> {
+        let Self {
+            data_path,
+            data_leaf,
+            ..
+        } = self;
+
+        // -- data_proof
+
+        // PrivateInput: data_leaf
+        let data_leaf_num = num::AllocatedNum::alloc(cs.namespace(|| "data_leaf"), || {
+            data_leaf.ok_or_else(|| SynthesisError::AssignmentMissing)
+        })?;
+
+        // enforce inclusion of the data leaf in the tree D
+        enforce_inclusion(
+            cs.namespace(|| "data_inclusion"),
+            data_path,
+            comm_d,
+            &data_leaf_num,
+        )?;
+
+        // -- layer_proof
+
+        // TODO:
+
+        // -- parents_proofs
+        if with_parents {
+            // TODO:
+        }
 
         Ok(())
     }
@@ -168,17 +226,17 @@ mod tests {
 
     #[test]
     fn nse_input_circuit_poseidon_sub_8_2() {
-        nse_input_circuit::<DiskTree<PoseidonHasher, U8, U2, U0>>(3, 1_388);
+        nse_input_circuit::<DiskTree<PoseidonHasher, U8, U2, U0>>(14, 1_816_689);
     }
 
     #[test]
     fn nse_input_circuit_poseidon_sub_8_4() {
-        nse_input_circuit::<DiskTree<PoseidonHasher, U8, U4, U0>>(3, 1_388);
+        nse_input_circuit::<DiskTree<PoseidonHasher, U8, U4, U0>>(14, 2_270_509);
     }
 
     #[test]
     fn nse_input_circuit_poseidon_sub_8_8() {
-        nse_input_circuit::<DiskTree<PoseidonHasher, U8, U8, U0>>(3, 1_388);
+        nse_input_circuit::<DiskTree<PoseidonHasher, U8, U8, U0>>(14, 2_724_329);
     }
 
     fn nse_input_circuit<Tree: MerkleTreeTrait + 'static>(
