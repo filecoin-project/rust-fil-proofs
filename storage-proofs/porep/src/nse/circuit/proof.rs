@@ -35,9 +35,8 @@ pub struct NodeProof<Tree: MerkleTreeTrait, G: Hasher> {
     pub challenge: Option<u64>,
     /// Inclusion path of the challenged node in challenged layer.
     pub layer_path: TreeAuthPath<Tree>,
-    /// Proofs for the parents.
-    pub parents_paths: Vec<TreeAuthPath<Tree>>,
-    // TODO: add parent leafs
+    /// Proofs for the parents, first the path and then the leaf node.
+    pub parents: Vec<(TreeAuthPath<Tree>, Option<<Tree::Hasher as Hasher>::Domain>)>,
     _t: PhantomData<Tree>,
 }
 
@@ -81,8 +80,8 @@ impl<Tree: MerkleTreeTrait, G: Hasher> NodeProof<Tree, G> {
             data_leaf: None,
             challenge: None,
             layer_path: TreeAuthPath::<Tree>::blank(config.num_nodes_sector()),
-            parents_paths: (0..num_parents)
-                .map(|_| TreeAuthPath::<Tree>::blank(config.num_nodes_sector()))
+            parents: (0..num_parents)
+                .map(|_| (TreeAuthPath::<Tree>::blank(config.num_nodes_sector()), None))
                 .collect(),
             _t: PhantomData,
         }
@@ -105,9 +104,9 @@ impl<Tree: MerkleTreeTrait, G: Hasher> From<VanillaNodeProof<Tree, G>> for NodeP
             data_leaf,
             challenge: Some(layer_proof.path_index() as u64),
             layer_path: layer_proof.as_options().into(),
-            parents_paths: parents_proofs
+            parents: parents_proofs
                 .into_iter()
-                .map(|p| p.as_options().into())
+                .map(|p| (p.as_options().into(), Some(p.leaf())))
                 .collect(),
             _t: PhantomData,
         }

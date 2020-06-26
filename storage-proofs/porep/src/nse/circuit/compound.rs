@@ -91,6 +91,13 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher>
                     c as usize,
                     k,
                 )?);
+
+                // layer_inclusion proof
+                inputs.extend(generate_inclusion_inputs::<Tree>(
+                    &por_params,
+                    c as usize,
+                    k,
+                )?);
             }
 
             // -- butterfly layers

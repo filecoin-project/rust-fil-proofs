@@ -2,10 +2,10 @@ use bellperson::{
     gadgets::{boolean::Boolean, num, sha256::sha256 as sha256_circuit, uint32::UInt32},
     ConstraintSystem, SynthesisError,
 };
-use ff::{Field, PrimeField};
+use ff::PrimeField;
 use paired::bls12_381::{Bls12, Fr};
 use storage_proofs_core::{
-    gadgets::{constraint, multipack, uint64::UInt64},
+    gadgets::{constraint, encode, multipack, uint64::UInt64},
     util::reverse_bit_numbering,
 };
 
@@ -65,6 +65,7 @@ pub fn derive_butterfly_layer_leaf<CS: ConstraintSystem<Bls12>>(
     replica_id: &[Boolean],
     challenge_index_num: &UInt64,
     layer: u32,
+    parents_data: &[num::AllocatedNum<Bls12>],
 ) -> Result<num::AllocatedNum<Bls12>, SynthesisError> {
     // TODO: can we reuse this allocation accross challenges?
     let layer_index = UInt32::alloc(cs.namespace(|| "layer_index"), Some(layer))?;
@@ -76,9 +77,13 @@ pub fn derive_butterfly_layer_leaf<CS: ConstraintSystem<Bls12>>(
     ciphertexts.extend_from_slice(replica_id);
 
     // hash parents
+    ciphertexts.extend(expand_nums_to_bools(
+        cs.namespace(|| "expand_nums"),
+        parents_data,
+    )?);
 
     // sha256
-    todo!()
+    hash_sha256(cs, &ciphertexts)
 }
 
 pub fn derive_last_layer_leaf<CS: ConstraintSystem<Bls12>>(
@@ -86,22 +91,20 @@ pub fn derive_last_layer_leaf<CS: ConstraintSystem<Bls12>>(
     replica_id: &[Boolean],
     challenge_index_num: &UInt64,
     layer: u32,
+    data_node: &num::AllocatedNum<Bls12>,
+    parents_data: &[num::AllocatedNum<Bls12>],
 ) -> Result<num::AllocatedNum<Bls12>, SynthesisError> {
-    // TODO: can we reuse this allocation accross challenges?
-    let layer_index = UInt32::alloc(cs.namespace(|| "layer_index"), Some(layer))?;
-
-    // prefix
-    let mut ciphertexts = hash_prefix(challenge_index_num, layer_index)?;
-
-    // replica id
-    ciphertexts.extend_from_slice(replica_id);
-
-    // hash parents
+    // derive regular label
+    let key = derive_butterfly_layer_leaf(
+        cs.namespace(|| "butterfly_label"),
+        replica_id,
+        challenge_index_num,
+        layer,
+        parents_data,
+    )?;
 
     // encode
-
-    // sha256
-    todo!()
+    encode::encode(cs.namespace(|| "encode"), &key, data_node)
 }
 
 /// Sha256
@@ -156,8 +159,10 @@ fn batch_expansion<CS: ConstraintSystem<Bls12>>(
     let k = k as u32;
 
     for i in 0..degree {
-        let mut el = num::AllocatedNum::alloc(&mut cs, || Ok(Fr::zero())).unwrap();
-        for l in 0..k {
+        // the first element is at `i`.
+        let mut el = parents_data[i].clone();
+
+        for l in 1..k {
             let y = i + (l as usize * degree as usize);
             el = constraint::add(
                 cs.namespace(|| format!("add_{}_{}", i, l)),
@@ -172,4 +177,19 @@ fn batch_expansion<CS: ConstraintSystem<Bls12>>(
     }
 
     Ok(expanded)
+}
+
+/// Expands the given list of `AllocatedNum`s into their expanded boolean representation.
+fn expand_nums_to_bools<CS: ConstraintSystem<Bls12>>(
+    mut cs: CS,
+    nums: &[num::AllocatedNum<Bls12>],
+) -> Result<Vec<Boolean>, SynthesisError> {
+    nums.iter()
+        .enumerate()
+        .try_fold(Vec::new(), |mut acc, (i, num)| {
+            acc.extend(reverse_bit_numbering(
+                num.to_bits_le(cs.namespace(|| format!("num_to_bits_{}", i)))?,
+            ));
+            Ok(acc)
+        })
 }
