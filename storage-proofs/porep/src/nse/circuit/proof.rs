@@ -37,6 +37,7 @@ pub struct NodeProof<Tree: MerkleTreeTrait, G: Hasher> {
     pub layer_path: TreeAuthPath<Tree>,
     /// Proofs for the parents.
     pub parents_paths: Vec<TreeAuthPath<Tree>>,
+    // TODO: add parent leafs
     _t: PhantomData<Tree>,
 }
 

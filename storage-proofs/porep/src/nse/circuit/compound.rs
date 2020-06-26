@@ -3,6 +3,7 @@ use bellperson::Circuit;
 use paired::bls12_381::{Bls12, Fr};
 use storage_proofs_core::{
     compound_proof::{CircuitComponent, CompoundProof},
+    fr32::u64_into_fr,
     gadgets::por::generate_inclusion_inputs,
     hasher::Hasher,
     merkle::{BinaryMerkleTree, MerkleTreeTrait},
@@ -48,6 +49,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher>
             leaves: config.num_nodes_sector(),
             private: true,
         };
+        let por_params = por::PoR::<Tree>::setup(&por_setup_params)?;
         let por_params_d = por::PoR::<BinaryMerkleTree<G>>::setup(&por_setup_params)?;
         let challenges = Challenges::new(
             config,
@@ -60,36 +62,56 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher>
         for layer_challenge in challenges {
             // -- first layer
             {
+                let c = layer_challenge.first_layer_challenge.absolute_index;
+                inputs.push(u64_into_fr(c));
+
                 // comm_d inclusion proof for the data leaf
                 inputs.extend(generate_inclusion_inputs::<BinaryMerkleTree<G>>(
                     &por_params_d,
-                    layer_challenge.first_layer_challenge.absolute_index as usize,
+                    c as usize,
+                    k,
+                )?);
+
+                // layer_inclusion proof
+                inputs.extend(generate_inclusion_inputs::<Tree>(
+                    &por_params,
+                    c as usize,
                     k,
                 )?);
             }
 
             // -- expander layers
             for challenge in &layer_challenge.expander_challenges {
+                let c = challenge.absolute_index;
+                inputs.push(u64_into_fr(c));
+
                 // comm_d inclusion proof for the data leaf
                 inputs.extend(generate_inclusion_inputs::<BinaryMerkleTree<G>>(
                     &por_params_d,
-                    challenge.absolute_index as usize,
+                    c as usize,
                     k,
                 )?);
             }
 
             // -- butterfly layers
             for challenge in &layer_challenge.butterfly_challenges {
+                let c = challenge.absolute_index;
+                inputs.push(u64_into_fr(c));
+
                 // comm_d inclusion proof for the data leaf
                 inputs.extend(generate_inclusion_inputs::<BinaryMerkleTree<G>>(
                     &por_params_d,
-                    challenge.absolute_index as usize,
+                    c as usize,
                     k,
                 )?);
             }
 
             // -- last layer
             {
+                inputs.push(u64_into_fr(
+                    layer_challenge.last_layer_challenge.absolute_index,
+                ));
+
                 // comm_d inclusion proof for the data leaf
                 inputs.extend(generate_inclusion_inputs::<BinaryMerkleTree<G>>(
                     &por_params_d,

@@ -1,5 +1,6 @@
 mod circuit;
 mod compound;
+mod hash;
 mod proof;
 
 pub use self::circuit::*;

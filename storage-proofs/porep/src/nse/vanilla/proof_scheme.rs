@@ -378,11 +378,7 @@ impl<'a, 'c, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher>
         // no parents for the mask layer
         check_eq!(proof.parents_proofs.len(), 0, "mask parents length");
 
-        let prefix = hash_prefix(
-            layer as u32,
-            challenge.relative_index,
-            challenge.window as u32,
-        );
+        let prefix = hash_prefix(layer as u32, challenge.absolute_index);
 
         let mut hasher = Sha256::new();
         // Hash prefix + replica id, each 32 bytes.
@@ -452,11 +448,7 @@ impl<'a, 'c, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher>
             .iter()
             .map(|parent_proof| parent_proof.leaf())
             .collect();
-        let prefix = hash_prefix(
-            layer as u32,
-            challenge.relative_index as u32,
-            challenge.window as u32,
-        );
+        let prefix = hash_prefix(layer as u32, challenge.absolute_index);
 
         let mut hasher = Sha256::new();
         // Hash prefix + replica id, each 32 bytes.
@@ -525,11 +517,7 @@ impl<'a, 'c, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher>
             .iter()
             .map(|parent_proof| parent_proof.leaf())
             .collect();
-        let prefix = hash_prefix(
-            layer as u32,
-            challenge.relative_index,
-            challenge.window as u32,
-        );
+        let prefix = hash_prefix(layer as u32, challenge.absolute_index);
 
         let mut hasher = Sha256::new();
         // Hash prefix + replica id, each 32 bytes.
@@ -605,11 +593,7 @@ impl<'a, 'c, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher>
             .iter()
             .map(|parent_proof| parent_proof.leaf())
             .collect();
-        let prefix = hash_prefix(
-            layer as u32,
-            challenge.relative_index,
-            challenge.window as u32,
-        );
+        let prefix = hash_prefix(layer as u32, challenge.absolute_index);
 
         let mut hasher = Sha256::new();
         // Hash prefix + replica id, each 32 bytes.

@@ -214,7 +214,9 @@ fn mask_layer<D: Domain>(
         .par_chunks_mut(NODE_SIZE)
         .enumerate()
         .for_each(|(node_index, node)| {
-            let prefix = hash_prefix(LAYER_INDEX, node_index as u32, window_index);
+            let node_absolute_index =
+                window_index as u64 * config.num_nodes_window as u64 + node_index as u64;
+            let prefix = hash_prefix(LAYER_INDEX, node_absolute_index);
             let hash = Sha256::digest(&[&prefix[..], AsRef::<[u8]>::as_ref(replica_id)]);
             node.copy_from_slice(&hash);
             truncate_hash(node);
@@ -270,7 +272,9 @@ pub fn expander_layer<D: Domain>(
             let mut hasher = Sha256::new();
 
             // Hash prefix + replica id, each 32 bytes.
-            let prefix = hash_prefix(layer_index, node_index, window_index);
+            let node_absolute_index =
+                window_index as u64 * config.num_nodes_window as u64 + node_index as u64;
+            let prefix = hash_prefix(layer_index, node_absolute_index);
             hasher.input(&[&prefix[..], AsRef::<[u8]>::as_ref(replica_id)]);
 
             // Compute batch hash of the parents.
@@ -327,7 +331,9 @@ pub fn butterfly_layer<D: Domain>(
             let mut hasher = Sha256::new();
 
             // Hash prefix + replica id, each 32 bytes.
-            let prefix = hash_prefix(layer_index, node_index, window_index);
+            let node_absolute_index =
+                window_index as u64 * config.num_nodes_window as u64 + node_index as u64;
+            let prefix = hash_prefix(layer_index, node_absolute_index);
             hasher.input(&[&prefix[..], AsRef::<[u8]>::as_ref(replica_id)]);
 
             // Compute hash of the parents.
@@ -422,7 +428,9 @@ fn butterfly_encode_decode_layer<D: Domain, F: Fn(D, D) -> D>(
         let mut hasher = Sha256::new();
 
         // Hash prefix + replica id, each 32 bytes.
-        let prefix = hash_prefix(layer_index, node_index, window_index);
+        let node_absolute_index =
+            window_index as u64 * config.num_nodes_window as u64 + node_index as u64;
+        let prefix = hash_prefix(layer_index, node_absolute_index);
         hasher.input(&[&prefix[..], AsRef::<[u8]>::as_ref(replica_id)]);
 
         // Compute hash of the parents.
@@ -451,14 +459,12 @@ fn butterfly_encode_decode_layer<D: Domain, F: Fn(D, D) -> D>(
 }
 
 /// Constructs the first 32 byte prefix for hashing any node.
-pub fn hash_prefix(layer: u32, node_index: u32, window_index: u32) -> [u8; 32] {
+pub fn hash_prefix(layer: u32, node_index: u64) -> [u8; 32] {
     let mut prefix = [0u8; 32];
     // layer: 32bits
     prefix[..4].copy_from_slice(&layer.to_be_bytes());
-    // node_index: 32bits
-    prefix[4..8].copy_from_slice(&node_index.to_be_bytes());
-    // window_index: 32bits
-    prefix[8..12].copy_from_slice(&window_index.to_be_bytes());
+    // absolute_node_index: 64bits
+    prefix[4..12].copy_from_slice(&node_index.to_be_bytes());
     // 0 padding for the rest
 
     prefix
@@ -686,11 +692,11 @@ mod tests {
 
     #[test]
     fn test_hash_prefix() {
-        assert_eq!(hash_prefix(0, 0, 0), [0u8; 32]);
+        assert_eq!(hash_prefix(0, 0), [0u8; 32]);
         assert_eq!(
-            hash_prefix(1, 2, 3),
+            hash_prefix(1, 6),
             [
-                0, 0, 0, 1, 0, 0, 0, 2, 0, 0, 0, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 6, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
                 0, 0, 0, 0
             ]
         );
