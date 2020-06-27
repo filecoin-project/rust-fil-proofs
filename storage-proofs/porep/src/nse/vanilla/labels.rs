@@ -524,19 +524,23 @@ pub fn encode_with_oct_lc_poseidon_trees_gpu(
 ) -> gpu::NSEResult<(Vec<MerkleTree<GPUTree>>, LCMerkleTree<GPUTree>)> {
     use storage_proofs_core::fr32::fr_into_bytes;
     let gpu_conf = to_gpu_config(conf);
-    let mut context = gpu::GPU::new(gpu_conf)?;
-    let sealer = gpu::Sealer::new(
+    let pool = gpu::SealerPool::new(
+        gpu::utils::all_devices()?,
         gpu_conf,
-        unsafe { std::mem::transmute::<_, gpu::ReplicaId>(*replica_id) },
-        window_index as usize,
-        gpu::Layer::from(&data.to_vec()),
-        &mut context,
-        true,
-        0,
+        gpu::TreeOptions::Enabled { rows_to_discard: 0 },
     )?;
-    let layers = sealer
-        .map(|v| v)
-        .collect::<gpu::NSEResult<Vec<gpu::LayerOutput>>>()?;
+    let inp = gpu::SealerInput {
+        replica_id: unsafe { std::mem::transmute::<_, gpu::ReplicaId>(*replica_id) },
+        window_index: window_index as usize,
+        original_data: gpu::Layer::from(&data.to_vec()),
+    };
+
+    let layers = pool
+        .seal_on_gpu(inp)
+        .iter()
+        .collect::<gpu::NSEResult<Vec<_>>>()
+        .unwrap();
+
     data.copy_from_slice(Vec::<u8>::from(&layers.last().unwrap().base).as_slice());
 
     let tree_len = layers[0].tree.len() + layers[0].base.0.len();
