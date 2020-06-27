@@ -13,7 +13,7 @@ use storage_proofs_core::{
 };
 
 use super::{LayerProof, NseCircuit};
-use crate::nse::{Challenges, NarrowStackedExpander};
+use crate::nse::{ButterflyGraph, Challenges, ExpanderGraph, NarrowStackedExpander};
 
 #[derive(Debug)]
 pub struct NseCompound {}
@@ -58,73 +58,95 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher>
             public_inputs.seed,
         );
 
+        let data_inclusion_inputs =
+            |c: u64| generate_inclusion_inputs::<BinaryMerkleTree<G>>(&por_params_d, c as usize, k);
+        let layer_inclusion_inputs =
+            |c: u64| generate_inclusion_inputs::<Tree>(&por_params, c as usize, k);
+        let parent_inclusion_inputs =
+            |c: usize| generate_inclusion_inputs::<Tree>(&por_params, c as usize, k);
+
         // layer proofs
         for layer_challenge in challenges {
             // -- first layer
             {
                 let c = layer_challenge.first_layer_challenge.absolute_index;
+
+                // challenge input
                 inputs.push(u64_into_fr(c));
 
                 // comm_d inclusion proof for the data leaf
-                inputs.extend(generate_inclusion_inputs::<BinaryMerkleTree<G>>(
-                    &por_params_d,
-                    c as usize,
-                    k,
-                )?);
+                inputs.extend(data_inclusion_inputs(c)?);
 
                 // layer_inclusion proof
-                inputs.extend(generate_inclusion_inputs::<Tree>(
-                    &por_params,
-                    c as usize,
-                    k,
-                )?);
+                inputs.extend(layer_inclusion_inputs(c)?);
             }
 
             // -- expander layers
             for challenge in &layer_challenge.expander_challenges {
                 let c = challenge.absolute_index;
+
+                // challenge input
                 inputs.push(u64_into_fr(c));
 
                 // comm_d inclusion proof for the data leaf
-                inputs.extend(generate_inclusion_inputs::<BinaryMerkleTree<G>>(
-                    &por_params_d,
-                    c as usize,
-                    k,
-                )?);
+                inputs.extend(data_inclusion_inputs(c)?);
 
                 // layer_inclusion proof
-                inputs.extend(generate_inclusion_inputs::<Tree>(
-                    &por_params,
-                    c as usize,
-                    k,
-                )?);
+                inputs.extend(layer_inclusion_inputs(c)?);
+
+                // parent_inclusion proofs
+                let parents: ExpanderGraph = config.into();
+                for p in parents.expanded_parents(challenge.relative_index) {
+                    let parent = challenge.window as usize * config.num_nodes_window + p as usize;
+                    inputs.extend(parent_inclusion_inputs(parent)?);
+                }
             }
 
             // -- butterfly layers
-            for challenge in &layer_challenge.butterfly_challenges {
+            for (i, challenge) in layer_challenge.butterfly_challenges.iter().enumerate() {
+                let layer = i + config.num_expander_layers + 1;
                 let c = challenge.absolute_index;
+
+                // challenge input
                 inputs.push(u64_into_fr(c));
 
                 // comm_d inclusion proof for the data leaf
-                inputs.extend(generate_inclusion_inputs::<BinaryMerkleTree<G>>(
-                    &por_params_d,
-                    c as usize,
-                    k,
-                )?);
+                inputs.extend(data_inclusion_inputs(c)?);
+
+                // layer_inclusion proof
+                inputs.extend(layer_inclusion_inputs(c)?);
+
+                // parent_inclusion proofs
+                let parents: ButterflyGraph = config.into();
+                for p in parents.parents(challenge.relative_index, layer as u32) {
+                    let parent = challenge.window as usize * config.num_nodes_window + p as usize;
+                    inputs.extend(parent_inclusion_inputs(parent)?);
+                }
             }
 
             // -- last layer
             {
-                inputs.push(u64_into_fr(
-                    layer_challenge.last_layer_challenge.absolute_index,
-                ));
+                let layer = config.num_layers();
+                let challenge = layer_challenge.last_layer_challenge;
+                let c = challenge.absolute_index;
+
+                // challenge input
+                inputs.push(u64_into_fr(c));
 
                 // comm_d inclusion proof for the data leaf
-                inputs.extend(generate_inclusion_inputs::<BinaryMerkleTree<G>>(
-                    &por_params_d,
-                    layer_challenge.last_layer_challenge.absolute_index as usize,
-                    k,
-                )?);
+
+                // comm_d inclusion proof for the data leaf
+                inputs.extend(data_inclusion_inputs(c)?);
+
+                // layer_inclusion proof
+                inputs.extend(layer_inclusion_inputs(c)?);
+
+                // parent_inclusion proofs
+                let parents: ButterflyGraph = config.into();
+                for p in parents.parents(challenge.relative_index, layer as u32) {
+                    let parent = challenge.window as usize * config.num_nodes_window + p as usize;
+                    inputs.extend(parent_inclusion_inputs(parent)?);
+                }
             }
         }
 
@@ -241,9 +263,6 @@ mod tests {
             .collect();
 
         let partition_count = 1;
-
-        // TODO: add porepid
-        // let arbitrary_porep_id = [55; 32];
 
         let setup_params = compound_proof::SetupParams {
             vanilla_params: SetupParams {

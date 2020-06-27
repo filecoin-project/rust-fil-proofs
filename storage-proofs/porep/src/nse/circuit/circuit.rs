@@ -142,6 +142,12 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> LayerProof<Tree, 
         comm_layers_nums: &[num::AllocatedNum<Bls12>],
         replica_id: &[Boolean],
     ) -> Result<(), SynthesisError> {
+        assert_eq!(
+            comm_layers_nums.len(),
+            config.num_layers(),
+            "invalid number of layers"
+        );
+
         let Self {
             first_layer_proof,
             expander_layer_proofs,
@@ -150,48 +156,45 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> LayerProof<Tree, 
         } = self;
 
         {
-            let challenge_num = UInt64::alloc(
-                cs.namespace(|| "first_layer_challenge_num"),
-                first_layer_proof.challenge,
-            )?;
-            challenge_num.pack_into_input(cs.namespace(|| "first_layer_challenge_input"))?;
+            let proof = first_layer_proof;
+            let layer = 1;
+            let mut cs = cs.namespace(|| "first_layer");
+
+            // PublicInput: Challenge
+            let challenge_num = UInt64::alloc(cs.namespace(|| "challenge_num"), proof.challenge)?;
+            challenge_num.pack_into_input(cs.namespace(|| "challenge_input"))?;
 
             let layer_leaf = derive_first_layer_leaf(
-                cs.namespace(|| "first_layer_leaf"),
+                cs.namespace(|| "layer_leaf"),
                 replica_id,
                 &challenge_num,
-                1,
+                layer as u32,
             )?;
 
-            first_layer_proof.synthesize(
-                &mut cs.namespace(|| "first_layer"),
+            let data_leaf = proof.alloc_data_leaf(cs.namespace(|| "data_leaf"))?;
+            let layer_root = &comm_layers_nums[layer - 1];
+
+            proof.synthesize(
+                &mut cs.namespace(|| "proof"),
                 comm_d,
-                &comm_layers_nums[0],
-                Some(&layer_leaf),
-                false,
+                &data_leaf,
+                layer_root,
+                &layer_leaf,
+                None,
             )?;
         }
 
         for (i, proof) in expander_layer_proofs.into_iter().enumerate() {
-            let mut cs = cs.namespace(|| format!("expander_layer_{}", i));
             let layer = i + 2;
+            let mut cs = cs.namespace(|| format!("expander_layer_{}", layer));
+
+            // PublicInput: Challenge
             let challenge_num = UInt64::alloc(cs.namespace(|| "challenge_num"), proof.challenge)?;
             challenge_num.pack_into_input(cs.namespace(|| "challenge_input"))?;
 
-            let parents_data = proof
-                .parents
-                .iter()
-                .enumerate()
-                .map(|(j, (_, leaf))| {
-                    num::AllocatedNum::alloc(cs.namespace(|| format!("parents_data_{}", j)), || {
-                        leaf.map(Into::into)
-                            .ok_or_else(|| SynthesisError::AssignmentMissing)
-                    })
-                })
-                .collect::<Result<Vec<num::AllocatedNum<Bls12>>, _>>()?;
-
+            let parents_data = proof.alloc_parents_leafs(cs.namespace(|| "parents_data"))?;
             let layer_leaf = derive_expander_layer_leaf(
-                cs.namespace(|| "leaf"),
+                cs.namespace(|| "layer_leaf"),
                 replica_id,
                 &challenge_num,
                 layer as u32,
@@ -199,61 +202,80 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> LayerProof<Tree, 
                 &parents_data,
             )?;
 
+            let data_leaf = proof.alloc_data_leaf(cs.namespace(|| "data_leaf"))?;
+            let layer_root = &comm_layers_nums[layer - 1];
+            let parents_root = &comm_layers_nums[layer - 2];
+
             proof.synthesize(
                 &mut cs.namespace(|| "proof"),
                 comm_d,
-                &comm_layers_nums[layer - 1],
-                Some(&layer_leaf),
-                true,
+                &data_leaf,
+                layer_root,
+                &layer_leaf,
+                Some((&parents_data, parents_root)),
             )?;
         }
 
         for (i, proof) in butterfly_layer_proofs.into_iter().enumerate() {
             let layer = i + config.num_expander_layers + 1;
+            let mut cs = cs.namespace(|| format!("butterfly_layer_{}", layer));
 
-            let challenge_num = UInt64::alloc(
-                cs.namespace(|| format!("butterfly_layer_{}_challenge_num", i)),
-                proof.challenge,
-            )?;
-            challenge_num.pack_into_input(
-                cs.namespace(|| format!("butterfly_layer_{}_challenge_input", i)),
+            let challenge_num = UInt64::alloc(cs.namespace(|| "challenge_num"), proof.challenge)?;
+            challenge_num.pack_into_input(cs.namespace(|| "challenge_input"))?;
+
+            let parents_data = proof.alloc_parents_leafs(cs.namespace(|| "parents_data"))?;
+            let layer_leaf = derive_butterfly_layer_leaf(
+                cs.namespace(|| "layer_leaf"),
+                replica_id,
+                &challenge_num,
+                layer as u32,
+                &parents_data,
             )?;
 
-            // let layer_leaf = derive_butterfly_layer_leaf(
-            //     cs.namespace(|| format!("butterfly_layer_leaf_{}", i)),
-            //     replica_id,
-            //     &challenge_num,
-            //     layer as u32,
-            // )?;
+            let data_leaf = proof.alloc_data_leaf(cs.namespace(|| "data_leaf"))?;
+            let layer_root = &comm_layers_nums[layer - 1];
+            let parents_root = &comm_layers_nums[layer - 2];
+
             proof.synthesize(
-                &mut cs.namespace(|| format!("butterfly_layer_{}", i)),
+                &mut cs.namespace(|| "proof"),
                 comm_d,
-                &comm_layers_nums[layer - i],
-                None, // &layer_leaf,
-                true,
+                &data_leaf,
+                layer_root,
+                &layer_leaf,
+                Some((&parents_data, parents_root)),
             )?;
         }
 
         {
+            let proof = last_layer_proof;
+            let mut cs = cs.namespace(|| "last_layer");
             let layer = config.num_layers();
-            let challenge_num = UInt64::alloc(
-                cs.namespace(|| "last_layer_challenge_num"),
-                last_layer_proof.challenge,
-            )?;
-            challenge_num.pack_into_input(cs.namespace(|| "last_layer_challenge_input"))?;
 
-            // let layer_leaf = derive_last_layer_leaf(
-            //     cs.namespace(|| "last_layer_leaf"),
-            //     replica_id,
-            //     &challenge_num,
-            //     layer as u32,
-            // )?;
-            last_layer_proof.synthesize(
-                &mut cs.namespace(|| "last_layer"),
+            // PublicInput: Challenge
+            let challenge_num = UInt64::alloc(cs.namespace(|| "challenge_num"), proof.challenge)?;
+            challenge_num.pack_into_input(cs.namespace(|| "challenge_input"))?;
+
+            let parents_data = proof.alloc_parents_leafs(cs.namespace(|| "parents_data"))?;
+
+            let data_leaf = proof.alloc_data_leaf(cs.namespace(|| "data_leaf"))?;
+            let layer_root = &comm_layers_nums[layer - 1];
+            let parents_root = &comm_layers_nums[layer - 2];
+
+            let layer_leaf = derive_last_layer_leaf(
+                cs.namespace(|| "leaf"),
+                replica_id,
+                &challenge_num,
+                layer as u32,
+                &data_leaf,
+                &parents_data,
+            )?;
+            proof.synthesize(
+                &mut cs.namespace(|| "proof"),
                 comm_d,
-                &comm_layers_nums[layer - 1],
-                None, // &layer_leaf,
-                true,
+                &data_leaf,
+                layer_root,
+                &layer_leaf,
+                Some((&parents_data, parents_root)),
             )?;
         }
 
@@ -266,45 +288,46 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> NodeProof<Tree, G
         self,
         cs: &mut CS,
         comm_d: &num::AllocatedNum<Bls12>,
+        data_leaf: &num::AllocatedNum<Bls12>,
         layer_root: &num::AllocatedNum<Bls12>,
-        layer_leaf: Option<&num::AllocatedNum<Bls12>>,
-        with_parents: bool,
+        layer_leaf: &num::AllocatedNum<Bls12>,
+        with_parents: Option<(&[num::AllocatedNum<Bls12>], &num::AllocatedNum<Bls12>)>,
     ) -> Result<(), SynthesisError> {
         let Self {
             data_path,
-            data_leaf,
             layer_path,
+            parents,
             ..
         } = self;
 
         // -- data_proof
-
-        // PrivateInput: data_leaf
-        let data_leaf_num = num::AllocatedNum::alloc(cs.namespace(|| "data_leaf"), || {
-            data_leaf.ok_or_else(|| SynthesisError::AssignmentMissing)
-        })?;
-
-        // enforce inclusion of the data leaf in the tree D
         enforce_inclusion(
             cs.namespace(|| "data_inclusion"),
             data_path,
             comm_d,
-            &data_leaf_num,
+            data_leaf,
         )?;
 
         // -- layer_proof
-        if let Some(layer_leaf) = layer_leaf {
-            enforce_inclusion(
-                cs.namespace(|| "layer_inclusion"),
-                layer_path,
-                layer_root,
-                layer_leaf,
-            )?;
-        }
+        enforce_inclusion(
+            cs.namespace(|| "layer_inclusion"),
+            layer_path,
+            layer_root,
+            layer_leaf,
+        )?;
 
         // -- parents_proofs
-        if with_parents {
-            // TODO:
+        if let Some((parents_leafs, parent_root)) = with_parents {
+            for (i, ((parent_path, _), parent_leaf)) in
+                parents.into_iter().zip(parents_leafs.iter()).enumerate()
+            {
+                enforce_inclusion(
+                    cs.namespace(|| format!("parent_inclusion_{}", i)),
+                    parent_path,
+                    parent_root,
+                    parent_leaf,
+                )?;
+            }
         }
 
         Ok(())
@@ -315,7 +338,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> NodeProof<Tree, G
 mod tests {
     use super::*;
 
-    use bellperson::util_cs::{metric_cs::MetricCS, test_cs::TestConstraintSystem};
+    use bellperson::util_cs::test_cs::TestConstraintSystem;
     use ff::Field;
     use generic_array::typenum::{U0, U2, U4, U8};
     use merkletree::store::StoreConfig;
@@ -339,12 +362,12 @@ mod tests {
 
     #[test]
     fn nse_input_circuit_poseidon_sub_8_2() {
-        nse_input_circuit::<DiskTree<PoseidonHasher, U8, U2, U0>>(30, 2_410_677);
+        nse_input_circuit::<DiskTree<PoseidonHasher, U8, U2, U0>>(146, 2_900_771);
     }
 
     #[test]
     fn nse_input_circuit_poseidon_sub_8_4() {
-        nse_input_circuit::<DiskTree<PoseidonHasher, U8, U4, U0>>(30, 2_864_935);
+        nse_input_circuit::<DiskTree<PoseidonHasher, U8, U4, U0>>(146, 3_363_497);
     }
 
     fn nse_input_circuit<Tree: MerkleTreeTrait + 'static>(
@@ -386,8 +409,6 @@ mod tests {
 
         let mut mmapped_data = setup_replica(&data, &replica_path);
 
-        // TODO: add porepid to NSE
-        // let arbitrary_porep_id = [44; 32];
         let sp = SetupParams {
             config: config.clone(),
             num_layer_challenges: 2,
@@ -446,22 +467,6 @@ mod tests {
         // Discard cached MTs that are no longer needed.
         TemporaryAux::<Tree, Sha256Hasher>::clear_temp(t_aux_orig).expect("t_aux delete failed");
 
-        {
-            // Verify that MetricCS returns the same metrics as TestConstraintSystem.
-            let mut cs = MetricCS::<Bls12>::new();
-
-            NseCompound::circuit(&pub_inputs, (), &proofs[0], &pp, None)
-                .expect("circuit failed")
-                .synthesize(&mut cs.namespace(|| "nse drgporep"))
-                .expect("failed to synthesize circuit");
-
-            assert_eq!(cs.num_inputs(), expected_inputs, "wrong number of inputs");
-            assert_eq!(
-                cs.num_constraints(),
-                expected_constraints,
-                "wrong number of constraints"
-            );
-        }
         let mut cs = TestConstraintSystem::<Bls12>::new();
 
         NseCompound::circuit(&pub_inputs, (), &proofs[0], &pp, None)

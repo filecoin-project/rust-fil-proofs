@@ -184,12 +184,93 @@ fn expand_nums_to_bools<CS: ConstraintSystem<Bls12>>(
     mut cs: CS,
     nums: &[num::AllocatedNum<Bls12>],
 ) -> Result<Vec<Boolean>, SynthesisError> {
-    nums.iter()
-        .enumerate()
-        .try_fold(Vec::new(), |mut acc, (i, num)| {
-            acc.extend(reverse_bit_numbering(
-                num.to_bits_le(cs.namespace(|| format!("num_to_bits_{}", i)))?,
-            ));
-            Ok(acc)
+    assert!(nums.len() % 2 == 0, "parents number must be even");
+
+    let mut bools = Vec::new();
+    for (i, num) in nums.iter().enumerate() {
+        bools.extend(reverse_bit_numbering(
+            num.to_bits_le(cs.namespace(|| format!("num_to_bits_{}", i)))?,
+        ));
+    }
+
+    debug_assert_eq!(bools.len(), nums.len() * 4 * 64);
+
+    Ok(bools)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use crate::nse::vanilla::{hash_prefix, truncate_hash};
+
+    use bellperson::util_cs::test_cs::TestConstraintSystem;
+    use rand::SeedableRng;
+    use rand_xorshift::XorShiftRng;
+    use sha2raw::Sha256;
+    use storage_proofs_core::hasher::{Domain, PedersenDomain};
+
+    #[test]
+    fn test_derive_butterfly_layer_leaf() {
+        let mut cs = TestConstraintSystem::<Bls12>::new();
+        let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
+
+        let layer = 5;
+        let challenge = 8;
+        let replica_id = PedersenDomain::random(rng);
+        let replica_id_num = num::AllocatedNum::alloc(cs.namespace(|| "replica_id"), || {
+            Ok(replica_id.clone().into())
         })
+        .unwrap();
+        let replica_id_bits = reverse_bit_numbering(
+            replica_id_num
+                .to_bits_le(cs.namespace(|| "replica_id_bits"))
+                .unwrap(),
+        );
+
+        let challenge_index_num =
+            UInt64::alloc(cs.namespace(|| "challenge_num"), Some(challenge)).unwrap();
+        let data: Vec<_> = (0..6).map(|_| PedersenDomain::random(rng)).collect();
+        let parents_data: Vec<_> = data
+            .iter()
+            .enumerate()
+            .map(|(i, p)| {
+                num::AllocatedNum::alloc(cs.namespace(|| format!("parent_{}", i)), || {
+                    Ok((*p).into())
+                })
+                .unwrap()
+            })
+            .collect();
+
+        let leaf = derive_butterfly_layer_leaf(
+            cs,
+            &replica_id_bits,
+            &challenge_index_num,
+            layer,
+            &parents_data,
+        )
+        .unwrap();
+
+        let expected_leaf = {
+            let prefix = hash_prefix(layer as u32, challenge);
+
+            let mut hasher = Sha256::new();
+            // Hash prefix + replica id, each 32 bytes.
+            hasher.input(&[&prefix[..], AsRef::<[u8]>::as_ref(&replica_id)]);
+
+            // Butterfly hashing
+            for chunk in data.chunks(2) {
+                hasher.input(&[
+                    AsRef::<[u8]>::as_ref(&chunk[0]),
+                    AsRef::<[u8]>::as_ref(&chunk[1]),
+                ]);
+            }
+            let mut label = hasher.finish();
+            truncate_hash(&mut label);
+            label
+        };
+
+        let domain_leaf: PedersenDomain = leaf.get_value().unwrap().into();
+        assert_eq!(expected_leaf, AsRef::<[u8]>::as_ref(&domain_leaf));
+    }
 }

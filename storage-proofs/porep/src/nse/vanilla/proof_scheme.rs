@@ -517,6 +517,7 @@ impl<'a, 'c, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher>
             .iter()
             .map(|parent_proof| parent_proof.leaf())
             .collect();
+
         let prefix = hash_prefix(layer as u32, challenge.absolute_index);
 
         let mut hasher = Sha256::new();

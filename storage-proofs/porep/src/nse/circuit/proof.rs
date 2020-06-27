@@ -1,7 +1,8 @@
 use std::marker::PhantomData;
 
+use bellperson::{gadgets::num, ConstraintSystem, SynthesisError};
 use generic_array::typenum::{U0, U2};
-use paired::bls12_381::Fr;
+use paired::bls12_381::{Bls12, Fr};
 use storage_proofs_core::{
     gadgets::por::AuthPath,
     hasher::Hasher,
@@ -85,6 +86,35 @@ impl<Tree: MerkleTreeTrait, G: Hasher> NodeProof<Tree, G> {
                 .collect(),
             _t: PhantomData,
         }
+    }
+
+    ///  Allocate the `data_leaf` of this proof.
+    pub fn alloc_data_leaf<CS: ConstraintSystem<Bls12>>(
+        &self,
+        cs: CS,
+    ) -> Result<num::AllocatedNum<Bls12>, SynthesisError> {
+        num::AllocatedNum::alloc(cs, || {
+            self.data_leaf
+                .map(Into::into)
+                .ok_or_else(|| SynthesisError::AssignmentMissing)
+        })
+    }
+
+    /// Allocate the leafs of the parents of this proof.
+    pub fn alloc_parents_leafs<CS: ConstraintSystem<Bls12>>(
+        &self,
+        mut cs: CS,
+    ) -> Result<Vec<num::AllocatedNum<Bls12>>, SynthesisError> {
+        self.parents
+            .iter()
+            .enumerate()
+            .map(|(j, (_, leaf))| {
+                num::AllocatedNum::alloc(cs.namespace(|| format!("leaf_{}", j)), || {
+                    leaf.map(Into::into)
+                        .ok_or_else(|| SynthesisError::AssignmentMissing)
+                })
+            })
+            .collect()
     }
 }
 
