@@ -511,10 +511,11 @@ fn to_gpu_config(conf: &Config) -> gpu::Config {
     }
 }
 
+type GPUTree = storage_proofs_core::merkle::OctLCMerkleTree<GPUHasher>;
 pub fn encode_with_trees_all<'a, Tree: 'static + MerkleTreeTrait, I>(
     conf: &Config,
     inps: I,
-) -> gpu::NSEResult<Vec<(Vec<MerkleTree<Tree>>, LCMerkleTree<Tree>)>>
+) -> Result<Vec<(Vec<MerkleTree<Tree>>, LCMerkleTree<Tree>)>>
 where
     I: Iterator<
         Item = (
@@ -525,21 +526,25 @@ where
         ),
     >,
 {
-    use storage_proofs_core::fr32::fr_into_bytes;
-    let gpu_conf = to_gpu_config(conf);
-    let pool = gpu::SealerPool::new(
-        gpu::utils::all_devices()?,
-        gpu_conf,
-        gpu::TreeOptions::Enabled { rows_to_discard: 0 },
-    )?;
+    if !generic_cast::equals::<Tree, GPUTree>() {
+        inps.map(|(store_configs, window_index, replica_id, data)| {
+            encode_with_trees::<Tree>(conf, store_configs, window_index, replica_id, data)
+        })
+        .collect()
+    } else {
+        // GPU, fast version
+        use storage_proofs_core::fr32::fr_into_bytes;
+        let gpu_conf = to_gpu_config(conf);
+        let pool = gpu::SealerPool::new(
+            gpu::utils::all_devices()?,
+            gpu_conf,
+            gpu::TreeOptions::Enabled { rows_to_discard: 0 },
+        )?;
 
-    let outputs = inps
+        let outputs = inps
         .map(|(store_configs, window_index, replica_id, data)| {
             let inp = gpu::SealerInput {
-                replica_id: unsafe {
-                    assert_eq!(std::mem::size_of::<gpu::ReplicaId>(), std::mem::size_of::<<Tree::Hasher as Hasher>::Domain>());
-                    *std::mem::transmute::<_, &gpu::ReplicaId>(replica_id)
-                },
+                replica_id: *generic_cast::cast_ref::<_, gpu::ReplicaId>(replica_id).unwrap(),
                 window_index: window_index as usize,
                 original_data: gpu::Layer::from(&data.to_vec()),
             };
@@ -593,7 +598,8 @@ where
         })
         .collect::<gpu::NSEResult<Vec<_>>>()?;
 
-    Ok(outputs)
+        Ok(outputs)
+    }
 }
 
 #[cfg(test)]

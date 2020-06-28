@@ -35,6 +35,7 @@ byteorder = "1.3.4"
 itertools = "0.9.0"
 positioned-io = "0.2.2"
 rust-fil-nse-gpu = "0.1.0"
+generic-cast = "0.1.0"
 
 [dev-dependencies]
 tempfile = "3"
