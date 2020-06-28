@@ -515,13 +515,13 @@ fn to_gpu_config(conf: &Config) -> gpu::Config {
 type GPUHasherDomain = storage_proofs_core::hasher::PoseidonDomain;
 type GPUHasher = storage_proofs_core::hasher::PoseidonHasher;
 type GPUTree = storage_proofs_core::merkle::OctLCMerkleTree<GPUHasher>;
-pub fn encode_with_oct_lc_poseidon_trees_gpu(
+pub fn encode_with_oct_lc_poseidon_trees_gpu<'a, I>(
     conf: &Config,
-    mut store_configs: Vec<StoreConfig>,
-    window_index: u32,
-    replica_id: &GPUHasherDomain,
-    data: &mut [u8],
-) -> gpu::NSEResult<(Vec<MerkleTree<GPUTree>>, LCMerkleTree<GPUTree>)> {
+    inps: I,
+) -> gpu::NSEResult<Vec<(Vec<MerkleTree<GPUTree>>, LCMerkleTree<GPUTree>)>>
+where
+    I: Iterator<Item = (Vec<StoreConfig>, u32, GPUHasherDomain, &'a mut [u8])>,
+{
     use storage_proofs_core::fr32::fr_into_bytes;
     let gpu_conf = to_gpu_config(conf);
     let pool = gpu::SealerPool::new(
@@ -529,55 +529,65 @@ pub fn encode_with_oct_lc_poseidon_trees_gpu(
         gpu_conf,
         gpu::TreeOptions::Enabled { rows_to_discard: 0 },
     )?;
-    let inp = gpu::SealerInput {
-        replica_id: unsafe { std::mem::transmute::<_, gpu::ReplicaId>(*replica_id) },
-        window_index: window_index as usize,
-        original_data: gpu::Layer::from(&data.to_vec()),
-    };
 
-    let layers = pool
-        .seal_on_gpu(inp)
-        .iter()
-        .collect::<gpu::NSEResult<Vec<_>>>()
-        .unwrap();
+    let outputs = inps
+        .map(|(store_configs, window_index, replica_id, data)| {
+            let inp = gpu::SealerInput {
+                replica_id: unsafe { std::mem::transmute::<_, gpu::ReplicaId>(replica_id) },
+                window_index: window_index as usize,
+                original_data: gpu::Layer::from(&data.to_vec()),
+            };
+            (store_configs, data, pool.seal_on_gpu(inp))
+        })
+        .collect::<Vec<_>>()
+        .into_iter()
+        .map(|(mut store_configs, data, chan)| -> gpu::NSEResult<(Vec<MerkleTree<GPUTree>>, LCMerkleTree<GPUTree>)> {
+            let layers = chan.iter().collect::<gpu::NSEResult<Vec<_>>>()?;
+            data.copy_from_slice(Vec::<u8>::from(&layers.last().unwrap().base).as_slice());
+            let tree_len = layers[0].tree.len() + layers[0].base.0.len();
 
-    data.copy_from_slice(Vec::<u8>::from(&layers.last().unwrap().base).as_slice());
+            let mut tree_data = Vec::new();
+            for lo in layers.iter() {
+                let data: Vec<u8> = lo
+                    .base
+                    .0
+                    .iter()
+                    .chain(lo.tree.iter())
+                    .flat_map(|node| fr_into_bytes(&node.0))
+                    .collect();
+                tree_data.push(data);
+            }
 
-    let tree_len = layers[0].tree.len() + layers[0].base.0.len();
+            let _replica_data = tree_data.pop().unwrap();
 
-    let mut tree_data = Vec::new();
-    for lo in layers.iter() {
-        let data: Vec<u8> = lo
-            .base
-            .0
-            .iter()
-            .chain(lo.tree.iter())
-            .flat_map(|node| fr_into_bytes(&node.0))
-            .collect();
-        tree_data.push(data);
-    }
-
-    let replica_data = tree_data.pop().unwrap();
-
-    let mut trees = Vec::new();
-    for data in tree_data {
-        let store_config = store_configs.remove(0);
-        let mut store =
-            DiskStore::<GPUHasherDomain>::new_with_config(tree_len, 8, store_config.clone())
+            let mut trees = Vec::new();
+            for data in tree_data {
+                let store_config = store_configs.remove(0);
+                let mut store = DiskStore::<GPUHasherDomain>::new_with_config(
+                    tree_len,
+                    8,
+                    store_config.clone(),
+                )
                 .unwrap();
-        store.copy_from_slice(&data[..], 0).unwrap();
-        trees.push(MerkleTree::<GPUTree>::from_data_store(store, conf.num_nodes_window).unwrap());
-    }
+                store.copy_from_slice(&data[..], 0).unwrap();
+                trees.push(
+                    MerkleTree::<GPUTree>::from_data_store(store, conf.num_nodes_window).unwrap(),
+                );
+            }
 
-    let store_config = store_configs.remove(0);
-    let replica_tree = lc_tree_from_slice::<GPUTree>(&data, store_config).unwrap();
-    //let mut store =
-    //    LCStore::<GPUHasherDomain>::new_with_config(tree_len, 8, store_config.clone()).unwrap();
-    //store.copy_from_slice(&replica_data[..], 0).unwrap();
-    //let replica_tree =
-    //    LCMerkleTree::<GPUTree>::from_data_store(store, conf.num_nodes_window).unwrap();
+            let store_config = store_configs.remove(0);
+            let replica_tree = lc_tree_from_slice::<GPUTree>(&data, store_config).unwrap();
+            //let mut store =
+            //    LCStore::<GPUHasherDomain>::new_with_config(tree_len, 8, store_config.clone()).unwrap();
+            //store.copy_from_slice(&replica_data[..], 0).unwrap();
+            //let replica_tree =
+            //    LCMerkleTree::<GPUTree>::from_data_store(store, conf.num_nodes_window).unwrap();
 
-    Ok((trees, replica_tree))
+            Ok((trees, replica_tree))
+        })
+        .collect::<gpu::NSEResult<Vec<_>>>()?;
+
+    Ok(outputs)
 }
 
 #[cfg(test)]
@@ -837,14 +847,17 @@ mod tests {
         let gpu_store_configs =
             split_config(gpu_store_config.clone(), config.num_layers()).unwrap();
 
-        let (gpu_trees, gpu_replica_tree) = encode_with_oct_lc_poseidon_trees_gpu(
+        let (gpu_trees, gpu_replica_tree) = &encode_with_oct_lc_poseidon_trees_gpu(
             &config,
-            gpu_store_configs,
-            window_index,
-            &replica_id,
-            &mut gpu_encoded_data,
+            vec![(
+                gpu_store_configs,
+                window_index,
+                replica_id,
+                &mut gpu_encoded_data[..],
+            )]
+            .into_iter(),
         )
-        .unwrap();
+        .unwrap()[0];
 
         let gpu_roots = gpu_trees.into_iter().map(|t| t.root()).collect::<Vec<_>>();
         let gpu_replica_root = gpu_replica_tree.root();
