@@ -511,6 +511,7 @@ fn to_gpu_config(conf: &Config) -> gpu::Config {
     }
 }
 
+type GPUHasher = storage_proofs_core::hasher::PoseidonHasher;
 type GPUTree = storage_proofs_core::merkle::OctLCMerkleTree<GPUHasher>;
 pub fn encode_with_trees_all<'a, Tree: 'static + MerkleTreeTrait, I>(
     conf: &Config,
