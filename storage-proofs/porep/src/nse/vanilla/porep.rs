@@ -117,9 +117,9 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> PoRep<'a, Tree::H
         let trees = labels::encode_with_trees_all::<Tree, _>(
             config,
             data.as_mut()
-                .par_chunks_mut(config.window_size())
+                .chunks_mut(config.window_size())
                 .enumerate()
-                .zip(windowed_store_configs.into_par_iter())
+                .zip(windowed_store_configs.into_iter())
                 .map(|((window_index, window_data), store_configs)| {
                     (store_configs, window_index as u32, replica_id, window_data)
                 })
