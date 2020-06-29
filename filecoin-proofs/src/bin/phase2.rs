@@ -96,6 +96,7 @@ impl Hasher {
 }
 
 #[derive(Clone, Copy)]
+#[allow(clippy::enum_variant_names)]
 enum Sector {
     SectorSize2KiB,
     SectorSize4KiB,
@@ -110,7 +111,7 @@ enum Sector {
 }
 
 impl Sector {
-    fn as_u64(&self) -> u64 {
+    fn as_u64(self) -> u64 {
         match self {
             Sector::SectorSize2KiB => SECTOR_SIZE_2_KIB,
             Sector::SectorSize4KiB => SECTOR_SIZE_4_KIB,
@@ -177,12 +178,12 @@ impl ParamSize {
         }
     }
 
-    fn is_small(&self) -> bool {
-        *self == ParamSize::Small
+    fn is_small(self) -> bool {
+        self == ParamSize::Small
     }
 
-    fn is_large(&self) -> bool {
-        *self == ParamSize::Large
+    fn is_large(self) -> bool {
+        self == ParamSize::Large
     }
 }
 
@@ -500,7 +501,7 @@ fn get_mixed_entropy() -> [u8; 32] {
 
 /// Contributes entropy to the current phase2 parameters for a circuit, then writes the updated
 /// parameters to a new file.
-fn contribute_to_params_streaming<'a>(path_before: &'a str, write_raw: bool) {
+fn contribute_to_params_streaming(path_before: &str, write_raw: bool) {
     let (proof, hasher, sector_size, head, prev_param_number, param_size, read_raw) =
         parse_params_filename(path_before);
 
@@ -592,7 +593,7 @@ fn contribute_to_params_streaming<'a>(path_before: &'a str, write_raw: bool) {
     );
 }
 
-fn convert_small<'a>(path_before: &'a str) {
+fn convert_small(path_before: &str) {
     let (proof, hasher, sector_size, head, param_number, param_size, read_raw) =
         parse_params_filename(path_before);
 
@@ -848,6 +849,7 @@ fn verify_contribution_small(
     participant_contrib: [u8; 64],
     read_raw: bool,
 ) {
+    #[allow(clippy::large_enum_variant)]
     enum Message {
         Done(MPCSmall),
         Error(io::Error),
@@ -1016,6 +1018,7 @@ fn setup_logger(log_filename: &str) {
     });
 }
 
+#[allow(clippy::cognitive_complexity)]
 fn main() {
     let new_command = SubCommand::with_name("new")
         .about("Create initial phase2 parameters for circuit")

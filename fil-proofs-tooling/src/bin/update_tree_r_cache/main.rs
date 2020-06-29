@@ -130,8 +130,7 @@ fn build_tree_r_last<Tree: MerkleTreeTrait>(
     };
 
     let mut base_tree_roots: Vec<DefaultTreeDomain> = Vec::with_capacity(tree_count);
-    for i in 0..tree_count {
-        let config = &configs[i];
+    for (i, config) in configs.iter().enumerate().take(tree_count) {
         let offset = replica_config.offsets[i];
 
         let slice = &input_mmap[offset..(offset + (sector_size / tree_count))];
@@ -216,11 +215,11 @@ fn run_verify(sector_size: usize, cache: PathBuf, replica_path: PathBuf) -> Resu
 
     // First, read the roots from the cached trees on disk
     let mut cached_base_tree_roots: Vec<DefaultTreeDomain> = Vec::with_capacity(tree_count);
-    for i in 0..tree_count {
+    for (i, config) in configs.iter().enumerate().take(tree_count) {
         let store = LCStore::new_from_disk_with_reader(
             base_tree_len,
             OCT_ARITY,
-            &configs[i],
+            &config,
             ExternalReader::new_from_config(&replica_config, i)?,
         )?;
         cached_base_tree_roots.push(store.last()?);
