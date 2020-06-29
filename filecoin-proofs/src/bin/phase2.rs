@@ -1,53 +1,28 @@
-/// A CLI program for running Phase2 of Filecoin's trusted-setup.
-///
-/// # Build
-///
-/// From the directory `rust-fil-proofs` run:
-///
-/// ```
-/// $ RUSTFLAGS="-C target-cpu=native" cargo build --release -p filecoin-proofs --bin=phase2
-/// ```
-///
-/// # Usage
-///
-/// ```
-/// # Create initial params for a circuit using:
-/// $ RUST_BACKTRACE=1 ./target/release/phase2 new \
-///     <--porep, --epost, --fpost> \
-///     [--poseidon (default), --sha-pedersen] \
-///     <--2kib, --8mib, --512mib, --32gib, --64gib>
-///
-/// # Contribute randomness to the phase2 params for a circuit:
-/// $ RUST_BACKTRACE=1 ./target/release/phase2 contribute <path to params file>
-///
-/// # Verify the transition from one phase2 params file to another:
-/// $ RUST_BACKTRACE=1 ./target/release/phase2 verify \
-///     --paths=<comma separated list of file paths to params> \
-///     --contributions=<comma separated list of contribution digests>
-///
-/// # Run verification as a daemon - verify the parameters and contributions as they are written to
-/// # the `rust-fil-proofs` directory:
-/// $ RUST_BACKTRACE=1 ./target/release/phase2 verifyd
-/// ```
-use std::fmt::{self, Display, Formatter};
 use std::fs::{self, File};
-use std::io::{BufReader, BufWriter};
+use std::io::{self, BufReader, BufWriter};
 use std::path::Path;
 use std::process::Command;
 use std::str::{self, FromStr};
-use std::thread::sleep;
+use std::sync::mpsc::{channel, TryRecvError};
+use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
 use clap::{App, AppSettings, Arg, ArgGroup, SubCommand};
+
 use filecoin_proofs::constants::*;
 use filecoin_proofs::parameters::{
     setup_params, window_post_public_params, winning_post_public_params,
 };
-use filecoin_proofs::types::*;
+use filecoin_proofs::types::{
+    PaddedBytesAmount, PoRepConfig, PoRepProofPartitions, PoStConfig, PoStType, SectorSize,
+};
 use filecoin_proofs::with_shape;
-use log::info;
-use phase2::{verify_contribution, MPCParameters};
-use rand::SeedableRng;
+use log::{error, info};
+use phase2::small::{read_small_params_from_large_file, MPCSmall, Streamer};
+use phase2::MPCParameters;
+use rand::rngs::OsRng;
+use rand::{RngCore, SeedableRng};
+use rand_chacha::ChaChaRng;
 use simplelog::{self, CombinedLogger, LevelFilter, TermLogger, TerminalMode, WriteLogger};
 use storage_proofs::compound_proof::{self, CompoundProof};
 use storage_proofs::hasher::Sha256Hasher;
@@ -55,21 +30,42 @@ use storage_proofs::merkle::MerkleTreeTrait;
 use storage_proofs::porep::stacked::{StackedCircuit, StackedCompound, StackedDrg};
 use storage_proofs::post::fallback::{FallbackPoSt, FallbackPoStCircuit, FallbackPoStCompound};
 
-#[derive(Clone, Copy)]
-enum Proof {
-    Porep,
-    WinningPost,
-    WindowPost,
+const CHUNK_SIZE: usize = 10_000;
+
+fn get_head_commit() -> String {
+    let output = Command::new("git")
+        .args(&["rev-parse", "--short=7", "HEAD"])
+        .output()
+        .expect("failed to execute child process: `git rev-parse --short=7 HEAD`");
+
+    str::from_utf8(&output.stdout)
+        .expect("`git` child process outputed invalid Utf8 bytes")
+        .trim()
+        .to_lowercase()
 }
 
-impl Display for Proof {
-    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        let s = match self {
-            Proof::Porep => "PoRep",
-            Proof::WinningPost => "WinningPoSt",
-            Proof::WindowPost => "WindowPoSt",
-        };
-        write!(f, "{}", s)
+#[derive(Clone, Copy)]
+enum Proof {
+    Sdr,
+    Winning,
+    Window,
+}
+
+impl Proof {
+    fn pretty_print(&self) -> &str {
+        match self {
+            Proof::Sdr => "SDR",
+            Proof::Winning => "Winning",
+            Proof::Window => "Window",
+        }
+    }
+
+    fn lowercase(&self) -> &str {
+        match self {
+            Proof::Sdr => "sdr",
+            Proof::Winning => "winning",
+            Proof::Window => "window",
+        }
     }
 }
 
@@ -79,98 +75,198 @@ enum Hasher {
     // ShaPedersen,
 }
 
-impl Display for Hasher {
-    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        let s = match self {
+impl Hasher {
+    // Used for printing during logging. Implementing Debug and Display is less clear than having
+    // methods `.pretty_print()` and `.lowercase()` which differentiate between printing for logging
+    // v.s. printing for filenames.
+    fn pretty_print(&self) -> &str {
+        match self {
             Hasher::Poseidon => "Poseidon",
-            // Hasher::ShaPedersen => "SHA-Pedersen",
-        };
-        write!(f, "{}", s)
+            // Hasher::ShaPedersen => "SHA-Pederson",
+        }
+    }
+
+    // Used for constructing param filenames.
+    fn lowercase(&self) -> &str {
+        match self {
+            Hasher::Poseidon => "poseidon",
+            // Hasher::ShaPedersen => "shapederson",
+        }
     }
 }
 
-fn display_sector_size(sector_size: u64) -> String {
-    match sector_size {
-        SECTOR_SIZE_2_KIB => "2KiB".to_string(),
-        SECTOR_SIZE_8_MIB => "8MiB".to_string(),
-        SECTOR_SIZE_512_MIB => "512MiB".to_string(),
-        SECTOR_SIZE_32_GIB => "32GiB".to_string(),
-        SECTOR_SIZE_64_GIB => "64GiB".to_string(),
-        _ => unreachable!(),
+#[derive(Clone, Copy)]
+#[allow(clippy::enum_variant_names)]
+enum Sector {
+    SectorSize2KiB,
+    SectorSize4KiB,
+    SectorSize16KiB,
+    SectorSize32KiB,
+    SectorSize8MiB,
+    SectorSize16MiB,
+    SectorSize512MiB,
+    SectorSize1GiB,
+    SectorSize32GiB,
+    SectorSize64GiB,
+}
+
+impl Sector {
+    fn as_u64(self) -> u64 {
+        match self {
+            Sector::SectorSize2KiB => SECTOR_SIZE_2_KIB,
+            Sector::SectorSize4KiB => SECTOR_SIZE_4_KIB,
+            Sector::SectorSize16KiB => SECTOR_SIZE_16_KIB,
+            Sector::SectorSize32KiB => SECTOR_SIZE_32_KIB,
+            Sector::SectorSize8MiB => SECTOR_SIZE_8_MIB,
+            Sector::SectorSize16MiB => SECTOR_SIZE_16_MIB,
+            Sector::SectorSize512MiB => SECTOR_SIZE_512_MIB,
+            Sector::SectorSize1GiB => SECTOR_SIZE_1_GIB,
+            Sector::SectorSize32GiB => SECTOR_SIZE_32_GIB,
+            Sector::SectorSize64GiB => SECTOR_SIZE_64_GIB,
+        }
+    }
+
+    fn lowercase(&self) -> &str {
+        match self {
+            Sector::SectorSize2KiB => "2kib",
+            Sector::SectorSize4KiB => "4kib",
+            Sector::SectorSize16KiB => "16kib",
+            Sector::SectorSize32KiB => "32kib",
+            Sector::SectorSize8MiB => "8mib",
+            Sector::SectorSize16MiB => "16mib",
+            Sector::SectorSize512MiB => "512mib",
+            Sector::SectorSize1GiB => "1gib",
+            Sector::SectorSize32GiB => "32gib",
+            Sector::SectorSize64GiB => "64gib",
+        }
+    }
+
+    fn pretty_print(&self) -> &str {
+        match self {
+            Sector::SectorSize2KiB => "2KiB",
+            Sector::SectorSize4KiB => "4KiB",
+            Sector::SectorSize16KiB => "16KiB",
+            Sector::SectorSize32KiB => "32KiB",
+            Sector::SectorSize8MiB => "8MiB",
+            Sector::SectorSize16MiB => "16MiB",
+            Sector::SectorSize512MiB => "512MiB",
+            Sector::SectorSize1GiB => "1GiB",
+            Sector::SectorSize32GiB => "32GiB",
+            Sector::SectorSize64GiB => "64GiB",
+        }
     }
 }
 
-fn get_head_commit() -> String {
-    let output = Command::new("git")
-        .args(&["rev-parse", "--short=7", "HEAD"])
-        .output()
-        .expect("failed to execute child process: `git rev-parse --short=7 HEAD`");
+#[derive(Clone, Copy, PartialEq)]
+enum ParamSize {
+    Large,
+    Small,
+}
 
-    str::from_utf8(&output.stdout).unwrap().trim().to_string()
+impl ParamSize {
+    fn pretty_print(&self) -> &str {
+        match self {
+            ParamSize::Large => "Large",
+            ParamSize::Small => "Small",
+        }
+    }
+
+    fn lowercase(&self) -> &str {
+        match self {
+            ParamSize::Large => "large",
+            ParamSize::Small => "small",
+        }
+    }
+
+    fn is_small(self) -> bool {
+        self == ParamSize::Small
+    }
+
+    fn is_large(self) -> bool {
+        self == ParamSize::Large
+    }
 }
 
 fn params_filename(
     proof: Proof,
     hasher: Hasher,
-    sector_size: u64,
+    sector_size: Sector,
     head: &str,
     param_number: usize,
+    param_size: ParamSize,
+    raw: bool,
 ) -> String {
-    let mut filename = format!(
-        "{}_{}_{}_{}_{}",
-        proof,
-        hasher,
-        display_sector_size(sector_size),
-        head,
-        param_number
-    );
-    filename.make_ascii_lowercase();
-    filename.replace("-", "_")
+    format!(
+        "{proof}_{hasher}_{sector}_{head}_{number}_{size}{maybe_fmt}",
+        proof = proof.lowercase(),
+        hasher = hasher.lowercase(),
+        sector = sector_size.lowercase(),
+        head = head,
+        number = param_number,
+        size = param_size.lowercase(),
+        maybe_fmt = if raw { "_raw" } else { "" },
+    )
 }
 
-fn initial_params_filename(proof: Proof, hasher: Hasher, sector_size: u64) -> String {
-    params_filename(proof, hasher, sector_size, &get_head_commit(), 0)
-}
-
-/// Parses a phase2 parameters filename `path` (e.g. "porep_poseidon_32gib_abcdef_0") to a tuple
-/// containing the proof, hasher, sector-size, shortened head commit, and contribution number (e.g.
-/// `(Proof::Porep, Hasher::Poseidon, SECTOR_SIZE_32_GIB, "abcdef1", 0)`).
-fn parse_params_filename(path: &str) -> (Proof, Hasher, u64, String, usize) {
+// Parses a phase2 parameters filename into the tuple:
+// (proof, hasher, sector-size, head, param-number, param-size).
+fn parse_params_filename(path: &str) -> (Proof, Hasher, Sector, String, usize, ParamSize, bool) {
+    // Remove directories from the path.
     let filename = path.rsplitn(2, '/').next().unwrap();
     let split: Vec<&str> = filename.split('_').collect();
 
     let proof = match split[0] {
-        "porep" => Proof::Porep,
-        "winning-post" => Proof::WinningPost,
-        "window-post" => Proof::WindowPost,
-        other => panic!("invalid proof id in filename: {}", other),
+        "sdr" => Proof::Sdr,
+        "winning" => Proof::Winning,
+        "window" => Proof::Window,
+        other => panic!("invalid proof name in params filename: {}", other),
     };
 
-    // TODO: this is broken if we enable SHA-Pedersen.
     let hasher = match split[1] {
         "poseidon" => Hasher::Poseidon,
-        // "sha_pedersen" => Hasher::ShaPedersen,
-        other => panic!("invalid hasher id in filename: {}", other),
+        // "shapedersen" => Hasher::ShaPedersen,
+        other => panic!("invalid hasher name in params filename: {}", other),
     };
 
     let sector_size = match split[2] {
-        "2kib" => SECTOR_SIZE_2_KIB,
-        "8mib" => SECTOR_SIZE_8_MIB,
-        "512mib" => SECTOR_SIZE_512_MIB,
-        "32gib" => SECTOR_SIZE_32_GIB,
-        "64gib" => SECTOR_SIZE_64_GIB,
-        other => panic!("invalid sector-size id in filename: {}", other),
+        "2kib" => Sector::SectorSize2KiB,
+        "4kib" => Sector::SectorSize4KiB,
+        "16kib" => Sector::SectorSize16KiB,
+        "32kib" => Sector::SectorSize32KiB,
+        "8mib" => Sector::SectorSize8MiB,
+        "16mib" => Sector::SectorSize16MiB,
+        "512mib" => Sector::SectorSize512MiB,
+        "1gib" => Sector::SectorSize1GiB,
+        "32gib" => Sector::SectorSize32GiB,
+        "64gib" => Sector::SectorSize64GiB,
+        other => panic!("invalid sector-size in params filename: {}", other),
     };
 
     let head = split[3].to_string();
 
     let param_number = usize::from_str(split[4])
-        .unwrap_or_else(|_| panic!("invalid param number in filename: {}", split[3]));
+        .unwrap_or_else(|_| panic!("invalid param number in params filename: {}", split[4]));
 
-    (proof, hasher, sector_size, head, param_number)
+    let param_size = match split[5] {
+        "large" => ParamSize::Large,
+        "small" => ParamSize::Small,
+        other => panic!("invalid param-size in params filename: {}", other),
+    };
+
+    let raw_fmt = split.get(6) == Some(&"raw");
+
+    (
+        proof,
+        hasher,
+        sector_size,
+        head,
+        param_number,
+        param_size,
+        raw_fmt,
+    )
 }
 
-fn blank_porep_poseidon_circuit<Tree: MerkleTreeTrait>(
+fn blank_sdr_poseidon_circuit<Tree: MerkleTreeTrait>(
     sector_size: u64,
 ) -> StackedCircuit<'static, Tree, Sha256Hasher> {
     let n_partitions = *POREP_PARTITIONS.read().unwrap().get(&sector_size).unwrap();
@@ -280,73 +376,55 @@ fn blank_window_post_poseidon_circuit<Tree: 'static + MerkleTreeTrait>(
         FallbackPoStCircuit<Tree>,
     >>::blank_circuit(&public_params)
 }
-/*
-fn blank_fallback_post_sha_pedersen_circuit(sector_size: u64) -> ... {}
-*/
 
 /// Creates the first phase2 parameters for a circuit and writes them to a file.
 fn create_initial_params<Tree: 'static + MerkleTreeTrait>(
     proof: Proof,
     hasher: Hasher,
-    sector_size: u64,
+    sector_size: Sector,
 ) {
-    let start_total = Instant::now();
+    let head = get_head_commit();
 
     info!(
-        "creating initial params for circuit: {} {} {} {}",
-        proof,
-        hasher,
-        display_sector_size(sector_size),
-        get_head_commit()
+        "creating initial params for circuit: {}-{}-{}-{}",
+        proof.pretty_print(),
+        hasher.pretty_print(),
+        sector_size.pretty_print(),
+        head,
     );
 
-    let params_path = initial_params_filename(proof, hasher, sector_size);
-    let params_file = File::create(&params_path).unwrap();
-    let mut params_writer = BufWriter::with_capacity(1024 * 1024, params_file);
-
+    let start_total = Instant::now();
     let dt_create_circuit: u64;
     let dt_create_params: u64;
 
     let params = match (proof, hasher) {
-        (Proof::Porep, Hasher::Poseidon) => {
+        (Proof::Sdr, Hasher::Poseidon) => {
             let start = Instant::now();
-            let circuit = blank_porep_poseidon_circuit::<Tree>(sector_size);
+            let circuit = blank_sdr_poseidon_circuit::<Tree>(sector_size.as_u64());
             dt_create_circuit = start.elapsed().as_secs();
             let start = Instant::now();
-            let params = phase2::MPCParameters::new(circuit).unwrap();
+            let params = MPCParameters::new(circuit).unwrap();
             dt_create_params = start.elapsed().as_secs();
             params
         }
-        /*
-        (Proof::Porep, Hasher::ShaPedersen) => {
+        (Proof::Winning, Hasher::Poseidon) => {
             let start = Instant::now();
-            let circuit = blank_porep_sha_pedersen_circuit(sector_size);
+            let circuit = blank_winning_post_poseidon_circuit::<Tree>(sector_size.as_u64());
             dt_create_circuit = start.elapsed().as_secs();
             let start = Instant::now();
-            let params = phase2::MPCParameters::new(circuit).unwrap();
+            let params = MPCParameters::new(circuit).unwrap();
             dt_create_params = start.elapsed().as_secs();
             params
         }
-        */
-        (Proof::WinningPost, Hasher::Poseidon) => {
+        (Proof::Window, Hasher::Poseidon) => {
             let start = Instant::now();
-            let circuit = blank_winning_post_poseidon_circuit::<Tree>(sector_size);
+            let circuit = blank_window_post_poseidon_circuit::<Tree>(sector_size.as_u64());
             dt_create_circuit = start.elapsed().as_secs();
             let start = Instant::now();
-            let params = phase2::MPCParameters::new(circuit).unwrap();
+            let params = MPCParameters::new(circuit).unwrap();
             dt_create_params = start.elapsed().as_secs();
             params
         }
-        (Proof::WindowPost, Hasher::Poseidon) => {
-            let start = Instant::now();
-            let circuit = blank_window_post_poseidon_circuit::<Tree>(sector_size);
-            dt_create_circuit = start.elapsed().as_secs();
-            let start = Instant::now();
-            let params = phase2::MPCParameters::new(circuit).unwrap();
-            dt_create_params = start.elapsed().as_secs();
-            params
-        } /*(Proof::FallbackPost, Hasher::ShaPedersen) => { ... }
-           */
     };
 
     info!(
@@ -355,492 +433,672 @@ fn create_initial_params<Tree: 'static + MerkleTreeTrait>(
         dt_create_params
     );
 
-    info!("writing initial params to file: {}", params_path);
-    params.write(&mut params_writer).unwrap();
-
-    info!(
-        "successfully created initial params for circuit: {} {} {} {}, dt_total={}s",
+    let large_path = params_filename(
         proof,
         hasher,
-        display_sector_size(sector_size),
-        get_head_commit(),
+        sector_size,
+        &head,
+        0,
+        ParamSize::Large,
+        false,
+    );
+    let small_path = params_filename(proof, hasher, sector_size, &head, 0, ParamSize::Small, true);
+
+    {
+        info!("writing large initial params to file: {}", large_path);
+        let file = File::create(&large_path).unwrap();
+        let mut writer = BufWriter::with_capacity(1024 * 1024, file);
+        params.write(&mut writer).unwrap();
+        info!("finished writing large params to file");
+    }
+
+    {
+        info!("writing small initial params to file: {}", small_path);
+        let file = File::create(&small_path).unwrap();
+        let mut writer = BufWriter::with_capacity(1024 * 1024, file);
+        params.write_small(&mut writer).unwrap();
+        info!("finished writing small params to file");
+    }
+
+    info!(
+        "successfully created and wrote initial params for circuit: {}-{}-{}-{}, dt_total={}s",
+        proof.pretty_print(),
+        hasher.pretty_print(),
+        sector_size.pretty_print(),
+        head,
         start_total.elapsed().as_secs()
     );
 }
 
-/// Prompt the user to mash on their keyboard to gather entropy.
-fn prompt_for_randomness() -> [u8; 32] {
-    use dialoguer::{theme::ColorfulTheme, Password};
+// Encodes a contribution into a hex string (lowercase, no leading "0x").
+fn hex_string(contrib: &[u8; 64]) -> String {
+    hex::encode(&contrib[..])
+}
 
-    let raw = Password::with_theme(&ColorfulTheme::default())
-        .with_prompt(
-            "Please randomly press your keyboard for entropy (press Return/Enter when finished)",
-        )
+fn get_mixed_entropy() -> [u8; 32] {
+    use dialoguer::theme::ColorfulTheme;
+    use dialoguer::Password;
+
+    let mut os_entropy = [0u8; 32];
+    OsRng.fill_bytes(&mut os_entropy);
+
+    let user_input = Password::with_theme(&ColorfulTheme::default())
+        .with_prompt("Please randomly press your keyboard (press Return/Enter when finished)")
         .interact()
         .unwrap();
 
-    let hashed = blake2b_simd::blake2b(raw.as_bytes());
+    let mut blake2b = blake2b_simd::Params::default();
+    blake2b.hash_length(32);
+    let digest = blake2b.hash(user_input.as_bytes());
+    let user_entropy = digest.as_bytes();
 
     let mut seed = [0u8; 32];
-    seed.copy_from_slice(&hashed.as_ref()[..32]);
+    for i in 0..32 {
+        seed[i] = os_entropy[i] ^ user_entropy[i];
+    }
     seed
 }
 
 /// Contributes entropy to the current phase2 parameters for a circuit, then writes the updated
 /// parameters to a new file.
-fn contribute_to_params(path_before: &str) {
-    let start_total = Instant::now();
-
-    let (proof, hasher, sector_size, head, param_number_before) =
+fn contribute_to_params_streaming(path_before: &str, write_raw: bool) {
+    let (proof, hasher, sector_size, head, prev_param_number, param_size, read_raw) =
         parse_params_filename(path_before);
 
+    let param_number = prev_param_number + 1;
+
     info!(
-        "contributing randomness to params for circuit: {} {} {} {}",
+        "contributing to params for circuit: {}-{}-{}-{}-{} {}->{}",
+        proof.pretty_print(),
+        hasher.pretty_print(),
+        sector_size.pretty_print(),
+        head,
+        param_size.pretty_print(),
+        prev_param_number,
+        param_number
+    );
+
+    // Get OS entropy prior to deserialization the previous participant's params.
+    let seed = get_mixed_entropy();
+    let mut rng = ChaChaRng::from_seed(seed);
+
+    // Default to small params for first participant.
+    let path_after = params_filename(
         proof,
         hasher,
-        display_sector_size(sector_size),
-        head
+        sector_size,
+        &head,
+        param_number,
+        ParamSize::Small,
+        write_raw,
     );
 
-    assert_eq!(
-        head,
-        get_head_commit(),
-        "cannot contribute to parameters using a different circuit version",
-    );
-
-    let seed = prompt_for_randomness();
-    let mut rng = rand_chacha::ChaChaRng::from_seed(seed);
-
-    info!("reading 'before' params from disk: {}", path_before);
-    let file_before = File::open(path_before).unwrap();
-    let mut params_reader = BufReader::with_capacity(1024 * 1024, file_before);
-    let start = Instant::now();
-    let mut params = phase2::MPCParameters::read(&mut params_reader, true).unwrap();
-    info!(
-        "successfully read 'before' params from disk, dt_read={}s",
-        start.elapsed().as_secs()
-    );
+    let start_total = Instant::now();
 
     info!("making contribution");
-    let start = Instant::now();
-    let contribution = params.contribute(&mut rng);
+    let start_contrib = Instant::now();
+
     info!(
-        "successfully made contribution, contribution hash: {}, dt_contribute={}s",
-        hex::encode(&contribution[..]),
-        start.elapsed().as_secs()
+        "making streamer from small 'before' params: {}",
+        path_before
     );
 
-    let path_after = params_filename(proof, hasher, sector_size, &head, param_number_before + 1);
-    info!("writing 'after' params to file: {}", path_after);
-    let file_after = File::create(path_after).unwrap();
-    let mut params_writer = BufWriter::with_capacity(1024 * 1024, file_after);
-    params.write(&mut params_writer).unwrap();
+    let mut streamer = if param_size.is_large() {
+        Streamer::new_from_large_file(path_before, read_raw, write_raw).unwrap_or_else(|e| {
+            panic!(
+                "failed to make streamer from large `{}`: {}",
+                path_before, e
+            );
+        })
+    } else {
+        Streamer::new(path_before, read_raw, write_raw).unwrap_or_else(|e| {
+            panic!(
+                "failed to make streamer from small `{}`: {}",
+                path_before, e
+            );
+        })
+    };
+
+    info!("writing small 'after' params to file: {}", path_after);
+    let file_after = File::create(&path_after).unwrap_or_else(|e| {
+        panic!(
+            "failed to create 'after' params file `{}`: {}",
+            path_after, e
+        );
+    });
+
+    let contrib = streamer
+        .contribute(&mut rng, file_after, CHUNK_SIZE)
+        .unwrap_or_else(|e| panic!("failed to make streaming contribution: {}", e));
+
+    let contrib_str = hex_string(&contrib);
+    info!(
+        "successfully made contribution: {}, dt_contribute={}s",
+        contrib_str,
+        start_contrib.elapsed().as_secs()
+    );
+
+    let contrib_path = format!("{}.contrib", path_after);
+    info!("writing contribution hash to file: {}", contrib_path);
+    fs::write(&contrib_path, contrib_str).unwrap_or_else(|e| {
+        panic!(
+            "failed to write contribution to file `{}`: {}",
+            contrib_path, e
+        );
+    });
+
     info!(
         "successfully made contribution, dt_total={}s",
         start_total.elapsed().as_secs()
     );
 }
 
-/// Verifies a sequence of parameter transitions against a sequence of corresponding contribution
-/// hashes. For example, verifies that the first digest in `contribution_hashes` transitions the
-/// first parameters file in `param_paths` to the second file, then verifies that the second
-/// contribution hash transitions the second parameters file to the third file.
-fn verify_param_transitions(param_paths: &[&str], contribution_hashes: &[[u8; 64]]) {
-    let start_total = Instant::now();
+fn convert_small(path_before: &str) {
+    let (proof, hasher, sector_size, head, param_number, param_size, read_raw) =
+        parse_params_filename(path_before);
 
-    assert_eq!(
-        param_paths.len() - 1,
-        contribution_hashes.len(),
-        "the number of contributions must be one less than the number of parameter files"
+    // TODO: change this if we update the large MPC params (and G2Affine) to support the raw serialization format.
+    assert!(
+        param_size.is_small(),
+        "converting large params to raw format is not currently supported"
     );
 
-    let mut next_params_before: Option<phase2::MPCParameters> = None;
-
-    for (param_pair, provided_contribution_hash) in
-        param_paths.windows(2).zip(contribution_hashes.iter())
-    {
-        let path_before = param_pair[0];
-        let path_after = param_pair[1];
-
-        info!(
-            "verifying transition:\n\tparams: {} -> {}\n\tcontribution: {}",
-            path_before,
-            path_after,
-            hex::encode(&provided_contribution_hash[..])
-        );
-
-        // If we are verifying the first contribution read both `path_before` and `path_after`
-        // files. For every subsequent verification, move the previous loop's "after" params to this
-        // loop's "before" params then read this loop's "after" params file. This will minimize the
-        // number of expensive parameter file reads.
-        let params_before = match next_params_before.take() {
-            Some(params_before) => params_before,
-            None => {
-                info!("reading 'before' params from disk: {}", path_before);
-                let file = File::open(path_before).unwrap();
-                let mut reader = BufReader::with_capacity(1024 * 1024, file);
-                let start = Instant::now();
-                let params_before = phase2::MPCParameters::read(&mut reader, true).unwrap();
-                info!(
-                    "successfully read 'before' params from disk, dt_read={}s",
-                    start.elapsed().as_secs()
-                );
-                params_before
-            }
-        };
-
-        let params_after = {
-            info!("reading 'after' params from disk: {}", path_after);
-            let file = File::open(path_after).unwrap();
-            let mut reader = BufReader::with_capacity(1024 * 1024, file);
-            let start = Instant::now();
-            let params_after = phase2::MPCParameters::read(&mut reader, true).unwrap();
-            info!(
-                "successfully read 'after' params from disk, dt_read={}s",
-                start.elapsed().as_secs()
-            );
-            params_after
-        };
-
-        info!("verifying param transition");
-        let start_verification = Instant::now();
-
-        let calculated_contribution_hash =
-            phase2::verify_contribution(&params_before, &params_after).expect("invalid transition");
-
-        assert_eq!(
-            &provided_contribution_hash[..],
-            &calculated_contribution_hash[..],
-            "provided contribution hash ({}) does not match calculated contribution hash ({})",
-            hex::encode(&provided_contribution_hash[..]),
-            hex::encode(&calculated_contribution_hash[..]),
-        );
-
-        info!(
-            "successfully verified param transition, dt_verify={}s",
-            start_verification.elapsed().as_secs()
-        );
-
-        next_params_before = Some(params_after);
-    }
+    let write_raw = !read_raw;
 
     info!(
-        "successfully verified all param transitions, dt_total={}s",
+        "converting params {to_from} raw format for circuit: {proof}-{hasher}-{sector_size}-{head}-{num} {param_size}",
+        to_from = if write_raw { "to" } else { "from" },
+        proof = proof.pretty_print(),
+        hasher = hasher.pretty_print(),
+        sector_size = sector_size.pretty_print(),
+        head = head,
+        num = param_number,
+        param_size = param_size.pretty_print(),
+    );
+
+    // Default to small params for first participant.
+    let path_after = params_filename(
+        proof,
+        hasher,
+        sector_size,
+        &head,
+        param_number,
+        ParamSize::Small,
+        write_raw,
+    );
+
+    let start_total = Instant::now();
+
+    info!("converting");
+
+    info!(
+        "making streamer from small {} params: {}",
+        if read_raw { "raw" } else { "non-raw" },
+        path_before
+    );
+
+    let mut streamer = if param_size.is_large() {
+        panic!("cannot convert large param format");
+    } else {
+        Streamer::new(path_before, read_raw, write_raw).unwrap_or_else(|e| {
+            panic!(
+                "failed to make streamer from small `{}`: {}",
+                path_before, e
+            );
+        })
+    };
+
+    info!(
+        "streamer is writing {} formatted params to file: {}",
+        if write_raw { "raw" } else { "non-raw" },
+        path_after
+    );
+    let file_after = File::create(&path_after).unwrap_or_else(|e| {
+        panic!(
+            "failed to create 'after' params file `{}`: {}",
+            path_after, e
+        );
+    });
+
+    streamer
+        .process(file_after, CHUNK_SIZE)
+        .expect("failed to convert");
+
+    info!(
+        "successfully converted, dt_total={}s",
         start_total.elapsed().as_secs()
     );
 }
 
-fn verify_param_transistions_daemon(proof: Proof, hasher: Hasher, sector_size: u64) {
-    const SLEEP_SECS: u64 = 10;
-
-    let head = get_head_commit();
-
-    info!(
-        "starting the verification daemon for the circuit: {} {} {} {}",
-        proof,
-        hasher,
-        display_sector_size(sector_size),
-        head
-    );
-
-    let mut next_before_params: Option<MPCParameters> = None;
-    let mut next_before_filename: Option<String> = None;
-    let mut param_number: usize = 0;
-
-    loop {
-        let (before_params, before_filename) = if next_before_params.is_some() {
-            let before_params = next_before_params.take().unwrap();
-            let before_filename = next_before_filename.take().unwrap();
-            (before_params, before_filename)
-        } else {
-            let before_filename = params_filename(proof, hasher, sector_size, &head, param_number);
-            let before_path = Path::new(&before_filename);
-            if !before_path.exists() {
-                info!("waiting for params file: {}", before_filename);
-                while !before_path.exists() {
-                    sleep(Duration::from_secs(SLEEP_SECS));
-                }
-            }
-            info!("found file: {}", before_filename);
-            info!("reading params file: {}", before_filename);
-            let file = File::open(&before_path).unwrap();
-            let mut reader = BufReader::with_capacity(1024 * 1024, file);
-            let read_start = Instant::now();
-            let before_params = MPCParameters::read(&mut reader, true).unwrap();
-            info!(
-                "successfully read params, dt_read={}s",
-                read_start.elapsed().as_secs()
-            );
-            param_number += 1;
-            (before_params, before_filename)
-        };
-
-        let after_filename = params_filename(proof, hasher, sector_size, &head, param_number);
-        let after_path = Path::new(&after_filename);
-
-        if !after_path.exists() {
-            info!("waiting for params file: {}", after_filename);
-            while !after_path.exists() {
-                sleep(Duration::from_secs(SLEEP_SECS));
-            }
-        }
-        info!("found file: {}", after_filename);
-
-        let after_params = {
-            info!("reading params file: {}", after_filename);
-            let file = File::open(&after_path).unwrap();
-            let mut reader = BufReader::with_capacity(1024 * 1024, file);
-            let read_start = Instant::now();
-            let params = MPCParameters::read(&mut reader, true).unwrap();
-            info!(
-                "successfully read params, dt_read={}s",
-                read_start.elapsed().as_secs()
-            );
-            param_number += 1;
-            params
-        };
-
-        let contribution_hash_filename = format!("{}_contribution", after_filename);
-        let contribution_hash_path = Path::new(&contribution_hash_filename);
-
-        if !contribution_hash_path.exists() {
-            info!(
-                "waiting for contribution hash file: {}",
-                contribution_hash_filename
-            );
-            while !contribution_hash_path.exists() {
-                sleep(Duration::from_secs(SLEEP_SECS));
-            }
-        }
-        info!("found file: {}", contribution_hash_filename);
-
-        let hex_str = fs::read_to_string(&contribution_hash_path)
-            .expect("failed to read contribution hash file")
-            .trim()
-            .to_string();
-
-        let provided_contribution_hash = {
-            let mut arr = [0u8; 64];
-            let vec = hex::decode(&hex_str).unwrap_or_else(|_| {
-                panic!("contribution hash is not a valid hex string: {}", hex_str)
-            });
-            info!("parsed contribution hash");
-            arr.copy_from_slice(&vec[..]);
-            arr
-        };
-
-        info!(
-            "verifying param transition:\n\t{} -> {}\n\t{}",
-            before_filename, after_filename, hex_str
-        );
-
-        let start_verification = Instant::now();
-
-        let calculated_contribution_hash =
-            verify_contribution(&before_params, &after_params).expect("invalid transition");
-
-        assert_eq!(
-            &provided_contribution_hash[..],
-            &calculated_contribution_hash[..],
-            "provided contribution hash ({}) does not match calculated contribution hash ({})",
-            hex_str,
-            hex::encode(&calculated_contribution_hash[..]),
-        );
-
-        info!(
-            "successfully verified param transition, dt_verify={}s\n",
-            start_verification.elapsed().as_secs()
-        );
-
-        next_before_params = Some(after_params);
-        next_before_filename = Some(after_filename);
-    }
-}
-
-/// Creates the logger for the "new" CLI subcommand. Writes info logs to stdout, error logs to
-/// stderr, and all logs to the file: `<proof>_<hasher>_<sector-size>_<head>_0.log`.
-fn setup_new_logger(proof: Proof, hasher: Hasher, sector_size: u64) {
-    let log_filename = format!(
-        "{}.log",
-        initial_params_filename(proof, hasher, sector_size)
-    );
-
-    let log_file = File::create(&log_filename)
-        .unwrap_or_else(|_| panic!("failed to create log file: {}", log_filename));
-
-    CombinedLogger::init(vec![
-        TermLogger::new(
-            LevelFilter::Info,
-            simplelog::Config::default(),
-            TerminalMode::Mixed,
-        ),
-        WriteLogger::new(LevelFilter::Info, simplelog::Config::default(), log_file),
-    ])
-    .expect("failed to setup logger");
-}
-
-/// Creates the logger for the "contribute" CLI subcommand. Writes info logs to stdout, error logs
-/// to stderr, and all logs to the file:
-/// `<proof>_<hasher>_<sector-size>_<head>_<param number containing contribution>.log`.
-fn setup_contribute_logger(path_before: &str) {
-    let (proof, hasher, sector_size, head, param_number_before) =
+/// Contributes entropy to the current phase2 parameters for a circuit, then writes the updated
+/// parameters to a new file.
+fn contribute_to_params(path_before: &str) {
+    let (proof, hasher, sector_size, head, prev_param_number, param_size, read_raw) =
         parse_params_filename(path_before);
 
-    let mut log_filename =
-        params_filename(proof, hasher, sector_size, &head, param_number_before + 1);
+    let param_number = prev_param_number + 1;
 
-    log_filename.push_str(".log");
-
-    let log_file = File::create(&log_filename)
-        .unwrap_or_else(|_| panic!("failed to create log file: {}", log_filename));
-
-    CombinedLogger::init(vec![
-        TermLogger::new(
-            LevelFilter::Info,
-            simplelog::Config::default(),
-            TerminalMode::Mixed,
-        ),
-        WriteLogger::new(LevelFilter::Info, simplelog::Config::default(), log_file),
-    ])
-    .expect("failed to setup logger");
-}
-
-/// Creates the logger for the "contribute" CLI subcommand. Writes info logs to stdout, error logs
-/// to stderr, and all logs to the file:
-/// <proof>_<hasher>_<sector-size>_<head>_verify_<first param number>_<last param number>.log
-fn setup_verify_logger(param_paths: &[&str]) {
-    let (proof, hasher, sector_size, head, first_param_number) =
-        parse_params_filename(param_paths.first().unwrap());
-
-    let last_param_number = parse_params_filename(param_paths.last().unwrap()).4;
-
-    let mut log_filename = format!(
-        "{}_{}_{}_{}_verify_{}_{}.log",
-        proof,
-        hasher,
-        display_sector_size(sector_size),
+    info!(
+        "contributing to params for circuit: {}-{}-{}-{}-{} {}->{}",
+        proof.pretty_print(),
+        hasher.pretty_print(),
+        sector_size.pretty_print(),
         head,
-        first_param_number,
-        last_param_number
+        param_size.pretty_print(),
+        prev_param_number,
+        param_number
     );
-    log_filename.make_ascii_lowercase();
-    let log_filename = log_filename.replace("-", "_");
 
-    let log_file = File::create(&log_filename)
-        .unwrap_or_else(|_| panic!("failed to create log file: {}", log_filename));
+    if param_size.is_large() {
+        info!("large param file found, contributing as small");
+    }
 
-    CombinedLogger::init(vec![
-        TermLogger::new(
-            LevelFilter::Info,
-            simplelog::Config::default(),
-            TerminalMode::Mixed,
-        ),
-        WriteLogger::new(LevelFilter::Info, simplelog::Config::default(), log_file),
-    ])
-    .expect("failed to setup logger");
-}
+    // Get OS entropy prior to deserialization the previous participant's params.
+    let seed = get_mixed_entropy();
+    let mut rng = ChaChaRng::from_seed(seed);
 
-/// Setup the logger for the `verifyd` CLI subcommand. Writes info logs to stdout, error logs to
-/// stderr, and all logs to the file: <proof>_<hasher>_<sector-size>_<head>_verifyd.log
-fn setup_verifyd_logger(proof: Proof, hasher: Hasher, sector_size: u64) {
-    let mut log_filename = format!(
-        "{}_{}_{}_{}_verifyd.log",
+    /*
+    let path_after =
+        params_filename(proof, hasher, sector_size, &head, param_number, param_size);
+    */
+    // Default to small params for first participant.
+    let path_after = params_filename(
         proof,
         hasher,
-        display_sector_size(sector_size),
-        &get_head_commit(),
+        sector_size,
+        &head,
+        param_number,
+        ParamSize::Small,
+        false,
     );
-    log_filename.make_ascii_lowercase();
-    let log_filename = log_filename.replace("-", "_");
 
+    let start_total = Instant::now();
+    let start_read = Instant::now();
+
+    let mut small_params = if param_size.is_large() {
+        info!("reading large 'before' params as small: {}", path_before);
+        read_small_params_from_large_file(&path_before).unwrap_or_else(|e| {
+            panic!(
+                "failed to read large param file `{}` as small: {}",
+                path_before, e
+            );
+        })
+    } else {
+        info!("reading small 'before' params as small: {}", path_before);
+        let file_before = File::open(path_before).unwrap();
+        let mut reader = BufReader::with_capacity(1024 * 1024, file_before);
+        MPCSmall::read(&mut reader, read_raw).unwrap_or_else(|e| {
+            panic!(
+                "failed to read small param file `{}` as small: {}",
+                path_before, e
+            );
+        })
+    };
+    info!(
+        "successfully read 'before' params, dt_read={}s",
+        start_read.elapsed().as_secs()
+    );
+
+    info!("making contribution");
+    let start_contrib = Instant::now();
+    let contrib = small_params.contribute(&mut rng);
+    let contrib_str = hex_string(&contrib);
+    info!(
+        "successfully made contribution: {}, dt_contribute={}s",
+        contrib_str,
+        start_contrib.elapsed().as_secs()
+    );
+
+    info!("writing small 'after' params to file: {}", path_after);
+    let file_after = File::create(&path_after).unwrap_or_else(|e| {
+        panic!(
+            "failed to create 'after' params file `{}`: {}",
+            path_after, e
+        );
+    });
+    let mut writer = BufWriter::with_capacity(1024 * 1024, file_after);
+    small_params.write(&mut writer).unwrap();
+
+    let contrib_path = format!("{}.contrib", path_after);
+    info!("writing contribution hash to file: {}", contrib_path);
+    fs::write(&contrib_path, contrib_str).unwrap_or_else(|e| {
+        panic!(
+            "failed to write contribution to file `{}`: {}",
+            contrib_path, e
+        );
+    });
+
+    info!(
+        "successfully made contribution, dt_total={}s",
+        start_total.elapsed().as_secs()
+    );
+
+    /*
+    info!("reading 'before' params from disk: {}", path_before);
+    let file_before = File::open(path_before).unwrap();
+    let mut reader = BufReader::with_capacity(1024 * 1024, file_before);
+    let start_read = Instant::now();
+
+    let contrib_str = if param_size.is_large() {
+        let mut large_params = MPCParameters::read(&mut reader, true).unwrap();
+        info!(
+            "successfully read 'before' params from disk, dt_read={}s",
+            start_read.elapsed().as_secs()
+        );
+
+        info!("making contribution");
+        let start_contrib = Instant::now();
+        let contrib = large_params.contribute(&mut rng);
+        let contrib_str = hex_string(&contrib);
+        info!(
+            "successfully made contribution: {}, dt_contribute={}s",
+            contrib_str,
+            start_contrib.elapsed().as_secs()
+        );
+
+        info!("writing 'after' params to file: {}", path_after);
+        let file_after = File::create(&path_after).unwrap();
+        let mut writer = BufWriter::with_capacity(1024 * 1024, file_after);
+        large_params.write(&mut writer).unwrap();
+
+        contrib_str
+    } else {
+        let mut small_params = MPCSmall::read(&mut reader).unwrap();
+        info!(
+            "successfully read 'before' params from disk, dt_read={}s",
+            start_read.elapsed().as_secs()
+        );
+
+        info!("making contribution");
+        let start_contrib = Instant::now();
+        let contrib = small_params.contribute(&mut rng);
+        let contrib_str = hex_string(&contrib);
+        info!(
+            "successfully made contribution: {}, dt_contribute={}s",
+            contrib_str,
+            start_contrib.elapsed().as_secs()
+        );
+
+        info!("writing 'after' params to file: {}", path_after);
+        let file_after = File::create(&path_after).unwrap();
+        let mut writer = BufWriter::with_capacity(1024 * 1024, file_after);
+        small_params.write(&mut writer).unwrap();
+
+        contrib_str
+    };
+
+    let contrib_path = format!("{}.contrib", path_after);
+    info!("writing contribution hash to file: {}", contrib_path);
+    fs::write(&contrib_path, contrib_str).unwrap_or_else(|e| {
+        panic!(
+            "failed to write contribution hash to file `{}`: {}",
+            contrib_path, e
+        );
+    });
+
+    info!(
+        "successfully made contribution, dt_total={}s",
+        start_total.elapsed().as_secs()
+    );
+    */
+}
+
+fn verify_contribution_small(
+    path_before: &str,
+    path_after: &str,
+    participant_contrib: [u8; 64],
+    read_raw: bool,
+) {
+    #[allow(clippy::large_enum_variant)]
+    enum Message {
+        Done(MPCSmall),
+        Error(io::Error),
+    }
+
+    let start_total = Instant::now();
+
+    info!(
+        "verifying contribution:\n    before: {}\n    after: {}\n    contrib: {}",
+        path_before,
+        path_after,
+        hex_string(&participant_contrib)
+    );
+
+    // Do these checks now to avoid panics in the reader threads.
+    assert!(
+        Path::new(&path_before).exists(),
+        "'before' params file not found: {}",
+        path_before
+    );
+    assert!(
+        Path::new(&path_after).exists(),
+        "'after' params file not found: {}",
+        path_after
+    );
+
+    let before_params_are_large = path_before.contains("large");
+    let after_params_are_large = path_after.contains("large");
+
+    let (before_tx, before_rx) = channel::<Message>();
+    let (after_tx, after_rx) = channel::<Message>();
+
+    let path_before = path_before.to_string();
+    let path_after = path_after.to_string();
+
+    let before_thread: JoinHandle<()> = thread::spawn(move || {
+        let start_read = Instant::now();
+        let read_res: io::Result<MPCSmall> = if before_params_are_large {
+            info!("reading large 'before' params as small: {}", path_before);
+            read_small_params_from_large_file(&path_before)
+        } else {
+            info!("reading (small) 'before' params as small: {}", path_before);
+            File::open(path_before).and_then(|file| {
+                let mut reader = BufReader::with_capacity(1024 * 1024, file);
+                MPCSmall::read(&mut reader, read_raw)
+            })
+        };
+        match read_res {
+            Ok(params) => {
+                let dt_read = start_read.elapsed().as_secs();
+                info!("successfully read 'before' params, dt_read={}s", dt_read);
+                before_tx.send(Message::Done(params)).unwrap();
+            }
+            Err(e) => {
+                error!("failed to read 'before' params: {}", e);
+                before_tx.send(Message::Error(e)).unwrap();
+            }
+        };
+    });
+
+    let after_thread: JoinHandle<()> = thread::spawn(move || {
+        let start_read = Instant::now();
+        let read_res: io::Result<MPCSmall> = if after_params_are_large {
+            info!("reading large 'after' params as small: {}", path_after);
+            read_small_params_from_large_file(&path_after)
+        } else {
+            info!("reading (small) 'after' params as small: {}", path_after);
+            File::open(path_after).and_then(|file| {
+                let mut reader = BufReader::with_capacity(1024 * 1024, file);
+                MPCSmall::read(&mut reader, read_raw)
+            })
+        };
+        match read_res {
+            Ok(params) => {
+                let dt_read = start_read.elapsed().as_secs();
+                info!("successfully read 'after' params, dt_read={}s", dt_read);
+                after_tx.send(Message::Done(params)).unwrap();
+            }
+            Err(e) => {
+                error!("failed to read 'after' params: {}", e);
+                after_tx.send(Message::Error(e)).unwrap();
+            }
+        };
+    });
+
+    let mut before_params: Option<MPCSmall> = None;
+    let mut after_params: Option<MPCSmall> = None;
+
+    loop {
+        if before_params.is_none() {
+            match before_rx.try_recv() {
+                Ok(Message::Done(params)) => {
+                    before_params = Some(params);
+                    info!("received 'before' params from thread");
+                }
+                Ok(Message::Error(e)) => panic!("'before' thread panic-ed: {}", e),
+                Err(TryRecvError::Disconnected) => panic!("'before' thread disconnected"),
+                Err(TryRecvError::Empty) => {}
+            };
+        }
+
+        if after_params.is_none() {
+            match after_rx.try_recv() {
+                Ok(Message::Done(params)) => {
+                    after_params = Some(params);
+                    info!("received 'after' params from thread");
+                }
+                Ok(Message::Error(e)) => panic!("'after' thread panic-ed: {}", e),
+                Err(TryRecvError::Disconnected) => panic!("'after' thread disconnected"),
+                Err(TryRecvError::Empty) => {}
+            };
+        }
+
+        if before_params.is_some() && after_params.is_some() {
+            break;
+        }
+
+        thread::sleep(Duration::from_secs(3));
+    }
+
+    before_thread.join().unwrap();
+    after_thread.join().unwrap();
+
+    info!("verifying contribution");
+    let start_verification = Instant::now();
+
+    let calculated_contrib =
+        phase2::small::verify_contribution_small(&before_params.unwrap(), &after_params.unwrap())
+            .expect("failed to calculate expected contribution");
+
+    assert_eq!(
+        &participant_contrib[..],
+        &calculated_contrib[..],
+        "provided contribution hash does not match expected contribution hash \
+        \n\tprovided: {}\n\texpected: {}",
+        hex_string(&participant_contrib),
+        hex_string(&calculated_contrib)
+    );
+
+    info!(
+        "successfully verified contribution, dt_verify={}s, dt_total={}s",
+        start_verification.elapsed().as_secs(),
+        start_total.elapsed().as_secs()
+    );
+}
+
+// TODO:
+// fn verify_contribution_large()
+
+// Writes info logs to stdout, error logs to stderr, and all logs to the file `log_filename` in
+// `rust-fil-proofs`'s top-level directory.
+fn setup_logger(log_filename: &str) {
     let log_file = File::create(&log_filename)
-        .unwrap_or_else(|_| panic!("failed to create log file: {}", log_filename));
+        .unwrap_or_else(|e| panic!("failed to create log file `{}`: {}", log_filename, e));
 
-    CombinedLogger::init(vec![
-        TermLogger::new(
-            LevelFilter::Info,
-            simplelog::Config::default(),
-            TerminalMode::Mixed,
-        ),
-        WriteLogger::new(LevelFilter::Info, simplelog::Config::default(), log_file),
-    ])
-    .expect("failed to setup logger");
+    let term_logger = TermLogger::new(
+        LevelFilter::Info,
+        simplelog::Config::default(),
+        TerminalMode::Mixed,
+    );
+
+    let file_logger = WriteLogger::new(LevelFilter::Info, simplelog::Config::default(), log_file);
+
+    CombinedLogger::init(vec![term_logger, file_logger]).unwrap_or_else(|e| {
+        panic!("failed to create `CombinedLogger`: {}", e);
+    });
 }
 
 #[allow(clippy::cognitive_complexity)]
 fn main() {
     let new_command = SubCommand::with_name("new")
-        .about("Create parameters")
+        .about("Create initial phase2 parameters for circuit")
         .arg(
-            Arg::with_name("porep")
-                .long("porep")
-                .help("Generate PoRep parameters"),
+            Arg::with_name("sdr")
+                .long("sdr")
+                .help("Generate SDR PoRep parameters"),
         )
         .arg(
-            Arg::with_name("winning-post")
-                .long("winning-post")
-                .help("Generate WinningPoSt parameters"),
+            Arg::with_name("winning")
+                .long("winning")
+                .help("Generate Winning PoSt parameters"),
         )
         .arg(
-            Arg::with_name("window-post")
-                .long("window-post")
-                .help("Generate WindowPoSt parameters"),
+            Arg::with_name("window")
+                .long("window")
+                .help("Generate Window PoSt parameters"),
         )
         .group(
             ArgGroup::with_name("proof")
-                .args(&["porep", "winning-post", "window-post"])
+                .args(&["sdr", "winning", "window"])
                 .required(true)
                 .multiple(false),
         )
         .arg(
-            Arg::with_name("poseidon")
-                .long("poseidon")
-                .help("Use the Poseidon hash function for column commitments and Merkle trees"),
-        )
-        /*
-        .arg(
-            Arg::with_name("sha-pedersen")
-                .long("sha-pedersen")
-                .help("Use SHA256 for column commitments and Pedersen hash for Merkle trees"),
-        )
-        */
-        .group(
-            ArgGroup::with_name("hasher")
-                .args(&["poseidon"])
-                .required(false), /*
-                                  .args(&["poseidon", "sha-pedersen"])
-                                  .required(true)
-                                  .multiple(false),
-                                  */
-        )
-        .arg(
             Arg::with_name("2kib")
                 .long("2kib")
-                .help("Use circuits with 2KiB sector sizes"),
+                .help("Create circuit with 2KiB sector-size"),
+        )
+        .arg(
+            Arg::with_name("4kib")
+                .long("4kib")
+                .help("Create circuit with 4KiB sector-size"),
+        )
+        .arg(
+            Arg::with_name("16kib")
+                .long("16kib")
+                .help("Create circuit with 16KiB sector-size"),
+        )
+        .arg(
+            Arg::with_name("32kib")
+                .long("32kib")
+                .help("Create circuit with 32KiB sector-size"),
         )
         .arg(
             Arg::with_name("8mib")
                 .long("8mib")
-                .help("Use circuits with 16MiB sector sizes"),
+                .help("Create circuit with 8MiB sector-size"),
+        )
+        .arg(
+            Arg::with_name("16mib")
+                .long("16mib")
+                .help("Create circuit with 16MiB sector-size"),
         )
         .arg(
             Arg::with_name("512mib")
                 .long("512mib")
-                .help("Use circuits with 256MiB sector sizes"),
+                .help("Create circuit with 512MiB sector-size"),
+        )
+        .arg(
+            Arg::with_name("1gib")
+                .long("1gib")
+                .help("Create circuit with 1GiB sector-size"),
         )
         .arg(
             Arg::with_name("32gib")
                 .long("32gib")
-                .help("Use circuits with 32GiB sector sizes"),
+                .help("Create circuit with 32GiB sector-size"),
         )
         .arg(
             Arg::with_name("64gib")
                 .long("64gib")
-                .help("Use circuits with 64GiB sector sizes"),
+                .help("Create circuit with 64GiB sector-size"),
         )
         .group(
             ArgGroup::with_name("sector-size")
-                .args(&["2kib", "8mib", "512mib", "32gib", "64gib"])
+                .args(&[
+                    "2kib", "4kib", "16kib", "32kib", "8mib", "16mib", "512mib", "1gib", "32gib",
+                    "64gib",
+                ])
                 .required(true)
                 .multiple(false),
         );
@@ -849,113 +1107,49 @@ fn main() {
         .about("Contribute to parameters")
         .arg(
             Arg::with_name("path-before")
-                .index(1)
                 .required(true)
-                .help("The path to the parameters file to read and contribute to"),
+                .help("The path to the previous participant's params file"),
+        )
+        .arg(
+            Arg::with_name("no-raw")
+                .takes_value(false)
+                .help("Don't use raw output format (slow to read for next participant)"),
+        );
+    let contribute_non_streaming_command = SubCommand::with_name("contribute-non-streaming")
+        .about("Contribute to parameters")
+        .arg(
+            Arg::with_name("path-before")
+                .required(true)
+                .help("The path to the previous participant's params file"),
         );
 
     let verify_command = SubCommand::with_name("verify")
-        .about("Verify that a set of contribution hashes correctly transition a set of params")
+        .about("Verifies that a contribution transitions one set of params to another")
         .arg(
-            Arg::with_name("paths")
-                .long("paths")
-                .required(true)
-                .takes_value(true)
-                .value_delimiter(",")
-                .min_values(2)
-                .help("Comma separated list (no whitespace between items) of paths to parameter files"),
+            Arg::with_name("large")
+                .long("large")
+                .help("Verify the contribution using the large parameter format"),
         )
         .arg(
-            Arg::with_name("contributions")
-                .long("contributions")
+            Arg::with_name("path-after")
                 .required(true)
-                .takes_value(true)
-                .case_insensitive(true)
-                .value_delimiter(",")
-                .min_values(1)
-                .help(
-                    "An ordered (first to most recent) comma separated list of hex-encoded \
-                    contribution hashes. There must be no whitespace in any of the digest strings \
-                    or between any items in the list. Each digest must be 128 characters long \
-                    (i.e. each digest hex string encodes 64 bytes), digest strings can use upper \
-                    or lower case hex characters."
-                ),
+                .help("The path to the params file containing the contribution to be verified"),
         );
 
-    let verifyd_command = SubCommand::with_name("verifyd")
-        .about("Run the param verification daemon")
+    let small_command = SubCommand::with_name("small")
+        .about("Copies a large params file into the small file format")
         .arg(
-            Arg::with_name("porep")
-                .long("porep")
-                .help("Generate PoRep parameters"),
-        )
-        .arg(
-            Arg::with_name("winning-post")
-                .long("winning-post")
-                .help("Generate WinningPoSt parameters"),
-        )
-        .arg(
-            Arg::with_name("window-post")
-                .long("window-post")
-                .help("Generate WindowPoSt parameters"),
-        )
-        .group(
-            ArgGroup::with_name("proof")
-                .args(&["porep", "winning-post", "window-post"])
+            Arg::with_name("large-path")
                 .required(true)
-                .multiple(false),
-        )
+                .help("The path to the large params file"),
+        );
+
+    let convert_command = SubCommand::with_name("convert")
+        .about("Converts a small params file to and from raw format")
         .arg(
-            Arg::with_name("poseidon")
-                .long("poseidon")
-                .help("Use the Poseidon hash function for column commitments and Merkle trees"),
-        )
-        /*
-        .arg(
-            Arg::with_name("sha-pedersen")
-                .long("sha-pedersen")
-                .help("Use SHA256 for column commitments and Pedersen hash for Merkle trees"),
-        )
-        */
-        .group(
-            ArgGroup::with_name("hasher")
-                .args(&["poseidon"])
-                .required(false), /*
-                                  .args(&["poseidon", "sha-pedersen"])
-                                  .required(true)
-                                  .multiple(false),
-                                  */
-        )
-        .arg(
-            Arg::with_name("2kib")
-                .long("2kib")
-                .help("Use circuits with 2KiB sector sizes"),
-        )
-        .arg(
-            Arg::with_name("8mib")
-                .long("8mib")
-                .help("Use circuits with 16MiB sector sizes"),
-        )
-        .arg(
-            Arg::with_name("512mib")
-                .long("512mib")
-                .help("Use circuits with 256MiB sector sizes"),
-        )
-        .arg(
-            Arg::with_name("32gib")
-                .long("32gib")
-                .help("Use circuits with 32GiB sector sizes"),
-        )
-        .arg(
-            Arg::with_name("64gib")
-                .long("64gib")
-                .help("Use circuits with 64GiB sector sizes"),
-        )
-        .group(
-            ArgGroup::with_name("sector-size")
-                .args(&["2kib", "8mib", "512mib", "32gib", "64gib"])
+            Arg::with_name("path-before")
                 .required(true)
-                .multiple(false),
+                .help("The path to the small params file to convert."),
         );
 
     let matches = App::new("phase2")
@@ -964,46 +1158,63 @@ fn main() {
         .setting(AppSettings::SubcommandRequired)
         .subcommand(new_command)
         .subcommand(contribute_command)
+        .subcommand(contribute_non_streaming_command)
         .subcommand(verify_command)
-        .subcommand(verifyd_command)
+        .subcommand(small_command)
+        .subcommand(convert_command)
         .get_matches();
 
     if let (subcommand, Some(matches)) = matches.subcommand() {
         match subcommand {
             "new" => {
-                let proof = if matches.is_present("porep") {
-                    Proof::Porep
-                } else if matches.is_present("winning-post") {
-                    Proof::WinningPost
+                let proof = if matches.is_present("sdr") {
+                    Proof::Sdr
+                } else if matches.is_present("winning") {
+                    Proof::Winning
                 } else {
-                    Proof::WindowPost
+                    Proof::Window
                 };
 
                 // Default to using Poseidon for the hasher.
                 let hasher = Hasher::Poseidon;
-                /*
-                let hasher = if matches.is_present("sha-pedersen") {
-                    Hasher::ShaPedersen
-                } else {
-                    Hasher::Poseidon
-                };
-                */
 
                 let sector_size = if matches.is_present("2kib") {
-                    SECTOR_SIZE_2_KIB
+                    Sector::SectorSize2KiB
+                } else if matches.is_present("4kib") {
+                    Sector::SectorSize4KiB
+                } else if matches.is_present("16kib") {
+                    Sector::SectorSize16KiB
+                } else if matches.is_present("32kib") {
+                    Sector::SectorSize32KiB
                 } else if matches.is_present("8mib") {
-                    SECTOR_SIZE_8_MIB
+                    Sector::SectorSize8MiB
+                } else if matches.is_present("16mib") {
+                    Sector::SectorSize16MiB
                 } else if matches.is_present("512mib") {
-                    SECTOR_SIZE_512_MIB
+                    Sector::SectorSize512MiB
+                } else if matches.is_present("1gib") {
+                    Sector::SectorSize1GiB
                 } else if matches.is_present("32gib") {
-                    SECTOR_SIZE_32_GIB
+                    Sector::SectorSize32GiB
                 } else {
-                    SECTOR_SIZE_64_GIB
+                    Sector::SectorSize64GiB
                 };
 
-                setup_new_logger(proof, hasher, sector_size);
-                with_shape!(
+                let head = get_head_commit();
+                let mut log_filename = params_filename(
+                    proof,
+                    hasher,
                     sector_size,
+                    &head,
+                    0,
+                    ParamSize::Large,
+                    false,
+                );
+                log_filename.push_str(".log");
+                setup_logger(&log_filename);
+
+                with_shape!(
+                    sector_size.as_u64(),
                     create_initial_params,
                     proof,
                     hasher,
@@ -1012,61 +1223,205 @@ fn main() {
             }
             "contribute" => {
                 let path_before = matches.value_of("path-before").unwrap();
-                setup_contribute_logger(path_before);
+                let raw = !matches.is_present("no-raw");
+
+                let (proof, hasher, sector_size, head, param_num_before, _param_size, _read_raw) =
+                    parse_params_filename(path_before);
+
+                let param_num = param_num_before + 1;
+
+                // Default to small contributions.
+                let mut log_filename = params_filename(
+                    proof,
+                    hasher,
+                    sector_size,
+                    &head,
+                    param_num,
+                    ParamSize::Small,
+                    raw,
+                );
+                log_filename.push_str(".log");
+                setup_logger(&log_filename);
+
+                contribute_to_params_streaming(path_before, raw);
+            }
+            "contribute-non-streaming" => {
+                // This path only exists to test streaming vs non-streaming.
+
+                let path_before = matches.value_of("path-before").unwrap();
+
+                let (proof, hasher, sector_size, head, param_num_before, _param_size, _read_raw) =
+                    parse_params_filename(path_before);
+                let param_num = param_num_before + 1;
+
+                // Default to small contributions.
+                let mut log_filename = params_filename(
+                    proof,
+                    hasher,
+                    sector_size,
+                    &head,
+                    param_num,
+                    ParamSize::Small,
+                    false,
+                );
+                log_filename.push_str(".log");
+                setup_logger(&log_filename);
                 contribute_to_params(path_before);
             }
             "verify" => {
-                let param_paths: Vec<&str> = matches.values_of("paths").unwrap().collect();
+                let use_large_params = matches.is_present("large");
+                let path_after = matches.value_of("path-after").unwrap();
 
-                let contribution_hashes: Vec<[u8; 64]> = matches
-                    .values_of("contributions")
-                    .unwrap()
-                    .map(|hex_str| {
-                        let mut digest_bytes_arr = [0u8; 64];
-                        let digest_bytes_vec = hex::decode(hex_str).unwrap_or_else(|_| {
-                            panic!("contribution hash is not a valid hex string: {}", hex_str)
-                        });
-                        digest_bytes_arr.copy_from_slice(&digest_bytes_vec[..]);
-                        digest_bytes_arr
-                    })
-                    .collect();
+                assert!(
+                    Path::new(&path_after).exists(),
+                    "'after' params path does not exist: `{}`",
+                    path_after
+                );
 
-                setup_verify_logger(&param_paths);
-                verify_param_transitions(&param_paths, &contribution_hashes);
+                let log_filename = format!("{}_verify.log", path_after);
+                setup_logger(&log_filename);
+
+                let (proof, hasher, sector_size, head, param_num, param_size, read_raw) =
+                    parse_params_filename(path_after);
+
+                // TODO: in the future, allow for large before params.
+                if param_size.is_large() {
+                    unimplemented!("cannot currently verify large 'before' params");
+                }
+
+                // small, --large => panic!()
+                // large, --large => verify_contribution()
+                // large, no flag => verify_contribution_small()
+                // small, no flag => verify_contribution_small()
+                if param_size.is_small() && use_large_params {
+                    panic!("the `--large` flag can only be used when parameters are large");
+                }
+
+                // Default to using small before params, fallback to large before params is they exist.
+                let mut path_before = params_filename(
+                    proof,
+                    hasher,
+                    sector_size,
+                    &head,
+                    param_num - 1,
+                    ParamSize::Small,
+                    read_raw,
+                );
+
+                if !Path::new(&path_before).exists() {
+                    let path_before_large = params_filename(
+                        proof,
+                        hasher,
+                        sector_size,
+                        &head,
+                        param_num - 1,
+                        ParamSize::Large,
+                        false,
+                    );
+                    info!(
+                        "small 'before' params not found `{}`, attempting to fall back to large 'before' params `{}`",
+                        path_before,
+                        path_before_large,
+                    );
+                    if Path::new(&path_before_large).exists() {
+                        info!("large 'before' params found `{}`, falling back to large 'before' params", path_before_large);
+                        path_before = path_before_large;
+                    } else {
+                        panic!(
+                            "large 'before' params not found `{}`, fallback failed",
+                            path_before_large
+                        );
+                    }
+                };
+
+                let contrib_path = format!("{}.contrib", path_after);
+                assert!(
+                    Path::new(&contrib_path).exists(),
+                    "contribution file not found: {}",
+                    contrib_path
+                );
+
+                let contrib = {
+                    let mut bytes = [0u8; 64];
+                    let hex_str = fs::read_to_string(&contrib_path).unwrap_or_else(|e| {
+                        panic!("failed to read contribution file `{}`: {}", contrib_path, e);
+                    });
+                    let bytes_vec = hex::decode(&hex_str).unwrap_or_else(|_| {
+                        panic!(
+                            "contribution found in file `{}` is not a valid hex string: {}",
+                            contrib_path, hex_str
+                        );
+                    });
+                    let n_bytes = bytes_vec.len();
+                    assert_eq!(
+                        n_bytes, 64,
+                        "contribution file's `{}` hex string must represent 64 bytes, \
+                        found {} bytes",
+                        contrib_path, n_bytes
+                    );
+                    bytes.copy_from_slice(&bytes_vec[..]);
+                    bytes
+                };
+
+                if use_large_params {
+                    unimplemented!("large param verification is unimplemented");
+                } else {
+                    verify_contribution_small(&path_before, &path_after, contrib, read_raw);
+                }
             }
-            "verifyd" => {
-                let proof = if matches.is_present("porep") {
-                    Proof::Porep
-                } else if matches.is_present("winning-post") {
-                    Proof::WinningPost
-                } else {
-                    Proof::WindowPost
-                };
+            "small" => {
+                let large_path = matches.value_of("large-path").unwrap();
 
-                // Default to using Poseidon for the hasher.
-                let hasher = Hasher::Poseidon;
-                /*
-                let hasher = if matches.is_present("sha-pedersen") {
-                    Hasher::ShaPedersen
-                } else {
-                    Hasher::Poseidon
-                };
-                */
+                let (proof, hasher, sector_size, head, param_num, param_size, read_raw) =
+                    parse_params_filename(large_path);
 
-                let sector_size = if matches.is_present("2kib") {
-                    SECTOR_SIZE_2_KIB
-                } else if matches.is_present("8mib") {
-                    SECTOR_SIZE_8_MIB
-                } else if matches.is_present("512mib") {
-                    SECTOR_SIZE_512_MIB
-                } else if matches.is_present("32gib") {
-                    SECTOR_SIZE_32_GIB
-                } else {
-                    SECTOR_SIZE_64_GIB
-                };
+                assert!(param_size.is_large(), "param file is not in large format");
+                assert!(!read_raw, "param file is in raw format");
 
-                setup_verifyd_logger(proof, hasher, sector_size);
-                verify_param_transistions_daemon(proof, hasher, sector_size);
+                let small_path = params_filename(
+                    proof,
+                    hasher,
+                    sector_size,
+                    &head,
+                    param_num,
+                    ParamSize::Small,
+                    false,
+                );
+
+                println!("reading small params from large file: {}", large_path);
+                let small_params =
+                    read_small_params_from_large_file(&large_path).unwrap_or_else(|e| {
+                        panic!("failed to read large params `{}`: {}", large_path, e)
+                    });
+
+                let start_read = Instant::now();
+                let small_file = File::create(&small_path).unwrap_or_else(|e| {
+                    panic!("failed to create small params file `{}`: {}", small_path, e);
+                });
+                println!(
+                    "successfully read small params from large, dt_read={}s",
+                    start_read.elapsed().as_secs()
+                );
+
+                let mut writer = BufWriter::with_capacity(1024 * 1024, small_file);
+
+                println!("writing small params to file: {}", small_path);
+                small_params.write(&mut writer).unwrap_or_else(|e| {
+                    panic!(
+                        "failed to write small params to file `{}`: {}",
+                        small_path, e
+                    );
+                });
+
+                println!("successfully wrote small params");
+            }
+            "convert" => {
+                let path_before = matches.value_of("path-before").unwrap();
+
+                let log_filename = format!("{}_convert.log", path_before);
+                setup_logger(&log_filename);
+
+                convert_small(path_before)
             }
             _ => unreachable!(),
         }
