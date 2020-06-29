@@ -1007,8 +1007,7 @@ fn setup_logger(log_filename: &str) {
         LevelFilter::Info,
         simplelog::Config::default(),
         TerminalMode::Mixed,
-    )
-    .unwrap();
+    );
 
     let file_logger = WriteLogger::new(LevelFilter::Info, simplelog::Config::default(), log_file);
 
