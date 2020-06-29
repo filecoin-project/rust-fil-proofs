@@ -512,6 +512,7 @@ fn to_gpu_config(conf: &Config) -> gpu::Config {
 }
 
 type GPUHasher = storage_proofs_core::hasher::PoseidonHasher;
+type GPUHasherDomain = storage_proofs_core::hasher::PoseidonDomain;
 type GPUTree = storage_proofs_core::merkle::OctLCMerkleTree<GPUHasher>;
 pub fn encode_with_trees_all<'a, Tree: 'static + MerkleTreeTrait, I>(
     conf: &Config,
@@ -545,7 +546,11 @@ where
         let outputs = inps
         .map(|(store_configs, window_index, replica_id, data)| {
             let inp = gpu::SealerInput {
-                replica_id: *generic_cast::cast_ref::<_, gpu::ReplicaId>(replica_id).unwrap(),
+                replica_id: unsafe {
+                    std::mem::transmute::<GPUHasherDomain, gpu::ReplicaId>(
+                        *generic_cast::cast_ref::<_, GPUHasherDomain>(replica_id).unwrap(),
+                    )
+                },
                 window_index: window_index as usize,
                 original_data: gpu::Layer::from(&data.to_vec()),
             };
