@@ -81,25 +81,29 @@ fn seal_lifecycle<Tree: 'static + MerkleTreeTrait>(sector_size: u64) -> Result<(
 #[test]
 #[ignore]
 fn test_winning_post_2kib_base_8() -> Result<()> {
-    winning_post::<SectorShape2KiB>(SECTOR_SIZE_2_KIB)
+    winning_post::<SectorShape2KiB>(SECTOR_SIZE_2_KIB, false)?;
+    winning_post::<SectorShape2KiB>(SECTOR_SIZE_2_KIB, true)
 }
 
 #[test]
 #[ignore]
 fn test_winning_post_4kib_sub_8_2() -> Result<()> {
-    winning_post::<SectorShape4KiB>(SECTOR_SIZE_4_KIB)
+    winning_post::<SectorShape4KiB>(SECTOR_SIZE_4_KIB, false)?;
+    winning_post::<SectorShape4KiB>(SECTOR_SIZE_4_KIB, true)
 }
 
 #[test]
 #[ignore]
 fn test_winning_post_16kib_sub_8_8() -> Result<()> {
-    winning_post::<SectorShape16KiB>(SECTOR_SIZE_16_KIB)
+    winning_post::<SectorShape16KiB>(SECTOR_SIZE_16_KIB, false)?;
+    winning_post::<SectorShape16KiB>(SECTOR_SIZE_16_KIB, true)
 }
 
 #[test]
 #[ignore]
 fn test_winning_post_32kib_top_8_8_2() -> Result<()> {
-    winning_post::<SectorShape32KiB>(SECTOR_SIZE_32_KIB)
+    winning_post::<SectorShape32KiB>(SECTOR_SIZE_32_KIB, false)?;
+    winning_post::<SectorShape32KiB>(SECTOR_SIZE_32_KIB, true)
 }
 
 #[test]
@@ -138,15 +142,18 @@ fn test_winning_post_empty_sector_challenge() -> Result<()> {
     Ok(())
 }
 
-fn winning_post<Tree: 'static + MerkleTreeTrait>(sector_size: u64) -> Result<()> {
+fn winning_post<Tree: 'static + MerkleTreeTrait>(sector_size: u64, fake: bool) -> Result<()> {
     let rng = &mut XorShiftRng::from_seed(TEST_SEED);
 
     let prover_fr: DefaultTreeDomain = Fr::random(rng).into();
     let mut prover_id = [0u8; 32];
     prover_id.copy_from_slice(AsRef::<[u8]>::as_ref(&prover_fr));
 
-    let (sector_id, replica, comm_r, cache_dir) =
-        create_seal::<_, Tree>(rng, sector_size, prover_id, true)?;
+    let (sector_id, replica, comm_r, cache_dir) = if fake {
+        create_fake_seal::<_, Tree>(rng, sector_size)?
+    } else {
+        create_seal::<_, Tree>(rng, sector_size, prover_id, true)?
+    };
     let sector_count = WINNING_POST_SECTOR_COUNT;
 
     let random_fr: DefaultTreeDomain = Fr::random(rng).into();
@@ -194,7 +201,8 @@ fn test_window_post_single_partition_smaller_2kib_base_8() -> Result<()> {
         .get(&sector_size)
         .unwrap();
 
-    window_post::<SectorShape2KiB>(sector_size, sector_count / 2, sector_count)
+    window_post::<SectorShape2KiB>(sector_size, sector_count / 2, sector_count, false)?;
+    window_post::<SectorShape2KiB>(sector_size, sector_count / 2, sector_count, true)
 }
 
 #[test]
@@ -207,7 +215,8 @@ fn test_window_post_two_partitions_matching_2kib_base_8() -> Result<()> {
         .get(&sector_size)
         .unwrap();
 
-    window_post::<SectorShape2KiB>(sector_size, 2 * sector_count, sector_count)
+    window_post::<SectorShape2KiB>(sector_size, 2 * sector_count, sector_count, false)?;
+    window_post::<SectorShape2KiB>(sector_size, 2 * sector_count, sector_count, true)
 }
 
 #[test]
@@ -220,7 +229,8 @@ fn test_window_post_two_partitions_matching_4kib_sub_8_2() -> Result<()> {
         .get(&sector_size)
         .unwrap();
 
-    window_post::<SectorShape4KiB>(sector_size, 2 * sector_count, sector_count)
+    window_post::<SectorShape4KiB>(sector_size, 2 * sector_count, sector_count, false)?;
+    window_post::<SectorShape4KiB>(sector_size, 2 * sector_count, sector_count, true)
 }
 
 #[test]
@@ -233,7 +243,8 @@ fn test_window_post_two_partitions_matching_16kib_sub_8_8() -> Result<()> {
         .get(&sector_size)
         .unwrap();
 
-    window_post::<SectorShape16KiB>(sector_size, 2 * sector_count, sector_count)
+    window_post::<SectorShape16KiB>(sector_size, 2 * sector_count, sector_count, false)?;
+    window_post::<SectorShape16KiB>(sector_size, 2 * sector_count, sector_count, true)
 }
 
 #[test]
@@ -246,7 +257,8 @@ fn test_window_post_two_partitions_matching_32kib_top_8_8_2() -> Result<()> {
         .get(&sector_size)
         .unwrap();
 
-    window_post::<SectorShape32KiB>(sector_size, 2 * sector_count, sector_count)
+    window_post::<SectorShape32KiB>(sector_size, 2 * sector_count, sector_count, false)?;
+    window_post::<SectorShape32KiB>(sector_size, 2 * sector_count, sector_count, true)
 }
 
 #[test]
@@ -259,7 +271,8 @@ fn test_window_post_two_partitions_smaller_2kib_base_8() -> Result<()> {
         .get(&sector_size)
         .unwrap();
 
-    window_post::<SectorShape2KiB>(sector_size, 2 * sector_count - 1, sector_count)
+    window_post::<SectorShape2KiB>(sector_size, 2 * sector_count - 1, sector_count, false)?;
+    window_post::<SectorShape2KiB>(sector_size, 2 * sector_count - 1, sector_count, true)
 }
 
 #[test]
@@ -272,13 +285,15 @@ fn test_window_post_single_partition_matching_2kib_base_8() -> Result<()> {
         .get(&sector_size)
         .unwrap();
 
-    window_post::<SectorShape2KiB>(sector_size, sector_count, sector_count)
+    window_post::<SectorShape2KiB>(sector_size, sector_count, sector_count, false)?;
+    window_post::<SectorShape2KiB>(sector_size, sector_count, sector_count, true)
 }
 
 fn window_post<Tree: 'static + MerkleTreeTrait>(
     sector_size: u64,
     total_sector_count: usize,
     sector_count: usize,
+    fake: bool,
 ) -> Result<()> {
     let rng = &mut XorShiftRng::from_seed(TEST_SEED);
 
@@ -291,8 +306,11 @@ fn window_post<Tree: 'static + MerkleTreeTrait>(
     prover_id.copy_from_slice(AsRef::<[u8]>::as_ref(&prover_fr));
 
     for _ in 0..total_sector_count {
-        let (sector_id, replica, comm_r, cache_dir) =
-            create_seal::<_, Tree>(rng, sector_size, prover_id, true)?;
+        let (sector_id, replica, comm_r, cache_dir) = if fake {
+            create_fake_seal::<_, Tree>(rng, sector_size)?
+        } else {
+            create_seal::<_, Tree>(rng, sector_size, prover_id, true)?
+        };
         priv_replicas.insert(
             sector_id,
             PrivateReplicaInfo::new(replica.path().into(), comm_r, cache_dir.path().into())?,
@@ -461,6 +479,37 @@ fn create_seal<R: Rng, Tree: 'static + MerkleTreeTrait>(
         )?;
         assert!(verified, "failed to verify valid seal");
     }
+
+    Ok((sector_id, sealed_sector_file, comm_r, cache_dir))
+}
+
+fn create_fake_seal<R: rand::Rng, Tree: 'static + MerkleTreeTrait>(
+    mut rng: &mut R,
+    sector_size: u64,
+) -> Result<(SectorId, NamedTempFile, Commitment, tempfile::TempDir)> {
+    init_logger();
+
+    let arbitrary_porep_id = [28; 32];
+    let sealed_sector_file = NamedTempFile::new()?;
+
+    let config = PoRepConfig {
+        sector_size: SectorSize(sector_size),
+        partitions: PoRepProofPartitions(
+            *POREP_PARTITIONS.read().unwrap().get(&sector_size).unwrap(),
+        ),
+        porep_id: arbitrary_porep_id,
+    };
+
+    let cache_dir = tempfile::tempdir().unwrap();
+
+    let sector_id = rng.gen::<u64>().into();
+
+    let comm_r = fauxrep_aux::<_, _, _, Tree>(
+        &mut rng,
+        config,
+        cache_dir.path(),
+        sealed_sector_file.path(),
+    )?;
 
     Ok((sector_id, sealed_sector_file, comm_r, cache_dir))
 }
