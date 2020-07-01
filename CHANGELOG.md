@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://book.async.rs/overview
 
 ## Unreleased
 
+## 4.0.3 - 2020-07-01
+
+- Add fauxrep to API for fake sealing [1194](https://github.com/filecoin-project/rust-fil-proofs/pull/1194)
+- Streaming phase2 contribution and fast I/O [1188](https://github.com/filecoin-project/rust-fil-proofs/pull/1188)
+- Add omitted changelog updates [1190](https://github.com/filecoin-project/rust-fil-proofs/pull/1190)
+
 ## 4.0.2 - 2020-06-25
 
 - Allow parameters map to be accessible externally [1186](https://github.com/filecoin-project/rust-fil-proofs/pull/1186)
@@ -58,7 +64,8 @@ and this project adheres to [Semantic Versioning](https://book.async.rs/overview
 
 - Initial stable release
 
-[Unreleased]: https://github.com/filecoin-project/rust-fil-proofs/compare/v4.0.2...HEAD
+[Unreleased]: https://github.com/filecoin-project/rust-fil-proofs/compare/v4.0.3...HEAD
+[4.0.3]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v4.0.3
 [4.0.2]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v4.0.2
 [4.0.1]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v4.0.0
 [3.0.0]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v3.0.0
