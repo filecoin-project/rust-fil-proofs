@@ -222,7 +222,7 @@ mod tests {
                 // Since every element in the set is reversibly mapped to another element also in the set,
                 // this is indeed a permutation.
                 assert_eq!(i, v, "failed to permute");
-                assert!(p <= *n, "output number is too big");
+                assert!(p < *n, "output number is too big");
             }
         }
     }
