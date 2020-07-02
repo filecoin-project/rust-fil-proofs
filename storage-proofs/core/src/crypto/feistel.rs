@@ -167,6 +167,7 @@ fn feistel(right: Index, key: Index, right_mask: Index) -> Index {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rayon::prelude::*;
 
     // Some sample n-values which are not powers of four and also don't coincidentally happen to
     // encode/decode correctly.
@@ -224,5 +225,22 @@ mod tests {
                 assert!(p <= *n, "output number is too big");
             }
         }
+    }
+
+    #[test]
+    #[ignore]
+    fn test_feistel_valid_permutation() {
+        let n = (1u64 << 30) as Index;
+        let mut flags = vec![false; n as usize];
+        let precomputed = precompute(n);
+        let perm: Vec<Index> = (0..n)
+            .into_par_iter()
+            .map(|i| permute(n, i, &[1, 2, 3, 4], precomputed))
+            .collect();
+        for i in perm {
+            assert!(i < n, "output number is too big");
+            flags[i as usize] = true;
+        }
+        assert!(flags.iter().all(|f| *f), "output isn't a permutation");
     }
 }
