@@ -299,7 +299,8 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
 
         let layer_size = graph.size() * NODE_SIZE;
         // NOTE: this means we currently keep 2x sector size around, to improve speed.
-        let mut labels_buffer = vec![0u8; 2 * layer_size];
+        let mut layer_labels = vec![0u8; layer_size];
+        let mut exp_labels = vec![0u8; layer_size];
 
         let use_cache = settings::SETTINGS.lock().unwrap().maximize_caching;
         let mut cache = if use_cache {
@@ -315,19 +316,24 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
             }
 
             if layer == 1 {
-                let layer_labels = &mut labels_buffer[..layer_size];
                 for node in 0..graph.size() {
-                    create_label(graph, cache.as_mut(), replica_id, layer_labels, layer, node)?;
+                    create_label(
+                        graph,
+                        cache.as_mut(),
+                        replica_id,
+                        &mut layer_labels,
+                        layer,
+                        node,
+                    )?;
                 }
             } else {
-                let (layer_labels, exp_labels) = labels_buffer.split_at_mut(layer_size);
                 for node in 0..graph.size() {
                     create_label_exp(
                         graph,
                         cache.as_mut(),
                         replica_id,
-                        exp_labels,
-                        layer_labels,
+                        &exp_labels,
+                        &mut layer_labels,
                         layer,
                         node,
                     )?;
@@ -335,7 +341,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
             }
 
             info!("  setting exp parents");
-            labels_buffer.copy_within(..layer_size, layer_size);
+            std::mem::swap(&mut layer_labels, &mut exp_labels); // Results are in `exp_labels` now
 
             // Write the result to disk to avoid keeping it in memory all the time.
             let layer_config =
@@ -347,7 +353,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                 DiskStore::new_from_slice_with_config(
                     graph.size(),
                     Tree::Arity::to_usize(),
-                    &labels_buffer[..layer_size],
+                    &mut exp_labels,
                     layer_config.clone(),
                 )?;
             info!(
