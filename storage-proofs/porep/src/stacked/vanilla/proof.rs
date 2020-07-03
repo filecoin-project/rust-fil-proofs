@@ -299,8 +299,8 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
 
         let layer_size = graph.size() * NODE_SIZE;
         // NOTE: this means we currently keep 2x sector size around, to improve speed.
-        let mut layer_labels = vec![0u8; layer_size];
-        let mut exp_labels = vec![0u8; layer_size];
+        let mut layer_labels = vec![0u8; layer_size]; // Buffer for labels of the current layer
+        let mut exp_labels = vec![0u8; layer_size]; // Buffer for labels of the previous layer, needed for expander parents
 
         let use_cache = settings::SETTINGS.lock().unwrap().maximize_caching;
         let mut cache = if use_cache {
@@ -340,9 +340,6 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                 }
             }
 
-            info!("  setting exp parents");
-            std::mem::swap(&mut layer_labels, &mut exp_labels); // Results are in `exp_labels` now
-
             // Write the result to disk to avoid keeping it in memory all the time.
             let layer_config =
                 StoreConfig::from_config(&config, CacheKey::label_layer(layer), Some(graph.size()));
@@ -353,13 +350,16 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                 DiskStore::new_from_slice_with_config(
                     graph.size(),
                     Tree::Arity::to_usize(),
-                    &mut exp_labels,
+                    &layer_labels,
                     layer_config.clone(),
                 )?;
             info!(
                 "  generated layer {} store with id {}",
                 layer, layer_config.id
             );
+
+            info!("  setting exp parents");
+            std::mem::swap(&mut layer_labels, &mut exp_labels);
 
             // Track the layer specific store and StoreConfig for later retrieval.
             labels.push(layer_store);
