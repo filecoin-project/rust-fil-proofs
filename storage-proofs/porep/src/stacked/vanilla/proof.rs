@@ -459,9 +459,6 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
 
             // This channel will receive batches of columns and add them to the ColumnTreeBuilder.
             let (builder_tx, builder_rx) = mpsc::sync_channel(0);
-            mpsc::sync_channel::<(Vec<GenericArray<Fr, ColumnArity>>, bool)>(
-                max_gpu_column_batch_size * ColumnArity::to_usize() * 32,
-            );
 
             let config_count = configs.len(); // Don't move config into closure below.
             rayon::scope(|s| {
