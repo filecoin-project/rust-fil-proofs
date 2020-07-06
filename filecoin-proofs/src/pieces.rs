@@ -142,31 +142,31 @@ struct Stack(Vec<PieceInfo>);
 
 impl Stack {
     /// Creates a new stack.
-    pub fn new() -> Self {
+    fn new() -> Self {
         Stack(Vec::new())
     }
 
     /// Pushes a single element onto the stack.
-    pub fn shift(&mut self, el: PieceInfo) {
+    fn shift(&mut self, el: PieceInfo) {
         self.0.push(el)
     }
 
     /// Look at the last element of the stack.
-    pub fn peek(&self) -> &PieceInfo {
+    fn peek(&self) -> &PieceInfo {
         &self.0[self.0.len() - 1]
     }
 
     /// Look at the second to last element of the stack.
-    pub fn peek2(&self) -> &PieceInfo {
+    fn peek2(&self) -> &PieceInfo {
         &self.0[self.0.len() - 2]
     }
 
     /// Pop the last element of the stack.
-    pub fn pop(&mut self) -> Result<PieceInfo> {
+    fn pop(&mut self) -> Result<PieceInfo> {
         self.0.pop().context("empty stack popped")
     }
 
-    pub fn reduce1(&mut self) -> Result<bool> {
+    fn reduce1(&mut self) -> Result<bool> {
         if self.len() < 2 {
             return Ok(false);
         }
@@ -182,17 +182,17 @@ impl Stack {
         Ok(false)
     }
 
-    pub fn reduce(&mut self) -> Result<()> {
+    fn reduce(&mut self) -> Result<()> {
         while self.reduce1()? {}
         Ok(())
     }
 
-    pub fn shift_reduce(&mut self, piece: PieceInfo) -> Result<()> {
+    fn shift_reduce(&mut self, piece: PieceInfo) -> Result<()> {
         self.shift(piece);
         self.reduce()
     }
 
-    pub fn len(&self) -> usize {
+    fn len(&self) -> usize {
         self.0.len()
     }
 }
