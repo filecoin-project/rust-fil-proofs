@@ -91,6 +91,7 @@ where
     T: IntoIterator<Item = bool>,
 {
     use fil_sapling_crypto::pedersen_hash::pedersen_hash;
+    use paired::bls12_381::Bls12;
 
     let digest = pedersen_hash::<Bls12, _>(Personalization::None, bits, &JJ_PARAMS);
 
