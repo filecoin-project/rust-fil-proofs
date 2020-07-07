@@ -66,6 +66,7 @@ pub struct SystemMetadata {
 }
 
 impl SystemMetadata {
+    #[cfg(target_arch = "x86_64")]
     pub fn new() -> Result<Self> {
         use async_std::task::block_on;
         let host = block_on(async { heim::host::platform().await })
@@ -104,6 +105,33 @@ impl SystemMetadata {
                 .get_feature_info()
                 .map(|info| format!("{:?}", info))
                 .unwrap_or_default(),
+            processor_cores_logical: cpu_logical,
+            processor_cores_physical: cpu_physical.unwrap_or_default(),
+            memory_total_bytes: memory.total().get::<uom::si::information::byte>(),
+        })
+    }
+
+    #[cfg(not(target_arch = "x86_64"))]
+    pub fn new() -> Result<Self> {
+        use async_std::task::block_on;
+        let host = block_on(async { heim::host::platform().await })
+            .map_err(|_| anyhow!("Failed to retrieve host information"))?;
+        let memory = block_on(async { heim::memory::memory().await })
+            .map_err(|_| anyhow!("Failed to retrieve memory information"))?;
+        let cpu_logical = block_on(async { heim::cpu::logical_count().await })
+            .map_err(|_| anyhow!("Failed to retrieve cpu logical count information"))?;
+        let cpu_physical = block_on(async { heim::cpu::physical_count().await })
+            .map_err(|_| anyhow!("Failed to retrieve cpu physical count information"))?;
+
+        Ok(SystemMetadata {
+            system: host.system().into(),
+            release: host.release().into(),
+            version: host.version().into(),
+            architecture: host.architecture().as_str().into(),
+            processor: "unknown",
+            processor_base_frequency_hz: 0,
+            processor_max_frequency_hz: 0,
+            processor_features: "unknown",
             processor_cores_logical: cpu_logical,
             processor_cores_physical: cpu_physical.unwrap_or_default(),
             memory_total_bytes: memory.total().get::<uom::si::information::byte>(),
