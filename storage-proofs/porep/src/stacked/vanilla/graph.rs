@@ -1,11 +1,6 @@
 use std::convert::TryInto;
 use std::marker::PhantomData;
 
-#[cfg(target_arch = "x86")]
-use std::arch::x86::*;
-#[cfg(target_arch = "x86_64")]
-use std::arch::x86_64::*;
-
 use anyhow::ensure;
 use log::info;
 use sha2raw::Sha256;
@@ -68,9 +63,7 @@ fn prefetch(parents: &[u32], data: &[u8]) {
         let start = *parent as usize * NODE_SIZE;
         let end = start + NODE_SIZE;
 
-        unsafe {
-            _mm_prefetch(data[start..end].as_ptr() as *const i8, _MM_HINT_T0);
-        }
+        prefetch!(data[start..end].as_ptr() as *const i8);
     }
 }
 

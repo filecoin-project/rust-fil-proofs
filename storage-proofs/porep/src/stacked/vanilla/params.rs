@@ -747,7 +747,7 @@ pub fn generate_replica_id<H: Hasher, T: AsRef<[u8]>>(
         .chain(ticket)
         .chain(AsRef::<[u8]>::as_ref(&comm_d))
         .chain(porep_seed)
-        .result();
+        .finalize();
 
     bytes_into_fr_repr_safe(hash.as_ref()).into()
 }
