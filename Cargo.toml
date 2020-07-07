@@ -12,3 +12,4 @@ members = [
 
 [patch.crates-io]
 fil-sapling-crypto = { git = "https://github.com/filecoin-project/sapling-crypto", branch = "fix/compile-nonx86" }
+fff = { git = "https://github.com/filecoin-project/ff", branch = "fix-arch" }
