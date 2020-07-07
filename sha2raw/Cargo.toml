@@ -16,10 +16,12 @@ block-buffer = "0.7"
 fake-simd = "0.1"
 opaque-debug = "0.2"
 sha2-asm = { version = "0.5", optional = true }
-raw-cpuid = "7.0.3"
 
 [dependencies.lazy_static]
 version = "1.4.0"
+
+[target.'cfg(target_arch = "x86_64")'.build-dependencies]
+cpuid-bool = "0.1.0"
 
 [dev-dependencies]
 digest = { version = "0.8", features = ["dev", "std"] }

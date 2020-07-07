@@ -16,7 +16,7 @@ merkletree = "0.20.0"
 memmap = "0.7"
 num-bigint = "0.2"
 num-traits = "0.2"
-sha2 = { version = "0.8.3", package = "sha2ni" }
+sha2 = "0.9.1"
 rayon = "1.0.0"
 serde = { version = "1.0", features = ["derive"]}
 ff = { version = "0.2.1", package = "fff" }
