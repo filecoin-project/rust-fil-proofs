@@ -195,20 +195,26 @@ impl HashFunction<PedersenDomain> for PedersenFunction {
         pedersen::pedersen_md_no_padding(data).into()
     }
 
+    #[cfg(target_arch = "x86_64")]
     fn hash2(a: &PedersenDomain, b: &PedersenDomain) -> PedersenDomain {
-        let data = NodeBits::new(&(a.0).0[..], &(b.0).0[..]);
+        use fil_sapling_crypto::pedersen_hash::pedersen_hash_bls12_381_with_precomp;
 
-        let digest = if cfg!(target_arch = "x86_64") {
-            use fil_sapling_crypto::pedersen_hash::pedersen_hash_bls12_381_with_precomp;
-            pedersen_hash_bls12_381_with_precomp::<_>(
-                Personalization::None,
-                data,
-                &pedersen::JJ_PARAMS,
-            )
-        } else {
-            use fil_sapling_crypto::pedersen_hash::pedersen_hash;
-            pedersen_hash::<Bls12, _>(Personalization::None, data, &pedersen::JJ_PARAMS)
-        };
+        let data = NodeBits::new(&(a.0).0[..], &(b.0).0[..]);
+        let digest = pedersen_hash_bls12_381_with_precomp::<_>(
+            Personalization::None,
+            data,
+            &pedersen::JJ_PARAMS,
+        );
+        digest.into_xy().0.into()
+    }
+
+    #[cfg(not(target_arch = "x86_64"))]
+    fn hash2(a: &PedersenDomain, b: &PedersenDomain) -> PedersenDomain {
+        use fil_sapling_crypto::pedersen_hash::pedersen_hash;
+
+        let data = NodeBits::new(&(a.0).0[..], &(b.0).0[..]);
+        let digest = pedersen_hash::<Bls12, _>(Personalization::None, data, &pedersen::JJ_PARAMS);
+
         digest.into_xy().0.into()
     }
 
@@ -312,25 +318,37 @@ impl LightAlgorithm<PedersenDomain> for PedersenFunction {
         leaf
     }
 
+    #[cfg(target_arch = "x86_64")]
     fn node(
         &mut self,
         left: PedersenDomain,
         right: PedersenDomain,
         _height: usize,
     ) -> PedersenDomain {
-        let node_bits = NodeBits::new(&(left.0).0[..], &(right.0).0[..]);
+        use fil_sapling_crypto::pedersen_hash::pedersen_hash_bls12_381_with_precomp;
 
-        let digest = if cfg!(target_arch = "x86_64") {
-            use fil_sapling_crypto::pedersen_hash::pedersen_hash_bls12_381_with_precomp;
-            pedersen_hash_bls12_381_with_precomp::<_>(
-                Personalization::None,
-                node_bits,
-                &pedersen::JJ_PARAMS,
-            )
-        } else {
-            use fil_sapling_crypto::pedersen_hash::pedersen_hash;
-            pedersen_hash::<Bls12, _>(Personalization::None, node_bits, &pedersen::JJ_PARAMS)
-        };
+        let node_bits = NodeBits::new(&(left.0).0[..], &(right.0).0[..]);
+        let digest = pedersen_hash_bls12_381_with_precomp::<_>(
+            Personalization::None,
+            node_bits,
+            &pedersen::JJ_PARAMS,
+        );
+
+        digest.into_xy().0.into()
+    }
+
+    #[cfg(not(target_arch = "x86_64"))]
+    fn node(
+        &mut self,
+        left: PedersenDomain,
+        right: PedersenDomain,
+        _height: usize,
+    ) -> PedersenDomain {
+        use fil_sapling_crypto::pedersen_hash::pedersen_hash;
+
+        let node_bits = NodeBits::new(&(left.0).0[..], &(right.0).0[..]);
+        let digest =
+            pedersen_hash::<Bls12, _>(Personalization::None, node_bits, &pedersen::JJ_PARAMS);
 
         digest.into_xy().0.into()
     }
