@@ -151,7 +151,7 @@ mod tests {
         };
 
         // Construct and store an MT using a named DiskStore.
-        let temp_dir = tempdir::TempDir::new("tree").unwrap();
+        let temp_dir = tempfile::tempdir().unwrap();
         let temp_path = temp_dir.path();
 
         let (_data1, tree1) = generate_tree::<Tree, _>(rng, leaves, Some(temp_path.to_path_buf()));

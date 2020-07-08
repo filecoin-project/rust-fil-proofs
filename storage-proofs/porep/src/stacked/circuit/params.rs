@@ -94,6 +94,9 @@ impl<Tree: MerkleTreeTrait, G: 'static + Hasher> Proof<Tree, G> {
             ..
         } = self;
 
+        assert!(!drg_parents_proofs.is_empty());
+        assert!(!exp_parents_proofs.is_empty());
+
         // -- verify initial data layer
 
         // PrivateInput: data_leaf
@@ -112,11 +115,12 @@ impl<Tree: MerkleTreeTrait, G: 'static + Hasher> Proof<Tree, G> {
         // -- verify replica column openings
 
         // Private Inputs for the DRG parent nodes.
-        let mut drg_parents = Vec::new();
+        let mut drg_parents = Vec::with_capacity(layers);
 
         for (i, parent) in drg_parents_proofs.into_iter().enumerate() {
             let (parent_col, inclusion_path) =
                 parent.alloc(cs.namespace(|| format!("drg_parent_{}_num", i)))?;
+            assert_eq!(layers, parent_col.len());
 
             // calculate column hash
             let val = parent_col.hash(cs.namespace(|| format!("drg_parent_{}_constraint", i)))?;
@@ -136,6 +140,7 @@ impl<Tree: MerkleTreeTrait, G: 'static + Hasher> Proof<Tree, G> {
         for (i, parent) in exp_parents_proofs.into_iter().enumerate() {
             let (parent_col, inclusion_path) =
                 parent.alloc(cs.namespace(|| format!("exp_parent_{}_num", i)))?;
+            assert_eq!(layers, parent_col.len());
 
             // calculate column hash
             let val = parent_col.hash(cs.namespace(|| format!("exp_parent_{}_constraint", i)))?;

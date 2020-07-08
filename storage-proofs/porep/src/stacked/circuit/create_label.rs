@@ -18,6 +18,7 @@ where
     E: JubjubEngine,
     CS: ConstraintSystem<E>,
 {
+    assert!(replica_id.len() >= 32, "replica id is too small");
     assert!(replica_id.len() <= 256, "replica id is too large");
     assert_eq!(parents.len(), TOTAL_PARENTS, "invalid sized parents");
 

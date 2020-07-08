@@ -56,6 +56,10 @@ impl Column {
 }
 
 impl AllocatedColumn {
+    pub fn len(&self) -> usize {
+        self.rows.len()
+    }
+
     /// Creates the column hash of this column.
     pub fn hash<CS: ConstraintSystem<Bls12>>(
         &self,
