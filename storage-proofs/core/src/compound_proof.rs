@@ -202,18 +202,18 @@ where
     /// default trait methods.
     fn circuit_proofs(
         pub_in: &S::PublicInputs,
-        vanilla_proof: Vec<S::Proof>,
+        vanilla_proofs: Vec<S::Proof>,
         pub_params: &S::PublicParams,
         groth_params: &groth16::MappedParameters<Bls12>,
         priority: bool,
     ) -> Result<Vec<groth16::Proof<Bls12>>> {
         let mut rng = OsRng;
         ensure!(
-            !vanilla_proof.is_empty(),
+            !vanilla_proofs.is_empty(),
             "cannot create a circuit proof over missing vanilla proofs"
         );
 
-        let circuits = vanilla_proof
+        let circuits = vanilla_proofs
             .into_par_iter()
             .enumerate()
             .map(|(k, vanilla_proof)| {

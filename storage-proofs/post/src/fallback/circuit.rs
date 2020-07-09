@@ -315,7 +315,7 @@ mod tests {
         };
 
         // Construct and store an MT using a named DiskStore.
-        let temp_dir = tempdir::TempDir::new("level_cache_tree_v1").unwrap();
+        let temp_dir = tempfile::tempdir().unwrap();
         let temp_path = temp_dir.path();
 
         let mut pub_sectors = Vec::new();

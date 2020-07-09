@@ -40,8 +40,8 @@ impl fmt::Display for SectorId {
 }
 
 impl SectorId {
-    pub fn as_fr_safe(self) -> [u8; 31] {
-        let mut buf: [u8; 31] = [0; 31];
+    pub fn as_fr_safe(self) -> [u8; 32] {
+        let mut buf: [u8; 32] = [0; 32];
         byteorder::LittleEndian::write_u64(&mut buf[0..8], self.0);
         buf
     }

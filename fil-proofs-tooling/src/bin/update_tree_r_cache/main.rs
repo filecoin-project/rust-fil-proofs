@@ -8,7 +8,6 @@ use generic_array::typenum::Unsigned;
 use memmap::MmapOptions;
 use merkletree::merkle::get_merkle_tree_len;
 use merkletree::store::{ExternalReader, ReplicaConfig, Store, StoreConfig};
-use tempdir::TempDir;
 
 use filecoin_proofs::constants::*;
 use filecoin_proofs::types::*;
@@ -244,7 +243,7 @@ fn run_verify(sector_size: usize, cache: PathBuf, replica_path: PathBuf) -> Resu
 
     // Rebuild each of the tree_r_last base trees (in a new temp dir so as not to interfere
     // with any existing ones on disk) and check if the roots match what's cached on disk
-    let tmp_dir = TempDir::new("tree-r-last-verify")?;
+    let tmp_dir = tempfile::tempdir().unwrap();
     let tmp_path = tmp_dir.path();
     create_dir_all(&tmp_path)?;
 

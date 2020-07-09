@@ -154,6 +154,10 @@ impl<'a, 'c, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> ProofScheme<'
     ) -> bool {
         let partition_challenges = public_params.layer_challenges.challenges_count_all();
 
+        assert_eq!(
+            partition_challenges.checked_mul(partitions),
+            Some(partition_challenges * partitions)
+        );
         partition_challenges * partitions >= requirements.minimum_challenges
     }
 }

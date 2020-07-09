@@ -457,8 +457,18 @@ impl<'a, Tree: 'a + MerkleTreeTrait> ProofScheme<'a> for FallbackPoSt<'a, Tree> 
         requirements: &Self::Requirements,
         partitions: usize,
     ) -> bool {
-        partitions * public_params.sector_count * public_params.challenge_count
-            >= requirements.minimum_challenge_count
+        let checked = partitions * public_params.sector_count;
+
+        assert_eq!(
+            partitions.checked_mul(public_params.sector_count),
+            Some(checked)
+        );
+        assert_eq!(
+            checked.checked_mul(public_params.challenge_count),
+            Some(checked * public_params.challenge_count)
+        );
+
+        checked * public_params.challenge_count >= requirements.minimum_challenge_count
     }
 }
 
@@ -497,7 +507,7 @@ mod tests {
         let prover_id = <Tree::Hasher as Hasher>::Domain::random(rng);
 
         // Construct and store an MT using a named DiskStore.
-        let temp_dir = tempdir::TempDir::new("level_cache_tree").unwrap();
+        let temp_dir = tempfile::tempdir().unwrap();
         let temp_path = temp_dir.path();
 
         let mut pub_sectors = Vec::new();
