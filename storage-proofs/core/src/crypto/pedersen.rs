@@ -1,12 +1,12 @@
 use anyhow::{ensure, Context};
 use ff::PrimeFieldRepr;
 use fil_sapling_crypto::jubjub::JubjubBls12;
-use fil_sapling_crypto::pedersen_hash::Personalization;
 use lazy_static::lazy_static;
 use paired::bls12_381::{Fr, FrRepr};
 
 use crate::error::Result;
 use crate::fr32::bytes_into_frs;
+use crate::hasher::pedersen::pedersen_hash;
 use crate::settings;
 
 lazy_static! {
@@ -25,22 +25,8 @@ pub fn pedersen(data: &[u8]) -> Fr {
     pedersen_bits(Bits::new(data))
 }
 
-#[cfg(target_arch = "x86_64")]
 pub fn pedersen_bits<'a, S: Iterator<Item = &'a [u8]>>(data: Bits<&'a [u8], S>) -> Fr {
-    use fil_sapling_crypto::pedersen_hash::pedersen_hash_bls12_381_with_precomp;
-
-    let digest = pedersen_hash_bls12_381_with_precomp::<_>(Personalization::None, data, &JJ_PARAMS);
-
-    digest.into_xy().0
-}
-
-#[cfg(not(target_arch = "x86_64"))]
-pub fn pedersen_bits<'a, S: Iterator<Item = &'a [u8]>>(data: Bits<&'a [u8], S>) -> Fr {
-    use fil_sapling_crypto::pedersen_hash::pedersen_hash;
-    use paired::bls12_381::Bls12;
-
-    let digest = pedersen_hash::<Bls12, _>(Personalization::None, data, &JJ_PARAMS);
-
+    let digest = pedersen_hash(data);
     digest.into_xy().0
 }
 
@@ -73,28 +59,11 @@ pub fn pedersen_md_no_padding_bits<T: AsRef<[u8]>, S: Iterator<Item = T>>(
     frs[0]
 }
 
-#[cfg(target_arch = "x86_64")]
 fn pedersen_compression_bits<T>(bits: T) -> FrRepr
 where
     T: IntoIterator<Item = bool>,
 {
-    use fil_sapling_crypto::pedersen_hash::pedersen_hash_bls12_381_with_precomp;
-
-    let digest = pedersen_hash_bls12_381_with_precomp::<_>(Personalization::None, bits, &JJ_PARAMS);
-
-    digest.into_xy().0.into()
-}
-
-#[cfg(not(target_arch = "x86_64"))]
-fn pedersen_compression_bits<T>(bits: T) -> FrRepr
-where
-    T: IntoIterator<Item = bool>,
-{
-    use fil_sapling_crypto::pedersen_hash::pedersen_hash;
-    use paired::bls12_381::Bls12;
-
-    let digest = pedersen_hash::<Bls12, _>(Personalization::None, bits, &JJ_PARAMS);
-
+    let digest = pedersen_hash(bits);
     digest.into_xy().0.into()
 }
 
