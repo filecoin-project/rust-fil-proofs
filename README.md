@@ -36,13 +36,7 @@ If at any point it were to become clear that the FFI approach is irredeemably pr
 
 The instructions below assume you have independently installed `rust-fil-proofs` in order to test, develop, or experiment with it.
 
-[Install Rust.](https://www.rust-lang.org/en-US/install.html)
-
-Configure to use nightly:
-
-```
-> rustup default nightly
-```
+[Install Rust using rustup.](https://www.rust-lang.org/en-US/install.html)
 
 ## Build
 
@@ -90,7 +84,7 @@ To benchmark the examples you can use [benchy](src/bin/benchy/main.rs), [stacked
 > ./target/release/benchy
 ```
 
-The results are displyed at the command line, or alternatively written as JSON files.
+The results are displayed at the command line, or alternatively written as JSON files.
 
 Note: On macOS you need `gtime` (`brew install gnu-time`), as the built in `time` command is not enough.
 
@@ -120,32 +114,6 @@ For advanced/verbose/debug logging, you can use the code setting
 
 ```sh
 > RUST_LOG=trace
-```
-
-## Memory Leak Detection
-
-To run the leak detector against the FFI-exposed portion of
-libsector_builder_ffi.a, simply run the FFI example with leak detection enabled.
-On a Linux machine, you can run the following command:
-
-```shell
-RUSTFLAGS="-Z sanitizer=leak" cargo run --release --package filecoin-proofs --example ffi --target x86_64-unknown-linux-gnu
-```
-
-If using mac OS, you'll have to run the leak detection from within a Docker
-container. After installing Docker, run the following commands to build and run
-the proper Docker image and then the leak detector itself:
-
-```shell
-docker build -t foo -f ./Dockerfile-ci . && \
-  docker run \
-    -it \
-    -e RUSTFLAGS="-Z sanitizer=leak" \
-    --privileged \
-    -w /mnt/crate \
-    -v `pwd`:/mnt/crate -v $(TMP=$(mktemp -d) && mv ${TMP} /tmp/ && echo /tmp${TMP}):/mnt/crate/target \
-    foo:latest \
-    cargo run --release --package filecoin-proofs --example ffi --target x86_64-unknown-linux-gnu
 ```
 
 ## Parameter File Location
