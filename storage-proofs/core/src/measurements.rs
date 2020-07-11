@@ -10,6 +10,11 @@ use std::time::{Duration, Instant};
 #[cfg(feature = "measurements")]
 use cpu_time::ProcessTime;
 
+#[cfg(feature = "prometheus")]
+use prometheus::*;
+#[cfg(feature = "prometheus")]
+use std::collections::HashMap;
+
 use serde::Serialize;
 
 #[cfg(feature = "measurements")]
@@ -35,7 +40,7 @@ pub struct OpMeasurement {
     pub wall_time: Duration,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(PartialEq, Eq, Clone, Copy, Hash, Debug, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum Operation {
     AddPiece,
@@ -50,6 +55,29 @@ pub enum Operation {
     PostFinalizeTicket,
     PostReadChallengedRange,
     PostPartialTicketHash,
+}
+
+#[cfg(feature = "prometheus")]
+const HISTOGRAMED_OPS: &[Operation] = &[
+    Operation::AddPiece,
+    Operation::GeneratePieceCommitment,
+    Operation::GenerateTreeC,
+    Operation::GenerateTreeRLast,
+    Operation::CommD,
+];
+
+#[cfg(feature = "prometheus")]
+lazy_static! {
+    static ref PROMETHEUS_HISTOGRAMS: HashMap<Operation, Histogram> = {
+        let mut hists = HashMap::new();
+        for op in HISTOGRAMED_OPS {
+            hists.insert(
+                *op,
+                register_histogram!(format!("{:?}", op), format!("{:?}", op)).unwrap(),
+            );
+        }
+        hists
+    };
 }
 
 #[cfg(feature = "measurements")]
@@ -79,12 +107,22 @@ where
         .lock()
         .expect("acquire lock on tx side of perf channel");
 
+    let cpu_time = cpu_time_start.elapsed();
+    let wall_time = wall_start_time.elapsed();
+
+    #[cfg(feature = "prometheus")]
+    {
+        if let Some(hist) = PROMETHEUS_HISTOGRAMS.get(&op) {
+            hist.observe(wall_time.as_secs_f64());
+        }
+    }
+
     if let Some(tx) = opt_tx.as_ref() {
         tx.clone()
             .send(OpMeasurement {
                 op,
-                cpu_time: cpu_time_start.elapsed(),
-                wall_time: wall_start_time.elapsed(),
+                cpu_time,
+                wall_time,
             })
             .expect("failed to send to perf channel");
     }
