@@ -80,6 +80,28 @@ lazy_static! {
     };
 }
 
+#[cfg(feature = "prometheus")]
+use hyper::{header::CONTENT_TYPE, Body, Request, Response};
+
+#[cfg(feature = "prometheus")]
+pub async fn prometheus_server(
+    _req: Request<Body>,
+) -> std::result::Result<Response<Body>, hyper::Error> {
+    let encoder = TextEncoder::new();
+
+    let metric_families = prometheus::gather();
+    let mut buffer = vec![];
+    encoder.encode(&metric_families, &mut buffer).unwrap();
+
+    let response = Response::builder()
+        .status(200)
+        .header(CONTENT_TYPE, encoder.format_type())
+        .body(Body::from(buffer))
+        .unwrap();
+
+    Ok(response)
+}
+
 #[cfg(feature = "measurements")]
 pub fn measure_op<T, F>(op: Operation, f: F) -> T
 where
