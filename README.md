@@ -1,6 +1,6 @@
-# Filecoin Proving Subsystem (FPS)
+# Filecoin Proving Subsystem
 
-The **Filecoin Proving Subsystem** provides the storage proofs required by the Filecoin protocol. It is implemented entirely in Rust, as a series of partially inter-dependent crates – some of which export C bindings to the supported API.
+The **Filecoin Proving Subsystem** (or FPS) provides the storage proofs required by the Filecoin protocol. It is implemented entirely in Rust, as a series of partially inter-dependent crates – some of which export C bindings to the supported API.
 
 There are currently several different crates:
 
@@ -35,7 +35,7 @@ There are currently several different crates:
 
 Earlier in the design process, we considered implementing what has become the **FPS** in Go – as a wrapper around potentially multiple SNARK circuit libraries. We eventually decided to use [bellman](https://github.com/zkcrypto/bellman) – a library developed by Zcash, which supports efficient pedersen hashing inside of SNARKs. Having made that decision, it was natural and efficient to implement the entire subsystem in Rust. We considered the benefits (self-contained codebase, ability to rely on static typing across layers) and costs (developer ramp-up, sometimes unwieldiness of borrow-checker) as part of that larger decision and determined that the overall project benefits (in particular ability to build on Zcash’s work) outweighed the costs.
 
-We also considered whether the **FPS** should be implemented as a standalone binary accessed from [**`lotus`**](https://github.com/filecoin-project/lotus) either as a single-invocation CLI or as a long-running daemon process. Bundling the **FPS** as an FFI dependency was chosen for both the simplicity of having a Filecoin node deliverable as a single monolithic binary, and for the (perceived) relative development simplicity of the API implementation.
+We also considered whether the **FPS** should be implemented as a standalone binary accessed from Filecoin nodes either as a single-invocation CLI or as a long-running daemon process. Bundling the **FPS** as an FFI dependency was chosen for both the simplicity of having a Filecoin node deliverable as a single monolithic binary, and for the (perceived) relative development simplicity of the API implementation.
 
 If at any point it were to become clear that the FFI approach is irredeemably problematic, the option of moving to a standalone **FPS** remains. However, the majority of technical problems associated with calling from Go into Rust are now solved, even while allowing for a high degree of runtime configurability. Therefore, continuing down the same path we have already invested in, and have begun to reap rewards from, seems likely.
 
@@ -223,13 +223,16 @@ Adjusting this setting is NOT recommended unless you understand the implications
 First, navigate to the `rust-fil-proofs` directory.
 
 - If you cloned `rust-fil-proofs` manually, it will be wherever you cloned it:
+
 ```
-> cd <install-path>/rust-fil-proofs
+> git clone https://github.com/filecoin-project/rust-fil-proofs.git
+> cd rust-fil-proofs
 ```
 
 For documentation corresponding to the latest source, you should clone `rust-fil-proofs` yourself.
 
 Now, generate the documentation:
+
 ```
 > cargo doc --all --no-deps
 ```
@@ -242,14 +245,14 @@ View the docs by pointing your browser at: `…/rust-fil-proofs/target/doc/proof
 
 The **FPS** is accessed from [**lotus**](https://github.com/filecoin-project/lotus) via FFI calls to its API, which is the union of the APIs of its constituents:
 
- The Rust source code serves as the source of truth defining the **FPS** APIs. View the source directly:
+ The source of truth defining the **FPS** APIs is a separate repository of Rust source code. View the source directly:
 
-- [**filecoin-proofs**](https://github.com/filecoin-project/rust-fil-proofs/tree/master/filecoin-proofs/src/api)
 - [**filecoin-proofs-api**](https://github.com/filecoin-project/rust-filecoin-proofs-api)
 
+The above referenced repository contains the consumer facing API and it provides a versioned wrapper around the `rust-fil-proofs` repository's internal APIs.  End users should not be using the internal APIs of `rust-fil-proofs` directly, as they are subject to change outside of the formal API provided.
 
-Or better, generate the documentation locally (until repository is public). Follow the instructions to generate documentation above. Then navigate to:
-- **Filecoin Proofs API:** `…/rust-fil-proofs/target/doc/filecoin_proofs/api/index.html`
+To generate the API documentation locally, follow the instructions to generate documentation above. Then navigate to:
+- **Filecoin Proofs API:** `…/rust-filecoin-proofs-api/target/doc/filecoin_proofs_api/index.html`
 
 - [Go implementation of filecoin-proofs sectorbuilder API](https://github.com/filecoin-project/go-sectorbuilder/blob/master/sectorbuilder.go) and [associated interface structures](https://github.com/filecoin-project/go-sectorbuilder/blob/master/interface.go).
 
