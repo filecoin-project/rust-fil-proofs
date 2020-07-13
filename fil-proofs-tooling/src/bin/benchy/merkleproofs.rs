@@ -6,7 +6,7 @@ use rand::{thread_rng, Rng};
 use rayon::prelude::*;
 use storage_proofs::hasher::{Domain, Hasher, PoseidonHasher};
 use storage_proofs::util::NODE_SIZE;
-use typenum::{Unsigned, U0, U1, U2, U8};
+use typenum::{Unsigned, U0, U2, U8};
 
 #[allow(clippy::type_complexity)]
 fn generate_tree<R: Rng, BaseTreeArity: Unsigned>(
@@ -86,7 +86,17 @@ fn generate_proofs<
     Ok(())
 }
 
-fn run_tree_bench<R: Rng, BaseTreeArity: Unsigned, SubTreeArity: Unsigned>(
+fn run_base_tree_bench<R: Rng, BaseTreeArity: Unsigned>(
+    rng: &mut R,
+    nodes: usize,
+    proofs_count: usize,
+    validate: bool,
+) -> Result<()> {
+    let tree = generate_tree::<R, BaseTreeArity>(rng, nodes)?;
+    generate_proofs::<R, BaseTreeArity, U0, U0>(rng, tree, nodes, proofs_count, validate)
+}
+
+fn run_sub_tree_bench<R: Rng, BaseTreeArity: Unsigned, SubTreeArity: Unsigned>(
     rng: &mut R,
     nodes: usize,
     proofs_count: usize,
@@ -95,6 +105,7 @@ fn run_tree_bench<R: Rng, BaseTreeArity: Unsigned, SubTreeArity: Unsigned>(
     let arity = BaseTreeArity::to_usize();
     let tree_count = SubTreeArity::to_usize();
 
+    assert!(tree_count > 1);
     info!(
         "is_merkle_tree_size_valid({}, {})? {}",
         nodes,
@@ -217,19 +228,19 @@ pub fn run(size: usize, proofs_count: usize, validate: bool) -> Result<()> {
 
     match size as u64 {
         // 2 KIB sectors are composed of a single 2KIB tree of arity 8.
-        SECTOR_SIZE_2_KIB => run_tree_bench::<_, U8, U1>(&mut rng, nodes, proofs_count, validate),
+        SECTOR_SIZE_2_KIB => run_base_tree_bench::<_, U8>(&mut rng, nodes, proofs_count, validate),
         // 4 KIB sectors are composed of 2 2KIB trees each of arity 8.
-        SECTOR_SIZE_4_KIB => run_tree_bench::<_, U8, U2>(&mut rng, nodes, proofs_count, validate),
+        SECTOR_SIZE_4_KIB => run_sub_tree_bench::<_, U8, U2>(&mut rng, nodes, proofs_count, validate),
         // 8 MIB sectors are composed of a single 8MIB tree of arity 8.
-        SECTOR_SIZE_8_MIB => run_tree_bench::<_, U8, U1>(&mut rng, nodes, proofs_count, validate),
+        SECTOR_SIZE_8_MIB => run_base_tree_bench::<_, U8>(&mut rng, nodes, proofs_count, validate),
         // 16 MIB sectors are composed of 2 8MIB trees each of arity 8.
-        SECTOR_SIZE_16_MIB => run_tree_bench::<_, U8, U2>(&mut rng, nodes, proofs_count, validate),
+        SECTOR_SIZE_16_MIB => run_sub_tree_bench::<_, U8, U2>(&mut rng, nodes, proofs_count, validate),
         // 512 MIB sectors are composed of a single 512MIB tree of arity 8.
-        SECTOR_SIZE_512_MIB => run_tree_bench::<_, U8, U1>(&mut rng, nodes, proofs_count, validate),
+        SECTOR_SIZE_512_MIB => run_base_tree_bench::<_, U8>(&mut rng, nodes, proofs_count, validate),
         // 1 GIB sectors are composed of 2 512MB trees each of arity 8.
-        SECTOR_SIZE_1_GIB => run_tree_bench::<_, U8, U2>(&mut rng, nodes, proofs_count, validate),
+        SECTOR_SIZE_1_GIB => run_sub_tree_bench::<_, U8, U2>(&mut rng, nodes, proofs_count, validate),
         // 32 GIB sectors are composed of 8 4GIB trees each of arity 8.
-        SECTOR_SIZE_32_GIB => run_tree_bench::<_, U8, U8>(&mut rng, nodes, proofs_count, validate),
+        SECTOR_SIZE_32_GIB => run_sub_tree_bench::<_, U8, U8>(&mut rng, nodes, proofs_count, validate),
         // 64 GIB sectors are composed of 2 32 GIB trees.
         SECTOR_SIZE_64_GIB => run_top_tree_bench::<_, U8, U8, U2>(&mut rng, nodes, proofs_count, validate),
         _ => panic!("Invalid sector size specified (valid values are: 2, 4, 8192, 16384, 524288, 1048576, 33554432, 67108864)")

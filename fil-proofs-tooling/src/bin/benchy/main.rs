@@ -215,9 +215,9 @@ fn main() -> Result<()> {
         .arg(
             Arg::with_name("proofs")
                 .long("proofs")
-                .default_value("0")
+                .default_value("1024")
                 .required(false)
-                .help("How many proofs to generate (default is all)")
+                .help("How many proofs to generate (default is 1024)")
                 .takes_value(true),
         )
         .arg(
