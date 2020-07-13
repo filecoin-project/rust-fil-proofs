@@ -68,18 +68,16 @@ Before building you will need OpenCL to be installed, on Ubuntu this can be achi
 The main benchmarking tool is called `benchy`.  `benchy` has several subcommands, including `merkleproofs`, `prodbench`, `winning_post` and `window_post`.  You can run them with various configuration options, but some examples are below:
 
 ```
-> cargo run --bin benchy -- prodbench
-> cargo run --bin benchy -- merkleproofs --size 2
-> cargo run --bin benchy -- winning-post --size 2
-> cargo run --bin benchy -- window-post --size 2
-
-
+> cargo run --release--bin benchy -- merkleproofs --size 2
+> cargo run --release--bin benchy -- winning-post --size 2
+> cargo run --release--bin benchy -- window-post --size 2
+> cargo run --release--bin benchy -- prodbench
 ```
 
 There is also a bench called `gpu-cpu-test`:
 
 ```
-> cargo run --bin gpu-cpu-test
+> cargo run --release --bin gpu-cpu-test
 ```
 
 Some results are displayed at the command line, or alternatively written as JSON files.  Logging can be enabled using the `RUST_LOG=trace` option (see more Logging options in the `Logging` section below).
@@ -112,6 +110,18 @@ For advanced/verbose/debug logging, you can use the code setting
 
 ```sh
 > RUST_LOG=trace
+```
+
+## Settings
+
+Further down in this README, various settings are described that can be adjusted by the end-user.  These settings are summarized in `rust-fil-proofs.config.toml.sample` and this configuration file can be used directly if copied to `./rust-fil-proofs.config.toml`.  Alternatively, each setting can be set by using environment variables of the form "FIL_PROOFS_<setting name here>", in all caps.  For example, to set `rows_to_discard` to the value 2, you would set `FIL_PROOFS_ROWS_TO_DISCARD=2` in your environment.
+
+Any configuration setting that is not specified has a reasonable default already chosen.
+
+To verify current environment settings, you can run:
+
+```
+cargo run --bin settings
 ```
 
 ## Parameter File Location
