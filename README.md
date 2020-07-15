@@ -28,9 +28,6 @@ There are currently several different crates:
 - [**Filecoin Proofs (`filecoin-proofs`)**](./filecoin-proofs)
   A wrapper around `storage-proofs`, providing an FFI-exported API callable from C (and in practice called by [lotus](https://github.com/filecoin-project/lotus) via cgo). Filecoin-specific values of setup parameters are included here.
 
-
-    ![FPS crate dependencies](/img/fps-dependencies.png?raw=true)
-
 ## Design Notes
 
 Earlier in the design process, we considered implementing what has become the **FPS** in Go – as a wrapper around potentially multiple SNARK circuit libraries. We eventually decided to use [bellman](https://github.com/zkcrypto/bellman) – a library developed by Zcash, which supports efficient pedersen hashing inside of SNARKs. Having made that decision, it was natural and efficient to implement the entire subsystem in Rust. We considered the benefits (self-contained codebase, ability to rely on static typing across layers) and costs (developer ramp-up, sometimes unwieldiness of borrow-checker) as part of that larger decision and determined that the overall project benefits (in particular ability to build on Zcash’s work) outweighed the costs.
@@ -163,6 +160,10 @@ Lastly, the parent's cache data is located on disk by default in `/var/tmp/filec
 ```
 FIL_PROOFS_PARENT_CACHE=/path/to/parent/cache
 ```
+
+Using the above, the cache data would be located at `/path/to/parent/cache/filecoin-parents`.
+
+Alternatively, use `FIL_PROOFS_CACHE_DIR=/path/to/parent/cache`, in which the parent cache will be located in `$FIL_PROOFS_CACHE_DIR/filecoin-parents`.  Note that if you're using `FIL_PROOFS_CACHE_DIR`, it must be set through the environment and cannot be set using the configuration file.  This setting has no effect if `FIL_PROOFS_PARENT_CACHE` is also specified.
 
 ### GPU Usage
 

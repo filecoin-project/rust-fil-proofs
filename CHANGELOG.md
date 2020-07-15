@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://book.async.rs/overview
 
 ## Unreleased
 
+## 4.0.4 - 2020-07-15
+
+- Default parent cache path to use FIL_PROOFS_CACHE_DIR if set [1207](https://github.com/filecoin-project/rust-fil-proofs/pull/1207)
+- Investigate CI metrics capture [1212](https://github.com/filecoin-project/rust-fil-proofs/pull/1212) and [1213] (https://github.com/filecoin-project/rust-fil-proofs/pull/1213)
+- Additional README updates and corrections [1211](https://github.com/filecoin-project/rust-fil-proofs/pull/1211)
+- Update README [1208](https://github.com/filecoin-project/rust-fil-proofs/pull/1208)
+- Swap buffers instead of memcpy in generate_labels [1197](https://github.com/filecoin-project/rust-fil-proofs/pull/1197)
+- Apply suggested security audit fixes [1196](https://github.com/filecoin-project/rust-fil-proofs/pull/1196)
+- Make pieces::Stack methods private [1202](https://github.com/filecoin-project/rust-fil-proofs/pull/1202)
+- Remove dead code [1201](https://github.com/filecoin-project/rust-fil-proofs/pull/1201)
+- Test feistel implementation is a valid permutation [1193](https://github.com/filecoin-project/rust-fil-proofs/pull/1193)
+
 ## 4.0.3 - 2020-07-01
 
 - Add fauxrep to API for fake sealing [1194](https://github.com/filecoin-project/rust-fil-proofs/pull/1194)
@@ -64,7 +76,8 @@ and this project adheres to [Semantic Versioning](https://book.async.rs/overview
 
 - Initial stable release
 
-[Unreleased]: https://github.com/filecoin-project/rust-fil-proofs/compare/v4.0.3...HEAD
+[Unreleased]: https://github.com/filecoin-project/rust-fil-proofs/compare/v4.0.4...HEAD
+[4.0.4]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v4.0.4
 [4.0.3]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v4.0.3
 [4.0.2]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v4.0.2
 [4.0.1]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v4.0.0
