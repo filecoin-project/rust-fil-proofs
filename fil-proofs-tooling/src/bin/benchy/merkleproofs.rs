@@ -26,18 +26,32 @@ fn generate_proofs<R: Rng, Tree: MerkleTreeTrait>(
     proofs_count: usize,
     validate: bool,
 ) -> Result<()> {
+    let proofs_count = if proofs_count >= nodes {
+        info!(
+            "requested {} proofs, but instead challenging all {} nodes sequentially",
+            proofs_count, nodes
+        );
+
+        nodes
+    } else {
+        proofs_count
+    };
+
     info!(
         "creating {} inclusion proofs over {} nodes (validate enabled? {})",
         proofs_count, nodes, validate
     );
 
-    let proofs_count = std::cmp::min(nodes, proofs_count);
     let rows_to_discard = default_rows_to_discard(
         base_tree_nodes,
         <Tree as MerkleTreeTrait>::Arity::to_usize(),
     );
     for i in 0..proofs_count {
-        let challenge = rng.gen_range(0, nodes);
+        let challenge = if proofs_count == nodes {
+            i
+        } else {
+            rng.gen_range(0, nodes)
+        };
         debug!("challenge[{}] = {}", i, challenge);
         let proof = tree
             .gen_cached_proof(challenge, Some(rows_to_discard))
