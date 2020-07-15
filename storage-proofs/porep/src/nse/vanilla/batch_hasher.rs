@@ -21,31 +21,29 @@ pub fn batch_hash(
     data: &[u8],
 ) -> [u8; 32] {
     assert!(parents.len() % 2 == 0, "number of parents must be even");
+    assert!(degree % 2 == 0, "degree must be even");
     assert_eq!(parents.len(), degree * k, "invalid number of parents");
     let modulus = Fr::char();
+    let k = k as u32;
+    let zero = FrRepr::from(0);
 
-    for (i, j) in (0..degree).tuples() {
-        let k = k as u32;
+    // Read the (i, j)th parent.
+    // i indexes the degree (0..degree), j indexes the batch (0..k)
+    let read_parent = |i, j| read_at(data, parents[(j * degree) + i] as usize);
 
-        let (el1, el2) = (0..k).fold(
-            (FrRepr::from(0), FrRepr::from(0)),
-            |(mut el1, mut el2), l| {
-                let y1 = i + (l as usize * degree as usize);
-                let parent1 = parents[y1 as usize];
-                let current1 = read_at(data, parent1 as usize);
-                let y2 = j + (l as usize * degree as usize);
-                let parent2 = parents[y2 as usize];
-                let current2 = read_at(data, parent2 as usize);
+    let combined_parent_bytes = |i| {
+        // Sum the k parents for this index position using field addition.
+        let combined = (0..k).fold(zero, |mut acc, l| {
+            add_assign(&mut acc, &read_parent(i, l as usize), &modulus);
+            acc
+        });
 
-                add_assign(&mut el1, &current1, &modulus);
-                add_assign(&mut el2, &current2, &modulus);
+        fr_repr_as_bytes(&combined)
+    };
 
-                (el1, el2)
-            },
-        );
-
+    for i in (0..degree).step_by(2) {
         // hash two 32 byte chunks at once
-        hasher.input(&[&fr_repr_as_bytes(&el1), &fr_repr_as_bytes(&el2)]);
+        hasher.input(&[&combined_parent_bytes(i), &combined_parent_bytes(i + 1)]);
     }
 
     let mut hash = hasher.finish();
