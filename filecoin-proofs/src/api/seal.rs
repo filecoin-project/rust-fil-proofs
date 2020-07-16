@@ -807,3 +807,27 @@ pub fn fauxrep_aux<
     commitment[..].copy_from_slice(&comm_r.into_bytes()[..]);
     Ok(commitment)
 }
+
+pub fn fauxrep2<R: AsRef<Path>, S: AsRef<Path>, Tree: 'static + MerkleTreeTrait>(
+    cache_path: R,
+    existing_p_aux_path: S,
+) -> Result<Commitment> {
+    let mut rng = rand::thread_rng();
+
+    let fake_comm_c = <Tree::Hasher as Hasher>::Domain::random(&mut rng);
+
+    let (comm_r, p_aux) =
+        StackedDrg::<Tree, DefaultPieceHasher>::fake_comm_r(fake_comm_c, existing_p_aux_path)?;
+
+    let p_aux_path = cache_path.as_ref().join(CacheKey::PAux.to_string());
+    let mut f_p_aux = File::create(&p_aux_path)
+        .with_context(|| format!("could not create file p_aux={:?}", p_aux_path))?;
+    let p_aux_bytes = serialize(&p_aux)?;
+    f_p_aux
+        .write_all(&p_aux_bytes)
+        .with_context(|| format!("could not write to file p_aux={:?}", p_aux_path))?;
+
+    let mut commitment = [0u8; 32];
+    commitment[..].copy_from_slice(&comm_r.into_bytes()[..]);
+    Ok(commitment)
+}

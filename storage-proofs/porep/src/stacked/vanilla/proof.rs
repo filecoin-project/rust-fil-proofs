@@ -4,6 +4,7 @@ use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
 use std::sync::{mpsc, Arc, RwLock};
 
+use bincode::deserialize;
 use generic_array::typenum::{self, Unsigned};
 use log::{info, trace};
 use merkletree::merkle::{
@@ -1324,6 +1325,33 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         let p_aux = PersistentAux {
             comm_c: tree_c_root,
             comm_r_last: tree_r_last_root,
+        };
+
+        Ok((comm_r, p_aux))
+    }
+
+    pub fn fake_comm_r<R: AsRef<Path>>(
+        tree_c_root: <Tree::Hasher as Hasher>::Domain,
+        existing_p_aux_path: R,
+    ) -> Result<(
+        <Tree::Hasher as Hasher>::Domain,
+        PersistentAux<<Tree::Hasher as Hasher>::Domain>,
+    )> {
+        let existing_p_aux: PersistentAux<<Tree::Hasher as Hasher>::Domain> = {
+            let p_aux_bytes = std::fs::read(&existing_p_aux_path)?;
+
+            deserialize(&p_aux_bytes)
+        }?;
+
+        let existing_comm_r_last = existing_p_aux.comm_r_last;
+
+        // comm_r = H(comm_c || comm_r_last)
+        let comm_r: <Tree::Hasher as Hasher>::Domain =
+            <Tree::Hasher as Hasher>::Function::hash2(&tree_c_root, &existing_comm_r_last);
+
+        let p_aux = PersistentAux {
+            comm_c: tree_c_root,
+            comm_r_last: existing_comm_r_last,
         };
 
         Ok((comm_r, p_aux))
