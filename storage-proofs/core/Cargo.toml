@@ -13,7 +13,8 @@ bench = false
 
 [dependencies]
 rand = "0.7"
-merkletree = "0.20.0"
+#merkletree = "0.20.0"
+merkletree = { git = "https://github.com/filecoin-project/merkle_light", branch = "update-discard-rows" }
 byteorder = "1"
 config = { version = "0.10.1", default-features = false, features = ["toml"] }
 itertools = "0.9"
