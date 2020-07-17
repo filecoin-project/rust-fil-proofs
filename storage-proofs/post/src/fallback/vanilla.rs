@@ -16,7 +16,7 @@ use storage_proofs_core::{
     parameter_cache::ParameterSetMetadata,
     proof::ProofScheme,
     sector::*,
-    util::NODE_SIZE,
+    util::{default_rows_to_discard, NODE_SIZE},
 };
 
 #[derive(Debug, Clone)]
@@ -311,6 +311,7 @@ impl<'a, Tree: 'a + MerkleTreeTrait> ProofScheme<'a> for FallbackPoSt<'a, Tree> 
                 let tree = priv_sector.tree;
                 let sector_id = pub_sector.id;
                 let tree_leafs = tree.leafs();
+                let rows_to_discard = default_rows_to_discard(tree_leafs, Tree::Arity::to_usize());
 
                 trace!(
                     "Generating proof for tree leafs {} and arity {}",
@@ -331,7 +332,7 @@ impl<'a, Tree: 'a + MerkleTreeTrait> ProofScheme<'a> for FallbackPoSt<'a, Tree> 
                             challenge_index,
                         )?;
 
-                        tree.gen_cached_proof(challenged_leaf_start as usize, None)
+                        tree.gen_cached_proof(challenged_leaf_start as usize, Some(rows_to_discard))
                     })
                     .collect::<Result<Vec<_>>>()?;
 
