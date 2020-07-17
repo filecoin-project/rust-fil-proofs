@@ -11,8 +11,7 @@ readme = "README.md"
 [dependencies]
 storage-proofs-core = { path = "../core", version = "4.0.1" }
 rand = "0.7"
-#merkletree = "0.20.0"
-merkletree = { git = "https://github.com/filecoin-project/merkle_light", branch = "update-discard-rows" }
+merkletree = "0.21.0"
 byteorder = "1"
 crossbeam = "0.7.3"
 sha2 = { version = "0.8.3", package = "sha2ni" }
