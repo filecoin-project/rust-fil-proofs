@@ -7,6 +7,7 @@ use rayon::prelude::*;
 use rust_fil_nse_gpu as gpu;
 use sha2raw::Sha256;
 use storage_proofs_core::{
+    settings,
     hasher::{Domain, Hasher},
     merkle::{DiskStore, DiskTree, LCTree, MerkleTreeTrait, MerkleTreeWrapper},
     util::NODE_SIZE,
@@ -528,7 +529,7 @@ where
         ),
     >,
 {
-    if !generic_cast::equals::<Tree, GPUTree>() {
+    if !settings::SETTINGS.lock().unwrap().use_gpu_nse || !generic_cast::equals::<Tree, GPUTree>() {
         inps.map(|(store_configs, window_index, replica_id, data)| {
             encode_with_trees::<Tree>(conf, store_configs, window_index, replica_id, data)
         })

@@ -28,6 +28,7 @@ pub struct Settings {
     pub window_post_synthesis_num_cpus: u32,
     pub parameter_cache: String,
     pub parent_cache: String,
+    pub use_gpu_nse: bool
 }
 
 impl Default for Settings {
@@ -43,6 +44,7 @@ impl Default for Settings {
             rows_to_discard: 2,
             sdr_parents_cache_size: 2_048,
             window_post_synthesis_num_cpus: num_cpus::get() as u32,
+            use_gpu_nse: false,
             // `parameter_cache` does not use the cache() mechanism because it is now used
             // for durable, canonical Groth parameters and verifying keys.
             // The name is retained for backwards compatibility.
