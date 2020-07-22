@@ -150,7 +150,7 @@ jobs:
     steps:
       - add_ssh_keys:
           fingerprints:
-            - "f8:db:3c:6d:f9:74:2c:9e:07:42:3f:3f:23:07:f7:6d"
+            - "96:12:32:00:d7:ef:4e:ff:ae:1e:04:e2:5f:ce:23:bd"
       - run:
           name: Add benchmark server's public key to known hosts
           command: |
@@ -159,6 +159,7 @@ jobs:
               echo "
             ${BENCHMARK_SERVER_RSA_FINGERPRINT}
               " >> ~/.ssh/known_hosts
+              ssh-keyscan -H 147.75.55.201 >> ~/.ssh/known_hosts
             fi
       - checkout
       - attach_workspace:

@@ -224,7 +224,7 @@ fn main() -> Result<()> {
             Arg::with_name("validate")
                 .long("validate")
                 .required(false)
-                .default_value("false")
+                .default_value("true")
                 .help("Validate proofs if specified")
                 .takes_value(false),
         );
