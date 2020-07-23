@@ -19,10 +19,10 @@ num-traits = "0.2"
 sha2 = "0.9.1"
 rayon = "1.0.0"
 serde = { version = "1.0", features = ["derive"]}
-ff = { version = "0.2.1", package = "fff" }
+ff = { version = "0.2.3", package = "fff" }
 bellperson = "0.9.1"
 paired = { version = "0.20.0", features = ["serde"] }
-fil-sapling-crypto = "0.6.0"
+fil-sapling-crypto = "0.6.3"
 log = "0.4.7"
 pretty_assertions = "0.6.1"
 generic-array = "0.13.2"
@@ -49,4 +49,3 @@ harness = false
 [[bench]]
 name = "parents"
 harness = false
-
