@@ -2,13 +2,15 @@ use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
+use ff::Field;
 use generic_array::typenum::{Unsigned, U2};
 use merkletree::merkle::get_merkle_tree_leafs;
 use merkletree::store::{Store, StoreConfig};
+use neptune::poseidon::Poseidon;
 use paired::bls12_381::Fr;
 use serde::{Deserialize, Serialize};
 use storage_proofs_core::{
-    hasher::{Domain, HashFunction, Hasher, PoseidonDomain, PoseidonFunction, PoseidonMDArity},
+    hasher::{Domain, Hasher, POSEIDON_CONSTANTS_16},
     merkle::{
         split_config, split_config_and_replica, BinaryMerkleTree, DiskStore, LCStore, MerkleProof,
         MerkleTreeTrait, MerkleTreeWrapper,
@@ -24,6 +26,9 @@ pub struct NarrowStackedExpander<'a, Tree: 'a + MerkleTreeTrait, G: 'a + Hasher>
     _tree: PhantomData<&'a Tree>,
     _g: PhantomData<G>,
 }
+
+// TODO: switch to 15 once neptune supports it
+pub const MAX_COMM_R_ARITY: usize = 16;
 
 #[derive(Debug, Clone)]
 pub struct SetupParams {
@@ -398,20 +403,21 @@ impl<Tree: MerkleTreeTrait, G: Hasher> Clone for NodeProof<Tree, G> {
 
 /// Calculate the comm_r hash.
 pub fn hash_comm_r<D: Domain>(comm_layers: &[D], comm_replica: D) -> Fr {
-    let arity = PoseidonMDArity::to_usize();
-    let mut data: Vec<PoseidonDomain> = Vec::with_capacity(arity);
+    assert!(comm_layers.len() <= MAX_COMM_R_ARITY, "too many layers");
+
+    let mut data: Vec<Fr> = Vec::with_capacity(MAX_COMM_R_ARITY);
     data.extend(comm_layers.iter().map(|v| {
         let fr: Fr = (*v).into();
-        let d: PoseidonDomain = fr.into();
-        d
+        fr
     }));
     let comm_replica_fr: Fr = comm_replica.into();
-    data.push(comm_replica_fr.into());
+    data.push(comm_replica_fr);
 
-    // pad for MD
-    while data.len() % arity != 0 {
-        data.push(PoseidonDomain::default());
+    // pad
+    while data.len() < MAX_COMM_R_ARITY {
+        data.push(Fr::zero());
     }
 
-    PoseidonFunction::hash_md(&data).into()
+    let mut p = Poseidon::new_with_preimage(&data, &POSEIDON_CONSTANTS_16);
+    p.hash().into()
 }
