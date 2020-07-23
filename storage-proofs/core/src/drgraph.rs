@@ -112,17 +112,17 @@ impl<H: Hasher> Graph<H> for BucketGraph<H> {
         _exp_parents_data: Option<&[u8]>,
     ) -> Result<Self::Key> {
         let mut hasher = Sha256::new();
-        hasher.input(AsRef::<[u8]>::as_ref(id));
+        hasher.update(AsRef::<[u8]>::as_ref(id));
 
         // The hash is about the parents, hence skip if a node doesn't have any parents
         if node != parents[0] as usize {
             for parent in parents.iter() {
                 let offset = data_at_node_offset(*parent as usize);
-                hasher.input(&base_parents_data[offset..offset + NODE_SIZE]);
+                hasher.update(&base_parents_data[offset..offset + NODE_SIZE]);
             }
         }
 
-        let hash = hasher.result();
+        let hash = hasher.finalize();
         Ok(bytes_into_fr_repr_safe(hash.as_ref()).into())
     }
 

@@ -190,6 +190,25 @@ impl StdHasher for PedersenFunction {
     }
 }
 
+pub fn pedersen_hash<I: IntoIterator<Item = bool>>(
+    node_bits: I,
+) -> fil_sapling_crypto::jubjub::edwards::Point<Bls12, fil_sapling_crypto::jubjub::PrimeOrder> {
+    #[cfg(target_arch = "x86_64")]
+    {
+        use fil_sapling_crypto::pedersen_hash::pedersen_hash_bls12_381_with_precomp;
+        pedersen_hash_bls12_381_with_precomp::<_>(
+            Personalization::None,
+            node_bits,
+            &pedersen::JJ_PARAMS,
+        )
+    }
+    #[cfg(not(target_arch = "x86_64"))]
+    {
+        use fil_sapling_crypto::pedersen_hash::pedersen_hash;
+        pedersen_hash::<Bls12, _>(Personalization::None, node_bits, &pedersen::JJ_PARAMS)
+    }
+}
+
 impl HashFunction<PedersenDomain> for PedersenFunction {
     fn hash(data: &[u8]) -> PedersenDomain {
         pedersen::pedersen_md_no_padding(data).into()
@@ -197,18 +216,7 @@ impl HashFunction<PedersenDomain> for PedersenFunction {
 
     fn hash2(a: &PedersenDomain, b: &PedersenDomain) -> PedersenDomain {
         let data = NodeBits::new(&(a.0).0[..], &(b.0).0[..]);
-
-        let digest = if cfg!(target_arch = "x86_64") {
-            use fil_sapling_crypto::pedersen_hash::pedersen_hash_bls12_381_with_precomp;
-            pedersen_hash_bls12_381_with_precomp::<_>(
-                Personalization::None,
-                data,
-                &pedersen::JJ_PARAMS,
-            )
-        } else {
-            use fil_sapling_crypto::pedersen_hash::pedersen_hash;
-            pedersen_hash::<Bls12, _>(Personalization::None, data, &pedersen::JJ_PARAMS)
-        };
+        let digest = pedersen_hash(data);
         digest.into_xy().0.into()
     }
 
@@ -319,18 +327,7 @@ impl LightAlgorithm<PedersenDomain> for PedersenFunction {
         _height: usize,
     ) -> PedersenDomain {
         let node_bits = NodeBits::new(&(left.0).0[..], &(right.0).0[..]);
-
-        let digest = if cfg!(target_arch = "x86_64") {
-            use fil_sapling_crypto::pedersen_hash::pedersen_hash_bls12_381_with_precomp;
-            pedersen_hash_bls12_381_with_precomp::<_>(
-                Personalization::None,
-                node_bits,
-                &pedersen::JJ_PARAMS,
-            )
-        } else {
-            use fil_sapling_crypto::pedersen_hash::pedersen_hash;
-            pedersen_hash::<Bls12, _>(Personalization::None, node_bits, &pedersen::JJ_PARAMS)
-        };
+        let digest = pedersen_hash(node_bits);
 
         digest.into_xy().0.into()
     }

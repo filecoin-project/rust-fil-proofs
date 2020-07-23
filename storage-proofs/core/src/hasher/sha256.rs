@@ -47,7 +47,7 @@ pub struct Sha256Function(Sha256);
 impl StdHasher for Sha256Function {
     #[inline]
     fn write(&mut self, msg: &[u8]) {
-        self.0.input(msg)
+        self.0.update(msg)
     }
 
     #[inline]
@@ -179,7 +179,7 @@ impl HashFunction<Sha256Domain> for Sha256Function {
         let hashed = Sha256::new()
             .chain(AsRef::<[u8]>::as_ref(a))
             .chain(AsRef::<[u8]>::as_ref(b))
-            .result();
+            .finalize();
         let mut res = Sha256Domain::default();
         res.0.copy_from_slice(&hashed[..]);
         res.trim_to_fr32();
@@ -303,7 +303,7 @@ impl Algorithm<Sha256Domain> for Sha256Function {
     #[inline]
     fn hash(&mut self) -> Sha256Domain {
         let mut h = [0u8; 32];
-        h.copy_from_slice(self.0.clone().result().as_ref());
+        h.copy_from_slice(self.0.clone().finalize().as_ref());
         let mut dd = Sha256Domain::from(h);
         dd.trim_to_fr32();
         dd

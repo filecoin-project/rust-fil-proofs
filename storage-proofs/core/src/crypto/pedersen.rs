@@ -1,12 +1,12 @@
 use anyhow::{ensure, Context};
 use ff::PrimeFieldRepr;
 use fil_sapling_crypto::jubjub::JubjubBls12;
-use fil_sapling_crypto::pedersen_hash::Personalization;
 use lazy_static::lazy_static;
-use paired::bls12_381::{Bls12, Fr, FrRepr};
+use paired::bls12_381::{Fr, FrRepr};
 
 use crate::error::Result;
 use crate::fr32::bytes_into_frs;
+use crate::hasher::pedersen::pedersen_hash;
 use crate::settings;
 
 lazy_static! {
@@ -26,14 +26,7 @@ pub fn pedersen(data: &[u8]) -> Fr {
 }
 
 pub fn pedersen_bits<'a, S: Iterator<Item = &'a [u8]>>(data: Bits<&'a [u8], S>) -> Fr {
-    let digest = if cfg!(target_arch = "x86_64") {
-        use fil_sapling_crypto::pedersen_hash::pedersen_hash_bls12_381_with_precomp;
-        pedersen_hash_bls12_381_with_precomp::<_>(Personalization::None, data, &JJ_PARAMS)
-    } else {
-        use fil_sapling_crypto::pedersen_hash::pedersen_hash;
-        pedersen_hash::<Bls12, _>(Personalization::None, data, &JJ_PARAMS)
-    };
-
+    let digest = pedersen_hash(data);
     digest.into_xy().0
 }
 
@@ -70,14 +63,7 @@ fn pedersen_compression_bits<T>(bits: T) -> FrRepr
 where
     T: IntoIterator<Item = bool>,
 {
-    let digest = if cfg!(target_arch = "x86_64") {
-        use fil_sapling_crypto::pedersen_hash::pedersen_hash_bls12_381_with_precomp;
-        pedersen_hash_bls12_381_with_precomp::<_>(Personalization::None, bits, &JJ_PARAMS)
-    } else {
-        use fil_sapling_crypto::pedersen_hash::pedersen_hash;
-        pedersen_hash::<Bls12, _>(Personalization::None, bits, &JJ_PARAMS)
-    };
-
+    let digest = pedersen_hash(bits);
     digest.into_xy().0.into()
 }
 

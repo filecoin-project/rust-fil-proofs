@@ -396,13 +396,13 @@ where
 
             let key = {
                 let prover_bytes = pub_inputs.replica_id.context("missing replica_id")?;
-                hasher.input(AsRef::<[u8]>::as_ref(&prover_bytes));
+                hasher.update(AsRef::<[u8]>::as_ref(&prover_bytes));
 
                 for p in proof.replica_parents[i].iter() {
-                    hasher.input(AsRef::<[u8]>::as_ref(&p.1.data));
+                    hasher.update(AsRef::<[u8]>::as_ref(&p.1.data));
                 }
 
-                let hash = hasher.result_reset();
+                let hash = hasher.finalize_reset();
                 bytes_into_fr_repr_safe(hash.as_ref()).into()
             };
 
@@ -580,18 +580,18 @@ pub fn create_key_from_tree<H: Hasher, U: 'static + PoseidonArity>(
     tree: &LCMerkleTree<H, U>,
 ) -> Result<H::Domain> {
     let mut hasher = Sha256::new();
-    hasher.input(AsRef::<[u8]>::as_ref(&id));
+    hasher.update(AsRef::<[u8]>::as_ref(&id));
 
     // The hash is about the parents, hence skip if a node doesn't have any parents
     if node != parents[0] as usize {
         let mut scratch: [u8; NODE_SIZE] = [0; NODE_SIZE];
         for parent in parents.iter() {
             tree.read_into(*parent as usize, &mut scratch)?;
-            hasher.input(&scratch);
+            hasher.update(&scratch);
         }
     }
 
-    let hash = hasher.result();
+    let hash = hasher.finalize();
     Ok(bytes_into_fr_repr_safe(hash.as_ref()).into())
 }
 
