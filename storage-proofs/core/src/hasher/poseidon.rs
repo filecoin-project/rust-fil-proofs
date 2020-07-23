@@ -234,7 +234,6 @@ fn shared_hash_frs(
             let mut p = Poseidon::new_with_preimage(&preimage, &POSEIDON_CONSTANTS_16);
             p.hash()
         }
-
         _ => panic!("Unsupported arity for Poseidon hasher: {}", preimage.len()),
     }
 }

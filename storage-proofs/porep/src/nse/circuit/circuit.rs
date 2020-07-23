@@ -3,19 +3,20 @@ use bellperson::{
     Circuit, ConstraintSystem, SynthesisError,
 };
 use ff::Field;
-use generic_array::typenum::Unsigned;
+use generic_array::typenum;
+use neptune::circuit::poseidon_hash;
 use paired::bls12_381::{Bls12, Fr};
 use storage_proofs_core::{
     compound_proof::CircuitComponent,
     gadgets::{constraint, por::enforce_inclusion, uint64::UInt64},
-    hasher::{HashFunction, Hasher, PoseidonFunction, PoseidonMDArity},
+    hasher::{Hasher, PoseidonArity},
     merkle::MerkleTreeTrait,
     proof::ProofScheme,
     util::reverse_bit_numbering,
 };
 
 use super::{hash::*, LayerProof, NodeProof};
-use crate::nse::{Config, NarrowStackedExpander};
+use crate::nse::{Config, NarrowStackedExpander, MAX_COMM_R_ARITY};
 
 /// NSE Circuit.
 pub struct NseCircuit<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> {
@@ -96,8 +97,12 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> Circuit<Bls12>
             .collect::<Result<Vec<_>, _>>()?;
 
         let mut comm_layers_nums_padded = comm_layers_nums.clone();
-        let arity = PoseidonMDArity::to_usize();
-        while comm_layers_nums_padded.len() % arity != 0 {
+        assert!(
+            comm_layers_nums_padded.len() <= MAX_COMM_R_ARITY,
+            "too many layers"
+        );
+
+        while comm_layers_nums_padded.len() < MAX_COMM_R_ARITY {
             comm_layers_nums_padded.push(num::AllocatedNum::alloc(
                 cs.namespace(|| format!("padding_{}", comm_layers_nums_padded.len())),
                 || Ok(Fr::zero()),
@@ -106,9 +111,10 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> Circuit<Bls12>
 
         // Verify hash(comm_layers) == comm_r
         {
-            let hash_num = PoseidonFunction::hash_md_circuit::<_>(
+            let hash_num = poseidon_hash(
                 &mut cs.namespace(|| "comm_layers_hash"),
-                &comm_layers_nums_padded,
+                comm_layers_nums_padded,
+                typenum::U16::PARAMETERS(),
             )?;
             constraint::equal(
                 cs,
@@ -340,7 +346,7 @@ mod tests {
 
     use bellperson::util_cs::test_cs::TestConstraintSystem;
     use ff::Field;
-    use generic_array::typenum::{U0, U2, U4, U8};
+    use generic_array::typenum::{Unsigned, U0, U2, U4, U8};
     use merkletree::store::StoreConfig;
     use rand::{Rng, SeedableRng};
     use rand_xorshift::XorShiftRng;
@@ -362,12 +368,12 @@ mod tests {
 
     #[test]
     fn nse_input_circuit_poseidon_sub_8_2() {
-        nse_input_circuit::<DiskTree<PoseidonHasher, U8, U2, U0>>(146, 2_900_771);
+        nse_input_circuit::<DiskTree<PoseidonHasher, U8, U2, U0>>(146, 2_900_147);
     }
 
     #[test]
     fn nse_input_circuit_poseidon_sub_8_4() {
-        nse_input_circuit::<DiskTree<PoseidonHasher, U8, U4, U0>>(146, 3_363_497);
+        nse_input_circuit::<DiskTree<PoseidonHasher, U8, U4, U0>>(146, 3_362_873);
     }
 
     fn nse_input_circuit<Tree: MerkleTreeTrait + 'static>(
