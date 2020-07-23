@@ -78,6 +78,7 @@ impl PoseidonArity for U16 {
         &*POSEIDON_CONSTANTS_16
     }
 }
+
 impl PoseidonArity for U24 {
     fn PARAMETERS() -> &'static PoseidonConstants<Bls12, Self> {
         &*POSEIDON_CONSTANTS_24
