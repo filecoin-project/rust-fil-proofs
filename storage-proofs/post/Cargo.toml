@@ -27,10 +27,14 @@ log = "0.4.7"
 hex = "0.4.0"
 generic-array = "0.13.2"
 anyhow = "1.0.23"
-neptune = { version = "1.0.1", features = ["gpu"] }
+neptune = "1.0.1"
 num_cpus = "1.10.1"
 
 [dev-dependencies]
 tempfile = "3"
 pretty_assertions = "0.6.1"
 rand_xorshift = "0.2.0"
+
+[features]
+default = []
+gpu = [ "neptune/gpu" ]

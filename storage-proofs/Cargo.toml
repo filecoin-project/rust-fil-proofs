@@ -14,10 +14,14 @@ storage-proofs-post = { path = "./post", version = "4.0.1" }
 storage-proofs-porep = { path = "./porep", version = "4.0.1" }
 
 [features]
-default = ["gpu"]
+default = []
 simd = ["storage-proofs-core/simd"]
 asm = ["storage-proofs-core/asm"]
-gpu = ["storage-proofs-core/gpu"]
+gpu = [
+    "storage-proofs-core/gpu",
+    "storage-proofs-post/gpu",
+    "storage-proofs-porep/gpu",
+]
 measurements = ["storage-proofs-core/measurements"]
 profile = ["measurements"]
 
