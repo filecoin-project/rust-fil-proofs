@@ -12,7 +12,8 @@ use storage_proofs_core::{
 use super::{
     batch_hasher::{batch_hash_expanded, truncate_hash},
     hash_comm_r, hash_prefix, Challenge, ChallengeRequirements, Challenges, Config, LayerProof,
-    NarrowStackedExpander, Parent, PrivateInputs, Proof, PublicInputs, PublicParams, SetupParams,
+    NarrowStackedExpander, NodeProof, Parent, PrivateInputs, Proof, PublicInputs, PublicParams,
+    SetupParams,
 };
 use crate::{encode, PoRep};
 
@@ -23,7 +24,7 @@ impl<'a, 'c, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> ProofScheme<'
     type SetupParams = SetupParams;
     type PublicInputs = PublicInputs<<Tree::Hasher as Hasher>::Domain, <G as Hasher>::Domain>;
     type PrivateInputs = PrivateInputs<Tree, G>;
-    type Proof = Vec<LayerProof<Tree, G>>;
+    type Proof = Proof<Tree, G>;
     type Requirements = ChallengeRequirements;
 
     fn setup(sp: &Self::SetupParams) -> Result<Self::PublicParams> {
@@ -92,10 +93,6 @@ impl<'a, 'c, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> ProofScheme<'
                         .gen_cached_proof(challenge.absolute_index as usize, Some(rows_to_discard))
                         .context("failed to create layer proof")?;
 
-                    // roots for the layers
-                    let mut comm_layers = priv_inputs.p_aux.comm_layers.clone();
-                    comm_layers.push(priv_inputs.p_aux.comm_replica);
-
                     let parents_proofs = if let Some((parents, parents_tree)) = pt {
                         parents
                             .iter()
@@ -114,12 +111,7 @@ impl<'a, 'c, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> ProofScheme<'
                         Vec::new()
                     };
 
-                    Ok(Proof::new(
-                        data_proof,
-                        layer_proof,
-                        parents_proofs,
-                        comm_layers,
-                    ))
+                    Ok(NodeProof::new(data_proof, layer_proof, parents_proofs))
                 };
 
             for (layer_challenge_index, layer_challenge) in challenges.clone().enumerate() {
@@ -146,7 +138,11 @@ impl<'a, 'c, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> ProofScheme<'
                             .expanded_parents(challenge.relative_index)
                             .collect();
                         let parents_tree = &priv_inputs.t_aux.layers[layer - 2];
-
+                        assert_eq!(
+                            parents.len(),
+                            config.degree_expander_expanded(),
+                            "invalid number of parents"
+                        );
                         generate_node_proof(
                             challenge,
                             &priv_inputs.t_aux.layers[layer - 1],
@@ -169,6 +165,11 @@ impl<'a, 'c, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> ProofScheme<'
                             .collect();
 
                         let parents_tree = &priv_inputs.t_aux.layers[layer - 2];
+                        assert_eq!(
+                            parents.len(),
+                            config.degree_butterfly,
+                            "invalid number of parents"
+                        );
 
                         generate_node_proof(
                             challenge,
@@ -204,7 +205,14 @@ impl<'a, 'c, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> ProofScheme<'
                 });
             }
 
-            partition_proofs.push(proofs);
+            // roots for the layers
+            let mut comm_layers = priv_inputs.p_aux.comm_layers.clone();
+            comm_layers.push(priv_inputs.p_aux.comm_replica);
+
+            partition_proofs.push(Proof {
+                layer_proofs: proofs,
+                comm_layers,
+            });
         }
 
         Ok(partition_proofs)
@@ -217,9 +225,9 @@ impl<'a, 'c, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> ProofScheme<'
     ) -> Result<bool> {
         let config = &pub_params.config;
 
-        let is_valid = partition_proofs.iter().enumerate().all(|(k, proofs)| {
+        let is_valid = partition_proofs.iter().enumerate().all(|(k, proof)| {
             let pub_inputs = Self::with_partition(pub_inputs.clone(), Some(k));
-            let tau = pub_inputs.tau.as_ref().expect("missing tau");
+            let tau = &pub_inputs.tau;
 
             let challenges = Challenges::new(
                 config,
@@ -228,7 +236,14 @@ impl<'a, 'c, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> ProofScheme<'
                 pub_inputs.seed,
             );
 
-            for (proof, challenge) in proofs.iter().zip(challenges) {
+            // verify comm_r
+            let last = proof.comm_layers.len() - 1;
+            let comm_layers = &proof.comm_layers;
+            let comm_r: <Tree::Hasher as Hasher>::Domain =
+                hash_comm_r(&comm_layers[..last], comm_layers[last]).into();
+            check_eq!(comm_r, tau.comm_r);
+
+            for (proof, challenge) in proof.layer_proofs.iter().zip(challenges) {
                 debug!("verifying challenge {:?}", challenge);
 
                 // -- First Layer
@@ -239,6 +254,7 @@ impl<'a, 'c, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> ProofScheme<'
                         pub_inputs.replica_id,
                         &proof.first_layer_proof,
                         &challenge.first_layer_challenge,
+                        comm_layers,
                     ),
                     "invalid first layer"
                 );
@@ -270,6 +286,7 @@ impl<'a, 'c, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> ProofScheme<'
                             proof,
                             challenge,
                             layer,
+                            comm_layers
                         ),
                         "invalid expander layer {}",
                         layer
@@ -303,6 +320,7 @@ impl<'a, 'c, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> ProofScheme<'
                             proof,
                             challenge,
                             layer,
+                            comm_layers
                         ),
                         "invalid butterfly layer {}",
                         layer
@@ -318,6 +336,7 @@ impl<'a, 'c, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> ProofScheme<'
                         &proof.last_layer_proof,
                         &challenge.last_layer_challenge,
                         config.num_layers(),
+                        comm_layers
                     ),
                     "invalid last layer"
                 );
@@ -339,7 +358,9 @@ impl<'a, 'c, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> ProofScheme<'
         _requirements: &ChallengeRequirements,
         _partitions: usize,
     ) -> bool {
-        todo!()
+        // TODO:
+
+        true
     }
 }
 
@@ -349,16 +370,11 @@ impl<'a, 'c, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher>
     fn verify_first_layer(
         tau: &<Self as PoRep<'c, Tree::Hasher, G>>::Tau,
         replica_id: <Tree::Hasher as Hasher>::Domain,
-        proof: &Proof<Tree, G>,
+        proof: &NodeProof<Tree, G>,
         challenge: &Challenge,
+        comm_layers: &[<Tree::Hasher as Hasher>::Domain],
     ) -> bool {
         let layer = 1;
-
-        // verify comm_r
-        let last = proof.comm_layers.len() - 1;
-        let comm_r: <Tree::Hasher as Hasher>::Domain =
-            hash_comm_r(&proof.comm_layers[..last], proof.comm_layers[last]).into();
-        check_eq!(comm_r, tau.comm_r);
 
         // verify data inclusion
         check!(proof.data_proof.verify());
@@ -366,16 +382,12 @@ impl<'a, 'c, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher>
 
         // verify layer inclusion
         check!(proof.layer_proof.verify());
-        check_eq!(proof.layer_proof.root(), proof.comm_layers[layer - 1]);
+        check_eq!(proof.layer_proof.root(), comm_layers[layer - 1]);
 
         // no parents for the mask layer
         check_eq!(proof.parents_proofs.len(), 0, "mask parents length");
 
-        let prefix = hash_prefix(
-            layer as u32,
-            challenge.relative_index,
-            challenge.window as u32,
-        );
+        let prefix = hash_prefix(layer as u32, challenge.absolute_index);
 
         let mut hasher = Sha256::new();
         // Hash prefix + replica id, each 32 bytes.
@@ -399,17 +411,12 @@ impl<'a, 'c, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher>
         config: &Config,
         tau: &<Self as PoRep<'c, Tree::Hasher, G>>::Tau,
         replica_id: <Tree::Hasher as Hasher>::Domain,
-        proof: &Proof<Tree, G>,
+        proof: &NodeProof<Tree, G>,
         challenge: &Challenge,
         layer: usize,
+        comm_layers: &[<Tree::Hasher as Hasher>::Domain],
     ) -> bool {
         let exp_parents = super::ExpanderGraph::from(config);
-
-        // verify comm_r
-        let last = proof.comm_layers.len() - 1;
-        let comm_r: <Tree::Hasher as Hasher>::Domain =
-            hash_comm_r(&proof.comm_layers[..last], proof.comm_layers[last]).into();
-        check_eq!(comm_r, tau.comm_r);
 
         // verify data inclusion
         check!(proof.data_proof.verify());
@@ -417,12 +424,12 @@ impl<'a, 'c, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher>
 
         // verify layer inclusion
         check!(proof.layer_proof.verify());
-        check_eq!(proof.layer_proof.root(), proof.comm_layers[layer - 1]);
+        check_eq!(proof.layer_proof.root(), comm_layers[layer - 1]);
 
         // Verify labeling
         for parent_proof in &proof.parents_proofs {
             check!(parent_proof.verify());
-            check_eq!(parent_proof.root(), proof.comm_layers[layer - 2]);
+            check_eq!(parent_proof.root(), comm_layers[layer - 2]);
         }
         let parent_indices = proof
             .parents_proofs
@@ -450,11 +457,7 @@ impl<'a, 'c, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher>
             .iter()
             .map(|parent_proof| parent_proof.leaf())
             .collect();
-        let prefix = hash_prefix(
-            layer as u32,
-            challenge.relative_index as u32,
-            challenge.window as u32,
-        );
+        let prefix = hash_prefix(layer as u32, challenge.absolute_index);
 
         let mut hasher = Sha256::new();
         // Hash prefix + replica id, each 32 bytes.
@@ -477,17 +480,12 @@ impl<'a, 'c, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher>
         config: &Config,
         tau: &<Self as PoRep<'c, Tree::Hasher, G>>::Tau,
         replica_id: <Tree::Hasher as Hasher>::Domain,
-        proof: &Proof<Tree, G>,
+        proof: &NodeProof<Tree, G>,
         challenge: &Challenge,
         layer: usize,
+        comm_layers: &[<Tree::Hasher as Hasher>::Domain],
     ) -> bool {
         let butterfly_parents = super::ButterflyGraph::from(config);
-
-        // verify comm_r
-        let last = proof.comm_layers.len() - 1;
-        let comm_r: <Tree::Hasher as Hasher>::Domain =
-            hash_comm_r(&proof.comm_layers[..last], proof.comm_layers[last]).into();
-        check_eq!(comm_r, tau.comm_r);
 
         // verify data inclusion
         check!(proof.data_proof.verify());
@@ -495,12 +493,12 @@ impl<'a, 'c, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher>
 
         // verify layer inclusion
         check!(proof.layer_proof.verify());
-        check_eq!(proof.layer_proof.root(), proof.comm_layers[layer - 1]);
+        check_eq!(proof.layer_proof.root(), comm_layers[layer - 1]);
 
         // Verify labeling
         for parent_proof in &proof.parents_proofs {
             check!(parent_proof.verify());
-            check_eq!(parent_proof.root(), proof.comm_layers[layer - 2]);
+            check_eq!(parent_proof.root(), comm_layers[layer - 2]);
         }
         let parent_indices = proof
             .parents_proofs
@@ -528,11 +526,8 @@ impl<'a, 'c, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher>
             .iter()
             .map(|parent_proof| parent_proof.leaf())
             .collect();
-        let prefix = hash_prefix(
-            layer as u32,
-            challenge.relative_index,
-            challenge.window as u32,
-        );
+
+        let prefix = hash_prefix(layer as u32, challenge.absolute_index);
 
         let mut hasher = Sha256::new();
         // Hash prefix + replica id, each 32 bytes.
@@ -562,17 +557,12 @@ impl<'a, 'c, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher>
         config: &Config,
         tau: &<Self as PoRep<'c, Tree::Hasher, G>>::Tau,
         replica_id: <Tree::Hasher as Hasher>::Domain,
-        proof: &Proof<Tree, G>,
+        proof: &NodeProof<Tree, G>,
         challenge: &Challenge,
         layer: usize,
+        comm_layers: &[<Tree::Hasher as Hasher>::Domain],
     ) -> bool {
         let butterfly_parents = super::ButterflyGraph::from(config);
-
-        // verify comm_r
-        let last = proof.comm_layers.len() - 1;
-        let comm_r: <Tree::Hasher as Hasher>::Domain =
-            hash_comm_r(&proof.comm_layers[..last], proof.comm_layers[last]).into();
-        check_eq!(comm_r, tau.comm_r);
 
         // verify data inclusion
         check!(proof.data_proof.verify());
@@ -580,12 +570,12 @@ impl<'a, 'c, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher>
 
         // verify layer inclusion
         check!(proof.layer_proof.verify());
-        check_eq!(proof.layer_proof.root(), proof.comm_layers[layer - 1]);
+        check_eq!(proof.layer_proof.root(), comm_layers[layer - 1]);
 
         // Verify labeling
         for parent_proof in &proof.parents_proofs {
             check!(parent_proof.verify());
-            check_eq!(parent_proof.root(), proof.comm_layers[layer - 2]);
+            check_eq!(parent_proof.root(), comm_layers[layer - 2]);
         }
         let parent_indices = proof
             .parents_proofs
@@ -613,11 +603,7 @@ impl<'a, 'c, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher>
             .iter()
             .map(|parent_proof| parent_proof.leaf())
             .collect();
-        let prefix = hash_prefix(
-            layer as u32,
-            challenge.relative_index,
-            challenge.window as u32,
-        );
+        let prefix = hash_prefix(layer as u32, challenge.absolute_index);
 
         let mut hasher = Sha256::new();
         // Hash prefix + replica id, each 32 bytes.
@@ -741,7 +727,7 @@ mod tests {
         > {
             replica_id,
             seed,
-            tau: Some(tau),
+            tau,
             k: None,
         };
 

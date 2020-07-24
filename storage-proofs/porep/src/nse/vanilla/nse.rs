@@ -2,13 +2,15 @@ use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
+use ff::Field;
 use generic_array::typenum::{Unsigned, U2};
 use merkletree::merkle::get_merkle_tree_leafs;
 use merkletree::store::{Store, StoreConfig};
+use neptune::poseidon::Poseidon;
 use paired::bls12_381::Fr;
 use serde::{Deserialize, Serialize};
 use storage_proofs_core::{
-    hasher::{Domain, HashFunction, Hasher, PoseidonDomain, PoseidonFunction, PoseidonMDArity},
+    hasher::{Domain, Hasher, POSEIDON_CONSTANTS_16},
     merkle::{
         split_config, split_config_and_replica, BinaryMerkleTree, DiskStore, LCStore, MerkleProof,
         MerkleTreeTrait, MerkleTreeWrapper,
@@ -24,6 +26,9 @@ pub struct NarrowStackedExpander<'a, Tree: 'a + MerkleTreeTrait, G: 'a + Hasher>
     _tree: PhantomData<&'a Tree>,
     _g: PhantomData<G>,
 }
+
+// TODO: switch to 15 once neptune supports it
+pub const MAX_COMM_R_ARITY: usize = 16;
 
 #[derive(Debug, Clone)]
 pub struct SetupParams {
@@ -165,7 +170,7 @@ pub struct Tau<D: Domain, E: Domain> {
 pub struct PublicInputs<D: Domain, S: Domain> {
     pub replica_id: D,
     pub seed: [u8; 32],
-    pub tau: Option<Tau<D, S>>,
+    pub tau: Tau<D, S>,
     /// Partition index
     pub k: Option<usize>,
 }
@@ -287,27 +292,49 @@ impl<Tree: MerkleTreeTrait, G: Hasher> TemporaryAuxCache<Tree, G> {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+pub struct Proof<Tree: MerkleTreeTrait, G: Hasher> {
+    /// The proofs for each `LayerChallenge`.
+    #[serde(bound(
+        serialize = "LayerProof<Tree, G>: Serialize",
+        deserialize = "LayerProof<Tree, G>: Deserialize<'de>"
+    ))]
+    pub layer_proofs: Vec<LayerProof<Tree, G>>,
+    /// The roots of the merkle tree layers, including the replica layer.
+    pub comm_layers: Vec<<Tree::Hasher as Hasher>::Domain>,
+}
+
+impl<Tree: MerkleTreeTrait, G: Hasher> Clone for Proof<Tree, G> {
+    fn clone(&self) -> Self {
+        Self {
+            layer_proofs: self.layer_proofs.clone(),
+            comm_layers: self.comm_layers.clone(),
+        }
+    }
+}
+
+/// A proof of a single `LayerChallenge`.
+#[derive(Debug, Serialize, Deserialize)]
 pub struct LayerProof<Tree: MerkleTreeTrait, G: Hasher> {
     #[serde(bound(
-        serialize = "Proof<Tree, G>: Serialize",
-        deserialize = "Proof<Tree, G>: Deserialize<'de>"
+        serialize = "NodeProof<Tree, G>: Serialize",
+        deserialize = "NodeProof<Tree, G>: Deserialize<'de>"
     ))]
-    pub first_layer_proof: Proof<Tree, G>,
+    pub first_layer_proof: NodeProof<Tree, G>,
     #[serde(bound(
-        serialize = "Proof<Tree, G>: Serialize",
-        deserialize = "Proof<Tree, G>: Deserialize<'de>"
+        serialize = "NodeProof<Tree, G>: Serialize",
+        deserialize = "NodeProof<Tree, G>: Deserialize<'de>"
     ))]
-    pub expander_layer_proofs: Vec<Proof<Tree, G>>,
+    pub expander_layer_proofs: Vec<NodeProof<Tree, G>>,
     #[serde(bound(
-        serialize = "Proof<Tree, G>: Serialize",
-        deserialize = "Proof<Tree, G>: Deserialize<'de>"
+        serialize = "NodeProof<Tree, G>: Serialize",
+        deserialize = "NodeProof<Tree, G>: Deserialize<'de>"
     ))]
-    pub butterfly_layer_proofs: Vec<Proof<Tree, G>>,
+    pub butterfly_layer_proofs: Vec<NodeProof<Tree, G>>,
     #[serde(bound(
-        serialize = "Proof<Tree, G>: Serialize",
-        deserialize = "Proof<Tree, G>: Deserialize<'de>"
+        serialize = "NodeProof<Tree, G>: Serialize",
+        deserialize = "NodeProof<Tree, G>: Deserialize<'de>"
     ))]
-    pub last_layer_proof: Proof<Tree, G>,
+    pub last_layer_proof: NodeProof<Tree, G>,
 }
 
 impl<Tree: MerkleTreeTrait, G: Hasher> Clone for LayerProof<Tree, G> {
@@ -321,8 +348,9 @@ impl<Tree: MerkleTreeTrait, G: Hasher> Clone for LayerProof<Tree, G> {
     }
 }
 
+/// A proof of a single `Challenge`.
 #[derive(Debug, Serialize, Deserialize)]
-pub struct Proof<Tree: MerkleTreeTrait, G: Hasher> {
+pub struct NodeProof<Tree: MerkleTreeTrait, G: Hasher> {
     #[serde(bound(
         serialize = "MerkleProof<G, U2>: Serialize",
         deserialize = "MerkleProof<G, U2>: Deserialize<'de>"
@@ -339,39 +367,34 @@ pub struct Proof<Tree: MerkleTreeTrait, G: Hasher> {
     ))]
     pub parents_proofs:
         Vec<MerkleProof<Tree::Hasher, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>>,
-    /// The roots of the merkle tree layers, including the replica layer.
-    pub comm_layers: Vec<<Tree::Hasher as Hasher>::Domain>,
     _tree: PhantomData<Tree>,
     _g: PhantomData<G>,
 }
 
-impl<Tree: MerkleTreeTrait, G: Hasher> Proof<Tree, G> {
+impl<Tree: MerkleTreeTrait, G: Hasher> NodeProof<Tree, G> {
     pub fn new(
         data_proof: MerkleProof<G, U2>,
         layer_proof: MerkleProof<Tree::Hasher, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>,
         parents_proofs: Vec<
             MerkleProof<Tree::Hasher, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>,
         >,
-        comm_layers: Vec<<Tree::Hasher as Hasher>::Domain>,
     ) -> Self {
         Self {
             data_proof,
             layer_proof,
             parents_proofs,
-            comm_layers,
             _tree: Default::default(),
             _g: Default::default(),
         }
     }
 }
 
-impl<Tree: MerkleTreeTrait, G: Hasher> Clone for Proof<Tree, G> {
+impl<Tree: MerkleTreeTrait, G: Hasher> Clone for NodeProof<Tree, G> {
     fn clone(&self) -> Self {
         Self {
             data_proof: self.data_proof.clone(),
             layer_proof: self.layer_proof.clone(),
             parents_proofs: self.parents_proofs.clone(),
-            comm_layers: self.comm_layers.clone(),
             _tree: Default::default(),
             _g: Default::default(),
         }
@@ -380,20 +403,21 @@ impl<Tree: MerkleTreeTrait, G: Hasher> Clone for Proof<Tree, G> {
 
 /// Calculate the comm_r hash.
 pub fn hash_comm_r<D: Domain>(comm_layers: &[D], comm_replica: D) -> Fr {
-    let arity = PoseidonMDArity::to_usize();
-    let mut data: Vec<PoseidonDomain> = Vec::with_capacity(arity);
+    assert!(comm_layers.len() <= MAX_COMM_R_ARITY, "too many layers");
+
+    let mut data: Vec<Fr> = Vec::with_capacity(MAX_COMM_R_ARITY);
     data.extend(comm_layers.iter().map(|v| {
         let fr: Fr = (*v).into();
-        let d: PoseidonDomain = fr.into();
-        d
+        fr
     }));
     let comm_replica_fr: Fr = comm_replica.into();
-    data.push(comm_replica_fr.into());
+    data.push(comm_replica_fr);
 
-    // pad for MD
-    while data.len() % arity != 0 {
-        data.push(PoseidonDomain::default());
+    // pad
+    while data.len() < MAX_COMM_R_ARITY {
+        data.push(Fr::zero());
     }
 
-    PoseidonFunction::hash_md(&data).into()
+    let mut p = Poseidon::new_with_preimage(&data, &POSEIDON_CONSTANTS_16);
+    p.hash().into()
 }
