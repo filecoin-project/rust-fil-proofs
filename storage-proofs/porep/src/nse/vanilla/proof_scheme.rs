@@ -138,7 +138,11 @@ impl<'a, 'c, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> ProofScheme<'
                             .expanded_parents(challenge.relative_index)
                             .collect();
                         let parents_tree = &priv_inputs.t_aux.layers[layer - 2];
-
+                        assert_eq!(
+                            parents.len(),
+                            config.degree_expander_expanded(),
+                            "invalid number of parents"
+                        );
                         generate_node_proof(
                             challenge,
                             &priv_inputs.t_aux.layers[layer - 1],
@@ -161,6 +165,11 @@ impl<'a, 'c, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> ProofScheme<'
                             .collect();
 
                         let parents_tree = &priv_inputs.t_aux.layers[layer - 2];
+                        assert_eq!(
+                            parents.len(),
+                            config.degree_butterfly,
+                            "invalid number of parents"
+                        );
 
                         generate_node_proof(
                             challenge,
