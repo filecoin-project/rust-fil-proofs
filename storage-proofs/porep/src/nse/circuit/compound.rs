@@ -251,7 +251,7 @@ mod tests {
         let config = Config {
             k: 2,
             num_nodes_window: nodes / windows,
-            degree_expander: 3,
+            degree_expander: 4,
             degree_butterfly: 2,
             num_expander_layers: 3,
             num_butterfly_layers: 2,
