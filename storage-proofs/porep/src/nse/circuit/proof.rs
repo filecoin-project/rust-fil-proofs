@@ -46,7 +46,7 @@ impl<Tree: MerkleTreeTrait, G: Hasher> LayerProof<Tree, G> {
         LayerProof {
             first_layer_proof: NodeProof::blank(config, 0),
             expander_layer_proofs: (0..config.num_expander_layers - 1)
-                .map(|_| NodeProof::blank(config, config.degree_expander))
+                .map(|_| NodeProof::blank(config, config.degree_expander_expanded()))
                 .collect(),
             butterfly_layer_proofs: (0..config.num_butterfly_layers - 1)
                 .map(|_| NodeProof::blank(config, config.degree_butterfly))

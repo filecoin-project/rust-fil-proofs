@@ -165,6 +165,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> LayerProof<Tree, 
             let proof = first_layer_proof;
             let layer = 1;
             let mut cs = cs.namespace(|| "first_layer");
+            assert_eq!(proof.parents.len(), 0, "invalid number of parents");
 
             // PublicInput: Challenge
             let challenge_num = UInt64::alloc(cs.namespace(|| "challenge_num"), proof.challenge)?;
@@ -190,9 +191,15 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> LayerProof<Tree, 
             )?;
         }
 
+        assert_eq!(expander_layer_proofs.len(), config.num_expander_layers - 1);
         for (i, proof) in expander_layer_proofs.into_iter().enumerate() {
             let layer = i + 2;
             let mut cs = cs.namespace(|| format!("expander_layer_{}", layer));
+            assert_eq!(
+                proof.parents.len(),
+                config.degree_expander_expanded(),
+                "invalid number of parents"
+            );
 
             // PublicInput: Challenge
             let challenge_num = UInt64::alloc(cs.namespace(|| "challenge_num"), proof.challenge)?;
@@ -222,8 +229,19 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> LayerProof<Tree, 
             )?;
         }
 
+        assert_eq!(
+            butterfly_layer_proofs.len(),
+            config.num_butterfly_layers - 1
+        );
         for (i, proof) in butterfly_layer_proofs.into_iter().enumerate() {
             let layer = i + config.num_expander_layers + 1;
+
+            assert_eq!(
+                proof.parents.len(),
+                config.degree_butterfly,
+                "invalid number of parents"
+            );
+
             let mut cs = cs.namespace(|| format!("butterfly_layer_{}", layer));
 
             let challenge_num = UInt64::alloc(cs.namespace(|| "challenge_num"), proof.challenge)?;
@@ -256,6 +274,11 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> LayerProof<Tree, 
             let proof = last_layer_proof;
             let mut cs = cs.namespace(|| "last_layer");
             let layer = config.num_layers();
+            assert_eq!(
+                proof.parents.len(),
+                config.degree_butterfly,
+                "invalid number of parents"
+            );
 
             // PublicInput: Challenge
             let challenge_num = UInt64::alloc(cs.namespace(|| "challenge_num"), proof.challenge)?;

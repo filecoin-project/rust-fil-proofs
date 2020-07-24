@@ -48,4 +48,9 @@ impl Config {
     pub fn is_layer_replica(&self, layer: usize) -> bool {
         layer == self.num_layers()
     }
+
+    /// The number of parents in an expander layer, after expansion.
+    pub fn degree_expander_expanded(&self) -> usize {
+        self.degree_expander * self.k as usize
+    }
 }
