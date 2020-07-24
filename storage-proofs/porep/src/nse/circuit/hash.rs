@@ -153,6 +153,7 @@ fn batch_expansion<CS: ConstraintSystem<Bls12>>(
         parents_data.len() % 2 == 0,
         "number of parents must be even"
     );
+    assert_eq!(degree % 2, 0, "degree must be even");
     assert_eq!(parents_data.len(), degree * k, "invalid number of parents");
 
     let mut expanded = Vec::new();

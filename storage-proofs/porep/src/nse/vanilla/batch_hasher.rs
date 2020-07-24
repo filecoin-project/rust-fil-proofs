@@ -20,8 +20,8 @@ pub fn batch_hash(
     parents: &[Parent],
     data: &[u8],
 ) -> [u8; 32] {
-    assert!(parents.len() % 2 == 0, "number of parents must be even");
-    assert!(degree % 2 == 0, "degree must be even");
+    assert_eq!(parents.len() % 2, 0, "number of parents must be even");
+    assert_eq!(degree % 2, 0, "degree must be even");
     assert_eq!(parents.len(), degree * k, "invalid number of parents");
     let modulus = Fr::char();
     let k = k as u32;
