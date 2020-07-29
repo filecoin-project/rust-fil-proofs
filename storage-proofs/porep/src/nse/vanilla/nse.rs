@@ -2,7 +2,6 @@ use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
-use ff::Field;
 use generic_array::typenum::{Unsigned, U2};
 use merkletree::merkle::get_merkle_tree_leafs;
 use merkletree::store::{Store, StoreConfig};
@@ -10,7 +9,7 @@ use neptune::poseidon::Poseidon;
 use paired::bls12_381::Fr;
 use serde::{Deserialize, Serialize};
 use storage_proofs_core::{
-    hasher::{Domain, Hasher, POSEIDON_CONSTANTS_16},
+    hasher::{Domain, Hasher, POSEIDON_CONSTANTS_15_BASE},
     merkle::{
         split_config, split_config_and_replica, BinaryMerkleTree, DiskStore, LCStore, MerkleProof,
         MerkleTreeTrait, MerkleTreeWrapper,
@@ -27,8 +26,7 @@ pub struct NarrowStackedExpander<'a, Tree: 'a + MerkleTreeTrait, G: 'a + Hasher>
     _g: PhantomData<G>,
 }
 
-// TODO: switch to 15 once neptune supports it
-pub const MAX_COMM_R_ARITY: usize = 16;
+pub const MAX_COMM_R_ARITY: usize = 15;
 
 #[derive(Debug, Clone)]
 pub struct SetupParams {
@@ -405,7 +403,7 @@ impl<Tree: MerkleTreeTrait, G: Hasher> Clone for NodeProof<Tree, G> {
 pub fn hash_comm_r<D: Domain>(comm_layers: &[D], comm_replica: D) -> Fr {
     assert!(comm_layers.len() <= MAX_COMM_R_ARITY, "too many layers");
 
-    let mut data: Vec<Fr> = Vec::with_capacity(MAX_COMM_R_ARITY);
+    let mut data: Vec<Fr> = Vec::with_capacity(comm_layers.len() + 1);
     data.extend(comm_layers.iter().map(|v| {
         let fr: Fr = (*v).into();
         fr
@@ -413,11 +411,7 @@ pub fn hash_comm_r<D: Domain>(comm_layers: &[D], comm_replica: D) -> Fr {
     let comm_replica_fr: Fr = comm_replica.into();
     data.push(comm_replica_fr);
 
-    // pad
-    while data.len() < MAX_COMM_R_ARITY {
-        data.push(Fr::zero());
-    }
-
-    let mut p = Poseidon::new_with_preimage(&data, &POSEIDON_CONSTANTS_16);
+    let c = POSEIDON_CONSTANTS_15_BASE.with_length(data.len());
+    let mut p = Poseidon::new_with_preimage(&data, &c);
     p.hash().into()
 }
