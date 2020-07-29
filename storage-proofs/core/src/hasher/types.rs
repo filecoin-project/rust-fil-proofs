@@ -1,6 +1,6 @@
 use bellperson::gadgets::{boolean, num};
 use bellperson::{ConstraintSystem, SynthesisError};
-use generic_array::typenum::{U0, U11, U16, U2, U24, U36, U4, U8};
+use generic_array::typenum::{U0, U11, U15, U16, U2, U24, U36, U4, U8};
 use lazy_static::lazy_static;
 use merkletree::hash::{Algorithm as LightAlgorithm, Hashable as LightHashable};
 use merkletree::merkle::Element;
@@ -26,6 +26,8 @@ lazy_static! {
     pub static ref POSEIDON_CONSTANTS_2: PoseidonConstants::<Bls12, U2> = PoseidonConstants::new();
     pub static ref POSEIDON_CONSTANTS_4: PoseidonConstants::<Bls12, U4> = PoseidonConstants::new();
     pub static ref POSEIDON_CONSTANTS_8: PoseidonConstants::<Bls12, U8> = PoseidonConstants::new();
+    pub static ref POSEIDON_CONSTANTS_15_BASE: PoseidonConstants::<Bls12, U15> =
+        PoseidonConstants::new_constant_length(15);
     pub static ref POSEIDON_CONSTANTS_16: PoseidonConstants::<Bls12, U16> =
         PoseidonConstants::new();
     pub static ref POSEIDON_CONSTANTS_24: PoseidonConstants::<Bls12, U24> =
