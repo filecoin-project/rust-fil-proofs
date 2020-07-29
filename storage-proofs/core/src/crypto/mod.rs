@@ -17,6 +17,6 @@ pub fn derive_porep_domain_seed(
     Sha256::new()
         .chain(domain_separation_tag.0)
         .chain(porep_id)
-        .result()
+        .finalize()
         .into()
 }

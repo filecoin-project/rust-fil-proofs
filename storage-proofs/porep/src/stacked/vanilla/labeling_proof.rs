@@ -37,15 +37,15 @@ impl<H: Hasher> LabelingProof<H> {
         // node id
         buffer[36..44].copy_from_slice(&(self.node as u64).to_be_bytes());
 
-        hasher.input(&buffer[..]);
+        hasher.update(&buffer[..]);
 
         // parents
         for parent in &self.parents {
             let data = AsRef::<[u8]>::as_ref(parent);
-            hasher.input(data);
+            hasher.update(data);
         }
 
-        bytes_into_fr_repr_safe(hasher.result().as_ref()).into()
+        bytes_into_fr_repr_safe(hasher.finalize().as_ref()).into()
     }
 
     pub fn verify(&self, replica_id: &H::Domain, expected_label: &H::Domain) -> bool {

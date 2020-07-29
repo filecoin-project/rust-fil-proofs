@@ -7,10 +7,20 @@ and this project adheres to [Semantic Versioning](https://book.async.rs/overview
 
 ## Unreleased
 
+## 4.0.5 - 2020-07-28
+
+- Include proofs and snark security audit documents, with updated references [1233](https://github.com/filecoin-project/rust-fil-proofs/pull/1233)
+- Remove `stacked` benchmark from benchy (broken) [1229](https://github.com/filecoin-project/rust-fil-proofs/pull/1229)
+- Update range for feistel tests [1228](https://github.com/filecoin-project/rust-fil-proofs/pull/1228)
+- Allow for compilation on aarch64 [1204](https://github.com/filecoin-project/rust-fil-proofs/pull/1204)
+- Implement `fauxrep2`: a testable fake replication API [1218]((https://github.com/filecoin-project/rust-fil-proofs/pull/1218)
+- Fix CI `metrics_capture` jobs from consistently failing [1215](https://github.com/filecoin-project/rust-fil-proofs/pull/1215)
+- Correct `rows_to_discard` value during post [1220](https://github.com/filecoin-project/rust-fil-proofs/pull/1220)
+
 ## 4.0.4 - 2020-07-15
 
 - Default parent cache path to use FIL_PROOFS_CACHE_DIR if set [1207](https://github.com/filecoin-project/rust-fil-proofs/pull/1207)
-- Investigate CI metrics capture [1212](https://github.com/filecoin-project/rust-fil-proofs/pull/1212) and [1213] (https://github.com/filecoin-project/rust-fil-proofs/pull/1213)
+- Investigate CI metrics capture [1212](https://github.com/filecoin-project/rust-fil-proofs/pull/1212) and [1213](https://github.com/filecoin-project/rust-fil-proofs/pull/1213)
 - Additional README updates and corrections [1211](https://github.com/filecoin-project/rust-fil-proofs/pull/1211)
 - Update README [1208](https://github.com/filecoin-project/rust-fil-proofs/pull/1208)
 - Swap buffers instead of memcpy in generate_labels [1197](https://github.com/filecoin-project/rust-fil-proofs/pull/1197)
@@ -76,7 +86,8 @@ and this project adheres to [Semantic Versioning](https://book.async.rs/overview
 
 - Initial stable release
 
-[Unreleased]: https://github.com/filecoin-project/rust-fil-proofs/compare/v4.0.4...HEAD
+[Unreleased]: https://github.com/filecoin-project/rust-fil-proofs/compare/v4.0.5...HEAD
+[4.0.5]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v4.0.5
 [4.0.4]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v4.0.4
 [4.0.3]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v4.0.3
 [4.0.2]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v4.0.2

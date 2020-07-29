@@ -55,7 +55,7 @@ impl LayerChallenges {
                     .chain(replica_id.into_bytes())
                     .chain(seed)
                     .chain(&j.to_le_bytes())
-                    .result();
+                    .finalize();
 
                 let big_challenge = BigUint::from_bytes_le(hash.as_ref());
 

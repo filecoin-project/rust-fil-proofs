@@ -180,7 +180,7 @@ mod tests {
             let p = encode(i, &[1, 2, 3, 4], precomputed);
             let v = decode(p, &[1, 2, 3, 4], precomputed);
             let equal = i == v;
-            let in_range = p <= n;
+            let in_range = p < n;
             if expect_success {
                 assert!(equal, "failed to permute (n = {})", n);
                 assert!(in_range, "output number is too big (n = {})", n);

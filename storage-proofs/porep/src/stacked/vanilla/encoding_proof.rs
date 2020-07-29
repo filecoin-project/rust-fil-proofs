@@ -39,14 +39,14 @@ impl<H: Hasher> EncodingProof<H> {
         // node id
         buffer[36..44].copy_from_slice(&(self.node as u64).to_be_bytes());
 
-        hasher.input(&buffer[..]);
+        hasher.update(&buffer[..]);
 
         // parents
         for parent in &self.parents {
-            hasher.input(AsRef::<[u8]>::as_ref(parent));
+            hasher.update(AsRef::<[u8]>::as_ref(parent));
         }
 
-        bytes_into_fr_repr_safe(hasher.result().as_ref()).into()
+        bytes_into_fr_repr_safe(hasher.finalize().as_ref()).into()
     }
 
     pub fn verify<G: Hasher>(

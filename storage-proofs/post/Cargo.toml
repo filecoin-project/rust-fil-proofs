@@ -1,6 +1,6 @@
 [package]
 name = "storage-proofs-post"
-version = "4.0.4"
+version = "4.0.5"
 authors = ["dignifiedquire <me@dignifiedquire.com>"]
 license = "MIT OR Apache-2.0"
 description = "Proofs of Space Time"
@@ -14,15 +14,15 @@ rand = "0.7"
 merkletree = "0.21.0"
 byteorder = "1"
 crossbeam = "0.7.3"
-sha2 = { version = "0.8.3", package = "sha2ni" }
+sha2 = "0.9.1"
 rayon = "1.0.0"
 serde = { version = "1.0", features = ["derive"]}
 blake2b_simd = "0.5"
 blake2s_simd = "0.5"
-ff = { version = "0.2.1", package = "fff" }
+ff = { version = "0.2.3", package = "fff" }
 bellperson = "0.9.1"
 paired = { version = "0.20.0", features = ["serde"] }
-fil-sapling-crypto = "0.6.0"
+fil-sapling-crypto = "0.6.3"
 log = "0.4.7"
 hex = "0.4.0"
 generic-array = "0.13.2"

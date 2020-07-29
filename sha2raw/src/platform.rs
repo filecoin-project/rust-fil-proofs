@@ -1,5 +1,3 @@
-use raw_cpuid::CpuId;
-
 #[allow(dead_code)]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum Platform {
@@ -16,7 +14,7 @@ pub struct Implementation(Platform);
 impl Implementation {
     pub fn detect() -> Self {
         // Try the different implementations in order of how fast/modern they are.
-        #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+        #[cfg(target_arch = "x86_64")]
         {
             if let Some(sha_impl) = Self::sha_if_supported() {
                 return sha_impl;
@@ -36,16 +34,12 @@ impl Implementation {
         Implementation(Platform::Portable)
     }
 
-    #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+    #[cfg(target_arch = "x86_64")]
     #[allow(unreachable_code)]
     pub fn sha_if_supported() -> Option<Self> {
         // Use raw_cpuid instead of is_x86_feature_detected, to ensure the check
         // never happens at compile time.
-        let cpuid = CpuId::new();
-        let is_runtime_ok = cpuid
-            .get_extended_feature_info()
-            .map(|info| info.has_sha())
-            .unwrap_or_default();
+        let is_runtime_ok = cpuid_bool::cpuid_bool!("sha");
 
         #[cfg(target_feature = "sha")]
         {

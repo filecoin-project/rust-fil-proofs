@@ -176,13 +176,13 @@ pub fn generate_sector_challenge<T: Domain>(
     prover_id: T,
 ) -> Result<u64> {
     let mut hasher = Sha256::new();
-    hasher.input(AsRef::<[u8]>::as_ref(&prover_id));
-    hasher.input(AsRef::<[u8]>::as_ref(&randomness));
-    hasher.input(&n.to_le_bytes()[..]);
+    hasher.update(AsRef::<[u8]>::as_ref(&prover_id));
+    hasher.update(AsRef::<[u8]>::as_ref(&randomness));
+    hasher.update(&n.to_le_bytes()[..]);
 
-    let hash = hasher.result();
+    let hash = hasher.finalize();
 
-    let sector_challenge = LittleEndian::read_u64(&hash.as_ref()[..8]);
+    let sector_challenge = LittleEndian::read_u64(&hash[..8]);
     let sector_index = sector_challenge % sector_set_len;
 
     Ok(sector_index)
@@ -218,12 +218,12 @@ pub fn generate_leaf_challenge<T: Domain>(
     leaf_challenge_index: u64,
 ) -> Result<u64> {
     let mut hasher = Sha256::new();
-    hasher.input(AsRef::<[u8]>::as_ref(&randomness));
-    hasher.input(&sector_id.to_le_bytes()[..]);
-    hasher.input(&leaf_challenge_index.to_le_bytes()[..]);
-    let hash = hasher.result();
+    hasher.update(AsRef::<[u8]>::as_ref(&randomness));
+    hasher.update(&sector_id.to_le_bytes()[..]);
+    hasher.update(&leaf_challenge_index.to_le_bytes()[..]);
+    let hash = hasher.finalize();
 
-    let leaf_challenge = LittleEndian::read_u64(&hash.as_ref()[..8]);
+    let leaf_challenge = LittleEndian::read_u64(&hash[..8]);
 
     let challenged_range_index = leaf_challenge % (pub_params.sector_size / NODE_SIZE as u64);
 

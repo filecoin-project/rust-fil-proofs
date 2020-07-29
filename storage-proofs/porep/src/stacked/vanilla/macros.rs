@@ -43,3 +43,17 @@ macro_rules! check {
         }
     };
 }
+
+macro_rules! prefetch {
+    ($val:expr) => {
+        #[cfg(any(target_arch = "x86_64", target_arch = "x86"))]
+        unsafe {
+            #[cfg(target_arch = "x86")]
+            use std::arch::x86::*;
+            #[cfg(target_arch = "x86_64")]
+            use std::arch::x86_64::*;
+
+            _mm_prefetch($val, _MM_HINT_T0);
+        }
+    };
+}

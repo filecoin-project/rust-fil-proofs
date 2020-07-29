@@ -1,7 +1,7 @@
 [package]
 name = "fil-proofs-tooling"
 description = "Tooling for rust-fil-proofs"
-version = "4.0.4"
+version = "4.0.5"
 authors = ["dignifiedquire <dignifiedquire@gmail.com>"]
 license = "MIT OR Apache-2.0"
 publish = false
@@ -25,7 +25,7 @@ chrono = { version = "0.4.7", features = ["serde"] }
 memmap = "0.7.0"
 bellperson = "0.9.1"
 paired = "0.20.0"
-fil-sapling-crypto = "0.6.0"
+fil-sapling-crypto = "0.6.3"
 rand = "0.7"
 storage-proofs = { path = "../storage-proofs"}
 filecoin-proofs = { path = "../filecoin-proofs"}
@@ -34,7 +34,6 @@ cpu-time = "1.0.0"
 git2 = "0.13.6"
 heim = { version = "0.1.0-beta.1", features = ["host", "memory", "cpu"] }
 async-std = "1.6"
-raw-cpuid = "7.0.3"
 blake2s_simd = "0.5.6"
 fil_logger = "0.1"
 log = "0.4.8"
@@ -42,7 +41,7 @@ uom = "0.28"
 merkletree = "0.21.0"
 bincode = "1.1.2"
 anyhow = "1.0.23"
-ff = { version = "0.2.0", package = "fff" }
+ff = { version = "0.2.3", package = "fff" }
 rand_xorshift = "0.2.0"
 bytefmt = "0.1.7"
 rayon = "1.3.0"
@@ -55,3 +54,7 @@ default = ["gpu", "measurements"]
 gpu = ["storage-proofs/gpu", "filecoin-proofs/gpu", "bellperson/gpu", "fil-sapling-crypto/gpu"]
 measurements = ["storage-proofs/measurements"]
 profile = ["storage-proofs/profile", "measurements"]
+
+
+[target.'cfg(target_arch = "x86_64")'.dependencies]
+raw-cpuid = "7.0.3"

@@ -1,6 +1,6 @@
 [package]
 name = "storage-proofs-core"
-version = "4.0.4"
+version = "4.0.5"
 authors = ["dignifiedquire <me@dignifiedquire.com>"]
 description = "Core parts for proofs of storage"
 license = "MIT OR Apache-2.0"
@@ -21,7 +21,7 @@ lazy_static = "1.2"
 memmap = "0.7"
 aes = "0.3"
 block-modes = "0.3"
-sha2 = { version = "0.8.3", package = "sha2ni" }
+sha2 = "0.9.1"
 tempfile = "3"
 fs2 = "0.4"
 rayon = "1.0.0"
@@ -29,10 +29,10 @@ serde = { version = "1.0", features = ["derive"]}
 blake2b_simd = "0.5"
 blake2s_simd = "0.5"
 toml = "0.5"
-ff = { version = "0.2.1", package = "fff" }
+ff = { version = "0.2.3", package = "fff" }
 bellperson = "0.9.1"
 paired = { version = "0.20.0", features = ["serde"] }
-fil-sapling-crypto = "0.6.0"
+fil-sapling-crypto = "0.6.3"
 serde_json = "1.0"
 log = "0.4.7"
 rand_chacha = "0.2.1"

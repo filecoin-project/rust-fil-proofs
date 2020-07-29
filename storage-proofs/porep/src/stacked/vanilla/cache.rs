@@ -247,13 +247,13 @@ where
 {
     let mut hasher = Sha256::default();
 
-    hasher.input(H::name());
-    hasher.input(graph.identifier());
+    hasher.update(H::name());
+    hasher.update(graph.identifier());
     for key in &graph.feistel_keys {
-        hasher.input(key.to_le_bytes());
+        hasher.update(key.to_le_bytes());
     }
-    hasher.input(cache_entries.to_le_bytes());
-    let h = hasher.result();
+    hasher.update(cache_entries.to_le_bytes());
+    let h = hasher.finalize();
     PathBuf::from(parent_cache_dir_name()).join(format!(
         "v{}-sdr-parent-{}.cache",
         VERSION,
