@@ -24,5 +24,3 @@ gpu = [
 ]
 measurements = ["storage-proofs-core/measurements"]
 profile = ["measurements"]
-
-
