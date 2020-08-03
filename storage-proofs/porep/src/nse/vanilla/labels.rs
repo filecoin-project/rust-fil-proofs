@@ -7,9 +7,9 @@ use rayon::prelude::*;
 use rust_fil_nse_gpu as gpu;
 use sha2raw::Sha256;
 use storage_proofs_core::{
-    settings,
     hasher::{Domain, Hasher},
     merkle::{DiskStore, DiskTree, LCTree, MerkleTreeTrait, MerkleTreeWrapper},
+    settings,
     util::NODE_SIZE,
 };
 
@@ -538,7 +538,7 @@ where
         // GPU, fast version
         use storage_proofs_core::fr32::fr_into_bytes;
         let gpu_conf = to_gpu_config(conf);
-        let pool = gpu::SealerPool::new(
+        let mut pool = gpu::SealerPool::new(
             gpu::utils::all_devices()?,
             gpu_conf,
             gpu::TreeOptions::Enabled { rows_to_discard: 0 },
