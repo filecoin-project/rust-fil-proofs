@@ -28,7 +28,7 @@ pub struct Settings {
     pub window_post_synthesis_num_cpus: u32,
     pub parameter_cache: String,
     pub parent_cache: String,
-    pub use_gpu_nse: bool
+    pub use_gpu_nse: bool,
 }
 
 impl Default for Settings {
