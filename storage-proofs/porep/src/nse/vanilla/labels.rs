@@ -535,6 +535,7 @@ where
         })
         .collect()
     } else {
+        println!("GPU version is running!");
         // GPU, fast version
         use storage_proofs_core::fr32::fr_into_bytes;
         let gpu_conf = to_gpu_config(conf);
