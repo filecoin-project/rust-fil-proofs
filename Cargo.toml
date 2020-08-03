@@ -9,3 +9,7 @@ members = [
   "fil-proofs-tooling",
   "sha2raw"
 ]
+
+
+[patch.crates-io]
+rust-fil-nse-gpu = { git = "https://github.com/filecoin-project/rust-fil-nse-gpu", branch="fix-checks" }
