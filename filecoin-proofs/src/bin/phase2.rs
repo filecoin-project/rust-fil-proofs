@@ -1,3 +1,4 @@
+use std::env;
 use std::fs::{self, File};
 use std::io::{self, BufReader, BufWriter};
 use std::path::Path;
@@ -8,7 +9,6 @@ use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
 use clap::{App, AppSettings, Arg, ArgGroup, SubCommand};
-
 use filecoin_proofs::constants::*;
 use filecoin_proofs::parameters::{
     setup_params, window_post_public_params, winning_post_public_params,
@@ -209,7 +209,7 @@ fn params_filename(
 }
 
 // Parses a phase2 parameters filename into the tuple:
-// (proof, hasher, sector-size, head, param-number, param-size).
+// (proof, hasher, sector-size, head, param-number, param-size, is-raw).
 fn parse_params_filename(path: &str) -> (Proof, Hasher, Sector, String, usize, ParamSize, bool) {
     // Remove directories from the path.
     let filename = path.rsplitn(2, '/').next().unwrap();
@@ -254,6 +254,10 @@ fn parse_params_filename(path: &str) -> (Proof, Hasher, Sector, String, usize, P
     };
 
     let raw_fmt = split.get(6) == Some(&"raw");
+
+    if param_size == ParamSize::Large && raw_fmt {
+        unimplemented!("large-raw params are not currently supported: {}", path);
+    }
 
     (
         proof,
@@ -442,8 +446,6 @@ fn create_initial_params<Tree: 'static + MerkleTreeTrait>(
         ParamSize::Large,
         false,
     );
-    let small_path = params_filename(proof, hasher, sector_size, &head, 0, ParamSize::Small, true);
-
     {
         info!("writing large initial params to file: {}", large_path);
         let file = File::create(&large_path).unwrap();
@@ -452,6 +454,10 @@ fn create_initial_params<Tree: 'static + MerkleTreeTrait>(
         info!("finished writing large params to file");
     }
 
+    // TODO: enable writing small-raw initial params when we are able to convert `MPCParameters` to
+    // `MPCSmall` (without having to deserialize the large params into small).
+    /*
+    let small_path = params_filename(proof, hasher, sector_size, &head, 0, ParamSize::Small, true);
     {
         info!("writing small initial params to file: {}", small_path);
         let file = File::create(&small_path).unwrap();
@@ -459,6 +465,7 @@ fn create_initial_params<Tree: 'static + MerkleTreeTrait>(
         params.write_small(&mut writer).unwrap();
         info!("finished writing small params to file");
     }
+    */
 
     info!(
         "successfully created and wrote initial params for circuit: {}-{}-{}-{}, dt_total={}s",
@@ -1020,6 +1027,11 @@ fn setup_logger(log_filename: &str) {
 
 #[allow(clippy::cognitive_complexity)]
 fn main() {
+    match env::var("RUST_BACKTRACE") {
+        Ok(s) if s == "1" || s == "full" => {}
+        _ => env::set_var("RUST_BACKTRACE", "1"),
+    };
+
     let new_command = SubCommand::with_name("new")
         .about("Create initial phase2 parameters for circuit")
         .arg(
@@ -1115,6 +1127,7 @@ fn main() {
                 .takes_value(false)
                 .help("Don't use raw output format (slow to read for next participant)"),
         );
+
     let contribute_non_streaming_command = SubCommand::with_name("contribute-non-streaming")
         .about("Contribute to parameters")
         .arg(
