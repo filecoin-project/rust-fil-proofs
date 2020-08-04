@@ -209,7 +209,7 @@ fn params_filename(
 }
 
 // Parses a phase2 parameters filename into the tuple:
-// (proof, hasher, sector-size, head, param-number, param-size).
+// (proof, hasher, sector-size, head, param-number, param-size, is-raw).
 fn parse_params_filename(path: &str) -> (Proof, Hasher, Sector, String, usize, ParamSize, bool) {
     // Remove directories from the path.
     let filename = path.rsplitn(2, '/').next().unwrap();
@@ -254,6 +254,10 @@ fn parse_params_filename(path: &str) -> (Proof, Hasher, Sector, String, usize, P
     };
 
     let raw_fmt = split.get(6) == Some(&"raw");
+
+    if param_size.is_large() && raw_fmt {
+        unimplemented!("large-raw params are not currently supported: {}", path);
+    }
 
     (
         proof,
@@ -442,7 +446,6 @@ fn create_initial_params<Tree: 'static + MerkleTreeTrait>(
         ParamSize::Large,
         false,
     );
-    let small_path = params_filename(proof, hasher, sector_size, &head, 0, ParamSize::Small, true);
 
     {
         info!("writing large initial params to file: {}", large_path);
@@ -452,6 +455,10 @@ fn create_initial_params<Tree: 'static + MerkleTreeTrait>(
         info!("finished writing large params to file");
     }
 
+    // TODO: add conversion from large to small params to phase2 crate, then write initial params as
+    // small-raw.
+    /*
+    let small_path = params_filename(proof, hasher, sector_size, &head, 0, ParamSize::Small, true);
     {
         info!("writing small initial params to file: {}", small_path);
         let file = File::create(&small_path).unwrap();
@@ -459,6 +466,7 @@ fn create_initial_params<Tree: 'static + MerkleTreeTrait>(
         params.write_small(&mut writer).unwrap();
         info!("finished writing small params to file");
     }
+    */
 
     info!(
         "successfully created and wrote initial params for circuit: {}-{}-{}-{}, dt_total={}s",
