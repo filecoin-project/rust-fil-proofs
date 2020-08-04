@@ -125,7 +125,7 @@ jobs:
               cargo test --release << parameters.features >> -- --ignored
           environment:
             RUST_TEST_THREADS: 1
-          no_output_timeout: 30m
+          no_output_timeout: 60m
 
   bench:
     docker:
