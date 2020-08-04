@@ -34,6 +34,15 @@ pub trait MerkleTreeTrait: Send + Sync + std::fmt::Debug {
     /// Creates a merkle proof of the node at the given index.
     fn gen_proof(&self, index: usize) -> Result<Self::Proof>;
     fn gen_cached_proof(&self, i: usize, rows_to_discard: Option<usize>) -> Result<Self::Proof>;
+    fn gen_base_proof(
+        &self,
+        index: usize,
+    ) -> Result<MerkleProof<Self::Hasher, Self::Arity, U0, U0>>;
+    fn gen_cached_base_proof(
+        &self,
+        i: usize,
+        rows_to_discard: Option<usize>,
+    ) -> Result<MerkleProof<Self::Hasher, Self::Arity, U0, U0>>;
     fn row_count(&self) -> usize;
     fn leaves(&self) -> usize;
     fn from_merkle(
@@ -104,6 +113,34 @@ impl<
         let proof = self.inner.gen_cached_proof(i, rows_to_discard)?;
 
         debug_assert!(proof.validate::<H::Function>().expect("validate failed"));
+
+        MerkleProof::try_from_proof(proof)
+    }
+
+    fn gen_base_proof(&self, i: usize) -> Result<MerkleProof<Self::Hasher, Self::Arity, U0, U0>> {
+        let proof = self.inner.gen_base_proof(i)?;
+
+        debug_assert!(proof.validate::<H::Function>().expect("validate failed"));
+        debug_assert_eq!(proof.sub_layer_nodes(), 0);
+        debug_assert_eq!(proof.top_layer_nodes(), 0);
+
+        MerkleProof::try_from_proof(proof)
+    }
+
+    fn gen_cached_base_proof(
+        &self,
+        i: usize,
+        rows_to_discard: Option<usize>,
+    ) -> Result<MerkleProof<Self::Hasher, Self::Arity, U0, U0>> {
+        if rows_to_discard.is_some() && rows_to_discard.unwrap() == 0 {
+            return self.gen_base_proof(i);
+        }
+
+        let proof = self.inner.gen_cached_base_proof(i, rows_to_discard)?;
+
+        debug_assert!(proof.validate::<H::Function>().expect("validate failed"));
+        debug_assert_eq!(proof.sub_layer_nodes(), 0);
+        debug_assert_eq!(proof.top_layer_nodes(), 0);
 
         MerkleProof::try_from_proof(proof)
     }
