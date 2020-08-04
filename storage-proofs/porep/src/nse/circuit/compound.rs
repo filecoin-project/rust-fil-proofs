@@ -13,7 +13,7 @@ use storage_proofs_core::{
 };
 
 use super::{LayerProof, NseCircuit};
-use crate::nse::{ButterflyGraph, Challenges, ExpanderGraph, NarrowStackedExpander};
+use crate::nse::vanilla::{ButterflyGraph, Challenges, ExpanderGraph, NarrowStackedExpander};
 
 #[derive(Debug)]
 pub struct NseCompound {}
@@ -223,7 +223,7 @@ mod tests {
         util::default_rows_to_discard,
     };
 
-    use crate::nse::{
+    use crate::nse::vanilla::{
         ChallengeRequirements, Config, PrivateInputs, PublicInputs, SetupParams, TemporaryAux,
         TemporaryAuxCache,
     };

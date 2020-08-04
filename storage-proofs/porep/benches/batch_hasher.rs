@@ -5,7 +5,7 @@ use rand::{Rng, SeedableRng};
 use rand_xorshift::XorShiftRng;
 use sha2raw::Sha256;
 use storage_proofs_core::fr32::fr_into_bytes;
-use storage_proofs_porep::nse::*;
+use storage_proofs_porep::nse::vanilla::*;
 
 fn bench_batch_hash(c: &mut Criterion) {
     let rng = &mut XorShiftRng::seed_from_u64(5);

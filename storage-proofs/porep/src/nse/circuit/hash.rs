@@ -9,7 +9,7 @@ use storage_proofs_core::{
     util::reverse_bit_numbering,
 };
 
-use super::super::Config;
+use super::super::vanilla::Config;
 
 pub fn derive_first_layer_leaf<CS: ConstraintSystem<Bls12>>(
     mut cs: CS,
