@@ -17,7 +17,7 @@ use filecoin_proofs::types::{
     PaddedBytesAmount, PoRepConfig, PoRepProofPartitions, PoStConfig, PoStType, SectorSize,
 };
 use filecoin_proofs::with_shape;
-use log::{error, info};
+use log::{error, info, warn};
 use phase2::small::{read_small_params_from_large_file, MPCSmall, Streamer};
 use phase2::MPCParameters;
 use rand::rngs::OsRng;
@@ -843,12 +843,7 @@ fn contribute_to_params(path_before: &str) {
     */
 }
 
-fn verify_contribution_small(
-    path_before: &str,
-    path_after: &str,
-    participant_contrib: [u8; 64],
-    read_raw: bool,
-) {
+fn verify_contribution(path_before: &str, path_after: &str, participant_contrib: [u8; 64]) {
     #[allow(clippy::large_enum_variant)]
     enum Message {
         Done(MPCSmall),
@@ -864,21 +859,6 @@ fn verify_contribution_small(
         hex_string(&participant_contrib)
     );
 
-    // Do these checks now to avoid panics in the reader threads.
-    assert!(
-        Path::new(&path_before).exists(),
-        "'before' params file not found: {}",
-        path_before
-    );
-    assert!(
-        Path::new(&path_after).exists(),
-        "'after' params file not found: {}",
-        path_after
-    );
-
-    let before_params_are_large = path_before.contains("large");
-    let after_params_are_large = path_after.contains("large");
-
     let (before_tx, before_rx) = channel::<Message>();
     let (after_tx, after_rx) = channel::<Message>();
 
@@ -887,16 +867,30 @@ fn verify_contribution_small(
 
     let before_thread: JoinHandle<()> = thread::spawn(move || {
         let start_read = Instant::now();
-        let read_res: io::Result<MPCSmall> = if before_params_are_large {
-            info!("reading large 'before' params as small: {}", path_before);
+        let is_large = path_before.contains("large");
+        let is_raw = path_before.ends_with("raw");
+
+        if !is_raw {
+            warn!("using non-raw 'before' params");
+        }
+
+        let read_res: io::Result<MPCSmall> = if is_large {
+            info!(
+                "reading large 'before' params as `MPCSmall`: {}",
+                path_before
+            );
             read_small_params_from_large_file(&path_before)
         } else {
-            info!("reading (small) 'before' params as small: {}", path_before);
-            File::open(path_before).and_then(|file| {
+            info!(
+                "reading small 'before' params as `MPCSmall`: {}",
+                path_before
+            );
+            File::open(&path_before).and_then(|file| {
                 let mut reader = BufReader::with_capacity(1024 * 1024, file);
-                MPCSmall::read(&mut reader, read_raw)
+                MPCSmall::read(&mut reader, is_raw)
             })
         };
+
         match read_res {
             Ok(params) => {
                 let dt_read = start_read.elapsed().as_secs();
@@ -912,16 +906,24 @@ fn verify_contribution_small(
 
     let after_thread: JoinHandle<()> = thread::spawn(move || {
         let start_read = Instant::now();
-        let read_res: io::Result<MPCSmall> = if after_params_are_large {
-            info!("reading large 'after' params as small: {}", path_after);
+        let is_large = path_after.contains("large");
+        let is_raw = path_after.ends_with("raw");
+
+        if !is_raw {
+            warn!("using non-raw 'after' params");
+        }
+
+        let read_res: io::Result<MPCSmall> = if is_large {
+            info!("reading large 'after' params as `MPCSmall`: {}", path_after);
             read_small_params_from_large_file(&path_after)
         } else {
-            info!("reading (small) 'after' params as small: {}", path_after);
-            File::open(path_after).and_then(|file| {
+            info!("reading small 'after' params as `MPCSmall`: {}", path_after);
+            File::open(&path_after).and_then(|file| {
                 let mut reader = BufReader::with_capacity(1024 * 1024, file);
-                MPCSmall::read(&mut reader, read_raw)
+                MPCSmall::read(&mut reader, is_raw)
             })
         };
+
         match read_res {
             Ok(params) => {
                 let dt_read = start_read.elapsed().as_secs();
@@ -995,9 +997,6 @@ fn verify_contribution_small(
         start_total.elapsed().as_secs()
     );
 }
-
-// TODO:
-// fn verify_contribution_large()
 
 // Writes info logs to stdout, error logs to stderr, and all logs to the file `log_filename` in
 // `rust-fil-proofs`'s top-level directory.
@@ -1125,11 +1124,6 @@ fn main() {
 
     let verify_command = SubCommand::with_name("verify")
         .about("Verifies that a contribution transitions one set of params to another")
-        .arg(
-            Arg::with_name("large")
-                .long("large")
-                .help("Verify the contribution using the large parameter format"),
-        )
         .arg(
             Arg::with_name("path-after")
                 .required(true)
@@ -1269,7 +1263,6 @@ fn main() {
                 contribute_to_params(path_before);
             }
             "verify" => {
-                let use_large_params = matches.is_present("large");
                 let path_after = matches.value_of("path-after").unwrap();
 
                 assert!(
@@ -1278,68 +1271,75 @@ fn main() {
                     path_after
                 );
 
+                let (proof, hasher, sector_size, head, param_num_after, _, _) =
+                    parse_params_filename(path_after);
+
                 let log_filename = format!("{}_verify.log", path_after);
                 setup_logger(&log_filename);
 
-                let (proof, hasher, sector_size, head, param_num, param_size, read_raw) =
-                    parse_params_filename(path_after);
-
-                // TODO: in the future, allow for large before params.
-                if param_size.is_large() {
-                    unimplemented!("cannot currently verify large 'before' params");
-                }
-
-                // small, --large => panic!()
-                // large, --large => verify_contribution()
-                // large, no flag => verify_contribution_small()
-                // small, no flag => verify_contribution_small()
-                if param_size.is_small() && use_large_params {
-                    panic!("the `--large` flag can only be used when parameters are large");
-                }
-
-                // Default to using small before params, fallback to large before params is they exist.
-                let mut path_before = params_filename(
-                    proof,
-                    hasher,
-                    sector_size,
-                    &head,
-                    param_num - 1,
-                    ParamSize::Small,
-                    read_raw,
-                );
-
-                if !Path::new(&path_before).exists() {
-                    let path_before_large = params_filename(
+                // Default to using small-raw before params, fallback to non-raw params if raw do
+                // not exist.
+                let path_before = {
+                    let small_raw = params_filename(
                         proof,
                         hasher,
                         sector_size,
                         &head,
-                        param_num - 1,
-                        ParamSize::Large,
-                        false,
+                        param_num_after - 1,
+                        ParamSize::Small,
+                        true,
                     );
-                    info!(
-                        "small 'before' params not found `{}`, attempting to fall back to large 'before' params `{}`",
-                        path_before,
-                        path_before_large,
-                    );
-                    if Path::new(&path_before_large).exists() {
-                        info!("large 'before' params found `{}`, falling back to large 'before' params", path_before_large);
-                        path_before = path_before_large;
+                    let small_nonraw = small_raw.trim_end_matches("_raw").to_string();
+                    let large = small_nonraw.replace("small", "large");
+
+                    if Path::new(&small_raw).exists() {
+                        info!("found small-raw 'before' params: {}", small_raw);
+                        small_raw
+                    } else if Path::new(&small_nonraw).exists() {
+                        info!("found small-nonraw 'before' params: {}", small_nonraw);
+                        small_nonraw
+                    } else if Path::new(&large).exists() {
+                        info!("found large 'before' params: {}", large);
+                        large
                     } else {
-                        panic!(
-                            "large 'before' params not found `{}`, fallback failed",
-                            path_before_large
+                        let err_msg = format!(
+                            "no 'before' params found, attempted: {}, {}, {}",
+                            small_raw, small_nonraw, large
                         );
+                        error!("{}", err_msg);
+                        panic!("{}", err_msg);
                     }
                 };
 
-                let contrib_path = format!("{}.contrib", path_after);
-                assert!(
-                    Path::new(&contrib_path).exists(),
-                    "contribution file not found: {}",
-                    contrib_path
-                );
+                let mut contrib_path = format!("{}.contrib", path_after);
+
+                // It is possible that the .contrib file was generated using a param-size or
+                // serialization format that differs from those in `path_after`, in which case we
+                // need to search for the .contrib file.
+                if !Path::new(&contrib_path).exists() {
+                    warn!("contrib file not found: {}", contrib_path);
+                    let mut found_contrib_file = false;
+                    for _ in 0..2 {
+                        contrib_path = if contrib_path.ends_with("large.contrib") {
+                            contrib_path.replace("large", "small")
+                        } else if contrib_path.ends_with("small.contrib") {
+                            contrib_path.replace("small", "small_raw")
+                        } else {
+                            contrib_path.replace("small_raw", "large")
+                        };
+                        info!("trying contrib file: {}", contrib_path);
+                        if Path::new(&contrib_path).exists() {
+                            found_contrib_file = true;
+                            break;
+                        }
+                        warn!("contrib file not found");
+                    }
+                    if !found_contrib_file {
+                        error!("no contrib file found");
+                        panic!("no contrib file found");
+                    }
+                }
+                info!("using contrib file: {}", contrib_path);
 
                 let contrib = {
                     let mut bytes = [0u8; 64];
@@ -1363,11 +1363,7 @@ fn main() {
                     bytes
                 };
 
-                if use_large_params {
-                    unimplemented!("large param verification is unimplemented");
-                } else {
-                    verify_contribution_small(&path_before, &path_after, contrib, read_raw);
-                }
+                verify_contribution(&path_before, &path_after, contrib);
             }
             "small" => {
                 let large_path = matches.value_of("large-path").unwrap();
