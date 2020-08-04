@@ -268,7 +268,7 @@ fn ensure_parent(path: &PathBuf) -> Result<()> {
 
 // Reads parameter mappings using mmap so that they can be lazily
 // loaded later.
-fn read_cached_params(cache_entry_path: &PathBuf) -> Result<groth16::MappedParameters<Bls12>> {
+pub fn read_cached_params(cache_entry_path: &PathBuf) -> Result<groth16::MappedParameters<Bls12>> {
     info!("checking cache_path: {:?} for parameters", cache_entry_path);
     with_exclusive_read_lock(cache_entry_path, |_| {
         let params = Parameters::build_mapped_parameters(cache_entry_path.to_path_buf(), false)?;
