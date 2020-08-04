@@ -10,3 +10,6 @@ members = [
   "sha2raw",
   "phase2",
 ]
+
+[patch.crates-io]
+merkletree = { git = "https://github.com/filecoin-project/merkle_light", branch = "feat/base-proof"}

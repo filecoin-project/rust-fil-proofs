@@ -1,4 +1,2 @@
-mod circuit;
-mod vanilla;
-
-pub use self::vanilla::*;
+pub mod circuit;
+pub mod vanilla;

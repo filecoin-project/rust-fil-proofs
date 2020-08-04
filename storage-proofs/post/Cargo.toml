@@ -9,7 +9,8 @@ repository = "https://github.com/filecoin-project/rust-fil-proofs"
 readme = "README.md"
 
 [dependencies]
-storage-proofs-core = { path = "../core", version = "^5.0.0", default-features = false}
+storage-proofs-core = { path = "../core", version = "^5.1.1", default-features = false}
+storage-proofs-porep = { path = "../porep", version = "^5.1.1", default-features = false}
 rand = "0.7"
 merkletree = "0.21.0"
 byteorder = "1"
@@ -32,6 +33,7 @@ num_cpus = "1.10.1"
 tempfile = "3"
 pretty_assertions = "0.6.1"
 rand_xorshift = "0.2.0"
+femme = "2"
 
 [features]
 default = ["pairing", "gpu"]
