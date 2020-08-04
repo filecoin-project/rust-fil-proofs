@@ -108,7 +108,7 @@ impl<D: Domain> Challenges<D> {
             .chain(self.replica_id.into_bytes())
             .chain(self.seed)
             .chain(&(index as u64).to_le_bytes())
-            .result();
+            .finalize();
 
         let mut partial_bytes = [0u8; 8];
         partial_bytes.copy_from_slice(&bytes[..8]);
