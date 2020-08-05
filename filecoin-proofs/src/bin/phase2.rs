@@ -31,8 +31,12 @@ use simplelog::{self, CombinedLogger, LevelFilter, TermLogger, TerminalMode, Wri
 use storage_proofs::compound_proof::{self, CompoundProof};
 use storage_proofs::hasher::Sha256Hasher;
 use storage_proofs::merkle::MerkleTreeTrait;
-use storage_proofs::porep::stacked::{StackedCircuit, StackedCompound, StackedDrg};
-use storage_proofs::post::fallback::{FallbackPoSt, FallbackPoStCircuit, FallbackPoStCompound};
+use storage_proofs::porep::stacked::{
+    PublicParams as PoRepPublicParams, StackedCompound, StackedDrg,
+};
+use storage_proofs::post::fallback::{
+    FallbackPoSt, FallbackPoStCircuit, FallbackPoStCompound, PublicParams as PoStPublicParams,
+};
 
 const CHUNK_SIZE: usize = 10_000;
 
@@ -281,9 +285,7 @@ fn parse_params_filename(path: &str) -> (Proof, Hasher, Sector, String, usize, P
     )
 }
 
-fn blank_sdr_poseidon_circuit<Tree: MerkleTreeTrait>(
-    sector_size: u64,
-) -> StackedCircuit<'static, Tree, Sha256Hasher> {
+fn blank_sdr_poseidon_params<Tree: MerkleTreeTrait>(sector_size: u64) -> PoRepPublicParams<Tree> {
     let n_partitions = *POREP_PARTITIONS.read().unwrap().get(&sector_size).unwrap();
 
     let porep_config = PoRepConfig {
@@ -308,11 +310,7 @@ fn blank_sdr_poseidon_circuit<Tree: MerkleTreeTrait>(
         _,
     >>::setup(&setup_params)
     .unwrap();
-
-    <StackedCompound<Tree, Sha256Hasher> as CompoundProof<
-        StackedDrg<Tree, Sha256Hasher>,
-        _,
-    >>::blank_circuit(&public_params.vanilla_params)
+    public_params.vanilla_params
 }
 
 /*
@@ -350,9 +348,9 @@ fn blank_porep_sha_pedersen_circuit(
 }
 */
 
-fn blank_winning_post_poseidon_circuit<Tree: 'static + MerkleTreeTrait>(
+fn blank_winning_post_poseidon_params<Tree: 'static + MerkleTreeTrait>(
     sector_size: u64,
-) -> FallbackPoStCircuit<Tree> {
+) -> PoStPublicParams {
     let post_config = PoStConfig {
         sector_size: SectorSize(sector_size),
         challenge_count: WINNING_POST_CHALLENGE_COUNT,
@@ -361,17 +359,12 @@ fn blank_winning_post_poseidon_circuit<Tree: 'static + MerkleTreeTrait>(
         priority: false,
     };
 
-    let public_params = winning_post_public_params::<Tree>(&post_config).unwrap();
-
-    <FallbackPoStCompound<Tree> as CompoundProof<
-        FallbackPoSt<Tree>,
-        FallbackPoStCircuit<Tree>,
-    >>::blank_circuit(&public_params)
+    winning_post_public_params::<Tree>(&post_config).unwrap()
 }
 
-fn blank_window_post_poseidon_circuit<Tree: 'static + MerkleTreeTrait>(
+fn blank_window_post_poseidon_params<Tree: 'static + MerkleTreeTrait>(
     sector_size: u64,
-) -> FallbackPoStCircuit<Tree> {
+) -> PoStPublicParams {
     let post_config = PoStConfig {
         sector_size: SectorSize(sector_size),
         challenge_count: WINDOW_POST_CHALLENGE_COUNT,
@@ -384,12 +377,7 @@ fn blank_window_post_poseidon_circuit<Tree: 'static + MerkleTreeTrait>(
         priority: false,
     };
 
-    let public_params = window_post_public_params::<Tree>(&post_config).unwrap();
-
-    <FallbackPoStCompound<Tree> as CompoundProof<
-        FallbackPoSt<Tree>,
-        FallbackPoStCircuit<Tree>,
-    >>::blank_circuit(&public_params)
+    window_post_public_params::<Tree>(&post_config).unwrap()
 }
 
 /// Creates the first phase2 parameters for a circuit and writes them to a file.
@@ -415,7 +403,11 @@ fn create_initial_params<Tree: 'static + MerkleTreeTrait>(
     let params = match (proof, hasher) {
         (Proof::Sdr, Hasher::Poseidon) => {
             let start = Instant::now();
-            let circuit = blank_sdr_poseidon_circuit::<Tree>(sector_size.as_u64());
+            let public_params = blank_sdr_poseidon_params(sector_size.as_u64());
+            let circuit = <StackedCompound<Tree, Sha256Hasher> as CompoundProof<
+                StackedDrg<Tree, Sha256Hasher>,
+                _,
+            >>::blank_circuit(&public_params);
             dt_create_circuit = start.elapsed().as_secs();
             let start = Instant::now();
             let params = MPCParameters::new(circuit).unwrap();
@@ -424,7 +416,11 @@ fn create_initial_params<Tree: 'static + MerkleTreeTrait>(
         }
         (Proof::Winning, Hasher::Poseidon) => {
             let start = Instant::now();
-            let circuit = blank_winning_post_poseidon_circuit::<Tree>(sector_size.as_u64());
+            let public_params = blank_winning_post_poseidon_params::<Tree>(sector_size.as_u64());
+            let circuit = <FallbackPoStCompound<Tree> as CompoundProof<
+                FallbackPoSt<Tree>,
+                FallbackPoStCircuit<Tree>,
+            >>::blank_circuit(&public_params);
             dt_create_circuit = start.elapsed().as_secs();
             let start = Instant::now();
             let params = MPCParameters::new(circuit).unwrap();
@@ -433,7 +429,11 @@ fn create_initial_params<Tree: 'static + MerkleTreeTrait>(
         }
         (Proof::Window, Hasher::Poseidon) => {
             let start = Instant::now();
-            let circuit = blank_window_post_poseidon_circuit::<Tree>(sector_size.as_u64());
+            let public_params = blank_window_post_poseidon_params::<Tree>(sector_size.as_u64());
+            let circuit = <FallbackPoStCompound<Tree> as CompoundProof<
+                FallbackPoSt<Tree>,
+                FallbackPoStCircuit<Tree>,
+            >>::blank_circuit(&public_params);
             dt_create_circuit = start.elapsed().as_secs();
             let start = Instant::now();
             let params = MPCParameters::new(circuit).unwrap();
