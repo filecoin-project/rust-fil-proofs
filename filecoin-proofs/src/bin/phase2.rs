@@ -1419,6 +1419,14 @@ fn main() {
                 .help("The path to the file that contains all the data."),
         );
 
+    let parse_command = SubCommand::with_name("parse")
+        .about("Parses file info from large or small-nonraw params")
+        .arg(
+            Arg::with_name("path")
+                .required(true)
+                .help("Path to params file."),
+        );
+
     let matches = App::new("phase2")
         .version("1.0")
         .setting(AppSettings::ArgRequiredElseHelp)
@@ -1431,6 +1439,7 @@ fn main() {
         .subcommand(convert_command)
         .subcommand(merge_command)
         .subcommand(split_keys_command)
+        .subcommand(parse_command)
         .get_matches();
 
     if let (subcommand, Some(matches)) = matches.subcommand() {
@@ -1966,6 +1975,22 @@ fn main() {
                     writeln!(&mut info_file, "{}", input_path)
                         .unwrap_or_else(|_| panic!("failed to write info data to {}", info_path));
                 }
+            }
+            "parse" => {
+                let path = matches.value_of("path").unwrap();
+                let (_, _, _, _, _, size, raw) = parse_params_filename(&path);
+
+                if raw {
+                    unimplemented!("`parse` command does not currently support raw params");
+                }
+
+                let file_info = if size.is_large() {
+                    FileInfo::parse_large(&path)
+                } else {
+                    FileInfo::parse_small(&path)
+                };
+
+                println!("{:#?}", file_info);
             }
             _ => unreachable!(),
         }
