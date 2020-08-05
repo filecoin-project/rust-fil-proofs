@@ -1058,8 +1058,8 @@ fn seek(file: &mut File, offset: u64) -> io::Result<()> {
 
 struct FileInfo {
     delta_g1_offset: u64,
+    h_len_offset: u64,
     h_len: u64,
-    h_offset: u64,
     l_len: u64,
     cs_hash: [u8; 64],
     contributions_len_offset: u64,
@@ -1070,8 +1070,8 @@ impl Debug for FileInfo {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         f.debug_struct("FileInfo")
             .field("delta_g1_offset", &self.delta_g1_offset)
+            .field("h_len_offset", &self.h_len_offset)
             .field("h_len", &self.h_len)
-            .field("h_offset", &self.h_offset)
             .field("l_len", &self.l_len)
             .field("cs_hash", &hex_string(&self.cs_hash))
             .field("contributions_len_offset", &self.contributions_len_offset)
@@ -1107,8 +1107,8 @@ impl FileInfo {
 
         FileInfo {
             delta_g1_offset: 0,
+            h_len_offset,
             h_len,
-            h_offset,
             l_len,
             cs_hash,
             contributions_len_offset,
@@ -1163,8 +1163,8 @@ impl FileInfo {
 
         FileInfo {
             delta_g1_offset,
+            h_len_offset,
             h_len,
-            h_offset,
             l_len,
             cs_hash,
             contributions_len_offset,
@@ -1685,8 +1685,8 @@ fn main() {
 
                 let FileInfo {
                     delta_g1_offset: delta_g1_offset_large,
+                    h_len_offset: h_len_offset_large,
                     h_len: h_len_large,
-                    h_offset: h_offset_large,
                     l_len: l_len_large,
                     cs_hash: cs_hash_large,
                     contributions_len_offset: contributions_len_offset_large,
@@ -1748,7 +1748,7 @@ fn main() {
 
                 // Copy h_len, h, l_len, l
                 let mut h_l_bytes = (&mut file_small).take((h_len + l_len) * G1_SIZE + 8);
-                seek(&mut file_large_new, h_offset_large - 4)
+                seek(&mut file_large_new, h_len_offset_large)
                     .expect("failed to seek to h in new file");
                 io::copy(&mut h_l_bytes, &mut file_large_new)
                     .expect("failed to merge h, h_len, and l");
