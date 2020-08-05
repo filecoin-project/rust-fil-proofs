@@ -264,9 +264,9 @@ jobs:
       - run:
           name: Test Darwin
           command: |
-            sudo ulimit -n 20000
-            sudo ulimit -u 20000
-            ulimit -n 20000
+            sudo ulimit -n 40000
+            sudo ulimit -u 40000
+            ulimit -n 40000
             cargo +$(cat rust-toolchain) test --release --verbose --workspace
           no_output_timeout: 2h
 
