@@ -186,7 +186,7 @@ pub fn get_parameter_data(cache_id: &str) -> Option<&ParameterData> {
     PARAMETERS.get(&parameter_id(cache_id))
 }
 
-fn parameter_id(cache_id: &str) -> String {
+pub fn parameter_id(cache_id: &str) -> String {
     format!(
         "v{}-{}.params",
         storage_proofs::parameter_cache::VERSION,
@@ -199,9 +199,17 @@ pub fn get_verifying_key_data(cache_id: &str) -> Option<&ParameterData> {
     PARAMETERS.get(&verifying_key_id(cache_id))
 }
 
-fn verifying_key_id(cache_id: &str) -> String {
+pub fn verifying_key_id(cache_id: &str) -> String {
     format!(
         "v{}-{}.vk",
+        storage_proofs::parameter_cache::VERSION,
+        cache_id
+    )
+}
+
+pub fn metadata_id(cache_id: &str) -> String {
+    format!(
+        "v{}-{}.meta",
         storage_proofs::parameter_cache::VERSION,
         cache_id
     )

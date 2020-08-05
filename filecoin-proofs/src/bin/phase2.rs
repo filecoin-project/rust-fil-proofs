@@ -1,6 +1,6 @@
 use std::fmt::{self, Debug, Formatter};
 use std::fs::{self, File, OpenOptions};
-use std::io::{self, BufReader, BufWriter, Read, Seek, SeekFrom};
+use std::io::{self, BufReader, BufWriter, Read, Seek, SeekFrom, Write};
 use std::mem::size_of;
 use std::path::Path;
 use std::process::Command;
@@ -9,6 +9,7 @@ use std::sync::mpsc::{channel, TryRecvError};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
+use bellperson::groth16;
 use byteorder::{BigEndian, ReadBytesExt};
 use clap::{App, AppSettings, Arg, ArgGroup, SubCommand};
 use filecoin_proofs::constants::*;
@@ -21,7 +22,7 @@ use filecoin_proofs::types::{
 use filecoin_proofs::with_shape;
 use groupy::{CurveAffine, EncodedPoint};
 use log::{error, info, warn};
-use paired::bls12_381::{G1Affine, G1Uncompressed, G2Affine, G2Uncompressed};
+use paired::bls12_381::{Bls12, G1Affine, G1Uncompressed, G2Affine, G2Uncompressed};
 use phase2::small::{read_small_params_from_large_file, MPCSmall, Streamer};
 use phase2::MPCParameters;
 use rand::rngs::OsRng;
@@ -31,8 +32,13 @@ use simplelog::{self, CombinedLogger, LevelFilter, TermLogger, TerminalMode, Wri
 use storage_proofs::compound_proof::{self, CompoundProof};
 use storage_proofs::hasher::Sha256Hasher;
 use storage_proofs::merkle::MerkleTreeTrait;
-use storage_proofs::porep::stacked::{StackedCircuit, StackedCompound, StackedDrg};
-use storage_proofs::post::fallback::{FallbackPoSt, FallbackPoStCircuit, FallbackPoStCompound};
+use storage_proofs::parameter_cache::{self, CacheableParameters};
+use storage_proofs::porep::stacked::{
+    PublicParams as PoRepPublicParams, StackedCircuit, StackedCompound, StackedDrg,
+};
+use storage_proofs::post::fallback::{
+    FallbackPoSt, FallbackPoStCircuit, FallbackPoStCompound, PublicParams as PoStPublicParams,
+};
 
 const CHUNK_SIZE: usize = 10_000;
 
@@ -281,9 +287,7 @@ fn parse_params_filename(path: &str) -> (Proof, Hasher, Sector, String, usize, P
     )
 }
 
-fn blank_sdr_poseidon_circuit<Tree: MerkleTreeTrait>(
-    sector_size: u64,
-) -> StackedCircuit<'static, Tree, Sha256Hasher> {
+fn blank_sdr_poseidon_params<Tree: MerkleTreeTrait>(sector_size: u64) -> PoRepPublicParams<Tree> {
     let n_partitions = *POREP_PARTITIONS.read().unwrap().get(&sector_size).unwrap();
 
     let porep_config = PoRepConfig {
@@ -308,11 +312,7 @@ fn blank_sdr_poseidon_circuit<Tree: MerkleTreeTrait>(
         _,
     >>::setup(&setup_params)
     .unwrap();
-
-    <StackedCompound<Tree, Sha256Hasher> as CompoundProof<
-        StackedDrg<Tree, Sha256Hasher>,
-        _,
-    >>::blank_circuit(&public_params.vanilla_params)
+    public_params.vanilla_params
 }
 
 /*
@@ -350,9 +350,9 @@ fn blank_porep_sha_pedersen_circuit(
 }
 */
 
-fn blank_winning_post_poseidon_circuit<Tree: 'static + MerkleTreeTrait>(
+fn blank_winning_post_poseidon_params<Tree: 'static + MerkleTreeTrait>(
     sector_size: u64,
-) -> FallbackPoStCircuit<Tree> {
+) -> PoStPublicParams {
     let post_config = PoStConfig {
         sector_size: SectorSize(sector_size),
         challenge_count: WINNING_POST_CHALLENGE_COUNT,
@@ -361,17 +361,12 @@ fn blank_winning_post_poseidon_circuit<Tree: 'static + MerkleTreeTrait>(
         priority: false,
     };
 
-    let public_params = winning_post_public_params::<Tree>(&post_config).unwrap();
-
-    <FallbackPoStCompound<Tree> as CompoundProof<
-        FallbackPoSt<Tree>,
-        FallbackPoStCircuit<Tree>,
-    >>::blank_circuit(&public_params)
+    winning_post_public_params::<Tree>(&post_config).unwrap()
 }
 
-fn blank_window_post_poseidon_circuit<Tree: 'static + MerkleTreeTrait>(
+fn blank_window_post_poseidon_params<Tree: 'static + MerkleTreeTrait>(
     sector_size: u64,
-) -> FallbackPoStCircuit<Tree> {
+) -> PoStPublicParams {
     let post_config = PoStConfig {
         sector_size: SectorSize(sector_size),
         challenge_count: WINDOW_POST_CHALLENGE_COUNT,
@@ -384,12 +379,7 @@ fn blank_window_post_poseidon_circuit<Tree: 'static + MerkleTreeTrait>(
         priority: false,
     };
 
-    let public_params = window_post_public_params::<Tree>(&post_config).unwrap();
-
-    <FallbackPoStCompound<Tree> as CompoundProof<
-        FallbackPoSt<Tree>,
-        FallbackPoStCircuit<Tree>,
-    >>::blank_circuit(&public_params)
+    window_post_public_params::<Tree>(&post_config).unwrap()
 }
 
 /// Creates the first phase2 parameters for a circuit and writes them to a file.
@@ -415,7 +405,11 @@ fn create_initial_params<Tree: 'static + MerkleTreeTrait>(
     let params = match (proof, hasher) {
         (Proof::Sdr, Hasher::Poseidon) => {
             let start = Instant::now();
-            let circuit = blank_sdr_poseidon_circuit::<Tree>(sector_size.as_u64());
+            let public_params = blank_sdr_poseidon_params(sector_size.as_u64());
+            let circuit = <StackedCompound<Tree, Sha256Hasher> as CompoundProof<
+                StackedDrg<Tree, Sha256Hasher>,
+                _,
+            >>::blank_circuit(&public_params);
             dt_create_circuit = start.elapsed().as_secs();
             let start = Instant::now();
             let params = MPCParameters::new(circuit).unwrap();
@@ -424,7 +418,11 @@ fn create_initial_params<Tree: 'static + MerkleTreeTrait>(
         }
         (Proof::Winning, Hasher::Poseidon) => {
             let start = Instant::now();
-            let circuit = blank_winning_post_poseidon_circuit::<Tree>(sector_size.as_u64());
+            let public_params = blank_winning_post_poseidon_params::<Tree>(sector_size.as_u64());
+            let circuit = <FallbackPoStCompound<Tree> as CompoundProof<
+                FallbackPoSt<Tree>,
+                FallbackPoStCircuit<Tree>,
+            >>::blank_circuit(&public_params);
             dt_create_circuit = start.elapsed().as_secs();
             let start = Instant::now();
             let params = MPCParameters::new(circuit).unwrap();
@@ -433,7 +431,11 @@ fn create_initial_params<Tree: 'static + MerkleTreeTrait>(
         }
         (Proof::Window, Hasher::Poseidon) => {
             let start = Instant::now();
-            let circuit = blank_window_post_poseidon_circuit::<Tree>(sector_size.as_u64());
+            let public_params = blank_window_post_poseidon_params::<Tree>(sector_size.as_u64());
+            let circuit = <FallbackPoStCompound<Tree> as CompoundProof<
+                FallbackPoSt<Tree>,
+                FallbackPoStCircuit<Tree>,
+            >>::blank_circuit(&public_params);
             dt_create_circuit = start.elapsed().as_secs();
             let start = Instant::now();
             let params = MPCParameters::new(circuit).unwrap();
@@ -1240,6 +1242,33 @@ fn setup_logger(log_filename: &str) {
     });
 }
 
+fn parameter_identifier<Tree: 'static + MerkleTreeTrait>(sector_size: u64, proof: Proof) -> String {
+    match proof {
+        Proof::Sdr => {
+            let public_params = blank_sdr_poseidon_params::<Tree>(sector_size);
+
+            <StackedCompound<Tree, Sha256Hasher> as CacheableParameters<
+                StackedCircuit<Tree, Sha256Hasher>,
+                _,
+            >>::cache_identifier(&public_params)
+        }
+        Proof::Winning => {
+            let public_params = blank_winning_post_poseidon_params::<Tree>(sector_size);
+            <FallbackPoStCompound<Tree> as CacheableParameters<
+                            FallbackPoStCircuit<Tree>,
+                            _,
+                        >>::cache_identifier(&public_params)
+        }
+        Proof::Window => {
+            let public_params = blank_window_post_poseidon_params::<Tree>(sector_size);
+            <FallbackPoStCompound<Tree> as CacheableParameters<
+                           FallbackPoStCircuit<Tree>,
+                           _,
+                        >>::cache_identifier(&public_params)
+        }
+    }
+}
+
 #[allow(clippy::cognitive_complexity)]
 fn main() {
     let new_command = SubCommand::with_name("new")
@@ -1382,6 +1411,14 @@ fn main() {
                 .help("Path to the large params file."),
         );
 
+    let split_keys_command = SubCommand::with_name("split-keys")
+        .about("Splits the keys from the trusted setup into parameter files")
+        .arg(
+            Arg::with_name("input-path")
+                .required(true)
+                .help("The path to the file that contains all the data."),
+        );
+
     let matches = App::new("phase2")
         .version("1.0")
         .setting(AppSettings::ArgRequiredElseHelp)
@@ -1393,6 +1430,7 @@ fn main() {
         .subcommand(small_command)
         .subcommand(convert_command)
         .subcommand(merge_command)
+        .subcommand(split_keys_command)
         .get_matches();
 
     if let (subcommand, Some(matches)) = matches.subcommand() {
@@ -1814,6 +1852,120 @@ fn main() {
                 println!("merged contributions");
 
                 println!("successfully merged");
+            }
+            "split-keys" => {
+                let input_path = matches
+                    .value_of("input-path")
+                    .expect("failed to read input-path argument");
+
+                println!("reading params: {}", input_path);
+
+                // Get the identifier for the output files based in the input file's name
+                let (proof, _hasher, sector_size_enum, _head, param_num, param_size, _read_raw) =
+                    parse_params_filename(input_path);
+                assert!(param_size.is_large(), "params must be large");
+                let sector_size = sector_size_enum.as_u64();
+                let identifier = with_shape!(sector_size, parameter_identifier, sector_size, proof);
+
+                let mut input_file = File::open(input_path)
+                    .unwrap_or_else(|_| panic!("failed to open {}", input_path));
+
+                // Extract the vk data into its own file.
+                {
+                    let vk_data = groth16::VerifyingKey::<Bls12>::read(&input_file)
+                        .expect("failed to deserialize vk from input file");
+                    let vk_path = verifying_key_id(&identifier);
+                    println!("writing verifying key to file: {}", vk_path);
+                    let mut vk_file = File::create(&vk_path)
+                        .unwrap_or_else(|_| panic!("failed to create {}", vk_path));
+                    vk_data.write(&mut vk_file).unwrap_or_else(|_| {
+                        panic!("failed to write verification keys to file {}", vk_path)
+                    });
+                    let vk_file_size = vk_file
+                        .seek(SeekFrom::Current(0))
+                        .unwrap_or_else(|_| panic!("failed to seek in {}", vk_path));
+                    println!("size of the verifying key is {} bytes", vk_file_size);
+                }
+
+                // The params file is the trusted setup phase2 result without the contributions
+                // at the end of the file.
+                {
+                    let params_path = parameter_id(&identifier);
+                    println!("writing parameters to file: {}", params_path);
+                    let mut params_file = File::create(&params_path)
+                        .unwrap_or_else(|_| panic!("failed to create {}", params_path));
+
+                    // input_file_size - cs_hash - contributions_length -
+                    //   (num_contributions * public_key_size)
+                    let params_file_size = input_file
+                        .metadata()
+                        .unwrap_or_else(|_| panic!("failed to get filesize of {}", input_path))
+                        .len()
+                        - 64
+                        - 4
+                        - (param_num as u64 * 544);
+                    println!("size of the parameters file is {} bytes", params_file_size);
+                    // Make sure the cursor is at the beginning of the file (it was moved
+                    // during the extraction of the vk data)
+                    input_file
+                        .seek(SeekFrom::Start(0))
+                        .expect("cannot seek to beginning of the input file");
+
+                    io::copy(
+                        &mut Read::by_ref(&mut input_file).take(params_file_size),
+                        &mut params_file,
+                    )
+                    .unwrap_or_else(|_| {
+                        panic!(
+                            "Failed to copy params from {} to {}",
+                            input_path, params_path
+                        )
+                    });
+                }
+
+                // Writing the contributions to disk is not needed for the final parameters,
+                // they won't be published, they are only there for verification purpose.
+                {
+                    let contribs_path =
+                        format!("v{}-{}.contribs", parameter_cache::VERSION, &identifier);
+                    println!("writing contributions to file: {}", contribs_path);
+                    let mut contribs_file = File::create(&contribs_path)
+                        .unwrap_or_else(|_| panic!("failed to create {}", contribs_path));
+                    // The input file is already sought to the right offset, due to writing the
+                    // params file
+                    let contribs_file_size = io::copy(&mut input_file, &mut contribs_file)
+                        .unwrap_or_else(|_| {
+                            panic!(
+                                "Failed to copy contributions from {} to {}",
+                                input_path, contribs_path
+                            )
+                        });
+                    println!(
+                        "size of the contributions file is {} bytes",
+                        contribs_file_size
+                    );
+                }
+
+                // The metadata is needed for the publication of the parameters.
+                {
+                    let meta_path = metadata_id(&identifier);
+                    println!("writing metadata to file: {}", meta_path);
+                    let mut meta_file = File::create(&meta_path)
+                        .unwrap_or_else(|_| panic!("failed to create {}", meta_path));
+                    write!(&mut meta_file, r#"{{"sector_size":{}}}"#, sector_size).unwrap_or_else(
+                        |_| panic!("failed to write meta information to {}", meta_path),
+                    );
+                }
+
+                // The info file contains the filename the parameter was created of.
+                {
+                    let info_path = format!("v{}-{}.info", parameter_cache::VERSION, &identifier);
+                    println!("writing info to file: {}", info_path);
+                    let mut info_file = File::create(&info_path)
+                        .unwrap_or_else(|_| panic!("failed to create {}", info_path));
+                    writeln!(&mut info_file, "{}", input_path)
+                        .unwrap_or_else(|_| panic!("failed to write info data to {}", info_path));
+                }
             }
             _ => unreachable!(),
         }
