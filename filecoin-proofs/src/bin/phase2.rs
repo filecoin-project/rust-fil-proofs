@@ -1058,15 +1058,9 @@ fn seek(file: &mut File, offset: u64) -> io::Result<()> {
 
 struct FileInfo {
     delta_g1_offset: u64,
-    delta_g1: G1Affine,
-    delta_g2: G2Affine,
     h_len: u64,
     h_offset: u64,
-    h_first: G1Affine,
-    h_last: G1Affine,
     l_len: u64,
-    l_first: G1Affine,
-    l_last: G1Affine,
     cs_hash: [u8; 64],
     contributions_len_offset: u64,
     contributions_len: u64,
@@ -1076,15 +1070,9 @@ impl Debug for FileInfo {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         f.debug_struct("FileInfo")
             .field("delta_g1_offset", &self.delta_g1_offset)
-            .field("delta_g1", &self.delta_g1)
-            .field("delta_g2", &self.delta_g2)
             .field("h_len", &self.h_len)
             .field("h_offset", &self.h_offset)
-            .field("h_first", &self.h_first)
-            .field("h_last", &self.h_last)
             .field("l_len", &self.l_len)
-            .field("l_first", &self.l_first)
-            .field("l_last", &self.l_last)
             .field("cs_hash", &hex_string(&self.cs_hash))
             .field("contributions_len_offset", &self.contributions_len_offset)
             .field("contributions_len", &self.contributions_len)
@@ -1096,26 +1084,18 @@ impl FileInfo {
     fn parse_small(path: &str) -> Self {
         let mut file = File::open(path).expect("failed to open file");
 
-        let delta_g1 = read_g1(&mut file).expect("failed to read delta_g1");
-        let delta_g2 = read_g2(&mut file).expect("failed to read delta_g2");
-
         let h_len_offset = G1_SIZE + G2_SIZE;
+        seek(&mut file, h_len_offset).expect("failed to seek to h_len");
         let h_len = file.read_u32::<BigEndian>().expect("failed to read h_len") as u64;
         let h_offset = h_len_offset + 4;
-        let h_first = read_g1(&mut file).expect("failed to read first h element");
-        let h_last_offset = h_offset + (h_len - 1) * G1_SIZE;
-        seek(&mut file, h_last_offset).expect("failed to seek to last h element");
-        let h_last = read_g1(&mut file).expect("failed to read last h element");
 
-        let l_len_offset = h_last_offset + G1_SIZE;
+        let l_len_offset = h_offset + (h_len * G1_SIZE);
+        seek(&mut file, l_len_offset).expect("failed to seek to l_len");
         let l_len = file.read_u32::<BigEndian>().expect("failed to read l_len") as u64;
-        let l_first = read_g1(&mut file).expect("failed to read first l element");
-        let l_last_offset = l_len_offset + 4 + (l_len - 1) * G1_SIZE;
-        seek(&mut file, l_last_offset).expect("failed to seek to last l element");
-        let l_last = read_g1(&mut file).expect("failed to read last l element");
+        let l_offset = l_len_offset + 4;
 
         let mut cs_hash = [0u8; 64];
-        let cs_hash_offset = l_last_offset + G1_SIZE;
+        let cs_hash_offset = l_offset + (l_len * G1_SIZE);
         seek(&mut file, cs_hash_offset).expect("failed to seek to cs_hash");
         file.read_exact(&mut cs_hash)
             .expect("failed to read cs_hash");
@@ -1127,15 +1107,9 @@ impl FileInfo {
 
         FileInfo {
             delta_g1_offset: 0,
-            delta_g1,
-            delta_g2,
             h_len,
             h_offset,
-            h_first,
-            h_last,
             l_len,
-            l_first,
-            l_last,
             cs_hash,
             contributions_len_offset,
             contributions_len,
@@ -1146,11 +1120,8 @@ impl FileInfo {
         let mut file = File::open(path).expect("failed to open file");
 
         let delta_g1_offset = 2 * G1_SIZE + 2 * G2_SIZE;
-        seek(&mut file, delta_g1_offset).expect("failed to seek to delta_g1");
-        let delta_g1 = read_g1(&mut file).expect("failed to read delta_g1");
-        let delta_g2 = read_g2(&mut file).expect("failed to read delta_g2");
-
         let ic_len_offset = delta_g1_offset + G1_SIZE + G2_SIZE;
+        seek(&mut file, ic_len_offset).expect("failed to seek to ic_len");
         let ic_len = file.read_u32::<BigEndian>().expect("failed to read ic_len") as u64;
 
         let h_len_offset = ic_len_offset + 4 + ic_len * G1_SIZE;
@@ -1158,19 +1129,12 @@ impl FileInfo {
         let h_len = file.read_u32::<BigEndian>().expect("failed to read h_len") as u64;
         let h_offset = h_len_offset + 4;
 
-        let h_first = read_g1(&mut file).expect("failed to read first h element");
-        let h_last_offset = h_offset + (h_len - 1) * G1_SIZE;
-        seek(&mut file, h_last_offset).expect("failed to seek to last h element");
-        let h_last = read_g1(&mut file).expect("failed to read last h element");
-
-        let l_len_offset = h_last_offset + G1_SIZE;
+        let l_len_offset = h_offset + (h_len * G1_SIZE);
+        seek(&mut file, l_len_offset).expect("failed to seek to l_len");
         let l_len = file.read_u32::<BigEndian>().expect("failed to read l_len") as u64;
-        let l_first = read_g1(&mut file).expect("failed to read first l element");
-        let l_last_offset = l_len_offset + 4 + (l_len - 1) * G1_SIZE;
-        seek(&mut file, l_last_offset).expect("failed to seek to last l element");
-        let l_last = read_g1(&mut file).expect("failed to read last l element");
+        let l_offset = l_len_offset + 4;
 
-        let a_len_offset = l_last_offset + G1_SIZE;
+        let a_len_offset = l_offset + (l_len * G1_SIZE);
         seek(&mut file, a_len_offset).expect("failed to seek to a_len");
         let a_len = file.read_u32::<BigEndian>().expect("failed to read a_len") as u64;
 
@@ -1199,15 +1163,9 @@ impl FileInfo {
 
         FileInfo {
             delta_g1_offset,
-            delta_g1,
-            delta_g2,
             h_len,
             h_offset,
-            h_first,
-            h_last,
             l_len,
-            l_first,
-            l_last,
             cs_hash,
             contributions_len_offset,
             contributions_len,
@@ -1733,7 +1691,6 @@ fn main() {
                     cs_hash: cs_hash_large,
                     contributions_len_offset: contributions_len_offset_large,
                     contributions_len: contributions_len_large,
-                    ..
                 } = FileInfo::parse_large(&path_large_old);
                 println!("parsed large file");
 
