@@ -1,5 +1,7 @@
-use std::fs::{self, File};
-use std::io::{self, BufReader, BufWriter};
+use std::fmt::{self, Debug, Formatter};
+use std::fs::{self, File, OpenOptions};
+use std::io::{self, BufReader, BufWriter, Read, Seek, SeekFrom};
+use std::mem::size_of;
 use std::path::Path;
 use std::process::Command;
 use std::str::{self, FromStr};
@@ -7,8 +9,8 @@ use std::sync::mpsc::{channel, TryRecvError};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
+use byteorder::{BigEndian, ReadBytesExt};
 use clap::{App, AppSettings, Arg, ArgGroup, SubCommand};
-
 use filecoin_proofs::constants::*;
 use filecoin_proofs::parameters::{
     setup_params, window_post_public_params, winning_post_public_params,
@@ -17,7 +19,9 @@ use filecoin_proofs::types::{
     PaddedBytesAmount, PoRepConfig, PoRepProofPartitions, PoStConfig, PoStType, SectorSize,
 };
 use filecoin_proofs::with_shape;
+use groupy::{CurveAffine, EncodedPoint};
 use log::{error, info, warn};
+use paired::bls12_381::{G1Affine, G1Uncompressed, G2Affine, G2Uncompressed};
 use phase2::small::{read_small_params_from_large_file, MPCSmall, Streamer};
 use phase2::MPCParameters;
 use rand::rngs::OsRng;
@@ -32,6 +36,13 @@ use storage_proofs::post::fallback::{FallbackPoSt, FallbackPoStCircuit, Fallback
 
 const CHUNK_SIZE: usize = 10_000;
 
+// Non-raw sizes.
+const G1_SIZE: u64 = size_of::<G1Uncompressed>() as u64; // 96
+const G2_SIZE: u64 = size_of::<G2Uncompressed>() as u64; // 192
+const PUBKEY_SIZE: u64 = 3 * G1_SIZE + G2_SIZE + 64; // 544
+
+const VEC_LEN_SIZE: u64 = size_of::<u32>() as u64; // 4
+
 fn get_head_commit() -> String {
     let output = Command::new("git")
         .args(&["rev-parse", "--short=7", "HEAD"])
@@ -44,7 +55,7 @@ fn get_head_commit() -> String {
         .to_lowercase()
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 enum Proof {
     Sdr,
     Winning,
@@ -69,7 +80,7 @@ impl Proof {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 enum Hasher {
     Poseidon,
     // ShaPedersen,
@@ -95,7 +106,7 @@ impl Hasher {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 #[allow(clippy::enum_variant_names)]
 enum Sector {
     SectorSize2KiB,
@@ -157,7 +168,7 @@ impl Sector {
     }
 }
 
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 enum ParamSize {
     Large,
     Small,
@@ -1006,6 +1017,210 @@ fn verify_contribution(path_before: &str, path_after: &str, participant_contrib:
     );
 }
 
+// Non-raw only.
+pub fn read_g1<R: Read>(mut reader: R) -> io::Result<G1Affine> {
+    let mut affine_bytes = G1Uncompressed::empty();
+    reader.read_exact(affine_bytes.as_mut())?;
+    let affine = affine_bytes
+        .into_affine()
+        .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
+
+    if affine.is_zero() {
+        Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "deserialized G1Affine is point at infinity",
+        ))
+    } else {
+        Ok(affine)
+    }
+}
+
+// Non-raw only.
+pub fn read_g2<R: Read>(mut reader: R) -> io::Result<G2Affine> {
+    let mut affine_bytes = G2Uncompressed::empty();
+    reader.read_exact(affine_bytes.as_mut())?;
+    let affine = affine_bytes
+        .into_affine()
+        .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
+
+    if affine.is_zero() {
+        Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "deserialized G2Affine is point at infinity",
+        ))
+    } else {
+        Ok(affine)
+    }
+}
+
+fn seek(file: &mut File, offset: u64) -> io::Result<()> {
+    let pos = file.seek(SeekFrom::Start(offset))?;
+    if pos != offset {
+        Err(io::Error::new(
+            io::ErrorKind::UnexpectedEof,
+            format!("seek stopped early, reached: {}, expected: {}", pos, offset),
+        ))
+    } else {
+        Ok(())
+    }
+}
+
+struct FileInfo {
+    delta_g1_offset: u64,
+    delta_g1: G1Affine,
+    delta_g2: G2Affine,
+    h_len_offset: u64,
+    h_len: u64,
+    h_first: G1Affine,
+    h_last: G1Affine,
+    l_len: u64,
+    l_first: G1Affine,
+    l_last: G1Affine,
+    cs_hash: [u8; 64],
+    contributions_len_offset: u64,
+    contributions_len: u64,
+}
+
+impl Debug for FileInfo {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        f.debug_struct("FileInfo")
+            .field("delta_g1_offset", &self.delta_g1_offset)
+            .field("delta_g1", &self.delta_g1)
+            .field("delta_g2", &self.delta_g2)
+            .field("h_len_offset", &self.h_len_offset)
+            .field("h_len", &self.h_len)
+            .field("h_first", &self.h_first)
+            .field("h_last", &self.h_last)
+            .field("l_len", &self.l_len)
+            .field("l_first", &self.l_first)
+            .field("l_last", &self.l_last)
+            .field("cs_hash", &hex_string(&self.cs_hash))
+            .field("contributions_len_offset", &self.contributions_len_offset)
+            .field("contributions_len", &self.contributions_len)
+            .finish()
+    }
+}
+
+impl FileInfo {
+    fn parse_small(path: &str) -> Self {
+        let mut file = File::open(path).expect("failed to open file");
+
+        let delta_g1 = read_g1(&mut file).expect("failed to read delta_g1");
+        let delta_g2 = read_g2(&mut file).expect("failed to read delta_g2");
+
+        let h_len_offset = G1_SIZE + G2_SIZE;
+        let h_len = file.read_u32::<BigEndian>().expect("failed to read h_len") as u64;
+        let h_first = read_g1(&mut file).expect("failed to read first h element");
+        let h_last_offset = h_len_offset + VEC_LEN_SIZE + (h_len - 1) * G1_SIZE;
+        seek(&mut file, h_last_offset).expect("failed to seek to last h element");
+        let h_last = read_g1(&mut file).expect("failed to read last h element");
+
+        let l_len_offset = h_last_offset + G1_SIZE;
+        let l_len = file.read_u32::<BigEndian>().expect("failed to read l_len") as u64;
+        let l_first = read_g1(&mut file).expect("failed to read first l element");
+        let l_last_offset = l_len_offset + VEC_LEN_SIZE + (l_len - 1) * G1_SIZE;
+        seek(&mut file, l_last_offset).expect("failed to seek to last l element");
+        let l_last = read_g1(&mut file).expect("failed to read last l element");
+
+        let mut cs_hash = [0u8; 64];
+        let cs_hash_offset = l_last_offset + G1_SIZE;
+        seek(&mut file, cs_hash_offset).expect("failed to seek to cs_hash");
+        file.read_exact(&mut cs_hash)
+            .expect("failed to read cs_hash");
+
+        let contributions_len_offset = cs_hash_offset + 64;
+        let contributions_len = file
+            .read_u32::<BigEndian>()
+            .expect("failed to read contributions_len") as u64;
+
+        FileInfo {
+            delta_g1_offset: 0,
+            delta_g1,
+            delta_g2,
+            h_len_offset,
+            h_len,
+            h_first,
+            h_last,
+            l_len,
+            l_first,
+            l_last,
+            cs_hash,
+            contributions_len_offset,
+            contributions_len,
+        }
+    }
+
+    fn parse_large(path: &str) -> Self {
+        let mut file = File::open(path).expect("failed to open file");
+
+        let delta_g1_offset = 2 * G1_SIZE + 2 * G2_SIZE;
+        seek(&mut file, delta_g1_offset).expect("failed to seek to delta_g1");
+        let delta_g1 = read_g1(&mut file).expect("failed to read delta_g1");
+        let delta_g2 = read_g2(&mut file).expect("failed to read delta_g2");
+
+        let ic_len_offset = delta_g1_offset + G1_SIZE + G2_SIZE;
+        let ic_len = file.read_u32::<BigEndian>().expect("failed to read ic_len") as u64;
+
+        let h_len_offset = ic_len_offset + VEC_LEN_SIZE + ic_len * G1_SIZE;
+        seek(&mut file, h_len_offset).expect("failed to seek to h_len");
+        let h_len = file.read_u32::<BigEndian>().expect("failed to read h_len") as u64;
+        let h_first = read_g1(&mut file).expect("failed to read first h element");
+        let h_last_offset = h_len_offset + VEC_LEN_SIZE + (h_len - 1) * G1_SIZE;
+        seek(&mut file, h_last_offset).expect("failed to seek to last h element");
+        let h_last = read_g1(&mut file).expect("failed to read last h element");
+
+        let l_len_offset = h_last_offset + G1_SIZE;
+        let l_len = file.read_u32::<BigEndian>().expect("failed to read l_len") as u64;
+        let l_first = read_g1(&mut file).expect("failed to read first l element");
+        let l_last_offset = l_len_offset + VEC_LEN_SIZE + (l_len - 1) * G1_SIZE;
+        seek(&mut file, l_last_offset).expect("failed to seek to last l element");
+        let l_last = read_g1(&mut file).expect("failed to read last l element");
+
+        let a_len_offset = l_last_offset + G1_SIZE;
+        seek(&mut file, a_len_offset).expect("failed to seek to a_len");
+        let a_len = file.read_u32::<BigEndian>().expect("failed to read a_len") as u64;
+
+        let b_g1_len_offset = a_len_offset + VEC_LEN_SIZE + a_len * G1_SIZE;
+        seek(&mut file, b_g1_len_offset).expect("failed to seek to b_g1_len");
+        let b_g1_len = file
+            .read_u32::<BigEndian>()
+            .expect("failed to read b_g1_len") as u64;
+
+        let b_g2_len_offset = b_g1_len_offset + VEC_LEN_SIZE + b_g1_len * G1_SIZE;
+        seek(&mut file, b_g2_len_offset).expect("failed to seek to b_g2_len");
+        let b_g2_len = file
+            .read_u32::<BigEndian>()
+            .expect("failed to read b_g2_len") as u64;
+
+        let mut cs_hash = [0u8; 64];
+        let cs_hash_offset = b_g2_len_offset + VEC_LEN_SIZE + b_g2_len * G2_SIZE;
+        seek(&mut file, cs_hash_offset).expect("failed to seek to cs_hash");
+        file.read_exact(&mut cs_hash)
+            .expect("failed to read cs_hash");
+
+        let contributions_len_offset = cs_hash_offset + 64;
+        let contributions_len = file
+            .read_u32::<BigEndian>()
+            .expect("failed to read contributions_len") as u64;
+
+        FileInfo {
+            delta_g1_offset,
+            delta_g1,
+            delta_g2,
+            h_len_offset,
+            h_len,
+            h_first,
+            h_last,
+            l_len,
+            l_first,
+            l_last,
+            cs_hash,
+            contributions_len_offset,
+            contributions_len,
+        }
+    }
+}
+
 // Writes info logs to stdout, error logs to stderr, and all logs to the file `log_filename` in
 // `rust-fil-proofs`'s top-level directory.
 fn setup_logger(log_filename: &str) {
@@ -1154,6 +1369,19 @@ fn main() {
                 .help("The path to the small params file to convert."),
         );
 
+    let merge_command = SubCommand::with_name("merge")
+        .about("Merges small-nonraw and large params into a new large file")
+        .arg(
+            Arg::with_name("path-small")
+                .required(true)
+                .help("Path to the small params file."),
+        )
+        .arg(
+            Arg::with_name("path-large")
+                .required(true)
+                .help("Path to the large params file."),
+        );
+
     let matches = App::new("phase2")
         .version("1.0")
         .setting(AppSettings::ArgRequiredElseHelp)
@@ -1164,6 +1392,7 @@ fn main() {
         .subcommand(verify_command)
         .subcommand(small_command)
         .subcommand(convert_command)
+        .subcommand(merge_command)
         .get_matches();
 
     if let (subcommand, Some(matches)) = matches.subcommand() {
@@ -1426,6 +1655,165 @@ fn main() {
                 setup_logger(&log_filename);
 
                 convert_small(path_before)
+            }
+            "merge" => {
+                let path_small = matches.value_of("path-small").unwrap();
+                let path_large_old = matches.value_of("path-large").unwrap();
+
+                assert!(
+                    Path::new(path_small).exists(),
+                    "small file does not exist: {}",
+                    path_small
+                );
+                assert!(
+                    Path::new(path_large_old).exists(),
+                    "large file does not exist: {}",
+                    path_large_old
+                );
+
+                let (
+                    proof_small,
+                    hasher_small,
+                    sector_size_small,
+                    head_small,
+                    param_num_small,
+                    param_size_small,
+                    is_raw_small,
+                ) = parse_params_filename(path_small);
+
+                let (
+                    proof_large,
+                    hasher_large,
+                    sector_size_large,
+                    head_large,
+                    param_num_large,
+                    param_size_large,
+                    _,
+                ) = parse_params_filename(path_large_old);
+
+                assert!(
+                    param_size_small.is_small(),
+                    "small params file is not small"
+                );
+                assert!(
+                    param_size_large.is_large(),
+                    "large params file is not large"
+                );
+                assert_eq!(
+                    proof_small, proof_large,
+                    "small and large params do not have the same proof name"
+                );
+                assert_eq!(
+                    hasher_small, hasher_large,
+                    "small and large params do not have the same hasher name"
+                );
+                assert_eq!(
+                    sector_size_small, sector_size_large,
+                    "small and large params do not have the same sector-size name"
+                );
+                assert_eq!(
+                    head_small, head_large,
+                    "small and large params do not have the same head commit"
+                );
+                assert!(
+                    param_num_small > param_num_large,
+                    "small params must contain more contributions than the large"
+                );
+                assert!(!is_raw_small, "small params must be non-raw");
+
+                let FileInfo {
+                    h_len: h_len_small,
+                    l_len: l_len_small,
+                    cs_hash: cs_hash_small,
+                    contributions_len_offset: contributions_len_offset_small,
+                    contributions_len: contributions_len_small,
+                    ..
+                } = FileInfo::parse_small(&path_small);
+                println!("parsed small file");
+
+                let FileInfo {
+                    delta_g1_offset: delta_g1_offset_large,
+                    h_len_offset: h_len_offset_large,
+                    h_len: h_len_large,
+                    l_len: l_len_large,
+                    cs_hash: cs_hash_large,
+                    contributions_len_offset: contributions_len_offset_large,
+                    contributions_len: contributions_len_large,
+                    ..
+                } = FileInfo::parse_large(&path_large_old);
+                println!("parsed large file");
+
+                assert_eq!(
+                    h_len_small, h_len_large,
+                    "parsed files have different h_len: small: {}, large: {}",
+                    h_len_small, h_len_large
+                );
+                let h_len = h_len_small;
+                assert_eq!(
+                    l_len_small, l_len_large,
+                    "parsed files have different l_len: small: {}, large: {}",
+                    l_len_small, l_len_large,
+                );
+                let l_len = l_len_small;
+                assert_eq!(
+                    &cs_hash_small[..],
+                    &cs_hash_large[..],
+                    "parsed files have different cs_hash: small: {:?}, large: {:?}",
+                    &cs_hash_small[..],
+                    &cs_hash_large[..],
+                );
+                assert!(
+                    contributions_len_small > contributions_len_large,
+                    "small file does not contain additional contributions, small: {}, large: {}",
+                    contributions_len_small,
+                    contributions_len_large
+                );
+                println!("files are consistent");
+
+                println!("copying large file");
+                let path_large_new = path_small.replace("small", "large");
+                let large_len_old =
+                    fs::copy(&path_large_old, &path_large_new).expect("failed to copy large file");
+                let append_len = (contributions_len_small - contributions_len_large) * PUBKEY_SIZE;
+                let large_len_new = large_len_old + append_len;
+                let mut file_large_new = OpenOptions::new()
+                    .write(true)
+                    .open(&path_large_new)
+                    .expect("failed to open new large file");
+                file_large_new
+                    .set_len(large_len_new)
+                    .expect("failed to set new large file length");
+
+                println!("merging small file into copy");
+                let mut file_small = File::open(path_small).expect("failed to open small file");
+
+                // Copy delta_g1/g2
+                let mut delta_bytes = (&mut file_small).take(G1_SIZE + G2_SIZE);
+                seek(&mut file_large_new, delta_g1_offset_large)
+                    .expect("failed to seek to delta_g1 in new file");
+                io::copy(&mut delta_bytes, &mut file_large_new)
+                    .expect("failed to merge delta_g1/g2");
+                println!("merged delta_g1/g2");
+
+                // Copy h_len, h, l_len, l
+                let mut h_l_bytes = (&mut file_small)
+                    .take(VEC_LEN_SIZE + h_len * G1_SIZE + VEC_LEN_SIZE + l_len * G1_SIZE);
+                seek(&mut file_large_new, h_len_offset_large)
+                    .expect("failed to seek to h in new file");
+                io::copy(&mut h_l_bytes, &mut file_large_new)
+                    .expect("failed to merge h, h_len, and l");
+                println!("merged h_len, h, l_len, and l");
+
+                // Copy contributions_len and contributions
+                seek(&mut file_small, contributions_len_offset_small)
+                    .expect("failed to seek to contributions_len in small file");
+                seek(&mut file_large_new, contributions_len_offset_large)
+                    .expect("failed to seek to contributions_len in new file");
+                io::copy(&mut file_small, &mut file_large_new)
+                    .expect("failed to merge contributions");
+                println!("merged contributions");
+
+                println!("successfully merged");
             }
             _ => unreachable!(),
         }
