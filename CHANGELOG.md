@@ -7,57 +7,69 @@ and this project adheres to [Semantic Versioning](https://book.async.rs/overview
 
 ## Unreleased
 
+## 5.0.0 - 2020-08-07
+
+- Publish v28 parameters [FIXME]()
+
+- Add scripts to validate phase2 output and parameters [#1249](https://github.com/filecoin-project/rust-fil-proofs/pull/1249)
+- phase2-cli parse command [#1247](https://github.com/filecoin-project/rust-fil-proofs/pull/1247)
+- phase2-cli merge command [#1242](https://github.com/filecoin-project/rust-fil-proofs/pull/1242)
+- phase2-cli paramgen and filename parsing [#1240](https://github.com/filecoin-project/rust-fil-proofs/pull/1240)
+- Verify transitions from non-raw to raw parameters in phase2-cli [#1239](https://github.com/filecoin-project/rust-fil-proofs/pull/1239)
+- Add a check parameter command that maps parameter files [#1238](https://github.com/filecoin-project/rust-fil-proofs/pull/1238)
+- Add tool to split phase2 parameters [#1235](https://github.com/filecoin-project/rust-fil-proofs/pull/1235)
+
 ## 4.0.5 - 2020-07-28
 
-- Include proofs and snark security audit documents, with updated references [1233](https://github.com/filecoin-project/rust-fil-proofs/pull/1233)
-- Remove `stacked` benchmark from benchy (broken) [1229](https://github.com/filecoin-project/rust-fil-proofs/pull/1229)
-- Update range for feistel tests [1228](https://github.com/filecoin-project/rust-fil-proofs/pull/1228)
-- Allow for compilation on aarch64 [1204](https://github.com/filecoin-project/rust-fil-proofs/pull/1204)
-- Implement `fauxrep2`: a testable fake replication API [1218]((https://github.com/filecoin-project/rust-fil-proofs/pull/1218)
-- Fix CI `metrics_capture` jobs from consistently failing [1215](https://github.com/filecoin-project/rust-fil-proofs/pull/1215)
-- Correct `rows_to_discard` value during post [1220](https://github.com/filecoin-project/rust-fil-proofs/pull/1220)
+- Include proofs and snark security audit documents, with updated references [#1233](https://github.com/filecoin-project/rust-fil-proofs/pull/1233)
+- Remove `stacked` benchmark from benchy (broken) [#1229](https://github.com/filecoin-project/rust-fil-proofs/pull/1229)
+- Update range for feistel tests [#1228](https://github.com/filecoin-project/rust-fil-proofs/pull/1228)
+- Allow for compilation on aarch64 [#1204](https://github.com/filecoin-project/rust-fil-proofs/pull/1204)
+- Implement `fauxrep2`: a testable fake replication API [#1218](https://github.com/filecoin-project/rust-fil-proofs/pull/1218)
+- Fix CI `metrics_capture` jobs from consistently failing [#1215](https://github.com/filecoin-project/rust-fil-proofs/pull/1215)
+- Correct `rows_to_discard` value during post [#1220](https://github.com/filecoin-project/rust-fil-proofs/pull/1220)
 
 ## 4.0.4 - 2020-07-15
 
-- Default parent cache path to use FIL_PROOFS_CACHE_DIR if set [1207](https://github.com/filecoin-project/rust-fil-proofs/pull/1207)
-- Investigate CI metrics capture [1212](https://github.com/filecoin-project/rust-fil-proofs/pull/1212) and [1213](https://github.com/filecoin-project/rust-fil-proofs/pull/1213)
-- Additional README updates and corrections [1211](https://github.com/filecoin-project/rust-fil-proofs/pull/1211)
-- Update README [1208](https://github.com/filecoin-project/rust-fil-proofs/pull/1208)
-- Swap buffers instead of memcpy in generate_labels [1197](https://github.com/filecoin-project/rust-fil-proofs/pull/1197)
-- Apply suggested security audit fixes [1196](https://github.com/filecoin-project/rust-fil-proofs/pull/1196)
-- Make pieces::Stack methods private [1202](https://github.com/filecoin-project/rust-fil-proofs/pull/1202)
-- Remove dead code [1201](https://github.com/filecoin-project/rust-fil-proofs/pull/1201)
-- Test feistel implementation is a valid permutation [1193](https://github.com/filecoin-project/rust-fil-proofs/pull/1193)
+- Default parent cache path to use FIL_PROOFS_CACHE_DIR if set [#1207](https://github.com/filecoin-project/rust-fil-proofs/pull/1207)
+- Investigate CI metrics capture [#1212](https://github.com/filecoin-project/rust-fil-proofs/pull/1212) and [#1213](https://github.com/filecoin-project/rust-fil-proofs/pull/1213)
+- Additional README updates and corrections [#1211](https://github.com/filecoin-project/rust-fil-proofs/pull/1211)
+- Update README [#1208](https://github.com/filecoin-project/rust-fil-proofs/pull/1208)
+- Swap buffers instead of memcpy in generate_labels [#1197](https://github.com/filecoin-project/rust-fil-proofs/pull/1197)
+- Apply suggested security audit fixes [#1196](https://github.com/filecoin-project/rust-fil-proofs/pull/1196)
+- Make pieces::Stack methods private [#1202](https://github.com/filecoin-project/rust-fil-proofs/pull/1202)
+- Remove dead code [#1201](https://github.com/filecoin-project/rust-fil-proofs/pull/1201)
+- Test feistel implementation is a valid permutation [#1193](https://github.com/filecoin-project/rust-fil-proofs/pull/1193)
 
 ## 4.0.3 - 2020-07-01
 
-- Add fauxrep to API for fake sealing [1194](https://github.com/filecoin-project/rust-fil-proofs/pull/1194)
-- Streaming phase2 contribution and fast I/O [1188](https://github.com/filecoin-project/rust-fil-proofs/pull/1188)
-- Add omitted changelog updates [1190](https://github.com/filecoin-project/rust-fil-proofs/pull/1190)
+- Add fauxrep to API for fake sealing [#1194](https://github.com/filecoin-project/rust-fil-proofs/pull/1194)
+- Streaming phase2 contribution and fast I/O [#1188](https://github.com/filecoin-project/rust-fil-proofs/pull/1188)
+- Add omitted changelog updates [#1190](https://github.com/filecoin-project/rust-fil-proofs/pull/1190)
 
 ## 4.0.2 - 2020-06-25
 
-- Allow parameters map to be accessible externally [1186](https://github.com/filecoin-project/rust-fil-proofs/pull/1186)
-- Extend update_tree_r_cache command with new features [1175](https://github.com/filecoin-project/rust-fil-proofs/pull/1175)
-- Add OpenCL to the build instructions [1112](https://github.com/filecoin-project/rust-fil-proofs/pull/1112)
-- Use file locking for cache generation [1179](https://github.com/filecoin-project/rust-fil-proofs/pull/1179)
-- Add logging to all public API functions [1137](https://github.com/filecoin-project/rust-fil-proofs/pull/1137)
-- Upgrade some dependencies [1126](https://github.com/filecoin-project/rust-fil-proofs/pull/1126)
-- Fix clippy warnings [1147](https://github.com/filecoin-project/rust-fil-proofs/pull/1147)
-- Partial caching for SDR [1163](https://github.com/filecoin-project/rust-fil-proofs/pull/1163)
-- Add tool to rebuild tree_r_last from a replica [1170](https://github.com/filecoin-project/rust-fil-proofs/pull/1170)
-- Verify consistent use of porep_id when sealing [1167](https://github.com/filecoin-project/rust-fil-proofs/pull/1167)
+- Allow parameters map to be accessible externally [#1186](https://github.com/filecoin-project/rust-fil-proofs/pull/1186)
+- Extend update_tree_r_cache command with new features [#1175](https://github.com/filecoin-project/rust-fil-proofs/pull/1175)
+- Add OpenCL to the build instructions [#1112](https://github.com/filecoin-project/rust-fil-proofs/pull/1112)
+- Use file locking for cache generation [#1179](https://github.com/filecoin-project/rust-fil-proofs/pull/1179)
+- Add logging to all public API functions [#1137](https://github.com/filecoin-project/rust-fil-proofs/pull/1137)
+- Upgrade some dependencies [#1126](https://github.com/filecoin-project/rust-fil-proofs/pull/1126)
+- Fix clippy warnings [#1147](https://github.com/filecoin-project/rust-fil-proofs/pull/1147)
+- Partial caching for SDR [#1163](https://github.com/filecoin-project/rust-fil-proofs/pull/1163)
+- Add tool to rebuild tree_r_last from a replica [#1170](https://github.com/filecoin-project/rust-fil-proofs/pull/1170)
+- Verify consistent use of porep_id when sealing [#1167](https://github.com/filecoin-project/rust-fil-proofs/pull/1167)
 
 ## 4.0.1 - 2020-06-22
 
-- This release is a hotfix that pinned dependencies to avoid a build break [1182](https://github.com/filecoin-project/rust-fil-proofs/pull/1182)
+- This release is a hotfix that pinned dependencies to avoid a build break [#1182](https://github.com/filecoin-project/rust-fil-proofs/pull/1182)
 
 ## 4.0.0 - 2020-06-15
 
-- Change default rows_to_discard for cached oct-trees [1165](https://github.com/filecoin-project/rust-fil-proofs/pull/1165)
-- Remove validate commit message [1164](https://github.com/filecoin-project/rust-fil-proofs/pull/1164)
-- Modularized window-post bench [1162](https://github.com/filecoin-project/rust-fil-proofs/pull/1162)
-- Updated reported PoSt constraints (in comments) [1161](https://github.com/filecoin-project/rust-fil-proofs/pull/1161)
+- Change default rows_to_discard for cached oct-trees [#1165](https://github.com/filecoin-project/rust-fil-proofs/pull/1165)
+- Remove validate commit message [#1164](https://github.com/filecoin-project/rust-fil-proofs/pull/1164)
+- Modularized window-post bench [#1162](https://github.com/filecoin-project/rust-fil-proofs/pull/1162)
+- Updated reported PoSt constraints (in comments) [#1161](https://github.com/filecoin-project/rust-fil-proofs/pull/1161)
 
 ## 3.0.0 - 2020-06-08
 
@@ -86,7 +98,8 @@ and this project adheres to [Semantic Versioning](https://book.async.rs/overview
 
 - Initial stable release
 
-[Unreleased]: https://github.com/filecoin-project/rust-fil-proofs/compare/v4.0.5...HEAD
+[Unreleased]: https://github.com/filecoin-project/rust-fil-proofs/compare/v5.0.0...HEAD
+[5.0.0]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v5.0.0
 [4.0.5]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v4.0.5
 [4.0.4]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v4.0.4
 [4.0.3]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v4.0.3

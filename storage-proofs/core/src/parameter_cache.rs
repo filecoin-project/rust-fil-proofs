@@ -17,7 +17,7 @@ use std::path::{Path, PathBuf};
 use super::settings;
 
 /// Bump this when circuits change to invalidate the cache.
-pub const VERSION: usize = 27;
+pub const VERSION: usize = 28;
 
 pub const GROTH_PARAMETER_EXT: &str = "params";
 pub const PARAMETER_METADATA_EXT: &str = "meta";
