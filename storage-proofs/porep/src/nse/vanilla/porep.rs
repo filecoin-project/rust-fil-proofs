@@ -223,7 +223,7 @@ mod tests {
     use rand_xorshift::XorShiftRng;
     use storage_proofs_core::{
         hasher::{PoseidonHasher, Sha256Hasher},
-        merkle::LCTree,
+        merkle::{LCTree, OctLCMerkleTree},
         proof::ProofScheme,
         util::NODE_SIZE,
     };
@@ -233,7 +233,7 @@ mod tests {
     #[test]
     #[cfg(feature = "gpu-tests")]
     fn test_gpu_bench_encode() {
-        type Tree = LCTree<PoseidonHasher, U8, U8, U0>;
+        type Tree = OctLCMerkleTree<PoseidonHasher>;
         // femme::start(log::LevelFilter::Debug).ok();
 
         let sector_size = 1024 * 1024 * 1024 * 4;
