@@ -304,10 +304,12 @@ jobs:
       - run: apt-cache search opencl
       - run: sudo apt install -y ocl-icd-opencl-dev
       - run: sudo apt install -y ocl-icd-opencl-dev
-      - run: |
-          cd storage-proofs/porep
-          cargo test --release --features "gpu-tests" gpu
-
+      - run:
+          name: Run GPU tests
+          command: |
+              cd storage-proofs/porep
+              cargo test --release --features "gpu-tests" gpu
+          no_output_timeout: 1h
 
 commands:
   ensure_filecoin_parameters:
