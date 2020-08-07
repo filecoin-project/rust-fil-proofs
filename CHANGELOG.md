@@ -9,9 +9,9 @@ and this project adheres to [Semantic Versioning](https://book.async.rs/overview
 
 ## 5.0.0 - 2020-08-07
 
-- Publish v28 parameters [FIXME]()
-
-- Add scripts to validate phase2 output and parameters [#1249](https://github.com/filecoin-project/rust-fil-proofs/pull/1249)
+- Publish v28 parameters and update Changelog for release [#1252](https://github.com/filecoin-project/rust-fil-proofs/pull/1252)
+- Add script to validate parameter checksums in parameters.json [#1251](https://github.com/filecoin-project/rust-fil-proofs/pull/1251)
+- phase2-cli force small-raw contributions [#1248](https://github.com/filecoin-project/rust-fil-proofs/pull/1248)
 - phase2-cli parse command [#1247](https://github.com/filecoin-project/rust-fil-proofs/pull/1247)
 - phase2-cli merge command [#1242](https://github.com/filecoin-project/rust-fil-proofs/pull/1242)
 - phase2-cli paramgen and filename parsing [#1240](https://github.com/filecoin-project/rust-fil-proofs/pull/1240)

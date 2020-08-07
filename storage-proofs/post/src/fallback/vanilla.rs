@@ -507,7 +507,6 @@ mod tests {
         let randomness = <Tree::Hasher as Hasher>::Domain::random(rng);
         let prover_id = <Tree::Hasher as Hasher>::Domain::random(rng);
 
-        // Construct and store an MT using a named DiskStore.
         let temp_dir = tempfile::tempdir().unwrap();
         let temp_path = temp_dir.path();
 

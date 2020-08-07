@@ -323,7 +323,6 @@ mod tests {
             challenges_count,
         };
 
-        // Construct and store an MT using a named store.
         let temp_dir = tempfile::tempdir().unwrap();
         let temp_path = temp_dir.path();
 
@@ -437,7 +436,6 @@ mod tests {
             challenges_count,
         };
 
-        // Construct and store an MT using a named store.
         let temp_dir = tempfile::tempdir().unwrap();
         let temp_path = temp_dir.path();
 
