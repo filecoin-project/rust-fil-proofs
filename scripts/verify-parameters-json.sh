@@ -1,17 +1,17 @@
 #!/bin/sh
 
 # This script verifies that a given `.params` file (and the corresponding
-# `.vk` file) is part of `parameters.json` as has the correct digest.
+# `.vk` file) is part of `parameters.json` and has the correct digest.
 #
 # This script runs on POSIX compatible shells. You need to have standard
 # utilities (`basename`, `head`, `grep`) as well as have `jq` and `b2sum`
 # installed.
 #
-# The input a `parameter.json` file and a `.params' file.
+# The inputs are a `parameter.json` file and a `.params' file.
 
-if [ "${#}" -ne 1 ]; then
+if [ "${#}" -ne 2 ]; then
     echo "Verify that a given .params file (and the corresponding .vk file)"
-    echo "is part of parameters.json as has the correct digest."
+    echo "is part of parameters.json and has the correct digest."
     echo ""
     echo "Usage: $(basename "${0}") parameters.json parameter-file.params"
     exit 1
