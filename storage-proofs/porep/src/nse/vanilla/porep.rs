@@ -116,7 +116,6 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> PoRep<'a, Tree::H
 
         let trees = labels::encode_with_trees_all::<Tree>(
             config,
-            store_config.rows_to_discard,
             *replica_id,
             data.as_mut()
                 .chunks_mut(config.window_size())
