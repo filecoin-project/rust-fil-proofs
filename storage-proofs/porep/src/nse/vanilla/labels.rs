@@ -529,7 +529,6 @@ type Window<'a> = (Vec<StoreConfig>, u32, &'a mut [u8]); // (StoreConfigs, Windo
 
 pub fn encode_with_trees_all_cpu<'a, Tree: 'static + MerkleTreeTrait>(
     conf: &Config,
-    _rows_to_discard: usize,
     replica_id: <Tree::Hasher as Hasher>::Domain,
     inps: &mut Vec<Window<'a>>,
 ) -> Result<Vec<(Vec<LCMerkleTree<Tree>>, LCMerkleTree<Tree>)>> {
@@ -550,7 +549,6 @@ type GPUHasher = storage_proofs_core::hasher::PoseidonHasher;
 type GPUTree = storage_proofs_core::merkle::OctLCMerkleTree<GPUHasher>;
 pub fn encode_with_trees_all_gpu<'a, Tree: 'static + MerkleTreeTrait>(
     conf: &Config,
-    rows_to_discard: usize,
     replica_id: <Tree::Hasher as Hasher>::Domain,
     inps: &mut Vec<Window<'a>>,
 ) -> Result<Vec<(Vec<LCMerkleTree<Tree>>, LCMerkleTree<Tree>)>> {
@@ -560,7 +558,9 @@ pub fn encode_with_trees_all_gpu<'a, Tree: 'static + MerkleTreeTrait>(
     let mut pool = gpu::SealerPool::new(
         gpu::utils::all_devices()?,
         gpu_conf,
-        gpu::TreeOptions::Enabled { rows_to_discard },
+        gpu::TreeOptions::Enabled {
+            rows_to_discard: inps[0].0[0].rows_to_discard,
+        },
     )?;
 
     let mut replica_id_bytes = [0u8; 32];
@@ -639,15 +639,13 @@ pub fn encode_with_trees_all_gpu<'a, Tree: 'static + MerkleTreeTrait>(
 
 pub fn encode_with_trees_all<'a, Tree: 'static + MerkleTreeTrait>(
     conf: &Config,
-    rows_to_discard: usize,
     replica_id: <Tree::Hasher as Hasher>::Domain,
     mut inps: Vec<Window<'a>>,
 ) -> Result<Vec<(Vec<LCMerkleTree<Tree>>, LCMerkleTree<Tree>)>> {
     if settings::SETTINGS.lock().unwrap().use_gpu_nse
         && std::any::TypeId::of::<Tree>() == std::any::TypeId::of::<GPUTree>()
     {
-        let gpu_result =
-            encode_with_trees_all_gpu::<Tree>(conf, rows_to_discard, replica_id, &mut inps);
+        let gpu_result = encode_with_trees_all_gpu::<Tree>(conf, replica_id, &mut inps);
         match gpu_result {
             Ok(result) => {
                 return Ok(result);
@@ -658,7 +656,7 @@ pub fn encode_with_trees_all<'a, Tree: 'static + MerkleTreeTrait>(
         }
     }
 
-    encode_with_trees_all_cpu::<Tree>(conf, rows_to_discard, replica_id, &mut inps)
+    encode_with_trees_all_cpu::<Tree>(conf, replica_id, &mut inps)
 }
 
 #[cfg(test)]
@@ -892,7 +890,6 @@ mod tests {
             encode_with_trees_all_cpu::<Tree>
         }(
             &config,
-            store_config.rows_to_discard,
             replica_id,
             &mut vec![(store_configs, window_index, &mut encoded_data[..])],
         )
