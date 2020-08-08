@@ -580,6 +580,7 @@ pub fn encode_with_trees_all_gpu<'a, Tree: 'static + MerkleTreeTrait>(
         .into_iter()
         .map(
             |(store_configs, data, layers)| -> Result<(Vec<LCMerkleTree<Tree>>, LCMerkleTree<Tree>)> {
+                let mut store_configs = store_configs.clone();
                 let mut trees = Vec::with_capacity(conf.num_layers());
                 for (layer_index, layer_output_result) in layers.iter().enumerate() {
                     let lo = layer_output_result?;
