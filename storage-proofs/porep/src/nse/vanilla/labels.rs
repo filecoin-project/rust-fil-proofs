@@ -579,16 +579,13 @@ pub fn encode_with_trees_all_gpu<'a, Tree: 'static + MerkleTreeTrait>(
         .collect::<Vec<_>>()
         .into_iter()
         .map(
-            |(store_configs, data, chan)| -> Result<(Vec<LCMerkleTree<Tree>>, LCMerkleTree<Tree>)> {
-                let layers = chan.iter().collect::<gpu::NSEResult<Vec<_>>>()?;
-                data.copy_from_slice(Vec::<u8>::from(&layers.last().unwrap().base).as_slice());
-                let full_tree_len =
-                    get_merkle_tree_len(layers[0].base.0.len(), Tree::Arity::to_usize())
-                        .context("failed to calculate tree length from the base length")?;
+            |(store_configs, data, layers)| -> Result<(Vec<LCMerkleTree<Tree>>, LCMerkleTree<Tree>)> {
+                let mut trees = Vec::with_capacity(conf.num_layers());
+                for (layer_index, layer_output_result) in layers.iter().enumerate() {
+                    let lo = layer_output_result?;
+                    debug!("layer: {}", layer_index);
 
-                let mut trees = Vec::with_capacity(layers.len());
-                for lo in layers.iter() {
-                    let data: Vec<u8> = lo
+                    let tree_data: Vec<u8> = lo
                         .base
                         .0
                         .iter()
@@ -605,10 +602,13 @@ pub fn encode_with_trees_all_gpu<'a, Tree: 'static + MerkleTreeTrait>(
                         .create_new(true)
                         .open(store_path)
                         .context("failed to open store path")?;
-                    f.write_all(&data)
+                    f.write_all(&tree_data)
                         .context("failed to write out gpu tree data")?;
 
                     // Re-instantiate the 'v1' compacted store as an lc tree.
+                    let full_tree_len =
+                        get_merkle_tree_len(lo.base.0.len(), Tree::Arity::to_usize())
+                            .context("failed to calculate tree length from the base length")?;
                     let store = LCStore::new_from_disk(
                         full_tree_len,
                         Tree::Arity::to_usize(),
@@ -619,6 +619,10 @@ pub fn encode_with_trees_all_gpu<'a, Tree: 'static + MerkleTreeTrait>(
                         store,
                         conf.num_nodes_window,
                     )?);
+
+                    if layer_index == conf.num_layers() - 1 {
+                        data.copy_from_slice(Vec::<u8>::from(&lo.base).as_slice());
+                    }
                 }
 
                 assert!(trees.last().is_some());
