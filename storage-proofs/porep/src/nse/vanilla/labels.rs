@@ -905,6 +905,8 @@ mod tests {
     #[test]
     #[cfg(feature = "gpu-tests")]
     fn test_gpu_cpu_consistency() {
+        femme::start(log::LevelFilter::Debug).ok();
+
         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
 
         let config = Config {
