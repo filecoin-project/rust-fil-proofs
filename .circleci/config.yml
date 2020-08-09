@@ -89,8 +89,8 @@ jobs:
       - run:
           name: Test in release profile
           command: |
-            sudo ulimit -n 20000
-            sudo ulimit -u 20000
+            ulimit -n 20000
+            ulimit -u 20000
             ulimit -n 20000
             cargo +$(cat rust-toolchain) test --verbose --release --workspace
             RUSTFLAGS="-D warnings" cargo +$(cat rust-toolchain) build --examples --release --workspace
@@ -118,8 +118,8 @@ jobs:
       - run:
           name: Test ignored in release profile
           command: |
-              sudo ulimit -n 20000
-              sudo ulimit -u 20000
+              ulimit -n 20000
+              ulimit -u 20000
               ulimit -n 20000
               cd << parameters.crate >>
               cargo test --release << parameters.features >> -- --ignored

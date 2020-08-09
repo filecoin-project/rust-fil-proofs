@@ -7,9 +7,11 @@ and this project adheres to [Semantic Versioning](https://book.async.rs/overview
 
 ## Unreleased
 
-## 5.0.0 - 2020-08-07
+## 5.0.0 - 2020-08-10
 
-- Publish v28 parameters and update Changelog for release [#1252](https://github.com/filecoin-project/rust-fil-proofs/pull/1252)
+- Publish v28 parameters and update Changelog for release [#1254](https://github.com/filecoin-project/rust-fil-proofs/pull/1254)
+- Fix benchmark examples in README [#1253](https://github.com/filecoin-project/rust-fil-proofs/pull/1253)
+- Remove unused dependencies [#1124](https://github.com/filecoin-project/rust-fil-proofs/pull/1124) and [#1252](https://github.com/filecoin-project/rust-fil-proofs/pull/1252)
 - Add script to validate parameter checksums in parameters.json [#1251](https://github.com/filecoin-project/rust-fil-proofs/pull/1251)
 - phase2-cli force small-raw contributions [#1248](https://github.com/filecoin-project/rust-fil-proofs/pull/1248)
 - phase2-cli parse command [#1247](https://github.com/filecoin-project/rust-fil-proofs/pull/1247)
