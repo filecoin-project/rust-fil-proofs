@@ -232,16 +232,16 @@ mod tests {
     #[test]
     #[cfg(feature = "gpu-tests")]
     fn test_gpu_bench_encode() {
-        type Tree = OctLCMerkleTree<PoseidonHasher>;
+        type Tree = LCTree<PoseidonHasher, U8, U8, U0>;
         // femme::start(log::LevelFilter::Debug).ok();
 
         let sector_size = 1024 * 1024 * 1024 * 4;
-        let num_windows = 1;
+        let num_windows = 8;
 
         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
         let replica_id = <PoseidonHasher as Hasher>::Domain::random(rng);
         let config = Config {
-            k: 8,
+            k: 1,
             num_nodes_window: (sector_size / num_windows) / NODE_SIZE,
             degree_expander: 384,
             degree_butterfly: 16,

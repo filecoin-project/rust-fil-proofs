@@ -546,7 +546,6 @@ pub fn encode_with_trees_all_cpu<'a, Tree: 'static + MerkleTreeTrait>(
 }
 
 type GPUHasher = storage_proofs_core::hasher::PoseidonHasher;
-type GPUTree = storage_proofs_core::merkle::OctLCMerkleTree<GPUHasher>;
 pub fn encode_with_trees_all_gpu<'a, Tree: 'static + MerkleTreeTrait>(
     conf: &Config,
     replica_id: <Tree::Hasher as Hasher>::Domain,
@@ -643,7 +642,9 @@ pub fn encode_with_trees_all<'a, Tree: 'static + MerkleTreeTrait>(
     mut inps: Vec<Window<'a>>,
 ) -> Result<Vec<(Vec<LCMerkleTree<Tree>>, LCMerkleTree<Tree>)>> {
     if settings::SETTINGS.lock().unwrap().use_gpu_nse
-        && std::any::TypeId::of::<Tree>() == std::any::TypeId::of::<GPUTree>()
+        && std::any::TypeId::of::<Tree::Hasher>() == std::any::TypeId::of::<GPUHasher>()
+        && Tree::Arity::to_usize() == 8
+        && ExpanderGraph::from(conf).bits % 8 == 0
     {
         let gpu_result = encode_with_trees_all_gpu::<Tree>(conf, replica_id, &mut inps);
         match gpu_result {
