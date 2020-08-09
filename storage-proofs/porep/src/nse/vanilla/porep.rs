@@ -222,7 +222,7 @@ mod tests {
     use rand_xorshift::XorShiftRng;
     use storage_proofs_core::{
         hasher::{PoseidonHasher, Sha256Hasher},
-        merkle::{LCTree, OctLCMerkleTree},
+        merkle::LCTree,
         proof::ProofScheme,
         util::NODE_SIZE,
     };
