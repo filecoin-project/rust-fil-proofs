@@ -213,7 +213,6 @@ mod tests {
         let mut sectors: Vec<SectorId> = Vec::new();
         let mut trees = BTreeMap::new();
 
-        // Construct and store an MT using a named store.
         let temp_dir = tempfile::tempdir().unwrap();
         let temp_path = temp_dir.path();
 
