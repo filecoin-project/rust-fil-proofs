@@ -51,7 +51,7 @@ criterion = "0.3"
 bitvec = "0.17"
 rand_xorshift = "0.2.0"
 pretty_assertions = "0.6.1"
-sha2raw = { path = "../../sha2raw", version = "1.0.0" }
+sha2raw = { path = "../../sha2raw", version = "^2.0.0"}
 
 [features]
 default = ["gpu"]

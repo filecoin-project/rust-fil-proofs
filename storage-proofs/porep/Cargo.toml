@@ -10,7 +10,7 @@ readme = "README.md"
 
 [dependencies]
 storage-proofs-core = { path = "../core", version = "4.0.1" }
-sha2raw = { path = "../../sha2raw", version = "1.0.0" }
+sha2raw = { path = "../../sha2raw", version = "^2.0.0"}
 rand = "0.7"
 merkletree = "0.21.0"
 memmap = "0.7"
