@@ -525,7 +525,11 @@ impl From<Config> for gpu::Config {
     }
 }
 
-type Window<'a> = (Vec<StoreConfig>, u32, &'a mut [u8]); // (StoreConfigs, WindowIndex, Data)
+pub struct Window<'a> {
+    pub store_configs: Vec<StoreConfig>,
+    pub window_index: u32,
+    pub data: &'a mut [u8],
+}
 
 pub fn encode_with_trees_all_cpu<'a, Tree: 'static + MerkleTreeTrait>(
     conf: &Config,
@@ -533,13 +537,13 @@ pub fn encode_with_trees_all_cpu<'a, Tree: 'static + MerkleTreeTrait>(
     inps: &mut Vec<Window<'a>>,
 ) -> Result<Vec<(Vec<LCMerkleTree<Tree>>, LCMerkleTree<Tree>)>> {
     inps.into_par_iter()
-        .map(|(store_configs, window_index, data)| {
+        .map(|window| {
             encode_with_trees::<Tree>(
                 conf,
-                store_configs.clone(),
-                *window_index,
+                window.store_configs.clone(),
+                window.window_index,
                 &replica_id,
-                *data,
+                window.data,
             )
         })
         .collect()
@@ -553,13 +557,13 @@ pub fn encode_with_trees_all_gpu<'a, Tree: 'static + MerkleTreeTrait>(
 ) -> Result<Vec<(Vec<LCMerkleTree<Tree>>, LCMerkleTree<Tree>)>> {
     use storage_proofs_core::fr32::fr_into_bytes;
 
+    let rows_to_discard = inps[0].store_configs[0].rows_to_discard;
+
     let gpu_conf: gpu::Config = conf.clone().into();
     let mut pool = gpu::SealerPool::new(
         gpu::utils::all_devices()?,
         gpu_conf,
-        gpu::TreeOptions::Enabled {
-            rows_to_discard: inps[0].0[0].rows_to_discard,
-        },
+        gpu::TreeOptions::Enabled { rows_to_discard },
     )?;
 
     let mut replica_id_bytes = [0u8; 32];
@@ -567,13 +571,14 @@ pub fn encode_with_trees_all_gpu<'a, Tree: 'static + MerkleTreeTrait>(
 
     let outputs = inps
         .into_iter()
-        .map(|(store_configs, window_index, data)| {
+        .map(|window| {
+            assert!(window.store_configs.iter().all(|c|c.rows_to_discard == rows_to_discard));
             let inp = gpu::SealerInput {
                 replica_id: gpu::ReplicaId(replica_id_bytes),
-                window_index: *window_index as usize,
-                original_data: gpu::Layer::from(&data.to_vec()),
+                window_index: window.window_index as usize,
+                original_data: gpu::Layer::from(&window.data.to_vec()),
             };
-            (store_configs, data, pool.seal_on_gpu(inp))
+            (window.store_configs.clone(), &mut window.data, pool.seal_on_gpu(inp))
         })
         .collect::<Vec<_>>()
         .into_iter()
@@ -892,7 +897,11 @@ mod tests {
         }(
             &config,
             replica_id,
-            &mut vec![(store_configs, window_index, &mut encoded_data[..])],
+            &mut vec![Window {
+                store_configs,
+                window_index,
+                data: &mut encoded_data[..],
+            }],
         )
         .unwrap()[0];
 

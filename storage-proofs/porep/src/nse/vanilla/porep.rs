@@ -121,9 +121,13 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> PoRep<'a, Tree::H
                 .chunks_mut(config.window_size())
                 .enumerate()
                 .zip(windowed_store_configs.into_iter())
-                .map(|((window_index, window_data), store_configs)| {
-                    (store_configs, window_index as u32, window_data)
-                })
+                .map(
+                    |((window_index, window_data), store_configs)| labels::Window {
+                        store_configs,
+                        window_index: window_index as u32,
+                        data: window_data,
+                    },
+                )
                 .collect::<Vec<_>>(),
         )?;
 
