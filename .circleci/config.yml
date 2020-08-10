@@ -271,7 +271,7 @@ jobs:
           environment:
             RUST_TEST_THREADS: 1
           no_output_timeout: 2h
-  test_gpu:
+  test_gpu_nse:
     machine:
       image: ubuntu-1604-cuda-10.1:201909-23
     working_directory: ~/crate
@@ -312,7 +312,9 @@ jobs:
           name: Run GPU tests
           command: |
               cd storage-proofs/porep
-              cargo test --release --features "gpu-tests" gpu
+              cargo test --release --features "gpu-tests" nse::
+          environment:
+            RUST_TEST_THREADS: 1
           no_output_timeout: 1h
 
 commands:
@@ -399,7 +401,7 @@ workflows:
             - cargo_fetch
             - ensure_groth_parameters_and_keys_linux
       - test_darwin
-      - test_gpu
+      - test_gpu_nse
       - metrics_capture:
           requires:
             - cargo_fetch

@@ -312,13 +312,13 @@ mod tests {
         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
         let replica_id = <PoseidonHasher as Hasher>::Domain::random(rng);
         let config = Config {
-            k: 8,
-            num_nodes_window: 64,
+            k: 2,
+            num_nodes_window: 512,
             degree_expander: 12,
             degree_butterfly: 8,
             num_expander_layers: 3,
             num_butterfly_layers: 3,
-            sector_size: 64 * 32 * 8,
+            sector_size: 512 * 32 * 8,
         };
 
         let data: Vec<u8> = (0..config.num_nodes_sector())
