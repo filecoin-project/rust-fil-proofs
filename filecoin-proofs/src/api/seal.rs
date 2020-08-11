@@ -759,6 +759,52 @@ pub fn verify_batch_seal<Tree: 'static + MerkleTreeTrait>(
     result
 }
 
+use rayon::prelude::*;
+pub fn verify_batch_seals<Tree: 'static + MerkleTreeTrait>(
+    porep_configs: &[PoRepConfig],
+    comm_r_ins_s: &[&[Commitment]],
+    comm_d_ins_s: &[&[Commitment]],
+    prover_ids_s: &[&[ProverId]],
+    sector_ids_s: &[&[SectorId]],
+    tickets_s: &[&[Ticket]],
+    seeds_s: &[&[Ticket]],
+    proof_vecs_s: &[&[&[u8]]],
+) -> Result<Vec<bool>> {
+    porep_configs
+        .into_par_iter()
+        .zip(comm_r_ins_s.into_par_iter())
+        .zip(comm_d_ins_s.into_par_iter())
+        .zip(prover_ids_s.into_par_iter())
+        .zip(sector_ids_s.into_par_iter())
+        .zip(tickets_s.into_par_iter())
+        .zip(seeds_s.into_par_iter())
+        .zip(proof_vecs_s.into_par_iter())
+        .map(
+            |
+                (((((((porep_config,
+                comm_r_ins),
+                comm_d_ins),
+                prover_ids),
+                sector_ids),
+                tickets),
+                seeds),
+                proof_vecs),
+            | {
+                verify_batch_seal::<Tree>(
+                    *porep_config,
+                    comm_r_ins,
+                    comm_d_ins,
+                    prover_ids,
+                    sector_ids,
+                    tickets,
+                    seeds,
+                    proof_vecs,
+                )
+            },
+        )
+        .collect()
+}
+
 pub fn fauxrep<R: AsRef<Path>, S: AsRef<Path>, Tree: 'static + MerkleTreeTrait>(
     porep_config: PoRepConfig,
     cache_path: R,
