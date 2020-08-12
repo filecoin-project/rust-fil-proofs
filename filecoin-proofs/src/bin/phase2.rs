@@ -691,7 +691,12 @@ fn convert_small(path_before: &str) {
     );
 }
 
-fn verify_contribution(path_before: &str, path_after: &str, participant_contrib: [u8; 64]) {
+fn verify_contribution(
+    path_before: &str,
+    path_after: &str,
+    participant_contrib: [u8; 64],
+    raw_subgroup_checks: bool,
+) {
     #[allow(clippy::large_enum_variant)]
     enum Message {
         Done(MPCSmall),
@@ -722,6 +727,10 @@ fn verify_contribution(path_before: &str, path_after: &str, participant_contrib:
             warn!("using non-raw 'before' params");
         }
 
+        if is_raw && !raw_subgroup_checks {
+            warn!("skipping subgroup checks when deserializing small-raw 'before' params");
+        }
+
         let read_res: io::Result<MPCSmall> = if is_large {
             info!(
                 "reading large 'before' params as `MPCSmall`: {}",
@@ -735,7 +744,7 @@ fn verify_contribution(path_before: &str, path_after: &str, participant_contrib:
             );
             File::open(&path_before).and_then(|file| {
                 let mut reader = BufReader::with_capacity(1024 * 1024, file);
-                MPCSmall::read(&mut reader, is_raw)
+                MPCSmall::read(&mut reader, is_raw, raw_subgroup_checks)
             })
         };
 
@@ -761,6 +770,10 @@ fn verify_contribution(path_before: &str, path_after: &str, participant_contrib:
             warn!("using non-raw 'after' params");
         }
 
+        if is_raw && !raw_subgroup_checks {
+            warn!("skipping subgroup checks when deserializing small-raw 'after' params")
+        }
+
         let read_res: io::Result<MPCSmall> = if is_large {
             info!("reading large 'after' params as `MPCSmall`: {}", path_after);
             read_small_params_from_large_file(&path_after)
@@ -768,7 +781,7 @@ fn verify_contribution(path_before: &str, path_after: &str, participant_contrib:
             info!("reading small 'after' params as `MPCSmall`: {}", path_after);
             File::open(&path_after).and_then(|file| {
                 let mut reader = BufReader::with_capacity(1024 * 1024, file);
-                MPCSmall::read(&mut reader, is_raw)
+                MPCSmall::read(&mut reader, is_raw, raw_subgroup_checks)
             })
         };
 
@@ -1201,6 +1214,12 @@ fn main() {
             Arg::with_name("path-after")
                 .required(true)
                 .help("The path to the params file containing the contribution to be verified"),
+        )
+        .arg(
+            Arg::with_name("skip-raw-subgroup-checks")
+                .long("skip-raw-subgroup-checks")
+                .short("s")
+                .help("Skip the slow subgroup check when deserializing each raw G1 point"),
         );
 
     let small_command = SubCommand::with_name("small")
@@ -1248,6 +1267,14 @@ fn main() {
                 .help("Path to params file."),
         );
 
+    let verify_g1_command = SubCommand::with_name("verify-g1")
+        .about("Verifies that all points in small-raw params are valid G1")
+        .arg(
+            Arg::with_name("path")
+                .required(true)
+                .help("Path to small-raw params file."),
+        );
+
     let matches = App::new("phase2")
         .version("1.0")
         .setting(AppSettings::ArgRequiredElseHelp)
@@ -1260,6 +1287,7 @@ fn main() {
         .subcommand(merge_command)
         .subcommand(split_keys_command)
         .subcommand(parse_command)
+        .subcommand(verify_g1_command)
         .get_matches();
 
     if let (subcommand, Some(matches)) = matches.subcommand() {
@@ -1359,6 +1387,7 @@ fn main() {
             }
             "verify" => {
                 let path_after = matches.value_of("path-after").unwrap();
+                let raw_subgroup_checks = !matches.is_present("skip-raw-subgroup-checks");
 
                 assert!(
                     Path::new(&path_after).exists(),
@@ -1458,7 +1487,7 @@ fn main() {
                     bytes
                 };
 
-                verify_contribution(&path_before, &path_after, contrib);
+                verify_contribution(&path_before, &path_after, contrib, raw_subgroup_checks);
             }
             "small" => {
                 let large_path = matches.value_of("large-path").unwrap();
@@ -1802,6 +1831,29 @@ fn main() {
                 };
 
                 println!("{:#?}", file_info);
+            }
+            "verify-g1" => {
+                let path = matches.value_of("path").unwrap();
+                let (_, _, _, _, _, _, raw) = parse_params_filename(&path);
+
+                assert!(
+                    raw,
+                    "found non-raw params, `verify-g1` is relevant only when verifying small-raw \
+                    params"
+                );
+
+                let file = File::open(&path).expect("failed to open params file");
+                let mut reader = BufReader::with_capacity(1024 * 1024, file);
+
+                println!("starting deserialization");
+
+                let start = Instant::now();
+                let _params = MPCSmall::read(&mut reader, raw, true).unwrap();
+
+                println!(
+                    "succesfully verified h and l G1 points, dt={}s",
+                    start.elapsed().as_secs()
+                );
             }
             _ => unreachable!(),
         }
