@@ -43,7 +43,7 @@ sha2 = "0.9.1"
 typenum = "1.11.2"
 bitintr = "0.3.0"
 gperftools = { version = "0.2", optional = true }
-phase2 = { version = "0.7.0", package = "phase21" }
+phase2 = { version = "0.8.0", package = "phase21" }
 simplelog = "0.8.0"
 rand_chacha = "0.2.1"
 dialoguer = "0.6.2"
