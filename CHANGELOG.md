@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://book.async.rs/overview
 
 ## Unreleased
 
+## 5.1.0 - 2020-08-12
+
+- Add Phase2 cli verify raw g1 point command [#1256](https://github.com/filecoin-project/rust-fil-proofs/pull/1256)
+
 ## 5.0.0 - 2020-08-10
 
 - Publish v28 parameters and update Changelog for release [#1254](https://github.com/filecoin-project/rust-fil-proofs/pull/1254)
@@ -100,7 +104,8 @@ and this project adheres to [Semantic Versioning](https://book.async.rs/overview
 
 - Initial stable release
 
-[Unreleased]: https://github.com/filecoin-project/rust-fil-proofs/compare/v5.0.0...HEAD
+[Unreleased]: https://github.com/filecoin-project/rust-fil-proofs/compare/v5.1.0...HEAD
+[5.1.0]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v5.1.0
 [5.0.0]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v5.0.0
 [4.0.5]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v4.0.5
 [4.0.4]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v4.0.4
