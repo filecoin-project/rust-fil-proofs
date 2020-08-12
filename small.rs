@@ -753,7 +753,11 @@ pub fn read_g1<R: Read>(mut reader: R) -> io::Result<G1Affine> {
 #[inline]
 fn load_g1<R: Read>(mut reader: R, raw: bool, check_raw: bool) -> io::Result<G1Affine> {
     if raw {
-        G1Affine::read_raw(&mut reader, check_raw)
+        if check_raw {
+            G1Affine::read_raw_checked(&mut reader)
+        } else {
+            G1Affine::read_raw(&mut reader)
+        }
     } else {
         read_g1(reader)
     }
