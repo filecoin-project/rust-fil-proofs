@@ -238,7 +238,7 @@ impl<'a> Streamer<'a> {
             info!("phase2::MPCParameters::contribute() beginning streaming h");
             while this_chunk_size > 0 {
                 for _ in 0..this_chunk_size {
-                    h_chunk.push(load_g1(&mut reader, self.read_raw)?);
+                    h_chunk.push(load_g1(&mut reader, self.read_raw, false)?);
                 }
                 chunks_read += this_chunk_size;
 
@@ -265,7 +265,7 @@ impl<'a> Streamer<'a> {
             info!("phase2::MPCParameters::contribute() beginning streaming l");
             while this_chunk_size > 0 {
                 for _ in 0..this_chunk_size {
-                    l_chunk.push(load_g1(&mut reader, self.read_raw)?);
+                    l_chunk.push(load_g1(&mut reader, self.read_raw, false)?);
                 }
                 chunks_read += this_chunk_size;
 
@@ -337,7 +337,7 @@ impl<'a> Streamer<'a> {
             info!("phase2::MPCParameters::convert() beginning streaming h");
             while this_chunk_size > 0 {
                 for _ in 0..this_chunk_size {
-                    h_chunk.push(load_g1(&mut reader, self.read_raw)?);
+                    h_chunk.push(load_g1(&mut reader, self.read_raw, false)?);
                 }
                 chunks_read += this_chunk_size;
 
@@ -363,7 +363,7 @@ impl<'a> Streamer<'a> {
             info!("phase2::MPCParameters::convert() beginning streaming l");
             while this_chunk_size > 0 {
                 for _ in 0..this_chunk_size {
-                    l_chunk.push(load_g1(&mut reader, self.read_raw)?);
+                    l_chunk.push(load_g1(&mut reader, self.read_raw, false)?);
                 }
                 chunks_read += this_chunk_size;
 
@@ -444,20 +444,20 @@ impl MPCSmall {
     }
 
     /// Deserialize these parameters.
-    pub fn read<R: Read>(mut reader: R, raw: bool) -> io::Result<Self> {
+    pub fn read<R: Read>(mut reader: R, raw: bool, check_raw: bool) -> io::Result<Self> {
         let delta_g1: G1Affine = read_g1(&mut reader)?;
         let delta_g2: G2Affine = read_g2(&mut reader)?;
 
         let h_len = reader.read_u32::<BigEndian>()? as usize;
         let mut h = Vec::<G1Affine>::with_capacity(h_len);
         for _ in 0..h_len {
-            h.push(load_g1(&mut reader, raw)?);
+            h.push(load_g1(&mut reader, raw, check_raw)?);
         }
 
         let l_len = reader.read_u32::<BigEndian>()? as usize;
         let mut l = Vec::<G1Affine>::with_capacity(l_len);
         for _ in 0..l_len {
-            l.push(load_g1(&mut reader, raw)?);
+            l.push(load_g1(&mut reader, raw, check_raw)?);
         }
 
         let mut cs_hash = [0u8; 64];
@@ -751,9 +751,9 @@ pub fn read_g1<R: Read>(mut reader: R) -> io::Result<G1Affine> {
 }
 
 #[inline]
-fn load_g1<R: Read>(mut reader: R, raw: bool) -> io::Result<G1Affine> {
+fn load_g1<R: Read>(mut reader: R, raw: bool, check_raw: bool) -> io::Result<G1Affine> {
     if raw {
-        G1Affine::read_raw(&mut reader)
+        G1Affine::read_raw(&mut reader, check_raw)
     } else {
         read_g1(reader)
     }
