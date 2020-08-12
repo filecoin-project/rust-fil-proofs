@@ -208,7 +208,7 @@ fn test_small_file_io() {
     {
         let file = File::open(SMALL_PATH).unwrap();
         let mut reader = BufReader::with_capacity(1024 * 1024, file);
-        let small_read = MPCSmall::read(&mut reader, false).unwrap();
+        let small_read = MPCSmall::read(&mut reader, false, false).unwrap();
         assert_eq!(small_read, small_params);
         assert!(large_params.has_last_contrib(&small_read));
     };
