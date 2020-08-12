@@ -691,6 +691,11 @@ fn convert_small(path_before: &str) {
     );
 }
 
+/// If `raw_subgroup_checks` is true, then `verify_contribution` ensures that the G1 points of the 'after' contribution
+/// are in the correct subgroup. This is expensive, so the 'before' contribution is not checked. This assumes that all
+/// 'after' contributions will be separately verified, and ensures that the subgroup check will happen once (but no
+/// more). This means the very first 'before' params will not have the subgroup check. However, the verifier will have
+/// constructed these deterministically such that they are known to be in the subgroup.
 fn verify_contribution(
     path_before: &str,
     path_after: &str,
@@ -727,7 +732,7 @@ fn verify_contribution(
             warn!("using non-raw 'before' params");
         }
 
-        if is_raw && !raw_subgroup_checks {
+        if is_raw {
             warn!("skipping subgroup checks when deserializing small-raw 'before' params");
         }
 
@@ -744,7 +749,7 @@ fn verify_contribution(
             );
             File::open(&path_before).and_then(|file| {
                 let mut reader = BufReader::with_capacity(1024 * 1024, file);
-                MPCSmall::read(&mut reader, is_raw, raw_subgroup_checks)
+                MPCSmall::read(&mut reader, is_raw, false)
             })
         };
 
