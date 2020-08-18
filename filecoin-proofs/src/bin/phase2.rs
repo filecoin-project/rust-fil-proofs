@@ -229,7 +229,10 @@ fn params_filename(
 // (proof, hasher, sector-size, head, param-number, param-size, is-raw).
 fn parse_params_filename(path: &str) -> (Proof, Hasher, Sector, String, usize, ParamSize, bool) {
     // Remove directories from the path.
-    let filename = path.rsplitn(2, '/').next().expect("parse_params_filename rsplitn failed");
+    let filename = path
+        .rsplitn(2, '/')
+        .next()
+        .expect("parse_params_filename rsplitn failed");
     let split: Vec<&str> = filename.split('_').collect();
 
     let proof = match split[0] {
@@ -288,7 +291,11 @@ fn parse_params_filename(path: &str) -> (Proof, Hasher, Sector, String, usize, P
 }
 
 fn blank_sdr_poseidon_params<Tree: MerkleTreeTrait>(sector_size: u64) -> PoRepPublicParams<Tree> {
-    let n_partitions = *POREP_PARTITIONS.read().expect("porep partition read error").get(&sector_size).expect("porep partition get error");
+    let n_partitions = *POREP_PARTITIONS
+        .read()
+        .expect("porep partition read error")
+        .get(&sector_size)
+        .expect("porep partition get error");
 
     let porep_config = PoRepConfig {
         sector_size: SectorSize(sector_size),
@@ -844,9 +851,11 @@ fn verify_contribution(
     info!("verifying contribution");
     let start_verification = Instant::now();
 
-    let calculated_contrib =
-        phase2::small::verify_contribution_small(&before_params.expect("before params failure"), &after_params.expect("after params failure"))
-            .expect("failed to calculate expected contribution");
+    let calculated_contrib = phase2::small::verify_contribution_small(
+        &before_params.expect("before params failure"),
+        &after_params.expect("after params failure"),
+    )
+    .expect("failed to calculate expected contribution");
 
     assert_eq!(
         &participant_contrib[..],
@@ -1353,7 +1362,9 @@ fn main() {
                 );
             }
             "contribute" => {
-                let path_before = matches.value_of("path-before").expect("path-before match failure");
+                let path_before = matches
+                    .value_of("path-before")
+                    .expect("path-before match failure");
 
                 let seed: Option<[u8; 32]> = matches.value_of("seed").map(|hex_str| {
                     assert_eq!(
@@ -1391,7 +1402,9 @@ fn main() {
                 contribute_to_params(path_before, seed);
             }
             "verify" => {
-                let path_after = matches.value_of("path-after").expect("path-after match failure");
+                let path_after = matches
+                    .value_of("path-after")
+                    .expect("path-after match failure");
                 let raw_subgroup_checks = !matches.is_present("skip-raw-subgroup-checks");
 
                 assert!(
@@ -1495,7 +1508,9 @@ fn main() {
                 verify_contribution(&path_before, &path_after, contrib, raw_subgroup_checks);
             }
             "small" => {
-                let large_path = matches.value_of("large-path").expect("large-path match failure");
+                let large_path = matches
+                    .value_of("large-path")
+                    .expect("large-path match failure");
 
                 let (proof, hasher, sector_size, head, param_num, param_size, read_raw) =
                     parse_params_filename(large_path);
@@ -1541,7 +1556,9 @@ fn main() {
                 println!("successfully wrote small params");
             }
             "convert" => {
-                let path_before = matches.value_of("path-before").expect("path-before match failure");
+                let path_before = matches
+                    .value_of("path-before")
+                    .expect("path-before match failure");
 
                 let log_filename = format!("{}_convert.log", path_before);
                 setup_logger(&log_filename);
@@ -1549,8 +1566,12 @@ fn main() {
                 convert_small(path_before)
             }
             "merge" => {
-                let path_small = matches.value_of("path-small").expect("path-small match failure");
-                let path_large_old = matches.value_of("path-large").expect("path-large match failure");
+                let path_small = matches
+                    .value_of("path-small")
+                    .expect("path-small match failure");
+                let path_large_old = matches
+                    .value_of("path-large")
+                    .expect("path-large match failure");
 
                 assert!(
                     Path::new(path_small).exists(),
@@ -1853,7 +1874,8 @@ fn main() {
                 println!("starting deserialization");
 
                 let start = Instant::now();
-                let _params = MPCSmall::read(&mut reader, raw, true).expect("mpc small read failure");
+                let _params =
+                    MPCSmall::read(&mut reader, raw, true).expect("mpc small read failure");
 
                 println!(
                     "succesfully verified h and l G1 points, dt={}s",

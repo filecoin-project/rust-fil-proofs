@@ -163,7 +163,10 @@ pub fn default_rows_to_discard(leafs: usize, arity: usize) -> usize {
 
     // This configurable setting is for a default oct-tree
     // rows_to_discard value, which defaults to 2.
-    let rows_to_discard = settings::SETTINGS.lock().unwrap().rows_to_discard as usize;
+    let rows_to_discard = settings::SETTINGS
+        .lock()
+        .expect("rows_to_discard settings lock failure")
+        .rows_to_discard as usize;
 
     // Discard at most 'constant value' rows (coded below,
     // differing by arity) while respecting the max number that
@@ -196,13 +199,14 @@ mod tests {
             let data: Vec<u8> = (0..i + 10).map(|_| rng.gen()).collect();
             let bools = {
                 let mut cs = cs.namespace(|| format!("round: {}", i));
-                bytes_into_boolean_vec(&mut cs, Some(data.as_slice()), 8).unwrap()
+                bytes_into_boolean_vec(&mut cs, Some(data.as_slice()), 8)
+                    .expect("bytes into boolean vec failure")
             };
 
             let bytes_actual: Vec<u8> = bits_to_bytes(
                 bools
                     .iter()
-                    .map(|b| b.get_value().unwrap())
+                    .map(|b| b.get_value().expect("get_value failure"))
                     .collect::<Vec<bool>>()
                     .as_slice(),
             );
@@ -257,22 +261,27 @@ mod tests {
             let val_fr = Fr::random(rng);
             let val_vec = fr_into_bytes(&val_fr);
 
-            let val_num =
-                num::AllocatedNum::alloc(cs.namespace(|| "val_num"), || Ok(val_fr)).unwrap();
-            let val_num_bits = val_num.to_bits_le(cs.namespace(|| "val_bits")).unwrap();
+            let val_num = num::AllocatedNum::alloc(cs.namespace(|| "val_num"), || Ok(val_fr))
+                .expect("alloc failure");
+            let val_num_bits = val_num
+                .to_bits_le(cs.namespace(|| "val_bits"))
+                .expect("to_bits_le failure");
 
             let bits =
                 bytes_into_boolean_vec_be(cs.namespace(|| "val_bits_2"), Some(&val_vec), 256)
-                    .unwrap();
+                    .expect("bytes_into_boolean_vec_be failure");
 
             let val_num_reversed_bit_numbering = reverse_bit_numbering(val_num_bits);
 
             let a_values: Vec<bool> = val_num_reversed_bit_numbering
                 .iter()
-                .map(|v| v.get_value().unwrap())
+                .map(|v| v.get_value().expect("get_value failure"))
                 .collect();
 
-            let b_values: Vec<bool> = bits.iter().map(|v| v.get_value().unwrap()).collect();
+            let b_values: Vec<bool> = bits
+                .iter()
+                .map(|v| v.get_value().expect("get_value failure"))
+                .collect();
             assert_eq!(&a_values[..], &b_values[..]);
         }
     }

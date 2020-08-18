@@ -67,7 +67,7 @@ pub fn bytes_into_fr_repr_safe(r: &[u8]) -> FrRepr {
 // Takes an Fr and returns a vector of exactly 32 bytes guaranteed to contain a valid Fr.
 pub fn fr_into_bytes(fr: &Fr) -> Fr32Vec {
     let mut out = Vec::with_capacity(32);
-    fr.into_repr().write_le(&mut out).unwrap();
+    fr.into_repr().write_le(&mut out).expect("write_le failure");
     out
 }
 
@@ -90,7 +90,7 @@ pub fn frs_into_bytes(frs: &[Fr]) -> Fr32Vec {
 pub fn u32_into_fr(n: u32) -> Fr {
     let mut buf: Fr32Vec = vec![0u8; 32];
     let mut w = &mut buf[0..4];
-    w.write_u32::<LittleEndian>(n).unwrap();
+    w.write_u32::<LittleEndian>(n).expect("write_u32 failure");
 
     bytes_into_fr(&buf).expect("should never fail since u32 is in the field")
 }
@@ -99,7 +99,7 @@ pub fn u32_into_fr(n: u32) -> Fr {
 pub fn u64_into_fr(n: u64) -> Fr {
     let mut buf: Fr32Vec = vec![0u8; 32];
     let mut w = &mut buf[0..8];
-    w.write_u64::<LittleEndian>(n).unwrap();
+    w.write_u64::<LittleEndian>(n).expect("write_u64 failure");
 
     bytes_into_fr(&buf).expect("should never fail since u64 is in the field")
 }

@@ -27,7 +27,7 @@ where
     );
 
     let mut chunks = data.chunks(PEDERSEN_BLOCK_SIZE);
-    let mut cur: Vec<Boolean> = chunks.next().unwrap().to_vec();
+    let mut cur: Vec<Boolean> = chunks.next().expect("chunks.next failure").to_vec();
     let chunks_len = chunks.len();
 
     for (i, block) in chunks.enumerate() {
@@ -101,7 +101,8 @@ mod tests {
 
             let data_bits: Vec<Boolean> = {
                 let mut cs = cs.namespace(|| "data");
-                bytes_into_boolean_vec(&mut cs, Some(data.as_slice()), data.len()).unwrap()
+                bytes_into_boolean_vec(&mut cs, Some(data.as_slice()), data.len())
+                    .expect("bytes_into_boolean_vec failure")
             };
             let out =
                 pedersen_compression_num(&mut cs, &data_bits).expect("pedersen hashing failed");
@@ -118,7 +119,7 @@ mod tests {
 
             assert_eq!(
                 expected,
-                out.get_value().unwrap(),
+                out.get_value().expect("get_value failure"),
                 "circuit and non circuit do not match"
             );
         }
@@ -143,7 +144,8 @@ mod tests {
 
             let data_bits: Vec<Boolean> = {
                 let mut cs = cs.namespace(|| "data");
-                bytes_into_boolean_vec(&mut cs, Some(data.as_slice()), data.len()).unwrap()
+                bytes_into_boolean_vec(&mut cs, Some(data.as_slice()), data.len())
+                    .expect("bytes_into_boolean_vec failure")
             };
             let out = pedersen_md_no_padding(cs.namespace(|| "pedersen"), &data_bits)
                 .expect("pedersen hashing failed");
@@ -160,7 +162,7 @@ mod tests {
 
             assert_eq!(
                 expected,
-                out.get_value().unwrap(),
+                out.get_value().expect("get_value failure"),
                 "circuit and non circuit do not match {} bytes",
                 bytes
             );

@@ -1,4 +1,5 @@
-#![warn(clippy::unwrap_used)]
+//requires nightly, or later stable version
+//#![warn(clippy::unwrap_used)]
 
 pub mod drg;
 pub mod stacked;

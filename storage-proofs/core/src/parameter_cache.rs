@@ -92,7 +92,11 @@ impl Drop for LockedFile {
 }
 
 pub fn parameter_cache_dir_name() -> String {
-    settings::SETTINGS.lock().unwrap().parameter_cache.clone()
+    settings::SETTINGS
+        .lock()
+        .expect("parameter_cache_dir_name settings lock failure")
+        .parameter_cache
+        .clone()
 }
 
 pub fn parameter_cache_dir() -> PathBuf {

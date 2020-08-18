@@ -77,10 +77,13 @@ fn read_node<'a>(i: usize, parents: &[u32], data: &'a [u8]) -> &'a [u8] {
 pub fn derive_feistel_keys(porep_id: [u8; 32]) -> [u64; 4] {
     let mut feistel_keys = [0u64; 4];
     let raw_seed = derive_porep_domain_seed(FEISTEL_DST, porep_id);
-    feistel_keys[0] = u64::from_le_bytes(raw_seed[0..8].try_into().unwrap());
-    feistel_keys[1] = u64::from_le_bytes(raw_seed[8..16].try_into().unwrap());
-    feistel_keys[2] = u64::from_le_bytes(raw_seed[16..24].try_into().unwrap());
-    feistel_keys[3] = u64::from_le_bytes(raw_seed[24..32].try_into().unwrap());
+    feistel_keys[0] = u64::from_le_bytes(raw_seed[0..8].try_into().expect("from_le_bytes failure"));
+    feistel_keys[1] =
+        u64::from_le_bytes(raw_seed[8..16].try_into().expect("from_le_bytes failure"));
+    feistel_keys[2] =
+        u64::from_le_bytes(raw_seed[16..24].try_into().expect("from_le_bytes failure"));
+    feistel_keys[3] =
+        u64::from_le_bytes(raw_seed[24..32].try_into().expect("from_le_bytes failure"));
     feistel_keys
 }
 
@@ -126,7 +129,10 @@ where
     /// Returns a reference to the parent cache.
     pub fn parent_cache(&self) -> Result<ParentCache> {
         // Number of nodes to be cached in memory
-        let default_cache_size = settings::SETTINGS.lock().unwrap().sdr_parents_cache_size;
+        let default_cache_size = settings::SETTINGS
+            .lock()
+            .expect("sdr_parents_cache_size settings lock failure")
+            .sdr_parents_cache_size;
         let cache_entries = self.size() as u32;
         let cache_size = cache_entries.min(default_cache_size);
 
@@ -149,7 +155,8 @@ where
         } else {
             let mut cache_parents = [0u32; DEGREE];
 
-            self.parents(node as usize, &mut cache_parents[..]).unwrap();
+            self.parents(node as usize, &mut cache_parents[..])
+                .expect("parents failure");
             Ok(self.copy_parents_data_inner_exp(&cache_parents, base_data, exp_data, hasher))
         }
     }
@@ -167,7 +174,8 @@ where
         } else {
             let mut cache_parents = [0u32; DEGREE];
 
-            self.parents(node as usize, &mut cache_parents[..]).unwrap();
+            self.parents(node as usize, &mut cache_parents[..])
+                .expect("parents failure");
             Ok(self.copy_parents_data_inner(&cache_parents, base_data, hasher))
         }
     }

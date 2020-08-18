@@ -188,7 +188,7 @@ impl<Tree: 'static + MerkleTreeTrait> FallbackPoStCircuit<Tree> {
 
         let num_chunks = settings::SETTINGS
             .lock()
-            .unwrap()
+            .expect("window_post_synthesis_num_cpus settings lock failure")
             .window_post_synthesis_num_cpus as usize;
 
         let chunk_size = (sectors.len() / num_chunks).max(1);
@@ -282,12 +282,13 @@ mod tests {
             sector_count: 5,
         };
 
-        let pp = FallbackPoSt::<OctMerkleTree<PoseidonHasher>>::setup(&params).unwrap();
+        let pp = FallbackPoSt::<OctMerkleTree<PoseidonHasher>>::setup(&params)
+            .expect("fallback post setup failure");
 
         let mut cs = BenchCS::<Bls12>::new();
         FallbackPoStCompound::<OctMerkleTree<PoseidonHasher>>::blank_circuit(&pp)
             .synthesize(&mut cs)
-            .unwrap();
+            .expect("blank circuit failure");
 
         assert_eq!(cs.num_constraints(), 266_665);
     }
@@ -314,7 +315,7 @@ mod tests {
             sector_count,
         };
 
-        let temp_dir = tempfile::tempdir().unwrap();
+        let temp_dir = tempfile::tempdir().expect("tempdir failure");
         let temp_path = temp_dir.path();
 
         let mut pub_sectors = Vec::new();
@@ -390,7 +391,7 @@ mod tests {
                     }
                 })
                 .collect::<Result<_>>()
-                .unwrap();
+                .expect("circuit sectors failure");
 
             let mut cs = TestConstraintSystem::<Bls12>::new();
 
@@ -422,7 +423,7 @@ mod tests {
                 &pub_params,
                 Some(j),
             )
-            .unwrap();
+            .expect("generate_public_inputs failure");
             let expected_inputs = cs.get_inputs();
 
             for ((input, label), generated_input) in

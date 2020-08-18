@@ -61,7 +61,9 @@ impl Default for PoseidonFunction {
 impl Hashable<PoseidonFunction> for Fr {
     fn hash(&self, state: &mut PoseidonFunction) {
         let mut bytes = Vec::with_capacity(32);
-        self.into_repr().write_le(&mut bytes).unwrap();
+        self.into_repr()
+            .write_le(&mut bytes)
+            .expect("write_le failure");
         state.write(&bytes);
     }
 }
@@ -144,7 +146,7 @@ fn as_ref<'a>(src: &'a [u64; 4]) -> &'a [u8] {
 impl Domain for PoseidonDomain {
     fn into_bytes(&self) -> Vec<u8> {
         let mut out = Vec::with_capacity(PoseidonDomain::byte_len());
-        self.0.write_le(&mut out).unwrap();
+        self.0.write_le(&mut out).expect("write_le failure");
 
         out
     }
@@ -188,7 +190,7 @@ impl Element for PoseidonDomain {
 impl StdHasher for PoseidonFunction {
     #[inline]
     fn write(&mut self, msg: &[u8]) {
-        self.0 = Fr::from_repr(shared_hash(msg).0).unwrap();
+        self.0 = Fr::from_repr(shared_hash(msg).0).expect("from_repr failure");
     }
 
     #[inline]
@@ -203,7 +205,8 @@ fn shared_hash(data: &[u8]) -> PoseidonDomain {
     let preimage = data
         .chunks(32)
         .map(|ref chunk| {
-            <Bls12 as ff::ScalarEngine>::Fr::from_repr(PoseidonDomain::from_slice(chunk).0).unwrap()
+            <Bls12 as ff::ScalarEngine>::Fr::from_repr(PoseidonDomain::from_slice(chunk).0)
+                .expect("from_repr failure")
         })
         .collect::<Vec<_>>();
 
@@ -255,16 +258,16 @@ impl HashFunction<PoseidonDomain> for PoseidonFunction {
 
         let fr_input = input
             .iter()
-            .map(|x| <Bls12 as ScalarEngine>::Fr::from_repr(x.0).unwrap())
+            .map(|x| <Bls12 as ScalarEngine>::Fr::from_repr(x.0).expect("from_repr failure"))
             .collect::<Vec<_>>();
 
         fr_input[1..]
             .chunks(arity - 1)
             .fold(fr_input[0], |acc, elts| {
                 p.reset();
-                p.input(acc).unwrap(); // These unwraps will panic iff arity is incorrect, but it was checked above.
+                p.input(acc).expect("input failure"); // These unwraps will panic iff arity is incorrect, but it was checked above.
                 elts.iter().for_each(|elt| {
-                    let _ = p.input(*elt).unwrap();
+                    let _ = p.input(*elt).expect("input failure");
                 });
                 p.hash()
             })
@@ -300,8 +303,7 @@ impl HashFunction<PoseidonDomain> for PoseidonFunction {
 
         let mut hash = elements[0].clone();
         let mut preimage = vec![hash.clone(); arity]; // Allocate. This will be overwritten.
-        let mut hash_num = 0;
-        for elts in elements[1..].chunks(arity - 1) {
+        for (hash_num, elts) in elements[1..].chunks(arity - 1).enumerate() {
             preimage[0] = hash;
             for (i, elt) in elts.iter().enumerate() {
                 preimage[i + 1] = elt.clone();
@@ -313,12 +315,11 @@ impl HashFunction<PoseidonDomain> for PoseidonFunction {
                     num::AllocatedNum::alloc(cs.namespace(|| format!("padding {}", i)), || {
                         Ok(Fr::zero())
                     })
-                    .unwrap();
+                    .expect("alloc failure");
             }
             let cs = cs.namespace(|| format!("hash md {}", hash_num));
             hash =
                 poseidon_hash::<_, Bls12, PoseidonMDArity>(cs, preimage.clone(), params)?.clone();
-            hash_num += 1;
         }
 
         Ok(hash)
@@ -366,8 +367,8 @@ impl LightAlgorithm<PoseidonDomain> for PoseidonFunction {
         _height: usize,
     ) -> PoseidonDomain {
         shared_hash_frs(&[
-            <Bls12 as ff::ScalarEngine>::Fr::from_repr(left.0).unwrap(),
-            <Bls12 as ff::ScalarEngine>::Fr::from_repr(right.0).unwrap(),
+            <Bls12 as ff::ScalarEngine>::Fr::from_repr(left.0).expect("from_repr failure"),
+            <Bls12 as ff::ScalarEngine>::Fr::from_repr(right.0).expect("from_repr failure"),
         ])
         .into()
     }
@@ -377,7 +378,9 @@ impl LightAlgorithm<PoseidonDomain> for PoseidonFunction {
             1 | 2 | 4 | 8 | 16 => shared_hash_frs(
                 &parts
                     .iter()
-                    .map(|x| <Bls12 as ff::ScalarEngine>::Fr::from_repr(x.0).unwrap())
+                    .map(|x| {
+                        <Bls12 as ff::ScalarEngine>::Fr::from_repr(x.0).expect("from_repr failure")
+                    })
                     .collect::<Vec<_>>(),
             )
             .into(),
@@ -403,7 +406,7 @@ impl From<FrRepr> for PoseidonDomain {
 impl From<PoseidonDomain> for Fr {
     #[inline]
     fn from(val: PoseidonDomain) -> Self {
-        Fr::from_repr(val.0).unwrap()
+        Fr::from_repr(val.0).expect("from_repr failure")
     }
 }
 
@@ -426,9 +429,10 @@ mod tests {
             PoseidonDomain(Fr::one().into_repr()),
         ];
 
-        let t = MerkleTree::<PoseidonHasher, typenum::U2>::new(values.iter().copied()).unwrap();
+        let t = MerkleTree::<PoseidonHasher, typenum::U2>::new(values.iter().copied())
+            .expect("merkle tree new failure");
 
-        let p = t.gen_proof(0).unwrap(); // create a proof for the first value =k Fr::one()
+        let p = t.gen_proof(0).expect("gen_proof failure"); // create a proof for the first value =k Fr::one()
 
         assert_eq!(*p.path(), vec![0, 0]);
         assert_eq!(
@@ -454,30 +458,31 @@ mod tests {
             PoseidonDomain(Fr::one().into_repr()),
         ];
 
-        let t = MerkleTree::<PoseidonHasher, typenum::U2>::new(leaves.iter().copied()).unwrap();
+        let t = MerkleTree::<PoseidonHasher, typenum::U2>::new(leaves.iter().copied())
+            .expect("merkle tree new failure");
 
         assert_eq!(t.leafs(), 4);
 
         let mut a = PoseidonFunction::default();
 
-        assert_eq!(t.read_at(0).unwrap(), leaves[0]);
-        assert_eq!(t.read_at(1).unwrap(), leaves[1]);
-        assert_eq!(t.read_at(2).unwrap(), leaves[2]);
-        assert_eq!(t.read_at(3).unwrap(), leaves[3]);
+        assert_eq!(t.read_at(0).expect("read_at failure"), leaves[0]);
+        assert_eq!(t.read_at(1).expect("read_at failure"), leaves[1]);
+        assert_eq!(t.read_at(2).expect("read_at failure"), leaves[2]);
+        assert_eq!(t.read_at(3).expect("read_at failure"), leaves[3]);
 
         let i1 = a.node(leaves[0], leaves[1], 0);
         a.reset();
         let i2 = a.node(leaves[2], leaves[3], 0);
         a.reset();
 
-        assert_eq!(t.read_at(4).unwrap(), i1);
-        assert_eq!(t.read_at(5).unwrap(), i2);
+        assert_eq!(t.read_at(4).expect("read_at failure"), i1);
+        assert_eq!(t.read_at(5).expect("read_at failure"), i2);
 
         let root = a.node(i1, i2, 1);
         a.reset();
 
         assert_eq!(
-            t.read_at(4).unwrap().0,
+            t.read_at(4).expect("read_at failure").0,
             FrRepr([
                 0xb339ff6079800b5e,
                 0xec5907b3dc3094af,
@@ -492,10 +497,10 @@ mod tests {
             0x30eb6385ae6b74ae,
             0x1effebb7b26ad9eb,
         ]);
-        let actual = t.read_at(6).unwrap().0;
+        let actual = t.read_at(6).expect("read_at failure").0;
 
         assert_eq!(actual, expected);
-        assert_eq!(t.read_at(6).unwrap(), root);
+        assert_eq!(t.read_at(6).expect("read_at failure"), root);
     }
 
     #[test]
@@ -570,17 +575,18 @@ mod tests {
         let circuit_data = (0..n)
             .map(|n| {
                 num::AllocatedNum::alloc(cs.namespace(|| format!("input {}", n)), || Ok(Fr::one()))
-                    .unwrap()
+                    .expect("alloc failure")
             })
             .collect::<Vec<_>>();
 
         let hashed = PoseidonFunction::hash_md(&data);
-        let hashed_fr = Fr::from_repr(hashed.0).unwrap();
+        let hashed_fr = Fr::from_repr(hashed.0).expect("from_repr failure");
 
-        let circuit_hashed =
-            PoseidonFunction::hash_md_circuit(&mut cs, circuit_data.as_slice()).unwrap();
+        let circuit_hashed = PoseidonFunction::hash_md_circuit(&mut cs, circuit_data.as_slice())
+            .expect("hash_md_circuit failure");
         let hashed_alloc =
-            &num::AllocatedNum::alloc(cs.namespace(|| "calculated"), || Ok(hashed_fr)).unwrap();
+            &num::AllocatedNum::alloc(cs.namespace(|| "calculated"), || Ok(hashed_fr))
+                .expect("alloc failure");
         constraint::equal(
             &mut cs.namespace(|| "enforce correct"),
             || "correct result",
@@ -594,6 +600,9 @@ mod tests {
 
         assert_eq!(expected_constraints, actual_constraints);
 
-        assert_eq!(hashed_fr, circuit_hashed.get_value().unwrap());
+        assert_eq!(
+            hashed_fr,
+            circuit_hashed.get_value().expect("get_value failure")
+        );
     }
 }

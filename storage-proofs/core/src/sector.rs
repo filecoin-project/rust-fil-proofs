@@ -29,7 +29,7 @@ impl From<SectorId> for u64 {
 
 impl From<SectorId> for Fr {
     fn from(n: SectorId) -> Self {
-        Fr::from_repr(FrRepr::from(n.0)).unwrap()
+        Fr::from_repr(FrRepr::from(n.0)).expect("from repr failure")
     }
 }
 

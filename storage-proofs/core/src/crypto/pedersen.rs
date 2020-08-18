@@ -13,7 +13,7 @@ lazy_static! {
     pub static ref JJ_PARAMS: JubjubBls12 = JubjubBls12::new_with_window_size(
         settings::SETTINGS
             .lock()
-            .unwrap()
+            .expect("settings lock failure")
             .pedersen_hash_exp_window_size
     );
 }
@@ -318,7 +318,7 @@ mod tests {
 
         let x = pedersen_compression_bits(bytes);
         let mut data = Vec::new();
-        x.write_le(&mut data).unwrap();
+        x.write_le(&mut data).expect("write_le failure");
 
         let expected = vec![
             237, 70, 41, 231, 39, 180, 131, 120, 36, 36, 119, 199, 200, 225, 153, 242, 106, 116,
@@ -390,12 +390,12 @@ mod tests {
             let flat: Vec<u8> = x.iter().flatten().copied().collect();
             let hashed = pedersen_md_no_padding(&flat);
 
-            let mut hasher = Hasher::new(&x[0]).unwrap();
+            let mut hasher = Hasher::new(&x[0]).expect("hasher new failure");
             for val in x.iter().skip(1).take(4) {
-                hasher.update(&val).unwrap();
+                hasher.update(&val).expect("hasher update failure");
             }
 
-            let hasher_final = hasher.finalize().unwrap();
+            let hasher_final = hasher.finalize().expect("hasher finalize failure");
 
             assert_eq!(hashed, hasher_final);
         }

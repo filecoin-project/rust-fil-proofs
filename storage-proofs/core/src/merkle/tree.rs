@@ -98,7 +98,7 @@ impl<
     }
 
     fn gen_cached_proof(&self, i: usize, rows_to_discard: Option<usize>) -> Result<Self::Proof> {
-        if rows_to_discard.is_some() && rows_to_discard.unwrap() == 0 {
+        if rows_to_discard.is_some() && rows_to_discard.expect("rows to discard failure") == 0 {
             return self.gen_proof(i);
         }
 

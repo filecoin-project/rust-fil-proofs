@@ -85,7 +85,7 @@ pub fn run_merkleproofs_bench<Tree: 'static + MerkleTreeTrait>(
     let (_data, tree) = generate_tree::<Tree, _>(
         &mut rng,
         base_tree_leaves * tree_count,
-        Some(temp_path.to_path_buf()),
+        Some(temp_path.clone()),
     );
     generate_proofs::<_, Tree>(
         &mut rng,
