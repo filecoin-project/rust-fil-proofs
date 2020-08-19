@@ -28,9 +28,15 @@ digest = { version = "0.9", features = ["dev", "std"] }
 sha2 = "0.9.1"
 rand = "0.7.3"
 rand_xorshift = "0.2.0"
+criterion = "0.3"
 
 [features]
 default = ["asm"]
 asm = ["sha2-asm"]
 
+[lib]
+bench = false
 
+[[bench]]
+name = "compress256"
+harness = false

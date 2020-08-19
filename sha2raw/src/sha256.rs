@@ -9,8 +9,8 @@ lazy_static::lazy_static! {
 
 #[derive(Clone)]
 pub struct Sha256 {
-    len: u64,
-    state: [u32; 8],
+    pub len: u64,
+    pub state: [u32; 8],
 }
 
 impl Default for Sha256 {
