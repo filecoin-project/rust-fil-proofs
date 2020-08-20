@@ -53,19 +53,31 @@ else
   exit 1
 fi
 
-CLUSTER_HOST="/dnsaddr/cluster.ipfs.io"
+CLUSTER_HOST="/dnsaddr/filecoin.collab.ipfscluster.io"
+ADDITIONAL_CLUSTER_HOST="/dnsaddr/cluster.ipfs.io"
 CLUSTER_PIN_NAME="filecoin-proof-parameters-$VERSION"
 DNSLINK_DOMAIN="proofs.filecoin.io"
 
-# Pin to cluster
+# Add and pin to collab cluster. After this it will be on 1 peer and pin requests
+# will have been triggered for the others.
 ROOT_CID=$(ipfs-cluster-ctl \
   --host $CLUSTER_HOST \
   --basic-auth $CLUSTER_TOKEN \
   add --quieter \
+  --local \
   --name $CLUSTER_PIN_NAME \
   --recursive $INPUT_DIR )
 
 echo "ok! root cid is $ROOT_CID"
+
+# Pin to main cluster additionally.
+ipfs-cluster-ctl \
+    --host $ADDITIONAL_CLUSTER_HOST \
+    --basic-auth $CLUSTER_TOKEN \
+    pin add $ROOT_CID \
+    --no-status
+
+echo "ok! Pin request sent to additional cluster"
 
 # Publist the new cid to the dnslink
 npx dnslink-dnsimple --domain $DNSLINK_DOMAIN --link "/ipfs/$ROOT_CID"
