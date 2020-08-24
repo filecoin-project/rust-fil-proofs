@@ -77,12 +77,12 @@ pub fn setup_params(
         partitions,
         *POREP_MINIMUM_CHALLENGES
             .read()
-            .unwrap()
+            .expect("POREP_MINIMUM_CHALLENGES poisoned")
             .get(&u64::from(sector_bytes))
             .expect("unknown sector size") as usize,
         *LAYERS
             .read()
-            .unwrap()
+            .expect("LAYERS poisoned")
             .get(&u64::from(sector_bytes))
             .expect("unknown sector size"),
     )?;
@@ -131,7 +131,7 @@ mod tests {
     fn partition_layer_challenges_test() {
         let f = |partitions| {
             select_challenges(partitions, 12, 11)
-                .unwrap()
+                .expect("never fails")
                 .challenges_count_all()
         };
         // Update to ensure all supported PoRepProofPartitions options are represented here.
@@ -152,7 +152,8 @@ mod tests {
             sector_size: 2048u64.into(),
         };
 
-        let params = winning_post_public_params::<DefaultOctLCTree>(&config).unwrap();
+        let params =
+            winning_post_public_params::<DefaultOctLCTree>(&config).expect("failed to get params");
         assert_eq!(params.sector_count, 66);
         assert_eq!(params.challenge_count, 1);
         assert_eq!(params.sector_size, 2048);

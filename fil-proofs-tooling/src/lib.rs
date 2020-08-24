@@ -1,3 +1,6 @@
+//requires nightly, or later stable version
+//#![warn(clippy::unwrap_used)]
+
 pub mod measure;
 pub mod metadata;
 pub mod shared;

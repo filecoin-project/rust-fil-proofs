@@ -93,7 +93,9 @@ impl Hashable<Sha256Function> for Sha256Domain {
 impl From<Fr> for Sha256Domain {
     fn from(val: Fr) -> Self {
         let mut res = Self::default();
-        val.into_repr().write_le(&mut res.0[0..32]).unwrap();
+        val.into_repr()
+            .write_le(&mut res.0[0..32])
+            .expect("write_le failure");
 
         res
     }
@@ -102,7 +104,7 @@ impl From<Fr> for Sha256Domain {
 impl From<FrRepr> for Sha256Domain {
     fn from(val: FrRepr) -> Self {
         let mut res = Self::default();
-        val.write_le(&mut res.0[0..32]).unwrap();
+        val.write_le(&mut res.0[0..32]).expect("write_le failure");
 
         res
     }
@@ -111,9 +113,9 @@ impl From<FrRepr> for Sha256Domain {
 impl From<Sha256Domain> for Fr {
     fn from(val: Sha256Domain) -> Self {
         let mut res = FrRepr::default();
-        res.read_le(&val.0[0..32]).unwrap();
+        res.read_le(&val.0[0..32]).expect("read_le failure");
 
-        Fr::from_repr(res).unwrap()
+        Fr::from_repr(res).expect("from_repr failure")
     }
 }
 
@@ -375,12 +377,13 @@ mod tests {
 
         let left_bits: Vec<Boolean> = {
             let mut cs = cs.namespace(|| "left");
-            bytes_into_boolean_vec(&mut cs, Some(left.as_slice()), 256).unwrap()
+            bytes_into_boolean_vec(&mut cs, Some(left.as_slice()), 256).expect("left bits failure")
         };
 
         let right_bits: Vec<Boolean> = {
             let mut cs = cs.namespace(|| "right");
-            bytes_into_boolean_vec(&mut cs, Some(right.as_slice()), 256).unwrap()
+            bytes_into_boolean_vec(&mut cs, Some(right.as_slice()), 256)
+                .expect("right bits failure")
         };
 
         let out = Sha256Function::hash_leaf_bits_circuit(
@@ -400,7 +403,7 @@ mod tests {
 
         assert_eq!(
             expected,
-            out.get_value().unwrap(),
+            out.get_value().expect("get_value failure"),
             "circuit and non circuit do not match"
         );
     }

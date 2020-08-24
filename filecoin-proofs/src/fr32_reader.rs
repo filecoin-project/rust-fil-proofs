@@ -377,7 +377,9 @@ mod tests {
         let data = vec![3u8; 30];
         let mut reader = Fr32Reader::new(io::Cursor::new(&data));
         let mut padded = Vec::new();
-        reader.read_to_end(&mut padded).unwrap();
+        reader
+            .read_to_end(&mut padded)
+            .expect("in-memory read failed");
         assert_eq!(&data[..], &padded[..]);
 
         assert_eq!(padded.into_boxed_slice(), bit_vec_padding(data));
@@ -388,7 +390,9 @@ mod tests {
         let data = vec![255u8; 32];
         let mut padded = Vec::new();
         let mut reader = Fr32Reader::new(io::Cursor::new(&data));
-        reader.read_to_end(&mut padded).unwrap();
+        reader
+            .read_to_end(&mut padded)
+            .expect("in-memory read failed");
 
         assert_eq!(&padded[0..31], &data[0..31]);
         assert_eq!(padded[31], 0b0011_1111);
@@ -403,7 +407,9 @@ mod tests {
         let data = vec![255u8; 127];
         let mut padded = Vec::new();
         let mut reader = Fr32Reader::new(io::Cursor::new(&data));
-        reader.read_to_end(&mut padded).unwrap();
+        reader
+            .read_to_end(&mut padded)
+            .expect("in-memory read failed");
 
         assert_eq!(&padded[0..31], &data[0..31]);
         assert_eq!(padded[31], 0b0011_1111);
@@ -460,7 +466,7 @@ mod tests {
 
         let mut buf = Vec::new();
         let mut reader = Fr32Reader::new(io::Cursor::new(&data));
-        reader.read_to_end(&mut buf).unwrap();
+        reader.read_to_end(&mut buf).expect("in-memory read failed");
 
         assert_eq!(buf.clone().into_boxed_slice(), bit_vec_padding(data));
         validate_fr32(&buf);
@@ -479,7 +485,7 @@ mod tests {
 
                 let mut buf = Vec::new();
                 let mut reader = Fr32Reader::new(io::Cursor::new(&data));
-                reader.read_to_end(&mut buf).unwrap();
+                reader.read_to_end(&mut buf).expect("in-memory read failed");
 
                 assert_eq!(buf.clone().into_boxed_slice(), bit_vec_padding(data));
             }
@@ -542,7 +548,7 @@ mod tests {
 
         let mut buf = Vec::new();
         let mut reader = Fr32Reader::new(io::Cursor::new(&source));
-        reader.read_to_end(&mut buf).unwrap();
+        reader.read_to_end(&mut buf).expect("in-memory read failed");
 
         for (i, &byte) in buf.iter().enumerate().take(31) {
             assert_eq!(byte, i as u8 + 1);

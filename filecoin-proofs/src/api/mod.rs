@@ -345,7 +345,11 @@ fn verify_store(config: &StoreConfig, arity: usize, required_configs: usize) -> 
     if !Path::new(&store_path).exists() {
         // Configs may have split due to sector size, so we need to
         // check deterministic paths from here.
-        let orig_path = store_path.clone().into_os_string().into_string().unwrap();
+        let orig_path = store_path
+            .clone()
+            .into_os_string()
+            .into_string()
+            .expect("failed to convert store_path to string");
         let mut configs: Vec<StoreConfig> = Vec::with_capacity(required_configs);
         for i in 0..required_configs {
             let cur_path = orig_path
@@ -374,7 +378,7 @@ fn verify_store(config: &StoreConfig, arity: usize, required_configs: usize) -> 
             store_path.display()
         );
 
-        let store_len = config.size.unwrap();
+        let store_len = config.size.expect("disk store size not configured");
         for config in &configs {
             ensure!(
                 DiskStore::<DefaultPieceDomain>::is_consistent(store_len, arity, &config,)?,
@@ -384,7 +388,11 @@ fn verify_store(config: &StoreConfig, arity: usize, required_configs: usize) -> 
         }
     } else {
         ensure!(
-            DiskStore::<DefaultPieceDomain>::is_consistent(config.size.unwrap(), arity, &config,)?,
+            DiskStore::<DefaultPieceDomain>::is_consistent(
+                config.size.expect("disk store size not configured"),
+                arity,
+                &config,
+            )?,
             "Store is inconsistent: {:?}",
             store_path
         );
@@ -401,7 +409,11 @@ fn verify_level_cache_store<Tree: MerkleTreeTrait>(config: &StoreConfig) -> Resu
 
         // Configs may have split due to sector size, so we need to
         // check deterministic paths from here.
-        let orig_path = store_path.clone().into_os_string().into_string().unwrap();
+        let orig_path = store_path
+            .clone()
+            .into_os_string()
+            .into_string()
+            .expect("failed to convert store_path to string");
         let mut configs: Vec<StoreConfig> = Vec::with_capacity(required_configs);
         for i in 0..required_configs {
             let cur_path = orig_path
@@ -430,7 +442,7 @@ fn verify_level_cache_store<Tree: MerkleTreeTrait>(config: &StoreConfig) -> Resu
             store_path.display()
         );
 
-        let store_len = config.size.unwrap();
+        let store_len = config.size.expect("disk store size not configured");
         for config in &configs {
             ensure!(
                 LevelCacheStore::<DefaultPieceDomain, std::fs::File>::is_consistent(
@@ -445,7 +457,7 @@ fn verify_level_cache_store<Tree: MerkleTreeTrait>(config: &StoreConfig) -> Resu
     } else {
         ensure!(
             LevelCacheStore::<DefaultPieceDomain, std::fs::File>::is_consistent(
-                config.size.unwrap(),
+                config.size.expect("disk store size not configured"),
                 Tree::Arity::to_usize(),
                 &config,
             )?,
@@ -602,9 +614,9 @@ mod tests {
                     partitions: PoRepProofPartitions(
                         *POREP_PARTITIONS
                             .read()
-                            .unwrap()
+                            .expect("POREP_PARTITIONS poisoned")
                             .get(&SECTOR_SIZE_2_KIB)
-                            .unwrap(),
+                            .expect("unknown sector size"),
                     ),
                     porep_id: arbitrary_porep_id,
                 },
@@ -637,9 +649,9 @@ mod tests {
                     partitions: PoRepProofPartitions(
                         *POREP_PARTITIONS
                             .read()
-                            .unwrap()
+                            .expect("POREP_PARTITIONS poisoned")
                             .get(&SECTOR_SIZE_2_KIB)
-                            .unwrap(),
+                            .expect("unknown sector size"),
                     ),
                     porep_id: arbitrary_porep_id,
                 },
@@ -674,7 +686,8 @@ mod tests {
             let random_el: DefaultTreeDomain = Fr::random(rng).into();
             let mut randomness = [0u8; 32];
             randomness.copy_from_slice(AsRef::<[u8]>::as_ref(&random_el));
-            let back: DefaultTreeDomain = as_safe_commitment(&randomness, "test").unwrap();
+            let back: DefaultTreeDomain = as_safe_commitment(&randomness, "test")
+                .expect("failed to get domain from randomness");
             assert_eq!(back, random_el);
         }
     }

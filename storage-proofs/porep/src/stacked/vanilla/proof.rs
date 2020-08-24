@@ -80,7 +80,10 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
 
         // Sanity checks on restored trees.
         assert!(pub_inputs.tau.is_some());
-        assert_eq!(pub_inputs.tau.as_ref().unwrap().comm_d, t_aux.tree_d.root());
+        assert_eq!(
+            pub_inputs.tau.as_ref().expect("as_ref failure").comm_d,
+            t_aux.tree_d.root()
+        );
 
         let get_drg_parents_columns = |x: usize| -> Result<Vec<Column<Tree::Hasher>>> {
             let base_degree = graph.base_graph().degree();
@@ -303,7 +306,10 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         let mut layer_labels = vec![0u8; layer_size]; // Buffer for labels of the current layer
         let mut exp_labels = vec![0u8; layer_size]; // Buffer for labels of the previous layer, needed for expander parents
 
-        let use_cache = settings::SETTINGS.lock().unwrap().maximize_caching;
+        let use_cache = settings::SETTINGS
+            .lock()
+            .expect("maximize caching settings lock failure")
+            .maximize_caching;
         let mut cache = if use_cache {
             Some(graph.parent_cache()?)
         } else {
@@ -395,7 +401,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
             (0..leafs)
                 .into_par_iter()
                 // TODO: proper error handling instead of `unwrap()`
-                .map(|i| get_node::<K>(tree_data, i).unwrap()),
+                .map(|i| get_node::<K>(tree_data, i).expect("get_node failure")),
             config,
         )?;
         Ok(tree)
@@ -412,7 +418,11 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         ColumnArity: 'static + PoseidonArity,
         TreeArity: PoseidonArity,
     {
-        if settings::SETTINGS.lock().unwrap().use_gpu_column_builder {
+        if settings::SETTINGS
+            .lock()
+            .expect("use_gpu_column_builder settings lock failure")
+            .use_gpu_column_builder
+        {
             Self::generate_tree_c_gpu::<ColumnArity, TreeArity>(
                 layers,
                 nodes_count,
@@ -457,12 +467,18 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
             // Override these values with care using environment variables:
             // FIL_PROOFS_MAX_GPU_COLUMN_BATCH_SIZE, FIL_PROOFS_MAX_GPU_TREE_BATCH_SIZE, and
             // FIL_PROOFS_COLUMN_WRITE_BATCH_SIZE respectively.
-            let max_gpu_column_batch_size =
-                settings::SETTINGS.lock().unwrap().max_gpu_column_batch_size as usize;
-            let max_gpu_tree_batch_size =
-                settings::SETTINGS.lock().unwrap().max_gpu_tree_batch_size as usize;
-            let column_write_batch_size =
-                settings::SETTINGS.lock().unwrap().column_write_batch_size as usize;
+            let max_gpu_column_batch_size = settings::SETTINGS
+                .lock()
+                .expect("max_gpu_column_batch_size settings lock failure")
+                .max_gpu_column_batch_size as usize;
+            let max_gpu_tree_batch_size = settings::SETTINGS
+                .lock()
+                .expect("max_gpu_tree_batch_size settings lock failure")
+                .max_gpu_tree_batch_size as usize;
+            let column_write_batch_size = settings::SETTINGS
+                .lock()
+                .expect("column_write_batch_size settings lock failure")
+                .column_write_batch_size as usize;
 
             // This channel will receive batches of columns and add them to the ColumnTreeBuilder.
             let (builder_tx, builder_rx) = mpsc::sync_channel(0);
@@ -575,7 +591,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                             tree_len,
                         );
                         assert_eq!(base_data.len(), nodes_count);
-                        assert_eq!(tree_len, config.size.unwrap());
+                        assert_eq!(tree_len, config.size.expect("config size failure"));
 
                         // Persist the base and tree data to disk based using the current store config.
                         let tree_c_store =
@@ -621,7 +637,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                         store
                             .write()
                             .expect("failed to access store for sync")
-                            .sync().unwrap();
+                            .sync().expect("store sync failure");
                         trace!("done writing tree_c store data");
 
                         // Move on to the next config.
@@ -636,7 +652,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
 
             create_disk_tree::<
                 DiskTree<Tree::Hasher, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>,
-            >(configs[0].size.unwrap(), &configs)
+            >(configs[0].size.expect("config size failure"), &configs)
         })
     }
 
@@ -680,7 +696,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                                         let store = labels.labels_for_layer(layer);
                                         let el: <Tree::Hasher as Hasher>::Domain = store
                                             .read_at((i * nodes_count) + j + chunk * chunk_size)
-                                            .unwrap();
+                                            .expect("store read_at failure");
                                         el.into()
                                     })
                                     .collect();
@@ -705,7 +721,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
             assert_eq!(tree_count, trees.len());
             create_disk_tree::<
                 DiskTree<Tree::Hasher, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>,
-            >(configs[0].size.unwrap(), &configs)
+            >(configs[0].size.expect("config size failure"), &configs)
         })
     }
 
@@ -730,10 +746,16 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         data.ensure_data()?;
         let last_layer_labels = labels.labels_for_last_layer()?;
 
-        if settings::SETTINGS.lock().unwrap().use_gpu_tree_builder {
+        if settings::SETTINGS
+            .lock()
+            .expect("use_gpu_tree_builder settings lock failure")
+            .use_gpu_tree_builder
+        {
             info!("generating tree r last using the GPU");
-            let max_gpu_tree_batch_size =
-                settings::SETTINGS.lock().unwrap().max_gpu_tree_batch_size as usize;
+            let max_gpu_tree_batch_size = settings::SETTINGS
+                .lock()
+                .expect("max_gpu_tree_batch_size settings lock failure")
+                .max_gpu_tree_batch_size as usize;
 
             // This channel will receive batches of leaf nodes and add them to the TreeBuilder.
             let (builder_tx, builder_rx) = mpsc::sync_channel::<(Vec<Fr>, bool)>(0);
@@ -839,7 +861,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                             let tree_data_len = tree_data.len();
                             let cache_size = get_merkle_tree_cache_size(
                                 get_merkle_tree_leafs(
-                                    config.size.unwrap(),
+                                    config.size.expect("config size failure"),
                                     Tree::Arity::to_usize(),
                                 )
                                 .expect("failed to get merkle tree leaves"),
@@ -919,7 +941,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         };
 
         create_lc_tree::<LCTree<Tree::Hasher, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>>(
-            tree_r_last_config.size.unwrap(),
+            tree_r_last_config.size.expect("config size failure"),
             &configs,
             &replica_config,
         )
@@ -1078,7 +1100,10 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
             }
         };
         tree_d_config.size = Some(tree_d.len());
-        assert_eq!(tree_d_config.size.unwrap(), tree_d.len());
+        assert_eq!(
+            tree_d_config.size.expect("config size failure"),
+            tree_d.len()
+        );
         let tree_d_root = tree_d.root();
         drop(tree_d);
 
@@ -1187,10 +1212,16 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
             tree_count,
         )?;
 
-        if settings::SETTINGS.lock().unwrap().use_gpu_tree_builder {
+        if settings::SETTINGS
+            .lock()
+            .expect("use_gpu_tree_builder settings lock failure")
+            .use_gpu_tree_builder
+        {
             info!("generating tree r last using the GPU");
-            let max_gpu_tree_batch_size =
-                settings::SETTINGS.lock().unwrap().max_gpu_tree_batch_size as usize;
+            let max_gpu_tree_batch_size = settings::SETTINGS
+                .lock()
+                .expect("max_gpu_tree_batch_size settings lock failure")
+                .max_gpu_tree_batch_size as usize;
 
             let mut tree_builder = TreeBuilder::<Tree::Arity>::new(
                 Some(BatcherType::GPU),
@@ -1228,8 +1259,11 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                         .expect("failed to add final leaves");
                     let tree_data_len = tree_data.len();
                     let cache_size = get_merkle_tree_cache_size(
-                        get_merkle_tree_leafs(config.size.unwrap(), Tree::Arity::to_usize())
-                            .expect("failed to get merkle tree leaves"),
+                        get_merkle_tree_leafs(
+                            config.size.expect("config size failure"),
+                            Tree::Arity::to_usize(),
+                        )
+                        .expect("failed to get merkle tree leaves"),
                         Tree::Arity::to_usize(),
                         config.rows_to_discard,
                     )
@@ -1273,7 +1307,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         };
 
         create_lc_tree::<LCTree<Tree::Hasher, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>>(
-            tree_r_last_config.size.unwrap(),
+            tree_r_last_config.size.expect("config size failure"),
             &configs,
             &replica_config,
         )
@@ -1470,7 +1504,7 @@ mod tests {
 
         // MT for original data is always named tree-d, and it will be
         // referenced later in the process as such.
-        let cache_dir = tempfile::tempdir().unwrap();
+        let cache_dir = tempfile::tempdir().expect("tempdir failure");
         let config = StoreConfig::new(
             cache_dir.path(),
             CacheKey::CommDTree.to_string(),
@@ -1646,7 +1680,7 @@ mod tests {
 
         // MT for original data is always named tree-d, and it will be
         // referenced later in the process as such.
-        let cache_dir = tempfile::tempdir().unwrap();
+        let cache_dir = tempfile::tempdir().expect("tempdir failure");
         let config = StoreConfig::new(
             cache_dir.path(),
             CacheKey::CommDTree.to_string(),

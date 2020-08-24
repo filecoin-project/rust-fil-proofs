@@ -57,7 +57,9 @@ impl Default for PedersenFunction {
 impl Hashable<PedersenFunction> for Fr {
     fn hash(&self, state: &mut PedersenFunction) {
         let mut bytes = Vec::with_capacity(32);
-        self.into_repr().write_le(&mut bytes).unwrap();
+        self.into_repr()
+            .write_le(&mut bytes)
+            .expect("write_le failure");
         state.write(&bytes);
     }
 }
@@ -140,7 +142,7 @@ fn as_ref<'a>(src: &'a [u64; 4]) -> &'a [u8] {
 impl Domain for PedersenDomain {
     fn into_bytes(&self) -> Vec<u8> {
         let mut out = Vec::with_capacity(PedersenDomain::byte_len());
-        self.0.write_le(&mut out).unwrap();
+        self.0.write_le(&mut out).expect("write_le failure");
 
         out
     }
@@ -403,7 +405,7 @@ impl From<FrRepr> for PedersenDomain {
 impl From<PedersenDomain> for Fr {
     #[inline]
     fn from(val: PedersenDomain) -> Self {
-        Fr::from_repr(val.0).unwrap()
+        Fr::from_repr(val.0).expect("from_repr failure")
     }
 }
 

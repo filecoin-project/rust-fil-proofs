@@ -10,9 +10,9 @@ use rand::{thread_rng, Rng};
 fn start_profile(stage: &str) {
     gperftools::profiler::PROFILER
         .lock()
-        .unwrap()
+        .expect("PROFILER poisoned")
         .start(format!("./{}.profile", stage))
-        .unwrap();
+        .expect("failed to start profiler");
 }
 
 #[cfg(not(feature = "cpu-profile"))]
@@ -24,9 +24,9 @@ fn start_profile(_stage: &str) {}
 fn stop_profile() {
     gperftools::profiler::PROFILER
         .lock()
-        .unwrap()
+        .expect("PROFILER poisoned")
         .stop()
-        .unwrap();
+        .expect("failed to start profiler");
 }
 
 #[cfg(not(feature = "cpu-profile"))]
@@ -50,7 +50,7 @@ fn preprocessing_benchmark(c: &mut Criterion) {
                 start_profile(&format!("write_padded_{}", *size));
                 b.iter(|| {
                     let mut reader = Fr32Reader::new(io::Cursor::new(&data));
-                    reader.read_to_end(&mut buf).unwrap();
+                    reader.read_to_end(&mut buf).expect("in memory read error");
                     assert!(buf.len() >= data.len());
                 });
                 stop_profile();

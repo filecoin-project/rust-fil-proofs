@@ -365,14 +365,14 @@ impl<'a, Tree: 'static + MerkleTreeTrait> ProofScheme<'a> for ElectionPoSt<'a, T
             (0..pub_params.challenge_count)
                 .into_par_iter()
                 .flat_map(|n| {
-                    // TODO: replace unwrap with proper error handling
+                    // TODO: replace expect with proper error handling
                     let challenged_leaf_start = generate_leaf_challenge(
                         pub_params,
                         pub_inputs.randomness,
                         pub_inputs.sector_challenge_index,
                         n as u64,
                     )
-                    .unwrap();
+                    .expect("generate leaf challenge failure");
                     (0..pub_params.challenged_nodes)
                         .into_par_iter()
                         .map(move |i| {
@@ -477,7 +477,7 @@ mod tests {
         let mut sectors: Vec<SectorId> = Vec::new();
         let mut trees = BTreeMap::new();
 
-        let temp_dir = tempfile::tempdir().unwrap();
+        let temp_dir = tempfile::tempdir().expect("tempdir failure");
         let temp_path = temp_dir.path();
 
         for i in 0..5 {
@@ -489,10 +489,12 @@ mod tests {
 
         let candidates =
             generate_candidates::<Tree>(&pub_params, &sectors, &trees, prover_id, randomness)
-                .unwrap();
+                .expect("generate candidates failure");
 
         let candidate = &candidates[0];
-        let tree = trees.remove(&candidate.sector_id).unwrap();
+        let tree = trees
+            .remove(&candidate.sector_id)
+            .expect("trees.remove failure");
         let comm_r_last = tree.root();
         let comm_c = <Tree::Hasher as Hasher>::Domain::random(rng);
         let comm_r = <Tree::Hasher as Hasher>::Function::hash2(&comm_c, &comm_r_last);

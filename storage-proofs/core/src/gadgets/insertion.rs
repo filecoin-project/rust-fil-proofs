@@ -167,6 +167,7 @@ pub fn insert_4<E: Engine, CS: ConstraintSystem<E>>(
     Ok(vec![p0, p1, p2, p3])
 }
 
+#[allow(clippy::many_single_char_names)]
 pub fn insert_8<E: Engine, CS: ConstraintSystem<E>>(
     cs: &mut CS,
     element: &AllocatedNum<E>,

@@ -81,7 +81,7 @@ fn parse_criterion_out(s: impl AsRef<str>) -> Result<Vec<CriterionResult>> {
     for line in s.as_ref().lines() {
         if let Some(caps) = start_re.captures(line) {
             if current.is_some() {
-                let r = current.take().unwrap();
+                let r = current.take().expect("unreachable: is_some()");
                 res.push(CriterionResult {
                     name: r.0,
                     samples: r.1.unwrap_or_default(),
@@ -175,8 +175,8 @@ fn parse_criterion_out(s: impl AsRef<str>) -> Result<Vec<CriterionResult>> {
             // R^2
             if let Some(caps) = r_2_re.captures(line) {
                 current.9 = Some(Interval {
-                    start: caps[1].parse().unwrap(),
-                    end: caps[2].parse().unwrap(),
+                    start: caps[1].parse().expect("failed to parse caps[1] string"),
+                    end: caps[2].parse().expect("failed to parse caps[2] string"),
                     unit: None,
                 });
             }
@@ -202,7 +202,7 @@ fn parse_criterion_out(s: impl AsRef<str>) -> Result<Vec<CriterionResult>> {
     }
 
     if current.is_some() {
-        let r = current.take().unwrap();
+        let r = current.take().expect("unreachable: is_some()");
         res.push(CriterionResult {
             name: r.0,
             samples: r.1.unwrap_or_default(),
@@ -277,7 +277,7 @@ fn run_benches(mut args: Vec<String>) -> Result<()> {
     let reader = std::io::BufReader::new(stdout);
     let mut stdout = String::new();
     reader.lines().for_each(|line| {
-        let line = line.unwrap();
+        let line = line.expect("io (stdout) read error");
         if is_verbose {
             println!("{}", &line);
         }
@@ -339,7 +339,7 @@ slope  [141.11 us 159.66 us] R^2            [0.8124914 0.8320154]
 mean   [140.55 us 150.62 us] std. dev.      [5.6028 us 15.213 us]
 median [138.33 us 143.23 us] med. abs. dev. [1.7507 ms 8.4109 ms]";
 
-        let parsed = parse_criterion_out(stdout).unwrap();
+        let parsed = parse_criterion_out(stdout).expect("failed to parse criterion output");
         assert_eq!(
             parsed,
             vec![CriterionResult {
@@ -410,7 +410,8 @@ slope  [141.11 us 159.66 us] R^2            [0.8124914 0.8320154]
 mean   [140.55 us 150.62 us] std. dev.      [5.6028 us 15.213 us]
 median [138.33 us 143.23 us] med. abs. dev. [1.7507 ms 8.4109 ms]";
 
-        let parsed = parse_criterion_out(with_throughput).unwrap();
+        let parsed =
+            parse_criterion_out(with_throughput).expect("failed to parse criterion output");
         assert_eq!(
             parsed,
             vec![CriterionResult {

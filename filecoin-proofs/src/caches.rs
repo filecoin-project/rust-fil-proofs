@@ -38,7 +38,7 @@ where
 {
     info!("trying parameters memory cache for: {}", &identifier);
     {
-        let cache = (*cache_ref).lock().unwrap();
+        let cache = (*cache_ref).lock().expect("poisoned cache");
 
         if let Some(entry) = cache.get(&identifier) {
             info!("found params in memory cache for {}", &identifier);
@@ -51,7 +51,7 @@ where
     let new_entry = Arc::new(generator()?);
     let res = new_entry.clone();
     {
-        let cache = &mut (*cache_ref).lock().unwrap();
+        let cache = &mut (*cache_ref).lock().expect("poisoned cache");
         cache.insert(identifier, new_entry);
     }
 

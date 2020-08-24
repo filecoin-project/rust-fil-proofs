@@ -1,3 +1,6 @@
+//requires nightly, or later stable version
+//#![warn(clippy::unwrap_used)]
+
 use std::io::{stdin, stdout};
 
 use anyhow::Result;
@@ -197,7 +200,7 @@ fn main() -> Result<()> {
         }
         ("prodbench", Some(m)) => {
             let inputs: ProdbenchInputs = if m.is_present("config") {
-                let file = value_t!(m, "config", String).unwrap();
+                let file = value_t!(m, "config", String).expect("failed to get config");
                 serde_json::from_reader(
                     std::fs::File::open(&file)
                         .unwrap_or_else(|_| panic!("invalid file {:?}", file)),

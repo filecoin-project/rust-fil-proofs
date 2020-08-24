@@ -113,7 +113,7 @@ impl<'a> Data<'a> {
             Some(..) => {}
             None => {
                 ensure!(self.path.is_some(), "Missing path");
-                let path = self.path.as_ref().unwrap();
+                let path = self.path.as_ref().expect("path as_ref failure");
 
                 info!("restoring {}", path.display());
 

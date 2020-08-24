@@ -167,7 +167,7 @@ impl ParentCache {
     {
         info!("parent cache: generating {}", path.display());
 
-        with_exclusive_lock(&path.clone(), |file| {
+        with_exclusive_lock(&path, |file| {
             let cache_size = cache_entries as usize * NODE_BYTES * DEGREE;
             file.as_ref()
                 .set_len(cache_size as u64)
@@ -237,7 +237,11 @@ impl ParentCache {
 }
 
 fn parent_cache_dir_name() -> String {
-    settings::SETTINGS.lock().unwrap().parent_cache.clone()
+    settings::SETTINGS
+        .lock()
+        .expect("parent_cache settings lock failure")
+        .parent_cache
+        .clone()
 }
 
 fn cache_path<H, G>(cache_entries: u32, graph: &StackedGraph<H, G>) -> PathBuf
@@ -277,14 +281,16 @@ mod tests {
             EXP_DEGREE,
             [0u8; 32],
         )
-        .unwrap();
+        .expect("new_stacked failure");
 
-        let mut cache = ParentCache::new(nodes, nodes, &graph).unwrap();
+        let mut cache = ParentCache::new(nodes, nodes, &graph).expect("parent cache new failure");
 
         for node in 0..nodes {
             let mut expected_parents = [0; DEGREE];
-            graph.parents(node as usize, &mut expected_parents).unwrap();
-            let parents = cache.read(node).unwrap();
+            graph
+                .parents(node as usize, &mut expected_parents)
+                .expect("graph parents failure");
+            let parents = cache.read(node).expect("cache read failure");
 
             assert_eq!(expected_parents, parents);
         }
@@ -299,19 +305,25 @@ mod tests {
             EXP_DEGREE,
             [0u8; 32],
         )
-        .unwrap();
+        .expect("new_stacked failure");
 
-        let mut half_cache = ParentCache::new(nodes / 2, nodes, &graph).unwrap();
-        let mut quarter_cache = ParentCache::new(nodes / 4, nodes, &graph).unwrap();
+        let mut half_cache =
+            ParentCache::new(nodes / 2, nodes, &graph).expect("parent cache new failure");
+        let mut quarter_cache =
+            ParentCache::new(nodes / 4, nodes, &graph).expect("parent cache new failure");
 
         for node in 0..nodes {
             let mut expected_parents = [0; DEGREE];
-            graph.parents(node as usize, &mut expected_parents).unwrap();
+            graph
+                .parents(node as usize, &mut expected_parents)
+                .expect("graph parents failure");
 
-            let parents = half_cache.read(node).unwrap();
+            let parents = half_cache.read(node).expect("half cache read failure");
             assert_eq!(expected_parents, parents);
 
-            let parents = quarter_cache.read(node).unwrap();
+            let parents = quarter_cache
+                .read(node)
+                .expect("quarter cache read failure");
             assert_eq!(expected_parents, parents);
 
             // some internal checks to make sure the cache works as expected
@@ -325,17 +337,21 @@ mod tests {
             );
         }
 
-        half_cache.reset().unwrap();
-        quarter_cache.reset().unwrap();
+        half_cache.reset().expect("half cache reset failure");
+        quarter_cache.reset().expect("quarter cache reset failure");
 
         for node in 0..nodes {
             let mut expected_parents = [0; DEGREE];
-            graph.parents(node as usize, &mut expected_parents).unwrap();
+            graph
+                .parents(node as usize, &mut expected_parents)
+                .expect("graph parents failure");
 
-            let parents = half_cache.read(node).unwrap();
+            let parents = half_cache.read(node).expect("half cache read failure");
             assert_eq!(expected_parents, parents);
 
-            let parents = quarter_cache.read(node).unwrap();
+            let parents = quarter_cache
+                .read(node)
+                .expect("quarter cache read failure");
             assert_eq!(expected_parents, parents);
         }
     }

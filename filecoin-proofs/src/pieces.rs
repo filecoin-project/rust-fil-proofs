@@ -59,13 +59,14 @@ impl Read for EmptySource {
 }
 
 fn empty_comm_d(sector_size: SectorSize) -> Commitment {
-    let map = &mut *COMMITMENTS.lock().unwrap();
+    let map = &mut *COMMITMENTS.lock().expect("COMMITMENTS poisoned");
 
     *map.entry(sector_size).or_insert_with(|| {
         let size: UnpaddedBytesAmount = sector_size.into();
         let fr32_reader = Fr32Reader::new(EmptySource::new(size.into()));
         let mut commitment_reader = CommitmentReader::new(fr32_reader);
-        io::copy(&mut commitment_reader, &mut io::sink()).unwrap();
+        io::copy(&mut commitment_reader, &mut io::sink())
+            .expect("failed to copy commitment to sink");
 
         let mut comm = [0u8; 32];
         comm.copy_from_slice(
@@ -104,7 +105,10 @@ pub fn compute_comm_d(sector_size: SectorSize, piece_infos: &[PieceInfo]) -> Res
 
     let mut stack = Stack::new();
 
-    let first = piece_infos.first().unwrap().clone();
+    let first = piece_infos
+        .first()
+        .expect("unreachable: !is_empty()")
+        .clone();
     ensure!(
         u64::from(PaddedBytesAmount::from(first.size)).is_power_of_two(),
         "Piece size ({:?}) must be a power of 2.",
@@ -364,13 +368,16 @@ mod tests {
     fn test_empty_source() {
         let mut source = EmptySource::new(12);
         let mut target = Vec::new();
-        source.read_to_end(&mut target).unwrap();
+        source
+            .read_to_end(&mut target)
+            .expect("EmptySource read error");
         assert_eq!(target, vec![0u8; 12]);
     }
 
     #[test]
     fn test_compute_comm_d_empty() {
-        let comm_d = compute_comm_d(SectorSize(2048), &[]).unwrap();
+        let comm_d = compute_comm_d(SectorSize(2048), &[])
+            .expect("failed to verify pieces, empty piece infos");
         assert_eq!(
             comm_d,
             [
@@ -379,7 +386,7 @@ mod tests {
             ]
         );
 
-        let comm_d = compute_comm_d(SectorSize(128), &[]).unwrap();
+        let comm_d = compute_comm_d(SectorSize(128), &[]).expect("failed to verify pieces");
         assert_eq!(
             hex::encode(&comm_d),
             "3731bb99ac689f66eef5973e4a94da188f4ddcae580724fc6f3fd60dfd488333",
@@ -464,14 +471,14 @@ mod tests {
         let mut g = [0u8; 32];
         let h = piece_hash(&e, &f);
         g.copy_from_slice(h.as_ref());
-        let a = PieceInfo::new(a, UnpaddedBytesAmount(127)).unwrap();
-        let b = PieceInfo::new(b, UnpaddedBytesAmount(127)).unwrap();
-        let c = PieceInfo::new(c, UnpaddedBytesAmount(127)).unwrap();
-        let d = PieceInfo::new(d, UnpaddedBytesAmount(127)).unwrap();
+        let a = PieceInfo::new(a, UnpaddedBytesAmount(127)).expect("failed to create piece info a");
+        let b = PieceInfo::new(b, UnpaddedBytesAmount(127)).expect("failed to create piece info b");
+        let c = PieceInfo::new(c, UnpaddedBytesAmount(127)).expect("failed to create piece info c");
+        let d = PieceInfo::new(d, UnpaddedBytesAmount(127)).expect("failed to create piece info d");
 
-        let e = PieceInfo::new(e, UnpaddedBytesAmount(254)).unwrap();
-        let f = PieceInfo::new(f, UnpaddedBytesAmount(254)).unwrap();
-        let g = PieceInfo::new(g, UnpaddedBytesAmount(508)).unwrap();
+        let e = PieceInfo::new(e, UnpaddedBytesAmount(254)).expect("failed to create piece info e");
+        let f = PieceInfo::new(f, UnpaddedBytesAmount(254)).expect("failed to create piece info f");
+        let g = PieceInfo::new(g, UnpaddedBytesAmount(508)).expect("failed to create piece info g");
 
         let sector_size = SectorSize(4 * 128);
         let comm_d = g.commitment;
@@ -524,29 +531,37 @@ mod tests {
         // ]
 
         let sector_size = SectorSize(32 * 128);
-        let pad = zero_padding(UnpaddedBytesAmount(127)).unwrap();
+        let pad = zero_padding(UnpaddedBytesAmount(127)).expect("failed to create pad");
 
         let pieces = vec![
-            PieceInfo::new([1u8; 32], UnpaddedBytesAmount(1 * 127)).unwrap(),
-            PieceInfo::new([2u8; 32], UnpaddedBytesAmount(4 * 127)).unwrap(),
-            PieceInfo::new([3u8; 32], UnpaddedBytesAmount(2 * 127)).unwrap(),
-            PieceInfo::new([4u8; 32], UnpaddedBytesAmount(8 * 127)).unwrap(),
+            PieceInfo::new([1u8; 32], UnpaddedBytesAmount(1 * 127))
+                .expect("failed to create piece info 0"),
+            PieceInfo::new([2u8; 32], UnpaddedBytesAmount(4 * 127))
+                .expect("failed to create piece info 1"),
+            PieceInfo::new([3u8; 32], UnpaddedBytesAmount(2 * 127))
+                .expect("failed to create piece info 2"),
+            PieceInfo::new([4u8; 32], UnpaddedBytesAmount(8 * 127))
+                .expect("failed to create piece info 3"),
         ];
 
         let padded_pieces = vec![
-            PieceInfo::new([1u8; 32], UnpaddedBytesAmount(1 * 127)).unwrap(),
+            PieceInfo::new([1u8; 32], UnpaddedBytesAmount(1 * 127))
+                .expect("failed to create padded piece info 0"),
             pad.clone(),
             pad.clone(),
             pad.clone(),
-            PieceInfo::new([2u8; 32], UnpaddedBytesAmount(4 * 127)).unwrap(),
-            PieceInfo::new([3u8; 32], UnpaddedBytesAmount(2 * 127)).unwrap(),
+            PieceInfo::new([2u8; 32], UnpaddedBytesAmount(4 * 127))
+                .expect("failed to create padded piece info 1"),
+            PieceInfo::new([3u8; 32], UnpaddedBytesAmount(2 * 127))
+                .expect("failed to create padded piece info 2"),
             pad.clone(),
             pad.clone(),
             pad.clone(),
             pad.clone(),
             pad.clone(),
             pad.clone(),
-            PieceInfo::new([4u8; 32], UnpaddedBytesAmount(8 * 127)).unwrap(),
+            PieceInfo::new([4u8; 32], UnpaddedBytesAmount(8 * 127))
+                .expect("failed to create padded piece info 4"),
             pad.clone(),
             pad.clone(),
             pad.clone(),
@@ -603,7 +618,7 @@ mod tests {
 
         let comm_d = hash(&layer4[0], &layer4[1]); // 32
 
-        assert!(verify_pieces(&comm_d, &pieces, sector_size).unwrap());
+        assert!(verify_pieces(&comm_d, &pieces, sector_size).expect("failed to verify pieces"));
     }
 
     #[ignore] // slow test
@@ -727,7 +742,8 @@ mod tests {
         assert_eq!(staged_sector.len(), u64::from(sector_size) as usize);
 
         let data_tree: DataTree =
-            create_base_merkle_tree::<DataTree>(None, graph.size(), &staged_sector).unwrap();
+            create_base_merkle_tree::<DataTree>(None, graph.size(), &staged_sector)
+                .expect("failed to create data tree");
         let comm_d_root: Fr = data_tree.root().into();
         let comm_d = commitment_from_fr(comm_d_root);
 

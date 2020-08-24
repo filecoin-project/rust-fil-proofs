@@ -54,7 +54,7 @@ pub fn target_dir() -> PathBuf {
             }
             path
         })
-        .unwrap()
+        .expect("failed to get current exe path")
 }
 
 /// Look up the path to a cargo-built binary within an integration test.
