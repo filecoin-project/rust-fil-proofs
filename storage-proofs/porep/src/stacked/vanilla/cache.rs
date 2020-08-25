@@ -35,7 +35,7 @@ pub struct ParentCache {
 #[derive(Debug)]
 struct CacheData {
     /// This is a large list of fixed (parent) sized arrays.
-    pub data: memmap::Mmap,
+    data: memmap::Mmap,
     /// Offset in nodes.
     offset: u32,
     /// Len in nodes.
