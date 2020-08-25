@@ -390,27 +390,27 @@ mod tests {
         nse_window_post::<LCTree<PoseidonHasher, U8, U4, U0>>(5, 3, 2, 40, 28_830);
     }
 
-    #[test]
-    #[ignore]
-    fn metric_nse_window_post_circuit_poseidon() {
-        use bellperson::util_cs::bench_cs::BenchCS;
-        let params = nse_window::SetupParams {
-            sector_size: 1024 * 1024 * 1024 * 1024,
-            window_size: 1024 * 1024 * 1024 * 4,
-            window_challenge_count: 2,
-            sector_count: 1,
-            num_layers: 15,
-        };
+    // #[test]
+    // #[ignore]
+    // fn metric_nse_window_post_circuit_poseidon() {
+    //     use bellperson::util_cs::bench_cs::BenchCS;
+    //     let params = nse_window::SetupParams {
+    //         sector_size: 1024 * 1024 * 1024 * 1024,
+    //         window_size: 1024 * 1024 * 1024 * 4,
+    //         window_challenge_count: 2,
+    //         sector_count: 1,
+    //         num_layers: 15,
+    //     };
 
-        let pp = NseWindowPoSt::<LCTree<PoseidonHasher, U8, U4, U0>>::setup(&params).unwrap();
+    //     let pp = NseWindowPoSt::<LCTree<PoseidonHasher, U8, U4, U0>>::setup(&params).unwrap();
 
-        let mut cs = BenchCS::<Bls12>::new();
-        NseWindowPoStCompound::<LCTree<PoseidonHasher, U8, U4, U0>>::blank_circuit(&pp)
-            .synthesize(&mut cs)
-            .unwrap();
+    //     let mut cs = BenchCS::<Bls12>::new();
+    //     NseWindowPoStCompound::<LCTree<PoseidonHasher, U8, U4, U0>>::blank_circuit(&pp)
+    //         .synthesize(&mut cs)
+    //         .unwrap();
 
-        assert_eq!(cs.num_constraints(), 266_665);
-    }
+    //     assert_eq!(cs.num_constraints(), 266_665);
+    // }
 
     fn nse_window_post<Tree: 'static + MerkleTreeTrait>(
         total_sector_count: usize,
