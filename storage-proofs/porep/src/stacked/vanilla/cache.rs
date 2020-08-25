@@ -1,5 +1,5 @@
 use std::fs::File;
-use std::io::{Read, Write};
+use std::io::{Read, Write, BufRead, BufReader};
 use std::path::{Path, PathBuf};
 
 use anyhow::{bail, ensure, Context};
@@ -156,8 +156,8 @@ impl ParentCache {
         H: Hasher,
         G: Graph<H> + ParameterSetMetadata + Send + Sync,
     {
-        let mut checksum_path = path.clone();
-        checksum_path.set_extension("cksum");
+        let mut digest_path = path.clone();
+        digest_path.set_extension("digest");
 
         let mut verify_cache = settings::SETTINGS
             .lock()
@@ -170,11 +170,11 @@ impl ParentCache {
             verify_cache
         );
 
-        // If the checksum file does not exist, generate the cache
-        // file again along with the checksum file.
-        if !Path::new(&checksum_path).exists() {
+        // If the digest file does not exist, generate the cache
+        // file again along with the digest file.
+        if !Path::new(&digest_path).exists() {
             info!(
-                "[!!!] Parent cache checksum is missing.  Regenerating {}",
+                "[!!!] Parent cache digest is missing.  Regenerating {}",
                 path.display()
             );
             ensure!(
@@ -182,7 +182,7 @@ impl ParentCache {
                 "Failed to generate parent cache"
             );
 
-            // If we've just generated the checksum file, do not
+            // If we've just generated the digest file, do not
             // re-verify, even if requested.
             verify_cache = false;
         }
@@ -193,6 +193,11 @@ impl ParentCache {
             let mut hasher = Sha256::new();
             info!("[open] parent cache: calculating consistency digest");
             let file = File::open(&path)?;
+            /*
+            let mut reader = BufReader::new(file);
+            while reader.fill_buf()?.len() > 0 {
+                hasher.update(reader.buffer());
+            }*/
             let data = unsafe {
                 memmap::MmapOptions::new()
                     .map(&file)
@@ -204,14 +209,14 @@ impl ParentCache {
             let hash = hasher.finalize();
             info!("[open] parent cache: calculated consistency digest");
 
-            let mut checksum = Vec::new();
-            let mut checksum_file = File::open(&checksum_path)?;
-            checksum_file.read_to_end(&mut checksum)?;
-            if checksum.as_slice() == hash.as_slice() {
+            let mut digest = Vec::new();
+            let mut digest_file = File::open(&digest_path)?;
+            digest_file.read_to_end(&mut digest)?;
+            if digest.as_slice() == hash.as_slice() {
                 info!("[open] parent cache: cached is verified!");
             } else {
                 info!(
-                    "[!!!] Parent cache checksum mismatch detected.  Regenerating {}",
+                    "[!!!] Parent cache digest mismatch detected.  Regenerating {}",
                     path.display()
                 );
                 ensure!(
@@ -277,17 +282,17 @@ impl ParentCache {
 
             drop(data);
 
-            // Write out the data checksum to disk.
-            let mut checksum_path = path.clone();
-            checksum_path.set_extension("cksum");
+            // Write out the data digest to disk.
+            let mut digest_path = path.clone();
+            digest_path.set_extension("digest");
 
-            // If the checksum file already exists, remove it since we
+            // If the digest file already exists, remove it since we
             // just generated the data.
-            if Path::new(&checksum_path).exists() {
-                std::fs::remove_file(&checksum_path)?;
+            if Path::new(&digest_path).exists() {
+                std::fs::remove_file(&digest_path)?;
             }
 
-            with_exclusive_lock(&checksum_path, |file| Ok(file.as_ref().write_all(&hash)?))?;
+            with_exclusive_lock(&digest_path, |file| Ok(file.as_ref().write_all(&hash)?))?;
 
             info!("parent cache: written to disk");
             Ok(())
