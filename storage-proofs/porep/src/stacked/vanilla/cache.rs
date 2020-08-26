@@ -1,5 +1,5 @@
 use std::fs::File;
-use std::io::{Read, Write, BufRead, BufReader};
+use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 
 use anyhow::{bail, ensure, Context};
@@ -193,11 +193,6 @@ impl ParentCache {
             let mut hasher = Sha256::new();
             info!("[open] parent cache: calculating consistency digest");
             let file = File::open(&path)?;
-            /*
-            let mut reader = BufReader::new(file);
-            while reader.fill_buf()?.len() > 0 {
-                hasher.update(reader.buffer());
-            }*/
             let data = unsafe {
                 memmap::MmapOptions::new()
                     .map(&file)
