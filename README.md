@@ -141,23 +141,13 @@ While replicating and generating the Merkle Trees (MT) for the proof at the same
 
 ### Speed
 
-One of the most computational expensive operations during replication (besides the encoding itself) is the generation of the indexes of the (expansion) parents in the Stacked graph, implemented through a Feistel cipher (used as a pseudorandom permutation). To reduce that time we provide a caching mechanism to generate them only once and reuse them throughout replication (across the different layers). Already built into the system it can be activated with the environmental variable
-
-```
-FIL_PROOFS_MAXIMIZE_CACHING=1
-```
-
-To check that it's working you can inspect the replication log to find `using parents cache of unlimited size`. As the log indicates, we don't have a fine grain control at the moment so it either stores all parents or none. This cache will add about 1.5x the entire sector size to the disk cache used during replication, and a configurable sliding window of cached data is used as memory overhead.  This setting is _very recommended_ as it has a considerable impact on replication time.
-
-You can also verify if the cache is working by inspecting the time each layer takes to encode, `encoding, layer:` in the log, where the first two layers, forward and reverse, will take more time than the rest to populate the cache while the remaining 8 should see a considerable time drop.
-
-Note that this setting is enabled by `default`.  It can be disabled by setting the value to 0.
-
-A related setting that can also be tuned is the SDR parents cache size.  This value is defaulted to 2048 nodes, which is the equivalent of 112KiB of resident memory (where each cached node consists of DEGREE (base + exp = 6 + 8) x 4 byte elements = 56 bytes in length).  Given that the cache is now located on disk, it is memory mapped when accessed in window sizes related to this variable.  This default was chosen to minimize memory while still allowing efficient access to the cache.  If you would like to experiment with alternate sizes, you can modify the environment variable
+One of the most computationally expensive operations during replication (besides the encoding itself) is the generation of the indexes of the (expansion) parents in the Stacked graph, implemented through a Feistel cipher (used as a pseudorandom permutation). To reduce that time we provide a caching mechanism to generate them only once and reuse them throughout replication (across the different layers).
 
 ```
 FIL_PROOFS_SDR_PARENTS_CACHE_SIZE=2048
 ```
+
+This value is defaulted to 2048 nodes, which is the equivalent of 112KiB of resident memory (where each cached node consists of DEGREE (base + exp = 6 + 8) x 4 byte elements = 56 bytes in length).  Given that the cache is now located on disk, it is memory mapped when accessed in window sizes related to this variable.  This default was chosen to minimize memory while still allowing efficient access to the cache.  If you would like to experiment with alternate sizes, you can modify the environment variable
 
 Increasing this value will increase the amount of resident RAM used.
 
@@ -170,6 +160,24 @@ FIL_PROOFS_PARENT_CACHE=/path/to/parent/cache
 Using the above, the cache data would be located at `/path/to/parent/cache/filecoin-parents`.
 
 Alternatively, use `FIL_PROOFS_CACHE_DIR=/path/to/parent/cache`, in which the parent cache will be located in `$FIL_PROOFS_CACHE_DIR/filecoin-parents`.  Note that if you're using `FIL_PROOFS_CACHE_DIR`, it must be set through the environment and cannot be set using the configuration file.  This setting has no effect if `FIL_PROOFS_PARENT_CACHE` is also specified.
+
+```
+FIL_PROOFS_USE_MULTICORE_SDR
+```
+
+When performing SDR replication (Precommit Phase 1) using only a single core, memory access to fetch a node's parents is
+a bottlneck. Multicore SDR uses multiple cores (which should be restricted to a single core complex for shared cache) to
+assemble each nodes parents and perform some prehashing. This setting is not enabled by default but can be activated by
+setting `FIL_PROOFS_USE_MULTICORE_SDR=1`.
+
+To take advantage of shared cache, the process should have been restricted to a single complex's cores. For example, on
+an AMD Threadripper 3970x (where tested), this can be accomplished using `taskset -c 4,5,6,7` to ensure four 'adjacent'
+cores are used (note that this avoids spanning a complex border).
+
+Best performance will also be achieved when it is possible to lock pages which have been memory-mapped. This can be
+accomplished either by running the process as root, or by increasing the system limit for max locked memory with `ulimit
+-l`. Two sector size's worth of data (for current and previous layers) must be locked -- along with 56 *
+`FIL_PROOFS_PARENT_CACHE_SIZE` bytes for the parent cache.
 
 ### GPU Usage
 

@@ -9,14 +9,16 @@ repository = "https://github.com/filecoin-project/rust-fil-proofs"
 readme = "README.md"
 
 [dependencies]
+crossbeam = "0.7.3"
+digest = "0.9"
 storage-proofs-core = { path = "../core", version = "^5.0.0"}
 sha2raw = { path = "../../sha2raw", version = "^2.0.0"}
 rand = "0.7"
 merkletree = "0.21.0"
-memmap = "0.7"
+mapr = "0.8.0"
 num-bigint = "0.2"
 num-traits = "0.2"
-sha2 = "0.9.1"
+sha2 = { version = "0.9.1", features = ["compress"] }
 rayon = "1.0.0"
 serde = { version = "1.0", features = ["derive"]}
 serde_json = "1.0"
@@ -34,6 +36,7 @@ hex = "0.4.2"
 bincode = "1.1.2"
 byteorder = "1.3.4"
 lazy_static = "1.2"
+byte-slice-cast = "0.3.5"
 
 [dev-dependencies]
 tempfile = "3"

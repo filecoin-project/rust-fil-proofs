@@ -5,7 +5,10 @@ use rand::thread_rng;
 use storage_proofs_core::fr32::fr_into_bytes;
 use storage_proofs_core::hasher::sha256::Sha256Hasher;
 use storage_proofs_core::hasher::{Domain, Hasher};
-use storage_proofs_porep::stacked::{create_label, create_label_exp, StackedBucketGraph};
+use storage_proofs_porep::stacked::{
+    create_label::single::{create_label, create_label_exp},
+    StackedBucketGraph,
+};
 
 struct Pregenerated<H: 'static + Hasher> {
     data: Vec<u8>,
