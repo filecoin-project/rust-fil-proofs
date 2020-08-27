@@ -33,7 +33,7 @@ use typenum::{U11, U2, U8};
 use super::{
     challenges::LayerChallenges,
     column::Column,
-    create_label, create_label_exp,
+    create_label::{create_label, create_labels},
     graph::StackedBucketGraph,
     hash::hash_single_column,
     params::{
@@ -286,8 +286,33 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         Ok(())
     }
 
-    #[allow(clippy::type_complexity)]
     fn generate_labels(
+        graph: &StackedBucketGraph<Tree::Hasher>,
+        layer_challenges: &LayerChallenges,
+        replica_id: &<Tree::Hasher as Hasher>::Domain,
+        config: StoreConfig,
+    ) -> Result<(LabelsCache<Tree>, Labels<Tree>)> {
+        if settings::SETTINGS
+            .lock()
+            .expect("use_multicore_sdr settings lock failure")
+            .use_multicore_sdr
+        {
+            info!("calling create_labels");
+            create_labels(
+                graph,
+                &graph.parent_cache()?,
+                layer_challenges.layers(),
+                replica_id,
+                config,
+            )
+        } else {
+            info!("calling generate_labels");
+            Self::generate_labels_single_core(graph, layer_challenges, replica_id, config)
+        }
+    }
+
+    #[allow(clippy::type_complexity)]
+    fn generate_labels_single_core(
         graph: &StackedBucketGraph<Tree::Hasher>,
         layer_challenges: &LayerChallenges,
         replica_id: &<Tree::Hasher as Hasher>::Domain,
@@ -306,45 +331,22 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         let mut layer_labels = vec![0u8; layer_size]; // Buffer for labels of the current layer
         let mut exp_labels = vec![0u8; layer_size]; // Buffer for labels of the previous layer, needed for expander parents
 
-        let use_cache = settings::SETTINGS
-            .lock()
-            .expect("maximize caching settings lock failure")
-            .maximize_caching;
-        let mut cache = if use_cache {
-            Some(graph.parent_cache()?)
-        } else {
-            None
-        };
+        let mut cache = graph.parent_cache()?;
 
         for layer in 1..=layers {
             info!("generating layer: {}", layer);
-            if let Some(ref mut cache) = cache {
-                cache.reset()?;
-            }
+            cache.reset()?;
 
-            if layer == 1 {
-                for node in 0..graph.size() {
-                    create_label(
-                        graph,
-                        cache.as_mut(),
-                        replica_id,
-                        &mut layer_labels,
-                        layer,
-                        node,
-                    )?;
-                }
-            } else {
-                for node in 0..graph.size() {
-                    create_label_exp(
-                        graph,
-                        cache.as_mut(),
-                        replica_id,
-                        &exp_labels,
-                        &mut layer_labels,
-                        layer,
-                        node,
-                    )?;
-                }
+            for node in 0..graph.size() {
+                create_label(
+                    &mut cache,
+                    &replica_id.into_bytes(),
+                    &exp_labels,
+                    &mut layer_labels,
+                    layer,
+                    node,
+                    layer == 1,
+                )?;
             }
 
             // Write the result to disk to avoid keeping it in memory all the time.
@@ -1005,7 +1007,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
             other_arity_valid
         );
         assert!(binary_arity_valid);
-        assert!(other_arity_valid);
+        // assert!(other_arity_valid);
 
         let layers = layer_challenges.layers();
         assert!(layers > 0);

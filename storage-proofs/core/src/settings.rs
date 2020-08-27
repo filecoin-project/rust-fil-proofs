@@ -27,10 +27,12 @@ pub struct Settings {
     pub max_gpu_tree_batch_size: u32,
     pub rows_to_discard: u32,
     pub sdr_parents_cache_size: u32,
+    pub sdr_parents_cache_window_nodes: u32,
     pub window_post_synthesis_num_cpus: u32,
     pub parameter_cache: String,
     pub parent_cache: String,
     pub use_fil_blst: bool,
+    pub use_multicore_sdr: bool,
 }
 
 impl Default for Settings {
@@ -47,6 +49,7 @@ impl Default for Settings {
             max_gpu_tree_batch_size: 700_000,
             rows_to_discard: 2,
             sdr_parents_cache_size: 2_048,
+            sdr_parents_cache_window_nodes: 1024,
             window_post_synthesis_num_cpus: num_cpus::get() as u32,
             // `parameter_cache` does not use the cache() mechanism because it is now used
             // for durable, canonical Groth parameters and verifying keys.
@@ -54,6 +57,7 @@ impl Default for Settings {
             parameter_cache: "/var/tmp/filecoin-proof-parameters/".to_string(),
             parent_cache: cache("filecoin-parents"),
             use_fil_blst: false,
+            use_multicore_sdr: false,
         }
     }
 }

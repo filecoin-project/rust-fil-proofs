@@ -10,10 +10,12 @@ mod encoding_proof;
 mod graph;
 pub(crate) mod hash;
 mod labeling_proof;
+mod memory_handling;
 mod params;
 mod porep;
 mod proof;
 mod proof_scheme;
+mod utils;
 
 pub use self::challenges::{ChallengeRequirements, LayerChallenges};
 pub use self::column::Column;
