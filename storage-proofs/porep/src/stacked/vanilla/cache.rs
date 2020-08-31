@@ -180,7 +180,7 @@ impl ParentCache {
         // If not, we're dealing with some kind of test sector.
         let (parent_cache_data, verify_cache, mut digest_hex) = match get_parent_cache_data(&path) {
             None => {
-                info!("Parent cache data is not supported in production");
+                info!("[open] Parent cache data is not supported in production");
                 (None, false, "".to_string())
             }
             Some(pcd) => (
@@ -237,7 +237,9 @@ impl ParentCache {
                     Self::generate(len, graph.size() as u32, graph, path.clone()).is_ok(),
                     "Failed to generate parent cache"
                 );
-                digest_hex = parent_cache_data.digest.clone();
+
+                // Note that if we wanted the user to manually terminate after repeated
+                // generation attemps, we could recursively return Self::open(...) here.
             }
         }
 
@@ -301,6 +303,21 @@ impl ParentCache {
             drop(data);
 
             digest_hex = hash.iter().map(|x| format!("{:01$x}", x, 2)).collect();
+
+            // Check if current entry is part of the official manifest and verify
+            // that what we just generated matches what we expect for this entry
+            // (if found). If not, we're dealing with some kind of test sector.
+            match get_parent_cache_data(&path) {
+                None => {
+                    info!("[generate] Parent cache data is not supported in production");
+                }
+                Some(pcd) => {
+                    ensure!(
+                        digest_hex == pcd.digest,
+                        "Newly generated parent cache is invalid"
+                    );
+                }
+            };
 
             info!("parent cache: written to disk");
             Ok(())
