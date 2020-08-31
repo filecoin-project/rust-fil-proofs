@@ -86,7 +86,7 @@ fn main() -> Result<()> {
         .get_matches();
 
     // NOTE: The porep_ids below are tied to the versioned values provided in
-    // filecoin-proofs-api:src/registry [porep_id()] that matche the specified
+    // filecoin-proofs-api:src/registry [porep_id()] that matches the specified
     // sector size and must be updated when that value is updated for the proper
     // graph cache generation/validation.
     //
