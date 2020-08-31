@@ -183,7 +183,7 @@ fn publish(matches: &ArgMatches) -> Result<()> {
             }
         };
 
-        // The parameter IDs that should bet published
+        // The parameter IDs that should be published
         let mut parameter_ids = meta_map
             .keys()
             // Filter out all that don't match the selected version

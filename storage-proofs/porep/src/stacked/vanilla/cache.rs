@@ -1,11 +1,13 @@
+use std::collections::BTreeMap;
 use std::fs::File;
-use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 
 use anyhow::{bail, ensure, Context};
 use byteorder::{ByteOrder, LittleEndian};
-use log::info;
+use lazy_static::lazy_static;
+use log::{info, trace};
 use rayon::prelude::*;
+use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 use storage_proofs_core::{
@@ -15,6 +17,7 @@ use storage_proofs_core::{
     hasher::Hasher,
     parameter_cache::{with_exclusive_lock, LockedFile, ParameterSetMetadata, VERSION},
     settings,
+    util::NODE_SIZE,
 };
 
 use super::graph::{StackedGraph, DEGREE};
@@ -22,14 +25,31 @@ use super::graph::{StackedGraph, DEGREE};
 /// u32 = 4 bytes
 const NODE_BYTES: usize = 4;
 
+pub const PARENT_CACHE_DATA: &str = include_str!("../../../parent_cache.json");
+
+pub type ParentCacheDataMap = BTreeMap<String, ParentCacheData>;
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct ParentCacheData {
+    pub digest: String,
+    pub sector_size: u64,
+}
+
+lazy_static! {
+    pub static ref PARENT_CACHE: ParentCacheDataMap =
+        serde_json::from_str(PARENT_CACHE_DATA).expect("Invalid parent_cache.json");
+}
+
 // StackedGraph will hold two different (but related) `ParentCache`,
 #[derive(Debug)]
 pub struct ParentCache {
     /// Disk path for the cache.
-    path: PathBuf,
+    pub path: PathBuf,
     /// The total number of cache entries.
     num_cache_entries: u32,
     cache: CacheData,
+    pub sector_size: usize,
+    pub digest: String,
 }
 
 #[derive(Debug)]
@@ -156,13 +176,22 @@ impl ParentCache {
         H: Hasher,
         G: Graph<H> + ParameterSetMetadata + Send + Sync,
     {
-        let mut digest_path = path.clone();
-        digest_path.set_extension("digest");
-
-        let mut verify_cache = settings::SETTINGS
-            .lock()
-            .expect("verify_cache settings lock failure")
-            .verify_cache;
+        // Check if current entry is part of the official manifest.
+        // If not, we're dealing with some kind of test sector.
+        let (parent_cache_data, verify_cache, mut digest_hex) = match get_parent_cache_data(&path) {
+            None => {
+                info!("Parent cache data is not supported in production");
+                (None, false, "".to_string())
+            }
+            Some(pcd) => (
+                Some(pcd),
+                settings::SETTINGS
+                    .lock()
+                    .expect("verify_cache settings lock failure")
+                    .verify_cache,
+                pcd.digest.clone(),
+            ),
+        };
 
         info!(
             "parent cache: opening {}, verify enabled: {}",
@@ -170,24 +199,9 @@ impl ParentCache {
             verify_cache
         );
 
-        // If the digest file does not exist, generate the cache
-        // file again along with the digest file.
-        if !Path::new(&digest_path).exists() {
-            info!(
-                "[!!!] Parent cache digest is missing.  Regenerating {}",
-                path.display()
-            );
-            ensure!(
-                Self::generate(len, graph.size() as u32, graph, path.clone()).is_ok(),
-                "Failed to generate parent cache"
-            );
-
-            // If we've just generated the digest file, do not
-            // re-verify, even if requested.
-            verify_cache = false;
-        }
-
         if verify_cache {
+            let parent_cache_data = parent_cache_data.expect("parent_cache_data failure");
+
             // Always check all of the data for integrity checks, even
             // if we're only opening a portion of it.
             let mut hasher = Sha256::new();
@@ -204,11 +218,16 @@ impl ParentCache {
             let hash = hasher.finalize();
             info!("[open] parent cache: calculated consistency digest");
 
-            let mut digest = Vec::new();
-            let mut digest_file = File::open(&digest_path)?;
-            digest_file.read_to_end(&mut digest)?;
-            if digest.as_slice() == hash.as_slice() {
-                info!("[open] parent cache: cached is verified!");
+            digest_hex = hash.iter().map(|x| format!("{:01$x}", x, 2)).collect();
+
+            trace!(
+                "[{}] Comparing {:?} to {:?}",
+                graph.size() * NODE_SIZE,
+                digest_hex,
+                parent_cache_data.digest
+            );
+            if digest_hex == parent_cache_data.digest {
+                info!("[open] parent cache: cache is verified!");
             } else {
                 info!(
                     "[!!!] Parent cache digest mismatch detected.  Regenerating {}",
@@ -218,6 +237,7 @@ impl ParentCache {
                     Self::generate(len, graph.size() as u32, graph, path.clone()).is_ok(),
                     "Failed to generate parent cache"
                 );
+                digest_hex = parent_cache_data.digest.clone();
             }
         }
 
@@ -225,6 +245,8 @@ impl ParentCache {
             cache: CacheData::open(0, len, &path)?,
             path,
             num_cache_entries: cache_entries,
+            sector_size: graph.size() * NODE_SIZE,
+            digest: digest_hex,
         })
     }
 
@@ -240,6 +262,8 @@ impl ParentCache {
         G: Graph<H> + ParameterSetMetadata + Send + Sync,
     {
         info!("parent cache: generating {}", path.display());
+        let mut digest_hex: String = "".to_string();
+        let sector_size = graph.size() * NODE_SIZE;
 
         with_exclusive_lock(&path, |file| {
             let cache_size = cache_entries as usize * NODE_BYTES * DEGREE;
@@ -273,21 +297,10 @@ impl ParentCache {
             let mut hasher = Sha256::new();
             hasher.update(&data);
             let hash = hasher.finalize();
-            info!("[generate]parent cache: generated consistency digest");
-
+            info!("[generate] parent cache: generated consistency digest");
             drop(data);
 
-            // Write out the data digest to disk.
-            let mut digest_path = path.clone();
-            digest_path.set_extension("digest");
-
-            // If the digest file already exists, remove it since we
-            // just generated the data.
-            if Path::new(&digest_path).exists() {
-                std::fs::remove_file(&digest_path)?;
-            }
-
-            with_exclusive_lock(&digest_path, |file| Ok(file.as_ref().write_all(&hash)?))?;
+            digest_hex = hash.iter().map(|x| format!("{:01$x}", x, 2)).collect();
 
             info!("parent cache: written to disk");
             Ok(())
@@ -297,6 +310,8 @@ impl ParentCache {
             cache: CacheData::open(0, len, &path)?,
             path,
             num_cache_entries: cache_entries,
+            sector_size,
+            digest: digest_hex,
         })
     }
 
@@ -335,6 +350,20 @@ fn parent_cache_dir_name() -> String {
         .expect("parent_cache settings lock failure")
         .parent_cache
         .clone()
+}
+
+fn parent_cache_id(path: &PathBuf) -> String {
+    Path::new(&path)
+        .file_stem()
+        .expect("parent_cache_id file_stem failure")
+        .to_str()
+        .expect("parent_cache_id to_str failure")
+        .to_string()
+}
+
+/// Get the correct parent cache data for a given cache id.
+fn get_parent_cache_data(path: &PathBuf) -> Option<&ParentCacheData> {
+    PARENT_CACHE.get(&parent_cache_id(path))
 }
 
 fn cache_path<H, G>(cache_entries: u32, graph: &StackedGraph<H, G>) -> PathBuf
