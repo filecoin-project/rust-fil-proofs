@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::time::Instant;
 
 use log::info;
@@ -5,6 +6,7 @@ use serde::de::DeserializeOwned;
 use serde::ser::Serialize;
 
 use crate::error::Result;
+use crate::sector::SectorId;
 
 /// The ProofScheme trait provides the methods that any proof scheme needs to implement.
 pub trait ProofScheme<'a> {
@@ -56,6 +58,16 @@ pub trait ProofScheme<'a> {
         info!("total_groth_proof_time: {:?}", total_proof_time);
 
         result
+    }
+
+    fn prove_all_partitions_with_challenges(
+        _pub_params: &Self::PublicParams,
+        _pub_in: &Self::PublicInputs,
+        _priv_in: &Self::PrivateInputs,
+        _partition_count: usize,
+        _sector_challenges: &BTreeMap<SectorId, Vec<u64>>,
+    ) -> Result<Vec<Self::Proof>> {
+        unimplemented!();
     }
 
     /// verify returns true if the supplied proof is valid for the given public parameter and public inputs.

@@ -569,8 +569,12 @@ pub fn generate_window_post_vanilla_proofs<Tree: 'static + MerkleTreeTrait>(
         sectors: &priv_sectors,
     };
 
-    let vanilla_proofs =
-        fallback::FallbackPoStCompound::prove_vanilla(&pub_params, &pub_inputs, &priv_inputs)?;
+    let vanilla_proofs = fallback::FallbackPoStCompound::prove_vanilla_with_challenges(
+        &pub_params,
+        &pub_inputs,
+        &priv_inputs,
+        &challenges.sector_challenges,
+    )?;
 
     info!("generate_window_post_vanilla_proofs:finish");
 

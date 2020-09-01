@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use anyhow::{ensure, Context};
 use bellperson::{groth16, Circuit};
 use log::info;
@@ -10,6 +12,7 @@ use crate::multi_proof::MultiProof;
 use crate::parameter_cache::{CacheableParameters, ParameterSetMetadata};
 use crate::partitions;
 use crate::proof::ProofScheme;
+use crate::sector::SectorId;
 
 #[derive(Clone)]
 pub struct SetupParams<'a, S: ProofScheme<'a>> {
@@ -86,7 +89,7 @@ where
         // This will always run at least once, since there cannot be zero partitions.
         ensure!(partition_count > 0, "There must be partitions");
 
-        info!("vanilla_proof:start");
+        info!("prove_vanilla:start");
         let vanilla_proofs = S::prove_all_partitions(
             &pub_params.vanilla_params,
             &pub_in,
@@ -94,7 +97,37 @@ where
             partition_count,
         )?;
 
-        info!("vanilla_proof:finish");
+        info!("prove_vanilla:finish");
+
+        let sanity_check =
+            S::verify_all_partitions(&pub_params.vanilla_params, &pub_in, &vanilla_proofs)?;
+        ensure!(sanity_check, "sanity check failed");
+
+        Ok(vanilla_proofs)
+    }
+
+    /// prove_vanilla and prove_circuit combined is equivalent to ProofScheme::prove.
+    fn prove_vanilla_with_challenges(
+        pub_params: &PublicParams<'a, S>,
+        pub_in: &S::PublicInputs,
+        priv_in: &S::PrivateInputs,
+        sector_challenges: &BTreeMap<SectorId, Vec<u64>>,
+    ) -> Result<Vec<S::Proof>> {
+        let partition_count = Self::partition_count(pub_params);
+
+        // This will always run at least once, since there cannot be zero partitions.
+        ensure!(partition_count > 0, "There must be partitions");
+
+        info!("prove_vanilla_with_challenges:start");
+        let vanilla_proofs = S::prove_all_partitions_with_challenges(
+            &pub_params.vanilla_params,
+            &pub_in,
+            priv_in,
+            partition_count,
+            sector_challenges,
+        )?;
+
+        info!("prove_vanilla_with_challenges:finish");
 
         let sanity_check =
             S::verify_all_partitions(&pub_params.vanilla_params, &pub_in, &vanilla_proofs)?;

@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::marker::PhantomData;
 
 use anyhow::ensure;
@@ -332,6 +333,84 @@ impl<'a, Tree: 'a + MerkleTreeTrait> ProofScheme<'a> for FallbackPoSt<'a, Tree> 
                             challenge_index,
                         )?;
 
+                        tree.gen_cached_proof(challenged_leaf_start as usize, Some(rows_to_discard))
+                    })
+                    .collect::<Result<Vec<_>>>()?;
+
+                proofs.push(SectorProof {
+                    inclusion_proofs,
+                    comm_c: priv_sector.comm_c,
+                    comm_r_last: priv_sector.comm_r_last,
+                });
+            }
+
+            // If there were less than the required number of sectors provided, we duplicate the last one
+            // to pad the proof out, such that it works in the circuit part.
+            while proofs.len() < num_sectors_per_chunk {
+                proofs.push(proofs[proofs.len() - 1].clone());
+            }
+
+            partition_proofs.push(Proof { sectors: proofs });
+        }
+
+        Ok(partition_proofs)
+    }
+
+    fn prove_all_partitions_with_challenges<'b>(
+        pub_params: &'b Self::PublicParams,
+        pub_inputs: &'b Self::PublicInputs,
+        priv_inputs: &'b Self::PrivateInputs,
+        partition_count: usize,
+        sector_challenges: &BTreeMap<SectorId, Vec<u64>>,
+    ) -> Result<Vec<Self::Proof>> {
+        ensure!(
+            priv_inputs.sectors.len() == pub_inputs.sectors.len(),
+            "inconsistent number of private and public sectors {} != {}",
+            priv_inputs.sectors.len(),
+            pub_inputs.sectors.len(),
+        );
+
+        let num_sectors_per_chunk = pub_params.sector_count;
+        let num_sectors = pub_inputs.sectors.len();
+
+        ensure!(
+            num_sectors <= partition_count * num_sectors_per_chunk,
+            "cannot prove the provided number of sectors: {} > {} * {}",
+            num_sectors,
+            partition_count,
+            num_sectors_per_chunk,
+        );
+
+        let mut partition_proofs = Vec::new();
+
+        for (j, (pub_sectors_chunk, priv_sectors_chunk)) in pub_inputs
+            .sectors
+            .chunks(num_sectors_per_chunk)
+            .zip(priv_inputs.sectors.chunks(num_sectors_per_chunk))
+            .enumerate()
+        {
+            trace!("proving partition {}", j);
+
+            let mut proofs = Vec::with_capacity(num_sectors_per_chunk);
+
+            for (pub_sector, priv_sector) in pub_sectors_chunk.iter().zip(priv_sectors_chunk.iter())
+            {
+                let tree = priv_sector.tree;
+                let sector_id = pub_sector.id;
+                let tree_leafs = tree.leafs();
+                let rows_to_discard = default_rows_to_discard(tree_leafs, Tree::Arity::to_usize());
+
+                trace!(
+                    "Generating proof for tree leafs {} and arity {}",
+                    tree_leafs,
+                    Tree::Arity::to_usize(),
+                );
+
+                let challenges = &sector_challenges[&sector_id];
+                let inclusion_proofs = (0..challenges.len())
+                    .into_par_iter()
+                    .map(|challenged_leaf_index| {
+                        let challenged_leaf_start = challenges[challenged_leaf_index];
                         tree.gen_cached_proof(challenged_leaf_start as usize, Some(rows_to_discard))
                     })
                     .collect::<Result<Vec<_>>>()?;
