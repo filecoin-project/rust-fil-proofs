@@ -19,7 +19,7 @@ use storage_proofs_core::{
     util::{default_rows_to_discard, NODE_SIZE},
 };
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SetupParams {
     /// Size of the sector in bytes.
     pub sector_size: u64,
@@ -29,7 +29,7 @@ pub struct SetupParams {
     pub sector_count: usize,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PublicParams {
     /// Size of the sector in bytes.
     pub sector_size: u64,

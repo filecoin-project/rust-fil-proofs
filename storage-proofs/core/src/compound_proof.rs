@@ -70,6 +70,17 @@ where
         priv_in: &S::PrivateInputs,
         groth_params: &'b groth16::MappedParameters<Bls12>,
     ) -> Result<MultiProof<'b>> {
+        let vanilla_proofs = Self::prove_vanilla(pub_params, pub_in, priv_in)?;
+
+        Self::prove_circuit(pub_params, pub_in, vanilla_proofs, groth_params)
+    }
+
+    /// prove_vanilla and prove_circuit combined is equivalent to ProofScheme::prove.
+    fn prove_vanilla(
+        pub_params: &PublicParams<'a, S>,
+        pub_in: &S::PublicInputs,
+        priv_in: &S::PrivateInputs,
+    ) -> Result<Vec<S::Proof>> {
         let partition_count = Self::partition_count(pub_params);
 
         // This will always run at least once, since there cannot be zero partitions.
@@ -88,6 +99,21 @@ where
         let sanity_check =
             S::verify_all_partitions(&pub_params.vanilla_params, &pub_in, &vanilla_proofs)?;
         ensure!(sanity_check, "sanity check failed");
+
+        Ok(vanilla_proofs)
+    }
+
+    /// prove_vanilla and prove_circuit combined is equivalent to ProofScheme::prove.
+    fn prove_circuit<'b>(
+        pub_params: &PublicParams<'a, S>,
+        pub_in: &S::PublicInputs,
+        vanilla_proofs: Vec<S::Proof>,
+        groth_params: &'b groth16::MappedParameters<Bls12>,
+    ) -> Result<MultiProof<'b>> {
+        let partition_count = Self::partition_count(pub_params);
+
+        // This will always run at least once, since there cannot be zero partitions.
+        ensure!(partition_count > 0, "There must be partitions");
 
         info!("snark_proof:start");
         let groth_proofs = Self::circuit_proofs(

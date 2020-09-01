@@ -6,10 +6,10 @@ use storage_proofs::proof::ProofScheme;
 use crate::constants::*;
 use crate::types::{MerkleTreeTrait, PaddedBytesAmount, PoStConfig};
 
-type WinningPostSetupParams = fallback::SetupParams;
+pub type WinningPostSetupParams = fallback::SetupParams;
 pub type WinningPostPublicParams = fallback::PublicParams;
 
-type WindowPostSetupParams = fallback::SetupParams;
+pub type WindowPostSetupParams = fallback::SetupParams;
 pub type WindowPostPublicParams = fallback::PublicParams;
 
 pub fn public_params<Tree: 'static + MerkleTreeTrait>(

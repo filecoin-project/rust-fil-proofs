@@ -334,7 +334,22 @@ fn window_post<Tree: 'static + MerkleTreeTrait>(
         priority: false,
     };
 
-    let proof = generate_window_post::<Tree>(&config, &randomness, &priv_replicas, prover_id)?;
+    /////////////////////////////////////////////
+    // The following methods of proof generation are functionally equivalent:
+    // 1)
+    //let proof = generate_window_post::<Tree>(&config, &randomness, &priv_replicas, prover_id)?;
+    //
+    // 2)
+    let replica_sectors = priv_replicas
+        .iter()
+        .map(|(sector, _replica)| *sector)
+        .collect::<Vec<SectorId>>();
+
+    let challenges =
+        generate_window_post_challenges::<Tree>(&config, &randomness, &replica_sectors, prover_id)?;
+    let vanilla_proofs = generate_window_post_vanilla_proofs::<Tree>(&priv_replicas, &challenges)?;
+    let proof = generate_window_post_circuit_proof::<Tree>(&challenges, &vanilla_proofs)?;
+    /////////////////////////////////////////////
 
     let valid = verify_window_post::<Tree>(&config, &randomness, &pub_replicas, prover_id, &proof)?;
     assert!(valid, "proof did not verify");

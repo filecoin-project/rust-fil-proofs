@@ -1,8 +1,13 @@
+use std::collections::BTreeMap;
+
 use serde::{Deserialize, Serialize};
 use storage_proofs::hasher::Hasher;
 use storage_proofs::porep::stacked;
+use storage_proofs::post::fallback::*;
+use storage_proofs::sector::*;
 
 use crate::constants::*;
+use crate::parameters::*;
 
 mod bytes_amount;
 mod piece_info;
@@ -82,4 +87,31 @@ pub struct SealPreCommitPhase1Output<Tree: MerkleTreeTrait> {
     pub labels: Labels<Tree>,
     pub config: StoreConfig,
     pub comm_d: Commitment,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct WindowPoStChallenges {
+    pub post_config: PoStConfig,
+    pub randomness: ChallengeSeed,
+    pub prover_id: ProverId,
+    pub sector_challenges: BTreeMap<SectorId, Vec<u64>>,
+}
+
+pub type SnarkProof = Vec<u8>;
+pub type VanillaProof<Tree> = Proof<<Tree as MerkleTreeTrait>::Proof>;
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct WindowPoStVanillaProofs<Tree: MerkleTreeTrait> {
+    pub vanilla_params: WindowPostSetupParams,
+    pub partitions: Option<usize>,
+    #[serde(bound(
+        serialize = "Vec<PublicSector<<Tree::Hasher as Hasher>::Domain>>: Serialize",
+        deserialize = "Vec<PublicSector<<Tree::Hasher as Hasher>::Domain>>: Deserialize<'de>"
+    ))]
+    pub pub_sectors: Vec<PublicSector<<Tree::Hasher as Hasher>::Domain>>,
+    #[serde(bound(
+        serialize = "Vec<VanillaProof<Tree>>: Serialize",
+        deserialize = "Vec<VanillaProof<Tree>>: Deserialize<'de>"
+    ))]
+    pub vanilla_proofs: Vec<VanillaProof<Tree>>,
 }

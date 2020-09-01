@@ -6,7 +6,7 @@ use storage_proofs::post::fallback;
 
 use crate::types::*;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct PoStConfig {
     pub sector_size: SectorSize,
     pub challenge_count: usize,
@@ -16,7 +16,7 @@ pub struct PoStConfig {
     pub priority: bool,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum PoStType {
     Winning,
     Window,
