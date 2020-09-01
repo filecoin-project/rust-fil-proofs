@@ -1,14 +1,17 @@
 use bellperson::groth16;
 
 use crate::error::Result;
-use anyhow::Context;
+use anyhow::{ensure, Context};
 use paired::bls12_381::Bls12;
+use rayon::prelude::*;
 use std::io::{self, Read, Write};
 
 pub struct MultiProof<'a> {
     pub circuit_proofs: Vec<groth16::Proof<Bls12>>,
     pub verifying_key: &'a groth16::VerifyingKey<Bls12>,
 }
+
+const GROTH_PROOF_SIZE: usize = 192;
 
 impl<'a> MultiProof<'a> {
     pub fn new(
@@ -26,13 +29,34 @@ impl<'a> MultiProof<'a> {
         mut reader: R,
         verifying_key: &'a groth16::VerifyingKey<Bls12>,
     ) -> Result<Self> {
-        let num_proofs = match partitions {
-            Some(n) => n,
-            None => 1,
-        };
-        let proofs = (0..num_proofs)
-            .map(|_| groth16::Proof::read(&mut reader))
+        let num_proofs = partitions.unwrap_or(1);
+
+        let mut proof_vec: Vec<u8> = Vec::with_capacity(num_proofs * GROTH_PROOF_SIZE);
+        reader.read_to_end(&mut proof_vec)?;
+
+        Self::new_from_bytes(partitions, &proof_vec, verifying_key)
+    }
+
+    // Parallelizing reduces deserialization time for 10 proofs from 13ms to 2ms.
+    pub fn new_from_bytes(
+        partitions: Option<usize>,
+        proof_bytes: &[u8],
+        verifying_key: &'a groth16::VerifyingKey<Bls12>,
+    ) -> Result<Self> {
+        let num_proofs = partitions.unwrap_or(1);
+
+        let proofs = proof_bytes
+            .par_chunks(GROTH_PROOF_SIZE)
+            .take(num_proofs)
+            .map(groth16::Proof::read)
             .collect::<io::Result<Vec<_>>>()?;
+
+        ensure!(
+            num_proofs == proofs.len(),
+            "expected {} proofs but found only {}",
+            num_proofs,
+            proofs.len()
+        );
 
         Ok(Self::new(proofs, verifying_key))
     }
