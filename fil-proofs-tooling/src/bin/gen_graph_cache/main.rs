@@ -26,14 +26,17 @@ pub struct ParentCacheSummary {
 
 fn gen_graph_cache<Tree: 'static + MerkleTreeTrait>(
     sector_size: usize,
-    challenge_count: usize,
-    layers: usize,
     porep_id: [u8; 32],
     parent_cache_summary_map: &mut ParentCacheSummaryMap,
 ) -> Result<()> {
     let nodes = (sector_size / 32) as usize;
     let drg_degree = filecoin_proofs::constants::DRG_DEGREE;
     let expansion_degree = filecoin_proofs::constants::EXP_DEGREE;
+
+    // Note that layers and challenge_count don't affect the graph, so
+    // we just use dummy values of 1 for the setup params.
+    let layers = 1;
+    let challenge_count = 1;
     let layer_challenges = LayerChallenges::new(layers, challenge_count);
 
     let sp = SetupParams {
@@ -160,24 +163,10 @@ fn main() -> Result<()> {
             continue;
         }
 
-        let challenge_count = *filecoin_proofs::constants::POREP_MINIMUM_CHALLENGES
-            .read()
-            .expect("POREP_MINIMUM_CHALLENGES read failure")
-            .get(&sector_size)
-            .expect("unknown sector size") as usize;
-
-        let layers = *filecoin_proofs::constants::LAYERS
-            .read()
-            .expect("LAYERS read failure")
-            .get(&sector_size)
-            .expect("unknown sector size") as usize;
-
         with_shape!(
             sector_size as u64,
             gen_graph_cache,
             sector_size as usize,
-            challenge_count,
-            layers,
             porep_id,
             &mut parent_cache_summary_map,
         )?;
