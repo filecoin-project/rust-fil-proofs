@@ -1,11 +1,13 @@
+use std::convert::TryFrom;
 use std::marker::PhantomData;
 
 use anyhow::ensure;
 use bellperson::gadgets::boolean::{AllocatedBit, Boolean};
 use bellperson::gadgets::{multipack, num};
 use bellperson::{Circuit, ConstraintSystem, SynthesisError};
+use ff::PrimeField;
 use generic_array::typenum::Unsigned;
-use paired::bls12_381::{Bls12, Fr};
+use paired::bls12_381::{Bls12, Fr, FrRepr};
 
 use crate::compound_proof::{CircuitComponent, CompoundProof};
 use crate::error::Result;
@@ -306,10 +308,19 @@ impl<'a, Tree: 'static + MerkleTreeTrait> CompoundProof<'a, PoR<Tree>, PoRCircui
         pub_params: &<PoR<Tree> as ProofScheme<'a>>::PublicParams,
         _k: Option<usize>,
     ) -> Result<Vec<Fr>> {
+        ensure!(
+            pub_inputs.challenge < pub_params.leaves,
+            "Challenge out of range"
+        );
         let mut inputs = Vec::new();
-        let path_bits = challenge_into_auth_path_bits(pub_inputs.challenge, pub_params.leaves);
 
-        inputs.extend(multipack::compute_multipacking::<Bls12>(&path_bits));
+        // Inputs are (currently, inefficiently) packed with one `Fr` per challenge.
+        // Boolean/bit auth paths trivially correspond to the challenged node's index within a sector.
+        // Defensively convert the challenge with `try_from` as a reminder that we must not truncate.
+        let input_fr = Fr::from_repr(FrRepr::from(
+            u64::try_from(pub_inputs.challenge).expect("challenge type too wide"),
+        ))?;
+        inputs.push(input_fr);
 
         if let Some(commitment) = pub_inputs.commitment {
             ensure!(!pub_params.private, "Params must be public");
