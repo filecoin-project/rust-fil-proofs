@@ -295,15 +295,6 @@ impl ParentCache {
             info!("parent cache: generated");
             data.flush().context("failed to flush parent cache")?;
 
-            info!("[generate] parent cache: generating consistency digest");
-            let mut hasher = Sha256::new();
-            hasher.update(&data);
-            let hash = hasher.finalize();
-            info!("[generate] parent cache: generated consistency digest");
-            drop(data);
-
-            digest_hex = hash.iter().map(|x| format!("{:01$x}", x, 2)).collect();
-
             // Check if current entry is part of the official manifest and verify
             // that what we just generated matches what we expect for this entry
             // (if found). If not, we're dealing with some kind of test sector.
@@ -312,12 +303,22 @@ impl ParentCache {
                     info!("[generate] Parent cache data is not supported in production");
                 }
                 Some(pcd) => {
+                    info!("[generate] parent cache: generating consistency digest");
+                    let mut hasher = Sha256::new();
+                    hasher.update(&data);
+                    let hash = hasher.finalize();
+                    info!("[generate] parent cache: generated consistency digest");
+
+                    digest_hex = hash.iter().map(|x| format!("{:01$x}", x, 2)).collect();
+
                     ensure!(
                         digest_hex == pcd.digest,
                         "Newly generated parent cache is invalid"
                     );
                 }
             };
+
+            drop(data);
 
             info!("parent cache: written to disk");
             Ok(())
