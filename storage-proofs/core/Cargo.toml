@@ -44,7 +44,7 @@ neptune = { version = "1.0.1", features = ["gpu"] }
 cpu-time = { version = "1.0", optional = true }
 gperftools = { version = "0.2", optional = true }
 num_cpus = "1.10.1"
-lotus_blst = { git = "https://github.com/simonatsn/lotus-blst" }
+lotus_blst = { git = "https://github.com/vmx/lotus-blst", branch = "update-build" }
 
 [dev-dependencies]
 proptest = "0.10"
