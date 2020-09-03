@@ -2,8 +2,8 @@ use std::path::Path;
 
 use anyhow::{ensure, Context};
 use bellperson::{groth16, Circuit};
-use log::info;
 use fil_blst::{blst_fr, blst_scalar, scalar_from_u64, verify_batch_proof};
+use log::info;
 use paired::bls12_381::{Bls12, Fr};
 use rand::{rngs::OsRng, RngCore};
 use rayon::prelude::*;
