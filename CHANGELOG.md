@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://book.async.rs/overview
 
 ## Unreleased
 
+## 5.1.2 - 2020-09-03
+
+- Accelerate SNARK verification [#1271](https://github.com/filecoin-project/rust-fil-proofs/pull/1271)
+- Decompress proofs in parallel [#1268](https://github.com/filecoin-project/rust-fil-proofs/pull/1268)
+- Eliminate wasteful public-input conversions [#1267](https://github.com/filecoin-project/rust-fil-proofs/pull/1267)
+- Remove usage of unwrap [#1260](https://github.com/filecoin-project/rust-fil-proofs/pull/1260)
+- Pin params to the filecoin collab cluster [#1263](https://github.com/filecoin-project/rust-fil-proofs/pull/1263)
+
 ## 5.1.1 - 2020-08-12
 
 - Only perform subgroup check on 'after' params [#1258](https://github.com/filecoin-project/rust-fil-proofs/pull/1258)
@@ -108,7 +116,8 @@ and this project adheres to [Semantic Versioning](https://book.async.rs/overview
 
 - Initial stable release
 
-[Unreleased]: https://github.com/filecoin-project/rust-fil-proofs/compare/v5.1.1...HEAD
+[Unreleased]: https://github.com/filecoin-project/rust-fil-proofs/compare/v5.1.2...HEAD
+[5.1.2]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v5.1.2
 [5.1.1]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v5.1.1
 [5.1.0]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v5.1.0
 [5.0.0]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v5.0.0
