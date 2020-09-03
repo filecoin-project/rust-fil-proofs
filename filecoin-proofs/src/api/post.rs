@@ -17,6 +17,7 @@ use storage_proofs::merkle::{
 use storage_proofs::multi_proof::MultiProof;
 use storage_proofs::post::fallback;
 use storage_proofs::sector::*;
+use storage_proofs::settings;
 use storage_proofs::util::default_rows_to_discard;
 
 use crate::api::util::{as_safe_commitment, get_base_tree_leafs, get_base_tree_size};
@@ -400,13 +401,6 @@ pub fn verify_winning_post<Tree: 'static + MerkleTreeTrait>(
     let pub_params: compound_proof::PublicParams<fallback::FallbackPoSt<Tree>> =
         fallback::FallbackPoStCompound::setup(&setup_params)?;
 
-    let verifying_key = get_post_verifying_key::<Tree>(&post_config)?;
-
-    let proof = MultiProof::new_from_reader(None, &proof[..], &verifying_key)?;
-    if proof.len() != 1 {
-        return Ok(false);
-    }
-
     let mut pub_sectors = Vec::with_capacity(param_sector_count);
     for _ in 0..param_sector_count {
         for (id, replica) in replicas.iter() {
@@ -422,14 +416,40 @@ pub fn verify_winning_post<Tree: 'static + MerkleTreeTrait>(
         k: None,
     };
 
-    let is_valid = fallback::FallbackPoStCompound::verify(
-        &pub_params,
-        &pub_inputs,
-        &proof,
-        &fallback::ChallengeRequirements {
-            minimum_challenge_count: post_config.challenge_count * post_config.sector_count,
-        },
-    )?;
+    let use_fil_blst = settings::SETTINGS
+        .lock()
+        .expect("use_fil_blst settings lock failure")
+        .use_fil_blst;
+
+    let is_valid = if use_fil_blst {
+        let verifying_key_path = post_config.get_cache_verifying_key_path::<Tree>()?;
+        fallback::FallbackPoStCompound::verify_blst(
+            &pub_params,
+            &pub_inputs,
+            &proof,
+            proof.len() / 192,
+            &fallback::ChallengeRequirements {
+                minimum_challenge_count: post_config.challenge_count * post_config.sector_count,
+            },
+            &verifying_key_path,
+        )?
+    } else {
+        let verifying_key = get_post_verifying_key::<Tree>(&post_config)?;
+
+        let single_proof = MultiProof::new_from_reader(None, &proof[..], &verifying_key)?;
+        if single_proof.len() != 1 {
+            return Ok(false);
+        }
+
+        fallback::FallbackPoStCompound::verify(
+            &pub_params,
+            &pub_inputs,
+            &single_proof,
+            &fallback::ChallengeRequirements {
+                minimum_challenge_count: post_config.challenge_count * post_config.sector_count,
+            },
+        )?
+    };
 
     if !is_valid {
         return Ok(false);

@@ -21,6 +21,7 @@ use storage_proofs::porep::stacked::{
 };
 use storage_proofs::proof::ProofScheme;
 use storage_proofs::sector::SectorId;
+use storage_proofs::settings;
 use storage_proofs::util::default_rows_to_discard;
 
 use crate::api::util::{
@@ -574,7 +575,6 @@ pub fn verify_seal<Tree: 'static + MerkleTreeTrait>(
     ensure!(comm_d_in != [0; 32], "Invalid all zero commitment (comm_d)");
     ensure!(comm_r_in != [0; 32], "Invalid all zero commitment (comm_r)");
 
-    let sector_bytes = PaddedBytesAmount::from(porep_config);
     let comm_r: <Tree::Hasher as Hasher>::Domain = as_safe_commitment(&comm_r_in, "comm_r")?;
     let comm_d: DefaultPieceDomain = as_safe_commitment(&comm_d_in, "comm_d")?;
 
@@ -609,32 +609,56 @@ pub fn verify_seal<Tree: 'static + MerkleTreeTrait>(
             k: None,
         };
 
-    let verifying_key = get_stacked_verifying_key::<Tree>(porep_config)?;
+    let use_fil_blst = settings::SETTINGS
+        .lock()
+        .expect("use_fil_blst settings lock failure")
+        .use_fil_blst;
 
-    info!(
-        "got verifying key ({}) while verifying seal",
-        u64::from(sector_bytes)
-    );
+    let result = if use_fil_blst {
+        let verifying_key_path = porep_config.get_cache_verifying_key_path::<Tree>()?;
 
-    let proof = MultiProof::new_from_reader(
-        Some(usize::from(PoRepProofPartitions::from(porep_config))),
-        proof_vec,
-        &verifying_key,
-    )?;
+        StackedCompound::verify_blst(
+            &compound_public_params,
+            &public_inputs,
+            &proof_vec,
+            proof_vec.len() / 192,
+            &ChallengeRequirements {
+                minimum_challenges: *POREP_MINIMUM_CHALLENGES
+                    .read()
+                    .expect("POREP_MINIMUM_CHALLENGES poisoned")
+                    .get(&u64::from(SectorSize::from(porep_config)))
+                    .expect("unknown sector size") as usize,
+            },
+            &verifying_key_path,
+        )
+    } else {
+        let sector_bytes = PaddedBytesAmount::from(porep_config);
+        let verifying_key = get_stacked_verifying_key::<Tree>(porep_config)?;
 
-    let result = StackedCompound::verify(
-        &compound_public_params,
-        &public_inputs,
-        &proof,
-        &ChallengeRequirements {
-            minimum_challenges: *POREP_MINIMUM_CHALLENGES
-                .read()
-                .expect("POREP_MINIMUM_CHALLENGES poisoned")
-                .get(&u64::from(SectorSize::from(porep_config)))
-                .expect("unknown sector size") as usize,
-        },
-    )
-    .map_err(Into::into);
+        info!(
+            "got verifying key ({}) while verifying seal",
+            u64::from(sector_bytes)
+        );
+
+        let proof = MultiProof::new_from_reader(
+            Some(usize::from(PoRepProofPartitions::from(porep_config))),
+            proof_vec,
+            &verifying_key,
+        )?;
+
+        StackedCompound::verify(
+            &compound_public_params,
+            &public_inputs,
+            &proof,
+            &ChallengeRequirements {
+                minimum_challenges: *POREP_MINIMUM_CHALLENGES
+                    .read()
+                    .expect("POREP_MINIMUM_CHALLENGES poisoned")
+                    .get(&u64::from(SectorSize::from(porep_config)))
+                    .expect("unknown sector size") as usize,
+            },
+        )
+    };
 
     info!("verify_seal:finish");
     result

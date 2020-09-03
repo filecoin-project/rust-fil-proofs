@@ -35,3 +35,6 @@ rows_to_discard = 2
 
 # Window size for pedersen hashing.
 pedersen_hash_exp_window_size = 16
+
+# This enables accelerate snark verification
+use_fil_blst = false
