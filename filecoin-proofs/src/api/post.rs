@@ -416,12 +416,12 @@ pub fn verify_winning_post<Tree: 'static + MerkleTreeTrait>(
         k: None,
     };
 
-    let use_lotus_blst = settings::SETTINGS
+    let use_fil_blst = settings::SETTINGS
         .lock()
-        .expect("use_lotus_blst settings lock failure")
-        .use_lotus_blst;
+        .expect("use_fil_blst settings lock failure")
+        .use_fil_blst;
 
-    let is_valid = if use_lotus_blst {
+    let is_valid = if use_fil_blst {
         let verifying_key_path = post_config.get_cache_verifying_key_path::<Tree>()?;
         fallback::FallbackPoStCompound::verify_blst(
             &pub_params,

@@ -609,12 +609,12 @@ pub fn verify_seal<Tree: 'static + MerkleTreeTrait>(
             k: None,
         };
 
-    let use_lotus_blst = settings::SETTINGS
+    let use_fil_blst = settings::SETTINGS
         .lock()
-        .expect("use_lotus_blst settings lock failure")
-        .use_lotus_blst;
+        .expect("use_fil_blst settings lock failure")
+        .use_fil_blst;
 
-    let result = if use_lotus_blst {
+    let result = if use_fil_blst {
         let verifying_key_path = porep_config.get_cache_verifying_key_path::<Tree>()?;
 
         StackedCompound::verify_blst(

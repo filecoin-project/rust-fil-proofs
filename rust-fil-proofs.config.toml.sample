@@ -37,4 +37,4 @@ rows_to_discard = 2
 pedersen_hash_exp_window_size = 16
 
 # This enables accelerate snark verification
-use_lotus_blst = false
+use_fil_blst = false

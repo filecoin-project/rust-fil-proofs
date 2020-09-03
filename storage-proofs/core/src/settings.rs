@@ -28,7 +28,7 @@ pub struct Settings {
     pub window_post_synthesis_num_cpus: u32,
     pub parameter_cache: String,
     pub parent_cache: String,
-    pub use_lotus_blst: bool,
+    pub use_fil_blst: bool,
 }
 
 impl Default for Settings {
@@ -49,7 +49,7 @@ impl Default for Settings {
             // The name is retained for backwards compatibility.
             parameter_cache: "/var/tmp/filecoin-proof-parameters/".to_string(),
             parent_cache: cache("filecoin-parents"),
-            use_lotus_blst: false,
+            use_fil_blst: false,
         }
     }
 }
