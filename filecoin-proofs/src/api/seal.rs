@@ -615,6 +615,7 @@ pub fn verify_seal<Tree: 'static + MerkleTreeTrait>(
         .use_fil_blst;
 
     let result = if use_fil_blst {
+        info!("verify_seal: use_fil_blst=true");
         let verifying_key_path = porep_config.get_cache_verifying_key_path::<Tree>()?;
 
         StackedCompound::verify_blst(

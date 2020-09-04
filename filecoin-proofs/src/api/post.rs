@@ -422,6 +422,7 @@ pub fn verify_winning_post<Tree: 'static + MerkleTreeTrait>(
         .use_fil_blst;
 
     let is_valid = if use_fil_blst {
+        info!("verify_winning_post: use_fil_blst=true");
         let verifying_key_path = post_config.get_cache_verifying_key_path::<Tree>()?;
         fallback::FallbackPoStCompound::verify_blst(
             &pub_params,
@@ -590,6 +591,7 @@ pub fn verify_window_post<Tree: 'static + MerkleTreeTrait>(
         .use_fil_blst;
 
     let is_valid = if use_fil_blst {
+        info!("verify_window_post: use_fil_blst=true");
         let verifying_key_path = post_config.get_cache_verifying_key_path::<Tree>()?;
         fallback::FallbackPoStCompound::verify_blst(
             &pub_params,
