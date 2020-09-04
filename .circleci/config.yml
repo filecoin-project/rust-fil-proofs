@@ -127,6 +127,33 @@ jobs:
             RUST_TEST_THREADS: 1
           no_output_timeout: 30m
 
+  # Running with `use_fil_blst=true` should be integrated directly into the test code. For now we
+  # just re-run the tests that exercise the fil-blst code path with that setting set.
+  test_fil_blst:
+    docker:
+      - image: filecoin/rust:latest
+    working_directory: /mnt/crate
+    resource_class: 2xlarge+
+    steps:
+      - configure_environment_variables
+      - checkout
+      - attach_workspace:
+          at: "."
+      - restore_cache:
+          keys:
+            - cargo-v28-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
+      - restore_parameter_cache
+      - run:
+          name: Test with fil-blst enabled
+          command: |
+            ulimit -n 20000
+            ulimit -u 20000
+            ulimit -n 20000
+            cargo +$(cat rust-toolchain) test --verbose --release --test api -- --ignored
+          environment:
+            RUST_TEST_THREADS: 1
+            FIL_PROOFS_USE_FIL_BLST: true
+
   bench:
     docker:
       - image: filecoin/rust:latest
@@ -348,6 +375,10 @@ workflows:
       - test_ignored_release:
           name: test_ignored_release_filecoin_proofs
           crate: "filecoin-proofs"
+          requires:
+            - cargo_fetch
+            - ensure_groth_parameters_and_keys_linux
+      - test_fil_blst:
           requires:
             - cargo_fetch
             - ensure_groth_parameters_and_keys_linux
