@@ -1,6 +1,6 @@
 [package]
 name = "storage-proofs-porep"
-version = "5.1.2"
+version = "5.1.3"
 authors = ["dignifiedquire <me@dignifiedquire.com>"]
 description = "Proofs of replication"
 license = "MIT OR Apache-2.0"
