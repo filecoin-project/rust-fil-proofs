@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 use storage_proofs_core::{
-    error::Result,
+    error::{Error, Result},
     hasher::{Domain, HashFunction, Hasher},
     merkle::{MerkleProof, MerkleProofTrait, MerkleTreeTrait, MerkleTreeWrapper},
     parameter_cache::ParameterSetMetadata,
@@ -230,6 +230,11 @@ pub fn generate_leaf_challenge<T: Domain>(
     Ok(challenged_range_index)
 }
 
+enum ProofOrFault<T> {
+    Proof(T),
+    Fault(SectorId),
+}
+
 impl<'a, Tree: 'a + MerkleTreeTrait> ProofScheme<'a> for FallbackPoSt<'a, Tree> {
     type PublicParams = PublicParams;
     type SetupParams = SetupParams;
@@ -292,6 +297,7 @@ impl<'a, Tree: 'a + MerkleTreeTrait> ProofScheme<'a> for FallbackPoSt<'a, Tree> 
         );
 
         let mut partition_proofs = Vec::new();
+        let mut faulty_sectors = Vec::new();
 
         for (j, (pub_sectors_chunk, priv_sectors_chunk)) in pub_inputs
             .sectors
@@ -319,7 +325,8 @@ impl<'a, Tree: 'a + MerkleTreeTrait> ProofScheme<'a> for FallbackPoSt<'a, Tree> 
                     Tree::Arity::to_usize(),
                 );
 
-                let inclusion_proofs = (0..pub_params.challenge_count)
+                let mut inclusion_proofs = Vec::new();
+                for proof_or_fault in (0..pub_params.challenge_count)
                     .into_par_iter()
                     .map(|n| {
                         let challenge_index = ((j * num_sectors_per_chunk + i)
@@ -332,9 +339,28 @@ impl<'a, Tree: 'a + MerkleTreeTrait> ProofScheme<'a> for FallbackPoSt<'a, Tree> 
                             challenge_index,
                         )?;
 
-                        tree.gen_cached_proof(challenged_leaf_start as usize, Some(rows_to_discard))
+                        let proof = tree.gen_cached_proof(
+                            challenged_leaf_start as usize,
+                            Some(rows_to_discard),
+                        );
+                        let valid = if let Ok(proof) = &proof {
+                            proof.validate(challenged_leaf_start as usize)
+                        } else {
+                            false
+                        };
+                        if valid {
+                            Ok(ProofOrFault::Proof(proof))
+                        } else {
+                            Ok(ProofOrFault::Fault(sector_id))
+                        }
                     })
-                    .collect::<Result<Vec<_>>>()?;
+                    .collect::<Result<Vec<_>>>()?
+                {
+                    match proof_or_fault {
+                        ProofOrFault::Proof(proof) => inclusion_proofs.push(proof?),
+                        ProofOrFault::Fault(sector_id) => faulty_sectors.push(sector_id),
+                    }
+                }
 
                 proofs.push(SectorProof {
                     inclusion_proofs,
@@ -351,6 +377,11 @@ impl<'a, Tree: 'a + MerkleTreeTrait> ProofScheme<'a> for FallbackPoSt<'a, Tree> 
 
             partition_proofs.push(Proof { sectors: proofs });
         }
+
+        ensure!(
+            faulty_sectors.is_empty(),
+            Error::FaultySectors(faulty_sectors)
+        );
 
         Ok(partition_proofs)
     }
@@ -390,6 +421,7 @@ impl<'a, Tree: 'a + MerkleTreeTrait> ProofScheme<'a> for FallbackPoSt<'a, Tree> 
                 proof.sectors.len(),
                 num_sectors_per_chunk,
             );
+
             for (i, (pub_sector, sector_proof)) in pub_sectors_chunk
                 .iter()
                 .zip(proof.sectors.iter())
@@ -449,7 +481,6 @@ impl<'a, Tree: 'a + MerkleTreeTrait> ProofScheme<'a> for FallbackPoSt<'a, Tree> 
                 }
             }
         }
-
         Ok(true)
     }
 
