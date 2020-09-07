@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://book.async.rs/overview
 
 ## Unreleased
 
+## 5.1.3 - 2020-09-07
+
+- Make fil-blst usage in Window PoSt possible [#1272](https://github.com/filecoin-project/rust-fil-proofs/pull/1272)
+
 ## 5.1.2 - 2020-09-03
 
 - Accelerate SNARK verification [#1271](https://github.com/filecoin-project/rust-fil-proofs/pull/1271)
@@ -116,7 +120,8 @@ and this project adheres to [Semantic Versioning](https://book.async.rs/overview
 
 - Initial stable release
 
-[Unreleased]: https://github.com/filecoin-project/rust-fil-proofs/compare/v5.1.2...HEAD
+[Unreleased]: https://github.com/filecoin-project/rust-fil-proofs/compare/v5.1.3...HEAD
+[5.1.3]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v5.1.3
 [5.1.2]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v5.1.2
 [5.1.1]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v5.1.1
 [5.1.0]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v5.1.0
