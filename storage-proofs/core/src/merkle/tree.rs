@@ -104,6 +104,8 @@ impl<
 
         let proof = self.inner.gen_cached_proof(i, rows_to_discard)?;
 
+        debug_assert!(proof.validate::<H::Function>().expect("validate failed"));
+
         MerkleProof::try_from_proof(proof)
     }
 
