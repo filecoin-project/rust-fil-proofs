@@ -346,23 +346,24 @@ impl<'a, Tree: 'a + MerkleTreeTrait> ProofScheme<'a> for FallbackPoSt<'a, Tree> 
                             challenged_leaf_start as usize,
                             Some(rows_to_discard),
                         );
-                        let valid = if let Ok(proof) = &proof {
-                            proof.validate(challenged_leaf_start as usize)
-                                && proof.root() == priv_sector.comm_r_last
-                        } else {
-                            false
-                        };
-                        if valid {
-                            Ok(ProofOrFault::Proof(proof))
-                        } else {
-                            Ok(ProofOrFault::Fault(sector_id))
+                        match proof {
+                            Ok(proof) => {
+                                if proof.validate(challenged_leaf_start as usize)
+                                    && proof.root() == priv_sector.comm_r_last
+                                {
+                                    Ok(ProofOrFault::Proof(proof))
+                                } else {
+                                    Ok(ProofOrFault::Fault(sector_id))
+                                }
+                            }
+                            Err(_) => Ok(ProofOrFault::Fault(sector_id)),
                         }
                     })
                     .collect::<Result<Vec<_>>>()?
                 {
                     match proof_or_fault {
                         ProofOrFault::Proof(proof) => {
-                            inclusion_proofs.push(proof?);
+                            inclusion_proofs.push(proof);
                         }
                         ProofOrFault::Fault(sector_id) => {
                             faulty_sectors.insert(sector_id);
@@ -386,11 +387,11 @@ impl<'a, Tree: 'a + MerkleTreeTrait> ProofScheme<'a> for FallbackPoSt<'a, Tree> 
             partition_proofs.push(Proof { sectors: proofs });
         }
 
-        ensure!(faulty_sectors.is_empty(), {
-            Error::FaultySectors(faulty_sectors.into_iter().collect())
-        });
-
-        Ok(partition_proofs)
+        if faulty_sectors.is_empty() {
+            Ok(partition_proofs)
+        } else {
+            Err(Error::FaultySectors(faulty_sectors.into_iter().collect()).into())
+        }
     }
 
     fn verify_all_partitions(
@@ -550,13 +551,11 @@ mod tests {
 
         let mut pub_sectors = Vec::new();
         let mut priv_sectors = Vec::new();
-        let mut trees = Vec::new();
 
-        for _i in 0..total_sector_count {
-            let (_data, tree) =
-                generate_tree::<Tree, _>(rng, leaves, Some(temp_path.to_path_buf()));
-            trees.push(tree);
-        }
+        let trees = (0..total_sector_count)
+            .map(|_| generate_tree::<Tree, _>(rng, leaves, Some(temp_path.to_path_buf())).1)
+            .collect::<Vec<_>>();
+
         for (i, tree) in trees.iter().enumerate() {
             let comm_c = <Tree::Hasher as Hasher>::Domain::random(rng);
             let comm_r_last = tree.root();
@@ -695,7 +694,6 @@ mod tests {
                 Err(_) => panic!("failed to downcast to Error"),
                 Ok(Error::FaultySectors(sector_ids)) => assert_eq!(faulty_sectors, sector_ids),
                 Ok(_) => panic!("PoSt failed to return FaultySectors error."),
-                _ => (),
             },
         };
     }
