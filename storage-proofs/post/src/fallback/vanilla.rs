@@ -6,7 +6,6 @@ use byteorder::{ByteOrder, LittleEndian};
 use generic_array::typenum::Unsigned;
 use log::trace;
 use paired::bls12_381::Fr;
-use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
@@ -231,11 +230,6 @@ pub fn generate_leaf_challenge<T: Domain>(
     Ok(challenged_range_index)
 }
 
-enum ProofOrFault<T> {
-    Proof(T),
-    Fault(SectorId),
-}
-
 impl<'a, Tree: 'a + MerkleTreeTrait> ProofScheme<'a> for FallbackPoSt<'a, Tree> {
     type PublicParams = PublicParams;
     type SetupParams = SetupParams;
@@ -329,47 +323,37 @@ impl<'a, Tree: 'a + MerkleTreeTrait> ProofScheme<'a> for FallbackPoSt<'a, Tree> 
                 );
 
                 let mut inclusion_proofs = Vec::new();
-                for proof_or_fault in (0..pub_params.challenge_count)
-                    .into_par_iter()
-                    .map(|n| {
-                        let challenge_index = ((j * num_sectors_per_chunk + i)
-                            * pub_params.challenge_count
-                            + n) as u64;
-                        let challenged_leaf_start = generate_leaf_challenge(
-                            pub_params,
-                            pub_inputs.randomness,
-                            sector_id.into(),
-                            challenge_index,
-                        )?;
 
-                        let proof = tree.gen_cached_proof(
-                            challenged_leaf_start as usize,
-                            Some(rows_to_discard),
-                        );
-                        match proof {
-                            Ok(proof) => {
-                                if proof.validate(challenged_leaf_start as usize)
-                                    && proof.root() == priv_sector.comm_r_last
-                                {
-                                    Ok(ProofOrFault::Proof(proof))
-                                } else {
-                                    Ok(ProofOrFault::Fault(sector_id))
-                                }
+                (0..pub_params.challenge_count).try_for_each::<_, Result<()>>(|n| {
+                    let challenge_index =
+                        ((j * num_sectors_per_chunk + i) * pub_params.challenge_count + n) as u64;
+                    let challenged_leaf_start = generate_leaf_challenge(
+                        pub_params,
+                        pub_inputs.randomness,
+                        sector_id.into(),
+                        challenge_index,
+                    )?;
+
+                    let gen_proof = tree
+                        .gen_cached_proof(challenged_leaf_start as usize, Some(rows_to_discard));
+
+                    match gen_proof {
+                        Ok(proof) => {
+                            if proof.validate(challenged_leaf_start as usize)
+                                && proof.root() == priv_sector.comm_r_last
+                            {
+                                inclusion_proofs.push(proof);
+                            } else {
+                                faulty_sectors.insert(sector_id);
                             }
-                            Err(_) => Ok(ProofOrFault::Fault(sector_id)),
                         }
-                    })
-                    .collect::<Result<Vec<_>>>()?
-                {
-                    match proof_or_fault {
-                        ProofOrFault::Proof(proof) => {
-                            inclusion_proofs.push(proof);
-                        }
-                        ProofOrFault::Fault(sector_id) => {
+                        Err(_) => {
                             faulty_sectors.insert(sector_id);
                         }
-                    }
-                }
+                    };
+
+                    Ok(())
+                })?;
 
                 proofs.push(SectorProof {
                     inclusion_proofs,
