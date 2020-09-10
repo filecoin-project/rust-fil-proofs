@@ -236,6 +236,58 @@ enum ProofOrFault<T> {
     Fault(SectorId),
 }
 
+// Generates a single vanilla proof, given the private inputs and sector challenges.
+pub fn vanilla_proofs<Tree: MerkleTreeTrait>(
+    sector_id: SectorId,
+    priv_inputs: &PrivateInputs<Tree>,
+    challenges: &[u64],
+) -> Result<Proof<Tree::Proof>> {
+    ensure!(
+        priv_inputs.sectors.len() == 1,
+        "vanilla_proofs called with multiple sector proofs"
+    );
+
+    let priv_sector = &priv_inputs.sectors[0];
+    let comm_c = priv_sector.comm_c;
+    let comm_r_last = priv_sector.comm_r_last;
+    let tree = priv_sector.tree;
+
+    let tree_leafs = tree.leafs();
+    let rows_to_discard = default_rows_to_discard(tree_leafs, Tree::Arity::to_usize());
+
+    trace!(
+        "Generating proof for tree leafs {} and arity {}",
+        tree_leafs,
+        Tree::Arity::to_usize(),
+    );
+
+    let inclusion_proofs = (0..challenges.len())
+        .into_par_iter()
+        .map(|challenged_leaf_index| {
+            let challenged_leaf_start = challenges[challenged_leaf_index];
+            let proof =
+                tree.gen_cached_proof(challenged_leaf_start as usize, Some(rows_to_discard))?;
+
+            ensure!(
+                proof.validate(challenged_leaf_start as usize)
+                    && proof.root() == priv_sector.comm_r_last,
+                "Generated vanilla proof for sector {} is invalid",
+                sector_id
+            );
+
+            Ok(proof)
+        })
+        .collect::<Result<Vec<_>>>()?;
+
+    Ok(Proof {
+        sectors: vec![SectorProof {
+            inclusion_proofs,
+            comm_c,
+            comm_r_last,
+        }],
+    })
+}
+
 impl<'a, Tree: 'a + MerkleTreeTrait> ProofScheme<'a> for FallbackPoSt<'a, Tree> {
     type PublicParams = PublicParams;
     type SetupParams = SetupParams;
@@ -455,7 +507,7 @@ impl<'a, Tree: 'a + MerkleTreeTrait> ProofScheme<'a> for FallbackPoSt<'a, Tree> 
 
                 ensure!(
                     challenge_count == inclusion_proofs.len(),
-                    "unexpected umber of inclusion proofs: {} != {}",
+                    "unexpected number of inclusion proofs: {} != {}",
                     challenge_count,
                     inclusion_proofs.len()
                 );

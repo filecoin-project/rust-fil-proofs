@@ -3,7 +3,7 @@ use std::hash::{Hash, Hasher as StdHasher};
 use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
 
-use anyhow::{ensure, Context, Result};
+use anyhow::{anyhow, ensure, Context, Result};
 use bincode::deserialize;
 use generic_array::typenum::Unsigned;
 use log::{info, trace};
@@ -25,7 +25,8 @@ use crate::caches::{get_post_params, get_post_verifying_key};
 use crate::constants::*;
 use crate::parameters::{window_post_setup_params, winning_post_setup_params};
 use crate::types::{
-    ChallengeSeed, Commitment, PersistentAux, PoStConfig, ProverId, SectorSize, TemporaryAux,
+    ChallengeSeed, Commitment, FallbackPoStVanillaProof, PersistentAux, PoStConfig, ProverId,
+    SectorSize, SnarkProof, TemporaryAux, VanillaProof,
 };
 use crate::PoStType;
 
@@ -241,7 +242,75 @@ pub fn clear_caches<Tree: MerkleTreeTrait>(
     Ok(())
 }
 
-pub type SnarkProof = Vec<u8>;
+/// Generates a Window proof-of-spacetime with provided vanilla proofs.
+pub fn generate_winning_post_with_vanilla<Tree: 'static + MerkleTreeTrait>(
+    post_config: &PoStConfig,
+    randomness: &ChallengeSeed,
+    prover_id: ProverId,
+    vanilla_proofs: Vec<FallbackPoStVanillaProof<Tree>>,
+) -> Result<SnarkProof> {
+    info!("generate_winning_post_with_vanilla:start");
+    ensure!(
+        post_config.typ == PoStType::Winning,
+        "invalid post config type"
+    );
+
+    ensure!(
+        vanilla_proofs.len() == post_config.sector_count,
+        "invalid amount of vanilla proofs"
+    );
+
+    let randomness_safe: <Tree::Hasher as Hasher>::Domain =
+        as_safe_commitment(randomness, "randomness")?;
+    let prover_id_safe: <Tree::Hasher as Hasher>::Domain =
+        as_safe_commitment(&prover_id, "prover_id")?;
+
+    let vanilla_params = winning_post_setup_params(&post_config)?;
+
+    let setup_params = compound_proof::SetupParams {
+        vanilla_params,
+        partitions: None,
+        priority: post_config.priority,
+    };
+    let pub_params: compound_proof::PublicParams<fallback::FallbackPoSt<Tree>> =
+        fallback::FallbackPoStCompound::setup(&setup_params)?;
+    let groth_params = get_post_params::<Tree>(&post_config)?;
+
+    let mut pub_sectors = Vec::with_capacity(vanilla_proofs.len());
+    for vanilla_proof in &vanilla_proofs {
+        pub_sectors.push(fallback::PublicSector {
+            id: vanilla_proof.sector_id,
+            comm_r: vanilla_proof.comm_r,
+        });
+    }
+
+    let pub_inputs = fallback::PublicInputs {
+        randomness: randomness_safe,
+        prover_id: prover_id_safe,
+        sectors: &pub_sectors,
+        k: None,
+    };
+
+    let partitions = 1;
+    let partitioned_proofs = partition_vanilla_proofs(
+        &pub_params.vanilla_params,
+        &pub_inputs,
+        partitions,
+        &vanilla_proofs,
+    )?;
+
+    let proof = fallback::FallbackPoStCompound::prove_with_vanilla(
+        &pub_params,
+        &pub_inputs,
+        partitioned_proofs,
+        &groth_params,
+    )?;
+    let proof = proof.to_vec()?;
+
+    info!("generate_winning_post_with_vanilla:finish");
+
+    Ok(proof)
+}
 
 /// Generates a Winning proof-of-spacetime.
 pub fn generate_winning_post<Tree: 'static + MerkleTreeTrait>(
@@ -328,9 +397,9 @@ pub fn generate_winning_post<Tree: 'static + MerkleTreeTrait>(
     Ok(proof)
 }
 
-/// Given some randomness and a the length of available sectors, generates the challenged sector.
+/// Given some randomness and the length of available sectors, generates the challenged sector.
 ///
-/// The returned values are indicies in the range of `0..sector_set_size`, requiring the caller
+/// The returned values are indices in the range of `0..sector_set_size`, requiring the caller
 /// to match the index to the correct sector.
 pub fn generate_winning_post_sector_challenge<Tree: MerkleTreeTrait>(
     post_config: &PoStConfig,
@@ -360,6 +429,117 @@ pub fn generate_winning_post_sector_challenge<Tree: MerkleTreeTrait>(
     info!("generate_winning_post_sector_challenge:finish");
 
     result
+}
+
+/// Generates the challenges per SectorId required for a Window proof-of-spacetime.
+// FIXME: rename to avoid confusion with fallback::generate_sector_challenges
+pub fn generate_sector_challenges<Tree: 'static + MerkleTreeTrait>(
+    post_config: &PoStConfig,
+    randomness: &ChallengeSeed,
+    pub_sectors: &[SectorId],
+    _prover_id: ProverId,
+) -> Result<BTreeMap<SectorId, Vec<u64>>> {
+    info!("generate_sector_challenges:start");
+    ensure!(
+        post_config.typ == PoStType::Window || post_config.typ == PoStType::Winning,
+        "invalid post config type"
+    );
+
+    let randomness_safe: <Tree::Hasher as Hasher>::Domain =
+        as_safe_commitment(randomness, "randomness")?;
+
+    let public_params = fallback::PublicParams {
+        sector_size: u64::from(post_config.sector_size),
+        challenge_count: post_config.challenge_count,
+        sector_count: post_config.sector_count,
+    };
+
+    let mut sector_challenges: BTreeMap<SectorId, Vec<u64>> = BTreeMap::new();
+
+    let num_sectors_per_chunk = post_config.sector_count;
+    let partitions = if post_config.typ == PoStType::Window {
+        match get_partitions_for_window_post(pub_sectors.len(), &post_config) {
+            Some(x) => x,
+            None => 1,
+        }
+    } else {
+        assert_eq!(post_config.typ, PoStType::Winning);
+
+        1
+    };
+
+    for partition_index in 0..partitions {
+        let sectors = pub_sectors
+            .chunks(num_sectors_per_chunk)
+            .nth(partition_index)
+            .ok_or_else(|| anyhow!("invalid number of sectors/partition index"))?;
+
+        for (i, sector) in sectors.iter().enumerate() {
+            let mut challenges = Vec::new();
+
+            for n in 0..post_config.challenge_count {
+                let challenge_index = ((partition_index * post_config.sector_count + i)
+                    * post_config.challenge_count
+                    + n) as u64;
+                let challenged_leaf_start = fallback::generate_leaf_challenge(
+                    &public_params,
+                    randomness_safe,
+                    u64::from(*sector),
+                    challenge_index,
+                )?;
+                challenges.push(challenged_leaf_start);
+            }
+
+            sector_challenges.insert(*sector, challenges);
+        }
+    }
+
+    info!("generate_sector_challenges:finish");
+
+    Ok(sector_challenges)
+}
+
+/// Generates a single vanilla proof required for Window proof-of-spacetime.
+pub fn generate_single_vanilla_proof<Tree: 'static + MerkleTreeTrait>(
+    post_config: &PoStConfig,
+    sector_id: SectorId,
+    replica: &PrivateReplicaInfo<Tree>,
+    challenges: &[u64],
+) -> Result<FallbackPoStVanillaProof<Tree>> {
+    let sector_count = 1;
+
+    info!("generate_single_vanilla_proof:start");
+    ensure!(
+        post_config.sector_count == sector_count,
+        "invalid post config sector size ({} required)",
+        sector_count
+    );
+
+    let tree = &replica.merkle_tree(post_config.sector_size)?;
+    let comm_r = replica.safe_comm_r()?;
+    let comm_c = replica.safe_comm_c()?;
+    let comm_r_last = replica.safe_comm_r_last()?;
+
+    let mut priv_sectors = Vec::with_capacity(sector_count);
+    priv_sectors.push(fallback::PrivateSector {
+        tree,
+        comm_c,
+        comm_r_last,
+    });
+
+    let priv_inputs = fallback::PrivateInputs::<Tree> {
+        sectors: &priv_sectors,
+    };
+
+    let vanilla_proof = fallback::vanilla_proofs(sector_id, &priv_inputs, challenges)?;
+
+    info!("generate_single_vanilla_proof:finish");
+
+    Ok(FallbackPoStVanillaProof {
+        sector_id,
+        comm_r,
+        vanilla_proof,
+    })
 }
 
 /// Verifies a winning proof-of-spacetime.
@@ -459,6 +639,127 @@ pub fn verify_winning_post<Tree: 'static + MerkleTreeTrait>(
     info!("verify_winning_post:finish");
 
     Ok(true)
+}
+
+// Partition a flat vector of vanilla proofs.
+pub fn partition_vanilla_proofs<Tree: MerkleTreeTrait>(
+    pub_params: &fallback::PublicParams,
+    pub_inputs: &fallback::PublicInputs<<Tree::Hasher as Hasher>::Domain>,
+    partition_count: usize,
+    vanilla_proofs: &[FallbackPoStVanillaProof<Tree>],
+) -> Result<Vec<VanillaProof<Tree>>> {
+    info!("partition_vanilla_proofs:start");
+
+    let num_sectors_per_chunk = pub_params.sector_count;
+    let num_sectors = pub_inputs.sectors.len();
+
+    ensure!(
+        num_sectors <= partition_count * num_sectors_per_chunk,
+        "cannot prove the provided number of sectors: {} > {} * {}",
+        num_sectors,
+        partition_count,
+        num_sectors_per_chunk,
+    );
+
+    let mut partition_proofs = Vec::new();
+
+    for (j, pub_sectors_chunk) in pub_inputs.sectors.chunks(num_sectors_per_chunk).enumerate() {
+        trace!("processing partition {}", j);
+
+        let mut proofs = Vec::with_capacity(num_sectors_per_chunk);
+
+        for pub_sector in pub_sectors_chunk.iter() {
+            let cur_proof = vanilla_proofs
+                .iter()
+                .find(|&proof| proof.sector_id == pub_sector.id)
+                .expect("failed to locate sector proof");
+
+            proofs.extend(cur_proof.vanilla_proof.sectors.clone());
+        }
+
+        // If there were less than the required number of sectors provided, we duplicate the last one
+        // to pad the proof out, such that it works in the circuit part.
+        while proofs.len() < num_sectors_per_chunk {
+            proofs.push(proofs[proofs.len() - 1].clone());
+        }
+
+        partition_proofs
+            .push(fallback::Proof::<<Tree as MerkleTreeTrait>::Proof> { sectors: proofs });
+    }
+
+    info!("partition_vanilla_proofs:finish");
+
+    Ok(partition_proofs)
+}
+
+/// Generates a Window proof-of-spacetime with provided vanilla proofs.
+pub fn generate_window_post_with_vanilla<Tree: 'static + MerkleTreeTrait>(
+    post_config: &PoStConfig,
+    randomness: &ChallengeSeed,
+    prover_id: ProverId,
+    vanilla_proofs: Vec<FallbackPoStVanillaProof<Tree>>,
+) -> Result<SnarkProof> {
+    info!("generate_window_post_with_vanilla:start");
+    ensure!(
+        post_config.typ == PoStType::Window,
+        "invalid post config type"
+    );
+
+    let randomness_safe: <Tree::Hasher as Hasher>::Domain =
+        as_safe_commitment(randomness, "randomness")?;
+    let prover_id_safe: <Tree::Hasher as Hasher>::Domain =
+        as_safe_commitment(&prover_id, "prover_id")?;
+
+    let vanilla_params = window_post_setup_params(&post_config);
+    let partitions = get_partitions_for_window_post(vanilla_proofs.len(), &post_config);
+
+    let setup_params = compound_proof::SetupParams {
+        vanilla_params,
+        partitions,
+        priority: post_config.priority,
+    };
+
+    let partitions = match partitions {
+        Some(x) => x,
+        None => 1,
+    };
+
+    let pub_params: compound_proof::PublicParams<fallback::FallbackPoSt<Tree>> =
+        fallback::FallbackPoStCompound::setup(&setup_params)?;
+    let groth_params = get_post_params::<Tree>(&post_config)?;
+
+    let mut pub_sectors = Vec::with_capacity(vanilla_proofs.len());
+    for vanilla_proof in &vanilla_proofs {
+        pub_sectors.push(fallback::PublicSector {
+            id: vanilla_proof.sector_id,
+            comm_r: vanilla_proof.comm_r,
+        });
+    }
+
+    let pub_inputs = fallback::PublicInputs {
+        randomness: randomness_safe,
+        prover_id: prover_id_safe,
+        sectors: &pub_sectors,
+        k: None,
+    };
+
+    let partitioned_proofs = partition_vanilla_proofs(
+        &pub_params.vanilla_params,
+        &pub_inputs,
+        partitions,
+        &vanilla_proofs,
+    )?;
+
+    let proof = fallback::FallbackPoStCompound::prove_with_vanilla(
+        &pub_params,
+        &pub_inputs,
+        partitioned_proofs,
+        &groth_params,
+    )?;
+
+    info!("generate_window_post_with_vanilla:finish");
+
+    Ok(proof.to_vec()?)
 }
 
 /// Generates a Window proof-of-spacetime.

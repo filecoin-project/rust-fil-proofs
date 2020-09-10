@@ -105,6 +105,30 @@ where
         Ok(MultiProof::new(groth_proofs, &groth_params.vk))
     }
 
+    fn prove_with_vanilla<'b>(
+        pub_params: &PublicParams<'a, S>,
+        pub_in: &S::PublicInputs,
+        vanilla_proofs: Vec<S::Proof>,
+        groth_params: &'b groth16::MappedParameters<Bls12>,
+    ) -> Result<MultiProof<'b>> {
+        let partition_count = Self::partition_count(pub_params);
+
+        // This will always run at least once, since there cannot be zero partitions.
+        ensure!(partition_count > 0, "There must be partitions");
+
+        info!("snark_proof:start");
+        let groth_proofs = Self::circuit_proofs(
+            pub_in,
+            vanilla_proofs,
+            &pub_params.vanilla_params,
+            groth_params,
+            pub_params.priority,
+        )?;
+        info!("snark_proof:finish");
+
+        Ok(MultiProof::new(groth_proofs, &groth_params.vk))
+    }
+
     // verify is equivalent to ProofScheme::verify.
     fn verify<'b>(
         public_params: &PublicParams<'a, S>,

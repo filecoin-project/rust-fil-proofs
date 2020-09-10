@@ -1,6 +1,8 @@
 use serde::{Deserialize, Serialize};
 use storage_proofs::hasher::Hasher;
 use storage_proofs::porep::stacked;
+use storage_proofs::post::fallback::*;
+use storage_proofs::sector::*;
 
 use crate::constants::*;
 
@@ -82,4 +84,18 @@ pub struct SealPreCommitPhase1Output<Tree: MerkleTreeTrait> {
     pub labels: Labels<Tree>,
     pub config: StoreConfig,
     pub comm_d: Commitment,
+}
+
+pub type SnarkProof = Vec<u8>;
+pub type VanillaProof<Tree> = Proof<<Tree as MerkleTreeTrait>::Proof>;
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct FallbackPoStVanillaProof<Tree: MerkleTreeTrait> {
+    pub sector_id: SectorId,
+    pub comm_r: <Tree::Hasher as Hasher>::Domain,
+    #[serde(bound(
+        serialize = "VanillaProof<Tree>: Serialize",
+        deserialize = "VanillaProof<Tree>: Deserialize<'de>"
+    ))]
+    pub vanilla_proof: VanillaProof<Tree>, // Has comm_c, comm_r_last, inclusion_proofs
 }
