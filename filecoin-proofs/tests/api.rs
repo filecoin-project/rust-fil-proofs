@@ -195,8 +195,12 @@ fn winning_post<Tree: 'static + MerkleTreeTrait>(sector_size: u64, fake: bool) -
     //
     // 2)
     let mut vanilla_proofs = Vec::with_capacity(sector_count);
-    let challenges =
-        generate_sector_challenges::<Tree>(&config, &randomness, &vec![sector_id], prover_id)?;
+    let challenges = generate_fallback_sector_challenges::<Tree>(
+        &config,
+        &randomness,
+        &vec![sector_id],
+        prover_id,
+    )?;
 
     let single_proof = generate_single_vanilla_proof::<Tree>(
         &config,
@@ -376,8 +380,12 @@ fn window_post<Tree: 'static + MerkleTreeTrait>(
         .map(|(sector, _replica)| *sector)
         .collect::<Vec<SectorId>>();
 
-    let challenges =
-        generate_sector_challenges::<Tree>(&config, &randomness, &replica_sectors, prover_id)?;
+    let challenges = generate_fallback_sector_challenges::<Tree>(
+        &config,
+        &randomness,
+        &replica_sectors,
+        prover_id,
+    )?;
 
     // This 'single config' is used when generating a single vanilla proof.
     let single_config = PoStConfig {

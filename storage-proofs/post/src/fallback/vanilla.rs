@@ -109,7 +109,7 @@ pub struct SectorProof<Proof: MerkleProofTrait> {
         serialize = "MerkleProof<Proof::Hasher, Proof::Arity, Proof::SubTreeArity, Proof::TopTreeArity>: Serialize",
         deserialize = "MerkleProof<Proof::Hasher, Proof::Arity, Proof::SubTreeArity, Proof::TopTreeArity>: serde::de::DeserializeOwned"
     ))]
-    inclusion_proofs:
+    pub inclusion_proofs:
         Vec<MerkleProof<Proof::Hasher, Proof::Arity, Proof::SubTreeArity, Proof::TopTreeArity>>,
     pub comm_c: <Proof::Hasher as Hasher>::Domain,
     pub comm_r_last: <Proof::Hasher as Hasher>::Domain,
@@ -147,6 +147,13 @@ impl<P: MerkleProofTrait> SectorProof<P> {
             .iter()
             .map(MerkleProofTrait::as_options)
             .collect()
+    }
+
+    // Returns a read-only reference.
+    pub fn inclusion_proofs(
+        &self,
+    ) -> &Vec<MerkleProof<P::Hasher, P::Arity, P::SubTreeArity, P::TopTreeArity>> {
+        &self.inclusion_proofs
     }
 }
 

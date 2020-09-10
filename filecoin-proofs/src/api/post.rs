@@ -16,6 +16,7 @@ use storage_proofs::merkle::{
 };
 use storage_proofs::multi_proof::MultiProof;
 use storage_proofs::post::fallback;
+use storage_proofs::post::fallback::SectorProof;
 use storage_proofs::proof::ProofScheme;
 use storage_proofs::sector::*;
 use storage_proofs::settings;
@@ -294,6 +295,7 @@ pub fn generate_winning_post_with_vanilla<Tree: 'static + MerkleTreeTrait>(
 
     let partitions = 1;
     let partitioned_proofs = partition_vanilla_proofs(
+        &post_config,
         &pub_params.vanilla_params,
         &pub_inputs,
         partitions,
@@ -432,9 +434,9 @@ pub fn generate_winning_post_sector_challenge<Tree: MerkleTreeTrait>(
     result
 }
 
-/// Generates the challenges per SectorId required for a Window proof-of-spacetime.
-// FIXME: rename to avoid confusion with fallback::generate_sector_challenges
-pub fn generate_sector_challenges<Tree: 'static + MerkleTreeTrait>(
+/// Generates the challenges per SectorId required for either a Window
+/// proof-of-spacetime or a Winning proof-of-spacetime.
+pub fn generate_fallback_sector_challenges<Tree: 'static + MerkleTreeTrait>(
     post_config: &PoStConfig,
     randomness: &ChallengeSeed,
     pub_sectors: &[SectorId],
@@ -642,14 +644,21 @@ pub fn verify_winning_post<Tree: 'static + MerkleTreeTrait>(
     Ok(true)
 }
 
-// Partition a flat vector of vanilla proofs.
+// Partition a flat vector of vanilla proofs -- the post_config type
+// is required in order to determine the proper shape of the returned
+// partitioned proofs.
 pub fn partition_vanilla_proofs<Tree: MerkleTreeTrait>(
+    post_config: &PoStConfig,
     pub_params: &fallback::PublicParams,
     pub_inputs: &fallback::PublicInputs<<Tree::Hasher as Hasher>::Domain>,
     partition_count: usize,
     vanilla_proofs: &[FallbackPoStVanillaProof<Tree>],
 ) -> Result<Vec<VanillaProof<Tree>>> {
     info!("partition_vanilla_proofs:start");
+    ensure!(
+        post_config.typ == PoStType::Window || post_config.typ == PoStType::Winning,
+        "invalid post config type"
+    );
 
     let num_sectors_per_chunk = pub_params.sector_count;
     let num_sectors = pub_inputs.sectors.len();
@@ -664,28 +673,83 @@ pub fn partition_vanilla_proofs<Tree: MerkleTreeTrait>(
 
     let mut partition_proofs = Vec::new();
 
-    for (j, pub_sectors_chunk) in pub_inputs.sectors.chunks(num_sectors_per_chunk).enumerate() {
-        trace!("processing partition {}", j);
+    // Note that the partition proofs returned are shaped differently
+    // based on which type of PoSt is being considered.
+    if post_config.typ == PoStType::Window {
+        for (j, sectors_chunk) in pub_inputs.sectors.chunks(num_sectors_per_chunk).enumerate() {
+            trace!("processing partition {}", j);
 
-        let mut proofs = Vec::with_capacity(num_sectors_per_chunk);
+            let mut proofs = Vec::with_capacity(num_sectors_per_chunk);
 
-        for pub_sector in pub_sectors_chunk.iter() {
-            let cur_proof = vanilla_proofs
-                .iter()
-                .find(|&proof| proof.sector_id == pub_sector.id)
-                .expect("failed to locate sector proof");
+            for pub_sector in sectors_chunk.iter() {
+                let cur_proof = vanilla_proofs
+                    .iter()
+                    .find(|&proof| proof.sector_id == pub_sector.id)
+                    .expect("failed to locate sector proof");
 
-            proofs.extend(cur_proof.vanilla_proof.sectors.clone());
+                // Note: Window post requires all inclusion proofs (based on the challenge
+                // count per sector) per sector proof.
+                proofs.extend(cur_proof.vanilla_proof.sectors.clone());
+            }
+
+            // If there were less than the required number of sectors provided, we duplicate the last one
+            // to pad the proof out, such that it works in the circuit part.
+            while proofs.len() < num_sectors_per_chunk {
+                proofs.push(proofs[proofs.len() - 1].clone());
+            }
+
+            partition_proofs
+                .push(fallback::Proof::<<Tree as MerkleTreeTrait>::Proof> { sectors: proofs });
         }
+    } else {
+        for (j, sectors_chunk) in vanilla_proofs.chunks(num_sectors_per_chunk).enumerate() {
+            trace!("processing partition {}", j);
 
-        // If there were less than the required number of sectors provided, we duplicate the last one
-        // to pad the proof out, such that it works in the circuit part.
-        while proofs.len() < num_sectors_per_chunk {
-            proofs.push(proofs[proofs.len() - 1].clone());
+            // Winning post sector_count is winning post challenges per sector
+            ensure!(
+                post_config.sector_count == vanilla_proofs[j].vanilla_proof.sectors.len(),
+                "invalid number of sector proofs for Winning PoSt"
+            );
+
+            let mut proofs = Vec::with_capacity(post_config.challenge_count);
+
+            // Sanity check incoming structure
+            ensure!(
+                sectors_chunk.len() == 1,
+                "Invalid sector chunk for Winning PoSt"
+            );
+            ensure!(
+                sectors_chunk[0].vanilla_proof.sectors.len() == 1,
+                "Invalid sector count for Winning PoSt chunk"
+            );
+
+            let cur_sector_proof = &sectors_chunk[0].vanilla_proof.sectors[0];
+
+            // Unroll inclusions proofs from the single provided sector_proof (per partition)
+            // into individual sector proofs, required for winning post.
+            for cur_inclusion_proof in cur_sector_proof.inclusion_proofs() {
+                proofs.push(SectorProof {
+                    inclusion_proofs: vec![cur_inclusion_proof.clone()],
+                    comm_c: cur_sector_proof.comm_c,
+                    comm_r_last: cur_sector_proof.comm_r_last,
+                });
+            }
+
+            // If there were less than the required number of sectors provided, we duplicate the last one
+            // to pad the proof out, such that it works in the circuit part.
+            while proofs.len() < num_sectors_per_chunk {
+                proofs.push(proofs[proofs.len() - 1].clone());
+            }
+
+            // Winning post Challenge count is the total winning post challenges
+            ensure!(
+                proofs.len() == post_config.challenge_count,
+                "invalid number of partition proofs based on Winning PoSt challenges"
+            );
+
+            partition_proofs
+                .push(fallback::Proof::<<Tree as MerkleTreeTrait>::Proof> { sectors: proofs });
         }
-
-        partition_proofs
-            .push(fallback::Proof::<<Tree as MerkleTreeTrait>::Proof> { sectors: proofs });
     }
 
     info!("partition_vanilla_proofs:finish");
@@ -695,7 +759,7 @@ pub fn partition_vanilla_proofs<Tree: MerkleTreeTrait>(
             pub_params,
             pub_inputs,
             &partition_proofs
-        )? == true,
+        )?,
         "partitioned vanilla proofs failed to verify"
     );
 
@@ -754,6 +818,7 @@ pub fn generate_window_post_with_vanilla<Tree: 'static + MerkleTreeTrait>(
     };
 
     let partitioned_proofs = partition_vanilla_proofs(
+        &post_config,
         &pub_params.vanilla_params,
         &pub_inputs,
         partitions,
