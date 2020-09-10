@@ -16,6 +16,7 @@ use storage_proofs::merkle::{
 };
 use storage_proofs::multi_proof::MultiProof;
 use storage_proofs::post::fallback;
+use storage_proofs::proof::ProofScheme;
 use storage_proofs::sector::*;
 use storage_proofs::settings;
 use storage_proofs::util::default_rows_to_discard;
@@ -688,6 +689,15 @@ pub fn partition_vanilla_proofs<Tree: MerkleTreeTrait>(
     }
 
     info!("partition_vanilla_proofs:finish");
+
+    ensure!(
+        fallback::FallbackPoSt::<Tree>::verify_all_partitions(
+            pub_params,
+            pub_inputs,
+            &partition_proofs
+        )? == true,
+        "partitioned vanilla proofs failed to verify"
+    );
 
     Ok(partition_proofs)
 }
