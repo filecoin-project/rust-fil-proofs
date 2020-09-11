@@ -21,7 +21,6 @@ pub use self::api::*;
 pub use self::commitment_reader::*;
 pub use self::constants::SINGLE_PARTITION_PROOF_LEN;
 pub use self::constants::*;
-pub use self::param::{ParameterData, ParameterMap};
 pub use self::types::*;
 
 pub use storage_proofs;

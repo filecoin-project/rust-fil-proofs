@@ -18,6 +18,7 @@ const PREFIX: &str = "FIL_PROOFS";
 pub struct Settings {
     pub maximize_caching: bool,
     pub verify_cache: bool,
+    pub verify_production_params: bool,
     pub pedersen_hash_exp_window_size: u32,
     pub use_gpu_column_builder: bool,
     pub max_gpu_column_batch_size: u32,
@@ -37,6 +38,7 @@ impl Default for Settings {
         Settings {
             maximize_caching: true,
             verify_cache: false,
+            verify_production_params: false,
             pedersen_hash_exp_window_size: 16,
             use_gpu_column_builder: false,
             max_gpu_column_batch_size: 400_000,

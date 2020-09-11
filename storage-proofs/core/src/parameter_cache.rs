@@ -1,15 +1,17 @@
 use crate::error::*;
-use anyhow::bail;
+use anyhow::{bail, ensure};
 use bellperson::groth16::Parameters;
 use bellperson::{groth16, Circuit};
 use fs2::FileExt;
 use itertools::Itertools;
+use lazy_static::lazy_static;
 use log::info;
 use paired::bls12_381::Bls12;
 use rand::RngCore;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
+use std::collections::BTreeMap;
 use std::fs::{self, create_dir_all, File};
 use std::io::{self, SeekFrom};
 use std::path::{Path, PathBuf};
@@ -25,6 +27,49 @@ pub const VERIFYING_KEY_EXT: &str = "vk";
 
 #[derive(Debug)]
 pub struct LockedFile(File);
+
+pub type ParameterMap = BTreeMap<String, ParameterData>;
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct ParameterData {
+    pub cid: String,
+    pub digest: String,
+    pub sector_size: u64,
+}
+
+pub const PARAMETERS_DATA: &str = include_str!("../..//parameters.json");
+
+lazy_static! {
+    pub static ref PARAMETERS: ParameterMap =
+        serde_json::from_str(PARAMETERS_DATA).expect("Invalid parameters.json");
+}
+
+pub fn parameter_id(cache_id: &str) -> String {
+    format!("v{}-{}.params", VERSION, cache_id)
+}
+
+pub fn verifying_key_id(cache_id: &str) -> String {
+    format!("v{}-{}.vk", VERSION, cache_id)
+}
+
+pub fn metadata_id(cache_id: &str) -> String {
+    format!("v{}-{}.meta", VERSION, cache_id)
+}
+
+/// Get the correct parameter data for a given cache id.
+pub fn get_parameter_data_from_id(parameter_id: &str) -> Option<&ParameterData> {
+    PARAMETERS.get(parameter_id)
+}
+
+/// Get the correct parameter data for a given cache id.
+pub fn get_parameter_data(cache_id: &str) -> Option<&ParameterData> {
+    PARAMETERS.get(&parameter_id(cache_id))
+}
+
+/// Get the correct verifying key data for a given cache id.
+pub fn get_verifying_key_data(cache_id: &str) -> Option<&ParameterData> {
+    PARAMETERS.get(&verifying_key_id(cache_id))
+}
 
 // TODO: use in memory lock as well, as file locks do not guarantee exclusive access across OSes.
 
@@ -274,6 +319,32 @@ fn ensure_parent(path: &PathBuf) -> Result<()> {
 // loaded later.
 pub fn read_cached_params(cache_entry_path: &PathBuf) -> Result<groth16::MappedParameters<Bls12>> {
     info!("checking cache_path: {:?} for parameters", cache_entry_path);
+
+    let verify_production_params = settings::SETTINGS
+        .lock()
+        .expect("verify_production_params settings lock failure")
+        .verify_production_params;
+
+    // If the verify production params is set, we make sure that the
+    // path being accessed matches a production cache key, found in
+    // the 'parameters.json' file.
+    //
+    // Note that this is not an expensive check (that should also have
+    // an option to be added) where the parameter data file is hashed
+    // and matched against the hash in the parameters.json file.
+    if verify_production_params {
+        let cache_key = cache_entry_path
+            .file_name()
+            .expect("failed to get cached param filename");
+        let data =
+            get_parameter_data_from_id(cache_key.to_str().expect("failed to convert to str"));
+        ensure!(
+            data.is_some(),
+            "Cache key {:?} does not match a production parameter entry",
+            cache_key
+        );
+    }
+
     with_exclusive_read_lock(cache_entry_path, |_| {
         let params = Parameters::build_mapped_parameters(cache_entry_path.to_path_buf(), false)?;
         info!("read parameters from cache {:?} ", cache_entry_path);

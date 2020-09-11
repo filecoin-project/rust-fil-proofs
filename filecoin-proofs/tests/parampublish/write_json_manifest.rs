@@ -4,8 +4,7 @@ use std::path::Path;
 
 use failure::Error as FailureError;
 
-use filecoin_proofs::param::ParameterData;
-use storage_proofs::parameter_cache::CacheEntryMetadata;
+use storage_proofs::parameter_cache::{CacheEntryMetadata, ParameterData};
 
 use crate::parampublish::support::session::ParamPublishSessionBuilder;
 use crate::support::{tmp_manifest, FakeIpfsBin};

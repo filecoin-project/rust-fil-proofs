@@ -6,7 +6,6 @@ use storage_proofs::hasher::Hasher;
 use storage_proofs::util::NODE_SIZE;
 use typenum::{U0, U2, U8};
 
-use crate::param::{ParameterData, ParameterMap};
 use crate::types::UnpaddedBytesAmount;
 
 pub const SECTOR_SIZE_2_KIB: u64 = 1 << 11;
@@ -28,11 +27,7 @@ pub const WINDOW_POST_CHALLENGE_COUNT: usize = 10;
 pub const DRG_DEGREE: usize = storage_proofs::drgraph::BASE_DEGREE;
 pub const EXP_DEGREE: usize = storage_proofs::porep::stacked::EXP_DEGREE;
 
-pub const PARAMETERS_DATA: &str = include_str!("../parameters.json");
-
 lazy_static! {
-    pub static ref PARAMETERS: ParameterMap =
-        serde_json::from_str(PARAMETERS_DATA).expect("Invalid parameters.json");
     pub static ref POREP_MINIMUM_CHALLENGES: RwLock<HashMap<u64, u64>> = RwLock::new(
         [
             (SECTOR_SIZE_2_KIB, 2),
@@ -180,40 +175,6 @@ pub fn is_sector_shape_top2(sector_size: u64) -> bool {
 }
 
 pub use storage_proofs::merkle::{DiskTree, LCTree};
-
-/// Get the correct parameter data for a given cache id.
-pub fn get_parameter_data(cache_id: &str) -> Option<&ParameterData> {
-    PARAMETERS.get(&parameter_id(cache_id))
-}
-
-pub fn parameter_id(cache_id: &str) -> String {
-    format!(
-        "v{}-{}.params",
-        storage_proofs::parameter_cache::VERSION,
-        cache_id
-    )
-}
-
-/// Get the correct verifying key data for a given cache id.
-pub fn get_verifying_key_data(cache_id: &str) -> Option<&ParameterData> {
-    PARAMETERS.get(&verifying_key_id(cache_id))
-}
-
-pub fn verifying_key_id(cache_id: &str) -> String {
-    format!(
-        "v{}-{}.vk",
-        storage_proofs::parameter_cache::VERSION,
-        cache_id
-    )
-}
-
-pub fn metadata_id(cache_id: &str) -> String {
-    format!(
-        "v{}-{}.meta",
-        storage_proofs::parameter_cache::VERSION,
-        cache_id
-    )
-}
 
 /// Calls a function with the type hint of the sector shape matching the provided sector.
 /// Panics if provided with an unknown sector size.

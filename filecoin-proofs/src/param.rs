@@ -6,21 +6,11 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 use blake2b_simd::State as Blake2b;
-use serde::{Deserialize, Serialize};
 use storage_proofs::parameter_cache::{
     parameter_cache_dir, CacheEntryMetadata, PARAMETER_METADATA_EXT,
 };
 
 const ERROR_STRING: &str = "invalid string";
-
-pub type ParameterMap = BTreeMap<String, ParameterData>;
-
-#[derive(Debug, Deserialize, Serialize)]
-pub struct ParameterData {
-    pub cid: String,
-    pub digest: String,
-    pub sector_size: u64,
-}
 
 // Produces an absolute path to a file within the cache
 pub fn get_full_path_for_file_within_cache(filename: &str) -> PathBuf {
