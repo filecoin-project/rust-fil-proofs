@@ -244,14 +244,14 @@ enum ProofOrFault<T> {
 }
 
 // Generates a single vanilla proof, given the private inputs and sector challenges.
-pub fn vanilla_proofs<Tree: MerkleTreeTrait>(
+pub fn vanilla_proof<Tree: MerkleTreeTrait>(
     sector_id: SectorId,
     priv_inputs: &PrivateInputs<Tree>,
     challenges: &[u64],
 ) -> Result<Proof<Tree::Proof>> {
     ensure!(
         priv_inputs.sectors.len() == 1,
-        "vanilla_proofs called with multiple sector proofs"
+        "vanilla_proof called with multiple sector proofs"
     );
 
     let priv_sector = &priv_inputs.sectors[0];
@@ -271,13 +271,11 @@ pub fn vanilla_proofs<Tree: MerkleTreeTrait>(
     let inclusion_proofs = (0..challenges.len())
         .into_par_iter()
         .map(|challenged_leaf_index| {
-            let challenged_leaf_start = challenges[challenged_leaf_index];
-            let proof =
-                tree.gen_cached_proof(challenged_leaf_start as usize, Some(rows_to_discard))?;
+            let challenged_leaf = challenges[challenged_leaf_index];
+            let proof = tree.gen_cached_proof(challenged_leaf as usize, Some(rows_to_discard))?;
 
             ensure!(
-                proof.validate(challenged_leaf_start as usize)
-                    && proof.root() == priv_sector.comm_r_last,
+                proof.validate(challenged_leaf as usize) && proof.root() == priv_sector.comm_r_last,
                 "Generated vanilla proof for sector {} is invalid",
                 sector_id
             );

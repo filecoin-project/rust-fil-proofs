@@ -89,8 +89,11 @@ pub struct SealPreCommitPhase1Output<Tree: MerkleTreeTrait> {
 pub type SnarkProof = Vec<u8>;
 pub type VanillaProof<Tree> = Proof<<Tree as MerkleTreeTrait>::Proof>;
 
+// This FallbackPoStSectorProof is used during Fallback PoSt, but
+// contains only Vanilla proof information and is not a full Fallback
+// PoSt proof.
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct FallbackPoStVanillaProof<Tree: MerkleTreeTrait> {
+pub struct FallbackPoStSectorProof<Tree: MerkleTreeTrait> {
     pub sector_id: SectorId,
     pub comm_r: <Tree::Hasher as Hasher>::Domain,
     #[serde(bound(

@@ -78,7 +78,7 @@ where
         // This will always run at least once, since there cannot be zero partitions.
         ensure!(partition_count > 0, "There must be partitions");
 
-        info!("vanilla_proof:start");
+        info!("vanilla_proofs:start");
         let vanilla_proofs = S::prove_all_partitions(
             &pub_params.vanilla_params,
             &pub_in,
@@ -86,7 +86,7 @@ where
             partition_count,
         )?;
 
-        info!("vanilla_proof:finish");
+        info!("vanilla_proofs:finish");
 
         let sanity_check =
             S::verify_all_partitions(&pub_params.vanilla_params, &pub_in, &vanilla_proofs)?;
