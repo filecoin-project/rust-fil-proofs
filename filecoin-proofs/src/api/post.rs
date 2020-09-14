@@ -127,12 +127,12 @@ impl<Tree: 'static + MerkleTreeTrait> PrivateReplicaInfo<Tree> {
         as_safe_commitment(&self.comm_r, "comm_r")
     }
 
-    pub fn safe_comm_c(&self) -> Result<<Tree::Hasher as Hasher>::Domain> {
-        Ok(self.aux.comm_c)
+    pub fn safe_comm_c(&self) -> <Tree::Hasher as Hasher>::Domain {
+        self.aux.comm_c
     }
 
-    pub fn safe_comm_r_last(&self) -> Result<<Tree::Hasher as Hasher>::Domain> {
-        Ok(self.aux.comm_r_last)
+    pub fn safe_comm_r_last(&self) -> <Tree::Hasher as Hasher>::Domain {
+        self.aux.comm_r_last
     }
 
     /// Generate the merkle tree of this particular replica.
@@ -355,20 +355,28 @@ pub fn generate_winning_post<Tree: 'static + MerkleTreeTrait>(
 
     let trees = replicas
         .iter()
-        .map(|(_, replica)| replica.merkle_tree(post_config.sector_size))
+        .map(|(sector_id, replica)| {
+            replica
+                .merkle_tree(post_config.sector_size)
+                .with_context(|| {
+                    format!("generate_winning_post: merkle_tree failed: {:?}", sector_id)
+                })
+        })
         .collect::<Result<Vec<_>>>()?;
 
     let mut pub_sectors = Vec::with_capacity(param_sector_count);
     let mut priv_sectors = Vec::with_capacity(param_sector_count);
 
     for _ in 0..param_sector_count {
-        for ((id, replica), tree) in replicas.iter().zip(trees.iter()) {
-            let comm_r = replica.safe_comm_r()?;
-            let comm_c = replica.safe_comm_c()?;
-            let comm_r_last = replica.safe_comm_r_last()?;
+        for ((sector_id, replica), tree) in replicas.iter().zip(trees.iter()) {
+            let comm_r = replica.safe_comm_r().with_context(|| {
+                format!("generate_winning_post: safe_comm_r failed: {:?}", sector_id)
+            })?;
+            let comm_c = replica.safe_comm_c();
+            let comm_r_last = replica.safe_comm_r_last();
 
             pub_sectors.push(fallback::PublicSector::<<Tree::Hasher as Hasher>::Domain> {
-                id: *id,
+                id: *sector_id,
                 comm_r,
             });
             priv_sectors.push(fallback::PrivateSector {
@@ -493,7 +501,7 @@ pub fn generate_fallback_sector_challenges<Tree: 'static + MerkleTreeTrait>(
                     randomness_safe,
                     u64::from(*sector),
                     challenge_index,
-                )?;
+                );
                 challenges.push(challenged_leaf);
             }
 
@@ -514,12 +522,24 @@ pub fn generate_single_vanilla_proof<Tree: 'static + MerkleTreeTrait>(
     replica: &PrivateReplicaInfo<Tree>,
     challenges: &[u64],
 ) -> Result<FallbackPoStSectorProof<Tree>> {
-    info!("generate_single_vanilla_proof:start");
+    info!("generate_single_vanilla_proof:start: {:?}", sector_id);
 
-    let tree = &replica.merkle_tree(post_config.sector_size)?;
-    let comm_r = replica.safe_comm_r()?;
-    let comm_c = replica.safe_comm_c()?;
-    let comm_r_last = replica.safe_comm_r_last()?;
+    let tree = &replica
+        .merkle_tree(post_config.sector_size)
+        .with_context(|| {
+            format!(
+                "generate_single_vanilla_proof: merkle_tree failed: {:?}",
+                sector_id
+            )
+        })?;
+    let comm_r = replica.safe_comm_r().with_context(|| {
+        format!(
+            "generate_single_vanilla_poof: safe_comm_r failed: {:?}",
+            sector_id
+        )
+    })?;
+    let comm_c = replica.safe_comm_c();
+    let comm_r_last = replica.safe_comm_r_last();
 
     // There is only enough information in the arguments to generate a
     // single vanilla proof, so the behaviour is unexpected if the
@@ -542,9 +562,15 @@ pub fn generate_single_vanilla_proof<Tree: 'static + MerkleTreeTrait>(
         sectors: &priv_sectors,
     };
 
-    let vanilla_proof = fallback::vanilla_proof(sector_id, &priv_inputs, challenges)?;
+    let vanilla_proof =
+        fallback::vanilla_proof(sector_id, &priv_inputs, challenges).with_context(|| {
+            format!(
+                "generate_single_vanilla_proof: vanilla_proof failed: {:?}",
+                sector_id
+            )
+        })?;
 
-    info!("generate_single_vanilla_proof:finish");
+    info!("generate_single_vanilla_proof:finish: {:?}", sector_id);
 
     Ok(FallbackPoStSectorProof {
         sector_id,
@@ -594,9 +620,14 @@ pub fn verify_winning_post<Tree: 'static + MerkleTreeTrait>(
 
     let mut pub_sectors = Vec::with_capacity(param_sector_count);
     for _ in 0..param_sector_count {
-        for (id, replica) in replicas.iter() {
-            let comm_r = replica.safe_comm_r()?;
-            pub_sectors.push(fallback::PublicSector { id: *id, comm_r });
+        for (sector_id, replica) in replicas.iter() {
+            let comm_r = replica.safe_comm_r().with_context(|| {
+                format!("verify_winning_post: safe_comm_r failed: {:?}", sector_id)
+            })?;
+            pub_sectors.push(fallback::PublicSector {
+                id: *sector_id,
+                comm_r,
+            });
         }
     }
 
@@ -881,16 +912,24 @@ pub fn generate_window_post<Tree: 'static + MerkleTreeTrait>(
 
     let trees: Vec<_> = replicas
         .iter()
-        .map(|(_id, replica)| replica.merkle_tree(post_config.sector_size))
+        .map(|(sector_id, replica)| {
+            replica
+                .merkle_tree(post_config.sector_size)
+                .with_context(|| {
+                    format!("generate_window_post: merkle_tree failed: {:?}", sector_id)
+                })
+        })
         .collect::<Result<_>>()?;
 
     let mut pub_sectors = Vec::with_capacity(sector_count);
     let mut priv_sectors = Vec::with_capacity(sector_count);
 
     for ((sector_id, replica), tree) in replicas.iter().zip(trees.iter()) {
-        let comm_r = replica.safe_comm_r()?;
-        let comm_c = replica.safe_comm_c()?;
-        let comm_r_last = replica.safe_comm_r_last()?;
+        let comm_r = replica.safe_comm_r().with_context(|| {
+            format!("generate_window_post: safe_comm_r failed: {:?}", sector_id)
+        })?;
+        let comm_c = replica.safe_comm_c();
+        let comm_r_last = replica.safe_comm_r_last();
 
         pub_sectors.push(fallback::PublicSector {
             id: *sector_id,
@@ -958,7 +997,9 @@ pub fn verify_window_post<Tree: 'static + MerkleTreeTrait>(
     let pub_sectors: Vec<_> = replicas
         .iter()
         .map(|(sector_id, replica)| {
-            let comm_r = replica.safe_comm_r()?;
+            let comm_r = replica.safe_comm_r().with_context(|| {
+                format!("verify_window_post: safe_comm_r failed: {:?}", sector_id)
+            })?;
             Ok(fallback::PublicSector {
                 id: *sector_id,
                 comm_r,

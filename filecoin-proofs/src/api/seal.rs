@@ -57,7 +57,7 @@ where
     S: AsRef<Path>,
     T: AsRef<Path>,
 {
-    info!("seal_pre_commit_phase1:start");
+    info!("seal_pre_commit_phase1:start: {:?}", sector_id);
 
     // Sanity check all input path types.
     ensure!(
@@ -185,7 +185,7 @@ where
         comm_d,
     };
 
-    info!("seal_pre_commit_phase1:finish");
+    info!("seal_pre_commit_phase1:finish: {:?}", sector_id);
     Ok(out)
 }
 
@@ -324,7 +324,7 @@ pub fn seal_commit_phase1<T: AsRef<Path>, Tree: 'static + MerkleTreeTrait>(
     pre_commit: SealPreCommitOutput,
     piece_infos: &[PieceInfo],
 ) -> Result<SealCommitPhase1Output<Tree>> {
-    info!("seal_commit_phase1:start");
+    info!("seal_commit_phase1:start: {:?}", sector_id);
 
     // Sanity check all input path types.
     ensure!(
@@ -435,7 +435,7 @@ pub fn seal_commit_phase1<T: AsRef<Path>, Tree: 'static + MerkleTreeTrait>(
         ticket,
     };
 
-    info!("seal_commit_phase1:finish");
+    info!("seal_commit_phase1:finish: {:?}", sector_id);
     Ok(out)
 }
 
@@ -446,7 +446,7 @@ pub fn seal_commit_phase2<Tree: 'static + MerkleTreeTrait>(
     prover_id: ProverId,
     sector_id: SectorId,
 ) -> Result<SealCommitOutput> {
-    info!("seal_commit_phase2:start");
+    info!("seal_commit_phase2:start: {:?}", sector_id);
 
     let SealCommitPhase1Output {
         vanilla_proofs,
@@ -529,7 +529,7 @@ pub fn seal_commit_phase2<Tree: 'static + MerkleTreeTrait>(
 
     let out = SealCommitOutput { proof: buf };
 
-    info!("seal_commit_phase2:finish");
+    info!("seal_commit_phase2:finish: {:?}", sector_id);
     Ok(out)
 }
 
@@ -571,7 +571,7 @@ pub fn verify_seal<Tree: 'static + MerkleTreeTrait>(
     seed: Ticket,
     proof_vec: &[u8],
 ) -> Result<bool> {
-    info!("verify_seal:start");
+    info!("verify_seal:start: {:?}", sector_id);
     ensure!(comm_d_in != [0; 32], "Invalid all zero commitment (comm_d)");
     ensure!(comm_r_in != [0; 32], "Invalid all zero commitment (comm_r)");
 
@@ -661,7 +661,7 @@ pub fn verify_seal<Tree: 'static + MerkleTreeTrait>(
         )
     };
 
-    info!("verify_seal:finish");
+    info!("verify_seal:finish: {:?}", sector_id);
     result
 }
 
