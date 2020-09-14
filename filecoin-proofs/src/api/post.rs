@@ -476,9 +476,7 @@ pub fn generate_fallback_sector_challenges<Tree: 'static + MerkleTreeTrait>(
             Some(x) => x,
             None => 1,
         },
-        PoStType::Winning => {
-            1
-        }
+        PoStType::Winning => 1,
     };
 
     for partition_index in 0..partitions {

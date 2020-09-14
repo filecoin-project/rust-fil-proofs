@@ -264,7 +264,11 @@ where
                 );
                 Ok(parameters)
             } else {
-                bail!("No cached parameters found for {} [failure finding {}]", id, cache_path.display());
+                bail!(
+                    "No cached parameters found for {} [failure finding {}]",
+                    id,
+                    cache_path.display()
+                );
             }
         };
 
