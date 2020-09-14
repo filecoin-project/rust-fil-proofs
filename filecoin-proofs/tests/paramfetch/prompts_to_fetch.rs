@@ -186,7 +186,7 @@ fn invalid_json_produces_error() -> Result<(), FailureError> {
 
 #[test]
 fn no_json_path_uses_default_manifest() -> Result<(), FailureError> {
-    let file = File::open("parameters.json")?;
+    let file = File::open("../storage-proofs/parameters.json")?;
     let reader = BufReader::new(file);
     let manifest: ParameterMap = serde_json::from_reader(reader)?;
 
