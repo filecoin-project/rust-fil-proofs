@@ -73,7 +73,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait>
                     pub_inputs.randomness,
                     sector.id.into(),
                     challenge_index,
-                )?;
+                );
 
                 let por_pub_inputs = por::PublicInputs {
                     commitment: None,
