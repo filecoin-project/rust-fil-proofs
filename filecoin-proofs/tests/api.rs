@@ -178,16 +178,51 @@ fn winning_post<Tree: 'static + MerkleTreeTrait>(sector_size: u64, fake: bool) -
     assert_eq!(challenged_sectors[0], 0); // with a sector_count of 1, the only valid index is 0
 
     let pub_replicas = vec![(sector_id, PublicReplicaInfo::new(comm_r)?)];
+    let private_replica_info =
+        PrivateReplicaInfo::new(replica.path().into(), comm_r, cache_dir.path().into())?;
+
+    /////////////////////////////////////////////
+    // The following methods of proof generation are functionally equivalent:
+    // 1)
+    //
+    /*
     let priv_replicas = vec![(
         sector_id,
-        PrivateReplicaInfo::new(replica.path().into(), comm_r, cache_dir.path().into())?,
+        private_replica_info,
     )];
-
     let proof = generate_winning_post::<Tree>(&config, &randomness, &priv_replicas[..], prover_id)?;
+     */
+    //
+    // 2)
+    let mut vanilla_proofs = Vec::with_capacity(sector_count);
+    let challenges = generate_fallback_sector_challenges::<Tree>(
+        &config,
+        &randomness,
+        &vec![sector_id],
+        prover_id,
+    )?;
+
+    let single_proof = generate_single_vanilla_proof::<Tree>(
+        &config,
+        sector_id,
+        &private_replica_info,
+        &challenges[&sector_id],
+    )?;
+
+    vanilla_proofs.push(single_proof);
+
+    let proof = generate_winning_post_with_vanilla::<Tree>(
+        &config,
+        &randomness,
+        prover_id,
+        vanilla_proofs,
+    )?;
+    /////////////////////////////////////////////
 
     let valid =
         verify_winning_post::<Tree>(&config, &randomness, &pub_replicas[..], prover_id, &proof)?;
     assert!(valid, "proof did not verify");
+
     Ok(())
 }
 
@@ -334,10 +369,54 @@ fn window_post<Tree: 'static + MerkleTreeTrait>(
         priority: false,
     };
 
-    let proof = generate_window_post::<Tree>(&config, &randomness, &priv_replicas, prover_id)?;
+    /////////////////////////////////////////////
+    // The following methods of proof generation are functionally equivalent:
+    // 1)
+    //let proof = generate_window_post::<Tree>(&config, &randomness, &priv_replicas, prover_id)?;
+    //
+    // 2)
+    let replica_sectors = priv_replicas
+        .iter()
+        .map(|(sector, _replica)| *sector)
+        .collect::<Vec<SectorId>>();
+
+    let challenges = generate_fallback_sector_challenges::<Tree>(
+        &config,
+        &randomness,
+        &replica_sectors,
+        prover_id,
+    )?;
+
+    // This 'single config' is used when generating a single vanilla proof.
+    let single_config = PoStConfig {
+        sector_size: sector_size.into(),
+        sector_count: 1,
+        challenge_count: WINDOW_POST_CHALLENGE_COUNT,
+        typ: PoStType::Window,
+        priority: false,
+    };
+
+    let mut vanilla_proofs = Vec::with_capacity(replica_sectors.len());
+
+    for (sector_id, replica) in priv_replicas.iter() {
+        let sector_challenges = &challenges[sector_id];
+        let single_proof = generate_single_vanilla_proof::<Tree>(
+            &single_config,
+            *sector_id,
+            replica,
+            sector_challenges,
+        )?;
+
+        vanilla_proofs.push(single_proof);
+    }
+
+    let proof =
+        generate_window_post_with_vanilla::<Tree>(&config, &randomness, prover_id, vanilla_proofs)?;
+    /////////////////////////////////////////////
 
     let valid = verify_window_post::<Tree>(&config, &randomness, &pub_replicas, prover_id, &proof)?;
     assert!(valid, "proof did not verify");
+
     Ok(())
 }
 
