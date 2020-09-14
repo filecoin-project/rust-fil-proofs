@@ -248,6 +248,7 @@ where
         pub_params: &P,
     ) -> Result<groth16::MappedParameters<Bls12>> {
         let id = Self::cache_identifier(pub_params);
+        let cache_path = ensure_ancestor_dirs_exist(parameter_cache_params_path(&id))?;
 
         let generate = || -> Result<_> {
             if let Some(rng) = rng {
@@ -263,12 +264,11 @@ where
                 );
                 Ok(parameters)
             } else {
-                bail!("No cached parameters found for {}", id);
+                bail!("No cached parameters found for {} [failure finding {}]", id, cache_path.display());
             }
         };
 
         // load or generate Groth parameter mappings
-        let cache_path = ensure_ancestor_dirs_exist(parameter_cache_params_path(&id))?;
         match read_cached_params(&cache_path) {
             Ok(x) => Ok(x),
             Err(_) => {

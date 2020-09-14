@@ -477,8 +477,6 @@ pub fn generate_fallback_sector_challenges<Tree: 'static + MerkleTreeTrait>(
             None => 1,
         },
         PoStType::Winning => {
-            assert_eq!(post_config.typ, PoStType::Winning);
-
             1
         }
     };
