@@ -324,7 +324,7 @@ fn ensure_parent(path: &PathBuf) -> Result<()> {
 pub fn read_cached_params(cache_entry_path: &PathBuf) -> Result<groth16::MappedParameters<Bls12>> {
     info!("checking cache_path: {:?} for parameters", cache_entry_path);
 
-    let mut params = with_exclusive_read_lock(cache_entry_path, |_| {
+    let params = with_exclusive_read_lock(cache_entry_path, |_| {
         let mapped_params =
             Parameters::build_mapped_parameters(cache_entry_path.to_path_buf(), false)?;
         info!("read parameters from cache {:?} ", cache_entry_path);
@@ -359,8 +359,8 @@ pub fn read_cached_params(cache_entry_path: &PathBuf) -> Result<groth16::MappedP
                 if not_yet_verified {
                     info!("generating consistency digest for parameters");
                     let mut hasher = Blake2bParams::new().to_state();
-                    io::copy(&mut params.param_file, &mut hasher)
-                        .expect("copying file into hasher failed");
+                    let mut file = &params.param_file;
+                    io::copy(&mut file, &mut hasher).expect("copying file into hasher failed");
                     let hash = hasher.finalize();
                     info!("generated consistency digest for parameters");
 
