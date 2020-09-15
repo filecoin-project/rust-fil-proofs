@@ -2,7 +2,7 @@ use crate::error::*;
 use anyhow::{anyhow, bail, ensure};
 use bellperson::groth16::Parameters;
 use bellperson::{groth16, Circuit};
-use blake2b_simd::blake2b;
+use blake2b_simd::Params as Blake2bParams;
 use fs2::FileExt;
 use itertools::Itertools;
 use lazy_static::lazy_static;
@@ -324,7 +324,7 @@ fn ensure_parent(path: &PathBuf) -> Result<()> {
 pub fn read_cached_params(cache_entry_path: &PathBuf) -> Result<groth16::MappedParameters<Bls12>> {
     info!("checking cache_path: {:?} for parameters", cache_entry_path);
 
-    let params = with_exclusive_read_lock(cache_entry_path, |_| {
+    let mut params = with_exclusive_read_lock(cache_entry_path, |_| {
         let mapped_params =
             Parameters::build_mapped_parameters(cache_entry_path.to_path_buf(), false)?;
         info!("read parameters from cache {:?} ", cache_entry_path);
@@ -353,12 +353,15 @@ pub fn read_cached_params(cache_entry_path: &PathBuf) -> Result<groth16::MappedP
                 // Verify the actual hash only once per parameters file
                 let not_yet_verified = VERIFIED_PARAMETERS
                     .lock()
-                    .expect("acquiring lock failed")
+                    .expect("verified parameters lock failed")
                     .get(&cache_key)
                     .is_none();
                 if not_yet_verified {
                     info!("generating consistency digest for parameters");
-                    let hash = blake2b(&params.params[..]);
+                    let mut hasher = Blake2bParams::new().to_state();
+                    io::copy(&mut params.param_file, &mut hasher)
+                        .expect("copying file into hasher failed");
+                    let hash = hasher.finalize();
                     info!("generated consistency digest for parameters");
 
                     // The hash in the parameters file is truncated to 256 bits.
@@ -368,7 +371,7 @@ pub fn read_cached_params(cache_entry_path: &PathBuf) -> Result<groth16::MappedP
 
                     VERIFIED_PARAMETERS
                         .lock()
-                        .expect("acquiring lock failed")
+                        .expect("verified parameters lock failed")
                         .insert(cache_key);
                 }
             }
