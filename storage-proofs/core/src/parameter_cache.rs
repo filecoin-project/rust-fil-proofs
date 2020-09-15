@@ -1,7 +1,8 @@
 use crate::error::*;
-use anyhow::{bail, ensure};
+use anyhow::{anyhow, bail, ensure};
 use bellperson::groth16::Parameters;
 use bellperson::{groth16, Circuit};
+use blake2b_simd::blake2b;
 use fs2::FileExt;
 use itertools::Itertools;
 use lazy_static::lazy_static;
@@ -319,37 +320,49 @@ fn ensure_parent(path: &PathBuf) -> Result<()> {
 pub fn read_cached_params(cache_entry_path: &PathBuf) -> Result<groth16::MappedParameters<Bls12>> {
     info!("checking cache_path: {:?} for parameters", cache_entry_path);
 
+    let params = with_exclusive_read_lock(cache_entry_path, |_| {
+        let mapped_params =
+            Parameters::build_mapped_parameters(cache_entry_path.to_path_buf(), false)?;
+        info!("read parameters from cache {:?} ", cache_entry_path);
+
+        Ok(mapped_params)
+    })?;
+
     let verify_production_params = settings::SETTINGS
         .lock()
         .expect("verify_production_params settings lock failure")
         .verify_production_params;
 
-    // If the verify production params is set, we make sure that the
-    // path being accessed matches a production cache key, found in
-    // the 'parameters.json' file.
-    //
-    // Note that this is not an expensive check (that should also have
-    // an option to be added) where the parameter data file is hashed
-    // and matched against the hash in the parameters.json file.
+    // If the verify production params is set, we make sure that the path being accessed matches a
+    // production cache key, found in the 'parameters.json' file. The parameter data file is also
+    // hashed and matched against the hash in the `parameters.json` file.
     if verify_production_params {
         let cache_key = cache_entry_path
             .file_name()
             .expect("failed to get cached param filename");
         let data =
             get_parameter_data_from_id(cache_key.to_str().expect("failed to convert to str"));
-        ensure!(
-            data.is_some(),
-            "Cache key {:?} does not match a production parameter entry",
-            cache_key
-        );
+
+        match data {
+            None => {
+                return Err(anyhow!(
+                    "Cache key {:?} does not match a production parameter entry",
+                    cache_key
+                ));
+            }
+            Some(data) => {
+                info!("generating consistency digest for parameters");
+                let hash = blake2b(&params.params[..]);
+                info!("generated consistency digest for parameters");
+
+                // The hash in the parameters file is truncated to 256 bits.
+                let digest_hex = &hash.to_hex()[..32];
+
+                ensure!(digest_hex == data.digest, "Parameters are invalid");
+            }
+        }
     }
-
-    with_exclusive_read_lock(cache_entry_path, |_| {
-        let params = Parameters::build_mapped_parameters(cache_entry_path.to_path_buf(), false)?;
-        info!("read parameters from cache {:?} ", cache_entry_path);
-
-        Ok(params)
-    })
+    Ok(params)
 }
 
 fn read_cached_verifying_key(cache_entry_path: &PathBuf) -> Result<groth16::VerifyingKey<Bls12>> {
