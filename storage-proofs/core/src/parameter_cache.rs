@@ -12,10 +12,11 @@ use rand::RngCore;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 use std::fs::{self, create_dir_all, File};
 use std::io::{self, SeekFrom};
 use std::path::{Path, PathBuf};
+use std::sync::Mutex;
 
 use super::settings;
 
@@ -43,6 +44,9 @@ pub const PARAMETERS_DATA: &str = include_str!("../..//parameters.json");
 lazy_static! {
     pub static ref PARAMETERS: ParameterMap =
         serde_json::from_str(PARAMETERS_DATA).expect("Invalid parameters.json");
+    /// Contains the parameters that were previously verified. This way the parameter files are
+    /// only hashed once and not on every usage.
+    static ref VERIFIED_PARAMETERS: Mutex<HashSet<String>> = Mutex::new(HashSet::new());
 }
 
 pub fn parameter_id(cache_id: &str) -> String {
@@ -339,26 +343,40 @@ pub fn read_cached_params(cache_entry_path: &PathBuf) -> Result<groth16::MappedP
     if verify_production_params {
         let cache_key = cache_entry_path
             .file_name()
-            .expect("failed to get cached param filename");
-        let data =
-            get_parameter_data_from_id(cache_key.to_str().expect("failed to convert to str"));
+            .expect("failed to get cached param filename")
+            .to_str()
+            .expect("failed to convert to str")
+            .to_string();
 
-        match data {
+        match get_parameter_data_from_id(&cache_key) {
+            Some(data) => {
+                // Verify the actual hash only once per parameters file
+                let not_yet_verified = VERIFIED_PARAMETERS
+                    .lock()
+                    .expect("acquiring lock failed")
+                    .get(&cache_key)
+                    .is_none();
+                if not_yet_verified {
+                    info!("generating consistency digest for parameters");
+                    let hash = blake2b(&params.params[..]);
+                    info!("generated consistency digest for parameters");
+
+                    // The hash in the parameters file is truncated to 256 bits.
+                    let digest_hex = &hash.to_hex()[..32];
+
+                    ensure!(digest_hex == data.digest, "Parameters are invalid");
+
+                    VERIFIED_PARAMETERS
+                        .lock()
+                        .expect("acquiring lock failed")
+                        .insert(cache_key);
+                }
+            }
             None => {
                 return Err(anyhow!(
                     "Cache key {:?} does not match a production parameter entry",
                     cache_key
                 ));
-            }
-            Some(data) => {
-                info!("generating consistency digest for parameters");
-                let hash = blake2b(&params.params[..]);
-                info!("generated consistency digest for parameters");
-
-                // The hash in the parameters file is truncated to 256 bits.
-                let digest_hex = &hash.to_hex()[..32];
-
-                ensure!(digest_hex == data.digest, "Parameters are invalid");
             }
         }
     }
