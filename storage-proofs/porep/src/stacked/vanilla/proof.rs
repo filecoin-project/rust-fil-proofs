@@ -315,7 +315,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                 )
                 .is_ok();
             if generated {
-                // successfull load
+                // succesful load
                 info!("found valid labels for layer {}", layer);
             }
 
