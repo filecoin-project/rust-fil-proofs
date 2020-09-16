@@ -367,7 +367,11 @@ pub fn read_cached_params(cache_entry_path: &PathBuf) -> Result<groth16::MappedP
                     // The hash in the parameters file is truncated to 256 bits.
                     let digest_hex = &hash.to_hex()[..32];
 
-                    ensure!(digest_hex == data.digest, "Parameters are invalid");
+                    ensure!(
+                        digest_hex == data.digest,
+                        "Parameters are invalid! Path: {}",
+                        cache_entry_path.display()
+                    );
 
                     VERIFIED_PARAMETERS
                         .lock()
