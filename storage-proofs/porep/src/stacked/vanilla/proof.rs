@@ -270,8 +270,8 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         let layers = layer_challenges.layers();
         assert!(layers > 0);
 
-        // generate labels
-        let labels = Self::generate_labels_extract(graph, layer_challenges, replica_id, config)?;
+        let labels =
+            Self::generate_labels_for_decoding(graph, layer_challenges, replica_id, config)?;
 
         let last_layer_labels = labels.labels_for_last_layer()?;
         let size = merkletree::store::Store::len(last_layer_labels);
@@ -292,6 +292,8 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         Ok(())
     }
 
+    /// Prepares the necessary `StoreConfig`s with which the layers are stored.
+    /// Also checks for already existing layers and marks them as such.
     fn prepare_layers(
         graph: &StackedBucketGraph<Tree::Hasher>,
         config: &StoreConfig,
@@ -326,15 +328,16 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         states
     }
 
-    fn generate_labels_replicate(
+    /// Generates the layers as needed for encoding.
+    fn generate_labels_for_encoding(
         graph: &StackedBucketGraph<Tree::Hasher>,
         layer_challenges: &LayerChallenges,
         replica_id: &<Tree::Hasher as Hasher>::Domain,
         config: StoreConfig,
-    ) -> Result<Labels<Tree>> {
+    ) -> Result<(Labels<Tree>, Vec<LayerState>)> {
         info!("generate labels");
         let layers = layer_challenges.layers();
-        let mut layer_states = Self::prepare_layers(graph, &config, layers);
+        let layer_states = Self::prepare_layers(graph, &config, layers);
 
         let layer_size = graph.size() * NODE_SIZE;
         // NOTE: this means we currently keep 2x sector size around, to improve speed.
@@ -351,7 +354,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
             None
         };
 
-        for (layer, layer_state) in (1..=layers).zip(layer_states.iter_mut()) {
+        for (layer, layer_state) in (1..=layers).zip(layer_states.iter()) {
             info!("generating layer: {}", layer);
             if layer_state.generated {
                 info!("skipping layer {}, already generated", layer);
@@ -408,13 +411,17 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
             std::mem::swap(&mut layer_labels, &mut exp_labels);
         }
 
-        Ok(Labels::<Tree> {
-            labels: layer_states.into_iter().map(|s| s.config).collect(),
-            _h: PhantomData,
-        })
+        Ok((
+            Labels::<Tree> {
+                labels: layer_states.iter().map(|s| s.config.clone()).collect(),
+                _h: PhantomData,
+            },
+            layer_states,
+        ))
     }
 
-    fn generate_labels_extract(
+    /// Generates the layers, as needed for decoding.
+    fn generate_labels_for_decoding(
         graph: &StackedBucketGraph<Tree::Hasher>,
         layer_challenges: &LayerChallenges,
         replica_id: &<Tree::Hasher as Hasher>::Domain,
@@ -1079,8 +1086,9 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
     ) -> Result<TransformedLayers<Tree, G>> {
         // Generate key layers.
         let labels = measure_op(EncodeWindowTimeAll, || {
-            Self::generate_labels_replicate(graph, layer_challenges, replica_id, config.clone())
-        })?;
+            Self::generate_labels_for_encoding(graph, layer_challenges, replica_id, config.clone())
+        })?
+        .0;
 
         Self::transform_and_replicate_layers_inner(
             graph,
@@ -1279,13 +1287,13 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         info!("replicate_phase1");
 
         let labels = measure_op(EncodeWindowTimeAll, || {
-            Self::generate_labels_replicate(&pp.graph, &pp.layer_challenges, replica_id, config)
-        })?;
+            Self::generate_labels_for_encoding(&pp.graph, &pp.layer_challenges, replica_id, config)
+        })?
+        .0;
 
         Ok(labels)
     }
 
-    #[allow(clippy::type_complexity)]
     /// Phase2 of replication.
     #[allow(clippy::type_complexity)]
     pub fn replicate_phase2(
@@ -1644,7 +1652,7 @@ mod tests {
             degree: BASE_DEGREE,
             expansion_degree: EXP_DEGREE,
             porep_id: [32; 32],
-            layer_challenges,
+            layer_challenges: layer_challenges.clone(),
         };
 
         let pp = StackedDrg::<Tree, Blake2sHasher>::setup(&sp).expect("setup failed");
@@ -1658,6 +1666,20 @@ mod tests {
             replica_path,
         )
         .expect("replication failed");
+
+        // The layers are still in the cache dir, so rerunning the label generation should
+        // not do any work.
+
+        let (_, label_states) = StackedDrg::<Tree, Blake2sHasher>::generate_labels_for_encoding(
+            &pp.graph,
+            &layer_challenges,
+            &replica_id,
+            config.clone(),
+        )
+        .expect("label generation failed");
+        for state in label_states {
+            assert!(state.generated);
+        }
 
         let mut copied = vec![0; data.len()];
         copied.copy_from_slice(&mmapped_data);
