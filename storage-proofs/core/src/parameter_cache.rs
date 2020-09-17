@@ -1,5 +1,5 @@
 use crate::error::*;
-use anyhow::{anyhow, bail, ensure};
+use anyhow::bail;
 use bellperson::groth16::Parameters;
 use bellperson::{groth16, Circuit};
 use blake2b_simd::Params as Blake2bParams;
@@ -273,15 +273,15 @@ where
         };
 
         // load or generate Groth parameter mappings
-        match read_cached_params(&cache_path) {
-            Ok(x) => Ok(x),
-            Err(_) => {
+        read_cached_params(&cache_path).or_else(|err| match err.downcast::<Error>() {
+            Ok(Error::InvalidParameters(msg)) => panic!("Parameter verification failed: {}", msg),
+            _ => {
                 write_cached_params(&cache_path, generate()?).unwrap_or_else(|e| {
                     panic!("{}: failed to write generated parameters to cache", e)
                 });
                 Ok(read_cached_params(&cache_path)?)
             }
-        }
+        })
     }
 
     /// If the rng option argument is set, parameters will be
@@ -360,11 +360,12 @@ pub fn read_cached_params(cache_entry_path: &PathBuf) -> Result<groth16::MappedP
                     // The hash in the parameters file is truncated to 256 bits.
                     let digest_hex = &hash.to_hex()[..32];
 
-                    ensure!(
-                        digest_hex == data.digest,
-                        "Parameters are invalid! Path: {}",
-                        cache_entry_path.display()
-                    );
+                    if digest_hex != data.digest {
+                        return Err(Error::InvalidParameters(
+                            cache_entry_path.display().to_string(),
+                        )
+                        .into());
+                    }
 
                     VERIFIED_PARAMETERS
                         .lock()
@@ -373,10 +374,7 @@ pub fn read_cached_params(cache_entry_path: &PathBuf) -> Result<groth16::MappedP
                 }
             }
             None => {
-                return Err(anyhow!(
-                    "Cache key {:?} does not match a production parameter entry",
-                    cache_key
-                ));
+                return Err(Error::InvalidParameters(cache_entry_path.display().to_string()).into())
             }
         }
     }
