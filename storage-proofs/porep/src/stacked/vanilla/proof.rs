@@ -4,9 +4,11 @@ use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
 use std::sync::{mpsc, Arc, RwLock};
 
+use anyhow::Context;
 use bincode::deserialize;
 use generic_array::typenum::{self, Unsigned};
 use log::{info, trace};
+use merkletree::merkle::Element;
 use merkletree::merkle::{
     get_merkle_tree_cache_size, get_merkle_tree_leafs, get_merkle_tree_len,
     is_merkle_tree_size_valid,
@@ -306,14 +308,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         let mut states = Vec::with_capacity(layers);
         for (layer, label_config) in (1..=layers).zip(label_configs) {
             // Check if this layer is already on disk
-            let data_path = StoreConfig::data_path(&label_config.path, &label_config.id);
-            let generated = data_path.exists()
-                && DiskStore::<<Tree::Hasher as Hasher>::Domain>::new_from_disk(
-                    graph.size(),
-                    Tree::Arity::to_usize(),
-                    &label_config,
-                )
-                .is_ok();
+            let generated = Self::is_layer_written(graph, &label_config).unwrap_or_default();
             if generated {
                 // succesful load
                 info!("found valid labels for layer {}", layer);
@@ -394,14 +389,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
             let layer_config = &layer_state.config;
 
             info!("  storing labels on disk");
-            // Construct and persist the layer data.
-            let _layer_store: DiskStore<<Tree::Hasher as Hasher>::Domain> =
-                DiskStore::new_from_slice_with_config(
-                    graph.size(),
-                    Tree::Arity::to_usize(),
-                    &layer_labels,
-                    layer_config.clone(),
-                )?;
+            Self::write_layer(&layer_labels, layer_config).context("failed to store labels")?;
             info!(
                 "  generated layer {} store with id {}",
                 layer, layer_config.id
@@ -418,6 +406,41 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
             },
             layer_states,
         ))
+    }
+
+    /// Stores a layer atomically on disk, by writing first to `.tmp` and then renaming.
+    fn write_layer(data: &[u8], config: &StoreConfig) -> Result<()> {
+        let data_path = StoreConfig::data_path(&config.path, &config.id);
+        let tmp_data_path = data_path.with_extension(".tmp");
+
+        if let Some(parent) = data_path.parent() {
+            std::fs::create_dir_all(parent).context("failed to create parent directories")?;
+        }
+        std::fs::write(&tmp_data_path, data).context("failed to write layer data")?;
+        std::fs::rename(tmp_data_path, data_path).context("failed to rename tmp data")?;
+
+        Ok(())
+    }
+
+    /// Checks if the given layer is already written and of the right size.
+    fn is_layer_written(
+        graph: &StackedBucketGraph<Tree::Hasher>,
+        config: &StoreConfig,
+    ) -> Result<bool> {
+        let data_path = StoreConfig::data_path(&config.path, &config.id);
+        if !data_path.exists() {
+            return Ok(false);
+        }
+
+        let file = std::fs::File::open(&data_path)?;
+        let metadata = file.metadata()?;
+        let file_size = metadata.len() as usize;
+
+        if file_size != graph.size() * <Tree::Hasher as Hasher>::Domain::byte_len() {
+            return Ok(false);
+        }
+
+        Ok(true)
     }
 
     /// Generates the layers, as needed for decoding.
@@ -487,14 +510,10 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
 
             // Write the result to disk to avoid keeping it in memory all the time.
             info!("  storing labels on disk");
-            // Construct and persist the layer data.
+            Self::write_layer(&layer_labels, &layer_config)?;
+
             let layer_store: DiskStore<<Tree::Hasher as Hasher>::Domain> =
-                DiskStore::new_from_slice_with_config(
-                    graph.size(),
-                    Tree::Arity::to_usize(),
-                    &layer_labels,
-                    layer_config.clone(),
-                )?;
+                DiskStore::new_from_disk(graph.size(), Tree::Arity::to_usize(), &layer_config)?;
             info!(
                 "  generated layer {} store with id {}",
                 layer, layer_config.id
