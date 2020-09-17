@@ -324,14 +324,6 @@ fn ensure_parent(path: &PathBuf) -> Result<()> {
 pub fn read_cached_params(cache_entry_path: &PathBuf) -> Result<groth16::MappedParameters<Bls12>> {
     info!("checking cache_path: {:?} for parameters", cache_entry_path);
 
-    let params = with_exclusive_read_lock(cache_entry_path, |_| {
-        let mapped_params =
-            Parameters::build_mapped_parameters(cache_entry_path.to_path_buf(), false)?;
-        info!("read parameters from cache {:?} ", cache_entry_path);
-
-        Ok(mapped_params)
-    })?;
-
     let verify_production_params = settings::SETTINGS
         .lock()
         .expect("verify_production_params settings lock failure")
@@ -358,10 +350,11 @@ pub fn read_cached_params(cache_entry_path: &PathBuf) -> Result<groth16::MappedP
                     .is_none();
                 if not_yet_verified {
                     info!("generating consistency digest for parameters");
-                    let mut hasher = Blake2bParams::new().to_state();
-                    let mut file = &params.param_file;
-                    io::copy(&mut file, &mut hasher).expect("copying file into hasher failed");
-                    let hash = hasher.finalize();
+                    let hash = with_exclusive_read_lock(cache_entry_path, |mut file| {
+                        let mut hasher = Blake2bParams::new().to_state();
+                        io::copy(&mut file, &mut hasher).expect("copying file into hasher failed");
+                        Ok(hasher.finalize())
+                    })?;
                     info!("generated consistency digest for parameters");
 
                     // The hash in the parameters file is truncated to 256 bits.
@@ -387,6 +380,15 @@ pub fn read_cached_params(cache_entry_path: &PathBuf) -> Result<groth16::MappedP
             }
         }
     }
+
+    let params = with_exclusive_read_lock(cache_entry_path, |_| {
+        let mapped_params =
+            Parameters::build_mapped_parameters(cache_entry_path.to_path_buf(), false)?;
+        info!("read parameters from cache {:?} ", cache_entry_path);
+
+        Ok(mapped_params)
+    })?;
+
     Ok(params)
 }
 
