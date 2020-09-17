@@ -387,25 +387,12 @@ fn window_post<Tree: 'static + MerkleTreeTrait>(
         prover_id,
     )?;
 
-    // This 'single config' is used when generating a single vanilla proof.
-    let single_config = PoStConfig {
-        sector_size: sector_size.into(),
-        sector_count: 1,
-        challenge_count: WINDOW_POST_CHALLENGE_COUNT,
-        typ: PoStType::Window,
-        priority: false,
-    };
-
     let mut vanilla_proofs = Vec::with_capacity(replica_sectors.len());
 
     for (sector_id, replica) in priv_replicas.iter() {
         let sector_challenges = &challenges[sector_id];
-        let single_proof = generate_single_vanilla_proof::<Tree>(
-            &single_config,
-            *sector_id,
-            replica,
-            sector_challenges,
-        )?;
+        let single_proof =
+            generate_single_vanilla_proof::<Tree>(&config, *sector_id, replica, sector_challenges)?;
 
         vanilla_proofs.push(single_proof);
     }
