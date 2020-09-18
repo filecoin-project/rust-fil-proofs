@@ -39,7 +39,7 @@ pub struct ParameterData {
     pub sector_size: u64,
 }
 
-pub const PARAMETERS_DATA: &str = include_str!("../..//parameters.json");
+pub const PARAMETERS_DATA: &str = include_str!("../../parameters.json");
 
 lazy_static! {
     pub static ref PARAMETERS: ParameterMap =
@@ -274,7 +274,7 @@ where
 
         // load or generate Groth parameter mappings
         read_cached_params(&cache_path).or_else(|err| match err.downcast::<Error>() {
-            Ok(Error::InvalidParameters(msg)) => panic!("Parameter verification failed: {}", msg),
+            Ok(error @ Error::InvalidParameters(_)) => Err(error.into()),
             _ => {
                 write_cached_params(&cache_path, generate()?).unwrap_or_else(|e| {
                     panic!("{}: failed to write generated parameters to cache", e)
@@ -379,15 +379,13 @@ pub fn read_cached_params(cache_entry_path: &PathBuf) -> Result<groth16::MappedP
         }
     }
 
-    let params = with_exclusive_read_lock(cache_entry_path, |_| {
+    with_exclusive_read_lock(cache_entry_path, |_| {
         let mapped_params =
             Parameters::build_mapped_parameters(cache_entry_path.to_path_buf(), false)?;
         info!("read parameters from cache {:?} ", cache_entry_path);
 
         Ok(mapped_params)
-    })?;
-
-    Ok(params)
+    })
 }
 
 fn read_cached_verifying_key(cache_entry_path: &PathBuf) -> Result<groth16::VerifyingKey<Bls12>> {
