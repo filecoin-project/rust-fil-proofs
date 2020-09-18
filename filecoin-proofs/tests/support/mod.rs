@@ -2,9 +2,10 @@ use std::path::{Path, PathBuf};
 use std::{env, thread};
 
 use failure::format_err;
-use filecoin_proofs::param::ParameterData;
 use rexpect::session::PtyReplSession;
 use rexpect::spawn_bash;
+use storage_proofs::parameter_cache::ParameterData;
+
 use std::collections::btree_map::BTreeMap;
 use std::fs::File;
 use std::process::Command;

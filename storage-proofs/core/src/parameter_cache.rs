@@ -2,17 +2,21 @@ use crate::error::*;
 use anyhow::bail;
 use bellperson::groth16::Parameters;
 use bellperson::{groth16, Circuit};
+use blake2b_simd::Params as Blake2bParams;
 use fs2::FileExt;
 use itertools::Itertools;
+use lazy_static::lazy_static;
 use log::info;
 use paired::bls12_381::Bls12;
 use rand::RngCore;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
+use std::collections::{BTreeMap, HashSet};
 use std::fs::{self, create_dir_all, File};
 use std::io::{self, SeekFrom};
 use std::path::{Path, PathBuf};
+use std::sync::Mutex;
 
 use super::settings;
 
@@ -25,6 +29,47 @@ pub const VERIFYING_KEY_EXT: &str = "vk";
 
 #[derive(Debug)]
 pub struct LockedFile(File);
+
+pub type ParameterMap = BTreeMap<String, ParameterData>;
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct ParameterData {
+    pub cid: String,
+    pub digest: String,
+    pub sector_size: u64,
+}
+
+pub const PARAMETERS_DATA: &str = include_str!("../../parameters.json");
+
+lazy_static! {
+    pub static ref PARAMETERS: ParameterMap =
+        serde_json::from_str(PARAMETERS_DATA).expect("Invalid parameters.json");
+    /// Contains the parameters that were previously verified. This way the parameter files are
+    /// only hashed once and not on every usage.
+    static ref VERIFIED_PARAMETERS: Mutex<HashSet<String>> = Mutex::new(HashSet::new());
+}
+
+pub fn parameter_id(cache_id: &str) -> String {
+    format!("v{}-{}.params", VERSION, cache_id)
+}
+
+pub fn verifying_key_id(cache_id: &str) -> String {
+    format!("v{}-{}.vk", VERSION, cache_id)
+}
+
+pub fn metadata_id(cache_id: &str) -> String {
+    format!("v{}-{}.meta", VERSION, cache_id)
+}
+
+/// Get the correct parameter data for a given cache id.
+pub fn get_parameter_data_from_id(parameter_id: &str) -> Option<&ParameterData> {
+    PARAMETERS.get(parameter_id)
+}
+
+/// Get the correct verifying key data for a given cache id.
+pub fn get_verifying_key_data(cache_id: &str) -> Option<&ParameterData> {
+    PARAMETERS.get(&verifying_key_id(cache_id))
+}
 
 // TODO: use in memory lock as well, as file locks do not guarantee exclusive access across OSes.
 
@@ -203,6 +248,7 @@ where
         pub_params: &P,
     ) -> Result<groth16::MappedParameters<Bls12>> {
         let id = Self::cache_identifier(pub_params);
+        let cache_path = ensure_ancestor_dirs_exist(parameter_cache_params_path(&id))?;
 
         let generate = || -> Result<_> {
             if let Some(rng) = rng {
@@ -218,21 +264,24 @@ where
                 );
                 Ok(parameters)
             } else {
-                bail!("No cached parameters found for {}", id);
+                bail!(
+                    "No cached parameters found for {} [failure finding {}]",
+                    id,
+                    cache_path.display()
+                );
             }
         };
 
         // load or generate Groth parameter mappings
-        let cache_path = ensure_ancestor_dirs_exist(parameter_cache_params_path(&id))?;
-        match read_cached_params(&cache_path) {
-            Ok(x) => Ok(x),
-            Err(_) => {
+        read_cached_params(&cache_path).or_else(|err| match err.downcast::<Error>() {
+            Ok(error @ Error::InvalidParameters(_)) => Err(error.into()),
+            _ => {
                 write_cached_params(&cache_path, generate()?).unwrap_or_else(|e| {
                     panic!("{}: failed to write generated parameters to cache", e)
                 });
                 Ok(read_cached_params(&cache_path)?)
             }
-        }
+        })
     }
 
     /// If the rng option argument is set, parameters will be
@@ -274,11 +323,68 @@ fn ensure_parent(path: &PathBuf) -> Result<()> {
 // loaded later.
 pub fn read_cached_params(cache_entry_path: &PathBuf) -> Result<groth16::MappedParameters<Bls12>> {
     info!("checking cache_path: {:?} for parameters", cache_entry_path);
+
+    let verify_production_params = settings::SETTINGS
+        .lock()
+        .expect("verify_production_params settings lock failure")
+        .verify_production_params;
+
+    // If the verify production params is set, we make sure that the path being accessed matches a
+    // production cache key, found in the 'parameters.json' file. The parameter data file is also
+    // hashed and matched against the hash in the `parameters.json` file.
+    if verify_production_params {
+        let cache_key = cache_entry_path
+            .file_name()
+            .expect("failed to get cached param filename")
+            .to_str()
+            .expect("failed to convert to str")
+            .to_string();
+
+        match get_parameter_data_from_id(&cache_key) {
+            Some(data) => {
+                // Verify the actual hash only once per parameters file
+                let not_yet_verified = VERIFIED_PARAMETERS
+                    .lock()
+                    .expect("verified parameters lock failed")
+                    .get(&cache_key)
+                    .is_none();
+                if not_yet_verified {
+                    info!("generating consistency digest for parameters");
+                    let hash = with_exclusive_read_lock(cache_entry_path, |mut file| {
+                        let mut hasher = Blake2bParams::new().to_state();
+                        io::copy(&mut file, &mut hasher).expect("copying file into hasher failed");
+                        Ok(hasher.finalize())
+                    })?;
+                    info!("generated consistency digest for parameters");
+
+                    // The hash in the parameters file is truncated to 256 bits.
+                    let digest_hex = &hash.to_hex()[..32];
+
+                    if digest_hex != data.digest {
+                        return Err(Error::InvalidParameters(
+                            cache_entry_path.display().to_string(),
+                        )
+                        .into());
+                    }
+
+                    VERIFIED_PARAMETERS
+                        .lock()
+                        .expect("verified parameters lock failed")
+                        .insert(cache_key);
+                }
+            }
+            None => {
+                return Err(Error::InvalidParameters(cache_entry_path.display().to_string()).into())
+            }
+        }
+    }
+
     with_exclusive_read_lock(cache_entry_path, |_| {
-        let params = Parameters::build_mapped_parameters(cache_entry_path.to_path_buf(), false)?;
+        let mapped_params =
+            Parameters::build_mapped_parameters(cache_entry_path.to_path_buf(), false)?;
         info!("read parameters from cache {:?} ", cache_entry_path);
 
-        Ok(params)
+        Ok(mapped_params)
     })
 }
 

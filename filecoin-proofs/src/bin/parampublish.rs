@@ -15,15 +15,14 @@ use itertools::Itertools;
 use filecoin_proofs::param::{
     add_extension, choose_from, filename_to_parameter_id, get_digest_for_file_within_cache,
     get_full_path_for_file_within_cache, has_extension, parameter_id_to_metadata_map,
-    ParameterData, ParameterMap,
 };
 use filecoin_proofs::{
     SECTOR_SIZE_2_KIB, SECTOR_SIZE_32_GIB, SECTOR_SIZE_512_MIB, SECTOR_SIZE_64_GIB,
     SECTOR_SIZE_8_MIB,
 };
 use storage_proofs::parameter_cache::{
-    parameter_cache_dir, parameter_cache_dir_name, CacheEntryMetadata, GROTH_PARAMETER_EXT,
-    PARAMETER_METADATA_EXT, VERIFYING_KEY_EXT,
+    parameter_cache_dir, parameter_cache_dir_name, CacheEntryMetadata, ParameterData, ParameterMap,
+    GROTH_PARAMETER_EXT, PARAMETER_METADATA_EXT, VERIFYING_KEY_EXT,
 };
 
 const ERROR_IPFS_COMMAND: &str = "failed to run ipfs";
@@ -183,7 +182,7 @@ fn publish(matches: &ArgMatches) -> Result<()> {
             }
         };
 
-        // The parameter IDs that should bet published
+        // The parameter IDs that should be published
         let mut parameter_ids = meta_map
             .keys()
             // Filter out all that don't match the selected version

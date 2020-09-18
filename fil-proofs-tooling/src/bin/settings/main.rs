@@ -6,6 +6,8 @@ fn main() -> Result<()> {
     let Settings {
         parameter_cache,
         maximize_caching,
+        verify_cache,
+        verify_production_params,
         parent_cache,
         sdr_parents_cache_size,
         use_gpu_column_builder,
@@ -21,6 +23,8 @@ fn main() -> Result<()> {
 
     println!("parameter_cache: {}", parameter_cache);
     println!("maximize_caching: {}", maximize_caching);
+    println!("verify_cache: {}", verify_cache);
+    println!("verify_production_params: {}", verify_production_params);
     println!("parent_cache: {}", parent_cache);
     println!("sdr_parents_cache_size: {}", sdr_parents_cache_size);
 

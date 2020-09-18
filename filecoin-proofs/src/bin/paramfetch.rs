@@ -18,14 +18,14 @@ use tar::Archive;
 
 use filecoin_proofs::param::*;
 use storage_proofs::parameter_cache::{
-    parameter_cache_dir, parameter_cache_dir_name, GROTH_PARAMETER_EXT,
+    parameter_cache_dir, parameter_cache_dir_name, ParameterData, ParameterMap, GROTH_PARAMETER_EXT,
 };
 
 const ERROR_PARAMETER_FILE: &str = "failed to find file in cache";
 const ERROR_PARAMETER_ID: &str = "failed to find key in manifest";
 
 const IPGET_PATH: &str = "/var/tmp/ipget";
-const DEFAULT_PARAMETERS: &str = include_str!("../../parameters.json");
+const DEFAULT_PARAMETERS: &str = include_str!("../../../storage-proofs/parameters.json");
 const IPGET_VERSION: &str = "v0.4.0";
 
 struct FetchProgress<R> {

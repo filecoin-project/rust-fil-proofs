@@ -32,7 +32,9 @@ use simplelog::{self, CombinedLogger, LevelFilter, TermLogger, TerminalMode, Wri
 use storage_proofs::compound_proof::{self, CompoundProof};
 use storage_proofs::hasher::Sha256Hasher;
 use storage_proofs::merkle::MerkleTreeTrait;
-use storage_proofs::parameter_cache::{self, CacheableParameters};
+use storage_proofs::parameter_cache::{
+    self, metadata_id, parameter_id, verifying_key_id, CacheableParameters,
+};
 use storage_proofs::porep::stacked::{
     PublicParams as PoRepPublicParams, StackedCircuit, StackedCompound, StackedDrg,
 };

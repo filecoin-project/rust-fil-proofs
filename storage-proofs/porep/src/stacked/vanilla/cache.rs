@@ -1,9 +1,13 @@
-use std::path::PathBuf;
+use std::collections::BTreeMap;
+use std::fs::File;
+use std::path::{Path, PathBuf};
 
 use anyhow::{bail, ensure, Context};
 use byteorder::{ByteOrder, LittleEndian};
-use log::info;
+use lazy_static::lazy_static;
+use log::{info, trace};
 use rayon::prelude::*;
+use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 use storage_proofs_core::{
@@ -13,6 +17,7 @@ use storage_proofs_core::{
     hasher::Hasher,
     parameter_cache::{with_exclusive_lock, LockedFile, ParameterSetMetadata, VERSION},
     settings,
+    util::NODE_SIZE,
 };
 
 use super::graph::{StackedGraph, DEGREE};
@@ -20,14 +25,31 @@ use super::graph::{StackedGraph, DEGREE};
 /// u32 = 4 bytes
 const NODE_BYTES: usize = 4;
 
+pub const PARENT_CACHE_DATA: &str = include_str!("../../../parent_cache.json");
+
+pub type ParentCacheDataMap = BTreeMap<String, ParentCacheData>;
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct ParentCacheData {
+    pub digest: String,
+    pub sector_size: u64,
+}
+
+lazy_static! {
+    pub static ref PARENT_CACHE: ParentCacheDataMap =
+        serde_json::from_str(PARENT_CACHE_DATA).expect("Invalid parent_cache.json");
+}
+
 // StackedGraph will hold two different (but related) `ParentCache`,
 #[derive(Debug)]
 pub struct ParentCache {
     /// Disk path for the cache.
-    path: PathBuf,
+    pub path: PathBuf,
     /// The total number of cache entries.
     num_cache_entries: u32,
     cache: CacheData,
+    pub sector_size: usize,
+    pub digest: String,
 }
 
 #[derive(Debug)]
@@ -134,23 +156,99 @@ impl ParentCache {
     {
         let path = cache_path(cache_entries, graph);
         if path.exists() {
-            Self::open(len, cache_entries, path)
+            Self::open(len, cache_entries, graph, path)
         } else {
             Self::generate(len, cache_entries, graph, path)
         }
     }
 
-    /// Opens an existing cache from disk.
-    pub fn open(len: u32, cache_entries: u32, path: PathBuf) -> Result<Self> {
-        info!("parent cache: opening {}", path.display());
+    /// Opens an existing cache from disk.  If the verify_cache option
+    /// is enabled, we rehash the data and compare with the persisted
+    /// hash file.  If the persisted hash file does not exist, we
+    /// re-generate the cache file, which will create it.
+    pub fn open<H, G>(
+        len: u32,
+        cache_entries: u32,
+        graph: &StackedGraph<H, G>,
+        path: PathBuf,
+    ) -> Result<Self>
+    where
+        H: Hasher,
+        G: Graph<H> + ParameterSetMetadata + Send + Sync,
+    {
+        // Check if current entry is part of the official manifest.
+        // If not, we're dealing with some kind of test sector.
+        let (parent_cache_data, verify_cache, mut digest_hex) = match get_parent_cache_data(&path) {
+            None => {
+                info!("[open] Parent cache data is not supported in production");
+                (None, false, "".to_string())
+            }
+            Some(pcd) => (
+                Some(pcd),
+                settings::SETTINGS
+                    .lock()
+                    .expect("verify_cache settings lock failure")
+                    .verify_cache,
+                pcd.digest.clone(),
+            ),
+        };
 
-        let cache = CacheData::open(0, len, &path)?;
-        info!("parent cache: opened");
+        info!(
+            "parent cache: opening {}, verify enabled: {}",
+            path.display(),
+            verify_cache
+        );
+
+        if verify_cache {
+            let parent_cache_data = parent_cache_data.expect("parent_cache_data failure");
+
+            // Always check all of the data for integrity checks, even
+            // if we're only opening a portion of it.
+            let mut hasher = Sha256::new();
+            info!("[open] parent cache: calculating consistency digest");
+            let file = File::open(&path)?;
+            let data = unsafe {
+                memmap::MmapOptions::new()
+                    .map(&file)
+                    .with_context(|| format!("could not mmap path={}", path.display()))?
+            };
+            hasher.update(&data);
+            drop(data);
+
+            let hash = hasher.finalize();
+            info!("[open] parent cache: calculated consistency digest");
+
+            digest_hex = hash.iter().map(|x| format!("{:01$x}", x, 2)).collect();
+
+            trace!(
+                "[{}] Comparing {:?} to {:?}",
+                graph.size() * NODE_SIZE,
+                digest_hex,
+                parent_cache_data.digest
+            );
+            if digest_hex == parent_cache_data.digest {
+                info!("[open] parent cache: cache is verified!");
+            } else {
+                info!(
+                    "[!!!] Parent cache digest mismatch detected.  Regenerating {}",
+                    path.display()
+                );
+                ensure!(
+                    Self::generate(len, graph.size() as u32, graph, path.clone()).is_ok(),
+                    "Failed to generate parent cache"
+                );
+
+                // Note that if we wanted the user to manually terminate after repeated
+                // generation attemps, we could recursively return Self::open(...) here.
+            }
+        }
 
         Ok(ParentCache {
-            cache,
+            cache: CacheData::open(0, len, &path)?,
             path,
             num_cache_entries: cache_entries,
+            sector_size: graph.size() * NODE_SIZE,
+            digest: digest_hex,
         })
     }
 
@@ -166,6 +264,8 @@ impl ParentCache {
         G: Graph<H> + ParameterSetMetadata + Send + Sync,
     {
         info!("parent cache: generating {}", path.display());
+        let mut digest_hex: String = "".to_string();
+        let sector_size = graph.size() * NODE_SIZE;
 
         with_exclusive_lock(&path, |file| {
             let cache_size = cache_entries as usize * NODE_BYTES * DEGREE;
@@ -194,6 +294,30 @@ impl ParentCache {
 
             info!("parent cache: generated");
             data.flush().context("failed to flush parent cache")?;
+
+            // Check if current entry is part of the official manifest and verify
+            // that what we just generated matches what we expect for this entry
+            // (if found). If not, we're dealing with some kind of test sector.
+            match get_parent_cache_data(&path) {
+                None => {
+                    info!("[generate] Parent cache data is not supported in production");
+                }
+                Some(pcd) => {
+                    info!("[generate] parent cache: generating consistency digest");
+                    let mut hasher = Sha256::new();
+                    hasher.update(&data);
+                    let hash = hasher.finalize();
+                    info!("[generate] parent cache: generated consistency digest");
+
+                    digest_hex = hash.iter().map(|x| format!("{:01$x}", x, 2)).collect();
+
+                    ensure!(
+                        digest_hex == pcd.digest,
+                        "Newly generated parent cache is invalid"
+                    );
+                }
+            };
+
             drop(data);
 
             info!("parent cache: written to disk");
@@ -204,6 +328,8 @@ impl ParentCache {
             cache: CacheData::open(0, len, &path)?,
             path,
             num_cache_entries: cache_entries,
+            sector_size,
+            digest: digest_hex,
         })
     }
 
@@ -242,6 +368,20 @@ fn parent_cache_dir_name() -> String {
         .expect("parent_cache settings lock failure")
         .parent_cache
         .clone()
+}
+
+fn parent_cache_id(path: &PathBuf) -> String {
+    Path::new(&path)
+        .file_stem()
+        .expect("parent_cache_id file_stem failure")
+        .to_str()
+        .expect("parent_cache_id to_str failure")
+        .to_string()
+}
+
+/// Get the correct parent cache data for a given cache id.
+fn get_parent_cache_data(path: &PathBuf) -> Option<&ParentCacheData> {
+    PARENT_CACHE.get(&parent_cache_id(path))
 }
 
 fn cache_path<H, G>(cache_entries: u32, graph: &StackedGraph<H, G>) -> PathBuf
