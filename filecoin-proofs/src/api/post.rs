@@ -537,17 +537,7 @@ pub fn generate_single_vanilla_proof<Tree: 'static + MerkleTreeTrait>(
     let comm_c = replica.safe_comm_c();
     let comm_r_last = replica.safe_comm_r_last();
 
-    // There is only enough information in the arguments to generate a
-    // single vanilla proof, so the behaviour is unexpected if the
-    // sector_count provided is > 1.
-    let sector_count = post_config.sector_count;
-    ensure!(
-        post_config.sector_count == 1,
-        "invalid post config sector size ({} required)",
-        sector_count
-    );
-
-    let mut priv_sectors = Vec::with_capacity(sector_count);
+    let mut priv_sectors = Vec::with_capacity(1);
     priv_sectors.push(fallback::PrivateSector {
         tree,
         comm_c,
