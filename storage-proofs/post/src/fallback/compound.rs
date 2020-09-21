@@ -50,7 +50,6 @@ impl<'a, Tree: 'static + MerkleTreeTrait>
         };
 
         let num_sectors_per_chunk = pub_params.sector_count;
-
         let partition_index = partition_k.unwrap_or(0);
 
         let sectors = pub_inputs
@@ -59,25 +58,22 @@ impl<'a, Tree: 'static + MerkleTreeTrait>
             .nth(partition_index)
             .ok_or_else(|| anyhow!("invalid number of sectors/partition index"))?;
 
-        for (i, sector) in sectors.iter().enumerate() {
+        for sector in sectors.iter() {
             // 1. Inputs for verifying comm_r = H(comm_c || comm_r_last)
             inputs.push(sector.comm_r.into());
 
             // 2. Inputs for verifying inclusion paths
-            for n in 0..pub_params.challenge_count {
-                let challenge_index = ((partition_index * pub_params.sector_count + i)
-                    * pub_params.challenge_count
-                    + n) as u64;
-                let challenged_leaf_start = fallback::generate_leaf_challenge(
+            for challenge_index in 0..pub_params.challenge_count {
+                let challenged_leaf = fallback::generate_leaf_challenge(
                     &pub_params,
                     pub_inputs.randomness,
                     sector.id.into(),
-                    challenge_index,
+                    challenge_index as u64,
                 );
 
                 let por_pub_inputs = por::PublicInputs {
                     commitment: None,
-                    challenge: challenged_leaf_start as usize,
+                    challenge: challenged_leaf as usize,
                 };
                 let por_inputs = PoRCompound::<Tree>::generate_public_inputs(
                     &por_pub_inputs,

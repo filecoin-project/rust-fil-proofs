@@ -485,21 +485,13 @@ pub fn generate_fallback_sector_challenges<Tree: 'static + MerkleTreeTrait>(
             .nth(partition_index)
             .ok_or_else(|| anyhow!("invalid number of sectors/partition index"))?;
 
-        for (i, sector) in sectors.iter().enumerate() {
-            let mut challenges = Vec::new();
-
-            for n in 0..post_config.challenge_count {
-                let challenge_index = ((partition_index * post_config.sector_count + i)
-                    * post_config.challenge_count
-                    + n) as u64;
-                let challenged_leaf = fallback::generate_leaf_challenge(
-                    &public_params,
-                    randomness_safe,
-                    u64::from(*sector),
-                    challenge_index,
-                );
-                challenges.push(challenged_leaf);
-            }
+        for sector in sectors.iter() {
+            let challenges = fallback::generate_leaf_challenges(
+                &public_params,
+                randomness_safe,
+                u64::from(*sector),
+                post_config.challenge_count,
+            );
 
             sector_challenges.insert(*sector, challenges);
         }
@@ -594,7 +586,6 @@ pub fn verify_winning_post<Tree: 'static + MerkleTreeTrait>(
         as_safe_commitment(&prover_id, "prover_id")?;
 
     let vanilla_params = winning_post_setup_params(&post_config)?;
-    let param_sector_count = vanilla_params.sector_count;
 
     let setup_params = compound_proof::SetupParams {
         vanilla_params,
@@ -604,18 +595,18 @@ pub fn verify_winning_post<Tree: 'static + MerkleTreeTrait>(
     let pub_params: compound_proof::PublicParams<fallback::FallbackPoSt<Tree>> =
         fallback::FallbackPoStCompound::setup(&setup_params)?;
 
-    let mut pub_sectors = Vec::with_capacity(param_sector_count);
-    for _ in 0..param_sector_count {
-        for (sector_id, replica) in replicas.iter() {
+    let pub_sectors: Vec<_> = replicas
+        .iter()
+        .map(|(sector_id, replica)| {
             let comm_r = replica.safe_comm_r().with_context(|| {
-                format!("verify_winning_post: safe_comm_r failed: {:?}", sector_id)
+                format!("verify_window_post: safe_comm_r failed: {:?}", sector_id)
             })?;
-            pub_sectors.push(fallback::PublicSector {
+            Ok(fallback::PublicSector {
                 id: *sector_id,
                 comm_r,
-            });
-        }
-    }
+            })
+        })
+        .collect::<Result<_>>()?;
 
     let pub_inputs = fallback::PublicInputs {
         randomness: randomness_safe,
