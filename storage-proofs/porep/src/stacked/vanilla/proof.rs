@@ -1396,14 +1396,15 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
 mod tests {
     use super::*;
 
-    use ff::Field;
-    use paired::bls12_381::Fr;
+    use ff::{Field, PrimeField};
+    use paired::bls12_381::{Fr, FrRepr};
     use rand::{Rng, SeedableRng};
     use rand_xorshift::XorShiftRng;
+    use storage_proofs_core::hasher::poseidon::PoseidonHasher;
     use storage_proofs_core::{
         drgraph::BASE_DEGREE,
         fr32::fr_into_bytes,
-        hasher::{Blake2sHasher, PedersenHasher, PoseidonHasher, Sha256Hasher},
+        hasher::{Blake2sHasher, PedersenHasher, Sha256Hasher},
         merkle::MerkleTreeTrait,
         proof::ProofScheme,
         table_tests,
@@ -1788,5 +1789,87 @@ mod tests {
             Blake2sHasher,
         >::setup(&sp)
         .expect("setup failed");
+    }
+
+    #[test]
+    fn test_generate_labels() {
+        let layers = 11;
+        let nodes_2k = 1 << 11;
+        let nodes_4k = 1 << 12;
+        let replica_id = [9u8; 32];
+        let porep_id = [123; 32];
+        test_generate_labels_aux(
+            nodes_2k,
+            layers,
+            replica_id,
+            porep_id,
+            Fr::from_repr(FrRepr([
+                0x1a4017052cbe1c4a,
+                0x446354db91e96d8e,
+                0xbc864a95454eba0c,
+                0x094cf219d72cad06,
+            ]))
+            .unwrap(),
+        );
+
+        test_generate_labels_aux(
+            nodes_4k,
+            layers,
+            replica_id,
+            porep_id,
+            Fr::from_repr(FrRepr([
+                0x0a6917a59c51198b,
+                0xd2edc96e3717044a,
+                0xf438a1131f907206,
+                0x084f42888ca2342c,
+            ]))
+            .unwrap(),
+        );
+    }
+
+    fn test_generate_labels_aux(
+        sector_size: usize,
+        layers: usize,
+        replica_id: [u8; 32],
+        porep_id: [u8; 32],
+        expected_last_label: Fr,
+    ) {
+        let nodes = sector_size / NODE_SIZE;
+
+        let cache_dir = tempfile::tempdir().expect("tempdir failure");
+        let config = StoreConfig::new(
+            cache_dir.path(),
+            CacheKey::CommDTree.to_string(),
+            nodes.trailing_zeros() as usize,
+        );
+
+        let graph = StackedBucketGraph::<PoseidonHasher>::new(
+            None,
+            nodes,
+            BASE_DEGREE,
+            EXP_DEGREE,
+            porep_id,
+        )
+        .unwrap();
+
+        let unused_layer_challenges = LayerChallenges::new(layers, 0);
+
+        let (labels, _) = StackedDrg::<
+            // Although not generally correct for every size, the hasher shape is not used,
+            // so for purposes of testing label creation, it is safe to supply a dummy.
+            DiskTree<PoseidonHasher, typenum::U8, typenum::U8, typenum::U2>,
+            Sha256Hasher,
+        >::generate_labels(
+            &graph,
+            &unused_layer_challenges,
+            &<PoseidonHasher as Hasher>::Domain::try_from_bytes(&replica_id).unwrap(),
+            config,
+        )
+        .unwrap();
+
+        let final_labels = labels.labels_for_last_layer().unwrap();
+        let last_label = final_labels.read_at(nodes - 1).unwrap();
+
+        assert_eq!(expected_last_label.into_repr(), last_label.0);
     }
 }
