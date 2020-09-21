@@ -7,7 +7,7 @@ use std::sync::{mpsc, Arc, RwLock};
 use anyhow::Context;
 use bincode::deserialize;
 use generic_array::typenum::{self, Unsigned};
-use log::{info, trace};
+use log::{info, trace, warn};
 use merkletree::merkle::Element;
 use merkletree::merkle::{
     get_merkle_tree_cache_size, get_merkle_tree_leafs, get_merkle_tree_len,
@@ -307,6 +307,9 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
 
         let mut states = Vec::with_capacity(layers);
         for (layer, label_config) in (1..=layers).zip(label_configs) {
+            // Clear possible left over tmp files
+            Self::remove_tmp_layer(&label_config);
+
             // Check if this layer is already on disk
             let generated = Self::is_layer_written(graph, &label_config).unwrap_or_default();
             if generated {
@@ -353,6 +356,9 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
             info!("generating layer: {}", layer);
             if layer_state.generated {
                 info!("skipping layer {}, already generated", layer);
+
+                // load the already generated layer into exp_labels
+                Self::read_layer(&layer_state.config, &mut exp_labels)?;
                 continue;
             }
 
@@ -420,6 +426,26 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         std::fs::rename(tmp_data_path, data_path).context("failed to rename tmp data")?;
 
         Ok(())
+    }
+
+    /// Reads a layer from disk, into the provided slice.
+    fn read_layer(config: &StoreConfig, mut data: &mut [u8]) -> Result<()> {
+        let data_path = StoreConfig::data_path(&config.path, &config.id);
+        let file = std::fs::File::open(data_path).context("failed to open layer")?;
+        let mut buffered = std::io::BufReader::new(file);
+        std::io::copy(&mut buffered, &mut data).context("failed to read layer")?;
+
+        Ok(())
+    }
+
+    fn remove_tmp_layer(config: &StoreConfig) {
+        let data_path = StoreConfig::data_path(&config.path, &config.id);
+        let tmp_data_path = data_path.with_extension(".tmp");
+        if tmp_data_path.exists() {
+            if let Err(err) = std::fs::remove_file(tmp_data_path) {
+                warn!("failed to delete tmp file: {}", err);
+            }
+        }
     }
 
     /// Checks if the given layer is already written and of the right size.
@@ -1634,9 +1660,7 @@ mod tests {
     }
 
     fn test_extract_all<Tree: 'static + MerkleTreeTrait>() {
-        // femme::pretty::Logger::new()
-        //     .start(log::LevelFilter::Trace)
-        //     .ok();
+        // pretty_env_logger::try_init();
 
         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
         let replica_id: <Tree::Hasher as Hasher>::Domain =
@@ -1682,7 +1706,7 @@ mod tests {
             (mmapped_data.as_mut()).into(),
             None,
             config.clone(),
-            replica_path,
+            replica_path.clone(),
         )
         .expect("replication failed");
 
@@ -1696,13 +1720,32 @@ mod tests {
             config.clone(),
         )
         .expect("label generation failed");
-        for state in label_states {
+        for state in &label_states {
             assert!(state.generated);
         }
+        // delete last 2 layers
+        let off = label_states.len() - 3;
+        for label_state in &label_states[off..] {
+            let config = &label_state.config;
+            let data_path = StoreConfig::data_path(&config.path, &config.id);
+            std::fs::remove_file(data_path).expect("failed to delete layer cache");
+        }
 
-        let mut copied = vec![0; data.len()];
-        copied.copy_from_slice(&mmapped_data);
-        assert_ne!(data, copied, "replication did not change data");
+        let (_, label_states) = StackedDrg::<Tree, Blake2sHasher>::generate_labels_for_encoding(
+            &pp.graph,
+            &layer_challenges,
+            &replica_id,
+            config.clone(),
+        )
+        .expect("label generation failed");
+        for state in &label_states[..off] {
+            assert!(state.generated);
+        }
+        for state in &label_states[off..] {
+            assert!(!state.generated);
+        }
+
+        assert_ne!(data, &mmapped_data[..], "replication did not change data");
 
         let decoded_data = StackedDrg::<Tree, Blake2sHasher>::extract_all(
             &pp,
