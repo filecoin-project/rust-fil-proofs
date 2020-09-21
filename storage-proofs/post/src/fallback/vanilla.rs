@@ -379,10 +379,7 @@ impl<'a, Tree: 'a + MerkleTreeTrait> ProofScheme<'a> for FallbackPoSt<'a, Tree> 
 
             let mut proofs = Vec::with_capacity(num_sectors_per_chunk);
 
-            for (i, (pub_sector, priv_sector)) in pub_sectors_chunk
-                .iter()
-                .zip(priv_sectors_chunk.iter())
-                .enumerate()
+            for (pub_sector, priv_sector) in pub_sectors_chunk.iter().zip(priv_sectors_chunk.iter())
             {
                 let tree = priv_sector.tree;
                 let sector_id = pub_sector.id;
@@ -403,24 +400,19 @@ impl<'a, Tree: 'a + MerkleTreeTrait> ProofScheme<'a> for FallbackPoSt<'a, Tree> 
                 let mut inclusion_proofs = Vec::new();
                 for proof_or_fault in (0..pub_params.challenge_count)
                     .into_par_iter()
-                    .map(|n| {
-                        let challenge_index = ((j * num_sectors_per_chunk + i)
-                            * pub_params.challenge_count
-                            + n) as u64;
-                        let challenged_leaf_start =
-                            generate_leaf_challenge_inner::<<Tree::Hasher as Hasher>::Domain>(
-                                challenge_hasher.clone(),
-                                pub_params,
-                                challenge_index,
-                            );
-
-                        let proof = tree.gen_cached_proof(
-                            challenged_leaf_start as usize,
-                            Some(rows_to_discard),
+                    .map(|challenge_index| {
+                        let challenged_leaf = generate_leaf_challenge(
+                            pub_params,
+                            pub_inputs.randomness,
+                            sector_id.into(),
+                            challenge_index as u64,
                         );
+
+                        let proof =
+                            tree.gen_cached_proof(challenged_leaf as usize, Some(rows_to_discard));
                         match proof {
                             Ok(proof) => {
-                                if proof.validate(challenged_leaf_start as usize)
+                                if proof.validate(challenged_leaf as usize)
                                     && proof.root() == priv_sector.comm_r_last
                                     && pub_sector.comm_r
                                         == <Tree::Hasher as Hasher>::Function::hash2(
@@ -508,11 +500,7 @@ impl<'a, Tree: 'a + MerkleTreeTrait> ProofScheme<'a> for FallbackPoSt<'a, Tree> 
                 num_sectors_per_chunk,
             );
 
-            for (i, (pub_sector, sector_proof)) in pub_sectors_chunk
-                .iter()
-                .zip(proof.sectors.iter())
-                .enumerate()
-            {
+            for (pub_sector, sector_proof) in pub_sectors_chunk.iter().zip(proof.sectors.iter()) {
                 let sector_id = pub_sector.id;
                 let comm_r = &pub_sector.comm_r;
                 let comm_c = sector_proof.comm_c;
