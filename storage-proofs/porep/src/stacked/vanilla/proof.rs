@@ -1766,8 +1766,9 @@ mod tests {
 
     #[test]
     fn test_resume_seal() {
+        // pretty_env_logger::try_init().ok();
+
         type Tree = DiskTree<PoseidonHasher, typenum::U8, typenum::U8, typenum::U2>;
-        pretty_env_logger::try_init().ok();
 
         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
         let replica_id = <PoseidonHasher as Hasher>::Domain::random(rng);
@@ -1809,6 +1810,18 @@ mod tests {
 
         let pp = StackedDrg::<Tree, Blake2sHasher>::setup(&sp).expect("setup failed");
 
+        let clear_temp = || {
+            for entry in glob::glob(&(cache_dir.path().to_string_lossy() + "/*.dat")).unwrap() {
+                let entry = entry.unwrap();
+                if entry.is_file() {
+                    // delete everything except the data-layers
+                    if !entry.to_string_lossy().contains("data-layer") {
+                        std::fs::remove_file(entry).unwrap();
+                    }
+                }
+            }
+        };
+
         // first replicaton
         StackedDrg::<Tree, Blake2sHasher>::replicate(
             &pp,
@@ -1819,6 +1832,7 @@ mod tests {
             replica_path1.clone(),
         )
         .expect("replication failed 1");
+        clear_temp();
 
         // replicate a second time
         StackedDrg::<Tree, Blake2sHasher>::replicate(
@@ -1830,6 +1844,7 @@ mod tests {
             replica_path2.clone(),
         )
         .expect("replication failed 2");
+        clear_temp();
 
         // delete last 2 layers
         let (_, label_states) = StackedDrg::<Tree, Blake2sHasher>::generate_labels_for_encoding(
@@ -1856,6 +1871,7 @@ mod tests {
             replica_path3.clone(),
         )
         .expect("replication failed 3");
+        clear_temp();
 
         assert_ne!(data, &mmapped_data1[..], "replication did not change data");
 
