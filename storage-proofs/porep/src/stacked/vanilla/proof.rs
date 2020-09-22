@@ -1106,7 +1106,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                     i + 1,
                     tree_count
                 );
-                LCTree::<Tree::Hasher, Tree::Arity, typenum::U0, typenum::U0>::from_par_iter_with_config(encoded_data, config.clone())?;
+                LCTree::<Tree::Hasher, Tree::Arity, typenum::U0, typenum::U0>::from_par_iter_with_config(encoded_data, config.clone()).with_context(|| format!("failed tree_r_last CPU {}/{}", i + 1, tree_count))?;
 
                 start = end;
                 end += size / tree_count;
@@ -1132,6 +1132,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         // Generate key layers.
         let labels = measure_op(EncodeWindowTimeAll, || {
             Self::generate_labels_for_encoding(graph, layer_challenges, replica_id, config.clone())
+                .context("failed to generate labels")
         })?
         .0;
 
@@ -1144,6 +1145,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
             replica_path,
             labels,
         )
+        .context("failed to transform")
     }
 
     pub(crate) fn transform_and_replicate_layers_inner(
@@ -1219,7 +1221,8 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         tree_c_config.rows_to_discard =
             default_rows_to_discard(nodes_count, Tree::Arity::to_usize());
 
-        let labels = LabelsCache::<Tree>::new(&label_configs)?;
+        let labels =
+            LabelsCache::<Tree>::new(&label_configs).context("failed to create labels cache")?;
         let configs = split_config(tree_c_config.clone(), tree_count)?;
 
         let tree_c_root = match layers {
@@ -1292,6 +1295,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                 replica_path.clone(),
                 &labels,
             )
+            .context("failed to generate tree_r_last")
         })?;
         info!("tree_r_last done");
 
@@ -1751,6 +1755,117 @@ mod tests {
             &pp,
             &replica_id,
             mmapped_data.as_mut(),
+            Some(config),
+        )
+        .expect("failed to extract data");
+
+        assert_eq!(data, decoded_data);
+
+        cache_dir.close().expect("Failed to remove cache dir");
+    }
+
+    #[test]
+    fn test_resume_seal() {
+        type Tree = DiskTree<PoseidonHasher, typenum::U8, typenum::U8, typenum::U2>;
+        pretty_env_logger::try_init().ok();
+
+        let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
+        let replica_id = <PoseidonHasher as Hasher>::Domain::random(rng);
+        let nodes = 64 * get_base_tree_count::<Tree>();
+
+        let data: Vec<u8> = (0..nodes)
+            .flat_map(|_| {
+                let v = <PoseidonHasher as Hasher>::Domain::random(rng);
+                v.into_bytes()
+            })
+            .collect();
+
+        // MT for original data is always named tree-d, and it will be
+        // referenced later in the process as such.
+        let cache_dir = tempfile::tempdir().expect("tempdir failure");
+        let config = StoreConfig::new(
+            cache_dir.path(),
+            CacheKey::CommDTree.to_string(),
+            default_rows_to_discard(nodes, BINARY_ARITY),
+        );
+
+        // Generate a replica path.
+        let replica_path1 = cache_dir.path().join("replica-path-1");
+        let replica_path2 = cache_dir.path().join("replica-path-2");
+        let replica_path3 = cache_dir.path().join("replica-path-3");
+        let mut mmapped_data1 = setup_replica(&data, &replica_path1);
+        let mut mmapped_data2 = setup_replica(&data, &replica_path2);
+        let mut mmapped_data3 = setup_replica(&data, &replica_path3);
+
+        let layer_challenges = LayerChallenges::new(DEFAULT_STACKED_LAYERS, 5);
+
+        let sp = SetupParams {
+            nodes,
+            degree: BASE_DEGREE,
+            expansion_degree: EXP_DEGREE,
+            porep_id: [32; 32],
+            layer_challenges: layer_challenges.clone(),
+        };
+
+        let pp = StackedDrg::<Tree, Blake2sHasher>::setup(&sp).expect("setup failed");
+
+        // first replicaton
+        StackedDrg::<Tree, Blake2sHasher>::replicate(
+            &pp,
+            &replica_id,
+            (mmapped_data1.as_mut()).into(),
+            None,
+            config.clone(),
+            replica_path1.clone(),
+        )
+        .expect("replication failed 1");
+
+        // replicate a second time
+        StackedDrg::<Tree, Blake2sHasher>::replicate(
+            &pp,
+            &replica_id,
+            (mmapped_data2.as_mut()).into(),
+            None,
+            config.clone(),
+            replica_path2.clone(),
+        )
+        .expect("replication failed 2");
+
+        // delete last 2 layers
+        let (_, label_states) = StackedDrg::<Tree, Blake2sHasher>::generate_labels_for_encoding(
+            &pp.graph,
+            &layer_challenges,
+            &replica_id,
+            config.clone(),
+        )
+        .expect("label generation failed");
+        let off = label_states.len() - 3;
+        for label_state in &label_states[off..] {
+            let config = &label_state.config;
+            let data_path = StoreConfig::data_path(&config.path, &config.id);
+            std::fs::remove_file(data_path).expect("failed to delete layer cache");
+        }
+
+        // replicate a third time
+        StackedDrg::<Tree, Blake2sHasher>::replicate(
+            &pp,
+            &replica_id,
+            (mmapped_data3.as_mut()).into(),
+            None,
+            config.clone(),
+            replica_path3.clone(),
+        )
+        .expect("replication failed 3");
+
+        assert_ne!(data, &mmapped_data1[..], "replication did not change data");
+
+        assert_eq!(&mmapped_data1[..], &mmapped_data2[..]);
+        assert_eq!(&mmapped_data2[..], &mmapped_data3[..]);
+
+        let decoded_data = StackedDrg::<Tree, Blake2sHasher>::extract_all(
+            &pp,
+            &replica_id,
+            mmapped_data1.as_mut(),
             Some(config),
         )
         .expect("failed to extract data");
