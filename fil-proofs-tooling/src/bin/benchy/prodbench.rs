@@ -180,6 +180,7 @@ pub fn run(
 
     let sector_size = SectorSize(inputs.sector_size_bytes());
     let arbitrary_porep_id = [123; 32];
+    let api_version = 1;
 
     assert!(inputs.num_sectors > 0, "Missing num_sectors");
 
@@ -188,6 +189,7 @@ pub fn run(
         inputs.num_sectors as usize,
         only_add_piece,
         arbitrary_porep_id,
+        api_version,
     );
 
     if only_add_piece || only_replicate {
@@ -318,11 +320,13 @@ fn generate_params(i: &ProdbenchInputs) {
         &sector_size, &partitions
     );
     let dummy_porep_id = [0; 32];
+    let api_version = 1;
 
     cache_porep_params(PoRepConfig {
         sector_size,
         partitions,
         porep_id: dummy_porep_id,
+        api_version,
     });
 }
 

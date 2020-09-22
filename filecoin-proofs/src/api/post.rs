@@ -273,6 +273,7 @@ pub fn generate_winning_post_with_vanilla<Tree: 'static + MerkleTreeTrait>(
         vanilla_params,
         partitions: None,
         priority: post_config.priority,
+        api_version: post_config.api_version,
     };
     let pub_params: compound_proof::PublicParams<fallback::FallbackPoSt<Tree>> =
         fallback::FallbackPoStCompound::setup(&setup_params)?;
@@ -348,6 +349,7 @@ pub fn generate_winning_post<Tree: 'static + MerkleTreeTrait>(
         vanilla_params,
         partitions: None,
         priority: post_config.priority,
+        api_version: post_config.api_version,
     };
     let pub_params: compound_proof::PublicParams<fallback::FallbackPoSt<Tree>> =
         fallback::FallbackPoStCompound::setup(&setup_params)?;
@@ -466,6 +468,7 @@ pub fn generate_fallback_sector_challenges<Tree: 'static + MerkleTreeTrait>(
         sector_size: u64::from(post_config.sector_size),
         challenge_count: post_config.challenge_count,
         sector_count: post_config.sector_count,
+        api_version: post_config.api_version,
     };
 
     let mut sector_challenges: BTreeMap<SectorId, Vec<u64>> = BTreeMap::new();
@@ -600,6 +603,7 @@ pub fn verify_winning_post<Tree: 'static + MerkleTreeTrait>(
         vanilla_params,
         partitions: None,
         priority: false,
+        api_version: post_config.api_version,
     };
     let pub_params: compound_proof::PublicParams<fallback::FallbackPoSt<Tree>> =
         fallback::FallbackPoStCompound::setup(&setup_params)?;
@@ -820,6 +824,7 @@ pub fn generate_window_post_with_vanilla<Tree: 'static + MerkleTreeTrait>(
         vanilla_params,
         partitions,
         priority: post_config.priority,
+        api_version: post_config.api_version,
     };
 
     let partitions = match partitions {
@@ -890,6 +895,7 @@ pub fn generate_window_post<Tree: 'static + MerkleTreeTrait>(
         vanilla_params,
         partitions,
         priority: post_config.priority,
+        api_version: post_config.api_version,
     };
 
     let pub_params: compound_proof::PublicParams<fallback::FallbackPoSt<Tree>> =
@@ -976,6 +982,7 @@ pub fn verify_window_post<Tree: 'static + MerkleTreeTrait>(
         vanilla_params,
         partitions,
         priority: false,
+        api_version: post_config.api_version,
     };
     let pub_params: compound_proof::PublicParams<fallback::FallbackPoSt<Tree>> =
         fallback::FallbackPoStCompound::setup(&setup_params)?;

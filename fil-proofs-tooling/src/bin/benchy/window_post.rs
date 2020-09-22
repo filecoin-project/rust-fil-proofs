@@ -94,6 +94,7 @@ fn get_porep_config(sector_size: u64) -> PoRepConfig {
                 .expect("unknown sector size"),
         ),
         porep_id: arbitrary_porep_id,
+        api_version: 1,
     }
 }
 
@@ -467,6 +468,7 @@ pub fn run_window_post_bench<Tree: 'static + MerkleTreeTrait>(
             .expect("unknown sector size"),
         typ: PoStType::Window,
         priority: true,
+        api_version: 1,
     };
 
     let gen_window_post_measurement = measure(|| {

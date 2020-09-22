@@ -5,6 +5,7 @@ pub struct SectorClass {
     pub sector_size: SectorSize,
     pub partitions: PoRepProofPartitions,
     pub porep_id: [u8; 32],
+    pub api_version: usize,
 }
 
 impl From<SectorClass> for PoRepConfig {
@@ -13,11 +14,13 @@ impl From<SectorClass> for PoRepConfig {
             sector_size,
             partitions,
             porep_id,
+            api_version,
         } = x;
         PoRepConfig {
             sector_size,
             partitions,
             porep_id,
+            api_version
         }
     }
 }

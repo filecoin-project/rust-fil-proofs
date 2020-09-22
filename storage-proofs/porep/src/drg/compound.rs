@@ -356,6 +356,7 @@ mod tests {
             },
             partitions: None,
             priority: false,
+            api_version: 1,
         };
 
         let public_params =
@@ -398,6 +399,7 @@ mod tests {
             },
             partitions: None,
             priority: false,
+            api_version: 1,
         };
 
         let public_params =

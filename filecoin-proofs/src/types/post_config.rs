@@ -14,6 +14,7 @@ pub struct PoStConfig {
     pub typ: PoStType,
     /// High priority (always runs on GPU) == true
     pub priority: bool,
+    pub api_version: usize,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

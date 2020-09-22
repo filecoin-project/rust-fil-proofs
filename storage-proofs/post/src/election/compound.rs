@@ -208,6 +208,7 @@ mod tests {
             },
             partitions: None,
             priority: true,
+            api_version: 1,
         };
 
         let mut sectors: Vec<SectorId> = Vec::new();

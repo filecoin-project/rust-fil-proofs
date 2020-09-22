@@ -51,6 +51,7 @@ pub fn winning_post_setup_params(post_config: &PoStConfig) -> Result<WinningPost
         sector_size: post_config.padded_sector_size().into(),
         challenge_count: param_challenge_count,
         sector_count: param_sector_count,
+        api_version: post_config.api_version,
     })
 }
 
@@ -65,6 +66,7 @@ pub fn window_post_setup_params(post_config: &PoStConfig) -> WindowPostSetupPara
         sector_size: post_config.padded_sector_size().into(),
         challenge_count: post_config.challenge_count,
         sector_count: post_config.sector_count,
+        api_version: post_config.api_version,
     }
 }
 
@@ -150,6 +152,7 @@ mod tests {
             challenge_count: 66,
             sector_count: 1,
             sector_size: 2048u64.into(),
+            api_version: 1,
         };
 
         let params =

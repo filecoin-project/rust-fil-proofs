@@ -28,6 +28,8 @@ pub struct SetupParams {
     pub challenge_count: usize,
     /// Number of challenged sectors.
     pub sector_count: usize,
+    /// API version (introduced as v2))
+    pub api_version: usize,
 }
 
 #[derive(Debug, Clone)]
@@ -38,6 +40,8 @@ pub struct PublicParams {
     pub challenge_count: usize,
     /// Number of challenged sectors.
     pub sector_count: usize,
+    /// API version (introduced as v2))
+    pub api_version: usize,
 }
 
 #[derive(Debug, Default)]
@@ -304,6 +308,7 @@ impl<'a, Tree: 'a + MerkleTreeTrait> ProofScheme<'a> for FallbackPoSt<'a, Tree> 
             sector_size: sp.sector_size,
             challenge_count: sp.challenge_count,
             sector_count: sp.sector_count,
+            api_version: sp.api_version,
         })
     }
 
@@ -601,6 +606,7 @@ mod tests {
             sector_size: sector_size as u64,
             challenge_count: 10,
             sector_count,
+            api_version: 1,
         };
 
         let randomness = <Tree::Hasher as Hasher>::Domain::random(rng);
@@ -675,6 +681,7 @@ mod tests {
             sector_size: sector_size as u64,
             challenge_count: 10,
             sector_count,
+            api_version: 1,
         };
 
         let randomness = <Tree::Hasher as Hasher>::Domain::random(rng);

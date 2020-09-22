@@ -20,6 +20,7 @@ pub struct SetupParams<'a, S: ProofScheme<'a>> {
     pub partitions: Option<usize>,
     /// High priority (always runs on GPU) == true
     pub priority: bool,
+    pub api_version: usize,
 }
 
 #[derive(Clone)]
@@ -27,6 +28,7 @@ pub struct PublicParams<'a, S: ProofScheme<'a>> {
     pub vanilla_params: S::PublicParams,
     pub partitions: Option<usize>,
     pub priority: bool,
+    pub api_version: usize,
 }
 
 /// CircuitComponent exists so parent components can pass private inputs to their subcomponents
@@ -55,6 +57,7 @@ where
             vanilla_params: S::setup(&sp.vanilla_params)?,
             partitions: sp.partitions,
             priority: sp.priority,
+            api_version: sp.api_version,
         })
     }
 

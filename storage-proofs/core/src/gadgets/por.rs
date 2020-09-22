@@ -504,6 +504,7 @@ mod tests {
             },
             partitions: None,
             priority: false,
+            api_version: 1,
         };
         let public_params = PoRCompound::<Tree>::setup(&setup_params).expect("setup failed");
 
@@ -826,6 +827,7 @@ mod tests {
                 },
                 partitions: None,
                 priority: false,
+                api_version: 1,
             };
             let public_params =
                 PoRCompound::<ResTree<Tree>>::setup(&setup_params).expect("setup failed");

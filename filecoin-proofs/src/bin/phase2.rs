@@ -303,6 +303,7 @@ fn blank_sdr_poseidon_params<Tree: MerkleTreeTrait>(sector_size: u64) -> PoRepPu
         sector_size: SectorSize(sector_size),
         partitions: PoRepProofPartitions(n_partitions),
         porep_id: [0; 32],
+        api_version: 1,
     };
 
     let setup_params = compound_proof::SetupParams {
@@ -314,6 +315,7 @@ fn blank_sdr_poseidon_params<Tree: MerkleTreeTrait>(sector_size: u64) -> PoRepPu
         .expect("failed to setup params"),
         partitions: Some(usize::from(PoRepProofPartitions::from(porep_config))),
         priority: false,
+        api_version: 1,
     };
 
     let public_params = <StackedCompound<Tree, Sha256Hasher> as CompoundProof<
@@ -368,6 +370,7 @@ fn blank_winning_post_poseidon_params<Tree: 'static + MerkleTreeTrait>(
         sector_count: WINNING_POST_SECTOR_COUNT,
         typ: PoStType::Winning,
         priority: false,
+        api_version: 1,
     };
 
     winning_post_public_params::<Tree>(&post_config).expect("winning post public params failed")
@@ -386,6 +389,7 @@ fn blank_window_post_poseidon_params<Tree: 'static + MerkleTreeTrait>(
             .expect("post config sector count get failure"),
         typ: PoStType::Window,
         priority: false,
+        api_version: 1,
     };
 
     window_post_public_params::<Tree>(&post_config).expect("window post public params failed")

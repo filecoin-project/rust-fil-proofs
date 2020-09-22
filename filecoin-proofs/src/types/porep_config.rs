@@ -12,6 +12,7 @@ pub struct PoRepConfig {
     pub sector_size: SectorSize,
     pub partitions: PoRepProofPartitions,
     pub porep_id: [u8; 32],
+    pub api_version: usize,
 }
 
 impl From<PoRepConfig> for PaddedBytesAmount {

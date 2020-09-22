@@ -586,6 +586,7 @@ mod tests {
             },
             partitions: Some(partition_count),
             priority: false,
+            api_version: 1,
         };
 
         // MT for original data is always named tree-d, and it will be

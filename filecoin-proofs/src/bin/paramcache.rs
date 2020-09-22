@@ -186,6 +186,7 @@ fn generate_params_post(sector_size: u64) {
             sector_count: WINNING_POST_SECTOR_COUNT,
             typ: PoStType::Winning,
             priority: true,
+            api_version: 1,
         }
     );
 
@@ -202,6 +203,7 @@ fn generate_params_post(sector_size: u64) {
                 .expect("unknown sector size"),
             typ: PoStType::Window,
             priority: true,
+            api_version: 1,
         }
     );
 }
@@ -220,6 +222,7 @@ fn generate_params_porep(sector_size: u64) {
                     .expect("unknown sector size"),
             ),
             porep_id: [0; 32],
+            api_version: 1,
         }
     );
 }

@@ -112,6 +112,7 @@ where
         )?,
         partitions: Some(usize::from(PoRepProofPartitions::from(porep_config))),
         priority: false,
+        api_version: porep_config.api_version,
     };
 
     let compound_public_params = <StackedCompound<Tree, DefaultPieceHasher> as CompoundProof<
@@ -271,6 +272,7 @@ where
         )?,
         partitions: Some(usize::from(PoRepProofPartitions::from(porep_config))),
         priority: false,
+        api_version: porep_config.api_version,
     };
 
     let compound_public_params = <StackedCompound<Tree, DefaultPieceHasher> as CompoundProof<
@@ -405,6 +407,7 @@ pub fn seal_commit_phase1<T: AsRef<Path>, Tree: 'static + MerkleTreeTrait>(
         )?,
         partitions: Some(usize::from(PoRepProofPartitions::from(porep_config))),
         priority: false,
+        api_version: porep_config.api_version,
     };
 
     let compound_public_params = <StackedCompound<Tree, DefaultPieceHasher> as CompoundProof<
@@ -488,6 +491,7 @@ pub fn seal_commit_phase2<Tree: 'static + MerkleTreeTrait>(
         )?,
         partitions: Some(usize::from(PoRepProofPartitions::from(porep_config))),
         priority: false,
+        api_version: porep_config.api_version,
     };
 
     let compound_public_params = <StackedCompound<Tree, DefaultPieceHasher> as CompoundProof<
@@ -594,6 +598,7 @@ pub fn verify_seal<Tree: 'static + MerkleTreeTrait>(
         )?,
         partitions: Some(usize::from(PoRepProofPartitions::from(porep_config))),
         priority: false,
+        api_version: porep_config.api_version,
     };
 
     let compound_public_params: compound_proof::PublicParams<
@@ -728,6 +733,7 @@ pub fn verify_batch_seal<Tree: 'static + MerkleTreeTrait>(
         )?,
         partitions: Some(usize::from(PoRepProofPartitions::from(porep_config))),
         priority: false,
+        api_version: porep_config.api_version,
     };
 
     let compound_public_params: compound_proof::PublicParams<

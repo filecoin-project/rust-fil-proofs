@@ -238,9 +238,11 @@ mod tests {
                 sector_size: sector_size as u64,
                 challenge_count,
                 sector_count,
+                api_version: 1,
             },
             partitions: Some(partitions),
             priority: false,
+            api_version: 1,
         };
 
         let temp_dir = tempfile::tempdir().unwrap();

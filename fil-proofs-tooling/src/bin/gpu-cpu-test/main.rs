@@ -28,6 +28,7 @@ const POST_CONFIG: PoStConfig = PoStConfig {
     sector_count: WINNING_POST_SECTOR_COUNT,
     typ: PoStType::Winning,
     priority: false,
+    api_version: 1,
 };
 
 arg_enum! {
@@ -133,9 +134,10 @@ fn threads_mode(parallel: u8, gpu_stealing: bool) {
     // All thread handles that get terminated
     let mut threads: Vec<Option<thread::JoinHandle<_>>> = Vec::new();
     let arbitrary_porep_id = [234; 32];
+    let api_version = 1;
 
     // Create fixtures only once for both threads
-    let (sector_id, replica_output) = create_replica::<MerkleTree>(SECTOR_SIZE, arbitrary_porep_id);
+    let (sector_id, replica_output) = create_replica::<MerkleTree>(SECTOR_SIZE, arbitrary_porep_id, api_version);
     let priv_replica_info = (sector_id, replica_output.private_replica_info);
 
     // Put each proof into it's own scope (the other one is due to the if statement)

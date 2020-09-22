@@ -129,6 +129,7 @@ fn test_winning_post_empty_sector_challenge() -> Result<()> {
         challenge_count: WINNING_POST_CHALLENGE_COUNT,
         typ: PoStType::Winning,
         priority: false,
+        api_version: 1,
     };
 
     assert!(generate_winning_post_sector_challenge::<SectorShape2KiB>(
@@ -166,6 +167,7 @@ fn winning_post<Tree: 'static + MerkleTreeTrait>(sector_size: u64, fake: bool) -
         challenge_count: WINNING_POST_CHALLENGE_COUNT,
         typ: PoStType::Winning,
         priority: false,
+        api_version: 1,
     };
 
     let challenged_sectors = generate_winning_post_sector_challenge::<Tree>(
@@ -367,6 +369,7 @@ fn window_post<Tree: 'static + MerkleTreeTrait>(
         challenge_count: WINDOW_POST_CHALLENGE_COUNT,
         typ: PoStType::Window,
         priority: false,
+        api_version: 1,
     };
 
     /////////////////////////////////////////////
@@ -451,6 +454,7 @@ fn create_seal<R: Rng, Tree: 'static + MerkleTreeTrait>(
                 .expect("unknown sector size"),
         ),
         porep_id: arbitrary_porep_id,
+        api_version: 1,
     };
 
     let cache_dir = tempfile::tempdir().expect("failed to create temp dir");
@@ -568,6 +572,7 @@ fn create_fake_seal<R: rand::Rng, Tree: 'static + MerkleTreeTrait>(
             *POREP_PARTITIONS.read().unwrap().get(&sector_size).unwrap(),
         ),
         porep_id: arbitrary_porep_id,
+        api_version: 1,
     };
 
     let cache_dir = tempfile::tempdir().unwrap();

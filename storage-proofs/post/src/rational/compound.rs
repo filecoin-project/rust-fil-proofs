@@ -218,6 +218,7 @@ mod tests {
             },
             partitions: None,
             priority: true,
+            api_version: 1,
         };
 
         let pub_params = RationalPoStCompound::<Tree>::setup(&setup_params).expect("setup failed");
