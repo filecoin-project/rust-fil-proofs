@@ -492,9 +492,14 @@ pub fn generate_fallback_sector_challenges<Tree: 'static + MerkleTreeTrait>(
             let mut challenges = Vec::new();
 
             for n in 0..post_config.challenge_count {
-                let challenge_index = ((partition_index * post_config.sector_count + i)
-                    * post_config.challenge_count
-                    + n) as u64;
+                let challenge_index = if post_config.api_version == 1 {
+                    (partition_index * post_config.sector_count + i)
+                        * post_config.challenge_count
+                        + n
+                } else {
+                    n
+                } as u64;
+
                 let challenged_leaf = fallback::generate_leaf_challenge(
                     &public_params,
                     randomness_safe,

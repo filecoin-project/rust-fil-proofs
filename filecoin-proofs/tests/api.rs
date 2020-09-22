@@ -167,7 +167,7 @@ fn winning_post<Tree: 'static + MerkleTreeTrait>(sector_size: u64, fake: bool) -
         challenge_count: WINNING_POST_CHALLENGE_COUNT,
         typ: PoStType::Winning,
         priority: false,
-        api_version: 1,
+        api_version: 1, // v1 has the legacy challenge selection
     };
 
     let challenged_sectors = generate_winning_post_sector_challenge::<Tree>(
@@ -369,7 +369,7 @@ fn window_post<Tree: 'static + MerkleTreeTrait>(
         challenge_count: WINDOW_POST_CHALLENGE_COUNT,
         typ: PoStType::Window,
         priority: false,
-        api_version: 1,
+        api_version: 2, // v2 has the updated challenge selection
     };
 
     /////////////////////////////////////////////

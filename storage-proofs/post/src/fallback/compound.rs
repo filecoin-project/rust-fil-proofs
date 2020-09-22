@@ -65,9 +65,14 @@ impl<'a, Tree: 'static + MerkleTreeTrait>
 
             // 2. Inputs for verifying inclusion paths
             for n in 0..pub_params.challenge_count {
-                let challenge_index = ((partition_index * pub_params.sector_count + i)
-                    * pub_params.challenge_count
-                    + n) as u64;
+                let challenge_index = if pub_params.api_version == 1 {
+                    (partition_index * pub_params.sector_count + i)
+                        * pub_params.challenge_count
+                        + n
+                } else {
+                    n
+                } as u64;
+
                 let challenged_leaf_start = fallback::generate_leaf_challenge(
                     &pub_params,
                     pub_inputs.randomness,

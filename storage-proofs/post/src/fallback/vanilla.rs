@@ -392,9 +392,14 @@ impl<'a, Tree: 'a + MerkleTreeTrait> ProofScheme<'a> for FallbackPoSt<'a, Tree> 
                 for proof_or_fault in (0..pub_params.challenge_count)
                     .into_par_iter()
                     .map(|n| {
-                        let challenge_index = ((j * num_sectors_per_chunk + i)
-                            * pub_params.challenge_count
-                            + n) as u64;
+                        let challenge_index = if pub_params.api_version == 1 {
+                            (j * num_sectors_per_chunk + i)
+                                * pub_params.challenge_count
+                                + n
+                        } else {
+                            n
+                        } as u64;
+
                         let challenged_leaf_start = generate_leaf_challenge(
                             pub_params,
                             pub_inputs.randomness,
@@ -523,8 +528,12 @@ impl<'a, Tree: 'a + MerkleTreeTrait> ProofScheme<'a> for FallbackPoSt<'a, Tree> 
                 );
 
                 for (n, inclusion_proof) in inclusion_proofs.iter().enumerate() {
-                    let challenge_index =
-                        ((j * num_sectors_per_chunk + i) * pub_params.challenge_count + n) as u64;
+                    let challenge_index = if pub_params.api_version == 1 {
+                        (j * num_sectors_per_chunk + i) * pub_params.challenge_count + n
+                    } else {
+                        n
+                    } as u64;
+
                     let challenged_leaf_start = generate_leaf_challenge(
                         pub_params,
                         pub_inputs.randomness,
