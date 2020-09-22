@@ -656,7 +656,6 @@ mod tests {
                     ),
                     porep_id: arbitrary_porep_id,
                     api_version: 1,
-
                 },
                 convertible_to_fr_bytes,
                 not_convertible_to_fr_bytes,

@@ -55,7 +55,8 @@ pub fn run_fallback_post_bench<Tree: 'static + MerkleTreeTrait>(
     }
     let arbitrary_porep_id = [66; 32];
     let api_version = 1;
-    let (sector_id, replica_output) = create_replica::<Tree>(sector_size, arbitrary_porep_id, api_version);
+    let (sector_id, replica_output) =
+        create_replica::<Tree>(sector_size, arbitrary_porep_id, api_version);
 
     // Store the replica's private and publicly facing info for proving and verifying respectively.
     let pub_replica_info = vec![(sector_id, replica_output.public_replica_info)];

@@ -20,7 +20,7 @@ impl From<SectorClass> for PoRepConfig {
             sector_size,
             partitions,
             porep_id,
-            api_version
+            api_version,
         }
     }
 }

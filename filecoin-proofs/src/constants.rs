@@ -175,6 +175,9 @@ pub fn is_sector_shape_top2(sector_size: u64) -> bool {
 }
 
 pub use storage_proofs::merkle::{DiskTree, LCTree};
+pub use storage_proofs::parameter_cache::{
+    get_parameter_data, get_parameter_data_from_id, get_verifying_key_data,
+};
 
 /// Calls a function with the type hint of the sector shape matching the provided sector.
 /// Panics if provided with an unknown sector size.

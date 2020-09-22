@@ -393,9 +393,7 @@ impl<'a, Tree: 'a + MerkleTreeTrait> ProofScheme<'a> for FallbackPoSt<'a, Tree> 
                     .into_par_iter()
                     .map(|n| {
                         let challenge_index = if pub_params.api_version == 1 {
-                            (j * num_sectors_per_chunk + i)
-                                * pub_params.challenge_count
-                                + n
+                            (j * num_sectors_per_chunk + i) * pub_params.challenge_count + n
                         } else {
                             n
                         } as u64;
