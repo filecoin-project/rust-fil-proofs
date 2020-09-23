@@ -2,6 +2,7 @@ use std::marker::PhantomData;
 
 use anyhow::{anyhow, ensure};
 use bellperson::Circuit;
+use log::trace;
 use paired::bls12_381::{Bls12, Fr};
 
 use storage_proofs_core::{
@@ -59,6 +60,12 @@ impl<'a, Tree: 'static + MerkleTreeTrait>
             .nth(partition_index)
             .ok_or_else(|| anyhow!("invalid number of sectors/partition index"))?;
 
+        if pub_params.api_version == 1 {
+            trace!("Using legacy sector challenges in generate public inputs");
+        } else {
+            trace!("Using updated sector challenges in generate public inputs");
+        };
+
         for (i, sector) in sectors.iter().enumerate() {
             // 1. Inputs for verifying comm_r = H(comm_c || comm_r_last)
             inputs.push(sector.comm_r.into());
@@ -67,8 +74,10 @@ impl<'a, Tree: 'static + MerkleTreeTrait>
             for n in 0..pub_params.challenge_count {
                 let challenge_index = if pub_params.api_version == 1 {
                     (partition_index * pub_params.sector_count + i) * pub_params.challenge_count + n
-                } else {
+                } else if pub_params.api_version == 2 {
                     n
+                } else {
+                    panic!("Unsupported api_version specified");
                 } as u64;
 
                 let challenged_leaf_start = fallback::generate_leaf_challenge(

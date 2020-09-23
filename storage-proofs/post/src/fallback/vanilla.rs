@@ -393,8 +393,12 @@ impl<'a, Tree: 'a + MerkleTreeTrait> ProofScheme<'a> for FallbackPoSt<'a, Tree> 
                     .into_par_iter()
                     .map(|n| {
                         let challenge_index = if pub_params.api_version == 1 {
+                            trace!("Using legacy sector challenges for fallback PoSt");
+
                             (j * num_sectors_per_chunk + i) * pub_params.challenge_count + n
                         } else if pub_params.api_version == 2 {
+                            trace!("Using updated sector challenges for fallback PoSt");
+
                             n
                         } else {
                             panic!("Unsupported api_version specified");
@@ -529,8 +533,12 @@ impl<'a, Tree: 'a + MerkleTreeTrait> ProofScheme<'a> for FallbackPoSt<'a, Tree> 
 
                 for (n, inclusion_proof) in inclusion_proofs.iter().enumerate() {
                     let challenge_index = if pub_params.api_version == 1 {
+                        trace!("Using legacy sector challenges for fallback PoSt");
+
                         (j * num_sectors_per_chunk + i) * pub_params.challenge_count + n
                     } else if pub_params.api_version == 2 {
+                        trace!("Using updated sector challenges for fallback PoSt");
+
                         n
                     } else {
                         panic!("Unsupported api_version specified");
