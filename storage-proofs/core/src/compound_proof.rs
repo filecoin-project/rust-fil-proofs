@@ -2,7 +2,7 @@ use std::path::Path;
 
 use anyhow::{ensure, Context};
 use bellperson::{groth16, Circuit};
-use fil_blst::{blst_fr, blst_scalar, scalar_from_u64, verify_batch_proof};
+use fil_blst::{blst::blst_scalar, blst_fr_from_fr, scalar_from_u64, verify_batch_proof};
 use log::info;
 use paired::bls12_381::{Bls12, Fr};
 use rand::{rngs::OsRng, RngCore};
@@ -193,7 +193,7 @@ where
 
         let blst_inputs: Vec<_> = inputs
             .iter()
-            .flat_map(|pis| pis.iter().map(|pi| blst_fr::from(*pi)))
+            .flat_map(|pis| pis.iter().map(|pi| blst_fr_from_fr(*pi)))
             .collect();
 
         // choose random coefficients for combining the proofs
@@ -213,9 +213,9 @@ where
         let res = verify_batch_proof(
             proof_vec,
             num_proofs,
-            &blst_inputs,
+            &blst_inputs[..],
             inputs[0].len(),
-            &r,
+            &r[..],
             128,
             vk_path,
         );
