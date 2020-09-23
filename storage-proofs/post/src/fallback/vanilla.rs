@@ -394,8 +394,10 @@ impl<'a, Tree: 'a + MerkleTreeTrait> ProofScheme<'a> for FallbackPoSt<'a, Tree> 
                     .map(|n| {
                         let challenge_index = if pub_params.api_version == 1 {
                             (j * num_sectors_per_chunk + i) * pub_params.challenge_count + n
-                        } else {
+                        } else if pub_params.api_version == 2 {
                             n
+                        } else {
+                            panic!("Unsupported api_version specified");
                         } as u64;
 
                         let challenged_leaf_start = generate_leaf_challenge(
@@ -528,8 +530,10 @@ impl<'a, Tree: 'a + MerkleTreeTrait> ProofScheme<'a> for FallbackPoSt<'a, Tree> 
                 for (n, inclusion_proof) in inclusion_proofs.iter().enumerate() {
                     let challenge_index = if pub_params.api_version == 1 {
                         (j * num_sectors_per_chunk + i) * pub_params.challenge_count + n
-                    } else {
+                    } else if pub_params.api_version == 2 {
                         n
+                    } else {
+                        panic!("Unsupported api_version specified");
                     } as u64;
 
                     let challenged_leaf_start = generate_leaf_challenge(

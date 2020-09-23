@@ -495,8 +495,10 @@ pub fn generate_fallback_sector_challenges<Tree: 'static + MerkleTreeTrait>(
                 let challenge_index = if post_config.api_version == 1 {
                     (partition_index * post_config.sector_count + i) * post_config.challenge_count
                         + n
-                } else {
+                } else if post_config.api_version == 2 {
                     n
+                } else {
+                    panic!("Unsupported api_version specified");
                 } as u64;
 
                 let challenged_leaf = fallback::generate_leaf_challenge(
