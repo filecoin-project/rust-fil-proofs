@@ -8,6 +8,7 @@ use bincode::deserialize;
 use generic_array::typenum::Unsigned;
 use log::{info, trace};
 use merkletree::store::StoreConfig;
+use rayon::prelude::*;
 use storage_proofs::cache_key::CacheKey;
 use storage_proofs::compound_proof::{self, CompoundProof};
 use storage_proofs::hasher::{Domain, Hasher};
@@ -356,7 +357,7 @@ pub fn generate_winning_post<Tree: 'static + MerkleTreeTrait>(
     let groth_params = get_post_params::<Tree>(&post_config)?;
 
     let trees = replicas
-        .iter()
+        .into_par_iter()
         .map(|(sector_id, replica)| {
             replica
                 .merkle_tree(post_config.sector_size)
@@ -909,7 +910,7 @@ pub fn generate_window_post<Tree: 'static + MerkleTreeTrait>(
     let groth_params = get_post_params::<Tree>(&post_config)?;
 
     let trees: Vec<_> = replicas
-        .iter()
+        .into_par_iter()
         .map(|(sector_id, replica)| {
             replica
                 .merkle_tree(post_config.sector_size)
