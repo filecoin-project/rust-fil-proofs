@@ -42,7 +42,7 @@ sha2 = "0.9.1"
 typenum = "1.11.2"
 bitintr = "0.3.0"
 gperftools = { version = "0.2", optional = true }
-phase2 = { version = "0.8.0", package = "phase21" }
+phase2 = { git = "https://github.com/filecoin-project/phase2", branch = "blst", package = "phase21", default-features = false }
 simplelog = "0.8.0"
 rand_chacha = "0.2.1"
 dialoguer = "0.6.2"
@@ -71,8 +71,8 @@ heap-profile = ["gperftools/heap"]
 simd = ["storage-proofs/simd"]
 asm = ["storage-proofs/asm"]
 gpu = ["storage-proofs/gpu", "bellperson/gpu"]
-pairing = ["storage-proofs/pairing", "bellperson/pairing"]
-blst = ["storage-proofs/blst", "bellperson/blst"]
+pairing = ["storage-proofs/pairing", "bellperson/pairing", "phase2/pairing"]
+blst = ["storage-proofs/blst", "bellperson/blst", "phase2/blst"]
 
 [[bench]]
 name = "preprocessing"
