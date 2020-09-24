@@ -191,10 +191,11 @@ where
             .map(|k| Self::generate_public_inputs(public_inputs, vanilla_public_params, Some(k)))
             .collect::<Result<_>>()?;
 
-        let blst_inputs: Vec<_> = inputs
+
+        let blst_inputs: Vec<_> = todo!();/*inputs
             .iter()
             .flat_map(|pis| pis.iter().map(|pi| blst_fr_from_fr(*pi)))
-            .collect();
+            .collect();*/
 
         // choose random coefficients for combining the proofs
         let mut r: Vec<blst_scalar> = Vec::with_capacity(num_proofs);

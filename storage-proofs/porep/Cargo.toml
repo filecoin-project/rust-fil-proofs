@@ -23,13 +23,13 @@ rayon = "1.0.0"
 serde = { version = "1.0", features = ["derive"]}
 serde_json = "1.0"
 ff = { version = "0.2.3", package = "fff" }
-bellperson = "0.9.1"
+bellperson = { git = "https://github.com/filecoin-project/bellman", branch = "blstrs", default-features = false }
 paired = { version = "0.20.0", features = ["serde"] }
 log = "0.4.7"
 pretty_assertions = "0.6.1"
 generic-array = "0.13.2"
 anyhow = "1.0.23"
-neptune = { version = "=1.2.1", features = ["gpu"] }
+neptune = { git = "https://github.com/filecoin-project/neptune", branch = "blst", default-features = false, features = ["gpu"] }
 num_cpus = "1.10.1"
 hex = "0.4.2"
 bincode = "1.1.2"
@@ -47,7 +47,9 @@ glob = "0.3.0"
 pretty_env_logger = "0.4.0"
 
 [features]
-default = []
+default = ["pairing"]
+pairing = ["storage-proofs-core/pairing", "bellperson/pairing", "fil-sapling-crypto/pairing"]
+blst = ["storage-proofs-core/blst", "bellperson/blst", "fil-sapling-crypto/blst"]
 
 [[bench]]
 name = "encode"

@@ -60,8 +60,8 @@ big-sector-sizes-bench = []
 gpu = ["bellperson/gpu"]
 measurements = ["cpu-time", "gperftools"]
 profile = ["measurements"]
-pairing = ["bellperson/pairing", "fil-sapling-crypto/pairing", "neptune/pairing"]
-blst = ["bellperson/blst", "fil-sapling-crypto/blst", "neptune/blst"]
+pairing = ["bellperson/pairing", "fil-sapling-crypto/pairing", "neptune/pairing", "bellperson/pairing-serde"]
+blst = ["bellperson/blst", "fil-sapling-crypto/blst", "neptune/blst", "bellperson/blst-serde"]
 
 [[bench]]
 name = "sha256"

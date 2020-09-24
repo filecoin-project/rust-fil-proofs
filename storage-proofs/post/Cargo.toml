@@ -20,16 +20,21 @@ serde = { version = "1.0", features = ["derive"]}
 blake2b_simd = "0.5"
 blake2s_simd = "0.5"
 ff = { version = "0.2.3", package = "fff" }
-bellperson = "0.9.1"
+bellperson = { git = "https://github.com/filecoin-project/bellman", branch = "blstrs", default-features = false }
 paired = { version = "0.20.0", features = ["serde"] }
 log = "0.4.7"
 hex = "0.4.0"
 generic-array = "0.13.2"
 anyhow = "1.0.23"
-neptune = { version = "=1.2.1", features = ["gpu"] }
+neptune = { git = "https://github.com/filecoin-project/neptune", branch = "blst", default-features = false, features = ["gpu"] }
 num_cpus = "1.10.1"
 
 [dev-dependencies]
 tempfile = "3"
 pretty_assertions = "0.6.1"
 rand_xorshift = "0.2.0"
+
+[features]
+default = ["pairing"]
+pairing = ["storage-proofs-core/pairing", "bellperson/pairing", "fil-sapling-crypto/pairing"]
+blst = ["storage-proofs-core/blst", "bellperson/blst", "fil-sapling-crypto/blst"]
