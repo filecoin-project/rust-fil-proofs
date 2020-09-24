@@ -2195,7 +2195,7 @@ mod tests {
             // so for purposes of testing label creation, it is safe to supply a dummy.
             DiskTree<PoseidonHasher, typenum::U8, typenum::U8, typenum::U2>,
             Sha256Hasher,
-        >::generate_labels(
+        >::generate_labels_for_encoding(
             &graph,
             &unused_layer_challenges,
             &<PoseidonHasher as Hasher>::Domain::try_from_bytes(&replica_id).unwrap(),
