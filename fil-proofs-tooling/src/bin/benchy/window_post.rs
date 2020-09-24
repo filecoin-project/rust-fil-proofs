@@ -102,6 +102,8 @@ fn run_pre_commit_phases<Tree: 'static + MerkleTreeTrait>(
     cache_dir: PathBuf,
     skip_precommit_phase1: bool,
     skip_precommit_phase2: bool,
+    test_resume: bool,
+    skip_staging: bool,
 ) -> anyhow::Result<((u64, u64), (u64, u64), (u64, u64))> {
     let (seal_pre_commit_phase1_measurement_cpu_time, seal_pre_commit_phase1_measurement_wall_time): (u64, u64) = if skip_precommit_phase1 {
             // generate no-op measurements
@@ -109,28 +111,45 @@ fn run_pre_commit_phases<Tree: 'static + MerkleTreeTrait>(
     } else {
         // Create files for the staged and sealed sectors.
         let staged_file_path = cache_dir.join(STAGED_FILE);
-        let mut staged_file = OpenOptions::new().read(true).write(true).create(true).open(&staged_file_path)?;
-        info!("*** Created staged file");
+        let mut staged_file = if skip_staging {
+            info!("*** Re-using staged file");
+            OpenOptions::new().read(true).write(true).open(&staged_file_path)
+        } else {
+            info!("*** Creating staged file");
+            OpenOptions::new().read(true).write(true).create(true).open(&staged_file_path)
+        }?;
 
         let sealed_file_path = cache_dir.join(SEALED_FILE);
-        let _sealed_file = OpenOptions::new().read(true).write(true).create(true).open(&sealed_file_path)?;
-        info!("*** Created sealed file");
+        let _sealed_file = if skip_staging {
+            info!("*** Re-using sealed file");
+            OpenOptions::new().read(true).write(true).open(&sealed_file_path)
+        } else {
+            info!("*** Creating sealed file");
+            OpenOptions::new().read(true).write(true).create(true).open(&sealed_file_path)
+        }?;
 
         let sector_size_unpadded_bytes_amount =
             UnpaddedBytesAmount::from(PaddedBytesAmount(sector_size));
 
-        // Generate the data from which we will create a replica, we will then prove the continued
-        // storage of that replica using the PoSt.
-        let piece_bytes: Vec<u8> = (0..usize::from(sector_size_unpadded_bytes_amount))
-            .map(|_| rand::random::<u8>())
-            .collect();
-
         let piece_file_path = cache_dir.join(PIECE_FILE);
-        let mut piece_file = OpenOptions::new().read(true).write(true).create(true).open(&piece_file_path)?;
-        info!("*** Created piece file");
-        piece_file.write_all(&piece_bytes)?;
-        piece_file.sync_all()?;
-        piece_file.seek(SeekFrom::Start(0))?;
+        let mut piece_file = if skip_staging {
+            info!("*** Re-using piece file");
+            OpenOptions::new().read(true).write(true).open(&piece_file_path)?
+        } else {
+            // Generate the data from which we will create a replica, we will then prove the continued
+            // storage of that replica using the PoSt.
+            let piece_bytes: Vec<u8> = (0..usize::from(sector_size_unpadded_bytes_amount))
+                .map(|_| rand::random::<u8>())
+                .collect();
+
+            info!("*** Created piece file");
+            let mut piece_file = OpenOptions::new().read(true).write(true).create(true).open(&piece_file_path)?;
+            piece_file.write_all(&piece_bytes)?;
+            piece_file.sync_all()?;
+            piece_file.seek(SeekFrom::Start(0))?;
+
+            piece_file
+        };
 
         let piece_info =
             generate_piece_commitment(&mut piece_file, sector_size_unpadded_bytes_amount)?;
@@ -161,6 +180,30 @@ fn run_pre_commit_phases<Tree: 'static + MerkleTreeTrait>(
         })
             .expect("failed in seal_pre_commit_phase1");
         let precommit_phase1_output = seal_pre_commit_phase1_measurement.return_value;
+
+        if test_resume {
+            // Locate the last layer and delete it.
+            //
+            // NOTE: We should select a random layer to determine if
+            // the code will properly resume and re-write later layer
+            // files that exist beyond the missing one.
+            let mut layers = Vec::new();
+            for entry in std::fs::read_dir(&cache_dir)? {
+                let cur = entry?;
+                let entry_path = cur.path();
+                let entry_str = entry_path.to_str().expect("failed to get string from path");
+                if entry_str.contains("data-layer") {
+                    layers.push(entry_path.clone());
+                }
+            }
+
+            assert!(!layers.is_empty());
+            // Delete the last layer only.
+            info!("Test resume requested.  Removing last layer {:?}", layers[layers.len() - 1]);
+            std::fs::remove_file(&layers[layers.len() - 1])?;
+
+            return run_pre_commit_phases::<Tree>(sector_size, cache_dir, skip_precommit_phase1, skip_precommit_phase2, false, true);
+        }
 
         // Persist piece_infos here
         let piece_infos_path = cache_dir.join(PIECE_INFOS_FILE);
@@ -291,6 +334,7 @@ fn run_pre_commit_phases<Tree: 'static + MerkleTreeTrait>(
     ))
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn run_window_post_bench<Tree: 'static + MerkleTreeTrait>(
     sector_size: u64,
     cache_dir: PathBuf,
@@ -299,6 +343,7 @@ pub fn run_window_post_bench<Tree: 'static + MerkleTreeTrait>(
     skip_precommit_phase2: bool,
     skip_commit_phase1: bool,
     skip_commit_phase2: bool,
+    test_resume: bool,
 ) -> anyhow::Result<()> {
     let (
         (seal_pre_commit_phase1_cpu_time_ms, seal_pre_commit_phase1_wall_time_ms),
@@ -316,6 +361,8 @@ pub fn run_window_post_bench<Tree: 'static + MerkleTreeTrait>(
             cache_dir.clone(),
             skip_precommit_phase1,
             skip_precommit_phase2,
+            test_resume,
+            false, // skip staging
         )
     }?;
 
@@ -524,6 +571,7 @@ pub fn run_window_post_bench<Tree: 'static + MerkleTreeTrait>(
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn run(
     sector_size: usize,
     cache: String,
@@ -532,8 +580,9 @@ pub fn run(
     skip_precommit_phase2: bool,
     skip_commit_phase1: bool,
     skip_commit_phase2: bool,
+    test_resume: bool,
 ) -> anyhow::Result<()> {
-    info!("Benchy Window PoSt: sector-size={}, preserve_cache={}, skip_precommit_phase1={}, skip_precommit_phase2={}, skip_commit_phase1={}, skip_commit_phase2={}", sector_size, preserve_cache, skip_precommit_phase1, skip_precommit_phase2, skip_commit_phase1, skip_commit_phase2);
+    info!("Benchy Window PoSt: sector-size={}, preserve_cache={}, skip_precommit_phase1={}, skip_precommit_phase2={}, skip_commit_phase1={}, skip_commit_phase2={}, test_resume={}", sector_size, preserve_cache, skip_precommit_phase1, skip_precommit_phase2, skip_commit_phase1, skip_commit_phase2, test_resume);
 
     let cache_dir_specified = !cache.is_empty();
     if skip_precommit_phase1 || skip_precommit_phase2 || skip_commit_phase1 || skip_commit_phase2 {
@@ -573,5 +622,6 @@ pub fn run(
         skip_precommit_phase2,
         skip_commit_phase1,
         skip_commit_phase2,
+        test_resume,
     )
 }
