@@ -1,10 +1,10 @@
 use std::path::Path;
 
 use anyhow::{ensure, Context};
+use bellperson::bls::{Bls12, Fr};
 use bellperson::{groth16, Circuit};
 use fil_blst::{blst::blst_scalar, blst_fr_from_fr, scalar_from_u64, verify_batch_proof};
 use log::info;
-use bellperson::bls::{Bls12, Fr};
 use rand::{rngs::OsRng, RngCore};
 use rayon::prelude::*;
 
@@ -191,11 +191,10 @@ where
             .map(|k| Self::generate_public_inputs(public_inputs, vanilla_public_params, Some(k)))
             .collect::<Result<_>>()?;
 
-
-        let blst_inputs: Vec<_> = todo!();/*inputs
-            .iter()
-            .flat_map(|pis| pis.iter().map(|pi| blst_fr_from_fr(*pi)))
-            .collect();*/
+        let blst_inputs: Vec<_> = todo!(); /*inputs
+                                           .iter()
+                                           .flat_map(|pis| pis.iter().map(|pi| blst_fr_from_fr(*pi)))
+                                           .collect();*/
 
         // choose random coefficients for combining the proofs
         let mut r: Vec<blst_scalar> = Vec::with_capacity(num_proofs);

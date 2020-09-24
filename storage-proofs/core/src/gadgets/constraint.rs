@@ -1,4 +1,4 @@
-use bellperson::{gadgets::num, ConstraintSystem, SynthesisError, bls::Engine};
+use bellperson::{bls::Engine, gadgets::num, ConstraintSystem, SynthesisError};
 use ff::Field;
 
 /// Adds a constraint to CS, enforcing an equality relationship between the allocated numbers a and b.
@@ -118,8 +118,8 @@ pub fn difference<E: Engine, A, AR, CS: ConstraintSystem<E>>(
 mod tests {
     use super::*;
 
-    use bellperson::util_cs::test_cs::TestConstraintSystem;
     use bellperson::bls::{Bls12, Fr};
+    use bellperson::util_cs::test_cs::TestConstraintSystem;
     use rand::SeedableRng;
     use rand_xorshift::XorShiftRng;
 

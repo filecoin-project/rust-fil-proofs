@@ -5,7 +5,7 @@
 
 use bellperson::gadgets::boolean::{AllocatedBit, Boolean};
 use bellperson::gadgets::num::AllocatedNum;
-use bellperson::{ConstraintSystem, SynthesisError, bls::Engine};
+use bellperson::{bls::Engine, ConstraintSystem, SynthesisError};
 use ff::Field;
 
 /// Insert `element` after the nth 1-indexed element of `elements`, where `path_bits` represents n, least-significant bit first.
@@ -348,10 +348,10 @@ where
 mod tests {
     use super::*;
 
+    use bellperson::bls::{Bls12, Fr};
     use bellperson::gadgets::boolean::AllocatedBit;
     use bellperson::util_cs::test_cs::TestConstraintSystem;
     use ff::Field;
-    use bellperson::bls::{Bls12, Fr};
     use rand::SeedableRng;
     use rand_xorshift::XorShiftRng;
 

@@ -1,7 +1,7 @@
 use crate::error;
 use anyhow::ensure;
 use bellperson::gadgets::boolean::{self, AllocatedBit, Boolean};
-use bellperson::{ConstraintSystem, SynthesisError, bls::Engine};
+use bellperson::{bls::Engine, ConstraintSystem, SynthesisError};
 use merkletree::merkle::get_merkle_tree_row_count;
 
 use super::settings;
@@ -179,10 +179,10 @@ mod tests {
     use super::*;
 
     use crate::fr32::fr_into_bytes;
+    use bellperson::bls::*;
     use bellperson::gadgets::num;
     use bellperson::util_cs::test_cs::TestConstraintSystem;
     use ff::Field;
-    use bellperson::bls::*;
     use rand::{Rng, SeedableRng};
     use rand_xorshift::XorShiftRng;
 

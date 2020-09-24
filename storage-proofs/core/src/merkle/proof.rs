@@ -3,10 +3,10 @@
 use std::marker::PhantomData;
 
 use anyhow::{ensure, Result};
+use bellperson::bls::Fr;
 use generic_array::typenum::{Unsigned, U0};
 use merkletree::hash::Algorithm;
 use merkletree::proof;
-use bellperson::bls::Fr;
 use serde::{Deserialize, Serialize};
 
 use crate::drgraph::graph_height;

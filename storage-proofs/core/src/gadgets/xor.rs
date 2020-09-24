@@ -35,7 +35,7 @@ mod tests {
     use crate::util::{bits_to_bytes, bytes_into_boolean_vec};
     use bellperson::gadgets::boolean::Boolean;
     use bellperson::util_cs::test_cs::TestConstraintSystem;
-    use bellperson::{ConstraintSystem, bls::Bls12};
+    use bellperson::{bls::Bls12, ConstraintSystem};
     use rand::{Rng, SeedableRng};
     use rand_xorshift::XorShiftRng;
 

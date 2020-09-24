@@ -150,9 +150,9 @@ impl<'a, Tree: 'a + MerkleTreeTrait> ProofScheme<'a> for PoR<Tree> {
 mod tests {
     use super::*;
 
+    use bellperson::bls::Fr;
     use ff::Field;
     use generic_array::typenum;
-    use bellperson::bls::Fr;
     use rand::SeedableRng;
     use rand_xorshift::XorShiftRng;
 
