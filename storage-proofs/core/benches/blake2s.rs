@@ -3,7 +3,7 @@ use bellperson::groth16::*;
 use bellperson::util_cs::bench_cs::BenchCS;
 use bellperson::{Circuit, ConstraintSystem, SynthesisError};
 use criterion::{black_box, criterion_group, criterion_main, Criterion, ParameterizedBenchmark};
-use paired::bls12_381::Bls12;
+use bellperson::bls::Bls12;
 use rand::{thread_rng, Rng};
 
 struct Blake2sExample<'a> {

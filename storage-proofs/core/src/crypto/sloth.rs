@@ -1,5 +1,5 @@
 use ff::Field;
-use paired::bls12_381::Fr;
+use bellperson::bls::Fr;
 
 /// Sloth based encoding.
 #[inline]
@@ -24,7 +24,7 @@ pub fn decode(key: &Fr, ciphertext: &Fr) -> Fr {
 mod tests {
     use super::*;
     use ff::PrimeField;
-    use paired::bls12_381::{Fr, FrRepr};
+    use bellperson::bls::{Fr, FrRepr};
     use proptest::{prop_compose, proptest};
 
     // the modulus from `bls12_381::Fr`

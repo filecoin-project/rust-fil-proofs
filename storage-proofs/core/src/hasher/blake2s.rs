@@ -8,7 +8,7 @@ use blake2s_simd::{Hash as Blake2sHash, Params as Blake2s, State};
 use ff::{Field, PrimeField, PrimeFieldRepr};
 use merkletree::hash::{Algorithm, Hashable};
 use merkletree::merkle::Element;
-use paired::bls12_381::{Bls12, Fr, FrRepr};
+use bellperson::bls::{Bls12, Fr, FrRepr};
 use rand::RngCore;
 use serde::{Deserialize, Serialize};
 

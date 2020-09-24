@@ -7,7 +7,7 @@ use bellperson::gadgets::{multipack, num};
 use bellperson::{Circuit, ConstraintSystem, SynthesisError};
 use ff::PrimeField;
 use generic_array::typenum::Unsigned;
-use paired::bls12_381::{Bls12, Fr, FrRepr};
+use bellperson::bls::{Bls12, Fr, FrRepr};
 
 use crate::compound_proof::{CircuitComponent, CompoundProof};
 use crate::error::Result;

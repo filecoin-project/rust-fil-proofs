@@ -1,6 +1,5 @@
-use bellperson::{gadgets::num, ConstraintSystem, SynthesisError};
+use bellperson::{gadgets::num, ConstraintSystem, SynthesisError, bls::Engine};
 use ff::Field;
-use paired::Engine;
 
 /// Adds a constraint to CS, enforcing an equality relationship between the allocated numbers a and b.
 ///
@@ -120,7 +119,7 @@ mod tests {
     use super::*;
 
     use bellperson::util_cs::test_cs::TestConstraintSystem;
-    use paired::bls12_381::{Bls12, Fr};
+    use bellperson::bls::{Bls12, Fr};
     use rand::SeedableRng;
     use rand_xorshift::XorShiftRng;
 

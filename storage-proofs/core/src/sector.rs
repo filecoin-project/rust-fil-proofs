@@ -3,7 +3,7 @@ use std::fmt;
 
 use byteorder::ByteOrder;
 use ff::PrimeField;
-use paired::bls12_381::{Fr, FrRepr};
+use bellperson::bls::{Fr, FrRepr};
 use serde::{Deserialize, Serialize};
 
 /// An ordered set of `SectorId`s.

@@ -7,7 +7,7 @@ use fs2::FileExt;
 use itertools::Itertools;
 use lazy_static::lazy_static;
 use log::info;
-use paired::bls12_381::Bls12;
+use bellperson::bls::Bls12;
 use rand::RngCore;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};

@@ -6,7 +6,7 @@ use anyhow::{ensure, Result};
 use generic_array::typenum::{Unsigned, U0};
 use merkletree::hash::Algorithm;
 use merkletree::proof;
-use paired::bls12_381::Fr;
+use bellperson::bls::Fr;
 use serde::{Deserialize, Serialize};
 
 use crate::drgraph::graph_height;

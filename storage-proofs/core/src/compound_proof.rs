@@ -4,7 +4,7 @@ use anyhow::{ensure, Context};
 use bellperson::{groth16, Circuit};
 use fil_blst::{blst::blst_scalar, blst_fr_from_fr, scalar_from_u64, verify_batch_proof};
 use log::info;
-use paired::bls12_381::{Bls12, Fr};
+use bellperson::bls::{Bls12, Fr};
 use rand::{rngs::OsRng, RngCore};
 use rayon::prelude::*;
 

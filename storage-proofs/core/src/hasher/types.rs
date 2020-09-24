@@ -5,7 +5,7 @@ use lazy_static::lazy_static;
 use merkletree::hash::{Algorithm as LightAlgorithm, Hashable as LightHashable};
 use merkletree::merkle::Element;
 use neptune::poseidon::PoseidonConstants;
-use paired::bls12_381::{Bls12, Fr, FrRepr};
+use bellperson::bls::{Bls12, Fr, FrRepr};
 use serde::de::DeserializeOwned;
 use serde::ser::Serialize;
 

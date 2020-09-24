@@ -1,7 +1,6 @@
 use bellperson::gadgets::boolean::{AllocatedBit, Boolean};
 use bellperson::gadgets::multipack::pack_into_inputs;
-use bellperson::{ConstraintSystem, SynthesisError};
-use paired::Engine;
+use bellperson::{ConstraintSystem, SynthesisError, bls::Engine};
 
 /// Represents an interpretation of 64 `Boolean` objects as an unsigned integer.
 #[derive(Clone)]

@@ -152,7 +152,7 @@ mod tests {
 
     use ff::Field;
     use generic_array::typenum;
-    use paired::bls12_381::Fr;
+    use bellperson::bls::Fr;
     use rand::SeedableRng;
     use rand_xorshift::XorShiftRng;
 

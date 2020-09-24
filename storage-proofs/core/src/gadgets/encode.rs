@@ -1,6 +1,5 @@
 use bellperson::gadgets::num;
-use bellperson::{ConstraintSystem, SynthesisError};
-use paired::Engine;
+use bellperson::{ConstraintSystem, SynthesisError, bls::Engine};
 
 use crate::gadgets::constraint;
 

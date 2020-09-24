@@ -3,7 +3,7 @@ use crate::error::*;
 use anyhow::{ensure, Context};
 use byteorder::{ByteOrder, LittleEndian, WriteBytesExt};
 use ff::{PrimeField, PrimeFieldRepr};
-use paired::bls12_381::{Fr, FrRepr};
+use bellperson::bls::{Fr, FrRepr};
 
 // Contains 32 bytes whose little-endian value represents an Fr.
 // Invariants:

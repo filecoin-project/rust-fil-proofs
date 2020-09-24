@@ -17,7 +17,7 @@ use merkletree::hash::{Algorithm as LightAlgorithm, Hashable};
 use merkletree::merkle::Element;
 use neptune::circuit::poseidon_hash;
 use neptune::poseidon::Poseidon;
-use paired::bls12_381::{Bls12, Fr, FrRepr};
+use bellperson::bls::{Bls12, Fr, FrRepr};
 use serde::{Deserialize, Serialize};
 
 #[derive(Default, Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

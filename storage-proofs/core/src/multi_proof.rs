@@ -2,7 +2,7 @@ use bellperson::groth16;
 
 use crate::error::Result;
 use anyhow::{ensure, Context};
-use paired::bls12_381::Bls12;
+use bellperson::bls::Bls12;
 use rayon::prelude::*;
 use std::io::{self, Read, Write};
 
