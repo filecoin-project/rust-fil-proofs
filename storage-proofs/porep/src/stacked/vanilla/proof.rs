@@ -2190,12 +2190,12 @@ mod tests {
 
         let unused_layer_challenges = LayerChallenges::new(layers, 0);
 
-        let (labels, _) = StackedDrg::<
+        let labels = StackedDrg::<
             // Although not generally correct for every size, the hasher shape is not used,
             // so for purposes of testing label creation, it is safe to supply a dummy.
             DiskTree<PoseidonHasher, typenum::U8, typenum::U8, typenum::U2>,
             Sha256Hasher,
-        >::generate_labels_for_encoding(
+        >::generate_labels_for_decoding(
             &graph,
             &unused_layer_challenges,
             &<PoseidonHasher as Hasher>::Domain::try_from_bytes(&replica_id).unwrap(),
