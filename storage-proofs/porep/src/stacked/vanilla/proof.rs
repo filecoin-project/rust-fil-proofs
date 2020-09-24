@@ -502,7 +502,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
             None
         };
 
-        for (layer, layer_config) in (1..=layers).zip(layer_configs.into_iter()) {
+        for (layer, layer_config) in (1..=layers).zip(layer_configs) {
             info!("generating layer: {}", layer);
 
             if let Some(ref mut cache) = cache {
