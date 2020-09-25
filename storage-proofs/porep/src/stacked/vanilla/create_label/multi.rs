@@ -1,15 +1,19 @@
-use sha2::{Digest, Sha256};
+use std::convert::TryInto;
 use std::marker::PhantomData;
 use std::mem::size_of;
+use std::sync::atomic::{AtomicU64, Ordering::SeqCst};
 
 use anyhow::Result;
 use byte_slice_cast::*;
 use crossbeam::thread;
-use digest::generic_array::{typenum::U64, GenericArray};
-use generic_array::typenum::Unsigned;
+use digest::generic_array::{
+    typenum::{Unsigned, U64},
+    GenericArray,
+};
 use log::*;
 use memmap::MmapMut;
 use merkletree::store::{DiskStore, StoreConfig};
+use sha2::{Digest, Sha256};
 use storage_proofs_core::{
     cache_key::CacheKey,
     drgraph::{Graph, BASE_DEGREE},
@@ -19,16 +23,13 @@ use storage_proofs_core::{
     util::{data_at_node_offset, NODE_SIZE},
 };
 
-use super::{
+use super::super::{
     cache::ParentCache,
     graph::{StackedBucketGraph, DEGREE, EXP_DEGREE},
     memory_handling::{setup_create_label_memory, CacheReader},
     params::{Labels, LabelsCache},
     utils::*,
 };
-
-use std::convert::TryInto;
-use std::sync::atomic::{AtomicU64, Ordering::SeqCst};
 
 const NODE_WORDS: usize = NODE_SIZE / size_of::<u32>();
 
@@ -188,7 +189,7 @@ fn create_label_runner(
     Ok(())
 }
 
-pub fn create_layer_labels(
+fn create_layer_labels(
     parents_cache: &CacheReader<u32>,
     replica_id: &[u8],
     layer_labels: &mut MmapMut,
@@ -390,7 +391,7 @@ pub fn create_layer_labels(
 }
 
 #[allow(clippy::type_complexity)]
-pub(crate) fn create_labels<Tree: 'static + MerkleTreeTrait, T: AsRef<[u8]>>(
+pub fn create_labels<Tree: 'static + MerkleTreeTrait, T: AsRef<[u8]>>(
     graph: &StackedBucketGraph<Tree::Hasher>,
     parents_cache: &ParentCache,
     layers: usize,

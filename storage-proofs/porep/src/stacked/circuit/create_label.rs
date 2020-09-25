@@ -85,7 +85,7 @@ mod tests {
     use crate::stacked::vanilla::{create_label, StackedBucketGraph, EXP_DEGREE, TOTAL_PARENTS};
 
     #[test]
-    fn test_create_label() {
+    fn test_create_label_multi() {
         let mut cs = TestConstraintSystem::<Bls12>::new();
         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
 
@@ -166,7 +166,7 @@ mod tests {
 
         let (l1, l2) = data.split_at_mut(size * NODE_SIZE);
         // FIXME: Update this test.
-        create_label(
+        create_label::multi::create_label(
             &mut graph.parent_cache().unwrap(),
             &fr_into_bytes(&id_fr),
             &*l2,

@@ -5,7 +5,7 @@ mod cache;
 mod challenges;
 mod column;
 mod column_proof;
-mod create_label;
+pub(crate) mod create_label;
 mod encoding_proof;
 mod graph;
 pub(crate) mod hash;

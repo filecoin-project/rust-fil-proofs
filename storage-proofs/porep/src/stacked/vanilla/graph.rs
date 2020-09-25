@@ -3,6 +3,7 @@ use std::marker::PhantomData;
 
 use anyhow::ensure;
 use log::info;
+use sha2raw::Sha256;
 use storage_proofs_core::{
     crypto::{
         derive_porep_domain_seed,
@@ -15,6 +16,7 @@ use storage_proofs_core::{
     hasher::Hasher,
     parameter_cache::ParameterSetMetadata,
     settings,
+    util::NODE_SIZE,
 };
 
 use super::cache::ParentCache;
@@ -54,6 +56,23 @@ where
 }
 
 pub type StackedBucketGraph<H> = StackedGraph<H, BucketGraph<H>>;
+
+#[inline]
+fn prefetch(parents: &[u32], data: &[u8]) {
+    for parent in parents {
+        let start = *parent as usize * NODE_SIZE;
+        let end = start + NODE_SIZE;
+
+        prefetch!(data[start..end].as_ptr() as *const i8);
+    }
+}
+
+#[inline]
+fn read_node<'a>(i: usize, parents: &[u32], data: &'a [u8]) -> &'a [u8] {
+    let start = parents[i] as usize * NODE_SIZE;
+    let end = start + NODE_SIZE;
+    &data[start..end]
+}
 
 pub fn derive_feistel_keys(porep_id: [u8; 32]) -> [u64; 4] {
     let mut feistel_keys = [0u64; 4];
@@ -120,6 +139,123 @@ where
         info!("using parent_cache[{} / {}]", cache_size, cache_entries);
 
         ParentCache::new(cache_size, cache_entries, self)
+    }
+    pub fn copy_parents_data_exp(
+        &self,
+        node: u32,
+        base_data: &[u8],
+        exp_data: &[u8],
+        hasher: Sha256,
+        mut cache: Option<&mut ParentCache>,
+    ) -> Result<[u8; 32]> {
+        if let Some(ref mut cache) = cache {
+            let cache_parents = cache.read(node as u32)?;
+            Ok(self.copy_parents_data_inner_exp(&cache_parents, base_data, exp_data, hasher))
+        } else {
+            let mut cache_parents = [0u32; DEGREE];
+
+            self.parents(node as usize, &mut cache_parents[..])
+                .expect("parents failure");
+            Ok(self.copy_parents_data_inner_exp(&cache_parents, base_data, exp_data, hasher))
+        }
+    }
+
+    pub fn copy_parents_data(
+        &self,
+        node: u32,
+        base_data: &[u8],
+        hasher: Sha256,
+        mut cache: Option<&mut ParentCache>,
+    ) -> Result<[u8; 32]> {
+        if let Some(ref mut cache) = cache {
+            let cache_parents = cache.read(node as u32)?;
+            Ok(self.copy_parents_data_inner(&cache_parents, base_data, hasher))
+        } else {
+            let mut cache_parents = [0u32; DEGREE];
+
+            self.parents(node as usize, &mut cache_parents[..])
+                .expect("parents failure");
+            Ok(self.copy_parents_data_inner(&cache_parents, base_data, hasher))
+        }
+    }
+
+    fn copy_parents_data_inner_exp(
+        &self,
+        cache_parents: &[u32],
+        base_data: &[u8],
+        exp_data: &[u8],
+        mut hasher: Sha256,
+    ) -> [u8; 32] {
+        prefetch(&cache_parents[..BASE_DEGREE], base_data);
+        prefetch(&cache_parents[BASE_DEGREE..], exp_data);
+
+        // fill buffer
+        let parents = [
+            read_node(0, cache_parents, base_data),
+            read_node(1, cache_parents, base_data),
+            read_node(2, cache_parents, base_data),
+            read_node(3, cache_parents, base_data),
+            read_node(4, cache_parents, base_data),
+            read_node(5, cache_parents, base_data),
+            read_node(6, cache_parents, exp_data),
+            read_node(7, cache_parents, exp_data),
+            read_node(8, cache_parents, exp_data),
+            read_node(9, cache_parents, exp_data),
+            read_node(10, cache_parents, exp_data),
+            read_node(11, cache_parents, exp_data),
+            read_node(12, cache_parents, exp_data),
+            read_node(13, cache_parents, exp_data),
+        ];
+
+        // round 1 (14)
+        hasher.input(&parents);
+
+        // round 2 (14)
+        hasher.input(&parents);
+
+        // round 3 (9)
+        hasher.input(&parents[..8]);
+        hasher.finish_with(&parents[8])
+    }
+
+    fn copy_parents_data_inner(
+        &self,
+        cache_parents: &[u32],
+        base_data: &[u8],
+        mut hasher: Sha256,
+    ) -> [u8; 32] {
+        prefetch(&cache_parents[..BASE_DEGREE], base_data);
+
+        // fill buffer
+        let parents = [
+            read_node(0, cache_parents, base_data),
+            read_node(1, cache_parents, base_data),
+            read_node(2, cache_parents, base_data),
+            read_node(3, cache_parents, base_data),
+            read_node(4, cache_parents, base_data),
+            read_node(5, cache_parents, base_data),
+        ];
+
+        // round 1 (0..6)
+        hasher.input(&parents);
+
+        // round 2 (6..12)
+        hasher.input(&parents);
+
+        // round 3 (12..18)
+        hasher.input(&parents);
+
+        // round 4 (18..24)
+        hasher.input(&parents);
+
+        // round 5 (24..30)
+        hasher.input(&parents);
+
+        // round 6 (30..36)
+        hasher.input(&parents);
+
+        // round 7 (37)
+        hasher.finish_with(parents[0])
     }
 }
 
