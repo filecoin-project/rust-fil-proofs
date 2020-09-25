@@ -85,7 +85,7 @@ mod tests {
     use crate::stacked::vanilla::{create_label, StackedBucketGraph, EXP_DEGREE, TOTAL_PARENTS};
 
     #[test]
-    fn test_create_label_multi() {
+    fn test_create_label() {
         let mut cs = TestConstraintSystem::<Bls12>::new();
         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
 
@@ -165,17 +165,17 @@ mod tests {
         assert_eq!(cs.num_constraints(), 532_025);
 
         let (l1, l2) = data.split_at_mut(size * NODE_SIZE);
-        // FIXME: Update this test.
-        create_label::multi::create_label(
-            &mut graph.parent_cache().unwrap(),
-            &fr_into_bytes(&id_fr),
+        create_label::single::create_label_exp(
+            &graph,
+            None,
+            fr_into_bytes(&id_fr),
             &*l2,
             l1,
             layer,
             node,
-            false,
         )
         .unwrap();
+
         let expected_raw = data_at_node(&l1, node).unwrap();
         let expected = bytes_into_fr(expected_raw).unwrap();
 

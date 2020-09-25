@@ -42,7 +42,7 @@ pub fn create_labels<Tree: 'static + MerkleTreeTrait, T: AsRef<[u8]>>(
             for node in 0..graph.size() {
                 create_label(
                     graph,
-                    parents_cache,
+                    Some(parents_cache),
                     &replica_id,
                     &mut layer_labels,
                     layer,
@@ -53,7 +53,7 @@ pub fn create_labels<Tree: 'static + MerkleTreeTrait, T: AsRef<[u8]>>(
             for node in 0..graph.size() {
                 create_label_exp(
                     graph,
-                    parents_cache,
+                    Some(parents_cache),
                     &replica_id,
                     &exp_labels,
                     &mut layer_labels,
@@ -106,7 +106,7 @@ pub fn create_labels<Tree: 'static + MerkleTreeTrait, T: AsRef<[u8]>>(
 
 pub fn create_label<H: Hasher, T: AsRef<[u8]>>(
     graph: &StackedBucketGraph<H>,
-    cache: &mut ParentCache,
+    cache: Option<&mut ParentCache>,
     replica_id: T,
     layer_labels: &mut [u8],
     layer_index: usize,
@@ -143,7 +143,7 @@ pub fn create_label<H: Hasher, T: AsRef<[u8]>>(
 
 pub fn create_label_exp<H: Hasher, T: AsRef<[u8]>>(
     graph: &StackedBucketGraph<H>,
-    cache: &mut ParentCache,
+    cache: Option<&mut ParentCache>,
     replica_id: T,
     exp_parents_data: &[u8],
     layer_labels: &mut [u8],
