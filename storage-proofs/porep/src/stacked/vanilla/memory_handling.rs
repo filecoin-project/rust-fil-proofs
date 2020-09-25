@@ -7,7 +7,7 @@ use std::path::PathBuf;
 use anyhow::Result;
 use byte_slice_cast::*;
 use log::*;
-use memmap::{Mmap, MmapMut, MmapOptions};
+use mapr::{Mmap, MmapMut, MmapOptions};
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering::SeqCst};
 
 pub struct CacheReader<T> {

@@ -11,7 +11,7 @@ use digest::generic_array::{
     GenericArray,
 };
 use log::*;
-use memmap::MmapMut;
+use mapr::MmapMut;
 use merkletree::store::{DiskStore, StoreConfig};
 use sha2::{Digest, Sha256};
 use storage_proofs_core::{

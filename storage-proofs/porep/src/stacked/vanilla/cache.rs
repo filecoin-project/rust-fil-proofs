@@ -6,6 +6,7 @@ use anyhow::{bail, ensure, Context};
 use byteorder::{ByteOrder, LittleEndian};
 use lazy_static::lazy_static;
 use log::{info, trace};
+use mapr::{Mmap, MmapOptions};
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -55,7 +56,7 @@ pub struct ParentCache {
 #[derive(Debug)]
 struct CacheData {
     /// This is a large list of fixed (parent) sized arrays.
-    data: memmap::Mmap,
+    data: Mmap,
     /// Offset in nodes.
     offset: u32,
     /// Len in nodes.
@@ -78,7 +79,7 @@ impl CacheData {
         let len = self.len as usize * DEGREE * NODE_BYTES;
 
         self.data = unsafe {
-            memmap::MmapOptions::new()
+            MmapOptions::new()
                 .offset(offset as u64)
                 .len(len)
                 .map(self.file.as_ref())
@@ -132,7 +133,7 @@ impl CacheData {
         }
 
         let data = unsafe {
-            memmap::MmapOptions::new()
+            MmapOptions::new()
                 .offset((offset as usize * DEGREE * NODE_BYTES) as u64)
                 .len(len as usize * DEGREE * NODE_BYTES)
                 .map(file.as_ref())
@@ -208,7 +209,7 @@ impl ParentCache {
             info!("[open] parent cache: calculating consistency digest");
             let file = File::open(&path)?;
             let data = unsafe {
-                memmap::MmapOptions::new()
+                MmapOptions::new()
                     .map(&file)
                     .with_context(|| format!("could not mmap path={}", path.display()))?
             };
@@ -274,7 +275,7 @@ impl ParentCache {
                 .with_context(|| format!("failed to set length: {}", cache_size))?;
 
             let mut data = unsafe {
-                memmap::MmapOptions::new()
+                MmapOptions::new()
                     .map_mut(file.as_ref())
                     .with_context(|| format!("could not mmap path={}", path.display()))?
             };
