@@ -505,7 +505,7 @@ pub fn seal_commit_phase2<Tree: 'static + MerkleTreeTrait>(
     )?;
     info!("snark_proof:finish");
 
-    let proof = MultiProof::new(groth_proofs, &groth_params.vk);
+    let proof = MultiProof::new(groth_proofs, &groth_params.pvk);
 
     let mut buf = Vec::with_capacity(
         SINGLE_PARTITION_PROOF_LEN * usize::from(PoRepProofPartitions::from(porep_config)),

@@ -102,7 +102,7 @@ where
         )?;
         info!("snark_proof:finish");
 
-        Ok(MultiProof::new(groth_proofs, &groth_params.vk))
+        Ok(MultiProof::new(groth_proofs, &groth_params.pvk))
     }
 
     fn prove_with_vanilla<'b>(
@@ -126,7 +126,7 @@ where
         )?;
         info!("snark_proof:finish");
 
-        Ok(MultiProof::new(groth_proofs, &groth_params.vk))
+        Ok(MultiProof::new(groth_proofs, &groth_params.pvk))
     }
 
     // verify is equivalent to ProofScheme::verify.
@@ -142,7 +142,7 @@ where
         );
 
         let vanilla_public_params = &public_params.vanilla_params;
-        let pvk = groth16::prepare_batch_verifying_key(&multi_proof.verifying_key);
+        let pvk = &multi_proof.verifying_key;
 
         if !<S as ProofScheme>::satisfies_requirements(
             &public_params.vanilla_params,
@@ -243,7 +243,7 @@ where
 
         let vanilla_public_params = &public_params.vanilla_params;
         // just use the first one, the must be equal any way
-        let pvk = groth16::prepare_batch_verifying_key(&multi_proofs[0].verifying_key);
+        let pvk = &multi_proofs[0].verifying_key;
 
         for multi_proof in multi_proofs.iter() {
             if !<S as ProofScheme>::satisfies_requirements(
