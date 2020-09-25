@@ -16,7 +16,6 @@ const PREFIX: &str = "FIL_PROOFS";
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Settings {
-    pub maximize_caching: bool,
     pub verify_cache: bool,
     pub verify_production_params: bool,
     pub pedersen_hash_exp_window_size: u32,
@@ -38,7 +37,6 @@ pub struct Settings {
 impl Default for Settings {
     fn default() -> Self {
         Settings {
-            maximize_caching: true,
             verify_cache: false,
             verify_production_params: false,
             pedersen_hash_exp_window_size: 16,

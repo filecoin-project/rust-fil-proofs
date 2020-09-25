@@ -146,18 +146,10 @@ where
         base_data: &[u8],
         exp_data: &[u8],
         hasher: Sha256,
-        mut cache: Option<&mut ParentCache>,
+        cache: &mut ParentCache,
     ) -> Result<[u8; 32]> {
-        if let Some(ref mut cache) = cache {
-            let cache_parents = cache.read(node as u32)?;
-            Ok(self.copy_parents_data_inner_exp(&cache_parents, base_data, exp_data, hasher))
-        } else {
-            let mut cache_parents = [0u32; DEGREE];
-
-            self.parents(node as usize, &mut cache_parents[..])
-                .expect("parents failure");
-            Ok(self.copy_parents_data_inner_exp(&cache_parents, base_data, exp_data, hasher))
-        }
+        let cache_parents = cache.read(node as u32)?;
+        Ok(self.copy_parents_data_inner_exp(&cache_parents, base_data, exp_data, hasher))
     }
 
     pub fn copy_parents_data(
@@ -165,18 +157,10 @@ where
         node: u32,
         base_data: &[u8],
         hasher: Sha256,
-        mut cache: Option<&mut ParentCache>,
+        cache: &mut ParentCache,
     ) -> Result<[u8; 32]> {
-        if let Some(ref mut cache) = cache {
-            let cache_parents = cache.read(node as u32)?;
-            Ok(self.copy_parents_data_inner(&cache_parents, base_data, hasher))
-        } else {
-            let mut cache_parents = [0u32; DEGREE];
-
-            self.parents(node as usize, &mut cache_parents[..])
-                .expect("parents failure");
-            Ok(self.copy_parents_data_inner(&cache_parents, base_data, hasher))
-        }
+        let cache_parents = cache.read(node as u32)?;
+        Ok(self.copy_parents_data_inner(&cache_parents, base_data, hasher))
     }
 
     fn copy_parents_data_inner_exp(
