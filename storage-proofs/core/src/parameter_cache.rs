@@ -66,6 +66,11 @@ pub fn get_parameter_data_from_id(parameter_id: &str) -> Option<&ParameterData> 
     PARAMETERS.get(parameter_id)
 }
 
+/// Get the correct parameter data for a given cache id.
+pub fn get_parameter_data(cache_id: &str) -> Option<&ParameterData> {
+    PARAMETERS.get(&parameter_id(cache_id))
+}
+
 /// Get the correct verifying key data for a given cache id.
 pub fn get_verifying_key_data(cache_id: &str) -> Option<&ParameterData> {
     PARAMETERS.get(&verifying_key_id(cache_id))
