@@ -936,7 +936,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
             other_arity_valid
         );
         assert!(binary_arity_valid);
-        // assert!(other_arity_valid);
+        assert!(other_arity_valid);
 
         let layers = layer_challenges.layers();
         assert!(layers > 0);
