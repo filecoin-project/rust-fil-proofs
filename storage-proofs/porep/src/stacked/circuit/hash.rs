@@ -1,8 +1,8 @@
+use bellperson::bls::Bls12;
 use bellperson::gadgets::num;
 use bellperson::{ConstraintSystem, SynthesisError};
 use generic_array::typenum;
 use neptune::circuit::poseidon_hash;
-use paired::bls12_381::Bls12;
 
 /// Hash a list of bits.
 pub fn hash_single_column<CS>(
@@ -31,10 +31,10 @@ where
 mod tests {
     use super::*;
 
+    use bellperson::bls::{Bls12, Fr};
     use bellperson::util_cs::test_cs::TestConstraintSystem;
     use bellperson::ConstraintSystem;
     use ff::Field;
-    use paired::bls12_381::{Bls12, Fr};
     use rand::SeedableRng;
     use rand_xorshift::XorShiftRng;
     use storage_proofs_core::hasher::{HashFunction, Hasher, PoseidonHasher};

@@ -1,6 +1,6 @@
+use bellperson::bls::{Bls12, Fr};
 use bellperson::gadgets::num;
 use bellperson::{ConstraintSystem, SynthesisError};
-use paired::bls12_381::{Bls12, Fr};
 use storage_proofs_core::{hasher::Hasher, merkle::MerkleTreeTrait};
 
 use super::hash::hash_single_column;

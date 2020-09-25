@@ -357,7 +357,7 @@ mod tests {
     use crate::constants::{DRG_DEGREE, EXP_DEGREE};
     use crate::types::DataTree;
 
-    use paired::bls12_381::Fr;
+    use bellperson::bls::Fr;
     use rand::{Rng, RngCore, SeedableRng};
     use rand_xorshift::XorShiftRng;
     use storage_proofs::drgraph::Graph;

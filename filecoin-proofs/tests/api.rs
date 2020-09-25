@@ -6,7 +6,7 @@ use std::sync::Once;
 
 use anyhow::Result;
 use ff::Field;
-use paired::bls12_381::Fr;
+use bellperson::bls::Fr;
 use rand::{Rng, SeedableRng};
 use rand_xorshift::XorShiftRng;
 use storage_proofs::hasher::Hasher;

@@ -5,6 +5,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{mpsc, Arc, RwLock};
 
 use anyhow::Context;
+use bellperson::bls::Fr;
 use bincode::deserialize;
 use generic_array::typenum::{self, Unsigned};
 use log::*;
@@ -13,7 +14,6 @@ use merkletree::merkle::{
     is_merkle_tree_size_valid,
 };
 use merkletree::store::{DiskStore, StoreConfig};
-use paired::bls12_381::Fr;
 use rayon::prelude::*;
 use storage_proofs_core::{
     cache_key::CacheKey,
@@ -1339,8 +1339,8 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
 mod tests {
     use super::*;
 
+    use bellperson::bls::{Fr, FrRepr};
     use ff::{Field, PrimeField};
-    use paired::bls12_381::{Fr, FrRepr};
     use rand::{Rng, SeedableRng};
     use rand_xorshift::XorShiftRng;
     use storage_proofs_core::hasher::poseidon::PoseidonHasher;

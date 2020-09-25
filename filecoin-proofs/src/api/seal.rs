@@ -3,11 +3,11 @@ use std::io::prelude::*;
 use std::path::{Path, PathBuf};
 
 use anyhow::{ensure, Context, Result};
+use bellperson::bls::Fr;
 use bincode::{deserialize, serialize};
 use log::{info, trace};
 use memmap::MmapOptions;
 use merkletree::store::{DiskStore, Store, StoreConfig};
-use paired::bls12_381::Fr;
 use storage_proofs::cache_key::CacheKey;
 use storage_proofs::compound_proof::{self, CompoundProof};
 use storage_proofs::drgraph::Graph;

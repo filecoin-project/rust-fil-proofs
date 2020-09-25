@@ -607,8 +607,8 @@ pub fn replica_id<H: Hasher>(prover_id: [u8; 32], sector_id: [u8; 32]) -> H::Dom
 mod tests {
     use super::*;
 
+    use bellperson::bls::Fr;
     use ff::Field;
-    use paired::bls12_381::Fr;
     use rand::SeedableRng;
     use rand_xorshift::XorShiftRng;
     use storage_proofs_core::{

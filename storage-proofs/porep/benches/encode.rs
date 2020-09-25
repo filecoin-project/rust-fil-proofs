@@ -1,6 +1,6 @@
+use bellperson::bls::Fr;
 use criterion::{black_box, criterion_group, criterion_main, Criterion, Throughput};
 use ff::Field;
-use paired::bls12_381::Fr;
 use rand::thread_rng;
 use storage_proofs_core::fr32::fr_into_bytes;
 use storage_proofs_core::hasher::sha256::Sha256Hasher;

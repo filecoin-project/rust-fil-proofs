@@ -1,8 +1,8 @@
 use std::marker::PhantomData;
 
 use anyhow::{anyhow, ensure};
+use bellperson::bls::{Bls12, Fr};
 use bellperson::Circuit;
-use paired::bls12_381::{Bls12, Fr};
 
 use storage_proofs_core::{
     compound_proof::{CircuitComponent, CompoundProof},

@@ -1,8 +1,8 @@
 use std::marker::PhantomData;
 
+use bellperson::bls::{Bls12, Fr};
 use bellperson::Circuit;
 use generic_array::typenum;
-use paired::bls12_381::{Bls12, Fr};
 use typenum::marker_traits::Unsigned;
 
 use storage_proofs_core::{

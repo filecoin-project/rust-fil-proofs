@@ -1,7 +1,7 @@
+use bellperson::bls::{Bls12, Fr};
 use bellperson::gadgets::num;
 use bellperson::{Circuit, ConstraintSystem, SynthesisError};
 use ff::Field;
-use paired::bls12_381::{Bls12, Fr};
 use rayon::prelude::*;
 
 use storage_proofs_core::{
@@ -218,7 +218,6 @@ mod tests {
     use bellperson::util_cs::test_cs::TestConstraintSystem;
     use ff::Field;
     use generic_array::typenum::{U0, U2, U4, U8};
-    use paired::bls12_381::{Bls12, Fr};
     use rand::SeedableRng;
     use rand_xorshift::XorShiftRng;
     use storage_proofs_core::{

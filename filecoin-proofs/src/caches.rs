@@ -3,10 +3,10 @@ use std::sync::Arc;
 use std::sync::Mutex;
 
 use anyhow::Result;
+use bellperson::bls::Bls12;
 use bellperson::groth16;
 use lazy_static::lazy_static;
 use log::info;
-use paired::bls12_381::Bls12;
 use storage_proofs::compound_proof::CompoundProof;
 use storage_proofs::porep::stacked::{StackedCompound, StackedDrg};
 use storage_proofs::post::fallback;

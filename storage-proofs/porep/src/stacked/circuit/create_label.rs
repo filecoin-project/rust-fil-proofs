@@ -68,10 +68,10 @@ where
 mod tests {
     use super::*;
 
+    use bellperson::bls::{Bls12, Fr};
     use bellperson::gadgets::boolean::Boolean;
     use bellperson::util_cs::test_cs::TestConstraintSystem;
     use ff::Field;
-    use paired::bls12_381::{Bls12, Fr};
     use rand::SeedableRng;
     use rand_xorshift::XorShiftRng;
     use storage_proofs_core::{

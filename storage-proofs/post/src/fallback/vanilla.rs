@@ -2,10 +2,10 @@ use std::collections::BTreeSet;
 use std::marker::PhantomData;
 
 use anyhow::ensure;
+use bellperson::bls::Fr;
 use byteorder::{ByteOrder, LittleEndian};
 use generic_array::typenum::Unsigned;
 use log::{error, trace};
-use paired::bls12_381::Fr;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};

@@ -21,7 +21,6 @@ commandspec = "0.12.2"
 chrono = { version = "0.4.7", features = ["serde"] }
 memmap = "0.7.0"
 bellperson = { git = "https://github.com/filecoin-project/bellman", branch = "blstrs", default-features = false }
-paired = "0.20.0"
 rand = "0.7"
 storage-proofs = { path = "../storage-proofs"}
 filecoin-proofs = { path = "../filecoin-proofs"}
