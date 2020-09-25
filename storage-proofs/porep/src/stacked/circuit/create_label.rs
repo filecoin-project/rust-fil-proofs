@@ -82,9 +82,7 @@ mod tests {
         util::{data_at_node, NODE_SIZE},
     };
 
-    use crate::stacked::vanilla::{
-        create_label_exp, StackedBucketGraph, EXP_DEGREE, TOTAL_PARENTS,
-    };
+    use crate::stacked::vanilla::{create_label, StackedBucketGraph, EXP_DEGREE, TOTAL_PARENTS};
 
     #[test]
     fn test_create_label() {
@@ -167,7 +165,17 @@ mod tests {
         assert_eq!(cs.num_constraints(), 532_025);
 
         let (l1, l2) = data.split_at_mut(size * NODE_SIZE);
-        create_label_exp(&graph, None, &id_fr.into(), &*l2, l1, layer, node).unwrap();
+        create_label::single::create_label_exp(
+            &graph,
+            None,
+            fr_into_bytes(&id_fr),
+            &*l2,
+            l1,
+            layer,
+            node,
+        )
+        .unwrap();
+
         let expected_raw = data_at_node(&l1, node).unwrap();
         let expected = bytes_into_fr(expected_raw).unwrap();
 

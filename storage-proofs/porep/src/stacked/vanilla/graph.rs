@@ -140,7 +140,6 @@ where
 
         ParentCache::new(cache_size, cache_entries, self)
     }
-
     pub fn copy_parents_data_exp(
         &self,
         node: u32,
