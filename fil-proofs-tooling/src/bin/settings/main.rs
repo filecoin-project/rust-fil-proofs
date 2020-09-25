@@ -1,6 +1,6 @@
 use anyhow::Result;
 
-use storage_proofs::settings::{Settings, SETTINGS};
+use storage_proofs::settings::{SETTINGS};
 
 fn main() -> Result<()> {
     println!("{:#?}", *SETTINGS.lock().unwrap());

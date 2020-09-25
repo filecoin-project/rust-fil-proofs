@@ -67,8 +67,9 @@ impl<T: FromByteSlice> CacheReader<T> {
     }
 
     #[inline]
-    pub fn get_mut_bufs(&self) -> &mut [Mmap] {
-        unsafe { std::slice::from_raw_parts_mut((*self.bufs.get()).as_mut_ptr(), 2) }
+    #[allow(clippy::mut_from_ref)]
+    pub unsafe fn get_mut_bufs(&self) -> &mut [Mmap] {
+        std::slice::from_raw_parts_mut((*self.bufs.get()).as_mut_ptr(), 2)
     }
 
     pub fn reset(&self) -> Result<()> {
@@ -76,7 +77,7 @@ impl<T: FromByteSlice> CacheReader<T> {
         // FIXME: If window_size is more than half of size, then buf1 will map past end of file.
         // This should never be accessed, but we should not map it.
         let buf1 = Self::map_buf(self.window_size as u64, self.window_size, &self.file)?;
-        let bufs = self.get_mut_bufs();
+        let bufs = unsafe { self.get_mut_bufs() };
         bufs[0] = buf0;
         bufs[1] = buf1;
         self.cur_window.store(0, SeqCst);
@@ -86,13 +87,13 @@ impl<T: FromByteSlice> CacheReader<T> {
 
     pub fn start_reset(&self) -> Result<()> {
         let buf0 = Self::map_buf(0, self.window_size, &self.file)?;
-        let bufs = self.get_mut_bufs();
+        let bufs = unsafe { self.get_mut_bufs() };
         bufs[0] = buf0;
         Ok(())
     }
     pub fn finish_reset(&self) -> Result<()> {
         let buf1 = Self::map_buf(self.window_size as u64, self.window_size, &self.file)?;
-        let bufs = self.get_mut_bufs();
+        let bufs = unsafe { self.get_mut_bufs() };
         bufs[1] = buf1;
         self.cur_window.store(0, SeqCst);
         self.cur_window_safe.store(0, SeqCst);
@@ -190,7 +191,7 @@ impl<T: FromByteSlice> CacheReader<T> {
             } else {
                 // We failed to increment `self.cur_window`, so we must wait for the window to be advanced before continuing.
                 // Wait until it is safe to use the new current window.
-                while !(self.cur_window_safe.load(SeqCst) == cur + 1) {}
+                while self.cur_window_safe.load(SeqCst) != cur + 1 {}
             }
         }
 
@@ -211,7 +212,9 @@ impl<T: FromByteSlice> CacheReader<T> {
         )
         .unwrap();
 
-        self.get_mut_bufs()[replace_idx] = new_buf
+        unsafe {
+            self.get_mut_bufs()[replace_idx] = new_buf;
+        }
     }
 }
 

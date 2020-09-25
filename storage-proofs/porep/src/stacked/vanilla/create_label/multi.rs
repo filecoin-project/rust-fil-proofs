@@ -34,7 +34,14 @@ use super::super::{
 const NODE_WORDS: usize = NODE_SIZE / size_of::<u32>();
 
 const SHA256_INITIAL_DIGEST: [u32; 8] = [
-    0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19,
+    0x6a09_e667,
+    0xbb67_ae85,
+    0x3c6_ef372,
+    0xa54f_f53a,
+    0x510e_527f,
+    0x9b05_688c,
+    0x1f83_d9ab,
+    0x5be0_cd19,
 ];
 
 #[inline]
@@ -119,6 +126,7 @@ fn fill_buffer(
 // - base_parent_missing - Bit mask of any base parent nodes that could not
 //                         be filled in. This is an array of size lookahead.
 // - is_layer0    - Indicates first (no expander parents) or subsequent layer
+#[allow(clippy::too_many_arguments)]
 fn create_label_runner(
     parents_cache: &CacheReader<u32>,
     layer_labels: &UnsafeSlice<u32>,
@@ -140,10 +148,11 @@ fn create_label_runner(
         if work >= num_nodes {
             break;
         }
-        let mut count = stride;
-        if work + stride > num_nodes {
-            count = num_nodes - work;
-        }
+        let count = if work + stride > num_nodes {
+            num_nodes - work
+        } else {
+            stride
+        };
         // info!(
         //     "starting work on count items: {}, starting from {}",
         //     count, work
@@ -278,7 +287,7 @@ fn create_layer_labels(
         // Fix endianess
         cur_node_ptr[..8].iter_mut().for_each(|x| *x = x.to_be());
 
-        cur_node_ptr[7] &= 0x3FFFFFFF; // Strip last two bits to ensure in Fr
+        cur_node_ptr[7] &= 0x3FFF_FFFF; // Strip last two bits to ensure in Fr
 
         // Keep track of which node slot in the ring_buffer to use
         let mut cur_slot = 0;
@@ -314,7 +323,7 @@ fn create_layer_labels(
                     if bpm.get(k) {
                         // info!("getting missing parent, k={}", k);
                         let source = unsafe {
-                            if cur_parent_ptr.len() < 1 {
+                            if cur_parent_ptr.is_empty() {
                                 cur_parent_ptr =
                                     parents_cache.consumer_slice_at(cur_parent_ptr_offset);
                             }
@@ -373,7 +382,7 @@ fn create_layer_labels(
                 // Fix endianess
                 cur_node_ptr[..8].iter_mut().for_each(|x| *x = x.to_be());
 
-                cur_node_ptr[7] &= 0x3FFFFFFF; // Strip last two bits to fit in Fr
+                cur_node_ptr[7] &= 0x3FFF_FFFF; // Strip last two bits to fit in Fr
 
                 cur_consumer.fetch_add(1, SeqCst);
                 i += 1;

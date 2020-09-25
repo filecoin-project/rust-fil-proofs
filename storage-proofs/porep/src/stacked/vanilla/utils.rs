@@ -80,7 +80,7 @@ impl BitMask {
 
     /// Returns true if the ith bit is set, false otherwise.
     #[inline]
-    pub fn get(&self, i: usize) -> bool {
+    pub fn get(self, i: usize) -> bool {
         self.0 & (1 << i) != 0
     }
 }
@@ -106,6 +106,7 @@ impl RingBuf {
         }
     }
 
+    #[allow(clippy::mut_from_ref)]
     unsafe fn slice_mut(&self) -> &mut [u8] {
         std::slice::from_raw_parts_mut((*self.data.get()).as_mut_ptr(), self.len())
     }
@@ -114,6 +115,7 @@ impl RingBuf {
         self.slot_size * self.num_slots
     }
 
+    #[allow(clippy::mut_from_ref)]
     pub unsafe fn slot_mut(&self, slot: usize) -> &mut [u8] {
         let start = self.slot_size * slot;
         let end = start + self.slot_size;
