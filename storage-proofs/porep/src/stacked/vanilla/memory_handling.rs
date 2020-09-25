@@ -62,16 +62,18 @@ impl<T: FromByteSlice> CacheReader<T> {
     }
 
     #[inline]
-    pub fn get_bufs(&self) -> &[Mmap] {
+    fn get_bufs(&self) -> &[Mmap] {
         unsafe { &std::slice::from_raw_parts((*self.bufs.get()).as_ptr(), 2) }
     }
 
     #[inline]
     #[allow(clippy::mut_from_ref)]
-    pub unsafe fn get_mut_bufs(&self) -> &mut [Mmap] {
+    unsafe fn get_mut_bufs(&self) -> &mut [Mmap] {
         std::slice::from_raw_parts_mut((*self.bufs.get()).as_mut_ptr(), 2)
     }
 
+    // TODO: is this actually needed?
+    #[allow(dead_code)]
     pub fn reset(&self) -> Result<()> {
         let buf0 = Self::map_buf(0, self.window_size, &self.file)?;
         // FIXME: If window_size is more than half of size, then buf1 will map past end of file.

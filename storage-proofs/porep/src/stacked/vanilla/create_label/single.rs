@@ -141,7 +141,7 @@ pub fn create_label<H: Hasher, T: AsRef<[u8]>>(
     Ok(())
 }
 
-fn create_label_exp<H: Hasher, T: AsRef<[u8]>>(
+pub fn create_label_exp<H: Hasher, T: AsRef<[u8]>>(
     graph: &StackedBucketGraph<H>,
     cache: Option<&mut ParentCache>,
     replica_id: T,
