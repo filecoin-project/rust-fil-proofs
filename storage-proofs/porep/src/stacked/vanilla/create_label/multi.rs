@@ -207,9 +207,7 @@ fn create_layer_labels(
 ) -> Result<()> {
     info!("Creating labels for layer {}", cur_layer);
     // num_producers is the number of producer threads
-    let (lookahead, num_producers, producer_stride) = if cur_layer == 1 {
-        (400, 1, 16)
-    } else {
+    let (lookahead, num_producers, producer_stride) = {
         // NOTE: Stride must not exceed `sdr_parents_cache_window_nodes`.
         // If it does, the process will deadlock with producers and consumers
         // waiting for each other.

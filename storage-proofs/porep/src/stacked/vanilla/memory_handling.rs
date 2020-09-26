@@ -72,18 +72,12 @@ impl<T: FromByteSlice> CacheReader<T> {
         std::slice::from_raw_parts_mut((*self.bufs.get()).as_mut_ptr(), 2)
     }
 
-    // TODO: is this actually needed?
     #[allow(dead_code)]
+    // This is unused, but included to document the meaning of its components.
+    // This allows splitting the reset in order to avoid a pause.
     pub fn reset(&self) -> Result<()> {
-        let buf0 = Self::map_buf(0, self.window_size, &self.file)?;
-        // FIXME: If window_size is more than half of size, then buf1 will map past end of file.
-        // This should never be accessed, but we should not map it.
-        let buf1 = Self::map_buf(self.window_size as u64, self.window_size, &self.file)?;
-        let bufs = unsafe { self.get_mut_bufs() };
-        bufs[0] = buf0;
-        bufs[1] = buf1;
-        self.cur_window.store(0, SeqCst);
-        self.cur_window_safe.store(0, SeqCst);
+        self.start_reset();
+        self.finish_reset();
         Ok(())
     }
 
