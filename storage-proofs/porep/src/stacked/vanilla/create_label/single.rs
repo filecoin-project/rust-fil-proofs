@@ -12,7 +12,9 @@ use storage_proofs_core::{
     util::{data_at_node_offset, NODE_SIZE},
 };
 
-use super::super::{cache::ParentCache, Labels, LabelsCache, StackedBucketGraph, proof::LayerState};
+use super::super::{
+    cache::ParentCache, proof::LayerState, Labels, LabelsCache, StackedBucketGraph,
+};
 
 #[allow(clippy::type_complexity)]
 pub fn create_labels_for_encoding<Tree: 'static + MerkleTreeTrait, T: AsRef<[u8]>>(
@@ -25,7 +27,7 @@ pub fn create_labels_for_encoding<Tree: 'static + MerkleTreeTrait, T: AsRef<[u8]
     info!("generate labels");
 
     let layer_states = super::prepare_layers::<Tree>(graph, &config, layers);
-    
+
     // For now, we require it due to changes in encodings structure.
     let mut labels: Vec<DiskStore<<Tree::Hasher as Hasher>::Domain>> = Vec::with_capacity(layers);
 
@@ -78,7 +80,7 @@ pub fn create_labels_for_encoding<Tree: 'static + MerkleTreeTrait, T: AsRef<[u8]
         super::write_layer(&layer_labels, layer_config).context("failed to store labels")?;
         let layer_store: DiskStore<<Tree::Hasher as Hasher>::Domain> =
             DiskStore::new_from_disk(graph.size(), Tree::Arity::to_usize(), &layer_config)?;
-        
+
         info!(
             "  generated layer {} store with id {}",
             layer, layer_config.id
@@ -102,10 +104,9 @@ pub fn create_labels_for_encoding<Tree: 'static + MerkleTreeTrait, T: AsRef<[u8]
             labels: layer_states.iter().map(|s| s.config.clone()).collect(),
             _h: PhantomData,
         },
-        layer_states
+        layer_states,
     ))
 }
-
 
 #[allow(clippy::type_complexity)]
 pub fn create_labels_for_decoding<Tree: 'static + MerkleTreeTrait, T: AsRef<[u8]>>(
@@ -155,17 +156,13 @@ pub fn create_labels_for_decoding<Tree: 'static + MerkleTreeTrait, T: AsRef<[u8]
             }
         }
 
-
         // Write the result to disk to avoid keeping it in memory all the time.
         info!("  storing labels on disk");
         super::write_layer(&layer_labels, &config)?;
 
         let layer_store: DiskStore<<Tree::Hasher as Hasher>::Domain> =
             DiskStore::new_from_disk(graph.size(), Tree::Arity::to_usize(), &config)?;
-        info!(
-            "  generated layer {} store with id {}",
-            layer, config.id
-        );
+        info!("  generated layer {} store with id {}", layer, config.id);
 
         info!("  setting exp parents");
         std::mem::swap(&mut layer_labels, &mut exp_labels);
@@ -180,9 +177,7 @@ pub fn create_labels_for_decoding<Tree: 'static + MerkleTreeTrait, T: AsRef<[u8]
         "Invalid amount of layers encoded expected"
     );
 
-    Ok(
-        LabelsCache::<Tree> { labels },
-    )
+    Ok(LabelsCache::<Tree> { labels })
 }
 
 pub fn create_label<H: Hasher, T: AsRef<[u8]>>(

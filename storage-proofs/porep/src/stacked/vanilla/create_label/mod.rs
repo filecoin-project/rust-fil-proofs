@@ -1,24 +1,19 @@
-use log::*;
-use merkletree::store::{StoreConfig};
-use merkletree::merkle::Element;
 use anyhow::Context;
+use log::*;
+use merkletree::merkle::Element;
+use merkletree::store::StoreConfig;
 use storage_proofs_core::{
-    cache_key::CacheKey,
-    hasher::{Hasher},
-    merkle::MerkleTreeTrait,
-    error::Result,
-    drgraph::Graph,
+    cache_key::CacheKey, drgraph::Graph, error::Result, hasher::Hasher, merkle::MerkleTreeTrait,
 };
 
-use crate::stacked::vanilla::{StackedBucketGraph, proof::LayerState};
+use crate::stacked::vanilla::{proof::LayerState, StackedBucketGraph};
 
 pub mod multi;
 pub mod single;
 
-
 /// Prepares the necessary `StoreConfig`s with which the layers are stored.
 /// Also checks for already existing layers and marks them as such.
-pub fn prepare_layers<Tree:  'static + MerkleTreeTrait>(
+pub fn prepare_layers<Tree: 'static + MerkleTreeTrait>(
     graph: &StackedBucketGraph<Tree::Hasher>,
     config: &StoreConfig,
     layers: usize,
@@ -83,7 +78,7 @@ pub fn remove_tmp_layer(config: &StoreConfig) {
 }
 
 /// Checks if the given layer is already written and of the right size.
-pub fn is_layer_written<Tree:  'static + MerkleTreeTrait>(
+pub fn is_layer_written<Tree: 'static + MerkleTreeTrait>(
     graph: &StackedBucketGraph<Tree::Hasher>,
     config: &StoreConfig,
 ) -> Result<bool> {
@@ -102,4 +97,3 @@ pub fn is_layer_written<Tree:  'static + MerkleTreeTrait>(
 
     Ok(true)
 }
-

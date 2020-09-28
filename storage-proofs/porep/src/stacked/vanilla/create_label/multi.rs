@@ -27,8 +27,8 @@ use super::super::{
     graph::{StackedBucketGraph, DEGREE, EXP_DEGREE},
     memory_handling::{setup_create_label_memory, CacheReader},
     params::{Labels, LabelsCache},
-    utils::*,
     proof::LayerState,
+    utils::*,
 };
 
 const NODE_WORDS: usize = NODE_SIZE / size_of::<u32>();
@@ -408,7 +408,7 @@ pub fn create_labels_for_encoding<Tree: 'static + MerkleTreeTrait, T: AsRef<[u8]
     info!("create labels");
 
     let layer_states = super::prepare_layers::<Tree>(graph, &config, layers);
-    
+
     // For now, we require it due to changes in encodings structure.
     let mut labels: Vec<DiskStore<<Tree::Hasher as Hasher>::Domain>> = Vec::with_capacity(layers);
 
@@ -502,7 +502,6 @@ pub fn create_labels_for_encoding<Tree: 'static + MerkleTreeTrait, T: AsRef<[u8]
     ))
 }
 
-
 #[allow(clippy::type_complexity)]
 pub fn create_labels_for_decoding<Tree: 'static + MerkleTreeTrait, T: AsRef<[u8]>>(
     graph: &StackedBucketGraph<Tree::Hasher>,
@@ -593,9 +592,7 @@ pub fn create_labels_for_decoding<Tree: 'static + MerkleTreeTrait, T: AsRef<[u8]
         "Invalid amount of layers encoded expected"
     );
 
-    Ok(
-        LabelsCache::<Tree> { labels },
-    )
+    Ok(LabelsCache::<Tree> { labels })
 }
 
 #[cfg(test)]

@@ -293,7 +293,6 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         Ok(())
     }
 
-
     /// Generates the layers as needed for encoding.
     fn generate_labels_for_encoding(
         graph: &StackedBucketGraph<Tree::Hasher>,
