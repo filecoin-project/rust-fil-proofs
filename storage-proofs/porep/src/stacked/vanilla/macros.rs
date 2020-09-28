@@ -55,6 +55,11 @@ macro_rules! prefetch {
 
             _mm_prefetch($val, _MM_HINT_T0);
         }
+        #[cfg(all(target_arch = "aarch64"))]
+        unsafe {
+            use std::arch::aarch64::*;
+            _prefetch($val, _PREFETCH_READ, _PREFETCH_LOCALITY3);
+        }
     };
 }
 
