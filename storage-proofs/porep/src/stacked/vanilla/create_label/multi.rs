@@ -152,10 +152,10 @@ fn create_label_runner(
         } else {
             stride
         };
-        // info!(
-        //     "starting work on count items: {}, starting from {}",
-        //     count, work
-        // );
+        debug!(
+            "starting work on count items: {}, starting from {}",
+            count, work
+        );
 
         // Do the work of filling the buffers
         for cur_node in work..work + count {
@@ -172,7 +172,7 @@ fn create_label_runner(
             let bpm = unsafe { base_parent_missing.get_mut(cur_slot as usize) };
 
             let pc = parents_cache.slice_at(cur_node as usize * DEGREE as usize, cur_consumer);
-            // info!("filling");
+            debug!("filling buffer");
             fill_buffer(
                 cur_node,
                 cur_consumer,
@@ -182,7 +182,7 @@ fn create_label_runner(
                 buf,
                 bpm,
             );
-            // info!("filled");
+            debug!("filled buffer");
         }
 
         // Wait for the previous node to finish
@@ -320,23 +320,20 @@ fn create_layer_labels(
                 for k in 0..BASE_DEGREE {
                     let bpm = unsafe { base_parent_missing.get(cur_slot) };
                     if bpm.get(k) {
-                        // info!("getting missing parent, k={}", k);
+                        debug!("getting missing parent, k={}", k);
                         let source = unsafe {
                             if cur_parent_ptr.is_empty() {
                                 cur_parent_ptr =
                                     parents_cache.consumer_slice_at(cur_parent_ptr_offset);
                             }
-                            // info!("after unsafe, when getting miss parent");
                             let start = cur_parent_ptr[0] as usize * NODE_WORDS;
                             let end = start + NODE_WORDS;
-
-                            // info!("before as_slice(), when getting miss parent");
                             &layer_labels.as_slice()[start..end]
                         };
 
                         buf[64 + (NODE_SIZE * k)..64 + (NODE_SIZE * (k + 1))]
                             .copy_from_slice(source.as_byte_slice());
-                        // info!("got missing parent, k={}", k);
+                        debug!("got missing parent, k={}", k);
                     }
                     cur_parent_ptr = &cur_parent_ptr[1..];
                     cur_parent_ptr_offset += 1;
@@ -569,7 +566,11 @@ mod tests {
         let cache = graph.parent_cache().unwrap();
 
         let (labels, _) = create_labels::<LCTree<PoseidonHasher, U8, U0, U2>, _>(
-            &graph, &cache.path, layers, replica_id, config,
+            &graph,
+            &cache.path,
+            layers,
+            replica_id,
+            config,
         )
         .unwrap();
 

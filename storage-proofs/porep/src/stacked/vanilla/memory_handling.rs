@@ -81,7 +81,11 @@ impl<T: FromByteSlice> CacheReader<T> {
     }
 
     pub fn finish_reset(&mut self) -> Result<()> {
-        self.buf1 = UnsafeCell::new(Self::map_buf(self.window_size as u64, self.window_size, &self.file)?);
+        self.buf1 = UnsafeCell::new(Self::map_buf(
+            self.window_size as u64,
+            self.window_size,
+            &self.file,
+        )?);
         self.cur_window.store(0, SeqCst);
         self.cur_window_safe.store(0, SeqCst);
         Ok(())
@@ -192,13 +196,9 @@ impl<T: FromByteSlice> CacheReader<T> {
 
         // Safety: we wait for the current window to be at pos above.
         if window % 2 == 0 {
-            unsafe {
-                &self.get_buf0().as_slice_of::<T>().unwrap()[pos..]
-            }
+            unsafe { &self.get_buf0().as_slice_of::<T>().unwrap()[pos..] }
         } else {
-            unsafe {
-                &self.get_buf1().as_slice_of::<T>().unwrap()[pos..]
-            }
+            unsafe { &self.get_buf1().as_slice_of::<T>().unwrap()[pos..] }
         }
     }
 
@@ -214,9 +214,9 @@ impl<T: FromByteSlice> CacheReader<T> {
         .unwrap();
 
         let buf = if new_window % 2 == 0 {
-            &mut *self.buf0.get() 
+            &mut *self.buf0.get()
         } else {
-            &mut *self.buf0.get() 
+            &mut *self.buf0.get()
         };
 
         *buf = new_buf;
