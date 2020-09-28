@@ -12,7 +12,8 @@ use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering::SeqCst};
 
 pub struct CacheReader<T> {
     file: File,
-    bufs: UnsafeCell<[Mmap; 2]>,
+    buf0: UnsafeCell<Mmap>,
+    buf1: UnsafeCell<Mmap>,
     size: usize,
     degree: usize,
     window_size: usize,
@@ -50,7 +51,8 @@ impl<T: FromByteSlice> CacheReader<T> {
         let buf1 = Self::map_buf(window_size as u64, window_size, &file)?;
         Ok(Self {
             file,
-            bufs: UnsafeCell::new([buf0, buf1]),
+            buf0: UnsafeCell::new(buf0),
+            buf1: UnsafeCell::new(buf1),
             size,
             degree,
             window_size,
@@ -61,42 +63,25 @@ impl<T: FromByteSlice> CacheReader<T> {
         })
     }
 
+    /// Unsafe because the caller must ensure no `buf0` is not accessed mutably in parallel.
     #[inline]
-    fn get_bufs(&self) -> &[Mmap] {
-        unsafe { &std::slice::from_raw_parts((*self.bufs.get()).as_ptr(), 2) }
+    unsafe fn get_buf0(&self) -> &Mmap {
+        &*self.buf0.get()
     }
 
+    /// Unsafe because the caller must ensure no `buf1` is not accessed mutably in parallel.
     #[inline]
-    #[allow(clippy::mut_from_ref)]
-    unsafe fn get_mut_bufs(&self) -> &mut [Mmap] {
-        std::slice::from_raw_parts_mut((*self.bufs.get()).as_mut_ptr(), 2)
+    unsafe fn get_buf1(&self) -> &Mmap {
+        &*self.buf1.get()
     }
 
-    // TODO: is this actually needed?
-    #[allow(dead_code)]
-    pub fn reset(&self) -> Result<()> {
-        let buf0 = Self::map_buf(0, self.window_size, &self.file)?;
-        // FIXME: If window_size is more than half of size, then buf1 will map past end of file.
-        // This should never be accessed, but we should not map it.
-        let buf1 = Self::map_buf(self.window_size as u64, self.window_size, &self.file)?;
-        let bufs = unsafe { self.get_mut_bufs() };
-        bufs[0] = buf0;
-        bufs[1] = buf1;
-        self.cur_window.store(0, SeqCst);
-        self.cur_window_safe.store(0, SeqCst);
+    pub fn start_reset(&mut self) -> Result<()> {
+        self.buf0 = UnsafeCell::new(Self::map_buf(0, self.window_size, &self.file)?);
         Ok(())
     }
 
-    pub fn start_reset(&self) -> Result<()> {
-        let buf0 = Self::map_buf(0, self.window_size, &self.file)?;
-        let bufs = unsafe { self.get_mut_bufs() };
-        bufs[0] = buf0;
-        Ok(())
-    }
-    pub fn finish_reset(&self) -> Result<()> {
-        let buf1 = Self::map_buf(self.window_size as u64, self.window_size, &self.file)?;
-        let bufs = unsafe { self.get_mut_bufs() };
-        bufs[1] = buf1;
+    pub fn finish_reset(&mut self) -> Result<()> {
+        self.buf1 = UnsafeCell::new(Self::map_buf(self.window_size as u64, self.window_size, &self.file)?);
         self.cur_window.store(0, SeqCst);
         self.cur_window_safe.store(0, SeqCst);
         Ok(())
@@ -137,8 +122,10 @@ impl<T: FromByteSlice> CacheReader<T> {
     }
 
     /// `pos` is in units of `T`.
+    ///
+    /// Unsafe because the caller must ensure to only read a position that is currently not accessed mutably.
     #[inline]
-    pub fn consumer_slice_at(&self, pos: usize) -> &[T] {
+    pub unsafe fn consumer_slice_at(&self, pos: usize) -> &[T] {
         assert!(
             pos < self.size,
             "pos {} out of range for buffer of size {}",
@@ -147,9 +134,12 @@ impl<T: FromByteSlice> CacheReader<T> {
         );
         let window = pos / self.window_element_count();
         let pos = pos % self.window_element_count();
-        let targeted_buf = &self.get_bufs()[window % 2];
 
-        &targeted_buf.as_slice_of::<T>().unwrap()[pos..]
+        if window % 2 == 0 {
+            &self.get_buf0().as_slice_of::<T>().unwrap()[pos..]
+        } else {
+            &self.get_buf1().as_slice_of::<T>().unwrap()[pos..]
+        }
     }
 
     /// `pos` is in units of `T`.
@@ -186,7 +176,10 @@ impl<T: FromByteSlice> CacheReader<T> {
                     while (consumer.load(SeqCst) as usize) < safe_consumer {}
                 }
 
-                self.advance_rear_window(window);
+                // Safety: we have waited for the consumer to advance beyond the rear window above.
+                unsafe {
+                    self.advance_rear_window(window);
+                }
 
                 // Now it is safe to use the new window.
                 self.cur_window_safe.fetch_add(1, SeqCst);
@@ -197,15 +190,21 @@ impl<T: FromByteSlice> CacheReader<T> {
             }
         }
 
-        let targeted_buf = &self.get_bufs()[window % 2];
-
-        &targeted_buf.as_slice_of::<T>().unwrap()[pos..]
+        // Safety: we wait for the current window to be at pos above.
+        if window % 2 == 0 {
+            unsafe {
+                &self.get_buf0().as_slice_of::<T>().unwrap()[pos..]
+            }
+        } else {
+            unsafe {
+                &self.get_buf1().as_slice_of::<T>().unwrap()[pos..]
+            }
+        }
     }
 
-    fn advance_rear_window(&self, new_window: usize) {
+    /// Unsafe because the caller must ensure that there is no current access the rear window.
+    unsafe fn advance_rear_window(&self, new_window: usize) {
         assert!(new_window as usize * self.window_size < self.size);
-
-        let replace_idx = (new_window % 2) as usize;
 
         let new_buf = Self::map_buf(
             (new_window * self.window_size) as u64,
@@ -214,9 +213,13 @@ impl<T: FromByteSlice> CacheReader<T> {
         )
         .unwrap();
 
-        unsafe {
-            self.get_mut_bufs()[replace_idx] = new_buf;
-        }
+        let buf = if new_window % 2 == 0 {
+            &mut *self.buf0.get() 
+        } else {
+            &mut *self.buf0.get() 
+        };
+
+        *buf = new_buf;
     }
 }
 

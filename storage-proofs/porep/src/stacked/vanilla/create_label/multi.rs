@@ -1,6 +1,7 @@
 use std::convert::TryInto;
 use std::marker::PhantomData;
 use std::mem::size_of;
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering::SeqCst};
 
 use anyhow::Result;
@@ -23,7 +24,6 @@ use storage_proofs_core::{
 };
 
 use super::super::{
-    cache::ParentCache,
     graph::{StackedBucketGraph, DEGREE, EXP_DEGREE},
     memory_handling::{setup_create_label_memory, CacheReader},
     params::{Labels, LabelsCache},
@@ -271,7 +271,7 @@ fn create_layer_labels(
         }
 
         let mut cur_node_ptr = unsafe { layer_labels.as_mut_slice() };
-        let mut cur_parent_ptr = parents_cache.consumer_slice_at(DEGREE);
+        let mut cur_parent_ptr = unsafe { parents_cache.consumer_slice_at(DEGREE) };
         let mut cur_parent_ptr_offset = DEGREE;
 
         // Calculate node 0 (special case with no parents)
@@ -401,7 +401,7 @@ fn create_layer_labels(
 #[allow(clippy::type_complexity)]
 pub fn create_labels<Tree: 'static + MerkleTreeTrait, T: AsRef<[u8]>>(
     graph: &StackedBucketGraph<Tree::Hasher>,
-    parents_cache: &ParentCache,
+    parents_cache_path: &PathBuf,
     layers: usize,
     replica_id: T,
     config: StoreConfig,
@@ -423,11 +423,11 @@ pub fn create_labels<Tree: 'static + MerkleTreeTrait, T: AsRef<[u8]>>(
     let default_cache_size = DEGREE * 4 * cache_window_nodes;
 
     // NOTE: this means we currently keep 2x sector size around, to improve speed
-    let (parents_cache, mut layer_labels, mut exp_labels) = setup_create_label_memory(
+    let (mut parents_cache, mut layer_labels, mut exp_labels) = setup_create_label_memory(
         sector_size,
         DEGREE,
         Some(default_cache_size as usize),
-        &parents_cache.path,
+        parents_cache_path,
     )?;
 
     for layer in 1..=layers {
@@ -569,7 +569,7 @@ mod tests {
         let cache = graph.parent_cache().unwrap();
 
         let (labels, _) = create_labels::<LCTree<PoseidonHasher, U8, U0, U2>, _>(
-            &graph, &cache, layers, replica_id, config,
+            &graph, &cache.path, layers, replica_id, config,
         )
         .unwrap();
 

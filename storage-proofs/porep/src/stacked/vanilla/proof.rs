@@ -300,9 +300,11 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
             .use_multicore_sdr
         {
             info!("multi core replication");
+            let parent_cache_path = parent_cache.path.clone();
+            drop(parent_cache); // avoid keeping unnecessary Mmaps around
             create_label::multi::create_labels(
                 graph,
-                &parent_cache,
+                &parent_cache_path,
                 layer_challenges.layers(),
                 replica_id,
                 config,
