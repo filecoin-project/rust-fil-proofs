@@ -416,8 +416,8 @@ pub fn create_labels_for_encoding<Tree: 'static + MerkleTreeTrait, T: AsRef<[u8]
     let node_count = graph.size() as u64;
     let cache_window_nodes = settings::SETTINGS
         .lock()
-        .expect("sdr_parents_cache_window_nodes settings lock failure")
-        .sdr_parents_cache_window_nodes as usize;
+        .expect("sdr_parents_cache_size settings lock failure")
+        .sdr_parents_cache_size as usize;
 
     let default_cache_size = DEGREE * 4 * cache_window_nodes;
 
