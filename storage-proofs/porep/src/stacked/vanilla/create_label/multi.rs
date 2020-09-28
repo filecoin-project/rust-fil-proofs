@@ -3,7 +3,7 @@ use std::marker::PhantomData;
 use std::mem::size_of;
 use std::sync::atomic::{AtomicU64, Ordering::SeqCst};
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use byte_slice_cast::*;
 use crossbeam::thread;
 use digest::generic_array::{
@@ -409,9 +409,6 @@ pub fn create_labels_for_encoding<Tree: 'static + MerkleTreeTrait, T: AsRef<[u8]
 
     let layer_states = super::prepare_layers::<Tree>(graph, &config, layers);
 
-    // For now, we require it due to changes in encodings structure.
-    let mut labels: Vec<DiskStore<<Tree::Hasher as Hasher>::Domain>> = Vec::with_capacity(layers);
-
     let sector_size = graph.size() * NODE_SIZE;
     let node_count = graph.size() as u64;
     let cache_window_nodes = settings::SETTINGS
@@ -468,30 +465,16 @@ pub fn create_labels_for_encoding<Tree: 'static + MerkleTreeTrait, T: AsRef<[u8]
             let layer_config = &layer_state.config;
 
             info!("  storing labels on disk");
-            // Construct and persist the layer data.
-            let layer_store: DiskStore<<Tree::Hasher as Hasher>::Domain> =
-                DiskStore::new_from_slice_with_config(
-                    graph.size(),
-                    Tree::Arity::to_usize(),
-                    &layer_labels,
-                    layer_config.clone(),
-                )?;
+            super::write_layer(&layer_labels, layer_config).context("failed to store labels")?;
+
             info!(
                 "  generated layer {} store with id {}",
                 layer, layer_config.id
             );
 
             std::mem::swap(&mut layer_labels, &mut exp_labels);
-
-            // Track the layer specific store and StoreConfig for later retrieval.
-            labels.push(layer_store);
         }
     }
-    assert_eq!(
-        labels.len(),
-        layers,
-        "Invalid amount of layers encoded expected"
-    );
 
     Ok((
         Labels::<Tree> {

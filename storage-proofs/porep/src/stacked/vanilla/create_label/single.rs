@@ -28,9 +28,6 @@ pub fn create_labels_for_encoding<Tree: 'static + MerkleTreeTrait, T: AsRef<[u8]
 
     let layer_states = super::prepare_layers::<Tree>(graph, &config, layers);
 
-    // For now, we require it due to changes in encodings structure.
-    let mut labels: Vec<DiskStore<<Tree::Hasher as Hasher>::Domain>> = Vec::with_capacity(layers);
-
     let layer_size = graph.size() * NODE_SIZE;
     // NOTE: this means we currently keep 2x sector size around, to improve speed.
     let mut layer_labels = vec![0u8; layer_size]; // Buffer for labels of the current layer
@@ -78,8 +75,6 @@ pub fn create_labels_for_encoding<Tree: 'static + MerkleTreeTrait, T: AsRef<[u8]
 
         info!("  storing labels on disk");
         super::write_layer(&layer_labels, layer_config).context("failed to store labels")?;
-        let layer_store: DiskStore<<Tree::Hasher as Hasher>::Domain> =
-            DiskStore::new_from_disk(graph.size(), Tree::Arity::to_usize(), &layer_config)?;
 
         info!(
             "  generated layer {} store with id {}",
@@ -88,16 +83,7 @@ pub fn create_labels_for_encoding<Tree: 'static + MerkleTreeTrait, T: AsRef<[u8]
 
         info!("  setting exp parents");
         std::mem::swap(&mut layer_labels, &mut exp_labels);
-
-        // Track the layer specific store and StoreConfig for later retrieval.
-        labels.push(layer_store);
     }
-
-    assert_eq!(
-        labels.len(),
-        layers,
-        "Invalid amount of layers encoded expected"
-    );
 
     Ok((
         Labels::<Tree> {
