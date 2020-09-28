@@ -3,7 +3,7 @@ use std::marker::PhantomData;
 use std::mem::size_of;
 use std::sync::atomic::{AtomicU64, Ordering::SeqCst};
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use byte_slice_cast::*;
 use crossbeam::thread;
 use digest::generic_array::{
@@ -27,6 +27,7 @@ use super::super::{
     graph::{StackedBucketGraph, DEGREE, EXP_DEGREE},
     memory_handling::{setup_create_label_memory, CacheReader},
     params::{Labels, LabelsCache},
+    proof::LayerState,
     utils::*,
 };
 
@@ -397,13 +398,101 @@ fn create_layer_labels(
 }
 
 #[allow(clippy::type_complexity)]
-pub fn create_labels<Tree: 'static + MerkleTreeTrait, T: AsRef<[u8]>>(
+pub fn create_labels_for_encoding<Tree: 'static + MerkleTreeTrait, T: AsRef<[u8]>>(
     graph: &StackedBucketGraph<Tree::Hasher>,
     parents_cache: &ParentCache,
     layers: usize,
     replica_id: T,
     config: StoreConfig,
-) -> Result<(LabelsCache<Tree>, Labels<Tree>)> {
+) -> Result<(Labels<Tree>, Vec<LayerState>)> {
+    info!("create labels");
+
+    let layer_states = super::prepare_layers::<Tree>(graph, &config, layers);
+
+    let sector_size = graph.size() * NODE_SIZE;
+    let node_count = graph.size() as u64;
+    let cache_window_nodes = settings::SETTINGS
+        .lock()
+        .expect("sdr_parents_cache_size settings lock failure")
+        .sdr_parents_cache_size as usize;
+
+    let default_cache_size = DEGREE * 4 * cache_window_nodes;
+
+    // NOTE: this means we currently keep 2x sector size around, to improve speed
+    let (parents_cache, mut layer_labels, mut exp_labels) = setup_create_label_memory(
+        sector_size,
+        DEGREE,
+        Some(default_cache_size as usize),
+        &parents_cache.path,
+    )?;
+
+    for (layer, layer_state) in (1..=layers).zip(layer_states.iter()) {
+        info!("Layer {}", layer);
+
+        if layer_state.generated {
+            info!("skipping layer {}, already generated", layer);
+
+            // load the already generated layer into exp_labels
+            super::read_layer(&layer_state.config, &mut exp_labels)?;
+            continue;
+        }
+
+        // Cache reset happens in two parts.
+        // The second part (the finish) happens before each layer but the first.
+        if layers != 1 {
+            parents_cache.finish_reset()?;
+        }
+        create_layer_labels(
+            &parents_cache,
+            &replica_id.as_ref(),
+            &mut layer_labels,
+            if layer == 1 {
+                None
+            } else {
+                Some(&mut exp_labels)
+            },
+            node_count,
+            layer as u32,
+        )?;
+
+        // Cache reset happens in two parts.
+        // The first part (the start) happens after each layer but the last.
+        if layer != layers {
+            parents_cache.start_reset()?;
+        }
+
+        {
+            let layer_config = &layer_state.config;
+
+            info!("  storing labels on disk");
+            super::write_layer(&layer_labels, layer_config).context("failed to store labels")?;
+
+            info!(
+                "  generated layer {} store with id {}",
+                layer, layer_config.id
+            );
+
+            std::mem::swap(&mut layer_labels, &mut exp_labels);
+        }
+    }
+
+    Ok((
+        Labels::<Tree> {
+            labels: layer_states.iter().map(|s| s.config.clone()).collect(),
+            _h: PhantomData,
+        },
+        layer_states,
+    ))
+}
+
+#[allow(clippy::type_complexity)]
+pub fn create_labels_for_decoding<Tree: 'static + MerkleTreeTrait, T: AsRef<[u8]>>(
+    graph: &StackedBucketGraph<Tree::Hasher>,
+    parents_cache: &ParentCache,
+    layers: usize,
+    replica_id: T,
+    config: StoreConfig,
+) -> Result<LabelsCache<Tree>> {
     info!("create labels");
 
     // For now, we require it due to changes in encodings structure.
@@ -486,13 +575,7 @@ pub fn create_labels<Tree: 'static + MerkleTreeTrait, T: AsRef<[u8]>>(
         "Invalid amount of layers encoded expected"
     );
 
-    Ok((
-        LabelsCache::<Tree> { labels },
-        Labels::<Tree> {
-            labels: label_configs,
-            _h: PhantomData,
-        },
-    ))
+    Ok(LabelsCache::<Tree> { labels })
 }
 
 #[cfg(test)]
@@ -566,7 +649,7 @@ mod tests {
         .unwrap();
         let cache = graph.parent_cache().unwrap();
 
-        let (labels, _) = create_labels::<LCTree<PoseidonHasher, U8, U0, U2>, _>(
+        let labels = create_labels_for_decoding::<LCTree<PoseidonHasher, U8, U0, U2>, _>(
             &graph, &cache, layers, replica_id, config,
         )
         .unwrap();
