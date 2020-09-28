@@ -216,7 +216,7 @@ impl<T: FromByteSlice> CacheReader<T> {
         let buf = if new_window % 2 == 0 {
             &mut *self.buf0.get()
         } else {
-            &mut *self.buf0.get()
+            &mut *self.buf1.get()
         };
 
         *buf = new_buf;
