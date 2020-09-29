@@ -452,6 +452,7 @@ pub fn generate_fallback_sector_challenges<Tree: 'static + MerkleTreeTrait>(
     randomness: &ChallengeSeed,
     pub_sectors: &[SectorId],
     _prover_id: ProverId,
+    is_winning: bool,
 ) -> Result<BTreeMap<SectorId, Vec<u64>>> {
     info!("generate_sector_challenges:start");
     ensure!(
@@ -466,6 +467,7 @@ pub fn generate_fallback_sector_challenges<Tree: 'static + MerkleTreeTrait>(
         sector_size: u64::from(post_config.sector_size),
         challenge_count: post_config.challenge_count,
         sector_count: post_config.sector_count,
+        is_winning,
     };
 
     let mut sector_challenges: BTreeMap<SectorId, Vec<u64>> = BTreeMap::new();
@@ -586,6 +588,7 @@ pub fn verify_winning_post<Tree: 'static + MerkleTreeTrait>(
         as_safe_commitment(&prover_id, "prover_id")?;
 
     let vanilla_params = winning_post_setup_params(&post_config)?;
+    let param_sector_count = vanilla_params.sector_count;
 
     let setup_params = compound_proof::SetupParams {
         vanilla_params,
@@ -595,18 +598,18 @@ pub fn verify_winning_post<Tree: 'static + MerkleTreeTrait>(
     let pub_params: compound_proof::PublicParams<fallback::FallbackPoSt<Tree>> =
         fallback::FallbackPoStCompound::setup(&setup_params)?;
 
-    let pub_sectors: Vec<_> = replicas
-        .iter()
-        .map(|(sector_id, replica)| {
+    let mut pub_sectors = Vec::with_capacity(param_sector_count);
+    for _ in 0..param_sector_count {
+        for (sector_id, replica) in replicas.iter() {
             let comm_r = replica.safe_comm_r().with_context(|| {
-                format!("verify_window_post: safe_comm_r failed: {:?}", sector_id)
+                format!("verify_winning_post: safe_comm_r failed: {:?}", sector_id)
             })?;
-            Ok(fallback::PublicSector {
+            pub_sectors.push(fallback::PublicSector {
                 id: *sector_id,
                 comm_r,
-            })
-        })
-        .collect::<Result<_>>()?;
+            });
+        }
+    }
 
     let pub_inputs = fallback::PublicInputs {
         randomness: randomness_safe,

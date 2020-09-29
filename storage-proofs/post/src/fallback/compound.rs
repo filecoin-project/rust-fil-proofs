@@ -58,7 +58,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait>
             .nth(partition_index)
             .ok_or_else(|| anyhow!("invalid number of sectors/partition index"))?;
 
-        for sector in sectors.iter() {
+        for (i, sector) in sectors.iter().enumerate() {
             // 1. Inputs for verifying comm_r = H(comm_c || comm_r_last)
             inputs.push(sector.comm_r.into());
 
@@ -68,7 +68,11 @@ impl<'a, Tree: 'static + MerkleTreeTrait>
                     &pub_params,
                     pub_inputs.randomness,
                     sector.id.into(),
-                    challenge_index as u64,
+                    if pub_params.is_winning {
+                        i
+                    } else {
+                        challenge_index
+                    } as u64,
                 );
 
                 let por_pub_inputs = por::PublicInputs {
@@ -234,6 +238,7 @@ mod tests {
                 sector_size: sector_size as u64,
                 challenge_count,
                 sector_count,
+                is_winning: false,
             },
             partitions: Some(partitions),
             priority: false,
