@@ -447,6 +447,7 @@ fn winning_post<Tree: 'static + MerkleTreeTrait>(sector_size: u64, fake: bool) -
         &randomness,
         &vec![sector_id],
         prover_id,
+        true,
     )?;
 
     let single_proof = generate_single_vanilla_proof::<Tree>(
@@ -635,6 +636,7 @@ fn window_post<Tree: 'static + MerkleTreeTrait>(
         &randomness,
         &replica_sectors,
         prover_id,
+        false,
     )?;
 
     let mut vanilla_proofs = Vec::with_capacity(replica_sectors.len());

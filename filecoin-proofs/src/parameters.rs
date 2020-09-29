@@ -51,6 +51,7 @@ pub fn winning_post_setup_params(post_config: &PoStConfig) -> Result<WinningPost
         sector_size: post_config.padded_sector_size().into(),
         challenge_count: param_challenge_count,
         sector_count: param_sector_count,
+        is_winning: true,
     })
 }
 
@@ -65,6 +66,7 @@ pub fn window_post_setup_params(post_config: &PoStConfig) -> WindowPostSetupPara
         sector_size: post_config.padded_sector_size().into(),
         challenge_count: post_config.challenge_count,
         sector_count: post_config.sector_count,
+        is_winning: false,
     }
 }
 
