@@ -184,57 +184,50 @@ mod tests {
     #[ignore]
     #[test]
     fn fallback_post_pedersen_single_partition_matching_base_8() {
-        //fallback_post::<LCTree<PedersenHasher, U8, U0, U0>>(3, 3, 1, true);
-        fallback_post::<LCTree<PedersenHasher, U8, U0, U0>>(3, 3, 1, false);
+        fallback_post::<LCTree<PedersenHasher, U8, U0, U0>>(3, 3, 1);
     }
 
     #[ignore]
     #[test]
     fn fallback_post_poseidon_single_partition_matching_base_8() {
-        //fallback_post::<LCTree<PoseidonHasher, U8, U0, U0>>(15, 15, 1, true);
-        fallback_post::<LCTree<PoseidonHasher, U8, U0, U0>>(15, 15, 1, false);
+        fallback_post::<LCTree<PoseidonHasher, U8, U0, U0>>(15, 15, 1);
     }
 
     #[ignore]
     #[test]
     fn fallback_post_poseidon_single_partition_matching_sub_8_4() {
-        //fallback_post::<LCTree<PoseidonHasher, U8, U4, U0>>(3, 3, 1, true);
-        fallback_post::<LCTree<PoseidonHasher, U8, U4, U0>>(3, 3, 1, false);
+        fallback_post::<LCTree<PoseidonHasher, U8, U4, U0>>(3, 3, 1);
     }
 
     #[ignore]
     #[test]
     fn fallback_post_poseidon_single_partition_matching_top_8_4_2() {
-        //fallback_post::<LCTree<PoseidonHasher, U8, U4, U2>>(3, 3, 1, true);
-        fallback_post::<LCTree<PoseidonHasher, U8, U4, U2>>(3, 3, 1, false);
+        fallback_post::<LCTree<PoseidonHasher, U8, U4, U2>>(3, 3, 1);
     }
 
     #[ignore]
     #[test]
     fn fallback_post_poseidon_single_partition_smaller_base_8() {
-        //fallback_post::<LCTree<PoseidonHasher, U8, U0, U0>>(2, 3, 1, true);
-        fallback_post::<LCTree<PoseidonHasher, U8, U0, U0>>(2, 3, 1, false);
+        fallback_post::<LCTree<PoseidonHasher, U8, U0, U0>>(2, 3, 1);
     }
 
     #[ignore]
     #[test]
     fn fallback_post_poseidon_two_partitions_matching_base_8() {
-        //fallback_post::<LCTree<PoseidonHasher, U8, U0, U0>>(4, 2, 2, true);
-        fallback_post::<LCTree<PoseidonHasher, U8, U0, U0>>(4, 2, 2, false);
+        fallback_post::<LCTree<PoseidonHasher, U8, U0, U0>>(4, 2, 2);
     }
 
     #[ignore]
     #[test]
     fn fallback_post_poseidon_two_partitions_smaller_base_8() {
-        //fallback_post::<LCTree<PoseidonHasher, U8, U0, U0>>(5, 3, 2, true);
-        fallback_post::<LCTree<PoseidonHasher, U8, U0, U0>>(5, 3, 2, false);
+        fallback_post::<LCTree<PoseidonHasher, U8, U0, U0>>(5, 3, 2);
     }
 
+    // Note: This test is implicitly specific to Window PoSt
     fn fallback_post<Tree: 'static + MerkleTreeTrait>(
         total_sector_count: usize,
         sector_count: usize,
         partitions: usize,
-        is_winning: bool,
     ) where
         Tree::Store: 'static,
     {
@@ -251,7 +244,7 @@ mod tests {
                 sector_size: sector_size as u64,
                 challenge_count,
                 sector_count,
-                is_winning,
+                is_winning: false,
             },
             partitions: Some(partitions),
             priority: false,
