@@ -384,6 +384,12 @@ impl<'a, Tree: 'a + MerkleTreeTrait> ProofScheme<'a> for FallbackPoSt<'a, Tree> 
                 );
 
                 let num_challenges = if pub_params.is_winning {
+                    ensure!(
+                        pub_params.challenge_count == 1,
+                        "WinningPoSt shape assumption violated: challenges {} != 1",
+                        pub_params.challenge_count
+                    );
+
                     pub_params.sector_count
                 } else {
                     pub_params.challenge_count
@@ -541,10 +547,17 @@ impl<'a, Tree: 'a + MerkleTreeTrait> ProofScheme<'a> for FallbackPoSt<'a, Tree> 
 
                 for (n, inclusion_proof) in inclusion_proofs.iter().enumerate() {
                     let challenge_index = if pub_params.is_winning {
-                        // Note that this generality is perhaps over-complicated and unnecessary
-                        // with the current parameterization.  To avoid complexity, the
-                        // challenge_index could be set to 'i' here.
-                        (j * num_sectors_per_chunk + i) * pub_params.challenge_count + n
+                        // Note that this legacy index generality is perhaps over-complicated and unnecessary
+                        // with the current parameterization.  To avoid complexity, the challenge_index
+                        // could be set to 'i' here.
+                        let legacy_index =
+                            (j * num_sectors_per_chunk + i) * pub_params.challenge_count + n;
+                        ensure!(
+                            legacy_index == i,
+                            "WinningPoSt challenge assumption violated"
+                        );
+
+                        i
                     } else {
                         n
                     } as u64;
