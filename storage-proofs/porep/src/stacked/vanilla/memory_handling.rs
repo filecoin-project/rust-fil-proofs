@@ -76,9 +76,8 @@ impl<T: FromByteSlice> CacheReader<T> {
     // This is unused, but included to document the meaning of its components.
     // This allows splitting the reset in order to avoid a pause.
     pub fn reset(&self) -> Result<()> {
-        self.start_reset();
-        self.finish_reset();
-        Ok(())
+        self.start_reset()?;
+        self.finish_reset()
     }
 
     pub fn start_reset(&self) -> Result<()> {
