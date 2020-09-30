@@ -432,7 +432,10 @@ fn winning_post<Tree: 'static + MerkleTreeTrait>(sector_size: u64, fake: bool) -
     // The following methods of proof generation are functionally equivalent:
     // 1)
     //
-    let priv_replicas = vec![(sector_id, private_replica_info.clone())];
+    let priv_replicas = vec![(
+        sector_id,
+        private_replica_info.clone(),
+    )];
     let proof = generate_winning_post::<Tree>(&config, &randomness, &priv_replicas[..], prover_id)?;
 
     let valid =
