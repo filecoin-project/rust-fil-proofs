@@ -382,7 +382,10 @@ impl<'a, Tree: 'a + MerkleTreeTrait> ProofScheme<'a> for FallbackPoSt<'a, Tree> 
 
             let mut proofs = Vec::with_capacity(num_sectors_per_chunk);
 
-            for (pub_sector, priv_sector) in pub_sectors_chunk.iter().zip(priv_sectors_chunk.iter())
+            for (i, (pub_sector, priv_sector)) in pub_sectors_chunk
+                .iter()
+                .zip(priv_sectors_chunk.iter())
+                .enumerate()
             {
                 let tree = priv_sector.tree;
                 let sector_id = pub_sector.id;
@@ -404,12 +407,11 @@ impl<'a, Tree: 'a + MerkleTreeTrait> ProofScheme<'a> for FallbackPoSt<'a, Tree> 
                 for proof_or_fault in (0..pub_params.challenge_count)
                     .into_par_iter()
                     .map(|challenge_index| {
-                        let challenged_leaf = generate_leaf_challenge(
-                            pub_params,
-                            pub_inputs.randomness,
-                            sector_id.into(),
-                            challenge_index as u64,
-                        );
+                        let challenged_leaf = if pub_params.is_winning {
+                            challenges[i]
+                        } else {
+                            challenges[challenge_index]
+                        } as u64;
 
                         let proof =
                             tree.gen_cached_proof(challenged_leaf as usize, Some(rows_to_discard));
@@ -444,11 +446,25 @@ impl<'a, Tree: 'a + MerkleTreeTrait> ProofScheme<'a> for FallbackPoSt<'a, Tree> 
                     }
                 }
 
-                proofs.push(SectorProof {
-                    inclusion_proofs,
-                    comm_c: priv_sector.comm_c,
-                    comm_r_last: priv_sector.comm_r_last,
-                });
+                // Winning PoSt and Window PoSt have different proof shapes regarding inclusion
+                // and sector proofs, so we are careful to partition them appropriately.
+                if pub_params.is_winning {
+                    // Unroll partition inclusion proofs into sector proofs.
+                    for inclusion_proof in inclusion_proofs {
+                        proofs.push(SectorProof {
+                            inclusion_proofs: vec![inclusion_proof],
+                            comm_c: priv_sector.comm_c,
+                            comm_r_last: priv_sector.comm_r_last,
+                        });
+                    }
+                } else {
+                    // Include partition inclusion proofs in a sector proof.
+                    proofs.push(SectorProof {
+                        inclusion_proofs,
+                        comm_c: priv_sector.comm_c,
+                        comm_r_last: priv_sector.comm_r_last,
+                    });
+                }
             }
 
             // If there were less than the required number of sectors provided, we duplicate the last one
@@ -495,6 +511,7 @@ impl<'a, Tree: 'a + MerkleTreeTrait> ProofScheme<'a> for FallbackPoSt<'a, Tree> 
                 pub_sectors_chunk.len(),
                 num_sectors_per_chunk,
             );
+
             ensure!(
                 proof.sectors.len() == num_sectors_per_chunk,
                 "invalid number of sectors in the partition proof {}: {} != {}",
@@ -503,7 +520,11 @@ impl<'a, Tree: 'a + MerkleTreeTrait> ProofScheme<'a> for FallbackPoSt<'a, Tree> 
                 num_sectors_per_chunk,
             );
 
-            for (pub_sector, sector_proof) in pub_sectors_chunk.iter().zip(proof.sectors.iter()) {
+            for (i, (pub_sector, sector_proof)) in pub_sectors_chunk
+                .iter()
+                .zip(proof.sectors.iter())
+                .enumerate()
+            {
                 let sector_id = pub_sector.id;
                 let comm_r = &pub_sector.comm_r;
                 let comm_c = sector_proof.comm_c;
