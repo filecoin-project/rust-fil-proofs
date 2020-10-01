@@ -9,3 +9,9 @@ members = [
   "fil-proofs-tooling",
   "sha2raw"
 ]
+
+# waiting for release
+[patch.crates-io]
+neptune = { git = "https://github.com/filecoin-project/neptune", branch = "chore-bellperson-0-10-1" }
+phase21 = { git = "https://github.com/filecoin-project/phase2", branch = "chore-bellperson-0-10" }
+fil-sapling-crypto = { git = "https://github.com/filecoin-project/sapling-crypto", branch = "chore-bellperson-0-10" }

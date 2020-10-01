@@ -16,19 +16,19 @@ sha2raw = { path = "../../sha2raw", version = "^2.0.0"}
 rand = "0.7"
 merkletree = "0.21.0"
 mapr = "0.8.0"
-num-bigint = "0.2"
+num-bigint = "0.3"
 num-traits = "0.2"
 sha2 = { version = "0.9.1", features = ["compress"] }
 rayon = "1.0.0"
 serde = { version = "1.0", features = ["derive"]}
 serde_json = "1.0"
 ff = { version = "0.2.3", package = "fff" }
-bellperson = "0.9.1"
+bellperson = "0.10.0"
 paired = { version = "0.20.0", features = ["serde"] }
 fil-sapling-crypto = "0.6.3"
 log = "0.4.7"
 pretty_assertions = "0.6.1"
-generic-array = "0.13.2"
+generic-array = "0.14.4"
 anyhow = "1.0.23"
 neptune = { version = "=1.2.0", features = ["gpu"] }
 num_cpus = "1.10.1"
