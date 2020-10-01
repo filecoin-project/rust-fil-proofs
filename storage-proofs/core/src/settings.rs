@@ -31,6 +31,9 @@ pub struct Settings {
     pub parent_cache: String,
     pub use_fil_blst: bool,
     pub use_multicore_sdr: bool,
+    pub multicore_sdr_producers: usize,
+    pub multicore_sdr_producer_stride: u64,
+    pub multicore_sdr_lookahead: usize,
 }
 
 impl Default for Settings {
@@ -54,6 +57,9 @@ impl Default for Settings {
             parent_cache: cache("filecoin-parents"),
             use_fil_blst: false,
             use_multicore_sdr: false,
+            multicore_sdr_producers: 3,
+            multicore_sdr_producer_stride: 128,
+            multicore_sdr_lookahead: 800,
         }
     }
 }

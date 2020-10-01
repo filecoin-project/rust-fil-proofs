@@ -2,6 +2,7 @@ use std::convert::TryInto;
 use std::marker::PhantomData;
 use std::mem::size_of;
 use std::sync::atomic::{AtomicU64, Ordering::SeqCst};
+use std::sync::{Arc, MutexGuard};
 
 use anyhow::{Context, Result};
 use byte_slice_cast::*;
@@ -24,6 +25,7 @@ use storage_proofs_core::{
 
 use super::super::{
     cache::ParentCache,
+    cores::{bind_core, checkout_core_group, CoreIndex},
     graph::{StackedBucketGraph, DEGREE, EXP_DEGREE},
     memory_handling::{setup_create_label_memory, CacheReader},
     params::{Labels, LabelsCache},
@@ -31,7 +33,10 @@ use super::super::{
     utils::*,
 };
 
+const MIN_BASE_PARENT_NODE: u64 = 2000;
+
 const NODE_WORDS: usize = NODE_SIZE / size_of::<u32>();
+const SHA_BLOCK_SIZE: usize = 64;
 
 const SHA256_INITIAL_DIGEST: [u32; 8] = [
     0x6a09_e667,
@@ -47,15 +52,13 @@ const SHA256_INITIAL_DIGEST: [u32; 8] = [
 #[inline]
 fn fill_buffer(
     cur_node: u64,
-    cur_consumer: &AtomicU64,
+    parents_cache: &CacheReader<u32>,
     mut cur_parent: &[u32], // parents for this node
     layer_labels: &UnsafeSlice<u32>,
     exp_labels: Option<&UnsafeSlice<u32>>, // None for layer0
     buf: &mut [u8],
     base_parent_missing: &mut BitMask,
 ) {
-    const MIN_BASE_PARENT_NODE: u64 = 2000;
-
     let cur_node_swap = cur_node.to_be_bytes(); // Note switch to big endian
     buf[36..44].copy_from_slice(&cur_node_swap); // update buf with current node
 
@@ -77,23 +80,27 @@ fn fill_buffer(
         // Skip the last base parent - it always points to the preceding node,
         // which we know is not ready and will be filled in the main loop
         for k in 0..BASE_DEGREE - 1 {
-            if cur_parent[0] as u64 >= cur_consumer.load(SeqCst) {
-                // Node is not ready
-                base_parent_missing.set(k);
-            } else {
-                let parent_data = unsafe {
-                    let offset = cur_parent[0] as usize * NODE_WORDS;
-                    &layer_labels.as_slice()[offset..offset + NODE_WORDS]
+            unsafe {
+                if cur_parent[0] as u64 >= parents_cache.get_consumer() {
+                    // Node is not ready
+                    base_parent_missing.set(k);
+                } else {
+                    let parent_data = {
+                        let offset = cur_parent[0] as usize * NODE_WORDS;
+                        &layer_labels.as_slice()[offset..offset + NODE_WORDS]
+                    };
+                    let a = SHA_BLOCK_SIZE + (NODE_SIZE * k);
+                    buf[a..a + NODE_SIZE].copy_from_slice(parent_data.as_byte_slice());
                 };
-                let a = 64 + (NODE_SIZE * k);
-                buf[a..a + NODE_SIZE].copy_from_slice(parent_data.as_byte_slice());
+
+                // Advance pointer for the last base parent
+                cur_parent = &cur_parent[1..];
             }
-            cur_parent = &cur_parent[1..];
         }
         // Advance pointer for the last base parent
         cur_parent = &cur_parent[1..];
     } else {
-        base_parent_missing.set_upto(BASE_DEGREE as u8); // (1 << BASE_DEGREE) - 1);
+        base_parent_missing.set_upto(BASE_DEGREE as u8);
         cur_parent = &cur_parent[BASE_DEGREE..];
     }
 
@@ -104,7 +111,7 @@ fn fill_buffer(
                 let offset = cur_parent[0] as usize * NODE_WORDS;
                 &exp_labels.as_slice()[offset..offset + NODE_WORDS]
             };
-            let a = 64 + (NODE_SIZE * k);
+            let a = SHA_BLOCK_SIZE + (NODE_SIZE * k);
             buf[a..a + NODE_SIZE].copy_from_slice(parent_data.as_byte_slice());
             cur_parent = &cur_parent[1..];
         }
@@ -132,7 +139,6 @@ fn create_label_runner(
     layer_labels: &UnsafeSlice<u32>,
     exp_labels: Option<&UnsafeSlice<u32>>, // None for layer 0
     num_nodes: u64,
-    cur_consumer: &AtomicU64,
     cur_producer: &AtomicU64,
     cur_awaiting: &AtomicU64,
     stride: u64,
@@ -153,10 +159,6 @@ fn create_label_runner(
         } else {
             stride
         };
-        // info!(
-        //     "starting work on count items: {}, starting from {}",
-        //     count, work
-        // );
 
         // Do the work of filling the buffers
         for cur_node in work..work + count {
@@ -165,25 +167,23 @@ fn create_label_runner(
             let cur_slot = (cur_node - 1) % lookahead;
 
             // Don't overrun the buffer
-            while cur_node > (cur_consumer.load(SeqCst) + lookahead - 1) {
+            while cur_node > (parents_cache.get_consumer() + lookahead - 1) {
                 std::thread::sleep(std::time::Duration::from_micros(10));
             }
 
             let buf = unsafe { ring_buf.slot_mut(cur_slot as usize) };
             let bpm = unsafe { base_parent_missing.get_mut(cur_slot as usize) };
 
-            let pc = parents_cache.slice_at(cur_node as usize * DEGREE as usize, cur_consumer);
-            // info!("filling");
+            let pc = unsafe { parents_cache.slice_at(cur_node as usize * DEGREE as usize) };
             fill_buffer(
                 cur_node,
-                cur_consumer,
+                parents_cache,
                 pc,
                 &layer_labels,
                 exp_labels,
                 buf,
                 bpm,
             );
-            // info!("filled");
         }
 
         // Wait for the previous node to finish
@@ -205,19 +205,24 @@ fn create_layer_labels(
     exp_labels: Option<&mut MmapMut>,
     num_nodes: u64,
     cur_layer: u32,
+    core_group: Arc<Option<MutexGuard<Vec<CoreIndex>>>>,
 ) -> Result<()> {
     info!("Creating labels for layer {}", cur_layer);
     // num_producers is the number of producer threads
     let (lookahead, num_producers, producer_stride) = {
-        // NOTE: Stride must not exceed `sdr_parents_cache_window_nodes`.
-        // If it does, the process will deadlock with producers and consumers
-        // waiting for each other.
-        // TODO: Enforce this.
-        //(800, 1, 128)
-        (800, 2, 128)
+        let settings = settings::SETTINGS.lock().expect("settings lock failure");
+        let lookahead = settings.multicore_sdr_lookahead;
+        let num_producers = settings.multicore_sdr_producers;
+        // NOTE: Stride must not exceed the number of nodes in parents_cache's window. If it does, the process will deadlock
+        // with producers and consumers waiting for each other.
+        let producer_stride = settings
+            .multicore_sdr_producer_stride
+            .min(parents_cache.window_nodes() as u64);
+
+        (lookahead, num_producers, producer_stride)
     };
 
-    const BYTES_PER_NODE: usize = (NODE_SIZE * DEGREE) + 64;
+    const BYTES_PER_NODE: usize = (NODE_SIZE * DEGREE) + SHA_BLOCK_SIZE;
 
     let mut ring_buf = RingBuf::new(BYTES_PER_NODE, lookahead);
     let mut base_parent_missing = vec![BitMask::default(); lookahead];
@@ -227,8 +232,6 @@ fn create_layer_labels(
         prepare_block(replica_id, cur_layer, buf);
     }
 
-    // Node the consumer is currently working on
-    let cur_consumer = AtomicU64::new(0);
     // Highest node that is ready from the producer
     let cur_producer = AtomicU64::new(0);
     // Next node to be filled
@@ -243,22 +246,31 @@ fn create_layer_labels(
     thread::scope(|s| {
         let mut runners = Vec::with_capacity(num_producers);
 
-        for _i in 0..num_producers {
+        for i in 0..num_producers {
             let layer_labels = &layer_labels;
             let exp_labels = exp_labels.as_ref();
-            let cur_consumer = &cur_consumer;
             let cur_producer = &cur_producer;
             let cur_awaiting = &cur_awaiting;
             let ring_buf = &ring_buf;
             let base_parent_missing = &base_parent_missing;
 
+            let core_index = if let Some(cg) = &*core_group {
+                cg.get(i + 1)
+            } else {
+                None
+            };
             runners.push(s.spawn(move |_| {
+                // This could fail, but we will ignore the error if so.
+                // It will be logged as a warning by `bind_core`.
+                debug!("binding core in producer thread {}", i);
+                // When `_cleanup_handle` is dropped, the previous binding of thread will be restored.
+                let _cleanup_handle = core_index.map(|c| bind_core(*c));
+
                 create_label_runner(
                     parents_cache,
                     layer_labels,
                     exp_labels,
                     num_nodes,
-                    cur_consumer,
                     cur_producer,
                     cur_awaiting,
                     producer_stride,
@@ -270,7 +282,7 @@ fn create_layer_labels(
         }
 
         let mut cur_node_ptr = unsafe { layer_labels.as_mut_slice() };
-        let mut cur_parent_ptr = parents_cache.consumer_slice_at(DEGREE);
+        let mut cur_parent_ptr = unsafe { parents_cache.consumer_slice_at(DEGREE) };
         let mut cur_parent_ptr_offset = DEGREE;
 
         // Calculate node 0 (special case with no parents)
@@ -292,7 +304,9 @@ fn create_layer_labels(
         let mut _count_not_ready = 0;
 
         // Calculate nodes 1 to n
-        cur_consumer.store(1, SeqCst);
+
+        // Skip first node.
+        parents_cache.store_consumer(1);
         let mut i = 1;
         while i < num_nodes {
             // Ensure next buffer is ready
@@ -312,6 +326,15 @@ fn create_layer_labels(
             // Process as many nodes as are ready
             let ready_count = producer_val - i + 1;
             for _count in 0..ready_count {
+                // If we have used up the last cache window's parent data, get some more.
+                if cur_parent_ptr.is_empty() {
+                    // Safety: values read from `cur_parent_ptr` before calling `increment_consumer`
+                    // must not be read again after.
+                    unsafe {
+                        cur_parent_ptr = parents_cache.consumer_slice_at(cur_parent_ptr_offset);
+                    }
+                }
+
                 cur_node_ptr = &mut cur_node_ptr[8..];
                 // Grab the current slot of the ring_buf
                 let buf = unsafe { ring_buf.slot_mut(cur_slot) };
@@ -319,23 +342,14 @@ fn create_layer_labels(
                 for k in 0..BASE_DEGREE {
                     let bpm = unsafe { base_parent_missing.get(cur_slot) };
                     if bpm.get(k) {
-                        // info!("getting missing parent, k={}", k);
                         let source = unsafe {
-                            if cur_parent_ptr.is_empty() {
-                                cur_parent_ptr =
-                                    parents_cache.consumer_slice_at(cur_parent_ptr_offset);
-                            }
-                            // info!("after unsafe, when getting miss parent");
                             let start = cur_parent_ptr[0] as usize * NODE_WORDS;
                             let end = start + NODE_WORDS;
-
-                            // info!("before as_slice(), when getting miss parent");
                             &layer_labels.as_slice()[start..end]
                         };
 
                         buf[64 + (NODE_SIZE * k)..64 + (NODE_SIZE * (k + 1))]
                             .copy_from_slice(source.as_byte_slice());
-                        // info!("got missing parent, k={}", k);
                     }
                     cur_parent_ptr = &cur_parent_ptr[1..];
                     cur_parent_ptr_offset += 1;
@@ -382,7 +396,14 @@ fn create_layer_labels(
 
                 cur_node_ptr[7] &= 0x3FFF_FFFF; // Strip last two bits to fit in Fr
 
-                cur_consumer.fetch_add(1, SeqCst);
+                // Safety:
+                // It's possible that this increment will trigger moving the cache window.
+                // In that case, we must not access `parents_cache` again but instead replace it.
+                // This will happen above because `parents_cache` will now be empty, if we have
+                // correctly advanced it so far.
+                unsafe {
+                    parents_cache.increment_consumer();
+                }
                 i += 1;
                 cur_slot = (cur_slot + 1) % lookahead;
             }
@@ -418,6 +439,16 @@ pub fn create_labels_for_encoding<Tree: 'static + MerkleTreeTrait, T: AsRef<[u8]
 
     let default_cache_size = DEGREE * 4 * cache_window_nodes;
 
+    let core_group = Arc::new(checkout_core_group());
+
+    // When `_cleanup_handle` is dropped, the previous binding of thread will be restored.
+    let _cleanup_handle = (*core_group).as_ref().map(|group| {
+        // This could fail, but we will ignore the error if so.
+        // It will be logged as a warning by `bind_core`.
+        debug!("binding core in main thread");
+        group.get(0).map(|core_index| bind_core(*core_index))
+    });
+
     // NOTE: this means we currently keep 2x sector size around, to improve speed
     let (parents_cache, mut layer_labels, mut exp_labels) = setup_create_label_memory(
         sector_size,
@@ -442,6 +473,7 @@ pub fn create_labels_for_encoding<Tree: 'static + MerkleTreeTrait, T: AsRef<[u8]
         if layers != 1 {
             parents_cache.finish_reset()?;
         }
+
         create_layer_labels(
             &parents_cache,
             &replica_id.as_ref(),
@@ -453,6 +485,7 @@ pub fn create_labels_for_encoding<Tree: 'static + MerkleTreeTrait, T: AsRef<[u8]
             },
             node_count,
             layer as u32,
+            core_group.clone(),
         )?;
 
         // Cache reset happens in two parts.
@@ -461,18 +494,17 @@ pub fn create_labels_for_encoding<Tree: 'static + MerkleTreeTrait, T: AsRef<[u8]
             parents_cache.start_reset()?;
         }
 
+        std::mem::swap(&mut layer_labels, &mut exp_labels);
         {
             let layer_config = &layer_state.config;
 
             info!("  storing labels on disk");
-            super::write_layer(&layer_labels, layer_config).context("failed to store labels")?;
+            super::write_layer(&exp_labels, layer_config).context("failed to store labels")?;
 
             info!(
                 "  generated layer {} store with id {}",
                 layer, layer_config.id
             );
-
-            std::mem::swap(&mut layer_labels, &mut exp_labels);
         }
     }
 
@@ -509,6 +541,16 @@ pub fn create_labels_for_decoding<Tree: 'static + MerkleTreeTrait, T: AsRef<[u8]
 
     let default_cache_size = DEGREE * 4 * cache_window_nodes;
 
+    let core_group = Arc::new(checkout_core_group());
+
+    // When `_cleanup_handle` is dropped, the previous binding of thread will be restored.
+    let _cleanup_handle = (*core_group).as_ref().map(|group| {
+        // This could fail, but we will ignore the error if so.
+        // It will be logged as a warning by `bind_core`.
+        debug!("binding core in main thread");
+        group.get(0).map(|core_index| bind_core(*core_index))
+    });
+
     // NOTE: this means we currently keep 2x sector size around, to improve speed
     let (parents_cache, mut layer_labels, mut exp_labels) = setup_create_label_memory(
         sector_size,
@@ -525,6 +567,7 @@ pub fn create_labels_for_decoding<Tree: 'static + MerkleTreeTrait, T: AsRef<[u8]
         if layers != 1 {
             parents_cache.finish_reset()?;
         }
+
         create_layer_labels(
             &parents_cache,
             &replica_id.as_ref(),
@@ -536,6 +579,7 @@ pub fn create_labels_for_decoding<Tree: 'static + MerkleTreeTrait, T: AsRef<[u8]
             },
             node_count,
             layer as u32,
+            core_group.clone(),
         )?;
 
         // Cache reset happens in two parts.
