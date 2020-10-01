@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://book.async.rs/overview
 
 ## Unreleased
 
+## 5.2.1 - 2020-10-01
+
+- Pin neptune to version 1.2.x [#1302](https://github.com/filecoin-project/rust-fil-proofs/pull/1302)
+- Add correct sizes for metrics capture CI [#1301](https://github.com/filecoin-project/rust-fil-proofs/pull/1301)
+- Ensure all PoSt code paths are tested [#1299](https://github.com/filecoin-project/rust-fil-proofs/pull/1299)
+- Add byte_unit dep for handling benchy input sizes [#1297](https://github.com/filecoin-project/rust-fil-proofs/pull/1297)
+- Implement prefetch macro for aarch64 [#1294](https://github.com/filecoin-project/rust-fil-proofs/pull/1294)
+
 ## 5.2.0 - 2020-09-28
 
 - Add Seal resume by skipping existing layers [#1292](https://github.com/filecoin-project/rust-fil-proofs/pull/1292)
@@ -139,7 +147,8 @@ and this project adheres to [Semantic Versioning](https://book.async.rs/overview
 
 - Initial stable release
 
-[Unreleased]: https://github.com/filecoin-project/rust-fil-proofs/compare/v5.2.0...HEAD
+[Unreleased]: https://github.com/filecoin-project/rust-fil-proofs/compare/v5.2.1...HEAD
+[5.2.1]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v5.2.1
 [5.2.0]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v5.2.0
 [5.1.4]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v5.1.4
 [5.1.3]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v5.1.3
