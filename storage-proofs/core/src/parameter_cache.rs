@@ -39,7 +39,7 @@ pub struct ParameterData {
     pub sector_size: u64,
 }
 
-pub const PARAMETERS_DATA: &str = include_str!("../../parameters.json");
+pub const PARAMETERS_DATA: &str = include_str!("../parameters.json");
 
 lazy_static! {
     pub static ref PARAMETERS: ParameterMap =

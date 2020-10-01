@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://book.async.rs/overview
 
 ## Unreleased
 
+## 5.2.0 - 2020-09-28
+
+- Add Seal resume by skipping existing layers [#1292](https://github.com/filecoin-project/rust-fil-proofs/pull/1292)
+- Use two producers in all layers [#1296](https://github.com/filecoin-project/rust-fil-proofs/pull/1296)
+- Re-export some methods that moved for api access [#1291](https://github.com/filecoin-project/rust-fil-proofs/pull/1291)
+- Update rustc to 1.46.0 [#1290](https://github.com/filecoin-project/rust-fil-proofs/pull/1290)
+- Optimize Phase 1 (Replication) [#1289](https://github.com/filecoin-project/rust-fil-proofs/pull/1289)
+- Add Seal resume testing to the Window PoSt bench [#1288](https://github.com/filecoin-project/rust-fil-proofs/pull/1288)
+- Add labeling test vectors [#1285](https://github.com/filecoin-project/rust-fil-proofs/pull/1285)
+- Remove artificial requirement that sector count be 1 for single vanilla proof [#1283](https://github.com/filecoin-project/rust-fil-proofs/pull/1283)
+- Add Parent Cache and parameter verification and settings to enable [#1265](https://github.com/filecoin-project/rust-fil-proofs/pull/1265)
+- Improve SectorId logging [#1280](https://github.com/filecoin-project/rust-fil-proofs/pull/1280)
+- Split up Window PoSt API into separate calls [#1278](https://github.com/filecoin-project/rust-fil-proofs/pull/1278)
+- Destructure settings [#1273](https://github.com/filecoin-project/rust-fil-proofs/pull/1273)
+
 ## 5.1.4 - 2020-09-08
 
 - Add FaultySectors error to Fallback PoSt [#1274](https://github.com/filecoin-project/rust-fil-proofs/pull/1274)
@@ -124,7 +139,8 @@ and this project adheres to [Semantic Versioning](https://book.async.rs/overview
 
 - Initial stable release
 
-[Unreleased]: https://github.com/filecoin-project/rust-fil-proofs/compare/v5.1.4...HEAD
+[Unreleased]: https://github.com/filecoin-project/rust-fil-proofs/compare/v5.2.0...HEAD
+[5.2.0]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v5.2.0
 [5.1.4]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v5.1.4
 [5.1.3]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v5.1.3
 [5.1.2]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v5.1.2
