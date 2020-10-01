@@ -1,6 +1,6 @@
 [package]
 name = "storage-proofs-core"
-version = "5.2.0"
+version = "5.2.1"
 authors = ["dignifiedquire <me@dignifiedquire.com>"]
 description = "Core parts for proofs of storage"
 license = "MIT OR Apache-2.0"
