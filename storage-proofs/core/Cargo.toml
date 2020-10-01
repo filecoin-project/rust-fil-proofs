@@ -32,7 +32,7 @@ toml = "0.5"
 ff = { version = "0.2.3", package = "fff" }
 bellperson = "0.10.0"
 paired = { version = "0.20.0", features = ["serde"] }
-fil-sapling-crypto = "0.6.3"
+fil-sapling-crypto = "0.7.0"
 serde_json = "1.0"
 log = "0.4.7"
 rand_chacha = "0.2.1"
