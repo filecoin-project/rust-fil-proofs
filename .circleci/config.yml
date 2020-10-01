@@ -247,13 +247,13 @@ jobs:
       - run:
           name: Run Winning PoST benchmarks using 512MiB sectors
           command: |
-            ./fil-proofs-tooling/scripts/run-remote.sh "${CIRCLE_BRANCH}" "${BENCHMARK_SERVER_SSH_USERNAME}@${BENCHMARK_SERVER_IP_ADDR}" ./fil-proofs-tooling/scripts/benchy.sh winning-post --size=$((512*1024)) > winning-post-benchmarks.json
+            ./fil-proofs-tooling/scripts/run-remote.sh "${CIRCLE_BRANCH}" "${BENCHMARK_SERVER_SSH_USERNAME}@${BENCHMARK_SERVER_IP_ADDR}" ./fil-proofs-tooling/scripts/benchy.sh winning-post --size=512KiB > winning-post-benchmarks.json
             cat winning-post-benchmarks.json
           no_output_timeout: 60m
       - run:
           name: Run Window PoST benchmarks using a 512MiB sector
           command: |
-            ./fil-proofs-tooling/scripts/run-remote.sh "${CIRCLE_BRANCH}" "${BENCHMARK_SERVER_SSH_USERNAME}@${BENCHMARK_SERVER_IP_ADDR}" ./fil-proofs-tooling/scripts/benchy.sh window-post --size=$((512*1024)) > window-post-benchmarks.json
+            ./fil-proofs-tooling/scripts/run-remote.sh "${CIRCLE_BRANCH}" "${BENCHMARK_SERVER_SSH_USERNAME}@${BENCHMARK_SERVER_IP_ADDR}" ./fil-proofs-tooling/scripts/benchy.sh window-post --size=512KiB > window-post-benchmarks.json
             cat window-post-benchmarks.json
           no_output_timeout: 60m
       - run:
