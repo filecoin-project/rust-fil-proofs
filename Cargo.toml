@@ -12,4 +12,4 @@ members = [
 
 [patch.crates-io]
 # bellperson = { path = "../../../opensource/bellperson"}
-bellperson = { git = "https://github.com/filecoin-project/bellman", branch = "fix-spawn" }
+bellperson = { git = "https://github.com/filecoin-project/bellman", branch = "fix-spawn", rev = "924e436" }
