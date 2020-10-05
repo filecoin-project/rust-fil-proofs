@@ -156,9 +156,13 @@ where
             .into_par_iter()
             .map(|k| Self::generate_public_inputs(public_inputs, vanilla_public_params, Some(k)))
             .collect::<Result<_>>()?;
-        let proofs: Vec<_> = multi_proof.circuit_proofs.iter().collect();
 
-        let res = groth16::verify_proofs_batch(&pvk, &mut rand::rngs::OsRng, &proofs, &inputs)?;
+        let res = groth16::verify_proofs_batch(
+            &pvk,
+            &mut rand::rngs::OsRng,
+            &multi_proof.circuit_proofs,
+            &inputs,
+        )?;
         Ok(res)
     }
 
