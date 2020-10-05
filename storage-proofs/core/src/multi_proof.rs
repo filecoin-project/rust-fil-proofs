@@ -45,11 +45,7 @@ impl<'a> MultiProof<'a> {
     ) -> Result<Self> {
         let num_proofs = partitions.unwrap_or(1);
 
-        let proofs = proof_bytes
-            .par_chunks(GROTH_PROOF_SIZE)
-            .take(num_proofs)
-            .map(groth16::Proof::read)
-            .collect::<io::Result<Vec<_>>>()?;
+        let proofs = groth16::Proof::read_many(proof_bytes, num_proofs)?;
 
         ensure!(
             num_proofs == proofs.len(),
