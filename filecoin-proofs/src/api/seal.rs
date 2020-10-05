@@ -21,7 +21,6 @@ use storage_proofs::porep::stacked::{
 };
 use storage_proofs::proof::ProofScheme;
 use storage_proofs::sector::SectorId;
-use storage_proofs::settings;
 use storage_proofs::util::default_rows_to_discard;
 
 use crate::api::util::{
@@ -609,27 +608,7 @@ pub fn verify_seal<Tree: 'static + MerkleTreeTrait>(
             k: None,
         };
 
-    let use_fil_blst = settings::SETTINGS.use_fil_blst;
-
-    let result = if use_fil_blst {
-        info!("verify_seal: use_fil_blst=true");
-        let verifying_key_path = porep_config.get_cache_verifying_key_path::<Tree>()?;
-
-        StackedCompound::verify_blst(
-            &compound_public_params,
-            &public_inputs,
-            &proof_vec,
-            proof_vec.len() / 192,
-            &ChallengeRequirements {
-                minimum_challenges: *POREP_MINIMUM_CHALLENGES
-                    .read()
-                    .expect("POREP_MINIMUM_CHALLENGES poisoned")
-                    .get(&u64::from(SectorSize::from(porep_config)))
-                    .expect("unknown sector size") as usize,
-            },
-            &verifying_key_path,
-        )
-    } else {
+    let result = {
         let sector_bytes = PaddedBytesAmount::from(porep_config);
         let verifying_key = get_stacked_verifying_key::<Tree>(porep_config)?;
 

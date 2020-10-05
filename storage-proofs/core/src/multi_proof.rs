@@ -3,8 +3,7 @@ use bellperson::groth16;
 use crate::error::Result;
 use anyhow::{ensure, Context};
 use bellperson::bls::Bls12;
-use rayon::prelude::*;
-use std::io::{self, Read, Write};
+use std::io::{Read, Write};
 
 pub struct MultiProof<'a> {
     pub circuit_proofs: Vec<groth16::Proof<Bls12>>,

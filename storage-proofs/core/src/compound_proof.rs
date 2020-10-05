@@ -1,9 +1,6 @@
-use std::path::Path;
-
 use anyhow::{ensure, Context};
 use bellperson::bls::{Bls12, Fr};
 use bellperson::{groth16, Circuit};
-use fil_blst::{blst::blst_scalar, blst_fr_from_fr, scalar_from_u64, verify_batch_proof};
 use log::info;
 use rand::{rngs::OsRng, RngCore};
 use rayon::prelude::*;
@@ -159,66 +156,6 @@ where
 
         let proofs: Vec<_> = multi_proof.circuit_proofs.iter().collect();
         let res = groth16::verify_proofs_batch(&pvk, &mut rand::rngs::OsRng, &proofs, &inputs)?;
-        Ok(res)
-    }
-
-    // verify_blst is equivalent to ProofScheme::verify.
-    fn verify_blst(
-        public_params: &PublicParams<'a, S>,
-        public_inputs: &S::PublicInputs,
-        proof_vec: &[u8],
-        num_proofs: usize,
-        requirements: &S::Requirements,
-        vk_path: &Path,
-    ) -> Result<bool> {
-        ensure!(
-            num_proofs == Self::partition_count(public_params),
-            "Inconsistent inputs"
-        );
-
-        let vanilla_public_params = &public_params.vanilla_params;
-
-        if !<S as ProofScheme>::satisfies_requirements(
-            &public_params.vanilla_params,
-            requirements,
-            num_proofs,
-        ) {
-            return Ok(false);
-        }
-
-        let inputs: Vec<_> = (0..num_proofs)
-            .into_par_iter()
-            .map(|k| Self::generate_public_inputs(public_inputs, vanilla_public_params, Some(k)))
-            .collect::<Result<_>>()?;
-
-        let blst_inputs: Vec<_> = todo!(); /*inputs
-                                           .iter()
-                                           .flat_map(|pis| pis.iter().map(|pi| blst_fr_from_fr(*pi)))
-                                           .collect();*/
-
-        // choose random coefficients for combining the proofs
-        let mut r: Vec<blst_scalar> = Vec::with_capacity(num_proofs);
-        let mut rng = rand::rngs::OsRng;
-        for _ in 0..num_proofs {
-            use rand::Rng;
-            let t: u128 = rng.gen();
-
-            let mut limbs: [u64; 4] = [0, 0, 0, 0];
-            limbs[1] = (t >> 64) as u64;
-            limbs[0] = (t & (-1i64 as u128) >> 64) as u64;
-
-            r.push(scalar_from_u64(&limbs));
-        }
-
-        let res = verify_batch_proof(
-            proof_vec,
-            num_proofs,
-            &blst_inputs[..],
-            inputs[0].len(),
-            &r[..],
-            128,
-            vk_path,
-        );
         Ok(res)
     }
 
