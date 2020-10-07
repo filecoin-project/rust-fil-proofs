@@ -1,8 +1,8 @@
+use bellperson::bls::Bls12;
 use bellperson::gadgets::boolean::Boolean;
 use bellperson::util_cs::test_cs::TestConstraintSystem;
 use bellperson::ConstraintSystem;
 use fil_proofs_tooling::metadata::Metadata;
-use bellperson::bls::Bls12;
 use rand::RngCore;
 use serde::Serialize;
 use storage_proofs::util::{bits_to_bytes, bytes_into_boolean_vec, bytes_into_boolean_vec_be};

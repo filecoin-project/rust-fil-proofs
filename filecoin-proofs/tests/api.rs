@@ -5,8 +5,8 @@ use std::path::{Path, PathBuf};
 use std::sync::Once;
 
 use anyhow::Result;
-use ff::Field;
 use bellperson::bls::Fr;
+use ff::Field;
 use rand::{Rng, SeedableRng};
 use rand_xorshift::XorShiftRng;
 use storage_proofs::hasher::Hasher;

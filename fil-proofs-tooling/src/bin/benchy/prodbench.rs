@@ -1,3 +1,4 @@
+use bellperson::bls::Bls12;
 use bellperson::util_cs::bench_cs::BenchCS;
 use bellperson::Circuit;
 use fil_proofs_tooling::shared::{create_replicas, PROVER_ID, RANDOMNESS, TICKET_BYTES};
@@ -11,7 +12,6 @@ use filecoin_proofs::{
     validate_cache_for_commit, PoRepConfig,
 };
 use log::info;
-use bellperson::bls::Bls12;
 use rand::SeedableRng;
 use rand_xorshift::XorShiftRng;
 use serde::{Deserialize, Serialize};
