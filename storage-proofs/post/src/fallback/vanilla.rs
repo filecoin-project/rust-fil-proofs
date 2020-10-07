@@ -205,11 +205,14 @@ pub fn generate_leaf_challenges<T: Domain>(
 ) -> Vec<u64> {
     let mut challenges = Vec::with_capacity(challenge_count);
 
+    let mut hasher = Sha256::new();
+    hasher.update(AsRef::<[u8]>::as_ref(&randomness));
+    hasher.update(&sector_id.to_le_bytes()[..]);
+
     for leaf_challenge_index in 0..challenge_count {
-        let challenge = generate_leaf_challenge(
+        let challenge = generate_leaf_challenge_inner::<T>(
+            hasher.clone(),
             pub_params,
-            randomness,
-            sector_id,
             leaf_challenge_index as u64,
         );
         challenges.push(challenge)
@@ -228,6 +231,15 @@ pub fn generate_leaf_challenge<T: Domain>(
     let mut hasher = Sha256::new();
     hasher.update(AsRef::<[u8]>::as_ref(&randomness));
     hasher.update(&sector_id.to_le_bytes()[..]);
+
+    generate_leaf_challenge_inner::<T>(hasher, pub_params, leaf_challenge_index)
+}
+
+fn generate_leaf_challenge_inner<T: Domain>(
+    mut hasher: Sha256,
+    pub_params: &PublicParams,
+    leaf_challenge_index: u64,
+) -> u64 {
     hasher.update(&leaf_challenge_index.to_le_bytes()[..]);
     let hash = hasher.finalize();
 
@@ -383,6 +395,11 @@ impl<'a, Tree: 'a + MerkleTreeTrait> ProofScheme<'a> for FallbackPoSt<'a, Tree> 
                     Tree::Arity::to_usize(),
                 );
 
+                // avoid rehashing fixed inputs
+                let mut challenge_hasher = Sha256::new();
+                challenge_hasher.update(AsRef::<[u8]>::as_ref(&pub_inputs.randomness));
+                challenge_hasher.update(&u64::from(sector_id).to_le_bytes()[..]);
+
                 let mut inclusion_proofs = Vec::new();
                 for proof_or_fault in (0..pub_params.challenge_count)
                     .into_par_iter()
@@ -390,12 +407,12 @@ impl<'a, Tree: 'a + MerkleTreeTrait> ProofScheme<'a> for FallbackPoSt<'a, Tree> 
                         let challenge_index = ((j * num_sectors_per_chunk + i)
                             * pub_params.challenge_count
                             + n) as u64;
-                        let challenged_leaf_start = generate_leaf_challenge(
-                            pub_params,
-                            pub_inputs.randomness,
-                            sector_id.into(),
-                            challenge_index,
-                        );
+                        let challenged_leaf_start =
+                            generate_leaf_challenge_inner::<<Tree::Hasher as Hasher>::Domain>(
+                                challenge_hasher.clone(),
+                                pub_params,
+                                challenge_index,
+                            );
 
                         let proof = tree.gen_cached_proof(
                             challenged_leaf_start as usize,
@@ -522,35 +539,51 @@ impl<'a, Tree: 'a + MerkleTreeTrait> ProofScheme<'a> for FallbackPoSt<'a, Tree> 
                     inclusion_proofs.len()
                 );
 
-                for (n, inclusion_proof) in inclusion_proofs.iter().enumerate() {
-                    let challenge_index =
-                        ((j * num_sectors_per_chunk + i) * pub_params.challenge_count + n) as u64;
-                    let challenged_leaf_start = generate_leaf_challenge(
-                        pub_params,
-                        pub_inputs.randomness,
-                        sector_id.into(),
-                        challenge_index,
-                    );
+                // avoid rehashing fixed inputs
+                let mut challenge_hasher = Sha256::new();
+                challenge_hasher.update(AsRef::<[u8]>::as_ref(&pub_inputs.randomness));
+                challenge_hasher.update(&u64::from(sector_id).to_le_bytes()[..]);
 
-                    // validate all comm_r_lasts match
-                    if inclusion_proof.root() != comm_r_last {
-                        error!("inclusion proof root != comm_r_last: {:?}", sector_id);
-                        return Ok(false);
-                    }
+                let is_valid_list = inclusion_proofs
+                    .par_iter()
+                    .enumerate()
+                    .map(|(n, inclusion_proof)| -> Result<bool> {
+                        let challenge_index = ((j * num_sectors_per_chunk + i)
+                            * pub_params.challenge_count
+                            + n) as u64;
+                        let challenged_leaf_start =
+                            generate_leaf_challenge_inner::<<Tree::Hasher as Hasher>::Domain>(
+                                challenge_hasher.clone(),
+                                pub_params,
+                                challenge_index,
+                            );
 
-                    // validate the path length
-                    let expected_path_length =
-                        inclusion_proof.expected_len(pub_params.sector_size as usize / NODE_SIZE);
+                        // validate all comm_r_lasts match
+                        if inclusion_proof.root() != comm_r_last {
+                            error!("inclusion proof root != comm_r_last: {:?}", sector_id);
+                            return Ok(false);
+                        }
 
-                    if expected_path_length != inclusion_proof.path().len() {
-                        error!("wrong path length: {:?}", sector_id);
-                        return Ok(false);
-                    }
+                        // validate the path length
+                        let expected_path_length = inclusion_proof
+                            .expected_len(pub_params.sector_size as usize / NODE_SIZE);
 
-                    if !inclusion_proof.validate(challenged_leaf_start as usize) {
-                        error!("invalid inclusion proof: {:?}", sector_id);
-                        return Ok(false);
-                    }
+                        if expected_path_length != inclusion_proof.path().len() {
+                            error!("wrong path length: {:?}", sector_id);
+                            return Ok(false);
+                        }
+
+                        if !inclusion_proof.validate(challenged_leaf_start as usize) {
+                            error!("invalid inclusion proof: {:?}", sector_id);
+                            return Ok(false);
+                        }
+                        Ok(true)
+                    })
+                    .collect::<Result<Vec<bool>>>()?;
+
+                let is_valid = is_valid_list.into_iter().all(|v| v);
+                if !is_valid {
+                    return Ok(false);
                 }
             }
         }
