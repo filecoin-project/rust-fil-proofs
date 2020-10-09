@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
 use std::io::{Read, Seek, SeekFrom, Write};
+use std::path::Path;
 use std::sync::Once;
 
 use anyhow::Result;
@@ -484,6 +485,82 @@ fn run_seal_pre_commit_phase1<Tree: 'static + MerkleTreeTrait>(
     Ok((piece_infos, phase1_output))
 }
 
+fn run_proof<Tree: 'static + MerkleTreeTrait>(
+    config: PoRepConfig,
+    cache_dir_path: &Path,
+    sealed_sector_file: &NamedTempFile,
+    prover_id: ProverId,
+    sector_id: SectorId,
+    ticket: [u8; 32],
+    seed: [u8; 32],
+    pre_commit_output: SealPreCommitOutput,
+    piece_infos: &[PieceInfo],
+    piece_bytes: &[u8],
+) -> Result<()> {
+    let comm_d = pre_commit_output.comm_d;
+    let comm_r = pre_commit_output.comm_r;
+
+    let mut unseal_file = NamedTempFile::new()?;
+    let phase1_output = seal_commit_phase1::<_, Tree>(
+        config,
+        cache_dir_path,
+        sealed_sector_file.path(),
+        prover_id,
+        sector_id,
+        ticket,
+        seed,
+        pre_commit_output,
+        &piece_infos,
+    )?;
+
+    clear_cache::<Tree>(cache_dir_path)?;
+
+    let commit_output = seal_commit_phase2(config, phase1_output, prover_id, sector_id)?;
+
+    let _ = unseal_range::<_, _, _, Tree>(
+        config,
+        cache_dir_path,
+        sealed_sector_file,
+        &unseal_file,
+        prover_id,
+        sector_id,
+        comm_d,
+        ticket,
+        UnpaddedByteIndex(508),
+        UnpaddedBytesAmount(508),
+    )?;
+
+    unseal_file.seek(SeekFrom::Start(0))?;
+
+    let mut contents = vec![];
+    assert!(
+        unseal_file.read_to_end(&mut contents).is_ok(),
+        "failed to populate buffer with unsealed bytes"
+    );
+    assert_eq!(contents.len(), 508);
+    assert_eq!(&piece_bytes[508..508 + 508], &contents[..]);
+
+    let computed_comm_d = compute_comm_d(config.sector_size, &piece_infos)?;
+
+    assert_eq!(
+        comm_d, computed_comm_d,
+        "Computed and expected comm_d don't match."
+    );
+
+    let verified = verify_seal::<Tree>(
+        config,
+        comm_r,
+        comm_d,
+        prover_id,
+        sector_id,
+        ticket,
+        seed,
+        &commit_output.proof,
+    )?;
+    assert!(verified, "failed to verify valid seal");
+    Ok(())
+}
+
 fn create_seal<R: Rng, Tree: 'static + MerkleTreeTrait>(
     rng: &mut R,
     sector_size: u64,
@@ -494,7 +571,6 @@ fn create_seal<R: Rng, Tree: 'static + MerkleTreeTrait>(
 
     let (mut piece_file, piece_bytes) = generate_piece_file(sector_size)?;
     let sealed_sector_file = NamedTempFile::new()?;
-    let mut unseal_file = NamedTempFile::new()?;
     let cache_dir = tempfile::tempdir().expect("failed to create temp dir");
 
     let arbitrary_porep_id = rng.gen();
@@ -520,7 +596,6 @@ fn create_seal<R: Rng, Tree: 'static + MerkleTreeTrait>(
         sealed_sector_file.path(),
     )?;
 
-    let comm_d = pre_commit_output.comm_d;
     let comm_r = pre_commit_output.comm_r;
 
     validate_cache_for_commit::<_, _, Tree>(cache_dir.path(), sealed_sector_file.path())?;
@@ -528,63 +603,19 @@ fn create_seal<R: Rng, Tree: 'static + MerkleTreeTrait>(
     if skip_proof {
         clear_cache::<Tree>(cache_dir.path())?;
     } else {
-        let phase1_output = seal_commit_phase1::<_, Tree>(
+        run_proof::<Tree>(
             config,
             cache_dir.path(),
-            sealed_sector_file.path(),
+            &sealed_sector_file,
             prover_id,
             sector_id,
             ticket,
             seed,
             pre_commit_output,
             &piece_infos,
-        )?;
-
-        clear_cache::<Tree>(cache_dir.path())?;
-
-        let commit_output = seal_commit_phase2(config, phase1_output, prover_id, sector_id)?;
-
-        let _ = unseal_range::<_, _, _, Tree>(
-            config,
-            cache_dir.path(),
-            &sealed_sector_file,
-            &unseal_file,
-            prover_id,
-            sector_id,
-            comm_d,
-            ticket,
-            UnpaddedByteIndex(508),
-            UnpaddedBytesAmount(508),
-        )?;
-
-        unseal_file.seek(SeekFrom::Start(0))?;
-
-        let mut contents = vec![];
-        assert!(
-            unseal_file.read_to_end(&mut contents).is_ok(),
-            "failed to populate buffer with unsealed bytes"
-        );
-        assert_eq!(contents.len(), 508);
-        assert_eq!(&piece_bytes[508..508 + 508], &contents[..]);
-
-        let computed_comm_d = compute_comm_d(config.sector_size, &piece_infos)?;
-
-        assert_eq!(
-            comm_d, computed_comm_d,
-            "Computed and expected comm_d don't match."
-        );
-
-        let verified = verify_seal::<Tree>(
-            config,
-            comm_r,
-            comm_d,
-            prover_id,
-            sector_id,
-            ticket,
-            seed,
-            &commit_output.proof,
-        )?;
-        assert!(verified, "failed to verify valid seal");
+            &piece_bytes,
+        )
+        .expect("failed to proof");
     }
 
     Ok((sector_id, sealed_sector_file, comm_r, cache_dir))
