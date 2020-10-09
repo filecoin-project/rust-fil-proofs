@@ -410,14 +410,7 @@ fn window_post<Tree: 'static + MerkleTreeTrait>(
     Ok(())
 }
 
-fn create_seal<R: Rng, Tree: 'static + MerkleTreeTrait>(
-    rng: &mut R,
-    sector_size: u64,
-    prover_id: ProverId,
-    skip_proof: bool,
-) -> Result<(SectorId, NamedTempFile, Commitment, tempfile::TempDir)> {
-    init_logger();
-
+fn generate_piece_file(sector_size: u64) -> Result<(NamedTempFile, Vec<u8>)> {
     let number_of_bytes_in_piece = UnpaddedBytesAmount::from(PaddedBytesAmount(sector_size));
 
     let piece_bytes: Vec<u8> = (0..number_of_bytes_in_piece.0)
@@ -428,6 +421,35 @@ fn create_seal<R: Rng, Tree: 'static + MerkleTreeTrait>(
     piece_file.write_all(&piece_bytes)?;
     piece_file.as_file_mut().sync_all()?;
     piece_file.as_file_mut().seek(SeekFrom::Start(0))?;
+
+    Ok((piece_file, piece_bytes))
+}
+
+fn porep_config(sector_size: u64, porep_id: [u8; 32]) -> PoRepConfig {
+    PoRepConfig {
+        sector_size: SectorSize(sector_size),
+        partitions: PoRepProofPartitions(
+            *POREP_PARTITIONS
+                .read()
+                .expect("POREP_PARTITIONS poisoned")
+                .get(&sector_size)
+                .expect("unknown sector size"),
+        ),
+        porep_id,
+    }
+}
+
+fn run_seal_pre_commit_phase1<Tree: 'static + MerkleTreeTrait>(
+    config: PoRepConfig,
+    prover_id: ProverId,
+    sector_id: SectorId,
+    ticket: [u8; 32],
+    cache_dir: &tempfile::TempDir,
+    mut piece_file: &mut NamedTempFile,
+    sealed_sector_file: &NamedTempFile,
+) -> Result<(Vec<PieceInfo>, SealPreCommitPhase1Output<Tree>)> {
+    let number_of_bytes_in_piece =
+        UnpaddedBytesAmount::from(PaddedBytesAmount(config.sector_size.into()));
 
     let piece_info = generate_piece_commitment(piece_file.as_file_mut(), number_of_bytes_in_piece)?;
     piece_file.as_file_mut().seek(SeekFrom::Start(0))?;
@@ -441,26 +463,6 @@ fn create_seal<R: Rng, Tree: 'static + MerkleTreeTrait>(
     )?;
 
     let piece_infos = vec![piece_info];
-    let arbitrary_porep_id = [28; 32];
-    let sealed_sector_file = NamedTempFile::new()?;
-    let mut unseal_file = NamedTempFile::new()?;
-    let config = PoRepConfig {
-        sector_size: SectorSize(sector_size),
-        partitions: PoRepProofPartitions(
-            *POREP_PARTITIONS
-                .read()
-                .expect("POREM_PARTITIONS poisoned")
-                .get(&sector_size)
-                .expect("unknown sector size"),
-        ),
-        porep_id: arbitrary_porep_id,
-    };
-
-    let cache_dir = tempfile::tempdir().expect("failed to create temp dir");
-
-    let ticket = rng.gen();
-    let seed = rng.gen();
-    let sector_id = rng.gen::<u64>().into();
 
     let phase1_output = seal_pre_commit_phase1::<_, _, _, Tree>(
         config,
@@ -477,6 +479,38 @@ fn create_seal<R: Rng, Tree: 'static + MerkleTreeTrait>(
         cache_dir.path(),
         staged_sector_file.path(),
         &phase1_output,
+    )?;
+
+    Ok((piece_infos, phase1_output))
+}
+
+fn create_seal<R: Rng, Tree: 'static + MerkleTreeTrait>(
+    rng: &mut R,
+    sector_size: u64,
+    prover_id: ProverId,
+    skip_proof: bool,
+) -> Result<(SectorId, NamedTempFile, Commitment, tempfile::TempDir)> {
+    init_logger();
+
+    let (mut piece_file, piece_bytes) = generate_piece_file(sector_size)?;
+    let sealed_sector_file = NamedTempFile::new()?;
+    let mut unseal_file = NamedTempFile::new()?;
+    let cache_dir = tempfile::tempdir().expect("failed to create temp dir");
+
+    let arbitrary_porep_id = rng.gen();
+    let config = porep_config(sector_size, arbitrary_porep_id);
+    let ticket = rng.gen();
+    let seed = rng.gen();
+    let sector_id = rng.gen::<u64>().into();
+
+    let (piece_infos, phase1_output) = run_seal_pre_commit_phase1::<Tree>(
+        config,
+        prover_id,
+        sector_id,
+        ticket,
+        &cache_dir,
+        &mut piece_file,
+        &sealed_sector_file,
     )?;
 
     let pre_commit_output = seal_pre_commit_phase2(
@@ -565,13 +599,7 @@ fn create_fake_seal<R: rand::Rng, Tree: 'static + MerkleTreeTrait>(
     let arbitrary_porep_id = [28; 32];
     let sealed_sector_file = NamedTempFile::new()?;
 
-    let config = PoRepConfig {
-        sector_size: SectorSize(sector_size),
-        partitions: PoRepProofPartitions(
-            *POREP_PARTITIONS.read().unwrap().get(&sector_size).unwrap(),
-        ),
-        porep_id: arbitrary_porep_id,
-    };
+    let config = porep_config(sector_size, arbitrary_porep_id);
 
     let cache_dir = tempfile::tempdir().unwrap();
 
