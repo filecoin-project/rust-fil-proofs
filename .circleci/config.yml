@@ -314,6 +314,16 @@ jobs:
       - configure_environment_variables
       - checkout
       - run:
+          name: Install hwloc 1.11.9
+          command: |
+            cd /tmp
+            curl https://www.open-mpi.org/software/hwloc/v1.11/downloads/hwloc-1.11.9.tar.gz --location --output /tmp/hwloc-1.11.9.tar.gz
+            tar xzvf hwloc-1.11.9.tar.gz
+            cd hwloc-1.11.9
+            ./configure
+            make
+            sudo make install
+      - run:
           name: Install Rust
           command: |
             curl https://sh.rustup.rs -sSf | sh -s -- -y

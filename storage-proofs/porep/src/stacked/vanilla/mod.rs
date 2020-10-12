@@ -5,6 +5,7 @@ mod cache;
 mod challenges;
 mod column;
 mod column_proof;
+mod cores;
 pub mod create_label;
 mod encoding_proof;
 mod graph;
