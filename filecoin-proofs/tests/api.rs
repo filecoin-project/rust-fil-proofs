@@ -167,12 +167,12 @@ fn run_resumable_seal(skip_proofs: bool, layer_to_delete: usize) {
     // Delete one layer, keep the other
     clear_cache_dir_keep_data_layer(&cache_dir);
     std::fs::remove_file(&layers[layer_to_delete]).expect("failed to remove layer");
-    let layers_removed = get_layer_file_paths(&cache_dir);
-    assert_eq!(layers_removed.len(), 1, "found more than one layer");
+    let layers_remaining = get_layer_file_paths(&cache_dir);
+    assert_eq!(layers_remaining.len(), 1, "expected one layer only");
     if layer_to_delete == 0 {
-        assert_eq!(layers_removed[0], layers[1], "wrong layer was removed");
+        assert_eq!(layers_remaining[0], layers[1], "wrong layer was removed");
     } else {
-        assert_eq!(layers_removed[0], layers[0], "wrong layer was removed");
+        assert_eq!(layers_remaining[0], layers[0], "wrong layer was removed");
     }
 
     // Resume the seal
