@@ -216,7 +216,7 @@ fn run_resumable_seal(skip_proofs: bool, layer_to_delete: usize) {
             .expect("failed to validate cache for commit");
 
         let seed = rng.gen();
-        run_proof::<Tree>(
+        proof_and_unseal::<Tree>(
             config,
             cache_dir.path(),
             &sealed_sector_file,
@@ -638,7 +638,7 @@ fn run_seal_pre_commit_phase1<Tree: 'static + MerkleTreeTrait>(
     Ok((piece_infos, phase1_output))
 }
 
-fn run_proof<Tree: 'static + MerkleTreeTrait>(
+fn proof_and_unseal<Tree: 'static + MerkleTreeTrait>(
     config: PoRepConfig,
     cache_dir_path: &Path,
     sealed_sector_file: &NamedTempFile,
@@ -755,7 +755,7 @@ fn create_seal<R: Rng, Tree: 'static + MerkleTreeTrait>(
     if skip_proof {
         clear_cache::<Tree>(cache_dir.path())?;
     } else {
-        run_proof::<Tree>(
+        proof_and_unseal::<Tree>(
             config,
             cache_dir.path(),
             &sealed_sector_file,
