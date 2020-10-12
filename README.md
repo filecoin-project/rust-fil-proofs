@@ -138,6 +138,14 @@ Filecoin proof parameter files are expected to be located in `/var/tmp/filecoin-
 FIL_PROOFS_PARAMETER_CACHE=/path/to/parameters
 ```
 
+If you are running a node that is expected to be using production parameters (i.e. the ones specified in the parameters.json file within this repo), you can optionally verify your on-disk parameters using an environment variable
+
+```
+FIL_PROOFS_VERIFY_PRODUCTION_PARAMS=1
+```
+
+By default, this verification is disabled.
+
 ## Optimizing for either speed or memory during replication
 
 While replicating and generating the Merkle Trees (MT) for the proof at the same time there will always be a time-memory trade-off to consider, we present here strategies to optimize one at the cost of the other.
@@ -163,6 +171,14 @@ FIL_PROOFS_PARENT_CACHE=/path/to/parent/cache
 Using the above, the cache data would be located at `/path/to/parent/cache/filecoin-parents`.
 
 Alternatively, use `FIL_PROOFS_CACHE_DIR=/path/to/parent/cache`, in which the parent cache will be located in `$FIL_PROOFS_CACHE_DIR/filecoin-parents`.  Note that if you're using `FIL_PROOFS_CACHE_DIR`, it must be set through the environment and cannot be set using the configuration file.  This setting has no effect if `FIL_PROOFS_PARENT_CACHE` is also specified.
+
+If you are concerned about the integrity of your on-disk parent cache files, they can be verified at runtime when accessed for the first time using an environment variable
+
+```
+FIL_PROOFS_VERIFY_CACHE=1
+```
+
+If they are inconsistent (compared to the manifest in storage-proofs/porep/parent-cache.json), they will be automatically re-generated at runtime.  If that cache generation fails, it will be reported as an error.
 
 ```
 FIL_PROOFS_USE_MULTICORE_SDR
