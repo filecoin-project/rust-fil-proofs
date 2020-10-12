@@ -15,6 +15,9 @@ use tempfile::NamedTempFile;
 
 use filecoin_proofs::*;
 
+// Use a fixed PoRep ID, so that the parents cache can be re-used between different tests
+const ARBITRARY_POREP_ID: [u8; 32] = [28; 32];
+
 static INIT_LOGGER: Once = Once::new();
 fn init_logger() {
     INIT_LOGGER.call_once(|| {
@@ -143,8 +146,7 @@ fn run_resumable_seal(skip_proofs: bool, layer_to_delete: usize) {
     let sealed_sector_file = NamedTempFile::new().expect("failed to created sealed sector file");
     let cache_dir = tempfile::tempdir().expect("failed to create temp dir");
 
-    let arbitrary_porep_id = rng.gen();
-    let config = porep_config(sector_size, arbitrary_porep_id);
+    let config = porep_config(sector_size, ARBITRARY_POREP_ID);
     let ticket = rng.gen();
     let sector_id = rng.gen::<u64>().into();
 
@@ -724,8 +726,7 @@ fn create_seal<R: Rng, Tree: 'static + MerkleTreeTrait>(
     let sealed_sector_file = NamedTempFile::new()?;
     let cache_dir = tempfile::tempdir().expect("failed to create temp dir");
 
-    let arbitrary_porep_id = rng.gen();
-    let config = porep_config(sector_size, arbitrary_porep_id);
+    let config = porep_config(sector_size, ARBITRARY_POREP_ID);
     let ticket = rng.gen();
     let seed = rng.gen();
     let sector_id = rng.gen::<u64>().into();
@@ -778,10 +779,9 @@ fn create_fake_seal<R: rand::Rng, Tree: 'static + MerkleTreeTrait>(
 ) -> Result<(SectorId, NamedTempFile, Commitment, tempfile::TempDir)> {
     init_logger();
 
-    let arbitrary_porep_id = [28; 32];
     let sealed_sector_file = NamedTempFile::new()?;
 
-    let config = porep_config(sector_size, arbitrary_porep_id);
+    let config = porep_config(sector_size, ARBITRARY_POREP_ID);
 
     let cache_dir = tempfile::tempdir().unwrap();
 
