@@ -9,7 +9,6 @@ use memmap::MmapOptions;
 use merkletree::merkle::get_merkle_tree_len;
 use merkletree::store::{ExternalReader, ReplicaConfig, Store, StoreConfig};
 
-use filecoin_proofs::constants::*;
 use filecoin_proofs::types::*;
 use filecoin_proofs::with_shape;
 use storage_proofs::cache_key::CacheKey;

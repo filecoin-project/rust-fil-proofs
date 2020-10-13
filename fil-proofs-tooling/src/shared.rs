@@ -10,8 +10,12 @@ use filecoin_proofs::types::{
     MerkleTreeTrait, PaddedBytesAmount, PoRepConfig, SectorSize, UnpaddedBytesAmount,
 };
 use filecoin_proofs::{
-    add_piece, seal_pre_commit_phase1, seal_pre_commit_phase2, validate_cache_for_precommit_phase2,
-    PieceInfo, PoRepProofPartitions, PrivateReplicaInfo, PublicReplicaInfo, SealPreCommitOutput,
+    cache::validate_cache_for_precommit_phase2,
+    commitments::add_piece,
+    seal::{seal_pre_commit_phase1, seal_pre_commit_phase2},
+    types::{
+        PieceInfo, PoRepProofPartitions, PrivateReplicaInfo, PublicReplicaInfo, SealPreCommitOutput,
+    },
 };
 use storage_proofs::sector::SectorId;
 

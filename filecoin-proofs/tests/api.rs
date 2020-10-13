@@ -179,9 +179,9 @@ fn winning_post<Tree: 'static + MerkleTreeTrait>(sector_size: u64, fake: bool) -
     assert_eq!(challenged_sectors.len(), sector_count);
     assert_eq!(challenged_sectors[0], 0); // with a sector_count of 1, the only valid index is 0
 
-    let pub_replicas = vec![(sector_id, post::PublicReplicaInfo::new(comm_r)?)];
+    let pub_replicas = vec![(sector_id, PublicReplicaInfo::new(comm_r)?)];
     let private_replica_info =
-        post::PrivateReplicaInfo::new(replica.path().into(), comm_r, cache_dir.path().into())?;
+        PrivateReplicaInfo::new(replica.path().into(), comm_r, cache_dir.path().into())?;
 
     /////////////////////////////////////////////
     // The following methods of proof generation are functionally equivalent:
@@ -361,9 +361,9 @@ fn window_post<Tree: 'static + MerkleTreeTrait>(
         };
         priv_replicas.insert(
             sector_id,
-            post::PrivateReplicaInfo::new(replica.path().into(), comm_r, cache_dir.path().into())?,
+            PrivateReplicaInfo::new(replica.path().into(), comm_r, cache_dir.path().into())?,
         );
-        pub_replicas.insert(sector_id, post::PublicReplicaInfo::new(comm_r)?);
+        pub_replicas.insert(sector_id, PublicReplicaInfo::new(comm_r)?);
         sectors.push((sector_id, replica, comm_r, cache_dir, prover_id));
     }
     assert_eq!(priv_replicas.len(), total_sector_count);

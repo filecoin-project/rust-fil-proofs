@@ -2,13 +2,14 @@ use bellperson::util_cs::bench_cs::BenchCS;
 use bellperson::Circuit;
 use fil_proofs_tooling::shared::{create_replicas, PROVER_ID, RANDOMNESS, TICKET_BYTES};
 use fil_proofs_tooling::{measure, Metadata};
-use filecoin_proofs::constants::{DefaultOctTree, POREP_PARTITIONS};
-use filecoin_proofs::types::PaddedBytesAmount;
-use filecoin_proofs::types::SectorSize;
-use filecoin_proofs::types::*;
+use filecoin_proofs::constants::POREP_PARTITIONS;
+use filecoin_proofs::types::{
+    DefaultOctLCTree, DefaultOctTree, PaddedBytesAmount, PoRepConfig, PoRepProofPartitions,
+    SectorSize,
+};
 use filecoin_proofs::{
-    clear_cache, constants::DefaultOctLCTree, seal_commit_phase1, seal_commit_phase2,
-    validate_cache_for_commit, PoRepConfig,
+    cache::validate_cache_for_commit, post::clear_cache, seal::seal_commit_phase1,
+    seal::seal_commit_phase2,
 };
 use log::info;
 use paired::bls12_381::Bls12;

@@ -10,11 +10,12 @@ use std::time::{Duration, Instant};
 
 use clap::{arg_enum, value_t, App, Arg};
 use fil_proofs_tooling::shared::{create_replica, PROVER_ID, RANDOMNESS};
-use filecoin_proofs::constants::{SectorShape8MiB, SECTOR_SIZE_8_MIB};
-use filecoin_proofs::types::{PoStConfig, SectorSize};
-use filecoin_proofs::{
-    generate_winning_post, PoStType, PrivateReplicaInfo, WINNING_POST_CHALLENGE_COUNT,
-    WINNING_POST_SECTOR_COUNT,
+use filecoin_proofs::constants::{
+    SECTOR_SIZE_8_MIB, WINNING_POST_CHALLENGE_COUNT, WINNING_POST_SECTOR_COUNT,
+};
+use filecoin_proofs::post::generate_winning_post;
+use filecoin_proofs::types::{
+    PoStConfig, PoStType, PrivateReplicaInfo, SectorShape8MiB, SectorSize,
 };
 use log::{debug, info};
 use storage_proofs::sector::SectorId;
