@@ -26,9 +26,6 @@ use storage_proofs_porep::stacked::{
     TemporaryAux, TemporaryAuxCache,
 };
 
-use crate::api::util::{
-    as_safe_commitment, commitment_from_fr, get_base_tree_leafs, get_base_tree_size,
-};
 use crate::caches::{get_stacked_params, get_stacked_verifying_key};
 use crate::constants::{POREP_MINIMUM_CHALLENGES, SINGLE_PARTITION_PROOF_LEN};
 use crate::parameters::setup_params;
@@ -39,6 +36,9 @@ use crate::types::{
     PieceInfo, PoRepConfig, PoRepProofPartitions, ProverId, SealCommitOutput,
     SealCommitPhase1Output, SealPreCommitOutput, SealPreCommitPhase1Output, SectorSize, Ticket,
     BINARY_ARITY,
+};
+use crate::util::{
+    as_safe_commitment, commitment_from_fr, get_base_tree_leafs, get_base_tree_size,
 };
 
 #[allow(clippy::too_many_arguments)]
@@ -855,4 +855,118 @@ pub fn fauxrep2<R: AsRef<Path>, S: AsRef<Path>, Tree: 'static + MerkleTreeTrait>
     let mut commitment = [0u8; 32];
     commitment[..].copy_from_slice(&comm_r.into_bytes()[..]);
     Ok(commitment)
+}
+
+#[cfg(test)]
+mod tests {
+    use ff::Field;
+    use paired::bls12_381::Fr;
+    use rand::SeedableRng;
+    use rand_xorshift::XorShiftRng;
+    use storage_proofs_core::{fr32::bytes_into_fr, sector::SectorId};
+
+    use crate::{
+        constants::{POREP_PARTITIONS, SECTOR_SIZE_2_KIB},
+        seal,
+        types::{
+            DefaultOctLCTree, DefaultTreeDomain, PoRepConfig, PoRepProofPartitions, SectorSize,
+        },
+        util::as_safe_commitment,
+    };
+
+    #[test]
+    fn test_verify_seal_fr32_validation() {
+        let convertible_to_fr_bytes = [0; 32];
+        let out = bytes_into_fr(&convertible_to_fr_bytes);
+        assert!(out.is_ok(), "tripwire");
+
+        let not_convertible_to_fr_bytes = [255; 32];
+        let out = bytes_into_fr(&not_convertible_to_fr_bytes);
+        assert!(out.is_err(), "tripwire");
+
+        let arbitrary_porep_id = [87; 32];
+        {
+            let result = seal::verify_seal::<DefaultOctLCTree>(
+                PoRepConfig {
+                    sector_size: SectorSize(SECTOR_SIZE_2_KIB),
+                    partitions: PoRepProofPartitions(
+                        *POREP_PARTITIONS
+                            .read()
+                            .expect("POREP_PARTITIONS poisoned")
+                            .get(&SECTOR_SIZE_2_KIB)
+                            .expect("unknown sector size"),
+                    ),
+                    porep_id: arbitrary_porep_id,
+                },
+                not_convertible_to_fr_bytes,
+                convertible_to_fr_bytes,
+                [0; 32],
+                SectorId::from(0),
+                [0; 32],
+                [0; 32],
+                &[],
+            );
+
+            if let Err(err) = result {
+                let needle = "Invalid all zero commitment";
+                let haystack = format!("{}", err);
+
+                assert!(
+                    haystack.contains(needle),
+                    format!("\"{}\" did not contain \"{}\"", haystack, needle)
+                );
+            } else {
+                panic!("should have failed comm_r to Fr32 conversion");
+            }
+        }
+
+        {
+            let result = seal::verify_seal::<DefaultOctLCTree>(
+                PoRepConfig {
+                    sector_size: SectorSize(SECTOR_SIZE_2_KIB),
+                    partitions: PoRepProofPartitions(
+                        *POREP_PARTITIONS
+                            .read()
+                            .expect("POREP_PARTITIONS poisoned")
+                            .get(&SECTOR_SIZE_2_KIB)
+                            .expect("unknown sector size"),
+                    ),
+                    porep_id: arbitrary_porep_id,
+                },
+                convertible_to_fr_bytes,
+                not_convertible_to_fr_bytes,
+                [0; 32],
+                SectorId::from(0),
+                [0; 32],
+                [0; 32],
+                &[],
+            );
+
+            if let Err(err) = result {
+                let needle = "Invalid all zero commitment";
+                let haystack = format!("{}", err);
+
+                assert!(
+                    haystack.contains(needle),
+                    format!("\"{}\" did not contain \"{}\"", haystack, needle)
+                );
+            } else {
+                panic!("should have failed comm_d to Fr32 conversion");
+            }
+        }
+    }
+
+    #[test]
+    fn test_random_domain_element() {
+        let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
+
+        for _ in 0..100 {
+            let random_el: DefaultTreeDomain = Fr::random(rng).into();
+            let mut randomness = [0u8; 32];
+            randomness.copy_from_slice(AsRef::<[u8]>::as_ref(&random_el));
+            let back: DefaultTreeDomain = as_safe_commitment(&randomness, "test")
+                .expect("failed to get domain from randomness");
+            assert_eq!(back, random_el);
+        }
+    }
 }

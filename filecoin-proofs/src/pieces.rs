@@ -353,9 +353,9 @@ pub fn get_aligned_source<T: Read>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::api::util::commitment_from_fr;
     use crate::constants::{DRG_DEGREE, EXP_DEGREE};
     use crate::types::DataTree;
+    use crate::util::commitment_from_fr;
 
     use paired::bls12_381::Fr;
     use rand::{Rng, RngCore, SeedableRng};
@@ -729,7 +729,7 @@ mod tests {
 
             let mut piece_file = std::io::Cursor::new(&mut piece_bytes);
 
-            let (piece_info, _) = crate::api::commitments::add_piece(
+            let (piece_info, _) = crate::commitments::add_piece(
                 &mut piece_file,
                 &mut staged_sector_io,
                 *piece_size,

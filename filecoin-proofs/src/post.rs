@@ -24,13 +24,13 @@ use storage_proofs_core::{
 };
 use storage_proofs_post::fallback::{self, SectorProof};
 
-use crate::api::util::{as_safe_commitment, get_base_tree_leafs, get_base_tree_size};
 use crate::caches::{get_post_params, get_post_verifying_key};
 use crate::parameters::{window_post_setup_params, winning_post_setup_params};
 use crate::types::{
     ChallengeSeed, Commitment, DefaultPieceHasher, FallbackPoStSectorProof, PersistentAux,
     PoStConfig, PoStType, ProverId, SectorSize, SnarkProof, TemporaryAux, VanillaProof,
 };
+use crate::util::{as_safe_commitment, get_base_tree_leafs, get_base_tree_size};
 
 /// The minimal information required about a replica, in order to be able to generate
 /// a PoSt over it.
