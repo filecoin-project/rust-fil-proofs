@@ -7,11 +7,11 @@ use ff::Field;
 use paired::bls12_381::Fr;
 use rand::{Rng, SeedableRng};
 use rand_xorshift::XorShiftRng;
-use storage_proofs::hasher::Hasher;
-use storage_proofs::sector::*;
+use storage_proofs_core::{hasher::Hasher, sector::*};
 use tempfile::NamedTempFile;
 
 use filecoin_proofs::*;
+use filecoin_proofs::{constants::*, types::*};
 
 static INIT_LOGGER: Once = Once::new();
 fn init_logger() {
@@ -131,13 +131,15 @@ fn test_winning_post_empty_sector_challenge() -> Result<()> {
         priority: false,
     };
 
-    assert!(generate_winning_post_sector_challenge::<SectorShape2KiB>(
-        &config,
-        &randomness,
-        sector_count as u64,
-        prover_id
-    )
-    .is_err());
+    assert!(
+        post::generate_winning_post_sector_challenge::<SectorShape2KiB>(
+            &config,
+            &randomness,
+            sector_count as u64,
+            prover_id
+        )
+        .is_err()
+    );
 
     Ok(())
 }
@@ -168,7 +170,7 @@ fn winning_post<Tree: 'static + MerkleTreeTrait>(sector_size: u64, fake: bool) -
         priority: false,
     };
 
-    let challenged_sectors = generate_winning_post_sector_challenge::<Tree>(
+    let challenged_sectors = post::generate_winning_post_sector_challenge::<Tree>(
         &config,
         &randomness,
         sector_count as u64,
@@ -177,32 +179,38 @@ fn winning_post<Tree: 'static + MerkleTreeTrait>(sector_size: u64, fake: bool) -
     assert_eq!(challenged_sectors.len(), sector_count);
     assert_eq!(challenged_sectors[0], 0); // with a sector_count of 1, the only valid index is 0
 
-    let pub_replicas = vec![(sector_id, PublicReplicaInfo::new(comm_r)?)];
+    let pub_replicas = vec![(sector_id, post::PublicReplicaInfo::new(comm_r)?)];
     let private_replica_info =
-        PrivateReplicaInfo::new(replica.path().into(), comm_r, cache_dir.path().into())?;
+        post::PrivateReplicaInfo::new(replica.path().into(), comm_r, cache_dir.path().into())?;
 
     /////////////////////////////////////////////
     // The following methods of proof generation are functionally equivalent:
     // 1)
     //
     let priv_replicas = vec![(sector_id, private_replica_info.clone())];
-    let proof = generate_winning_post::<Tree>(&config, &randomness, &priv_replicas[..], prover_id)?;
+    let proof =
+        post::generate_winning_post::<Tree>(&config, &randomness, &priv_replicas[..], prover_id)?;
 
-    let valid =
-        verify_winning_post::<Tree>(&config, &randomness, &pub_replicas[..], prover_id, &proof)?;
+    let valid = post::verify_winning_post::<Tree>(
+        &config,
+        &randomness,
+        &pub_replicas[..],
+        prover_id,
+        &proof,
+    )?;
     assert!(valid, "proof did not verify");
 
     //
     // 2)
     let mut vanilla_proofs = Vec::with_capacity(sector_count);
-    let challenges = generate_fallback_sector_challenges::<Tree>(
+    let challenges = post::generate_fallback_sector_challenges::<Tree>(
         &config,
         &randomness,
         &vec![sector_id],
         prover_id,
     )?;
 
-    let single_proof = generate_single_vanilla_proof::<Tree>(
+    let single_proof = post::generate_single_vanilla_proof::<Tree>(
         &config,
         sector_id,
         &private_replica_info,
@@ -211,7 +219,7 @@ fn winning_post<Tree: 'static + MerkleTreeTrait>(sector_size: u64, fake: bool) -
 
     vanilla_proofs.push(single_proof);
 
-    let proof = generate_winning_post_with_vanilla::<Tree>(
+    let proof = post::generate_winning_post_with_vanilla::<Tree>(
         &config,
         &randomness,
         prover_id,
@@ -219,8 +227,13 @@ fn winning_post<Tree: 'static + MerkleTreeTrait>(sector_size: u64, fake: bool) -
     )?;
     /////////////////////////////////////////////
 
-    let valid =
-        verify_winning_post::<Tree>(&config, &randomness, &pub_replicas[..], prover_id, &proof)?;
+    let valid = post::verify_winning_post::<Tree>(
+        &config,
+        &randomness,
+        &pub_replicas[..],
+        prover_id,
+        &proof,
+    )?;
     assert!(valid, "proof did not verify");
 
     Ok(())
@@ -348,9 +361,9 @@ fn window_post<Tree: 'static + MerkleTreeTrait>(
         };
         priv_replicas.insert(
             sector_id,
-            PrivateReplicaInfo::new(replica.path().into(), comm_r, cache_dir.path().into())?,
+            post::PrivateReplicaInfo::new(replica.path().into(), comm_r, cache_dir.path().into())?,
         );
-        pub_replicas.insert(sector_id, PublicReplicaInfo::new(comm_r)?);
+        pub_replicas.insert(sector_id, post::PublicReplicaInfo::new(comm_r)?);
         sectors.push((sector_id, replica, comm_r, cache_dir, prover_id));
     }
     assert_eq!(priv_replicas.len(), total_sector_count);
@@ -372,9 +385,11 @@ fn window_post<Tree: 'static + MerkleTreeTrait>(
     /////////////////////////////////////////////
     // The following methods of proof generation are functionally equivalent:
     // 1)
-    let proof = generate_window_post::<Tree>(&config, &randomness, &priv_replicas, prover_id)?;
+    let proof =
+        post::generate_window_post::<Tree>(&config, &randomness, &priv_replicas, prover_id)?;
 
-    let valid = verify_window_post::<Tree>(&config, &randomness, &pub_replicas, prover_id, &proof)?;
+    let valid =
+        post::verify_window_post::<Tree>(&config, &randomness, &pub_replicas, prover_id, &proof)?;
     assert!(valid, "proof did not verify");
 
     // 2)
@@ -383,7 +398,7 @@ fn window_post<Tree: 'static + MerkleTreeTrait>(
         .map(|(sector, _replica)| *sector)
         .collect::<Vec<SectorId>>();
 
-    let challenges = generate_fallback_sector_challenges::<Tree>(
+    let challenges = post::generate_fallback_sector_challenges::<Tree>(
         &config,
         &randomness,
         &replica_sectors,
@@ -394,17 +409,26 @@ fn window_post<Tree: 'static + MerkleTreeTrait>(
 
     for (sector_id, replica) in priv_replicas.iter() {
         let sector_challenges = &challenges[sector_id];
-        let single_proof =
-            generate_single_vanilla_proof::<Tree>(&config, *sector_id, replica, sector_challenges)?;
+        let single_proof = post::generate_single_vanilla_proof::<Tree>(
+            &config,
+            *sector_id,
+            replica,
+            sector_challenges,
+        )?;
 
         vanilla_proofs.push(single_proof);
     }
 
-    let proof =
-        generate_window_post_with_vanilla::<Tree>(&config, &randomness, prover_id, vanilla_proofs)?;
+    let proof = post::generate_window_post_with_vanilla::<Tree>(
+        &config,
+        &randomness,
+        prover_id,
+        vanilla_proofs,
+    )?;
     /////////////////////////////////////////////
 
-    let valid = verify_window_post::<Tree>(&config, &randomness, &pub_replicas, prover_id, &proof)?;
+    let valid =
+        post::verify_window_post::<Tree>(&config, &randomness, &pub_replicas, prover_id, &proof)?;
     assert!(valid, "proof did not verify");
 
     Ok(())
@@ -429,11 +453,12 @@ fn create_seal<R: Rng, Tree: 'static + MerkleTreeTrait>(
     piece_file.as_file_mut().sync_all()?;
     piece_file.as_file_mut().seek(SeekFrom::Start(0))?;
 
-    let piece_info = generate_piece_commitment(piece_file.as_file_mut(), number_of_bytes_in_piece)?;
+    let piece_info =
+        commitments::generate_piece_commitment(piece_file.as_file_mut(), number_of_bytes_in_piece)?;
     piece_file.as_file_mut().seek(SeekFrom::Start(0))?;
 
     let mut staged_sector_file = NamedTempFile::new()?;
-    add_piece(
+    commitments::add_piece(
         &mut piece_file,
         &mut staged_sector_file,
         number_of_bytes_in_piece,
@@ -462,7 +487,7 @@ fn create_seal<R: Rng, Tree: 'static + MerkleTreeTrait>(
     let seed = rng.gen();
     let sector_id = rng.gen::<u64>().into();
 
-    let phase1_output = seal_pre_commit_phase1::<_, _, _, Tree>(
+    let phase1_output = seal::seal_pre_commit_phase1::<_, _, _, Tree>(
         config,
         cache_dir.path(),
         staged_sector_file.path(),
@@ -473,13 +498,13 @@ fn create_seal<R: Rng, Tree: 'static + MerkleTreeTrait>(
         &piece_infos,
     )?;
 
-    validate_cache_for_precommit_phase2(
+    cache::validate_cache_for_precommit_phase2(
         cache_dir.path(),
         staged_sector_file.path(),
         &phase1_output,
     )?;
 
-    let pre_commit_output = seal_pre_commit_phase2(
+    let pre_commit_output = seal::seal_pre_commit_phase2(
         config,
         phase1_output,
         cache_dir.path(),
@@ -489,12 +514,12 @@ fn create_seal<R: Rng, Tree: 'static + MerkleTreeTrait>(
     let comm_d = pre_commit_output.comm_d;
     let comm_r = pre_commit_output.comm_r;
 
-    validate_cache_for_commit::<_, _, Tree>(cache_dir.path(), sealed_sector_file.path())?;
+    cache::validate_cache_for_commit::<_, _, Tree>(cache_dir.path(), sealed_sector_file.path())?;
 
     if skip_proof {
-        clear_cache::<Tree>(cache_dir.path())?;
+        post::clear_cache::<Tree>(cache_dir.path())?;
     } else {
-        let phase1_output = seal_commit_phase1::<_, Tree>(
+        let phase1_output = seal::seal_commit_phase1::<_, Tree>(
             config,
             cache_dir.path(),
             sealed_sector_file.path(),
@@ -506,11 +531,11 @@ fn create_seal<R: Rng, Tree: 'static + MerkleTreeTrait>(
             &piece_infos,
         )?;
 
-        clear_cache::<Tree>(cache_dir.path())?;
+        post::clear_cache::<Tree>(cache_dir.path())?;
 
-        let commit_output = seal_commit_phase2(config, phase1_output, prover_id, sector_id)?;
+        let commit_output = seal::seal_commit_phase2(config, phase1_output, prover_id, sector_id)?;
 
-        let _ = unseal_range::<_, _, _, Tree>(
+        let _ = unseal::unseal_range::<_, _, _, Tree>(
             config,
             cache_dir.path(),
             &sealed_sector_file,
@@ -533,14 +558,14 @@ fn create_seal<R: Rng, Tree: 'static + MerkleTreeTrait>(
         assert_eq!(contents.len(), 508);
         assert_eq!(&piece_bytes[508..508 + 508], &contents[..]);
 
-        let computed_comm_d = compute_comm_d(config.sector_size, &piece_infos)?;
+        let computed_comm_d = pieces::compute_comm_d(config.sector_size, &piece_infos)?;
 
         assert_eq!(
             comm_d, computed_comm_d,
             "Computed and expected comm_d don't match."
         );
 
-        let verified = verify_seal::<Tree>(
+        let verified = seal::verify_seal::<Tree>(
             config,
             comm_r,
             comm_d,
@@ -577,7 +602,7 @@ fn create_fake_seal<R: rand::Rng, Tree: 'static + MerkleTreeTrait>(
 
     let sector_id = rng.gen::<u64>().into();
 
-    let comm_r = fauxrep_aux::<_, _, _, Tree>(
+    let comm_r = seal::fauxrep_aux::<_, _, _, Tree>(
         &mut rng,
         config,
         cache_dir.path(),

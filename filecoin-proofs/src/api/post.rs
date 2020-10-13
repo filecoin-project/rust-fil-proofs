@@ -8,29 +8,29 @@ use bincode::deserialize;
 use generic_array::typenum::Unsigned;
 use log::{info, trace};
 use merkletree::store::StoreConfig;
-use storage_proofs::cache_key::CacheKey;
-use storage_proofs::compound_proof::{self, CompoundProof};
-use storage_proofs::hasher::{Domain, Hasher};
-use storage_proofs::merkle::{
-    create_tree, get_base_tree_count, split_config_and_replica, MerkleTreeTrait, MerkleTreeWrapper,
+use storage_proofs_core::{
+    cache_key::CacheKey,
+    compound_proof::{self, CompoundProof},
+    hasher::{Domain, Hasher},
+    merkle::{
+        create_tree, get_base_tree_count, split_config_and_replica, MerkleTreeTrait,
+        MerkleTreeWrapper,
+    },
+    multi_proof::MultiProof,
+    proof::ProofScheme,
+    sector::*,
+    settings,
+    util::default_rows_to_discard,
 };
-use storage_proofs::multi_proof::MultiProof;
-use storage_proofs::post::fallback;
-use storage_proofs::post::fallback::SectorProof;
-use storage_proofs::proof::ProofScheme;
-use storage_proofs::sector::*;
-use storage_proofs::settings;
-use storage_proofs::util::default_rows_to_discard;
+use storage_proofs_post::fallback::{self, SectorProof};
 
 use crate::api::util::{as_safe_commitment, get_base_tree_leafs, get_base_tree_size};
 use crate::caches::{get_post_params, get_post_verifying_key};
-use crate::constants::*;
 use crate::parameters::{window_post_setup_params, winning_post_setup_params};
 use crate::types::{
-    ChallengeSeed, Commitment, FallbackPoStSectorProof, PersistentAux, PoStConfig, ProverId,
-    SectorSize, SnarkProof, TemporaryAux, VanillaProof,
+    ChallengeSeed, Commitment, DefaultPieceHasher, FallbackPoStSectorProof, PersistentAux,
+    PoStConfig, PoStType, ProverId, SectorSize, SnarkProof, TemporaryAux, VanillaProof,
 };
-use crate::PoStType;
 
 /// The minimal information required about a replica, in order to be able to generate
 /// a PoSt over it.

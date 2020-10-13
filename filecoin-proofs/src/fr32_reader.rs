@@ -523,7 +523,7 @@ mod tests {
     fn validate_fr32(bytes: &[u8]) {
         let chunks = (bytes.len() as f64 / 32_f64).ceil() as usize;
         for (i, chunk) in bytes.chunks(32).enumerate() {
-            let _ = storage_proofs::fr32::bytes_into_fr(chunk).unwrap_or_else(|_| {
+            let _ = storage_proofs_core::fr32::bytes_into_fr(chunk).unwrap_or_else(|_| {
                 panic!(
                     "chunk {}/{} cannot be converted to valid Fr: {:?}",
                     i + 1,

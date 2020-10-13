@@ -3,7 +3,7 @@ use std::iter::FromIterator;
 
 use failure::Error as FailureError;
 
-use storage_proofs::parameter_cache::CacheEntryMetadata;
+use storage_proofs_core::parameter_cache::CacheEntryMetadata;
 
 use crate::parampublish::support::session::ParamPublishSessionBuilder;
 use std::collections::btree_map::BTreeMap;

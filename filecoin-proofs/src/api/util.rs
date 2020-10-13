@@ -1,9 +1,11 @@
 use anyhow::{Context, Result};
 use merkletree::merkle::{get_merkle_tree_leafs, get_merkle_tree_len};
 use paired::bls12_381::Fr;
-use storage_proofs::fr32::{bytes_into_fr, fr_into_bytes};
-use storage_proofs::hasher::{Domain, Hasher};
-use storage_proofs::merkle::{get_base_tree_count, MerkleTreeTrait};
+use storage_proofs_core::{
+    fr32::{bytes_into_fr, fr_into_bytes},
+    hasher::{Domain, Hasher},
+    merkle::{get_base_tree_count, MerkleTreeTrait},
+};
 use typenum::Unsigned;
 
 use crate::types::{Commitment, SectorSize};

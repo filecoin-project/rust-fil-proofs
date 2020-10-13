@@ -1,8 +1,8 @@
 use std::path::PathBuf;
 
 use anyhow::Result;
-use storage_proofs::parameter_cache::{self, CacheableParameters};
-use storage_proofs::post::fallback;
+use storage_proofs_core::parameter_cache::{self, CacheableParameters};
+use storage_proofs_post::fallback;
 
 use crate::types::*;
 

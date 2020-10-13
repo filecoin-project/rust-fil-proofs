@@ -8,37 +8,37 @@ use log::{info, trace};
 use memmap::MmapOptions;
 use merkletree::store::{DiskStore, Store, StoreConfig};
 use paired::bls12_381::Fr;
-use storage_proofs::cache_key::CacheKey;
-use storage_proofs::compound_proof::{self, CompoundProof};
-use storage_proofs::drgraph::Graph;
-use storage_proofs::hasher::{Domain, Hasher};
-use storage_proofs::measurements::{measure_op, Operation::CommD};
-use storage_proofs::merkle::{create_base_merkle_tree, BinaryMerkleTree, MerkleTreeTrait};
-use storage_proofs::multi_proof::MultiProof;
-use storage_proofs::porep::stacked::{
+use storage_proofs_core::{
+    cache_key::CacheKey,
+    compound_proof::{self, CompoundProof},
+    drgraph::Graph,
+    hasher::{Domain, Hasher},
+    measurements::{measure_op, Operation::CommD},
+    merkle::{create_base_merkle_tree, BinaryMerkleTree, MerkleTreeTrait},
+    multi_proof::MultiProof,
+    proof::ProofScheme,
+    sector::SectorId,
+    settings,
+    util::default_rows_to_discard,
+};
+use storage_proofs_porep::stacked::{
     self, generate_replica_id, ChallengeRequirements, StackedCompound, StackedDrg, Tau,
     TemporaryAux, TemporaryAuxCache,
 };
-use storage_proofs::proof::ProofScheme;
-use storage_proofs::sector::SectorId;
-use storage_proofs::settings;
-use storage_proofs::util::default_rows_to_discard;
 
 use crate::api::util::{
     as_safe_commitment, commitment_from_fr, get_base_tree_leafs, get_base_tree_size,
 };
 use crate::caches::{get_stacked_params, get_stacked_verifying_key};
-use crate::constants::{
-    DefaultBinaryTree, DefaultPieceDomain, DefaultPieceHasher, POREP_MINIMUM_CHALLENGES,
-    SINGLE_PARTITION_PROOF_LEN,
-};
+use crate::constants::{POREP_MINIMUM_CHALLENGES, SINGLE_PARTITION_PROOF_LEN};
 use crate::parameters::setup_params;
 pub use crate::pieces;
 pub use crate::pieces::verify_pieces;
 use crate::types::{
-    Commitment, PaddedBytesAmount, PieceInfo, PoRepConfig, PoRepProofPartitions, ProverId,
-    SealCommitOutput, SealCommitPhase1Output, SealPreCommitOutput, SealPreCommitPhase1Output,
-    SectorSize, Ticket, BINARY_ARITY,
+    Commitment, DefaultBinaryTree, DefaultPieceDomain, DefaultPieceHasher, PaddedBytesAmount,
+    PieceInfo, PoRepConfig, PoRepProofPartitions, ProverId, SealCommitOutput,
+    SealCommitPhase1Output, SealPreCommitOutput, SealPreCommitPhase1Output, SectorSize, Ticket,
+    BINARY_ARITY,
 };
 
 #[allow(clippy::too_many_arguments)]
@@ -240,7 +240,7 @@ where
             )
         })?
     };
-    let data: storage_proofs::Data<'_> = (data, PathBuf::from(replica_path.as_ref())).into();
+    let data: storage_proofs_core::Data<'_> = (data, PathBuf::from(replica_path.as_ref())).into();
 
     // Load data tree from disk
     let data_tree = {

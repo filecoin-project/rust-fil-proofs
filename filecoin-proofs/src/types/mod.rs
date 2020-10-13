@@ -1,10 +1,7 @@
 use serde::{Deserialize, Serialize};
-use storage_proofs::hasher::Hasher;
-use storage_proofs::porep::stacked;
-use storage_proofs::post::fallback::*;
-use storage_proofs::sector::*;
-
-use crate::constants::*;
+use storage_proofs_core::{hasher::Hasher, sector::*};
+use storage_proofs_porep::stacked;
+use storage_proofs_post::fallback::*;
 
 mod bytes_amount;
 mod piece_info;
@@ -13,6 +10,7 @@ mod porep_proof_partitions;
 mod post_config;
 mod post_proof_partitions;
 mod sector_class;
+mod sector_shapes;
 mod sector_size;
 
 pub use self::bytes_amount::*;
@@ -22,6 +20,7 @@ pub use self::porep_proof_partitions::*;
 pub use self::post_config::*;
 pub use self::post_proof_partitions::*;
 pub use self::sector_class::*;
+pub use self::sector_shapes::*;
 pub use self::sector_size::*;
 
 pub type Commitment = [u8; 32];
@@ -31,14 +30,26 @@ pub use stacked::TemporaryAux;
 pub type ProverId = [u8; 32];
 pub type Ticket = [u8; 32];
 
-pub type Tree = storage_proofs::merkle::OctMerkleTree<DefaultTreeHasher>;
-pub type LCTree = storage_proofs::merkle::OctLCMerkleTree<DefaultTreeHasher>;
+pub type Tree = storage_proofs_core::merkle::OctMerkleTree<DefaultTreeHasher>;
+pub type LCTree = storage_proofs_core::merkle::OctLCMerkleTree<DefaultTreeHasher>;
 
-pub use storage_proofs::porep::stacked::Labels;
-pub type DataTree = storage_proofs::merkle::BinaryMerkleTree<DefaultPieceHasher>;
+pub use storage_proofs_porep::stacked::Labels;
+pub type DataTree = storage_proofs_core::merkle::BinaryMerkleTree<DefaultPieceHasher>;
 
-pub use storage_proofs::merkle::MerkleProof;
-pub use storage_proofs::merkle::MerkleTreeTrait;
+pub use storage_proofs_core::merkle::MerkleProof;
+pub use storage_proofs_core::merkle::MerkleTreeTrait;
+
+/// The hasher used for creating comm_d.
+pub type DefaultPieceHasher = storage_proofs_core::hasher::Sha256Hasher;
+pub type DefaultPieceDomain = <DefaultPieceHasher as Hasher>::Domain;
+
+/// The default hasher for merkle trees currently in use.
+pub type DefaultTreeHasher = storage_proofs_core::hasher::PoseidonHasher;
+pub type DefaultTreeDomain = <DefaultTreeHasher as Hasher>::Domain;
+
+pub type DefaultBinaryTree = storage_proofs_core::merkle::BinaryMerkleTree<DefaultTreeHasher>;
+pub type DefaultOctTree = storage_proofs_core::merkle::OctMerkleTree<DefaultTreeHasher>;
+pub type DefaultOctLCTree = storage_proofs_core::merkle::OctLCMerkleTree<DefaultTreeHasher>;
 
 /// Arity for oct trees, used for comm_r_last.
 pub const OCT_ARITY: usize = 8;
@@ -52,7 +63,7 @@ pub struct SealPreCommitOutput {
     pub comm_d: Commitment,
 }
 
-pub type VanillaSealProof<Tree> = storage_proofs::porep::stacked::Proof<Tree, DefaultPieceHasher>;
+pub type VanillaSealProof<Tree> = storage_proofs_porep::stacked::Proof<Tree, DefaultPieceHasher>;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct SealCommitPhase1Output<Tree: MerkleTreeTrait> {

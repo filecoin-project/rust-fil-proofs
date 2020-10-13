@@ -29,16 +29,16 @@ use rand::rngs::OsRng;
 use rand::{RngCore, SeedableRng};
 use rand_chacha::ChaChaRng;
 use simplelog::{self, CombinedLogger, LevelFilter, TermLogger, TerminalMode, WriteLogger};
-use storage_proofs::compound_proof::{self, CompoundProof};
-use storage_proofs::hasher::Sha256Hasher;
-use storage_proofs::merkle::MerkleTreeTrait;
-use storage_proofs::parameter_cache::{
-    self, metadata_id, parameter_id, verifying_key_id, CacheableParameters,
+use storage_proofs_core::{
+    compound_proof::{self, CompoundProof},
+    hasher::Sha256Hasher,
+    merkle::MerkleTreeTrait,
+    parameter_cache::{self, metadata_id, parameter_id, verifying_key_id, CacheableParameters},
 };
-use storage_proofs::porep::stacked::{
+use storage_proofs_porep::stacked::{
     PublicParams as PoRepPublicParams, StackedCircuit, StackedCompound, StackedDrg,
 };
-use storage_proofs::post::fallback::{
+use storage_proofs_post::fallback::{
     FallbackPoSt, FallbackPoStCircuit, FallbackPoStCompound, PublicParams as PoStPublicParams,
 };
 

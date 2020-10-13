@@ -9,13 +9,10 @@ use filecoin_proofs::constants::*;
 use filecoin_proofs::parameters::{
     public_params, window_post_public_params, winning_post_public_params,
 };
-use filecoin_proofs::types::*;
-use filecoin_proofs::with_shape;
-use filecoin_proofs::PoStType;
-use storage_proofs::compound_proof::CompoundProof;
-use storage_proofs::parameter_cache::CacheableParameters;
-use storage_proofs::porep::stacked::{StackedCompound, StackedDrg};
-use storage_proofs::post::fallback::{FallbackPoSt, FallbackPoStCircuit, FallbackPoStCompound};
+use filecoin_proofs::{types::PoStType, types::*, with_shape};
+use storage_proofs_core::{compound_proof::CompoundProof, parameter_cache::CacheableParameters};
+use storage_proofs_porep::stacked::{StackedCompound, StackedDrg};
+use storage_proofs_post::fallback::{FallbackPoSt, FallbackPoStCircuit, FallbackPoStCompound};
 
 const PUBLISHED_SECTOR_SIZES: [u64; 10] = [
     SECTOR_SIZE_2_KIB,

@@ -7,15 +7,15 @@ use std::sync::Mutex;
 use anyhow::{ensure, Context, Result};
 use lazy_static::lazy_static;
 use log::info;
-use storage_proofs::hasher::{HashFunction, Hasher};
-use storage_proofs::util::NODE_SIZE;
-
-use crate::constants::{
-    DefaultPieceHasher,
-    MINIMUM_RESERVED_BYTES_FOR_PIECE_IN_FULLY_ALIGNED_SECTOR as MINIMUM_PIECE_SIZE,
+use storage_proofs_core::{
+    hasher::{HashFunction, Hasher},
+    util::NODE_SIZE,
 };
+
+use crate::constants::MINIMUM_RESERVED_BYTES_FOR_PIECE_IN_FULLY_ALIGNED_SECTOR as MINIMUM_PIECE_SIZE;
 use crate::types::{
-    Commitment, PaddedBytesAmount, PieceInfo, SectorSize, UnpaddedByteIndex, UnpaddedBytesAmount,
+    Commitment, DefaultPieceHasher, PaddedBytesAmount, PieceInfo, SectorSize, UnpaddedByteIndex,
+    UnpaddedBytesAmount,
 };
 
 /// Verify that the provided `piece_infos` and `comm_d` match.
@@ -360,9 +360,8 @@ mod tests {
     use paired::bls12_381::Fr;
     use rand::{Rng, RngCore, SeedableRng};
     use rand_xorshift::XorShiftRng;
-    use storage_proofs::drgraph::Graph;
-    use storage_proofs::merkle::create_base_merkle_tree;
-    use storage_proofs::porep::stacked::StackedBucketGraph;
+    use storage_proofs_core::{drgraph::Graph, merkle::create_base_merkle_tree};
+    use storage_proofs_porep::stacked::StackedBucketGraph;
 
     #[test]
     fn test_empty_source() {
@@ -730,7 +729,7 @@ mod tests {
 
             let mut piece_file = std::io::Cursor::new(&mut piece_bytes);
 
-            let (piece_info, _) = crate::api::add_piece(
+            let (piece_info, _) = crate::api::commitments::add_piece(
                 &mut piece_file,
                 &mut staged_sector_io,
                 *piece_size,

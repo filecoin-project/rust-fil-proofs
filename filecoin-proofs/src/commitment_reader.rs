@@ -2,9 +2,9 @@ use std::io::{self, Read};
 
 use anyhow::{ensure, Result};
 use rayon::prelude::*;
-use storage_proofs::hasher::{HashFunction, Hasher};
+use storage_proofs_core::hasher::{HashFunction, Hasher};
 
-use crate::constants::DefaultPieceHasher;
+use crate::types::DefaultPieceHasher;
 
 /// Calculates comm-d of the data piped through to it.
 /// Data must be bit padded and power of 2 bytes.
@@ -90,7 +90,7 @@ mod tests {
 
     use crate::types::*;
 
-    use storage_proofs::pieces::generate_piece_commitment_bytes_from_source;
+    use storage_proofs_core::pieces::generate_piece_commitment_bytes_from_source;
 
     #[test]
     fn test_commitment_reader() {

@@ -1,10 +1,12 @@
 use anyhow::{ensure, Result};
-use storage_proofs::porep::stacked::{self, LayerChallenges, StackedDrg};
-use storage_proofs::post::fallback;
-use storage_proofs::proof::ProofScheme;
+use storage_proofs_core::proof::ProofScheme;
+use storage_proofs_porep::stacked::{self, LayerChallenges, StackedDrg};
+use storage_proofs_post::fallback;
 
-use crate::constants::*;
-use crate::types::{MerkleTreeTrait, PaddedBytesAmount, PoStConfig};
+use crate::{
+    constants::{DRG_DEGREE, EXP_DEGREE, LAYERS, POREP_MINIMUM_CHALLENGES},
+    types::{DefaultPieceHasher, MerkleTreeTrait, PaddedBytesAmount, PoStConfig},
+};
 
 type WinningPostSetupParams = fallback::SetupParams;
 pub type WinningPostPublicParams = fallback::PublicParams;
@@ -125,7 +127,7 @@ fn select_challenges(
 mod tests {
     use super::*;
 
-    use crate::types::PoStType;
+    use crate::types::{DefaultOctLCTree, PoRepProofPartitions, PoStType};
 
     #[test]
     fn partition_layer_challenges_test() {
@@ -135,7 +137,7 @@ mod tests {
                 .challenges_count_all()
         };
         // Update to ensure all supported PoRepProofPartitions options are represented here.
-        assert_eq!(6, f(usize::from(crate::PoRepProofPartitions(2))));
+        assert_eq!(6, f(usize::from(PoRepProofPartitions(2))));
 
         assert_eq!(12, f(1));
         assert_eq!(6, f(2));

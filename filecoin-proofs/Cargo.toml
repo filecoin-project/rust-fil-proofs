@@ -9,7 +9,9 @@ repository = "https://github.com/filecoin-project/rust-fil-proofs"
 readme = "README.md"
 
 [dependencies]
-storage-proofs = { version = "^5.0.0", path = "../storage-proofs" }
+storage-proofs-core = { version = "^5.0.0", path = "../storage-proofs/core" }
+storage-proofs-post = { version = "^5.0.0", path = "../storage-proofs/post" }
+storage-proofs-porep = { version = "^5.0.0", path = "../storage-proofs/porep" }
 bitvec = "0.17"
 chrono = "0.4"
 rand = "0.7"
@@ -69,9 +71,17 @@ tempfile = "3"
 default = ["gpu"]
 cpu-profile = ["gperftools"]
 heap-profile = ["gperftools/heap"]
-simd = ["storage-proofs/simd"]
-asm = ["storage-proofs/asm"]
-gpu = ["storage-proofs/gpu", "bellperson/gpu", "fil-sapling-crypto/gpu"]
+simd = [
+  "storage-proofs-core/simd",
+]
+asm = [
+  "storage-proofs-core/asm"
+]
+gpu = [
+  "storage-proofs-core/gpu",
+  "bellperson/gpu",
+  "fil-sapling-crypto/gpu"
+]
 
 [[bench]]
 name = "preprocessing"

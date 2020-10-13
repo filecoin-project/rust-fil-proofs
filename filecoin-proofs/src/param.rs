@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 use blake2b_simd::State as Blake2b;
-use storage_proofs::parameter_cache::{
+use storage_proofs_core::parameter_cache::{
     parameter_cache_dir, CacheEntryMetadata, PARAMETER_METADATA_EXT,
 };
 
