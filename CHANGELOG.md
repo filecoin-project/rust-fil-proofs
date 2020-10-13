@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://book.async.rs/overview
 
 ## Unreleased
 
+## 5.2.2 - 2020-10-13
+
+- Add notes about param and cache verification [#1313](https://github.com/filecoin-project/rust-fil-proofs/pull/1313)
+- Update incorrect log message [#1312](https://github.com/filecoin-project/rust-fil-proofs/pull/1312)
+- Bind threads to cores in multicore SDR [#1305](https://github.com/filecoin-project/rust-fil-proofs/pull/1305)
+- Add hwloc dependency to CI [#1307](https://github.com/filecoin-project/rust-fil-proofs/pull/1307)
+
 ## 5.2.1 - 2020-10-01
 
 - Pin neptune to version 1.2.x [#1302](https://github.com/filecoin-project/rust-fil-proofs/pull/1302)
@@ -147,7 +154,8 @@ and this project adheres to [Semantic Versioning](https://book.async.rs/overview
 
 - Initial stable release
 
-[Unreleased]: https://github.com/filecoin-project/rust-fil-proofs/compare/v5.2.1...HEAD
+[Unreleased]: https://github.com/filecoin-project/rust-fil-proofs/compare/v5.2.2...HEAD
+[5.2.2]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v5.2.2
 [5.2.1]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v5.2.1
 [5.2.0]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v5.2.0
 [5.1.4]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v5.1.4
