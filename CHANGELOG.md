@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://book.async.rs/overview
 
 ## Unreleased
 
+## 5.2.3 - 2020-10-13
+
+- Update neptune dependency version
+
 ## 5.2.2 - 2020-10-13
 
 - Add notes about param and cache verification [#1313](https://github.com/filecoin-project/rust-fil-proofs/pull/1313)
@@ -154,7 +158,8 @@ and this project adheres to [Semantic Versioning](https://book.async.rs/overview
 
 - Initial stable release
 
-[Unreleased]: https://github.com/filecoin-project/rust-fil-proofs/compare/v5.2.2...HEAD
+[Unreleased]: https://github.com/filecoin-project/rust-fil-proofs/compare/v5.2.3...HEAD
+[5.2.3]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v5.2.3
 [5.2.2]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v5.2.2
 [5.2.1]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v5.2.1
 [5.2.0]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v5.2.0
