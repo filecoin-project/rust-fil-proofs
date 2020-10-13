@@ -506,7 +506,7 @@ impl<'a, Tree: 'a + MerkleTreeTrait> ProofScheme<'a> for FallbackPoSt<'a, Tree> 
                     &comm_r_last,
                 )) != AsRef::<[u8]>::as_ref(comm_r)
                 {
-                    error!("comm_c != comm_r_last: {:?}", sector_id);
+                    error!("hash(comm_c || comm_r_last) != comm_r: {:?}", sector_id);
                     return Ok(false);
                 }
 
