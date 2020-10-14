@@ -257,9 +257,15 @@ pub fn generate_winning_post_with_vanilla<Tree: 'static + MerkleTreeTrait>(
     );
 
     ensure!(
-        vanilla_proofs.len() == post_config.sector_count,
-        "invalid amount of vanilla proofs"
+        post_config.sector_count == 1,
+        "invalid Winning PoSt config -- sector_count must be 1"
     );
+    ensure!(
+        vanilla_proofs.len() == 1,
+        "expected exactly one vanilla proof"
+    );
+
+    let vanilla_proof = &vanilla_proofs[0];
 
     let randomness_safe: <Tree::Hasher as Hasher>::Domain =
         as_safe_commitment(randomness, "randomness")?;
@@ -277,18 +283,13 @@ pub fn generate_winning_post_with_vanilla<Tree: 'static + MerkleTreeTrait>(
         fallback::FallbackPoStCompound::setup(&setup_params)?;
     let groth_params = get_post_params::<Tree>(&post_config)?;
 
-    let mut pub_sectors = Vec::with_capacity(vanilla_proofs.len());
-    for vanilla_proof in &vanilla_proofs {
-        pub_sectors.push(fallback::PublicSector {
-            id: vanilla_proof.sector_id,
-            comm_r: vanilla_proof.comm_r,
-        });
-    }
-
     let pub_inputs = fallback::PublicInputs {
         randomness: randomness_safe,
         prover_id: prover_id_safe,
-        sectors: &pub_sectors,
+        sectors: &[fallback::PublicSector {
+            id: vanilla_proof.sector_id,
+            comm_r: vanilla_proof.comm_r,
+        }],
         k: None,
     };
 
@@ -296,8 +297,8 @@ pub fn generate_winning_post_with_vanilla<Tree: 'static + MerkleTreeTrait>(
         Some(x) => x,
         None => 1,
     };
+
     let partitioned_proofs = partition_vanilla_proofs(
-        &post_config,
         &pub_params.vanilla_params,
         &pub_inputs,
         partitions,
@@ -451,7 +452,7 @@ pub fn generate_fallback_sector_challenges<Tree: 'static + MerkleTreeTrait>(
     randomness: &ChallengeSeed,
     pub_sectors: &[SectorId],
     _prover_id: ProverId,
-    is_winning: bool,
+    shape: fallback::PoStShape,
 ) -> Result<BTreeMap<SectorId, Vec<u64>>> {
     info!("generate_sector_challenges:start");
     ensure!(
@@ -466,7 +467,7 @@ pub fn generate_fallback_sector_challenges<Tree: 'static + MerkleTreeTrait>(
         sector_size: u64::from(post_config.sector_size),
         challenge_count: post_config.challenge_count,
         sector_count: post_config.sector_count,
-        is_winning,
+        shape,
     };
 
     let mut sector_challenges: BTreeMap<SectorId, Vec<u64>> = BTreeMap::new();
@@ -648,42 +649,37 @@ pub fn verify_winning_post<Tree: 'static + MerkleTreeTrait>(
 // (PoSt) type is required in order to determine the proper shape of
 // the returned partitioned proofs.
 pub fn partition_vanilla_proofs<Tree: MerkleTreeTrait>(
-    post_config: &PoStConfig,
     pub_params: &fallback::PublicParams,
     pub_inputs: &fallback::PublicInputs<'_, <Tree::Hasher as Hasher>::Domain>,
     partition_count: usize,
-    vanilla_proofs: &[FallbackPoStSectorProof<Tree>],
+    fallback_sector_proofs: &[FallbackPoStSectorProof<Tree>],
 ) -> Result<Vec<VanillaProof<Tree>>> {
     info!("partition_vanilla_proofs:start");
-    ensure!(
-        post_config.typ == PoStType::Window || post_config.typ == PoStType::Winning,
-        "invalid post config type"
-    );
-
-    let num_sectors_per_chunk = pub_params.sector_count;
-    let num_sectors = pub_inputs.sectors.len();
-
-    ensure!(
-        num_sectors <= partition_count * num_sectors_per_chunk,
-        "cannot prove the provided number of sectors: {} > {} * {}",
-        num_sectors,
-        partition_count,
-        num_sectors_per_chunk,
-    );
-
-    let mut partition_proofs = Vec::new();
 
     // Note that the partition proofs returned are shaped differently
     // based on which type of PoSt is being considered.
-    match post_config.typ {
+    let partition_proofs: Vec<_> = match pub_params.shape {
         PoStType::Window => {
+            let num_sectors_per_chunk = pub_params.sector_count;
+            let num_sectors = pub_inputs.sectors.len();
+
+            ensure!(
+                num_sectors <= partition_count * num_sectors_per_chunk,
+                "cannot prove the provided number of sectors: {} > {} * {}",
+                num_sectors,
+                partition_count,
+                num_sectors_per_chunk,
+            );
+
+            let mut partition_proofs = Vec::new();
+
             for (j, sectors_chunk) in pub_inputs.sectors.chunks(num_sectors_per_chunk).enumerate() {
                 trace!("processing partition {}", j);
 
                 let mut sector_proofs = Vec::with_capacity(num_sectors_per_chunk);
 
                 for pub_sector in sectors_chunk.iter() {
-                    let cur_proof = vanilla_proofs
+                    let cur_proof = fallback_sector_proofs
                         .iter()
                         .find(|&proof| proof.sector_id == pub_sector.id)
                         .expect("failed to locate sector proof");
@@ -703,58 +699,53 @@ pub fn partition_vanilla_proofs<Tree: MerkleTreeTrait>(
                     sectors: sector_proofs,
                 });
             }
+            partition_proofs
         }
         PoStType::Winning => {
-            for (j, sectors_chunk) in vanilla_proofs.chunks(num_sectors_per_chunk).enumerate() {
-                trace!("processing partition {}", j);
+            ensure!(
+                partition_count == 1,
+                "Winning PoSt must be a single partition but got {} partitions",
+                partition_count
+            );
+            ensure!(
+                pub_inputs.sectors.len() == 1,
+                "Winning PoSt must cover a single sector but {} sectors were provided",
+                pub_inputs.sectors.len()
+            );
+            ensure!(
+                fallback_sector_proofs.len() == 1,
+                "Winning PoSt must cover a single sector but {} proofs were provided",
+                fallback_sector_proofs.len()
+            );
 
-                // Sanity check incoming structure
-                ensure!(
-                    sectors_chunk.len() == 1,
-                    "Invalid sector chunk for Winning PoSt"
-                );
-                ensure!(
-                    sectors_chunk[0].vanilla_proof.sectors.len() == 1,
-                    "Invalid sector count for Winning PoSt chunk"
-                );
+            let vanilla_proof_sectors = &fallback_sector_proofs[0].vanilla_proof.sectors;
 
-                // Winning post sector_count is winning post challenges per sector
-                ensure!(
-                    post_config.sector_count == sectors_chunk[j].vanilla_proof.sectors.len(),
-                    "invalid number of sector proofs for Winning PoSt"
-                );
+            ensure!(
+                vanilla_proof_sectors.len() == 1,
+                "invalid number of sector proofs for Winning PoSt"
+            );
 
-                let mut sector_proofs = Vec::with_capacity(post_config.challenge_count);
-                let cur_sector_proof = &sectors_chunk[0].vanilla_proof.sectors[0];
+            let vanilla_sector_proof = &vanilla_proof_sectors[0];
+            let inclusion_proofs = vanilla_sector_proof.inclusion_proofs();
 
-                // Unroll inclusions proofs from the single provided sector_proof (per partition)
-                // into individual sector proofs, required for winning post.
-                for cur_inclusion_proof in cur_sector_proof.inclusion_proofs() {
-                    sector_proofs.push(SectorProof {
-                        inclusion_proofs: vec![cur_inclusion_proof.clone()],
-                        comm_c: cur_sector_proof.comm_c,
-                        comm_r_last: cur_sector_proof.comm_r_last,
-                    });
-                }
+            // Unroll inclusions proofs from the single provided sector_proof (per partition)
+            // into individual sector proofs, required for winning post.
+            let sector_proofs = inclusion_proofs
+                .iter()
+                .map(|proof| SectorProof {
+                    inclusion_proofs: vec![proof.clone()],
+                    comm_c: vanilla_sector_proof.comm_c,
+                    comm_r_last: vanilla_sector_proof.comm_r_last,
+                })
+                .collect::<Vec<_>>();
 
-                // If there were less than the required number of sectors provided, we duplicate the last one
-                // to pad the proof out, such that it works in the circuit part.
-                while sector_proofs.len() < num_sectors_per_chunk {
-                    sector_proofs.push(sector_proofs[sector_proofs.len() - 1].clone());
-                }
+            let partition_proof = fallback::Proof::<<Tree as MerkleTreeTrait>::Proof> {
+                sectors: sector_proofs,
+            };
 
-                // Winning post Challenge count is the total winning post challenges
-                ensure!(
-                    sector_proofs.len() == post_config.challenge_count,
-                    "invalid number of partition proofs based on Winning PoSt challenges"
-                );
-
-                partition_proofs.push(fallback::Proof::<<Tree as MerkleTreeTrait>::Proof> {
-                    sectors: sector_proofs,
-                });
-            }
+            vec![partition_proof]
         }
-    }
+    };
 
     info!("partition_vanilla_proofs:finish");
 
@@ -822,7 +813,6 @@ pub fn generate_window_post_with_vanilla<Tree: 'static + MerkleTreeTrait>(
     };
 
     let partitioned_proofs = partition_vanilla_proofs(
-        &post_config,
         &pub_params.vanilla_params,
         &pub_inputs,
         partitions,

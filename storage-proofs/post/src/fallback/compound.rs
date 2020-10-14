@@ -16,7 +16,7 @@ use storage_proofs_core::{
 };
 
 use super::circuit::Sector;
-use crate::fallback::{self, FallbackPoSt, FallbackPoStCircuit};
+use crate::fallback::{self, FallbackPoSt, FallbackPoStCircuit, PoStShape};
 
 pub struct FallbackPoStCompound<Tree>
 where
@@ -49,66 +49,94 @@ impl<'a, Tree: 'static + MerkleTreeTrait>
             private: true,
         };
 
-        let num_sectors_per_chunk = pub_params.sector_count;
         let partition_index = partition_k.unwrap_or(0);
 
-        let sectors = pub_inputs
-            .sectors
-            .chunks(num_sectors_per_chunk)
-            .nth(partition_index)
-            .ok_or_else(|| anyhow!("invalid number of sectors/partition index"))?;
+        match pub_params.shape {
+            PoStShape::Window => {
+                let num_sectors_per_chunk = pub_params.sector_count;
+                let sectors = pub_inputs
+                    .sectors
+                    .chunks(num_sectors_per_chunk)
+                    .nth(partition_index)
+                    .ok_or_else(|| anyhow!("invalid number of sectors/partition index"))?;
 
-        for (i, sector) in sectors.iter().enumerate() {
-            // 1. Inputs for verifying comm_r = H(comm_c || comm_r_last)
-            inputs.push(sector.comm_r.into());
+                for sector in sectors {
+                    // 1. Inputs for verifying comm_r = H(comm_c || comm_r_last)
+                    inputs.push(sector.comm_r.into());
 
-            // 2. Inputs for verifying inclusion paths
-            for n in 0..pub_params.challenge_count {
-                let challenge_index = if pub_params.is_winning {
-                    // Note that this legacy index generality is perhaps over-complicated and unnecessary
-                    // with the current parameterization.  To avoid complexity, the challenge_index
-                    // could be set to 'i' here.
-                    let legacy_index = (partition_index * pub_params.sector_count + i)
-                        * pub_params.challenge_count
-                        + n;
-                    ensure!(
-                        legacy_index == i,
-                        "WinningPoSt challenge assumption violated"
+                    // 2. Inputs for verifying inclusion paths
+                    for challenge_index in 0..pub_params.challenge_count {
+                        let challenged_leaf = fallback::generate_leaf_challenge(
+                            &pub_params,
+                            pub_inputs.randomness,
+                            sector.id.into(),
+                            challenge_index as u64,
+                        );
+
+                        let por_pub_inputs = por::PublicInputs {
+                            commitment: None,
+                            challenge: challenged_leaf as usize,
+                        };
+
+                        let por_inputs = PoRCompound::<Tree>::generate_public_inputs(
+                            &por_pub_inputs,
+                            &por_pub_params,
+                            partition_k,
+                        )?;
+
+                        inputs.extend(por_inputs);
+                    }
+                }
+                let num_inputs_per_sector = inputs.len() / sectors.len();
+
+                // duplicate last one if too few sectors available
+                while inputs.len() / num_inputs_per_sector < num_sectors_per_chunk {
+                    let s = inputs[inputs.len() - num_inputs_per_sector..].to_vec();
+                    inputs.extend_from_slice(&s);
+                }
+                assert_eq!(inputs.len(), num_inputs_per_sector * num_sectors_per_chunk);
+            }
+            PoStShape::Winning => {
+                ensure!(
+                    partition_index == 0,
+                    "Winning PoSt must have a single partition, but partition_index is {}",
+                    partition_index
+                );
+                ensure!(
+                    pub_params.challenge_count == 1,
+                    "Winning PoSt must have a single partition, but challenge_count is {}",
+                    pub_params.challenge_count
+                );
+                ensure!(pub_inputs.sectors.len() == pub_params.sector_count, "Winning PoSt must have same number of sectors ({}) as specified in public parameters ({})", pub_inputs.sectors.len(), pub_params.sector_count);
+
+                let sectors = pub_inputs.sectors;
+
+                for (challenge_index, sector) in sectors.iter().enumerate() {
+                    // 1. Inputs for verifying comm_r = H(comm_c || comm_r_last)
+                    inputs.push(sector.comm_r.into());
+
+                    // 2. Inputs for verifying inclusion paths
+                    let challenged_leaf = fallback::generate_leaf_challenge(
+                        &pub_params,
+                        pub_inputs.randomness,
+                        sector.id.into(),
+                        challenge_index as u64,
                     );
 
-                    i
-                } else {
-                    n
-                } as u64;
+                    let por_pub_inputs = por::PublicInputs {
+                        commitment: None,
+                        challenge: challenged_leaf as usize,
+                    };
+                    let por_inputs = PoRCompound::<Tree>::generate_public_inputs(
+                        &por_pub_inputs,
+                        &por_pub_params,
+                        partition_k,
+                    )?;
 
-                let challenged_leaf = fallback::generate_leaf_challenge(
-                    &pub_params,
-                    pub_inputs.randomness,
-                    sector.id.into(),
-                    challenge_index,
-                );
-
-                let por_pub_inputs = por::PublicInputs {
-                    commitment: None,
-                    challenge: challenged_leaf as usize,
-                };
-                let por_inputs = PoRCompound::<Tree>::generate_public_inputs(
-                    &por_pub_inputs,
-                    &por_pub_params,
-                    partition_k,
-                )?;
-
-                inputs.extend(por_inputs);
+                    inputs.extend(por_inputs);
+                }
             }
         }
-        let num_inputs_per_sector = inputs.len() / sectors.len();
-
-        // duplicate last one if too little sectors available
-        while inputs.len() / num_inputs_per_sector < num_sectors_per_chunk {
-            let s = inputs[inputs.len() - num_inputs_per_sector..].to_vec();
-            inputs.extend_from_slice(&s);
-        }
-        assert_eq!(inputs.len(), num_inputs_per_sector * num_sectors_per_chunk);
 
         Ok(inputs)
     }
@@ -246,7 +274,7 @@ mod tests {
                 sector_size: sector_size as u64,
                 challenge_count,
                 sector_count,
-                is_winning: false,
+                shape: fallback::PoStShape::Window,
             },
             partitions: Some(partitions),
             priority: false,
