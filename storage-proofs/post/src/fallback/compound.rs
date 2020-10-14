@@ -16,7 +16,7 @@ use storage_proofs_core::{
 };
 
 use super::circuit::Sector;
-use crate::fallback::{self, FallbackPoSt, FallbackPoStCircuit};
+use crate::fallback::{self, FallbackPoSt, FallbackPoStCircuit, PoStShape};
 
 pub struct FallbackPoStCompound<Tree>
 where
@@ -64,21 +64,22 @@ impl<'a, Tree: 'static + MerkleTreeTrait>
 
             // 2. Inputs for verifying inclusion paths
             for n in 0..pub_params.challenge_count {
-                let challenge_index = if pub_params.is_winning {
-                    // Note that this legacy index generality is perhaps over-complicated and unnecessary
-                    // with the current parameterization.  To avoid complexity, the challenge_index
-                    // could be set to 'i' here.
-                    let legacy_index = (partition_index * pub_params.sector_count + i)
-                        * pub_params.challenge_count
-                        + n;
-                    ensure!(
-                        legacy_index == i,
-                        "WinningPoSt challenge assumption violated"
-                    );
+                let challenge_index = match pub_params.shape {
+                    PoStShape::Winning => {
+                        // Note that this legacy index generality is perhaps over-complicated and unnecessary
+                        // with the current parameterization.  To avoid complexity, the challenge_index
+                        // could be set to 'i' here.
+                        let legacy_index = (partition_index * pub_params.sector_count + i)
+                            * pub_params.challenge_count
+                            + n;
+                        ensure!(
+                            legacy_index == i,
+                            "WinningPoSt challenge assumption violated"
+                        );
 
-                    i
-                } else {
-                    n
+                        i
+                    }
+                    PoStShape::Window => n,
                 } as u64;
 
                 let challenged_leaf = fallback::generate_leaf_challenge(
@@ -252,7 +253,7 @@ mod tests {
                 sector_size: sector_size as u64,
                 challenge_count,
                 sector_count,
-                is_winning: false,
+                shape: fallback::PoStShape::Window,
             },
             partitions: Some(partitions),
             priority: false,

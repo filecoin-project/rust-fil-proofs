@@ -280,7 +280,7 @@ mod tests {
             sector_size: 1024 * 1024 * 1024 * 32 as u64,
             challenge_count: 10,
             sector_count: 5,
-            is_winning: false,
+            shape: fallback::PoStShape::Window,
         };
 
         let pp = FallbackPoSt::<OctMerkleTree<PoseidonHasher>>::setup(&params)
@@ -314,7 +314,7 @@ mod tests {
             sector_size: sector_size as u64,
             challenge_count: 5,
             sector_count,
-            is_winning: false,
+            shape: fallback::PoStShape::Window,
         };
 
         let temp_dir = tempfile::tempdir().expect("tempdir failure");

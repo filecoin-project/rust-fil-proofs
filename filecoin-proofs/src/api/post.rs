@@ -452,7 +452,7 @@ pub fn generate_fallback_sector_challenges<Tree: 'static + MerkleTreeTrait>(
     randomness: &ChallengeSeed,
     pub_sectors: &[SectorId],
     _prover_id: ProverId,
-    is_winning: bool,
+    shape: fallback::PoStShape,
 ) -> Result<BTreeMap<SectorId, Vec<u64>>> {
     info!("generate_sector_challenges:start");
     ensure!(
@@ -467,7 +467,7 @@ pub fn generate_fallback_sector_challenges<Tree: 'static + MerkleTreeTrait>(
         sector_size: u64::from(post_config.sector_size),
         challenge_count: post_config.challenge_count,
         sector_count: post_config.sector_count,
-        is_winning,
+        shape,
     };
 
     let mut sector_challenges: BTreeMap<SectorId, Vec<u64>> = BTreeMap::new();

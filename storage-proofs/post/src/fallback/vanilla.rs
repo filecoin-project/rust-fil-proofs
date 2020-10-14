@@ -20,6 +20,12 @@ use storage_proofs_core::{
     util::{default_rows_to_discard, NODE_SIZE},
 };
 
+#[derive(Debug, Copy, Clone)]
+pub enum PoStShape {
+    Window,
+    Winning,
+}
+
 #[derive(Debug, Clone)]
 pub struct SetupParams {
     /// Size of the sector in bytes.
@@ -28,7 +34,7 @@ pub struct SetupParams {
     pub challenge_count: usize,
     /// Number of challenged sectors.
     pub sector_count: usize,
-    pub is_winning: bool,
+    pub shape: PoStShape,
 }
 
 #[derive(Debug, Clone)]
@@ -39,7 +45,7 @@ pub struct PublicParams {
     pub challenge_count: usize,
     /// Number of challenged sectors.
     pub sector_count: usize,
-    pub is_winning: bool,
+    pub shape: PoStShape,
 }
 
 #[derive(Debug, Default)]
@@ -303,7 +309,7 @@ impl<'a, Tree: 'a + MerkleTreeTrait> ProofScheme<'a> for FallbackPoSt<'a, Tree> 
             sector_size: sp.sector_size,
             challenge_count: sp.challenge_count,
             sector_count: sp.sector_count,
-            is_winning: sp.is_winning,
+            shape: sp.shape,
         })
     }
 
@@ -383,16 +389,17 @@ impl<'a, Tree: 'a + MerkleTreeTrait> ProofScheme<'a> for FallbackPoSt<'a, Tree> 
                     Tree::Arity::to_usize(),
                 );
 
-                let num_challenges = if pub_params.is_winning {
-                    ensure!(
-                        pub_params.challenge_count == 1,
-                        "WinningPoSt shape assumption violated: challenges {} != 1",
-                        pub_params.challenge_count
-                    );
+                let num_challenges = match pub_params.shape {
+                    PoStShape::Winning => {
+                        ensure!(
+                            pub_params.challenge_count == 1,
+                            "WinningPoSt shape assumption violated: challenges {} != 1",
+                            pub_params.challenge_count
+                        );
 
-                    pub_params.sector_count
-                } else {
-                    pub_params.challenge_count
+                        pub_params.sector_count
+                    }
+                    PoStShape::Window => pub_params.challenge_count,
                 };
 
                 let challenges = generate_leaf_challenges(
@@ -406,11 +413,10 @@ impl<'a, Tree: 'a + MerkleTreeTrait> ProofScheme<'a> for FallbackPoSt<'a, Tree> 
                 for proof_or_fault in (0..pub_params.challenge_count)
                     .into_par_iter()
                     .map(|challenge_index| {
-                        let challenged_leaf = if pub_params.is_winning {
-                            challenges[i]
-                        } else {
-                            challenges[challenge_index]
-                        } as u64;
+                        let challenged_leaf = match pub_params.shape {
+                            PoStShape::Winning => challenges[i] as u64,
+                            PoStShape::Window => challenges[challenge_index] as u64,
+                        };
 
                         let proof =
                             tree.gen_cached_proof(challenged_leaf as usize, Some(rows_to_discard));
@@ -442,22 +448,25 @@ impl<'a, Tree: 'a + MerkleTreeTrait> ProofScheme<'a> for FallbackPoSt<'a, Tree> 
 
                 // Winning PoSt and Window PoSt have different proof shapes regarding inclusion
                 // and sector proofs, so we are careful to partition them appropriately.
-                if pub_params.is_winning {
-                    // Unroll partition inclusion proofs into sector proofs.
-                    for inclusion_proof in inclusion_proofs {
+                match pub_params.shape {
+                    PoStShape::Winning => {
+                        // Unroll partition inclusion proofs into sector proofs.
+                        for inclusion_proof in inclusion_proofs {
+                            proofs.push(SectorProof {
+                                inclusion_proofs: vec![inclusion_proof],
+                                comm_c: priv_sector.comm_c,
+                                comm_r_last: priv_sector.comm_r_last,
+                            });
+                        }
+                    }
+                    PoStShape::Window => {
+                        // Include partition inclusion proofs in a sector proof.
                         proofs.push(SectorProof {
-                            inclusion_proofs: vec![inclusion_proof],
+                            inclusion_proofs,
                             comm_c: priv_sector.comm_c,
                             comm_r_last: priv_sector.comm_r_last,
                         });
                     }
-                } else {
-                    // Include partition inclusion proofs in a sector proof.
-                    proofs.push(SectorProof {
-                        inclusion_proofs,
-                        comm_c: priv_sector.comm_c,
-                        comm_r_last: priv_sector.comm_r_last,
-                    });
                 }
             }
 
@@ -546,21 +555,22 @@ impl<'a, Tree: 'a + MerkleTreeTrait> ProofScheme<'a> for FallbackPoSt<'a, Tree> 
                 );
 
                 for (n, inclusion_proof) in inclusion_proofs.iter().enumerate() {
-                    let challenge_index = if pub_params.is_winning {
-                        // Note that this legacy index generality is perhaps over-complicated and unnecessary
-                        // with the current parameterization.  To avoid complexity, the challenge_index
-                        // could be set to 'i' here.
-                        let legacy_index =
-                            (j * num_sectors_per_chunk + i) * pub_params.challenge_count + n;
-                        ensure!(
-                            legacy_index == i,
-                            "WinningPoSt challenge assumption violated"
-                        );
+                    let challenge_index = match pub_params.shape {
+                        PoStShape::Winning => {
+                            // Note that this legacy index generality is perhaps over-complicated and unnecessary
+                            // with the current parameterization.  To avoid complexity, the challenge_index
+                            // could be set to 'i' here.
+                            let legacy_index =
+                                (j * num_sectors_per_chunk + i) * pub_params.challenge_count + n;
+                            ensure!(
+                                legacy_index == i,
+                                "WinningPoSt challenge assumption violated"
+                            );
 
-                        i
-                    } else {
-                        n
-                    } as u64;
+                            i as u64
+                        }
+                        PoStShape::Window => n as u64,
+                    };
 
                     let challenged_leaf = generate_leaf_challenge(
                         pub_params,
@@ -643,7 +653,7 @@ mod tests {
             sector_size: sector_size as u64,
             challenge_count: 10,
             sector_count,
-            is_winning: false,
+            shape: PoStShape::Window,
         };
 
         let randomness = <Tree::Hasher as Hasher>::Domain::random(rng);
@@ -718,7 +728,7 @@ mod tests {
             sector_size: sector_size as u64,
             challenge_count: 10,
             sector_count,
-            is_winning: false,
+            shape: PoStShape::Window,
         };
 
         let randomness = <Tree::Hasher as Hasher>::Domain::random(rng);

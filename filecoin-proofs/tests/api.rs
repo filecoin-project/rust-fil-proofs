@@ -8,6 +8,7 @@ use paired::bls12_381::Fr;
 use rand::{Rng, SeedableRng};
 use rand_xorshift::XorShiftRng;
 use storage_proofs::hasher::Hasher;
+use storage_proofs::post::fallback::PoStShape;
 use storage_proofs::sector::*;
 use tempfile::NamedTempFile;
 
@@ -200,7 +201,7 @@ fn winning_post<Tree: 'static + MerkleTreeTrait>(sector_size: u64, fake: bool) -
         &randomness,
         &vec![sector_id],
         prover_id,
-        true,
+        PoStShape::Winning,
     )?;
 
     let single_proof = generate_single_vanilla_proof::<Tree>(
@@ -389,7 +390,7 @@ fn window_post<Tree: 'static + MerkleTreeTrait>(
         &randomness,
         &replica_sectors,
         prover_id,
-        false,
+        PoStShape::Window,
     )?;
 
     let mut vanilla_proofs = Vec::with_capacity(replica_sectors.len());
