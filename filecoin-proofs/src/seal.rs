@@ -26,11 +26,9 @@ use storage_proofs_porep::stacked::{
     TemporaryAux, TemporaryAuxCache,
 };
 
-use crate::caches::{get_stacked_params, get_stacked_verifying_key};
 use crate::constants::{POREP_MINIMUM_CHALLENGES, SINGLE_PARTITION_PROOF_LEN};
-use crate::parameters::setup_params;
-pub use crate::pieces;
-pub use crate::pieces::verify_pieces;
+use crate::parameters::{get_stacked_params, get_stacked_verifying_key, setup_params};
+use crate::pieces::{self, verify_pieces};
 use crate::types::{
     Commitment, DefaultBinaryTree, DefaultPieceDomain, DefaultPieceHasher, PaddedBytesAmount,
     PieceInfo, PoRepConfig, PoRepProofPartitions, ProverId, SealCommitOutput,
@@ -42,7 +40,7 @@ use crate::util::{
 };
 
 #[allow(clippy::too_many_arguments)]
-pub fn seal_pre_commit_phase1<R, S, T, Tree: 'static + MerkleTreeTrait>(
+pub fn pre_commit_phase1<R, S, T, Tree: 'static + MerkleTreeTrait>(
     porep_config: PoRepConfig,
     cache_path: R,
     in_path: S,
@@ -190,7 +188,7 @@ where
 }
 
 #[allow(clippy::too_many_arguments)]
-pub fn seal_pre_commit_phase2<R, S, Tree: 'static + MerkleTreeTrait>(
+pub fn pre_commit_phase2<R, S, Tree: 'static + MerkleTreeTrait>(
     porep_config: PoRepConfig,
     phase1_output: SealPreCommitPhase1Output<Tree>,
     cache_path: S,
@@ -313,7 +311,7 @@ where
 }
 
 #[allow(clippy::too_many_arguments)]
-pub fn seal_commit_phase1<T: AsRef<Path>, Tree: 'static + MerkleTreeTrait>(
+pub fn commit_phase1<T: AsRef<Path>, Tree: 'static + MerkleTreeTrait>(
     porep_config: PoRepConfig,
     cache_path: T,
     replica_path: T,
@@ -440,7 +438,7 @@ pub fn seal_commit_phase1<T: AsRef<Path>, Tree: 'static + MerkleTreeTrait>(
 }
 
 #[allow(clippy::too_many_arguments)]
-pub fn seal_commit_phase2<Tree: 'static + MerkleTreeTrait>(
+pub fn commit_phase2<Tree: 'static + MerkleTreeTrait>(
     porep_config: PoRepConfig,
     phase1_output: SealCommitPhase1Output<Tree>,
     prover_id: ProverId,
@@ -515,7 +513,7 @@ pub fn seal_commit_phase2<Tree: 'static + MerkleTreeTrait>(
 
     // Verification is cheap when parameters are cached,
     // and it is never correct to return a proof which does not verify.
-    verify_seal::<Tree>(
+    verify::<Tree>(
         porep_config,
         comm_r,
         comm_d,
@@ -561,7 +559,7 @@ pub fn compute_comm_d(sector_size: SectorSize, piece_infos: &[PieceInfo]) -> Res
 /// * `seed` - the seed used to derive the porep challenges.
 /// * `proof_vec` - the porep circuit proof serialized into a vector of bytes.
 #[allow(clippy::too_many_arguments)]
-pub fn verify_seal<Tree: 'static + MerkleTreeTrait>(
+pub fn verify<Tree: 'static + MerkleTreeTrait>(
     porep_config: PoRepConfig,
     comm_r_in: Commitment,
     comm_d_in: Commitment,
@@ -678,7 +676,7 @@ pub fn verify_seal<Tree: 'static + MerkleTreeTrait>(
 /// * `[seeds]` - list of seeds used to derive the porep challenges.
 /// * `[proof_vecs]` - list of porep circuit proofs serialized into a vector of bytes.
 #[allow(clippy::too_many_arguments)]
-pub fn verify_batch_seal<Tree: 'static + MerkleTreeTrait>(
+pub fn verify_batch<Tree: 'static + MerkleTreeTrait>(
     porep_config: PoRepConfig,
     comm_r_ins: &[Commitment],
     comm_d_ins: &[Commitment],
@@ -886,7 +884,7 @@ mod tests {
 
         let arbitrary_porep_id = [87; 32];
         {
-            let result = seal::verify_seal::<DefaultOctLCTree>(
+            let result = seal::verify::<DefaultOctLCTree>(
                 PoRepConfig {
                     sector_size: SectorSize(SECTOR_SIZE_2_KIB),
                     partitions: PoRepProofPartitions(
@@ -921,7 +919,7 @@ mod tests {
         }
 
         {
-            let result = seal::verify_seal::<DefaultOctLCTree>(
+            let result = seal::verify::<DefaultOctLCTree>(
                 PoRepConfig {
                     sector_size: SectorSize(SECTOR_SIZE_2_KIB),
                     partitions: PoRepProofPartitions(

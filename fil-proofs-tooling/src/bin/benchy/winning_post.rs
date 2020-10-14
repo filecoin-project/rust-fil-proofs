@@ -5,7 +5,7 @@ use fil_proofs_tooling::shared::{create_replica, PROVER_ID, RANDOMNESS};
 use fil_proofs_tooling::{measure, Metadata};
 use filecoin_proofs::{
     constants::{WINNING_POST_CHALLENGE_COUNT, WINNING_POST_SECTOR_COUNT},
-    post::{generate_winning_post, generate_winning_post_sector_challenge, verify_winning_post},
+    post,
     types::{PoStConfig, PoStType},
     with_shape,
 };
@@ -69,7 +69,7 @@ pub fn run_fallback_post_bench<Tree: 'static + MerkleTreeTrait>(
     };
 
     let gen_winning_post_sector_challenge_measurement = measure(|| {
-        generate_winning_post_sector_challenge::<Tree>(
+        post::winning::generate_sector_challenge::<Tree>(
             &post_config,
             &RANDOMNESS,
             WINNING_POST_SECTOR_COUNT as u64,
@@ -79,14 +79,19 @@ pub fn run_fallback_post_bench<Tree: 'static + MerkleTreeTrait>(
     .expect("failed to generate winning post sector challenge");
 
     let gen_winning_post_measurement = measure(|| {
-        generate_winning_post::<Tree>(&post_config, &RANDOMNESS, &priv_replica_info[..], PROVER_ID)
+        post::winning::generate::<Tree>(
+            &post_config,
+            &RANDOMNESS,
+            &priv_replica_info[..],
+            PROVER_ID,
+        )
     })
     .expect("failed to generate winning post");
 
     let proof = &gen_winning_post_measurement.return_value;
 
     let verify_winning_post_measurement = measure(|| {
-        verify_winning_post::<Tree>(
+        post::winning::verify::<Tree>(
             &post_config,
             &RANDOMNESS,
             &pub_replica_info[..],

@@ -131,15 +131,13 @@ fn test_winning_post_empty_sector_challenge() -> Result<()> {
         priority: false,
     };
 
-    assert!(
-        post::generate_winning_post_sector_challenge::<SectorShape2KiB>(
-            &config,
-            &randomness,
-            sector_count as u64,
-            prover_id
-        )
-        .is_err()
-    );
+    assert!(post::winning::generate_sector_challenge::<SectorShape2KiB>(
+        &config,
+        &randomness,
+        sector_count as u64,
+        prover_id
+    )
+    .is_err());
 
     Ok(())
 }
@@ -170,7 +168,7 @@ fn winning_post<Tree: 'static + MerkleTreeTrait>(sector_size: u64, fake: bool) -
         priority: false,
     };
 
-    let challenged_sectors = post::generate_winning_post_sector_challenge::<Tree>(
+    let challenged_sectors = post::winning::generate_sector_challenge::<Tree>(
         &config,
         &randomness,
         sector_count as u64,
@@ -189,15 +187,10 @@ fn winning_post<Tree: 'static + MerkleTreeTrait>(sector_size: u64, fake: bool) -
     //
     let priv_replicas = vec![(sector_id, private_replica_info.clone())];
     let proof =
-        post::generate_winning_post::<Tree>(&config, &randomness, &priv_replicas[..], prover_id)?;
+        post::winning::generate::<Tree>(&config, &randomness, &priv_replicas[..], prover_id)?;
 
-    let valid = post::verify_winning_post::<Tree>(
-        &config,
-        &randomness,
-        &pub_replicas[..],
-        prover_id,
-        &proof,
-    )?;
+    let valid =
+        post::winning::verify::<Tree>(&config, &randomness, &pub_replicas[..], prover_id, &proof)?;
     assert!(valid, "proof did not verify");
 
     //
@@ -219,7 +212,7 @@ fn winning_post<Tree: 'static + MerkleTreeTrait>(sector_size: u64, fake: bool) -
 
     vanilla_proofs.push(single_proof);
 
-    let proof = post::generate_winning_post_with_vanilla::<Tree>(
+    let proof = post::winning::generate_with_vanilla::<Tree>(
         &config,
         &randomness,
         prover_id,
@@ -227,13 +220,8 @@ fn winning_post<Tree: 'static + MerkleTreeTrait>(sector_size: u64, fake: bool) -
     )?;
     /////////////////////////////////////////////
 
-    let valid = post::verify_winning_post::<Tree>(
-        &config,
-        &randomness,
-        &pub_replicas[..],
-        prover_id,
-        &proof,
-    )?;
+    let valid =
+        post::winning::verify::<Tree>(&config, &randomness, &pub_replicas[..], prover_id, &proof)?;
     assert!(valid, "proof did not verify");
 
     Ok(())
@@ -385,11 +373,10 @@ fn window_post<Tree: 'static + MerkleTreeTrait>(
     /////////////////////////////////////////////
     // The following methods of proof generation are functionally equivalent:
     // 1)
-    let proof =
-        post::generate_window_post::<Tree>(&config, &randomness, &priv_replicas, prover_id)?;
+    let proof = post::window::generate::<Tree>(&config, &randomness, &priv_replicas, prover_id)?;
 
     let valid =
-        post::verify_window_post::<Tree>(&config, &randomness, &pub_replicas, prover_id, &proof)?;
+        post::window::verify::<Tree>(&config, &randomness, &pub_replicas, prover_id, &proof)?;
     assert!(valid, "proof did not verify");
 
     // 2)
@@ -419,7 +406,7 @@ fn window_post<Tree: 'static + MerkleTreeTrait>(
         vanilla_proofs.push(single_proof);
     }
 
-    let proof = post::generate_window_post_with_vanilla::<Tree>(
+    let proof = post::window::generate_with_vanilla::<Tree>(
         &config,
         &randomness,
         prover_id,
@@ -428,7 +415,7 @@ fn window_post<Tree: 'static + MerkleTreeTrait>(
     /////////////////////////////////////////////
 
     let valid =
-        post::verify_window_post::<Tree>(&config, &randomness, &pub_replicas, prover_id, &proof)?;
+        post::window::verify::<Tree>(&config, &randomness, &pub_replicas, prover_id, &proof)?;
     assert!(valid, "proof did not verify");
 
     Ok(())
@@ -487,7 +474,7 @@ fn create_seal<R: Rng, Tree: 'static + MerkleTreeTrait>(
     let seed = rng.gen();
     let sector_id = rng.gen::<u64>().into();
 
-    let phase1_output = seal::seal_pre_commit_phase1::<_, _, _, Tree>(
+    let phase1_output = seal::pre_commit_phase1::<_, _, _, Tree>(
         config,
         cache_dir.path(),
         staged_sector_file.path(),
@@ -498,13 +485,13 @@ fn create_seal<R: Rng, Tree: 'static + MerkleTreeTrait>(
         &piece_infos,
     )?;
 
-    cache::validate_cache_for_precommit_phase2(
+    cache::validate_for_precommit_phase2(
         cache_dir.path(),
         staged_sector_file.path(),
         &phase1_output,
     )?;
 
-    let pre_commit_output = seal::seal_pre_commit_phase2(
+    let pre_commit_output = seal::pre_commit_phase2(
         config,
         phase1_output,
         cache_dir.path(),
@@ -514,12 +501,12 @@ fn create_seal<R: Rng, Tree: 'static + MerkleTreeTrait>(
     let comm_d = pre_commit_output.comm_d;
     let comm_r = pre_commit_output.comm_r;
 
-    cache::validate_cache_for_commit::<_, _, Tree>(cache_dir.path(), sealed_sector_file.path())?;
+    cache::validate_for_commit::<_, _, Tree>(cache_dir.path(), sealed_sector_file.path())?;
 
     if skip_proof {
-        post::clear_cache::<Tree>(cache_dir.path())?;
+        cache::clear::<Tree>(cache_dir.path())?;
     } else {
-        let phase1_output = seal::seal_commit_phase1::<_, Tree>(
+        let phase1_output = seal::commit_phase1::<_, Tree>(
             config,
             cache_dir.path(),
             sealed_sector_file.path(),
@@ -531,9 +518,9 @@ fn create_seal<R: Rng, Tree: 'static + MerkleTreeTrait>(
             &piece_infos,
         )?;
 
-        post::clear_cache::<Tree>(cache_dir.path())?;
+        cache::clear::<Tree>(cache_dir.path())?;
 
-        let commit_output = seal::seal_commit_phase2(config, phase1_output, prover_id, sector_id)?;
+        let commit_output = seal::commit_phase2(config, phase1_output, prover_id, sector_id)?;
 
         let _ = unseal::unseal_range::<_, _, _, Tree>(
             config,
@@ -565,7 +552,7 @@ fn create_seal<R: Rng, Tree: 'static + MerkleTreeTrait>(
             "Computed and expected comm_d don't match."
         );
 
-        let verified = seal::verify_seal::<Tree>(
+        let verified = seal::verify::<Tree>(
             config,
             comm_r,
             comm_d,

@@ -10,12 +10,10 @@ use std::time::{Duration, Instant};
 
 use clap::{arg_enum, value_t, App, Arg};
 use fil_proofs_tooling::shared::{create_replica, PROVER_ID, RANDOMNESS};
-use filecoin_proofs::constants::{
-    SECTOR_SIZE_8_MIB, WINNING_POST_CHALLENGE_COUNT, WINNING_POST_SECTOR_COUNT,
-};
-use filecoin_proofs::post::generate_winning_post;
-use filecoin_proofs::types::{
-    PoStConfig, PoStType, PrivateReplicaInfo, SectorShape8MiB, SectorSize,
+use filecoin_proofs::{
+    constants::{SECTOR_SIZE_8_MIB, WINNING_POST_CHALLENGE_COUNT, WINNING_POST_SECTOR_COUNT},
+    post,
+    types::{PoStConfig, PoStType, PrivateReplicaInfo, SectorShape8MiB, SectorSize},
 };
 use log::{debug, info};
 use storage_proofs_core::sector::SectorId;
@@ -66,14 +64,14 @@ pub fn colored_with_thread(
 }
 
 fn generate_post(priv_replica_info: &[(SectorId, PrivateReplicaInfo<MerkleTree>)]) {
-    generate_winning_post::<MerkleTree>(&POST_CONFIG, &RANDOMNESS, priv_replica_info, PROVER_ID)
+    post::winning::generate::<MerkleTree>(&POST_CONFIG, &RANDOMNESS, priv_replica_info, PROVER_ID)
         .expect("failed to generate PoSt");
 }
 
 fn generate_post_in_priority(priv_replica_info: &[(SectorId, PrivateReplicaInfo<MerkleTree>)]) {
     let mut post_config = POST_CONFIG;
     post_config.priority = true;
-    generate_winning_post::<MerkleTree>(&post_config, &RANDOMNESS, priv_replica_info, PROVER_ID)
+    post::winning::generate::<MerkleTree>(&post_config, &RANDOMNESS, priv_replica_info, PROVER_ID)
         .expect("failed to generate PoSt with high priority");
 }
 

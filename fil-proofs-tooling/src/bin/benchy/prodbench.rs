@@ -7,10 +7,7 @@ use filecoin_proofs::types::{
     DefaultOctLCTree, DefaultOctTree, PaddedBytesAmount, PoRepConfig, PoRepProofPartitions,
     SectorSize,
 };
-use filecoin_proofs::{
-    cache::validate_cache_for_commit, post::clear_cache, seal::seal_commit_phase1,
-    seal::seal_commit_phase2,
-};
+use filecoin_proofs::{cache, seal};
 use log::info;
 use paired::bls12_381::Bls12;
 use rand::SeedableRng;
@@ -203,12 +200,12 @@ pub fn run(
             replica_measurement.return_value.iter().zip(created.iter())
         {
             let measured = measure(|| {
-                validate_cache_for_commit::<_, _, DefaultOctLCTree>(
+                cache::validate_for_commit::<_, _, DefaultOctLCTree>(
                     &replica_info.private_replica_info.cache_dir_path(),
                     &replica_info.private_replica_info.replica_path(),
                 )?;
 
-                let phase1_output = seal_commit_phase1::<_, DefaultOctLCTree>(
+                let phase1_output = seal::commit_phase1::<_, DefaultOctLCTree>(
                     cfg,
                     &replica_info.private_replica_info.cache_dir_path(),
                     &replica_info.private_replica_info.replica_path(),
@@ -220,11 +217,11 @@ pub fn run(
                     &replica_info.piece_info,
                 )?;
 
-                clear_cache::<DefaultOctLCTree>(
+                cache::clear::<DefaultOctLCTree>(
                     &replica_info.private_replica_info.cache_dir_path(),
                 )?;
 
-                seal_commit_phase2(cfg, phase1_output, PROVER_ID, *sector_id)
+                seal::commit_phase2(cfg, phase1_output, PROVER_ID, *sector_id)
             })
             .expect("failed to prove sector");
 

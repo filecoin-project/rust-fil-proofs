@@ -3,7 +3,6 @@
 //requires nightly, or later stable version
 //#![warn(clippy::unwrap_used)]
 
-mod caches;
 mod commitment_reader;
 
 pub(crate) mod util;
@@ -19,7 +18,6 @@ pub mod pieces;
 pub mod post;
 pub mod seal;
 pub mod serde_big_array;
-pub mod singletons;
 pub mod types;
 pub mod unseal;
 

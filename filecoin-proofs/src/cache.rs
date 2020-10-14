@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::fs::File;
 use std::path::Path;
 
@@ -8,16 +9,51 @@ use storage_proofs_core::{
     cache_key::CacheKey,
     hasher::Hasher,
     merkle::{get_base_tree_count, MerkleTreeTrait},
+    sector::SectorId,
 };
 use typenum::Unsigned;
 
 use crate::types::{
     DefaultBinaryTree, DefaultOctTree, DefaultPieceDomain, DefaultPieceHasher, PersistentAux,
-    SealPreCommitPhase1Output, TemporaryAux,
+    PrivateReplicaInfo, SealPreCommitPhase1Output, TemporaryAux,
 };
 
+/// Ensure that any associated cached data persisted is discarded.
+pub fn clear<Tree: MerkleTreeTrait>(cache_dir: &Path) -> Result<()> {
+    info!("clear_cache:start");
+
+    let t_aux = {
+        let f_aux_path = cache_dir.to_path_buf().join(CacheKey::TAux.to_string());
+        let aux_bytes = std::fs::read(&f_aux_path)
+            .with_context(|| format!("could not read from path={:?}", f_aux_path))?;
+
+        bincode::deserialize(&aux_bytes)
+    }?;
+
+    let result = TemporaryAux::<Tree, DefaultPieceHasher>::clear_temp(t_aux);
+
+    info!("clear_cache:finish");
+
+    result
+}
+
+/// Ensure that any associated cached data persisted is discarded.
+pub fn clear_all<Tree: MerkleTreeTrait>(
+    replicas: &BTreeMap<SectorId, PrivateReplicaInfo<Tree>>,
+) -> Result<()> {
+    info!("clear_caches:start");
+
+    for replica in replicas.values() {
+        clear::<Tree>(&replica.cache_dir.as_path())?;
+    }
+
+    info!("clear_caches:finish");
+
+    Ok(())
+}
+
 /// Checks for the existence of the tree d store, the replica, and all generated labels.
-pub fn validate_cache_for_precommit_phase2<R, T, Tree: MerkleTreeTrait>(
+pub fn validate_for_precommit_phase2<R, T, Tree: MerkleTreeTrait>(
     cache_path: R,
     replica_path: T,
     seal_precommit_phase1_output: &SealPreCommitPhase1Output<Tree>,
@@ -59,10 +95,9 @@ where
     result
 }
 
-// Checks for the existence of the replica data and t_aux, which in
-// turn allows us to verify the tree d, tree r, tree c, and the
-// labels.
-pub fn validate_cache_for_commit<R, T, Tree: MerkleTreeTrait>(
+/// Checks for the existence of the replica data and t_aux, which in
+/// turn allows us to verify the tree d, tree r, tree c, and the labels.
+pub fn validate_for_commit<R, T, Tree: MerkleTreeTrait>(
     cache_path: R,
     replica_path: T,
 ) -> Result<()>
@@ -130,7 +165,7 @@ where
     Ok(())
 }
 
-// Verifies if a DiskStore specified by a config (or set of 'required_configs' is consistent).
+/// Verifies if a DiskStore specified by a config (or set of 'required_configs' is consistent).
 fn verify_store(config: &StoreConfig, arity: usize, required_configs: usize) -> Result<()> {
     let store_path = StoreConfig::data_path(&config.path, &config.id);
     if !Path::new(&store_path).exists() {
@@ -192,7 +227,7 @@ fn verify_store(config: &StoreConfig, arity: usize, required_configs: usize) -> 
     Ok(())
 }
 
-// Verifies if a LevelCacheStore specified by a config is consistent.
+/// Verifies if a LevelCacheStore specified by a config is consistent.
 fn verify_level_cache_store<Tree: MerkleTreeTrait>(config: &StoreConfig) -> Result<()> {
     let store_path = StoreConfig::data_path(&config.path, &config.id);
     if !Path::new(&store_path).exists() {

@@ -10,9 +10,9 @@ use filecoin_proofs::types::{
     MerkleTreeTrait, PaddedBytesAmount, PoRepConfig, SectorSize, UnpaddedBytesAmount,
 };
 use filecoin_proofs::{
-    cache::validate_cache_for_precommit_phase2,
+    cache,
     commitments::add_piece,
-    seal::{seal_pre_commit_phase1, seal_pre_commit_phase2},
+    seal,
     types::{
         PieceInfo, PoRepProofPartitions, PrivateReplicaInfo, PublicReplicaInfo, SealPreCommitOutput,
     },
@@ -178,7 +178,7 @@ pub fn create_replicas<Tree: 'static + MerkleTreeTrait>(
             .zip(piece_infos.par_iter())
             .map(
                 |((((cache_dir, staged_file), sealed_file), sector_id), piece_infos)| {
-                    seal_pre_commit_phase1(
+                    seal::pre_commit_phase1(
                         porep_config,
                         cache_dir,
                         staged_file,
@@ -196,12 +196,12 @@ pub fn create_replicas<Tree: 'static + MerkleTreeTrait>(
             .into_iter()
             .enumerate()
             .map(|(i, phase1)| {
-                validate_cache_for_precommit_phase2::<_, _, Tree>(
+                cache::validate_for_precommit_phase2::<_, _, Tree>(
                     &cache_dirs[i],
                     &sealed_files[i],
                     &phase1,
                 )?;
-                seal_pre_commit_phase2(porep_config, phase1, &cache_dirs[i], &sealed_files[i])
+                seal::pre_commit_phase2(porep_config, phase1, &cache_dirs[i], &sealed_files[i])
             })
             .collect::<Result<Vec<_>, _>>()
     })
