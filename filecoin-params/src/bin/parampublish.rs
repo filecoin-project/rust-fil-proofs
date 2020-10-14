@@ -16,13 +16,14 @@ use filecoin_proofs::constants::{
     SECTOR_SIZE_2_KIB, SECTOR_SIZE_32_GIB, SECTOR_SIZE_512_MIB, SECTOR_SIZE_64_GIB,
     SECTOR_SIZE_8_MIB,
 };
-use filecoin_proofs::param::{
-    add_extension, choose_from, filename_to_parameter_id, get_digest_for_file_within_cache,
-    get_full_path_for_file_within_cache, has_extension, parameter_id_to_metadata_map,
-};
 use storage_proofs_core::parameter_cache::{
     parameter_cache_dir, parameter_cache_dir_name, CacheEntryMetadata, ParameterData, ParameterMap,
     GROTH_PARAMETER_EXT, PARAMETER_METADATA_EXT, VERIFYING_KEY_EXT,
+};
+
+use filecoin_params::{
+    add_extension, choose_from, filename_to_parameter_id, get_digest_for_file_within_cache,
+    get_full_path_for_file_within_cache, has_extension, parameter_id_to_metadata_map,
 };
 
 const ERROR_IPFS_COMMAND: &str = "failed to run ipfs";

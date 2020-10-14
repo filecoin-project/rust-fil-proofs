@@ -16,7 +16,10 @@ use pbr::{ProgressBar, Units};
 use reqwest::{blocking::Client, header, Proxy, Url};
 use tar::Archive;
 
-use filecoin_proofs::param::*;
+use filecoin_params::{
+    choose, choose_from, get_digest_for_file_within_cache, get_full_path_for_file_within_cache,
+    has_extension,
+};
 use storage_proofs_core::parameter_cache::{
     parameter_cache_dir, parameter_cache_dir_name, ParameterData, ParameterMap, GROTH_PARAMETER_EXT,
 };
@@ -25,7 +28,7 @@ const ERROR_PARAMETER_FILE: &str = "failed to find file in cache";
 const ERROR_PARAMETER_ID: &str = "failed to find key in manifest";
 
 const IPGET_PATH: &str = "/var/tmp/ipget";
-const DEFAULT_PARAMETERS: &str = include_str!("../../parameters.json");
+const DEFAULT_PARAMETERS: &str = include_str!("../../../parameters.json");
 const IPGET_VERSION: &str = "v0.4.0";
 
 struct FetchProgress<R> {

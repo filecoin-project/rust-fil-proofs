@@ -9,4 +9,5 @@ members = [
   "sha2raw",
   "fr32", 
   "filecoin-phase2",
+  "filecoin-params",
 ]

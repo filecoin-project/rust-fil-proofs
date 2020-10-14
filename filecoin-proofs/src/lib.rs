@@ -8,7 +8,6 @@ pub(crate) mod util;
 pub mod cache;
 pub mod commitments;
 pub mod constants;
-pub mod param;
 pub mod parameters;
 pub mod pieces;
 pub mod post;
