@@ -11,8 +11,8 @@ readme = "README.md"
 [dependencies]
 crossbeam = "0.7.3"
 digest = "0.9"
-storage-proofs-core = { path = "../core", version = "^5.0.0"}
-sha2raw = { path = "../../sha2raw", version = "^2.0.0"}
+storage-proofs-core = { path = "../storage-proofs-core", version = "^5.0.0"}
+sha2raw = { path = "../sha2raw", version = "^2.0.0"}
 rand = "0.7"
 merkletree = "0.21.0"
 mapr = "0.8.0"

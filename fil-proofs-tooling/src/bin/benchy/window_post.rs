@@ -28,8 +28,7 @@ use filecoin_proofs::{
 };
 use log::info;
 use serde::{Deserialize, Serialize};
-use storage_proofs::merkle::MerkleTreeTrait;
-use storage_proofs::sector::SectorId;
+use storage_proofs_core::{merkle::MerkleTreeTrait, sector::SectorId};
 
 const SECTOR_ID: u64 = 0;
 

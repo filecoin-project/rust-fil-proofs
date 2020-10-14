@@ -10,6 +10,10 @@ repository = "https://github.com/filecoin-project/rust-fil-proofs"
 readme = "README.md"
 
 [dependencies]
+storage-proofs-core = { path = "../storage-proofs-core"}
+storage-proofs-post = { path = "../storage-proofs-post"}
+storage-proofs-porep = { path = "../storage-proofs-porep"}
+filecoin-proofs = { path = "../filecoin-proofs"}
 clap = "2"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
@@ -24,8 +28,6 @@ bellperson = "0.9.1"
 paired = "0.20.0"
 fil-sapling-crypto = "0.6.3"
 rand = "0.7"
-storage-proofs = { path = "../storage-proofs"}
-filecoin-proofs = { path = "../filecoin-proofs"}
 tempfile = "3.0.8"
 cpu-time = "1.0.0"
 git2 = "0.13.6"
@@ -49,9 +51,9 @@ byte-unit = "4.0.9"
 
 [features]
 default = ["gpu", "measurements"]
-gpu = ["storage-proofs/gpu", "filecoin-proofs/gpu", "bellperson/gpu", "fil-sapling-crypto/gpu"]
-measurements = ["storage-proofs/measurements"]
-profile = ["storage-proofs/profile", "measurements"]
+gpu = ["storage-proofs-core/gpu", "filecoin-proofs/gpu", "bellperson/gpu", "fil-sapling-crypto/gpu"]
+measurements = ["storage-proofs-core/measurements"]
+profile = ["storage-proofs-core/profile", "measurements"]
 
 
 [target.'cfg(target_arch = "x86_64")'.dependencies]

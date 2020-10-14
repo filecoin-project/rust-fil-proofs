@@ -17,7 +17,7 @@ use filecoin_proofs::{
         PieceInfo, PoRepProofPartitions, PrivateReplicaInfo, PublicReplicaInfo, SealPreCommitOutput,
     },
 };
-use storage_proofs::sector::SectorId;
+use storage_proofs_core::sector::SectorId;
 
 use crate::{measure, FuncMeasurement};
 

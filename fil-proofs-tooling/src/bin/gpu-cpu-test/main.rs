@@ -18,7 +18,7 @@ use filecoin_proofs::types::{
     PoStConfig, PoStType, PrivateReplicaInfo, SectorShape8MiB, SectorSize,
 };
 use log::{debug, info};
-use storage_proofs::sector::SectorId;
+use storage_proofs_core::sector::SectorId;
 
 type MerkleTree = SectorShape8MiB;
 const SECTOR_SIZE: u64 = SECTOR_SIZE_8_MIB;

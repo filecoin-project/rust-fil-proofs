@@ -5,7 +5,7 @@ use bellperson::groth16::MappedParameters;
 use clap::{value_t, App, Arg, SubCommand};
 use paired::bls12_381::Bls12;
 
-use storage_proofs::parameter_cache::read_cached_params;
+use storage_proofs_core::parameter_cache::read_cached_params;
 
 fn run_map(parameter_file: &PathBuf) -> Result<MappedParameters<Bls12>> {
     read_cached_params(parameter_file)

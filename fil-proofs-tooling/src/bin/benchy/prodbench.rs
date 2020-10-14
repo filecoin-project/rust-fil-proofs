@@ -16,14 +16,12 @@ use paired::bls12_381::Bls12;
 use rand::SeedableRng;
 use rand_xorshift::XorShiftRng;
 use serde::{Deserialize, Serialize};
-use storage_proofs::compound_proof::CompoundProof;
-use storage_proofs::hasher::Sha256Hasher;
 #[cfg(feature = "measurements")]
-use storage_proofs::measurements::Operation;
-#[cfg(feature = "measurements")]
-use storage_proofs::measurements::OP_MEASUREMENTS;
-use storage_proofs::parameter_cache::CacheableParameters;
-use storage_proofs::proof::ProofScheme;
+use storage_proofs_core::measurements::{Operation, OP_MEASUREMENTS};
+use storage_proofs_core::{
+    compound_proof::CompoundProof, hasher::Sha256Hasher, parameter_cache::CacheableParameters,
+    proof::ProofScheme,
+};
 
 const SEED: [u8; 16] = [
     0x59, 0x62, 0xbe, 0x5d, 0x76, 0x3d, 0x31, 0x8d, 0x17, 0xdb, 0x37, 0x32, 0x54, 0x06, 0xbc, 0xe5,
@@ -273,7 +271,7 @@ fn run_measure_circuits(i: &ProdbenchInputs) -> CircuitOutputs {
 }
 
 fn measure_porep_circuit(i: &ProdbenchInputs) -> usize {
-    use storage_proofs::porep::stacked::{
+    use storage_proofs_porep::stacked::{
         LayerChallenges, SetupParams, StackedCompound, StackedDrg,
     };
 
@@ -329,7 +327,7 @@ fn generate_params(i: &ProdbenchInputs) {
 
 fn cache_porep_params(porep_config: PoRepConfig) {
     use filecoin_proofs::parameters::public_params;
-    use storage_proofs::porep::stacked::{StackedCompound, StackedDrg};
+    use storage_proofs_porep::stacked::{StackedCompound, StackedDrg};
 
     let dummy_porep_id = [0; 32];
     let public_params = public_params(

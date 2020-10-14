@@ -5,11 +5,13 @@ use anyhow::Result;
 use filecoin_proofs::with_shape;
 use log::{debug, info};
 use rand::{thread_rng, Rng};
-use storage_proofs::hasher::Hasher;
-use storage_proofs::merkle::{
-    generate_tree, get_base_tree_count, MerkleProofTrait, MerkleTreeTrait, MerkleTreeWrapper,
+use storage_proofs_core::{
+    hasher::Hasher,
+    merkle::{
+        generate_tree, get_base_tree_count, MerkleProofTrait, MerkleTreeTrait, MerkleTreeWrapper,
+    },
+    util::default_rows_to_discard,
 };
-use storage_proofs::util::default_rows_to_discard;
 use typenum::Unsigned;
 
 fn generate_proofs<R: Rng, Tree: MerkleTreeTrait>(

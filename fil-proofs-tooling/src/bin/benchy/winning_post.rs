@@ -11,7 +11,7 @@ use filecoin_proofs::{
 };
 use log::info;
 use serde::Serialize;
-use storage_proofs::merkle::MerkleTreeTrait;
+use storage_proofs_core::merkle::MerkleTreeTrait;
 
 #[derive(Serialize)]
 #[serde(rename_all = "kebab-case")]
