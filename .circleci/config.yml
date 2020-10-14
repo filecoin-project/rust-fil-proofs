@@ -314,12 +314,12 @@ jobs:
       - configure_environment_variables
       - checkout
       - run:
-          name: Install hwloc 1.11.9
+          name: Install hwloc 2.3.0
           command: |
             cd /tmp
-            curl https://www.open-mpi.org/software/hwloc/v1.11/downloads/hwloc-1.11.9.tar.gz --location --output /tmp/hwloc-1.11.9.tar.gz
-            tar xzvf hwloc-1.11.9.tar.gz
-            cd hwloc-1.11.9
+            curl https://download.open-mpi.org/release/hwloc/v2.3/hwloc-2.3.0.tar.gz --location --output /tmp/hwloc-2.3.0.tar.gz
+            tar xzvf hwloc-2.3.0.tar.gz
+            cd hwloc-2.3.0
             ./configure
             make
             sudo make install
