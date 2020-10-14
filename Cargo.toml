@@ -7,5 +7,6 @@ members = [
   "storage-proofs-post",
   "fil-proofs-tooling",
   "sha2raw",
-  "fr32",
+  "fr32", 
+  "filecoin-phase2",
 ]
