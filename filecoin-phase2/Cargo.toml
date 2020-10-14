@@ -26,3 +26,7 @@ simplelog = "0.8.0"
 dialoguer = "0.6.2"
 hex = "0.4.2"
 blake2b_simd = "0.5.10"
+
+[features]
+default = ["gpu"]
+gpu = ["storage-proofs-core/gpu", "filecoin-proofs/gpu", "bellperson/gpu"]

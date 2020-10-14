@@ -50,9 +50,6 @@ fil_logger = "0.1.2"
 default = ["gpu"]
 cpu-profile = ["gperftools"]
 heap-profile = ["gperftools/heap"]
-simd = [
-  "storage-proofs-core/simd",
-]
 asm = [
   "storage-proofs-core/asm"
 ]

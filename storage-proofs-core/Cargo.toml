@@ -57,7 +57,6 @@ sha2raw = { path = "../sha2raw", version = "^2.0.0"}
 
 [features]
 default = ["gpu"]
-simd = []
 asm = ["sha2/sha2-asm"]
 big-sector-sizes-bench = []
 gpu = ["bellperson/gpu", "fil-sapling-crypto/gpu"]
