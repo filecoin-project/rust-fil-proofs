@@ -3,6 +3,7 @@ use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
 
 use anyhow::Context;
+use fr32::bytes_into_fr_repr_safe;
 use generic_array::typenum::{self, Unsigned};
 use log::trace;
 use merkletree::merkle::get_merkle_tree_leafs;
@@ -11,7 +12,6 @@ use serde::{Deserialize, Serialize};
 use storage_proofs_core::{
     drgraph::Graph,
     error::Result,
-    fr32::bytes_into_fr_repr_safe,
     hasher::{Domain, Hasher},
     merkle::*,
     parameter_cache::ParameterSetMetadata,

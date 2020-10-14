@@ -3,6 +3,7 @@ use std::io::{BufWriter, Read, Write};
 use std::path::{Path, PathBuf};
 
 use anyhow::{ensure, Context, Result};
+use fr32::write_unpadded;
 use log::*;
 use merkletree::store::StoreConfig;
 use storage_proofs_core::{
@@ -16,7 +17,6 @@ use storage_proofs_porep::{
 use typenum::Unsigned;
 
 use crate::{
-    fr32::write_unpadded,
     parameters::public_params,
     types::{
         Commitment, DefaultBinaryTree, DefaultPieceHasher, PaddedBytesAmount, PoRepConfig,

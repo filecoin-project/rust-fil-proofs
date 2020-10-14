@@ -1,11 +1,11 @@
 use anyhow::{ensure, Context};
 use ff::PrimeFieldRepr;
 use fil_sapling_crypto::jubjub::JubjubBls12;
+use fr32::bytes_into_frs;
 use lazy_static::lazy_static;
 use paired::bls12_381::{Fr, FrRepr};
 
 use crate::error::Result;
-use crate::fr32::bytes_into_frs;
 use crate::hasher::pedersen::pedersen_hash;
 use crate::settings;
 

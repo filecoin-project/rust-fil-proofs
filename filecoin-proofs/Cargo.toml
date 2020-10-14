@@ -12,6 +12,7 @@ readme = "README.md"
 storage-proofs-core = { version = "^5.0.0", path = "../storage-proofs-core" }
 storage-proofs-post = { version = "^5.0.0", path = "../storage-proofs-post" }
 storage-proofs-porep = { version = "^5.0.0", path = "../storage-proofs-porep" }
+fr32 = { version = "0.1.0", path = "../fr32" }
 bitvec = "0.17"
 chrono = "0.4"
 rand = "0.7"
@@ -61,7 +62,6 @@ default-features = false
 features = ["blocking", "native-tls-vendored"]
 
 [dev-dependencies]
-criterion = "0.3"
 rexpect = "0.4.0"
 pretty_assertions = "0.6.1"
 failure = "0.1.7"
@@ -83,6 +83,3 @@ gpu = [
   "fil-sapling-crypto/gpu"
 ]
 
-[[bench]]
-name = "preprocessing"
-harness = false

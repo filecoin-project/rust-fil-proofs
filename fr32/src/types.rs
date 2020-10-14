@@ -1,9 +1,11 @@
-use crate::error::*;
-
-use anyhow::{ensure, Context};
+use anyhow::{ensure, Context, Result};
 use byteorder::{ByteOrder, LittleEndian, WriteBytesExt};
-use ff::{PrimeField, PrimeFieldRepr};
+use fff::{PrimeField, PrimeFieldRepr};
 use paired::bls12_381::{Fr, FrRepr};
+
+#[derive(Debug, thiserror::Error)]
+#[error("Bytes could not be converted to Fr")]
+pub struct ErrorBadFrBytes;
 
 // Contains 32 bytes whose little-endian value represents an Fr.
 // Invariants:
@@ -26,17 +28,17 @@ pub type Fr32Ary = [u8; 32];
 // Takes a slice of bytes and returns an Fr if byte slice is exactly 32 bytes and does not overflow.
 // Otherwise, returns a BadFrBytesError.
 pub fn bytes_into_fr(bytes: &[u8]) -> Result<Fr> {
-    ensure!(bytes.len() == 32, Error::BadFrBytes);
+    ensure!(bytes.len() == 32, ErrorBadFrBytes);
 
     let mut fr_repr = <<Fr as PrimeField>::Repr as Default>::default();
-    fr_repr.read_le(bytes).context(Error::BadFrBytes)?;
+    fr_repr.read_le(bytes).context(ErrorBadFrBytes)?;
 
-    Fr::from_repr(fr_repr).map_err(|_| Error::BadFrBytes.into())
+    Fr::from_repr(fr_repr).map_err(|_| ErrorBadFrBytes.into())
 }
 
 #[inline]
 pub fn trim_bytes_to_fr_safe(r: &[u8]) -> Result<Vec<u8>> {
-    ensure!(r.len() == 32, Error::BadFrBytes);
+    ensure!(r.len() == 32, ErrorBadFrBytes);
     let mut res = r[..32].to_vec();
     // strip last two bits, to ensure result is in Fr.
     res[31] &= 0b0011_1111;

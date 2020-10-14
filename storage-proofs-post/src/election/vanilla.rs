@@ -4,6 +4,7 @@ use std::marker::PhantomData;
 
 use anyhow::{bail, ensure, Context};
 use byteorder::{ByteOrder, LittleEndian};
+use fr32::fr_into_bytes;
 use generic_array::typenum;
 use log::trace;
 use paired::bls12_381::Fr;
@@ -14,7 +15,6 @@ use typenum::Unsigned;
 
 use storage_proofs_core::{
     error::{Error, Result},
-    fr32::fr_into_bytes,
     hasher::{Domain, HashFunction, Hasher, PoseidonDomain, PoseidonFunction, PoseidonMDArity},
     measurements::{measure_op, Operation},
     merkle::{MerkleProof, MerkleProofTrait, MerkleTreeTrait, MerkleTreeWrapper},

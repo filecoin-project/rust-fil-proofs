@@ -2,6 +2,7 @@ use std::marker::PhantomData;
 use std::path::PathBuf;
 
 use anyhow::{ensure, Context};
+use fr32::bytes_into_fr_repr_safe;
 use generic_array::typenum;
 use merkletree::store::{ReplicaConfig, StoreConfig};
 use rayon::prelude::*;
@@ -11,7 +12,6 @@ use sha2::{Digest, Sha256};
 use storage_proofs_core::{
     drgraph::Graph,
     error::Result,
-    fr32::bytes_into_fr_repr_safe,
     hasher::{Domain, HashFunction, Hasher, PoseidonArity},
     merkle::{
         create_base_lcmerkle_tree, create_base_merkle_tree, BinaryLCMerkleTree, BinaryMerkleTree,
@@ -608,13 +608,13 @@ mod tests {
     use super::*;
 
     use ff::Field;
+    use fr32::fr_into_bytes;
     use paired::bls12_381::Fr;
     use rand::SeedableRng;
     use rand_xorshift::XorShiftRng;
     use storage_proofs_core::{
         cache_key::CacheKey,
         drgraph::{BucketGraph, BASE_DEGREE},
-        fr32::fr_into_bytes,
         hasher::{Blake2sHasher, PedersenHasher, Sha256Hasher},
         merkle::{BinaryMerkleTree, MerkleTreeTrait},
         table_tests,

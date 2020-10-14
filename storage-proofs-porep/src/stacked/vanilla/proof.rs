@@ -45,11 +45,11 @@ use super::{
 };
 
 use ff::Field;
+use fr32::fr_into_bytes;
 use generic_array::{sequence::GenericSequence, GenericArray};
 use neptune::batch_hasher::BatcherType;
 use neptune::column_tree_builder::{ColumnTreeBuilder, ColumnTreeBuilderTrait};
 use neptune::tree_builder::{TreeBuilder, TreeBuilderTrait};
-use storage_proofs_core::fr32::fr_into_bytes;
 
 use crate::encode::{decode, encode};
 use crate::PoRep;
@@ -1375,13 +1375,13 @@ mod tests {
     use super::*;
 
     use ff::{Field, PrimeField};
+    use fr32::fr_into_bytes;
     use paired::bls12_381::{Fr, FrRepr};
     use rand::{Rng, SeedableRng};
     use rand_xorshift::XorShiftRng;
     use storage_proofs_core::hasher::poseidon::PoseidonHasher;
     use storage_proofs_core::{
         drgraph::BASE_DEGREE,
-        fr32::fr_into_bytes,
         hasher::{Blake2sHasher, PedersenHasher, Sha256Hasher},
         merkle::MerkleTreeTrait,
         proof::ProofScheme,

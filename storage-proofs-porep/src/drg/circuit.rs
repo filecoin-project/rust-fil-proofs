@@ -307,6 +307,7 @@ mod tests {
 
     use bellperson::util_cs::test_cs::TestConstraintSystem;
     use ff::Field;
+    use fr32::{bytes_into_fr, fr_into_bytes};
     use generic_array::typenum;
     use merkletree::store::StoreConfig;
     use pretty_assertions::assert_eq;
@@ -316,7 +317,6 @@ mod tests {
         cache_key::CacheKey,
         compound_proof,
         drgraph::{graph_height, BucketGraph, BASE_DEGREE},
-        fr32::{bytes_into_fr, fr_into_bytes},
         hasher::PedersenHasher,
         merkle::MerkleProofTrait,
         proof::ProofScheme,

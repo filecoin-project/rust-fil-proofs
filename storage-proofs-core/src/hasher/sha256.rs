@@ -352,17 +352,17 @@ impl From<Sha256Domain> for [u8; 32] {
 mod tests {
     use super::*;
 
-    use crate::fr32::fr_into_bytes;
-    use crate::util::bytes_into_boolean_vec;
-    use bellperson::util_cs::test_cs::TestConstraintSystem;
-
     use bellperson::gadgets::boolean::Boolean;
+    use bellperson::util_cs::test_cs::TestConstraintSystem;
     use bellperson::ConstraintSystem;
     use ff::Field;
+    use fr32::fr_into_bytes;
     use merkletree::hash::Algorithm;
     use paired::bls12_381::{Bls12, Fr};
     use rand::SeedableRng;
     use rand_xorshift::XorShiftRng;
+
+    use crate::util::bytes_into_boolean_vec;
 
     #[test]
     fn hash_leaf_bits_circuit() {

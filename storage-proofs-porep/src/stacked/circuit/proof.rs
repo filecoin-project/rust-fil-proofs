@@ -3,12 +3,12 @@ use std::marker::PhantomData;
 use anyhow::ensure;
 use bellperson::gadgets::num;
 use bellperson::{Circuit, ConstraintSystem, SynthesisError};
+use fr32::u64_into_fr;
 use paired::bls12_381::{Bls12, Fr};
 use storage_proofs_core::{
     compound_proof::{CircuitComponent, CompoundProof},
     drgraph::Graph,
     error::Result,
-    fr32::u64_into_fr,
     gadgets::constraint,
     gadgets::por::PoRCompound,
     hasher::{HashFunction, Hasher},
@@ -343,6 +343,7 @@ mod tests {
 
     use bellperson::util_cs::{metric_cs::MetricCS, test_cs::TestConstraintSystem};
     use ff::Field;
+    use fr32::fr_into_bytes;
     use generic_array::typenum::{U0, U2, U4, U8};
     use merkletree::store::StoreConfig;
     use rand::{Rng, SeedableRng};
@@ -351,7 +352,6 @@ mod tests {
         cache_key::CacheKey,
         compound_proof,
         drgraph::BASE_DEGREE,
-        fr32::fr_into_bytes,
         hasher::{Hasher, PedersenHasher, PoseidonHasher, Sha256Hasher},
         merkle::{get_base_tree_count, DiskTree, MerkleTreeTrait},
         proof::ProofScheme,

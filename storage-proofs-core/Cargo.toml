@@ -12,6 +12,7 @@ readme = "README.md"
 bench = false
 
 [dependencies]
+fr32 = { version = "0.1", path = "../fr32" }
 rand = "0.7"
 merkletree = "0.21.0"
 byteorder = "1"
@@ -81,10 +82,6 @@ harness = false
 
 [[bench]]
 name = "xor"
-harness = false
-
-[[bench]]
-name = "fr"
 harness = false
 
 [[bench]]

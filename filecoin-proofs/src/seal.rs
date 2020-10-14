@@ -858,10 +858,11 @@ pub fn fauxrep2<R: AsRef<Path>, S: AsRef<Path>, Tree: 'static + MerkleTreeTrait>
 #[cfg(test)]
 mod tests {
     use ff::Field;
+    use fr32::bytes_into_fr;
     use paired::bls12_381::Fr;
     use rand::SeedableRng;
     use rand_xorshift::XorShiftRng;
-    use storage_proofs_core::{fr32::bytes_into_fr, sector::SectorId};
+    use storage_proofs_core::sector::SectorId;
 
     use crate::{
         constants::{POREP_PARTITIONS, SECTOR_SIZE_2_KIB},

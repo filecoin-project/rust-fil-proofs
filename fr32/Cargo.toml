@@ -1,0 +1,34 @@
+[package]
+name = "fr32"
+description = "Tooling for commitments and Fr32"
+version = "0.1.0"
+authors = ["dignifiedquire <me@dignifiedquire.com>"]
+edition = "2018"
+readme = "README.md"
+repository = "https://github.com/filecoin-project/rust-fil-proofs"
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+anyhow = "1.0.33"
+bitintr = "0.3.0"
+thiserror = "1.0.21"
+paired = "0.20.1"
+fff = "0.2.3"
+byteorder = "1.3.4"
+bitvec = "0.17"
+
+[dev-dependencies]
+rand = "0.7.3"
+itertools = "0.9.0"
+rand_xorshift = "0.2.0"
+pretty_assertions = "0.6.1"
+criterion = "0.3"
+gperftools = "0.2"
+
+[[bench]]
+name = "preprocessing"
+harness = false
+
+[[bench]]
+name = "bytes"
+harness = false

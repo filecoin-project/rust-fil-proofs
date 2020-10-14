@@ -3,25 +3,18 @@
 //requires nightly, or later stable version
 //#![warn(clippy::unwrap_used)]
 
-mod commitment_reader;
-
 pub(crate) mod util;
 
 pub mod cache;
 pub mod commitments;
 pub mod constants;
-pub mod fr32;
-pub mod fr32_reader;
 pub mod param;
 pub mod parameters;
 pub mod pieces;
 pub mod post;
 pub mod seal;
-pub mod serde_big_array;
 pub mod types;
 pub mod unseal;
-
-pub use self::commitment_reader::*;
 
 #[cfg(test)]
 pub(crate) const TEST_SEED: [u8; 16] = [

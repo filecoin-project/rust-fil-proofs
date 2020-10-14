@@ -151,13 +151,13 @@ mod tests {
     use super::*;
 
     use ff::Field;
+    use fr32::fr_into_bytes;
     use generic_array::typenum;
     use paired::bls12_381::Fr;
     use rand::SeedableRng;
     use rand_xorshift::XorShiftRng;
 
     use crate::drgraph::{BucketGraph, Graph, BASE_DEGREE};
-    use crate::fr32::fr_into_bytes;
     use crate::hasher::{Blake2sHasher, PedersenHasher, PoseidonHasher, Sha256Hasher};
     use crate::merkle::{create_base_merkle_tree, DiskStore, MerkleProofTrait, MerkleTreeWrapper};
     use crate::util::data_at_node;

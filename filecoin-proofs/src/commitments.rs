@@ -3,6 +3,7 @@ use std::io::{Read, Write};
 use anyhow::{ensure, Context, Result};
 use log::*;
 use storage_proofs_core::{
+    commitment_reader::CommitmentReader,
     measurements::{measure_op, Operation},
     pieces::generate_piece_commitment_bytes_from_source,
 };
@@ -10,7 +11,6 @@ use storage_proofs_core::{
 use crate::{
     constants::MINIMUM_RESERVED_BYTES_FOR_PIECE_IN_FULLY_ALIGNED_SECTOR as MINIMUM_PIECE_SIZE,
     types::{DefaultPieceHasher, PaddedBytesAmount, PieceInfo, UnpaddedBytesAmount},
-    CommitmentReader,
 };
 
 /// Generates a piece commitment for the provided byte source. Returns an error
@@ -32,7 +32,7 @@ pub fn generate_piece_commitment<T: std::io::Read>(
 
         // send the source through the preprocessor
         let source = std::io::BufReader::new(source);
-        let mut fr32_reader = crate::fr32_reader::Fr32Reader::new(source);
+        let mut fr32_reader = fr32::Fr32Reader::new(source);
 
         let commitment = generate_piece_commitment_bytes_from_source::<DefaultPieceHasher>(
             &mut fr32_reader,
@@ -85,14 +85,14 @@ where
 
         let written_bytes = crate::pieces::sum_piece_bytes_with_alignment(&piece_lengths);
         let piece_alignment = crate::pieces::get_piece_alignment(written_bytes, piece_size);
-        let fr32_reader = crate::fr32_reader::Fr32Reader::new(source);
+        let fr32_reader = fr32::Fr32Reader::new(source);
 
         // write left alignment
         for _ in 0..usize::from(PaddedBytesAmount::from(piece_alignment.left_bytes)) {
             target.write_all(&[0u8][..])?;
         }
 
-        let mut commitment_reader = CommitmentReader::new(fr32_reader);
+        let mut commitment_reader = CommitmentReader::<_, DefaultPieceHasher>::new(fr32_reader);
         let n = std::io::copy(&mut commitment_reader, &mut target)
             .context("failed to write and preprocess bytes")?;
 

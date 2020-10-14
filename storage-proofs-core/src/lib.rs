@@ -9,12 +9,12 @@
 pub mod test_helper;
 
 pub mod cache_key;
+pub mod commitment_reader;
 pub mod compound_proof;
 pub mod crypto;
 pub mod data;
 pub mod drgraph;
 pub mod error;
-pub mod fr32;
 pub mod gadgets;
 pub mod hasher;
 pub mod measurements;

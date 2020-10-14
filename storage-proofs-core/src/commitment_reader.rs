@@ -2,20 +2,20 @@ use std::io::{self, Read};
 
 use anyhow::{ensure, Result};
 use rayon::prelude::*;
-use storage_proofs_core::hasher::{HashFunction, Hasher};
 
-use crate::types::DefaultPieceHasher;
+use crate::hasher::{HashFunction, Hasher};
+use crate::util::NODE_SIZE;
 
 /// Calculates comm-d of the data piped through to it.
 /// Data must be bit padded and power of 2 bytes.
-pub struct CommitmentReader<R> {
+pub struct CommitmentReader<R, H: Hasher> {
     source: R,
     buffer: [u8; 64],
     buffer_pos: usize,
-    current_tree: Vec<<DefaultPieceHasher as Hasher>::Domain>,
+    current_tree: Vec<H::Domain>,
 }
 
-impl<R: Read> CommitmentReader<R> {
+impl<R: Read, H: Hasher> CommitmentReader<R, H> {
     pub fn new(source: R) -> Self {
         CommitmentReader {
             source,
@@ -32,14 +32,14 @@ impl<R: Read> CommitmentReader<R> {
         }
 
         // WARNING: keep in sync with DefaultPieceHasher and its .node impl
-        let hash = <DefaultPieceHasher as Hasher>::Function::hash(&self.buffer);
+        let hash = <H as Hasher>::Function::hash(&self.buffer);
         self.current_tree.push(hash);
         self.buffer_pos = 0;
 
         // TODO: reduce hashes when possible, instead of keeping them around.
     }
 
-    pub fn finish(self) -> Result<<DefaultPieceHasher as Hasher>::Domain> {
+    pub fn finish(self) -> Result<<H as Hasher>::Domain> {
         ensure!(self.buffer_pos == 0, "not enough inputs provided");
 
         let CommitmentReader { current_tree, .. } = self;
@@ -49,7 +49,12 @@ impl<R: Read> CommitmentReader<R> {
         while current_row.len() > 1 {
             let next_row = current_row
                 .par_chunks(2)
-                .map(|chunk| crate::pieces::piece_hash(chunk[0].as_ref(), chunk[1].as_ref()))
+                .map(|chunk| {
+                    let mut buf = [0u8; NODE_SIZE * 2];
+                    buf[..NODE_SIZE].copy_from_slice(AsRef::<[u8]>::as_ref(&chunk[0]));
+                    buf[NODE_SIZE..].copy_from_slice(AsRef::<[u8]>::as_ref(&chunk[1]));
+                    <H as Hasher>::Function::hash(&buf)
+                })
                 .collect::<Vec<_>>();
 
             current_row = next_row;
@@ -63,7 +68,7 @@ impl<R: Read> CommitmentReader<R> {
     }
 }
 
-impl<R: Read> Read for CommitmentReader<R> {
+impl<R: Read, H: Hasher> Read for CommitmentReader<R, H> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         let start = self.buffer_pos;
         let left = 64 - self.buffer_pos;
@@ -88,24 +93,23 @@ impl<R: Read> Read for CommitmentReader<R> {
 mod tests {
     use super::*;
 
-    use crate::types::*;
-
-    use storage_proofs_core::pieces::generate_piece_commitment_bytes_from_source;
+    use crate::hasher::Sha256Hasher;
+    use crate::pieces::generate_piece_commitment_bytes_from_source;
 
     #[test]
     fn test_commitment_reader() {
         let piece_size = 127 * 8;
         let source = vec![255u8; piece_size];
-        let mut fr32_reader = crate::fr32_reader::Fr32Reader::new(io::Cursor::new(&source));
+        let mut fr32_reader = fr32::Fr32Reader::new(io::Cursor::new(&source));
 
-        let commitment1 = generate_piece_commitment_bytes_from_source::<DefaultPieceHasher>(
+        let commitment1 = generate_piece_commitment_bytes_from_source::<Sha256Hasher>(
             &mut fr32_reader,
-            PaddedBytesAmount::from(UnpaddedBytesAmount(piece_size as u64)).into(),
+            fr32::to_padded_bytes(piece_size),
         )
         .expect("failed to generate piece commitment bytes from source");
 
-        let fr32_reader = crate::fr32_reader::Fr32Reader::new(io::Cursor::new(&source));
-        let mut commitment_reader = CommitmentReader::new(fr32_reader);
+        let fr32_reader = fr32::Fr32Reader::new(io::Cursor::new(&source));
+        let mut commitment_reader = CommitmentReader::<_, Sha256Hasher>::new(fr32_reader);
         io::copy(&mut commitment_reader, &mut io::sink()).expect("io copy failed");
 
         let commitment2 = commitment_reader.finish().expect("failed to finish");

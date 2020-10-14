@@ -2,6 +2,7 @@ use std::cmp::{max, min};
 use std::marker::PhantomData;
 
 use anyhow::ensure;
+use fr32::bytes_into_fr_repr_safe;
 use generic_array::typenum;
 use rand::{Rng, SeedableRng};
 use rand_chacha::ChaCha8Rng;
@@ -9,7 +10,6 @@ use sha2::{Digest, Sha256};
 
 use crate::crypto::{derive_porep_domain_seed, DRSAMPLE_DST};
 use crate::error::*;
-use crate::fr32::bytes_into_fr_repr_safe;
 use crate::hasher::{Hasher, PoseidonArity};
 use crate::parameter_cache::ParameterSetMetadata;
 use crate::util::{data_at_node_offset, NODE_SIZE};

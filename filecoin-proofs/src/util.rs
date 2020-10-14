@@ -1,8 +1,8 @@
 use anyhow::{Context, Result};
+use fr32::{bytes_into_fr, fr_into_bytes};
 use merkletree::merkle::{get_merkle_tree_leafs, get_merkle_tree_len};
 use paired::bls12_381::Fr;
 use storage_proofs_core::{
-    fr32::{bytes_into_fr, fr_into_bytes},
     hasher::{Domain, Hasher},
     merkle::{get_base_tree_count, MerkleTreeTrait},
 };

@@ -71,12 +71,12 @@ mod tests {
     use bellperson::gadgets::boolean::Boolean;
     use bellperson::util_cs::test_cs::TestConstraintSystem;
     use ff::Field;
+    use fr32::{bytes_into_fr, fr_into_bytes};
     use paired::bls12_381::{Bls12, Fr};
     use rand::SeedableRng;
     use rand_xorshift::XorShiftRng;
     use storage_proofs_core::{
         drgraph::{Graph, BASE_DEGREE},
-        fr32::{bytes_into_fr, fr_into_bytes},
         hasher::Sha256Hasher,
         util::bytes_into_boolean_vec_be,
         util::{data_at_node, NODE_SIZE},
