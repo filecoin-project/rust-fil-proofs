@@ -347,39 +347,149 @@ impl<'a, Tree: 'a + MerkleTreeTrait> ProofScheme<'a> for FallbackPoSt<'a, Tree> 
             pub_inputs.sectors.len(),
         );
 
-        let num_sectors_per_chunk = pub_params.sector_count;
-        let num_sectors = pub_inputs.sectors.len();
-
-        ensure!(
-            num_sectors <= partition_count * num_sectors_per_chunk,
-            "cannot prove the provided number of sectors: {} > {} * {}",
-            num_sectors,
-            partition_count,
-            num_sectors_per_chunk,
-        );
-
-        let mut partition_proofs = Vec::new();
-
         // Use `BTreeSet` so failure result will be canonically ordered (sorted).
         let mut faulty_sectors = BTreeSet::new();
 
-        for (j, (pub_sectors_chunk, priv_sectors_chunk)) in pub_inputs
-            .sectors
-            .chunks(num_sectors_per_chunk)
-            .zip(priv_inputs.sectors.chunks(num_sectors_per_chunk))
-            .enumerate()
-        {
-            trace!("proving partition {}", j);
+        let partition_proofs = match pub_params.shape {
+            PoStShape::Window => {
+                let num_sectors_per_chunk = pub_params.sector_count;
+                let num_sectors = pub_inputs.sectors.len();
 
-            let mut proofs = Vec::with_capacity(num_sectors_per_chunk);
+                ensure!(
+                    num_sectors <= partition_count * num_sectors_per_chunk,
+                    "cannot prove the provided number of sectors: {} > {} * {}",
+                    num_sectors,
+                    partition_count,
+                    num_sectors_per_chunk,
+                );
 
-            for (i, (pub_sector, priv_sector)) in pub_sectors_chunk
-                .iter()
-                .zip(priv_sectors_chunk.iter())
-                .enumerate()
-            {
+                let mut partition_proofs = Vec::new();
+
+                for (j, (pub_sectors_chunk, priv_sectors_chunk)) in pub_inputs
+                    .sectors
+                    .chunks(num_sectors_per_chunk)
+                    .zip(priv_inputs.sectors.chunks(num_sectors_per_chunk))
+                    .enumerate()
+                {
+                    trace!("proving partition {}", j);
+
+                    let mut proofs = Vec::with_capacity(num_sectors_per_chunk);
+
+                    for (pub_sector, priv_sector) in
+                        pub_sectors_chunk.iter().zip(priv_sectors_chunk.iter())
+                    {
+                        let tree = priv_sector.tree;
+                        let sector_id = pub_sector.id;
+                        let tree_leafs = tree.leafs();
+                        let rows_to_discard =
+                            default_rows_to_discard(tree_leafs, Tree::Arity::to_usize());
+
+                        trace!(
+                            "Generating proof for tree leafs {} and arity {}",
+                            tree_leafs,
+                            Tree::Arity::to_usize(),
+                        );
+
+                        let num_challenges = pub_params.challenge_count;
+
+                        let challenges = generate_leaf_challenges(
+                            pub_params,
+                            pub_inputs.randomness,
+                            sector_id.into(),
+                            num_challenges,
+                        );
+
+                        let mut inclusion_proofs = Vec::new();
+                        for proof_or_fault in (0..pub_params.challenge_count)
+                            .into_par_iter()
+                            .map(|challenge_index| {
+                                let challenged_leaf = challenges[challenge_index] as u64;
+
+                                let proof = tree.gen_cached_proof(
+                                    challenged_leaf as usize,
+                                    Some(rows_to_discard),
+                                );
+                                match proof {
+                                    Ok(proof) => {
+                                        if proof.validate(challenged_leaf as usize)
+                                            && proof.root() == priv_sector.comm_r_last
+                                            && pub_sector.comm_r
+                                                == <Tree::Hasher as Hasher>::Function::hash2(
+                                                    &priv_sector.comm_c,
+                                                    &priv_sector.comm_r_last,
+                                                )
+                                        {
+                                            Ok(ProofOrFault::Proof(proof))
+                                        } else {
+                                            Ok(ProofOrFault::Fault(sector_id))
+                                        }
+                                    }
+                                    Err(_) => Ok(ProofOrFault::Fault(sector_id)),
+                                }
+                            })
+                            .collect::<Result<Vec<_>>>()?
+                        {
+                            match proof_or_fault {
+                                ProofOrFault::Proof(proof) => {
+                                    inclusion_proofs.push(proof);
+                                }
+                                ProofOrFault::Fault(sector_id) => {
+                                    error!("faulty sector: {:?}", sector_id);
+                                    faulty_sectors.insert(sector_id);
+                                }
+                            }
+                        }
+
+                        // Winning PoSt and Window PoSt have different proof shapes regarding inclusion
+                        // and sector proofs, so we are careful to partition them appropriately.
+                        // Include partition inclusion proofs in a sector proof.
+                        proofs.push(SectorProof {
+                            inclusion_proofs,
+                            comm_c: priv_sector.comm_c,
+                            comm_r_last: priv_sector.comm_r_last,
+                        });
+                    }
+
+                    // If there were less than the required number of sectors provided, we duplicate the last one
+                    // to pad the proof out, such that it works in the circuit part.
+                    while proofs.len() < num_sectors_per_chunk {
+                        proofs.push(proofs[proofs.len() - 1].clone());
+                    }
+
+                    partition_proofs.push(Proof { sectors: proofs });
+                }
+                partition_proofs
+            }
+
+            PoStShape::Winning => {
+                let num_challenges = pub_params.sector_count;
+                let pub_sectors = pub_inputs.sectors;
+                let priv_sectors = priv_inputs.sectors;
+
+                ensure!(
+                    pub_sectors.len() == num_challenges && num_challenges > 0,
+                    "Winning PoSt, wrong number of challenges: {}",
+                    pub_sectors.len()
+                );
+                ensure!(
+                    priv_sectors.len() == pub_sectors.len(),
+                    "number of private sectors ({}) did not equal number of public sectors ({}).",
+                    priv_sectors.len(),
+                    pub_sectors.len()
+                );
+                // challenge_count means challenges per sector.
+                // Bizarrely, this means that sector_count is the number of challenges.
+                // Because each challenge has its own sector.
+                // But guess what? In the current construction, it's the same sector repeated every time.
+                ensure!(
+                    pub_params.challenge_count == 1,
+                    "WinningPoSt shape assumption violated: challenges {} != 1",
+                    pub_params.challenge_count
+                );
+
+                let pub_sector = &pub_sectors[0];
+                let priv_sector = &priv_sectors[0];
                 let tree = priv_sector.tree;
-                let sector_id = pub_sector.id;
                 let tree_leafs = tree.leafs();
                 let rows_to_discard = default_rows_to_discard(tree_leafs, Tree::Arity::to_usize());
 
@@ -389,18 +499,7 @@ impl<'a, Tree: 'a + MerkleTreeTrait> ProofScheme<'a> for FallbackPoSt<'a, Tree> 
                     Tree::Arity::to_usize(),
                 );
 
-                let num_challenges = match pub_params.shape {
-                    PoStShape::Winning => {
-                        ensure!(
-                            pub_params.challenge_count == 1,
-                            "WinningPoSt shape assumption violated: challenges {} != 1",
-                            pub_params.challenge_count
-                        );
-
-                        pub_params.sector_count
-                    }
-                    PoStShape::Window => pub_params.challenge_count,
-                };
+                let sector_id = pub_sector.id;
 
                 let challenges = generate_leaf_challenges(
                     pub_params,
@@ -409,75 +508,39 @@ impl<'a, Tree: 'a + MerkleTreeTrait> ProofScheme<'a> for FallbackPoSt<'a, Tree> 
                     num_challenges,
                 );
 
-                let mut inclusion_proofs = Vec::new();
-                for proof_or_fault in (0..pub_params.challenge_count)
-                    .into_par_iter()
-                    .map(|challenge_index| {
-                        let challenged_leaf = match pub_params.shape {
-                            PoStShape::Winning => challenges[i] as u64,
-                            PoStShape::Window => challenges[challenge_index] as u64,
-                        };
+                let mut proofs = Vec::with_capacity(1);
 
-                        let proof =
-                            tree.gen_cached_proof(challenged_leaf as usize, Some(rows_to_discard));
-                        match proof {
-                            Ok(proof) => {
-                                if proof.validate(challenged_leaf as usize)
-                                    && proof.root() == priv_sector.comm_r_last
-                                {
-                                    Ok(ProofOrFault::Proof(proof))
-                                } else {
-                                    Ok(ProofOrFault::Fault(sector_id))
-                                }
-                            }
-                            Err(_) => Ok(ProofOrFault::Fault(sector_id)),
+                challenges.iter().for_each(|challenge| {
+                    let challenge = *challenge as usize;
+                    let proof = tree.gen_cached_proof(challenge, Some(rows_to_discard));
+
+                    match proof {
+                        Ok(proof)
+                            if proof.validate(challenge)
+                                && proof.root() == priv_sector.comm_r_last
+                                && pub_sector.comm_r
+                                    == <Tree::Hasher as Hasher>::Function::hash2(
+                                        &priv_sector.comm_c,
+                                        &priv_sector.comm_r_last,
+                                    ) =>
+                        {
+                            proofs.push(SectorProof {
+                                inclusion_proofs: vec![proof],
+                                comm_c: priv_sector.comm_c,
+                                comm_r_last: priv_sector.comm_r_last,
+                            })
                         }
-                    })
-                    .collect::<Result<Vec<_>>>()?
-                {
-                    match proof_or_fault {
-                        ProofOrFault::Proof(proof) => {
-                            inclusion_proofs.push(proof);
-                        }
-                        ProofOrFault::Fault(sector_id) => {
+
+                        _ => {
                             error!("faulty sector: {:?}", sector_id);
                             faulty_sectors.insert(sector_id);
                         }
-                    }
-                }
+                    };
+                });
 
-                // Winning PoSt and Window PoSt have different proof shapes regarding inclusion
-                // and sector proofs, so we are careful to partition them appropriately.
-                match pub_params.shape {
-                    PoStShape::Winning => {
-                        // Unroll partition inclusion proofs into sector proofs.
-                        for inclusion_proof in inclusion_proofs {
-                            proofs.push(SectorProof {
-                                inclusion_proofs: vec![inclusion_proof],
-                                comm_c: priv_sector.comm_c,
-                                comm_r_last: priv_sector.comm_r_last,
-                            });
-                        }
-                    }
-                    PoStShape::Window => {
-                        // Include partition inclusion proofs in a sector proof.
-                        proofs.push(SectorProof {
-                            inclusion_proofs,
-                            comm_c: priv_sector.comm_c,
-                            comm_r_last: priv_sector.comm_r_last,
-                        });
-                    }
-                }
+                vec![Proof { sectors: proofs }]
             }
-
-            // If there were less than the required number of sectors provided, we duplicate the last one
-            // to pad the proof out, such that it works in the circuit part.
-            while proofs.len() < num_sectors_per_chunk {
-                proofs.push(proofs[proofs.len() - 1].clone());
-            }
-
-            partition_proofs.push(Proof { sectors: proofs });
-        }
+        };
 
         if faulty_sectors.is_empty() {
             Ok(partition_proofs)

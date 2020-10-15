@@ -299,11 +299,6 @@ pub fn generate_winning_post_with_vanilla<Tree: 'static + MerkleTreeTrait>(
         None => 1,
     };
 
-    ensure!(
-        partitions == 1,
-        "Winning PoSt must have exactly one partition"
-    );
-
     let partitioned_proofs = partition_vanilla_proofs(
         &pub_params.vanilla_params,
         &pub_inputs,
@@ -726,6 +721,8 @@ pub fn partition_vanilla_proofs<Tree: MerkleTreeTrait>(
             partition_proofs
         }
         PoStType::Winning => {
+            pub_params.ensure_valid();
+
             ensure!(
                 partition_count == 1,
                 "Winning PoSt must be a single partition but got {} partitions",
@@ -742,10 +739,6 @@ pub fn partition_vanilla_proofs<Tree: MerkleTreeTrait>(
                 fallback_sector_proofs.len()
             );
 
-            // Winning post sector_count is actually challenge count.
-            // TODO: Refactor that nonsense.
-            let challenge_count = pub_params.sector_count;
-
             let vanilla_proof_sectors = &fallback_sector_proofs[0].vanilla_proof.sectors;
 
             ensure!(
@@ -758,7 +751,7 @@ pub fn partition_vanilla_proofs<Tree: MerkleTreeTrait>(
 
             // Unroll inclusions proofs from the single provided sector_proof (per partition)
             // into individual sector proofs, required for winning post.
-            let mut sector_proofs = inclusion_proofs
+            let sector_proofs = inclusion_proofs
                 .iter()
                 .map(|proof| SectorProof {
                     inclusion_proofs: vec![proof.clone()],
@@ -766,12 +759,6 @@ pub fn partition_vanilla_proofs<Tree: MerkleTreeTrait>(
                     comm_r_last: vanilla_sector_proof.comm_r_last,
                 })
                 .collect::<Vec<_>>();
-
-            // If there were less than the required number of sectors provided, we duplicate the last one
-            // to pad the proof out, such that it works in the circuit part.
-            while sector_proofs.len() < challenge_count {
-                sector_proofs.push(sector_proofs[sector_proofs.len() - 1].clone());
-            }
 
             let partition_proof = fallback::Proof::<<Tree as MerkleTreeTrait>::Proof> {
                 sectors: sector_proofs,
