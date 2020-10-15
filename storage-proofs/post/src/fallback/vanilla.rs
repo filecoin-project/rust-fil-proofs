@@ -20,7 +20,7 @@ use storage_proofs_core::{
     util::{default_rows_to_discard, NODE_SIZE},
 };
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum PoStShape {
     Window,
     Winning,

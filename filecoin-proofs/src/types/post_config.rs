@@ -6,6 +6,9 @@ use storage_proofs::post::fallback;
 
 use crate::types::*;
 
+/// For backward compatibility with external API.
+pub type PoStType = fallback::PoStShape;
+
 #[derive(Clone, Debug)]
 pub struct PoStConfig {
     pub sector_size: SectorSize,
@@ -14,12 +17,6 @@ pub struct PoStConfig {
     pub typ: PoStType,
     /// High priority (always runs on GPU) == true
     pub priority: bool,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum PoStType {
-    Winning,
-    Window,
 }
 
 impl From<PoStConfig> for PaddedBytesAmount {
@@ -48,7 +45,7 @@ impl PoStConfig {
     /// Returns the cache identifier as used by `storage-proofs::paramater_cache`.
     pub fn get_cache_identifier<Tree: 'static + MerkleTreeTrait>(&self) -> Result<String> {
         match self.typ {
-            PoStType::Winning => {
+            fallback::PoStShape::Winning => {
                 let params = crate::parameters::winning_post_public_params::<Tree>(self)?;
 
                 Ok(
@@ -58,7 +55,7 @@ impl PoStConfig {
                     >>::cache_identifier(&params),
                 )
             }
-            PoStType::Window => {
+            fallback::PoStShape::Window => {
                 let params = crate::parameters::window_post_public_params::<Tree>(self)?;
 
                 Ok(
