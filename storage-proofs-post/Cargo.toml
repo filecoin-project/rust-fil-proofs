@@ -9,8 +9,8 @@ repository = "https://github.com/filecoin-project/rust-fil-proofs"
 readme = "README.md"
 
 [dependencies]
-fr32 = { path = "../fr32", version = "0.1.0"}
-storage-proofs-core = { path = "../storage-proofs-core", version = "^5.0.0"}
+fr32 = {git = "https://github.com/filecoin-project/rust-fil-proofs", branch = "dig-refactor-prepare-upgrades" }#{ path = "../fr32", version = "0.1.0"}
+storage-proofs-core = {git = "https://github.com/filecoin-project/rust-fil-proofs", branch = "dig-refactor-prepare-upgrades" }#{ path = "../storage-proofs-core", version = "^5.0.0"}
 rand = "0.7"
 merkletree = "0.21.0"
 byteorder = "1"
