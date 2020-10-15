@@ -340,7 +340,7 @@ pub fn get_post_verifying_key<Tree: 'static + MerkleTreeTrait>(
 mod tests {
     use super::*;
 
-    use crate::types::{DefaultOctLCTree, PoRepProofPartitions, PoStType};
+    use crate::types::{DefaultOctLCTree, PoRepProofPartitions, PoStType, SectorSize};
 
     #[test]
     fn partition_layer_challenges_test() {
@@ -364,7 +364,7 @@ mod tests {
             priority: false,
             challenge_count: 66,
             sector_count: 1,
-            sector_size: 2048u64.into(),
+            sector_size: SectorSize::KiB2,
         };
 
         let params =

@@ -3,6 +3,8 @@ use storage_proofs_core::{hasher::Hasher, sector::*};
 use storage_proofs_porep::stacked;
 use storage_proofs_post::fallback::*;
 
+mod sector_shapes;
+
 mod bytes_amount;
 mod piece_info;
 mod porep_config;
@@ -11,7 +13,6 @@ mod post_config;
 mod post_proof_partitions;
 mod replica_info;
 mod sector_class;
-mod sector_shapes;
 mod sector_size;
 
 pub use self::bytes_amount::*;

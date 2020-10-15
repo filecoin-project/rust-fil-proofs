@@ -233,7 +233,7 @@ pub fn verify<Tree: 'static + MerkleTreeTrait>(
 
     let is_valid = if use_fil_blst {
         info!("verify_window_post: use_fil_blst=true");
-        let verifying_key_path = post_config.get_cache_verifying_key_path::<Tree>()?;
+        let verifying_key_path = post_config.get_cache_verifying_key_path()?;
         fallback::FallbackPoStCompound::verify_blst(
             &pub_params,
             &pub_inputs,

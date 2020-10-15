@@ -28,7 +28,8 @@ pub(crate) fn commitment_from_fr(fr: Fr) -> Commitment {
 }
 
 pub(crate) fn get_base_tree_size<Tree: MerkleTreeTrait>(sector_size: SectorSize) -> Result<usize> {
-    let base_tree_leaves = u64::from(sector_size) as usize
+    let sector_size: usize = sector_size.into();
+    let base_tree_leaves = sector_size
         / std::mem::size_of::<<Tree::Hasher as Hasher>::Domain>()
         / get_base_tree_count::<Tree>();
 

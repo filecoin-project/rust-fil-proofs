@@ -375,7 +375,7 @@ mod tests {
 
     #[test]
     fn test_compute_comm_d_empty() {
-        let comm_d = compute_comm_d(SectorSize(2048), &[])
+        let comm_d = compute_comm_d(SectorSize::KiB2, &[])
             .expect("failed to verify pieces, empty piece infos");
         assert_eq!(
             comm_d,
@@ -383,12 +383,6 @@ mod tests {
                 252, 126, 146, 130, 150, 229, 22, 250, 173, 233, 134, 178, 143, 146, 212, 74, 79,
                 36, 185, 53, 72, 82, 35, 55, 106, 121, 144, 39, 188, 24, 248, 51
             ]
-        );
-
-        let comm_d = compute_comm_d(SectorSize(128), &[]).expect("failed to verify pieces");
-        assert_eq!(
-            hex::encode(&comm_d),
-            "3731bb99ac689f66eef5973e4a94da188f4ddcae580724fc6f3fd60dfd488333",
         );
     }
 
@@ -479,7 +473,7 @@ mod tests {
         let f = PieceInfo::new(f, UnpaddedBytesAmount(254)).expect("failed to create piece info f");
         let g = PieceInfo::new(g, UnpaddedBytesAmount(508)).expect("failed to create piece info g");
 
-        let sector_size = SectorSize(4 * 128);
+        let sector_size = SectorSize::Arbitrary(4 * 128);
         let comm_d = g.commitment;
 
         // println!("e: {:?}", e);
@@ -529,7 +523,7 @@ mod tests {
         //   {(00 00) (00 00)} -> P(1) P(1) P(1) P(1) P(1) P(1) P(1) P(1)
         // ]
 
-        let sector_size = SectorSize(32 * 128);
+        let sector_size = SectorSize::Arbitrary(32 * 128);
         let pad = zero_padding(UnpaddedBytesAmount(127)).expect("failed to create pad");
 
         let pieces = vec![
@@ -628,10 +622,10 @@ mod tests {
         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
 
         for sector_size in &[
-            SectorSize(4 * 128),
-            SectorSize(32 * 128),
-            SectorSize(1024 * 128),
-            SectorSize(1024 * 8 * 128),
+            SectorSize::Arbitrary(4 * 128),
+            SectorSize::Arbitrary(32 * 128),
+            SectorSize::Arbitrary(1024 * 128),
+            SectorSize::Arbitrary(1024 * 8 * 128),
         ] {
             println!("--- {:?} ---", sector_size);
             for i in 0..100 {

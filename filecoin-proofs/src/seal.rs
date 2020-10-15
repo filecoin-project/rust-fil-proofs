@@ -614,7 +614,7 @@ pub fn verify<Tree: 'static + MerkleTreeTrait>(
 
     let result = if use_fil_blst {
         info!("verify_seal: use_fil_blst=true");
-        let verifying_key_path = porep_config.get_cache_verifying_key_path::<Tree>()?;
+        let verifying_key_path = porep_config.get_cache_verifying_key_path()?;
 
         StackedCompound::verify_blst(
             &compound_public_params,
@@ -887,7 +887,7 @@ mod tests {
         {
             let result = seal::verify::<DefaultOctLCTree>(
                 PoRepConfig {
-                    sector_size: SectorSize(SECTOR_SIZE_2_KIB),
+                    sector_size: SectorSize::KiB2,
                     partitions: PoRepProofPartitions(
                         *POREP_PARTITIONS
                             .read()
@@ -922,7 +922,7 @@ mod tests {
         {
             let result = seal::verify::<DefaultOctLCTree>(
                 PoRepConfig {
-                    sector_size: SectorSize(SECTOR_SIZE_2_KIB),
+                    sector_size: SectorSize::KiB2,
                     partitions: PoRepProofPartitions(
                         *POREP_PARTITIONS
                             .read()

@@ -40,6 +40,7 @@ bitintr = "0.3.0"
 gperftools = { version = "0.2", optional = true }
 generic-array = "0.13.2"
 groupy = "0.3.0"
+thiserror = "1.0.21"
 
 [dev-dependencies]
 pretty_assertions = "0.6.1"

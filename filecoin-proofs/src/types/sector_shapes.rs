@@ -62,45 +62,64 @@ pub fn is_sector_shape_top2(sector_size: u64) -> bool {
 /// Calls a function with the type hint of the sector shape matching the provided sector.
 /// Panics if provided with an unknown sector size.
 #[macro_export]
+macro_rules! with_shape_enum {
+    ($size:expr, $f:ident) => {
+        with_shape_enum!($size, $f,)
+    };
+    ($size:expr, $f:ident, $($args:expr,)*) => {
+        #[allow(unreachable_patterns)]
+        match $size {
+            $crate::types::SectorSize::KiB2 => {
+              $f::<$crate::types::SectorShape2KiB>($($args),*)
+            },
+            $crate::types::SectorSize::KiB4 => {
+              $f::<$crate::types::SectorShape4KiB>($($args),*)
+            },
+            $crate::types::SectorSize::KiB16 => {
+              $f::<$crate::types::SectorShape16KiB>($($args),*)
+            },
+            $crate::types::SectorSize::KiB32 => {
+              $f::<$crate::types::SectorShape32KiB>($($args),*)
+            },
+            $crate::types::SectorSize::MiB8 => {
+              $f::<$crate::types::SectorShape8MiB>($($args),*)
+            },
+            $crate::types::SectorSize::MiB16 => {
+              $f::<$crate::types::SectorShape16MiB>($($args),*)
+            },
+            $crate::types::SectorSize::MiB512 => {
+              $f::<$crate::types::SectorShape512MiB>($($args),*)
+            },
+            $crate::types::SectorSize::GiB1=> {
+              $f::<$crate::types::SectorShape1GiB>($($args),*)
+            },
+            $crate::types::SectorSize::GiB32 => {
+              $f::<$crate::types::SectorShape32GiB>($($args),*)
+            },
+            $crate::types::SectorSize::GiB64 => {
+              $f::<$crate::types::SectorShape64GiB>($($args),*)
+            },
+            _ => panic!("unsupported sector size: {:?}", $size),
+        }
+    };
+    ($size:expr, $f:ident, $($args:expr),*) => {
+        with_shape_enum!($size, $f, $($args,)*)
+    };
+}
+
+/// Calls a function with the type hint of the sector shape matching the provided sector.
+/// Panics if provided with an unknown sector size.
+#[macro_export]
 macro_rules! with_shape {
     ($size:expr, $f:ident) => {
         with_shape!($size, $f,)
     };
-    ($size:expr, $f:ident, $($args:expr,)*) => {
-        match $size {
-            _x if $size == $crate::constants::SECTOR_SIZE_2_KIB => {
-              $f::<$crate::types::SectorShape2KiB>($($args),*)
-            },
-            _x if $size == $crate::constants::SECTOR_SIZE_4_KIB => {
-              $f::<$crate::types::SectorShape4KiB>($($args),*)
-            },
-            _x if $size == $crate::constants::SECTOR_SIZE_16_KIB => {
-              $f::<$crate::types::SectorShape16KiB>($($args),*)
-            },
-            _x if $size == $crate::constants::SECTOR_SIZE_32_KIB => {
-              $f::<$crate::types::SectorShape32KiB>($($args),*)
-            },
-            _xx if $size == $crate::constants::SECTOR_SIZE_8_MIB => {
-              $f::<$crate::types::SectorShape8MiB>($($args),*)
-            },
-            _xx if $size == $crate::constants::SECTOR_SIZE_16_MIB => {
-              $f::<$crate::types::SectorShape16MiB>($($args),*)
-            },
-            _x if $size == $crate::constants::SECTOR_SIZE_512_MIB => {
-              $f::<$crate::types::SectorShape512MiB>($($args),*)
-            },
-            _x if $size == $crate::constants::SECTOR_SIZE_1_GIB => {
-              $f::<$crate::types::SectorShape1GiB>($($args),*)
-            },
-            _x if $size == $crate::constants::SECTOR_SIZE_32_GIB => {
-              $f::<$crate::types::SectorShape32GiB>($($args),*)
-            },
-            _x if $size == $crate::constants::SECTOR_SIZE_64_GIB => {
-              $f::<$crate::types::SectorShape64GiB>($($args),*)
-            },
-            _ => panic!("unsupported sector size: {}", $size),
-        }
-    };
+    ($size:expr, $f:ident, $($args:expr,)*) => {{
+        use std::convert::TryInto;
+        let e: $crate::types::SectorSize = $size.try_into().expect("unsupported sector size");
+
+        with_shape_enum!(e, $f, $($args), *)
+    }};
     ($size:expr, $f:ident, $($args:expr),*) => {
         with_shape!($size, $f, $($args,)*)
     };
