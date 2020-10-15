@@ -16,7 +16,7 @@ use storage_proofs_core::{
 };
 
 use super::circuit::Sector;
-use crate::fallback::{self, FallbackPoSt, FallbackPoStCircuit};
+use crate::fallback::{self, FallbackPoSt, FallbackPoStCircuit, PoStShape};
 
 pub struct FallbackPoStCompound<Tree>
 where
@@ -50,7 +50,6 @@ impl<'a, Tree: 'static + MerkleTreeTrait>
         };
 
         let num_sectors_per_chunk = pub_params.sector_count;
-
         let partition_index = partition_k.unwrap_or(0);
 
         let sectors = pub_inputs
@@ -65,10 +64,25 @@ impl<'a, Tree: 'static + MerkleTreeTrait>
 
             // 2. Inputs for verifying inclusion paths
             for n in 0..pub_params.challenge_count {
-                let challenge_index = ((partition_index * pub_params.sector_count + i)
-                    * pub_params.challenge_count
-                    + n) as u64;
-                let challenged_leaf_start = fallback::generate_leaf_challenge(
+                let challenge_index = match pub_params.shape {
+                    PoStShape::Winning => {
+                        // Note that this legacy index generality is perhaps over-complicated and unnecessary
+                        // with the current parameterization.  To avoid complexity, the challenge_index
+                        // could be set to 'i' here.
+                        let legacy_index = (partition_index * pub_params.sector_count + i)
+                            * pub_params.challenge_count
+                            + n;
+                        ensure!(
+                            legacy_index == i,
+                            "WinningPoSt challenge assumption violated"
+                        );
+
+                        i
+                    }
+                    PoStShape::Window => n,
+                } as u64;
+
+                let challenged_leaf = fallback::generate_leaf_challenge(
                     &pub_params,
                     pub_inputs.randomness,
                     sector.id.into(),
@@ -77,7 +91,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait>
 
                 let por_pub_inputs = por::PublicInputs {
                     commitment: None,
-                    challenge: challenged_leaf_start as usize,
+                    challenge: challenged_leaf as usize,
                 };
                 let por_inputs = PoRCompound::<Tree>::generate_public_inputs(
                     &por_pub_inputs,
@@ -218,6 +232,7 @@ mod tests {
         fallback_post::<LCTree<PoseidonHasher, U8, U0, U0>>(5, 3, 2);
     }
 
+    // Note: This test is implicitly specific to Window PoSt
     fn fallback_post<Tree: 'static + MerkleTreeTrait>(
         total_sector_count: usize,
         sector_count: usize,
@@ -238,6 +253,7 @@ mod tests {
                 sector_size: sector_size as u64,
                 challenge_count,
                 sector_count,
+                shape: fallback::PoStShape::Window,
             },
             partitions: Some(partitions),
             priority: false,

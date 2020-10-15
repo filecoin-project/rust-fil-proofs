@@ -8,6 +8,7 @@ use paired::bls12_381::Fr;
 use rand::{Rng, SeedableRng};
 use rand_xorshift::XorShiftRng;
 use storage_proofs_core::{hasher::Hasher, sector::*};
+use storage_proofs_post::fallback::PoStShape;
 use tempfile::NamedTempFile;
 
 use filecoin_proofs::*;
@@ -201,6 +202,7 @@ fn winning_post<Tree: 'static + MerkleTreeTrait>(sector_size: u64, fake: bool) -
         &randomness,
         &vec![sector_id],
         prover_id,
+        PoStShape::Winning,
     )?;
 
     let single_proof = post::generate_single_vanilla_proof::<Tree>(
@@ -218,11 +220,11 @@ fn winning_post<Tree: 'static + MerkleTreeTrait>(sector_size: u64, fake: bool) -
         prover_id,
         vanilla_proofs,
     )?;
-    /////////////////////////////////////////////
 
     let valid =
         post::winning::verify::<Tree>(&config, &randomness, &pub_replicas[..], prover_id, &proof)?;
     assert!(valid, "proof did not verify");
+    /////////////////////////////////////////////
 
     Ok(())
 }
@@ -390,6 +392,7 @@ fn window_post<Tree: 'static + MerkleTreeTrait>(
         &randomness,
         &replica_sectors,
         prover_id,
+        PoStShape::Window,
     )?;
 
     let mut vanilla_proofs = Vec::with_capacity(replica_sectors.len());
@@ -412,11 +415,11 @@ fn window_post<Tree: 'static + MerkleTreeTrait>(
         prover_id,
         vanilla_proofs,
     )?;
-    /////////////////////////////////////////////
 
     let valid =
         post::window::verify::<Tree>(&config, &randomness, &pub_replicas, prover_id, &proof)?;
     assert!(valid, "proof did not verify");
+    /////////////////////////////////////////////
 
     Ok(())
 }
