@@ -609,10 +609,7 @@ pub fn verify_seal<Tree: 'static + MerkleTreeTrait>(
             k: None,
         };
 
-    let use_fil_blst = settings::SETTINGS
-        .lock()
-        .expect("use_fil_blst settings lock failure")
-        .use_fil_blst;
+    let use_fil_blst = settings::SETTINGS.use_fil_blst;
 
     let result = if use_fil_blst {
         info!("verify_seal: use_fil_blst=true");

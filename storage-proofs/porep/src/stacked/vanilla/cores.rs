@@ -11,7 +11,7 @@ type CoreGroup = Vec<CoreIndex>;
 lazy_static! {
     pub static ref TOPOLOGY: Mutex<Topology> = Mutex::new(Topology::new());
     pub static ref CORE_GROUPS: Option<Vec<Mutex<CoreGroup>>> = {
-        let settings = settings::SETTINGS.lock().expect("settings lock failure");
+        let settings = &settings::SETTINGS;
         let num_producers = settings.multicore_sdr_producers;
         let cores_per_unit = num_producers + 1;
 

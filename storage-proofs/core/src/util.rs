@@ -163,10 +163,7 @@ pub fn default_rows_to_discard(leafs: usize, arity: usize) -> usize {
 
     // This configurable setting is for a default oct-tree
     // rows_to_discard value, which defaults to 2.
-    let rows_to_discard = settings::SETTINGS
-        .lock()
-        .expect("rows_to_discard settings lock failure")
-        .rows_to_discard as usize;
+    let rows_to_discard = settings::SETTINGS.rows_to_discard as usize;
 
     // Discard at most 'constant value' rows (coded below,
     // differing by arity) while respecting the max number that

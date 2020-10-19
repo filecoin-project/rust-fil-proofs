@@ -210,7 +210,7 @@ fn create_layer_labels(
     info!("Creating labels for layer {}", cur_layer);
     // num_producers is the number of producer threads
     let (lookahead, num_producers, producer_stride) = {
-        let settings = settings::SETTINGS.lock().expect("settings lock failure");
+        let settings = &settings::SETTINGS;
         let lookahead = settings.multicore_sdr_lookahead;
         let num_producers = settings.multicore_sdr_producers;
         // NOTE: Stride must not exceed the number of nodes in parents_cache's window. If it does, the process will deadlock
@@ -432,10 +432,7 @@ pub fn create_labels_for_encoding<Tree: 'static + MerkleTreeTrait, T: AsRef<[u8]
 
     let sector_size = graph.size() * NODE_SIZE;
     let node_count = graph.size() as u64;
-    let cache_window_nodes = settings::SETTINGS
-        .lock()
-        .expect("sdr_parents_cache_size settings lock failure")
-        .sdr_parents_cache_size as usize;
+    let cache_window_nodes = settings::SETTINGS.sdr_parents_cache_size as usize;
 
     let default_cache_size = DEGREE * 4 * cache_window_nodes;
 
@@ -533,11 +530,7 @@ pub fn create_labels_for_decoding<Tree: 'static + MerkleTreeTrait, T: AsRef<[u8]
 
     let sector_size = graph.size() * NODE_SIZE;
     let node_count = graph.size() as u64;
-    let cache_window_nodes = (settings::SETTINGS
-        .lock()
-        .expect("sdr_parents_cache_window_nodes settings lock failure")
-        .sdr_parents_cache_size
-        / 2) as usize;
+    let cache_window_nodes = (&settings::SETTINGS.sdr_parents_cache_size / 2) as usize;
 
     let default_cache_size = DEGREE * 4 * cache_window_nodes;
 
