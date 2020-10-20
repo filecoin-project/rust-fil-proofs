@@ -186,10 +186,7 @@ impl ParentCache {
             }
             Some(pcd) => (
                 Some(pcd),
-                settings::SETTINGS
-                    .lock()
-                    .expect("verify_cache settings lock failure")
-                    .verify_cache,
+                settings::SETTINGS.verify_cache,
                 pcd.digest.clone(),
             ),
         };
@@ -364,11 +361,7 @@ impl ParentCache {
 }
 
 fn parent_cache_dir_name() -> String {
-    settings::SETTINGS
-        .lock()
-        .expect("parent_cache settings lock failure")
-        .parent_cache
-        .clone()
+    settings::SETTINGS.parent_cache.clone()
 }
 
 fn parent_cache_id(path: &PathBuf) -> String {

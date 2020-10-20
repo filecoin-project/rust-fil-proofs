@@ -142,11 +142,7 @@ impl Drop for LockedFile {
 }
 
 pub fn parameter_cache_dir_name() -> String {
-    settings::SETTINGS
-        .lock()
-        .expect("parameter_cache_dir_name settings lock failure")
-        .parameter_cache
-        .clone()
+    settings::SETTINGS.parameter_cache.clone()
 }
 
 pub fn parameter_cache_dir() -> PathBuf {
@@ -329,10 +325,7 @@ fn ensure_parent(path: &PathBuf) -> Result<()> {
 pub fn read_cached_params(cache_entry_path: &PathBuf) -> Result<groth16::MappedParameters<Bls12>> {
     info!("checking cache_path: {:?} for parameters", cache_entry_path);
 
-    let verify_production_params = settings::SETTINGS
-        .lock()
-        .expect("verify_production_params settings lock failure")
-        .verify_production_params;
+    let verify_production_params = settings::SETTINGS.verify_production_params;
 
     // If the verify production params is set, we make sure that the path being accessed matches a
     // production cache key, found in the 'parameters.json' file. The parameter data file is also

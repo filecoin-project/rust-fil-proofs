@@ -186,10 +186,7 @@ impl<Tree: 'static + MerkleTreeTrait> FallbackPoStCircuit<Tree> {
     ) -> Result<(), SynthesisError> {
         let FallbackPoStCircuit { sectors, .. } = self;
 
-        let num_chunks = settings::SETTINGS
-            .lock()
-            .expect("window_post_synthesis_num_cpus settings lock failure")
-            .window_post_synthesis_num_cpus as usize;
+        let num_chunks = settings::SETTINGS.window_post_synthesis_num_cpus as usize;
 
         let chunk_size = (sectors.len() / num_chunks).max(1);
         let css = sectors

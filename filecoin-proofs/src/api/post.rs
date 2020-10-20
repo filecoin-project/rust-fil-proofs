@@ -624,10 +624,7 @@ pub fn verify_winning_post<Tree: 'static + MerkleTreeTrait>(
         k: None,
     };
 
-    let use_fil_blst = settings::SETTINGS
-        .lock()
-        .expect("use_fil_blst settings lock failure")
-        .use_fil_blst;
+    let use_fil_blst = settings::SETTINGS.use_fil_blst;
 
     let is_valid = if use_fil_blst {
         info!("verify_winning_post: use_fil_blst=true");
@@ -1000,10 +997,7 @@ pub fn verify_window_post<Tree: 'static + MerkleTreeTrait>(
         k: None,
     };
 
-    let use_fil_blst = settings::SETTINGS
-        .lock()
-        .expect("use_fil_blst settings lock failure")
-        .use_fil_blst;
+    let use_fil_blst = settings::SETTINGS.use_fil_blst;
 
     let is_valid = if use_fil_blst {
         info!("verify_window_post: use_fil_blst=true");

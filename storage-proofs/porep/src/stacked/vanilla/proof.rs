@@ -302,11 +302,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
     ) -> Result<(Labels<Tree>, Vec<LayerState>)> {
         let mut parent_cache = graph.parent_cache()?;
 
-        if settings::SETTINGS
-            .lock()
-            .expect("use_multicore_sdr settings lock failure")
-            .use_multicore_sdr
-        {
+        if settings::SETTINGS.use_multicore_sdr {
             info!("multi core replication");
             create_label::multi::create_labels_for_encoding(
                 graph,
@@ -336,11 +332,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
     ) -> Result<LabelsCache<Tree>> {
         let mut parent_cache = graph.parent_cache()?;
 
-        if settings::SETTINGS
-            .lock()
-            .expect("use_multicore_sdr settings lock failure")
-            .use_multicore_sdr
-        {
+        if settings::SETTINGS.use_multicore_sdr {
             info!("multi core replication");
             create_label::multi::create_labels_for_decoding(
                 graph,
@@ -391,11 +383,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         ColumnArity: 'static + PoseidonArity,
         TreeArity: PoseidonArity,
     {
-        if settings::SETTINGS
-            .lock()
-            .expect("use_gpu_column_builder settings lock failure")
-            .use_gpu_column_builder
-        {
+        if settings::SETTINGS.use_gpu_column_builder {
             Self::generate_tree_c_gpu::<ColumnArity, TreeArity>(
                 layers,
                 nodes_count,
@@ -440,18 +428,9 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
             // Override these values with care using environment variables:
             // FIL_PROOFS_MAX_GPU_COLUMN_BATCH_SIZE, FIL_PROOFS_MAX_GPU_TREE_BATCH_SIZE, and
             // FIL_PROOFS_COLUMN_WRITE_BATCH_SIZE respectively.
-            let max_gpu_column_batch_size = settings::SETTINGS
-                .lock()
-                .expect("max_gpu_column_batch_size settings lock failure")
-                .max_gpu_column_batch_size as usize;
-            let max_gpu_tree_batch_size = settings::SETTINGS
-                .lock()
-                .expect("max_gpu_tree_batch_size settings lock failure")
-                .max_gpu_tree_batch_size as usize;
-            let column_write_batch_size = settings::SETTINGS
-                .lock()
-                .expect("column_write_batch_size settings lock failure")
-                .column_write_batch_size as usize;
+            let max_gpu_column_batch_size = settings::SETTINGS.max_gpu_column_batch_size as usize;
+            let max_gpu_tree_batch_size = settings::SETTINGS.max_gpu_tree_batch_size as usize;
+            let column_write_batch_size = settings::SETTINGS.column_write_batch_size as usize;
 
             // This channel will receive batches of columns and add them to the ColumnTreeBuilder.
             let (builder_tx, builder_rx) = mpsc::sync_channel(0);
@@ -719,16 +698,9 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         data.ensure_data()?;
         let last_layer_labels = labels.labels_for_last_layer()?;
 
-        if settings::SETTINGS
-            .lock()
-            .expect("use_gpu_tree_builder settings lock failure")
-            .use_gpu_tree_builder
-        {
+        if settings::SETTINGS.use_gpu_tree_builder {
             info!("generating tree r last using the GPU");
-            let max_gpu_tree_batch_size = settings::SETTINGS
-                .lock()
-                .expect("max_gpu_tree_batch_size settings lock failure")
-                .max_gpu_tree_batch_size as usize;
+            let max_gpu_tree_batch_size = settings::SETTINGS.max_gpu_tree_batch_size as usize;
 
             // This channel will receive batches of leaf nodes and add them to the TreeBuilder.
             let (builder_tx, builder_rx) = mpsc::sync_channel::<(Vec<Fr>, bool)>(0);
@@ -1190,16 +1162,9 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
             tree_count,
         )?;
 
-        if settings::SETTINGS
-            .lock()
-            .expect("use_gpu_tree_builder settings lock failure")
-            .use_gpu_tree_builder
-        {
+        if settings::SETTINGS.use_gpu_tree_builder {
             info!("generating tree r last using the GPU");
-            let max_gpu_tree_batch_size = settings::SETTINGS
-                .lock()
-                .expect("max_gpu_tree_batch_size settings lock failure")
-                .max_gpu_tree_batch_size as usize;
+            let max_gpu_tree_batch_size = settings::SETTINGS.max_gpu_tree_batch_size as usize;
 
             let mut tree_builder = TreeBuilder::<Tree::Arity>::new(
                 Some(BatcherType::GPU),
