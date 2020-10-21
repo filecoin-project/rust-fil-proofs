@@ -182,19 +182,20 @@ pub fn generate_leaf_challenges<T: Domain>(
     window_challenge_count: usize,
 ) -> Result<Vec<Vec<u64>>> {
     let mut challenges = Vec::with_capacity(num_windows);
+    let mut challenge_index_in_sector: u64 = 0;
 
-    for window_index in 0..num_windows {
+    for _ in 0..num_windows {
         let mut window_challenges = Vec::with_capacity(window_challenge_count);
 
-        for leaf_challenge_index in 0..window_challenge_count {
+        for _ in 0..window_challenge_count {
             let challenge = generate_leaf_challenge(
                 pub_params,
                 randomness,
                 sector_id,
-                window_index as u64,
-                leaf_challenge_index as u64,
+                challenge_index_in_sector,
             )?;
-            window_challenges.push(challenge)
+            window_challenges.push(challenge);
+            challenge_index_in_sector += 1;
         }
 
         challenges.push(window_challenges);
@@ -208,14 +209,12 @@ pub fn generate_leaf_challenge<T: Domain>(
     pub_params: &PublicParams,
     randomness: T,
     sector_id: u64,
-    window_index: u64,
-    leaf_challenge_index: u64,
+    challenge_index_in_sector: u64,
 ) -> Result<u64> {
     let mut hasher = Sha256::new();
     hasher.update(AsRef::<[u8]>::as_ref(&randomness));
     hasher.update(&sector_id.to_le_bytes()[..]);
-    hasher.update(&window_index.to_le_bytes()[..]);
-    hasher.update(&leaf_challenge_index.to_le_bytes()[..]);
+    hasher.update(&challenge_index_in_sector.to_le_bytes()[..]);
     let hash = hasher.finalize();
 
     let leaf_challenge = LittleEndian::read_u64(&hash[..8]);
@@ -300,10 +299,7 @@ impl<'a, Tree: 'a + MerkleTreeTrait> ProofScheme<'a> for NseWindowPoSt<'a, Tree>
 
             let mut proofs = Vec::with_capacity(num_sectors_per_chunk);
 
-            for (i, (pub_sector, priv_sector)) in pub_sectors_chunk
-                .iter()
-                .zip(priv_sectors_chunk.iter())
-                .enumerate()
+            for (pub_sector, priv_sector) in pub_sectors_chunk.iter().zip(priv_sectors_chunk.iter())
             {
                 let tree = priv_sector.tree;
                 let sector_id = pub_sector.id;
@@ -325,16 +321,13 @@ impl<'a, Tree: 'a + MerkleTreeTrait> ProofScheme<'a> for NseWindowPoSt<'a, Tree>
                         (0..pub_params.window_challenge_count)
                             .into_par_iter()
                             .map(|n| {
-                                let challenge_index = ((j * num_sectors_per_chunk + i)
-                                    * pub_params.window_challenge_count
-                                    + n)
-                                    as u64;
+                                let challenge_index_in_sector =
+                                    window_index * pub_params.window_challenge_count + n;
                                 let challenged_leaf_relative = generate_leaf_challenge(
                                     pub_params,
                                     pub_inputs.randomness,
                                     sector_id.into(),
-                                    window_index as u64,
-                                    challenge_index,
+                                    challenge_index_in_sector as u64,
                                 )?;
                                 let challenged_leaf_absolute = offset + challenged_leaf_relative;
 
@@ -470,15 +463,13 @@ impl<'a, Tree: 'a + MerkleTreeTrait> ProofScheme<'a> for NseWindowPoSt<'a, Tree>
 
                     for (n, inclusion_proof) in inclusion_proofs.iter().enumerate() {
                         trace!("inclusion_proof {}", n);
-                        let challenge_index = ((j * num_sectors_per_chunk + i)
-                            * pub_params.window_challenge_count
-                            + n) as u64;
+                        let challenge_index_in_sector =
+                            window_index * pub_params.window_challenge_count + n;
                         let challenged_leaf_relative = generate_leaf_challenge(
                             pub_params,
                             pub_inputs.randomness,
                             sector_id.into(),
-                            window_index as u64,
-                            challenge_index,
+                            challenge_index_in_sector as u64,
                         )?;
 
                         // validate all comm_windows match
