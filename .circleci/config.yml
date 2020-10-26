@@ -435,7 +435,3 @@ workflows:
       - metrics_capture:
           requires:
             - cargo_fetch
-          filters:
-            branches:
-              only:
-                - master
