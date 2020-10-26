@@ -56,6 +56,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher>
             public_params.num_layer_challenges,
             &public_inputs.replica_id,
             public_inputs.seed,
+            k.unwrap_or(0),
         );
 
         let data_inclusion_inputs =
