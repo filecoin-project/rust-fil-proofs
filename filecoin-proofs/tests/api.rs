@@ -117,22 +117,22 @@ fn clear_cache_dir_keep_data_layer(cache_dir: &tempfile::TempDir) {
 
 #[test]
 fn test_resumable_seal_skip_proofs() {
-    run_resumable_seal(true, 0);
-    run_resumable_seal(true, 1);
+    run_resumable_seal::<SectorShape2KiB>(true, 0);
+    run_resumable_seal::<SectorShape2KiB>(true, 1);
 }
 
 #[test]
 #[ignore]
 fn test_resumable_seal() {
-    run_resumable_seal(false, 0);
-    run_resumable_seal(false, 1);
+    run_resumable_seal::<SectorShape2KiB>(false, 0);
+    run_resumable_seal::<SectorShape2KiB>(false, 1);
 }
 
 /// Create a seal, delete a layer and resume
 ///
 /// The current code works on two layers only. The `layer_to_delete` specifies (zero-based) which
 /// layer should be deleted.
-fn run_resumable_seal(skip_proofs: bool, layer_to_delete: usize) {
+fn run_resumable_seal<Tree: 'static + MerkleTreeTrait>(skip_proofs: bool, layer_to_delete: usize) {
     init_logger();
 
     let sector_size = SECTOR_SIZE_2_KIB;
