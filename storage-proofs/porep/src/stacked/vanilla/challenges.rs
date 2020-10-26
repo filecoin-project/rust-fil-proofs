@@ -82,7 +82,7 @@ mod test {
 
     use rand::{thread_rng, Rng};
     use std::collections::HashMap;
-    use storage_proofs_core::hasher::pedersen::PedersenDomain;
+    use storage_proofs_core::hasher::sha256::Sha256Domain;
 
     #[test]
     fn challenge_derivation() {
@@ -92,7 +92,7 @@ mod test {
         let challenges = LayerChallenges::new(layers, n);
         let leaves = 1 << 30;
         let rng = &mut thread_rng();
-        let replica_id: PedersenDomain = PedersenDomain::random(rng);
+        let replica_id: Sha256Domain = Sha256Domain::random(rng);
         let seed: [u8; 32] = rng.gen();
         let partitions = 5;
         let total_challenges = partitions * n;
@@ -129,7 +129,7 @@ mod test {
         let n = 40;
         let leaves = 1 << 30;
         let rng = &mut thread_rng();
-        let replica_id: PedersenDomain = PedersenDomain::random(rng);
+        let replica_id: Sha256Domain = Sha256Domain::random(rng);
         let seed: [u8; 32] = rng.gen();
         let partitions = 5;
         let layers = 100;

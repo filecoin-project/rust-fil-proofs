@@ -1347,7 +1347,7 @@ mod tests {
     use storage_proofs_core::{
         drgraph::BASE_DEGREE,
         fr32::fr_into_bytes,
-        hasher::{Blake2sHasher, PedersenHasher, Sha256Hasher},
+        hasher::{Blake2sHasher, Sha256Hasher},
         merkle::MerkleTreeTrait,
         proof::ProofScheme,
         table_tests,
@@ -1366,21 +1366,6 @@ mod tests {
 
         let calculated_count = layer_challenges.challenges_count_all();
         assert_eq!(expected as usize, calculated_count);
-    }
-
-    #[test]
-    fn extract_all_pedersen_8() {
-        test_extract_all::<DiskTree<PedersenHasher, typenum::U8, typenum::U0, typenum::U0>>();
-    }
-
-    #[test]
-    fn extract_all_pedersen_8_2() {
-        test_extract_all::<DiskTree<PedersenHasher, typenum::U8, typenum::U2, typenum::U0>>();
-    }
-
-    #[test]
-    fn extract_all_pedersen_8_8_2() {
-        test_extract_all::<DiskTree<PedersenHasher, typenum::U8, typenum::U8, typenum::U2>>();
     }
 
     #[test]
@@ -1659,32 +1644,6 @@ mod tests {
     fn prove_verify_fixed(n: usize) {
         let challenges = LayerChallenges::new(DEFAULT_STACKED_LAYERS, 5);
 
-        test_prove_verify::<DiskTree<PedersenHasher, typenum::U4, typenum::U0, typenum::U0>>(
-            n,
-            challenges.clone(),
-        );
-        test_prove_verify::<DiskTree<PedersenHasher, typenum::U4, typenum::U2, typenum::U0>>(
-            n,
-            challenges.clone(),
-        );
-        test_prove_verify::<DiskTree<PedersenHasher, typenum::U4, typenum::U8, typenum::U2>>(
-            n,
-            challenges.clone(),
-        );
-
-        test_prove_verify::<DiskTree<PedersenHasher, typenum::U8, typenum::U0, typenum::U0>>(
-            n,
-            challenges.clone(),
-        );
-        test_prove_verify::<DiskTree<PedersenHasher, typenum::U8, typenum::U2, typenum::U0>>(
-            n,
-            challenges.clone(),
-        );
-        test_prove_verify::<DiskTree<PedersenHasher, typenum::U8, typenum::U8, typenum::U2>>(
-            n,
-            challenges.clone(),
-        );
-
         test_prove_verify::<DiskTree<Sha256Hasher, typenum::U8, typenum::U0, typenum::U0>>(
             n,
             challenges.clone(),
@@ -1886,7 +1845,7 @@ mod tests {
         // When this fails, the call to setup should panic, but seems to actually hang (i.e. neither return nor panic) for some reason.
         // When working as designed, the call to setup returns without error.
         let _pp = StackedDrg::<
-            DiskTree<PedersenHasher, typenum::U8, typenum::U0, typenum::U0>,
+            DiskTree<Sha256Hasher, typenum::U8, typenum::U0, typenum::U0>,
             Blake2sHasher,
         >::setup(&sp)
         .expect("setup failed");

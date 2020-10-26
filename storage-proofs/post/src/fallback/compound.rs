@@ -168,19 +168,13 @@ mod tests {
     use rand_xorshift::XorShiftRng;
     use storage_proofs_core::{
         compound_proof,
-        hasher::{Domain, HashFunction, Hasher, PedersenHasher, PoseidonHasher},
+        hasher::{Domain, HashFunction, Hasher, PoseidonHasher},
         merkle::{generate_tree, get_base_tree_count, LCTree, MerkleTreeTrait},
     };
 
     use crate::fallback::{
         self, ChallengeRequirements, PrivateInputs, PrivateSector, PublicInputs, PublicSector,
     };
-
-    #[ignore]
-    #[test]
-    fn fallback_post_pedersen_single_partition_matching_base_8() {
-        fallback_post::<LCTree<PedersenHasher, U8, U0, U0>>(3, 3, 1);
-    }
 
     #[ignore]
     #[test]

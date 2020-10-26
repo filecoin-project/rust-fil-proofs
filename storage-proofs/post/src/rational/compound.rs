@@ -184,19 +184,13 @@ mod tests {
     use rand_xorshift::XorShiftRng;
     use storage_proofs_core::{
         compound_proof,
-        hasher::{Domain, HashFunction, Hasher, PedersenHasher, PoseidonHasher},
+        hasher::{Domain, HashFunction, Hasher, PoseidonHasher},
         merkle::{generate_tree, get_base_tree_count, BinaryMerkleTree},
         proof::NoRequirements,
         sector::OrderedSectorSet,
     };
 
     use crate::rational::{self, derive_challenges};
-
-    #[ignore] // Slow test – run only when compiled for release.
-    #[test]
-    fn rational_post_test_compound_pedersen() {
-        rational_post_test_compound::<BinaryMerkleTree<PedersenHasher>>();
-    }
 
     #[ignore] // Slow test – run only when compiled for release.
     #[test]

@@ -1,7 +1,7 @@
 use bellperson::gadgets::{boolean::Boolean, num, sha256::sha256 as sha256_circuit, uint32};
 use bellperson::{ConstraintSystem, SynthesisError};
 use ff::PrimeField;
-use fil_sapling_crypto::jubjub::JubjubEngine;
+use paired::Engine;
 use storage_proofs_core::{gadgets::multipack, gadgets::uint64, util::reverse_bit_numbering};
 
 use crate::stacked::vanilla::TOTAL_PARENTS;
@@ -15,7 +15,7 @@ pub fn create_label_circuit<E, CS>(
     node: uint64::UInt64,
 ) -> Result<num::AllocatedNum<E>, SynthesisError>
 where
-    E: JubjubEngine,
+    E: Engine,
     CS: ConstraintSystem<E>,
 {
     assert!(replica_id.len() >= 32, "replica id is too small");

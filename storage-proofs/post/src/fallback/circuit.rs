@@ -223,7 +223,7 @@ mod tests {
     use rand_xorshift::XorShiftRng;
     use storage_proofs_core::{
         compound_proof::CompoundProof,
-        hasher::{Domain, HashFunction, Hasher, PedersenHasher, PoseidonHasher},
+        hasher::{Domain, HashFunction, Hasher, PoseidonHasher},
         merkle::{generate_tree, get_base_tree_count, LCTree, MerkleTreeTrait, OctMerkleTree},
         proof::ProofScheme,
         util::NODE_SIZE,
@@ -233,11 +233,6 @@ mod tests {
         self, FallbackPoSt, FallbackPoStCompound, PrivateInputs, PrivateSector, PublicInputs,
         PublicSector,
     };
-
-    #[test]
-    fn fallback_post_pedersen_single_partition_matching_base_8() {
-        fallback_post::<LCTree<PedersenHasher, U8, U0, U0>>(3, 3, 1, 19, 293_439);
-    }
 
     #[test]
     fn fallback_post_poseidon_single_partition_matching_base_8() {

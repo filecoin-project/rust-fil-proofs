@@ -1,6 +1,6 @@
 use bellperson::gadgets::boolean::Boolean;
 use bellperson::{ConstraintSystem, SynthesisError};
-use fil_sapling_crypto::jubjub::JubjubEngine;
+use paired::Engine;
 
 pub fn xor<E, CS>(
     cs: &mut CS,
@@ -8,7 +8,7 @@ pub fn xor<E, CS>(
     input: &[Boolean],
 ) -> Result<Vec<Boolean>, SynthesisError>
 where
-    E: JubjubEngine,
+    E: Engine,
     CS: ConstraintSystem<E>,
 {
     let key_len = key.len();

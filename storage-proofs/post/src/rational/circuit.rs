@@ -119,7 +119,7 @@ mod tests {
     use bellperson::util_cs::test_cs::TestConstraintSystem;
     use storage_proofs_core::{
         compound_proof::CompoundProof,
-        hasher::{Domain, HashFunction, Hasher, PedersenHasher, PoseidonHasher},
+        hasher::{Domain, HashFunction, Hasher, PoseidonHasher},
         merkle::{generate_tree, get_base_tree_count, BinaryMerkleTree},
         proof::ProofScheme,
         sector::OrderedSectorSet,
@@ -127,11 +127,6 @@ mod tests {
     };
 
     use crate::rational::{self, derive_challenges, RationalPoSt, RationalPoStCompound};
-
-    #[test]
-    fn test_rational_post_circuit_pedersen() {
-        test_rational_post_circuit::<BinaryMerkleTree<PedersenHasher>>(16_490);
-    }
 
     #[test]
     fn test_rational_post_circuit_poseidon() {
