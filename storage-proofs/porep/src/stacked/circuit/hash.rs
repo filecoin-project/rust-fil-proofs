@@ -69,7 +69,7 @@ mod tests {
             .expect("hash2 function failed");
 
             assert!(cs.is_satisfied(), "constraints not satisfied");
-            assert_eq!(cs.num_constraints(), 1_371);
+            assert_eq!(cs.num_constraints(), 311);
 
             let expected: Fr =
                 <PoseidonHasher as Hasher>::Function::hash2(&a.into(), &b.into()).into();

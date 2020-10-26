@@ -470,7 +470,7 @@ mod tests {
 
         assert!(cs.is_satisfied(), "constraints not satisfied");
         assert_eq!(cs.num_inputs(), 18, "wrong number of inputs");
-        assert_eq!(cs.num_constraints(), 149_580, "wrong number of constraints");
+        assert_eq!(cs.num_constraints(), 115_660, "wrong number of constraints");
 
         assert_eq!(cs.get_input(0, "ONE"), Fr::one());
 
@@ -529,6 +529,6 @@ mod tests {
         .expect("failed to synthesize circuit");
 
         assert_eq!(cs.num_inputs(), 18, "wrong number of inputs");
-        assert_eq!(cs.num_constraints(), 391_404, "wrong number of constraints");
+        assert_eq!(cs.num_constraints(), 170_924, "wrong number of constraints");
     }
 }
