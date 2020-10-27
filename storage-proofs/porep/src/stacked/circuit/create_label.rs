@@ -1,7 +1,6 @@
 use bellperson::gadgets::{boolean::Boolean, num, sha256::sha256 as sha256_circuit, uint32};
-use bellperson::{ConstraintSystem, SynthesisError};
+use bellperson::{bls::Engine, ConstraintSystem, SynthesisError};
 use ff::PrimeField;
-use paired::Engine;
 use storage_proofs_core::{gadgets::multipack, gadgets::uint64, util::reverse_bit_numbering};
 
 use crate::stacked::vanilla::TOTAL_PARENTS;

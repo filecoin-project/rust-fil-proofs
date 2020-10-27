@@ -13,17 +13,17 @@ storage-proofs-core = { path = "../core", version = "^5.0.0", default-features =
 rand = "0.7"
 merkletree = "0.21.0"
 byteorder = "1"
-crossbeam = "0.7.3"
+crossbeam = "0.8"
 sha2 = "0.9.1"
 rayon = "1.0.0"
 serde = { version = "1.0", features = ["derive"]}
 blake2b_simd = "0.5"
 blake2s_simd = "0.5"
 ff = { version = "0.2.3", package = "fff" }
-bellperson = { git = "https://github.com/filecoin-project/bellman", branch = "blstrs", default-features = false }
+bellperson = { git = "https://github.com/filecoin-project/bellperson", branch = "blstrs", default-features = false }
 log = "0.4.7"
 hex = "0.4.0"
-generic-array = "0.13.2"
+generic-array = "0.14.4"
 anyhow = "1.0.23"
 neptune = { git = "https://github.com/filecoin-project/neptune", branch = "blst", default-features = false, features = ["gpu"] }
 num_cpus = "1.10.1"

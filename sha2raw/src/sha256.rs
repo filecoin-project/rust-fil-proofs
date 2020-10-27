@@ -1,4 +1,4 @@
-use block_buffer::byteorder::{ByteOrder, BE};
+use byteorder::{ByteOrder, BE};
 
 use crate::consts::H256;
 use crate::platform::Implementation;
@@ -79,7 +79,7 @@ impl Sha256 {
     }
 }
 
-opaque_debug::impl_opaque_debug!(Sha256);
+opaque_debug::implement!(Sha256);
 
 #[cfg(test)]
 mod tests {

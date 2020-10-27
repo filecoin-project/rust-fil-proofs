@@ -19,8 +19,8 @@ config = { version = "0.10.1", default-features = false, features = ["toml"] }
 itertools = "0.9"
 lazy_static = "1.2"
 memmap = "0.7"
-aes = "0.3"
-block-modes = "0.3"
+aes = "0.6"
+block-modes = "0.7"
 sha2 = "0.9.1"
 tempfile = "3"
 fs2 = "0.4"
@@ -30,12 +30,12 @@ blake2b_simd = "0.5"
 blake2s_simd = "0.5"
 toml = "0.5"
 ff = { version = "0.2.3", package = "fff" }
-bellperson = { git = "https://github.com/filecoin-project/bellman", branch = "blstrs", default-features = false }
+bellperson = { git = "https://github.com/filecoin-project/bellperson", branch = "blstrs", default-features = false }
 serde_json = "1.0"
 log = "0.4.7"
 rand_chacha = "0.2.1"
 hex = "0.4.0"
-generic-array = "0.13.2"
+generic-array = "0.14.4"
 anyhow = "1.0.23"
 thiserror = "1.0.6"
 neptune = { git = "https://github.com/filecoin-project/neptune", branch = "blst", default-features = false, features = ["gpu"] }

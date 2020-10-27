@@ -4,7 +4,7 @@ use log::{info, warn};
 use structopt::StructOpt;
 
 use bellperson::util_cs::bench_cs::BenchCS;
-use bellperson::Circuit;
+use bellperson::{bls::Bls12, Circuit};
 use filecoin_proofs::constants::*;
 use filecoin_proofs::parameters::{
     public_params, window_post_public_params, winning_post_public_params,
@@ -12,7 +12,6 @@ use filecoin_proofs::parameters::{
 use filecoin_proofs::types::*;
 use filecoin_proofs::with_shape;
 use filecoin_proofs::PoStType;
-use paired::bls12_381::Bls12;
 use storage_proofs::compound_proof::CompoundProof;
 use storage_proofs::porep::stacked::{StackedCompound, StackedDrg};
 use storage_proofs::post::fallback::{FallbackPoSt, FallbackPoStCircuit, FallbackPoStCompound};
