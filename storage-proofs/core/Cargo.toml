@@ -30,7 +30,7 @@ blake2b_simd = "0.5"
 blake2s_simd = "0.5"
 toml = "0.5"
 ff = { version = "0.2.3", package = "fff" }
-bellperson = { git = "https://github.com/filecoin-project/bellperson", branch = "blstrs", default-features = false }
+bellperson = { git = "https://github.com/filecoin-project/bellperson", branch = "blstrs-9", default-features = false }
 serde_json = "1.0"
 log = "0.4.7"
 rand_chacha = "0.2.1"
@@ -38,7 +38,7 @@ hex = "0.4.0"
 generic-array = "0.14.4"
 anyhow = "1.0.23"
 thiserror = "1.0.6"
-neptune = { git = "https://github.com/filecoin-project/neptune", branch = "blst", default-features = false, features = ["gpu"] }
+neptune = { git = "https://github.com/filecoin-project/neptune", branch = "blstrs-9", default-features = false, features = ["gpu"] }
 cpu-time = { version = "1.0", optional = true }
 gperftools = { version = "0.2", optional = true }
 num_cpus = "1.10.1"
