@@ -171,7 +171,7 @@ mod tests {
     use bellperson::util_cs::{metric_cs::MetricCS, test_cs::TestConstraintSystem};
     use storage_proofs_core::{
         compound_proof,
-        hasher::{Domain, HashFunction, Hasher, PedersenHasher, PoseidonHasher},
+        hasher::{Domain, HashFunction, Hasher, PoseidonHasher},
         merkle::{generate_tree, get_base_tree_count, LCTree, MerkleTreeTrait},
         proof::NoRequirements,
         sector::SectorId,
@@ -179,12 +179,6 @@ mod tests {
     use typenum::{U0, U8};
 
     use crate::election;
-
-    #[ignore] // Slow test – run only when compiled for release.
-    #[test]
-    fn election_post_test_compound_pedersen() {
-        election_post_test_compound::<LCTree<PedersenHasher, U8, U0, U0>>();
-    }
 
     #[ignore] // Slow test – run only when compiled for release.
     #[test]

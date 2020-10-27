@@ -31,9 +31,6 @@ rows_to_discard = 2
 # This value is defaulted to the number of cores available on your system.
 #window_post_synthesis_num_cpus = 8
 
-# Window size for pedersen hashing.
-pedersen_hash_exp_window_size = 16
-
 # This enables accelerate snark verification
 use_fil_blst = false
 

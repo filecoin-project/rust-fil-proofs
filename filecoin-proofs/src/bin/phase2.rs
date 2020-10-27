@@ -91,7 +91,6 @@ impl Proof {
 #[derive(Clone, Copy, Debug, PartialEq)]
 enum Hasher {
     Poseidon,
-    // ShaPedersen,
 }
 
 impl Hasher {
@@ -101,7 +100,6 @@ impl Hasher {
     fn pretty_print(&self) -> &str {
         match self {
             Hasher::Poseidon => "Poseidon",
-            // Hasher::ShaPedersen => "SHA-Pederson",
         }
     }
 
@@ -109,7 +107,6 @@ impl Hasher {
     fn lowercase(&self) -> &str {
         match self {
             Hasher::Poseidon => "poseidon",
-            // Hasher::ShaPedersen => "shapederson",
         }
     }
 }
@@ -246,7 +243,6 @@ fn parse_params_filename(path: &str) -> (Proof, Hasher, Sector, String, usize, P
 
     let hasher = match split[1] {
         "poseidon" => Hasher::Poseidon,
-        // "shapedersen" => Hasher::ShaPedersen,
         other => panic!("invalid hasher name in params filename: {}", other),
     };
 
@@ -323,41 +319,6 @@ fn blank_sdr_poseidon_params<Tree: MerkleTreeTrait>(sector_size: u64) -> PoRepPu
     .expect("public param setup failed");
     public_params.vanilla_params
 }
-
-/*
-fn blank_porep_sha_pedersen_circuit(
-    sector_size: u64,
-) -> StackedCircuit<'static, PedersenHasher, Sha256Hasher> {
-    let	n_partitions = *POREP_PARTITIONS.read().unwrap().get(&sector_size).unwrap();
-
-    let porep_config = PoRepConfig {
-        sector_size: SectorSize(sector_size),
-        partitions: PoRepProofPartitions(n_partitions),
-    };
-
-    let setup_params = compound_proof::SetupParams {
-        vanilla_params: setup_params(
-            PaddedBytesAmount::from(porep_config),
-            usize::from(PoRepProofPartitions::from(porep_config)),
-        )
-        .unwrap(),
-        partitions: Some(usize::from(PoRepProofPartitions::from(porep_config))),
-        priority: false,
-    };
-
-    let public_params =
-        <StackedCompound<PedersenHasher, Sha256Hasher> as CompoundProof<_, StackedDrg<PedersenHasher, Sha256Hasher>, _>>::setup(
-            &setup_params,
-        )
-        .unwrap();
-
-    <StackedCompound<PedersenHasher, Sha256Hasher> as CompoundProof<
-        _,
-        StackedDrg<PedersenHasher, Sha256Hasher>,
-        _,
-    >>::blank_circuit(&public_params.vanilla_params)
-}
-*/
 
 fn blank_winning_post_poseidon_params<Tree: 'static + MerkleTreeTrait>(
     sector_size: u64,

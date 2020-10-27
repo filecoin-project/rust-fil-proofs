@@ -722,7 +722,7 @@ mod tests {
 
     use generic_array::typenum;
 
-    use crate::hasher::{Blake2sHasher, Domain, PedersenHasher, PoseidonHasher, Sha256Hasher};
+    use crate::hasher::{Blake2sHasher, Domain, PoseidonHasher, Sha256Hasher};
     use crate::merkle::{generate_tree, MerkleProofTrait};
 
     fn merklepath<Tree: 'static + MerkleTreeTrait>() {
@@ -747,71 +747,6 @@ mod tests {
                 "failed to validate valid data"
             );
         }
-    }
-
-    #[test]
-    fn merklepath_pedersen_2() {
-        merklepath::<
-            MerkleTreeWrapper<
-                PedersenHasher,
-                DiskStore<<PedersenHasher as Hasher>::Domain>,
-                typenum::U2,
-                typenum::U0,
-                typenum::U0,
-            >,
-        >();
-    }
-
-    #[test]
-    fn merklepath_pedersen_4() {
-        merklepath::<
-            MerkleTreeWrapper<
-                PedersenHasher,
-                DiskStore<<PedersenHasher as Hasher>::Domain>,
-                typenum::U4,
-                typenum::U0,
-                typenum::U0,
-            >,
-        >();
-    }
-
-    #[test]
-    fn merklepath_pedersen_8() {
-        merklepath::<
-            MerkleTreeWrapper<
-                PedersenHasher,
-                DiskStore<<PedersenHasher as Hasher>::Domain>,
-                typenum::U8,
-                typenum::U0,
-                typenum::U0,
-            >,
-        >();
-    }
-
-    #[test]
-    fn merklepath_pedersen_2_2() {
-        merklepath::<
-            MerkleTreeWrapper<
-                PedersenHasher,
-                DiskStore<<PedersenHasher as Hasher>::Domain>,
-                typenum::U2,
-                typenum::U2,
-                typenum::U0,
-            >,
-        >();
-    }
-
-    #[test]
-    fn merklepath_pedersen_2_2_2() {
-        merklepath::<
-            MerkleTreeWrapper<
-                PedersenHasher,
-                DiskStore<<PedersenHasher as Hasher>::Domain>,
-                typenum::U2,
-                typenum::U2,
-                typenum::U2,
-            >,
-        >();
     }
 
     #[test]

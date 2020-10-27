@@ -14,7 +14,6 @@ pub mod param;
 pub mod parameters;
 pub mod pieces;
 pub mod serde_big_array;
-pub mod singletons;
 pub mod types;
 
 pub use self::api::*;

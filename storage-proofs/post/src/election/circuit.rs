@@ -185,7 +185,7 @@ mod tests {
     use rand_xorshift::XorShiftRng;
     use storage_proofs_core::{
         compound_proof::CompoundProof,
-        hasher::{Domain, HashFunction, Hasher, PedersenHasher, PoseidonHasher},
+        hasher::{Domain, HashFunction, Hasher, PoseidonHasher},
         merkle::{generate_tree, get_base_tree_count, LCTree, MerkleTreeTrait},
         proof::ProofScheme,
         sector::SectorId,
@@ -194,11 +194,6 @@ mod tests {
     use typenum::{U0, U8};
 
     use crate::election::{self, ElectionPoSt, ElectionPoStCompound};
-
-    #[test]
-    fn test_election_post_circuit_pedersen() {
-        test_election_post_circuit::<LCTree<PedersenHasher, U8, U0, U0>>(388_520);
-    }
 
     #[test]
     fn test_election_post_circuit_poseidon() {

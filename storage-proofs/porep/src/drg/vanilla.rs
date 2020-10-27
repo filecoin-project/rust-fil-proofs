@@ -615,7 +615,7 @@ mod tests {
         cache_key::CacheKey,
         drgraph::{BucketGraph, BASE_DEGREE},
         fr32::fr_into_bytes,
-        hasher::{Blake2sHasher, PedersenHasher, Sha256Hasher},
+        hasher::{Blake2sHasher, Sha256Hasher},
         merkle::{BinaryMerkleTree, MerkleTreeTrait},
         table_tests,
         test_helper::setup_replica,
@@ -686,11 +686,6 @@ mod tests {
         assert_eq!(data, decoded_data.as_slice(), "failed to extract data");
 
         cache_dir.close().expect("Failed to remove cache dir");
-    }
-
-    #[test]
-    fn extract_all_pedersen() {
-        test_extract_all::<BinaryMerkleTree<PedersenHasher>>();
     }
 
     #[test]
@@ -765,11 +760,6 @@ mod tests {
                 "failed to extract data"
             );
         }
-    }
-
-    #[test]
-    fn extract_pedersen() {
-        test_extract::<BinaryMerkleTree<PedersenHasher>>();
     }
 
     #[test]
@@ -964,19 +954,16 @@ mod tests {
     }
 
     fn prove_verify(n: usize, i: usize) {
-        prove_verify_aux::<BinaryMerkleTree<PedersenHasher>>(n, i, false, false);
         prove_verify_aux::<BinaryMerkleTree<Sha256Hasher>>(n, i, false, false);
         prove_verify_aux::<BinaryMerkleTree<Blake2sHasher>>(n, i, false, false);
     }
 
     fn prove_verify_wrong_challenge(n: usize, i: usize) {
-        prove_verify_aux::<BinaryMerkleTree<PedersenHasher>>(n, i, true, false);
         prove_verify_aux::<BinaryMerkleTree<Sha256Hasher>>(n, i, true, false);
         prove_verify_aux::<BinaryMerkleTree<Blake2sHasher>>(n, i, true, false);
     }
 
     fn prove_verify_wrong_parents(n: usize, i: usize) {
-        prove_verify_aux::<BinaryMerkleTree<PedersenHasher>>(n, i, false, true);
         prove_verify_aux::<BinaryMerkleTree<Sha256Hasher>>(n, i, false, true);
         prove_verify_aux::<BinaryMerkleTree<Blake2sHasher>>(n, i, false, true);
     }

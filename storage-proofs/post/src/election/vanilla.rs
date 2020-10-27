@@ -455,7 +455,7 @@ mod tests {
     use typenum::{U0, U2, U8};
 
     use storage_proofs_core::{
-        hasher::{PedersenHasher, PoseidonHasher},
+        hasher::PoseidonHasher,
         merkle::{generate_tree, get_base_tree_count, LCTree},
     };
 
@@ -521,11 +521,6 @@ mod tests {
             .expect("verification failed");
 
         assert!(is_valid);
-    }
-
-    #[test]
-    fn election_post_pedersen() {
-        test_election_post::<LCTree<PedersenHasher, U8, U0, U0>>();
     }
 
     #[test]

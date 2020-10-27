@@ -292,7 +292,7 @@ mod tests {
         compound_proof,
         drgraph::{BucketGraph, BASE_DEGREE},
         fr32::fr_into_bytes,
-        hasher::{Hasher, PedersenHasher, PoseidonHasher},
+        hasher::{Hasher, PoseidonHasher},
         merkle::{BinaryMerkleTree, MerkleTreeTrait},
         proof::NoRequirements,
         test_helper::setup_replica,
@@ -301,12 +301,6 @@ mod tests {
 
     use crate::stacked::BINARY_ARITY;
     use crate::{drg, PoRep};
-
-    #[test]
-    #[ignore] // Slow test – run only when compiled for release.
-    fn test_drgporep_compound_pedersen() {
-        drgporep_test_compound::<BinaryMerkleTree<PedersenHasher>>();
-    }
 
     #[test]
     #[ignore] // Slow test – run only when compiled for release.

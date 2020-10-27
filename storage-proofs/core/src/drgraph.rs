@@ -243,9 +243,7 @@ mod tests {
     use memmap::MmapOptions;
     use merkletree::store::StoreConfig;
 
-    use crate::hasher::{
-        Blake2sHasher, PedersenHasher, PoseidonArity, PoseidonHasher, Sha256Hasher,
-    };
+    use crate::hasher::{Blake2sHasher, PoseidonArity, PoseidonHasher, Sha256Hasher};
     use crate::merkle::{
         create_base_merkle_tree, DiskStore, MerkleProofTrait, MerkleTreeTrait, MerkleTreeWrapper,
     };
@@ -308,11 +306,6 @@ mod tests {
         graph_bucket::<Blake2sHasher>();
     }
 
-    #[test]
-    fn graph_bucket_pedersen() {
-        graph_bucket::<PedersenHasher>();
-    }
-
     fn gen_proof<H: 'static + Hasher, U: 'static + PoseidonArity>(config: Option<StoreConfig>) {
         let leafs = 64;
         let porep_id = [1; 32];
@@ -327,11 +320,6 @@ mod tests {
         let proof = tree.gen_proof(2).unwrap();
 
         assert!(proof.verify());
-    }
-
-    #[test]
-    fn gen_proof_pedersen_binary() {
-        gen_proof::<PedersenHasher, typenum::U2>(None);
     }
 
     #[test]
@@ -350,11 +338,6 @@ mod tests {
     }
 
     #[test]
-    fn gen_proof_pedersen_quad() {
-        gen_proof::<PedersenHasher, typenum::U4>(None);
-    }
-
-    #[test]
     fn gen_proof_poseidon_quad() {
         gen_proof::<PoseidonHasher, typenum::U4>(None);
     }
@@ -367,11 +350,6 @@ mod tests {
     #[test]
     fn gen_proof_blake2s_quad() {
         gen_proof::<Blake2sHasher, typenum::U4>(None);
-    }
-
-    #[test]
-    fn gen_proof_pedersen_oct() {
-        gen_proof::<PedersenHasher, typenum::U8>(None);
     }
 
     #[test]

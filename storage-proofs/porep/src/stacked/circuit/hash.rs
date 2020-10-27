@@ -37,7 +37,7 @@ mod tests {
     use paired::bls12_381::{Bls12, Fr};
     use rand::SeedableRng;
     use rand_xorshift::XorShiftRng;
-    use storage_proofs_core::hasher::{HashFunction, Hasher, PedersenHasher};
+    use storage_proofs_core::hasher::{HashFunction, Hasher, PoseidonHasher};
 
     use crate::stacked::vanilla::hash::hash_single_column as vanilla_hash_single_column;
 
@@ -61,7 +61,7 @@ mod tests {
                 num::AllocatedNum::alloc(&mut cs, || Ok(b)).unwrap()
             };
 
-            let out = <PedersenHasher as Hasher>::Function::hash2_circuit(
+            let out = <PoseidonHasher as Hasher>::Function::hash2_circuit(
                 cs.namespace(|| "hash2"),
                 &a_num,
                 &b_num,
@@ -69,10 +69,10 @@ mod tests {
             .expect("hash2 function failed");
 
             assert!(cs.is_satisfied(), "constraints not satisfied");
-            assert_eq!(cs.num_constraints(), 1_371);
+            assert_eq!(cs.num_constraints(), 311);
 
             let expected: Fr =
-                <PedersenHasher as Hasher>::Function::hash2(&a.into(), &b.into()).into();
+                <PoseidonHasher as Hasher>::Function::hash2(&a.into(), &b.into()).into();
 
             assert_eq!(
                 expected,
