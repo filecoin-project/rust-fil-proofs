@@ -252,13 +252,7 @@ pub fn run(
 
 #[derive(Default, Debug, Serialize)]
 struct CircuitOutputs {
-    // porep_snark_partition_constraints
     pub porep_constraints: usize,
-    // data_inclusion (constraints: sha merklepath)
-    // window_inclusion (constraints: merkle inclusion path in comm_c)
-    // ticket_constraints - (skip)
-    // kdf_constraints
-    // merkle_tree_datahash_constraints - sha2 constraints 64
 }
 
 fn run_measure_circuits(i: &ProdbenchInputs) -> CircuitOutputs {
