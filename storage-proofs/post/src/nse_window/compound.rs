@@ -59,25 +59,23 @@ impl<'a, Tree: 'static + MerkleTreeTrait>
             .nth(partition_index)
             .ok_or_else(|| anyhow!("invalid number of sectors/partition index"))?;
 
-        for (i, sector) in sectors.iter().enumerate() {
+        for sector in sectors.iter() {
             // 1. Inputs for verifying comm_r = H(comm_layer_0 || ..)
             inputs.push(sector.comm_r.into());
             inputs.extend(sector.comm_layers.iter().copied().map(Into::into));
 
             inputs.push(sector.comm_replica.into());
 
+            let mut challenge_index_in_sector: u64 = 0;
+
             // 2. Inputs for verifying inclusion paths
-            for window_index in 0..pub_params.num_windows() {
-                for n in 0..pub_params.window_challenge_count {
-                    let challenge_index = ((partition_index * num_sectors_per_chunk + i)
-                        * pub_params.window_challenge_count
-                        + n) as u64;
+            for _ in 0..pub_params.num_windows() {
+                for _ in 0..pub_params.window_challenge_count {
                     let challenged_leaf_relative = nse_window::vanilla::generate_leaf_challenge(
                         pub_params,
                         pub_inputs.randomness,
                         sector.id.into(),
-                        window_index as u64,
-                        challenge_index,
+                        challenge_index_in_sector,
                     )?;
 
                     let por_pub_inputs = por::PublicInputs {
@@ -91,6 +89,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait>
                     )?;
 
                     inputs.extend(por_inputs);
+                    challenge_index_in_sector += 1;
                 }
             }
         }
