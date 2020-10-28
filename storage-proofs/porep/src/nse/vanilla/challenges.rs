@@ -33,6 +33,8 @@ pub struct Challenges<D: Domain> {
     seed: [u8; 32],
     /// Currently challenged node index. Goes from 0 to `num_layer_challenges` * `num_layers`.
     current_challenge: usize,
+    /// The final challenge for this partition.
+    last_challenge: usize,
 }
 
 impl<D: Domain> Challenges<D> {
@@ -41,6 +43,7 @@ impl<D: Domain> Challenges<D> {
         num_layer_challenges: usize,
         replica_id: &D,
         seed: [u8; 32],
+        partition: usize,
     ) -> Self {
         Self {
             num_expander_layers: config.num_expander_layers,
@@ -51,17 +54,14 @@ impl<D: Domain> Challenges<D> {
             num_nodes_window: config.num_nodes_window,
             replica_id: *replica_id,
             seed,
-            current_challenge: 0,
+            current_challenge: partition * num_layer_challenges * config.num_layers(),
+            last_challenge: (partition + 1) * num_layer_challenges * config.num_layers() - 1,
         }
     }
 
     /// Returns the number of layer challenges.
     pub fn len(&self) -> usize {
         self.num_layer_challenges
-    }
-
-    fn num_layers(&self) -> usize {
-        self.num_expander_layers + self.num_butterfly_layers
     }
 }
 
@@ -121,7 +121,7 @@ impl<D: Domain> Iterator for Challenges<D> {
     type Item = LayerChallenge;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.current_challenge >= self.num_layer_challenges * self.num_layers() {
+        if self.current_challenge > self.last_challenge {
             return None;
         }
 
@@ -173,7 +173,7 @@ mod tests {
         let replica_id = <PoseidonHasher as Hasher>::Domain::random(rng);
         let seed = rng.gen();
         let num_layer_challenges = 2;
-        let challenges = Challenges::new(&config, num_layer_challenges, &replica_id, seed);
+        let challenges = Challenges::new(&config, num_layer_challenges, &replica_id, seed, 0);
 
         let list: Vec<_> = challenges.collect();
         assert_eq!(list.len(), num_layer_challenges);
