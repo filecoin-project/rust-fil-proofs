@@ -59,18 +59,20 @@ impl<'a, 'c, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> ProofScheme<'
         ensure!(partition_count > 0, "partitions must not be 0");
 
         let config = &pub_params.config;
-        let challenges = Challenges::new(
-            config,
-            pub_params.num_layer_challenges,
-            &pub_inputs.replica_id,
-            pub_inputs.seed,
-        );
 
         let mut partition_proofs = Vec::with_capacity(partition_count);
         let rows_to_discard = priv_inputs.t_aux.tree_config_rows_to_discard;
 
         for partition in 0..partition_count {
             debug!("proving {} partition", partition);
+
+            let challenges = Challenges::new(
+                config,
+                pub_params.num_layer_challenges,
+                &pub_inputs.replica_id,
+                pub_inputs.seed,
+                partition,
+            );
 
             let mut proofs = Vec::with_capacity(challenges.len());
 
@@ -114,7 +116,7 @@ impl<'a, 'c, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> ProofScheme<'
                     Ok(NodeProof::new(data_proof, layer_proof, parents_proofs))
                 };
 
-            for (layer_challenge_index, layer_challenge) in challenges.clone().enumerate() {
+            for (layer_challenge_index, layer_challenge) in challenges.enumerate() {
                 debug!("proving challenge: {}", layer_challenge_index);
 
                 // -- First Layer Challenge
@@ -234,6 +236,7 @@ impl<'a, 'c, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> ProofScheme<'
                 pub_params.num_layer_challenges,
                 &pub_inputs.replica_id,
                 pub_inputs.seed,
+                k,
             );
 
             // verify comm_r
