@@ -29,6 +29,7 @@ jobs:
             - cargo-v28-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
       - run: rustup install $(cat rust-toolchain)
       - run: rustup default $(cat rust-toolchain)
+      - run: rustup install nightly
       - run: rustup component add rustfmt-preview
       - run: rustup component add clippy
       - run: cargo update
@@ -127,32 +128,6 @@ jobs:
             RUST_TEST_THREADS: 1
           no_output_timeout: 30m
 
-  # Running with `use_fil_blst=true` should be integrated directly into the test code. For now we
-  # just re-run the tests that exercise the fil-blst code path with that setting set.
-  test_fil_blst:
-    docker:
-      - image: filecoin/rust:latest
-    working_directory: /mnt/crate
-    resource_class: 2xlarge+
-    steps:
-      - configure_environment_variables
-      - checkout
-      - attach_workspace:
-          at: "."
-      - restore_cache:
-          keys:
-            - cargo-v28-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
-      - restore_parameter_cache
-      - run:
-          name: Test with fil-blst enabled
-          command: |
-            ulimit -n 20000
-            ulimit -u 20000
-            ulimit -n 20000
-            cargo +$(cat rust-toolchain) test --verbose --release --test api -- --ignored
-          environment:
-            RUST_TEST_THREADS: 1
-            FIL_PROOFS_USE_FIL_BLST: true
 
   # Running with `use_multicore_sdr=true` should be integrated directly into the test code. For now we
   # just re-run the lifecycle tests to exercise the use_multicore_sdr code path with that setting set.
@@ -171,15 +146,59 @@ jobs:
             - cargo-v28-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
       - restore_parameter_cache
       - run:
-          name: Test with use_multicore_sdr enabled
+          name: Test with use_multicore_sdr pairing enabled
           command: |
             ulimit -n 20000
             ulimit -u 20000
             ulimit -n 20000
-            cargo +$(cat rust-toolchain) test --verbose --release -- --ignored lifecycle
+            cargo +nightly -Zpackage-features test --all --verbose --release --test api -- --ignored lifecycle
           environment:
             RUST_TEST_THREADS: 1
             FIL_PROOFS_USE_MULTICORE_SDR: true
+
+      - run:
+          name: Test with use_multicore_sdr and blst enabled
+          command: |
+            ulimit -n 20000
+            ulimit -u 20000
+            ulimit -n 20000
+            cargo +nightly -Zpackage-features test --all --no-default-features --features gpu,blst --verbose --release --test api -- --ignored lifecycle
+          environment:
+            RUST_TEST_THREADS: 1
+            FIL_PROOFS_USE_MULTICORE_SDR: true
+
+  test_blst:
+    docker:
+      - image: filecoin/rust:latest
+    working_directory: /mnt/crate
+    resource_class: 2xlarge+
+    steps:
+      - configure_environment_variables
+      - checkout
+      - attach_workspace:
+          at: "."
+      - restore_cache:
+          keys:
+            - cargo-v28-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
+      - restore_parameter_cache
+      - run:
+          name: Test ignored with blst enabled 
+          command: |
+            ulimit -n 20000
+            ulimit -u 20000
+            ulimit -n 20000
+            cargo +nightly -Zpackage-features test --all --no-default-features --features gpu,blst --verbose --release --test api -- --ignored
+          environment:
+            RUST_TEST_THREADS: 1
+
+      - run:
+          name: Test with blst enabled 
+          command: |
+            ulimit -n 20000
+            ulimit -u 20000
+            ulimit -n 20000
+            cargo +nightly -Zpackage-features test --all --no-default-features --features gpu,blst --verbose
+
 
   bench:
     docker:
@@ -415,11 +434,12 @@ workflows:
           requires:
             - cargo_fetch
             - ensure_groth_parameters_and_keys_linux
-      - test_fil_blst:
+
+      - test_multicore_sdr:
           requires:
             - cargo_fetch
             - ensure_groth_parameters_and_keys_linux
-      - test_multicore_sdr:
+      - test_blst:
           requires:
             - cargo_fetch
             - ensure_groth_parameters_and_keys_linux

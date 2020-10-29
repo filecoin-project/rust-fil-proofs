@@ -9,6 +9,7 @@ use std::sync::mpsc::{channel, TryRecvError};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
+use bellperson::bls::{Bls12, G1Affine, G1Uncompressed, G2Affine, G2Uncompressed};
 use bellperson::groth16;
 use byteorder::{BigEndian, ReadBytesExt};
 use clap::{App, AppSettings, Arg, ArgGroup, SubCommand};
@@ -22,7 +23,6 @@ use filecoin_proofs::types::{
 use filecoin_proofs::with_shape;
 use groupy::{CurveAffine, EncodedPoint};
 use log::{error, info, warn};
-use paired::bls12_381::{Bls12, G1Affine, G1Uncompressed, G2Affine, G2Uncompressed};
 use phase2::small::{read_small_params_from_large_file, MPCSmall, Streamer};
 use phase2::MPCParameters;
 use rand::rngs::OsRng;

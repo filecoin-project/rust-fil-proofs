@@ -619,9 +619,9 @@ pub fn create_labels_for_decoding<Tree: 'static + MerkleTreeTrait, T: AsRef<[u8]
 mod tests {
     use super::*;
 
+    use bellperson::bls::{Fr, FrRepr};
     use ff::PrimeField;
     use generic_array::typenum::{U0, U2, U8};
-    use paired::bls12_381::{Fr, FrRepr};
     use storage_proofs_core::hasher::poseidon::PoseidonHasher;
 
     #[test]

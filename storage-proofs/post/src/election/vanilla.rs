@@ -3,10 +3,10 @@ use std::fmt;
 use std::marker::PhantomData;
 
 use anyhow::{bail, ensure, Context};
+use bellperson::bls::Fr;
 use byteorder::{ByteOrder, LittleEndian};
 use generic_array::typenum;
 use log::trace;
-use paired::bls12_381::Fr;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};

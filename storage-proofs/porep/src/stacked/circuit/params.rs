@@ -1,9 +1,9 @@
 use std::marker::PhantomData;
 
+use bellperson::bls::{Bls12, Fr};
 use bellperson::gadgets::{boolean::Boolean, num, uint32};
 use bellperson::{ConstraintSystem, SynthesisError};
 use generic_array::typenum::{U0, U2};
-use paired::bls12_381::{Bls12, Fr};
 use storage_proofs_core::{
     drgraph::Graph,
     gadgets::por::{AuthPath, PoRCircuit},

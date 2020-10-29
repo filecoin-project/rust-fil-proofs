@@ -1,8 +1,8 @@
 use std::marker::PhantomData;
 
+use bellperson::bls::{Bls12, Fr};
 use bellperson::gadgets::num;
 use bellperson::{Circuit, ConstraintSystem, SynthesisError};
-use paired::bls12_381::{Bls12, Fr};
 
 use storage_proofs_core::{
     compound_proof::CircuitComponent,
@@ -111,8 +111,8 @@ mod tests {
 
     use std::collections::BTreeMap;
 
+    use bellperson::bls::{Bls12, Fr};
     use ff::Field;
-    use paired::bls12_381::{Bls12, Fr};
     use rand::{Rng, SeedableRng};
     use rand_xorshift::XorShiftRng;
 

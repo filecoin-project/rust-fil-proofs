@@ -283,7 +283,7 @@ fn sha256_digest_block_u32(state: &mut [u32; 8], block: &[u32; 16]) {
 #[inline]
 pub fn compress256(state: &mut [u32; 8], blocks: &[&[u8]]) {
     use crate::consts::BLOCK_LEN;
-    use block_buffer::byteorder::{ByteOrder, BE};
+    use byteorder::{ByteOrder, BE};
 
     let mut block_u32 = [0u32; BLOCK_LEN];
 

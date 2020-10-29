@@ -5,9 +5,8 @@
 
 use bellperson::gadgets::boolean::{AllocatedBit, Boolean};
 use bellperson::gadgets::num::AllocatedNum;
-use bellperson::{ConstraintSystem, SynthesisError};
+use bellperson::{bls::Engine, ConstraintSystem, SynthesisError};
 use ff::Field;
-use paired::Engine;
 
 /// Insert `element` after the nth 1-indexed element of `elements`, where `path_bits` represents n, least-significant bit first.
 /// The returned result contains a new vector of `AllocatedNum`s with `element` inserted, and constraints are enforced.
@@ -349,10 +348,10 @@ where
 mod tests {
     use super::*;
 
+    use bellperson::bls::{Bls12, Fr};
     use bellperson::gadgets::boolean::AllocatedBit;
     use bellperson::util_cs::test_cs::TestConstraintSystem;
     use ff::Field;
-    use paired::bls12_381::{Bls12, Fr};
     use rand::SeedableRng;
     use rand_xorshift::XorShiftRng;
 

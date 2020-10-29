@@ -1,9 +1,9 @@
 use std::marker::PhantomData;
 
 use anyhow::ensure;
+use bellperson::bls::{Bls12, Fr};
 use bellperson::{Circuit, ConstraintSystem, SynthesisError};
 use generic_array::typenum;
-use paired::bls12_381::{Bls12, Fr};
 
 use storage_proofs_core::{
     compound_proof::{CircuitComponent, CompoundProof},

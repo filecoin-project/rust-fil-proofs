@@ -8,6 +8,7 @@ use crate::hasher::types::{
 };
 use crate::hasher::{Domain, HashFunction, Hasher};
 use anyhow::ensure;
+use bellperson::bls::{Bls12, Fr, FrRepr};
 use bellperson::gadgets::{boolean, num};
 use bellperson::{ConstraintSystem, SynthesisError};
 use ff::{Field, PrimeField, PrimeFieldRepr, ScalarEngine};
@@ -17,7 +18,6 @@ use merkletree::hash::{Algorithm as LightAlgorithm, Hashable};
 use merkletree::merkle::Element;
 use neptune::circuit::poseidon_hash;
 use neptune::poseidon::Poseidon;
-use paired::bls12_381::{Bls12, Fr, FrRepr};
 use serde::{Deserialize, Serialize};
 
 #[derive(Default, Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

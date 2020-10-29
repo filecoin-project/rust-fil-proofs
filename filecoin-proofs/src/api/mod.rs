@@ -587,8 +587,8 @@ where
 mod tests {
     use super::*;
 
+    use bellperson::bls::Fr;
     use ff::Field;
-    use paired::bls12_381::Fr;
     use rand::SeedableRng;
     use rand_xorshift::XorShiftRng;
     use storage_proofs::fr32::bytes_into_fr;

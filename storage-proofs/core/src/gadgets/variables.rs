@@ -3,8 +3,7 @@ use std::fmt;
 use anyhow::Result;
 
 use bellperson::gadgets::num::AllocatedNum;
-use bellperson::{ConstraintSystem, SynthesisError};
-use paired::Engine;
+use bellperson::{bls::Engine, ConstraintSystem, SynthesisError};
 
 /// Root represents a root commitment which may be either a raw value or an already-allocated number.
 /// This allows subcomponents to depend on roots which may optionally be shared with their parent

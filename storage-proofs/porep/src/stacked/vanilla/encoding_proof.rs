@@ -1,7 +1,7 @@
 use log::trace;
 use std::marker::PhantomData;
 
-use paired::bls12_381::Fr;
+use bellperson::bls::Fr;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use storage_proofs_core::{fr32::bytes_into_fr_repr_safe, hasher::Hasher};

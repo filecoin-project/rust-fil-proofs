@@ -19,7 +19,6 @@ use storage_proofs::post::fallback;
 use storage_proofs::post::fallback::SectorProof;
 use storage_proofs::proof::ProofScheme;
 use storage_proofs::sector::*;
-use storage_proofs::settings;
 use storage_proofs::util::default_rows_to_discard;
 
 use crate::api::util::{as_safe_commitment, get_base_tree_leafs, get_base_tree_size};
@@ -624,22 +623,7 @@ pub fn verify_winning_post<Tree: 'static + MerkleTreeTrait>(
         k: None,
     };
 
-    let use_fil_blst = settings::SETTINGS.use_fil_blst;
-
-    let is_valid = if use_fil_blst {
-        info!("verify_winning_post: use_fil_blst=true");
-        let verifying_key_path = post_config.get_cache_verifying_key_path::<Tree>()?;
-        fallback::FallbackPoStCompound::verify_blst(
-            &pub_params,
-            &pub_inputs,
-            &proof,
-            proof.len() / 192,
-            &fallback::ChallengeRequirements {
-                minimum_challenge_count: post_config.challenge_count * post_config.sector_count,
-            },
-            &verifying_key_path,
-        )?
-    } else {
+    let is_valid = {
         let verifying_key = get_post_verifying_key::<Tree>(&post_config)?;
 
         let single_proof = MultiProof::new_from_reader(None, &proof[..], &verifying_key)?;
@@ -997,22 +981,7 @@ pub fn verify_window_post<Tree: 'static + MerkleTreeTrait>(
         k: None,
     };
 
-    let use_fil_blst = settings::SETTINGS.use_fil_blst;
-
-    let is_valid = if use_fil_blst {
-        info!("verify_window_post: use_fil_blst=true");
-        let verifying_key_path = post_config.get_cache_verifying_key_path::<Tree>()?;
-        fallback::FallbackPoStCompound::verify_blst(
-            &pub_params,
-            &pub_inputs,
-            &proof,
-            proof.len() / 192,
-            &fallback::ChallengeRequirements {
-                minimum_challenge_count: post_config.challenge_count * post_config.sector_count,
-            },
-            &verifying_key_path,
-        )?
-    } else {
+    let is_valid = {
         let verifying_key = get_post_verifying_key::<Tree>(&post_config)?;
         let multi_proof = MultiProof::new_from_reader(partitions, &proof[..], &verifying_key)?;
 
