@@ -15,7 +15,7 @@ use tempfile::NamedTempFile;
 
 use filecoin_proofs::*;
 
-// Use a fixed PoRep ID, so that the parents cache can be re-used between different tests
+// Use a fixed PoRep ID, so that the parents cache can be re-used between some tests.
 const ARBITRARY_POREP_ID: [u8; 32] = [28; 32];
 
 static INIT_LOGGER: Once = Once::new();
@@ -31,55 +31,114 @@ const TEST_SEED: [u8; 16] = [
 
 #[test]
 #[ignore]
-fn test_seal_lifecycle_2kib_base_8() -> Result<()> {
-    seal_lifecycle::<SectorShape2KiB>(SECTOR_SIZE_2_KIB)
+fn test_seal_lifecycle_2kib_porep_id_v1_base_8() -> Result<()> {
+    let porep_id_v1: u64 = 0; // This is a RegisteredSealProof value
+
+    let mut porep_id = [0u8; 32];
+    porep_id[..8].copy_from_slice(&porep_id_v1.to_le_bytes());
+    seal_lifecycle::<SectorShape2KiB>(SECTOR_SIZE_2_KIB, &porep_id)
+}
+
+#[test]
+#[ignore]
+fn test_seal_lifecycle_2kib_porep_id_v1_1_base_8() -> Result<()> {
+    let porep_id_v1_1: u64 = 5; // This is a RegisteredSealProof value
+
+    let mut porep_id = [0u8; 32];
+    porep_id[..8].copy_from_slice(&porep_id_v1_1.to_le_bytes());
+    seal_lifecycle::<SectorShape2KiB>(SECTOR_SIZE_2_KIB, &porep_id)
 }
 
 #[test]
 #[ignore]
 fn test_seal_lifecycle_4kib_sub_8_2() -> Result<()> {
-    seal_lifecycle::<SectorShape4KiB>(SECTOR_SIZE_4_KIB)
+    seal_lifecycle::<SectorShape4KiB>(SECTOR_SIZE_4_KIB, &ARBITRARY_POREP_ID)
 }
 
 #[test]
 #[ignore]
 fn test_seal_lifecycle_16kib_sub_8_2() -> Result<()> {
-    seal_lifecycle::<SectorShape16KiB>(SECTOR_SIZE_16_KIB)
+    seal_lifecycle::<SectorShape16KiB>(SECTOR_SIZE_16_KIB, &ARBITRARY_POREP_ID)
 }
 
 #[test]
 #[ignore]
 fn test_seal_lifecycle_32kib_top_8_8_2() -> Result<()> {
-    seal_lifecycle::<SectorShape32KiB>(SECTOR_SIZE_32_KIB)
+    seal_lifecycle::<SectorShape32KiB>(SECTOR_SIZE_32_KIB, &ARBITRARY_POREP_ID)
 }
 
 // These tests are good to run, but take a long time.
 
 //#[test]
 //#[ignore]
-//fn test_seal_lifecycle_512mib_top_8_0_0() -> Result<()> {
-//    seal_lifecycle::<SectorShape512MiB>(SECTOR_SIZE_512_MIB)
+//fn test_seal_lifecycle_512mib_porep_id_v1_top_8_0_0() -> Result<()> {
+//    let porep_id_v1: u64 = 2; // This is a RegisteredSealProof value
+//
+//    let mut porep_id = [0u8; 32];
+//    porep_id[..8].copy_from_slice(&porep_id_v1.to_le_bytes());
+//    seal_lifecycle::<SectorShape512MiB>(SECTOR_SIZE_512_MIB, &porep_id)
 //}
 
 //#[test]
 //#[ignore]
-//fn test_seal_lifecycle_32gib_top_8_8_0() -> Result<()> {
-//    seal_lifecycle::<SectorShape32GiB>(SECTOR_SIZE_32_GIB)
+//fn test_seal_lifecycle_512mib_porep_id_v1_1_top_8_0_0() -> Result<()> {
+//    let porep_id_v1_1: u64 = 7; // This is a RegisteredSealProof value
+//
+//    let mut porep_id = [0u8; 32];
+//    porep_id[..8].copy_from_slice(&porep_id_v1_1.to_le_bytes());
+//    seal_lifecycle::<SectorShape512MiB>(SECTOR_SIZE_512_MIB, &porep_id)
 //}
 
 //#[test]
 //#[ignore]
-//fn test_seal_lifecycle_64gib_top_8_8_2() -> Result<()> {
-//    seal_lifecycle::<SectorShape64GiB>(SECTOR_SIZE_64_GIB)
+//fn test_seal_lifecycle_32gib_porep_id_v1_top_8_8_0() -> Result<()> {
+//    let porep_id_v1: u64 = 3; // This is a RegisteredSealProof value
+//
+//    let mut porep_id = [0u8; 32];
+//    porep_id[..8].copy_from_slice(&porep_id_v1.to_le_bytes());
+//    seal_lifecycle::<SectorShape32GiB>(SECTOR_SIZE_32_GIB, &porep_id)
 //}
 
-fn seal_lifecycle<Tree: 'static + MerkleTreeTrait>(sector_size: u64) -> Result<()> {
+//#[test]
+//#[ignore]
+//fn test_seal_lifecycle_32gib_porep_id_v1_1_top_8_8_0() -> Result<()> {
+//    let porep_id_v1_1: u64 = 8; // This is a RegisteredSealProof value
+//
+//    let mut porep_id = [0u8; 32];
+//    porep_id[..8].copy_from_slice(&porep_id_v1_1.to_le_bytes());
+//    seal_lifecycle::<SectorShape32GiB>(SECTOR_SIZE_32_GIB, &porep_id)
+//}
+
+//#[test]
+//#[ignore]
+//fn test_seal_lifecycle_64gib_porep_id_v1_top_8_8_2() -> Result<()> {
+//    let porep_id_v1: u64 = 4; // This is a RegisteredSealProof value
+//
+//    let mut porep_id = [0u8; 32];
+//    porep_id[..8].copy_from_slice(&porep_id_v1.to_le_bytes());
+//    seal_lifecycle::<SectorShape64GiB>(SECTOR_SIZE_64_GIB, &porep_id)
+//}
+
+//#[test]
+//#[ignore]
+//fn test_seal_lifecycle_64gib_porep_id_v1_1_top_8_8_2() -> Result<()> {
+//    let porep_id_v1_1: u64 = 9; // This is a RegisteredSealProof value
+//
+//    let mut porep_id = [0u8; 32];
+//    porep_id[..8].copy_from_slice(&porep_id_v1_1.to_le_bytes());
+//    seal_lifecycle::<SectorShape64GiB>(SECTOR_SIZE_64_GIB, &porep_id)
+//}
+
+fn seal_lifecycle<Tree: 'static + MerkleTreeTrait>(
+    sector_size: u64,
+    porep_id: &[u8; 32],
+) -> Result<()> {
     let rng = &mut XorShiftRng::from_seed(TEST_SEED);
     let prover_fr: DefaultTreeDomain = Fr::random(rng).into();
     let mut prover_id = [0u8; 32];
     prover_id.copy_from_slice(AsRef::<[u8]>::as_ref(&prover_fr));
 
-    create_seal::<_, Tree>(rng, sector_size, prover_id, false)?;
+    create_seal::<_, Tree>(rng, sector_size, prover_id, false, porep_id)?;
     Ok(())
 }
 
@@ -116,23 +175,56 @@ fn clear_cache_dir_keep_data_layer(cache_dir: &tempfile::TempDir) {
 }
 
 #[test]
-fn test_resumable_seal_skip_proofs() {
-    run_resumable_seal::<SectorShape2KiB>(true, 0);
-    run_resumable_seal::<SectorShape2KiB>(true, 1);
+fn test_resumable_seal_skip_proofs_v1() {
+    let porep_id_v1: u64 = 0; // This is a RegisteredSealProof value
+
+    let mut porep_id = [0u8; 32];
+    porep_id[..8].copy_from_slice(&porep_id_v1.to_le_bytes());
+    run_resumable_seal::<SectorShape2KiB>(true, 0, &porep_id);
+    run_resumable_seal::<SectorShape2KiB>(true, 1, &porep_id);
+}
+
+#[test]
+fn test_resumable_seal_skip_proofs_v1_1() {
+    let porep_id_v1_1: u64 = 5; // This is a RegisteredSealProof value
+
+    let mut porep_id = [0u8; 32];
+    porep_id[..8].copy_from_slice(&porep_id_v1_1.to_le_bytes());
+    run_resumable_seal::<SectorShape2KiB>(true, 0, &porep_id);
+    run_resumable_seal::<SectorShape2KiB>(true, 1, &porep_id);
 }
 
 #[test]
 #[ignore]
-fn test_resumable_seal() {
-    run_resumable_seal::<SectorShape2KiB>(false, 0);
-    run_resumable_seal::<SectorShape2KiB>(false, 1);
+fn test_resumable_seal_v1() {
+    let porep_id_v1: u64 = 0; // This is a RegisteredSealProof value
+
+    let mut porep_id = [0u8; 32];
+    porep_id[..8].copy_from_slice(&porep_id_v1.to_le_bytes());
+    run_resumable_seal::<SectorShape2KiB>(false, 0, &porep_id);
+    run_resumable_seal::<SectorShape2KiB>(false, 1, &porep_id);
+}
+
+#[test]
+#[ignore]
+fn test_resumable_seal_v1_1() {
+    let porep_id_v1_1: u64 = 5; // This is a RegisteredSealProof value
+
+    let mut porep_id = [0u8; 32];
+    porep_id[..8].copy_from_slice(&porep_id_v1_1.to_le_bytes());
+    run_resumable_seal::<SectorShape2KiB>(false, 0, &porep_id);
+    run_resumable_seal::<SectorShape2KiB>(false, 1, &porep_id);
 }
 
 /// Create a seal, delete a layer and resume
 ///
 /// The current code works on two layers only. The `layer_to_delete` specifies (zero-based) which
 /// layer should be deleted.
-fn run_resumable_seal<Tree: 'static + MerkleTreeTrait>(skip_proofs: bool, layer_to_delete: usize) {
+fn run_resumable_seal<Tree: 'static + MerkleTreeTrait>(
+    skip_proofs: bool,
+    layer_to_delete: usize,
+    porep_id: &[u8; 32],
+) {
     init_logger();
 
     let sector_size = SECTOR_SIZE_2_KIB;
@@ -146,7 +238,7 @@ fn run_resumable_seal<Tree: 'static + MerkleTreeTrait>(skip_proofs: bool, layer_
     let sealed_sector_file = NamedTempFile::new().expect("failed to created sealed sector file");
     let cache_dir = tempfile::tempdir().expect("failed to create temp dir");
 
-    let config = porep_config(sector_size, ARBITRARY_POREP_ID);
+    let config = porep_config(sector_size, *porep_id);
     let ticket = rng.gen();
     let sector_id = rng.gen::<u64>().into();
 
@@ -271,7 +363,8 @@ fn test_winning_post_empty_sector_challenge() -> Result<()> {
     let sector_count = 0;
     let sector_size = SECTOR_SIZE_2_KIB;
 
-    let (_, _, _, _) = create_seal::<_, SectorShape2KiB>(rng, sector_size, prover_id, true)?;
+    let (_, _, _, _) =
+        create_seal::<_, SectorShape2KiB>(rng, sector_size, prover_id, true, &ARBITRARY_POREP_ID)?;
 
     let random_fr: DefaultTreeDomain = Fr::random(rng).into();
     let mut randomness = [0u8; 32];
@@ -304,9 +397,9 @@ fn winning_post<Tree: 'static + MerkleTreeTrait>(sector_size: u64, fake: bool) -
     prover_id.copy_from_slice(AsRef::<[u8]>::as_ref(&prover_fr));
 
     let (sector_id, replica, comm_r, cache_dir) = if fake {
-        create_fake_seal::<_, Tree>(rng, sector_size)?
+        create_fake_seal::<_, Tree>(rng, sector_size, &ARBITRARY_POREP_ID)?
     } else {
-        create_seal::<_, Tree>(rng, sector_size, prover_id, true)?
+        create_seal::<_, Tree>(rng, sector_size, prover_id, true, &ARBITRARY_POREP_ID)?
     };
     let sector_count = WINNING_POST_SECTOR_COUNT;
 
@@ -496,9 +589,9 @@ fn window_post<Tree: 'static + MerkleTreeTrait>(
 
     for _ in 0..total_sector_count {
         let (sector_id, replica, comm_r, cache_dir) = if fake {
-            create_fake_seal::<_, Tree>(rng, sector_size)?
+            create_fake_seal::<_, Tree>(rng, sector_size, &ARBITRARY_POREP_ID)?
         } else {
-            create_seal::<_, Tree>(rng, sector_size, prover_id, true)?
+            create_seal::<_, Tree>(rng, sector_size, prover_id, true, &ARBITRARY_POREP_ID)?
         };
         priv_replicas.insert(
             sector_id,
@@ -719,6 +812,7 @@ fn create_seal<R: Rng, Tree: 'static + MerkleTreeTrait>(
     sector_size: u64,
     prover_id: ProverId,
     skip_proof: bool,
+    porep_id: &[u8; 32],
 ) -> Result<(SectorId, NamedTempFile, Commitment, tempfile::TempDir)> {
     init_logger();
 
@@ -726,7 +820,7 @@ fn create_seal<R: Rng, Tree: 'static + MerkleTreeTrait>(
     let sealed_sector_file = NamedTempFile::new()?;
     let cache_dir = tempfile::tempdir().expect("failed to create temp dir");
 
-    let config = porep_config(sector_size, ARBITRARY_POREP_ID);
+    let config = porep_config(sector_size, *porep_id);
     let ticket = rng.gen();
     let seed = rng.gen();
     let sector_id = rng.gen::<u64>().into();
@@ -776,12 +870,19 @@ fn create_seal<R: Rng, Tree: 'static + MerkleTreeTrait>(
 fn create_fake_seal<R: rand::Rng, Tree: 'static + MerkleTreeTrait>(
     mut rng: &mut R,
     sector_size: u64,
+    porep_id: &[u8; 32],
 ) -> Result<(SectorId, NamedTempFile, Commitment, tempfile::TempDir)> {
     init_logger();
 
     let sealed_sector_file = NamedTempFile::new()?;
 
-    let config = porep_config(sector_size, ARBITRARY_POREP_ID);
+    let config = PoRepConfig {
+        sector_size: SectorSize(sector_size),
+        partitions: PoRepProofPartitions(
+            *POREP_PARTITIONS.read().unwrap().get(&sector_size).unwrap(),
+        ),
+        porep_id: *porep_id,
+    };
 
     let cache_dir = tempfile::tempdir().unwrap();
 

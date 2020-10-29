@@ -22,4 +22,3 @@ measurements = ["storage-proofs-core/measurements"]
 profile = ["measurements"]
 pairing = ["storage-proofs-core/pairing", "storage-proofs-post/pairing", "storage-proofs-porep/pairing"]
 blst = ["storage-proofs-core/blst", "storage-proofs-post/blst", "storage-proofs-porep/blst"]
-

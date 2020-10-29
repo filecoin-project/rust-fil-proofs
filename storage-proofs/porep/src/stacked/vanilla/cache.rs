@@ -177,19 +177,30 @@ impl ParentCache {
         H: Hasher,
         G: Graph<H> + ParameterSetMetadata + Send + Sync,
     {
-        // Check if current entry is part of the official manifest.
-        // If not, we're dealing with some kind of test sector.
-        let (parent_cache_data, verify_cache, mut digest_hex) = match get_parent_cache_data(&path) {
-            None => {
-                info!("[open] Parent cache data is not supported in production");
-                (None, false, "".to_string())
-            }
-            Some(pcd) => (
-                Some(pcd),
-                settings::SETTINGS.verify_cache,
-                pcd.digest.clone(),
-            ),
-        };
+        // Check if current entry is part of the official parent cache manifest.  If not, we're
+        // dealing with some kind of test sector.  If verify has been requested but it's not a
+        // production entry in the manifest, we'll calculate the digest so that it can be returned,
+        // although we don't attempt to match it up to anything.  This is useful for the case of
+        // generating new additions to the parent cache manifest since a valid digest is required.
+        let (parent_cache_data, verify_cache, is_production, mut digest_hex) =
+            match get_parent_cache_data(&path) {
+                None => {
+                    info!("[open] Parent cache data is not supported in production");
+
+                    (
+                        None,
+                        settings::SETTINGS.verify_cache,
+                        false, // not production since not in manifest
+                        "".to_string(),
+                    )
+                }
+                Some(pcd) => (
+                    Some(pcd),
+                    settings::SETTINGS.verify_cache,
+                    true, // is_production since it exists in the manifest
+                    pcd.digest.clone(),
+                ),
+            };
 
         info!(
             "parent cache: opening {}, verify enabled: {}",
@@ -198,8 +209,6 @@ impl ParentCache {
         );
 
         if verify_cache {
-            let parent_cache_data = parent_cache_data.expect("parent_cache_data failure");
-
             // Always check all of the data for integrity checks, even
             // if we're only opening a portion of it.
             let mut hasher = Sha256::new();
@@ -214,30 +223,38 @@ impl ParentCache {
             drop(data);
 
             let hash = hasher.finalize();
-            info!("[open] parent cache: calculated consistency digest");
-
             digest_hex = hash.iter().map(|x| format!("{:01$x}", x, 2)).collect();
 
-            trace!(
-                "[{}] Comparing {:?} to {:?}",
-                graph.size() * NODE_SIZE,
-                digest_hex,
-                parent_cache_data.digest
+            info!(
+                "[open] parent cache: calculated consistency digest: {:?}",
+                digest_hex
             );
-            if digest_hex == parent_cache_data.digest {
-                info!("[open] parent cache: cache is verified!");
-            } else {
-                info!(
-                    "[!!!] Parent cache digest mismatch detected.  Regenerating {}",
-                    path.display()
-                );
-                ensure!(
-                    Self::generate(len, graph.size() as u32, graph, path.clone()).is_ok(),
-                    "Failed to generate parent cache"
+
+            if is_production {
+                let parent_cache_data = parent_cache_data.expect("parent_cache_data failure");
+
+                trace!(
+                    "[{}] Comparing {:?} to {:?}",
+                    graph.size() * NODE_SIZE,
+                    digest_hex,
+                    parent_cache_data.digest
                 );
 
-                // Note that if we wanted the user to manually terminate after repeated
-                // generation attemps, we could recursively return Self::open(...) here.
+                if digest_hex == parent_cache_data.digest {
+                    info!("[open] parent cache: cache is verified!");
+                } else {
+                    info!(
+                        "[!!!] Parent cache digest mismatch detected.  Regenerating {}",
+                        path.display()
+                    );
+                    ensure!(
+                        Self::generate(len, graph.size() as u32, graph, path.clone()).is_ok(),
+                        "Failed to generate parent cache"
+                    );
+
+                    // Note that if we wanted the user to manually terminate after repeated
+                    // generation attemps, we could recursively return Self::open(...) here.
+                }
             }
         }
 
@@ -293,6 +310,16 @@ impl ParentCache {
             info!("parent cache: generated");
             data.flush().context("failed to flush parent cache")?;
 
+            info!("[generate] parent cache: generating consistency digest");
+            let mut hasher = Sha256::new();
+            hasher.update(&data);
+            let hash = hasher.finalize();
+            digest_hex = hash.iter().map(|x| format!("{:01$x}", x, 2)).collect();
+            info!(
+                "[generate] parent cache: generated consistency digest: {:?}",
+                digest_hex
+            );
+
             // Check if current entry is part of the official manifest and verify
             // that what we just generated matches what we expect for this entry
             // (if found). If not, we're dealing with some kind of test sector.
@@ -301,14 +328,6 @@ impl ParentCache {
                     info!("[generate] Parent cache data is not supported in production");
                 }
                 Some(pcd) => {
-                    info!("[generate] parent cache: generating consistency digest");
-                    let mut hasher = Sha256::new();
-                    hasher.update(&data);
-                    let hash = hasher.finalize();
-                    info!("[generate] parent cache: generated consistency digest");
-
-                    digest_hex = hash.iter().map(|x| format!("{:01$x}", x, 2)).collect();
-
                     ensure!(
                         digest_hex == pcd.digest,
                         "Newly generated parent cache is invalid"
