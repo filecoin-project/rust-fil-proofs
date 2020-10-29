@@ -1,6 +1,6 @@
 use bellperson::{Circuit, ConstraintSystem, SynthesisError};
 use ff::Field;
-use paired::Engine;
+use bellperson::bls::Engine;
 
 pub const MIMC_ROUNDS: usize = 322;
 

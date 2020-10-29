@@ -6,7 +6,7 @@ use std::path::Path;
 
 use bellperson::groth16::{create_random_proof, prepare_verifying_key, verify_proof};
 use ff::Field;
-use paired::bls12_381::{Bls12, Fr};
+use bellperson::bls::{Bls12, Fr};
 use phase21::small::{read_small_params_from_large_file, verify_contribution_small, MPCSmall};
 use phase21::{verify_contribution, MPCParameters};
 use rand::{thread_rng, SeedableRng};

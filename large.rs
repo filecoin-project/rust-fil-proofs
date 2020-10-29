@@ -4,7 +4,7 @@ use std::path::Path;
 
 use bellperson::groth16::{create_random_proof, prepare_verifying_key, verify_proof};
 use ff::Field;
-use paired::bls12_381::{Bls12, Fr};
+use bellperson::bls::{Bls12, Fr};
 use phase21::{contains_contribution, MPCParameters, verify_contribution};
 use rand::thread_rng;
 
