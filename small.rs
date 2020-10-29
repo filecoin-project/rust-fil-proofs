@@ -7,8 +7,8 @@ use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use ff::{Field, PrimeField};
 use groupy::{CurveAffine, CurveProjective, EncodedPoint, Wnaf};
 use log::{error, info};
-use paired::bls12_381::{
-    Fr, G1Affine, G1Uncompressed, G2Affine, G2Uncompressed, G1 as G1Projective,
+use bellperson::bls::{
+    Fr, G1Affine, G1Uncompressed, G2Affine, G2Uncompressed, G1Projective,
 };
 use rand::Rng;
 

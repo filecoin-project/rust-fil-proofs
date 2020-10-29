@@ -2,8 +2,7 @@
 //!
 //! ## Make your circuit
 //!
-//! Grab the [`bellperson`](https://github.com/filecoin-project/bellman) and
-//! [`paired`](https://github.com/filecoin-project/pairing) crates. Bellman
+//! Grab the [`bellperson`](https://github.com/filecoin-project/bellman) crate. Bellman
 //! provides a trait called `Circuit`, which you must implement
 //! for your computation.
 //!
@@ -11,12 +10,12 @@
 //! a field element.
 //!
 //! ```rust
-//! use paired::Engine;
 //! use ff::Field;
 //! use bellperson::{
 //!     Circuit,
 //!     ConstraintSystem,
 //!     SynthesisError,
+//!     bls::Engine,
 //! };
 //!
 //! struct CubeRoot<E: Engine> {
@@ -81,7 +80,7 @@
 //! let's create some parameters and make some proofs.
 //!
 //! ```rust,ignore
-//! use paired::bls12_381::{Bls12, Fr};
+//! use bellperson::bls::{Bls12, Fr};
 //! use bellperson::groth16::{
 //!     generate_random_parameters,
 //!     create_random_proof,
@@ -209,8 +208,8 @@ use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use ff::{Field, PrimeField};
 use groupy::{CurveAffine, CurveProjective, EncodedPoint, Wnaf};
 use log::{error, info};
-use paired::{
-    bls12_381::{Bls12, Fr, G1Affine, G1Uncompressed, G2Affine, G2Uncompressed, G1, G2},
+use bellperson::bls::{
+    Bls12, Fr, G1Affine, G1Uncompressed, G2Affine, G2Uncompressed, G1Projective, G2Projective,
     Engine, PairingCurveAffine,
 };
 use rand::{Rng, SeedableRng};
@@ -543,15 +542,15 @@ impl MPCParameters {
         let alpha_coeffs_g1 = Arc::new(alpha_coeffs_g1);
         let beta_coeffs_g1 = Arc::new(beta_coeffs_g1);
 
-        let mut ic = vec![G1::zero(); assembly.num_inputs];
+        let mut ic = vec![G1Projective::zero(); assembly.num_inputs];
         info!("phase2::MPCParameters::new() initialized ic vector");
-        let mut l = vec![G1::zero(); assembly.num_aux];
+        let mut l = vec![G1Projective::zero(); assembly.num_aux];
         info!("phase2::MPCParameters::new() initialized l vector");
-        let mut a_g1 = vec![G1::zero(); assembly.num_inputs + assembly.num_aux];
+        let mut a_g1 = vec![G1Projective::zero(); assembly.num_inputs + assembly.num_aux];
         info!("phase2::MPCParameters::new() initialized a_g1 vector");
-        let mut b_g1 = vec![G1::zero(); assembly.num_inputs + assembly.num_aux];
+        let mut b_g1 = vec![G1Projective::zero(); assembly.num_inputs + assembly.num_aux];
         info!("phase2::MPCParameters::new() initialized b_g1 vector");
-        let mut b_g2 = vec![G2::zero(); assembly.num_inputs + assembly.num_aux];
+        let mut b_g2 = vec![G2Projective::zero(); assembly.num_inputs + assembly.num_aux];
         info!("phase2::MPCParameters::new() initialized b_g2 vector");
 
         #[allow(clippy::too_many_arguments)]
@@ -568,10 +567,10 @@ impl MPCParameters {
             ct: &[Vec<(Fr, usize)>],
 
             // Resulting evaluated QAP polynomials
-            a_g1: &mut [G1],
-            b_g1: &mut [G1],
-            b_g2: &mut [G2],
-            ext: &mut [G1],
+            a_g1: &mut [G1Projective],
+            b_g1: &mut [G1Projective],
+            b_g2: &mut [G2Projective],
+            ext: &mut [G1Projective],
 
             // Worker
             worker: &Worker,
@@ -627,10 +626,10 @@ impl MPCParameters {
                         }
 
                         // Batch normalize
-                        G1::batch_normalization(a_g1);
-                        G1::batch_normalization(b_g1);
-                        G2::batch_normalization(b_g2);
-                        G1::batch_normalization(ext);
+                        G1Projective::batch_normalization(a_g1);
+                        G1Projective::batch_normalization(b_g1);
+                        G2Projective::batch_normalization(b_g2);
+                        G1Projective::batch_normalization(ext);
                     });
                 }
             });
@@ -1508,7 +1507,7 @@ fn keypair<R: Rng>(rng: &mut R, current: &MPCParameters) -> (PublicKey, PrivateK
     let delta: Fr = Fr::random(rng);
 
     // Compute delta s-pair in G1
-    let s = G1::random(rng).into_affine();
+    let s = G1Projective::random(rng).into_affine();
     let s_delta = s.mul(delta).into_affine();
 
     // H(cs_hash | <previous pubkeys> | s | s_delta)
@@ -1549,13 +1548,13 @@ fn keypair<R: Rng>(rng: &mut R, current: &MPCParameters) -> (PublicKey, PrivateK
 
 /// Hashes to G2 using the first 32 bytes of `digest`. Panics if `digest` is less
 /// than 32 bytes.
-pub(crate) fn hash_to_g2(digest: &[u8]) -> G2 {
+pub(crate) fn hash_to_g2(digest: &[u8]) -> G2Projective {
     assert!(digest.len() >= 32);
 
     let mut seed = [0u8; 32];
     seed.copy_from_slice(&digest[..32]);
 
-    G2::random(&mut ChaChaRng::from_seed(seed))
+    G2Projective::random(&mut ChaChaRng::from_seed(seed))
 }
 
 /// Abstraction over a writer which hashes the data being written.
