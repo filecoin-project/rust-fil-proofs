@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://book.async.rs/overview
 
 ## Unreleased
 
+## 5.3.0 - 2020-10-29
+
+- Integrate blst backend and proof verification optimizations [#1332](https://github.com/filecoin-project/rust-fil-proofs/pull/1332)
+- Remove unused pedersen hasher [#1331](https://github.com/filecoin-project/rust-fil-proofs/pull/1331)
+- Sanity check commitments [#1330](https://github.com/filecoin-project/rust-fil-proofs/pull/1330)
+- Install hwloc to fix metrics capture on CI [#1328](https://github.com/filecoin-project/rust-fil-proofs/pull/1328)
+- Remove no longer used exports [#1315](https://github.com/filecoin-project/rust-fil-proofs/pull/1315)
+- Add tests for resumable sealing [#1309](https://github.com/filecoin-project/rust-fil-proofs/pull/1309)
+- Add circuitinfo CLI tool to count circuit constraints [#1325](https://github.com/filecoin-project/rust-fil-proofs/pull/1325)
+- Remove mutex from settings access [#1321](https://github.com/filecoin-project/rust-fil-proofs/pull/1321)
+- Add SECURITY.md [#1317](https://github.com/filecoin-project/rust-fil-proofs/pull/1317)
+- Update hwloc dependency for CI [#1316](https://github.com/filecoin-project/rust-fil-proofs/pull/1316)
+
 ## 5.2.3 - 2020-10-13
 
 - Update neptune dependency version
@@ -158,7 +171,8 @@ and this project adheres to [Semantic Versioning](https://book.async.rs/overview
 
 - Initial stable release
 
-[Unreleased]: https://github.com/filecoin-project/rust-fil-proofs/compare/v5.2.3...HEAD
+[Unreleased]: https://github.com/filecoin-project/rust-fil-proofs/compare/v5.3.0...HEAD
+[5.3.0]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v5.3.0
 [5.2.3]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v5.2.3
 [5.2.2]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v5.2.2
 [5.2.1]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v5.2.1
