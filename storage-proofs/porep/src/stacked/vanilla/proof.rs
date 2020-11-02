@@ -57,7 +57,7 @@ use crate::PoRep;
 pub const TOTAL_PARENTS: usize = 37;
 
 #[derive(Debug)]
-pub struct StackedDrg<'a, Tree: 'a + MerkleTreeTrait, G: 'a + Hasher> {
+pub struct StackedDrg<'a, Tree: MerkleTreeTrait, G: Hasher> {
     _a: PhantomData<&'a Tree>,
     _b: PhantomData<&'a G>,
 }
@@ -678,7 +678,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
     }
 
     fn generate_tree_r_last<TreeArity>(
-        data: &mut Data,
+        data: &mut Data<'_>,
         nodes_count: usize,
         tree_count: usize,
         tree_r_last_config: StoreConfig,
@@ -896,7 +896,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         graph: &StackedBucketGraph<Tree::Hasher>,
         layer_challenges: &LayerChallenges,
         replica_id: &<Tree::Hasher as Hasher>::Domain,
-        data: Data,
+        data: Data<'_>,
         data_tree: Option<BinaryMerkleTree<G>>,
         config: StoreConfig,
         replica_path: PathBuf,
@@ -923,7 +923,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
     pub(crate) fn transform_and_replicate_layers_inner(
         graph: &StackedBucketGraph<Tree::Hasher>,
         layer_challenges: &LayerChallenges,
-        mut data: Data,
+        mut data: Data<'_>,
         data_tree: Option<BinaryMerkleTree<G>>,
         config: StoreConfig,
         replica_path: PathBuf,

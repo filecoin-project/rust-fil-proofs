@@ -189,8 +189,8 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher>
     for StackedCompound<Tree, G>
 {
     fn generate_public_inputs(
-        pub_in: &<StackedDrg<Tree, G> as ProofScheme>::PublicInputs,
-        pub_params: &<StackedDrg<Tree, G> as ProofScheme>::PublicParams,
+        pub_in: &<StackedDrg<'_, Tree, G> as ProofScheme<'_>>::PublicInputs,
+        pub_params: &<StackedDrg<'_, Tree, G> as ProofScheme<'_>>::PublicParams,
         k: Option<usize>,
     ) -> Result<Vec<Fr>> {
         let graph = &pub_params.graph;
@@ -271,10 +271,10 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher>
     }
 
     fn circuit<'b>(
-        public_inputs: &'b <StackedDrg<Tree, G> as ProofScheme>::PublicInputs,
+        public_inputs: &'b <StackedDrg<'_, Tree, G> as ProofScheme<'_>>::PublicInputs,
         _component_private_inputs: <StackedCircuit<'a, Tree, G> as CircuitComponent>::ComponentPrivateInputs,
-        vanilla_proof: &'b <StackedDrg<Tree, G> as ProofScheme>::Proof,
-        public_params: &'b <StackedDrg<Tree, G> as ProofScheme>::PublicParams,
+        vanilla_proof: &'b <StackedDrg<'_, Tree, G> as ProofScheme<'_>>::Proof,
+        public_params: &'b <StackedDrg<'_, Tree, G> as ProofScheme<'_>>::PublicParams,
         _partition_k: Option<usize>,
     ) -> Result<StackedCircuit<'a, Tree, G>> {
         ensure!(
@@ -307,7 +307,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher>
     }
 
     fn blank_circuit(
-        public_params: &<StackedDrg<Tree, G> as ProofScheme>::PublicParams,
+        public_params: &<StackedDrg<'_, Tree, G> as ProofScheme<'_>>::PublicParams,
     ) -> StackedCircuit<'a, Tree, G> {
         StackedCircuit {
             public_params: public_params.clone(),
@@ -509,7 +509,7 @@ mod tests {
         assert_eq!(cs.get_input(0, "ONE"), Fr::one());
 
         let generated_inputs = <StackedCompound<Tree, Sha256Hasher> as CompoundProof<
-            StackedDrg<Tree, Sha256Hasher>,
+            StackedDrg<'_, Tree, Sha256Hasher>,
             _,
         >>::generate_public_inputs(&pub_inputs, &pp, None)
         .expect("failed to generate public inputs");
@@ -651,7 +651,7 @@ mod tests {
                 StackedCompound::circuit_for_test(&public_params, &public_inputs, &private_inputs)
                     .unwrap();
             let blank_circuit = <StackedCompound<Tree, Sha256Hasher> as CompoundProof<
-                StackedDrg<Tree, Sha256Hasher>,
+                StackedDrg<'_, Tree, Sha256Hasher>,
                 _,
             >>::blank_circuit(&public_params.vanilla_params);
 
@@ -672,7 +672,7 @@ mod tests {
         }
 
         let blank_groth_params = <StackedCompound<Tree, Sha256Hasher> as CompoundProof<
-            StackedDrg<Tree, Sha256Hasher>,
+            StackedDrg<'_, Tree, Sha256Hasher>,
             _,
         >>::groth_params(Some(rng), &public_params.vanilla_params)
         .expect("failed to generate groth params");

@@ -138,7 +138,7 @@ where
 
     fn circuit(
         public_inputs: &<DrgPoRep<'a, H, G> as ProofScheme<'a>>::PublicInputs,
-        component_private_inputs: <DrgPoRepCircuit<H> as CircuitComponent>::ComponentPrivateInputs,
+        component_private_inputs: <DrgPoRepCircuit<'_, H> as CircuitComponent>::ComponentPrivateInputs,
         proof: &<DrgPoRep<'a, H, G> as ProofScheme<'a>>::Proof,
         public_params: &<DrgPoRep<'a, H, G> as ProofScheme<'a>>::PublicParams,
         _partition_k: Option<usize>,

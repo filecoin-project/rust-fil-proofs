@@ -57,7 +57,7 @@ pub struct PublicInputs<T: Domain> {
 }
 
 #[derive(Debug)]
-pub struct PrivateInputs<'a, H: 'a + Hasher> {
+pub struct PrivateInputs<'a, H: Hasher> {
     pub tree_d: &'a BinaryMerkleTree<H>,
     pub tree_r: &'a BinaryLCMerkleTree<H>,
     pub tree_r_config_rows_to_discard: usize,
@@ -225,7 +225,7 @@ impl<'a, H: Hasher> From<&'a Proof<H>> for Proof<H> {
 #[derive(Default)]
 pub struct DrgPoRep<'a, H, G>
 where
-    H: 'a + Hasher,
+    H: Hasher,
     G: 'a + Graph<H>,
 {
     _h: PhantomData<&'a H>,
