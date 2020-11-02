@@ -60,7 +60,7 @@ impl PartialEq for Blake2sFunction {
 impl Eq for Blake2sFunction {}
 
 impl fmt::Debug for Blake2sFunction {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "Blake2sFunction({:?})", self.0)
     }
 }

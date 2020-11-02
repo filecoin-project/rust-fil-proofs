@@ -207,7 +207,7 @@ impl<H: Hasher, Arity: PoseidonArity> InclusionPath<H, Arity> {
         self.path.is_empty()
     }
 
-    pub fn iter(&self) -> std::slice::Iter<PathElement<H, Arity>> {
+    pub fn iter(&self) -> std::slice::Iter<'_, PathElement<H, Arity>> {
         self.path.iter()
     }
 

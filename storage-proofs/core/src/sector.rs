@@ -34,7 +34,7 @@ impl From<SectorId> for Fr {
 }
 
 impl fmt::Display for SectorId {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "SectorId({})", self.0)
     }
 }

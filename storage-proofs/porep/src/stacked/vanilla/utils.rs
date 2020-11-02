@@ -123,7 +123,7 @@ impl RingBuf {
         &mut self.slice_mut()[start..end]
     }
 
-    pub fn iter_slot_mut(&mut self) -> std::slice::ChunksExactMut<u8> {
+    pub fn iter_slot_mut(&mut self) -> std::slice::ChunksExactMut<'_, u8> {
         // Safety: safe because we are holding &mut self
         unsafe { self.slice_mut().chunks_exact_mut(self.slot_size) }
     }

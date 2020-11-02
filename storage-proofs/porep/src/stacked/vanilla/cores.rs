@@ -67,13 +67,10 @@ pub struct Cleanup {
 
 impl Drop for Cleanup {
     fn drop(&mut self) {
-        match self.prior_state.take() {
-            Some(prior) => {
-                let child_topo = &TOPOLOGY;
-                let mut locked_topo = child_topo.lock().unwrap();
-                let _ = locked_topo.set_cpubind_for_thread(self.tid, prior, CPUBIND_THREAD);
-            }
-            None => (),
+        if let Some(prior) = self.prior_state.take() {
+            let child_topo = &TOPOLOGY;
+            let mut locked_topo = child_topo.lock().expect("poisded lock");
+            let _ = locked_topo.set_cpubind_for_thread(self.tid, prior, CPUBIND_THREAD);
         }
     }
 }
@@ -81,7 +78,7 @@ impl Drop for Cleanup {
 pub fn bind_core(core_index: CoreIndex) -> Result<Cleanup> {
     let child_topo = &TOPOLOGY;
     let tid = get_thread_id();
-    let mut locked_topo = child_topo.lock().unwrap();
+    let mut locked_topo = child_topo.lock().expect("poisoned lock");
     let core = get_core_by_index(&locked_topo, core_index).map_err(|err| {
         anyhow::format_err!("failed to get core at index {}: {:?}", core_index.0, err)
     })?;
@@ -129,7 +126,7 @@ fn get_core_by_index<'a>(topo: &'a Topology, index: CoreIndex) -> Result<&'a Top
 }
 
 fn core_groups(cores_per_unit: usize) -> Option<Vec<Mutex<Vec<CoreIndex>>>> {
-    let topo = TOPOLOGY.lock().unwrap();
+    let topo = TOPOLOGY.lock().expect("poisoned lock");
 
     let core_depth = match topo.depth_or_below_for_type(&ObjectType::Core) {
         Ok(depth) => depth,

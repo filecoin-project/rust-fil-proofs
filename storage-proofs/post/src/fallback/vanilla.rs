@@ -160,7 +160,7 @@ impl<P: MerkleProofTrait> SectorProof<P> {
 #[derive(Debug, Clone)]
 pub struct FallbackPoSt<'a, Tree>
 where
-    Tree: 'a + MerkleTreeTrait,
+    Tree: MerkleTreeTrait,
 {
     _t: PhantomData<&'a Tree>,
 }
@@ -256,7 +256,7 @@ enum ProofOrFault<T> {
 // Generates a single vanilla proof, given the private inputs and sector challenges.
 pub fn vanilla_proof<Tree: MerkleTreeTrait>(
     sector_id: SectorId,
-    priv_inputs: &PrivateInputs<Tree>,
+    priv_inputs: &PrivateInputs<'_, Tree>,
     challenges: &[u64],
 ) -> Result<Proof<Tree::Proof>> {
     ensure!(

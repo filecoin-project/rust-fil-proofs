@@ -273,7 +273,7 @@ pub fn generate_winning_post_with_vanilla<Tree: 'static + MerkleTreeTrait>(
         partitions: None,
         priority: post_config.priority,
     };
-    let pub_params: compound_proof::PublicParams<fallback::FallbackPoSt<Tree>> =
+    let pub_params: compound_proof::PublicParams<'_, fallback::FallbackPoSt<'_, Tree>> =
         fallback::FallbackPoStCompound::setup(&setup_params)?;
     let groth_params = get_post_params::<Tree>(&post_config)?;
 
@@ -348,7 +348,7 @@ pub fn generate_winning_post<Tree: 'static + MerkleTreeTrait>(
         partitions: None,
         priority: post_config.priority,
     };
-    let pub_params: compound_proof::PublicParams<fallback::FallbackPoSt<Tree>> =
+    let pub_params: compound_proof::PublicParams<'_, fallback::FallbackPoSt<'_, Tree>> =
         fallback::FallbackPoStCompound::setup(&setup_params)?;
     let groth_params = get_post_params::<Tree>(&post_config)?;
 
@@ -600,7 +600,7 @@ pub fn verify_winning_post<Tree: 'static + MerkleTreeTrait>(
         partitions: None,
         priority: false,
     };
-    let pub_params: compound_proof::PublicParams<fallback::FallbackPoSt<Tree>> =
+    let pub_params: compound_proof::PublicParams<'_, fallback::FallbackPoSt<'_, Tree>> =
         fallback::FallbackPoStCompound::setup(&setup_params)?;
 
     let mut pub_sectors = Vec::with_capacity(param_sector_count);
@@ -656,7 +656,7 @@ pub fn verify_winning_post<Tree: 'static + MerkleTreeTrait>(
 pub fn partition_vanilla_proofs<Tree: MerkleTreeTrait>(
     post_config: &PoStConfig,
     pub_params: &fallback::PublicParams,
-    pub_inputs: &fallback::PublicInputs<<Tree::Hasher as Hasher>::Domain>,
+    pub_inputs: &fallback::PublicInputs<'_, <Tree::Hasher as Hasher>::Domain>,
     partition_count: usize,
     vanilla_proofs: &[FallbackPoStSectorProof<Tree>],
 ) -> Result<Vec<VanillaProof<Tree>>> {
@@ -808,7 +808,7 @@ pub fn generate_window_post_with_vanilla<Tree: 'static + MerkleTreeTrait>(
         None => 1,
     };
 
-    let pub_params: compound_proof::PublicParams<fallback::FallbackPoSt<Tree>> =
+    let pub_params: compound_proof::PublicParams<'_, fallback::FallbackPoSt<'_, Tree>> =
         fallback::FallbackPoStCompound::setup(&setup_params)?;
     let groth_params = get_post_params::<Tree>(&post_config)?;
 
@@ -873,7 +873,7 @@ pub fn generate_window_post<Tree: 'static + MerkleTreeTrait>(
         priority: post_config.priority,
     };
 
-    let pub_params: compound_proof::PublicParams<fallback::FallbackPoSt<Tree>> =
+    let pub_params: compound_proof::PublicParams<'_, fallback::FallbackPoSt<'_, Tree>> =
         fallback::FallbackPoStCompound::setup(&setup_params)?;
     let groth_params = get_post_params::<Tree>(&post_config)?;
 
@@ -958,7 +958,7 @@ pub fn verify_window_post<Tree: 'static + MerkleTreeTrait>(
         partitions,
         priority: false,
     };
-    let pub_params: compound_proof::PublicParams<fallback::FallbackPoSt<Tree>> =
+    let pub_params: compound_proof::PublicParams<'_, fallback::FallbackPoSt<'_, Tree>> =
         fallback::FallbackPoStCompound::setup(&setup_params)?;
 
     let pub_sectors: Vec<_> = replicas
