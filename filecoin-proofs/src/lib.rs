@@ -1,4 +1,4 @@
-#![deny(clippy::all, clippy::perf, clippy::correctness)]
+#![deny(clippy::all, clippy::perf, clippy::correctness, rust_2018_idioms)]
 #![warn(clippy::unwrap_used)]
 
 mod api;
@@ -11,7 +11,6 @@ pub mod fr32_reader;
 pub mod param;
 pub mod parameters;
 pub mod pieces;
-pub mod serde_big_array;
 pub mod types;
 
 pub use self::api::*;
