@@ -44,6 +44,7 @@ flexi_logger = "0.16.1"
 typenum = "1.11.2"
 generic-array = "0.14.4"
 byte-unit = "4.0.9"
+fdlimit = "0.2.0"
 
 [features]
 default = ["gpu", "measurements"]
