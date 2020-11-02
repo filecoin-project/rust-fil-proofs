@@ -4,6 +4,7 @@ use std::sync::RwLock;
 use lazy_static::lazy_static;
 use storage_proofs::hasher::Hasher;
 use storage_proofs::util::NODE_SIZE;
+use storage_proofs::MAX_LEGACY_POREP_REGISTERED_PROOF_ID;
 use typenum::{U0, U2, U8};
 
 use crate::types::UnpaddedBytesAmount;
@@ -26,6 +27,8 @@ pub const WINDOW_POST_CHALLENGE_COUNT: usize = 10;
 
 pub const DRG_DEGREE: usize = storage_proofs::drgraph::BASE_DEGREE;
 pub const EXP_DEGREE: usize = storage_proofs::porep::stacked::EXP_DEGREE;
+
+pub const MAX_LEGACY_REGISTERED_SEAL_PROOF_ID: u64 = MAX_LEGACY_POREP_REGISTERED_PROOF_ID;
 
 /// Sector sizes for which parameters have been published.
 pub const PUBLISHED_SECTOR_SIZES: [u64; 10] = [

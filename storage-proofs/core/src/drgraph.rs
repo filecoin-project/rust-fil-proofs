@@ -13,6 +13,7 @@ use crate::fr32::bytes_into_fr_repr_safe;
 use crate::hasher::{Hasher, PoseidonArity};
 use crate::parameter_cache::ParameterSetMetadata;
 use crate::util::{data_at_node_offset, NODE_SIZE};
+use crate::{is_legacy_porep_id, PoRepID};
 
 pub const PARALLEL_MERKLE: bool = true;
 
@@ -55,7 +56,7 @@ pub trait Graph<H: Hasher>: ::std::fmt::Debug + Clone + PartialEq + Eq {
         nodes: usize,
         base_degree: usize,
         expansion_degree: usize,
-        porep_id: [u8; 32],
+        porep_id: PoRepID,
     ) -> Result<Self>;
     fn seed(&self) -> [u8; 28];
 
@@ -81,6 +82,7 @@ pub struct BucketGraph<H: Hasher> {
     nodes: usize,
     base_degree: usize,
     seed: [u8; 28],
+    is_legacy: bool,
     _h: PhantomData<H>,
 }
 
@@ -155,7 +157,13 @@ impl<H: Hasher> Graph<H> for BucketGraph<H> {
                 let metagraph_node = node as u64 * m_prime as u64;
                 let n_buckets = (metagraph_node as f64).log2().ceil() as u64;
 
-                for parent in parents.iter_mut().take(m_prime) {
+                let (predecessor_index, other_drg_parents) = if self.is_legacy {
+                    (m_prime, &mut parents[..])
+                } else {
+                    (0, &mut parents[1..])
+                };
+
+                for parent in other_drg_parents.iter_mut().take(m_prime) {
                     let bucket_index = (rng.gen::<u64>() % n_buckets) + 1;
                     let largest_distance_in_bucket = min(metagraph_node, 1 << bucket_index);
                     let smallest_distance_in_bucket = max(2, largest_distance_in_bucket >> 1);
@@ -179,7 +187,8 @@ impl<H: Hasher> Graph<H> for BucketGraph<H> {
                     };
                 }
 
-                parents[m_prime] = node - 1;
+                // Immediate predecessor must be the first parent, so hashing cannot begin early.
+                parents[predecessor_index] = node - 1;
                 Ok(())
             }
         }
@@ -204,7 +213,7 @@ impl<H: Hasher> Graph<H> for BucketGraph<H> {
         nodes: usize,
         base_degree: usize,
         expansion_degree: usize,
-        porep_id: [u8; 32],
+        porep_id: PoRepID,
     ) -> Result<Self> {
         ensure!(expansion_degree == 0, "Expension degree must be zero.");
 
@@ -223,12 +232,13 @@ impl<H: Hasher> Graph<H> for BucketGraph<H> {
             nodes,
             base_degree,
             seed: drg_seed,
+            is_legacy: is_legacy_porep_id(porep_id),
             _h: PhantomData,
         })
     }
 }
 
-pub fn derive_drg_seed(porep_id: [u8; 32]) -> [u8; 28] {
+pub fn derive_drg_seed(porep_id: PoRepID) -> [u8; 28] {
     let mut drg_seed = [0; 28];
     let raw_seed = derive_porep_domain_seed(DRSAMPLE_DST, porep_id);
     drg_seed.copy_from_slice(&raw_seed[..28]);
@@ -259,8 +269,25 @@ mod tests {
     }
 
     fn graph_bucket<H: Hasher>() {
+        // These PoRepIDs do not correspond to the small-sized graphs used in
+        // the tests. However, they are sufficient to distinguish legacy vs new
+        // behavior of parent ordering.
+        let porep_id = |id: u8| {
+            let mut porep_id = [0u8; 32];
+            porep_id[0] = id;
+
+            porep_id
+        };
+
+        let legacy_porep_id = porep_id(0);
+        let new_porep_id = porep_id(5);
+
+        graph_bucket_aux::<H>(legacy_porep_id);
+        graph_bucket_aux::<H>(new_porep_id);
+    }
+
+    fn graph_bucket_aux<H: Hasher>(porep_id: PoRepID) {
         let degree = BASE_DEGREE;
-        let porep_id = [123; 32];
 
         for &size in &[4, 16, 256, 2048] {
             let g = BucketGraph::<H>::new(size, degree, 0, porep_id).unwrap();
@@ -274,7 +301,7 @@ mod tests {
             g.parents(1, &mut parents).unwrap();
             assert_eq!(parents, vec![0; degree as usize]);
 
-            for i in 2..size {
+            for i in 1..size {
                 let mut pa1 = vec![0; degree];
                 g.parents(i, &mut pa1).unwrap();
                 let mut pa2 = vec![0; degree];
@@ -291,6 +318,20 @@ mod tests {
                 for parent in p1 {
                     // TODO: fix me
                     assert_ne!(i, parent as usize, "self reference found");
+                }
+
+                if is_legacy_porep_id(porep_id) {
+                    assert_eq!(
+                        i - 1,
+                        pa1[degree - 1] as usize,
+                        "immediate predecessor was not last DRG parent"
+                    );
+                } else {
+                    assert_eq!(
+                        i - 1,
+                        pa1[0] as usize,
+                        "immediate predecessor was not first parent"
+                    );
                 }
             }
         }

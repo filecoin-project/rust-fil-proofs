@@ -1857,17 +1857,46 @@ mod tests {
         let nodes_2k = 1 << 11;
         let nodes_4k = 1 << 12;
         let replica_id = [9u8; 32];
+        let legacy_porep_id = [0; 32];
         let porep_id = [123; 32];
+        test_generate_labels_aux(
+            nodes_2k,
+            layers,
+            replica_id,
+            legacy_porep_id,
+            Fr::from_repr(FrRepr([
+                0xd3faa96b9a0fba04,
+                0xea81a283d106485e,
+                0xe3d51b9afa5ac2b3,
+                0x0462f4f4f1a68d37,
+            ]))
+            .unwrap(),
+        );
+
+        test_generate_labels_aux(
+            nodes_4k,
+            layers,
+            replica_id,
+            legacy_porep_id,
+            Fr::from_repr(FrRepr([
+                0x7e191e52c4a8da86,
+                0x5ae8a1c9e6fac148,
+                0xce239f3b88a894b8,
+                0x234c00d1dc1d53be,
+            ]))
+            .unwrap(),
+        );
+
         test_generate_labels_aux(
             nodes_2k,
             layers,
             replica_id,
             porep_id,
             Fr::from_repr(FrRepr([
-                0x1a4017052cbe1c4a,
-                0x446354db91e96d8e,
-                0xbc864a95454eba0c,
-                0x094cf219d72cad06,
+                0xabb3f38bb70defcf,
+                0x777a2e4d7769119f,
+                0x3448959d495490bc,
+                0x06021188c7a71cb5,
             ]))
             .unwrap(),
         );
@@ -1878,10 +1907,10 @@ mod tests {
             replica_id,
             porep_id,
             Fr::from_repr(FrRepr([
-                0x0a6917a59c51198b,
-                0xd2edc96e3717044a,
-                0xf438a1131f907206,
-                0x084f42888ca2342c,
+                0x22ab81cf68c4676d,
+                0x7a77a82fc7c9c189,
+                0xc6c03d32c1e42d23,
+                0x0f777c18cc2c55bd,
             ]))
             .unwrap(),
         );
