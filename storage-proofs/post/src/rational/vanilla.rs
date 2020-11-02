@@ -47,7 +47,7 @@ impl ParameterSetMetadata for PublicParams {
 }
 
 #[derive(Debug, Clone)]
-pub struct PublicInputs<'a, T: 'a + Domain> {
+pub struct PublicInputs<'a, T: Domain> {
     /// The challenges, which leafs to prove.
     pub challenges: &'a [Challenge],
     pub faults: &'a OrderedSectorSet,
@@ -108,7 +108,7 @@ impl<P: MerkleProofTrait> Proof<P> {
 #[derive(Debug, Clone)]
 pub struct RationalPoSt<'a, Tree>
 where
-    Tree: 'a + MerkleTreeTrait,
+    Tree: MerkleTreeTrait,
 {
     _t: PhantomData<&'a Tree>,
 }

@@ -140,7 +140,7 @@ impl<P: MerkleProofTrait> Proof<P> {
 #[derive(Debug, Clone)]
 pub struct ElectionPoSt<'a, Tree>
 where
-    Tree: 'a + MerkleTreeTrait,
+    Tree: MerkleTreeTrait,
 {
     _t: PhantomData<&'a Tree>,
 }
