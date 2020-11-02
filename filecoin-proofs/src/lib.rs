@@ -1,7 +1,5 @@
 #![deny(clippy::all, clippy::perf, clippy::correctness)]
-
-//requires nightly, or later stable version
-//#![warn(clippy::unwrap_used)]
+#![warn(clippy::unwrap_used)]
 
 mod api;
 mod caches;
