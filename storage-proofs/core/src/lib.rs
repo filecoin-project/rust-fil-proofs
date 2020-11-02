@@ -1,4 +1,4 @@
-#![deny(clippy::all, clippy::perf, clippy::correctness)]
+#![deny(clippy::all, clippy::perf, clippy::correctness, rust_2018_idioms)]
 #![allow(clippy::many_single_char_names)]
 #![allow(clippy::unreadable_literal)]
 #![allow(clippy::type_repetition_in_bounds)]
@@ -47,6 +47,10 @@ pub fn is_legacy_porep_id(porep_id: PoRepID) -> bool {
     // Of course, it happens to be the case that only the 'legacy' ids in question can ever satisfy
     // this predicate, so the distinction is somewhat moot. However, for the sake of clarity in any future
     // use of `porep_id`, we should pay close attention to this.
-    let id = u64::from_le_bytes(porep_id[..8].try_into().unwrap());
+    let id = u64::from_le_bytes(
+        porep_id[..8]
+            .try_into()
+            .expect("8 bytes is always a valid u64"),
+    );
     id <= MAX_LEGACY_POREP_REGISTERED_PROOF_ID
 }

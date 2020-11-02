@@ -54,7 +54,7 @@ pub struct PublicInputs<T: Domain> {
 
 /// The inputs that are only available to the prover.
 #[derive(Debug)]
-pub struct PrivateInputs<'a, Tree: 'a + MerkleTreeTrait> {
+pub struct PrivateInputs<'a, Tree: MerkleTreeTrait> {
     /// The data of the leaf.
     pub leaf: <Tree::Hasher as Hasher>::Domain,
     /// The underlying merkle tree.

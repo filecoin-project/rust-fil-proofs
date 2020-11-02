@@ -15,7 +15,7 @@ pub enum Root<E: Engine> {
 }
 
 impl<E: Engine> fmt::Debug for Root<E> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Root::Var(num) => write!(f, "Root::Var({:?})", num.get_value()),
             Root::Val(val) => write!(f, "Root::Val({:?})", val),
