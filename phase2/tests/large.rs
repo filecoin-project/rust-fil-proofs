@@ -2,10 +2,10 @@ mod mimc;
 
 use std::path::Path;
 
-use bellperson::groth16::{create_random_proof, prepare_verifying_key, verify_proof};
-use ff::Field;
 use bellperson::bls::{Bls12, Fr};
-use phase21::{contains_contribution, MPCParameters, verify_contribution};
+use bellperson::groth16::{create_random_proof, prepare_verifying_key, verify_proof};
+use fff::Field;
+use filecoin_phase2::{contains_contribution, verify_contribution, MPCParameters};
 use rand::thread_rng;
 
 use mimc::{mimc as mimc_hash, MiMCDemo, MIMC_ROUNDS};
@@ -54,7 +54,6 @@ fn test_large_params() {
 
     assert!(contains_contribution(&all_contributions, &first_contrib));
     assert!(contains_contribution(&all_contributions, &second_contrib));
-
 
     // Create a Groth16 proof using the generated parameters and verfy that the proof is valid.
     let groth_params = params.get_params();

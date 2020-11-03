@@ -10,7 +10,7 @@
 //! a field element.
 //!
 //! ```rust
-//! use ff::Field;
+//! use fff::Field;
 //! use bellperson::{
 //!     Circuit,
 //!     ConstraintSystem,
@@ -187,7 +187,7 @@
 //! Great, now if you're happy, grab the Groth16 `Parameters` with
 //! `params.params()`, so that you can interact with the bellman APIs
 //! just as before.
-#![deny(clippy::all, clippy::perf, clippy::correctness)]
+#![deny(clippy::all, clippy::perf, clippy::correctness, rust_2018_idioms)]
 
 pub mod small;
 
@@ -198,6 +198,10 @@ use std::{
     sync::Arc,
 };
 
+use bellperson::bls::{
+    Bls12, Engine, Fr, G1Affine, G1Projective, G1Uncompressed, G2Affine, G2Projective,
+    G2Uncompressed, PairingCurveAffine,
+};
 use bellperson::{
     groth16::{Parameters, VerifyingKey},
     multicore::Worker,
@@ -205,13 +209,9 @@ use bellperson::{
 };
 use blake2b_simd::State as Blake2b;
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
-use ff::{Field, PrimeField};
+use fff::{Field, PrimeField};
 use groupy::{CurveAffine, CurveProjective, EncodedPoint, Wnaf};
 use log::{error, info};
-use bellperson::bls::{
-    Bls12, Fr, G1Affine, G1Uncompressed, G2Affine, G2Uncompressed, G1Projective, G2Projective,
-    Engine, PairingCurveAffine,
-};
 use rand::{Rng, SeedableRng};
 use rand_chacha::ChaChaRng;
 use rayon::prelude::*;
@@ -382,7 +382,7 @@ pub struct MPCParameters {
 
 // Required by `assert_eq!()`.
 impl Debug for MPCParameters {
-    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         f.debug_struct("MPCParameters")
             .field("params", &"<bellman::groth16::Parameters>")
             .field("cs_hash", &self.cs_hash.to_vec())
@@ -1177,7 +1177,7 @@ struct PublicKey {
 
 // Required by `assert_eq!()`.
 impl Debug for PublicKey {
-    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         f.debug_struct("PublicKey")
             .field("delta_after", &self.delta_after)
             .field("s", &self.s)

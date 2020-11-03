@@ -1,3 +1,5 @@
+#![deny(clippy::all, clippy::perf, clippy::correctness, rust_2018_idioms)]
+
 use std::fmt::{self, Debug, Formatter};
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, BufReader, BufWriter, Read, Seek, SeekFrom, Write};
@@ -13,6 +15,8 @@ use bellperson::bls::{Bls12, G1Affine, G1Uncompressed, G2Affine, G2Uncompressed}
 use bellperson::groth16;
 use byteorder::{BigEndian, ReadBytesExt};
 use clap::{App, AppSettings, Arg, ArgGroup, SubCommand};
+use filecoin_phase2::small::{read_small_params_from_large_file, MPCSmall, Streamer};
+use filecoin_phase2::MPCParameters;
 use filecoin_proofs::constants::*;
 use filecoin_proofs::parameters::{
     setup_params, window_post_public_params, winning_post_public_params,
@@ -23,8 +27,6 @@ use filecoin_proofs::types::{
 use filecoin_proofs::with_shape;
 use groupy::{CurveAffine, EncodedPoint};
 use log::{error, info, warn};
-use phase2::small::{read_small_params_from_large_file, MPCSmall, Streamer};
-use phase2::MPCParameters;
 use rand::rngs::OsRng;
 use rand::{RngCore, SeedableRng};
 use rand_chacha::ChaChaRng;
@@ -313,7 +315,7 @@ fn blank_sdr_poseidon_params<Tree: MerkleTreeTrait>(sector_size: u64) -> PoRepPu
     };
 
     let public_params = <StackedCompound<Tree, Sha256Hasher> as CompoundProof<
-        StackedDrg<Tree, Sha256Hasher>,
+        StackedDrg<'_, Tree, Sha256Hasher>,
         _,
     >>::setup(&setup_params)
     .expect("public param setup failed");
@@ -377,7 +379,7 @@ fn create_initial_params<Tree: 'static + MerkleTreeTrait>(
             let start = Instant::now();
             let public_params = blank_sdr_poseidon_params(sector_size.as_u64());
             let circuit = <StackedCompound<Tree, Sha256Hasher> as CompoundProof<
-                StackedDrg<Tree, Sha256Hasher>,
+                StackedDrg<'_, Tree, Sha256Hasher>,
                 _,
             >>::blank_circuit(&public_params);
             dt_create_circuit = start.elapsed().as_secs();
@@ -390,7 +392,7 @@ fn create_initial_params<Tree: 'static + MerkleTreeTrait>(
             let start = Instant::now();
             let public_params = blank_winning_post_poseidon_params::<Tree>(sector_size.as_u64());
             let circuit = <FallbackPoStCompound<Tree> as CompoundProof<
-                FallbackPoSt<Tree>,
+                FallbackPoSt<'_, Tree>,
                 FallbackPoStCircuit<Tree>,
             >>::blank_circuit(&public_params);
             dt_create_circuit = start.elapsed().as_secs();
@@ -403,7 +405,7 @@ fn create_initial_params<Tree: 'static + MerkleTreeTrait>(
             let start = Instant::now();
             let public_params = blank_window_post_poseidon_params::<Tree>(sector_size.as_u64());
             let circuit = <FallbackPoStCompound<Tree> as CompoundProof<
-                FallbackPoSt<Tree>,
+                FallbackPoSt<'_, Tree>,
                 FallbackPoStCircuit<Tree>,
             >>::blank_circuit(&public_params);
             dt_create_circuit = start.elapsed().as_secs();
@@ -814,7 +816,7 @@ fn verify_contribution(
     info!("verifying contribution");
     let start_verification = Instant::now();
 
-    let calculated_contrib = phase2::small::verify_contribution_small(
+    let calculated_contrib = filecoin_phase2::small::verify_contribution_small(
         &before_params.expect("before params failure"),
         &after_params.expect("after params failure"),
     )
@@ -901,7 +903,7 @@ struct FileInfo {
 }
 
 impl Debug for FileInfo {
-    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         f.debug_struct("FileInfo")
             .field("delta_g1_offset", &self.delta_g1_offset)
             .field("delta_g1", &self.delta_g1)
@@ -1065,7 +1067,7 @@ fn parameter_identifier<Tree: 'static + MerkleTreeTrait>(sector_size: u64, proof
             let public_params = blank_sdr_poseidon_params::<Tree>(sector_size);
 
             <StackedCompound<Tree, Sha256Hasher> as CacheableParameters<
-                StackedCircuit<Tree, Sha256Hasher>,
+                StackedCircuit<'_, Tree, Sha256Hasher>,
                 _,
             >>::cache_identifier(&public_params)
         }

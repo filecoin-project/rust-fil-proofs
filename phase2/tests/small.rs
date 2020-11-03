@@ -4,11 +4,13 @@ use std::fs::{remove_file, File};
 use std::io::{BufReader, BufWriter};
 use std::path::Path;
 
-use bellperson::groth16::{create_random_proof, prepare_verifying_key, verify_proof};
-use ff::Field;
 use bellperson::bls::{Bls12, Fr};
-use phase21::small::{read_small_params_from_large_file, verify_contribution_small, MPCSmall};
-use phase21::{verify_contribution, MPCParameters};
+use bellperson::groth16::{create_random_proof, prepare_verifying_key, verify_proof};
+use fff::Field;
+use filecoin_phase2::small::{
+    read_small_params_from_large_file, verify_contribution_small, MPCSmall,
+};
+use filecoin_phase2::{verify_contribution, MPCParameters};
 use rand::{thread_rng, SeedableRng};
 use rand_chacha::ChaChaRng;
 

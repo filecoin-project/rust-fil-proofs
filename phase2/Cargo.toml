@@ -10,7 +10,6 @@ edition = "2018"
 bellperson = { version = "0.12.0", default-features = false }
 filecoin-proofs = { version = "5.4.0", path = "../filecoin-proofs", default-features = false }
 storage-proofs = { version = "5.4.0", path = "../storage-proofs", default-features = false }
-phase2 = { version = "0.11", package = "phase21", default-features = false }
 groupy = "0.3.1"
 log = "0.4.11"
 clap = "2.33.3"
@@ -21,9 +20,13 @@ simplelog = "0.8.0"
 dialoguer = "0.7.1"
 hex = "0.4.2"
 blake2b_simd = "0.5.11"
+fff = "0.2.3"
+rayon = "1.5.0"
+num_cpus = "1.13.0"
+crossbeam = "0.8.0"
 
 [features]
 default = ["pairing", "gpu"]
-gpu = ["bellperson/gpu", "filecoin-proofs/gpu", "storage-proofs/gpu", "phase2/gpu"]
-pairing = ["bellperson/pairing", "filecoin-proofs/pairing", "storage-proofs/pairing", "phase2/pairing"]
-blst = ["bellperson/blst", "filecoin-proofs/blst", "storage-proofs/blst", "phase2/blst"]
+gpu = ["bellperson/gpu", "filecoin-proofs/gpu", "storage-proofs/gpu"]
+pairing = ["bellperson/pairing", "filecoin-proofs/pairing", "storage-proofs/pairing"]
+blst = ["bellperson/blst", "filecoin-proofs/blst", "storage-proofs/blst"]

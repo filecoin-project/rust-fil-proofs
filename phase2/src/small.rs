@@ -3,13 +3,11 @@ use std::fs::File;
 use std::io::{self, BufReader, BufWriter, Read, Seek, SeekFrom, Write};
 use std::mem::size_of;
 
+use bellperson::bls::{Fr, G1Affine, G1Projective, G1Uncompressed, G2Affine, G2Uncompressed};
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
-use ff::{Field, PrimeField};
+use fff::{Field, PrimeField};
 use groupy::{CurveAffine, CurveProjective, EncodedPoint, Wnaf};
 use log::{error, info};
-use bellperson::bls::{
-    Fr, G1Affine, G1Uncompressed, G2Affine, G2Uncompressed, G1Projective,
-};
 use rand::Rng;
 
 use crate::{hash_to_g2, merge_pairs, same_ratio, HashWriter, PrivateKey, PublicKey};
@@ -43,7 +41,7 @@ pub struct Streamer<'a> {
 
 impl<'a> Streamer<'a> {
     // Create a new `Streamer` from small params file.
-    pub fn new(path: &'a str, read_raw: bool, write_raw: bool) -> io::Result<Streamer> {
+    pub fn new(path: &'a str, read_raw: bool, write_raw: bool) -> io::Result<Streamer<'_>> {
         let mut file = File::open(path)?;
 
         let delta_g1: G1Affine = read_g1(&mut file)?;
@@ -90,7 +88,7 @@ impl<'a> Streamer<'a> {
         path: &'a str,
         read_raw: bool,
         write_raw: bool,
-    ) -> io::Result<Streamer> {
+    ) -> io::Result<Streamer<'_>> {
         let mut file = File::open(path)?;
 
         /*
@@ -390,7 +388,7 @@ impl<'a> Streamer<'a> {
 
 // Required by `assert_eq!()`.
 impl Debug for MPCSmall {
-    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         f.debug_struct("MPCSmall")
             .field("delta_g1", &self.delta_g1)
             .field("delta_g2", &self.delta_g2)
