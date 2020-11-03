@@ -618,7 +618,7 @@ pub fn verify_contribution_small(before: &MPCSmall, after: &MPCSmall) -> Result<
         return Err(());
     }
 
-    let before_is_initial = before.contributions.len() == 0;
+    let before_is_initial = before.contributions.is_empty();
     let after_pubkey = after.contributions.last().unwrap();
 
     // Check that the before params' `delta_g1` and `delta_after` are the same value.
