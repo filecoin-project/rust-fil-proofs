@@ -219,8 +219,8 @@ impl<'a> Streamer<'a> {
 
         let delta_inv = privkey.delta.inverse().expect("nonzero");
 
-        writer.write(self.delta_g1.into_uncompressed().as_ref())?;
-        writer.write(self.delta_g2.into_uncompressed().as_ref())?;
+        writer.write_all(self.delta_g1.into_uncompressed().as_ref())?;
+        writer.write_all(self.delta_g2.into_uncompressed().as_ref())?;
 
         {
             reader.seek(SeekFrom::Start(self.h_len_offset))?;
@@ -281,7 +281,7 @@ impl<'a> Streamer<'a> {
 
         self.contributions.push(pubkey.clone());
 
-        writer.write(&self.cs_hash)?;
+        writer.write_all(&self.cs_hash)?;
 
         writer.write_u32::<BigEndian>(self.contributions.len() as u32)?;
 
@@ -318,8 +318,8 @@ impl<'a> Streamer<'a> {
         let mut reader = BufReader::with_capacity(read_buf_size, file);
         let mut writer = BufWriter::with_capacity(write_buf_size, out_file);
 
-        writer.write(self.delta_g1.into_uncompressed().as_ref())?;
-        writer.write(self.delta_g2.into_uncompressed().as_ref())?;
+        writer.write_all(self.delta_g1.into_uncompressed().as_ref())?;
+        writer.write_all(self.delta_g2.into_uncompressed().as_ref())?;
 
         reader.seek(SeekFrom::Start(self.h_len_offset))?;
         {
@@ -375,7 +375,7 @@ impl<'a> Streamer<'a> {
             info!("phase2::MPCParameters::convert() finished streaming l");
         }
 
-        writer.write(&self.cs_hash)?;
+        writer.write_all(&self.cs_hash)?;
 
         writer.write_u32::<BigEndian>(self.contributions.len() as u32)?;
 
