@@ -1,0 +1,29 @@
+[package]
+name = "filecoin-phase2"
+version = "0.1.0"
+authors = ["dignifiedquire <me@dignifiedquire.com>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+bellperson = { version = "0.12.0", default-features = false }
+filecoin-proofs = { version = "5.4.0", path = "../filecoin-proofs", default-features = false }
+storage-proofs = { version = "5.4.0", path = "../storage-proofs", default-features = false }
+phase2 = { version = "0.11", package = "phase21", default-features = false }
+groupy = "0.3.1"
+log = "0.4.11"
+clap = "2.33.3"
+byteorder = "1.3.4"
+rand = "0.7.3"
+rand_chacha = "0.2.2"
+simplelog = "0.8.0"
+dialoguer = "0.7.1"
+hex = "0.4.2"
+blake2b_simd = "0.5.11"
+
+[features]
+default = ["pairing", "gpu"]
+gpu = ["bellperson/gpu", "filecoin-proofs/gpu", "storage-proofs/gpu", "phase2/gpu"]
+pairing = ["bellperson/pairing", "filecoin-proofs/pairing", "storage-proofs/pairing", "phase2/pairing"]
+blst = ["bellperson/blst", "filecoin-proofs/blst", "storage-proofs/blst", "phase2/blst"]
