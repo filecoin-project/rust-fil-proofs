@@ -15,6 +15,7 @@ use log::info;
 use rand::SeedableRng;
 use rand_xorshift::XorShiftRng;
 use serde::{Deserialize, Serialize};
+use storage_proofs::api_version::APIVersion;
 use storage_proofs::compound_proof::CompoundProof;
 use storage_proofs::hasher::Sha256Hasher;
 #[cfg(feature = "measurements")]
@@ -23,6 +24,8 @@ use storage_proofs::measurements::Operation;
 use storage_proofs::measurements::OP_MEASUREMENTS;
 use storage_proofs::parameter_cache::CacheableParameters;
 use storage_proofs::proof::ProofScheme;
+
+const FIXED_API_VERSION: APIVersion = APIVersion::V1_0;
 
 const SEED: [u8; 16] = [
     0x59, 0x62, 0xbe, 0x5d, 0x76, 0x3d, 0x31, 0x8d, 0x17, 0xdb, 0x37, 0x32, 0x54, 0x06, 0xbc, 0xe5,
@@ -188,6 +191,7 @@ pub fn run(
         inputs.num_sectors as usize,
         only_add_piece,
         arbitrary_porep_id,
+        FIXED_API_VERSION,
     );
 
     if only_add_piece || only_replicate {
@@ -313,6 +317,7 @@ fn generate_params(i: &ProdbenchInputs) {
         sector_size,
         partitions,
         porep_id: dummy_porep_id,
+        api_version: FIXED_API_VERSION,
     });
 }
 
@@ -320,11 +325,10 @@ fn cache_porep_params(porep_config: PoRepConfig) {
     use filecoin_proofs::parameters::public_params;
     use storage_proofs::porep::stacked::{StackedCompound, StackedDrg};
 
-    let dummy_porep_id = [0; 32];
     let public_params = public_params(
         PaddedBytesAmount::from(porep_config),
         usize::from(PoRepProofPartitions::from(porep_config)),
-        dummy_porep_id,
+        porep_config.porep_id,
     )
     .expect("failed to get public_params");
 

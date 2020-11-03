@@ -12,10 +12,13 @@ use filecoin_proofs::parameters::{
 use filecoin_proofs::types::*;
 use filecoin_proofs::with_shape;
 use filecoin_proofs::PoStType;
+use storage_proofs::api_version::APIVersion;
 use storage_proofs::compound_proof::CompoundProof;
 use storage_proofs::parameter_cache::CacheableParameters;
 use storage_proofs::porep::stacked::{StackedCompound, StackedDrg};
 use storage_proofs::post::fallback::{FallbackPoSt, FallbackPoStCircuit, FallbackPoStCompound};
+
+const FIXED_API_VERSION: APIVersion = APIVersion::V1_0;
 
 fn cache_porep_params<Tree: 'static + MerkleTreeTrait>(porep_config: PoRepConfig) {
     info!("PoRep params");
@@ -163,7 +166,7 @@ struct Opt {
     params_for_sector_sizes: Vec<u64>,
 }
 
-fn generate_params_post(sector_size: u64) {
+fn generate_params_post(sector_size: u64, api_version: APIVersion) {
     with_shape!(
         sector_size,
         cache_winning_post_params,
@@ -173,6 +176,7 @@ fn generate_params_post(sector_size: u64) {
             sector_count: WINNING_POST_SECTOR_COUNT,
             typ: PoStType::Winning,
             priority: true,
+            api_version,
         }
     );
 
@@ -189,11 +193,12 @@ fn generate_params_post(sector_size: u64) {
                 .expect("unknown sector size"),
             typ: PoStType::Window,
             priority: true,
+            api_version,
         }
     );
 }
 
-fn generate_params_porep(sector_size: u64) {
+fn generate_params_porep(sector_size: u64, api_version: APIVersion) {
     with_shape!(
         sector_size,
         cache_porep_params,
@@ -207,6 +212,7 @@ fn generate_params_porep(sector_size: u64) {
                     .expect("unknown sector size"),
             ),
             porep_id: [0; 32],
+            api_version,
         }
     );
 }
@@ -286,10 +292,11 @@ pub fn main() {
         spinner.set_message(&message);
         spinner.enable_steady_tick(100);
 
-        generate_params_post(sector_size);
+        // TODO: get API version from command line args
+        generate_params_post(sector_size, FIXED_API_VERSION);
 
         if !only_post {
-            generate_params_porep(sector_size);
+            generate_params_porep(sector_size, FIXED_API_VERSION);
         }
         spinner.finish_with_message(&format!("✔ {}", &message));
     }

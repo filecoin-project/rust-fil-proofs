@@ -8,6 +8,7 @@ use bincode::deserialize;
 use generic_array::typenum::Unsigned;
 use log::{info, trace};
 use merkletree::store::StoreConfig;
+use storage_proofs::api_version::APIVersion;
 use storage_proofs::cache_key::CacheKey;
 use storage_proofs::compound_proof::{self, CompoundProof};
 use storage_proofs::hasher::{Domain, Hasher};
@@ -15,8 +16,7 @@ use storage_proofs::merkle::{
     create_tree, get_base_tree_count, split_config_and_replica, MerkleTreeTrait, MerkleTreeWrapper,
 };
 use storage_proofs::multi_proof::MultiProof;
-use storage_proofs::post::fallback;
-use storage_proofs::post::fallback::SectorProof;
+use storage_proofs::post::fallback::{self, PoStShape, SectorProof};
 use storage_proofs::proof::ProofScheme;
 use storage_proofs::sector::*;
 use storage_proofs::util::default_rows_to_discard;
@@ -452,7 +452,6 @@ pub fn generate_fallback_sector_challenges<Tree: 'static + MerkleTreeTrait>(
     randomness: &ChallengeSeed,
     pub_sectors: &[SectorId],
     _prover_id: ProverId,
-    shape: fallback::PoStShape,
 ) -> Result<BTreeMap<SectorId, Vec<u64>>> {
     info!("generate_sector_challenges:start");
     ensure!(
@@ -463,11 +462,16 @@ pub fn generate_fallback_sector_challenges<Tree: 'static + MerkleTreeTrait>(
     let randomness_safe: <Tree::Hasher as Hasher>::Domain =
         as_safe_commitment(randomness, "randomness")?;
 
+    let shape = match post_config.typ {
+        PoStType::Window => PoStShape::Window,
+        PoStType::Winning => PoStShape::Winning,
+    };
     let public_params = fallback::PublicParams {
         sector_size: u64::from(post_config.sector_size),
         challenge_count: post_config.challenge_count,
         sector_count: post_config.sector_count,
         shape,
+        api_version: post_config.api_version,
     };
 
     let mut sector_challenges: BTreeMap<SectorId, Vec<u64>> = BTreeMap::new();
@@ -487,13 +491,27 @@ pub fn generate_fallback_sector_challenges<Tree: 'static + MerkleTreeTrait>(
             .nth(partition_index)
             .ok_or_else(|| anyhow!("invalid number of sectors/partition index"))?;
 
-        for sector in sectors.iter() {
-            let challenges = fallback::generate_leaf_challenges(
-                &public_params,
-                randomness_safe,
-                u64::from(*sector),
-                post_config.challenge_count,
-            );
+        for (i, sector) in sectors.iter().enumerate() {
+            let mut challenges = Vec::new();
+
+            for n in 0..post_config.challenge_count {
+                let challenge_index = match post_config.api_version {
+                    APIVersion::V1_0 => {
+                        (partition_index * post_config.sector_count + i)
+                            * post_config.challenge_count
+                            + n
+                    }
+                    APIVersion::V1_1 => n,
+                } as u64;
+
+                let challenged_leaf = fallback::generate_leaf_challenge(
+                    &public_params,
+                    randomness_safe,
+                    u64::from(*sector),
+                    challenge_index,
+                );
+                challenges.push(challenged_leaf);
+            }
 
             sector_challenges.insert(*sector, challenges);
         }

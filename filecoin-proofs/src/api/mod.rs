@@ -591,6 +591,7 @@ mod tests {
     use ff::Field;
     use rand::SeedableRng;
     use rand_xorshift::XorShiftRng;
+    use storage_proofs::api_version::APIVersion;
     use storage_proofs::fr32::bytes_into_fr;
 
     use crate::constants::*;
@@ -619,6 +620,7 @@ mod tests {
                             .expect("unknown sector size"),
                     ),
                     porep_id: arbitrary_porep_id,
+                    api_version: APIVersion::V1_0,
                 },
                 not_convertible_to_fr_bytes,
                 convertible_to_fr_bytes,
@@ -654,6 +656,7 @@ mod tests {
                             .expect("unknown sector size"),
                     ),
                     porep_id: arbitrary_porep_id,
+                    api_version: APIVersion::V1_0,
                 },
                 convertible_to_fr_bytes,
                 not_convertible_to_fr_bytes,

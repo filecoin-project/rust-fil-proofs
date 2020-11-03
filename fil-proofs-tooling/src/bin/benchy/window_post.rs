@@ -25,6 +25,7 @@ use filecoin_proofs::{
 };
 use log::info;
 use serde::{Deserialize, Serialize};
+use storage_proofs::api_version::APIVersion;
 use storage_proofs::merkle::MerkleTreeTrait;
 use storage_proofs::sector::SectorId;
 
@@ -94,6 +95,7 @@ fn get_porep_config(sector_size: u64) -> PoRepConfig {
                 .expect("unknown sector size"),
         ),
         porep_id: arbitrary_porep_id,
+        api_version: APIVersion::V1_1,
     }
 }
 
@@ -514,6 +516,7 @@ pub fn run_window_post_bench<Tree: 'static + MerkleTreeTrait>(
             .expect("unknown sector size"),
         typ: PoStType::Window,
         priority: true,
+        api_version: APIVersion::V1_1,
     };
 
     let gen_window_post_measurement = measure(|| {

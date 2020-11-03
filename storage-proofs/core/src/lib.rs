@@ -7,6 +7,7 @@
 #[macro_use]
 pub mod test_helper;
 
+pub mod api_version;
 pub mod cache_key;
 pub mod compound_proof;
 pub mod crypto;

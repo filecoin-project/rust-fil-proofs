@@ -11,7 +11,10 @@ use filecoin_proofs::{
 };
 use log::info;
 use serde::Serialize;
+use storage_proofs::api_version::APIVersion;
 use storage_proofs::merkle::MerkleTreeTrait;
+
+const FIXED_API_VERSION: APIVersion = APIVersion::V1_0;
 
 #[derive(Serialize)]
 #[serde(rename_all = "kebab-case")]
@@ -54,7 +57,8 @@ pub fn run_fallback_post_bench<Tree: 'static + MerkleTreeTrait>(
         ));
     }
     let arbitrary_porep_id = [66; 32];
-    let (sector_id, replica_output) = create_replica::<Tree>(sector_size, arbitrary_porep_id);
+    let (sector_id, replica_output) =
+        create_replica::<Tree>(sector_size, arbitrary_porep_id, FIXED_API_VERSION);
 
     // Store the replica's private and publicly facing info for proving and verifying respectively.
     let pub_replica_info = vec![(sector_id, replica_output.public_replica_info)];
@@ -66,6 +70,7 @@ pub fn run_fallback_post_bench<Tree: 'static + MerkleTreeTrait>(
         challenge_count: WINNING_POST_CHALLENGE_COUNT,
         typ: PoStType::Winning,
         priority: true,
+        api_version: FIXED_API_VERSION,
     };
 
     let gen_winning_post_sector_challenge_measurement = measure(|| {

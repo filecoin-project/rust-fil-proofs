@@ -52,6 +52,7 @@ pub fn winning_post_setup_params(post_config: &PoStConfig) -> Result<WinningPost
         challenge_count: param_challenge_count,
         sector_count: param_sector_count,
         shape: fallback::PoStShape::Winning,
+        api_version: post_config.api_version,
     })
 }
 
@@ -67,6 +68,7 @@ pub fn window_post_setup_params(post_config: &PoStConfig) -> WindowPostSetupPara
         challenge_count: post_config.challenge_count,
         sector_count: post_config.sector_count,
         shape: fallback::PoStShape::Window,
+        api_version: post_config.api_version,
     }
 }
 
@@ -128,6 +130,7 @@ mod tests {
     use super::*;
 
     use crate::types::PoStType;
+    use storage_proofs::api_version::APIVersion;
 
     #[test]
     fn partition_layer_challenges_test() {
@@ -152,6 +155,7 @@ mod tests {
             challenge_count: 66,
             sector_count: 1,
             sector_size: 2048u64.into(),
+            api_version: APIVersion::V1_0,
         };
 
         let params =
