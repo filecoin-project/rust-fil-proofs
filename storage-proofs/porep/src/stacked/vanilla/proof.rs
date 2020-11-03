@@ -997,8 +997,12 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
             LabelsCache::<Tree>::new(&label_configs).context("failed to create labels cache")?;
         let configs = split_config(tree_c_config.clone(), tree_count)?;
 
-        let res = fdlimit::raise_fd_limit().expect("Failed to raise the fd limit");
-        info!("Building trees [{} descriptors max available]", res);
+        match fdlimit::raise_fd_limit() {
+            Some(res) => {
+                info!("Building trees [{} descriptors max available]", res);
+            }
+            None => error!("Failed to raise the fd limit"),
+        };
 
         let tree_c_root = match layers {
             2 => {
