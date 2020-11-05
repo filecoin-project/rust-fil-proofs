@@ -2,18 +2,18 @@ use anyhow::{ensure, Context, Result};
 use log::info;
 use storage_proofs::compound_proof::{self, CompoundProof};
 use storage_proofs::hasher::Hasher;
+use storage_proofs::merkle::MerkleTreeTrait;
 use storage_proofs::multi_proof::MultiProof;
 use storage_proofs::post::fallback;
 use storage_proofs::sector::*;
-use storage_proofs::merkle::MerkleTreeTrait;
 
 use crate::api::post_util::partition_vanilla_proofs;
 use crate::api::util::as_safe_commitment;
 use crate::caches::{get_post_params, get_post_verifying_key};
 use crate::parameters::winning_post_setup_params;
 use crate::types::{
-    ChallengeSeed, Commitment, FallbackPoStSectorProof, PoStConfig,
-    PrivateReplicaInfo, ProverId, PublicReplicaInfo, SnarkProof,
+    ChallengeSeed, Commitment, FallbackPoStSectorProof, PoStConfig, PrivateReplicaInfo, ProverId,
+    PublicReplicaInfo, SnarkProof,
 };
 use crate::PoStType;
 

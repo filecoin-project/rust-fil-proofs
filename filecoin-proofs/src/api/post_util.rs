@@ -15,8 +15,8 @@ use storage_proofs::sector::*;
 use crate::api::util::as_safe_commitment;
 use crate::constants::*;
 use crate::types::{
-    ChallengeSeed, FallbackPoStSectorProof, PoStConfig,
-    PrivateReplicaInfo, ProverId, TemporaryAux, VanillaProof,
+    ChallengeSeed, FallbackPoStSectorProof, PoStConfig, PrivateReplicaInfo, ProverId, TemporaryAux,
+    VanillaProof,
 };
 use crate::PoStType;
 

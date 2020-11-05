@@ -9,15 +9,13 @@ use storage_proofs::multi_proof::MultiProof;
 use storage_proofs::post::fallback;
 use storage_proofs::sector::*;
 
-use crate::api::post_util::{
-    get_partitions_for_window_post, partition_vanilla_proofs,
-};
+use crate::api::post_util::{get_partitions_for_window_post, partition_vanilla_proofs};
 use crate::api::util::as_safe_commitment;
 use crate::caches::{get_post_params, get_post_verifying_key};
 use crate::parameters::window_post_setup_params;
 use crate::types::{
-    ChallengeSeed, FallbackPoStSectorProof, PoStConfig,
-    PrivateReplicaInfo, ProverId, PublicReplicaInfo, SnarkProof,
+    ChallengeSeed, FallbackPoStSectorProof, PoStConfig, PrivateReplicaInfo, ProverId,
+    PublicReplicaInfo, SnarkProof,
 };
 use crate::PoStType;
 

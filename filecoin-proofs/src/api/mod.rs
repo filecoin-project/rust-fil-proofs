@@ -31,12 +31,14 @@ use crate::types::{
     ProverId, SealPreCommitPhase1Output, Ticket, UnpaddedByteIndex, UnpaddedBytesAmount,
 };
 
+mod fake_seal;
 mod post_util;
 mod seal;
 pub(crate) mod util;
 mod window_post;
 mod winning_post;
 
+pub use self::fake_seal::*;
 pub use self::post_util::*;
 pub use self::seal::*;
 pub use self::window_post::*;
