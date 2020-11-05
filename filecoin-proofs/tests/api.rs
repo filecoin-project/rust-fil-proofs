@@ -13,6 +13,7 @@ use rand_xorshift::XorShiftRng;
 use storage_proofs::sector::*;
 use tempfile::NamedTempFile;
 
+use filecoin_proofs::types::*;
 use filecoin_proofs::*;
 
 // Use a fixed PoRep ID, so that the parents cache can be re-used between some tests.

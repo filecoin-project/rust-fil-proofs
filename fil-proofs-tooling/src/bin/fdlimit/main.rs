@@ -1,5 +1,4 @@
 use anyhow::Result;
-use fdlimit;
 
 fn main() -> Result<()> {
     fil_logger::init();

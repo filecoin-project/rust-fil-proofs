@@ -31,12 +31,16 @@ use crate::types::{
     ProverId, SealPreCommitPhase1Output, Ticket, UnpaddedByteIndex, UnpaddedBytesAmount,
 };
 
-mod post;
+mod post_util;
 mod seal;
 pub(crate) mod util;
+mod window_post;
+mod winning_post;
 
-pub use self::post::*;
+pub use self::post_util::*;
 pub use self::seal::*;
+pub use self::window_post::*;
+pub use self::winning_post::*;
 
 use storage_proofs::pieces::generate_piece_commitment_bytes_from_source;
 
