@@ -1,21 +1,10 @@
-use std::hash::{Hash, Hasher as StdHasher};
-use std::marker::PhantomData;
-use std::path::{Path, PathBuf};
+use std::hash::Hash;
 
-use anyhow::{anyhow, ensure, Context, Result};
-use bincode::deserialize;
-use generic_array::typenum::Unsigned;
-use log::{info, trace};
-use merkletree::store::StoreConfig;
-use storage_proofs::cache_key::CacheKey;
-use storage_proofs::hasher::{Domain, Hasher};
-use storage_proofs::merkle::{
-    create_tree, get_base_tree_count, split_config_and_replica, MerkleTreeTrait, MerkleTreeWrapper,
-};
-use storage_proofs::util::default_rows_to_discard;
+use anyhow::{ensure, Result};
+use storage_proofs::hasher::Domain;
 
-use crate::api::util::{as_safe_commitment, get_base_tree_leafs, get_base_tree_size};
-use crate::types::{Commitment, PersistentAux, SectorSize};
+use crate::api::util::as_safe_commitment;
+use crate::types::Commitment;
 
 /// The minimal information required about a replica, in order to be able to verify
 /// a PoSt over it.

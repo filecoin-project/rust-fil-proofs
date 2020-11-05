@@ -2,10 +2,10 @@ use std::hash::{Hash, Hasher as StdHasher};
 use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
 
-use anyhow::{anyhow, ensure, Context, Result};
+use anyhow::{ensure, Context, Result};
 use bincode::deserialize;
 use generic_array::typenum::Unsigned;
-use log::{info, trace};
+use log::trace;
 use merkletree::store::StoreConfig;
 use storage_proofs::cache_key::CacheKey;
 use storage_proofs::hasher::Hasher;

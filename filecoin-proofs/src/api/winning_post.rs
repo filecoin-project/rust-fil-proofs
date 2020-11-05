@@ -1,36 +1,19 @@
-use std::collections::BTreeMap;
-use std::hash::{Hash, Hasher as StdHasher};
-use std::marker::PhantomData;
-use std::path::{Path, PathBuf};
-
-use anyhow::{anyhow, ensure, Context, Result};
-use bincode::deserialize;
-use generic_array::typenum::Unsigned;
-use log::{info, trace};
-use merkletree::store::StoreConfig;
-use storage_proofs::cache_key::CacheKey;
+use anyhow::{ensure, Context, Result};
+use log::info;
 use storage_proofs::compound_proof::{self, CompoundProof};
-use storage_proofs::hasher::{Domain, Hasher};
-use storage_proofs::merkle::{
-    create_tree, get_base_tree_count, split_config_and_replica, MerkleTreeTrait, MerkleTreeWrapper,
-};
+use storage_proofs::hasher::Hasher;
 use storage_proofs::multi_proof::MultiProof;
 use storage_proofs::post::fallback;
-use storage_proofs::post::fallback::SectorProof;
-use storage_proofs::proof::ProofScheme;
 use storage_proofs::sector::*;
-use storage_proofs::util::default_rows_to_discard;
+use storage_proofs::merkle::MerkleTreeTrait;
 
-use crate::api::post_util::{
-    generate_fallback_sector_challenges, generate_single_vanilla_proof, partition_vanilla_proofs,
-};
-use crate::api::util::{as_safe_commitment, get_base_tree_leafs, get_base_tree_size};
+use crate::api::post_util::partition_vanilla_proofs;
+use crate::api::util::as_safe_commitment;
 use crate::caches::{get_post_params, get_post_verifying_key};
-use crate::constants::*;
-use crate::parameters::{window_post_setup_params, winning_post_setup_params};
+use crate::parameters::winning_post_setup_params;
 use crate::types::{
-    ChallengeSeed, Commitment, FallbackPoStSectorProof, PersistentAux, PoStConfig,
-    PrivateReplicaInfo, ProverId, PublicReplicaInfo, SnarkProof, TemporaryAux, VanillaProof,
+    ChallengeSeed, Commitment, FallbackPoStSectorProof, PoStConfig,
+    PrivateReplicaInfo, ProverId, PublicReplicaInfo, SnarkProof,
 };
 use crate::PoStType;
 
