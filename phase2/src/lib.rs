@@ -72,14 +72,12 @@
 //!         Ok(())
 //!     }
 //! }
-//! ```
 //!
 //! ## Create some proofs
 //!
 //! Now that we have `CubeRoot<E>` implementing `Circuit`,
 //! let's create some parameters and make some proofs.
 //!
-//! ```rust,ignore
 //! use bellperson::bls::{Bls12, Fr};
 //! use bellperson::groth16::{
 //!     generate_random_parameters,
@@ -87,7 +85,7 @@
 //!     prepare_verifying_key,
 //!     verify_proof
 //! };
-//! use rand::{OsRng, Rand};
+//! use rand::rngs::OsRng;
 //!
 //! let rng = &mut OsRng::new();
 //!
@@ -126,7 +124,7 @@
 //!     // Verifier checks the proof against the cube
 //!     assert!(verify_proof(&pvk, &proof, &[cube]).unwrap());
 //! }
-//! ```
+//!
 //! ## Creating parameters
 //!
 //! Notice in the previous example that we created our zk-SNARK
@@ -138,17 +136,17 @@
 //! In order to convince others you didn't, a multi-party
 //! computation (MPC) can be used. The MPC has the property that
 //! only one participant needs to be honest for the parameters to
-//! be secure. This crate (`phase21`) is about creating parameters
+//! be secure. This crate (`filecoin_phase2`) is about creating parameters
 //! securely using such an MPC.
 //!
-//! Let's start by using `phase21` to create some base parameters
+//! Let's start by using `filecoin_phase2` to create some base parameters
 //! for our circuit:
 //!
-//! ```rust,ignore
-//! let mut params = phase21::MPCParameters::new(CubeRoot {
+//!
+//! let mut params = filecoin_phase2::MPCParameters::new(CubeRoot {
 //!     cube_root: None
 //! }).unwrap();
-//! ```
+//!
 //!
 //! The first time you try this, it will try to read a file like
 //! `phase1radix2m2` from the current directory. You need to grab
@@ -158,11 +156,9 @@
 //! created for them. Let's contribute some randomness to these
 //! parameters.
 //!
-//! ```rust,ignore
 //! // Contribute randomness to the parameters. Remember this hash,
 //! // it's how we know our contribution is in the parameters!
 //! let hash = params.contribute(rng);
-//! ```
 //!
 //! These parameters are now secure to use, so long as you weren't
 //! malicious. That may not be convincing to others, so let them
@@ -174,15 +170,13 @@
 //! Once you're done setting up the parameters, you can verify the
 //! parameters:
 //!
-//! ```rust,ignore
 //! let contributions = params.verify(CubeRoot {
 //!     cube_root: None
 //! }).expect("parameters should be valid!");
 //!
 //! // We need to check the `contributions` to see if our `hash`
 //! // is in it (see above, when we first contributed)
-//! assert!(phase21::contains_contribution(&contributions, &hash));
-//! ```
+//! assert!(filecoin_phase2::contains_contribution(&contributions, &hash));
 //!
 //! Great, now if you're happy, grab the Groth16 `Parameters` with
 //! `params.params()`, so that you can interact with the bellman APIs

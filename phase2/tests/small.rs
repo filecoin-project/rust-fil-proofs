@@ -16,12 +16,17 @@ use rand_chacha::ChaChaRng;
 
 use mimc::{mimc as mimc_hash, MiMCDemo, MIMC_ROUNDS};
 
-// This test is marked as ignore because we haven't checked-in the phase1 file required for this
-// test to pass when run via CI. To run this test you must have the correct phase1 params file in
-// the top level directory of this crate.
 #[test]
 #[ignore]
 fn test_mimc_small_params() {
+    //test_mimc_small_params_inner()
+}
+
+// This test is marked as ignore because we haven't checked-in the phase1 file required for this
+// test to pass when run via CI. To run this test you must have the correct phase1 params file in
+// the top level directory of this crate.
+#[allow(dead_code)]
+fn test_mimc_small_params_inner() {
     assert!(
         Path::new("./phase1radix2m10").exists(),
         "the phase1 file `phase1radix2m10` must be in the crate's top level directory"
@@ -157,12 +162,17 @@ fn test_mimc_small_params() {
     assert!(verify_proof(&pvk, &proof, &[image]).unwrap());
 }
 
-// This test is marked as ignore because we haven't checked-in the phase1 file required for this
-// test to pass when run via CI. To run this test you must have the correct phase1 params file in
-// the top level directory of this crate.
 #[test]
 #[ignore]
 fn test_small_file_io() {
+    //test_small_file_io_inner()
+}
+
+// This test is marked as ignore because we haven't checked-in the phase1 file required for this
+// test to pass when run via CI. To run this test you must have the correct phase1 params file in
+// the top level directory of this crate.
+#[allow(dead_code)]
+fn test_small_file_io_inner() {
     const LARGE_PATH: &str = "./tests/large_params";
     const SMALL_PATH: &str = "./tests/small_params";
 
