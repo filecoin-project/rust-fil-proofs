@@ -1,11 +1,8 @@
-use std::fs::OpenOptions;
-use std::io::Write;
-
 use anyhow::{ensure, Context, Result};
 use generic_array::typenum::{Unsigned, U0};
 use itertools::Itertools;
-use log::{debug, error};
-use merkletree::merkle::{get_merkle_tree_leafs, get_merkle_tree_len};
+use log::*;
+use merkletree::merkle::get_merkle_tree_leafs;
 use merkletree::store::{Store, StoreConfig, StoreConfigDataVersion};
 use rayon::prelude::*;
 #[cfg(all(feature = "gpu", not(target_os = "macos")))]
@@ -14,7 +11,6 @@ use sha2raw::Sha256;
 use storage_proofs_core::{
     hasher::{Domain, Hasher},
     merkle::{DiskTree, LCStore, LCTree, MerkleTreeTrait, MerkleTreeWrapper},
-    settings,
     util::NODE_SIZE,
 };
 
@@ -551,14 +547,16 @@ pub fn encode_with_trees_all_cpu<'a, Tree: 'static + MerkleTreeTrait>(
         .collect()
 }
 
-type GPUHasher = storage_proofs_core::hasher::PoseidonHasher;
-
 #[cfg(all(feature = "gpu", not(target_os = "macos")))]
 pub fn encode_with_trees_all_gpu<'a, Tree: 'static + MerkleTreeTrait>(
     conf: &Config,
     replica_id: <Tree::Hasher as Hasher>::Domain,
     inps: &mut Vec<Window<'a>>,
 ) -> Result<Vec<(Vec<LCMerkleTree<Tree>>, LCMerkleTree<Tree>)>> {
+    use std::fs::OpenOptions;
+    use std::io::Write;
+
+    use merkletree::merkle::get_merkle_tree_len;
     use storage_proofs_core::fr32::fr_into_bytes;
 
     let rows_to_discard = inps[0].store_configs[0].rows_to_discard;
@@ -651,8 +649,9 @@ pub fn encode_with_trees_all<'a, Tree: 'static + MerkleTreeTrait>(
     mut inps: Vec<Window<'a>>,
 ) -> Result<Vec<(Vec<LCMerkleTree<Tree>>, LCMerkleTree<Tree>)>> {
     #[cfg(all(feature = "gpu", not(target_os = "macos")))]
-    if settings::SETTINGS.use_gpu_nse
-        && std::any::TypeId::of::<Tree::Hasher>() == std::any::TypeId::of::<GPUHasher>()
+    if storage_proofs_core::settings::SETTINGS.use_gpu_nse
+        && std::any::TypeId::of::<Tree::Hasher>()
+            == std::any::TypeId::of::<storage_proofs_core::hasher::PoseidonHasher>()
         && Tree::Arity::to_usize() == 8
         && ExpanderGraph::from(conf).bits % 8 == 0
     {
