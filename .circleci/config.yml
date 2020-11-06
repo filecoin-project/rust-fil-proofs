@@ -392,7 +392,7 @@ jobs:
             - "~/.rustup"
       - run: sudo apt-get update -y
       - run: apt-cache search opencl
-      - run: sudo apt install -y ocl-icd-opencl-dev
+      - run: sudo apt install -y ocl-icd-opencl-dev clang libssl-dev libhwloc-dev
       - run: |
           sudo fallocate -l 64G /swapfile
           sudo chmod 600 /swapfile
