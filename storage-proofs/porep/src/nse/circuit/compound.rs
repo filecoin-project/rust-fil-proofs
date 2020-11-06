@@ -1,6 +1,8 @@
 use anyhow::{ensure, Result};
-use bellperson::Circuit;
-use paired::bls12_381::{Bls12, Fr};
+use bellperson::{
+    bls::{Bls12, Fr},
+    Circuit,
+};
 use storage_proofs_core::{
     compound_proof::{CircuitComponent, CompoundProof},
     fr32::u64_into_fr,
@@ -28,8 +30,8 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher>
     CompoundProof<'a, NarrowStackedExpander<'a, Tree, G>, NseCircuit<'a, Tree, G>> for NseCompound
 {
     fn generate_public_inputs(
-        public_inputs: &<NarrowStackedExpander<Tree, G> as ProofScheme>::PublicInputs,
-        public_params: &<NarrowStackedExpander<Tree, G> as ProofScheme>::PublicParams,
+        public_inputs: &<NarrowStackedExpander<'_, Tree, G> as ProofScheme<'_>>::PublicInputs,
+        public_params: &<NarrowStackedExpander<'_, Tree, G> as ProofScheme<'_>>::PublicParams,
         k: Option<usize>,
     ) -> Result<Vec<Fr>> {
         let config = &public_params.config;
@@ -155,10 +157,10 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher>
     }
 
     fn circuit<'b>(
-        public_inputs: &'b <NarrowStackedExpander<Tree, G> as ProofScheme>::PublicInputs,
-        _component_private_inputs: <NseCircuit<Tree, G> as CircuitComponent>::ComponentPrivateInputs,
-        vanilla_proof: &'b <NarrowStackedExpander<Tree, G> as ProofScheme>::Proof,
-        public_params: &'b <NarrowStackedExpander<Tree, G> as ProofScheme>::PublicParams,
+        public_inputs: &'b <NarrowStackedExpander<'_, Tree, G> as ProofScheme<'_>>::PublicInputs,
+        _component_private_inputs: <NseCircuit<'_, Tree, G> as CircuitComponent>::ComponentPrivateInputs,
+        vanilla_proof: &'b <NarrowStackedExpander<'_, Tree, G> as ProofScheme<'_>>::Proof,
+        public_params: &'b <NarrowStackedExpander<'_, Tree, G> as ProofScheme<'_>>::PublicParams,
         _partition_k: Option<usize>,
     ) -> Result<NseCircuit<'a, Tree, G>> {
         ensure!(
@@ -187,7 +189,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher>
     }
 
     fn blank_circuit(
-        public_params: &<NarrowStackedExpander<Tree, G> as ProofScheme>::PublicParams,
+        public_params: &<NarrowStackedExpander<'_, Tree, G> as ProofScheme<'_>>::PublicParams,
     ) -> NseCircuit<'a, Tree, G> {
         let config = &public_params.config;
 
@@ -348,7 +350,7 @@ mod tests {
                 NseCompound::circuit_for_test(&public_params, &public_inputs, &private_inputs)
                     .unwrap();
             let blank_circuit = <NseCompound as CompoundProof<
-                NarrowStackedExpander<Tree, Sha256Hasher>,
+                NarrowStackedExpander<'_, Tree, Sha256Hasher>,
                 _,
             >>::blank_circuit(&public_params.vanilla_params);
 
@@ -369,7 +371,7 @@ mod tests {
         }
 
         let blank_groth_params = <NseCompound as CompoundProof<
-            NarrowStackedExpander<Tree, Sha256Hasher>,
+            NarrowStackedExpander<'_, Tree, Sha256Hasher>,
             _,
         >>::groth_params(Some(rng), &public_params.vanilla_params)
         .expect("failed to generate groth params");

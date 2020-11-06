@@ -1,9 +1,9 @@
 use bellperson::{
+    bls::Bls12,
     gadgets::{boolean::Boolean, num},
     Circuit, ConstraintSystem, SynthesisError,
 };
 use neptune::circuit::poseidon_hash;
-use paired::bls12_381::Bls12;
 use storage_proofs_core::{
     compound_proof::CircuitComponent,
     gadgets::{constraint, por::enforce_inclusion, uint64::UInt64},
@@ -354,11 +354,11 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> NodeProof<Tree, G
 mod tests {
     use super::*;
 
+    use bellperson::bls::Fr;
     use bellperson::util_cs::test_cs::TestConstraintSystem;
     use ff::Field;
     use generic_array::typenum::{Unsigned, U0, U2, U4, U8};
     use merkletree::store::StoreConfig;
-    use paired::bls12_381::Fr;
     use rand::{Rng, SeedableRng};
     use rand_xorshift::XorShiftRng;
     use storage_proofs_core::{
@@ -502,7 +502,7 @@ mod tests {
         assert_eq!(cs.get_input(0, "ONE"), Fr::one());
 
         let generated_inputs = <NseCompound as CompoundProof<
-            NarrowStackedExpander<Tree, Sha256Hasher>,
+            NarrowStackedExpander<'_, Tree, Sha256Hasher>,
             _,
         >>::generate_public_inputs(&pub_inputs, &pp, None)
         .expect("failed to generate public inputs");

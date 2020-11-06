@@ -503,8 +503,8 @@ fn tree_from_slice<Tree: MerkleTreeTrait>(
 mod tests {
     use super::*;
 
+    use bellperson::bls::Fr;
     use ff::Field;
-    use paired::bls12_381::Fr;
     use rand::{Rng, SeedableRng};
     use rand_xorshift::XorShiftRng;
     use storage_proofs_core::{
