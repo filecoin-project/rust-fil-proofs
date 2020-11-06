@@ -17,7 +17,7 @@ pub struct ButterflyGraph {
 impl ButterflyGraph {
     /// Calculates the parents for the node at the given `index`, at the
     /// given `layer`.
-    pub fn parents(&self, index: u32, layer: u32) -> ButterflyGraphParentsIter {
+    pub fn parents(&self, index: u32, layer: u32) -> ButterflyGraphParentsIter<'_> {
         assert!(layer <= self.num_layers);
         assert!(layer >= self.num_layers - self.num_butterfly_layers);
         ButterflyGraphParentsIter::new(self, index, layer)

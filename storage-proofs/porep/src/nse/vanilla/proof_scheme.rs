@@ -1,6 +1,6 @@
 use anyhow::{ensure, Context};
+use bellperson::bls::Fr;
 use log::debug;
-use paired::bls12_381::Fr;
 use sha2raw::Sha256;
 use storage_proofs_core::{
     error::Result,

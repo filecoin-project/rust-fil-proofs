@@ -16,7 +16,7 @@ pub struct ExpanderGraph {
 
 impl ExpanderGraph {
     /// Calculates the parents for the node at the given `index`.
-    pub fn parents(&self, index: u32) -> ExpanderGraphParentsIter {
+    pub fn parents(&self, index: u32) -> ExpanderGraphParentsIter<'_> {
         ExpanderGraphParentsIter::new(self, index)
     }
 

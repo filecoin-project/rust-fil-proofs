@@ -1,5 +1,4 @@
 use bellperson::bls::Fr;
-use log::trace;
 use serde::{Deserialize, Serialize};
 use storage_proofs_core::{error::Result, hasher::Hasher, merkle::MerkleProofTrait};
 
