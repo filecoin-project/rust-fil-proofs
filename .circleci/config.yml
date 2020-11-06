@@ -399,9 +399,7 @@ jobs:
           sudo swapon /swapfile
       - run:
           name: Run GPU tests
-          command: |
-              cd storage-proofs/porep
-              cargo test --release --features "gpu-tests" nse::
+          command: cargo +nightly test -Zpackage-features -p storage-proofs-porep --release --features gpu-tests nse::
           environment:
             RUST_TEST_THREADS: 1
           no_output_timeout: 1h
