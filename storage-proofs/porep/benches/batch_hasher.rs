@@ -1,7 +1,7 @@
+use bellperson::bls::Fr;
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use ff::Field;
-use paired::bls12_381::Fr;
-use rand::{Rng, SeedableRng};
+use rand::SeedableRng;
 use rand_xorshift::XorShiftRng;
 use sha2raw::Sha256;
 use storage_proofs_core::fr32::fr_into_bytes;

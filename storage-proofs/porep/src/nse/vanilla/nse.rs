@@ -2,11 +2,11 @@ use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
+use bellperson::bls::Fr;
 use generic_array::typenum::{Unsigned, U2};
 use merkletree::merkle::get_merkle_tree_leafs;
 use merkletree::store::{Store, StoreConfig};
 use neptune::poseidon::Poseidon;
-use paired::bls12_381::Fr;
 use serde::{Deserialize, Serialize};
 use storage_proofs_core::{
     hasher::{Domain, Hasher, POSEIDON_CONSTANTS_15_BASE},
@@ -21,7 +21,7 @@ use super::Config;
 
 /// Implementation of  Narrow Stacked Expander PoRep (NSE).
 #[derive(Debug, Default)]
-pub struct NarrowStackedExpander<'a, Tree: 'a + MerkleTreeTrait, G: 'a + Hasher> {
+pub struct NarrowStackedExpander<'a, Tree: MerkleTreeTrait, G: 'a + Hasher> {
     _tree: PhantomData<&'a Tree>,
     _g: PhantomData<G>,
 }

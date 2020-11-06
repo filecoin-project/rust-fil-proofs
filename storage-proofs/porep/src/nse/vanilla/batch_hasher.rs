@@ -1,9 +1,9 @@
 //! Implementation of batched hashing using Sha256.
 
+use bellperson::bls::{Fr, FrRepr};
 use byteorder::{ByteOrder, LittleEndian};
 use ff::PrimeField;
 use itertools::Itertools;
-use paired::bls12_381::{Fr, FrRepr};
 use sha2raw::Sha256;
 use storage_proofs_core::{hasher::Domain, util::NODE_SIZE};
 

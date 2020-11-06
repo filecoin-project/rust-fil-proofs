@@ -1,6 +1,5 @@
 use bellperson::bls::Fr;
 use filecoin_hashers::Hasher;
-use log::trace;
 use serde::{Deserialize, Serialize};
 use storage_proofs_core::{error::Result, merkle::MerkleProofTrait};
 

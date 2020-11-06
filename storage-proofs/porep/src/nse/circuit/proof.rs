@@ -1,8 +1,11 @@
 use std::marker::PhantomData;
 
-use bellperson::{gadgets::num, ConstraintSystem, SynthesisError};
+use bellperson::{
+    bls::{Bls12, Fr},
+    gadgets::num,
+    ConstraintSystem, SynthesisError,
+};
 use generic_array::typenum::{U0, U2};
-use paired::bls12_381::{Bls12, Fr};
 use storage_proofs_core::{
     gadgets::por::AuthPath,
     hasher::Hasher,

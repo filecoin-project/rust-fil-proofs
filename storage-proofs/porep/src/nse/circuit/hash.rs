@@ -1,9 +1,9 @@
 use bellperson::{
+    bls::{Bls12, Fr},
     gadgets::{boolean::Boolean, num, sha256::sha256 as sha256_circuit, uint32::UInt32},
     ConstraintSystem, SynthesisError,
 };
 use ff::PrimeField;
-use paired::bls12_381::{Bls12, Fr};
 use storage_proofs_core::{
     gadgets::{constraint, encode, multipack, uint64::UInt64},
     util::reverse_bit_numbering,
@@ -209,7 +209,7 @@ mod tests {
     use rand::SeedableRng;
     use rand_xorshift::XorShiftRng;
     use sha2raw::Sha256;
-    use storage_proofs_core::hasher::{Domain, PedersenDomain};
+    use storage_proofs_core::hasher::{Domain, PoseidonDomain};
 
     #[test]
     fn test_derive_butterfly_layer_leaf() {
@@ -218,7 +218,7 @@ mod tests {
 
         let layer = 5;
         let challenge = 8;
-        let replica_id = PedersenDomain::random(rng);
+        let replica_id = PoseidonDomain::random(rng);
         let replica_id_num = num::AllocatedNum::alloc(cs.namespace(|| "replica_id"), || {
             Ok(replica_id.clone().into())
         })
@@ -231,7 +231,7 @@ mod tests {
 
         let challenge_index_num =
             UInt64::alloc(cs.namespace(|| "challenge_num"), Some(challenge)).unwrap();
-        let data: Vec<_> = (0..6).map(|_| PedersenDomain::random(rng)).collect();
+        let data: Vec<_> = (0..6).map(|_| PoseidonDomain::random(rng)).collect();
         let parents_data: Vec<_> = data
             .iter()
             .enumerate()
@@ -271,7 +271,7 @@ mod tests {
             label
         };
 
-        let domain_leaf: PedersenDomain = leaf.get_value().unwrap().into();
+        let domain_leaf: PoseidonDomain = leaf.get_value().unwrap().into();
         assert_eq!(expected_leaf, AsRef::<[u8]>::as_ref(&domain_leaf));
     }
 }
