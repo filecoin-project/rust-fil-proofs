@@ -379,6 +379,7 @@ jobs:
       - run: cargo fetch
       - run: rustup install $(cat rust-toolchain)
       - run: rustup default $(cat rust-toolchain)
+      - run: rustup install nightly
       - run: rustc --version
       - persist_to_workspace:
           root: ~/
@@ -398,8 +399,12 @@ jobs:
           sudo mkswap /swapfile
           sudo swapon /swapfile
       - run:
-          name: Run GPU tests
+          name: Run GPU tests (pairing)
           command: cargo +nightly test -Zpackage-features -p storage-proofs-porep --release --features gpu-tests nse -- --test-threads 1
+          no_output_timeout: 1h
+      - run:
+          name: Run GPU tests (blst)
+          command: cargo +nightly test -Zpackage-features -p storage-proofs-porep --release --no-default-features --features gpu,gpu-tests,blst nse -- --test-threads 1
           no_output_timeout: 1h
 
 commands:
