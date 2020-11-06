@@ -40,7 +40,9 @@ libc = "0.2"
 fdlimit = "0.2.0"
 itertools = "0.9.0"
 positioned-io = "0.2.2"
-rust-fil-nse-gpu = "0.2.0"
+
+[target.'cfg(not(target_os = "macos"))'.dependencies]
+rust-fil-nse-gpu = { git = "https://github.com/filecoin-project/rust-fil-nse-gpu", branch = "update-deps", optional = true, default-features = false }
 
 [dev-dependencies]
 tempfile = "3"
@@ -52,9 +54,9 @@ femme = "1.3.0"
 
 [features]
 default = ["pairing", "gpu"]
-gpu = ["storage-proofs-core/gpu"]
-pairing = ["storage-proofs-core/pairing", "bellperson/pairing", "neptune/pairing"]
-blst = ["storage-proofs-core/blst", "bellperson/blst", "neptune/blst"]
+gpu = ["storage-proofs-core/gpu", "rust-fil-nse-gpu"]
+pairing = ["storage-proofs-core/pairing", "bellperson/pairing", "neptune/pairing", "rust-fil-nse-gpu/pairing"]
+blst = ["storage-proofs-core/blst", "bellperson/blst", "neptune/blst", "rust-fil-nse-gpu/blst"]
 gpu-tests = []
 
 [[bench]]

@@ -234,7 +234,7 @@ mod tests {
     use super::super::{Config, SetupParams};
 
     #[test]
-    #[cfg(feature = "gpu-tests")]
+    #[cfg(all(feature = "gpu", feature = "gpu-tests", not(target_os = "macos")))]
     fn test_gpu_bench_encode() {
         type Tree = LCTree<PoseidonHasher, U8, U8, U0>;
         // femme::start(log::LevelFilter::Debug).ok();

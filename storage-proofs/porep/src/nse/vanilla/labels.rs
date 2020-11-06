@@ -8,6 +8,7 @@ use log::{debug, error};
 use merkletree::merkle::{get_merkle_tree_leafs, get_merkle_tree_len};
 use merkletree::store::{Store, StoreConfig, StoreConfigDataVersion};
 use rayon::prelude::*;
+#[cfg(all(feature = "gpu", not(target_os = "macos")))]
 use rust_fil_nse_gpu as gpu;
 use sha2raw::Sha256;
 use storage_proofs_core::{
@@ -512,6 +513,7 @@ fn tree_from_slice<Tree: MerkleTreeTrait>(
     MerkleTreeWrapper::from_data_store(store, leafs)
 }
 
+#[cfg(all(feature = "gpu", not(target_os = "macos")))]
 impl From<Config> for gpu::Config {
     fn from(conf: Config) -> gpu::Config {
         gpu::Config {
@@ -550,6 +552,8 @@ pub fn encode_with_trees_all_cpu<'a, Tree: 'static + MerkleTreeTrait>(
 }
 
 type GPUHasher = storage_proofs_core::hasher::PoseidonHasher;
+
+#[cfg(all(feature = "gpu", not(target_os = "macos")))]
 pub fn encode_with_trees_all_gpu<'a, Tree: 'static + MerkleTreeTrait>(
     conf: &Config,
     replica_id: <Tree::Hasher as Hasher>::Domain,
@@ -646,6 +650,7 @@ pub fn encode_with_trees_all<'a, Tree: 'static + MerkleTreeTrait>(
     replica_id: <Tree::Hasher as Hasher>::Domain,
     mut inps: Vec<Window<'a>>,
 ) -> Result<Vec<(Vec<LCMerkleTree<Tree>>, LCMerkleTree<Tree>)>> {
+    #[cfg(all(feature = "gpu", not(target_os = "macos")))]
     if settings::SETTINGS.use_gpu_nse
         && std::any::TypeId::of::<Tree::Hasher>() == std::any::TypeId::of::<GPUHasher>()
         && Tree::Arity::to_usize() == 8
@@ -868,7 +873,7 @@ mod tests {
         );
     }
 
-    #[cfg(feature = "gpu-tests")]
+    #[cfg(all(feature = "gpu", feature = "gpu-tests", not(target_os = "macos")))]
     fn run_encode_with_trees<Tree: 'static + MerkleTreeTrait>(
         config: Config,
         data: Vec<u8>,
@@ -910,8 +915,8 @@ mod tests {
         (encoded_data, roots, replica_root)
     }
 
+    #[cfg(all(feature = "gpu", feature = "gpu-tests", not(target_os = "macos")))]
     #[test]
-    #[cfg(feature = "gpu-tests")]
     fn test_gpu_cpu_consistency() {
         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
 
