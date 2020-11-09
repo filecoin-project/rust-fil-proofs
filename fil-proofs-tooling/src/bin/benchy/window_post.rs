@@ -339,6 +339,7 @@ fn run_pre_commit_phases<Tree: 'static + MerkleTreeTrait>(
 #[allow(clippy::too_many_arguments)]
 pub fn run_window_post_bench<Tree: 'static + MerkleTreeTrait>(
     sector_size: u64,
+    api_version: APIVersion,
     cache_dir: PathBuf,
     preserve_cache: bool,
     skip_precommit_phase1: bool,
@@ -516,7 +517,7 @@ pub fn run_window_post_bench<Tree: 'static + MerkleTreeTrait>(
             .expect("unknown sector size"),
         typ: PoStType::Window,
         priority: true,
-        api_version: APIVersion::V1_1,
+        api_version,
     };
 
     let gen_window_post_measurement = measure(|| {
@@ -577,6 +578,7 @@ pub fn run_window_post_bench<Tree: 'static + MerkleTreeTrait>(
 #[allow(clippy::too_many_arguments)]
 pub fn run(
     sector_size: usize,
+    api_version: APIVersion,
     cache: String,
     preserve_cache: bool,
     skip_precommit_phase1: bool,
@@ -585,7 +587,7 @@ pub fn run(
     skip_commit_phase2: bool,
     test_resume: bool,
 ) -> anyhow::Result<()> {
-    info!("Benchy Window PoSt: sector-size={}, preserve_cache={}, skip_precommit_phase1={}, skip_precommit_phase2={}, skip_commit_phase1={}, skip_commit_phase2={}, test_resume={}", sector_size, preserve_cache, skip_precommit_phase1, skip_precommit_phase2, skip_commit_phase1, skip_commit_phase2, test_resume);
+    info!("Benchy Window PoSt: sector-size={}, api_version={:?}, preserve_cache={}, skip_precommit_phase1={}, skip_precommit_phase2={}, skip_commit_phase1={}, skip_commit_phase2={}, test_resume={}", sector_size, api_version, preserve_cache, skip_precommit_phase1, skip_precommit_phase2, skip_commit_phase1, skip_commit_phase2, test_resume);
 
     let cache_dir_specified = !cache.is_empty();
     if skip_precommit_phase1 || skip_precommit_phase2 || skip_commit_phase1 || skip_commit_phase2 {
@@ -619,6 +621,7 @@ pub fn run(
         sector_size as u64,
         run_window_post_bench,
         sector_size as u64,
+        api_version,
         cache_dir,
         preserve_cache,
         skip_precommit_phase1,

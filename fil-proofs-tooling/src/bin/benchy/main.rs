@@ -2,10 +2,13 @@
 //#![warn(clippy::unwrap_used)]
 
 use std::io::{stdin, stdout};
+use std::str::FromStr;
 
 use anyhow::Result;
 use byte_unit::Byte;
 use clap::{value_t, App, Arg, SubCommand};
+
+use storage_proofs::api_version::APIVersion;
 
 use crate::prodbench::ProdbenchInputs;
 
@@ -83,6 +86,14 @@ fn main() -> Result<()> {
                 .long("size")
                 .required(true)
                 .help("The data size (e.g. 2KiB)")
+                .takes_value(true),
+        )
+        .arg(
+            Arg::with_name("api_version")
+                .long("api-version")
+                .required(true)
+                .help("The api_version to use (default: 1.0)")
+                .default_value("1.0")
                 .takes_value(true),
         );
 
@@ -179,8 +190,10 @@ fn main() -> Result<()> {
             let test_resume = m.is_present("test-resume");
             let cache_dir = value_t!(m, "cache", String)?;
             let sector_size = Byte::from_str(value_t!(m, "size", String)?)?.get_bytes() as usize;
+            let api_version = APIVersion::from_str(&value_t!(m, "api_version", String)?)?;
             window_post::run(
                 sector_size,
+                api_version,
                 cache_dir,
                 preserve_cache,
                 skip_precommit_phase1,

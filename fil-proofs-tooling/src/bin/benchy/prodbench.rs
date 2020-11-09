@@ -1,3 +1,5 @@
+use std::str::FromStr;
+
 use bellperson::bls::Bls12;
 use bellperson::util_cs::bench_cs::BenchCS;
 use bellperson::Circuit;
@@ -50,11 +52,15 @@ pub struct ProdbenchInputs {
     stacked_layers: u64,
     /// How many sectors should be created in parallel.
     num_sectors: u64,
+    api_version: String,
 }
 
 impl ProdbenchInputs {
     pub fn sector_size_bytes(&self) -> u64 {
         bytefmt::parse(&self.sector_size).expect("failed to parse sector size")
+    }
+    pub fn api_version(&self) -> APIVersion {
+        APIVersion::from_str(&self.api_version).expect("failed to parse api version")
     }
 }
 
@@ -191,7 +197,7 @@ pub fn run(
         inputs.num_sectors as usize,
         only_add_piece,
         arbitrary_porep_id,
-        FIXED_API_VERSION,
+        inputs.api_version(),
     );
 
     if only_add_piece || only_replicate {
