@@ -394,190 +394,193 @@ impl From<PoseidonDomain> for Fr {
     }
 }
 
-// TODO: fix once storage-proofs-core::merkle is extracted
-// #[cfg(test)]
-// mod tests {
-//     use super::*;
-//     use std::mem;
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::mem;
 
-//     use crate::merkle::MerkleTree;
-//     use bellperson::gadgets::num;
-//     use bellperson::util_cs::test_cs::TestConstraintSystem;
+    use bellperson::gadgets::num;
+    use bellperson::util_cs::test_cs::TestConstraintSystem;
+    use merkletree::{merkle::MerkleTree, store::VecStore};
 
-//     #[test]
-//     fn test_path() {
-//         let values = [
-//             PoseidonDomain(Fr::one().into_repr()),
-//             PoseidonDomain(Fr::one().into_repr()),
-//             PoseidonDomain(Fr::one().into_repr()),
-//             PoseidonDomain(Fr::one().into_repr()),
-//         ];
+    #[test]
+    fn test_path() {
+        let values = [
+            PoseidonDomain(Fr::one().into_repr()),
+            PoseidonDomain(Fr::one().into_repr()),
+            PoseidonDomain(Fr::one().into_repr()),
+            PoseidonDomain(Fr::one().into_repr()),
+        ];
 
-//         let t = MerkleTree::<PoseidonHasher, typenum::U2>::new(values.iter().copied())
-//             .expect("merkle tree new failure");
+        let t = MerkleTree::<PoseidonDomain, PoseidonFunction, VecStore<_>, typenum::U2>::new(
+            values.iter().copied(),
+        )
+        .expect("merkle tree new failure");
 
-//         let p = t.gen_proof(0).expect("gen_proof failure"); // create a proof for the first value =k Fr::one()
+        let p = t.gen_proof(0).expect("gen_proof failure"); // create a proof for the first value =k Fr::one()
 
-//         assert_eq!(*p.path(), vec![0, 0]);
-//         assert_eq!(
-//             p.validate::<PoseidonFunction>()
-//                 .expect("failed to validate"),
-//             true
-//         );
-//     }
+        assert_eq!(*p.path(), vec![0, 0]);
+        assert_eq!(
+            p.validate::<PoseidonFunction>()
+                .expect("failed to validate"),
+            true
+        );
+    }
 
-//     // #[test]
-//     // fn test_poseidon_quad() {
-//     //     let leaves = [Fr::one(), Fr::zero(), Fr::zero(), Fr::one()];
+    // #[test]
+    // fn test_poseidon_quad() {
+    //     let leaves = [Fr::one(), Fr::zero(), Fr::zero(), Fr::one()];
 
-//     //     assert_eq!(Fr::zero().into_repr(), shared_hash_frs(&leaves[..]).0);
-//     // }
+    //     assert_eq!(Fr::zero().into_repr(), shared_hash_frs(&leaves[..]).0);
+    // }
 
-//     #[test]
-//     fn test_poseidon_hasher() {
-//         let leaves = [
-//             PoseidonDomain(Fr::one().into_repr()),
-//             PoseidonDomain(Fr::zero().into_repr()),
-//             PoseidonDomain(Fr::zero().into_repr()),
-//             PoseidonDomain(Fr::one().into_repr()),
-//         ];
+    #[test]
+    fn test_poseidon_hasher() {
+        let leaves = [
+            PoseidonDomain(Fr::one().into_repr()),
+            PoseidonDomain(Fr::zero().into_repr()),
+            PoseidonDomain(Fr::zero().into_repr()),
+            PoseidonDomain(Fr::one().into_repr()),
+        ];
 
-//         let t = MerkleTree::<PoseidonHasher, typenum::U2>::new(leaves.iter().copied())
-//             .expect("merkle tree new failure");
+        let t = MerkleTree::<PoseidonDomain, PoseidonFunction, VecStore<_>, typenum::U2>::new(
+            leaves.iter().copied(),
+        )
+        .expect("merkle tree new failure");
 
-//         assert_eq!(t.leafs(), 4);
+        assert_eq!(t.leafs(), 4);
 
-//         let mut a = PoseidonFunction::default();
+        let mut a = PoseidonFunction::default();
 
-//         assert_eq!(t.read_at(0).expect("read_at failure"), leaves[0]);
-//         assert_eq!(t.read_at(1).expect("read_at failure"), leaves[1]);
-//         assert_eq!(t.read_at(2).expect("read_at failure"), leaves[2]);
-//         assert_eq!(t.read_at(3).expect("read_at failure"), leaves[3]);
+        assert_eq!(t.read_at(0).expect("read_at failure"), leaves[0]);
+        assert_eq!(t.read_at(1).expect("read_at failure"), leaves[1]);
+        assert_eq!(t.read_at(2).expect("read_at failure"), leaves[2]);
+        assert_eq!(t.read_at(3).expect("read_at failure"), leaves[3]);
 
-//         let i1 = a.node(leaves[0], leaves[1], 0);
-//         a.reset();
-//         let i2 = a.node(leaves[2], leaves[3], 0);
-//         a.reset();
+        let i1 = a.node(leaves[0], leaves[1], 0);
+        a.reset();
+        let i2 = a.node(leaves[2], leaves[3], 0);
+        a.reset();
 
-//         assert_eq!(t.read_at(4).expect("read_at failure"), i1);
-//         assert_eq!(t.read_at(5).expect("read_at failure"), i2);
+        assert_eq!(t.read_at(4).expect("read_at failure"), i1);
+        assert_eq!(t.read_at(5).expect("read_at failure"), i2);
 
-//         let root = a.node(i1, i2, 1);
-//         a.reset();
+        let root = a.node(i1, i2, 1);
+        a.reset();
 
-//         assert_eq!(
-//             t.read_at(4).expect("read_at failure").0,
-//             FrRepr([
-//                 0xb339ff6079800b5e,
-//                 0xec5907b3dc3094af,
-//                 0x93c003cc74a24f26,
-//                 0x042f94ffbe786bc3,
-//             ])
-//         );
+        assert_eq!(
+            t.read_at(4).expect("read_at failure").0,
+            FrRepr([
+                0xb339ff6079800b5e,
+                0xec5907b3dc3094af,
+                0x93c003cc74a24f26,
+                0x042f94ffbe786bc3,
+            ])
+        );
 
-//         let expected = FrRepr([
-//             0xefbb8be3e291e671,
-//             0x77cc72b8cb2b5ad2,
-//             0x30eb6385ae6b74ae,
-//             0x1effebb7b26ad9eb,
-//         ]);
-//         let actual = t.read_at(6).expect("read_at failure").0;
+        let expected = FrRepr([
+            0xefbb8be3e291e671,
+            0x77cc72b8cb2b5ad2,
+            0x30eb6385ae6b74ae,
+            0x1effebb7b26ad9eb,
+        ]);
+        let actual = t.read_at(6).expect("read_at failure").0;
 
-//         assert_eq!(actual, expected);
-//         assert_eq!(t.read_at(6).expect("read_at failure"), root);
-//     }
+        assert_eq!(actual, expected);
+        assert_eq!(t.read_at(6).expect("read_at failure"), root);
+    }
 
-//     #[test]
-//     fn test_as_ref() {
-//         let cases: Vec<[u64; 4]> = vec![
-//             [0, 0, 0, 0],
-//             [
-//                 14963070332212552755,
-//                 2414807501862983188,
-//                 16116531553419129213,
-//                 6357427774790868134,
-//             ],
-//         ];
+    #[test]
+    fn test_as_ref() {
+        let cases: Vec<[u64; 4]> = vec![
+            [0, 0, 0, 0],
+            [
+                14963070332212552755,
+                2414807501862983188,
+                16116531553419129213,
+                6357427774790868134,
+            ],
+        ];
 
-//         for case in cases.into_iter() {
-//             let repr = FrRepr(case);
-//             let val = PoseidonDomain(repr);
+        for case in cases.into_iter() {
+            let repr = FrRepr(case);
+            let val = PoseidonDomain(repr);
 
-//             for _ in 0..100 {
-//                 assert_eq!(val.into_bytes(), val.into_bytes());
-//             }
+            for _ in 0..100 {
+                assert_eq!(val.into_bytes(), val.into_bytes());
+            }
 
-//             let raw: &[u8] = val.as_ref();
+            let raw: &[u8] = val.as_ref();
 
-//             for i in 0..4 {
-//                 assert_eq!(case[i], unsafe {
-//                     let mut val = [0u8; 8];
-//                     val.clone_from_slice(&raw[i * 8..(i + 1) * 8]);
-//                     mem::transmute::<[u8; 8], u64>(val)
-//                 });
-//             }
-//         }
-//     }
+            for i in 0..4 {
+                assert_eq!(case[i], unsafe {
+                    let mut val = [0u8; 8];
+                    val.clone_from_slice(&raw[i * 8..(i + 1) * 8]);
+                    mem::transmute::<[u8; 8], u64>(val)
+                });
+            }
+        }
+    }
 
-//     #[test]
-//     fn test_serialize() {
-//         let repr = FrRepr([1, 2, 3, 4]);
-//         let val = PoseidonDomain(repr);
+    #[test]
+    fn test_serialize() {
+        let repr = FrRepr([1, 2, 3, 4]);
+        let val = PoseidonDomain(repr);
 
-//         let ser = serde_json::to_string(&val)
-//             .expect("Failed to serialize `PoseidonDomain` element to JSON string");
-//         let val_back = serde_json::from_str(&ser)
-//             .expect("Failed to deserialize JSON string to `PoseidonnDomain`");
+        let ser = serde_json::to_string(&val)
+            .expect("Failed to serialize `PoseidonDomain` element to JSON string");
+        let val_back = serde_json::from_str(&ser)
+            .expect("Failed to deserialize JSON string to `PoseidonnDomain`");
 
-//         assert_eq!(val, val_back);
-//     }
+        assert_eq!(val, val_back);
+    }
 
-//     #[test]
-//     fn test_hash_md() {
-//         // let arity = PoseidonMDArity::to_usize();
-//         let n = 71;
-//         let data = vec![PoseidonDomain(Fr::one().into_repr()); n];
-//         let hashed = PoseidonFunction::hash_md(&data);
+    #[test]
+    fn test_hash_md() {
+        // let arity = PoseidonMDArity::to_usize();
+        let n = 71;
+        let data = vec![PoseidonDomain(Fr::one().into_repr()); n];
+        let hashed = PoseidonFunction::hash_md(&data);
 
-//         assert_eq!(
-//             hashed,
-//             PoseidonDomain(FrRepr([
-//                 0x351c54133b332c90,
-//                 0xc26f6d625f4e8195,
-//                 0x5fd9623643ed9622,
-//                 0x59f42220e09ff6f7,
-//             ]))
-//         );
-//     }
-//     #[test]
-//     fn test_hash_md_circuit() {
-//         // let arity = PoseidonMDArity::to_usize();
-//         let n = 71;
-//         let data = vec![PoseidonDomain(Fr::one().into_repr()); n];
+        assert_eq!(
+            hashed,
+            PoseidonDomain(FrRepr([
+                0x351c54133b332c90,
+                0xc26f6d625f4e8195,
+                0x5fd9623643ed9622,
+                0x59f42220e09ff6f7,
+            ]))
+        );
+    }
+    #[test]
+    fn test_hash_md_circuit() {
+        // let arity = PoseidonMDArity::to_usize();
+        let n = 71;
+        let data = vec![PoseidonDomain(Fr::one().into_repr()); n];
 
-//         let mut cs = TestConstraintSystem::<Bls12>::new();
-//         let circuit_data = (0..n)
-//             .map(|n| {
-//                 num::AllocatedNum::alloc(cs.namespace(|| format!("input {}", n)), || Ok(Fr::one()))
-//                     .expect("alloc failure")
-//             })
-//             .collect::<Vec<_>>();
+        let mut cs = TestConstraintSystem::<Bls12>::new();
+        let circuit_data = (0..n)
+            .map(|n| {
+                num::AllocatedNum::alloc(cs.namespace(|| format!("input {}", n)), || Ok(Fr::one()))
+                    .expect("alloc failure")
+            })
+            .collect::<Vec<_>>();
 
-//         let hashed = PoseidonFunction::hash_md(&data);
-//         let hashed_fr = Fr::from_repr(hashed.0).expect("from_repr failure");
+        let hashed = PoseidonFunction::hash_md(&data);
+        let hashed_fr = Fr::from_repr(hashed.0).expect("from_repr failure");
 
-//         let circuit_hashed = PoseidonFunction::hash_md_circuit(&mut cs, circuit_data.as_slice())
-//             .expect("hash_md_circuit failure");
+        let circuit_hashed = PoseidonFunction::hash_md_circuit(&mut cs, circuit_data.as_slice())
+            .expect("hash_md_circuit failure");
 
-//         assert!(cs.is_satisfied());
-//         let expected_constraints = 2_771;
-//         let actual_constraints = cs.num_constraints();
+        assert!(cs.is_satisfied());
+        let expected_constraints = 2_770;
+        let actual_constraints = cs.num_constraints();
 
-//         assert_eq!(expected_constraints, actual_constraints);
+        assert_eq!(expected_constraints, actual_constraints);
 
-//         assert_eq!(
-//             hashed_fr,
-//             circuit_hashed.get_value().expect("get_value failure")
-//         );
-//     }
-// }
+        assert_eq!(
+            hashed_fr,
+            circuit_hashed.get_value().expect("get_value failure")
+        );
+    }
+}
