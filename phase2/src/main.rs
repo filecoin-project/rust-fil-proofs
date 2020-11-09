@@ -31,7 +31,7 @@ use rand::rngs::OsRng;
 use rand::{RngCore, SeedableRng};
 use rand_chacha::ChaChaRng;
 use simplelog::{self, CombinedLogger, LevelFilter, TermLogger, TerminalMode, WriteLogger};
-use storage_proofs::api_version::APIVersion;
+use storage_proofs::api_version::ApiVersion;
 use storage_proofs::compound_proof::{self, CompoundProof};
 use storage_proofs::hasher::Sha256Hasher;
 use storage_proofs::merkle::MerkleTreeTrait;
@@ -45,7 +45,7 @@ use storage_proofs::post::fallback::{
     FallbackPoSt, FallbackPoStCircuit, FallbackPoStCompound, PublicParams as PoStPublicParams,
 };
 
-const FIXED_API_VERSION: APIVersion = APIVersion::V1_0;
+const FIXED_API_VERSION: ApiVersion = ApiVersion::V1_0;
 
 const CHUNK_SIZE: usize = 10_000;
 

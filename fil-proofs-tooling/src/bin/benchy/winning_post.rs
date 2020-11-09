@@ -11,10 +11,10 @@ use filecoin_proofs::{
 };
 use log::info;
 use serde::Serialize;
-use storage_proofs::api_version::APIVersion;
+use storage_proofs::api_version::ApiVersion;
 use storage_proofs::merkle::MerkleTreeTrait;
 
-const FIXED_API_VERSION: APIVersion = APIVersion::V1_0;
+const FIXED_API_VERSION: ApiVersion = ApiVersion::V1_0;
 
 #[derive(Serialize)]
 #[serde(rename_all = "kebab-case")]

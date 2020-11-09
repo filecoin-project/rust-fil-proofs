@@ -1,4 +1,4 @@
-use storage_proofs::api_version::APIVersion;
+use storage_proofs::api_version::ApiVersion;
 
 use crate::types::*;
 
@@ -7,7 +7,7 @@ pub struct SectorClass {
     pub sector_size: SectorSize,
     pub partitions: PoRepProofPartitions,
     pub porep_id: [u8; 32],
-    pub api_version: APIVersion,
+    pub api_version: ApiVersion,
 }
 
 impl From<SectorClass> for PoRepConfig {

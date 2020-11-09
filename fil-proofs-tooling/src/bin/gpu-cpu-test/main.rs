@@ -17,10 +17,10 @@ use filecoin_proofs::{
     WINNING_POST_SECTOR_COUNT,
 };
 use log::{debug, info};
-use storage_proofs::api_version::APIVersion;
+use storage_proofs::api_version::ApiVersion;
 use storage_proofs::sector::SectorId;
 
-const FIXED_API_VERSION: APIVersion = APIVersion::V1_0;
+const FIXED_API_VERSION: ApiVersion = ApiVersion::V1_0;
 
 type MerkleTree = SectorShape8MiB;
 const SECTOR_SIZE: u64 = SECTOR_SIZE_8_MIB;

@@ -12,13 +12,13 @@ use filecoin_proofs::parameters::{
 use filecoin_proofs::types::*;
 use filecoin_proofs::with_shape;
 use filecoin_proofs::PoStType;
-use storage_proofs::api_version::APIVersion;
+use storage_proofs::api_version::ApiVersion;
 use storage_proofs::compound_proof::CompoundProof;
 use storage_proofs::parameter_cache::CacheableParameters;
 use storage_proofs::porep::stacked::{StackedCompound, StackedDrg};
 use storage_proofs::post::fallback::{FallbackPoSt, FallbackPoStCircuit, FallbackPoStCompound};
 
-const FIXED_API_VERSION: APIVersion = APIVersion::V1_0;
+const FIXED_API_VERSION: ApiVersion = ApiVersion::V1_0;
 
 fn cache_porep_params<Tree: 'static + MerkleTreeTrait>(porep_config: PoRepConfig) {
     info!("PoRep params");
@@ -166,7 +166,7 @@ struct Opt {
     params_for_sector_sizes: Vec<u64>,
 }
 
-fn generate_params_post(sector_size: u64, api_version: APIVersion) {
+fn generate_params_post(sector_size: u64, api_version: ApiVersion) {
     with_shape!(
         sector_size,
         cache_winning_post_params,
@@ -198,7 +198,7 @@ fn generate_params_post(sector_size: u64, api_version: APIVersion) {
     );
 }
 
-fn generate_params_porep(sector_size: u64, api_version: APIVersion) {
+fn generate_params_porep(sector_size: u64, api_version: ApiVersion) {
     with_shape!(
         sector_size,
         cache_porep_params,

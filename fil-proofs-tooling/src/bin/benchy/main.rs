@@ -8,7 +8,7 @@ use anyhow::Result;
 use byte_unit::Byte;
 use clap::{value_t, App, Arg, SubCommand};
 
-use storage_proofs::api_version::APIVersion;
+use storage_proofs::api_version::ApiVersion;
 
 use crate::prodbench::ProdbenchInputs;
 
@@ -190,7 +190,7 @@ fn main() -> Result<()> {
             let test_resume = m.is_present("test-resume");
             let cache_dir = value_t!(m, "cache", String)?;
             let sector_size = Byte::from_str(value_t!(m, "size", String)?)?.get_bytes() as usize;
-            let api_version = APIVersion::from_str(&value_t!(m, "api_version", String)?)?;
+            let api_version = ApiVersion::from_str(&value_t!(m, "api_version", String)?)?;
             window_post::run(
                 sector_size,
                 api_version,

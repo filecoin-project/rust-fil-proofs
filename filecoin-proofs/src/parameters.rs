@@ -130,7 +130,7 @@ mod tests {
     use super::*;
 
     use crate::types::PoStType;
-    use storage_proofs::api_version::APIVersion;
+    use storage_proofs::api_version::ApiVersion;
 
     #[test]
     fn partition_layer_challenges_test() {
@@ -155,7 +155,7 @@ mod tests {
             challenge_count: 66,
             sector_count: 1,
             sector_size: 2048u64.into(),
-            api_version: APIVersion::V1_0,
+            api_version: ApiVersion::V1_0,
         };
 
         let params =

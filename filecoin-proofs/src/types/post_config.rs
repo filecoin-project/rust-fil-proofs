@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use anyhow::Result;
-use storage_proofs::api_version::APIVersion;
+use storage_proofs::api_version::ApiVersion;
 use storage_proofs::parameter_cache::{self, CacheableParameters};
 use storage_proofs::post::fallback;
 
@@ -18,7 +18,7 @@ pub struct PoStConfig {
     pub typ: PoStType,
     /// High priority (always runs on GPU) == true
     pub priority: bool,
-    pub api_version: APIVersion,
+    pub api_version: ApiVersion,
 }
 
 impl From<PoStConfig> for PaddedBytesAmount {

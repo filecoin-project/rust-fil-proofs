@@ -12,7 +12,7 @@ use filecoin_proofs::parameters::{
 use filecoin_proofs::types::*;
 use filecoin_proofs::with_shape;
 use filecoin_proofs::PoStType;
-use storage_proofs::api_version::APIVersion;
+use storage_proofs::api_version::ApiVersion;
 use storage_proofs::compound_proof::CompoundProof;
 use storage_proofs::porep::stacked::{StackedCompound, StackedDrg};
 use storage_proofs::post::fallback::{FallbackPoSt, FallbackPoStCircuit, FallbackPoStCompound};
@@ -93,7 +93,7 @@ struct Opt {
     constraints_for_sector_sizes: Vec<u64>,
 }
 
-fn winning_post_info(sector_size: u64, api_version: APIVersion) -> CircuitInfo {
+fn winning_post_info(sector_size: u64, api_version: ApiVersion) -> CircuitInfo {
     with_shape!(
         sector_size,
         get_winning_post_info,
@@ -108,7 +108,7 @@ fn winning_post_info(sector_size: u64, api_version: APIVersion) -> CircuitInfo {
     )
 }
 
-fn window_post_info(sector_size: u64, api_version: APIVersion) -> CircuitInfo {
+fn window_post_info(sector_size: u64, api_version: ApiVersion) -> CircuitInfo {
     with_shape!(
         sector_size,
         get_window_post_info,
@@ -127,7 +127,7 @@ fn window_post_info(sector_size: u64, api_version: APIVersion) -> CircuitInfo {
     )
 }
 
-fn porep_info(sector_size: u64, api_version: APIVersion) -> (CircuitInfo, usize) {
+fn porep_info(sector_size: u64, api_version: ApiVersion) -> (CircuitInfo, usize) {
     let partitions = PoRepProofPartitions(
         *POREP_PARTITIONS
             .read()
@@ -215,7 +215,7 @@ pub fn main() {
     let count_porep = opts.porep;
 
     // TODO: get api version from opts
-    let api_version = APIVersion::V1_0;
+    let api_version = ApiVersion::V1_0;
 
     for sector_size in sizes {
         let human_size = sector_size

@@ -5,7 +5,7 @@ use bellperson::bls::{Bls12, Fr};
 use bellperson::Circuit;
 
 use storage_proofs_core::{
-    api_version::APIVersion,
+    api_version::ApiVersion,
     compound_proof::{CircuitComponent, CompoundProof},
     error::Result,
     gadgets::por::PoRCompound,
@@ -68,12 +68,12 @@ impl<'a, Tree: 'static + MerkleTreeTrait>
                     // 2. Inputs for verifying inclusion paths
                     for n in 0..pub_params.challenge_count {
                         let challenge_index = match pub_params.api_version {
-                            APIVersion::V1_0 => {
+                            ApiVersion::V1_0 => {
                                 (partition_index * pub_params.sector_count + i)
                                     * pub_params.challenge_count
                                     + n
                             }
-                            APIVersion::V1_1 => n,
+                            ApiVersion::V1_1 => n,
                         } as u64;
 
                         let challenged_leaf = fallback::generate_leaf_challenge(
@@ -218,7 +218,7 @@ mod tests {
     use rand::SeedableRng;
     use rand_xorshift::XorShiftRng;
     use storage_proofs_core::{
-        api_version::APIVersion,
+        api_version::ApiVersion,
         compound_proof,
         hasher::{Domain, HashFunction, Hasher, PoseidonHasher},
         merkle::{generate_tree, get_base_tree_count, LCTree, MerkleTreeTrait},
@@ -231,43 +231,43 @@ mod tests {
     #[ignore]
     #[test]
     fn fallback_post_poseidon_single_partition_matching_base_8() {
-        fallback_post::<LCTree<PoseidonHasher, U8, U0, U0>>(15, 15, 1, APIVersion::V1_0);
-        fallback_post::<LCTree<PoseidonHasher, U8, U0, U0>>(15, 15, 1, APIVersion::V1_1);
+        fallback_post::<LCTree<PoseidonHasher, U8, U0, U0>>(15, 15, 1, ApiVersion::V1_0);
+        fallback_post::<LCTree<PoseidonHasher, U8, U0, U0>>(15, 15, 1, ApiVersion::V1_1);
     }
 
     #[ignore]
     #[test]
     fn fallback_post_poseidon_single_partition_matching_sub_8_4() {
-        fallback_post::<LCTree<PoseidonHasher, U8, U4, U0>>(3, 3, 1, APIVersion::V1_0);
-        fallback_post::<LCTree<PoseidonHasher, U8, U4, U0>>(3, 3, 1, APIVersion::V1_1);
+        fallback_post::<LCTree<PoseidonHasher, U8, U4, U0>>(3, 3, 1, ApiVersion::V1_0);
+        fallback_post::<LCTree<PoseidonHasher, U8, U4, U0>>(3, 3, 1, ApiVersion::V1_1);
     }
 
     #[ignore]
     #[test]
     fn fallback_post_poseidon_single_partition_matching_top_8_4_2() {
-        fallback_post::<LCTree<PoseidonHasher, U8, U4, U2>>(3, 3, 1, APIVersion::V1_0);
-        fallback_post::<LCTree<PoseidonHasher, U8, U4, U2>>(3, 3, 1, APIVersion::V1_1);
+        fallback_post::<LCTree<PoseidonHasher, U8, U4, U2>>(3, 3, 1, ApiVersion::V1_0);
+        fallback_post::<LCTree<PoseidonHasher, U8, U4, U2>>(3, 3, 1, ApiVersion::V1_1);
     }
 
     #[ignore]
     #[test]
     fn fallback_post_poseidon_single_partition_smaller_base_8() {
-        fallback_post::<LCTree<PoseidonHasher, U8, U0, U0>>(2, 3, 1, APIVersion::V1_0);
-        fallback_post::<LCTree<PoseidonHasher, U8, U0, U0>>(2, 3, 1, APIVersion::V1_1);
+        fallback_post::<LCTree<PoseidonHasher, U8, U0, U0>>(2, 3, 1, ApiVersion::V1_0);
+        fallback_post::<LCTree<PoseidonHasher, U8, U0, U0>>(2, 3, 1, ApiVersion::V1_1);
     }
 
     #[ignore]
     #[test]
     fn fallback_post_poseidon_two_partitions_matching_base_8() {
-        fallback_post::<LCTree<PoseidonHasher, U8, U0, U0>>(4, 2, 2, APIVersion::V1_0);
-        fallback_post::<LCTree<PoseidonHasher, U8, U0, U0>>(4, 2, 2, APIVersion::V1_1);
+        fallback_post::<LCTree<PoseidonHasher, U8, U0, U0>>(4, 2, 2, ApiVersion::V1_0);
+        fallback_post::<LCTree<PoseidonHasher, U8, U0, U0>>(4, 2, 2, ApiVersion::V1_1);
     }
 
     #[ignore]
     #[test]
     fn fallback_post_poseidon_two_partitions_smaller_base_8() {
-        fallback_post::<LCTree<PoseidonHasher, U8, U0, U0>>(5, 3, 2, APIVersion::V1_0);
-        fallback_post::<LCTree<PoseidonHasher, U8, U0, U0>>(5, 3, 2, APIVersion::V1_1);
+        fallback_post::<LCTree<PoseidonHasher, U8, U0, U0>>(5, 3, 2, ApiVersion::V1_0);
+        fallback_post::<LCTree<PoseidonHasher, U8, U0, U0>>(5, 3, 2, ApiVersion::V1_1);
     }
 
     // Note: This test is implicitly specific to Window PoSt
@@ -275,7 +275,7 @@ mod tests {
         total_sector_count: usize,
         sector_count: usize,
         partitions: usize,
-        api_version: APIVersion,
+        api_version: ApiVersion,
     ) where
         Tree::Store: 'static,
     {

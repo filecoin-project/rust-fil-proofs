@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 use storage_proofs_core::{
-    api_version::APIVersion,
+    api_version::ApiVersion,
     error::{Error, Result},
     hasher::{Domain, HashFunction, Hasher},
     merkle::{MerkleProof, MerkleProofTrait, MerkleTreeTrait, MerkleTreeWrapper},
@@ -36,7 +36,7 @@ pub struct SetupParams {
     /// Number of challenged sectors.
     pub sector_count: usize,
     pub shape: PoStShape,
-    pub api_version: APIVersion,
+    pub api_version: ApiVersion,
 }
 
 #[derive(Debug, Clone)]
@@ -48,7 +48,7 @@ pub struct PublicParams {
     /// Number of challenged sectors.
     pub sector_count: usize,
     pub shape: PoStShape,
-    pub api_version: APIVersion,
+    pub api_version: ApiVersion,
 }
 
 #[derive(Debug, Default)]
@@ -418,8 +418,8 @@ impl<'a, Tree: 'a + MerkleTreeTrait> ProofScheme<'a> for FallbackPoSt<'a, Tree> 
                                     (j * num_sectors_per_chunk + i) * num_challenges + index;
                                 let challenge_index = match pub_params.shape {
                                     PoStShape::Window => match pub_params.api_version {
-                                        APIVersion::V1_0 => legacy_index,
-                                        APIVersion::V1_1 => index,
+                                        ApiVersion::V1_0 => legacy_index,
+                                        ApiVersion::V1_1 => index,
                                     },
                                     PoStShape::Winning => {
                                         ensure!(
@@ -665,8 +665,8 @@ impl<'a, Tree: 'a + MerkleTreeTrait> ProofScheme<'a> for FallbackPoSt<'a, Tree> 
                             (j * num_sectors_per_chunk + i) * pub_params.challenge_count + n;
                         let challenge_index = match pub_params.shape {
                             PoStShape::Window => match pub_params.api_version {
-                                APIVersion::V1_0 => legacy_index,
-                                APIVersion::V1_1 => n,
+                                ApiVersion::V1_0 => legacy_index,
+                                ApiVersion::V1_1 => n,
                             },
                             PoStShape::Winning => {
                                 ensure!(legacy_index == i, "Invalid winning post challenge index");
@@ -751,7 +751,7 @@ mod tests {
         total_sector_count: usize,
         sector_count: usize,
         partitions: usize,
-        api_version: APIVersion,
+        api_version: ApiVersion,
     ) where
         Tree::Store: 'static,
     {
@@ -828,7 +828,7 @@ mod tests {
         total_sector_count: usize,
         sector_count: usize,
         partitions: usize,
-        api_version: APIVersion,
+        api_version: ApiVersion,
     ) where
         Tree::Store: 'static,
     {
@@ -928,193 +928,193 @@ mod tests {
 
     #[test]
     fn fallback_post_poseidon_single_partition_matching_base_8() {
-        test_fallback_post::<LCTree<PoseidonHasher, U8, U0, U0>>(5, 5, 1, APIVersion::V1_0);
-        test_fallback_post::<LCTree<PoseidonHasher, U8, U0, U0>>(5, 5, 1, APIVersion::V1_1);
+        test_fallback_post::<LCTree<PoseidonHasher, U8, U0, U0>>(5, 5, 1, ApiVersion::V1_0);
+        test_fallback_post::<LCTree<PoseidonHasher, U8, U0, U0>>(5, 5, 1, ApiVersion::V1_1);
     }
 
     #[test]
     fn invalid_fallback_post_poseidon_single_partition_matching_base_8() {
-        test_invalid_fallback_post::<LCTree<PoseidonHasher, U8, U0, U0>>(5, 5, 1, APIVersion::V1_0);
-        test_invalid_fallback_post::<LCTree<PoseidonHasher, U8, U0, U0>>(5, 5, 1, APIVersion::V1_1);
+        test_invalid_fallback_post::<LCTree<PoseidonHasher, U8, U0, U0>>(5, 5, 1, ApiVersion::V1_0);
+        test_invalid_fallback_post::<LCTree<PoseidonHasher, U8, U0, U0>>(5, 5, 1, ApiVersion::V1_1);
     }
 
     #[test]
     fn fallback_post_poseidon_single_partition_smaller_base_8() {
-        test_fallback_post::<LCTree<PoseidonHasher, U8, U0, U0>>(3, 5, 1, APIVersion::V1_0);
-        test_fallback_post::<LCTree<PoseidonHasher, U8, U0, U0>>(3, 5, 1, APIVersion::V1_1);
+        test_fallback_post::<LCTree<PoseidonHasher, U8, U0, U0>>(3, 5, 1, ApiVersion::V1_0);
+        test_fallback_post::<LCTree<PoseidonHasher, U8, U0, U0>>(3, 5, 1, ApiVersion::V1_1);
     }
 
     #[test]
     fn invalid_fallback_post_poseidon_single_partition_smaller_base_8() {
-        test_invalid_fallback_post::<LCTree<PoseidonHasher, U8, U0, U0>>(3, 5, 1, APIVersion::V1_0);
-        test_invalid_fallback_post::<LCTree<PoseidonHasher, U8, U0, U0>>(3, 5, 1, APIVersion::V1_1);
+        test_invalid_fallback_post::<LCTree<PoseidonHasher, U8, U0, U0>>(3, 5, 1, ApiVersion::V1_0);
+        test_invalid_fallback_post::<LCTree<PoseidonHasher, U8, U0, U0>>(3, 5, 1, ApiVersion::V1_1);
     }
 
     #[test]
     fn fallback_post_poseidon_two_partitions_matching_base_8() {
-        test_fallback_post::<LCTree<PoseidonHasher, U8, U0, U0>>(4, 2, 2, APIVersion::V1_0);
-        test_fallback_post::<LCTree<PoseidonHasher, U8, U0, U0>>(4, 2, 2, APIVersion::V1_1);
+        test_fallback_post::<LCTree<PoseidonHasher, U8, U0, U0>>(4, 2, 2, ApiVersion::V1_0);
+        test_fallback_post::<LCTree<PoseidonHasher, U8, U0, U0>>(4, 2, 2, ApiVersion::V1_1);
     }
 
     #[test]
     fn invalid_fallback_post_poseidon_two_partitions_matching_base_8() {
-        test_invalid_fallback_post::<LCTree<PoseidonHasher, U8, U0, U0>>(4, 2, 2, APIVersion::V1_0);
-        test_invalid_fallback_post::<LCTree<PoseidonHasher, U8, U0, U0>>(4, 2, 2, APIVersion::V1_1);
+        test_invalid_fallback_post::<LCTree<PoseidonHasher, U8, U0, U0>>(4, 2, 2, ApiVersion::V1_0);
+        test_invalid_fallback_post::<LCTree<PoseidonHasher, U8, U0, U0>>(4, 2, 2, ApiVersion::V1_1);
     }
 
     #[test]
     fn fallback_post_poseidon_two_partitions_smaller_base_8() {
-        test_fallback_post::<LCTree<PoseidonHasher, U8, U0, U0>>(5, 3, 2, APIVersion::V1_0);
-        test_fallback_post::<LCTree<PoseidonHasher, U8, U0, U0>>(5, 3, 2, APIVersion::V1_1);
+        test_fallback_post::<LCTree<PoseidonHasher, U8, U0, U0>>(5, 3, 2, ApiVersion::V1_0);
+        test_fallback_post::<LCTree<PoseidonHasher, U8, U0, U0>>(5, 3, 2, ApiVersion::V1_1);
     }
 
     #[test]
     fn invalid_fallback_post_poseidon_two_partitions_smaller_base_8() {
-        test_invalid_fallback_post::<LCTree<PoseidonHasher, U8, U0, U0>>(5, 3, 2, APIVersion::V1_0);
-        test_invalid_fallback_post::<LCTree<PoseidonHasher, U8, U0, U0>>(5, 3, 2, APIVersion::V1_1);
+        test_invalid_fallback_post::<LCTree<PoseidonHasher, U8, U0, U0>>(5, 3, 2, ApiVersion::V1_0);
+        test_invalid_fallback_post::<LCTree<PoseidonHasher, U8, U0, U0>>(5, 3, 2, ApiVersion::V1_1);
     }
 
     #[test]
     fn fallback_post_poseidon_single_partition_matching_sub_8_4() {
-        test_fallback_post::<LCTree<PoseidonHasher, U8, U4, U0>>(5, 5, 1, APIVersion::V1_0);
-        test_fallback_post::<LCTree<PoseidonHasher, U8, U4, U0>>(5, 5, 1, APIVersion::V1_1);
+        test_fallback_post::<LCTree<PoseidonHasher, U8, U4, U0>>(5, 5, 1, ApiVersion::V1_0);
+        test_fallback_post::<LCTree<PoseidonHasher, U8, U4, U0>>(5, 5, 1, ApiVersion::V1_1);
     }
 
     #[test]
     fn invalid_fallback_post_poseidon_single_partition_matching_sub_8_4() {
-        test_invalid_fallback_post::<LCTree<PoseidonHasher, U8, U4, U0>>(5, 5, 1, APIVersion::V1_0);
-        test_invalid_fallback_post::<LCTree<PoseidonHasher, U8, U4, U0>>(5, 5, 1, APIVersion::V1_1);
+        test_invalid_fallback_post::<LCTree<PoseidonHasher, U8, U4, U0>>(5, 5, 1, ApiVersion::V1_0);
+        test_invalid_fallback_post::<LCTree<PoseidonHasher, U8, U4, U0>>(5, 5, 1, ApiVersion::V1_1);
     }
 
     #[test]
     fn fallback_post_poseidon_single_partition_smaller_sub_8_4() {
-        test_fallback_post::<LCTree<PoseidonHasher, U8, U4, U0>>(3, 5, 1, APIVersion::V1_0);
-        test_fallback_post::<LCTree<PoseidonHasher, U8, U4, U0>>(3, 5, 1, APIVersion::V1_1);
+        test_fallback_post::<LCTree<PoseidonHasher, U8, U4, U0>>(3, 5, 1, ApiVersion::V1_0);
+        test_fallback_post::<LCTree<PoseidonHasher, U8, U4, U0>>(3, 5, 1, ApiVersion::V1_1);
     }
 
     #[test]
     fn invalid_fallback_post_poseidon_single_partition_smaller_sub_8_4() {
-        test_invalid_fallback_post::<LCTree<PoseidonHasher, U8, U4, U0>>(3, 5, 1, APIVersion::V1_0);
-        test_invalid_fallback_post::<LCTree<PoseidonHasher, U8, U4, U0>>(3, 5, 1, APIVersion::V1_1);
+        test_invalid_fallback_post::<LCTree<PoseidonHasher, U8, U4, U0>>(3, 5, 1, ApiVersion::V1_0);
+        test_invalid_fallback_post::<LCTree<PoseidonHasher, U8, U4, U0>>(3, 5, 1, ApiVersion::V1_1);
     }
 
     #[test]
     fn fallback_post_poseidon_two_partitions_matching_sub_8_4() {
-        test_fallback_post::<LCTree<PoseidonHasher, U8, U4, U0>>(4, 2, 2, APIVersion::V1_0);
-        test_fallback_post::<LCTree<PoseidonHasher, U8, U4, U0>>(4, 2, 2, APIVersion::V1_1);
+        test_fallback_post::<LCTree<PoseidonHasher, U8, U4, U0>>(4, 2, 2, ApiVersion::V1_0);
+        test_fallback_post::<LCTree<PoseidonHasher, U8, U4, U0>>(4, 2, 2, ApiVersion::V1_1);
     }
 
     #[test]
     fn invalid_fallback_post_poseidon_two_partitions_matching_sub_8_4() {
-        test_invalid_fallback_post::<LCTree<PoseidonHasher, U8, U4, U0>>(4, 2, 2, APIVersion::V1_0);
-        test_invalid_fallback_post::<LCTree<PoseidonHasher, U8, U4, U0>>(4, 2, 2, APIVersion::V1_1);
+        test_invalid_fallback_post::<LCTree<PoseidonHasher, U8, U4, U0>>(4, 2, 2, ApiVersion::V1_0);
+        test_invalid_fallback_post::<LCTree<PoseidonHasher, U8, U4, U0>>(4, 2, 2, ApiVersion::V1_1);
     }
 
     #[test]
     fn fallback_post_poseidon_two_partitions_matching_sub_8_8() {
-        test_fallback_post::<LCTree<PoseidonHasher, U8, U8, U0>>(4, 2, 2, APIVersion::V1_0);
-        test_fallback_post::<LCTree<PoseidonHasher, U8, U8, U0>>(4, 2, 2, APIVersion::V1_1);
+        test_fallback_post::<LCTree<PoseidonHasher, U8, U8, U0>>(4, 2, 2, ApiVersion::V1_0);
+        test_fallback_post::<LCTree<PoseidonHasher, U8, U8, U0>>(4, 2, 2, ApiVersion::V1_1);
     }
 
     #[test]
     fn invalid_fallback_post_poseidon_two_partitions_matching_sub_8_8() {
-        test_invalid_fallback_post::<LCTree<PoseidonHasher, U8, U8, U0>>(4, 2, 2, APIVersion::V1_0);
-        test_invalid_fallback_post::<LCTree<PoseidonHasher, U8, U8, U0>>(4, 2, 2, APIVersion::V1_1);
+        test_invalid_fallback_post::<LCTree<PoseidonHasher, U8, U8, U0>>(4, 2, 2, ApiVersion::V1_0);
+        test_invalid_fallback_post::<LCTree<PoseidonHasher, U8, U8, U0>>(4, 2, 2, ApiVersion::V1_1);
     }
 
     #[test]
     fn fallback_post_poseidon_two_partitions_smaller_sub_8_4() {
-        test_fallback_post::<LCTree<PoseidonHasher, U8, U4, U0>>(5, 3, 2, APIVersion::V1_0);
-        test_fallback_post::<LCTree<PoseidonHasher, U8, U4, U0>>(5, 3, 2, APIVersion::V1_1);
+        test_fallback_post::<LCTree<PoseidonHasher, U8, U4, U0>>(5, 3, 2, ApiVersion::V1_0);
+        test_fallback_post::<LCTree<PoseidonHasher, U8, U4, U0>>(5, 3, 2, ApiVersion::V1_1);
     }
 
     #[test]
     fn invalid_fallback_post_poseidon_two_partitions_smaller_sub_8_4() {
-        test_invalid_fallback_post::<LCTree<PoseidonHasher, U8, U4, U0>>(5, 3, 2, APIVersion::V1_0);
-        test_invalid_fallback_post::<LCTree<PoseidonHasher, U8, U4, U0>>(5, 3, 2, APIVersion::V1_1);
+        test_invalid_fallback_post::<LCTree<PoseidonHasher, U8, U4, U0>>(5, 3, 2, ApiVersion::V1_0);
+        test_invalid_fallback_post::<LCTree<PoseidonHasher, U8, U4, U0>>(5, 3, 2, ApiVersion::V1_1);
     }
 
     #[test]
     fn fallback_post_poseidon_two_partitions_smaller_sub_8_8() {
-        test_fallback_post::<LCTree<PoseidonHasher, U8, U8, U0>>(5, 3, 2, APIVersion::V1_0);
-        test_fallback_post::<LCTree<PoseidonHasher, U8, U8, U0>>(5, 3, 2, APIVersion::V1_1);
+        test_fallback_post::<LCTree<PoseidonHasher, U8, U8, U0>>(5, 3, 2, ApiVersion::V1_0);
+        test_fallback_post::<LCTree<PoseidonHasher, U8, U8, U0>>(5, 3, 2, ApiVersion::V1_1);
     }
 
     #[test]
     fn invalid_fallback_post_poseidon_two_partitions_smaller_sub_8_8() {
-        test_invalid_fallback_post::<LCTree<PoseidonHasher, U8, U8, U0>>(5, 3, 2, APIVersion::V1_0);
-        test_invalid_fallback_post::<LCTree<PoseidonHasher, U8, U8, U0>>(5, 3, 2, APIVersion::V1_1);
+        test_invalid_fallback_post::<LCTree<PoseidonHasher, U8, U8, U0>>(5, 3, 2, ApiVersion::V1_0);
+        test_invalid_fallback_post::<LCTree<PoseidonHasher, U8, U8, U0>>(5, 3, 2, ApiVersion::V1_1);
     }
 
     #[test]
     fn fallback_post_poseidon_single_partition_matching_top_8_4_2() {
-        test_fallback_post::<LCTree<PoseidonHasher, U8, U4, U2>>(5, 5, 1, APIVersion::V1_0);
-        test_fallback_post::<LCTree<PoseidonHasher, U8, U4, U2>>(5, 5, 1, APIVersion::V1_1);
+        test_fallback_post::<LCTree<PoseidonHasher, U8, U4, U2>>(5, 5, 1, ApiVersion::V1_0);
+        test_fallback_post::<LCTree<PoseidonHasher, U8, U4, U2>>(5, 5, 1, ApiVersion::V1_1);
     }
 
     #[test]
     fn invalid_fallback_post_poseidon_single_partition_matching_top_8_4_2() {
-        test_invalid_fallback_post::<LCTree<PoseidonHasher, U8, U4, U2>>(5, 5, 1, APIVersion::V1_0);
-        test_invalid_fallback_post::<LCTree<PoseidonHasher, U8, U4, U2>>(5, 5, 1, APIVersion::V1_1);
+        test_invalid_fallback_post::<LCTree<PoseidonHasher, U8, U4, U2>>(5, 5, 1, ApiVersion::V1_0);
+        test_invalid_fallback_post::<LCTree<PoseidonHasher, U8, U4, U2>>(5, 5, 1, ApiVersion::V1_1);
     }
 
     #[test]
     fn fallback_post_poseidon_single_partition_matching_top_8_8_2() {
-        test_fallback_post::<LCTree<PoseidonHasher, U8, U8, U2>>(5, 5, 1, APIVersion::V1_0);
-        test_fallback_post::<LCTree<PoseidonHasher, U8, U8, U2>>(5, 5, 1, APIVersion::V1_1);
+        test_fallback_post::<LCTree<PoseidonHasher, U8, U8, U2>>(5, 5, 1, ApiVersion::V1_0);
+        test_fallback_post::<LCTree<PoseidonHasher, U8, U8, U2>>(5, 5, 1, ApiVersion::V1_1);
     }
 
     #[test]
     fn invalid_fallback_post_poseidon_single_partition_matching_top_8_8_2() {
-        test_invalid_fallback_post::<LCTree<PoseidonHasher, U8, U8, U2>>(5, 5, 1, APIVersion::V1_0);
-        test_invalid_fallback_post::<LCTree<PoseidonHasher, U8, U8, U2>>(5, 5, 1, APIVersion::V1_1);
+        test_invalid_fallback_post::<LCTree<PoseidonHasher, U8, U8, U2>>(5, 5, 1, ApiVersion::V1_0);
+        test_invalid_fallback_post::<LCTree<PoseidonHasher, U8, U8, U2>>(5, 5, 1, ApiVersion::V1_1);
     }
 
     #[test]
     fn fallback_post_poseidon_single_partition_smaller_top_8_4_2() {
-        test_fallback_post::<LCTree<PoseidonHasher, U8, U4, U2>>(3, 5, 1, APIVersion::V1_0);
-        test_fallback_post::<LCTree<PoseidonHasher, U8, U4, U2>>(3, 5, 1, APIVersion::V1_1);
+        test_fallback_post::<LCTree<PoseidonHasher, U8, U4, U2>>(3, 5, 1, ApiVersion::V1_0);
+        test_fallback_post::<LCTree<PoseidonHasher, U8, U4, U2>>(3, 5, 1, ApiVersion::V1_1);
     }
 
     #[test]
     fn invalid_fallback_post_poseidon_single_partition_smaller_top_8_4_2() {
-        test_invalid_fallback_post::<LCTree<PoseidonHasher, U8, U4, U2>>(3, 5, 1, APIVersion::V1_0);
-        test_invalid_fallback_post::<LCTree<PoseidonHasher, U8, U4, U2>>(3, 5, 1, APIVersion::V1_1);
+        test_invalid_fallback_post::<LCTree<PoseidonHasher, U8, U4, U2>>(3, 5, 1, ApiVersion::V1_0);
+        test_invalid_fallback_post::<LCTree<PoseidonHasher, U8, U4, U2>>(3, 5, 1, ApiVersion::V1_1);
     }
 
     #[test]
     fn fallback_post_poseidon_two_partitions_matching_top_8_4_2() {
-        test_fallback_post::<LCTree<PoseidonHasher, U8, U4, U2>>(4, 2, 2, APIVersion::V1_0);
-        test_fallback_post::<LCTree<PoseidonHasher, U8, U4, U2>>(4, 2, 2, APIVersion::V1_1);
+        test_fallback_post::<LCTree<PoseidonHasher, U8, U4, U2>>(4, 2, 2, ApiVersion::V1_0);
+        test_fallback_post::<LCTree<PoseidonHasher, U8, U4, U2>>(4, 2, 2, ApiVersion::V1_1);
     }
 
     #[test]
     fn invalid_fallback_post_poseidon_two_partitions_matching_top_8_4_2() {
-        test_invalid_fallback_post::<LCTree<PoseidonHasher, U8, U4, U2>>(4, 2, 2, APIVersion::V1_0);
-        test_invalid_fallback_post::<LCTree<PoseidonHasher, U8, U4, U2>>(4, 2, 2, APIVersion::V1_1);
+        test_invalid_fallback_post::<LCTree<PoseidonHasher, U8, U4, U2>>(4, 2, 2, ApiVersion::V1_0);
+        test_invalid_fallback_post::<LCTree<PoseidonHasher, U8, U4, U2>>(4, 2, 2, ApiVersion::V1_1);
     }
 
     #[test]
     fn fallback_post_poseidon_two_partitions_smaller_top_8_4_2() {
-        test_fallback_post::<LCTree<PoseidonHasher, U8, U4, U2>>(5, 3, 2, APIVersion::V1_0);
-        test_fallback_post::<LCTree<PoseidonHasher, U8, U4, U2>>(5, 3, 2, APIVersion::V1_1);
+        test_fallback_post::<LCTree<PoseidonHasher, U8, U4, U2>>(5, 3, 2, ApiVersion::V1_0);
+        test_fallback_post::<LCTree<PoseidonHasher, U8, U4, U2>>(5, 3, 2, ApiVersion::V1_1);
     }
 
     #[test]
     fn invalid_fallback_post_poseidon_two_partitions_smaller_top_8_4_2() {
-        test_invalid_fallback_post::<LCTree<PoseidonHasher, U8, U4, U2>>(5, 3, 2, APIVersion::V1_0);
-        test_invalid_fallback_post::<LCTree<PoseidonHasher, U8, U4, U2>>(5, 3, 2, APIVersion::V1_1);
+        test_invalid_fallback_post::<LCTree<PoseidonHasher, U8, U4, U2>>(5, 3, 2, ApiVersion::V1_0);
+        test_invalid_fallback_post::<LCTree<PoseidonHasher, U8, U4, U2>>(5, 3, 2, ApiVersion::V1_1);
     }
 
     #[test]
     fn fallback_post_poseidon_two_partitions_smaller_top_8_8_2() {
-        test_fallback_post::<LCTree<PoseidonHasher, U8, U8, U2>>(5, 3, 2, APIVersion::V1_0);
-        test_fallback_post::<LCTree<PoseidonHasher, U8, U8, U2>>(5, 3, 2, APIVersion::V1_1);
+        test_fallback_post::<LCTree<PoseidonHasher, U8, U8, U2>>(5, 3, 2, ApiVersion::V1_0);
+        test_fallback_post::<LCTree<PoseidonHasher, U8, U8, U2>>(5, 3, 2, ApiVersion::V1_1);
     }
 
     #[test]
     fn invalid_fallback_post_poseidon_two_partitions_smaller_top_8_8_2() {
-        test_invalid_fallback_post::<LCTree<PoseidonHasher, U8, U8, U2>>(5, 3, 2, APIVersion::V1_0);
-        test_invalid_fallback_post::<LCTree<PoseidonHasher, U8, U8, U2>>(5, 3, 2, APIVersion::V1_1);
+        test_invalid_fallback_post::<LCTree<PoseidonHasher, U8, U8, U2>>(5, 3, 2, ApiVersion::V1_0);
+        test_invalid_fallback_post::<LCTree<PoseidonHasher, U8, U8, U2>>(5, 3, 2, ApiVersion::V1_1);
     }
 }

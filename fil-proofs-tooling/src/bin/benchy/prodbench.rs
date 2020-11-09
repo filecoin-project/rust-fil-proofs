@@ -17,7 +17,7 @@ use log::info;
 use rand::SeedableRng;
 use rand_xorshift::XorShiftRng;
 use serde::{Deserialize, Serialize};
-use storage_proofs::api_version::APIVersion;
+use storage_proofs::api_version::ApiVersion;
 use storage_proofs::compound_proof::CompoundProof;
 use storage_proofs::hasher::Sha256Hasher;
 #[cfg(feature = "measurements")]
@@ -26,8 +26,6 @@ use storage_proofs::measurements::Operation;
 use storage_proofs::measurements::OP_MEASUREMENTS;
 use storage_proofs::parameter_cache::CacheableParameters;
 use storage_proofs::proof::ProofScheme;
-
-const FIXED_API_VERSION: APIVersion = APIVersion::V1_0;
 
 const SEED: [u8; 16] = [
     0x59, 0x62, 0xbe, 0x5d, 0x76, 0x3d, 0x31, 0x8d, 0x17, 0xdb, 0x37, 0x32, 0x54, 0x06, 0xbc, 0xe5,
@@ -59,8 +57,8 @@ impl ProdbenchInputs {
     pub fn sector_size_bytes(&self) -> u64 {
         bytefmt::parse(&self.sector_size).expect("failed to parse sector size")
     }
-    pub fn api_version(&self) -> APIVersion {
-        APIVersion::from_str(&self.api_version).expect("failed to parse api version")
+    pub fn api_version(&self) -> ApiVersion {
+        ApiVersion::from_str(&self.api_version).expect("failed to parse api version")
     }
 }
 
@@ -323,7 +321,7 @@ fn generate_params(i: &ProdbenchInputs) {
         sector_size,
         partitions,
         porep_id: dummy_porep_id,
-        api_version: FIXED_API_VERSION,
+        api_version: i.api_version(),
     });
 }
 

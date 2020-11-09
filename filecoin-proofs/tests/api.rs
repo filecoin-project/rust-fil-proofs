@@ -9,7 +9,7 @@ use bellperson::bls::Fr;
 use ff::Field;
 use rand::{Rng, SeedableRng};
 use rand_xorshift::XorShiftRng;
-use storage_proofs::api_version::APIVersion;
+use storage_proofs::api_version::ApiVersion;
 use storage_proofs::hasher::Hasher;
 use storage_proofs::sector::*;
 use tempfile::NamedTempFile;
@@ -37,8 +37,8 @@ fn test_seal_lifecycle_2kib_porep_id_v1_base_8() -> Result<()> {
 
     let mut porep_id = [0u8; 32];
     porep_id[..8].copy_from_slice(&porep_id_v1.to_le_bytes());
-    seal_lifecycle::<SectorShape2KiB>(SECTOR_SIZE_2_KIB, &porep_id, APIVersion::V1_0)?;
-    seal_lifecycle::<SectorShape2KiB>(SECTOR_SIZE_2_KIB, &porep_id, APIVersion::V1_1)
+    seal_lifecycle::<SectorShape2KiB>(SECTOR_SIZE_2_KIB, &porep_id, ApiVersion::V1_0)?;
+    seal_lifecycle::<SectorShape2KiB>(SECTOR_SIZE_2_KIB, &porep_id, ApiVersion::V1_1)
 }
 
 #[test]
@@ -48,29 +48,29 @@ fn test_seal_lifecycle_2kib_porep_id_v1_1_base_8() -> Result<()> {
 
     let mut porep_id = [0u8; 32];
     porep_id[..8].copy_from_slice(&porep_id_v1_1.to_le_bytes());
-    seal_lifecycle::<SectorShape2KiB>(SECTOR_SIZE_2_KIB, &porep_id, APIVersion::V1_0)?;
-    seal_lifecycle::<SectorShape2KiB>(SECTOR_SIZE_2_KIB, &porep_id, APIVersion::V1_1)
+    seal_lifecycle::<SectorShape2KiB>(SECTOR_SIZE_2_KIB, &porep_id, ApiVersion::V1_0)?;
+    seal_lifecycle::<SectorShape2KiB>(SECTOR_SIZE_2_KIB, &porep_id, ApiVersion::V1_1)
 }
 
 #[test]
 #[ignore]
 fn test_seal_lifecycle_4kib_sub_8_2() -> Result<()> {
-    seal_lifecycle::<SectorShape4KiB>(SECTOR_SIZE_4_KIB, &ARBITRARY_POREP_ID, APIVersion::V1_0)?;
-    seal_lifecycle::<SectorShape4KiB>(SECTOR_SIZE_4_KIB, &ARBITRARY_POREP_ID, APIVersion::V1_1)
+    seal_lifecycle::<SectorShape4KiB>(SECTOR_SIZE_4_KIB, &ARBITRARY_POREP_ID, ApiVersion::V1_0)?;
+    seal_lifecycle::<SectorShape4KiB>(SECTOR_SIZE_4_KIB, &ARBITRARY_POREP_ID, ApiVersion::V1_1)
 }
 
 #[test]
 #[ignore]
 fn test_seal_lifecycle_16kib_sub_8_2() -> Result<()> {
-    seal_lifecycle::<SectorShape16KiB>(SECTOR_SIZE_16_KIB, &ARBITRARY_POREP_ID, APIVersion::V1_0)?;
-    seal_lifecycle::<SectorShape16KiB>(SECTOR_SIZE_16_KIB, &ARBITRARY_POREP_ID, APIVersion::V1_1)
+    seal_lifecycle::<SectorShape16KiB>(SECTOR_SIZE_16_KIB, &ARBITRARY_POREP_ID, ApiVersion::V1_0)?;
+    seal_lifecycle::<SectorShape16KiB>(SECTOR_SIZE_16_KIB, &ARBITRARY_POREP_ID, ApiVersion::V1_1)
 }
 
 #[test]
 #[ignore]
 fn test_seal_lifecycle_32kib_top_8_8_2() -> Result<()> {
-    seal_lifecycle::<SectorShape32KiB>(SECTOR_SIZE_32_KIB, &ARBITRARY_POREP_ID, APIVersion::V1_0)?;
-    seal_lifecycle::<SectorShape32KiB>(SECTOR_SIZE_32_KIB, &ARBITRARY_POREP_ID, APIVersion::V1_1)
+    seal_lifecycle::<SectorShape32KiB>(SECTOR_SIZE_32_KIB, &ARBITRARY_POREP_ID, ApiVersion::V1_0)?;
+    seal_lifecycle::<SectorShape32KiB>(SECTOR_SIZE_32_KIB, &ARBITRARY_POREP_ID, ApiVersion::V1_1)
 }
 
 // These tests are good to run, but take a long time.
@@ -82,7 +82,7 @@ fn test_seal_lifecycle_32kib_top_8_8_2() -> Result<()> {
 //
 //    let mut porep_id = [0u8; 32];
 //    porep_id[..8].copy_from_slice(&porep_id_v1.to_le_bytes());
-//    seal_lifecycle::<SectorShape512MiB>(SECTOR_SIZE_512_MIB, &porep_id, APIVersion::V1_0)
+//    seal_lifecycle::<SectorShape512MiB>(SECTOR_SIZE_512_MIB, &porep_id, ApiVersion::V1_0)
 //}
 
 //#[test]
@@ -92,7 +92,7 @@ fn test_seal_lifecycle_32kib_top_8_8_2() -> Result<()> {
 //
 //    let mut porep_id = [0u8; 32];
 //    porep_id[..8].copy_from_slice(&porep_id_v1.to_le_bytes());
-//    seal_lifecycle::<SectorShape512MiB>(SECTOR_SIZE_512_MIB, &porep_id, APIVersion::V1_1)
+//    seal_lifecycle::<SectorShape512MiB>(SECTOR_SIZE_512_MIB, &porep_id, ApiVersion::V1_1)
 //}
 
 //#[test]
@@ -102,7 +102,7 @@ fn test_seal_lifecycle_32kib_top_8_8_2() -> Result<()> {
 //
 //    let mut porep_id = [0u8; 32];
 //    porep_id[..8].copy_from_slice(&porep_id_v1_1.to_le_bytes());
-//    seal_lifecycle::<SectorShape512MiB>(SECTOR_SIZE_512_MIB, &porep_id, APIVersion::V1_0)
+//    seal_lifecycle::<SectorShape512MiB>(SECTOR_SIZE_512_MIB, &porep_id, ApiVersion::V1_0)
 //}
 
 //#[test]
@@ -112,7 +112,7 @@ fn test_seal_lifecycle_32kib_top_8_8_2() -> Result<()> {
 //
 //    let mut porep_id = [0u8; 32];
 //    porep_id[..8].copy_from_slice(&porep_id_v1_1.to_le_bytes());
-//    seal_lifecycle::<SectorShape512MiB>(SECTOR_SIZE_512_MIB, &porep_id, APIVersion::V1_1)
+//    seal_lifecycle::<SectorShape512MiB>(SECTOR_SIZE_512_MIB, &porep_id, ApiVersion::V1_1)
 //}
 
 //#[test]
@@ -122,7 +122,7 @@ fn test_seal_lifecycle_32kib_top_8_8_2() -> Result<()> {
 //
 //    let mut porep_id = [0u8; 32];
 //    porep_id[..8].copy_from_slice(&porep_id_v1.to_le_bytes());
-//    seal_lifecycle::<SectorShape32GiB>(SECTOR_SIZE_32_GIB, &porep_id, APIVersion::V1_0)
+//    seal_lifecycle::<SectorShape32GiB>(SECTOR_SIZE_32_GIB, &porep_id, ApiVersion::V1_0)
 //}
 
 //#[test]
@@ -132,7 +132,7 @@ fn test_seal_lifecycle_32kib_top_8_8_2() -> Result<()> {
 //
 //    let mut porep_id = [0u8; 32];
 //    porep_id[..8].copy_from_slice(&porep_id_v1.to_le_bytes());
-//    seal_lifecycle::<SectorShape32GiB>(SECTOR_SIZE_32_GIB, &porep_id, APIVersion::V1_1)
+//    seal_lifecycle::<SectorShape32GiB>(SECTOR_SIZE_32_GIB, &porep_id, ApiVersion::V1_1)
 //}
 
 //#[test]
@@ -142,7 +142,7 @@ fn test_seal_lifecycle_32kib_top_8_8_2() -> Result<()> {
 //
 //    let mut porep_id = [0u8; 32];
 //    porep_id[..8].copy_from_slice(&porep_id_v1_1.to_le_bytes());
-//    seal_lifecycle::<SectorShape32GiB>(SECTOR_SIZE_32_GIB, &porep_id, APIVersion::V1_0)
+//    seal_lifecycle::<SectorShape32GiB>(SECTOR_SIZE_32_GIB, &porep_id, ApiVersion::V1_0)
 //}
 
 //#[test]
@@ -152,7 +152,7 @@ fn test_seal_lifecycle_32kib_top_8_8_2() -> Result<()> {
 //
 //    let mut porep_id = [0u8; 32];
 //    porep_id[..8].copy_from_slice(&porep_id_v1_1.to_le_bytes());
-//    seal_lifecycle::<SectorShape32GiB>(SECTOR_SIZE_32_GIB, &porep_id, APIVersion::V1_1)
+//    seal_lifecycle::<SectorShape32GiB>(SECTOR_SIZE_32_GIB, &porep_id, ApiVersion::V1_1)
 //}
 
 //#[test]
@@ -162,7 +162,7 @@ fn test_seal_lifecycle_32kib_top_8_8_2() -> Result<()> {
 //
 //    let mut porep_id = [0u8; 32];
 //    porep_id[..8].copy_from_slice(&porep_id_v1.to_le_bytes());
-//    seal_lifecycle::<SectorShape64GiB>(SECTOR_SIZE_64_GIB, &porep_id, APIVersion::V1_0)
+//    seal_lifecycle::<SectorShape64GiB>(SECTOR_SIZE_64_GIB, &porep_id, ApiVersion::V1_0)
 //}
 
 //#[test]
@@ -172,7 +172,7 @@ fn test_seal_lifecycle_32kib_top_8_8_2() -> Result<()> {
 //
 //    let mut porep_id = [0u8; 32];
 //    porep_id[..8].copy_from_slice(&porep_id_v1.to_le_bytes());
-//    seal_lifecycle::<SectorShape64GiB>(SECTOR_SIZE_64_GIB, &porep_id, APIVersion::V1_1)
+//    seal_lifecycle::<SectorShape64GiB>(SECTOR_SIZE_64_GIB, &porep_id, ApiVersion::V1_1)
 //}
 
 //#[test]
@@ -182,7 +182,7 @@ fn test_seal_lifecycle_32kib_top_8_8_2() -> Result<()> {
 //
 //    let mut porep_id = [0u8; 32];
 //    porep_id[..8].copy_from_slice(&porep_id_v1_1.to_le_bytes());
-//    seal_lifecycle::<SectorShape64GiB>(SECTOR_SIZE_64_GIB, &porep_id, APIVersion::V1_0)
+//    seal_lifecycle::<SectorShape64GiB>(SECTOR_SIZE_64_GIB, &porep_id, ApiVersion::V1_0)
 //}
 
 //#[test]
@@ -192,13 +192,13 @@ fn test_seal_lifecycle_32kib_top_8_8_2() -> Result<()> {
 //
 //    let mut porep_id = [0u8; 32];
 //    porep_id[..8].copy_from_slice(&porep_id_v1_1.to_le_bytes());
-//    seal_lifecycle::<SectorShape64GiB>(SECTOR_SIZE_64_GIB, &porep_id, APIVersion::V1_1)
+//    seal_lifecycle::<SectorShape64GiB>(SECTOR_SIZE_64_GIB, &porep_id, ApiVersion::V1_1)
 //}
 
 fn seal_lifecycle<Tree: 'static + MerkleTreeTrait>(
     sector_size: u64,
     porep_id: &[u8; 32],
-    api_version: APIVersion,
+    api_version: ApiVersion,
 ) -> Result<()> {
     let rng = &mut XorShiftRng::from_seed(TEST_SEED);
     let prover_fr: DefaultTreeDomain = Fr::random(rng).into();
@@ -247,8 +247,8 @@ fn test_resumable_seal_skip_proofs_v1() {
 
     let mut porep_id = [0u8; 32];
     porep_id[..8].copy_from_slice(&porep_id_v1.to_le_bytes());
-    run_resumable_seal::<SectorShape2KiB>(true, 0, &porep_id, APIVersion::V1_0);
-    run_resumable_seal::<SectorShape2KiB>(true, 1, &porep_id, APIVersion::V1_0);
+    run_resumable_seal::<SectorShape2KiB>(true, 0, &porep_id, ApiVersion::V1_0);
+    run_resumable_seal::<SectorShape2KiB>(true, 1, &porep_id, ApiVersion::V1_0);
 }
 
 #[test]
@@ -257,8 +257,8 @@ fn test_resumable_seal_skip_proofs_v1_1() {
 
     let mut porep_id = [0u8; 32];
     porep_id[..8].copy_from_slice(&porep_id_v1_1.to_le_bytes());
-    run_resumable_seal::<SectorShape2KiB>(true, 0, &porep_id, APIVersion::V1_1);
-    run_resumable_seal::<SectorShape2KiB>(true, 1, &porep_id, APIVersion::V1_1);
+    run_resumable_seal::<SectorShape2KiB>(true, 0, &porep_id, ApiVersion::V1_1);
+    run_resumable_seal::<SectorShape2KiB>(true, 1, &porep_id, ApiVersion::V1_1);
 }
 
 #[test]
@@ -268,8 +268,8 @@ fn test_resumable_seal_v1() {
 
     let mut porep_id = [0u8; 32];
     porep_id[..8].copy_from_slice(&porep_id_v1.to_le_bytes());
-    run_resumable_seal::<SectorShape2KiB>(false, 0, &porep_id, APIVersion::V1_0);
-    run_resumable_seal::<SectorShape2KiB>(false, 1, &porep_id, APIVersion::V1_0);
+    run_resumable_seal::<SectorShape2KiB>(false, 0, &porep_id, ApiVersion::V1_0);
+    run_resumable_seal::<SectorShape2KiB>(false, 1, &porep_id, ApiVersion::V1_0);
 }
 
 #[test]
@@ -279,8 +279,8 @@ fn test_resumable_seal_v1_1() {
 
     let mut porep_id = [0u8; 32];
     porep_id[..8].copy_from_slice(&porep_id_v1_1.to_le_bytes());
-    run_resumable_seal::<SectorShape2KiB>(false, 0, &porep_id, APIVersion::V1_1);
-    run_resumable_seal::<SectorShape2KiB>(false, 1, &porep_id, APIVersion::V1_1);
+    run_resumable_seal::<SectorShape2KiB>(false, 0, &porep_id, ApiVersion::V1_1);
+    run_resumable_seal::<SectorShape2KiB>(false, 1, &porep_id, ApiVersion::V1_1);
 }
 
 /// Create a seal, delete a layer and resume
@@ -291,7 +291,7 @@ fn run_resumable_seal<Tree: 'static + MerkleTreeTrait>(
     skip_proofs: bool,
     layer_to_delete: usize,
     porep_id: &[u8; 32],
-    api_version: APIVersion,
+    api_version: ApiVersion,
 ) {
     init_logger();
 
@@ -395,37 +395,37 @@ fn run_resumable_seal<Tree: 'static + MerkleTreeTrait>(
 #[test]
 #[ignore]
 fn test_winning_post_2kib_base_8() -> Result<()> {
-    winning_post::<SectorShape2KiB>(SECTOR_SIZE_2_KIB, false, APIVersion::V1_0)?;
-    winning_post::<SectorShape2KiB>(SECTOR_SIZE_2_KIB, true, APIVersion::V1_0)?;
-    winning_post::<SectorShape2KiB>(SECTOR_SIZE_2_KIB, false, APIVersion::V1_1)?;
-    winning_post::<SectorShape2KiB>(SECTOR_SIZE_2_KIB, true, APIVersion::V1_1)
+    winning_post::<SectorShape2KiB>(SECTOR_SIZE_2_KIB, false, ApiVersion::V1_0)?;
+    winning_post::<SectorShape2KiB>(SECTOR_SIZE_2_KIB, true, ApiVersion::V1_0)?;
+    winning_post::<SectorShape2KiB>(SECTOR_SIZE_2_KIB, false, ApiVersion::V1_1)?;
+    winning_post::<SectorShape2KiB>(SECTOR_SIZE_2_KIB, true, ApiVersion::V1_1)
 }
 
 #[test]
 #[ignore]
 fn test_winning_post_4kib_sub_8_2() -> Result<()> {
-    winning_post::<SectorShape4KiB>(SECTOR_SIZE_4_KIB, false, APIVersion::V1_0)?;
-    winning_post::<SectorShape4KiB>(SECTOR_SIZE_4_KIB, true, APIVersion::V1_0)?;
-    winning_post::<SectorShape4KiB>(SECTOR_SIZE_4_KIB, false, APIVersion::V1_1)?;
-    winning_post::<SectorShape4KiB>(SECTOR_SIZE_4_KIB, true, APIVersion::V1_1)
+    winning_post::<SectorShape4KiB>(SECTOR_SIZE_4_KIB, false, ApiVersion::V1_0)?;
+    winning_post::<SectorShape4KiB>(SECTOR_SIZE_4_KIB, true, ApiVersion::V1_0)?;
+    winning_post::<SectorShape4KiB>(SECTOR_SIZE_4_KIB, false, ApiVersion::V1_1)?;
+    winning_post::<SectorShape4KiB>(SECTOR_SIZE_4_KIB, true, ApiVersion::V1_1)
 }
 
 #[test]
 #[ignore]
 fn test_winning_post_16kib_sub_8_8() -> Result<()> {
-    winning_post::<SectorShape16KiB>(SECTOR_SIZE_16_KIB, false, APIVersion::V1_0)?;
-    winning_post::<SectorShape16KiB>(SECTOR_SIZE_16_KIB, true, APIVersion::V1_0)?;
-    winning_post::<SectorShape16KiB>(SECTOR_SIZE_16_KIB, false, APIVersion::V1_1)?;
-    winning_post::<SectorShape16KiB>(SECTOR_SIZE_16_KIB, true, APIVersion::V1_1)
+    winning_post::<SectorShape16KiB>(SECTOR_SIZE_16_KIB, false, ApiVersion::V1_0)?;
+    winning_post::<SectorShape16KiB>(SECTOR_SIZE_16_KIB, true, ApiVersion::V1_0)?;
+    winning_post::<SectorShape16KiB>(SECTOR_SIZE_16_KIB, false, ApiVersion::V1_1)?;
+    winning_post::<SectorShape16KiB>(SECTOR_SIZE_16_KIB, true, ApiVersion::V1_1)
 }
 
 #[test]
 #[ignore]
 fn test_winning_post_32kib_top_8_8_2() -> Result<()> {
-    winning_post::<SectorShape32KiB>(SECTOR_SIZE_32_KIB, false, APIVersion::V1_0)?;
-    winning_post::<SectorShape32KiB>(SECTOR_SIZE_32_KIB, true, APIVersion::V1_0)?;
-    winning_post::<SectorShape32KiB>(SECTOR_SIZE_32_KIB, false, APIVersion::V1_1)?;
-    winning_post::<SectorShape32KiB>(SECTOR_SIZE_32_KIB, true, APIVersion::V1_1)
+    winning_post::<SectorShape32KiB>(SECTOR_SIZE_32_KIB, false, ApiVersion::V1_0)?;
+    winning_post::<SectorShape32KiB>(SECTOR_SIZE_32_KIB, true, ApiVersion::V1_0)?;
+    winning_post::<SectorShape32KiB>(SECTOR_SIZE_32_KIB, false, ApiVersion::V1_1)?;
+    winning_post::<SectorShape32KiB>(SECTOR_SIZE_32_KIB, true, ApiVersion::V1_1)
 }
 
 #[test]
@@ -438,7 +438,7 @@ fn test_winning_post_empty_sector_challenge() -> Result<()> {
 
     let sector_count = 0;
     let sector_size = SECTOR_SIZE_2_KIB;
-    let api_version = APIVersion::V1_0;
+    let api_version = ApiVersion::V1_0;
 
     let (_, _, _, _) = create_seal::<_, SectorShape2KiB>(
         rng,
@@ -459,7 +459,7 @@ fn test_winning_post_empty_sector_challenge() -> Result<()> {
         challenge_count: WINNING_POST_CHALLENGE_COUNT,
         typ: PoStType::Winning,
         priority: false,
-        api_version: APIVersion::V1_0,
+        api_version: ApiVersion::V1_0,
     };
 
     assert!(generate_winning_post_sector_challenge::<SectorShape2KiB>(
@@ -476,7 +476,7 @@ fn test_winning_post_empty_sector_challenge() -> Result<()> {
 fn winning_post<Tree: 'static + MerkleTreeTrait>(
     sector_size: u64,
     fake: bool,
-    api_version: APIVersion,
+    api_version: ApiVersion,
 ) -> Result<()> {
     let rng = &mut XorShiftRng::from_seed(TEST_SEED);
 
@@ -584,28 +584,28 @@ fn test_window_post_single_partition_smaller_2kib_base_8() -> Result<()> {
         sector_count / 2,
         sector_count,
         false,
-        APIVersion::V1_0,
+        ApiVersion::V1_0,
     )?;
     window_post::<SectorShape2KiB>(
         sector_size,
         sector_count / 2,
         sector_count,
         true,
-        APIVersion::V1_0,
+        ApiVersion::V1_0,
     )?;
     window_post::<SectorShape2KiB>(
         sector_size,
         sector_count / 2,
         sector_count,
         false,
-        APIVersion::V1_1,
+        ApiVersion::V1_1,
     )?;
     window_post::<SectorShape2KiB>(
         sector_size,
         sector_count / 2,
         sector_count,
         true,
-        APIVersion::V1_1,
+        ApiVersion::V1_1,
     )
 }
 
@@ -624,28 +624,28 @@ fn test_window_post_two_partitions_matching_2kib_base_8() -> Result<()> {
         2 * sector_count,
         sector_count,
         false,
-        APIVersion::V1_0,
+        ApiVersion::V1_0,
     )?;
     window_post::<SectorShape2KiB>(
         sector_size,
         2 * sector_count,
         sector_count,
         true,
-        APIVersion::V1_0,
+        ApiVersion::V1_0,
     )?;
     window_post::<SectorShape2KiB>(
         sector_size,
         2 * sector_count,
         sector_count,
         false,
-        APIVersion::V1_1,
+        ApiVersion::V1_1,
     )?;
     window_post::<SectorShape2KiB>(
         sector_size,
         2 * sector_count,
         sector_count,
         true,
-        APIVersion::V1_1,
+        ApiVersion::V1_1,
     )
 }
 
@@ -664,28 +664,28 @@ fn test_window_post_two_partitions_matching_4kib_sub_8_2() -> Result<()> {
         2 * sector_count,
         sector_count,
         false,
-        APIVersion::V1_0,
+        ApiVersion::V1_0,
     )?;
     window_post::<SectorShape4KiB>(
         sector_size,
         2 * sector_count,
         sector_count,
         true,
-        APIVersion::V1_0,
+        ApiVersion::V1_0,
     )?;
     window_post::<SectorShape4KiB>(
         sector_size,
         2 * sector_count,
         sector_count,
         false,
-        APIVersion::V1_1,
+        ApiVersion::V1_1,
     )?;
     window_post::<SectorShape4KiB>(
         sector_size,
         2 * sector_count,
         sector_count,
         true,
-        APIVersion::V1_1,
+        ApiVersion::V1_1,
     )
 }
 
@@ -704,28 +704,28 @@ fn test_window_post_two_partitions_matching_16kib_sub_8_8() -> Result<()> {
         2 * sector_count,
         sector_count,
         false,
-        APIVersion::V1_0,
+        ApiVersion::V1_0,
     )?;
     window_post::<SectorShape16KiB>(
         sector_size,
         2 * sector_count,
         sector_count,
         true,
-        APIVersion::V1_0,
+        ApiVersion::V1_0,
     )?;
     window_post::<SectorShape16KiB>(
         sector_size,
         2 * sector_count,
         sector_count,
         false,
-        APIVersion::V1_1,
+        ApiVersion::V1_1,
     )?;
     window_post::<SectorShape16KiB>(
         sector_size,
         2 * sector_count,
         sector_count,
         true,
-        APIVersion::V1_1,
+        ApiVersion::V1_1,
     )
 }
 
@@ -744,28 +744,28 @@ fn test_window_post_two_partitions_matching_32kib_top_8_8_2() -> Result<()> {
         2 * sector_count,
         sector_count,
         false,
-        APIVersion::V1_0,
+        ApiVersion::V1_0,
     )?;
     window_post::<SectorShape32KiB>(
         sector_size,
         2 * sector_count,
         sector_count,
         true,
-        APIVersion::V1_0,
+        ApiVersion::V1_0,
     )?;
     window_post::<SectorShape32KiB>(
         sector_size,
         2 * sector_count,
         sector_count,
         false,
-        APIVersion::V1_1,
+        ApiVersion::V1_1,
     )?;
     window_post::<SectorShape32KiB>(
         sector_size,
         2 * sector_count,
         sector_count,
         true,
-        APIVersion::V1_1,
+        ApiVersion::V1_1,
     )
 }
 
@@ -784,28 +784,28 @@ fn test_window_post_two_partitions_smaller_2kib_base_8() -> Result<()> {
         2 * sector_count - 1,
         sector_count,
         false,
-        APIVersion::V1_0,
+        ApiVersion::V1_0,
     )?;
     window_post::<SectorShape2KiB>(
         sector_size,
         2 * sector_count - 1,
         sector_count,
         true,
-        APIVersion::V1_0,
+        ApiVersion::V1_0,
     )?;
     window_post::<SectorShape2KiB>(
         sector_size,
         2 * sector_count - 1,
         sector_count,
         false,
-        APIVersion::V1_1,
+        ApiVersion::V1_1,
     )?;
     window_post::<SectorShape2KiB>(
         sector_size,
         2 * sector_count - 1,
         sector_count,
         true,
-        APIVersion::V1_1,
+        ApiVersion::V1_1,
     )
 }
 
@@ -824,28 +824,28 @@ fn test_window_post_single_partition_matching_2kib_base_8() -> Result<()> {
         sector_count,
         sector_count,
         false,
-        APIVersion::V1_0,
+        ApiVersion::V1_0,
     )?;
     window_post::<SectorShape2KiB>(
         sector_size,
         sector_count,
         sector_count,
         true,
-        APIVersion::V1_0,
+        ApiVersion::V1_0,
     )?;
     window_post::<SectorShape2KiB>(
         sector_size,
         sector_count,
         sector_count,
         false,
-        APIVersion::V1_1,
+        ApiVersion::V1_1,
     )?;
     window_post::<SectorShape2KiB>(
         sector_size,
         sector_count,
         sector_count,
         true,
-        APIVersion::V1_1,
+        ApiVersion::V1_1,
     )
 }
 
@@ -854,7 +854,7 @@ fn window_post<Tree: 'static + MerkleTreeTrait>(
     total_sector_count: usize,
     sector_count: usize,
     fake: bool,
-    api_version: APIVersion,
+    api_version: ApiVersion,
 ) -> Result<()> {
     let rng = &mut XorShiftRng::from_seed(TEST_SEED);
 
@@ -959,7 +959,7 @@ fn generate_piece_file(sector_size: u64) -> Result<(NamedTempFile, Vec<u8>)> {
     Ok((piece_file, piece_bytes))
 }
 
-fn porep_config(sector_size: u64, porep_id: [u8; 32], api_version: APIVersion) -> PoRepConfig {
+fn porep_config(sector_size: u64, porep_id: [u8; 32], api_version: ApiVersion) -> PoRepConfig {
     PoRepConfig {
         sector_size: SectorSize(sector_size),
         partitions: PoRepProofPartitions(
@@ -1101,7 +1101,7 @@ fn create_seal<R: Rng, Tree: 'static + MerkleTreeTrait>(
     prover_id: ProverId,
     skip_proof: bool,
     porep_id: &[u8; 32],
-    api_version: APIVersion,
+    api_version: ApiVersion,
 ) -> Result<(SectorId, NamedTempFile, Commitment, tempfile::TempDir)> {
     init_logger();
 
@@ -1160,7 +1160,7 @@ fn create_fake_seal<R: rand::Rng, Tree: 'static + MerkleTreeTrait>(
     mut rng: &mut R,
     sector_size: u64,
     porep_id: &[u8; 32],
-    api_version: APIVersion,
+    api_version: ApiVersion,
 ) -> Result<(SectorId, NamedTempFile, Commitment, tempfile::TempDir)> {
     init_logger();
 

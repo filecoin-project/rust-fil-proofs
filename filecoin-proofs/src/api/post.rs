@@ -8,7 +8,7 @@ use bincode::deserialize;
 use generic_array::typenum::Unsigned;
 use log::{info, trace};
 use merkletree::store::StoreConfig;
-use storage_proofs::api_version::APIVersion;
+use storage_proofs::api_version::ApiVersion;
 use storage_proofs::cache_key::CacheKey;
 use storage_proofs::compound_proof::{self, CompoundProof};
 use storage_proofs::hasher::{Domain, Hasher};
@@ -496,12 +496,12 @@ pub fn generate_fallback_sector_challenges<Tree: 'static + MerkleTreeTrait>(
 
             for n in 0..post_config.challenge_count {
                 let challenge_index = match post_config.api_version {
-                    APIVersion::V1_0 => {
+                    ApiVersion::V1_0 => {
                         (partition_index * post_config.sector_count + i)
                             * post_config.challenge_count
                             + n
                     }
-                    APIVersion::V1_1 => n,
+                    ApiVersion::V1_1 => n,
                 } as u64;
 
                 let challenged_leaf = fallback::generate_leaf_challenge(

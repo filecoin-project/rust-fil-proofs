@@ -25,7 +25,7 @@ use filecoin_proofs::{
 };
 use log::info;
 use serde::{Deserialize, Serialize};
-use storage_proofs::api_version::APIVersion;
+use storage_proofs::api_version::ApiVersion;
 use storage_proofs::merkle::MerkleTreeTrait;
 use storage_proofs::sector::SectorId;
 
@@ -95,7 +95,7 @@ fn get_porep_config(sector_size: u64) -> PoRepConfig {
                 .expect("unknown sector size"),
         ),
         porep_id: arbitrary_porep_id,
-        api_version: APIVersion::V1_1,
+        api_version: ApiVersion::V1_1,
     }
 }
 
@@ -339,7 +339,7 @@ fn run_pre_commit_phases<Tree: 'static + MerkleTreeTrait>(
 #[allow(clippy::too_many_arguments)]
 pub fn run_window_post_bench<Tree: 'static + MerkleTreeTrait>(
     sector_size: u64,
-    api_version: APIVersion,
+    api_version: ApiVersion,
     cache_dir: PathBuf,
     preserve_cache: bool,
     skip_precommit_phase1: bool,
@@ -578,7 +578,7 @@ pub fn run_window_post_bench<Tree: 'static + MerkleTreeTrait>(
 #[allow(clippy::too_many_arguments)]
 pub fn run(
     sector_size: usize,
-    api_version: APIVersion,
+    api_version: ApiVersion,
     cache: String,
     preserve_cache: bool,
     skip_precommit_phase1: bool,
