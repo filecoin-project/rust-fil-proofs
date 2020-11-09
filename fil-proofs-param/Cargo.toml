@@ -1,0 +1,70 @@
+[package]
+name = "fil-proofs-param"
+description = "Filecoin parameter cli tools."
+version = "0.1.0"
+authors = ["dignifiedquire <dignifiedquire@gmail.com>", "laser <l@s3r.com>", "porcuquine <porcuquine@users.noreply.github.com>"]
+license = "MIT OR Apache-2.0"
+edition = "2018"
+repository = "https://github.com/filecoin-project/rust-fil-proofs"
+readme = "README.md"
+
+[dependencies]
+storage-proofs = { path = "../storage-proofs", default-features = false }
+filecoin-proofs = { path = "../filecoin-proofs", default-features = false }
+bitvec = "0.17"
+rand = "0.7"
+lazy_static = "1.2"
+memmap = "0.7"
+pbr = "1.0"
+byteorder = "1"
+itertools = "0.9"
+serde = { version = "1.0", features = ["rc", "derive"] }
+serde_json = "1.0"
+ff = { version = "0.2.3", package = "fff" }
+blake2b_simd = "0.5"
+bellperson = { version = "0.12", default-features = false }
+log = "0.4.7"
+fil_logger = "0.1"
+env_proxy = "0.4"
+flate2 = { version = "1.0.9", features = ["rust_backend"]}
+tar = "0.4.26"
+rayon = "1.1.0"
+blake2s_simd = "0.5.8"
+hex = "0.4.0"
+merkletree = "0.21.0"
+bincode = "1.1.2"
+anyhow = "1.0.23"
+rand_xorshift = "0.2.0"
+sha2 = "0.9.1"
+typenum = "1.11.2"
+bitintr = "0.3.0"
+gperftools = { version = "0.2", optional = true }
+generic-array = "0.14.4"
+structopt = "0.3.12"
+humansize = "1.1.0"
+indicatif = "0.15.0"
+groupy = "0.3.0"
+dialoguer = "0.7.1"
+clap = "2.33.3"
+
+[dependencies.reqwest]
+version = "0.10"
+default-features = false
+features = ["blocking", "native-tls-vendored"]
+
+[dev-dependencies]
+criterion = "0.3"
+rexpect = "0.4.0"
+pretty_assertions = "0.6.1"
+failure = "0.1.7"
+tempfile = "3"
+
+[features]
+default = ["gpu", "pairing"]
+cpu-profile = ["gperftools"]
+heap-profile = ["gperftools/heap"]
+simd = ["storage-proofs/simd"]
+asm = ["storage-proofs/asm"]
+gpu = ["storage-proofs/gpu", "bellperson/gpu"]
+pairing = ["storage-proofs/pairing", "bellperson/pairing"]
+blst = ["storage-proofs/blst", "bellperson/blst"]
