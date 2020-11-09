@@ -40,11 +40,11 @@ macro_rules! process_fr {
         $out1:expr,
         $bit_offset:expr
     ) => {{
-        *$out0 = $in_buffer[0] >> 128 - $bit_offset;
-        *$out0 |= $in_buffer[1] << $bit_offset;
-        *$out1 = $in_buffer[1] >> 128 - $bit_offset;
-        *$out1 |= $in_buffer[2] << $bit_offset;
-        *$out1 &= MASK_SKIP_HIGH_2; // zero high 2 bits
+        $out0 = $in_buffer[0] >> 128 - $bit_offset;
+        $out0 |= $in_buffer[1] << $bit_offset;
+        $out1 = $in_buffer[1] >> 128 - $bit_offset;
+        $out1 |= $in_buffer[2] << $bit_offset;
+        $out1 &= MASK_SKIP_HIGH_2; // zero high 2 bits
     }};
 }
 
@@ -71,11 +71,11 @@ impl<R: io::Read> Fr32Reader<R> {
             out[1] = in_buffer[1] & MASK_SKIP_HIGH_2;
         }
         // 254..508
-        process_fr!(&in_buffer[1..], &mut out[2], &mut out[3], 2);
+        process_fr!(&in_buffer[1..], out[2], out[3], 2);
         // 508..762
-        process_fr!(&in_buffer[3..], &mut out[4], &mut out[5], 4);
+        process_fr!(&in_buffer[3..], out[4], out[5], 4);
         // 762..1016
-        process_fr!(&in_buffer[5..], &mut out[6], &mut out[7], 6);
+        process_fr!(&in_buffer[5..], out[6], out[7], 6);
 
         // Reset buffer offset.
         self.out_offset = 0;
