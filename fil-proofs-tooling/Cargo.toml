@@ -46,6 +46,9 @@ typenum = "1.11.2"
 generic-array = "0.14.4"
 byte-unit = "4.0.9"
 fdlimit = "0.2.0"
+dialoguer = "0.7.1"
+structopt = "0.3.12"
+humansize = "1.1.0"
 
 [features]
 default = ["gpu", "measurements"]
