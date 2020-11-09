@@ -1,32 +1,61 @@
 use byte_slice_cast::*;
 use std::io;
 
+/// The number of Frs per Block.
+const NUM_FRS_PER_BLOCK: usize = 4;
+/// The amount of bits in an Fr when not padded.
+const IN_BITS_FR: usize = 254;
+/// The amount of bits in an Fr when padded.
+const OUT_BITS_FR: usize = 256;
+
+const NUM_BYTES_IN_BLOCK: usize = NUM_FRS_PER_BLOCK * IN_BITS_FR / 8;
+const NUM_BYTES_OUT_BLOCK: usize = NUM_FRS_PER_BLOCK * OUT_BITS_FR / 8;
+
+const NUM_U128S_PER_BLOCK: usize = NUM_BYTES_OUT_BLOCK / std::mem::size_of::<u128>();
+
+const MASK_SKIP_HIGH_2: u128 = 0b0011_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111;
+
+/// An `io::Reader` that converts unpadded input into valid `Fr32` padded output.
 pub struct Fr32Reader<R> {
     /// The source being padded.
     source: R,
     /// Currently read block.
-    in_buffer: [u8; NUM_U128S_PER_BLOCK * 16],
+    /// This is padded to 128 bytes to allow reading all values as `u128`s, but only the first
+    /// 127 bytes are ever valid.
+    in_buffer: [u8; NUM_BYTES_IN_BLOCK + 1],
     /// Currently writing out block.
     out_buffer: [u128; NUM_U128S_PER_BLOCK],
-    /// How many blocks are left in the buffers.
-    to_process: usize,
-    /// How many bytes of the out_buffer are already read out.
+    /// The current offset into the `out_buffer` in bytes.
     out_offset: usize,
+    /// How many `Fr32`s are available in the `out_buffer`.
+    available_frs: usize,
     /// Are we done reading?
     done: bool,
 }
 
-const NUM_U128S_PER_BLOCK: usize = 8;
-const MASK_SKIP_HIGH_2: u128 = 0b0011_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111;
+macro_rules! process_fr {
+    (
+        $in_buffer:expr,
+        $out0:expr,
+        $out1:expr,
+        $bit_offset:expr
+    ) => {{
+        *$out0 = $in_buffer[0] >> 128 - $bit_offset;
+        *$out0 |= $in_buffer[1] << $bit_offset;
+        *$out1 = $in_buffer[1] >> 128 - $bit_offset;
+        *$out1 |= $in_buffer[2] << $bit_offset;
+        *$out1 &= MASK_SKIP_HIGH_2; // zero high 2 bits
+    }};
+}
 
 impl<R: io::Read> Fr32Reader<R> {
     pub fn new(source: R) -> Self {
         Fr32Reader {
             source,
-            in_buffer: [0; NUM_U128S_PER_BLOCK * 16],
+            in_buffer: [0; NUM_BYTES_IN_BLOCK + 1],
             out_buffer: [0; NUM_U128S_PER_BLOCK],
-            to_process: 0,
             out_offset: 0,
+            available_frs: 0,
             done: false,
         }
     }
@@ -34,42 +63,27 @@ impl<R: io::Read> Fr32Reader<R> {
     /// Processes a single block in in_buffer, writing the result to out_buffer.
     fn process_block(&mut self) {
         let in_buffer: &[u128] = self.in_buffer.as_slice_of::<u128>().unwrap();
-        let out_buffer = &mut self.out_buffer;
+        let out = &mut self.out_buffer;
 
         // 0..254
         {
-            out_buffer[0] = in_buffer[0];
-            out_buffer[1] = in_buffer[1] & MASK_SKIP_HIGH_2;
+            out[0] = in_buffer[0];
+            out[1] = in_buffer[1] & MASK_SKIP_HIGH_2;
         }
         // 254..508
-        {
-            out_buffer[2] = in_buffer[1] >> 126; // top 2 bits
-            out_buffer[2] |= in_buffer[2] << 2; // low 126 bits
-            out_buffer[3] = in_buffer[2] >> 126; // top 2 bits
-            out_buffer[3] |= in_buffer[3] << 2; // low 124 bits
-            out_buffer[3] &= MASK_SKIP_HIGH_2; // zero high 2 bits
-        }
+        process_fr!(&in_buffer[1..], &mut out[2], &mut out[3], 2);
         // 508..762
-        {
-            out_buffer[4] = in_buffer[3] >> 124; // top 4 bits
-            out_buffer[4] |= in_buffer[4] << 4; // low 124 bits
-            out_buffer[5] = in_buffer[4] >> 124; // top 4 bits
-            out_buffer[5] |= in_buffer[5] << 4; // low 122 bits
-            out_buffer[5] &= MASK_SKIP_HIGH_2; // zero high 2 bits
-        }
+        process_fr!(&in_buffer[3..], &mut out[4], &mut out[5], 4);
         // 762..1016
-        {
-            out_buffer[6] = in_buffer[5] >> 122; // top 6 bits
-            out_buffer[6] |= in_buffer[6] << 6; // low 122 bits
-            out_buffer[7] = in_buffer[6] >> 122; // top 6 bits
-            out_buffer[7] |= in_buffer[7] << 6; // low 120 bits
-            out_buffer[7] &= MASK_SKIP_HIGH_2; // zero high 2 bits
-        }
+        process_fr!(&in_buffer[5..], &mut out[6], &mut out[7], 6);
+
+        // Reset buffer offset.
+        self.out_offset = 0;
     }
 
-    fn fill_buffer(&mut self) -> io::Result<usize> {
+    fn fill_in_buffer(&mut self) -> io::Result<usize> {
         let mut bytes_read = 0;
-        let mut buf = &mut self.in_buffer[..127];
+        let mut buf = &mut self.in_buffer[..NUM_BYTES_IN_BLOCK];
 
         while !buf.is_empty() {
             match self.source.read(buf) {
@@ -77,8 +91,7 @@ impl<R: io::Read> Fr32Reader<R> {
                     break;
                 }
                 Ok(n) => {
-                    let tmp = buf;
-                    buf = &mut tmp[n..];
+                    buf = &mut buf[n..];
                     bytes_read += n;
                 }
                 Err(ref e) if e.kind() == std::io::ErrorKind::Interrupted => {}
@@ -86,8 +99,8 @@ impl<R: io::Read> Fr32Reader<R> {
             }
         }
 
-        // clear unfilled memory
-        for val in &mut self.in_buffer[bytes_read..127] {
+        // Clear unfilled memory.
+        for val in &mut self.in_buffer[bytes_read..NUM_BYTES_IN_BLOCK] {
             *val = 0;
         }
 
@@ -108,44 +121,48 @@ impl<R: io::Read> io::Read for Fr32Reader<R> {
             return Ok(0);
         }
 
-        let num_bytes = target.len();
+        // The number of bytes already read and written into `target`.
+        let mut bytes_read = 0;
+        // The number of bytes to read.
+        let bytes_to_read = target.len();
 
-        let mut read = 0;
+        while bytes_read < bytes_to_read {
+            // Load and process the next block, if no Frs are available anymore.
+            if self.available_frs == 0 {
+                let bytes_read = self.fill_in_buffer()?;
 
-        while read < num_bytes {
-            // load new block
-            if self.to_process == 0 {
-                let bytes_read = self.fill_buffer()?;
-
-                // read all data, no new data in the buffer
+                // All data was read from the source, no new data in the buffer.
                 if bytes_read == 0 {
                     self.done = true;
                     break;
                 }
 
                 self.process_block();
-                self.to_process += div_ceil(bytes_read * 8, 254);
-                self.out_offset = 0;
+
+                // Update state of how many new Frs are now available.
+                self.available_frs = div_ceil(bytes_read * 8, IN_BITS_FR);
             }
 
-            // write out result
-            let available_bytes = self.to_process * (256 / 8);
+            // Write out as many Frs as available and requested
+            {
+                let available_bytes = self.available_frs * (OUT_BITS_FR / 8);
 
-            let start = read;
-            let end = std::cmp::min(start + available_bytes, num_bytes);
-            let len = end - start;
+                let target_start = bytes_read;
+                let target_end = std::cmp::min(target_start + available_bytes, bytes_to_read);
+                let len = target_end - target_start;
 
-            let out_start = self.out_offset;
-            let out_end = out_start + len;
+                let out_start = self.out_offset;
+                let out_end = out_start + len;
 
-            target[start..end]
-                .copy_from_slice(&self.out_buffer.as_byte_slice()[out_start..out_end]);
-            read += len;
-            self.out_offset += len;
-            self.to_process -= div_ceil(len * 8, 256);
+                target[target_start..target_end]
+                    .copy_from_slice(&self.out_buffer.as_byte_slice()[out_start..out_end]);
+                bytes_read += len;
+                self.out_offset += len;
+                self.available_frs -= div_ceil(len * 8, OUT_BITS_FR);
+            }
         }
 
-        Ok(read)
+        Ok(bytes_read)
     }
 }
 
