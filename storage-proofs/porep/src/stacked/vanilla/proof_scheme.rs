@@ -1,12 +1,9 @@
 use anyhow::ensure;
+use filecoin_hashers::{HashFunction, Hasher};
 use log::trace;
 use rayon::prelude::*;
 use storage_proofs_core::{
-    drgraph::Graph,
-    error::Result,
-    hasher::{HashFunction, Hasher},
-    merkle::MerkleTreeTrait,
-    proof::ProofScheme,
+    drgraph::Graph, error::Result, merkle::MerkleTreeTrait, proof::ProofScheme,
 };
 
 use super::{

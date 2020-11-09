@@ -2,6 +2,7 @@ use bellperson::bls::{Bls12, Fr};
 use bellperson::gadgets::num;
 use bellperson::{Circuit, ConstraintSystem, SynthesisError};
 use ff::Field;
+use filecoin_hashers::{HashFunction, Hasher};
 use rayon::prelude::*;
 
 use storage_proofs_core::{
@@ -10,7 +11,6 @@ use storage_proofs_core::{
     gadgets::constraint,
     gadgets::por::{AuthPath, PoRCircuit},
     gadgets::variables::Root,
-    hasher::{HashFunction, Hasher},
     merkle::MerkleTreeTrait,
     por, settings,
     util::NODE_SIZE,
@@ -217,12 +217,12 @@ mod tests {
 
     use bellperson::util_cs::test_cs::TestConstraintSystem;
     use ff::Field;
+    use filecoin_hashers::{poseidon::PoseidonHasher, Domain, HashFunction, Hasher};
     use generic_array::typenum::{U0, U2, U4, U8};
     use rand::SeedableRng;
     use rand_xorshift::XorShiftRng;
     use storage_proofs_core::{
         compound_proof::CompoundProof,
-        hasher::{Domain, HashFunction, Hasher, PoseidonHasher},
         merkle::{generate_tree, get_base_tree_count, LCTree, MerkleTreeTrait, OctMerkleTree},
         proof::ProofScheme,
         util::NODE_SIZE,

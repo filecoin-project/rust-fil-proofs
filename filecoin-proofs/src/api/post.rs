@@ -5,12 +5,12 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{anyhow, ensure, Context, Result};
 use bincode::deserialize;
+use filecoin_hashers::{Domain, Hasher};
 use generic_array::typenum::Unsigned;
 use log::{info, trace};
 use merkletree::store::StoreConfig;
 use storage_proofs::cache_key::CacheKey;
 use storage_proofs::compound_proof::{self, CompoundProof};
-use storage_proofs::hasher::{Domain, Hasher};
 use storage_proofs::merkle::{
     create_tree, get_base_tree_count, split_config_and_replica, MerkleTreeTrait, MerkleTreeWrapper,
 };

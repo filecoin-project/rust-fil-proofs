@@ -180,11 +180,11 @@ mod tests {
     use std::collections::BTreeMap;
 
     use bellperson::util_cs::test_cs::TestConstraintSystem;
+    use filecoin_hashers::{poseidon::PoseidonHasher, Domain, HashFunction, Hasher};
     use rand::{Rng, SeedableRng};
     use rand_xorshift::XorShiftRng;
     use storage_proofs_core::{
         compound_proof,
-        hasher::{Domain, HashFunction, Hasher, PoseidonHasher},
         merkle::{generate_tree, get_base_tree_count, BinaryMerkleTree},
         proof::NoRequirements,
         sector::OrderedSectorSet,

@@ -3,15 +3,11 @@ use std::marker::PhantomData;
 use bellperson::bls::{Bls12, Fr};
 use bellperson::gadgets::num;
 use bellperson::{Circuit, ConstraintSystem, SynthesisError};
+use filecoin_hashers::{HashFunction, Hasher};
 
 use storage_proofs_core::{
-    compound_proof::CircuitComponent,
-    error::Result,
-    gadgets::constraint,
-    gadgets::por::PoRCircuit,
-    gadgets::variables::Root,
-    hasher::{HashFunction, Hasher},
-    merkle::MerkleTreeTrait,
+    compound_proof::CircuitComponent, error::Result, gadgets::constraint, gadgets::por::PoRCircuit,
+    gadgets::variables::Root, merkle::MerkleTreeTrait,
 };
 
 /// This is the `RationalPoSt` circuit.
@@ -112,14 +108,13 @@ mod tests {
     use std::collections::BTreeMap;
 
     use bellperson::bls::{Bls12, Fr};
+    use bellperson::util_cs::test_cs::TestConstraintSystem;
     use ff::Field;
+    use filecoin_hashers::{poseidon::PoseidonHasher, Domain, HashFunction, Hasher};
     use rand::{Rng, SeedableRng};
     use rand_xorshift::XorShiftRng;
-
-    use bellperson::util_cs::test_cs::TestConstraintSystem;
     use storage_proofs_core::{
         compound_proof::CompoundProof,
-        hasher::{Domain, HashFunction, Hasher, PoseidonHasher},
         merkle::{generate_tree, get_base_tree_count, BinaryMerkleTree},
         proof::ProofScheme,
         sector::OrderedSectorSet,

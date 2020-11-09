@@ -1,8 +1,7 @@
 #![allow(clippy::len_without_is_empty)]
 
+use filecoin_hashers::Hasher;
 use generic_array::typenum::{U0, U2, U4, U8};
-
-use crate::hasher::Hasher;
 
 mod builders;
 mod proof;

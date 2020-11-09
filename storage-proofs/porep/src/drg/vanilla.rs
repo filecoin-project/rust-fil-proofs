@@ -2,6 +2,7 @@ use std::marker::PhantomData;
 use std::path::PathBuf;
 
 use anyhow::{ensure, Context};
+use filecoin_hashers::{Domain, HashFunction, Hasher, PoseidonArity};
 use generic_array::typenum;
 use merkletree::store::{ReplicaConfig, StoreConfig};
 use rayon::prelude::*;
@@ -9,10 +10,10 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 use storage_proofs_core::{
+    crypto::sloth,
     drgraph::Graph,
     error::Result,
     fr32::bytes_into_fr_repr_safe,
-    hasher::{Domain, HashFunction, Hasher, PoseidonArity},
     merkle::{
         create_base_lcmerkle_tree, create_base_merkle_tree, BinaryLCMerkleTree, BinaryMerkleTree,
         LCMerkleTree, MerkleProof, MerkleProofTrait, MerkleTreeTrait,
@@ -466,7 +467,7 @@ where
             let end = start + NODE_SIZE;
 
             let node_data = <H as Hasher>::Domain::try_from_bytes(&data.as_ref()[start..end])?;
-            let encoded = H::sloth_encode(key.as_ref(), &node_data)?;
+            let encoded: H::Domain = sloth_encode::<H>(key.as_ref(), &node_data)?;
 
             encoded.write_bytes(&mut data.as_mut()[start..end])?;
         }
@@ -603,19 +604,27 @@ pub fn replica_id<H: Hasher>(prover_id: [u8; 32], sector_id: [u8; 32]) -> H::Dom
     H::Function::hash_leaf(&to_hash)
 }
 
+fn sloth_encode<H: Hasher>(key: &H::Domain, ciphertext: &H::Domain) -> Result<H::Domain> {
+    // TODO: validate this is how sloth should work in this case
+    let k = (*key).into();
+    let c = (*ciphertext).into();
+
+    Ok(sloth::encode(&k, &c).into())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     use bellperson::bls::Fr;
     use ff::Field;
+    use filecoin_hashers::{blake2s::Blake2sHasher, sha256::Sha256Hasher};
     use rand::SeedableRng;
     use rand_xorshift::XorShiftRng;
     use storage_proofs_core::{
         cache_key::CacheKey,
         drgraph::{BucketGraph, BASE_DEGREE},
         fr32::fr_into_bytes,
-        hasher::{Blake2sHasher, Sha256Hasher},
         merkle::{BinaryMerkleTree, MerkleTreeTrait},
         table_tests,
         test_helper::setup_replica,

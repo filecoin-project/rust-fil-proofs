@@ -7,10 +7,10 @@ use anyhow::Result;
 use clap::{value_t, App, Arg};
 use serde::{Deserialize, Serialize};
 
+use filecoin_hashers::sha256::Sha256Hasher;
 use filecoin_proofs::constants::*;
 use filecoin_proofs::types::*;
 use filecoin_proofs::with_shape;
-use storage_proofs::hasher::Sha256Hasher;
 use storage_proofs::porep::stacked::{LayerChallenges, SetupParams, StackedDrg};
 use storage_proofs::proof::ProofScheme;
 

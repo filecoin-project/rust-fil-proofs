@@ -1,6 +1,6 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion, ParameterizedBenchmark};
+use filecoin_hashers::{poseidon::PoseidonHasher, sha256::Sha256Hasher};
 use rand::{thread_rng, Rng};
-use storage_proofs_core::hasher::{PoseidonHasher, Sha256Hasher};
 use storage_proofs_core::merkle::{create_base_merkle_tree, BinaryMerkleTree};
 
 fn merkle_benchmark(c: &mut Criterion) {

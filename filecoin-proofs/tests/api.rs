@@ -7,9 +7,9 @@ use std::sync::Once;
 use anyhow::Result;
 use bellperson::bls::Fr;
 use ff::Field;
+use filecoin_hashers::Hasher;
 use rand::{Rng, SeedableRng};
 use rand_xorshift::XorShiftRng;
-use storage_proofs::hasher::Hasher;
 use storage_proofs::sector::*;
 use tempfile::NamedTempFile;
 

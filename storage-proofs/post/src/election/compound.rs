@@ -169,9 +169,9 @@ mod tests {
     use rand_xorshift::XorShiftRng;
 
     use bellperson::util_cs::{metric_cs::MetricCS, test_cs::TestConstraintSystem};
+    use filecoin_hashers::{poseidon::PoseidonHasher, Domain, HashFunction, Hasher};
     use storage_proofs_core::{
         compound_proof,
-        hasher::{Domain, HashFunction, Hasher, PoseidonHasher},
         merkle::{generate_tree, get_base_tree_count, LCTree, MerkleTreeTrait},
         proof::NoRequirements,
         sector::SectorId,

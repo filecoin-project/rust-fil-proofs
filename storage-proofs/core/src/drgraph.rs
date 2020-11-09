@@ -2,6 +2,7 @@ use std::cmp::{max, min};
 use std::marker::PhantomData;
 
 use anyhow::ensure;
+use filecoin_hashers::{Hasher, PoseidonArity};
 use generic_array::typenum;
 use rand::{Rng, SeedableRng};
 use rand_chacha::ChaCha8Rng;
@@ -10,7 +11,6 @@ use sha2::{Digest, Sha256};
 use crate::crypto::{derive_porep_domain_seed, DRSAMPLE_DST};
 use crate::error::*;
 use crate::fr32::bytes_into_fr_repr_safe;
-use crate::hasher::{Hasher, PoseidonArity};
 use crate::parameter_cache::ParameterSetMetadata;
 use crate::util::{data_at_node_offset, NODE_SIZE};
 use crate::{is_legacy_porep_id, PoRepID};
@@ -249,11 +249,13 @@ pub fn derive_drg_seed(porep_id: PoRepID) -> [u8; 28] {
 mod tests {
     use super::*;
 
+    use filecoin_hashers::{
+        blake2s::Blake2sHasher, poseidon::PoseidonHasher, sha256::Sha256Hasher, PoseidonArity,
+    };
     use memmap::MmapMut;
     use memmap::MmapOptions;
     use merkletree::store::StoreConfig;
 
-    use crate::hasher::{Blake2sHasher, PoseidonArity, PoseidonHasher, Sha256Hasher};
     use crate::merkle::{
         create_base_merkle_tree, DiskStore, MerkleProofTrait, MerkleTreeTrait, MerkleTreeWrapper,
     };

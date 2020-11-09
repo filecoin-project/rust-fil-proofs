@@ -2,12 +2,12 @@ use sha2raw::Sha256;
 use std::marker::PhantomData;
 
 use anyhow::{Context, Result};
+use filecoin_hashers::Hasher;
 use generic_array::typenum::Unsigned;
 use log::*;
 use merkletree::store::{DiskStore, StoreConfig};
 use storage_proofs_core::{
     drgraph::Graph,
-    hasher::Hasher,
     merkle::*,
     util::{data_at_node_offset, NODE_SIZE},
 };

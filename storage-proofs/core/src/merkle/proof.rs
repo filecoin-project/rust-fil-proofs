@@ -4,13 +4,13 @@ use std::marker::PhantomData;
 
 use anyhow::{ensure, Result};
 use bellperson::bls::Fr;
+use filecoin_hashers::{Hasher, PoseidonArity};
 use generic_array::typenum::{Unsigned, U0};
 use merkletree::hash::Algorithm;
 use merkletree::proof;
 use serde::{Deserialize, Serialize};
 
 use crate::drgraph::graph_height;
-use crate::hasher::{Hasher, PoseidonArity};
 
 /// Trait to abstract over the concept of Merkle Proof.
 pub trait MerkleProofTrait:
@@ -720,10 +720,11 @@ impl<
 mod tests {
     use super::super::*;
 
-    use generic_array::typenum;
-
-    use crate::hasher::{Blake2sHasher, Domain, PoseidonHasher, Sha256Hasher};
     use crate::merkle::{generate_tree, MerkleProofTrait};
+    use filecoin_hashers::{
+        blake2s::Blake2sHasher, poseidon::PoseidonHasher, sha256::Sha256Hasher, Domain,
+    };
+    use generic_array::typenum;
 
     fn merklepath<Tree: 'static + MerkleTreeTrait>() {
         let node_size = 32;

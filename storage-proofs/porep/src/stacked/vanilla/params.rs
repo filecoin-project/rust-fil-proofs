@@ -3,19 +3,15 @@ use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
 
 use anyhow::Context;
+use filecoin_hashers::{Domain, Hasher};
 use generic_array::typenum::{self, Unsigned};
 use log::trace;
 use merkletree::merkle::get_merkle_tree_leafs;
 use merkletree::store::{DiskStore, Store, StoreConfig};
 use serde::{Deserialize, Serialize};
 use storage_proofs_core::{
-    drgraph::Graph,
-    error::Result,
-    fr32::bytes_into_fr_repr_safe,
-    hasher::{Domain, Hasher},
-    merkle::*,
-    parameter_cache::ParameterSetMetadata,
-    util::data_at_node,
+    drgraph::Graph, error::Result, fr32::bytes_into_fr_repr_safe, merkle::*,
+    parameter_cache::ParameterSetMetadata, util::data_at_node,
 };
 
 use super::{

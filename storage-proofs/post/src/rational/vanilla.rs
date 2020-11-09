@@ -3,11 +3,11 @@ use std::marker::PhantomData;
 
 use anyhow::{bail, ensure, Context};
 use byteorder::{ByteOrder, LittleEndian};
+use filecoin_hashers::{Domain, HashFunction, Hasher};
 use serde::{Deserialize, Serialize};
 
 use storage_proofs_core::{
     error::{Error, Result},
-    hasher::{Domain, HashFunction, Hasher},
     merkle::{MerkleProof, MerkleProofTrait, MerkleTreeTrait, MerkleTreeWrapper},
     parameter_cache::ParameterSetMetadata,
     proof::{NoRequirements, ProofScheme},
@@ -298,14 +298,16 @@ fn derive_challenge(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use filecoin_hashers::{
+        blake2s::Blake2sHasher, poseidon::PoseidonHasher, sha256::Sha256Hasher, Domain, Hasher,
+    };
     use generic_array::typenum;
     use rand::{Rng, SeedableRng};
     use rand_xorshift::XorShiftRng;
     use typenum::{U0, U2, U8};
 
-    use storage_proofs_core::{
-        hasher::{Blake2sHasher, Domain, Hasher, PoseidonHasher, Sha256Hasher},
-        merkle::{generate_tree, get_base_tree_count, LCTree, MerkleTreeTrait},
+    use storage_proofs_core::merkle::{
+        generate_tree, get_base_tree_count, LCTree, MerkleTreeTrait,
     };
 
     fn test_rational_post<Tree: MerkleTreeTrait>()

@@ -13,6 +13,7 @@ crossbeam = "0.8"
 digest = "0.9"
 storage-proofs-core = { path = "../core", version = "^5.0.0", default-features = false}
 sha2raw = { path = "../../sha2raw", version = "^2.0.0"}
+filecoin-hashers = { path = "../../filecoin-hashers", version = "0.1.0", default-features = false, features = ["poseidon", "sha256"]}
 rand = "0.7"
 merkletree = "0.21.0"
 mapr = "0.8.0"
@@ -48,9 +49,9 @@ pretty_env_logger = "0.4.0"
 
 [features]
 default = ["pairing", "gpu"]
-gpu = ["storage-proofs-core/gpu"]
-pairing = ["storage-proofs-core/pairing", "bellperson/pairing", "neptune/pairing"]
-blst = ["storage-proofs-core/blst", "bellperson/blst", "neptune/blst"]
+gpu = ["storage-proofs-core/gpu", "filecoin-hashers/gpu"]
+pairing = ["storage-proofs-core/pairing", "bellperson/pairing", "neptune/pairing", "filecoin-hashers/pairing"]
+blst = ["storage-proofs-core/blst", "bellperson/blst", "neptune/blst", "filecoin-hashers/blst"]
 
 [[bench]]
 name = "encode"

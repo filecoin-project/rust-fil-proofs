@@ -12,6 +12,7 @@ readme = "README.md"
 [dependencies]
 storage-proofs = { path = "../storage-proofs", default-features = false }
 filecoin-proofs = { path = "../filecoin-proofs", default-features = false }
+filecoin-hashers = { path = "../filecoin-hashers", default-features = false, features = ["poseidon", "blake2s", "sha256"] }
 clap = "2"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
@@ -48,11 +49,11 @@ fdlimit = "0.2.0"
 
 [features]
 default = ["gpu", "measurements"]
-gpu = ["storage-proofs/gpu", "filecoin-proofs/gpu", "bellperson/gpu"]
+gpu = ["storage-proofs/gpu", "filecoin-proofs/gpu", "bellperson/gpu", "filecoin-hashers/gpu"]
 measurements = ["storage-proofs/measurements"]
 profile = ["storage-proofs/profile", "measurements"]
-pairing = ["storage-proofs/pairing", "filecoin-proofs/pairing", "bellperson/pairing"]
-blst = ["storage-proofs/blst", "filecoin-proofs/blst", "bellperson/blst"]
+pairing = ["storage-proofs/pairing", "filecoin-proofs/pairing", "bellperson/pairing", "filecoin-hashers/pairing"]
+blst = ["storage-proofs/blst", "filecoin-proofs/blst", "bellperson/blst", "filecoin-hashers/blst"]
 
 [target.'cfg(target_arch = "x86_64")'.dependencies]
 raw-cpuid = "8.1.2"

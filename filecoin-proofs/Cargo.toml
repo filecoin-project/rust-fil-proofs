@@ -10,6 +10,7 @@ readme = "README.md"
 
 [dependencies]
 storage-proofs = { version = "^5.0.0", path = "../storage-proofs", default-features = false }
+filecoin-hashers = { version = "0.1.0", path = "../filecoin-hashers", default-features = false, features = ["poseidon", "sha256"] }
 bitvec = "0.17"
 rand = "0.7"
 lazy_static = "1.2"
@@ -64,9 +65,9 @@ cpu-profile = ["gperftools"]
 heap-profile = ["gperftools/heap"]
 simd = ["storage-proofs/simd"]
 asm = ["storage-proofs/asm"]
-gpu = ["storage-proofs/gpu", "bellperson/gpu"]
-pairing = ["storage-proofs/pairing", "bellperson/pairing"]
-blst = ["storage-proofs/blst", "bellperson/blst"]
+gpu = ["storage-proofs/gpu", "bellperson/gpu", "filecoin-hashers/gpu"]
+pairing = ["storage-proofs/pairing", "bellperson/pairing", "filecoin-hashers/pairing"]
+blst = ["storage-proofs/blst", "bellperson/blst", "filecoin-hashers/blst"]
 
 [[bench]]
 name = "preprocessing"

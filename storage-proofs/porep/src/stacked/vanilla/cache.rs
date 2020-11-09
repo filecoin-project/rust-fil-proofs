@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{bail, ensure, Context};
 use byteorder::{ByteOrder, LittleEndian};
+use filecoin_hashers::Hasher;
 use lazy_static::lazy_static;
 use log::{info, trace};
 use mapr::{Mmap, MmapOptions};
@@ -15,7 +16,6 @@ use storage_proofs_core::{
     drgraph::Graph,
     drgraph::BASE_DEGREE,
     error::Result,
-    hasher::Hasher,
     parameter_cache::{with_exclusive_lock, LockedFile, ParameterSetMetadata, VERSION},
     settings,
     util::NODE_SIZE,
@@ -423,7 +423,7 @@ mod tests {
     use super::*;
 
     use crate::stacked::vanilla::graph::{StackedBucketGraph, EXP_DEGREE};
-    use storage_proofs_core::hasher::PoseidonHasher;
+    use filecoin_hashers::poseidon::PoseidonHasher;
 
     #[test]
     fn test_read_full_range() {

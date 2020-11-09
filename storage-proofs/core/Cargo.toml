@@ -12,6 +12,7 @@ readme = "README.md"
 bench = false
 
 [dependencies]
+filecoin-hashers = { path = "../../filecoin-hashers", version = "0.1.0", default-features = false, features = ["sha256", "poseidon"] }
 rand = "0.7"
 merkletree = "0.21.0"
 byteorder = "1"
@@ -50,17 +51,19 @@ bitvec = "0.17"
 rand_xorshift = "0.2.0"
 pretty_assertions = "0.6.1"
 sha2raw = { path = "../../sha2raw", version = "^2.0.0"}
+filecoin-hashers = { path = "../../filecoin-hashers", version = "0.1.0", default-features = false, features = ["blake2s", "sha256", "poseidon"] }
 
 [features]
 default = ["gpu", "pairing"]
 simd = []
 asm = ["sha2/sha2-asm"]
 big-sector-sizes-bench = []
-gpu = ["bellperson/gpu"]
 measurements = ["cpu-time", "gperftools"]
 profile = ["measurements"]
-pairing = ["bellperson/pairing", "neptune/pairing", "bellperson/pairing-serde"]
-blst = ["bellperson/blst", "neptune/blst", "bellperson/blst-serde"]
+
+gpu = ["bellperson/gpu", "neptune/gpu", "filecoin-hashers/gpu"]
+pairing = ["bellperson/pairing", "neptune/pairing", "bellperson/pairing-serde", "filecoin-hashers/pairing"]
+blst = ["bellperson/blst", "neptune/blst", "bellperson/blst-serde", "filecoin-hashers/blst"]
 
 [[bench]]
 name = "sha256"

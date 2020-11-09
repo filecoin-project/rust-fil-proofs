@@ -7,6 +7,7 @@ use bellperson::gadgets::boolean::{AllocatedBit, Boolean};
 use bellperson::gadgets::{multipack, num};
 use bellperson::{Circuit, ConstraintSystem, SynthesisError};
 use ff::PrimeField;
+use filecoin_hashers::{HashFunction, Hasher, PoseidonArity};
 use generic_array::typenum::Unsigned;
 
 use crate::compound_proof::{CircuitComponent, CompoundProof};
@@ -14,7 +15,6 @@ use crate::error::Result;
 use crate::gadgets::constraint;
 use crate::gadgets::insertion::insert;
 use crate::gadgets::variables::Root;
-use crate::hasher::{HashFunction, Hasher, PoseidonArity};
 use crate::merkle::{base_path_length, MerkleProofTrait, MerkleTreeTrait};
 use crate::parameter_cache::{CacheableParameters, ParameterSetMetadata};
 use crate::por::PoR;
@@ -453,7 +453,6 @@ mod tests {
 
     use crate::compound_proof;
     use crate::fr32::{bytes_into_fr, fr_into_bytes};
-    use crate::hasher::{Blake2sHasher, Domain, Hasher, PoseidonHasher, Sha256Hasher};
     use crate::merkle::{
         create_base_merkle_tree, generate_tree, get_base_tree_count, MerkleProofTrait,
         MerkleTreeWrapper, ResTree,
@@ -464,6 +463,9 @@ mod tests {
     use crate::util::data_at_node;
     use bellperson::util_cs::metric_cs::MetricCS;
     use bellperson::util_cs::test_cs::TestConstraintSystem;
+    use filecoin_hashers::{
+        blake2s::Blake2sHasher, poseidon::PoseidonHasher, sha256::Sha256Hasher, Domain, Hasher,
+    };
 
     type TestTree<H, A> =
         MerkleTreeWrapper<H, VecStore<<H as Hasher>::Domain>, A, typenum::U0, typenum::U0>;
