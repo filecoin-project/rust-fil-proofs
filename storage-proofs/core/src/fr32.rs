@@ -1,9 +1,8 @@
 use crate::error::*;
 
-use anyhow::{ensure, Context};
+use anyhow::ensure;
 use bellperson::bls::{Fr, FrRepr};
 use byteorder::{ByteOrder, LittleEndian, WriteBytesExt};
-use ff::{PrimeField, PrimeFieldRepr};
 
 // Contains 32 bytes whose little-endian value represents an Fr.
 // Invariants:
@@ -27,6 +26,9 @@ pub type Fr32Ary = [u8; 32];
 // Otherwise, returns a BadFrBytesError.
 #[cfg(feature = "pairing")]
 pub fn bytes_into_fr(bytes: &[u8]) -> Result<Fr> {
+    use anyhow::Context;
+    use ff::{PrimeField, PrimeFieldRepr};
+
     ensure!(bytes.len() == 32, Error::BadFrBytes);
 
     let mut fr_repr = <<Fr as PrimeField>::Repr as Default>::default();
@@ -76,6 +78,8 @@ pub fn bytes_into_fr_repr_safe(r: &[u8]) -> FrRepr {
 // Takes an Fr and returns a vector of exactly 32 bytes guaranteed to contain a valid Fr.
 #[cfg(feature = "pairing")]
 pub fn fr_into_bytes(fr: &Fr) -> Fr32Vec {
+    use ff::{PrimeField, PrimeFieldRepr};
+
     let mut out = Vec::with_capacity(32);
     fr.into_repr().write_le(&mut out).expect("write_le failure");
     out
@@ -83,8 +87,6 @@ pub fn fr_into_bytes(fr: &Fr) -> Fr32Vec {
 
 #[cfg(feature = "blst")]
 pub fn fr_into_bytes(fr: &Fr) -> Fr32Vec {
-    use std::convert::TryInto;
-
     fr.to_bytes_le().to_vec()
 }
 

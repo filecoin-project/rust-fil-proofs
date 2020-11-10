@@ -51,7 +51,7 @@ structopt = "0.3.12"
 humansize = "1.1.0"
 
 [features]
-default = ["gpu", "measurements"]
+default = ["gpu", "measurements", "pairing"]
 gpu = ["storage-proofs/gpu", "filecoin-proofs/gpu", "bellperson/gpu", "filecoin-hashers/gpu"]
 measurements = ["storage-proofs/measurements"]
 profile = ["storage-proofs/profile", "measurements"]

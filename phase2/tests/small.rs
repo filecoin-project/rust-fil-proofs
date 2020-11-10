@@ -19,14 +19,6 @@ use mimc::{mimc as mimc_hash, MiMCDemo, MIMC_ROUNDS};
 #[test]
 #[ignore]
 fn test_mimc_small_params() {
-    //test_mimc_small_params_inner()
-}
-
-// This test is marked as ignore because we haven't checked-in the phase1 file required for this
-// test to pass when run via CI. To run this test you must have the correct phase1 params file in
-// the top level directory of this crate.
-#[allow(dead_code)]
-fn test_mimc_small_params_inner() {
     assert!(
         Path::new("./phase1radix2m10").exists(),
         "the phase1 file `phase1radix2m10` must be in the crate's top level directory"
