@@ -13,7 +13,7 @@ readme = "README.md"
 bellperson = { version = "0.12.2", default-features = false }
 filecoin-proofs = { version = "5.4.0", path = "../filecoin-proofs", default-features = false }
 storage-proofs = { version = "5.4.0", path = "../storage-proofs", default-features = false }
-filecoin-hashers = { version = "0.1.0", path = "../filecoin-hashers", default-features = false, features = ["sha256"] }
+filecoin-hashers = { version = "1.0.0", path = "../filecoin-hashers", default-features = false, features = ["sha256"] }
 groupy = "0.3.1"
 log = "0.4.11"
 clap = "2.33.3"
