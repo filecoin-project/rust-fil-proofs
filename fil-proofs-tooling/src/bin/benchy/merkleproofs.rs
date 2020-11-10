@@ -2,10 +2,10 @@ use std::fs::{create_dir, remove_dir_all};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use anyhow::Result;
+use filecoin_hashers::Hasher;
 use filecoin_proofs::with_shape;
 use log::{debug, info};
 use rand::{thread_rng, Rng};
-use storage_proofs::hasher::Hasher;
 use storage_proofs::merkle::{
     generate_tree, get_base_tree_count, MerkleProofTrait, MerkleTreeTrait, MerkleTreeWrapper,
 };

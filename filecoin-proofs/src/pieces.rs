@@ -5,9 +5,9 @@ use std::iter::Iterator;
 use std::sync::Mutex;
 
 use anyhow::{ensure, Context, Result};
+use filecoin_hashers::{HashFunction, Hasher};
 use lazy_static::lazy_static;
 use log::info;
-use storage_proofs::hasher::{HashFunction, Hasher};
 use storage_proofs::util::NODE_SIZE;
 
 use crate::constants::{

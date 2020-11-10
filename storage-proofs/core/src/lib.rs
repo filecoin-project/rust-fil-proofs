@@ -15,7 +15,6 @@ pub mod drgraph;
 pub mod error;
 pub mod fr32;
 pub mod gadgets;
-pub mod hasher;
 pub mod measurements;
 pub mod merkle;
 pub mod multi_proof;

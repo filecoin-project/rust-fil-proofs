@@ -8,6 +8,7 @@ use std::sync::{mpsc, Arc, Mutex, RwLock};
 use anyhow::Context;
 use bellperson::bls::Fr;
 use bincode::deserialize;
+use filecoin_hashers::{Domain, HashFunction, Hasher, PoseidonArity};
 use generic_array::typenum::{self, Unsigned};
 use log::*;
 use merkletree::merkle::{
@@ -21,7 +22,6 @@ use storage_proofs_core::{
     data::Data,
     drgraph::Graph,
     error::Result,
-    hasher::{Domain, HashFunction, Hasher, PoseidonArity},
     measurements::{
         measure_op,
         Operation::{CommD, EncodeWindowTimeAll, GenerateTreeC, GenerateTreeRLast},
@@ -1363,17 +1363,14 @@ mod tests {
 
     use bellperson::bls::{Fr, FrRepr};
     use ff::{Field, PrimeField};
+    use filecoin_hashers::{
+        blake2s::Blake2sHasher, poseidon::PoseidonHasher, sha256::Sha256Hasher,
+    };
     use rand::{Rng, SeedableRng};
     use rand_xorshift::XorShiftRng;
-    use storage_proofs_core::hasher::poseidon::PoseidonHasher;
     use storage_proofs_core::{
-        drgraph::BASE_DEGREE,
-        fr32::fr_into_bytes,
-        hasher::{Blake2sHasher, Sha256Hasher},
-        merkle::MerkleTreeTrait,
-        proof::ProofScheme,
-        table_tests,
-        test_helper::setup_replica,
+        drgraph::BASE_DEGREE, fr32::fr_into_bytes, merkle::MerkleTreeTrait, proof::ProofScheme,
+        table_tests, test_helper::setup_replica,
     };
 
     use crate::stacked::{PrivateInputs, SetupParams, EXP_DEGREE};

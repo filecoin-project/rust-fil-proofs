@@ -1,11 +1,11 @@
 use std::io::Read;
 
 use anyhow::{ensure, Context};
+use filecoin_hashers::{Domain, Hasher};
 use merkletree::merkle::next_pow2;
 
 use crate::error::*;
 use crate::fr32::Fr32Ary;
-use crate::hasher::{Domain, Hasher};
 use crate::merkle::BinaryMerkleTree;
 use crate::util::NODE_SIZE;
 
@@ -103,7 +103,7 @@ fn subtree_capacity(pos: usize, total: usize) -> Result<usize> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::hasher::PoseidonHasher;
+    use filecoin_hashers::poseidon::PoseidonHasher;
 
     #[test]
     fn test_subtree_capacity() {

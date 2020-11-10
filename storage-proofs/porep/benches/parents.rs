@@ -1,10 +1,6 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion, ParameterizedBenchmark};
-use storage_proofs_core::{
-    drgraph::{Graph, BASE_DEGREE},
-    hasher::blake2s::Blake2sHasher,
-    hasher::sha256::Sha256Hasher,
-    hasher::Hasher,
-};
+use filecoin_hashers::{blake2s::Blake2sHasher, sha256::Sha256Hasher, Hasher};
+use storage_proofs_core::drgraph::{Graph, BASE_DEGREE};
 use storage_proofs_porep::stacked::{StackedBucketGraph, EXP_DEGREE};
 
 #[cfg(feature = "cpu-profile")]

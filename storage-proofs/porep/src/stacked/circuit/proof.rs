@@ -4,6 +4,7 @@ use anyhow::ensure;
 use bellperson::bls::{Bls12, Fr};
 use bellperson::gadgets::num;
 use bellperson::{Circuit, ConstraintSystem, SynthesisError};
+use filecoin_hashers::{HashFunction, Hasher};
 use storage_proofs_core::{
     compound_proof::{CircuitComponent, CompoundProof},
     drgraph::Graph,
@@ -11,7 +12,6 @@ use storage_proofs_core::{
     fr32::u64_into_fr,
     gadgets::constraint,
     gadgets::por::PoRCompound,
-    hasher::{HashFunction, Hasher},
     merkle::{BinaryMerkleTree, MerkleTreeTrait},
     parameter_cache::{CacheableParameters, ParameterSetMetadata},
     por,
@@ -343,6 +343,7 @@ mod tests {
 
     use bellperson::util_cs::{metric_cs::MetricCS, test_cs::TestConstraintSystem};
     use ff::Field;
+    use filecoin_hashers::{poseidon::PoseidonHasher, sha256::Sha256Hasher, Hasher};
     use generic_array::typenum::{U0, U2, U4, U8};
     use merkletree::store::StoreConfig;
     use rand::{Rng, SeedableRng};
@@ -352,7 +353,6 @@ mod tests {
         compound_proof,
         drgraph::BASE_DEGREE,
         fr32::fr_into_bytes,
-        hasher::{Hasher, PoseidonHasher, Sha256Hasher},
         merkle::{get_base_tree_count, DiskTree, MerkleTreeTrait},
         proof::ProofScheme,
         test_helper::setup_replica,

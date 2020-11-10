@@ -15,6 +15,7 @@ use bellperson::bls::{Bls12, G1Affine, G1Uncompressed, G2Affine, G2Uncompressed}
 use bellperson::groth16;
 use byteorder::{BigEndian, ReadBytesExt};
 use clap::{App, AppSettings, Arg, ArgGroup, SubCommand};
+use filecoin_hashers::sha256::Sha256Hasher;
 use filecoin_phase2::small::{read_small_params_from_large_file, MPCSmall, Streamer};
 use filecoin_phase2::MPCParameters;
 use filecoin_proofs::constants::*;
@@ -32,7 +33,6 @@ use rand::{RngCore, SeedableRng};
 use rand_chacha::ChaChaRng;
 use simplelog::{self, CombinedLogger, LevelFilter, TermLogger, TerminalMode, WriteLogger};
 use storage_proofs::compound_proof::{self, CompoundProof};
-use storage_proofs::hasher::Sha256Hasher;
 use storage_proofs::merkle::MerkleTreeTrait;
 use storage_proofs::parameter_cache::{
     self, metadata_id, parameter_id, verifying_key_id, CacheableParameters,

@@ -2,6 +2,7 @@ use std::convert::{TryFrom, TryInto};
 use std::marker::PhantomData;
 
 use anyhow::ensure;
+use filecoin_hashers::Hasher;
 use log::info;
 use sha2raw::Sha256;
 use storage_proofs_core::{
@@ -13,7 +14,6 @@ use storage_proofs_core::{
     drgraph::BASE_DEGREE,
     drgraph::{BucketGraph, Graph},
     error::Result,
-    hasher::Hasher,
     is_legacy_porep_id,
     parameter_cache::ParameterSetMetadata,
     settings,
@@ -445,7 +445,7 @@ mod tests {
 
     use std::collections::HashSet;
 
-    use storage_proofs_core::hasher::PoseidonHasher;
+    use filecoin_hashers::poseidon::PoseidonHasher;
 
     #[test]
     fn test_is_legacy() {

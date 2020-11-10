@@ -1,9 +1,9 @@
 use anyhow::ensure;
+use filecoin_hashers::{Domain, Hasher};
 use serde::{Deserialize, Serialize};
 use std::marker::PhantomData;
 
 use crate::error::*;
-use crate::hasher::{Domain, Hasher};
 use crate::merkle::{MerkleProofTrait, MerkleTreeTrait};
 use crate::parameter_cache::ParameterSetMetadata;
 use crate::proof::{NoRequirements, ProofScheme};
@@ -152,13 +152,15 @@ mod tests {
 
     use bellperson::bls::Fr;
     use ff::Field;
+    use filecoin_hashers::{
+        blake2s::Blake2sHasher, poseidon::PoseidonHasher, sha256::Sha256Hasher,
+    };
     use generic_array::typenum;
     use rand::SeedableRng;
     use rand_xorshift::XorShiftRng;
 
     use crate::drgraph::{BucketGraph, Graph, BASE_DEGREE};
     use crate::fr32::fr_into_bytes;
-    use crate::hasher::{Blake2sHasher, PoseidonHasher, Sha256Hasher};
     use crate::merkle::{create_base_merkle_tree, DiskStore, MerkleProofTrait, MerkleTreeWrapper};
     use crate::util::data_at_node;
 

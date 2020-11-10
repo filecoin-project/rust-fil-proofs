@@ -16,12 +16,12 @@ where
         2 => poseidon_hash::<CS, Bls12, typenum::U2>(
             cs,
             column.to_vec(),
-            &*storage_proofs_core::hasher::types::POSEIDON_CONSTANTS_2,
+            &*filecoin_hashers::POSEIDON_CONSTANTS_2,
         ),
         11 => poseidon_hash::<CS, Bls12, typenum::U11>(
             cs,
             column.to_vec(),
-            &*storage_proofs_core::hasher::types::POSEIDON_CONSTANTS_11,
+            &*filecoin_hashers::POSEIDON_CONSTANTS_11,
         ),
         _ => panic!("unsupported column size: {}", column.len()),
     }
@@ -35,9 +35,9 @@ mod tests {
     use bellperson::util_cs::test_cs::TestConstraintSystem;
     use bellperson::ConstraintSystem;
     use ff::Field;
+    use filecoin_hashers::{poseidon::PoseidonHasher, HashFunction, Hasher};
     use rand::SeedableRng;
     use rand_xorshift::XorShiftRng;
-    use storage_proofs_core::hasher::{HashFunction, Hasher, PoseidonHasher};
 
     use crate::stacked::vanilla::hash::hash_single_column as vanilla_hash_single_column;
 

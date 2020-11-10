@@ -1,7 +1,9 @@
-use bellperson::gadgets::{boolean::Boolean, num, sha256::sha256 as sha256_circuit, uint32};
+use bellperson::gadgets::{
+    boolean::Boolean, multipack, num, sha256::sha256 as sha256_circuit, uint32,
+};
 use bellperson::{bls::Engine, ConstraintSystem, SynthesisError};
 use ff::PrimeField;
-use storage_proofs_core::{gadgets::multipack, gadgets::uint64, util::reverse_bit_numbering};
+use storage_proofs_core::{gadgets::uint64, util::reverse_bit_numbering};
 
 use crate::stacked::vanilla::TOTAL_PARENTS;
 
@@ -71,12 +73,13 @@ mod tests {
     use bellperson::gadgets::boolean::Boolean;
     use bellperson::util_cs::test_cs::TestConstraintSystem;
     use ff::Field;
+    use filecoin_hashers::sha256::Sha256Hasher;
     use rand::SeedableRng;
     use rand_xorshift::XorShiftRng;
+
     use storage_proofs_core::{
         drgraph::{Graph, BASE_DEGREE},
         fr32::{bytes_into_fr, fr_into_bytes},
-        hasher::Sha256Hasher,
         util::bytes_into_boolean_vec_be,
         util::{data_at_node, NODE_SIZE},
     };

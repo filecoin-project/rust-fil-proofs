@@ -3,14 +3,13 @@
 use std::marker::PhantomData;
 
 use anyhow::Result;
+use filecoin_hashers::{Hasher, PoseidonArity};
 use generic_array::typenum::{self, U0};
 use merkletree::hash::Hashable;
 use merkletree::merkle;
 use merkletree::merkle::FromIndexedParallelIterator;
 use merkletree::store::{ReplicaConfig, StoreConfig};
 use rayon::prelude::*;
-
-use crate::hasher::{Hasher, PoseidonArity};
 
 use super::*;
 

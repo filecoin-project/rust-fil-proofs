@@ -1,13 +1,6 @@
 use std::hash::Hasher as StdHasher;
 
-use crate::crypto::sloth;
-use crate::error::{Error, Result};
-use crate::hasher::types::{
-    PoseidonArity, PoseidonMDArity, POSEIDON_CONSTANTS_16, POSEIDON_CONSTANTS_2,
-    POSEIDON_CONSTANTS_4, POSEIDON_CONSTANTS_8, POSEIDON_MD_CONSTANTS,
-};
-use crate::hasher::{Domain, HashFunction, Hasher};
-use anyhow::ensure;
+use anyhow::{ensure, Result};
 use bellperson::bls::{Bls12, Fr, FrRepr};
 use bellperson::gadgets::{boolean, num};
 use bellperson::{ConstraintSystem, SynthesisError};
@@ -20,6 +13,11 @@ use neptune::circuit::poseidon_hash;
 use neptune::poseidon::Poseidon;
 use serde::{Deserialize, Serialize};
 
+use crate::types::{
+    Domain, HashFunction, Hasher, PoseidonArity, PoseidonMDArity, POSEIDON_CONSTANTS_16,
+    POSEIDON_CONSTANTS_2, POSEIDON_CONSTANTS_4, POSEIDON_CONSTANTS_8, POSEIDON_MD_CONSTANTS,
+};
+
 #[derive(Default, Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PoseidonHasher {}
 
@@ -29,23 +27,6 @@ impl Hasher for PoseidonHasher {
 
     fn name() -> String {
         "poseidon_hasher".into()
-    }
-
-    #[inline]
-    fn sloth_encode(key: &Self::Domain, ciphertext: &Self::Domain) -> Result<Self::Domain> {
-        // Unrapping here is safe; `Fr` elements and hash domain elements are the same byte length.
-        let key = Fr::from_repr(key.0)?;
-        let ciphertext = Fr::from_repr(ciphertext.0)?;
-        Ok(sloth::encode(&key, &ciphertext).into())
-    }
-
-    #[inline]
-    fn sloth_decode(key: &Self::Domain, ciphertext: &Self::Domain) -> Result<Self::Domain> {
-        // Unrapping here is safe; `Fr` elements and hash domain elements are the same byte length.
-        let key = Fr::from_repr(key.0)?;
-        let ciphertext = Fr::from_repr(ciphertext.0)?;
-
-        Ok(sloth::decode(&key, &ciphertext).into())
     }
 }
 
@@ -152,7 +133,10 @@ impl Domain for PoseidonDomain {
     }
 
     fn try_from_bytes(raw: &[u8]) -> Result<Self> {
-        ensure!(raw.len() == PoseidonDomain::byte_len(), Error::BadFrBytes);
+        ensure!(
+            raw.len() == PoseidonDomain::byte_len(),
+            "invalid amount of bytes"
+        );
         let mut res: FrRepr = Default::default();
         res.read_le(raw)?;
 
@@ -415,10 +399,9 @@ mod tests {
     use super::*;
     use std::mem;
 
-    use crate::gadgets::constraint;
-    use crate::merkle::MerkleTree;
     use bellperson::gadgets::num;
     use bellperson::util_cs::test_cs::TestConstraintSystem;
+    use merkletree::{merkle::MerkleTree, store::VecStore};
 
     #[test]
     fn test_path() {
@@ -429,8 +412,10 @@ mod tests {
             PoseidonDomain(Fr::one().into_repr()),
         ];
 
-        let t = MerkleTree::<PoseidonHasher, typenum::U2>::new(values.iter().copied())
-            .expect("merkle tree new failure");
+        let t = MerkleTree::<PoseidonDomain, PoseidonFunction, VecStore<_>, typenum::U2>::new(
+            values.iter().copied(),
+        )
+        .expect("merkle tree new failure");
 
         let p = t.gen_proof(0).expect("gen_proof failure"); // create a proof for the first value =k Fr::one()
 
@@ -458,8 +443,10 @@ mod tests {
             PoseidonDomain(Fr::one().into_repr()),
         ];
 
-        let t = MerkleTree::<PoseidonHasher, typenum::U2>::new(leaves.iter().copied())
-            .expect("merkle tree new failure");
+        let t = MerkleTree::<PoseidonDomain, PoseidonFunction, VecStore<_>, typenum::U2>::new(
+            leaves.iter().copied(),
+        )
+        .expect("merkle tree new failure");
 
         assert_eq!(t.leafs(), 4);
 
@@ -584,18 +571,9 @@ mod tests {
 
         let circuit_hashed = PoseidonFunction::hash_md_circuit(&mut cs, circuit_data.as_slice())
             .expect("hash_md_circuit failure");
-        let hashed_alloc =
-            &num::AllocatedNum::alloc(cs.namespace(|| "calculated"), || Ok(hashed_fr))
-                .expect("alloc failure");
-        constraint::equal(
-            &mut cs.namespace(|| "enforce correct"),
-            || "correct result",
-            &hashed_alloc,
-            &circuit_hashed,
-        );
 
         assert!(cs.is_satisfied());
-        let expected_constraints = 2_771;
+        let expected_constraints = 2_770;
         let actual_constraints = cs.num_constraints();
 
         assert_eq!(expected_constraints, actual_constraints);

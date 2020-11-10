@@ -1,8 +1,8 @@
 use std::hash::Hasher as StdHasher;
 
-use anyhow::ensure;
+use anyhow::{ensure, Result};
 use bellperson::bls::{Bls12, Fr, FrRepr};
-use bellperson::gadgets::{boolean, num, sha256::sha256 as sha256_circuit};
+use bellperson::gadgets::{boolean, multipack, num, sha256::sha256 as sha256_circuit};
 use bellperson::{ConstraintSystem, SynthesisError};
 use ff::{Field, PrimeField, PrimeFieldRepr};
 use merkletree::hash::{Algorithm, Hashable};
@@ -12,9 +12,6 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 use super::{Domain, HashFunction, Hasher};
-use crate::crypto::sloth;
-use crate::error::*;
-use crate::gadgets::multipack;
 
 #[derive(Default, Copy, Clone, Debug, PartialEq, Eq)]
 pub struct Sha256Hasher {}
@@ -25,19 +22,6 @@ impl Hasher for Sha256Hasher {
 
     fn name() -> String {
         "sha256_hasher".into()
-    }
-
-    fn sloth_encode(key: &Self::Domain, ciphertext: &Self::Domain) -> Result<Self::Domain> {
-        // TODO: validate this is how sloth should work in this case
-        let k = (*key).into();
-        let c = (*ciphertext).into();
-
-        Ok(sloth::encode(&k, &c).into())
-    }
-
-    fn sloth_decode(key: &Self::Domain, ciphertext: &Self::Domain) -> Result<Self::Domain> {
-        // TODO: validate this is how sloth should work in this case
-        Ok(sloth::decode(&(*key).into(), &(*ciphertext).into()).into())
     }
 }
 
@@ -127,7 +111,7 @@ impl Domain for Sha256Domain {
     fn try_from_bytes(raw: &[u8]) -> Result<Self> {
         ensure!(
             raw.len() == Sha256Domain::byte_len(),
-            Error::InvalidInputSize
+            "invalid number of bytes"
         );
 
         let mut res = Sha256Domain::default();
@@ -138,7 +122,7 @@ impl Domain for Sha256Domain {
     fn write_bytes(&self, dest: &mut [u8]) -> Result<()> {
         ensure!(
             dest.len() >= Sha256Domain::byte_len(),
-            Error::InvalidInputSize
+            "invalid number of bytes"
         );
 
         dest[0..Sha256Domain::byte_len()].copy_from_slice(&self.0[..]);
@@ -345,66 +329,5 @@ impl From<Sha256Domain> for [u8; 32] {
     #[inline]
     fn from(val: Sha256Domain) -> Self {
         val.0
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    use crate::fr32::fr_into_bytes;
-    use crate::util::bytes_into_boolean_vec;
-    use bellperson::util_cs::test_cs::TestConstraintSystem;
-
-    use bellperson::bls::{Bls12, Fr};
-    use bellperson::gadgets::boolean::Boolean;
-    use bellperson::ConstraintSystem;
-    use ff::Field;
-    use merkletree::hash::Algorithm;
-    use rand::SeedableRng;
-    use rand_xorshift::XorShiftRng;
-
-    #[test]
-    fn hash_leaf_bits_circuit() {
-        let mut cs = TestConstraintSystem::<Bls12>::new();
-        let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
-
-        let left_fr = Fr::random(rng);
-        let right_fr = Fr::random(rng);
-        let left: Vec<u8> = fr_into_bytes(&left_fr);
-        let right: Vec<u8> = fr_into_bytes(&right_fr);
-        let height = 1;
-
-        let left_bits: Vec<Boolean> = {
-            let mut cs = cs.namespace(|| "left");
-            bytes_into_boolean_vec(&mut cs, Some(left.as_slice()), 256).expect("left bits failure")
-        };
-
-        let right_bits: Vec<Boolean> = {
-            let mut cs = cs.namespace(|| "right");
-            bytes_into_boolean_vec(&mut cs, Some(right.as_slice()), 256)
-                .expect("right bits failure")
-        };
-
-        let out = Sha256Function::hash_leaf_bits_circuit(
-            cs.namespace(|| "hash_leaf_circuit"),
-            &left_bits,
-            &right_bits,
-            height,
-        )
-        .expect("key derivation function failed");
-
-        assert!(cs.is_satisfied(), "constraints not satisfied");
-        assert_eq!(cs.num_constraints(), 45_387);
-
-        let expected: Fr = Sha256Function::default()
-            .node(left_fr.into(), right_fr.into(), height)
-            .into();
-
-        assert_eq!(
-            expected,
-            out.get_value().expect("get_value failure"),
-            "circuit and non circuit do not match"
-        );
     }
 }

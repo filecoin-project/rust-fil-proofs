@@ -2,6 +2,7 @@ use std::io::Write;
 use std::path::PathBuf;
 
 use anyhow::{ensure, Result};
+use filecoin_hashers::{Domain, Hasher, PoseidonArity};
 use generic_array::typenum::{self, Unsigned};
 use log::trace;
 use merkletree::merkle;
@@ -12,7 +13,6 @@ use merkletree::store::{ExternalReader, ReplicaConfig, Store, StoreConfig};
 use rayon::prelude::*;
 
 use crate::error::*;
-use crate::hasher::{Domain, Hasher, PoseidonArity};
 use crate::util::{data_at_node, default_rows_to_discard, NODE_SIZE};
 
 use super::*;

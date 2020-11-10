@@ -1,9 +1,10 @@
 use anyhow::Context;
+use filecoin_hashers::Hasher;
 use log::*;
 use merkletree::merkle::Element;
 use merkletree::store::StoreConfig;
 use storage_proofs_core::{
-    cache_key::CacheKey, drgraph::Graph, error::Result, hasher::Hasher, merkle::MerkleTreeTrait,
+    cache_key::CacheKey, drgraph::Graph, error::Result, merkle::MerkleTreeTrait,
 };
 
 use crate::stacked::vanilla::{proof::LayerState, StackedBucketGraph};

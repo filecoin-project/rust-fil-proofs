@@ -11,13 +11,13 @@ use digest::generic_array::{
     typenum::{Unsigned, U64},
     GenericArray,
 };
+use filecoin_hashers::Hasher;
 use log::*;
 use mapr::MmapMut;
 use merkletree::store::{DiskStore, StoreConfig};
 use storage_proofs_core::{
     cache_key::CacheKey,
     drgraph::{Graph, BASE_DEGREE},
-    hasher::Hasher,
     merkle::*,
     settings,
     util::NODE_SIZE,
@@ -621,8 +621,8 @@ mod tests {
 
     use bellperson::bls::{Fr, FrRepr};
     use ff::PrimeField;
+    use filecoin_hashers::poseidon::PoseidonHasher;
     use generic_array::typenum::{U0, U2, U8};
-    use storage_proofs_core::hasher::poseidon::PoseidonHasher;
 
     #[test]
     fn test_create_labels() {

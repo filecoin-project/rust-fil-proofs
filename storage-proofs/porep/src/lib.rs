@@ -9,10 +9,9 @@ mod encode;
 
 use std::path::PathBuf;
 
+use filecoin_hashers::Hasher;
 use merkletree::store::StoreConfig;
-use storage_proofs_core::{
-    error::Result, hasher::Hasher, merkle::BinaryMerkleTree, proof::ProofScheme, Data,
-};
+use storage_proofs_core::{error::Result, merkle::BinaryMerkleTree, proof::ProofScheme, Data};
 
 pub trait PoRep<'a, H: Hasher, G: Hasher>: ProofScheme<'a> {
     type Tau;

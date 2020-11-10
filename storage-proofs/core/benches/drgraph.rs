@@ -1,6 +1,6 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion, ParameterizedBenchmark};
+use filecoin_hashers::poseidon::*;
 use storage_proofs_core::drgraph::*;
-use storage_proofs_core::hasher::poseidon::*;
 
 #[allow(clippy::unit_arg)]
 fn drgraph(c: &mut Criterion) {

@@ -13,6 +13,7 @@ crossbeam = "0.8"
 digest = "0.9"
 storage-proofs-core = { path = "../core", version = "^5.0.0", default-features = false}
 sha2raw = { path = "../../sha2raw", version = "^2.0.0"}
+filecoin-hashers = { path = "../../filecoin-hashers", version = "0.1.0", default-features = false, features = ["poseidon", "sha256"]}
 rand = "0.7"
 merkletree = "0.21.0"
 mapr = "0.8.0"
@@ -23,7 +24,7 @@ rayon = "1.0.0"
 serde = { version = "1.0", features = ["derive"]}
 serde_json = "1.0"
 ff = { version = "0.2.3", package = "fff" }
-bellperson = { version = "0.12", default-features = false }
+bellperson = { version = "0.12.2", default-features = false }
 log = "0.4.7"
 pretty_assertions = "0.6.1"
 generic-array = "0.14.4"
@@ -45,12 +46,13 @@ rand_xorshift = "0.2.0"
 criterion = "0.3.2"
 glob = "0.3.0"
 pretty_env_logger = "0.4.0"
+filecoin-hashers = { path = "../../filecoin-hashers", version = "0.1.0", default-features = false, features = ["poseidon", "sha256", "blake2s"]}
 
 [features]
 default = ["pairing", "gpu"]
-gpu = ["storage-proofs-core/gpu"]
-pairing = ["storage-proofs-core/pairing", "bellperson/pairing", "neptune/pairing"]
-blst = ["storage-proofs-core/blst", "bellperson/blst", "neptune/blst"]
+gpu = ["storage-proofs-core/gpu", "filecoin-hashers/gpu"]
+pairing = ["storage-proofs-core/pairing", "bellperson/pairing", "neptune/pairing", "filecoin-hashers/pairing"]
+blst = ["storage-proofs-core/blst", "bellperson/blst", "neptune/blst", "filecoin-hashers/blst"]
 
 [[bench]]
 name = "encode"

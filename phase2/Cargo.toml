@@ -10,9 +10,10 @@ readme = "README.md"
 
 
 [dependencies]
-bellperson = { version = "0.12.0", default-features = false }
+bellperson = { version = "0.12.2", default-features = false }
 filecoin-proofs = { version = "5.4.0", path = "../filecoin-proofs", default-features = false }
 storage-proofs = { version = "5.4.0", path = "../storage-proofs", default-features = false }
+filecoin-hashers = { version = "0.1.0", path = "../filecoin-hashers", default-features = false, features = ["sha256"] }
 groupy = "0.3.1"
 log = "0.4.11"
 clap = "2.33.3"
@@ -30,6 +31,6 @@ crossbeam = "0.8.0"
 
 [features]
 default = ["pairing", "gpu"]
-gpu = ["bellperson/gpu", "filecoin-proofs/gpu", "storage-proofs/gpu"]
-pairing = ["bellperson/pairing", "filecoin-proofs/pairing", "storage-proofs/pairing"]
-blst = ["bellperson/blst", "filecoin-proofs/blst", "storage-proofs/blst"]
+gpu = ["bellperson/gpu", "filecoin-proofs/gpu", "storage-proofs/gpu", "filecoin-hashers/gpu"]
+pairing = ["bellperson/pairing", "filecoin-proofs/pairing", "storage-proofs/pairing", "filecoin-hashers/pairing"]
+blst = ["bellperson/blst", "filecoin-proofs/blst", "storage-proofs/blst", "filecoin-hashers/blst"]

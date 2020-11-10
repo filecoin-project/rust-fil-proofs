@@ -4,16 +4,13 @@ use bellperson::bls::{Bls12, Fr};
 use bellperson::gadgets::num;
 use bellperson::{Circuit, ConstraintSystem, SynthesisError};
 use ff::Field;
+use filecoin_hashers::{poseidon::PoseidonFunction, HashFunction, Hasher, PoseidonMDArity};
 use generic_array::typenum;
 use typenum::marker_traits::Unsigned;
 
 use storage_proofs_core::{
-    compound_proof::CircuitComponent,
-    gadgets::constraint,
-    gadgets::por::PoRCircuit,
-    gadgets::variables::Root,
-    hasher::{HashFunction, Hasher, PoseidonFunction, PoseidonMDArity},
-    merkle::MerkleTreeTrait,
+    compound_proof::CircuitComponent, gadgets::constraint, gadgets::por::PoRCircuit,
+    gadgets::variables::Root, merkle::MerkleTreeTrait,
 };
 
 /// This is the `ElectionPoSt` circuit.
@@ -181,11 +178,11 @@ mod tests {
     use bellperson::bls::{Bls12, Fr};
     use bellperson::util_cs::test_cs::TestConstraintSystem;
     use ff::Field;
+    use filecoin_hashers::{poseidon::PoseidonHasher, Domain, HashFunction, Hasher};
     use rand::SeedableRng;
     use rand_xorshift::XorShiftRng;
     use storage_proofs_core::{
         compound_proof::CompoundProof,
-        hasher::{Domain, HashFunction, Hasher, PoseidonHasher},
         merkle::{generate_tree, get_base_tree_count, LCTree, MerkleTreeTrait},
         proof::ProofScheme,
         sector::SectorId,

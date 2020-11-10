@@ -1,93 +1,14 @@
+use anyhow::Result;
 use bellperson::bls::{Bls12, Fr, FrRepr};
 use bellperson::gadgets::{boolean, num};
 use bellperson::{ConstraintSystem, SynthesisError};
-use generic_array::typenum::{U0, U11, U16, U2, U24, U36, U4, U8};
-use lazy_static::lazy_static;
 use merkletree::hash::{Algorithm as LightAlgorithm, Hashable as LightHashable};
 use merkletree::merkle::Element;
-use neptune::poseidon::PoseidonConstants;
 use serde::de::DeserializeOwned;
 use serde::ser::Serialize;
 
-use crate::error::Result;
-
-pub type PoseidonBinaryArity = U2;
-pub type PoseidonQuadArity = U4;
-pub type PoseidonOctArity = U8;
-
-/// Arity to use by default for `hash_md` with poseidon.
-pub type PoseidonMDArity = U36;
-
-/// Arity to use for hasher implementations (Poseidon) which are specialized at compile time.
-/// Must match PoseidonArity
-pub const MERKLE_TREE_ARITY: usize = 2;
-
-lazy_static! {
-    pub static ref POSEIDON_CONSTANTS_2: PoseidonConstants::<Bls12, U2> = PoseidonConstants::new();
-    pub static ref POSEIDON_CONSTANTS_4: PoseidonConstants::<Bls12, U4> = PoseidonConstants::new();
-    pub static ref POSEIDON_CONSTANTS_8: PoseidonConstants::<Bls12, U8> = PoseidonConstants::new();
-    pub static ref POSEIDON_CONSTANTS_16: PoseidonConstants::<Bls12, U16> =
-        PoseidonConstants::new();
-    pub static ref POSEIDON_CONSTANTS_24: PoseidonConstants::<Bls12, U24> =
-        PoseidonConstants::new();
-    pub static ref POSEIDON_CONSTANTS_36: PoseidonConstants::<Bls12, U36> =
-        PoseidonConstants::new();
-    pub static ref POSEIDON_CONSTANTS_11: PoseidonConstants::<Bls12, U11> =
-        PoseidonConstants::new();
-    pub static ref POSEIDON_MD_CONSTANTS: PoseidonConstants::<Bls12, PoseidonMDArity> =
-        PoseidonConstants::new();
-}
-
-pub trait PoseidonArity: neptune::Arity<Fr> + Send + Sync + Clone + std::fmt::Debug {
-    #[allow(non_snake_case)]
-    fn PARAMETERS() -> &'static PoseidonConstants<Bls12, Self>;
-}
-
-impl PoseidonArity for U0 {
-    fn PARAMETERS() -> &'static PoseidonConstants<Bls12, Self> {
-        unreachable!("dummy implementation, do not ever call me")
-    }
-}
-
-impl PoseidonArity for U2 {
-    fn PARAMETERS() -> &'static PoseidonConstants<Bls12, Self> {
-        &*POSEIDON_CONSTANTS_2
-    }
-}
-
-impl PoseidonArity for U4 {
-    fn PARAMETERS() -> &'static PoseidonConstants<Bls12, Self> {
-        &*POSEIDON_CONSTANTS_4
-    }
-}
-
-impl PoseidonArity for U8 {
-    fn PARAMETERS() -> &'static PoseidonConstants<Bls12, Self> {
-        &*POSEIDON_CONSTANTS_8
-    }
-}
-
-impl PoseidonArity for U11 {
-    fn PARAMETERS() -> &'static PoseidonConstants<Bls12, Self> {
-        &*POSEIDON_CONSTANTS_11
-    }
-}
-
-impl PoseidonArity for U16 {
-    fn PARAMETERS() -> &'static PoseidonConstants<Bls12, Self> {
-        &*POSEIDON_CONSTANTS_16
-    }
-}
-impl PoseidonArity for U24 {
-    fn PARAMETERS() -> &'static PoseidonConstants<Bls12, Self> {
-        &*POSEIDON_CONSTANTS_24
-    }
-}
-impl PoseidonArity for U36 {
-    fn PARAMETERS() -> &'static PoseidonConstants<Bls12, Self> {
-        &*POSEIDON_CONSTANTS_36
-    }
-}
+#[cfg(feature = "poseidon")]
+pub use crate::poseidon_types::*;
 
 pub trait Domain:
     Ord
@@ -193,9 +114,6 @@ pub trait HashFunction<T: Domain>:
 pub trait Hasher: Clone + ::std::fmt::Debug + Eq + Default + Send + Sync {
     type Domain: Domain + LightHashable<Self::Function> + AsRef<Self::Domain>;
     type Function: HashFunction<Self::Domain>;
-
-    fn sloth_encode(key: &Self::Domain, ciphertext: &Self::Domain) -> Result<Self::Domain>;
-    fn sloth_decode(key: &Self::Domain, ciphertext: &Self::Domain) -> Result<Self::Domain>;
 
     fn name() -> String;
 }

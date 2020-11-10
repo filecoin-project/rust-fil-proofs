@@ -4,6 +4,7 @@ use std::marker::PhantomData;
 use anyhow::ensure;
 use bellperson::bls::Fr;
 use byteorder::{ByteOrder, LittleEndian};
+use filecoin_hashers::{Domain, HashFunction, Hasher};
 use generic_array::typenum::Unsigned;
 use log::{error, trace};
 use rayon::prelude::*;
@@ -12,7 +13,6 @@ use sha2::{Digest, Sha256};
 
 use storage_proofs_core::{
     error::{Error, Result},
-    hasher::{Domain, HashFunction, Hasher},
     merkle::{MerkleProof, MerkleProofTrait, MerkleTreeTrait, MerkleTreeWrapper},
     parameter_cache::ParameterSetMetadata,
     proof::ProofScheme,
@@ -614,13 +614,12 @@ impl<'a, Tree: 'a + MerkleTreeTrait> ProofScheme<'a> for FallbackPoSt<'a, Tree> 
 mod tests {
     use super::*;
 
+    use filecoin_hashers::poseidon::PoseidonHasher;
     use generic_array::typenum::{U0, U2, U4, U8};
     use rand::SeedableRng;
     use rand_xorshift::XorShiftRng;
-
-    use storage_proofs_core::{
-        hasher::PoseidonHasher,
-        merkle::{generate_tree, get_base_tree_count, LCTree, MerkleTreeTrait},
+    use storage_proofs_core::merkle::{
+        generate_tree, get_base_tree_count, LCTree, MerkleTreeTrait,
     };
 
     fn test_fallback_post<Tree: MerkleTreeTrait>(

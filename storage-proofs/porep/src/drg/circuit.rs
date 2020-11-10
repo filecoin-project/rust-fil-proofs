@@ -8,11 +8,11 @@ use bellperson::gadgets::{
 };
 use bellperson::{Circuit, ConstraintSystem, SynthesisError};
 use ff::PrimeField;
-
+use filecoin_hashers::Hasher;
 use storage_proofs_core::{
     compound_proof::CircuitComponent, error::Result, gadgets::constraint, gadgets::encode,
-    gadgets::por::PoRCircuit, gadgets::uint64, gadgets::variables::Root, hasher::Hasher,
-    merkle::BinaryMerkleTree, util::reverse_bit_numbering,
+    gadgets::por::PoRCircuit, gadgets::uint64, gadgets::variables::Root, merkle::BinaryMerkleTree,
+    util::reverse_bit_numbering,
 };
 
 /// DRG based Proof of Replication.
@@ -306,17 +306,18 @@ mod tests {
 
     use bellperson::util_cs::test_cs::TestConstraintSystem;
     use ff::Field;
+    use filecoin_hashers::poseidon::PoseidonHasher;
     use generic_array::typenum;
     use merkletree::store::StoreConfig;
     use pretty_assertions::assert_eq;
     use rand::SeedableRng;
     use rand_xorshift::XorShiftRng;
+
     use storage_proofs_core::{
         cache_key::CacheKey,
         compound_proof,
         drgraph::{graph_height, BucketGraph, BASE_DEGREE},
         fr32::{bytes_into_fr, fr_into_bytes},
-        hasher::PoseidonHasher,
         merkle::MerkleProofTrait,
         proof::ProofScheme,
         test_helper::setup_replica,

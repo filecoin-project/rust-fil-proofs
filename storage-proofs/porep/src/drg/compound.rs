@@ -3,6 +3,7 @@ use std::marker::PhantomData;
 use anyhow::{ensure, Context};
 use bellperson::bls::{Bls12, Fr};
 use bellperson::Circuit;
+use filecoin_hashers::Hasher;
 use generic_array::typenum;
 
 use storage_proofs_core::{
@@ -11,7 +12,6 @@ use storage_proofs_core::{
     error::Result,
     gadgets::por::PoRCompound,
     gadgets::variables::Root,
-    hasher::Hasher,
     merkle::{BinaryMerkleTree, MerkleProofTrait},
     parameter_cache::{CacheableParameters, ParameterSetMetadata},
     por,
@@ -283,16 +283,17 @@ mod tests {
 
     use bellperson::util_cs::{metric_cs::MetricCS, test_cs::TestConstraintSystem};
     use ff::Field;
+    use filecoin_hashers::{poseidon::PoseidonHasher, Hasher};
     use merkletree::store::StoreConfig;
     use pretty_assertions::assert_eq;
     use rand::SeedableRng;
     use rand_xorshift::XorShiftRng;
+
     use storage_proofs_core::{
         cache_key::CacheKey,
         compound_proof,
         drgraph::{BucketGraph, BASE_DEGREE},
         fr32::fr_into_bytes,
-        hasher::{Hasher, PoseidonHasher},
         merkle::{BinaryMerkleTree, MerkleTreeTrait},
         proof::NoRequirements,
         test_helper::setup_replica,
