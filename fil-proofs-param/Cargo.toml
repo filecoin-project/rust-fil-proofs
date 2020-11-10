@@ -38,7 +38,6 @@ anyhow = "1.0.23"
 rand_xorshift = "0.2.0"
 sha2 = "0.9.1"
 typenum = "1.11.2"
-bitintr = "0.3.0"
 gperftools = { version = "0.2", optional = true }
 generic-array = "0.14.4"
 structopt = "0.3.12"

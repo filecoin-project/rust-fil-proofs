@@ -15,7 +15,6 @@ bitvec = "0.17"
 rand = "0.7"
 lazy_static = "1.2"
 memmap = "0.7"
-pbr = "1.0"
 byteorder = "1"
 itertools = "0.9"
 serde = { version = "1.0", features = ["rc", "derive"] }
@@ -25,9 +24,6 @@ blake2b_simd = "0.5"
 bellperson = { version = "0.12.2", default-features = false }
 log = "0.4.7"
 fil_logger = "0.1"
-env_proxy = "0.4"
-flate2 = { version = "1.0.9", features = ["rust_backend"]}
-tar = "0.4.26"
 rayon = "1.1.0"
 blake2s_simd = "0.5.8"
 hex = "0.4.0"
@@ -39,18 +35,8 @@ sha2 = "0.9.1"
 typenum = "1.11.2"
 gperftools = { version = "0.2", optional = true }
 generic-array = "0.14.4"
-structopt = "0.3.12"
-humansize = "1.1.0"
-indicatif = "0.15.0"
 groupy = "0.3.0"
-dialoguer = "0.7.1"
-clap = "2.33.3"
 byte-slice-cast = "1.0.0"
-
-[dependencies.reqwest]
-version = "0.10"
-default-features = false
-features = ["blocking", "native-tls-vendored"]
 
 [dev-dependencies]
 criterion = "0.3"
