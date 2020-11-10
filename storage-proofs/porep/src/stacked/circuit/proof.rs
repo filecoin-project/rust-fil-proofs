@@ -12,7 +12,6 @@ use storage_proofs_core::{
     fr32::u64_into_fr,
     gadgets::constraint,
     gadgets::por::generate_inclusion_inputs,
-    hasher::{HashFunction, Hasher},
     merkle::{BinaryMerkleTree, MerkleTreeTrait},
     parameter_cache::{CacheableParameters, ParameterSetMetadata},
     por,

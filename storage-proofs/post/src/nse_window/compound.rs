@@ -169,13 +169,13 @@ mod tests {
     use super::*;
 
     use bellperson::util_cs::{metric_cs::MetricCS, test_cs::TestConstraintSystem};
+    use filecoin_hashers::{poseidon::PoseidonHasher, Domain, Hasher};
     use generic_array::typenum::{U0, U4, U8};
     use pretty_assertions::assert_eq;
     use rand::SeedableRng;
     use rand_xorshift::XorShiftRng;
     use storage_proofs_core::{
         compound_proof,
-        hasher::{Domain, Hasher, PoseidonHasher},
         merkle::{generate_tree, get_base_tree_count, LCTree, MerkleTreeTrait},
     };
     use storage_proofs_porep::nse::vanilla::hash_comm_r;

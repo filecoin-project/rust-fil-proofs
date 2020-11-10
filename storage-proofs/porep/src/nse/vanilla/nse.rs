@@ -3,13 +3,13 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 use bellperson::bls::Fr;
+use filecoin_hashers::{Domain, Hasher, POSEIDON_CONSTANTS_15_BASE};
 use generic_array::typenum::{Unsigned, U2};
 use merkletree::merkle::get_merkle_tree_leafs;
 use merkletree::store::{Store, StoreConfig};
 use neptune::poseidon::Poseidon;
 use serde::{Deserialize, Serialize};
 use storage_proofs_core::{
-    hasher::{Domain, Hasher, POSEIDON_CONSTANTS_15_BASE},
     merkle::{
         split_config, split_config_and_replica, BinaryMerkleTree, DiskStore, LCStore, MerkleProof,
         MerkleTreeTrait, MerkleTreeWrapper,

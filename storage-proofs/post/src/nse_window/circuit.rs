@@ -4,6 +4,7 @@ use bellperson::{
     Circuit, ConstraintSystem, SynthesisError,
 };
 use ff::Field;
+use filecoin_hashers::{HashFunction, Hasher, POSEIDON_CONSTANTS_15_BASE};
 use generic_array::typenum::{Unsigned, U0};
 use neptune::circuit::poseidon_hash;
 use rayon::prelude::*;
@@ -14,8 +15,6 @@ use storage_proofs_core::{
     gadgets::constraint,
     gadgets::por::{AuthPath, PoRCircuit},
     gadgets::variables::Root,
-    hasher::types::POSEIDON_CONSTANTS_15_BASE,
-    hasher::{HashFunction, Hasher},
     merkle::{MerkleProofTrait, MerkleTreeTrait, MerkleTreeWrapper},
     por, settings,
     util::NODE_SIZE,
@@ -352,12 +351,12 @@ mod tests {
     use bellperson::bls::{Bls12, Fr};
     use bellperson::util_cs::test_cs::TestConstraintSystem;
     use ff::Field;
+    use filecoin_hashers::{poseidon::PoseidonHasher, Domain, Hasher};
     use generic_array::typenum::{U0, U4, U8};
     use rand::SeedableRng;
     use rand_xorshift::XorShiftRng;
     use storage_proofs_core::{
         compound_proof::CompoundProof,
-        hasher::{Domain, Hasher, PoseidonHasher},
         merkle::{generate_tree, get_base_tree_count, LCTree, MerkleTreeTrait},
         proof::ProofScheme,
         util::NODE_SIZE,

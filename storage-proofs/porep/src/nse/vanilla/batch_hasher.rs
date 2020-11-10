@@ -3,9 +3,10 @@
 use bellperson::bls::{Fr, FrRepr};
 use byteorder::{ByteOrder, LittleEndian};
 use ff::PrimeField;
+use filecoin_hashers::Domain;
 use itertools::Itertools;
 use sha2raw::Sha256;
-use storage_proofs_core::{hasher::Domain, util::NODE_SIZE};
+use storage_proofs_core::util::NODE_SIZE;
 
 use super::Parent;
 

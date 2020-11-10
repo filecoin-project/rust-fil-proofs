@@ -1,4 +1,5 @@
 use anyhow::{ensure, Context, Result};
+use filecoin_hashers::{Domain, Hasher};
 use generic_array::typenum::{Unsigned, U0};
 use itertools::Itertools;
 use log::*;
@@ -9,7 +10,6 @@ use rayon::prelude::*;
 use rust_fil_nse_gpu as gpu;
 use sha2raw::Sha256;
 use storage_proofs_core::{
-    hasher::{Domain, Hasher},
     merkle::{DiskTree, LCStore, LCTree, MerkleTreeTrait, MerkleTreeWrapper},
     util::NODE_SIZE,
 };
@@ -651,7 +651,7 @@ pub fn encode_with_trees_all<'a, Tree: 'static + MerkleTreeTrait>(
     #[cfg(all(feature = "gpu", not(target_os = "macos")))]
     if storage_proofs_core::settings::SETTINGS.use_gpu_nse
         && std::any::TypeId::of::<Tree::Hasher>()
-            == std::any::TypeId::of::<storage_proofs_core::hasher::PoseidonHasher>()
+            == std::any::TypeId::of::<filecoin_hashers::poseidon::PoseidonHasher>()
         && Tree::Arity::to_usize() == 8
         && ExpanderGraph::from(conf).bits % 8 == 0
     {
@@ -675,12 +675,16 @@ mod tests {
 
     use bellperson::bls::Fr;
     use ff::Field;
+    use filecoin_hashers::{
+        poseidon::{PoseidonDomain, PoseidonHasher},
+        sha256::Sha256Domain,
+    };
     use rand::{Rng, SeedableRng};
     use rand_xorshift::XorShiftRng;
+
     use storage_proofs_core::{
         cache_key::CacheKey,
         fr32::fr_into_bytes,
-        hasher::{PoseidonDomain, PoseidonHasher, Sha256Domain},
         merkle::{split_config, OctLCMerkleTree},
     };
 

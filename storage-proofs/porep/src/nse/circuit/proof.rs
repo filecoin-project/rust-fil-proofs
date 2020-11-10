@@ -5,10 +5,10 @@ use bellperson::{
     gadgets::num,
     ConstraintSystem, SynthesisError,
 };
+use filecoin_hashers::Hasher;
 use generic_array::typenum::{U0, U2};
 use storage_proofs_core::{
     gadgets::por::AuthPath,
-    hasher::Hasher,
     merkle::{MerkleProofTrait, MerkleTreeTrait},
 };
 

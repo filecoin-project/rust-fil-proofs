@@ -1,11 +1,11 @@
 use bellperson::{
     bls::{Bls12, Fr},
-    gadgets::{boolean::Boolean, num, sha256::sha256 as sha256_circuit, uint32::UInt32},
+    gadgets::{boolean::Boolean, multipack, num, sha256::sha256 as sha256_circuit, uint32::UInt32},
     ConstraintSystem, SynthesisError,
 };
 use ff::PrimeField;
 use storage_proofs_core::{
-    gadgets::{constraint, encode, multipack, uint64::UInt64},
+    gadgets::{constraint, encode, uint64::UInt64},
     util::reverse_bit_numbering,
 };
 
@@ -206,10 +206,10 @@ mod tests {
     use crate::nse::vanilla::{hash_prefix, truncate_hash};
 
     use bellperson::util_cs::test_cs::TestConstraintSystem;
+    use filecoin_hashers::{poseidon::PoseidonDomain, Domain};
     use rand::SeedableRng;
     use rand_xorshift::XorShiftRng;
     use sha2raw::Sha256;
-    use storage_proofs_core::hasher::{Domain, PoseidonDomain};
 
     #[test]
     fn test_derive_butterfly_layer_leaf() {
