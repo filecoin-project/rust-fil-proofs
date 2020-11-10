@@ -35,13 +35,13 @@ fn test_empty_source() {
 
 #[test]
 fn test_compute_comm_d_empty() {
-    let comm_d = compute_comm_d(SectorSize(2048), &[])
-        .expect("failed to verify pieces, empty piece infos");
+    let comm_d =
+        compute_comm_d(SectorSize(2048), &[]).expect("failed to verify pieces, empty piece infos");
     assert_eq!(
         comm_d,
         [
-            252, 126, 146, 130, 150, 229, 22, 250, 173, 233, 134, 178, 143, 146, 212, 74, 79,
-            36, 185, 53, 72, 82, 35, 55, 106, 121, 144, 39, 188, 24, 248, 51
+            252, 126, 146, 130, 150, 229, 22, 250, 173, 233, 134, 178, 143, 146, 212, 74, 79, 36,
+            185, 53, 72, 82, 35, 55, 106, 121, 144, 39, 188, 24, 248, 51
         ]
     );
 
@@ -152,7 +152,7 @@ fn test_verify_simple_pieces() {
             &[a.clone(), b.clone(), c.clone(), d.clone()],
             sector_size
         )
-            .expect("failed to verify"),
+        .expect("failed to verify"),
         "[a, b, c, d]"
     );
 
@@ -402,7 +402,7 @@ fn build_sector(
 
     let data_tree: DataTree =
         create_base_merkle_tree::<DataTree>(None, graph.size(), &staged_sector)
-        .expect("failed to create data tree");
+            .expect("failed to create data tree");
     let comm_d_root: Fr = data_tree.root().into();
     let comm_d = commitment_from_fr(comm_d_root);
 

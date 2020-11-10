@@ -1,8 +1,8 @@
 use std::collections::BTreeMap;
 
 use anyhow::{ensure, Context, Result};
-use log::info;
 use filecoin_hashers::Hasher;
+use log::info;
 use storage_proofs::compound_proof::{self, CompoundProof};
 use storage_proofs::merkle::MerkleTreeTrait;
 use storage_proofs::multi_proof::MultiProof;

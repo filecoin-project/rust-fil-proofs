@@ -101,8 +101,8 @@ fn test_random_domain_element() {
         let random_el: DefaultTreeDomain = Fr::random(rng).into();
         let mut randomness = [0u8; 32];
         randomness.copy_from_slice(AsRef::<[u8]>::as_ref(&random_el));
-        let back: DefaultTreeDomain = as_safe_commitment(&randomness, "test")
-            .expect("failed to get domain from randomness");
+        let back: DefaultTreeDomain =
+            as_safe_commitment(&randomness, "test").expect("failed to get domain from randomness");
         assert_eq!(back, random_el);
     }
 }

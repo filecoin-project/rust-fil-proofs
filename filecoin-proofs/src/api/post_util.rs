@@ -3,8 +3,8 @@ use std::path::Path;
 
 use anyhow::{anyhow, ensure, Context, Result};
 use bincode::deserialize;
-use log::{info, trace};
 use filecoin_hashers::Hasher;
+use log::{info, trace};
 use storage_proofs::cache_key::CacheKey;
 use storage_proofs::merkle::MerkleTreeTrait;
 use storage_proofs::post::fallback;
