@@ -1,7 +1,7 @@
 use std::hash::Hash;
 
 use anyhow::{ensure, Result};
-use storage_proofs::hasher::Domain;
+use filecoin_hashers::Domain;
 
 use crate::api::util::as_safe_commitment;
 use crate::types::Commitment;

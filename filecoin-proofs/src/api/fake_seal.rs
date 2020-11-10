@@ -4,8 +4,8 @@ use std::path::Path;
 
 use anyhow::{Context, Result};
 use bincode::serialize;
+use filecoin_hashers::{Domain, Hasher};
 use storage_proofs::cache_key::CacheKey;
-use storage_proofs::hasher::{Domain, Hasher};
 use storage_proofs::merkle::MerkleTreeTrait;
 use storage_proofs::porep::stacked::StackedDrg;
 

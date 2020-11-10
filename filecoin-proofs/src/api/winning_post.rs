@@ -1,7 +1,8 @@
 use anyhow::{ensure, Context, Result};
 use log::info;
+
+use filecoin_hashers::Hasher;
 use storage_proofs::compound_proof::{self, CompoundProof};
-use storage_proofs::hasher::Hasher;
 use storage_proofs::merkle::MerkleTreeTrait;
 use storage_proofs::multi_proof::MultiProof;
 use storage_proofs::post::fallback;
