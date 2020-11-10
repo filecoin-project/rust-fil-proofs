@@ -1,12 +1,13 @@
 use std::path::PathBuf;
 
+use filecoin_hashers::{Domain, Hasher};
 use generic_array::typenum::{Unsigned, U2};
 use merkletree::{merkle::get_merkle_tree_len, store::StoreConfig};
 use rayon::prelude::*;
+
 use storage_proofs_core::{
     cache_key::CacheKey,
     error::Result,
-    hasher::{Domain, Hasher},
     merkle::{split_config, BinaryMerkleTree, MerkleTreeTrait, MerkleTreeWrapper},
     util::NODE_SIZE,
     Data,
@@ -221,21 +222,19 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> PoRep<'a, Tree::H
 mod tests {
     use super::*;
 
+    use filecoin_hashers::{poseidon::PoseidonHasher, sha256::Sha256Hasher};
     use generic_array::typenum::{U0, U8};
     use rand::SeedableRng;
     use rand_xorshift::XorShiftRng;
-    use storage_proofs_core::{
-        hasher::{PoseidonHasher, Sha256Hasher},
-        merkle::LCTree,
-        proof::ProofScheme,
-        util::NODE_SIZE,
-    };
+
+    use storage_proofs_core::{merkle::LCTree, proof::ProofScheme};
 
     use super::super::{Config, SetupParams};
 
     #[test]
     #[cfg(all(feature = "gpu", feature = "gpu-tests", not(target_os = "macos")))]
     fn test_gpu_bench_encode() {
+        use storage_proofs_core::util::NODE_SIZE;
         type Tree = LCTree<PoseidonHasher, U8, U8, U0>;
         // femme::start(log::LevelFilter::Debug).ok();
 

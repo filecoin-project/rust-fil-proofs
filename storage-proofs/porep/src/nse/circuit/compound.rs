@@ -3,11 +3,11 @@ use bellperson::{
     bls::{Bls12, Fr},
     Circuit,
 };
+use filecoin_hashers::Hasher;
 use storage_proofs_core::{
     compound_proof::{CircuitComponent, CompoundProof},
     fr32::u64_into_fr,
     gadgets::por::generate_inclusion_inputs,
-    hasher::Hasher,
     merkle::{BinaryMerkleTree, MerkleTreeTrait},
     parameter_cache::{CacheableParameters, ParameterSetMetadata},
     por,
@@ -212,6 +212,7 @@ mod tests {
 
     use bellperson::util_cs::{metric_cs::MetricCS, test_cs::TestConstraintSystem};
     use ff::Field;
+    use filecoin_hashers::{poseidon::PoseidonHasher, sha256::Sha256Hasher, Hasher};
     use generic_array::typenum::{Unsigned, U0, U4, U8};
     use merkletree::store::StoreConfig;
     use rand::{Rng, SeedableRng};
@@ -220,7 +221,6 @@ mod tests {
         cache_key::CacheKey,
         compound_proof,
         fr32::fr_into_bytes,
-        hasher::{Hasher, PoseidonHasher, Sha256Hasher},
         merkle::{get_base_tree_count, DiskTree, MerkleTreeTrait},
         test_helper::setup_replica,
         util::default_rows_to_discard,

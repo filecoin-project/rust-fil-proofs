@@ -2,6 +2,7 @@ use std::marker::PhantomData;
 
 use anyhow::ensure;
 use byteorder::{ByteOrder, LittleEndian};
+use filecoin_hashers::{Domain, Hasher};
 use generic_array::typenum::{Unsigned, U0};
 use log::trace;
 use rayon::prelude::*;
@@ -10,7 +11,6 @@ use sha2::{Digest, Sha256};
 
 use storage_proofs_core::{
     error::Result,
-    hasher::{Domain, Hasher},
     merkle::{MerkleProof, MerkleProofTrait, MerkleTreeTrait, MerkleTreeWrapper},
     parameter_cache::ParameterSetMetadata,
     proof::ProofScheme,
@@ -528,13 +528,13 @@ impl<'a, Tree: 'a + MerkleTreeTrait> ProofScheme<'a> for NseWindowPoSt<'a, Tree>
 mod tests {
     use super::*;
 
+    use filecoin_hashers::poseidon::PoseidonHasher;
     use generic_array::typenum::{U0, U4, U8};
     use rand::SeedableRng;
     use rand_xorshift::XorShiftRng;
 
-    use storage_proofs_core::{
-        hasher::PoseidonHasher,
-        merkle::{generate_tree, get_base_tree_count, LCTree, MerkleTreeTrait},
+    use storage_proofs_core::merkle::{
+        generate_tree, get_base_tree_count, LCTree, MerkleTreeTrait,
     };
 
     fn test_nse_window_post<Tree: MerkleTreeTrait>(

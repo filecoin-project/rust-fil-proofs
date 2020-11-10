@@ -3,12 +3,11 @@ use bellperson::{
     gadgets::{boolean::Boolean, num},
     Circuit, ConstraintSystem, SynthesisError,
 };
+use filecoin_hashers::{Hasher, POSEIDON_CONSTANTS_15_BASE};
 use neptune::circuit::poseidon_hash;
 use storage_proofs_core::{
     compound_proof::CircuitComponent,
     gadgets::{constraint, por::enforce_inclusion, uint64::UInt64},
-    hasher::types::POSEIDON_CONSTANTS_15_BASE,
-    hasher::Hasher,
     merkle::MerkleTreeTrait,
     proof::ProofScheme,
     util::reverse_bit_numbering,
@@ -357,6 +356,7 @@ mod tests {
     use bellperson::bls::Fr;
     use bellperson::util_cs::test_cs::TestConstraintSystem;
     use ff::Field;
+    use filecoin_hashers::{poseidon::PoseidonHasher, sha256::Sha256Hasher, Hasher};
     use generic_array::typenum::{Unsigned, U0, U2, U4, U8};
     use merkletree::store::StoreConfig;
     use rand::{Rng, SeedableRng};
@@ -365,7 +365,6 @@ mod tests {
         cache_key::CacheKey,
         compound_proof::CompoundProof,
         fr32::fr_into_bytes,
-        hasher::{Hasher, PoseidonHasher, Sha256Hasher},
         merkle::{get_base_tree_count, DiskTree, MerkleTreeTrait},
         proof::ProofScheme,
         test_helper::setup_replica,

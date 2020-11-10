@@ -1,10 +1,10 @@
 use anyhow::{ensure, Context};
 use bellperson::bls::Fr;
+use filecoin_hashers::{Domain, Hasher};
 use log::debug;
 use sha2raw::Sha256;
 use storage_proofs_core::{
     error::Result,
-    hasher::{Domain, Hasher},
     merkle::{MerkleProofTrait, MerkleTreeTrait, MerkleTreeWrapper},
     proof::ProofScheme,
 };
@@ -644,16 +644,13 @@ impl<'a, 'c, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher>
 mod tests {
     use super::*;
 
+    use filecoin_hashers::{poseidon::PoseidonHasher, sha256::Sha256Hasher, Domain};
     use generic_array::typenum::{Unsigned, U0, U2, U8};
     use merkletree::store::StoreConfig;
     use rand::{Rng, SeedableRng};
     use rand_xorshift::XorShiftRng;
     use storage_proofs_core::cache_key::CacheKey;
-    use storage_proofs_core::{
-        hasher::{Domain, PoseidonHasher, Sha256Hasher},
-        merkle::LCTree,
-        proof::ProofScheme,
-    };
+    use storage_proofs_core::{merkle::LCTree, proof::ProofScheme};
 
     use super::super::{Config, TemporaryAuxCache};
     use crate::PoRep;

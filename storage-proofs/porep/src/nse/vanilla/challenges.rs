@@ -1,7 +1,7 @@
 use std::convert::TryFrom;
 
+use filecoin_hashers::Domain;
 use sha2::{Digest, Sha256};
-use storage_proofs_core::hasher::Domain;
 
 use super::Config;
 
@@ -152,9 +152,9 @@ impl<D: Domain> Iterator for Challenges<D> {
 mod tests {
     use super::*;
 
+    use filecoin_hashers::{poseidon::PoseidonHasher, Hasher};
     use rand::{Rng, SeedableRng};
     use rand_xorshift::XorShiftRng;
-    use storage_proofs_core::hasher::{Hasher, PoseidonHasher};
 
     #[test]
     fn test_challenges_smoke() {

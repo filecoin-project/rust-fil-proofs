@@ -1,3 +1,4 @@
+use std::convert::TryInto;
 use std::hash::Hasher as StdHasher;
 
 use anyhow::{ensure, Result};
@@ -135,7 +136,25 @@ impl Domain for Sha256Domain {
     }
 
     fn into_repr(self) -> FrRepr {
-        crate::fr32::bytes_into_fr_repr_safe(&self.0)
+        // TODO: use fr32::bytes_into_fr_repr_safe(&self.0) when extracted
+        let r = self.0;
+        debug_assert!(r.len() == 32);
+
+        let repr: [u64; 4] = [
+            u64::from_le_bytes(r[0..8].try_into().expect("fixed size")),
+            u64::from_le_bytes(r[8..16].try_into().expect("fixed size")),
+            u64::from_le_bytes(r[16..24].try_into().expect("fixed size")),
+            u64::from(r[31] & 0b0011_1111) << 56
+                | u64::from(r[30]) << 48
+                | u64::from(r[29]) << 40
+                | u64::from(r[28]) << 32
+                | u64::from(r[27]) << 24
+                | u64::from(r[26]) << 16
+                | u64::from(r[25]) << 8
+                | u64::from(r[24]),
+        ];
+
+        FrRepr(repr)
     }
 }
 
