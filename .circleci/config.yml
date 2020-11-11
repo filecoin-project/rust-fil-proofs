@@ -249,7 +249,7 @@ jobs:
       - run:
           name: Ensure existence of Groth parameters and keys on remote host
           command: |
-            ./fil-proofs-tooling/scripts/run-remote.sh "${CIRCLE_BRANCH}" "${BENCHMARK_SERVER_SSH_USERNAME}@${BENCHMARK_SERVER_IP_ADDR}" cargo run --release --package filecoin-proofs --bin paramcache -- --params-for-sector-sizes=$((512*1024*1024))
+            ./fil-proofs-tooling/scripts/run-remote.sh "${CIRCLE_BRANCH}" "${BENCHMARK_SERVER_SSH_USERNAME}@${BENCHMARK_SERVER_IP_ADDR}" cargo run --release --package fil-proofs-param --bin paramcache -- --params-for-sector-sizes=$((512*1024*1024))
           no_output_timeout: 60m
       - run:
           name: Run hash-constraints benchmarks on remote host
