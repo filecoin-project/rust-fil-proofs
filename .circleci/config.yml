@@ -249,7 +249,7 @@ jobs:
       - run:
           name: Ensure existence of Groth parameters and keys on remote host
           command: |
-            ./fil-proofs-tooling/scripts/run-remote.sh "${CIRCLE_BRANCH}" "${BENCHMARK_SERVER_SSH_USERNAME}@${BENCHMARK_SERVER_IP_ADDR}" cargo run --release --package filecoin-proofs --bin paramcache -- --params-for-sector-sizes=$((512*1024*1024))
+            ./fil-proofs-tooling/scripts/run-remote.sh "${CIRCLE_BRANCH}" "${BENCHMARK_SERVER_SSH_USERNAME}@${BENCHMARK_SERVER_IP_ADDR}" cargo run --release --package fil-proofs-param --bin paramcache -- --params-for-sector-sizes=$((512*1024*1024))
           no_output_timeout: 60m
       - run:
           name: Run hash-constraints benchmarks on remote host
@@ -364,10 +364,9 @@ commands:
     steps:
       - configure_environment_variables
       - run:
-          name: Build paramcache if it doesn't already exist
+          name: Build latest paramcache
           command: |
-            set -x; test -f ~/paramcache.awesome \
-            || (cargo build --release --workspace && find . -type f -name paramcache | xargs -I {} mv {} ~/paramcache.awesome)
+            set -x; (cargo build --release --workspace && find . -type f -name paramcache | xargs -I {} mv {} ~/paramcache.awesome)
       - run:
           name: Obtain filecoin groth parameters
           command: ~/paramcache.awesome --params-for-sector-sizes='2048,4096,16384,32768'
@@ -455,7 +454,3 @@ workflows:
       - metrics_capture:
           requires:
             - cargo_fetch
-          filters:
-            branches:
-              only:
-                - master
