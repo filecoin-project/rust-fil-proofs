@@ -7,6 +7,7 @@ members = [
   "storage-proofs/porep",
   "storage-proofs/post",
   "fil-proofs-tooling",
+  "fil-proofs-param",
   "sha2raw",
   "phase2",
   "filecoin-hashers",

@@ -18,7 +18,7 @@ use storage_proofs::sector::SectorId;
 use storage_proofs::util::default_rows_to_discard;
 use typenum::Unsigned;
 
-use crate::api::util::{as_safe_commitment, get_base_tree_leafs, get_base_tree_size};
+use crate::api::util::{get_base_tree_leafs, get_base_tree_size};
 use crate::commitment_reader::CommitmentReader;
 use crate::constants::{
     DefaultBinaryTree, DefaultOctTree, DefaultPieceDomain, DefaultPieceHasher,
@@ -31,12 +31,20 @@ use crate::types::{
     ProverId, SealPreCommitPhase1Output, Ticket, UnpaddedByteIndex, UnpaddedBytesAmount,
 };
 
-mod post;
+mod fake_seal;
+mod post_util;
 mod seal;
 pub(crate) mod util;
+mod window_post;
+mod winning_post;
 
-pub use self::post::*;
+pub use self::fake_seal::*;
+pub use self::post_util::*;
 pub use self::seal::*;
+pub use self::window_post::*;
+pub use self::winning_post::*;
+
+pub use self::util::{as_safe_commitment, commitment_from_fr};
 
 use storage_proofs::pieces::generate_piece_commitment_bytes_from_source;
 
@@ -581,114 +589,4 @@ where
 
     info!("validate_cache_for_precommit:finish");
     Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    use bellperson::bls::Fr;
-    use ff::Field;
-    use rand::SeedableRng;
-    use rand_xorshift::XorShiftRng;
-    use storage_proofs::fr32::bytes_into_fr;
-
-    use crate::constants::*;
-    use crate::types::SectorSize;
-
-    #[test]
-    fn test_verify_seal_fr32_validation() {
-        let convertible_to_fr_bytes = [0; 32];
-        let out = bytes_into_fr(&convertible_to_fr_bytes);
-        assert!(out.is_ok(), "tripwire");
-
-        let not_convertible_to_fr_bytes = [255; 32];
-        let out = bytes_into_fr(&not_convertible_to_fr_bytes);
-        assert!(out.is_err(), "tripwire");
-
-        let arbitrary_porep_id = [87; 32];
-        {
-            let result = verify_seal::<DefaultOctLCTree>(
-                PoRepConfig {
-                    sector_size: SectorSize(SECTOR_SIZE_2_KIB),
-                    partitions: PoRepProofPartitions(
-                        *POREP_PARTITIONS
-                            .read()
-                            .expect("POREP_PARTITIONS poisoned")
-                            .get(&SECTOR_SIZE_2_KIB)
-                            .expect("unknown sector size"),
-                    ),
-                    porep_id: arbitrary_porep_id,
-                },
-                not_convertible_to_fr_bytes,
-                convertible_to_fr_bytes,
-                [0; 32],
-                SectorId::from(0),
-                [0; 32],
-                [0; 32],
-                &[],
-            );
-
-            if let Err(err) = result {
-                let needle = "Invalid all zero commitment";
-                let haystack = format!("{}", err);
-
-                assert!(
-                    haystack.contains(needle),
-                    format!("\"{}\" did not contain \"{}\"", haystack, needle)
-                );
-            } else {
-                panic!("should have failed comm_r to Fr32 conversion");
-            }
-        }
-
-        {
-            let result = verify_seal::<DefaultOctLCTree>(
-                PoRepConfig {
-                    sector_size: SectorSize(SECTOR_SIZE_2_KIB),
-                    partitions: PoRepProofPartitions(
-                        *POREP_PARTITIONS
-                            .read()
-                            .expect("POREP_PARTITIONS poisoned")
-                            .get(&SECTOR_SIZE_2_KIB)
-                            .expect("unknown sector size"),
-                    ),
-                    porep_id: arbitrary_porep_id,
-                },
-                convertible_to_fr_bytes,
-                not_convertible_to_fr_bytes,
-                [0; 32],
-                SectorId::from(0),
-                [0; 32],
-                [0; 32],
-                &[],
-            );
-
-            if let Err(err) = result {
-                let needle = "Invalid all zero commitment";
-                let haystack = format!("{}", err);
-
-                assert!(
-                    haystack.contains(needle),
-                    format!("\"{}\" did not contain \"{}\"", haystack, needle)
-                );
-            } else {
-                panic!("should have failed comm_d to Fr32 conversion");
-            }
-        }
-    }
-
-    #[test]
-    fn test_random_domain_element() {
-        let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
-
-        for _ in 0..100 {
-            let random_el: DefaultTreeDomain = Fr::random(rng).into();
-            let mut randomness = [0u8; 32];
-            randomness.copy_from_slice(AsRef::<[u8]>::as_ref(&random_el));
-            let back: DefaultTreeDomain = as_safe_commitment(&randomness, "test")
-                .expect("failed to get domain from randomness");
-            assert_eq!(back, random_el);
-        }
-    }
 }

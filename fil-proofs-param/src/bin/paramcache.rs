@@ -5,14 +5,21 @@ use log::{info, warn};
 use rand::rngs::OsRng;
 use structopt::StructOpt;
 
-use filecoin_proofs::constants::*;
+use filecoin_proofs::constants::{
+    DefaultPieceHasher, POREP_PARTITIONS, PUBLISHED_SECTOR_SIZES, WINDOW_POST_CHALLENGE_COUNT,
+    WINDOW_POST_SECTOR_COUNT, WINNING_POST_CHALLENGE_COUNT, WINNING_POST_SECTOR_COUNT,
+};
 use filecoin_proofs::parameters::{
     public_params, window_post_public_params, winning_post_public_params,
 };
-use filecoin_proofs::types::*;
-use filecoin_proofs::with_shape;
-use filecoin_proofs::PoStType;
+use filecoin_proofs::types::{
+    PaddedBytesAmount, PoRepConfig, PoRepProofPartitions, PoStConfig, SectorSize,
+};
+use filecoin_proofs::{with_shape, PoStType};
+
 use storage_proofs::compound_proof::CompoundProof;
+use storage_proofs::merkle::MerkleTreeTrait;
+
 use storage_proofs::parameter_cache::CacheableParameters;
 use storage_proofs::porep::stacked::{StackedCompound, StackedDrg};
 use storage_proofs::post::fallback::{FallbackPoSt, FallbackPoStCircuit, FallbackPoStCompound};

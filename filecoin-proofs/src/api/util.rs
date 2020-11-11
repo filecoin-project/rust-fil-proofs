@@ -8,7 +8,7 @@ use typenum::Unsigned;
 
 use crate::types::{Commitment, SectorSize};
 
-pub(crate) fn as_safe_commitment<H: Domain, T: AsRef<str>>(
+pub fn as_safe_commitment<H: Domain, T: AsRef<str>>(
     comm: &[u8; 32],
     commitment_name: T,
 ) -> Result<H> {
@@ -17,7 +17,7 @@ pub(crate) fn as_safe_commitment<H: Domain, T: AsRef<str>>(
         .with_context(|| format!("Invalid commitment ({})", commitment_name.as_ref(),))
 }
 
-pub(crate) fn commitment_from_fr(fr: Fr) -> Commitment {
+pub fn commitment_from_fr(fr: Fr) -> Commitment {
     let mut commitment = [0; 32];
     for (i, b) in fr_into_bytes(&fr).iter().enumerate() {
         commitment[i] = *b;
