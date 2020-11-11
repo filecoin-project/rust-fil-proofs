@@ -349,6 +349,7 @@ mod tests {
     use rand::{Rng, SeedableRng};
     use rand_xorshift::XorShiftRng;
     use storage_proofs_core::{
+        api_version::ApiVersion,
         cache_key::CacheKey,
         compound_proof,
         drgraph::BASE_DEGREE,
@@ -422,6 +423,7 @@ mod tests {
             expansion_degree,
             porep_id: arbitrary_porep_id,
             layer_challenges,
+            api_version: ApiVersion::V1_1_0,
         };
 
         let pp = StackedDrg::<Tree, Sha256Hasher>::setup(&sp).expect("setup failed");
@@ -572,6 +574,7 @@ mod tests {
                 expansion_degree,
                 porep_id: arbitrary_porep_id,
                 layer_challenges,
+                api_version: ApiVersion::V1_1_0,
             },
             partitions: Some(partition_count),
             priority: false,

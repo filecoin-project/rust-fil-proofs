@@ -3,7 +3,6 @@ use std::marker::PhantomData;
 use anyhow::{anyhow, ensure};
 use bellperson::bls::{Bls12, Fr};
 use bellperson::Circuit;
-
 use storage_proofs_core::{
     compound_proof::{CircuitComponent, CompoundProof},
     error::Result,
@@ -72,7 +71,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait>
                     &pub_params,
                     pub_inputs.randomness,
                     sector.id.into(),
-                    challenge_index,
+                    challenge_index
                 );
 
                 let por_pub_inputs = por::PublicInputs {
@@ -168,6 +167,7 @@ mod tests {
     use rand::SeedableRng;
     use rand_xorshift::XorShiftRng;
     use storage_proofs_core::{
+        api_version::ApiVersion,
         compound_proof,
         merkle::{generate_tree, get_base_tree_count, LCTree, MerkleTreeTrait},
     };
@@ -179,43 +179,50 @@ mod tests {
     #[ignore]
     #[test]
     fn fallback_post_poseidon_single_partition_matching_base_8() {
-        fallback_post::<LCTree<PoseidonHasher, U8, U0, U0>>(15, 15, 1);
+        fallback_post::<LCTree<PoseidonHasher, U8, U0, U0>>(15, 15, 1, ApiVersion::V1_0_0);
+        fallback_post::<LCTree<PoseidonHasher, U8, U0, U0>>(15, 15, 1, ApiVersion::V1_1_0);
     }
 
     #[ignore]
     #[test]
     fn fallback_post_poseidon_single_partition_matching_sub_8_4() {
-        fallback_post::<LCTree<PoseidonHasher, U8, U4, U0>>(3, 3, 1);
+        fallback_post::<LCTree<PoseidonHasher, U8, U4, U0>>(3, 3, 1, ApiVersion::V1_0_0);
+        fallback_post::<LCTree<PoseidonHasher, U8, U4, U0>>(3, 3, 1, ApiVersion::V1_1_0);
     }
 
     #[ignore]
     #[test]
     fn fallback_post_poseidon_single_partition_matching_top_8_4_2() {
-        fallback_post::<LCTree<PoseidonHasher, U8, U4, U2>>(3, 3, 1);
+        fallback_post::<LCTree<PoseidonHasher, U8, U4, U2>>(3, 3, 1, ApiVersion::V1_0_0);
+        fallback_post::<LCTree<PoseidonHasher, U8, U4, U2>>(3, 3, 1, ApiVersion::V1_1_0);
     }
 
     #[ignore]
     #[test]
     fn fallback_post_poseidon_single_partition_smaller_base_8() {
-        fallback_post::<LCTree<PoseidonHasher, U8, U0, U0>>(2, 3, 1);
+        fallback_post::<LCTree<PoseidonHasher, U8, U0, U0>>(2, 3, 1, ApiVersion::V1_0_0);
+        fallback_post::<LCTree<PoseidonHasher, U8, U0, U0>>(2, 3, 1, ApiVersion::V1_1_0);
     }
 
     #[ignore]
     #[test]
     fn fallback_post_poseidon_two_partitions_matching_base_8() {
-        fallback_post::<LCTree<PoseidonHasher, U8, U0, U0>>(4, 2, 2);
+        fallback_post::<LCTree<PoseidonHasher, U8, U0, U0>>(4, 2, 2, ApiVersion::V1_0_0);
+        fallback_post::<LCTree<PoseidonHasher, U8, U0, U0>>(4, 2, 2, ApiVersion::V1_1_0);
     }
 
     #[ignore]
     #[test]
     fn fallback_post_poseidon_two_partitions_smaller_base_8() {
-        fallback_post::<LCTree<PoseidonHasher, U8, U0, U0>>(5, 3, 2);
+        fallback_post::<LCTree<PoseidonHasher, U8, U0, U0>>(5, 3, 2, ApiVersion::V1_0_0);
+        fallback_post::<LCTree<PoseidonHasher, U8, U0, U0>>(5, 3, 2, ApiVersion::V1_1_0);
     }
 
     fn fallback_post<Tree: 'static + MerkleTreeTrait>(
         total_sector_count: usize,
         sector_count: usize,
         partitions: usize,
+        api_version: ApiVersion,
     ) where
         Tree::Store: 'static,
     {
@@ -232,6 +239,7 @@ mod tests {
                 sector_size: sector_size as u64,
                 challenge_count,
                 sector_count,
+                api_version,
             },
             partitions: Some(partitions),
             priority: false,

@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 
 use anyhow::Result;
+use storage_proofs::api_version::ApiVersion;
 use storage_proofs::parameter_cache::{self, CacheableParameters};
 use storage_proofs::porep::stacked::{StackedCircuit, StackedCompound};
 
@@ -12,6 +13,7 @@ pub struct PoRepConfig {
     pub sector_size: SectorSize,
     pub partitions: PoRepProofPartitions,
     pub porep_id: [u8; 32],
+    pub api_version: ApiVersion,
 }
 
 impl From<PoRepConfig> for PaddedBytesAmount {
@@ -49,6 +51,7 @@ impl PoRepConfig {
             self.sector_size.into(),
             self.partitions.into(),
             self.porep_id,
+            self.api_version,
         )?;
 
         Ok(

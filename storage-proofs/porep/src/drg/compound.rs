@@ -290,6 +290,7 @@ mod tests {
     use rand_xorshift::XorShiftRng;
 
     use storage_proofs_core::{
+        api_version::ApiVersion,
         cache_key::CacheKey,
         compound_proof,
         drgraph::{BucketGraph, BASE_DEGREE},
@@ -348,6 +349,7 @@ mod tests {
                 },
                 private: false,
                 challenges_count: 2,
+                api_version: ApiVersion::V1_1_0,
             },
             partitions: None,
             priority: false,
@@ -390,6 +392,7 @@ mod tests {
                 },
                 private: false,
                 challenges_count: 2,
+                api_version: ApiVersion::V1_1_0,
             },
             partitions: None,
             priority: false,

@@ -1377,8 +1377,8 @@ mod tests {
     use rand::{Rng, SeedableRng};
     use rand_xorshift::XorShiftRng;
     use storage_proofs_core::{
-        drgraph::BASE_DEGREE, fr32::fr_into_bytes, merkle::MerkleTreeTrait, proof::ProofScheme,
-        table_tests, test_helper::setup_replica,
+        api_version::ApiVersion, drgraph::BASE_DEGREE, fr32::fr_into_bytes,
+        merkle::MerkleTreeTrait, proof::ProofScheme, table_tests, test_helper::setup_replica,
     };
 
     use crate::stacked::{PrivateInputs, SetupParams, EXP_DEGREE};
@@ -1477,6 +1477,7 @@ mod tests {
             expansion_degree: EXP_DEGREE,
             porep_id: [32; 32],
             layer_challenges: layer_challenges.clone(),
+            api_version: ApiVersion::V1_1_0,
         };
 
         let pp = StackedDrg::<Tree, Blake2sHasher>::setup(&sp).expect("setup failed");
@@ -1583,6 +1584,7 @@ mod tests {
             expansion_degree: EXP_DEGREE,
             porep_id: [32; 32],
             layer_challenges: layer_challenges.clone(),
+            api_version: ApiVersion::V1_1_0,
         };
 
         let pp = StackedDrg::<Tree, Blake2sHasher>::setup(&sp).expect("setup failed");
@@ -1788,6 +1790,7 @@ mod tests {
             expansion_degree,
             porep_id: arbitrary_porep_id,
             layer_challenges: challenges,
+            api_version: ApiVersion::V1_1_0,
         };
 
         let pp = StackedDrg::<Tree, Blake2sHasher>::setup(&sp).expect("setup failed");
@@ -1867,6 +1870,7 @@ mod tests {
             expansion_degree,
             porep_id: [32; 32],
             layer_challenges,
+            api_version: ApiVersion::V1_1_0,
         };
 
         // When this fails, the call to setup should panic, but seems to actually hang (i.e. neither return nor panic) for some reason.
@@ -1891,6 +1895,7 @@ mod tests {
             layers,
             replica_id,
             legacy_porep_id,
+            ApiVersion::V1_0_0,
             Fr::from_repr(FrRepr([
                 0xd3faa96b9a0fba04,
                 0xea81a283d106485e,
@@ -1905,6 +1910,7 @@ mod tests {
             layers,
             replica_id,
             legacy_porep_id,
+            ApiVersion::V1_0_0,
             Fr::from_repr(FrRepr([
                 0x7e191e52c4a8da86,
                 0x5ae8a1c9e6fac148,
@@ -1919,6 +1925,7 @@ mod tests {
             layers,
             replica_id,
             porep_id,
+            ApiVersion::V1_1_0,
             Fr::from_repr(FrRepr([
                 0xabb3f38bb70defcf,
                 0x777a2e4d7769119f,
@@ -1933,6 +1940,7 @@ mod tests {
             layers,
             replica_id,
             porep_id,
+            ApiVersion::V1_1_0,
             Fr::from_repr(FrRepr([
                 0x22ab81cf68c4676d,
                 0x7a77a82fc7c9c189,
@@ -1948,6 +1956,7 @@ mod tests {
         layers: usize,
         replica_id: [u8; 32],
         porep_id: [u8; 32],
+        api_version: ApiVersion,
         expected_last_label: Fr,
     ) {
         let nodes = sector_size / NODE_SIZE;
@@ -1965,6 +1974,7 @@ mod tests {
             BASE_DEGREE,
             EXP_DEGREE,
             porep_id,
+            api_version,
         )
         .unwrap();
 

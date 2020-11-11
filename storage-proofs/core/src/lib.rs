@@ -7,6 +7,7 @@
 #[macro_use]
 pub mod test_helper;
 
+pub mod api_version;
 pub mod cache_key;
 pub mod compound_proof;
 pub mod crypto;
@@ -37,6 +38,7 @@ pub(crate) const TEST_SEED: [u8; 16] = [
 pub const MAX_LEGACY_POREP_REGISTERED_PROOF_ID: u64 = 4;
 
 pub type PoRepID = [u8; 32];
+
 pub fn is_legacy_porep_id(porep_id: PoRepID) -> bool {
     use std::convert::TryInto;
 

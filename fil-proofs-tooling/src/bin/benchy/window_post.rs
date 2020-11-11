@@ -25,6 +25,7 @@ use filecoin_proofs::{
 };
 use log::info;
 use serde::{Deserialize, Serialize};
+use storage_proofs::api_version::ApiVersion;
 use storage_proofs::merkle::MerkleTreeTrait;
 use storage_proofs::sector::SectorId;
 
@@ -80,7 +81,7 @@ impl Report {
     }
 }
 
-fn get_porep_config(sector_size: u64) -> PoRepConfig {
+fn get_porep_config(sector_size: u64, api_version: ApiVersion) -> PoRepConfig {
     let arbitrary_porep_id = [99; 32];
 
     // Replicate the staged sector, write the replica file to `sealed_path`.
@@ -94,11 +95,13 @@ fn get_porep_config(sector_size: u64) -> PoRepConfig {
                 .expect("unknown sector size"),
         ),
         porep_id: arbitrary_porep_id,
+        api_version,
     }
 }
 
 fn run_pre_commit_phases<Tree: 'static + MerkleTreeTrait>(
     sector_size: u64,
+    api_version: ApiVersion,
     cache_dir: PathBuf,
     skip_precommit_phase1: bool,
     skip_precommit_phase2: bool,
@@ -164,7 +167,7 @@ fn run_pre_commit_phases<Tree: 'static + MerkleTreeTrait>(
 
         let piece_infos = vec![piece_info];
         let sector_id = SectorId::from(SECTOR_ID);
-        let porep_config = get_porep_config(sector_size);
+        let porep_config = get_porep_config(sector_size, api_version);
 
         let seal_pre_commit_phase1_measurement: FuncMeasurement<SealPreCommitPhase1Output<Tree>> = measure(|| {
             seal_pre_commit_phase1::<_, _, _, Tree>(
@@ -202,7 +205,7 @@ fn run_pre_commit_phases<Tree: 'static + MerkleTreeTrait>(
             info!("Test resume requested.  Removing last layer {:?}", layers[layers.len() - 1]);
             std::fs::remove_file(&layers[layers.len() - 1])?;
 
-            return run_pre_commit_phases::<Tree>(sector_size, cache_dir, skip_precommit_phase1, skip_precommit_phase2, false, true);
+            return run_pre_commit_phases::<Tree>(sector_size, api_version, cache_dir, skip_precommit_phase1, skip_precommit_phase2, false, true);
         }
 
         // Persist piece_infos here
@@ -255,7 +258,7 @@ fn run_pre_commit_phases<Tree: 'static + MerkleTreeTrait>(
             res
         };
 
-        let porep_config = get_porep_config(sector_size);
+        let porep_config = get_porep_config(sector_size, api_version);
 
         let sealed_file_path = cache_dir.join(SEALED_FILE);
 
@@ -337,6 +340,7 @@ fn run_pre_commit_phases<Tree: 'static + MerkleTreeTrait>(
 #[allow(clippy::too_many_arguments)]
 pub fn run_window_post_bench<Tree: 'static + MerkleTreeTrait>(
     sector_size: u64,
+    api_version: ApiVersion,
     cache_dir: PathBuf,
     preserve_cache: bool,
     skip_precommit_phase1: bool,
@@ -358,6 +362,7 @@ pub fn run_window_post_bench<Tree: 'static + MerkleTreeTrait>(
     } else {
         run_pre_commit_phases::<Tree>(
             sector_size,
+            api_version,
             cache_dir.clone(),
             skip_precommit_phase1,
             skip_precommit_phase2,
@@ -400,7 +405,7 @@ pub fn run_window_post_bench<Tree: 'static + MerkleTreeTrait>(
     let comm_r = seal_pre_commit_output.comm_r;
 
     let sector_id = SectorId::from(SECTOR_ID);
-    let porep_config = get_porep_config(sector_size);
+    let porep_config = get_porep_config(sector_size, api_version);
 
     let sealed_file_path = cache_dir.join(SEALED_FILE);
 
@@ -514,6 +519,7 @@ pub fn run_window_post_bench<Tree: 'static + MerkleTreeTrait>(
             .expect("unknown sector size"),
         typ: PoStType::Window,
         priority: true,
+        api_version,
     };
 
     let gen_window_post_measurement = measure(|| {
@@ -574,6 +580,7 @@ pub fn run_window_post_bench<Tree: 'static + MerkleTreeTrait>(
 #[allow(clippy::too_many_arguments)]
 pub fn run(
     sector_size: usize,
+    api_version: ApiVersion,
     cache: String,
     preserve_cache: bool,
     skip_precommit_phase1: bool,
@@ -582,7 +589,7 @@ pub fn run(
     skip_commit_phase2: bool,
     test_resume: bool,
 ) -> anyhow::Result<()> {
-    info!("Benchy Window PoSt: sector-size={}, preserve_cache={}, skip_precommit_phase1={}, skip_precommit_phase2={}, skip_commit_phase1={}, skip_commit_phase2={}, test_resume={}", sector_size, preserve_cache, skip_precommit_phase1, skip_precommit_phase2, skip_commit_phase1, skip_commit_phase2, test_resume);
+    info!("Benchy Window PoSt: sector-size={}, api_version={}, preserve_cache={}, skip_precommit_phase1={}, skip_precommit_phase2={}, skip_commit_phase1={}, skip_commit_phase2={}, test_resume={}", sector_size, api_version, preserve_cache, skip_precommit_phase1, skip_precommit_phase2, skip_commit_phase1, skip_commit_phase2, test_resume);
 
     let cache_dir_specified = !cache.is_empty();
     if skip_precommit_phase1 || skip_precommit_phase2 || skip_commit_phase1 || skip_commit_phase2 {
@@ -616,6 +623,7 @@ pub fn run(
         sector_size as u64,
         run_window_post_bench,
         sector_size as u64,
+        api_version,
         cache_dir,
         preserve_cache,
         skip_precommit_phase1,

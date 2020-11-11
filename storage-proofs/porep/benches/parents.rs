@@ -1,5 +1,6 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion, ParameterizedBenchmark};
 use filecoin_hashers::{blake2s::Blake2sHasher, sha256::Sha256Hasher, Hasher};
+use storage_proofs_core::api_version::ApiVersion;
 use storage_proofs_core::drgraph::{Graph, BASE_DEGREE};
 use storage_proofs_porep::stacked::{StackedBucketGraph, EXP_DEGREE};
 
@@ -31,8 +32,9 @@ fn stop_profile() {
 #[inline(always)]
 fn stop_profile() {}
 
-fn pregenerate_graph<H: Hasher>(size: usize) -> StackedBucketGraph<H> {
-    StackedBucketGraph::<H>::new_stacked(size, BASE_DEGREE, EXP_DEGREE, [32; 32]).unwrap()
+fn pregenerate_graph<H: Hasher>(size: usize, api_version: ApiVersion) -> StackedBucketGraph<H> {
+    StackedBucketGraph::<H>::new_stacked(size, BASE_DEGREE, EXP_DEGREE, [32; 32], api_version)
+        .unwrap()
 }
 
 fn parents_loop<H: Hasher, G: Graph<H>>(graph: &G, parents: &mut [u32]) {
@@ -50,7 +52,7 @@ fn parents_loop_benchmark(cc: &mut Criterion) {
         ParameterizedBenchmark::new(
             "Blake2s",
             |b, size| {
-                let graph = pregenerate_graph::<Blake2sHasher>(*size);
+                let graph = pregenerate_graph::<Blake2sHasher>(*size, ApiVersion::V1_1_0);
                 let mut parents = vec![0; graph.degree()];
                 start_profile(&format!("parents-blake2s-{}", *size));
                 b.iter(|| black_box(parents_loop::<Blake2sHasher, _>(&graph, &mut parents)));
@@ -59,7 +61,7 @@ fn parents_loop_benchmark(cc: &mut Criterion) {
             sizes,
         )
         .with_function("Sha256", |b, degree| {
-            let graph = pregenerate_graph::<Sha256Hasher>(*degree);
+            let graph = pregenerate_graph::<Sha256Hasher>(*degree, ApiVersion::V1_1_0);
             let mut parents = vec![0; graph.degree()];
             b.iter(|| black_box(parents_loop::<Sha256Hasher, _>(&graph, &mut parents)))
         }),

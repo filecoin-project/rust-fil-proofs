@@ -10,6 +10,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 use storage_proofs_core::{
+    api_version::ApiVersion,
     crypto::sloth,
     drgraph::Graph,
     error::Result,
@@ -69,6 +70,7 @@ pub struct SetupParams {
     pub drg: DrgParams,
     pub private: bool,
     pub challenges_count: usize,
+    pub api_version: ApiVersion,
 }
 
 #[derive(Debug, Clone)]
@@ -251,6 +253,7 @@ where
             sp.drg.degree,
             sp.drg.expansion_degree,
             sp.drg.porep_id,
+            sp.api_version,
         )?;
 
         Ok(PublicParams::new(graph, sp.private, sp.challenges_count))
@@ -663,6 +666,7 @@ mod tests {
             },
             private: false,
             challenges_count: 1,
+            api_version: ApiVersion::V1_1_0,
         };
 
         let pp: PublicParams<Tree::Hasher, BucketGraph<Tree::Hasher>> =
@@ -737,6 +741,7 @@ mod tests {
             },
             private: false,
             challenges_count: 1,
+            api_version: ApiVersion::V1_1_0,
         };
 
         let pp =
@@ -825,6 +830,7 @@ mod tests {
                 },
                 private: false,
                 challenges_count: 2,
+                api_version: ApiVersion::V1_1_0,
             };
 
             let pp = DrgPoRep::<Tree::Hasher, BucketGraph<_>>::setup(&sp).expect("setup failed");
