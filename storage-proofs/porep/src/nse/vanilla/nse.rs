@@ -1,3 +1,4 @@
+use std::iter;
 use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
 
@@ -9,10 +10,10 @@ use merkletree::store::{Store, StoreConfig};
 use neptune::poseidon::Poseidon;
 use serde::{Deserialize, Serialize};
 use storage_proofs_core::{
-    hasher::{Domain, Hasher, POSEIDON_CONSTANTS_15_BASE},
+    hasher::{Domain, Hasher, POSEIDON_CONSTANTS_15_BASE, POSEIDON_CONSTANTS_2},
     merkle::{
         split_config, split_config_and_replica, BinaryMerkleTree, DiskStore, LCStore, MerkleProof,
-        MerkleTreeTrait, MerkleTreeWrapper,
+        MerkleProofTrait, MerkleTreeTrait, MerkleTreeWrapper,
     },
     parameter_cache::ParameterSetMetadata,
 };
@@ -81,10 +82,8 @@ impl<Tree: MerkleTreeTrait> ParameterSetMetadata for PublicParams<Tree> {
 /// Stored along side the sector on disk.
 #[derive(Default, Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct PersistentAux<D> {
-    /// The commitments for the individual layers.
-    pub comm_layers: Vec<D>,
-    /// The commitment of the replica.
-    pub comm_replica: D,
+    // The roots of all layer trees.
+    pub layer_roots: Vec<D>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -297,15 +296,18 @@ pub struct Proof<Tree: MerkleTreeTrait, G: Hasher> {
         deserialize = "LayerProof<Tree, G>: Deserialize<'de>"
     ))]
     pub layer_proofs: Vec<LayerProof<Tree, G>>,
-    /// The roots of the merkle tree layers, including the replica layer.
-    pub comm_layers: Vec<<Tree::Hasher as Hasher>::Domain>,
+}
+
+impl<Tree: MerkleTreeTrait, G: Hasher> Proof<Tree, G> {
+    pub fn layer_roots(&self) -> Vec<<Tree::Hasher as Hasher>::Domain> {
+        self.layer_proofs[0].layer_roots()
+    }
 }
 
 impl<Tree: MerkleTreeTrait, G: Hasher> Clone for Proof<Tree, G> {
     fn clone(&self) -> Self {
         Self {
             layer_proofs: self.layer_proofs.clone(),
-            comm_layers: self.comm_layers.clone(),
         }
     }
 }
@@ -333,6 +335,17 @@ pub struct LayerProof<Tree: MerkleTreeTrait, G: Hasher> {
         deserialize = "NodeProof<Tree, G>: Deserialize<'de>"
     ))]
     pub last_layer_proof: NodeProof<Tree, G>,
+}
+
+impl<Tree: MerkleTreeTrait, G: Hasher> LayerProof<Tree, G> {
+    pub fn layer_roots(&self) -> Vec<<Tree::Hasher as Hasher>::Domain> {
+        iter::once(&self.first_layer_proof)
+            .chain(self.expander_layer_proofs.iter())
+            .chain(self.butterfly_layer_proofs.iter())
+            .chain(iter::once(&self.last_layer_proof))
+            .map(|node_proof| node_proof.layer_proof.root())
+            .collect()
+    }
 }
 
 impl<Tree: MerkleTreeTrait, G: Hasher> Clone for LayerProof<Tree, G> {
@@ -399,19 +412,21 @@ impl<Tree: MerkleTreeTrait, G: Hasher> Clone for NodeProof<Tree, G> {
     }
 }
 
-/// Calculate the comm_r hash.
-pub fn hash_comm_r<D: Domain>(comm_layers: &[D], comm_replica: D) -> Fr {
-    assert!(comm_layers.len() <= MAX_COMM_R_ARITY, "too many layers");
+// Hash all but the last layer's root to produce comm_layers.
+pub fn hash_comm_layers<D: Domain>(layer_roots_sans_last: &[D]) -> Fr {
+    let len = layer_roots_sans_last.len();
+    assert!(len != 0 && len <= 15);
+    let consts = POSEIDON_CONSTANTS_15_BASE.with_length(len);
+    let layer_roots_sans_last: Vec<Fr> = layer_roots_sans_last
+        .iter()
+        .map(|&layer_root| layer_root.into())
+        .collect();
+    let mut hasher = Poseidon::new_with_preimage(&layer_roots_sans_last, &consts);
+    hasher.hash()
+}
 
-    let mut data: Vec<Fr> = Vec::with_capacity(comm_layers.len() + 1);
-    data.extend(comm_layers.iter().map(|v| {
-        let fr: Fr = (*v).into();
-        fr
-    }));
-    let comm_replica_fr: Fr = comm_replica.into();
-    data.push(comm_replica_fr);
-
-    let c = POSEIDON_CONSTANTS_15_BASE.with_length(data.len());
-    let mut p = Poseidon::new_with_preimage(&data, &c);
-    p.hash().into()
+pub fn hash_comm_r<D: Domain>(comm_layers: D, root_r: D) -> Fr {
+    let preimg: [Fr; 2] = [comm_layers.into(), root_r.into()];
+    let mut hasher = Poseidon::new_with_preimage(&preimg[..], &*POSEIDON_CONSTANTS_2);
+    hasher.hash()
 }

@@ -179,12 +179,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher>
                 .cloned()
                 .map(Into::into)
                 .collect(),
-            comm_layers: vanilla_proof
-                .comm_layers
-                .iter()
-                .cloned()
-                .map(Some)
-                .collect(),
+            layer_roots: vanilla_proof.layer_roots().into_iter().map(Some).collect(),
         })
     }
 
@@ -201,7 +196,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher>
             layer_proofs: (0..public_params.num_layer_challenges)
                 .map(|_| LayerProof::blank(config))
                 .collect(),
-            comm_layers: (0..config.num_layers()).map(|_| None).collect(),
+            layer_roots: (0..config.num_layers()).map(|_| None).collect(),
         }
     }
 }
