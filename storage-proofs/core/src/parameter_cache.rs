@@ -14,7 +14,7 @@ use sha2::{Digest, Sha256};
 
 use std::collections::{BTreeMap, HashSet};
 use std::fs::{self, create_dir_all, File};
-use std::io::{self, SeekFrom};
+use std::io::{self, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
@@ -80,7 +80,7 @@ pub fn get_verifying_key_data(cache_id: &str) -> Option<&ParameterData> {
 
 impl LockedFile {
     pub fn open_exclusive_read<P: AsRef<Path>>(p: P) -> io::Result<Self> {
-        let f = fs::OpenOptions::new().read(true).open(p)?;
+        let f = fs::OpenOptions::new().read(true).create(false).open(p)?;
         f.lock_exclusive()?;
 
         Ok(LockedFile(f))
@@ -90,7 +90,7 @@ impl LockedFile {
         let f = fs::OpenOptions::new()
             .read(true)
             .write(true)
-            .create(true)
+            .create_new(true)
             .open(p)?;
         f.lock_exclusive()?;
 
@@ -98,7 +98,7 @@ impl LockedFile {
     }
 
     pub fn open_shared_read<P: AsRef<Path>>(p: P) -> io::Result<Self> {
-        let f = fs::OpenOptions::new().read(true).open(p)?;
+        let f = fs::OpenOptions::new().read(true).create(false).open(p)?;
         f.lock_shared()?;
 
         Ok(LockedFile(f))
@@ -236,6 +236,7 @@ where
         let meta_path = ensure_ancestor_dirs_exist(parameter_cache_metadata_path(&id))?;
         read_cached_metadata(&meta_path)
             .or_else(|_| write_cached_metadata(&meta_path, Self::cache_meta(pub_params)))
+            .map_err(Into::into)
     }
 
     /// If the rng option argument is set, parameters will be
@@ -277,9 +278,16 @@ where
         read_cached_params(&cache_path).or_else(|err| match err.downcast::<Error>() {
             Ok(error @ Error::InvalidParameters(_)) => Err(error.into()),
             _ => {
-                write_cached_params(&cache_path, generate()?).unwrap_or_else(|e| {
-                    panic!("{}: failed to write generated parameters to cache", e)
-                });
+                // if the file already exists, another process is already trying to generate these.
+                if !cache_path.exists() {
+                    match write_cached_params(&cache_path, generate()?) {
+                        Ok(_) => {}
+                        Err(e) if e.kind() == io::ErrorKind::AlreadyExists => {
+                            // other thread just wrote it, do nothing
+                        }
+                        Err(e) => panic!("{}: failed to write generated parameters to cache", e),
+                    }
+                }
                 Ok(read_cached_params(&cache_path)?)
             }
         })
@@ -305,12 +313,14 @@ where
 
         // generate (or load) verifying key
         let cache_path = ensure_ancestor_dirs_exist(parameter_cache_verifying_key_path(&id))?;
-        read_cached_verifying_key(&cache_path)
-            .or_else(|_| write_cached_verifying_key(&cache_path, generate()?))
+        match read_cached_verifying_key(&cache_path) {
+            Ok(key) => Ok(key),
+            Err(_) => write_cached_verifying_key(&cache_path, generate()?).map_err(Into::into),
+        }
     }
 }
 
-fn ensure_parent(path: &PathBuf) -> Result<()> {
+fn ensure_parent(path: &PathBuf) -> io::Result<()> {
     match path.parent() {
         Some(dir) => {
             create_dir_all(dir)?;
@@ -348,11 +358,15 @@ pub fn read_cached_params(cache_entry_path: &PathBuf) -> Result<groth16::MappedP
                     .is_none();
                 if not_yet_verified {
                     info!("generating consistency digest for parameters");
-                    let hash = with_exclusive_read_lock(cache_entry_path, |mut file| {
-                        let mut hasher = Blake2bParams::new().to_state();
-                        io::copy(&mut file, &mut hasher).expect("copying file into hasher failed");
-                        Ok(hasher.finalize())
-                    })?;
+                    let hash = with_exclusive_read_lock::<_, io::Error, _>(
+                        cache_entry_path,
+                        |mut file| {
+                            let mut hasher = Blake2bParams::new().to_state();
+                            io::copy(&mut file, &mut hasher)
+                                .expect("copying file into hasher failed");
+                            Ok(hasher.finalize())
+                        },
+                    )?;
                     info!("generated consistency digest for parameters");
 
                     // The hash in the parameters file is truncated to 256 bits.
@@ -377,16 +391,19 @@ pub fn read_cached_params(cache_entry_path: &PathBuf) -> Result<groth16::MappedP
         }
     }
 
-    with_exclusive_read_lock(cache_entry_path, |_| {
+    with_exclusive_read_lock::<_, io::Error, _>(cache_entry_path, |_file| {
         let mapped_params =
             Parameters::build_mapped_parameters(cache_entry_path.to_path_buf(), false)?;
         info!("read parameters from cache {:?} ", cache_entry_path);
 
         Ok(mapped_params)
     })
+    .map_err(Into::into)
 }
 
-fn read_cached_verifying_key(cache_entry_path: &PathBuf) -> Result<groth16::VerifyingKey<Bls12>> {
+fn read_cached_verifying_key(
+    cache_entry_path: &PathBuf,
+) -> io::Result<groth16::VerifyingKey<Bls12>> {
     info!(
         "checking cache_path: {:?} for verifying key",
         cache_entry_path
@@ -399,7 +416,7 @@ fn read_cached_verifying_key(cache_entry_path: &PathBuf) -> Result<groth16::Veri
     })
 }
 
-fn read_cached_metadata(cache_entry_path: &PathBuf) -> Result<CacheEntryMetadata> {
+fn read_cached_metadata(cache_entry_path: &PathBuf) -> io::Result<CacheEntryMetadata> {
     info!("checking cache_path: {:?} for metadata", cache_entry_path);
     with_exclusive_read_lock(cache_entry_path, |file| {
         let value = serde_json::from_reader(file)?;
@@ -412,7 +429,7 @@ fn read_cached_metadata(cache_entry_path: &PathBuf) -> Result<CacheEntryMetadata
 fn write_cached_metadata(
     cache_entry_path: &PathBuf,
     value: CacheEntryMetadata,
-) -> Result<CacheEntryMetadata> {
+) -> io::Result<CacheEntryMetadata> {
     with_exclusive_lock(cache_entry_path, |file| {
         serde_json::to_writer(file, &value)?;
         info!("wrote metadata to cache {:?} ", cache_entry_path);
@@ -424,9 +441,10 @@ fn write_cached_metadata(
 fn write_cached_verifying_key(
     cache_entry_path: &PathBuf,
     value: groth16::VerifyingKey<Bls12>,
-) -> Result<groth16::VerifyingKey<Bls12>> {
-    with_exclusive_lock(cache_entry_path, |file| {
-        value.write(file)?;
+) -> io::Result<groth16::VerifyingKey<Bls12>> {
+    with_exclusive_lock(cache_entry_path, |mut file| {
+        value.write(&mut file)?;
+        file.flush()?;
         info!("wrote verifying key to cache {:?} ", cache_entry_path);
 
         Ok(value)
@@ -436,34 +454,42 @@ fn write_cached_verifying_key(
 fn write_cached_params(
     cache_entry_path: &PathBuf,
     value: groth16::Parameters<Bls12>,
-) -> Result<groth16::Parameters<Bls12>> {
-    with_exclusive_lock(cache_entry_path, |file| {
-        value.write(file)?;
+) -> io::Result<groth16::Parameters<Bls12>> {
+    with_exclusive_lock(cache_entry_path, |mut file| {
+        value.write(&mut file)?;
+        file.flush()?;
         info!("wrote groth parameters to cache {:?} ", cache_entry_path);
 
         Ok(value)
     })
 }
 
-pub fn with_exclusive_lock<T>(
-    file_path: &PathBuf,
-    f: impl FnOnce(&mut LockedFile) -> Result<T>,
-) -> Result<T> {
+pub fn with_exclusive_lock<T, E, F>(file_path: &PathBuf, f: F) -> std::result::Result<T, E>
+where
+    F: FnOnce(&mut LockedFile) -> std::result::Result<T, E>,
+    E: From<io::Error>,
+{
     with_open_file(file_path, LockedFile::open_exclusive, f)
 }
 
-pub fn with_exclusive_read_lock<T>(
-    file_path: &PathBuf,
-    f: impl FnOnce(&mut LockedFile) -> Result<T>,
-) -> Result<T> {
+pub fn with_exclusive_read_lock<T, E, F>(file_path: &PathBuf, f: F) -> std::result::Result<T, E>
+where
+    F: FnOnce(&mut LockedFile) -> std::result::Result<T, E>,
+    E: From<io::Error>,
+{
     with_open_file(file_path, LockedFile::open_exclusive_read, f)
 }
 
-pub fn with_open_file<'a, T>(
+pub fn with_open_file<'a, T, E, F, G>(
     file_path: &'a PathBuf,
-    open_file: impl FnOnce(&'a PathBuf) -> io::Result<LockedFile>,
-    f: impl FnOnce(&mut LockedFile) -> Result<T>,
-) -> Result<T> {
+    open_file: G,
+    f: F,
+) -> std::result::Result<T, E>
+where
+    F: FnOnce(&mut LockedFile) -> std::result::Result<T, E>,
+    G: FnOnce(&'a PathBuf) -> io::Result<LockedFile>,
+    E: From<io::Error>,
+{
     ensure_parent(&file_path)?;
     f(&mut open_file(&file_path)?)
 }

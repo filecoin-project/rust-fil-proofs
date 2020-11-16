@@ -144,7 +144,7 @@ fn seal_lifecycle<Tree: 'static + MerkleTreeTrait>(
 }
 
 fn get_layer_file_paths(cache_dir: &tempfile::TempDir) -> Vec<PathBuf> {
-    fs::read_dir(&cache_dir)
+    let mut list: Vec<_> = fs::read_dir(&cache_dir)
         .expect("failed to read read directory ")
         .filter_map(|entry| {
             let cur = entry.expect("reading directory failed");
@@ -156,7 +156,9 @@ fn get_layer_file_paths(cache_dir: &tempfile::TempDir) -> Vec<PathBuf> {
                 None
             }
         })
-        .collect()
+        .collect();
+    list.sort();
+    list
 }
 
 fn clear_cache_dir_keep_data_layer(cache_dir: &tempfile::TempDir) {

@@ -157,9 +157,21 @@ impl ParentCache {
     {
         let path = cache_path(cache_entries, graph);
         if path.exists() {
-            Self::open(len, cache_entries, graph, path)
+            Self::open(len, cache_entries, graph, &path)
         } else {
-            Self::generate(len, cache_entries, graph, path)
+            match Self::generate(len, cache_entries, graph, &path) {
+                Ok(c) => Ok(c),
+                Err(err) => {
+                    match err.downcast::<std::io::Error>() {
+                        Ok(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
+                            // cache was written from another process, just read it
+                            Self::open(len, cache_entries, graph, &path)
+                        }
+                        Ok(error) => Err(error.into()),
+                        Err(error) => Err(error),
+                    }
+                }
+            }
         }
     }
 
@@ -171,7 +183,7 @@ impl ParentCache {
         len: u32,
         cache_entries: u32,
         graph: &StackedGraph<H, G>,
-        path: PathBuf,
+        path: &PathBuf,
     ) -> Result<Self>
     where
         H: Hasher,
@@ -247,8 +259,10 @@ impl ParentCache {
                         "[!!!] Parent cache digest mismatch detected.  Regenerating {}",
                         path.display()
                     );
+                    // delete invalid cache
+                    std::fs::remove_file(path)?;
                     ensure!(
-                        Self::generate(len, graph.size() as u32, graph, path.clone()).is_ok(),
+                        Self::generate(len, graph.size() as u32, graph, path).is_ok(),
                         "Failed to generate parent cache"
                     );
 
@@ -260,7 +274,7 @@ impl ParentCache {
 
         Ok(ParentCache {
             cache: CacheData::open(0, len, &path)?,
-            path,
+            path: path.clone(),
             num_cache_entries: cache_entries,
             sector_size: graph.size() * NODE_SIZE,
             digest: digest_hex,
@@ -272,7 +286,7 @@ impl ParentCache {
         len: u32,
         cache_entries: u32,
         graph: &StackedGraph<H, G>,
-        path: PathBuf,
+        path: &PathBuf,
     ) -> Result<Self>
     where
         H: Hasher,
@@ -343,7 +357,7 @@ impl ParentCache {
 
         Ok(ParentCache {
             cache: CacheData::open(0, len, &path)?,
-            path,
+            path: path.clone(),
             num_cache_entries: cache_entries,
             sector_size,
             digest: digest_hex,
