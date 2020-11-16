@@ -172,7 +172,7 @@ impl HashFunction<Sha256Domain> for Sha256Function {
         res
     }
 
-    fn hash_multi_leaf_circuit<Arity, CS: ConstraintSystem<Bls12>>(
+    fn hash_multi_leaf_circuit<CS: ConstraintSystem<Bls12>>(
         mut cs: CS,
         leaves: &[num::AllocatedNum<Bls12>],
         _height: usize,

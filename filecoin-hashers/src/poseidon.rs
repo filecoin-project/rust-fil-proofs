@@ -14,8 +14,8 @@ use neptune::poseidon::Poseidon;
 use serde::{Deserialize, Serialize};
 
 use crate::types::{
-    Domain, HashFunction, Hasher, PoseidonArity, PoseidonMDArity, POSEIDON_CONSTANTS_16,
-    POSEIDON_CONSTANTS_2, POSEIDON_CONSTANTS_4, POSEIDON_CONSTANTS_8, POSEIDON_MD_CONSTANTS,
+    Domain, HashFunction, Hasher, PoseidonMDArity, POSEIDON_CONSTANTS_16, POSEIDON_CONSTANTS_2,
+    POSEIDON_CONSTANTS_4, POSEIDON_CONSTANTS_8, POSEIDON_MD_CONSTANTS,
 };
 
 #[derive(Default, Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -266,23 +266,38 @@ impl HashFunction<PoseidonDomain> for PoseidonFunction {
     ) -> ::std::result::Result<num::AllocatedNum<Bls12>, SynthesisError> {
         let preimage = vec![left.clone(), right.clone()];
 
-        poseidon_hash::<CS, Bls12, typenum::U2>(cs, preimage, typenum::U2::PARAMETERS())
+        poseidon_hash::<CS, Bls12, typenum::U2>(cs, preimage, &POSEIDON_CONSTANTS_2)
     }
 
-    fn hash_multi_leaf_circuit<Arity: 'static + PoseidonArity, CS: ConstraintSystem<Bls12>>(
+    fn hash_multi_leaf_circuit<CS: ConstraintSystem<Bls12>>(
         cs: CS,
         leaves: &[num::AllocatedNum<Bls12>],
         _height: usize,
-    ) -> ::std::result::Result<num::AllocatedNum<Bls12>, SynthesisError> {
-        let params = Arity::PARAMETERS();
-        poseidon_hash::<CS, Bls12, Arity>(cs, leaves.to_vec(), params)
+    ) -> std::result::Result<num::AllocatedNum<Bls12>, SynthesisError> {
+        match leaves.len() {
+            2 => {
+                poseidon_hash::<CS, Bls12, typenum::U2>(cs, leaves.to_vec(), &POSEIDON_CONSTANTS_2)
+            }
+            4 => {
+                poseidon_hash::<CS, Bls12, typenum::U4>(cs, leaves.to_vec(), &POSEIDON_CONSTANTS_4)
+            }
+            8 => {
+                poseidon_hash::<CS, Bls12, typenum::U8>(cs, leaves.to_vec(), &POSEIDON_CONSTANTS_8)
+            }
+            16 => poseidon_hash::<CS, Bls12, typenum::U16>(
+                cs,
+                leaves.to_vec(),
+                &POSEIDON_CONSTANTS_16,
+            ),
+            _ => panic!("Unsupported arity for Poseidon hasher: {}", leaves.len()),
+        }
     }
 
     fn hash_md_circuit<CS: ConstraintSystem<Bls12>>(
         cs: &mut CS,
         elements: &[num::AllocatedNum<Bls12>],
     ) -> ::std::result::Result<num::AllocatedNum<Bls12>, SynthesisError> {
-        let params = PoseidonMDArity::PARAMETERS();
+        let params = &POSEIDON_MD_CONSTANTS;
         let arity = PoseidonMDArity::to_usize();
 
         let mut hash = elements[0].clone();
@@ -325,7 +340,7 @@ impl HashFunction<PoseidonDomain> for PoseidonFunction {
         CS: ConstraintSystem<Bls12>,
     {
         let preimage = vec![a.clone(), b.clone()];
-        poseidon_hash::<CS, Bls12, typenum::U2>(cs, preimage, typenum::U2::PARAMETERS())
+        poseidon_hash::<CS, Bls12, typenum::U2>(cs, preimage, &POSEIDON_CONSTANTS_2)
     }
 }
 

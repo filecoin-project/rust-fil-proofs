@@ -75,7 +75,7 @@ pub trait HashFunction<T: Domain>:
         Self::hash_leaf_bits_circuit(cs, &left_bits, &right_bits, height)
     }
 
-    fn hash_multi_leaf_circuit<Arity: 'static + PoseidonArity, CS: ConstraintSystem<Bls12>>(
+    fn hash_multi_leaf_circuit<CS: ConstraintSystem<Bls12>>(
         cs: CS,
         leaves: &[num::AllocatedNum<Bls12>],
         height: usize,

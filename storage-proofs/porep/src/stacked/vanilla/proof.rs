@@ -8,7 +8,7 @@ use std::sync::{mpsc, Arc, Mutex, RwLock};
 use anyhow::Context;
 use bellperson::bls::Fr;
 use bincode::deserialize;
-use filecoin_hashers::{Domain, HashFunction, Hasher, PoseidonArity};
+use filecoin_hashers::{Domain, HashFunction, Hasher};
 use generic_array::typenum::{self, Unsigned};
 use log::*;
 use merkletree::merkle::{
@@ -46,7 +46,6 @@ use super::{
 };
 
 use ff::Field;
-use generic_array::{sequence::GenericSequence, GenericArray};
 use neptune::batch_hasher::BatcherType;
 use neptune::column_tree_builder::{ColumnTreeBuilder, ColumnTreeBuilderTrait};
 use neptune::tree_builder::{TreeBuilder, TreeBuilderTrait};
@@ -389,8 +388,8 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         labels: &LabelsCache<Tree>,
     ) -> Result<DiskTree<Tree::Hasher, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>>
     where
-        ColumnArity: 'static + PoseidonArity,
-        TreeArity: PoseidonArity,
+        ColumnArity: 'static + MerkleArity,
+        TreeArity: MerkleArity,
     {
         if settings::SETTINGS.use_gpu_column_builder {
             Self::generate_tree_c_gpu::<ColumnArity, TreeArity>(
@@ -420,8 +419,8 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         labels: &LabelsCache<Tree>,
     ) -> Result<DiskTree<Tree::Hasher, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>>
     where
-        ColumnArity: 'static + PoseidonArity,
-        TreeArity: PoseidonArity,
+        ColumnArity: 'static + MerkleArity,
+        TreeArity: MerkleArity,
     {
         info!("generating tree c using the GPU");
         // Build the tree for CommC
@@ -462,43 +461,21 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                                 tree_count,
                                 chunked_nodes_count,
                             );
-                            let mut columns: Vec<GenericArray<Fr, ColumnArity>> = vec![
-                                GenericArray::<Fr, ColumnArity>::generate(|_i: usize| Fr::zero());
-                                chunked_nodes_count
-                            ];
+                            let mut columns =
+                                vec![Fr::zero(); ColumnArity::to_usize() * chunked_nodes_count];
 
-                            // Allocate layer data array and insert a placeholder for each layer.
-                            let mut layer_data: Vec<Vec<Fr>> =
-                                vec![Vec::with_capacity(chunked_nodes_count); layers];
-
-                            rayon::scope(|s| {
-                                // capture a shadowed version of layer_data.
-                                let layer_data: &mut Vec<_> = &mut layer_data;
-
-                                // gather all layer data in parallel.
-                                s.spawn(move |_| {
-                                    for (layer_index, layer_elements) in
-                                        layer_data.iter_mut().enumerate()
-                                    {
-                                        let store = labels.labels_for_layer(layer_index + 1);
-                                        let start = (i * nodes_count) + node_index;
-                                        let end = start + chunked_nodes_count;
-                                        let elements: Vec<<Tree::Hasher as Hasher>::Domain> = store
-                                            .read_range(std::ops::Range { start, end })
-                                            .expect("failed to read store range");
-                                        layer_elements.extend(elements.into_iter().map(Into::into));
-                                    }
-                                });
-                            });
-
-                            // Copy out all layer data arranged into columns.
                             for layer_index in 0..layers {
-                                for index in 0..chunked_nodes_count {
-                                    columns[index][layer_index] = layer_data[layer_index][index];
+                                let store = labels.labels_for_layer(layer_index + 1);
+                                let start = (i * nodes_count) + node_index;
+                                let end = start + chunked_nodes_count;
+                                let elements: Vec<<Tree::Hasher as Hasher>::Domain> = store
+                                    .read_range(std::ops::Range { start, end })
+                                    .expect("failed to read store range");
+
+                                for (index, el) in elements.into_iter().enumerate() {
+                                    columns[index * chunked_nodes_count + layer_index] = el.into();
                                 }
                             }
-
-                            drop(layer_data);
 
                             node_index += chunked_nodes_count;
                             trace!(
@@ -515,6 +492,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                         }
                     }
                 });
+
                 s.spawn(move |_| {
                     let _gpu_lock = GPU_LOCK.lock().unwrap();
                     let mut column_tree_builder = ColumnTreeBuilder::<ColumnArity, TreeArity>::new(
@@ -527,7 +505,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
 
                     // Loop until all trees for all configs have been built.
                     for i in 0..config_count {
-                        let (columns, is_final): (Vec<GenericArray<Fr, ColumnArity>>, bool) =
+                        let (columns, is_final): (Vec<Fr>, bool) =
                             builder_rx.recv().expect("failed to recv columns");
 
                         // Just add non-final column batches.
@@ -638,8 +616,8 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         labels: &LabelsCache<Tree>,
     ) -> Result<DiskTree<Tree::Hasher, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>>
     where
-        ColumnArity: PoseidonArity,
-        TreeArity: PoseidonArity,
+        ColumnArity: MerkleArity,
+        TreeArity: MerkleArity,
     {
         info!("generating tree c using the CPU");
         measure_op(GenerateTreeC, || {
@@ -708,7 +686,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         labels: &LabelsCache<Tree>,
     ) -> Result<LCTree<Tree::Hasher, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>>
     where
-        TreeArity: PoseidonArity,
+        TreeArity: MerkleArity,
     {
         let (configs, replica_config) = split_config_and_replica(
             tree_r_last_config.clone(),
@@ -1182,7 +1160,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         replica_path: PathBuf,
     ) -> Result<LCTree<Tree::Hasher, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>>
     where
-        TreeArity: PoseidonArity,
+        TreeArity: MerkleArity,
     {
         let (configs, replica_config) = split_config_and_replica(
             tree_r_last_config.clone(),

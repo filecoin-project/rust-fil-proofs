@@ -12,3 +12,6 @@ members = [
   "phase2",
   "filecoin-hashers",
 ]
+
+[patch.crates-io]
+neptune = { git = "https://github.com/filecoin-project/neptune", branch = "refacor-arity" }

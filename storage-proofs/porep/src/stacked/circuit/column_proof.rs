@@ -1,10 +1,10 @@
 use bellperson::bls::Bls12;
 use bellperson::{ConstraintSystem, SynthesisError};
-use filecoin_hashers::{Hasher, PoseidonArity};
+use filecoin_hashers::Hasher;
 use storage_proofs_core::{
     drgraph::Graph,
     gadgets::por::AuthPath,
-    merkle::{MerkleProofTrait, MerkleTreeTrait, Store},
+    merkle::{MerkleArity, MerkleProofTrait, MerkleTreeTrait, Store},
 };
 
 use super::column::{AllocatedColumn, Column};
@@ -13,9 +13,9 @@ use crate::stacked::{ColumnProof as VanillaColumnProof, PublicParams};
 #[derive(Debug, Clone)]
 pub struct ColumnProof<
     H: Hasher,
-    U: 'static + PoseidonArity,
-    V: 'static + PoseidonArity,
-    W: 'static + PoseidonArity,
+    U: 'static + MerkleArity,
+    V: 'static + MerkleArity,
+    W: 'static + MerkleArity,
 > {
     column: Column,
     inclusion_path: AuthPath<H, U, V, W>,
@@ -23,9 +23,9 @@ pub struct ColumnProof<
 
 impl<
         H: 'static + Hasher,
-        U: 'static + PoseidonArity,
-        V: 'static + PoseidonArity,
-        W: 'static + PoseidonArity,
+        U: 'static + MerkleArity,
+        V: 'static + MerkleArity,
+        W: 'static + MerkleArity,
     > ColumnProof<H, U, V, W>
 {
     /// Create an empty `ColumnProof`, used in `blank_circuit`s.

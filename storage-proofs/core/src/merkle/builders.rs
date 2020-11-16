@@ -2,7 +2,7 @@ use std::io::Write;
 use std::path::PathBuf;
 
 use anyhow::{ensure, Result};
-use filecoin_hashers::{Domain, Hasher, PoseidonArity};
+use filecoin_hashers::{Domain, Hasher};
 use generic_array::typenum::{self, Unsigned};
 use log::trace;
 use merkletree::merkle;
@@ -230,7 +230,7 @@ pub fn create_base_merkle_tree<Tree: MerkleTreeTrait>(
 /// replica path (since the replica file will contain the same data),
 /// we pass both since we have access from all callers and this avoids
 /// reading that data from the replica_config here.
-pub fn create_base_lcmerkle_tree<H: Hasher, BaseTreeArity: 'static + PoseidonArity>(
+pub fn create_base_lcmerkle_tree<H: Hasher, BaseTreeArity: 'static + MerkleArity>(
     config: StoreConfig,
     size: usize,
     data: &[u8],

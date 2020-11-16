@@ -7,7 +7,7 @@ use bellperson::gadgets::boolean::{AllocatedBit, Boolean};
 use bellperson::gadgets::{multipack, num};
 use bellperson::{Circuit, ConstraintSystem, SynthesisError};
 use ff::PrimeField;
-use filecoin_hashers::{HashFunction, Hasher, PoseidonArity};
+use filecoin_hashers::{HashFunction, Hasher};
 use generic_array::typenum::Unsigned;
 
 use crate::compound_proof::{CircuitComponent, CompoundProof};
@@ -15,7 +15,7 @@ use crate::error::Result;
 use crate::gadgets::constraint;
 use crate::gadgets::insertion::insert;
 use crate::gadgets::variables::Root;
-use crate::merkle::{base_path_length, MerkleProofTrait, MerkleTreeTrait};
+use crate::merkle::{base_path_length, MerkleArity, MerkleProofTrait, MerkleTreeTrait};
 use crate::parameter_cache::{CacheableParameters, ParameterSetMetadata};
 use crate::por::PoR;
 use crate::proof::ProofScheme;
@@ -40,21 +40,17 @@ pub struct PoRCircuit<Tree: MerkleTreeTrait> {
 #[derive(Debug, Clone)]
 pub struct AuthPath<
     H: Hasher,
-    U: 'static + PoseidonArity,
-    V: 'static + PoseidonArity,
-    W: 'static + PoseidonArity,
+    U: 'static + MerkleArity,
+    V: 'static + MerkleArity,
+    W: 'static + MerkleArity,
 > {
     base: SubPath<H, U>,
     sub: SubPath<H, V>,
     top: SubPath<H, W>,
 }
 
-impl<
-        H: Hasher,
-        U: 'static + PoseidonArity,
-        V: 'static + PoseidonArity,
-        W: 'static + PoseidonArity,
-    > From<Vec<(Vec<Option<Fr>>, Option<usize>)>> for AuthPath<H, U, V, W>
+impl<H: Hasher, U: 'static + MerkleArity, V: 'static + MerkleArity, W: 'static + MerkleArity>
+    From<Vec<(Vec<Option<Fr>>, Option<usize>)>> for AuthPath<H, U, V, W>
 {
     fn from(mut base_opts: Vec<(Vec<Option<Fr>>, Option<usize>)>) -> Self {
         let has_top = W::to_usize() > 0;
@@ -115,19 +111,19 @@ impl<
 }
 
 #[derive(Debug, Clone)]
-struct SubPath<H: Hasher, Arity: 'static + PoseidonArity> {
+struct SubPath<H: Hasher, Arity: 'static + MerkleArity> {
     path: Vec<PathElement<H, Arity>>,
 }
 
 #[derive(Debug, Clone)]
-struct PathElement<H: Hasher, Arity: 'static + PoseidonArity> {
+struct PathElement<H: Hasher, Arity: 'static + MerkleArity> {
     hashes: Vec<Option<Fr>>,
     index: Option<usize>,
     _a: PhantomData<Arity>,
     _h: PhantomData<H>,
 }
 
-impl<H: Hasher, Arity: 'static + PoseidonArity> SubPath<H, Arity> {
+impl<H: Hasher, Arity: 'static + MerkleArity> SubPath<H, Arity> {
     fn synthesize<CS: ConstraintSystem<Bls12>>(
         self,
         mut cs: CS,
@@ -178,7 +174,7 @@ impl<H: Hasher, Arity: 'static + PoseidonArity> SubPath<H, Arity> {
             let inserted = insert(cs, &cur, &index_bits, &path_hash_nums)?;
 
             // Compute the new subtree value
-            cur = H::Function::hash_multi_leaf_circuit::<Arity, _>(
+            cur = H::Function::hash_multi_leaf_circuit::<_>(
                 cs.namespace(|| "computation of commitment hash"),
                 &inserted,
                 i,
@@ -189,7 +185,7 @@ impl<H: Hasher, Arity: 'static + PoseidonArity> SubPath<H, Arity> {
     }
 }
 
-impl<H: Hasher, U: PoseidonArity, V: PoseidonArity, W: PoseidonArity> AuthPath<H, U, V, W> {
+impl<H: Hasher, U: MerkleArity, V: MerkleArity, W: MerkleArity> AuthPath<H, U, V, W> {
     pub fn blank(leaves: usize) -> Self {
         let has_sub = V::to_usize() > 0;
         let has_top = W::to_usize() > 0;

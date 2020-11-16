@@ -3,14 +3,14 @@ use std::marker::PhantomData;
 use bellperson::bls::{Bls12, Fr};
 use bellperson::gadgets::{boolean::Boolean, num, uint32};
 use bellperson::{ConstraintSystem, SynthesisError};
-use filecoin_hashers::{Hasher, PoseidonArity};
+use filecoin_hashers::Hasher;
 use generic_array::typenum::{U0, U2};
 
 use storage_proofs_core::{
     drgraph::Graph,
     gadgets::por::{AuthPath, PoRCircuit},
     gadgets::{encode::encode, uint64, variables::Root},
-    merkle::{DiskStore, MerkleProofTrait, MerkleTreeTrait, MerkleTreeWrapper},
+    merkle::{DiskStore, MerkleArity, MerkleProofTrait, MerkleTreeTrait, MerkleTreeWrapper},
     util::reverse_bit_numbering,
 };
 
@@ -299,9 +299,9 @@ fn enforce_inclusion<H, U, V, W, CS: ConstraintSystem<Bls12>>(
 ) -> Result<(), SynthesisError>
 where
     H: 'static + Hasher,
-    U: 'static + PoseidonArity,
-    V: 'static + PoseidonArity,
-    W: 'static + PoseidonArity,
+    U: 'static + MerkleArity,
+    V: 'static + MerkleArity,
+    W: 'static + MerkleArity,
 {
     let root = Root::from_allocated::<CS>(root.clone());
     let leaf = Root::from_allocated::<CS>(leaf.clone());

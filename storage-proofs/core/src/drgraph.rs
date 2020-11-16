@@ -2,7 +2,7 @@ use std::cmp::{max, min};
 use std::marker::PhantomData;
 
 use anyhow::ensure;
-use filecoin_hashers::{Hasher, PoseidonArity};
+use filecoin_hashers::Hasher;
 use generic_array::typenum;
 use rand::{Rng, SeedableRng};
 use rand_chacha::ChaCha8Rng;
@@ -11,6 +11,7 @@ use sha2::{Digest, Sha256};
 use crate::crypto::{derive_porep_domain_seed, DRSAMPLE_DST};
 use crate::error::*;
 use crate::fr32::bytes_into_fr_repr_safe;
+use crate::merkle::MerkleArity;
 use crate::parameter_cache::ParameterSetMetadata;
 use crate::util::{data_at_node_offset, NODE_SIZE};
 use crate::{is_legacy_porep_id, PoRepID};
@@ -32,7 +33,7 @@ pub trait Graph<H: Hasher>: ::std::fmt::Debug + Clone + PartialEq + Eq {
     }
 
     /// Returns the merkle tree depth.
-    fn merkle_tree_depth<U: 'static + PoseidonArity>(&self) -> u64 {
+    fn merkle_tree_depth<U: 'static + MerkleArity>(&self) -> u64 {
         graph_height::<U>(self.size()) as u64
     }
 
@@ -250,14 +251,15 @@ mod tests {
     use super::*;
 
     use filecoin_hashers::{
-        blake2s::Blake2sHasher, poseidon::PoseidonHasher, sha256::Sha256Hasher, PoseidonArity,
+        blake2s::Blake2sHasher, poseidon::PoseidonHasher, sha256::Sha256Hasher,
     };
     use memmap::MmapMut;
     use memmap::MmapOptions;
     use merkletree::store::StoreConfig;
 
     use crate::merkle::{
-        create_base_merkle_tree, DiskStore, MerkleProofTrait, MerkleTreeTrait, MerkleTreeWrapper,
+        create_base_merkle_tree, DiskStore, MerkleArity, MerkleProofTrait, MerkleTreeTrait,
+        MerkleTreeWrapper,
     };
 
     // Create and return an object of MmapMut backed by in-memory copy of data.
@@ -349,7 +351,7 @@ mod tests {
         graph_bucket::<Blake2sHasher>();
     }
 
-    fn gen_proof<H: 'static + Hasher, U: 'static + PoseidonArity>(config: Option<StoreConfig>) {
+    fn gen_proof<H: 'static + Hasher, U: 'static + MerkleArity>(config: Option<StoreConfig>) {
         let leafs = 64;
         let porep_id = [1; 32];
         let g = BucketGraph::<H>::new(leafs, BASE_DEGREE, 0, porep_id).unwrap();

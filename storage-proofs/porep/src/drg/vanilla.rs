@@ -2,7 +2,7 @@ use std::marker::PhantomData;
 use std::path::PathBuf;
 
 use anyhow::{ensure, Context};
-use filecoin_hashers::{Domain, HashFunction, Hasher, PoseidonArity};
+use filecoin_hashers::{Domain, HashFunction, Hasher};
 use generic_array::typenum;
 use merkletree::store::{ReplicaConfig, StoreConfig};
 use rayon::prelude::*;
@@ -16,7 +16,7 @@ use storage_proofs_core::{
     fr32::bytes_into_fr_repr_safe,
     merkle::{
         create_base_lcmerkle_tree, create_base_merkle_tree, BinaryLCMerkleTree, BinaryMerkleTree,
-        LCMerkleTree, MerkleProof, MerkleProofTrait, MerkleTreeTrait,
+        LCMerkleTree, MerkleArity, MerkleProof, MerkleProofTrait, MerkleTreeTrait,
     },
     parameter_cache::ParameterSetMetadata,
     proof::{NoRequirements, ProofScheme},
@@ -130,7 +130,7 @@ where
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DataProof<H: Hasher, U: PoseidonArity> {
+pub struct DataProof<H: Hasher, U: MerkleArity> {
     #[serde(bound(
         serialize = "MerkleProof<H, U>: Serialize",
         deserialize = "MerkleProof<H, U>: Deserialize<'de>"
@@ -139,7 +139,7 @@ pub struct DataProof<H: Hasher, U: PoseidonArity> {
     pub data: H::Domain,
 }
 
-impl<H: Hasher, U: 'static + PoseidonArity> DataProof<H, U> {
+impl<H: Hasher, U: 'static + MerkleArity> DataProof<H, U> {
     pub fn new(n: usize) -> Self {
         DataProof {
             proof: MerkleProof::new(n),
@@ -574,7 +574,7 @@ where
 /// Creates the encoding key from a `MerkleTree`.
 /// The algorithm for that is `Blake2s(id | encodedParentNode1 | encodedParentNode1 | ...)`.
 /// It is only public so that it can be used for benchmarking
-pub fn create_key_from_tree<H: Hasher, U: 'static + PoseidonArity>(
+pub fn create_key_from_tree<H: Hasher, U: 'static + MerkleArity>(
     id: &H::Domain,
     node: usize,
     parents: &[u32],
