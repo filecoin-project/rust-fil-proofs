@@ -4,7 +4,7 @@ use bellperson::{
     Circuit, ConstraintSystem, SynthesisError,
 };
 use ff::Field;
-use filecoin_hashers::{HashFunction, Hasher, POSEIDON_CONSTANTS_15_BASE};
+use filecoin_hashers::{HashFunction, Hasher, POSEIDON_CONSTANTS_2_BASE};
 use generic_array::typenum::{Unsigned, U0};
 use neptune::circuit::poseidon_hash;
 use rayon::prelude::*;
@@ -31,8 +31,7 @@ pub struct NseWindowPoStCircuit<Tree: MerkleTreeTrait> {
 #[derive(Clone)]
 pub struct Sector<Tree: MerkleTreeTrait> {
     pub comm_r: Option<Fr>,
-    pub comm_replica: Option<Fr>,
-    pub comm_layers: Vec<Option<Fr>>,
+    pub comm_layers: Option<Fr>,
     pub windows: Vec<Window<Tree>>,
     pub id: Option<Fr>,
 }
@@ -86,26 +85,19 @@ impl<Tree: 'static + MerkleTreeTrait> Sector<Tree> {
         Ok(Sector {
             id: Some(sector.id.into()),
             comm_r: Some(sector.comm_r.into()),
-            comm_replica: Some(vanilla_proof.comm_replica.into()),
-            comm_layers: vanilla_proof
-                .comm_layers
-                .iter()
-                .map(|c| Some((*c).into()))
-                .collect(),
+            comm_layers: Some(vanilla_proof.comm_layers.into()),
             windows,
         })
     }
 
     pub fn blank_circuit(pub_params: &PublicParams) -> Self {
         let windows = vec![Window::blank_circuit(pub_params); pub_params.num_windows()];
-        let comm_layers = vec![None; pub_params.num_layers - 1];
 
         Sector {
             id: None,
             windows,
             comm_r: None,
-            comm_replica: None,
-            comm_layers,
+            comm_layers: None,
         }
     }
 }
@@ -164,14 +156,11 @@ impl<Tree: 'static + MerkleTreeTrait> Circuit<Bls12> for &Sector<Tree> {
         let Sector {
             comm_r,
             comm_layers,
-            comm_replica,
             windows,
             ..
         } = self;
 
-        // 1. Verify comm_r = H(comm_layer_0 | ..)
-
-        // Allocate comm_r
+        // 1. Verify comm_r = H(comm_layers | root_r)
         let comm_r_num = num::AllocatedNum::alloc(cs.namespace(|| "comm_r"), || {
             comm_r
                 .map(Into::into)
@@ -180,49 +169,11 @@ impl<Tree: 'static + MerkleTreeTrait> Circuit<Bls12> for &Sector<Tree> {
 
         comm_r_num.inputize(cs.namespace(|| "comm_r_input"))?;
 
-        // Allocate comm_layers
-        let mut comm_layers_nums = Vec::with_capacity(comm_layers.len());
-        for (layer_index, comm_layer) in comm_layers.iter().enumerate() {
-            let mut cs = cs.namespace(|| format!("layer_{}", layer_index));
-            let comm_layer_num = num::AllocatedNum::alloc(cs.namespace(|| "comm_layer"), || {
-                comm_layer
-                    .map(Into::into)
-                    .ok_or_else(|| SynthesisError::AssignmentMissing)
-            })?;
-
-            comm_layer_num.inputize(cs.namespace(|| "comm_layer_input"))?;
-            comm_layers_nums.push(comm_layer_num);
-        }
-
-        // Allocate comm_replica
-        let comm_replica_num = num::AllocatedNum::alloc(cs.namespace(|| "comm_replica"), || {
-            comm_replica
+        let comm_layers_num = num::AllocatedNum::alloc(cs.namespace(|| "comm_layers"), || {
+            comm_layers
                 .map(Into::into)
                 .ok_or_else(|| SynthesisError::AssignmentMissing)
         })?;
-
-        comm_replica_num.inputize(cs.namespace(|| "comm_replica_input"))?;
-
-        // comm_layers only includes the layers that are not the replica, so need to add it here.
-        comm_layers_nums.push(comm_replica_num.clone());
-
-        // Verify equality
-        {
-            let c = POSEIDON_CONSTANTS_15_BASE.with_length(comm_layers_nums.len());
-            let hash_num = poseidon_hash(
-                &mut cs.namespace(|| "comm_layers_hash"),
-                comm_layers_nums.clone(),
-                &c,
-            )?;
-            constraint::equal(
-                cs,
-                || "enforce comm_r = H(comm_layers)",
-                &comm_r_num,
-                &hash_num,
-            );
-        }
-
-        // 2. Verify comm_replica = Root(MerkleTree(comm_window_0 | ..))
 
         // Allocate window roots
         let mut window_roots = Vec::with_capacity(windows.len());
@@ -238,8 +189,7 @@ impl<Tree: 'static + MerkleTreeTrait> Circuit<Bls12> for &Sector<Tree> {
             window_roots.push(window_root_num);
         }
 
-        // Construct Top MerkleTree
-
+        // Construct the top of the replica tree.
         let mut hashes = window_roots.clone();
         let mut height = 0;
         while hashes.len() != 1 {
@@ -261,16 +211,22 @@ impl<Tree: 'static + MerkleTreeTrait> Circuit<Bls12> for &Sector<Tree> {
             hashes = new_hashes;
             height += 1;
         }
+        let root_r_num = hashes[0].clone();
 
-        // Compare comm_replica with constructed version.
+        // Prove (transitively via root_r) that the window proofs are consistent with comm_r.
+        let comm_r_unverified_num = poseidon_hash(
+            &mut cs.namespace(|| "comm_r_unverified = H(comm_layers | root_r)"),
+            vec![comm_layers_num, root_r_num],
+            &*POSEIDON_CONSTANTS_2_BASE,
+        )?;
         constraint::equal(
             cs,
-            || "enforce top merkletree",
-            &hashes[0],
-            &comm_replica_num,
+            || "enforce comm_r = H(comm_layers, root_r)",
+            &comm_r_num,
+            &comm_r_unverified_num,
         );
 
-        // 3. Verify windows
+        // 2. Verify windows
         for (window_index, window) in windows.iter().enumerate() {
             window.synthesize(
                 cs.namespace(|| format!("window_proof_{}", window_index)),
@@ -370,22 +326,22 @@ mod tests {
 
     #[test]
     fn nse_window_post_poseidon_single_partition_matching_sub_8_4() {
-        nse_window_post::<LCTree<PoseidonHasher, U8, U4, U0>>(3, 3, 1, 40, 28_830);
+        nse_window_post::<LCTree<PoseidonHasher, U8, U4, U0>>(3, 3, 1, 28, 27_558);
     }
 
     #[test]
     fn nse_window_post_poseidon_single_partition_smaller_sub_8_4() {
-        nse_window_post::<LCTree<PoseidonHasher, U8, U4, U0>>(2, 3, 1, 40, 28_830);
+        nse_window_post::<LCTree<PoseidonHasher, U8, U4, U0>>(2, 3, 1, 28, 27_558);
     }
 
     #[test]
     fn nse_window_post_poseidon_two_partitions_matching_sub_8_4() {
-        nse_window_post::<LCTree<PoseidonHasher, U8, U4, U0>>(4, 2, 2, 27, 19_220);
+        nse_window_post::<LCTree<PoseidonHasher, U8, U4, U0>>(4, 2, 2, 19, 18_372);
     }
 
     #[test]
     fn nse_window_post_poseidon_two_partitions_smaller_sub_8_4() {
-        nse_window_post::<LCTree<PoseidonHasher, U8, U4, U0>>(5, 3, 2, 40, 28_830);
+        nse_window_post::<LCTree<PoseidonHasher, U8, U4, U0>>(5, 3, 2, 28, 27_558);
     }
 
     // #[test]
@@ -453,19 +409,14 @@ mod tests {
         }
 
         for (i, tree) in trees.iter().enumerate() {
-            let comm_layers: Vec<_> = (0..pub_params.num_layers - 1)
-                .map(|_| <Tree::Hasher as Hasher>::Domain::random(rng))
-                .collect();
-            let comm_replica = tree.root();
-            let comm_r: <Tree::Hasher as Hasher>::Domain =
-                hash_comm_r(&comm_layers[..], comm_replica).into();
+            let comm_layers = <Tree::Hasher as Hasher>::Domain::random(rng);
+            let root_r = tree.root();
+            let comm_r: <Tree::Hasher as Hasher>::Domain = hash_comm_r(comm_layers, root_r).into();
 
-            priv_sectors.push(PrivateSector { tree });
+            priv_sectors.push(PrivateSector { tree, comm_layers });
             pub_sectors.push(PublicSector {
                 id: (i as u64).into(),
                 comm_r,
-                comm_layers,
-                comm_replica,
             });
         }
 

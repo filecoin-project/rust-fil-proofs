@@ -1,3 +1,4 @@
+use std::iter;
 use std::path::PathBuf;
 
 use filecoin_hashers::{Domain, Hasher};
@@ -14,8 +15,8 @@ use storage_proofs_core::{
 };
 
 use super::{
-    hash_comm_r, labels, Config, NarrowStackedExpander, PersistentAux, PublicParams, Tau,
-    TemporaryAux,
+    hash_comm_layers, hash_comm_r, labels, Config, NarrowStackedExpander, PersistentAux,
+    PublicParams, Tau, TemporaryAux,
 };
 use crate::PoRep;
 
@@ -96,6 +97,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> PoRep<'a, Tree::H
     ) -> Result<(Self::Tau, Self::ProverAux)> {
         let config = &pp.config;
         let num_nodes_sector = config.num_nodes_sector();
+        let num_layers = config.num_layers();
 
         assert_eq!(num_nodes_sector % config.num_nodes_window, 0);
         assert_eq!(data.len(), config.sector_size);
@@ -135,13 +137,13 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> PoRep<'a, Tree::H
         debug_assert_eq!(trees.len(), config.num_windows());
         data.drop_data();
 
-        let mut layered_trees: Vec<Vec<_>> = (0..config.num_layers() - 1)
+        let mut layered_trees: Vec<Vec<_>> = (0..num_layers - 1)
             .map(|_| Vec::with_capacity(config.num_windows()))
             .collect();
         let mut replica_trees = Vec::with_capacity(config.num_windows());
 
         for (window_trees, replica_tree) in trees.into_iter() {
-            debug_assert_eq!(window_trees.len(), config.num_layers() - 1);
+            debug_assert_eq!(window_trees.len(), num_layers - 1);
             for (layer_index, trees) in window_trees.into_iter().enumerate() {
                 layered_trees[layer_index].push(trees);
             }
@@ -170,19 +172,24 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> PoRep<'a, Tree::H
             Tree::TopTreeArity,
         >::from_trees(replica_trees)?;
 
-        let p_aux = PersistentAux {
-            comm_layers: trees_layers.iter().map(|tree| tree.root()).collect(),
-            comm_replica: replica_tree.root(),
-        };
+        let layer_roots: Vec<<Tree::Hasher as Hasher>::Domain> = trees_layers
+            .iter()
+            .chain(iter::once(&replica_tree))
+            .map(|tree| tree.root())
+            .collect();
+        debug_assert_eq!(layer_roots.len(), num_layers);
 
         // Calculate comm_r
-        let comm_r = hash_comm_r(&p_aux.comm_layers, p_aux.comm_replica);
+        let comm_layers: <Tree::Hasher as Hasher>::Domain =
+            hash_comm_layers(&layer_roots[..num_layers - 1]).into();
+        let comm_r = hash_comm_r(comm_layers, layer_roots[num_layers - 1]);
 
         let tau = Tau::<<Tree::Hasher as Hasher>::Domain, G::Domain> {
             comm_d: data_tree.root(),
             comm_r: comm_r.into(),
         };
 
+        let p_aux = PersistentAux { layer_roots };
         let t_aux = TemporaryAux::new(layer_store_config, data_tree_config);
 
         Ok((tau, (p_aux, t_aux)))
