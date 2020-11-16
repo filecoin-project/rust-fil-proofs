@@ -82,10 +82,6 @@ pub struct PublicInputs<'a, T: Domain> {
 pub struct PublicSector<T: Domain> {
     pub id: SectorId,
     pub comm_r: T,
-    /// The root of the individual layers.
-    pub comm_layers: Vec<T>,
-    /// The root of the replica layer.
-    pub comm_replica: T,
 }
 
 #[derive(Debug)]
@@ -97,6 +93,7 @@ pub struct PrivateSector<'a, Tree: MerkleTreeTrait> {
         Tree::SubTreeArity,
         Tree::TopTreeArity,
     >,
+    pub comm_layers: <Tree::Hasher as Hasher>::Domain,
 }
 
 #[derive(Debug)]
@@ -121,8 +118,7 @@ pub struct SectorProof<Proof: MerkleProofTrait> {
         deserialize = "MerkleProof<Proof::Hasher, Proof::Arity, U0, U0>: serde::de::DeserializeOwned"
     ))]
     pub inclusion_proofs: Vec<Vec<MerkleProof<Proof::Hasher, Proof::Arity, U0, U0>>>,
-    pub comm_layers: Vec<<Proof::Hasher as Hasher>::Domain>,
-    pub comm_replica: <Proof::Hasher as Hasher>::Domain,
+    pub comm_layers: <Proof::Hasher as Hasher>::Domain,
 }
 
 #[derive(Debug, Clone)]
@@ -302,6 +298,7 @@ impl<'a, Tree: 'a + MerkleTreeTrait> ProofScheme<'a> for NseWindowPoSt<'a, Tree>
             for (pub_sector, priv_sector) in pub_sectors_chunk.iter().zip(priv_sectors_chunk.iter())
             {
                 let tree = priv_sector.tree;
+                let comm_layers = priv_sector.comm_layers;
                 let sector_id = pub_sector.id;
                 let tree_leafs = tree.leafs();
                 let rows_to_discard = default_rows_to_discard(tree_leafs, Tree::Arity::to_usize());
@@ -340,17 +337,9 @@ impl<'a, Tree: 'a + MerkleTreeTrait> ProofScheme<'a> for NseWindowPoSt<'a, Tree>
                     })
                     .collect::<Result<Vec<_>>>()?;
 
-                let comm_layers = pub_sector.comm_layers.clone();
-                ensure!(
-                    comm_layers.len() == pub_params.num_layers - 1,
-                    "invalid number of layer commitments {} != {}",
-                    comm_layers.len(),
-                    pub_params.num_layers - 1
-                );
                 proofs.push(SectorProof {
                     inclusion_proofs,
                     comm_layers,
-                    comm_replica: pub_sector.comm_replica,
                 });
             }
 
@@ -410,17 +399,8 @@ impl<'a, Tree: 'a + MerkleTreeTrait> ProofScheme<'a> for NseWindowPoSt<'a, Tree>
                 trace!("partition {}", i);
                 let sector_id = pub_sector.id;
                 let comm_r = &pub_sector.comm_r;
-                let comm_layers = &sector_proof.comm_layers;
                 let inclusion_proofs = &sector_proof.inclusion_proofs;
-                let comm_replica = sector_proof.comm_replica;
-
-                // -- Verify that H(Comm_layers..| comm_replica) == Comm_R
-                let comm_r_expected: <Tree::Hasher as Hasher>::Domain =
-                    hash_comm_r(&comm_layers, comm_replica).into();
-                if AsRef::<[u8]>::as_ref(&comm_r_expected) != AsRef::<[u8]>::as_ref(comm_r) {
-                    trace!("invalid comm_r");
-                    return Ok(false);
-                }
+                let comm_layers = &sector_proof.comm_layers;
 
                 // -- Verify top part of the tree
                 let tree = MerkleTreeWrapper::<
@@ -432,12 +412,13 @@ impl<'a, Tree: 'a + MerkleTreeTrait> ProofScheme<'a> for NseWindowPoSt<'a, Tree>
                 >::try_from_iter(
                     inclusion_proofs.iter().map(|p| Ok(p[0].root()))
                 )?;
-                let comm_replica_expected = tree.root();
+                let root_r = tree.root();
 
-                if AsRef::<[u8]>::as_ref(&comm_replica_expected)
-                    != AsRef::<[u8]>::as_ref(&comm_replica)
-                {
-                    trace!("invalid comm_replica");
+                // -- Verify that H(comm_layers | root_r) == comm_r
+                let comm_r_unverified: <Tree::Hasher as Hasher>::Domain =
+                    hash_comm_r(*comm_layers, root_r).into();
+                if &comm_r_unverified != comm_r {
+                    trace!("invalid comm_r");
                     return Ok(false);
                 }
 
@@ -578,20 +559,15 @@ mod tests {
             trees.push(tree);
         }
         for (i, tree) in trees.iter().enumerate() {
-            let comm_layers: Vec<_> = (0..num_layers - 1)
-                .map(|_| <Tree::Hasher as Hasher>::Domain::random(rng))
-                .collect();
-            let comm_replica = tree.root();
-            let comm_r: <Tree::Hasher as Hasher>::Domain =
-                hash_comm_r(&comm_layers, comm_replica).into();
+            let comm_layers = <Tree::Hasher as Hasher>::Domain::random(rng);
+            let root_r = tree.root();
+            let comm_r: <Tree::Hasher as Hasher>::Domain = hash_comm_r(comm_layers, root_r).into();
 
-            priv_sectors.push(PrivateSector { tree });
+            priv_sectors.push(PrivateSector { tree, comm_layers });
 
             pub_sectors.push(PublicSector {
                 id: (i as u64).into(),
                 comm_r,
-                comm_layers,
-                comm_replica,
             });
         }
 

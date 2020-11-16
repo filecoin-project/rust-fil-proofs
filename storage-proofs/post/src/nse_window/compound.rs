@@ -62,11 +62,8 @@ impl<'a, Tree: 'static + MerkleTreeTrait>
             .ok_or_else(|| anyhow!("invalid number of sectors/partition index"))?;
 
         for sector in sectors.iter() {
-            // 1. Inputs for verifying comm_r = H(comm_layer_0 || ..)
+            // 1. Input for verifying comm_r = H(comm_layers || root_r)
             inputs.push(sector.comm_r.into());
-            inputs.extend(sector.comm_layers.iter().copied().map(Into::into));
-
-            inputs.push(sector.comm_replica.into());
 
             let mut challenge_index_in_sector: u64 = 0;
 
@@ -247,21 +244,15 @@ mod tests {
             trees.push(tree);
         }
         for (i, tree) in trees.iter().enumerate() {
-            let comm_layers: Vec<_> = (0..num_layers - 1)
-                .map(|_| <Tree::Hasher as Hasher>::Domain::random(rng))
-                .collect();
-            let comm_replica = tree.root();
+            let comm_layers = <Tree::Hasher as Hasher>::Domain::random(rng);
+            let root_r = tree.root();
+            let comm_r: <Tree::Hasher as Hasher>::Domain = hash_comm_r(comm_layers, root_r).into();
 
-            let comm_r: <Tree::Hasher as Hasher>::Domain =
-                hash_comm_r(&comm_layers, comm_replica).into();
-
-            priv_sectors.push(PrivateSector { tree });
+            priv_sectors.push(PrivateSector { tree, comm_layers });
 
             pub_sectors.push(PublicSector {
                 id: (i as u64).into(),
                 comm_r,
-                comm_layers,
-                comm_replica,
             });
         }
 

@@ -15,7 +15,11 @@ pub type PoseidonMDArity = U36;
 pub const MERKLE_TREE_ARITY: usize = 2;
 
 lazy_static! {
+    // Used for arity-2 Merkle trees.
     pub static ref POSEIDON_CONSTANTS_2: PoseidonConstants::<Bls12, U2> = PoseidonConstants::new();
+    // Used for all other arity-2 hashes.
+    pub static ref POSEIDON_CONSTANTS_2_BASE: PoseidonConstants::<Bls12, U2> =
+        PoseidonConstants::new_constant_length(2);
     pub static ref POSEIDON_CONSTANTS_4: PoseidonConstants::<Bls12, U4> = PoseidonConstants::new();
     pub static ref POSEIDON_CONSTANTS_8: PoseidonConstants::<Bls12, U8> = PoseidonConstants::new();
     pub static ref POSEIDON_CONSTANTS_15_BASE: PoseidonConstants::<Bls12, U15> =

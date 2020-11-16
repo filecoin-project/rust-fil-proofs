@@ -3,7 +3,7 @@ use bellperson::{
     gadgets::{boolean::Boolean, num},
     Circuit, ConstraintSystem, SynthesisError,
 };
-use filecoin_hashers::{Hasher, POSEIDON_CONSTANTS_15_BASE};
+use filecoin_hashers::{Hasher, POSEIDON_CONSTANTS_15_BASE, POSEIDON_CONSTANTS_2_BASE};
 use neptune::circuit::poseidon_hash;
 use storage_proofs_core::{
     compound_proof::CircuitComponent,
@@ -24,7 +24,7 @@ pub struct NseCircuit<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> 
     pub(crate) comm_d: Option<G::Domain>,
 
     pub(crate) layer_proofs: Vec<LayerProof<Tree, G>>,
-    pub(crate) comm_layers: Vec<Option<<Tree::Hasher as Hasher>::Domain>>,
+    pub(crate) layer_roots: Vec<Option<<Tree::Hasher as Hasher>::Domain>>,
 }
 
 impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> CircuitComponent
@@ -42,7 +42,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> Circuit<Bls12>
             comm_r,
             comm_d,
             layer_proofs,
-            comm_layers,
+            layer_roots,
             public_params,
             ..
         } = self;
@@ -82,31 +82,37 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> Circuit<Bls12>
         // make comm_r a public input
         comm_r_num.inputize(cs.namespace(|| "comm_r_input"))?;
 
-        // Allocate comm_layers
-        let comm_layers_nums = comm_layers
+        // Allocate layer_roots
+        let num_layers = public_params.config.num_layers();
+        assert_eq!(num_layers, layer_roots.len());
+        let layer_roots_nums = layer_roots
             .into_iter()
             .enumerate()
-            .map(|(i, comm)| {
-                num::AllocatedNum::alloc(cs.namespace(|| format!("comm_layer_{}", i)), || {
-                    comm.map(Into::into)
+            .map(|(i, root)| {
+                num::AllocatedNum::alloc(cs.namespace(|| format!("layer_root_{}", i)), || {
+                    root.map(Into::into)
                         .ok_or_else(|| SynthesisError::AssignmentMissing)
                 })
             })
             .collect::<Result<Vec<_>, _>>()?;
 
-        // Verify hash(comm_layers) == comm_r
+        // Verify hash(comm_layers, root_r) == comm_r
         {
-            let c = POSEIDON_CONSTANTS_15_BASE.with_length(comm_layers_nums.len());
-            let hash_num = poseidon_hash(
+            let comm_layers_num = poseidon_hash(
                 &mut cs.namespace(|| "comm_layers_hash"),
-                comm_layers_nums.clone(),
-                &c,
+                layer_roots_nums[..num_layers - 1].to_vec(),
+                &POSEIDON_CONSTANTS_15_BASE.with_length(num_layers - 1),
+            )?;
+            let comm_r_unverified_num = poseidon_hash(
+                &mut cs.namespace(|| "comm_r_hash"),
+                vec![comm_layers_num, layer_roots_nums[num_layers - 1].clone()],
+                &*POSEIDON_CONSTANTS_2_BASE,
             )?;
             constraint::equal(
                 cs,
-                || "enforce comm_r = H(comm_layers)",
+                || "enforce comm_r = H(comm_layers, root_r)",
                 &comm_r_num,
-                &hash_num,
+                &comm_r_unverified_num,
             );
         }
 
@@ -116,7 +122,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> Circuit<Bls12>
                 &mut cs.namespace(|| format!("layer_proof_{}", i)),
                 &public_params.config,
                 &comm_d_num,
-                &comm_layers_nums,
+                &layer_roots_nums,
                 &replica_id_bits,
             )?;
         }
@@ -131,11 +137,11 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> LayerProof<Tree, 
         cs: &mut CS,
         config: &Config,
         comm_d: &num::AllocatedNum<Bls12>,
-        comm_layers_nums: &[num::AllocatedNum<Bls12>],
+        layer_roots_nums: &[num::AllocatedNum<Bls12>],
         replica_id: &[Boolean],
     ) -> Result<(), SynthesisError> {
         assert_eq!(
-            comm_layers_nums.len(),
+            layer_roots_nums.len(),
             config.num_layers(),
             "invalid number of layers"
         );
@@ -165,7 +171,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> LayerProof<Tree, 
             )?;
 
             let data_leaf = proof.alloc_data_leaf(cs.namespace(|| "data_leaf"))?;
-            let layer_root = &comm_layers_nums[layer - 1];
+            let layer_root = &layer_roots_nums[layer - 1];
 
             proof.synthesize(
                 &mut cs.namespace(|| "proof"),
@@ -202,8 +208,8 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> LayerProof<Tree, 
             )?;
 
             let data_leaf = proof.alloc_data_leaf(cs.namespace(|| "data_leaf"))?;
-            let layer_root = &comm_layers_nums[layer - 1];
-            let parents_root = &comm_layers_nums[layer - 2];
+            let layer_root = &layer_roots_nums[layer - 1];
+            let parents_root = &layer_roots_nums[layer - 2];
 
             proof.synthesize(
                 &mut cs.namespace(|| "proof"),
@@ -243,8 +249,8 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> LayerProof<Tree, 
             )?;
 
             let data_leaf = proof.alloc_data_leaf(cs.namespace(|| "data_leaf"))?;
-            let layer_root = &comm_layers_nums[layer - 1];
-            let parents_root = &comm_layers_nums[layer - 2];
+            let layer_root = &layer_roots_nums[layer - 1];
+            let parents_root = &layer_roots_nums[layer - 2];
 
             proof.synthesize(
                 &mut cs.namespace(|| "proof"),
@@ -273,8 +279,8 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> LayerProof<Tree, 
             let parents_data = proof.alloc_parents_leafs(cs.namespace(|| "parents_data"))?;
 
             let data_leaf = proof.alloc_data_leaf(cs.namespace(|| "data_leaf"))?;
-            let layer_root = &comm_layers_nums[layer - 1];
-            let parents_root = &comm_layers_nums[layer - 2];
+            let layer_root = &layer_roots_nums[layer - 1];
+            let parents_root = &layer_roots_nums[layer - 2];
 
             let layer_leaf = derive_last_layer_leaf(
                 cs.namespace(|| "leaf"),
@@ -380,12 +386,12 @@ mod tests {
 
     #[test]
     fn nse_input_circuit_poseidon_sub_8_2() {
-        nse_input_circuit::<DiskTree<PoseidonHasher, U8, U2, U0>>(146, 2_900_116);
+        nse_input_circuit::<DiskTree<PoseidonHasher, U8, U2, U0>>(146, 2_900_427);
     }
 
     #[test]
     fn nse_input_circuit_poseidon_sub_8_4() {
-        nse_input_circuit::<DiskTree<PoseidonHasher, U8, U4, U0>>(146, 3_362_842);
+        nse_input_circuit::<DiskTree<PoseidonHasher, U8, U4, U0>>(146, 3_363_153);
     }
 
     fn nse_input_circuit<Tree: MerkleTreeTrait + 'static>(
