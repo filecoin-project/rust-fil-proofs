@@ -444,6 +444,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
             let (builder_tx, builder_rx) = mpsc::sync_channel(0);
 
             let config_count = configs.len(); // Don't move config into closure below.
+
             rayon::scope(|s| {
                 // This channel will receive the finished tree data to be written to disk.
                 let (writer_tx, writer_rx) = mpsc::sync_channel::<(Vec<Fr>, Vec<Fr>)>(0);
@@ -473,7 +474,10 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                                     .expect("failed to read store range");
 
                                 for (index, el) in elements.into_iter().enumerate() {
-                                    columns[index * chunked_nodes_count + layer_index] = el.into();
+                                    // let el = layer_data[layer_index][index];
+                                    // columns[index][layer_index] = el.into();
+                                    columns[index * ColumnArity::to_usize() + layer_index] =
+                                        el.into();
                                 }
                             }
 
@@ -601,11 +605,11 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                     trace!("done writing tree_c store data");
                 }
             });
+        });
 
-            create_disk_tree::<
-                DiskTree<Tree::Hasher, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>,
-            >(configs[0].size.expect("config size failure"), &configs)
-        })
+        create_disk_tree::<
+            DiskTree<Tree::Hasher, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>,
+        >(configs[0].size.expect("config size failure"), &configs)
     }
 
     fn generate_tree_c_cpu<ColumnArity, TreeArity>(
@@ -707,6 +711,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
             let config_count = configs.len(); // Don't move config into closure below.
             let configs = &configs;
             let tree_r_last_config = &tree_r_last_config;
+
             rayon::scope(|s| {
                 // This channel will receive the finished tree data to be written to disk.
                 let (writer_tx, writer_rx) = mpsc::sync_channel::<Vec<Fr>>(0);
