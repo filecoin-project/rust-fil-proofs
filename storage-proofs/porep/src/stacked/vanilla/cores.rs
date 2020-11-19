@@ -68,7 +68,7 @@ pub struct Cleanup {
 impl Drop for Cleanup {
     fn drop(&mut self) {
         if let Some(prior) = self.prior_state.take() {
-            if let Some(ref mut locked_topo) = &mut *TOPOLOGY.lock().expect("poisded lock") {
+            if let Some(ref mut locked_topo) = &mut *TOPOLOGY.lock().expect("poisoned lock") {
                 let _ = locked_topo.set_cpubind_for_thread(
                     self.tid,
                     prior,
