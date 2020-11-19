@@ -135,14 +135,26 @@ fn core_groups(cores_per_unit: usize) -> Option<Vec<Mutex<Vec<CoreIndex>>>> {
     let mut guard = TOPOLOGY.lock().expect("poisoned lock");
     let topo = match &mut *guard {
         Some(ref mut topo) => topo,
-        None => return None,
+        None => {
+            warn!("no topology available");
+            return None;
+        }
     };
 
     let core_depth = match topo.depth_or_below_for_type(&ObjectType::Core) {
         Ok(depth) => depth,
-        Err(_) => return None,
+        Err(err) => {
+            warn!("failed to retrieve core depth: {:?}", err);
+            return None;
+        }
     };
-    let all_cores = topo.objects_with_type(&ObjectType::Core).unwrap();
+    let all_cores = match topo.objects_with_type(&ObjectType::Core) {
+        Ok(cores) => cores,
+        Err(err) => {
+            warn!("failed to retrieve cores: {:?}", err);
+            return None;
+        }
+    };
     let core_count = all_cores.len();
 
     let mut cache_depth = core_depth;
