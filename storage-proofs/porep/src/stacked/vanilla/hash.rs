@@ -1,12 +1,16 @@
 use neptune::poseidon::Poseidon;
 use paired::bls12_381::Fr;
-use storage_proofs_core::hasher::types::{POSEIDON_CONSTANTS_11, POSEIDON_CONSTANTS_2};
+use storage_proofs_core::hasher::types::{POSEIDON_CONSTANTS_11, POSEIDON_CONSTANTS_5, POSEIDON_CONSTANTS_2};
 
 /// Hash all elements in the given column.
 pub fn hash_single_column(column: &[Fr]) -> Fr {
     match column.len() {
         2 => {
             let mut hasher = Poseidon::new_with_preimage(column, &*POSEIDON_CONSTANTS_2);
+            hasher.hash()
+        }
+        5 => {
+            let mut hasher = Poseidon::new_with_preimage(column, &*POSEIDON_CONSTANTS_5);
             hasher.hash()
         }
         11 => {

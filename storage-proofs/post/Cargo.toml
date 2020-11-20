@@ -27,7 +27,7 @@ log = "0.4.7"
 hex = "0.4.0"
 generic-array = "0.13.2"
 anyhow = "1.0.23"
-neptune = { version = "1.0.1", features = ["gpu"] }
+neptune = { git = "https://github.com/filestar-project/neptune.git", version = "1.2.3", features = ["gpu"] }
 num_cpus = "1.10.1"
 
 [dev-dependencies]

@@ -123,6 +123,7 @@ enum Sector {
     SectorSize16MiB,
     SectorSize512MiB,
     SectorSize1GiB,
+    SectorSize8GiB,
     SectorSize32GiB,
     SectorSize64GiB,
 }
@@ -138,6 +139,7 @@ impl Sector {
             Sector::SectorSize16MiB => SECTOR_SIZE_16_MIB,
             Sector::SectorSize512MiB => SECTOR_SIZE_512_MIB,
             Sector::SectorSize1GiB => SECTOR_SIZE_1_GIB,
+            Sector::SectorSize8GiB => SECTOR_SIZE_8_GIB,
             Sector::SectorSize32GiB => SECTOR_SIZE_32_GIB,
             Sector::SectorSize64GiB => SECTOR_SIZE_64_GIB,
         }
@@ -153,6 +155,7 @@ impl Sector {
             Sector::SectorSize16MiB => "16mib",
             Sector::SectorSize512MiB => "512mib",
             Sector::SectorSize1GiB => "1gib",
+            Sector::SectorSize8GiB => "8gib",
             Sector::SectorSize32GiB => "32gib",
             Sector::SectorSize64GiB => "64gib",
         }
@@ -168,6 +171,7 @@ impl Sector {
             Sector::SectorSize16MiB => "16MiB",
             Sector::SectorSize512MiB => "512MiB",
             Sector::SectorSize1GiB => "1GiB",
+            Sector::SectorSize8GiB => "8GiB",
             Sector::SectorSize32GiB => "32GiB",
             Sector::SectorSize64GiB => "64GiB",
         }
@@ -257,6 +261,7 @@ fn parse_params_filename(path: &str) -> (Proof, Hasher, Sector, String, usize, P
         "16mib" => Sector::SectorSize16MiB,
         "512mib" => Sector::SectorSize512MiB,
         "1gib" => Sector::SectorSize1GiB,
+        "8gib" => Sector::SectorSize8GiB,
         "32gib" => Sector::SectorSize32GiB,
         "64gib" => Sector::SectorSize64GiB,
         other => panic!("invalid sector-size in params filename: {}", other),
@@ -1189,6 +1194,11 @@ fn main() {
                 .help("Create circuit with 1GiB sector-size"),
         )
         .arg(
+            Arg::with_name("8gib")
+                .long("8gib")
+                .help("Create circuit with 8GiB sector-size"),
+        )
+        .arg(
             Arg::with_name("32gib")
                 .long("32gib")
                 .help("Create circuit with 32GiB sector-size"),
@@ -1201,8 +1211,8 @@ fn main() {
         .group(
             ArgGroup::with_name("sector-size")
                 .args(&[
-                    "2kib", "4kib", "16kib", "32kib", "8mib", "16mib", "512mib", "1gib", "32gib",
-                    "64gib",
+                    "2kib", "4kib", "16kib", "32kib", "8mib", "16mib", "512mib", "1gib", "8gib",
+                    "32gib", "64gib",
                 ])
                 .required(true)
                 .multiple(false),
@@ -1334,6 +1344,8 @@ fn main() {
                     Sector::SectorSize512MiB
                 } else if matches.is_present("1gib") {
                     Sector::SectorSize1GiB
+                } else if matches.is_present("8gib") {
+                    Sector::SectorSize8GiB
                 } else if matches.is_present("32gib") {
                     Sector::SectorSize32GiB
                 } else {

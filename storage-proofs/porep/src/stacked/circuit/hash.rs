@@ -18,6 +18,11 @@ where
             column.to_vec(),
             &*storage_proofs_core::hasher::types::POSEIDON_CONSTANTS_2,
         ),
+        5 => poseidon_hash::<CS, Bls12, typenum::U5>(
+            cs,
+            column.to_vec(),
+            &*storage_proofs_core::hasher::types::POSEIDON_CONSTANTS_5,
+        ),
         11 => poseidon_hash::<CS, Bls12, typenum::U11>(
             cs,
             column.to_vec(),

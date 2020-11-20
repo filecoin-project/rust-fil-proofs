@@ -28,7 +28,7 @@ use storage_proofs_core::{
     settings,
     util::{default_rows_to_discard, NODE_SIZE},
 };
-use typenum::{U11, U2, U8};
+use typenum::{U11, U2, U5, U8};
 
 use super::{
     challenges::LayerChallenges,
@@ -1059,6 +1059,16 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                 )?;
                 tree_c.root()
             }
+            5 => {
+                let tree_c = Self::generate_tree_c::<U5, Tree::Arity>(
+                    layers,
+                    nodes_count,
+                    tree_count,
+                    configs,
+                    &labels,
+                )?;
+                tree_c.root()
+            }
             8 => {
                 let tree_c = Self::generate_tree_c::<U8, Tree::Arity>(
                     layers,
@@ -1445,6 +1455,11 @@ mod tests {
     }
 
     #[test]
+    fn extract_all_sha256_8_2() {
+        test_extract_all::<DiskTree<Sha256Hasher, typenum::U8, typenum::U2, typenum::U0>>();
+    }
+
+    #[test]
     fn extract_all_sha256_8_8() {
         test_extract_all::<DiskTree<Sha256Hasher, typenum::U8, typenum::U8, typenum::U0>>();
     }
@@ -1485,14 +1500,20 @@ mod tests {
     }
 
     fn test_extract_all<Tree: 'static + MerkleTreeTrait>() {
-        // femme::pretty::Logger::new()
-        //     .start(log::LevelFilter::Trace)
-        //     .ok();
+        let start_program = std::time::Instant::now();
+        femme::pretty::Logger::new()
+            .start(log::LevelFilter::Trace)
+            .ok();
 
         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
         let replica_id: <Tree::Hasher as Hasher>::Domain =
             <Tree::Hasher as Hasher>::Domain::random(rng);
-        let nodes = 64 * get_base_tree_count::<Tree>();
+        // let nodes = 64 * get_base_tree_count::<Tree>();
+
+        // let nodes = 1 << 27;
+        use std::env;
+        let nodes = env::var("nodes").unwrap().parse::<usize>().unwrap();
+        println!("nodes: {}", nodes);
 
         let data: Vec<u8> = (0..nodes)
             .flat_map(|_| {
@@ -1515,7 +1536,8 @@ mod tests {
         let replica_path = cache_dir.path().join("replica-path");
         let mut mmapped_data = setup_replica(&data, &replica_path);
 
-        let layer_challenges = LayerChallenges::new(DEFAULT_STACKED_LAYERS, 5);
+        // let layer_challenges = LayerChallenges::new(DEFAULT_STACKED_LAYERS, 5);
+        let layer_challenges = LayerChallenges::new(2, 2);
 
         let sp = SetupParams {
             nodes,
@@ -1552,6 +1574,7 @@ mod tests {
         assert_eq!(data, decoded_data);
 
         cache_dir.close().expect("Failed to remove cache dir");
+        println!("layer all takse {:?}", start_program.elapsed());
     }
 
     fn prove_verify_fixed(n: usize) {
