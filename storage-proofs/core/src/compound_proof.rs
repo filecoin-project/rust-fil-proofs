@@ -1,10 +1,7 @@
-use std::path::Path;
-
 use anyhow::{ensure, Context};
+use bellperson::bls::{Bls12, Fr};
 use bellperson::{groth16, Circuit};
-use fil_blst::{blst_fr, blst_scalar, scalar_from_u64, verify_batch_proof};
 use log::info;
-use paired::bls12_381::{Bls12, Fr};
 use rand::{rngs::OsRng, RngCore};
 use rayon::prelude::*;
 
@@ -78,7 +75,7 @@ where
         // This will always run at least once, since there cannot be zero partitions.
         ensure!(partition_count > 0, "There must be partitions");
 
-        info!("vanilla_proof:start");
+        info!("vanilla_proofs:start");
         let vanilla_proofs = S::prove_all_partitions(
             &pub_params.vanilla_params,
             &pub_in,
@@ -86,7 +83,7 @@ where
             partition_count,
         )?;
 
-        info!("vanilla_proof:finish");
+        info!("vanilla_proofs:finish");
 
         let sanity_check =
             S::verify_all_partitions(&pub_params.vanilla_params, &pub_in, &vanilla_proofs)?;
@@ -102,7 +99,31 @@ where
         )?;
         info!("snark_proof:finish");
 
-        Ok(MultiProof::new(groth_proofs, &groth_params.vk))
+        Ok(MultiProof::new(groth_proofs, &groth_params.pvk))
+    }
+
+    fn prove_with_vanilla<'b>(
+        pub_params: &PublicParams<'a, S>,
+        pub_in: &S::PublicInputs,
+        vanilla_proofs: Vec<S::Proof>,
+        groth_params: &'b groth16::MappedParameters<Bls12>,
+    ) -> Result<MultiProof<'b>> {
+        let partition_count = Self::partition_count(pub_params);
+
+        // This will always run at least once, since there cannot be zero partitions.
+        ensure!(partition_count > 0, "There must be partitions");
+
+        info!("snark_proof:start");
+        let groth_proofs = Self::circuit_proofs(
+            pub_in,
+            vanilla_proofs,
+            &pub_params.vanilla_params,
+            groth_params,
+            pub_params.priority,
+        )?;
+        info!("snark_proof:finish");
+
+        Ok(MultiProof::new(groth_proofs, &groth_params.pvk))
     }
 
     // verify is equivalent to ProofScheme::verify.
@@ -118,7 +139,7 @@ where
         );
 
         let vanilla_public_params = &public_params.vanilla_params;
-        let pvk = groth16::prepare_batch_verifying_key(&multi_proof.verifying_key);
+        let pvk = &multi_proof.verifying_key;
 
         if !<S as ProofScheme>::satisfies_requirements(
             &public_params.vanilla_params,
@@ -132,69 +153,9 @@ where
             .into_par_iter()
             .map(|k| Self::generate_public_inputs(public_inputs, vanilla_public_params, Some(k)))
             .collect::<Result<_>>()?;
+
         let proofs: Vec<_> = multi_proof.circuit_proofs.iter().collect();
-
         let res = groth16::verify_proofs_batch(&pvk, &mut rand::rngs::OsRng, &proofs, &inputs)?;
-        Ok(res)
-    }
-
-    // verify_blst is equivalent to ProofScheme::verify.
-    fn verify_blst(
-        public_params: &PublicParams<'a, S>,
-        public_inputs: &S::PublicInputs,
-        proof_vec: &[u8],
-        num_proofs: usize,
-        requirements: &S::Requirements,
-        vk_path: &Path,
-    ) -> Result<bool> {
-        ensure!(
-            num_proofs == Self::partition_count(public_params),
-            "Inconsistent inputs"
-        );
-
-        let vanilla_public_params = &public_params.vanilla_params;
-
-        if !<S as ProofScheme>::satisfies_requirements(
-            &public_params.vanilla_params,
-            requirements,
-            num_proofs,
-        ) {
-            return Ok(false);
-        }
-
-        let inputs: Vec<_> = (0..num_proofs)
-            .into_par_iter()
-            .map(|k| Self::generate_public_inputs(public_inputs, vanilla_public_params, Some(k)))
-            .collect::<Result<_>>()?;
-
-        let blst_inputs: Vec<_> = inputs
-            .iter()
-            .flat_map(|pis| pis.iter().map(|pi| blst_fr::from(*pi)))
-            .collect();
-
-        // choose random coefficients for combining the proofs
-        let mut r: Vec<blst_scalar> = Vec::with_capacity(num_proofs);
-        let mut rng = rand::rngs::OsRng;
-        for _ in 0..num_proofs {
-            use rand::Rng;
-            let t: u128 = rng.gen();
-
-            let mut limbs: [u64; 4] = [0, 0, 0, 0];
-            limbs[1] = (t >> 64) as u64;
-            limbs[0] = (t & (-1i64 as u128) >> 64) as u64;
-
-            r.push(scalar_from_u64(&limbs));
-        }
-
-        let res = verify_batch_proof(
-            proof_vec,
-            num_proofs,
-            &blst_inputs,
-            inputs[0].len(),
-            &r,
-            128,
-            vk_path,
-        );
         Ok(res)
     }
 
@@ -219,7 +180,7 @@ where
 
         let vanilla_public_params = &public_params.vanilla_params;
         // just use the first one, the must be equal any way
-        let pvk = groth16::prepare_batch_verifying_key(&multi_proofs[0].verifying_key);
+        let pvk = &multi_proofs[0].verifying_key;
 
         for multi_proof in multi_proofs.iter() {
             if !<S as ProofScheme>::satisfies_requirements(

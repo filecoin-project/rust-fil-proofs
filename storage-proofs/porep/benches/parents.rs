@@ -1,11 +1,6 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion, ParameterizedBenchmark};
-use storage_proofs_core::{
-    drgraph::{Graph, BASE_DEGREE},
-    hasher::blake2s::Blake2sHasher,
-    hasher::pedersen::PedersenHasher,
-    hasher::sha256::Sha256Hasher,
-    hasher::Hasher,
-};
+use filecoin_hashers::{blake2s::Blake2sHasher, sha256::Sha256Hasher, Hasher};
+use storage_proofs_core::drgraph::{Graph, BASE_DEGREE};
 use storage_proofs_porep::stacked::{StackedBucketGraph, EXP_DEGREE};
 
 #[cfg(feature = "cpu-profile")]
@@ -63,11 +58,6 @@ fn parents_loop_benchmark(cc: &mut Criterion) {
             },
             sizes,
         )
-        .with_function("Pedersen", |b, degree| {
-            let graph = pregenerate_graph::<PedersenHasher>(*degree);
-            let mut parents = vec![0; graph.degree()];
-            b.iter(|| black_box(parents_loop::<PedersenHasher, _>(&graph, &mut parents)))
-        })
         .with_function("Sha256", |b, degree| {
             let graph = pregenerate_graph::<Sha256Hasher>(*degree);
             let mut parents = vec![0; graph.degree()];

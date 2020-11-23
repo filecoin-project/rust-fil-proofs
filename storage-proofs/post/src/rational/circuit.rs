@@ -1,17 +1,13 @@
 use std::marker::PhantomData;
 
+use bellperson::bls::{Bls12, Fr};
 use bellperson::gadgets::num;
 use bellperson::{Circuit, ConstraintSystem, SynthesisError};
-use paired::bls12_381::{Bls12, Fr};
+use filecoin_hashers::{HashFunction, Hasher};
 
 use storage_proofs_core::{
-    compound_proof::CircuitComponent,
-    error::Result,
-    gadgets::constraint,
-    gadgets::por::PoRCircuit,
-    gadgets::variables::Root,
-    hasher::{HashFunction, Hasher},
-    merkle::MerkleTreeTrait,
+    compound_proof::CircuitComponent, error::Result, gadgets::constraint, gadgets::por::PoRCircuit,
+    gadgets::variables::Root, merkle::MerkleTreeTrait,
 };
 
 /// This is the `RationalPoSt` circuit.
@@ -111,15 +107,14 @@ mod tests {
 
     use std::collections::BTreeMap;
 
+    use bellperson::bls::{Bls12, Fr};
+    use bellperson::util_cs::test_cs::TestConstraintSystem;
     use ff::Field;
-    use paired::bls12_381::{Bls12, Fr};
+    use filecoin_hashers::{poseidon::PoseidonHasher, Domain, HashFunction, Hasher};
     use rand::{Rng, SeedableRng};
     use rand_xorshift::XorShiftRng;
-
-    use bellperson::util_cs::test_cs::TestConstraintSystem;
     use storage_proofs_core::{
         compound_proof::CompoundProof,
-        hasher::{Domain, HashFunction, Hasher, PedersenHasher, PoseidonHasher},
         merkle::{generate_tree, get_base_tree_count, BinaryMerkleTree},
         proof::ProofScheme,
         sector::OrderedSectorSet,
@@ -127,11 +122,6 @@ mod tests {
     };
 
     use crate::rational::{self, derive_challenges, RationalPoSt, RationalPoStCompound};
-
-    #[test]
-    fn test_rational_post_circuit_pedersen() {
-        test_rational_post_circuit::<BinaryMerkleTree<PedersenHasher>>(16_490);
-    }
 
     #[test]
     fn test_rational_post_circuit_poseidon() {

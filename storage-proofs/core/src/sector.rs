@@ -1,9 +1,9 @@
 use std::collections::BTreeSet;
 use std::fmt;
 
+use bellperson::bls::{Fr, FrRepr};
 use byteorder::ByteOrder;
 use ff::PrimeField;
-use paired::bls12_381::{Fr, FrRepr};
 use serde::{Deserialize, Serialize};
 
 /// An ordered set of `SectorId`s.
@@ -34,7 +34,7 @@ impl From<SectorId> for Fr {
 }
 
 impl fmt::Display for SectorId {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "SectorId({})", self.0)
     }
 }

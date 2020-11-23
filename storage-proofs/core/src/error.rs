@@ -40,6 +40,8 @@ pub enum Error {
     MissingPrivateInput(&'static str, u64),
     #[error("faulty sectors {:?}", _0)]
     FaultySectors(Vec<SectorId>),
+    #[error("Invalid parameters file: {}", _0)]
+    InvalidParameters(String),
 }
 
 impl From<Box<dyn Any + Send>> for Error {

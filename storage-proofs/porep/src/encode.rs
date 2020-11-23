@@ -1,6 +1,6 @@
+use bellperson::bls::Fr;
 use ff::Field;
-use paired::bls12_381::Fr;
-use storage_proofs_core::hasher::Domain;
+use filecoin_hashers::Domain;
 
 pub fn encode<T: Domain>(key: T, value: T) -> T {
     let mut result: Fr = value.into();

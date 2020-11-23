@@ -1,13 +1,11 @@
 use std::env;
-use std::sync::Mutex;
 
 use config::{Config, ConfigError, Environment, File};
 use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize};
 
 lazy_static! {
-    pub static ref SETTINGS: Mutex<Settings> =
-        Mutex::new(Settings::new().expect("invalid configuration"));
+    pub static ref SETTINGS: Settings = Settings::new().expect("invalid configuration");
 }
 
 const SETTINGS_PATH: &str = "./rust-fil-proofs.config.toml";
@@ -16,8 +14,8 @@ const PREFIX: &str = "FIL_PROOFS";
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Settings {
-    pub maximize_caching: bool,
-    pub pedersen_hash_exp_window_size: u32,
+    pub verify_cache: bool,
+    pub verify_production_params: bool,
     pub use_gpu_column_builder: bool,
     pub max_gpu_column_batch_size: u32,
     pub column_write_batch_size: u32,
@@ -28,14 +26,17 @@ pub struct Settings {
     pub window_post_synthesis_num_cpus: u32,
     pub parameter_cache: String,
     pub parent_cache: String,
-    pub use_fil_blst: bool,
+    pub use_multicore_sdr: bool,
+    pub multicore_sdr_producers: usize,
+    pub multicore_sdr_producer_stride: u64,
+    pub multicore_sdr_lookahead: usize,
 }
 
 impl Default for Settings {
     fn default() -> Self {
         Settings {
-            maximize_caching: true,
-            pedersen_hash_exp_window_size: 16,
+            verify_cache: false,
+            verify_production_params: false,
             use_gpu_column_builder: false,
             max_gpu_column_batch_size: 400_000,
             column_write_batch_size: 262_144,
@@ -49,7 +50,10 @@ impl Default for Settings {
             // The name is retained for backwards compatibility.
             parameter_cache: "/var/tmp/filecoin-proof-parameters/".to_string(),
             parent_cache: cache("filecoin-parents"),
-            use_fil_blst: false,
+            use_multicore_sdr: false,
+            multicore_sdr_producers: 3,
+            multicore_sdr_producer_stride: 128,
+            multicore_sdr_lookahead: 800,
         }
     }
 }

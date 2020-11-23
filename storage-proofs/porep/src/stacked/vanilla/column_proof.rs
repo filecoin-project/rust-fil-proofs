@@ -1,7 +1,8 @@
+use bellperson::bls::Fr;
+use filecoin_hashers::Hasher;
 use log::trace;
-use paired::bls12_381::Fr;
 use serde::{Deserialize, Serialize};
-use storage_proofs_core::{error::Result, hasher::Hasher, merkle::MerkleProofTrait};
+use storage_proofs_core::{error::Result, merkle::MerkleProofTrait};
 
 use super::column::Column;
 

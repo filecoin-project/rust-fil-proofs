@@ -1,9 +1,9 @@
 use anyhow::ensure;
+use filecoin_hashers::{Domain, Hasher};
 use serde::{Deserialize, Serialize};
 use std::marker::PhantomData;
 
 use crate::error::*;
-use crate::hasher::{Domain, Hasher};
 use crate::merkle::{MerkleProofTrait, MerkleTreeTrait};
 use crate::parameter_cache::ParameterSetMetadata;
 use crate::proof::{NoRequirements, ProofScheme};
@@ -54,7 +54,7 @@ pub struct PublicInputs<T: Domain> {
 
 /// The inputs that are only available to the prover.
 #[derive(Debug)]
-pub struct PrivateInputs<'a, Tree: 'a + MerkleTreeTrait> {
+pub struct PrivateInputs<'a, Tree: MerkleTreeTrait> {
     /// The data of the leaf.
     pub leaf: <Tree::Hasher as Hasher>::Domain,
     /// The underlying merkle tree.
@@ -150,15 +150,17 @@ impl<'a, Tree: 'a + MerkleTreeTrait> ProofScheme<'a> for PoR<Tree> {
 mod tests {
     use super::*;
 
+    use bellperson::bls::Fr;
     use ff::Field;
+    use filecoin_hashers::{
+        blake2s::Blake2sHasher, poseidon::PoseidonHasher, sha256::Sha256Hasher,
+    };
     use generic_array::typenum;
-    use paired::bls12_381::Fr;
     use rand::SeedableRng;
     use rand_xorshift::XorShiftRng;
 
     use crate::drgraph::{BucketGraph, Graph, BASE_DEGREE};
     use crate::fr32::fr_into_bytes;
-    use crate::hasher::{Blake2sHasher, PedersenHasher, PoseidonHasher, Sha256Hasher};
     use crate::merkle::{create_base_merkle_tree, DiskStore, MerkleProofTrait, MerkleTreeWrapper};
     use crate::util::data_at_node;
 
@@ -203,11 +205,6 @@ mod tests {
         MerkleTreeWrapper<H, DiskStore<<H as Hasher>::Domain>, U, typenum::U0, typenum::U0>;
 
     #[test]
-    fn merklepor_pedersen_binary() {
-        test_merklepor::<TestTree<PedersenHasher, typenum::U2>>();
-    }
-
-    #[test]
     fn merklepor_poseidon_binary() {
         test_merklepor::<TestTree<PoseidonHasher, typenum::U2>>();
     }
@@ -220,11 +217,6 @@ mod tests {
     #[test]
     fn merklepor_blake2s_binary() {
         test_merklepor::<TestTree<Blake2sHasher, typenum::U2>>();
-    }
-
-    #[test]
-    fn merklepor_pedersen_quad() {
-        test_merklepor::<TestTree<PedersenHasher, typenum::U4>>();
     }
 
     #[test]
@@ -309,11 +301,6 @@ mod tests {
     }
 
     #[test]
-    fn merklepor_actually_validates_pedersen_binary() {
-        test_merklepor_validates::<TestTree<PedersenHasher, typenum::U2>>();
-    }
-
-    #[test]
     fn merklepor_actually_validates_poseidon_binary() {
         test_merklepor_validates::<TestTree<PoseidonHasher, typenum::U2>>();
     }
@@ -326,11 +313,6 @@ mod tests {
     #[test]
     fn merklepor_actually_validates_blake2s_quad() {
         test_merklepor_validates::<TestTree<Blake2sHasher, typenum::U4>>();
-    }
-
-    #[test]
-    fn merklepor_actually_validates_pedersen_quad() {
-        test_merklepor_validates::<TestTree<PedersenHasher, typenum::U4>>();
     }
 
     #[test]
@@ -394,11 +376,6 @@ mod tests {
     }
 
     #[test]
-    fn merklepor_actually_validates_challenge_identity_pedersen_binary() {
-        test_merklepor_validates_challenge_identity::<TestTree<PedersenHasher, typenum::U2>>();
-    }
-
-    #[test]
     fn merklepor_actually_validates_challenge_identity_poseidon_binary() {
         test_merklepor_validates_challenge_identity::<TestTree<PoseidonHasher, typenum::U2>>();
     }
@@ -411,11 +388,6 @@ mod tests {
     #[test]
     fn merklepor_actually_validates_challenge_identity_blake2s_quad() {
         test_merklepor_validates_challenge_identity::<TestTree<Blake2sHasher, typenum::U4>>();
-    }
-
-    #[test]
-    fn merklepor_actually_validates_challenge_identity_pedersen_quad() {
-        test_merklepor_validates_challenge_identity::<TestTree<PedersenHasher, typenum::U4>>();
     }
 
     #[test]

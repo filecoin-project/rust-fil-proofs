@@ -9,11 +9,11 @@ use memmap::MmapOptions;
 use merkletree::merkle::get_merkle_tree_len;
 use merkletree::store::{ExternalReader, ReplicaConfig, Store, StoreConfig};
 
+use filecoin_hashers::Hasher;
 use filecoin_proofs::constants::*;
 use filecoin_proofs::types::*;
 use filecoin_proofs::with_shape;
 use storage_proofs::cache_key::CacheKey;
-use storage_proofs::hasher::Hasher;
 use storage_proofs::merkle::{create_lc_tree, get_base_tree_count, split_config_and_replica};
 use storage_proofs::merkle::{LCStore, LCTree, MerkleTreeTrait};
 use storage_proofs::util::{default_rows_to_discard, NODE_SIZE};

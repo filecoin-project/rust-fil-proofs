@@ -1,9 +1,10 @@
 use std::marker::PhantomData;
 
 use anyhow::{ensure, Context};
+use bellperson::bls::{Bls12, Fr};
 use bellperson::Circuit;
+use filecoin_hashers::Hasher;
 use generic_array::typenum;
-use paired::bls12_381::{Bls12, Fr};
 
 use storage_proofs_core::{
     compound_proof::{CircuitComponent, CompoundProof},
@@ -11,7 +12,6 @@ use storage_proofs_core::{
     error::Result,
     gadgets::por::PoRCompound,
     gadgets::variables::Root,
-    hasher::Hasher,
     merkle::{BinaryMerkleTree, MerkleProofTrait},
     parameter_cache::{CacheableParameters, ParameterSetMetadata},
     por,
@@ -138,7 +138,7 @@ where
 
     fn circuit(
         public_inputs: &<DrgPoRep<'a, H, G> as ProofScheme<'a>>::PublicInputs,
-        component_private_inputs: <DrgPoRepCircuit<H> as CircuitComponent>::ComponentPrivateInputs,
+        component_private_inputs: <DrgPoRepCircuit<'_, H> as CircuitComponent>::ComponentPrivateInputs,
         proof: &<DrgPoRep<'a, H, G> as ProofScheme<'a>>::Proof,
         public_params: &<DrgPoRep<'a, H, G> as ProofScheme<'a>>::PublicParams,
         _partition_k: Option<usize>,
@@ -283,16 +283,17 @@ mod tests {
 
     use bellperson::util_cs::{metric_cs::MetricCS, test_cs::TestConstraintSystem};
     use ff::Field;
+    use filecoin_hashers::{poseidon::PoseidonHasher, Hasher};
     use merkletree::store::StoreConfig;
     use pretty_assertions::assert_eq;
     use rand::SeedableRng;
     use rand_xorshift::XorShiftRng;
+
     use storage_proofs_core::{
         cache_key::CacheKey,
         compound_proof,
         drgraph::{BucketGraph, BASE_DEGREE},
         fr32::fr_into_bytes,
-        hasher::{Hasher, PedersenHasher, PoseidonHasher},
         merkle::{BinaryMerkleTree, MerkleTreeTrait},
         proof::NoRequirements,
         test_helper::setup_replica,
@@ -301,12 +302,6 @@ mod tests {
 
     use crate::stacked::BINARY_ARITY;
     use crate::{drg, PoRep};
-
-    #[test]
-    #[ignore] // Slow test – run only when compiled for release.
-    fn test_drgporep_compound_pedersen() {
-        drgporep_test_compound::<BinaryMerkleTree<PedersenHasher>>();
-    }
 
     #[test]
     #[ignore] // Slow test – run only when compiled for release.

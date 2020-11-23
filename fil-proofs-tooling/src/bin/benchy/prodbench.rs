@@ -1,7 +1,9 @@
+use bellperson::bls::Bls12;
 use bellperson::util_cs::bench_cs::BenchCS;
 use bellperson::Circuit;
 use fil_proofs_tooling::shared::{create_replicas, PROVER_ID, RANDOMNESS, TICKET_BYTES};
 use fil_proofs_tooling::{measure, Metadata};
+use filecoin_hashers::sha256::Sha256Hasher;
 use filecoin_proofs::constants::{DefaultOctTree, POREP_PARTITIONS};
 use filecoin_proofs::types::PaddedBytesAmount;
 use filecoin_proofs::types::SectorSize;
@@ -11,12 +13,10 @@ use filecoin_proofs::{
     validate_cache_for_commit, PoRepConfig,
 };
 use log::info;
-use paired::bls12_381::Bls12;
 use rand::SeedableRng;
 use rand_xorshift::XorShiftRng;
 use serde::{Deserialize, Serialize};
 use storage_proofs::compound_proof::CompoundProof;
-use storage_proofs::hasher::Sha256Hasher;
 #[cfg(feature = "measurements")]
 use storage_proofs::measurements::Operation;
 #[cfg(feature = "measurements")]
@@ -252,17 +252,7 @@ pub fn run(
 
 #[derive(Default, Debug, Serialize)]
 struct CircuitOutputs {
-    // porep_snark_partition_constraints
     pub porep_constraints: usize,
-    // replica_inclusion (constraints: single merkle path pedersen)
-    // data_inclusion (constraints: sha merklepath)
-    // window_inclusion (constraints: merkle inclusion path in comm_c)
-    // ticket_constraints - (skip)
-    // replica_inclusion (constraints: single merkle path pedersen)
-    // column_leaf_hash_constraints - (64 byte * stacked layers) pedersen_md
-    // kdf_constraints
-    // merkle_tree_datahash_constraints - sha2 constraints 64
-    // merkle_tree_hash_constraints - 64 byte pedersen
 }
 
 fn run_measure_circuits(i: &ProdbenchInputs) -> CircuitOutputs {

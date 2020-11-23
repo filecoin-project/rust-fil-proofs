@@ -1,8 +1,8 @@
 use std::io::{self, Read};
 
 use anyhow::{ensure, Result};
+use filecoin_hashers::{HashFunction, Hasher};
 use rayon::prelude::*;
-use storage_proofs::hasher::{HashFunction, Hasher};
 
 use crate::constants::DefaultPieceHasher;
 

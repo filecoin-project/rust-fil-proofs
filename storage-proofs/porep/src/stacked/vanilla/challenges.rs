@@ -3,7 +3,7 @@ use num_traits::cast::ToPrimitive;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
-use storage_proofs_core::hasher::Domain;
+use filecoin_hashers::Domain;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LayerChallenges {
@@ -80,9 +80,9 @@ pub struct ChallengeRequirements {
 mod test {
     use super::*;
 
+    use filecoin_hashers::sha256::Sha256Domain;
     use rand::{thread_rng, Rng};
     use std::collections::HashMap;
-    use storage_proofs_core::hasher::pedersen::PedersenDomain;
 
     #[test]
     fn challenge_derivation() {
@@ -92,7 +92,7 @@ mod test {
         let challenges = LayerChallenges::new(layers, n);
         let leaves = 1 << 30;
         let rng = &mut thread_rng();
-        let replica_id: PedersenDomain = PedersenDomain::random(rng);
+        let replica_id: Sha256Domain = Sha256Domain::random(rng);
         let seed: [u8; 32] = rng.gen();
         let partitions = 5;
         let total_challenges = partitions * n;
@@ -129,7 +129,7 @@ mod test {
         let n = 40;
         let leaves = 1 << 30;
         let rng = &mut thread_rng();
-        let replica_id: PedersenDomain = PedersenDomain::random(rng);
+        let replica_id: Sha256Domain = Sha256Domain::random(rng);
         let seed: [u8; 32] = rng.gen();
         let partitions = 5;
         let layers = 100;

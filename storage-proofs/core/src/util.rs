@@ -1,9 +1,8 @@
 use crate::error;
 use anyhow::ensure;
 use bellperson::gadgets::boolean::{self, AllocatedBit, Boolean};
-use bellperson::{ConstraintSystem, SynthesisError};
+use bellperson::{bls::Engine, ConstraintSystem, SynthesisError};
 use merkletree::merkle::get_merkle_tree_row_count;
-use paired::Engine;
 
 use super::settings;
 
@@ -163,10 +162,7 @@ pub fn default_rows_to_discard(leafs: usize, arity: usize) -> usize {
 
     // This configurable setting is for a default oct-tree
     // rows_to_discard value, which defaults to 2.
-    let rows_to_discard = settings::SETTINGS
-        .lock()
-        .expect("rows_to_discard settings lock failure")
-        .rows_to_discard as usize;
+    let rows_to_discard = settings::SETTINGS.rows_to_discard as usize;
 
     // Discard at most 'constant value' rows (coded below,
     // differing by arity) while respecting the max number that
@@ -183,10 +179,14 @@ mod tests {
     use super::*;
 
     use crate::fr32::fr_into_bytes;
+    use bellperson::bls::*;
+    use bellperson::gadgets::boolean::Boolean;
     use bellperson::gadgets::num;
     use bellperson::util_cs::test_cs::TestConstraintSystem;
+    use bellperson::ConstraintSystem;
     use ff::Field;
-    use paired::bls12_381::*;
+    use filecoin_hashers::{sha256::*, HashFunction};
+    use merkletree::hash::Algorithm;
     use rand::{Rng, SeedableRng};
     use rand_xorshift::XorShiftRng;
 
@@ -284,5 +284,49 @@ mod tests {
                 .collect();
             assert_eq!(&a_values[..], &b_values[..]);
         }
+    }
+
+    #[test]
+    fn hash_leaf_bits_circuit() {
+        let mut cs = TestConstraintSystem::<Bls12>::new();
+        let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
+
+        let left_fr = Fr::random(rng);
+        let right_fr = Fr::random(rng);
+        let left: Vec<u8> = fr_into_bytes(&left_fr);
+        let right: Vec<u8> = fr_into_bytes(&right_fr);
+        let height = 1;
+
+        let left_bits: Vec<Boolean> = {
+            let mut cs = cs.namespace(|| "left");
+            bytes_into_boolean_vec(&mut cs, Some(left.as_slice()), 256).expect("left bits failure")
+        };
+
+        let right_bits: Vec<Boolean> = {
+            let mut cs = cs.namespace(|| "right");
+            bytes_into_boolean_vec(&mut cs, Some(right.as_slice()), 256)
+                .expect("right bits failure")
+        };
+
+        let out = Sha256Function::hash_leaf_bits_circuit(
+            cs.namespace(|| "hash_leaf_circuit"),
+            &left_bits,
+            &right_bits,
+            height,
+        )
+        .expect("key derivation function failed");
+
+        assert!(cs.is_satisfied(), "constraints not satisfied");
+        assert_eq!(cs.num_constraints(), 45_387);
+
+        let expected: Fr = Sha256Function::default()
+            .node(left_fr.into(), right_fr.into(), height)
+            .into();
+
+        assert_eq!(
+            expected,
+            out.get_value().expect("get_value failure"),
+            "circuit and non circuit do not match"
+        );
     }
 }

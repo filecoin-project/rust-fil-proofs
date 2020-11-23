@@ -1,6 +1,8 @@
+use filecoin_hashers::Hasher;
 use serde::{Deserialize, Serialize};
-use storage_proofs::hasher::Hasher;
 use storage_proofs::porep::stacked;
+use storage_proofs::post::fallback::*;
+use storage_proofs::sector::*;
 
 use crate::constants::*;
 
@@ -10,6 +12,8 @@ mod porep_config;
 mod porep_proof_partitions;
 mod post_config;
 mod post_proof_partitions;
+mod private_replica_info;
+mod public_replica_info;
 mod sector_class;
 mod sector_size;
 
@@ -19,6 +23,8 @@ pub use self::porep_config::*;
 pub use self::porep_proof_partitions::*;
 pub use self::post_config::*;
 pub use self::post_proof_partitions::*;
+pub use self::private_replica_info::*;
+pub use self::public_replica_info::*;
 pub use self::sector_class::*;
 pub use self::sector_size::*;
 
@@ -28,9 +34,6 @@ pub use stacked::PersistentAux;
 pub use stacked::TemporaryAux;
 pub type ProverId = [u8; 32];
 pub type Ticket = [u8; 32];
-
-pub type Tree = storage_proofs::merkle::OctMerkleTree<DefaultTreeHasher>;
-pub type LCTree = storage_proofs::merkle::OctLCMerkleTree<DefaultTreeHasher>;
 
 pub use storage_proofs::porep::stacked::Labels;
 pub type DataTree = storage_proofs::merkle::BinaryMerkleTree<DefaultPieceHasher>;
@@ -82,4 +85,21 @@ pub struct SealPreCommitPhase1Output<Tree: MerkleTreeTrait> {
     pub labels: Labels<Tree>,
     pub config: StoreConfig,
     pub comm_d: Commitment,
+}
+
+pub type SnarkProof = Vec<u8>;
+pub type VanillaProof<Tree> = Proof<<Tree as MerkleTreeTrait>::Proof>;
+
+// This FallbackPoStSectorProof is used during Fallback PoSt, but
+// contains only Vanilla proof information and is not a full Fallback
+// PoSt proof.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct FallbackPoStSectorProof<Tree: MerkleTreeTrait> {
+    pub sector_id: SectorId,
+    pub comm_r: <Tree::Hasher as Hasher>::Domain,
+    #[serde(bound(
+        serialize = "VanillaProof<Tree>: Serialize",
+        deserialize = "VanillaProof<Tree>: Deserialize<'de>"
+    ))]
+    pub vanilla_proof: VanillaProof<Tree>, // Has comm_c, comm_r_last, inclusion_proofs
 }

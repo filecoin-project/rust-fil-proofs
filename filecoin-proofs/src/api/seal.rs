@@ -3,15 +3,15 @@ use std::io::prelude::*;
 use std::path::{Path, PathBuf};
 
 use anyhow::{ensure, Context, Result};
+use bellperson::bls::Fr;
 use bincode::{deserialize, serialize};
+use filecoin_hashers::{Domain, Hasher};
 use log::{info, trace};
 use memmap::MmapOptions;
 use merkletree::store::{DiskStore, Store, StoreConfig};
-use paired::bls12_381::Fr;
 use storage_proofs::cache_key::CacheKey;
 use storage_proofs::compound_proof::{self, CompoundProof};
 use storage_proofs::drgraph::Graph;
-use storage_proofs::hasher::{Domain, Hasher};
 use storage_proofs::measurements::{measure_op, Operation::CommD};
 use storage_proofs::merkle::{create_base_merkle_tree, BinaryMerkleTree, MerkleTreeTrait};
 use storage_proofs::multi_proof::MultiProof;
@@ -21,7 +21,6 @@ use storage_proofs::porep::stacked::{
 };
 use storage_proofs::proof::ProofScheme;
 use storage_proofs::sector::SectorId;
-use storage_proofs::settings;
 use storage_proofs::util::default_rows_to_discard;
 
 use crate::api::util::{
@@ -57,7 +56,7 @@ where
     S: AsRef<Path>,
     T: AsRef<Path>,
 {
-    info!("seal_pre_commit_phase1:start");
+    info!("seal_pre_commit_phase1:start: {:?}", sector_id);
 
     // Sanity check all input path types.
     ensure!(
@@ -115,7 +114,7 @@ where
     };
 
     let compound_public_params = <StackedCompound<Tree, DefaultPieceHasher> as CompoundProof<
-        StackedDrg<Tree, DefaultPieceHasher>,
+        StackedDrg<'_, Tree, DefaultPieceHasher>,
         _,
     >>::setup(&compound_setup_params)?;
 
@@ -185,7 +184,7 @@ where
         comm_d,
     };
 
-    info!("seal_pre_commit_phase1:finish");
+    info!("seal_pre_commit_phase1:finish: {:?}", sector_id);
     Ok(out)
 }
 
@@ -274,7 +273,7 @@ where
     };
 
     let compound_public_params = <StackedCompound<Tree, DefaultPieceHasher> as CompoundProof<
-        StackedDrg<Tree, DefaultPieceHasher>,
+        StackedDrg<'_, Tree, DefaultPieceHasher>,
         _,
     >>::setup(&compound_setup_params)?;
 
@@ -324,7 +323,7 @@ pub fn seal_commit_phase1<T: AsRef<Path>, Tree: 'static + MerkleTreeTrait>(
     pre_commit: SealPreCommitOutput,
     piece_infos: &[PieceInfo],
 ) -> Result<SealCommitPhase1Output<Tree>> {
-    info!("seal_commit_phase1:start");
+    info!("seal_commit_phase1:start: {:?}", sector_id);
 
     // Sanity check all input path types.
     ensure!(
@@ -408,7 +407,7 @@ pub fn seal_commit_phase1<T: AsRef<Path>, Tree: 'static + MerkleTreeTrait>(
     };
 
     let compound_public_params = <StackedCompound<Tree, DefaultPieceHasher> as CompoundProof<
-        StackedDrg<Tree, DefaultPieceHasher>,
+        StackedDrg<'_, Tree, DefaultPieceHasher>,
         _,
     >>::setup(&compound_setup_params)?;
 
@@ -435,7 +434,7 @@ pub fn seal_commit_phase1<T: AsRef<Path>, Tree: 'static + MerkleTreeTrait>(
         ticket,
     };
 
-    info!("seal_commit_phase1:finish");
+    info!("seal_commit_phase1:finish: {:?}", sector_id);
     Ok(out)
 }
 
@@ -446,7 +445,7 @@ pub fn seal_commit_phase2<Tree: 'static + MerkleTreeTrait>(
     prover_id: ProverId,
     sector_id: SectorId,
 ) -> Result<SealCommitOutput> {
-    info!("seal_commit_phase2:start");
+    info!("seal_commit_phase2:start: {:?}", sector_id);
 
     let SealCommitPhase1Output {
         vanilla_proofs,
@@ -491,7 +490,7 @@ pub fn seal_commit_phase2<Tree: 'static + MerkleTreeTrait>(
     };
 
     let compound_public_params = <StackedCompound<Tree, DefaultPieceHasher> as CompoundProof<
-        StackedDrg<Tree, DefaultPieceHasher>,
+        StackedDrg<'_, Tree, DefaultPieceHasher>,
         _,
     >>::setup(&compound_setup_params)?;
 
@@ -505,7 +504,7 @@ pub fn seal_commit_phase2<Tree: 'static + MerkleTreeTrait>(
     )?;
     info!("snark_proof:finish");
 
-    let proof = MultiProof::new(groth_proofs, &groth_params.vk);
+    let proof = MultiProof::new(groth_proofs, &groth_params.pvk);
 
     let mut buf = Vec::with_capacity(
         SINGLE_PARTITION_PROOF_LEN * usize::from(PoRepProofPartitions::from(porep_config)),
@@ -529,7 +528,7 @@ pub fn seal_commit_phase2<Tree: 'static + MerkleTreeTrait>(
 
     let out = SealCommitOutput { proof: buf };
 
-    info!("seal_commit_phase2:finish");
+    info!("seal_commit_phase2:finish: {:?}", sector_id);
     Ok(out)
 }
 
@@ -571,7 +570,7 @@ pub fn verify_seal<Tree: 'static + MerkleTreeTrait>(
     seed: Ticket,
     proof_vec: &[u8],
 ) -> Result<bool> {
-    info!("verify_seal:start");
+    info!("verify_seal:start: {:?}", sector_id);
     ensure!(comm_d_in != [0; 32], "Invalid all zero commitment (comm_d)");
     ensure!(comm_r_in != [0; 32], "Invalid all zero commitment (comm_r)");
 
@@ -609,30 +608,7 @@ pub fn verify_seal<Tree: 'static + MerkleTreeTrait>(
             k: None,
         };
 
-    let use_fil_blst = settings::SETTINGS
-        .lock()
-        .expect("use_fil_blst settings lock failure")
-        .use_fil_blst;
-
-    let result = if use_fil_blst {
-        info!("verify_seal: use_fil_blst=true");
-        let verifying_key_path = porep_config.get_cache_verifying_key_path::<Tree>()?;
-
-        StackedCompound::verify_blst(
-            &compound_public_params,
-            &public_inputs,
-            &proof_vec,
-            proof_vec.len() / 192,
-            &ChallengeRequirements {
-                minimum_challenges: *POREP_MINIMUM_CHALLENGES
-                    .read()
-                    .expect("POREP_MINIMUM_CHALLENGES poisoned")
-                    .get(&u64::from(SectorSize::from(porep_config)))
-                    .expect("unknown sector size") as usize,
-            },
-            &verifying_key_path,
-        )
-    } else {
+    let result = {
         let sector_bytes = PaddedBytesAmount::from(porep_config);
         let verifying_key = get_stacked_verifying_key::<Tree>(porep_config)?;
 
@@ -661,7 +637,7 @@ pub fn verify_seal<Tree: 'static + MerkleTreeTrait>(
         )
     };
 
-    info!("verify_seal:finish");
+    info!("verify_seal:finish: {:?}", sector_id);
     result
 }
 
@@ -782,77 +758,4 @@ pub fn verify_batch_seal<Tree: 'static + MerkleTreeTrait>(
 
     info!("verify_batch_seal:finish");
     result
-}
-
-pub fn fauxrep<R: AsRef<Path>, S: AsRef<Path>, Tree: 'static + MerkleTreeTrait>(
-    porep_config: PoRepConfig,
-    cache_path: R,
-    out_path: S,
-) -> Result<Commitment> {
-    let mut rng = rand::thread_rng();
-    fauxrep_aux::<_, R, S, Tree>(&mut rng, porep_config, cache_path, out_path)
-}
-
-pub fn fauxrep_aux<
-    Rng: rand::Rng,
-    R: AsRef<Path>,
-    S: AsRef<Path>,
-    Tree: 'static + MerkleTreeTrait,
->(
-    mut rng: &mut Rng,
-    porep_config: PoRepConfig,
-    cache_path: R,
-    out_path: S,
-) -> Result<Commitment> {
-    let sector_bytes = PaddedBytesAmount::from(porep_config).0;
-
-    {
-        // Create a sector full of null bytes at `out_path`.
-        let file = File::create(&out_path)?;
-        file.set_len(sector_bytes)?;
-    }
-
-    let fake_comm_c = <Tree::Hasher as Hasher>::Domain::random(&mut rng);
-    let (comm_r, p_aux) = StackedDrg::<Tree, DefaultPieceHasher>::fake_replicate_phase2(
-        fake_comm_c,
-        out_path,
-        &cache_path,
-        sector_bytes as usize,
-    )?;
-
-    let p_aux_path = cache_path.as_ref().join(CacheKey::PAux.to_string());
-    let mut f_p_aux = File::create(&p_aux_path)
-        .with_context(|| format!("could not create file p_aux={:?}", p_aux_path))?;
-    let p_aux_bytes = serialize(&p_aux)?;
-    f_p_aux
-        .write_all(&p_aux_bytes)
-        .with_context(|| format!("could not write to file p_aux={:?}", p_aux_path))?;
-
-    let mut commitment = [0u8; 32];
-    commitment[..].copy_from_slice(&comm_r.into_bytes()[..]);
-    Ok(commitment)
-}
-
-pub fn fauxrep2<R: AsRef<Path>, S: AsRef<Path>, Tree: 'static + MerkleTreeTrait>(
-    cache_path: R,
-    existing_p_aux_path: S,
-) -> Result<Commitment> {
-    let mut rng = rand::thread_rng();
-
-    let fake_comm_c = <Tree::Hasher as Hasher>::Domain::random(&mut rng);
-
-    let (comm_r, p_aux) =
-        StackedDrg::<Tree, DefaultPieceHasher>::fake_comm_r(fake_comm_c, existing_p_aux_path)?;
-
-    let p_aux_path = cache_path.as_ref().join(CacheKey::PAux.to_string());
-    let mut f_p_aux = File::create(&p_aux_path)
-        .with_context(|| format!("could not create file p_aux={:?}", p_aux_path))?;
-    let p_aux_bytes = serialize(&p_aux)?;
-    f_p_aux
-        .write_all(&p_aux_bytes)
-        .with_context(|| format!("could not write to file p_aux={:?}", p_aux_path))?;
-
-    let mut commitment = [0u8; 32];
-    commitment[..].copy_from_slice(&comm_r.into_bytes()[..]);
-    Ok(commitment)
 }

@@ -1,10 +1,11 @@
 use std::marker::PhantomData;
 
-use paired::bls12_381::Fr;
+use bellperson::bls::Fr;
+use filecoin_hashers::Hasher;
 use serde::{Deserialize, Serialize};
+
 use storage_proofs_core::{
     error::Result,
-    hasher::Hasher,
     merkle::{MerkleTreeTrait, Store},
 };
 

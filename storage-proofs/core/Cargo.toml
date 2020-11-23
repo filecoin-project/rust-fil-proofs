@@ -1,6 +1,6 @@
 [package]
 name = "storage-proofs-core"
-version = "5.1.4"
+version = "5.4.0"
 authors = ["dignifiedquire <me@dignifiedquire.com>"]
 description = "Core parts for proofs of storage"
 license = "MIT OR Apache-2.0"
@@ -12,6 +12,7 @@ readme = "README.md"
 bench = false
 
 [dependencies]
+filecoin-hashers = { path = "../../filecoin-hashers", version = "1.0.0", default-features = false, features = ["sha256", "poseidon"] }
 rand = "0.7"
 merkletree = "0.21.0"
 byteorder = "1"
@@ -19,8 +20,8 @@ config = { version = "0.10.1", default-features = false, features = ["toml"] }
 itertools = "0.9"
 lazy_static = "1.2"
 memmap = "0.7"
-aes = "0.3"
-block-modes = "0.3"
+aes = "0.6"
+block-modes = "0.7"
 sha2 = "0.9.1"
 tempfile = "3"
 fs2 = "0.4"
@@ -30,21 +31,18 @@ blake2b_simd = "0.5"
 blake2s_simd = "0.5"
 toml = "0.5"
 ff = { version = "0.2.3", package = "fff" }
-bellperson = "0.9.1"
-paired = { version = "0.20.0", features = ["serde"] }
-fil-sapling-crypto = "0.6.3"
+bellperson = { version = "0.12.2", default-features = false }
 serde_json = "1.0"
 log = "0.4.7"
 rand_chacha = "0.2.1"
 hex = "0.4.0"
-generic-array = "0.13.2"
+generic-array = "0.14.4"
 anyhow = "1.0.23"
 thiserror = "1.0.6"
-neptune = { version = "1.0.1", features = ["gpu"] }
+neptune = { version = "2.2.0", default-features = false, features = ["gpu"] }
 cpu-time = { version = "1.0", optional = true }
 gperftools = { version = "0.2", optional = true }
 num_cpus = "1.10.1"
-fil-blst = "0.1.1"
 
 [dev-dependencies]
 proptest = "0.10"
@@ -53,19 +51,19 @@ bitvec = "0.17"
 rand_xorshift = "0.2.0"
 pretty_assertions = "0.6.1"
 sha2raw = { path = "../../sha2raw", version = "^2.0.0"}
+filecoin-hashers = { path = "../../filecoin-hashers", version = "1.0.0", default-features = false, features = ["blake2s", "sha256", "poseidon"] }
 
 [features]
-default = ["gpu"]
+default = ["gpu", "pairing"]
 simd = []
 asm = ["sha2/sha2-asm"]
 big-sector-sizes-bench = []
-gpu = ["bellperson/gpu", "fil-sapling-crypto/gpu"]
 measurements = ["cpu-time", "gperftools"]
 profile = ["measurements"]
 
-[[bench]]
-name = "pedersen"
-harness = false
+gpu = ["bellperson/gpu", "neptune/gpu", "filecoin-hashers/gpu"]
+pairing = ["bellperson/pairing", "neptune/pairing", "bellperson/pairing-serde", "filecoin-hashers/pairing"]
+blst = ["bellperson/blst", "neptune/blst", "bellperson/blst-serde", "filecoin-hashers/blst"]
 
 [[bench]]
 name = "sha256"

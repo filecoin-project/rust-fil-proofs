@@ -3,14 +3,14 @@
 use std::marker::PhantomData;
 
 use anyhow::{ensure, Result};
+use bellperson::bls::Fr;
+use filecoin_hashers::{Hasher, PoseidonArity};
 use generic_array::typenum::{Unsigned, U0};
 use merkletree::hash::Algorithm;
 use merkletree::proof;
-use paired::bls12_381::Fr;
 use serde::{Deserialize, Serialize};
 
 use crate::drgraph::graph_height;
-use crate::hasher::{Hasher, PoseidonArity};
 
 /// Trait to abstract over the concept of Merkle Proof.
 pub trait MerkleProofTrait:
@@ -207,7 +207,7 @@ impl<H: Hasher, Arity: PoseidonArity> InclusionPath<H, Arity> {
         self.path.is_empty()
     }
 
-    pub fn iter(&self) -> std::slice::Iter<PathElement<H, Arity>> {
+    pub fn iter(&self) -> std::slice::Iter<'_, PathElement<H, Arity>> {
         self.path.iter()
     }
 
@@ -720,10 +720,11 @@ impl<
 mod tests {
     use super::super::*;
 
-    use generic_array::typenum;
-
-    use crate::hasher::{Blake2sHasher, Domain, PedersenHasher, PoseidonHasher, Sha256Hasher};
     use crate::merkle::{generate_tree, MerkleProofTrait};
+    use filecoin_hashers::{
+        blake2s::Blake2sHasher, poseidon::PoseidonHasher, sha256::Sha256Hasher, Domain,
+    };
+    use generic_array::typenum;
 
     fn merklepath<Tree: 'static + MerkleTreeTrait>() {
         let node_size = 32;
@@ -747,71 +748,6 @@ mod tests {
                 "failed to validate valid data"
             );
         }
-    }
-
-    #[test]
-    fn merklepath_pedersen_2() {
-        merklepath::<
-            MerkleTreeWrapper<
-                PedersenHasher,
-                DiskStore<<PedersenHasher as Hasher>::Domain>,
-                typenum::U2,
-                typenum::U0,
-                typenum::U0,
-            >,
-        >();
-    }
-
-    #[test]
-    fn merklepath_pedersen_4() {
-        merklepath::<
-            MerkleTreeWrapper<
-                PedersenHasher,
-                DiskStore<<PedersenHasher as Hasher>::Domain>,
-                typenum::U4,
-                typenum::U0,
-                typenum::U0,
-            >,
-        >();
-    }
-
-    #[test]
-    fn merklepath_pedersen_8() {
-        merklepath::<
-            MerkleTreeWrapper<
-                PedersenHasher,
-                DiskStore<<PedersenHasher as Hasher>::Domain>,
-                typenum::U8,
-                typenum::U0,
-                typenum::U0,
-            >,
-        >();
-    }
-
-    #[test]
-    fn merklepath_pedersen_2_2() {
-        merklepath::<
-            MerkleTreeWrapper<
-                PedersenHasher,
-                DiskStore<<PedersenHasher as Hasher>::Domain>,
-                typenum::U2,
-                typenum::U2,
-                typenum::U0,
-            >,
-        >();
-    }
-
-    #[test]
-    fn merklepath_pedersen_2_2_2() {
-        merklepath::<
-            MerkleTreeWrapper<
-                PedersenHasher,
-                DiskStore<<PedersenHasher as Hasher>::Domain>,
-                typenum::U2,
-                typenum::U2,
-                typenum::U2,
-            >,
-        >();
     }
 
     #[test]

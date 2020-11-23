@@ -1,6 +1,5 @@
 use bellperson::gadgets::boolean::Boolean;
-use bellperson::{ConstraintSystem, SynthesisError};
-use fil_sapling_crypto::jubjub::JubjubEngine;
+use bellperson::{bls::Engine, ConstraintSystem, SynthesisError};
 
 pub fn xor<E, CS>(
     cs: &mut CS,
@@ -8,7 +7,7 @@ pub fn xor<E, CS>(
     input: &[Boolean],
 ) -> Result<Vec<Boolean>, SynthesisError>
 where
-    E: JubjubEngine,
+    E: Engine,
     CS: ConstraintSystem<E>,
 {
     let key_len = key.len();
@@ -35,8 +34,7 @@ mod tests {
     use crate::util::{bits_to_bytes, bytes_into_boolean_vec};
     use bellperson::gadgets::boolean::Boolean;
     use bellperson::util_cs::test_cs::TestConstraintSystem;
-    use bellperson::ConstraintSystem;
-    use paired::bls12_381::Bls12;
+    use bellperson::{bls::Bls12, ConstraintSystem};
     use rand::{Rng, SeedableRng};
     use rand_xorshift::XorShiftRng;
 

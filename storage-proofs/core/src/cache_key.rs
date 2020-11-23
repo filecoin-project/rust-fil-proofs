@@ -10,7 +10,7 @@ pub enum CacheKey {
 }
 
 impl fmt::Display for CacheKey {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match *self {
             CacheKey::PAux => write!(f, "p_aux"),
             CacheKey::TAux => write!(f, "t_aux"),

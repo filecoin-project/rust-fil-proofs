@@ -1,9 +1,9 @@
 use std::marker::PhantomData;
 
 use anyhow::ensure;
+use bellperson::bls::{Bls12, Fr};
 use bellperson::{Circuit, ConstraintSystem, SynthesisError};
 use generic_array::typenum;
-use paired::bls12_381::{Bls12, Fr};
 
 use storage_proofs_core::{
     compound_proof::{CircuitComponent, CompoundProof},
@@ -180,23 +180,17 @@ mod tests {
     use std::collections::BTreeMap;
 
     use bellperson::util_cs::test_cs::TestConstraintSystem;
+    use filecoin_hashers::{poseidon::PoseidonHasher, Domain, HashFunction, Hasher};
     use rand::{Rng, SeedableRng};
     use rand_xorshift::XorShiftRng;
     use storage_proofs_core::{
         compound_proof,
-        hasher::{Domain, HashFunction, Hasher, PedersenHasher, PoseidonHasher},
         merkle::{generate_tree, get_base_tree_count, BinaryMerkleTree},
         proof::NoRequirements,
         sector::OrderedSectorSet,
     };
 
     use crate::rational::{self, derive_challenges};
-
-    #[ignore] // Slow test – run only when compiled for release.
-    #[test]
-    fn rational_post_test_compound_pedersen() {
-        rational_post_test_compound::<BinaryMerkleTree<PedersenHasher>>();
-    }
 
     #[ignore] // Slow test – run only when compiled for release.
     #[test]

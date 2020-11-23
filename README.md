@@ -54,7 +54,10 @@ The instructions below assume you have independently installed `rust-fil-proofs`
 
 **NOTE:** `rust-fil-proofs` can only be built for and run on 64-bit platforms; building will panic if the target architecture is not 64-bits.
 
-Before building you will need OpenCL to be installed, on Ubuntu this can be achieved with `apt install ocl-icd-opencl-dev`.  Other system dependencies such as 'gcc/clang', 'wall' and 'cmake' are also required.
+Before building you will need OpenCL to be installed. On Ubuntu, this can be achieved with `apt install ocl-icd-opencl-dev`.  Other system dependencies such as 'gcc/clang', 'wall' and 'cmake' are also required.
+
+You will also need to install the hwloc library. On Ubuntu, this can be achieved with `apt install hwloc libhwloc-dev`. For other platforms, please see the [hwloc-rs Prerequisites section](https://github.com/daschl/hwloc-rs).
+
 
 ```
 > cargo build --release --all
@@ -135,29 +138,27 @@ Filecoin proof parameter files are expected to be located in `/var/tmp/filecoin-
 FIL_PROOFS_PARAMETER_CACHE=/path/to/parameters
 ```
 
+If you are running a node that is expected to be using production parameters (i.e. the ones specified in the parameters.json file within this repo), you can optionally verify your on-disk parameters using an environment variable
+
+```
+FIL_PROOFS_VERIFY_PRODUCTION_PARAMS=1
+```
+
+By default, this verification is disabled.
+
 ## Optimizing for either speed or memory during replication
 
 While replicating and generating the Merkle Trees (MT) for the proof at the same time there will always be a time-memory trade-off to consider, we present here strategies to optimize one at the cost of the other.
 
 ### Speed
 
-One of the most computational expensive operations during replication (besides the encoding itself) is the generation of the indexes of the (expansion) parents in the Stacked graph, implemented through a Feistel cipher (used as a pseudorandom permutation). To reduce that time we provide a caching mechanism to generate them only once and reuse them throughout replication (across the different layers). Already built into the system it can be activated with the environmental variable
-
-```
-FIL_PROOFS_MAXIMIZE_CACHING=1
-```
-
-To check that it's working you can inspect the replication log to find `using parents cache of unlimited size`. As the log indicates, we don't have a fine grain control at the moment so it either stores all parents or none. This cache will add about 1.5x the entire sector size to the disk cache used during replication, and a configurable sliding window of cached data is used as memory overhead.  This setting is _very recommended_ as it has a considerable impact on replication time.
-
-You can also verify if the cache is working by inspecting the time each layer takes to encode, `encoding, layer:` in the log, where the first two layers, forward and reverse, will take more time than the rest to populate the cache while the remaining 8 should see a considerable time drop.
-
-Note that this setting is enabled by `default`.  It can be disabled by setting the value to 0.
-
-A related setting that can also be tuned is the SDR parents cache size.  This value is defaulted to 2048 nodes, which is the equivalent of 112KiB of resident memory (where each cached node consists of DEGREE (base + exp = 6 + 8) x 4 byte elements = 56 bytes in length).  Given that the cache is now located on disk, it is memory mapped when accessed in window sizes related to this variable.  This default was chosen to minimize memory while still allowing efficient access to the cache.  If you would like to experiment with alternate sizes, you can modify the environment variable
+One of the most computationally expensive operations during replication (besides the encoding itself) is the generation of the indexes of the (expansion) parents in the Stacked graph, implemented through a Feistel cipher (used as a pseudorandom permutation). To reduce that time we provide a caching mechanism to generate them only once and reuse them throughout replication (across the different layers).
 
 ```
 FIL_PROOFS_SDR_PARENTS_CACHE_SIZE=2048
 ```
+
+This value is defaulted to 2048 nodes, which is the equivalent of 112KiB of resident memory (where each cached node consists of DEGREE (base + exp = 6 + 8) x 4 byte elements = 56 bytes in length).  Given that the cache is now located on disk, it is memory mapped when accessed in window sizes related to this variable.  This default was chosen to minimize memory while still allowing efficient access to the cache.  If you would like to experiment with alternate sizes, you can modify the environment variable
 
 Increasing this value will increase the amount of resident RAM used.
 
@@ -170,6 +171,44 @@ FIL_PROOFS_PARENT_CACHE=/path/to/parent/cache
 Using the above, the cache data would be located at `/path/to/parent/cache/filecoin-parents`.
 
 Alternatively, use `FIL_PROOFS_CACHE_DIR=/path/to/parent/cache`, in which the parent cache will be located in `$FIL_PROOFS_CACHE_DIR/filecoin-parents`.  Note that if you're using `FIL_PROOFS_CACHE_DIR`, it must be set through the environment and cannot be set using the configuration file.  This setting has no effect if `FIL_PROOFS_PARENT_CACHE` is also specified.
+
+If you are concerned about the integrity of your on-disk parent cache files, they can be verified at runtime when accessed for the first time using an environment variable
+
+```
+FIL_PROOFS_VERIFY_CACHE=1
+```
+
+If they are inconsistent (compared to the manifest in storage-proofs/porep/parent-cache.json), they will be automatically re-generated at runtime.  If that cache generation fails, it will be reported as an error.
+
+```
+FIL_PROOFS_USE_MULTICORE_SDR
+```
+
+When performing SDR replication (Precommit Phase 1) using only a single core, memory access to fetch a node's parents is
+a bottlneck. Multicore SDR uses multiple cores (which should be restricted to a single core complex for shared cache) to
+assemble each nodes parents and perform some prehashing. This setting is not enabled by default but can be activated by
+setting `FIL_PROOFS_USE_MULTICORE_SDR=1`.
+
+To take advantage of shared cache, the process should have been restricted to a single complex's cores. For example, on
+an AMD Threadripper 3970x (where tested), this can be accomplished using `taskset -c 4,5,6,7` to ensure four 'adjacent'
+cores are used (note that this avoids spanning a complex border).
+
+Best performance will also be achieved when it is possible to lock pages which have been memory-mapped. This can be
+accomplished either by running the process as root, or by increasing the system limit for max locked memory with `ulimit
+-l`. Two sector size's worth of data (for current and previous layers) must be locked -- along with 56 *
+`FIL_PROOFS_PARENT_CACHE_SIZE` bytes for the parent cache.
+
+Default parameters have been tuned to provide good performance on the AMD Ryzen Threadripper 3970x. It may be useful to
+experiment with these, especially on different hardware. We have made an effort to use sensible heuristics and to ensure
+reasonable behavior for a range of configurations and hardware, but actual performance or behavior of mulitcore
+replication is not yet well tested except on our target. The following settings may be useful, but do expect some
+failure in the search for good parameters. This might take the form of failed replication (bad proofs), errors during
+replication, or even potentially crashes if parameters prove pathological. For now, this is an experimental feature, and
+only the default configuration on default hardware (3970x) is known to work well.
+
+`FIL_PROOFS_MULTICORE_SDR_PRODUCERS`: This is the number of worker threads loading node parents in parallel. The default is `3` so the producers and main thread together use a full core complex (but no more).
+`FIL_PROOFS_MULTICORE_SDR_PRODUCER_STRIDE`: This is the (max) number of nodes for which a producer thread will load parents in each iteration of its loop. The default is`128`.
+`FIL_PROOFS_MULTICORE_SDR_LOOKAHEAD`: This is the size of the lookahead buffer into which node parents are pre-loaded by the producer threads. The default is 800.
 
 ### GPU Usage
 

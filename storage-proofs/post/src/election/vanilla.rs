@@ -3,10 +3,14 @@ use std::fmt;
 use std::marker::PhantomData;
 
 use anyhow::{bail, ensure, Context};
+use bellperson::bls::Fr;
 use byteorder::{ByteOrder, LittleEndian};
+use filecoin_hashers::{
+    poseidon::{PoseidonDomain, PoseidonFunction},
+    Domain, HashFunction, Hasher, PoseidonMDArity,
+};
 use generic_array::typenum;
 use log::trace;
-use paired::bls12_381::Fr;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -15,7 +19,6 @@ use typenum::Unsigned;
 use storage_proofs_core::{
     error::{Error, Result},
     fr32::fr_into_bytes,
-    hasher::{Domain, HashFunction, Hasher, PoseidonDomain, PoseidonFunction, PoseidonMDArity},
     measurements::{measure_op, Operation},
     merkle::{MerkleProof, MerkleProofTrait, MerkleTreeTrait, MerkleTreeWrapper},
     parameter_cache::ParameterSetMetadata,
@@ -140,7 +143,7 @@ impl<P: MerkleProofTrait> Proof<P> {
 #[derive(Debug, Clone)]
 pub struct ElectionPoSt<'a, Tree>
 where
-    Tree: 'a + MerkleTreeTrait,
+    Tree: MerkleTreeTrait,
 {
     _t: PhantomData<&'a Tree>,
 }
@@ -450,14 +453,12 @@ impl<'a, Tree: 'static + MerkleTreeTrait> ProofScheme<'a> for ElectionPoSt<'a, T
 mod tests {
     use super::*;
 
+    use filecoin_hashers::poseidon::PoseidonHasher;
     use rand::SeedableRng;
     use rand_xorshift::XorShiftRng;
     use typenum::{U0, U2, U8};
 
-    use storage_proofs_core::{
-        hasher::{PedersenHasher, PoseidonHasher},
-        merkle::{generate_tree, get_base_tree_count, LCTree},
-    };
+    use storage_proofs_core::merkle::{generate_tree, get_base_tree_count, LCTree};
 
     fn test_election_post<Tree: 'static + MerkleTreeTrait>() {
         let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
@@ -521,11 +522,6 @@ mod tests {
             .expect("verification failed");
 
         assert!(is_valid);
-    }
-
-    #[test]
-    fn election_post_pedersen() {
-        test_election_post::<LCTree<PedersenHasher, U8, U0, U0>>();
     }
 
     #[test]
