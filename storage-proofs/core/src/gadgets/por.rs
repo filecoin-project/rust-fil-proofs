@@ -439,16 +439,75 @@ impl<'a, Tree: MerkleTreeTrait> PoRCircuit<Tree> {
     }
 }
 
+/// Synthesizes a non-compound arity PoR without adding a public input for the challenge (whereas
+/// `PoRCircuit` adds one public input for the challenge). This PoR gadget allows the caller to pack
+/// mulitple PoR challenges into a single public input when the challenge bit length is less than
+/// `Fr::Capacity`.
+pub fn por_no_challenge_input<Tree, CS>(
+    cs: &mut CS,
+    // Least significant bit first, most significant bit last.
+    challenge_bits: Vec<AllocatedBit>,
+    leaf: num::AllocatedNum<Bls12>,
+    path_values: Vec<Vec<num::AllocatedNum<Bls12>>>,
+    root: num::AllocatedNum<Bls12>,
+) -> Result<(), SynthesisError>
+where
+    Tree: MerkleTreeTrait,
+    CS: ConstraintSystem<Bls12>,
+{
+    let arity = Tree::Arity::to_usize();
+    let arity_bit_len = arity.trailing_zeros() as usize;
+    let challenge_bit_len = challenge_bits.len();
+    let height = path_values.len();
+
+    // Check that all path elements are consistent with the arity.
+    assert!(path_values
+        .iter()
+        .all(|siblings| siblings.len() == arity - 1));
+
+    // Check that the challenge bit length is consistent with the height and arity.
+    assert_eq!(challenge_bit_len, arity_bit_len * height);
+
+    let challenge_bits: Vec<Boolean> = challenge_bits.into_iter().map(Boolean::from).collect();
+
+    // Compute a root from the provided path and check equality with the provided root.
+    let mut cur = leaf;
+    for (height, (siblings, insert_index)) in path_values
+        .iter()
+        .zip(challenge_bits.chunks(arity_bit_len))
+        .enumerate()
+    {
+        let inputs = insert(
+            &mut cs.namespace(|| format!("merkle insert, height {}", height)),
+            &cur,
+            &insert_index,
+            &siblings,
+        )?;
+        cur = <<Tree::Hasher as Hasher>::Function as HashFunction<
+            <Tree::Hasher as Hasher>::Domain,
+        >>::hash_multi_leaf_circuit::<Tree::Arity, _>(
+            cs.namespace(|| format!("merkle hash, height {}", height)),
+            &inputs,
+            height,
+        )?;
+    }
+    let computed_root = cur;
+    constraint::equal(cs, || "merkle root equality", &computed_root, &root);
+
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     use bellperson::gadgets::multipack;
+    use bellperson::gadgets::num::AllocatedNum;
     use ff::Field;
     use generic_array::typenum;
     use merkletree::store::VecStore;
     use pretty_assertions::assert_eq;
-    use rand::SeedableRng;
+    use rand::{Rng, SeedableRng};
     use rand_xorshift::XorShiftRng;
 
     use crate::compound_proof;
@@ -958,5 +1017,98 @@ mod tests {
             assert!(cs.is_satisfied(), "constraints are not all satisfied");
             assert!(cs.verify(&expected_inputs), "failed to verify inputs");
         }
+    }
+
+    #[test]
+    fn test_por_no_challenge_input() {
+        type Arity = typenum::U8;
+        type Tree = TestTree<PoseidonHasher, Arity>;
+
+        // == Setup
+        let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
+
+        let height = 3;
+        let n_leaves = Arity::to_usize() << height;
+
+        let data: Vec<u8> = (0..n_leaves)
+            .flat_map(|_| fr_into_bytes(&Fr::random(rng)))
+            .collect();
+
+        let tree = create_base_merkle_tree::<Tree>(None, n_leaves, &data)
+            .expect("create_base_merkle_tree failure");
+        let root = tree.root();
+
+        let challenge = rng.gen::<usize>() % n_leaves;
+        let leaf_bytes = data_at_node(&data, challenge).expect("data_at_node failure");
+        let leaf = bytes_into_fr(leaf_bytes).expect("bytes_into_fr failure");
+
+        // == Vanilla PoR proof
+        let proof = {
+            use por::{PoR, PrivateInputs, PublicInputs, PublicParams};
+            let pub_params = PublicParams {
+                leaves: n_leaves,
+                private: false,
+            };
+            let pub_inputs = PublicInputs {
+                challenge,
+                commitment: None,
+            };
+            let priv_inputs = PrivateInputs {
+                leaf: leaf.into(),
+                tree: &tree,
+            };
+            let proof =
+                PoR::<Tree>::prove(&pub_params, &pub_inputs, &priv_inputs).expect("proving failed");
+            let is_valid =
+                PoR::<Tree>::verify(&pub_params, &pub_inputs, &proof).expect("verification failed");
+            assert!(is_valid, "failed to verify por proof");
+            proof.proof
+        };
+
+        // == Test PoR gadget
+        let mut cs = TestConstraintSystem::<Bls12>::new();
+
+        let challenge_bit_len = n_leaves.trailing_zeros() as usize;
+        let challenge: Vec<AllocatedBit> = (0..challenge_bit_len)
+            .map(|i| {
+                AllocatedBit::alloc(
+                    cs.namespace(|| format!("challenge bit {}", i)),
+                    Some((challenge >> i) & 1 == 1),
+                )
+                .expect("failed to allocate challenge bit")
+            })
+            .collect();
+
+        let leaf = AllocatedNum::alloc(cs.namespace(|| "leaf".to_string()), || Ok(leaf))
+            .expect("failed to allocate leaf");
+
+        let path_values: Vec<Vec<num::AllocatedNum<Bls12>>> = proof
+            .path()
+            .iter()
+            .enumerate()
+            .map(|(height, (siblings, _insert_index))| {
+                siblings
+                    .iter()
+                    .enumerate()
+                    .map(|(sib_index, &sib)| {
+                        AllocatedNum::alloc(
+                            cs.namespace(|| format!("sib {}, height {}", sib_index, height)),
+                            || Ok(sib.into()),
+                        )
+                        .expect("failed to allocate sibling")
+                    })
+                    .collect()
+            })
+            .collect();
+
+        let root = AllocatedNum::alloc(cs.namespace(|| "root".to_string()), || Ok(root.into()))
+            .expect("failed to allocate root");
+
+        por_no_challenge_input::<Tree, _>(&mut cs, challenge, leaf, path_values, root)
+            .expect("por gadget failed");
+
+        assert!(cs.is_satisfied());
+        let public_inputs = vec![];
+        assert!(cs.verify(&public_inputs));
     }
 }
