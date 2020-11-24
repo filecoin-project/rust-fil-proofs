@@ -62,7 +62,7 @@ lazy_static! {
             (SECTOR_SIZE_512_MIB, 2),
             (SECTOR_SIZE_1_GIB, 2),
             (SECTOR_SIZE_4_GIB, 4),
-            (SECTOR_SIZE_8_GIB, 85),
+            (SECTOR_SIZE_8_GIB, 326), //131,521,312 constraints
             (SECTOR_SIZE_32_GIB, 176),
             (SECTOR_SIZE_64_GIB, 176),
         ]
@@ -81,7 +81,7 @@ lazy_static! {
             (SECTOR_SIZE_512_MIB, 1),
             (SECTOR_SIZE_1_GIB, 1),
             (SECTOR_SIZE_4_GIB, 2),
-            (SECTOR_SIZE_8_GIB, 5),
+            (SECTOR_SIZE_8_GIB, 10),
             (SECTOR_SIZE_32_GIB, 10),
             (SECTOR_SIZE_64_GIB, 10),
         ]
@@ -122,7 +122,7 @@ lazy_static! {
             (SECTOR_SIZE_512_MIB, 2),
             (SECTOR_SIZE_1_GIB, 2),
             (SECTOR_SIZE_4_GIB, 2),
-            (SECTOR_SIZE_8_GIB, 2),
+            (SECTOR_SIZE_8_GIB, 2500), // this gives 127,932,500 constraints, fitting in a single partition
             (SECTOR_SIZE_32_GIB, 2349), // this gives 125,279,217 constraints, fitting in a single partition
             (SECTOR_SIZE_64_GIB, 2300), // this gives 129,887,900 constraints, fitting in a single partition
         ]
