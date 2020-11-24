@@ -527,38 +527,41 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
 
                     // Loop until all trees for all configs have been built.
                     for i in 0..config_count {
-                        let (columns, is_final): (Vec<GenericArray<Fr, ColumnArity>>, bool) =
-                            builder_rx.recv().expect("failed to recv columns");
+                        loop {
+                            let (columns, is_final): (Vec<GenericArray<Fr, ColumnArity>>, bool) =
+                                builder_rx.recv().expect("failed to recv columns");
 
-                        // Just add non-final column batches.
-                        if !is_final {
-                            column_tree_builder
-                                .add_columns(&columns)
-                                .expect("failed to add columns");
-                            continue;
-                        };
+                            // Just add non-final column batches.
+                            if !is_final {
+                                column_tree_builder
+                                    .add_columns(&columns)
+                                    .expect("failed to add columns");
+                                continue;
+                            };
 
-                        // If we get here, this is a final column: build a sub-tree.
-                        let (base_data, tree_data) = column_tree_builder
-                            .add_final_columns(&columns)
-                            .expect("failed to add final columns");
-                        trace!(
-                            "base data len {}, tree data len {}",
-                            base_data.len(),
-                            tree_data.len()
-                        );
+                            // If we get here, this is a final column: build a sub-tree.
+                            let (base_data, tree_data) = column_tree_builder
+                                .add_final_columns(&columns)
+                                .expect("failed to add final columns");
+                            trace!(
+                                "base data len {}, tree data len {}",
+                                base_data.len(),
+                                tree_data.len()
+                            );
 
-                        let tree_len = base_data.len() + tree_data.len();
-                        info!(
-                            "persisting base tree_c {}/{} of length {}",
-                            i + 1,
-                            tree_count,
-                            tree_len,
-                        );
+                            let tree_len = base_data.len() + tree_data.len();
+                            info!(
+                                "persisting base tree_c {}/{} of length {}",
+                                i + 1,
+                                tree_count,
+                                tree_len,
+                            );
 
-                        writer_tx
-                            .send((base_data, tree_data))
-                            .expect("failed to send base_data, tree_data");
+                            writer_tx
+                                .send((base_data, tree_data))
+                                .expect("failed to send base_data, tree_data");
+                            break;
+                        }
                     }
                 });
 
@@ -804,28 +807,31 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
 
                     // Loop until all trees for all configs have been built.
                     for i in 0..config_count {
-                        let (encoded, is_final) =
-                            builder_rx.recv().expect("failed to recv encoded data");
+                        loop {
+                            let (encoded, is_final) =
+                                builder_rx.recv().expect("failed to recv encoded data");
 
-                        // Just add non-final leaf batches.
-                        if !is_final {
-                            tree_builder
-                                .add_leaves(&encoded)
-                                .expect("failed to add leaves");
-                            continue;
-                        };
+                            // Just add non-final leaf batches.
+                            if !is_final {
+                                tree_builder
+                                    .add_leaves(&encoded)
+                                    .expect("failed to add leaves");
+                                continue;
+                            };
 
-                        // If we get here, this is a final leaf batch: build a sub-tree.
-                        info!(
-                            "building base tree_r_last with GPU {}/{}",
-                            i + 1,
-                            tree_count
-                        );
-                        let (_, tree_data) = tree_builder
-                            .add_final_leaves(&encoded)
-                            .expect("failed to add final leaves");
+                            // If we get here, this is a final leaf batch: build a sub-tree.
+                            info!(
+                                "building base tree_r_last with GPU {}/{}",
+                                i + 1,
+                                tree_count
+                            );
+                            let (_, tree_data) = tree_builder
+                                .add_final_leaves(&encoded)
+                                .expect("failed to add final leaves");
 
-                        writer_tx.send(tree_data).expect("failed to send tree_data");
+                            writer_tx.send(tree_data).expect("failed to send tree_data");
+                            break;
+                        }
                     }
                 });
 
