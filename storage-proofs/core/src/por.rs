@@ -159,6 +159,7 @@ mod tests {
     use rand::SeedableRng;
     use rand_xorshift::XorShiftRng;
 
+    use crate::api_version::ApiVersion;
     use crate::drgraph::{BucketGraph, Graph, BASE_DEGREE};
     use crate::fr32::fr_into_bytes;
     use crate::merkle::{create_base_merkle_tree, DiskStore, MerkleProofTrait, MerkleTreeWrapper};
@@ -177,7 +178,9 @@ mod tests {
             .flat_map(|_| fr_into_bytes(&Fr::random(rng)))
             .collect();
         let porep_id = [3; 32];
-        let graph = BucketGraph::<Tree::Hasher>::new(leaves, BASE_DEGREE, 0, porep_id).unwrap();
+        let graph =
+            BucketGraph::<Tree::Hasher>::new(leaves, BASE_DEGREE, 0, porep_id, ApiVersion::V1_1_0)
+                .unwrap();
         let tree = create_base_merkle_tree::<Tree>(None, graph.size(), data.as_slice()).unwrap();
 
         let pub_inputs = PublicInputs {
@@ -259,7 +262,9 @@ mod tests {
 
         let porep_id = [99; 32];
 
-        let graph = BucketGraph::<Tree::Hasher>::new(leaves, BASE_DEGREE, 0, porep_id).unwrap();
+        let graph =
+            BucketGraph::<Tree::Hasher>::new(leaves, BASE_DEGREE, 0, porep_id, ApiVersion::V1_1_0)
+                .unwrap();
         let tree = create_base_merkle_tree::<Tree>(None, graph.size(), data.as_slice()).unwrap();
 
         let pub_inputs = PublicInputs {
@@ -335,7 +340,9 @@ mod tests {
             .collect();
 
         let porep_id = [32; 32];
-        let graph = BucketGraph::<Tree::Hasher>::new(leaves, BASE_DEGREE, 0, porep_id).unwrap();
+        let graph =
+            BucketGraph::<Tree::Hasher>::new(leaves, BASE_DEGREE, 0, porep_id, ApiVersion::V1_1_0)
+                .unwrap();
         let tree = create_base_merkle_tree::<Tree>(None, graph.size(), data.as_slice()).unwrap();
 
         let pub_inputs = PublicInputs {

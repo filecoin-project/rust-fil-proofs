@@ -10,8 +10,8 @@ use merkletree::merkle::get_merkle_tree_leafs;
 use merkletree::store::{DiskStore, Store, StoreConfig};
 use serde::{Deserialize, Serialize};
 use storage_proofs_core::{
-    drgraph::Graph, error::Result, fr32::bytes_into_fr_repr_safe, merkle::*,
-    parameter_cache::ParameterSetMetadata, util::data_at_node,
+    api_version::ApiVersion, drgraph::Graph, error::Result, fr32::bytes_into_fr_repr_safe,
+    merkle::*, parameter_cache::ParameterSetMetadata, util::data_at_node,
 };
 
 use super::{
@@ -35,6 +35,7 @@ pub struct SetupParams {
 
     pub porep_id: [u8; 32],
     pub layer_challenges: LayerChallenges,
+    pub api_version: ApiVersion,
 }
 
 #[derive(Debug)]

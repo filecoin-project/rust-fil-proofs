@@ -2,10 +2,13 @@
 //#![warn(clippy::unwrap_used)]
 
 use std::io::{stdin, stdout};
+use std::str::FromStr;
 
 use anyhow::Result;
 use byte_unit::Byte;
 use clap::{value_t, App, Arg, SubCommand};
+
+use storage_proofs::api_version::ApiVersion;
 
 use crate::prodbench::ProdbenchInputs;
 
@@ -84,6 +87,14 @@ fn main() -> Result<()> {
                 .required(true)
                 .help("The data size (e.g. 2KiB)")
                 .takes_value(true),
+        )
+        .arg(
+            Arg::with_name("api_version")
+                .long("api-version")
+                .required(true)
+                .help("The api_version to use (default: 1.0.0)")
+                .default_value("1.0.0")
+                .takes_value(true),
         );
 
     let winning_post_cmd = SubCommand::with_name("winning-post")
@@ -93,6 +104,14 @@ fn main() -> Result<()> {
                 .long("size")
                 .required(true)
                 .help("The data size (e.g. 2KiB)")
+                .takes_value(true),
+        )
+        .arg(
+            Arg::with_name("api_version")
+                .long("api-version")
+                .required(true)
+                .help("The api_version to use (default: 1.0.0)")
+                .default_value("1.0.0")
                 .takes_value(true),
         );
 
@@ -179,8 +198,10 @@ fn main() -> Result<()> {
             let test_resume = m.is_present("test-resume");
             let cache_dir = value_t!(m, "cache", String)?;
             let sector_size = Byte::from_str(value_t!(m, "size", String)?)?.get_bytes() as usize;
+            let api_version = ApiVersion::from_str(&value_t!(m, "api_version", String)?)?;
             window_post::run(
                 sector_size,
+                api_version,
                 cache_dir,
                 preserve_cache,
                 skip_precommit_phase1,
@@ -192,7 +213,8 @@ fn main() -> Result<()> {
         }
         ("winning-post", Some(m)) => {
             let sector_size = Byte::from_str(value_t!(m, "size", String)?)?.get_bytes() as usize;
-            winning_post::run(sector_size)?;
+            let api_version = ApiVersion::from_str(&value_t!(m, "api_version", String)?)?;
+            winning_post::run(sector_size, api_version)?;
         }
         ("hash-constraints", Some(_m)) => {
             hash_fns::run()?;

@@ -6,6 +6,7 @@ use filecoin_hashers::{
     {Domain, Hasher},
 };
 use rand::thread_rng;
+use storage_proofs_core::api_version::ApiVersion;
 use storage_proofs_core::fr32::fr_into_bytes;
 use storage_proofs_porep::stacked::{
     create_label::single::{create_label, create_label_exp},
@@ -22,12 +23,13 @@ fn pregenerate_data<H: Hasher>(degree: usize) -> Pregenerated<H> {
     assert_eq!(degree, 6 + 8);
     let mut rng = thread_rng();
     let size = degree * 4 * 1024 * 1024;
+    let api_version = ApiVersion::V1_0_0;
     let data: Vec<u8> = (0..size)
         .flat_map(|_| fr_into_bytes(&Fr::random(&mut rng)))
         .collect();
     let replica_id: H::Domain = H::Domain::random(&mut rng);
 
-    let graph = StackedBucketGraph::<H>::new_stacked(size, 6, 8, [32; 32]).unwrap();
+    let graph = StackedBucketGraph::<H>::new_stacked(size, 6, 8, [32; 32], api_version).unwrap();
 
     Pregenerated {
         data,

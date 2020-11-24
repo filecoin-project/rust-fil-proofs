@@ -78,6 +78,7 @@ mod tests {
     use rand_xorshift::XorShiftRng;
 
     use storage_proofs_core::{
+        api_version::ApiVersion,
         drgraph::{Graph, BASE_DEGREE},
         fr32::{bytes_into_fr, fr_into_bytes},
         util::bytes_into_boolean_vec_be,
@@ -99,6 +100,7 @@ mod tests {
             BASE_DEGREE,
             EXP_DEGREE,
             porep_id,
+            ApiVersion::V1_1_0,
         )
         .unwrap();
 

@@ -314,6 +314,7 @@ mod tests {
     use rand_xorshift::XorShiftRng;
 
     use storage_proofs_core::{
+        api_version::ApiVersion,
         cache_key::CacheKey,
         compound_proof,
         drgraph::{graph_height, BucketGraph, BASE_DEGREE},
@@ -372,6 +373,7 @@ mod tests {
             },
             private: false,
             challenges_count: 1,
+            api_version: ApiVersion::V1_1_0,
         };
 
         let pp = drg::DrgPoRep::<PoseidonHasher, BucketGraph<_>>::setup(&sp)

@@ -623,6 +623,7 @@ mod tests {
     use ff::PrimeField;
     use filecoin_hashers::poseidon::PoseidonHasher;
     use generic_array::typenum::{U0, U2, U8};
+    use storage_proofs_core::api_version::ApiVersion;
 
     #[test]
     fn test_create_labels() {
@@ -640,6 +641,7 @@ mod tests {
             layers,
             replica_id,
             legacy_porep_id,
+            ApiVersion::V1_0_0,
             Fr::from_repr(FrRepr([
                 0xd3faa96b9a0fba04,
                 0xea81a283d106485e,
@@ -653,6 +655,7 @@ mod tests {
             layers,
             replica_id,
             legacy_porep_id,
+            ApiVersion::V1_0_0,
             Fr::from_repr(FrRepr([
                 0x7e191e52c4a8da86,
                 0x5ae8a1c9e6fac148,
@@ -667,6 +670,7 @@ mod tests {
             layers,
             replica_id,
             new_porep_id,
+            ApiVersion::V1_1_0,
             Fr::from_repr(FrRepr([
                 0xabb3f38bb70defcf,
                 0x777a2e4d7769119f,
@@ -681,6 +685,7 @@ mod tests {
             layers,
             replica_id,
             new_porep_id,
+            ApiVersion::V1_1_0,
             Fr::from_repr(FrRepr([
                 0x22ab81cf68c4676d,
                 0x7a77a82fc7c9c189,
@@ -696,6 +701,7 @@ mod tests {
         layers: usize,
         replica_id: [u8; 32],
         porep_id: [u8; 32],
+        api_version: ApiVersion,
         expected_last_label: Fr,
     ) {
         let nodes = sector_size / NODE_SIZE;
@@ -713,6 +719,7 @@ mod tests {
             BASE_DEGREE,
             EXP_DEGREE,
             porep_id,
+            api_version,
         )
         .unwrap();
         let cache = graph.parent_cache().unwrap();

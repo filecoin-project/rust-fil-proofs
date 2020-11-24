@@ -11,6 +11,7 @@ use filecoin_hashers::sha256::Sha256Hasher;
 use filecoin_proofs::constants::*;
 use filecoin_proofs::types::*;
 use filecoin_proofs::with_shape;
+use storage_proofs::api_version::ApiVersion;
 use storage_proofs::porep::stacked::{LayerChallenges, SetupParams, StackedDrg};
 use storage_proofs::proof::ProofScheme;
 
@@ -27,6 +28,7 @@ pub struct ParentCacheSummary {
 fn gen_graph_cache<Tree: 'static + MerkleTreeTrait>(
     sector_size: usize,
     porep_id: [u8; 32],
+    api_version: ApiVersion,
     parent_cache_summary_map: &mut ParentCacheSummaryMap,
 ) -> Result<()> {
     let nodes = (sector_size / 32) as usize;
@@ -45,6 +47,7 @@ fn gen_graph_cache<Tree: 'static + MerkleTreeTrait>(
         expansion_degree,
         porep_id,
         layer_challenges,
+        api_version,
     };
 
     let pp = StackedDrg::<Tree, Sha256Hasher>::setup(&sp).expect("failed to setup DRG");
@@ -95,13 +98,14 @@ fn main() -> Result<()> {
     //
     // If this value changes, previously existing cache files will no longer be
     // used and new cache files will be generated.
-    let sector_sizes_and_porep_ids: Vec<(u64, [u8; 32])> = vec![
+    let sector_sizes_and_porep_ids: Vec<(u64, [u8; 32], ApiVersion)> = vec![
         (
             SECTOR_SIZE_2_KIB,
             [
                 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
                 0, 0, 0, 0,
             ],
+            ApiVersion::V1_0_0,
         ),
         (
             SECTOR_SIZE_8_MIB,
@@ -109,6 +113,7 @@ fn main() -> Result<()> {
                 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
                 0, 0, 0, 0,
             ],
+            ApiVersion::V1_0_0,
         ),
         (
             SECTOR_SIZE_512_MIB,
@@ -116,6 +121,7 @@ fn main() -> Result<()> {
                 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
                 0, 0, 0, 0,
             ],
+            ApiVersion::V1_0_0,
         ),
         (
             SECTOR_SIZE_32_GIB,
@@ -123,6 +129,7 @@ fn main() -> Result<()> {
                 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
                 0, 0, 0, 0,
             ],
+            ApiVersion::V1_0_0,
         ),
         (
             SECTOR_SIZE_64_GIB,
@@ -130,41 +137,47 @@ fn main() -> Result<()> {
                 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
                 0, 0, 0, 0,
             ],
+            ApiVersion::V1_0_0,
         ),
         (
-            SECTOR_SIZE_2_KIB, // v1.1
+            SECTOR_SIZE_2_KIB, // v1.1.0
             [
                 5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
                 0, 0, 0, 0,
             ],
+            ApiVersion::V1_1_0,
         ),
         (
-            SECTOR_SIZE_8_MIB, // v1.1
+            SECTOR_SIZE_8_MIB, // v1.1.0
             [
                 6, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
                 0, 0, 0, 0,
             ],
+            ApiVersion::V1_1_0,
         ),
         (
-            SECTOR_SIZE_512_MIB, // v1.1
+            SECTOR_SIZE_512_MIB, // v1.1.0
             [
                 7, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
                 0, 0, 0, 0,
             ],
+            ApiVersion::V1_1_0,
         ),
         (
-            SECTOR_SIZE_32_GIB, // v1.1
+            SECTOR_SIZE_32_GIB, // v1.1.0
             [
                 8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
                 0, 0, 0, 0,
             ],
+            ApiVersion::V1_1_0,
         ),
         (
-            SECTOR_SIZE_64_GIB, // v1.1
+            SECTOR_SIZE_64_GIB, // v1.1.0
             [
                 9, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
                 0, 0, 0, 0,
             ],
+            ApiVersion::V1_1_0,
         ),
     ];
 
@@ -192,7 +205,7 @@ fn main() -> Result<()> {
         return Ok(());
     }
 
-    for (sector_size, porep_id) in sector_sizes_and_porep_ids {
+    for (sector_size, porep_id, api_version) in sector_sizes_and_porep_ids {
         // 'size' 0 indicates no size was specified, so we run all sizes.
         if size != 0 && size != sector_size {
             continue;
@@ -203,6 +216,7 @@ fn main() -> Result<()> {
             gen_graph_cache,
             sector_size as usize,
             porep_id,
+            api_version,
             &mut parent_cache_summary_map,
         )?;
     }

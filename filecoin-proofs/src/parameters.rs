@@ -1,4 +1,5 @@
 use anyhow::{ensure, Result};
+use storage_proofs::api_version::ApiVersion;
 use storage_proofs::porep::stacked::{self, LayerChallenges, StackedDrg};
 use storage_proofs::post::fallback;
 use storage_proofs::proof::ProofScheme;
@@ -16,11 +17,13 @@ pub fn public_params<Tree: 'static + MerkleTreeTrait>(
     sector_bytes: PaddedBytesAmount,
     partitions: usize,
     porep_id: [u8; 32],
+    api_version: ApiVersion,
 ) -> Result<stacked::PublicParams<Tree>> {
     StackedDrg::<Tree, DefaultPieceHasher>::setup(&setup_params(
         sector_bytes,
         partitions,
         porep_id,
+        api_version,
     )?)
 }
 
@@ -51,6 +54,7 @@ pub fn winning_post_setup_params(post_config: &PoStConfig) -> Result<WinningPost
         sector_size: post_config.padded_sector_size().into(),
         challenge_count: param_challenge_count,
         sector_count: param_sector_count,
+        api_version: post_config.api_version,
     })
 }
 
@@ -65,6 +69,7 @@ pub fn window_post_setup_params(post_config: &PoStConfig) -> WindowPostSetupPara
         sector_size: post_config.padded_sector_size().into(),
         challenge_count: post_config.challenge_count,
         sector_count: post_config.sector_count,
+        api_version: post_config.api_version,
     }
 }
 
@@ -72,6 +77,7 @@ pub fn setup_params(
     sector_bytes: PaddedBytesAmount,
     partitions: usize,
     porep_id: [u8; 32],
+    api_version: ApiVersion,
 ) -> Result<stacked::SetupParams> {
     let layer_challenges = select_challenges(
         partitions,
@@ -104,6 +110,7 @@ pub fn setup_params(
         expansion_degree,
         porep_id,
         layer_challenges,
+        api_version,
     })
 }
 
@@ -126,6 +133,7 @@ mod tests {
     use super::*;
 
     use crate::types::PoStType;
+    use storage_proofs::api_version::ApiVersion;
 
     #[test]
     fn partition_layer_challenges_test() {
@@ -150,6 +158,7 @@ mod tests {
             challenge_count: 66,
             sector_count: 1,
             sector_size: 2048u64.into(),
+            api_version: ApiVersion::V1_0_0,
         };
 
         let params =

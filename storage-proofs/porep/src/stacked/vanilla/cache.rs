@@ -438,6 +438,7 @@ mod tests {
 
     use crate::stacked::vanilla::graph::{StackedBucketGraph, EXP_DEGREE};
     use filecoin_hashers::poseidon::PoseidonHasher;
+    use storage_proofs_core::api_version::ApiVersion;
 
     #[test]
     fn test_read_full_range() {
@@ -447,6 +448,7 @@ mod tests {
             BASE_DEGREE,
             EXP_DEGREE,
             [0u8; 32],
+            ApiVersion::V1_0_0,
         )
         .expect("new_stacked failure");
 
@@ -471,6 +473,7 @@ mod tests {
             BASE_DEGREE,
             EXP_DEGREE,
             [0u8; 32],
+            ApiVersion::V1_0_0,
         )
         .expect("new_stacked failure");
 

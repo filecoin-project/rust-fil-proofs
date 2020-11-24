@@ -3,7 +3,8 @@ use std::marker::PhantomData;
 use anyhow::{anyhow, ensure};
 use bellperson::bls::{Bls12, Fr};
 use bellperson::Circuit;
-
+use filecoin_hashers::Hasher;
+use sha2::{Digest, Sha256};
 use storage_proofs_core::{
     compound_proof::{CircuitComponent, CompoundProof},
     error::Result,
@@ -16,7 +17,7 @@ use storage_proofs_core::{
 };
 
 use super::circuit::Sector;
-use crate::fallback::{self, FallbackPoSt, FallbackPoStCircuit};
+use crate::fallback::{generate_leaf_challenge_inner, FallbackPoSt, FallbackPoStCircuit};
 
 pub struct FallbackPoStCompound<Tree>
 where
@@ -63,21 +64,25 @@ impl<'a, Tree: 'static + MerkleTreeTrait>
             // 1. Inputs for verifying comm_r = H(comm_c || comm_r_last)
             inputs.push(sector.comm_r.into());
 
+            // avoid rehashing fixed inputs
+            let mut challenge_hasher = Sha256::new();
+            challenge_hasher.update(AsRef::<[u8]>::as_ref(&pub_inputs.randomness));
+            challenge_hasher.update(&u64::from(sector.id).to_le_bytes()[..]);
+
             // 2. Inputs for verifying inclusion paths
             for n in 0..pub_params.challenge_count {
                 let challenge_index = ((partition_index * pub_params.sector_count + i)
                     * pub_params.challenge_count
                     + n) as u64;
-                let challenged_leaf_start = fallback::generate_leaf_challenge(
-                    &pub_params,
-                    pub_inputs.randomness,
-                    sector.id.into(),
-                    challenge_index,
+                let challenged_leaf = generate_leaf_challenge_inner::<
+                    <Tree::Hasher as Hasher>::Domain,
+                >(
+                    challenge_hasher.clone(), &pub_params, challenge_index
                 );
 
                 let por_pub_inputs = por::PublicInputs {
                     commitment: None,
-                    challenge: challenged_leaf_start as usize,
+                    challenge: challenged_leaf as usize,
                 };
                 let por_inputs = PoRCompound::<Tree>::generate_public_inputs(
                     &por_pub_inputs,
@@ -168,6 +173,7 @@ mod tests {
     use rand::SeedableRng;
     use rand_xorshift::XorShiftRng;
     use storage_proofs_core::{
+        api_version::ApiVersion,
         compound_proof,
         merkle::{generate_tree, get_base_tree_count, LCTree, MerkleTreeTrait},
     };
@@ -179,43 +185,50 @@ mod tests {
     #[ignore]
     #[test]
     fn fallback_post_poseidon_single_partition_matching_base_8() {
-        fallback_post::<LCTree<PoseidonHasher, U8, U0, U0>>(15, 15, 1);
+        fallback_post::<LCTree<PoseidonHasher, U8, U0, U0>>(15, 15, 1, ApiVersion::V1_0_0);
+        fallback_post::<LCTree<PoseidonHasher, U8, U0, U0>>(15, 15, 1, ApiVersion::V1_1_0);
     }
 
     #[ignore]
     #[test]
     fn fallback_post_poseidon_single_partition_matching_sub_8_4() {
-        fallback_post::<LCTree<PoseidonHasher, U8, U4, U0>>(3, 3, 1);
+        fallback_post::<LCTree<PoseidonHasher, U8, U4, U0>>(3, 3, 1, ApiVersion::V1_0_0);
+        fallback_post::<LCTree<PoseidonHasher, U8, U4, U0>>(3, 3, 1, ApiVersion::V1_1_0);
     }
 
     #[ignore]
     #[test]
     fn fallback_post_poseidon_single_partition_matching_top_8_4_2() {
-        fallback_post::<LCTree<PoseidonHasher, U8, U4, U2>>(3, 3, 1);
+        fallback_post::<LCTree<PoseidonHasher, U8, U4, U2>>(3, 3, 1, ApiVersion::V1_0_0);
+        fallback_post::<LCTree<PoseidonHasher, U8, U4, U2>>(3, 3, 1, ApiVersion::V1_1_0);
     }
 
     #[ignore]
     #[test]
     fn fallback_post_poseidon_single_partition_smaller_base_8() {
-        fallback_post::<LCTree<PoseidonHasher, U8, U0, U0>>(2, 3, 1);
+        fallback_post::<LCTree<PoseidonHasher, U8, U0, U0>>(2, 3, 1, ApiVersion::V1_0_0);
+        fallback_post::<LCTree<PoseidonHasher, U8, U0, U0>>(2, 3, 1, ApiVersion::V1_1_0);
     }
 
     #[ignore]
     #[test]
     fn fallback_post_poseidon_two_partitions_matching_base_8() {
-        fallback_post::<LCTree<PoseidonHasher, U8, U0, U0>>(4, 2, 2);
+        fallback_post::<LCTree<PoseidonHasher, U8, U0, U0>>(4, 2, 2, ApiVersion::V1_0_0);
+        fallback_post::<LCTree<PoseidonHasher, U8, U0, U0>>(4, 2, 2, ApiVersion::V1_1_0);
     }
 
     #[ignore]
     #[test]
     fn fallback_post_poseidon_two_partitions_smaller_base_8() {
-        fallback_post::<LCTree<PoseidonHasher, U8, U0, U0>>(5, 3, 2);
+        fallback_post::<LCTree<PoseidonHasher, U8, U0, U0>>(5, 3, 2, ApiVersion::V1_0_0);
+        fallback_post::<LCTree<PoseidonHasher, U8, U0, U0>>(5, 3, 2, ApiVersion::V1_1_0);
     }
 
     fn fallback_post<Tree: 'static + MerkleTreeTrait>(
         total_sector_count: usize,
         sector_count: usize,
         partitions: usize,
+        api_version: ApiVersion,
     ) where
         Tree::Store: 'static,
     {
@@ -232,6 +245,7 @@ mod tests {
                 sector_size: sector_size as u64,
                 challenge_count,
                 sector_count,
+                api_version,
             },
             partitions: Some(partitions),
             priority: false,
