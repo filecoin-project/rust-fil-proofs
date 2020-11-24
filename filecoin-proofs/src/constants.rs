@@ -32,6 +32,22 @@ pub const EXP_DEGREE: usize = storage_proofs::porep::stacked::EXP_DEGREE;
 
 pub const PARAMETERS_DATA: &str = include_str!("../parameters.json");
 
+/// Sector sizes for which parameters have been published.
+pub const PUBLISHED_SECTOR_SIZES: [u64; 11] = [
+    SECTOR_SIZE_2_KIB,
+    SECTOR_SIZE_4_KIB,
+    SECTOR_SIZE_16_KIB,
+    SECTOR_SIZE_32_KIB,
+    SECTOR_SIZE_8_MIB,
+    SECTOR_SIZE_16_MIB,
+    SECTOR_SIZE_512_MIB,
+    SECTOR_SIZE_1_GIB,
+    SECTOR_SIZE_8_GIB,
+    SECTOR_SIZE_32_GIB,
+    SECTOR_SIZE_64_GIB,
+];
+
+
 lazy_static! {
     pub static ref PARAMETERS: ParameterMap =
         serde_json::from_str(PARAMETERS_DATA).expect("Invalid parameters.json");
