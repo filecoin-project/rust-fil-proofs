@@ -13,5 +13,3 @@ members = [
   "filecoin-hashers",
 ]
 
-[patch.crates-io]
-bellperson = { git = "https://github.com/filecoin-project/bellperson", branch = "feat-update-blstrs" }
