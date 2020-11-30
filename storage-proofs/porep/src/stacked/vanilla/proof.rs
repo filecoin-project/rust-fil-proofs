@@ -587,7 +587,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                     let batch_size = std::cmp::min(base_data.len(), column_write_batch_size);
                     let flatten_and_write_store = |data: &Vec<Fr>, offset| {
                         data.into_par_iter()
-                            .chunks(column_write_batch_size)
+                            .chunks(batch_size)
                             .enumerate()
                             .try_for_each(|(index, fr_elements)| {
                                 let mut buf = Vec::with_capacity(batch_size * NODE_SIZE);
