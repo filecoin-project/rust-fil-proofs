@@ -11,7 +11,7 @@ readme = "README.md"
 
 [dependencies]
 bellperson = { version = "0.12.3", default-features = false }
-filecoin-proofs = { version = "5.4.0", path = "../filecoin-proofs", default-features = false }
+filecoin-proofs = { version = "^6.0.0", path = "../filecoin-proofs", default-features = false }
 storage-proofs = { version = "^6.0.0", path = "../storage-proofs", default-features = false }
 filecoin-hashers = { version = "1.0.0", path = "../filecoin-hashers", default-features = false, features = ["sha256"] }
 groupy = "0.3.1"
