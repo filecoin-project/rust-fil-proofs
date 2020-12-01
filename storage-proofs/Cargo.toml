@@ -10,7 +10,7 @@ readme = "README.md"
 
 [dependencies]
 storage-proofs-core = { path = "./core", version = "^6.0.0", default-features = false }
-storage-proofs-post = { path = "./post", version = "^5.0.0", default-features = false }
+storage-proofs-post = { path = "./post", version = "^6.0.0", default-features = false }
 storage-proofs-porep = { path = "./porep", version = "^6.0.0", default-features = false }
 
 [features]
