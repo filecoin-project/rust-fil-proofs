@@ -185,13 +185,9 @@ FIL_PROOFS_USE_MULTICORE_SDR
 ```
 
 When performing SDR replication (Precommit Phase 1) using only a single core, memory access to fetch a node's parents is
-a bottlneck. Multicore SDR uses multiple cores (which should be restricted to a single core complex for shared cache) to
+a bottleneck. Multicore SDR uses multiple cores (which should be restricted to a single core complex for shared cache) to
 assemble each nodes parents and perform some prehashing. This setting is not enabled by default but can be activated by
 setting `FIL_PROOFS_USE_MULTICORE_SDR=1`.
-
-To take advantage of shared cache, the process should have been restricted to a single complex's cores. For example, on
-an AMD Threadripper 3970x (where tested), this can be accomplished using `taskset -c 4,5,6,7` to ensure four 'adjacent'
-cores are used (note that this avoids spanning a complex border).
 
 Best performance will also be achieved when it is possible to lock pages which have been memory-mapped. This can be
 accomplished either by running the process as root, or by increasing the system limit for max locked memory with `ulimit
@@ -200,7 +196,7 @@ accomplished either by running the process as root, or by increasing the system 
 
 Default parameters have been tuned to provide good performance on the AMD Ryzen Threadripper 3970x. It may be useful to
 experiment with these, especially on different hardware. We have made an effort to use sensible heuristics and to ensure
-reasonable behavior for a range of configurations and hardware, but actual performance or behavior of mulitcore
+reasonable behavior for a range of configurations and hardware, but actual performance or behavior of multicore
 replication is not yet well tested except on our target. The following settings may be useful, but do expect some
 failure in the search for good parameters. This might take the form of failed replication (bad proofs), errors during
 replication, or even potentially crashes if parameters prove pathological. For now, this is an experimental feature, and
@@ -212,13 +208,13 @@ only the default configuration on default hardware (3970x) is known to work well
 
 ### GPU Usage
 
-We can now optionally build the column hashed tree 'tree_c' using the GPU with noticeable speed-up over the CPU.  To activate the GPU for this, use the environment variable
+The column hashed tree 'tree_c' can optionally be built using the GPU with noticeable speed-up over the CPU.  To activate the GPU for this, use the environment variable
 
 ```
 FIL_PROOFS_USE_GPU_COLUMN_BUILDER=1
 ```
 
-We can optionally also build 'tree_r_last' using the GPU, which provides at least a 2x speed-up over the CPU.  To activate the GPU for this, use the environment variable
+Similarly, the 'tree_r_last' tree can also be built using the GPU, which provides at least a 2x speed-up over the CPU.  To activate the GPU for this, use the environment variable
 
 ```
 FIL_PROOFS_USE_GPU_TREE_BUILDER=1
@@ -228,7 +224,15 @@ Note that *both* of these GPU options can and should be enabled if a supported G
 
 ### Advanced GPU Usage
 
-If using the GPU to build tree_c (using `FIL_PROOFS_USE_GPU_COLUMN_BUILDER=1`), two experimental variables can be tested for local optimization of your hardware.  First, you can set
+When using the GPU to build 'tree_r_last' (using `FIL_PROOFS_USE_GPU_TREE_BUILDER=1`), an experimental variable can be tested for local optimization of your hardware.
+
+```
+FIL_PROOFS_MAX_GPU_TREE_BATCH_SIZE=Z
+```
+
+The default batch size value is 700,000 tree nodes.
+
+When using the GPU to build 'tree_c' (using `FIL_PROOFS_USE_GPU_COLUMN_BUILDER=1`), two experimental variables can be tested for local optimization of your hardware.  First, you can set
 
 ```
 FIL_PROOFS_MAX_GPU_COLUMN_BATCH_SIZE=X
@@ -236,17 +240,13 @@ FIL_PROOFS_MAX_GPU_COLUMN_BATCH_SIZE=X
 
 The default value for this is 400,000, which means that we compile 400,000 columns at once and pass them in batches to the GPU.  Each column is a "single node x the number of layers" (e.g. a 32GiB sector has 11 layers, so each column consists of 11 nodes).  This value is used as both a reasonable default, but it's also measured that it takes about as much time to compile this size batch as it does for the GPU to consume it (using the 2080ti for testing), which we do in parallel for maximized throughput.  Changing this value may exhaust GPU RAM if set too large, or may decrease performance if set too low.  This setting is made available for your experimentation during this step.
 
-The second variable that may affect performance is the size of the parallel write buffers when storing the tree data returned from the GPU.  This value is set to a reasonable default of 262,144, but you may adjust it as needed if an individual performance benefit can be achieved.  To adjust this value, use the environment variable
+The second variable that may affect overall 'tree_c' performance is the size of the parallel write buffers when storing the tree data returned from the GPU.  This value is set to a reasonable default of 262,144, but you may adjust it as needed if an individual performance benefit can be achieved.  To adjust this value, use the environment variable
 
 ```
 FIL_PROOFS_COLUMN_WRITE_BATCH_SIZE=Y
 ```
 
-A similar option for building 'tree_r_last' exists.  The default batch size is 700,000 tree nodes.  To adjust this, use the environment variable
-
-```
-FIL_PROOFS_MAX_GPU_TREE_BATCH_SIZE=Z
-```
+Note that this value affects the degree of parallelism used when persisting the column tree to disk, and may exhaust system file descriptors if the limit is not adjusted appropriately (e.g. using `ulimit -n`).  If persisting the tree is failing due to a 'bad file descriptor' error, try adjusting this value to something larger (e.g. 524288, or 1048576).  Increasing this value processes larger chunks at once, which results in larger (but fewer) disk writes in parallel.
 
 ### Memory
 
