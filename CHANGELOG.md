@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://book.async.rs/overview
 
 ## Unreleased
 
+## [6.0.0] - 2020-12-01
+
+- Add PoR gadget that does not add a public input [#1374](https://github.com/filecoin-project/rust-fil-proofs/pull/1374)
+- Update README and fix some typos [#1377](https://github.com/filecoin-project/rust-fil-proofs/pull/1377)
+- Update bellperson using new blstrs release gadget [#1376](https://github.com/filecoin-project/rust-fil-proofs/pull/1376)
+- Fix tree_c and tree_r_last generation in GPU mode [#1375](https://github.com/filecoin-project/rust-fil-proofs/pull/1375)
+- Add API version enum for determining runtime behaviour [#1362](https://github.com/filecoin-project/rust-fil-proofs/pull/1362)
+- Parallelize CI test runs across packages [#1358](https://github.com/filecoin-project/rust-fil-proofs/pull/1358)
+- Update paramcache run for metrics capture CI job [#1363](https://github.com/filecoin-project/rust-fil-proofs/pull/1363)
+- Re-organize filecoin-proofs source [#1352](https://github.com/filecoin-project/rust-fil-proofs/pull/1352)
+- Move hashers into `filecoin-hashers` crate [#1356](https://github.com/filecoin-project/rust-fil-proofs/pull/1356)
+- Speed up Fr32Reader [#1341](https://github.com/filecoin-project/rust-fil-proofs/pull/1341)
+- Serialize GPU tree building with GPU lock [#1335](https://github.com/filecoin-project/rust-fil-proofs/pull/1335)
+- Disable `phase2` tests that require external files [#1342](https://github.com/filecoin-project/rust-fil-proofs/pull/1342)
+- Move `phase2` into its own crate [#1340](https://github.com/filecoin-project/rust-fil-proofs/pull/1340)
+- Raise soft fdlimit to max at runtime (OS X/Linux) [#1338](https://github.com/filecoin-project/rust-fil-proofs/pull/1338)
+- Improve clippy lints (rust 2018 idioms) [#1337](https://github.com/filecoin-project/rust-fil-proofs/pull/1337)
+
 ## [5.4.0] - 2020-11-02
 
 - Fix graph generation [#1336](https://github.com/filecoin-project/rust-fil-proofs/pull/1336)
