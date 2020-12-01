@@ -11,7 +11,7 @@ and this project adheres to [Semantic Versioning](https://book.async.rs/overview
 
 - Add PoR gadget that does not add a public input [#1374](https://github.com/filecoin-project/rust-fil-proofs/pull/1374)
 - Update README and fix some typos [#1377](https://github.com/filecoin-project/rust-fil-proofs/pull/1377)
-- Update bellperson using new blstrs release gadget [#1376](https://github.com/filecoin-project/rust-fil-proofs/pull/1376)
+- Update bellperson using new blstrs, which in turn now uses`blst@0.3.2` [#1376](https://github.com/filecoin-project/rust-fil-proofs/pull/1376)
 - Fix tree_c and tree_r_last generation in GPU mode [#1375](https://github.com/filecoin-project/rust-fil-proofs/pull/1375)
 - Add API version enum for determining runtime behaviour [#1362](https://github.com/filecoin-project/rust-fil-proofs/pull/1362)
 - Parallelize CI test runs across packages [#1358](https://github.com/filecoin-project/rust-fil-proofs/pull/1358)
