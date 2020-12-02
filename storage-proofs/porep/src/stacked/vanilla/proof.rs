@@ -86,7 +86,6 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         t_aux: &TemporaryAuxCache<Tree, G>,
         layer_challenges: &LayerChallenges,
         layers: usize,
-        _total_layers: usize,
         partition_count: usize,
     ) -> Result<Vec<Vec<Proof<Tree, G>>>> {
         assert!(layers > 0);
