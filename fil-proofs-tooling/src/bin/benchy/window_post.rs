@@ -596,7 +596,7 @@ pub fn run(
     // If 'preserve_cache' is specified, the 'cache' option must be specified and must not exist on disk.
     if preserve_cache {
         ensure!(
-            cache_dir_specified && !Path::new(&PathBuf::from(&cache)).exists(),
+            cache_dir_specified && !PathBuf::from(&cache).exists(),
             "The 'preserve_cache' option cannot be used with a cache_dir that already exists"
         );
     }
