@@ -592,6 +592,13 @@ pub fn run(
     info!("Benchy Window PoSt: sector-size={}, api_version={}, preserve_cache={}, skip_precommit_phase1={}, skip_precommit_phase2={}, skip_commit_phase1={}, skip_commit_phase2={}, test_resume={}", sector_size, api_version, preserve_cache, skip_precommit_phase1, skip_precommit_phase2, skip_commit_phase1, skip_commit_phase2, test_resume);
 
     let cache_dir_specified = !cache.is_empty();
+
+    // If 'preserve_cache' is specified, the 'cache' option must be specified and must not exist on disk.
+    if preserve_cache {
+        ensure!(cache_dir_specified && !Path::new(&PathBuf::from(&cache)).exists(),
+                "The 'preserve_cache' option cannot be used with a cache_dir that already exists");
+    }
+
     if skip_precommit_phase1 || skip_precommit_phase2 || skip_commit_phase1 || skip_commit_phase2 {
         ensure!(
             !preserve_cache,
