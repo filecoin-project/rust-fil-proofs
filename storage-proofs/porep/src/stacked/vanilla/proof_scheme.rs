@@ -72,7 +72,6 @@ impl<'a, 'c, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> ProofScheme<'
             &priv_inputs.t_aux,
             &pub_params.layer_challenges,
             pub_params.layer_challenges.layers(),
-            pub_params.layer_challenges.layers(),
             partition_count,
         )
     }

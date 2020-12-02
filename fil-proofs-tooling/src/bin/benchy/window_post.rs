@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 use std::fs::{create_dir, read, read_to_string, remove_dir_all, File, OpenOptions};
 use std::io::{stdout, Seek, SeekFrom, Write};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use anyhow::{ensure, Context};
@@ -592,6 +592,15 @@ pub fn run(
     info!("Benchy Window PoSt: sector-size={}, api_version={}, preserve_cache={}, skip_precommit_phase1={}, skip_precommit_phase2={}, skip_commit_phase1={}, skip_commit_phase2={}, test_resume={}", sector_size, api_version, preserve_cache, skip_precommit_phase1, skip_precommit_phase2, skip_commit_phase1, skip_commit_phase2, test_resume);
 
     let cache_dir_specified = !cache.is_empty();
+
+    // If 'preserve_cache' is specified, the 'cache' option must be specified and must not exist on disk.
+    if preserve_cache {
+        ensure!(
+            cache_dir_specified && !PathBuf::from(&cache).exists(),
+            "The 'preserve_cache' option cannot be used with a cache_dir that already exists"
+        );
+    }
+
     if skip_precommit_phase1 || skip_precommit_phase2 || skip_commit_phase1 || skip_commit_phase2 {
         ensure!(
             !preserve_cache,
@@ -614,7 +623,7 @@ pub fn run(
         )
     };
 
-    if !Path::new(&cache_dir).exists() {
+    if !cache_dir.exists() {
         create_dir(&cache_dir)?;
     }
     info!("Using cache directory {:?}", cache_dir);
