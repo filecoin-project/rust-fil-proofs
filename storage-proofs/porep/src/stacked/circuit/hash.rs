@@ -38,12 +38,13 @@ mod tests {
     use filecoin_hashers::{poseidon::PoseidonHasher, HashFunction, Hasher};
     use rand::SeedableRng;
     use rand_xorshift::XorShiftRng;
+    use storage_proofs_core::TEST_SEED;
 
     use crate::stacked::vanilla::hash::hash_single_column as vanilla_hash_single_column;
 
     #[test]
     fn test_hash2_circuit() {
-        let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
+        let rng = &mut XorShiftRng::from_seed(TEST_SEED);
 
         for _ in 0..10 {
             let mut cs = TestConstraintSystem::<Bls12>::new();
@@ -84,7 +85,7 @@ mod tests {
 
     #[test]
     fn test_hash_single_column_circuit() {
-        let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
+        let rng = &mut XorShiftRng::from_seed(TEST_SEED);
 
         for _ in 0..1 {
             let mut cs = TestConstraintSystem::<Bls12>::new();
