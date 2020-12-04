@@ -1,8 +1,8 @@
 use bellperson::bls::Fr;
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use ff::Field;
+use fr32::{bytes_into_fr, fr_into_bytes};
 use rand::thread_rng;
-use storage_proofs_core::fr32::{bytes_into_fr, fr_into_bytes};
 
 fn fr_benchmark(c: &mut Criterion) {
     c.bench_function("fr-to-bytes-32", move |b| {

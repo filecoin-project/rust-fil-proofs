@@ -5,6 +5,7 @@ use bellperson::{
 };
 use ff::Field;
 use filecoin_hashers::{poseidon::PoseidonHasher, Hasher};
+use fr32::{bytes_into_fr, fr_into_bytes};
 use generic_array::typenum::{U0, U2, U4, U8};
 use merkletree::store::VecStore;
 use pretty_assertions::assert_eq;
@@ -12,7 +13,6 @@ use rand::SeedableRng;
 use rand_xorshift::XorShiftRng;
 use storage_proofs_core::{
     compound_proof::{self, CompoundProof},
-    fr32::{bytes_into_fr, fr_into_bytes},
     gadgets::por::PoRCompound,
     merkle::{
         create_base_merkle_tree, generate_tree, get_base_tree_count, MerkleTreeTrait,

@@ -6,6 +6,7 @@ use std::sync::Mutex;
 
 use anyhow::{ensure, Context, Result};
 use filecoin_hashers::{HashFunction, Hasher};
+use fr32::Fr32Reader;
 use lazy_static::lazy_static;
 use log::info;
 use storage_proofs::util::NODE_SIZE;
@@ -33,7 +34,6 @@ lazy_static! {
     static ref COMMITMENTS: Mutex<HashMap<SectorSize, Commitment>> = Mutex::new(HashMap::new());
 }
 use crate::commitment_reader::CommitmentReader;
-use crate::fr32_reader::Fr32Reader;
 
 #[derive(Debug, Clone)]
 pub struct EmptySource {

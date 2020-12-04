@@ -6,8 +6,6 @@ mod caches;
 mod commitment_reader;
 
 pub mod constants;
-pub mod fr32;
-pub mod fr32_reader;
 pub mod param;
 pub mod parameters;
 pub mod pieces;

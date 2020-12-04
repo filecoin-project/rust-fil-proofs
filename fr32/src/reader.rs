@@ -1,5 +1,6 @@
-use byte_slice_cast::*;
 use std::io;
+
+use byte_slice_cast::{AsByteSlice, AsSliceOf};
 
 /// The number of Frs per Block.
 const NUM_FRS_PER_BLOCK: usize = 4;
@@ -169,8 +170,12 @@ impl<R: io::Read> io::Read for Fr32Reader<R> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use pretty_assertions::assert_eq;
+
     use std::io::Read;
+
+    use pretty_assertions::assert_eq;
+
+    use crate::bytes_into_fr;
 
     const DATA_BITS: u64 = 254;
     const TARGET_BITS: u64 = 256;
@@ -334,7 +339,7 @@ mod tests {
     fn validate_fr32(bytes: &[u8]) {
         let chunks = (bytes.len() as f64 / 32_f64).ceil() as usize;
         for (i, chunk) in bytes.chunks(32).enumerate() {
-            let _ = storage_proofs::fr32::bytes_into_fr(chunk).unwrap_or_else(|_| {
+            let _ = bytes_into_fr(chunk).unwrap_or_else(|_| {
                 panic!(
                     "chunk {}/{} cannot be converted to valid Fr: {:?}",
                     i + 1,

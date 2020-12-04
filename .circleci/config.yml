@@ -622,3 +622,15 @@ workflows:
             branches:
               only:
                 - master
+
+      - test:
+          name: test_fr32
+          crate: "fr32"
+          requires:
+            - cargo_fetch
+
+      - test_blst:
+          name: test_blst_fr32
+          crate: "fr32"
+          requires:
+            - cargo_fetch

@@ -5,13 +5,13 @@ use ff::Field;
 use filecoin_hashers::{
     blake2s::Blake2sHasher, poseidon::PoseidonHasher, sha256::Sha256Hasher, Domain, Hasher,
 };
+use fr32::fr_into_bytes;
 use generic_array::typenum::{U0, U2, U4};
 use rand::SeedableRng;
 use rand_xorshift::XorShiftRng;
 use storage_proofs_core::{
     api_version::ApiVersion,
     drgraph::{BucketGraph, Graph, BASE_DEGREE},
-    fr32::fr_into_bytes,
     merkle::{create_base_merkle_tree, DiskStore, MerkleTreeTrait, MerkleTreeWrapper},
     por::{self, PoR},
     proof::ProofScheme,

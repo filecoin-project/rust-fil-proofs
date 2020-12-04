@@ -8,8 +8,6 @@ pub use anyhow::Result;
 /// Custom error types
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
-    #[error("Bytes could not be converted to Fr")]
-    BadFrBytes,
     #[error("Could not create PieceInclusionProof (probably bad piece commitment: comm_p)")]
     BadPieceCommitment,
     #[error("Out of bounds access {} > {}", _0, _1)]

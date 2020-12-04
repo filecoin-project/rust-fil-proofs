@@ -39,6 +39,7 @@ byte-slice-cast = "1.0.0"
 hwloc = "0.3.0"
 libc = "0.2"
 fdlimit = "0.2.0"
+fr32 = { path = "../../fr32", default-features = false }
 
 [dev-dependencies]
 tempfile = "3"
@@ -50,9 +51,9 @@ filecoin-hashers = { path = "../../filecoin-hashers", version = "1.0.0", default
 
 [features]
 default = ["pairing", "gpu"]
-gpu = ["storage-proofs-core/gpu", "filecoin-hashers/gpu", "neptune/gpu", "bellperson/gpu"]
-pairing = ["storage-proofs-core/pairing", "bellperson/pairing", "neptune/pairing", "filecoin-hashers/pairing"]
-blst = ["storage-proofs-core/blst", "bellperson/blst", "neptune/blst", "filecoin-hashers/blst"]
+gpu = ["storage-proofs-core/gpu", "filecoin-hashers/gpu", "neptune/gpu", "bellperson/gpu", "fr32/gpu"]
+pairing = ["storage-proofs-core/pairing", "bellperson/pairing", "neptune/pairing", "filecoin-hashers/pairing", "fr32/pairing"]
+blst = ["storage-proofs-core/blst", "bellperson/blst", "neptune/blst", "filecoin-hashers/blst", "fr32/blst"]
 single-threaded = []
 
 [[bench]]

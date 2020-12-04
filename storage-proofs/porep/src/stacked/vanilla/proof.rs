@@ -434,12 +434,12 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
     {
         use bellperson::bls::Fr;
         use ff::Field;
+        use fr32::fr_into_bytes;
         use generic_array::{sequence::GenericSequence, GenericArray};
         use merkletree::store::DiskStore;
         use neptune::batch_hasher::BatcherType;
         use neptune::column_tree_builder::{ColumnTreeBuilder, ColumnTreeBuilderTrait};
         use std::sync::{mpsc, Arc, RwLock};
-        use storage_proofs_core::fr32::fr_into_bytes;
 
         info!("generating tree c using the GPU");
         // Build the tree for CommC
@@ -788,13 +788,13 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         TreeArity: PoseidonArity,
     {
         use bellperson::bls::Fr;
+        use fr32::fr_into_bytes;
         use merkletree::merkle::{get_merkle_tree_cache_size, get_merkle_tree_leafs};
         use neptune::batch_hasher::BatcherType;
         use neptune::tree_builder::{TreeBuilder, TreeBuilderTrait};
         use std::fs::OpenOptions;
         use std::io::Write;
         use std::sync::mpsc;
-        use storage_proofs_core::fr32::fr_into_bytes;
 
         let (configs, replica_config) = split_config_and_replica(
             tree_r_last_config.clone(),
@@ -1299,12 +1299,12 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
     {
         use bellperson::bls::Fr;
         use ff::Field;
+        use fr32::fr_into_bytes;
         use merkletree::merkle::{get_merkle_tree_cache_size, get_merkle_tree_leafs};
         use neptune::batch_hasher::BatcherType;
         use neptune::tree_builder::{TreeBuilder, TreeBuilderTrait};
         use std::fs::OpenOptions;
         use std::io::Write;
-        use storage_proofs_core::fr32::fr_into_bytes;
 
         let (configs, replica_config) = split_config_and_replica(
             tree_r_last_config.clone(),

@@ -1,8 +1,8 @@
 use anyhow::{Context, Result};
 use bellperson::bls::Fr;
 use filecoin_hashers::{Domain, Hasher};
+use fr32::{bytes_into_fr, fr_into_bytes};
 use merkletree::merkle::{get_merkle_tree_leafs, get_merkle_tree_len};
-use storage_proofs::fr32::{bytes_into_fr, fr_into_bytes};
 use storage_proofs::merkle::{get_base_tree_count, MerkleTreeTrait};
 use typenum::Unsigned;
 

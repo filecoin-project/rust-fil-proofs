@@ -3,6 +3,7 @@ use ff::{Field, PrimeField};
 use filecoin_hashers::{
     blake2s::Blake2sHasher, poseidon::PoseidonHasher, sha256::Sha256Hasher, Domain, Hasher,
 };
+use fr32::fr_into_bytes;
 use generic_array::typenum::{U0, U2, U4, U8};
 use merkletree::store::{Store, StoreConfig};
 use rand::{Rng, SeedableRng};
@@ -11,7 +12,6 @@ use storage_proofs_core::{
     api_version::ApiVersion,
     cache_key::CacheKey,
     drgraph::BASE_DEGREE,
-    fr32::fr_into_bytes,
     merkle::{get_base_tree_count, DiskTree, MerkleTreeTrait},
     proof::ProofScheme,
     table_tests,

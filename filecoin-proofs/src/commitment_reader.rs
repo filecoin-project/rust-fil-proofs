@@ -90,13 +90,14 @@ mod tests {
 
     use crate::types::*;
 
+    use fr32::Fr32Reader;
     use storage_proofs::pieces::generate_piece_commitment_bytes_from_source;
 
     #[test]
     fn test_commitment_reader() {
         let piece_size = 127 * 8;
         let source = vec![255u8; piece_size];
-        let mut fr32_reader = crate::fr32_reader::Fr32Reader::new(io::Cursor::new(&source));
+        let mut fr32_reader = Fr32Reader::new(io::Cursor::new(&source));
 
         let commitment1 = generate_piece_commitment_bytes_from_source::<DefaultPieceHasher>(
             &mut fr32_reader,
@@ -104,7 +105,7 @@ mod tests {
         )
         .expect("failed to generate piece commitment bytes from source");
 
-        let fr32_reader = crate::fr32_reader::Fr32Reader::new(io::Cursor::new(&source));
+        let fr32_reader = Fr32Reader::new(io::Cursor::new(&source));
         let mut commitment_reader = CommitmentReader::new(fr32_reader);
         io::copy(&mut commitment_reader, &mut io::sink()).expect("io copy failed");
 

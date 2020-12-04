@@ -2,7 +2,8 @@ use std::io::{self, Read};
 use std::time::Duration;
 
 use criterion::{criterion_group, criterion_main, Criterion, ParameterizedBenchmark, Throughput};
-use filecoin_proofs::{add_piece, fr32_reader::Fr32Reader, PaddedBytesAmount, UnpaddedBytesAmount};
+use filecoin_proofs::{add_piece, PaddedBytesAmount, UnpaddedBytesAmount};
+use fr32::Fr32Reader;
 use rand::{thread_rng, Rng};
 
 #[cfg(feature = "cpu-profile")]
