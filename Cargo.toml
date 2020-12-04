@@ -9,7 +9,6 @@ members = [
   "fil-proofs-tooling",
   "fil-proofs-param",
   "sha2raw",
-  "phase2",
   "filecoin-hashers",
 ]
 

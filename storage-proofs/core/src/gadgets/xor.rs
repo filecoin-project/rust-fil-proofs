@@ -39,7 +39,7 @@ mod tests {
     use rand_xorshift::XorShiftRng;
 
     #[test]
-    fn test_xor_input_circut() {
+    fn test_xor_input_circuit() {
         let mut rng = XorShiftRng::from_seed(crate::TEST_SEED);
 
         for i in 0..10 {
