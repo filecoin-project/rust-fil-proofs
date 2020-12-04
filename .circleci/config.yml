@@ -147,6 +147,7 @@ jobs:
             ulimit -u 20000
             ulimit -n 20000
             cargo +<< pipeline.parameters.nightly-toolchain >> -Zpackage-features test --all --verbose --release lifecycle -- --ignored --nocapture
+            cargo +<< pipeline.parameters.nightly-toolchain >> -Zpackage-features test -p storage-proofs-porep --features single-threaded --release checkout_cores -- --test-threads=1
           no_output_timeout: 30m
           environment:
             RUST_TEST_THREADS: 1

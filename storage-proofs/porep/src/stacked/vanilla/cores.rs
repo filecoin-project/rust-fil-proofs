@@ -201,6 +201,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "single-threaded")]
     fn test_checkout_cores() {
         let checkout1 = checkout_core_group();
         dbg!(&checkout1);

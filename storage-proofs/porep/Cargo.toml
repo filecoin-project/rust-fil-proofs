@@ -53,6 +53,7 @@ default = ["pairing", "gpu"]
 gpu = ["storage-proofs-core/gpu", "filecoin-hashers/gpu"]
 pairing = ["storage-proofs-core/pairing", "bellperson/pairing", "neptune/pairing", "filecoin-hashers/pairing"]
 blst = ["storage-proofs-core/blst", "bellperson/blst", "neptune/blst", "filecoin-hashers/blst"]
+single-threaded = []
 
 [[bench]]
 name = "encode"
