@@ -618,9 +618,9 @@ workflows:
           requires:
             - cargo_fetch
             - ensure_groth_parameters_and_keys_linux
-            
-     - test_no_gpu:
-         requires:
+
+      - test_no_gpu:
+          requires:
             - cargo_fetch
             - ensure_groth_parameters_and_keys_linux
 
