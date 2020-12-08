@@ -165,6 +165,29 @@ jobs:
             RUST_TEST_THREADS: 1
             FIL_PROOFS_USE_MULTICORE_SDR: true
 
+  test_no_gpu:
+    executor: default
+    environment: *setup-env
+    steps:
+      - checkout
+      - attach_workspace:
+          at: "."
+      - restore_cache:
+          keys:
+            - cargo-v28-b-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
+      - restore_parameter_cache
+      - run:
+          name: Test with no gpu (pairing)
+          command: |
+            cargo +<< pipeline.parameters.nightly-toolchain >> -Zpackage-features test --all --verbose --no-default-features --features pairing
+          no_output_timeout: 30m
+      - run:
+          name: Test with no gpu (blst)
+          command: |
+            cargo +<< pipeline.parameters.nightly-toolchain >> -Zpackage-features test --all --verbose --no-default-features --features blst
+          no_output_timeout: 30m
+
+
   test_blst:
     executor: default
     environment: *setup-env
@@ -592,6 +615,11 @@ workflows:
       - test:
           name: test_fil_proofs_param
           crate: "fil-proofs-param"
+          requires:
+            - cargo_fetch
+            - ensure_groth_parameters_and_keys_linux
+
+      - test_no_gpu:
           requires:
             - cargo_fetch
             - ensure_groth_parameters_and_keys_linux
