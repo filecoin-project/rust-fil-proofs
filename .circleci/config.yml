@@ -576,20 +576,6 @@ workflows:
 
             
       - test_blst:
-          name: test_blst_phase2
-          crate: "filecoin-phase2"
-          requires:
-            - cargo_fetch
-            - ensure_groth_parameters_and_keys_linux
-
-      - test:
-          name: test_phase2
-          crate: "filecoin-phase2"
-          requires:
-            - cargo_fetch
-            - ensure_groth_parameters_and_keys_linux
-
-      - test_blst:
           name: test_blst_filecoin_hashers
           crate: "filecoin-hashers"
           features: "blst,gpu,poseidon,sha256,blake2s"
