@@ -1,34 +1,33 @@
+use std::env;
+use std::process::exit;
 use std::str::FromStr;
 
 use dialoguer::{theme::ColorfulTheme, MultiSelect};
+use filecoin_proofs::{
+    constants::{
+        DefaultPieceHasher, POREP_PARTITIONS, PUBLISHED_SECTOR_SIZES, WINDOW_POST_CHALLENGE_COUNT,
+        WINDOW_POST_SECTOR_COUNT, WINNING_POST_CHALLENGE_COUNT, WINNING_POST_SECTOR_COUNT,
+    },
+    parameters::{public_params, window_post_public_params, winning_post_public_params},
+    types::{PaddedBytesAmount, PoRepConfig, PoRepProofPartitions, PoStConfig, SectorSize},
+    with_shape, PoStType,
+};
 use humansize::{file_size_opts, FileSize};
 use indicatif::ProgressBar;
-use log::{info, warn};
+use log::{error, info, warn};
 use rand::rngs::OsRng;
+use storage_proofs::{
+    api_version::ApiVersion,
+    compound_proof::CompoundProof,
+    merkle::MerkleTreeTrait,
+    parameter_cache::CacheableParameters,
+    porep::stacked::{StackedCircuit, StackedCompound, StackedDrg},
+    post::fallback::{FallbackPoSt, FallbackPoStCircuit, FallbackPoStCompound},
+};
 use structopt::StructOpt;
 
-use filecoin_proofs::constants::{
-    DefaultPieceHasher, POREP_PARTITIONS, PUBLISHED_SECTOR_SIZES, WINDOW_POST_CHALLENGE_COUNT,
-    WINDOW_POST_SECTOR_COUNT, WINNING_POST_CHALLENGE_COUNT, WINNING_POST_SECTOR_COUNT,
-};
-use filecoin_proofs::parameters::{
-    public_params, window_post_public_params, winning_post_public_params,
-};
-use filecoin_proofs::types::{
-    PaddedBytesAmount, PoRepConfig, PoRepProofPartitions, PoStConfig, SectorSize,
-};
-use filecoin_proofs::{with_shape, PoStType};
-
-use storage_proofs::api_version::ApiVersion;
-use storage_proofs::compound_proof::CompoundProof;
-use storage_proofs::merkle::MerkleTreeTrait;
-
-use storage_proofs::parameter_cache::CacheableParameters;
-use storage_proofs::porep::stacked::{StackedCompound, StackedDrg};
-use storage_proofs::post::fallback::{FallbackPoSt, FallbackPoStCircuit, FallbackPoStCompound};
-
 fn cache_porep_params<Tree: 'static + MerkleTreeTrait>(porep_config: PoRepConfig) {
-    info!("PoRep params");
+    info!("generating PoRep groth params");
 
     let public_params = public_params(
         PaddedBytesAmount::from(porep_config),
@@ -38,141 +37,108 @@ fn cache_porep_params<Tree: 'static + MerkleTreeTrait>(porep_config: PoRepConfig
     )
     .expect("failed to get public params from config");
 
-    {
-        let circuit = <StackedCompound<Tree, DefaultPieceHasher> as CompoundProof<
-            StackedDrg<Tree, DefaultPieceHasher>,
-            _,
-        >>::blank_circuit(&public_params);
-        let _ = StackedCompound::<Tree, DefaultPieceHasher>::get_param_metadata(
-            circuit,
-            &public_params,
-        );
-    }
-    {
-        let circuit = <StackedCompound<Tree, DefaultPieceHasher> as CompoundProof<
-            StackedDrg<Tree, DefaultPieceHasher>,
-            _,
-        >>::blank_circuit(&public_params);
-        StackedCompound::<Tree, DefaultPieceHasher>::get_groth_params(
-            Some(&mut OsRng),
-            circuit,
-            &public_params,
-        )
-        .expect("failed to get groth params");
-    }
-    {
-        let circuit = <StackedCompound<Tree, DefaultPieceHasher> as CompoundProof<
-            StackedDrg<Tree, DefaultPieceHasher>,
-            _,
-        >>::blank_circuit(&public_params);
+    let circuit = <StackedCompound<Tree, DefaultPieceHasher> as CompoundProof<
+        StackedDrg<Tree, DefaultPieceHasher>,
+        StackedCircuit<Tree, DefaultPieceHasher>,
+    >>::blank_circuit(&public_params);
 
-        StackedCompound::<Tree, DefaultPieceHasher>::get_verifying_key(
-            Some(&mut OsRng),
-            circuit,
-            &public_params,
-        )
-        .expect("failed to get verifying key");
-    }
+    let _ = StackedCompound::<Tree, DefaultPieceHasher>::get_param_metadata(
+        circuit.clone(),
+        &public_params,
+    )
+    .expect("failed to get metadata");
+
+    let _ = StackedCompound::<Tree, DefaultPieceHasher>::get_groth_params(
+        Some(&mut OsRng),
+        circuit.clone(),
+        &public_params,
+    )
+    .expect("failed to get groth params");
+
+    let _ = StackedCompound::<Tree, DefaultPieceHasher>::get_verifying_key(
+        Some(&mut OsRng),
+        circuit,
+        &public_params,
+    )
+    .expect("failed to get verifying key");
 }
 
 fn cache_winning_post_params<Tree: 'static + MerkleTreeTrait>(post_config: &PoStConfig) {
-    info!("Winning PoSt params");
+    info!("generating Winning-PoSt groth params");
 
-    let post_public_params = winning_post_public_params::<Tree>(post_config)
+    let public_params = winning_post_public_params::<Tree>(post_config)
         .expect("failed to get public params from config");
 
-    {
-        let post_circuit: FallbackPoStCircuit<Tree> =
-            <FallbackPoStCompound<Tree> as CompoundProof<
-                FallbackPoSt<Tree>,
-                FallbackPoStCircuit<Tree>,
-            >>::blank_circuit(&post_public_params);
-        let _ = <FallbackPoStCompound<Tree>>::get_param_metadata(post_circuit, &post_public_params)
-            .expect("failed to get metadata");
-    }
-    {
-        let post_circuit: FallbackPoStCircuit<Tree> =
-            <FallbackPoStCompound<Tree> as CompoundProof<
-                FallbackPoSt<Tree>,
-                FallbackPoStCircuit<Tree>,
-            >>::blank_circuit(&post_public_params);
-        <FallbackPoStCompound<Tree>>::get_groth_params(
-            Some(&mut OsRng),
-            post_circuit,
-            &post_public_params,
-        )
-        .expect("failed to get groth params");
-    }
-    {
-        let post_circuit: FallbackPoStCircuit<Tree> =
-            <FallbackPoStCompound<Tree> as CompoundProof<
-                FallbackPoSt<Tree>,
-                FallbackPoStCircuit<Tree>,
-            >>::blank_circuit(&post_public_params);
+    let circuit = <FallbackPoStCompound<Tree> as CompoundProof<
+        FallbackPoSt<Tree>,
+        FallbackPoStCircuit<Tree>,
+    >>::blank_circuit(&public_params);
 
-        <FallbackPoStCompound<Tree>>::get_verifying_key(
-            Some(&mut OsRng),
-            post_circuit,
-            &post_public_params,
-        )
-        .expect("failed to get verifying key");
-    }
+    let _ = <FallbackPoStCompound<Tree>>::get_param_metadata(circuit.clone(), &public_params)
+        .expect("failed to get metadata");
+
+    let _ = <FallbackPoStCompound<Tree>>::get_groth_params(
+        Some(&mut OsRng),
+        circuit.clone(),
+        &public_params,
+    )
+    .expect("failed to get groth params");
+
+    let _ =
+        <FallbackPoStCompound<Tree>>::get_verifying_key(Some(&mut OsRng), circuit, &public_params)
+            .expect("failed to get verifying key");
 }
 
 fn cache_window_post_params<Tree: 'static + MerkleTreeTrait>(post_config: &PoStConfig) {
-    info!("Window PoSt params");
+    info!("generating Window-PoSt groth params");
 
-    let post_public_params = window_post_public_params::<Tree>(post_config)
+    let public_params = window_post_public_params::<Tree>(post_config)
         .expect("failed to get public params from config");
 
-    {
-        let post_circuit: FallbackPoStCircuit<Tree> =
-            <FallbackPoStCompound<Tree> as CompoundProof<
-                FallbackPoSt<Tree>,
-                FallbackPoStCircuit<Tree>,
-            >>::blank_circuit(&post_public_params);
-        let _ = <FallbackPoStCompound<Tree>>::get_param_metadata(post_circuit, &post_public_params)
-            .expect("failed to get metadata");
-    }
-    {
-        let post_circuit: FallbackPoStCircuit<Tree> =
-            <FallbackPoStCompound<Tree> as CompoundProof<
-                FallbackPoSt<Tree>,
-                FallbackPoStCircuit<Tree>,
-            >>::blank_circuit(&post_public_params);
-        <FallbackPoStCompound<Tree>>::get_groth_params(
-            Some(&mut OsRng),
-            post_circuit,
-            &post_public_params,
-        )
-        .expect("failed to get groth params");
-    }
-    {
-        let post_circuit: FallbackPoStCircuit<Tree> =
-            <FallbackPoStCompound<Tree> as CompoundProof<
-                FallbackPoSt<Tree>,
-                FallbackPoStCircuit<Tree>,
-            >>::blank_circuit(&post_public_params);
+    let circuit: FallbackPoStCircuit<Tree> = <FallbackPoStCompound<Tree> as CompoundProof<
+        FallbackPoSt<Tree>,
+        FallbackPoStCircuit<Tree>,
+    >>::blank_circuit(&public_params);
 
-        <FallbackPoStCompound<Tree>>::get_verifying_key(
-            Some(&mut OsRng),
-            post_circuit,
-            &post_public_params,
-        )
-        .expect("failed to get verifying key");
-    }
+    let _ = <FallbackPoStCompound<Tree>>::get_param_metadata(circuit.clone(), &public_params)
+        .expect("failed to get metadata");
+
+    let _ = <FallbackPoStCompound<Tree>>::get_groth_params(
+        Some(&mut OsRng),
+        circuit.clone(),
+        &public_params,
+    )
+    .expect("failed to get groth params");
+
+    let _ = <FallbackPoStCompound<Tree>>::get_verifying_key(
+        Some(&mut OsRng),
+        circuit.clone(),
+        &public_params,
+    )
+    .expect("failed to get verifying key");
 }
 
-/// Generate and persist Groth parameters and verifying keys for filecoin-proofs.
 #[derive(Debug, StructOpt)]
-#[structopt(name = "paramcache")]
+#[structopt(
+    name = "paramcache",
+    about = "generates and caches SDR PoRep, Winning-PoSt, and Window-PoSt groth params"
+)]
 struct Opt {
-    /// Only generate parameters for post.
-    #[structopt(long)]
+    #[structopt(long, help = "Only cache PoSt groth params.")]
     only_post: bool,
-    #[structopt(short = "z", long, use_delimiter = true)]
-    params_for_sector_sizes: Vec<u64>,
-    #[structopt(default_value = "1.1.0", long)]
+    #[structopt(
+        short = "z",
+        long,
+        use_delimiter = true,
+        help = "A comma-separated list of sector sizes (in number of bytes)."
+    )]
+    sector_sizes: Vec<u64>,
+    #[structopt(
+        long = "api-version",
+        value_name = "SEMANTIC VERSION",
+        default_value = "1.1.0",
+        help = "Use a specific rust-fil-proofs API version."
+    )]
     api_version: String,
 }
 
@@ -227,73 +193,61 @@ fn generate_params_porep(sector_size: u64, api_version: ApiVersion) {
     );
 }
 
-// Run this from the command-line to pre-generate the groth parameters used by the API.
 pub fn main() {
-    // The logger is used and every message from this tool is also logged into those logs.
-    // Though the information is also printed to stdout, so that users who haven't set the
-    // `RUST_LOG` environment variable also see warngings/progress.
+    // Create a stderr logger for all log levels.
+    env::set_var("RUST_LOG", "paramcache");
     fil_logger::init();
 
-    let opts = Opt::from_args();
+    let mut opts = Opt::from_args();
 
-    // Display interactive menu if no sizes are given
-    let sizes: Vec<u64> = if opts.params_for_sector_sizes.is_empty() {
-        let sector_sizes = PUBLISHED_SECTOR_SIZES
+    // If no sector-sizes were given provided via. the CLI, display an interactive menu. Otherwise,
+    // filter out invalid CLI sector-size arguments.
+    if opts.sector_sizes.is_empty() {
+        let sector_size_strings: Vec<String> = PUBLISHED_SECTOR_SIZES
             .iter()
             .map(|sector_size| {
-                // Right aligning the numbers makes them easier to read
-                format!(
-                    "{: >7}",
-                    sector_size
-                        .file_size(file_size_opts::BINARY)
-                        .expect("failed to format sector size"),
-                )
+                let human_size = sector_size
+                    .file_size(file_size_opts::BINARY)
+                    .expect("failed to format sector size");
+                // Right align numbers for easier reading.
+                format!("{: >7}", human_size)
             })
-            .collect::<Vec<_>>();
+            .collect();
 
-        let selected_sector_sizes = MultiSelect::with_theme(&ColorfulTheme::default())
-            .with_prompt("Select the sizes that should be generated if not already cached [use space key to select]")
-            .items(&sector_sizes[..])
+        opts.sector_sizes = MultiSelect::with_theme(&ColorfulTheme::default())
+            .with_prompt(
+                "Select the sizes that should be generated if not already cached [use space key to \
+                select, press return to finish]",
+            )
+            .items(&sector_size_strings)
             .interact()
-            .expect("interaction failed");
-
-        // Extract the selected sizes
-        PUBLISHED_SECTOR_SIZES
-            .iter()
-            .enumerate()
-            .filter_map(|(index, size)| {
-                if selected_sector_sizes.contains(&index) {
-                    Some(*size)
-                } else {
-                    None
-                }
-            })
-            .collect()
-    } else {
-        opts.params_for_sector_sizes
+            .expect("interaction failed")
             .into_iter()
-            .filter(|size| {
-                if PUBLISHED_SECTOR_SIZES.contains(size) {
-                    return true;
-                }
-
-                warn!("ignoring invalid sector size: {}", size);
-                println!("ignoring invalid sector size: {}", size);
+            .map(|i| PUBLISHED_SECTOR_SIZES[i])
+            .collect();
+    } else {
+        opts.sector_sizes.retain(|size| {
+            if PUBLISHED_SECTOR_SIZES.contains(size) {
+                true
+            } else {
+                let human_size = size
+                    .file_size(file_size_opts::BINARY)
+                    .expect("failed to humansize sector size argument");
+                warn!("ignoring invalid sector size argument: {}", human_size);
                 false
-            })
-            .collect()
-    };
-
-    if sizes.is_empty() {
-        info!("No valid sector sizes given. Abort.");
-        println!("No valid sector sizes given. Abort.");
+            }
+        });
     }
 
-    let only_post = opts.only_post;
+    if opts.sector_sizes.is_empty() {
+        error!("no valid sector sizes given, aborting");
+        exit(1);
+    }
+
     let api_version = ApiVersion::from_str(&opts.api_version)
         .expect("Cannot parse API version from semver string (e.g. 1.1.0)");
 
-    for sector_size in sizes {
+    for sector_size in opts.sector_sizes {
         let human_size = sector_size
             .file_size(file_size_opts::BINARY)
             .expect("failed to format sector size");
@@ -304,12 +258,12 @@ pub fn main() {
         spinner.set_message(&message);
         spinner.enable_steady_tick(100);
 
-        // TODO: get API version from command line args
         generate_params_post(sector_size, api_version);
 
-        if !only_post {
+        if !opts.only_post {
             generate_params_porep(sector_size, api_version);
         }
+
         spinner.finish_with_message(&format!("✔ {}", &message));
     }
 }

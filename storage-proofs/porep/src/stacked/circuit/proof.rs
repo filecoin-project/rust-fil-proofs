@@ -40,6 +40,24 @@ pub struct StackedCircuit<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hash
     proofs: Vec<Proof<Tree, G>>,
 }
 
+// We must manually implement Clone for all types generic over MerkleTreeTrait (instead of using
+// #[derive(Clone)]) because derive(Clone) will only expand for MerkleTreeTrait types that also
+// implement Clone. Not every MerkleTreeTrait type is Clone-able because not all merkel Store's are
+// Clone-able, therefore deriving Clone would impl Clone for less than all possible Tree types.
+impl<'a, Tree: MerkleTreeTrait, G: Hasher> Clone for StackedCircuit<'a, Tree, G> {
+    fn clone(&self) -> Self {
+        StackedCircuit {
+            public_params: self.public_params.clone(),
+            replica_id: self.replica_id,
+            comm_d: self.comm_d,
+            comm_r: self.comm_r,
+            comm_r_last: self.comm_r_last,
+            comm_c: self.comm_c,
+            proofs: self.proofs.clone(),
+        }
+    }
+}
+
 impl<'a, Tree: MerkleTreeTrait, G: Hasher> CircuitComponent for StackedCircuit<'a, Tree, G> {
     type ComponentPrivateInputs = ();
 }
