@@ -85,6 +85,15 @@ mod test {
     use std::collections::HashMap;
 
     #[test]
+    fn test_calculate_fixed_challenges() {
+        let layer_challenges = LayerChallenges::new(10, 333);
+        let expected = 333;
+
+        let calculated_count = layer_challenges.challenges_count_all();
+        assert_eq!(expected as usize, calculated_count);
+    }
+
+    #[test]
     fn challenge_derivation() {
         let n = 200;
         let layers = 100;
