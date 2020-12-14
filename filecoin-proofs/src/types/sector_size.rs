@@ -1,4 +1,5 @@
-use crate::fr32::to_unpadded_bytes;
+use fr32::to_unpadded_bytes;
+
 use crate::types::*;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]

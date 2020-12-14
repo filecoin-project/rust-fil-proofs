@@ -513,6 +513,7 @@ mod tests {
 
     use bellperson::gadgets::multipack;
     use ff::Field;
+    use fr32::{bytes_into_fr, fr_into_bytes};
     use generic_array::typenum;
     use merkletree::store::VecStore;
     use pretty_assertions::assert_eq;
@@ -520,7 +521,6 @@ mod tests {
     use rand_xorshift::XorShiftRng;
 
     use crate::compound_proof;
-    use crate::fr32::{bytes_into_fr, fr_into_bytes};
     use crate::merkle::{
         create_base_merkle_tree, generate_tree, get_base_tree_count, MerkleProofTrait,
         MerkleTreeWrapper, ResTree,

@@ -3,6 +3,7 @@ use std::marker::PhantomData;
 
 use anyhow::ensure;
 use filecoin_hashers::{Hasher, PoseidonArity};
+use fr32::bytes_into_fr_repr_safe;
 use generic_array::typenum;
 use rand::{Rng, SeedableRng};
 use rand_chacha::ChaCha8Rng;
@@ -11,7 +12,6 @@ use sha2::{Digest, Sha256};
 use crate::api_version::ApiVersion;
 use crate::crypto::{derive_porep_domain_seed, DRSAMPLE_DST};
 use crate::error::*;
-use crate::fr32::bytes_into_fr_repr_safe;
 use crate::parameter_cache::ParameterSetMetadata;
 use crate::util::{data_at_node_offset, NODE_SIZE};
 use crate::PoRepID;

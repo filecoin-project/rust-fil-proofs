@@ -1,8 +1,5 @@
 use std::cmp::min;
-use std::io::{self, Error, ErrorKind, Read, Seek, SeekFrom, Write};
-
-use anyhow::{ensure, Result};
-use bitvec::{order::Lsb0 as LittleEndian, vec::BitVec};
+use std::io::{self, Error, ErrorKind, Write};
 
 /** PaddingMap represents a mapping between data and its padded equivalent.
 
@@ -153,7 +150,7 @@ an additional summary of what was already discussed.
 
 **/
 #[derive(Debug)]
-pub struct PaddingMap {
+struct PaddingMap {
     /// The number of bits of raw data in an element.
     data_bits: usize,
     /// Number of bits in an element: `data_bits` + `pad_bits()`. Its value
@@ -169,44 +166,10 @@ pub struct PaddingMap {
 // This is the padding map corresponding to Fr32.
 // Most of the code in this module is general-purpose and could move elsewhere.
 // The application-specific wrappers which implicitly use Fr32 embed the FR32_PADDING_MAP.
-pub const FR32_PADDING_MAP: PaddingMap = PaddingMap {
+const FR32_PADDING_MAP: PaddingMap = PaddingMap {
     data_bits: 254,
     element_bits: 256,
 };
-
-pub type BitVecLEu8 = BitVec<LittleEndian, u8>;
-
-////////////////////////////////////////////////////////////////////////////////////////////////////
-// Convenience interface for API functions – all bundling FR32_PADDING_MAP
-// parameter/return types are tuned for current caller convenience.
-
-pub fn target_unpadded_bytes<W: ?Sized>(target: &mut W) -> io::Result<u64>
-where
-    W: Seek,
-{
-    let (_, unpadded, _) = FR32_PADDING_MAP.target_offsets(target)?;
-
-    Ok(unpadded)
-}
-
-// Leave the actual truncation to caller, since we can't do it generically.
-// Return the length to which target should be truncated.
-// We might should also handle zero-padding what will become the final byte of target.
-// Technically, this should be okay though because that byte will always be overwritten later.
-// If we decide this is unnecessary, then we don't need to pass target at all.
-pub fn almost_truncate_to_unpadded_bytes<W: ?Sized>(
-    _target: &mut W,
-    length: u64,
-) -> io::Result<usize>
-where
-    W: Read + Write + Seek,
-{
-    let padded =
-        BitByte::from_bits(FR32_PADDING_MAP.transform_bit_offset((length * 8) as usize, true));
-    let real_length = padded.bytes_needed();
-    let _final_bit_count = padded.bits;
-    Ok(real_length)
-}
 
 pub fn to_unpadded_bytes(padded_bytes: u64) -> u64 {
     FR32_PADDING_MAP.transform_byte_offset(padded_bytes as usize, false) as u64
@@ -221,70 +184,33 @@ pub fn to_padded_bytes(unpadded_bytes: usize) -> usize {
 // with bit precision, that is, not rounded.
 // Invariant: it is an error for bits to be > 7.
 #[derive(Debug)]
-pub struct BitByte {
+struct BitByte {
     bytes: usize,
     bits: usize,
 }
 
 impl BitByte {
     // Create a BitByte from number of bits. Guaranteed to return a well-formed value (bits < 8)
-    pub fn from_bits(bits: usize) -> BitByte {
+    fn from_bits(bits: usize) -> BitByte {
         BitByte {
             bytes: bits / 8,
             bits: bits % 8,
         }
     }
 
-    pub fn from_bytes(bytes: usize) -> BitByte {
-        Self::from_bits(bytes * 8)
-    }
-
     // How many bits in the BitByte (inverse of from_bits).
-    pub fn total_bits(&self) -> usize {
+    fn total_bits(&self) -> usize {
         self.bytes * 8 + self.bits
     }
 
-    // True if the BitByte has no bits component.
-    pub fn is_byte_aligned(&self) -> bool {
-        self.bits == 0
-    }
-
     // How many distinct bytes are needed to represent data of this size?
-    pub fn bytes_needed(&self) -> usize {
+    fn bytes_needed(&self) -> usize {
         self.bytes + if self.bits == 0 { 0 } else { 1 }
     }
 }
 
 impl PaddingMap {
-    pub fn new(data_bits: usize, element_bits: usize) -> Result<PaddingMap> {
-        // Check that we add less than 1 byte of padding (sub-byte padding).
-        ensure!(
-            element_bits - data_bits <= 7,
-            "Padding (num bits: {}) must be less than 1 byte.",
-            element_bits - data_bits
-        );
-        // Check that the element is byte aligned.
-        ensure!(
-            element_bits % 8 == 0,
-            "Element (num bits: {}) must be byte aligned.",
-            element_bits
-        );
-
-        Ok(PaddingMap {
-            data_bits,
-            element_bits,
-        })
-    }
-
-    pub fn pad(&self, bits_out: &mut BitVecLEu8) {
-        for _ in 0..self.pad_bits() {
-            bits_out.push(false)
-        }
-        // TODO: Optimization: Drop this explicit `push` padding, the padding
-        // should happen implicitly when byte-aligning the data unit.
-    }
-
-    pub fn pad_bits(&self) -> usize {
+    fn pad_bits(&self) -> usize {
         self.element_bits - self.data_bits
     }
 
@@ -293,7 +219,7 @@ impl PaddingMap {
     // generated padded bit stream, that is, not byte aligned (so we
     // don't count the extra bits here). If `padding` is `false` calculate
     // the inverse transformation.
-    pub fn transform_bit_offset(&self, pos: usize, padding: bool) -> usize {
+    fn transform_bit_offset(&self, pos: usize, padding: bool) -> usize {
         // Set the sizes we're converting to and from.
         let (from_size, to_size) = if padding {
             (self.data_bits, self.element_bits)
@@ -320,7 +246,7 @@ impl PaddingMap {
     // TODO: Evaluate the relationship between this function and `transform_bit_offset`,
     // it seems the two could be merged, or at least restructured to better expose
     // their differences.
-    pub fn transform_byte_offset(&self, pos: usize, padding: bool) -> usize {
+    fn transform_byte_offset(&self, pos: usize, padding: bool) -> usize {
         let transformed_bit_pos = self.transform_bit_offset(pos * 8, padding);
 
         let transformed_byte_pos = transformed_bit_pos as f64 / 8.;
@@ -345,7 +271,7 @@ impl PaddingMap {
     //   in bytes (since elements -with padding- are byte aligned).
     // - the number of bits left to read (write) from (to) the current
     //   data unit (assuming it's full).
-    pub fn next_boundary(&self, position: &BitByte) -> (usize, usize) {
+    fn next_boundary(&self, position: &BitByte) -> (usize, usize) {
         let position_bits = position.total_bits();
 
         let (_, bits_after_last_boundary) = div_rem(position_bits, self.element_bits);
@@ -355,36 +281,6 @@ impl PaddingMap {
         let next_element_position_bits = position_bits + remaining_data_unit_bits + self.pad_bits();
 
         (next_element_position_bits / 8, remaining_data_unit_bits)
-    }
-
-    // For a `Seek`able `target` of a byte-aligned padded layout, return:
-    // - the size in bytes
-    // - the size in bytes of raw data which corresponds to the `target` size
-    // - a BitByte representing the number of padded bits contained in the
-    //   byte-aligned padded layout
-    pub fn target_offsets<W: ?Sized>(&self, target: &mut W) -> io::Result<(u64, u64, BitByte)>
-    where
-        W: Seek,
-    {
-        // The current position in `target` is the number of padded bytes already written
-        // to the byte-aligned stream.
-        let padded_bytes = target.seek(SeekFrom::End(0))?;
-
-        // Deduce the number of input raw bytes that generated that padded byte size.
-        let raw_data_bytes = self.transform_byte_offset(padded_bytes as usize, false);
-
-        // With the number of raw data bytes elucidated it can now be specified the
-        // number of padding bits in the generated bit stream (before it was converted
-        // to a byte-aligned stream), that is, `raw_data_bytes * 8` is not necessarily
-        // `padded_bits`).
-        let padded_bits = self.transform_bit_offset(raw_data_bytes * 8, true);
-
-        Ok((
-            padded_bytes,
-            raw_data_bytes as u64,
-            BitByte::from_bits(padded_bits),
-        ))
-        // TODO: Why do we use `usize` internally and `u64` externally?
     }
 }
 
@@ -450,7 +346,7 @@ the unique bit `0`, that just *started* at that position but doesn't
 necessarily carry that value.)
 
 **/
-pub fn shift_bits(input: &[u8], amount: usize, is_left: bool) -> Vec<u8> {
+fn shift_bits(input: &[u8], amount: usize, is_left: bool) -> Vec<u8> {
     debug_assert!(amount >= 1);
     debug_assert!(amount <= 7);
 
@@ -571,12 +467,7 @@ as it's no longer needed.)
 // may need to be moved elsewhere which would allow to reuse that term).
 // This also will imply removing the hardcoded `8`s (size of byte).
 #[inline]
-pub fn extract_bits_and_shift(
-    input: &[u8],
-    pos: usize,
-    num_bits: usize,
-    new_offset: usize,
-) -> Vec<u8> {
+fn extract_bits_and_shift(input: &[u8], pos: usize, num_bits: usize, new_offset: usize) -> Vec<u8> {
     debug_assert!(input.len() * 8 >= pos + num_bits);
     debug_assert!(new_offset <= 7);
 
@@ -638,14 +529,14 @@ pub fn extract_bits_and_shift(
 // Set to zero all the bits to the "left" of the `offset` including
 // it, that is, [MSB; `offset`].
 #[inline]
-pub fn clear_left_bits(byte: &mut u8, offset: usize) {
+fn clear_left_bits(byte: &mut u8, offset: usize) {
     *(byte) &= (1 << offset) - 1
 }
 
 // Set to zero all the bits to the "right" of the `offset` excluding
 // it, that is, (`offset`; LSB].
 #[inline]
-pub fn clear_right_bits(byte: &mut u8, offset: usize) {
+fn clear_right_bits(byte: &mut u8, offset: usize) {
     *(byte) &= !((1 << offset) - 1)
 }
 
@@ -740,7 +631,7 @@ The reader will generally operate with bit precision, even if the padded
 layout is byte-aligned (no extra bits) the data inside it isn't (since
 we pad at the bit-level).
 **/
-pub fn write_unpadded_aux<W: ?Sized>(
+fn write_unpadded_aux<W: ?Sized>(
     padding_map: &PaddingMap,
     source: &[u8],
     target: &mut W,
@@ -860,9 +751,19 @@ where
 mod tests {
     use super::*;
 
+    use std::io::Read;
+
+    use bitvec::{order::Lsb0 as LittleEndian, vec::BitVec};
     use itertools::Itertools;
     use rand::{Rng, SeedableRng};
     use rand_xorshift::XorShiftRng;
+
+    use crate::Fr32Reader;
+
+    const TEST_SEED: [u8; 16] = [
+        0x59, 0x62, 0xbe, 0x5d, 0x76, 0x3d, 0x31, 0x8d, 0x17, 0xdb, 0x37, 0x32, 0x54, 0x06, 0xbc,
+        0xe5,
+    ];
 
     #[test]
     fn test_position() {
@@ -883,7 +784,7 @@ mod tests {
         // Length of the data vector we'll be extracting from.
         let len = 20;
 
-        let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
+        let rng = &mut XorShiftRng::from_seed(TEST_SEED);
         let data: Vec<u8> = (0..len).map(|_| rng.gen()).collect();
 
         // TODO: Evaluate designing a scattered pattered of `pos` and `num_bits`
@@ -893,14 +794,14 @@ mod tests {
             let num_bits = rng.gen_range(1, data.len() * 8 - pos);
             let new_offset = rng.gen_range(0, 8);
 
-            let mut bv = BitVecLEu8::new();
+            let mut bv = BitVec::<LittleEndian, u8>::new();
             bv.extend(
-                BitVecLEu8::from(&data[..])
+                BitVec::<LittleEndian, u8>::from(&data[..])
                     .into_iter()
                     .skip(pos)
                     .take(num_bits),
             );
-            let shifted_bv: BitVecLEu8 = bv >> new_offset;
+            let shifted_bv: BitVec<LittleEndian, u8> = bv >> new_offset;
 
             assert_eq!(
                 shifted_bv.as_slice(),
@@ -914,7 +815,7 @@ mod tests {
     #[test]
     fn test_bit_shifts() {
         let len = 5;
-        let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
+        let rng = &mut XorShiftRng::from_seed(TEST_SEED);
 
         for amount in 1..8 {
             for left in [true, false].iter() {
@@ -971,7 +872,7 @@ mod tests {
         let len = 1016; // Use a multiple of 254.
         let data = vec![255u8; len];
         let mut padded = Vec::new();
-        let mut reader = crate::fr32_reader::Fr32Reader::new(io::Cursor::new(&data));
+        let mut reader = Fr32Reader::new(io::Cursor::new(&data));
         reader
             .read_to_end(&mut padded)
             .expect("in-memory read failed");
@@ -993,13 +894,13 @@ mod tests {
     // different lengths of raw data at different offset, check integrity.
     #[test]
     fn test_read_write_padded_offset() {
-        let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
+        let rng = &mut XorShiftRng::from_seed(TEST_SEED);
 
         let len = 1016;
         let data: Vec<u8> = (0..len).map(|_| rng.gen()).collect();
 
         let mut padded = Vec::new();
-        let mut reader = crate::fr32_reader::Fr32Reader::new(io::Cursor::new(&data));
+        let mut reader = Fr32Reader::new(io::Cursor::new(&data));
         reader
             .read_to_end(&mut padded)
             .expect("in-memory read failed");

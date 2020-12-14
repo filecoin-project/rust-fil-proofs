@@ -1,0 +1,34 @@
+[package]
+name = "fr32"
+version = "0.1.0"
+authors = ["dignifiedquire <me@dignifiedquire.com>"]
+description = "Filecoin proofs Fr/32-byte conversion tooling"
+license = "MIT OR Apache-2.0"
+edition = "2018"
+repository = "https://github.com/filecoin-project/rust-fil-proofs"
+
+[dependencies]
+anyhow = "1.0.23"
+bellperson = { version = "0.12.3", default-features = false }
+byte-slice-cast = "1.0.0"
+byteorder = "1"
+ff = { version = "0.2.3", package = "fff" }
+thiserror = "1.0.6"
+
+[dev-dependencies]
+bitvec = "0.17"
+criterion = "0.3"
+itertools = "0.9"
+pretty_assertions = "0.6.1"
+rand = "0.7"
+rand_xorshift = "0.2.0"
+
+[features]
+default = ["pairing"]
+blst = ["bellperson/blst"]
+gpu = ["bellperson/gpu"]
+pairing = ["bellperson/pairing"]
+
+[[bench]]
+name = "fr"
+harness = false

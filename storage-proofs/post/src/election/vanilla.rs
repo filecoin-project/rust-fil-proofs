@@ -9,6 +9,7 @@ use filecoin_hashers::{
     poseidon::{PoseidonDomain, PoseidonFunction},
     Domain, HashFunction, Hasher, PoseidonMDArity,
 };
+use fr32::fr_into_bytes;
 use generic_array::typenum;
 use log::trace;
 use rayon::prelude::*;
@@ -18,7 +19,6 @@ use typenum::Unsigned;
 
 use storage_proofs_core::{
     error::{Error, Result},
-    fr32::fr_into_bytes,
     measurements::{measure_op, Operation},
     merkle::{MerkleProof, MerkleProofTrait, MerkleTreeTrait, MerkleTreeWrapper},
     parameter_cache::ParameterSetMetadata,

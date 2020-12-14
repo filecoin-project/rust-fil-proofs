@@ -14,7 +14,6 @@ pub mod crypto;
 pub mod data;
 pub mod drgraph;
 pub mod error;
-pub mod fr32;
 pub mod gadgets;
 pub mod measurements;
 pub mod merkle;
