@@ -35,9 +35,9 @@ fn merkle_benchmark_sha256(c: &mut Criterion) {
 
 fn merkle_benchmark_poseidon(c: &mut Criterion) {
     #[cfg(feature = "big-sector-sizes-bench")]
-    let params = vec![64];
+    let params = vec![64, 128, 1024, 1_048_576];
     #[cfg(not(feature = "big-sector-sizes-bench"))]
-    let params = vec![64];
+    let params = vec![64, 128, 1024];
 
     c.bench(
         "merkletree-binary",
