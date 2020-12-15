@@ -362,8 +362,10 @@ impl LightAlgorithm<PoseidonDomain> for PoseidonFunction {
             1 | 2 | 4 | 8 | 16 => shared_hash_frs(
                 &parts
                     .iter()
-                    .map(|x| {
-                        <Bls12 as ff::ScalarEngine>::Fr::from_repr(x.0).expect("from_repr failure")
+                    .enumerate()
+                    .map(|(i, x)| {
+                        <Bls12 as ff::ScalarEngine>::Fr::from_repr(x.0)
+                            .unwrap_or_else(|_| panic!("from_repr failure at {}", i))
                     })
                     .collect::<Vec<_>>(),
             )
