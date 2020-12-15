@@ -4,7 +4,7 @@ use bellperson::groth16::Parameters;
 use bellperson::{groth16, Circuit};
 use fs2::FileExt;
 use itertools::Itertools;
-use log::info;
+use log::{info, warn};
 use paired::bls12_381::Bls12;
 use rand::RngCore;
 use serde::{Deserialize, Serialize};
@@ -226,7 +226,8 @@ where
         let cache_path = ensure_ancestor_dirs_exist(parameter_cache_params_path(&id))?;
         match read_cached_params(&cache_path) {
             Ok(x) => Ok(x),
-            Err(_) => {
+            Err(err) => {
+                warn!("{}: failed to read cached params", err);
                 write_cached_params(&cache_path, generate()?).unwrap_or_else(|e| {
                     panic!("{}: failed to write generated parameters to cache", e)
                 });
