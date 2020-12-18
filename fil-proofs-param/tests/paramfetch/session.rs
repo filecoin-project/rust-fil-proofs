@@ -73,7 +73,7 @@ impl ParamFetchSessionBuilder {
         let whitelist: String = self
             .whitelisted_sector_sizes
             .map(|wl| {
-                let mut s = "--params-for-sector-sizes=".to_string();
+                let mut s = "--sector-sizes=".to_string();
                 s.push_str(&wl.join(","));
                 s
             })
@@ -86,14 +86,13 @@ impl ParamFetchSessionBuilder {
         };
 
         let cmd = format!(
-            "{}={} {:?} {} {} {} --ipget-bin={:?}",
+            "{}={} {:?} {} {} {}",
             "FIL_PROOFS_PARAMETER_CACHE", // related to var name in core/src/settings.rs
             cache_dir_path,
             paramfetch_path,
             if self.prompt_enabled { "" } else { "--all" },
             json_argument,
             whitelist,
-            "true"
         );
 
         p.execute(&cmd, ".*").expect("could not execute paramfetch");

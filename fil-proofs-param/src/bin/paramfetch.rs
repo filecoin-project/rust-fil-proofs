@@ -1,484 +1,437 @@
-use std::collections::HashSet;
+use std::env;
 use std::fs::{create_dir_all, rename, File};
-use std::io::copy;
-use std::io::prelude::*;
-use std::io::{BufReader, Stdout};
-use std::path::{Path, PathBuf};
-use std::process::exit;
-use std::process::Command;
-use std::{fs, io};
+use std::io::{self, copy, stderr, stdout, Read, Stdout, Write};
+use std::path::PathBuf;
+use std::process::{exit, Command};
 
-use anyhow::{bail, ensure, Context, Result};
-use clap::{values_t, App, Arg, ArgMatches};
+use anyhow::{ensure, Context, Result};
+use dialoguer::{theme::ColorfulTheme, MultiSelect, Select};
+use filecoin_proofs::param::{
+    get_digest_for_file_within_cache, get_full_path_for_file_within_cache, has_extension,
+};
 use flate2::read::GzDecoder;
-use itertools::Itertools;
+use humansize::{file_size_opts, FileSize};
+use lazy_static::lazy_static;
+use log::{error, info, trace, warn};
 use pbr::{ProgressBar, Units};
 use reqwest::{blocking::Client, header, Proxy, Url};
+use storage_proofs::parameter_cache::{
+    parameter_cache_dir, parameter_cache_dir_name, ParameterMap, GROTH_PARAMETER_EXT,
+};
+use structopt::StructOpt;
 use tar::Archive;
 
-use filecoin_proofs::param::*;
-use storage_proofs::parameter_cache::{
-    parameter_cache_dir, parameter_cache_dir_name, ParameterData, ParameterMap, GROTH_PARAMETER_EXT,
-};
+lazy_static! {
+    static ref CLI_ABOUT: String = format!(
+        "Downloads missing or outdated Groth parameter files from ipfs using ipget.\n\n\
 
-const ERROR_PARAMETER_FILE: &str = "failed to find file in cache";
-const ERROR_PARAMETER_ID: &str = "failed to find key in manifest";
+        Set the $FIL_PROOFS_PARAMETER_CACHE env-var to specify the path to the parameter cache
+        directory (location where params are written), otherwise params will be written to '{}'.",
+        parameter_cache_dir_name(),
+    );
+}
 
-const IPGET_PATH: &str = "/var/tmp/ipget";
-const DEFAULT_PARAMETERS: &str = include_str!("../../parameters.json");
-const IPGET_VERSION: &str = "v0.4.0";
+const DEFAULT_JSON: &str = include_str!("../../parameters.json");
+const DEFAULT_IPGET_VERSION: &str = "v0.6.0";
 
+#[inline]
+fn ipget_dir(version: &str) -> String {
+    format!("/var/tmp/ipget-{}", version)
+}
+
+#[inline]
+fn ipget_path(version: &str) -> String {
+    format!("{}/ipget/ipget", ipget_dir(version))
+}
+
+/// Reader with progress bar.
 struct FetchProgress<R> {
-    inner: R,
+    reader: R,
     progress_bar: ProgressBar<Stdout>,
 }
 
 impl<R: Read> Read for FetchProgress<R> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        self.inner.read(buf).map(|n| {
+        self.reader.read(buf).map(|n| {
             self.progress_bar.add(n as u64);
             n
         })
     }
 }
 
-pub fn main() {
-    fil_logger::init();
-
-    let matches = App::new("paramfetch")
-        .version("1.1")
-        .about(
-            &format!(
-                "
-Set {} to specify Groth parameter and verifying key-cache directory.
-Defaults to '{}'
-",
-                "FIL_PROOFS_PARAMETER_CACHE", // related to var name in core/src/settings.rs
-                parameter_cache_dir_name(),
-            )[..],
-        )
-        .arg(
-            Arg::with_name("json")
-                .value_name("JSON")
-                .takes_value(true)
-                .short("j")
-                .long("json")
-                .help("Use specific JSON file"),
-        )
-        .arg(
-            Arg::with_name("retry")
-                .short("r")
-                .long("retry")
-                .help("Prompt to retry on failure"),
-        )
-        .arg(
-            Arg::with_name("all")
-                .short("a")
-                .long("all")
-                .conflicts_with("params-for-sector-sizes")
-                .help("Download all available parameters and verifying keys"),
-        )
-        .arg(
-            Arg::with_name("params-for-sector-sizes")
-                .short("z")
-                .long("params-for-sector-sizes")
-                .conflicts_with("all")
-                .require_delimiter(true)
-                .value_delimiter(",")
-                .multiple(true)
-                .help("A comma-separated list of sector sizes, in bytes, for which Groth parameters will be downloaded"),
-        )
-        .arg(
-            Arg::with_name("verbose")
-                .short("v")
-                .long("verbose")
-                .help("Print diagnostic information to stdout"),
-        )
-        .arg(
-            Arg::with_name("ipget-bin")
-                .conflicts_with("ipget-version")
-                .takes_value(true)
-                .short("i")
-                .long("ipget-bin")
-                .help("Use specific ipget binary instead of looking for (or installing) one in /var/tmp/ipget/ipget"),
-        )
-        .arg(
-            Arg::with_name("ipget-args")
-                .takes_value(true)
-                .long("ipget-args")
-                .help("Specify additional arguments for ipget")
-        )
-        .arg(
-            Arg::with_name("ipget-version")
-                .conflicts_with("ipget-bin")
-                .long("ipget-version")
-                .takes_value(true)
-                .help("Set the version of ipget to use")
-        )
-        .get_matches();
-
-    match fetch(&matches) {
-        Ok(_) => println!("done"),
-        Err(err) => {
-            println!("fatal error: {}", err);
-            exit(1);
+impl<R: Read> FetchProgress<R> {
+    fn new(reader: R, size: u64) -> Self {
+        let mut progress_bar = ProgressBar::new(size);
+        progress_bar.set_units(Units::Bytes);
+        FetchProgress {
+            reader,
+            progress_bar,
         }
     }
-}
-
-fn fetch(matches: &ArgMatches) -> Result<()> {
-    let manifest = if matches.is_present("json") {
-        let json_path = PathBuf::from(
-            matches
-                .value_of("json")
-                .expect("failed to convert to path buf"),
-        );
-        println!("using JSON file: {:?}", json_path);
-
-        if !json_path.exists() {
-            bail!(
-                "JSON file '{}' does not exist",
-                &json_path.to_str().unwrap_or("")
-            );
-        }
-
-        let file = File::open(&json_path)?;
-        let reader = BufReader::new(file);
-
-        serde_json::from_reader(reader).with_context(|| {
-            format!(
-                "JSON file '{}' did not parse correctly",
-                &json_path.to_str().unwrap_or(""),
-            )
-        })?
-    } else {
-        println!("using built-in manifest");
-        serde_json::from_str(&DEFAULT_PARAMETERS)?
-    };
-
-    let retry = matches.is_present("retry");
-
-    let mut filenames = get_filenames_from_parameter_map(&manifest)?;
-
-    println!("{} files in manifest...", filenames.len());
-    println!();
-
-    // if user has specified sector sizes for which they wish to download Groth
-    // parameters, trim non-matching Groth parameter filenames from the list
-    if matches.is_present("params-for-sector-sizes") {
-        let whitelisted_sector_sizes: HashSet<u64> =
-            values_t!(matches.values_of("params-for-sector-sizes"), u64)?
-                .into_iter()
-                .collect();
-
-        // always download all verifying keys - but conditionally skip Groth
-        // parameters for sector sizes the user doesn't care about
-        filenames = filenames
-            .into_iter()
-            .filter(|id| {
-                !has_extension(id, GROTH_PARAMETER_EXT) || {
-                    manifest
-                        .get(id)
-                        .map(|p| p.sector_size)
-                        .map(|n| whitelisted_sector_sizes.contains(&n))
-                        .unwrap_or(false)
-                }
-            })
-            .collect_vec();
-    }
-
-    println!("{} files to check for (re)download...", filenames.len());
-    println!();
-
-    // ensure filename corresponds to asset on disk and that its checksum
-    // matches that which is specified in the manifest
-    filenames = get_filenames_requiring_download(&manifest, filenames)?;
-
-    // don't prompt the user to download files if they've used certain flags
-    if !matches.is_present("params-for-sector-sizes")
-        && !matches.is_present("all")
-        && !filenames.is_empty()
-    {
-        filenames = choose_from(&filenames, |filename| {
-            manifest.get(filename).map(|x| x.sector_size)
-        })?;
-        println!();
-    }
-
-    let is_verbose = matches.is_present("verbose");
-    let ipget_bin_path = matches.value_of("ipget-bin");
-    let ipget_version = matches.value_of("ipget-version").unwrap_or(IPGET_VERSION);
-    let ipget_args = matches.value_of("ipget-args");
-
-    // Make sure we have ipget available
-    if ipget_bin_path.is_none() {
-        ensure_ipget(is_verbose, ipget_version)?;
-    }
-
-    let ipget_path = if let Some(p) = ipget_bin_path {
-        PathBuf::from(p)
-    } else {
-        PathBuf::from(&get_ipget_bin(ipget_version))
-    };
-
-    loop {
-        println!("{} files to fetch...", filenames.len());
-        println!();
-
-        for filename in &filenames {
-            println!("fetching: {}", filename);
-            print!("downloading file... ");
-            io::stdout().flush().expect("failed to flush stdout");
-
-            match fetch_parameter_file(is_verbose, &manifest, &filename, &ipget_path, ipget_args) {
-                Ok(_) => println!("ok\n"),
-                Err(err) => println!("error: {}\n", err),
-            }
-        }
-
-        // if we haven't downloaded a valid copy of each asset specified in the
-        // manifest, ask the user if they wish to try again
-        filenames = get_filenames_requiring_download(&manifest, filenames)?;
-
-        if filenames.is_empty() {
-            break;
-        } else {
-            println!("{} files failed to be fetched:", filenames.len());
-
-            for parameter_id in &filenames {
-                println!("{}", parameter_id);
-            }
-
-            println!();
-
-            if !retry || !choose("try again?") {
-                bail!("some files failed to be fetched. try again, or run paramcache to generate locally");
-            }
-        }
-    }
-
-    Ok(())
-}
-
-fn get_ipget_bin(version: &str) -> String {
-    format!("{}-{}/ipget/ipget", IPGET_PATH, version)
-}
-
-/// Check if ipget is available, dowwnload it otherwise.
-fn ensure_ipget(is_verbose: bool, version: &str) -> Result<()> {
-    let ipget_bin = get_ipget_bin(version);
-    if Path::new(&ipget_bin).exists() {
-        Ok(())
-    } else {
-        download_ipget(is_verbose, version)
-    }
-    .map(|_| {
-        if is_verbose {
-            println!("ipget installed: {}", ipget_bin);
-        }
-    })
 }
 
 /// Download a version of ipget.
-fn download_ipget(is_verbose: bool, version: &str) -> Result<()> {
-    let (os, extension) = if cfg!(target_os = "macos") {
+fn download_ipget(version: &str, verbose: bool) -> Result<()> {
+    info!("downloading ipget");
+
+    let (os, ext) = if cfg!(target_os = "macos") {
         ("darwin", "tar.gz")
     } else if cfg!(target_os = "windows") {
-        ("windows", "zip")
+        // TODO: enable Windows by adding support for .zip files.
+        // ("windows", "zip")
+        unimplemented!("paramfetch does not currently support Windows/.zip downloads");
     } else {
         ("linux", "tar.gz")
     };
 
+    // Request ipget file.
     let url = Url::parse(&format!(
         "https://dist.ipfs.io/ipget/{}/ipget_{}_{}-amd64.{}",
-        version, version, os, extension
+        version, version, os, ext,
     ))?;
-
-    if is_verbose {
-        println!("downloading ipget@{}-{}...", version, os);
-    }
-
-    // download file
-    let p = format!("{}-{}.{}", IPGET_PATH, version, extension);
-    download_file(url, &p, is_verbose)?;
-
-    // extract file
-    if extension == "tar.gz" {
-        let tar_gz = fs::File::open(p)?;
-        let tar = GzDecoder::new(tar_gz);
-        let mut archive = Archive::new(tar);
-        archive.unpack(format!("/var/tmp/ipget-{}", version))?;
-    } else {
-        // TODO: handle zip archives on windows
-        unimplemented!("failed to install ipget: unzip is not yet supported");
-    }
-
-    Ok(())
-}
-
-/// Download the given file.
-fn download_file(url: Url, target: impl AsRef<Path>, is_verbose: bool) -> Result<()> {
-    let mut file = File::create(target)?;
-
+    trace!("making GET request: {}", url.as_str());
     let client = Client::builder()
         .proxy(Proxy::custom(move |url| env_proxy::for_url(&url).to_url()))
         .build()?;
-    let total_size = {
-        let res = client.head(url.as_str()).send()?;
-        if res.status().is_success() {
-            res.headers()
-                .get(header::CONTENT_LENGTH)
-                .and_then(|ct_len| ct_len.to_str().ok())
-                .and_then(|ct_len| ct_len.parse().ok())
-                .unwrap_or(0)
-        } else {
-            bail!("failed to download file: {}", url);
-        }
+    let mut resp = client.get(url).send()?;
+    trace!("received GET response");
+    if !resp.status().is_success() {
+        error!("non-200 response status:\n{:?}\nexiting", resp);
+        exit(1);
+    }
+
+    let size: Option<u64> = resp
+        .headers()
+        .get(header::CONTENT_LENGTH)
+        .and_then(|val| val.to_str().unwrap().parse().ok());
+
+    match size {
+        Some(size) => trace!("content-length: {}", size),
+        None => trace!(
+            "unable to parse content-length: {:?}",
+            resp.headers().get(header::CONTENT_LENGTH),
+        ),
     };
 
-    let req = client.get(url.as_str());
-    if is_verbose {
-        let mut pb = ProgressBar::new(total_size);
-        pb.set_units(Units::Bytes);
-
-        let mut source = FetchProgress {
-            inner: req.send()?,
-            progress_bar: pb,
-        };
-
-        let _ = copy(&mut source, &mut file)?;
+    // Write downloaded file.
+    let write_path = format!("{}.{}", ipget_dir(version), ext);
+    trace!("writing downloaded file to: {}", write_path);
+    let mut writer = File::create(&write_path).expect("failed to create file");
+    if verbose && size.is_some() {
+        let mut resp = FetchProgress::new(resp, size.unwrap());
+        copy(&mut resp, &mut writer).expect("failed to write download to file");
     } else {
-        let mut source = req.send()?;
-        let _ = copy(&mut source, &mut file)?;
+        copy(&mut resp, &mut writer).expect("failed to write download to file");
     }
+    drop(writer);
 
-    Ok(())
-}
-
-fn fetch_parameter_file(
-    is_verbose: bool,
-    parameter_map: &ParameterMap,
-    filename: &str,
-    ipget_bin_path: impl AsRef<Path>,
-    ipget_args: Option<impl AsRef<str>>,
-) -> Result<()> {
-    let parameter_data = parameter_map_lookup(parameter_map, filename)?;
-    let path = get_full_path_for_file_within_cache(filename);
-
-    create_dir_all(parameter_cache_dir())?;
-    download_file_with_ipget(
-        &parameter_data.cid,
-        path,
-        is_verbose,
-        ipget_bin_path,
-        ipget_args,
-    )
-}
-
-fn download_file_with_ipget(
-    cid: impl AsRef<str>,
-    target: impl AsRef<Path>,
-    is_verbose: bool,
-    ipget_bin_path: impl AsRef<Path>,
-    ipget_args: Option<impl AsRef<str>>,
-) -> Result<()> {
-    let mut cmd = Command::new(ipget_bin_path.as_ref().as_os_str());
-    cmd.arg("-o")
-        .arg(target.as_ref().to_str().expect("failed to convert -o arg"))
-        .arg(cid.as_ref());
-
-    if let Some(args) = ipget_args {
-        cmd.args(args.as_ref().split(' '));
+    // Unzip and unarchive downloaded file.
+    let reader = File::open(&write_path).expect("failed to open downloaded tar file");
+    if ext == "tar.gz" {
+        trace!("unzipping and unarchiving downloaded file");
+        let unzipper = GzDecoder::new(reader);
+        let mut unarchiver = Archive::new(unzipper);
+        unarchiver
+            .unpack(ipget_dir(version))
+            .expect("failed to unzip and unarchive");
+    } else {
+        unimplemented!("unzip is not yet supported");
     }
-
-    let output = cmd.output()?;
-
-    if is_verbose {
-        io::stdout().write_all(&output.stdout)?;
-        io::stderr().write_all(&output.stderr)?;
-    }
-
-    ensure!(
-        output.status.success(),
-        "failed to download {}",
-        target.as_ref().display()
+    info!(
+        "successfully downloaded ipget binary: {}",
+        ipget_path(version),
     );
 
     Ok(())
 }
 
+/// Check which files are outdated (or no not exist).
 fn get_filenames_requiring_download(
     parameter_map: &ParameterMap,
-    parameter_ids: Vec<String>,
-) -> Result<Vec<String>> {
-    Ok(parameter_ids
+    selected_filenames: Vec<String>,
+) -> Vec<String> {
+    selected_filenames
         .into_iter()
-        .filter(|parameter_id| {
-            println!("checking: {}", parameter_id);
-            print!("does file exist... ");
-
-            if get_full_path_for_file_within_cache(parameter_id).exists() {
-                println!("yes");
-                print!("is file valid... ");
-                io::stdout().flush().expect("failed to flush stdout");
-
-                match validate_parameter_file(&parameter_map, &parameter_id) {
-                    Ok(true) => {
-                        println!("yes\n");
-                        false
-                    }
-                    Ok(false) => {
-                        println!("no\n");
-                        invalidate_parameter_file(&parameter_id)
-                            .expect("invalidate failed to rename file");
-                        true
-                    }
-                    Err(err) => {
-                        println!("error: {}\n", err);
-                        true
-                    }
+        .filter(|filename| {
+            trace!("determining if file is out of date: {}", filename);
+            let path = get_full_path_for_file_within_cache(filename);
+            if !path.exists() {
+                trace!("file not found, marking for download");
+                return true;
+            };
+            trace!("params file found");
+            let calculated_digest = match get_digest_for_file_within_cache(&filename) {
+                Ok(digest) => digest,
+                Err(e) => {
+                    warn!("failed to hash file {}, marking for download", e);
+                    return true;
                 }
+            };
+            let expected_digest = &parameter_map[filename].digest;
+            if &calculated_digest == expected_digest {
+                trace!("file is up to date");
+                false
             } else {
-                println!("no\n");
+                trace!("file has unexpected digest, marking for download");
+                let new_filename = format!("{}-invalid-digest", filename);
+                let new_path = path.with_file_name(new_filename);
+                trace!("moving invalid params to: {}", new_path.display());
+                rename(path, new_path).expect("failed to move file");
                 true
             }
         })
-        .collect())
+        .collect()
 }
 
-fn get_filenames_from_parameter_map(parameter_map: &ParameterMap) -> Result<Vec<String>> {
-    Ok(parameter_map.iter().map(|(k, _)| k.clone()).collect())
-}
-
-fn validate_parameter_file(parameter_map: &ParameterMap, filename: &str) -> Result<bool> {
-    let parameter_data = parameter_map_lookup(parameter_map, filename)?;
-    let digest = get_digest_for_file_within_cache(filename)?;
-
-    if parameter_data.digest != digest {
-        Ok(false)
-    } else {
-        Ok(true)
+fn download_file_with_ipget(
+    cid: &str,
+    path: &PathBuf,
+    ipget_path: &PathBuf,
+    ipget_args: &Option<String>,
+    verbose: bool,
+) -> Result<()> {
+    let mut args = vec![cid, "-o", path.to_str().unwrap()];
+    if let Some(ipget_args) = ipget_args {
+        args.extend(ipget_args.split_whitespace());
     }
-}
-
-fn invalidate_parameter_file(filename: &str) -> Result<()> {
-    let parameter_file_path = get_full_path_for_file_within_cache(filename);
-    let target_parameter_file_path =
-        parameter_file_path.with_file_name(format!("{}-invalid-digest", filename));
-
-    ensure!(parameter_file_path.exists(), ERROR_PARAMETER_FILE);
-    rename(parameter_file_path, target_parameter_file_path)?;
-
+    trace!(
+        "spawning subprocess: {} {}",
+        ipget_path.display(),
+        args.join(" ")
+    );
+    let output = Command::new(ipget_path.as_os_str())
+        .args(&args)
+        .output()
+        .with_context(|| "failed to spawn ipget subprocess")?;
+    if verbose {
+        stdout()
+            .write_all(&output.stdout)
+            .with_context(|| "failed to write ipget's stdout")?;
+        stderr()
+            .write_all(&output.stderr)
+            .with_context(|| "failed to write ipget's stderr")?;
+    }
+    ensure!(output.status.success(), "ipget returned non-zero exit code");
     Ok(())
 }
 
-fn parameter_map_lookup<'a>(
-    parameter_map: &'a ParameterMap,
-    filename: &str,
-) -> Result<&'a ParameterData> {
-    ensure!(parameter_map.contains_key(filename), ERROR_PARAMETER_ID);
+#[derive(Debug, StructOpt)]
+#[structopt(name = "paramfetch", version = "1.1", about = CLI_ABOUT.as_str())]
+struct Cli {
+    #[structopt(
+        long,
+        short = "j",
+        value_name = "PATH TO JSON FILE",
+        help = "Use a specific JSON file."
+    )]
+    json: Option<String>,
+    #[structopt(long, short = "r", help = "Prompt to retry file downloads on failure.")]
+    retry: bool,
+    #[structopt(
+        long,
+        short = "a",
+        conflicts_with = "sector-sizes",
+        help = "Download parameters for all sector sizes."
+    )]
+    all: bool,
+    #[structopt(
+        long = "sector-sizes",
+        short = "z",
+        value_name = "SECTOR SIZES",
+        value_delimiter = ",",
+        require_delimiter = true,
+        multiple = false,
+        conflicts_with = "all",
+        help = "A comma-separated list of sector sizes (in bytes) for which Groth parameters will \
+            be downloaded."
+    )]
+    sector_sizes: Option<Vec<u64>>,
+    #[structopt(long, short = "v")]
+    verbose: bool,
+    #[structopt(
+        long = "ipget-bin",
+        short = "i",
+        value_name = "PATH TO IPGET",
+        conflicts_with = "ipget-version",
+        long_help = "Path to an ipget binary. If this argument is not given, paramfetch with look \
+            for ipget in the default location: /var/tmp/ipget-<version>/ipget/ipget. If no binary \
+            is found in the default location, paramfetch will download ipget into that location."
+    )]
+    ipget_bin: Option<String>,
+    #[structopt(
+        long = "ipget-version",
+        value_name = "VERSION",
+        conflicts_with = "ipget-bin",
+        help = "Set the version of ipget to use."
+    )]
+    ipget_version: Option<String>,
+    #[structopt(
+        long = "ipget-args",
+        value_name = "ARGS",
+        help = "Specify additional arguments for ipget."
+    )]
+    ipget_args: Option<String>,
+}
 
-    Ok(parameter_map
-        .get(filename)
-        .expect("unreachable: contains_key()"))
+pub fn main() {
+    // Log all log levels to stderr.
+    env::set_var("RUST_LOG", "paramfetch");
+    fil_logger::init();
+
+    let cli = Cli::from_args();
+
+    // Parse parameters.json file.
+    let parameter_map: ParameterMap = match cli.json {
+        Some(json_path) => {
+            trace!("using json file: {}", json_path);
+            let mut json_file = File::open(&json_path)
+                .map_err(|e| {
+                    error!("failed to open json file, exiting\n{:?}", e);
+                    exit(1);
+                })
+                .unwrap();
+            serde_json::from_reader(&mut json_file)
+                .map_err(|e| {
+                    error!("failed to parse json file, exiting\n{:?}", e);
+                    exit(1);
+                })
+                .unwrap()
+        }
+        None => {
+            trace!("using built-in json");
+            serde_json::from_str(DEFAULT_JSON)
+                .map_err(|e| {
+                    error!("failed to parse built-in json, exiting\n{:?}", e);
+                    exit(1);
+                })
+                .unwrap()
+        }
+    };
+
+    let mut filenames: Vec<String> = parameter_map.keys().cloned().collect();
+    trace!("json contains {} files", filenames.len());
+
+    // Filter out unwanted sector sizes from params files (.params files only, leave verifying-key
+    // files).
+    if let Some(ref sector_sizes) = cli.sector_sizes {
+        filenames.retain(|filename| {
+            let remove = has_extension(filename, GROTH_PARAMETER_EXT)
+                && !sector_sizes.contains(&parameter_map[filename].sector_size);
+            if remove {
+                let human_size = parameter_map[filename]
+                    .sector_size
+                    .file_size(file_size_opts::BINARY)
+                    .unwrap();
+                trace!("ignoring file: {} ({})", filename, human_size);
+            }
+            !remove
+        });
+    }
+
+    // Determine which files are outdated.
+    filenames = get_filenames_requiring_download(&parameter_map, filenames);
+    if filenames.is_empty() {
+        info!("no outdated files, exiting");
+        return;
+    }
+
+    // If no sector size CLI argument was provided, prompt the user to select which files to
+    // download.
+    if cli.sector_sizes.is_none() && !cli.all {
+        let filename_strings: Vec<String> = filenames
+            .iter()
+            .map(|filename| {
+                let human_size = parameter_map[filename]
+                    .sector_size
+                    .file_size(file_size_opts::BINARY)
+                    .unwrap();
+                format!("{} ({})", filename, human_size)
+            })
+            .collect();
+        filenames = MultiSelect::with_theme(&ColorfulTheme::default())
+            .with_prompt("Select files to be downloaded (press space key to select)")
+            .items(&filename_strings)
+            .interact()
+            .expect("MultiSelect interaction failed")
+            .into_iter()
+            .map(|i| filenames[i].clone())
+            .collect();
+    }
+
+    info!(
+        "{} files to be downloaded: {:?}",
+        filenames.len(),
+        filenames
+    );
+    if filenames.is_empty() {
+        info!("no files to download, exiting");
+        return;
+    }
+
+    let ipget_path = match cli.ipget_bin {
+        Some(ipget_path) => {
+            let ipget_path = PathBuf::from(ipget_path);
+            if !ipget_path.exists() {
+                error!(
+                    "provided ipget binary not found: {}, exiting",
+                    ipget_path.display()
+                );
+                exit(1);
+            }
+            ipget_path
+        }
+        None => {
+            let ipget_version = cli
+                .ipget_version
+                .unwrap_or(DEFAULT_IPGET_VERSION.to_string());
+            let ipget_path = PathBuf::from(ipget_path(&ipget_version));
+            if !ipget_path.exists() {
+                info!("ipget binary not found: {}", ipget_path.display());
+                download_ipget(&ipget_version, cli.verbose).expect("ipget download failed");
+            }
+            ipget_path
+        }
+    };
+    trace!("using ipget binary: {}", ipget_path.display());
+
+    trace!("creating param cache dir(s) if they don't exist");
+    create_dir_all(parameter_cache_dir()).expect("failed to create param cache dir");
+
+    loop {
+        for filename in &filenames {
+            info!("downloading params file with ipget: {}", filename);
+            let path = get_full_path_for_file_within_cache(filename);
+            match download_file_with_ipget(
+                &parameter_map[filename].cid,
+                &path,
+                &ipget_path,
+                &cli.ipget_args,
+                cli.verbose,
+            ) {
+                Ok(_) => info!("finished downloading params file"),
+                Err(e) => warn!("failed to download params file: {}", e),
+            };
+        }
+        filenames = get_filenames_requiring_download(&parameter_map, filenames);
+        if filenames.is_empty() {
+            info!("succesfully updated all files, exiting");
+            return;
+        }
+        warn!(
+            "{} files failed to be fetched: {:?}",
+            filenames.len(),
+            filenames
+        );
+        let retry = cli.retry
+            || Select::with_theme(&ColorfulTheme::default())
+                .with_prompt("Retry failed downloads? (press arrow keys to select)")
+                .items(&["y", "n"])
+                .interact()
+                .map(|i| i == 0)
+                .expect("Select interaction failed");
+        if !retry {
+            warn!("not retrying failed downloads, exiting");
+            exit(1);
+        }
+    }
 }
