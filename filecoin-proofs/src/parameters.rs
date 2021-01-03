@@ -1,8 +1,8 @@
 use anyhow::{ensure, Result};
-use storage_proofs::api_version::ApiVersion;
-use storage_proofs::porep::stacked::{self, LayerChallenges, StackedDrg};
-use storage_proofs::post::fallback;
-use storage_proofs::proof::ProofScheme;
+use storage_proofs_core::api_version::ApiVersion;
+use storage_proofs_core::proof::ProofScheme;
+use storage_proofs_porep::stacked::{self, LayerChallenges, StackedDrg};
+use storage_proofs_post::fallback;
 
 use crate::constants::*;
 use crate::types::{MerkleTreeTrait, PaddedBytesAmount, PoStConfig};
@@ -133,7 +133,7 @@ mod tests {
     use super::*;
 
     use crate::types::PoStType;
-    use storage_proofs::api_version::ApiVersion;
+    use storage_proofs_core::api_version::ApiVersion;
 
     #[test]
     fn partition_layer_challenges_test() {

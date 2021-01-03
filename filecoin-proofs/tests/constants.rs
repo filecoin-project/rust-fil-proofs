@@ -2,7 +2,7 @@ use filecoin_proofs::constants::*;
 use filecoin_proofs::with_shape;
 
 use generic_array::typenum::Unsigned;
-use storage_proofs::merkle::MerkleTreeTrait;
+use storage_proofs_core::merkle::MerkleTreeTrait;
 
 fn canonical_shape(sector_size: u64) -> (usize, usize, usize) {
     // This could perhaps be cleaned up, but I think it expresses the intended constraints

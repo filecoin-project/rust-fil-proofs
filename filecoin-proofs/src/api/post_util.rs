@@ -5,12 +5,12 @@ use anyhow::{anyhow, ensure, Context, Result};
 use bincode::deserialize;
 use filecoin_hashers::Hasher;
 use log::{info, trace};
-use storage_proofs::cache_key::CacheKey;
-use storage_proofs::merkle::MerkleTreeTrait;
-use storage_proofs::post::fallback;
-use storage_proofs::post::fallback::SectorProof;
-use storage_proofs::proof::ProofScheme;
-use storage_proofs::sector::*;
+use storage_proofs_core::cache_key::CacheKey;
+use storage_proofs_core::merkle::MerkleTreeTrait;
+use storage_proofs_core::proof::ProofScheme;
+use storage_proofs_core::sector::*;
+use storage_proofs_post::fallback;
+use storage_proofs_post::fallback::SectorProof;
 
 use crate::api::util::as_safe_commitment;
 use crate::constants::*;

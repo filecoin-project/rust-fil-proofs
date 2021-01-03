@@ -14,10 +14,10 @@ use filecoin_proofs::parameters::{
 use filecoin_proofs::types::*;
 use filecoin_proofs::with_shape;
 use filecoin_proofs::PoStType;
-use storage_proofs::api_version::ApiVersion;
-use storage_proofs::compound_proof::CompoundProof;
-use storage_proofs::porep::stacked::{StackedCompound, StackedDrg};
-use storage_proofs::post::fallback::{FallbackPoSt, FallbackPoStCircuit, FallbackPoStCompound};
+use storage_proofs_core::api_version::ApiVersion;
+use storage_proofs_core::compound_proof::CompoundProof;
+use storage_proofs_porep::stacked::{StackedCompound, StackedDrg};
+use storage_proofs_post::fallback::{FallbackPoSt, FallbackPoStCircuit, FallbackPoStCompound};
 
 struct CircuitInfo {
     constraints: usize,

@@ -11,9 +11,9 @@ use filecoin_hashers::sha256::Sha256Hasher;
 use filecoin_proofs::constants::*;
 use filecoin_proofs::types::*;
 use filecoin_proofs::with_shape;
-use storage_proofs::api_version::ApiVersion;
-use storage_proofs::porep::stacked::{LayerChallenges, SetupParams, StackedDrg};
-use storage_proofs::proof::ProofScheme;
+use storage_proofs_core::api_version::ApiVersion;
+use storage_proofs_core::proof::ProofScheme;
+use storage_proofs_porep::stacked::{LayerChallenges, SetupParams, StackedDrg};
 
 const PARENT_CACHE_JSON_OUTPUT: &str = "./parent_cache.json";
 

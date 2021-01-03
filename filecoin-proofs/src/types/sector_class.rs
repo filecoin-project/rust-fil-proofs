@@ -1,4 +1,4 @@
-use storage_proofs::api_version::ApiVersion;
+use storage_proofs_core::api_version::ApiVersion;
 
 use crate::types::*;
 

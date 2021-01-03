@@ -4,7 +4,7 @@ use std::{env, thread};
 use failure::format_err;
 use rexpect::session::PtyReplSession;
 use rexpect::spawn_bash;
-use storage_proofs::parameter_cache::ParameterData;
+use storage_proofs_core::parameter_cache::ParameterData;
 
 use std::collections::btree_map::BTreeMap;
 use std::fs::File;

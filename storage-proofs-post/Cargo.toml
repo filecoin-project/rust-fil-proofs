@@ -9,8 +9,8 @@ repository = "https://github.com/filecoin-project/rust-fil-proofs"
 readme = "README.md"
 
 [dependencies]
-storage-proofs-core = { path = "../core", version = "^6.0.0", default-features = false}
-filecoin-hashers = { path = "../../filecoin-hashers", version = "1.0.0", default-features = false, features = ["poseidon", "sha256"]}
+storage-proofs-core = { path = "../storage-proofs-core", version = "^6.0.0", default-features = false}
+filecoin-hashers = { path = "../filecoin-hashers", version = "1.0.0", default-features = false, features = ["poseidon", "sha256"]}
 rand = "0.7"
 merkletree = "0.21.0"
 byteorder = "1"
@@ -28,13 +28,13 @@ generic-array = "0.14.4"
 anyhow = "1.0.23"
 neptune = { version = "2.2.0", default-features = false }
 num_cpus = "1.10.1"
-fr32 = { path = "../../fr32", default-features = false }
+fr32 = { path = "../fr32", default-features = false }
 
 [dev-dependencies]
 tempfile = "3"
 pretty_assertions = "0.6.1"
 rand_xorshift = "0.2.0"
-filecoin-hashers = { path = "../../filecoin-hashers", version = "1.0.0", default-features = false, features = ["poseidon", "sha256", "blake2s"]}
+filecoin-hashers = { path = "../filecoin-hashers", version = "1.0.0", default-features = false, features = ["poseidon", "sha256", "blake2s"]}
 
 [features]
 default = ["pairing", "gpu"]

@@ -2,10 +2,9 @@
 
 members = [
   "filecoin-proofs",
-  "storage-proofs",
-  "storage-proofs/core",
-  "storage-proofs/porep",
-  "storage-proofs/post",
+  "storage-proofs-core",
+  "storage-proofs-porep",
+  "storage-proofs-post",
   "fil-proofs-tooling",
   "fil-proofs-param",
   "fr32",

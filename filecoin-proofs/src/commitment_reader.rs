@@ -91,7 +91,7 @@ mod tests {
     use crate::types::*;
 
     use fr32::Fr32Reader;
-    use storage_proofs::pieces::generate_piece_commitment_bytes_from_source;
+    use storage_proofs_core::pieces::generate_piece_commitment_bytes_from_source;
 
     #[test]
     fn test_commitment_reader() {

@@ -8,7 +8,7 @@ use std::path::PathBuf;
 use blake2b_simd::State as Blake2b;
 use failure::Error as FailureError;
 use rand::Rng;
-use storage_proofs::parameter_cache::{ParameterData, ParameterMap};
+use storage_proofs_core::parameter_cache::{ParameterData, ParameterMap};
 
 use crate::support::tmp_manifest;
 use session::ParamFetchSessionBuilder;
@@ -188,7 +188,7 @@ fn invalid_json_produces_error() -> Result<(), FailureError> {
 
 #[test]
 fn no_json_path_uses_default_manifest() -> Result<(), FailureError> {
-    let file = File::open("../storage-proofs/parameters.json")?;
+    let file = File::open("../parameters.json")?;
     let reader = BufReader::new(file);
     let manifest: ParameterMap = serde_json::from_reader(reader)?;
 

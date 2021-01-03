@@ -3,8 +3,8 @@ use std::sync::RwLock;
 
 use filecoin_hashers::Hasher;
 use lazy_static::lazy_static;
-use storage_proofs::util::NODE_SIZE;
-use storage_proofs::MAX_LEGACY_POREP_REGISTERED_PROOF_ID;
+use storage_proofs_core::util::NODE_SIZE;
+use storage_proofs_core::MAX_LEGACY_POREP_REGISTERED_PROOF_ID;
 use typenum::{U0, U2, U8};
 
 use crate::types::UnpaddedBytesAmount;
@@ -25,8 +25,8 @@ pub const WINNING_POST_SECTOR_COUNT: usize = 1;
 
 pub const WINDOW_POST_CHALLENGE_COUNT: usize = 10;
 
-pub const DRG_DEGREE: usize = storage_proofs::drgraph::BASE_DEGREE;
-pub const EXP_DEGREE: usize = storage_proofs::porep::stacked::EXP_DEGREE;
+pub const DRG_DEGREE: usize = storage_proofs_core::drgraph::BASE_DEGREE;
+pub const EXP_DEGREE: usize = storage_proofs_porep::stacked::EXP_DEGREE;
 
 pub const MAX_LEGACY_REGISTERED_SEAL_PROOF_ID: u64 = MAX_LEGACY_POREP_REGISTERED_PROOF_ID;
 
@@ -138,9 +138,9 @@ pub type DefaultPieceDomain = <DefaultPieceHasher as Hasher>::Domain;
 pub type DefaultTreeHasher = filecoin_hashers::poseidon::PoseidonHasher;
 pub type DefaultTreeDomain = <DefaultTreeHasher as Hasher>::Domain;
 
-pub type DefaultBinaryTree = storage_proofs::merkle::BinaryMerkleTree<DefaultTreeHasher>;
-pub type DefaultOctTree = storage_proofs::merkle::OctMerkleTree<DefaultTreeHasher>;
-pub type DefaultOctLCTree = storage_proofs::merkle::OctLCMerkleTree<DefaultTreeHasher>;
+pub type DefaultBinaryTree = storage_proofs_core::merkle::BinaryMerkleTree<DefaultTreeHasher>;
+pub type DefaultOctTree = storage_proofs_core::merkle::OctMerkleTree<DefaultTreeHasher>;
+pub type DefaultOctLCTree = storage_proofs_core::merkle::OctLCMerkleTree<DefaultTreeHasher>;
 
 // Generic shapes
 pub type SectorShapeBase = LCTree<DefaultTreeHasher, U8, U0, U0>;
@@ -191,8 +191,8 @@ pub fn is_sector_shape_top2(sector_size: u64) -> bool {
     }
 }
 
-pub use storage_proofs::merkle::{DiskTree, LCTree};
-pub use storage_proofs::parameter_cache::{
+pub use storage_proofs_core::merkle::{DiskTree, LCTree};
+pub use storage_proofs_core::parameter_cache::{
     get_parameter_data, get_parameter_data_from_id, get_verifying_key_data,
 };
 

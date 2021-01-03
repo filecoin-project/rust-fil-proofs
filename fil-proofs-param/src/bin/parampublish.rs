@@ -19,7 +19,7 @@ use humansize::{file_size_opts, FileSize};
 use itertools::Itertools;
 use lazy_static::lazy_static;
 use log::{error, info, trace, warn};
-use storage_proofs::parameter_cache::{
+use storage_proofs_core::parameter_cache::{
     parameter_cache_dir, parameter_cache_dir_name, ParameterData, ParameterMap,
     GROTH_PARAMETER_EXT, PARAMETER_METADATA_EXT, VERIFYING_KEY_EXT,
 };

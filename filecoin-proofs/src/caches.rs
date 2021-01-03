@@ -7,9 +7,9 @@ use bellperson::bls::Bls12;
 use bellperson::groth16;
 use lazy_static::lazy_static;
 use log::info;
-use storage_proofs::compound_proof::CompoundProof;
-use storage_proofs::porep::stacked::{StackedCompound, StackedDrg};
-use storage_proofs::post::fallback;
+use storage_proofs_core::compound_proof::CompoundProof;
+use storage_proofs_porep::stacked::{StackedCompound, StackedDrg};
+use storage_proofs_post::fallback;
 
 use crate::constants::DefaultPieceHasher;
 use crate::parameters::{public_params, window_post_public_params, winning_post_public_params};

@@ -1,9 +1,9 @@
 use std::path::PathBuf;
 
 use anyhow::Result;
-use storage_proofs::api_version::ApiVersion;
-use storage_proofs::parameter_cache::{self, CacheableParameters};
-use storage_proofs::porep::stacked::{StackedCircuit, StackedCompound};
+use storage_proofs_core::api_version::ApiVersion;
+use storage_proofs_core::parameter_cache::{self, CacheableParameters};
+use storage_proofs_porep::stacked::{StackedCircuit, StackedCompound};
 
 use crate::constants::DefaultPieceHasher;
 use crate::types::*;

@@ -13,8 +13,8 @@ use filecoin_proofs::{
     add_piece, seal_pre_commit_phase1, seal_pre_commit_phase2, validate_cache_for_precommit_phase2,
     PieceInfo, PoRepProofPartitions, PrivateReplicaInfo, PublicReplicaInfo, SealPreCommitOutput,
 };
-use storage_proofs::api_version::ApiVersion;
-use storage_proofs::sector::SectorId;
+use storage_proofs_core::api_version::ApiVersion;
+use storage_proofs_core::sector::SectorId;
 
 use crate::{measure, FuncMeasurement};
 

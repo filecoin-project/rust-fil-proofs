@@ -4,7 +4,7 @@ use std::path::Path;
 
 use failure::Error as FailureError;
 
-use storage_proofs::parameter_cache::{CacheEntryMetadata, ParameterData};
+use storage_proofs_core::parameter_cache::{CacheEntryMetadata, ParameterData};
 
 use crate::parampublish::support::session::ParamPublishSessionBuilder;
 use crate::support::{tmp_manifest, FakeIpfsBin};

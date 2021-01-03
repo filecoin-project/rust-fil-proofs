@@ -16,14 +16,12 @@ use humansize::{file_size_opts, FileSize};
 use indicatif::ProgressBar;
 use log::{error, info, warn};
 use rand::rngs::OsRng;
-use storage_proofs::{
-    api_version::ApiVersion,
-    compound_proof::CompoundProof,
-    merkle::MerkleTreeTrait,
+use storage_proofs_core::{
+    api_version::ApiVersion, compound_proof::CompoundProof, merkle::MerkleTreeTrait,
     parameter_cache::CacheableParameters,
-    porep::stacked::{StackedCircuit, StackedCompound, StackedDrg},
-    post::fallback::{FallbackPoSt, FallbackPoStCircuit, FallbackPoStCompound},
 };
+use storage_proofs_porep::stacked::{StackedCircuit, StackedCompound, StackedDrg};
+use storage_proofs_post::fallback::{FallbackPoSt, FallbackPoStCircuit, FallbackPoStCompound};
 use structopt::StructOpt;
 
 fn cache_porep_params<Tree: 'static + MerkleTreeTrait>(porep_config: PoRepConfig) {

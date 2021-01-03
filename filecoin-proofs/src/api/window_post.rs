@@ -3,11 +3,11 @@ use std::collections::BTreeMap;
 use anyhow::{ensure, Context, Result};
 use filecoin_hashers::Hasher;
 use log::info;
-use storage_proofs::compound_proof::{self, CompoundProof};
-use storage_proofs::merkle::MerkleTreeTrait;
-use storage_proofs::multi_proof::MultiProof;
-use storage_proofs::post::fallback;
-use storage_proofs::sector::*;
+use storage_proofs_core::compound_proof::{self, CompoundProof};
+use storage_proofs_core::merkle::MerkleTreeTrait;
+use storage_proofs_core::multi_proof::MultiProof;
+use storage_proofs_core::sector::*;
+use storage_proofs_post::fallback;
 
 use crate::api::post_util::{get_partitions_for_window_post, partition_vanilla_proofs};
 use crate::api::util::as_safe_commitment;

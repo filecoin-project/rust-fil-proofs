@@ -8,15 +8,13 @@ use filecoin_hashers::Hasher;
 use fr32::{write_unpadded, Fr32Reader};
 use log::{info, trace};
 use merkletree::store::{DiskStore, LevelCacheStore, StoreConfig};
-use storage_proofs::cache_key::CacheKey;
-use storage_proofs::measurements::{measure_op, Operation};
-use storage_proofs::merkle::get_base_tree_count;
-use storage_proofs::porep::stacked::{
-    generate_replica_id, PersistentAux, StackedDrg, TemporaryAux,
-};
-use storage_proofs::porep::PoRep;
-use storage_proofs::sector::SectorId;
-use storage_proofs::util::default_rows_to_discard;
+use storage_proofs_core::cache_key::CacheKey;
+use storage_proofs_core::measurements::{measure_op, Operation};
+use storage_proofs_core::merkle::get_base_tree_count;
+use storage_proofs_core::sector::SectorId;
+use storage_proofs_core::util::default_rows_to_discard;
+use storage_proofs_porep::stacked::{generate_replica_id, PersistentAux, StackedDrg, TemporaryAux};
+use storage_proofs_porep::PoRep;
 use typenum::Unsigned;
 
 use crate::api::util::{get_base_tree_leafs, get_base_tree_size};
@@ -46,7 +44,7 @@ pub use self::winning_post::*;
 
 pub use self::util::{as_safe_commitment, commitment_from_fr};
 
-use storage_proofs::pieces::generate_piece_commitment_bytes_from_source;
+use storage_proofs_core::pieces::generate_piece_commitment_bytes_from_source;
 
 /// Unseals the sector at `sealed_path` and returns the bytes for a piece
 /// whose first (unpadded) byte begins at `offset` and ends at `offset` plus

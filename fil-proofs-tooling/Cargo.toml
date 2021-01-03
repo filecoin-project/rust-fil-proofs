@@ -10,7 +10,9 @@ repository = "https://github.com/filecoin-project/rust-fil-proofs"
 readme = "README.md"
 
 [dependencies]
-storage-proofs = { path = "../storage-proofs", default-features = false }
+storage-proofs-core = { path = "../storage-proofs-core", version = "^6.0.0", default-features = false}
+storage-proofs-porep = { path = "../storage-proofs-porep", version = "^6.0.0", default-features = false }
+storage-proofs-post = { path = "../storage-proofs-post", version = "^6.0.0", default-features = false }
 filecoin-proofs = { path = "../filecoin-proofs", default-features = false }
 filecoin-hashers = { path = "../filecoin-hashers", default-features = false, features = ["poseidon", "blake2s", "sha256"] }
 clap = "2"
@@ -52,11 +54,32 @@ humansize = "1.1.0"
 
 [features]
 default = ["gpu", "measurements", "pairing"]
-gpu = ["storage-proofs/gpu", "filecoin-proofs/gpu", "bellperson/gpu", "filecoin-hashers/gpu"]
-measurements = ["storage-proofs/measurements"]
-profile = ["storage-proofs/profile", "measurements"]
-pairing = ["storage-proofs/pairing", "filecoin-proofs/pairing", "bellperson/pairing", "filecoin-hashers/pairing"]
-blst = ["storage-proofs/blst", "filecoin-proofs/blst", "bellperson/blst", "filecoin-hashers/blst"]
+gpu = [
+    "storage-proofs-core/gpu",
+    "storage-proofs-porep/gpu",
+    "storage-proofs-post/gpu",
+    "filecoin-proofs/gpu",
+    "bellperson/gpu",
+    "filecoin-hashers/gpu",
+]
+measurements = ["storage-proofs-core/measurements"]
+profile = ["storage-proofs-core/profile", "measurements"]
+pairing = [
+    "storage-proofs-core/pairing",
+    "storage-proofs-porep/pairing",
+    "storage-proofs-post/pairing",
+    "filecoin-proofs/pairing",
+    "bellperson/pairing",
+    "filecoin-hashers/pairing",
+]
+blst = [
+    "storage-proofs-core/blst",
+    "storage-proofs-porep/blst",
+    "storage-proofs-post/blst",
+    "filecoin-proofs/blst",
+    "bellperson/blst",
+    "filecoin-hashers/blst",
+]
 
 [target.'cfg(target_arch = "x86_64")'.dependencies]
 raw-cpuid = "8.1.2"

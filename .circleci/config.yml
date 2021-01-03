@@ -436,21 +436,21 @@ workflows:
             
       - test_ignored_release:
           name: test_ignored_release_storage_proofs_post
-          crate: "storage-proofs/post"
+          crate: "storage-proofs-post"
           requires:
             - cargo_fetch
             - ensure_groth_parameters_and_keys_linux
             
       - test_ignored_release:
           name: test_ignored_release_storage_proofs_core
-          crate: "storage-proofs/core"
+          crate: "storage-proofs-core"
           requires:
             - cargo_fetch
             - ensure_groth_parameters_and_keys_linux
             
       - test_ignored_release:
           name: test_ignored_release_storage_proofs_porep
-          crate: "storage-proofs/porep"
+          crate: "storage-proofs-porep"
           requires:
             - cargo_fetch
             - ensure_groth_parameters_and_keys_linux
