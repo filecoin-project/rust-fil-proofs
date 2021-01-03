@@ -1,7 +1,6 @@
 use std::collections::BTreeMap;
 use std::ffi::OsStr;
 use std::fs::File;
-use std::io::{stdin, stdout, Write};
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
@@ -9,8 +8,6 @@ use blake2b_simd::State as Blake2b;
 use storage_proofs::parameter_cache::{
     parameter_cache_dir, CacheEntryMetadata, PARAMETER_METADATA_EXT,
 };
-
-const ERROR_STRING: &str = "invalid string";
 
 // Produces an absolute path to a file within the cache
 pub fn get_full_path_for_file_within_cache(filename: &str) -> PathBuf {
@@ -28,23 +25,6 @@ pub fn get_digest_for_file_within_cache(filename: &str) -> Result<String> {
     std::io::copy(&mut file, &mut hasher)?;
 
     Ok(hasher.finalize().to_hex()[..32].into())
-}
-
-// Prompts the user to approve/reject the message
-pub fn choose(message: &str) -> bool {
-    loop {
-        print!("[y/n] {}: ", message);
-
-        let _ = stdout().flush();
-        let mut s = String::new();
-        stdin().read_line(&mut s).expect(ERROR_STRING);
-
-        match s.trim().to_uppercase().as_str() {
-            "Y" => return true,
-            "N" => return false,
-            _ => {}
-        }
-    }
 }
 
 // Predicate which matches the provided extension against the given filename
@@ -80,27 +60,6 @@ pub fn parameter_id_to_metadata_map(
     }
 
     Ok(map)
-}
-
-/// Prompts the user to approve/reject the filename
-pub fn choose_from<S: AsRef<str>>(
-    filenames: &[S],
-    lookup: impl Fn(&str) -> Option<u64>,
-) -> Result<Vec<String>> {
-    let mut chosen_filenames: Vec<String> = vec![];
-
-    for filename in filenames.iter() {
-        let sector_size = lookup(filename.as_ref())
-            .with_context(|| format!("no sector size found for filename {}", filename.as_ref()))?;
-
-        let msg = format!("(sector size: {}B) {}", sector_size, filename.as_ref());
-
-        if choose(&msg) {
-            chosen_filenames.push(filename.as_ref().to_string())
-        }
-    }
-
-    Ok(chosen_filenames)
 }
 
 /// Maps the name of a file in the cache to its parameter id. For example,
