@@ -1,33 +1,40 @@
 use std::collections::BTreeMap;
+use std::env;
 use std::fs::{read_dir, File};
-use std::io;
-use std::io::prelude::*;
-use std::io::BufWriter;
-use std::path::{Path, PathBuf};
+use std::io::{stderr, Write};
+use std::path::Path;
 use std::process::{exit, Command};
 
 use anyhow::{ensure, Context, Result};
-use clap::{App, Arg, ArgMatches};
 use dialoguer::{theme::ColorfulTheme, MultiSelect, Select};
-use humansize::{file_size_opts, FileSize};
-use itertools::Itertools;
-
-use filecoin_proofs::param::{
-    add_extension, choose_from, filename_to_parameter_id, get_digest_for_file_within_cache,
-    get_full_path_for_file_within_cache, has_extension, parameter_id_to_metadata_map,
-};
 use filecoin_proofs::{
+    param::{
+        add_extension, filename_to_parameter_id, get_digest_for_file_within_cache,
+        get_full_path_for_file_within_cache, has_extension, parameter_id_to_metadata_map,
+    },
     SECTOR_SIZE_2_KIB, SECTOR_SIZE_32_GIB, SECTOR_SIZE_512_MIB, SECTOR_SIZE_64_GIB,
     SECTOR_SIZE_8_MIB,
 };
+use humansize::{file_size_opts, FileSize};
+use itertools::Itertools;
+use lazy_static::lazy_static;
+use log::{error, info, trace, warn};
 use storage_proofs::parameter_cache::{
-    parameter_cache_dir, parameter_cache_dir_name, CacheEntryMetadata, ParameterData, ParameterMap,
+    parameter_cache_dir, parameter_cache_dir_name, ParameterData, ParameterMap,
     GROTH_PARAMETER_EXT, PARAMETER_METADATA_EXT, VERIFYING_KEY_EXT,
 };
+use structopt::StructOpt;
 
-const ERROR_IPFS_COMMAND: &str = "failed to run ipfs";
-const ERROR_IPFS_PUBLISH: &str = "failed to publish via ipfs";
-const PUBLISH_SECTOR_SIZES: [u64; 5] = [
+lazy_static! {
+    static ref CLI_ABOUT: String = format!(
+        "Publish param files found in the cache directory specified by the env-var \
+        $FIL_PROOFS_PARAMETER_CACHE (or if the env-var is not set, the dir: {}) to ipfs",
+        parameter_cache_dir_name(),
+    );
+}
+
+// Default sector-sizes to publish.
+const DEFAULT_SECTOR_SIZES: [u64; 5] = [
     SECTOR_SIZE_2_KIB,
     SECTOR_SIZE_8_MIB,
     SECTOR_SIZE_512_MIB,
@@ -35,335 +42,306 @@ const PUBLISH_SECTOR_SIZES: [u64; 5] = [
     SECTOR_SIZE_64_GIB,
 ];
 
-pub fn main() {
-    fil_logger::init();
-
-    let matches = App::new("parampublish")
-        .version("1.0")
-        .about(
-            &format!(
-                "
-Set $FIL_PROOFS_PARAMETER_CACHE to specify parameter directory.
-Defaults to '{}'
-",
-                parameter_cache_dir_name()
-            )[..],
-        )
-        .arg(
-            Arg::with_name("json")
-                .value_name("JSON")
-                .takes_value(true)
-                .short("j")
-                .long("json")
-                .help("Use specific json file"),
-        )
-        .arg(
-            Arg::with_name("all")
-                .short("a")
-                .long("all")
-                .help("Publish all local Groth parameters and verifying keys"),
-        )
-        .arg(
-            Arg::with_name("ipfs-bin")
-                .takes_value(true)
-                .short("i")
-                .long("ipfs-bin")
-                .help("Use specific ipfs binary instead of searching for one in $PATH"),
-        )
-        .get_matches();
-
-    match publish(&matches) {
-        Ok(_) => println!("done"),
-        Err(err) => {
-            println!("fatal error: {}", err);
-            exit(1);
-        }
-    }
+#[derive(Clone, Debug, PartialEq)]
+struct FileInfo {
+    id: String,
+    filename: String,
+    sector_size: u64,
+    version: String,
+    ext: String,
 }
 
-fn publish(matches: &ArgMatches) -> Result<()> {
-    let ipfs_bin_path = matches.value_of("ipfs-bin").unwrap_or("ipfs");
+#[inline]
+fn human_size(sector_size: u64) -> String {
+    sector_size.file_size(file_size_opts::BINARY).unwrap()
+}
 
-    // Get all valid parameter IDs which have all three files, `.meta`, `.params and `.vk`
-    // associated with them. If one of the files is missing, it won't show up in the selection.
-    let (mut parameter_ids, counter) = get_filenames_in_cache_dir()?
-        .iter()
-        .filter(|f| {
-            has_extension(f, GROTH_PARAMETER_EXT)
-                || has_extension(f, VERIFYING_KEY_EXT)
-                || has_extension(f, PARAMETER_METADATA_EXT)
+/// Returns `true` if a params filename starts with a version string and has a valid extension.
+fn is_well_formed_filename(filename: &str) -> bool {
+    let ext_is_valid = has_extension(filename, GROTH_PARAMETER_EXT)
+        || has_extension(filename, VERIFYING_KEY_EXT)
+        || has_extension(filename, PARAMETER_METADATA_EXT);
+    if !ext_is_valid {
+        warn!("file has invalid extension: {}, ignoring file", filename);
+        return false;
+    }
+    let version = filename.split('-').nth(0).unwrap();
+    let version_is_valid =
+        version.get(0..1).unwrap() == "v" && version[1..].chars().all(|c| c.is_digit(10));
+    if !version_is_valid {
+        warn!(
+            "filename does not start with version: {}, ignoring file",
+            filename
+        );
+        return false;
+    }
+    true
+}
+
+fn get_filenames_in_cache_dir() -> Vec<String> {
+    let path = parameter_cache_dir();
+    if !path.exists() {
+        warn!("param cache dir does not exist (no files to publish), exiting");
+        exit(0);
+    }
+    // Ignore entries that are not files or have a non-Utf8 filename.
+    read_dir(path)
+        .expect("failed to read param cache dir")
+        .filter_map(|entry_res| {
+            let path = entry_res.expect("failed to read directory entry").path();
+            if !path.is_file() {
+                return None;
+            }
+            path.file_name()
+                .and_then(|os_str| os_str.to_str())
+                .map(|s| s.to_string())
         })
-        .sorted()
-        // Make sure there are always three files per parameter ID
-        .fold(
-            (Vec::new(), 0),
-            |(mut result, mut counter): (std::vec::Vec<String>, u8), filename| {
-                let parameter_id =
-                    filename_to_parameter_id(&filename).expect("failed to get paramater id");
-                // Check if previous file had the same parameter ID
-                if !result.is_empty()
-                    && &parameter_id == result.last().expect("unreachable: is_empty()")
-                {
-                    counter += 1;
-                } else {
-                    // There weren't three files for the same parameter ID, hence remove it from
-                    // the list
-                    if counter < 3 {
-                        result.pop();
-                    }
+        .collect()
+}
 
-                    // It's a new parameter ID, hence reset the counter and add it to the list
-                    counter = 1;
-                    result.push(parameter_id);
-                }
+fn publish_file(ipfs_bin: &str, filename: &str) -> Result<String> {
+    let path = get_full_path_for_file_within_cache(filename);
+    let output = Command::new(ipfs_bin)
+        .args(&["add", "-Q", path.to_str().unwrap()])
+        .output()
+        .expect("failed to run ipfs subprocess");
+    stderr()
+        .write_all(&output.stderr)
+        .with_context(|| "failed to write ipfs' stderr")?;
+    ensure!(output.status.success(), "failed to publish via ipfs");
+    let cid = String::from_utf8(output.stdout)
+        .with_context(|| "ipfs' stdout is not valid Utf8")?
+        .trim()
+        .to_string();
+    Ok(cid)
+}
 
-                (result, counter)
-            },
-        );
+/// Write the parameters.json file (or file specified by `json_path`) containing the published
+/// params' IPFS cid's.
+fn write_param_map_to_disk(param_map: &ParameterMap, json_path: &str) -> Result<()> {
+    let mut file = File::create(json_path).with_context(|| "failed to create json file")?;
+    serde_json::to_writer_pretty(&mut file, &param_map).with_context(|| "failed to write json")?;
+    Ok(())
+}
 
-    // There might be lef-overs from the last fold iterations
-    if counter < 3 {
-        parameter_ids.pop();
+#[derive(Debug, StructOpt)]
+#[structopt(name = "parampublish", version = "1.0", about = CLI_ABOUT.as_str())]
+struct Cli {
+    #[structopt(
+        long = "list-all",
+        short = "a",
+        help = "The user will be prompted to select the files to publish from the set of all files \
+            found in the cache dir. Excluding the -a/--list-all flag will result in the user being \
+            prompted for a single param version number for filtering-in files in the cache dir."
+    )]
+    list_all_files: bool,
+    #[structopt(
+        long = "ipfs-bin",
+        value_name = "PATH TO IPFS BINARY",
+        default_value = "ipfs",
+        help = "Use a specific ipfs binary instead of searching for one in $PATH."
+    )]
+    ipfs_bin: String,
+    #[structopt(
+        long = "json",
+        short = "j",
+        value_name = "PATH",
+        default_value = "parameters.json",
+        help = "The path to write the parameters.json file."
+    )]
+    json_path: String,
+}
+
+pub fn main() {
+    // Log all levels to stderr.
+    env::set_var("RUST_LOG", "parampublish");
+    fil_logger::init();
+
+    let cli = Cli::from_args();
+
+    let cache_dir = match env::var("FIL_PROOFS_PARAMETER_CACHE") {
+        Ok(s) => s,
+        _ => format!("{}", parameter_cache_dir().display()),
+    };
+    info!("using param cache dir: {}", cache_dir);
+
+    if !Path::new(&cli.ipfs_bin).exists() {
+        error!("ipfs binary not found: `{}`, exiting", cli.ipfs_bin);
+        exit(1);
     }
 
-    if parameter_ids.is_empty() {
-        println!(
-            "No valid parameters in directory {:?} found.",
-            parameter_cache_dir()
-        );
-        std::process::exit(1)
-    }
-
-    // build a mapping from parameter id to metadata
-    let meta_map = parameter_id_to_metadata_map(&parameter_ids)?;
-
-    let filenames = if !matches.is_present("all") {
-        let tmp_filenames = meta_map
-            .keys()
-            .flat_map(|parameter_id| {
-                vec![
-                    add_extension(parameter_id, GROTH_PARAMETER_EXT),
-                    add_extension(parameter_id, VERIFYING_KEY_EXT),
-                ]
-            })
-            .collect_vec();
-        choose_from(&tmp_filenames, |filename| {
-            filename_to_parameter_id(PathBuf::from(filename))
-                .as_ref()
-                .and_then(|p_id| meta_map.get(p_id).map(|x| x.sector_size))
-        })?
-    } else {
-        // `--all` let's you select a specific version
-        let versions: Vec<String> = meta_map
-            .keys()
-            // Split off the version of the parameters
-            .map(|parameter_id| {
-                parameter_id
-                    .split('-')
-                    .next()
-                    .expect("paramater id to contain a '-'")
-                    .to_string()
-            })
-            // Sort by descending order, newest parameter first
-            .sorted_by(|a, b| Ord::cmp(&b, &a))
-            .dedup()
+    // Get the param-id's in the cache dir for which three files exist (.meta, .params, and .vk).
+    let ids = {
+        let filenames: Vec<String> = get_filenames_in_cache_dir()
+            .into_iter()
+            .filter(|filename| is_well_formed_filename(filename))
             .collect();
+        trace!("found {} param files in cache dir", filenames.len());
+        let mut ids: Vec<String> = filenames
+            .iter()
+            .map(|filename| filename_to_parameter_id(filename).unwrap())
+            .unique()
+            .collect_vec();
+        ids.retain(|id| {
+            filenames.contains(&add_extension(id, GROTH_PARAMETER_EXT))
+                && filenames.contains(&add_extension(id, VERIFYING_KEY_EXT))
+                && filenames.contains(&add_extension(id, PARAMETER_METADATA_EXT))
+        });
+        if ids.is_empty() {
+            warn!("no file triples found, exiting");
+            exit(0);
+        }
+        trace!("found {} file triples", ids.len());
+        ids
+    };
+
+    // Read each param file's sector-size from its .meta file.
+    let meta_map = parameter_id_to_metadata_map(&ids).unwrap_or_else(|e| {
+        error!("failed to parse .meta file:\n{:?}\nexiting", e);
+        exit(1);
+    });
+
+    // Store every param-id's .params and .vk file info.
+    let mut infos = Vec::<FileInfo>::with_capacity(2 * ids.len());
+    for id in &ids {
+        let version = id.split('-').nth(0).unwrap().to_string();
+        let sector_size = meta_map[id].sector_size;
+        infos.push(FileInfo {
+            id: id.clone(),
+            filename: add_extension(id, GROTH_PARAMETER_EXT),
+            sector_size,
+            version: version.clone(),
+            ext: GROTH_PARAMETER_EXT.to_string(),
+        });
+        infos.push(FileInfo {
+            id: id.clone(),
+            filename: add_extension(id, VERIFYING_KEY_EXT),
+            sector_size,
+            version,
+            ext: VERIFYING_KEY_EXT.to_string(),
+        });
+    }
+
+    if cli.list_all_files {
+        // Create two vectors, one containing the file infos sorted in the order with which they
+        // will appear in the user prompt and a second for each param file's prompt string sorted
+        // in the same way.
+        let mut infos_sorted: Vec<&FileInfo> = Vec::with_capacity(infos.len());
+        let mut items: Vec<String> = Vec::with_capacity(infos.len());
+        infos
+            .iter()
+            .sorted_by(|info_1, info_2| {
+                // Sort in descending order by version, then order each version's files by ascending
+                // sector-size and filename, example order:
+                // ("v28", 1024, "filename"), ("v28", 2056, "filename"), ("v27", 1024, "filename")
+                let a = (&info_2.version, info_1.sector_size, &info_1.filename);
+                let b = (&info_1.version, info_2.sector_size, &info_2.filename);
+                a.cmp(&b)
+            })
+            .for_each(|info| {
+                let item = format!("{} ({})", info.filename, human_size(info.sector_size));
+                items.push(item);
+                infos_sorted.push(info);
+            });
+
+        infos = MultiSelect::with_theme(&ColorfulTheme::default())
+            .with_prompt("Select files to publish (press 'space' to select, 'return' to submit)")
+            .items(&items[..])
+            .interact()
+            .expect("interaction failed")
+            .into_iter()
+            .map(|i| infos_sorted[i].clone())
+            .collect();
+    } else {
+        let versions: Vec<String> = infos
+            .iter()
+            .map(|info| info.version.clone())
+            .dedup()
+            .sorted()
+            .rev()
+            .collect();
+
         let selected_version = Select::with_theme(&ColorfulTheme::default())
-            .with_prompt("Select a version (press 'q' to quit)")
+            .with_prompt("Select a version (press 'space' to select, 'q' to quit)")
             .default(0)
             .items(&versions[..])
             .interact_opt()
-            .expect("interact_opt failed");
-        let version = match selected_version {
-            Some(index) => &versions[index],
-            None => {
-                println!("Aborted.");
-                std::process::exit(1)
-            }
-        };
+            .expect("interaction failed")
+            .map(|i| versions[i].clone())
+            .unwrap_or_else(|| {
+                warn!("no versions selected, exiting");
+                exit(0);
+            });
 
-        // The parameter IDs that should be published
-        let mut parameter_ids = meta_map
-            .keys()
-            // Filter out all that don't match the selected version
-            .filter(|parameter_id| parameter_id.starts_with(version))
-            .collect_vec();
+        infos.retain(|info| info.version == selected_version);
 
-        // Display the sector sizes
-        let sector_sizes_iter = parameter_ids
+        // Sort the param-ids by ascending sector-size. Associate each param-id (two files: .params and
+        // .vk) with one prompt item.
+        let mut ids_sorted = Vec::<String>::with_capacity(infos.len() / 2);
+        let mut items = Vec::<String>::with_capacity(infos.len() / 2);
+        let mut default_items: Vec<bool> = vec![];
+        infos
             .iter()
-            // Get sector size and parameter ID
-            .map(|&parameter_id| {
-                meta_map
-                    .get(parameter_id)
-                    .map(|x| (x.sector_size, parameter_id))
-                    .expect("unreachable: key came from map")
-            })
-            // Sort it ascending by sector size
-            .sorted_by(|a, b| Ord::cmp(&a.0, &b.0));
-
-        // The parameters IDs need to be sorted the same way as the menu we display, else
-        // the selected items won't match the list we select from
-        parameter_ids = sector_sizes_iter
-            .clone()
-            .map(|(_, parameter_id)| parameter_id)
-            .collect_vec();
-
-        let sector_sizes = sector_sizes_iter
-            .clone()
-            // Format them
-            .map(|(sector_size, parameter_id)| {
-                format!(
-                    "({:?}) {:?}",
-                    sector_size
-                        .file_size(file_size_opts::BINARY)
-                        .expect("failed to format sector_size"),
-                    parameter_id
-                )
-            })
-            .collect_vec();
-        // Set the default, pre-selected sizes
-        let default_sector_sizes = sector_sizes_iter
-            .map(|(sector_size, _)| PUBLISH_SECTOR_SIZES.contains(&sector_size))
-            .collect_vec();
-        let selected_sector_sizes = MultiSelect::with_theme(&ColorfulTheme::default())
-            .with_prompt("Select the sizes to publish")
-            .items(&sector_sizes[..])
-            .defaults(&default_sector_sizes)
-            .interact()
-            .expect("interaction failed");
-
-        if selected_sector_sizes.is_empty() {
-            println!("Nothing selected. Abort.");
-        } else {
-            // Filter out the selected ones
-            parameter_ids = parameter_ids
-                .into_iter()
-                .enumerate()
-                .filter_map(|(index, parameter_id)| {
-                    if selected_sector_sizes.contains(&index) {
-                        Some(parameter_id)
-                    } else {
-                        None
-                    }
-                })
-                .collect_vec();
-        }
-
-        // Generate filenames based on their parameter IDs
-        parameter_ids
-            .iter()
-            .flat_map(|parameter_id| {
-                vec![
-                    add_extension(parameter_id, GROTH_PARAMETER_EXT),
-                    add_extension(parameter_id, VERIFYING_KEY_EXT),
-                ]
-            })
-            .collect_vec()
-    };
-    println!();
-
-    let json = PathBuf::from(matches.value_of("json").unwrap_or("./parameters.json"));
-    let mut parameter_map: ParameterMap = BTreeMap::new();
-
-    if !filenames.is_empty() {
-        println!("publishing {} files...", filenames.len());
-        println!();
-
-        for filename in filenames {
-            let id = filename_to_parameter_id(&filename)
-                .with_context(|| format!("failed to parse id from file name {}", filename))?;
-
-            let meta: &CacheEntryMetadata = meta_map
-                .get(&id)
-                .with_context(|| format!("no metadata found for parameter id {}", id))?;
-
-            println!("publishing: {}", filename);
-            print!("publishing to ipfs... ");
-            io::stdout().flush().expect("failed to flush stdout");
-
-            match publish_parameter_file(&ipfs_bin_path, &filename) {
-                Ok(cid) => {
-                    println!("ok");
-                    print!("generating digest... ");
-                    io::stdout().flush().expect("failed to flush stdout");
-
-                    let digest = get_digest_for_file_within_cache(&filename)?;
-                    let data = ParameterData {
-                        cid,
-                        digest,
-                        sector_size: meta.sector_size,
-                    };
-
-                    parameter_map.insert(filename, data);
-
-                    println!("ok");
+            .sorted_by_key(|info| info.sector_size)
+            .for_each(|info| {
+                if !ids_sorted.contains(&info.id) {
+                    let item = format!("{} ({})", human_size(info.sector_size), info.id);
+                    items.push(item);
+                    ids_sorted.push(info.id.clone());
+                    default_items.push(DEFAULT_SECTOR_SIZES.contains(&info.sector_size));
                 }
-                Err(err) => println!("error: {}", err),
+            });
+
+        let selected_ids: Vec<&String> = MultiSelect::with_theme(&ColorfulTheme::default())
+            .with_prompt("Select sizes to publish (press 'space' to select, 'return' to submit)")
+            .items(&items[..])
+            .defaults(&default_items)
+            .interact()
+            .expect("interaction failed")
+            .into_iter()
+            .map(|i| &ids_sorted[i])
+            .collect();
+
+        infos.retain(|info| selected_ids.contains(&&info.id));
+    }
+
+    let n_files_to_publish = infos.len();
+    if n_files_to_publish == 0 {
+        warn!("no params selected, exiting");
+        exit(0);
+    }
+    trace!("{} files to publish", n_files_to_publish);
+
+    // Publish files to ipfs.
+    let mut param_map: ParameterMap = BTreeMap::new();
+
+    for info in infos {
+        trace!("publishing file to ipfs: {}", info.filename);
+        match publish_file(&cli.ipfs_bin, &info.filename) {
+            Ok(cid) => {
+                info!("successfully published file to ipfs, cid={}", cid);
+                let digest =
+                    get_digest_for_file_within_cache(&info.filename).expect("failed to hash file");
+                trace!("successfully hashed file: {}", digest);
+                let param_data = ParameterData {
+                    cid,
+                    digest,
+                    sector_size: info.sector_size,
+                };
+                param_map.insert(info.filename, param_data);
             }
-
-            println!();
+            Err(e) => {
+                error!("failed to publish file to ipfs:\n{:?}\nexiting", e);
+                exit(1);
+            }
         }
-
-        write_parameter_map_to_disk(&parameter_map, &json)?;
-    } else {
-        println!("no files to publish");
     }
+    info!("finished publishing files");
 
-    Ok(())
-}
-
-fn get_filenames_in_cache_dir() -> Result<Vec<String>> {
-    let path = parameter_cache_dir();
-
-    if path.exists() {
-        Ok(read_dir(path)?
-            .map(|f| f.expect("failed to get directory entry").path())
-            .filter(|p| p.is_file())
-            .map(|p| {
-                p.as_path()
-                    .file_name()
-                    .expect("failed to get file name from path")
-                    .to_str()
-                    .expect("failed to get valid Unicode filename")
-                    .to_string()
-            })
-            .collect())
-    } else {
-        println!(
-            "parameter directory '{}' does not exist",
-            path.as_path()
-                .to_str()
-                .expect("failed to get valid Unicode path")
-        );
-
-        Ok(Vec::new())
+    // Write parameters.json file containing published ipfs cid's.
+    if let Err(e) = write_param_map_to_disk(&param_map, &cli.json_path) {
+        error!("failed to write json file:\n{:?}\nexiting", e);
+        exit(1);
     }
-}
-
-fn publish_parameter_file(ipfs_bin_path: &str, filename: &str) -> Result<String> {
-    let path = get_full_path_for_file_within_cache(filename);
-
-    let output = Command::new(ipfs_bin_path)
-        .arg("add")
-        .arg("-Q")
-        .arg(&path)
-        .output()
-        .expect(ERROR_IPFS_COMMAND);
-
-    ensure!(output.status.success(), ERROR_IPFS_PUBLISH);
-
-    Ok(String::from_utf8(output.stdout)?.trim().to_string())
-}
-
-fn write_parameter_map_to_disk<P: AsRef<Path>>(
-    parameter_map: &ParameterMap,
-    dest_path: P,
-) -> Result<()> {
-    let p: &Path = dest_path.as_ref();
-    let file = File::create(p)?;
-    let writer = BufWriter::new(file);
-    serde_json::to_writer_pretty(writer, &parameter_map)?;
-
-    Ok(())
+    info!("successfully wrote json file: {}", cli.json_path);
 }
