@@ -23,7 +23,19 @@ pub struct FallbackPoStCircuit<Tree: MerkleTreeTrait> {
     pub sectors: Vec<Sector<Tree>>,
 }
 
-#[derive(Clone)]
+// We must manually implement Clone for all types generic over MerkleTreeTrait (instead of using
+// #[derive(Clone)]) because derive(Clone) will only expand for MerkleTreeTrait types that also
+// implement Clone. Not every MerkleTreeTrait type is Clone-able because not all merkel Store's are
+// Clone-able, therefore deriving Clone would impl Clone for less than all possible Tree types.
+impl<Tree: 'static + MerkleTreeTrait> Clone for FallbackPoStCircuit<Tree> {
+    fn clone(&self) -> Self {
+        FallbackPoStCircuit {
+            prover_id: self.prover_id,
+            sectors: self.sectors.clone(),
+        }
+    }
+}
+
 pub struct Sector<Tree: MerkleTreeTrait> {
     pub comm_r: Option<Fr>,
     pub comm_c: Option<Fr>,
@@ -31,6 +43,21 @@ pub struct Sector<Tree: MerkleTreeTrait> {
     pub leafs: Vec<Option<Fr>>,
     pub paths: Vec<AuthPath<Tree::Hasher, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>>,
     pub id: Option<Fr>,
+}
+
+// We must manually implement Clone for all types generic over MerkleTreeTrait (instead of using
+// #derive(Clone)).
+impl<Tree: MerkleTreeTrait> Clone for Sector<Tree> {
+    fn clone(&self) -> Self {
+        Sector {
+            comm_r: self.comm_r,
+            comm_c: self.comm_c,
+            comm_r_last: self.comm_r_last,
+            leafs: self.leafs.clone(),
+            paths: self.paths.clone(),
+            id: self.id,
+        }
+    }
 }
 
 impl<Tree: 'static + MerkleTreeTrait> Sector<Tree> {

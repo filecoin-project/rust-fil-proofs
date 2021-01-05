@@ -55,6 +55,25 @@ pub struct Proof<Tree: MerkleTreeTrait, G: Hasher> {
     _t: PhantomData<Tree>,
 }
 
+// We must manually implement Clone for all types generic over MerkleTreeTrait (instead of using
+// #[derive(Clone)]) because derive(Clone) will only expand for MerkleTreeTrait types that also
+// implement Clone. Not every MerkleTreeTrait type is Clone-able because not all merkel Store's are
+// Clone-able, therefore deriving Clone would impl Clone for less than all possible Tree types.
+impl<Tree: MerkleTreeTrait, G: 'static + Hasher> Clone for Proof<Tree, G> {
+    fn clone(&self) -> Self {
+        Proof {
+            comm_d_path: self.comm_d_path.clone(),
+            data_leaf: self.data_leaf,
+            challenge: self.challenge,
+            comm_r_last_path: self.comm_r_last_path.clone(),
+            comm_c_path: self.comm_c_path.clone(),
+            drg_parents_proofs: self.drg_parents_proofs.clone(),
+            exp_parents_proofs: self.exp_parents_proofs.clone(),
+            _t: self._t,
+        }
+    }
+}
+
 impl<Tree: MerkleTreeTrait, G: 'static + Hasher> Proof<Tree, G> {
     /// Create an empty proof, used in `blank_circuit`s.
     pub fn empty(params: &PublicParams<Tree>) -> Self {

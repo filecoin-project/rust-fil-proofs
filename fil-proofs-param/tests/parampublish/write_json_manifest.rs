@@ -23,7 +23,6 @@ fn writes_json_manifest() -> Result<(), FailureError> {
         .with_metadata("v10-aaa.meta", &CacheEntryMetadata { sector_size: 1234 })
         .write_manifest_to(manifest_path.clone())
         .with_ipfs_bin(&ipfs)
-        .with_prompt_disabled()
         .build();
 
     // compute checksums from files added to cache to compare with
@@ -34,13 +33,13 @@ fn writes_json_manifest() -> Result<(), FailureError> {
     // There is only one version of parameters, accept that one
     session.send_line("")?;
     //session.exp_regex(".*Select the sizes to publish.*")?;
-    session.exp_string("Select the sizes to publish")?;
+    session.exp_string("Select sizes to publish")?;
     // There is only one size, accept that one
-    session.send_line("")?;
+    session.send_line(" ")?;
 
     // wait for confirmation...
-    session.exp_string("publishing 2 files")?;
-    session.exp_string("done")?;
+    session.exp_string("2 files to publish")?;
+    session.exp_string("finished publishing files")?;
 
     // read the manifest file from disk and verify that it is well
     // formed and contains the expected keys

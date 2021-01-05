@@ -18,7 +18,7 @@ pub struct ParamPublishSessionBuilder {
     session_timeout_ms: u64,
     manifest: PathBuf,
     ipfs_bin_path: PathBuf,
-    prompt_enabled: bool,
+    list_all_files: bool,
 }
 
 impl ParamPublishSessionBuilder {
@@ -36,7 +36,7 @@ impl ParamPublishSessionBuilder {
             session_timeout_ms: 1000,
             manifest: pbuf,
             ipfs_bin_path: cargo_bin("fakeipfsadd"),
-            prompt_enabled: true,
+            list_all_files: false,
         }
     }
 
@@ -103,9 +103,9 @@ impl ParamPublishSessionBuilder {
         self
     }
 
-    /// If prompt is disabled, `--all` flag will be passed to parampublish.
-    pub fn with_prompt_disabled(mut self) -> ParamPublishSessionBuilder {
-        self.prompt_enabled = false;
+    /// Prompts the user to filter by param version.
+    pub fn list_all_files(mut self) -> ParamPublishSessionBuilder {
+        self.list_all_files = true;
         self
     }
 
@@ -135,7 +135,7 @@ impl ParamPublishSessionBuilder {
             "FIL_PROOFS_PARAMETER_CACHE", // related to var name in core/src/settings.rs
             cache_dir_path,
             parampublish_path,
-            if self.prompt_enabled { "" } else { "--all" },
+            if self.list_all_files { "-a" } else { "" },
             self.ipfs_bin_path,
             self.manifest
         );
