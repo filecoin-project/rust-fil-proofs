@@ -10,9 +10,9 @@ use ff::Field;
 use filecoin_hashers::Hasher;
 use rand::{Rng, SeedableRng};
 use rand_xorshift::XorShiftRng;
-use storage_proofs::api_version::ApiVersion;
-use storage_proofs::is_legacy_porep_id;
-use storage_proofs::sector::*;
+use storage_proofs_core::api_version::ApiVersion;
+use storage_proofs_core::is_legacy_porep_id;
+use storage_proofs_core::sector::*;
 use tempfile::NamedTempFile;
 
 use filecoin_proofs::types::*;

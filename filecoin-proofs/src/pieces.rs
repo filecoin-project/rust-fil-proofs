@@ -9,7 +9,7 @@ use filecoin_hashers::{HashFunction, Hasher};
 use fr32::Fr32Reader;
 use lazy_static::lazy_static;
 use log::info;
-use storage_proofs::util::NODE_SIZE;
+use storage_proofs_core::util::NODE_SIZE;
 
 use crate::constants::{
     DefaultPieceHasher,

@@ -5,9 +5,9 @@ use std::path::Path;
 use anyhow::{Context, Result};
 use bincode::serialize;
 use filecoin_hashers::{Domain, Hasher};
-use storage_proofs::cache_key::CacheKey;
-use storage_proofs::merkle::MerkleTreeTrait;
-use storage_proofs::porep::stacked::StackedDrg;
+use storage_proofs_core::cache_key::CacheKey;
+use storage_proofs_core::merkle::MerkleTreeTrait;
+use storage_proofs_porep::stacked::StackedDrg;
 
 use crate::constants::DefaultPieceHasher;
 pub use crate::pieces;

@@ -5,7 +5,7 @@ use bellperson::ConstraintSystem;
 use fil_proofs_tooling::metadata::Metadata;
 use rand::RngCore;
 use serde::Serialize;
-use storage_proofs::util::{bits_to_bytes, bytes_into_boolean_vec, bytes_into_boolean_vec_be};
+use storage_proofs_core::util::{bits_to_bytes, bytes_into_boolean_vec, bytes_into_boolean_vec_be};
 
 fn blake2s_count(bytes: usize) -> anyhow::Result<Report> {
     let rng = &mut rand::thread_rng();

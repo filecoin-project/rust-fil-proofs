@@ -8,7 +8,7 @@ use rexpect::session::PtyReplSession;
 use tempfile;
 use tempfile::TempDir;
 
-use storage_proofs::parameter_cache::CacheEntryMetadata;
+use storage_proofs_core::parameter_cache::CacheEntryMetadata;
 
 use crate::support::{cargo_bin, spawn_bash_with_retries, FakeIpfsBin};
 

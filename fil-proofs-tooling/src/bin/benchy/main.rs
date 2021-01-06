@@ -8,7 +8,7 @@ use anyhow::Result;
 use byte_unit::Byte;
 use clap::{value_t, App, Arg, SubCommand};
 
-use storage_proofs::api_version::ApiVersion;
+use storage_proofs_core::api_version::ApiVersion;
 
 use crate::prodbench::ProdbenchInputs;
 

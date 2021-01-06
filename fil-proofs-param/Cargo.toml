@@ -9,7 +9,9 @@ repository = "https://github.com/filecoin-project/rust-fil-proofs"
 readme = "README.md"
 
 [dependencies]
-storage-proofs = { version = "^6.0.0", path = "../storage-proofs", default-features = false }
+storage-proofs-core = { path = "../storage-proofs-core", version = "^6.0.0", default-features = false}
+storage-proofs-porep = { path = "../storage-proofs-porep", version = "^6.0.0", default-features = false }
+storage-proofs-post = { path = "../storage-proofs-post", version = "^6.0.0", default-features = false }
 filecoin-hashers = { version = "1.0.0", path = "../filecoin-hashers", default-features = false, features = ["poseidon", "sha256"] }
 filecoin-proofs = { version = "^6.0.0", path = "../filecoin-proofs", default-features = false }
 bitvec = "0.17"
@@ -63,8 +65,8 @@ tempfile = "3"
 default = ["gpu", "pairing"]
 cpu-profile = ["gperftools"]
 heap-profile = ["gperftools/heap"]
-simd = ["storage-proofs/simd"]
-asm = ["storage-proofs/asm"]
-gpu = ["storage-proofs/gpu", "bellperson/gpu"]
-pairing = ["storage-proofs/pairing", "bellperson/pairing"]
-blst = ["storage-proofs/blst", "bellperson/blst"]
+simd = ["storage-proofs-core/simd"]
+asm = ["storage-proofs-core/asm"]
+gpu = ["storage-proofs-core/gpu", "storage-proofs-porep/gpu", "storage-proofs-post/gpu", "bellperson/gpu"]
+pairing = ["storage-proofs-core/pairing", "storage-proofs-porep/pairing", "storage-proofs-post/pairing", "bellperson/pairing"]
+blst = ["storage-proofs-core/blst", "storage-proofs-porep/blst", "storage-proofs-post/blst", "bellperson/blst"]

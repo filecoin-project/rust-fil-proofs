@@ -6,11 +6,11 @@ use bellperson::bls::Fr;
 use rand::{Rng, RngCore, SeedableRng};
 use rand_xorshift::XorShiftRng;
 
-use storage_proofs::api_version::ApiVersion;
-use storage_proofs::drgraph::Graph;
-use storage_proofs::merkle::create_base_merkle_tree;
-use storage_proofs::porep::stacked::StackedBucketGraph;
-use storage_proofs::util::NODE_SIZE;
+use storage_proofs_core::api_version::ApiVersion;
+use storage_proofs_core::drgraph::Graph;
+use storage_proofs_core::merkle::create_base_merkle_tree;
+use storage_proofs_core::util::NODE_SIZE;
+use storage_proofs_porep::stacked::StackedBucketGraph;
 
 use filecoin_proofs::constants::{DefaultPieceHasher, DRG_DEGREE, EXP_DEGREE};
 use filecoin_proofs::types::{

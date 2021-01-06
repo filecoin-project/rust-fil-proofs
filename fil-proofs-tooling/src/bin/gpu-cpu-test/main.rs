@@ -17,8 +17,8 @@ use filecoin_proofs::{
     WINNING_POST_SECTOR_COUNT,
 };
 use log::{debug, info};
-use storage_proofs::api_version::ApiVersion;
-use storage_proofs::sector::SectorId;
+use storage_proofs_core::api_version::ApiVersion;
+use storage_proofs_core::sector::SectorId;
 
 const FIXED_API_VERSION: ApiVersion = ApiVersion::V1_0_0;
 

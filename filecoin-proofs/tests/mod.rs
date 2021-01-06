@@ -4,8 +4,8 @@ use fr32::bytes_into_fr;
 use rand::SeedableRng;
 use rand_xorshift::XorShiftRng;
 
-use storage_proofs::api_version::ApiVersion;
-use storage_proofs::sector::SectorId;
+use storage_proofs_core::api_version::ApiVersion;
+use storage_proofs_core::sector::SectorId;
 
 use filecoin_proofs::as_safe_commitment;
 use filecoin_proofs::constants::*;

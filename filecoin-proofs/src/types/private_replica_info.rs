@@ -8,11 +8,11 @@ use filecoin_hashers::Hasher;
 use generic_array::typenum::Unsigned;
 use log::trace;
 use merkletree::store::StoreConfig;
-use storage_proofs::cache_key::CacheKey;
-use storage_proofs::merkle::{
+use storage_proofs_core::cache_key::CacheKey;
+use storage_proofs_core::merkle::{
     create_tree, get_base_tree_count, split_config_and_replica, MerkleTreeTrait, MerkleTreeWrapper,
 };
-use storage_proofs::util::default_rows_to_discard;
+use storage_proofs_core::util::default_rows_to_discard;
 
 use crate::api::util::{as_safe_commitment, get_base_tree_leafs, get_base_tree_size};
 use crate::types::{Commitment, PersistentAux, SectorSize};

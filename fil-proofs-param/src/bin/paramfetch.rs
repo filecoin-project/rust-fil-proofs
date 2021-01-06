@@ -15,7 +15,7 @@ use lazy_static::lazy_static;
 use log::{error, info, trace, warn};
 use pbr::{ProgressBar, Units};
 use reqwest::{blocking::Client, header, Proxy, Url};
-use storage_proofs::parameter_cache::{
+use storage_proofs_core::parameter_cache::{
     parameter_cache_dir, parameter_cache_dir_name, ParameterMap, GROTH_PARAMETER_EXT,
 };
 use structopt::StructOpt;

@@ -17,4 +17,4 @@ pub use self::constants::SINGLE_PARTITION_PROOF_LEN;
 pub use self::constants::*;
 pub use self::types::*;
 
-pub use storage_proofs;
+pub use storage_proofs_core;
