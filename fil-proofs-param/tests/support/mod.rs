@@ -1,15 +1,15 @@
+use std::collections::BTreeMap;
+use std::env;
+use std::fs::File;
 use std::path::{Path, PathBuf};
-use std::{env, thread};
+use std::process::Command;
+use std::thread;
+use std::time::Duration;
 
 use failure::format_err;
-use rexpect::session::PtyReplSession;
-use rexpect::spawn_bash;
+use rexpect::{session::PtyReplSession, spawn_bash};
 use storage_proofs_core::parameter_cache::ParameterData;
-
-use std::collections::btree_map::BTreeMap;
-use std::fs::File;
-use std::process::Command;
-use std::time::Duration;
+use tempfile::tempdir;
 
 pub struct FakeIpfsBin {
     bin_path: PathBuf,
@@ -87,7 +87,7 @@ pub fn spawn_bash_with_retries(
 pub fn tmp_manifest(
     opt_manifest: Option<BTreeMap<String, ParameterData>>,
 ) -> Result<PathBuf, failure::Error> {
-    let manifest_dir = tempfile::tempdir()?;
+    let manifest_dir = tempdir()?;
     let mut pbuf = manifest_dir.into_path();
     pbuf.push("parameters.json");
 

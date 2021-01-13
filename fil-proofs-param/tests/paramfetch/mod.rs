@@ -1,29 +1,30 @@
-mod session;
-
-use std::collections::btree_map::BTreeMap;
+use std::collections::BTreeMap;
 use std::fs::File;
-use std::io::{BufReader, Write};
+use std::io::{self, BufReader, Write};
 use std::path::PathBuf;
 
 use blake2b_simd::State as Blake2b;
 use failure::Error as FailureError;
-use rand::Rng;
+use rand::{thread_rng, Rng};
 use storage_proofs_core::parameter_cache::{ParameterData, ParameterMap};
 
 use crate::support::tmp_manifest;
+
+mod session;
+
 use session::ParamFetchSessionBuilder;
 
 /// Produce a random sequence of bytes and first 32 characters of hex encoded
 /// BLAKE2b checksum. This helper function must be kept up-to-date with the
 /// parampublish implementation.
 fn rand_bytes_with_blake2b() -> Result<(Vec<u8>, String), FailureError> {
-    let bytes = rand::thread_rng().gen::<[u8; 32]>();
+    let bytes = thread_rng().gen::<[u8; 32]>();
 
     let mut hasher = Blake2b::new();
 
     let mut as_slice = &bytes[..];
 
-    std::io::copy(&mut as_slice, &mut hasher)?;
+    io::copy(&mut as_slice, &mut hasher)?;
 
     Ok((
         bytes.iter().cloned().collect(),

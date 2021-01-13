@@ -1,5 +1,5 @@
 use std::collections::BTreeMap;
-use std::fmt;
+use std::fmt::{self, Debug, Formatter};
 use std::marker::PhantomData;
 
 use anyhow::{bail, ensure, Context};
@@ -10,20 +10,20 @@ use filecoin_hashers::{
     Domain, HashFunction, Hasher, PoseidonMDArity,
 };
 use fr32::fr_into_bytes;
-use generic_array::typenum;
+use generic_array::typenum::Unsigned;
 use log::trace;
-use rayon::prelude::*;
-use serde::{Deserialize, Serialize};
+use rayon::prelude::{
+    IndexedParallelIterator, IntoParallelIterator, IntoParallelRefIterator, ParallelIterator,
+};
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use typenum::Unsigned;
-
 use storage_proofs_core::{
     error::{Error, Result},
     measurements::{measure_op, Operation},
     merkle::{MerkleProof, MerkleProofTrait, MerkleTreeTrait, MerkleTreeWrapper},
     parameter_cache::ParameterSetMetadata,
     proof::{NoRequirements, ProofScheme},
-    sector::*,
+    sector::{OrderedSectorSet, SectorId},
     util::NODE_SIZE,
 };
 
@@ -90,8 +90,8 @@ pub struct Candidate {
     pub sector_challenge_index: u64,
 }
 
-impl fmt::Debug for Candidate {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl Debug for Candidate {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         f.debug_struct("Candidate")
             .field("sector_id", &self.sector_id)
             .field("partial_ticket", &self.partial_ticket)
@@ -105,7 +105,7 @@ impl fmt::Debug for Candidate {
 pub struct Proof<P: MerkleProofTrait> {
     #[serde(bound(
         serialize = "MerkleProof<P::Hasher, P::Arity, P::SubTreeArity, P::TopTreeArity>: Serialize",
-        deserialize = "MerkleProof<P::Hasher, P::Arity, P::SubTreeArity, P::TopTreeArity>: serde::de::DeserializeOwned"
+        deserialize = "MerkleProof<P::Hasher, P::Arity, P::SubTreeArity, P::TopTreeArity>: DeserializeOwned"
     ))]
     inclusion_proofs: Vec<MerkleProof<P::Hasher, P::Arity, P::SubTreeArity, P::TopTreeArity>>,
     pub ticket: [u8; 32],

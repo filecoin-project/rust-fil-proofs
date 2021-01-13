@@ -1,7 +1,12 @@
 #![allow(clippy::len_without_is_empty)]
 
+use std::fs::File;
+
+pub use merkletree::store::{DiskStore, ExternalReader, Store};
+
 use filecoin_hashers::Hasher;
 use generic_array::typenum::{U0, U2, U4, U8};
+use merkletree::store::LevelCacheStore;
 
 mod builders;
 mod proof;
@@ -11,11 +16,7 @@ pub use builders::*;
 pub use proof::*;
 pub use tree::*;
 
-// Reexport here, so we don't depend on merkletree directly in other places.
-pub use merkletree::store::{ExternalReader, Store};
-
-pub type DiskStore<E> = merkletree::store::DiskStore<E>;
-pub type LCStore<E> = merkletree::store::LevelCacheStore<E, std::fs::File>;
+pub type LCStore<E> = LevelCacheStore<E, File>;
 
 pub type MerkleStore<T> = DiskStore<T>;
 

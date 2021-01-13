@@ -1,5 +1,4 @@
-use bellperson::gadgets::boolean::Boolean;
-use bellperson::{bls::Engine, ConstraintSystem, SynthesisError};
+use bellperson::{bls::Engine, gadgets::boolean::Boolean, ConstraintSystem, SynthesisError};
 
 pub fn xor<E, CS>(
     cs: &mut CS,
@@ -30,17 +29,19 @@ where
 mod tests {
     use super::*;
 
-    use crate::crypto;
-    use crate::util::{bits_to_bytes, bytes_into_boolean_vec};
-    use bellperson::gadgets::boolean::Boolean;
-    use bellperson::util_cs::test_cs::TestConstraintSystem;
-    use bellperson::{bls::Bls12, ConstraintSystem};
+    use bellperson::{bls::Bls12, util_cs::test_cs::TestConstraintSystem};
     use rand::{Rng, SeedableRng};
     use rand_xorshift::XorShiftRng;
 
+    use crate::{
+        crypto::xor,
+        util::{bits_to_bytes, bytes_into_boolean_vec},
+        TEST_SEED,
+    };
+
     #[test]
     fn test_xor_input_circuit() {
-        let mut rng = XorShiftRng::from_seed(crate::TEST_SEED);
+        let mut rng = XorShiftRng::from_seed(TEST_SEED);
 
         for i in 0..10 {
             let mut cs = TestConstraintSystem::<Bls12>::new();
@@ -73,7 +74,7 @@ mod tests {
                     .as_slice(),
             );
 
-            let expected = crypto::xor::encode(key.as_slice(), data.as_slice()).unwrap();
+            let expected = xor::encode(key.as_slice(), data.as_slice()).unwrap();
 
             assert_eq!(expected, actual, "circuit and non circuit do not match");
 

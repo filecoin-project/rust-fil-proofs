@@ -1,16 +1,16 @@
-use std::collections::btree_map::BTreeMap;
+use std::collections::BTreeMap;
 use std::fs::File;
 use std::path::Path;
 
-use failure::Error as FailureError;
-
 use storage_proofs_core::parameter_cache::{CacheEntryMetadata, ParameterData};
 
-use crate::parampublish::support::session::ParamPublishSessionBuilder;
-use crate::support::{tmp_manifest, FakeIpfsBin};
+use crate::{
+    parampublish::support::session::ParamPublishSessionBuilder,
+    support::{tmp_manifest, FakeIpfsBin},
+};
 
 #[test]
-fn writes_json_manifest() -> Result<(), FailureError> {
+fn writes_json_manifest() -> Result<(), failure::Error> {
     let filenames = vec!["v10-aaa.vk", "v10-aaa.params"];
 
     let manifest_path = tmp_manifest(None)?;

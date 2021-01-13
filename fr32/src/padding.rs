@@ -1,4 +1,4 @@
-use std::cmp::min;
+use std::cmp::{min, Ordering};
 use std::io::{self, Error, ErrorKind, Write};
 
 /** PaddingMap represents a mapping between data and its padded equivalent.
@@ -489,7 +489,6 @@ fn extract_bits_and_shift(input: &[u8], pos: usize, num_bits: usize, new_offset:
     let input = &input[..BitByte::from_bits(extraction_offset + num_bits).bytes_needed()];
 
     // (2).
-    use std::cmp::Ordering;
     let mut output = match new_offset.cmp(&extraction_offset) {
         Ordering::Less => {
             // Shift right.
@@ -751,7 +750,7 @@ where
 mod tests {
     use super::*;
 
-    use std::io::Read;
+    use std::io::{Cursor, Read};
 
     use bitvec::{order::Lsb0 as LittleEndian, vec::BitVec};
     use itertools::Itertools;
@@ -872,7 +871,7 @@ mod tests {
         let len = 1016; // Use a multiple of 254.
         let data = vec![255u8; len];
         let mut padded = Vec::new();
-        let mut reader = Fr32Reader::new(io::Cursor::new(&data));
+        let mut reader = Fr32Reader::new(Cursor::new(&data));
         reader
             .read_to_end(&mut padded)
             .expect("in-memory read failed");
@@ -900,7 +899,7 @@ mod tests {
         let data: Vec<u8> = (0..len).map(|_| rng.gen()).collect();
 
         let mut padded = Vec::new();
-        let mut reader = Fr32Reader::new(io::Cursor::new(&data));
+        let mut reader = Fr32Reader::new(Cursor::new(&data));
         reader
             .read_to_end(&mut padded)
             .expect("in-memory read failed");

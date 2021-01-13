@@ -1,19 +1,23 @@
 use std::collections::HashMap;
-use std::sync::Arc;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 use anyhow::Result;
-use bellperson::bls::Bls12;
-use bellperson::groth16;
+use bellperson::{
+    bls::Bls12,
+    groth16::{self, prepare_verifying_key},
+};
 use lazy_static::lazy_static;
 use log::info;
-use storage_proofs_core::compound_proof::CompoundProof;
+use rand::rngs::OsRng;
+use storage_proofs_core::{compound_proof::CompoundProof, merkle::MerkleTreeTrait};
 use storage_proofs_porep::stacked::{StackedCompound, StackedDrg};
-use storage_proofs_post::fallback;
+use storage_proofs_post::fallback::{FallbackPoSt, FallbackPoStCircuit, FallbackPoStCompound};
 
-use crate::constants::DefaultPieceHasher;
-use crate::parameters::{public_params, window_post_public_params, winning_post_public_params};
-use crate::types::*;
+use crate::{
+    constants::DefaultPieceHasher,
+    parameters::{public_params, window_post_public_params, winning_post_public_params},
+    types::{PaddedBytesAmount, PoRepConfig, PoRepProofPartitions, PoStConfig, PoStType},
+};
 
 type Bls12GrothParams = groth16::MappedParameters<Bls12>;
 pub type Bls12PreparedVerifyingKey = groth16::PreparedVerifyingKey<Bls12>;
@@ -92,7 +96,7 @@ pub fn get_stacked_params<Tree: 'static + MerkleTreeTrait>(
         <StackedCompound<Tree, DefaultPieceHasher> as CompoundProof<
             StackedDrg<'_, Tree, DefaultPieceHasher>,
             _,
-        >>::groth_params::<rand::rngs::OsRng>(None, &public_params)
+        >>::groth_params::<OsRng>(None, &public_params)
         .map_err(Into::into)
     };
 
@@ -113,10 +117,10 @@ pub fn get_post_params<Tree: 'static + MerkleTreeTrait>(
             let post_public_params = winning_post_public_params::<Tree>(post_config)?;
 
             let parameters_generator = || {
-                <fallback::FallbackPoStCompound<Tree> as CompoundProof<
-                    fallback::FallbackPoSt<'_, Tree>,
-                    fallback::FallbackPoStCircuit<Tree>,
-                >>::groth_params::<rand::rngs::OsRng>(None, &post_public_params)
+                <FallbackPoStCompound<Tree> as CompoundProof<
+                    FallbackPoSt<'_, Tree>,
+                    FallbackPoStCircuit<Tree>,
+                >>::groth_params::<OsRng>(None, &post_public_params)
                 .map_err(Into::into)
             };
 
@@ -132,10 +136,10 @@ pub fn get_post_params<Tree: 'static + MerkleTreeTrait>(
             let post_public_params = window_post_public_params::<Tree>(post_config)?;
 
             let parameters_generator = || {
-                <fallback::FallbackPoStCompound<Tree> as CompoundProof<
-                    fallback::FallbackPoSt<'_, Tree>,
-                    fallback::FallbackPoStCircuit<Tree>,
-                >>::groth_params::<rand::rngs::OsRng>(None, &post_public_params)
+                <FallbackPoStCompound<Tree> as CompoundProof<
+                    FallbackPoSt<'_, Tree>,
+                    FallbackPoStCircuit<Tree>,
+                >>::groth_params::<OsRng>(None, &post_public_params)
                 .map_err(Into::into)
             };
 
@@ -164,8 +168,8 @@ pub fn get_stacked_verifying_key<Tree: 'static + MerkleTreeTrait>(
         let vk = <StackedCompound<Tree, DefaultPieceHasher> as CompoundProof<
             StackedDrg<'_, Tree, DefaultPieceHasher>,
             _,
-        >>::verifying_key::<rand::rngs::OsRng>(None, &public_params)?;
-        Ok(bellperson::groth16::prepare_verifying_key(&vk))
+        >>::verifying_key::<OsRng>(None, &public_params)?;
+        Ok(prepare_verifying_key(&vk))
     };
 
     Ok(lookup_verifying_key(
@@ -185,13 +189,11 @@ pub fn get_post_verifying_key<Tree: 'static + MerkleTreeTrait>(
             let post_public_params = winning_post_public_params::<Tree>(post_config)?;
 
             let vk_generator = || {
-                let vk = <fallback::FallbackPoStCompound<Tree> as CompoundProof<
-                    fallback::FallbackPoSt<'_, Tree>,
-                    fallback::FallbackPoStCircuit<Tree>,
-                >>::verifying_key::<rand::rngs::OsRng>(
-                    None, &post_public_params
-                )?;
-                Ok(bellperson::groth16::prepare_verifying_key(&vk))
+                let vk = <FallbackPoStCompound<Tree> as CompoundProof<
+                    FallbackPoSt<'_, Tree>,
+                    FallbackPoStCircuit<Tree>,
+                >>::verifying_key::<OsRng>(None, &post_public_params)?;
+                Ok(prepare_verifying_key(&vk))
             };
 
             Ok(lookup_verifying_key(
@@ -206,13 +208,11 @@ pub fn get_post_verifying_key<Tree: 'static + MerkleTreeTrait>(
             let post_public_params = window_post_public_params::<Tree>(post_config)?;
 
             let vk_generator = || {
-                let vk = <fallback::FallbackPoStCompound<Tree> as CompoundProof<
-                    fallback::FallbackPoSt<'_, Tree>,
-                    fallback::FallbackPoStCircuit<Tree>,
-                >>::verifying_key::<rand::rngs::OsRng>(
-                    None, &post_public_params
-                )?;
-                Ok(bellperson::groth16::prepare_verifying_key(&vk))
+                let vk = <FallbackPoStCompound<Tree> as CompoundProof<
+                    FallbackPoSt<'_, Tree>,
+                    FallbackPoStCircuit<Tree>,
+                >>::verifying_key::<OsRng>(None, &post_public_params)?;
+                Ok(prepare_verifying_key(&vk))
             };
 
             Ok(lookup_verifying_key(

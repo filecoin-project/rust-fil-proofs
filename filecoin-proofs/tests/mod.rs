@@ -1,16 +1,13 @@
 use bellperson::bls::Fr;
 use ff::Field;
+use filecoin_proofs::{
+    as_safe_commitment, verify_seal, DefaultOctLCTree, DefaultTreeDomain, PoRepConfig,
+    PoRepProofPartitions, SectorSize, POREP_PARTITIONS, SECTOR_SIZE_2_KIB, TEST_SEED,
+};
 use fr32::bytes_into_fr;
 use rand::SeedableRng;
 use rand_xorshift::XorShiftRng;
-
-use storage_proofs_core::api_version::ApiVersion;
-use storage_proofs_core::sector::SectorId;
-
-use filecoin_proofs::as_safe_commitment;
-use filecoin_proofs::constants::*;
-use filecoin_proofs::types::{PoRepConfig, PoRepProofPartitions, SectorSize};
-use filecoin_proofs::verify_seal;
+use storage_proofs_core::{api_version::ApiVersion, sector::SectorId};
 
 #[test]
 fn test_verify_seal_fr32_validation() {

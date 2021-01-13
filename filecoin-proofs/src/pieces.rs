@@ -1,6 +1,6 @@
+use std::cmp::min;
 use std::collections::HashMap;
-use std::io::Read;
-use std::io::{self, Cursor};
+use std::io::{self, Cursor, Read};
 use std::iter::Iterator;
 use std::sync::Mutex;
 
@@ -11,12 +11,16 @@ use lazy_static::lazy_static;
 use log::info;
 use storage_proofs_core::util::NODE_SIZE;
 
-use crate::constants::{
-    DefaultPieceHasher,
-    MINIMUM_RESERVED_BYTES_FOR_PIECE_IN_FULLY_ALIGNED_SECTOR as MINIMUM_PIECE_SIZE,
-};
-use crate::types::{
-    Commitment, PaddedBytesAmount, PieceInfo, SectorSize, UnpaddedByteIndex, UnpaddedBytesAmount,
+use crate::{
+    commitment_reader::CommitmentReader,
+    constants::{
+        DefaultPieceHasher,
+        MINIMUM_RESERVED_BYTES_FOR_PIECE_IN_FULLY_ALIGNED_SECTOR as MINIMUM_PIECE_SIZE,
+    },
+    types::{
+        Commitment, PaddedBytesAmount, PieceInfo, SectorSize, UnpaddedByteIndex,
+        UnpaddedBytesAmount,
+    },
 };
 
 /// Verify that the provided `piece_infos` and `comm_d` match.
@@ -33,7 +37,6 @@ pub fn verify_pieces(
 lazy_static! {
     static ref COMMITMENTS: Mutex<HashMap<SectorSize, Commitment>> = Mutex::new(HashMap::new());
 }
-use crate::commitment_reader::CommitmentReader;
 
 #[derive(Debug, Clone)]
 pub struct EmptySource {
@@ -48,7 +51,7 @@ impl EmptySource {
 
 impl Read for EmptySource {
     fn read(&mut self, target: &mut [u8]) -> io::Result<usize> {
-        let to_read = std::cmp::min(self.size, target.len());
+        let to_read = min(self.size, target.len());
         self.size -= to_read;
         for val in target {
             *val = 0;

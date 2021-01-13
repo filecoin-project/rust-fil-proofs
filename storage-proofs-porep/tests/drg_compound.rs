@@ -26,6 +26,7 @@ use storage_proofs_porep::{
     stacked::BINARY_ARITY,
     PoRep,
 };
+use tempfile::tempdir;
 
 #[test]
 #[ignore]
@@ -51,7 +52,7 @@ fn drg_porep_compound<Tree: 'static + MerkleTreeTrait>() {
 
     // MT for original data is always named tree-d, and it will be
     // referenced later in the process as such.
-    let cache_dir = tempfile::tempdir().unwrap();
+    let cache_dir = tempdir().unwrap();
     let config = StoreConfig::new(
         cache_dir.path(),
         CacheKey::CommDTree.to_string(),

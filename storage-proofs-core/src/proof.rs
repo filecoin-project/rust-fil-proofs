@@ -1,8 +1,7 @@
 use std::time::Instant;
 
 use log::info;
-use serde::de::DeserializeOwned;
-use serde::ser::Serialize;
+use serde::{de::DeserializeOwned, Serialize};
 
 use crate::error::Result;
 

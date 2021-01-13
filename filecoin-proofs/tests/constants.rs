@@ -1,6 +1,7 @@
-use filecoin_proofs::constants::*;
-use filecoin_proofs::with_shape;
-
+use filecoin_proofs::{
+    with_shape, SECTOR_SIZE_16_MIB, SECTOR_SIZE_1_GIB, SECTOR_SIZE_2_KIB, SECTOR_SIZE_32_GIB,
+    SECTOR_SIZE_4_KIB, SECTOR_SIZE_512_MIB, SECTOR_SIZE_64_GIB, SECTOR_SIZE_8_MIB,
+};
 use generic_array::typenum::Unsigned;
 use storage_proofs_core::merkle::MerkleTreeTrait;
 

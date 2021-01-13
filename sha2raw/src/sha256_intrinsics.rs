@@ -2,9 +2,15 @@
 #![allow(clippy::cast_ptr_alignment)] // Safe to cast without alignment checks as the loads and stores do not require alignment.
 
 #[cfg(target_arch = "x86")]
-use std::arch::x86::*;
+use std::arch::x86;
 #[cfg(target_arch = "x86_64")]
-use std::arch::x86_64::*;
+use std::arch::x86_64 as x86;
+
+use x86::{
+    __m128i, _mm_add_epi32, _mm_alignr_epi8, _mm_blend_epi16, _mm_loadu_si128, _mm_set_epi64x,
+    _mm_sha256msg1_epu32, _mm_sha256msg2_epu32, _mm_sha256rnds2_epu32, _mm_shuffle_epi32,
+    _mm_shuffle_epi8, _mm_storeu_si128,
+};
 
 /// Process a block with the SHA-256 algorithm.
 /// Based on https://github.com/noloader/SHA-Intrinsics/blob/master/sha256-x86.c

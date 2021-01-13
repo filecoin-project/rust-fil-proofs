@@ -1,21 +1,26 @@
-use bellperson::bls::{Bls12, Fr};
-use bellperson::gadgets::num;
-use bellperson::{Circuit, ConstraintSystem, SynthesisError};
+use bellperson::{
+    bls::{Bls12, Fr},
+    gadgets::num::AllocatedNum,
+    Circuit, ConstraintSystem, SynthesisError,
+};
 use ff::Field;
 use filecoin_hashers::{HashFunction, Hasher};
-use rayon::prelude::*;
+use rayon::prelude::{ParallelIterator, ParallelSlice};
 use storage_proofs_core::{
     compound_proof::CircuitComponent,
     error::Result,
-    gadgets::constraint,
-    gadgets::por::{AuthPath, PoRCircuit},
-    gadgets::variables::Root,
+    gadgets::{
+        constraint,
+        por::{AuthPath, PoRCircuit},
+        variables::Root,
+    },
     merkle::MerkleTreeTrait,
-    por, settings,
+    por,
+    settings::SETTINGS,
     util::NODE_SIZE,
 };
 
-use super::vanilla::{PublicParams, PublicSector, SectorProof};
+use crate::fallback::{PublicParams, PublicSector, SectorProof};
 
 /// This is the `FallbackPoSt` circuit.
 pub struct FallbackPoStCircuit<Tree: MerkleTreeTrait> {
@@ -123,19 +128,19 @@ impl<Tree: 'static + MerkleTreeTrait> Circuit<Bls12> for &Sector<Tree> {
         assert_eq!(paths.len(), leafs.len());
 
         // 1. Verify comm_r
-        let comm_r_last_num = num::AllocatedNum::alloc(cs.namespace(|| "comm_r_last"), || {
+        let comm_r_last_num = AllocatedNum::alloc(cs.namespace(|| "comm_r_last"), || {
             comm_r_last
                 .map(Into::into)
                 .ok_or_else(|| SynthesisError::AssignmentMissing)
         })?;
 
-        let comm_c_num = num::AllocatedNum::alloc(cs.namespace(|| "comm_c"), || {
+        let comm_c_num = AllocatedNum::alloc(cs.namespace(|| "comm_c"), || {
             comm_c
                 .map(Into::into)
                 .ok_or_else(|| SynthesisError::AssignmentMissing)
         })?;
 
-        let comm_r_num = num::AllocatedNum::alloc(cs.namespace(|| "comm_r"), || {
+        let comm_r_num = AllocatedNum::alloc(cs.namespace(|| "comm_r"), || {
             comm_r
                 .map(Into::into)
                 .ok_or_else(|| SynthesisError::AssignmentMissing)
@@ -212,7 +217,7 @@ impl<Tree: 'static + MerkleTreeTrait> FallbackPoStCircuit<Tree> {
     ) -> Result<(), SynthesisError> {
         let FallbackPoStCircuit { sectors, .. } = self;
 
-        let num_chunks = settings::SETTINGS.window_post_synthesis_num_cpus as usize;
+        let num_chunks = SETTINGS.window_post_synthesis_num_cpus as usize;
 
         let chunk_size = (sectors.len() / num_chunks).max(1);
         let css = sectors

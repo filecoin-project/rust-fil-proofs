@@ -1,4 +1,4 @@
-use std::io::{Read, Seek, Write};
+use std::io::{Read, Seek, SeekFrom, Write};
 
 use criterion::{black_box, criterion_group, criterion_main, Criterion, ParameterizedBenchmark};
 use rand::{thread_rng, Rng};
@@ -21,7 +21,7 @@ fn read_bytes_benchmark(c: &mut Criterion) {
 
                 b.iter(|| {
                     let mut res = vec![0u8; *bytes];
-                    f.seek(std::io::SeekFrom::Start(0)).unwrap();
+                    f.seek(SeekFrom::Start(0)).unwrap();
                     f.read_exact(&mut res).unwrap();
 
                     black_box(res)

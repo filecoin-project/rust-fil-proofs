@@ -1,15 +1,24 @@
 use anyhow::{ensure, Context};
-use bellperson::bls::{Bls12, Fr};
-use bellperson::{groth16, Circuit};
+use bellperson::{
+    bls::{Bls12, Fr},
+    groth16::{
+        self, create_random_proof_batch, create_random_proof_batch_in_priority, verify_proofs_batch,
+    },
+    Circuit,
+};
 use log::info;
 use rand::{rngs::OsRng, RngCore};
-use rayon::prelude::*;
+use rayon::prelude::{
+    IndexedParallelIterator, IntoParallelIterator, IntoParallelRefIterator, ParallelIterator,
+};
 
-use crate::error::Result;
-use crate::multi_proof::MultiProof;
-use crate::parameter_cache::{CacheableParameters, ParameterSetMetadata};
-use crate::partitions;
-use crate::proof::ProofScheme;
+use crate::{
+    error::Result,
+    multi_proof::MultiProof,
+    parameter_cache::{CacheableParameters, ParameterSetMetadata},
+    partitions::partition_count,
+    proof::ProofScheme,
+};
 
 #[derive(Clone)]
 pub struct SetupParams<'a, S: ProofScheme<'a>> {
@@ -155,7 +164,7 @@ where
             .collect::<Result<_>>()?;
 
         let proofs: Vec<_> = multi_proof.circuit_proofs.iter().collect();
-        let res = groth16::verify_proofs_batch(&pvk, &mut rand::rngs::OsRng, &proofs, &inputs)?;
+        let res = verify_proofs_batch(&pvk, &mut OsRng, &proofs, &inputs)?;
         Ok(res)
     }
 
@@ -210,12 +219,7 @@ where
             .flat_map(|m| m.circuit_proofs.iter())
             .collect();
 
-        let res = groth16::verify_proofs_batch(
-            &pvk,
-            &mut rand::rngs::OsRng,
-            &circuit_proofs[..],
-            &inputs,
-        )?;
+        let res = verify_proofs_batch(&pvk, &mut OsRng, &circuit_proofs[..], &inputs)?;
 
         Ok(res)
     }
@@ -252,9 +256,9 @@ where
             .collect::<Result<Vec<_>>>()?;
 
         let groth_proofs = if priority {
-            groth16::create_random_proof_batch_in_priority(circuits, groth_params, &mut rng)?
+            create_random_proof_batch_in_priority(circuits, groth_params, &mut rng)?
         } else {
-            groth16::create_random_proof_batch(circuits, groth_params, &mut rng)?
+            create_random_proof_batch(circuits, groth_params, &mut rng)?
         };
 
         groth_proofs
@@ -321,7 +325,7 @@ where
         private_inputs: &S::PrivateInputs,
     ) -> Result<(C, Vec<Fr>)> {
         let vanilla_params = &public_parameters.vanilla_params;
-        let partition_count = partitions::partition_count(public_parameters.partitions);
+        let partition_count = partition_count(public_parameters.partitions);
         let vanilla_proofs = S::prove_all_partitions(
             vanilla_params,
             public_inputs,
@@ -365,7 +369,7 @@ where
         private_inputs: &S::PrivateInputs,
     ) -> Result<Vec<(C, Vec<Fr>)>> {
         let vanilla_params = &public_parameters.vanilla_params;
-        let partition_count = partitions::partition_count(public_parameters.partitions);
+        let partition_count = partition_count(public_parameters.partitions);
         let vanilla_proofs = S::prove_all_partitions(
             vanilla_params,
             public_inputs,

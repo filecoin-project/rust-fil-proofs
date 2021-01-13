@@ -1,10 +1,10 @@
+use std::cmp::Ordering;
 use std::hash::Hash;
 
 use anyhow::{ensure, Result};
 use filecoin_hashers::Domain;
 
-use crate::api::util::as_safe_commitment;
-use crate::types::Commitment;
+use crate::{api::as_safe_commitment, types::Commitment};
 
 /// The minimal information required about a replica, in order to be able to verify
 /// a PoSt over it.
@@ -14,14 +14,14 @@ pub struct PublicReplicaInfo {
     comm_r: Commitment,
 }
 
-impl std::cmp::Ord for PublicReplicaInfo {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+impl Ord for PublicReplicaInfo {
+    fn cmp(&self, other: &Self) -> Ordering {
         self.comm_r.as_ref().cmp(other.comm_r.as_ref())
     }
 }
 
-impl std::cmp::PartialOrd for PublicReplicaInfo {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+impl PartialOrd for PublicReplicaInfo {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
     }
 }

@@ -2,16 +2,18 @@
 #![warn(clippy::unwrap_used)]
 #![cfg_attr(target_arch = "aarch64", feature(stdsimd))]
 
-pub mod drg;
-pub mod stacked;
-
-mod encode;
-
 use std::path::PathBuf;
 
 use filecoin_hashers::Hasher;
 use merkletree::store::StoreConfig;
 use storage_proofs_core::{error::Result, merkle::BinaryMerkleTree, proof::ProofScheme, Data};
+
+pub mod drg;
+pub mod stacked;
+
+mod encode;
+
+pub const MAX_LEGACY_POREP_REGISTERED_PROOF_ID: u64 = 4;
 
 pub trait PoRep<'a, H: Hasher, G: Hasher>: ProofScheme<'a> {
     type Tau;
@@ -41,5 +43,3 @@ pub trait PoRep<'a, H: Hasher, G: Hasher>: ProofScheme<'a> {
         config: Option<StoreConfig>,
     ) -> Result<Vec<u8>>;
 }
-
-pub const MAX_LEGACY_POREP_REGISTERED_PROOF_ID: u64 = 4;

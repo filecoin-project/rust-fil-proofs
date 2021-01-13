@@ -12,6 +12,7 @@ use storage_proofs_core::{
     TEST_SEED,
 };
 use storage_proofs_post::fallback::{self, FallbackPoSt, PrivateSector, PublicSector};
+use tempfile::tempdir;
 
 #[test]
 fn test_fallback_post_poseidon_single_partition_base_8() {
@@ -132,7 +133,7 @@ fn test_fallback_post<Tree: MerkleTreeTrait>(
     let randomness = <Tree::Hasher as Hasher>::Domain::random(rng);
     let prover_id = <Tree::Hasher as Hasher>::Domain::random(rng);
 
-    let temp_dir = tempfile::tempdir().unwrap();
+    let temp_dir = tempdir().unwrap();
     let temp_path = temp_dir.path();
 
     let mut pub_sectors = Vec::new();
@@ -303,7 +304,7 @@ fn test_invalid_fallback_post<Tree: MerkleTreeTrait>(
     let randomness = <Tree::Hasher as Hasher>::Domain::random(rng);
     let prover_id = <Tree::Hasher as Hasher>::Domain::random(rng);
 
-    let temp_dir = tempfile::tempdir().unwrap();
+    let temp_dir = tempdir().unwrap();
     let temp_path = temp_dir.path();
 
     let mut pub_sectors = Vec::new();

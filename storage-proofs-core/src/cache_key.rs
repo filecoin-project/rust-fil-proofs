@@ -1,4 +1,4 @@
-use std::fmt;
+use std::fmt::{self, Display, Formatter};
 
 #[derive(Debug, Copy, Clone)]
 pub enum CacheKey {
@@ -9,8 +9,8 @@ pub enum CacheKey {
     CommRLastTree,
 }
 
-impl fmt::Display for CacheKey {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl Display for CacheKey {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match *self {
             CacheKey::PAux => write!(f, "p_aux"),
             CacheKey::TAux => write!(f, "t_aux"),

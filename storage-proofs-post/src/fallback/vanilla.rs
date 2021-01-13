@@ -7,8 +7,10 @@ use byteorder::{ByteOrder, LittleEndian};
 use filecoin_hashers::{Domain, HashFunction, Hasher};
 use generic_array::typenum::Unsigned;
 use log::{error, trace};
-use rayon::prelude::*;
-use serde::{Deserialize, Serialize};
+use rayon::prelude::{
+    IndexedParallelIterator, IntoParallelIterator, IntoParallelRefIterator, ParallelIterator,
+};
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use storage_proofs_core::{
     api_version::ApiVersion,
@@ -16,7 +18,7 @@ use storage_proofs_core::{
     merkle::{MerkleProof, MerkleProofTrait, MerkleTreeTrait, MerkleTreeWrapper},
     parameter_cache::ParameterSetMetadata,
     proof::ProofScheme,
-    sector::*,
+    sector::SectorId,
     util::{default_rows_to_discard, NODE_SIZE},
 };
 
@@ -109,7 +111,7 @@ pub struct Proof<P: MerkleProofTrait> {
 pub struct SectorProof<Proof: MerkleProofTrait> {
     #[serde(bound(
         serialize = "MerkleProof<Proof::Hasher, Proof::Arity, Proof::SubTreeArity, Proof::TopTreeArity>: Serialize",
-        deserialize = "MerkleProof<Proof::Hasher, Proof::Arity, Proof::SubTreeArity, Proof::TopTreeArity>: serde::de::DeserializeOwned"
+        deserialize = "MerkleProof<Proof::Hasher, Proof::Arity, Proof::SubTreeArity, Proof::TopTreeArity>: DeserializeOwned"
     ))]
     pub inclusion_proofs:
         Vec<MerkleProof<Proof::Hasher, Proof::Arity, Proof::SubTreeArity, Proof::TopTreeArity>>,

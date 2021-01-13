@@ -1,4 +1,4 @@
-use std::fmt;
+use std::fmt::{self, Debug, Formatter};
 
 use anyhow::{ensure, Result};
 use serde::{Deserialize, Serialize};
@@ -11,8 +11,8 @@ pub struct PieceInfo {
     pub size: UnpaddedBytesAmount,
 }
 
-impl fmt::Debug for PieceInfo {
-    fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl Debug for PieceInfo {
+    fn fmt(&self, fmt: &mut Formatter<'_>) -> fmt::Result {
         fmt.debug_struct("PieceInfo")
             .field("commitment", &hex::encode(&self.commitment))
             .field("size", &self.size)

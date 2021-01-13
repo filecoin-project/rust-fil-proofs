@@ -1,9 +1,9 @@
-use log::trace;
 use std::marker::PhantomData;
 
 use bellperson::bls::Fr;
 use filecoin_hashers::Hasher;
 use fr32::bytes_into_fr_repr_safe;
+use log::trace;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 

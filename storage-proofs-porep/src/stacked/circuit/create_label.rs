@@ -1,9 +1,13 @@
-use bellperson::gadgets::{
-    boolean::Boolean, multipack, num, sha256::sha256 as sha256_circuit, uint32,
+use bellperson::{
+    bls::Engine,
+    gadgets::{
+        boolean::Boolean, multipack, num::AllocatedNum, sha256::sha256 as sha256_circuit,
+        uint32::UInt32,
+    },
+    ConstraintSystem, SynthesisError,
 };
-use bellperson::{bls::Engine, ConstraintSystem, SynthesisError};
 use ff::PrimeField;
-use storage_proofs_core::{gadgets::uint64, util::reverse_bit_numbering};
+use storage_proofs_core::{gadgets::uint64::UInt64, util::reverse_bit_numbering};
 
 use crate::stacked::vanilla::TOTAL_PARENTS;
 
@@ -12,9 +16,9 @@ pub fn create_label_circuit<E, CS>(
     mut cs: CS,
     replica_id: &[Boolean],
     parents: Vec<Vec<Boolean>>,
-    layer_index: uint32::UInt32,
-    node: uint64::UInt64,
-) -> Result<num::AllocatedNum<E>, SynthesisError>
+    layer_index: UInt32,
+    node: UInt64,
+) -> Result<AllocatedNum<E>, SynthesisError>
 where
     E: Engine,
     CS: ConstraintSystem<E>,
@@ -69,9 +73,10 @@ where
 mod tests {
     use super::*;
 
-    use bellperson::bls::{Bls12, Fr};
-    use bellperson::gadgets::boolean::Boolean;
-    use bellperson::util_cs::test_cs::TestConstraintSystem;
+    use bellperson::{
+        bls::{Bls12, Fr},
+        util_cs::test_cs::TestConstraintSystem,
+    };
     use ff::Field;
     use filecoin_hashers::sha256::Sha256Hasher;
     use fr32::{bytes_into_fr, fr_into_bytes};
@@ -84,7 +89,7 @@ mod tests {
         TEST_SEED,
     };
 
-    use crate::stacked::vanilla::{create_label, StackedBucketGraph, EXP_DEGREE, TOTAL_PARENTS};
+    use crate::stacked::vanilla::{create_label, StackedBucketGraph, EXP_DEGREE};
 
     #[test]
     fn test_create_label() {
@@ -152,8 +157,8 @@ mod tests {
             bytes_into_boolean_vec_be(&mut cs, Some(id.as_slice()), id.len()).unwrap()
         };
 
-        let layer_alloc = uint32::UInt32::constant(layer as u32);
-        let node_alloc = uint64::UInt64::constant(node as u64);
+        let layer_alloc = UInt32::constant(layer as u32);
+        let node_alloc = UInt64::constant(node as u64);
 
         let out = create_label_circuit(
             cs.namespace(|| "create_label"),

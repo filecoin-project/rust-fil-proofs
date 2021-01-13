@@ -1,7 +1,9 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion, ParameterizedBenchmark};
-use filecoin_hashers::poseidon::*;
-use storage_proofs_core::api_version::ApiVersion;
-use storage_proofs_core::drgraph::*;
+use filecoin_hashers::poseidon::PoseidonHasher;
+use storage_proofs_core::{
+    api_version::ApiVersion,
+    drgraph::{BucketGraph, Graph, BASE_DEGREE},
+};
 
 #[allow(clippy::unit_arg)]
 fn drgraph(c: &mut Criterion) {

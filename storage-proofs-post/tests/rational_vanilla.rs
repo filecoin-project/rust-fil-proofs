@@ -14,6 +14,7 @@ use storage_proofs_core::{
     TEST_SEED,
 };
 use storage_proofs_post::rational::{self, derive_challenges, RationalPoSt};
+use tempfile::tempdir;
 
 #[test]
 fn test_rational_post_sha256_base_8() {
@@ -55,7 +56,7 @@ where
         challenges_count,
     };
 
-    let temp_dir = tempfile::tempdir().unwrap();
+    let temp_dir = tempdir().unwrap();
     let temp_path = temp_dir.path();
 
     let (_data1, tree1) = generate_tree::<Tree, _>(rng, leaves, Some(temp_path.to_path_buf()));
@@ -161,7 +162,7 @@ fn test_rational_post_validates_challenge<Tree: 'static + MerkleTreeTrait>() {
         challenges_count,
     };
 
-    let temp_dir = tempfile::tempdir().unwrap();
+    let temp_dir = tempdir().unwrap();
     let temp_path = temp_dir.path();
 
     let (_data, tree) = generate_tree::<Tree, _>(rng, leaves, Some(temp_path.to_path_buf()));

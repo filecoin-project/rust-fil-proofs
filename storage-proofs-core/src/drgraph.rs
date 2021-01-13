@@ -1,20 +1,24 @@
 use std::cmp::{max, min};
+use std::fmt::Debug;
 use std::marker::PhantomData;
 
 use anyhow::ensure;
 use filecoin_hashers::{Hasher, PoseidonArity};
 use fr32::bytes_into_fr_repr_safe;
-use generic_array::typenum;
+use generic_array::typenum::Unsigned;
+use merkletree::merkle::get_merkle_tree_row_count;
 use rand::{Rng, SeedableRng};
 use rand_chacha::ChaCha8Rng;
 use sha2::{Digest, Sha256};
 
-use crate::api_version::ApiVersion;
-use crate::crypto::{derive_porep_domain_seed, DRSAMPLE_DST};
-use crate::error::*;
-use crate::parameter_cache::ParameterSetMetadata;
-use crate::util::{data_at_node_offset, NODE_SIZE};
-use crate::PoRepID;
+use crate::{
+    api_version::ApiVersion,
+    crypto::{derive_porep_domain_seed, DRSAMPLE_DST},
+    error::Result,
+    parameter_cache::ParameterSetMetadata,
+    util::{data_at_node_offset, NODE_SIZE},
+    PoRepID,
+};
 
 pub const PARALLEL_MERKLE: bool = true;
 
@@ -24,8 +28,8 @@ pub const PARALLEL_MERKLE: bool = true;
 pub const BASE_DEGREE: usize = 6;
 
 /// A depth robust graph.
-pub trait Graph<H: Hasher>: ::std::fmt::Debug + Clone + PartialEq + Eq {
-    type Key: std::fmt::Debug;
+pub trait Graph<H: Hasher>: Debug + Clone + PartialEq + Eq {
+    type Key: Debug;
 
     /// Returns the expected size of all nodes in the graph.
     fn expected_size(&self) -> usize {
@@ -74,8 +78,8 @@ pub trait Graph<H: Hasher>: ::std::fmt::Debug + Clone + PartialEq + Eq {
     ) -> Result<Self::Key>;
 }
 
-pub fn graph_height<U: typenum::Unsigned>(number_of_leafs: usize) -> usize {
-    merkletree::merkle::get_merkle_tree_row_count(number_of_leafs, U::to_usize())
+pub fn graph_height<U: Unsigned>(number_of_leafs: usize) -> usize {
+    get_merkle_tree_row_count(number_of_leafs, U::to_usize())
 }
 
 /// Bucket sampling algorithm.
@@ -252,10 +256,10 @@ mod tests {
     use super::*;
 
     use filecoin_hashers::{
-        blake2s::Blake2sHasher, poseidon::PoseidonHasher, sha256::Sha256Hasher, PoseidonArity,
+        blake2s::Blake2sHasher, poseidon::PoseidonHasher, sha256::Sha256Hasher,
     };
-    use memmap::MmapMut;
-    use memmap::MmapOptions;
+    use generic_array::typenum::{U0, U2, U4, U8};
+    use memmap::{MmapMut, MmapOptions};
     use merkletree::store::StoreConfig;
 
     use crate::merkle::{
@@ -361,10 +365,13 @@ mod tests {
         let data = vec![2u8; NODE_SIZE * leafs];
 
         let mmapped = &mmap_from(&data);
-        let tree = create_base_merkle_tree::<
-            MerkleTreeWrapper<H, DiskStore<H::Domain>, U, typenum::U0, typenum::U0>,
-        >(config, g.size(), mmapped)
-        .unwrap();
+        let tree =
+            create_base_merkle_tree::<MerkleTreeWrapper<H, DiskStore<H::Domain>, U, U0, U0>>(
+                config,
+                g.size(),
+                mmapped,
+            )
+            .unwrap();
         let proof = tree.gen_proof(2).unwrap();
 
         assert!(proof.verify());
@@ -372,36 +379,36 @@ mod tests {
 
     #[test]
     fn gen_proof_poseidon_binary() {
-        gen_proof::<PoseidonHasher, typenum::U2>(None);
+        gen_proof::<PoseidonHasher, U2>(None);
     }
 
     #[test]
     fn gen_proof_sha256_binary() {
-        gen_proof::<Sha256Hasher, typenum::U2>(None);
+        gen_proof::<Sha256Hasher, U2>(None);
     }
 
     #[test]
     fn gen_proof_blake2s_binary() {
-        gen_proof::<Blake2sHasher, typenum::U2>(None);
+        gen_proof::<Blake2sHasher, U2>(None);
     }
 
     #[test]
     fn gen_proof_poseidon_quad() {
-        gen_proof::<PoseidonHasher, typenum::U4>(None);
+        gen_proof::<PoseidonHasher, U4>(None);
     }
 
     #[test]
     fn gen_proof_sha256_quad() {
-        gen_proof::<Sha256Hasher, typenum::U4>(None);
+        gen_proof::<Sha256Hasher, U4>(None);
     }
 
     #[test]
     fn gen_proof_blake2s_quad() {
-        gen_proof::<Blake2sHasher, typenum::U4>(None);
+        gen_proof::<Blake2sHasher, U4>(None);
     }
 
     #[test]
     fn gen_proof_poseidon_oct() {
-        gen_proof::<PoseidonHasher, typenum::U8>(None);
+        gen_proof::<PoseidonHasher, U8>(None);
     }
 }

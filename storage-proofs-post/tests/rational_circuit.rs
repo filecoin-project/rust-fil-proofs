@@ -21,6 +21,7 @@ use storage_proofs_core::{
 use storage_proofs_post::rational::{
     self, derive_challenges, RationalPoSt, RationalPoStCircuit, RationalPoStCompound,
 };
+use tempfile::tempdir;
 
 #[test]
 fn test_rational_post_circuit_poseidon() {
@@ -39,7 +40,7 @@ fn test_rational_post_circuit<Tree: 'static + MerkleTreeTrait>(expected_constrai
         challenges_count,
     };
 
-    let temp_dir = tempfile::tempdir().unwrap();
+    let temp_dir = tempdir().unwrap();
     let temp_path = temp_dir.path();
 
     let (_data1, tree1) = generate_tree::<Tree, _>(rng, leaves, Some(temp_path.to_path_buf()));

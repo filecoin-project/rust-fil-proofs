@@ -1,19 +1,13 @@
 #[cfg(feature = "measurements")]
-use std::sync::mpsc::{channel, Receiver, Sender};
-#[cfg(feature = "measurements")]
-use std::sync::Mutex;
-#[cfg(not(feature = "measurements"))]
+use std::sync::{
+    mpsc::{channel, Receiver, Sender},
+    Mutex,
+};
 use std::time::Duration;
-#[cfg(feature = "measurements")]
-use std::time::{Duration, Instant};
-
-#[cfg(feature = "measurements")]
-use cpu_time::ProcessTime;
-
-use serde::Serialize;
 
 #[cfg(feature = "measurements")]
 use lazy_static::lazy_static;
+use serde::Serialize;
 
 #[cfg(feature = "measurements")]
 lazy_static! {
@@ -57,7 +51,9 @@ pub fn measure_op<T, F>(op: Operation, f: F) -> T
 where
     F: FnOnce() -> T,
 {
-    let cpu_time_start = ProcessTime::now();
+    use std::time::Instant;
+
+    let cpu_time_start = cpu_time::ProcessTime::now();
     let wall_start_time = Instant::now();
 
     #[cfg(feature = "profile")]

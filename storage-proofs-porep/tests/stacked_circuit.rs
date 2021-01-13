@@ -28,6 +28,7 @@ use storage_proofs_porep::{
     },
     PoRep,
 };
+use tempfile::tempdir;
 
 #[test]
 fn test_stacked_porep_circuit_poseidon_base_2() {
@@ -68,7 +69,7 @@ fn test_stacked_porep_circuit<Tree: MerkleTreeTrait + 'static>(
 
     // MT for original data is always named tree-d, and it will be
     // referenced later in the process as such.
-    let cache_dir = tempfile::tempdir().unwrap();
+    let cache_dir = tempdir().unwrap();
     let config = StoreConfig::new(
         cache_dir.path(),
         CacheKey::CommDTree.to_string(),

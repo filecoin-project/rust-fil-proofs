@@ -1,10 +1,10 @@
 use bellperson::bls::Fr;
 use filecoin_hashers::Hasher;
 use log::trace;
-use serde::{Deserialize, Serialize};
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use storage_proofs_core::{error::Result, merkle::MerkleProofTrait};
 
-use super::column::Column;
+use crate::stacked::vanilla::Column;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ColumnProof<Proof: MerkleProofTrait> {
@@ -15,7 +15,7 @@ pub struct ColumnProof<Proof: MerkleProofTrait> {
     pub(crate) column: Column<Proof::Hasher>,
     #[serde(bound(
         serialize = "Proof: Serialize",
-        deserialize = "Proof: serde::de::DeserializeOwned"
+        deserialize = "Proof: DeserializeOwned"
     ))]
     pub(crate) inclusion_proof: Proof,
 }

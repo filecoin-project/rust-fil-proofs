@@ -1,8 +1,10 @@
 use std::marker::PhantomData;
 
-use bellperson::bls::{Bls12, Fr};
-use bellperson::gadgets::num;
-use bellperson::{Circuit, ConstraintSystem, SynthesisError};
+use bellperson::{
+    bls::{Bls12, Fr},
+    gadgets::num::AllocatedNum,
+    Circuit, ConstraintSystem, SynthesisError,
+};
 use filecoin_hashers::{HashFunction, Hasher};
 use storage_proofs_core::{
     compound_proof::CircuitComponent, error::Result, gadgets::constraint, gadgets::por::PoRCircuit,
@@ -48,25 +50,23 @@ impl<'a, Tree: 'static + MerkleTreeTrait> Circuit<Bls12> for RationalPoStCircuit
             .zip(comm_rs.iter())
         {
             let comm_r_last_num =
-                num::AllocatedNum::alloc(cs.namespace(|| format!("comm_r_last_{}", i)), || {
+                AllocatedNum::alloc(cs.namespace(|| format!("comm_r_last_{}", i)), || {
                     comm_r_last
                         .map(Into::into)
                         .ok_or_else(|| SynthesisError::AssignmentMissing)
                 })?;
 
-            let comm_c_num =
-                num::AllocatedNum::alloc(cs.namespace(|| format!("comm_c_{}", i)), || {
-                    comm_c
-                        .map(Into::into)
-                        .ok_or_else(|| SynthesisError::AssignmentMissing)
-                })?;
+            let comm_c_num = AllocatedNum::alloc(cs.namespace(|| format!("comm_c_{}", i)), || {
+                comm_c
+                    .map(Into::into)
+                    .ok_or_else(|| SynthesisError::AssignmentMissing)
+            })?;
 
-            let comm_r_num =
-                num::AllocatedNum::alloc(cs.namespace(|| format!("comm_r_{}", i)), || {
-                    comm_r
-                        .map(Into::into)
-                        .ok_or_else(|| SynthesisError::AssignmentMissing)
-                })?;
+            let comm_r_num = AllocatedNum::alloc(cs.namespace(|| format!("comm_r_{}", i)), || {
+                comm_r
+                    .map(Into::into)
+                    .ok_or_else(|| SynthesisError::AssignmentMissing)
+            })?;
 
             comm_r_num.inputize(cs.namespace(|| format!("comm_r_{}_input", i)))?;
 

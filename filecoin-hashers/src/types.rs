@@ -1,14 +1,20 @@
-use anyhow::Result;
-use bellperson::bls::{Bls12, Fr, FrRepr};
-use bellperson::gadgets::{boolean, num};
-use bellperson::{ConstraintSystem, SynthesisError};
-use merkletree::hash::{Algorithm as LightAlgorithm, Hashable as LightHashable};
-use merkletree::merkle::Element;
-use serde::de::DeserializeOwned;
-use serde::ser::Serialize;
+use std::fmt::Debug;
+use std::hash::Hash as StdHash;
 
 #[cfg(feature = "poseidon")]
 pub use crate::poseidon_types::*;
+
+use bellperson::{
+    bls::{Bls12, Fr, FrRepr},
+    gadgets::{boolean::Boolean, num::AllocatedNum},
+    ConstraintSystem, SynthesisError,
+};
+use merkletree::{
+    hash::{Algorithm as LightAlgorithm, Hashable as LightHashable},
+    merkle::Element,
+};
+use rand::RngCore;
+use serde::{de::DeserializeOwned, Serialize};
 
 pub trait Domain:
     Ord
@@ -16,7 +22,7 @@ pub trait Domain:
     + Clone
     + AsRef<[u8]>
     + Default
-    + ::std::fmt::Debug
+    + Debug
     + Eq
     + Send
     + Sync
@@ -26,19 +32,17 @@ pub trait Domain:
     + Serialize
     + DeserializeOwned
     + Element
-    + std::hash::Hash
+    + StdHash
 {
     fn into_bytes(&self) -> Vec<u8>;
-    fn try_from_bytes(raw: &[u8]) -> Result<Self>;
+    fn try_from_bytes(raw: &[u8]) -> anyhow::Result<Self>;
     /// Write itself into the given slice, LittleEndian bytes.
-    fn write_bytes(&self, _: &mut [u8]) -> Result<()>;
+    fn write_bytes(&self, _: &mut [u8]) -> anyhow::Result<()>;
 
-    fn random<R: rand::RngCore>(rng: &mut R) -> Self;
+    fn random<R: RngCore>(rng: &mut R) -> Self;
 }
 
-pub trait HashFunction<T: Domain>:
-    Clone + ::std::fmt::Debug + Send + Sync + LightAlgorithm<T>
-{
+pub trait HashFunction<T: Domain>: Clone + Debug + Send + Sync + LightAlgorithm<T> {
     fn hash(data: &[u8]) -> T;
     fn hash2(a: &T, b: &T) -> T;
     fn hash_md(input: &[T]) -> T {
@@ -65,10 +69,10 @@ pub trait HashFunction<T: Domain>:
 
     fn hash_leaf_circuit<CS: ConstraintSystem<Bls12>>(
         mut cs: CS,
-        left: &num::AllocatedNum<Bls12>,
-        right: &num::AllocatedNum<Bls12>,
+        left: &AllocatedNum<Bls12>,
+        right: &AllocatedNum<Bls12>,
         height: usize,
-    ) -> std::result::Result<num::AllocatedNum<Bls12>, SynthesisError> {
+    ) -> Result<AllocatedNum<Bls12>, SynthesisError> {
         let left_bits = left.to_bits_le(cs.namespace(|| "left num into bits"))?;
         let right_bits = right.to_bits_le(cs.namespace(|| "right num into bits"))?;
 
@@ -77,41 +81,41 @@ pub trait HashFunction<T: Domain>:
 
     fn hash_multi_leaf_circuit<Arity: 'static + PoseidonArity, CS: ConstraintSystem<Bls12>>(
         cs: CS,
-        leaves: &[num::AllocatedNum<Bls12>],
+        leaves: &[AllocatedNum<Bls12>],
         height: usize,
-    ) -> std::result::Result<num::AllocatedNum<Bls12>, SynthesisError>;
+    ) -> Result<AllocatedNum<Bls12>, SynthesisError>;
 
     fn hash_md_circuit<CS: ConstraintSystem<Bls12>>(
         _cs: &mut CS,
-        _elements: &[num::AllocatedNum<Bls12>],
-    ) -> std::result::Result<num::AllocatedNum<Bls12>, SynthesisError> {
+        _elements: &[AllocatedNum<Bls12>],
+    ) -> Result<AllocatedNum<Bls12>, SynthesisError> {
         unimplemented!();
     }
 
     fn hash_leaf_bits_circuit<CS: ConstraintSystem<Bls12>>(
         _cs: CS,
-        _left: &[boolean::Boolean],
-        _right: &[boolean::Boolean],
+        _left: &[Boolean],
+        _right: &[Boolean],
         _height: usize,
-    ) -> std::result::Result<num::AllocatedNum<Bls12>, SynthesisError> {
+    ) -> Result<AllocatedNum<Bls12>, SynthesisError> {
         unimplemented!();
     }
 
     fn hash_circuit<CS: ConstraintSystem<Bls12>>(
         cs: CS,
-        bits: &[boolean::Boolean],
-    ) -> std::result::Result<num::AllocatedNum<Bls12>, SynthesisError>;
+        bits: &[Boolean],
+    ) -> Result<AllocatedNum<Bls12>, SynthesisError>;
 
     fn hash2_circuit<CS>(
         cs: CS,
-        a: &num::AllocatedNum<Bls12>,
-        b: &num::AllocatedNum<Bls12>,
-    ) -> std::result::Result<num::AllocatedNum<Bls12>, SynthesisError>
+        a: &AllocatedNum<Bls12>,
+        b: &AllocatedNum<Bls12>,
+    ) -> Result<AllocatedNum<Bls12>, SynthesisError>
     where
         CS: ConstraintSystem<Bls12>;
 }
 
-pub trait Hasher: Clone + ::std::fmt::Debug + Eq + Default + Send + Sync {
+pub trait Hasher: Clone + Debug + Eq + Default + Send + Sync {
     type Domain: Domain + LightHashable<Self::Function> + AsRef<Self::Domain>;
     type Function: HashFunction<Self::Domain>;
 

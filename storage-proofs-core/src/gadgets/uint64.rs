@@ -1,6 +1,11 @@
-use bellperson::gadgets::boolean::{AllocatedBit, Boolean};
-use bellperson::gadgets::multipack::pack_into_inputs;
-use bellperson::{bls::Engine, ConstraintSystem, SynthesisError};
+use bellperson::{
+    bls::Engine,
+    gadgets::{
+        boolean::{AllocatedBit, Boolean},
+        multipack::pack_into_inputs,
+    },
+    ConstraintSystem, SynthesisError,
+};
 
 /// Represents an interpretation of 64 `Boolean` objects as an unsigned integer.
 #[derive(Clone)]
@@ -171,9 +176,11 @@ mod test {
     use rand::{Rng, SeedableRng};
     use rand_xorshift::XorShiftRng;
 
+    use crate::TEST_SEED;
+
     #[test]
     fn test_uint64_from_bits_be() {
-        let mut rng = XorShiftRng::from_seed(crate::TEST_SEED);
+        let mut rng = XorShiftRng::from_seed(TEST_SEED);
 
         for _ in 0..1000 {
             let v = (0..64)
@@ -205,7 +212,7 @@ mod test {
 
     #[test]
     fn test_uint64_from_bits() {
-        let mut rng = XorShiftRng::from_seed(crate::TEST_SEED);
+        let mut rng = XorShiftRng::from_seed(TEST_SEED);
 
         for _ in 0..1000 {
             let v = (0..64)

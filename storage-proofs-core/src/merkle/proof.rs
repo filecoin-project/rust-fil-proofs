@@ -1,21 +1,20 @@
 #![allow(clippy::len_without_is_empty)]
 
+use std::fmt::Debug;
 use std::marker::PhantomData;
+use std::slice::Iter;
 
 use anyhow::{ensure, Result};
 use bellperson::bls::Fr;
 use filecoin_hashers::{Hasher, PoseidonArity};
 use generic_array::typenum::{Unsigned, U0};
 use merkletree::hash::Algorithm;
-use merkletree::proof;
-use serde::{Deserialize, Serialize};
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
 use crate::drgraph::graph_height;
 
 /// Trait to abstract over the concept of Merkle Proof.
-pub trait MerkleProofTrait:
-    Clone + Serialize + serde::de::DeserializeOwned + std::fmt::Debug + Sync + Send
-{
+pub trait MerkleProofTrait: Clone + Serialize + DeserializeOwned + Debug + Sync + Send {
     type Hasher: Hasher;
     type Arity: 'static + PoseidonArity;
     type SubTreeArity: 'static + PoseidonArity;
@@ -23,7 +22,7 @@ pub trait MerkleProofTrait:
 
     /// Try to convert a merkletree proof into this structure.
     fn try_from_proof(
-        p: proof::Proof<<Self::Hasher as Hasher>::Domain, Self::Arity>,
+        p: merkletree::proof::Proof<<Self::Hasher as Hasher>::Domain, Self::Arity>,
     ) -> Result<Self>;
 
     fn as_options(&self) -> Vec<(Vec<Option<Fr>>, Option<usize>)> {
@@ -203,7 +202,7 @@ impl<H: Hasher, Arity: PoseidonArity> InclusionPath<H, Arity> {
         self.path.is_empty()
     }
 
-    pub fn iter(&self) -> std::slice::Iter<'_, PathElement<H, Arity>> {
+    pub fn iter(&self) -> Iter<'_, PathElement<H, Arity>> {
         self.path.iter()
     }
 
@@ -255,7 +254,7 @@ impl<
     type TopTreeArity = TopTreeArity;
 
     fn try_from_proof(
-        p: proof::Proof<<Self::Hasher as Hasher>::Domain, Self::Arity>,
+        p: merkletree::proof::Proof<<Self::Hasher as Hasher>::Domain, Self::Arity>,
     ) -> Result<Self> {
         if p.top_layer_nodes() > 0 {
             Ok(MerkleProof {
@@ -476,7 +475,7 @@ impl<
 
 /// Converts a merkle_light proof to a SingleProof
 fn proof_to_single<H: Hasher, Arity: PoseidonArity, TargetArity: PoseidonArity>(
-    proof: &proof::Proof<H::Domain, Arity>,
+    proof: &merkletree::proof::Proof<H::Domain, Arity>,
     lemma_start_index: usize,
     sub_root: Option<H::Domain>,
 ) -> SingleProof<H, TargetArity> {
@@ -513,7 +512,7 @@ fn extract_path<H: Hasher, Arity: PoseidonArity>(
 }
 
 impl<H: Hasher, Arity: 'static + PoseidonArity> SingleProof<H, Arity> {
-    fn try_from_proof(p: proof::Proof<<H as Hasher>::Domain, Arity>) -> Result<Self> {
+    fn try_from_proof(p: merkletree::proof::Proof<<H as Hasher>::Domain, Arity>) -> Result<Self> {
         Ok(proof_to_single(&p, 1, None))
     }
 
@@ -549,7 +548,7 @@ impl<H: Hasher, Arity: 'static + PoseidonArity> SingleProof<H, Arity> {
 impl<H: Hasher, Arity: 'static + PoseidonArity, SubTreeArity: 'static + PoseidonArity>
     SubProof<H, Arity, SubTreeArity>
 {
-    fn try_from_proof(p: proof::Proof<<H as Hasher>::Domain, Arity>) -> Result<Self> {
+    fn try_from_proof(p: merkletree::proof::Proof<<H as Hasher>::Domain, Arity>) -> Result<Self> {
         ensure!(
             p.sub_layer_nodes() == SubTreeArity::to_usize(),
             "sub arity mismatch"
@@ -615,7 +614,7 @@ impl<
         TopTreeArity: 'static + PoseidonArity,
     > TopProof<H, Arity, SubTreeArity, TopTreeArity>
 {
-    fn try_from_proof(p: proof::Proof<<H as Hasher>::Domain, Arity>) -> Result<Self> {
+    fn try_from_proof(p: merkletree::proof::Proof<<H as Hasher>::Domain, Arity>) -> Result<Self> {
         ensure!(
             p.top_layer_nodes() == TopTreeArity::to_usize(),
             "top arity mismatch"
@@ -698,19 +697,23 @@ impl<
 
 #[cfg(test)]
 mod tests {
-    use super::super::*;
+    use super::*;
 
-    use crate::merkle::{generate_tree, MerkleProofTrait};
     use filecoin_hashers::{
         blake2s::Blake2sHasher, poseidon::PoseidonHasher, sha256::Sha256Hasher, Domain,
     };
-    use generic_array::typenum;
+    use generic_array::typenum::{U2, U4, U8};
+    use rand::thread_rng;
+
+    use crate::merkle::{
+        generate_tree, get_base_tree_count, DiskStore, MerkleTreeTrait, MerkleTreeWrapper,
+    };
 
     fn merklepath<Tree: 'static + MerkleTreeTrait>() {
         let node_size = 32;
         let nodes = 64 * get_base_tree_count::<Tree>();
 
-        let mut rng = rand::thread_rng();
+        let mut rng = thread_rng();
         let (data, tree) = generate_tree::<Tree, _>(&mut rng, nodes, None);
 
         for i in 0..nodes {
@@ -736,9 +739,9 @@ mod tests {
             MerkleTreeWrapper<
                 PoseidonHasher,
                 DiskStore<<PoseidonHasher as Hasher>::Domain>,
-                typenum::U2,
-                typenum::U0,
-                typenum::U0,
+                U2,
+                U0,
+                U0,
             >,
         >();
     }
@@ -749,9 +752,9 @@ mod tests {
             MerkleTreeWrapper<
                 PoseidonHasher,
                 DiskStore<<PoseidonHasher as Hasher>::Domain>,
-                typenum::U4,
-                typenum::U0,
-                typenum::U0,
+                U4,
+                U0,
+                U0,
             >,
         >();
     }
@@ -762,9 +765,9 @@ mod tests {
             MerkleTreeWrapper<
                 PoseidonHasher,
                 DiskStore<<PoseidonHasher as Hasher>::Domain>,
-                typenum::U8,
-                typenum::U0,
-                typenum::U0,
+                U8,
+                U0,
+                U0,
             >,
         >();
     }
@@ -775,9 +778,9 @@ mod tests {
             MerkleTreeWrapper<
                 PoseidonHasher,
                 DiskStore<<PoseidonHasher as Hasher>::Domain>,
-                typenum::U8,
-                typenum::U2,
-                typenum::U0,
+                U8,
+                U2,
+                U0,
             >,
         >();
     }
@@ -788,9 +791,9 @@ mod tests {
             MerkleTreeWrapper<
                 PoseidonHasher,
                 DiskStore<<PoseidonHasher as Hasher>::Domain>,
-                typenum::U8,
-                typenum::U4,
-                typenum::U0,
+                U8,
+                U4,
+                U0,
             >,
         >();
     }
@@ -801,9 +804,9 @@ mod tests {
             MerkleTreeWrapper<
                 PoseidonHasher,
                 DiskStore<<PoseidonHasher as Hasher>::Domain>,
-                typenum::U8,
-                typenum::U4,
-                typenum::U2,
+                U8,
+                U4,
+                U2,
             >,
         >();
     }
@@ -814,9 +817,9 @@ mod tests {
             MerkleTreeWrapper<
                 Sha256Hasher,
                 DiskStore<<Sha256Hasher as Hasher>::Domain>,
-                typenum::U2,
-                typenum::U0,
-                typenum::U0,
+                U2,
+                U0,
+                U0,
             >,
         >();
     }
@@ -827,9 +830,9 @@ mod tests {
             MerkleTreeWrapper<
                 Sha256Hasher,
                 DiskStore<<Sha256Hasher as Hasher>::Domain>,
-                typenum::U4,
-                typenum::U0,
-                typenum::U0,
+                U4,
+                U0,
+                U0,
             >,
         >();
     }
@@ -840,9 +843,9 @@ mod tests {
             MerkleTreeWrapper<
                 Sha256Hasher,
                 DiskStore<<Sha256Hasher as Hasher>::Domain>,
-                typenum::U2,
-                typenum::U4,
-                typenum::U0,
+                U2,
+                U4,
+                U0,
             >,
         >();
     }
@@ -853,9 +856,9 @@ mod tests {
             MerkleTreeWrapper<
                 Sha256Hasher,
                 DiskStore<<Sha256Hasher as Hasher>::Domain>,
-                typenum::U2,
-                typenum::U4,
-                typenum::U2,
+                U2,
+                U4,
+                U2,
             >,
         >();
     }
@@ -866,9 +869,9 @@ mod tests {
             MerkleTreeWrapper<
                 Blake2sHasher,
                 DiskStore<<Blake2sHasher as Hasher>::Domain>,
-                typenum::U2,
-                typenum::U0,
-                typenum::U0,
+                U2,
+                U0,
+                U0,
             >,
         >();
     }
@@ -879,9 +882,9 @@ mod tests {
             MerkleTreeWrapper<
                 Blake2sHasher,
                 DiskStore<<Blake2sHasher as Hasher>::Domain>,
-                typenum::U4,
-                typenum::U0,
-                typenum::U0,
+                U4,
+                U0,
+                U0,
             >,
         >();
     }
@@ -892,9 +895,9 @@ mod tests {
             MerkleTreeWrapper<
                 Blake2sHasher,
                 DiskStore<<Blake2sHasher as Hasher>::Domain>,
-                typenum::U8,
-                typenum::U4,
-                typenum::U2,
+                U8,
+                U4,
+                U2,
             >,
         >();
     }

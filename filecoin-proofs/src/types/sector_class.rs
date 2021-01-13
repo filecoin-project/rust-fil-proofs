@@ -1,6 +1,6 @@
 use storage_proofs_core::api_version::ApiVersion;
 
-use crate::types::*;
+use crate::types::{PoRepConfig, PoRepProofPartitions, SectorSize};
 
 #[derive(Clone, Copy, Debug)]
 pub struct SectorClass {

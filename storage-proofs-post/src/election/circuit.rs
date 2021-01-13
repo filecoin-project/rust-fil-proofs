@@ -1,16 +1,17 @@
 use std::marker::PhantomData;
 
-use bellperson::bls::{Bls12, Fr};
-use bellperson::gadgets::num;
-use bellperson::{Circuit, ConstraintSystem, SynthesisError};
+use bellperson::{
+    bls::{Bls12, Fr},
+    gadgets::num::AllocatedNum,
+    Circuit, ConstraintSystem, SynthesisError,
+};
 use ff::Field;
 use filecoin_hashers::{poseidon::PoseidonFunction, HashFunction, Hasher, PoseidonMDArity};
-use generic_array::typenum;
-use typenum::marker_traits::Unsigned;
-
+use generic_array::typenum::Unsigned;
 use storage_proofs_core::{
-    compound_proof::CircuitComponent, gadgets::constraint, gadgets::por::PoRCircuit,
-    gadgets::variables::Root, merkle::MerkleTreeTrait,
+    compound_proof::CircuitComponent,
+    gadgets::{constraint, por::PoRCircuit, variables::Root},
+    merkle::MerkleTreeTrait,
 };
 
 /// This is the `ElectionPoSt` circuit.
@@ -51,19 +52,19 @@ impl<'a, Tree: 'static + MerkleTreeTrait> Circuit<Bls12> for ElectionPoStCircuit
 
         // 1. Verify comm_r
 
-        let comm_r_last_num = num::AllocatedNum::alloc(cs.namespace(|| "comm_r_last"), || {
+        let comm_r_last_num = AllocatedNum::alloc(cs.namespace(|| "comm_r_last"), || {
             comm_r_last
                 .map(Into::into)
                 .ok_or_else(|| SynthesisError::AssignmentMissing)
         })?;
 
-        let comm_c_num = num::AllocatedNum::alloc(cs.namespace(|| "comm_c"), || {
+        let comm_c_num = AllocatedNum::alloc(cs.namespace(|| "comm_c"), || {
             comm_c
                 .map(Into::into)
                 .ok_or_else(|| SynthesisError::AssignmentMissing)
         })?;
 
-        let comm_r_num = num::AllocatedNum::alloc(cs.namespace(|| "comm_r"), || {
+        let comm_r_num = AllocatedNum::alloc(cs.namespace(|| "comm_r"), || {
             comm_r
                 .map(Into::into)
                 .ok_or_else(|| SynthesisError::AssignmentMissing)
@@ -102,21 +103,21 @@ impl<'a, Tree: 'static + MerkleTreeTrait> Circuit<Bls12> for ElectionPoStCircuit
         // 3. Verify partial ticket
 
         // randomness
-        let randomness_num = num::AllocatedNum::alloc(cs.namespace(|| "randomness"), || {
+        let randomness_num = AllocatedNum::alloc(cs.namespace(|| "randomness"), || {
             randomness
                 .map(Into::into)
                 .ok_or_else(|| SynthesisError::AssignmentMissing)
         })?;
 
         // prover_id
-        let prover_id_num = num::AllocatedNum::alloc(cs.namespace(|| "prover_id"), || {
+        let prover_id_num = AllocatedNum::alloc(cs.namespace(|| "prover_id"), || {
             prover_id
                 .map(Into::into)
                 .ok_or_else(|| SynthesisError::AssignmentMissing)
         })?;
 
         // sector_id
-        let sector_id_num = num::AllocatedNum::alloc(cs.namespace(|| "sector_id"), || {
+        let sector_id_num = AllocatedNum::alloc(cs.namespace(|| "sector_id"), || {
             sector_id
                 .map(Into::into)
                 .ok_or_else(|| SynthesisError::AssignmentMissing)
@@ -124,18 +125,17 @@ impl<'a, Tree: 'static + MerkleTreeTrait> Circuit<Bls12> for ElectionPoStCircuit
 
         let mut partial_ticket_nums = vec![randomness_num, prover_id_num, sector_id_num];
         for (i, leaf) in leafs.iter().enumerate() {
-            let leaf_num =
-                num::AllocatedNum::alloc(cs.namespace(|| format!("leaf_{}", i)), || {
-                    leaf.map(Into::into)
-                        .ok_or_else(|| SynthesisError::AssignmentMissing)
-                })?;
+            let leaf_num = AllocatedNum::alloc(cs.namespace(|| format!("leaf_{}", i)), || {
+                leaf.map(Into::into)
+                    .ok_or_else(|| SynthesisError::AssignmentMissing)
+            })?;
             partial_ticket_nums.push(leaf_num);
         }
 
         // pad to a multiple of md arity
         let arity = PoseidonMDArity::to_usize();
         while partial_ticket_nums.len() % arity != 0 {
-            partial_ticket_nums.push(num::AllocatedNum::alloc(
+            partial_ticket_nums.push(AllocatedNum::alloc(
                 cs.namespace(|| format!("padding_{}", partial_ticket_nums.len())),
                 || Ok(Fr::zero()),
             )?);
@@ -149,7 +149,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait> Circuit<Bls12> for ElectionPoStCircuit
 
         // allocate expected input
         let expected_partial_ticket_num =
-            num::AllocatedNum::alloc(cs.namespace(|| "partial_ticket"), || {
+            AllocatedNum::alloc(cs.namespace(|| "partial_ticket"), || {
                 partial_ticket
                     .map(Into::into)
                     .ok_or_else(|| SynthesisError::AssignmentMissing)

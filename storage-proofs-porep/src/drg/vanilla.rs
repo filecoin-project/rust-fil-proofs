@@ -4,14 +4,14 @@ use std::path::PathBuf;
 use anyhow::{ensure, Context};
 use filecoin_hashers::{Domain, HashFunction, Hasher, PoseidonArity};
 use fr32::bytes_into_fr_repr_safe;
-use generic_array::typenum;
+use generic_array::typenum::U2;
 use merkletree::store::{ReplicaConfig, StoreConfig};
-use rayon::prelude::*;
+use rayon::prelude::{IntoParallelIterator, ParallelIterator};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-
 use storage_proofs_core::{
     api_version::ApiVersion,
+    cache_key::CacheKey,
     crypto::sloth,
     drgraph::Graph,
     error::Result,
@@ -156,7 +156,7 @@ impl<H: Hasher, U: 'static + PoseidonArity> DataProof<H, U> {
     }
 }
 
-pub type ReplicaParents<H> = Vec<(u32, DataProof<H, typenum::U2>)>;
+pub type ReplicaParents<H> = Vec<(u32, DataProof<H, U2>)>;
 
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
 pub struct Proof<H: Hasher> {
@@ -171,10 +171,10 @@ pub struct Proof<H: Hasher> {
     ))]
     pub replica_root: H::Domain,
     #[serde(bound(
-        serialize = "DataProof<H, typenum::U2>: Serialize",
-        deserialize = "DataProof<H, typenum::U2>: Deserialize<'de>"
+        serialize = "DataProof<H, U2>: Serialize",
+        deserialize = "DataProof<H, U2>: Deserialize<'de>"
     ))]
-    pub replica_nodes: Vec<DataProof<H, typenum::U2>>,
+    pub replica_nodes: Vec<DataProof<H, U2>>,
     #[serde(bound(
         serialize = "H::Domain: Serialize",
         deserialize = "H::Domain: Deserialize<'de>"
@@ -184,7 +184,7 @@ pub struct Proof<H: Hasher> {
         serialize = "H::Domain: Serialize",
         deserialize = "H::Domain: Deserialize<'de>"
     ))]
-    pub nodes: Vec<DataProof<H, typenum::U2>>,
+    pub nodes: Vec<DataProof<H, U2>>,
 }
 
 impl<H: Hasher> Proof<H> {
@@ -199,9 +199,9 @@ impl<H: Hasher> Proof<H> {
     }
 
     pub fn new(
-        replica_nodes: Vec<DataProof<H, typenum::U2>>,
+        replica_nodes: Vec<DataProof<H, U2>>,
         replica_parents: Vec<ReplicaParents<H>>,
-        nodes: Vec<DataProof<H, typenum::U2>>,
+        nodes: Vec<DataProof<H, U2>>,
     ) -> Proof<H> {
         Proof {
             data_root: nodes[0].proof.root(),
@@ -274,7 +274,7 @@ where
 
         let mut replica_nodes = Vec::with_capacity(len);
         let mut replica_parents = Vec::with_capacity(len);
-        let mut data_nodes: Vec<DataProof<H, typenum::U2>> = Vec::with_capacity(len);
+        let mut data_nodes: Vec<DataProof<H, U2>> = Vec::with_capacity(len);
 
         for i in 0..len {
             let challenge = pub_inputs.challenges[i] % pub_params.graph.size();
@@ -443,8 +443,6 @@ where
         config: StoreConfig,
         replica_path: PathBuf,
     ) -> Result<(Self::Tau, Self::ProverAux)> {
-        use storage_proofs_core::cache_key::CacheKey;
-
         let tree_d = match data_tree {
             Some(tree) => tree,
             None => create_base_merkle_tree::<BinaryMerkleTree<H>>(

@@ -1,4 +1,5 @@
 use std::cell::UnsafeCell;
+use std::slice::{self, ChunksExactMut};
 
 /// A slice type which can be shared between threads, but must be fully managed by the caller.
 /// Any synchronization must be ensured by the caller, which is why all access is `unsafe`.
@@ -26,12 +27,12 @@ impl<'a, T> UnsafeSlice<'a, T> {
     /// Safety: The caller must ensure that there are no unsynchronized parallel access to the same regions.
     #[inline]
     pub unsafe fn as_mut_slice(&self) -> &'a mut [T] {
-        std::slice::from_raw_parts_mut(self.ptr, self.len)
+        slice::from_raw_parts_mut(self.ptr, self.len)
     }
     /// Safety: The caller must ensure that there are no unsynchronized parallel access to the same regions.
     #[inline]
     pub unsafe fn as_slice(&self) -> &'a [T] {
-        std::slice::from_raw_parts(self.ptr, self.len)
+        slice::from_raw_parts(self.ptr, self.len)
     }
 
     #[inline]
@@ -108,7 +109,7 @@ impl RingBuf {
 
     #[allow(clippy::mut_from_ref)]
     unsafe fn slice_mut(&self) -> &mut [u8] {
-        std::slice::from_raw_parts_mut((*self.data.get()).as_mut_ptr(), self.len())
+        slice::from_raw_parts_mut((*self.data.get()).as_mut_ptr(), self.len())
     }
 
     fn len(&self) -> usize {
@@ -123,7 +124,7 @@ impl RingBuf {
         &mut self.slice_mut()[start..end]
     }
 
-    pub fn iter_slot_mut(&mut self) -> std::slice::ChunksExactMut<'_, u8> {
+    pub fn iter_slot_mut(&mut self) -> ChunksExactMut<'_, u8> {
         // Safety: safe because we are holding &mut self
         unsafe { self.slice_mut().chunks_exact_mut(self.slot_size) }
     }

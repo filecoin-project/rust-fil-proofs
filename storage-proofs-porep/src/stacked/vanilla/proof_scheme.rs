@@ -1,12 +1,12 @@
 use anyhow::ensure;
 use filecoin_hashers::{HashFunction, Hasher};
 use log::trace;
-use rayon::prelude::*;
+use rayon::prelude::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use storage_proofs_core::{
     drgraph::Graph, error::Result, merkle::MerkleTreeTrait, proof::ProofScheme,
 };
 
-use super::{
+use crate::stacked::vanilla::{
     challenges::ChallengeRequirements,
     graph::StackedBucketGraph,
     params::{PrivateInputs, Proof, PublicInputs, PublicParams, SetupParams},
@@ -136,7 +136,7 @@ impl<'a, 'c, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> ProofScheme<'
     }
 
     fn with_partition(pub_in: Self::PublicInputs, k: Option<usize>) -> Self::PublicInputs {
-        self::PublicInputs {
+        PublicInputs {
             replica_id: pub_in.replica_id,
             seed: pub_in.seed,
             tau: pub_in.tau,

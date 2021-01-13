@@ -23,7 +23,8 @@ pub fn decode(key: &Fr, ciphertext: &Fr) -> Fr {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use bellperson::bls::{Fr, FrRepr};
+
+    use bellperson::bls::FrRepr;
     use ff::PrimeField;
     use proptest::{prop_compose, proptest};
 

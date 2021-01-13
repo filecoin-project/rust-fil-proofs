@@ -1,8 +1,8 @@
 use bellperson::gadgets::{
     boolean::Boolean,
     num::{AllocatedNum, Num},
+    ConstraintSystem, SynthesisError,
 };
-use bellperson::{ConstraintSystem, SynthesisError};
 use ff::{Field, PrimeField, ScalarEngine};
 
 /// Takes a sequence of booleans and exposes them as a single compact Num.

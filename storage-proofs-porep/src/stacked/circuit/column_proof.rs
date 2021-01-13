@@ -1,5 +1,4 @@
-use bellperson::bls::Bls12;
-use bellperson::{ConstraintSystem, SynthesisError};
+use bellperson::{bls::Bls12, ConstraintSystem, SynthesisError};
 use filecoin_hashers::{Hasher, PoseidonArity};
 use storage_proofs_core::{
     drgraph::Graph,
@@ -7,8 +6,10 @@ use storage_proofs_core::{
     merkle::{MerkleProofTrait, MerkleTreeTrait, Store},
 };
 
-use super::column::{AllocatedColumn, Column};
-use crate::stacked::{ColumnProof as VanillaColumnProof, PublicParams};
+use crate::stacked::{
+    circuit::column::{AllocatedColumn, Column},
+    vanilla::{ColumnProof as VanillaColumnProof, PublicParams},
+};
 
 #[derive(Debug, Clone)]
 pub struct ColumnProof<

@@ -1,11 +1,12 @@
-use bellperson::bls::{Bls12, Fr};
-use bellperson::gadgets::num;
-use bellperson::{ConstraintSystem, SynthesisError};
+use bellperson::{
+    bls::{Bls12, Fr},
+    gadgets::num::AllocatedNum,
+    ConstraintSystem, SynthesisError,
+};
 use filecoin_hashers::Hasher;
 use storage_proofs_core::merkle::MerkleTreeTrait;
 
-use super::hash::hash_single_column;
-use crate::stacked::{Column as VanillaColumn, PublicParams};
+use crate::stacked::{circuit::hash::hash_single_column, Column as VanillaColumn, PublicParams};
 
 #[derive(Debug, Clone)]
 pub struct Column {
@@ -14,7 +15,7 @@ pub struct Column {
 
 #[derive(Clone)]
 pub struct AllocatedColumn {
-    rows: Vec<num::AllocatedNum<Bls12>>,
+    rows: Vec<AllocatedNum<Bls12>>,
 }
 
 impl<H: Hasher> From<VanillaColumn<H>> for Column {
@@ -46,7 +47,7 @@ impl Column {
             .into_iter()
             .enumerate()
             .map(|(i, val)| {
-                num::AllocatedNum::alloc(cs.namespace(|| format!("column_num_row_{}", i)), || {
+                AllocatedNum::alloc(cs.namespace(|| format!("column_num_row_{}", i)), || {
                     val.ok_or_else(|| SynthesisError::AssignmentMissing)
                 })
             })
@@ -65,11 +66,11 @@ impl AllocatedColumn {
     pub fn hash<CS: ConstraintSystem<Bls12>>(
         &self,
         cs: CS,
-    ) -> Result<num::AllocatedNum<Bls12>, SynthesisError> {
+    ) -> Result<AllocatedNum<Bls12>, SynthesisError> {
         hash_single_column(cs, &self.rows)
     }
 
-    pub fn get_value(&self, layer: usize) -> &num::AllocatedNum<Bls12> {
+    pub fn get_value(&self, layer: usize) -> &AllocatedNum<Bls12> {
         assert!(layer > 0, "layers are 1 indexed");
         assert!(
             layer <= self.rows.len(),

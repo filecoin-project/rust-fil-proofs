@@ -1,24 +1,25 @@
 use std::marker::PhantomData;
 
-use bellperson::bls::{Bls12, Fr};
-use bellperson::gadgets::{boolean::Boolean, num, uint32};
-use bellperson::{ConstraintSystem, SynthesisError};
+use bellperson::{
+    bls::{Bls12, Fr},
+    gadgets::{boolean::Boolean, num::AllocatedNum, uint32::UInt32},
+    ConstraintSystem, SynthesisError,
+};
 use filecoin_hashers::{Hasher, PoseidonArity};
 use generic_array::typenum::{U0, U2};
-
 use storage_proofs_core::{
     drgraph::Graph,
     gadgets::por::{AuthPath, PoRCircuit},
-    gadgets::{encode::encode, uint64, variables::Root},
+    gadgets::{encode::encode, uint64::UInt64, variables::Root},
     merkle::{DiskStore, MerkleProofTrait, MerkleTreeTrait, MerkleTreeWrapper},
     util::reverse_bit_numbering,
 };
 
-use super::{
-    column_proof::ColumnProof, create_label_circuit as create_label, hash::hash_single_column,
-};
 use crate::stacked::{
-    Proof as VanillaProof, PublicParams, ReplicaColumnProof as VanillaReplicaColumnProof,
+    circuit::{column_proof::ColumnProof, create_label_circuit, hash::hash_single_column},
+    vanilla::{
+        Proof as VanillaProof, PublicParams, ReplicaColumnProof as VanillaReplicaColumnProof,
+    },
 };
 
 type TreeAuthPath<T> = AuthPath<
@@ -98,9 +99,9 @@ impl<Tree: MerkleTreeTrait, G: 'static + Hasher> Proof<Tree, G> {
         self,
         mut cs: CS,
         layers: usize,
-        comm_d: &num::AllocatedNum<Bls12>,
-        comm_c: &num::AllocatedNum<Bls12>,
-        comm_r_last: &num::AllocatedNum<Bls12>,
+        comm_d: &AllocatedNum<Bls12>,
+        comm_c: &AllocatedNum<Bls12>,
+        comm_r_last: &AllocatedNum<Bls12>,
         replica_id: &[Boolean],
     ) -> Result<(), SynthesisError> {
         let Proof {
@@ -120,7 +121,7 @@ impl<Tree: MerkleTreeTrait, G: 'static + Hasher> Proof<Tree, G> {
         // -- verify initial data layer
 
         // PrivateInput: data_leaf
-        let data_leaf_num = num::AllocatedNum::alloc(cs.namespace(|| "data_leaf"), || {
+        let data_leaf_num = AllocatedNum::alloc(cs.namespace(|| "data_leaf"), || {
             data_leaf.ok_or_else(|| SynthesisError::AssignmentMissing)
         })?;
 
@@ -180,11 +181,11 @@ impl<Tree: MerkleTreeTrait, G: 'static + Hasher> Proof<Tree, G> {
         let mut column_labels = Vec::new();
 
         // PublicInput: challenge index
-        let challenge_num = uint64::UInt64::alloc(cs.namespace(|| "challenge"), challenge)?;
+        let challenge_num = UInt64::alloc(cs.namespace(|| "challenge"), challenge)?;
         challenge_num.pack_into_input(cs.namespace(|| "challenge input"))?;
 
         for layer in 1..=layers {
-            let layer_num = uint32::UInt32::constant(layer as u32);
+            let layer_num = UInt32::constant(layer as u32);
 
             let mut cs = cs.namespace(|| format!("labeling_{}", layer));
 
@@ -230,7 +231,7 @@ impl<Tree: MerkleTreeTrait, G: 'static + Hasher> Proof<Tree, G> {
             };
 
             // Reconstruct the label
-            let label = create_label(
+            let label = create_label_circuit(
                 cs.namespace(|| "create_label"),
                 replica_id,
                 expanded_parents,
@@ -313,8 +314,8 @@ where
 fn enforce_inclusion<H, U, V, W, CS: ConstraintSystem<Bls12>>(
     cs: CS,
     path: AuthPath<H, U, V, W>,
-    root: &num::AllocatedNum<Bls12>,
-    leaf: &num::AllocatedNum<Bls12>,
+    root: &AllocatedNum<Bls12>,
+    leaf: &AllocatedNum<Bls12>,
 ) -> Result<(), SynthesisError>
 where
     H: 'static + Hasher,

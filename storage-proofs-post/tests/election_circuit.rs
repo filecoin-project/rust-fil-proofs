@@ -22,6 +22,7 @@ use storage_proofs_core::{
 use storage_proofs_post::election::{
     self, generate_candidates, ElectionPoSt, ElectionPoStCircuit, ElectionPoStCompound,
 };
+use tempfile::tempdir;
 
 #[test]
 fn test_election_post_circuit_poseidon() {
@@ -46,7 +47,7 @@ fn test_election_post_circuit<Tree: 'static + MerkleTreeTrait>(expected_constrai
     let mut sectors: Vec<SectorId> = Vec::new();
     let mut trees = BTreeMap::new();
 
-    let temp_dir = tempfile::tempdir().unwrap();
+    let temp_dir = tempdir().unwrap();
     let temp_path = temp_dir.path();
 
     for i in 0..5 {

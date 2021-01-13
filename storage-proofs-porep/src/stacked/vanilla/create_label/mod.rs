@@ -1,8 +1,10 @@
+use std::fs::{self, create_dir_all, remove_file, rename, File};
+use std::io::{self, BufReader};
+
 use anyhow::Context;
 use filecoin_hashers::Hasher;
-use log::*;
-use merkletree::merkle::Element;
-use merkletree::store::StoreConfig;
+use log::{info, warn};
+use merkletree::{merkle::Element, store::StoreConfig};
 use storage_proofs_core::{
     cache_key::CacheKey, drgraph::Graph, error::Result, merkle::MerkleTreeTrait,
 };
@@ -50,10 +52,10 @@ pub fn write_layer(data: &[u8], config: &StoreConfig) -> Result<()> {
     let tmp_data_path = data_path.with_extension(".tmp");
 
     if let Some(parent) = data_path.parent() {
-        std::fs::create_dir_all(parent).context("failed to create parent directories")?;
+        create_dir_all(parent).context("failed to create parent directories")?;
     }
-    std::fs::write(&tmp_data_path, data).context("failed to write layer data")?;
-    std::fs::rename(tmp_data_path, data_path).context("failed to rename tmp data")?;
+    fs::write(&tmp_data_path, data).context("failed to write layer data")?;
+    rename(tmp_data_path, data_path).context("failed to rename tmp data")?;
 
     Ok(())
 }
@@ -61,9 +63,9 @@ pub fn write_layer(data: &[u8], config: &StoreConfig) -> Result<()> {
 /// Reads a layer from disk, into the provided slice.
 pub fn read_layer(config: &StoreConfig, mut data: &mut [u8]) -> Result<()> {
     let data_path = StoreConfig::data_path(&config.path, &config.id);
-    let file = std::fs::File::open(data_path).context("failed to open layer")?;
-    let mut buffered = std::io::BufReader::new(file);
-    std::io::copy(&mut buffered, &mut data).context("failed to read layer")?;
+    let file = File::open(data_path).context("failed to open layer")?;
+    let mut buffered = BufReader::new(file);
+    io::copy(&mut buffered, &mut data).context("failed to read layer")?;
 
     Ok(())
 }
@@ -72,7 +74,7 @@ pub fn remove_tmp_layer(config: &StoreConfig) {
     let data_path = StoreConfig::data_path(&config.path, &config.id);
     let tmp_data_path = data_path.with_extension(".tmp");
     if tmp_data_path.exists() {
-        if let Err(err) = std::fs::remove_file(tmp_data_path) {
+        if let Err(err) = remove_file(tmp_data_path) {
             warn!("failed to delete tmp file: {}", err);
         }
     }
@@ -88,7 +90,7 @@ pub fn is_layer_written<Tree: 'static + MerkleTreeTrait>(
         return Ok(false);
     }
 
-    let file = std::fs::File::open(&data_path)?;
+    let file = File::open(&data_path)?;
     let metadata = file.metadata()?;
     let file_size = metadata.len() as usize;
 

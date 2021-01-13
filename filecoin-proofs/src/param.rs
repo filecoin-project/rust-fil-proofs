@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
 use std::ffi::OsStr;
 use std::fs::File;
+use std::io;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
@@ -22,7 +23,7 @@ pub fn get_digest_for_file_within_cache(filename: &str) -> Result<String> {
     let mut file = File::open(&path).with_context(|| format!("could not open path={:?}", path))?;
     let mut hasher = Blake2b::new();
 
-    std::io::copy(&mut file, &mut hasher)?;
+    io::copy(&mut file, &mut hasher)?;
 
     Ok(hasher.finalize().to_hex()[..32].into())
 }

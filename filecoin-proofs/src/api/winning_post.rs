@@ -1,22 +1,27 @@
 use anyhow::{ensure, Context, Result};
-use log::info;
-
 use filecoin_hashers::Hasher;
-use storage_proofs_core::compound_proof::{self, CompoundProof};
-use storage_proofs_core::merkle::MerkleTreeTrait;
-use storage_proofs_core::multi_proof::MultiProof;
-use storage_proofs_core::sector::*;
-use storage_proofs_post::fallback;
-
-use crate::api::post_util::partition_vanilla_proofs;
-use crate::api::util::as_safe_commitment;
-use crate::caches::{get_post_params, get_post_verifying_key};
-use crate::parameters::winning_post_setup_params;
-use crate::types::{
-    ChallengeSeed, Commitment, FallbackPoStSectorProof, PoStConfig, PrivateReplicaInfo, ProverId,
-    PublicReplicaInfo, SnarkProof,
+use log::info;
+use storage_proofs_core::{
+    compound_proof::{self, CompoundProof},
+    merkle::MerkleTreeTrait,
+    multi_proof::MultiProof,
+    sector::SectorId,
 };
-use crate::PoStType;
+use storage_proofs_post::fallback::{
+    self, generate_sector_challenges, FallbackPoSt, FallbackPoStCompound, PrivateSector,
+    PublicSector,
+};
+
+use crate::{
+    api::{as_safe_commitment, partition_vanilla_proofs},
+    caches::{get_post_params, get_post_verifying_key},
+    parameters::winning_post_setup_params,
+    types::{
+        ChallengeSeed, Commitment, FallbackPoStSectorProof, PoStConfig, PrivateReplicaInfo,
+        ProverId, PublicReplicaInfo, SnarkProof,
+    },
+    PoStType,
+};
 
 /// Generates a Winning proof-of-spacetime with provided vanilla proofs.
 pub fn generate_winning_post_with_vanilla<Tree: 'static + MerkleTreeTrait>(
@@ -48,13 +53,13 @@ pub fn generate_winning_post_with_vanilla<Tree: 'static + MerkleTreeTrait>(
         partitions: None,
         priority: post_config.priority,
     };
-    let pub_params: compound_proof::PublicParams<'_, fallback::FallbackPoSt<'_, Tree>> =
-        fallback::FallbackPoStCompound::setup(&setup_params)?;
+    let pub_params: compound_proof::PublicParams<'_, FallbackPoSt<'_, Tree>> =
+        FallbackPoStCompound::setup(&setup_params)?;
     let groth_params = get_post_params::<Tree>(&post_config)?;
 
     let mut pub_sectors = Vec::with_capacity(vanilla_proofs.len());
     for vanilla_proof in &vanilla_proofs {
-        pub_sectors.push(fallback::PublicSector {
+        pub_sectors.push(PublicSector {
             id: vanilla_proof.sector_id,
             comm_r: vanilla_proof.comm_r,
         });
@@ -79,7 +84,7 @@ pub fn generate_winning_post_with_vanilla<Tree: 'static + MerkleTreeTrait>(
         &vanilla_proofs,
     )?;
 
-    let proof = fallback::FallbackPoStCompound::prove_with_vanilla(
+    let proof = FallbackPoStCompound::prove_with_vanilla(
         &pub_params,
         &pub_inputs,
         partitioned_proofs,
@@ -123,8 +128,8 @@ pub fn generate_winning_post<Tree: 'static + MerkleTreeTrait>(
         partitions: None,
         priority: post_config.priority,
     };
-    let pub_params: compound_proof::PublicParams<'_, fallback::FallbackPoSt<'_, Tree>> =
-        fallback::FallbackPoStCompound::setup(&setup_params)?;
+    let pub_params: compound_proof::PublicParams<'_, FallbackPoSt<'_, Tree>> =
+        FallbackPoStCompound::setup(&setup_params)?;
     let groth_params = get_post_params::<Tree>(&post_config)?;
 
     let trees = replicas
@@ -149,11 +154,11 @@ pub fn generate_winning_post<Tree: 'static + MerkleTreeTrait>(
             let comm_c = replica.safe_comm_c();
             let comm_r_last = replica.safe_comm_r_last();
 
-            pub_sectors.push(fallback::PublicSector::<<Tree::Hasher as Hasher>::Domain> {
+            pub_sectors.push(PublicSector::<<Tree::Hasher as Hasher>::Domain> {
                 id: *sector_id,
                 comm_r,
             });
-            priv_sectors.push(fallback::PrivateSector {
+            priv_sectors.push(PrivateSector {
                 tree,
                 comm_c,
                 comm_r_last,
@@ -172,12 +177,8 @@ pub fn generate_winning_post<Tree: 'static + MerkleTreeTrait>(
         sectors: &priv_sectors,
     };
 
-    let proof = fallback::FallbackPoStCompound::<Tree>::prove(
-        &pub_params,
-        &pub_inputs,
-        &priv_inputs,
-        &groth_params,
-    )?;
+    let proof =
+        FallbackPoStCompound::<Tree>::prove(&pub_params, &pub_inputs, &priv_inputs, &groth_params)?;
     let proof = proof.to_vec()?;
 
     info!("generate_winning_post:finish");
@@ -207,7 +208,7 @@ pub fn generate_winning_post_sector_challenge<Tree: MerkleTreeTrait>(
 
     let randomness_safe: <Tree::Hasher as Hasher>::Domain =
         as_safe_commitment(randomness, "randomness")?;
-    let result = fallback::generate_sector_challenges(
+    let result = generate_sector_challenges(
         randomness_safe,
         post_config.sector_count,
         sector_set_size,
@@ -255,8 +256,8 @@ pub fn verify_winning_post<Tree: 'static + MerkleTreeTrait>(
         partitions: None,
         priority: false,
     };
-    let pub_params: compound_proof::PublicParams<'_, fallback::FallbackPoSt<'_, Tree>> =
-        fallback::FallbackPoStCompound::setup(&setup_params)?;
+    let pub_params: compound_proof::PublicParams<'_, FallbackPoSt<'_, Tree>> =
+        FallbackPoStCompound::setup(&setup_params)?;
 
     let mut pub_sectors = Vec::with_capacity(param_sector_count);
     for _ in 0..param_sector_count {
@@ -264,7 +265,7 @@ pub fn verify_winning_post<Tree: 'static + MerkleTreeTrait>(
             let comm_r = replica.safe_comm_r().with_context(|| {
                 format!("verify_winning_post: safe_comm_r failed: {:?}", sector_id)
             })?;
-            pub_sectors.push(fallback::PublicSector {
+            pub_sectors.push(PublicSector {
                 id: *sector_id,
                 comm_r,
             });
@@ -286,7 +287,7 @@ pub fn verify_winning_post<Tree: 'static + MerkleTreeTrait>(
             return Ok(false);
         }
 
-        fallback::FallbackPoStCompound::verify(
+        FallbackPoStCompound::verify(
             &pub_params,
             &pub_inputs,
             &single_proof,

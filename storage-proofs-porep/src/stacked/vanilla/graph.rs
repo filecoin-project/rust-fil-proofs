@@ -1,4 +1,5 @@
 use std::convert::{TryFrom, TryInto};
+use std::fmt::{self, Debug, Formatter};
 use std::marker::PhantomData;
 
 use anyhow::ensure;
@@ -12,16 +13,15 @@ use storage_proofs_core::{
         feistel::{self, FeistelPrecomputed},
         FEISTEL_DST,
     },
-    drgraph::BASE_DEGREE,
-    drgraph::{BucketGraph, Graph},
+    drgraph::{BucketGraph, Graph, BASE_DEGREE},
     error::Result,
     parameter_cache::ParameterSetMetadata,
-    settings,
+    settings::SETTINGS,
     util::NODE_SIZE,
     PoRepID,
 };
 
-use super::cache::ParentCache;
+use crate::stacked::vanilla::cache::ParentCache;
 
 /// The expansion degree used for Stacked Graphs.
 pub const EXP_DEGREE: usize = 8;
@@ -43,12 +43,12 @@ where
     _h: PhantomData<H>,
 }
 
-impl<H, G> std::fmt::Debug for StackedGraph<H, G>
+impl<H, G> Debug for StackedGraph<H, G>
 where
     H: Hasher,
     G: Graph<H> + 'static,
 {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         f.debug_struct("StackedGraph")
             .field("expansion_degree", &self.expansion_degree)
             .field("base_graph", &self.base_graph)
@@ -105,7 +105,7 @@ where
     ) -> Result<Self> {
         assert_eq!(base_degree, BASE_DEGREE);
         assert_eq!(expansion_degree, EXP_DEGREE);
-        ensure!(nodes <= std::u32::MAX as usize, "too many nodes");
+        ensure!(nodes <= u32::MAX as usize, "too many nodes");
 
         let base_graph = match base_graph {
             Some(graph) => graph,
@@ -135,7 +135,7 @@ where
     /// Returns a reference to the parent cache.
     pub fn parent_cache(&self) -> Result<ParentCache> {
         // Number of nodes to be cached in memory
-        let default_cache_size = settings::SETTINGS.sdr_parents_cache_size;
+        let default_cache_size = SETTINGS.sdr_parents_cache_size;
         let cache_entries = self.size() as u32;
         let cache_size = cache_entries.min(default_cache_size);
 

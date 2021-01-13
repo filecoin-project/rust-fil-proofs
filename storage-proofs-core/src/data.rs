@@ -1,7 +1,10 @@
+use std::fs::OpenOptions;
+use std::ops::{Deref, DerefMut};
 use std::path::PathBuf;
 
 use anyhow::{ensure, Context, Result};
 use log::info;
+use memmap::{MmapMut, MmapOptions};
 
 /// A wrapper around data either on disk or a slice in memory, that can be dropped and read back into memory,
 /// to allow for better control of memory consumption.
@@ -15,10 +18,8 @@ pub struct Data<'a> {
 #[derive(Debug)]
 enum RawData<'a> {
     Slice(&'a mut [u8]),
-    Mmap(memmap::MmapMut),
+    Mmap(MmapMut),
 }
-
-use std::ops::{Deref, DerefMut};
 
 impl<'a> Deref for RawData<'a> {
     type Target = [u8];
@@ -51,8 +52,8 @@ impl<'a> From<&'a mut [u8]> for Data<'a> {
     }
 }
 
-impl<'a> From<(memmap::MmapMut, PathBuf)> for Data<'a> {
-    fn from(raw: (memmap::MmapMut, PathBuf)) -> Self {
+impl<'a> From<(MmapMut, PathBuf)> for Data<'a> {
+    fn from(raw: (MmapMut, PathBuf)) -> Self {
         let len = raw.0.len();
         Data {
             raw: Some(RawData::Mmap(raw.0)),
@@ -117,13 +118,13 @@ impl<'a> Data<'a> {
 
                 info!("restoring {}", path.display());
 
-                let f_data = std::fs::OpenOptions::new()
+                let f_data = OpenOptions::new()
                     .read(true)
                     .write(true)
                     .open(path)
                     .with_context(|| format!("could not open path={:?}", path))?;
                 let data = unsafe {
-                    memmap::MmapOptions::new()
+                    MmapOptions::new()
                         .map_mut(&f_data)
                         .with_context(|| format!("could not mmap path={:?}", path))?
                 };

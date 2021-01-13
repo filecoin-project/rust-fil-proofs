@@ -1,4 +1,4 @@
-use bellperson::{bls::Engine, gadgets::num, ConstraintSystem, SynthesisError};
+use bellperson::{bls::Engine, gadgets::num::AllocatedNum, ConstraintSystem, SynthesisError};
 use ff::Field;
 
 /// Adds a constraint to CS, enforcing an equality relationship between the allocated numbers a and b.
@@ -7,8 +7,8 @@ use ff::Field;
 pub fn equal<E: Engine, A, AR, CS: ConstraintSystem<E>>(
     cs: &mut CS,
     annotation: A,
-    a: &num::AllocatedNum<E>,
-    b: &num::AllocatedNum<E>,
+    a: &AllocatedNum<E>,
+    b: &AllocatedNum<E>,
 ) where
     A: FnOnce() -> AR,
     AR: Into<String>,
@@ -28,9 +28,9 @@ pub fn equal<E: Engine, A, AR, CS: ConstraintSystem<E>>(
 pub fn sum<E: Engine, A, AR, CS: ConstraintSystem<E>>(
     cs: &mut CS,
     annotation: A,
-    a: &num::AllocatedNum<E>,
-    b: &num::AllocatedNum<E>,
-    sum: &num::AllocatedNum<E>,
+    a: &AllocatedNum<E>,
+    b: &AllocatedNum<E>,
+    sum: &AllocatedNum<E>,
 ) where
     A: FnOnce() -> AR,
     AR: Into<String>,
@@ -46,10 +46,10 @@ pub fn sum<E: Engine, A, AR, CS: ConstraintSystem<E>>(
 
 pub fn add<E: Engine, CS: ConstraintSystem<E>>(
     mut cs: CS,
-    a: &num::AllocatedNum<E>,
-    b: &num::AllocatedNum<E>,
-) -> Result<num::AllocatedNum<E>, SynthesisError> {
-    let res = num::AllocatedNum::alloc(cs.namespace(|| "add_num"), || {
+    a: &AllocatedNum<E>,
+    b: &AllocatedNum<E>,
+) -> Result<AllocatedNum<E>, SynthesisError> {
+    let res = AllocatedNum::alloc(cs.namespace(|| "add_num"), || {
         let mut tmp = a
             .get_value()
             .ok_or_else(|| SynthesisError::AssignmentMissing)?;
@@ -69,10 +69,10 @@ pub fn add<E: Engine, CS: ConstraintSystem<E>>(
 
 pub fn sub<E: Engine, CS: ConstraintSystem<E>>(
     mut cs: CS,
-    a: &num::AllocatedNum<E>,
-    b: &num::AllocatedNum<E>,
-) -> Result<num::AllocatedNum<E>, SynthesisError> {
-    let res = num::AllocatedNum::alloc(cs.namespace(|| "sub_num"), || {
+    a: &AllocatedNum<E>,
+    b: &AllocatedNum<E>,
+) -> Result<AllocatedNum<E>, SynthesisError> {
+    let res = AllocatedNum::alloc(cs.namespace(|| "sub_num"), || {
         let mut tmp = a
             .get_value()
             .ok_or_else(|| SynthesisError::AssignmentMissing)?;
@@ -96,9 +96,9 @@ pub fn sub<E: Engine, CS: ConstraintSystem<E>>(
 pub fn difference<E: Engine, A, AR, CS: ConstraintSystem<E>>(
     cs: &mut CS,
     annotation: A,
-    a: &num::AllocatedNum<E>,
-    b: &num::AllocatedNum<E>,
-    difference: &num::AllocatedNum<E>,
+    a: &AllocatedNum<E>,
+    b: &AllocatedNum<E>,
+    difference: &AllocatedNum<E>,
 ) where
     A: FnOnce() -> AR,
     AR: Into<String>,
@@ -118,20 +118,24 @@ pub fn difference<E: Engine, A, AR, CS: ConstraintSystem<E>>(
 mod tests {
     use super::*;
 
-    use bellperson::bls::{Bls12, Fr};
-    use bellperson::util_cs::test_cs::TestConstraintSystem;
+    use bellperson::{
+        bls::{Bls12, Fr},
+        util_cs::test_cs::TestConstraintSystem,
+    };
     use rand::SeedableRng;
     use rand_xorshift::XorShiftRng;
 
+    use crate::TEST_SEED;
+
     #[test]
     fn add_constraint() {
-        let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
+        let rng = &mut XorShiftRng::from_seed(TEST_SEED);
 
         for _ in 0..100 {
             let mut cs = TestConstraintSystem::<Bls12>::new();
 
-            let a = num::AllocatedNum::alloc(cs.namespace(|| "a"), || Ok(Fr::random(rng))).unwrap();
-            let b = num::AllocatedNum::alloc(cs.namespace(|| "b"), || Ok(Fr::random(rng))).unwrap();
+            let a = AllocatedNum::alloc(cs.namespace(|| "a"), || Ok(Fr::random(rng))).unwrap();
+            let b = AllocatedNum::alloc(cs.namespace(|| "b"), || Ok(Fr::random(rng))).unwrap();
 
             let res = add(cs.namespace(|| "a+b"), &a, &b).expect("add failed");
 
@@ -145,13 +149,13 @@ mod tests {
 
     #[test]
     fn sub_constraint() {
-        let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
+        let rng = &mut XorShiftRng::from_seed(TEST_SEED);
 
         for _ in 0..100 {
             let mut cs = TestConstraintSystem::<Bls12>::new();
 
-            let a = num::AllocatedNum::alloc(cs.namespace(|| "a"), || Ok(Fr::random(rng))).unwrap();
-            let b = num::AllocatedNum::alloc(cs.namespace(|| "b"), || Ok(Fr::random(rng))).unwrap();
+            let a = AllocatedNum::alloc(cs.namespace(|| "a"), || Ok(Fr::random(rng))).unwrap();
+            let b = AllocatedNum::alloc(cs.namespace(|| "b"), || Ok(Fr::random(rng))).unwrap();
 
             let res = sub(cs.namespace(|| "a-b"), &a, &b).expect("subtraction failed");
 

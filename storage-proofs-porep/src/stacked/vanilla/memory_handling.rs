@@ -3,12 +3,13 @@ use std::fs::File;
 use std::marker::{PhantomData, Sync};
 use std::mem::size_of;
 use std::path::PathBuf;
+use std::slice;
+use std::sync::atomic::{spin_loop_hint, AtomicU64, AtomicUsize, Ordering};
 
 use anyhow::Result;
-use byte_slice_cast::*;
-use log::*;
+use byte_slice_cast::{AsSliceOf, FromByteSlice};
+use log::{info, warn};
 use mapr::{Mmap, MmapMut, MmapOptions};
-use std::sync::atomic::{spin_loop_hint, AtomicU64, AtomicUsize, Ordering::SeqCst};
 
 pub struct CacheReader<T> {
     file: File,
@@ -39,21 +40,22 @@ impl IncrementingCursor {
         }
     }
     fn store(&self, val: usize) {
-        self.cur.store(val, SeqCst);
-        self.cur_safe.store(val, SeqCst);
+        self.cur.store(val, Ordering::SeqCst);
+        self.cur_safe.store(val, Ordering::SeqCst);
     }
     fn compare_and_swap(&self, before: usize, after: usize) {
-        self.cur.compare_and_swap(before, after, SeqCst);
-        self.cur_safe.compare_and_swap(before, after, SeqCst);
+        self.cur.compare_and_swap(before, after, Ordering::SeqCst);
+        self.cur_safe
+            .compare_and_swap(before, after, Ordering::SeqCst);
     }
     fn increment<F: Fn() -> bool, G: Fn()>(&self, target: usize, wait_fn: F, advance_fn: G) {
         // Check using `cur_safe`, to ensure we wait until the current cursor value is safe to use.
         // If we were to instead check `cur`, it could have been incremented but not yet safe.
-        let cur = self.cur_safe.load(SeqCst);
+        let cur = self.cur_safe.load(Ordering::SeqCst);
         if target > cur {
             // Only one producer will successfully increment `cur`. We need this second atomic because we cannot
             // increment `cur_safe` until after the underlying resource has been advanced.
-            let instant_cur = self.cur.compare_and_swap(cur, cur + 1, SeqCst);
+            let instant_cur = self.cur.compare_and_swap(cur, cur + 1, Ordering::SeqCst);
 
             if instant_cur == cur {
                 // We successfully incremented `self.cur`, so we are responsible for advancing the resource.
@@ -66,11 +68,11 @@ impl IncrementingCursor {
                 advance_fn();
 
                 // Now it is safe to use the new window.
-                self.cur_safe.fetch_add(1, SeqCst);
+                self.cur_safe.fetch_add(1, Ordering::SeqCst);
             } else {
                 // We failed to increment `self.cur_window`, so we must wait for the window to be advanced before
                 // continuing. Wait until it is safe to use the new current window.
-                while self.cur_safe.load(SeqCst) != cur + 1 {
+                while self.cur_safe.load(Ordering::SeqCst) != cur + 1 {
                     spin_loop_hint()
                 }
             }
@@ -127,13 +129,13 @@ impl<T: FromByteSlice> CacheReader<T> {
     /// Safety: incrementing the consumer at the end of a window will unblock the producer waiting to remap the
     /// consumer's previous buffer. The buffer must not be accessed once this has happened.
     pub unsafe fn increment_consumer(&self) {
-        self.consumer.fetch_add(1, SeqCst);
+        self.consumer.fetch_add(1, Ordering::SeqCst);
     }
     pub fn store_consumer(&self, val: u64) {
-        self.consumer.store(val, SeqCst);
+        self.consumer.store(val, Ordering::SeqCst);
     }
     pub fn get_consumer(&self) -> u64 {
-        self.consumer.load(SeqCst)
+        self.consumer.load(Ordering::SeqCst)
     }
 
     #[inline]
@@ -144,7 +146,7 @@ impl<T: FromByteSlice> CacheReader<T> {
     #[inline]
     #[allow(clippy::mut_from_ref)]
     unsafe fn get_mut_bufs(&self) -> &mut [Mmap] {
-        std::slice::from_raw_parts_mut((*self.bufs.get()).as_mut_ptr(), 2)
+        slice::from_raw_parts_mut((*self.bufs.get()).as_mut_ptr(), 2)
     }
 
     #[allow(dead_code)]
@@ -228,7 +230,7 @@ impl<T: FromByteSlice> CacheReader<T> {
 
         let wait_fn = || {
             let safe_consumer = (window - 1) * (self.window_element_count() / self.degree);
-            (self.consumer.load(SeqCst) as usize) < safe_consumer
+            (self.consumer.load(Ordering::SeqCst) as usize) < safe_consumer
         };
 
         self.cursor

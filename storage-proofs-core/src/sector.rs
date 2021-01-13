@@ -1,8 +1,8 @@
 use std::collections::BTreeSet;
-use std::fmt;
+use std::fmt::{self, Display, Formatter};
 
 use bellperson::bls::{Fr, FrRepr};
-use byteorder::ByteOrder;
+use byteorder::{ByteOrder, LittleEndian};
 use ff::PrimeField;
 use serde::{Deserialize, Serialize};
 
@@ -33,8 +33,8 @@ impl From<SectorId> for Fr {
     }
 }
 
-impl fmt::Display for SectorId {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl Display for SectorId {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(f, "SectorId({})", self.0)
     }
 }
@@ -42,7 +42,7 @@ impl fmt::Display for SectorId {
 impl SectorId {
     pub fn as_fr_safe(self) -> [u8; 32] {
         let mut buf: [u8; 32] = [0; 32];
-        byteorder::LittleEndian::write_u64(&mut buf[0..8], self.0);
+        LittleEndian::write_u64(&mut buf[0..8], self.0);
         buf
     }
 }

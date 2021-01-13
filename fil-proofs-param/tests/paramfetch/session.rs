@@ -1,11 +1,10 @@
 use std::fs::File;
-use std::io::Read;
+use std::io::{self, Read};
 use std::path::{Path, PathBuf};
 
 use failure::SyncFailure;
 use rexpect::session::PtyReplSession;
-use tempfile;
-use tempfile::TempDir;
+use tempfile::{tempdir, TempDir};
 
 use crate::support::{cargo_bin, spawn_bash_with_retries};
 
@@ -19,7 +18,7 @@ pub struct ParamFetchSessionBuilder {
 
 impl ParamFetchSessionBuilder {
     pub fn new(manifest: Option<PathBuf>) -> ParamFetchSessionBuilder {
-        let temp_dir = tempfile::tempdir().expect("could not create temp dir");
+        let temp_dir = tempdir().expect("could not create temp dir");
 
         ParamFetchSessionBuilder {
             cache_dir: temp_dir,
@@ -56,7 +55,7 @@ impl ParamFetchSessionBuilder {
 
         let mut file = File::create(&pbuf).expect("failed to create file in temp dir");
 
-        std::io::copy(r, &mut file).expect("failed to copy bytes to file");
+        io::copy(r, &mut file).expect("failed to copy bytes to file");
 
         self
     }
