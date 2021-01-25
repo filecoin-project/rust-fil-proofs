@@ -496,36 +496,38 @@ where
     fn extract_all<'b>(
         pp: &'b Self::PublicParams,
         replica_id: &'b <H as Hasher>::Domain,
-        data: &'b [u8],
+        data: &'b mut [u8],
         _config: Option<StoreConfig>,
-    ) -> Result<Vec<u8>> {
+    ) -> Result<()> {
         decode(&pp.graph, replica_id, data, None)
     }
 
     fn extract(
         pp: &Self::PublicParams,
         replica_id: &<H as Hasher>::Domain,
-        data: &[u8],
+        data: &mut [u8],
         node: usize,
         _config: Option<StoreConfig>,
-    ) -> Result<Vec<u8>> {
-        Ok(decode_block(&pp.graph, replica_id, data, None, node)?.into_bytes())
+    ) -> Result<()> {
+        let block = decode_block(&pp.graph, replica_id, &data, None, node)?;
+        data.copy_from_slice(AsRef::<[u8]>::as_ref(&block));
+        Ok(())
     }
 }
 
 pub fn decode<'a, H, G>(
     graph: &'a G,
     replica_id: &'a <H as Hasher>::Domain,
-    data: &'a [u8],
+    data: &'a mut [u8],
     exp_parents_data: Option<&'a [u8]>,
-) -> Result<Vec<u8>>
+) -> Result<()>
 where
     H: Hasher,
     G::Key: AsRef<H::Domain>,
     G: Graph<H> + Sync,
 {
     // TODO: proper error handling
-    let result = (0..graph.size())
+    let result: Vec<u8> = (0..graph.size())
         .into_par_iter()
         .flat_map(|i| {
             decode_block::<H, G>(graph, replica_id, data, exp_parents_data, i)
@@ -534,7 +536,8 @@ where
         })
         .collect();
 
-    Ok(result)
+    data.copy_from_slice(&result);
+    Ok(())
 }
 
 pub fn decode_block<'a, H, G>(

@@ -84,17 +84,12 @@ fn test_extract_all<Tree: MerkleTreeTrait>() {
     copied.copy_from_slice(&mmapped_data);
     assert_ne!(data, copied, "replication did not change data");
 
-    let decoded_data = DrgPoRep::<Tree::Hasher, _>::extract_all(
-        &pp,
-        &replica_id,
-        mmapped_data.as_mut(),
-        Some(config),
-    )
-    .unwrap_or_else(|e| {
-        panic!("Failed to extract data from `DrgPoRep`: {}", e);
-    });
+    DrgPoRep::<Tree::Hasher, _>::extract_all(&pp, &replica_id, mmapped_data.as_mut(), Some(config))
+        .unwrap_or_else(|e| {
+            panic!("Failed to extract data from `DrgPoRep`: {}", e);
+        });
 
-    assert_eq!(data, decoded_data.as_slice(), "failed to extract data");
+    assert_eq!(data, mmapped_data.as_ref(), "failed to extract data");
 
     cache_dir.close().expect("Failed to remove cache dir");
 }
@@ -159,15 +154,20 @@ fn test_extract<Tree: MerkleTreeTrait>() {
     assert_ne!(data, copied, "replication did not change data");
 
     for i in 0..nodes {
-        let decoded_data =
-            DrgPoRep::extract(&pp, &replica_id, &mmapped_data, i, Some(config.clone()))
-                .expect("failed to extract node data from PoRep");
+        DrgPoRep::extract(
+            &pp,
+            &replica_id,
+            mmapped_data.as_mut(),
+            i,
+            Some(config.clone()),
+        )
+        .expect("failed to extract node data from PoRep");
 
         let original_data = data_at_node(&data, i).expect("data_at_node failure");
 
         assert_eq!(
             original_data,
-            decoded_data.as_slice(),
+            mmapped_data.as_ref(),
             "failed to extract data"
         );
     }

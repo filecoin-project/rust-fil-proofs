@@ -183,11 +183,10 @@ where
     let offset_padded: PaddedBytesAmount = UnpaddedBytesAmount::from(offset).into();
     let num_bytes_padded: PaddedBytesAmount = num_bytes.into();
 
-    let unsealed_all =
-        StackedDrg::<Tree, DefaultPieceHasher>::extract_all(&pp, &replica_id, &data, Some(config))?;
+    StackedDrg::<Tree, DefaultPieceHasher>::extract_all(&pp, &replica_id, &mut data, Some(config))?;
     let start: usize = offset_padded.into();
     let end = start + usize::from(num_bytes_padded);
-    let unsealed = &unsealed_all[start..end];
+    let unsealed = &data[start..end];
 
     // If the call to `extract_range` was successful, the `unsealed` vector must
     // have a length which equals `num_bytes_padded`. The byte at its 0-index

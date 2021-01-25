@@ -31,15 +31,15 @@ pub trait PoRep<'a, H: Hasher, G: Hasher>: ProofScheme<'a> {
     fn extract_all(
         pub_params: &'a Self::PublicParams,
         replica_id: &H::Domain,
-        replica: &[u8],
+        data: &mut [u8],
         config: Option<StoreConfig>,
-    ) -> Result<Vec<u8>>;
+    ) -> Result<()>;
 
     fn extract(
         pub_params: &'a Self::PublicParams,
         replica_id: &H::Domain,
-        replica: &[u8],
+        data: &mut [u8],
         node: usize,
         config: Option<StoreConfig>,
-    ) -> Result<Vec<u8>>;
+    ) -> Result<()>;
 }
