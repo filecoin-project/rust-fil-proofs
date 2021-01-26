@@ -3,9 +3,14 @@
 //! Insert an `AllocatedNum` into a sequence of `AllocatedNums` at an arbitrary position.
 //! This can be thought of as a generalization of `AllocatedNum::conditionally_reverse` and reduces to it in the binary case.
 
-use bellperson::gadgets::boolean::{AllocatedBit, Boolean};
-use bellperson::gadgets::num::AllocatedNum;
-use bellperson::{bls::Engine, ConstraintSystem, SynthesisError};
+use bellperson::{
+    bls::Engine,
+    gadgets::{
+        boolean::{AllocatedBit, Boolean},
+        num::AllocatedNum,
+    },
+    ConstraintSystem, SynthesisError,
+};
 use ff::Field;
 
 /// Insert `element` after the nth 1-indexed element of `elements`, where `path_bits` represents n, least-significant bit first.
@@ -348,12 +353,14 @@ where
 mod tests {
     use super::*;
 
-    use bellperson::bls::{Bls12, Fr};
-    use bellperson::gadgets::boolean::AllocatedBit;
-    use bellperson::util_cs::test_cs::TestConstraintSystem;
-    use ff::Field;
+    use bellperson::{
+        bls::{Bls12, Fr},
+        util_cs::test_cs::TestConstraintSystem,
+    };
     use rand::SeedableRng;
     use rand_xorshift::XorShiftRng;
+
+    use crate::TEST_SEED;
 
     #[test]
     fn test_select() {
@@ -361,7 +368,7 @@ mod tests {
             let size = 1 << log_size;
             for index in 0..size {
                 // Initialize rng in loop to simplify debugging with consistent elements.
-                let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
+                let rng = &mut XorShiftRng::from_seed(TEST_SEED);
                 let mut cs = TestConstraintSystem::new();
 
                 let elements: Vec<_> = (0..size)
@@ -379,7 +386,7 @@ mod tests {
 
                 let path_bits = (0..log_size)
                     .map(|i| {
-                        <Boolean as std::convert::From<AllocatedBit>>::from(
+                        <Boolean as From<AllocatedBit>>::from(
                             AllocatedBit::alloc(cs.namespace(|| format!("index bit {}", i)), {
                                 let bit = ((index >> i) & 1) == 1;
                                 Some(bit)
@@ -412,7 +419,7 @@ mod tests {
             let size = 1 << log_size;
             for index in 0..size {
                 // Initialize rng in loop to simplify debugging with consistent elements.
-                let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
+                let rng = &mut XorShiftRng::from_seed(TEST_SEED);
                 let mut cs = TestConstraintSystem::new();
 
                 let elements: Vec<_> = (0..size - 1)
@@ -437,7 +444,7 @@ mod tests {
 
                 let index_bits = (0..log_size)
                     .map(|i| {
-                        <Boolean as std::convert::From<AllocatedBit>>::from(
+                        <Boolean as From<AllocatedBit>>::from(
                             AllocatedBit::alloc(cs.namespace(|| format!("index bit {}", i)), {
                                 let bit = ((index >> i) & 1) == 1;
                                 Some(bit)

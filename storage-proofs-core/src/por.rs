@@ -1,12 +1,15 @@
+use std::marker::PhantomData;
+
 use anyhow::ensure;
 use filecoin_hashers::{Domain, Hasher};
 use serde::{Deserialize, Serialize};
-use std::marker::PhantomData;
 
-use crate::error::*;
-use crate::merkle::{MerkleProofTrait, MerkleTreeTrait};
-use crate::parameter_cache::ParameterSetMetadata;
-use crate::proof::{NoRequirements, ProofScheme};
+use crate::{
+    error::{Error, Result},
+    merkle::{MerkleProofTrait, MerkleTreeTrait},
+    parameter_cache::ParameterSetMetadata,
+    proof::{NoRequirements, ProofScheme},
+};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DataProof<Proof: MerkleProofTrait> {

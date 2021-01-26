@@ -7,10 +7,11 @@ use rand::{thread_rng, Rng};
 use storage_proofs_core::merkle::{create_base_merkle_tree, BinaryMerkleTree};
 
 fn merkle_benchmark_sha256(c: &mut Criterion) {
-    #[cfg(feature = "big-sector-sizes-bench")]
-    let params = vec![128, 1024, 1_048_576];
-    #[cfg(not(feature = "big-sector-sizes-bench"))]
-    let params = vec![128, 1024];
+    let params = if cfg!(feature = "big-sector-sizes-bench") {
+        vec![128, 1024, 1_048_576]
+    } else {
+        vec![128, 1024]
+    };
 
     c.bench(
         "merkletree-binary",
@@ -34,10 +35,11 @@ fn merkle_benchmark_sha256(c: &mut Criterion) {
 }
 
 fn merkle_benchmark_poseidon(c: &mut Criterion) {
-    #[cfg(feature = "big-sector-sizes-bench")]
-    let params = vec![64, 128, 1024, 1_048_576];
-    #[cfg(not(feature = "big-sector-sizes-bench"))]
-    let params = vec![64, 128, 1024];
+    let params = if cfg!(feature = "big-sector-sizes-bench") {
+        vec![64, 128, 1024, 1_048_576]
+    } else {
+        vec![64, 128, 1024]
+    };
 
     c.bench(
         "merkletree-binary",

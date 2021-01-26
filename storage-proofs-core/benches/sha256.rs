@@ -1,13 +1,18 @@
-use bellperson::bls::Bls12;
-use bellperson::gadgets::boolean::{self, Boolean};
-use bellperson::groth16::*;
-use bellperson::util_cs::bench_cs::BenchCS;
-use bellperson::{Circuit, ConstraintSystem, SynthesisError};
+use bellperson::{
+    bls::Bls12,
+    gadgets::{
+        boolean::{AllocatedBit, Boolean},
+        sha256::sha256 as sha256_circuit,
+    },
+    groth16::{create_random_proof, generate_random_parameters},
+    util_cs::bench_cs::BenchCS,
+    Circuit, ConstraintSystem, SynthesisError,
+};
 use criterion::{
     black_box, criterion_group, criterion_main, Criterion, ParameterizedBenchmark, Throughput,
 };
 use rand::{thread_rng, Rng};
-use sha2::{Digest, Sha256};
+use sha2::Digest;
 
 struct Sha256Example<'a> {
     data: &'a [Option<bool>],
@@ -20,7 +25,7 @@ impl<'a> Circuit<Bls12> for Sha256Example<'a> {
             .iter()
             .enumerate()
             .map(|(i, b)| {
-                Ok(Boolean::from(boolean::AllocatedBit::alloc(
+                Ok(Boolean::from(AllocatedBit::alloc(
                     cs.namespace(|| format!("bit {}", i)),
                     *b,
                 )?))
@@ -29,7 +34,7 @@ impl<'a> Circuit<Bls12> for Sha256Example<'a> {
 
         let cs = cs.namespace(|| "sha256");
 
-        let _res = bellperson::gadgets::sha256::sha256(cs, &data)?;
+        let _res = sha256_circuit(cs, &data)?;
         Ok(())
     }
 }
@@ -45,7 +50,7 @@ fn sha256_benchmark(c: &mut Criterion) {
                 let mut rng = thread_rng();
                 let data: Vec<u8> = (0..*bytes).map(|_| rng.gen()).collect();
 
-                b.iter(|| black_box(Sha256::digest(&data)))
+                b.iter(|| black_box(sha2::Sha256::digest(&data)))
             },
             params,
         )
@@ -61,13 +66,11 @@ fn sha256_raw_benchmark(c: &mut Criterion) {
         ParameterizedBenchmark::new(
             "non-circuit",
             |b, bytes| {
-                use sha2raw::Sha256;
-
                 let mut rng = thread_rng();
                 let data: Vec<u8> = (0..*bytes).map(|_| rng.gen()).collect();
                 let chunks = data.chunks(32).collect::<Vec<_>>();
 
-                b.iter(|| black_box(Sha256::digest(&chunks)))
+                b.iter(|| black_box(sha2raw::Sha256::digest(&chunks)))
             },
             params,
         )

@@ -5,5 +5,5 @@ mod hash;
 mod params;
 mod proof;
 
-pub use self::create_label::*;
-pub use self::proof::{StackedCircuit, StackedCompound};
+pub use create_label::*;
+pub use proof::{StackedCircuit, StackedCompound};

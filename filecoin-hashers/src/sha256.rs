@@ -1,17 +1,22 @@
+use std::fmt::{self, Debug, Formatter};
 use std::hash::Hasher as StdHasher;
 
-use anyhow::{ensure, Result};
-use bellperson::bls::{Bls12, Fr, FrRepr};
-use bellperson::gadgets::{boolean, multipack, num, sha256::sha256 as sha256_circuit};
-use bellperson::{ConstraintSystem, SynthesisError};
+use anyhow::ensure;
+use bellperson::{
+    bls::{Bls12, Fr, FrRepr},
+    gadgets::{boolean::Boolean, multipack, num::AllocatedNum, sha256::sha256 as sha256_circuit},
+    ConstraintSystem, SynthesisError,
+};
 use ff::{Field, PrimeField, PrimeFieldRepr};
-use merkletree::hash::{Algorithm, Hashable};
-use merkletree::merkle::Element;
+use merkletree::{
+    hash::{Algorithm, Hashable},
+    merkle::Element,
+};
 use rand::RngCore;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
-use super::{Domain, HashFunction, Hasher};
+use crate::types::{Domain, HashFunction, Hasher};
 
 #[derive(Default, Copy, Clone, Debug, PartialEq, Eq)]
 pub struct Sha256Hasher {}
@@ -43,8 +48,8 @@ impl StdHasher for Sha256Function {
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Default, Serialize, Deserialize, Hash)]
 pub struct Sha256Domain(pub [u8; 32]);
 
-impl std::fmt::Debug for Sha256Domain {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl Debug for Sha256Domain {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(f, "Sha256Domain({})", hex::encode(&self.0))
     }
 }
@@ -108,7 +113,7 @@ impl Domain for Sha256Domain {
         self.0.to_vec()
     }
 
-    fn try_from_bytes(raw: &[u8]) -> Result<Self> {
+    fn try_from_bytes(raw: &[u8]) -> anyhow::Result<Self> {
         ensure!(
             raw.len() == Sha256Domain::byte_len(),
             "invalid number of bytes"
@@ -119,7 +124,7 @@ impl Domain for Sha256Domain {
         Ok(res)
     }
 
-    fn write_bytes(&self, dest: &mut [u8]) -> Result<()> {
+    fn write_bytes(&self, dest: &mut [u8]) -> anyhow::Result<()> {
         ensure!(
             dest.len() >= Sha256Domain::byte_len(),
             "invalid number of bytes"
@@ -174,14 +179,14 @@ impl HashFunction<Sha256Domain> for Sha256Function {
 
     fn hash_multi_leaf_circuit<Arity, CS: ConstraintSystem<Bls12>>(
         mut cs: CS,
-        leaves: &[num::AllocatedNum<Bls12>],
+        leaves: &[AllocatedNum<Bls12>],
         _height: usize,
-    ) -> std::result::Result<num::AllocatedNum<Bls12>, SynthesisError> {
+    ) -> Result<AllocatedNum<Bls12>, SynthesisError> {
         let mut bits = Vec::with_capacity(leaves.len() * Fr::CAPACITY as usize);
         for (i, leaf) in leaves.iter().enumerate() {
             let mut padded = leaf.to_bits_le(cs.namespace(|| format!("{}_num_into_bits", i)))?;
             while padded.len() % 8 != 0 {
-                padded.push(boolean::Boolean::Constant(false));
+                padded.push(Boolean::Constant(false));
             }
 
             bits.extend(
@@ -196,15 +201,15 @@ impl HashFunction<Sha256Domain> for Sha256Function {
 
     fn hash_leaf_bits_circuit<CS: ConstraintSystem<Bls12>>(
         cs: CS,
-        left: &[boolean::Boolean],
-        right: &[boolean::Boolean],
+        left: &[Boolean],
+        right: &[Boolean],
         _height: usize,
-    ) -> std::result::Result<num::AllocatedNum<Bls12>, SynthesisError> {
-        let mut preimage: Vec<boolean::Boolean> = vec![];
+    ) -> Result<AllocatedNum<Bls12>, SynthesisError> {
+        let mut preimage: Vec<Boolean> = vec![];
 
         let mut left_padded = left.to_vec();
         while left_padded.len() % 8 != 0 {
-            left_padded.push(boolean::Boolean::Constant(false));
+            left_padded.push(Boolean::Constant(false));
         }
 
         preimage.extend(
@@ -216,7 +221,7 @@ impl HashFunction<Sha256Domain> for Sha256Function {
 
         let mut right_padded = right.to_vec();
         while right_padded.len() % 8 != 0 {
-            right_padded.push(boolean::Boolean::Constant(false));
+            right_padded.push(Boolean::Constant(false));
         }
 
         preimage.extend(
@@ -231,8 +236,8 @@ impl HashFunction<Sha256Domain> for Sha256Function {
 
     fn hash_circuit<CS: ConstraintSystem<Bls12>>(
         mut cs: CS,
-        bits: &[boolean::Boolean],
-    ) -> std::result::Result<num::AllocatedNum<Bls12>, SynthesisError> {
+        bits: &[Boolean],
+    ) -> Result<AllocatedNum<Bls12>, SynthesisError> {
         let be_bits = sha256_circuit(cs.namespace(|| "hash"), &bits[..])?;
         let le_bits = be_bits
             .chunks(8)
@@ -245,9 +250,9 @@ impl HashFunction<Sha256Domain> for Sha256Function {
 
     fn hash2_circuit<CS>(
         mut cs: CS,
-        a_num: &num::AllocatedNum<Bls12>,
-        b_num: &num::AllocatedNum<Bls12>,
-    ) -> std::result::Result<num::AllocatedNum<Bls12>, SynthesisError>
+        a_num: &AllocatedNum<Bls12>,
+        b_num: &AllocatedNum<Bls12>,
+    ) -> Result<AllocatedNum<Bls12>, SynthesisError>
     where
         CS: ConstraintSystem<Bls12>,
     {
@@ -255,11 +260,11 @@ impl HashFunction<Sha256Domain> for Sha256Function {
         let a = a_num.to_bits_le(cs.namespace(|| "a_bits"))?;
         let b = b_num.to_bits_le(cs.namespace(|| "b_bits"))?;
 
-        let mut preimage: Vec<boolean::Boolean> = vec![];
+        let mut preimage: Vec<Boolean> = vec![];
 
         let mut a_padded = a.to_vec();
         while a_padded.len() % 8 != 0 {
-            a_padded.push(boolean::Boolean::Constant(false));
+            a_padded.push(Boolean::Constant(false));
         }
 
         preimage.extend(
@@ -271,7 +276,7 @@ impl HashFunction<Sha256Domain> for Sha256Function {
 
         let mut b_padded = b.to_vec();
         while b_padded.len() % 8 != 0 {
-            b_padded.push(boolean::Boolean::Constant(false));
+            b_padded.push(Boolean::Constant(false));
         }
 
         preimage.extend(

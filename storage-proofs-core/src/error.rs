@@ -1,9 +1,10 @@
 use std::any::Any;
 
-use crate::sector::SectorId;
+pub use anyhow::Result;
+
 use bellperson::SynthesisError;
 
-pub use anyhow::Result;
+use crate::sector::SectorId;
 
 /// Custom error types
 #[derive(Debug, thiserror::Error)]
@@ -17,7 +18,7 @@ pub enum Error {
     #[error("{}", _0)]
     Synthesis(#[from] SynthesisError),
     #[error("{}", _0)]
-    Io(#[from] ::std::io::Error),
+    Io(#[from] std::io::Error),
     #[error("tree root and commitment do not match")]
     InvalidCommitment,
     #[error("malformed input")]
@@ -31,7 +32,7 @@ pub enum Error {
     #[error("Cannot (yet) generate inclusion proof for unaligned piece.")]
     UnalignedPiece,
     #[error("{}", _0)]
-    Serde(#[from] serde_json::error::Error),
+    Serde(#[from] serde_json::Error),
     #[error("unclassified error: {}", _0)]
     Unclassified(String),
     #[error("Missing Private Input {0} for sector {1}")]

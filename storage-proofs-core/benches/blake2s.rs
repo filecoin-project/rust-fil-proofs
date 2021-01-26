@@ -1,8 +1,14 @@
-use bellperson::bls::Bls12;
-use bellperson::gadgets::boolean::{self, Boolean};
-use bellperson::groth16::*;
-use bellperson::util_cs::bench_cs::BenchCS;
-use bellperson::{Circuit, ConstraintSystem, SynthesisError};
+use bellperson::{
+    bls::Bls12,
+    gadgets::{
+        blake2s::blake2s as blake2s_circuit,
+        boolean::{AllocatedBit, Boolean},
+    },
+    groth16::{create_random_proof, generate_random_parameters},
+    util_cs::bench_cs::BenchCS,
+    Circuit, ConstraintSystem, SynthesisError,
+};
+use blake2s_simd::blake2s;
 use criterion::{black_box, criterion_group, criterion_main, Criterion, ParameterizedBenchmark};
 use rand::{thread_rng, Rng};
 
@@ -17,7 +23,7 @@ impl<'a> Circuit<Bls12> for Blake2sExample<'a> {
             .iter()
             .enumerate()
             .map(|(i, b)| {
-                Ok(Boolean::from(boolean::AllocatedBit::alloc(
+                Ok(Boolean::from(AllocatedBit::alloc(
                     cs.namespace(|| format!("bit {}", i)),
                     *b,
                 )?))
@@ -26,7 +32,7 @@ impl<'a> Circuit<Bls12> for Blake2sExample<'a> {
 
         let cs = cs.namespace(|| "blake2s");
         let personalization = vec![0u8; 8];
-        let _res = bellperson::gadgets::blake2s::blake2s(cs, &data, &personalization)?;
+        let _res = blake2s_circuit(cs, &data, &personalization)?;
         Ok(())
     }
 }
@@ -42,7 +48,7 @@ fn blake2s_benchmark(c: &mut Criterion) {
                 let mut rng = thread_rng();
                 let data: Vec<u8> = (0..*bytes).map(|_| rng.gen()).collect();
 
-                b.iter(|| black_box(blake2s_simd::blake2s(&data)))
+                b.iter(|| black_box(blake2s(&data)))
             },
             params,
         ),

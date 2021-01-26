@@ -1,17 +1,17 @@
 use std::marker::PhantomData;
 
-use bellperson::bls::{Bls12, Engine, Fr};
-use bellperson::gadgets::{
-    boolean::Boolean,
-    sha256::sha256 as sha256_circuit,
-    {multipack, num},
+use bellperson::{
+    bls::{Bls12, Engine, Fr},
+    gadgets::{boolean::Boolean, multipack, num::AllocatedNum, sha256::sha256 as sha256_circuit},
+    Circuit, ConstraintSystem, SynthesisError,
 };
-use bellperson::{Circuit, ConstraintSystem, SynthesisError};
 use ff::PrimeField;
 use filecoin_hashers::Hasher;
 use storage_proofs_core::{
-    compound_proof::CircuitComponent, error::Result, gadgets::constraint, gadgets::encode,
-    gadgets::por::PoRCircuit, gadgets::uint64, gadgets::variables::Root, merkle::BinaryMerkleTree,
+    compound_proof::CircuitComponent,
+    error::Result,
+    gadgets::{constraint, encode, por::PoRCircuit, uint64::UInt64, variables::Root},
+    merkle::BinaryMerkleTree,
     util::reverse_bit_numbering,
 };
 
@@ -136,7 +136,7 @@ impl<'a, H: 'static + Hasher> Circuit<Bls12> for DrgPoRepCircuit<'a, H> {
         assert_eq!(self.replica_parents_paths.len(), nodes);
         assert_eq!(self.data_nodes_paths.len(), nodes);
 
-        let replica_node_num = num::AllocatedNum::alloc(cs.namespace(|| "replica_id_num"), || {
+        let replica_node_num = AllocatedNum::alloc(cs.namespace(|| "replica_id_num"), || {
             replica_id.ok_or_else(|| SynthesisError::AssignmentMissing)
         })?;
 
@@ -204,7 +204,7 @@ impl<'a, H: 'static + Hasher> Circuit<Bls12> for DrgPoRepCircuit<'a, H> {
                     .iter()
                     .enumerate()
                     .map(|(i, val)| {
-                        let num = num::AllocatedNum::alloc(
+                        let num = AllocatedNum::alloc(
                             cs.namespace(|| format!("parents_{}_num", i)),
                             || {
                                 val.map(Into::into)
@@ -227,7 +227,7 @@ impl<'a, H: 'static + Hasher> Circuit<Bls12> for DrgPoRepCircuit<'a, H> {
                 )?;
 
                 let replica_node_num =
-                    num::AllocatedNum::alloc(cs.namespace(|| "replica_node"), || {
+                    AllocatedNum::alloc(cs.namespace(|| "replica_node"), || {
                         (*replica_node).ok_or_else(|| SynthesisError::AssignmentMissing)
                     })?;
 
@@ -235,7 +235,7 @@ impl<'a, H: 'static + Hasher> Circuit<Bls12> for DrgPoRepCircuit<'a, H> {
 
                 // TODO this should not be here, instead, this should be the leaf Fr in the data_auth_path
                 // TODO also note that we need to change/makesurethat the leaves are the data, instead of hashes of the data
-                let expected = num::AllocatedNum::alloc(cs.namespace(|| "data node"), || {
+                let expected = AllocatedNum::alloc(cs.namespace(|| "data node"), || {
                     data_node.ok_or_else(|| SynthesisError::AssignmentMissing)
                 })?;
 
@@ -253,9 +253,9 @@ fn kdf<E, CS>(
     mut cs: CS,
     id: &[Boolean],
     parents: Vec<Vec<Boolean>>,
-    window_index: Option<uint64::UInt64>,
-    node: Option<uint64::UInt64>,
-) -> Result<num::AllocatedNum<E>, SynthesisError>
+    window_index: Option<UInt64>,
+    node: Option<UInt64>,
+) -> Result<AllocatedNum<E>, SynthesisError>
 where
     E: Engine,
     CS: ConstraintSystem<E>,
@@ -296,5 +296,5 @@ where
         Err(SynthesisError::AssignmentMissing)
     };
 
-    num::AllocatedNum::<E>::alloc(cs.namespace(|| "result_num"), || fr)
+    AllocatedNum::<E>::alloc(cs.namespace(|| "result_num"), || fr)
 }

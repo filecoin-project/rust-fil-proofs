@@ -1,9 +1,8 @@
-use std::fmt;
+use std::fmt::{self, Debug, Formatter};
 
-use anyhow::Result;
+use bellperson::{bls::Engine, gadgets::num::AllocatedNum, ConstraintSystem, SynthesisError};
 
-use bellperson::gadgets::num::AllocatedNum;
-use bellperson::{bls::Engine, ConstraintSystem, SynthesisError};
+use crate::error::Result;
 
 /// Root represents a root commitment which may be either a raw value or an already-allocated number.
 /// This allows subcomponents to depend on roots which may optionally be shared with their parent
@@ -14,8 +13,8 @@ pub enum Root<E: Engine> {
     Val(Option<E::Fr>),
 }
 
-impl<E: Engine> fmt::Debug for Root<E> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl<E: Engine> Debug for Root<E> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
             Root::Var(num) => write!(f, "Root::Var({:?})", num.get_value()),
             Root::Val(val) => write!(f, "Root::Val({:?})", val),

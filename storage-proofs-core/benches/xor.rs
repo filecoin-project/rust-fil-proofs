@@ -1,12 +1,13 @@
-use bellperson::bls::Bls12;
-use bellperson::gadgets::boolean::{self, Boolean};
-use bellperson::groth16::*;
-use bellperson::util_cs::bench_cs::BenchCS;
-use bellperson::{Circuit, ConstraintSystem, SynthesisError};
+use bellperson::{
+    bls::Bls12,
+    gadgets::boolean::{AllocatedBit, Boolean},
+    groth16::{create_random_proof, generate_random_parameters},
+    util_cs::bench_cs::BenchCS,
+    Circuit, ConstraintSystem, SynthesisError,
+};
 use criterion::{black_box, criterion_group, criterion_main, Criterion, ParameterizedBenchmark};
 use rand::{thread_rng, Rng};
-use storage_proofs_core::crypto::xor;
-use storage_proofs_core::gadgets;
+use storage_proofs_core::{crypto::xor, gadgets::xor::xor as xor_circuit};
 
 struct XorExample<'a> {
     key: &'a [Option<bool>],
@@ -20,7 +21,7 @@ impl<'a> Circuit<Bls12> for XorExample<'a> {
             .iter()
             .enumerate()
             .map(|(i, b)| {
-                Ok(Boolean::from(boolean::AllocatedBit::alloc(
+                Ok(Boolean::from(AllocatedBit::alloc(
                     cs.namespace(|| format!("key_bit {}", i)),
                     *b,
                 )?))
@@ -31,7 +32,7 @@ impl<'a> Circuit<Bls12> for XorExample<'a> {
             .iter()
             .enumerate()
             .map(|(i, b)| {
-                Ok(Boolean::from(boolean::AllocatedBit::alloc(
+                Ok(Boolean::from(AllocatedBit::alloc(
                     cs.namespace(|| format!("data_bit {}", i)),
                     *b,
                 )?))
@@ -39,7 +40,7 @@ impl<'a> Circuit<Bls12> for XorExample<'a> {
             .collect::<Result<Vec<_>, SynthesisError>>()?;
 
         let mut cs = cs.namespace(|| "xor");
-        let _res = gadgets::xor::xor(&mut cs, &key, &data)?;
+        let _res = xor_circuit(&mut cs, &key, &data)?;
 
         Ok(())
     }

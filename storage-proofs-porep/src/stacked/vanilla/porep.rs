@@ -8,11 +8,13 @@ use storage_proofs_core::{
     Data,
 };
 
-use super::{
-    params::{PersistentAux, PublicParams, Tau, TemporaryAux},
-    proof::StackedDrg,
+use crate::{
+    stacked::vanilla::{
+        params::{PersistentAux, PublicParams, Tau, TemporaryAux},
+        proof::StackedDrg,
+    },
+    PoRep,
 };
-use crate::PoRep;
 
 impl<'a, 'c, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> PoRep<'a, Tree::Hasher, G>
     for StackedDrg<'a, Tree, G>

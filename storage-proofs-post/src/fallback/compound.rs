@@ -1,8 +1,10 @@
 use std::marker::PhantomData;
 
 use anyhow::{anyhow, ensure};
-use bellperson::bls::{Bls12, Fr};
-use bellperson::Circuit;
+use bellperson::{
+    bls::{Bls12, Fr},
+    Circuit,
+};
 use filecoin_hashers::Hasher;
 use sha2::{Digest, Sha256};
 use storage_proofs_core::{
@@ -16,8 +18,7 @@ use storage_proofs_core::{
     util::NODE_SIZE,
 };
 
-use super::circuit::Sector;
-use crate::fallback::{generate_leaf_challenge_inner, FallbackPoSt, FallbackPoStCircuit};
+use crate::fallback::{generate_leaf_challenge_inner, FallbackPoSt, FallbackPoStCircuit, Sector};
 
 pub struct FallbackPoStCompound<Tree>
 where

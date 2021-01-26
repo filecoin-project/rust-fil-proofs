@@ -1,10 +1,14 @@
+pub use merkletree::store::StoreConfig;
+pub use storage_proofs_core::merkle::{MerkleProof, MerkleTreeTrait};
+pub use storage_proofs_porep::stacked::{Labels, PersistentAux, TemporaryAux};
+
 use filecoin_hashers::Hasher;
 use serde::{Deserialize, Serialize};
-use storage_proofs_core::sector::*;
+use storage_proofs_core::{merkle::BinaryMerkleTree, sector::SectorId};
 use storage_proofs_porep::stacked;
-use storage_proofs_post::fallback::*;
+use storage_proofs_post::fallback;
 
-use crate::constants::*;
+use crate::constants::DefaultPieceHasher;
 
 mod bytes_amount;
 mod piece_info;
@@ -17,29 +21,22 @@ mod public_replica_info;
 mod sector_class;
 mod sector_size;
 
-pub use self::bytes_amount::*;
-pub use self::piece_info::*;
-pub use self::porep_config::*;
-pub use self::porep_proof_partitions::*;
-pub use self::post_config::*;
-pub use self::post_proof_partitions::*;
-pub use self::private_replica_info::*;
-pub use self::public_replica_info::*;
-pub use self::sector_class::*;
-pub use self::sector_size::*;
+pub use bytes_amount::*;
+pub use piece_info::*;
+pub use porep_config::*;
+pub use porep_proof_partitions::*;
+pub use post_config::*;
+pub use post_proof_partitions::*;
+pub use private_replica_info::*;
+pub use public_replica_info::*;
+pub use sector_class::*;
+pub use sector_size::*;
 
 pub type Commitment = [u8; 32];
 pub type ChallengeSeed = [u8; 32];
-pub use stacked::PersistentAux;
-pub use stacked::TemporaryAux;
 pub type ProverId = [u8; 32];
 pub type Ticket = [u8; 32];
-
-pub use storage_proofs_porep::stacked::Labels;
-pub type DataTree = storage_proofs_core::merkle::BinaryMerkleTree<DefaultPieceHasher>;
-
-pub use storage_proofs_core::merkle::MerkleProof;
-pub use storage_proofs_core::merkle::MerkleTreeTrait;
+pub type DataTree = BinaryMerkleTree<DefaultPieceHasher>;
 
 /// Arity for oct trees, used for comm_r_last.
 pub const OCT_ARITY: usize = 8;
@@ -53,7 +50,7 @@ pub struct SealPreCommitOutput {
     pub comm_d: Commitment,
 }
 
-pub type VanillaSealProof<Tree> = storage_proofs_porep::stacked::Proof<Tree, DefaultPieceHasher>;
+pub type VanillaSealProof<Tree> = stacked::Proof<Tree, DefaultPieceHasher>;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct SealCommitPhase1Output<Tree: MerkleTreeTrait> {
@@ -74,8 +71,6 @@ pub struct SealCommitOutput {
     pub proof: Vec<u8>,
 }
 
-pub use merkletree::store::StoreConfig;
-
 #[derive(Debug, Serialize, Deserialize)]
 pub struct SealPreCommitPhase1Output<Tree: MerkleTreeTrait> {
     #[serde(bound(
@@ -88,7 +83,7 @@ pub struct SealPreCommitPhase1Output<Tree: MerkleTreeTrait> {
 }
 
 pub type SnarkProof = Vec<u8>;
-pub type VanillaProof<Tree> = Proof<<Tree as MerkleTreeTrait>::Proof>;
+pub type VanillaProof<Tree> = fallback::Proof<<Tree as MerkleTreeTrait>::Proof>;
 
 // This FallbackPoStSectorProof is used during Fallback PoSt, but
 // contains only Vanilla proof information and is not a full Fallback

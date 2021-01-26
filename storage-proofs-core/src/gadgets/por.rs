@@ -2,23 +2,28 @@ use std::convert::TryFrom;
 use std::marker::PhantomData;
 
 use anyhow::ensure;
-use bellperson::bls::{Bls12, Fr, FrRepr};
-use bellperson::gadgets::boolean::{AllocatedBit, Boolean};
-use bellperson::gadgets::{multipack, num};
-use bellperson::{Circuit, ConstraintSystem, SynthesisError};
+use bellperson::{
+    bls::{Bls12, Fr, FrRepr},
+    gadgets::{
+        boolean::{AllocatedBit, Boolean},
+        multipack,
+        num::AllocatedNum,
+    },
+    Circuit, ConstraintSystem, SynthesisError,
+};
 use ff::PrimeField;
 use filecoin_hashers::{HashFunction, Hasher, PoseidonArity};
 use generic_array::typenum::Unsigned;
 
-use crate::compound_proof::{CircuitComponent, CompoundProof};
-use crate::error::Result;
-use crate::gadgets::constraint;
-use crate::gadgets::insertion::insert;
-use crate::gadgets::variables::Root;
-use crate::merkle::{base_path_length, MerkleProofTrait, MerkleTreeTrait};
-use crate::parameter_cache::{CacheableParameters, ParameterSetMetadata};
-use crate::por::PoR;
-use crate::proof::ProofScheme;
+use crate::{
+    compound_proof::{CircuitComponent, CompoundProof},
+    error::Result,
+    gadgets::{constraint, insertion::insert, variables::Root},
+    merkle::{base_path_length, MerkleProofTrait, MerkleTreeTrait},
+    parameter_cache::{CacheableParameters, ParameterSetMetadata},
+    por::PoR,
+    proof::ProofScheme,
+};
 
 /// Proof of retrievability.
 ///
@@ -131,8 +136,8 @@ impl<H: Hasher, Arity: 'static + PoseidonArity> SubPath<H, Arity> {
     fn synthesize<CS: ConstraintSystem<Bls12>>(
         self,
         mut cs: CS,
-        mut cur: num::AllocatedNum<Bls12>,
-    ) -> Result<(num::AllocatedNum<Bls12>, Vec<Boolean>), SynthesisError> {
+        mut cur: AllocatedNum<Bls12>,
+    ) -> Result<(AllocatedNum<Bls12>, Vec<Boolean>), SynthesisError> {
         let arity = Arity::to_usize();
 
         if arity == 0 {
@@ -169,7 +174,7 @@ impl<H: Hasher, Arity: 'static + PoseidonArity> SubPath<H, Arity> {
                 .iter()
                 .enumerate()
                 .map(|(i, elt)| {
-                    num::AllocatedNum::alloc(cs.namespace(|| format!("path element {}", i)), || {
+                    AllocatedNum::alloc(cs.namespace(|| format!("path element {}", i)), || {
                         elt.ok_or_else(|| SynthesisError::AssignmentMissing)
                     })
                 })
@@ -457,9 +462,9 @@ pub fn por_no_challenge_input<Tree, CS>(
     cs: &mut CS,
     // Least significant bit first, most significant bit last.
     challenge_bits: Vec<AllocatedBit>,
-    leaf: num::AllocatedNum<Bls12>,
-    path_values: Vec<Vec<num::AllocatedNum<Bls12>>>,
-    root: num::AllocatedNum<Bls12>,
+    leaf: AllocatedNum<Bls12>,
+    path_values: Vec<Vec<AllocatedNum<Bls12>>>,
+    root: AllocatedNum<Bls12>,
 ) -> Result<(), SynthesisError>
 where
     Tree: MerkleTreeTrait,
@@ -511,46 +516,43 @@ where
 mod tests {
     use super::*;
 
-    use bellperson::gadgets::multipack;
+    use bellperson::util_cs::{metric_cs::MetricCS, test_cs::TestConstraintSystem};
     use ff::Field;
+    use filecoin_hashers::{
+        blake2s::Blake2sHasher, poseidon::PoseidonHasher, sha256::Sha256Hasher, Domain,
+    };
     use fr32::{bytes_into_fr, fr_into_bytes};
-    use generic_array::typenum;
+    use generic_array::typenum::{U0, U2, U4, U8};
     use merkletree::store::VecStore;
     use pretty_assertions::assert_eq;
     use rand::SeedableRng;
     use rand_xorshift::XorShiftRng;
 
-    use crate::compound_proof;
-    use crate::merkle::{
-        create_base_merkle_tree, generate_tree, get_base_tree_count, MerkleProofTrait,
-        MerkleTreeWrapper, ResTree,
-    };
-    use crate::por;
-    use crate::proof::NoRequirements;
-    use crate::proof::ProofScheme;
-    use crate::util::data_at_node;
-    use bellperson::util_cs::metric_cs::MetricCS;
-    use bellperson::util_cs::test_cs::TestConstraintSystem;
-    use filecoin_hashers::{
-        blake2s::Blake2sHasher, poseidon::PoseidonHasher, sha256::Sha256Hasher, Domain, Hasher,
+    use crate::{
+        compound_proof,
+        merkle::{
+            create_base_merkle_tree, generate_tree, get_base_tree_count, MerkleTreeWrapper, ResTree,
+        },
+        por,
+        proof::NoRequirements,
+        util::data_at_node,
+        TEST_SEED,
     };
 
-    type TestTree<H, A> =
-        MerkleTreeWrapper<H, VecStore<<H as Hasher>::Domain>, A, typenum::U0, typenum::U0>;
+    type TestTree<H, A> = MerkleTreeWrapper<H, VecStore<<H as Hasher>::Domain>, A, U0, U0>;
 
-    type TestTree2<H, A, B> =
-        MerkleTreeWrapper<H, VecStore<<H as Hasher>::Domain>, A, B, typenum::U0>;
+    type TestTree2<H, A, B> = MerkleTreeWrapper<H, VecStore<<H as Hasher>::Domain>, A, B, U0>;
 
     type TestTree3<H, A, B, C> = MerkleTreeWrapper<H, VecStore<<H as Hasher>::Domain>, A, B, C>;
 
     #[test]
     #[ignore] // Slow test – run only when compiled for release.
     fn por_test_compound_poseidon_base_8() {
-        por_compound::<TestTree<PoseidonHasher, typenum::U8>>();
+        por_compound::<TestTree<PoseidonHasher, U8>>();
     }
 
     fn por_compound<Tree: 'static + MerkleTreeTrait>() {
-        let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
+        let rng = &mut XorShiftRng::from_seed(TEST_SEED);
 
         let leaves = 64 * get_base_tree_count::<Tree>();
 
@@ -610,88 +612,82 @@ mod tests {
 
     #[test]
     fn test_por_circuit_blake2s_base_2() {
-        test_por_circuit::<TestTree<Blake2sHasher, typenum::U2>>(3, 129_135);
+        test_por_circuit::<TestTree<Blake2sHasher, U2>>(3, 129_135);
     }
 
     #[test]
     fn test_por_circuit_sha256_base_2() {
-        test_por_circuit::<TestTree<Sha256Hasher, typenum::U2>>(3, 272_295);
+        test_por_circuit::<TestTree<Sha256Hasher, U2>>(3, 272_295);
     }
 
     #[test]
     fn test_por_circuit_poseidon_base_2() {
-        test_por_circuit::<TestTree<PoseidonHasher, typenum::U2>>(3, 1_887);
+        test_por_circuit::<TestTree<PoseidonHasher, U2>>(3, 1_887);
     }
 
     #[test]
     fn test_por_circuit_blake2s_base_4() {
-        test_por_circuit::<TestTree<Blake2sHasher, typenum::U4>>(3, 130_296);
+        test_por_circuit::<TestTree<Blake2sHasher, U4>>(3, 130_296);
     }
 
     #[test]
     fn test_por_circuit_sha256_base_4() {
-        test_por_circuit::<TestTree<Sha256Hasher, typenum::U4>>(3, 216_258);
+        test_por_circuit::<TestTree<Sha256Hasher, U4>>(3, 216_258);
     }
 
     #[test]
     fn test_por_circuit_poseidon_base_4() {
-        test_por_circuit::<TestTree<PoseidonHasher, typenum::U4>>(3, 1_164);
+        test_por_circuit::<TestTree<PoseidonHasher, U4>>(3, 1_164);
     }
 
     #[test]
     fn test_por_circuit_blake2s_base_8() {
-        test_por_circuit::<TestTree<Blake2sHasher, typenum::U8>>(3, 174_503);
+        test_por_circuit::<TestTree<Blake2sHasher, U8>>(3, 174_503);
     }
 
     #[test]
     fn test_por_circuit_sha256_base_8() {
-        test_por_circuit::<TestTree<Sha256Hasher, typenum::U8>>(3, 250_987);
+        test_por_circuit::<TestTree<Sha256Hasher, U8>>(3, 250_987);
     }
 
     #[test]
     fn test_por_circuit_poseidon_base_8() {
-        test_por_circuit::<TestTree<PoseidonHasher, typenum::U8>>(3, 1_063);
+        test_por_circuit::<TestTree<PoseidonHasher, U8>>(3, 1_063);
     }
 
     #[test]
     fn test_por_circuit_poseidon_sub_8_2() {
-        test_por_circuit::<TestTree2<PoseidonHasher, typenum::U8, typenum::U2>>(3, 1_377);
+        test_por_circuit::<TestTree2<PoseidonHasher, U8, U2>>(3, 1_377);
     }
 
     #[test]
     fn test_por_circuit_poseidon_top_8_4_2() {
-        test_por_circuit::<TestTree3<PoseidonHasher, typenum::U8, typenum::U4, typenum::U2>>(
-            3, 1_764,
-        );
+        test_por_circuit::<TestTree3<PoseidonHasher, U8, U4, U2>>(3, 1_764);
     }
 
     #[test]
     fn test_por_circuit_poseidon_top_8_8() {
         // This is the shape we want for 32GiB sectors.
-        test_por_circuit::<TestTree2<PoseidonHasher, typenum::U8, typenum::U8>>(3, 1_593);
+        test_por_circuit::<TestTree2<PoseidonHasher, U8, U8>>(3, 1_593);
     }
     #[test]
     fn test_por_circuit_poseidon_top_8_8_2() {
         // This is the shape we want for 64GiB secotrs.
-        test_por_circuit::<TestTree3<PoseidonHasher, typenum::U8, typenum::U8, typenum::U2>>(
-            3, 1_907,
-        );
+        test_por_circuit::<TestTree3<PoseidonHasher, U8, U8, U2>>(3, 1_907);
     }
 
     #[test]
     fn test_por_circuit_poseidon_top_8_2_4() {
         // We can handle top-heavy trees with a non-zero subtree arity.
         // These should never be produced, though.
-        test_por_circuit::<TestTree3<PoseidonHasher, typenum::U8, typenum::U2, typenum::U4>>(
-            3, 1_764,
-        );
+        test_por_circuit::<TestTree3<PoseidonHasher, U8, U2, U4>>(3, 1_764);
     }
 
     fn test_por_circuit<Tree: 'static + MerkleTreeTrait>(
         num_inputs: usize,
         num_constraints: usize,
     ) {
-        let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
+        let rng = &mut XorShiftRng::from_seed(TEST_SEED);
 
         // Ensure arity will evenly fill tree.
         let leaves = 64 * get_base_tree_count::<Tree>();
@@ -720,11 +716,11 @@ mod tests {
             assert!(p.verify());
 
             // create a non circuit proof
-            let proof = por::PoR::<ResTree<Tree>>::prove(&pub_params, &pub_inputs, &priv_inputs)
+            let proof = PoR::<ResTree<Tree>>::prove(&pub_params, &pub_inputs, &priv_inputs)
                 .expect("proving failed");
 
             // make sure it verifies
-            let is_valid = por::PoR::<ResTree<Tree>>::verify(&pub_params, &pub_inputs, &proof)
+            let is_valid = PoR::<ResTree<Tree>>::verify(&pub_params, &pub_inputs, &proof)
                 .expect("verification failed");
             assert!(is_valid, "failed to verify por proof");
 
@@ -782,50 +778,47 @@ mod tests {
     #[ignore] // Slow test – run only when compiled for release.
     #[test]
     fn test_private_por_compound_poseidon_base_2() {
-        private_por_test_compound::<TestTree<PoseidonHasher, typenum::U2>>();
+        private_por_test_compound::<TestTree<PoseidonHasher, U2>>();
     }
 
     #[ignore] // Slow test – run only when compiled for release.
     #[test]
     fn test_private_por_compound_poseidon_base_4() {
-        private_por_test_compound::<TestTree<PoseidonHasher, typenum::U4>>();
+        private_por_test_compound::<TestTree<PoseidonHasher, U4>>();
     }
 
     #[ignore] // Slow test – run only when compiled for release.
     #[test]
     fn test_private_por_compound_poseidon_sub_8_2() {
-        private_por_test_compound::<TestTree2<PoseidonHasher, typenum::U8, typenum::U2>>();
+        private_por_test_compound::<TestTree2<PoseidonHasher, U8, U2>>();
     }
 
     #[ignore] // Slow test – run only when compiled for release.
     #[test]
     fn test_private_por_compound_poseidon_top_8_4_2() {
-        private_por_test_compound::<TestTree3<PoseidonHasher, typenum::U8, typenum::U4, typenum::U2>>(
-        );
+        private_por_test_compound::<TestTree3<PoseidonHasher, U8, U4, U2>>();
     }
 
     #[ignore] // Slow test – run only when compiled for release.
     #[test]
     fn test_private_por_compound_poseidon_top_8_8() {
-        private_por_test_compound::<TestTree2<PoseidonHasher, typenum::U8, typenum::U8>>();
+        private_por_test_compound::<TestTree2<PoseidonHasher, U8, U8>>();
     }
 
     #[ignore] // Slow test – run only when compiled for release.
     #[test]
     fn test_private_por_compound_poseidon_top_8_8_2() {
-        private_por_test_compound::<TestTree3<PoseidonHasher, typenum::U8, typenum::U8, typenum::U2>>(
-        );
+        private_por_test_compound::<TestTree3<PoseidonHasher, U8, U8, U2>>();
     }
 
     #[ignore] // Slow test – run only when compiled for release.
     #[test]
     fn test_private_por_compound_poseidon_top_8_2_4() {
-        private_por_test_compound::<TestTree3<PoseidonHasher, typenum::U8, typenum::U2, typenum::U4>>(
-        );
+        private_por_test_compound::<TestTree3<PoseidonHasher, U8, U2, U4>>();
     }
 
     fn private_por_test_compound<Tree: 'static + MerkleTreeTrait>() {
-        let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
+        let rng = &mut XorShiftRng::from_seed(TEST_SEED);
 
         // Ensure arity will evenly fill tree.
         let leaves = 64 * get_base_tree_count::<Tree>();
@@ -929,21 +922,21 @@ mod tests {
 
     #[test]
     fn test_private_por_input_circuit_poseidon_binary() {
-        test_private_por_input_circuit::<TestTree<PoseidonHasher, typenum::U2>>(1_886);
+        test_private_por_input_circuit::<TestTree<PoseidonHasher, U2>>(1_886);
     }
 
     #[test]
     fn test_private_por_input_circuit_poseidon_quad() {
-        test_private_por_input_circuit::<TestTree<PoseidonHasher, typenum::U4>>(1_163);
+        test_private_por_input_circuit::<TestTree<PoseidonHasher, U4>>(1_163);
     }
 
     #[test]
     fn test_private_por_input_circuit_poseidon_oct() {
-        test_private_por_input_circuit::<TestTree<PoseidonHasher, typenum::U8>>(1_062);
+        test_private_por_input_circuit::<TestTree<PoseidonHasher, U8>>(1_062);
     }
 
     fn test_private_por_input_circuit<Tree: MerkleTreeTrait>(num_constraints: usize) {
-        let rng = &mut XorShiftRng::from_seed(crate::TEST_SEED);
+        let rng = &mut XorShiftRng::from_seed(TEST_SEED);
 
         let leaves = 64 * get_base_tree_count::<Tree>();
         for i in 0..leaves {
@@ -978,12 +971,12 @@ mod tests {
             );
 
             // create a non circuit proof
-            let proof = por::PoR::<Tree>::prove(&pub_params, &pub_inputs, &priv_inputs)
-                .expect("proving failed");
+            let proof =
+                PoR::<Tree>::prove(&pub_params, &pub_inputs, &priv_inputs).expect("proving failed");
 
             // make sure it verifies
-            let is_valid = por::PoR::<Tree>::verify(&pub_params, &pub_inputs, &proof)
-                .expect("verification failed");
+            let is_valid =
+                PoR::<Tree>::verify(&pub_params, &pub_inputs, &proof).expect("verification failed");
             assert!(is_valid, "failed to verify por proof");
 
             // -- Circuit

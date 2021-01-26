@@ -1,11 +1,12 @@
 use anyhow::{ensure, Result};
-use storage_proofs_core::api_version::ApiVersion;
-use storage_proofs_core::proof::ProofScheme;
+use storage_proofs_core::{api_version::ApiVersion, proof::ProofScheme};
 use storage_proofs_porep::stacked::{self, LayerChallenges, StackedDrg};
-use storage_proofs_post::fallback;
+use storage_proofs_post::fallback::{self, FallbackPoSt};
 
-use crate::constants::*;
-use crate::types::{MerkleTreeTrait, PaddedBytesAmount, PoStConfig};
+use crate::{
+    constants::{DefaultPieceHasher, DRG_DEGREE, EXP_DEGREE, LAYERS, POREP_MINIMUM_CHALLENGES},
+    types::{MerkleTreeTrait, PaddedBytesAmount, PoStConfig},
+};
 
 type WinningPostSetupParams = fallback::SetupParams;
 pub type WinningPostPublicParams = fallback::PublicParams;
@@ -30,7 +31,7 @@ pub fn public_params<Tree: 'static + MerkleTreeTrait>(
 pub fn winning_post_public_params<Tree: 'static + MerkleTreeTrait>(
     post_config: &PoStConfig,
 ) -> Result<WinningPostPublicParams> {
-    fallback::FallbackPoSt::<Tree>::setup(&winning_post_setup_params(&post_config)?)
+    FallbackPoSt::<Tree>::setup(&winning_post_setup_params(&post_config)?)
 }
 
 pub fn winning_post_setup_params(post_config: &PoStConfig) -> Result<WinningPostSetupParams> {
@@ -61,7 +62,7 @@ pub fn winning_post_setup_params(post_config: &PoStConfig) -> Result<WinningPost
 pub fn window_post_public_params<Tree: 'static + MerkleTreeTrait>(
     post_config: &PoStConfig,
 ) -> Result<WindowPostPublicParams> {
-    fallback::FallbackPoSt::<Tree>::setup(&window_post_setup_params(&post_config))
+    FallbackPoSt::<Tree>::setup(&window_post_setup_params(&post_config))
 }
 
 pub fn window_post_setup_params(post_config: &PoStConfig) -> WindowPostSetupParams {
@@ -132,8 +133,7 @@ fn select_challenges(
 mod tests {
     use super::*;
 
-    use crate::types::PoStType;
-    use storage_proofs_core::api_version::ApiVersion;
+    use crate::{DefaultOctLCTree, PoRepProofPartitions, PoStType};
 
     #[test]
     fn partition_layer_challenges_test() {
@@ -143,7 +143,7 @@ mod tests {
                 .challenges_count_all()
         };
         // Update to ensure all supported PoRepProofPartitions options are represented here.
-        assert_eq!(6, f(usize::from(crate::PoRepProofPartitions(2))));
+        assert_eq!(6, f(usize::from(PoRepProofPartitions(2))));
 
         assert_eq!(12, f(1));
         assert_eq!(6, f(2));

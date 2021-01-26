@@ -5,19 +5,29 @@ use std::path::{Path, PathBuf};
 use anyhow::Context;
 use filecoin_hashers::{Domain, Hasher};
 use fr32::bytes_into_fr_repr_safe;
-use generic_array::typenum::{self, Unsigned};
+use generic_array::typenum::{Unsigned, U2};
 use log::trace;
-use merkletree::merkle::get_merkle_tree_leafs;
-use merkletree::store::{DiskStore, Store, StoreConfig};
+use merkletree::{
+    merkle::get_merkle_tree_leafs,
+    store::{DiskStore, Store, StoreConfig},
+};
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use storage_proofs_core::{
-    api_version::ApiVersion, drgraph::Graph, error::Result, merkle::*,
-    parameter_cache::ParameterSetMetadata, util::data_at_node,
+    api_version::ApiVersion,
+    drgraph::Graph,
+    error::Result,
+    merkle::{
+        create_disk_tree, create_lc_tree, get_base_tree_count, split_config,
+        split_config_and_replica, BinaryMerkleTree, DiskTree, LCTree, MerkleProof,
+        MerkleProofTrait, MerkleTreeTrait,
+    },
+    parameter_cache::ParameterSetMetadata,
+    util::data_at_node,
 };
 
-use super::{
-    column::Column, column_proof::ColumnProof, graph::StackedBucketGraph, EncodingProof,
-    LabelingProof, LayerChallenges,
+use crate::stacked::vanilla::{
+    Column, ColumnProof, EncodingProof, LabelingProof, LayerChallenges, StackedBucketGraph,
 };
 
 pub const BINARY_ARITY: usize = 2;
@@ -133,10 +143,10 @@ pub struct PrivateInputs<Tree: MerkleTreeTrait, G: Hasher> {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Proof<Tree: MerkleTreeTrait, G: Hasher> {
     #[serde(bound(
-        serialize = "MerkleProof<G, typenum::U2>: Serialize",
-        deserialize = "MerkleProof<G, typenum::U2>: Deserialize<'de>"
+        serialize = "MerkleProof<G, U2>: Serialize",
+        deserialize = "MerkleProof<G, U2>: Deserialize<'de>"
     ))]
-    pub comm_d_proofs: MerkleProof<G, typenum::U2>,
+    pub comm_d_proofs: MerkleProof<G, U2>,
     #[serde(bound(
         serialize = "MerkleProof<Tree::Hasher, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>: Serialize",
         deserialize = "MerkleProof<Tree::Hasher, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>: Deserialize<'de>"
@@ -749,8 +759,6 @@ pub fn generate_replica_id<H: Hasher, T: AsRef<[u8]>>(
     comm_d: T,
     porep_seed: &[u8; 32],
 ) -> H::Domain {
-    use sha2::{Digest, Sha256};
-
     let hash = Sha256::new()
         .chain(prover_id)
         .chain(&sector_id.to_be_bytes()[..])

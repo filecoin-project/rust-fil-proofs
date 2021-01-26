@@ -3,10 +3,10 @@ use std::marker::PhantomData;
 use anyhow::ensure;
 use bellperson::bls::{Bls12, Fr};
 use bellperson::{Circuit, ConstraintSystem, SynthesisError};
-use generic_array::typenum;
+use generic_array::typenum::U2;
 use storage_proofs_core::{
     compound_proof::{CircuitComponent, CompoundProof},
-    drgraph,
+    drgraph::graph_height,
     error::Result,
     gadgets::por::PoRCompound,
     merkle::MerkleTreeTrait,
@@ -16,7 +16,7 @@ use storage_proofs_core::{
     util::NODE_SIZE,
 };
 
-use super::{RationalPoSt, RationalPoStCircuit};
+use crate::rational::{RationalPoSt, RationalPoStCircuit};
 
 pub struct RationalPoStCompound<Tree>
 where
@@ -130,8 +130,7 @@ where
         pub_params: &<RationalPoSt<'a, Tree> as ProofScheme<'a>>::PublicParams,
     ) -> RationalPoStCircuit<Tree> {
         let challenges_count = pub_params.challenges_count;
-        let height =
-            drgraph::graph_height::<typenum::U2>(pub_params.sector_size as usize / NODE_SIZE);
+        let height = graph_height::<U2>(pub_params.sector_size as usize / NODE_SIZE);
 
         let comm_rs = vec![None; challenges_count];
         let comm_cs = vec![None; challenges_count];

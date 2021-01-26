@@ -1,6 +1,9 @@
 #![allow(clippy::many_single_char_names)]
 
+use byteorder::{ByteOrder, BE};
 use fake_simd::u32x4;
+
+use crate::consts::{BLOCK_LEN, K32X4};
 
 /// Not an intrinsic, but works like an unaligned load.
 #[inline]
@@ -121,9 +124,7 @@ fn sha256_digest_round_x2(cdgh: u32x4, abef: u32x4, wk: u32x4) -> u32x4 {
 
 /// Process a block with the SHA-256 algorithm.
 fn sha256_digest_block_u32(state: &mut [u32; 8], block: &[u32; 16]) {
-    use crate::consts;
-
-    let k = &consts::K32X4;
+    let k = &K32X4;
 
     macro_rules! schedule {
         ($v0:expr, $v1:expr, $v2:expr, $v3:expr) => {
@@ -282,9 +283,6 @@ fn sha256_digest_block_u32(state: &mut [u32; 8], block: &[u32; 16]) {
 ///  support in LLVM (and GCC, etc.).
 #[inline]
 pub fn compress256(state: &mut [u32; 8], blocks: &[&[u8]]) {
-    use crate::consts::BLOCK_LEN;
-    use byteorder::{ByteOrder, BE};
-
     let mut block_u32 = [0u32; BLOCK_LEN];
 
     for block in blocks.chunks(2) {

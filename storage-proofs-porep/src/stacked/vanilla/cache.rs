@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
-use std::fs::File;
+use std::fs::{remove_file, File};
+use std::io;
 use std::path::{Path, PathBuf};
 
 use anyhow::{bail, ensure, Context};
@@ -8,20 +9,18 @@ use filecoin_hashers::Hasher;
 use lazy_static::lazy_static;
 use log::{info, trace};
 use mapr::{Mmap, MmapOptions};
-use rayon::prelude::*;
+use rayon::prelude::{IndexedParallelIterator, ParallelIterator, ParallelSliceMut};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-
 use storage_proofs_core::{
-    drgraph::Graph,
-    drgraph::BASE_DEGREE,
+    drgraph::{Graph, BASE_DEGREE},
     error::Result,
     parameter_cache::{with_exclusive_lock, LockedFile, ParameterSetMetadata, VERSION},
-    settings,
+    settings::SETTINGS,
     util::NODE_SIZE,
 };
 
-use super::graph::{StackedGraph, DEGREE};
+use crate::stacked::vanilla::graph::{StackedGraph, DEGREE};
 
 /// u32 = 4 bytes
 const NODE_BYTES: usize = 4;
@@ -162,8 +161,8 @@ impl ParentCache {
             match Self::generate(len, cache_entries, graph, &path) {
                 Ok(c) => Ok(c),
                 Err(err) => {
-                    match err.downcast::<std::io::Error>() {
-                        Ok(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
+                    match err.downcast::<io::Error>() {
+                        Ok(error) if error.kind() == io::ErrorKind::AlreadyExists => {
                             // cache was written from another process, just read it
                             Self::open(len, cache_entries, graph, &path)
                         }
@@ -201,14 +200,14 @@ impl ParentCache {
 
                     (
                         None,
-                        settings::SETTINGS.verify_cache,
+                        SETTINGS.verify_cache,
                         false, // not production since not in manifest
                         "".to_string(),
                     )
                 }
                 Some(pcd) => (
                     Some(pcd),
-                    settings::SETTINGS.verify_cache,
+                    SETTINGS.verify_cache,
                     true, // is_production since it exists in the manifest
                     pcd.digest.clone(),
                 ),
@@ -260,7 +259,7 @@ impl ParentCache {
                         path.display()
                     );
                     // delete invalid cache
-                    std::fs::remove_file(path)?;
+                    remove_file(path)?;
                     ensure!(
                         Self::generate(len, graph.size() as u32, graph, path).is_ok(),
                         "Failed to generate parent cache"
@@ -394,7 +393,7 @@ impl ParentCache {
 }
 
 fn parent_cache_dir_name() -> String {
-    settings::SETTINGS.parent_cache.clone()
+    SETTINGS.parent_cache.clone()
 }
 
 fn parent_cache_id(path: &PathBuf) -> String {
@@ -436,9 +435,10 @@ where
 mod tests {
     use super::*;
 
-    use crate::stacked::vanilla::graph::{StackedBucketGraph, EXP_DEGREE};
     use filecoin_hashers::poseidon::PoseidonHasher;
     use storage_proofs_core::api_version::ApiVersion;
+
+    use crate::stacked::vanilla::graph::{StackedBucketGraph, EXP_DEGREE};
 
     #[test]
     fn test_read_full_range() {

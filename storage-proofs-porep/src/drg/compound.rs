@@ -5,7 +5,6 @@ use bellperson::bls::{Bls12, Fr};
 use bellperson::Circuit;
 use filecoin_hashers::Hasher;
 use generic_array::typenum;
-
 use storage_proofs_core::{
     compound_proof::{CircuitComponent, CompoundProof},
     drgraph::Graph,
@@ -17,9 +16,9 @@ use storage_proofs_core::{
     por,
     proof::ProofScheme,
 };
+use typenum::U2;
 
-use super::circuit::DrgPoRepCircuit;
-use super::DrgPoRep;
+use crate::drg::{DrgPoRep, DrgPoRepCircuit};
 
 /// DRG based Proof of Replication.
 ///
@@ -242,7 +241,7 @@ where
     fn blank_circuit(
         public_params: &<DrgPoRep<'a, H, G> as ProofScheme<'a>>::PublicParams,
     ) -> DrgPoRepCircuit<'a, H> {
-        let depth = public_params.graph.merkle_tree_depth::<typenum::U2>() as usize;
+        let depth = public_params.graph.merkle_tree_depth::<U2>() as usize;
         let degree = public_params.graph.degree();
         let arity = 2;
 

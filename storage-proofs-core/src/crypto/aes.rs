@@ -1,7 +1,6 @@
 use aes::Aes256;
 use anyhow::{ensure, Context};
-use block_modes::block_padding::ZeroPadding;
-use block_modes::{BlockMode, Cbc};
+use block_modes::{block_padding::ZeroPadding, BlockMode, Cbc};
 
 use crate::error::Result;
 
@@ -27,12 +26,15 @@ pub fn decode(key: &[u8], ciphertext: &[u8]) -> Result<Vec<u8>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
     use rand::{Rng, SeedableRng};
     use rand_xorshift::XorShiftRng;
 
+    use crate::TEST_SEED;
+
     #[test]
     fn test_aes() {
-        let mut rng = XorShiftRng::from_seed(crate::TEST_SEED);
+        let mut rng = XorShiftRng::from_seed(TEST_SEED);
 
         for i in 0..10 {
             let key: Vec<u8> = (0..32).map(|_| rng.gen()).collect();

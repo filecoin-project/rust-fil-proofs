@@ -1,5 +1,6 @@
-use crate::error::Result;
 use anyhow::ensure;
+
+use crate::error::Result;
 
 /// Encodes plaintext by elementwise xoring with the passed in key.
 pub fn encode(key: &[u8], plaintext: &[u8]) -> Result<Vec<u8>> {
@@ -25,12 +26,15 @@ fn xor(key: &[u8], input: &[u8]) -> Result<Vec<u8>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
     use rand::{Rng, SeedableRng};
     use rand_xorshift::XorShiftRng;
 
+    use crate::TEST_SEED;
+
     #[test]
     fn test_xor() {
-        let mut rng = XorShiftRng::from_seed(crate::TEST_SEED);
+        let mut rng = XorShiftRng::from_seed(TEST_SEED);
 
         for i in 0..10 {
             let key: Vec<u8> = (0..32).map(|_| rng.gen()).collect();

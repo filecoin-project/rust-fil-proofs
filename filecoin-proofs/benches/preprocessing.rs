@@ -1,4 +1,4 @@
-use std::io::{self, Read};
+use std::io::{Cursor, Read};
 use std::time::Duration;
 
 use criterion::{criterion_group, criterion_main, Criterion, ParameterizedBenchmark, Throughput};
@@ -50,7 +50,7 @@ fn preprocessing_benchmark(c: &mut Criterion) {
 
                 start_profile(&format!("write_padded_{}", *size));
                 b.iter(|| {
-                    let mut reader = Fr32Reader::new(io::Cursor::new(&data));
+                    let mut reader = Fr32Reader::new(Cursor::new(&data));
                     reader.read_to_end(&mut buf).expect("in memory read error");
                     assert!(buf.len() >= data.len());
                     buf.clear();
@@ -79,7 +79,7 @@ fn add_piece_benchmark(c: &mut Criterion) {
                 start_profile(&format!("add_piece_{}", *size));
                 b.iter(|| {
                     add_piece(
-                        io::Cursor::new(&data),
+                        Cursor::new(&data),
                         &mut buf,
                         unpadded_size,
                         &[unpadded_size][..],

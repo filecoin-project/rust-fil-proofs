@@ -1,5 +1,5 @@
 use std::fs::{self, metadata, File, OpenOptions};
-use std::io::prelude::*;
+use std::io::Write;
 use std::path::{Path, PathBuf};
 
 use anyhow::{ensure, Context, Result};
@@ -9,35 +9,37 @@ use filecoin_hashers::{Domain, Hasher};
 use log::{info, trace};
 use memmap::MmapOptions;
 use merkletree::store::{DiskStore, Store, StoreConfig};
-use storage_proofs_core::cache_key::CacheKey;
-use storage_proofs_core::compound_proof::{self, CompoundProof};
-use storage_proofs_core::drgraph::Graph;
-use storage_proofs_core::measurements::{measure_op, Operation::CommD};
-use storage_proofs_core::merkle::{create_base_merkle_tree, BinaryMerkleTree, MerkleTreeTrait};
-use storage_proofs_core::multi_proof::MultiProof;
-use storage_proofs_core::proof::ProofScheme;
-use storage_proofs_core::sector::SectorId;
-use storage_proofs_core::util::default_rows_to_discard;
+use storage_proofs_core::{
+    cache_key::CacheKey,
+    compound_proof::{self, CompoundProof},
+    drgraph::Graph,
+    measurements::{measure_op, Operation},
+    merkle::{create_base_merkle_tree, BinaryMerkleTree, MerkleTreeTrait},
+    multi_proof::MultiProof,
+    proof::ProofScheme,
+    sector::SectorId,
+    util::default_rows_to_discard,
+    Data,
+};
 use storage_proofs_porep::stacked::{
     self, generate_replica_id, ChallengeRequirements, StackedCompound, StackedDrg, Tau,
     TemporaryAux, TemporaryAuxCache,
 };
 
-use crate::api::util::{
-    as_safe_commitment, commitment_from_fr, get_base_tree_leafs, get_base_tree_size,
-};
-use crate::caches::{get_stacked_params, get_stacked_verifying_key};
-use crate::constants::{
-    DefaultBinaryTree, DefaultPieceDomain, DefaultPieceHasher, POREP_MINIMUM_CHALLENGES,
-    SINGLE_PARTITION_PROOF_LEN,
-};
-use crate::parameters::setup_params;
-pub use crate::pieces;
-pub use crate::pieces::verify_pieces;
-use crate::types::{
-    Commitment, PaddedBytesAmount, PieceInfo, PoRepConfig, PoRepProofPartitions, ProverId,
-    SealCommitOutput, SealCommitPhase1Output, SealPreCommitOutput, SealPreCommitPhase1Output,
-    SectorSize, Ticket, BINARY_ARITY,
+use crate::{
+    api::{as_safe_commitment, commitment_from_fr, get_base_tree_leafs, get_base_tree_size},
+    caches::{get_stacked_params, get_stacked_verifying_key},
+    constants::{
+        DefaultBinaryTree, DefaultPieceDomain, DefaultPieceHasher, POREP_MINIMUM_CHALLENGES,
+        SINGLE_PARTITION_PROOF_LEN,
+    },
+    parameters::setup_params,
+    pieces::{self, verify_pieces},
+    types::{
+        Commitment, PaddedBytesAmount, PieceInfo, PoRepConfig, PoRepProofPartitions, ProverId,
+        SealCommitOutput, SealCommitPhase1Output, SealPreCommitOutput, SealPreCommitPhase1Output,
+        SectorSize, Ticket, BINARY_ARITY,
+    },
 };
 
 #[allow(clippy::too_many_arguments)]
@@ -120,7 +122,7 @@ where
     >>::setup(&compound_setup_params)?;
 
     info!("building merkle tree for the original data");
-    let (config, comm_d) = measure_op(CommD, || -> Result<_> {
+    let (config, comm_d) = measure_op(Operation::CommD, || -> Result<_> {
         let base_tree_size = get_base_tree_size::<DefaultBinaryTree>(porep_config.sector_size)?;
         let base_tree_leafs = get_base_tree_leafs::<DefaultBinaryTree>(base_tree_size)?;
         ensure!(
@@ -240,7 +242,7 @@ where
             )
         })?
     };
-    let data: storage_proofs_core::Data<'_> = (data, PathBuf::from(replica_path.as_ref())).into();
+    let data: Data<'_> = (data, PathBuf::from(replica_path.as_ref())).into();
 
     // Load data tree from disk
     let data_tree = {
@@ -348,7 +350,7 @@ pub fn seal_commit_phase1<T: AsRef<Path>, Tree: 'static + MerkleTreeTrait>(
 
     let p_aux = {
         let p_aux_path = cache_path.as_ref().join(CacheKey::PAux.to_string());
-        let p_aux_bytes = std::fs::read(&p_aux_path)
+        let p_aux_bytes = fs::read(&p_aux_path)
             .with_context(|| format!("could not read file p_aux={:?}", p_aux_path))?;
 
         deserialize(&p_aux_bytes)
@@ -356,7 +358,7 @@ pub fn seal_commit_phase1<T: AsRef<Path>, Tree: 'static + MerkleTreeTrait>(
 
     let t_aux = {
         let t_aux_path = cache_path.as_ref().join(CacheKey::TAux.to_string());
-        let t_aux_bytes = std::fs::read(&t_aux_path)
+        let t_aux_bytes = fs::read(&t_aux_path)
             .with_context(|| format!("could not read file t_aux={:?}", t_aux_path))?;
 
         let mut res: TemporaryAux<_, _> = deserialize(&t_aux_bytes)?;

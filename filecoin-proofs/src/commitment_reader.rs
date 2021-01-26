@@ -1,10 +1,11 @@
+use std::cmp::min;
 use std::io::{self, Read};
 
 use anyhow::{ensure, Result};
 use filecoin_hashers::{HashFunction, Hasher};
-use rayon::prelude::*;
+use rayon::prelude::{ParallelIterator, ParallelSlice};
 
-use crate::constants::DefaultPieceHasher;
+use crate::{constants::DefaultPieceHasher, pieces::piece_hash};
 
 /// Calculates comm-d of the data piped through to it.
 /// Data must be bit padded and power of 2 bytes.
@@ -49,7 +50,7 @@ impl<R: Read> CommitmentReader<R> {
         while current_row.len() > 1 {
             let next_row = current_row
                 .par_chunks(2)
-                .map(|chunk| crate::pieces::piece_hash(chunk[0].as_ref(), chunk[1].as_ref()))
+                .map(|chunk| piece_hash(chunk[0].as_ref(), chunk[1].as_ref()))
                 .collect::<Vec<_>>();
 
             current_row = next_row;
@@ -67,7 +68,7 @@ impl<R: Read> Read for CommitmentReader<R> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         let start = self.buffer_pos;
         let left = 64 - self.buffer_pos;
-        let end = start + std::cmp::min(left, buf.len());
+        let end = start + min(left, buf.len());
 
         // fill the buffer as much as possible
         let r = self.source.read(&mut self.buffer[start..end])?;
@@ -88,16 +89,18 @@ impl<R: Read> Read for CommitmentReader<R> {
 mod tests {
     use super::*;
 
-    use crate::types::*;
+    use std::io::Cursor;
 
     use fr32::Fr32Reader;
     use storage_proofs_core::pieces::generate_piece_commitment_bytes_from_source;
+
+    use crate::types::{PaddedBytesAmount, UnpaddedBytesAmount};
 
     #[test]
     fn test_commitment_reader() {
         let piece_size = 127 * 8;
         let source = vec![255u8; piece_size];
-        let mut fr32_reader = Fr32Reader::new(io::Cursor::new(&source));
+        let mut fr32_reader = Fr32Reader::new(Cursor::new(&source));
 
         let commitment1 = generate_piece_commitment_bytes_from_source::<DefaultPieceHasher>(
             &mut fr32_reader,
@@ -105,7 +108,7 @@ mod tests {
         )
         .expect("failed to generate piece commitment bytes from source");
 
-        let fr32_reader = Fr32Reader::new(io::Cursor::new(&source));
+        let fr32_reader = Fr32Reader::new(Cursor::new(&source));
         let mut commitment_reader = CommitmentReader::new(fr32_reader);
         io::copy(&mut commitment_reader, &mut io::sink()).expect("io copy failed");
 

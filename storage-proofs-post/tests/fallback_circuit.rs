@@ -21,6 +21,7 @@ use storage_proofs_post::fallback::{
     self, FallbackPoSt, FallbackPoStCircuit, FallbackPoStCompound, PrivateSector, PublicSector,
     Sector,
 };
+use tempfile::tempdir;
 
 #[test]
 fn test_fallback_post_circuit_poseidon_single_partition_base_8() {
@@ -75,7 +76,7 @@ fn test_fallback_post<Tree: 'static + MerkleTreeTrait>(
         api_version: ApiVersion::V1_1_0,
     };
 
-    let temp_dir = tempfile::tempdir().expect("tempdir failure");
+    let temp_dir = tempdir().expect("tempdir failure");
     let temp_path = temp_dir.path();
 
     let mut pub_sectors = Vec::new();

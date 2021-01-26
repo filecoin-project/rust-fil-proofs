@@ -1,5 +1,6 @@
+use std::mem::size_of;
+
 use blake2b_simd::blake2b;
-use std::mem;
 
 pub const FEISTEL_ROUNDS: usize = 3;
 // 3 rounds is an acceptable value for a pseudo-random permutation,
@@ -101,7 +102,7 @@ fn decode(index: Index, keys: &[Index], precomputed: FeistelPrecomputed) -> Inde
     (left << half_bits) | right
 }
 
-const HALF_FEISTEL_BYTES: usize = mem::size_of::<Index>();
+const HALF_FEISTEL_BYTES: usize = size_of::<Index>();
 const FEISTEL_BYTES: usize = 2 * HALF_FEISTEL_BYTES;
 
 // Round function of the Feistel network: `F(Ri, Ki)`. Joins the `right`
@@ -167,7 +168,8 @@ fn feistel(right: Index, key: Index, right_mask: Index) -> Index {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rayon::prelude::*;
+
+    use rayon::prelude::{IntoParallelIterator, ParallelIterator};
 
     // Some sample n-values which are not powers of four and also don't coincidentally happen to
     // encode/decode correctly.

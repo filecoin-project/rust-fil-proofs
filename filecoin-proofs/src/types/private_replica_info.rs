@@ -1,3 +1,5 @@
+use std::cmp::Ordering;
+use std::fs;
 use std::hash::{Hash, Hasher as StdHasher};
 use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
@@ -8,14 +10,19 @@ use filecoin_hashers::Hasher;
 use generic_array::typenum::Unsigned;
 use log::trace;
 use merkletree::store::StoreConfig;
-use storage_proofs_core::cache_key::CacheKey;
-use storage_proofs_core::merkle::{
-    create_tree, get_base_tree_count, split_config_and_replica, MerkleTreeTrait, MerkleTreeWrapper,
+use storage_proofs_core::{
+    cache_key::CacheKey,
+    merkle::{
+        create_tree, get_base_tree_count, split_config_and_replica, MerkleTreeTrait,
+        MerkleTreeWrapper,
+    },
+    util::default_rows_to_discard,
 };
-use storage_proofs_core::util::default_rows_to_discard;
 
-use crate::api::util::{as_safe_commitment, get_base_tree_leafs, get_base_tree_size};
-use crate::types::{Commitment, PersistentAux, SectorSize};
+use crate::{
+    api::{as_safe_commitment, get_base_tree_leafs, get_base_tree_size},
+    types::{Commitment, PersistentAux, SectorSize},
+};
 
 /// The minimal information required about a replica, in order to be able to generate
 /// a PoSt over it.
@@ -45,7 +52,7 @@ impl<Tree: MerkleTreeTrait> Clone for PrivateReplicaInfo<Tree> {
     }
 }
 
-impl<Tree: MerkleTreeTrait> std::cmp::PartialEq for PrivateReplicaInfo<Tree> {
+impl<Tree: MerkleTreeTrait> PartialEq for PrivateReplicaInfo<Tree> {
     fn eq(&self, other: &Self) -> bool {
         self.replica == other.replica
             && self.comm_r == other.comm_r
@@ -63,16 +70,16 @@ impl<Tree: MerkleTreeTrait> Hash for PrivateReplicaInfo<Tree> {
     }
 }
 
-impl<Tree: MerkleTreeTrait> std::cmp::Eq for PrivateReplicaInfo<Tree> {}
+impl<Tree: MerkleTreeTrait> Eq for PrivateReplicaInfo<Tree> {}
 
-impl<Tree: MerkleTreeTrait> std::cmp::Ord for PrivateReplicaInfo<Tree> {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+impl<Tree: MerkleTreeTrait> Ord for PrivateReplicaInfo<Tree> {
+    fn cmp(&self, other: &Self) -> Ordering {
         self.comm_r.as_ref().cmp(other.comm_r.as_ref())
     }
 }
 
-impl<Tree: MerkleTreeTrait> std::cmp::PartialOrd for PrivateReplicaInfo<Tree> {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+impl<Tree: MerkleTreeTrait> PartialOrd for PrivateReplicaInfo<Tree> {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         self.comm_r.as_ref().partial_cmp(other.comm_r.as_ref())
     }
 }
@@ -83,7 +90,7 @@ impl<Tree: 'static + MerkleTreeTrait> PrivateReplicaInfo<Tree> {
 
         let aux = {
             let f_aux_path = cache_dir.join(CacheKey::PAux.to_string());
-            let aux_bytes = std::fs::read(&f_aux_path)
+            let aux_bytes = fs::read(&f_aux_path)
                 .with_context(|| format!("could not read from path={:?}", f_aux_path))?;
 
             deserialize(&aux_bytes)

@@ -1,22 +1,30 @@
-use std::fs::{create_dir_all, remove_dir_all, OpenOptions};
+use std::fs::{self, create_dir_all, remove_dir_all, OpenOptions};
 use std::path::{Path, PathBuf};
 
 use anyhow::{ensure, Context, Result};
 use bincode::deserialize;
 use clap::{value_t, App, Arg, SubCommand};
+use filecoin_hashers::Hasher;
+use filecoin_proofs::{
+    is_sector_shape_base, is_sector_shape_sub2, is_sector_shape_sub8, is_sector_shape_top2,
+    with_shape, DefaultTreeDomain, PersistentAux, SectorShapeBase, SectorShapeSub2,
+    SectorShapeSub8, SectorShapeTop2, OCT_ARITY,
+};
 use generic_array::typenum::Unsigned;
 use memmap::MmapOptions;
-use merkletree::merkle::get_merkle_tree_len;
-use merkletree::store::{ExternalReader, ReplicaConfig, Store, StoreConfig};
-
-use filecoin_hashers::Hasher;
-use filecoin_proofs::constants::*;
-use filecoin_proofs::types::*;
-use filecoin_proofs::with_shape;
-use storage_proofs_core::cache_key::CacheKey;
-use storage_proofs_core::merkle::{create_lc_tree, get_base_tree_count, split_config_and_replica};
-use storage_proofs_core::merkle::{LCStore, LCTree, MerkleTreeTrait};
-use storage_proofs_core::util::{default_rows_to_discard, NODE_SIZE};
+use merkletree::{
+    merkle::get_merkle_tree_len,
+    store::{ExternalReader, ReplicaConfig, Store, StoreConfig},
+};
+use storage_proofs_core::{
+    cache_key::CacheKey,
+    merkle::{
+        create_lc_tree, get_base_tree_count, split_config_and_replica, LCStore, LCTree,
+        MerkleTreeTrait,
+    },
+    util::{default_rows_to_discard, NODE_SIZE},
+};
+use tempfile::tempdir;
 
 fn get_tree_r_info(
     sector_size: usize,
@@ -100,7 +108,7 @@ fn get_tree_r_last_root(
 fn get_persistent_aux(cache: &PathBuf) -> Result<PersistentAux<DefaultTreeDomain>> {
     let p_aux: PersistentAux<DefaultTreeDomain> = {
         let p_aux_path = cache.join(CacheKey::PAux.to_string());
-        let p_aux_bytes = std::fs::read(&p_aux_path)
+        let p_aux_bytes = fs::read(&p_aux_path)
             .with_context(|| format!("could not read file p_aux={:?}", p_aux_path))?;
 
         deserialize(&p_aux_bytes)
@@ -235,7 +243,7 @@ fn run_verify(sector_size: usize, cache: PathBuf, replica_path: PathBuf) -> Resu
     // Read comm_r_last from the persistent aux in the cache dir
     let p_aux: PersistentAux<DefaultTreeDomain> = {
         let p_aux_path = cache.join(CacheKey::PAux.to_string());
-        let p_aux_bytes = std::fs::read(&p_aux_path)
+        let p_aux_bytes = fs::read(&p_aux_path)
             .with_context(|| format!("could not read file p_aux={:?}", p_aux_path))?;
 
         deserialize(&p_aux_bytes)
@@ -243,7 +251,7 @@ fn run_verify(sector_size: usize, cache: PathBuf, replica_path: PathBuf) -> Resu
 
     // Rebuild each of the tree_r_last base trees (in a new temp dir so as not to interfere
     // with any existing ones on disk) and check if the roots match what's cached on disk
-    let tmp_dir = tempfile::tempdir().unwrap();
+    let tmp_dir = tempdir().unwrap();
     let tmp_path = tmp_dir.path();
     create_dir_all(&tmp_path)?;
 

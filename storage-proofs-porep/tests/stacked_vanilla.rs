@@ -1,3 +1,5 @@
+use std::fs::remove_file;
+
 use bellperson::bls::{Fr, FrRepr};
 use ff::{Field, PrimeField};
 use filecoin_hashers::{
@@ -5,6 +7,7 @@ use filecoin_hashers::{
 };
 use fr32::fr_into_bytes;
 use generic_array::typenum::{U0, U2, U4, U8};
+use glob::glob;
 use merkletree::store::{Store, StoreConfig};
 use rand::{Rng, SeedableRng};
 use rand_xorshift::XorShiftRng;
@@ -26,6 +29,7 @@ use storage_proofs_porep::{
     },
     PoRep,
 };
+use tempfile::tempdir;
 
 const DEFAULT_STACKED_LAYERS: usize = 11;
 
@@ -91,7 +95,7 @@ fn test_extract_all<Tree: 'static + MerkleTreeTrait>() {
 
     // MT for original data is always named tree-d, and it will be
     // referenced later in the process as such.
-    let cache_dir = tempfile::tempdir().expect("tempdir failure");
+    let cache_dir = tempdir().expect("tempdir failure");
     let config = StoreConfig::new(
         cache_dir.path(),
         CacheKey::CommDTree.to_string(),
@@ -143,7 +147,7 @@ fn test_extract_all<Tree: 'static + MerkleTreeTrait>() {
     for label_state in &label_states[off..] {
         let config = &label_state.config;
         let data_path = StoreConfig::data_path(&config.path, &config.id);
-        std::fs::remove_file(data_path).expect("failed to delete layer cache");
+        remove_file(data_path).expect("failed to delete layer cache");
     }
 
     let (_, label_states) = StackedDrg::<Tree, Blake2sHasher>::generate_labels_for_encoding(
@@ -194,7 +198,7 @@ fn test_stacked_porep_resume_seal() {
 
     // MT for original data is always named tree-d, and it will be
     // referenced later in the process as such.
-    let cache_dir = tempfile::tempdir().expect("tempdir failure");
+    let cache_dir = tempdir().expect("tempdir failure");
     let config = StoreConfig::new(
         cache_dir.path(),
         CacheKey::CommDTree.to_string(),
@@ -223,12 +227,12 @@ fn test_stacked_porep_resume_seal() {
     let pp = StackedDrg::<Tree, Blake2sHasher>::setup(&sp).expect("setup failed");
 
     let clear_temp = || {
-        for entry in glob::glob(&(cache_dir.path().to_string_lossy() + "/*.dat")).unwrap() {
+        for entry in glob(&(cache_dir.path().to_string_lossy() + "/*.dat")).unwrap() {
             let entry = entry.unwrap();
             if entry.is_file() {
                 // delete everything except the data-layers
                 if !entry.to_string_lossy().contains("data-layer") {
-                    std::fs::remove_file(entry).unwrap();
+                    remove_file(entry).unwrap();
                 }
             }
         }
@@ -270,7 +274,7 @@ fn test_stacked_porep_resume_seal() {
     for label_state in &label_states[off..] {
         let config = &label_state.config;
         let data_path = StoreConfig::data_path(&config.path, &config.id);
-        std::fs::remove_file(data_path).expect("failed to delete layer cache");
+        remove_file(data_path).expect("failed to delete layer cache");
     }
 
     // replicate a third time
@@ -356,7 +360,7 @@ fn test_prove_verify<Tree: 'static + MerkleTreeTrait>(n: usize, challenges: Laye
 
     // MT for original data is always named tree-d, and it will be
     // referenced later in the process as such.
-    let cache_dir = tempfile::tempdir().expect("tempdir failure");
+    let cache_dir = tempdir().expect("tempdir failure");
     let config = StoreConfig::new(
         cache_dir.path(),
         CacheKey::CommDTree.to_string(),
@@ -538,7 +542,7 @@ fn test_generate_labels_aux(
 ) {
     let nodes = sector_size / NODE_SIZE;
 
-    let cache_dir = tempfile::tempdir().expect("tempdir failure");
+    let cache_dir = tempdir().expect("tempdir failure");
     let config = StoreConfig::new(
         cache_dir.path(),
         CacheKey::CommDTree.to_string(),

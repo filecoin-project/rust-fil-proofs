@@ -12,8 +12,8 @@ use storage_proofs_core::{
     util::NODE_SIZE,
     TEST_SEED,
 };
-
 use storage_proofs_post::rational::{self, derive_challenges, RationalPoStCompound};
+use tempfile::tempdir;
 
 #[ignore]
 #[test]
@@ -39,7 +39,7 @@ fn test_rational_post_compound<Tree: 'static + MerkleTreeTrait>() {
 
     let pub_params = RationalPoStCompound::<Tree>::setup(&setup_params).expect("setup failed");
 
-    let temp_dir = tempfile::tempdir().unwrap();
+    let temp_dir = tempdir().unwrap();
     let temp_path = temp_dir.path();
 
     let (_data1, tree1) = generate_tree::<Tree, _>(rng, leaves, Some(temp_path.to_path_buf()));

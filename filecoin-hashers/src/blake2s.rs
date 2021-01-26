@@ -1,18 +1,24 @@
-use std::fmt;
+use std::fmt::{self, Debug, Formatter};
 use std::hash::Hasher as StdHasher;
 
-use anyhow::{ensure, Result};
-use bellperson::bls::{Bls12, Fr, FrRepr};
-use bellperson::gadgets::{blake2s as blake2s_circuit, boolean, multipack, num};
-use bellperson::{ConstraintSystem, SynthesisError};
+use anyhow::ensure;
+use bellperson::{
+    bls::{Bls12, Fr, FrRepr},
+    gadgets::{
+        blake2s::blake2s as blake2s_circuit, boolean::Boolean, multipack, num::AllocatedNum,
+    },
+    ConstraintSystem, SynthesisError,
+};
 use blake2s_simd::{Hash as Blake2sHash, Params as Blake2s, State};
 use ff::{Field, PrimeField, PrimeFieldRepr};
-use merkletree::hash::{Algorithm, Hashable};
-use merkletree::merkle::Element;
+use merkletree::{
+    hash::{Algorithm, Hashable},
+    merkle::Element,
+};
 use rand::RngCore;
 use serde::{Deserialize, Serialize};
 
-use super::{Domain, HashFunction, Hasher};
+use crate::types::{Domain, HashFunction, Hasher};
 
 #[derive(Default, Copy, Clone, PartialEq, Eq, Debug)]
 pub struct Blake2sHasher {}
@@ -43,8 +49,8 @@ impl PartialEq for Blake2sFunction {
 
 impl Eq for Blake2sFunction {}
 
-impl fmt::Debug for Blake2sFunction {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl Debug for Blake2sFunction {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(f, "Blake2sFunction({:?})", self.0)
     }
 }
@@ -142,7 +148,7 @@ impl Domain for Blake2sDomain {
         self.0.to_vec()
     }
 
-    fn try_from_bytes(raw: &[u8]) -> Result<Self> {
+    fn try_from_bytes(raw: &[u8]) -> anyhow::Result<Self> {
         ensure!(
             raw.len() == 32 && u32::from(raw[31]) <= Fr::NUM_BITS,
             "invalid amount of bytes"
@@ -153,7 +159,7 @@ impl Domain for Blake2sDomain {
         Ok(res)
     }
 
-    fn write_bytes(&self, dest: &mut [u8]) -> Result<()> {
+    fn write_bytes(&self, dest: &mut [u8]) -> anyhow::Result<()> {
         ensure!(dest.len() >= 32, "too many bytes");
         dest[0..32].copy_from_slice(&self.0[..]);
         Ok(())
@@ -197,16 +203,16 @@ impl HashFunction<Blake2sDomain> for Blake2sFunction {
 
     fn hash_multi_leaf_circuit<Arity, CS: ConstraintSystem<Bls12>>(
         mut cs: CS,
-        leaves: &[num::AllocatedNum<Bls12>],
+        leaves: &[AllocatedNum<Bls12>],
         _height: usize,
-    ) -> std::result::Result<num::AllocatedNum<Bls12>, SynthesisError> {
+    ) -> Result<AllocatedNum<Bls12>, SynthesisError> {
         let mut bits = Vec::with_capacity(leaves.len() * Fr::CAPACITY as usize);
         for (i, leaf) in leaves.iter().enumerate() {
             bits.extend_from_slice(
                 &leaf.to_bits_le(cs.namespace(|| format!("{}_num_into_bits", i)))?,
             );
             while bits.len() % 8 != 0 {
-                bits.push(boolean::Boolean::Constant(false));
+                bits.push(Boolean::Constant(false));
             }
         }
         Self::hash_circuit(cs, &bits)
@@ -214,20 +220,20 @@ impl HashFunction<Blake2sDomain> for Blake2sFunction {
 
     fn hash_leaf_bits_circuit<CS: ConstraintSystem<Bls12>>(
         cs: CS,
-        left: &[boolean::Boolean],
-        right: &[boolean::Boolean],
+        left: &[Boolean],
+        right: &[Boolean],
         _height: usize,
-    ) -> std::result::Result<num::AllocatedNum<Bls12>, SynthesisError> {
-        let mut preimage: Vec<boolean::Boolean> = vec![];
+    ) -> Result<AllocatedNum<Bls12>, SynthesisError> {
+        let mut preimage: Vec<Boolean> = vec![];
 
         preimage.extend_from_slice(left);
         while preimage.len() % 8 != 0 {
-            preimage.push(boolean::Boolean::Constant(false));
+            preimage.push(Boolean::Constant(false));
         }
 
         preimage.extend_from_slice(right);
         while preimage.len() % 8 != 0 {
-            preimage.push(boolean::Boolean::Constant(false));
+            preimage.push(Boolean::Constant(false));
         }
 
         Self::hash_circuit(cs, &preimage[..])
@@ -235,20 +241,19 @@ impl HashFunction<Blake2sDomain> for Blake2sFunction {
 
     fn hash_circuit<CS: ConstraintSystem<Bls12>>(
         mut cs: CS,
-        bits: &[boolean::Boolean],
-    ) -> std::result::Result<num::AllocatedNum<Bls12>, SynthesisError> {
+        bits: &[Boolean],
+    ) -> Result<AllocatedNum<Bls12>, SynthesisError> {
         let personalization = vec![0u8; 8];
-        let alloc_bits =
-            blake2s_circuit::blake2s(cs.namespace(|| "hash"), &bits[..], &personalization)?;
+        let alloc_bits = blake2s_circuit(cs.namespace(|| "hash"), &bits[..], &personalization)?;
 
         multipack::pack_bits(cs.namespace(|| "pack"), &alloc_bits)
     }
 
     fn hash2_circuit<CS>(
         mut cs: CS,
-        a_num: &num::AllocatedNum<Bls12>,
-        b_num: &num::AllocatedNum<Bls12>,
-    ) -> std::result::Result<num::AllocatedNum<Bls12>, SynthesisError>
+        a_num: &AllocatedNum<Bls12>,
+        b_num: &AllocatedNum<Bls12>,
+    ) -> Result<AllocatedNum<Bls12>, SynthesisError>
     where
         CS: ConstraintSystem<Bls12>,
     {
@@ -256,16 +261,16 @@ impl HashFunction<Blake2sDomain> for Blake2sFunction {
         let a = a_num.to_bits_le(cs.namespace(|| "a_bits"))?;
         let b = b_num.to_bits_le(cs.namespace(|| "b_bits"))?;
 
-        let mut preimage: Vec<boolean::Boolean> = vec![];
+        let mut preimage: Vec<Boolean> = vec![];
 
         preimage.extend_from_slice(&a);
         while preimage.len() % 8 != 0 {
-            preimage.push(boolean::Boolean::Constant(false));
+            preimage.push(Boolean::Constant(false));
         }
 
         preimage.extend_from_slice(&b);
         while preimage.len() % 8 != 0 {
-            preimage.push(boolean::Boolean::Constant(false));
+            preimage.push(Boolean::Constant(false));
         }
 
         Self::hash_circuit(cs, &preimage[..])

@@ -1,11 +1,13 @@
 use std::marker::PhantomData;
 
-use bellperson::bls::{Bls12, Fr};
-use bellperson::Circuit;
+use bellperson::{
+    bls::{Bls12, Fr},
+    Circuit,
+};
 use generic_array::typenum::Unsigned;
 use storage_proofs_core::{
     compound_proof::{CircuitComponent, CompoundProof},
-    drgraph,
+    drgraph::graph_height,
     error::Result,
     gadgets::por::PoRCompound,
     merkle::MerkleTreeTrait,
@@ -15,7 +17,7 @@ use storage_proofs_core::{
     util::NODE_SIZE,
 };
 
-use crate::election::{self, ElectionPoSt, ElectionPoStCircuit};
+use crate::election::{generate_leaf_challenge, ElectionPoSt, ElectionPoStCircuit};
 
 pub struct ElectionPoStCompound<Tree>
 where
@@ -56,7 +58,7 @@ where
         // 2. Inputs for verifying inclusion paths
 
         for n in 0..pub_params.challenge_count {
-            let challenged_leaf_start = election::generate_leaf_challenge(
+            let challenged_leaf_start = generate_leaf_challenge(
                 &pub_params,
                 pub_inputs.randomness,
                 pub_inputs.sector_challenge_index,
@@ -133,8 +135,7 @@ where
         pub_params: &<ElectionPoSt<'a, Tree> as ProofScheme<'a>>::PublicParams,
     ) -> ElectionPoStCircuit<Tree> {
         let challenges_count = pub_params.challenged_nodes * pub_params.challenge_count;
-        let height =
-            drgraph::graph_height::<Tree::Arity>(pub_params.sector_size as usize / NODE_SIZE);
+        let height = graph_height::<Tree::Arity>(pub_params.sector_size as usize / NODE_SIZE);
 
         let leafs = vec![None; challenges_count];
         let paths = vec![

@@ -1,4 +1,5 @@
 use sha2::{Digest, Sha256};
+
 pub mod aes;
 pub mod feistel;
 pub mod sloth;

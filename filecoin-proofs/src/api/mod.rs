@@ -1,5 +1,5 @@
-use std::fs::File;
-use std::io::{BufWriter, Read, Write};
+use std::fs::{self, File};
+use std::io::{self, BufReader, BufWriter, Read, Write};
 use std::path::{Path, PathBuf};
 
 use anyhow::{ensure, Context, Result};
@@ -8,43 +8,48 @@ use filecoin_hashers::Hasher;
 use fr32::{write_unpadded, Fr32Reader};
 use log::{info, trace};
 use merkletree::store::{DiskStore, LevelCacheStore, StoreConfig};
-use storage_proofs_core::cache_key::CacheKey;
-use storage_proofs_core::measurements::{measure_op, Operation};
-use storage_proofs_core::merkle::get_base_tree_count;
-use storage_proofs_core::sector::SectorId;
-use storage_proofs_core::util::default_rows_to_discard;
-use storage_proofs_porep::stacked::{generate_replica_id, PersistentAux, StackedDrg, TemporaryAux};
-use storage_proofs_porep::PoRep;
+use storage_proofs_core::{
+    cache_key::CacheKey,
+    measurements::{measure_op, Operation},
+    merkle::get_base_tree_count,
+    pieces::generate_piece_commitment_bytes_from_source,
+    sector::SectorId,
+    util::default_rows_to_discard,
+};
+use storage_proofs_porep::{
+    stacked::{generate_replica_id, PersistentAux, StackedDrg, TemporaryAux},
+    PoRep,
+};
 use typenum::Unsigned;
 
-use crate::api::util::{get_base_tree_leafs, get_base_tree_size};
-use crate::commitment_reader::CommitmentReader;
-use crate::constants::{
-    DefaultBinaryTree, DefaultOctTree, DefaultPieceDomain, DefaultPieceHasher,
-    MINIMUM_RESERVED_BYTES_FOR_PIECE_IN_FULLY_ALIGNED_SECTOR as MINIMUM_PIECE_SIZE,
-};
-use crate::parameters::public_params;
-use crate::types::{
-    Commitment, MerkleTreeTrait, PaddedBytesAmount, PieceInfo, PoRepConfig, PoRepProofPartitions,
-    ProverId, SealPreCommitPhase1Output, Ticket, UnpaddedByteIndex, UnpaddedBytesAmount,
+use crate::{
+    commitment_reader::CommitmentReader,
+    constants::{
+        DefaultBinaryTree, DefaultOctTree, DefaultPieceDomain, DefaultPieceHasher,
+        MINIMUM_RESERVED_BYTES_FOR_PIECE_IN_FULLY_ALIGNED_SECTOR as MINIMUM_PIECE_SIZE,
+    },
+    parameters::public_params,
+    pieces::{get_piece_alignment, sum_piece_bytes_with_alignment},
+    types::{
+        Commitment, MerkleTreeTrait, PaddedBytesAmount, PieceInfo, PoRepConfig,
+        PoRepProofPartitions, ProverId, SealPreCommitPhase1Output, Ticket, UnpaddedByteIndex,
+        UnpaddedBytesAmount,
+    },
 };
 
 mod fake_seal;
 mod post_util;
 mod seal;
-pub(crate) mod util;
+mod util;
 mod window_post;
 mod winning_post;
 
-pub use self::fake_seal::*;
-pub use self::post_util::*;
-pub use self::seal::*;
-pub use self::window_post::*;
-pub use self::winning_post::*;
-
-pub use self::util::{as_safe_commitment, commitment_from_fr};
-
-use storage_proofs_core::pieces::generate_piece_commitment_bytes_from_source;
+pub use fake_seal::*;
+pub use post_util::*;
+pub use seal::*;
+pub use util::*;
+pub use window_post::*;
+pub use winning_post::*;
 
 /// Unseals the sector at `sealed_path` and returns the bytes for a piece
 /// whose first (unpadded) byte begins at `offset` and ends at `offset` plus
@@ -204,7 +209,7 @@ where
 /// * `source` - a readable source of unprocessed piece bytes. The piece's commitment will be
 /// generated for the bytes read from the source plus any added padding.
 /// * `piece_size` - the number of unpadded user-bytes which can be read from source before EOF.
-pub fn generate_piece_commitment<T: std::io::Read>(
+pub fn generate_piece_commitment<T: Read>(
     source: T,
     piece_size: UnpaddedBytesAmount,
 ) -> Result<PieceInfo> {
@@ -214,7 +219,7 @@ pub fn generate_piece_commitment<T: std::io::Read>(
         ensure_piece_size(piece_size)?;
 
         // send the source through the preprocessor
-        let source = std::io::BufReader::new(source);
+        let source = BufReader::new(source);
         let mut fr32_reader = Fr32Reader::new(source);
 
         let commitment = generate_piece_commitment_bytes_from_source::<DefaultPieceHasher>(
@@ -263,11 +268,11 @@ where
     let result = measure_op(Operation::AddPiece, || {
         ensure_piece_size(piece_size)?;
 
-        let source = std::io::BufReader::new(source);
-        let mut target = std::io::BufWriter::new(target);
+        let source = BufReader::new(source);
+        let mut target = BufWriter::new(target);
 
-        let written_bytes = crate::pieces::sum_piece_bytes_with_alignment(&piece_lengths);
-        let piece_alignment = crate::pieces::get_piece_alignment(written_bytes, piece_size);
+        let written_bytes = sum_piece_bytes_with_alignment(&piece_lengths);
+        let piece_alignment = get_piece_alignment(written_bytes, piece_size);
         let fr32_reader = Fr32Reader::new(source);
 
         // write left alignment
@@ -276,7 +281,7 @@ where
         }
 
         let mut commitment_reader = CommitmentReader::new(fr32_reader);
-        let n = std::io::copy(&mut commitment_reader, &mut target)
+        let n = io::copy(&mut commitment_reader, &mut target)
             .context("failed to write and preprocess bytes")?;
 
         ensure!(n != 0, "add_piece: read 0 bytes before EOF from source");
@@ -452,7 +457,7 @@ fn verify_level_cache_store<Tree: MerkleTreeTrait>(config: &StoreConfig) -> Resu
         let store_len = config.size.expect("disk store size not configured");
         for config in &configs {
             ensure!(
-                LevelCacheStore::<DefaultPieceDomain, std::fs::File>::is_consistent(
+                LevelCacheStore::<DefaultPieceDomain, File>::is_consistent(
                     store_len,
                     Tree::Arity::to_usize(),
                     &config,
@@ -463,7 +468,7 @@ fn verify_level_cache_store<Tree: MerkleTreeTrait>(config: &StoreConfig) -> Resu
         }
     } else {
         ensure!(
-            LevelCacheStore::<DefaultPieceDomain, std::fs::File>::is_consistent(
+            LevelCacheStore::<DefaultPieceDomain, File>::is_consistent(
                 config.size.expect("disk store size not configured"),
                 Tree::Arity::to_usize(),
                 &config,
@@ -550,7 +555,7 @@ where
 
     // Make sure p_aux exists and is valid.
     let p_aux_path = cache.join(CacheKey::PAux.to_string());
-    let p_aux_bytes = std::fs::read(&p_aux_path)
+    let p_aux_bytes = fs::read(&p_aux_path)
         .with_context(|| format!("could not read file p_aux={:?}", p_aux_path))?;
 
     let _: PersistentAux<<Tree::Hasher as Hasher>::Domain> = deserialize(&p_aux_bytes)?;
@@ -559,7 +564,7 @@ where
     // Make sure t_aux exists and is valid.
     let t_aux = {
         let t_aux_path = cache.join(CacheKey::TAux.to_string());
-        let t_aux_bytes = std::fs::read(&t_aux_path)
+        let t_aux_bytes = fs::read(&t_aux_path)
             .with_context(|| format!("could not read file t_aux={:?}", t_aux_path))?;
 
         let mut res: TemporaryAux<Tree, DefaultPieceHasher> = deserialize(&t_aux_bytes)?;

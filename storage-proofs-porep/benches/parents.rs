@@ -1,13 +1,17 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion, ParameterizedBenchmark};
 use filecoin_hashers::{blake2s::Blake2sHasher, sha256::Sha256Hasher, Hasher};
-use storage_proofs_core::api_version::ApiVersion;
-use storage_proofs_core::drgraph::{Graph, BASE_DEGREE};
+#[cfg(feature = "cpu-profile")]
+use gperftools::profiler::PROFILER;
+use storage_proofs_core::{
+    api_version::ApiVersion,
+    drgraph::{Graph, BASE_DEGREE},
+};
 use storage_proofs_porep::stacked::{StackedBucketGraph, EXP_DEGREE};
 
 #[cfg(feature = "cpu-profile")]
 #[inline(always)]
 fn start_profile(stage: &str) {
-    gperftools::profiler::PROFILER
+    PROFILER
         .lock()
         .unwrap()
         .start(format!("./{}.profile", stage))
@@ -21,11 +25,7 @@ fn start_profile(_stage: &str) {}
 #[cfg(feature = "cpu-profile")]
 #[inline(always)]
 fn stop_profile() {
-    gperftools::profiler::PROFILER
-        .lock()
-        .unwrap()
-        .stop()
-        .unwrap();
+    PROFILER.lock().unwrap().stop().unwrap();
 }
 
 #[cfg(not(feature = "cpu-profile"))]

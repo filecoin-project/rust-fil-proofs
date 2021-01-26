@@ -1,23 +1,22 @@
 use std::str::FromStr;
 
+use bellperson::{bls::Bls12, util_cs::bench_cs::BenchCS, Circuit};
 use dialoguer::{theme::ColorfulTheme, MultiSelect};
+use filecoin_proofs::{
+    parameters::{public_params, window_post_public_params, winning_post_public_params},
+    with_shape, DefaultPieceHasher, PaddedBytesAmount, PoRepConfig, PoRepProofPartitions,
+    PoStConfig, PoStType, SectorSize, POREP_PARTITIONS, PUBLISHED_SECTOR_SIZES,
+    WINDOW_POST_CHALLENGE_COUNT, WINDOW_POST_SECTOR_COUNT, WINNING_POST_CHALLENGE_COUNT,
+    WINNING_POST_SECTOR_COUNT,
+};
 use humansize::{file_size_opts, FileSize};
 use log::{info, warn};
-use structopt::StructOpt;
-
-use bellperson::util_cs::bench_cs::BenchCS;
-use bellperson::{bls::Bls12, Circuit};
-use filecoin_proofs::constants::*;
-use filecoin_proofs::parameters::{
-    public_params, window_post_public_params, winning_post_public_params,
+use storage_proofs_core::{
+    api_version::ApiVersion, compound_proof::CompoundProof, merkle::MerkleTreeTrait,
 };
-use filecoin_proofs::types::*;
-use filecoin_proofs::with_shape;
-use filecoin_proofs::PoStType;
-use storage_proofs_core::api_version::ApiVersion;
-use storage_proofs_core::compound_proof::CompoundProof;
 use storage_proofs_porep::stacked::{StackedCompound, StackedDrg};
 use storage_proofs_post::fallback::{FallbackPoSt, FallbackPoStCircuit, FallbackPoStCompound};
+use structopt::StructOpt;
 
 struct CircuitInfo {
     constraints: usize,

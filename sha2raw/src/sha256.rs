@@ -1,9 +1,9 @@
 use byteorder::{ByteOrder, BE};
+use lazy_static::lazy_static;
 
-use crate::consts::H256;
-use crate::platform::Implementation;
+use crate::{consts::H256, platform::Implementation};
 
-lazy_static::lazy_static! {
+lazy_static! {
     static ref IMPL: Implementation = Implementation::detect();
 }
 

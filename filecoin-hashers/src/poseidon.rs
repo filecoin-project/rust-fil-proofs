@@ -1,16 +1,22 @@
-use std::hash::Hasher as StdHasher;
+use std::cmp::Ordering;
+use std::hash::{Hash as StdHash, Hasher as StdHasher};
+use std::mem::size_of;
+use std::slice;
 
-use anyhow::{ensure, Result};
-use bellperson::bls::{Bls12, Fr, FrRepr};
-use bellperson::gadgets::{boolean, num};
-use bellperson::{ConstraintSystem, SynthesisError};
+use anyhow::ensure;
+use bellperson::{
+    bls::{Bls12, Fr, FrRepr},
+    gadgets::{boolean::Boolean, num::AllocatedNum},
+    ConstraintSystem, SynthesisError,
+};
 use ff::{Field, PrimeField, PrimeFieldRepr, ScalarEngine};
-use generic_array::typenum;
-use generic_array::typenum::marker_traits::Unsigned;
-use merkletree::hash::{Algorithm as LightAlgorithm, Hashable};
-use merkletree::merkle::Element;
-use neptune::circuit::poseidon_hash;
-use neptune::poseidon::Poseidon;
+use generic_array::typenum::{marker_traits::Unsigned, U2};
+use merkletree::{
+    hash::{Algorithm as LightAlgorithm, Hashable},
+    merkle::Element,
+};
+use neptune::{circuit::poseidon_hash, poseidon::Poseidon};
+use rand::RngCore;
 use serde::{Deserialize, Serialize};
 
 use crate::types::{
@@ -68,10 +74,10 @@ impl AsRef<PoseidonDomain> for PoseidonDomain {
     }
 }
 
-impl std::hash::Hash for PoseidonDomain {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+impl StdHash for PoseidonDomain {
+    fn hash<H: StdHasher>(&self, state: &mut H) {
         let raw: &[u64] = self.0.as_ref();
-        std::hash::Hash::hash(raw, state);
+        StdHash::hash(raw, state);
     }
 }
 
@@ -91,14 +97,14 @@ impl Default for PoseidonDomain {
 
 impl Ord for PoseidonDomain {
     #[inline(always)]
-    fn cmp(&self, other: &PoseidonDomain) -> ::std::cmp::Ordering {
+    fn cmp(&self, other: &PoseidonDomain) -> Ordering {
         (self.0).cmp(&other.0)
     }
 }
 
 impl PartialOrd for PoseidonDomain {
     #[inline(always)]
-    fn partial_cmp(&self, other: &PoseidonDomain) -> Option<::std::cmp::Ordering> {
+    fn partial_cmp(&self, other: &PoseidonDomain) -> Option<Ordering> {
         Some((self.0).cmp(&other.0))
     }
 }
@@ -116,12 +122,7 @@ impl AsRef<[u8]> for PoseidonDomain {
 #[inline(always)]
 #[allow(clippy::needless_lifetimes)]
 fn as_ref<'a>(src: &'a [u64; 4]) -> &'a [u8] {
-    unsafe {
-        std::slice::from_raw_parts(
-            src.as_ptr() as *const u8,
-            src.len() * std::mem::size_of::<u64>(),
-        )
-    }
+    unsafe { slice::from_raw_parts(src.as_ptr() as *const u8, src.len() * size_of::<u64>()) }
 }
 
 impl Domain for PoseidonDomain {
@@ -132,7 +133,7 @@ impl Domain for PoseidonDomain {
         out
     }
 
-    fn try_from_bytes(raw: &[u8]) -> Result<Self> {
+    fn try_from_bytes(raw: &[u8]) -> anyhow::Result<Self> {
         ensure!(
             raw.len() == PoseidonDomain::byte_len(),
             "invalid amount of bytes"
@@ -143,12 +144,12 @@ impl Domain for PoseidonDomain {
         Ok(PoseidonDomain(res))
     }
 
-    fn write_bytes(&self, dest: &mut [u8]) -> Result<()> {
+    fn write_bytes(&self, dest: &mut [u8]) -> anyhow::Result<()> {
         self.0.write_le(dest)?;
         Ok(())
     }
 
-    fn random<R: rand::RngCore>(rng: &mut R) -> Self {
+    fn random<R: RngCore>(rng: &mut R) -> Self {
         // generating an Fr and converting it, to ensure we stay in the field
         Fr::random(rng).into()
     }
@@ -189,7 +190,7 @@ fn shared_hash(data: &[u8]) -> PoseidonDomain {
     let preimage = data
         .chunks(32)
         .map(|ref chunk| {
-            <Bls12 as ff::ScalarEngine>::Fr::from_repr(PoseidonDomain::from_slice(chunk).0)
+            <Bls12 as ScalarEngine>::Fr::from_repr(PoseidonDomain::from_slice(chunk).0)
                 .expect("from_repr failure")
         })
         .collect::<Vec<_>>();
@@ -197,9 +198,7 @@ fn shared_hash(data: &[u8]) -> PoseidonDomain {
     shared_hash_frs(&preimage).into()
 }
 
-fn shared_hash_frs(
-    preimage: &[<Bls12 as ff::ScalarEngine>::Fr],
-) -> <Bls12 as ff::ScalarEngine>::Fr {
+fn shared_hash_frs(preimage: &[<Bls12 as ScalarEngine>::Fr]) -> <Bls12 as ScalarEngine>::Fr {
     match preimage.len() {
         2 => {
             let mut p = Poseidon::new_with_preimage(&preimage, &POSEIDON_CONSTANTS_2);
@@ -260,28 +259,28 @@ impl HashFunction<PoseidonDomain> for PoseidonFunction {
 
     fn hash_leaf_circuit<CS: ConstraintSystem<Bls12>>(
         cs: CS,
-        left: &num::AllocatedNum<Bls12>,
-        right: &num::AllocatedNum<Bls12>,
+        left: &AllocatedNum<Bls12>,
+        right: &AllocatedNum<Bls12>,
         _height: usize,
-    ) -> ::std::result::Result<num::AllocatedNum<Bls12>, SynthesisError> {
+    ) -> Result<AllocatedNum<Bls12>, SynthesisError> {
         let preimage = vec![left.clone(), right.clone()];
 
-        poseidon_hash::<CS, Bls12, typenum::U2>(cs, preimage, typenum::U2::PARAMETERS())
+        poseidon_hash::<CS, Bls12, U2>(cs, preimage, U2::PARAMETERS())
     }
 
     fn hash_multi_leaf_circuit<Arity: 'static + PoseidonArity, CS: ConstraintSystem<Bls12>>(
         cs: CS,
-        leaves: &[num::AllocatedNum<Bls12>],
+        leaves: &[AllocatedNum<Bls12>],
         _height: usize,
-    ) -> ::std::result::Result<num::AllocatedNum<Bls12>, SynthesisError> {
+    ) -> Result<AllocatedNum<Bls12>, SynthesisError> {
         let params = Arity::PARAMETERS();
         poseidon_hash::<CS, Bls12, Arity>(cs, leaves.to_vec(), params)
     }
 
     fn hash_md_circuit<CS: ConstraintSystem<Bls12>>(
         cs: &mut CS,
-        elements: &[num::AllocatedNum<Bls12>],
-    ) -> ::std::result::Result<num::AllocatedNum<Bls12>, SynthesisError> {
+        elements: &[AllocatedNum<Bls12>],
+    ) -> Result<AllocatedNum<Bls12>, SynthesisError> {
         let params = PoseidonMDArity::PARAMETERS();
         let arity = PoseidonMDArity::to_usize();
 
@@ -296,7 +295,7 @@ impl HashFunction<PoseidonDomain> for PoseidonFunction {
             #[allow(clippy::needless_range_loop)]
             for i in (elts.len() + 1)..arity {
                 preimage[i] =
-                    num::AllocatedNum::alloc(cs.namespace(|| format!("padding {}", i)), || {
+                    AllocatedNum::alloc(cs.namespace(|| format!("padding {}", i)), || {
                         Ok(Fr::zero())
                     })
                     .expect("alloc failure");
@@ -311,21 +310,21 @@ impl HashFunction<PoseidonDomain> for PoseidonFunction {
 
     fn hash_circuit<CS: ConstraintSystem<Bls12>>(
         _cs: CS,
-        _bits: &[boolean::Boolean],
-    ) -> std::result::Result<num::AllocatedNum<Bls12>, SynthesisError> {
+        _bits: &[Boolean],
+    ) -> Result<AllocatedNum<Bls12>, SynthesisError> {
         unimplemented!();
     }
 
     fn hash2_circuit<CS>(
         cs: CS,
-        a: &num::AllocatedNum<Bls12>,
-        b: &num::AllocatedNum<Bls12>,
-    ) -> std::result::Result<num::AllocatedNum<Bls12>, SynthesisError>
+        a: &AllocatedNum<Bls12>,
+        b: &AllocatedNum<Bls12>,
+    ) -> Result<AllocatedNum<Bls12>, SynthesisError>
     where
         CS: ConstraintSystem<Bls12>,
     {
         let preimage = vec![a.clone(), b.clone()];
-        poseidon_hash::<CS, Bls12, typenum::U2>(cs, preimage, typenum::U2::PARAMETERS())
+        poseidon_hash::<CS, Bls12, U2>(cs, preimage, U2::PARAMETERS())
     }
 }
 
@@ -351,8 +350,8 @@ impl LightAlgorithm<PoseidonDomain> for PoseidonFunction {
         _height: usize,
     ) -> PoseidonDomain {
         shared_hash_frs(&[
-            <Bls12 as ff::ScalarEngine>::Fr::from_repr(left.0).expect("from_repr failure"),
-            <Bls12 as ff::ScalarEngine>::Fr::from_repr(right.0).expect("from_repr failure"),
+            <Bls12 as ScalarEngine>::Fr::from_repr(left.0).expect("from_repr failure"),
+            <Bls12 as ScalarEngine>::Fr::from_repr(right.0).expect("from_repr failure"),
         ])
         .into()
     }
@@ -364,7 +363,7 @@ impl LightAlgorithm<PoseidonDomain> for PoseidonFunction {
                     .iter()
                     .enumerate()
                     .map(|(i, x)| {
-                        <Bls12 as ff::ScalarEngine>::Fr::from_repr(x.0)
+                        <Bls12 as ScalarEngine>::Fr::from_repr(x.0)
                             .unwrap_or_else(|_| panic!("from_repr failure at {}", i))
                     })
                     .collect::<Vec<_>>(),
@@ -399,9 +398,9 @@ impl From<PoseidonDomain> for Fr {
 #[cfg(test)]
 mod tests {
     use super::*;
+
     use std::mem;
 
-    use bellperson::gadgets::num;
     use bellperson::util_cs::test_cs::TestConstraintSystem;
     use merkletree::{merkle::MerkleTree, store::VecStore};
 
@@ -414,7 +413,7 @@ mod tests {
             PoseidonDomain(Fr::one().into_repr()),
         ];
 
-        let t = MerkleTree::<PoseidonDomain, PoseidonFunction, VecStore<_>, typenum::U2>::new(
+        let t = MerkleTree::<PoseidonDomain, PoseidonFunction, VecStore<_>, U2>::new(
             values.iter().copied(),
         )
         .expect("merkle tree new failure");
@@ -445,7 +444,7 @@ mod tests {
             PoseidonDomain(Fr::one().into_repr()),
         ];
 
-        let t = MerkleTree::<PoseidonDomain, PoseidonFunction, VecStore<_>, typenum::U2>::new(
+        let t = MerkleTree::<PoseidonDomain, PoseidonFunction, VecStore<_>, U2>::new(
             leaves.iter().copied(),
         )
         .expect("merkle tree new failure");
@@ -563,7 +562,7 @@ mod tests {
         let mut cs = TestConstraintSystem::<Bls12>::new();
         let circuit_data = (0..n)
             .map(|n| {
-                num::AllocatedNum::alloc(cs.namespace(|| format!("input {}", n)), || Ok(Fr::one()))
+                AllocatedNum::alloc(cs.namespace(|| format!("input {}", n)), || Ok(Fr::one()))
                     .expect("alloc failure")
             })
             .collect::<Vec<_>>();

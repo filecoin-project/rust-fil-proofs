@@ -1,7 +1,9 @@
+use std::fmt::Debug;
+
 use bellperson::bls::{Bls12, Fr};
 use generic_array::typenum::{U0, U11, U16, U2, U24, U36, U4, U8};
 use lazy_static::lazy_static;
-use neptune::poseidon::PoseidonConstants;
+use neptune::{poseidon::PoseidonConstants, Arity};
 
 pub type PoseidonBinaryArity = U2;
 pub type PoseidonQuadArity = U4;
@@ -30,7 +32,7 @@ lazy_static! {
         PoseidonConstants::new();
 }
 
-pub trait PoseidonArity: neptune::Arity<Fr> + Send + Sync + Clone + std::fmt::Debug {
+pub trait PoseidonArity: Arity<Fr> + Send + Sync + Clone + Debug {
     #[allow(non_snake_case)]
     fn PARAMETERS() -> &'static PoseidonConstants<Bls12, Self>;
 }

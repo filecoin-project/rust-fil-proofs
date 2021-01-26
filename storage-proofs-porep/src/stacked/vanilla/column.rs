@@ -3,13 +3,12 @@ use std::marker::PhantomData;
 use bellperson::bls::Fr;
 use filecoin_hashers::Hasher;
 use serde::{Deserialize, Serialize};
-
 use storage_proofs_core::{
     error::Result,
     merkle::{MerkleTreeTrait, Store},
 };
 
-use super::{column_proof::ColumnProof, hash::hash_single_column};
+use crate::stacked::vanilla::{column_proof::ColumnProof, hash::hash_single_column};
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Column<H: Hasher> {

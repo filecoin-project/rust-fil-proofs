@@ -19,6 +19,7 @@ use storage_proofs_core::{
 use storage_proofs_post::election::{
     generate_candidates, ElectionPoStCompound, PrivateInputs, PublicInputs, SetupParams,
 };
+use tempfile::tempdir;
 
 #[ignore]
 #[test]
@@ -47,7 +48,7 @@ fn test_election_post_compound<Tree: 'static + MerkleTreeTrait>() {
     let mut sectors: Vec<SectorId> = Vec::new();
     let mut trees = BTreeMap::new();
 
-    let temp_dir = tempfile::tempdir().unwrap();
+    let temp_dir = tempdir().unwrap();
     let temp_path = temp_dir.path();
 
     for i in 0..5 {

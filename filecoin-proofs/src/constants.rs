@@ -1,10 +1,16 @@
 use std::collections::HashMap;
 use std::sync::RwLock;
 
-use filecoin_hashers::Hasher;
+pub use storage_proofs_core::drgraph::BASE_DEGREE as DRG_DEGREE;
+pub use storage_proofs_porep::stacked::EXP_DEGREE;
+
+use filecoin_hashers::{poseidon::PoseidonHasher, sha256::Sha256Hasher, Hasher};
 use lazy_static::lazy_static;
-use storage_proofs_core::util::NODE_SIZE;
-use storage_proofs_core::MAX_LEGACY_POREP_REGISTERED_PROOF_ID;
+use storage_proofs_core::{
+    merkle::{BinaryMerkleTree, LCTree, OctLCMerkleTree, OctMerkleTree},
+    util::NODE_SIZE,
+    MAX_LEGACY_POREP_REGISTERED_PROOF_ID,
+};
 use typenum::{U0, U2, U8};
 
 use crate::types::UnpaddedBytesAmount;
@@ -24,9 +30,6 @@ pub const WINNING_POST_CHALLENGE_COUNT: usize = 66;
 pub const WINNING_POST_SECTOR_COUNT: usize = 1;
 
 pub const WINDOW_POST_CHALLENGE_COUNT: usize = 10;
-
-pub const DRG_DEGREE: usize = storage_proofs_core::drgraph::BASE_DEGREE;
-pub const EXP_DEGREE: usize = storage_proofs_porep::stacked::EXP_DEGREE;
 
 pub const MAX_LEGACY_REGISTERED_SEAL_PROOF_ID: u64 = MAX_LEGACY_POREP_REGISTERED_PROOF_ID;
 
@@ -131,16 +134,16 @@ pub const MINIMUM_RESERVED_BYTES_FOR_PIECE_IN_FULLY_ALIGNED_SECTOR: u64 =
 pub const MIN_PIECE_SIZE: UnpaddedBytesAmount = UnpaddedBytesAmount(127);
 
 /// The hasher used for creating comm_d.
-pub type DefaultPieceHasher = filecoin_hashers::sha256::Sha256Hasher;
+pub type DefaultPieceHasher = Sha256Hasher;
 pub type DefaultPieceDomain = <DefaultPieceHasher as Hasher>::Domain;
 
 /// The default hasher for merkle trees currently in use.
-pub type DefaultTreeHasher = filecoin_hashers::poseidon::PoseidonHasher;
+pub type DefaultTreeHasher = PoseidonHasher;
 pub type DefaultTreeDomain = <DefaultTreeHasher as Hasher>::Domain;
 
-pub type DefaultBinaryTree = storage_proofs_core::merkle::BinaryMerkleTree<DefaultTreeHasher>;
-pub type DefaultOctTree = storage_proofs_core::merkle::OctMerkleTree<DefaultTreeHasher>;
-pub type DefaultOctLCTree = storage_proofs_core::merkle::OctLCMerkleTree<DefaultTreeHasher>;
+pub type DefaultBinaryTree = BinaryMerkleTree<DefaultTreeHasher>;
+pub type DefaultOctTree = OctMerkleTree<DefaultTreeHasher>;
+pub type DefaultOctLCTree = OctLCMerkleTree<DefaultTreeHasher>;
 
 // Generic shapes
 pub type SectorShapeBase = LCTree<DefaultTreeHasher, U8, U0, U0>;
@@ -190,11 +193,6 @@ pub fn is_sector_shape_top2(sector_size: u64) -> bool {
         _ => false,
     }
 }
-
-pub use storage_proofs_core::merkle::{DiskTree, LCTree};
-pub use storage_proofs_core::parameter_cache::{
-    get_parameter_data, get_parameter_data_from_id, get_verifying_key_data,
-};
 
 /// Calls a function with the type hint of the sector shape matching the provided sector.
 /// Panics if provided with an unknown sector size.

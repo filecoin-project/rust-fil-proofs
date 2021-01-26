@@ -5,9 +5,11 @@ use filecoin_hashers::{Domain, Hasher};
 use fr32::Fr32Ary;
 use merkletree::merkle::next_pow2;
 
-use crate::error::*;
-use crate::merkle::BinaryMerkleTree;
-use crate::util::NODE_SIZE;
+use crate::{
+    error::{Error, Result},
+    merkle::BinaryMerkleTree,
+    util::NODE_SIZE,
+};
 
 /// `position`, `length` are in H::Domain units
 #[derive(Clone, Debug)]
@@ -103,6 +105,7 @@ fn subtree_capacity(pos: usize, total: usize) -> Result<usize> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
     use filecoin_hashers::poseidon::PoseidonHasher;
 
     #[test]

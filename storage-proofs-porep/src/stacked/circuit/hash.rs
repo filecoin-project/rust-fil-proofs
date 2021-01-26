@@ -1,28 +1,19 @@
-use bellperson::bls::Bls12;
-use bellperson::gadgets::num;
-use bellperson::{ConstraintSystem, SynthesisError};
-use generic_array::typenum;
+use bellperson::{bls::Bls12, gadgets::num::AllocatedNum, ConstraintSystem, SynthesisError};
+use filecoin_hashers::{POSEIDON_CONSTANTS_11, POSEIDON_CONSTANTS_2};
+use generic_array::typenum::{U11, U2};
 use neptune::circuit::poseidon_hash;
 
 /// Hash a list of bits.
 pub fn hash_single_column<CS>(
     cs: CS,
-    column: &[num::AllocatedNum<Bls12>],
-) -> Result<num::AllocatedNum<Bls12>, SynthesisError>
+    column: &[AllocatedNum<Bls12>],
+) -> Result<AllocatedNum<Bls12>, SynthesisError>
 where
     CS: ConstraintSystem<Bls12>,
 {
     match column.len() {
-        2 => poseidon_hash::<CS, Bls12, typenum::U2>(
-            cs,
-            column.to_vec(),
-            &*filecoin_hashers::POSEIDON_CONSTANTS_2,
-        ),
-        11 => poseidon_hash::<CS, Bls12, typenum::U11>(
-            cs,
-            column.to_vec(),
-            &*filecoin_hashers::POSEIDON_CONSTANTS_11,
-        ),
+        2 => poseidon_hash::<CS, Bls12, U2>(cs, column.to_vec(), &*POSEIDON_CONSTANTS_2),
+        11 => poseidon_hash::<CS, Bls12, U11>(cs, column.to_vec(), &*POSEIDON_CONSTANTS_11),
         _ => panic!("unsupported column size: {}", column.len()),
     }
 }
@@ -31,9 +22,7 @@ where
 mod tests {
     use super::*;
 
-    use bellperson::bls::{Bls12, Fr};
-    use bellperson::util_cs::test_cs::TestConstraintSystem;
-    use bellperson::ConstraintSystem;
+    use bellperson::{bls::Fr, util_cs::test_cs::TestConstraintSystem};
     use ff::Field;
     use filecoin_hashers::{poseidon::PoseidonHasher, HashFunction, Hasher};
     use rand::SeedableRng;
@@ -54,12 +43,12 @@ mod tests {
 
             let a_num = {
                 let mut cs = cs.namespace(|| "a");
-                num::AllocatedNum::alloc(&mut cs, || Ok(a)).unwrap()
+                AllocatedNum::alloc(&mut cs, || Ok(a)).unwrap()
             };
 
             let b_num = {
                 let mut cs = cs.namespace(|| "b");
-                num::AllocatedNum::alloc(&mut cs, || Ok(b)).unwrap()
+                AllocatedNum::alloc(&mut cs, || Ok(b)).unwrap()
             };
 
             let out = <PoseidonHasher as Hasher>::Function::hash2_circuit(
@@ -95,8 +84,7 @@ mod tests {
                 .iter()
                 .enumerate()
                 .map(|(i, v)| {
-                    num::AllocatedNum::alloc(cs.namespace(|| format!("num_{}", i)), || Ok(*v))
-                        .unwrap()
+                    AllocatedNum::alloc(cs.namespace(|| format!("num_{}", i)), || Ok(*v)).unwrap()
                 })
                 .collect::<Vec<_>>();
 

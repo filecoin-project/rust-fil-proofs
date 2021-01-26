@@ -1,5 +1,5 @@
 use std::collections::BTreeMap;
-use std::fs;
+use std::fs::{read_dir, remove_file};
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 use std::sync::Once;
@@ -8,15 +8,26 @@ use anyhow::Result;
 use bellperson::bls::Fr;
 use ff::Field;
 use filecoin_hashers::Hasher;
-use rand::{Rng, SeedableRng};
+use filecoin_proofs::{
+    add_piece, clear_cache, compute_comm_d, fauxrep_aux, generate_fallback_sector_challenges,
+    generate_piece_commitment, generate_single_vanilla_proof, generate_window_post,
+    generate_window_post_with_vanilla, generate_winning_post,
+    generate_winning_post_sector_challenge, generate_winning_post_with_vanilla, seal_commit_phase1,
+    seal_commit_phase2, seal_pre_commit_phase1, seal_pre_commit_phase2, unseal_range,
+    validate_cache_for_commit, validate_cache_for_precommit_phase2, verify_seal,
+    verify_window_post, verify_winning_post, Commitment, DefaultTreeDomain, MerkleTreeTrait,
+    PaddedBytesAmount, PieceInfo, PoRepConfig, PoRepProofPartitions, PoStConfig, PoStType,
+    PrivateReplicaInfo, ProverId, PublicReplicaInfo, SealPreCommitOutput,
+    SealPreCommitPhase1Output, SectorShape16KiB, SectorShape2KiB, SectorShape32KiB,
+    SectorShape4KiB, SectorSize, UnpaddedByteIndex, UnpaddedBytesAmount, POREP_PARTITIONS,
+    SECTOR_SIZE_16_KIB, SECTOR_SIZE_2_KIB, SECTOR_SIZE_32_KIB, SECTOR_SIZE_4_KIB,
+    WINDOW_POST_CHALLENGE_COUNT, WINDOW_POST_SECTOR_COUNT, WINNING_POST_CHALLENGE_COUNT,
+    WINNING_POST_SECTOR_COUNT,
+};
+use rand::{random, Rng, SeedableRng};
 use rand_xorshift::XorShiftRng;
-use storage_proofs_core::api_version::ApiVersion;
-use storage_proofs_core::is_legacy_porep_id;
-use storage_proofs_core::sector::*;
-use tempfile::NamedTempFile;
-
-use filecoin_proofs::types::*;
-use filecoin_proofs::*;
+use storage_proofs_core::{api_version::ApiVersion, is_legacy_porep_id, sector::SectorId};
+use tempfile::{tempdir, NamedTempFile, TempDir};
 
 // Use a fixed PoRep ID, so that the parents cache can be re-used between some tests.
 // Note however, that parents caches cannot be shared when testing the differences
@@ -185,8 +196,8 @@ fn seal_lifecycle<Tree: 'static + MerkleTreeTrait>(
     Ok(())
 }
 
-fn get_layer_file_paths(cache_dir: &tempfile::TempDir) -> Vec<PathBuf> {
-    let mut list: Vec<_> = fs::read_dir(&cache_dir)
+fn get_layer_file_paths(cache_dir: &TempDir) -> Vec<PathBuf> {
+    let mut list: Vec<_> = read_dir(&cache_dir)
         .expect("failed to read read directory ")
         .filter_map(|entry| {
             let cur = entry.expect("reading directory failed");
@@ -203,8 +214,8 @@ fn get_layer_file_paths(cache_dir: &tempfile::TempDir) -> Vec<PathBuf> {
     list
 }
 
-fn clear_cache_dir_keep_data_layer(cache_dir: &tempfile::TempDir) {
-    for entry in fs::read_dir(&cache_dir).expect("faailed to read directory") {
+fn clear_cache_dir_keep_data_layer(cache_dir: &TempDir) {
+    for entry in read_dir(&cache_dir).expect("faailed to read directory") {
         let entry_path = entry.expect("failed get directory entry").path();
         if entry_path.is_file() {
             // delete everything except the data-layers
@@ -213,7 +224,7 @@ fn clear_cache_dir_keep_data_layer(cache_dir: &tempfile::TempDir) {
                 .expect("failed to get string from path")
                 .contains("data-layer")
             {
-                fs::remove_file(entry_path).expect("failed to remove file")
+                remove_file(entry_path).expect("failed to remove file")
             }
         }
     }
@@ -286,7 +297,7 @@ fn run_resumable_seal<Tree: 'static + MerkleTreeTrait>(
     let (mut piece_file, piece_bytes) =
         generate_piece_file(sector_size).expect("failed to generate piece file");
     let sealed_sector_file = NamedTempFile::new().expect("failed to created sealed sector file");
-    let cache_dir = tempfile::tempdir().expect("failed to create temp dir");
+    let cache_dir = tempdir().expect("failed to create temp dir");
 
     let config = porep_config(sector_size, *porep_id, api_version);
     let ticket = rng.gen();
@@ -308,7 +319,7 @@ fn run_resumable_seal<Tree: 'static + MerkleTreeTrait>(
 
     // Delete one layer, keep the other
     clear_cache_dir_keep_data_layer(&cache_dir);
-    std::fs::remove_file(&layers[layer_to_delete]).expect("failed to remove layer");
+    remove_file(&layers[layer_to_delete]).expect("failed to remove layer");
     let layers_remaining = get_layer_file_paths(&cache_dir);
     assert_eq!(layers_remaining.len(), 1, "expected one layer only");
     if layer_to_delete == 0 {
@@ -926,7 +937,7 @@ fn generate_piece_file(sector_size: u64) -> Result<(NamedTempFile, Vec<u8>)> {
     let number_of_bytes_in_piece = UnpaddedBytesAmount::from(PaddedBytesAmount(sector_size));
 
     let piece_bytes: Vec<u8> = (0..number_of_bytes_in_piece.0)
-        .map(|_| rand::random::<u8>())
+        .map(|_| random::<u8>())
         .collect();
 
     let mut piece_file = NamedTempFile::new()?;
@@ -957,7 +968,7 @@ fn run_seal_pre_commit_phase1<Tree: 'static + MerkleTreeTrait>(
     prover_id: ProverId,
     sector_id: SectorId,
     ticket: [u8; 32],
-    cache_dir: &tempfile::TempDir,
+    cache_dir: &TempDir,
     mut piece_file: &mut NamedTempFile,
     sealed_sector_file: &NamedTempFile,
 ) -> Result<(Vec<PieceInfo>, SealPreCommitPhase1Output<Tree>)> {
@@ -1080,12 +1091,12 @@ fn create_seal<R: Rng, Tree: 'static + MerkleTreeTrait>(
     skip_proof: bool,
     porep_id: &[u8; 32],
     api_version: ApiVersion,
-) -> Result<(SectorId, NamedTempFile, Commitment, tempfile::TempDir)> {
+) -> Result<(SectorId, NamedTempFile, Commitment, TempDir)> {
     init_logger();
 
     let (mut piece_file, piece_bytes) = generate_piece_file(sector_size)?;
     let sealed_sector_file = NamedTempFile::new()?;
-    let cache_dir = tempfile::tempdir().expect("failed to create temp dir");
+    let cache_dir = tempdir().expect("failed to create temp dir");
 
     let config = porep_config(sector_size, *porep_id, api_version);
     let ticket = rng.gen();
@@ -1134,19 +1145,19 @@ fn create_seal<R: Rng, Tree: 'static + MerkleTreeTrait>(
     Ok((sector_id, sealed_sector_file, comm_r, cache_dir))
 }
 
-fn create_fake_seal<R: rand::Rng, Tree: 'static + MerkleTreeTrait>(
+fn create_fake_seal<R: Rng, Tree: 'static + MerkleTreeTrait>(
     mut rng: &mut R,
     sector_size: u64,
     porep_id: &[u8; 32],
     api_version: ApiVersion,
-) -> Result<(SectorId, NamedTempFile, Commitment, tempfile::TempDir)> {
+) -> Result<(SectorId, NamedTempFile, Commitment, TempDir)> {
     init_logger();
 
     let sealed_sector_file = NamedTempFile::new()?;
 
     let config = porep_config(sector_size, *porep_id, api_version);
 
-    let cache_dir = tempfile::tempdir().unwrap();
+    let cache_dir = tempdir().unwrap();
 
     let sector_id = rng.gen::<u64>().into();
 

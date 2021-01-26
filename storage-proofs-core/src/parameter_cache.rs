@@ -1,8 +1,12 @@
-use crate::error::*;
+use std::collections::{BTreeMap, HashSet};
+use std::fs::{create_dir_all, File, OpenOptions};
+use std::io::{self, Read, Seek, SeekFrom, Write};
+use std::path::{Path, PathBuf};
+use std::sync::Mutex;
+use std::time::Instant;
+
 use anyhow::bail;
-use bellperson::bls::Bls12;
-use bellperson::groth16::Parameters;
-use bellperson::{groth16, Circuit};
+use bellperson::{bls::Bls12, groth16, Circuit};
 use blake2b_simd::Params as Blake2bParams;
 use fs2::FileExt;
 use itertools::Itertools;
@@ -12,13 +16,10 @@ use rand::RngCore;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
-use std::collections::{BTreeMap, HashSet};
-use std::fs::{self, create_dir_all, File};
-use std::io::{self, SeekFrom, Write};
-use std::path::{Path, PathBuf};
-use std::sync::Mutex;
-
-use super::settings;
+use crate::{
+    error::{Error, Result},
+    settings::SETTINGS,
+};
 
 /// Bump this when circuits change to invalidate the cache.
 pub const VERSION: usize = 28;
@@ -80,14 +81,14 @@ pub fn get_verifying_key_data(cache_id: &str) -> Option<&ParameterData> {
 
 impl LockedFile {
     pub fn open_exclusive_read<P: AsRef<Path>>(p: P) -> io::Result<Self> {
-        let f = fs::OpenOptions::new().read(true).create(false).open(p)?;
+        let f = OpenOptions::new().read(true).create(false).open(p)?;
         f.lock_exclusive()?;
 
         Ok(LockedFile(f))
     }
 
     pub fn open_exclusive<P: AsRef<Path>>(p: P) -> io::Result<Self> {
-        let f = fs::OpenOptions::new()
+        let f = OpenOptions::new()
             .read(true)
             .write(true)
             .create_new(true)
@@ -98,7 +99,7 @@ impl LockedFile {
     }
 
     pub fn open_shared_read<P: AsRef<Path>>(p: P) -> io::Result<Self> {
-        let f = fs::OpenOptions::new().read(true).create(false).open(p)?;
+        let f = OpenOptions::new().read(true).create(false).open(p)?;
         f.lock_shared()?;
 
         Ok(LockedFile(f))
@@ -111,7 +112,7 @@ impl AsRef<File> for LockedFile {
     }
 }
 
-impl io::Write for LockedFile {
+impl Write for LockedFile {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         self.0.write(buf)
     }
@@ -121,13 +122,13 @@ impl io::Write for LockedFile {
     }
 }
 
-impl io::Read for LockedFile {
+impl Read for LockedFile {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         self.0.read(buf)
     }
 }
 
-impl io::Seek for LockedFile {
+impl Seek for LockedFile {
     fn seek(&mut self, pos: SeekFrom) -> io::Result<u64> {
         self.0.seek(pos)
     }
@@ -142,7 +143,7 @@ impl Drop for LockedFile {
 }
 
 pub fn parameter_cache_dir_name() -> String {
-    settings::SETTINGS.parameter_cache.clone()
+    SETTINGS.parameter_cache.clone()
 }
 
 pub fn parameter_cache_dir() -> PathBuf {
@@ -254,8 +255,6 @@ where
 
         let generate = || -> Result<_> {
             if let Some(rng) = rng {
-                use std::time::Instant;
-
                 info!("Actually generating groth params. (id: {})", &id);
                 let start = Instant::now();
                 let parameters = groth16::generate_random_parameters::<Bls12, _, _>(circuit, rng)?;
@@ -335,7 +334,7 @@ fn ensure_parent(path: &PathBuf) -> io::Result<()> {
 pub fn read_cached_params(cache_entry_path: &PathBuf) -> Result<groth16::MappedParameters<Bls12>> {
     info!("checking cache_path: {:?} for parameters", cache_entry_path);
 
-    let verify_production_params = settings::SETTINGS.verify_production_params;
+    let verify_production_params = SETTINGS.verify_production_params;
 
     // If the verify production params is set, we make sure that the path being accessed matches a
     // production cache key, found in the 'parameters.json' file. The parameter data file is also
@@ -393,7 +392,7 @@ pub fn read_cached_params(cache_entry_path: &PathBuf) -> Result<groth16::MappedP
 
     with_exclusive_read_lock::<_, io::Error, _>(cache_entry_path, |_file| {
         let mapped_params =
-            Parameters::build_mapped_parameters(cache_entry_path.to_path_buf(), false)?;
+            groth16::Parameters::build_mapped_parameters(cache_entry_path.to_path_buf(), false)?;
         info!("read parameters from cache {:?} ", cache_entry_path);
 
         Ok(mapped_params)

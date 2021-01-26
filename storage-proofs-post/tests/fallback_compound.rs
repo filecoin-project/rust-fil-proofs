@@ -18,6 +18,7 @@ use storage_proofs_post::fallback::{
     ChallengeRequirements, FallbackPoStCompound, PrivateInputs, PrivateSector, PublicInputs,
     PublicSector, SetupParams,
 };
+use tempfile::tempdir;
 
 #[ignore]
 #[test]
@@ -88,7 +89,7 @@ fn fallback_post<Tree: 'static + MerkleTreeTrait>(
         priority: false,
     };
 
-    let temp_dir = tempfile::tempdir().unwrap();
+    let temp_dir = tempdir().unwrap();
     let temp_path = temp_dir.path();
 
     let mut pub_sectors = Vec::new();

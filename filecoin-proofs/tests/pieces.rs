@@ -1,29 +1,23 @@
-use std::io::Read;
+use std::io::{Cursor, Read};
 use std::iter::Iterator;
 
 use anyhow::Result;
 use bellperson::bls::Fr;
+use filecoin_proofs::{
+    add_piece, commitment_from_fr,
+    pieces::{
+        compute_comm_d, get_piece_alignment, get_piece_start_byte, piece_hash, verify_pieces,
+        zero_padding, EmptySource, PieceAlignment,
+    },
+    Commitment, DataTree, DefaultPieceHasher, PaddedBytesAmount, PieceInfo, SectorSize,
+    UnpaddedByteIndex, UnpaddedBytesAmount, DRG_DEGREE, EXP_DEGREE, TEST_SEED,
+};
 use rand::{Rng, RngCore, SeedableRng};
 use rand_xorshift::XorShiftRng;
-
-use storage_proofs_core::api_version::ApiVersion;
-use storage_proofs_core::drgraph::Graph;
-use storage_proofs_core::merkle::create_base_merkle_tree;
-use storage_proofs_core::util::NODE_SIZE;
+use storage_proofs_core::{
+    api_version::ApiVersion, drgraph::Graph, merkle::create_base_merkle_tree, util::NODE_SIZE,
+};
 use storage_proofs_porep::stacked::StackedBucketGraph;
-
-use filecoin_proofs::constants::{DefaultPieceHasher, DRG_DEGREE, EXP_DEGREE};
-use filecoin_proofs::types::{
-    Commitment, DataTree, PaddedBytesAmount, PieceInfo, SectorSize, UnpaddedByteIndex,
-    UnpaddedBytesAmount,
-};
-
-use filecoin_proofs::commitment_from_fr;
-use filecoin_proofs::constants::*;
-use filecoin_proofs::pieces::{
-    compute_comm_d, get_piece_alignment, get_piece_start_byte, piece_hash, verify_pieces,
-    zero_padding, EmptySource, PieceAlignment,
-};
 
 #[test]
 fn test_empty_source() {
@@ -285,7 +279,7 @@ fn test_verify_padded_pieces() {
 #[test]
 #[ignore] // slow test
 fn test_verify_random_pieces() -> Result<()> {
-    use filecoin_proofs::pieces::*;
+    use filecoin_proofs::pieces::sum_piece_bytes_with_alignment;
 
     let rng = &mut XorShiftRng::from_seed(TEST_SEED);
 
@@ -382,7 +376,7 @@ fn build_sector(
     )?;
 
     let mut staged_sector = Vec::with_capacity(u64::from(sector_size) as usize);
-    let mut staged_sector_io = std::io::Cursor::new(&mut staged_sector);
+    let mut staged_sector_io = Cursor::new(&mut staged_sector);
     let mut piece_infos = Vec::with_capacity(piece_sizes.len());
 
     for (i, piece_size) in piece_sizes.iter().enumerate() {
@@ -390,9 +384,9 @@ fn build_sector(
         let mut piece_bytes = vec![255u8; piece_size_u];
         rng.fill_bytes(&mut piece_bytes);
 
-        let mut piece_file = std::io::Cursor::new(&mut piece_bytes);
+        let mut piece_file = Cursor::new(&mut piece_bytes);
 
-        let (piece_info, _) = filecoin_proofs::add_piece(
+        let (piece_info, _) = add_piece(
             &mut piece_file,
             &mut staged_sector_io,
             *piece_size,

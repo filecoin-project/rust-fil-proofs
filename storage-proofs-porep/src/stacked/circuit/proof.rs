@@ -1,26 +1,26 @@
 use std::marker::PhantomData;
 
 use anyhow::ensure;
-use bellperson::bls::{Bls12, Fr};
-use bellperson::gadgets::num;
-use bellperson::{Circuit, ConstraintSystem, SynthesisError};
+use bellperson::{
+    bls::{Bls12, Fr},
+    gadgets::num::AllocatedNum,
+    Circuit, ConstraintSystem, SynthesisError,
+};
 use filecoin_hashers::{HashFunction, Hasher};
 use fr32::u64_into_fr;
 use storage_proofs_core::{
     compound_proof::{CircuitComponent, CompoundProof},
     drgraph::Graph,
     error::Result,
-    gadgets::constraint,
-    gadgets::por::PoRCompound,
+    gadgets::{constraint, por::PoRCompound},
     merkle::{BinaryMerkleTree, MerkleTreeTrait},
     parameter_cache::{CacheableParameters, ParameterSetMetadata},
-    por,
+    por::{self, PoR},
     proof::ProofScheme,
     util::reverse_bit_numbering,
 };
 
-use super::params::Proof;
-use crate::stacked::StackedDrg;
+use crate::stacked::{circuit::params::Proof, StackedDrg};
 
 /// Stacked DRG based Proof of Replication.
 ///
@@ -105,7 +105,7 @@ impl<'a, Tree: MerkleTreeTrait, G: Hasher> Circuit<Bls12> for StackedCircuit<'a,
         } = self;
 
         // Allocate replica_id
-        let replica_id_num = num::AllocatedNum::alloc(cs.namespace(|| "replica_id"), || {
+        let replica_id_num = AllocatedNum::alloc(cs.namespace(|| "replica_id"), || {
             replica_id
                 .map(Into::into)
                 .ok_or_else(|| SynthesisError::AssignmentMissing)
@@ -118,7 +118,7 @@ impl<'a, Tree: MerkleTreeTrait, G: Hasher> Circuit<Bls12> for StackedCircuit<'a,
             reverse_bit_numbering(replica_id_num.to_bits_le(cs.namespace(|| "replica_id_bits"))?);
 
         // Allocate comm_d as Fr
-        let comm_d_num = num::AllocatedNum::alloc(cs.namespace(|| "comm_d"), || {
+        let comm_d_num = AllocatedNum::alloc(cs.namespace(|| "comm_d"), || {
             comm_d
                 .map(Into::into)
                 .ok_or_else(|| SynthesisError::AssignmentMissing)
@@ -128,7 +128,7 @@ impl<'a, Tree: MerkleTreeTrait, G: Hasher> Circuit<Bls12> for StackedCircuit<'a,
         comm_d_num.inputize(cs.namespace(|| "comm_d_input"))?;
 
         // Allocate comm_r as Fr
-        let comm_r_num = num::AllocatedNum::alloc(cs.namespace(|| "comm_r"), || {
+        let comm_r_num = AllocatedNum::alloc(cs.namespace(|| "comm_r"), || {
             comm_r
                 .map(Into::into)
                 .ok_or_else(|| SynthesisError::AssignmentMissing)
@@ -138,14 +138,14 @@ impl<'a, Tree: MerkleTreeTrait, G: Hasher> Circuit<Bls12> for StackedCircuit<'a,
         comm_r_num.inputize(cs.namespace(|| "comm_r_input"))?;
 
         // Allocate comm_r_last as Fr
-        let comm_r_last_num = num::AllocatedNum::alloc(cs.namespace(|| "comm_r_last"), || {
+        let comm_r_last_num = AllocatedNum::alloc(cs.namespace(|| "comm_r_last"), || {
             comm_r_last
                 .map(Into::into)
                 .ok_or_else(|| SynthesisError::AssignmentMissing)
         })?;
 
         // Allocate comm_c as Fr
-        let comm_c_num = num::AllocatedNum::alloc(cs.namespace(|| "comm_c"), || {
+        let comm_c_num = AllocatedNum::alloc(cs.namespace(|| "comm_c"), || {
             comm_c
                 .map(Into::into)
                 .ok_or_else(|| SynthesisError::AssignmentMissing)
@@ -229,8 +229,8 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher>
             private: true,
         };
 
-        let por_params = por::PoR::<Tree>::setup(&por_setup_params)?;
-        let por_params_d = por::PoR::<BinaryMerkleTree<G>>::setup(&por_setup_params)?;
+        let por_params = PoR::<Tree>::setup(&por_setup_params)?;
+        let por_params_d = PoR::<BinaryMerkleTree<G>>::setup(&por_setup_params)?;
 
         let all_challenges = pub_in.challenges(&pub_params.layer_challenges, graph.size(), k);
 

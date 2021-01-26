@@ -1,24 +1,25 @@
 use std::collections::BTreeMap;
+use std::fs;
 use std::path::Path;
 
 use anyhow::{anyhow, ensure, Context, Result};
 use bincode::deserialize;
 use filecoin_hashers::Hasher;
 use log::{info, trace};
-use storage_proofs_core::cache_key::CacheKey;
-use storage_proofs_core::merkle::MerkleTreeTrait;
-use storage_proofs_core::proof::ProofScheme;
-use storage_proofs_core::sector::*;
-use storage_proofs_post::fallback;
-use storage_proofs_post::fallback::SectorProof;
-
-use crate::api::util::as_safe_commitment;
-use crate::constants::*;
-use crate::types::{
-    ChallengeSeed, FallbackPoStSectorProof, PoStConfig, PrivateReplicaInfo, ProverId, TemporaryAux,
-    VanillaProof,
+use storage_proofs_core::{
+    cache_key::CacheKey, merkle::MerkleTreeTrait, proof::ProofScheme, sector::SectorId,
 };
-use crate::PoStType;
+use storage_proofs_post::fallback::{self, generate_leaf_challenge, FallbackPoSt, SectorProof};
+
+use crate::{
+    api::as_safe_commitment,
+    constants::DefaultPieceHasher,
+    types::{
+        ChallengeSeed, FallbackPoStSectorProof, PoStConfig, PrivateReplicaInfo, ProverId,
+        TemporaryAux, VanillaProof,
+    },
+    PoStType,
+};
 
 // Ensure that any associated cached data persisted is discarded.
 pub fn clear_cache<Tree: MerkleTreeTrait>(cache_dir: &Path) -> Result<()> {
@@ -26,7 +27,7 @@ pub fn clear_cache<Tree: MerkleTreeTrait>(cache_dir: &Path) -> Result<()> {
 
     let t_aux = {
         let f_aux_path = cache_dir.to_path_buf().join(CacheKey::TAux.to_string());
-        let aux_bytes = std::fs::read(&f_aux_path)
+        let aux_bytes = fs::read(&f_aux_path)
             .with_context(|| format!("could not read from path={:?}", f_aux_path))?;
 
         deserialize(&aux_bytes)
@@ -102,7 +103,7 @@ pub fn generate_fallback_sector_challenges<Tree: 'static + MerkleTreeTrait>(
                 let challenge_index = ((partition_index * post_config.sector_count + i)
                     * post_config.challenge_count
                     + n) as u64;
-                let challenged_leaf = fallback::generate_leaf_challenge(
+                let challenged_leaf = generate_leaf_challenge(
                     &public_params,
                     randomness_safe,
                     u64::from(*sector),
@@ -290,11 +291,7 @@ pub fn partition_vanilla_proofs<Tree: MerkleTreeTrait>(
     info!("partition_vanilla_proofs:finish");
 
     ensure!(
-        fallback::FallbackPoSt::<Tree>::verify_all_partitions(
-            pub_params,
-            pub_inputs,
-            &partition_proofs
-        )?,
+        FallbackPoSt::<Tree>::verify_all_partitions(pub_params, pub_inputs, &partition_proofs)?,
         "partitioned vanilla proofs failed to verify"
     );
 

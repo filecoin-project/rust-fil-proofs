@@ -1,21 +1,27 @@
+use std::any::Any;
+use std::fs::File;
 use std::io::Write;
+use std::mem::size_of;
 use std::path::PathBuf;
 
-use anyhow::{ensure, Result};
+use anyhow::ensure;
 use filecoin_hashers::{Domain, Hasher, PoseidonArity};
-use generic_array::typenum::{self, Unsigned};
+use generic_array::typenum::{Unsigned, U0};
 use log::trace;
-use merkletree::merkle;
-use merkletree::merkle::{
-    get_merkle_tree_leafs, is_merkle_tree_size_valid, FromIndexedParallelIterator,
+use merkletree::{
+    merkle::{
+        get_merkle_tree_leafs, is_merkle_tree_size_valid, FromIndexedParallelIterator, MerkleTree,
+    },
+    store::{DiskStore, ExternalReader, LevelCacheStore, ReplicaConfig, Store, StoreConfig},
 };
-use merkletree::store::{ExternalReader, ReplicaConfig, Store, StoreConfig};
-use rayon::prelude::*;
+use rand::Rng;
+use rayon::prelude::{IntoParallelIterator, ParallelIterator};
 
-use crate::error::*;
-use crate::util::{data_at_node, default_rows_to_discard, NODE_SIZE};
-
-use super::*;
+use crate::{
+    error::{Error, Result},
+    merkle::{DiskTree, LCMerkleTree, LCStore, LCTree, MerkleTreeTrait, MerkleTreeWrapper},
+    util::{data_at_node, default_rows_to_discard, NODE_SIZE},
+};
 
 // Create a DiskTree from the provided config(s), each representing a 'base' layer tree with 'base_tree_len' elements.
 pub fn create_disk_tree<Tree: MerkleTreeTrait>(
@@ -99,8 +105,6 @@ pub fn create_tree<Tree: MerkleTreeTrait>(
 where
     Tree::Store: 'static,
 {
-    use std::any::Any;
-
     let base_tree_leafs = get_base_tree_leafs::<Tree>(base_tree_len)?;
     let mut trees = Vec::with_capacity(configs.len());
     for i in 0..configs.len() {
@@ -109,9 +113,8 @@ where
             Tree::Arity::to_usize(),
             configs[i].clone(),
         )?;
-        if let Some(lc_store) = Any::downcast_mut::<
-            merkletree::store::LevelCacheStore<<Tree::Hasher as Hasher>::Domain, std::fs::File>,
-        >(&mut store)
+        if let Some(lc_store) =
+            Any::downcast_mut::<LevelCacheStore<<Tree::Hasher as Hasher>::Domain, File>>(&mut store)
         {
             ensure!(
                 replica_config.is_some(),
@@ -134,8 +137,8 @@ where
                 Tree::Hasher,
                 Tree::Store,
                 Tree::Arity,
-                typenum::U0,
-                typenum::U0,
+                U0,
+                U0,
             >::from_data_store(store, base_tree_leafs)?);
         }
     }
@@ -202,7 +205,7 @@ pub fn create_base_merkle_tree<Tree: MerkleTreeTrait>(
     };
 
     let tree = match config {
-        Some(x) => merkle::MerkleTree::<
+        Some(x) => MerkleTree::<
             <Tree::Hasher as Hasher>::Domain,
             <Tree::Hasher as Hasher>::Function,
             Tree::Store,
@@ -210,7 +213,7 @@ pub fn create_base_merkle_tree<Tree: MerkleTreeTrait>(
             Tree::SubTreeArity,
             Tree::TopTreeArity,
         >::from_par_iter_with_config((0..size).into_par_iter().map(f), x),
-        None => merkle::MerkleTree::<
+        None => MerkleTree::<
             <Tree::Hasher as Hasher>::Domain,
             <Tree::Hasher as Hasher>::Function,
             Tree::Store,
@@ -248,7 +251,7 @@ pub fn create_base_lcmerkle_tree<H: Hasher, BaseTreeArity: 'static + PoseidonAri
         "Invalid merkle tree size given the arity"
     );
     ensure!(
-        data.len() == size * std::mem::size_of::<H::Domain>(),
+        data.len() == size * size_of::<H::Domain>(),
         "Invalid data length for merkle tree"
     );
 
@@ -386,7 +389,7 @@ pub type ResTree<Tree> = MerkleTreeWrapper<
     <Tree as MerkleTreeTrait>::TopTreeArity,
 >;
 
-fn generate_base_tree<R: rand::Rng, Tree: MerkleTreeTrait>(
+fn generate_base_tree<R: Rng, Tree: MerkleTreeTrait>(
     rng: &mut R,
     nodes: usize,
     temp_path: Option<PathBuf>,
@@ -417,21 +420,16 @@ where
                 .expect("try from iter with config failure");
 
         // Write out the replica data.
-        let mut f = std::fs::File::create(&replica_path).expect("replica file create failure");
+        let mut f = File::create(&replica_path).expect("replica file create failure");
         f.write_all(&data).expect("replica file write failure");
 
         {
             // Beware: evil dynamic downcasting RUST MAGIC down below.
-            use std::any::Any;
-
             if let Some(lc_tree) = Any::downcast_mut::<
-                merkle::MerkleTree<
+                MerkleTree<
                     <Tree::Hasher as Hasher>::Domain,
                     <Tree::Hasher as Hasher>::Function,
-                    merkletree::store::LevelCacheStore<
-                        <Tree::Hasher as Hasher>::Domain,
-                        std::fs::File,
-                    >,
+                    LevelCacheStore<<Tree::Hasher as Hasher>::Domain, File>,
                     Tree::Arity,
                     Tree::SubTreeArity,
                     Tree::TopTreeArity,
@@ -454,7 +452,7 @@ where
     }
 }
 
-fn generate_sub_tree<R: rand::Rng, Tree: MerkleTreeTrait>(
+fn generate_sub_tree<R: Rng, Tree: MerkleTreeTrait>(
     rng: &mut R,
     nodes: usize,
     temp_path: Option<PathBuf>,
@@ -483,7 +481,7 @@ where
 }
 
 /// Only used for testing, but can't cfg-test it as that stops exports.
-pub fn generate_tree<Tree: MerkleTreeTrait, R: rand::Rng>(
+pub fn generate_tree<Tree: MerkleTreeTrait, R: Rng>(
     rng: &mut R,
     nodes: usize,
     temp_path: Option<PathBuf>,
@@ -505,13 +503,7 @@ where
         for _i in 0..top_tree_arity {
             let (inner_data, tree) = generate_sub_tree::<
                 R,
-                MerkleTreeWrapper<
-                    Tree::Hasher,
-                    Tree::Store,
-                    Tree::Arity,
-                    Tree::SubTreeArity,
-                    typenum::U0,
-                >,
+                MerkleTreeWrapper<Tree::Hasher, Tree::Store, Tree::Arity, Tree::SubTreeArity, U0>,
             >(rng, nodes / top_tree_arity, temp_path.clone());
 
             sub_trees.push(tree);

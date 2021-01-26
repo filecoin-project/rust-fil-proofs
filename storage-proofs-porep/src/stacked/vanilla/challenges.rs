@@ -1,9 +1,8 @@
+use filecoin_hashers::Domain;
 use num_bigint::BigUint;
 use num_traits::cast::ToPrimitive;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-
-use filecoin_hashers::Domain;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LayerChallenges {
@@ -80,9 +79,10 @@ pub struct ChallengeRequirements {
 mod test {
     use super::*;
 
+    use std::collections::HashMap;
+
     use filecoin_hashers::sha256::Sha256Domain;
     use rand::{thread_rng, Rng};
-    use std::collections::HashMap;
 
     #[test]
     fn test_calculate_fixed_challenges() {

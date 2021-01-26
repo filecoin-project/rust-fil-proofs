@@ -2,15 +2,16 @@ use std::collections::{BTreeMap, HashSet};
 use std::marker::PhantomData;
 
 use anyhow::{bail, ensure, Context};
+use blake2b_simd::blake2b;
 use byteorder::{ByteOrder, LittleEndian};
 use filecoin_hashers::{Domain, HashFunction, Hasher};
-use serde::{Deserialize, Serialize};
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use storage_proofs_core::{
     error::{Error, Result},
     merkle::{MerkleProof, MerkleProofTrait, MerkleTreeTrait, MerkleTreeWrapper},
     parameter_cache::ParameterSetMetadata,
     proof::{NoRequirements, ProofScheme},
-    sector::*,
+    sector::{OrderedSectorSet, SectorId},
     util::NODE_SIZE,
 };
 
@@ -74,7 +75,7 @@ pub struct PrivateInputs<'a, Tree: 'a + MerkleTreeTrait> {
 pub struct Proof<P: MerkleProofTrait> {
     #[serde(bound(
         serialize = "MerkleProof<P::Hasher, P::Arity, P::SubTreeArity, P::TopTreeArity>: Serialize",
-        deserialize = "MerkleProof<P::Hasher, P::Arity, P::SubTreeArity, P::TopTreeArity>: serde::de::DeserializeOwned"
+        deserialize = "MerkleProof<P::Hasher, P::Arity, P::SubTreeArity, P::TopTreeArity>: DeserializeOwned"
     ))]
     inclusion_proofs: Vec<MerkleProof<P::Hasher, P::Arity, P::SubTreeArity, P::TopTreeArity>>,
     pub comm_cs: Vec<<P::Hasher as Hasher>::Domain>,
@@ -277,7 +278,7 @@ fn derive_challenge(
     data.extend_from_slice(&n.to_le_bytes()[..]);
     data.extend_from_slice(&attempt.to_le_bytes()[..]);
 
-    let hash = blake2b_simd::blake2b(&data);
+    let hash = blake2b(&data);
     let challenge_bytes = hash.as_bytes();
     let sector_challenge = LittleEndian::read_u64(&challenge_bytes[..8]);
     let leaf_challenge = LittleEndian::read_u64(&challenge_bytes[8..16]);
@@ -298,10 +299,10 @@ fn derive_challenge(
 mod tests {
     use super::*;
 
+    use std::collections::BTreeSet;
+
     #[test]
     fn test_derive_challenges_fails_on_all_faulty() {
-        use std::collections::BTreeSet;
-
         let mut sectors = BTreeSet::new();
         sectors.insert(SectorId::from(1));
         sectors.insert(SectorId::from(2));

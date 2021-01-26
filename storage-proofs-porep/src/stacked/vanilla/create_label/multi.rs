@@ -1,36 +1,40 @@
 use std::convert::TryInto;
 use std::marker::PhantomData;
-use std::mem::size_of;
-use std::sync::atomic::{AtomicU64, Ordering::SeqCst};
-use std::sync::{Arc, MutexGuard};
+use std::mem::{self, size_of};
+use std::sync::{
+    atomic::{AtomicU64, Ordering::SeqCst},
+    Arc, MutexGuard,
+};
+use std::thread;
+use std::time::Duration;
 
 use anyhow::{Context, Result};
-use byte_slice_cast::*;
-use crossbeam::thread;
-use digest::generic_array::{
+use byte_slice_cast::{AsByteSlice, AsMutSliceOf};
+use filecoin_hashers::Hasher;
+use generic_array::{
     typenum::{Unsigned, U64},
     GenericArray,
 };
-use filecoin_hashers::Hasher;
-use log::*;
+use log::{debug, info};
 use mapr::MmapMut;
-use merkletree::store::{DiskStore, StoreConfig};
+use merkletree::store::{DiskStore, Store, StoreConfig};
 use storage_proofs_core::{
     cache_key::CacheKey,
     drgraph::{Graph, BASE_DEGREE},
-    merkle::*,
-    settings,
+    merkle::MerkleTreeTrait,
+    settings::SETTINGS,
     util::NODE_SIZE,
 };
 
-use super::super::{
+use crate::stacked::vanilla::{
     cache::ParentCache,
     cores::{bind_core, checkout_core_group, CoreIndex},
+    create_label::{prepare_layers, read_layer, write_layer},
     graph::{StackedBucketGraph, DEGREE, EXP_DEGREE},
     memory_handling::{setup_create_label_memory, CacheReader},
     params::{Labels, LabelsCache},
     proof::LayerState,
-    utils::*,
+    utils::{memset, prepare_block, BitMask, RingBuf, UnsafeSlice},
 };
 
 const MIN_BASE_PARENT_NODE: u64 = 2000;
@@ -168,7 +172,7 @@ fn create_label_runner(
 
             // Don't overrun the buffer
             while cur_node > (parents_cache.get_consumer() + lookahead - 1) {
-                std::thread::sleep(std::time::Duration::from_micros(10));
+                thread::sleep(Duration::from_micros(10));
             }
 
             let buf = unsafe { ring_buf.slot_mut(cur_slot as usize) };
@@ -188,7 +192,7 @@ fn create_label_runner(
 
         // Wait for the previous node to finish
         while work > (cur_producer.load(SeqCst) + 1) {
-            std::thread::sleep(std::time::Duration::from_micros(10));
+            thread::sleep(Duration::from_micros(10));
         }
 
         // Mark our work as done
@@ -210,7 +214,7 @@ fn create_layer_labels(
     info!("Creating labels for layer {}", cur_layer);
     // num_producers is the number of producer threads
     let (lookahead, num_producers, producer_stride) = {
-        let settings = &settings::SETTINGS;
+        let settings = &SETTINGS;
         let lookahead = settings.multicore_sdr_lookahead;
         let num_producers = settings.multicore_sdr_producers;
         // NOTE: Stride must not exceed the number of nodes in parents_cache's window. If it does, the process will deadlock
@@ -243,7 +247,7 @@ fn create_layer_labels(
         exp_labels.map(|m| UnsafeSlice::from_slice(m.as_mut_slice_of::<u32>().unwrap()));
     let base_parent_missing = UnsafeSlice::from_slice(&mut base_parent_missing);
 
-    thread::scope(|s| {
+    crossbeam::thread::scope(|s| {
         let mut runners = Vec::with_capacity(num_producers);
 
         for i in 0..num_producers {
@@ -319,7 +323,7 @@ fn create_layer_labels(
                     printed = true;
                     _count_not_ready += 1;
                 }
-                std::thread::sleep(std::time::Duration::from_micros(10));
+                thread::sleep(Duration::from_micros(10));
                 producer_val = cur_producer.load(SeqCst);
             }
 
@@ -428,11 +432,11 @@ pub fn create_labels_for_encoding<Tree: 'static + MerkleTreeTrait, T: AsRef<[u8]
 ) -> Result<(Labels<Tree>, Vec<LayerState>)> {
     info!("create labels");
 
-    let layer_states = super::prepare_layers::<Tree>(graph, &config, layers);
+    let layer_states = prepare_layers::<Tree>(graph, &config, layers);
 
     let sector_size = graph.size() * NODE_SIZE;
     let node_count = graph.size() as u64;
-    let cache_window_nodes = settings::SETTINGS.sdr_parents_cache_size as usize;
+    let cache_window_nodes = SETTINGS.sdr_parents_cache_size as usize;
 
     let default_cache_size = DEGREE * 4 * cache_window_nodes;
 
@@ -461,7 +465,7 @@ pub fn create_labels_for_encoding<Tree: 'static + MerkleTreeTrait, T: AsRef<[u8]
             info!("skipping layer {}, already generated", layer);
 
             // load the already generated layer into exp_labels
-            super::read_layer(&layer_state.config, &mut exp_labels)?;
+            read_layer(&layer_state.config, &mut exp_labels)?;
             continue;
         }
 
@@ -491,12 +495,12 @@ pub fn create_labels_for_encoding<Tree: 'static + MerkleTreeTrait, T: AsRef<[u8]
             parents_cache.start_reset()?;
         }
 
-        std::mem::swap(&mut layer_labels, &mut exp_labels);
+        mem::swap(&mut layer_labels, &mut exp_labels);
         {
             let layer_config = &layer_state.config;
 
             info!("  storing labels on disk");
-            super::write_layer(&exp_labels, layer_config).context("failed to store labels")?;
+            write_layer(&exp_labels, layer_config).context("failed to store labels")?;
 
             info!(
                 "  generated layer {} store with id {}",
@@ -530,7 +534,7 @@ pub fn create_labels_for_decoding<Tree: 'static + MerkleTreeTrait, T: AsRef<[u8]
 
     let sector_size = graph.size() * NODE_SIZE;
     let node_count = graph.size() as u64;
-    let cache_window_nodes = (&settings::SETTINGS.sdr_parents_cache_size / 2) as usize;
+    let cache_window_nodes = (&SETTINGS.sdr_parents_cache_size / 2) as usize;
 
     let default_cache_size = DEGREE * 4 * cache_window_nodes;
 
@@ -599,7 +603,7 @@ pub fn create_labels_for_decoding<Tree: 'static + MerkleTreeTrait, T: AsRef<[u8]
                 layer, layer_config.id
             );
 
-            std::mem::swap(&mut layer_labels, &mut exp_labels);
+            mem::swap(&mut layer_labels, &mut exp_labels);
 
             // Track the layer specific store and StoreConfig for later retrieval.
             labels.push(layer_store);
@@ -623,7 +627,8 @@ mod tests {
     use ff::PrimeField;
     use filecoin_hashers::poseidon::PoseidonHasher;
     use generic_array::typenum::{U0, U2, U8};
-    use storage_proofs_core::api_version::ApiVersion;
+    use storage_proofs_core::{api_version::ApiVersion, merkle::LCTree};
+    use tempfile::tempdir;
 
     #[test]
     fn test_create_labels() {
@@ -706,7 +711,7 @@ mod tests {
     ) {
         let nodes = sector_size / NODE_SIZE;
 
-        let cache_dir = tempfile::tempdir().expect("tempdir failure");
+        let cache_dir = tempdir().expect("tempdir failure");
         let config = StoreConfig::new(
             cache_dir.path(),
             CacheKey::CommDTree.to_string(),
