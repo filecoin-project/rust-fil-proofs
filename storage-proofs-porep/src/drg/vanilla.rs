@@ -510,7 +510,11 @@ where
         _config: Option<StoreConfig>,
     ) -> Result<()> {
         let block = decode_block(&pp.graph, replica_id, &data, None, node)?;
-        data.copy_from_slice(AsRef::<[u8]>::as_ref(&block));
+        let start = node * NODE_SIZE;
+        let end = start + NODE_SIZE;
+        let dest = &mut data[start..end];
+        dest.copy_from_slice(AsRef::<[u8]>::as_ref(&block));
+
         Ok(())
     }
 }

@@ -1,4 +1,4 @@
-use std::fs::{self, File};
+use std::fs::{self, File, OpenOptions};
 use std::io::{self, BufReader, BufWriter, Read, Write};
 use std::path::{Path, PathBuf};
 
@@ -7,6 +7,7 @@ use bincode::deserialize;
 use filecoin_hashers::Hasher;
 use fr32::{write_unpadded, Fr32Reader};
 use log::{info, trace};
+use memmap::MmapOptions;
 use merkletree::store::{DiskStore, LevelCacheStore, StoreConfig};
 use storage_proofs_core::{
     cache_key::CacheKey,
@@ -83,18 +84,15 @@ pub fn get_unsealed_range<T: Into<PathBuf> + AsRef<Path>, Tree: 'static + Merkle
 ) -> Result<UnpaddedBytesAmount> {
     info!("get_unsealed_range:start");
 
-    let f_in = File::open(&sealed_path)
-        .with_context(|| format!("could not open sealed_path={:?}", sealed_path.as_ref()))?;
-
     let f_out = File::create(&output_path)
         .with_context(|| format!("could not create output_path={:?}", output_path.as_ref()))?;
 
     let buf_f_out = BufWriter::new(f_out);
 
-    let result = unseal_range::<_, _, _, Tree>(
+    let result = unseal_range_mapped::<_, _, Tree>(
         porep_config,
         cache_path,
-        f_in,
+        sealed_path.into(),
         buf_f_out,
         prover_id,
         sector_id,
@@ -130,7 +128,7 @@ pub fn unseal_range<P, R, W, Tree>(
     porep_config: PoRepConfig,
     cache_path: P,
     mut sealed_sector: R,
-    mut unsealed_output: W,
+    unsealed_output: W,
     prover_id: ProverId,
     sector_id: SectorId,
     comm_d: Commitment,
@@ -161,6 +159,119 @@ where
     let mut data = Vec::new();
     sealed_sector.read_to_end(&mut data)?;
 
+    let res = unseal_range_inner::<_, _, Tree>(
+        porep_config,
+        cache_path,
+        &mut data,
+        unsealed_output,
+        replica_id,
+        offset,
+        num_bytes,
+    )?;
+
+    info!("unseal_range:finish");
+
+    Ok(res)
+}
+
+/// Unseals the sector read from `sealed_sector` and returns the bytes for a
+/// piece whose first (unpadded) byte begins at `offset` and ends at `offset`
+/// plus `num_bytes`, inclusive. Note that the entire sector is unsealed each
+/// time this function is called.
+///
+/// # Arguments
+///
+/// * `porep_config` - porep configuration containing the sector size.
+/// * `cache_path` - path to the directory in which the sector data's Merkle Tree is written.
+/// * `sealed_sector` - a byte source from which we read sealed sector data.
+/// * `unsealed_output` - a byte sink to which we write unsealed, un-bit-padded sector bytes.
+/// * `prover_id` - the prover-id that sealed the sector.
+/// * `sector_id` - the sector-id of the sealed sector.
+/// * `comm_d` - the commitment to the sector's data.
+/// * `ticket` - the ticket that was used to generate the sector's replica-id.
+/// * `offset` - the byte index in the unsealed sector of the first byte that we want to read.
+/// * `num_bytes` - the number of bytes that we want to read.
+#[allow(clippy::too_many_arguments)]
+pub fn unseal_range_mapped<P, W, Tree>(
+    porep_config: PoRepConfig,
+    cache_path: P,
+    sealed_path: PathBuf,
+    unsealed_output: W,
+    prover_id: ProverId,
+    sector_id: SectorId,
+    comm_d: Commitment,
+    ticket: Ticket,
+    offset: UnpaddedByteIndex,
+    num_bytes: UnpaddedBytesAmount,
+) -> Result<UnpaddedBytesAmount>
+where
+    P: Into<PathBuf> + AsRef<Path>,
+    W: Write,
+    Tree: 'static + MerkleTreeTrait,
+{
+    info!("unseal_range_mapped:start");
+    ensure!(comm_d != [0; 32], "Invalid all zero commitment (comm_d)");
+
+    let comm_d =
+        as_safe_commitment::<<DefaultPieceHasher as Hasher>::Domain, _>(&comm_d, "comm_d")?;
+
+    let replica_id = generate_replica_id::<Tree::Hasher, _>(
+        &prover_id,
+        sector_id.into(),
+        &ticket,
+        comm_d,
+        &porep_config.porep_id,
+    );
+
+    let mapped_file = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(&sealed_path)?;
+    let mut data = unsafe { MmapOptions::new().map_mut(&mapped_file)? };
+
+    unseal_range_inner::<_, _, Tree>(
+        porep_config,
+        cache_path,
+        &mut data,
+        unsealed_output,
+        replica_id,
+        offset,
+        num_bytes,
+    )
+}
+
+/// Unseals the sector read from `sealed_sector` and returns the bytes for a
+/// piece whose first (unpadded) byte begins at `offset` and ends at `offset`
+/// plus `num_bytes`, inclusive. Note that the entire sector is unsealed each
+/// time this function is called.
+///
+/// # Arguments
+///
+/// * `porep_config` - porep configuration containing the sector size.
+/// * `cache_path` - path to the directory in which the sector data's Merkle Tree is written.
+/// * `sealed_sector` - a byte source from which we read sealed sector data.
+/// * `unsealed_output` - a byte sink to which we write unsealed, un-bit-padded sector bytes.
+/// * `prover_id` - the prover-id that sealed the sector.
+/// * `sector_id` - the sector-id of the sealed sector.
+/// * `comm_d` - the commitment to the sector's data.
+/// * `ticket` - the ticket that was used to generate the sector's replica-id.
+/// * `offset` - the byte index in the unsealed sector of the first byte that we want to read.
+/// * `num_bytes` - the number of bytes that we want to read.
+#[allow(clippy::too_many_arguments)]
+fn unseal_range_inner<P, W, Tree>(
+    porep_config: PoRepConfig,
+    cache_path: P,
+    data: &mut [u8],
+    mut unsealed_output: W,
+    replica_id: <Tree::Hasher as Hasher>::Domain,
+    offset: UnpaddedByteIndex,
+    num_bytes: UnpaddedBytesAmount,
+) -> Result<UnpaddedBytesAmount>
+where
+    P: Into<PathBuf> + AsRef<Path>,
+    W: Write,
+    Tree: 'static + MerkleTreeTrait,
+{
     let base_tree_size = get_base_tree_size::<DefaultBinaryTree>(porep_config.sector_size)?;
     let base_tree_leafs = get_base_tree_leafs::<DefaultBinaryTree>(base_tree_size)?;
     // MT for original data is always named tree-d, and it will be
@@ -183,7 +294,7 @@ where
     let offset_padded: PaddedBytesAmount = UnpaddedBytesAmount::from(offset).into();
     let num_bytes_padded: PaddedBytesAmount = num_bytes.into();
 
-    StackedDrg::<Tree, DefaultPieceHasher>::extract_all(&pp, &replica_id, &mut data, Some(config))?;
+    StackedDrg::<Tree, DefaultPieceHasher>::extract_all(&pp, &replica_id, data, Some(config))?;
     let start: usize = offset_padded.into();
     let end = start + usize::from(num_bytes_padded);
     let unsealed = &data[start..end];
@@ -196,7 +307,7 @@ where
 
     let amount = UnpaddedBytesAmount(written as u64);
 
-    info!("unseal_range:finish");
+    info!("unseal_range_inner:finish");
     Ok(amount)
 }
 
