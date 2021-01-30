@@ -165,6 +165,45 @@ jobs:
             RUST_TEST_THREADS: 1
             FIL_PROOFS_USE_MULTICORE_SDR: true
 
+  # Running with `use_multicore_sdr=true` should be integrated directly into the test code. For now we
+  # just re-run the lifecycle tests to exercise the use_multicore_sdr code path with that setting set.
+  test_multicore_sdr_gpu2:
+    executor: default
+    environment: *setup-env
+    steps:
+      - checkout
+      - attach_workspace:
+          at: "."
+      - restore_cache:
+          keys:
+            - cargo-v28-b-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
+      - restore_parameter_cache
+      - run:
+          name: Test with use_multicore_sdr pairing enabled
+          command: |
+            ulimit -n 20000
+            ulimit -u 20000
+            ulimit -n 20000
+            cargo +<< pipeline.parameters.nightly-toolchain >> -Zpackage-features test --all --verbose --release lifecycle -- --ignored --nocapture
+            cargo +<< pipeline.parameters.nightly-toolchain >> -Zpackage-features test -p storage-proofs-porep --features single-threaded --release checkout_cores -- --test-threads=1
+          no_output_timeout: 30m
+          environment:
+            RUST_TEST_THREADS: 1
+            FIL_PROOFS_USE_MULTICORE_SDR: true
+
+      - run:
+          name: Test with use_multicore_sdr and blst enabled
+          command: |
+            ulimit -n 20000
+            ulimit -u 20000
+            ulimit -n 20000
+            cargo +<< pipeline.parameters.nightly-toolchain >> -Zpackage-features test --all --no-default-features --features gpu2,blst --verbose --release  lifecycle -- --ignored --nocapture
+          no_output_timeout: 30m
+          environment:
+            RUST_TEST_THREADS: 1
+            FIL_PROOFS_USE_MULTICORE_SDR: true
+
+
   test_no_gpu:
     executor: default
     environment: *setup-env
@@ -463,6 +502,11 @@ workflows:
             - ensure_groth_parameters_and_keys_linux
 
       - test_multicore_sdr:
+          requires:
+            - cargo_fetch
+            - ensure_groth_parameters_and_keys_linux
+
+      - test_multicore_sdr_gpu2:
           requires:
             - cargo_fetch
             - ensure_groth_parameters_and_keys_linux

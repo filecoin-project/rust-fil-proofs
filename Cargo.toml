@@ -11,4 +11,3 @@ members = [
   "sha2raw",
   "filecoin-hashers",
 ]
-
