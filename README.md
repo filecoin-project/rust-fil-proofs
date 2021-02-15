@@ -190,8 +190,8 @@ assemble each nodes parents and perform some prehashing. This setting is not ena
 setting `FIL_PROOFS_USE_MULTICORE_SDR=1`.
 
 Best performance will also be achieved when it is possible to lock pages which have been memory-mapped. This can be
-accomplished either by running the process as root, or by increasing the system limit for max locked memory with `ulimit
--l`. Two sector size's worth of data (for current and previous layers) must be locked -- along with 56 *
+accomplished by running the process as a non-root user, and increasing the system limit for max locked memory with `ulimit
+-l`. Alternatively, the process can be run as root, if its total locked pages will fit inside physical memory. Otherwise, the OOM-killer may be invoked. Two sector size's worth of data (for current and previous layers) must be locked -- along with 56 *
 `FIL_PROOFS_PARENT_CACHE_SIZE` bytes for the parent cache.
 
 Default parameters have been tuned to provide good performance on the AMD Ryzen Threadripper 3970x. It may be useful to
