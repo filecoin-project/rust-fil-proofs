@@ -11,6 +11,11 @@ executors:
       - image: filecoin/rust:latest
     working_directory: /mnt/crate
     resource_class: 2xlarge+
+  gpu:
+    machine:
+      image: ubuntu-1604-cuda-10.1:201909-23
+    working_directory: ~/gpuci
+    resource_class: gpu.nvidia.medium
 
 setup-env: &setup-env
   FIL_PROOFS_PARAMETER_CACHE: "/root/filecoin-proof-parameters/"
@@ -26,6 +31,15 @@ jobs:
       - restore_parameter_cache
       - ensure_filecoin_parameters
       - save_parameter_cache
+
+  ensure_groth_parameters_and_keys_linux_gpu:
+    executor: gpu
+    environment: *setup-env
+    steps:
+      - checkout
+      - restore_parameter_cache_gpu
+      - ensure_filecoin_parameters_gpu
+      - save_parameter_cache_gpu
 
   cargo_fetch:
     executor: default
@@ -57,6 +71,43 @@ jobs:
           paths:
             - /root/.cargo
             - /root/.rustup
+  cargo_fetch_gpu:
+    executor: gpu
+    environment: *setup-env
+    steps:
+      - checkout
+      - run: curl https://sh.rustup.rs -sSf | sh -s -- -y
+      - run: echo 'export PATH="$HOME:~/.cargo/bin:$PATH"' >> $BASH_ENV
+      - run: echo $BASH_ENV
+      - run: echo $HOME
+      - run: source $BASH_ENV
+      - run: cargo --version
+      - run: rustc --version
+      - run:
+          name: Calculate dependencies
+          command: cargo generate-lockfile
+          no_output_timeout: 30m
+      - restore_cache:
+          keys:
+            - cargo-v28-gpu-d-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
+      - run: rustup install $(cat rust-toolchain)
+      - run: rustup default $(cat rust-toolchain)
+      - run: rustup install << pipeline.parameters.nightly-toolchain >>
+      - run: rustup component add rustfmt-preview
+      - run: rustup component add clippy
+      - run: cargo update
+      - run: cargo fetch
+      - run: rustc +$(cat rust-toolchain) --version
+      - run: rustup toolchain list --verbose
+      - persist_to_workspace:
+          root: ~/gpuci
+          paths:
+            - Cargo.lock
+      - save_cache:
+          key: cargo-v28-gpu-d-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
+          paths:
+            - "~/.cargo"
+            - "~/.rustup"
   test:
     executor: default
     environment: *setup-env
@@ -152,7 +203,6 @@ jobs:
           environment:
             RUST_TEST_THREADS: 1
             FIL_PROOFS_USE_MULTICORE_SDR: true
-
       - run:
           name: Test with use_multicore_sdr and blst enabled
           command: |
@@ -165,10 +215,8 @@ jobs:
             RUST_TEST_THREADS: 1
             FIL_PROOFS_USE_MULTICORE_SDR: true
 
-  # Running with `use_multicore_sdr=true` should be integrated directly into the test code. For now we
-  # just re-run the lifecycle tests to exercise the use_multicore_sdr code path with that setting set.
-  test_multicore_sdr_gpu2:
-    executor: default
+  test_gpu_tree_building:
+    executor: gpu
     environment: *setup-env
     steps:
       - checkout
@@ -176,33 +224,25 @@ jobs:
           at: "."
       - restore_cache:
           keys:
-            - cargo-v28-b-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
+            - cargo-v28-gpu-d-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
       - restore_parameter_cache
       - run:
-          name: Test with use_multicore_sdr pairing enabled
+          name: Test with GPU column and tree builders.
           command: |
+            sudo apt-get update -y
+            apt-cache search opencl
+            sudo apt install -y ocl-icd-opencl-dev
+            sudo apt install hwloc libhwloc-dev
             ulimit -n 20000
             ulimit -u 20000
             ulimit -n 20000
-            cargo +<< pipeline.parameters.nightly-toolchain >> -Zpackage-features test --all --verbose --release lifecycle -- --ignored --nocapture
-            cargo +<< pipeline.parameters.nightly-toolchain >> -Zpackage-features test -p storage-proofs-porep --features single-threaded --release checkout_cores -- --test-threads=1
+            cd filecoin-proofs
+            ~/.cargo/bin/cargo +<< pipeline.parameters.nightly-toolchain >> -Zpackage-features test --all --verbose --release lifecycle -- --ignored --nocapture
           no_output_timeout: 30m
           environment:
             RUST_TEST_THREADS: 1
-            FIL_PROOFS_USE_MULTICORE_SDR: true
-
-      - run:
-          name: Test with use_multicore_sdr and blst enabled
-          command: |
-            ulimit -n 20000
-            ulimit -u 20000
-            ulimit -n 20000
-            cargo +<< pipeline.parameters.nightly-toolchain >> -Zpackage-features test --all --no-default-features --features gpu2,blst --verbose --release  lifecycle -- --ignored --nocapture
-          no_output_timeout: 30m
-          environment:
-            RUST_TEST_THREADS: 1
-            FIL_PROOFS_USE_MULTICORE_SDR: true
-
+            FIL_PROOFS_USE_GPU_COLUMN_BUILDER: true
+            FIL_PROOFS_USE_GPU_TREE_BUILDER: true
 
   test_no_gpu:
     executor: default
@@ -225,7 +265,6 @@ jobs:
           command: |
             cargo +<< pipeline.parameters.nightly-toolchain >> -Zpackage-features test --all --verbose --no-default-features --features blst
           no_output_timeout: 30m
-
 
   test_blst:
     executor: default
@@ -442,6 +481,18 @@ commands:
           name: Obtain filecoin groth parameters
           command: ~/paramcache.awesome --sector-sizes='2048,4096,16384,32768'
           no_output_timeout: 60m
+  ensure_filecoin_parameters_gpu:
+    steps:
+      - run:
+          name: Build paramcache if it doesn't already exist
+          command: |
+            set -x; test -f ~/paramcache.awesome \
+            || (~/.cargo/bin/cargo build --release --workspace && find . -type f -name paramcache | xargs -I {} mv {} ~/paramcache.awesome)
+      - run:
+          name: Obtain filecoin groth parameters
+          command: ~/paramcache.awesome --sector-sizes='2048,4096,16384,32768'
+          no_output_timeout: 60m
+
   save_parameter_cache:
     steps:
       - save_cache:
@@ -454,13 +505,29 @@ commands:
       - restore_cache:
          keys:
             - proof-params-v28-b-{{ checksum "filecoin-proofs/parameters.json" }}-{{ arch }}
+  save_parameter_cache_gpu:
+    steps:
+      - save_cache:
+          key: proof-params-v28-gpu-{{ checksum "filecoin-proofs/parameters.json" }}-{{ arch }}
+          paths:
+            - "~/paramcache.awesome"
+            - "~/filecoin-proof-parameters/"
+  restore_parameter_cache_gpu:
+    steps:
+      - restore_cache:
+         keys:
+            - proof-params-v28-gpu-{{ checksum "filecoin-proofs/parameters.json" }}-{{ arch }}
 
 workflows:
   version: 2.1
   test_all:
     jobs:
       - ensure_groth_parameters_and_keys_linux
+      - ensure_groth_parameters_and_keys_linux_gpu:
+          requires:
+            - cargo_fetch_gpu
       - cargo_fetch
+      - cargo_fetch_gpu
       - rustfmt:
           requires:
             - cargo_fetch
@@ -501,12 +568,12 @@ workflows:
             - cargo_fetch
             - ensure_groth_parameters_and_keys_linux
 
-      - test_multicore_sdr:
+      - test_gpu_tree_building:
           requires:
-            - cargo_fetch
-            - ensure_groth_parameters_and_keys_linux
+            - cargo_fetch_gpu
+            - ensure_groth_parameters_and_keys_linux_gpu
 
-      - test_multicore_sdr_gpu2:
+      - test_multicore_sdr:
           requires:
             - cargo_fetch
             - ensure_groth_parameters_and_keys_linux

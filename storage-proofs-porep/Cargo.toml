@@ -51,8 +51,7 @@ filecoin-hashers = { path = "../filecoin-hashers", version = "1.0.0", default-fe
 
 [features]
 default = ["pairing", "gpu"]
-gpu = ["storage-proofs-core/gpu", "filecoin-hashers/gpu", "neptune/gpu", "bellperson/gpu", "fr32/gpu"]
-gpu2 = ["storage-proofs-core/gpu2", "filecoin-hashers/gpu2", "neptune/opencl", "bellperson/gpu", "fr32/gpu"]
+gpu = ["storage-proofs-core/gpu", "filecoin-hashers/gpu", "neptune/opencl", "bellperson/gpu", "fr32/gpu"]
 pairing = ["storage-proofs-core/pairing", "bellperson/pairing", "neptune/pairing", "filecoin-hashers/pairing", "fr32/pairing"]
 blst = ["storage-proofs-core/blst", "bellperson/blst", "neptune/blst", "filecoin-hashers/blst", "fr32/blst"]
 single-threaded = []
