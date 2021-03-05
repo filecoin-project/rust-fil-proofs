@@ -441,13 +441,11 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         TreeArity: PoseidonArity,
     {
         use std::cmp::min;
-        use std::ops::Range;
         use std::sync::{mpsc::sync_channel, Arc, RwLock};
 
         use bellperson::bls::Fr;
-        use ff::Field;
         use fr32::fr_into_bytes;
-        use generic_array::{sequence::GenericSequence, GenericArray};
+        use generic_array::GenericArray;
         use merkletree::store::DiskStore;
         use neptune::{
             batch_hasher::BatcherType,
@@ -493,43 +491,107 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                                 tree_count,
                                 chunked_nodes_count,
                             );
-                            let mut columns: Vec<GenericArray<Fr, ColumnArity>> = vec![
-                                GenericArray::<Fr, ColumnArity>::generate(|_i: usize| Fr::zero());
-                                chunked_nodes_count
-                            ];
 
-                            // Allocate layer data array and insert a placeholder for each layer.
-                            let mut layer_data: Vec<Vec<Fr>> =
-                                vec![Vec::with_capacity(chunked_nodes_count); layers];
+                            #[cfg(feature = "gpu")]
+                            let columns: Vec<
+                                GenericArray<Fr, ColumnArity>,
+                            > = {
+                                use ff::Field;
+                                use generic_array::sequence::GenericSequence;
+                                use std::ops::Range;
 
-                            rayon::scope(|s| {
-                                // capture a shadowed version of layer_data.
-                                let layer_data: &mut Vec<_> = &mut layer_data;
+                                let mut columns: Vec<GenericArray<Fr, ColumnArity>> = vec![
+                                        GenericArray::<Fr, ColumnArity>::generate(|_i: usize| {
+                                            Fr::zero()
+                                        });
+                                        chunked_nodes_count
+                                    ];
 
-                                // gather all layer data in parallel.
-                                s.spawn(move |_| {
-                                    for (layer_index, layer_elements) in
-                                        layer_data.iter_mut().enumerate()
-                                    {
-                                        let store = labels.labels_for_layer(layer_index + 1);
-                                        let start = (i * nodes_count) + node_index;
-                                        let end = start + chunked_nodes_count;
-                                        let elements: Vec<<Tree::Hasher as Hasher>::Domain> = store
-                                            .read_range(Range { start, end })
-                                            .expect("failed to read store range");
-                                        layer_elements.extend(elements.into_iter().map(Into::into));
-                                    }
+                                // Allocate layer data array and insert a placeholder for each layer.
+                                let mut layer_data: Vec<Vec<Fr>> =
+                                    vec![Vec::with_capacity(chunked_nodes_count); layers];
+
+                                rayon::scope(|s| {
+                                    // capture a shadowed version of layer_data.
+                                    let layer_data: &mut Vec<_> = &mut layer_data;
+
+                                    // gather all layer data in parallel.
+                                    s.spawn(move |_| {
+                                        for (layer_index, layer_elements) in
+                                            layer_data.iter_mut().enumerate()
+                                        {
+                                            let store = labels.labels_for_layer(layer_index + 1);
+                                            let start = (i * nodes_count) + node_index;
+                                            let end = start + chunked_nodes_count;
+                                            let elements: Vec<<Tree::Hasher as Hasher>::Domain> =
+                                                store
+                                                    .read_range(Range { start, end })
+                                                    .expect("failed to read store range");
+                                            layer_elements
+                                                .extend(elements.into_iter().map(Into::into));
+                                        }
+                                    });
                                 });
-                            });
-
-                            // Copy out all layer data arranged into columns.
-                            for layer_index in 0..layers {
-                                for index in 0..chunked_nodes_count {
-                                    columns[index][layer_index] = layer_data[layer_index][index];
+                                // Copy out all layer data arranged into columns.
+                                for layer_index in 0..layers {
+                                    for index in 0..chunked_nodes_count {
+                                        columns[index][layer_index] =
+                                            layer_data[layer_index][index];
+                                    }
                                 }
-                            }
 
-                            drop(layer_data);
+                                columns
+                            };
+
+                            #[cfg(feature = "gpu2")]
+                            let columns: Vec<
+                                GenericArray<Fr, ColumnArity>,
+                            > = {
+                                use fr32::bytes_into_fr;
+
+                                // Allocate layer data array and insert a placeholder for each layer.
+                                let mut layer_data: Vec<Vec<u8>> =
+                                    vec![
+                                        vec![0u8; chunked_nodes_count * std::mem::size_of::<Fr>()];
+                                        layers
+                                    ];
+
+                                rayon::scope(|s| {
+                                    // capture a shadowed version of layer_data.
+                                    let layer_data: &mut Vec<_> = &mut layer_data;
+
+                                    // gather all layer data in parallel.
+                                    s.spawn(move |_| {
+                                        for (layer_index, mut layer_bytes) in
+                                            layer_data.iter_mut().enumerate()
+                                        {
+                                            let store = labels.labels_for_layer(layer_index + 1);
+                                            let start = (i * nodes_count) + node_index;
+                                            let end = start + chunked_nodes_count;
+
+                                            store
+                                                .read_range_into(start, end, &mut layer_bytes)
+                                                .expect("failed to read store range");
+                                        }
+                                    });
+                                });
+
+                                (0..chunked_nodes_count)
+                                    .into_par_iter()
+                                    .map(|index| {
+                                        (0..layers)
+                                            .map(|layer_index| {
+                                                bytes_into_fr(
+                                                &layer_data[layer_index][std::mem::size_of::<Fr>()
+                                                    * index
+                                                    ..std::mem::size_of::<Fr>() * (index + 1)],
+                                            )
+                                            .expect("Could not create Fr from bytes.")
+                                            })
+                                            .collect::<GenericArray<Fr, ColumnArity>>()
+                                    })
+                                    .collect()
+                            };
 
                             node_index += chunked_nodes_count;
                             trace!(
@@ -855,6 +917,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                             end,
                         );
 
+                        #[cfg(feature = "gpu")]
                         let encoded_data = last_layer_labels
                             .read_range(start..end)
                             .expect("failed to read layer range")
@@ -875,6 +938,44 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
 
                                 encoded_node
                             });
+
+                        #[cfg(feature = "gpu2")]
+                        let encoded_data = {
+                            use fr32::bytes_into_fr;
+
+                            let mut layer_bytes =
+                                vec![0u8; (end - start) * std::mem::size_of::<Fr>()];
+                            last_layer_labels
+                                .read_range_into(start, end, &mut layer_bytes)
+                                .expect("failed to read layer bytes");
+
+                            layer_bytes
+                                .into_par_iter()
+                                .chunks(std::mem::size_of::<Fr>())
+                                .map(|chunk| {
+                                    bytes_into_fr(&chunk).expect("Could not create Fr from bytes.")
+                                })
+                                .zip(
+                                    data.as_mut()[(start * NODE_SIZE)..(end * NODE_SIZE)]
+                                        .par_chunks_mut(NODE_SIZE),
+                                )
+                                .map(|(key, data_node_bytes)| {
+                                    let data_node =
+                                        <Tree::Hasher as Hasher>::Domain::try_from_bytes(
+                                            data_node_bytes,
+                                        )
+                                        .expect("try_from_bytes failed");
+
+                                    let encoded_node = encode::<<Tree::Hasher as Hasher>::Domain>(
+                                        key.into(),
+                                        data_node,
+                                    );
+                                    data_node_bytes
+                                        .copy_from_slice(AsRef::<[u8]>::as_ref(&encoded_node));
+
+                                    encoded_node
+                                })
+                        };
 
                         node_index += chunked_nodes_count;
                         trace!(

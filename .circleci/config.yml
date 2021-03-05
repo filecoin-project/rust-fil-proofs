@@ -11,9 +11,14 @@ executors:
       - image: filecoin/rust:latest
     working_directory: /mnt/crate
     resource_class: 2xlarge+
+  gpu:
+    machine:
+      image: ubuntu-1604-cuda-10.1:201909-23
+    working_directory: ~/gpuci
+    resource_class: gpu.nvidia.medium
 
 setup-env: &setup-env
-  FIL_PROOFS_PARAMETER_CACHE: "/root/filecoin-proof-parameters/"
+  FIL_PROOFS_PARAMETER_CACHE: "/tmp/filecoin-proof-parameters/"
   RUST_LOG: info
 
 
@@ -36,9 +41,7 @@ jobs:
           name: Calculate dependencies
           command: cargo generate-lockfile
           no_output_timeout: 30m
-      - restore_cache:
-          keys:
-            - cargo-v28-b-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
+      - restore_rustup_cache
       - run: rustup install $(cat rust-toolchain)
       - run: rustup default $(cat rust-toolchain)
       - run: rustup install << pipeline.parameters.nightly-toolchain >>
@@ -52,11 +55,7 @@ jobs:
           root: "."
           paths:
             - Cargo.lock
-      - save_cache:
-          key: cargo-v28-b-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
-          paths:
-            - /root/.cargo
-            - /root/.rustup
+      - save_rustup_cache
   test:
     executor: default
     environment: *setup-env
@@ -67,9 +66,7 @@ jobs:
       - checkout
       - attach_workspace:
           at: "."
-      - restore_cache:
-          keys:
-            - cargo-v28-b-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
+      - restore_rustup_cache
       - restore_parameter_cache
       - run:
           name: Test (<< parameters.crate >>)
@@ -83,9 +80,7 @@ jobs:
       - checkout
       - attach_workspace:
           at: "."
-      - restore_cache:
-          keys:
-            - cargo-v28-b-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
+      - restore_rustup_cache
       - restore_parameter_cache
       - run:
           name: Test in release profile
@@ -110,9 +105,7 @@ jobs:
       - checkout
       - attach_workspace:
           at: "."
-      - restore_cache:
-          keys:
-            - cargo-v28-b-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
+      - restore_rustup_cache
       - restore_parameter_cache
       - run:
           name: Test ignored in release profile
@@ -136,9 +129,7 @@ jobs:
       - checkout
       - attach_workspace:
           at: "."
-      - restore_cache:
-          keys:
-            - cargo-v28-b-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
+      - restore_rustup_cache
       - restore_parameter_cache
       - run:
           name: Test with use_multicore_sdr pairing enabled
@@ -165,44 +156,39 @@ jobs:
             RUST_TEST_THREADS: 1
             FIL_PROOFS_USE_MULTICORE_SDR: true
 
-  # Running with `use_multicore_sdr=true` should be integrated directly into the test code. For now we
-  # just re-run the lifecycle tests to exercise the use_multicore_sdr code path with that setting set.
-  test_multicore_sdr_gpu2:
-    executor: default
+  test_gpu_tree_building:
+    executor: gpu
     environment: *setup-env
     steps:
       - checkout
       - attach_workspace:
           at: "."
-      - restore_cache:
-          keys:
-            - cargo-v28-b-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
+      - restore_rustup_cache
       - restore_parameter_cache
       - run:
-          name: Test with use_multicore_sdr pairing enabled
+          name: Set the PATH env variable
           command: |
-            ulimit -n 20000
-            ulimit -u 20000
-            ulimit -n 20000
-            cargo +<< pipeline.parameters.nightly-toolchain >> -Zpackage-features test --all --verbose --release lifecycle -- --ignored --nocapture
-            cargo +<< pipeline.parameters.nightly-toolchain >> -Zpackage-features test -p storage-proofs-porep --features single-threaded --release checkout_cores -- --test-threads=1
-          no_output_timeout: 30m
-          environment:
-            RUST_TEST_THREADS: 1
-            FIL_PROOFS_USE_MULTICORE_SDR: true
-
+            echo 'export PATH="~/.cargo/bin:$PATH"' | tee --append $BASH_ENV
+            source $BASH_ENV
       - run:
-          name: Test with use_multicore_sdr and blst enabled
+          name: Install libraries to make thing work on the GPU
+          command: |
+            sudo apt-get update -y
+            sudo apt install -y ocl-icd-opencl-dev libhwloc-dev
+      - run:
+          name: Test with GPU column and tree builders.
           command: |
             ulimit -n 20000
             ulimit -u 20000
             ulimit -n 20000
-            cargo +<< pipeline.parameters.nightly-toolchain >> -Zpackage-features test --all --no-default-features --features gpu2,blst --verbose --release  lifecycle -- --ignored --nocapture
+            cd filecoin-proofs
+            ~/.cargo/bin/cargo +<< pipeline.parameters.nightly-toolchain >> -Zpackage-features test --all --no-default-features --features gpu,blst --verbose --release lifecycle -- --ignored --nocapture
+            ~/.cargo/bin/cargo +<< pipeline.parameters.nightly-toolchain >> -Zpackage-features test --all --no-default-features --features gpu2,blst --verbose --release lifecycle -- --ignored --nocapture
           no_output_timeout: 30m
           environment:
             RUST_TEST_THREADS: 1
-            FIL_PROOFS_USE_MULTICORE_SDR: true
-
+            FIL_PROOFS_USE_GPU_COLUMN_BUILDER: true
+            FIL_PROOFS_USE_GPU_TREE_BUILDER: true
 
   test_no_gpu:
     executor: default
@@ -211,9 +197,7 @@ jobs:
       - checkout
       - attach_workspace:
           at: "."
-      - restore_cache:
-          keys:
-            - cargo-v28-b-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
+      - restore_rustup_cache
       - restore_parameter_cache
       - run:
           name: Test with no gpu (pairing)
@@ -240,9 +224,7 @@ jobs:
       - checkout
       - attach_workspace:
           at: "."
-      - restore_cache:
-          keys:
-            - cargo-v28-b-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
+      - restore_rustup_cache
       - restore_parameter_cache
       - run:
           name: Test ignored with blst enabled (<< parameters.crate >>)
@@ -265,9 +247,7 @@ jobs:
       - checkout
       - attach_workspace:
           at: "."
-      - restore_cache:
-          keys:
-            - cargo-v28-b-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
+      - restore_rustup_cache
       - restore_parameter_cache
 
       - run:
@@ -287,9 +267,7 @@ jobs:
       - checkout
       - attach_workspace:
           at: "."
-      - restore_cache:
-          keys:
-            - cargo-v28-b-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
+      - restore_rustup_cache
       - restore_parameter_cache
       - run:
           name: Benchmarks
@@ -375,9 +353,7 @@ jobs:
       - checkout
       - attach_workspace:
           at: "."
-      - restore_cache:
-          keys:
-            - cargo-v28-b-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
+      - restore_rustup_cache
       - run:
           name: Run cargo fmt
           command: cargo fmt --all -- --check
@@ -389,9 +365,7 @@ jobs:
       - checkout
       - attach_workspace:
           at: "."
-      - restore_cache:
-          keys:
-            - cargo-v28-b-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
+      - restore_rustup_cache
       - run:
           name: Run cargo clippy
           command: cargo +$(cat rust-toolchain) clippy --workspace
@@ -436,24 +410,46 @@ commands:
       - run:
           name: Build paramcache if it doesn't already exist
           command: |
-            set -x; test -f ~/paramcache.awesome \
-            || (cargo build --release --workspace && find . -type f -name paramcache | xargs -I {} mv {} ~/paramcache.awesome)
+            set -x; test -f /tmp/paramcache.awesome \
+            || (cargo build --release --workspace && find . -type f -name paramcache | xargs -I {} mv {} /tmp/paramcache.awesome)
       - run:
           name: Obtain filecoin groth parameters
-          command: ~/paramcache.awesome --sector-sizes='2048,4096,16384,32768'
+          command: /tmp/paramcache.awesome --sector-sizes='2048,4096,16384,32768'
           no_output_timeout: 60m
+      - run:
+          name: Make the parameters world readable
+          command: chmod -R 755 ${FIL_PROOFS_PARAMETER_CACHE}
+  save_rustup_cache:
+    steps:
+      # Move things from the home directory to `/tmp` first, so that it can be
+      # restored on executors that have a different home directory.
+      - run: cp -R ~/.cargo ~/.rustup /tmp/
+      - save_cache:
+          name: "Save rustup cache"
+          key: cargo-v28-d-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}
+          paths:
+            - /tmp/.cargo
+            - /tmp/.rustup
+  restore_rustup_cache:
+    steps:
+      - restore_cache:
+          name: "Restore rustup cache"
+          key: cargo-v28-d-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}
+      # Cache might not be created yet, hence ignore if the move fails
+      - run: cp -R /tmp/.cargo /tmp/.rustup ~/ || true
   save_parameter_cache:
     steps:
       - save_cache:
-          key: proof-params-v28-b-{{ checksum "filecoin-proofs/parameters.json" }}-{{ arch }}
+          name: "Save parameter cache"
+          key: proof-params-v28-e-{{ checksum "filecoin-proofs/parameters.json" }}
           paths:
-            - "~/paramcache.awesome"
-            - "~/filecoin-proof-parameters/"
+            - "/tmp/paramcache.awesome"
+            - "/tmp/filecoin-proof-parameters/"
   restore_parameter_cache:
     steps:
       - restore_cache:
-         keys:
-            - proof-params-v28-b-{{ checksum "filecoin-proofs/parameters.json" }}-{{ arch }}
+          name: "Restore parameter cache"
+          key: proof-params-v28-e-{{ checksum "filecoin-proofs/parameters.json" }}
 
 workflows:
   version: 2.1
@@ -501,12 +497,13 @@ workflows:
             - cargo_fetch
             - ensure_groth_parameters_and_keys_linux
 
-      - test_multicore_sdr:
+      - test_gpu_tree_building:
           requires:
+            #- cargo_fetch_gpu
             - cargo_fetch
             - ensure_groth_parameters_and_keys_linux
 
-      - test_multicore_sdr_gpu2:
+      - test_multicore_sdr:
           requires:
             - cargo_fetch
             - ensure_groth_parameters_and_keys_linux
