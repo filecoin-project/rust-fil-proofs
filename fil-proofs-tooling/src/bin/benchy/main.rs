@@ -30,7 +30,6 @@ fn main() -> Result<()> {
                 .help("Preserve the directory where cached files are persisted")
                 .takes_value(false),
         )
-        /*
         .arg(
             Arg::with_name("skip-precommit-phase1")
                 .long("skip-precommit-phase1")
@@ -43,13 +42,6 @@ fn main() -> Result<()> {
                 .long("skip-precommit-phase2")
                 .required(false)
                 .help("Skip precommit phase 2")
-                .takes_value(false),
-        )*/
-        .arg(
-            Arg::with_name("skip-precommit")
-                .long("skip-precommit")
-                .required(false)
-                .help("Skip precommit phase 1 & 2")
                 .takes_value(false),
         )
         .arg(
@@ -191,8 +183,8 @@ fn main() -> Result<()> {
         ("window-post", Some(m)) => {
             let preserve_cache = m.is_present("preserve-cache");
             // For now these options are combined.
-            let skip_precommit_phase1 = m.is_present("skip-precommit");
-            let skip_precommit_phase2 = m.is_present("skip-precommit");
+            let skip_precommit_phase1 = m.is_present("skip-precommit-phase1");
+            let skip_precommit_phase2 = m.is_present("skip-precommit-phase2");
             let skip_commit_phase1 = m.is_present("skip-commit-phase1");
             let skip_commit_phase2 = m.is_present("skip-commit-phase2");
             let test_resume = m.is_present("test-resume");

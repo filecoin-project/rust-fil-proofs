@@ -80,6 +80,37 @@ The main benchmarking tool is called `benchy`.  `benchy` has several subcommands
 > cargo run --release --bin benchy -- prodbench
 ```
 
+### Window PoSt Bench usages
+
+The Window PoSt bench can be used a number of ways, some of which are detailed here.
+
+First, you can run the benchmark and preserve the working directory like this:
+```
+cargo run --release --bin benchy -- window-post --size 2KiB --cache window-post-2KiB-dir --preserve-cache
+```
+
+Then if you want to run the benchmark again to test commit-phase2, you can quickly run it like this:
+```
+cargo run --release --bin benchy -- window-post --size 2KiB --skip-precommit-phase1 --skip-precommit-phase2 --skip-commit-phase1 --cache window-post-2KiB-dir
+```
+
+Alternatively, if you want to test just GPU tree building, you can run it like this:
+```
+cargo run --release --bin benchy -- window-post --size 2KiB --skip-precommit-phase1 --skip-commit-phase1 --skip-commit-phase2 --cache window-post-2KiB-dir
+```
+
+Note that some combinations of arguments will cause destructive changes to your cached directory.  For larger benchmark sector sizes, it is recommended that once you create an initial cache, that it be saved to an alternate location in the case that it is corrupted by a test run.  For example, the following run sequence will be guaranteed to corrupt your cache:
+
+```
+# Do NOT run this sequence.  For illustrative purposes only:
+# Generate clean cache
+cargo run --release --bin benchy -- window-post --size 2KiB --cache window-post-2KiB-dir --preserve-cache
+# Skip all stages except the first
+cargo run --release --bin benchy -- window-post --size 2KiB --skip-precommit-phase2 --skip-commit-phase1 --skip-commit-phase2 --cache broken-cache-dir
+```
+
+The reason this fails is because new random piece data is generated (rather than loaded from disk from a previous run) in the first step, and then we attempt to use it in later sealing steps using data from previously preserved run.  This cannot work.
+
 There is also a bench called `gpu-cpu-test`:
 
 ```

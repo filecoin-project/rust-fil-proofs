@@ -671,6 +671,18 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                     assert_eq!(tree_len, config.size.expect("config size failure"));
 
                     // Persist the base and tree data to disk based using the current store config.
+                    let tree_c_store_path = StoreConfig::data_path(&config.path, &config.id);
+                    let tree_c_store_exists = Path::new(&tree_c_store_path).exists();
+                    trace!(
+                        "tree_c store path {:?} -- exists? {}",
+                        tree_c_store_path,
+                        tree_c_store_exists
+                    );
+                    if tree_c_store_exists {
+                        std::fs::remove_file(&tree_c_store_path)
+                            .expect("failed to remove tree_c_store_path");
+                    }
+
                     let tree_c_store =
                         DiskStore::<<Tree::Hasher as Hasher>::Domain>::new_with_config(
                             tree_len,
@@ -790,6 +802,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
             }
 
             assert_eq!(tree_count, trees.len());
+
             create_disk_tree::<
                 DiskTree<Tree::Hasher, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>,
             >(configs[0].size.expect("config size failure"), &configs)
@@ -1135,6 +1148,20 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                 i + 1,
                 tree_count
             );
+
+            // Remove the tree_r_last store if it exists already
+            let tree_r_last_store_path = StoreConfig::data_path(&config.path, &config.id);
+            let tree_r_last_store_exists = Path::new(&tree_r_last_store_path).exists();
+            trace!(
+                "tree_r_last store path {:?} -- exists? {}",
+                tree_r_last_store_path,
+                tree_r_last_store_exists
+            );
+            if tree_r_last_store_exists {
+                std::fs::remove_file(&tree_r_last_store_path)
+                    .expect("failed to remove tree_r_last_store_path");
+            }
+
             LCTree::<Tree::Hasher, Tree::Arity, U0, U0>::from_par_iter_with_config(
                 encoded_data,
                 config.clone(),
