@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://book.async.rs/overview
 
 ## Unreleased
 
+## [6.1.0] - 2021-03-09
+
+- Update bellperson to the latest version [#1430](https://github.com/filecoin-project/rust-fil-proofs/pull/1430)
+- Remove unused metrics capture CI job [#1428](https://github.com/filecoin-project/rust-fil-proofs/pull/1428)
+- Split up pc1/pc2 in the Window PoSt bench [#1427](https://github.com/filecoin-project/rust-fil-proofs/pull/1427)
+- Use `compress,asm` features of sha2 for aarch64 [#1404](https://github.com/filecoin-project/rust-fil-proofs/pull/1404)
+- Add gpu2, an optional feature that uses `neptune`'s opencl backend [#1397](https://github.com/filecoin-project/rust-fil-proofs/pull/1397)
+- Clean-up imports and remove globs [#1394](https://github.com/filecoin-project/rust-fil-proofs/pull/1394)
+- Remove `storage-proofs` sub-crate [#1393](https://github.com/filecoin-project/rust-fil-proofs/pull/1393)
+- Re-factor parameter related binaries [#1392](https://github.com/filecoin-project/rust-fil-proofs/pull/1392)
+- Fix merkle bench for poseidon hashing [#1389](https://github.com/filecoin-project/rust-fil-proofs/pull/1389)
+- Move `phase2` code into its own crate [#1388](https://github.com/filecoin-project/rust-fil-proofs/pull/1388)
+- Move `fr32` into its own crate [#1387](https://github.com/filecoin-project/rust-fil-proofs/pull/1387)
+- Ensure that builds without gpu support work [#1386](https://github.com/filecoin-project/rust-fil-proofs/pull/1386)
+- Increase parallelism in fallback PoSt [#1384](https://github.com/filecoin-project/rust-fil-proofs/pull/1384)
+- Move checkout_cores test behing a single-threaded feature [#1383](https://github.com/filecoin-project/rust-fil-proofs/pull/1383)
+- Improve the cache preservation in Window PoSt bench [#1382](https://github.com/filecoin-project/rust-fil-proofs/pull/1382)
+- Correct some typos in the Changelog [#1381](https://github.com/filecoin-project/rust-fil-proofs/pull/1381)
+
 ## [6.0.0] - 2020-12-01
 
 - Add PoR gadget that does not add a public input [#1374](https://github.com/filecoin-project/rust-fil-proofs/pull/1374)
@@ -193,7 +212,8 @@ and this project adheres to [Semantic Versioning](https://book.async.rs/overview
 
 - Initial stable release
 
-[Unreleased]: https://github.com/filecoin-project/rust-fil-proofs/compare/v6.0.0...HEAD
+[Unreleased]: https://github.com/filecoin-project/rust-fil-proofs/compare/v6.1.0...HEAD
+[6.1.0]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v6.1.0
 [6.0.0]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v6.0.0
 [5.4.0]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v5.4.0
 [5.3.0]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v5.3.0
