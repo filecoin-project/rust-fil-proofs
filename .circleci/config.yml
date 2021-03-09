@@ -274,78 +274,6 @@ jobs:
           command: cargo +$(cat rust-toolchain) build --benches --verbose --workspace
           no_output_timeout: 15m
 
-  metrics_capture:
-    docker:
-      - image: filecoin/rust:latest
-    environment:
-      RUSTFLAGS: -Awarnings -C target-cpu=native
-    working_directory: /mnt/crate
-    resource_class: 2xlarge+
-    steps:
-      - add_ssh_keys:
-          fingerprints:
-            - "96:12:32:00:d7:ef:4e:ff:ae:1e:04:e2:5f:ce:23:bd"
-      - run:
-          name: Add benchmark server's public key to known hosts
-          command: |
-            mkdir -p ~/.ssh/
-            if [[ ! -f ~/.ssh/known_hosts ]] || ! grep "${BENCHMARK_SERVER_IP_ADDR}" ~/.ssh/known_hosts; then
-              echo "
-            ${BENCHMARK_SERVER_RSA_FINGERPRINT}
-              " >> ~/.ssh/known_hosts
-              ssh-keyscan -H 147.75.55.201 >> ~/.ssh/known_hosts
-            fi
-      - checkout
-      - attach_workspace:
-          at: "."
-      - run:
-          name: Install jq
-          command: apt-get install time jq -yqq
-      - run:
-          name: Ensure existence of Groth parameters and keys on remote host
-          command: |
-            ./fil-proofs-tooling/scripts/run-remote.sh "${CIRCLE_BRANCH}" "${BENCHMARK_SERVER_SSH_USERNAME}@${BENCHMARK_SERVER_IP_ADDR}" cargo run --release --package fil-proofs-param --bin paramcache -- --sector-sizes=$((512*1024*1024))
-          no_output_timeout: 60m
-      - run:
-          name: Run hash-constraints benchmarks on remote host
-          command: |
-            ./fil-proofs-tooling/scripts/run-remote.sh "${CIRCLE_BRANCH}" "${BENCHMARK_SERVER_SSH_USERNAME}@${BENCHMARK_SERVER_IP_ADDR}" ./fil-proofs-tooling/scripts/benchy.sh hash-constraints > hash-constraints.json
-            cat hash-constraints.json
-          no_output_timeout: 60m
-      - run:
-          name: Run micro benchmarks
-          command: |
-            ./fil-proofs-tooling/scripts/run-remote.sh "${CIRCLE_BRANCH}" "${BENCHMARK_SERVER_SSH_USERNAME}@${BENCHMARK_SERVER_IP_ADDR}" ./fil-proofs-tooling/scripts/micro.sh > micro-benchmarks.json
-            cat micro-benchmarks.json
-          no_output_timeout: 60m
-      - run:
-          name: Run Winning PoST benchmarks using 512MiB sectors
-          command: |
-            ./fil-proofs-tooling/scripts/run-remote.sh "${CIRCLE_BRANCH}" "${BENCHMARK_SERVER_SSH_USERNAME}@${BENCHMARK_SERVER_IP_ADDR}" ./fil-proofs-tooling/scripts/benchy.sh winning-post --size=512MiB > winning-post-benchmarks.json
-            cat winning-post-benchmarks.json
-          no_output_timeout: 60m
-      - run:
-          name: Run Window PoST benchmarks using a 512MiB sector
-          command: |
-            ./fil-proofs-tooling/scripts/run-remote.sh "${CIRCLE_BRANCH}" "${BENCHMARK_SERVER_SSH_USERNAME}@${BENCHMARK_SERVER_IP_ADDR}" ./fil-proofs-tooling/scripts/benchy.sh window-post --size=512MiB > window-post-benchmarks.json
-            cat window-post-benchmarks.json
-          no_output_timeout: 60m
-      - run:
-          name: Aggregate benchmarks into single JSON document
-          command: |
-            ./fil-proofs-tooling/scripts/aggregate-benchmarks.sh winning-post-benchmarks.json micro-benchmarks.json hash-constraints.json window-post-benchmarks.json > aggregated-benchmarks.json
-            cat aggregated-benchmarks.json
-      - store_artifacts:
-          path: winning-post-benchmarks.json
-      - store_artifacts:
-          path: window-post-benchmarks.json
-      - store_artifacts:
-          path: hash-constraints.json
-      - store_artifacts:
-          path: micro-benchmarks.json
-      - store_artifacts:
-          path: aggregated-benchmarks.json
-
   rustfmt:
     executor: default
     environment: *setup-env
@@ -656,13 +584,6 @@ workflows:
             - cargo_fetch
             - ensure_groth_parameters_and_keys_linux
       - test_darwin
-      - metrics_capture:
-          requires:
-            - cargo_fetch
-          filters:
-            branches:
-              only:
-                - master
 
       - test:
           name: test_fr32
