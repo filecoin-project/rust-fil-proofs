@@ -39,7 +39,7 @@ gperftools = { version = "0.2", optional = true }
 generic-array = "0.14.4"
 groupy = "0.3.0"
 byte-slice-cast = "1.0.0"
-fr32 = { path = "../fr32", default-features = false }
+fr32 = { path = "../fr32", version = "^0.2.0", default-features = false }
 
 [dev-dependencies]
 criterion = "0.3"
