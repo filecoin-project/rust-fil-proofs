@@ -12,6 +12,7 @@ use fs2::FileExt;
 use itertools::Itertools;
 use lazy_static::lazy_static;
 use log::info;
+use memmap::MmapOptions;
 use rand::RngCore;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -23,10 +24,13 @@ use crate::{
 
 /// Bump this when circuits change to invalidate the cache.
 pub const VERSION: usize = 28;
+pub const SRS_MAX_PROOFS_TO_AGGREGATE: usize = 65536; // FIXME: placeholder value
 
 pub const GROTH_PARAMETER_EXT: &str = "params";
 pub const PARAMETER_METADATA_EXT: &str = "meta";
 pub const VERIFYING_KEY_EXT: &str = "vk";
+pub const SRS_KEY_EXT: &str = "srs";
+pub const SRS_SHARED_KEY_NAME: &str = "fil-inner-product-v1";
 
 #[derive(Debug)]
 pub struct LockedFile(File);
@@ -41,10 +45,13 @@ pub struct ParameterData {
 }
 
 pub const PARAMETERS_DATA: &str = include_str!("../parameters.json");
+pub const SRS_PARAMETERS_DATA: &str = include_str!("../srs-inner-product.json");
 
 lazy_static! {
     pub static ref PARAMETERS: ParameterMap =
         serde_json::from_str(PARAMETERS_DATA).expect("Invalid parameters.json");
+    pub static ref SRS_PARAMETERS: ParameterMap =
+        serde_json::from_str(SRS_PARAMETERS_DATA).expect("Invalid srs-inner-product.json");
     /// Contains the parameters that were previously verified. This way the parameter files are
     /// only hashed once and not on every usage.
     static ref VERIFIED_PARAMETERS: Mutex<HashSet<String>> = Mutex::new(HashSet::new());
@@ -65,6 +72,11 @@ pub fn metadata_id(cache_id: &str) -> String {
 /// Get the correct parameter data for a given cache id.
 pub fn get_parameter_data_from_id(parameter_id: &str) -> Option<&ParameterData> {
     PARAMETERS.get(parameter_id)
+}
+
+/// Get the correct srs parameter data for a given cache id.
+pub fn get_srs_parameter_data_from_id(parameter_id: &str) -> Option<&ParameterData> {
+    SRS_PARAMETERS.get(parameter_id)
 }
 
 /// Get the correct parameter data for a given cache id.
@@ -171,6 +183,17 @@ pub fn parameter_cache_verifying_key_path(parameter_set_identifier: &str) -> Pat
     dir.join(format!(
         "v{}-{}.{}",
         VERSION, parameter_set_identifier, VERIFYING_KEY_EXT
+    ))
+}
+
+pub fn parameter_cache_srs_key_path(
+    _parameter_set_identifier: &str,
+    _num_proofs_to_aggregate: usize,
+) -> PathBuf {
+    let dir = Path::new(&parameter_cache_dir_name()).to_path_buf();
+    dir.join(format!(
+        "v{}-{}.{}",
+        VERSION, SRS_SHARED_KEY_NAME, SRS_KEY_EXT
     ))
 }
 
@@ -297,6 +320,47 @@ where
     /// parameters are otherwise unavailable (e.g. benches).  If rng
     /// is not set, an error will result if parameters are not
     /// present.
+    fn get_inner_product<R: RngCore>(
+        rng: Option<&mut R>,
+        _circuit: C,
+        pub_params: &P,
+        num_proofs_to_aggregate: usize,
+    ) -> Result<groth16::aggregate::GenericSRS<Bls12>> {
+        let id = Self::cache_identifier(pub_params);
+        let cache_path =
+            ensure_ancestor_dirs_exist(parameter_cache_srs_key_path(&id, num_proofs_to_aggregate))?;
+
+        let generate = || -> Result<groth16::aggregate::GenericSRS<Bls12>> {
+            if let Some(rng) = rng {
+                info!(
+                    "get_inner_product called with {} [max {}] proofs to aggregate",
+                    num_proofs_to_aggregate, SRS_MAX_PROOFS_TO_AGGREGATE
+                );
+                Ok(groth16::aggregate::setup_fake_srs(
+                    rng,
+                    num_proofs_to_aggregate,
+                ))
+            } else {
+                bail!(
+                    "No cached srs key found for {} [failure finding {}]",
+                    id,
+                    cache_path.display()
+                );
+            }
+        };
+
+        // generate (or load) srs key
+        match read_cached_srs_key(&cache_path) {
+            Ok(key) => Ok(key),
+            Err(_) => write_cached_srs_key(&cache_path, generate()?).map_err(Into::into),
+        }
+    }
+
+    /// If the rng option argument is set, parameters will be
+    /// generated using it.  This is used for testing only, or where
+    /// parameters are otherwise unavailable (e.g. benches).  If rng
+    /// is not set, an error will result if parameters are not
+    /// present.
     fn get_verifying_key<R: RngCore>(
         rng: Option<&mut R>,
         circuit: C,
@@ -337,12 +401,12 @@ pub fn read_cached_params(cache_entry_path: &PathBuf) -> Result<groth16::MappedP
     let verify_production_params = SETTINGS.verify_production_params;
 
     // If the verify production params is set, we make sure that the path being accessed matches a
-    // production cache key, found in the 'parameters.json' file. The parameter data file is also
-    // hashed and matched against the hash in the `parameters.json` file.
+    // production cache key, found in the 'srs-inner-product.json' file. The parameter data file is
+    // also hashed and matched against the hash in the 'srs-inner-product.json' file.
     if verify_production_params {
         let cache_key = cache_entry_path
             .file_name()
-            .expect("failed to get cached param filename")
+            .expect("failed to get cached srs filename")
             .to_str()
             .expect("failed to convert to str")
             .to_string();
@@ -415,6 +479,76 @@ fn read_cached_verifying_key(
     })
 }
 
+fn read_cached_srs_key(
+    cache_entry_path: &PathBuf,
+) -> Result<groth16::aggregate::GenericSRS<Bls12>> {
+    info!("checking cache_path: {:?} for srs", cache_entry_path);
+
+    let verify_production_params = SETTINGS.verify_production_params;
+
+    // If the verify production params is set, we make sure that the path being accessed matches a
+    // production cache key, found in the 'parameters.json' file. The parameter data file is also
+    // hashed and matched against the hash in the `parameters.json` file.
+    if verify_production_params {
+        let cache_key = cache_entry_path
+            .file_name()
+            .expect("failed to get cached param filename")
+            .to_str()
+            .expect("failed to convert to str")
+            .to_string();
+
+        match get_srs_parameter_data_from_id(&cache_key) {
+            Some(data) => {
+                // Verify the actual hash only once per parameters file
+                let not_yet_verified = VERIFIED_PARAMETERS
+                    .lock()
+                    .expect("verified parameters lock failed")
+                    .get(&cache_key)
+                    .is_none();
+                if not_yet_verified {
+                    info!("generating consistency digest for srs");
+                    let hash = with_exclusive_read_lock::<_, io::Error, _>(
+                        cache_entry_path,
+                        |mut file| {
+                            let mut hasher = Blake2bParams::new().to_state();
+                            io::copy(&mut file, &mut hasher)
+                                .expect("copying file into hasher failed");
+                            Ok(hasher.finalize())
+                        },
+                    )?;
+                    info!("generated consistency digest for srs");
+
+                    // The hash in the parameters file is truncated to 256 bits.
+                    let digest_hex = &hash.to_hex()[..32];
+
+                    if digest_hex != data.digest {
+                        return Err(Error::InvalidParameters(
+                            cache_entry_path.display().to_string(),
+                        )
+                        .into());
+                    }
+
+                    VERIFIED_PARAMETERS
+                        .lock()
+                        .expect("verified parameters lock failed")
+                        .insert(cache_key);
+                }
+            }
+            None => {
+                return Err(Error::InvalidParameters(cache_entry_path.display().to_string()).into())
+            }
+        }
+    }
+
+    with_exclusive_read_lock(cache_entry_path, |file| {
+        let srs_map = unsafe { MmapOptions::new().map(file.as_ref())? };
+        let key = groth16::aggregate::GenericSRS::read_mmap(&srs_map)?;
+        info!("read srs key from cache {:?} ", cache_entry_path);
+
+        Ok(key)
+    })
+}
+
 fn read_cached_metadata(cache_entry_path: &PathBuf) -> io::Result<CacheEntryMetadata> {
     info!("checking cache_path: {:?} for metadata", cache_entry_path);
     with_exclusive_read_lock(cache_entry_path, |file| {
@@ -445,6 +579,19 @@ fn write_cached_verifying_key(
         value.write(&mut file)?;
         file.flush()?;
         info!("wrote verifying key to cache {:?} ", cache_entry_path);
+
+        Ok(value)
+    })
+}
+
+fn write_cached_srs_key(
+    cache_entry_path: &PathBuf,
+    value: groth16::aggregate::GenericSRS<Bls12>,
+) -> io::Result<groth16::aggregate::GenericSRS<Bls12>> {
+    with_exclusive_lock(cache_entry_path, |mut file| {
+        value.write(&mut file)?;
+        file.flush()?;
+        info!("wrote srs key to cache {:?} ", cache_entry_path);
 
         Ok(value)
     })

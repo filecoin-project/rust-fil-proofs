@@ -11,3 +11,13 @@ members = [
   "sha2raw",
   "filecoin-hashers",
 ]
+
+[patch.crates-io]
+paired = { git = "https://github.com/filecoin-project/paired", branch = "ser-de" }
+fff = { git = "https://github.com/filecoin-project/ff", branch = "ser-de" }
+groupy = { git = "https://github.com/filecoin-project/group", branch = "ser-de" }
+#blstrs = { git = "https://github.com/cryptonemo/blstrs", branch = "ser-de-0-1" }
+#bellperson = { git = "https://github.com/filecoin-project/bellperson", branch = "feat-aggregation", default-features = false }
+#bellperson = { git = "https://github.com/cryptonemo/bellman", branch = "feat-aggregation", default-features = false }
+bellperson = { git = "https://github.com/filecoin-project/bellman", branch = "feat-ipp2" }
+

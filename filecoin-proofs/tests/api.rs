@@ -9,20 +9,20 @@ use bellperson::bls::Fr;
 use ff::Field;
 use filecoin_hashers::Hasher;
 use filecoin_proofs::{
-    add_piece, clear_cache, compute_comm_d, fauxrep_aux, generate_fallback_sector_challenges,
-    generate_piece_commitment, generate_single_vanilla_proof, generate_window_post,
-    generate_window_post_with_vanilla, generate_winning_post,
-    generate_winning_post_sector_challenge, generate_winning_post_with_vanilla, get_unsealed_range,
-    seal_commit_phase1, seal_commit_phase2, seal_pre_commit_phase1, seal_pre_commit_phase2,
-    validate_cache_for_commit, validate_cache_for_precommit_phase2, verify_seal,
-    verify_window_post, verify_winning_post, Commitment, DefaultTreeDomain, MerkleTreeTrait,
-    PaddedBytesAmount, PieceInfo, PoRepConfig, PoRepProofPartitions, PoStConfig, PoStType,
-    PrivateReplicaInfo, ProverId, PublicReplicaInfo, SealPreCommitOutput,
-    SealPreCommitPhase1Output, SectorShape16KiB, SectorShape2KiB, SectorShape32KiB,
-    SectorShape4KiB, SectorSize, UnpaddedByteIndex, UnpaddedBytesAmount, POREP_PARTITIONS,
-    SECTOR_SIZE_16_KIB, SECTOR_SIZE_2_KIB, SECTOR_SIZE_32_KIB, SECTOR_SIZE_4_KIB,
-    WINDOW_POST_CHALLENGE_COUNT, WINDOW_POST_SECTOR_COUNT, WINNING_POST_CHALLENGE_COUNT,
-    WINNING_POST_SECTOR_COUNT,
+    add_piece, aggregate_seal_commit_proofs, clear_cache, compute_comm_d, fauxrep_aux,
+    generate_fallback_sector_challenges, generate_piece_commitment, generate_single_vanilla_proof,
+    generate_window_post, generate_window_post_with_vanilla, generate_winning_post,
+    generate_winning_post_sector_challenge, generate_winning_post_with_vanilla, seal_commit_phase1,
+    seal_commit_phase2_for_aggregation, seal_pre_commit_phase1, seal_pre_commit_phase2,
+    unseal_range, validate_cache_for_commit, validate_cache_for_precommit_phase2,
+    verify_aggregate_seal_commit_proofs, verify_seal, verify_window_post, verify_winning_post,
+    Commitment, DefaultTreeDomain, MerkleTreeTrait, PaddedBytesAmount, PieceInfo, PoRepConfig,
+    PoRepProofPartitions, PoStConfig, PoStType, PrivateReplicaInfo, ProverId, PublicReplicaInfo,
+    SealCommitOutput, SealPreCommitOutput, SealPreCommitPhase1Output, SectorShape16KiB,
+    SectorShape2KiB, SectorShape32KiB, SectorShape4KiB, SectorSize, UnpaddedByteIndex,
+    UnpaddedBytesAmount, POREP_PARTITIONS, SECTOR_SIZE_16_KIB, SECTOR_SIZE_2_KIB,
+    SECTOR_SIZE_32_KIB, SECTOR_SIZE_4_KIB, WINDOW_POST_CHALLENGE_COUNT, WINDOW_POST_SECTOR_COUNT,
+    WINNING_POST_CHALLENGE_COUNT, WINNING_POST_SECTOR_COUNT,
 };
 use rand::{random, Rng, SeedableRng};
 use rand_xorshift::XorShiftRng;
@@ -196,9 +196,181 @@ fn seal_lifecycle<Tree: 'static + MerkleTreeTrait>(
     Ok(())
 }
 
-fn get_layer_file_paths(cache_dir: &TempDir) -> Vec<PathBuf> {
+#[test]
+#[ignore]
+fn test_seal_proof_aggregation_2_2kib_porep_id_v1_1_base_8() -> Result<()> {
+    let proofs_to_aggregate = 2;
+
+    let porep_id_v1_1: u64 = 5; // This is a RegisteredSealProof value
+
+    let mut porep_id = [0u8; 32];
+    porep_id[..8].copy_from_slice(&porep_id_v1_1.to_le_bytes());
+    assert!(!is_legacy_porep_id(porep_id));
+    let verified = aggregate_proofs::<SectorShape2KiB>(
+        SECTOR_SIZE_2_KIB,
+        &porep_id,
+        ApiVersion::V1_1_0,
+        proofs_to_aggregate,
+    )?;
+    assert!(verified);
+
+    Ok(())
+}
+
+#[test]
+#[ignore]
+fn test_seal_proof_aggregation_8_2kib_porep_id_v1_1_base_8() -> Result<()> {
+    let proofs_to_aggregate = 8;
+
+    let porep_id_v1_1: u64 = 5; // This is a RegisteredSealProof value
+
+    let mut porep_id = [0u8; 32];
+    porep_id[..8].copy_from_slice(&porep_id_v1_1.to_le_bytes());
+    assert!(!is_legacy_porep_id(porep_id));
+    let verified = aggregate_proofs::<SectorShape2KiB>(
+        SECTOR_SIZE_2_KIB,
+        &porep_id,
+        ApiVersion::V1_1_0,
+        proofs_to_aggregate,
+    )?;
+    assert!(verified);
+
+    Ok(())
+}
+
+#[test]
+#[ignore]
+fn test_seal_proof_aggregation_2_4kib_porep_id_v1_1_base_8() -> Result<()> {
+    let proofs_to_aggregate = 2;
+
+    let porep_id = ARBITRARY_POREP_ID_V1_1_0;
+    assert!(!is_legacy_porep_id(porep_id));
+    let verified = aggregate_proofs::<SectorShape4KiB>(
+        SECTOR_SIZE_4_KIB,
+        &porep_id,
+        ApiVersion::V1_1_0,
+        proofs_to_aggregate,
+    )?;
+    assert!(verified);
+
+    Ok(())
+}
+
+#[test]
+#[ignore]
+fn test_seal_proof_aggregation_4_32kib_porep_id_v1_1_base_8() -> Result<()> {
+    let proofs_to_aggregate = 4;
+
+    let porep_id = ARBITRARY_POREP_ID_V1_1_0;
+    assert!(!is_legacy_porep_id(porep_id));
+    let verified = aggregate_proofs::<SectorShape32KiB>(
+        SECTOR_SIZE_32_KIB,
+        &porep_id,
+        ApiVersion::V1_1_0,
+        proofs_to_aggregate,
+    )?;
+    assert!(verified);
+
+    Ok(())
+}
+
+#[test]
+#[ignore]
+fn test_seal_proof_aggregation_1024_2kib_porep_id_v1_1_base_8() -> Result<()> {
+    let proofs_to_aggregate = 1024;
+    inner_test_seal_proof_aggregation_2kib_porep_id_v1_1_base_8(proofs_to_aggregate)
+}
+
+#[test]
+#[ignore]
+fn test_seal_proof_aggregation_65536_2kib_porep_id_v1_1_base_8() -> Result<()> {
+    let proofs_to_aggregate = 65536;
+    inner_test_seal_proof_aggregation_2kib_porep_id_v1_1_base_8(proofs_to_aggregate)
+}
+
+fn inner_test_seal_proof_aggregation_2kib_porep_id_v1_1_base_8(
+    proofs_to_aggregate: usize,
+) -> Result<()> {
+    let porep_id_v1_1: u64 = 5; // This is a RegisteredSealProof value
+
+    let mut porep_id = [0u8; 32];
+    porep_id[..8].copy_from_slice(&porep_id_v1_1.to_le_bytes());
+    assert!(!is_legacy_porep_id(porep_id));
+
+    let rng = &mut XorShiftRng::from_seed(TEST_SEED);
+    let prover_fr: DefaultTreeDomain = Fr::random(rng).into();
+    let mut prover_id = [0u8; 32];
+    prover_id.copy_from_slice(AsRef::<[u8]>::as_ref(&prover_fr));
+
+    let mut commit_outputs = Vec::with_capacity(proofs_to_aggregate);
+    let mut commit_inputs = Vec::with_capacity(proofs_to_aggregate);
+
+    let (commit_output, commit_input) = create_seal_for_aggregation::<_, SectorShape2KiB>(
+        rng,
+        SECTOR_SIZE_2_KIB,
+        prover_id,
+        &porep_id,
+        ApiVersion::V1_1_0,
+    )?;
+
+    // duplicate a single proof to desired target for aggregation
+    for _ in 0..proofs_to_aggregate {
+        commit_outputs.push(commit_output.clone());
+        commit_inputs.extend(commit_input.clone());
+    }
+
+    let config = porep_config(SECTOR_SIZE_2_KIB, porep_id, ApiVersion::V1_1_0);
+    let aggregate_proof =
+        aggregate_seal_commit_proofs::<SectorShape2KiB>(config, commit_outputs.as_slice())?;
+    let verified = verify_aggregate_seal_commit_proofs::<SectorShape2KiB>(
+        config,
+        proofs_to_aggregate,
+        aggregate_proof,
+        commit_inputs,
+    )?;
+    assert!(verified);
+
+    Ok(())
+}
+
+fn aggregate_proofs<Tree: 'static + MerkleTreeTrait>(
+    sector_size: u64,
+    porep_id: &[u8; 32],
+    api_version: ApiVersion,
+    num_proofs_to_aggregate: usize,
+) -> Result<bool> {
+    let rng = &mut XorShiftRng::from_seed(TEST_SEED);
+    let prover_fr: DefaultTreeDomain = Fr::random(rng).into();
+    let mut prover_id = [0u8; 32];
+    prover_id.copy_from_slice(AsRef::<[u8]>::as_ref(&prover_fr));
+
+    let mut commit_outputs = Vec::with_capacity(num_proofs_to_aggregate);
+    let mut commit_inputs = Vec::with_capacity(num_proofs_to_aggregate);
+    for _ in 0..num_proofs_to_aggregate {
+        let (commit_output, commit_input) = create_seal_for_aggregation::<_, Tree>(
+            rng,
+            sector_size,
+            prover_id,
+            porep_id,
+            api_version,
+        )?;
+        commit_outputs.push(commit_output);
+        commit_inputs.extend(commit_input);
+    }
+
+    let config = porep_config(sector_size, *porep_id, api_version);
+    let aggregate_proof = aggregate_seal_commit_proofs::<Tree>(config, commit_outputs.as_slice())?;
+    verify_aggregate_seal_commit_proofs::<Tree>(
+        config,
+        num_proofs_to_aggregate,
+        aggregate_proof,
+        commit_inputs,
+    )
+}
+
+fn get_layer_file_paths(cache_dir: &tempfile::TempDir) -> Vec<PathBuf> {
     let mut list: Vec<_> = read_dir(&cache_dir)
-        .expect("failed to read read directory ")
+        .expect(&format!("failed to read directory {:?}", cache_dir))
         .filter_map(|entry| {
             let cur = entry.expect("reading directory failed");
             let entry_path = cur.path();
@@ -1008,7 +1180,7 @@ fn run_seal_pre_commit_phase1<Tree: 'static + MerkleTreeTrait>(
     Ok((piece_infos, phase1_output))
 }
 
-fn proof_and_unseal<Tree: 'static + MerkleTreeTrait>(
+fn generate_proof<Tree: 'static + MerkleTreeTrait>(
     config: PoRepConfig,
     cache_dir_path: &Path,
     sealed_sector_file: &NamedTempFile,
@@ -1016,14 +1188,9 @@ fn proof_and_unseal<Tree: 'static + MerkleTreeTrait>(
     sector_id: SectorId,
     ticket: [u8; 32],
     seed: [u8; 32],
-    pre_commit_output: SealPreCommitOutput,
+    pre_commit_output: &SealPreCommitOutput,
     piece_infos: &[PieceInfo],
-    piece_bytes: &[u8],
-) -> Result<()> {
-    let comm_d = pre_commit_output.comm_d;
-    let comm_r = pre_commit_output.comm_r;
-
-    let mut unseal_file = NamedTempFile::new()?;
+) -> Result<(SealCommitOutput, Vec<Vec<Fr>>)> {
     let phase1_output = seal_commit_phase1::<_, Tree>(
         config,
         cache_dir_path,
@@ -1032,19 +1199,37 @@ fn proof_and_unseal<Tree: 'static + MerkleTreeTrait>(
         sector_id,
         ticket,
         seed,
-        pre_commit_output,
+        pre_commit_output.clone(),
         &piece_infos,
     )?;
 
     clear_cache::<Tree>(cache_dir_path)?;
 
-    let commit_output = seal_commit_phase2(config, phase1_output, prover_id, sector_id)?;
+    seal_commit_phase2_for_aggregation(config, phase1_output, prover_id, sector_id)
+}
 
-    let _ = get_unsealed_range::<_, Tree>(
+fn unseal<Tree: 'static + MerkleTreeTrait>(
+    config: PoRepConfig,
+    cache_dir_path: &Path,
+    sealed_sector_file: &NamedTempFile,
+    prover_id: ProverId,
+    sector_id: SectorId,
+    ticket: [u8; 32],
+    seed: [u8; 32],
+    pre_commit_output: &SealPreCommitOutput,
+    piece_infos: &[PieceInfo],
+    piece_bytes: &[u8],
+    commit_output: &SealCommitOutput,
+) -> Result<()> {
+    let comm_d = pre_commit_output.comm_d;
+    let comm_r = pre_commit_output.comm_r;
+
+    let mut unseal_file = NamedTempFile::new()?;
+    let _ = unseal_range::<_, _, _, Tree>(
         config,
         cache_dir_path,
-        sealed_sector_file.path(),
-        unseal_file.path(),
+        sealed_sector_file,
+        &unseal_file,
         prover_id,
         sector_id,
         comm_d,
@@ -1082,6 +1267,45 @@ fn proof_and_unseal<Tree: 'static + MerkleTreeTrait>(
     )?;
     assert!(verified, "failed to verify valid seal");
     Ok(())
+}
+
+fn proof_and_unseal<Tree: 'static + MerkleTreeTrait>(
+    config: PoRepConfig,
+    cache_dir_path: &Path,
+    sealed_sector_file: &NamedTempFile,
+    prover_id: ProverId,
+    sector_id: SectorId,
+    ticket: [u8; 32],
+    seed: [u8; 32],
+    pre_commit_output: SealPreCommitOutput,
+    piece_infos: &[PieceInfo],
+    piece_bytes: &[u8],
+) -> Result<()> {
+    let (commit_output, _commit_inputs) = generate_proof::<Tree>(
+        config,
+        cache_dir_path,
+        sealed_sector_file,
+        prover_id,
+        sector_id,
+        ticket,
+        seed,
+        &pre_commit_output,
+        piece_infos,
+    )?;
+
+    unseal::<Tree>(
+        config,
+        cache_dir_path,
+        sealed_sector_file,
+        prover_id,
+        sector_id,
+        ticket,
+        seed,
+        &pre_commit_output,
+        piece_infos,
+        piece_bytes,
+        &commit_output,
+    )
 }
 
 fn create_seal<R: Rng, Tree: 'static + MerkleTreeTrait>(
@@ -1139,13 +1363,63 @@ fn create_seal<R: Rng, Tree: 'static + MerkleTreeTrait>(
             &piece_infos,
             &piece_bytes,
         )
-        .expect("failed to proof");
+        .expect("failed to proof_and_unseal");
     }
 
     Ok((sector_id, sealed_sector_file, comm_r, cache_dir))
 }
 
-fn create_fake_seal<R: Rng, Tree: 'static + MerkleTreeTrait>(
+fn create_seal_for_aggregation<R: Rng, Tree: 'static + MerkleTreeTrait>(
+    rng: &mut R,
+    sector_size: u64,
+    prover_id: ProverId,
+    porep_id: &[u8; 32],
+    api_version: ApiVersion,
+) -> Result<(SealCommitOutput, Vec<Vec<Fr>>)> {
+    init_logger();
+
+    let (mut piece_file, _piece_bytes) = generate_piece_file(sector_size)?;
+    let sealed_sector_file = NamedTempFile::new()?;
+    let cache_dir = tempfile::tempdir().expect("failed to create temp dir");
+
+    let config = porep_config(sector_size, *porep_id, api_version);
+    let ticket = rng.gen();
+    let seed = rng.gen();
+    let sector_id = rng.gen::<u64>().into();
+
+    let (piece_infos, phase1_output) = run_seal_pre_commit_phase1::<Tree>(
+        config,
+        prover_id,
+        sector_id,
+        ticket,
+        &cache_dir,
+        &mut piece_file,
+        &sealed_sector_file,
+    )?;
+
+    let pre_commit_output = seal_pre_commit_phase2(
+        config,
+        phase1_output,
+        cache_dir.path(),
+        sealed_sector_file.path(),
+    )?;
+
+    validate_cache_for_commit::<_, _, Tree>(cache_dir.path(), sealed_sector_file.path())?;
+
+    generate_proof::<Tree>(
+        config,
+        cache_dir.path(),
+        &sealed_sector_file,
+        prover_id,
+        sector_id,
+        ticket,
+        seed,
+        &pre_commit_output,
+        &piece_infos,
+    )
+}
+
+fn create_fake_seal<R: rand::Rng, Tree: 'static + MerkleTreeTrait>(
     mut rng: &mut R,
     sector_size: u64,
     porep_id: &[u8; 32],

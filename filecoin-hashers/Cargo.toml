@@ -28,8 +28,10 @@ default = ["gpu", "pairing", "blake2s", "poseidon", "sha256"]
 
 gpu = ["bellperson/gpu", "neptune/opencl"]
 
-pairing = ["bellperson/pairing", "neptune/pairing", "bellperson/pairing-serde"]
-blst = ["bellperson/blst", "neptune/blst", "bellperson/blst-serde"]
+#pairing = ["bellperson/pairing", "neptune/pairing", "bellperson/pairing-serde"]
+#blst = ["bellperson/blst", "neptune/blst", "bellperson/blst-serde"]
+pairing = ["neptune/pairing"]
+blst = ["neptune/blst"]
 
 # available hashers
 blake2s = ["blake2s_simd"]
