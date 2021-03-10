@@ -10,10 +10,10 @@ use ff::Field;
 use filecoin_hashers::Hasher;
 use filecoin_proofs::{
     add_piece, aggregate_seal_commit_proofs, clear_cache, compute_comm_d, fauxrep_aux,
-    generate_fallback_sector_challenges, generate_piece_commitment, generate_single_vanilla_proof,
+    get_seal_inputs, generate_fallback_sector_challenges, generate_piece_commitment, generate_single_vanilla_proof,
     generate_window_post, generate_window_post_with_vanilla, generate_winning_post,
     generate_winning_post_sector_challenge, generate_winning_post_with_vanilla, seal_commit_phase1,
-    seal_commit_phase2_for_aggregation, seal_pre_commit_phase1, seal_pre_commit_phase2,
+    seal_commit_phase2, seal_pre_commit_phase1, seal_pre_commit_phase2,
     unseal_range, validate_cache_for_commit, validate_cache_for_precommit_phase2,
     verify_aggregate_seal_commit_proofs, verify_seal, verify_window_post, verify_winning_post,
     Commitment, DefaultTreeDomain, MerkleTreeTrait, PaddedBytesAmount, PieceInfo, PoRepConfig,
@@ -1205,7 +1205,10 @@ fn generate_proof<Tree: 'static + MerkleTreeTrait>(
 
     clear_cache::<Tree>(cache_dir_path)?;
 
-    seal_commit_phase2_for_aggregation(config, phase1_output, prover_id, sector_id)
+    let inputs = get_seal_inputs::<Tree>(config, phase1_output.comm_r, phase1_output.comm_d, prover_id, sector_id, phase1_output.ticket, phase1_output.seed)?;
+    let result = seal_commit_phase2(config, phase1_output, prover_id, sector_id)?;
+
+    Ok((result, inputs))
 }
 
 fn unseal<Tree: 'static + MerkleTreeTrait>(

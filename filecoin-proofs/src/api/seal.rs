@@ -540,26 +540,25 @@ pub fn seal_commit_phase2<Tree: 'static + MerkleTreeTrait>(
     Ok(out)
 }
 
-#[allow(clippy::too_many_arguments)]
-pub fn seal_commit_phase2_for_aggregation<Tree: 'static + MerkleTreeTrait>(
+pub fn get_seal_inputs<Tree: 'static + MerkleTreeTrait>(
     porep_config: PoRepConfig,
-    phase1_output: SealCommitPhase1Output<Tree>,
+    comm_r: Commitment,
+    comm_d: Commitment,
     prover_id: ProverId,
     sector_id: SectorId,
-) -> Result<(SealCommitOutput, Vec<Vec<Fr>>)> {
-    info!("seal_commit_phase2_for_aggregation:start: {:?}", sector_id);
-
-    let SealCommitPhase1Output {
-        vanilla_proofs,
-        comm_d,
-        comm_r,
-        replica_id,
-        seed,
-        ticket,
-    } = phase1_output;
-
+    ticket: Ticket,
+    seed: Ticket,
+) -> Result<Vec<Vec<Fr>>> {
     ensure!(comm_d != [0; 32], "Invalid all zero commitment (comm_d)");
     ensure!(comm_r != [0; 32], "Invalid all zero commitment (comm_r)");
+
+    let replica_id = generate_replica_id::<Tree::Hasher, _>(
+        &prover_id,
+        sector_id.into(),
+        &ticket,
+        comm_d,
+        &porep_config.porep_id,
+    );
 
     let comm_r_safe = as_safe_commitment(&comm_r, "comm_r")?;
     let comm_d_safe = DefaultPieceDomain::try_from_bytes(&comm_d)?;
@@ -573,13 +572,6 @@ pub fn seal_commit_phase2_for_aggregation<Tree: 'static + MerkleTreeTrait>(
         k: None,
         seed,
     };
-
-    let groth_params = get_stacked_params::<Tree>(porep_config)?;
-
-    info!(
-        "got groth params ({}) while sealing",
-        u64::from(PaddedBytesAmount::from(porep_config))
-    );
 
     let compound_setup_params = compound_proof::SetupParams {
         vanilla_params: setup_params(
@@ -597,20 +589,13 @@ pub fn seal_commit_phase2_for_aggregation<Tree: 'static + MerkleTreeTrait>(
         _,
     >>::setup(&compound_setup_params)?;
 
-    info!("snark_proof:start");
-    let groth_proofs = StackedCompound::<Tree, DefaultPieceHasher>::circuit_proofs(
-        &public_inputs,
-        vanilla_proofs,
-        &compound_public_params.vanilla_params,
-        &groth_params,
-        compound_public_params.priority,
-    )?;
-    info!("snark_proof:finish");
-
-    let proof = MultiProof::new(groth_proofs, &groth_params.pvk);
+    let partitions = <StackedCompound<Tree, DefaultPieceHasher> as CompoundProof<
+        StackedDrg<'_, Tree, DefaultPieceHasher>,
+        _,
+    >>::partition_count(&compound_public_params);
 
     // These are returned for aggregated proof verification.
-    let inputs: Vec<_> = (0..proof.circuit_proofs.len())
+    let inputs: Vec<_> = (0..partitions)
         .into_par_iter()
         .map(|k| {
             StackedCompound::<Tree, DefaultPieceHasher>::generate_public_inputs(
@@ -621,30 +606,7 @@ pub fn seal_commit_phase2_for_aggregation<Tree: 'static + MerkleTreeTrait>(
         })
         .collect::<Result<_>>()?;
 
-    let mut buf = Vec::with_capacity(
-        SINGLE_PARTITION_PROOF_LEN * usize::from(PoRepProofPartitions::from(porep_config)),
-    );
-
-    proof.write(&mut buf)?;
-
-    // Verification is cheap when parameters are cached,
-    // and it is never correct to return a proof which does not verify.
-    verify_seal::<Tree>(
-        porep_config,
-        comm_r,
-        comm_d,
-        prover_id,
-        sector_id,
-        ticket,
-        seed,
-        &buf,
-    )
-    .context("post-seal verification sanity check failed")?;
-
-    let out = SealCommitOutput { proof: buf };
-
-    info!("seal_commit_phase2_for_aggregation:finish: {:?}", sector_id);
-    Ok((out, inputs))
+    Ok(inputs)
 }
 
 pub fn aggregate_seal_commit_proofs<Tree: 'static + MerkleTreeTrait>(
