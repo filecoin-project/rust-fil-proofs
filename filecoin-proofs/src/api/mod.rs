@@ -227,9 +227,9 @@ where
         .read(true)
         .write(true)
         .open(&sealed_path)?;
-    let mut data = unsafe { MmapOptions::new().map_mut(&mapped_file)? };
+    let mut data = unsafe { MmapOptions::new().map_copy(&mapped_file)? };
 
-    unseal_range_inner::<_, _, Tree>(
+    let result = unseal_range_inner::<_, _, Tree>(
         porep_config,
         cache_path,
         &mut data,
@@ -237,7 +237,10 @@ where
         replica_id,
         offset,
         num_bytes,
-    )
+    );
+    info!("unseal_range_mapped:finish");
+
+    result
 }
 
 /// Unseals the sector read from `sealed_sector` and returns the bytes for a
@@ -272,10 +275,10 @@ where
     W: Write,
     Tree: 'static + MerkleTreeTrait,
 {
+    info!("unseal_range_inner:start");
+
     let base_tree_size = get_base_tree_size::<DefaultBinaryTree>(porep_config.sector_size)?;
     let base_tree_leafs = get_base_tree_leafs::<DefaultBinaryTree>(base_tree_size)?;
-    // MT for original data is always named tree-d, and it will be
-    // referenced later in the process as such.
     let config = StoreConfig::new(
         cache_path.as_ref(),
         CacheKey::CommDTree.to_string(),
