@@ -103,9 +103,12 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
             let mut parents = vec![0; base_degree];
             graph.base_parents(x, &mut parents)?;
 
-            for parent in &parents {
-                columns.push(t_aux.column(*parent)?);
-            }
+            columns.extend(
+                parents
+                    .into_par_iter()
+                    .map(|parent| t_aux.column(parent).expect("failed to get parent column"))
+                    .collect::<Vec<Column<Tree::Hasher>>>(),
+            );
 
             debug_assert!(columns.len() == base_degree);
 
@@ -116,7 +119,10 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
             let mut parents = vec![0; graph.expansion_degree()];
             graph.expanded_parents(x, &mut parents)?;
 
-            parents.iter().map(|parent| t_aux.column(*parent)).collect()
+            parents
+                .into_par_iter()
+                .map(|parent| t_aux.column(parent))
+                .collect()
         };
 
         (0..partition_count)
@@ -194,7 +200,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                                 graph.base_parents(challenge, &mut parents)?;
 
                                 parents
-                                    .into_iter()
+                                    .into_par_iter()
                                     .map(|parent| t_aux.domain_node_at_layer(layer, parent))
                                     .collect::<Result<_>>()?
                             } else {
@@ -203,7 +209,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                                 let base_parents_count = graph.base_graph().degree();
 
                                 parents
-                                    .into_iter()
+                                    .into_par_iter()
                                     .enumerate()
                                     .map(|(i, parent)| {
                                         if i < base_parents_count {
@@ -502,25 +508,18 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                                         layers
                                     ];
 
-                                rayon::scope(|s| {
-                                    // capture a shadowed version of layer_data.
-                                    let layer_data: &mut Vec<_> = &mut layer_data;
+                                // gather all layer data.
+                                for (layer_index, mut layer_bytes) in
+                                    layer_data.iter_mut().enumerate()
+                                {
+                                    let store = labels.labels_for_layer(layer_index + 1);
+                                    let start = (i * nodes_count) + node_index;
+                                    let end = start + chunked_nodes_count;
 
-                                    // gather all layer data in parallel.
-                                    s.spawn(move |_| {
-                                        for (layer_index, mut layer_bytes) in
-                                            layer_data.iter_mut().enumerate()
-                                        {
-                                            let store = labels.labels_for_layer(layer_index + 1);
-                                            let start = (i * nodes_count) + node_index;
-                                            let end = start + chunked_nodes_count;
-
-                                            store
-                                                .read_range_into(start, end, &mut layer_bytes)
-                                                .expect("failed to read store range");
-                                        }
-                                    });
-                                });
+                                    store
+                                        .read_range_into(start, end, &mut layer_bytes)
+                                        .expect("failed to read store range");
+                                }
 
                                 (0..chunked_nodes_count)
                                     .into_par_iter()
