@@ -12,8 +12,8 @@ use filecoin_proofs::{
     add_piece, clear_cache, compute_comm_d, fauxrep_aux, generate_fallback_sector_challenges,
     generate_piece_commitment, generate_single_vanilla_proof, generate_window_post,
     generate_window_post_with_vanilla, generate_winning_post,
-    generate_winning_post_sector_challenge, generate_winning_post_with_vanilla, seal_commit_phase1,
-    seal_commit_phase2, seal_pre_commit_phase1, seal_pre_commit_phase2, unseal_range,
+    generate_winning_post_sector_challenge, generate_winning_post_with_vanilla, get_unsealed_range,
+    seal_commit_phase1, seal_commit_phase2, seal_pre_commit_phase1, seal_pre_commit_phase2,
     validate_cache_for_commit, validate_cache_for_precommit_phase2, verify_seal,
     verify_window_post, verify_winning_post, Commitment, DefaultTreeDomain, MerkleTreeTrait,
     PaddedBytesAmount, PieceInfo, PoRepConfig, PoRepProofPartitions, PoStConfig, PoStType,
@@ -1040,11 +1040,11 @@ fn proof_and_unseal<Tree: 'static + MerkleTreeTrait>(
 
     let commit_output = seal_commit_phase2(config, phase1_output, prover_id, sector_id)?;
 
-    let _ = unseal_range::<_, _, _, Tree>(
+    let _ = get_unsealed_range::<_, Tree>(
         config,
         cache_dir_path,
-        sealed_sector_file,
-        &unseal_file,
+        sealed_sector_file.path(),
+        unseal_file.path(),
         prover_id,
         sector_id,
         comm_d,

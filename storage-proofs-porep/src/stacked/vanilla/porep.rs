@@ -49,29 +49,27 @@ impl<'a, 'c, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> PoRep<'a, Tre
     fn extract_all<'b>(
         pp: &'b PublicParams<Tree>,
         replica_id: &'b <Tree::Hasher as Hasher>::Domain,
-        data: &'b [u8],
+        data: &'b mut [u8],
         config: Option<StoreConfig>,
-    ) -> Result<Vec<u8>> {
-        let mut data = data.to_vec();
-
+    ) -> Result<()> {
         Self::extract_and_invert_transform_layers(
             &pp.graph,
             &pp.layer_challenges,
             replica_id,
-            &mut data,
+            data,
             config.expect("Missing store config"),
         )?;
 
-        Ok(data)
+        Ok(())
     }
 
     fn extract(
         _pp: &PublicParams<Tree>,
         _replica_id: &<Tree::Hasher as Hasher>::Domain,
-        _data: &[u8],
+        _data: &mut [u8],
         _node: usize,
         _config: Option<StoreConfig>,
-    ) -> Result<Vec<u8>> {
+    ) -> Result<()> {
         unimplemented!();
     }
 }
