@@ -609,21 +609,118 @@ pub fn get_seal_inputs<Tree: 'static + MerkleTreeTrait>(
     Ok(inputs)
 }
 
+// Proposed method (untested), perhaps not useful.  Remove if not needed
+/*
+pub fn get_seal_inputs_padded<Tree: 'static + MerkleTreeTrait>(
+    porep_config: PoRepConfig,
+    comm_rs: &[Commitment],
+    comm_ds: &[Commitment],
+    prover_ids: &[ProverId],
+    sector_ids: &[SectorId],
+    tickets: &[Ticket],
+    seeds: &[Ticket],
+) -> Result<Vec<Vec<Fr>>> {
+    ensure!(comm_rs.len() == comm_ds.len(), "invalid argument length (comm_rs != comm_ds)");
+    ensure!(comm_rs.len() == prover_ids.len(), "invalid argument length (comm_rs != prover_ids)");
+    ensure!(comm_rs.len() == sector_ids.len(), "invalid argument length (comm_rs != sector_ids)");
+    ensure!(comm_rs.len() == tickets.len(), "invalid argument length (comm_rs != tickets)");
+    ensure!(comm_rs.len() == seeds.len(), "invalid argument length (comm_rs != seeds)");
+
+    let mut inputs_added = 0;
+    let target = comm_rs.len().next_power_of_two();
+    let mut inputs: Vec<Vec<Fr>> = Vec::with_capacity(target);
+
+    for i in 0..comm_rs.len() {
+        let comm_d = comm_ds[i];
+        let comm_r = comm_rs[i];
+        let prover_id = prover_ids[i];
+        let sector_id = sector_ids[i];
+        let ticket = tickets[i];
+        let seed = seeds[i];
+
+        ensure!(comm_d != [0; 32], "Invalid all zero commitment (comm_d)");
+        ensure!(comm_r != [0; 32], "Invalid all zero commitment (comm_r)");
+
+        let replica_id = generate_replica_id::<Tree::Hasher, _>(
+            &prover_id,
+            sector_id.into(),
+            &ticket,
+            comm_d,
+            &porep_config.porep_id,
+        );
+
+        let comm_r_safe = as_safe_commitment(&comm_r, "comm_r")?;
+        let comm_d_safe = DefaultPieceDomain::try_from_bytes(&comm_d)?;
+
+        let public_inputs = stacked::PublicInputs {
+            replica_id,
+            tau: Some(stacked::Tau {
+                comm_d: comm_d_safe,
+                comm_r: comm_r_safe,
+            }),
+            k: None,
+            seed,
+        };
+
+        let compound_setup_params = compound_proof::SetupParams {
+            vanilla_params: setup_params(
+                PaddedBytesAmount::from(porep_config),
+                usize::from(PoRepProofPartitions::from(porep_config)),
+                porep_config.porep_id,
+                porep_config.api_version,
+            )?,
+            partitions: Some(usize::from(PoRepProofPartitions::from(porep_config))),
+            priority: false,
+        };
+
+        let compound_public_params = <StackedCompound<Tree, DefaultPieceHasher> as CompoundProof<
+                StackedDrg<'_, Tree, DefaultPieceHasher>,
+            _,
+            >>::setup(&compound_setup_params)?;
+
+        let partitions = <StackedCompound<Tree, DefaultPieceHasher> as CompoundProof<
+                StackedDrg<'_, Tree, DefaultPieceHasher>,
+            _,
+            >>::partition_count(&compound_public_params);
+
+        // These are returned for aggregated proof verification.
+        let cur_inputs: Vec<_> = (0..partitions)
+            .into_par_iter()
+            .map(|k| {
+                StackedCompound::<Tree, DefaultPieceHasher>::generate_public_inputs(
+                    &public_inputs,
+                    &compound_public_params.vanilla_params,
+                    Some(k),
+                )
+            })
+            .collect::<Result<_>>()?;
+
+        inputs.extend(cur_inputs.clone());
+        inputs_added += 1;
+
+        // If we're at the last one and not at the pow2 target,
+        // duplicate it until we are.
+        if i == comm_rs.len() - 1 {
+            while inputs_added != target {
+                inputs.extend(cur_inputs.clone());
+                inputs_added += 1;
+            }
+        }
+    }
+
+    Ok(inputs)
+}
+*/
+
 pub fn aggregate_seal_commit_proofs<Tree: 'static + MerkleTreeTrait>(
     porep_config: PoRepConfig,
     commit_outputs: &[SealCommitOutput],
 ) -> Result<AggregateSnarkProof> {
     info!("aggregate_seal_commit_proofs:start");
 
-    ensure!(commit_outputs.len() > 1, "cannot aggregate a single proof");
-    ensure!(
-        commit_outputs.len().next_power_of_two() == commit_outputs.len(),
-        "proof count must be a power of 2 for aggregation"
-    );
-
     let partitions = usize::from(PoRepProofPartitions::from(porep_config));
     let verifying_key = get_stacked_verifying_key::<Tree>(porep_config)?;
-    let proofs: Vec<_> = commit_outputs
+    let mut proofs: Vec<_> = commit_outputs
         .iter()
         .fold(Vec::new(), |mut acc, commit_output| {
             acc.extend(
@@ -638,7 +735,42 @@ pub fn aggregate_seal_commit_proofs<Tree: 'static + MerkleTreeTrait>(
 
             acc
         });
+    trace!(
+        "aggregate_seal_commit_proofs called with {} commit_outputs",
+        commit_outputs.len()
+    );
 
+    let target = if commit_outputs.len() == 1 {
+        2
+    } else {
+        commit_outputs.len().next_power_of_two()
+    };
+    trace!("aggregate_seal_commit_proofs will pad to target {}", target);
+    ensure!(target > 1, "cannot aggregate less than two proofs");
+
+    // If we're not at the pow2 target, duplicate the last element until we are.
+    while proofs.len() != target {
+        ensure!(
+            proofs.last().is_some(),
+            "invalid last proof for duplication"
+        );
+        proofs.push(
+            proofs
+                .last()
+                .expect("failed to access last proof for duplication")
+                .clone(),
+        );
+    }
+    trace!(
+        "padded proofs from {} to {}",
+        commit_outputs.len(),
+        proofs.len()
+    );
+
+    ensure!(
+        proofs.len().next_power_of_two() == proofs.len(),
+        "proof count must be a power of 2 for aggregation"
+    );
     ensure!(
         proofs.len() <= SRS_MAX_PROOFS_TO_AGGREGATE,
         "proof count for aggregation is larger than the max supported value"
@@ -671,7 +803,61 @@ pub fn verify_aggregate_seal_commit_proofs<Tree: 'static + MerkleTreeTrait>(
 ) -> Result<bool> {
     info!("verify_aggregate_seal_commit_proofs:start");
 
-    ensure!(commit_inputs.len() > 1, "cannot aggregate a single proof");
+    ensure!(!commit_inputs.is_empty(), "cannot verify with empty inputs");
+    ensure!(
+        commit_inputs.len() % aggregated_proofs_len == 0,
+        "invalid number of inputs provided"
+    );
+
+    let num_inputs = commit_inputs.len();
+    let num_inputs_per_proof = num_inputs / aggregated_proofs_len;
+
+    trace!(
+        "verify_aggregate_seal_commit_proofs called with len {}",
+        aggregated_proofs_len
+    );
+    trace!(
+        "verify_aggregate_seal_commit_proofs got {} inputs with {} inputs per proof",
+        num_inputs,
+        num_inputs_per_proof
+    );
+
+    let aggregated_proofs_len = if aggregated_proofs_len == 1 {
+        2
+    } else {
+        aggregated_proofs_len.next_power_of_two()
+    };
+    ensure!(
+        aggregated_proofs_len > 1,
+        "cannot verify less than two proofs"
+    );
+    ensure!(
+        aggregated_proofs_len == aggregated_proofs_len.next_power_of_two(),
+        "cannot verify non-pow2 aggregate seal proofs"
+    );
+
+    let target_num_inputs = num_inputs_per_proof * aggregated_proofs_len;
+
+    trace!(
+        "verify_aggregate_seal_commit_proofs using target len {}, target inputs {}",
+        aggregated_proofs_len,
+        target_num_inputs
+    );
+    let commit_inputs = if target_num_inputs != num_inputs {
+        let duplicate_inputs = &commit_inputs[(num_inputs - num_inputs_per_proof)..num_inputs];
+        let mut num_inputs = commit_inputs.len();
+        let mut new_inputs = commit_inputs.clone();
+
+        trace!("padding from {} to {}", num_inputs, target_num_inputs);
+        while target_num_inputs != num_inputs {
+            new_inputs.extend_from_slice(duplicate_inputs);
+            num_inputs += num_inputs_per_proof;
+        }
+
+        new_inputs
+    } else {
+        commit_inputs
+    };
 
     let aggregate_proof: groth16::aggregate::AggregateProof<Bls12> =
         deserialize(&aggregate_proof_bytes)?;

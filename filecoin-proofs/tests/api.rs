@@ -10,10 +10,10 @@ use ff::Field;
 use filecoin_hashers::Hasher;
 use filecoin_proofs::{
     add_piece, aggregate_seal_commit_proofs, clear_cache, compute_comm_d, fauxrep_aux,
-    get_seal_inputs, generate_fallback_sector_challenges, generate_piece_commitment, generate_single_vanilla_proof,
+    generate_fallback_sector_challenges, generate_piece_commitment, generate_single_vanilla_proof,
     generate_window_post, generate_window_post_with_vanilla, generate_winning_post,
-    generate_winning_post_sector_challenge, generate_winning_post_with_vanilla, seal_commit_phase1,
-    seal_commit_phase2, seal_pre_commit_phase1, seal_pre_commit_phase2,
+    generate_winning_post_sector_challenge, generate_winning_post_with_vanilla, get_seal_inputs,
+    seal_commit_phase1, seal_commit_phase2, seal_pre_commit_phase1, seal_pre_commit_phase2,
     unseal_range, validate_cache_for_commit, validate_cache_for_precommit_phase2,
     verify_aggregate_seal_commit_proofs, verify_seal, verify_window_post, verify_winning_post,
     Commitment, DefaultTreeDomain, MerkleTreeTrait, PaddedBytesAmount, PieceInfo, PoRepConfig,
@@ -198,8 +198,8 @@ fn seal_lifecycle<Tree: 'static + MerkleTreeTrait>(
 
 #[test]
 #[ignore]
-fn test_seal_proof_aggregation_2_2kib_porep_id_v1_1_base_8() -> Result<()> {
-    let proofs_to_aggregate = 2;
+fn test_seal_proof_aggregation_1_2kib_porep_id_v1_1_base_8() -> Result<()> {
+    let proofs_to_aggregate = 1; // Requires auto-padding
 
     let porep_id_v1_1: u64 = 5; // This is a RegisteredSealProof value
 
@@ -219,23 +219,9 @@ fn test_seal_proof_aggregation_2_2kib_porep_id_v1_1_base_8() -> Result<()> {
 
 #[test]
 #[ignore]
-fn test_seal_proof_aggregation_8_2kib_porep_id_v1_1_base_8() -> Result<()> {
-    let proofs_to_aggregate = 8;
-
-    let porep_id_v1_1: u64 = 5; // This is a RegisteredSealProof value
-
-    let mut porep_id = [0u8; 32];
-    porep_id[..8].copy_from_slice(&porep_id_v1_1.to_le_bytes());
-    assert!(!is_legacy_porep_id(porep_id));
-    let verified = aggregate_proofs::<SectorShape2KiB>(
-        SECTOR_SIZE_2_KIB,
-        &porep_id,
-        ApiVersion::V1_1_0,
-        proofs_to_aggregate,
-    )?;
-    assert!(verified);
-
-    Ok(())
+fn test_seal_proof_aggregation_5_2kib_porep_id_v1_1_base_8() -> Result<()> {
+    let proofs_to_aggregate = 5; // Requires auto-padding
+    inner_test_seal_proof_aggregation_2kib_porep_id_v1_1_base_8(proofs_to_aggregate)
 }
 
 #[test]
@@ -258,8 +244,8 @@ fn test_seal_proof_aggregation_2_4kib_porep_id_v1_1_base_8() -> Result<()> {
 
 #[test]
 #[ignore]
-fn test_seal_proof_aggregation_4_32kib_porep_id_v1_1_base_8() -> Result<()> {
-    let proofs_to_aggregate = 4;
+fn test_seal_proof_aggregation_1_32kib_porep_id_v1_1_base_8() -> Result<()> {
+    let proofs_to_aggregate = 1; // Requires auto-padding
 
     let porep_id = ARBITRARY_POREP_ID_V1_1_0;
     assert!(!is_legacy_porep_id(porep_id));
@@ -274,19 +260,19 @@ fn test_seal_proof_aggregation_4_32kib_porep_id_v1_1_base_8() -> Result<()> {
     Ok(())
 }
 
-#[test]
-#[ignore]
-fn test_seal_proof_aggregation_1024_2kib_porep_id_v1_1_base_8() -> Result<()> {
-    let proofs_to_aggregate = 1024;
-    inner_test_seal_proof_aggregation_2kib_porep_id_v1_1_base_8(proofs_to_aggregate)
-}
-
-#[test]
-#[ignore]
-fn test_seal_proof_aggregation_65536_2kib_porep_id_v1_1_base_8() -> Result<()> {
-    let proofs_to_aggregate = 65536;
-    inner_test_seal_proof_aggregation_2kib_porep_id_v1_1_base_8(proofs_to_aggregate)
-}
+//#[test]
+//#[ignore]
+//fn test_seal_proof_aggregation_1024_2kib_porep_id_v1_1_base_8() -> Result<()> {
+//    let proofs_to_aggregate = 1024;
+//    inner_test_seal_proof_aggregation_2kib_porep_id_v1_1_base_8(proofs_to_aggregate)
+//}
+//
+//#[test]
+//#[ignore]
+//fn test_seal_proof_aggregation_65536_2kib_porep_id_v1_1_base_8() -> Result<()> {
+//    let proofs_to_aggregate = 65536;
+//    inner_test_seal_proof_aggregation_2kib_porep_id_v1_1_base_8(proofs_to_aggregate)
+//}
 
 fn inner_test_seal_proof_aggregation_2kib_porep_id_v1_1_base_8(
     proofs_to_aggregate: usize,
@@ -1205,7 +1191,15 @@ fn generate_proof<Tree: 'static + MerkleTreeTrait>(
 
     clear_cache::<Tree>(cache_dir_path)?;
 
-    let inputs = get_seal_inputs::<Tree>(config, phase1_output.comm_r, phase1_output.comm_d, prover_id, sector_id, phase1_output.ticket, phase1_output.seed)?;
+    let inputs = get_seal_inputs::<Tree>(
+        config,
+        phase1_output.comm_r,
+        phase1_output.comm_d,
+        prover_id,
+        sector_id,
+        phase1_output.ticket,
+        phase1_output.seed,
+    )?;
     let result = seal_commit_phase2(config, phase1_output, prover_id, sector_id)?;
 
     Ok((result, inputs))
