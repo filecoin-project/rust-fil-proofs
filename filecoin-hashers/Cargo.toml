@@ -26,8 +26,7 @@ hex = "0.4.2"
 [features]
 default = ["gpu", "pairing", "blake2s", "poseidon", "sha256"]
 
-gpu = ["bellperson/gpu", "neptune/gpu"]
-gpu2 = ["bellperson/gpu", "neptune/opencl"]
+gpu = ["bellperson/gpu", "neptune/opencl"]
 
 pairing = ["bellperson/pairing", "neptune/pairing", "bellperson/pairing-serde"]
 blst = ["bellperson/blst", "neptune/blst", "bellperson/blst-serde"]

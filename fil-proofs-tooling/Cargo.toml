@@ -62,14 +62,6 @@ gpu = [
     "bellperson/gpu",
     "filecoin-hashers/gpu",
 ]
-gpu2 = [
-    "storage-proofs-core/gpu2",
-    "storage-proofs-porep/gpu2",
-    "storage-proofs-post/gpu2",
-    "filecoin-proofs/gpu2",
-    "bellperson/gpu",
-    "filecoin-hashers/gpu2",
-]
 measurements = ["storage-proofs-core/measurements"]
 profile = ["storage-proofs-core/profile", "measurements"]
 pairing = [
