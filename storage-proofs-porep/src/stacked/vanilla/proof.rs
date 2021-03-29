@@ -492,9 +492,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                                 chunked_nodes_count,
                             );
 
-                            let columns: Vec<
-                                GenericArray<Fr, ColumnArity>,
-                            > = {
+                            let columns: Vec<GenericArray<Fr, ColumnArity>> = {
                                 use fr32::bytes_into_fr;
 
                                 // Allocate layer data array and insert a placeholder for each layer.

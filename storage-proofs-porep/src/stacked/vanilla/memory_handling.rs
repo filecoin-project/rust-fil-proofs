@@ -1,10 +1,11 @@
 use std::cell::UnsafeCell;
 use std::fs::File;
+use std::hint::spin_loop;
 use std::marker::{PhantomData, Sync};
 use std::mem::size_of;
 use std::path::PathBuf;
 use std::slice;
-use std::sync::atomic::{spin_loop_hint, AtomicU64, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 
 use anyhow::Result;
 use byte_slice_cast::{AsSliceOf, FromByteSlice};
@@ -61,7 +62,7 @@ impl IncrementingCursor {
                 // We successfully incremented `self.cur`, so we are responsible for advancing the resource.
                 {
                     while wait_fn() {
-                        spin_loop_hint()
+                        spin_loop()
                     }
                 }
 
@@ -73,7 +74,7 @@ impl IncrementingCursor {
                 // We failed to increment `self.cur_window`, so we must wait for the window to be advanced before
                 // continuing. Wait until it is safe to use the new current window.
                 while self.cur_safe.load(Ordering::SeqCst) != cur + 1 {
-                    spin_loop_hint()
+                    spin_loop()
                 }
             }
         }
