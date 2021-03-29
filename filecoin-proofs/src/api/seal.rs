@@ -31,7 +31,10 @@ use storage_proofs_porep::stacked::{
 
 use crate::{
     api::{as_safe_commitment, commitment_from_fr, get_base_tree_leafs, get_base_tree_size},
-    caches::{get_stacked_params, get_stacked_srs_key, get_stacked_verifying_key},
+    caches::{
+        get_stacked_params, get_stacked_srs_key, get_stacked_srs_verifier_key,
+        get_stacked_verifying_key,
+    },
     constants::{
         DefaultBinaryTree, DefaultPieceDomain, DefaultPieceHasher, POREP_MINIMUM_CHALLENGES,
         SINGLE_PARTITION_PROOF_LEN,
@@ -776,9 +779,9 @@ pub fn aggregate_seal_commit_proofs<Tree: 'static + MerkleTreeTrait>(
         "proof count for aggregation is larger than the max supported value"
     );
 
-    let srs_keys = get_stacked_srs_key::<Tree>(porep_config, proofs.len())?;
+    let srs_prover_key = get_stacked_srs_key::<Tree>(porep_config, proofs.len())?;
     let aggregate_proof = StackedCompound::<Tree, DefaultPieceHasher>::aggregate_proofs(
-        &srs_keys.prover_srs,
+        &srs_prover_key,
         proofs.as_slice(),
     )?;
     let aggregate_proof_bytes = serialize(&aggregate_proof)?;
@@ -863,11 +866,12 @@ pub fn verify_aggregate_seal_commit_proofs<Tree: 'static + MerkleTreeTrait>(
         deserialize(&aggregate_proof_bytes)?;
 
     let verifying_key = get_stacked_verifying_key::<Tree>(porep_config)?;
-    let srs_keys = get_stacked_srs_key::<Tree>(porep_config, aggregated_proofs_len)?;
+    let srs_verifier_key =
+        get_stacked_srs_verifier_key::<Tree>(porep_config, aggregated_proofs_len)?;
 
     info!("start verifying aggregate proof");
     let result = StackedCompound::<Tree, DefaultPieceHasher>::verify_aggregate_proofs(
-        &srs_keys.verifier_srs,
+        &srs_verifier_key,
         &verifying_key,
         commit_inputs.as_slice(),
         &aggregate_proof,

@@ -354,7 +354,7 @@ where
         rng: Option<&mut R>,
         public_params: &S::PublicParams,
         num_proofs_to_aggregate: usize,
-    ) -> Result<(ProverSRS<Bls12>, VerifierSRS<Bls12>)> {
+    ) -> Result<ProverSRS<Bls12>> {
         let generic_srs = Self::get_inner_product(
             rng,
             Self::blank_circuit(public_params),
@@ -362,7 +362,31 @@ where
             num_proofs_to_aggregate,
         )?;
 
-        Ok(generic_srs.specialize(num_proofs_to_aggregate))
+        let (prover_srs, _verifier_srs) = generic_srs.specialize(num_proofs_to_aggregate);
+
+        Ok(prover_srs)
+    }
+
+    /// If the rng option argument is set, parameters will be
+    /// generated using it.  This is used for testing only, or where
+    /// parameters are otherwise unavailable (e.g. benches).  If rng
+    /// is not set, an error will result if parameters are not
+    /// present.
+    fn srs_verifier_key<R: RngCore>(
+        rng: Option<&mut R>,
+        public_params: &S::PublicParams,
+        num_proofs_to_aggregate: usize,
+    ) -> Result<VerifierSRS<Bls12>> {
+        let generic_srs = Self::get_inner_product(
+            rng,
+            Self::blank_circuit(public_params),
+            public_params,
+            num_proofs_to_aggregate,
+        )?;
+
+        let (_prover_srs, verifier_srs) = generic_srs.specialize(num_proofs_to_aggregate);
+
+        Ok(verifier_srs)
     }
 
     fn circuit_for_test(
