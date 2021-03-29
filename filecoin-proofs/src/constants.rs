@@ -167,31 +167,25 @@ pub type SectorShape32KiB = SectorShapeTop2;
 pub type SectorShape64GiB = SectorShapeTop2;
 
 pub fn is_sector_shape_base(sector_size: u64) -> bool {
-    match sector_size {
-        SECTOR_SIZE_2_KIB | SECTOR_SIZE_8_MIB | SECTOR_SIZE_512_MIB => true,
-        _ => false,
-    }
+    matches!(
+        sector_size,
+        SECTOR_SIZE_2_KIB | SECTOR_SIZE_8_MIB | SECTOR_SIZE_512_MIB
+    )
 }
 
 pub fn is_sector_shape_sub2(sector_size: u64) -> bool {
-    match sector_size {
-        SECTOR_SIZE_4_KIB | SECTOR_SIZE_16_MIB | SECTOR_SIZE_1_GIB => true,
-        _ => false,
-    }
+    matches!(
+        sector_size,
+        SECTOR_SIZE_4_KIB | SECTOR_SIZE_16_MIB | SECTOR_SIZE_1_GIB
+    )
 }
 
 pub fn is_sector_shape_sub8(sector_size: u64) -> bool {
-    match sector_size {
-        SECTOR_SIZE_16_KIB | SECTOR_SIZE_32_GIB => true,
-        _ => false,
-    }
+    matches!(sector_size, SECTOR_SIZE_16_KIB | SECTOR_SIZE_32_GIB)
 }
 
 pub fn is_sector_shape_top2(sector_size: u64) -> bool {
-    match sector_size {
-        SECTOR_SIZE_32_KIB | SECTOR_SIZE_64_GIB => true,
-        _ => false,
-    }
+    matches!(sector_size, SECTOR_SIZE_32_KIB | SECTOR_SIZE_64_GIB)
 }
 
 /// Calls a function with the type hint of the sector shape matching the provided sector.

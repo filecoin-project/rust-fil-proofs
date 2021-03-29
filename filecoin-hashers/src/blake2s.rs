@@ -244,7 +244,7 @@ impl HashFunction<Blake2sDomain> for Blake2sFunction {
         bits: &[Boolean],
     ) -> Result<AllocatedNum<Bls12>, SynthesisError> {
         let personalization = vec![0u8; 8];
-        let alloc_bits = blake2s_circuit(cs.namespace(|| "hash"), &bits[..], &personalization)?;
+        let alloc_bits = blake2s_circuit(cs.namespace(|| "hash"), bits, &personalization)?;
 
         multipack::pack_bits(cs.namespace(|| "pack"), &alloc_bits)
     }

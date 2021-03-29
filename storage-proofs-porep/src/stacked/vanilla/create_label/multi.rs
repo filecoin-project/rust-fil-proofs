@@ -45,7 +45,7 @@ const SHA_BLOCK_SIZE: usize = 64;
 const SHA256_INITIAL_DIGEST: [u32; 8] = [
     0x6a09_e667,
     0xbb67_ae85,
-    0x3c6_ef372,
+    0x3c6e_f372,
     0xa54f_f53a,
     0x510e_527f,
     0x9b05_688c,
@@ -242,9 +242,14 @@ fn create_layer_labels(
     let cur_awaiting = AtomicU64::new(1);
 
     // These UnsafeSlices are managed through the 3 Atomics above, to minimize any locking overhead.
-    let layer_labels = UnsafeSlice::from_slice(layer_labels.as_mut_slice_of::<u32>().unwrap());
-    let exp_labels =
-        exp_labels.map(|m| UnsafeSlice::from_slice(m.as_mut_slice_of::<u32>().unwrap()));
+    let layer_labels = UnsafeSlice::from_slice(
+        layer_labels
+            .as_mut_slice_of::<u32>()
+            .expect("failed as mut slice of"),
+    );
+    let exp_labels = exp_labels.map(|m| {
+        UnsafeSlice::from_slice(m.as_mut_slice_of::<u32>().expect("failed as mut slice of"))
+    });
     let base_parent_missing = UnsafeSlice::from_slice(&mut base_parent_missing);
 
     crossbeam::thread::scope(|s| {

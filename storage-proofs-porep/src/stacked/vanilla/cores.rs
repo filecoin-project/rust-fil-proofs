@@ -108,7 +108,7 @@ pub fn bind_core(core_index: CoreIndex) -> Result<Cleanup> {
     })
 }
 
-fn get_core_by_index<'a>(topo: &'a Topology, index: CoreIndex) -> Result<&'a TopologyObject> {
+fn get_core_by_index(topo: &Topology, index: CoreIndex) -> Result<&TopologyObject> {
     let idx = index.0;
 
     match topo.objects_with_type(&ObjectType::Core) {

@@ -100,13 +100,13 @@ pub fn get_stacked_params<Tree: 'static + MerkleTreeTrait>(
         .map_err(Into::into)
     };
 
-    Ok(lookup_groth_params(
+    lookup_groth_params(
         format!(
             "STACKED[{}]",
             usize::from(PaddedBytesAmount::from(porep_config))
         ),
         parameters_generator,
-    )?)
+    )
 }
 
 pub fn get_post_params<Tree: 'static + MerkleTreeTrait>(
@@ -172,13 +172,13 @@ pub fn get_stacked_verifying_key<Tree: 'static + MerkleTreeTrait>(
         Ok(prepare_verifying_key(&vk))
     };
 
-    Ok(lookup_verifying_key(
+    lookup_verifying_key(
         format!(
             "STACKED[{}]",
             usize::from(PaddedBytesAmount::from(porep_config))
         ),
         vk_generator,
-    )?)
+    )
 }
 
 pub fn get_post_verifying_key<Tree: 'static + MerkleTreeTrait>(

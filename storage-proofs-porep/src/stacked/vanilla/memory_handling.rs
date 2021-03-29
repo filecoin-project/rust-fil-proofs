@@ -3,7 +3,7 @@ use std::fs::File;
 use std::hint::spin_loop;
 use std::marker::{PhantomData, Sync};
 use std::mem::size_of;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::slice;
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 
@@ -82,7 +82,7 @@ impl IncrementingCursor {
 }
 
 impl<T: FromByteSlice> CacheReader<T> {
-    pub fn new(filename: &PathBuf, window_size: Option<usize>, degree: usize) -> Result<Self> {
+    pub fn new(filename: &Path, window_size: Option<usize>, degree: usize) -> Result<Self> {
         info!("initializing cache");
         let file = File::open(filename)?;
         let size = File::metadata(&file)?.len() as usize;
@@ -285,7 +285,7 @@ pub fn setup_create_label_memory(
     sector_size: usize,
     degree: usize,
     window_size: Option<usize>,
-    cache_path: &PathBuf,
+    cache_path: &Path,
 ) -> Result<(CacheReader<u32>, MmapMut, MmapMut)> {
     let parents_cache = CacheReader::new(cache_path, window_size, degree)?;
     let layer_labels = allocate_layer(sector_size)?;

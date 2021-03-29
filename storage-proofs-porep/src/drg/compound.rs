@@ -97,8 +97,7 @@ where
             private: pub_params.private,
         };
 
-        let mut input: Vec<Fr> = Vec::new();
-        input.push(replica_id.into());
+        let mut input: Vec<Fr> = vec![replica_id.into()];
 
         let mut parents = vec![0; pub_params.graph.degree()];
         for challenge in challenges {

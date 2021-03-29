@@ -555,7 +555,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                     }
                 });
                 s.spawn(move |_| {
-                    let _gpu_lock = GPU_LOCK.lock().unwrap();
+                    let _gpu_lock = GPU_LOCK.lock().expect("failed to get gpu lock");
                     let mut column_tree_builder = ColumnTreeBuilder::<ColumnArity, TreeArity>::new(
                         Some(BatcherType::OpenCL),
                         nodes_count,
@@ -929,7 +929,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                 }
             });
             s.spawn(move |_| {
-                let _gpu_lock = GPU_LOCK.lock().unwrap();
+                let _gpu_lock = GPU_LOCK.lock().expect("failed to get gpu lock");
                 let mut tree_builder = TreeBuilder::<Tree::Arity>::new(
                     Some(BatcherType::OpenCL),
                     nodes_count,
@@ -1390,7 +1390,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
             info!("generating tree r last using the GPU");
             let max_gpu_tree_batch_size = SETTINGS.max_gpu_tree_batch_size as usize;
 
-            let _gpu_lock = GPU_LOCK.lock().unwrap();
+            let _gpu_lock = GPU_LOCK.lock().expect("failed to get gpu lock");
             let mut tree_builder = TreeBuilder::<Tree::Arity>::new(
                 #[cfg(feature = "gpu")]
                 Some(BatcherType::OpenCL),

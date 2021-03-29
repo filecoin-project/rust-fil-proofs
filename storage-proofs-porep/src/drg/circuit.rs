@@ -137,7 +137,7 @@ impl<'a, H: 'static + Hasher> Circuit<Bls12> for DrgPoRepCircuit<'a, H> {
         assert_eq!(self.data_nodes_paths.len(), nodes);
 
         let replica_node_num = AllocatedNum::alloc(cs.namespace(|| "replica_id_num"), || {
-            replica_id.ok_or_else(|| SynthesisError::AssignmentMissing)
+            replica_id.ok_or(SynthesisError::AssignmentMissing)
         })?;
 
         replica_node_num.inputize(cs.namespace(|| "replica_id"))?;
@@ -206,10 +206,7 @@ impl<'a, H: 'static + Hasher> Circuit<Bls12> for DrgPoRepCircuit<'a, H> {
                     .map(|(i, val)| {
                         let num = AllocatedNum::alloc(
                             cs.namespace(|| format!("parents_{}_num", i)),
-                            || {
-                                val.map(Into::into)
-                                    .ok_or_else(|| SynthesisError::AssignmentMissing)
-                            },
+                            || val.map(Into::into).ok_or(SynthesisError::AssignmentMissing),
                         )?;
                         Ok(reverse_bit_numbering(num.to_bits_le(
                             cs.namespace(|| format!("parents_{}_bits", i)),
@@ -228,7 +225,7 @@ impl<'a, H: 'static + Hasher> Circuit<Bls12> for DrgPoRepCircuit<'a, H> {
 
                 let replica_node_num =
                     AllocatedNum::alloc(cs.namespace(|| "replica_node"), || {
-                        (*replica_node).ok_or_else(|| SynthesisError::AssignmentMissing)
+                        (*replica_node).ok_or(SynthesisError::AssignmentMissing)
                     })?;
 
                 let decoded = encode::decode(cs.namespace(|| "decode"), &key, &replica_node_num)?;
@@ -236,7 +233,7 @@ impl<'a, H: 'static + Hasher> Circuit<Bls12> for DrgPoRepCircuit<'a, H> {
                 // TODO this should not be here, instead, this should be the leaf Fr in the data_auth_path
                 // TODO also note that we need to change/makesurethat the leaves are the data, instead of hashes of the data
                 let expected = AllocatedNum::alloc(cs.namespace(|| "data node"), || {
-                    data_node.ok_or_else(|| SynthesisError::AssignmentMissing)
+                    data_node.ok_or(SynthesisError::AssignmentMissing)
                 })?;
 
                 // ensure the encrypted data and data_node match

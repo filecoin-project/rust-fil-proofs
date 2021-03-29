@@ -41,10 +41,7 @@ impl<'a, 'c, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> ProofScheme<'
         priv_inputs: &'b Self::PrivateInputs,
     ) -> Result<Self::Proof> {
         let proofs = Self::prove_all_partitions(pub_params, pub_inputs, priv_inputs, 1)?;
-        let k = match pub_inputs.k {
-            None => 0,
-            Some(k) => k,
-        };
+        let k = pub_inputs.k.unwrap_or(0);
         // Because partition proofs require a common setup, the general ProofScheme implementation,
         // which makes use of `ProofScheme::prove` cannot be used here. Instead, we need to prove all
         // partitions in one pass, as implemented by `prove_all_partitions` below.

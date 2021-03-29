@@ -51,10 +51,7 @@ pub fn generate_window_post_with_vanilla<Tree: 'static + MerkleTreeTrait>(
         priority: post_config.priority,
     };
 
-    let partitions = match partitions {
-        Some(x) => x,
-        None => 1,
-    };
+    let partitions = partitions.unwrap_or(1);
 
     let pub_params: compound_proof::PublicParams<'_, FallbackPoSt<'_, Tree>> =
         FallbackPoStCompound::setup(&setup_params)?;
@@ -92,7 +89,7 @@ pub fn generate_window_post_with_vanilla<Tree: 'static + MerkleTreeTrait>(
 
     info!("generate_window_post_with_vanilla:finish");
 
-    Ok(proof.to_vec()?)
+    proof.to_vec()
 }
 
 /// Generates a Window proof-of-spacetime.
@@ -172,7 +169,7 @@ pub fn generate_window_post<Tree: 'static + MerkleTreeTrait>(
 
     info!("generate_window_post:finish");
 
-    Ok(proof.to_vec()?)
+    proof.to_vec()
 }
 
 /// Verifies a window proof-of-spacetime.
@@ -226,7 +223,7 @@ pub fn verify_window_post<Tree: 'static + MerkleTreeTrait>(
 
     let is_valid = {
         let verifying_key = get_post_verifying_key::<Tree>(&post_config)?;
-        let multi_proof = MultiProof::new_from_reader(partitions, &proof[..], &verifying_key)?;
+        let multi_proof = MultiProof::new_from_reader(partitions, proof, &verifying_key)?;
 
         FallbackPoStCompound::verify(
             &pub_params,

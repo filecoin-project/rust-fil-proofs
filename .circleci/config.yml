@@ -183,7 +183,6 @@ jobs:
             ulimit -n 20000
             cd filecoin-proofs
             ~/.cargo/bin/cargo +<< pipeline.parameters.nightly-toolchain >> -Zpackage-features test --all --no-default-features --features gpu,blst --verbose --release lifecycle -- --ignored --nocapture
-            ~/.cargo/bin/cargo +<< pipeline.parameters.nightly-toolchain >> -Zpackage-features test --all --no-default-features --features gpu2,blst --verbose --release lifecycle -- --ignored --nocapture
           no_output_timeout: 30m
           environment:
             RUST_TEST_THREADS: 1
