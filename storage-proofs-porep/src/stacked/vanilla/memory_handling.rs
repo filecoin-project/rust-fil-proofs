@@ -3,7 +3,7 @@ use std::fs::File;
 use std::hint::spin_loop;
 use std::marker::{PhantomData, Sync};
 use std::mem::size_of;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::slice;
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 
