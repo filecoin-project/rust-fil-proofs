@@ -108,7 +108,7 @@ impl<'a, Tree: MerkleTreeTrait, G: Hasher> Circuit<Bls12> for StackedCircuit<'a,
         let replica_id_num = AllocatedNum::alloc(cs.namespace(|| "replica_id"), || {
             replica_id
                 .map(Into::into)
-                .ok_or_else(|| SynthesisError::AssignmentMissing)
+                .ok_or(SynthesisError::AssignmentMissing)
         })?;
 
         // make replica_id a public input
@@ -121,7 +121,7 @@ impl<'a, Tree: MerkleTreeTrait, G: Hasher> Circuit<Bls12> for StackedCircuit<'a,
         let comm_d_num = AllocatedNum::alloc(cs.namespace(|| "comm_d"), || {
             comm_d
                 .map(Into::into)
-                .ok_or_else(|| SynthesisError::AssignmentMissing)
+                .ok_or(SynthesisError::AssignmentMissing)
         })?;
 
         // make comm_d a public input
@@ -131,7 +131,7 @@ impl<'a, Tree: MerkleTreeTrait, G: Hasher> Circuit<Bls12> for StackedCircuit<'a,
         let comm_r_num = AllocatedNum::alloc(cs.namespace(|| "comm_r"), || {
             comm_r
                 .map(Into::into)
-                .ok_or_else(|| SynthesisError::AssignmentMissing)
+                .ok_or(SynthesisError::AssignmentMissing)
         })?;
 
         // make comm_r a public input
@@ -141,14 +141,14 @@ impl<'a, Tree: MerkleTreeTrait, G: Hasher> Circuit<Bls12> for StackedCircuit<'a,
         let comm_r_last_num = AllocatedNum::alloc(cs.namespace(|| "comm_r_last"), || {
             comm_r_last
                 .map(Into::into)
-                .ok_or_else(|| SynthesisError::AssignmentMissing)
+                .ok_or(SynthesisError::AssignmentMissing)
         })?;
 
         // Allocate comm_c as Fr
         let comm_c_num = AllocatedNum::alloc(cs.namespace(|| "comm_c"), || {
             comm_c
                 .map(Into::into)
-                .ok_or_else(|| SynthesisError::AssignmentMissing)
+                .ok_or(SynthesisError::AssignmentMissing)
         })?;
 
         // Verify comm_r = H(comm_c || comm_r_last)

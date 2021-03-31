@@ -115,7 +115,7 @@ impl CacheData {
         self.shift(0)
     }
 
-    fn open(offset: u32, len: u32, path: &PathBuf) -> Result<Self> {
+    fn open(offset: u32, len: u32, path: &Path) -> Result<Self> {
         let min_cache_size = (offset + len) as usize * DEGREE * NODE_BYTES;
 
         let file = LockedFile::open_shared_read(path)
@@ -182,7 +182,7 @@ impl ParentCache {
         len: u32,
         cache_entries: u32,
         graph: &StackedGraph<H, G>,
-        path: &PathBuf,
+        path: &Path,
     ) -> Result<Self>
     where
         H: Hasher,
@@ -273,7 +273,7 @@ impl ParentCache {
 
         Ok(ParentCache {
             cache: CacheData::open(0, len, &path)?,
-            path: path.clone(),
+            path: path.to_path_buf(),
             num_cache_entries: cache_entries,
             sector_size: graph.size() * NODE_SIZE,
             digest: digest_hex,
@@ -285,7 +285,7 @@ impl ParentCache {
         len: u32,
         cache_entries: u32,
         graph: &StackedGraph<H, G>,
-        path: &PathBuf,
+        path: &Path,
     ) -> Result<Self>
     where
         H: Hasher,
@@ -295,7 +295,7 @@ impl ParentCache {
         let mut digest_hex: String = "".to_string();
         let sector_size = graph.size() * NODE_SIZE;
 
-        with_exclusive_lock(&path, |file| {
+        with_exclusive_lock(&path.to_path_buf(), |file| {
             let cache_size = cache_entries as usize * NODE_BYTES * DEGREE;
             file.as_ref()
                 .set_len(cache_size as u64)
@@ -356,7 +356,7 @@ impl ParentCache {
 
         Ok(ParentCache {
             cache: CacheData::open(0, len, &path)?,
-            path: path.clone(),
+            path: path.to_path_buf(),
             num_cache_entries: cache_entries,
             sector_size,
             digest: digest_hex,
@@ -396,7 +396,7 @@ fn parent_cache_dir_name() -> String {
     SETTINGS.parent_cache.clone()
 }
 
-fn parent_cache_id(path: &PathBuf) -> String {
+fn parent_cache_id(path: &Path) -> String {
     Path::new(&path)
         .file_stem()
         .expect("parent_cache_id file_stem failure")
@@ -406,7 +406,7 @@ fn parent_cache_id(path: &PathBuf) -> String {
 }
 
 /// Get the correct parent cache data for a given cache id.
-fn get_parent_cache_data(path: &PathBuf) -> Option<&ParentCacheData> {
+fn get_parent_cache_data(path: &Path) -> Option<&ParentCacheData> {
     PARENT_CACHE.get(&parent_cache_id(path))
 }
 

@@ -375,7 +375,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         Ok(tree)
     }
 
-    #[cfg(any(feature = "gpu", feature = "gpu2"))]
+    #[cfg(any(feature = "gpu"))]
     fn generate_tree_c<ColumnArity, TreeArity>(
         layers: usize,
         nodes_count: usize,
@@ -406,7 +406,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         }
     }
 
-    #[cfg(not(any(feature = "gpu", feature = "gpu2")))]
+    #[cfg(not(any(feature = "gpu")))]
     fn generate_tree_c<ColumnArity, TreeArity>(
         layers: usize,
         nodes_count: usize,
@@ -428,7 +428,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
     }
 
     #[allow(clippy::needless_range_loop)]
-    #[cfg(any(feature = "gpu", feature = "gpu2"))]
+    #[cfg(any(feature = "gpu"))]
     fn generate_tree_c_gpu<ColumnArity, TreeArity>(
         layers: usize,
         nodes_count: usize,
@@ -492,61 +492,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                                 chunked_nodes_count,
                             );
 
-                            #[cfg(feature = "gpu")]
-                            let columns: Vec<
-                                GenericArray<Fr, ColumnArity>,
-                            > = {
-                                use ff::Field;
-                                use generic_array::sequence::GenericSequence;
-                                use std::ops::Range;
-
-                                let mut columns: Vec<GenericArray<Fr, ColumnArity>> = vec![
-                                        GenericArray::<Fr, ColumnArity>::generate(|_i: usize| {
-                                            Fr::zero()
-                                        });
-                                        chunked_nodes_count
-                                    ];
-
-                                // Allocate layer data array and insert a placeholder for each layer.
-                                let mut layer_data: Vec<Vec<Fr>> =
-                                    vec![Vec::with_capacity(chunked_nodes_count); layers];
-
-                                rayon::scope(|s| {
-                                    // capture a shadowed version of layer_data.
-                                    let layer_data: &mut Vec<_> = &mut layer_data;
-
-                                    // gather all layer data in parallel.
-                                    s.spawn(move |_| {
-                                        for (layer_index, layer_elements) in
-                                            layer_data.iter_mut().enumerate()
-                                        {
-                                            let store = labels.labels_for_layer(layer_index + 1);
-                                            let start = (i * nodes_count) + node_index;
-                                            let end = start + chunked_nodes_count;
-                                            let elements: Vec<<Tree::Hasher as Hasher>::Domain> =
-                                                store
-                                                    .read_range(Range { start, end })
-                                                    .expect("failed to read store range");
-                                            layer_elements
-                                                .extend(elements.into_iter().map(Into::into));
-                                        }
-                                    });
-                                });
-                                // Copy out all layer data arranged into columns.
-                                for layer_index in 0..layers {
-                                    for index in 0..chunked_nodes_count {
-                                        columns[index][layer_index] =
-                                            layer_data[layer_index][index];
-                                    }
-                                }
-
-                                columns
-                            };
-
-                            #[cfg(feature = "gpu2")]
-                            let columns: Vec<
-                                GenericArray<Fr, ColumnArity>,
-                            > = {
+                            let columns: Vec<GenericArray<Fr, ColumnArity>> = {
                                 use fr32::bytes_into_fr;
 
                                 // Allocate layer data array and insert a placeholder for each layer.
@@ -609,11 +555,8 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                     }
                 });
                 s.spawn(move |_| {
-                    let _gpu_lock = GPU_LOCK.lock().unwrap();
+                    let _gpu_lock = GPU_LOCK.lock().expect("failed to get gpu lock");
                     let mut column_tree_builder = ColumnTreeBuilder::<ColumnArity, TreeArity>::new(
-                        #[cfg(feature = "gpu")]
-                        Some(BatcherType::GPU),
-                        #[cfg(feature = "gpu2")]
                         Some(BatcherType::OpenCL),
                         nodes_count,
                         max_gpu_column_batch_size,
@@ -809,7 +752,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         })
     }
 
-    #[cfg(any(feature = "gpu", feature = "gpu2"))]
+    #[cfg(any(feature = "gpu"))]
     fn generate_tree_r_last<TreeArity>(
         data: &mut Data<'_>,
         nodes_count: usize,
@@ -842,7 +785,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         }
     }
 
-    #[cfg(not(any(feature = "gpu", feature = "gpu2")))]
+    #[cfg(not(any(feature = "gpu")))]
     fn generate_tree_r_last<TreeArity>(
         data: &mut Data<'_>,
         nodes_count: usize,
@@ -864,7 +807,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         )
     }
 
-    #[cfg(any(feature = "gpu", feature = "gpu2"))]
+    #[cfg(any(feature = "gpu"))]
     fn generate_tree_r_last_gpu<TreeArity>(
         data: &mut Data<'_>,
         nodes_count: usize,
@@ -930,29 +873,6 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                             end,
                         );
 
-                        #[cfg(feature = "gpu")]
-                        let encoded_data = last_layer_labels
-                            .read_range(start..end)
-                            .expect("failed to read layer range")
-                            .into_par_iter()
-                            .zip(
-                                data.as_mut()[(start * NODE_SIZE)..(end * NODE_SIZE)]
-                                    .par_chunks_mut(NODE_SIZE),
-                            )
-                            .map(|(key, data_node_bytes)| {
-                                let data_node = <Tree::Hasher as Hasher>::Domain::try_from_bytes(
-                                    data_node_bytes,
-                                )
-                                .expect("try_from_bytes failed");
-                                let encoded_node =
-                                    encode::<<Tree::Hasher as Hasher>::Domain>(key, data_node);
-                                data_node_bytes
-                                    .copy_from_slice(AsRef::<[u8]>::as_ref(&encoded_node));
-
-                                encoded_node
-                            });
-
-                        #[cfg(feature = "gpu2")]
                         let encoded_data = {
                             use fr32::bytes_into_fr;
 
@@ -1009,11 +929,8 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                 }
             });
             s.spawn(move |_| {
-                let _gpu_lock = GPU_LOCK.lock().unwrap();
+                let _gpu_lock = GPU_LOCK.lock().expect("failed to get gpu lock");
                 let mut tree_builder = TreeBuilder::<Tree::Arity>::new(
-                    #[cfg(feature = "gpu")]
-                    Some(BatcherType::GPU),
-                    #[cfg(feature = "gpu2")]
                     Some(BatcherType::OpenCL),
                     nodes_count,
                     max_gpu_tree_batch_size,
@@ -1440,7 +1357,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
     // Assumes data is all zeros.
     // Replica path is used to create configs, but is not read.
     // Instead new zeros are provided (hence the need for replica to be all zeros).
-    #[cfg(any(feature = "gpu", feature = "gpu2"))]
+    #[cfg(any(feature = "gpu"))]
     fn generate_fake_tree_r_last<TreeArity>(
         nodes_count: usize,
         tree_count: usize,
@@ -1473,11 +1390,9 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
             info!("generating tree r last using the GPU");
             let max_gpu_tree_batch_size = SETTINGS.max_gpu_tree_batch_size as usize;
 
-            let _gpu_lock = GPU_LOCK.lock().unwrap();
+            let _gpu_lock = GPU_LOCK.lock().expect("failed to get gpu lock");
             let mut tree_builder = TreeBuilder::<Tree::Arity>::new(
                 #[cfg(feature = "gpu")]
-                Some(BatcherType::GPU),
-                #[cfg(feature = "gpu2")]
                 Some(BatcherType::OpenCL),
                 nodes_count,
                 max_gpu_tree_batch_size,
@@ -1573,7 +1488,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
     // Assumes data is all zeros.
     // Replica path is used to create configs, but is not read.
     // Instead new zeros are provided (hence the need for replica to be all zeros).
-    #[cfg(not(any(feature = "gpu", feature = "gpu2")))]
+    #[cfg(not(any(feature = "gpu")))]
     fn generate_fake_tree_r_last<TreeArity>(
         nodes_count: usize,
         tree_count: usize,

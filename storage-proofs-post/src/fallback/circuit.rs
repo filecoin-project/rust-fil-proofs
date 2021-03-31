@@ -131,19 +131,19 @@ impl<Tree: 'static + MerkleTreeTrait> Circuit<Bls12> for &Sector<Tree> {
         let comm_r_last_num = AllocatedNum::alloc(cs.namespace(|| "comm_r_last"), || {
             comm_r_last
                 .map(Into::into)
-                .ok_or_else(|| SynthesisError::AssignmentMissing)
+                .ok_or(SynthesisError::AssignmentMissing)
         })?;
 
         let comm_c_num = AllocatedNum::alloc(cs.namespace(|| "comm_c"), || {
             comm_c
                 .map(Into::into)
-                .ok_or_else(|| SynthesisError::AssignmentMissing)
+                .ok_or(SynthesisError::AssignmentMissing)
         })?;
 
         let comm_r_num = AllocatedNum::alloc(cs.namespace(|| "comm_r"), || {
             comm_r
                 .map(Into::into)
-                .ok_or_else(|| SynthesisError::AssignmentMissing)
+                .ok_or(SynthesisError::AssignmentMissing)
         })?;
 
         comm_r_num.inputize(cs.namespace(|| "comm_r_input"))?;

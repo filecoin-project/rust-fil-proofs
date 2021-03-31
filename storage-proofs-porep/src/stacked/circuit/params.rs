@@ -122,7 +122,7 @@ impl<Tree: MerkleTreeTrait, G: 'static + Hasher> Proof<Tree, G> {
 
         // PrivateInput: data_leaf
         let data_leaf_num = AllocatedNum::alloc(cs.namespace(|| "data_leaf"), || {
-            data_leaf.ok_or_else(|| SynthesisError::AssignmentMissing)
+            data_leaf.ok_or(SynthesisError::AssignmentMissing)
         })?;
 
         // enforce inclusion of the data leaf in the tree D
