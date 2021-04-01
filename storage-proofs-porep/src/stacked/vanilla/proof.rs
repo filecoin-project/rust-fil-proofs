@@ -106,8 +106,8 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
             columns.extend(
                 parents
                     .into_par_iter()
-                    .map(|parent| t_aux.column(parent).expect("failed to get parent column"))
-                    .collect::<Vec<Column<Tree::Hasher>>>(),
+                    .map(|parent| t_aux.column(parent))
+                    .collect::<Result<Vec<Column<Tree::Hasher>>>>()?
             );
 
             debug_assert!(columns.len() == base_degree);
