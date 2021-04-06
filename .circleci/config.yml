@@ -378,7 +378,7 @@ commands:
       - run:
           name: Obtain filecoin ipp parameter
           command: |
-            cargo run --release --bin paramfetch -- -j srs-inner-product.json
+            cargo run --release --bin paramfetch -- -a -j srs-inner-product.json
           no_output_timeout: 60m
       - run:
           name: Make the parameters world readable
