@@ -137,13 +137,12 @@ where
             base_tree_leafs,
         );
 
-        // MT for original data is always named tree-d, and it will be
-        // referenced later in the process as such.
         let mut config = StoreConfig::new(
             cache_path.as_ref(),
             CacheKey::CommDTree.to_string(),
             default_rows_to_discard(base_tree_leafs, BINARY_ARITY),
         );
+
         let data_tree = create_base_merkle_tree::<BinaryMerkleTree<DefaultPieceHasher>>(
             Some(config.clone()),
             base_tree_leafs,

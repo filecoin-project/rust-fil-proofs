@@ -264,7 +264,7 @@ where
         groth_proofs
             .into_iter()
             .map(|groth_proof| {
-                let mut proof_vec = vec![];
+                let mut proof_vec = Vec::new();
                 groth_proof.write(&mut proof_vec)?;
                 let gp = groth16::Proof::<Bls12>::read(&proof_vec[..])?;
                 Ok(gp)

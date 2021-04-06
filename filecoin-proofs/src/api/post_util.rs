@@ -147,7 +147,7 @@ pub fn generate_single_vanilla_proof<Tree: 'static + MerkleTreeTrait>(
     let comm_c = replica.safe_comm_c();
     let comm_r_last = replica.safe_comm_r_last();
 
-    let mut priv_sectors = vec![fallback::PrivateSector {
+    let priv_sectors = vec![fallback::PrivateSector {
         tree,
         comm_c,
         comm_r_last,

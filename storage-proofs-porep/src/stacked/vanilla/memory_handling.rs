@@ -3,7 +3,7 @@ use std::fs::File;
 use std::hint::spin_loop;
 use std::marker::{PhantomData, Sync};
 use std::mem::size_of;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::slice;
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 
@@ -30,6 +30,16 @@ struct IncrementingCursor {
     cur_safe: AtomicUsize,
 }
 
+fn compare_and_swap(atomic: &AtomicUsize, before: usize, after: usize) -> usize {
+    match atomic.compare_exchange_weak(before, after, Ordering::SeqCst, Ordering::SeqCst) {
+        Ok(x) => {
+            assert_eq!(x, before);
+            before
+        }
+        _ => after,
+    }
+}
+
 /// IncrementingCursor provides an atomic variable which can be incremented such that only one thread attempting the
 /// increment is selected to perform actions required to effect the transition. Unselected threads wait until the
 /// transition has completed. Transition and wait condition are both specified by closures supplied by the caller.
@@ -40,15 +50,17 @@ impl IncrementingCursor {
             cur_safe: AtomicUsize::new(val),
         }
     }
+
     fn store(&self, val: usize) {
         self.cur.store(val, Ordering::SeqCst);
         self.cur_safe.store(val, Ordering::SeqCst);
     }
+
     fn compare_and_swap(&self, before: usize, after: usize) {
-        self.cur.compare_and_swap(before, after, Ordering::SeqCst);
-        self.cur_safe
-            .compare_and_swap(before, after, Ordering::SeqCst);
+        compare_and_swap(&self.cur, before, after);
+        compare_and_swap(&self.cur_safe, before, after);
     }
+
     fn increment<F: Fn() -> bool, G: Fn()>(&self, target: usize, wait_fn: F, advance_fn: G) {
         // Check using `cur_safe`, to ensure we wait until the current cursor value is safe to use.
         // If we were to instead check `cur`, it could have been incremented but not yet safe.
@@ -56,8 +68,7 @@ impl IncrementingCursor {
         if target > cur {
             // Only one producer will successfully increment `cur`. We need this second atomic because we cannot
             // increment `cur_safe` until after the underlying resource has been advanced.
-            let instant_cur = self.cur.compare_and_swap(cur, cur + 1, Ordering::SeqCst);
-
+            let instant_cur = compare_and_swap(&self.cur, cur, cur + 1);
             if instant_cur == cur {
                 // We successfully incremented `self.cur`, so we are responsible for advancing the resource.
                 {
@@ -132,9 +143,11 @@ impl<T: FromByteSlice> CacheReader<T> {
     pub unsafe fn increment_consumer(&self) {
         self.consumer.fetch_add(1, Ordering::SeqCst);
     }
+
     pub fn store_consumer(&self, val: u64) {
         self.consumer.store(val, Ordering::SeqCst);
     }
+
     pub fn get_consumer(&self) -> u64 {
         self.consumer.load(Ordering::SeqCst)
     }
@@ -164,6 +177,7 @@ impl<T: FromByteSlice> CacheReader<T> {
         bufs[0] = buf0;
         Ok(())
     }
+
     pub fn finish_reset(&self) -> Result<()> {
         let buf1 = Self::map_buf(self.window_size as u64, self.window_size, &self.file)?;
         let bufs = unsafe { self.get_mut_bufs() };
