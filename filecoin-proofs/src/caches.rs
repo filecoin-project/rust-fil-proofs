@@ -271,14 +271,14 @@ pub fn get_stacked_srs_key<Tree: 'static + MerkleTreeTrait>(
         >>::srs_key::<rand::rngs::OsRng>(None, &public_params, num_proofs_to_aggregate)
     };
 
-    Ok(lookup_srs_key(
+    lookup_srs_key(
         format!(
             "STACKED[{}-{}]",
             usize::from(PaddedBytesAmount::from(porep_config)),
             num_proofs_to_aggregate,
         ),
         srs_generator,
-    )?)
+    )
 }
 
 pub fn get_stacked_srs_verifier_key<Tree: 'static + MerkleTreeTrait>(
@@ -301,12 +301,12 @@ pub fn get_stacked_srs_verifier_key<Tree: 'static + MerkleTreeTrait>(
         )
     };
 
-    Ok(lookup_srs_verifier_key(
+    lookup_srs_verifier_key(
         format!(
             "STACKED[{}-{}]",
             usize::from(PaddedBytesAmount::from(porep_config)),
             num_proofs_to_aggregate,
         ),
         srs_verifier_generator,
-    )?)
+    )
 }
