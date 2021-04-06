@@ -376,6 +376,11 @@ commands:
           command: /tmp/paramcache.awesome --sector-sizes='2048,4096,16384,32768'
           no_output_timeout: 60m
       - run:
+          name: Obtain filecoin ipp parameter
+          command: |
+            cargo run --release --bin paramfetch -- -j srs-inner-product.json
+          no_output_timeout: 60m
+      - run:
           name: Make the parameters world readable
           command: chmod -R 755 ${FIL_PROOFS_PARAMETER_CACHE}
   save_rustup_cache:
