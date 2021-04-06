@@ -376,7 +376,7 @@ commands:
           command: /tmp/paramcache.awesome --sector-sizes='2048,4096,16384,32768'
           no_output_timeout: 60m
       - run:
-          name: Obtain filecoin ipp parameter
+          name: Obtain filecoin ipp parameter file
           command: |
             cargo run --release --bin paramfetch -- -a -j srs-inner-product.json
           no_output_timeout: 60m
@@ -405,7 +405,7 @@ commands:
     steps:
       - save_cache:
           name: "Save parameter cache"
-          key: proof-params-v28-e-{{ checksum "filecoin-proofs/parameters.json" }}
+          key: proof-params-v28-f-{{ checksum "filecoin-proofs/parameters.json" }}
           paths:
             - "/tmp/paramcache.awesome"
             - "/tmp/filecoin-proof-parameters/"
@@ -413,7 +413,7 @@ commands:
     steps:
       - restore_cache:
           name: "Restore parameter cache"
-          key: proof-params-v28-e-{{ checksum "filecoin-proofs/parameters.json" }}
+          key: proof-params-v28-f-{{ checksum "filecoin-proofs/parameters.json" }}
 
 workflows:
   version: 2.1
