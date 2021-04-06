@@ -64,8 +64,8 @@ measurements = ["cpu-time", "gperftools"]
 profile = ["measurements"]
 
 gpu = ["bellperson/gpu", "neptune/opencl", "filecoin-hashers/gpu", "fr32/gpu"]
-pairing = ["bellperson/pairing", "neptune/pairing", "bellperson/pairing-serde", "filecoin-hashers/pairing", "fr32/pairing"]
-blst = ["bellperson/blst", "neptune/blst", "bellperson/blst-serde", "filecoin-hashers/blst", "fr32/blst"]
+pairing = ["bellperson/pairing", "neptune/pairing", "bellperson/pairing", "filecoin-hashers/pairing", "fr32/pairing"]
+blst = ["bellperson/blst", "neptune/blst", "bellperson/blst", "filecoin-hashers/blst", "fr32/blst"]
 
 [[bench]]
 name = "sha256"
