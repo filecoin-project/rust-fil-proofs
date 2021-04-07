@@ -30,8 +30,12 @@ sha2 = "0.9.1"
 rand = "0.7.3"
 rand_xorshift = "0.2.0"
 
-[features]
+[target."cfg(target_arch = \"aarch64\")".features]
+default = []
+[target."cfg(not(target_arch = \"aarch64\"))".features]
 default = ["asm"]
+
+[features]
 asm = ["sha2-asm"]
 
 

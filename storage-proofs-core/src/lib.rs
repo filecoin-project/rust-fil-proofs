@@ -8,6 +8,7 @@
 #![warn(clippy::ptr_arg)]
 #![warn(clippy::unnecessary_lazy_evaluations)]
 #![warn(clippy::redundant_slicing)]
+#![allow(bare_trait_objects)]
 
 use std::convert::TryInto;
 
