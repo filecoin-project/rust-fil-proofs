@@ -3,7 +3,8 @@ use std::sync::{Mutex, MutexGuard};
 use anyhow::{format_err, Result};
 use hwloc::{Bitmap, ObjectType, Topology, TopologyObject, CPUBIND_THREAD};
 use lazy_static::lazy_static;
-use log::{debug, info, warn};
+// use log::{debug, info, warn}; // Modified by long 20210401
+use log::{debug, warn};
 use storage_proofs_core::settings::SETTINGS;
 
 type CoreGroup = Vec<CoreIndex>;
@@ -125,50 +126,73 @@ fn get_core_by_index<'a>(topo: &'a Topology, index: CoreIndex) -> Result<&'a Top
 fn core_groups(cores_per_unit: usize) -> Option<Vec<Mutex<Vec<CoreIndex>>>> {
     let topo = TOPOLOGY.lock().expect("poisoned lock");
 
-    let core_depth = match topo.depth_or_below_for_type(&ObjectType::Core) {
-        Ok(depth) => depth,
-        Err(_) => return None,
-    };
+    // Deleted by long 20210312
+    // ------------------------------------------------------------------------
+    // let core_depth = match topo.depth_or_below_for_type(&ObjectType::Core) {
+    //     Ok(depth) => depth,
+    //     Err(_) => return None,
+    // };
+    // let all_cores = topo.objects_with_type(&ObjectType::Core).unwrap();
+    // let core_count = all_cores.len();
+
+    // let mut cache_depth = core_depth;
+    // let mut cache_count = 0;
+
+    // while cache_depth > 0 {
+    //     let objs = topo.objects_at_depth(cache_depth);
+    //     let obj_count = objs.len();
+    //     if obj_count < core_count {
+    //         cache_count = obj_count;
+    //         break;
+    //     }
+
+    //     cache_depth -= 1;
+    // }
+
+    // assert_eq!(0, core_count % cache_count);
+    // let mut group_size = core_count / cache_count;
+    // let mut group_count = cache_count;
+
+    // if cache_count <= 1 {
+    //     // If there are not more than one shared caches, there is no benefit in trying to group cores by cache.
+    //     // In that case, prefer more groups so we can still bind cores and also get some parallelism.
+    //     // Create as many full groups as possible. The last group may not be full.
+    //     group_count = core_count / cores_per_unit;
+    //     group_size = cores_per_unit;
+
+    //     info!(
+    //         "found only {} shared cache(s), heuristically grouping cores into {} groups",
+    //         cache_count, group_count
+    //     );
+    // } else {
+    //     debug!(
+    //         "Cores: {}, Shared Caches: {}, cores per cache (group_size): {}",
+    //         core_count, cache_count, group_size
+    //     );
+    // }
+    // ------------------------------------------------------------------------
+
+    // Added by long 20210308 -----------------------------
     let all_cores = topo.objects_with_type(&ObjectType::Core).unwrap();
     let core_count = all_cores.len();
+    let group_count = core_count / cores_per_unit;
+    let group_size = cores_per_unit;
+    // ----------------------------------------------------
 
-    let mut cache_depth = core_depth;
-    let mut cache_count = 0;
-
-    while cache_depth > 0 {
-        let objs = topo.objects_at_depth(cache_depth);
-        let obj_count = objs.len();
-        if obj_count < core_count {
-            cache_count = obj_count;
-            break;
-        }
-
-        cache_depth -= 1;
-    }
-
-    assert_eq!(0, core_count % cache_count);
-    let mut group_size = core_count / cache_count;
-    let mut group_count = cache_count;
-
-    if cache_count <= 1 {
-        // If there are not more than one shared caches, there is no benefit in trying to group cores by cache.
-        // In that case, prefer more groups so we can still bind cores and also get some parallelism.
-        // Create as many full groups as possible. The last group may not be full.
-        group_count = core_count / cores_per_unit;
-        group_size = cores_per_unit;
-
-        info!(
-            "found only {} shared cache(s), heuristically grouping cores into {} groups",
-            cache_count, group_count
-        );
-    } else {
-        debug!(
-            "Cores: {}, Shared Caches: {}, cores per cache (group_size): {}",
-            core_count, cache_count, group_size
-        );
-    }
+    // Added by long 20210313 -----------------------------
+    use std::env;
+    let cpugrp_start: usize = match match env::var("LO_P1_CPUGRP_START") {
+        Ok(v) => v,
+        Err(_) => String::from("0"),
+    }.parse() {
+        Ok(v) => v,
+        Err(_) => 0,
+    };
+    // ----------------------------------------------------
 
     let core_groups = (0..group_count)
+        .rev()                              // Added by long 20210402
+        .filter(| i | *i >= cpugrp_start )  // Added by long 20210313
         .map(|i| {
             (0..group_size)
                 .map(|j| {
