@@ -19,6 +19,7 @@ const NUM_U128S_PER_BLOCK: usize = NUM_BYTES_OUT_BLOCK / size_of::<u128>();
 const MASK_SKIP_HIGH_2: u128 = 0b0011_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111;
 
 /// An `io::Reader` that converts unpadded input into valid `Fr32` padded output.
+#[repr(align(16))]
 pub struct Fr32Reader<R> {
     /// The source being padded.
     source: R,
@@ -65,7 +66,14 @@ impl<R: Read> Fr32Reader<R> {
 
     /// Processes a single block in in_buffer, writing the result to out_buffer.
     fn process_block(&mut self) {
-        let in_buffer: &[u128] = self.in_buffer.as_slice_of::<u128>().unwrap();
+        let in_buffer: &[u128] = {
+            #[cfg(target_arch = "aarch64")]
+            unsafe {
+                &mut (*(&self.in_buffer as *const [u8] as *mut [u128]))
+            }
+            #[cfg(not(target_arch = "aarch64"))]
+            self.in_buffer.as_slice_of::<u128>().unwrap()
+        };
         let out = &mut self.out_buffer;
 
         // 0..254
