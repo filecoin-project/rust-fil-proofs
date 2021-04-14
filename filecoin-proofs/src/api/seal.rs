@@ -681,18 +681,18 @@ pub fn aggregate_seal_commit_proofs<Tree: 'static + MerkleTreeTrait>(
     ensure!(target_len > 1, "cannot aggregate less than two proofs");
 
     // If we're not at the pow2 target, duplicate the last element until we are.
-    while proofs.len() != target_len {
-        ensure!(
-            proofs.last().is_some(),
-            "invalid last proof for duplication"
-        );
-        proofs.push(
-            proofs
-                .last()
-                .expect("failed to access last proof for duplication")
-                .clone(),
-        );
-    }
+    ensure!(
+        proofs.last().is_some(),
+        "invalid last proof for duplication"
+    );
+    let last = proofs
+        .last()
+        .expect("invalid last proof for duplication")
+        .clone();
+    let mut padding: Vec<groth16::Proof<Bls12>> = (0..target_len - proofs.len())
+        .map(|_| last.clone())
+        .collect();
+    proofs.append(&mut padding);
     trace!(
         "padded proofs from {} to {}",
         commit_outputs.len(),
