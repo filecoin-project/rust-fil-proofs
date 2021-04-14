@@ -277,6 +277,8 @@ where
             .collect()
     }
 
+    /// Given a prover_srs key and a list of groth16 proofs, aggregate
+    /// them all into an AggregateProof type.
     fn aggregate_proofs(
         prover_srs: &ProverSRS<Bls12>,
         proofs: &[groth16::Proof<Bls12>],
@@ -284,15 +286,25 @@ where
         Ok(aggregate_proofs::<Bls12>(prover_srs, proofs)?)
     }
 
+    /// Verifies the aggregate proof, with respect to the flattened input list.
+    ///
+    /// Note that this method internally instantiates an OSRng and passes it to the `verify_aggregate_proofs`
+    /// method in bellperson.  While proofs would normally parameterize the type of rng used, we don't
+    /// want it exposed past this level so as not to force the wrapper calls around this method in
+    /// rust-filecoin-proofs-api to unroll this call outside of the tree parameterized `with_shape` macro
+    /// usage.
     fn verify_aggregate_proofs(
         ip_verifier_srs: &VerifierSRS<Bls12>,
         pvk: &PreparedVerifyingKey<Bls12>,
         public_inputs: &[Vec<Fr>],
         aggregate_proof: &groth16::aggregate::AggregateProof<Bls12>,
     ) -> Result<bool> {
+        let mut rng = OsRng;
+
         Ok(verify_aggregate_proof(
             ip_verifier_srs,
             pvk,
+            rng,
             public_inputs,
             aggregate_proof,
         )?)

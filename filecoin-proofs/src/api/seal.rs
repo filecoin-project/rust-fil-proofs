@@ -543,6 +543,22 @@ pub fn seal_commit_phase2<Tree: 'static + MerkleTreeTrait>(
     Ok(out)
 }
 
+/// Given the specified arguments, this method returns the inputs that were used to
+/// generate the seal proof.  This can be useful for proof aggregation, as verification
+/// requires these inputs.
+///
+/// This method allows them to be retrieved when needed, rather than storing them for
+/// some amount of time.
+///
+/// # Arguments
+///
+/// * `porep_config` - this sector's porep config that contains the number of bytes in the sector.
+/// * `comm_r` - a commitment to a sector's replica.
+/// * `comm_d` - a commitment to a sector's data.
+/// * `prover_id` - the prover_id used to seal this sector.
+/// * `sector_id` - the sector_id of this sector.
+/// * `ticket` - the ticket used to generate this sector's replica-id.
+/// * `seed` - the seed used to derive the porep challenges.
 pub fn get_seal_inputs<Tree: 'static + MerkleTreeTrait>(
     porep_config: PoRepConfig,
     comm_r: Commitment,
@@ -612,147 +628,60 @@ pub fn get_seal_inputs<Tree: 'static + MerkleTreeTrait>(
     Ok(inputs)
 }
 
-// Proposed method (untested), perhaps not useful.  Remove if not needed
-/*
-pub fn get_seal_inputs_padded<Tree: 'static + MerkleTreeTrait>(
-    porep_config: PoRepConfig,
-    comm_rs: &[Commitment],
-    comm_ds: &[Commitment],
-    prover_ids: &[ProverId],
-    sector_ids: &[SectorId],
-    tickets: &[Ticket],
-    seeds: &[Ticket],
-) -> Result<Vec<Vec<Fr>>> {
-    ensure!(comm_rs.len() == comm_ds.len(), "invalid argument length (comm_rs != comm_ds)");
-    ensure!(comm_rs.len() == prover_ids.len(), "invalid argument length (comm_rs != prover_ids)");
-    ensure!(comm_rs.len() == sector_ids.len(), "invalid argument length (comm_rs != sector_ids)");
-    ensure!(comm_rs.len() == tickets.len(), "invalid argument length (comm_rs != tickets)");
-    ensure!(comm_rs.len() == seeds.len(), "invalid argument length (comm_rs != seeds)");
-
-    let mut inputs_added = 0;
-    let target = comm_rs.len().next_power_of_two();
-    let mut inputs: Vec<Vec<Fr>> = Vec::with_capacity(target);
-
-    for i in 0..comm_rs.len() {
-        let comm_d = comm_ds[i];
-        let comm_r = comm_rs[i];
-        let prover_id = prover_ids[i];
-        let sector_id = sector_ids[i];
-        let ticket = tickets[i];
-        let seed = seeds[i];
-
-        ensure!(comm_d != [0; 32], "Invalid all zero commitment (comm_d)");
-        ensure!(comm_r != [0; 32], "Invalid all zero commitment (comm_r)");
-
-        let replica_id = generate_replica_id::<Tree::Hasher, _>(
-            &prover_id,
-            sector_id.into(),
-            &ticket,
-            comm_d,
-            &porep_config.porep_id,
-        );
-
-        let comm_r_safe = as_safe_commitment(&comm_r, "comm_r")?;
-        let comm_d_safe = DefaultPieceDomain::try_from_bytes(&comm_d)?;
-
-        let public_inputs = stacked::PublicInputs {
-            replica_id,
-            tau: Some(stacked::Tau {
-                comm_d: comm_d_safe,
-                comm_r: comm_r_safe,
-            }),
-            k: None,
-            seed,
-        };
-
-        let compound_setup_params = compound_proof::SetupParams {
-            vanilla_params: setup_params(
-                PaddedBytesAmount::from(porep_config),
-                usize::from(PoRepProofPartitions::from(porep_config)),
-                porep_config.porep_id,
-                porep_config.api_version,
-            )?,
-            partitions: Some(usize::from(PoRepProofPartitions::from(porep_config))),
-            priority: false,
-        };
-
-        let compound_public_params = <StackedCompound<Tree, DefaultPieceHasher> as CompoundProof<
-                StackedDrg<'_, Tree, DefaultPieceHasher>,
-            _,
-            >>::setup(&compound_setup_params)?;
-
-        let partitions = <StackedCompound<Tree, DefaultPieceHasher> as CompoundProof<
-                StackedDrg<'_, Tree, DefaultPieceHasher>,
-            _,
-            >>::partition_count(&compound_public_params);
-
-        // These are returned for aggregated proof verification.
-        let cur_inputs: Vec<_> = (0..partitions)
-            .into_par_iter()
-            .map(|k| {
-                StackedCompound::<Tree, DefaultPieceHasher>::generate_public_inputs(
-                    &public_inputs,
-                    &compound_public_params.vanilla_params,
-                    Some(k),
-                )
-            })
-            .collect::<Result<_>>()?;
-
-        inputs.extend(cur_inputs.clone());
-        inputs_added += 1;
-
-        // If we're at the last one and not at the pow2 target,
-        // duplicate it until we are.
-        if i == comm_rs.len() - 1 {
-            while inputs_added != target {
-                inputs.extend(cur_inputs.clone());
-                inputs_added += 1;
-            }
-        }
-    }
-
-    Ok(inputs)
-}
-*/
-
+/// Given a porep_config and a list of seal commit outputs, this method aggregates
+/// those proofs (naively padding the count if necessary up to a power of 2) and
+/// returns the aggregate proof bytes.
+///
+/// # Arguments
+///
+/// * `porep_config` - this sector's porep config that contains the number of bytes in the sector.
+/// * `commit_outputs` - a list of seal proof outputs returned from 'seal_commit_phase2'.
 pub fn aggregate_seal_commit_proofs<Tree: 'static + MerkleTreeTrait>(
     porep_config: PoRepConfig,
     commit_outputs: &[SealCommitOutput],
 ) -> Result<AggregateSnarkProof> {
     info!("aggregate_seal_commit_proofs:start");
 
+    ensure!(
+        !commit_outputs.is_empty(),
+        "cannot aggregate with empty outputs"
+    );
+
     let partitions = usize::from(PoRepProofPartitions::from(porep_config));
     let verifying_key = get_stacked_verifying_key::<Tree>(porep_config)?;
-    let mut proofs: Vec<_> = commit_outputs
-        .iter()
-        .fold(Vec::new(), |mut acc, commit_output| {
-            acc.extend(
-                MultiProof::new_from_reader(
-                    Some(partitions),
-                    &commit_output.proof[..],
-                    &verifying_key,
-                )
-                .expect("failed to construct multi proof from bytes")
-                .circuit_proofs,
-            );
+    let mut proofs: Vec<_> =
+        commit_outputs
+            .iter()
+            .try_fold(Vec::new(), |mut acc, commit_output| -> Result<_> {
+                acc.extend(
+                    MultiProof::new_from_reader(
+                        Some(partitions),
+                        &commit_output.proof[..],
+                        &verifying_key,
+                    )?
+                    .circuit_proofs,
+                );
 
-            acc
-        });
+                Ok(acc)
+            })?;
     trace!(
         "aggregate_seal_commit_proofs called with {} commit_outputs",
         commit_outputs.len()
     );
 
-    let target = if commit_outputs.len() == 1 {
+    let target_len = if commit_outputs.len() == 1 {
         2
     } else {
         commit_outputs.len().next_power_of_two()
     };
-    trace!("aggregate_seal_commit_proofs will pad to target {}", target);
-    ensure!(target > 1, "cannot aggregate less than two proofs");
+    trace!(
+        "aggregate_seal_commit_proofs will pad to target_len {}",
+        target_len
+    );
+    ensure!(target_len > 1, "cannot aggregate less than two proofs");
 
     // If we're not at the pow2 target, duplicate the last element until we are.
-    while proofs.len() != target {
+    while proofs.len() != target_len {
         ensure!(
             proofs.last().is_some(),
             "invalid last proof for duplication"
@@ -791,13 +720,20 @@ pub fn aggregate_seal_commit_proofs<Tree: 'static + MerkleTreeTrait>(
     Ok(aggregate_proof_bytes)
 }
 
-// 'aggregate_proof_bytes' is the serialized aggregate proof returned from 'aggregate_seal_commit_proofs'.
-// 'commit_inputs' is an ordered list of inputs returned from 'seal_commit_phase2_for_aggregation'.  The
-// order of that list must match the order of the 'commit_outputs' provided to 'aggregate_seal_commit_proofs'
-// in order for verification to work properly.
-//
-// aggregated_proofs_len is not the same as commit_inputs.len, since commit_inputs is a combined list and
-// aggregated_proofs_len describes the count that went into generating the aggregate proof initially.
+/// 'aggregate_proof_bytes' is the serialized aggregate proof returned from 'aggregate_seal_commit_proofs'.
+/// 'commit_inputs' is an ordered list of inputs returned from 'seal_commit_phase2_for_aggregation'.  The
+/// order of that list must match the order of the 'commit_outputs' provided to 'aggregate_seal_commit_proofs'
+/// in order for verification to work properly.
+///
+/// aggregated_proofs_len is not the same as commit_inputs.len, since commit_inputs is a combined list and
+/// aggregated_proofs_len describes the count that went into generating the aggregate proof initially.
+///
+/// # Arguments
+///
+/// * `porep_config` - this sector's porep config that contains the number of bytes in the sector.
+/// * `aggregated_proofs_len` - the number of proofs aggregated by 'aggregate_seal_commit_proofs'.
+/// * `aggregate_proof_bytes` - the returned aggregate proof from 'aggreate_seal_commit_proofs'.
+/// * `commit_inputs` - a flattened and ordered list of all inputs.
 pub fn verify_aggregate_seal_commit_proofs<Tree: 'static + MerkleTreeTrait>(
     porep_config: PoRepConfig,
     aggregated_proofs_len: usize,

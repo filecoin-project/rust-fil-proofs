@@ -38,6 +38,9 @@ fn is_well_formed_filename(filename: &str) -> bool {
         return false;
     }
     let version = filename.split('-').nth(0).unwrap();
+    if version.len() < 2 {
+        return false;
+    }
     let version_is_valid =
         version.get(0..1).unwrap() == "v" && version[1..].chars().all(|c| c.is_digit(10));
     if !version_is_valid {
@@ -54,7 +57,7 @@ fn get_filenames_in_cache_dir() -> Vec<String> {
     let path = parameter_cache_dir();
     if !path.exists() {
         warn!("param cache dir does not exist (no files to publish), exiting");
-        exit(0);
+        exit(1);
     }
     // Ignore entries that are not files or have a non-Utf8 filename.
     read_dir(path)
