@@ -83,7 +83,7 @@ fn get_window_post_info<Tree: 'static + MerkleTreeTrait>(post_config: &PoStConfi
 }
 
 #[derive(Debug, StructOpt)]
-#[structopt(name = "paramcache")]
+#[structopt(name = "circuitinfo")]
 struct Opt {
     #[structopt(long)]
     winning: bool,
