@@ -46,7 +46,7 @@ structopt = "0.3.12"
 humansize = "1.1.0"
 indicatif = "0.15.0"
 groupy = "0.3.0"
-dialoguer = "0.7.1"
+dialoguer = "0.8.0"
 clap = "2.33.3"
 
 [dependencies.reqwest]
