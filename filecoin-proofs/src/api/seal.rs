@@ -742,6 +742,7 @@ pub fn verify_aggregate_seal_commit_proofs<Tree: 'static + MerkleTreeTrait>(
 ) -> Result<bool> {
     info!("verify_aggregate_seal_commit_proofs:start");
 
+    ensure!(aggregated_proofs_len != 0, "cannot verify zero proofs");
     ensure!(!commit_inputs.is_empty(), "cannot verify with empty inputs");
     ensure!(
         commit_inputs.len() % aggregated_proofs_len == 0,
