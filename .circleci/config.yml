@@ -192,6 +192,9 @@ jobs:
   test_no_gpu:
     executor: default
     environment: *setup-env
+    parameters:
+      features:
+        type: string
     steps:
       - checkout
       - attach_workspace:
@@ -199,16 +202,10 @@ jobs:
       - restore_rustup_cache
       - restore_parameter_cache
       - run:
-          name: Test with no gpu (pairing)
+          name: Test with no gpu (<< parameters.features >>)
           command: |
-            cargo +<< pipeline.parameters.nightly-toolchain >> -Zpackage-features test --all --verbose --no-default-features --features pairing
+            cargo +<< pipeline.parameters.nightly-toolchain >> -Zpackage-features test --all --verbose --no-default-features --features << parameters.features >>
           no_output_timeout: 30m
-      - run:
-          name: Test with no gpu (blst)
-          command: |
-            cargo +<< pipeline.parameters.nightly-toolchain >> -Zpackage-features test --all --verbose --no-default-features --features blst
-          no_output_timeout: 30m
-
 
   test_blst:
     executor: default
@@ -574,9 +571,19 @@ workflows:
             - ensure_groth_parameters_and_keys_linux
 
       - test_no_gpu:
+          name: test_no_gpu_pairing
+          features: 'pairing'
           requires:
             - cargo_fetch
             - ensure_groth_parameters_and_keys_linux
+
+      - test_no_gpu:
+          name: test_no_gpu_blst
+          features: 'blst'
+          requires:
+            - cargo_fetch
+            - ensure_groth_parameters_and_keys_linux
+
 
       - bench:
           requires:
