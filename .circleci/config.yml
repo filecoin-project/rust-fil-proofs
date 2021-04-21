@@ -214,6 +214,9 @@ jobs:
   test_arm_no_gpu:
     executor: arm
     environment: *setup-env
+    parameters:
+      features:
+        type: string
     steps:
       - checkout
       - attach_workspace:
