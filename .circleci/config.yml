@@ -621,14 +621,14 @@ workflows:
             - ensure_groth_parameters_and_keys_linux
 
       - test_arm_no_gpu:
-          name: test_no_gpu_pairing
+          name: test_arm_no_gpu_pairing
           features: 'pairing'
           requires:
             - cargo_fetch
             - ensure_groth_parameters_and_keys_linux
 
       - test_arm_no_gpu:
-          name: test_no_gpu_blst
+          name: test_arm_no_gpu_blst
           features: 'blst'
           requires:
             - cargo_fetch
