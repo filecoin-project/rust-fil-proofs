@@ -31,10 +31,14 @@ rand = "0.7.3"
 rand_xorshift = "0.2.0"
 
 [features]
-[target."cfg(all(target_os = \"macos\", target_arch = \"aarch64\"))".features]
-default = []
-[target."cfg(not(all(target_os = \"macos\", target_arch = \"aarch64\")))".features]
+
+[target.'cfg(all(target_arch = "aarch64", not(target_os = "macos")))'.features]
 default = ["asm"]
+[target.'cfg(not(target_arch = "aarch64"))'.features]
+default = ["asm"]
+[target.'cfg(all(target_arch = "aarch64", target_os = "macos"))'.features]
+default = []
+
 asm = ["sha2-asm", "asm"]
 
 
