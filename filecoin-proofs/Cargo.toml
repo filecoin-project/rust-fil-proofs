@@ -12,7 +12,7 @@ readme = "README.md"
 storage-proofs-core = { path = "../storage-proofs-core", version = "^6.0.0", default-features = false}
 storage-proofs-porep = { path = "../storage-proofs-porep", version = "^6.0.0", default-features = false }
 storage-proofs-post = { path = "../storage-proofs-post", version = "^6.0.0", default-features = false }
-filecoin-hashers = { version = "1.0.0", path = "../filecoin-hashers", default-features = false, features = ["poseidon", "sha256"] }
+filecoin-hashers = { version = "^2.0.0", path = "../filecoin-hashers", default-features = false, features = ["poseidon", "sha256"] }
 bitvec = "0.17"
 rand = "0.7"
 lazy_static = "1.2"
