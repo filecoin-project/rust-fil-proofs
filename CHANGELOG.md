@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://book.async.rs/overview
 
 ## Unreleased
 
+## [7.0.0] - 2021-04-28
+
+- Split up non-gpu tests for improved CI [#1448](https://github.com/filecoin-project/rust-fil-proofs/pull/1448)
+- Use latest version of dialoguer [#1447](https://github.com/filecoin-project/rust-fil-proofs/pull/1447)
+- Fix circuitinfo's binary name [#1443](https://github.com/filecoin-project/rust-fil-proofs/pull/1443)
+- Remove deprecated calls and clean-up warnings; add parallelization [#1436](https://github.com/filecoin-project/rust-fil-proofs/pull/1436)
+- Migrate gpu2 to default gpu code; Update rust toolchain to 1.51.0 [#1441](https://github.com/filecoin-project/rust-fil-proofs/pull/1441)
+- Improve unsealing memory performance [#1401](https://github.com/filecoin-project/rust-fil-proofs/pull/1401)
+- Remove @porcuquine from codeowners [#1432](https://github.com/filecoin-project/rust-fil-proofs/pull/1432)
+- Update config.json for for benches [#1431](https://github.com/filecoin-project/rust-fil-proofs/pull/1431)
+
 ## [6.1.0] - 2021-03-09
 
 - Update bellperson to the latest version [#1430](https://github.com/filecoin-project/rust-fil-proofs/pull/1430)
@@ -212,7 +223,8 @@ and this project adheres to [Semantic Versioning](https://book.async.rs/overview
 
 - Initial stable release
 
-[Unreleased]: https://github.com/filecoin-project/rust-fil-proofs/compare/v6.1.0...HEAD
+[Unreleased]: https://github.com/filecoin-project/rust-fil-proofs/compare/v7.0.0...HEAD
+[7.0.0]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v7.0.0
 [6.1.0]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v6.1.0
 [6.0.0]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v6.0.0
 [5.4.0]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v5.4.0
