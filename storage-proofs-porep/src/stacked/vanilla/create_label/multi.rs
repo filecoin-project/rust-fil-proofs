@@ -636,6 +636,7 @@ mod tests {
     use tempfile::tempdir;
 
     #[test]
+    #[cfg(not(target_os = "macos"))]
     fn test_create_labels() {
         let layers = 11;
         let nodes_2k = 1 << 11;
