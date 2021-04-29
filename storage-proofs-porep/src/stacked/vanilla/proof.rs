@@ -72,6 +72,16 @@ pub struct LayerState {
     pub generated: bool,
 }
 
+#[cfg(target_os = "macos")]
+fn use_multicore_sdr() -> bool {
+    false
+}
+
+#[cfg(not(target_os = "macos"))]
+fn use_multicore_sdr() -> bool {
+    SETTINGS.use_multicore_sdr
+}
+
 impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tree, G> {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn prove_layers(
@@ -311,7 +321,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
     ) -> Result<(Labels<Tree>, Vec<LayerState>)> {
         let mut parent_cache = graph.parent_cache()?;
 
-        if SETTINGS.use_multicore_sdr {
+        if use_multicore_sdr() {
             info!("multi core replication");
             create_label::multi::create_labels_for_encoding(
                 graph,
@@ -341,7 +351,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
     ) -> Result<LabelsCache<Tree>> {
         let mut parent_cache = graph.parent_cache()?;
 
-        if SETTINGS.use_multicore_sdr {
+        if use_multicore_sdr() {
             info!("multi core replication");
             create_label::multi::create_labels_for_decoding(
                 graph,

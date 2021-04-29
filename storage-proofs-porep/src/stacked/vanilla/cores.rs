@@ -192,7 +192,10 @@ fn core_groups(cores_per_unit: usize) -> Option<Vec<Mutex<Vec<CoreIndex>>>> {
 mod tests {
     use super::*;
 
+    // This test is broken on darwin CI and CPU binding isn't supported on OSX
+    // Reference: https://nitschinger.at/Binding-Threads-And-Processes-to-CPUs-in-Rust/
     #[test]
+    #[cfg(not(target_os = "macos"))]
     fn test_cores() {
         core_groups(2);
     }
