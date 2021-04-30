@@ -350,6 +350,11 @@ impl<'a, Tree: 'a + MerkleTreeTrait> ProofScheme<'a> for FallbackPoSt<'a, Tree> 
                             Ok(proof) => {
                                 if proof.validate(challenged_leaf_start as usize)
                                     && proof.root() == priv_sector.comm_r_last
+                                    && pub_sector.comm_r
+                                    == <Tree::Hasher as Hasher>::Function::hash2(
+                                    &priv_sector.comm_c,
+                                    &priv_sector.comm_r_last,
+                                )
                                 {
                                     Ok(ProofOrFault::Proof(proof))
                                 } else {
