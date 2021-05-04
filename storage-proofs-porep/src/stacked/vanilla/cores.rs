@@ -133,7 +133,7 @@ fn core_groups(cores_per_unit: usize) -> Option<Vec<Mutex<Vec<CoreIndex>>>> {
     let core_count = all_cores.len();
 
     let mut cache_depth = core_depth;
-    let mut cache_count = 0;
+    let mut cache_count = 1;
 
     while cache_depth > 0 {
         let objs = topo.objects_at_depth(cache_depth);
