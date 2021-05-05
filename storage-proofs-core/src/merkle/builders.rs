@@ -114,7 +114,7 @@ where
             configs[i].clone(),
         )?;
         if let Some(lc_store) =
-            Any::downcast_mut::<LevelCacheStore<<Tree::Hasher as Hasher>::Domain, File>>(&mut store)
+            <dyn Any>::downcast_mut::<LevelCacheStore<<Tree::Hasher as Hasher>::Domain, File>>(&mut store)
         {
             ensure!(
                 replica_config.is_some(),
@@ -425,7 +425,7 @@ where
 
         {
             // Beware: evil dynamic downcasting RUST MAGIC down below.
-            if let Some(lc_tree) = Any::downcast_mut::<
+            if let Some(lc_tree) = <dyn Any>::downcast_mut::<
                 MerkleTree<
                     <Tree::Hasher as Hasher>::Domain,
                     <Tree::Hasher as Hasher>::Function,

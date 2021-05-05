@@ -1,5 +1,6 @@
 use std::fs::{read_dir, File};
 use std::io::{self, Read, Write};
+use std::panic::panic_any;
 use std::path::{Path, PathBuf};
 
 use failure::SyncFailure;
@@ -116,12 +117,12 @@ impl ParamPublishSessionBuilder {
     /// Launch parampublish in an environment configured by the builder.
     pub fn build(self) -> (ParamPublishSession, Vec<PathBuf>) {
         let mut p = spawn_bash_with_retries(10, Some(self.session_timeout_ms))
-            .unwrap_or_else(|err| panic!(err));
+            .unwrap_or_else(|err| panic_any(err));
 
         let cache_dir_path = format!("{:?}", self.cache_dir.path());
 
         let cache_contents: Vec<PathBuf> = read_dir(&self.cache_dir)
-            .unwrap_or_else(|_| panic!("failed to read cache dir {:?}", self.cache_dir))
+            .unwrap_or_else(|_| panic_any(format!("failed to read cache dir {:?}", self.cache_dir)))
             .map(|x| x.expect("failed to get dir entry"))
             .map(|x| x.path())
             .collect();

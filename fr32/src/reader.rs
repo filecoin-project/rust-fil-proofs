@@ -2,7 +2,10 @@ use std::cmp::min;
 use std::io::{self, Read};
 use std::mem::size_of;
 
-use byte_slice_cast::{AsByteSlice, AsSliceOf};
+#[cfg(not(target_arch = "aarch64"))]
+use byte_slice_cast::AsSliceOf;
+
+use byte_slice_cast::AsByteSlice;
 
 /// The number of Frs per Block.
 const NUM_FRS_PER_BLOCK: usize = 4;

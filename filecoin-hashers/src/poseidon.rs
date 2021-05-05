@@ -1,6 +1,7 @@
 use std::cmp::Ordering;
 use std::hash::{Hash as StdHash, Hasher as StdHasher};
 use std::mem::size_of;
+use std::panic::panic_any;
 use std::slice;
 
 use anyhow::ensure;
@@ -163,7 +164,7 @@ impl Element for PoseidonDomain {
     fn from_slice(bytes: &[u8]) -> Self {
         match PoseidonDomain::try_from_bytes(bytes) {
             Ok(res) => res,
-            Err(err) => panic!(err),
+            Err(err) => panic_any(err),
         }
     }
 
@@ -217,7 +218,10 @@ fn shared_hash_frs(preimage: &[<Bls12 as ScalarEngine>::Fr]) -> <Bls12 as Scalar
             p.hash()
         }
 
-        _ => panic!("Unsupported arity for Poseidon hasher: {}", preimage.len()),
+        _ => panic_any(format!(
+            "Unsupported arity for Poseidon hasher: {}",
+            preimage.len()
+        )),
     }
 }
 
@@ -364,12 +368,12 @@ impl LightAlgorithm<PoseidonDomain> for PoseidonFunction {
                     .enumerate()
                     .map(|(i, x)| {
                         <Bls12 as ScalarEngine>::Fr::from_repr(x.0)
-                            .unwrap_or_else(|_| panic!("from_repr failure at {}", i))
+                            .unwrap_or_else(|_| panic_any(format!("from_repr failure at {}", i)))
                     })
                     .collect::<Vec<_>>(),
             )
             .into(),
-            arity => panic!("unsupported arity {}", arity),
+            arity => panic_any(format!("unsupported arity {}", arity)),
         }
     }
 }

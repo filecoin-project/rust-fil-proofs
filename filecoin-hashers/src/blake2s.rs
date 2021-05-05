@@ -1,5 +1,6 @@
 use std::fmt::{self, Debug, Formatter};
 use std::hash::Hasher as StdHasher;
+use std::panic::panic_any;
 
 use anyhow::ensure;
 use bellperson::{
@@ -125,7 +126,7 @@ impl Element for Blake2sDomain {
     fn from_slice(bytes: &[u8]) -> Self {
         match Blake2sDomain::try_from_bytes(bytes) {
             Ok(res) => res,
-            Err(err) => panic!(err),
+            Err(err) => panic_any(err),
         }
     }
 

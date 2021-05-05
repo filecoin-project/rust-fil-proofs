@@ -1,3 +1,5 @@
+use std::panic::panic_any;
+
 use bellperson::bls::Fr;
 use ff::Field;
 use filecoin_proofs::{
@@ -49,10 +51,12 @@ fn test_verify_seal_fr32_validation() {
 
             assert!(
                 haystack.contains(needle),
-                format!("\"{}\" did not contain \"{}\"", haystack, needle)
+                "\"{}\" did not contain \"{}\"",
+                haystack,
+                needle,
             );
         } else {
-            panic!("should have failed comm_r to Fr32 conversion");
+            panic_any("should have failed comm_r to Fr32 conversion");
         }
     }
 
@@ -85,10 +89,12 @@ fn test_verify_seal_fr32_validation() {
 
             assert!(
                 haystack.contains(needle),
-                format!("\"{}\" did not contain \"{}\"", haystack, needle)
+                "\"{}\" did not contain \"{}\"",
+                haystack,
+                needle,
             );
         } else {
-            panic!("should have failed comm_d to Fr32 conversion");
+            panic_any("should have failed comm_d to Fr32 conversion");
         }
     }
 }
