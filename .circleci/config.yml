@@ -386,7 +386,7 @@ commands:
       - run: cp -R ~/.cargo ~/.rustup /tmp/
       - save_cache:
           name: "Save rustup cache"
-          key: cargo-v28-d-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}
+          key: cargo-v28-e-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}
           paths:
             - /tmp/.cargo
             - /tmp/.rustup
@@ -394,7 +394,7 @@ commands:
     steps:
       - restore_cache:
           name: "Restore rustup cache"
-          key: cargo-v28-d-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}
+          key: cargo-v28-e-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}
       # Cache might not be created yet, hence ignore if the move fails
       - run: cp -R /tmp/.cargo /tmp/.rustup ~/ || true
   save_parameter_cache:
