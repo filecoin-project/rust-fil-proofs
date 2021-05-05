@@ -16,6 +16,10 @@ executors:
       image: ubuntu-1604-cuda-10.1:201909-23
     working_directory: ~/gpuci
     resource_class: gpu.nvidia.medium
+  arm:
+    machine:
+      image: ubuntu-2004:202101-01
+    resource_class: arm.large
 
 setup-env: &setup-env
   FIL_PROOFS_PARAMETER_CACHE: "/tmp/filecoin-proof-parameters/"
@@ -206,6 +210,38 @@ jobs:
           command: |
             cargo +<< pipeline.parameters.nightly-toolchain >> -Zpackage-features test --all --verbose --no-default-features --features << parameters.features >>
           no_output_timeout: 30m
+
+  test_arm_no_gpu:
+    executor: arm
+    environment: *setup-env
+    parameters:
+      features:
+        type: string
+    steps:
+      - checkout
+      - attach_workspace:
+          at: "."
+      - restore_rustup_cache
+      - restore_parameter_cache
+      - run:
+          name: Install Rust
+          command: |
+            curl https://sh.rustup.rs -sSf | sh -s -- -y
+      - run: rustup install $(cat rust-toolchain)
+      - run: rustup default $(cat rust-toolchain)
+      - run: rustup install << pipeline.parameters.nightly-toolchain >>
+      - run: cargo update
+      - run: cargo fetch
+      - run:
+          name: Install required libraries
+          command: |
+            sudo apt-get update -y
+            sudo apt install -y libhwloc-dev
+      - run:
+          name: Test arm with no gpu (<< parameters.features >>)
+          command: |
+            cargo +<< pipeline.parameters.nightly-toolchain >> -Zpackage-features test --release --all --verbose --no-default-features --features << parameters.features >>
+          no_output_timeout: 90m
 
   test_blst:
     executor: default
@@ -584,6 +620,19 @@ workflows:
             - cargo_fetch
             - ensure_groth_parameters_and_keys_linux
 
+      - test_arm_no_gpu:
+          name: test_arm_no_gpu_pairing
+          features: 'pairing'
+          requires:
+            - cargo_fetch
+            - ensure_groth_parameters_and_keys_linux
+
+      - test_arm_no_gpu:
+          name: test_arm_no_gpu_blst
+          features: 'blst'
+          requires:
+            - cargo_fetch
+            - ensure_groth_parameters_and_keys_linux
 
       - bench:
           requires:

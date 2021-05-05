@@ -1,4 +1,6 @@
-use crate::{sha256_intrinsics, sha256_utils};
+#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+use crate::sha256_intrinsics;
+use crate::sha256_utils;
 
 #[allow(dead_code)]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

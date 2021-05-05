@@ -18,6 +18,9 @@ const NUM_U128S_PER_BLOCK: usize = NUM_BYTES_OUT_BLOCK / size_of::<u128>();
 
 const MASK_SKIP_HIGH_2: u128 = 0b0011_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111;
 
+#[repr(align(16))]
+struct AlignedBuffer([u8; NUM_BYTES_IN_BLOCK + 1]);
+
 /// An `io::Reader` that converts unpadded input into valid `Fr32` padded output.
 pub struct Fr32Reader<R> {
     /// The source being padded.
@@ -25,7 +28,7 @@ pub struct Fr32Reader<R> {
     /// Currently read block.
     /// This is padded to 128 bytes to allow reading all values as `u128`s, but only the first
     /// 127 bytes are ever valid.
-    in_buffer: [u8; NUM_BYTES_IN_BLOCK + 1],
+    in_buffer: AlignedBuffer,
     /// Currently writing out block.
     out_buffer: [u128; NUM_U128S_PER_BLOCK],
     /// The current offset into the `out_buffer` in bytes.
@@ -55,7 +58,7 @@ impl<R: Read> Fr32Reader<R> {
     pub fn new(source: R) -> Self {
         Fr32Reader {
             source,
-            in_buffer: [0; NUM_BYTES_IN_BLOCK + 1],
+            in_buffer: AlignedBuffer([0; NUM_BYTES_IN_BLOCK + 1]),
             out_buffer: [0; NUM_U128S_PER_BLOCK],
             out_offset: 0,
             available_frs: 0,
@@ -65,7 +68,17 @@ impl<R: Read> Fr32Reader<R> {
 
     /// Processes a single block in in_buffer, writing the result to out_buffer.
     fn process_block(&mut self) {
-        let in_buffer: &[u128] = self.in_buffer.as_slice_of::<u128>().unwrap();
+        let in_buffer: &[u128] = {
+            #[cfg(target_arch = "aarch64")]
+            // Safety: This is safe because the struct/data is aligned on
+            // a 16 byte boundary and can therefore be casted from u128
+            // to u8 without alignment safety issues.
+            unsafe {
+                &mut (*(&self.in_buffer.0 as *const [u8] as *mut [u128]))
+            }
+            #[cfg(not(target_arch = "aarch64"))]
+            self.in_buffer.0.as_slice_of::<u128>().unwrap()
+        };
         let out = &mut self.out_buffer;
 
         // 0..254
@@ -86,7 +99,7 @@ impl<R: Read> Fr32Reader<R> {
 
     fn fill_in_buffer(&mut self) -> io::Result<usize> {
         let mut bytes_read = 0;
-        let mut buf = &mut self.in_buffer[..NUM_BYTES_IN_BLOCK];
+        let mut buf = &mut self.in_buffer.0[..NUM_BYTES_IN_BLOCK];
 
         while !buf.is_empty() {
             match self.source.read(buf) {
@@ -103,7 +116,7 @@ impl<R: Read> Fr32Reader<R> {
         }
 
         // Clear unfilled memory.
-        for val in &mut self.in_buffer[bytes_read..NUM_BYTES_IN_BLOCK] {
+        for val in &mut self.in_buffer.0[bytes_read..NUM_BYTES_IN_BLOCK] {
             *val = 0;
         }
 
