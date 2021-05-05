@@ -15,8 +15,8 @@ and this project adheres to [Semantic Versioning](https://book.async.rs/overview
 - Remove deprecated calls and clean-up warnings; add parallelization [#1436](https://github.com/filecoin-project/rust-fil-proofs/pull/1436)
 - Migrate gpu2 to default gpu code; Update rust toolchain to 1.51.0 [#1441](https://github.com/filecoin-project/rust-fil-proofs/pull/1441)
 - Improve unsealing memory performance [#1401](https://github.com/filecoin-project/rust-fil-proofs/pull/1401)
-- Remove @porcuquine from codeowners [#1432](https://github.com/filecoin-project/rust-fil-proofs/pull/1432)
-- Update config.json for for benches [#1431](https://github.com/filecoin-project/rust-fil-proofs/pull/1431)
+- Update codeowners to current [#1432](https://github.com/filecoin-project/rust-fil-proofs/pull/1432)
+- Update config.json for the benches [#1431](https://github.com/filecoin-project/rust-fil-proofs/pull/1431)
 
 ## [6.1.0] - 2021-03-09
 
