@@ -175,7 +175,7 @@ jobs:
             echo 'export PATH="~/.cargo/bin:$PATH"' | tee --append $BASH_ENV
             source $BASH_ENV
       - run:
-          name: Install libraries to make thing work on the GPU
+          name: Install required libraries for GPU support
           command: |
             sudo apt-get update -y
             sudo apt install -y ocl-icd-opencl-dev libhwloc-dev
@@ -185,8 +185,7 @@ jobs:
             ulimit -n 20000
             ulimit -u 20000
             ulimit -n 20000
-            cd filecoin-proofs
-            ~/.cargo/bin/cargo +<< pipeline.parameters.nightly-toolchain >> test --all --no-default-features --features gpu,blst --verbose --release lifecycle -- --ignored --nocapture
+            cargo +<< pipeline.parameters.nightly-toolchain >> test --all --no-default-features --features gpu,blst --verbose --release lifecycle -- --ignored --nocapture
           no_output_timeout: 30m
           environment:
             RUST_TEST_THREADS: 1
