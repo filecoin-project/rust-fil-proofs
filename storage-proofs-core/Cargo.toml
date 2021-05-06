@@ -45,6 +45,7 @@ gperftools = { version = "0.2", optional = true }
 num_cpus = "1.10.1"
 semver = "0.11.0"
 fr32 = { path = "../fr32", version = "^1.0.0", default-features = false }
+scheduler_client = {package = "client", git = "https://github.com/Zondax/filecoin-scheduling.git", branch = "fixes"}
 
 [dev-dependencies]
 proptest = "0.10"

@@ -5,6 +5,8 @@ pub use anyhow::Result;
 use bellperson::SynthesisError;
 
 use crate::sector::SectorId;
+use neptune::Error as NeptuneError;
+use scheduler_client::Error as SchedulerError;
 
 /// Custom error types
 #[derive(Debug, thiserror::Error)]
@@ -41,6 +43,10 @@ pub enum Error {
     FaultySectors(Vec<SectorId>),
     #[error("Invalid parameters file: {}", _0)]
     InvalidParameters(String),
+    #[error("{}", _0)]
+    Scheduler(#[from] SchedulerError),
+    #[error("{}", _0)]
+    Neptune(#[from] NeptuneError),
 }
 
 impl From<Box<dyn Any + Send>> for Error {

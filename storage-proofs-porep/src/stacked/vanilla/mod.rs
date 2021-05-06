@@ -18,6 +18,7 @@ mod memory_handling;
 mod params;
 mod porep;
 mod proof;
+mod proof_ext;
 mod proof_scheme;
 #[cfg(feature = "multicore-sdr")]
 mod utils;
