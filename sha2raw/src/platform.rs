@@ -81,7 +81,7 @@ impl Implementation {
                 for block in blocks.chunks(2) {
                     buffer[..32].copy_from_slice(&block[0]);
                     buffer[32..].copy_from_slice(&block[1]);
-                    sha2_asm::compress256(state, &buffer);
+                    sha2_asm::compress256(state, &[buffer]);
                 }
             }
         }
