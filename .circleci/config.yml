@@ -3,7 +3,7 @@ version: 2.1
 parameters:
   nightly-toolchain:
     type: string
-    default: "nightly-2020-11-09"
+    default: "nightly-2021-04-24"
 
 executors:
   default:
@@ -141,8 +141,8 @@ jobs:
             ulimit -n 20000
             ulimit -u 20000
             ulimit -n 20000
-            cargo +<< pipeline.parameters.nightly-toolchain >> -Zpackage-features test --all --verbose --release lifecycle -- --ignored --nocapture
-            cargo +<< pipeline.parameters.nightly-toolchain >> -Zpackage-features test -p storage-proofs-porep --features single-threaded --release checkout_cores -- --test-threads=1
+            cargo +<< pipeline.parameters.nightly-toolchain >> test --all --verbose --release lifecycle -- --ignored --nocapture
+            cargo +<< pipeline.parameters.nightly-toolchain >> test -p storage-proofs-porep --features single-threaded --release checkout_cores -- --test-threads=1
           no_output_timeout: 30m
           environment:
             RUST_TEST_THREADS: 1
@@ -154,7 +154,7 @@ jobs:
             ulimit -n 20000
             ulimit -u 20000
             ulimit -n 20000
-            cargo +<< pipeline.parameters.nightly-toolchain >> -Zpackage-features test --all --no-default-features --features gpu,blst --verbose --release  lifecycle -- --ignored --nocapture
+            cargo +<< pipeline.parameters.nightly-toolchain >> test --all --no-default-features --features gpu,blst --verbose --release  lifecycle -- --ignored --nocapture
           no_output_timeout: 30m
           environment:
             RUST_TEST_THREADS: 1
@@ -175,7 +175,7 @@ jobs:
             echo 'export PATH="~/.cargo/bin:$PATH"' | tee --append $BASH_ENV
             source $BASH_ENV
       - run:
-          name: Install libraries to make thing work on the GPU
+          name: Install required libraries for GPU support
           command: |
             sudo apt-get update -y
             sudo apt install -y ocl-icd-opencl-dev libhwloc-dev
@@ -185,8 +185,7 @@ jobs:
             ulimit -n 20000
             ulimit -u 20000
             ulimit -n 20000
-            cd filecoin-proofs
-            ~/.cargo/bin/cargo +<< pipeline.parameters.nightly-toolchain >> -Zpackage-features test --all --no-default-features --features gpu,blst --verbose --release lifecycle -- --ignored --nocapture
+            cargo +<< pipeline.parameters.nightly-toolchain >> test --all --no-default-features --features gpu,blst --verbose --release lifecycle -- --ignored --nocapture
           no_output_timeout: 30m
           environment:
             RUST_TEST_THREADS: 1
@@ -208,7 +207,7 @@ jobs:
       - run:
           name: Test with no gpu (<< parameters.features >>)
           command: |
-            cargo +<< pipeline.parameters.nightly-toolchain >> -Zpackage-features test --all --verbose --no-default-features --features << parameters.features >>
+            cargo +<< pipeline.parameters.nightly-toolchain >> test --all --verbose --no-default-features --features << parameters.features >>
           no_output_timeout: 30m
 
   test_arm_no_gpu:
@@ -264,7 +263,7 @@ jobs:
             ulimit -n 20000
             ulimit -u 20000
             ulimit -n 20000
-            RUST_LOG=trace cargo +<< pipeline.parameters.nightly-toolchain >> -Zpackage-features test --no-default-features --features << parameters.features >> --verbose --release --package << parameters.crate >> -- --nocapture
+            RUST_LOG=trace cargo +<< pipeline.parameters.nightly-toolchain >> test --no-default-features --features << parameters.features >> --verbose --release --package << parameters.crate >> -- --nocapture
           no_output_timeout: 30m
           environment:
             RUST_TEST_THREADS: 1
@@ -288,7 +287,7 @@ jobs:
             ulimit -n 20000
             ulimit -u 20000
             ulimit -n 20000
-            cargo +<< pipeline.parameters.nightly-toolchain >> -Zpackage-features test --no-default-features --features gpu,blst --verbose --package << parameters.crate >> --release -- --ignored --nocapture
+            cargo +<< pipeline.parameters.nightly-toolchain >> test --no-default-features --features gpu,blst --verbose --package << parameters.crate >> --release -- --ignored --nocapture
           no_output_timeout: 30m
 
 
@@ -386,7 +385,7 @@ commands:
       - run: cp -R ~/.cargo ~/.rustup /tmp/
       - save_cache:
           name: "Save rustup cache"
-          key: cargo-v28-d-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}
+          key: cargo-v28-e-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}
           paths:
             - /tmp/.cargo
             - /tmp/.rustup
@@ -394,7 +393,7 @@ commands:
     steps:
       - restore_cache:
           name: "Restore rustup cache"
-          key: cargo-v28-d-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}
+          key: cargo-v28-e-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}
       # Cache might not be created yet, hence ignore if the move fails
       - run: cp -R /tmp/.cargo /tmp/.rustup ~/ || true
   save_parameter_cache:

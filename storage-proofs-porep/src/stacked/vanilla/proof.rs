@@ -1,5 +1,6 @@
 use std::fs;
 use std::marker::PhantomData;
+use std::panic::panic_any;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
@@ -239,7 +240,8 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                                 let labeled_node = rcp.c_x.get_node_at_layer(layer)?;
                                 assert!(
                                     proof.verify(&pub_inputs.replica_id, &labeled_node),
-                                    format!("Invalid encoding proof generated at layer {}", layer)
+                                    "Invalid encoding proof generated at layer {}",
+                                    layer,
                                 );
                                 trace!("Valid encoding proof generated at layer {}", layer);
                             }
@@ -1238,7 +1240,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                 )?;
                 tree_c.root()
             }
-            _ => panic!("Unsupported column arity"),
+            _ => panic_any("Unsupported column arity"),
         };
         info!("tree_c done");
 

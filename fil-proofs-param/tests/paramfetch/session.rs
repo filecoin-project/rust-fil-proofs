@@ -1,5 +1,6 @@
 use std::fs::File;
 use std::io::{self, Read};
+use std::panic::panic_any;
 use std::path::{Path, PathBuf};
 
 use failure::SyncFailure;
@@ -63,7 +64,7 @@ impl ParamFetchSessionBuilder {
     /// Launch paramfetch in an environment configured by the builder.
     pub fn build(self) -> ParamFetchSession {
         let mut p = spawn_bash_with_retries(10, Some(self.session_timeout_ms))
-            .unwrap_or_else(|err| panic!(err));
+            .unwrap_or_else(|err| panic_any(err));
 
         let cache_dir_path = format!("{:?}", self.cache_dir.path());
 
