@@ -47,6 +47,7 @@ semver = "0.11.0"
 fr32 = { path = "../fr32", version = "^3.0.0"}
 pairing = "0.21"
 blstrs = "0.4.0"
+scheduler_client = {package = "client", git = "https://github.com/Zondax/filecoin-scheduling.git", branch= "dev", optional = true}
 
 [dev-dependencies]
 proptest = "0.10"
@@ -65,8 +66,8 @@ big-sector-sizes-bench = []
 measurements = ["cpu-time", "gperftools"]
 profile = ["measurements"]
 
-cuda = ["bellperson/cuda", "neptune/cuda", "filecoin-hashers/cuda", "fr32/cuda"]
-opencl = ["bellperson/opencl", "neptune/opencl", "filecoin-hashers/opencl", "fr32/opencl"]
+cuda = ["bellperson/cuda", "neptune/cuda", "filecoin-hashers/cuda", "fr32/cuda", "scheduler_client/cuda"]
+opencl = ["bellperson/opencl", "neptune/opencl", "filecoin-hashers/opencl", "fr32/opencl", "scheduler_client/opencl"]
 
 [[bench]]
 name = "sha256"
