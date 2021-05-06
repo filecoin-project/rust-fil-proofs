@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://book.async.rs/overview
 
 ## Unreleased
 
+## [7.0.1] - 2021-05-06
+
+- Added Apple M1 asm support via updated sha2 dependency [#1457](https://github.com/filecoin-project/rust-fil-proofs/pull/1457)
+- Remove additional build warnings and update CI nightly toolchain [#1456](https://github.com/filecoin-project/rust-fil-proofs/pull/1456)
+- Fix aarch64/Linux build regression [#1455](https://github.com/filecoin-project/rust-fil-proofs/pull/1455)
+- Fix changelog errors and typos [#1451](https://github.com/filecoin-project/rust-fil-proofs/pull/1451)
+- Fix initial value for cache_count [#1454](https://github.com/filecoin-project/rust-fil-proofs/pull/1454)
+
 ## [7.0.0] - 2021-04-28
 
 - Split up non-gpu tests for improved CI [#1448](https://github.com/filecoin-project/rust-fil-proofs/pull/1448)
@@ -223,7 +231,8 @@ and this project adheres to [Semantic Versioning](https://book.async.rs/overview
 
 - Initial stable release
 
-[Unreleased]: https://github.com/filecoin-project/rust-fil-proofs/compare/v7.0.0...HEAD
+[Unreleased]: https://github.com/filecoin-project/rust-fil-proofs/compare/v7.0.1...HEAD
+[7.0.1]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v7.0.1
 [7.0.0]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v7.0.0
 [6.1.0]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v6.1.0
 [6.0.0]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v6.0.0
