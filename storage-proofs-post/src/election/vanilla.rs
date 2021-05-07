@@ -58,11 +58,14 @@ impl ParameterSetMetadata for PublicParams {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PublicInputs<T: Domain> {
+    #[serde(bound = "")]
     pub randomness: T,
     pub sector_id: SectorId,
+    #[serde(bound = "")]
     pub prover_id: T,
+    #[serde(bound = "")]
     pub comm_r: T,
     pub partial_ticket: Fr,
     pub sector_challenge_index: u64,

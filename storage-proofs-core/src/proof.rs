@@ -9,7 +9,7 @@ use crate::error::Result;
 pub trait ProofScheme<'a> {
     type PublicParams: Clone;
     type SetupParams: Clone;
-    type PublicInputs: Clone;
+    type PublicInputs: Clone + Serialize + DeserializeOwned;
     type PrivateInputs;
     type Proof: Clone + Serialize + DeserializeOwned;
     type Requirements: Default;

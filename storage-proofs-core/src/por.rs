@@ -47,9 +47,10 @@ impl ParameterSetMetadata for PublicParams {
 }
 
 /// The inputs that are necessary for the verifier to verify the proof.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PublicInputs<T: Domain> {
     /// The root hash of the underlying merkle tree.
+    #[serde(bound = "")]
     pub commitment: Option<T>,
     /// The challenge, which leaf to prove.
     pub challenge: usize,

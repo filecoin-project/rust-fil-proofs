@@ -65,18 +65,22 @@ impl ParameterSetMetadata for PublicParams {
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct PublicInputs<'a, T: Domain> {
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PublicInputs<T: Domain> {
+    #[serde(bound = "")]
     pub randomness: T,
+    #[serde(bound = "")]
     pub prover_id: T,
-    pub sectors: &'a [PublicSector<T>],
+    #[serde(bound = "")]
+    pub sectors: Vec<PublicSector<T>>,
     /// Partition index
     pub k: Option<usize>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PublicSector<T: Domain> {
     pub id: SectorId,
+    #[serde(bound = "")]
     pub comm_r: T,
 }
 
@@ -302,7 +306,7 @@ pub fn vanilla_proof<Tree: MerkleTreeTrait>(
 impl<'a, Tree: 'a + MerkleTreeTrait> ProofScheme<'a> for FallbackPoSt<'a, Tree> {
     type PublicParams = PublicParams;
     type SetupParams = SetupParams;
-    type PublicInputs = PublicInputs<'a, <Tree::Hasher as Hasher>::Domain>;
+    type PublicInputs = PublicInputs<<Tree::Hasher as Hasher>::Domain>;
     type PrivateInputs = PrivateInputs<'a, Tree>;
     type Proof = Proof<Tree::Proof>;
     type Requirements = ChallengeRequirements;

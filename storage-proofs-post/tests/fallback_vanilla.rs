@@ -163,7 +163,7 @@ fn test_fallback_post<Tree: MerkleTreeTrait>(
     let pub_inputs = fallback::PublicInputs {
         randomness,
         prover_id,
-        sectors: &pub_sectors,
+        sectors: pub_sectors.clone(),
         k: None,
     };
 
@@ -350,7 +350,7 @@ fn test_invalid_fallback_post<Tree: MerkleTreeTrait>(
     let pub_inputs = fallback::PublicInputs {
         randomness,
         prover_id,
-        sectors: &pub_sectors,
+        sectors: pub_sectors.clone(),
         k: None,
     };
 

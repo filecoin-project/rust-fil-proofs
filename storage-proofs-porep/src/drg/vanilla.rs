@@ -51,10 +51,12 @@ impl<H: Hasher> ProverAux<H> {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PublicInputs<T: Domain> {
+    #[serde(bound = "")]
     pub replica_id: Option<T>,
     pub challenges: Vec<usize>,
+    #[serde(bound = "")]
     pub tau: Option<Tau<T>>,
 }
 
