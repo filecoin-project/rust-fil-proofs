@@ -11,7 +11,7 @@ use blake2b_simd::Params as Blake2bParams;
 use fs2::FileExt;
 use itertools::Itertools;
 use lazy_static::lazy_static;
-use log::info;
+use log::{info, trace};
 use memmap::MmapOptions;
 use rand::RngCore;
 use serde::{Deserialize, Serialize};
@@ -442,6 +442,7 @@ pub fn read_cached_params(cache_entry_path: &PathBuf) -> Result<groth16::MappedP
                         .into());
                     }
 
+                    trace!("parameter data is valid [{}]", digest_hex);
                     VERIFIED_PARAMETERS
                         .lock()
                         .expect("verified parameters lock failed")
@@ -492,7 +493,7 @@ fn read_cached_srs_key(
     if verify_production_params {
         let cache_key = cache_entry_path
             .file_name()
-            .expect("failed to get cached param filename")
+            .expect("failed to get cached srs filename")
             .to_str()
             .expect("failed to convert to str")
             .to_string();
@@ -528,6 +529,7 @@ fn read_cached_srs_key(
                         .into());
                     }
 
+                    trace!("srs data is valid [{}]", digest_hex);
                     VERIFIED_PARAMETERS
                         .lock()
                         .expect("verified parameters lock failed")

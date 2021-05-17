@@ -281,9 +281,14 @@ where
     /// them all into an AggregateProof type.
     fn aggregate_proofs(
         prover_srs: &ProverSRS<Bls12>,
+        public_inputs: &[Vec<Fr>],
         proofs: &[groth16::Proof<Bls12>],
     ) -> Result<AggregateProof<Bls12>> {
-        Ok(aggregate_proofs::<Bls12>(prover_srs, proofs)?)
+        Ok(aggregate_proofs::<Bls12>(
+            prover_srs,
+            public_inputs,
+            proofs,
+        )?)
     }
 
     /// Verifies the aggregate proof, with respect to the flattened input list.
@@ -304,7 +309,7 @@ where
         Ok(verify_aggregate_proof(
             ip_verifier_srs,
             pvk,
-            rng,
+            &mut rng,
             public_inputs,
             aggregate_proof,
         )?)

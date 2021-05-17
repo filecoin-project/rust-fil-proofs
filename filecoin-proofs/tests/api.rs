@@ -306,8 +306,11 @@ fn inner_test_seal_proof_aggregation_2kib_porep_id_v1_1_base_8(
     }
 
     let config = porep_config(SECTOR_SIZE_2_KIB, porep_id, ApiVersion::V1_1_0);
-    let aggregate_proof =
-        aggregate_seal_commit_proofs::<SectorShape2KiB>(config, commit_outputs.as_slice())?;
+    let aggregate_proof = aggregate_seal_commit_proofs::<SectorShape2KiB>(
+        config,
+        commit_inputs.clone(),
+        commit_outputs.as_slice(),
+    )?;
     let verified = verify_aggregate_seal_commit_proofs::<SectorShape2KiB>(
         config,
         proofs_to_aggregate,
@@ -345,7 +348,11 @@ fn aggregate_proofs<Tree: 'static + MerkleTreeTrait>(
     }
 
     let config = porep_config(sector_size, *porep_id, api_version);
-    let aggregate_proof = aggregate_seal_commit_proofs::<Tree>(config, commit_outputs.as_slice())?;
+    let aggregate_proof = aggregate_seal_commit_proofs::<Tree>(
+        config,
+        commit_inputs.clone(),
+        commit_outputs.as_slice(),
+    )?;
     verify_aggregate_seal_commit_proofs::<Tree>(
         config,
         num_proofs_to_aggregate,
