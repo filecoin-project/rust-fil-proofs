@@ -544,7 +544,12 @@ fn read_cached_srs_key(
 
     with_exclusive_read_lock(cache_entry_path, |file| {
         let srs_map = unsafe { MmapOptions::new().map(file.as_ref())? };
-        let key = groth16::aggregate::GenericSRS::read_mmap(&srs_map)?;
+        // NOTE: We do not currently support lengths higher than this,
+        // even though the SRS file can handle up to (2 << 19) + 1
+        // elements.  Specifying under that limit speeds up
+        // performance quite a bit.
+        let max_len = (2 << 14) + 1;
+        let key = groth16::aggregate::GenericSRS::read_mmap(&srs_map, max_len)?;
         info!("read srs key from cache {:?} ", cache_entry_path);
 
         Ok(key)
