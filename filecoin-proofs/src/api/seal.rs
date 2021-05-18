@@ -819,33 +819,25 @@ pub fn aggregate_seal_commit_proofs<Tree: 'static + MerkleTreeTrait>(
 /// * `commit_inputs` - a flattened and ordered list of all inputs.
 pub fn verify_aggregate_seal_commit_proofs<Tree: 'static + MerkleTreeTrait>(
     porep_config: PoRepConfig,
-    aggregated_proofs_len: usize,
+    _aggregated_proofs_len: usize,
     aggregate_proof_bytes: AggregateSnarkProof,
     commit_inputs: Vec<Vec<Fr>>,
 ) -> Result<bool> {
     info!("verify_aggregate_seal_commit_proofs:start");
 
+    let aggregate_proof: groth16::aggregate::AggregateProof<Bls12> =
+        deserialize(&aggregate_proof_bytes)?;
+
+    let aggregated_proofs_len = aggregate_proof.tmipp.gipa.nproofs as usize;
+
     ensure!(aggregated_proofs_len != 0, "cannot verify zero proofs");
     ensure!(!commit_inputs.is_empty(), "cannot verify with empty inputs");
-    ensure!(
-        commit_inputs.len() % aggregated_proofs_len == 0,
-        "invalid number of inputs provided"
-    );
-
-    let num_inputs = commit_inputs.len();
-    let num_inputs_per_proof = num_inputs / aggregated_proofs_len;
 
     trace!(
         "verify_aggregate_seal_commit_proofs called with len {}",
-        aggregated_proofs_len
-    );
-    trace!(
-        "verify_aggregate_seal_commit_proofs got {} inputs with {} inputs per proof",
-        num_inputs,
-        num_inputs_per_proof
+        aggregated_proofs_len,
     );
 
-    let aggregated_proofs_len = get_aggregate_target_len(aggregated_proofs_len);
     ensure!(
         aggregated_proofs_len > 1,
         "cannot verify less than two proofs"
@@ -855,14 +847,23 @@ pub fn verify_aggregate_seal_commit_proofs<Tree: 'static + MerkleTreeTrait>(
         "cannot verify non-pow2 aggregate seal proofs"
     );
 
-    let target_inputs_len = num_inputs_per_proof * aggregated_proofs_len;
+    let num_inputs = commit_inputs.len();
+    let num_inputs_per_proof = get_aggregate_target_len(num_inputs) / aggregated_proofs_len;
+    let target_inputs_len = aggregated_proofs_len * num_inputs_per_proof;
+    ensure!(
+        target_inputs_len % aggregated_proofs_len == 0,
+        "invalid number of inputs provided",
+    );
+
+    trace!(
+        "verify_aggregate_seal_commit_proofs got {} inputs with {} inputs per proof",
+        num_inputs,
+        target_inputs_len / aggregated_proofs_len,
+    );
 
     // Pad public inputs if needed.
     let commit_inputs =
         pad_inputs_to_target(&commit_inputs, num_inputs_per_proof, target_inputs_len)?;
-
-    let aggregate_proof: groth16::aggregate::AggregateProof<Bls12> =
-        deserialize(&aggregate_proof_bytes)?;
 
     let verifying_key = get_stacked_verifying_key::<Tree>(porep_config)?;
     let srs_verifier_key =
