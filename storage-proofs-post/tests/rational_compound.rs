@@ -72,9 +72,9 @@ fn test_rational_post_compound<Tree: 'static + MerkleTreeTrait>() {
         .collect();
 
     let pub_inputs = rational::PublicInputs {
-        challenges: &challenges,
-        faults: &faults,
-        comm_rs: &comm_rs,
+        challenges: challenges.clone(),
+        faults: faults.clone(),
+        comm_rs: comm_rs.clone(),
     };
 
     let mut trees = BTreeMap::new();

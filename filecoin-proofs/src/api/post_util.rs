@@ -180,7 +180,7 @@ pub fn generate_single_vanilla_proof<Tree: 'static + MerkleTreeTrait>(
 pub fn partition_vanilla_proofs<Tree: MerkleTreeTrait>(
     post_config: &PoStConfig,
     pub_params: &fallback::PublicParams,
-    pub_inputs: &fallback::PublicInputs<'_, <Tree::Hasher as Hasher>::Domain>,
+    pub_inputs: &fallback::PublicInputs<<Tree::Hasher as Hasher>::Domain>,
     partition_count: usize,
     vanilla_proofs: &[FallbackPoStSectorProof<Tree>],
 ) -> Result<Vec<VanillaProof<Tree>>> {
