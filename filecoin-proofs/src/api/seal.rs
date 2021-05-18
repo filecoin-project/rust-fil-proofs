@@ -639,10 +639,11 @@ fn get_aggregate_target_len(len: usize) -> usize {
 
 /// Given a list of proofs and a target_len, make sure that the proofs list is padded to the target_len size.
 fn pad_proofs_to_target(proofs: &mut Vec<groth16::Proof<Bls12>>, target_len: usize) -> Result<()> {
-    ensure!(
-        target_len >= proofs.len(),
-        "target len must be greater than actual num proofs"
-    );
+    trace!("pad_proofs_to_target target_len {}, proofs len {}", target_len, proofs.len());
+    //ensure!(
+    //    target_len >= proofs.len(),
+    //    "target len must be greater than actual num proofs"
+    //);
     ensure!(
         proofs.last().is_some(),
         "invalid last proof for duplication"
