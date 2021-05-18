@@ -639,11 +639,15 @@ fn get_aggregate_target_len(len: usize) -> usize {
 
 /// Given a list of proofs and a target_len, make sure that the proofs list is padded to the target_len size.
 fn pad_proofs_to_target(proofs: &mut Vec<groth16::Proof<Bls12>>, target_len: usize) -> Result<()> {
-    trace!("pad_proofs_to_target target_len {}, proofs len {}", target_len, proofs.len());
-    //ensure!(
-    //    target_len >= proofs.len(),
-    //    "target len must be greater than actual num proofs"
-    //);
+    trace!(
+        "pad_proofs_to_target target_len {}, proofs len {}",
+        target_len,
+        proofs.len()
+    );
+    ensure!(
+        target_len >= proofs.len(),
+        "target len must be greater than actual num proofs"
+    );
     ensure!(
         proofs.last().is_some(),
         "invalid last proof for duplication"
@@ -672,8 +676,8 @@ fn pad_proofs_to_target(proofs: &mut Vec<groth16::Proof<Bls12>>, target_len: usi
 
 /// Given a list of public inputs and a target_len, make sure that the inputs list is padded to the target_len size.
 fn pad_inputs_to_target(
-    porep_config: PoRepConfig,
     commit_inputs: &[Vec<Fr>],
+    num_inputs_per_proof: usize,
     target_len: usize,
 ) -> Result<Vec<Vec<Fr>>> {
     ensure!(
@@ -689,7 +693,6 @@ fn pad_inputs_to_target(
             target_len > num_inputs,
             "target len must be greater than actual num inputs"
         );
-        let num_inputs_per_proof = usize::from(PoRepProofPartitions::from(porep_config));
         let duplicate_inputs = &commit_inputs[(num_inputs - num_inputs_per_proof)..num_inputs];
 
         trace!("padding inputs from {} to {}", num_inputs, target_len);
@@ -749,30 +752,42 @@ pub fn aggregate_seal_commit_proofs<Tree: 'static + MerkleTreeTrait>(
                 Ok(acc)
             })?;
     trace!(
-        "aggregate_seal_commit_proofs called with {} commit_outputs",
-        commit_outputs.len()
-    );
-
-    let target_len = get_aggregate_target_len(commit_outputs.len());
-    trace!(
-        "aggregate_seal_commit_proofs will pad to target_len {}",
-        target_len
-    );
-    ensure!(target_len > 1, "cannot aggregate less than two proofs");
-
-    // If we're not at the pow2 target, duplicate the last proof until we are.
-    pad_proofs_to_target(&mut proofs, target_len)?;
-    // Pad public inputs if needed as well.
-    let commit_inputs = pad_inputs_to_target(porep_config, &commit_inputs, target_len)?;
-
-    ensure!(
-        proofs.len() == commit_inputs.len(),
-        "padded proofs and inputs must match in length"
-    );
-    trace!(
-        "padded proofs and inputs from {} to {}",
+        "aggregate_seal_commit_proofs called with {} commit_inputs and {} commit_outputs containing {} proofs",
+        commit_inputs.len(),
         commit_outputs.len(),
         proofs.len(),
+    );
+
+    let num_inputs = commit_inputs.len();
+    let num_inputs_per_proof = num_inputs / proofs.len();
+
+    let target_proofs_len = get_aggregate_target_len(proofs.len());
+    ensure!(
+        target_proofs_len > 1,
+        "cannot aggregate less than two proofs"
+    );
+    trace!(
+        "aggregate_seal_commit_proofs will pad proofs to target_len {}",
+        target_proofs_len
+    );
+
+    // If we're not at the pow2 target, duplicate the last proof until we are.
+    pad_proofs_to_target(&mut proofs, target_proofs_len)?;
+
+    // Pad public inputs if needed as well.
+    let target_inputs_len = num_inputs_per_proof * target_proofs_len;
+
+    trace!(
+        "aggregate_seal_commit_proofs will pad {} inputs to target_len {}",
+        num_inputs,
+        target_inputs_len,
+    );
+    let commit_inputs =
+        pad_inputs_to_target(&commit_inputs, num_inputs_per_proof, target_inputs_len)?;
+
+    ensure!(
+        proofs.len() * num_inputs_per_proof == commit_inputs.len(),
+        "padded proofs and inputs must be related in length"
     );
 
     let srs_prover_key = get_stacked_srs_key::<Tree>(porep_config, proofs.len())?;
@@ -818,7 +833,7 @@ pub fn verify_aggregate_seal_commit_proofs<Tree: 'static + MerkleTreeTrait>(
     );
 
     let num_inputs = commit_inputs.len();
-    let num_inputs_per_proof = usize::from(PoRepProofPartitions::from(porep_config));
+    let num_inputs_per_proof = num_inputs / aggregated_proofs_len;
 
     trace!(
         "verify_aggregate_seal_commit_proofs called with len {}",
@@ -840,10 +855,11 @@ pub fn verify_aggregate_seal_commit_proofs<Tree: 'static + MerkleTreeTrait>(
         "cannot verify non-pow2 aggregate seal proofs"
     );
 
-    let target_len = num_inputs_per_proof * aggregated_proofs_len;
+    let target_inputs_len = num_inputs_per_proof * aggregated_proofs_len;
 
     // Pad public inputs if needed.
-    let commit_inputs = pad_inputs_to_target(porep_config, &commit_inputs, target_len)?;
+    let commit_inputs =
+        pad_inputs_to_target(&commit_inputs, num_inputs_per_proof, target_inputs_len)?;
 
     let aggregate_proof: groth16::aggregate::AggregateProof<Bls12> =
         deserialize(&aggregate_proof_bytes)?;

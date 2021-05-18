@@ -219,6 +219,13 @@ fn test_seal_proof_aggregation_1_2kib_porep_id_v1_1_base_8() -> Result<()> {
 
 #[test]
 #[ignore]
+fn test_seal_proof_aggregation_3_2kib_porep_id_v1_1_base_8() -> Result<()> {
+    let proofs_to_aggregate = 3; // Requires auto-padding
+    inner_test_seal_proof_aggregation_2kib_porep_id_v1_1_base_8(proofs_to_aggregate)
+}
+
+#[test]
+#[ignore]
 fn test_seal_proof_aggregation_5_2kib_porep_id_v1_1_base_8() -> Result<()> {
     let proofs_to_aggregate = 5; // Requires auto-padding
     inner_test_seal_proof_aggregation_2kib_porep_id_v1_1_base_8(proofs_to_aggregate)
