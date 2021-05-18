@@ -320,7 +320,6 @@ fn inner_test_seal_proof_aggregation_2kib_porep_id_v1_1_base_8(
     )?;
     let verified = verify_aggregate_seal_commit_proofs::<SectorShape2KiB>(
         config,
-        proofs_to_aggregate,
         aggregate_proof,
         commit_inputs,
     )?;
@@ -360,12 +359,7 @@ fn aggregate_proofs<Tree: 'static + MerkleTreeTrait>(
         commit_inputs.clone(),
         commit_outputs.as_slice(),
     )?;
-    verify_aggregate_seal_commit_proofs::<Tree>(
-        config,
-        num_proofs_to_aggregate,
-        aggregate_proof,
-        commit_inputs,
-    )
+    verify_aggregate_seal_commit_proofs::<Tree>(config, aggregate_proof, commit_inputs)
 }
 
 fn get_layer_file_paths(cache_dir: &tempfile::TempDir) -> Vec<PathBuf> {

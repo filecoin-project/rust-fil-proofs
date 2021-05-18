@@ -713,7 +713,7 @@ fn pad_inputs_to_target(
 ///
 /// * `porep_config` - this sector's porep config that contains the number of bytes in the sector.
 /// * `commit_inputs` - an ordered list of public inputs used in 'seal_commit_phase2'.
-/// * `commit_outputs` - a list of seal proof outputs returned from 'seal_commit_phase2'.
+/// * `commit_outputs` - an ordered list of seal proof outputs returned from 'seal_commit_phase2'.
 pub fn aggregate_seal_commit_proofs<Tree: 'static + MerkleTreeTrait>(
     porep_config: PoRepConfig,
     commit_inputs: Vec<Vec<Fr>>,
@@ -808,18 +808,15 @@ pub fn aggregate_seal_commit_proofs<Tree: 'static + MerkleTreeTrait>(
 /// order of that list must match the order of the 'commit_outputs' provided to 'aggregate_seal_commit_proofs'
 /// in order for verification to work properly.
 ///
-/// aggregated_proofs_len is not the same as commit_inputs.len, since commit_inputs is a combined list and
-/// aggregated_proofs_len describes the count that went into generating the aggregate proof initially.
+/// commit_inputs is a combined list of the public inputs, which must match the order used when aggregated.
 ///
 /// # Arguments
 ///
 /// * `porep_config` - this sector's porep config that contains the number of bytes in the sector.
-/// * `aggregated_proofs_len` - the number of proofs aggregated by 'aggregate_seal_commit_proofs'.
 /// * `aggregate_proof_bytes` - the returned aggregate proof from 'aggreate_seal_commit_proofs'.
 /// * `commit_inputs` - a flattened and ordered list of all inputs.
 pub fn verify_aggregate_seal_commit_proofs<Tree: 'static + MerkleTreeTrait>(
     porep_config: PoRepConfig,
-    _aggregated_proofs_len: usize,
     aggregate_proof_bytes: AggregateSnarkProof,
     commit_inputs: Vec<Vec<Fr>>,
 ) -> Result<bool> {
