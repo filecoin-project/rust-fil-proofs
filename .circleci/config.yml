@@ -49,8 +49,6 @@ jobs:
       - run: rustup install $(cat rust-toolchain)
       - run: rustup default $(cat rust-toolchain)
       - run: rustup install << pipeline.parameters.nightly-toolchain >>
-      - run: rustup component add rustfmt-preview
-      - run: rustup component add clippy
       - run: cargo update
       - run: cargo fetch
       - run: rustc +$(cat rust-toolchain) --version
@@ -327,7 +325,7 @@ jobs:
       - restore_rustup_cache
       - run:
           name: Run cargo clippy
-          command: cargo +$(cat rust-toolchain) clippy --workspace
+          command: cargo +$(cat rust-toolchain) clippy --all-targets --workspace -- -D warnings
   test_darwin:
     macos:
       xcode: "10.0.0"
