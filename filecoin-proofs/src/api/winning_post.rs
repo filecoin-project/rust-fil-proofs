@@ -68,7 +68,7 @@ pub fn generate_winning_post_with_vanilla<Tree: 'static + MerkleTreeTrait>(
     let pub_inputs = fallback::PublicInputs {
         randomness: randomness_safe,
         prover_id: prover_id_safe,
-        sectors: &pub_sectors,
+        sectors: pub_sectors,
         k: None,
     };
 
@@ -166,7 +166,7 @@ pub fn generate_winning_post<Tree: 'static + MerkleTreeTrait>(
     let pub_inputs = fallback::PublicInputs::<<Tree::Hasher as Hasher>::Domain> {
         randomness: randomness_safe,
         prover_id: prover_id_safe,
-        sectors: &pub_sectors,
+        sectors: pub_sectors,
         k: None,
     };
 
@@ -272,7 +272,7 @@ pub fn verify_winning_post<Tree: 'static + MerkleTreeTrait>(
     let pub_inputs = fallback::PublicInputs {
         randomness: randomness_safe,
         prover_id: prover_id_safe,
-        sectors: &pub_sectors,
+        sectors: pub_sectors,
         k: None,
     };
 

@@ -46,12 +46,13 @@ impl ParameterSetMetadata for PublicParams {
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct PublicInputs<'a, T: Domain> {
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PublicInputs<T: Domain> {
     /// The challenges, which leafs to prove.
-    pub challenges: &'a [Challenge],
-    pub faults: &'a OrderedSectorSet,
-    pub comm_rs: &'a [T],
+    pub challenges: Vec<Challenge>,
+    pub faults: OrderedSectorSet,
+    #[serde(bound = "")]
+    pub comm_rs: Vec<T>,
 }
 
 #[derive(Debug, Clone)]
@@ -116,7 +117,7 @@ where
 impl<'a, Tree: 'a + MerkleTreeTrait> ProofScheme<'a> for RationalPoSt<'a, Tree> {
     type PublicParams = PublicParams;
     type SetupParams = SetupParams;
-    type PublicInputs = PublicInputs<'a, <Tree::Hasher as Hasher>::Domain>;
+    type PublicInputs = PublicInputs<<Tree::Hasher as Hasher>::Domain>;
     type PrivateInputs = PrivateInputs<'a, Tree>;
     type Proof = Proof<Tree::Proof>;
     type Requirements = NoRequirements;
@@ -145,7 +146,7 @@ impl<'a, Tree: 'a + MerkleTreeTrait> ProofScheme<'a> for RationalPoSt<'a, Tree> 
             pub_inputs.challenges.len() == priv_inputs.comm_r_lasts.len(),
             "mismatched challenges and comm_r_lasts"
         );
-        let challenges = pub_inputs.challenges;
+        let challenges = &pub_inputs.challenges;
 
         let proofs = challenges
             .iter()
@@ -174,7 +175,7 @@ impl<'a, Tree: 'a + MerkleTreeTrait> ProofScheme<'a> for RationalPoSt<'a, Tree> 
         pub_inputs: &Self::PublicInputs,
         proof: &Self::Proof,
     ) -> Result<bool> {
-        let challenges = pub_inputs.challenges;
+        let challenges = &pub_inputs.challenges;
 
         ensure!(
             challenges.len() == pub_inputs.comm_rs.len() as usize,
@@ -226,7 +227,7 @@ impl<'a, Tree: 'a + MerkleTreeTrait> ProofScheme<'a> for RationalPoSt<'a, Tree> 
 }
 
 /// A challenge specifying a sector and leaf.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Challenge {
     // The identifier of the challenged sector.
     pub sector: SectorId,

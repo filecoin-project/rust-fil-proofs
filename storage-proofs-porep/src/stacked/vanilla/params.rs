@@ -112,10 +112,12 @@ where
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct PublicInputs<T: Domain, S: Domain> {
+    #[serde(bound = "")]
     pub replica_id: T,
     pub seed: [u8; 32],
+    #[serde(bound = "")]
     pub tau: Option<Tau<T, S>>,
     /// Partition index
     pub k: Option<usize>,
@@ -327,9 +329,11 @@ pub type TransformedLayers<Tree, G> = (
 );
 
 /// Tau for a single parition.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Tau<D: Domain, E: Domain> {
+    #[serde(bound = "")]
     pub comm_d: E,
+    #[serde(bound = "")]
     pub comm_r: D,
 }
 
