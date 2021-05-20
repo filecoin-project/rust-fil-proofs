@@ -569,6 +569,8 @@ pub fn get_seal_inputs<Tree: 'static + MerkleTreeTrait>(
     ticket: Ticket,
     seed: Ticket,
 ) -> Result<Vec<Vec<Fr>>> {
+    info!("get_seal_inputs:start");
+
     ensure!(comm_d != [0; 32], "Invalid all zero commitment (comm_d)");
     ensure!(comm_r != [0; 32], "Invalid all zero commitment (comm_r)");
 
@@ -625,6 +627,8 @@ pub fn get_seal_inputs<Tree: 'static + MerkleTreeTrait>(
             )
         })
         .collect::<Result<_>>()?;
+
+    info!("get_seal_inputs:finish");
 
     Ok(inputs)
 }
@@ -713,7 +717,7 @@ fn pad_inputs_to_target(
 /// # Arguments
 ///
 /// * `porep_config` - this sector's porep config that contains the number of bytes in the sector.
-/// * `seeds` - an ordered list of seeds seed used to derive the PoRep challenges.
+/// * `seeds` - an ordered list of seeds used to derive the PoRep challenges.
 /// * `commit_outputs` - an ordered list of seal proof outputs returned from 'seal_commit_phase2'.
 pub fn aggregate_seal_commit_proofs<Tree: 'static + MerkleTreeTrait>(
     porep_config: PoRepConfig,
@@ -791,7 +795,7 @@ pub fn aggregate_seal_commit_proofs<Tree: 'static + MerkleTreeTrait>(
 /// # Arguments
 ///
 /// * `porep_config` - this sector's porep config that contains the number of bytes in the sector.
-/// * `seeds` - an ordered list of seeds seed used to derive the PoRep challenges.
+/// * `seeds` - an ordered list of seeds used to derive the PoRep challenges.
 /// * `aggregate_proof_bytes` - the returned aggregate proof from 'aggreate_seal_commit_proofs'.
 /// * `commit_inputs` - a flattened/combined and ordered list of all public inputs, which must match
 ///    the ordering of the seal proofs when aggregated.
