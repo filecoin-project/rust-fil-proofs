@@ -154,5 +154,10 @@ fn get_seal_inputs_benchmark(c: &mut Criterion) {
     );
 }
 
-criterion_group!(benches, get_seal_inputs_benchmark, preprocessing_benchmark, add_piece_benchmark);
+criterion_group!(
+    benches,
+    get_seal_inputs_benchmark,
+    preprocessing_benchmark,
+    add_piece_benchmark
+);
 criterion_main!(benches);
