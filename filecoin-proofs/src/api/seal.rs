@@ -11,6 +11,7 @@ use log::{info, trace};
 use memmap::MmapOptions;
 use merkletree::store::{DiskStore, Store, StoreConfig};
 use rayon::prelude::*;
+use sha2::{Digest, Sha256};
 use storage_proofs_core::{
     cache_key::CacheKey,
     compound_proof::{self, CompoundProof},
@@ -712,26 +713,18 @@ fn pad_inputs_to_target(
 /// # Arguments
 ///
 /// * `porep_config` - this sector's porep config that contains the number of bytes in the sector.
-/// * `commit_inputs` - an ordered list of public inputs used in 'seal_commit_phase2'.
+/// * `seeds` - an ordered list of seeds seed used to derive the PoRep challenges.
 /// * `commit_outputs` - an ordered list of seal proof outputs returned from 'seal_commit_phase2'.
 pub fn aggregate_seal_commit_proofs<Tree: 'static + MerkleTreeTrait>(
     porep_config: PoRepConfig,
-    commit_inputs: Vec<Vec<Fr>>,
+    seeds: &[[u8; 32]],
     commit_outputs: &[SealCommitOutput],
 ) -> Result<AggregateSnarkProof> {
     info!("aggregate_seal_commit_proofs:start");
 
     ensure!(
-        !commit_inputs.is_empty(),
-        "cannot aggregate with empty public inputs"
-    );
-    ensure!(
         !commit_outputs.is_empty(),
         "cannot aggregate with empty outputs"
-    );
-    ensure!(
-        commit_inputs.len() % commit_outputs.len() == 0,
-        "invalid inputs/outputs length"
     );
 
     let partitions = usize::from(PoRepProofPartitions::from(porep_config));
@@ -752,14 +745,10 @@ pub fn aggregate_seal_commit_proofs<Tree: 'static + MerkleTreeTrait>(
                 Ok(acc)
             })?;
     trace!(
-        "aggregate_seal_commit_proofs called with {} commit_inputs and {} commit_outputs containing {} proofs",
-        commit_inputs.len(),
+        "aggregate_seal_commit_proofs called with {} commit_outputs containing {} proofs",
         commit_outputs.len(),
         proofs.len(),
     );
-
-    let num_inputs = commit_inputs.len();
-    let num_inputs_per_proof = num_inputs / proofs.len();
 
     let target_proofs_len = get_aggregate_target_len(proofs.len());
     ensure!(
@@ -774,26 +763,19 @@ pub fn aggregate_seal_commit_proofs<Tree: 'static + MerkleTreeTrait>(
     // If we're not at the pow2 target, duplicate the last proof until we are.
     pad_proofs_to_target(&mut proofs, target_proofs_len)?;
 
-    // Pad public inputs if needed as well.
-    let target_inputs_len = num_inputs_per_proof * target_proofs_len;
-
-    trace!(
-        "aggregate_seal_commit_proofs will pad {} inputs to target_len {}",
-        num_inputs,
-        target_inputs_len,
-    );
-    let commit_inputs =
-        pad_inputs_to_target(&commit_inputs, num_inputs_per_proof, target_inputs_len)?;
-
-    ensure!(
-        proofs.len() * num_inputs_per_proof == commit_inputs.len(),
-        "padded proofs and inputs must be related in length"
-    );
+    // Hash all of the seeds into a digest for the aggregate proof method.
+    let hashed_seeds: [u8; 32] = {
+        let mut hasher = Sha256::new();
+        for seed in seeds.iter() {
+            hasher.update(seed);
+        }
+        hasher.finalize().into()
+    };
 
     let srs_prover_key = get_stacked_srs_key::<Tree>(porep_config, proofs.len())?;
     let aggregate_proof = StackedCompound::<Tree, DefaultPieceHasher>::aggregate_proofs(
         &srs_prover_key,
-        &commit_inputs,
+        &hashed_seeds,
         proofs.as_slice(),
     )?;
     let aggregate_proof_bytes = serialize(&aggregate_proof)?;
@@ -803,21 +785,20 @@ pub fn aggregate_seal_commit_proofs<Tree: 'static + MerkleTreeTrait>(
     Ok(aggregate_proof_bytes)
 }
 
-/// 'aggregate_proof_bytes' is the serialized aggregate proof returned from 'aggregate_seal_commit_proofs'.
-/// 'commit_inputs' is an ordered list of inputs returned from 'seal_commit_phase2_for_aggregation'.  The
-/// order of that list must match the order of the 'commit_outputs' provided to 'aggregate_seal_commit_proofs'
-/// in order for verification to work properly.
-///
-/// commit_inputs is a combined list of the public inputs, which must match the order used when aggregated.
+/// Given a porep_config, an aggregate proof, a list of seeds and a combined and flattened list
+/// of public inputs, this method verifies the aggregate seal proof.
 ///
 /// # Arguments
 ///
 /// * `porep_config` - this sector's porep config that contains the number of bytes in the sector.
+/// * `seeds` - an ordered list of seeds seed used to derive the PoRep challenges.
 /// * `aggregate_proof_bytes` - the returned aggregate proof from 'aggreate_seal_commit_proofs'.
-/// * `commit_inputs` - a flattened and ordered list of all inputs.
+/// * `commit_inputs` - a flattened/combined and ordered list of all public inputs, which must match
+///    the ordering of the seal proofs when aggregated.
 pub fn verify_aggregate_seal_commit_proofs<Tree: 'static + MerkleTreeTrait>(
     porep_config: PoRepConfig,
     aggregate_proof_bytes: AggregateSnarkProof,
+    seeds: &[[u8; 32]],
     commit_inputs: Vec<Vec<Fr>>,
 ) -> Result<bool> {
     info!("verify_aggregate_seal_commit_proofs:start");
@@ -866,10 +847,20 @@ pub fn verify_aggregate_seal_commit_proofs<Tree: 'static + MerkleTreeTrait>(
     let srs_verifier_key =
         get_stacked_srs_verifier_key::<Tree>(porep_config, aggregated_proofs_len)?;
 
+    // Hash all of the seeds into a digest for the aggregate proof method.
+    let hashed_seeds: [u8; 32] = {
+        let mut hasher = Sha256::new();
+        for seed in seeds.iter() {
+            hasher.update(seed);
+        }
+        hasher.finalize().into()
+    };
+
     info!("start verifying aggregate proof");
     let result = StackedCompound::<Tree, DefaultPieceHasher>::verify_aggregate_proofs(
         &srs_verifier_key,
         &verifying_key,
+        &hashed_seeds,
         commit_inputs.as_slice(),
         &aggregate_proof,
     )?;
