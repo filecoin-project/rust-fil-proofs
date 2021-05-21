@@ -4,6 +4,7 @@
 use std::io::{stdin, stdout};
 
 use anyhow::Result;
+use byte_unit::Byte;
 use clap::{value_t, App, Arg, SubCommand};
 
 use crate::prodbench::ProdbenchInputs;
@@ -63,6 +64,13 @@ fn main() -> Result<()> {
                 .takes_value(false),
         )
         .arg(
+            Arg::with_name("test-resume")
+                .long("test-resume")
+                .required(false)
+                .help("Test replication resume")
+                .takes_value(false),
+        )
+        .arg(
             Arg::with_name("cache")
                 .long("cache")
                 .required(false)
@@ -74,7 +82,7 @@ fn main() -> Result<()> {
             Arg::with_name("size")
                 .long("size")
                 .required(true)
-                .help("The data size in KiB")
+                .help("The data size (e.g. 2KiB)")
                 .takes_value(true),
         );
 
@@ -84,7 +92,7 @@ fn main() -> Result<()> {
             Arg::with_name("size")
                 .long("size")
                 .required(true)
-                .help("The data size in KiB")
+                .help("The data size (e.g. 2KiB)")
                 .takes_value(true),
         );
 
@@ -131,7 +139,7 @@ fn main() -> Result<()> {
             Arg::with_name("size")
                 .long("size")
                 .required(true)
-                .help("The size of the data underlying the tree KiB")
+                .help("The data size (e.g. 2KiB)")
                 .takes_value(true),
         )
         .arg(
@@ -168,10 +176,9 @@ fn main() -> Result<()> {
             let skip_precommit_phase2 = m.is_present("skip-precommit");
             let skip_commit_phase1 = m.is_present("skip-commit-phase1");
             let skip_commit_phase2 = m.is_present("skip-commit-phase2");
+            let test_resume = m.is_present("test-resume");
             let cache_dir = value_t!(m, "cache", String)?;
-            let sector_size_kibs = value_t!(m, "size", usize)
-                .expect("could not convert `size` CLI argument to `usize`");
-            let sector_size = sector_size_kibs * 1024;
+            let sector_size = Byte::from_str(value_t!(m, "size", String)?)?.get_bytes() as usize;
             window_post::run(
                 sector_size,
                 cache_dir,
@@ -180,20 +187,18 @@ fn main() -> Result<()> {
                 skip_precommit_phase2,
                 skip_commit_phase1,
                 skip_commit_phase2,
+                test_resume,
             )?;
         }
         ("winning-post", Some(m)) => {
-            let sector_size_kibs = value_t!(m, "size", usize)
-                .expect("could not convert `size` CLI argument to `usize`");
-            let sector_size = sector_size_kibs * 1024;
+            let sector_size = Byte::from_str(value_t!(m, "size", String)?)?.get_bytes() as usize;
             winning_post::run(sector_size)?;
         }
         ("hash-constraints", Some(_m)) => {
             hash_fns::run()?;
         }
         ("merkleproofs", Some(m)) => {
-            let size_kibs = value_t!(m, "size", usize)?;
-            let size = size_kibs * 1024;
+            let size = Byte::from_str(value_t!(m, "size", String)?)?.get_bytes() as usize;
 
             let proofs = value_t!(m, "proofs", usize)?;
             merkleproofs::run(size, proofs, m.is_present("validate"))?;

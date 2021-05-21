@@ -2,10 +2,10 @@ use std::collections::BTreeSet;
 use std::marker::PhantomData;
 
 use anyhow::ensure;
+use bellperson::bls::Fr;
 use byteorder::{ByteOrder, LittleEndian};
 use generic_array::typenum::Unsigned;
-use log::trace;
-use paired::bls12_381::Fr;
+use log::{error, trace};
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -109,7 +109,7 @@ pub struct SectorProof<Proof: MerkleProofTrait> {
         serialize = "MerkleProof<Proof::Hasher, Proof::Arity, Proof::SubTreeArity, Proof::TopTreeArity>: Serialize",
         deserialize = "MerkleProof<Proof::Hasher, Proof::Arity, Proof::SubTreeArity, Proof::TopTreeArity>: serde::de::DeserializeOwned"
     ))]
-    inclusion_proofs:
+    pub inclusion_proofs:
         Vec<MerkleProof<Proof::Hasher, Proof::Arity, Proof::SubTreeArity, Proof::TopTreeArity>>,
     pub comm_c: <Proof::Hasher as Hasher>::Domain,
     pub comm_r_last: <Proof::Hasher as Hasher>::Domain,
@@ -147,6 +147,13 @@ impl<P: MerkleProofTrait> SectorProof<P> {
             .iter()
             .map(MerkleProofTrait::as_options)
             .collect()
+    }
+
+    // Returns a read-only reference.
+    pub fn inclusion_proofs(
+        &self,
+    ) -> &Vec<MerkleProof<P::Hasher, P::Arity, P::SubTreeArity, P::TopTreeArity>> {
+        &self.inclusion_proofs
     }
 }
 
@@ -195,20 +202,23 @@ pub fn generate_leaf_challenges<T: Domain>(
     randomness: T,
     sector_id: u64,
     challenge_count: usize,
-) -> Result<Vec<u64>> {
+) -> Vec<u64> {
     let mut challenges = Vec::with_capacity(challenge_count);
 
+    let mut hasher = Sha256::new();
+    hasher.update(AsRef::<[u8]>::as_ref(&randomness));
+    hasher.update(&sector_id.to_le_bytes()[..]);
+
     for leaf_challenge_index in 0..challenge_count {
-        let challenge = generate_leaf_challenge(
+        let challenge = generate_leaf_challenge_inner::<T>(
+            hasher.clone(),
             pub_params,
-            randomness,
-            sector_id,
             leaf_challenge_index as u64,
-        )?;
+        );
         challenges.push(challenge)
     }
 
-    Ok(challenges)
+    challenges
 }
 
 /// Generates challenge, such that the range fits into the sector.
@@ -217,23 +227,80 @@ pub fn generate_leaf_challenge<T: Domain>(
     randomness: T,
     sector_id: u64,
     leaf_challenge_index: u64,
-) -> Result<u64> {
+) -> u64 {
     let mut hasher = Sha256::new();
     hasher.update(AsRef::<[u8]>::as_ref(&randomness));
     hasher.update(&sector_id.to_le_bytes()[..]);
+
+    generate_leaf_challenge_inner::<T>(hasher, pub_params, leaf_challenge_index)
+}
+
+fn generate_leaf_challenge_inner<T: Domain>(
+    mut hasher: Sha256,
+    pub_params: &PublicParams,
+    leaf_challenge_index: u64,
+) -> u64 {
     hasher.update(&leaf_challenge_index.to_le_bytes()[..]);
     let hash = hasher.finalize();
 
     let leaf_challenge = LittleEndian::read_u64(&hash[..8]);
 
-    let challenged_range_index = leaf_challenge % (pub_params.sector_size / NODE_SIZE as u64);
-
-    Ok(challenged_range_index)
+    leaf_challenge % (pub_params.sector_size / NODE_SIZE as u64)
 }
 
 enum ProofOrFault<T> {
     Proof(T),
     Fault(SectorId),
+}
+
+// Generates a single vanilla proof, given the private inputs and sector challenges.
+pub fn vanilla_proof<Tree: MerkleTreeTrait>(
+    sector_id: SectorId,
+    priv_inputs: &PrivateInputs<Tree>,
+    challenges: &[u64],
+) -> Result<Proof<Tree::Proof>> {
+    ensure!(
+        priv_inputs.sectors.len() == 1,
+        "vanilla_proof called with multiple sector proofs"
+    );
+
+    let priv_sector = &priv_inputs.sectors[0];
+    let comm_c = priv_sector.comm_c;
+    let comm_r_last = priv_sector.comm_r_last;
+    let tree = priv_sector.tree;
+
+    let tree_leafs = tree.leafs();
+    let rows_to_discard = default_rows_to_discard(tree_leafs, Tree::Arity::to_usize());
+
+    trace!(
+        "Generating proof for tree leafs {} and arity {}",
+        tree_leafs,
+        Tree::Arity::to_usize(),
+    );
+
+    let inclusion_proofs = (0..challenges.len())
+        .into_par_iter()
+        .map(|challenged_leaf_index| {
+            let challenged_leaf = challenges[challenged_leaf_index];
+            let proof = tree.gen_cached_proof(challenged_leaf as usize, Some(rows_to_discard))?;
+
+            ensure!(
+                proof.validate(challenged_leaf as usize) && proof.root() == priv_sector.comm_r_last,
+                "Generated vanilla proof for sector {} is invalid",
+                sector_id
+            );
+
+            Ok(proof)
+        })
+        .collect::<Result<Vec<_>>>()?;
+
+    Ok(Proof {
+        sectors: vec![SectorProof {
+            inclusion_proofs,
+            comm_c,
+            comm_r_last,
+        }],
+    })
 }
 
 impl<'a, Tree: 'a + MerkleTreeTrait> ProofScheme<'a> for FallbackPoSt<'a, Tree> {
@@ -328,6 +395,11 @@ impl<'a, Tree: 'a + MerkleTreeTrait> ProofScheme<'a> for FallbackPoSt<'a, Tree> 
                     Tree::Arity::to_usize(),
                 );
 
+                // avoid rehashing fixed inputs
+                let mut challenge_hasher = Sha256::new();
+                challenge_hasher.update(AsRef::<[u8]>::as_ref(&pub_inputs.randomness));
+                challenge_hasher.update(&u64::from(sector_id).to_le_bytes()[..]);
+
                 let mut inclusion_proofs = Vec::new();
                 for proof_or_fault in (0..pub_params.challenge_count)
                     .into_par_iter()
@@ -335,12 +407,12 @@ impl<'a, Tree: 'a + MerkleTreeTrait> ProofScheme<'a> for FallbackPoSt<'a, Tree> 
                         let challenge_index = ((j * num_sectors_per_chunk + i)
                             * pub_params.challenge_count
                             + n) as u64;
-                        let challenged_leaf_start = generate_leaf_challenge(
-                            pub_params,
-                            pub_inputs.randomness,
-                            sector_id.into(),
-                            challenge_index,
-                        )?;
+                        let challenged_leaf_start =
+                            generate_leaf_challenge_inner::<<Tree::Hasher as Hasher>::Domain>(
+                                challenge_hasher.clone(),
+                                pub_params,
+                                challenge_index,
+                            );
 
                         let proof = tree.gen_cached_proof(
                             challenged_leaf_start as usize,
@@ -351,10 +423,10 @@ impl<'a, Tree: 'a + MerkleTreeTrait> ProofScheme<'a> for FallbackPoSt<'a, Tree> 
                                 if proof.validate(challenged_leaf_start as usize)
                                     && proof.root() == priv_sector.comm_r_last
                                     && pub_sector.comm_r
-                                    == <Tree::Hasher as Hasher>::Function::hash2(
-                                    &priv_sector.comm_c,
-                                    &priv_sector.comm_r_last,
-                                )
+                                        == <Tree::Hasher as Hasher>::Function::hash2(
+                                            &priv_sector.comm_c,
+                                            &priv_sector.comm_r_last,
+                                        )
                                 {
                                     Ok(ProofOrFault::Proof(proof))
                                 } else {
@@ -371,6 +443,7 @@ impl<'a, Tree: 'a + MerkleTreeTrait> ProofScheme<'a> for FallbackPoSt<'a, Tree> 
                             inclusion_proofs.push(proof);
                         }
                         ProofOrFault::Fault(sector_id) => {
+                            error!("faulty sector: {:?}", sector_id);
                             faulty_sectors.insert(sector_id);
                         }
                     }
@@ -455,42 +528,62 @@ impl<'a, Tree: 'a + MerkleTreeTrait> ProofScheme<'a> for FallbackPoSt<'a, Tree> 
                     &comm_r_last,
                 )) != AsRef::<[u8]>::as_ref(comm_r)
                 {
+                    error!("hash(comm_c || comm_r_last) != comm_r: {:?}", sector_id);
                     return Ok(false);
                 }
 
                 ensure!(
                     challenge_count == inclusion_proofs.len(),
-                    "unexpected umber of inclusion proofs: {} != {}",
+                    "unexpected number of inclusion proofs: {} != {}",
                     challenge_count,
                     inclusion_proofs.len()
                 );
 
-                for (n, inclusion_proof) in inclusion_proofs.iter().enumerate() {
-                    let challenge_index =
-                        ((j * num_sectors_per_chunk + i) * pub_params.challenge_count + n) as u64;
-                    let challenged_leaf_start = generate_leaf_challenge(
-                        pub_params,
-                        pub_inputs.randomness,
-                        sector_id.into(),
-                        challenge_index,
-                    )?;
+                // avoid rehashing fixed inputs
+                let mut challenge_hasher = Sha256::new();
+                challenge_hasher.update(AsRef::<[u8]>::as_ref(&pub_inputs.randomness));
+                challenge_hasher.update(&u64::from(sector_id).to_le_bytes()[..]);
 
-                    // validate all comm_r_lasts match
-                    if inclusion_proof.root() != comm_r_last {
-                        return Ok(false);
-                    }
+                let is_valid_list = inclusion_proofs
+                    .par_iter()
+                    .enumerate()
+                    .map(|(n, inclusion_proof)| -> Result<bool> {
+                        let challenge_index = ((j * num_sectors_per_chunk + i)
+                            * pub_params.challenge_count
+                            + n) as u64;
+                        let challenged_leaf_start =
+                            generate_leaf_challenge_inner::<<Tree::Hasher as Hasher>::Domain>(
+                                challenge_hasher.clone(),
+                                pub_params,
+                                challenge_index,
+                            );
 
-                    // validate the path length
-                    let expected_path_length =
-                        inclusion_proof.expected_len(pub_params.sector_size as usize / NODE_SIZE);
+                        // validate all comm_r_lasts match
+                        if inclusion_proof.root() != comm_r_last {
+                            error!("inclusion proof root != comm_r_last: {:?}", sector_id);
+                            return Ok(false);
+                        }
 
-                    if expected_path_length != inclusion_proof.path().len() {
-                        return Ok(false);
-                    }
+                        // validate the path length
+                        let expected_path_length = inclusion_proof
+                            .expected_len(pub_params.sector_size as usize / NODE_SIZE);
 
-                    if !inclusion_proof.validate(challenged_leaf_start as usize) {
-                        return Ok(false);
-                    }
+                        if expected_path_length != inclusion_proof.path().len() {
+                            error!("wrong path length: {:?}", sector_id);
+                            return Ok(false);
+                        }
+
+                        if !inclusion_proof.validate(challenged_leaf_start as usize) {
+                            error!("invalid inclusion proof: {:?}", sector_id);
+                            return Ok(false);
+                        }
+                        Ok(true)
+                    })
+                    .collect::<Result<Vec<bool>>>()?;
+
+                let is_valid = is_valid_list.into_iter().all(|v| v);
+                if !is_valid {
+                    return Ok(false);
                 }
             }
         }
@@ -526,7 +619,7 @@ mod tests {
     use rand_xorshift::XorShiftRng;
 
     use storage_proofs_core::{
-        hasher::{PedersenHasher, PoseidonHasher},
+        hasher::PoseidonHasher,
         merkle::{generate_tree, get_base_tree_count, LCTree, MerkleTreeTrait},
     };
 
@@ -704,16 +797,6 @@ mod tests {
     }
 
     #[test]
-    fn fallback_post_pedersen_single_partition_matching_base_8() {
-        test_fallback_post::<LCTree<PedersenHasher, U8, U0, U0>>(5, 5, 1);
-    }
-
-    #[test]
-    fn invalid_fallback_post_pedersen_single_partition_matching_base_8() {
-        test_invalid_fallback_post::<LCTree<PedersenHasher, U8, U0, U0>>(5, 5, 1);
-    }
-
-    #[test]
     fn fallback_post_poseidon_single_partition_matching_base_8() {
         test_fallback_post::<LCTree<PoseidonHasher, U8, U0, U0>>(5, 5, 1);
     }
@@ -751,16 +834,6 @@ mod tests {
     #[test]
     fn invalid_fallback_post_poseidon_two_partitions_smaller_base_8() {
         test_invalid_fallback_post::<LCTree<PoseidonHasher, U8, U0, U0>>(5, 3, 2);
-    }
-
-    #[test]
-    fn fallback_post_pedersen_single_partition_matching_sub_8_4() {
-        test_fallback_post::<LCTree<PedersenHasher, U8, U4, U0>>(5, 5, 1);
-    }
-
-    #[test]
-    fn invalid_fallback_post_pedersen_single_partition_matching_sub_8_4() {
-        test_invalid_fallback_post::<LCTree<PedersenHasher, U8, U4, U0>>(5, 5, 1);
     }
 
     #[test]
@@ -821,26 +894,6 @@ mod tests {
     #[test]
     fn invalid_fallback_post_poseidon_two_partitions_smaller_sub_8_8() {
         test_invalid_fallback_post::<LCTree<PoseidonHasher, U8, U8, U0>>(5, 3, 2);
-    }
-
-    #[test]
-    fn fallback_post_pedersen_single_partition_matching_top_8_4_2() {
-        test_fallback_post::<LCTree<PedersenHasher, U8, U4, U2>>(5, 5, 1);
-    }
-
-    #[test]
-    fn invalid_fallback_post_pedersen_single_partition_matching_top_8_4_2() {
-        test_invalid_fallback_post::<LCTree<PedersenHasher, U8, U4, U2>>(5, 5, 1);
-    }
-
-    #[test]
-    fn fallback_post_pedersen_single_partition_matching_top_8_8_2() {
-        test_fallback_post::<LCTree<PedersenHasher, U8, U8, U2>>(5, 5, 1);
-    }
-
-    #[test]
-    fn invalid_fallback_post_pedersen_single_partition_matching_top_8_8_2() {
-        test_invalid_fallback_post::<LCTree<PedersenHasher, U8, U8, U2>>(5, 5, 1);
     }
 
     #[test]

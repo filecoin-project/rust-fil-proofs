@@ -1,12 +1,12 @@
 use std::hash::Hasher as StdHasher;
 
 use anyhow::ensure;
+use bellperson::bls::{Bls12, Fr, FrRepr};
 use bellperson::gadgets::{boolean, num, sha256::sha256 as sha256_circuit};
 use bellperson::{ConstraintSystem, SynthesisError};
 use ff::{Field, PrimeField, PrimeFieldRepr};
 use merkletree::hash::{Algorithm, Hashable};
 use merkletree::merkle::Element;
-use paired::bls12_381::{Bls12, Fr, FrRepr};
 use rand::RngCore;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -356,11 +356,11 @@ mod tests {
     use crate::util::bytes_into_boolean_vec;
     use bellperson::util_cs::test_cs::TestConstraintSystem;
 
+    use bellperson::bls::{Bls12, Fr};
     use bellperson::gadgets::boolean::Boolean;
     use bellperson::ConstraintSystem;
     use ff::Field;
     use merkletree::hash::Algorithm;
-    use paired::bls12_381::{Bls12, Fr};
     use rand::SeedableRng;
     use rand_xorshift::XorShiftRng;
 

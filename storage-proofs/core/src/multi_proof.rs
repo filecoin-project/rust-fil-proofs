@@ -2,13 +2,12 @@ use bellperson::groth16;
 
 use crate::error::Result;
 use anyhow::{ensure, Context};
-use paired::bls12_381::Bls12;
-use rayon::prelude::*;
-use std::io::{self, Read, Write};
+use bellperson::bls::Bls12;
+use std::io::{Read, Write};
 
 pub struct MultiProof<'a> {
     pub circuit_proofs: Vec<groth16::Proof<Bls12>>,
-    pub verifying_key: &'a groth16::VerifyingKey<Bls12>,
+    pub verifying_key: &'a groth16::PreparedVerifyingKey<Bls12>,
 }
 
 const GROTH_PROOF_SIZE: usize = 192;
@@ -16,7 +15,7 @@ const GROTH_PROOF_SIZE: usize = 192;
 impl<'a> MultiProof<'a> {
     pub fn new(
         groth_proofs: Vec<groth16::Proof<Bls12>>,
-        verifying_key: &'a groth16::VerifyingKey<Bls12>,
+        verifying_key: &'a groth16::PreparedVerifyingKey<Bls12>,
     ) -> Self {
         MultiProof {
             circuit_proofs: groth_proofs,
@@ -27,7 +26,7 @@ impl<'a> MultiProof<'a> {
     pub fn new_from_reader<R: Read>(
         partitions: Option<usize>,
         mut reader: R,
-        verifying_key: &'a groth16::VerifyingKey<Bls12>,
+        verifying_key: &'a groth16::PreparedVerifyingKey<Bls12>,
     ) -> Result<Self> {
         let num_proofs = partitions.unwrap_or(1);
 
@@ -41,15 +40,11 @@ impl<'a> MultiProof<'a> {
     pub fn new_from_bytes(
         partitions: Option<usize>,
         proof_bytes: &[u8],
-        verifying_key: &'a groth16::VerifyingKey<Bls12>,
+        verifying_key: &'a groth16::PreparedVerifyingKey<Bls12>,
     ) -> Result<Self> {
         let num_proofs = partitions.unwrap_or(1);
 
-        let proofs = proof_bytes
-            .par_chunks(GROTH_PROOF_SIZE)
-            .take(num_proofs)
-            .map(groth16::Proof::read)
-            .collect::<io::Result<Vec<_>>>()?;
+        let proofs = groth16::Proof::read_many(proof_bytes, num_proofs)?;
 
         ensure!(
             num_proofs == proofs.len(),

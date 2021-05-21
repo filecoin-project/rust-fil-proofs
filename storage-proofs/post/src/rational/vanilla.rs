@@ -304,7 +304,7 @@ mod tests {
     use typenum::{U0, U2, U8};
 
     use storage_proofs_core::{
-        hasher::{Blake2sHasher, Domain, Hasher, PedersenHasher, PoseidonHasher, Sha256Hasher},
+        hasher::{Blake2sHasher, Domain, Hasher, PoseidonHasher, Sha256Hasher},
         merkle::{generate_tree, get_base_tree_count, LCTree, MerkleTreeTrait},
     };
 
@@ -392,11 +392,6 @@ mod tests {
             .expect("verification failed");
 
         assert!(is_valid);
-    }
-
-    #[test]
-    fn rational_post_pedersen() {
-        test_rational_post::<LCTree<PedersenHasher, U8, U0, U0>>();
     }
 
     #[test]
@@ -524,11 +519,6 @@ mod tests {
     #[test]
     fn rational_post_actually_validates_challenge_identity_blake2s() {
         test_rational_post_validates_challenge_identity::<LCTree<Blake2sHasher, U8, U0, U0>>();
-    }
-
-    #[test]
-    fn rational_post_actually_validates_challenge_identity_pedersen() {
-        test_rational_post_validates_challenge_identity::<LCTree<PedersenHasher, U8, U0, U0>>();
     }
 
     #[test]

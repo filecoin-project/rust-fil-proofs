@@ -1,3 +1,4 @@
+use bellperson::bls::Bls12;
 use bellperson::gadgets::boolean::{self, Boolean};
 use bellperson::groth16::*;
 use bellperson::util_cs::bench_cs::BenchCS;
@@ -5,7 +6,6 @@ use bellperson::{Circuit, ConstraintSystem, SynthesisError};
 use criterion::{
     black_box, criterion_group, criterion_main, Criterion, ParameterizedBenchmark, Throughput,
 };
-use paired::bls12_381::Bls12;
 use rand::{thread_rng, Rng};
 use sha2::{Digest, Sha256};
 

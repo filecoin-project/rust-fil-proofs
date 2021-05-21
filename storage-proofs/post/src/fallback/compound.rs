@@ -1,8 +1,8 @@
 use std::marker::PhantomData;
 
 use anyhow::{anyhow, ensure};
+use bellperson::bls::{Bls12, Fr};
 use bellperson::Circuit;
-use paired::bls12_381::{Bls12, Fr};
 
 use storage_proofs_core::{
     compound_proof::{CircuitComponent, CompoundProof},
@@ -73,7 +73,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait>
                     pub_inputs.randomness,
                     sector.id.into(),
                     challenge_index,
-                )?;
+                );
 
                 let por_pub_inputs = por::PublicInputs {
                     commitment: None,
@@ -168,19 +168,13 @@ mod tests {
     use rand_xorshift::XorShiftRng;
     use storage_proofs_core::{
         compound_proof,
-        hasher::{Domain, HashFunction, Hasher, PedersenHasher, PoseidonHasher},
+        hasher::{Domain, HashFunction, Hasher, PoseidonHasher},
         merkle::{generate_tree, get_base_tree_count, LCTree, MerkleTreeTrait},
     };
 
     use crate::fallback::{
         self, ChallengeRequirements, PrivateInputs, PrivateSector, PublicInputs, PublicSector,
     };
-
-    #[ignore]
-    #[test]
-    fn fallback_post_pedersen_single_partition_matching_base_8() {
-        fallback_post::<LCTree<PedersenHasher, U8, U0, U0>>(3, 3, 1);
-    }
 
     #[ignore]
     #[test]

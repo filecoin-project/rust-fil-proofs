@@ -1,9 +1,8 @@
 use crate::error;
 use anyhow::ensure;
 use bellperson::gadgets::boolean::{self, AllocatedBit, Boolean};
-use bellperson::{ConstraintSystem, SynthesisError};
+use bellperson::{bls::Engine, ConstraintSystem, SynthesisError};
 use merkletree::merkle::get_merkle_tree_row_count;
-use paired::Engine;
 
 use super::settings;
 
@@ -163,10 +162,7 @@ pub fn default_rows_to_discard(leafs: usize, arity: usize) -> usize {
 
     // This configurable setting is for a default oct-tree
     // rows_to_discard value, which defaults to 2.
-    let rows_to_discard = settings::SETTINGS
-        .lock()
-        .expect("rows_to_discard settings lock failure")
-        .rows_to_discard as usize;
+    let rows_to_discard = settings::SETTINGS.rows_to_discard as usize;
 
     // Discard at most 'constant value' rows (coded below,
     // differing by arity) while respecting the max number that
@@ -183,10 +179,10 @@ mod tests {
     use super::*;
 
     use crate::fr32::fr_into_bytes;
+    use bellperson::bls::*;
     use bellperson::gadgets::num;
     use bellperson::util_cs::test_cs::TestConstraintSystem;
     use ff::Field;
-    use paired::bls12_381::*;
     use rand::{Rng, SeedableRng};
     use rand_xorshift::XorShiftRng;
 

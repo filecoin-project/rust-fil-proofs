@@ -3,10 +3,10 @@ use std::fmt;
 use std::marker::PhantomData;
 
 use anyhow::{bail, ensure, Context};
+use bellperson::bls::Fr;
 use byteorder::{ByteOrder, LittleEndian};
 use generic_array::typenum;
 use log::trace;
-use paired::bls12_381::Fr;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -455,7 +455,7 @@ mod tests {
     use typenum::{U0, U2, U8};
 
     use storage_proofs_core::{
-        hasher::{PedersenHasher, PoseidonHasher},
+        hasher::PoseidonHasher,
         merkle::{generate_tree, get_base_tree_count, LCTree},
     };
 
@@ -521,11 +521,6 @@ mod tests {
             .expect("verification failed");
 
         assert!(is_valid);
-    }
-
-    #[test]
-    fn election_post_pedersen() {
-        test_election_post::<LCTree<PedersenHasher, U8, U0, U0>>();
     }
 
     #[test]

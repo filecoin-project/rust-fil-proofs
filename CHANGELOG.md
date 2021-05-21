@@ -7,6 +7,53 @@ and this project adheres to [Semantic Versioning](https://book.async.rs/overview
 
 ## Unreleased
 
+## 5.3.0 - 2020-10-29
+
+- Integrate blst backend and proof verification optimizations [#1332](https://github.com/filecoin-project/rust-fil-proofs/pull/1332)
+- Remove unused pedersen hasher [#1331](https://github.com/filecoin-project/rust-fil-proofs/pull/1331)
+- Sanity check commitments [#1330](https://github.com/filecoin-project/rust-fil-proofs/pull/1330)
+- Install hwloc to fix metrics capture on CI [#1328](https://github.com/filecoin-project/rust-fil-proofs/pull/1328)
+- Remove no longer used exports [#1315](https://github.com/filecoin-project/rust-fil-proofs/pull/1315)
+- Add tests for resumable sealing [#1309](https://github.com/filecoin-project/rust-fil-proofs/pull/1309)
+- Add circuitinfo CLI tool to count circuit constraints [#1325](https://github.com/filecoin-project/rust-fil-proofs/pull/1325)
+- Remove mutex from settings access [#1321](https://github.com/filecoin-project/rust-fil-proofs/pull/1321)
+- Add SECURITY.md [#1317](https://github.com/filecoin-project/rust-fil-proofs/pull/1317)
+- Update hwloc dependency for CI [#1316](https://github.com/filecoin-project/rust-fil-proofs/pull/1316)
+
+## 5.2.3 - 2020-10-13
+
+- Update neptune dependency version
+
+## 5.2.2 - 2020-10-13
+
+- Add notes about param and cache verification [#1313](https://github.com/filecoin-project/rust-fil-proofs/pull/1313)
+- Update incorrect log message [#1312](https://github.com/filecoin-project/rust-fil-proofs/pull/1312)
+- Bind threads to cores in multicore SDR [#1305](https://github.com/filecoin-project/rust-fil-proofs/pull/1305)
+- Add hwloc dependency to CI [#1307](https://github.com/filecoin-project/rust-fil-proofs/pull/1307)
+
+## 5.2.1 - 2020-10-01
+
+- Pin neptune to version 1.2.x [#1302](https://github.com/filecoin-project/rust-fil-proofs/pull/1302)
+- Add correct sizes for metrics capture CI [#1301](https://github.com/filecoin-project/rust-fil-proofs/pull/1301)
+- Ensure all PoSt code paths are tested [#1299](https://github.com/filecoin-project/rust-fil-proofs/pull/1299)
+- Add byte_unit dep for handling benchy input sizes [#1297](https://github.com/filecoin-project/rust-fil-proofs/pull/1297)
+- Implement prefetch macro for aarch64 [#1294](https://github.com/filecoin-project/rust-fil-proofs/pull/1294)
+
+## 5.2.0 - 2020-09-28
+
+- Add Seal resume by skipping existing layers [#1292](https://github.com/filecoin-project/rust-fil-proofs/pull/1292)
+- Use two producers in all layers [#1296](https://github.com/filecoin-project/rust-fil-proofs/pull/1296)
+- Re-export some methods that moved for api access [#1291](https://github.com/filecoin-project/rust-fil-proofs/pull/1291)
+- Update rustc to 1.46.0 [#1290](https://github.com/filecoin-project/rust-fil-proofs/pull/1290)
+- Optimize Phase 1 (Replication) [#1289](https://github.com/filecoin-project/rust-fil-proofs/pull/1289)
+- Add Seal resume testing to the Window PoSt bench [#1288](https://github.com/filecoin-project/rust-fil-proofs/pull/1288)
+- Add labeling test vectors [#1285](https://github.com/filecoin-project/rust-fil-proofs/pull/1285)
+- Remove artificial requirement that sector count be 1 for single vanilla proof [#1283](https://github.com/filecoin-project/rust-fil-proofs/pull/1283)
+- Add Parent Cache and parameter verification and settings to enable [#1265](https://github.com/filecoin-project/rust-fil-proofs/pull/1265)
+- Improve SectorId logging [#1280](https://github.com/filecoin-project/rust-fil-proofs/pull/1280)
+- Split up Window PoSt API into separate calls [#1278](https://github.com/filecoin-project/rust-fil-proofs/pull/1278)
+- Destructure settings [#1273](https://github.com/filecoin-project/rust-fil-proofs/pull/1273)
+
 ## 5.1.4 - 2020-09-08
 
 - Add FaultySectors error to Fallback PoSt [#1274](https://github.com/filecoin-project/rust-fil-proofs/pull/1274)
@@ -124,7 +171,12 @@ and this project adheres to [Semantic Versioning](https://book.async.rs/overview
 
 - Initial stable release
 
-[Unreleased]: https://github.com/filecoin-project/rust-fil-proofs/compare/v5.1.4...HEAD
+[Unreleased]: https://github.com/filecoin-project/rust-fil-proofs/compare/v5.3.0...HEAD
+[5.3.0]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v5.3.0
+[5.2.3]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v5.2.3
+[5.2.2]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v5.2.2
+[5.2.1]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v5.2.1
+[5.2.0]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v5.2.0
 [5.1.4]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v5.1.4
 [5.1.3]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v5.1.3
 [5.1.2]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v5.1.2

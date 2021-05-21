@@ -129,10 +129,7 @@ where
     /// Returns a reference to the parent cache.
     pub fn parent_cache(&self) -> Result<ParentCache> {
         // Number of nodes to be cached in memory
-        let default_cache_size = settings::SETTINGS
-            .lock()
-            .expect("sdr_parents_cache_size settings lock failure")
-            .sdr_parents_cache_size;
+        let default_cache_size = settings::SETTINGS.sdr_parents_cache_size;
         let cache_entries = self.size() as u32;
         let cache_size = cache_entries.min(default_cache_size);
 
@@ -140,7 +137,6 @@ where
 
         ParentCache::new(cache_size, cache_entries, self)
     }
-
     pub fn copy_parents_data_exp(
         &self,
         node: u32,

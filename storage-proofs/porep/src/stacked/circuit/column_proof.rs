@@ -1,5 +1,5 @@
+use bellperson::bls::Bls12;
 use bellperson::{ConstraintSystem, SynthesisError};
-use paired::bls12_381::Bls12;
 use storage_proofs_core::{
     drgraph::Graph,
     gadgets::por::AuthPath,

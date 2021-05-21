@@ -1,3 +1,4 @@
+use bellperson::bls::{Bls12, Fr, FrRepr};
 use bellperson::gadgets::{boolean, num};
 use bellperson::{ConstraintSystem, SynthesisError};
 use generic_array::typenum::{U0, U11, U16, U2, U24, U36, U4, U5, U8};
@@ -5,7 +6,6 @@ use lazy_static::lazy_static;
 use merkletree::hash::{Algorithm as LightAlgorithm, Hashable as LightHashable};
 use merkletree::merkle::Element;
 use neptune::poseidon::PoseidonConstants;
-use paired::bls12_381::{Bls12, Fr, FrRepr};
 use serde::de::DeserializeOwned;
 use serde::ser::Serialize;
 

@@ -103,7 +103,7 @@ fn subtree_capacity(pos: usize, total: usize) -> Result<usize> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::hasher::PedersenHasher;
+    use crate::hasher::PoseidonHasher;
 
     #[test]
     fn test_subtree_capacity() {
@@ -129,13 +129,13 @@ mod tests {
     fn test_generate_piece_commitment_bytes_from_source() -> Result<()> {
         let some_bytes: Vec<u8> = vec![0; 64];
         let mut some_bytes_slice: &[u8] = &some_bytes;
-        generate_piece_commitment_bytes_from_source::<PedersenHasher>(&mut some_bytes_slice, 64)
+        generate_piece_commitment_bytes_from_source::<PoseidonHasher>(&mut some_bytes_slice, 64)
             .expect("threshold for sufficient bytes is 32");
 
         let not_enough_bytes: Vec<u8> = vec![0; 7];
         let mut not_enough_bytes_slice: &[u8] = &not_enough_bytes;
         assert!(
-            generate_piece_commitment_bytes_from_source::<PedersenHasher>(
+            generate_piece_commitment_bytes_from_source::<PoseidonHasher>(
                 &mut not_enough_bytes_slice,
                 7
             )

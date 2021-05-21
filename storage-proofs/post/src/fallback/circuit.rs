@@ -1,7 +1,7 @@
+use bellperson::bls::{Bls12, Fr};
 use bellperson::gadgets::num;
 use bellperson::{Circuit, ConstraintSystem, SynthesisError};
 use ff::Field;
-use paired::bls12_381::{Bls12, Fr};
 use rayon::prelude::*;
 
 use storage_proofs_core::{
@@ -186,10 +186,7 @@ impl<Tree: 'static + MerkleTreeTrait> FallbackPoStCircuit<Tree> {
     ) -> Result<(), SynthesisError> {
         let FallbackPoStCircuit { sectors, .. } = self;
 
-        let num_chunks = settings::SETTINGS
-            .lock()
-            .expect("window_post_synthesis_num_cpus settings lock failure")
-            .window_post_synthesis_num_cpus as usize;
+        let num_chunks = settings::SETTINGS.window_post_synthesis_num_cpus as usize;
 
         let chunk_size = (sectors.len() / num_chunks).max(1);
         let css = sectors
@@ -221,12 +218,11 @@ mod tests {
     use bellperson::util_cs::test_cs::TestConstraintSystem;
     use ff::Field;
     use generic_array::typenum::{U0, U2, U4, U8};
-    use paired::bls12_381::{Bls12, Fr};
     use rand::SeedableRng;
     use rand_xorshift::XorShiftRng;
     use storage_proofs_core::{
         compound_proof::CompoundProof,
-        hasher::{Domain, HashFunction, Hasher, PedersenHasher, PoseidonHasher},
+        hasher::{Domain, HashFunction, Hasher, PoseidonHasher},
         merkle::{generate_tree, get_base_tree_count, LCTree, MerkleTreeTrait, OctMerkleTree},
         proof::ProofScheme,
         util::NODE_SIZE,
@@ -236,11 +232,6 @@ mod tests {
         self, FallbackPoSt, FallbackPoStCompound, PrivateInputs, PrivateSector, PublicInputs,
         PublicSector,
     };
-
-    #[test]
-    fn fallback_post_pedersen_single_partition_matching_base_8() {
-        fallback_post::<LCTree<PedersenHasher, U8, U0, U0>>(3, 3, 1, 19, 293_439);
-    }
 
     #[test]
     fn fallback_post_poseidon_single_partition_matching_base_8() {

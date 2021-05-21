@@ -1,0 +1,22 @@
+{
+  "v28-sdr-parent-2aa9c77c3e58259481351cc4be2079cc71e1c9af39700866545c043bfa30fb42": {
+    "sector_size": 536870912,
+    "digest": "3adcc092423aa76d6a7184016893406da44dd974b219a89cd3ece25e4e3018f5"
+  },
+  "v28-sdr-parent-3f0eef38bb48af1f48ad65e14eb85b4ebfc167cec18cd81764f6d998836c9899": {
+    "sector_size": 2048,
+    "digest": "3da49221e2ed55371b86d0bf3d6526fcf128af61bed904f966428db1b531750d"
+  },
+  "v28-sdr-parent-8a99e8d6b6be7ab87a56b632e6739ff201c23ea14e99737c74690f0e265574d6": {
+    "sector_size": 68719476736,
+    "digest": "2778a732ad46a7dc18e0564dfdf59fd321dcde74ab476fd6d3c4e6735d7cd89c"
+  },
+  "v28-sdr-parent-dcdabb0fbe4364bf0ac28b6a18c66de246409fa1a9020a00f33fb3e3053da6dc": {
+    "sector_size": 8388608,
+    "digest": "a76604f2f59f2744c7151653bbb1d8596b6b57d295e6fa6c1f0c41d725b502ce"
+  },
+  "v28-sdr-parent-e1fa5d5b811ddbd118be3412c4a8c329156b8b8acc72632bca459455b5a05a13": {
+    "sector_size": 34359738368,
+    "digest": "3c4f9841fcc75aed8c695800e58d08480629f25af3a2aefd81904181d75cc0b6"
+  }
+}

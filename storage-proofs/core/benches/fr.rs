@@ -1,6 +1,6 @@
+use bellperson::bls::Fr;
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use ff::Field;
-use paired::bls12_381::Fr;
 use rand::thread_rng;
 use storage_proofs_core::fr32::{bytes_into_fr, fr_into_bytes};
 

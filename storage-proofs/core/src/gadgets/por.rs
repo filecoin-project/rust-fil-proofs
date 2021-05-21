@@ -2,12 +2,12 @@ use std::convert::TryFrom;
 use std::marker::PhantomData;
 
 use anyhow::ensure;
+use bellperson::bls::{Bls12, Fr, FrRepr};
 use bellperson::gadgets::boolean::{AllocatedBit, Boolean};
 use bellperson::gadgets::{multipack, num};
 use bellperson::{Circuit, ConstraintSystem, SynthesisError};
 use ff::PrimeField;
 use generic_array::typenum::Unsigned;
-use paired::bls12_381::{Bls12, Fr, FrRepr};
 
 use crate::compound_proof::{CircuitComponent, CompoundProof};
 use crate::error::Result;
@@ -453,9 +453,7 @@ mod tests {
 
     use crate::compound_proof;
     use crate::fr32::{bytes_into_fr, fr_into_bytes};
-    use crate::hasher::{
-        Blake2sHasher, Domain, Hasher, PedersenHasher, PoseidonHasher, Sha256Hasher,
-    };
+    use crate::hasher::{Blake2sHasher, Domain, Hasher, PoseidonHasher, Sha256Hasher};
     use crate::merkle::{
         create_base_merkle_tree, generate_tree, get_base_tree_count, MerkleProofTrait,
         MerkleTreeWrapper, ResTree,
@@ -541,11 +539,6 @@ mod tests {
     }
 
     #[test]
-    fn test_por_circuit_pedersen_base_2() {
-        test_por_circuit::<TestTree<PedersenHasher, typenum::U2>>(3, 8_247);
-    }
-
-    #[test]
     fn test_por_circuit_blake2s_base_2() {
         test_por_circuit::<TestTree<Blake2sHasher, typenum::U2>>(3, 129_135);
     }
@@ -561,32 +554,6 @@ mod tests {
     }
 
     #[test]
-    fn test_por_circuit_pedersen_base_4() {
-        test_por_circuit::<TestTree<PedersenHasher, typenum::U4>>(3, 12_399);
-    }
-
-    #[test]
-    fn test_por_circuit_pedersen_sub_8_2() {
-        test_por_circuit::<TestTree2<PedersenHasher, typenum::U8, typenum::U2>>(3, 20_663);
-    }
-
-    #[test]
-    fn test_por_circuit_pedersen_top_8_4_2() {
-        test_por_circuit::<TestTree3<PedersenHasher, typenum::U8, typenum::U4, typenum::U2>>(
-            3, 24_795,
-        );
-    }
-
-    #[test]
-    fn test_por_circuit_pedersen_top_8_2_4() {
-        // We can handle top-heavy trees with a non-zero subtree arity.
-        // These should never be produced, though.
-        test_por_circuit::<TestTree3<PedersenHasher, typenum::U8, typenum::U2, typenum::U4>>(
-            3, 24_795,
-        );
-    }
-
-    #[test]
     fn test_por_circuit_blake2s_base_4() {
         test_por_circuit::<TestTree<Blake2sHasher, typenum::U4>>(3, 130_296);
     }
@@ -599,11 +566,6 @@ mod tests {
     #[test]
     fn test_por_circuit_poseidon_base_4() {
         test_por_circuit::<TestTree<PoseidonHasher, typenum::U4>>(3, 1_164);
-    }
-
-    #[test]
-    fn test_por_circuit_pedersen_base_8() {
-        test_por_circuit::<TestTree<PedersenHasher, typenum::U8>>(3, 19_289);
     }
 
     #[test]
@@ -745,18 +707,6 @@ mod tests {
 
             assert!(cs.verify(&generated_inputs), "failed to verify inputs");
         }
-    }
-
-    #[ignore] // Slow test – run only when compiled for release.
-    #[test]
-    fn test_private_por_compound_pedersen_base_2() {
-        private_por_test_compound::<TestTree<PedersenHasher, typenum::U2>>();
-    }
-
-    #[ignore] // Slow test – run only when compiled for release.
-    #[test]
-    fn test_private_por_compound_pedersen_base_4() {
-        private_por_test_compound::<TestTree<PedersenHasher, typenum::U4>>();
     }
 
     #[ignore] // Slow test – run only when compiled for release.
@@ -908,18 +858,8 @@ mod tests {
     }
 
     #[test]
-    fn test_private_por_input_circuit_pedersen_binary() {
-        test_private_por_input_circuit::<TestTree<PedersenHasher, typenum::U2>>(8_246);
-    }
-
-    #[test]
     fn test_private_por_input_circuit_poseidon_binary() {
         test_private_por_input_circuit::<TestTree<PoseidonHasher, typenum::U2>>(1_886);
-    }
-
-    #[test]
-    fn test_private_por_input_circuit_pedersen_quad() {
-        test_private_por_input_circuit::<TestTree<PedersenHasher, typenum::U4>>(12_398);
     }
 
     #[test]

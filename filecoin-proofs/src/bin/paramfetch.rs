@@ -18,7 +18,7 @@ use tar::Archive;
 
 use filecoin_proofs::param::*;
 use storage_proofs::parameter_cache::{
-    parameter_cache_dir, parameter_cache_dir_name, GROTH_PARAMETER_EXT,
+    parameter_cache_dir, parameter_cache_dir_name, ParameterData, ParameterMap, GROTH_PARAMETER_EXT,
 };
 
 const ERROR_PARAMETER_FILE: &str = "failed to find file in cache";

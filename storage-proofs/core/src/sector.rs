@@ -1,9 +1,9 @@
 use std::collections::BTreeSet;
 use std::fmt;
 
+use bellperson::bls::{Fr, FrRepr};
 use byteorder::ByteOrder;
 use ff::PrimeField;
-use paired::bls12_381::{Fr, FrRepr};
 use serde::{Deserialize, Serialize};
 
 /// An ordered set of `SectorId`s.

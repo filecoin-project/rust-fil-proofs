@@ -1,10 +1,10 @@
 use std::marker::PhantomData;
 
+use bellperson::bls::{Bls12, Fr};
 use bellperson::gadgets::num;
 use bellperson::{Circuit, ConstraintSystem, SynthesisError};
 use ff::Field;
 use generic_array::typenum;
-use paired::bls12_381::{Bls12, Fr};
 use typenum::marker_traits::Unsigned;
 
 use storage_proofs_core::{
@@ -178,14 +178,14 @@ mod tests {
 
     use std::collections::BTreeMap;
 
+    use bellperson::bls::{Bls12, Fr};
     use bellperson::util_cs::test_cs::TestConstraintSystem;
     use ff::Field;
-    use paired::bls12_381::{Bls12, Fr};
     use rand::SeedableRng;
     use rand_xorshift::XorShiftRng;
     use storage_proofs_core::{
         compound_proof::CompoundProof,
-        hasher::{Domain, HashFunction, Hasher, PedersenHasher, PoseidonHasher},
+        hasher::{Domain, HashFunction, Hasher, PoseidonHasher},
         merkle::{generate_tree, get_base_tree_count, LCTree, MerkleTreeTrait},
         proof::ProofScheme,
         sector::SectorId,
@@ -194,11 +194,6 @@ mod tests {
     use typenum::{U0, U8};
 
     use crate::election::{self, ElectionPoSt, ElectionPoStCompound};
-
-    #[test]
-    fn test_election_post_circuit_pedersen() {
-        test_election_post_circuit::<LCTree<PedersenHasher, U8, U0, U0>>(388_520);
-    }
 
     #[test]
     fn test_election_post_circuit_poseidon() {

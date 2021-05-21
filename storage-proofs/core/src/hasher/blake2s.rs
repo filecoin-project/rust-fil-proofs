@@ -2,13 +2,13 @@ use std::fmt;
 use std::hash::Hasher as StdHasher;
 
 use anyhow::ensure;
+use bellperson::bls::{Bls12, Fr, FrRepr};
 use bellperson::gadgets::{blake2s as blake2s_circuit, boolean, num};
 use bellperson::{ConstraintSystem, SynthesisError};
 use blake2s_simd::{Hash as Blake2sHash, Params as Blake2s, State};
 use ff::{Field, PrimeField, PrimeFieldRepr};
 use merkletree::hash::{Algorithm, Hashable};
 use merkletree::merkle::Element;
-use paired::bls12_381::{Bls12, Fr, FrRepr};
 use rand::RngCore;
 use serde::{Deserialize, Serialize};
 

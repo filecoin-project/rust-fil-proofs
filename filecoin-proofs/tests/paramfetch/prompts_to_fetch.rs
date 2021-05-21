@@ -8,8 +8,8 @@ use failure::Error as FailureError;
 use crate::paramfetch::support::session::ParamFetchSessionBuilder;
 use crate::support::tmp_manifest;
 use blake2b_simd::State as Blake2b;
-use filecoin_proofs::param::{ParameterData, ParameterMap};
 use rand::Rng;
+use storage_proofs::parameter_cache::{ParameterData, ParameterMap};
 
 /// Produce a random sequence of bytes and first 32 characters of hex encoded
 /// BLAKE2b checksum. This helper function must be kept up-to-date with the
@@ -186,7 +186,7 @@ fn invalid_json_produces_error() -> Result<(), FailureError> {
 
 #[test]
 fn no_json_path_uses_default_manifest() -> Result<(), FailureError> {
-    let file = File::open("parameters.json")?;
+    let file = File::open("../storage-proofs/parameters.json")?;
     let reader = BufReader::new(file);
     let manifest: ParameterMap = serde_json::from_reader(reader)?;
 

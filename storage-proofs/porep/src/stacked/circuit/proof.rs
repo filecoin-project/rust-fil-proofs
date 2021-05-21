@@ -1,9 +1,9 @@
 use std::marker::PhantomData;
 
 use anyhow::ensure;
+use bellperson::bls::{Bls12, Fr};
 use bellperson::gadgets::num;
 use bellperson::{Circuit, ConstraintSystem, SynthesisError};
-use paired::bls12_381::{Bls12, Fr};
 use storage_proofs_core::{
     compound_proof::{CircuitComponent, CompoundProof},
     drgraph::Graph,
@@ -352,7 +352,7 @@ mod tests {
         compound_proof,
         drgraph::BASE_DEGREE,
         fr32::fr_into_bytes,
-        hasher::{Hasher, PedersenHasher, PoseidonHasher, Sha256Hasher},
+        hasher::{Hasher, PoseidonHasher, Sha256Hasher},
         merkle::{get_base_tree_count, DiskTree, MerkleTreeTrait},
         proof::ProofScheme,
         test_helper::setup_replica,
@@ -364,11 +364,6 @@ mod tests {
         TemporaryAux, TemporaryAuxCache, BINARY_ARITY, EXP_DEGREE,
     };
     use crate::PoRep;
-
-    #[test]
-    fn stacked_input_circuit_pedersen_base_2() {
-        stacked_input_circuit::<DiskTree<PedersenHasher, U2, U0, U0>>(22, 1_258_152);
-    }
 
     #[test]
     fn stacked_input_circuit_poseidon_base_2() {
@@ -533,12 +528,6 @@ mod tests {
         );
 
         cache_dir.close().expect("Failed to remove cache dir");
-    }
-
-    #[test]
-    #[ignore]
-    fn test_stacked_compound_pedersen() {
-        stacked_test_compound::<DiskTree<PedersenHasher, U2, U0, U0>>();
     }
 
     #[test]

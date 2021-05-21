@@ -1,7 +1,6 @@
 use bellperson::gadgets::{boolean::Boolean, num, sha256::sha256 as sha256_circuit, uint32};
-use bellperson::{ConstraintSystem, SynthesisError};
+use bellperson::{bls::Engine, ConstraintSystem, SynthesisError};
 use ff::PrimeField;
-use fil_sapling_crypto::jubjub::JubjubEngine;
 use storage_proofs_core::{gadgets::multipack, gadgets::uint64, util::reverse_bit_numbering};
 
 use crate::stacked::vanilla::TOTAL_PARENTS;
@@ -15,7 +14,7 @@ pub fn create_label_circuit<E, CS>(
     node: uint64::UInt64,
 ) -> Result<num::AllocatedNum<E>, SynthesisError>
 where
-    E: JubjubEngine,
+    E: Engine,
     CS: ConstraintSystem<E>,
 {
     assert!(replica_id.len() >= 32, "replica id is too small");
@@ -68,10 +67,10 @@ where
 mod tests {
     use super::*;
 
+    use bellperson::bls::{Bls12, Fr};
     use bellperson::gadgets::boolean::Boolean;
     use bellperson::util_cs::test_cs::TestConstraintSystem;
     use ff::Field;
-    use paired::bls12_381::{Bls12, Fr};
     use rand::SeedableRng;
     use rand_xorshift::XorShiftRng;
     use storage_proofs_core::{
@@ -82,9 +81,7 @@ mod tests {
         util::{data_at_node, NODE_SIZE},
     };
 
-    use crate::stacked::vanilla::{
-        create_label_exp, StackedBucketGraph, EXP_DEGREE, TOTAL_PARENTS,
-    };
+    use crate::stacked::vanilla::{create_label, StackedBucketGraph, EXP_DEGREE, TOTAL_PARENTS};
 
     #[test]
     fn test_create_label() {
@@ -167,7 +164,17 @@ mod tests {
         assert_eq!(cs.num_constraints(), 532_025);
 
         let (l1, l2) = data.split_at_mut(size * NODE_SIZE);
-        create_label_exp(&graph, None, &id_fr.into(), &*l2, l1, layer, node).unwrap();
+        create_label::single::create_label_exp(
+            &graph,
+            None,
+            fr_into_bytes(&id_fr),
+            &*l2,
+            l1,
+            layer,
+            node,
+        )
+        .unwrap();
+
         let expected_raw = data_at_node(&l1, node).unwrap();
         let expected = bytes_into_fr(expected_raw).unwrap();
 

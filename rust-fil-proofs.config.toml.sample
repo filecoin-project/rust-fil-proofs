@@ -3,8 +3,6 @@
 # The location to store downloaded parameter files required for proofs.
 parameter_cache = "/var/tmp/filecoin-proofs-parameters/"
 
-# This enables the use of the parent cache to help speed-up runtime.
-maximize_caching = true
 # The location to store the on-disk parents cache.
 parent_cache = "/var/tmp/filecoin-parents"
 # The max number of parent cache elements to have mapped in RAM at a time.
@@ -33,8 +31,5 @@ rows_to_discard = 2
 # This value is defaulted to the number of cores available on your system.
 #window_post_synthesis_num_cpus = 8
 
-# Window size for pedersen hashing.
-pedersen_hash_exp_window_size = 16
-
-# This enables accelerate snark verification
-use_fil_blst = false
+# This enables multicore SDR replication
+use_multicore_sdr = false

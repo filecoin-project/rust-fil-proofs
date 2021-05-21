@@ -9,6 +9,7 @@ use std::sync::mpsc::{channel, TryRecvError};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
+use bellperson::bls::{Bls12, G1Affine, G1Uncompressed, G2Affine, G2Uncompressed};
 use bellperson::groth16;
 use byteorder::{BigEndian, ReadBytesExt};
 use clap::{App, AppSettings, Arg, ArgGroup, SubCommand};
@@ -22,7 +23,6 @@ use filecoin_proofs::types::{
 use filecoin_proofs::with_shape;
 use groupy::{CurveAffine, EncodedPoint};
 use log::{error, info, warn};
-use paired::bls12_381::{Bls12, G1Affine, G1Uncompressed, G2Affine, G2Uncompressed};
 use phase2::small::{read_small_params_from_large_file, MPCSmall, Streamer};
 use phase2::MPCParameters;
 use rand::rngs::OsRng;
@@ -32,7 +32,9 @@ use simplelog::{self, CombinedLogger, LevelFilter, TermLogger, TerminalMode, Wri
 use storage_proofs::compound_proof::{self, CompoundProof};
 use storage_proofs::hasher::Sha256Hasher;
 use storage_proofs::merkle::MerkleTreeTrait;
-use storage_proofs::parameter_cache::{self, CacheableParameters};
+use storage_proofs::parameter_cache::{
+    self, metadata_id, parameter_id, verifying_key_id, CacheableParameters,
+};
 use storage_proofs::porep::stacked::{
     PublicParams as PoRepPublicParams, StackedCircuit, StackedCompound, StackedDrg,
 };
@@ -89,7 +91,6 @@ impl Proof {
 #[derive(Clone, Copy, Debug, PartialEq)]
 enum Hasher {
     Poseidon,
-    // ShaPedersen,
 }
 
 impl Hasher {
@@ -99,7 +100,6 @@ impl Hasher {
     fn pretty_print(&self) -> &str {
         match self {
             Hasher::Poseidon => "Poseidon",
-            // Hasher::ShaPedersen => "SHA-Pederson",
         }
     }
 
@@ -107,7 +107,6 @@ impl Hasher {
     fn lowercase(&self) -> &str {
         match self {
             Hasher::Poseidon => "poseidon",
-            // Hasher::ShaPedersen => "shapederson",
         }
     }
 }
@@ -248,7 +247,6 @@ fn parse_params_filename(path: &str) -> (Proof, Hasher, Sector, String, usize, P
 
     let hasher = match split[1] {
         "poseidon" => Hasher::Poseidon,
-        // "shapedersen" => Hasher::ShaPedersen,
         other => panic!("invalid hasher name in params filename: {}", other),
     };
 
@@ -326,41 +324,6 @@ fn blank_sdr_poseidon_params<Tree: MerkleTreeTrait>(sector_size: u64) -> PoRepPu
     .expect("public param setup failed");
     public_params.vanilla_params
 }
-
-/*
-fn blank_porep_sha_pedersen_circuit(
-    sector_size: u64,
-) -> StackedCircuit<'static, PedersenHasher, Sha256Hasher> {
-    let	n_partitions = *POREP_PARTITIONS.read().unwrap().get(&sector_size).unwrap();
-
-    let porep_config = PoRepConfig {
-        sector_size: SectorSize(sector_size),
-        partitions: PoRepProofPartitions(n_partitions),
-    };
-
-    let setup_params = compound_proof::SetupParams {
-        vanilla_params: setup_params(
-            PaddedBytesAmount::from(porep_config),
-            usize::from(PoRepProofPartitions::from(porep_config)),
-        )
-        .unwrap(),
-        partitions: Some(usize::from(PoRepProofPartitions::from(porep_config))),
-        priority: false,
-    };
-
-    let public_params =
-        <StackedCompound<PedersenHasher, Sha256Hasher> as CompoundProof<_, StackedDrg<PedersenHasher, Sha256Hasher>, _>>::setup(
-            &setup_params,
-        )
-        .unwrap();
-
-    <StackedCompound<PedersenHasher, Sha256Hasher> as CompoundProof<
-        _,
-        StackedDrg<PedersenHasher, Sha256Hasher>,
-        _,
-    >>::blank_circuit(&public_params.vanilla_params)
-}
-*/
 
 fn blank_winning_post_poseidon_params<Tree: 'static + MerkleTreeTrait>(
     sector_size: u64,

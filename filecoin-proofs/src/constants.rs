@@ -6,7 +6,6 @@ use storage_proofs::hasher::Hasher;
 use storage_proofs::util::NODE_SIZE;
 use typenum::{U0, U2, U8};
 
-use crate::param::{ParameterData, ParameterMap};
 use crate::types::UnpaddedBytesAmount;
 
 pub const SECTOR_SIZE_2_KIB: u64 = 1 << 11;
@@ -30,7 +29,19 @@ pub const WINDOW_POST_CHALLENGE_COUNT: usize = 10;
 pub const DRG_DEGREE: usize = storage_proofs::drgraph::BASE_DEGREE;
 pub const EXP_DEGREE: usize = storage_proofs::porep::stacked::EXP_DEGREE;
 
-pub const PARAMETERS_DATA: &str = include_str!("../parameters.json");
+/// Sector sizes for which parameters have been published.
+pub const PUBLISHED_SECTOR_SIZES: [u64; 10] = [
+    SECTOR_SIZE_2_KIB,
+    SECTOR_SIZE_4_KIB,
+    SECTOR_SIZE_16_KIB,
+    SECTOR_SIZE_32_KIB,
+    SECTOR_SIZE_8_MIB,
+    SECTOR_SIZE_16_MIB,
+    SECTOR_SIZE_512_MIB,
+    SECTOR_SIZE_1_GIB,
+    SECTOR_SIZE_32_GIB,
+    SECTOR_SIZE_64_GIB,
+];
 
 /// Sector sizes for which parameters have been published.
 pub const PUBLISHED_SECTOR_SIZES: [u64; 11] = [
@@ -49,8 +60,6 @@ pub const PUBLISHED_SECTOR_SIZES: [u64; 11] = [
 
 
 lazy_static! {
-    pub static ref PARAMETERS: ParameterMap =
-        serde_json::from_str(PARAMETERS_DATA).expect("Invalid parameters.json");
     pub static ref POREP_MINIMUM_CHALLENGES: RwLock<HashMap<u64, u64>> = RwLock::new(
         [
             (SECTOR_SIZE_2_KIB, 2),
@@ -208,40 +217,9 @@ pub fn is_sector_shape_top2(sector_size: u64) -> bool {
 }
 
 pub use storage_proofs::merkle::{DiskTree, LCTree};
-
-/// Get the correct parameter data for a given cache id.
-pub fn get_parameter_data(cache_id: &str) -> Option<&ParameterData> {
-    PARAMETERS.get(&parameter_id(cache_id))
-}
-
-pub fn parameter_id(cache_id: &str) -> String {
-    format!(
-        "v{}-{}.params",
-        storage_proofs::parameter_cache::VERSION,
-        cache_id
-    )
-}
-
-/// Get the correct verifying key data for a given cache id.
-pub fn get_verifying_key_data(cache_id: &str) -> Option<&ParameterData> {
-    PARAMETERS.get(&verifying_key_id(cache_id))
-}
-
-pub fn verifying_key_id(cache_id: &str) -> String {
-    format!(
-        "v{}-{}.vk",
-        storage_proofs::parameter_cache::VERSION,
-        cache_id
-    )
-}
-
-pub fn metadata_id(cache_id: &str) -> String {
-    format!(
-        "v{}-{}.meta",
-        storage_proofs::parameter_cache::VERSION,
-        cache_id
-    )
-}
+pub use storage_proofs::parameter_cache::{
+    get_parameter_data, get_parameter_data_from_id, get_verifying_key_data,
+};
 
 /// Calls a function with the type hint of the sector shape matching the provided sector.
 /// Panics if provided with an unknown sector size.

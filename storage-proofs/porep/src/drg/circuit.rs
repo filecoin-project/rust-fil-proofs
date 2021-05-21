@@ -1,5 +1,6 @@
 use std::marker::PhantomData;
 
+use bellperson::bls::{Bls12, Engine, Fr};
 use bellperson::gadgets::{
     boolean::Boolean,
     sha256::sha256 as sha256_circuit,
@@ -7,8 +8,6 @@ use bellperson::gadgets::{
 };
 use bellperson::{Circuit, ConstraintSystem, SynthesisError};
 use ff::PrimeField;
-use fil_sapling_crypto::jubjub::JubjubEngine;
-use paired::bls12_381::{Bls12, Fr};
 
 use storage_proofs_core::{
     compound_proof::CircuitComponent, error::Result, gadgets::constraint, gadgets::encode,
@@ -258,7 +257,7 @@ fn kdf<E, CS>(
     node: Option<uint64::UInt64>,
 ) -> Result<num::AllocatedNum<E>, SynthesisError>
 where
-    E: JubjubEngine,
+    E: Engine,
     CS: ConstraintSystem<E>,
 {
     // ciphertexts will become a buffer of the layout
@@ -317,7 +316,7 @@ mod tests {
         compound_proof,
         drgraph::{graph_height, BucketGraph, BASE_DEGREE},
         fr32::{bytes_into_fr, fr_into_bytes},
-        hasher::PedersenHasher,
+        hasher::PoseidonHasher,
         merkle::MerkleProofTrait,
         proof::ProofScheme,
         test_helper::setup_replica,
@@ -374,9 +373,9 @@ mod tests {
             challenges_count: 1,
         };
 
-        let pp = drg::DrgPoRep::<PedersenHasher, BucketGraph<_>>::setup(&sp)
+        let pp = drg::DrgPoRep::<PoseidonHasher, BucketGraph<_>>::setup(&sp)
             .expect("failed to create drgporep setup");
-        let (tau, aux) = drg::DrgPoRep::<PedersenHasher, _>::replicate(
+        let (tau, aux) = drg::DrgPoRep::<PoseidonHasher, _>::replicate(
             &pp,
             &replica_id.into(),
             (mmapped_data.as_mut()).into(),
@@ -392,17 +391,17 @@ mod tests {
             tau: Some(tau),
         };
 
-        let priv_inputs = drg::PrivateInputs::<PedersenHasher> {
+        let priv_inputs = drg::PrivateInputs::<PoseidonHasher> {
             tree_d: &aux.tree_d,
             tree_r: &aux.tree_r,
             tree_r_config_rows_to_discard: default_rows_to_discard(nodes, BINARY_ARITY),
         };
 
-        let proof_nc = drg::DrgPoRep::<PedersenHasher, _>::prove(&pp, &pub_inputs, &priv_inputs)
+        let proof_nc = drg::DrgPoRep::<PoseidonHasher, _>::prove(&pp, &pub_inputs, &priv_inputs)
             .expect("failed to prove");
 
         assert!(
-            drg::DrgPoRep::<PedersenHasher, _>::verify(&pp, &pub_inputs, &proof_nc)
+            drg::DrgPoRep::<PoseidonHasher, _>::verify(&pp, &pub_inputs, &proof_nc)
                 .expect("failed to verify"),
             "failed to verify (non circuit)"
         );
@@ -446,7 +445,7 @@ mod tests {
         );
 
         let mut cs = TestConstraintSystem::<Bls12>::new();
-        DrgPoRepCircuit::<PedersenHasher>::synthesize(
+        DrgPoRepCircuit::<PoseidonHasher>::synthesize(
             cs.namespace(|| "drgporep"),
             vec![replica_node],
             vec![replica_node_path],
@@ -470,7 +469,7 @@ mod tests {
 
         assert!(cs.is_satisfied(), "constraints not satisfied");
         assert_eq!(cs.num_inputs(), 18, "wrong number of inputs");
-        assert_eq!(cs.num_constraints(), 149_580, "wrong number of constraints");
+        assert_eq!(cs.num_constraints(), 115_660, "wrong number of constraints");
 
         assert_eq!(cs.get_input(0, "ONE"), Fr::one());
 
@@ -513,7 +512,7 @@ mod tests {
         let tree_depth = graph_height::<typenum::U2>(n);
 
         let mut cs = TestConstraintSystem::<Bls12>::new();
-        DrgPoRepCircuit::<PedersenHasher>::synthesize(
+        DrgPoRepCircuit::<PoseidonHasher>::synthesize(
             cs.namespace(|| "drgporep"),
             vec![Some(Fr::random(rng)); 1],
             vec![vec![(vec![Some(Fr::random(rng))], Some(0)); tree_depth]; 1],
@@ -529,6 +528,6 @@ mod tests {
         .expect("failed to synthesize circuit");
 
         assert_eq!(cs.num_inputs(), 18, "wrong number of inputs");
-        assert_eq!(cs.num_constraints(), 391_404, "wrong number of constraints");
+        assert_eq!(cs.num_constraints(), 170_924, "wrong number of constraints");
     }
 }
