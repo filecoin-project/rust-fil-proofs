@@ -1654,7 +1654,6 @@ mod tests {
         assert_eq!(data, decoded_data);
 
         cache_dir.close().expect("Failed to remove cache dir");
-        println!("layer all takse {:?}", start_program.elapsed());
     }
 
     fn prove_verify_fixed(n: usize) {
