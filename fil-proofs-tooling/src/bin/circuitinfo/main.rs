@@ -5,7 +5,7 @@ use structopt::StructOpt;
 
 use bellperson::util_cs::bench_cs::BenchCS;
 use bellperson::{Circuit};
-use paired::bls12_381::Bls12;
+use bellperson::bls::Bls12;
 use filecoin_proofs::constants::*;
 use filecoin_proofs::parameters::{
     public_params, window_post_public_params, winning_post_public_params,

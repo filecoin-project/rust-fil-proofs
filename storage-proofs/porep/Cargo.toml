@@ -28,7 +28,7 @@ log = "0.4.7"
 pretty_assertions = "0.6.1"
 generic-array = "0.14.4"
 anyhow = "1.0.23"
-neptune = { git = "https://github.com/filestar-project/neptune.git", version = "1.2.3", features = ["gpu"] }
+neptune = { git = "https://github.com/filestar-project/neptune.git", tag = "v2.1.1", version = "2.1.1", default-features = false, features = ["gpu"] }
 num_cpus = "1.10.1"
 hex = "0.4.2"
 bincode = "1.1.2"
