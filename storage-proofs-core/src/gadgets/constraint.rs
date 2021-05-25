@@ -52,10 +52,10 @@ pub fn add<E: Engine, CS: ConstraintSystem<E>>(
     let res = AllocatedNum::alloc(cs.namespace(|| "add_num"), || {
         let mut tmp = a
             .get_value()
-            .ok_or_else(|| SynthesisError::AssignmentMissing)?;
+            .ok_or(SynthesisError::AssignmentMissing)?;
         tmp.add_assign(
             &b.get_value()
-                .ok_or_else(|| SynthesisError::AssignmentMissing)?,
+                .ok_or(SynthesisError::AssignmentMissing)?,
         );
 
         Ok(tmp)
@@ -75,10 +75,10 @@ pub fn sub<E: Engine, CS: ConstraintSystem<E>>(
     let res = AllocatedNum::alloc(cs.namespace(|| "sub_num"), || {
         let mut tmp = a
             .get_value()
-            .ok_or_else(|| SynthesisError::AssignmentMissing)?;
+            .ok_or(SynthesisError::AssignmentMissing)?;
         tmp.sub_assign(
             &b.get_value()
-                .ok_or_else(|| SynthesisError::AssignmentMissing)?,
+                .ok_or(SynthesisError::AssignmentMissing)?,
         );
 
         Ok(tmp)

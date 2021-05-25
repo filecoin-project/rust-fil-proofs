@@ -105,9 +105,9 @@ where
         .collect();
 
     let pub_inputs = rational::PublicInputs {
-        challenges: challenges.clone(),
-        comm_rs: comm_rs.clone(),
-        faults: faults.clone(),
+        challenges,
+        comm_rs,
+        faults,
     };
 
     let priv_inputs = rational::PrivateInputs::<Tree> {

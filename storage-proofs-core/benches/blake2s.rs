@@ -9,7 +9,7 @@ use bellperson::{
     Circuit, ConstraintSystem, SynthesisError,
 };
 use blake2s_simd::blake2s;
-use criterion::{black_box, criterion_group, criterion_main, Criterion, ParameterizedBenchmark};
+use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use rand::{thread_rng, Rng};
 
 struct Blake2sExample<'a> {
@@ -40,19 +40,20 @@ impl<'a> Circuit<Bls12> for Blake2sExample<'a> {
 fn blake2s_benchmark(c: &mut Criterion) {
     let params = vec![32, 64, 10 * 32];
 
-    c.bench(
-        "hash-blake2s",
-        ParameterizedBenchmark::new(
-            "non-circuit",
-            |b, bytes| {
+    let mut group = c.benchmark_group("non-circuit");
+    for bytes in params {
+        group.bench_function(
+            "hash-blake2s",
+            |b| {
                 let mut rng = thread_rng();
-                let data: Vec<u8> = (0..*bytes).map(|_| rng.gen()).collect();
+                let data: Vec<u8> = (0..bytes).map(|_| rng.gen()).collect();
 
                 b.iter(|| black_box(blake2s(&data)))
             },
-            params,
-        ),
-    );
+        )
+    }
+
+    group.finish();
 }
 
 fn blake2s_circuit_benchmark(c: &mut Criterion) {
@@ -63,11 +64,11 @@ fn blake2s_circuit_benchmark(c: &mut Criterion) {
 
     let params = vec![32];
 
-    c.bench(
-        "hash-blake2s-circuit",
-        ParameterizedBenchmark::new(
+    let mut group = c.benchmark_group("hash-blake2s-circuit");
+    for bytes in params {
+        group.bench_function(
             "create-proof",
-            move |b, bytes| {
+            |b| {
                 let mut rng = thread_rng();
                 let data: Vec<Option<bool>> = (0..bytes * 8).map(|_| Some(rng.gen())).collect();
 
@@ -84,25 +85,28 @@ fn blake2s_circuit_benchmark(c: &mut Criterion) {
                     black_box(proof)
                 });
             },
-            params,
-        )
-        .with_function("synthesize", move |b, bytes| {
-            let mut rng = thread_rng();
-            let data: Vec<Option<bool>> = (0..bytes * 8).map(|_| Some(rng.gen())).collect();
-            b.iter(|| {
-                let mut cs = BenchCS::<Bls12>::new();
+        );
+        group.bench_function(
+            "synthesize",
+            |b| {
+                let mut rng = thread_rng();
+                let data: Vec<Option<bool>> = (0..bytes * 8).map(|_| Some(rng.gen())).collect();
+                b.iter(|| {
+                    let mut cs = BenchCS::<Bls12>::new();
 
-                Blake2sExample {
-                    data: data.as_slice(),
-                }
-                .synthesize(&mut cs)
-                .unwrap();
+                    Blake2sExample {
+                        data: data.as_slice(),
+                    }
+                    .synthesize(&mut cs)
+                        .unwrap();
 
-                black_box(cs)
-            });
-        })
-        .sample_size(20),
-    );
+                    black_box(cs)
+                });
+            })
+            .sample_size(20);
+    }
+
+    group.finish();
 }
 
 criterion_group!(benches, blake2s_benchmark, blake2s_circuit_benchmark);
