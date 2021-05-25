@@ -562,12 +562,12 @@ mod tests {
                     "Expected pathological graph but found large-enough parent."
                 );
             } else if expanded_parents.iter().any(demonstrably_large_enough) {
-                    // If we ever see a large-enough parent, then this graph is
-                    // not pathological, and the test succeeds. This is the only
-                    // way for a test expecting a non-pathological graph to
-                    // succeed, so there is no risk of false negatives (i.e.
-                    // failure to identify pathological graphs when unexpected).
-                    return;
+                // If we ever see a large-enough parent, then this graph is
+                // not pathological, and the test succeeds. This is the only
+                // way for a test expecting a non-pathological graph to
+                // succeed, so there is no risk of false negatives (i.e.
+                // failure to identify pathological graphs when unexpected).
+                return;
             }
         }
 

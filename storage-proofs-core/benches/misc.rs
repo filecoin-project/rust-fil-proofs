@@ -9,25 +9,22 @@ fn read_bytes_benchmark(c: &mut Criterion) {
 
     let mut group = c.benchmark_group("read");
     for bytes in params {
-        group.bench_function(
-            "from_disk",
-            |b| {
-                let mut rng = thread_rng();
-                let data: Vec<u8> = (0..bytes).map(|_| rng.gen()).collect();
+        group.bench_function("from_disk", |b| {
+            let mut rng = thread_rng();
+            let data: Vec<u8> = (0..bytes).map(|_| rng.gen()).collect();
 
-                let mut f = tempfile().unwrap();
-                f.write_all(&data).unwrap();
-                f.sync_all().unwrap();
+            let mut f = tempfile().unwrap();
+            f.write_all(&data).unwrap();
+            f.sync_all().unwrap();
 
-                b.iter(|| {
-                    let mut res = vec![0u8; bytes];
-                    f.seek(SeekFrom::Start(0)).unwrap();
-                    f.read_exact(&mut res).unwrap();
+            b.iter(|| {
+                let mut res = vec![0u8; bytes];
+                f.seek(SeekFrom::Start(0)).unwrap();
+                f.read_exact(&mut res).unwrap();
 
-                    black_box(res)
-                })
-            },
-        );
+                black_box(res)
+            })
+        });
     }
 
     group.finish();

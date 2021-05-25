@@ -399,7 +399,8 @@ mod tests {
                 let test_constraints = cs.num_constraints();
                 assert_eq!(log_size, test_constraints);
 
-                let selected = select(cs.namespace(|| "select"), &elements, &path_bits).expect("select failed");
+                let selected = select(cs.namespace(|| "select"), &elements, &path_bits)
+                    .expect("select failed");
 
                 assert!(cs.is_satisfied());
                 assert_eq!(elements[index].get_value(), selected.get_value());

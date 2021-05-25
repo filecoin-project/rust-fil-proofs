@@ -51,12 +51,14 @@ mod tests {
 
             let key_bits: Vec<Boolean> = {
                 let mut cs = cs.namespace(|| "key");
-                bytes_into_boolean_vec(&mut cs, Some(key.as_slice()), key.len()).expect("bytes_into_boolean_vec failed")
+                bytes_into_boolean_vec(&mut cs, Some(key.as_slice()), key.len())
+                    .expect("bytes_into_boolean_vec failed")
             };
 
             let data_bits: Vec<Boolean> = {
                 let mut cs = cs.namespace(|| "data bits");
-                bytes_into_boolean_vec(&mut cs, Some(data.as_slice()), data.len()).expect("bytes_into_boolean_vec failed")
+                bytes_into_boolean_vec(&mut cs, Some(data.as_slice()), data.len())
+                    .expect("bytes_into_boolean_vec failed")
             };
 
             let out_bits =
@@ -74,7 +76,8 @@ mod tests {
                     .as_slice(),
             );
 
-            let expected = xor::encode(key.as_slice(), data.as_slice()).expect("xor::encode failed");
+            let expected =
+                xor::encode(key.as_slice(), data.as_slice()).expect("xor::encode failed");
 
             assert_eq!(expected, actual, "circuit and non circuit do not match");
 

@@ -15,21 +15,16 @@ fn merkle_benchmark_sha256(c: &mut Criterion) {
 
     let mut group = c.benchmark_group("merkletree-binary");
     for n_nodes in params {
-        group.bench_function(
-            "sha256",
-            |b| {
-                let mut rng = thread_rng();
-                let data: Vec<u8> = (0..32 * n_nodes).map(|_| rng.gen()).collect();
-                b.iter(|| {
-                    black_box(
-                        create_base_merkle_tree::<BinaryMerkleTree<Sha256Hasher>>(
-                            None, n_nodes, &data,
-                        )
-                            .unwrap(),
-                    )
-                })
-            }
-        );
+        group.bench_function("sha256", |b| {
+            let mut rng = thread_rng();
+            let data: Vec<u8> = (0..32 * n_nodes).map(|_| rng.gen()).collect();
+            b.iter(|| {
+                black_box(
+                    create_base_merkle_tree::<BinaryMerkleTree<Sha256Hasher>>(None, n_nodes, &data)
+                        .unwrap(),
+                )
+            })
+        });
     }
 
     group.finish();
@@ -44,30 +39,27 @@ fn merkle_benchmark_poseidon(c: &mut Criterion) {
 
     let mut group = c.benchmark_group("merkletree-binary");
     for n_nodes in params {
-        group.bench_function(
-            "poseidon",
-            |b| {
-                let mut rng = thread_rng();
-                let mut data: Vec<u8> = Vec::with_capacity(32 * n_nodes);
-                (0..n_nodes)
-                    .into_iter()
-                    .try_for_each(|_| -> Result<()> {
-                        let node = PoseidonDomain::random(&mut rng);
-                        data.extend(node.into_bytes());
-                        Ok(())
-                    })
-                    .expect("failed to generate data");
-
-                b.iter(|| {
-                    black_box(
-                        create_base_merkle_tree::<BinaryMerkleTree<PoseidonHasher>>(
-                            None, n_nodes, &data,
-                        )
-                            .unwrap(),
-                    )
+        group.bench_function("poseidon", |b| {
+            let mut rng = thread_rng();
+            let mut data: Vec<u8> = Vec::with_capacity(32 * n_nodes);
+            (0..n_nodes)
+                .into_iter()
+                .try_for_each(|_| -> Result<()> {
+                    let node = PoseidonDomain::random(&mut rng);
+                    data.extend(node.into_bytes());
+                    Ok(())
                 })
-            }
-        );
+                .expect("failed to generate data");
+
+            b.iter(|| {
+                black_box(
+                    create_base_merkle_tree::<BinaryMerkleTree<PoseidonHasher>>(
+                        None, n_nodes, &data,
+                    )
+                    .unwrap(),
+                )
+            })
+        });
     }
 
     group.finish();

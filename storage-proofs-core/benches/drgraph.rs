@@ -11,23 +11,16 @@ fn drgraph(c: &mut Criterion) {
 
     let mut group = c.benchmark_group("sample");
     for n in params {
-        group.bench_function(
-            "bucket/m=6",
-            |b| {
-                let graph = BucketGraph::<PoseidonHasher>::new(
-                    n,
-                    BASE_DEGREE,
-                    0,
-                    [32; 32],
-                    ApiVersion::V1_1_0,
-                )
+        group.bench_function("bucket/m=6", |b| {
+            let graph =
+                BucketGraph::<PoseidonHasher>::new(n, BASE_DEGREE, 0, [32; 32], ApiVersion::V1_1_0)
                     .unwrap();
 
-                b.iter(|| {
-                    let mut parents = vec![0; 6];
-                    black_box(graph.parents(2, &mut parents).unwrap());
-                })
-            });
+            b.iter(|| {
+                let mut parents = vec![0; 6];
+                black_box(graph.parents(2, &mut parents).unwrap());
+            })
+        });
     }
 
     group.finish();
