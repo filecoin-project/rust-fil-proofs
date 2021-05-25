@@ -50,7 +50,7 @@ fn blake2s_benchmark(c: &mut Criterion) {
 
                 b.iter(|| black_box(blake2s(&data)))
             },
-        )
+        );
     }
 
     group.finish();
