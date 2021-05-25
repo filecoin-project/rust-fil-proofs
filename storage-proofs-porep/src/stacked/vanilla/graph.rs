@@ -383,10 +383,46 @@ where
         // back this function in the `reversed` direction).
     }
 
+    /// Generate 8 (default exp parents) nodes at once
+    fn correspondent8(&self, node: usize, i_start: usize, out: &mut [u32]) {
+        assert_eq!(out.len(), 8);
+
+        let num_elements = self.size() as feistel::Index * self.expansion_degree as feistel::Index;
+        let mut indicies = [0; 8];
+        for (j, i) in (i_start..i_start + 8).enumerate() {
+            indicies[j] = (node * self.expansion_degree) as feistel::Index + i as feistel::Index;
+        }
+
+        let transformed = feistel::permute8(
+            num_elements,
+            indicies,
+            &self.feistel_keys,
+            self.feistel_precomputed,
+        );
+
+        for (transformed, el) in transformed.iter().zip(out.iter_mut()) {
+            *el = match self.api_version {
+                ApiVersion::V1_0_0 => *transformed as u32 / self.expansion_degree as u32,
+                ApiVersion::V1_1_0 => {
+                    u32::try_from(*transformed as u64 / self.expansion_degree as u64)
+                        .expect("invalid transformation")
+                }
+            };
+        }
+    }
+
     pub fn generate_expanded_parents(&self, node: usize, expanded_parents: &mut [u32]) {
         debug_assert_eq!(expanded_parents.len(), self.expansion_degree);
-        for (i, el) in expanded_parents.iter_mut().enumerate() {
-            *el = self.correspondent(node, i);
+        let mut i = 0;
+        for els in expanded_parents.chunks_mut(8) {
+            if els.len() == 8 {
+                self.correspondent8(node, i, els);
+            } else {
+                for (j, el) in els.iter_mut().enumerate() {
+                    *el = self.correspondent(node, i + j);
+                }
+            }
+            i += els.len();
         }
     }
 

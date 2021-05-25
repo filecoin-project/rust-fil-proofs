@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+use std::convert::TryInto;
 use std::mem::size_of;
 
 use blake2b_simd::blake2b;
@@ -50,6 +52,84 @@ pub fn permute(
     u
 }
 
+/// Permutes 8 elements at once.
+pub fn permute8(
+    num_elements: Index,
+    indicies: [Index; 8],
+    keys: &[Index],
+    precomputed: FeistelPrecomputed,
+) -> [Index; 8] {
+    let mut out = [0; 8];
+    let indicies0: [Index; 4] = indicies[..4].try_into().unwrap();
+    let indicies1: [Index; 4] = indicies[4..].try_into().unwrap();
+
+    let us0 = encode4(indicies0, keys, precomputed);
+    let us1 = encode4(indicies1, keys, precomputed);
+
+    out[..4].copy_from_slice(&us0);
+    out[4..].copy_from_slice(&us1);
+
+    let mut missing = HashSet::<usize>::with_capacity(8);
+    for (i, el) in out.iter().enumerate() {
+        if *el >= num_elements {
+            missing.insert(i);
+        }
+    }
+
+    while !missing.is_empty() {
+        let missing_v: Vec<_> = missing.iter().copied().collect();
+        for chunk4 in missing_v.chunks(4) {
+            if chunk4.len() == 4 {
+                let tmp = encode4(
+                    [
+                        out[chunk4[0]],
+                        out[chunk4[1]],
+                        out[chunk4[2]],
+                        out[chunk4[3]],
+                    ],
+                    keys,
+                    precomputed,
+                );
+
+                out[chunk4[0]] = tmp[0];
+                out[chunk4[1]] = tmp[1];
+                out[chunk4[2]] = tmp[2];
+                out[chunk4[3]] = tmp[3];
+
+                for i in chunk4 {
+                    if out[*i] < num_elements {
+                        missing.remove(i);
+                    }
+                }
+            } else {
+                let chunk4 = chunk4.to_vec();
+                for chunk2 in chunk4.chunks(2) {
+                    if chunk2.len() == 2 {
+                        let tmp = encode2([out[chunk2[0]], out[chunk2[1]]], keys, precomputed);
+
+                        out[chunk2[0]] = tmp[0];
+                        out[chunk2[1]] = tmp[1];
+
+                        for i in chunk2 {
+                            if out[*i] < num_elements {
+                                missing.remove(i);
+                            }
+                        }
+                    } else {
+                        let i = chunk2[0];
+                        out[i] = encode(out[i], keys, precomputed);
+                        if out[i] < num_elements {
+                            missing.remove(&i);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    out
+}
+
 // Inverts the `permute` result to its starting value for the same `key`.
 pub fn invert_permute(
     num_elements: Index,
@@ -88,6 +168,87 @@ fn encode(index: Index, keys: &[Index], precomputed: FeistelPrecomputed) -> Inde
     }
 
     (left << half_bits) | right
+}
+
+fn encode2(indicies: [Index; 2], keys: &[Index], precomputed: FeistelPrecomputed) -> [Index; 2] {
+    let (left_mask, right_mask, half_bits) = precomputed;
+
+    // common setup
+    let mut left0 = (indicies[0] & left_mask) >> half_bits;
+    let mut right0 = indicies[0] & right_mask;
+
+    let mut left1 = (indicies[1] & left_mask) >> half_bits;
+    let mut right1 = indicies[1] & right_mask;
+
+    for key in keys.iter().take(FEISTEL_ROUNDS) {
+        let rs = feistel2([right0, right1], *key, right_mask);
+
+        {
+            let (l, r) = (right0, left0 ^ rs[0]);
+            left0 = l;
+            right0 = r;
+        }
+
+        {
+            let (l, r) = (right1, left1 ^ rs[1]);
+            left1 = l;
+            right1 = r;
+        }
+    }
+
+    [(left0 << half_bits) | right0, (left1 << half_bits) | right1]
+}
+
+fn encode4(indicies: [Index; 4], keys: &[Index], precomputed: FeistelPrecomputed) -> [Index; 4] {
+    let (left_mask, right_mask, half_bits) = precomputed;
+
+    // common setup
+    let mut left0 = (indicies[0] & left_mask) >> half_bits;
+    let mut right0 = indicies[0] & right_mask;
+
+    let mut left1 = (indicies[1] & left_mask) >> half_bits;
+    let mut right1 = indicies[1] & right_mask;
+
+    let mut left2 = (indicies[2] & left_mask) >> half_bits;
+    let mut right2 = indicies[2] & right_mask;
+
+    let mut left3 = (indicies[3] & left_mask) >> half_bits;
+    let mut right3 = indicies[3] & right_mask;
+
+    for key in keys.iter().take(FEISTEL_ROUNDS) {
+        let rs = feistel4([right0, right1, right2, right3], *key, right_mask);
+
+        {
+            let (l, r) = (right0, left0 ^ rs[0]);
+            left0 = l;
+            right0 = r;
+        }
+
+        {
+            let (l, r) = (right1, left1 ^ rs[1]);
+            left1 = l;
+            right1 = r;
+        }
+
+        {
+            let (l, r) = (right2, left2 ^ rs[2]);
+            left2 = l;
+            right2 = r;
+        }
+
+        {
+            let (l, r) = (right3, left3 ^ rs[3]);
+            left3 = l;
+            right3 = r;
+        }
+    }
+
+    [
+        (left0 << half_bits) | right0,
+        (left1 << half_bits) | right1,
+        (left2 << half_bits) | right2,
+        (left3 << half_bits) | right3,
+    ]
 }
 
 fn decode(index: Index, keys: &[Index], precomputed: FeistelPrecomputed) -> Index {
@@ -163,6 +324,118 @@ fn feistel(right: Index, key: Index, right_mask: Index) -> Index {
     };
 
     r & right_mask
+}
+
+#[inline(always)]
+fn prepare_data(data: &mut [u8; FEISTEL_BYTES], right: Index, key: Index) {
+    if FEISTEL_BYTES <= 8 {
+        data[0] = (right >> 24) as u8;
+        data[1] = (right >> 16) as u8;
+        data[2] = (right >> 8) as u8;
+        data[3] = right as u8;
+
+        data[4] = (key >> 24) as u8;
+        data[5] = (key >> 16) as u8;
+        data[6] = (key >> 8) as u8;
+        data[7] = key as u8;
+    } else {
+        data[0] = (right >> 56) as u8;
+        data[1] = (right >> 48) as u8;
+        data[2] = (right >> 40) as u8;
+        data[3] = (right >> 32) as u8;
+        data[4] = (right >> 24) as u8;
+        data[5] = (right >> 16) as u8;
+        data[6] = (right >> 8) as u8;
+        data[7] = right as u8;
+
+        data[8] = (key >> 56) as u8;
+        data[9] = (key >> 48) as u8;
+        data[10] = (key >> 40) as u8;
+        data[11] = (key >> 32) as u8;
+        data[12] = (key >> 24) as u8;
+        data[13] = (key >> 16) as u8;
+        data[14] = (key >> 8) as u8;
+        data[15] = key as u8;
+    }
+}
+
+#[inline(always)]
+fn convert_index(hash: &[u8]) -> Index {
+    if FEISTEL_BYTES <= 8 {
+        Index::from(hash[0]) << 24
+            | Index::from(hash[1]) << 16
+            | Index::from(hash[2]) << 8
+            | Index::from(hash[3])
+    } else {
+        Index::from(hash[0]) << 56
+            | Index::from(hash[1]) << 48
+            | Index::from(hash[2]) << 40
+            | Index::from(hash[3]) << 32
+            | Index::from(hash[4]) << 24
+            | Index::from(hash[5]) << 16
+            | Index::from(hash[6]) << 8
+            | Index::from(hash[7])
+    }
+}
+
+/// Does the same as feistel but on 2 values at once
+fn feistel2(rights: [Index; 2], key: Index, right_mask: Index) -> [Index; 2] {
+    use blake2b_simd::{
+        many::{hash_many, HashManyJob},
+        Params,
+    };
+
+    let mut data0 = [0; FEISTEL_BYTES];
+    let mut data1 = [0; FEISTEL_BYTES];
+
+    prepare_data(&mut data0, rights[0], key);
+    prepare_data(&mut data1, rights[1], key);
+
+    let params = Params::default();
+    let mut jobs = [
+        HashManyJob::new(&params, &data0),
+        HashManyJob::new(&params, &data1),
+    ];
+    hash_many(jobs.iter_mut());
+
+    [
+        convert_index(jobs[0].to_hash().as_bytes()) & right_mask,
+        convert_index(jobs[1].to_hash().as_bytes()) & right_mask,
+    ]
+}
+
+/// Does the same as feistel but on 4 values at once
+fn feistel4(rights: [Index; 4], key: Index, right_mask: Index) -> [Index; 4] {
+    use blake2b_simd::{
+        many::{hash_many, HashManyJob},
+        Params,
+    };
+
+    let mut data0 = [0; FEISTEL_BYTES];
+    let mut data1 = [0; FEISTEL_BYTES];
+    let mut data2 = [0; FEISTEL_BYTES];
+    let mut data3 = [0; FEISTEL_BYTES];
+
+    prepare_data(&mut data0, rights[0], key);
+    prepare_data(&mut data1, rights[1], key);
+    prepare_data(&mut data2, rights[2], key);
+    prepare_data(&mut data3, rights[3], key);
+
+    let params = Params::default();
+    let mut jobs = [
+        HashManyJob::new(&params, &data0),
+        HashManyJob::new(&params, &data1),
+        HashManyJob::new(&params, &data2),
+        HashManyJob::new(&params, &data3),
+    ];
+    hash_many(jobs.iter_mut());
+
+    [
+        convert_index(jobs[0].to_hash().as_bytes()) & right_mask,
+        convert_index(jobs[1].to_hash().as_bytes()) & right_mask,
+        convert_index(jobs[2].to_hash().as_bytes()) & right_mask,
+        convert_index(jobs[3].to_hash().as_bytes()) & right_mask,
+    ]
 }
 
 #[cfg(test)]
