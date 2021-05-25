@@ -145,7 +145,7 @@ impl From<Blake2sDomain> for Fr {
 }
 
 impl Domain for Blake2sDomain {
-    fn into_bytes(&self) -> Vec<u8> {
+    fn into_bytes(self) -> Vec<u8> {
         self.0.to_vec()
     }
 
@@ -172,10 +172,10 @@ impl Domain for Blake2sDomain {
     }
 }
 
-impl Into<Blake2sDomain> for Blake2sHash {
-    fn into(self) -> Blake2sDomain {
+impl From<Blake2sHash> for Blake2sDomain {
+    fn from(other: Blake2sHash) -> Self {
         let mut res = Blake2sDomain::default();
-        res.0[..].copy_from_slice(self.as_ref());
+        res.0[..].copy_from_slice(other.as_ref());
         res.trim_to_fr32();
 
         res

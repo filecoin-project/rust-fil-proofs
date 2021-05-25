@@ -9,7 +9,7 @@ use bellperson::{
     Circuit, ConstraintSystem, SynthesisError,
 };
 use criterion::{
-    black_box, criterion_group, criterion_main, Criterion, ParameterizedBenchmark, Throughput,
+    black_box, criterion_group, criterion_main, Criterion, Throughput,
 };
 use rand::{thread_rng, Rng};
 use sha2::Digest;
@@ -42,40 +42,42 @@ impl<'a> Circuit<Bls12> for Sha256Example<'a> {
 fn sha256_benchmark(c: &mut Criterion) {
     let params = vec![32, 64, 10 * 32, 37 * 32];
 
-    c.bench(
-        "hash-sha256-base",
-        ParameterizedBenchmark::new(
+    let mut group = c.benchmark_group("hash-sha256-base");
+    for bytes in params {
+        group.bench_function(
             "non-circuit",
-            |b, bytes| {
+            |b| {
                 let mut rng = thread_rng();
-                let data: Vec<u8> = (0..*bytes).map(|_| rng.gen()).collect();
+                let data: Vec<u8> = (0..bytes).map(|_| rng.gen()).collect();
 
                 b.iter(|| black_box(sha2::Sha256::digest(&data)))
             },
-            params,
-        )
-        .throughput(|bytes| Throughput::Bytes(*bytes as u64)),
-    );
+        );
+        group.throughput(|bytes| Throughput::Bytes(bytes as u64));
+    }
+
+    group.finish();
 }
 
 fn sha256_raw_benchmark(c: &mut Criterion) {
     let params = vec![64, 10 * 32, 38 * 32];
 
-    c.bench(
-        "hash-sha256-raw",
-        ParameterizedBenchmark::new(
+    let mut group = c.benchmark_group("hash-sha256-raw");
+    for bytes in params {
+        group.bench_function(
             "non-circuit",
-            |b, bytes| {
+            |b| {
                 let mut rng = thread_rng();
-                let data: Vec<u8> = (0..*bytes).map(|_| rng.gen()).collect();
+                let data: Vec<u8> = (0..bytes).map(|_| rng.gen()).collect();
                 let chunks = data.chunks(32).collect::<Vec<_>>();
 
                 b.iter(|| black_box(sha2raw::Sha256::digest(&chunks)))
             },
-            params,
-        )
-        .throughput(|bytes| Throughput::Bytes(*bytes as u64)),
-    );
+        );
+        group.throughput(|bytes| Throughput::Bytes(bytes as u64));
+    }
+
+    group.finish();
 }
 
 fn sha256_circuit_benchmark(c: &mut Criterion) {
@@ -83,14 +85,14 @@ fn sha256_circuit_benchmark(c: &mut Criterion) {
 
     let params = vec![32, 64];
 
-    c.bench(
-        "hash-sha256-circuit",
-        ParameterizedBenchmark::new(
+    let mut group = c.benchmark_group("hash-sha256-circuit");
+    for bytes in params {
+        group.bench_function(
             "create-proof",
-            move |b, bytes| {
+            |b| {
                 let groth_params = generate_random_parameters::<Bls12, _, _>(
                     Sha256Example {
-                        data: &vec![None; *bytes as usize * 8],
+                        data: &vec![None; bytes as usize * 8],
                     },
                     &mut rng1,
                 )
@@ -111,26 +113,29 @@ fn sha256_circuit_benchmark(c: &mut Criterion) {
 
                     black_box(proof)
                 });
-            },
-            params,
-        )
-        .with_function("synthesize", move |b, bytes| {
-            let mut rng = thread_rng();
-            let data: Vec<Option<bool>> = (0..bytes * 8).map(|_| Some(rng.gen())).collect();
+            }
+        );
+        group.bench_function(
+            "synthesize",
+            |b| {
+                let mut rng = thread_rng();
+                let data: Vec<Option<bool>> = (0..bytes * 8).map(|_| Some(rng.gen())).collect();
 
-            b.iter(|| {
-                let mut cs = BenchCS::<Bls12>::new();
-                Sha256Example {
-                    data: data.as_slice(),
-                }
-                .synthesize(&mut cs)
-                .unwrap();
+                b.iter(|| {
+                    let mut cs = BenchCS::<Bls12>::new();
+                    Sha256Example {
+                        data: data.as_slice(),
+                    }
+                    .synthesize(&mut cs)
+                        .unwrap();
 
-                black_box(cs)
+                    black_box(cs)
+                });
             });
-        })
-        .sample_size(20),
-    );
+    }
+
+    group.sample_size(20);
+    group.finish();
 }
 
 criterion_group!(
