@@ -52,8 +52,7 @@ fn sha256_benchmark(c: &mut Criterion) {
 
                 b.iter(|| black_box(sha2::Sha256::digest(&data)))
             },
-        );
-        group.throughput(|bytes| Throughput::Bytes(bytes as u64));
+        ).throughput(Throughput::Bytes(bytes as u64));
     }
 
     group.finish();
@@ -73,8 +72,7 @@ fn sha256_raw_benchmark(c: &mut Criterion) {
 
                 b.iter(|| black_box(sha2raw::Sha256::digest(&chunks)))
             },
-        );
-        group.throughput(|bytes| Throughput::Bytes(bytes as u64));
+        ).throughput(Throughput::Bytes(bytes as u64));
     }
 
     group.finish();

@@ -60,7 +60,7 @@ mod tests {
 
     prop_compose! {
         fn arb_fr()(a in 0..MODULUS[0], b in 0..MODULUS[1], c in 0..MODULUS[2], d in 0..MODULUS[3]) -> Fr {
-            Fr::from_repr(FrRepr([a, b, c, d])).unwrap()
+            Fr::from_repr(FrRepr([a, b, c, d])).expect("from_repr failed")
         }
     }
     proptest! {

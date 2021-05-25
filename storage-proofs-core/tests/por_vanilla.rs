@@ -160,7 +160,7 @@ fn test_por_validates_proof<Tree: MerkleTreeTrait>() {
 
     // Invalidate the proof.
     let bad_proof = {
-        let mut proof = good_proof.clone();
+        let mut proof = good_proof;
         let mut bad_leaf = Into::<Fr>::into(proof.data);
         bad_leaf.add_assign(&Fr::one());
         proof.data = bad_leaf.into();

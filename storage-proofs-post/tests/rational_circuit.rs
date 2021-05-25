@@ -72,8 +72,8 @@ fn test_rational_post_circuit<Tree: 'static + MerkleTreeTrait>(expected_constrai
         .collect();
 
     let pub_inputs = rational::PublicInputs {
-        challenges: challenges.clone(),
-        faults: faults.clone(),
+        challenges,
+        faults,
         comm_rs: comm_rs.clone(),
     };
 

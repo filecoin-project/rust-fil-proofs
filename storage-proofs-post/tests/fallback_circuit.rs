@@ -205,7 +205,7 @@ fn test_fallback_post<Tree: 'static + MerkleTreeTrait>(
 #[ignore]
 fn test_fallback_post_circuit_poseidon_base_8_bench_cs() {
     let params = fallback::SetupParams {
-        sector_size: 1024 * 1024 * 1024 * 32 as u64,
+        sector_size: (1024 * 1024 * 1024) as u64 * 32_u64,
         challenge_count: 10,
         sector_count: 5,
         api_version: ApiVersion::V1_1_0,
