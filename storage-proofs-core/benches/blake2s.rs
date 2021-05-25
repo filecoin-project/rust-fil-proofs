@@ -42,15 +42,12 @@ fn blake2s_benchmark(c: &mut Criterion) {
 
     let mut group = c.benchmark_group("non-circuit");
     for bytes in params {
-        group.bench_function(
-            "hash-blake2s",
-            |b| {
-                let mut rng = thread_rng();
-                let data: Vec<u8> = (0..bytes).map(|_| rng.gen()).collect();
+        group.bench_function("hash-blake2s", |b| {
+            let mut rng = thread_rng();
+            let data: Vec<u8> = (0..bytes).map(|_| rng.gen()).collect();
 
-                b.iter(|| black_box(blake2s(&data)))
-            },
-        );
+            b.iter(|| black_box(blake2s(&data)))
+        });
     }
 
     group.finish();
@@ -66,29 +63,25 @@ fn blake2s_circuit_benchmark(c: &mut Criterion) {
 
     let mut group = c.benchmark_group("hash-blake2s-circuit");
     for bytes in params {
-        group.bench_function(
-            "create-proof",
-            |b| {
-                let mut rng = thread_rng();
-                let data: Vec<Option<bool>> = (0..bytes * 8).map(|_| Some(rng.gen())).collect();
+        group.bench_function("create-proof", |b| {
+            let mut rng = thread_rng();
+            let data: Vec<Option<bool>> = (0..bytes * 8).map(|_| Some(rng.gen())).collect();
 
-                b.iter(|| {
-                    let proof = create_random_proof(
-                        Blake2sExample {
-                            data: data.as_slice(),
-                        },
-                        &groth_params,
-                        &mut rng,
-                    )
-                    .unwrap();
+            b.iter(|| {
+                let proof = create_random_proof(
+                    Blake2sExample {
+                        data: data.as_slice(),
+                    },
+                    &groth_params,
+                    &mut rng,
+                )
+                .unwrap();
 
-                    black_box(proof)
-                });
-            },
-        );
-        group.bench_function(
-            "synthesize",
-            |b| {
+                black_box(proof)
+            });
+        });
+        group
+            .bench_function("synthesize", |b| {
                 let mut rng = thread_rng();
                 let data: Vec<Option<bool>> = (0..bytes * 8).map(|_| Some(rng.gen())).collect();
                 b.iter(|| {
@@ -98,7 +91,7 @@ fn blake2s_circuit_benchmark(c: &mut Criterion) {
                         data: data.as_slice(),
                     }
                     .synthesize(&mut cs)
-                        .unwrap();
+                    .unwrap();
 
                     black_box(cs)
                 });

@@ -465,9 +465,7 @@ pub fn read_cached_params(cache_entry_path: &Path) -> Result<groth16::MappedPara
     .map_err(Into::into)
 }
 
-fn read_cached_verifying_key(
-    cache_entry_path: &Path,
-) -> io::Result<groth16::VerifyingKey<Bls12>> {
+fn read_cached_verifying_key(cache_entry_path: &Path) -> io::Result<groth16::VerifyingKey<Bls12>> {
     info!(
         "checking cache_path: {:?} for verifying key",
         cache_entry_path

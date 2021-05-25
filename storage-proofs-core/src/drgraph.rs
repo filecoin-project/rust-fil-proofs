@@ -298,7 +298,8 @@ mod tests {
         let degree = BASE_DEGREE;
 
         for &size in &[4, 16, 256, 2048] {
-            let g = BucketGraph::<H>::new(size, degree, 0, porep_id, api_version).expect("bucket graph new failed");
+            let g = BucketGraph::<H>::new(size, degree, 0, porep_id, api_version)
+                .expect("bucket graph new failed");
 
             assert_eq!(g.size(), size, "wrong nodes count");
 
@@ -361,7 +362,8 @@ mod tests {
     fn gen_proof<H: 'static + Hasher, U: 'static + PoseidonArity>(config: Option<StoreConfig>) {
         let leafs = 64;
         let porep_id = [1; 32];
-        let g = BucketGraph::<H>::new(leafs, BASE_DEGREE, 0, porep_id, ApiVersion::V1_1_0).expect("bucket graph new failed");
+        let g = BucketGraph::<H>::new(leafs, BASE_DEGREE, 0, porep_id, ApiVersion::V1_1_0)
+            .expect("bucket graph new failed");
         let data = vec![2u8; NODE_SIZE * leafs];
 
         let mmapped = &mmap_from(&data);

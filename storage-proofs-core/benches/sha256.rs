@@ -8,9 +8,7 @@ use bellperson::{
     util_cs::bench_cs::BenchCS,
     Circuit, ConstraintSystem, SynthesisError,
 };
-use criterion::{
-    black_box, criterion_group, criterion_main, Criterion, Throughput,
-};
+use criterion::{black_box, criterion_group, criterion_main, Criterion, Throughput};
 use rand::{thread_rng, Rng};
 use sha2::Digest;
 
@@ -44,15 +42,14 @@ fn sha256_benchmark(c: &mut Criterion) {
 
     let mut group = c.benchmark_group("hash-sha256-base");
     for bytes in params {
-        group.bench_function(
-            "non-circuit",
-            |b| {
+        group
+            .bench_function("non-circuit", |b| {
                 let mut rng = thread_rng();
                 let data: Vec<u8> = (0..bytes).map(|_| rng.gen()).collect();
 
                 b.iter(|| black_box(sha2::Sha256::digest(&data)))
-            },
-        ).throughput(Throughput::Bytes(bytes as u64));
+            })
+            .throughput(Throughput::Bytes(bytes as u64));
     }
 
     group.finish();
@@ -63,16 +60,15 @@ fn sha256_raw_benchmark(c: &mut Criterion) {
 
     let mut group = c.benchmark_group("hash-sha256-raw");
     for bytes in params {
-        group.bench_function(
-            "non-circuit",
-            |b| {
+        group
+            .bench_function("non-circuit", |b| {
                 let mut rng = thread_rng();
                 let data: Vec<u8> = (0..bytes).map(|_| rng.gen()).collect();
                 let chunks = data.chunks(32).collect::<Vec<_>>();
 
                 b.iter(|| black_box(sha2raw::Sha256::digest(&chunks)))
-            },
-        ).throughput(Throughput::Bytes(bytes as u64));
+            })
+            .throughput(Throughput::Bytes(bytes as u64));
     }
 
     group.finish();
@@ -85,51 +81,46 @@ fn sha256_circuit_benchmark(c: &mut Criterion) {
 
     let mut group = c.benchmark_group("hash-sha256-circuit");
     for bytes in params {
-        group.bench_function(
-            "create-proof",
-            |b| {
-                let groth_params = generate_random_parameters::<Bls12, _, _>(
+        group.bench_function("create-proof", |b| {
+            let groth_params = generate_random_parameters::<Bls12, _, _>(
+                Sha256Example {
+                    data: &vec![None; bytes as usize * 8],
+                },
+                &mut rng1,
+            )
+            .unwrap();
+
+            let mut rng = thread_rng();
+            let data: Vec<Option<bool>> = (0..bytes * 8).map(|_| Some(rng.gen())).collect();
+
+            b.iter(|| {
+                let proof = create_random_proof(
                     Sha256Example {
-                        data: &vec![None; bytes as usize * 8],
+                        data: data.as_slice(),
                     },
-                    &mut rng1,
+                    &groth_params,
+                    &mut rng,
                 )
                 .unwrap();
 
-                let mut rng = thread_rng();
-                let data: Vec<Option<bool>> = (0..bytes * 8).map(|_| Some(rng.gen())).collect();
-
-                b.iter(|| {
-                    let proof = create_random_proof(
-                        Sha256Example {
-                            data: data.as_slice(),
-                        },
-                        &groth_params,
-                        &mut rng,
-                    )
-                    .unwrap();
-
-                    black_box(proof)
-                });
-            }
-        );
-        group.bench_function(
-            "synthesize",
-            |b| {
-                let mut rng = thread_rng();
-                let data: Vec<Option<bool>> = (0..bytes * 8).map(|_| Some(rng.gen())).collect();
-
-                b.iter(|| {
-                    let mut cs = BenchCS::<Bls12>::new();
-                    Sha256Example {
-                        data: data.as_slice(),
-                    }
-                    .synthesize(&mut cs)
-                        .unwrap();
-
-                    black_box(cs)
-                });
+                black_box(proof)
             });
+        });
+        group.bench_function("synthesize", |b| {
+            let mut rng = thread_rng();
+            let data: Vec<Option<bool>> = (0..bytes * 8).map(|_| Some(rng.gen())).collect();
+
+            b.iter(|| {
+                let mut cs = BenchCS::<Bls12>::new();
+                Sha256Example {
+                    data: data.as_slice(),
+                }
+                .synthesize(&mut cs)
+                .unwrap();
+
+                black_box(cs)
+            });
+        });
     }
 
     group.sample_size(20);
