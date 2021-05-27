@@ -1,8 +1,5 @@
-use anyhow::Result;
-
 use storage_proofs_core::settings::SETTINGS;
 
-fn main() -> Result<()> {
+fn main() {
     println!("{:#?}", *SETTINGS);
-    Ok(())
 }

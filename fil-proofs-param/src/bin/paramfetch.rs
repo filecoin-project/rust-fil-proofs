@@ -1,7 +1,7 @@
 use std::env;
 use std::fs::{create_dir_all, rename, File};
 use std::io::{self, copy, stderr, stdout, Read, Stdout, Write};
-use std::path::PathBuf;
+use std::path::Path;
 use std::process::{exit, Command};
 
 use anyhow::{ensure, Context, Result};
@@ -117,9 +117,11 @@ fn download_ipget(version: &str, verbose: bool) -> Result<()> {
     let write_path = format!("{}.{}", ipget_dir(version), ext);
     trace!("writing downloaded file to: {}", write_path);
     let mut writer = File::create(&write_path).expect("failed to create file");
-    if verbose && size.is_some() {
-        let mut resp = FetchProgress::new(resp, size.unwrap());
-        copy(&mut resp, &mut writer).expect("failed to write download to file");
+    if verbose {
+        if let Some(size) = size {
+            let mut resp = FetchProgress::new(resp, size);
+            copy(&mut resp, &mut writer).expect("failed to write download to file");
+        }
     } else {
         copy(&mut resp, &mut writer).expect("failed to write download to file");
     }
@@ -185,8 +187,8 @@ fn get_filenames_requiring_download(
 
 fn download_file_with_ipget(
     cid: &str,
-    path: &PathBuf,
-    ipget_path: &PathBuf,
+    path: &Path,
+    ipget_path: &Path,
     ipget_args: &Option<String>,
     verbose: bool,
 ) -> Result<()> {
@@ -370,21 +372,21 @@ pub fn main() {
 
     let ipget_path = match cli.ipget_bin {
         Some(ipget_path) => {
-            let ipget_path = PathBuf::from(ipget_path);
-            if !ipget_path.exists() {
+            let path = Path::new(&ipget_path.clone());
+            if !path.exists() {
                 error!(
                     "provided ipget binary not found: {}, exiting",
-                    ipget_path.display()
+                    path.display()
                 );
                 exit(1);
             }
-            ipget_path
+            path.clone()
         }
         None => {
             let ipget_version = cli
                 .ipget_version
                 .unwrap_or(DEFAULT_IPGET_VERSION.to_string());
-            let ipget_path = PathBuf::from(ipget_path(&ipget_version));
+            let ipget_path = Path::new(&ipget_path(&ipget_version).clone());
             if !ipget_path.exists() {
                 info!("ipget binary not found: {}", ipget_path.display());
                 download_ipget(&ipget_version, cli.verbose).expect("ipget download failed");

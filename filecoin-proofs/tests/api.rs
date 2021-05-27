@@ -532,7 +532,7 @@ fn winning_post<Tree: 'static + MerkleTreeTrait>(
     let challenges = generate_fallback_sector_challenges::<Tree>(
         &config,
         &randomness,
-        &vec![sector_id],
+        &[sector_id],
         prover_id,
     )?;
 
@@ -1008,6 +1008,7 @@ fn run_seal_pre_commit_phase1<Tree: 'static + MerkleTreeTrait>(
     Ok((piece_infos, phase1_output))
 }
 
+#[allow(clippy::too_many_arguments)]
 fn proof_and_unseal<Tree: 'static + MerkleTreeTrait>(
     config: PoRepConfig,
     cache_dir_path: &Path,

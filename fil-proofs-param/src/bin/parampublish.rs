@@ -65,7 +65,7 @@ fn is_well_formed_filename(filename: &str) -> bool {
         warn!("file has invalid extension: {}, ignoring file", filename);
         return false;
     }
-    let version = filename.split('-').nth(0).unwrap();
+    let version = filename.split('-').next().unwrap();
     let version_is_valid =
         version.get(0..1).unwrap() == "v" && version[1..].chars().all(|c| c.is_digit(10));
     if !version_is_valid {
@@ -204,7 +204,7 @@ pub fn main() {
     // Store every param-id's .params and .vk file info.
     let mut infos = Vec::<FileInfo>::with_capacity(2 * ids.len());
     for id in &ids {
-        let version = id.split('-').nth(0).unwrap().to_string();
+        let version = id.split('-').next().unwrap().to_string();
         let sector_size = meta_map[id].sector_size;
         infos.push(FileInfo {
             id: id.clone(),

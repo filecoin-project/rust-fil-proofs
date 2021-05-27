@@ -11,7 +11,7 @@ fn run_map(parameter_file: &PathBuf) -> Result<MappedParameters<Bls12>> {
     read_cached_params(parameter_file)
 }
 
-fn main() -> Result<()> {
+fn main() {
     fil_logger::init();
 
     let map_cmd = SubCommand::with_name("map")
@@ -31,11 +31,9 @@ fn main() -> Result<()> {
 
     match matches.subcommand() {
         ("map", Some(m)) => {
-            let parameter_file = value_t!(m, "param", PathBuf)?;
-            run_map(&parameter_file)?;
+            let parameter_file = value_t!(m, "param", PathBuf);
+            run_map(&parameter_file);
         }
         _ => panic!("Unrecognized subcommand"),
     }
-
-    Ok(())
 }

@@ -1,7 +1,7 @@
 use std::io::{Cursor, Read};
 use std::time::Duration;
 
-use criterion::{criterion_group, criterion_main, Criterion, ParameterizedBenchmark, Throughput};
+use criterion::{criterion_group, criterion_main, Criterion, Throughput};
 use filecoin_proofs::{add_piece, PaddedBytesAmount, UnpaddedBytesAmount};
 use fr32::Fr32Reader;
 use rand::{thread_rng, Rng};
@@ -40,15 +40,17 @@ fn random_data(size: usize) -> Vec<u8> {
 }
 
 fn preprocessing_benchmark(c: &mut Criterion) {
-    c.bench(
-        "preprocessing",
-        ParameterizedBenchmark::new(
-            "write_padded",
-            |b, size| {
-                let data = random_data(*size);
-                let mut buf = Vec::with_capacity(*size);
+    let params = vec![128, 256, 512, 256_000, 512_000, 1_024_000, 2_048_000];
 
-                start_profile(&format!("write_padded_{}", *size));
+    let mut group = c.benchmark_group("preprocessing");
+    for size in params {
+        group.bench_function(
+            "write_padded",
+            |b| {
+                let data = random_data(size);
+                let mut buf = Vec::with_capacity(size);
+
+                start_profile(&format!("write_padded_{}", size));
                 b.iter(|| {
                     let mut reader = Fr32Reader::new(Cursor::new(&data));
                     reader.read_to_end(&mut buf).expect("in memory read error");
@@ -56,27 +58,30 @@ fn preprocessing_benchmark(c: &mut Criterion) {
                     buf.clear();
                 });
                 stop_profile();
-            },
-            vec![128, 256, 512, 256_000, 512_000, 1_024_000, 2_048_000],
+            }
         )
         .sample_size(10)
-        .throughput(|s| Throughput::Bytes(*s as u64))
-        .warm_up_time(Duration::from_secs(1)),
-    );
+        .throughput(Throughput::Bytes(size as u64))
+            .warm_up_time(Duration::from_secs(1));
+    }
+
+    group.finish();
 }
 
 fn add_piece_benchmark(c: &mut Criterion) {
-    c.bench(
-        "preprocessing",
-        ParameterizedBenchmark::new(
+    let params = vec![512, 256 * 1024, 512 * 1024, 1024 * 1024, 2 * 1024 * 1024];
+
+    let mut group = c.benchmark_group("preprocessing");
+    for size in params {
+        group.bench_function(
             "add_piece",
-            |b, size| {
-                let padded_size = PaddedBytesAmount(*size as u64);
+            |b| {
+                let padded_size = PaddedBytesAmount(size as u64);
                 let unpadded_size: UnpaddedBytesAmount = padded_size.into();
                 let data = random_data(unpadded_size.0 as usize);
-                let mut buf = Vec::with_capacity(*size);
+                let mut buf = Vec::with_capacity(size);
 
-                start_profile(&format!("add_piece_{}", *size));
+                start_profile(&format!("add_piece_{}", size));
                 b.iter(|| {
                     add_piece(
                         Cursor::new(&data),
@@ -88,13 +93,14 @@ fn add_piece_benchmark(c: &mut Criterion) {
                     buf.clear();
                 });
                 stop_profile();
-            },
-            vec![512, 256 * 1024, 512 * 1024, 1024 * 1024, 2 * 1024 * 1024],
+            }
         )
         .sample_size(10)
-        .throughput(|s| Throughput::Bytes(*s as u64))
-        .warm_up_time(Duration::from_secs(1)),
-    );
+        .throughput(Throughput::Bytes(size as u64))
+            .warm_up_time(Duration::from_secs(1));
+    }
+
+    group.finish();
 }
 
 criterion_group!(benches, preprocessing_benchmark, add_piece_benchmark);
