@@ -110,7 +110,7 @@ fn cache_window_post_params<Tree: 'static + MerkleTreeTrait>(post_config: &PoStC
 
     let _ = <FallbackPoStCompound<Tree>>::get_verifying_key(
         Some(&mut OsRng),
-        circuit.clone(),
+        circuit,
         &public_params,
     )
     .expect("failed to get verifying key");

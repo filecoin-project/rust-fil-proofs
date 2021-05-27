@@ -470,7 +470,7 @@ where
             let end = start + NODE_SIZE;
 
             let node_data = <H as Hasher>::Domain::try_from_bytes(&data.as_ref()[start..end])?;
-            let encoded: H::Domain = sloth_encode::<H>(key.as_ref(), &node_data)?;
+            let encoded: H::Domain = sloth_encode::<H>(key.as_ref(), &node_data);
 
             encoded.write_bytes(&mut data.as_mut()[start..end])?;
         }
@@ -614,10 +614,10 @@ pub fn replica_id<H: Hasher>(prover_id: [u8; 32], sector_id: [u8; 32]) -> H::Dom
     H::Function::hash_leaf(&to_hash)
 }
 
-fn sloth_encode<H: Hasher>(key: &H::Domain, ciphertext: &H::Domain) -> Result<H::Domain> {
+fn sloth_encode<H: Hasher>(key: &H::Domain, ciphertext: &H::Domain) -> H::Domain {
     // TODO: validate this is how sloth should work in this case
     let k = (*key).into();
     let c = (*ciphertext).into();
 
-    Ok(sloth::encode(&k, &c).into())
+    sloth::encode(&k, &c).into()
 }

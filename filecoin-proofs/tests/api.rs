@@ -697,7 +697,7 @@ fn winning_post<Tree: 'static + MerkleTreeTrait>(
     let challenges = generate_fallback_sector_challenges::<Tree>(
         &config,
         &randomness,
-        &vec![sector_id],
+        &[sector_id],
         prover_id,
     )?;
 

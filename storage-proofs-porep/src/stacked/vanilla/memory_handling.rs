@@ -220,7 +220,7 @@ impl<T: FromByteSlice> CacheReader<T> {
         let pos = pos % self.window_element_count();
         let targeted_buf = &self.get_bufs()[window % 2];
 
-        &targeted_buf.as_slice_of::<T>().unwrap()[pos..]
+        &targeted_buf.as_slice_of::<T>().expect("as_slice_of failed")[pos..]
     }
 
     /// `pos` is in units of `T`.
@@ -253,7 +253,7 @@ impl<T: FromByteSlice> CacheReader<T> {
 
         let targeted_buf = &self.get_bufs()[window % 2];
 
-        &targeted_buf.as_slice_of::<T>().unwrap()[pos..]
+        &targeted_buf.as_slice_of::<T>().expect("as_slice_of failed")[pos..]
     }
 
     fn advance_rear_window(&self, new_window: usize) {
@@ -266,7 +266,7 @@ impl<T: FromByteSlice> CacheReader<T> {
             self.window_size as usize,
             &self.file,
         )
-        .unwrap();
+        .expect("map_buf failed");
 
         unsafe {
             self.get_mut_bufs()[replace_idx] = new_buf;

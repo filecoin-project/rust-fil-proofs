@@ -126,30 +126,30 @@ mod tests {
 
     #[test]
     fn allowed_operations() {
-        let a = UnpaddedBytesAmount(1);
-        let b = UnpaddedBytesAmount(2);
-        let c = UnpaddedBytesAmount(3);
+        let val_a = UnpaddedBytesAmount(1);
+        let val_b = UnpaddedBytesAmount(2);
+        let val_c = UnpaddedBytesAmount(3);
 
-        let d = PaddedBytesAmount(1);
-        let e = PaddedBytesAmount(2);
-        let f = PaddedBytesAmount(3);
+        let val_d = PaddedBytesAmount(1);
+        let val_e = PaddedBytesAmount(2);
+        let val_f = PaddedBytesAmount(3);
 
         // Operations between UnpaddedBytesAmounts are allowed
-        assert_eq!(a + b, c);
-        assert_eq!(c - b, a);
+        assert_eq!(val_a + val_b, val_c);
+        assert_eq!(val_c - val_b, val_a);
 
         // Operations between PaddedBytesAmounts are allowed
-        assert_eq!(d + e, f);
-        assert_eq!(f - e, d);
+        assert_eq!(val_d + val_e, val_f);
+        assert_eq!(val_f - val_e, val_d);
 
         // Mixed operations fail at compile time.
         // assert_eq!(a + b, f);
 
         // Coercion to primitives work
-        assert_eq!(1u64 + u64::from(b), 3u64);
-        assert_eq!(1usize + usize::from(b), 3usize);
-        assert_eq!(1u64 + u64::from(e), 3u64);
-        assert_eq!(1usize + usize::from(e), 3usize);
+        assert_eq!(1u64 + u64::from(val_b), 3u64);
+        assert_eq!(1usize + usize::from(val_b), 3usize);
+        assert_eq!(1u64 + u64::from(val_e), 3u64);
+        assert_eq!(1usize + usize::from(val_e), 3usize);
 
         // But not between BytesAmount types
         // assert_eq!(a + UnpaddedBytesAmount::from(e), c);
