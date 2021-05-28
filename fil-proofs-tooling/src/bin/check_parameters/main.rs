@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::Path;
 
 use anyhow::Result;
 use bellperson::bls::Bls12;
@@ -7,8 +7,8 @@ use clap::{value_t, App, Arg, SubCommand};
 
 use storage_proofs_core::parameter_cache::read_cached_params;
 
-fn run_map(parameter_file: &PathBuf) -> Result<MappedParameters<Bls12>> {
-    read_cached_params(parameter_file)
+fn run_map(parameter_file: &Path) -> Result<MappedParameters<Bls12>> {
+    read_cached_params(&parameter_file.to_path_buf())
 }
 
 fn main() {
@@ -31,8 +31,8 @@ fn main() {
 
     match matches.subcommand() {
         ("map", Some(m)) => {
-            let parameter_file = value_t!(m, "param", PathBuf);
-            run_map(&parameter_file);
+            let parameter_file_str = value_t!(m, "param", String).expect("param failed");
+            run_map(&Path::new(&parameter_file_str)).expect("run_map failed");
         }
         _ => panic!("Unrecognized subcommand"),
     }

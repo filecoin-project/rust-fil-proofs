@@ -1,7 +1,7 @@
 use std::fs::{create_dir, remove_dir_all};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use anyhow::Result;
+use anyhow::{ensure, Result};
 use filecoin_hashers::Hasher;
 use filecoin_proofs::with_shape;
 use log::{debug, info};
@@ -57,7 +57,7 @@ fn generate_proofs<R: Rng, Tree: MerkleTreeTrait>(
             .gen_cached_proof(challenge, Some(rows_to_discard))
             .expect("failed to generate proof");
         if validate {
-            assert!(proof.validate(challenge));
+            ensure!(proof.validate(challenge), "failed to validate proof");
         }
     }
 
