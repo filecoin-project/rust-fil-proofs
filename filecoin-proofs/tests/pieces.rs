@@ -127,14 +127,21 @@ fn test_verify_simple_pieces() {
     let val_h = piece_hash(&val_e, &val_f);
     val_g.copy_from_slice(val_h.as_ref());
 
-    let val_a = PieceInfo::new(val_a, UnpaddedBytesAmount(127)).expect("failed to create piece info a");
-    let val_b = PieceInfo::new(val_b, UnpaddedBytesAmount(127)).expect("failed to create piece info b");
-    let val_c = PieceInfo::new(val_c, UnpaddedBytesAmount(127)).expect("failed to create piece info c");
-    let val_d = PieceInfo::new(val_d, UnpaddedBytesAmount(127)).expect("failed to create piece info d");
+    let val_a =
+        PieceInfo::new(val_a, UnpaddedBytesAmount(127)).expect("failed to create piece info a");
+    let val_b =
+        PieceInfo::new(val_b, UnpaddedBytesAmount(127)).expect("failed to create piece info b");
+    let val_c =
+        PieceInfo::new(val_c, UnpaddedBytesAmount(127)).expect("failed to create piece info c");
+    let val_d =
+        PieceInfo::new(val_d, UnpaddedBytesAmount(127)).expect("failed to create piece info d");
 
-    let val_e = PieceInfo::new(val_e, UnpaddedBytesAmount(254)).expect("failed to create piece info e");
-    let val_f = PieceInfo::new(val_f, UnpaddedBytesAmount(254)).expect("failed to create piece info f");
-    let val_g = PieceInfo::new(val_g, UnpaddedBytesAmount(508)).expect("failed to create piece info g");
+    let val_e =
+        PieceInfo::new(val_e, UnpaddedBytesAmount(254)).expect("failed to create piece info e");
+    let val_f =
+        PieceInfo::new(val_f, UnpaddedBytesAmount(254)).expect("failed to create piece info f");
+    let val_g =
+        PieceInfo::new(val_g, UnpaddedBytesAmount(508)).expect("failed to create piece info g");
 
     let sector_size = SectorSize(4 * 128);
     let comm_d = val_g.commitment;
@@ -154,7 +161,8 @@ fn test_verify_simple_pieces() {
     );
 
     assert!(
-        verify_pieces(&comm_d, &[val_e.clone(), val_c, val_d], sector_size).expect("failed to verify"),
+        verify_pieces(&comm_d, &[val_e.clone(), val_c, val_d], sector_size)
+            .expect("failed to verify"),
         "[val_e, val_c, val_d]"
     );
 

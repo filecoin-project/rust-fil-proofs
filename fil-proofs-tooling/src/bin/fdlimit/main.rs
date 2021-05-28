@@ -1,4 +1,3 @@
-
 fn main() {
     fil_logger::init();
 

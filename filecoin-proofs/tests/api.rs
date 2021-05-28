@@ -529,12 +529,8 @@ fn winning_post<Tree: 'static + MerkleTreeTrait>(
     //
     // 2)
     let mut vanilla_proofs = Vec::with_capacity(sector_count);
-    let challenges = generate_fallback_sector_challenges::<Tree>(
-        &config,
-        &randomness,
-        &[sector_id],
-        prover_id,
-    )?;
+    let challenges =
+        generate_fallback_sector_challenges::<Tree>(&config, &randomness, &[sector_id], prover_id)?;
 
     let single_proof = generate_single_vanilla_proof::<Tree>(
         &config,

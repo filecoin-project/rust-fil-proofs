@@ -84,7 +84,8 @@ mod tests {
                 .iter()
                 .enumerate()
                 .map(|(i, v)| {
-                    AllocatedNum::alloc(cs.namespace(|| format!("num_{}", i)), || Ok(*v)).expect("alloc failed")
+                    AllocatedNum::alloc(cs.namespace(|| format!("num_{}", i)), || Ok(*v))
+                        .expect("alloc failed")
                 })
                 .collect::<Vec<_>>();
 

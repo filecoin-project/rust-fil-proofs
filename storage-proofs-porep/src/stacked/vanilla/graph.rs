@@ -552,7 +552,9 @@ mod tests {
         dbg!(&porep_id, &nodes, &expect_pathological);
         for i in 0..test_n {
             let mut expanded_parents = [0u32; EXP_DEGREE];
-            graph.expanded_parents(i, &mut expanded_parents).expect("expanded_parents");
+            graph
+                .expanded_parents(i, &mut expanded_parents)
+                .expect("expanded_parents");
 
             if expect_pathological {
                 // If we ever see a large-enough parent, then this graph is not
@@ -610,7 +612,9 @@ mod tests {
 
         let mut exp_parents = [0u32; EXP_DEGREE];
         for v in 0..N_CHILDREN_SAMPLED {
-            graph.expanded_parents(v, &mut exp_parents[..]).expect("expanded_parents");
+            graph
+                .expanded_parents(v, &mut exp_parents[..])
+                .expect("expanded_parents");
             if exp_parents.iter().any(|u| *u >= FIRST_TRUNCATED_PARENT) {
                 return;
             }
@@ -661,7 +665,9 @@ mod tests {
         let mut exp_parents = [0u32; EXP_DEGREE];
         for sample_index in 0..N_CHILDREN_SAMPLED {
             let v = sample_index * N_NODES / N_CHILDREN_SAMPLED;
-            graph.expanded_parents(v, &mut exp_parents[..]).expect("expanded_parents failed");
+            graph
+                .expanded_parents(v, &mut exp_parents[..])
+                .expect("expanded_parents failed");
             for u in exp_parents.iter() {
                 let bin_index = (u / N_NODES_PER_BIN) as usize;
                 hist[bin_index] += 1;
