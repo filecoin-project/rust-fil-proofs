@@ -15,7 +15,7 @@ fn merkle_benchmark_sha256(c: &mut Criterion) {
 
     let mut group = c.benchmark_group("merkletree-binary");
     for n_nodes in params {
-        group.bench_function("sha256", |b| {
+        group.bench_function(format!("sha256-{}", n_nodes), |b| {
             let mut rng = thread_rng();
             let data: Vec<u8> = (0..32 * n_nodes).map(|_| rng.gen()).collect();
             b.iter(|| {
@@ -39,7 +39,7 @@ fn merkle_benchmark_poseidon(c: &mut Criterion) {
 
     let mut group = c.benchmark_group("merkletree-binary");
     for n_nodes in params {
-        group.bench_function("poseidon", |b| {
+        group.bench_function(format!("poseidon-{}", n_nodes), |b| {
             let mut rng = thread_rng();
             let mut data: Vec<u8> = Vec::with_capacity(32 * n_nodes);
             (0..n_nodes)

@@ -46,7 +46,7 @@ fn preprocessing_benchmark(c: &mut Criterion) {
     let mut group = c.benchmark_group("preprocessing");
     for size in params {
         group
-            .bench_function("write_padded", |b| {
+            .bench_function(format!("write_padded-{}", size), |b| {
                 let data = random_data(size);
                 let mut buf = Vec::with_capacity(size);
 
@@ -73,7 +73,7 @@ fn add_piece_benchmark(c: &mut Criterion) {
     let mut group = c.benchmark_group("preprocessing");
     for size in params {
         group
-            .bench_function("add_piece", |b| {
+            .bench_function(format!("add_piece-{}", size), |b| {
                 let padded_size = PaddedBytesAmount(size as u64);
                 let unpadded_size: UnpaddedBytesAmount = padded_size.into();
                 let data = random_data(unpadded_size.0 as usize);

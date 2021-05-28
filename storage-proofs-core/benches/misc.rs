@@ -9,7 +9,7 @@ fn read_bytes_benchmark(c: &mut Criterion) {
 
     let mut group = c.benchmark_group("read");
     for bytes in params {
-        group.bench_function("from_disk", |b| {
+        group.bench_function(format!("from_disk-{}", bytes), |b| {
             let mut rng = thread_rng();
             let data: Vec<u8> = (0..bytes).map(|_| rng.gen()).collect();
 

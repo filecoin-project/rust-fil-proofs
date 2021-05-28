@@ -43,7 +43,7 @@ fn sha256_benchmark(c: &mut Criterion) {
     let mut group = c.benchmark_group("hash-sha256-base");
     for bytes in params {
         group
-            .bench_function("non-circuit", |b| {
+            .bench_function(format!("non-circuit-{}", bytes), |b| {
                 let mut rng = thread_rng();
                 let data: Vec<u8> = (0..bytes).map(|_| rng.gen()).collect();
 
@@ -61,7 +61,7 @@ fn sha256_raw_benchmark(c: &mut Criterion) {
     let mut group = c.benchmark_group("hash-sha256-raw");
     for bytes in params {
         group
-            .bench_function("non-circuit", |b| {
+            .bench_function(format!("non-circuit-{}", bytes), |b| {
                 let mut rng = thread_rng();
                 let data: Vec<u8> = (0..bytes).map(|_| rng.gen()).collect();
                 let chunks = data.chunks(32).collect::<Vec<_>>();
@@ -81,7 +81,7 @@ fn sha256_circuit_benchmark(c: &mut Criterion) {
 
     let mut group = c.benchmark_group("hash-sha256-circuit");
     for bytes in params {
-        group.bench_function("create-proof", |b| {
+        group.bench_function(format!("create-proof-{}", bytes), |b| {
             let groth_params = generate_random_parameters::<Bls12, _, _>(
                 Sha256Example {
                     data: &vec![None; bytes as usize * 8],
@@ -106,7 +106,7 @@ fn sha256_circuit_benchmark(c: &mut Criterion) {
                 black_box(proof)
             });
         });
-        group.bench_function("synthesize", |b| {
+        group.bench_function(format!("synthesize-{}", bytes), |b| {
             let mut rng = thread_rng();
             let data: Vec<Option<bool>> = (0..bytes * 8).map(|_| Some(rng.gen())).collect();
 

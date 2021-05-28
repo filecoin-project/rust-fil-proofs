@@ -42,7 +42,7 @@ fn blake2s_benchmark(c: &mut Criterion) {
 
     let mut group = c.benchmark_group("non-circuit");
     for bytes in params {
-        group.bench_function("hash-blake2s", |b| {
+        group.bench_function(format!("hash-blake2s-{}", bytes), |b| {
             let mut rng = thread_rng();
             let data: Vec<u8> = (0..bytes).map(|_| rng.gen()).collect();
 
@@ -63,7 +63,7 @@ fn blake2s_circuit_benchmark(c: &mut Criterion) {
 
     let mut group = c.benchmark_group("hash-blake2s-circuit");
     for bytes in params {
-        group.bench_function("create-proof", |b| {
+        group.bench_function(format!("create-proof-{}", bytes), |b| {
             let mut rng = thread_rng();
             let data: Vec<Option<bool>> = (0..bytes * 8).map(|_| Some(rng.gen())).collect();
 

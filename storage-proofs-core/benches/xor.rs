@@ -51,7 +51,7 @@ fn xor_benchmark(c: &mut Criterion) {
 
     let mut group = c.benchmark_group("xor");
     for bytes in params {
-        group.bench_function("non-circuit", |b| {
+        group.bench_function(format!("non-circuit-{}", bytes), |b| {
             let mut rng = thread_rng();
             let key: Vec<u8> = (0..32).map(|_| rng.gen()).collect();
             let data: Vec<u8> = (0..bytes).map(|_| rng.gen()).collect();
@@ -78,7 +78,7 @@ fn xor_circuit_benchmark(c: &mut Criterion) {
 
     let mut group = c.benchmark_group("xor-circuit");
     for bytes in params {
-        group.bench_function("create-proof", |b| {
+        group.bench_function(format!("create-proof-{}", bytes), |b| {
             let mut rng = thread_rng();
             let key: Vec<Option<bool>> = (0..32 * 8).map(|_| Some(rng.gen())).collect();
             let data: Vec<Option<bool>> = (0..bytes * 8).map(|_| Some(rng.gen())).collect();
@@ -97,7 +97,7 @@ fn xor_circuit_benchmark(c: &mut Criterion) {
                 black_box(proof)
             });
         });
-        group.bench_function("synthesize", |b| {
+        group.bench_function(format!("synthesize-{}", bytes), |b| {
             let mut rng = thread_rng();
             let key: Vec<Option<bool>> = (0..32 * 8).map(|_| Some(rng.gen())).collect();
             let data: Vec<Option<bool>> = (0..bytes * 8).map(|_| Some(rng.gen())).collect();
