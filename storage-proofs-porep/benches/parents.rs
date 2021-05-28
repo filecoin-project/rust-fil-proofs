@@ -49,14 +49,14 @@ fn parents_loop_benchmark(c: &mut Criterion) {
 
     let mut group = c.benchmark_group("parents in a loop");
     for size in sizes {
-        group.bench_function("Blake2s", |b| {
+        group.bench_function(format!("Blake2s-{}", size), |b| {
             let graph = pregenerate_graph::<Blake2sHasher>(size, ApiVersion::V1_1_0);
             let mut parents = vec![0; graph.degree()];
             start_profile(&format!("parents-blake2s-{}", size));
             b.iter(|| black_box(parents_loop::<Blake2sHasher, _>(&graph, &mut parents)));
             stop_profile();
         });
-        group.bench_function("Sha256", |b| {
+        group.bench_function(format!("Sha256-{}", size), |b| {
             let graph = pregenerate_graph::<Sha256Hasher>(size, ApiVersion::V1_1_0);
             let mut parents = vec![0; graph.degree()];
             b.iter(|| black_box(parents_loop::<Sha256Hasher, _>(&graph, &mut parents)))

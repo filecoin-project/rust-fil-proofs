@@ -11,7 +11,7 @@ fn drgraph(c: &mut Criterion) {
 
     let mut group = c.benchmark_group("sample");
     for n in params {
-        group.bench_function("bucket/m=6", |b| {
+        group.bench_function(format!("bucket/m=6-{}", n), |b| {
             let graph =
                 BucketGraph::<PoseidonHasher>::new(n, BASE_DEGREE, 0, [32; 32], ApiVersion::V1_1_0)
                     .unwrap();
