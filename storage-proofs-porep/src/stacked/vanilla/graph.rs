@@ -615,7 +615,7 @@ mod tests {
                 return;
             }
         }
-        assert!(false);
+        panic!();
     }
 
     // Checks that the distribution of parent node indexes within a sector is within a set bound.

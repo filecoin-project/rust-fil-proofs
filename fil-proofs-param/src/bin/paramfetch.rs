@@ -1,7 +1,7 @@
 use std::env;
 use std::fs::{create_dir_all, rename, File};
 use std::io::{self, copy, stderr, stdout, Read, Stdout, Write};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::{exit, Command};
 
 use anyhow::{ensure, Context, Result};
@@ -35,13 +35,13 @@ const DEFAULT_JSON: &str = include_str!("../../parameters.json");
 const DEFAULT_IPGET_VERSION: &str = "v0.6.0";
 
 #[inline]
-fn ipget_dir(version: &str) -> String {
+fn get_ipget_dir(version: &str) -> String {
     format!("/var/tmp/ipget-{}", version)
 }
 
 #[inline]
-fn ipget_path(version: &str) -> String {
-    format!("{}/ipget/ipget", ipget_dir(version))
+fn get_ipget_path(version: &str) -> String {
+    format!("{}/ipget/ipget", get_ipget_dir(version))
 }
 
 /// Reader with progress bar.
@@ -114,7 +114,7 @@ fn download_ipget(version: &str, verbose: bool) -> Result<()> {
     };
 
     // Write downloaded file.
-    let write_path = format!("{}.{}", ipget_dir(version), ext);
+    let write_path = format!("{}.{}", get_ipget_dir(version), ext);
     trace!("writing downloaded file to: {}", write_path);
     let mut writer = File::create(&write_path).expect("failed to create file");
     if verbose {
@@ -134,14 +134,14 @@ fn download_ipget(version: &str, verbose: bool) -> Result<()> {
         let unzipper = GzDecoder::new(reader);
         let mut unarchiver = Archive::new(unzipper);
         unarchiver
-            .unpack(ipget_dir(version))
+            .unpack(get_ipget_dir(version))
             .expect("failed to unzip and unarchive");
     } else {
         unimplemented!("unzip is not yet supported");
     }
     info!(
         "successfully downloaded ipget binary: {}",
-        ipget_path(version),
+        get_ipget_path(version),
     );
 
     Ok(())
@@ -370,29 +370,29 @@ pub fn main() {
         return;
     }
 
-    let ipget_path = match cli.ipget_bin {
-        Some(ipget_path) => {
-            let path = Path::new(&ipget_path.clone());
-            if !path.exists() {
-                error!(
-                    "provided ipget binary not found: {}, exiting",
-                    path.display()
-                );
-                exit(1);
-            }
-            path.clone()
+    let ipget_path = if let Some(path_str) = cli.ipget_bin {
+        let path = PathBuf::from(path_str);
+        if !path.exists() {
+            error!(
+                "provided ipget binary not found: {}, exiting",
+                path.display()
+            );
+            exit(1);
         }
-        None => {
-            let ipget_version = cli
-                .ipget_version
-                .unwrap_or(DEFAULT_IPGET_VERSION.to_string());
-            let ipget_path = Path::new(&ipget_path(&ipget_version).clone());
-            if !ipget_path.exists() {
-                info!("ipget binary not found: {}", ipget_path.display());
-                download_ipget(&ipget_version, cli.verbose).expect("ipget download failed");
-            }
-            ipget_path
+
+        path
+    } else {
+        let ipget_version = cli
+            .ipget_version
+            .unwrap_or_else(|| DEFAULT_IPGET_VERSION.to_string());
+        let tmp_path = get_ipget_path(&ipget_version);
+        let path = Path::new(&tmp_path);
+        if !path.exists() {
+            info!("ipget binary not found: {}", path.display());
+            download_ipget(&ipget_version, cli.verbose).expect("ipget download failed");
         }
+
+        path.to_path_buf()
     };
     trace!("using ipget binary: {}", ipget_path.display());
 
