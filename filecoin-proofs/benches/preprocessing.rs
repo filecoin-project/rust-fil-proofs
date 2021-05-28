@@ -45,9 +45,8 @@ fn preprocessing_benchmark(c: &mut Criterion) {
 
     let mut group = c.benchmark_group("preprocessing");
     for size in params {
-        group.bench_function(
-            "write_padded",
-            |b| {
+        group
+            .bench_function("write_padded", |b| {
                 let data = random_data(size);
                 let mut buf = Vec::with_capacity(size);
 
@@ -59,10 +58,9 @@ fn preprocessing_benchmark(c: &mut Criterion) {
                     buf.clear();
                 });
                 stop_profile();
-            }
-        )
-        .sample_size(10)
-        .throughput(Throughput::Bytes(size as u64))
+            })
+            .sample_size(10)
+            .throughput(Throughput::Bytes(size as u64))
             .warm_up_time(Duration::from_secs(1));
     }
 
@@ -74,9 +72,8 @@ fn add_piece_benchmark(c: &mut Criterion) {
 
     let mut group = c.benchmark_group("preprocessing");
     for size in params {
-        group.bench_function(
-            "add_piece",
-            |b| {
+        group
+            .bench_function("add_piece", |b| {
                 let padded_size = PaddedBytesAmount(size as u64);
                 let unpadded_size: UnpaddedBytesAmount = padded_size.into();
                 let data = random_data(unpadded_size.0 as usize);
@@ -94,10 +91,9 @@ fn add_piece_benchmark(c: &mut Criterion) {
                     buf.clear();
                 });
                 stop_profile();
-            }
-        )
-        .sample_size(10)
-        .throughput(Throughput::Bytes(size as u64))
+            })
+            .sample_size(10)
+            .throughput(Throughput::Bytes(size as u64))
             .warm_up_time(Duration::from_secs(1));
     }
 

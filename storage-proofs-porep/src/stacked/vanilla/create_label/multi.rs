@@ -388,8 +388,18 @@ fn create_layer_labels(
                         *GenericArray::<u8, U64>::from_slice(&buf[384..448]),
                         *GenericArray::<u8, U64>::from_slice(&buf[448..512]),
                     ];
-                    sha2::compress256((&mut cur_node_ptr[..8]).try_into().expect("compress failed"), &blocks);
-                    sha2::compress256((&mut cur_node_ptr[..8]).try_into().expect("compress failed"), &blocks);
+                    sha2::compress256(
+                        (&mut cur_node_ptr[..8])
+                            .try_into()
+                            .expect("compress failed"),
+                        &blocks,
+                    );
+                    sha2::compress256(
+                        (&mut cur_node_ptr[..8])
+                            .try_into()
+                            .expect("compress failed"),
+                        &blocks,
+                    );
 
                     // Final round is only nine parents
                     memset(&mut buf[352..384], 0); // Zero out upper half of last block
@@ -735,8 +745,12 @@ mod tests {
         )
         .expect("create_labels_for_decoding failed");
 
-        let final_labels = labels.labels_for_last_layer().expect("labels_for_last_layer failed");
-        let last_label = final_labels.read_at(final_labels.len() - 1).expect("read_at");
+        let final_labels = labels
+            .labels_for_last_layer()
+            .expect("labels_for_last_layer failed");
+        let last_label = final_labels
+            .read_at(final_labels.len() - 1)
+            .expect("read_at");
         dbg!(&last_label);
         assert_eq!(expected_last_label.into_repr(), last_label.0);
     }

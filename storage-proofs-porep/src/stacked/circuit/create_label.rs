@@ -148,13 +148,15 @@ mod tests {
             .enumerate()
             .map(|(i, p)| {
                 let mut cs = cs.namespace(|| format!("parents {}", i));
-                bytes_into_boolean_vec_be(&mut cs, Some(p), p.len()).expect("bytes_into_boolean_vec_be failed")
+                bytes_into_boolean_vec_be(&mut cs, Some(p), p.len())
+                    .expect("bytes_into_boolean_vec_be failed")
             })
             .collect();
 
         let id_bits: Vec<Boolean> = {
             let mut cs = cs.namespace(|| "id");
-            bytes_into_boolean_vec_be(&mut cs, Some(id.as_slice()), id.len()).expect("bytes_into_boolean_vec_be failed")
+            bytes_into_boolean_vec_be(&mut cs, Some(id.as_slice()), id.len())
+                .expect("bytes_into_boolean_vec_be failed")
         };
 
         let layer_alloc = UInt32::constant(layer as u32);

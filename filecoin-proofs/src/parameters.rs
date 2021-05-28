@@ -138,10 +138,7 @@ mod tests {
 
     #[test]
     fn partition_layer_challenges_test() {
-        let f = |partitions| {
-            select_challenges(partitions, 12, 11)
-                .challenges_count_all()
-        };
+        let f = |partitions| select_challenges(partitions, 12, 11).challenges_count_all();
         // Update to ensure all supported PoRepProofPartitions options are represented here.
         assert_eq!(6, f(usize::from(PoRepProofPartitions(2))));
 
