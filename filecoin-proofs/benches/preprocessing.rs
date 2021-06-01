@@ -2,9 +2,13 @@ use std::io::{Cursor, Read};
 use std::time::Duration;
 
 use criterion::{criterion_group, criterion_main, Criterion, ParameterizedBenchmark, Throughput};
-use filecoin_proofs::{add_piece, PaddedBytesAmount, UnpaddedBytesAmount};
+use filecoin_proofs::{
+    add_piece, get_seal_inputs, PaddedBytesAmount, PoRepConfig, PoRepProofPartitions,
+    SectorShape2KiB, SectorSize, UnpaddedBytesAmount, POREP_PARTITIONS, SECTOR_SIZE_2_KIB,
+};
 use fr32::Fr32Reader;
 use rand::{thread_rng, Rng};
+use storage_proofs_core::{api_version::ApiVersion, is_legacy_porep_id, sector::SectorId};
 
 #[cfg(feature = "cpu-profile")]
 #[inline(always)]
@@ -67,7 +71,7 @@ fn preprocessing_benchmark(c: &mut Criterion) {
 
 fn add_piece_benchmark(c: &mut Criterion) {
     c.bench(
-        "preprocessing",
+        "add_piece",
         ParameterizedBenchmark::new(
             "add_piece",
             |b, size| {
@@ -97,5 +101,63 @@ fn add_piece_benchmark(c: &mut Criterion) {
     );
 }
 
-criterion_group!(benches, preprocessing_benchmark, add_piece_benchmark);
+fn get_seal_inputs_benchmark(c: &mut Criterion) {
+    c.bench(
+        "get_seal_inputs",
+        ParameterizedBenchmark::new(
+            "get_seal_inputs",
+            |b, iterations| {
+                let mut rng = thread_rng();
+
+                let porep_id_v1_1: u64 = 5; // This is a RegisteredSealProof value
+
+                let mut porep_id = [0u8; 32];
+                porep_id[..8].copy_from_slice(&porep_id_v1_1.to_le_bytes());
+                assert!(!is_legacy_porep_id(porep_id));
+
+                let config = PoRepConfig {
+                    sector_size: SectorSize(SECTOR_SIZE_2_KIB),
+                    partitions: PoRepProofPartitions(
+                        *POREP_PARTITIONS
+                            .read()
+                            .expect("POREP_PARTITIONS poisoned")
+                            .get(&SECTOR_SIZE_2_KIB)
+                            .expect("unknown sector size"),
+                    ),
+                    porep_id,
+                    api_version: ApiVersion::V1_1_0,
+                };
+                let comm_r: [u8; 32] = [5u8; 32];
+                let comm_d: [u8; 32] = [6u8; 32];
+                let prover_id: [u8; 32] = [7u8; 32];
+
+                let ticket = rng.gen();
+                let seed = rng.gen();
+                let sector_id = rng.gen::<u64>().into();
+
+                start_profile(&format!("get_seal_inputs_{}", *iterations));
+                b.iter(|| {
+                    for i in 0..*iterations {
+                        get_seal_inputs::<SectorShape2KiB>(
+                            config, comm_r, comm_d, prover_id, sector_id, ticket, seed,
+                        )
+                        .unwrap();
+                    }
+                });
+                stop_profile();
+            },
+            vec![1, 256, 1024, 2048, 4096, 8192],
+        )
+        .sample_size(10)
+        .throughput(|s| Throughput::Bytes(*s as u64))
+        .warm_up_time(Duration::from_secs(1)),
+    );
+}
+
+criterion_group!(
+    benches,
+    get_seal_inputs_benchmark,
+    preprocessing_benchmark,
+    add_piece_benchmark
+);
 criterion_main!(benches);

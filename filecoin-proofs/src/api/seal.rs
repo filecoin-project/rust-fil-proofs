@@ -3,12 +3,15 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 
 use anyhow::{ensure, Context, Result};
-use bellperson::bls::Fr;
+use bellperson::bls::{Bls12, Fr};
+use bellperson::groth16;
 use bincode::{deserialize, serialize};
 use filecoin_hashers::{Domain, Hasher};
 use log::{info, trace};
 use memmap::MmapOptions;
 use merkletree::store::{DiskStore, Store, StoreConfig};
+use rayon::prelude::*;
+use sha2::{Digest, Sha256};
 use storage_proofs_core::{
     cache_key::CacheKey,
     compound_proof::{self, CompoundProof},
@@ -16,6 +19,7 @@ use storage_proofs_core::{
     measurements::{measure_op, Operation},
     merkle::{create_base_merkle_tree, BinaryMerkleTree, MerkleTreeTrait},
     multi_proof::MultiProof,
+    parameter_cache::SRS_MAX_PROOFS_TO_AGGREGATE,
     proof::ProofScheme,
     sector::SectorId,
     util::default_rows_to_discard,
@@ -28,7 +32,10 @@ use storage_proofs_porep::stacked::{
 
 use crate::{
     api::{as_safe_commitment, commitment_from_fr, get_base_tree_leafs, get_base_tree_size},
-    caches::{get_stacked_params, get_stacked_verifying_key},
+    caches::{
+        get_stacked_params, get_stacked_srs_key, get_stacked_srs_verifier_key,
+        get_stacked_verifying_key,
+    },
     constants::{
         DefaultBinaryTree, DefaultPieceDomain, DefaultPieceHasher, POREP_MINIMUM_CHALLENGES,
         SINGLE_PARTITION_PROOF_LEN,
@@ -36,9 +43,9 @@ use crate::{
     parameters::setup_params,
     pieces::{self, verify_pieces},
     types::{
-        Commitment, PaddedBytesAmount, PieceInfo, PoRepConfig, PoRepProofPartitions, ProverId,
-        SealCommitOutput, SealCommitPhase1Output, SealPreCommitOutput, SealPreCommitPhase1Output,
-        SectorSize, Ticket, BINARY_ARITY,
+        AggregateSnarkProof, Commitment, PaddedBytesAmount, PieceInfo, PoRepConfig,
+        PoRepProofPartitions, ProverId, SealCommitOutput, SealCommitPhase1Output,
+        SealPreCommitOutput, SealPreCommitPhase1Output, SectorSize, Ticket, BINARY_ARITY,
     },
 };
 
@@ -535,6 +542,337 @@ pub fn seal_commit_phase2<Tree: 'static + MerkleTreeTrait>(
 
     info!("seal_commit_phase2:finish: {:?}", sector_id);
     Ok(out)
+}
+
+/// Given the specified arguments, this method returns the inputs that were used to
+/// generate the seal proof.  This can be useful for proof aggregation, as verification
+/// requires these inputs.
+///
+/// This method allows them to be retrieved when needed, rather than storing them for
+/// some amount of time.
+///
+/// # Arguments
+///
+/// * `porep_config` - this sector's porep config that contains the number of bytes in the sector.
+/// * `comm_r` - a commitment to a sector's replica.
+/// * `comm_d` - a commitment to a sector's data.
+/// * `prover_id` - the prover_id used to seal this sector.
+/// * `sector_id` - the sector_id of this sector.
+/// * `ticket` - the ticket used to generate this sector's replica-id.
+/// * `seed` - the seed used to derive the porep challenges.
+pub fn get_seal_inputs<Tree: 'static + MerkleTreeTrait>(
+    porep_config: PoRepConfig,
+    comm_r: Commitment,
+    comm_d: Commitment,
+    prover_id: ProverId,
+    sector_id: SectorId,
+    ticket: Ticket,
+    seed: Ticket,
+) -> Result<Vec<Vec<Fr>>> {
+    info!("get_seal_inputs:start");
+
+    ensure!(comm_d != [0; 32], "Invalid all zero commitment (comm_d)");
+    ensure!(comm_r != [0; 32], "Invalid all zero commitment (comm_r)");
+
+    let replica_id = generate_replica_id::<Tree::Hasher, _>(
+        &prover_id,
+        sector_id.into(),
+        &ticket,
+        comm_d,
+        &porep_config.porep_id,
+    );
+
+    let comm_r_safe = as_safe_commitment(&comm_r, "comm_r")?;
+    let comm_d_safe = DefaultPieceDomain::try_from_bytes(&comm_d)?;
+
+    let public_inputs = stacked::PublicInputs {
+        replica_id,
+        tau: Some(stacked::Tau {
+            comm_d: comm_d_safe,
+            comm_r: comm_r_safe,
+        }),
+        k: None,
+        seed,
+    };
+
+    let compound_setup_params = compound_proof::SetupParams {
+        vanilla_params: setup_params(
+            PaddedBytesAmount::from(porep_config),
+            usize::from(PoRepProofPartitions::from(porep_config)),
+            porep_config.porep_id,
+            porep_config.api_version,
+        )?,
+        partitions: Some(usize::from(PoRepProofPartitions::from(porep_config))),
+        priority: false,
+    };
+
+    let compound_public_params = <StackedCompound<Tree, DefaultPieceHasher> as CompoundProof<
+        StackedDrg<'_, Tree, DefaultPieceHasher>,
+        _,
+    >>::setup(&compound_setup_params)?;
+
+    let partitions = <StackedCompound<Tree, DefaultPieceHasher> as CompoundProof<
+        StackedDrg<'_, Tree, DefaultPieceHasher>,
+        _,
+    >>::partition_count(&compound_public_params);
+
+    // These are returned for aggregated proof verification.
+    let inputs: Vec<_> = (0..partitions)
+        .into_par_iter()
+        .map(|k| {
+            StackedCompound::<Tree, DefaultPieceHasher>::generate_public_inputs(
+                &public_inputs,
+                &compound_public_params.vanilla_params,
+                Some(k),
+            )
+        })
+        .collect::<Result<_>>()?;
+
+    info!("get_seal_inputs:finish");
+
+    Ok(inputs)
+}
+
+/// Given a value, get one suitable for aggregation.
+fn get_aggregate_target_len(len: usize) -> usize {
+    if len == 1 {
+        2
+    } else {
+        len.next_power_of_two()
+    }
+}
+
+/// Given a list of proofs and a target_len, make sure that the proofs list is padded to the target_len size.
+fn pad_proofs_to_target(proofs: &mut Vec<groth16::Proof<Bls12>>, target_len: usize) -> Result<()> {
+    trace!(
+        "pad_proofs_to_target target_len {}, proofs len {}",
+        target_len,
+        proofs.len()
+    );
+    ensure!(
+        target_len >= proofs.len(),
+        "target len must be greater than actual num proofs"
+    );
+    ensure!(
+        proofs.last().is_some(),
+        "invalid last proof for duplication"
+    );
+
+    let last = proofs
+        .last()
+        .expect("invalid last proof for duplication")
+        .clone();
+    let mut padding: Vec<groth16::Proof<Bls12>> = (0..target_len - proofs.len())
+        .map(|_| last.clone())
+        .collect();
+    proofs.append(&mut padding);
+
+    ensure!(
+        proofs.len().next_power_of_two() == proofs.len(),
+        "proof count must be a power of 2 for aggregation"
+    );
+    ensure!(
+        proofs.len() <= SRS_MAX_PROOFS_TO_AGGREGATE,
+        "proof count for aggregation is larger than the max supported value"
+    );
+
+    Ok(())
+}
+
+/// Given a list of public inputs and a target_len, make sure that the inputs list is padded to the target_len size.
+fn pad_inputs_to_target(
+    commit_inputs: &[Vec<Fr>],
+    num_inputs_per_proof: usize,
+    target_len: usize,
+) -> Result<Vec<Vec<Fr>>> {
+    ensure!(
+        !commit_inputs.is_empty(),
+        "cannot aggregate with empty public inputs"
+    );
+
+    let mut num_inputs = commit_inputs.len();
+    let mut new_inputs = commit_inputs.to_owned();
+
+    if target_len != num_inputs {
+        ensure!(
+            target_len > num_inputs,
+            "target len must be greater than actual num inputs"
+        );
+        let duplicate_inputs = &commit_inputs[(num_inputs - num_inputs_per_proof)..num_inputs];
+
+        trace!("padding inputs from {} to {}", num_inputs, target_len);
+        while target_len != num_inputs {
+            new_inputs.extend_from_slice(duplicate_inputs);
+            num_inputs += num_inputs_per_proof;
+        }
+    }
+
+    Ok(new_inputs)
+}
+
+/// Given a porep_config and a list of seal commit outputs, this method aggregates
+/// those proofs (naively padding the count if necessary up to a power of 2) and
+/// returns the aggregate proof bytes.
+///
+/// # Arguments
+///
+/// * `porep_config` - this sector's porep config that contains the number of bytes in the sector.
+/// * `seeds` - an ordered list of seeds used to derive the PoRep challenges.
+/// * `commit_outputs` - an ordered list of seal proof outputs returned from 'seal_commit_phase2'.
+pub fn aggregate_seal_commit_proofs<Tree: 'static + MerkleTreeTrait>(
+    porep_config: PoRepConfig,
+    seeds: &[[u8; 32]],
+    commit_outputs: &[SealCommitOutput],
+) -> Result<AggregateSnarkProof> {
+    info!("aggregate_seal_commit_proofs:start");
+
+    ensure!(
+        !commit_outputs.is_empty(),
+        "cannot aggregate with empty outputs"
+    );
+
+    let partitions = usize::from(PoRepProofPartitions::from(porep_config));
+    let verifying_key = get_stacked_verifying_key::<Tree>(porep_config)?;
+    let mut proofs: Vec<_> =
+        commit_outputs
+            .iter()
+            .try_fold(Vec::new(), |mut acc, commit_output| -> Result<_> {
+                acc.extend(
+                    MultiProof::new_from_reader(
+                        Some(partitions),
+                        &commit_output.proof[..],
+                        &verifying_key,
+                    )?
+                    .circuit_proofs,
+                );
+
+                Ok(acc)
+            })?;
+    trace!(
+        "aggregate_seal_commit_proofs called with {} commit_outputs containing {} proofs",
+        commit_outputs.len(),
+        proofs.len(),
+    );
+
+    let target_proofs_len = get_aggregate_target_len(proofs.len());
+    ensure!(
+        target_proofs_len > 1,
+        "cannot aggregate less than two proofs"
+    );
+    trace!(
+        "aggregate_seal_commit_proofs will pad proofs to target_len {}",
+        target_proofs_len
+    );
+
+    // If we're not at the pow2 target, duplicate the last proof until we are.
+    pad_proofs_to_target(&mut proofs, target_proofs_len)?;
+
+    // Hash all of the seeds into a digest for the aggregate proof method.
+    let hashed_seeds: [u8; 32] = {
+        let mut hasher = Sha256::new();
+        for seed in seeds.iter() {
+            hasher.update(seed);
+        }
+        hasher.finalize().into()
+    };
+
+    let srs_prover_key = get_stacked_srs_key::<Tree>(porep_config, proofs.len())?;
+    let aggregate_proof = StackedCompound::<Tree, DefaultPieceHasher>::aggregate_proofs(
+        &srs_prover_key,
+        &hashed_seeds,
+        proofs.as_slice(),
+    )?;
+    let aggregate_proof_bytes = serialize(&aggregate_proof)?;
+
+    info!("aggregate_seal_commit_proofs:finish");
+
+    Ok(aggregate_proof_bytes)
+}
+
+/// Given a porep_config, an aggregate proof, a list of seeds and a combined and flattened list
+/// of public inputs, this method verifies the aggregate seal proof.
+///
+/// # Arguments
+///
+/// * `porep_config` - this sector's porep config that contains the number of bytes in the sector.
+/// * `seeds` - an ordered list of seeds used to derive the PoRep challenges.
+/// * `aggregate_proof_bytes` - the returned aggregate proof from 'aggreate_seal_commit_proofs'.
+/// * `commit_inputs` - a flattened/combined and ordered list of all public inputs, which must match
+///    the ordering of the seal proofs when aggregated.
+pub fn verify_aggregate_seal_commit_proofs<Tree: 'static + MerkleTreeTrait>(
+    porep_config: PoRepConfig,
+    aggregate_proof_bytes: AggregateSnarkProof,
+    seeds: &[[u8; 32]],
+    commit_inputs: Vec<Vec<Fr>>,
+) -> Result<bool> {
+    info!("verify_aggregate_seal_commit_proofs:start");
+
+    let aggregate_proof: groth16::aggregate::AggregateProof<Bls12> =
+        deserialize(&aggregate_proof_bytes)?;
+
+    let aggregated_proofs_len = aggregate_proof.tmipp.gipa.nproofs as usize;
+
+    ensure!(aggregated_proofs_len != 0, "cannot verify zero proofs");
+    ensure!(!commit_inputs.is_empty(), "cannot verify with empty inputs");
+
+    trace!(
+        "verify_aggregate_seal_commit_proofs called with len {}",
+        aggregated_proofs_len,
+    );
+
+    ensure!(
+        aggregated_proofs_len > 1,
+        "cannot verify less than two proofs"
+    );
+    ensure!(
+        aggregated_proofs_len == aggregated_proofs_len.next_power_of_two(),
+        "cannot verify non-pow2 aggregate seal proofs"
+    );
+
+    let num_inputs = commit_inputs.len();
+    let num_inputs_per_proof = get_aggregate_target_len(num_inputs) / aggregated_proofs_len;
+    let target_inputs_len = aggregated_proofs_len * num_inputs_per_proof;
+    ensure!(
+        target_inputs_len % aggregated_proofs_len == 0,
+        "invalid number of inputs provided",
+    );
+
+    trace!(
+        "verify_aggregate_seal_commit_proofs got {} inputs with {} inputs per proof",
+        num_inputs,
+        target_inputs_len / aggregated_proofs_len,
+    );
+
+    // Pad public inputs if needed.
+    let commit_inputs =
+        pad_inputs_to_target(&commit_inputs, num_inputs_per_proof, target_inputs_len)?;
+
+    let verifying_key = get_stacked_verifying_key::<Tree>(porep_config)?;
+    let srs_verifier_key =
+        get_stacked_srs_verifier_key::<Tree>(porep_config, aggregated_proofs_len)?;
+
+    // Hash all of the seeds into a digest for the aggregate proof method.
+    let hashed_seeds: [u8; 32] = {
+        let mut hasher = Sha256::new();
+        for seed in seeds.iter() {
+            hasher.update(seed);
+        }
+        hasher.finalize().into()
+    };
+
+    info!("start verifying aggregate proof");
+    let result = StackedCompound::<Tree, DefaultPieceHasher>::verify_aggregate_proofs(
+        &srs_verifier_key,
+        &verifying_key,
+        &hashed_seeds,
+        commit_inputs.as_slice(),
+        &aggregate_proof,
+    )?;
+    info!("end verifying aggregate proof");
+
+    info!("verify_aggregate_seal_commit_proofs:finish");
+
+    Ok(result)
 }
 
 /// Computes a sectors's `comm_d` given its pieces.

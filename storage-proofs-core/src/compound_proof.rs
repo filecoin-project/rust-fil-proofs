@@ -2,7 +2,12 @@ use anyhow::{ensure, Context};
 use bellperson::{
     bls::{Bls12, Fr},
     groth16::{
-        self, create_random_proof_batch, create_random_proof_batch_in_priority, verify_proofs_batch,
+        self,
+        aggregate::{
+            aggregate_proofs, verify_aggregate_proof, AggregateProof, ProverSRS, VerifierSRS,
+        },
+        create_random_proof_batch, create_random_proof_batch_in_priority, verify_proofs_batch,
+        PreparedVerifyingKey,
     },
     Circuit,
 };
@@ -272,6 +277,43 @@ where
             .collect()
     }
 
+    /// Given a prover_srs key, a list of groth16 proofs, and an ordered list of seeds
+    /// (used to derive the PoRep challenges) hashed using FIXME, aggregate them all into
+    /// an AggregateProof type.
+    fn aggregate_proofs(
+        prover_srs: &ProverSRS<Bls12>,
+        hashed_seeds: &[u8],
+        proofs: &[groth16::Proof<Bls12>],
+    ) -> Result<AggregateProof<Bls12>> {
+        Ok(aggregate_proofs::<Bls12>(prover_srs, hashed_seeds, proofs)?)
+    }
+
+    /// Verifies the aggregate proof, with respect to the flattened input list.
+    ///
+    /// Note that this method internally instantiates an OSRng and passes it to the `verify_aggregate_proofs`
+    /// method in bellperson.  While proofs would normally parameterize the type of rng used, we don't
+    /// want it exposed past this level so as not to force the wrapper calls around this method in
+    /// rust-filecoin-proofs-api to unroll this call outside of the tree parameterized `with_shape` macro
+    /// usage.
+    fn verify_aggregate_proofs(
+        ip_verifier_srs: &VerifierSRS<Bls12>,
+        pvk: &PreparedVerifyingKey<Bls12>,
+        hashed_seeds: &[u8],
+        public_inputs: &[Vec<Fr>],
+        aggregate_proof: &groth16::aggregate::AggregateProof<Bls12>,
+    ) -> Result<bool> {
+        let mut rng = OsRng;
+
+        Ok(verify_aggregate_proof(
+            ip_verifier_srs,
+            pvk,
+            &mut rng,
+            public_inputs,
+            aggregate_proof,
+            hashed_seeds,
+        )?)
+    }
+
     /// generate_public_inputs generates public inputs suitable for use as input during verification
     /// of a proof generated from this CompoundProof's bellperson::Circuit (C). These inputs correspond
     /// to those allocated when C is synthesized.
@@ -317,6 +359,50 @@ where
         public_params: &S::PublicParams,
     ) -> Result<groth16::VerifyingKey<Bls12>> {
         Self::get_verifying_key(rng, Self::blank_circuit(public_params), public_params)
+    }
+
+    /// If the rng option argument is set, parameters will be
+    /// generated using it.  This is used for testing only, or where
+    /// parameters are otherwise unavailable (e.g. benches).  If rng
+    /// is not set, an error will result if parameters are not
+    /// present.
+    fn srs_key<R: RngCore>(
+        rng: Option<&mut R>,
+        public_params: &S::PublicParams,
+        num_proofs_to_aggregate: usize,
+    ) -> Result<ProverSRS<Bls12>> {
+        let generic_srs = Self::get_inner_product(
+            rng,
+            Self::blank_circuit(public_params),
+            public_params,
+            num_proofs_to_aggregate,
+        )?;
+
+        let (prover_srs, _verifier_srs) = generic_srs.specialize(num_proofs_to_aggregate);
+
+        Ok(prover_srs)
+    }
+
+    /// If the rng option argument is set, parameters will be
+    /// generated using it.  This is used for testing only, or where
+    /// parameters are otherwise unavailable (e.g. benches).  If rng
+    /// is not set, an error will result if parameters are not
+    /// present.
+    fn srs_verifier_key<R: RngCore>(
+        rng: Option<&mut R>,
+        public_params: &S::PublicParams,
+        num_proofs_to_aggregate: usize,
+    ) -> Result<VerifierSRS<Bls12>> {
+        let generic_srs = Self::get_inner_product(
+            rng,
+            Self::blank_circuit(public_params),
+            public_params,
+            num_proofs_to_aggregate,
+        )?;
+
+        let (_prover_srs, verifier_srs) = generic_srs.specialize(num_proofs_to_aggregate);
+
+        Ok(verifier_srs)
     }
 
     fn circuit_for_test(
