@@ -12,7 +12,7 @@ readme = "README.md"
 bench = false
 
 [dependencies]
-filecoin-hashers = { path = "../filecoin-hashers", version = "^2.0.0", default-features = false, features = ["sha256", "poseidon"] }
+filecoin-hashers = { path = "../filecoin-hashers", version = "^3.0.0", default-features = false, features = ["sha256", "poseidon"] }
 rand = "0.7"
 merkletree = "0.21.0"
 byteorder = "1"
@@ -53,7 +53,7 @@ bitvec = "0.17"
 rand_xorshift = "0.2.0"
 pretty_assertions = "0.6.1"
 sha2raw = { path = "../sha2raw", version = "^2.0.0"}
-filecoin-hashers = { path = "../filecoin-hashers", version = "^2.0.0", default-features = false, features = ["blake2s", "sha256", "poseidon"] }
+filecoin-hashers = { path = "../filecoin-hashers", version = "^3.0.0", default-features = false, features = ["blake2s", "sha256", "poseidon"] }
 
 [features]
 default = ["gpu", "pairing"]
