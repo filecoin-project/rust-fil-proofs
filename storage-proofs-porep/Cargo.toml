@@ -38,7 +38,7 @@ byte-slice-cast = "1.0.0"
 hwloc = "0.3.0"
 libc = "0.2"
 fdlimit = "0.2.0"
-fr32 = { path = "../fr32", version = "^0.2.0", default-features = false }
+fr32 = { path = "../fr32", version = "^1.0.0", default-features = false }
 
 [target."cfg(target_arch = \"aarch64\")".dependencies]
 sha2 = { version = "0.9.3", features = ["compress", "asm"] }

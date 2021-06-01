@@ -28,7 +28,7 @@ generic-array = "0.14.4"
 anyhow = "1.0.23"
 neptune = { version = "^3.0", default-features = false }
 num_cpus = "1.10.1"
-fr32 = { path = "../fr32", version = "^0.2.0", default-features = false }
+fr32 = { path = "../fr32", version = "^1.0.0", default-features = false }
 
 [dev-dependencies]
 tempfile = "3"
