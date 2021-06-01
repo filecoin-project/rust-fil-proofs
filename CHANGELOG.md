@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://book.async.rs/overview
 
 ## Unreleased
 
+## [8.0.0] - 2021-06-01
+
+-  Add an API for Proof Aggregation [#1395](https://github.com/filecoin-project/rust-fil-proofs/pull/1395)
+-  Enforce serde for PublicInputs [#1458](https://github.com/filecoin-project/rust-fil-proofs/pull/1458)
+
 ## [7.0.1] - 2021-05-06
 
 - Added Apple M1 asm support via updated sha2 dependency [#1457](https://github.com/filecoin-project/rust-fil-proofs/pull/1457)
@@ -231,7 +236,8 @@ and this project adheres to [Semantic Versioning](https://book.async.rs/overview
 
 - Initial stable release
 
-[Unreleased]: https://github.com/filecoin-project/rust-fil-proofs/compare/v7.0.1...HEAD
+[Unreleased]: https://github.com/filecoin-project/rust-fil-proofs/compare/v8.0.0...HEAD
+[8.0.0]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v8.0.0
 [7.0.1]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v7.0.1
 [7.0.0]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v7.0.0
 [6.1.0]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v6.1.0
