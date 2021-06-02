@@ -119,8 +119,8 @@ fn download_ipget(version: &str, verbose: bool) -> Result<()> {
     let mut writer = File::create(&write_path).expect("failed to create file");
     if verbose {
         if let Some(size) = size {
-            let mut resp = FetchProgress::new(resp, size);
-            copy(&mut resp, &mut writer).expect("failed to write download to file");
+            let mut resp_with_progress = FetchProgress::new(resp, size);
+            copy(&mut resp_with_progress, &mut writer).expect("failed to write download to file");
         }
     } else {
         copy(&mut resp, &mut writer).expect("failed to write download to file");
