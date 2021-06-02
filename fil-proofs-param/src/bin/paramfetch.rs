@@ -386,13 +386,13 @@ pub fn main() {
             .ipget_version
             .unwrap_or_else(|| DEFAULT_IPGET_VERSION.to_string());
         let tmp_path = get_ipget_path(&ipget_version);
-        let path = Path::new(&tmp_path);
+        let path = PathBuf::from(&tmp_path);
         if !path.exists() {
             info!("ipget binary not found: {}", path.display());
             download_ipget(&ipget_version, cli.verbose).expect("ipget download failed");
         }
 
-        path.to_path_buf()
+        path
     };
     trace!("using ipget binary: {}", ipget_path.display());
 
