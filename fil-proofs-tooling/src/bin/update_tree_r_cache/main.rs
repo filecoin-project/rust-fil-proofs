@@ -1,5 +1,5 @@
 use std::fs::{self, create_dir_all, remove_dir_all, OpenOptions};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use anyhow::{ensure, Context, Result};
 use bincode::deserialize;
@@ -397,31 +397,25 @@ fn main() -> Result<()> {
 
     match matches.subcommand() {
         ("rebuild", Some(m)) => {
-            let cache_str = value_t!(m, "cache", String)?;
-            let cache = &Path::new(&cache_str);
-            let replica_str = value_t!(m, "replica", String)?;
-            let replica = &Path::new(&replica_str);
+            let cache = value_t!(m, "cache", PathBuf)?;
+            let replica = value_t!(m, "replica", PathBuf)?;
             let size = value_t!(m, "size", usize)
                 .expect("could not convert `size` CLI argument to `usize`");
-            run_rebuild(size, cache, replica)?;
+            run_rebuild(size, cache.as_path(), replica.as_path())?;
         }
         ("inspect", Some(m)) => {
-            let cache_str = value_t!(m, "cache", String)?;
-            let cache = &Path::new(&cache_str);
-            let replica_str = value_t!(m, "replica", String)?;
-            let replica = &Path::new(&replica_str);
+            let cache = value_t!(m, "cache", PathBuf)?;
+            let replica = value_t!(m, "replica", PathBuf)?;
             let size = value_t!(m, "size", usize)
                 .expect("could not convert `size` CLI argument to `usize`");
-            run_inspect(size, cache, replica)?;
+            run_inspect(size, cache.as_path(), replica.as_path())?;
         }
         ("verify", Some(m)) => {
-            let cache_str = value_t!(m, "cache", String)?;
-            let cache = &Path::new(&cache_str);
-            let replica_str = value_t!(m, "replica", String)?;
-            let replica = &Path::new(&replica_str);
+            let cache = value_t!(m, "cache", PathBuf)?;
+            let replica = value_t!(m, "replica", PathBuf)?;
             let size = value_t!(m, "size", usize)
                 .expect("could not convert `size` CLI argument to `usize`");
-            run_verify(size, cache, replica)?;
+            run_verify(size, cache.as_path(), replica.as_path())?;
         }
         _ => panic!("Unrecognized subcommand"),
     }
