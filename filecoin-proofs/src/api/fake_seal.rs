@@ -54,7 +54,7 @@ pub fn fauxrep_aux<R: Rng, S: AsRef<Path>, T: AsRef<Path>, Tree: 'static + Merkl
         .with_context(|| format!("could not write to file p_aux={:?}", p_aux_path))?;
 
     let mut commitment = [0u8; 32];
-    commitment[..].copy_from_slice(&comm_r.into_bytes()[..]);
+    commitment[..].copy_from_slice(&comm_r.to_bytes()[..]);
     Ok(commitment)
 }
 
@@ -78,6 +78,6 @@ pub fn fauxrep2<R: AsRef<Path>, S: AsRef<Path>, Tree: 'static + MerkleTreeTrait>
         .with_context(|| format!("could not write to file p_aux={:?}", p_aux_path))?;
 
     let mut commitment = [0u8; 32];
-    commitment[..].copy_from_slice(&comm_r.into_bytes()[..]);
+    commitment[..].copy_from_slice(&comm_r.to_bytes()[..]);
     Ok(commitment)
 }

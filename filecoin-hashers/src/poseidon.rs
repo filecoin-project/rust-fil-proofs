@@ -127,7 +127,7 @@ fn as_ref<'a>(src: &'a [u64; 4]) -> &'a [u8] {
 }
 
 impl Domain for PoseidonDomain {
-    fn into_bytes(self) -> Vec<u8> {
+    fn to_bytes(&self) -> Vec<u8> {
         let mut out = Vec::with_capacity(PoseidonDomain::byte_len());
         self.0.write_le(&mut out).expect("write_le failure");
 
@@ -169,7 +169,7 @@ impl Element for PoseidonDomain {
     }
 
     fn copy_to_slice(&self, bytes: &mut [u8]) {
-        bytes.copy_from_slice(&self.into_bytes());
+        bytes.copy_from_slice(&self.to_bytes());
     }
 }
 
@@ -512,7 +512,7 @@ mod tests {
             let val = PoseidonDomain(repr);
 
             for _ in 0..100 {
-                assert_eq!(val.into_bytes(), val.into_bytes());
+                assert_eq!(val.to_bytes(), val.to_bytes());
             }
 
             let raw: &[u8] = val.as_ref();

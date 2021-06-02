@@ -538,7 +538,7 @@ where
         .flat_map(|i| {
             decode_block::<H, G>(graph, replica_id, data, exp_parents_data, i)
                 .expect("decode block failure")
-                .into_bytes()
+                .to_bytes()
         })
         .collect();
 

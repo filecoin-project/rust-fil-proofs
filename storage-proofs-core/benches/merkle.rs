@@ -46,7 +46,7 @@ fn merkle_benchmark_poseidon(c: &mut Criterion) {
                 .into_iter()
                 .try_for_each(|_| -> Result<()> {
                     let node = PoseidonDomain::random(&mut rng);
-                    data.extend(node.into_bytes());
+                    data.extend(node.to_bytes());
                     Ok(())
                 })
                 .expect("failed to generate data");

@@ -145,7 +145,7 @@ impl From<Blake2sDomain> for Fr {
 }
 
 impl Domain for Blake2sDomain {
-    fn into_bytes(self) -> Vec<u8> {
+    fn to_bytes(&self) -> Vec<u8> {
         self.0.to_vec()
     }
 

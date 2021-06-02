@@ -89,7 +89,7 @@ fn test_extract_all<Tree: 'static + MerkleTreeTrait>() {
     let data: Vec<u8> = (0..nodes)
         .flat_map(|_| {
             let v = <Tree::Hasher as Hasher>::Domain::random(rng);
-            v.into_bytes()
+            v.to_bytes()
         })
         .collect();
 
@@ -192,7 +192,7 @@ fn test_stacked_porep_resume_seal() {
     let data: Vec<u8> = (0..nodes)
         .flat_map(|_| {
             let v = <PoseidonHasher as Hasher>::Domain::random(rng);
-            v.into_bytes()
+            v.to_bytes()
         })
         .collect();
 
