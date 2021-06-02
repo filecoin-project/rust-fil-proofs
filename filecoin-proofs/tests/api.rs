@@ -363,7 +363,7 @@ fn aggregate_proofs<Tree: 'static + MerkleTreeTrait>(
 
 fn get_layer_file_paths(cache_dir: &tempfile::TempDir) -> Vec<PathBuf> {
     let mut list: Vec<_> = read_dir(&cache_dir)
-        .expect(&format!("failed to read directory {:?}", cache_dir))
+        .unwrap_or_else(|_| panic!("failed to read directory {:?}", cache_dir))
         .filter_map(|entry| {
             let cur = entry.expect("reading directory failed");
             let entry_path = cur.path();
@@ -1169,6 +1169,7 @@ fn run_seal_pre_commit_phase1<Tree: 'static + MerkleTreeTrait>(
     Ok((piece_infos, phase1_output))
 }
 
+#[allow(clippy::too_many_arguments)]
 fn generate_proof<Tree: 'static + MerkleTreeTrait>(
     config: PoRepConfig,
     cache_dir_path: &Path,
@@ -1217,6 +1218,7 @@ fn generate_proof<Tree: 'static + MerkleTreeTrait>(
     Ok((result, inputs, seed))
 }
 
+#[allow(clippy::too_many_arguments)]
 fn unseal<Tree: 'static + MerkleTreeTrait>(
     config: PoRepConfig,
     cache_dir_path: &Path,
@@ -1278,6 +1280,7 @@ fn unseal<Tree: 'static + MerkleTreeTrait>(
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 fn proof_and_unseal<Tree: 'static + MerkleTreeTrait>(
     config: PoRepConfig,
     cache_dir_path: &Path,

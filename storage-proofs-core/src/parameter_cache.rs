@@ -478,9 +478,7 @@ fn read_cached_verifying_key(cache_entry_path: &Path) -> io::Result<groth16::Ver
     })
 }
 
-fn read_cached_srs_key(
-    cache_entry_path: &PathBuf,
-) -> Result<groth16::aggregate::GenericSRS<Bls12>> {
+fn read_cached_srs_key(cache_entry_path: &Path) -> Result<groth16::aggregate::GenericSRS<Bls12>> {
     info!("checking cache_path: {:?} for srs", cache_entry_path);
 
     let verify_production_params = SETTINGS.verify_production_params;
@@ -590,7 +588,7 @@ fn write_cached_verifying_key(
 }
 
 fn write_cached_srs_key(
-    cache_entry_path: &PathBuf,
+    cache_entry_path: &Path,
     value: groth16::aggregate::GenericSRS<Bls12>,
 ) -> io::Result<groth16::aggregate::GenericSRS<Bls12>> {
     with_exclusive_lock(cache_entry_path, |mut file| {
