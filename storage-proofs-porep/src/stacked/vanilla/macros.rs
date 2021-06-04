@@ -63,6 +63,8 @@ macro_rules! prefetch {
     };
 }
 
+// Used in multicore sdr only
+#[allow(unused_macros)]
 macro_rules! compress256 {
     ($state:expr, $buf:expr, 1) => {
         let blocks = [*GenericArray::<u8, U64>::from_slice(&$buf[..64])];
