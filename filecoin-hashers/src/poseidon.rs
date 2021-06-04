@@ -127,7 +127,7 @@ fn as_ref<'a>(src: &'a [u64; 4]) -> &'a [u8] {
 }
 
 impl Domain for PoseidonDomain {
-    fn into_bytes(self) -> Vec<u8> {
+    fn into_bytes(&self) -> Vec<u8> {
         let mut out = Vec::with_capacity(PoseidonDomain::byte_len());
         self.0.write_le(&mut out).expect("write_le failure");
 

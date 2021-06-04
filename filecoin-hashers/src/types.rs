@@ -34,7 +34,8 @@ pub trait Domain:
     + Element
     + StdHash
 {
-    fn into_bytes(self) -> Vec<u8>;
+    #[allow(clippy::wrong_self_convention)]
+    fn into_bytes(&self) -> Vec<u8>;
     fn try_from_bytes(raw: &[u8]) -> anyhow::Result<Self>;
     /// Write itself into the given slice, LittleEndian bytes.
     fn write_bytes(&self, _: &mut [u8]) -> anyhow::Result<()>;
