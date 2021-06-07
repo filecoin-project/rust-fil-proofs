@@ -32,8 +32,8 @@ impl Cli {
 pub fn main() {
     let cli = Cli::from_args();
 
-    let mut src_file =
-        File::open(cli.file_path()).expect(&format!("failed to open file: {}", cli.file_path()));
+    let mut src_file = File::open(cli.file_path())
+        .unwrap_or_else(|_| panic!("failed to open file: {}", cli.file_path()));
 
     let mut hasher = Blake2b::new();
     io::copy(&mut src_file, &mut hasher).expect("failed to write BLAKE2b bytes to hasher");

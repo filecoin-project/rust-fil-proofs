@@ -43,7 +43,7 @@ fn make_detail_re(name: &str) -> Regex {
 }
 
 /// Parses the output of `cargo bench -p storage-proofs --bench <benchmark> -- --verbose --colors never`.
-fn parse_criterion_out(s: impl AsRef<str>) -> Result<Vec<CriterionResult>> {
+fn parse_criterion_out(s: impl AsRef<str>) -> Vec<CriterionResult> {
     let mut res = Vec::new();
 
     let start_re = Regex::new(r"^Benchmarking ([^:]+)$").expect("invalid regex");
@@ -218,7 +218,8 @@ fn parse_criterion_out(s: impl AsRef<str>) -> Result<Vec<CriterionResult>> {
             med_abs_dev: r.11,
         });
     }
-    Ok(res)
+
+    res
 }
 
 /// parses a string of the form "521.80 KiB/s".
@@ -285,7 +286,7 @@ fn run_benches(mut args: Vec<String>) -> Result<()> {
         stdout += "\n";
     });
 
-    let parsed_results = parse_criterion_out(stdout)?;
+    let parsed_results = parse_criterion_out(stdout);
 
     let wrapped = Metadata::wrap(parsed_results)?;
 
@@ -339,7 +340,7 @@ slope  [141.11 us 159.66 us] R^2            [0.8124914 0.8320154]
 mean   [140.55 us 150.62 us] std. dev.      [5.6028 us 15.213 us]
 median [138.33 us 143.23 us] med. abs. dev. [1.7507 ms 8.4109 ms]";
 
-        let parsed = parse_criterion_out(stdout).expect("failed to parse criterion output");
+        let parsed = parse_criterion_out(stdout);
         assert_eq!(
             parsed,
             vec![CriterionResult {
@@ -410,8 +411,7 @@ slope  [141.11 us 159.66 us] R^2            [0.8124914 0.8320154]
 mean   [140.55 us 150.62 us] std. dev.      [5.6028 us 15.213 us]
 median [138.33 us 143.23 us] med. abs. dev. [1.7507 ms 8.4109 ms]";
 
-        let parsed =
-            parse_criterion_out(with_throughput).expect("failed to parse criterion output");
+        let parsed = parse_criterion_out(with_throughput);
         assert_eq!(
             parsed,
             vec![CriterionResult {

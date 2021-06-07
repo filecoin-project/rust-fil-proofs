@@ -298,30 +298,31 @@ mod tests {
         let degree = BASE_DEGREE;
 
         for &size in &[4, 16, 256, 2048] {
-            let g = BucketGraph::<H>::new(size, degree, 0, porep_id, api_version).unwrap();
+            let g = BucketGraph::<H>::new(size, degree, 0, porep_id, api_version)
+                .expect("bucket graph new failed");
 
             assert_eq!(g.size(), size, "wrong nodes count");
 
             let mut parents = vec![0; degree];
-            g.parents(0, &mut parents).unwrap();
+            g.parents(0, &mut parents).expect("parents failed");
             assert_eq!(parents, vec![0; degree as usize]);
             parents = vec![0; degree];
-            g.parents(1, &mut parents).unwrap();
+            g.parents(1, &mut parents).expect("parents failed");
             assert_eq!(parents, vec![0; degree as usize]);
 
             for i in 1..size {
                 let mut pa1 = vec![0; degree];
-                g.parents(i, &mut pa1).unwrap();
+                g.parents(i, &mut pa1).expect("parents failed");
                 let mut pa2 = vec![0; degree];
-                g.parents(i, &mut pa2).unwrap();
+                g.parents(i, &mut pa2).expect("parents failed");
 
                 assert_eq!(pa1.len(), degree);
                 assert_eq!(pa1, pa2, "different parents on the same node");
 
                 let mut p1 = vec![0; degree];
-                g.parents(i, &mut p1).unwrap();
+                g.parents(i, &mut p1).expect("parents failed");
                 let mut p2 = vec![0; degree];
-                g.parents(i, &mut p2).unwrap();
+                g.parents(i, &mut p2).expect("parents failed");
 
                 for parent in p1 {
                     // TODO: fix me
@@ -361,7 +362,8 @@ mod tests {
     fn gen_proof<H: 'static + Hasher, U: 'static + PoseidonArity>(config: Option<StoreConfig>) {
         let leafs = 64;
         let porep_id = [1; 32];
-        let g = BucketGraph::<H>::new(leafs, BASE_DEGREE, 0, porep_id, ApiVersion::V1_1_0).unwrap();
+        let g = BucketGraph::<H>::new(leafs, BASE_DEGREE, 0, porep_id, ApiVersion::V1_1_0)
+            .expect("bucket graph new failed");
         let data = vec![2u8; NODE_SIZE * leafs];
 
         let mmapped = &mmap_from(&data);
@@ -371,8 +373,8 @@ mod tests {
                 g.size(),
                 mmapped,
             )
-            .unwrap();
-        let proof = tree.gen_proof(2).unwrap();
+            .expect("failed to build tree");
+        let proof = tree.gen_proof(2).expect("failed to gen proof");
 
         assert!(proof.verify());
     }

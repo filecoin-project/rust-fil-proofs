@@ -172,6 +172,7 @@ impl Domain for Blake2sDomain {
     }
 }
 
+#[allow(clippy::from_over_into)]
 impl Into<Blake2sDomain> for Blake2sHash {
     fn into(self) -> Blake2sDomain {
         let mut res = Blake2sDomain::default();

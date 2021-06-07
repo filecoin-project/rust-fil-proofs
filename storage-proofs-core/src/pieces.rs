@@ -110,22 +110,43 @@ mod tests {
 
     #[test]
     fn test_subtree_capacity() {
-        assert_eq!(subtree_capacity(0, 16).unwrap(), 16);
-        assert_eq!(subtree_capacity(1, 16).unwrap(), 1);
-        assert_eq!(subtree_capacity(2, 16).unwrap(), 2);
-        assert_eq!(subtree_capacity(3, 16).unwrap(), 1);
-        assert_eq!(subtree_capacity(4, 16).unwrap(), 4);
-        assert_eq!(subtree_capacity(5, 16).unwrap(), 1);
-        assert_eq!(subtree_capacity(6, 16).unwrap(), 2);
-        assert_eq!(subtree_capacity(7, 16).unwrap(), 1);
-        assert_eq!(subtree_capacity(8, 16).unwrap(), 8);
-        assert_eq!(subtree_capacity(9, 16).unwrap(), 1);
-        assert_eq!(subtree_capacity(10, 16).unwrap(), 2);
-        assert_eq!(subtree_capacity(11, 16).unwrap(), 1);
-        assert_eq!(subtree_capacity(12, 16).unwrap(), 4);
-        assert_eq!(subtree_capacity(13, 16).unwrap(), 1);
-        assert_eq!(subtree_capacity(14, 16).unwrap(), 2);
-        assert_eq!(subtree_capacity(15, 16).unwrap(), 1);
+        assert_eq!(
+            subtree_capacity(0, 16).expect("subtree_capacity failed"),
+            16
+        );
+        assert_eq!(subtree_capacity(1, 16).expect("subtree_capacity failed"), 1);
+        assert_eq!(subtree_capacity(2, 16).expect("subtree_capacity failed"), 2);
+        assert_eq!(subtree_capacity(3, 16).expect("subtree_capacity failed"), 1);
+        assert_eq!(subtree_capacity(4, 16).expect("subtree_capacity failed"), 4);
+        assert_eq!(subtree_capacity(5, 16).expect("subtree_capacity failed"), 1);
+        assert_eq!(subtree_capacity(6, 16).expect("subtree_capacity failed"), 2);
+        assert_eq!(subtree_capacity(7, 16).expect("subtree_capacity failed"), 1);
+        assert_eq!(subtree_capacity(8, 16).expect("subtree_capacity failed"), 8);
+        assert_eq!(subtree_capacity(9, 16).expect("subtree_capacity failed"), 1);
+        assert_eq!(
+            subtree_capacity(10, 16).expect("subtree_capacity failed"),
+            2
+        );
+        assert_eq!(
+            subtree_capacity(11, 16).expect("subtree_capacity failed"),
+            1
+        );
+        assert_eq!(
+            subtree_capacity(12, 16).expect("subtree_capacity failed"),
+            4
+        );
+        assert_eq!(
+            subtree_capacity(13, 16).expect("subtree_capacity failed"),
+            1
+        );
+        assert_eq!(
+            subtree_capacity(14, 16).expect("subtree_capacity failed"),
+            2
+        );
+        assert_eq!(
+            subtree_capacity(15, 16).expect("subtree_capacity failed"),
+            1
+        );
     }
 
     #[test]

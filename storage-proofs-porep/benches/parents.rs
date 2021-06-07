@@ -1,4 +1,4 @@
-use criterion::{black_box, criterion_group, criterion_main, Criterion, ParameterizedBenchmark};
+use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use filecoin_hashers::{blake2s::Blake2sHasher, sha256::Sha256Hasher, Hasher};
 #[cfg(feature = "cpu-profile")]
 use gperftools::profiler::PROFILER;
@@ -44,28 +44,26 @@ fn parents_loop<H: Hasher, G: Graph<H>>(graph: &G, parents: &mut [u32]) {
 }
 
 #[allow(clippy::unit_arg)]
-fn parents_loop_benchmark(cc: &mut Criterion) {
+fn parents_loop_benchmark(c: &mut Criterion) {
     let sizes = vec![10, 50, 1000];
 
-    cc.bench(
-        "parents in a loop",
-        ParameterizedBenchmark::new(
-            "Blake2s",
-            |b, size| {
-                let graph = pregenerate_graph::<Blake2sHasher>(*size, ApiVersion::V1_1_0);
-                let mut parents = vec![0; graph.degree()];
-                start_profile(&format!("parents-blake2s-{}", *size));
-                b.iter(|| black_box(parents_loop::<Blake2sHasher, _>(&graph, &mut parents)));
-                stop_profile();
-            },
-            sizes,
-        )
-        .with_function("Sha256", |b, degree| {
-            let graph = pregenerate_graph::<Sha256Hasher>(*degree, ApiVersion::V1_1_0);
+    let mut group = c.benchmark_group("parents in a loop");
+    for size in sizes {
+        group.bench_function(format!("Blake2s-{}", size), |b| {
+            let graph = pregenerate_graph::<Blake2sHasher>(size, ApiVersion::V1_1_0);
+            let mut parents = vec![0; graph.degree()];
+            start_profile(&format!("parents-blake2s-{}", size));
+            b.iter(|| black_box(parents_loop::<Blake2sHasher, _>(&graph, &mut parents)));
+            stop_profile();
+        });
+        group.bench_function(format!("Sha256-{}", size), |b| {
+            let graph = pregenerate_graph::<Sha256Hasher>(size, ApiVersion::V1_1_0);
             let mut parents = vec![0; graph.degree()];
             b.iter(|| black_box(parents_loop::<Sha256Hasher, _>(&graph, &mut parents)))
-        }),
-    );
+        });
+    }
+
+    group.finish();
 }
 
 criterion_group!(benches, parents_loop_benchmark);

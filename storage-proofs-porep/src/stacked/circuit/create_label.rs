@@ -106,7 +106,7 @@ mod tests {
             porep_id,
             ApiVersion::V1_1_0,
         )
-        .unwrap();
+        .expect("stacked bucket graph new_stacked failed");
 
         let id_fr = Fr::random(rng);
         let id: Vec<u8> = fr_into_bytes(&id_fr);
@@ -118,7 +118,7 @@ mod tests {
             .collect();
 
         let mut parents = vec![0; BASE_DEGREE + EXP_DEGREE];
-        graph.parents(node, &mut parents).unwrap();
+        graph.parents(node, &mut parents).expect("parents failed");
 
         let raw_parents_bytes: Vec<Vec<u8>> = parents
             .iter()
@@ -127,12 +127,12 @@ mod tests {
                 if i < BASE_DEGREE {
                     // base
                     data_at_node(&data[..size * NODE_SIZE], *p as usize)
-                        .unwrap()
+                        .expect("data_at_node failed")
                         .to_vec()
                 } else {
                     // exp
                     data_at_node(&data[size * NODE_SIZE..], *p as usize)
-                        .unwrap()
+                        .expect("data_at_node failed")
                         .to_vec()
                 }
             })
@@ -148,13 +148,15 @@ mod tests {
             .enumerate()
             .map(|(i, p)| {
                 let mut cs = cs.namespace(|| format!("parents {}", i));
-                bytes_into_boolean_vec_be(&mut cs, Some(p), p.len()).unwrap()
+                bytes_into_boolean_vec_be(&mut cs, Some(p), p.len())
+                    .expect("bytes_into_boolean_vec_be failed")
             })
             .collect();
 
         let id_bits: Vec<Boolean> = {
             let mut cs = cs.namespace(|| "id");
-            bytes_into_boolean_vec_be(&mut cs, Some(id.as_slice()), id.len()).unwrap()
+            bytes_into_boolean_vec_be(&mut cs, Some(id.as_slice()), id.len())
+                .expect("bytes_into_boolean_vec_be failed")
         };
 
         let layer_alloc = UInt32::constant(layer as u32);
@@ -182,14 +184,14 @@ mod tests {
             layer,
             node,
         )
-        .unwrap();
+        .expect("create_label_exp failed");
 
-        let expected_raw = data_at_node(&l1, node).unwrap();
-        let expected = bytes_into_fr(expected_raw).unwrap();
+        let expected_raw = data_at_node(&l1, node).expect("data_at_node failed");
+        let expected = bytes_into_fr(expected_raw).expect("bytes_into_fr failed");
 
         assert_eq!(
             expected,
-            out.get_value().unwrap(),
+            out.get_value().expect("get_value failed"),
             "circuit and non circuit do not match"
         );
     }

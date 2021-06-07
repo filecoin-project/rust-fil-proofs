@@ -92,7 +92,7 @@ pub fn setup_params(
             .expect("LAYERS poisoned")
             .get(&u64::from(sector_bytes))
             .expect("unknown sector size"),
-    )?;
+    );
     let sector_bytes = u64::from(sector_bytes);
 
     ensure!(
@@ -119,14 +119,15 @@ fn select_challenges(
     partitions: usize,
     minimum_total_challenges: usize,
     layers: usize,
-) -> Result<LayerChallenges> {
+) -> LayerChallenges {
     let mut count = 1;
     let mut guess = LayerChallenges::new(layers, count);
     while partitions * guess.challenges_count_all() < minimum_total_challenges {
         count += 1;
         guess = LayerChallenges::new(layers, count);
     }
-    Ok(guess)
+
+    guess
 }
 
 #[cfg(test)]
@@ -137,11 +138,7 @@ mod tests {
 
     #[test]
     fn partition_layer_challenges_test() {
-        let f = |partitions| {
-            select_challenges(partitions, 12, 11)
-                .expect("never fails")
-                .challenges_count_all()
-        };
+        let f = |partitions| select_challenges(partitions, 12, 11).challenges_count_all();
         // Update to ensure all supported PoRepProofPartitions options are represented here.
         assert_eq!(6, f(usize::from(PoRepProofPartitions(2))));
 

@@ -105,9 +105,9 @@ where
         .collect();
 
     let pub_inputs = rational::PublicInputs {
-        challenges: challenges.clone(),
-        comm_rs: comm_rs.clone(),
-        faults: faults.clone(),
+        challenges,
+        comm_rs,
+        faults,
     };
 
     let priv_inputs = rational::PrivateInputs::<Tree> {
@@ -195,9 +195,9 @@ fn test_rational_post_validates_challenge<Tree: 'static + MerkleTreeTrait>() {
         .collect();
 
     let pub_inputs = rational::PublicInputs {
-        challenges: challenges.clone(),
+        challenges,
         faults: faults.clone(),
-        comm_rs: comm_rs.clone(),
+        comm_rs,
     };
 
     let priv_inputs = rational::PrivateInputs::<Tree> {

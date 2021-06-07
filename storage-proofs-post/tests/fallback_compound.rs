@@ -122,7 +122,7 @@ fn fallback_post<Tree: 'static + MerkleTreeTrait>(
     let pub_inputs = PublicInputs {
         randomness,
         prover_id,
-        sectors: pub_sectors.clone(),
+        sectors: pub_sectors,
         k: None,
     };
 

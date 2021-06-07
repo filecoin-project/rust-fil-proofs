@@ -113,30 +113,38 @@ fn test_verify_simple_pieces() {
     // / \  / \
     // a  b c  d
 
-    let (a, b, c, d): ([u8; 32], [u8; 32], [u8; 32], [u8; 32]) = rng.gen();
+    let (val_a, val_b, val_c, val_d): ([u8; 32], [u8; 32], [u8; 32], [u8; 32]) = rng.gen();
 
-    let mut e = [0u8; 32];
-    let h = piece_hash(&a, &b);
-    e.copy_from_slice(h.as_ref());
+    let mut val_e = [0u8; 32];
+    let val_h = piece_hash(&val_a, &val_b);
+    val_e.copy_from_slice(val_h.as_ref());
 
-    let mut f = [0u8; 32];
-    let h = piece_hash(&c, &d);
-    f.copy_from_slice(h.as_ref());
+    let mut val_f = [0u8; 32];
+    let val_h = piece_hash(&val_c, &val_d);
+    val_f.copy_from_slice(val_h.as_ref());
 
-    let mut g = [0u8; 32];
-    let h = piece_hash(&e, &f);
-    g.copy_from_slice(h.as_ref());
-    let a = PieceInfo::new(a, UnpaddedBytesAmount(127)).expect("failed to create piece info a");
-    let b = PieceInfo::new(b, UnpaddedBytesAmount(127)).expect("failed to create piece info b");
-    let c = PieceInfo::new(c, UnpaddedBytesAmount(127)).expect("failed to create piece info c");
-    let d = PieceInfo::new(d, UnpaddedBytesAmount(127)).expect("failed to create piece info d");
+    let mut val_g = [0u8; 32];
+    let val_h = piece_hash(&val_e, &val_f);
+    val_g.copy_from_slice(val_h.as_ref());
 
-    let e = PieceInfo::new(e, UnpaddedBytesAmount(254)).expect("failed to create piece info e");
-    let f = PieceInfo::new(f, UnpaddedBytesAmount(254)).expect("failed to create piece info f");
-    let g = PieceInfo::new(g, UnpaddedBytesAmount(508)).expect("failed to create piece info g");
+    let val_a =
+        PieceInfo::new(val_a, UnpaddedBytesAmount(127)).expect("failed to create piece info a");
+    let val_b =
+        PieceInfo::new(val_b, UnpaddedBytesAmount(127)).expect("failed to create piece info b");
+    let val_c =
+        PieceInfo::new(val_c, UnpaddedBytesAmount(127)).expect("failed to create piece info c");
+    let val_d =
+        PieceInfo::new(val_d, UnpaddedBytesAmount(127)).expect("failed to create piece info d");
+
+    let val_e =
+        PieceInfo::new(val_e, UnpaddedBytesAmount(254)).expect("failed to create piece info e");
+    let val_f =
+        PieceInfo::new(val_f, UnpaddedBytesAmount(254)).expect("failed to create piece info f");
+    let val_g =
+        PieceInfo::new(val_g, UnpaddedBytesAmount(508)).expect("failed to create piece info g");
 
     let sector_size = SectorSize(4 * 128);
-    let comm_d = g.commitment;
+    let comm_d = val_g.commitment;
 
     // println!("e: {:?}", e);
     // println!("f: {:?}", f);
@@ -145,31 +153,32 @@ fn test_verify_simple_pieces() {
     assert!(
         verify_pieces(
             &comm_d,
-            &[a.clone(), b.clone(), c.clone(), d.clone()],
+            &[val_a.clone(), val_b.clone(), val_c.clone(), val_d.clone()],
             sector_size
         )
         .expect("failed to verify"),
-        "[a, b, c, d]"
+        "[val_a, val_b, val_c, val_d]"
     );
 
     assert!(
-        verify_pieces(&comm_d, &[e.clone(), c, d], sector_size).expect("failed to verify"),
-        "[e, c, d]"
+        verify_pieces(&comm_d, &[val_e.clone(), val_c, val_d], sector_size)
+            .expect("failed to verify"),
+        "[val_e, val_c, val_d]"
     );
 
     assert!(
-        verify_pieces(&comm_d, &[e, f.clone()], sector_size).expect("failed to verify"),
-        "[e, f]"
+        verify_pieces(&comm_d, &[val_e, val_f.clone()], sector_size).expect("failed to verify"),
+        "[val_e, val_f]"
     );
 
     assert!(
-        verify_pieces(&comm_d, &[a, b, f], sector_size).expect("failed to verify"),
-        "[a, b, f]"
+        verify_pieces(&comm_d, &[val_a, val_b, val_f], sector_size).expect("failed to verify"),
+        "[val_a, val_b, val_f]"
     );
 
     assert!(
-        verify_pieces(&comm_d, &[g], sector_size).expect("failed to verify"),
-        "[g]"
+        verify_pieces(&comm_d, &[val_g], sector_size).expect("failed to verify"),
+        "[val_g]"
     );
 }
 
@@ -227,8 +236,8 @@ fn test_verify_padded_pieces() {
         pad,
     ];
 
-    let hash = |a, b| {
-        let hash = piece_hash(a, b);
+    let hash = |val_a, val_b| {
+        let hash = piece_hash(val_a, val_b);
         let mut res = [0u8; 32];
         res.copy_from_slice(hash.as_ref());
         res

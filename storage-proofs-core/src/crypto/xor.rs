@@ -40,7 +40,8 @@ mod tests {
             let key: Vec<u8> = (0..32).map(|_| rng.gen()).collect();
             let plaintext: Vec<u8> = (0..(i + 1) * 32).map(|_| rng.gen()).collect();
 
-            let ciphertext = encode(key.as_slice(), plaintext.as_slice()).unwrap();
+            let ciphertext =
+                encode(key.as_slice(), plaintext.as_slice()).expect("failed to encode");
 
             assert_ne!(
                 plaintext, ciphertext,
@@ -48,7 +49,8 @@ mod tests {
             );
             assert_eq!(plaintext.len(), ciphertext.len());
 
-            let roundtrip = decode(key.as_slice(), ciphertext.as_slice()).unwrap();
+            let roundtrip =
+                decode(key.as_slice(), ciphertext.as_slice()).expect("failed to decode");
             assert_eq!(plaintext, roundtrip, "failed to roundtrip");
         }
     }

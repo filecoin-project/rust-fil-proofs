@@ -192,7 +192,7 @@ mod test {
             for (i, bit) in b.bits.iter().enumerate() {
                 match *bit {
                     Boolean::Constant(bit) => {
-                        assert!(bit == ((b.value.unwrap() >> i) & 1 == 1));
+                        assert!(bit == ((b.value.expect("value failed") >> i) & 1 == 1));
                     }
                     _ => unreachable!(),
                 }
@@ -224,7 +224,7 @@ mod test {
             for (i, bit) in b.bits.iter().enumerate() {
                 match *bit {
                     Boolean::Constant(bit) => {
-                        assert!(bit == ((b.value.unwrap() >> i) & 1 == 1));
+                        assert!(bit == ((b.value.expect("value failed") >> i) & 1 == 1));
                     }
                     _ => unreachable!(),
                 }

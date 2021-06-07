@@ -51,12 +51,14 @@ mod tests {
 
             let key_bits: Vec<Boolean> = {
                 let mut cs = cs.namespace(|| "key");
-                bytes_into_boolean_vec(&mut cs, Some(key.as_slice()), key.len()).unwrap()
+                bytes_into_boolean_vec(&mut cs, Some(key.as_slice()), key.len())
+                    .expect("bytes_into_boolean_vec failed")
             };
 
             let data_bits: Vec<Boolean> = {
                 let mut cs = cs.namespace(|| "data bits");
-                bytes_into_boolean_vec(&mut cs, Some(data.as_slice()), data.len()).unwrap()
+                bytes_into_boolean_vec(&mut cs, Some(data.as_slice()), data.len())
+                    .expect("bytes_into_boolean_vec failed")
             };
 
             let out_bits =
@@ -69,12 +71,13 @@ mod tests {
             let actual = bits_to_bytes(
                 out_bits
                     .iter()
-                    .map(|v| v.get_value().unwrap())
+                    .map(|v| v.get_value().expect("get_value failed"))
                     .collect::<Vec<bool>>()
                     .as_slice(),
             );
 
-            let expected = xor::encode(key.as_slice(), data.as_slice()).unwrap();
+            let expected =
+                xor::encode(key.as_slice(), data.as_slice()).expect("xor::encode failed");
 
             assert_eq!(expected, actual, "circuit and non circuit do not match");
 
@@ -87,7 +90,7 @@ mod tests {
             let roundtrip = bits_to_bytes(
                 roundtrip_bits
                     .iter()
-                    .map(|v| v.get_value().unwrap())
+                    .map(|v| v.get_value().expect("get_value failed"))
                     .collect::<Vec<bool>>()
                     .as_slice(),
             );

@@ -40,8 +40,8 @@ mod tests {
 
     #[test]
     fn sloth_bls_12() {
-        let key = Fr::from_str("11111111").unwrap();
-        let plaintext = Fr::from_str("123456789").unwrap();
+        let key = Fr::from_str("11111111").expect("from_str failed");
+        let plaintext = Fr::from_str("123456789").expect("from_str failed");
         let ciphertext = encode(&key, &plaintext);
         let decrypted = decode(&key, &ciphertext);
         assert_eq!(plaintext, decrypted);
@@ -50,9 +50,9 @@ mod tests {
 
     #[test]
     fn sloth_bls_12_fake() {
-        let key = Fr::from_str("11111111").unwrap();
-        let key_fake = Fr::from_str("11111112").unwrap();
-        let plaintext = Fr::from_str("123456789").unwrap();
+        let key = Fr::from_str("11111111").expect("from_str failed");
+        let key_fake = Fr::from_str("11111112").expect("from_str failed");
+        let plaintext = Fr::from_str("123456789").expect("from_str failed");
         let ciphertext = encode(&key, &plaintext);
         let decrypted = decode(&key_fake, &ciphertext);
         assert_ne!(plaintext, decrypted);
@@ -60,7 +60,7 @@ mod tests {
 
     prop_compose! {
         fn arb_fr()(a in 0..MODULUS[0], b in 0..MODULUS[1], c in 0..MODULUS[2], d in 0..MODULUS[3]) -> Fr {
-            Fr::from_repr(FrRepr([a, b, c, d])).unwrap()
+            Fr::from_repr(FrRepr([a, b, c, d])).expect("from_repr failed")
         }
     }
     proptest! {

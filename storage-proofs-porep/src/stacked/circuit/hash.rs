@@ -43,12 +43,12 @@ mod tests {
 
             let a_num = {
                 let mut cs = cs.namespace(|| "a");
-                AllocatedNum::alloc(&mut cs, || Ok(a)).unwrap()
+                AllocatedNum::alloc(&mut cs, || Ok(a)).expect("alloc failed")
             };
 
             let b_num = {
                 let mut cs = cs.namespace(|| "b");
-                AllocatedNum::alloc(&mut cs, || Ok(b)).unwrap()
+                AllocatedNum::alloc(&mut cs, || Ok(b)).expect("alloc failed")
             };
 
             let out = <PoseidonHasher as Hasher>::Function::hash2_circuit(
@@ -66,7 +66,7 @@ mod tests {
 
             assert_eq!(
                 expected,
-                out.get_value().unwrap(),
+                out.get_value().expect("get_value failed"),
                 "circuit and non circuit do not match"
             );
         }
@@ -84,7 +84,8 @@ mod tests {
                 .iter()
                 .enumerate()
                 .map(|(i, v)| {
-                    AllocatedNum::alloc(cs.namespace(|| format!("num_{}", i)), || Ok(*v)).unwrap()
+                    AllocatedNum::alloc(cs.namespace(|| format!("num_{}", i)), || Ok(*v))
+                        .expect("alloc failed")
                 })
                 .collect::<Vec<_>>();
 
@@ -98,7 +99,7 @@ mod tests {
 
             assert_eq!(
                 expected,
-                out.get_value().unwrap(),
+                out.get_value().expect("get_value failed"),
                 "circuit and non circuit do not match"
             );
         }

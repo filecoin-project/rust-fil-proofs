@@ -125,7 +125,7 @@ fn test_extract_all<Tree: 'static + MerkleTreeTrait>() {
         (mmapped_data.as_mut()).into(),
         None,
         config.clone(),
-        replica_path.clone(),
+        replica_path,
     )
     .expect("replication failed");
 
@@ -245,7 +245,7 @@ fn test_stacked_porep_resume_seal() {
         (mmapped_data1.as_mut()).into(),
         None,
         config.clone(),
-        replica_path1.clone(),
+        replica_path1,
     )
     .expect("replication failed 1");
     clear_temp();
@@ -257,7 +257,7 @@ fn test_stacked_porep_resume_seal() {
         (mmapped_data2.as_mut()).into(),
         None,
         config.clone(),
-        replica_path2.clone(),
+        replica_path2,
     )
     .expect("replication failed 2");
     clear_temp();
@@ -284,7 +284,7 @@ fn test_stacked_porep_resume_seal() {
         (mmapped_data3.as_mut()).into(),
         None,
         config.clone(),
-        replica_path3.clone(),
+        replica_path3,
     )
     .expect("replication failed 3");
     clear_temp();

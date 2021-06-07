@@ -383,7 +383,7 @@ where
     }
 }
 
-fn ensure_parent(path: &PathBuf) -> io::Result<()> {
+fn ensure_parent(path: &Path) -> io::Result<()> {
     match path.parent() {
         Some(dir) => {
             create_dir_all(dir)?;
@@ -395,7 +395,7 @@ fn ensure_parent(path: &PathBuf) -> io::Result<()> {
 
 // Reads parameter mappings using mmap so that they can be lazily
 // loaded later.
-pub fn read_cached_params(cache_entry_path: &PathBuf) -> Result<groth16::MappedParameters<Bls12>> {
+pub fn read_cached_params(cache_entry_path: &Path) -> Result<groth16::MappedParameters<Bls12>> {
     info!("checking cache_path: {:?} for parameters", cache_entry_path);
 
     let verify_production_params = SETTINGS.verify_production_params;
@@ -465,9 +465,7 @@ pub fn read_cached_params(cache_entry_path: &PathBuf) -> Result<groth16::MappedP
     .map_err(Into::into)
 }
 
-fn read_cached_verifying_key(
-    cache_entry_path: &PathBuf,
-) -> io::Result<groth16::VerifyingKey<Bls12>> {
+fn read_cached_verifying_key(cache_entry_path: &Path) -> io::Result<groth16::VerifyingKey<Bls12>> {
     info!(
         "checking cache_path: {:?} for verifying key",
         cache_entry_path
@@ -480,9 +478,7 @@ fn read_cached_verifying_key(
     })
 }
 
-fn read_cached_srs_key(
-    cache_entry_path: &PathBuf,
-) -> Result<groth16::aggregate::GenericSRS<Bls12>> {
+fn read_cached_srs_key(cache_entry_path: &Path) -> Result<groth16::aggregate::GenericSRS<Bls12>> {
     info!("checking cache_path: {:?} for srs", cache_entry_path);
 
     let verify_production_params = SETTINGS.verify_production_params;
@@ -556,7 +552,7 @@ fn read_cached_srs_key(
     })
 }
 
-fn read_cached_metadata(cache_entry_path: &PathBuf) -> io::Result<CacheEntryMetadata> {
+fn read_cached_metadata(cache_entry_path: &Path) -> io::Result<CacheEntryMetadata> {
     info!("checking cache_path: {:?} for metadata", cache_entry_path);
     with_exclusive_read_lock(cache_entry_path, |file| {
         let value = serde_json::from_reader(file)?;
@@ -567,7 +563,7 @@ fn read_cached_metadata(cache_entry_path: &PathBuf) -> io::Result<CacheEntryMeta
 }
 
 fn write_cached_metadata(
-    cache_entry_path: &PathBuf,
+    cache_entry_path: &Path,
     value: CacheEntryMetadata,
 ) -> io::Result<CacheEntryMetadata> {
     with_exclusive_lock(cache_entry_path, |file| {
@@ -579,7 +575,7 @@ fn write_cached_metadata(
 }
 
 fn write_cached_verifying_key(
-    cache_entry_path: &PathBuf,
+    cache_entry_path: &Path,
     value: groth16::VerifyingKey<Bls12>,
 ) -> io::Result<groth16::VerifyingKey<Bls12>> {
     with_exclusive_lock(cache_entry_path, |mut file| {
@@ -592,7 +588,7 @@ fn write_cached_verifying_key(
 }
 
 fn write_cached_srs_key(
-    cache_entry_path: &PathBuf,
+    cache_entry_path: &Path,
     value: groth16::aggregate::GenericSRS<Bls12>,
 ) -> io::Result<groth16::aggregate::GenericSRS<Bls12>> {
     with_exclusive_lock(cache_entry_path, |mut file| {
@@ -605,7 +601,7 @@ fn write_cached_srs_key(
 }
 
 fn write_cached_params(
-    cache_entry_path: &PathBuf,
+    cache_entry_path: &Path,
     value: groth16::Parameters<Bls12>,
 ) -> io::Result<groth16::Parameters<Bls12>> {
     with_exclusive_lock(cache_entry_path, |mut file| {
@@ -617,7 +613,7 @@ fn write_cached_params(
     })
 }
 
-pub fn with_exclusive_lock<T, E, F>(file_path: &PathBuf, f: F) -> std::result::Result<T, E>
+pub fn with_exclusive_lock<T, E, F>(file_path: &Path, f: F) -> std::result::Result<T, E>
 where
     F: FnOnce(&mut LockedFile) -> std::result::Result<T, E>,
     E: From<io::Error>,
@@ -625,7 +621,7 @@ where
     with_open_file(file_path, LockedFile::open_exclusive, f)
 }
 
-pub fn with_exclusive_read_lock<T, E, F>(file_path: &PathBuf, f: F) -> std::result::Result<T, E>
+pub fn with_exclusive_read_lock<T, E, F>(file_path: &Path, f: F) -> std::result::Result<T, E>
 where
     F: FnOnce(&mut LockedFile) -> std::result::Result<T, E>,
     E: From<io::Error>,
@@ -634,15 +630,15 @@ where
 }
 
 pub fn with_open_file<'a, T, E, F, G>(
-    file_path: &'a PathBuf,
+    file_path: &'a Path,
     open_file: G,
     f: F,
 ) -> std::result::Result<T, E>
 where
     F: FnOnce(&mut LockedFile) -> std::result::Result<T, E>,
-    G: FnOnce(&'a PathBuf) -> io::Result<LockedFile>,
+    G: FnOnce(&'a Path) -> io::Result<LockedFile>,
     E: From<io::Error>,
 {
     ensure_parent(&file_path)?;
-    f(&mut open_file(&file_path)?)
+    f(&mut open_file(file_path)?)
 }

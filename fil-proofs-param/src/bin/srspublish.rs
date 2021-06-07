@@ -37,7 +37,7 @@ fn is_well_formed_filename(filename: &str) -> bool {
         }
         return false;
     }
-    let version = filename.split('-').nth(0).unwrap();
+    let version = filename.split('-').next().unwrap();
     if version.len() < 2 {
         return false;
     }

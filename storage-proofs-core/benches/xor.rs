@@ -5,7 +5,7 @@ use bellperson::{
     util_cs::bench_cs::BenchCS,
     Circuit, ConstraintSystem, SynthesisError,
 };
-use criterion::{black_box, criterion_group, criterion_main, Criterion, ParameterizedBenchmark};
+use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use rand::{thread_rng, Rng};
 use storage_proofs_core::{crypto::xor, gadgets::xor::xor as xor_circuit};
 
@@ -49,20 +49,18 @@ impl<'a> Circuit<Bls12> for XorExample<'a> {
 fn xor_benchmark(c: &mut Criterion) {
     let params = vec![32, 64, 10 * 32];
 
-    c.bench(
-        "xor",
-        ParameterizedBenchmark::new(
-            "non-circuit",
-            |b, bytes| {
-                let mut rng = thread_rng();
-                let key: Vec<u8> = (0..32).map(|_| rng.gen()).collect();
-                let data: Vec<u8> = (0..*bytes).map(|_| rng.gen()).collect();
+    let mut group = c.benchmark_group("xor");
+    for bytes in params {
+        group.bench_function(format!("non-circuit-{}", bytes), |b| {
+            let mut rng = thread_rng();
+            let key: Vec<u8> = (0..32).map(|_| rng.gen()).collect();
+            let data: Vec<u8> = (0..bytes).map(|_| rng.gen()).collect();
 
-                b.iter(|| black_box(xor::encode(&key, &data)))
-            },
-            params,
-        ),
-    );
+            b.iter(|| black_box(xor::encode(&key, &data)))
+        });
+    }
+
+    group.finish();
 }
 
 fn xor_circuit_benchmark(c: &mut Criterion) {
@@ -78,32 +76,28 @@ fn xor_circuit_benchmark(c: &mut Criterion) {
 
     let params = vec![32];
 
-    c.bench(
-        "xor-circuit",
-        ParameterizedBenchmark::new(
-            "create-proof",
-            move |b, bytes| {
-                let mut rng = thread_rng();
-                let key: Vec<Option<bool>> = (0..32 * 8).map(|_| Some(rng.gen())).collect();
-                let data: Vec<Option<bool>> = (0..bytes * 8).map(|_| Some(rng.gen())).collect();
+    let mut group = c.benchmark_group("xor-circuit");
+    for bytes in params {
+        group.bench_function(format!("create-proof-{}", bytes), |b| {
+            let mut rng = thread_rng();
+            let key: Vec<Option<bool>> = (0..32 * 8).map(|_| Some(rng.gen())).collect();
+            let data: Vec<Option<bool>> = (0..bytes * 8).map(|_| Some(rng.gen())).collect();
 
-                b.iter(|| {
-                    let proof = create_random_proof(
-                        XorExample {
-                            key: key.as_slice(),
-                            data: data.as_slice(),
-                        },
-                        &groth_params,
-                        &mut rng,
-                    )
-                    .unwrap();
+            b.iter(|| {
+                let proof = create_random_proof(
+                    XorExample {
+                        key: key.as_slice(),
+                        data: data.as_slice(),
+                    },
+                    &groth_params,
+                    &mut rng,
+                )
+                .unwrap();
 
-                    black_box(proof)
-                });
-            },
-            params,
-        )
-        .with_function("synthesize", move |b, bytes| {
+                black_box(proof)
+            });
+        });
+        group.bench_function(format!("synthesize-{}", bytes), |b| {
             let mut rng = thread_rng();
             let key: Vec<Option<bool>> = (0..32 * 8).map(|_| Some(rng.gen())).collect();
             let data: Vec<Option<bool>> = (0..bytes * 8).map(|_| Some(rng.gen())).collect();
@@ -119,9 +113,11 @@ fn xor_circuit_benchmark(c: &mut Criterion) {
 
                 black_box(cs)
             });
-        })
-        .sample_size(20),
-    );
+        });
+    }
+
+    group.sample_size(20);
+    group.finish();
 }
 
 criterion_group!(benches, xor_benchmark, xor_circuit_benchmark);

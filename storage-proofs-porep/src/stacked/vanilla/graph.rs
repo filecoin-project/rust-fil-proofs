@@ -541,7 +541,7 @@ mod tests {
             porep_id,
             api_version,
         )
-        .unwrap();
+        .expect("stacked bucket graph new_stacked failed");
 
         // If a parent index is not less than half the total node count, then
         // the parent falls in the second half of the previous layer. By the
@@ -552,7 +552,9 @@ mod tests {
         dbg!(&porep_id, &nodes, &expect_pathological);
         for i in 0..test_n {
             let mut expanded_parents = [0u32; EXP_DEGREE];
-            graph.expanded_parents(i, &mut expanded_parents).unwrap();
+            graph
+                .expanded_parents(i, &mut expanded_parents)
+                .expect("expanded_parents");
 
             if expect_pathological {
                 // If we ever see a large-enough parent, then this graph is not
@@ -561,15 +563,13 @@ mod tests {
                     !expanded_parents.iter().any(demonstrably_large_enough),
                     "Expected pathological graph but found large-enough parent."
                 );
-            } else {
-                if expanded_parents.iter().any(demonstrably_large_enough) {
-                    // If we ever see a large-enough parent, then this graph is
-                    // not pathological, and the test succeeds. This is the only
-                    // way for a test expecting a non-pathological graph to
-                    // succeed, so there is no risk of false negatives (i.e.
-                    // failure to identify pathological graphs when unexpected).
-                    return;
-                }
+            } else if expanded_parents.iter().any(demonstrably_large_enough) {
+                // If we ever see a large-enough parent, then this graph is
+                // not pathological, and the test succeeds. This is the only
+                // way for a test expecting a non-pathological graph to
+                // succeed, so there is no risk of false negatives (i.e.
+                // failure to identify pathological graphs when unexpected).
+                return;
             }
         }
 
@@ -608,16 +608,18 @@ mod tests {
             porep_id,
             ApiVersion::V1_1_0,
         )
-        .unwrap();
+        .expect("stacked bucket graph new_stacked");
 
         let mut exp_parents = [0u32; EXP_DEGREE];
         for v in 0..N_CHILDREN_SAMPLED {
-            graph.expanded_parents(v, &mut exp_parents[..]).unwrap();
+            graph
+                .expanded_parents(v, &mut exp_parents[..])
+                .expect("expanded_parents");
             if exp_parents.iter().any(|u| *u >= FIRST_TRUNCATED_PARENT) {
                 return;
             }
         }
-        assert!(false);
+        panic!();
     }
 
     // Checks that the distribution of parent node indexes within a sector is within a set bound.
@@ -656,14 +658,16 @@ mod tests {
             porep_id,
             ApiVersion::V1_1_0,
         )
-        .unwrap();
+        .expect("stacked bucket graph new_stacked failed");
 
         // Count the number of parents in each bin.
         let mut hist = [0usize; N_BINS];
         let mut exp_parents = [0u32; EXP_DEGREE];
         for sample_index in 0..N_CHILDREN_SAMPLED {
             let v = sample_index * N_NODES / N_CHILDREN_SAMPLED;
-            graph.expanded_parents(v, &mut exp_parents[..]).unwrap();
+            graph
+                .expanded_parents(v, &mut exp_parents[..])
+                .expect("expanded_parents failed");
             for u in exp_parents.iter() {
                 let bin_index = (u / N_NODES_PER_BIN) as usize;
                 hist[bin_index] += 1;
@@ -671,7 +675,7 @@ mod tests {
         }
 
         let success = hist.iter().all(|&n_parents| {
-            n_parents >= MIN_PARENT_COUNT_ALLOWED && n_parents <= MAX_PARENT_COUNT_ALLOWED
+            (MIN_PARENT_COUNT_ALLOWED..=MAX_PARENT_COUNT_ALLOWED).contains(&n_parents)
         });
 
         assert!(success);
