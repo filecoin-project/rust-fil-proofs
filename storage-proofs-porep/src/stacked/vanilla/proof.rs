@@ -313,7 +313,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
     ) -> Result<(Labels<Tree>, Vec<LayerState>)> {
         let mut parent_cache = graph.parent_cache()?;
 
-        #[cfg(feature = "cpu-detection")]
+        #[cfg(feature = "multicore-sdr")]
         {
             if SETTINGS.use_multicore_sdr {
                 info!("multi core replication");
@@ -336,7 +336,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
             }
         }
 
-        #[cfg(not(feature = "cpu-detection"))]
+        #[cfg(not(feature = "multicore-sdr"))]
         {
             info!("single core replication");
             create_label::single::create_labels_for_encoding(
@@ -358,7 +358,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
     ) -> Result<LabelsCache<Tree>> {
         let mut parent_cache = graph.parent_cache()?;
 
-        #[cfg(feature = "cpu-detection")]
+        #[cfg(feature = "multicore-sdr")]
         {
             if SETTINGS.use_multicore_sdr {
                 info!("multi core replication");
@@ -381,7 +381,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
             }
         }
 
-        #[cfg(not(feature = "cpu-detection"))]
+        #[cfg(not(feature = "multicore-sdr"))]
         {
             info!("single core replication");
             create_label::single::create_labels_for_decoding(
