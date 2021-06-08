@@ -8,15 +8,18 @@ mod cache;
 mod challenges;
 mod column;
 mod column_proof;
+#[cfg(feature = "multicore-sdr")]
 mod cores;
 mod encoding_proof;
 mod graph;
 mod labeling_proof;
+#[cfg(feature = "multicore-sdr")]
 mod memory_handling;
 mod params;
 mod porep;
 mod proof;
 mod proof_scheme;
+#[cfg(feature = "multicore-sdr")]
 mod utils;
 
 pub use challenges::{ChallengeRequirements, LayerChallenges};

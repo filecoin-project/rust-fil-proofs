@@ -56,11 +56,35 @@ The instructions below assume you have independently installed `rust-fil-proofs`
 
 Before building you will need OpenCL to be installed. On Ubuntu, this can be achieved with `apt install ocl-icd-opencl-dev`.  Other system dependencies such as 'gcc/clang', 'wall' and 'cmake' are also required.
 
-You will also need to install the hwloc library. On Ubuntu, this can be achieved with `apt install hwloc libhwloc-dev`. For other platforms, please see the [hwloc-rs Prerequisites section](https://github.com/daschl/hwloc-rs).
+For the `multicore sdr` feature (enabled by default), you will also need to install the `hwloc` library. On Ubuntu, this can be achieved with `apt install hwloc libhwloc-dev`. For other platforms, please see the [hwloc-rs Prerequisites section](https://github.com/daschl/hwloc-rs).
 
 
 ```
 > cargo build --release --all
+```
+
+The `hwloc` dependency is optional and may be disabled.  Disabling it will not allow the `multicore sdr` feature to be used.  The fallback is single core replication, which is the default unless specified otherwise.
+
+To disable `multicore sdr` so that `hwloc` is not required, you can build proofs like this:
+
+```
+> cargo build --release --all --no-default-features --features pairing,gpu
+```
+
+Note that the `multicore-sdr` feature is omitted from the specified feature list, which removes it from being used by default.
+
+
+## Building for Arm64
+
+In order to build for arm64 the current requirements are
+
+- nightly rust compiler
+
+Example for building `filecoin-proofs`
+
+```
+$ rustup +nightly target add aarch64-unknown-linux-gnu
+$ cargo +nightly build -p filecoin-proofs --release --target aarch64-unknown-linux-gnu
 ```
 
 ## Test
@@ -333,19 +357,6 @@ To generate the API documentation locally, follow the instructions to generate d
 
 - [Go implementation of filecoin-proofs sectorbuilder API](https://github.com/filecoin-project/go-sectorbuilder/blob/master/sectorbuilder.go) and [associated interface structures](https://github.com/filecoin-project/go-sectorbuilder/blob/master/interface.go).
 
-
-## Building for Arm64
-
-In order to build for arm64 the current requirements are
-
-- nightly rust compiler
-
-Example for building `filecoin-proofs`
-
-```
-$ rustup +nightly target add aarch64-unknown-linux-gnu
-$ cargo +nightly build -p filecoin-proofs --release --target aarch64-unknown-linux-gnu
-```
 
 ## Contributing
 
