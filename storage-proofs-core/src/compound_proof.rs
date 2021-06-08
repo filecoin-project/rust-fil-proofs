@@ -6,8 +6,8 @@ use bellperson::{
         aggregate::{
             aggregate_proofs, verify_aggregate_proof, AggregateProof, ProverSRS, VerifierSRS,
         },
-        create_random_proof_batch, create_random_proof_batch_in_priority, verify_proofs_batch,
-        PreparedVerifyingKey,
+        create_random_proof_batch, create_random_proof_batch_in_priority,
+        create_random_proof_batch_with_type, verify_proofs_batch, PreparedVerifyingKey,
     },
     Circuit,
 };
@@ -16,6 +16,7 @@ use rand::{rngs::OsRng, RngCore};
 use rayon::prelude::{
     IndexedParallelIterator, IntoParallelIterator, IntoParallelRefIterator, ParallelIterator,
 };
+use scheduler_client::TaskType;
 
 use crate::{
     error::Result,
@@ -78,11 +79,12 @@ where
     }
 
     /// prove is equivalent to ProofScheme::prove.
-    fn prove<'b>(
+    fn prove_with_type<'b>(
         pub_params: &PublicParams<'a, S>,
         pub_in: &S::PublicInputs,
         priv_in: &S::PrivateInputs,
         groth_params: &'b groth16::MappedParameters<Bls12>,
+        post_type: Option<TaskType>,
     ) -> Result<MultiProof<'b>> {
         let partition_count = Self::partition_count(pub_params);
 
@@ -109,11 +111,21 @@ where
             vanilla_proofs,
             &pub_params.vanilla_params,
             groth_params,
-            pub_params.priority,
+            post_type,
         )?;
         info!("snark_proof:finish");
 
         Ok(MultiProof::new(groth_proofs, &groth_params.pvk))
+    }
+
+    /// prove is equivalent to ProofScheme::prove.
+    fn prove<'b>(
+        pub_params: &PublicParams<'a, S>,
+        pub_in: &S::PublicInputs,
+        priv_in: &S::PrivateInputs,
+        groth_params: &'b groth16::MappedParameters<Bls12>,
+    ) -> Result<MultiProof<'b>> {
+        Self::prove_with_type(pub_params, pub_in, priv_in, groth_params, None)
     }
 
     fn prove_with_vanilla<'b>(
@@ -121,6 +133,7 @@ where
         pub_in: &S::PublicInputs,
         vanilla_proofs: Vec<S::Proof>,
         groth_params: &'b groth16::MappedParameters<Bls12>,
+        post_type: Option<TaskType>,
     ) -> Result<MultiProof<'b>> {
         let partition_count = Self::partition_count(pub_params);
 
@@ -133,7 +146,7 @@ where
             vanilla_proofs,
             &pub_params.vanilla_params,
             groth_params,
-            pub_params.priority,
+            post_type,
         )?;
         info!("snark_proof:finish");
 
@@ -238,7 +251,7 @@ where
         vanilla_proofs: Vec<S::Proof>,
         pub_params: &S::PublicParams,
         groth_params: &groth16::MappedParameters<Bls12>,
-        priority: bool,
+        post_type: Option<TaskType>,
     ) -> Result<Vec<groth16::Proof<Bls12>>> {
         let mut rng = OsRng;
         ensure!(
@@ -260,11 +273,8 @@ where
             })
             .collect::<Result<Vec<_>>>()?;
 
-        let groth_proofs = if priority {
-            create_random_proof_batch_in_priority(circuits, groth_params, &mut rng)?
-        } else {
-            create_random_proof_batch(circuits, groth_params, &mut rng)?
-        };
+        let groth_proofs =
+            create_random_proof_batch_with_type(circuits, groth_params, &mut rng, post_type)?;
 
         groth_proofs
             .into_iter()

@@ -1,3 +1,4 @@
+use scheduler_client::TaskType;
 use std::collections::BTreeMap;
 
 use anyhow::{ensure, Context, Result};
@@ -80,11 +81,17 @@ pub fn generate_window_post_with_vanilla<Tree: 'static + MerkleTreeTrait>(
         &vanilla_proofs,
     )?;
 
+    let post_type = match post_config.typ {
+        PoStType::Winning => TaskType::WinningPost,
+        PoStType::Window => TaskType::WindowPost,
+    };
+
     let proof = FallbackPoStCompound::prove_with_vanilla(
         &pub_params,
         &pub_inputs,
         partitioned_proofs,
         &groth_params,
+        Some(post_type),
     )?;
 
     info!("generate_window_post_with_vanilla:finish");
@@ -165,7 +172,18 @@ pub fn generate_window_post<Tree: 'static + MerkleTreeTrait>(
         sectors: &priv_sectors,
     };
 
-    let proof = FallbackPoStCompound::prove(&pub_params, &pub_inputs, &priv_inputs, &groth_params)?;
+    let post_type = match post_config.typ {
+        PoStType::Winning => TaskType::WinningPost,
+        PoStType::Window => TaskType::WindowPost,
+    };
+
+    let proof = FallbackPoStCompound::prove_with_type(
+        &pub_params,
+        &pub_inputs,
+        &priv_inputs,
+        &groth_params,
+        Some(post_type),
+    )?;
 
     info!("generate_window_post:finish");
 
