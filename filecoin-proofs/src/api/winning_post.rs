@@ -23,7 +23,7 @@ use crate::{
     PoStType,
 };
 
-use scheduler_client::TaskType;
+use bellperson::groth16::BellTaskType;
 
 /// Generates a Winning proof-of-spacetime with provided vanilla proofs.
 pub fn generate_winning_post_with_vanilla<Tree: 'static + MerkleTreeTrait>(
@@ -84,8 +84,8 @@ pub fn generate_winning_post_with_vanilla<Tree: 'static + MerkleTreeTrait>(
     )?;
 
     let post_type = match post_config.typ {
-        PoStType::Winning => TaskType::WinningPost,
-        PoStType::Window => TaskType::WindowPost,
+        PoStType::Winning => BellTaskType::WinningPost,
+        PoStType::Window => BellTaskType::WindowPost,
     };
 
     let proof = FallbackPoStCompound::prove_with_vanilla(
@@ -183,8 +183,8 @@ pub fn generate_winning_post<Tree: 'static + MerkleTreeTrait>(
     };
 
     let post_type = match post_config.typ {
-        PoStType::Winning => TaskType::WinningPost,
-        PoStType::Window => TaskType::WindowPost,
+        PoStType::Winning => BellTaskType::WinningPost,
+        PoStType::Window => BellTaskType::WindowPost,
     };
 
     let proof = FallbackPoStCompound::<Tree>::prove_with_type(

@@ -6,6 +6,7 @@ use bellperson::SynthesisError;
 
 use crate::sector::SectorId;
 use neptune::Error as NeptuneError;
+#[cfg(any(feature = "gpu"))]
 use scheduler_client::Error as SchedulerError;
 
 /// Custom error types
@@ -43,7 +44,8 @@ pub enum Error {
     FaultySectors(Vec<SectorId>),
     #[error("Invalid parameters file: {}", _0)]
     InvalidParameters(String),
-    #[error("{}", _0)]
+    #[cfg(any(feature = "gpu"))]
+    #[error("Scheduler error: {}", _0)]
     Scheduler(#[from] SchedulerError),
     #[error("{}", _0)]
     Neptune(#[from] NeptuneError),

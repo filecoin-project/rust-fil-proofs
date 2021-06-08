@@ -1,7 +1,7 @@
-use scheduler_client::TaskType;
 use std::collections::BTreeMap;
 
 use anyhow::{ensure, Context, Result};
+use bellperson::groth16::BellTaskType;
 use filecoin_hashers::Hasher;
 use log::info;
 use storage_proofs_core::{
@@ -81,9 +81,12 @@ pub fn generate_window_post_with_vanilla<Tree: 'static + MerkleTreeTrait>(
         &vanilla_proofs,
     )?;
 
+    // tell the scheduler in bellperson what task it is,
+    // so the scheduler can handle timing requirements accordingly
+    // as well as resources that are meant to be used by this task
     let post_type = match post_config.typ {
-        PoStType::Winning => TaskType::WinningPost,
-        PoStType::Window => TaskType::WindowPost,
+        PoStType::Winning => BellTaskType::WinningPost,
+        PoStType::Window => BellTaskType::WindowPost,
     };
 
     let proof = FallbackPoStCompound::prove_with_vanilla(
@@ -173,8 +176,8 @@ pub fn generate_window_post<Tree: 'static + MerkleTreeTrait>(
     };
 
     let post_type = match post_config.typ {
-        PoStType::Winning => TaskType::WinningPost,
-        PoStType::Window => TaskType::WindowPost,
+        PoStType::Winning => BellTaskType::WinningPost,
+        PoStType::Window => BellTaskType::WindowPost,
     };
 
     let proof = FallbackPoStCompound::prove_with_type(

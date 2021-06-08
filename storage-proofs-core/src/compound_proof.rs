@@ -6,8 +6,8 @@ use bellperson::{
         aggregate::{
             aggregate_proofs, verify_aggregate_proof, AggregateProof, ProverSRS, VerifierSRS,
         },
-        create_random_proof_batch, create_random_proof_batch_in_priority,
-        create_random_proof_batch_with_type, verify_proofs_batch, PreparedVerifyingKey,
+        create_random_proof_batch_with_type, verify_proofs_batch, BellTaskType,
+        PreparedVerifyingKey,
     },
     Circuit,
 };
@@ -16,7 +16,6 @@ use rand::{rngs::OsRng, RngCore};
 use rayon::prelude::{
     IndexedParallelIterator, IntoParallelIterator, IntoParallelRefIterator, ParallelIterator,
 };
-use scheduler_client::TaskType;
 
 use crate::{
     error::Result,
@@ -78,13 +77,15 @@ where
         }
     }
 
-    /// prove is equivalent to ProofScheme::prove.
+    // helper function it is almost the same as prove
+    // but with a taskType parameter which is used in bellperson to define
+    // the priority of the task and handling it accordingly.
     fn prove_with_type<'b>(
         pub_params: &PublicParams<'a, S>,
         pub_in: &S::PublicInputs,
         priv_in: &S::PrivateInputs,
         groth_params: &'b groth16::MappedParameters<Bls12>,
-        post_type: Option<TaskType>,
+        post_type: Option<BellTaskType>,
     ) -> Result<MultiProof<'b>> {
         let partition_count = Self::partition_count(pub_params);
 
@@ -125,7 +126,14 @@ where
         priv_in: &S::PrivateInputs,
         groth_params: &'b groth16::MappedParameters<Bls12>,
     ) -> Result<MultiProof<'b>> {
-        Self::prove_with_type(pub_params, pub_in, priv_in, groth_params, None)
+        // Is it ok to assign a default value of MerkleTree to this?
+        Self::prove_with_type(
+            pub_params,
+            pub_in,
+            priv_in,
+            groth_params,
+            Some(BellTaskType::MerkleTree),
+        )
     }
 
     fn prove_with_vanilla<'b>(
@@ -133,7 +141,7 @@ where
         pub_in: &S::PublicInputs,
         vanilla_proofs: Vec<S::Proof>,
         groth_params: &'b groth16::MappedParameters<Bls12>,
-        post_type: Option<TaskType>,
+        post_type: Option<BellTaskType>,
     ) -> Result<MultiProof<'b>> {
         let partition_count = Self::partition_count(pub_params);
 
@@ -251,7 +259,7 @@ where
         vanilla_proofs: Vec<S::Proof>,
         pub_params: &S::PublicParams,
         groth_params: &groth16::MappedParameters<Bls12>,
-        post_type: Option<TaskType>,
+        post_type: Option<BellTaskType>,
     ) -> Result<Vec<groth16::Proof<Bls12>>> {
         let mut rng = OsRng;
         ensure!(

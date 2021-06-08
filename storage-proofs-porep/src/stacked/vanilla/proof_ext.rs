@@ -27,11 +27,10 @@ where
 
     pub(crate) fn build(&mut self) -> Result<(), Error> {
         let requirements = {
-            let preemptible = if self.num_iter > 1 { true } else { false };
             let resouce_req = ResourceReq {
                 resource: ResourceType::Gpu(ResourceMemory::All),
                 quantity: 1,
-                preemptible,
+                preemptible: self.num_iter > 1,
             };
             let task_req = TaskReqBuilder::new()
                 .with_task_type(TaskType::MerkleProof)
