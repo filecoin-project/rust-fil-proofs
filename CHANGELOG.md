@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://book.async.rs/overview
 
 ## Unreleased
 
+## [8.0.1] - 2021-06-09
+
+- Required SnarkPack Audit updates [#1470](https://github.com/filecoin-project/rust-fil-proofs/pull/1470)
+- Allow hwloc to be optional, but enabled by default [#1468](https://github.com/filecoin-project/rust-fil-proofs/pull/1468)
+- Improve Clippy on CI [#1465](https://github.com/filecoin-project/rust-fil-proofs/pull/1465)
+
 ## [8.0.0] - 2021-06-01
 
 -  Add an API for Proof Aggregation [#1395](https://github.com/filecoin-project/rust-fil-proofs/pull/1395)
@@ -236,7 +242,8 @@ and this project adheres to [Semantic Versioning](https://book.async.rs/overview
 
 - Initial stable release
 
-[Unreleased]: https://github.com/filecoin-project/rust-fil-proofs/compare/v8.0.0...HEAD
+[Unreleased]: https://github.com/filecoin-project/rust-fil-proofs/compare/v8.0.1...HEAD
+[8.0.1]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v8.0.1
 [8.0.0]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v8.0.0
 [7.0.1]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v7.0.1
 [7.0.0]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v7.0.0
