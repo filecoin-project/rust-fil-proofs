@@ -1,6 +1,6 @@
 [package]
 name = "fr32"
-version = "1.0.0"
+version = "1.0.1"
 authors = ["dignifiedquire <me@dignifiedquire.com>"]
 description = "Filecoin proofs Fr/32-byte conversion tooling"
 license = "MIT OR Apache-2.0"
