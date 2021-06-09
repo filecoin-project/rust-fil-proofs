@@ -298,28 +298,36 @@ fn inner_test_seal_proof_aggregation_2kib_porep_id_v1_1_base_8(
     let mut commit_outputs = Vec::with_capacity(proofs_to_aggregate);
     let mut commit_inputs = Vec::with_capacity(proofs_to_aggregate);
     let mut seeds = Vec::with_capacity(proofs_to_aggregate);
+    let mut comm_rs = Vec::with_capacity(proofs_to_aggregate);
 
-    let (commit_output, commit_input, seed) = create_seal_for_aggregation::<_, SectorShape2KiB>(
-        rng,
-        SECTOR_SIZE_2_KIB,
-        prover_id,
-        &porep_id,
-        ApiVersion::V1_1_0,
-    )?;
+    let (commit_output, commit_input, seed, comm_r) =
+        create_seal_for_aggregation::<_, SectorShape2KiB>(
+            rng,
+            SECTOR_SIZE_2_KIB,
+            prover_id,
+            &porep_id,
+            ApiVersion::V1_1_0,
+        )?;
 
     // duplicate a single proof to desired target for aggregation
     for _ in 0..proofs_to_aggregate {
         commit_outputs.push(commit_output.clone());
         commit_inputs.extend(commit_input.clone());
         seeds.push(seed);
+        comm_rs.push(comm_r);
     }
 
     let config = porep_config(SECTOR_SIZE_2_KIB, porep_id, ApiVersion::V1_1_0);
-    let aggregate_proof =
-        aggregate_seal_commit_proofs::<SectorShape2KiB>(config, &seeds, commit_outputs.as_slice())?;
+    let aggregate_proof = aggregate_seal_commit_proofs::<SectorShape2KiB>(
+        config,
+        &comm_rs,
+        &seeds,
+        commit_outputs.as_slice(),
+    )?;
     let verified = verify_aggregate_seal_commit_proofs::<SectorShape2KiB>(
         config,
         aggregate_proof,
+        &comm_rs,
         &seeds,
         commit_inputs,
     )?;
@@ -342,8 +350,10 @@ fn aggregate_proofs<Tree: 'static + MerkleTreeTrait>(
     let mut commit_outputs = Vec::with_capacity(num_proofs_to_aggregate);
     let mut commit_inputs = Vec::with_capacity(num_proofs_to_aggregate);
     let mut seeds = Vec::with_capacity(num_proofs_to_aggregate);
+    let mut comm_rs = Vec::with_capacity(num_proofs_to_aggregate);
+
     for _ in 0..num_proofs_to_aggregate {
-        let (commit_output, commit_input, seed) = create_seal_for_aggregation::<_, Tree>(
+        let (commit_output, commit_input, seed, comm_r) = create_seal_for_aggregation::<_, Tree>(
             rng,
             sector_size,
             prover_id,
@@ -353,12 +363,19 @@ fn aggregate_proofs<Tree: 'static + MerkleTreeTrait>(
         commit_outputs.push(commit_output);
         commit_inputs.extend(commit_input);
         seeds.push(seed);
+        comm_rs.push(comm_r);
     }
 
     let config = porep_config(sector_size, *porep_id, api_version);
     let aggregate_proof =
-        aggregate_seal_commit_proofs::<Tree>(config, &seeds, commit_outputs.as_slice())?;
-    verify_aggregate_seal_commit_proofs::<Tree>(config, aggregate_proof, &seeds, commit_inputs)
+        aggregate_seal_commit_proofs::<Tree>(config, &comm_rs, &seeds, commit_outputs.as_slice())?;
+    verify_aggregate_seal_commit_proofs::<Tree>(
+        config,
+        aggregate_proof,
+        &comm_rs,
+        &seeds,
+        commit_inputs,
+    )
 }
 
 fn get_layer_file_paths(cache_dir: &tempfile::TempDir) -> Vec<PathBuf> {
@@ -1180,7 +1197,7 @@ fn generate_proof<Tree: 'static + MerkleTreeTrait>(
     seed: [u8; 32],
     pre_commit_output: &SealPreCommitOutput,
     piece_infos: &[PieceInfo],
-) -> Result<(SealCommitOutput, Vec<Vec<Fr>>, [u8; 32])> {
+) -> Result<(SealCommitOutput, Vec<Vec<Fr>>, [u8; 32], [u8; 32])> {
     let phase1_output = seal_commit_phase1::<_, Tree>(
         config,
         cache_dir_path,
@@ -1204,6 +1221,7 @@ fn generate_proof<Tree: 'static + MerkleTreeTrait>(
         "seed and phase1 output ticket do not match"
     );
 
+    let comm_r = phase1_output.comm_r;
     let inputs = get_seal_inputs::<Tree>(
         config,
         phase1_output.comm_r,
@@ -1215,7 +1233,7 @@ fn generate_proof<Tree: 'static + MerkleTreeTrait>(
     )?;
     let result = seal_commit_phase2(config, phase1_output, prover_id, sector_id)?;
 
-    Ok((result, inputs, seed))
+    Ok((result, inputs, seed, comm_r))
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1293,7 +1311,7 @@ fn proof_and_unseal<Tree: 'static + MerkleTreeTrait>(
     piece_infos: &[PieceInfo],
     piece_bytes: &[u8],
 ) -> Result<()> {
-    let (commit_output, _commit_inputs, _seed) = generate_proof::<Tree>(
+    let (commit_output, _commit_inputs, _seed, _comm_r) = generate_proof::<Tree>(
         config,
         cache_dir_path,
         sealed_sector_file,
@@ -1387,7 +1405,7 @@ fn create_seal_for_aggregation<R: Rng, Tree: 'static + MerkleTreeTrait>(
     prover_id: ProverId,
     porep_id: &[u8; 32],
     api_version: ApiVersion,
-) -> Result<(SealCommitOutput, Vec<Vec<Fr>>, [u8; 32])> {
+) -> Result<(SealCommitOutput, Vec<Vec<Fr>>, [u8; 32], [u8; 32])> {
     init_logger();
 
     let (mut piece_file, _piece_bytes) = generate_piece_file(sector_size)?;

@@ -721,6 +721,7 @@ fn pad_inputs_to_target(
 /// * `commit_outputs` - an ordered list of seal proof outputs returned from 'seal_commit_phase2'.
 pub fn aggregate_seal_commit_proofs<Tree: 'static + MerkleTreeTrait>(
     porep_config: PoRepConfig,
+    comm_rs: &[[u8; 32]],
     seeds: &[[u8; 32]],
     commit_outputs: &[SealCommitOutput],
 ) -> Result<AggregateSnarkProof> {
@@ -767,11 +768,13 @@ pub fn aggregate_seal_commit_proofs<Tree: 'static + MerkleTreeTrait>(
     // If we're not at the pow2 target, duplicate the last proof until we are.
     pad_proofs_to_target(&mut proofs, target_proofs_len)?;
 
-    // Hash all of the seeds into a digest for the aggregate proof method.
-    let hashed_seeds: [u8; 32] = {
+    // Hash all of the seeds and comm_r's pair-wise into a digest for the aggregate proof method.
+    let hashed_seeds_and_comm_rs: [u8; 32] = {
         let mut hasher = Sha256::new();
-        for seed in seeds.iter() {
+        for cur in seeds.iter().zip(comm_rs.iter()) {
+            let (seed, comm_r) = cur;
             hasher.update(seed);
+            hasher.update(comm_r);
         }
         hasher.finalize().into()
     };
@@ -779,7 +782,7 @@ pub fn aggregate_seal_commit_proofs<Tree: 'static + MerkleTreeTrait>(
     let srs_prover_key = get_stacked_srs_key::<Tree>(porep_config, proofs.len())?;
     let aggregate_proof = StackedCompound::<Tree, DefaultPieceHasher>::aggregate_proofs(
         &srs_prover_key,
-        &hashed_seeds,
+        &hashed_seeds_and_comm_rs,
         proofs.as_slice(),
     )?;
     let aggregate_proof_bytes = serialize(&aggregate_proof)?;
@@ -802,6 +805,7 @@ pub fn aggregate_seal_commit_proofs<Tree: 'static + MerkleTreeTrait>(
 pub fn verify_aggregate_seal_commit_proofs<Tree: 'static + MerkleTreeTrait>(
     porep_config: PoRepConfig,
     aggregate_proof_bytes: AggregateSnarkProof,
+    comm_rs: &[[u8; 32]],
     seeds: &[[u8; 32]],
     commit_inputs: Vec<Vec<Fr>>,
 ) -> Result<bool> {
@@ -814,6 +818,10 @@ pub fn verify_aggregate_seal_commit_proofs<Tree: 'static + MerkleTreeTrait>(
 
     ensure!(aggregated_proofs_len != 0, "cannot verify zero proofs");
     ensure!(!commit_inputs.is_empty(), "cannot verify with empty inputs");
+    ensure!(
+        comm_rs.len() == seeds.len(),
+        "invalid comm_rs and seeds len mismatch"
+    );
 
     trace!(
         "verify_aggregate_seal_commit_proofs called with len {}",
@@ -851,11 +859,13 @@ pub fn verify_aggregate_seal_commit_proofs<Tree: 'static + MerkleTreeTrait>(
     let srs_verifier_key =
         get_stacked_srs_verifier_key::<Tree>(porep_config, aggregated_proofs_len)?;
 
-    // Hash all of the seeds into a digest for the aggregate proof method.
-    let hashed_seeds: [u8; 32] = {
+    // Hash all of the seeds and comm_r's pair-wise into a digest for the aggregate proof method.
+    let hashed_seeds_and_comm_rs: [u8; 32] = {
         let mut hasher = Sha256::new();
-        for seed in seeds.iter() {
+        for cur in seeds.iter().zip(comm_rs.iter()) {
+            let (seed, comm_r) = cur;
             hasher.update(seed);
+            hasher.update(comm_r);
         }
         hasher.finalize().into()
     };
@@ -864,7 +874,7 @@ pub fn verify_aggregate_seal_commit_proofs<Tree: 'static + MerkleTreeTrait>(
     let result = StackedCompound::<Tree, DefaultPieceHasher>::verify_aggregate_proofs(
         &srs_verifier_key,
         &verifying_key,
-        &hashed_seeds,
+        &hashed_seeds_and_comm_rs,
         commit_inputs.as_slice(),
         &aggregate_proof,
     )?;
