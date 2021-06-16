@@ -82,3 +82,7 @@ blst = [
 [[bench]]
 name = "preprocessing"
 harness = false
+
+[[bench]]
+name = "aggregation"
+harness = false
