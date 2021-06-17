@@ -785,7 +785,8 @@ pub fn aggregate_seal_commit_proofs<Tree: 'static + MerkleTreeTrait>(
         &hashed_seeds_and_comm_rs,
         proofs.as_slice(),
     )?;
-    let aggregate_proof_bytes = serialize(&aggregate_proof)?;
+    let mut aggregate_proof_bytes = Vec::new();
+    aggregate_proof.write(&mut aggregate_proof_bytes)?;
 
     info!("aggregate_seal_commit_proofs:finish");
 
@@ -811,8 +812,8 @@ pub fn verify_aggregate_seal_commit_proofs<Tree: 'static + MerkleTreeTrait>(
 ) -> Result<bool> {
     info!("verify_aggregate_seal_commit_proofs:start");
 
-    let aggregate_proof: groth16::aggregate::AggregateProof<Bls12> =
-        deserialize(&aggregate_proof_bytes)?;
+    let aggregate_proof =
+        groth16::aggregate::AggregateProof::read(std::io::Cursor::new(&aggregate_proof_bytes))?;
 
     let aggregated_proofs_len = aggregate_proof.tmipp.gipa.nproofs as usize;
 
