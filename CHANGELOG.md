@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://book.async.rs/overview
 
 ## Unreleased
 
+## [8.0.2] - 2021-06-17
+
+- Use correct aggregate proof serialization format [#1475](https://github.com/filecoin-project/rust-fil-proofs/pull/1475)
+
 ## [8.0.1] - 2021-06-09
 
 - Required SnarkPack Audit updates [#1470](https://github.com/filecoin-project/rust-fil-proofs/pull/1470)
@@ -242,7 +246,8 @@ and this project adheres to [Semantic Versioning](https://book.async.rs/overview
 
 - Initial stable release
 
-[Unreleased]: https://github.com/filecoin-project/rust-fil-proofs/compare/v8.0.1...HEAD
+[Unreleased]: https://github.com/filecoin-project/rust-fil-proofs/compare/v8.0.2...HEAD
+[8.0.2]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v8.0.2
 [8.0.1]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v8.0.1
 [8.0.0]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v8.0.0
 [7.0.1]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v7.0.1
