@@ -1,7 +1,7 @@
 [package]
 name = "filecoin-proofs"
 description = "The Filecoin specific aspects of storage-proofs, including a C based FFI, to generate and verify proofs."
-version = "8.0.1"
+version = "8.0.2"
 authors = ["dignifiedquire <dignifiedquire@gmail.com>", "laser <l@s3r.com>", "porcuquine <porcuquine@users.noreply.github.com>"]
 license = "MIT OR Apache-2.0"
 edition = "2018"
