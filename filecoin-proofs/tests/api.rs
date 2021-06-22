@@ -1486,23 +1486,36 @@ fn create_fake_seal<R: rand::Rng, Tree: 'static + MerkleTreeTrait>(
 
 #[test]
 fn test_aggregate_proof_encode_decode() -> Result<()> {
-    // This byte vector is a natively serialized aggregate proof.
+    // This byte vector is a natively serialized aggregate proof generated from the
+    // 'test_seal_proof_aggregation_257_2kib_porep_id_v1_1_base_8' test.
     let aggregate_proof_bytes = std::include_bytes!("./aggregate_proof_bytes");
+    let expected_aggregate_proof_len = 29_044;
 
     // Re-construct the aggregate proof from the bytes, using the native deserialization method.
     let aggregate_proof: groth16::aggregate::AggregateProof<Bls12> =
         groth16::aggregate::AggregateProof::read(std::io::Cursor::new(&aggregate_proof_bytes))?;
+    let aggregate_proof_count = aggregate_proof.tmipp.gipa.nproofs as usize;
+    let expected_aggregate_proof_count = 512;
+
+    assert_eq!(aggregate_proof_count, expected_aggregate_proof_count);
 
     // Re-serialize the proof to ensure a round-trip match.
     let mut aggregate_proof_bytes2 = Vec::new();
     aggregate_proof.write(&mut aggregate_proof_bytes2)?;
 
+    assert_eq!(aggregate_proof_bytes.len(), expected_aggregate_proof_len);
     assert_eq!(aggregate_proof_bytes.len(), aggregate_proof_bytes2.len());
     assert_eq!(aggregate_proof_bytes, aggregate_proof_bytes2.as_slice());
 
     // Note: the native serialization format is more compact than bincode serialization, so assert that here.
     let bincode_serialized_proof = serialize(&aggregate_proof)?;
+    let expected_bincode_serialized_proof_len = 56_436;
+
     assert!(aggregate_proof_bytes2.len() < bincode_serialized_proof.len());
+    assert_eq!(
+        bincode_serialized_proof.len(),
+        expected_bincode_serialized_proof_len
+    );
 
     Ok(())
 }
