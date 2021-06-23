@@ -479,7 +479,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         use generic_array::GenericArray;
         use merkletree::store::DiskStore;
         use neptune::{
-            batch_hasher::BatcherType,
+            batch_hasher::Batcher,
             column_tree_builder::{ColumnTreeBuilder, ColumnTreeBuilderTrait},
         };
 
@@ -594,17 +594,27 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                                     "No resource allocation for TreeBuilder".to_string(),
                                 )
                             })?;
+                            let device =
+                                alloc.devices[0].get_device().ok_or(Error::Unclassified(
+                                    format!("Device with id: {:?} not found", alloc.devices[0]),
+                                ))?;
+
+                            let column_batcher = Batcher::new(device, max_gpu_column_batch_size)
+                                .expect("failed to create column batcher");
+
+                            let tree_batcher = Batcher::new(device, max_gpu_tree_batch_size)
+                                .expect("failed to create tree batcher");
+
                             column_tree_builder =
                                 Some(ColumnTreeBuilder::<ColumnArity, TreeArity>::new(
-                                    Some(BatcherType::CustomGPU(alloc.devices[0])),
+                                    Some(column_batcher),
+                                    Some(tree_batcher),
                                     nodes_count,
-                                    max_gpu_column_batch_size,
-                                    max_gpu_tree_batch_size,
                                 )?);
                         }
 
                         let builder = column_tree_builder.as_mut().ok_or_else(|| {
-                            Error::Unclassified("failed creating tree builder".to_string())
+                            Error::Unclassified("failed to create tree builder".to_string())
                         })?;
 
                         // build all trees for each config
@@ -879,7 +889,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         use fr32::fr_into_bytes;
         use merkletree::merkle::{get_merkle_tree_cache_size, get_merkle_tree_leafs};
         use neptune::{
-            batch_hasher::BatcherType,
+            batch_hasher::Batcher,
             tree_builder::{TreeBuilder, TreeBuilderTrait},
         };
 
@@ -992,15 +1002,22 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                             )
                         })?;
 
-                        tree_builder = Some(
-                            TreeBuilder::<Tree::Arity>::new(
-                                Some(BatcherType::CustomGPU(alloc.devices[0])),
-                                nodes_count,
-                                max_gpu_tree_batch_size,
-                                tree_r_last_config.rows_to_discard,
-                            )
-                            .map_err(|e| Error::Unclassified(e.to_string()))?,
-                        );
+                        let device =
+                            alloc.devices[0]
+                                .get_device()
+                                .ok_or(Error::Unclassified(format!(
+                                    "Device with id: {:?} not found",
+                                    alloc.devices[0]
+                                )))?;
+
+                        let tree_batcher = Batcher::new(device, max_gpu_tree_batch_size)
+                            .expect("failed to create tree batcher");
+
+                        tree_builder = Some(TreeBuilder::<TreeArity>::new(
+                            Some(tree_batcher),
+                            nodes_count,
+                            tree_r_last_config.rows_to_discard,
+                        )?);
                     }
                     let builder = tree_builder.as_mut().ok_or_else(|| {
                         Error::Unclassified("No resource allocation for tree builder".to_string())
@@ -1449,7 +1466,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         use fr32::fr_into_bytes;
         use merkletree::merkle::{get_merkle_tree_cache_size, get_merkle_tree_leafs};
         use neptune::{
-            batch_hasher::BatcherType,
+            batch_hasher::Batcher,
             tree_builder::{TreeBuilder, TreeBuilderTrait},
         };
 
@@ -1470,11 +1487,21 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                     let alloc = alloc.ok_or_else(|| {
                         Error::Unclassified("No resource allocation for TreeBuilder".to_string())
                     })?;
+
+                    let device =
+                        alloc.devices[0]
+                            .get_device()
+                            .ok_or(Error::Unclassified(format!(
+                                "Device with id: {:?} not found",
+                                alloc.devices[0]
+                            )))?;
+
+                    let tree_batcher = Batcher::new(device, max_gpu_tree_batch_size)?;
+
                     tree_builder = Some(
                         TreeBuilder::<Tree::Arity>::new(
-                            Some(BatcherType::CustomGPU(alloc.devices[0])),
+                            Some(tree_batcher),
                             nodes_count,
-                            max_gpu_tree_batch_size,
                             tree_r_last_config.rows_to_discard,
                         )
                         .map_err(|e| Error::Unclassified(e.to_string()))?,
@@ -1548,7 +1575,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                 Ok(TaskResult::Done)
             };
             let mut builder = Builder::new(call, configs.len());
-            builder.build().expect("failed building fake tree_r_last");
+            builder.build()?;
         } else {
             info!("generating tree r last using the CPU");
             for (i, config) in configs.iter().enumerate() {
