@@ -21,9 +21,10 @@ use filecoin_proofs::{
     Commitment, DefaultTreeDomain, MerkleTreeTrait, PaddedBytesAmount, PieceInfo, PoRepConfig,
     PoRepProofPartitions, PoStConfig, PoStType, PrivateReplicaInfo, ProverId, PublicReplicaInfo,
     SealCommitOutput, SealPreCommitOutput, SealPreCommitPhase1Output, SectorShape16KiB,
-    SectorShape2KiB, SectorShape32KiB, SectorShape4KiB, SectorSize, UnpaddedByteIndex,
-    UnpaddedBytesAmount, POREP_PARTITIONS, SECTOR_SIZE_16_KIB, SECTOR_SIZE_2_KIB,
-    SECTOR_SIZE_32_KIB, SECTOR_SIZE_4_KIB, WINDOW_POST_CHALLENGE_COUNT, WINDOW_POST_SECTOR_COUNT,
+    SectorShape2KiB, SectorShape32GiB, SectorShape32KiB, SectorShape4KiB, SectorShape64GiB,
+    SectorSize, UnpaddedByteIndex, UnpaddedBytesAmount, POREP_PARTITIONS, SECTOR_SIZE_16_KIB,
+    SECTOR_SIZE_2_KIB, SECTOR_SIZE_32_GIB, SECTOR_SIZE_32_KIB, SECTOR_SIZE_4_KIB,
+    SECTOR_SIZE_64_GIB, WINDOW_POST_CHALLENGE_COUNT, WINDOW_POST_SECTOR_COUNT,
     WINNING_POST_CHALLENGE_COUNT, WINNING_POST_SECTOR_COUNT,
 };
 use rand::{random, Rng, SeedableRng};
@@ -223,21 +224,54 @@ fn test_seal_proof_aggregation_1_2kib_porep_id_v1_1_base_8() -> Result<()> {
 #[ignore]
 fn test_seal_proof_aggregation_3_2kib_porep_id_v1_1_base_8() -> Result<()> {
     let proofs_to_aggregate = 3; // Requires auto-padding
-    inner_test_seal_proof_aggregation_2kib_porep_id_v1_1_base_8(proofs_to_aggregate)
+
+    let porep_id = ARBITRARY_POREP_ID_V1_1_0;
+    assert!(!is_legacy_porep_id(porep_id));
+    let verified = aggregate_proofs::<SectorShape2KiB>(
+        SECTOR_SIZE_2_KIB,
+        &porep_id,
+        ApiVersion::V1_1_0,
+        proofs_to_aggregate,
+    )?;
+    assert!(verified);
+
+    Ok(())
 }
 
 #[test]
 #[ignore]
 fn test_seal_proof_aggregation_5_2kib_porep_id_v1_1_base_8() -> Result<()> {
     let proofs_to_aggregate = 5; // Requires auto-padding
-    inner_test_seal_proof_aggregation_2kib_porep_id_v1_1_base_8(proofs_to_aggregate)
+
+    let porep_id = ARBITRARY_POREP_ID_V1_1_0;
+    assert!(!is_legacy_porep_id(porep_id));
+    let verified = aggregate_proofs::<SectorShape2KiB>(
+        SECTOR_SIZE_2_KIB,
+        &porep_id,
+        ApiVersion::V1_1_0,
+        proofs_to_aggregate,
+    )?;
+    assert!(verified);
+
+    Ok(())
 }
 
 #[test]
 #[ignore]
 fn test_seal_proof_aggregation_257_2kib_porep_id_v1_1_base_8() -> Result<()> {
     let proofs_to_aggregate = 257; // Requires auto-padding
-    inner_test_seal_proof_aggregation_2kib_porep_id_v1_1_base_8(proofs_to_aggregate)
+
+    let porep_id = ARBITRARY_POREP_ID_V1_1_0;
+    assert!(!is_legacy_porep_id(porep_id));
+    let verified = aggregate_proofs::<SectorShape2KiB>(
+        SECTOR_SIZE_2_KIB,
+        &porep_id,
+        ApiVersion::V1_1_0,
+        proofs_to_aggregate,
+    )?;
+    assert!(verified);
+
+    Ok(())
 }
 
 #[test]
@@ -276,6 +310,60 @@ fn test_seal_proof_aggregation_1_32kib_porep_id_v1_1_base_8() -> Result<()> {
     Ok(())
 }
 
+#[test]
+#[ignore]
+fn test_seal_proof_aggregation_818_32kib_porep_id_v1_1_base_8() -> Result<()> {
+    let proofs_to_aggregate = 818; // Requires auto-padding
+
+    let porep_id = ARBITRARY_POREP_ID_V1_1_0;
+    assert!(!is_legacy_porep_id(porep_id));
+    let verified = aggregate_proofs::<SectorShape32KiB>(
+        SECTOR_SIZE_32_KIB,
+        &porep_id,
+        ApiVersion::V1_1_0,
+        proofs_to_aggregate,
+    )?;
+    assert!(verified);
+
+    Ok(())
+}
+
+#[test]
+#[ignore]
+fn test_seal_proof_aggregation_818_32gib_porep_id_v1_1_base_8() -> Result<()> {
+    let proofs_to_aggregate = 818; // Requires auto-padding
+
+    let porep_id = ARBITRARY_POREP_ID_V1_1_0;
+    assert!(!is_legacy_porep_id(porep_id));
+    let verified = aggregate_proofs::<SectorShape32GiB>(
+        SECTOR_SIZE_32_GIB,
+        &porep_id,
+        ApiVersion::V1_1_0,
+        proofs_to_aggregate,
+    )?;
+    assert!(verified);
+
+    Ok(())
+}
+
+#[test]
+#[ignore]
+fn test_seal_proof_aggregation_818_64gib_porep_id_v1_1_base_8() -> Result<()> {
+    let proofs_to_aggregate = 818; // Requires auto-padding
+
+    let porep_id = ARBITRARY_POREP_ID_V1_1_0;
+    assert!(!is_legacy_porep_id(porep_id));
+    let verified = aggregate_proofs::<SectorShape64GiB>(
+        SECTOR_SIZE_64_GIB,
+        &porep_id,
+        ApiVersion::V1_1_0,
+        proofs_to_aggregate,
+    )?;
+    assert!(verified);
+
+    Ok(())
+}
+
 //#[test]
 //#[ignore]
 //fn test_seal_proof_aggregation_1024_2kib_porep_id_v1_1_base_8() -> Result<()> {
@@ -289,61 +377,6 @@ fn test_seal_proof_aggregation_1_32kib_porep_id_v1_1_base_8() -> Result<()> {
 //    let proofs_to_aggregate = 65536;
 //    inner_test_seal_proof_aggregation_2kib_porep_id_v1_1_base_8(proofs_to_aggregate)
 //}
-
-fn inner_test_seal_proof_aggregation_2kib_porep_id_v1_1_base_8(
-    proofs_to_aggregate: usize,
-) -> Result<()> {
-    let porep_id_v1_1: u64 = 5; // This is a RegisteredSealProof value
-
-    let mut porep_id = [0u8; 32];
-    porep_id[..8].copy_from_slice(&porep_id_v1_1.to_le_bytes());
-    assert!(!is_legacy_porep_id(porep_id));
-
-    let rng = &mut XorShiftRng::from_seed(TEST_SEED);
-    let prover_fr: DefaultTreeDomain = Fr::random(rng).into();
-    let mut prover_id = [0u8; 32];
-    prover_id.copy_from_slice(AsRef::<[u8]>::as_ref(&prover_fr));
-
-    let mut commit_outputs = Vec::with_capacity(proofs_to_aggregate);
-    let mut commit_inputs = Vec::with_capacity(proofs_to_aggregate);
-    let mut seeds = Vec::with_capacity(proofs_to_aggregate);
-    let mut comm_rs = Vec::with_capacity(proofs_to_aggregate);
-
-    let (commit_output, commit_input, seed, comm_r) =
-        create_seal_for_aggregation::<_, SectorShape2KiB>(
-            rng,
-            SECTOR_SIZE_2_KIB,
-            prover_id,
-            &porep_id,
-            ApiVersion::V1_1_0,
-        )?;
-
-    // duplicate a single proof to desired target for aggregation
-    for _ in 0..proofs_to_aggregate {
-        commit_outputs.push(commit_output.clone());
-        commit_inputs.extend(commit_input.clone());
-        seeds.push(seed);
-        comm_rs.push(comm_r);
-    }
-
-    let config = porep_config(SECTOR_SIZE_2_KIB, porep_id, ApiVersion::V1_1_0);
-    let aggregate_proof = aggregate_seal_commit_proofs::<SectorShape2KiB>(
-        config,
-        &comm_rs,
-        &seeds,
-        commit_outputs.as_slice(),
-    )?;
-    let verified = verify_aggregate_seal_commit_proofs::<SectorShape2KiB>(
-        config,
-        aggregate_proof,
-        &comm_rs,
-        &seeds,
-        commit_inputs,
-    )?;
-    assert!(verified);
-
-    Ok(())
-}
 
 fn aggregate_proofs<Tree: 'static + MerkleTreeTrait>(
     sector_size: u64,
@@ -361,16 +394,12 @@ fn aggregate_proofs<Tree: 'static + MerkleTreeTrait>(
     let mut seeds = Vec::with_capacity(num_proofs_to_aggregate);
     let mut comm_rs = Vec::with_capacity(num_proofs_to_aggregate);
 
+    let (commit_output, commit_input, seed, comm_r) =
+        create_seal_for_aggregation::<_, Tree>(rng, sector_size, prover_id, porep_id, api_version)?;
+
     for _ in 0..num_proofs_to_aggregate {
-        let (commit_output, commit_input, seed, comm_r) = create_seal_for_aggregation::<_, Tree>(
-            rng,
-            sector_size,
-            prover_id,
-            porep_id,
-            api_version,
-        )?;
-        commit_outputs.push(commit_output);
-        commit_inputs.extend(commit_input);
+        commit_outputs.push(commit_output.clone());
+        commit_inputs.extend(commit_input.clone());
         seeds.push(seed);
         comm_rs.push(comm_r);
     }
