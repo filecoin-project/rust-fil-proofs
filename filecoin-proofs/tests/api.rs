@@ -328,41 +328,41 @@ fn test_seal_proof_aggregation_818_32kib_porep_id_v1_1_base_8() -> Result<()> {
     Ok(())
 }
 
-#[test]
-#[ignore]
-fn test_seal_proof_aggregation_818_32gib_porep_id_v1_1_base_8() -> Result<()> {
-    let proofs_to_aggregate = 818; // Requires auto-padding
+//#[test]
+//#[ignore]
+//fn test_seal_proof_aggregation_818_32gib_porep_id_v1_1_base_8() -> Result<()> {
+//    let proofs_to_aggregate = 818; // Requires auto-padding
+//
+//    let porep_id = ARBITRARY_POREP_ID_V1_1_0;
+//    assert!(!is_legacy_porep_id(porep_id));
+//    let verified = aggregate_proofs::<SectorShape32GiB>(
+//        SECTOR_SIZE_32_GIB,
+//        &porep_id,
+//        ApiVersion::V1_1_0,
+//        proofs_to_aggregate,
+//    )?;
+//    assert!(verified);
+//
+//    Ok(())
+//}
 
-    let porep_id = ARBITRARY_POREP_ID_V1_1_0;
-    assert!(!is_legacy_porep_id(porep_id));
-    let verified = aggregate_proofs::<SectorShape32GiB>(
-        SECTOR_SIZE_32_GIB,
-        &porep_id,
-        ApiVersion::V1_1_0,
-        proofs_to_aggregate,
-    )?;
-    assert!(verified);
-
-    Ok(())
-}
-
-#[test]
-#[ignore]
-fn test_seal_proof_aggregation_818_64gib_porep_id_v1_1_base_8() -> Result<()> {
-    let proofs_to_aggregate = 818; // Requires auto-padding
-
-    let porep_id = ARBITRARY_POREP_ID_V1_1_0;
-    assert!(!is_legacy_porep_id(porep_id));
-    let verified = aggregate_proofs::<SectorShape64GiB>(
-        SECTOR_SIZE_64_GIB,
-        &porep_id,
-        ApiVersion::V1_1_0,
-        proofs_to_aggregate,
-    )?;
-    assert!(verified);
-
-    Ok(())
-}
+//#[test]
+//#[ignore]
+//fn test_seal_proof_aggregation_818_64gib_porep_id_v1_1_base_8() -> Result<()> {
+//    let proofs_to_aggregate = 818; // Requires auto-padding
+//
+//    let porep_id = ARBITRARY_POREP_ID_V1_1_0;
+//    assert!(!is_legacy_porep_id(porep_id));
+//    let verified = aggregate_proofs::<SectorShape64GiB>(
+//        SECTOR_SIZE_64_GIB,
+//        &porep_id,
+//        ApiVersion::V1_1_0,
+//        proofs_to_aggregate,
+//    )?;
+//    assert!(verified);
+//
+//    Ok(())
+//}
 
 //#[test]
 //#[ignore]

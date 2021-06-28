@@ -40,9 +40,9 @@ fn bench_seal_inputs(c: &mut Criterion) {
         porep_id,
         api_version: ApiVersion::V1_1_0,
     };
-    let comm_r: [u8; 32] = [5u8; 32];
-    let comm_d: [u8; 32] = [6u8; 32];
-    let prover_id: [u8; 32] = [7u8; 32];
+    let comm_r = [5u8; 32];
+    let comm_d = [6u8; 32];
+    let prover_id = [7u8; 32];
 
     let ticket = rng.gen();
     let seed = rng.gen();
