@@ -21,10 +21,9 @@ use filecoin_proofs::{
     Commitment, DefaultTreeDomain, MerkleTreeTrait, PaddedBytesAmount, PieceInfo, PoRepConfig,
     PoRepProofPartitions, PoStConfig, PoStType, PrivateReplicaInfo, ProverId, PublicReplicaInfo,
     SealCommitOutput, SealPreCommitOutput, SealPreCommitPhase1Output, SectorShape16KiB,
-    SectorShape2KiB, SectorShape32GiB, SectorShape32KiB, SectorShape4KiB, SectorShape64GiB,
-    SectorSize, UnpaddedByteIndex, UnpaddedBytesAmount, POREP_PARTITIONS, SECTOR_SIZE_16_KIB,
-    SECTOR_SIZE_2_KIB, SECTOR_SIZE_32_GIB, SECTOR_SIZE_32_KIB, SECTOR_SIZE_4_KIB,
-    SECTOR_SIZE_64_GIB, WINDOW_POST_CHALLENGE_COUNT, WINDOW_POST_SECTOR_COUNT,
+    SectorShape2KiB, SectorShape32KiB, SectorShape4KiB, SectorSize, UnpaddedByteIndex,
+    UnpaddedBytesAmount, POREP_PARTITIONS, SECTOR_SIZE_16_KIB, SECTOR_SIZE_2_KIB,
+    SECTOR_SIZE_32_KIB, SECTOR_SIZE_4_KIB, WINDOW_POST_CHALLENGE_COUNT, WINDOW_POST_SECTOR_COUNT,
     WINNING_POST_CHALLENGE_COUNT, WINNING_POST_SECTOR_COUNT,
 };
 use rand::{random, Rng, SeedableRng};
