@@ -7,7 +7,7 @@ use storage_proofs_core::error::{Error, Result};
 
 // TODO: We need to define if this is going to be part of the configuration file
 // as well as an appropiate value for this.
-const TIMEOUT: u64 = 3600;
+const TIMEOUT: u64 = 1200;
 
 pub(crate) struct Builder<F>
 where
