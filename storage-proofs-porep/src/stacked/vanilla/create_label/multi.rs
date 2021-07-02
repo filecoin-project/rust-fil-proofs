@@ -77,13 +77,13 @@ fn fill_buffer(
     // Node 5 (prev node) will always be missing, and there tend to be
     // frequent close references.
     if cur_node > MIN_BASE_PARENT_NODE {
-        // Mark base parent 5 as missing
+        // Mark base parent 0 as missing
         // base_parent_missing.set_all(0x20);
-        base_parent_missing.set(5);
+        base_parent_missing.set(0);
 
         // Skip the last base parent - it always points to the preceding node,
         // which we know is not ready and will be filled in the main loop
-        for k in 0..BASE_DEGREE - 1 {
+        for k in 1..BASE_DEGREE {
             unsafe {
                 if cur_parent[0] as u64 >= parents_cache.get_consumer() {
                     // Node is not ready
