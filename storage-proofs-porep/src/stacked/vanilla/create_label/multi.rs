@@ -346,8 +346,8 @@ fn create_layer_labels(
                 // Grab the current slot of the ring_buf
                 let buf = unsafe { ring_buf.slot_mut(cur_slot) };
                 // Fill in the base parents
+                let bpm = unsafe { base_parent_missing.get_mut(cur_slot) };
                 for k in 0..BASE_DEGREE {
-                    let bpm = unsafe { base_parent_missing.get(cur_slot) };
                     if bpm.get(k) {
                         let source = unsafe {
                             let start = cur_parent_ptr[0] as usize * NODE_WORDS;
@@ -361,6 +361,7 @@ fn create_layer_labels(
                     cur_parent_ptr = &cur_parent_ptr[1..];
                     cur_parent_ptr_offset += 1;
                 }
+                *bpm = BitMask::default();
 
                 // Expanders are already all filled in (layer 1 doesn't use expanders)
                 cur_parent_ptr = &cur_parent_ptr[EXP_DEGREE..];

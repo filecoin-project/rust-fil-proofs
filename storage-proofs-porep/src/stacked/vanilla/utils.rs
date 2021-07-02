@@ -36,6 +36,7 @@ impl<'a, T> UnsafeSlice<'a, T> {
     }
 
     #[inline]
+    #[allow(dead_code)]
     pub unsafe fn get(&self, index: usize) -> &'a T {
         &*self.ptr.add(index)
     }
