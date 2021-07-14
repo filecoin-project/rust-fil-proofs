@@ -29,6 +29,10 @@ type Cache<G> = HashMap<String, Arc<G>>;
 type GrothMemCache = Cache<Bls12GrothParams>;
 type VerifyingKeyMemCache = Cache<Bls12PreparedVerifyingKey>;
 
+const FIP0013_MIN_SNARKS: usize = 64;
+const FIP0013_MAX_SNARKS: usize = 8192;
+const PROOFS_TESTS_MIN_SNARKS: usize = FIP0013_MIN_SNARKS >> 5;
+
 const SRS_IDENTIFIER: &str = "srs-key";
 const SRS_VERIFIER_IDENTIFIER: &str = "srs-verifying-key";
 
@@ -52,7 +56,7 @@ pub struct SRSCache<G> {
 impl<G> SRSCache<G> {
     pub fn with_defaults(identifier: &str) -> Self {
         let mut data = HashMap::new();
-        let mut num_proofs_to_aggregate = 2;
+        let mut num_proofs_to_aggregate = PROOFS_TESTS_MIN_SNARKS;
 
         loop {
             for sector_size in &PUBLISHED_SECTOR_SIZES {
@@ -65,7 +69,7 @@ impl<G> SRSCache<G> {
             }
 
             num_proofs_to_aggregate <<= 1;
-            if num_proofs_to_aggregate > 8192 {
+            if num_proofs_to_aggregate > FIP0013_MAX_SNARKS {
                 break;
             }
         }
