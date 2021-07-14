@@ -31,7 +31,11 @@ type VerifyingKeyMemCache = Cache<Bls12PreparedVerifyingKey>;
 
 const FIP0013_MIN_SNARKS: usize = 64;
 const FIP0013_MAX_SNARKS: usize = 8192;
+
+// Note that proofs testing will use values under and over the FIP13
+// min and max, respectively.
 const PROOFS_TESTS_MIN_SNARKS: usize = FIP0013_MIN_SNARKS >> 5;
+const PROOFS_TESTS_MAX_SNARKS: usize = FIP0013_MAX_SNARKS << 1;
 
 const SRS_IDENTIFIER: &str = "srs-key";
 const SRS_VERIFIER_IDENTIFIER: &str = "srs-verifying-key";
@@ -69,7 +73,7 @@ impl<G> SRSCache<G> {
             }
 
             num_proofs_to_aggregate <<= 1;
-            if num_proofs_to_aggregate > FIP0013_MAX_SNARKS {
+            if num_proofs_to_aggregate > PROOFS_TESTS_MAX_SNARKS {
                 break;
             }
         }
@@ -84,6 +88,7 @@ impl<G> SRSCache<G> {
         F: FnOnce() -> Result<G>,
     {
         if let Some(cell) = self.data.get(key) {
+            trace!("generating or waiting on specialize for {}", key);
             return Some(
                 cell.get_or_init(|| Arc::new(generator().expect("SRS specialize failed"))),
             );
@@ -375,6 +380,11 @@ pub fn get_stacked_srs_verifier_key<Tree: 'static + MerkleTreeTrait>(
     )?;
 
     let srs_verifier_generator = || {
+        trace!(
+            "get_stacked_srs_verifier_key specializing STACKED[{}-{}]",
+            usize::from(PaddedBytesAmount::from(porep_config)),
+            num_proofs_to_aggregate,
+        );
         <StackedCompound<Tree, DefaultPieceHasher> as CompoundProof<
             StackedDrg<'_, Tree, DefaultPieceHasher>,
             _,
