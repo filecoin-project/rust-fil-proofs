@@ -15,14 +15,19 @@ where
 {
     call: F,
     num_iter: usize,
+    context: Option<String>,
 }
 
 impl<F> Builder<F>
 where
     for<'a> F: FnMut(Option<&'a ResourceAlloc>) -> Result<TaskResult, Error>,
 {
-    pub(crate) fn new(call: F, num_iter: usize) -> Self {
-        Self { call, num_iter }
+    pub(crate) fn new(call: F, num_iter: usize, context: Option<String>) -> Self {
+        Self {
+            call,
+            num_iter,
+            context,
+        }
     }
 
     pub(crate) fn build(&mut self) -> Result<(), Error> {
@@ -41,7 +46,7 @@ where
         let mut rng = rand::thread_rng();
         // get the scheduler client
         let id = rng.gen::<u32>();
-        let client = register::<Error>(id, id as _)?;
+        let client = register::<Error>(id, id as _, self.context.clone())?;
 
         schedule_one_of(client, self, requirements, Duration::from_secs(TIMEOUT)).map(|_| ())
     }

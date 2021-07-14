@@ -582,6 +582,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                     let mut column_tree_builder = None;
                     let mut done_adding_columns = false;
                     let mut i = 0;
+                    let context = Some(format!("{}:{}", file!(), line!()));
 
                     // funcion that is called by the scheduler
                     // multiple times until TaskResult::Done is returned
@@ -660,7 +661,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                     };
                     // use a builder that pass this call function to the scheduler-client
                     // so it handles preemption and accesses to the resources.
-                    let mut cbuilder = Builder::new(call, config_count);
+                    let mut cbuilder = Builder::new(call, config_count, context);
                     cbuilder.build().expect("failed building tree");
                 });
 
@@ -993,6 +994,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                 let mut tree_builder = None;
                 let mut done_adding_columns = false;
                 let mut i = 0;
+                let context = Some(format!("{}:{}", file!(), line!()));
                 let call = |alloc: Option<&ResourceAlloc>| -> Result<TaskResult, Error> {
                     // initialize the tree builder using the resource that the scheduler assigned
                     if tree_builder.is_none() {
@@ -1054,7 +1056,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                         Ok(TaskResult::Done)
                     }
                 };
-                let mut builder = Builder::new(call, config_count);
+                let mut builder = Builder::new(call, config_count, context);
                 builder.build().expect("failed building tree");
             });
 
@@ -1481,6 +1483,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
             info!("generating tree r last using the GPU");
             let max_gpu_tree_batch_size = SETTINGS.max_gpu_tree_batch_size as usize;
             let mut tree_builder = None;
+            let context = Some(format!("{}:{}", file!(), line!()));
             // this call-closure would block until it is done building the trees
             let call = |alloc: Option<&ResourceAlloc>| -> Result<TaskResult, Error> {
                 if tree_builder.is_none() {
@@ -1574,7 +1577,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                 }
                 Ok(TaskResult::Done)
             };
-            let mut builder = Builder::new(call, configs.len());
+            let mut builder = Builder::new(call, configs.len(), context);
             builder.build()?;
         } else {
             info!("generating tree r last using the CPU");
