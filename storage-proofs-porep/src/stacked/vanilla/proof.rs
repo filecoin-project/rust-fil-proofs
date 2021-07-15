@@ -547,7 +547,8 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                                 }
 
                                 (0..chunked_nodes_count)
-                                    .into_par_iter()
+                                    //.into_par_iter()
+                                    .into_iter()
                                     .map(|index| {
                                         (0..layers)
                                             .map(|layer_index| {
@@ -661,7 +662,8 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                     };
                     // use a builder that pass this call function to the scheduler-client
                     // so it handles preemption and accesses to the resources.
-                    let mut cbuilder = Builder::new(call, config_count, context);
+                    let mut cbuilder =
+                        Builder::new(call, config_count, Some("tree-c-gpu".to_string()), context);
                     cbuilder.build().expect("failed building tree");
                 });
 
@@ -1056,7 +1058,8 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                         Ok(TaskResult::Done)
                     }
                 };
-                let mut builder = Builder::new(call, config_count, context);
+                let mut builder =
+                    Builder::new(call, config_count, Some("tree-r-gpu".to_string()), context);
                 builder.build().expect("failed building tree");
             });
 
@@ -1577,7 +1580,12 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                 }
                 Ok(TaskResult::Done)
             };
-            let mut builder = Builder::new(call, configs.len(), context);
+            let mut builder = Builder::new(
+                call,
+                configs.len(),
+                Some("tree-r-fake".to_string()),
+                context,
+            );
             builder.build()?;
         } else {
             info!("generating tree r last using the CPU");
