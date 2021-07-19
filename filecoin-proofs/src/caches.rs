@@ -49,15 +49,17 @@ lazy_static! {
         SRSCache::with_defaults(SRS_VERIFIER_IDENTIFIER);
 }
 
-// We have a separate SRSCache type for srs keys since they are cached
-// differently (as a hashmap per type, keyed by identifier consisting
-// of sector size and pow2 num proofs to aggregate)
+/// We have a separate SRSCache type for srs keys since they are
+/// cached differently (as a hashmap per type, keyed by identifier
+/// consisting of sector size and pow2 num proofs to aggregate).
 #[derive(Debug, Default)]
 pub struct SRSCache<G> {
     data: HashMap<String, OnceCell<Arc<G>>>,
 }
 
 impl<G> SRSCache<G> {
+    /// Initializes the cache by pre-populating the internal map with
+    /// all supported keys that could be looked up at a later time.
     pub fn with_defaults(identifier: &str) -> Self {
         let mut data = HashMap::new();
         let mut num_proofs_to_aggregate = PROOFS_TESTS_MIN_SNARKS;
@@ -69,7 +71,7 @@ impl<G> SRSCache<G> {
                     sector_size, num_proofs_to_aggregate, identifier,
                 );
                 trace!("inserting placeholder srs key with hash key {}", key);
-                data.insert(key.to_string(), OnceCell::new());
+                data.insert(key, OnceCell::new());
             }
 
             num_proofs_to_aggregate <<= 1;
@@ -83,18 +85,18 @@ impl<G> SRSCache<G> {
 
     /// Returns `None` for non existent entries, `Some(v)` for existing ones, where `v` is either
     /// the result of running `generator` or already existing one.
-    pub fn get_or_init<F>(&self, key: &str, generator: F) -> Option<&Arc<G>>
+    pub fn get_or_init<F>(&self, key: &str, generator: F) -> Result<Option<&Arc<G>>>
     where
         F: FnOnce() -> Result<G>,
     {
         if let Some(cell) = self.data.get(key) {
             trace!("generating or waiting on specialize for {}", key);
-            return Some(
-                cell.get_or_init(|| Arc::new(generator().expect("SRS specialize failed"))),
-            );
+            let result =
+                cell.get_or_try_init(|| -> Result<Arc<G>> { Ok(Arc::new(generator()?)) })?;
+            return Ok(Some(result));
         }
 
-        None
+        Ok(None)
     }
 }
 
@@ -139,7 +141,7 @@ where
     G: Send + Sync,
 {
     trace!("srs_cache_lookup looking up {}", identifier);
-    if let Some(entry) = cache_ref.get_or_init(&identifier, generator) {
+    if let Some(entry) = cache_ref.get_or_init(&identifier, generator)? {
         return Ok(entry.clone());
     }
 
