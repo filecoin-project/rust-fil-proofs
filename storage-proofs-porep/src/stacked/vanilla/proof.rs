@@ -547,8 +547,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                                 }
 
                                 (0..chunked_nodes_count)
-                                    //.into_par_iter()
-                                    .into_iter()
+                                    .into_par_iter()
                                     .map(|index| {
                                         (0..layers)
                                             .map(|layer_index| {
