@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://book.async.rs/overview
 
 ## Unreleased
 
+## [8.0.3] - 2021-07-26
+
+- Avoid duplicate generation of srs key caches [#1481](https://github.com/filecoin-project/rust-fil-proofs/pull/1481)
+- Add an srs key loading bench and re-factor some tests [#1474](https://github.com/filecoin-project/rust-fil-proofs/pull/1474)
+
 ## [8.0.2] - 2021-06-17
 
 - Use correct aggregate proof serialization format [#1475](https://github.com/filecoin-project/rust-fil-proofs/pull/1475)
@@ -246,7 +251,8 @@ and this project adheres to [Semantic Versioning](https://book.async.rs/overview
 
 - Initial stable release
 
-[Unreleased]: https://github.com/filecoin-project/rust-fil-proofs/compare/v8.0.2...HEAD
+[Unreleased]: https://github.com/filecoin-project/rust-fil-proofs/compare/v8.0.3...HEAD
+[8.0.3]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v8.0.3
 [8.0.2]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v8.0.2
 [8.0.1]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v8.0.1
 [8.0.0]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v8.0.0
