@@ -587,8 +587,14 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                 });
                 s.spawn(move |_| {
                     let _gpu_lock = GPU_LOCK.lock().expect("failed to get gpu lock");
-                    let tree_batcher = Some(Batcher::pick_gpu(max_gpu_tree_batch_size).expect("failed to create tree gpu batcher"));
-                    let column_batcher = Some(Batcher::pick_gpu(max_gpu_column_batch_size).expect("failed to create col gpu batcher"));
+                    let tree_batcher = Some(
+                        Batcher::pick_gpu(max_gpu_tree_batch_size)
+                            .expect("failed to create tree gpu batcher"),
+                    );
+                    let column_batcher = Some(
+                        Batcher::pick_gpu(max_gpu_column_batch_size)
+                            .expect("failed to create col gpu batcher"),
+                    );
                     let mut column_tree_builder = ColumnTreeBuilder::<ColumnArity, TreeArity>::new(
                         column_batcher,
                         tree_batcher,
@@ -962,7 +968,10 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
             });
             s.spawn(move |_| {
                 let _gpu_lock = GPU_LOCK.lock().expect("failed to get gpu lock");
-                let batcher = Some(Batcher::pick_gpu(max_gpu_tree_batch_size).expect("failed to create gpu batcher"));
+                let batcher = Some(
+                    Batcher::pick_gpu(max_gpu_tree_batch_size)
+                        .expect("failed to create gpu batcher"),
+                );
                 let mut tree_builder = TreeBuilder::<Tree::Arity>::new(
                     batcher,
                     nodes_count,
@@ -1423,7 +1432,9 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
             let max_gpu_tree_batch_size = SETTINGS.max_gpu_tree_batch_size as usize;
 
             let _gpu_lock = GPU_LOCK.lock().expect("failed to get gpu lock");
-            let batcher = Some(Batcher::pick_gpu(max_gpu_tree_batch_size).expect("failed to create gpu batcher"));
+            let batcher = Some(
+                Batcher::pick_gpu(max_gpu_tree_batch_size).expect("failed to create gpu batcher"),
+            );
             let mut tree_builder = TreeBuilder::<Tree::Arity>::new(
                 #[cfg(feature = "gpu")]
                 batcher,
