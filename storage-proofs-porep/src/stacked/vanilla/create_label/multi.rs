@@ -308,7 +308,7 @@ fn create_layer_labels(
 
         // Keep track of which node slot in the ring_buffer to use
         let mut cur_slot = 0;
-        let mut _count_not_ready = 0;
+        let mut count_not_ready = 0;
 
         // Calculate nodes 1 to n
 
@@ -317,14 +317,13 @@ fn create_layer_labels(
         let mut i = 1;
         while i < num_nodes {
             // Ensure next buffer is ready
-            let mut printed = false;
+            let mut counted = false;
             let mut producer_val = cur_producer.load(SeqCst);
 
             while producer_val < i {
-                if !printed {
-                    debug!("PRODUCER NOT READY! {}", i);
-                    printed = true;
-                    _count_not_ready += 1;
+                if !counted {
+                    counted = true;
+                    count_not_ready += 1;
                 }
                 thread::sleep(Duration::from_micros(10));
                 producer_val = cur_producer.load(SeqCst);
@@ -425,6 +424,8 @@ fn create_layer_labels(
                 cur_slot = (cur_slot + 1) % lookahead;
             }
         }
+
+        debug!("PRODUCER NOT READY: {} times", count_not_ready);
 
         for runner in runners {
             runner.join().expect("join failed");
