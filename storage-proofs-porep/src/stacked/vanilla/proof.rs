@@ -1371,7 +1371,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
     #[allow(clippy::type_complexity)]
     pub fn replicate_phase2(
         pp: &'a PublicParams<Tree>,
-        labels: Labels<Tree>,
+        label_configs: Labels<Tree>,
         data: Data<'a>,
         data_tree: BinaryMerkleTree<G>,
         config: StoreConfig,
@@ -1389,7 +1389,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
             Some(data_tree),
             config,
             replica_path,
-            labels,
+            label_configs,
         )?;
 
         Ok((tau, (paux, taux)))
@@ -1436,7 +1436,6 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                 Batcher::pick_gpu(max_gpu_tree_batch_size).expect("failed to create gpu batcher"),
             );
             let mut tree_builder = TreeBuilder::<Tree::Arity>::new(
-                #[cfg(feature = "gpu")]
                 batcher,
                 nodes_count,
                 tree_r_last_config.rows_to_discard,
