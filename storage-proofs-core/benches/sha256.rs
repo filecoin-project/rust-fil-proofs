@@ -1,5 +1,4 @@
 use bellperson::{
-    bls::Bls12,
     gadgets::{
         boolean::{AllocatedBit, Boolean},
         sha256::sha256 as sha256_circuit,
@@ -8,6 +7,7 @@ use bellperson::{
     util_cs::bench_cs::BenchCS,
     Circuit, ConstraintSystem, SynthesisError,
 };
+use blstrs::Bls12;
 use criterion::{black_box, criterion_group, criterion_main, Criterion, Throughput};
 use rand::{thread_rng, Rng};
 use sha2::Digest;

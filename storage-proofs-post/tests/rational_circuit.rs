@@ -1,11 +1,8 @@
 use std::collections::BTreeMap;
 use std::marker::PhantomData;
 
-use bellperson::{
-    bls::{Bls12, Fr},
-    util_cs::test_cs::TestConstraintSystem,
-    Circuit,
-};
+use bellperson::{util_cs::test_cs::TestConstraintSystem, Circuit};
+use blstrs::{Bls12, Scalar as Fr};
 use ff::Field;
 use filecoin_hashers::{poseidon::PoseidonHasher, Domain, HashFunction, Hasher};
 use rand::{Rng, SeedableRng};

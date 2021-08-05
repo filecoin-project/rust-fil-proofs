@@ -1,8 +1,8 @@
 use bellperson::{
-    bls::Fr,
     util_cs::{metric_cs::MetricCS, test_cs::TestConstraintSystem},
     Circuit,
 };
+use blstrs::Scalar as Fr;
 use ff::Field;
 use filecoin_hashers::{poseidon::PoseidonHasher, sha256::Sha256Hasher, Hasher};
 use fr32::fr_into_bytes;
@@ -56,11 +56,11 @@ fn test_stacked_compound<Tree: 'static + MerkleTreeTrait>() {
     let layer_challenges = LayerChallenges::new(num_layers, 1);
     let partition_count = 1;
 
-    let rng = &mut XorShiftRng::from_seed(TEST_SEED);
+    let mut rng = XorShiftRng::from_seed(TEST_SEED);
 
-    let replica_id: Fr = Fr::random(rng);
+    let replica_id: Fr = Fr::random(&mut rng);
     let data: Vec<u8> = (0..nodes)
-        .flat_map(|_| fr_into_bytes(&Fr::random(rng)))
+        .flat_map(|_| fr_into_bytes(&Fr::random(&mut rng)))
         .collect();
 
     let arbitrary_porep_id = [55; 32];
@@ -174,7 +174,7 @@ fn test_stacked_compound<Tree: 'static + MerkleTreeTrait>() {
     let blank_groth_params = <StackedCompound<Tree, Sha256Hasher> as CompoundProof<
         StackedDrg<'_, Tree, Sha256Hasher>,
         _,
-    >>::groth_params(Some(rng), &public_params.vanilla_params)
+    >>::groth_params(Some(&mut rng), &public_params.vanilla_params)
     .expect("failed to generate groth params");
 
     // Discard cached MTs that are no longer needed.

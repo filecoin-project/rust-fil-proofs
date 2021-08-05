@@ -485,7 +485,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         use std::sync::mpsc::sync_channel as channel;
         use std::sync::{Arc, RwLock};
 
-        use bellperson::bls::Fr;
+        use blstrs::Scalar as Fr;
         use fr32::fr_into_bytes;
         use generic_array::GenericArray;
         use merkletree::store::DiskStore;
@@ -866,7 +866,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         use std::io::Write;
         use std::sync::mpsc::sync_channel as channel;
 
-        use bellperson::bls::Fr;
+        use blstrs::Scalar as Fr;
         use fr32::fr_into_bytes;
         use merkletree::merkle::{get_merkle_tree_cache_size, get_merkle_tree_leafs};
         use neptune::{
@@ -1416,7 +1416,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         use std::fs::OpenOptions;
         use std::io::Write;
 
-        use bellperson::bls::Fr;
+        use blstrs::Scalar as Fr;
         use ff::Field;
         use fr32::fr_into_bytes;
         use merkletree::merkle::{get_merkle_tree_cache_size, get_merkle_tree_leafs};

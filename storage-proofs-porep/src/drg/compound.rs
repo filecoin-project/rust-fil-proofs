@@ -1,8 +1,8 @@
 use std::marker::PhantomData;
 
 use anyhow::{ensure, Context};
-use bellperson::bls::{Bls12, Fr};
 use bellperson::Circuit;
+use blstrs::{Bls12, Scalar as Fr};
 use filecoin_hashers::Hasher;
 use generic_array::typenum;
 use storage_proofs_core::{

@@ -2,10 +2,8 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
 use anyhow::Result;
-use bellperson::{
-    bls::Bls12,
-    groth16::{self, prepare_verifying_key},
-};
+use bellperson::groth16::{self, prepare_verifying_key};
+use blstrs::Bls12;
 use lazy_static::lazy_static;
 use log::{info, trace};
 use once_cell::sync::OnceCell;

@@ -1,4 +1,5 @@
-use bellperson::{bls::Engine, gadgets::boolean::Boolean, ConstraintSystem, SynthesisError};
+use bellperson::{gadgets::boolean::Boolean, ConstraintSystem, SynthesisError};
+use pairing::Engine;
 
 pub fn xor<E, CS>(
     cs: &mut CS,
@@ -29,7 +30,8 @@ where
 mod tests {
     use super::*;
 
-    use bellperson::{bls::Bls12, util_cs::test_cs::TestConstraintSystem};
+    use bellperson::util_cs::test_cs::TestConstraintSystem;
+    use blstrs::Bls12;
     use rand::{Rng, SeedableRng};
     use rand_xorshift::XorShiftRng;
 

@@ -1,10 +1,10 @@
 use bellperson::{
-    bls::Bls12,
     gadgets::boolean::{AllocatedBit, Boolean},
     groth16::{create_random_proof, generate_random_parameters},
     util_cs::bench_cs::BenchCS,
     Circuit, ConstraintSystem, SynthesisError,
 };
+use blstrs::Bls12;
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use rand::{thread_rng, Rng};
 use storage_proofs_core::{crypto::xor, gadgets::xor::xor as xor_circuit};

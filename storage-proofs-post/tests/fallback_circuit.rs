@@ -1,8 +1,8 @@
 use bellperson::{
-    bls::{Bls12, Fr},
     util_cs::{bench_cs::BenchCS, test_cs::TestConstraintSystem},
     Circuit,
 };
+use blstrs::{Bls12, Scalar as Fr};
 use ff::Field;
 use filecoin_hashers::{poseidon::PoseidonHasher, Domain, HashFunction, Hasher};
 use generic_array::typenum::{U0, U2, U4, U8};

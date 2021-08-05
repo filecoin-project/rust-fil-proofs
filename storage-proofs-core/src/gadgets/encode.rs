@@ -1,4 +1,5 @@
-use bellperson::{bls::Engine, gadgets::num::AllocatedNum, ConstraintSystem, SynthesisError};
+use bellperson::{gadgets::num::AllocatedNum, ConstraintSystem, SynthesisError};
+use pairing::Engine;
 
 use crate::gadgets::constraint;
 

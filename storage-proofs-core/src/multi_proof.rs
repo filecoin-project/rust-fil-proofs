@@ -1,10 +1,8 @@
 use std::io::{Read, Write};
 
 use anyhow::{ensure, Context};
-use bellperson::{
-    bls::Bls12,
-    groth16::{self, PreparedVerifyingKey},
-};
+use bellperson::groth16::{self, PreparedVerifyingKey};
+use blstrs::Bls12;
 
 use crate::error::Result;
 

@@ -635,7 +635,7 @@ pub fn create_labels_for_decoding<Tree: 'static + MerkleTreeTrait, T: AsRef<[u8]
 mod tests {
     use super::*;
 
-    use bellperson::bls::{Fr, FrRepr};
+    use blstrs::Scalar as Fr;
     use ff::PrimeField;
     use filecoin_hashers::poseidon::PoseidonHasher;
     use generic_array::typenum::{U0, U2, U8};
@@ -659,7 +659,7 @@ mod tests {
             replica_id,
             legacy_porep_id,
             ApiVersion::V1_0_0,
-            Fr::from_repr(FrRepr([
+            Option::from(Fr::from_u64s_le(&[
                 0xd3faa96b9a0fba04,
                 0xea81a283d106485e,
                 0xe3d51b9afa5ac2b3,
@@ -673,7 +673,7 @@ mod tests {
             replica_id,
             legacy_porep_id,
             ApiVersion::V1_0_0,
-            Fr::from_repr(FrRepr([
+            Option::from(Fr::from_u64s_le(&[
                 0x7e191e52c4a8da86,
                 0x5ae8a1c9e6fac148,
                 0xce239f3b88a894b8,
@@ -688,7 +688,7 @@ mod tests {
             replica_id,
             new_porep_id,
             ApiVersion::V1_1_0,
-            Fr::from_repr(FrRepr([
+            Option::from(Fr::from_u64s_le(&[
                 0xabb3f38bb70defcf,
                 0x777a2e4d7769119f,
                 0x3448959d495490bc,
@@ -703,7 +703,7 @@ mod tests {
             replica_id,
             new_porep_id,
             ApiVersion::V1_1_0,
-            Fr::from_repr(FrRepr([
+            Option::from(Fr::from_u64s_le(&[
                 0x22ab81cf68c4676d,
                 0x7a77a82fc7c9c189,
                 0xc6c03d32c1e42d23,
@@ -753,6 +753,6 @@ mod tests {
             .read_at(final_labels.len() - 1)
             .expect("read_at");
         dbg!(&last_label);
-        assert_eq!(expected_last_label.into_repr(), last_label.0);
+        assert_eq!(expected_last_label.to_repr(), last_label.0);
     }
 }

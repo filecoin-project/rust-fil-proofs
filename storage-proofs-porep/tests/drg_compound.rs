@@ -1,8 +1,8 @@
 use bellperson::{
-    bls::Fr,
     util_cs::{metric_cs::MetricCS, test_cs::TestConstraintSystem},
     Circuit,
 };
+use blstrs::Scalar as Fr;
 use ff::Field;
 use filecoin_hashers::{poseidon::PoseidonHasher, Hasher};
 use fr32::fr_into_bytes;
@@ -39,15 +39,15 @@ fn drg_porep_compound<Tree: 'static + MerkleTreeTrait>() {
     //     .start(log::LevelFilter::Trace)
     //     .ok();
 
-    let rng = &mut XorShiftRng::from_seed(TEST_SEED);
+    let mut rng = XorShiftRng::from_seed(TEST_SEED);
 
     let nodes = 8;
     let degree = BASE_DEGREE;
     let challenges = vec![1, 3];
 
-    let replica_id: Fr = Fr::random(rng);
+    let replica_id: Fr = Fr::random(&mut rng);
     let data: Vec<u8> = (0..nodes)
-        .flat_map(|_| fr_into_bytes(&Fr::random(rng)))
+        .flat_map(|_| fr_into_bytes(&Fr::random(&mut rng)))
         .collect();
 
     // MT for original data is always named tree-d, and it will be
@@ -161,7 +161,7 @@ fn drg_porep_compound<Tree: 'static + MerkleTreeTrait>() {
 
     {
         let gparams = DrgPoRepCompound::<Tree::Hasher, _>::groth_params(
-            Some(rng),
+            Some(&mut rng),
             &public_params.vanilla_params,
         )
         .expect("failed to get groth params");

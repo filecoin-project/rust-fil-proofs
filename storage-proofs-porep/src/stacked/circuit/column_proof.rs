@@ -1,4 +1,5 @@
-use bellperson::{bls::Bls12, ConstraintSystem, SynthesisError};
+use bellperson::{ConstraintSystem, SynthesisError};
+use blstrs::Bls12;
 use filecoin_hashers::{Hasher, PoseidonArity};
 use storage_proofs_core::{
     drgraph::Graph,

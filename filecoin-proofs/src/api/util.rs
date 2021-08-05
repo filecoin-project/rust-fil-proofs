@@ -1,7 +1,7 @@
 use std::mem::size_of;
 
 use anyhow::{Context, Result};
-use bellperson::bls::Fr;
+use blstrs::Scalar as Fr;
 use filecoin_hashers::{Domain, Hasher};
 use fr32::{bytes_into_fr, fr_into_bytes};
 use merkletree::merkle::{get_merkle_tree_leafs, get_merkle_tree_len};

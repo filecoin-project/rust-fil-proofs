@@ -1,8 +1,8 @@
 use std::path::Path;
 
 use anyhow::Result;
-use bellperson::bls::Bls12;
 use bellperson::groth16::MappedParameters;
+use blstrs::Bls12;
 use clap::{value_t, App, Arg, SubCommand};
 
 use storage_proofs_core::parameter_cache::read_cached_params;

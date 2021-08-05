@@ -1,9 +1,7 @@
 use std::marker::PhantomData;
 
-use bellperson::{
-    bls::{Bls12, Fr},
-    Circuit,
-};
+use bellperson::Circuit;
+use blstrs::{Bls12, Scalar as Fr};
 use generic_array::typenum::Unsigned;
 use storage_proofs_core::{
     compound_proof::{CircuitComponent, CompoundProof},
