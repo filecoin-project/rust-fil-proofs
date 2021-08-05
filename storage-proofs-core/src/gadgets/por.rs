@@ -3,7 +3,7 @@ use std::marker::PhantomData;
 
 use anyhow::ensure;
 use bellperson::{
-    bls::{Bls12, Fr, FrRepr},
+    bls::{Bls12, Fr},
     gadgets::{
         boolean::{AllocatedBit, Boolean},
         multipack,
@@ -11,7 +11,6 @@ use bellperson::{
     },
     Circuit, ConstraintSystem, SynthesisError,
 };
-use ff::PrimeField;
 use filecoin_hashers::{HashFunction, Hasher, PoseidonArity};
 use generic_array::typenum::Unsigned;
 
@@ -322,9 +321,8 @@ impl<'a, Tree: 'static + MerkleTreeTrait> CompoundProof<'a, PoR<Tree>, PoRCircui
         // Inputs are (currently, inefficiently) packed with one `Fr` per challenge.
         // Boolean/bit auth paths trivially correspond to the challenged node's index within a sector.
         // Defensively convert the challenge with `try_from` as a reminder that we must not truncate.
-        let input_fr = Fr::from_repr(FrRepr::from(
-            u64::try_from(pub_inputs.challenge).expect("challenge type too wide"),
-        ))?;
+        let input_fr =
+            Fr::from(u64::try_from(pub_inputs.challenge).expect("challenge type too wide"));
         inputs.push(input_fr);
 
         if let Some(commitment) = pub_inputs.commitment {
@@ -552,12 +550,12 @@ mod tests {
     }
 
     fn por_compound<Tree: 'static + MerkleTreeTrait>() {
-        let rng = &mut XorShiftRng::from_seed(TEST_SEED);
+        let mut rng = XorShiftRng::from_seed(TEST_SEED);
 
         let leaves = 64 * get_base_tree_count::<Tree>();
 
         let data: Vec<u8> = (0..leaves)
-            .flat_map(|_| fr_into_bytes(&Fr::random(rng)))
+            .flat_map(|_| fr_into_bytes(&Fr::random(&mut rng)))
             .collect();
         let tree = create_base_merkle_tree::<Tree>(None, leaves, data.as_slice())
             .expect("create_base_merkle_tree failure");
@@ -587,8 +585,9 @@ mod tests {
             &tree,
         );
 
-        let gparams = PoRCompound::<Tree>::groth_params(Some(rng), &public_params.vanilla_params)
-            .expect("failed to generate groth params");
+        let gparams =
+            PoRCompound::<Tree>::groth_params(Some(&mut rng), &public_params.vanilla_params)
+                .expect("failed to generate groth params");
 
         let proof =
             PoRCompound::<Tree>::prove(&public_params, &public_inputs, &private_inputs, &gparams)
@@ -936,14 +935,14 @@ mod tests {
     }
 
     fn test_private_por_input_circuit<Tree: MerkleTreeTrait>(num_constraints: usize) {
-        let rng = &mut XorShiftRng::from_seed(TEST_SEED);
+        let mut rng = XorShiftRng::from_seed(TEST_SEED);
 
         let leaves = 64 * get_base_tree_count::<Tree>();
         for i in 0..leaves {
             // -- Basic Setup
 
             let data: Vec<u8> = (0..leaves)
-                .flat_map(|_| fr_into_bytes(&Fr::random(rng)))
+                .flat_map(|_| fr_into_bytes(&Fr::random(&mut rng)))
                 .collect();
 
             let tree = create_base_merkle_tree::<Tree>(None, leaves, data.as_slice())

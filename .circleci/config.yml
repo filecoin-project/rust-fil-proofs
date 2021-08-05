@@ -100,9 +100,6 @@ jobs:
     parameters:
       crate:
         type: string
-      features:
-        type: string
-        default: ""
     steps:
       - checkout
       - attach_workspace:
@@ -116,7 +113,7 @@ jobs:
               ulimit -u 20000
               ulimit -n 20000
               cd << parameters.crate >>
-              cargo test --release << parameters.features >> -- --ignored --nocapture
+              cargo test --release -- --ignored --nocapture
           environment:
             RUST_TEST_THREADS: 1
           no_output_timeout: 30m
@@ -134,25 +131,13 @@ jobs:
       - restore_rustup_cache
       - restore_parameter_cache
       - run:
-          name: Test with use_multicore_sdr pairing enabled
+          name: Test with use_multicore_sdr
           command: |
             ulimit -n 20000
             ulimit -u 20000
             ulimit -n 20000
             cargo +<< pipeline.parameters.nightly-toolchain >> test --all --verbose --release lifecycle -- --ignored --nocapture
             cargo +<< pipeline.parameters.nightly-toolchain >> test -p storage-proofs-porep --features single-threaded --release checkout_cores -- --test-threads=1
-          no_output_timeout: 30m
-          environment:
-            RUST_TEST_THREADS: 1
-            FIL_PROOFS_USE_MULTICORE_SDR: true
-
-      - run:
-          name: Test with use_multicore_sdr and blst enabled
-          command: |
-            ulimit -n 20000
-            ulimit -u 20000
-            ulimit -n 20000
-            cargo +<< pipeline.parameters.nightly-toolchain >> test --all --no-default-features --features gpu,blst --verbose --release  lifecycle -- --ignored --nocapture
           no_output_timeout: 30m
           environment:
             RUST_TEST_THREADS: 1
@@ -183,7 +168,7 @@ jobs:
             ulimit -n 20000
             ulimit -u 20000
             ulimit -n 20000
-            cargo +<< pipeline.parameters.nightly-toolchain >> test --all --no-default-features --features gpu,blst --verbose --release lifecycle -- --ignored --nocapture
+            cargo +<< pipeline.parameters.nightly-toolchain >> test --all --verbose --release lifecycle -- --ignored --nocapture
           no_output_timeout: 30m
           environment:
             RUST_TEST_THREADS: 1
@@ -193,9 +178,6 @@ jobs:
   test_no_gpu:
     executor: default
     environment: *setup-env
-    parameters:
-      features:
-        type: string
     steps:
       - checkout
       - attach_workspace:
@@ -203,17 +185,14 @@ jobs:
       - restore_rustup_cache
       - restore_parameter_cache
       - run:
-          name: Test with no gpu (<< parameters.features >>)
+          name: Test with no gpu
           command: |
-            cargo +<< pipeline.parameters.nightly-toolchain >> test --all --verbose --no-default-features --features << parameters.features >>
+            cargo +<< pipeline.parameters.nightly-toolchain >> test --all --verbose --no-default-features
           no_output_timeout: 30m
 
   test_arm_no_gpu:
     executor: arm
     environment: *setup-env
-    parameters:
-      features:
-        type: string
     steps:
       - checkout
       - attach_workspace:
@@ -235,59 +214,10 @@ jobs:
             sudo apt-get update -y
             sudo apt install -y libhwloc-dev
       - run:
-          name: Test arm with no gpu (<< parameters.features >>)
+          name: Test arm with no gpu
           command: |
-            cargo +<< pipeline.parameters.nightly-toolchain >> -Zpackage-features test --release --all --verbose --no-default-features --features << parameters.features >>
+            cargo +<< pipeline.parameters.nightly-toolchain >> -Zpackage-features test --release --all --verbose --no-default-features
           no_output_timeout: 90m
-
-  test_blst:
-    executor: default
-    environment: *setup-env
-    parameters:
-      crate:
-        type: string
-      features:
-        type: string
-        default: "gpu,blst"
-    steps:
-      - checkout
-      - attach_workspace:
-          at: "."
-      - restore_rustup_cache
-      - restore_parameter_cache
-      - run:
-          name: Test ignored with blst enabled (<< parameters.crate >>)
-          command: |
-            ulimit -n 20000
-            ulimit -u 20000
-            ulimit -n 20000
-            RUST_LOG=trace cargo +<< pipeline.parameters.nightly-toolchain >> test --no-default-features --features << parameters.features >> --verbose --release --package << parameters.crate >> -- --nocapture
-          no_output_timeout: 30m
-          environment:
-            RUST_TEST_THREADS: 1
-
-  test_blst_ignored:
-    executor: default
-    environment: *setup-env
-    parameters:
-      crate:
-        type: string
-    steps:
-      - checkout
-      - attach_workspace:
-          at: "."
-      - restore_rustup_cache
-      - restore_parameter_cache
-
-      - run:
-          name: Test with blst enabled (<< parameters.crate >>)
-          command: |
-            ulimit -n 20000
-            ulimit -u 20000
-            ulimit -n 20000
-            cargo +<< pipeline.parameters.nightly-toolchain >> test --no-default-features --features gpu,blst --verbose --package << parameters.crate >> --release -- --ignored --nocapture
-          no_output_timeout: 30m
-
 
   bench:
     executor: default
@@ -470,37 +400,9 @@ workflows:
             - cargo_fetch
             - ensure_groth_parameters_and_keys_linux
 
-      - test_blst:
-          name: test_blst_filecoin_proofs
-          crate: "filecoin-proofs"
-          requires:
-            - cargo_fetch
-            - ensure_groth_parameters_and_keys_linux
-
-      - test_blst_ignored:
-          name: test_blst_ignored_filecoin_proofs
-          crate: "filecoin-proofs"
-          requires:
-            - cargo_fetch
-            - ensure_groth_parameters_and_keys_linux
-
       - test:
           name: test_filecoin_proofs
           crate: "filecoin-proofs"
-          requires:
-            - cargo_fetch
-            - ensure_groth_parameters_and_keys_linux
-
-      - test_blst:
-          name: test_blst_storage_proofs_core
-          crate: "storage-proofs-core"
-          requires:
-            - cargo_fetch
-            - ensure_groth_parameters_and_keys_linux
-
-      - test_blst_ignored:
-          name: test_blst_ignored_storage_proofs_core
-          crate: "storage-proofs-core"
           requires:
             - cargo_fetch
             - ensure_groth_parameters_and_keys_linux
@@ -512,20 +414,6 @@ workflows:
             - cargo_fetch
             - ensure_groth_parameters_and_keys_linux
 
-      - test_blst:
-          name: test_blst_storage_proofs_post
-          crate: "storage-proofs-post"
-          requires:
-            - cargo_fetch
-            - ensure_groth_parameters_and_keys_linux
-
-      - test_blst_ignored:
-          name: test_blst_ignored_storage_proofs_post
-          crate: "storage-proofs-post"
-          requires:
-            - cargo_fetch
-            - ensure_groth_parameters_and_keys_linux
-
       - test:
           name: test_storage_proofs_post
           crate: "storage-proofs-post"
@@ -533,32 +421,9 @@ workflows:
             - cargo_fetch
             - ensure_groth_parameters_and_keys_linux
 
-
-      - test_blst:
-          name: test_blst_storage_proofs_porep
-          crate: "storage-proofs-porep"
-          requires:
-            - cargo_fetch
-            - ensure_groth_parameters_and_keys_linux
-
-      - test_blst_ignored:
-          name: test_blst_ignored_storage_proofs_porep
-          crate: "storage-proofs-porep"
-          requires:
-            - cargo_fetch
-            - ensure_groth_parameters_and_keys_linux
-
       - test:
           name: test_storage_proofs_porep
           crate: "storage-proofs-porep"
-          requires:
-            - cargo_fetch
-            - ensure_groth_parameters_and_keys_linux
-
-
-      - test_blst:
-          name: test_blst_fil_proofs_tooling
-          crate: "fil-proofs-tooling"
           requires:
             - cargo_fetch
             - ensure_groth_parameters_and_keys_linux
@@ -577,15 +442,6 @@ workflows:
             - cargo_fetch
             - ensure_groth_parameters_and_keys_linux
 
-            
-      - test_blst:
-          name: test_blst_filecoin_hashers
-          crate: "filecoin-hashers"
-          features: "blst,gpu,poseidon,sha256,blake2s"
-          requires:
-            - cargo_fetch
-            - ensure_groth_parameters_and_keys_linux
-
       - test:
           name: test_filecoin_hashers
           crate: "filecoin-hashers"
@@ -593,13 +449,6 @@ workflows:
             - cargo_fetch
             - ensure_groth_parameters_and_keys_linux
 
-
-      - test_blst:
-          name: test_blst_fil_proofs_param
-          crate: "fil-proofs-param"
-          requires:
-            - cargo_fetch
-            - ensure_groth_parameters_and_keys_linux
 
       - test:
           name: test_fil_proofs_param
@@ -609,29 +458,13 @@ workflows:
             - ensure_groth_parameters_and_keys_linux
 
       - test_no_gpu:
-          name: test_no_gpu_pairing
-          features: 'pairing'
-          requires:
-            - cargo_fetch
-            - ensure_groth_parameters_and_keys_linux
-
-      - test_no_gpu:
-          name: test_no_gpu_blst
-          features: 'blst'
+          name: test_no_gpu
           requires:
             - cargo_fetch
             - ensure_groth_parameters_and_keys_linux
 
       - test_arm_no_gpu:
-          name: test_arm_no_gpu_pairing
-          features: 'pairing'
-          requires:
-            - cargo_fetch
-            - ensure_groth_parameters_and_keys_linux
-
-      - test_arm_no_gpu:
-          name: test_arm_no_gpu_blst
-          features: 'blst'
+          name: test_arm_no_gpu
           requires:
             - cargo_fetch
             - ensure_groth_parameters_and_keys_linux
@@ -644,12 +477,6 @@ workflows:
 
       - test:
           name: test_fr32
-          crate: "fr32"
-          requires:
-            - cargo_fetch
-
-      - test_blst:
-          name: test_blst_fr32
           crate: "fr32"
           requires:
             - cargo_fetch

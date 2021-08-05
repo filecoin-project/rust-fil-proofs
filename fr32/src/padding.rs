@@ -789,9 +789,9 @@ mod tests {
         // TODO: Evaluate designing a scattered pattered of `pos` and `num_bits`
         // instead of repeating too many iterations with any number.
         for _ in 0..100 {
-            let pos = rng.gen_range(0, data.len() / 2);
-            let num_bits = rng.gen_range(1, data.len() * 8 - pos);
-            let new_offset = rng.gen_range(0, 8);
+            let pos = rng.gen_range(0..data.len() / 2);
+            let num_bits = rng.gen_range(1..data.len() * 8 - pos);
+            let new_offset = rng.gen_range(0..8);
 
             let mut bv = BitVec::<LittleEndian, u8>::new();
             bv.extend(

@@ -2,11 +2,11 @@ use std::cmp::min;
 
 use anyhow::ensure;
 use bellperson::{
-    bls::Engine,
     gadgets::boolean::{AllocatedBit, Boolean},
     ConstraintSystem, SynthesisError,
 };
 use merkletree::merkle::get_merkle_tree_row_count;
+use pairing::Engine;
 
 use crate::{error::Error, settings::SETTINGS};
 
@@ -295,10 +295,10 @@ mod tests {
     #[test]
     fn hash_leaf_bits_circuit() {
         let mut cs = TestConstraintSystem::<Bls12>::new();
-        let rng = &mut XorShiftRng::from_seed(TEST_SEED);
+        let mut rng = XorShiftRng::from_seed(TEST_SEED);
 
-        let left_fr = Fr::random(rng);
-        let right_fr = Fr::random(rng);
+        let left_fr = Fr::random(&mut rng);
+        let right_fr = Fr::random(&mut rng);
         let left: Vec<u8> = fr_into_bytes(&left_fr);
         let right: Vec<u8> = fr_into_bytes(&right_fr);
         let height = 1;

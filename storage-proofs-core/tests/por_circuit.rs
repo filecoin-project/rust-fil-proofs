@@ -107,13 +107,13 @@ fn test_por_circuit_poseidon_top_8_2_4() {
 }
 
 fn test_por_circuit<Tree: 'static + MerkleTreeTrait>(num_inputs: usize, num_constraints: usize) {
-    let rng = &mut XorShiftRng::from_seed(TEST_SEED);
+    let mut rng = XorShiftRng::from_seed(TEST_SEED);
 
     // Ensure arity will evenly fill tree.
     let leaves = 64 * get_base_tree_count::<Tree>();
 
     // -- Basic Setup
-    let (data, tree) = generate_tree::<Tree, _>(rng, leaves, None);
+    let (data, tree) = generate_tree::<Tree, _>(&mut rng, leaves, None);
 
     for i in 0..leaves {
         //println!("challenge: {}, ({})", i, leaves);
@@ -198,14 +198,14 @@ fn test_por_circuit_poseidon_base_8_private_root() {
 }
 
 fn test_por_circuit_private_root<Tree: MerkleTreeTrait>(num_constraints: usize) {
-    let rng = &mut XorShiftRng::from_seed(TEST_SEED);
+    let mut rng = XorShiftRng::from_seed(TEST_SEED);
 
     let leaves = 64 * get_base_tree_count::<Tree>();
     for i in 0..leaves {
         // -- Basic Setup
 
         let data: Vec<u8> = (0..leaves)
-            .flat_map(|_| fr_into_bytes(&Fr::random(rng)))
+            .flat_map(|_| fr_into_bytes(&Fr::random(&mut rng)))
             .collect();
 
         let tree = create_base_merkle_tree::<Tree>(None, leaves, data.as_slice())
@@ -281,13 +281,13 @@ fn test_por_no_challenge_input() {
     type Tree = TreeBase<PoseidonHasher, Arity>;
 
     // == Setup
-    let rng = &mut XorShiftRng::from_seed(TEST_SEED);
+    let mut rng = XorShiftRng::from_seed(TEST_SEED);
 
     let height = 3;
     let n_leaves = Arity::to_usize() << height;
 
     let data: Vec<u8> = (0..n_leaves)
-        .flat_map(|_| fr_into_bytes(&Fr::random(rng)))
+        .flat_map(|_| fr_into_bytes(&Fr::random(&mut rng)))
         .collect();
 
     let tree = create_base_merkle_tree::<Tree>(None, n_leaves, &data)

@@ -60,11 +60,11 @@ fn test_stacked_porep_circuit<Tree: MerkleTreeTrait + 'static>(
     let num_layers = 2;
     let layer_challenges = LayerChallenges::new(num_layers, 1);
 
-    let rng = &mut XorShiftRng::from_seed(TEST_SEED);
+    let mut rng = XorShiftRng::from_seed(TEST_SEED);
 
-    let replica_id: Fr = Fr::random(rng);
+    let replica_id: Fr = Fr::random(&mut rng);
     let data: Vec<u8> = (0..nodes)
-        .flat_map(|_| fr_into_bytes(&Fr::random(rng)))
+        .flat_map(|_| fr_into_bytes(&Fr::random(&mut rng)))
         .collect();
 
     // MT for original data is always named tree-d, and it will be

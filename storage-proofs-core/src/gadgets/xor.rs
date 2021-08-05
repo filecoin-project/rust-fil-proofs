@@ -1,4 +1,5 @@
-use bellperson::{bls::Engine, gadgets::boolean::Boolean, ConstraintSystem, SynthesisError};
+use bellperson::{gadgets::boolean::Boolean, ConstraintSystem, SynthesisError};
+use pairing::Engine;
 
 pub fn xor<E, CS>(
     cs: &mut CS,

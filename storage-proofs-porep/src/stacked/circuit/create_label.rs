@@ -1,5 +1,4 @@
 use bellperson::{
-    bls::Engine,
     gadgets::{
         boolean::Boolean, multipack, num::AllocatedNum, sha256::sha256 as sha256_circuit,
         uint32::UInt32,
@@ -7,6 +6,7 @@ use bellperson::{
     ConstraintSystem, SynthesisError,
 };
 use ff::PrimeField;
+use pairing::Engine;
 use storage_proofs_core::{gadgets::uint64::UInt64, util::reverse_bit_numbering};
 
 use crate::stacked::vanilla::TOTAL_PARENTS;
@@ -20,7 +20,7 @@ pub fn create_label_circuit<E, CS>(
     node: UInt64,
 ) -> Result<AllocatedNum<E>, SynthesisError>
 where
-    E: Engine,
+    E: Engine + Send,
     CS: ConstraintSystem<E>,
 {
     assert!(replica_id.len() >= 32, "replica id is too small");
@@ -94,7 +94,7 @@ mod tests {
     #[test]
     fn test_create_label() {
         let mut cs = TestConstraintSystem::<Bls12>::new();
-        let rng = &mut XorShiftRng::from_seed(TEST_SEED);
+        let mut rng = XorShiftRng::from_seed(TEST_SEED);
 
         let size = 64;
         let porep_id = [32; 32];
@@ -108,13 +108,13 @@ mod tests {
         )
         .expect("stacked bucket graph new_stacked failed");
 
-        let id_fr = Fr::random(rng);
+        let id_fr = Fr::random(&mut rng);
         let id: Vec<u8> = fr_into_bytes(&id_fr);
         let layer = 3;
         let node = 22;
 
         let mut data: Vec<u8> = (0..2 * size)
-            .flat_map(|_| fr_into_bytes(&Fr::random(rng)))
+            .flat_map(|_| fr_into_bytes(&Fr::random(&mut rng)))
             .collect();
 
         let mut parents = vec![0; BASE_DEGREE + EXP_DEGREE];

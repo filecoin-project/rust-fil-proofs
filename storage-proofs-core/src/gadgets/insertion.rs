@@ -4,7 +4,6 @@
 //! This can be thought of as a generalization of `AllocatedNum::conditionally_reverse` and reduces to it in the binary case.
 
 use bellperson::{
-    bls::Engine,
     gadgets::{
         boolean::{AllocatedBit, Boolean},
         num::AllocatedNum,
@@ -12,6 +11,7 @@ use bellperson::{
     ConstraintSystem, SynthesisError,
 };
 use ff::Field;
+use pairing::Engine;
 
 /// Insert `element` after the nth 1-indexed element of `elements`, where `path_bits` represents n, least-significant bit first.
 /// The returned result contains a new vector of `AllocatedNum`s with `element` inserted, and constraints are enforced.
@@ -368,7 +368,7 @@ mod tests {
             let size = 1 << log_size;
             for index in 0..size {
                 // Initialize rng in loop to simplify debugging with consistent elements.
-                let rng = &mut XorShiftRng::from_seed(TEST_SEED);
+                let mut rng = XorShiftRng::from_seed(TEST_SEED);
                 let mut cs = TestConstraintSystem::new();
 
                 let elements: Vec<_> = (0..size)
@@ -376,7 +376,7 @@ mod tests {
                         AllocatedNum::<Bls12>::alloc(
                             &mut cs.namespace(|| format!("element {}", i)),
                             || {
-                                let elt = <Fr as Field>::random(rng);
+                                let elt = <Fr as Field>::random(&mut rng);
                                 Ok(elt)
                             },
                         )
@@ -420,7 +420,7 @@ mod tests {
             let size = 1 << log_size;
             for index in 0..size {
                 // Initialize rng in loop to simplify debugging with consistent elements.
-                let rng = &mut XorShiftRng::from_seed(TEST_SEED);
+                let mut rng = XorShiftRng::from_seed(TEST_SEED);
                 let mut cs = TestConstraintSystem::new();
 
                 let elements: Vec<_> = (0..size - 1)
@@ -428,7 +428,7 @@ mod tests {
                         AllocatedNum::<Bls12>::alloc(
                             &mut cs.namespace(|| format!("element {}", i)),
                             || {
-                                let elt = <Fr as Field>::random(rng);
+                                let elt = <Fr as Field>::random(&mut rng);
                                 Ok(elt)
                             },
                         )
@@ -438,7 +438,7 @@ mod tests {
 
                 let to_insert =
                     AllocatedNum::<Bls12>::alloc(&mut cs.namespace(|| "insert"), || {
-                        let elt_to_insert = <Fr as Field>::random(rng);
+                        let elt_to_insert = <Fr as Field>::random(&mut rng);
                         Ok(elt_to_insert)
                     })
                     .expect("alloc failed");

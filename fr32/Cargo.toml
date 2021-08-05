@@ -9,10 +9,10 @@ repository = "https://github.com/filecoin-project/rust-fil-proofs"
 
 [dependencies]
 anyhow = "1.0.23"
-bellperson = { version = "0.16", default-features = false }
+bellperson = { git = "https://github.com/filecoin-project/bellperson", branch = "halo" }
 byte-slice-cast = "1.0.0"
 byteorder = "1"
-ff = { version = "0.3.1", package = "fff" }
+ff = "0.10.0"
 thiserror = "1.0.6"
 
 [dev-dependencies]
@@ -20,14 +20,12 @@ bitvec = "0.17"
 criterion = "0.3"
 itertools = "0.9"
 pretty_assertions = "0.6.1"
-rand = "0.7"
-rand_xorshift = "0.2.0"
+rand = "0.8"
+rand_xorshift = "0.3"
 
 [features]
-default = ["blst"]
-blst = ["bellperson/blst"]
+default = []
 gpu = ["bellperson/gpu"]
-pairing = ["bellperson/pairing"]
 
 [[bench]]
 name = "fr"

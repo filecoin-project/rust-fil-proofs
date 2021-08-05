@@ -101,10 +101,10 @@ fn test_verify_seal_fr32_validation() {
 
 #[test]
 fn test_random_domain_element() {
-    let rng = &mut XorShiftRng::from_seed(TEST_SEED);
+    let mut rng = XorShiftRng::from_seed(TEST_SEED);
 
     for _ in 0..100 {
-        let random_el: DefaultTreeDomain = Fr::random(rng).into();
+        let random_el: DefaultTreeDomain = Fr::random(&mut rng).into();
         let mut randomness = [0u8; 32];
         randomness.copy_from_slice(AsRef::<[u8]>::as_ref(&random_el));
         let back: DefaultTreeDomain =

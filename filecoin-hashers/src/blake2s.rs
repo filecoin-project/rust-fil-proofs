@@ -4,14 +4,14 @@ use std::panic::panic_any;
 
 use anyhow::ensure;
 use bellperson::{
-    bls::{Bls12, Fr, FrRepr},
+    bls::{Bls12, Fr},
     gadgets::{
         blake2s::blake2s as blake2s_circuit, boolean::Boolean, multipack, num::AllocatedNum,
     },
     ConstraintSystem, SynthesisError,
 };
 use blake2s_simd::{Hash as Blake2sHash, Params as Blake2s, State};
-use ff::{Field, PrimeField, PrimeFieldRepr};
+use ff::{Field, PrimeField};
 use merkletree::{
     hash::{Algorithm, Hashable},
     merkle::Element,
@@ -100,21 +100,7 @@ impl Hashable<Blake2sFunction> for Blake2sDomain {
 
 impl From<Fr> for Blake2sDomain {
     fn from(val: Fr) -> Self {
-        let mut res = Self::default();
-        val.into_repr()
-            .write_le(&mut res.0[0..32])
-            .expect("write_le failure");
-
-        res
-    }
-}
-
-impl From<FrRepr> for Blake2sDomain {
-    fn from(val: FrRepr) -> Self {
-        let mut res = Self::default();
-        val.write_le(&mut res.0[0..32]).expect("write_le failure");
-
-        res
+        Blake2sDomain(val.to_repr())
     }
 }
 
@@ -137,10 +123,7 @@ impl Element for Blake2sDomain {
 
 impl From<Blake2sDomain> for Fr {
     fn from(val: Blake2sDomain) -> Self {
-        let mut res = FrRepr::default();
-        res.read_le(&val.0[0..32]).expect("read_le failure");
-
-        Fr::from_repr(res).expect("from_repr failure")
+        Fr::from_repr(val.0).expect("from_repr failure")
     }
 }
 

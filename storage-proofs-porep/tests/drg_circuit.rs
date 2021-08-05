@@ -32,16 +32,16 @@ use tempfile::tempdir;
 
 #[test]
 fn test_drg_porep_circuit() {
-    let rng = &mut XorShiftRng::from_seed(TEST_SEED);
+    let mut rng = XorShiftRng::from_seed(TEST_SEED);
 
     let nodes = 16;
     let degree = BASE_DEGREE;
     let challenge = 2;
 
-    let replica_id: Fr = Fr::random(rng);
+    let replica_id: Fr = Fr::random(&mut rng);
 
     let data: Vec<u8> = (0..nodes)
-        .flat_map(|_| fr_into_bytes(&Fr::random(rng)))
+        .flat_map(|_| fr_into_bytes(&Fr::random(&mut rng)))
         .collect();
 
     // MT for original data is always named tree-d, and it will be
@@ -207,7 +207,7 @@ fn test_drg_porep_circuit() {
 
 #[test]
 fn test_drg_porep_circuit_inputs_and_constraints() {
-    let rng = &mut XorShiftRng::from_seed(TEST_SEED);
+    let mut rng = XorShiftRng::from_seed(TEST_SEED);
 
     // 1 GB
     let n = (1 << 30) / 32;
@@ -217,15 +217,15 @@ fn test_drg_porep_circuit_inputs_and_constraints() {
     let mut cs = TestConstraintSystem::<Bls12>::new();
     DrgPoRepCircuit::<PoseidonHasher>::synthesize(
         cs.namespace(|| "drgporep"),
-        vec![Some(Fr::random(rng)); 1],
-        vec![vec![(vec![Some(Fr::random(rng))], Some(0)); tree_depth]; 1],
-        Root::Val(Some(Fr::random(rng))),
-        vec![vec![Some(Fr::random(rng)); m]; 1],
-        vec![vec![vec![(vec![Some(Fr::random(rng))], Some(0)); tree_depth]; m]; 1],
-        vec![Some(Fr::random(rng)); 1],
-        vec![vec![(vec![Some(Fr::random(rng))], Some(0)); tree_depth]; 1],
-        Root::Val(Some(Fr::random(rng))),
-        Some(Fr::random(rng)),
+        vec![Some(Fr::random(&mut rng)); 1],
+        vec![vec![(vec![Some(Fr::random(&mut rng))], Some(0)); tree_depth]; 1],
+        Root::Val(Some(Fr::random(&mut rng))),
+        vec![vec![Some(Fr::random(&mut rng)); m]; 1],
+        vec![vec![vec![(vec![Some(Fr::random(&mut rng))], Some(0)); tree_depth]; m]; 1],
+        vec![Some(Fr::random(&mut rng)); 1],
+        vec![vec![(vec![Some(Fr::random(&mut rng))], Some(0)); tree_depth]; 1],
+        Root::Val(Some(Fr::random(&mut rng))),
+        Some(Fr::random(&mut rng)),
         false,
     )
     .expect("failed to synthesize circuit");

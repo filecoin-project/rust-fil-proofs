@@ -1,12 +1,13 @@
 use std::marker::PhantomData;
 
 use bellperson::{
-    bls::{Bls12, Engine, Fr},
+    bls::{Bls12, Fr},
     gadgets::{boolean::Boolean, multipack, num::AllocatedNum, sha256::sha256 as sha256_circuit},
     Circuit, ConstraintSystem, SynthesisError,
 };
 use ff::PrimeField;
 use filecoin_hashers::Hasher;
+use pairing::Engine;
 use storage_proofs_core::{
     compound_proof::CircuitComponent,
     error::Result,
@@ -254,7 +255,7 @@ fn kdf<E, CS>(
     node: Option<UInt64>,
 ) -> Result<AllocatedNum<E>, SynthesisError>
 where
-    E: Engine,
+    E: Engine + Send,
     CS: ConstraintSystem<E>,
 {
     // ciphertexts will become a buffer of the layout

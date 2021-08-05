@@ -1,16 +1,14 @@
 use std::cmp::Ordering;
 use std::hash::{Hash as StdHash, Hasher as StdHasher};
-use std::mem::size_of;
 use std::panic::panic_any;
-use std::slice;
 
 use anyhow::ensure;
 use bellperson::{
-    bls::{Bls12, Fr, FrRepr},
+    bls::{Bls12, Fr},
     gadgets::{boolean::Boolean, num::AllocatedNum},
     ConstraintSystem, SynthesisError,
 };
-use ff::{Field, PrimeField, PrimeFieldRepr, ScalarEngine};
+use ff::{Field, PrimeField};
 use generic_array::typenum::{marker_traits::Unsigned, U2};
 use merkletree::{
     hash::{Algorithm as LightAlgorithm, Hashable},
@@ -42,32 +40,24 @@ pub struct PoseidonFunction(Fr);
 
 impl Default for PoseidonFunction {
     fn default() -> PoseidonFunction {
-        PoseidonFunction(Fr::from_repr(FrRepr::default()).expect("failed default"))
+        PoseidonFunction(Fr::zero())
     }
 }
 
 impl Hashable<PoseidonFunction> for Fr {
     fn hash(&self, state: &mut PoseidonFunction) {
-        let mut bytes = Vec::with_capacity(32);
-        self.into_repr()
-            .write_le(&mut bytes)
-            .expect("write_le failure");
-        state.write(&bytes);
+        state.write(&self.to_repr());
     }
 }
 
 impl Hashable<PoseidonFunction> for PoseidonDomain {
     fn hash(&self, state: &mut PoseidonFunction) {
-        let mut bytes = Vec::with_capacity(32);
-        self.0
-            .write_le(&mut bytes)
-            .expect("Failed to write `FrRepr`");
-        state.write(&bytes);
+        state.write(&self.0);
     }
 }
 
 #[derive(Copy, Clone, Debug, Serialize, Deserialize)]
-pub struct PoseidonDomain(pub FrRepr);
+pub struct PoseidonDomain(pub <Fr as PrimeField>::Repr);
 
 impl AsRef<PoseidonDomain> for PoseidonDomain {
     fn as_ref(&self) -> &PoseidonDomain {
@@ -77,14 +67,13 @@ impl AsRef<PoseidonDomain> for PoseidonDomain {
 
 impl StdHash for PoseidonDomain {
     fn hash<H: StdHasher>(&self, state: &mut H) {
-        let raw: &[u64] = self.0.as_ref();
-        StdHash::hash(raw, state);
+        StdHash::hash(&self.0, state);
     }
 }
 
 impl PartialEq for PoseidonDomain {
     fn eq(&self, other: &Self) -> bool {
-        self.0.as_ref() == other.0.as_ref()
+        self.0 == other.0
     }
 }
 
@@ -92,7 +81,7 @@ impl Eq for PoseidonDomain {}
 
 impl Default for PoseidonDomain {
     fn default() -> PoseidonDomain {
-        PoseidonDomain(FrRepr::default())
+        PoseidonDomain(<Fr as PrimeField>::Repr::default())
     }
 }
 
@@ -113,25 +102,13 @@ impl PartialOrd for PoseidonDomain {
 impl AsRef<[u8]> for PoseidonDomain {
     #[inline]
     fn as_ref(&self) -> &[u8] {
-        as_ref(&(self.0).0)
+        &self.0
     }
-}
-
-// This is unsafe, and I wish it wasn't here, but I really need AsRef<[u8]> to work, without allocating.
-// https://internals.rust-lang.org/t/safe-trasnsmute-for-slices-e-g-u64-u32-particularly-simd-types/2871
-// https://github.com/briansmith/ring/blob/abb3fdfc08562f3f02e95fb551604a871fd4195e/src/polyfill.rs#L93-L110
-#[inline(always)]
-#[allow(clippy::needless_lifetimes)]
-fn as_ref<'a>(src: &'a [u64; 4]) -> &'a [u8] {
-    unsafe { slice::from_raw_parts(src.as_ptr() as *const u8, src.len() * size_of::<u64>()) }
 }
 
 impl Domain for PoseidonDomain {
     fn into_bytes(&self) -> Vec<u8> {
-        let mut out = Vec::with_capacity(PoseidonDomain::byte_len());
-        self.0.write_le(&mut out).expect("write_le failure");
-
-        out
+        self.0.to_vec()
     }
 
     fn try_from_bytes(raw: &[u8]) -> anyhow::Result<Self> {
@@ -139,14 +116,17 @@ impl Domain for PoseidonDomain {
             raw.len() == PoseidonDomain::byte_len(),
             "invalid amount of bytes"
         );
-        let mut res: FrRepr = Default::default();
-        res.read_le(raw)?;
-
-        Ok(PoseidonDomain(res))
+        let mut repr = <Fr as PrimeField>::Repr::default();
+        repr.copy_from_slice(&raw);
+        Ok(PoseidonDomain(repr))
     }
 
     fn write_bytes(&self, dest: &mut [u8]) -> anyhow::Result<()> {
-        self.0.write_le(dest)?;
+        ensure!(
+            dest.len() == PoseidonDomain::byte_len(),
+            "invalid amount of bytes"
+        );
+        dest.copy_from_slice(&self.0);
         Ok(())
     }
 
@@ -169,7 +149,7 @@ impl Element for PoseidonDomain {
     }
 
     fn copy_to_slice(&self, bytes: &mut [u8]) {
-        bytes.copy_from_slice(&self.into_bytes());
+        bytes.copy_from_slice(&self.0);
     }
 }
 
@@ -191,15 +171,14 @@ fn shared_hash(data: &[u8]) -> PoseidonDomain {
     let preimage = data
         .chunks(32)
         .map(|ref chunk| {
-            <Bls12 as ScalarEngine>::Fr::from_repr(PoseidonDomain::from_slice(chunk).0)
-                .expect("from_repr failure")
+            Fr::from_repr(PoseidonDomain::from_slice(chunk).0).expect("from_repr failure")
         })
         .collect::<Vec<_>>();
 
     shared_hash_frs(&preimage).into()
 }
 
-fn shared_hash_frs(preimage: &[<Bls12 as ScalarEngine>::Fr]) -> <Bls12 as ScalarEngine>::Fr {
+fn shared_hash_frs(preimage: &[Fr]) -> Fr {
     match preimage.len() {
         2 => {
             let mut p = Poseidon::new_with_preimage(&preimage, &POSEIDON_CONSTANTS_2);
@@ -233,7 +212,7 @@ impl HashFunction<PoseidonDomain> for PoseidonFunction {
     fn hash2(a: &PoseidonDomain, b: &PoseidonDomain) -> PoseidonDomain {
         let mut p =
             Poseidon::new_with_preimage(&[(*a).into(), (*b).into()][..], &*POSEIDON_CONSTANTS_2);
-        let fr: <Bls12 as ScalarEngine>::Fr = p.hash();
+        let fr: Fr = p.hash();
         fr.into()
     }
 
@@ -245,7 +224,7 @@ impl HashFunction<PoseidonDomain> for PoseidonFunction {
 
         let fr_input = input
             .iter()
-            .map(|x| <Bls12 as ScalarEngine>::Fr::from_repr(x.0).expect("from_repr failure"))
+            .map(|x| Fr::from_repr(x.0).expect("from_repr failure"))
             .collect::<Vec<_>>();
 
         fr_input[1..]
@@ -340,7 +319,7 @@ impl LightAlgorithm<PoseidonDomain> for PoseidonFunction {
 
     #[inline]
     fn reset(&mut self) {
-        self.0 = Fr::from_repr(FrRepr::from(0)).expect("failed 0");
+        self.0 = Fr::zero();
     }
 
     fn leaf(&mut self, leaf: PoseidonDomain) -> PoseidonDomain {
@@ -354,8 +333,8 @@ impl LightAlgorithm<PoseidonDomain> for PoseidonFunction {
         _height: usize,
     ) -> PoseidonDomain {
         shared_hash_frs(&[
-            <Bls12 as ScalarEngine>::Fr::from_repr(left.0).expect("from_repr failure"),
-            <Bls12 as ScalarEngine>::Fr::from_repr(right.0).expect("from_repr failure"),
+            Fr::from_repr(left.0).expect("from_repr failure"),
+            Fr::from_repr(right.0).expect("from_repr failure"),
         ])
         .into()
     }
@@ -367,8 +346,11 @@ impl LightAlgorithm<PoseidonDomain> for PoseidonFunction {
                     .iter()
                     .enumerate()
                     .map(|(i, x)| {
-                        <Bls12 as ScalarEngine>::Fr::from_repr(x.0)
-                            .unwrap_or_else(|_| panic_any(format!("from_repr failure at {}", i)))
+                        if let Some(fr) = Fr::from_repr(x.0) {
+                            fr
+                        } else {
+                            panic_any(format!("from_repr failure at {}", i));
+                        }
                     })
                     .collect::<Vec<_>>(),
             )
@@ -381,13 +363,13 @@ impl LightAlgorithm<PoseidonDomain> for PoseidonFunction {
 impl From<Fr> for PoseidonDomain {
     #[inline]
     fn from(val: Fr) -> Self {
-        PoseidonDomain(val.into_repr())
+        PoseidonDomain(val.to_repr())
     }
 }
 
-impl From<FrRepr> for PoseidonDomain {
+impl From<[u8; 32]> for PoseidonDomain {
     #[inline]
-    fn from(val: FrRepr) -> Self {
+    fn from(val: [u8; 32]) -> Self {
         PoseidonDomain(val)
     }
 }
@@ -403,18 +385,25 @@ impl From<PoseidonDomain> for Fr {
 mod tests {
     use super::*;
 
-    use std::mem;
-
     use bellperson::util_cs::test_cs::TestConstraintSystem;
     use merkletree::{merkle::MerkleTree, store::VecStore};
+
+    fn u64s_to_u8s(u64s: [u64; 4]) -> [u8; 32] {
+        let mut bytes = [0u8; 32];
+        bytes[..8].copy_from_slice(&u64s[0].to_le_bytes());
+        bytes[8..16].copy_from_slice(&u64s[1].to_le_bytes());
+        bytes[16..24].copy_from_slice(&u64s[2].to_le_bytes());
+        bytes[24..].copy_from_slice(&u64s[3].to_le_bytes());
+        bytes
+    }
 
     #[test]
     fn test_path() {
         let values = [
-            PoseidonDomain(Fr::one().into_repr()),
-            PoseidonDomain(Fr::one().into_repr()),
-            PoseidonDomain(Fr::one().into_repr()),
-            PoseidonDomain(Fr::one().into_repr()),
+            PoseidonDomain(Fr::one().to_repr()),
+            PoseidonDomain(Fr::one().to_repr()),
+            PoseidonDomain(Fr::one().to_repr()),
+            PoseidonDomain(Fr::one().to_repr()),
         ];
 
         let t = MerkleTree::<PoseidonDomain, PoseidonFunction, VecStore<_>, U2>::new(
@@ -436,16 +425,16 @@ mod tests {
     // fn test_poseidon_quad() {
     //     let leaves = [Fr::one(), Fr::zero(), Fr::zero(), Fr::one()];
 
-    //     assert_eq!(Fr::zero().into_repr(), shared_hash_frs(&leaves[..]).0);
+    //     assert_eq!(Fr::zero().to_repr(), shared_hash_frs(&leaves[..]).0);
     // }
 
     #[test]
     fn test_poseidon_hasher() {
         let leaves = [
-            PoseidonDomain(Fr::one().into_repr()),
-            PoseidonDomain(Fr::zero().into_repr()),
-            PoseidonDomain(Fr::zero().into_repr()),
-            PoseidonDomain(Fr::one().into_repr()),
+            PoseidonDomain(Fr::one().to_repr()),
+            PoseidonDomain(Fr::zero().to_repr()),
+            PoseidonDomain(Fr::zero().to_repr()),
+            PoseidonDomain(Fr::one().to_repr()),
         ];
 
         let t = MerkleTree::<PoseidonDomain, PoseidonFunction, VecStore<_>, U2>::new(
@@ -475,15 +464,15 @@ mod tests {
 
         assert_eq!(
             t.read_at(4).expect("read_at failure").0,
-            FrRepr([
+            u64s_to_u8s([
                 0xb339ff6079800b5e,
                 0xec5907b3dc3094af,
                 0x93c003cc74a24f26,
                 0x042f94ffbe786bc3,
-            ])
+            ]),
         );
 
-        let expected = FrRepr([
+        let expected = u64s_to_u8s([
             0xefbb8be3e291e671,
             0x77cc72b8cb2b5ad2,
             0x30eb6385ae6b74ae,
@@ -508,8 +497,7 @@ mod tests {
         ];
 
         for case in cases.into_iter() {
-            let repr = FrRepr(case);
-            let val = PoseidonDomain(repr);
+            let val = PoseidonDomain(u64s_to_u8s(case));
 
             for _ in 0..100 {
                 assert_eq!(val.into_bytes(), val.into_bytes());
@@ -517,20 +505,15 @@ mod tests {
 
             let raw: &[u8] = val.as_ref();
 
-            for i in 0..4 {
-                assert_eq!(case[i], unsafe {
-                    let mut val = [0u8; 8];
-                    val.clone_from_slice(&raw[i * 8..(i + 1) * 8]);
-                    mem::transmute::<[u8; 8], u64>(val)
-                });
+            for (limb, bytes) in case.iter().zip(raw.chunks(8)) {
+                assert_eq!(&limb.to_le_bytes(), bytes);
             }
         }
     }
 
     #[test]
     fn test_serialize() {
-        let repr = FrRepr([1, 2, 3, 4]);
-        let val = PoseidonDomain(repr);
+        let val = PoseidonDomain(u64s_to_u8s([1, 2, 3, 4]));
 
         let ser = serde_json::to_string(&val)
             .expect("Failed to serialize `PoseidonDomain` element to JSON string");
@@ -544,12 +527,12 @@ mod tests {
     fn test_hash_md() {
         // let arity = PoseidonMDArity::to_usize();
         let n = 71;
-        let data = vec![PoseidonDomain(Fr::one().into_repr()); n];
+        let data = vec![PoseidonDomain(Fr::one().to_repr()); n];
         let hashed = PoseidonFunction::hash_md(&data);
 
         assert_eq!(
             hashed,
-            PoseidonDomain(FrRepr([
+            PoseidonDomain(u64s_to_u8s([
                 0x351c54133b332c90,
                 0xc26f6d625f4e8195,
                 0x5fd9623643ed9622,
@@ -561,7 +544,7 @@ mod tests {
     fn test_hash_md_circuit() {
         // let arity = PoseidonMDArity::to_usize();
         let n = 71;
-        let data = vec![PoseidonDomain(Fr::one().into_repr()); n];
+        let data = vec![PoseidonDomain(Fr::one().to_repr()); n];
 
         let mut cs = TestConstraintSystem::<Bls12>::new();
         let circuit_data = (0..n)
