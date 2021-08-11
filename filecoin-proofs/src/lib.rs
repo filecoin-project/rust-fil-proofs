@@ -3,6 +3,7 @@
 #![warn(clippy::unnecessary_wraps)]
 #![allow(clippy::upper_case_acronyms)]
 
+pub mod caches;
 pub mod constants;
 pub mod param;
 pub mod parameters;
@@ -10,7 +11,6 @@ pub mod pieces;
 pub mod types;
 
 mod api;
-mod caches;
 mod commitment_reader;
 
 pub use api::*;

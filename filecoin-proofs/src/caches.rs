@@ -7,14 +7,15 @@ use bellperson::{
     groth16::{self, prepare_verifying_key},
 };
 use lazy_static::lazy_static;
-use log::info;
+use log::{info, trace};
+use once_cell::sync::OnceCell;
 use rand::rngs::OsRng;
 use storage_proofs_core::{compound_proof::CompoundProof, merkle::MerkleTreeTrait};
 use storage_proofs_porep::stacked::{StackedCompound, StackedDrg};
 use storage_proofs_post::fallback::{FallbackPoSt, FallbackPoStCircuit, FallbackPoStCompound};
 
 use crate::{
-    constants::DefaultPieceHasher,
+    constants::{DefaultPieceHasher, PUBLISHED_SECTOR_SIZES},
     parameters::{public_params, window_post_public_params, winning_post_public_params},
     types::{PaddedBytesAmount, PoRepConfig, PoRepProofPartitions, PoStConfig, PoStType},
 };
@@ -27,14 +28,76 @@ type Bls12VerifierSRSKey = groth16::aggregate::VerifierSRS<Bls12>;
 type Cache<G> = HashMap<String, Arc<G>>;
 type GrothMemCache = Cache<Bls12GrothParams>;
 type VerifyingKeyMemCache = Cache<Bls12PreparedVerifyingKey>;
-type SRSKeyMemCache = Cache<Bls12ProverSRSKey>;
-type SRSVerifierKeyMemCache = Cache<Bls12VerifierSRSKey>;
+
+const FIP0013_MIN_SNARKS: usize = 64;
+const FIP0013_MAX_SNARKS: usize = 8192;
+
+// Note that proofs testing will use values under and over the FIP13
+// min and max, respectively.
+const PROOFS_TESTS_MIN_SNARKS: usize = FIP0013_MIN_SNARKS >> 5;
+const PROOFS_TESTS_MAX_SNARKS: usize = FIP0013_MAX_SNARKS << 1;
+
+const SRS_IDENTIFIER: &str = "srs-key";
+const SRS_VERIFIER_IDENTIFIER: &str = "srs-verifying-key";
 
 lazy_static! {
     static ref GROTH_PARAM_MEMORY_CACHE: Mutex<GrothMemCache> = Default::default();
     static ref VERIFYING_KEY_MEMORY_CACHE: Mutex<VerifyingKeyMemCache> = Default::default();
-    static ref SRS_KEY_MEMORY_CACHE: Mutex<SRSKeyMemCache> = Default::default();
-    static ref SRS_VERIFIER_KEY_MEMORY_CACHE: Mutex<SRSVerifierKeyMemCache> = Default::default();
+    static ref SRS_KEY_MEMORY_CACHE: SRSCache<Bls12ProverSRSKey> =
+        SRSCache::with_defaults(SRS_IDENTIFIER);
+    static ref SRS_VERIFIER_KEY_MEMORY_CACHE: SRSCache<Bls12VerifierSRSKey> =
+        SRSCache::with_defaults(SRS_VERIFIER_IDENTIFIER);
+}
+
+/// We have a separate SRSCache type for srs keys since they are
+/// cached differently (as a hashmap per type, keyed by identifier
+/// consisting of sector size and pow2 num proofs to aggregate).
+#[derive(Debug, Default)]
+pub struct SRSCache<G> {
+    data: HashMap<String, OnceCell<Arc<G>>>,
+}
+
+impl<G> SRSCache<G> {
+    /// Initializes the cache by pre-populating the internal map with
+    /// all supported keys that could be looked up at a later time.
+    pub fn with_defaults(identifier: &str) -> Self {
+        let mut data = HashMap::new();
+        let mut num_proofs_to_aggregate = PROOFS_TESTS_MIN_SNARKS;
+
+        loop {
+            for sector_size in &PUBLISHED_SECTOR_SIZES {
+                let key = format!(
+                    "STACKED[{}-{}]-{}",
+                    sector_size, num_proofs_to_aggregate, identifier,
+                );
+                trace!("inserting placeholder srs key with hash key {}", key);
+                data.insert(key, OnceCell::new());
+            }
+
+            num_proofs_to_aggregate <<= 1;
+            if num_proofs_to_aggregate > PROOFS_TESTS_MAX_SNARKS {
+                break;
+            }
+        }
+
+        Self { data }
+    }
+
+    /// Returns `None` for non existent entries, `Some(v)` for existing ones, where `v` is either
+    /// the result of running `generator` or already existing one.
+    pub fn get_or_init<F>(&self, key: &str, generator: F) -> Result<Option<&Arc<G>>>
+    where
+        F: FnOnce() -> Result<G>,
+    {
+        if let Some(cell) = self.data.get(key) {
+            trace!("generating or waiting on specialize for {}", key);
+            let result =
+                cell.get_or_try_init(|| -> Result<Arc<G>> { Ok(Arc::new(generator()?)) })?;
+            return Ok(Some(result));
+        }
+
+        Ok(None)
+    }
 }
 
 pub fn cache_lookup<F, G>(
@@ -68,6 +131,23 @@ where
     Ok(res)
 }
 
+pub fn srs_cache_lookup<F, G>(
+    cache_ref: &SRSCache<G>,
+    identifier: String,
+    generator: F,
+) -> Result<Arc<G>>
+where
+    F: FnOnce() -> Result<G>,
+    G: Send + Sync,
+{
+    trace!("srs_cache_lookup looking up {}", identifier);
+    if let Some(entry) = cache_ref.get_or_init(&identifier, generator)? {
+        return Ok(entry.clone());
+    }
+
+    panic!("unknown identifier {}", identifier);
+}
+
 #[inline]
 pub fn lookup_groth_params<F>(identifier: String, generator: F) -> Result<Arc<Bls12GrothParams>>
 where
@@ -93,8 +173,8 @@ pub fn lookup_srs_key<F>(identifier: String, generator: F) -> Result<Arc<Bls12Pr
 where
     F: FnOnce() -> Result<Bls12ProverSRSKey>,
 {
-    let srs_identifier = format!("{}-srs-key", &identifier);
-    cache_lookup(&*SRS_KEY_MEMORY_CACHE, srs_identifier, generator)
+    let srs_identifier = format!("{}-{}", &identifier, SRS_IDENTIFIER);
+    srs_cache_lookup::<_, Bls12ProverSRSKey>(&*SRS_KEY_MEMORY_CACHE, srs_identifier, generator)
 }
 
 #[inline]
@@ -105,8 +185,12 @@ pub fn lookup_srs_verifier_key<F>(
 where
     F: FnOnce() -> Result<Bls12VerifierSRSKey>,
 {
-    let srs_identifier = format!("{}-srs-key", &identifier);
-    cache_lookup(&*SRS_VERIFIER_KEY_MEMORY_CACHE, srs_identifier, generator)
+    let srs_identifier = format!("{}-{}", &identifier, SRS_VERIFIER_IDENTIFIER);
+    srs_cache_lookup::<_, Bls12VerifierSRSKey>(
+        &*SRS_VERIFIER_KEY_MEMORY_CACHE,
+        srs_identifier,
+        generator,
+    )
 }
 
 pub fn get_stacked_params<Tree: 'static + MerkleTreeTrait>(
@@ -265,6 +349,11 @@ pub fn get_stacked_srs_key<Tree: 'static + MerkleTreeTrait>(
     )?;
 
     let srs_generator = || {
+        trace!(
+            "get_stacked_srs_key specializing STACKED[{}-{}]",
+            usize::from(PaddedBytesAmount::from(porep_config)),
+            num_proofs_to_aggregate,
+        );
         <StackedCompound<Tree, DefaultPieceHasher> as CompoundProof<
             StackedDrg<'_, Tree, DefaultPieceHasher>,
             _,
@@ -293,6 +382,11 @@ pub fn get_stacked_srs_verifier_key<Tree: 'static + MerkleTreeTrait>(
     )?;
 
     let srs_verifier_generator = || {
+        trace!(
+            "get_stacked_srs_verifier_key specializing STACKED[{}-{}]",
+            usize::from(PaddedBytesAmount::from(porep_config)),
+            num_proofs_to_aggregate,
+        );
         <StackedCompound<Tree, DefaultPieceHasher> as CompoundProof<
             StackedDrg<'_, Tree, DefaultPieceHasher>,
             _,

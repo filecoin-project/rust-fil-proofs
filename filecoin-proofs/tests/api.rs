@@ -5,7 +5,9 @@ use std::path::{Path, PathBuf};
 use std::sync::Once;
 
 use anyhow::{ensure, Result};
-use bellperson::bls::Fr;
+use bellperson::bls::{Bls12, Fr};
+use bellperson::groth16;
+use bincode::serialize;
 use ff::Field;
 use filecoin_hashers::Hasher;
 use filecoin_proofs::{
@@ -221,14 +223,54 @@ fn test_seal_proof_aggregation_1_2kib_porep_id_v1_1_base_8() -> Result<()> {
 #[ignore]
 fn test_seal_proof_aggregation_3_2kib_porep_id_v1_1_base_8() -> Result<()> {
     let proofs_to_aggregate = 3; // Requires auto-padding
-    inner_test_seal_proof_aggregation_2kib_porep_id_v1_1_base_8(proofs_to_aggregate)
+
+    let porep_id = ARBITRARY_POREP_ID_V1_1_0;
+    assert!(!is_legacy_porep_id(porep_id));
+    let verified = aggregate_proofs::<SectorShape2KiB>(
+        SECTOR_SIZE_2_KIB,
+        &porep_id,
+        ApiVersion::V1_1_0,
+        proofs_to_aggregate,
+    )?;
+    assert!(verified);
+
+    Ok(())
 }
 
 #[test]
 #[ignore]
 fn test_seal_proof_aggregation_5_2kib_porep_id_v1_1_base_8() -> Result<()> {
     let proofs_to_aggregate = 5; // Requires auto-padding
-    inner_test_seal_proof_aggregation_2kib_porep_id_v1_1_base_8(proofs_to_aggregate)
+
+    let porep_id = ARBITRARY_POREP_ID_V1_1_0;
+    assert!(!is_legacy_porep_id(porep_id));
+    let verified = aggregate_proofs::<SectorShape2KiB>(
+        SECTOR_SIZE_2_KIB,
+        &porep_id,
+        ApiVersion::V1_1_0,
+        proofs_to_aggregate,
+    )?;
+    assert!(verified);
+
+    Ok(())
+}
+
+#[test]
+#[ignore]
+fn test_seal_proof_aggregation_257_2kib_porep_id_v1_1_base_8() -> Result<()> {
+    let proofs_to_aggregate = 257; // Requires auto-padding
+
+    let porep_id = ARBITRARY_POREP_ID_V1_1_0;
+    assert!(!is_legacy_porep_id(porep_id));
+    let verified = aggregate_proofs::<SectorShape2KiB>(
+        SECTOR_SIZE_2_KIB,
+        &porep_id,
+        ApiVersion::V1_1_0,
+        proofs_to_aggregate,
+    )?;
+    assert!(verified);
+
+    Ok(())
 }
 
 #[test]
@@ -267,6 +309,60 @@ fn test_seal_proof_aggregation_1_32kib_porep_id_v1_1_base_8() -> Result<()> {
     Ok(())
 }
 
+#[test]
+#[ignore]
+fn test_seal_proof_aggregation_818_32kib_porep_id_v1_1_base_8() -> Result<()> {
+    let proofs_to_aggregate = 818; // Requires auto-padding
+
+    let porep_id = ARBITRARY_POREP_ID_V1_1_0;
+    assert!(!is_legacy_porep_id(porep_id));
+    let verified = aggregate_proofs::<SectorShape32KiB>(
+        SECTOR_SIZE_32_KIB,
+        &porep_id,
+        ApiVersion::V1_1_0,
+        proofs_to_aggregate,
+    )?;
+    assert!(verified);
+
+    Ok(())
+}
+
+//#[test]
+//#[ignore]
+//fn test_seal_proof_aggregation_818_32gib_porep_id_v1_1_base_8() -> Result<()> {
+//    let proofs_to_aggregate = 818; // Requires auto-padding
+//
+//    let porep_id = ARBITRARY_POREP_ID_V1_1_0;
+//    assert!(!is_legacy_porep_id(porep_id));
+//    let verified = aggregate_proofs::<SectorShape32GiB>(
+//        SECTOR_SIZE_32_GIB,
+//        &porep_id,
+//        ApiVersion::V1_1_0,
+//        proofs_to_aggregate,
+//    )?;
+//    assert!(verified);
+//
+//    Ok(())
+//}
+
+//#[test]
+//#[ignore]
+//fn test_seal_proof_aggregation_818_64gib_porep_id_v1_1_base_8() -> Result<()> {
+//    let proofs_to_aggregate = 818; // Requires auto-padding
+//
+//    let porep_id = ARBITRARY_POREP_ID_V1_1_0;
+//    assert!(!is_legacy_porep_id(porep_id));
+//    let verified = aggregate_proofs::<SectorShape64GiB>(
+//        SECTOR_SIZE_64_GIB,
+//        &porep_id,
+//        ApiVersion::V1_1_0,
+//        proofs_to_aggregate,
+//    )?;
+//    assert!(verified);
+//
+//    Ok(())
+//}
+
 //#[test]
 //#[ignore]
 //fn test_seal_proof_aggregation_1024_2kib_porep_id_v1_1_base_8() -> Result<()> {
@@ -280,61 +376,6 @@ fn test_seal_proof_aggregation_1_32kib_porep_id_v1_1_base_8() -> Result<()> {
 //    let proofs_to_aggregate = 65536;
 //    inner_test_seal_proof_aggregation_2kib_porep_id_v1_1_base_8(proofs_to_aggregate)
 //}
-
-fn inner_test_seal_proof_aggregation_2kib_porep_id_v1_1_base_8(
-    proofs_to_aggregate: usize,
-) -> Result<()> {
-    let porep_id_v1_1: u64 = 5; // This is a RegisteredSealProof value
-
-    let mut porep_id = [0u8; 32];
-    porep_id[..8].copy_from_slice(&porep_id_v1_1.to_le_bytes());
-    assert!(!is_legacy_porep_id(porep_id));
-
-    let rng = &mut XorShiftRng::from_seed(TEST_SEED);
-    let prover_fr: DefaultTreeDomain = Fr::random(rng).into();
-    let mut prover_id = [0u8; 32];
-    prover_id.copy_from_slice(AsRef::<[u8]>::as_ref(&prover_fr));
-
-    let mut commit_outputs = Vec::with_capacity(proofs_to_aggregate);
-    let mut commit_inputs = Vec::with_capacity(proofs_to_aggregate);
-    let mut seeds = Vec::with_capacity(proofs_to_aggregate);
-    let mut comm_rs = Vec::with_capacity(proofs_to_aggregate);
-
-    let (commit_output, commit_input, seed, comm_r) =
-        create_seal_for_aggregation::<_, SectorShape2KiB>(
-            rng,
-            SECTOR_SIZE_2_KIB,
-            prover_id,
-            &porep_id,
-            ApiVersion::V1_1_0,
-        )?;
-
-    // duplicate a single proof to desired target for aggregation
-    for _ in 0..proofs_to_aggregate {
-        commit_outputs.push(commit_output.clone());
-        commit_inputs.extend(commit_input.clone());
-        seeds.push(seed);
-        comm_rs.push(comm_r);
-    }
-
-    let config = porep_config(SECTOR_SIZE_2_KIB, porep_id, ApiVersion::V1_1_0);
-    let aggregate_proof = aggregate_seal_commit_proofs::<SectorShape2KiB>(
-        config,
-        &comm_rs,
-        &seeds,
-        commit_outputs.as_slice(),
-    )?;
-    let verified = verify_aggregate_seal_commit_proofs::<SectorShape2KiB>(
-        config,
-        aggregate_proof,
-        &comm_rs,
-        &seeds,
-        commit_inputs,
-    )?;
-    assert!(verified);
-
-    Ok(())
-}
 
 fn aggregate_proofs<Tree: 'static + MerkleTreeTrait>(
     sector_size: u64,
@@ -352,16 +393,12 @@ fn aggregate_proofs<Tree: 'static + MerkleTreeTrait>(
     let mut seeds = Vec::with_capacity(num_proofs_to_aggregate);
     let mut comm_rs = Vec::with_capacity(num_proofs_to_aggregate);
 
+    let (commit_output, commit_input, seed, comm_r) =
+        create_seal_for_aggregation::<_, Tree>(rng, sector_size, prover_id, porep_id, api_version)?;
+
     for _ in 0..num_proofs_to_aggregate {
-        let (commit_output, commit_input, seed, comm_r) = create_seal_for_aggregation::<_, Tree>(
-            rng,
-            sector_size,
-            prover_id,
-            porep_id,
-            api_version,
-        )?;
-        commit_outputs.push(commit_output);
-        commit_inputs.extend(commit_input);
+        commit_outputs.push(commit_output.clone());
+        commit_inputs.extend(commit_input.clone());
         seeds.push(seed);
         comm_rs.push(comm_r);
     }
@@ -1473,4 +1510,40 @@ fn create_fake_seal<R: rand::Rng, Tree: 'static + MerkleTreeTrait>(
     )?;
 
     Ok((sector_id, sealed_sector_file, comm_r, cache_dir))
+}
+
+#[test]
+fn test_aggregate_proof_encode_decode() -> Result<()> {
+    // This byte vector is a natively serialized aggregate proof generated from the
+    // 'test_seal_proof_aggregation_257_2kib_porep_id_v1_1_base_8' test.
+    let aggregate_proof_bytes = std::include_bytes!("./aggregate_proof_bytes");
+    let expected_aggregate_proof_len = 29_044;
+
+    // Re-construct the aggregate proof from the bytes, using the native deserialization method.
+    let aggregate_proof: groth16::aggregate::AggregateProof<Bls12> =
+        groth16::aggregate::AggregateProof::read(std::io::Cursor::new(&aggregate_proof_bytes))?;
+    let aggregate_proof_count = aggregate_proof.tmipp.gipa.nproofs as usize;
+    let expected_aggregate_proof_count = 512;
+
+    assert_eq!(aggregate_proof_count, expected_aggregate_proof_count);
+
+    // Re-serialize the proof to ensure a round-trip match.
+    let mut aggregate_proof_bytes2 = Vec::new();
+    aggregate_proof.write(&mut aggregate_proof_bytes2)?;
+
+    assert_eq!(aggregate_proof_bytes.len(), expected_aggregate_proof_len);
+    assert_eq!(aggregate_proof_bytes.len(), aggregate_proof_bytes2.len());
+    assert_eq!(aggregate_proof_bytes, aggregate_proof_bytes2.as_slice());
+
+    // Note: the native serialization format is more compact than bincode serialization, so assert that here.
+    let bincode_serialized_proof = serialize(&aggregate_proof)?;
+    let expected_bincode_serialized_proof_len = 56_436;
+
+    assert!(aggregate_proof_bytes2.len() < bincode_serialized_proof.len());
+    assert_eq!(
+        bincode_serialized_proof.len(),
+        expected_bincode_serialized_proof_len
+    );
+
+    Ok(())
 }

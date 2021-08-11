@@ -1,6 +1,6 @@
 [package]
 name = "storage-proofs-post"
-version = "8.0.2"
+version = "8.0.3"
 authors = ["dignifiedquire <me@dignifiedquire.com>"]
 license = "MIT OR Apache-2.0"
 description = "Proofs of Space Time"
@@ -21,12 +21,12 @@ serde = { version = "1.0", features = ["derive"]}
 blake2b_simd = "0.5"
 blake2s_simd = "0.5"
 ff = { version = "0.3.1", package = "fff" }
-bellperson = { version = "0.14", default-features = false }
+bellperson = { version = "0.16", default-features = false }
 log = "0.4.7"
 hex = "0.4.0"
 generic-array = "0.14.4"
 anyhow = "1.0.23"
-neptune = { version = "^3.0", default-features = false }
+neptune = { version = "^4.0", default-features = false }
 num_cpus = "1.10.1"
 fr32 = { path = "../fr32", version = "^1.0.0", default-features = false }
 
@@ -37,7 +37,7 @@ rand_xorshift = "0.2.0"
 filecoin-hashers = { path = "../filecoin-hashers", version = "^3.0.0", default-features = false, features = ["poseidon", "sha256", "blake2s"]}
 
 [features]
-default = ["pairing", "gpu"]
+default = ["blst", "gpu"]
 gpu = ["storage-proofs-core/gpu", "filecoin-hashers/gpu", "fr32/gpu", "neptune/opencl"]
 pairing = ["storage-proofs-core/pairing", "bellperson/pairing", "neptune/pairing", "filecoin-hashers/pairing", "fr32/pairing"]
 blst = ["storage-proofs-core/blst", "bellperson/blst", "neptune/blst", "filecoin-hashers/blst", "fr32/blst"]

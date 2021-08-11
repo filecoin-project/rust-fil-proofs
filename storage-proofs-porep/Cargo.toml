@@ -1,6 +1,6 @@
 [package]
 name = "storage-proofs-porep"
-version = "8.0.2"
+version = "8.0.3"
 authors = ["dignifiedquire <me@dignifiedquire.com>"]
 description = "Proofs of replication"
 license = "MIT OR Apache-2.0"
@@ -23,12 +23,12 @@ rayon = "1.0.0"
 serde = { version = "1.0", features = ["derive"]}
 serde_json = "1.0"
 ff = { version = "0.3.1", package = "fff" }
-bellperson = { version = "0.14", default-features = false }
+bellperson = { version = "0.16", default-features = false }
 log = "0.4.7"
 pretty_assertions = "0.6.1"
 generic-array = "0.14.4"
 anyhow = "1.0.23"
-neptune = { version = "^3.0", default-features = false }
+neptune = { version = "^4.0", default-features = false }
 num_cpus = "1.10.1"
 hex = "0.4.2"
 bincode = "1.1.2"
@@ -39,6 +39,7 @@ hwloc = { version = "0.3.0", optional = true }
 libc = "0.2"
 fdlimit = "0.2.0"
 fr32 = { path = "../fr32", version = "^1.0.0", default-features = false }
+yastl = "0.1.2"
 
 [target."cfg(target_arch = \"aarch64\")".dependencies]
 sha2 = { version = "0.9.3", features = ["compress", "asm"] }
@@ -54,7 +55,7 @@ pretty_env_logger = "0.4.0"
 filecoin-hashers = { path = "../filecoin-hashers", version = "^3.0.0", default-features = false, features = ["poseidon", "sha256", "blake2s"]}
 
 [features]
-default = ["pairing", "gpu", "multicore-sdr"]
+default = ["blst", "gpu", "multicore-sdr"]
 gpu = ["storage-proofs-core/gpu", "filecoin-hashers/gpu", "neptune/opencl", "bellperson/gpu", "fr32/gpu"]
 pairing = ["storage-proofs-core/pairing", "bellperson/pairing", "neptune/pairing", "filecoin-hashers/pairing", "fr32/pairing"]
 blst = ["storage-proofs-core/blst", "bellperson/blst", "neptune/blst", "filecoin-hashers/blst", "fr32/blst"]

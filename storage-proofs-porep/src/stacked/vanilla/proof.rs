@@ -32,6 +32,7 @@ use storage_proofs_core::{
     settings::SETTINGS,
     util::{default_rows_to_discard, NODE_SIZE},
 };
+use yastl::Pool;
 
 use crate::{
     encode::{decode, encode},
@@ -59,6 +60,8 @@ lazy_static! {
     /// It might be possible to relax this constraint, but in that case, only one builder
     /// should actually be active at any given time, so the mutex should still be used.
     static ref GPU_LOCK: Mutex<()> = Mutex::new(());
+
+    static ref THREAD_POOL: Pool = Pool::new(num_cpus::get());
 }
 
 #[derive(Debug)]
@@ -478,15 +481,16 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         ColumnArity: 'static + PoseidonArity,
         TreeArity: PoseidonArity,
     {
+        use crossbeam::channel::unbounded as channel;
         use std::cmp::min;
-        use std::sync::{mpsc::sync_channel, Arc, RwLock};
+        use std::sync::{Arc, RwLock};
 
         use bellperson::bls::Fr;
         use fr32::fr_into_bytes;
         use generic_array::GenericArray;
         use merkletree::store::DiskStore;
         use neptune::{
-            batch_hasher::BatcherType,
+            batch_hasher::Batcher,
             column_tree_builder::{ColumnTreeBuilder, ColumnTreeBuilderTrait},
         };
 
@@ -509,14 +513,14 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
             let column_write_batch_size = SETTINGS.column_write_batch_size as usize;
 
             // This channel will receive batches of columns and add them to the ColumnTreeBuilder.
-            let (builder_tx, builder_rx) = sync_channel(0);
+            let (builder_tx, builder_rx) = channel();
 
             let config_count = configs.len(); // Don't move config into closure below.
-            rayon::scope(|s| {
+            THREAD_POOL.scoped(|s| {
                 // This channel will receive the finished tree data to be written to disk.
-                let (writer_tx, writer_rx) = sync_channel::<(Vec<Fr>, Vec<Fr>)>(0);
+                let (writer_tx, writer_rx) = channel::<(Vec<Fr>, Vec<Fr>)>();
 
-                s.spawn(move |_| {
+                s.execute(move || {
                     for i in 0..config_count {
                         let mut node_index = 0;
                         let builder_tx = builder_tx.clone();
@@ -585,13 +589,20 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                         }
                     }
                 });
-                s.spawn(move |_| {
+                s.execute(move || {
                     let _gpu_lock = GPU_LOCK.lock().expect("failed to get gpu lock");
+                    let tree_batcher = Some(
+                        Batcher::pick_gpu(max_gpu_tree_batch_size)
+                            .expect("failed to create tree gpu batcher"),
+                    );
+                    let column_batcher = Some(
+                        Batcher::pick_gpu(max_gpu_column_batch_size)
+                            .expect("failed to create col gpu batcher"),
+                    );
                     let mut column_tree_builder = ColumnTreeBuilder::<ColumnArity, TreeArity>::new(
-                        Some(BatcherType::OpenCL),
+                        column_batcher,
+                        tree_batcher,
                         nodes_count,
-                        max_gpu_column_batch_size,
-                        max_gpu_tree_batch_size,
                     )
                     .expect("failed to create ColumnTreeBuilder");
 
@@ -735,7 +746,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                 let mut hashes: Vec<<Tree::Hasher as Hasher>::Domain> =
                     vec![<Tree::Hasher as Hasher>::Domain::default(); nodes_count];
 
-                rayon::scope(|s| {
+                THREAD_POOL.scoped(|s| {
                     let n = num_cpus::get();
 
                     // only split if we have at least two elements per thread
@@ -748,7 +759,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                     for (chunk, hashes_chunk) in hashes.chunks_mut(chunk_size).enumerate() {
                         let labels = &labels;
 
-                        s.spawn(move |_| {
+                        s.execute(move || {
                             for (j, hash) in hashes_chunk.iter_mut().enumerate() {
                                 let data: Vec<_> = (1..=layers)
                                     .map(|layer| {
@@ -850,16 +861,16 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
     where
         TreeArity: PoseidonArity,
     {
+        use crossbeam::channel::unbounded as channel;
         use std::cmp::min;
         use std::fs::OpenOptions;
         use std::io::Write;
-        use std::sync::mpsc::sync_channel;
 
         use bellperson::bls::Fr;
         use fr32::fr_into_bytes;
         use merkletree::merkle::{get_merkle_tree_cache_size, get_merkle_tree_leafs};
         use neptune::{
-            batch_hasher::BatcherType,
+            batch_hasher::Batcher,
             tree_builder::{TreeBuilder, TreeBuilderTrait},
         };
 
@@ -877,15 +888,16 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         let max_gpu_tree_batch_size = SETTINGS.max_gpu_tree_batch_size as usize;
 
         // This channel will receive batches of leaf nodes and add them to the TreeBuilder.
-        let (builder_tx, builder_rx) = sync_channel::<(Vec<Fr>, bool)>(0);
+        let (builder_tx, builder_rx) = channel::<(Vec<Fr>, bool)>();
         let config_count = configs.len(); // Don't move config into closure below.
         let configs = &configs;
         let tree_r_last_config = &tree_r_last_config;
-        rayon::scope(|s| {
-            // This channel will receive the finished tree data to be written to disk.
-            let (writer_tx, writer_rx) = sync_channel::<Vec<Fr>>(0);
 
-            s.spawn(move |_| {
+        THREAD_POOL.scoped(|s| {
+            // This channel will receive the finished tree data to be written to disk.
+            let (writer_tx, writer_rx) = channel::<Vec<Fr>>();
+
+            s.execute(move || {
                 for i in 0..config_count {
                     let mut node_index = 0;
                     while node_index != nodes_count {
@@ -959,12 +971,15 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                     }
                 }
             });
-            s.spawn(move |_| {
+            s.execute(move || {
                 let _gpu_lock = GPU_LOCK.lock().expect("failed to get gpu lock");
+                let batcher = Some(
+                    Batcher::pick_gpu(max_gpu_tree_batch_size)
+                        .expect("failed to create gpu batcher"),
+                );
                 let mut tree_builder = TreeBuilder::<Tree::Arity>::new(
-                    Some(BatcherType::OpenCL),
+                    batcher,
                     nodes_count,
-                    max_gpu_tree_batch_size,
                     tree_r_last_config.rows_to_discard,
                 )
                 .expect("failed to create TreeBuilder");
@@ -1361,7 +1376,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
     #[allow(clippy::type_complexity)]
     pub fn replicate_phase2(
         pp: &'a PublicParams<Tree>,
-        labels: Labels<Tree>,
+        label_configs: Labels<Tree>,
         data: Data<'a>,
         data_tree: BinaryMerkleTree<G>,
         config: StoreConfig,
@@ -1379,7 +1394,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
             Some(data_tree),
             config,
             replica_path,
-            labels,
+            label_configs,
         )?;
 
         Ok((tau, (paux, taux)))
@@ -1406,7 +1421,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         use fr32::fr_into_bytes;
         use merkletree::merkle::{get_merkle_tree_cache_size, get_merkle_tree_leafs};
         use neptune::{
-            batch_hasher::BatcherType,
+            batch_hasher::Batcher,
             tree_builder::{TreeBuilder, TreeBuilderTrait},
         };
 
@@ -1422,11 +1437,12 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
             let max_gpu_tree_batch_size = SETTINGS.max_gpu_tree_batch_size as usize;
 
             let _gpu_lock = GPU_LOCK.lock().expect("failed to get gpu lock");
+            let batcher = Some(
+                Batcher::pick_gpu(max_gpu_tree_batch_size).expect("failed to create gpu batcher"),
+            );
             let mut tree_builder = TreeBuilder::<Tree::Arity>::new(
-                #[cfg(feature = "gpu")]
-                Some(BatcherType::OpenCL),
+                batcher,
                 nodes_count,
-                max_gpu_tree_batch_size,
                 tree_r_last_config.rows_to_discard,
             )
             .expect("failed to create TreeBuilder");
