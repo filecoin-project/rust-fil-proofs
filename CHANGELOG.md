@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://book.async.rs/overview
 
 ## Unreleased
 
+## [9.0.0] - 2021-08-12
+
+- Correct usage of bitmask in multicore sdr (authored by @qt3u) [#1477](https://github.com/filecoin-project/rust-fil-proofs/pull/1477)
+- Switch to yastl threadpool from rayon [#1483](https://github.com/filecoin-project/rust-fil-proofs/pull/1483)
+- Swap out default bls-381 backend from pairing to blst [#1482](https://github.com/filecoin-project/rust-fil-proofs/pull/1482)
+- Improve multicore sdr logging [#1485](https://github.com/filecoin-project/rust-fil-proofs/pull/1485)
+
 ## [8.0.3] - 2021-07-26
 
 - Avoid duplicate generation of srs key caches [#1481](https://github.com/filecoin-project/rust-fil-proofs/pull/1481)
@@ -251,7 +258,8 @@ and this project adheres to [Semantic Versioning](https://book.async.rs/overview
 
 - Initial stable release
 
-[Unreleased]: https://github.com/filecoin-project/rust-fil-proofs/compare/v8.0.3...HEAD
+[Unreleased]: https://github.com/filecoin-project/rust-fil-proofs/compare/v9.0.0...HEAD
+[9.0.0]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v9.0.0
 [8.0.3]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v8.0.3
 [8.0.2]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v8.0.2
 [8.0.1]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v8.0.1
