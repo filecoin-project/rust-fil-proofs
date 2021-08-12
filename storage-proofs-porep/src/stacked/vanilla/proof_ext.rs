@@ -45,7 +45,7 @@ where
                 preemptible: self.num_iter > 1,
             };
             let task_req = TaskReqBuilder::new()
-                .with_task_type(TaskType::MerkleProof)
+                .with_task_type(TaskType::MerkleTree)
                 .resource_req(resouce_req);
             task_req.build()
         };

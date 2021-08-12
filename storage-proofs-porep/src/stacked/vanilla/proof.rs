@@ -521,6 +521,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
             batch_hasher::Batcher,
             column_tree_builder::{ColumnTreeBuilder, ColumnTreeBuilderTrait},
         };
+        use rust_gpu_tools::opencl::Device;
 
         info!("generating tree c using the GPU");
         // Build the tree for CommC
@@ -634,10 +635,8 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                                     "No resource allocation for TreeBuilder".to_string(),
                                 )
                             })?;
-                            let device =
-                                alloc.devices[0].get_device().ok_or(Error::Unclassified(
-                                    format!("Device with id: {:?} not found", alloc.devices[0]),
-                                ))?;
+                            let device = Device::by_unique_id(alloc.devices[0].0).map_err(|e|
+                                Error::Unclassified(e.to_string()))?;
 
                             let column_batcher = match Batcher::new(device, max_gpu_column_batch_size) {
                                 Ok(b) => Some(b),
@@ -1043,6 +1042,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
             batch_hasher::Batcher,
             tree_builder::{TreeBuilder, TreeBuilderTrait},
         };
+        use rust_gpu_tools::opencl::Device;
 
         let (configs, replica_config) = split_config_and_replica(
             tree_r_last_config.clone(),
@@ -1119,13 +1119,8 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                             )
                         })?;
 
-                        let device =
-                            alloc.devices[0]
-                                .get_device()
-                                .ok_or(Error::Unclassified(format!(
-                                    "Device with id: {:?} not found",
-                                    alloc.devices[0]
-                                )))?;
+                        let device = Device::by_unique_id(alloc.devices[0].0)
+                            .map_err(|e| Error::Unclassified(e.to_string()))?;
 
                         let tree_batcher = match Batcher::new(device, max_gpu_tree_batch_size) {
                             Ok(b) => Some(b),
@@ -1588,6 +1583,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
             batch_hasher::Batcher,
             tree_builder::{TreeBuilder, TreeBuilderTrait},
         };
+        use rust_gpu_tools::opencl::Device;
 
         let (configs, replica_config) = split_config_and_replica(
             tree_r_last_config.clone(),
@@ -1608,13 +1604,8 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                         Error::Unclassified("No resource allocation for TreeBuilder".to_string())
                     })?;
 
-                    let device =
-                        alloc.devices[0]
-                            .get_device()
-                            .ok_or(Error::Unclassified(format!(
-                                "Device with id: {:?} not found",
-                                alloc.devices[0]
-                            )))?;
+                    let device = Device::by_unique_id(alloc.devices[0].0)
+                        .map_err(|e| Error::Unclassified(e.to_string()))?;
 
                     let tree_batcher = match Batcher::new(device, max_gpu_tree_batch_size) {
                         Ok(b) => Some(b),
