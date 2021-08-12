@@ -43,6 +43,7 @@ yastl = "0.1.2"
 fil_logger = "0.1"
 pairing = "0.21"
 blstrs = "0.4.0"
+rust-gpu-tools = { git = "https://github.com/filecoin-project/rust-gpu-tools", branch = "master", default-features = false, optional = true }
 scheduler_client = {package = "client", git = "https://github.com/Zondax/filecoin-scheduling.git", branch= "dev", optional = true}
 
 [target."cfg(target_arch = \"aarch64\")".dependencies]
@@ -60,8 +61,8 @@ filecoin-hashers = { path = "../filecoin-hashers", version = "^5.0.0", default-f
 
 [features]
 default = ["opencl", "multicore-sdr"]
-cuda = ["storage-proofs-core/cuda", "filecoin-hashers/cuda", "neptune/cuda", "bellperson/cuda", "fr32/cuda", "scheduler_client/cuda"]
-opencl = ["storage-proofs-core/opencl", "filecoin-hashers/opencl", "neptune/opencl", "bellperson/opencl", "fr32/opencl", "scheduler_client/opencl"]
+cuda = ["storage-proofs-core/cuda", "filecoin-hashers/cuda", "neptune/cuda", "bellperson/cuda", "fr32/cuda", "scheduler_client/cuda", "rust-gpu-tools/cuda"]
+opencl = ["storage-proofs-core/opencl", "filecoin-hashers/opencl", "neptune/opencl", "bellperson/opencl", "fr32/opencl", "scheduler_client/opencl", "rust-gpu-tools/opencl"]
 isolated-testing = []
 multicore-sdr = ["hwloc"]
 
