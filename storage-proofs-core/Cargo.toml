@@ -47,7 +47,7 @@ semver = "0.11.0"
 fr32 = { path = "../fr32", version = "^3.0.0"}
 pairing = "0.21"
 blstrs = "0.4.0"
-scheduler_client = {package = "client", git = "https://github.com/Zondax/filecoin-scheduling.git", branch= "dev", optional = true}
+scheduler_client = {package = "client", git = "https://github.com/Zondax/filecoin-scheduling.git", optional = true}
 
 [dev-dependencies]
 proptest = "0.10"
