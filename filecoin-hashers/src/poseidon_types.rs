@@ -4,6 +4,7 @@ use bellperson::bls::Fr;
 use generic_array::typenum::{U0, U11, U16, U2, U24, U36, U4, U8};
 use lazy_static::lazy_static;
 use neptune::{poseidon::PoseidonConstants, Arity};
+use pasta_curves::{Fp, Fq};
 
 pub type PoseidonBinaryArity = U2;
 pub type PoseidonQuadArity = U4;
@@ -25,6 +26,40 @@ lazy_static! {
     pub static ref POSEIDON_CONSTANTS_36: PoseidonConstants::<Fr, U36> = PoseidonConstants::new();
     pub static ref POSEIDON_CONSTANTS_11: PoseidonConstants::<Fr, U11> = PoseidonConstants::new();
     pub static ref POSEIDON_MD_CONSTANTS: PoseidonConstants::<Fr, PoseidonMDArity> =
+        PoseidonConstants::new();
+
+    pub static ref POSEIDON_CONSTANTS_2_PALLAS: PoseidonConstants<Fp, U2> =
+PoseidonConstants::new();
+    pub static ref POSEIDON_CONSTANTS_4_PALLAS: PoseidonConstants<Fp, U4> =
+PoseidonConstants::new();
+    pub static ref POSEIDON_CONSTANTS_8_PALLAS: PoseidonConstants<Fp, U8> =
+PoseidonConstants::new();
+    pub static ref POSEIDON_CONSTANTS_16_PALLAS: PoseidonConstants<Fp, U16> =
+PoseidonConstants::new();
+    pub static ref POSEIDON_CONSTANTS_24_PALLAS: PoseidonConstants<Fp, U24> =
+PoseidonConstants::new();
+    pub static ref POSEIDON_CONSTANTS_36_PALLAS: PoseidonConstants<Fp, U36> =
+PoseidonConstants::new();
+    pub static ref POSEIDON_CONSTANTS_11_PALLAS: PoseidonConstants<Fp, U11> =
+PoseidonConstants::new();
+    pub static ref POSEIDON_MD_CONSTANTS_PALLAS: PoseidonConstants<Fp, PoseidonMDArity> =
+        PoseidonConstants::new();
+
+    pub static ref POSEIDON_CONSTANTS_2_VESTA: PoseidonConstants<Fq, U2> =
+PoseidonConstants::new();
+    pub static ref POSEIDON_CONSTANTS_4_VESTA: PoseidonConstants<Fq, U4> =
+PoseidonConstants::new();
+    pub static ref POSEIDON_CONSTANTS_8_VESTA: PoseidonConstants<Fq, U8> =
+PoseidonConstants::new();
+    pub static ref POSEIDON_CONSTANTS_16_VESTA: PoseidonConstants<Fq, U16> =
+PoseidonConstants::new();
+    pub static ref POSEIDON_CONSTANTS_24_VESTA: PoseidonConstants<Fq, U24> =
+PoseidonConstants::new();
+    pub static ref POSEIDON_CONSTANTS_36_VESTA: PoseidonConstants<Fq, U36> =
+PoseidonConstants::new();
+    pub static ref POSEIDON_CONSTANTS_11_VESTA: PoseidonConstants<Fq, U11> =
+PoseidonConstants::new();
+    pub static ref POSEIDON_MD_CONSTANTS_VESTA: PoseidonConstants<Fq, PoseidonMDArity> =
         PoseidonConstants::new();
 }
 

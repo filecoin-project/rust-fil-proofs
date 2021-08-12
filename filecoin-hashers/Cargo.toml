@@ -16,6 +16,7 @@ ff = "0.10.0"
 anyhow = "1.0.34"
 serde = "1.0.117"
 rand = "0.8.0"
+pasta_curves = "0.1.2"
 
 neptune = { git = "https://github.com/filecoin-project/neptune", branch = "halo", optional = true }
 lazy_static = { version = "1.4.0", optional = true }
