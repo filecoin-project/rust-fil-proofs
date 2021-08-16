@@ -138,18 +138,17 @@ impl<'a> Data<'a> {
     }
 
     /// Drops the actual data, if we can recover it.
-    pub fn drop_data(&mut self) {
+    pub fn drop_data(&mut self) -> Result<()> {
         if let Some(ref p) = self.path {
             info!("dropping data {}", p.display());
 
-            match &self.raw {
-                Some(RawData::Mmap(raw)) => {
-                    raw.flush().expect("mmap flush failure");
-                }
-                _ => {}
-            };
+            if let Some(RawData::Mmap(raw)) = &self.raw {
+                raw.flush()?;
+            }
 
             self.raw.take();
         }
+
+        Ok(())
     }
 }
