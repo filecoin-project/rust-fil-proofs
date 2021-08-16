@@ -141,6 +141,14 @@ impl<'a> Data<'a> {
     pub fn drop_data(&mut self) {
         if let Some(ref p) = self.path {
             info!("dropping data {}", p.display());
+
+            match &self.raw {
+                Some(RawData::Mmap(raw)) => {
+                    raw.flush().expect("mmap flush failure");
+                }
+                _ => {}
+            };
+
             self.raw.take();
         }
     }
