@@ -1331,7 +1331,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         let tree_r_last_root = tree_r_last.root();
         drop(tree_r_last);
 
-        data.drop_data();
+        data.drop_data()?;
 
         // comm_r = H(comm_c || comm_r_last)
         let comm_r: <Tree::Hasher as Hasher>::Domain =
