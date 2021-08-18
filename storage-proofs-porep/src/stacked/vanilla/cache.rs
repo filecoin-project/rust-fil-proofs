@@ -438,6 +438,8 @@ mod tests {
     use filecoin_hashers::poseidon::PoseidonHasher;
     use storage_proofs_core::api_version::ApiVersion;
 
+    use yastl::Pool;
+
     use crate::stacked::vanilla::graph::{StackedBucketGraph, EXP_DEGREE};
 
     #[test]
@@ -463,6 +465,32 @@ mod tests {
 
             assert_eq!(expected_parents, parents);
         }
+    }
+
+    #[test]
+    fn test_parallel_generation() {
+        use fil_logger;
+        fil_logger::init();
+        let pool = Pool::new(3);
+
+        pool.scoped(|s| {
+            for _ in 0..3 {
+                s.execute(move || {
+
+                    let nodes = 48u32;
+                    let graph = StackedBucketGraph::<PoseidonHasher>::new_stacked(
+                        nodes as usize,
+                        BASE_DEGREE,
+                        EXP_DEGREE,
+                        [0u8; 32],
+                        ApiVersion::V1_1_0,
+                    )
+                        .expect("new_stacked failure");
+
+                    ParentCache::new(nodes, nodes, &graph).expect("parent cache new failure");
+                });
+            }
+        });
     }
 
     #[test]
