@@ -454,7 +454,6 @@ mod tests {
 
     use std::sync::Once;
 
-    use fil_logger;
     use filecoin_hashers::poseidon::PoseidonHasher;
     use storage_proofs_core::api_version::ApiVersion;
 
@@ -531,10 +530,7 @@ mod tests {
 
         // If this cache file exists, remove it so that we can be sure
         // at least one thread will generate it in this test.
-        match std::fs::remove_file(&path) {
-            Ok(_) => {}
-            _ => {}
-        };
+        if std::fs::remove_file(&path).is_ok() {};
 
         pool.scoped(|s| {
             for _ in 0..3 {
