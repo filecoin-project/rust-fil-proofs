@@ -39,7 +39,7 @@ pub struct ParentCacheData {
 lazy_static! {
     pub static ref PARENT_CACHE: ParentCacheDataMap =
         serde_json::from_str(PARENT_CACHE_DATA).expect("Invalid parent_cache.json");
-    static ref PARENT_CACHE_GENERATION_LOCK: Mutex<HashSet<String>> = Mutex::new(HashSet::new());
+    static ref PARENT_CACHE_ACCESS_LOCK: Mutex<HashSet<String>> = Mutex::new(HashSet::new());
 }
 
 // StackedGraph will hold two different (but related) `ParentCache`,
@@ -158,7 +158,7 @@ impl ParentCache {
     {
         let path = cache_path(cache_entries, graph);
         let generation_key = path.display().to_string();
-        let mut generated = PARENT_CACHE_GENERATION_LOCK
+        let mut generated = PARENT_CACHE_ACCESS_LOCK
             .lock()
             .expect("parent cache generation lock failed");
 
@@ -173,7 +173,6 @@ impl ParentCache {
             match Self::generate(len, cache_entries, graph, &path) {
                 Ok(c) => {
                     generated.insert(generation_key);
-                    drop(generated);
 
                     Ok(c)
                 }
@@ -530,7 +529,15 @@ mod tests {
 
         // If this cache file exists, remove it so that we can be sure
         // at least one thread will generate it in this test.
-        if std::fs::remove_file(&path).is_ok() {};
+        {
+            // Note: we take the lock here because it would otherwise
+            // be possible to remove the file while another thread is
+            // reading or generating it.
+            let _ = PARENT_CACHE_ACCESS_LOCK
+                .lock()
+                .expect("parent cache generation lock failed");
+            if std::fs::remove_file(&path).is_ok() {};
+        }
 
         pool.scoped(|s| {
             for _ in 0..3 {
