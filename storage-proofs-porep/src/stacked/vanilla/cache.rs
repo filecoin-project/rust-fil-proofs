@@ -456,8 +456,6 @@ mod tests {
     use filecoin_hashers::poseidon::PoseidonHasher;
     use storage_proofs_core::api_version::ApiVersion;
 
-    use yastl::Pool;
-
     use crate::stacked::vanilla::graph::{StackedBucketGraph, EXP_DEGREE};
 
     static INIT_LOGGER: Once = Once::new();
@@ -494,12 +492,14 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "isolated-testing")]
     fn test_parallel_generation_and_read_partial_range_v1_0() {
         let porep_id = [0u8; 32];
         test_parallel_generation_and_read_partial_range(ApiVersion::V1_0_0, &porep_id);
     }
 
     #[test]
+    #[cfg(feature = "isolated-testing")]
     fn test_parallel_generation_and_read_partial_range_v1_1() {
         let porep_id = [1u8; 32]; //needs to be different than v1_0 for a separate graph
         test_parallel_generation_and_read_partial_range(ApiVersion::V1_1_0, &porep_id);
@@ -509,10 +509,17 @@ mod tests {
     // open or generate it in parallel.  Then we perform the
     // read_partial_range test, which should pass if the parallel
     // generation was not corrupted.
+    //
+    // This test should not be run while other tests that use the
+    // parent's cache are running, as it may remove the parent cache
+    // file while another thread is using it.
+    #[cfg(feature = "isolated-testing")]
     fn test_parallel_generation_and_read_partial_range(
         api_version: ApiVersion,
         porep_id: &[u8; 32],
     ) {
+        use yastl::Pool;
+
         init_logger();
         let pool = Pool::new(3);
         let nodes = 48u32;
@@ -529,15 +536,7 @@ mod tests {
 
         // If this cache file exists, remove it so that we can be sure
         // at least one thread will generate it in this test.
-        {
-            // Note: we take the lock here because it would otherwise
-            // be possible to remove the file while another thread is
-            // reading or generating it.
-            let _ = PARENT_CACHE_ACCESS_LOCK
-                .lock()
-                .expect("parent cache generation lock failed");
-            if std::fs::remove_file(&path).is_ok() {};
-        }
+        if std::fs::remove_file(&path).is_ok() {};
 
         pool.scoped(|s| {
             for _ in 0..3 {

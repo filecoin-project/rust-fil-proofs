@@ -60,7 +60,7 @@ default = ["blst", "gpu", "multicore-sdr"]
 gpu = ["storage-proofs-core/gpu", "filecoin-hashers/gpu", "neptune/opencl", "bellperson/gpu", "fr32/gpu"]
 pairing = ["storage-proofs-core/pairing", "bellperson/pairing", "neptune/pairing", "filecoin-hashers/pairing", "fr32/pairing"]
 blst = ["storage-proofs-core/blst", "bellperson/blst", "neptune/blst", "filecoin-hashers/blst", "fr32/blst"]
-single-threaded = []
+isolated-testing = []
 multicore-sdr = ["hwloc"]
 
 [[bench]]
