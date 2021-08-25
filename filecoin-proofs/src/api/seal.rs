@@ -925,8 +925,10 @@ pub fn verify_seal<Tree: 'static + MerkleTreeTrait>(
     proof_vec: &[u8],
 ) -> Result<bool> {
     info!("verify_seal:start: {:?}", sector_id);
+
     ensure!(comm_d_in != [0; 32], "Invalid all zero commitment (comm_d)");
     ensure!(comm_r_in != [0; 32], "Invalid all zero commitment (comm_r)");
+    ensure!(!proof_vec.is_empty(), "Invalid proof bytes (empty vector)");
 
     let comm_r: <Tree::Hasher as Hasher>::Domain = as_safe_commitment(&comm_r_in, "comm_r")?;
     let comm_d: DefaultPieceDomain = as_safe_commitment(&comm_d_in, "comm_d")?;
@@ -1041,6 +1043,9 @@ pub fn verify_batch_seal<Tree: 'static + MerkleTreeTrait>(
             comm_r_in != &[0; 32],
             "Invalid all zero commitment (comm_r)"
         );
+    }
+    for proofs in proof_vecs {
+        ensure!(!proofs.is_empty(), "Invalid proof (empty bytes) found");
     }
 
     let sector_bytes = PaddedBytesAmount::from(porep_config);
