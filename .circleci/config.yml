@@ -330,7 +330,7 @@ jobs:
           command: cargo +$(cat rust-toolchain) clippy --all-targets --workspace -- -D warnings
   test_darwin:
     macos:
-      xcode: "10.0.0"
+      xcode: "12.5.0"
     working_directory: ~/crate
     resource_class: large
     environment: *setup-env
