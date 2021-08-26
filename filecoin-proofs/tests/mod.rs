@@ -22,6 +22,8 @@ fn test_verify_seal_fr32_validation() {
     assert!(out.is_err(), "tripwire");
 
     let arbitrary_porep_id = [87; 32];
+
+    // Test failure for invalid comm_r conversion.
     {
         let result = verify_seal::<DefaultOctLCTree>(
             PoRepConfig {
@@ -60,6 +62,7 @@ fn test_verify_seal_fr32_validation() {
         }
     }
 
+    // Test failure for invalid comm_d conversion.
     {
         let result = verify_seal::<DefaultOctLCTree>(
             PoRepConfig {
@@ -95,6 +98,49 @@ fn test_verify_seal_fr32_validation() {
             );
         } else {
             panic_any("should have failed comm_d to Fr32 conversion");
+        }
+    }
+
+    // Test failure for verifying an empty proof.
+    {
+        let non_zero_commitment_fr_bytes = [1; 32];
+        let out = bytes_into_fr(&non_zero_commitment_fr_bytes);
+        assert!(out.is_ok(), "tripwire");
+
+        let result = verify_seal::<DefaultOctLCTree>(
+            PoRepConfig {
+                sector_size: SectorSize(SECTOR_SIZE_2_KIB),
+                partitions: PoRepProofPartitions(
+                    *POREP_PARTITIONS
+                        .read()
+                        .expect("POREP_PARTITIONS poisoned")
+                        .get(&SECTOR_SIZE_2_KIB)
+                        .expect("unknown sector size"),
+                ),
+                porep_id: arbitrary_porep_id,
+                api_version: ApiVersion::V1_1_0,
+            },
+            non_zero_commitment_fr_bytes,
+            non_zero_commitment_fr_bytes,
+            [0; 32],
+            SectorId::from(0),
+            [0; 32],
+            [0; 32],
+            &[],
+        );
+
+        if let Err(err) = result {
+            let needle = "Invalid proof bytes (empty vector)";
+            let haystack = format!("{}", err);
+
+            assert!(
+                haystack.contains(needle),
+                "\"{}\" did not contain \"{}\"",
+                haystack,
+                needle,
+            );
+        } else {
+            panic_any("should have failed due to empty proof bytes");
         }
     }
 }
