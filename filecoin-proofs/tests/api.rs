@@ -13,7 +13,8 @@ use filecoin_hashers::Hasher;
 use filecoin_proofs::{
     add_piece, aggregate_seal_commit_proofs, clear_cache, compute_comm_d, fauxrep_aux,
     generate_fallback_sector_challenges, generate_piece_commitment, generate_single_vanilla_proof,
-    generate_window_post, generate_window_post_with_vanilla, generate_winning_post,
+    generate_single_window_post_with_vanilla, generate_window_post,
+    generate_window_post_with_vanilla, generate_winning_post,
     generate_winning_post_sector_challenge, generate_winning_post_with_vanilla, get_seal_inputs,
     seal_commit_phase1, seal_commit_phase2, seal_pre_commit_phase1, seal_pre_commit_phase2,
     unseal_range, validate_cache_for_commit, validate_cache_for_precommit_phase2,
@@ -1072,6 +1073,182 @@ fn test_window_post_single_partition_matching_2kib_base_8() -> Result<()> {
         true,
         ApiVersion::V1_1_0,
     )
+}
+
+#[test]
+fn test_window_post_partition_matching_2kib_base_8() -> Result<()> {
+    let sector_size = SECTOR_SIZE_2_KIB;
+    let sector_count = *WINDOW_POST_SECTOR_COUNT
+        .read()
+        .expect("WINDOW_POST_SECTOR_COUNT poisoned")
+        .get(&sector_size)
+        .expect("unknown sector size");
+
+    partition_window_post::<SectorShape2KiB>(
+        sector_size,
+        3, // Validate the scenarios of two partition
+        sector_count,
+        false,
+        ApiVersion::V1_0_0,
+    )?;
+    partition_window_post::<SectorShape2KiB>(
+        sector_size,
+        3,
+        sector_count,
+        true,
+        ApiVersion::V1_0_0,
+    )?;
+    partition_window_post::<SectorShape2KiB>(
+        sector_size,
+        3,
+        sector_count,
+        false,
+        ApiVersion::V1_1_0,
+    )?;
+    partition_window_post::<SectorShape2KiB>(sector_size, 3, sector_count, true, ApiVersion::V1_1_0)
+}
+
+fn partition_window_post<Tree: 'static + MerkleTreeTrait>(
+    sector_size: u64,
+    total_sector_count: usize,
+    sector_count: usize,
+    fake: bool,
+    api_version: ApiVersion,
+) -> Result<()> {
+    use anyhow::anyhow;
+
+    let rng = &mut XorShiftRng::from_seed(TEST_SEED);
+
+    let mut sectors = Vec::with_capacity(total_sector_count);
+    let mut pub_replicas = BTreeMap::new();
+    let mut priv_replicas = BTreeMap::new();
+
+    let prover_fr: <Tree::Hasher as Hasher>::Domain = Fr::random(rng).into();
+    let mut prover_id = [0u8; 32];
+    prover_id.copy_from_slice(AsRef::<[u8]>::as_ref(&prover_fr));
+
+    let porep_id = match api_version {
+        ApiVersion::V1_0_0 => ARBITRARY_POREP_ID_V1_0_0,
+        ApiVersion::V1_1_0 => ARBITRARY_POREP_ID_V1_1_0,
+    };
+
+    for _ in 0..total_sector_count {
+        let (sector_id, replica, comm_r, cache_dir) = if fake {
+            create_fake_seal::<_, Tree>(rng, sector_size, &porep_id, api_version)?
+        } else {
+            create_seal::<_, Tree>(rng, sector_size, prover_id, true, &porep_id, api_version)?
+        };
+        priv_replicas.insert(
+            sector_id,
+            PrivateReplicaInfo::new(replica.path().into(), comm_r, cache_dir.path().into())?,
+        );
+        pub_replicas.insert(sector_id, PublicReplicaInfo::new(comm_r)?);
+        sectors.push((sector_id, replica, comm_r, cache_dir, prover_id));
+    }
+    assert_eq!(priv_replicas.len(), total_sector_count);
+    assert_eq!(pub_replicas.len(), total_sector_count);
+    assert_eq!(sectors.len(), total_sector_count);
+
+    let random_fr: <Tree::Hasher as Hasher>::Domain = Fr::random(rng).into();
+    let mut randomness = [0u8; 32];
+    randomness.copy_from_slice(AsRef::<[u8]>::as_ref(&random_fr));
+
+    let config = PoStConfig {
+        sector_size: sector_size.into(),
+        sector_count,
+        challenge_count: WINDOW_POST_CHALLENGE_COUNT,
+        typ: PoStType::Window,
+        priority: false,
+        api_version,
+    };
+
+    let replica_sectors = priv_replicas
+        .iter()
+        .map(|(sector, _replica)| *sector)
+        .collect::<Vec<SectorId>>();
+
+    let challenges = generate_fallback_sector_challenges::<Tree>(
+        &config,
+        &randomness,
+        &replica_sectors,
+        prover_id,
+    )?;
+
+    let mut start = 0;
+    let mut _end = config.sector_count;
+    let num_sectors_per_chunk = config.sector_count;
+    let mut proofs = Vec::new();
+
+    let partitions = match config.typ {
+        PoStType::Window => {
+            let partitions =
+                ((replica_sectors.len()) as f32 / config.sector_count as f32).ceil() as usize;
+            if partitions > 1 {
+                partitions
+            } else {
+                1
+            }
+        }
+        PoStType::Winning => 1,
+    };
+    for partition_index in 0..partitions {
+        let sector_ids = replica_sectors
+            .chunks(num_sectors_per_chunk)
+            .nth(partition_index)
+            .ok_or_else(|| anyhow!("invalid number of sectors/partition index"))?;
+
+        let mut partition_priv_replicas = BTreeMap::new();
+        for id in sector_ids {
+            let p_sector = match priv_replicas.get(id) {
+                Some(v) => v,
+                _ => {
+                    continue;
+                }
+            };
+
+            partition_priv_replicas.insert(*id, p_sector);
+        }
+
+        let mut sector_idxs = Vec::new();
+        let mut vanilla_proofs = Vec::new();
+        for (i, (sector_id, sector)) in partition_priv_replicas.iter().enumerate() {
+            let sector_index = i + start;
+            sector_idxs.push(sector_index as u64);
+
+            let sector_challenges = &challenges[sector_id];
+            let single_proof = generate_single_vanilla_proof::<Tree>(
+                &config,
+                *sector_id,
+                sector,
+                sector_challenges,
+            )?;
+
+            vanilla_proofs.push(single_proof);
+        }
+
+        let mut proof = generate_single_window_post_with_vanilla(
+            &config,
+            &randomness,
+            prover_id,
+            vanilla_proofs,
+            &sector_idxs,
+        )?;
+
+        if partition_index == 0 {
+            proofs = proof.clone();
+        } else {
+            proofs.append(&mut proof);
+        }
+
+        start += config.sector_count;
+        _end += config.sector_count;
+    }
+
+    let valid =
+        verify_window_post::<Tree>(&config, &randomness, &pub_replicas, prover_id, &proofs)?;
+    assert!(valid, "proofs did not verify");
+
+    Ok(())
 }
 
 fn window_post<Tree: 'static + MerkleTreeTrait>(
