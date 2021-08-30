@@ -518,10 +518,10 @@ mod tests {
         api_version: ApiVersion,
         porep_id: &[u8; 32],
     ) {
-        use yastl::Pool;
+        use rayon::ThreadPoolBuilder;
 
         init_logger();
-        let pool = Pool::new(3);
+        let pool = ThreadPoolBuilder::new().num_threads(3).build().unwrap();
         let nodes = 48u32;
         let graph = StackedBucketGraph::<PoseidonHasher>::new_stacked(
             nodes as usize,
@@ -538,9 +538,9 @@ mod tests {
         // at least one thread will generate it in this test.
         if std::fs::remove_file(&path).is_ok() {};
 
-        pool.scoped(|s| {
+        pool.scope(|s| {
             for _ in 0..3 {
-                s.execute(move || {
+                s.spawn(move |_| {
                     let graph = StackedBucketGraph::<PoseidonHasher>::new_stacked(
                         nodes as usize,
                         BASE_DEGREE,
