@@ -11,3 +11,7 @@ members = [
   "sha2raw",
   "filecoin-hashers",
 ]
+
+[patch.crates-io]
+bellperson = { git = "https://github.com/filecoin-project/bellperson", branch = "master" }
+neptune = { git = "https://github.com/filecoin-project/neptune", branch = "updated-bellperson" }
