@@ -28,7 +28,7 @@ log = "0.4.7"
 pretty_assertions = "0.6.1"
 generic-array = "0.14.4"
 anyhow = "1.0.23"
-neptune = { git = "https://github.com/filecoin-project/neptune", branch = "master" }
+neptune = { git = "https://github.com/filecoin-project/neptune", branch = "master", features = ["arity2", "arity4", "arity8", "arity11", "arity16", "arity24", "arity36"] }
 num_cpus = "1.10.1"
 hex = "0.4.2"
 bincode = "1.1.2"
@@ -58,8 +58,9 @@ pretty_env_logger = "0.4.0"
 filecoin-hashers = { path = "../filecoin-hashers", version = "^4.0.0", default-features = false, features = ["poseidon", "sha256", "blake2s"]}
 
 [features]
-default = ["gpu", "multicore-sdr"]
-gpu = ["storage-proofs-core/gpu", "filecoin-hashers/gpu", "neptune/opencl", "bellperson/gpu", "fr32/gpu"]
+default = ["opencl", "multicore-sdr"]
+cuda = ["storage-proofs-core/cuda", "filecoin-hashers/cuda", "neptune/cuda", "bellperson/cuda", "fr32/cuda"]
+opencl = ["storage-proofs-core/opencl", "filecoin-hashers/opencl", "neptune/opencl", "bellperson/opencl", "fr32/opencl"]
 isolated-testing = []
 multicore-sdr = ["hwloc"]
 
