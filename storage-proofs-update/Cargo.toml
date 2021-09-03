@@ -1,0 +1,43 @@
+[package]
+name = "storage-proofs-update"
+version = "9.0.1"
+authors = ["dignifiedquire <me@dignifiedquire.com>"]
+description = "Proof of SDR-PoRep Empty Sector Update"
+license = "MIT OR Apache-2.0"
+edition = "2018"
+repository = "https://github.com/filecoin-project/rust-fil-proofs"
+readme = "README.md"
+
+[dependencies]
+bellperson = { git = "https://github.com/filecoin-project/bellperson", branch = "master" }
+blstrs = { git = "https://github.com/filecoin-project/blstrs", branch = "master" }
+ff = "0.11.0"
+filecoin-hashers = { path = "../filecoin-hashers", version = "^4.0.0", default-features = false, features = ["sha256", "poseidon"] }
+generic-array = "0.14.4"
+merkletree = "0.21.0"
+storage-proofs-core = { path = "../storage-proofs-core", version = "^9.0.0", default-features = false}
+
+[dev-dependencies]
+rand = "0.8"
+rand_xorshift = "0.3.0"
+tempfile = "3"
+
+[features]
+default = []
+simd = ["storage-proofs-core/simd"]
+asm = ["storage-proofs-core/asm"]
+cuda = [
+    "bellperson/cuda",
+    "filecoin-hashers/cuda",
+    "storage-proofs-core/cuda",
+]
+opencl = [
+    "bellperson/opencl",
+    "filecoin-hashers/opencl",
+    "storage-proofs-core/opencl",
+]
+# gpu = [
+#     "bellperson/gpu",
+#     "filecoin-hashers/gpu",
+#     "storage-proofs-core/gpu",
+# ]
