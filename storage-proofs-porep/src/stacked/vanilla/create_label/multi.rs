@@ -57,7 +57,7 @@ const SHA256_INITIAL_DIGEST: [u32; 8] = [
 fn fill_buffer(
     cur_node: u64,
     parents_cache: &CacheReader<u32>,
-    mut cur_parent: &[u32], // parents for this node
+    cur_parent: &[u32], // parents for this node
     layer_labels: &UnsafeSlice<'_, u32>,
     exp_labels: Option<&UnsafeSlice<'_, u32>>, // None for layer0
     buf: &mut [u8],
@@ -85,39 +85,32 @@ fn fill_buffer(
         // which we know is not ready and will be filled in the main loop
         for k in 0..BASE_DEGREE - 1 {
             unsafe {
-                if cur_parent[0] as u64 >= parents_cache.get_consumer() {
+                if cur_parent[k] as u64 >= parents_cache.get_consumer() {
                     // Node is not ready
                     base_parent_missing.set(k);
                 } else {
                     let parent_data = {
-                        let offset = cur_parent[0] as usize * NODE_WORDS;
+                        let offset = cur_parent[k] as usize * NODE_WORDS;
                         &layer_labels.as_slice()[offset..offset + NODE_WORDS]
                     };
                     let a = SHA_BLOCK_SIZE + (NODE_SIZE * k);
                     buf[a..a + NODE_SIZE].copy_from_slice(parent_data.as_byte_slice());
                 };
-
-                // Advance pointer for the last base parent
-                cur_parent = &cur_parent[1..];
             }
         }
-        // Advance pointer for the last base parent
-        cur_parent = &cur_parent[1..];
     } else {
         base_parent_missing.set_upto(BASE_DEGREE as u8);
-        cur_parent = &cur_parent[BASE_DEGREE..];
     }
 
     if let Some(exp_labels) = exp_labels {
         // Read from each of the expander parent nodes
-        for k in BASE_DEGREE..DEGREE {
+        for (k, parent) in cur_parent.iter().enumerate().take(DEGREE).skip(BASE_DEGREE) {
             let parent_data = unsafe {
-                let offset = cur_parent[0] as usize * NODE_WORDS;
+                let offset = *parent as usize * NODE_WORDS;
                 &exp_labels.as_slice()[offset..offset + NODE_WORDS]
             };
             let a = SHA_BLOCK_SIZE + (NODE_SIZE * k);
             buf[a..a + NODE_SIZE].copy_from_slice(parent_data.as_byte_slice());
-            cur_parent = &cur_parent[1..];
         }
     }
 }
