@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://book.async.rs/overview
 
 ## Unreleased
 
+## [9.0.2] - 2021-09-07
+
+- Use sync channels in PC2 [#1500](https://github.com/filecoin-project/rust-fil-proofs/pull/1500)
+- Return error verifiying empty proof bytes [#1498](https://github.com/filecoin-project/rust-fil-proofs/pull/1498)
+- Serialize parent's cache generation and access [#1496](https://github.com/filecoin-project/rust-fil-proofs/pull/1496)
+
 ## [9.0.1] - 2021-08-16
 
 - Flush mutable mmap after data updates [#1493](https://github.com/filecoin-project/rust-fil-proofs/pull/1493)
@@ -263,7 +269,8 @@ and this project adheres to [Semantic Versioning](https://book.async.rs/overview
 
 - Initial stable release
 
-[Unreleased]: https://github.com/filecoin-project/rust-fil-proofs/compare/v9.0.1...HEAD
+[Unreleased]: https://github.com/filecoin-project/rust-fil-proofs/compare/v9.0.2...HEAD
+[9.0.2]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v9.0.2
 [9.0.1]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v9.0.1
 [9.0.0]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v9.0.0
 [8.0.3]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v8.0.3
