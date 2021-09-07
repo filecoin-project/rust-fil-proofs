@@ -481,8 +481,8 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         ColumnArity: 'static + PoseidonArity,
         TreeArity: PoseidonArity,
     {
-        use crossbeam::channel::unbounded as channel;
         use std::cmp::min;
+        use std::sync::mpsc::sync_channel as channel;
         use std::sync::{Arc, RwLock};
 
         use bellperson::bls::Fr;
@@ -513,12 +513,12 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
             let column_write_batch_size = SETTINGS.column_write_batch_size as usize;
 
             // This channel will receive batches of columns and add them to the ColumnTreeBuilder.
-            let (builder_tx, builder_rx) = channel();
+            let (builder_tx, builder_rx) = channel(0);
 
             let config_count = configs.len(); // Don't move config into closure below.
             THREAD_POOL.scoped(|s| {
                 // This channel will receive the finished tree data to be written to disk.
-                let (writer_tx, writer_rx) = channel::<(Vec<Fr>, Vec<Fr>)>();
+                let (writer_tx, writer_rx) = channel::<(Vec<Fr>, Vec<Fr>)>(0);
 
                 s.execute(move || {
                     for i in 0..config_count {
@@ -861,10 +861,10 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
     where
         TreeArity: PoseidonArity,
     {
-        use crossbeam::channel::unbounded as channel;
         use std::cmp::min;
         use std::fs::OpenOptions;
         use std::io::Write;
+        use std::sync::mpsc::sync_channel as channel;
 
         use bellperson::bls::Fr;
         use fr32::fr_into_bytes;
@@ -888,14 +888,14 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         let max_gpu_tree_batch_size = SETTINGS.max_gpu_tree_batch_size as usize;
 
         // This channel will receive batches of leaf nodes and add them to the TreeBuilder.
-        let (builder_tx, builder_rx) = channel::<(Vec<Fr>, bool)>();
+        let (builder_tx, builder_rx) = channel::<(Vec<Fr>, bool)>(0);
         let config_count = configs.len(); // Don't move config into closure below.
         let configs = &configs;
         let tree_r_last_config = &tree_r_last_config;
 
         THREAD_POOL.scoped(|s| {
             // This channel will receive the finished tree data to be written to disk.
-            let (writer_tx, writer_rx) = channel::<Vec<Fr>>();
+            let (writer_tx, writer_rx) = channel::<Vec<Fr>>(0);
 
             s.execute(move || {
                 for i in 0..config_count {
