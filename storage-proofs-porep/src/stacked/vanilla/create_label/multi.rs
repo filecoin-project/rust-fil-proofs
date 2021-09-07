@@ -83,7 +83,8 @@ fn fill_buffer(
     };
 
     if cur_node > MIN_BASE_PARENT_NODE {
-        // Mark base parent predrecessor as missing
+        // Mark base parent predecessor as missing
+        base_parent_missing.clear();
         base_parent_missing.set(predecessor_index);
 
         // Skip the last base parent - it always points to the preceding node,

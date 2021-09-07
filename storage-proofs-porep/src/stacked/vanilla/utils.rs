@@ -84,6 +84,11 @@ impl BitMask {
     pub fn get(self, i: usize) -> bool {
         self.0 & (1 << i) != 0
     }
+
+    #[inline]
+    pub fn clear(&mut self) {
+        self.0 = 0;
+    }
 }
 
 #[derive(Debug)]
