@@ -765,10 +765,10 @@ mod tests {
     }
 
     #[test]
-    fn test_create_labels_consistency() {
+    fn test_create_labels_consistency() -> anyhow::Result<()> {
         use rayon::prelude::*;
 
-        let layers = 11;
+        let layers = 2;
         let nodes_2k = 1 << 11;
         let nodes_4k = 1 << 12;
         let nodes_32k = 1 << 15;
@@ -777,51 +777,49 @@ mod tests {
         let legacy_porep_id = [0; 32];
         let new_porep_id = [123; 32];
 
-        (0..1_000/*_000*/)
+        (0..10000)
             .into_par_iter()
-            .with_min_len(40)
-            .with_max_len(50)
-            .for_each(|i| {
-                println!("--test 2k 1.0.0 - {}", i);
-                create_labels::<LCTree<PoseidonHasher, U8, U0, U0>>(
-                    nodes_2k,
-                    layers,
-                    replica_id,
-                    legacy_porep_id,
-                    ApiVersion::V1_0_0,
-                );
-                println!("--test 4k 1.0.0 - {}", i);
-                create_labels::<LCTree<PoseidonHasher, U8, U2, U0>>(
-                    nodes_4k,
-                    layers,
-                    replica_id,
-                    legacy_porep_id,
-                    ApiVersion::V1_0_0,
-                );
-                println!("--test 32k 1.0.0 - {}", i);
-                create_labels::<LCTree<PoseidonHasher, U8, U8, U2>>(
-                    nodes_32k,
-                    layers,
-                    replica_id,
-                    legacy_porep_id,
-                    ApiVersion::V1_0_0,
-                );
-                println!("--test 2k 1.1.0 - {}", i);
-                create_labels::<LCTree<PoseidonHasher, U8, U0, U0>>(
-                    nodes_2k,
-                    layers,
-                    replica_id,
-                    new_porep_id,
-                    ApiVersion::V1_1_0,
-                );
-                println!("--test 4k 1.1.0 - {}", i);
-                create_labels::<LCTree<PoseidonHasher, U8, U2, U0>>(
-                    nodes_4k,
-                    layers,
-                    replica_id,
-                    new_porep_id,
-                    ApiVersion::V1_1_0,
-                );
+            .try_for_each(|i| -> anyhow::Result<()> {
+                // println!("--test 2k 1.0.0 - {}", i);
+                // create_labels::<LCTree<PoseidonHasher, U8, U0, U0>>(
+                //     nodes_2k,
+                //     layers,
+                //     replica_id,
+                //     legacy_porep_id,
+                //     ApiVersion::V1_0_0,
+                // );
+                // println!("--test 4k 1.0.0 - {}", i);
+                // create_labels::<LCTree<PoseidonHasher, U8, U2, U0>>(
+                //     nodes_4k,
+                //     layers,
+                //     replica_id,
+                //     legacy_porep_id,
+                //     ApiVersion::V1_0_0,
+                // );
+                // println!("--test 32k 1.0.0 - {}", i);
+                // create_labels::<LCTree<PoseidonHasher, U8, U8, U2>>(
+                //     nodes_32k,
+                //     layers,
+                //     replica_id,
+                //     legacy_porep_id,
+                //     ApiVersion::V1_0_0,
+                // );
+                // println!("--test 2k 1.1.0 - {}", i);
+                // create_labels::<LCTree<PoseidonHasher, U8, U0, U0>>(
+                //     nodes_2k,
+                //     layers,
+                //     replica_id,
+                //     new_porep_id,
+                //     ApiVersion::V1_1_0,
+                // );
+                // println!("--test 4k 1.1.0 - {}", i);
+                // create_labels::<LCTree<PoseidonHasher, U8, U2, U0>>(
+                //     nodes_4k,
+                //     layers,
+                //     replica_id,
+                //     new_porep_id,
+                //     ApiVersion::V1_1_0,
+                // );
                 println!("--test 32k 1.1.0 - {}", i);
                 create_labels::<LCTree<PoseidonHasher, U8, U8, U2>>(
                     nodes_32k,
@@ -829,8 +827,9 @@ mod tests {
                     replica_id,
                     new_porep_id,
                     ApiVersion::V1_1_0,
-                );
-            });
+                )?;
+                Ok(())
+            })
     }
 
     fn create_labels<Tree: 'static + MerkleTreeTrait>(
@@ -839,7 +838,7 @@ mod tests {
         replica_id: [u8; 32],
         porep_id: [u8; 32],
         api_version: ApiVersion,
-    ) {
+    ) -> anyhow::Result<()> {
         let nodes = sector_size / NODE_SIZE;
 
         let cache_dir_par = tempdir().expect("tempdir failure");
@@ -872,9 +871,9 @@ mod tests {
             assert!(!state.generated);
         }
 
-        let labels_par_decoding =
-            create_labels_for_decoding::<Tree, _>(&graph, &cache, layers, replica_id, config_par)
-                .expect("create_labels_for_decoding failed");
+        // let labels_par_decoding =
+        //     create_labels_for_decoding::<Tree, _>(&graph, &cache, layers, replica_id, config_par)
+        //         .expect("create_labels_for_decoding failed");
 
         let cache_dir_ser = tempdir().expect("tempdir failure");
         let config_ser = StoreConfig::new(
@@ -895,31 +894,45 @@ mod tests {
             assert!(!state.generated);
         }
 
-        let labels_ser_decoding = single::create_labels_for_decoding::<Tree, _>(
-            &graph, &mut cache, layers, replica_id, config_ser,
-        )
-        .expect("create_labels_for_decoding failed");
+        // let labels_ser_decoding = single::create_labels_for_decoding::<Tree, _>(
+        //     &graph, &mut cache, layers, replica_id, config_ser,
+        // )
+        // .expect("create_labels_for_decoding failed");
 
         for layer in 1..=layers {
             use rayon::prelude::*;
 
             let enc_par = labels_par_encoding.labels_for_layer(layer).unwrap();
-            let dec_par = labels_par_decoding.labels_for_layer(layer);
+            //let dec_par = labels_par_decoding.labels_for_layer(layer);
 
             let enc_ser = labels_ser_encoding.labels_for_layer(layer).unwrap();
-            let dec_ser = labels_ser_decoding.labels_for_layer(layer);
+            //let dec_ser = labels_ser_decoding.labels_for_layer(layer);
 
             enc_par
                 .par_iter()
-                .zip(dec_par.par_iter())
+                .zip((0..nodes).into_par_iter())
+                //.zip(dec_par.par_iter())
                 .zip(enc_ser.par_iter())
-                .zip(dec_ser.par_iter())
-                .for_each(|(((a, b), c), d)| {
-                    assert!(!Into::<Fr>::into(a).is_zero(), "label is zero");
-                    assert_eq!(a, b, "par enc dec missmatch");
-                    assert_eq!(c, d, "ser enc dec missmatch");
-                    assert_eq!(a, c, "par ser missmatch");
-                });
+                //.zip(dec_ser.par_iter())
+                // .for_each(|((((a, i), b), c), d)| {
+                .try_for_each(|((a, i), b)| {
+                    use anyhow::ensure;
+                    ensure!(!Into::<Fr>::into(a).is_zero(), "label is zero");
+                    // assert_eq!(a, b, "par enc dec missmatch");
+
+                    // assert_eq!(c, d, "ser enc dec missmatch");
+                    ensure!(
+                        a == b,
+                        "par ser missmatch: {:?} != {:?}\nnode:{}, layer:{}, size:{}kib",
+                        a,
+                        b,
+                        i,
+                        layer,
+                        sector_size / 1024
+                    );
+                    Ok(())
+                })?;
         }
+        Ok(())
     }
 }
