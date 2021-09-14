@@ -406,6 +406,10 @@ impl ParentCache {
     pub fn reset(&mut self) -> Result<()> {
         self.cache.reset()
     }
+    /// Returns the length in bytes.
+    pub fn len(&self) -> usize {
+        self.cache.len as usize * NODE_SIZE
+    }
 }
 
 fn parent_cache_dir_name() -> String {

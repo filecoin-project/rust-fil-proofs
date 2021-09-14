@@ -7,13 +7,14 @@ use std::path::Path;
 use std::slice;
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 
-use anyhow::Result;
+use anyhow::{ensure, Result};
 use byte_slice_cast::{AsSliceOf, FromByteSlice};
 use log::{info, warn};
 use mapr::{Mmap, MmapMut, MmapOptions};
 
 pub struct CacheReader<T> {
     file: File,
+    file_len: usize,
     bufs: UnsafeCell<[Mmap; 2]>,
     size: usize,
     degree: usize,
@@ -102,7 +103,7 @@ impl<T: FromByteSlice> CacheReader<T> {
                 if s < size {
                     assert_eq!(
                         0,
-                        size % degree * size_of::<T>(),
+                        size % (degree * size_of::<T>()),
                         "window size is not multiple of element size"
                     );
                 };
@@ -115,10 +116,25 @@ impl<T: FromByteSlice> CacheReader<T> {
             }
         };
 
-        let buf0 = Self::map_buf(0, window_size, &file)?;
-        let buf1 = Self::map_buf(window_size as u64, window_size, &file)?;
+        ensure!(
+            window_size <= size / 2,
+            "window is too large: {} > {}",
+            window_size,
+            size
+        );
+
+        ensure!(
+            size % window_size == 0,
+            "window does not divide the cache size: {} % {} != 0",
+            size,
+            window_size,
+        );
+
+        let buf0 = Self::map_buf(0, window_size, &file, size)?;
+        let buf1 = Self::map_buf(window_size as u64, window_size, &file, size)?;
         Ok(Self {
             file,
+            file_len: size,
             bufs: UnsafeCell::new([buf0, buf1]),
             size,
             degree,
@@ -130,6 +146,7 @@ impl<T: FromByteSlice> CacheReader<T> {
         })
     }
 
+    /// Returns the size in bytes.
     pub fn size(&self) -> usize {
         self.size
     }
@@ -172,21 +189,33 @@ impl<T: FromByteSlice> CacheReader<T> {
     }
 
     pub fn start_reset(&self) -> Result<()> {
-        let buf0 = Self::map_buf(0, self.window_size, &self.file)?;
+        let buf0 = Self::map_buf(0, self.window_size, &self.file, self.file_len)?;
         let bufs = unsafe { self.get_mut_bufs() };
         bufs[0] = buf0;
         Ok(())
     }
 
     pub fn finish_reset(&self) -> Result<()> {
-        let buf1 = Self::map_buf(self.window_size as u64, self.window_size, &self.file)?;
+        let buf1 = Self::map_buf(
+            self.window_size as u64,
+            self.window_size,
+            &self.file,
+            self.file_len,
+        )?;
         let bufs = unsafe { self.get_mut_bufs() };
         bufs[1] = buf1;
         self.cursor.store(0);
         Ok(())
     }
 
-    fn map_buf(offset: u64, len: usize, file: &File) -> Result<Mmap> {
+    fn map_buf(offset: u64, len: usize, file: &File, file_len: usize) -> Result<Mmap> {
+        ensure!(
+            offset as usize + len <= file_len,
+            "mmapping too large: offset:{}, len:{}, file_len:{}",
+            offset,
+            len,
+            file_len
+        );
         unsafe {
             MmapOptions::new()
                 .offset(offset)
@@ -265,6 +294,7 @@ impl<T: FromByteSlice> CacheReader<T> {
             (new_window * self.window_size) as u64,
             self.window_size as usize,
             &self.file,
+            self.file_len,
         )
         .expect("map_buf failed");
 

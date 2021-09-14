@@ -224,6 +224,14 @@ fn create_layer_labels(
             .multicore_sdr_producer_stride
             .min(parents_cache.window_nodes() as u64);
 
+        dbg!(
+            producer_stride,
+            num_producers,
+            lookahead,
+            parents_cache.size(),
+            parents_cache.window_nodes()
+        );
+
         (lookahead, num_producers, producer_stride)
     };
 
@@ -252,13 +260,13 @@ fn create_layer_labels(
         UnsafeSlice::from_slice(m.as_mut_slice_of::<u32>().expect("failed as mut slice of"))
     });
     let base_parent_missing = UnsafeSlice::from_slice(&mut base_parent_missing);
-
+    let exp_labels_ref = exp_labels.as_ref();
     crossbeam::thread::scope(|s| {
         let mut runners = Vec::with_capacity(num_producers);
 
         for i in 0..num_producers {
             let layer_labels = &layer_labels;
-            let exp_labels = exp_labels.as_ref();
+            let exp_labels = exp_labels_ref;
             let cur_producer = &cur_producer;
             let cur_awaiting = &cur_awaiting;
             let ring_buf = &ring_buf;
@@ -337,20 +345,29 @@ fn create_layer_labels(
             let ready_count = producer_val - i + 1;
             for _count in 0..ready_count {
                 // If we have used up the last cache window's parent data, get some more.
+                // dbg!(cur_parent_ptr.len(), cur_parent_ptr_offset);
                 if cur_parent_ptr.is_empty() {
                     // Safety: values read from `cur_parent_ptr` before calling `increment_consumer`
                     // must not be read again after.
                     unsafe {
                         cur_parent_ptr = parents_cache.consumer_slice_at(cur_parent_ptr_offset);
                     }
+                    assert!(cur_parent_ptr.len() >= DEGREE, "not enough parents");
                 }
 
                 cur_node_ptr = &mut cur_node_ptr[8..];
                 // Grab the current slot of the ring_buf
                 let buf = unsafe { ring_buf.slot_mut(cur_slot) };
-
+                let original_len = cur_parent_ptr.len();
                 // Fill in the base parents
                 for k in 0..BASE_DEGREE {
+                    assert!(
+                        cur_parent_ptr.len() > 0,
+                        "iterated too long (k:{}, cur_layer:{}, {})",
+                        k,
+                        cur_layer,
+                        original_len
+                    );
                     let bpm = unsafe { base_parent_missing.get(cur_slot) };
                     if bpm.get(k) {
                         let source = unsafe {
@@ -361,6 +378,22 @@ fn create_layer_labels(
 
                         buf[64 + (NODE_SIZE * k)..64 + (NODE_SIZE * (k + 1))]
                             .copy_from_slice(source.as_byte_slice());
+                    }
+                    {
+                        let source = unsafe {
+                            let start = cur_parent_ptr[0] as usize * NODE_WORDS;
+                            let end = start + NODE_WORDS;
+                            &layer_labels.as_slice()[start..end]
+                        };
+                        let buf = &buf[64 + (NODE_SIZE * k)..64 + (NODE_SIZE * (k + 1))];
+
+                        assert_eq!(
+                            buf,
+                            source.as_byte_slice(),
+                            "missmatch in parents: k:{} layer:{}",
+                            k,
+                            cur_layer
+                        );
                     }
                     cur_parent_ptr = &cur_parent_ptr[1..];
                     cur_parent_ptr_offset += 1;
@@ -454,8 +487,13 @@ pub fn create_labels_for_encoding<Tree: 'static + MerkleTreeTrait, T: AsRef<[u8]
     let sector_size = graph.size() * NODE_SIZE;
     let node_count = graph.size() as u64;
     let cache_window_nodes = SETTINGS.sdr_parents_cache_size as usize;
+    let parents_cache_len = parents_cache.len();
 
-    let default_cache_size = DEGREE * 4 * cache_window_nodes;
+    let default_cache_size = if (DEGREE * 4 * cache_window_nodes) > parents_cache_len / 2 {
+        None
+    } else {
+        Some(DEGREE * 4 * cache_window_nodes as usize)
+    };
 
     let core_group = Arc::new(checkout_core_group());
 
@@ -468,12 +506,8 @@ pub fn create_labels_for_encoding<Tree: 'static + MerkleTreeTrait, T: AsRef<[u8]
     });
 
     // NOTE: this means we currently keep 2x sector size around, to improve speed
-    let (parents_cache, mut layer_labels, mut exp_labels) = setup_create_label_memory(
-        sector_size,
-        DEGREE,
-        Some(default_cache_size as usize),
-        &parents_cache.path,
-    )?;
+    let (parents_cache, mut layer_labels, mut exp_labels) =
+        setup_create_label_memory(sector_size, DEGREE, default_cache_size, &parents_cache.path)?;
 
     for (layer, layer_state) in (1..=layers).zip(layer_states.iter()) {
         info!("Layer {}", layer);
@@ -513,6 +547,8 @@ pub fn create_labels_for_encoding<Tree: 'static + MerkleTreeTrait, T: AsRef<[u8]
             parents_cache.start_reset()?;
         }
 
+        layer_labels.flush()?;
+        exp_labels.flush()?;
         mem::swap(&mut layer_labels, &mut exp_labels);
         {
             let layer_config = &layer_state.config;
@@ -553,8 +589,13 @@ pub fn create_labels_for_decoding<Tree: 'static + MerkleTreeTrait, T: AsRef<[u8]
     let sector_size = graph.size() * NODE_SIZE;
     let node_count = graph.size() as u64;
     let cache_window_nodes = (&SETTINGS.sdr_parents_cache_size / 2) as usize;
+    let parents_cache_len = parents_cache.len();
 
-    let default_cache_size = DEGREE * 4 * cache_window_nodes;
+    let default_cache_size = if (DEGREE * 4 * cache_window_nodes) > parents_cache_len / 2 {
+        None
+    } else {
+        Some(DEGREE * 4 * cache_window_nodes as usize)
+    };
 
     let core_group = Arc::new(checkout_core_group());
 
@@ -567,12 +608,8 @@ pub fn create_labels_for_decoding<Tree: 'static + MerkleTreeTrait, T: AsRef<[u8]
     });
 
     // NOTE: this means we currently keep 2x sector size around, to improve speed
-    let (parents_cache, mut layer_labels, mut exp_labels) = setup_create_label_memory(
-        sector_size,
-        DEGREE,
-        Some(default_cache_size as usize),
-        &parents_cache.path,
-    )?;
+    let (parents_cache, mut layer_labels, mut exp_labels) =
+        setup_create_label_memory(sector_size, DEGREE, default_cache_size, &parents_cache.path)?;
 
     for layer in 1..=layers {
         info!("Layer {}", layer);
@@ -777,7 +814,7 @@ mod tests {
         let legacy_porep_id = [0; 32];
         let new_porep_id = [123; 32];
 
-        (0..10000)
+        (0..1)
             .into_par_iter()
             .try_for_each(|i| -> anyhow::Result<()> {
                 // println!("--test 2k 1.0.0 - {}", i);
