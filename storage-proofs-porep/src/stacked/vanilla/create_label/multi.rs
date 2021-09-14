@@ -155,8 +155,13 @@ fn create_label_runner(
     loop {
         // Get next work items
         let work = cur_awaiting.fetch_add(stride, SeqCst);
-println!("vmx: {:?} work >= num_nodes: {} {}", std::thread::current().id(), work, num_nodes);
-//dbg!(num_nodes);
+        println!(
+            "vmx: {:?} work >= num_nodes: {} {}",
+            std::thread::current().id(),
+            work,
+            num_nodes
+        );
+        //dbg!(num_nodes);
         if work >= num_nodes {
             break;
         }
@@ -165,29 +170,44 @@ println!("vmx: {:?} work >= num_nodes: {} {}", std::thread::current().id(), work
         } else {
             stride
         };
-println!("vmx: {:?} count: {}", std::thread::current().id(), count);
-//dbg!((count, std::thread::current().id()));
+        println!("vmx: {:?} count: {}", std::thread::current().id(), count);
+        //dbg!((count, std::thread::current().id()));
         // Do the work of filling the buffers
         for cur_node in work..work + count {
             // Determine which node slot in the ring_buffer to use
             // Note that node 0 does not use a buffer slot
             let cur_slot = (cur_node - 1) % lookahead;
-//dbg!((cur_slot, std::thread::current().id()));
-println!("vmx: {:?} cur_slot: {}", std::thread::current().id(), cur_slot);
+            //dbg!((cur_slot, std::thread::current().id()));
+            println!(
+                "vmx: {:?} cur_slot: {}",
+                std::thread::current().id(),
+                cur_slot
+            );
 
             // Don't overrun the buffer
-//println!("vmx: {:?} get_consumer, lookahead: {} {}", std::thread::current().id(), parents_cache.get_consumer(), lookahead);
+            println!(
+                "vmx: {:?} get_consumer, lookahead: {} {} {}",
+                std::thread::current().id(),
+                parents_cache.get_consumer(),
+                lookahead,
+                cur_node
+            );
             while cur_node > (parents_cache.get_consumer() + lookahead - 1) {
+                println!("{:?} sleep", std::thread::current().id());
                 thread::sleep(Duration::from_micros(10));
             }
 
+            println!("{:?} buf", std::thread::current().id());
             let buf = unsafe { ring_buf.slot_mut(cur_slot as usize) };
-dbg!();
+            // dbg!();
+            println!("{:?} bpm", std::thread::current().id());
             let bpm = unsafe { base_parent_missing.get_mut(cur_slot as usize) };
-dbg!();
-
+            // dbg!();
+            println!("{:?} pc", std::thread::current().id());
             let pc = unsafe { parents_cache.slice_at(cur_node as usize * DEGREE as usize) };
-dbg!();
+            // dbg!();
+
+            println!("{:?} before_fill_buffer", std::thread::current().id());
             fill_buffer(
                 cur_node,
                 parents_cache,
@@ -198,17 +218,38 @@ dbg!();
                 bpm,
                 api_version,
             );
+            println!("{:?} after_fill_buffer", std::thread::current().id());
         }
 
-//dbg!(cur_producer.load(SeqCst));
-println!("vmx: {:?} work > current_producer: {} {}", std::thread::current().id(), work, cur_producer.load(SeqCst) + 1);
+        //dbg!(cur_producer.load(SeqCst));
+        println!(
+            "vmx: {:?} work > current_producer: {} {}",
+            std::thread::current().id(),
+            work,
+            cur_producer.load(SeqCst) + 1
+        );
         // Wait for the previous node to finish
-        while work > (cur_producer.load(SeqCst) + 1) {
+        /*while work > (cur_producer.load(SeqCst) + 1) {
             thread::sleep(Duration::from_micros(10));
         }
 
         // Mark our work as done
-        cur_producer.fetch_add(count, SeqCst);
+        cur_producer.fetch_add(count, SeqCst);*/
+        let prev = work - 1;
+        loop {
+            match cur_producer.compare_exchange_weak(prev, prev + count, SeqCst, SeqCst) {
+                Ok(_) => break,
+                Err(cur) => {
+                    println!(
+                        "{:?} wanted {}, got {}",
+                        std::thread::current().id(),
+                        prev,
+                        cur
+                    );
+                    thread::sleep(Duration::from_micros(10));
+                }
+            }
+        }
     }
 }
 
@@ -231,9 +272,20 @@ fn create_layer_labels(
         let num_producers = settings.multicore_sdr_producers;
         // NOTE: Stride must not exceed the number of nodes in parents_cache's window. If it does, the process will deadlock
         // with producers and consumers waiting for each other.
-        let producer_stride = settings
+        let mut producer_stride = settings
             .multicore_sdr_producer_stride
             .min(parents_cache.window_nodes() as u64);
+
+        if num_producers as u64 * producer_stride > parents_cache.window_nodes() as u64 {
+            info!("reducing");
+            let window_nodes = parents_cache.window_nodes() as u64;
+            let num_producers = if num_producers % 2 == 0 {
+                num_producers as u64
+            } else {
+                num_producers as u64 + 1
+            };
+            producer_stride = window_nodes / num_producers;
+        }
 
         dbg!(
             producer_stride,
@@ -334,8 +386,6 @@ fn create_layer_labels(
         let mut count_not_ready = 0;
 
         // Calculate nodes 1 to n
-
-        // Skip first node.
         parents_cache.store_consumer(1);
         let mut i = 1;
         while i < num_nodes {
@@ -349,12 +399,27 @@ fn create_layer_labels(
                     count_not_ready += 1;
                 }
                 thread::sleep(Duration::from_micros(10));
+                println!(
+                    "{:?} waiting for producer: {} {} {}",
+                    std::thread::current().id(),
+                    producer_val,
+                    i,
+                    count_not_ready,
+                );
                 producer_val = cur_producer.load(SeqCst);
             }
 
             // Process as many nodes as are ready
             let ready_count = producer_val - i + 1;
-            for _count in 0..ready_count {
+            for count in 0..ready_count {
+                println!(
+                    "{:?} hashing cur_producer: {} {} {}",
+                    std::thread::current().id(),
+                    producer_val,
+                    i,
+                    count,
+                );
+
                 // If we have used up the last cache window's parent data, get some more.
                 // dbg!(cur_parent_ptr.len(), cur_parent_ptr_offset);
                 if cur_parent_ptr.is_empty() {
@@ -370,6 +435,7 @@ fn create_layer_labels(
                 // Grab the current slot of the ring_buf
                 let buf = unsafe { ring_buf.slot_mut(cur_slot) };
                 let original_len = cur_parent_ptr.len();
+
                 // Fill in the base parents
                 for k in 0..BASE_DEGREE {
                     assert!(
@@ -670,6 +736,8 @@ pub fn create_labels_for_decoding<Tree: 'static + MerkleTreeTrait, T: AsRef<[u8]
                 layer, layer_config.id
             );
 
+            layer_labels.flush()?;
+            exp_labels.flush()?;
             mem::swap(&mut layer_labels, &mut exp_labels);
 
             // Track the layer specific store and StoreConfig for later retrieval.
@@ -825,49 +893,49 @@ mod tests {
         let legacy_porep_id = [0; 32];
         let new_porep_id = [123; 32];
 
-        (0..1)
+        (0..1000)
             .into_par_iter()
             .try_for_each(|i| -> anyhow::Result<()> {
-                // println!("--test 2k 1.0.0 - {}", i);
-                // create_labels::<LCTree<PoseidonHasher, U8, U0, U0>>(
-                //     nodes_2k,
-                //     layers,
-                //     replica_id,
-                //     legacy_porep_id,
-                //     ApiVersion::V1_0_0,
-                // );
-                // println!("--test 4k 1.0.0 - {}", i);
-                // create_labels::<LCTree<PoseidonHasher, U8, U2, U0>>(
-                //     nodes_4k,
-                //     layers,
-                //     replica_id,
-                //     legacy_porep_id,
-                //     ApiVersion::V1_0_0,
-                // );
-                // println!("--test 32k 1.0.0 - {}", i);
-                // create_labels::<LCTree<PoseidonHasher, U8, U8, U2>>(
-                //     nodes_32k,
-                //     layers,
-                //     replica_id,
-                //     legacy_porep_id,
-                //     ApiVersion::V1_0_0,
-                // );
-                // println!("--test 2k 1.1.0 - {}", i);
-                // create_labels::<LCTree<PoseidonHasher, U8, U0, U0>>(
-                //     nodes_2k,
-                //     layers,
-                //     replica_id,
-                //     new_porep_id,
-                //     ApiVersion::V1_1_0,
-                // );
-                // println!("--test 4k 1.1.0 - {}", i);
-                // create_labels::<LCTree<PoseidonHasher, U8, U2, U0>>(
-                //     nodes_4k,
-                //     layers,
-                //     replica_id,
-                //     new_porep_id,
-                //     ApiVersion::V1_1_0,
-                // );
+                println!("--test 2k 1.0.0 - {}", i);
+                create_labels::<LCTree<PoseidonHasher, U8, U0, U0>>(
+                    nodes_2k,
+                    layers,
+                    replica_id,
+                    legacy_porep_id,
+                    ApiVersion::V1_0_0,
+                )?;
+                println!("--test 4k 1.0.0 - {}", i);
+                create_labels::<LCTree<PoseidonHasher, U8, U2, U0>>(
+                    nodes_4k,
+                    layers,
+                    replica_id,
+                    legacy_porep_id,
+                    ApiVersion::V1_0_0,
+                )?;
+                println!("--test 32k 1.0.0 - {}", i);
+                create_labels::<LCTree<PoseidonHasher, U8, U8, U2>>(
+                    nodes_32k,
+                    layers,
+                    replica_id,
+                    legacy_porep_id,
+                    ApiVersion::V1_0_0,
+                )?;
+                println!("--test 2k 1.1.0 - {}", i);
+                create_labels::<LCTree<PoseidonHasher, U8, U0, U0>>(
+                    nodes_2k,
+                    layers,
+                    replica_id,
+                    new_porep_id,
+                    ApiVersion::V1_1_0,
+                )?;
+                println!("--test 4k 1.1.0 - {}", i);
+                create_labels::<LCTree<PoseidonHasher, U8, U2, U0>>(
+                    nodes_4k,
+                    layers,
+                    replica_id,
+                    new_porep_id,
+                    ApiVersion::V1_1_0,
+                )?;
                 println!("--test 32k 1.1.0 - {}", i);
                 create_labels::<LCTree<PoseidonHasher, U8, U8, U2>>(
                     nodes_32k,

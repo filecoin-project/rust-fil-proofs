@@ -76,8 +76,7 @@ impl IncrementingCursor {
                     while wait_fn() {
                         spin_loop()
                     }
-                }
-;
+                };
                 advance_fn();
 
                 // Now it is safe to use the new window.
@@ -86,6 +85,12 @@ impl IncrementingCursor {
                 // We failed to increment `self.cur_window`, so we must wait for the window to be advanced before
                 // continuing. Wait until it is safe to use the new current window.
                 while self.cur_safe.load(Ordering::SeqCst) != cur + 1 {
+                    println!(
+                        "{:?} waiting for new window {} {}",
+                        std::thread::current().id(),
+                        cur + 1,
+                        self.cur_safe.load(Ordering::SeqCst)
+                    );
                     spin_loop()
                 }
             }
@@ -98,23 +103,11 @@ impl<T: FromByteSlice> CacheReader<T> {
         info!("initializing cache");
         let file = File::open(filename)?;
         let size = File::metadata(&file)?.len() as usize;
-        let window_size = match window_size {
-            Some(s) => {
-                if s < size {
-                    assert_eq!(
-                        0,
-                        size % (degree * size_of::<T>()),
-                        "window size is not multiple of element size"
-                    );
-                };
-                s
-            }
-            None => {
-                let num_windows = 8;
-                assert_eq!(0, size % num_windows);
-                size / num_windows
-            }
-        };
+        let window_size = window_size.unwrap_or_else(|| {
+            let num_windows = 8;
+            assert_eq!(0, size % num_windows);
+            size / num_windows
+        });
 
         ensure!(
             window_size <= size / 2,
@@ -128,6 +121,21 @@ impl<T: FromByteSlice> CacheReader<T> {
             "window does not divide the cache size: {} % {} != 0",
             size,
             window_size,
+        );
+
+        ensure!(
+            window_size % (degree * size_of::<T>()) == 0,
+            "window does not divide the cache parent size: {} % {} != 0",
+            window_size,
+            degree * size_of::<T>(),
+        );
+
+        eprintln!(
+            "{} window size {} {} {}",
+            window_size,
+            size,
+            degree,
+            size_of::<T>()
         );
 
         let buf0 = Self::map_buf(0, window_size, &file, size)?;
@@ -152,7 +160,7 @@ impl<T: FromByteSlice> CacheReader<T> {
     }
 
     pub fn window_nodes(&self) -> usize {
-        self.size() / (size_of::<T>() * self.degree)
+        self.window_size / (size_of::<T>() * self.degree)
     }
 
     /// Safety: incrementing the consumer at the end of a window will unblock the producer waiting to remap the
@@ -182,7 +190,7 @@ impl<T: FromByteSlice> CacheReader<T> {
 
     #[allow(dead_code)]
     // This is unused, but included to document the meaning of its components.
-    // This allows splitting the reset in order to avoid a pause.
+
     pub fn reset(&self) -> Result<()> {
         self.start_reset()?;
         self.finish_reset()
@@ -274,13 +282,18 @@ impl<T: FromByteSlice> CacheReader<T> {
 
         let wait_fn = || {
             let safe_consumer = (window - 1) * (self.window_element_count() / self.degree);
-println!("vmx: {:?} self.consumer < safe_consumer: {} {}", std::thread::current().id(), self.consumer.load(Ordering::SeqCst), safe_consumer);
+            println!(
+                "vmx: {:?} self.consumer < safe_consumer: {} {}",
+                std::thread::current().id(),
+                self.consumer.load(Ordering::SeqCst),
+                safe_consumer
+            );
             (self.consumer.load(Ordering::SeqCst) as usize) < safe_consumer
         };
-dbg!();
+        // dbg!();
         self.cursor
             .increment(window, &wait_fn, &|| self.advance_rear_window(window));
-dbg!();
+        // dbg!();
         let targeted_buf = &self.get_bufs()[window % 2];
 
         &targeted_buf.as_slice_of::<T>().expect("as_slice_of failed")[pos..]
