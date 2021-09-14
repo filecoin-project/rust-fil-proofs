@@ -155,6 +155,8 @@ fn create_label_runner(
     loop {
         // Get next work items
         let work = cur_awaiting.fetch_add(stride, SeqCst);
+println!("vmx: {:?} work >= num_nodes: {} {}", std::thread::current().id(), work, num_nodes);
+//dbg!(num_nodes);
         if work >= num_nodes {
             break;
         }
@@ -163,22 +165,29 @@ fn create_label_runner(
         } else {
             stride
         };
-
+println!("vmx: {:?} count: {}", std::thread::current().id(), count);
+//dbg!((count, std::thread::current().id()));
         // Do the work of filling the buffers
         for cur_node in work..work + count {
             // Determine which node slot in the ring_buffer to use
             // Note that node 0 does not use a buffer slot
             let cur_slot = (cur_node - 1) % lookahead;
+//dbg!((cur_slot, std::thread::current().id()));
+println!("vmx: {:?} cur_slot: {}", std::thread::current().id(), cur_slot);
 
             // Don't overrun the buffer
+//println!("vmx: {:?} get_consumer, lookahead: {} {}", std::thread::current().id(), parents_cache.get_consumer(), lookahead);
             while cur_node > (parents_cache.get_consumer() + lookahead - 1) {
                 thread::sleep(Duration::from_micros(10));
             }
 
             let buf = unsafe { ring_buf.slot_mut(cur_slot as usize) };
+dbg!();
             let bpm = unsafe { base_parent_missing.get_mut(cur_slot as usize) };
+dbg!();
 
             let pc = unsafe { parents_cache.slice_at(cur_node as usize * DEGREE as usize) };
+dbg!();
             fill_buffer(
                 cur_node,
                 parents_cache,
@@ -191,6 +200,8 @@ fn create_label_runner(
             );
         }
 
+//dbg!(cur_producer.load(SeqCst));
+println!("vmx: {:?} work > current_producer: {} {}", std::thread::current().id(), work, cur_producer.load(SeqCst) + 1);
         // Wait for the previous node to finish
         while work > (cur_producer.load(SeqCst) + 1) {
             thread::sleep(Duration::from_micros(10));

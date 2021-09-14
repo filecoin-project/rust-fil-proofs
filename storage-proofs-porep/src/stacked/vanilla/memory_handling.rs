@@ -77,7 +77,7 @@ impl IncrementingCursor {
                         spin_loop()
                     }
                 }
-
+;
                 advance_fn();
 
                 // Now it is safe to use the new window.
@@ -274,12 +274,13 @@ impl<T: FromByteSlice> CacheReader<T> {
 
         let wait_fn = || {
             let safe_consumer = (window - 1) * (self.window_element_count() / self.degree);
+println!("vmx: {:?} self.consumer < safe_consumer: {} {}", std::thread::current().id(), self.consumer.load(Ordering::SeqCst), safe_consumer);
             (self.consumer.load(Ordering::SeqCst) as usize) < safe_consumer
         };
-
+dbg!();
         self.cursor
             .increment(window, &wait_fn, &|| self.advance_rear_window(window));
-
+dbg!();
         let targeted_buf = &self.get_bufs()[window % 2];
 
         &targeted_buf.as_slice_of::<T>().expect("as_slice_of failed")[pos..]
