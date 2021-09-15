@@ -285,12 +285,12 @@ impl<T: FromByteSlice> CacheReader<T> {
 
         let wait_fn = || {
             let safe_consumer = (target_window - 1) * (self.window_element_count() / self.degree);
-            println!(
-                "vmx: {:?} self.consumer < safe_consumer: {} {}",
-                std::thread::current().id(),
-                self.consumer.load(Ordering::SeqCst),
-                safe_consumer
-            );
+            // println!(
+            //     "vmx: {:?} self.consumer < safe_consumer: {} {}",
+            //     std::thread::current().id(),
+            //     self.consumer.load(Ordering::SeqCst),
+            //     safe_consumer
+            // );
             (self.consumer.load(Ordering::SeqCst) as usize) < safe_consumer
         };
 

@@ -485,22 +485,6 @@ fn create_layer_labels(
                         buf[64 + (NODE_SIZE * k)..64 + (NODE_SIZE * (k + 1))]
                             .copy_from_slice(source.as_byte_slice());
                     }
-                    {
-                        let source = unsafe {
-                            let start = cur_parent_ptr[0] as usize * NODE_WORDS;
-                            let end = start + NODE_WORDS;
-                            &layer_labels.as_slice()[start..end]
-                        };
-                        let buf = &buf[64 + (NODE_SIZE * k)..64 + (NODE_SIZE * (k + 1))];
-
-                        assert_eq!(
-                            buf,
-                            source.as_byte_slice(),
-                            "missmatch in parents: k:{} layer:{}",
-                            k,
-                            cur_layer
-                        );
-                    }
                     cur_parent_ptr = &cur_parent_ptr[1..];
                     cur_parent_ptr_offset += 1;
                 }
@@ -694,7 +678,7 @@ pub fn create_labels_for_decoding<Tree: 'static + MerkleTreeTrait, T: AsRef<[u8]
 
     let sector_size = graph.size() * NODE_SIZE;
     let node_count = graph.size() as u64;
-    let cache_window_nodes = (&SETTINGS.sdr_parents_cache_size / 2) as usize;
+    let cache_window_nodes = SETTINGS.sdr_parents_cache_size as usize;
     let parents_cache_len = parents_cache.len();
 
     let default_cache_size = if (DEGREE * 4 * cache_window_nodes) > parents_cache_len / 2 {
@@ -796,7 +780,7 @@ mod tests {
     use tempfile::tempdir;
 
     #[test]
-    fn test_create_labels() {
+    fn test_create_labels_fixed() {
         let layers = 11;
         let nodes_2k = 1 << 11;
         let nodes_4k = 1 << 12;
@@ -876,12 +860,20 @@ mod tests {
     ) {
         let nodes = sector_size / NODE_SIZE;
 
-        let cache_dir = tempdir().expect("tempdir failure");
-        let config = StoreConfig::new(
-            cache_dir.path(),
-            CacheKey::CommDTree.to_string(),
-            nodes.trailing_zeros() as usize,
-        );
+        let make_config = || {
+            let cache_dir = tempdir().expect("tempdir failure");
+            let config = StoreConfig::new(
+                cache_dir.path(),
+                CacheKey::CommDTree.to_string(),
+                nodes.trailing_zeros() as usize,
+            );
+            (cache_dir, config)
+        };
+
+        let (_dir, config1) = make_config();
+        let (_dir, config2) = make_config();
+        let (_dir, config3) = make_config();
+        let (_dir, config4) = make_config();
 
         let graph = StackedBucketGraph::<PoseidonHasher>::new(
             None,
@@ -892,21 +884,79 @@ mod tests {
             api_version,
         )
         .expect("stacked bucket graph new failed");
-        let cache = graph.parent_cache().expect("parent_cache failed");
+        let mut cache = graph.parent_cache().expect("parent_cache failed");
 
-        let labels = create_labels_for_decoding::<LCTree<PoseidonHasher, U8, U0, U2>, _>(
-            &graph, &cache, layers, replica_id, config,
+        let labels_enc = create_labels_for_encoding::<LCTree<PoseidonHasher, U8, U0, U2>, _>(
+            &graph, &cache, layers, replica_id, config1,
         )
         .expect("create_labels_for_decoding failed");
 
-        let final_labels = labels
+        let labels_dec = create_labels_for_decoding::<LCTree<PoseidonHasher, U8, U0, U2>, _>(
+            &graph, &cache, layers, replica_id, config2,
+        )
+        .expect("create_labels_for_decoding failed");
+
+        let (labels_enc_ser, _states) = single::create_labels_for_encoding::<
+            LCTree<PoseidonHasher, U8, U0, U2>,
+            _,
+        >(&graph, &mut cache, layers, replica_id, config3)
+        .expect("create_labels_for_encoding failed");
+
+        let labels_dec_ser = single::create_labels_for_decoding::<
+            LCTree<PoseidonHasher, U8, U0, U2>,
+            _,
+        >(&graph, &mut cache, layers, replica_id, config4)
+        .expect("create_labels_for_decoding failed");
+
+        let final_labels_enc_ser = labels_enc_ser
             .labels_for_last_layer()
             .expect("labels_for_last_layer failed");
-        let last_label = final_labels
-            .read_at(final_labels.len() - 1)
+        let last_label_enc_ser = final_labels_enc_ser
+            .read_at(final_labels_enc_ser.len() - 1)
             .expect("read_at");
-        dbg!(&last_label);
-        assert_eq!(expected_last_label.into_repr(), last_label.0);
+        dbg!(&last_label_enc_ser);
+
+        let final_labels_dec_ser = labels_dec_ser
+            .labels_for_last_layer()
+            .expect("labels_for_last_layer failed");
+        let last_label_dec_ser = final_labels_dec_ser
+            .read_at(final_labels_dec_ser.len() - 1)
+            .expect("read_at");
+        dbg!(&last_label_dec_ser);
+
+        let final_labels_enc = labels_enc
+            .0
+            .labels_for_last_layer()
+            .expect("labels_for_last_layer failed");
+        let last_label_enc = final_labels_enc
+            .read_at(final_labels_enc.len() - 1)
+            .expect("read_at");
+        dbg!(&last_label_enc);
+
+        let final_labels_dec = labels_dec
+            .labels_for_last_layer()
+            .expect("labels_for_last_layer failed");
+        let last_label_dec = final_labels_dec
+            .read_at(final_labels_dec.len() - 1)
+            .expect("read_at");
+        dbg!(&last_label_dec);
+
+        assert_eq!(
+            expected_last_label.into_repr(),
+            last_label_dec_ser.0,
+            "serial decoding missmatch"
+        );
+
+        assert_eq!(
+            expected_last_label.into_repr(),
+            last_label_dec.0,
+            "parallel decoding missmatch"
+        );
+
+        assert_eq!(
+            last_label_enc.0, last_label_enc_ser.0,
+            "encoding missmatch between par and ser"
+        );
     }
 
     #[test]
@@ -1002,7 +1052,7 @@ mod tests {
             api_version,
         )
         .expect("stacked bucket graph new failed");
-        let mut cache = graph.parent_cache().expect("parent_cache failed");
+        let cache = graph.parent_cache().expect("parent_cache failed");
 
         let (labels_par_encoding, states) = create_labels_for_encoding::<Tree, _>(
             &graph,
@@ -1027,6 +1077,7 @@ mod tests {
             nodes.trailing_zeros() as usize,
         );
 
+        let mut cache = graph.parent_cache().expect("parent_cache failed");
         let (labels_ser_encoding, states) = single::create_labels_for_encoding::<Tree, _>(
             &graph,
             &mut cache,
