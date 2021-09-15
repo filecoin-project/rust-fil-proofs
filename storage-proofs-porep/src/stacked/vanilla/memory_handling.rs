@@ -304,6 +304,7 @@ impl<T: FromByteSlice> CacheReader<T> {
         &targeted_buf.as_slice_of::<T>().expect("as_slice_of failed")[pos..]
     }
 
+    /// Returns true if the given position is in a window.
     pub fn is_in_window(&self, pos: usize) -> bool {
         let target_window = pos / self.window_element_count();
         let current_window = self.cursor.cur_safe.load(Ordering::SeqCst);
@@ -312,6 +313,8 @@ impl<T: FromByteSlice> CacheReader<T> {
             || (current_window > 0 && target_window == current_window - 1)
     }
 
+    /// Returns true if the consumer has moved to the last window entry, which means no more
+    /// requests need to be more to the current window.
     pub fn is_window_finished(&self) -> bool {
         let consumer = self.consumer.load(Ordering::SeqCst) * self.degree as u64;
         let current_window = self.cursor.cur_safe.load(Ordering::SeqCst);

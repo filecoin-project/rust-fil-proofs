@@ -202,6 +202,15 @@ fn create_label_runner(
                 && (parents_cache.is_in_window(cur_node_cache_offset)
                     || parents_cache.is_window_finished()))
             {
+                println!(
+                    "{:?} sleep {} - {} - {} - {} - {}",
+                    std::thread::current().id(),
+                    is_in_lookahead(),
+                    parents_cache.is_in_window(cur_node_cache_offset),
+                    parents_cache.is_window_finished(),
+                    cur_node,
+                    cur_node_cache_offset,
+                );
                 thread::sleep(Duration::from_micros(10));
             }
 
@@ -408,13 +417,13 @@ fn create_layer_labels(
                     count_not_ready += 1;
                 }
                 thread::sleep(Duration::from_micros(10));
-                println!(
-                    "{:?} waiting for producer: {} {} {}",
-                    std::thread::current().id(),
-                    producer_val,
-                    i,
-                    count_not_ready,
-                );
+                // println!(
+                //     "{:?} waiting for producer: {} {} {}",
+                //     std::thread::current().id(),
+                //     producer_val,
+                //     i,
+                //     count_not_ready,
+                // );
                 producer_val = cur_producer.load(SeqCst);
             }
 
@@ -903,24 +912,25 @@ mod tests {
         let new_porep_id = [123; 32];
 
         (0..1000)
-            .into_par_iter()
+            // .into_par_iter()
+            .into_iter()
             .try_for_each(|i| -> anyhow::Result<()> {
-                println!("--test 2k 1.0.0 - {}", i);
-                create_labels::<LCTree<PoseidonHasher, U8, U0, U0>>(
-                    nodes_2k,
-                    layers,
-                    replica_id,
-                    legacy_porep_id,
-                    ApiVersion::V1_0_0,
-                )?;
-                println!("--test 4k 1.0.0 - {}", i);
-                create_labels::<LCTree<PoseidonHasher, U8, U2, U0>>(
-                    nodes_4k,
-                    layers,
-                    replica_id,
-                    legacy_porep_id,
-                    ApiVersion::V1_0_0,
-                )?;
+                // println!("--test 2k 1.0.0 - {}", i);
+                // create_labels::<LCTree<PoseidonHasher, U8, U0, U0>>(
+                //     nodes_2k,
+                //     layers,
+                //     replica_id,
+                //     legacy_porep_id,
+                //     ApiVersion::V1_0_0,
+                // )?;
+                // println!("--test 4k 1.0.0 - {}", i);
+                // create_labels::<LCTree<PoseidonHasher, U8, U2, U0>>(
+                //     nodes_4k,
+                //     layers,
+                //     replica_id,
+                //     legacy_porep_id,
+                //     ApiVersion::V1_0_0,
+                // )?;
                 // println!("--test 32k 1.0.0 - {}", i);
                 // create_labels::<LCTree<PoseidonHasher, U8, U8, U2>>(
                 //     nodes_32k,
@@ -937,14 +947,14 @@ mod tests {
                     new_porep_id,
                     ApiVersion::V1_1_0,
                 )?;
-                println!("--test 4k 1.1.0 - {}", i);
-                create_labels::<LCTree<PoseidonHasher, U8, U2, U0>>(
-                    nodes_4k,
-                    layers,
-                    replica_id,
-                    new_porep_id,
-                    ApiVersion::V1_1_0,
-                )?;
+                // println!("--test 4k 1.1.0 - {}", i);
+                // create_labels::<LCTree<PoseidonHasher, U8, U2, U0>>(
+                //     nodes_4k,
+                //     layers,
+                //     replica_id,
+                //     new_porep_id,
+                //     ApiVersion::V1_1_0,
+                // )?;
                 // println!("--test 32k 1.1.0 - {}", i);
                 // create_labels::<LCTree<PoseidonHasher, U8, U8, U2>>(
                 //     nodes_32k,
