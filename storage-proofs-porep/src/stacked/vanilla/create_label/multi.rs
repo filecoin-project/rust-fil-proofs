@@ -204,7 +204,8 @@ fn create_label_runner(
 
             let is_last_in_window = || {
                 let result = cur_producer.load(SeqCst) + 1 == work;
-                println!("{:?} is_last_window {} - {} - {}",
+                println!(
+                    "{:?} is_last_window {} - {} - {}",
                     std::thread::current().id(),
                     result,
                     cur_producer.load(SeqCst) + 1,
@@ -214,24 +215,22 @@ fn create_label_runner(
             };
             let mut a = is_in_lookahead();
             let mut b = parents_cache.is_in_window(cur_node_cache_offset);
-            let mut c = parents_cache.is_window_finished();
-            let mut d = is_last_in_window();
+            let mut c = is_last_in_window();
 
-            while !(a && (b || c || d)) {
+            while !(a && (b || c)) {
                 println!(
                     "{:?} sleep {} - {} - {} - {} - {}",
                     std::thread::current().id(),
-                    is_in_lookahead(),
-                    parents_cache.is_in_window(cur_node_cache_offset),
-                    parents_cache.is_window_finished(),
+                    a,
+                    b,
+                    c,
                     cur_node,
                     cur_node_cache_offset,
                 );
                 thread::sleep(Duration::from_micros(10));
                 a = is_in_lookahead();
                 b = parents_cache.is_in_window(cur_node_cache_offset);
-                c = parents_cache.is_window_finished();
-                d = is_last_in_window();
+                c = is_last_in_window();
             }
 
             let buf = unsafe { ring_buf.slot_mut(cur_slot as usize) };
@@ -265,7 +264,7 @@ fn create_label_runner(
             // TODO vmx 2021-09-15: Think about whether `count` or `stride` should be added (given
             // that `cur_awaiting` was advanced by `stride`.
             match cur_producer.compare_exchange_weak(prev, prev + count, SeqCst, SeqCst) {
-            //match cur_producer.compare_exchange_weak(prev, prev + stride, SeqCst, SeqCst) {
+                //match cur_producer.compare_exchange_weak(prev, prev + stride, SeqCst, SeqCst) {
                 Ok(_) => break,
                 Err(cur) => {
                     println!(
