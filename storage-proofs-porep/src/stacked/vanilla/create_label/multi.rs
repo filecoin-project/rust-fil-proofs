@@ -198,11 +198,13 @@ fn create_label_runner(
             // only advance until at most looakhead
             let is_in_lookahead = || cur_node <= parents_cache.get_consumer() + lookahead - 1;
 
+            let is_last_in_window = || cur_producer.load(SeqCst) == work;
             let mut a = is_in_lookahead();
             let mut b = parents_cache.is_in_window(cur_node_cache_offset);
             let mut c = parents_cache.is_window_finished();
+            let mut d = is_last_in_window();
 
-            while !(a && (b || c)) {
+            while !(a && (b || c || d)) {
                 println!(
                     "{:?} sleep {} - {} - {} - {} - {}",
                     std::thread::current().id(),
@@ -216,6 +218,7 @@ fn create_label_runner(
                 a = is_in_lookahead();
                 b = parents_cache.is_in_window(cur_node_cache_offset);
                 c = parents_cache.is_window_finished();
+                d = is_last_in_window();
             }
 
             let buf = unsafe { ring_buf.slot_mut(cur_slot as usize) };
