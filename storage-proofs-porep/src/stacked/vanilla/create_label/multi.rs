@@ -224,6 +224,14 @@ fn create_label_runner(
                 // try to advance
                 unsafe { parents_cache.slice_at(cur_node_cache_offset) }
             } else {
+                println!(
+                    "{:?} fail {} - {} - {} - {}",
+                    std::thread::current().id(),
+                    is_in_lookahead(),
+                    cur_node,
+                    cur_node_cache_offset,
+                    cur_slot,
+                );
                 unreachable!();
             };
 

@@ -309,6 +309,14 @@ impl<T: FromByteSlice> CacheReader<T> {
         let target_window = pos / self.window_element_count();
         let current_window = self.cursor.cur_safe.load(Ordering::SeqCst);
 
+        println!(
+            "{:?} is in window: {} - {} - {} - {}",
+            std::thread::current().id(),
+            pos,
+            current_window,
+            target_window,
+            self.cursor.cur.load(Ordering::SeqCst)
+        );
         (target_window == current_window)
             || (current_window > 0 && target_window == current_window - 1)
     }
@@ -317,9 +325,16 @@ impl<T: FromByteSlice> CacheReader<T> {
     /// requests need to be more to the current window.
     pub fn is_window_finished(&self) -> bool {
         let consumer = self.consumer.load(Ordering::SeqCst) * self.degree as u64;
-        let current_window = self.cursor.cur_safe.load(Ordering::SeqCst);
-        let last_node_in_window = ((current_window + 1) * self.window_element_count()) - 1;
-
+        let current_window = self.cursor.cur.load(Ordering::SeqCst);
+        let last_node_in_window =
+            ((current_window + 1) * self.window_element_count()) - self.degree;
+        println!(
+            "{:?} is finished: {} - {} - {}",
+            std::thread::current().id(),
+            current_window,
+            last_node_in_window,
+            consumer
+        );
         consumer == last_node_in_window as u64
     }
 
