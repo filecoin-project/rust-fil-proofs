@@ -165,6 +165,10 @@ fn create_label_runner(
         if work >= num_nodes {
             break;
         }
+        // TODO vmx 2021-09-15: Check if this is correct. We already added the `stride` to
+        // `cur_awaiting`, so `cur_awaiting` might be biffer than `work + count`. No idea if this
+        // is a problem, or whether this calculation should happen before the
+        // `cur_awaiting.fetch_add()` call.
         let count = if work + stride > num_nodes {
             num_nodes - work
         } else {
@@ -249,7 +253,10 @@ fn create_label_runner(
         // Wait for the previous node to finish
         let prev = work - 1;
         loop {
+            // TODO vmx 2021-09-15: Think about whether `count` or `stride` should be added (given
+            // that `cur_awaiting` was advanced by `stride`.
             match cur_producer.compare_exchange_weak(prev, prev + count, SeqCst, SeqCst) {
+            //match cur_producer.compare_exchange_weak(prev, prev + stride, SeqCst, SeqCst) {
                 Ok(_) => break,
                 Err(cur) => {
                     println!(
