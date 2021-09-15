@@ -62,21 +62,23 @@ impl IncrementingCursor {
         compare_and_swap(&self.cur_safe, before, after);
     }
 
+    /// Increments or waits for the cursor to be incremented, iff the `target` is larger than the
+    /// current safe position.
     fn increment<F: Fn() -> bool, G: Fn()>(&self, target: usize, wait_fn: F, advance_fn: G) {
         // Check using `cur_safe`, to ensure we wait until the current cursor value is safe to use.
         // If we were to instead check `cur`, it could have been incremented but not yet safe.
         let cur = self.cur_safe.load(Ordering::SeqCst);
+        // We only need to increment if we actually
         if target > cur {
             // Only one producer will successfully increment `cur`. We need this second atomic because we cannot
             // increment `cur_safe` until after the underlying resource has been advanced.
             let instant_cur = compare_and_swap(&self.cur, cur, cur + 1);
             if instant_cur == cur {
+                // We (this thread) have been selected to increment.
+                while wait_fn() {
+                    spin_loop()
+                }
                 // We successfully incremented `self.cur`, so we are responsible for advancing the resource.
-                {
-                    while wait_fn() {
-                        spin_loop()
-                    }
-                };
                 advance_fn();
 
                 // Now it is safe to use the new window.
@@ -273,15 +275,16 @@ impl<T: FromByteSlice> CacheReader<T> {
             pos,
             self.size
         );
-        let window = pos / self.window_element_count();
-        if window == 1 {
+        // The window in which the `pos` is placed.
+        let target_window = pos / self.window_element_count();
+        if target_window == 1 {
             self.cursor.compare_and_swap(0, 1);
         }
 
         let pos = pos % self.window_element_count();
 
         let wait_fn = || {
-            let safe_consumer = (window - 1) * (self.window_element_count() / self.degree);
+            let safe_consumer = (target_window - 1) * (self.window_element_count() / self.degree);
             println!(
                 "vmx: {:?} self.consumer < safe_consumer: {} {}",
                 std::thread::current().id(),
@@ -290,13 +293,20 @@ impl<T: FromByteSlice> CacheReader<T> {
             );
             (self.consumer.load(Ordering::SeqCst) as usize) < safe_consumer
         };
-        // dbg!();
-        self.cursor
-            .increment(window, &wait_fn, &|| self.advance_rear_window(window));
-        // dbg!();
-        let targeted_buf = &self.get_bufs()[window % 2];
 
+        // Move or wait until the window cursor is in the target_window.
+        self.cursor.increment(target_window, &wait_fn, &|| {
+            self.advance_rear_window(target_window)
+        });
+
+        // Retrieve the actual window buffer.
+        let targeted_buf = &self.get_bufs()[target_window % 2];
         &targeted_buf.as_slice_of::<T>().expect("as_slice_of failed")[pos..]
+    }
+
+    /// In nodes.
+    pub fn get_available_limit(&self) -> usize {
+        ((self.cursor.cur.load(Ordering::SeqCst) + 1) * self.window_nodes()) - 1
     }
 
     fn advance_rear_window(&self, new_window: usize) {
