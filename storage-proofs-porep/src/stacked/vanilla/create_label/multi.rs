@@ -198,10 +198,11 @@ fn create_label_runner(
             // only advance until at most looakhead
             let is_in_lookahead = || cur_node <= parents_cache.get_consumer() + lookahead - 1;
 
-            while !(is_in_lookahead()
-                && (parents_cache.is_in_window(cur_node_cache_offset)
-                    || parents_cache.is_window_finished()))
-            {
+            let mut a = is_in_lookahead();
+            let mut b = parents_cache.is_in_window(cur_node_cache_offset);
+            let mut c = parents_cache.is_window_finished();
+
+            while !(a && (b || c)) {
                 println!(
                     "{:?} sleep {} - {} - {} - {} - {}",
                     std::thread::current().id(),
@@ -212,28 +213,16 @@ fn create_label_runner(
                     cur_node_cache_offset,
                 );
                 thread::sleep(Duration::from_micros(10));
+                a = is_in_lookahead();
+                b = parents_cache.is_in_window(cur_node_cache_offset);
+                c = parents_cache.is_window_finished();
             }
 
             let buf = unsafe { ring_buf.slot_mut(cur_slot as usize) };
             let bpm = unsafe { base_parent_missing.get_mut(cur_slot as usize) };
 
-            let pc = if parents_cache.is_in_window(cur_node_cache_offset) {
-                // read in current window
-                unsafe { parents_cache.consumer_slice_at(cur_node_cache_offset) }
-            } else if parents_cache.is_window_finished() {
-                // try to advance
-                unsafe { parents_cache.slice_at(cur_node_cache_offset) }
-            } else {
-                println!(
-                    "{:?} fail {} - {} - {} - {}",
-                    std::thread::current().id(),
-                    is_in_lookahead(),
-                    cur_node,
-                    cur_node_cache_offset,
-                    cur_slot,
-                );
-                unreachable!();
-            };
+            // try to advance
+            let pc = unsafe { parents_cache.slice_at(cur_node_cache_offset) };
 
             fill_buffer(
                 cur_node,
@@ -247,20 +236,14 @@ fn create_label_runner(
             );
         }
 
-        //dbg!(cur_producer.load(SeqCst));
         println!(
             "vmx: {:?} work > current_producer: {} {}",
             std::thread::current().id(),
             work,
             cur_producer.load(SeqCst) + 1
         );
-        // Wait for the previous node to finish
-        /*while work > (cur_producer.load(SeqCst) + 1) {
-            thread::sleep(Duration::from_micros(10));
-        }
 
-        // Mark our work as done
-        cur_producer.fetch_add(count, SeqCst);*/
+        // Wait for the previous node to finish
         let prev = work - 1;
         loop {
             match cur_producer.compare_exchange_weak(prev, prev + count, SeqCst, SeqCst) {
@@ -412,8 +395,10 @@ fn create_layer_labels(
         let mut count_not_ready = 0;
 
         // Calculate nodes 1 to n
-        parents_cache.store_consumer(1);
-        let mut i = 1;
+        const START_NODE: u64 = 1;
+        parents_cache.store_consumer(START_NODE);
+        let mut i = START_NODE;
+
         while i < num_nodes {
             // Ensure next buffer is ready
             let mut counted = false;
