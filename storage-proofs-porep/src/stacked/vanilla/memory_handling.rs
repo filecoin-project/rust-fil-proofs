@@ -304,9 +304,20 @@ impl<T: FromByteSlice> CacheReader<T> {
         &targeted_buf.as_slice_of::<T>().expect("as_slice_of failed")[pos..]
     }
 
-    /// In nodes.
-    pub fn get_available_limit(&self) -> usize {
-        ((self.cursor.cur.load(Ordering::SeqCst) + 1) * self.window_nodes()) - 1
+    pub fn is_in_window(&self, pos: usize) -> bool {
+        let target_window = pos / self.window_element_count();
+        let current_window = self.cursor.cur_safe.load(Ordering::SeqCst);
+
+        (target_window == current_window)
+            || (current_window > 0 && target_window == current_window - 1)
+    }
+
+    pub fn is_window_finished(&self) -> bool {
+        let consumer = self.consumer.load(Ordering::SeqCst) * self.degree as u64;
+        let current_window = self.cursor.cur_safe.load(Ordering::SeqCst);
+        let last_node_in_window = ((current_window + 1) * self.window_element_count()) - 1;
+
+        consumer == last_node_in_window as u64
     }
 
     fn advance_rear_window(&self, new_window: usize) {

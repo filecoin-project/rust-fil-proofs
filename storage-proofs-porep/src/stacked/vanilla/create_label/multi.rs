@@ -193,30 +193,31 @@ fn create_label_runner(
                 cur_node
             );
 
-            // Do not advance until the consumer has advanced "close enough", as defined by `lookahead`.
-            let max = parents_cache.get_consumer() + lookahead - 1;
-            let safe = parents_cache.get_available_limit() as u64;
-            while cur_node > max.min(safe) {
-                println!(
-                    "{:?} sleep {}-{}-{}",
-                    std::thread::current().id(),
-                    cur_node,
-                    max,
-                    safe
-                );
+            let cur_node_cache_offset = cur_node as usize * DEGREE as usize;
+
+            // only advance until at most looakhead
+            let is_in_lookahead = || cur_node <= parents_cache.get_consumer() + lookahead - 1;
+
+            while !(is_in_lookahead()
+                && (parents_cache.is_in_window(cur_node_cache_offset)
+                    || parents_cache.is_window_finished()))
+            {
                 thread::sleep(Duration::from_micros(10));
             }
 
-            println!("{:?} buf", std::thread::current().id());
             let buf = unsafe { ring_buf.slot_mut(cur_slot as usize) };
-
-            println!("{:?} bpm", std::thread::current().id());
             let bpm = unsafe { base_parent_missing.get_mut(cur_slot as usize) };
 
-            println!("{:?} pc", std::thread::current().id());
-            let pc = unsafe { parents_cache.slice_at(cur_node as usize * DEGREE as usize) };
+            let pc = if parents_cache.is_in_window(cur_node_cache_offset) {
+                // read in current window
+                unsafe { parents_cache.consumer_slice_at(cur_node_cache_offset) }
+            } else if parents_cache.is_window_finished() {
+                // try to advance
+                unsafe { parents_cache.slice_at(cur_node_cache_offset) }
+            } else {
+                unreachable!();
+            };
 
-            println!("{:?} before_fill_buffer", std::thread::current().id());
             fill_buffer(
                 cur_node,
                 parents_cache,
@@ -227,7 +228,6 @@ fn create_label_runner(
                 bpm,
                 api_version,
             );
-            println!("{:?} after_fill_buffer", std::thread::current().id());
         }
 
         //dbg!(cur_producer.load(SeqCst));
