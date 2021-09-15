@@ -202,7 +202,16 @@ fn create_label_runner(
             // only advance until at most looakhead
             let is_in_lookahead = || cur_node <= parents_cache.get_consumer() + lookahead - 1;
 
-            let is_last_in_window = || cur_producer.load(SeqCst) == work;
+            let is_last_in_window = || {
+                let result = cur_producer.load(SeqCst) + 1 == work;
+                println!("{:?} is_last_window {} - {} - {}",
+                    std::thread::current().id(),
+                    result,
+                    cur_producer.load(SeqCst) + 1,
+                    work,
+                );
+                result
+            };
             let mut a = is_in_lookahead();
             let mut b = parents_cache.is_in_window(cur_node_cache_offset);
             let mut c = parents_cache.is_window_finished();
