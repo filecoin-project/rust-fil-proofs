@@ -10,4 +10,5 @@ members = [
   "fr32",
   "sha2raw",
   "filecoin-hashers",
+  "storage-proofs-update",
 ]
