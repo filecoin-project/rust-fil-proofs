@@ -248,18 +248,18 @@ impl<T: FromByteSlice> CacheReader<T> {
     /// the window. NOTE: each time `consumer` is incremented, `self.degrees` elements of the cache are invalidated.
     /// This means callers should only access slice elements sequentially. They should only call `increment_consumer`
     /// once the next `self.degree` elements of the cache will never be accessed again.
-    pub unsafe fn consumer_slice_at(&self, pos: usize) -> &[T] {
+    pub unsafe fn consumer_slice_at(&self, pos_absolute: usize) -> &[T] {
         assert!(
-            pos < self.size,
+            pos_absolute < self.size,
             "pos {} out of range for buffer of size {}",
-            pos,
+            pos_absolute,
             self.size
         );
-        let window = pos / self.window_element_count();
-        let pos = pos % self.window_element_count();
+        let window = pos_absolute / self.window_element_count();
+        let pos_relative = pos_absolute % self.window_element_count();
         let targeted_buf = &self.get_bufs()[window % 2];
 
-        &targeted_buf.as_slice_of::<T>().expect("as_slice_of failed")[pos..]
+        &targeted_buf.as_slice_of::<T>().expect("as_slice_of failed")[pos_relative..]
     }
 
     /// `pos` is in units of `T`.
@@ -285,12 +285,12 @@ impl<T: FromByteSlice> CacheReader<T> {
 
         let wait_fn = || {
             let safe_consumer = (target_window - 1) * (self.window_element_count() / self.degree);
-            // println!(
-            //     "vmx: {:?} self.consumer < safe_consumer: {} {}",
-            //     std::thread::current().id(),
-            //     self.consumer.load(Ordering::SeqCst),
-            //     safe_consumer
-            // );
+            println!(
+                "vmx: {:?} self.consumer < safe_consumer: {} {}",
+                std::thread::current().id(),
+                self.consumer.load(Ordering::SeqCst),
+                safe_consumer
+            );
             (self.consumer.load(Ordering::SeqCst) as usize) < safe_consumer
         };
 
@@ -321,6 +321,25 @@ impl<T: FromByteSlice> CacheReader<T> {
         );
         (target_window == current_window)
             || (current_window > 0 && target_window == current_window - 1)
+    }
+
+    /// Returns true if the consumer has moved to the last window entry, which means no more
+    /// requests need to be more to the current window.
+    pub fn is_window_finished(&self) -> bool {
+        let consumer = self.consumer.load(Ordering::SeqCst) * self.degree as u64;
+        let current_window = self.cursor.cur.load(Ordering::SeqCst);
+        let last_node_in_window =
+            ((current_window + 1) * self.window_element_count()) - self.degree;
+        println!(
+            "{:?} is finished: {} - {} - {} - {} - {}",
+            std::thread::current().id(),
+            consumer == last_node_in_window as u64,
+            current_window,
+            last_node_in_window,
+            consumer,
+            self.window_element_count(),
+        );
+        consumer == last_node_in_window as u64
     }
 
     fn advance_rear_window(&self, new_window: usize) {

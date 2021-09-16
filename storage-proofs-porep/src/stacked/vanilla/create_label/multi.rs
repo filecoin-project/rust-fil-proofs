@@ -215,15 +215,17 @@ fn create_label_runner(
             };
             let mut a = is_in_lookahead();
             let mut b = parents_cache.is_in_window(cur_node_cache_offset);
-            let mut c = is_last_in_window();
+            let mut c = is_last_in_window(); // this means we are allowed to move the window
+            let mut d = parents_cache.is_window_finished();
 
             while !(a && (b || c)) {
                 println!(
-                    "{:?} sleep {} - {} - {} - {} - {}",
+                    "{:?} sleep - {} - {} - {} - {} - {} - {}",
                     std::thread::current().id(),
                     a,
                     b,
                     c,
+                    d,
                     cur_node,
                     cur_node_cache_offset,
                 );
@@ -231,6 +233,7 @@ fn create_label_runner(
                 a = is_in_lookahead();
                 b = parents_cache.is_in_window(cur_node_cache_offset);
                 c = is_last_in_window();
+                d = parents_cache.is_window_finished();
             }
 
             let buf = unsafe { ring_buf.slot_mut(cur_slot as usize) };
@@ -637,8 +640,6 @@ pub fn create_labels_for_encoding<Tree: 'static + MerkleTreeTrait, T: AsRef<[u8]
             parents_cache.start_reset()?;
         }
 
-        layer_labels.flush()?;
-        exp_labels.flush()?;
         mem::swap(&mut layer_labels, &mut exp_labels);
         {
             let layer_config = &layer_state.config;
@@ -749,8 +750,6 @@ pub fn create_labels_for_decoding<Tree: 'static + MerkleTreeTrait, T: AsRef<[u8]
                 layer, layer_config.id
             );
 
-            layer_labels.flush()?;
-            exp_labels.flush()?;
             mem::swap(&mut layer_labels, &mut exp_labels);
 
             // Track the layer specific store and StoreConfig for later retrieval.
@@ -884,24 +883,27 @@ mod tests {
             api_version,
         )
         .expect("stacked bucket graph new failed");
-        let mut cache = graph.parent_cache().expect("parent_cache failed");
+        let cache = graph.parent_cache().expect("parent_cache failed");
 
         let labels_enc = create_labels_for_encoding::<LCTree<PoseidonHasher, U8, U0, U2>, _>(
             &graph, &cache, layers, replica_id, config1,
         )
         .expect("create_labels_for_decoding failed");
 
+        let cache = graph.parent_cache().expect("parent_cache failed");
         let labels_dec = create_labels_for_decoding::<LCTree<PoseidonHasher, U8, U0, U2>, _>(
             &graph, &cache, layers, replica_id, config2,
         )
         .expect("create_labels_for_decoding failed");
 
+        let mut cache = graph.parent_cache().expect("parent_cache failed");
         let (labels_enc_ser, _states) = single::create_labels_for_encoding::<
             LCTree<PoseidonHasher, U8, U0, U2>,
             _,
         >(&graph, &mut cache, layers, replica_id, config3)
         .expect("create_labels_for_encoding failed");
 
+        let mut cache = graph.parent_cache().expect("parent_cache failed");
         let labels_dec_ser = single::create_labels_for_decoding::<
             LCTree<PoseidonHasher, U8, U0, U2>,
             _,
