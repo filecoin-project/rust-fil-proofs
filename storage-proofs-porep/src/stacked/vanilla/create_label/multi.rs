@@ -18,7 +18,6 @@ use generic_array::{
 use log::{debug, info};
 use mapr::MmapMut;
 use merkletree::store::{DiskStore, Store, StoreConfig};
-use storage_proofs_core::api_version::ApiVersion;
 use storage_proofs_core::{
     cache_key::CacheKey,
     drgraph::{Graph, BASE_DEGREE},
@@ -55,16 +54,14 @@ const SHA256_INITIAL_DIGEST: [u32; 8] = [
 ];
 
 #[inline]
-#[allow(clippy::too_many_arguments)]
 fn fill_buffer(
     cur_node: u64,
     parents_cache: &CacheReader<u32>,
-    cur_parent: &[u32], // parents for this node
+    mut cur_parent: &[u32], // parents for this node
     layer_labels: &UnsafeSlice<'_, u32>,
     exp_labels: Option<&UnsafeSlice<'_, u32>>, // None for layer0
     buf: &mut [u8],
     base_parent_missing: &mut BitMask,
-    api_version: ApiVersion,
 ) {
     let cur_node_swap = cur_node.to_be_bytes(); // Note switch to big endian
     buf[36..44].copy_from_slice(&cur_node_swap); // update buf with current node
@@ -77,46 +74,50 @@ fn fill_buffer(
     compress256!(cur_node_ptr, buf, 1);
 
     // Fill in the base parents
-    let (predecessor_index, other_drg_parents) = match api_version {
-        ApiVersion::V1_0_0 => (BASE_DEGREE - 1, (0..BASE_DEGREE - 1)),
-        ApiVersion::V1_1_0 => (0, (1..BASE_DEGREE)),
-    };
-
+    // Node 5 (prev node) will always be missing, and there tend to be
+    // frequent close references.
     if cur_node > MIN_BASE_PARENT_NODE {
-        // Mark base parent predecessor as missing
-        base_parent_missing.clear();
-        base_parent_missing.set(predecessor_index);
+        // Mark base parent 5 as missing
+        // base_parent_missing.set_all(0x20);
+        base_parent_missing.set(5);
 
         // Skip the last base parent - it always points to the preceding node,
         // which we know is not ready and will be filled in the main loop
-        for k in other_drg_parents {
+        for k in 0..BASE_DEGREE - 1 {
             unsafe {
-                if cur_parent[k] as u64 >= parents_cache.get_consumer() {
+                if cur_parent[0] as u64 >= parents_cache.get_consumer() {
                     // Node is not ready
                     base_parent_missing.set(k);
                 } else {
                     let parent_data = {
-                        let offset = cur_parent[k] as usize * NODE_WORDS;
+                        let offset = cur_parent[0] as usize * NODE_WORDS;
                         &layer_labels.as_slice()[offset..offset + NODE_WORDS]
                     };
                     let a = SHA_BLOCK_SIZE + (NODE_SIZE * k);
                     buf[a..a + NODE_SIZE].copy_from_slice(parent_data.as_byte_slice());
                 };
+
+                // Advance pointer for the last base parent
+                cur_parent = &cur_parent[1..];
             }
         }
+        // Advance pointer for the last base parent
+        cur_parent = &cur_parent[1..];
     } else {
         base_parent_missing.set_upto(BASE_DEGREE as u8);
+        cur_parent = &cur_parent[BASE_DEGREE..];
     }
 
     if let Some(exp_labels) = exp_labels {
         // Read from each of the expander parent nodes
-        for (k, parent) in cur_parent.iter().enumerate().take(DEGREE).skip(BASE_DEGREE) {
+        for k in BASE_DEGREE..DEGREE {
             let parent_data = unsafe {
-                let offset = *parent as usize * NODE_WORDS;
+                let offset = cur_parent[0] as usize * NODE_WORDS;
                 &exp_labels.as_slice()[offset..offset + NODE_WORDS]
             };
             let a = SHA_BLOCK_SIZE + (NODE_SIZE * k);
             buf[a..a + NODE_SIZE].copy_from_slice(parent_data.as_byte_slice());
+            cur_parent = &cur_parent[1..];
         }
     }
 }
@@ -148,7 +149,6 @@ fn create_label_runner(
     lookahead: u64,
     ring_buf: &RingBuf,
     base_parent_missing: &UnsafeSlice<'_, BitMask>,
-    api_version: ApiVersion,
 ) {
     info!("created label runner");
     // Label data bytes per node
@@ -187,7 +187,6 @@ fn create_label_runner(
                 exp_labels,
                 buf,
                 bpm,
-                api_version,
             );
         }
 
@@ -201,7 +200,6 @@ fn create_label_runner(
     }
 }
 
-#[allow(clippy::too_many_arguments)]
 fn create_layer_labels(
     parents_cache: &CacheReader<u32>,
     replica_id: &[u8],
@@ -210,7 +208,6 @@ fn create_layer_labels(
     num_nodes: u64,
     cur_layer: u32,
     core_group: Arc<Option<MutexGuard<'_, Vec<CoreIndex>>>>,
-    api_version: ApiVersion,
 ) {
     info!("Creating labels for layer {}", cur_layer);
     // num_producers is the number of producer threads
@@ -287,7 +284,6 @@ fn create_layer_labels(
                     lookahead as u64,
                     ring_buf,
                     base_parent_missing,
-                    api_version,
                 )
             }));
         }
@@ -348,7 +344,6 @@ fn create_layer_labels(
                 cur_node_ptr = &mut cur_node_ptr[8..];
                 // Grab the current slot of the ring_buf
                 let buf = unsafe { ring_buf.slot_mut(cur_slot) };
-
                 // Fill in the base parents
                 for k in 0..BASE_DEGREE {
                     let bpm = unsafe { base_parent_missing.get(cur_slot) };
@@ -504,7 +499,6 @@ pub fn create_labels_for_encoding<Tree: 'static + MerkleTreeTrait, T: AsRef<[u8]
             node_count,
             layer as u32,
             core_group.clone(),
-            graph.api_version(),
         );
 
         // Cache reset happens in two parts.
@@ -595,7 +589,6 @@ pub fn create_labels_for_decoding<Tree: 'static + MerkleTreeTrait, T: AsRef<[u8]
             node_count,
             layer as u32,
             core_group.clone(),
-            graph.api_version(),
         );
 
         // Cache reset happens in two parts.
