@@ -260,11 +260,6 @@ where
         // round 7 (37)
         hasher.finish_with(parents[0])
     }
-
-    /// Returns the current `ApiVersion`.
-    pub fn api_version(&self) -> ApiVersion {
-        self.api_version
-    }
 }
 
 impl<H, G> ParameterSetMetadata for StackedGraph<H, G>
