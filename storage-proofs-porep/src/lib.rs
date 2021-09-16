@@ -11,6 +11,7 @@ use storage_proofs_core::{error::Result, merkle::BinaryMerkleTree, proof::ProofS
 
 pub mod drg;
 pub mod stacked;
+pub mod stacked_cc;
 
 mod encode;
 

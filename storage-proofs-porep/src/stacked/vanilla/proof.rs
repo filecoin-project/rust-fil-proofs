@@ -397,7 +397,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         }
     }
 
-    fn build_binary_tree<K: Hasher>(
+    pub fn build_binary_tree<K: Hasher>(
         tree_data: &[u8],
         config: StoreConfig,
     ) -> Result<BinaryMerkleTree<K>> {
@@ -795,7 +795,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
     }
 
     #[cfg(any(feature = "gpu"))]
-    fn generate_tree_r_last<TreeArity>(
+    pub(crate) fn generate_tree_r_last<TreeArity>(
         data: &mut Data<'_>,
         nodes_count: usize,
         tree_count: usize,
