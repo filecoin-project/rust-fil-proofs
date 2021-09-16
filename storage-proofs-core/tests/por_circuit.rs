@@ -360,7 +360,7 @@ fn test_por_no_challenge_input() {
     let root = AllocatedNum::alloc(cs.namespace(|| "root".to_string()), || Ok(root.into()))
         .expect("failed to allocate root");
 
-    por_no_challenge_input::<Tree, _>(&mut cs, challenge, leaf, path_values, root)
+    por_no_challenge_input::<Tree, _>(cs.namespace(|| "por"), challenge, leaf, path_values, root)
         .expect("por gadget failed");
 
     assert!(cs.is_satisfied());

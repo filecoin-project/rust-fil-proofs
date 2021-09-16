@@ -1,16 +1,17 @@
 use std::collections::BTreeMap;
-use std::fs::{read_dir, remove_file};
+use std::fs::{metadata, read_dir, remove_file, OpenOptions};
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 use std::sync::Once;
 
-use anyhow::{ensure, Result};
+use anyhow::{ensure, Context, Result};
 use bellperson::groth16;
 use bincode::serialize;
 use blstrs::{Bls12, Scalar as Fr};
 use ff::Field;
 use filecoin_hashers::Hasher;
 use filecoin_proofs::{
+<<<<<<< HEAD
     add_piece, aggregate_seal_commit_proofs, clear_cache, compute_comm_d, fauxrep_aux,
     generate_fallback_sector_challenges, generate_piece_commitment, generate_single_vanilla_proof,
     generate_single_window_post_with_vanilla, generate_window_post,
@@ -27,6 +28,24 @@ use filecoin_proofs::{
     UnpaddedBytesAmount, POREP_PARTITIONS, SECTOR_SIZE_16_KIB, SECTOR_SIZE_2_KIB,
     SECTOR_SIZE_32_KIB, SECTOR_SIZE_4_KIB, WINDOW_POST_CHALLENGE_COUNT, WINDOW_POST_SECTOR_COUNT,
     WINNING_POST_CHALLENGE_COUNT, WINNING_POST_SECTOR_COUNT,
+=======
+    add_piece, aggregate_seal_commit_proofs, clear_cache, compare_elements, compute_comm_d,
+    decode_from, encode_into, fauxrep_aux, generate_fallback_sector_challenges,
+    generate_piece_commitment, generate_single_vanilla_proof, generate_window_post,
+    generate_window_post_with_vanilla, generate_winning_post,
+    generate_winning_post_sector_challenge, generate_winning_post_with_vanilla, get_seal_inputs,
+    remove_encoded_data, seal_commit_phase1, seal_commit_phase2, seal_pre_commit_phase1,
+    seal_pre_commit_phase2, unseal_range, validate_cache_for_commit,
+    validate_cache_for_precommit_phase2, verify_aggregate_seal_commit_proofs, verify_seal,
+    verify_window_post, verify_winning_post, Commitment, DefaultTreeDomain, MerkleTreeTrait,
+    PaddedBytesAmount, PieceInfo, PoRepConfig, PoRepProofPartitions, PoStConfig, PoStType,
+    PrivateReplicaInfo, ProverId, PublicReplicaInfo, SealCommitOutput, SealPreCommitOutput,
+    SealPreCommitPhase1Output, SectorShape16KiB, SectorShape2KiB, SectorShape32KiB,
+    SectorShape4KiB, SectorSize, UnpaddedByteIndex, UnpaddedBytesAmount, POREP_PARTITIONS,
+    SECTOR_SIZE_16_KIB, SECTOR_SIZE_2_KIB, SECTOR_SIZE_32_KIB, SECTOR_SIZE_4_KIB,
+    WINDOW_POST_CHALLENGE_COUNT, WINDOW_POST_SECTOR_COUNT, WINNING_POST_CHALLENGE_COUNT,
+    WINNING_POST_SECTOR_COUNT,
+>>>>>>> 5c046723 (feat: encode/decode/remove_data API with tests)
 };
 use rand::{random, Rng, SeedableRng};
 use rand_xorshift::XorShiftRng;
@@ -75,12 +94,28 @@ fn test_seal_lifecycle_2kib_porep_id_v1_1_base_8() -> Result<()> {
 
 #[test]
 #[ignore]
-fn test_seal_lifecycle_4kib_sub_8_2() -> Result<()> {
+fn test_seal_lifecycle_upgrade_2kib_porep_id_v1_1_base_8() -> Result<()> {
+    let porep_id_v1_1: u64 = 5; // This is a RegisteredSealProof value
+
+    let mut porep_id = [0u8; 32];
+    porep_id[..8].copy_from_slice(&porep_id_v1_1.to_le_bytes());
+    assert!(!is_legacy_porep_id(porep_id));
+    seal_lifecycle_upgrade::<SectorShape2KiB>(SECTOR_SIZE_2_KIB, &porep_id, ApiVersion::V1_1_0)
+}
+
+#[test]
+#[ignore]
+fn test_seal_lifecycle_4kib_sub_8_2_v1() -> Result<()> {
     seal_lifecycle::<SectorShape4KiB>(
         SECTOR_SIZE_4_KIB,
         &ARBITRARY_POREP_ID_V1_0_0,
         ApiVersion::V1_0_0,
-    )?;
+    )
+}
+
+#[test]
+#[ignore]
+fn test_seal_lifecycle_4kib_sub_8_2_v1_1() -> Result<()> {
     seal_lifecycle::<SectorShape4KiB>(
         SECTOR_SIZE_4_KIB,
         &ARBITRARY_POREP_ID_V1_1_0,
@@ -90,12 +125,27 @@ fn test_seal_lifecycle_4kib_sub_8_2() -> Result<()> {
 
 #[test]
 #[ignore]
-fn test_seal_lifecycle_16kib_sub_8_2() -> Result<()> {
+fn test_seal_lifecycle_upgrade_4kib_sub_8_2_v1_1() -> Result<()> {
+    seal_lifecycle_upgrade::<SectorShape4KiB>(
+        SECTOR_SIZE_4_KIB,
+        &ARBITRARY_POREP_ID_V1_1_0,
+        ApiVersion::V1_1_0,
+    )
+}
+
+#[test]
+#[ignore]
+fn test_seal_lifecycle_16kib_sub_8_2_v1() -> Result<()> {
     seal_lifecycle::<SectorShape16KiB>(
         SECTOR_SIZE_16_KIB,
         &ARBITRARY_POREP_ID_V1_0_0,
         ApiVersion::V1_0_0,
-    )?;
+    )
+}
+
+#[test]
+#[ignore]
+fn test_seal_lifecycle_16kib_sub_8_2_v1_1() -> Result<()> {
     seal_lifecycle::<SectorShape16KiB>(
         SECTOR_SIZE_16_KIB,
         &ARBITRARY_POREP_ID_V1_1_0,
@@ -105,13 +155,38 @@ fn test_seal_lifecycle_16kib_sub_8_2() -> Result<()> {
 
 #[test]
 #[ignore]
-fn test_seal_lifecycle_32kib_top_8_8_2() -> Result<()> {
+fn test_seal_lifecycle_upgrade_16kib_sub_8_2_v1_1() -> Result<()> {
+    seal_lifecycle_upgrade::<SectorShape16KiB>(
+        SECTOR_SIZE_16_KIB,
+        &ARBITRARY_POREP_ID_V1_1_0,
+        ApiVersion::V1_1_0,
+    )
+}
+
+#[test]
+#[ignore]
+fn test_seal_lifecycle_32kib_top_8_8_2_v1() -> Result<()> {
     seal_lifecycle::<SectorShape32KiB>(
         SECTOR_SIZE_32_KIB,
         &ARBITRARY_POREP_ID_V1_0_0,
         ApiVersion::V1_0_0,
-    )?;
+    )
+}
+
+#[test]
+#[ignore]
+fn test_seal_lifecycle_32kib_top_8_8_2_v1_1() -> Result<()> {
     seal_lifecycle::<SectorShape32KiB>(
+        SECTOR_SIZE_32_KIB,
+        &ARBITRARY_POREP_ID_V1_1_0,
+        ApiVersion::V1_1_0,
+    )
+}
+
+#[test]
+#[ignore]
+fn test_seal_lifecycle_upgrade_32kib_top_8_8_2_v1_1() -> Result<()> {
+    seal_lifecycle_upgrade::<SectorShape32KiB>(
         SECTOR_SIZE_32_KIB,
         &ARBITRARY_POREP_ID_V1_1_0,
         ApiVersion::V1_1_0,
@@ -196,7 +271,7 @@ fn seal_lifecycle<Tree: 'static + MerkleTreeTrait>(
     let mut prover_id = [0u8; 32];
     prover_id.copy_from_slice(AsRef::<[u8]>::as_ref(&prover_fr));
 
-    create_seal::<_, Tree>(
+    let (_, replica, _, _) = create_seal::<_, Tree>(
         &mut rng,
         sector_size,
         prover_id,
@@ -204,6 +279,30 @@ fn seal_lifecycle<Tree: 'static + MerkleTreeTrait>(
         porep_id,
         api_version,
     )?;
+    replica.close()?;
+
+    Ok(())
+}
+
+fn seal_lifecycle_upgrade<Tree: 'static + MerkleTreeTrait>(
+    sector_size: u64,
+    porep_id: &[u8; 32],
+    api_version: ApiVersion,
+) -> Result<()> {
+    let mut rng = &mut XorShiftRng::from_seed(TEST_SEED);
+    let prover_fr: DefaultTreeDomain = Fr::random(&mut rng).into();
+    let mut prover_id = [0u8; 32];
+    prover_id.copy_from_slice(AsRef::<[u8]>::as_ref(&prover_fr));
+
+    let (_, replica, _, _) = create_seal_for_upgrade::<_, Tree>(
+        &mut rng,
+        sector_size,
+        prover_id,
+        porep_id,
+        api_version,
+    )?;
+    replica.close()?;
+
     Ok(())
 }
 
@@ -666,7 +765,7 @@ fn test_winning_post_empty_sector_challenge() -> Result<()> {
     let sector_size = SECTOR_SIZE_2_KIB;
     let api_version = ApiVersion::V1_1_0;
 
-    let (_, _, _, _) = create_seal::<_, SectorShape2KiB>(
+    let (_, replica, _, _) = create_seal::<_, SectorShape2KiB>(
         &mut rng,
         sector_size,
         prover_id,
@@ -695,6 +794,8 @@ fn test_winning_post_empty_sector_challenge() -> Result<()> {
         prover_id
     )
     .is_err());
+
+    replica.close()?;
 
     Ok(())
 }
@@ -792,6 +893,8 @@ fn winning_post<Tree: 'static + MerkleTreeTrait>(
     let valid =
         verify_winning_post::<Tree>(&config, &randomness, &pub_replicas[..], prover_id, &proof)?;
     assert!(valid, "proof did not verify");
+
+    replica.close()?;
 
     Ok(())
 }
@@ -1672,6 +1775,167 @@ fn create_seal_for_aggregation<R: Rng, Tree: 'static + MerkleTreeTrait>(
         &pre_commit_output,
         &piece_infos,
     )
+}
+
+fn create_seal_for_upgrade<R: Rng, Tree: 'static + MerkleTreeTrait>(
+    rng: &mut R,
+    sector_size: u64,
+    prover_id: ProverId,
+    porep_id: &[u8; 32],
+    api_version: ApiVersion,
+) -> Result<(SectorId, NamedTempFile, Commitment, TempDir)> {
+    init_logger();
+
+    let (mut piece_file, _piece_bytes) = generate_piece_file(sector_size)?;
+    let sealed_sector_file = NamedTempFile::new()?;
+    let cache_dir = tempdir().expect("failed to create temp dir");
+
+    let config = porep_config(sector_size, *porep_id, api_version);
+    let ticket = rng.gen();
+    let sector_id = rng.gen::<u64>().into();
+
+    let (_piece_infos, phase1_output) = run_seal_pre_commit_phase1::<Tree>(
+        config,
+        prover_id,
+        sector_id,
+        ticket,
+        &cache_dir,
+        &mut piece_file,
+        &sealed_sector_file,
+    )?;
+
+    let pre_commit_output = seal_pre_commit_phase2(
+        config,
+        phase1_output,
+        cache_dir.path(),
+        sealed_sector_file.path(),
+    )?;
+    let comm_r = pre_commit_output.comm_r;
+
+    validate_cache_for_commit::<_, _, Tree>(cache_dir.path(), sealed_sector_file.path())?;
+
+    //println!("\nOriginal sealed data {:?}", sealed_sector_file);
+    //dump_elements(sealed_sector_file.path())?;
+
+    // Upgrade the cc sector here.
+    let new_sealed_sector_file = NamedTempFile::new()?;
+    let new_cache_dir = tempdir().expect("failed to create temp dir");
+
+    // create and generate some random data in staged_data_file.
+    let (mut new_piece_file, _new_piece_bytes) = generate_piece_file(sector_size)?;
+    let number_of_bytes_in_piece =
+        UnpaddedBytesAmount::from(PaddedBytesAmount(config.sector_size.into()));
+
+    let new_piece_info =
+        generate_piece_commitment(new_piece_file.as_file_mut(), number_of_bytes_in_piece)?;
+    new_piece_file.as_file_mut().seek(SeekFrom::Start(0))?;
+
+    let mut new_staged_sector_file = NamedTempFile::new()?;
+    add_piece(
+        &mut new_piece_file,
+        &mut new_staged_sector_file,
+        number_of_bytes_in_piece,
+        &[],
+    )?;
+    //println!("\nNew staged data {:?}", new_staged_sector_file);
+    //dump_elements(new_staged_sector_file.path())?;
+
+    let new_piece_infos = vec![new_piece_info];
+
+    // FIXME: New replica (new_sealed_sector_file) is currently 0
+    // bytes -- set a length here to ensure proper mmap later.  Lotus
+    // will already be passing in a destination path of the proper
+    // size in the future, so this is a test specific work-around.
+    let new_replica_target_len = metadata(&sealed_sector_file)?.len();
+    let f_sealed_sector = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .open(new_sealed_sector_file.path())
+        .with_context(|| format!("could not open path={:?}", new_sealed_sector_file.path()))?;
+    f_sealed_sector.set_len(new_replica_target_len)?;
+
+    let (new_comm_r, new_comm_d) = encode_into::<Tree>(
+        config,
+        new_sealed_sector_file.path(),
+        new_cache_dir.path(),
+        sealed_sector_file.path(),
+        cache_dir.path(),
+        new_staged_sector_file.path(),
+        &new_piece_infos,
+        comm_r,
+    )?;
+    //println!("\nEncoded new data {:?}", new_sealed_sector_file);
+    //dump_elements(new_sealed_sector_file.path())?;
+
+    let decoded_sector_file = NamedTempFile::new()?;
+    // FIXME: New replica (new_sealed_sector_file) is currently 0
+    // bytes -- set a length here to ensure proper mmap later.  Lotus
+    // will already be passing in a destination path of the proper
+    // size in the future, so this is a test specific work-around.
+    let decoded_sector_target_len = metadata(&sealed_sector_file)?.len();
+    let f_decoded_sector = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .open(decoded_sector_file.path())
+        .with_context(|| format!("could not open path={:?}", decoded_sector_file.path()))?;
+    f_decoded_sector.set_len(decoded_sector_target_len)?;
+
+    decode_from::<Tree>(
+        config,
+        decoded_sector_file.path(),
+        new_sealed_sector_file.path(),
+        sealed_sector_file.path(),
+        cache_dir.path(),
+        new_comm_d,
+        new_comm_r,
+        comm_r,
+    )?;
+    // When the data is decoded, it MUST match the original new staged data.
+    compare_elements(decoded_sector_file.path(), new_staged_sector_file.path())?;
+    //println!("\nDecoded data {:?}", decoded_sector_file);
+    //dump_elements(decoded_sector_file.path())?;
+
+    decoded_sector_file.close()?;
+
+    // Remove Data here
+    let remove_encoded_file = NamedTempFile::new()?;
+    let remove_encoded_cache_dir = tempdir().expect("failed to create temp dir");
+    // FIXME: New replica (new_sealed_sector_file) is currently 0
+    // bytes -- set a length here to ensure proper mmap later.  Lotus
+    // will already be passing in a destination path of the proper
+    // size in the future, so this is a test specific work-around.
+    let remove_encoded_target_len = metadata(&sealed_sector_file)?.len();
+    let f_remove_encoded = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .open(remove_encoded_file.path())
+        .with_context(|| format!("could not open path={:?}", remove_encoded_file.path()))?;
+    f_remove_encoded.set_len(remove_encoded_target_len)?;
+
+    remove_encoded_data::<Tree>(
+        config,
+        remove_encoded_file.path(),
+        remove_encoded_cache_dir.path(),
+        new_sealed_sector_file.path(),
+        new_cache_dir.path(),
+        new_staged_sector_file.path(),
+        new_comm_d,
+        new_comm_r,
+        comm_r,
+    )?;
+    // When the data is removed, it MUST match the original sealed data.
+    compare_elements(remove_encoded_file.path(), sealed_sector_file.path())?;
+    //println!("\nRemoved encoded data {:?}", remove_encoded_file);
+    //dump_elements(remove_encoded_file.path())?;
+
+    remove_encoded_file.close()?;
+
+    clear_cache::<Tree>(cache_dir.path())?;
+
+    Ok((sector_id, sealed_sector_file, comm_r, cache_dir))
 }
 
 fn create_fake_seal<R: rand::Rng, Tree: 'static + MerkleTreeTrait>(

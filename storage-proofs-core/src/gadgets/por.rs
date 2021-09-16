@@ -457,7 +457,7 @@ impl<'a, Tree: MerkleTreeTrait> PoRCircuit<Tree> {
 /// mulitple PoR challenges into a single public input when the challenge bit length is less than
 /// `Fr::Capacity`.
 pub fn por_no_challenge_input<Tree, CS>(
-    cs: &mut CS,
+    mut cs: CS,
     // Least significant bit first, most significant bit last.
     challenge_bits: Vec<AllocatedBit>,
     leaf: AllocatedNum<Fr>,
@@ -505,7 +505,13 @@ where
         )?;
     }
     let computed_root = cur;
-    constraint::equal(cs, || "merkle root equality", &computed_root, &root);
+
+    cs.enforce(
+        || "calculated root == provided root",
+        |lc| lc + computed_root.get_variable(),
+        |lc| lc + CS::one(),
+        |lc| lc + root.get_variable(),
+    );
 
     Ok(())
 }

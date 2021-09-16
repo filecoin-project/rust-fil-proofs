@@ -41,6 +41,7 @@ use crate::{
 mod fake_seal;
 mod post_util;
 mod seal;
+mod update;
 mod util;
 mod window_post;
 mod winning_post;
@@ -48,6 +49,7 @@ mod winning_post;
 pub use fake_seal::*;
 pub use post_util::*;
 pub use seal::*;
+pub use update::*;
 pub use util::*;
 pub use window_post::*;
 pub use winning_post::*;
@@ -505,13 +507,24 @@ fn verify_store(config: &StoreConfig, arity: usize, required_configs: usize) -> 
 
         let store_len = config.size.expect("disk store size not configured");
         for config in &configs {
+            let data_path = StoreConfig::data_path(&config.path, &config.id);
+            trace!(
+                "verify_store: {:?} has length {}",
+                &data_path,
+                std::fs::metadata(&data_path)?.len()
+            );
             ensure!(
                 DiskStore::<DefaultPieceDomain>::is_consistent(store_len, arity, config,)?,
                 "Store is inconsistent: {:?}",
-                StoreConfig::data_path(&config.path, &config.id)
+                &data_path
             );
         }
     } else {
+        trace!(
+            "verify_store: {:?} has length {}",
+            &store_path,
+            std::fs::metadata(&store_path)?.len()
+        );
         ensure!(
             DiskStore::<DefaultPieceDomain>::is_consistent(
                 config.size.expect("disk store size not configured"),
@@ -569,6 +582,12 @@ fn verify_level_cache_store<Tree: MerkleTreeTrait>(config: &StoreConfig) -> Resu
 
         let store_len = config.size.expect("disk store size not configured");
         for config in &configs {
+            let data_path = StoreConfig::data_path(&config.path, &config.id);
+            trace!(
+                "verify_store: {:?} has length {}",
+                &data_path,
+                std::fs::metadata(&data_path)?.len()
+            );
             ensure!(
                 LevelCacheStore::<DefaultPieceDomain, File>::is_consistent(
                     store_len,
@@ -576,10 +595,15 @@ fn verify_level_cache_store<Tree: MerkleTreeTrait>(config: &StoreConfig) -> Resu
                     config,
                 )?,
                 "Store is inconsistent: {:?}",
-                StoreConfig::data_path(&config.path, &config.id)
+                &data_path
             );
         }
     } else {
+        trace!(
+            "verify_store: {:?} has length {}",
+            &store_path,
+            std::fs::metadata(&store_path)?.len()
+        );
         ensure!(
             LevelCacheStore::<DefaultPieceDomain, File>::is_consistent(
                 config.size.expect("disk store size not configured"),
@@ -648,7 +672,7 @@ where
     R: AsRef<Path>,
     T: AsRef<Path>,
 {
-    info!("validate_cache_for_precommit:start");
+    info!("validate_cache_for_commit:start");
 
     // Verify that the replica exists and is not empty.
     ensure!(
@@ -704,7 +728,7 @@ where
     )?;
     verify_level_cache_store::<DefaultOctTree>(&t_aux.tree_r_last_config)?;
 
-    info!("validate_cache_for_precommit:finish");
+    info!("validate_cache_for_commit:finish");
 
     Ok(())
 }
