@@ -218,7 +218,7 @@ fn create_label_runner(
             let mut c = is_last_in_window(); // this means we are allowed to move the window
             let mut d = parents_cache.is_window_finished();
 
-            while !(a && (b || c)) {
+            while !(a && (b || c) && d) {
                 println!(
                     "{:?} sleep - {} - {} - {} - {} - {} - {}",
                     std::thread::current().id(),
