@@ -3,7 +3,7 @@ use std::fmt::{self, Debug, Formatter};
 use std::marker::PhantomData;
 
 use anyhow::{bail, ensure, Context};
-use bellperson::bls::Fr;
+use blstrs::Scalar as Fr;
 use byteorder::{ByteOrder, LittleEndian};
 use filecoin_hashers::{
     poseidon::{PoseidonDomain, PoseidonFunction},

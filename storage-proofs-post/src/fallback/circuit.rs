@@ -1,8 +1,5 @@
-use bellperson::{
-    bls::{Bls12, Fr},
-    gadgets::num::AllocatedNum,
-    Circuit, ConstraintSystem, SynthesisError,
-};
+use bellperson::{gadgets::num::AllocatedNum, Circuit, ConstraintSystem, SynthesisError};
+use blstrs::{Bls12, Scalar as Fr};
 use ff::Field;
 use filecoin_hashers::{HashFunction, Hasher};
 use rayon::prelude::{ParallelIterator, ParallelSlice};

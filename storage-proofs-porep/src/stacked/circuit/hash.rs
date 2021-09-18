@@ -1,4 +1,5 @@
-use bellperson::{bls::Bls12, gadgets::num::AllocatedNum, ConstraintSystem, SynthesisError};
+use bellperson::{gadgets::num::AllocatedNum, ConstraintSystem, SynthesisError};
+use blstrs::Bls12;
 use filecoin_hashers::{POSEIDON_CONSTANTS_11, POSEIDON_CONSTANTS_2};
 use generic_array::typenum::{U11, U2};
 use neptune::circuit::poseidon_hash;
@@ -22,7 +23,8 @@ where
 mod tests {
     use super::*;
 
-    use bellperson::{bls::Fr, util_cs::test_cs::TestConstraintSystem};
+    use bellperson::util_cs::test_cs::TestConstraintSystem;
+    use blstrs::Scalar as Fr;
     use ff::Field;
     use filecoin_hashers::{poseidon::PoseidonHasher, HashFunction, Hasher};
     use rand::SeedableRng;
@@ -33,13 +35,13 @@ mod tests {
 
     #[test]
     fn test_hash2_circuit() {
-        let rng = &mut XorShiftRng::from_seed(TEST_SEED);
+        let mut rng = XorShiftRng::from_seed(TEST_SEED);
 
         for _ in 0..10 {
             let mut cs = TestConstraintSystem::<Bls12>::new();
 
-            let a = Fr::random(rng);
-            let b = Fr::random(rng);
+            let a = Fr::random(&mut rng);
+            let b = Fr::random(&mut rng);
 
             let a_num = {
                 let mut cs = cs.namespace(|| "a");
@@ -74,12 +76,12 @@ mod tests {
 
     #[test]
     fn test_hash_single_column_circuit() {
-        let rng = &mut XorShiftRng::from_seed(TEST_SEED);
+        let mut rng = XorShiftRng::from_seed(TEST_SEED);
 
         for _ in 0..1 {
             let mut cs = TestConstraintSystem::<Bls12>::new();
 
-            let vals = vec![Fr::random(rng); 11];
+            let vals = vec![Fr::random(&mut rng); 11];
             let vals_opt = vals
                 .iter()
                 .enumerate()

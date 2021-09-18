@@ -1,6 +1,6 @@
 use std::fs::remove_file;
 
-use bellperson::bls::{Fr, FrRepr};
+use blstrs::Scalar as Fr;
 use ff::{Field, PrimeField};
 use filecoin_hashers::{
     blake2s::Blake2sHasher, poseidon::PoseidonHasher, sha256::Sha256Hasher, Domain, Hasher,
@@ -81,14 +81,14 @@ fn test_stacked_porep_extract_all_poseidon_top_8_8_2() {
 fn test_extract_all<Tree: 'static + MerkleTreeTrait>() {
     // pretty_env_logger::try_init();
 
-    let rng = &mut XorShiftRng::from_seed(TEST_SEED);
+    let mut rng = XorShiftRng::from_seed(TEST_SEED);
     let replica_id: <Tree::Hasher as Hasher>::Domain =
-        <Tree::Hasher as Hasher>::Domain::random(rng);
+        <Tree::Hasher as Hasher>::Domain::random(&mut rng);
     let nodes = 64 * get_base_tree_count::<Tree>();
 
     let data: Vec<u8> = (0..nodes)
         .flat_map(|_| {
-            let v = <Tree::Hasher as Hasher>::Domain::random(rng);
+            let v = <Tree::Hasher as Hasher>::Domain::random(&mut rng);
             v.into_bytes()
         })
         .collect();
@@ -185,13 +185,13 @@ fn test_stacked_porep_resume_seal() {
 
     type Tree = DiskTree<PoseidonHasher, U8, U8, U2>;
 
-    let rng = &mut XorShiftRng::from_seed(TEST_SEED);
-    let replica_id = <PoseidonHasher as Hasher>::Domain::random(rng);
+    let mut rng = XorShiftRng::from_seed(TEST_SEED);
+    let replica_id = <PoseidonHasher as Hasher>::Domain::random(&mut rng);
     let nodes = 64 * get_base_tree_count::<Tree>();
 
     let data: Vec<u8> = (0..nodes)
         .flat_map(|_| {
-            let v = <PoseidonHasher as Hasher>::Domain::random(rng);
+            let v = <PoseidonHasher as Hasher>::Domain::random(&mut rng);
             v.into_bytes()
         })
         .collect();
@@ -348,14 +348,14 @@ fn test_prove_verify<Tree: 'static + MerkleTreeTrait>(n: usize, challenges: Laye
     //     .ok();
 
     let nodes = n * get_base_tree_count::<Tree>();
-    let rng = &mut XorShiftRng::from_seed(TEST_SEED);
+    let mut rng = XorShiftRng::from_seed(TEST_SEED);
 
     let degree = BASE_DEGREE;
     let expansion_degree = EXP_DEGREE;
     let replica_id: <Tree::Hasher as Hasher>::Domain =
-        <Tree::Hasher as Hasher>::Domain::random(rng);
+        <Tree::Hasher as Hasher>::Domain::random(&mut rng);
     let data: Vec<u8> = (0..nodes)
-        .flat_map(|_| fr_into_bytes(&Fr::random(rng)))
+        .flat_map(|_| fr_into_bytes(&Fr::random(&mut rng)))
         .collect();
 
     // MT for original data is always named tree-d, and it will be
@@ -477,12 +477,12 @@ fn test_stacked_porep_generate_labels() {
         replica_id,
         legacy_porep_id,
         ApiVersion::V1_0_0,
-        Fr::from_repr(FrRepr([
+        Fr::from_u64s_le(&[
             0xd3faa96b9a0fba04,
             0xea81a283d106485e,
             0xe3d51b9afa5ac2b3,
             0x0462f4f4f1a68d37,
-        ]))
+        ])
         .unwrap(),
     );
 
@@ -492,12 +492,12 @@ fn test_stacked_porep_generate_labels() {
         replica_id,
         legacy_porep_id,
         ApiVersion::V1_0_0,
-        Fr::from_repr(FrRepr([
+        Fr::from_u64s_le(&[
             0x7e191e52c4a8da86,
             0x5ae8a1c9e6fac148,
             0xce239f3b88a894b8,
             0x234c00d1dc1d53be,
-        ]))
+        ])
         .unwrap(),
     );
 
@@ -507,12 +507,12 @@ fn test_stacked_porep_generate_labels() {
         replica_id,
         porep_id,
         ApiVersion::V1_1_0,
-        Fr::from_repr(FrRepr([
+        Fr::from_u64s_le(&[
             0xabb3f38bb70defcf,
             0x777a2e4d7769119f,
             0x3448959d495490bc,
             0x06021188c7a71cb5,
-        ]))
+        ])
         .unwrap(),
     );
 
@@ -522,12 +522,12 @@ fn test_stacked_porep_generate_labels() {
         replica_id,
         porep_id,
         ApiVersion::V1_1_0,
-        Fr::from_repr(FrRepr([
+        Fr::from_u64s_le(&[
             0x22ab81cf68c4676d,
             0x7a77a82fc7c9c189,
             0xc6c03d32c1e42d23,
             0x0f777c18cc2c55bd,
-        ]))
+        ])
         .unwrap(),
     );
 }
@@ -577,5 +577,5 @@ fn test_generate_labels_aux(
     let final_labels = labels.labels_for_last_layer().unwrap();
     let last_label = final_labels.read_at(nodes - 1).unwrap();
 
-    assert_eq!(expected_last_label.into_repr(), last_label.0);
+    assert_eq!(expected_last_label.to_repr(), last_label.0);
 }

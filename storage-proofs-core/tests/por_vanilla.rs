@@ -1,6 +1,6 @@
 use std::convert::Into;
 
-use bellperson::bls::Fr;
+use blstrs::Scalar as Fr;
 use ff::Field;
 use filecoin_hashers::{
     blake2s::Blake2sHasher, poseidon::PoseidonHasher, sha256::Sha256Hasher, Domain, Hasher,
@@ -52,7 +52,7 @@ fn test_por_blake2s_base_4() {
 }
 
 fn test_por<Tree: MerkleTreeTrait>() {
-    let rng = &mut XorShiftRng::from_seed(TEST_SEED);
+    let mut rng = XorShiftRng::from_seed(TEST_SEED);
 
     let leaves = 16;
     let pub_params = por::PublicParams {
@@ -61,7 +61,7 @@ fn test_por<Tree: MerkleTreeTrait>() {
     };
 
     let data: Vec<u8> = (0..leaves)
-        .flat_map(|_| fr_into_bytes(&Fr::random(rng)))
+        .flat_map(|_| fr_into_bytes(&Fr::random(&mut rng)))
         .collect();
     let porep_id = [3; 32];
     let graph =
@@ -120,7 +120,7 @@ fn test_por_validates_proof_poseidon_base_4() {
 }
 
 fn test_por_validates_proof<Tree: MerkleTreeTrait>() {
-    let rng = &mut XorShiftRng::from_seed(TEST_SEED);
+    let mut rng = XorShiftRng::from_seed(TEST_SEED);
 
     let leaves = 64;
     let pub_params = por::PublicParams {
@@ -129,7 +129,7 @@ fn test_por_validates_proof<Tree: MerkleTreeTrait>() {
     };
 
     let data: Vec<u8> = (0..leaves)
-        .flat_map(|_| fr_into_bytes(&Fr::random(rng)))
+        .flat_map(|_| fr_into_bytes(&Fr::random(&mut rng)))
         .collect();
 
     let porep_id = [99; 32];
@@ -162,7 +162,7 @@ fn test_por_validates_proof<Tree: MerkleTreeTrait>() {
     let bad_proof = {
         let mut proof = good_proof;
         let mut bad_leaf = Into::<Fr>::into(proof.data);
-        bad_leaf.add_assign(&Fr::one());
+        bad_leaf += Fr::one();
         proof.data = bad_leaf.into();
         proof
     };
@@ -204,7 +204,7 @@ fn test_por_validates_challenge_poseidon_base_4() {
 }
 
 fn test_por_validates_challenge<Tree: MerkleTreeTrait>() {
-    let rng = &mut XorShiftRng::from_seed(TEST_SEED);
+    let mut rng = XorShiftRng::from_seed(TEST_SEED);
 
     let leaves = 64;
 
@@ -214,7 +214,7 @@ fn test_por_validates_challenge<Tree: MerkleTreeTrait>() {
     };
 
     let data: Vec<u8> = (0..leaves)
-        .flat_map(|_| fr_into_bytes(&Fr::random(rng)))
+        .flat_map(|_| fr_into_bytes(&Fr::random(&mut rng)))
         .collect();
 
     let porep_id = [32; 32];

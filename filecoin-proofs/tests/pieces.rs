@@ -2,7 +2,7 @@ use std::io::{Cursor, Read};
 use std::iter::Iterator;
 
 use anyhow::Result;
-use bellperson::bls::Fr;
+use blstrs::Scalar as Fr;
 use filecoin_proofs::{
     add_piece, commitment_from_fr,
     pieces::{
@@ -325,10 +325,8 @@ fn test_verify_random_pieces() -> Result<()> {
                     let max_exp = (left_power_of_two as f64).log2() as u32;
 
                     let padded_exp = if max_exp > 7 {
-                        rng.gen_range(
-                            7, // 2**7 == 128,
-                            max_exp,
-                        )
+                        // 2**7 == 128
+                        rng.gen_range(7..max_exp)
                     } else {
                         7
                     };

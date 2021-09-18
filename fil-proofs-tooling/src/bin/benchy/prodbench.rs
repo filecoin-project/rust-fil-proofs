@@ -1,7 +1,8 @@
 use std::fs::remove_file;
 use std::str::FromStr;
 
-use bellperson::{bls::Bls12, util_cs::bench_cs::BenchCS, Circuit};
+use bellperson::{util_cs::bench_cs::BenchCS, Circuit};
+use blstrs::Bls12;
 use fil_proofs_tooling::{
     measure,
     shared::{create_replicas, PROVER_ID, RANDOMNESS, TICKET_BYTES},

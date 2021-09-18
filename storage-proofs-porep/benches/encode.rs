@@ -1,4 +1,4 @@
-use bellperson::bls::Fr;
+use blstrs::Scalar as Fr;
 use criterion::{black_box, criterion_group, criterion_main, Criterion, Throughput};
 use ff::Field;
 use filecoin_hashers::{sha256::Sha256Hasher, Domain, Hasher};

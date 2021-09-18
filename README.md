@@ -68,7 +68,7 @@ The `hwloc` dependency is optional and may be disabled.  Disabling it will not a
 To disable `multicore sdr` so that `hwloc` is not required, you can build proofs like this:
 
 ```
-> cargo build --release --all --no-default-features --features pairing,gpu
+> cargo build --release --all --no-default-features --features gpu
 ```
 
 Note that the `multicore-sdr` feature is omitted from the specified feature list, which removes it from being used by default.

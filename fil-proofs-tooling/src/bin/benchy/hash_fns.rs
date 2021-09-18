@@ -1,7 +1,7 @@
-use bellperson::bls::Bls12;
 use bellperson::gadgets::boolean::Boolean;
 use bellperson::util_cs::test_cs::TestConstraintSystem;
 use bellperson::ConstraintSystem;
+use blstrs::Bls12;
 use fil_proofs_tooling::metadata::Metadata;
 use rand::RngCore;
 use serde::Serialize;

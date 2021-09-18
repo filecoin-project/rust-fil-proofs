@@ -2,7 +2,7 @@ use std::collections::BTreeSet;
 use std::marker::PhantomData;
 
 use anyhow::ensure;
-use bellperson::bls::Fr;
+use blstrs::Scalar as Fr;
 use byteorder::{ByteOrder, LittleEndian};
 use filecoin_hashers::{Domain, HashFunction, Hasher};
 use generic_array::typenum::Unsigned;

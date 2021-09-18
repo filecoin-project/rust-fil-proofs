@@ -1,6 +1,6 @@
 use std::marker::PhantomData;
 
-use bellperson::bls::Fr;
+use blstrs::Scalar as Fr;
 use filecoin_hashers::Hasher;
 use serde::{Deserialize, Serialize};
 use storage_proofs_core::{

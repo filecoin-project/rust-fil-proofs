@@ -1,11 +1,8 @@
 use std::marker::PhantomData;
 
 use anyhow::ensure;
-use bellperson::{
-    bls::{Bls12, Fr},
-    gadgets::num::AllocatedNum,
-    Circuit, ConstraintSystem, SynthesisError,
-};
+use bellperson::{gadgets::num::AllocatedNum, Circuit, ConstraintSystem, SynthesisError};
+use blstrs::{Bls12, Scalar as Fr};
 use filecoin_hashers::{HashFunction, Hasher};
 use fr32::u64_into_fr;
 use storage_proofs_core::{

@@ -50,7 +50,7 @@ fn generate_proofs<R: Rng, Tree: MerkleTreeTrait>(
         let challenge = if proofs_count == nodes {
             i
         } else {
-            rng.gen_range(0, nodes)
+            rng.gen_range(0..nodes)
         };
         debug!("challenge[{}] = {}", i, challenge);
         let proof = tree

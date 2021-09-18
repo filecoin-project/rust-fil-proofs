@@ -1,8 +1,8 @@
 use std::marker::PhantomData;
 
 use anyhow::ensure;
-use bellperson::bls::{Bls12, Fr};
 use bellperson::{Circuit, ConstraintSystem, SynthesisError};
+use blstrs::{Bls12, Scalar as Fr};
 use generic_array::typenum::U2;
 use storage_proofs_core::{
     compound_proof::{CircuitComponent, CompoundProof},

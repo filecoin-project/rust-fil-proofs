@@ -3,9 +3,9 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 
 use anyhow::{ensure, Context, Result};
-use bellperson::bls::{Bls12, Fr};
 use bellperson::groth16;
 use bincode::{deserialize, serialize};
+use blstrs::{Bls12, Scalar as Fr};
 use filecoin_hashers::{Domain, Hasher};
 use log::{info, trace};
 use memmap::MmapOptions;

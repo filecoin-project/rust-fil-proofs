@@ -5,7 +5,7 @@ use std::marker::PhantomData;
 use std::slice::Iter;
 
 use anyhow::{ensure, Result};
-use bellperson::bls::Fr;
+use blstrs::Scalar as Fr;
 use filecoin_hashers::{Hasher, PoseidonArity};
 use generic_array::typenum::{Unsigned, U0};
 use merkletree::hash::Algorithm;

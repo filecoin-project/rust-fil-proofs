@@ -1,8 +1,8 @@
 use bellperson::{
-    bls::Fr,
     util_cs::{metric_cs::MetricCS, test_cs::TestConstraintSystem},
     Circuit,
 };
+use blstrs::Scalar as Fr;
 use ff::Field;
 use filecoin_hashers::{poseidon::PoseidonHasher, Hasher};
 use fr32::{bytes_into_fr, fr_into_bytes};
@@ -35,12 +35,12 @@ fn test_por_compound_poseidon_base_8() {
 }
 
 fn por_compound<Tree: 'static + MerkleTreeTrait>() {
-    let rng = &mut XorShiftRng::from_seed(TEST_SEED);
+    let mut rng = XorShiftRng::from_seed(TEST_SEED);
 
     let leaves = 64 * get_base_tree_count::<Tree>();
 
     let data: Vec<u8> = (0..leaves)
-        .flat_map(|_| fr_into_bytes(&Fr::random(rng)))
+        .flat_map(|_| fr_into_bytes(&Fr::random(&mut rng)))
         .collect();
     let tree = create_base_merkle_tree::<Tree>(None, leaves, data.as_slice())
         .expect("create_base_merkle_tree failure");
@@ -69,7 +69,7 @@ fn por_compound<Tree: 'static + MerkleTreeTrait>() {
         &tree,
     );
 
-    let gparams = PoRCompound::<Tree>::groth_params(Some(rng), &public_params.vanilla_params)
+    let gparams = PoRCompound::<Tree>::groth_params(Some(&mut rng), &public_params.vanilla_params)
         .expect("failed to generate groth params");
 
     let proof =
@@ -135,13 +135,13 @@ fn test_por_compound_poseidon_top_8_2_4_private_root() {
 }
 
 fn por_compound_private_root<Tree: 'static + MerkleTreeTrait>() {
-    let rng = &mut XorShiftRng::from_seed(TEST_SEED);
+    let mut rng = XorShiftRng::from_seed(TEST_SEED);
 
     // Ensure arity will evenly fill tree.
     let leaves = 64 * get_base_tree_count::<Tree>();
 
     // -- Basic Setup
-    let (data, tree) = generate_tree::<Tree, _>(rng, leaves, None);
+    let (data, tree) = generate_tree::<Tree, _>(&mut rng, leaves, None);
 
     for i in 0..3 {
         let public_inputs = por::PublicInputs {
@@ -215,9 +215,11 @@ fn por_compound_private_root<Tree: 'static + MerkleTreeTrait>() {
             }
         }
 
-        let blank_groth_params =
-            PoRCompound::<ResTree<Tree>>::groth_params(Some(rng), &public_params.vanilla_params)
-                .expect("failed to generate groth params");
+        let blank_groth_params = PoRCompound::<ResTree<Tree>>::groth_params(
+            Some(&mut rng),
+            &public_params.vanilla_params,
+        )
+        .expect("failed to generate groth params");
 
         let proof = PoRCompound::prove(
             &public_params,

@@ -1,8 +1,5 @@
-use bellperson::{
-    bls::{Bls12, Fr},
-    gadgets::num::AllocatedNum,
-    ConstraintSystem, SynthesisError,
-};
+use bellperson::{gadgets::num::AllocatedNum, ConstraintSystem, SynthesisError};
+use blstrs::{Bls12, Scalar as Fr};
 use filecoin_hashers::Hasher;
 use storage_proofs_core::merkle::MerkleTreeTrait;
 

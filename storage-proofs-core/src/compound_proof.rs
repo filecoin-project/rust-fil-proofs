@@ -1,6 +1,5 @@
 use anyhow::{ensure, Context};
 use bellperson::{
-    bls::{Bls12, Fr},
     groth16::{
         self,
         aggregate::{
@@ -11,6 +10,7 @@ use bellperson::{
     },
     Circuit,
 };
+use blstrs::{Bls12, Scalar as Fr};
 use log::info;
 use rand::{rngs::OsRng, RngCore};
 use rayon::prelude::{

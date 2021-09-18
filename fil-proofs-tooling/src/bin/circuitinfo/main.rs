@@ -1,6 +1,7 @@
 use std::str::FromStr;
 
-use bellperson::{bls::Bls12, util_cs::bench_cs::BenchCS, Circuit};
+use bellperson::{util_cs::bench_cs::BenchCS, Circuit};
+use blstrs::Bls12;
 use dialoguer::{theme::ColorfulTheme, MultiSelect};
 use filecoin_proofs::{
     parameters::{public_params, window_post_public_params, winning_post_public_params},

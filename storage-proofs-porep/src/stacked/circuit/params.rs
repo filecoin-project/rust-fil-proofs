@@ -1,10 +1,10 @@
 use std::marker::PhantomData;
 
 use bellperson::{
-    bls::{Bls12, Fr},
     gadgets::{boolean::Boolean, num::AllocatedNum, uint32::UInt32},
     ConstraintSystem, SynthesisError,
 };
+use blstrs::{Bls12, Scalar as Fr};
 use filecoin_hashers::{Hasher, PoseidonArity};
 use generic_array::typenum::{U0, U2};
 use storage_proofs_core::{

@@ -6,8 +6,9 @@ use std::sync::Mutex;
 use std::time::Instant;
 
 use anyhow::bail;
-use bellperson::{bls::Bls12, groth16, Circuit};
+use bellperson::{groth16, Circuit};
 use blake2b_simd::Params as Blake2bParams;
+use blstrs::Bls12;
 use fs2::FileExt;
 use itertools::Itertools;
 use lazy_static::lazy_static;

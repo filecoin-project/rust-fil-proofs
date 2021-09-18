@@ -1,5 +1,4 @@
 use bellperson::{
-    bls::Bls12,
     gadgets::{
         blake2s::blake2s as blake2s_circuit,
         boolean::{AllocatedBit, Boolean},
@@ -9,6 +8,7 @@ use bellperson::{
     Circuit, ConstraintSystem, SynthesisError,
 };
 use blake2s_simd::blake2s;
+use blstrs::Bls12;
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use rand::{thread_rng, Rng};
 
