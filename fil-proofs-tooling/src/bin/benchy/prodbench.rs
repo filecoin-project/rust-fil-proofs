@@ -11,9 +11,9 @@ use fil_proofs_tooling::{
 use filecoin_hashers::sha256::Sha256Hasher;
 use filecoin_proofs::{
     clear_cache, parameters::public_params, seal_commit_phase1, seal_commit_phase2,
-    validate_cache_for_commit, DefaultOctLCTree, DefaultOctTree, PaddedBytesAmount, PoRepConfig,
-    PoRepProofPartitions, SectorSize, DRG_DEGREE, EXP_DEGREE, LAYERS, POREP_MINIMUM_CHALLENGES,
-    POREP_PARTITIONS, HSelect, UpdateProofPartitions,
+    validate_cache_for_commit, DefaultOctLCTree, DefaultOctTree, HSelect, PaddedBytesAmount,
+    PoRepConfig, PoRepProofPartitions, SectorSize, UpdateProofPartitions, DRG_DEGREE, EXP_DEGREE,
+    LAYERS, POREP_MINIMUM_CHALLENGES, POREP_PARTITIONS,
 };
 use log::info;
 use rand::SeedableRng;
@@ -26,7 +26,7 @@ use storage_proofs_core::{
     proof::ProofScheme, util::NODE_SIZE,
 };
 use storage_proofs_porep::stacked::{LayerChallenges, SetupParams, StackedCompound, StackedDrg};
-use storage_proofs_update::constants::{partition_count, hs};
+use storage_proofs_update::constants::{hs, partition_count};
 
 const SEED: [u8; 16] = [
     0x59, 0x62, 0xbe, 0x5d, 0x76, 0x3d, 0x31, 0x8d, 0x17, 0xdb, 0x37, 0x32, 0x54, 0x06, 0xbc, 0xe5,

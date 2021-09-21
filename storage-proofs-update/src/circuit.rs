@@ -8,7 +8,7 @@ use bellperson::{
     Circuit, ConstraintSystem, SynthesisError,
 };
 use blstrs::{Bls12, Scalar as Fr};
-use filecoin_hashers::{Hasher, HashFunction};
+use filecoin_hashers::{HashFunction, Hasher};
 use generic_array::typenum::Unsigned;
 use storage_proofs_core::{
     gadgets::insertion::select,
@@ -21,8 +21,8 @@ use crate::{
         ALLOWED_SECTOR_SIZES,
     },
     gadgets::{
-        allocated_num_to_allocated_bits, get_challenge_high_bits, gen_challenge_bits, label_r_new,
-        apex_por, por_no_challenge_input,
+        allocated_num_to_allocated_bits, apex_por, gen_challenge_bits, get_challenge_high_bits,
+        label_r_new, por_no_challenge_input,
     },
 };
 
@@ -374,14 +374,15 @@ impl<TreeR: MerkleTreeTrait> Circuit<Bls12> for EmptySectorUpdateCircuit<TreeR> 
                 })
             })
             .collect::<Result<Vec<AllocatedNum<Bls12>>, SynthesisError>>()?;
-            
+
         let partition_path = partition_path
             .iter()
             .enumerate()
             .map(|(i, siblings)| {
-                AllocatedNum::alloc(cs.namespace(|| format!("partition_path_sibling_{}", i)), || {
-                    siblings[0].ok_or(SynthesisError::AssignmentMissing)
-                })
+                AllocatedNum::alloc(
+                    cs.namespace(|| format!("partition_path_sibling_{}", i)),
+                    || siblings[0].ok_or(SynthesisError::AssignmentMissing),
+                )
                 .map(|sibling| vec![sibling])
             })
             .collect::<Result<Vec<Vec<AllocatedNum<Bls12>>>, SynthesisError>>()?;
@@ -463,12 +464,20 @@ impl<TreeR: MerkleTreeTrait> Circuit<Bls12> for EmptySectorUpdateCircuit<TreeR> 
 
             let leaf_r_old = AllocatedNum::alloc(
                 cs.namespace(|| format!("leaf_r_old (c_index={})", c_index)),
-                || challenge_proof.leaf_r_old.ok_or(SynthesisError::AssignmentMissing),
+                || {
+                    challenge_proof
+                        .leaf_r_old
+                        .ok_or(SynthesisError::AssignmentMissing)
+                },
             )?;
 
             let leaf_d_new = AllocatedNum::alloc(
                 cs.namespace(|| format!("leaf_d_new (c_index={})", c_index)),
-                || challenge_proof.leaf_d_new.ok_or(SynthesisError::AssignmentMissing),
+                || {
+                    challenge_proof
+                        .leaf_d_new
+                        .ok_or(SynthesisError::AssignmentMissing)
+                },
             )?;
 
             let leaf_r_new = label_r_new(
@@ -546,7 +555,11 @@ impl<TreeR: MerkleTreeTrait> Circuit<Bls12> for EmptySectorUpdateCircuit<TreeR> 
             let apex_select_bits: Vec<Boolean> = {
                 let start = challenge_bit_len - partition_bit_len - apex_select_bit_len;
                 let stop = start + apex_select_bit_len;
-                c_bits[start..stop].iter().cloned().map(Into::into).collect()
+                c_bits[start..stop]
+                    .iter()
+                    .cloned()
+                    .map(Into::into)
+                    .collect()
             };
 
             let apex_leaf = select(
@@ -557,22 +570,22 @@ impl<TreeR: MerkleTreeTrait> Circuit<Bls12> for EmptySectorUpdateCircuit<TreeR> 
 
             let path_len_to_apex_leaf = challenge_bit_len - partition_bit_len - apex_select_bit_len;
 
-            let c_bits_to_apex_leaf: Vec<AllocatedBit> = c_bits
-                .into_iter()
-                .take(path_len_to_apex_leaf)
-                .collect();
+            let c_bits_to_apex_leaf: Vec<AllocatedBit> =
+                c_bits.into_iter().take(path_len_to_apex_leaf).collect();
 
-            let path_to_apex_leaf = challenge_proof.path_d_new
+            let path_to_apex_leaf = challenge_proof
+                .path_d_new
                 .iter()
                 .take(path_len_to_apex_leaf)
                 .enumerate()
                 .map(|(tree_row, siblings)| {
                     AllocatedNum::alloc(
-                        cs.namespace(|| format!(
-                            "path_to_apex_leaf sibling (c_index={}, tree_row={})",
-                            c_index,
-                            tree_row,
-                        )),
+                        cs.namespace(|| {
+                            format!(
+                                "path_to_apex_leaf sibling (c_index={}, tree_row={})",
+                                c_index, tree_row,
+                            )
+                        }),
                         || siblings[0].ok_or(SynthesisError::AssignmentMissing),
                     )
                     .map(|sibling| vec![sibling])

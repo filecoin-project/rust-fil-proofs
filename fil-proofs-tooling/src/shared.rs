@@ -3,9 +3,9 @@ use std::io::{BufWriter, Seek, SeekFrom, Write};
 
 use filecoin_proofs::{
     add_piece, seal_pre_commit_phase1, seal_pre_commit_phase2, validate_cache_for_precommit_phase2,
-    MerkleTreeTrait, PaddedBytesAmount, PieceInfo, PoRepConfig, PoRepProofPartitions,
+    HSelect, MerkleTreeTrait, PaddedBytesAmount, PieceInfo, PoRepConfig, PoRepProofPartitions,
     PrivateReplicaInfo, PublicReplicaInfo, SealPreCommitOutput, SectorSize, UnpaddedBytesAmount,
-    POREP_PARTITIONS, HSelect, UpdateProofPartitions,
+    UpdateProofPartitions, POREP_PARTITIONS,
 };
 use log::info;
 use rand::{random, thread_rng, RngCore};
@@ -13,7 +13,7 @@ use rayon::prelude::{
     IndexedParallelIterator, IntoParallelIterator, IntoParallelRefIterator, ParallelIterator,
 };
 use storage_proofs_core::{api_version::ApiVersion, sector::SectorId, util::NODE_SIZE};
-use storage_proofs_update::constants::{partition_count, hs};
+use storage_proofs_update::constants::{hs, partition_count};
 use tempfile::{tempdir, NamedTempFile};
 
 use crate::{measure, FuncMeasurement};
