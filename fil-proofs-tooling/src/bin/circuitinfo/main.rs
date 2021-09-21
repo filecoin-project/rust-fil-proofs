@@ -5,19 +5,20 @@ use blstrs::Scalar as Fr;
 use dialoguer::{theme::ColorfulTheme, MultiSelect};
 use filecoin_proofs::{
     parameters::{public_params, window_post_public_params, winning_post_public_params},
-    with_shape, DefaultPieceHasher, PaddedBytesAmount, PoRepConfig, PoRepProofPartitions,
-    PoStConfig, PoStType, SectorSize, POREP_PARTITIONS, PUBLISHED_SECTOR_SIZES,
-    WINDOW_POST_CHALLENGE_COUNT, WINDOW_POST_SECTOR_COUNT, WINNING_POST_CHALLENGE_COUNT,
-    WINNING_POST_SECTOR_COUNT, HSelect, UpdateProofPartitions,
+    with_shape, DefaultPieceHasher, HSelect, PaddedBytesAmount, PoRepConfig, PoRepProofPartitions,
+    PoStConfig, PoStType, SectorSize, UpdateProofPartitions, POREP_PARTITIONS,
+    PUBLISHED_SECTOR_SIZES, WINDOW_POST_CHALLENGE_COUNT, WINDOW_POST_SECTOR_COUNT,
+    WINNING_POST_CHALLENGE_COUNT, WINNING_POST_SECTOR_COUNT,
 };
 use humansize::{file_size_opts, FileSize};
 use log::{info, warn};
 use storage_proofs_core::{
-    api_version::ApiVersion, compound_proof::CompoundProof, merkle::MerkleTreeTrait, util::NODE_SIZE,
+    api_version::ApiVersion, compound_proof::CompoundProof, merkle::MerkleTreeTrait,
+    util::NODE_SIZE,
 };
 use storage_proofs_porep::stacked::{StackedCompound, StackedDrg};
 use storage_proofs_post::fallback::{FallbackPoSt, FallbackPoStCircuit, FallbackPoStCompound};
-use storage_proofs_update::constants::{partition_count, hs};
+use storage_proofs_update::constants::{hs, partition_count};
 use structopt::StructOpt;
 
 struct CircuitInfo {

@@ -16,7 +16,7 @@ use storage_proofs_update::{CCUpdateVanilla, PublicInputs, PublicParams};
 use crate::{
     constants::{DefaultPieceDomain, DefaultPieceHasher},
     pieces::verify_pieces,
-    types::{Commitment, PieceInfo, PoRepConfig, HSelect, UpdateProofPartitions},
+    types::{Commitment, HSelect, PieceInfo, PoRepConfig, UpdateProofPartitions},
 };
 
 // FIXME: This is a debug only method
@@ -219,7 +219,8 @@ pub fn generate_update_proof<Tree: 'static + MerkleTreeTrait>(
     comm_d_new: Commitment,
     replica_path: &Path,
     replica_cache_path: &Path,
-) -> Result<()> { // FIXME: Return UpdateProof type
+) -> Result<()> {
+    // FIXME: Return UpdateProof type
 
     /*
     // Convert TemporaryAux to TemporaryAuxCache, which instantiates all
@@ -244,7 +245,7 @@ pub fn generate_update_proof<Tree: 'static + MerkleTreeTrait>(
         h_select: u64::from(HSelect::from(porep_config)),
         _tree_r: PhantomData::default(),
     };
-/*
+    /*
     let private_inputs = stacked::PrivateInputs::<Tree, DefaultPieceHasher> {
         p_aux,
         t_aux: t_aux_cache,

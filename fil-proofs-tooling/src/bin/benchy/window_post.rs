@@ -13,9 +13,9 @@ use filecoin_proofs::constants::{
     POREP_PARTITIONS, WINDOW_POST_CHALLENGE_COUNT, WINDOW_POST_SECTOR_COUNT,
 };
 use filecoin_proofs::types::{
-    PaddedBytesAmount, PieceInfo, PoRepConfig, PoRepProofPartitions, PoStConfig,
+    HSelect, PaddedBytesAmount, PieceInfo, PoRepConfig, PoRepProofPartitions, PoStConfig,
     SealCommitPhase1Output, SealPreCommitOutput, SealPreCommitPhase1Output, SectorSize,
-    UnpaddedBytesAmount, HSelect, UpdateProofPartitions,
+    UnpaddedBytesAmount, UpdateProofPartitions,
 };
 use filecoin_proofs::{
     add_piece, generate_piece_commitment, generate_window_post, seal_commit_phase1,
@@ -26,12 +26,9 @@ use filecoin_proofs::{
 use log::info;
 use serde::{Deserialize, Serialize};
 use storage_proofs_core::{
-    api_version::ApiVersion,
-    merkle::MerkleTreeTrait,
-    sector::SectorId,
-    util::NODE_SIZE,
+    api_version::ApiVersion, merkle::MerkleTreeTrait, sector::SectorId, util::NODE_SIZE,
 };
-use storage_proofs_update::constants::{partition_count, hs};
+use storage_proofs_update::constants::{hs, partition_count};
 
 const SECTOR_ID: u64 = 0;
 
