@@ -11,6 +11,7 @@ use storage_proofs_post::fallback;
 use crate::constants::DefaultPieceHasher;
 
 mod bytes_amount;
+mod hselect;
 mod piece_info;
 mod porep_config;
 mod porep_proof_partitions;
@@ -20,8 +21,10 @@ mod private_replica_info;
 mod public_replica_info;
 mod sector_class;
 mod sector_size;
+mod update_proof_partitions;
 
 pub use bytes_amount::*;
+pub use hselect::*;
 pub use piece_info::*;
 pub use porep_config::*;
 pub use porep_proof_partitions::*;
@@ -31,6 +34,7 @@ pub use private_replica_info::*;
 pub use public_replica_info::*;
 pub use sector_class::*;
 pub use sector_size::*;
+pub use update_proof_partitions::*;
 
 pub type Commitment = [u8; 32];
 pub type ChallengeSeed = [u8; 32];
