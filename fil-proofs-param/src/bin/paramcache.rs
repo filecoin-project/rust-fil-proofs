@@ -9,7 +9,10 @@ use filecoin_proofs::{
         WINDOW_POST_SECTOR_COUNT, WINNING_POST_CHALLENGE_COUNT, WINNING_POST_SECTOR_COUNT,
     },
     parameters::{public_params, window_post_public_params, winning_post_public_params},
-    types::{PaddedBytesAmount, PoRepConfig, PoRepProofPartitions, PoStConfig, SectorSize, HSelect, UpdateProofPartitions},
+    types::{
+        HSelect, PaddedBytesAmount, PoRepConfig, PoRepProofPartitions, PoStConfig, SectorSize,
+        UpdateProofPartitions,
+    },
     with_shape, PoStType,
 };
 use humansize::{file_size_opts, FileSize};
@@ -22,7 +25,7 @@ use storage_proofs_core::{
 };
 use storage_proofs_porep::stacked::{StackedCircuit, StackedCompound, StackedDrg};
 use storage_proofs_post::fallback::{FallbackPoSt, FallbackPoStCircuit, FallbackPoStCompound};
-use storage_proofs_update::constants::{partition_count, hs};
+use storage_proofs_update::constants::{hs, partition_count};
 use structopt::StructOpt;
 
 fn cache_porep_params<Tree: 'static + MerkleTreeTrait>(porep_config: PoRepConfig) {

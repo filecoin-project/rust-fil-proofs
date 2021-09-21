@@ -14,7 +14,10 @@ use storage_proofs_porep::stacked::{StackedCircuit, StackedCompound};
 use crate::{
     constants::DefaultPieceHasher,
     parameters::public_params,
-    types::{HSelect, PaddedBytesAmount, PoRepProofPartitions, SectorSize, UnpaddedBytesAmount, UpdateProofPartitions},
+    types::{
+        HSelect, PaddedBytesAmount, PoRepProofPartitions, SectorSize, UnpaddedBytesAmount,
+        UpdateProofPartitions,
+    },
 };
 
 #[derive(Clone, Copy, Debug)]
@@ -50,7 +53,9 @@ impl From<PoRepConfig> for PoRepProofPartitions {
 
 impl From<PoRepConfig> for UpdateProofPartitions {
     fn from(x: PoRepConfig) -> Self {
-        let PoRepConfig { update_partitions, .. } = x;
+        let PoRepConfig {
+            update_partitions, ..
+        } = x;
         update_partitions
     }
 }
