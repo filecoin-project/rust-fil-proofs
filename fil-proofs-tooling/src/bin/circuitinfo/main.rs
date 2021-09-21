@@ -8,15 +8,16 @@ use filecoin_proofs::{
     with_shape, DefaultPieceHasher, PaddedBytesAmount, PoRepConfig, PoRepProofPartitions,
     PoStConfig, PoStType, SectorSize, POREP_PARTITIONS, PUBLISHED_SECTOR_SIZES,
     WINDOW_POST_CHALLENGE_COUNT, WINDOW_POST_SECTOR_COUNT, WINNING_POST_CHALLENGE_COUNT,
-    WINNING_POST_SECTOR_COUNT,
+    WINNING_POST_SECTOR_COUNT, HSelect, UpdateProofPartitions,
 };
 use humansize::{file_size_opts, FileSize};
 use log::{info, warn};
 use storage_proofs_core::{
-    api_version::ApiVersion, compound_proof::CompoundProof, merkle::MerkleTreeTrait,
+    api_version::ApiVersion, compound_proof::CompoundProof, merkle::MerkleTreeTrait, util::NODE_SIZE,
 };
 use storage_proofs_porep::stacked::{StackedCompound, StackedDrg};
 use storage_proofs_post::fallback::{FallbackPoSt, FallbackPoStCircuit, FallbackPoStCompound};
+use storage_proofs_update::constants::{partition_count, hs};
 use structopt::StructOpt;
 
 struct CircuitInfo {
@@ -140,12 +141,15 @@ fn porep_info(sector_size: u64, api_version: ApiVersion) -> (CircuitInfo, usize)
             .get(&sector_size)
             .expect("unknown sector size"),
     );
+    let nodes_count = sector_size as usize / NODE_SIZE;
     let info = with_shape!(
         sector_size,
         get_porep_info,
         PoRepConfig {
             sector_size: SectorSize(sector_size),
             partitions,
+            update_partitions: UpdateProofPartitions::from(partition_count(nodes_count)),
+            h_select: HSelect::from(hs(nodes_count)[0]), // FIXME: which hselect?
             porep_id: [0; 32],
             api_version,
         }
