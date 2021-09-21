@@ -13,7 +13,7 @@ use filecoin_proofs::{
     clear_cache, parameters::public_params, seal_commit_phase1, seal_commit_phase2,
     validate_cache_for_commit, DefaultOctLCTree, DefaultOctTree, PaddedBytesAmount, PoRepConfig,
     PoRepProofPartitions, SectorSize, DRG_DEGREE, EXP_DEGREE, LAYERS, POREP_MINIMUM_CHALLENGES,
-    POREP_PARTITIONS,
+    POREP_PARTITIONS, HSelect, UpdateProofPartitions,
 };
 use log::info;
 use rand::SeedableRng;
@@ -23,9 +23,10 @@ use serde::{Deserialize, Serialize};
 use storage_proofs_core::measurements::{Operation, OP_MEASUREMENTS};
 use storage_proofs_core::{
     api_version::ApiVersion, compound_proof::CompoundProof, parameter_cache::CacheableParameters,
-    proof::ProofScheme,
+    proof::ProofScheme, util::NODE_SIZE,
 };
 use storage_proofs_porep::stacked::{LayerChallenges, SetupParams, StackedCompound, StackedDrg};
+use storage_proofs_update::constants::{partition_count, hs};
 
 const SEED: [u8; 16] = [
     0x59, 0x62, 0xbe, 0x5d, 0x76, 0x3d, 0x31, 0x8d, 0x17, 0xdb, 0x37, 0x32, 0x54, 0x06, 0xbc, 0xe5,
@@ -313,9 +314,12 @@ fn generate_params(i: &ProdbenchInputs) {
     );
     let dummy_porep_id = [0; 32];
 
+    let nodes_count = i.sector_size_bytes() as usize / NODE_SIZE;
     cache_porep_params(PoRepConfig {
         sector_size,
         partitions,
+        update_partitions: UpdateProofPartitions::from(partition_count(nodes_count)),
+        h_select: HSelect::from(hs(nodes_count)[0]),
         porep_id: dummy_porep_id,
         api_version: i.api_version(),
     });

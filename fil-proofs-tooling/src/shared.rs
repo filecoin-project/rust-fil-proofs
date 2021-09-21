@@ -5,14 +5,15 @@ use filecoin_proofs::{
     add_piece, seal_pre_commit_phase1, seal_pre_commit_phase2, validate_cache_for_precommit_phase2,
     MerkleTreeTrait, PaddedBytesAmount, PieceInfo, PoRepConfig, PoRepProofPartitions,
     PrivateReplicaInfo, PublicReplicaInfo, SealPreCommitOutput, SectorSize, UnpaddedBytesAmount,
-    POREP_PARTITIONS,
+    POREP_PARTITIONS, HSelect, UpdateProofPartitions,
 };
 use log::info;
 use rand::{random, thread_rng, RngCore};
 use rayon::prelude::{
     IndexedParallelIterator, IntoParallelIterator, IntoParallelRefIterator, ParallelIterator,
 };
-use storage_proofs_core::{api_version::ApiVersion, sector::SectorId};
+use storage_proofs_core::{api_version::ApiVersion, sector::SectorId, util::NODE_SIZE};
+use storage_proofs_update::constants::{partition_count, hs};
 use tempfile::{tempdir, NamedTempFile};
 
 use crate::{measure, FuncMeasurement};
@@ -98,6 +99,7 @@ pub fn create_replicas<Tree: 'static + MerkleTreeTrait>(
     let sector_size_unpadded_bytes_ammount =
         UnpaddedBytesAmount::from(PaddedBytesAmount::from(sector_size));
 
+    let nodes_count = u64::from(sector_size) as usize / NODE_SIZE;
     let porep_config = PoRepConfig {
         sector_size,
         partitions: PoRepProofPartitions(
@@ -107,6 +109,8 @@ pub fn create_replicas<Tree: 'static + MerkleTreeTrait>(
                 .get(&u64::from(sector_size))
                 .expect("unknown sector size"),
         ),
+        update_partitions: UpdateProofPartitions::from(partition_count(nodes_count)),
+        h_select: HSelect::from(hs(nodes_count)[0]),
         porep_id,
         api_version,
     };
