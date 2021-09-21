@@ -9,7 +9,7 @@ use filecoin_proofs::{
         WINDOW_POST_SECTOR_COUNT, WINNING_POST_CHALLENGE_COUNT, WINNING_POST_SECTOR_COUNT,
     },
     parameters::{public_params, window_post_public_params, winning_post_public_params},
-    types::{PaddedBytesAmount, PoRepConfig, PoRepProofPartitions, PoStConfig, SectorSize},
+    types::{PaddedBytesAmount, PoRepConfig, PoRepProofPartitions, PoStConfig, SectorSize, HSelect, UpdateProofPartitions},
     with_shape, PoStType,
 };
 use humansize::{file_size_opts, FileSize};
@@ -18,10 +18,11 @@ use log::{error, info, warn};
 use rand::rngs::OsRng;
 use storage_proofs_core::{
     api_version::ApiVersion, compound_proof::CompoundProof, merkle::MerkleTreeTrait,
-    parameter_cache::CacheableParameters,
+    parameter_cache::CacheableParameters, util::NODE_SIZE,
 };
 use storage_proofs_porep::stacked::{StackedCircuit, StackedCompound, StackedDrg};
 use storage_proofs_post::fallback::{FallbackPoSt, FallbackPoStCircuit, FallbackPoStCompound};
+use storage_proofs_update::constants::{partition_count, hs};
 use structopt::StructOpt;
 
 fn cache_porep_params<Tree: 'static + MerkleTreeTrait>(porep_config: PoRepConfig) {
@@ -170,6 +171,7 @@ fn generate_params_post(sector_size: u64, api_version: ApiVersion) {
 }
 
 fn generate_params_porep(sector_size: u64, api_version: ApiVersion) {
+    let nodes_count = sector_size as usize / NODE_SIZE;
     with_shape!(
         sector_size,
         cache_porep_params,
@@ -182,6 +184,8 @@ fn generate_params_porep(sector_size: u64, api_version: ApiVersion) {
                     .get(&sector_size)
                     .expect("unknown sector size"),
             ),
+            update_partitions: UpdateProofPartitions::from(partition_count(nodes_count)),
+            h_select: HSelect::from(hs(nodes_count)[0]),
             porep_id: [0; 32],
             api_version,
         }

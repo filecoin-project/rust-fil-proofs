@@ -14,15 +14,17 @@ use storage_proofs_porep::stacked::{StackedCircuit, StackedCompound};
 use crate::{
     constants::DefaultPieceHasher,
     parameters::public_params,
-    types::{PaddedBytesAmount, PoRepProofPartitions, SectorSize, UnpaddedBytesAmount},
+    types::{HSelect, PaddedBytesAmount, PoRepProofPartitions, SectorSize, UnpaddedBytesAmount, UpdateProofPartitions},
 };
 
 #[derive(Clone, Copy, Debug)]
 pub struct PoRepConfig {
     pub sector_size: SectorSize,
     pub partitions: PoRepProofPartitions,
+    pub update_partitions: UpdateProofPartitions,
     pub porep_id: [u8; 32],
     pub api_version: ApiVersion,
+    pub h_select: HSelect,
 }
 
 impl From<PoRepConfig> for PaddedBytesAmount {
@@ -46,6 +48,20 @@ impl From<PoRepConfig> for PoRepProofPartitions {
     }
 }
 
+impl From<PoRepConfig> for UpdateProofPartitions {
+    fn from(x: PoRepConfig) -> Self {
+        let PoRepConfig { update_partitions, .. } = x;
+        update_partitions
+    }
+}
+
+impl From<PoRepConfig> for HSelect {
+    fn from(x: PoRepConfig) -> Self {
+        let PoRepConfig { h_select, .. } = x;
+        h_select
+    }
+}
+
 impl From<PoRepConfig> for SectorSize {
     fn from(cfg: PoRepConfig) -> Self {
         let PoRepConfig { sector_size, .. } = cfg;
@@ -54,7 +70,8 @@ impl From<PoRepConfig> for SectorSize {
 }
 
 impl PoRepConfig {
-    /// Returns the cache identifier as used by `storage-proofs::paramater_cache`.
+    /// Returns the cache identifier as used by `storage-proofs::parameter_cache`.
+    /// FIXME: add breaking change and add hselect/update_partitions?
     pub fn get_cache_identifier<Tree: 'static + MerkleTreeTrait>(&self) -> Result<String> {
         let params = public_params::<Tree>(
             self.sector_size.into(),
