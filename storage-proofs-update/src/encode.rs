@@ -1,5 +1,5 @@
 use blstrs::Scalar as Fr;
-use filecoin_hashers::{Hasher, HashFunction};
+use filecoin_hashers::{HashFunction, Hasher};
 use storage_proofs_core::merkle::MerkleTreeTrait;
 
 use crate::constants::TreeD;

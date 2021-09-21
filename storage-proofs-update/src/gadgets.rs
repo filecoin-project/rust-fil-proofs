@@ -8,7 +8,7 @@ use bellperson::{
 };
 use blstrs::{Bls12, Scalar as Fr};
 use ff::{Field, PrimeField};
-use filecoin_hashers::{Hasher, HashFunction};
+use filecoin_hashers::{HashFunction, Hasher};
 use generic_array::typenum::Unsigned;
 use storage_proofs_core::{gadgets::insertion::insert, merkle::MerkleTreeTrait};
 
@@ -74,7 +74,11 @@ where
     // Hash base-tree Merkle proof elements.
     for _ in 0..base_path_len {
         let siblings = path_values.next().expect("no path elements remaining");
-        assert_eq!(siblings.len(), base_arity - 1, "path element has incorrect number of siblings");
+        assert_eq!(
+            siblings.len(),
+            base_arity - 1,
+            "path element has incorrect number of siblings"
+        );
         let insert_index: Vec<Boolean> = (0..base_arity_bit_len)
             .map(|_| c_bits.next().expect("no challenge bits remaining"))
             .collect();
@@ -97,7 +101,11 @@ where
     // If one exists, hash the sub-tree Merkle proof element.
     if sub_arity > 0 {
         let siblings = path_values.next().expect("no path elements remaining");
-        assert_eq!(siblings.len(), sub_arity - 1, "path element has incorrect number of siblings");
+        assert_eq!(
+            siblings.len(),
+            sub_arity - 1,
+            "path element has incorrect number of siblings"
+        );
         let insert_index: Vec<Boolean> = (0..sub_arity_bit_len)
             .map(|_| c_bits.next().expect("no challenge bits remaining"))
             .collect();
@@ -120,7 +128,11 @@ where
     // If one exists, hash the top-tree Merkle proof element.
     if top_arity > 0 {
         let siblings = path_values.next().expect("no path elements remaining");
-        assert_eq!(siblings.len(), top_arity - 1, "path element has incorrect number of siblings");
+        assert_eq!(
+            siblings.len(),
+            top_arity - 1,
+            "path element has incorrect number of siblings"
+        );
         let insert_index: Vec<Boolean> = (0..top_arity_bit_len)
             .map(|_| c_bits.next().expect("no challenge bits remaining"))
             .collect();
@@ -140,7 +152,10 @@ where
     }
 
     // Check that no additional challenge bits were provided.
-    assert!(c_bits.next().is_none(), "challenge bit-length and tree arity do not agree");
+    assert!(
+        c_bits.next().is_none(),
+        "challenge bit-length and tree arity do not agree"
+    );
 
     // Assert equality between the computed root and the provided root.
     let computed_root = cur;
@@ -173,11 +188,12 @@ pub fn apex_por<CS: ConstraintSystem<Bls12>>(
             .enumerate()
             .map(|(i, siblings)| {
                 <TreeDHasher as Hasher>::Function::hash2_circuit(
-                    cs.namespace(|| format!(
-                        "apex_tree generation hash (tree_row={}, siblings={})",
-                        row_index,
-                        i,
-                    )),
+                    cs.namespace(|| {
+                        format!(
+                            "apex_tree generation hash (tree_row={}, siblings={})",
+                            row_index, i,
+                        )
+                    }),
                     &siblings[0],
                     &siblings[1],
                 )
@@ -217,21 +233,22 @@ pub fn gen_challenge_bits<H: Hasher, CS: ConstraintSystem<Bls12>>(
     for j in 0..digests_per_partition {
         // The index of the current digest across all partition proofs:
         // `digest_index = k * digests_per_partition + j`.
-        let digest_index = AllocatedNum::alloc(
-            cs.namespace(|| format!("digest_index_{}", j)),
-            || {
-                let k = partition.get_value().ok_or(SynthesisError::AssignmentMissing)?;
+        let digest_index =
+            AllocatedNum::alloc(cs.namespace(|| format!("digest_index_{}", j)), || {
+                let k = partition
+                    .get_value()
+                    .ok_or(SynthesisError::AssignmentMissing)?;
                 let digest_index = k * Fr::from(digests_per_partition) + Fr::from(j);
                 Ok(digest_index)
-            },
-        )?;
+            })?;
 
         // `digests_per_partition` and `j` are (unallocated) constants.
         cs.enforce(
             || format!("digest_index_{} == k * digests_per_partition + {}", j, j),
-            |lc| lc
-                + (Fr::from(digests_per_partition), partition.get_variable())
-                + (Fr::from(j), CS::one()),
+            |lc| {
+                lc + (Fr::from(digests_per_partition), partition.get_variable())
+                    + (Fr::from(j), CS::one())
+            },
             |lc| lc + CS::one(),
             |lc| lc + digest_index.get_variable(),
         );
@@ -291,11 +308,7 @@ pub fn get_challenge_high_bits<CS: ConstraintSystem<Bls12>>(
 
     let c_bit_len = c_bits.len();
 
-    let c_bits_boolean: Vec<Boolean> = c_bits
-        .iter()
-        .cloned()
-        .map(Into::into)
-        .collect();
+    let c_bits_boolean: Vec<Boolean> = c_bits.iter().cloned().map(Into::into).collect();
 
     // Get each challenges's `h` high bits then scale each by the corresponding bit of `h_select`.
     let c_high_and_zeros = hs
@@ -309,16 +322,17 @@ pub fn get_challenge_high_bits<CS: ConstraintSystem<Bls12>>(
             )?;
 
             // Multiply: `c_high * h_select_bit`.
-            let c_high_or_zero = AllocatedNum::alloc(
-                cs.namespace(|| format!("c_high_or_zero (h={})", h)),
-                || {
-                    if h_select_bit.get_value().ok_or(SynthesisError::AssignmentMissing)? {
+            let c_high_or_zero =
+                AllocatedNum::alloc(cs.namespace(|| format!("c_high_or_zero (h={})", h)), || {
+                    if h_select_bit
+                        .get_value()
+                        .ok_or(SynthesisError::AssignmentMissing)?
+                    {
                         c_high.get_value().ok_or(SynthesisError::AssignmentMissing)
                     } else {
                         Ok(Fr::zero())
                     }
-                },
-            )?;
+                })?;
 
             cs.enforce(
                 || format!("c_high_or_zero == c_high * h_select_bit (h={})", h),
@@ -334,9 +348,13 @@ pub fn get_challenge_high_bits<CS: ConstraintSystem<Bls12>>(
     // Summate the scaled `c_high` values. One of the values is the selected `c_high` (chosen
     // via `h_select`) and all other values are zero. Thus, the sum is the selected `c_high`.
     let c_high_selected = AllocatedNum::alloc(cs.namespace(|| "c_high_selected"), || {
-        let mut sum = c_high_and_zeros[0].get_value().ok_or(SynthesisError::AssignmentMissing)?;
+        let mut sum = c_high_and_zeros[0]
+            .get_value()
+            .ok_or(SynthesisError::AssignmentMissing)?;
         for c_high_or_zero in &c_high_and_zeros[1..] {
-            sum += c_high_or_zero.get_value().ok_or(SynthesisError::AssignmentMissing)?;
+            sum += c_high_or_zero
+                .get_value()
+                .ok_or(SynthesisError::AssignmentMissing)?;
         }
         Ok(sum)
     })?;
@@ -366,8 +384,12 @@ pub fn label_r_new<CS: ConstraintSystem<Bls12>>(
 
     // `label_r_new = label_r_old + label_d_new * rho`
     let label_r_new = AllocatedNum::alloc(cs.namespace(|| "label_r_new"), || {
-        let label_r_old = label_r_old.get_value().ok_or(SynthesisError::AssignmentMissing)?;
-        let label_d_new_rho = label_d_new_rho.get_value().ok_or(SynthesisError::AssignmentMissing)?;
+        let label_r_old = label_r_old
+            .get_value()
+            .ok_or(SynthesisError::AssignmentMissing)?;
+        let label_d_new_rho = label_d_new_rho
+            .get_value()
+            .ok_or(SynthesisError::AssignmentMissing)?;
         Ok(label_r_old + label_d_new_rho)
     })?;
 

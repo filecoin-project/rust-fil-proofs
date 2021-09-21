@@ -2,7 +2,7 @@ use std::marker::PhantomData;
 
 use blstrs::Scalar as Fr;
 use ff::{PrimeField, PrimeFieldBits};
-use filecoin_hashers::{Hasher, HashFunction};
+use filecoin_hashers::{HashFunction, Hasher};
 
 use crate::constants::{challenge_count, partition_count};
 
@@ -127,12 +127,9 @@ mod tests {
                 let first_partition_node = k * partition_nodes;
                 let last_partition_node = first_partition_node + partition_nodes - 1;
 
-                let challenges: Vec<usize> = Challenges::<PoseidonHasher>::new(
-                    sector_nodes,
-                    comm_r_new.clone(),
-                    k,
-                )
-                .collect();
+                let challenges: Vec<usize> =
+                    Challenges::<PoseidonHasher>::new(sector_nodes, comm_r_new.clone(), k)
+                        .collect();
 
                 assert_eq!(challenges.len(), partition_challenges);
 
