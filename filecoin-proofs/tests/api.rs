@@ -1876,7 +1876,7 @@ fn create_seal_for_upgrade<R: Rng, Tree: 'static + MerkleTreeTrait>(
         .with_context(|| format!("could not open path={:?}", new_sealed_sector_file.path()))?;
     f_sealed_sector.set_len(new_replica_target_len)?;
 
-    let (new_comm_r, new_comm_d) = encode_into::<Tree>(
+    let (new_comm_r, new_comm_r_last, new_comm_d) = encode_into::<Tree>(
         config,
         new_sealed_sector_file.path(),
         new_cache_dir.path(),
@@ -1888,6 +1888,19 @@ fn create_seal_for_upgrade<R: Rng, Tree: 'static + MerkleTreeTrait>(
     )?;
     //println!("\nEncoded new data {:?}", new_sealed_sector_file);
     //dump_elements(new_sealed_sector_file.path())?;
+
+    // Generate update proof here
+    generate_update_proof::<Tree>(
+        config,
+        comm_r,
+        new_comm_r,
+        new_comm_r_last,
+        new_comm_d,
+        sealed_sector_file.path(), /* sector key file and path */
+        cache_dir.path(), /* sector key path needed for t_aux, we don't need sealed_sector_file_path?? */
+        new_sealed_sector_file.path(),
+        new_cache_dir.path(),
+    )?;
 
     let decoded_sector_file = NamedTempFile::new()?;
     // FIXME: New replica (new_sealed_sector_file) is currently 0
@@ -1919,16 +1932,6 @@ fn create_seal_for_upgrade<R: Rng, Tree: 'static + MerkleTreeTrait>(
     //dump_elements(decoded_sector_file.path())?;
 
     decoded_sector_file.close()?;
-
-    // Generate update proof here
-    generate_update_proof::<Tree>(
-        config,
-        comm_r,
-        new_comm_r,
-        new_comm_d,
-        new_sealed_sector_file.path(),
-        new_cache_dir.path(),
-    )?;
 
     // Remove Data here
     let remove_encoded_file = NamedTempFile::new()?;
