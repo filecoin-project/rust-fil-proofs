@@ -30,6 +30,8 @@ use storage_proofs_core::{
 
 use storage_proofs_porep::stacked::{StackedDrg, TemporaryAuxCache};
 
+use crate::{EmptySectorUpdateCircuit, PublicInputs, PublicParams};
+
 const CHUNK_SIZE_MIN: usize = 4096;
 const FR_SIZE: usize = std::mem::size_of::<Fr>() as usize;
 
@@ -70,7 +72,7 @@ fn mmap_write(path: &Path) -> Result<MmapMut, Error> {
 #[allow(clippy::too_many_arguments)]
 #[allow(clippy::from_iter_instead_of_collect)]
 impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> CCUpdateVanilla<'a, Tree, G> {
-    /// Returns tuple of (new_comm_r, new_comm_d)
+    /// Returns tuple of (new_comm_r, new_comm_r_last, new_comm_d)
     pub fn encode_into(
         nodes_count: usize,
         t_aux: &TemporaryAuxCache<Tree, G>,
@@ -81,7 +83,11 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> CCUpdateVanilla<'
         sector_key_path: &Path,
         sector_key_cache_path: &Path,
         staged_data_path: &Path,
-    ) -> Result<(<Tree::Hasher as Hasher>::Domain, G::Domain)> {
+    ) -> Result<(
+        <Tree::Hasher as Hasher>::Domain,
+        <Tree::Hasher as Hasher>::Domain,
+        G::Domain,
+    )> {
         // Sanity check all input path types.
         ensure!(
             metadata(new_cache_path)?.is_dir(),
@@ -273,6 +279,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> CCUpdateVanilla<'
 
         Ok((
             <Tree::Hasher as Hasher>::Domain::try_from_bytes(&new_comm_r.into_bytes())?,
+            new_comm_r_last,
             new_comm_d,
         ))
     }
@@ -516,6 +523,30 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> CCUpdateVanilla<'
             })?;
         sector_key_data.flush()?;
 
+        Ok(())
+    }
+
+    pub fn generate_update_proof(
+        nodes_count: usize,
+        pub_params: PublicParams,
+        pub_inputs: PublicInputs<Tree>,
+        t_aux: &TemporaryAuxCache<Tree, G>,
+        comm_r_old: <Tree::Hasher as Hasher>::Domain,
+        comm_r_last_new: <Tree::Hasher as Hasher>::Domain,
+        replica_path: &Path,
+        replica_cache_path: &Path,
+    ) -> Result<()> {
+        /*
+        let empty_sector_update_circuit = EmptySectorUpdateCircuit {
+            pub_params,
+            k: Some(pub_inputs.k),
+            comm_r_old: Some(pub_inputs.comm_r_old),
+            comm_d_new: Some(pub_inputs.comm_d_new),
+            comm_r_new: Some(pub_inputs.comm_r_new),
+            h_select: Some(pub_inputs.h_select),
+        };*/
+
+        // FIXME:
         Ok(())
     }
 }
