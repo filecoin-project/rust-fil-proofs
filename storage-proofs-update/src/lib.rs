@@ -11,4 +11,4 @@ pub use self::challenges::Challenges;
 pub use self::circuit::{
     ChallengeProof, EmptySectorUpdateCircuit, MerkleProof, PublicInputs, PublicParams,
 };
-pub use self::vanilla::CCUpdateVanilla;
+pub use self::vanilla::{EmptySectorUpdateVanilla, VanillaProof, VanillaUpdateProof};

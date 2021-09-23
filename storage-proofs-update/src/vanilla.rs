@@ -44,9 +44,23 @@ const FR_SIZE: usize = std::mem::size_of::<Fr>() as usize;
 
 #[derive(Debug)]
 #[allow(clippy::upper_case_acronyms)]
-pub struct CCUpdateVanilla<'a, Tree: MerkleTreeTrait, G: Hasher> {
+pub struct EmptySectorUpdateVanilla<'a, Tree: MerkleTreeTrait, G: Hasher> {
     _a: PhantomData<&'a Tree>,
     _b: PhantomData<&'a G>,
+}
+
+#[derive(Clone)]
+pub struct VanillaProof<Tree: MerkleTreeTrait, G: Hasher> {
+    apex_leaves: Vec<G::Domain>,
+    challenge_proofs: Vec<ChallengeProof<Tree>>,
+}
+
+#[derive(Clone)]
+pub struct VanillaUpdateProof<Tree: MerkleTreeTrait, G: Hasher> {
+    vanilla_proofs: Vec<VanillaProof<Tree, G>>,
+    comm_c: <Tree::Hasher as Hasher>::Domain,
+    comm_r_last_old: <Tree::Hasher as Hasher>::Domain,
+    comm_r_last_new: <Tree::Hasher as Hasher>::Domain,
 }
 
 fn mmap_read(path: &Path) -> Result<Mmap, Error> {
@@ -78,7 +92,9 @@ fn mmap_write(path: &Path) -> Result<MmapMut, Error> {
 // Note: t_aux has labels and tree_d, tree_c, tree_r_last trees
 #[allow(clippy::too_many_arguments)]
 #[allow(clippy::from_iter_instead_of_collect)]
-impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> CCUpdateVanilla<'a, Tree, G> {
+impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher>
+    EmptySectorUpdateVanilla<'a, Tree, G>
+{
     /// Returns tuple of (new_comm_r, new_comm_r_last, new_comm_d)
     pub fn encode_into(
         nodes_count: usize,
@@ -175,24 +191,6 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> CCUpdateVanilla<'
         );
         t_aux_new.tree_d_config = tree_d_config.clone();
         t_aux_new.tree_r_last_config = tree_r_last_config.clone();
-
-        // FIXME: Do we need a t_aux written at the new_cache_path for
-        // later reference?
-        //
-        // It can't be instantiated because of the labels, so instead
-        // generate_proofs set the new path and pulls just the tree_d
-        // and tree_r_last configs from it for proof generation.
-        /*
-        // Persist new t_aux here in the new_cache_path for later reference.
-        let t_aux_path = new_cache_path.join(CacheKey::TAux.to_string());
-        let mut f_t_aux = File::create(&t_aux_path)
-            .with_context(|| format!("could not create file t_aux={:?}", t_aux_path))?;
-        let t_aux_bytes = serialize(&t_aux_new)?;
-        f_t_aux
-            .write_all(&t_aux_bytes)
-            .with_context(|| format!("could not write to file t_aux={:?}", t_aux_path))?;
-        println!("WROTE T_AUX NEW AT {:?}", t_aux_path);
-         */
 
         // Re-open staged_data as Data (type)
         let mut new_data: Data<'a> = Data::from_path(staged_data_path.to_path_buf());
@@ -576,7 +574,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> CCUpdateVanilla<'
         nodes_count: usize,
         pub_params: PublicParams,
         pub_inputs: PublicInputs<Tree>,
-        t_aux_old: &TemporaryAuxCache<Tree, Sha256Hasher>,
+        t_aux_old: &TemporaryAuxCache<Tree, /*G*/ Sha256Hasher>,
         tree_d_config: StoreConfig,
         tree_r_last_config: StoreConfig,
         comm_c_old: <Tree::Hasher as Hasher>::Domain,
@@ -585,7 +583,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> CCUpdateVanilla<'
         comm_r_last_new: <Tree::Hasher as Hasher>::Domain,
         replica_path: &Path,
         replica_cache_path: &Path,
-    ) -> Result<()> {
+    ) -> Result<VanillaUpdateProof<Tree, /*G*/ Sha256Hasher>> {
         let new_comm_r = <PoseidonHasher as Hasher>::Function::hash2(
             &<PoseidonDomain as Domain>::try_from_bytes(&comm_c_old.into_bytes())?,
             &<PoseidonDomain as Domain>::try_from_bytes(&comm_r_last_new.into_bytes())?,
@@ -635,8 +633,8 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> CCUpdateVanilla<'
             LCTree<Tree::Hasher, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>,
         >(tree_r_last_size, &configs, &replica_config)?;
 
-        // FIXME: tree_d merkle tree borrowed the store, so
-        // re-instantiate it here for reading apex leaves.
+        // tree_d merkle tree borrowed the store, so re-instantiate it
+        // here for reading apex leaves.
         let tree_d_store: DiskStore</*G*/ <Sha256Hasher as Hasher>::Domain> =
             DiskStore::new_from_disk(tree_d_size, BINARY_ARITY, &tree_d_config)
                 .context("tree_d_store")?;
@@ -662,80 +660,79 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> CCUpdateVanilla<'
             total_apex_leaves, tree_d_total_size
         );
 
-        for k in 0..partitions {
-            let challenges = Self::get_update_proof_challenges(
-                nodes_count,
-                k,
-                partition_challenges,
-                <Tree::Hasher as Hasher>::Domain::try_from_bytes(&new_comm_r.into_bytes())?,
-            )?;
-            assert_eq!(challenges.len(), partition_challenges);
+        let vanilla_proofs = (0..partitions)
+            .into_par_iter()
+            .map(|k| {
+                let challenges = Self::get_update_proof_challenges(
+                    nodes_count,
+                    k,
+                    partition_challenges,
+                    <Tree::Hasher as Hasher>::Domain::try_from_bytes(&new_comm_r.into_bytes())?,
+                )?;
+                assert_eq!(challenges.len(), partition_challenges);
 
-            // Gather all apex leaves per partition
-            let apex_leaf_offset_from_end =
-                (tree_d_total_size - total_apex_tree_len) + (k * apex_leaves_per_partition);
-            info!(
-                "apex_leaves_offset_from_end for partition {} is {}",
-                k, apex_leaf_offset_from_end
-            );
-            let start = apex_leaf_offset_from_end;
-            let end = apex_leaf_offset_from_end + apex_leaves_per_partition;
-            let apex_leaves: Vec</*G*/ <Sha256Hasher as Hasher>::Domain> =
-                tree_d_store.read_range(start..end)?;
-            info!(
-                "read {} apex leafs for partition {} from store nodes {}-{}",
-                apex_leaves.len(),
-                k,
-                start,
-                end
-            );
+                // Gather all apex leaves per partition
+                let apex_leaf_offset_from_end =
+                    (tree_d_total_size - total_apex_tree_len) + (k * apex_leaves_per_partition);
+                info!(
+                    "apex_leaves_offset_from_end for partition {} is {}",
+                    k, apex_leaf_offset_from_end
+                );
+                let start = apex_leaf_offset_from_end;
+                let end = apex_leaf_offset_from_end + apex_leaves_per_partition;
+                let apex_leaves: Vec</*G*/ <Sha256Hasher as Hasher>::Domain> =
+                    tree_d_store.read_range(start..end)?;
+                info!(
+                    "read {} apex leafs for partition {} from store nodes {}-{}",
+                    apex_leaves.len(),
+                    k,
+                    start,
+                    end
+                );
 
-            // Generate all merkle proofs (FIXME: par iter)
-            let vanilla_proofs: Vec<Result<ChallengeProof<Tree>>> = challenges
-                .iter()
-                .map(|challenge| {
-                    let proof_d_new: MerkleProof<BinaryMerkleTree</*G*/ Sha256Hasher>> =
-                        tree_d.gen_proof(*challenge)?;
-                    let proof_r_new: MerkleProof<Tree> =
-                        tree_r_last.gen_cached_proof(*challenge, rows_to_discard)?;
-                    let proof_r_old: MerkleProof<Tree> = t_aux_old
-                        .tree_r_last
-                        .gen_cached_proof(*challenge, rows_to_discard)?;
+                // Generate all challenge proofs
+                let challenge_proofs = challenges
+                    .into_par_iter()
+                    .map(|challenge| {
+                        let proof_d_new: MerkleProof<BinaryMerkleTree</*G*/ Sha256Hasher>> =
+                            tree_d.gen_proof(challenge)?;
+                        let proof_r_new: MerkleProof<Tree> =
+                            tree_r_last.gen_cached_proof(challenge, rows_to_discard)?;
+                        let proof_r_old: MerkleProof<Tree> = t_aux_old
+                            .tree_r_last
+                            .gen_cached_proof(challenge, rows_to_discard)?;
 
-                    Ok(ChallengeProof::from_merkle_proofs(
-                        proof_r_old,
-                        proof_d_new,
-                        proof_r_new,
-                    ))
+                        Ok(ChallengeProof::from_merkle_proofs(
+                            proof_r_old,
+                            proof_d_new,
+                            proof_r_new,
+                        ))
+                    })
+                    .collect::<Result<Vec<ChallengeProof<Tree>>>>()?;
+
+                info!(
+                    "got {} challenge proofs for partition {}",
+                    challenge_proofs.len(),
+                    k
+                );
+
+                Ok(VanillaProof {
+                    apex_leaves,
+                    challenge_proofs,
                 })
-                .collect();
+            })
+            .collect::<Result<Vec<VanillaProof<Tree, /*G*/ Sha256Hasher>>>>()?;
 
-            info!(
-                "got {} challenge proofs for partition {}",
-                vanilla_proofs.len(),
-                k
-            );
+        ensure!(
+            vanilla_proofs.len() == partitions,
+            "Vanilla Proofs vector must match the number of partitions"
+        );
 
-            /*
-                let circuit = EmptySectorUpdateCircuit {
-                pub_params,
-                k: Some(pub_inputs.k),
-                comm_r_old: Some(pub_inputs.comm_r_old),
-                comm_d_new: Some(pub_inputs.comm_d_new),
-                comm_r_new: Some(pub_inputs.comm_r_new),
-                h_select: Some(pub_inputs.h_select),
-                comm_c: Some(comm_c_old),
-                comm_r_last_old,
-                comm_r_last_new,
-                apex_leaves,
-                partition_path,
-                challenge_proofs,
-            };
-                circuit.synthesize()?;
-                 */
-        }
-
-        // FIXME: return proof(s)
-        Ok(())
+        Ok(VanillaUpdateProof {
+            vanilla_proofs,
+            comm_c: comm_c_old,
+            comm_r_last_old,
+            comm_r_last_new,
+        })
     }
 }

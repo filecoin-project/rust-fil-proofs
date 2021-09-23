@@ -12,7 +12,9 @@ use log::info;
 use memmap::MmapOptions;
 use storage_proofs_core::{cache_key::CacheKey, merkle::MerkleTreeTrait, util::NODE_SIZE};
 use storage_proofs_porep::stacked::{PersistentAux, TemporaryAux, TemporaryAuxCache};
-use storage_proofs_update::{CCUpdateVanilla, PublicInputs, PublicParams};
+use storage_proofs_update::{
+    EmptySectorUpdateVanilla, PublicInputs, PublicParams, VanillaUpdateProof,
+};
 
 use crate::{
     constants::{DefaultPieceDomain, DefaultPieceHasher},
@@ -128,7 +130,7 @@ pub fn encode_into<Tree: 'static + MerkleTreeTrait>(
 
     let nodes_count = u64::from(porep_config.sector_size) as usize / NODE_SIZE;
     let (comm_r_domain, comm_r_last_domain, comm_d_domain) =
-        CCUpdateVanilla::<Tree, DefaultPieceHasher>::encode_into(
+        EmptySectorUpdateVanilla::<Tree, DefaultPieceHasher>::encode_into(
             nodes_count,
             &t_aux_cache,
             <Tree::Hasher as Hasher>::Domain::try_from_bytes(&p_aux.comm_c.into_bytes())?,
@@ -174,7 +176,7 @@ pub fn decode_from<Tree: 'static + MerkleTreeTrait>(
     info!("decode_from:start");
 
     let nodes_count = u64::from(porep_config.sector_size) as usize / NODE_SIZE;
-    CCUpdateVanilla::<Tree, DefaultPieceHasher>::decode_from(
+    EmptySectorUpdateVanilla::<Tree, DefaultPieceHasher>::decode_from(
         nodes_count,
         out_data_path,
         replica_path,
@@ -205,7 +207,7 @@ pub fn remove_encoded_data<Tree: 'static + MerkleTreeTrait>(
     info!("remove_data:start");
 
     let nodes_count = u64::from(porep_config.sector_size) as usize / NODE_SIZE;
-    CCUpdateVanilla::<Tree, DefaultPieceHasher>::remove_encoded_data(
+    EmptySectorUpdateVanilla::<Tree, DefaultPieceHasher>::remove_encoded_data(
         nodes_count,
         sector_key_path,
         sector_key_cache_path,
@@ -231,8 +233,7 @@ pub fn generate_update_proof<Tree: 'static + MerkleTreeTrait>(
     sector_key_cache_path: &Path,
     replica_path: &Path,
     replica_cache_path: &Path,
-) -> Result<()> {
-    // FIXME: Return UpdateProof type
+) -> Result<VanillaUpdateProof<Tree, /*DefaultTreeHasher*/ Sha256Hasher>> {
     info!("generate_update_proof:start");
 
     let nodes_count = u64::from(porep_config.sector_size) as usize / NODE_SIZE;
@@ -265,7 +266,7 @@ pub fn generate_update_proof<Tree: 'static + MerkleTreeTrait>(
     }?;
 
     // Note: t_aux has labels and tree_d, tree_c, tree_r_last store configs
-    let t_aux_old = {
+    let mut t_aux_old = {
         let t_aux_path = sector_key_cache_path.join(CacheKey::TAux.to_string());
         let t_aux_bytes = fs::read(&t_aux_path)
             .with_context(|| format!("could not read file t_aux={:?}", t_aux_path))?;
@@ -277,22 +278,24 @@ pub fn generate_update_proof<Tree: 'static + MerkleTreeTrait>(
     // Convert TemporaryAux to TemporaryAuxCache, which instantiates all
     // elements based on the configs stored in TemporaryAux.
     let t_aux_cache_old: TemporaryAuxCache<Tree, DefaultPieceHasher> =
-        TemporaryAuxCache::new(&t_aux_old, sector_key_cache_path.to_path_buf())
+        TemporaryAuxCache::new(&t_aux_old, sector_key_path.to_path_buf())
             .context("failed to restore contents of t_aux_old")?;
 
     // Re-instantiate a t_aux with the new replica cache path, then
     // use new tree_d_config and tree_r_last_config from it.
-    let mut t_aux_cache_new = t_aux_cache_old.t_aux.clone();
-    t_aux_cache_new.set_cache_path(replica_cache_path);
+    let mut t_aux_new = t_aux_old.clone();
+    t_aux_new.set_cache_path(replica_cache_path);
 
-    /*let update_proof = */
-    CCUpdateVanilla::<Tree, /*DefaultTreeHasher*/ Sha256Hasher>::generate_update_proofs(
+    let vanilla_update_proof = EmptySectorUpdateVanilla::<
+        Tree,
+        /*DefaultTreeHasher*/ Sha256Hasher,
+    >::generate_update_proofs(
         nodes_count,
         public_params,
         public_inputs,
         &t_aux_cache_old,
-        t_aux_cache_new.tree_d_config,
-        t_aux_cache_new.tree_r_last_config,
+        t_aux_new.tree_d_config,
+        t_aux_new.tree_r_last_config,
         p_aux_old.comm_c,
         comm_r_old_safe,
         p_aux_old.comm_r_last,
@@ -303,5 +306,5 @@ pub fn generate_update_proof<Tree: 'static + MerkleTreeTrait>(
 
     info!("generate_update_proof:finish");
 
-    Ok(/*update_proof*/ ())
+    Ok(vanilla_update_proof)
 }
