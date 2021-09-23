@@ -295,6 +295,7 @@ pub fn generate_update_proof<Tree: 'static + MerkleTreeTrait>(
         t_aux_cache_new.tree_r_last_config,
         p_aux_old.comm_c,
         comm_r_old_safe,
+        p_aux_old.comm_r_last,
         comm_r_last_new_safe,
         replica_path,
         replica_cache_path,
