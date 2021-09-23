@@ -24,13 +24,16 @@ rayon = "1.0.0"
 serde = { version = "1.0", features = ["derive"]}
 serde_json = "1.0"
 ff = "0.11.0"
+#bellperson = { git = "https://github.com/filecoin-project/bellperson", branch = "master" }
 bellperson = { git = "https://github.com/filecoin-project/bellperson", branch = "master" }
+#blstrs = { git = "https://github.com/filecoin-project/blstrs", branch = "master" }
 blstrs = { git = "https://github.com/filecoin-project/blstrs", branch = "master" }
 log = "0.4.7"
 pretty_assertions = "0.6.1"
 generic-array = "0.14.4"
 anyhow = "1.0.23"
-neptune = { git = "https://github.com/filecoin-project/neptune", branch = "master" }
+#neptune = { git = "https://github.com/filecoin-project/neptune", branch = "master" }
+neptune = { git = "https://github.com/filecoin-project/neptune", branch = "master", features = ["arity2", "arity4", "arity8", "arity11", "arity16", "arity24", "arity36"] }
 num_cpus = "1.10.1"
 hex = "0.4.2"
 bincode = "1.1.2"
@@ -60,14 +63,22 @@ filecoin-hashers = { path = "../filecoin-hashers", version = "^4.0.0", default-f
 storage-proofs-porep = { path = "../storage-proofs-porep", version = "^9.0.0", default-features = false }
 
 [features]
-default = ["gpu", "multicore-sdr"]
-gpu = [
-    "storage-proofs-core/gpu",
-    "storage-proofs-porep/gpu",
-    "filecoin-hashers/gpu",
+default = ["opencl", "multicore-sdr"]
+opencl = [
+    "storage-proofs-core/opencl",
+    "storage-proofs-porep/opencl",
+    "filecoin-hashers/opencl",
     "neptune/opencl",
-    "bellperson/gpu",
-    "fr32/gpu",
+    "bellperson/opencl",
+    "fr32/opencl",
+]
+cuda = [
+    "storage-proofs-core/cuda",
+    "storage-proofs-porep/cuda",
+    "filecoin-hashers/cuda",
+    "neptune/cuda",
+    "bellperson/cuda",
+    "fr32/cuda",
 ]
 multicore-sdr = [
     "storage-proofs-porep/multicore-sdr",
