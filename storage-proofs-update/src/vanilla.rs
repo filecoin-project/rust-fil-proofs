@@ -1,9 +1,11 @@
-use std::fs::{metadata, OpenOptions};
+use std::fs::{metadata, File, OpenOptions};
+use std::io::Write;
 use std::iter::FromIterator;
 use std::marker::PhantomData;
 use std::path::Path;
 
 use anyhow::{ensure, Context, Error};
+use bincode::serialize;
 use blstrs::{Bls12, Scalar as Fr};
 use ff::{Field, PrimeField};
 
@@ -14,7 +16,7 @@ use generic_array::typenum::{Unsigned, U0};
 use log::{info, trace};
 use memmap::{Mmap, MmapMut, MmapOptions};
 use merkletree::{
-    merkle::get_merkle_tree_len,
+    merkle::{get_merkle_tree_leafs, get_merkle_tree_len},
     store::{DiskStore, ExternalReader, Store, StoreConfig},
 };
 use rayon::iter::IntoParallelIterator;
@@ -24,13 +26,18 @@ use storage_proofs_core::{
     data::Data,
     error::Result,
     merkle::{
-        create_lc_tree, get_base_tree_count, split_config_and_replica, LCTree, MerkleTreeTrait,
+        create_lc_tree, get_base_tree_count, split_config_and_replica, BinaryMerkleTree, LCTree,
+        MerkleTreeTrait,
     },
+    util::default_rows_to_discard,
 };
 
 use storage_proofs_porep::stacked::{StackedDrg, TemporaryAuxCache};
 
-use crate::{EmptySectorUpdateCircuit, PublicInputs, PublicParams};
+use crate::constants::{challenge_count, partition_count, BINARY_ARITY};
+use crate::{
+    ChallengeProof, Challenges, EmptySectorUpdateCircuit, MerkleProof, PublicInputs, PublicParams,
+};
 
 const CHUNK_SIZE_MIN: usize = 4096;
 const FR_SIZE: usize = std::mem::size_of::<Fr>() as usize;
@@ -151,21 +158,41 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> CCUpdateVanilla<'
 
         // Re-instantiate a t_aux with the new cache path, then use
         // the tree_d and tree_r_last configs from it.
-        let mut new_tmp_t_aux = t_aux.t_aux.clone();
-        new_tmp_t_aux.set_cache_path(new_cache_path);
+        let mut t_aux_new = t_aux.t_aux.clone();
+        t_aux_new.set_cache_path(new_cache_path);
 
         // With the new cache path set, get the new tree_d and tree_r_last configs.
         let tree_d_config = StoreConfig::from_config(
-            &new_tmp_t_aux.tree_r_last_config,
+            &t_aux_new.tree_d_config,
             CacheKey::CommDTree.to_string(),
-            Some(get_merkle_tree_len(nodes_count, Tree::Arity::to_usize())?),
+            Some(get_merkle_tree_len(nodes_count, BINARY_ARITY)?),
         );
 
         let tree_r_last_config = StoreConfig::from_config(
-            &new_tmp_t_aux.tree_r_last_config,
+            &t_aux_new.tree_r_last_config,
             CacheKey::CommRLastTree.to_string(),
             Some(get_merkle_tree_len(nodes_count, Tree::Arity::to_usize())?),
         );
+        t_aux_new.tree_d_config = tree_d_config.clone();
+        t_aux_new.tree_r_last_config = tree_r_last_config.clone();
+
+        // FIXME: Do we need a t_aux written at the new_cache_path for
+        // later reference?
+        //
+        // It can't be instantiated because of the labels, so instead
+        // generate_proofs set the new path and pulls just the tree_d
+        // and tree_r_last configs from it for proof generation.
+        /*
+        // Persist new t_aux here in the new_cache_path for later reference.
+        let t_aux_path = new_cache_path.join(CacheKey::TAux.to_string());
+        let mut f_t_aux = File::create(&t_aux_path)
+            .with_context(|| format!("could not create file t_aux={:?}", t_aux_path))?;
+        let t_aux_bytes = serialize(&t_aux_new)?;
+        f_t_aux
+            .write_all(&t_aux_bytes)
+            .with_context(|| format!("could not write to file t_aux={:?}", t_aux_path))?;
+        println!("WROTE T_AUX NEW AT {:?}", t_aux_path);
+         */
 
         // Re-open staged_data as Data (type)
         let mut new_data: Data<'a> = Data::from_path(staged_data_path.to_path_buf());
@@ -526,25 +553,145 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> CCUpdateVanilla<'
         Ok(())
     }
 
-    pub fn generate_update_proof(
+    /// Returns the update proof challenges required for the specified partition.
+    pub fn get_update_proof_challenges(
+        nodes_count: usize,
+        partition: usize,
+        partition_challenges: usize,
+        comm_r_new: <Tree::Hasher as Hasher>::Domain,
+    ) -> Result<Vec<usize>> {
+        let challenges: Vec<usize> = Challenges::<PoseidonHasher>::new(
+            nodes_count,
+            <PoseidonDomain as Domain>::try_from_bytes(&comm_r_new.into_bytes())?,
+            partition,
+        )
+        .collect();
+
+        assert_eq!(challenges.len(), partition_challenges);
+
+        Ok(challenges)
+    }
+
+    pub fn generate_update_proofs(
         nodes_count: usize,
         pub_params: PublicParams,
         pub_inputs: PublicInputs<Tree>,
-        t_aux: &TemporaryAuxCache<Tree, G>,
+        t_aux_old: &TemporaryAuxCache<Tree, Sha256Hasher>,
+        tree_d_config: StoreConfig,
+        tree_r_last_config: StoreConfig,
+        comm_c_old: <Tree::Hasher as Hasher>::Domain,
         comm_r_old: <Tree::Hasher as Hasher>::Domain,
         comm_r_last_new: <Tree::Hasher as Hasher>::Domain,
         replica_path: &Path,
         replica_cache_path: &Path,
     ) -> Result<()> {
+        let new_comm_r = <PoseidonHasher as Hasher>::Function::hash2(
+            &<PoseidonDomain as Domain>::try_from_bytes(&comm_c_old.into_bytes())?,
+            &<PoseidonDomain as Domain>::try_from_bytes(&comm_r_last_new.into_bytes())?,
+        );
+
+        let tree_count = get_base_tree_count::<Tree>();
+
+        // Instantiate Tree-D new from the replica cache path.  Note
+        // that this is similar to what we do when going from t_aux to
+        // t_aux cache.
+        let tree_d_size = tree_d_config.size.expect("config size failure");
+        let tree_d_leafs = get_merkle_tree_leafs(tree_d_size, BINARY_ARITY)?;
+        trace!(
+            "Instantiating tree d with size {} and leafs {}",
+            tree_d_size,
+            tree_d_leafs,
+        );
+        let tree_d_store: DiskStore</*G*/ <Sha256Hasher as Hasher>::Domain> =
+            DiskStore::new_from_disk(tree_d_size, BINARY_ARITY, &tree_d_config)
+                .context("tree_d_store")?;
+        let tree_d =
+            BinaryMerkleTree::</*G*/ Sha256Hasher>::from_data_store(tree_d_store, tree_d_leafs)
+                .context("tree_d")?;
+
+        // Instantiate Tree-R new from the replica_cache_path.  Note
+        // that this is similar to what we do when going from t_aux to
+        // t_aux cache.
+        // tree_r_last_size stored in the config is the base tree size
+        let tree_r_last_size = tree_r_last_config.size.expect("config size failure");
+        let tree_r_last_config_rows_to_discard = tree_r_last_config.rows_to_discard;
+        let (configs, replica_config) = split_config_and_replica(
+            tree_r_last_config.clone(),
+            replica_path.to_path_buf(),
+            get_merkle_tree_leafs(tree_r_last_size, Tree::Arity::to_usize())?,
+            tree_count,
+        )?;
+
+        trace!(
+            "Instantiating tree r last [count {}] with size {} and arity {}, {}, {}",
+            tree_count,
+            tree_r_last_size,
+            Tree::Arity::to_usize(),
+            Tree::SubTreeArity::to_usize(),
+            Tree::TopTreeArity::to_usize(),
+        );
+        let tree_r_last = create_lc_tree::<
+            LCTree<Tree::Hasher, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>,
+        >(tree_r_last_size, &configs, &replica_config)?;
+
+        let partitions = partition_count(nodes_count);
+        let partition_nodes = nodes_count / partitions;
+        let partition_challenges = challenge_count(nodes_count);
+        let rows_to_discard = Some(default_rows_to_discard(
+            nodes_count,
+            Tree::Arity::to_usize(),
+        ));
+
+        for k in 0..partitions {
+            let challenges = Self::get_update_proof_challenges(
+                nodes_count,
+                k,
+                partition_challenges,
+                <Tree::Hasher as Hasher>::Domain::try_from_bytes(&new_comm_r.into_bytes())?,
+            )?;
+            assert_eq!(challenges.len(), partition_challenges);
+
+            // Generate all merkle proofs (FIXME: par iter)
+            let vanilla_proofs: Vec<Result<ChallengeProof<Tree>>> = challenges
+                .iter()
+                .map(|challenge| {
+                    let proof_d_new: MerkleProof<BinaryMerkleTree</*G*/ Sha256Hasher>> =
+                        tree_d.gen_proof(*challenge)?;
+                    let proof_r_new: MerkleProof<Tree> =
+                        tree_r_last.gen_cached_proof(*challenge, rows_to_discard)?;
+                    let proof_r_old: MerkleProof<Tree> = t_aux_old
+                        .tree_r_last
+                        .gen_cached_proof(*challenge, rows_to_discard)?;
+
+                    Ok(ChallengeProof::from_merkle_proofs(
+                        proof_r_old,
+                        proof_d_new,
+                        proof_r_new,
+                    ))
+                })
+                .collect();
+
+            trace!(
+                "got {} challenge proofs for partition {}",
+                vanilla_proofs.len(),
+                k
+            );
+        }
         /*
-        let empty_sector_update_circuit = EmptySectorUpdateCircuit {
-            pub_params,
-            k: Some(pub_inputs.k),
-            comm_r_old: Some(pub_inputs.comm_r_old),
-            comm_d_new: Some(pub_inputs.comm_d_new),
-            comm_r_new: Some(pub_inputs.comm_r_new),
-            h_select: Some(pub_inputs.h_select),
-        };*/
+                let empty_sector_update_circuit = EmptySectorUpdateCircuit {
+                    pub_params,
+                    k: Some(pub_inputs.k),
+                    comm_r_old: Some(pub_inputs.comm_r_old),
+                    comm_d_new: Some(pub_inputs.comm_d_new),
+                    comm_r_new: Some(pub_inputs.comm_r_new),
+                    h_select: Some(pub_inputs.h_select),
+                comm_c,
+        comm_r_last_old,
+        comm_r_last_new,
+        apex_leafs,
+        partition_path,
+        challenge_proofs,
+                };*/
 
         // FIXME:
         Ok(())

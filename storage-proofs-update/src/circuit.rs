@@ -26,7 +26,7 @@ use crate::{
     },
 };
 
-type MerkleProof<Tree> = storage_proofs_core::merkle::MerkleProof<
+pub type MerkleProof<Tree> = storage_proofs_core::merkle::MerkleProof<
     <Tree as MerkleTreeTrait>::Hasher,
     <Tree as MerkleTreeTrait>::Arity,
     <Tree as MerkleTreeTrait>::SubTreeArity,
