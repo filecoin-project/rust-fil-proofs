@@ -1890,7 +1890,7 @@ fn create_seal_for_upgrade<R: Rng, Tree: 'static + MerkleTreeTrait>(
     //dump_elements(new_sealed_sector_file.path())?;
 
     // Generate update proof here
-    generate_update_proof::<Tree>(
+    let vanilla_update_proof = generate_update_proof::<Tree>(
         config,
         comm_r,
         new_comm_r,
