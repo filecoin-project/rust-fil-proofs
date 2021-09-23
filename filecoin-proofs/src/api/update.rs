@@ -5,6 +5,7 @@ use std::path::Path;
 use anyhow::{ensure, Context, Error, Result};
 use bincode::deserialize;
 use blstrs::{Bls12, Scalar as Fr};
+use filecoin_hashers::sha256::Sha256Hasher;
 use filecoin_hashers::{Domain, Hasher};
 use fr32::bytes_into_fr;
 use log::info;
@@ -236,22 +237,6 @@ pub fn generate_update_proof<Tree: 'static + MerkleTreeTrait>(
 
     let nodes_count = u64::from(porep_config.sector_size) as usize / NODE_SIZE;
 
-    // Note: t_aux has labels and tree_d, tree_c, tree_r_last store configs
-    let t_aux = {
-        let t_aux_path = sector_key_cache_path.join(CacheKey::TAux.to_string());
-        let t_aux_bytes = fs::read(&t_aux_path)
-            .with_context(|| format!("could not read file t_aux={:?}", t_aux_path))?;
-
-        let res: TemporaryAux<_, _> = deserialize(&t_aux_bytes)?;
-        res
-    };
-
-    // Convert TemporaryAux to TemporaryAuxCache, which instantiates all
-    // elements based on the configs stored in TemporaryAux.
-    let t_aux_cache: TemporaryAuxCache<Tree, DefaultPieceHasher> =
-        TemporaryAuxCache::new(&t_aux, sector_key_cache_path.to_path_buf())
-            .context("failed to restore contents of t_aux")?;
-
     let comm_r_old_safe = <Tree::Hasher as Hasher>::Domain::try_from_bytes(&comm_r_old)?;
     let comm_r_new_safe = <Tree::Hasher as Hasher>::Domain::try_from_bytes(&comm_r_new)?;
     let comm_r_last_new_safe = <Tree::Hasher as Hasher>::Domain::try_from_bytes(&comm_r_last_new)?;
@@ -270,12 +255,45 @@ pub fn generate_update_proof<Tree: 'static + MerkleTreeTrait>(
         _tree_r: PhantomData::default(),
     };
 
+    // NOTE: p_aux has comm_c and comm_r_last
+    let p_aux_old: PersistentAux<<Tree::Hasher as Hasher>::Domain> = {
+        let p_aux_path = sector_key_cache_path.join(CacheKey::PAux.to_string());
+        let p_aux_bytes = fs::read(&p_aux_path)
+            .with_context(|| format!("could not read file p_aux={:?}", p_aux_path))?;
+
+        deserialize(&p_aux_bytes)
+    }?;
+
+    // Note: t_aux has labels and tree_d, tree_c, tree_r_last store configs
+    let t_aux_old = {
+        let t_aux_path = sector_key_cache_path.join(CacheKey::TAux.to_string());
+        let t_aux_bytes = fs::read(&t_aux_path)
+            .with_context(|| format!("could not read file t_aux={:?}", t_aux_path))?;
+
+        let res: TemporaryAux<_, _> = deserialize(&t_aux_bytes)?;
+        res
+    };
+
+    // Convert TemporaryAux to TemporaryAuxCache, which instantiates all
+    // elements based on the configs stored in TemporaryAux.
+    let t_aux_cache_old: TemporaryAuxCache<Tree, DefaultPieceHasher> =
+        TemporaryAuxCache::new(&t_aux_old, sector_key_cache_path.to_path_buf())
+            .context("failed to restore contents of t_aux_old")?;
+
+    // Re-instantiate a t_aux with the new replica cache path, then
+    // use new tree_d_config and tree_r_last_config from it.
+    let mut t_aux_cache_new = t_aux_cache_old.t_aux.clone();
+    t_aux_cache_new.set_cache_path(replica_cache_path);
+
     /*let update_proof = */
-    CCUpdateVanilla::<Tree, DefaultPieceHasher>::generate_update_proof(
+    CCUpdateVanilla::<Tree, /*DefaultTreeHasher*/ Sha256Hasher>::generate_update_proofs(
         nodes_count,
         public_params,
         public_inputs,
-        &t_aux_cache,
+        &t_aux_cache_old,
+        t_aux_cache_new.tree_d_config,
+        t_aux_cache_new.tree_r_last_config,
+        p_aux_old.comm_c,
         comm_r_old_safe,
         comm_r_last_new_safe,
         replica_path,

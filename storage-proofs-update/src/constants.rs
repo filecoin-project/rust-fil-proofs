@@ -35,6 +35,8 @@ pub const ALLOWED_SECTOR_SIZES: [usize; 11] = [
     SECTOR_SIZE_64_GIB,
 ];
 
+pub const BINARY_ARITY: usize = 2;
+
 pub type TreeD = BinaryMerkleTree<Sha256Hasher>;
 pub type TreeDArity = <TreeD as MerkleTreeTrait>::Arity;
 pub type TreeDHasher = <TreeD as MerkleTreeTrait>::Hasher;
