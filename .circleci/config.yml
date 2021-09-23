@@ -13,7 +13,7 @@ executors:
     resource_class: 2xlarge+
   gpu:
     machine:
-      image: ubuntu-1604-cuda-10.1:201909-23
+      image: ubuntu-2004-cuda-11.2:202103-01
     working_directory: ~/gpuci
     resource_class: gpu.nvidia.medium
   arm:
@@ -148,6 +148,11 @@ jobs:
   test_gpu_tree_building:
     executor: gpu
     environment: *setup-env
+    parameters:
+      cargo-args:
+        description: Addtional arguments for the cargo command
+        type: string
+        default: ""
     steps:
       - checkout
       - attach_workspace:
@@ -157,12 +162,12 @@ jobs:
       - run:
           name: Set the PATH env variable
           command: |
-            echo 'export PATH="~/.cargo/bin:$PATH"' | tee --append $BASH_ENV
+            echo 'export PATH="~/.cargo/bin:/usr/local/cuda-11.2/bin:$PATH"' | tee --append $BASH_ENV
             source $BASH_ENV
       - run:
           name: Install required libraries for GPU support
           command: |
-            sudo apt-get update -y
+            sudo apt update
             sudo apt install -y ocl-icd-opencl-dev libhwloc-dev
       - run:
           name: Test with GPU column and tree builders.
@@ -170,12 +175,13 @@ jobs:
             ulimit -n 20000
             ulimit -u 20000
             ulimit -n 20000
-            cargo +<< pipeline.parameters.nightly-toolchain >> test --all --verbose --release lifecycle -- --ignored --nocapture
+            cargo +<< pipeline.parameters.nightly-toolchain >> test --all --verbose --release lifecycle << parameters.cargo-args >> -- --ignored --nocapture
           no_output_timeout: 30m
           environment:
             RUST_TEST_THREADS: 1
             FIL_PROOFS_USE_GPU_COLUMN_BUILDER: true
             FIL_PROOFS_USE_GPU_TREE_BUILDER: true
+            BELLMAN_CUDA_NVCC_ARGS: --fatbin --gpu-architecture=sm_75 --generate-code=arch=compute_75,code=sm_75
 
   test_no_gpu:
     executor: default
@@ -392,8 +398,15 @@ workflows:
             - ensure_groth_parameters_and_keys_linux
 
       - test_gpu_tree_building:
+          name: test_gpu_tree_building_opencl
           requires:
-            #- cargo_fetch_gpu
+            - cargo_fetch
+            - ensure_groth_parameters_and_keys_linux
+
+      - test_gpu_tree_building:
+          name: test_gpu_tree_building_cuda
+          cargo-args: "--features cuda"
+          requires:
             - cargo_fetch
             - ensure_groth_parameters_and_keys_linux
 

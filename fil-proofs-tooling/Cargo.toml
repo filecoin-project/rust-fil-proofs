@@ -54,14 +54,22 @@ humansize = "1.1.0"
 blstrs = { git = "https://github.com/filecoin-project/blstrs", branch = "master" }
 
 [features]
-default = ["gpu", "measurements"]
-gpu = [
-    "storage-proofs-core/gpu",
-    "storage-proofs-porep/gpu",
-    "storage-proofs-post/gpu",
-    "filecoin-proofs/gpu",
-    "bellperson/gpu",
-    "filecoin-hashers/gpu",
+default = ["opencl", "measurements"]
+cuda = [
+    "storage-proofs-core/cuda",
+    "storage-proofs-porep/cuda",
+    "storage-proofs-post/cuda",
+    "filecoin-proofs/cuda",
+    "bellperson/cuda",
+    "filecoin-hashers/cuda",
+]
+opencl = [
+    "storage-proofs-core/opencl",
+    "storage-proofs-porep/opencl",
+    "storage-proofs-post/opencl",
+    "filecoin-proofs/opencl",
+    "bellperson/opencl",
+    "filecoin-hashers/opencl",
 ]
 measurements = ["storage-proofs-core/measurements"]
 profile = ["storage-proofs-core/profile", "measurements"]

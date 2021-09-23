@@ -26,7 +26,8 @@ rand_xorshift = "0.3"
 
 [features]
 default = []
-gpu = ["bellperson/gpu"]
+cuda = ["bellperson/cuda"]
+opencl = ["bellperson/opencl"]
 
 [[bench]]
 name = "fr"
