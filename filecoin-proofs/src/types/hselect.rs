@@ -9,6 +9,6 @@ impl From<HSelect> for u64 {
 
 impl From<usize> for HSelect {
     fn from(x: usize) -> Self {
-        HSelect::from(x)
+        HSelect(x as u8)
     }
 }

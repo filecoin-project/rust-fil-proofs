@@ -4,7 +4,7 @@ use std::path::Path;
 
 use anyhow::{ensure, Context, Error, Result};
 use bincode::deserialize;
-use blstrs::{Bls12, Scalar as Fr};
+use blstrs::Scalar as Fr;
 use filecoin_hashers::sha256::Sha256Hasher;
 use filecoin_hashers::{Domain, Hasher};
 use fr32::bytes_into_fr;
@@ -266,7 +266,7 @@ pub fn generate_update_proof<Tree: 'static + MerkleTreeTrait>(
     }?;
 
     // Note: t_aux has labels and tree_d, tree_c, tree_r_last store configs
-    let mut t_aux_old = {
+    let t_aux_old = {
         let t_aux_path = sector_key_cache_path.join(CacheKey::TAux.to_string());
         let t_aux_bytes = fs::read(&t_aux_path)
             .with_context(|| format!("could not read file t_aux={:?}", t_aux_path))?;
