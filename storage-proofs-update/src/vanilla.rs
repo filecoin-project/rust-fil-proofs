@@ -1,5 +1,4 @@
 use std::fs::{metadata, File, OpenOptions};
-use std::io::Write;
 use std::iter::FromIterator;
 use std::marker::PhantomData;
 use std::path::Path;
@@ -27,7 +26,7 @@ use storage_proofs_core::{
     error::Result,
     merkle::{
         create_lc_tree, get_base_tree_count, split_config_and_replica, BinaryMerkleTree, LCTree,
-        MerkleTreeTrait,
+        MerkleProofTrait, MerkleTreeTrait,
     },
     util::default_rows_to_discard,
 };
@@ -35,9 +34,7 @@ use storage_proofs_core::{
 use storage_proofs_porep::stacked::{StackedDrg, TemporaryAuxCache};
 
 use crate::constants::{apex_leaf_count, challenge_count, partition_count, BINARY_ARITY};
-use crate::{
-    ChallengeProof, Challenges, EmptySectorUpdateCircuit, MerkleProof, PublicInputs, PublicParams,
-};
+use crate::{ChallengeProof, Challenges, MerkleProof, PublicInputs, PublicParams};
 
 const CHUNK_SIZE_MIN: usize = 4096;
 const FR_SIZE: usize = std::mem::size_of::<Fr>() as usize;
@@ -260,15 +257,12 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher>
             tree_count,
         )?;
 
-        // Re-open the new replica data as Data type.
-        let new_replica_len = metadata(new_replica_path)?.len() as usize;
-
-        let mut start = 0;
-        let mut end = nodes_count;
-
         // Open the new written replica data as a DiskStore.
         let new_replica_store: DiskStore<<Tree::Hasher as Hasher>::Domain> =
             DiskStore::new_from_slice(nodes_count * tree_count, &new_replica_data[0..])?;
+
+        let mut start = 0;
+        let mut end = nodes_count;
 
         for (i, config) in configs.iter().enumerate() {
             let current_data: Vec<<Tree::Hasher as Hasher>::Domain> =
@@ -317,7 +311,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher>
         sector_key_path: &Path,
         sector_key_cache_path: &Path,
         comm_d: G::Domain,
-        comm_r: <Tree::Hasher as Hasher>::Domain,
+        _comm_r: <Tree::Hasher as Hasher>::Domain,
         comm_sector_key: <Tree::Hasher as Hasher>::Domain,
     ) -> Result<()> {
         // Sanity check all input path types.
@@ -436,7 +430,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher>
         replica_cache_path: &Path,
         data_path: &Path,
         comm_d: G::Domain,
-        comm_r: <Tree::Hasher as Hasher>::Domain,
+        _comm_r: <Tree::Hasher as Hasher>::Domain,
         comm_sector_key: <Tree::Hasher as Hasher>::Domain,
     ) -> Result<()> {
         // Sanity check all input path types.
@@ -578,11 +572,11 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher>
         tree_d_config: StoreConfig,
         tree_r_last_config: StoreConfig,
         comm_c_old: <Tree::Hasher as Hasher>::Domain,
-        comm_r_old: <Tree::Hasher as Hasher>::Domain,
+        _comm_r_old: <Tree::Hasher as Hasher>::Domain,
         comm_r_last_old: <Tree::Hasher as Hasher>::Domain,
         comm_r_last_new: <Tree::Hasher as Hasher>::Domain,
         replica_path: &Path,
-        replica_cache_path: &Path,
+        _replica_cache_path: &Path,
     ) -> Result<VanillaUpdateProof<Tree, /*G*/ Sha256Hasher>> {
         let new_comm_r = <PoseidonHasher as Hasher>::Function::hash2(
             &<PoseidonDomain as Domain>::try_from_bytes(&comm_c_old.into_bytes())?,
@@ -613,7 +607,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher>
         // t_aux cache.
         // tree_r_last_size stored in the config is the base tree size
         let tree_r_last_size = tree_r_last_config.size.expect("config size failure");
-        let tree_r_last_config_rows_to_discard = tree_r_last_config.rows_to_discard;
+        let rows_to_discard = Some(tree_r_last_config.rows_to_discard);
         let (configs, replica_config) = split_config_and_replica(
             tree_r_last_config.clone(),
             replica_path.to_path_buf(),
@@ -641,12 +635,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher>
         let tree_d_total_size = Store::len(&tree_d_store);
 
         let partitions = partition_count(nodes_count);
-        let partition_nodes = nodes_count / partitions;
         let partition_challenges = challenge_count(nodes_count);
-        let rows_to_discard = Some(default_rows_to_discard(
-            nodes_count,
-            Tree::Arity::to_usize(),
-        ));
 
         let apex_leaves_per_partition = apex_leaf_count(nodes_count);
         let total_apex_leaves = apex_leaves_per_partition * partitions;
@@ -701,6 +690,22 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher>
                         let proof_r_old: MerkleProof<Tree> = t_aux_old
                             .tree_r_last
                             .gen_cached_proof(challenge, rows_to_discard)?;
+
+                        ensure!(
+                            proof_d_new.verify(),
+                            "failed to validte tree_d proof on challenge {}",
+                            challenge
+                        );
+                        ensure!(
+                            proof_r_new.verify(),
+                            "failed to validte tree_r_new proof on challenge {}",
+                            challenge
+                        );
+                        ensure!(
+                            proof_r_old.verify(),
+                            "failed to validte tree_r_old proof on challenge {}",
+                            challenge
+                        );
 
                         Ok(ChallengeProof::from_merkle_proofs(
                             proof_r_old,

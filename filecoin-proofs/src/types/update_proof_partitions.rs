@@ -9,6 +9,6 @@ impl From<UpdateProofPartitions> for usize {
 
 impl From<usize> for UpdateProofPartitions {
     fn from(x: usize) -> Self {
-        UpdateProofPartitions::from(x)
+        UpdateProofPartitions(x as u8)
     }
 }
