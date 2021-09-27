@@ -1,6 +1,6 @@
 use scheduler_client::{
-    register, schedule_one_of, ResourceAlloc, ResourceMemory, ResourceReq, ResourceType, TaskFunc,
-    TaskReqBuilder, TaskResult, TaskType,
+    Client, ResourceAlloc, ResourceMemory, ResourceReq, ResourceType, TaskFunc, TaskReqBuilder,
+    TaskResult, TaskType,
 };
 use std::time::Duration;
 use storage_proofs_core::error::{Error, Result};
@@ -15,20 +15,15 @@ where
 {
     call: F,
     num_iter: usize,
-    name: Option<String>,
-    context: Option<String>,
+    name: String,
+    context: String,
 }
 
 impl<F> Builder<F>
 where
     for<'a> F: FnMut(Option<&'a ResourceAlloc>) -> Result<TaskResult, Error>,
 {
-    pub(crate) fn new(
-        call: F,
-        num_iter: usize,
-        client_name: Option<String>,
-        context: Option<String>,
-    ) -> Self {
+    pub(crate) fn new(call: F, num_iter: usize, client_name: String, context: String) -> Self {
         Self {
             call,
             num_iter,
@@ -49,9 +44,13 @@ where
                 .resource_req(resouce_req);
             task_req.build()
         };
-        let client = register::<Error>(self.name.take(), self.context.take())?;
+        let mut client = Client::register::<Error>()?;
+        client.set_name(self.name.clone());
+        client.set_context(self.context.clone());
 
-        schedule_one_of(client, self, requirements, Duration::from_secs(TIMEOUT)).map(|_| ())
+        client
+            .schedule_one_of(self, requirements, Duration::from_secs(TIMEOUT))
+            .map(|_| ())
     }
 }
 
