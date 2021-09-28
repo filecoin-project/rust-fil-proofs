@@ -68,8 +68,41 @@ fn cache(s: &str) -> String {
     cache_name
 }
 
+/// Sets an environment variable to a value if it isn't properly set yet.
+fn set_env_var_if_unset(env_var: &str, value: &str) {
+    if env::var(env_var).is_err() {
+        env::set_var(env_var, value);
+    }
+}
+
+/// Set the GPU framework for the dependencies.
+///
+/// If a GPU framework, CUDA and OpenCL is selected, it needs to be communicated some of the
+/// dependnecies. This is done via environment variables.
+///
+/// If one of those environment variables is already set, it won't be overridden.
+fn set_gpu_framework() {
+    if let Ok(framework) = env::var(format!("{}_GPU_FRAMEWORK", PREFIX)) {
+        set_env_var_if_unset("BELLMAN_GPU_FRAMEWORK", &framework);
+        set_env_var_if_unset("NEPTUNE_GPU_FRAMEWORK", &framework);
+    }
+}
+
+/// Set CUDA nvcc compile flags (if set) for the dependencies.
+///
+/// If one of those environment variables is already set, it won't be overridden.
+fn set_cuda_nvcc_args() {
+    if let Ok(nvcc_args) = env::var(format!("{}_CUDA_NVCC_ARGS", PREFIX)) {
+        set_env_var_if_unset("BELLMAN_CUDA_NVCC_ARGS", &nvcc_args);
+        set_env_var_if_unset("NEPTUNE_CUDA_NVCC_ARGS", &nvcc_args);
+    }
+}
+
 impl Settings {
     fn new() -> Result<Settings, ConfigError> {
+        set_gpu_framework();
+        set_cuda_nvcc_args();
+
         let mut s = Config::new();
 
         s.merge(File::with_name(SETTINGS_PATH).required(false))?;

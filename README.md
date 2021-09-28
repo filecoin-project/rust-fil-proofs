@@ -73,6 +73,14 @@ To disable `multicore sdr` so that `hwloc` is not required, you can build proofs
 
 Note that the `multicore-sdr` feature is omitted from the specified feature list, which removes it from being used by default.
 
+There is experimental support for CUDA behind the `cuda` feature (disabled by default). You will need to install `nvcc`.  On Ubuntu, this can be achieved with `apt install nvidia-cuda-toolkit`.  To enable CUDA support, you can build proofs like this:
+
+```
+> cargo build --release --all --features cuda
+```
+
+It now builds it with both, CUDA and OpenCL support, CUDA will then be preferred at runtime, but can be disabled with the `FIL_PROOFS_GPU_FRAMEWORK` environment variable (see more information in the `GPU usage` section below).
+
 
 ## Building for Arm64
 
@@ -302,6 +310,20 @@ FIL_PROOFS_COLUMN_WRITE_BATCH_SIZE=Y
 ```
 
 Note that this value affects the degree of parallelism used when persisting the column tree to disk, and may exhaust system file descriptors if the limit is not adjusted appropriately (e.g. using `ulimit -n`).  If persisting the tree is failing due to a 'bad file descriptor' error, try adjusting this value to something larger (e.g. 524288, or 1048576).  Increasing this value processes larger chunks at once, which results in larger (but fewer) disk writes in parallel.
+
+When the library is built with both CUDA and OpenCL support, you can choose which one to use at run time.  Use the environment variable:
+
+```
+FIL_PROOFS_GPU_FRAMEWORK=cuda
+```
+
+You can set it to `opencl` to use OpenCL instead.  The default value is `cuda`, when you set nothing or any other (invalid) value.
+
+CUDA kernels are compiled and build time.  By default, they are built for recent architectures, Turing (`sm_75` and Ampere (`sm_80`, `sm_86`).  This increases the overall build time by several minutes.  You can reduce it by compiling it only for the specific aritecture you need.  For example if you only need the CUDA kernels to work on the Turing architecture, you can set
+
+`FIL_PROOFS_CUDA_NVCC_ARGS="--fatbin --gpu-architecture=sm_75 --generate-code=arch=compute_75,code=sm_75"`
+
+Note that this environment variable is forwarded to underlying dependencies, which might not be automatically be rebuilt.  If you change this variable, best is to start from a clean build.
 
 ### Memory
 
