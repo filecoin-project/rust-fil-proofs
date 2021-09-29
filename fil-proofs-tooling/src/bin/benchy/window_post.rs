@@ -536,7 +536,8 @@ pub fn run_window_post_bench<Tree: 'static + MerkleTreeTrait>(
         &pub_replica_info,
         PROVER_ID,
         &proof,
-    ).unwrap();
+    )
+    .unwrap();
     let verify_window_post_measurement = measure(|| {
         verify_window_post::<Tree>(
             &post_config,
