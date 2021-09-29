@@ -7,95 +7,39 @@ use bellperson::{
     },
     Circuit, ConstraintSystem, SynthesisError,
 };
-use blstrs::{Bls12, Scalar as Fr};
+use blstrs::Scalar as Fr;
 use filecoin_hashers::{HashFunction, Hasher};
 use generic_array::typenum::Unsigned;
 use storage_proofs_core::{
+    compound_proof::CircuitComponent,
     gadgets::insertion::select,
-    merkle::{MerkleProofTrait, MerkleTreeTrait},
+    merkle::{MerkleProof, MerkleProofTrait, MerkleTreeTrait},
 };
 
 use crate::{
     constants::{
-        apex_leaf_count, challenge_count, hs, partition_count, tree_shape_is_valid, TreeD,
-        ALLOWED_SECTOR_SIZES,
+        hs, validate_tree_r_shape, TreeD, TreeDArity, TreeDDomain, TreeDHasher, TreeRDomain,
+        TreeRHasher,
     },
     gadgets::{
         allocated_num_to_allocated_bits, apex_por, gen_challenge_bits, get_challenge_high_bits,
         label_r_new, por_no_challenge_input,
     },
+    PublicParams,
 };
 
-pub type MerkleProof<Tree> = storage_proofs_core::merkle::MerkleProof<
-    <Tree as MerkleTreeTrait>::Hasher,
-    <Tree as MerkleTreeTrait>::Arity,
-    <Tree as MerkleTreeTrait>::SubTreeArity,
-    <Tree as MerkleTreeTrait>::TopTreeArity,
->;
-
 #[derive(Clone)]
-pub struct PublicParams {
-    // The sector-size measured in nodes.
-    pub sector_nodes: usize,
-    // The number of challenges per partition proof.
-    pub challenge_count: usize,
-    // The number of bits per challenge, i.e. `challenge_bits = log2(sector_nodes)`.
-    pub challenge_bit_len: usize,
-    // The number of partition proofs for this sector-size.
-    pub partition_count: usize,
-    // The bit length of an integer in `0..partition_count`.
-    pub partition_bit_len: usize,
-    // The number of leafs in the apex-tree.
-    pub apex_leaf_count: usize,
-    // The bit length of an integer in `0..apex_leaf_count`.
-    pub apex_select_bit_len: usize,
-}
-
-impl PublicParams {
-    pub fn from_sector_size(sector_bytes: u64) -> Self {
-        // The sector-size measured in 32-byte nodes.
-        let sector_nodes = ALLOWED_SECTOR_SIZES
-            .iter()
-            .copied()
-            .find(|allowed_nodes| (allowed_nodes << 5) as u64 == sector_bytes)
-            .expect("provided sector-size is not allowed");
-
-        // `sector_nodes` is guaranteed to be a power of two.
-        let challenge_bit_len = sector_nodes.trailing_zeros() as usize;
-        let challenge_count = challenge_count(sector_nodes);
-
-        let partition_count = partition_count(sector_nodes);
-        // `partition_count` is guaranteed to be a power of two.
-        let partition_bit_len = partition_count.trailing_zeros() as usize;
-
-        let apex_leaf_count = apex_leaf_count(sector_nodes);
-        // `apex_leaf_count` is guaranteed to be a power of two.
-        let apex_select_bit_len = apex_leaf_count.trailing_zeros() as usize;
-
-        PublicParams {
-            sector_nodes,
-            challenge_count,
-            challenge_bit_len,
-            partition_count,
-            partition_bit_len,
-            apex_leaf_count,
-            apex_select_bit_len,
-        }
-    }
-}
-
-#[derive(Clone)]
-pub struct PublicInputs<TreeR: MerkleTreeTrait> {
+pub struct PublicInputs {
     pub k: usize,
-    pub comm_r_old: <TreeR::Hasher as Hasher>::Domain,
-    pub comm_d_new: <<TreeD as MerkleTreeTrait>::Hasher as Hasher>::Domain,
-    pub comm_r_new: <TreeR::Hasher as Hasher>::Domain,
+    pub comm_r_old: TreeRDomain,
+    pub comm_d_new: TreeDDomain,
+    pub comm_r_new: TreeRDomain,
     pub h_select: u64,
-    pub _tree_r: PhantomData<TreeR>,
 }
 
-impl<TreeR: MerkleTreeTrait> PublicInputs<TreeR> {
-    pub fn to_vec(self) -> Vec<Fr> {
+impl PublicInputs {
+    // Returns public-inputs in the order expected by `ConstraintSystem::verify()`.
+    pub fn to_vec(&self) -> Vec<Fr> {
         vec![
             Fr::from(self.k as u64),
             self.comm_r_old.into(),
@@ -106,7 +50,10 @@ impl<TreeR: MerkleTreeTrait> PublicInputs<TreeR> {
     }
 }
 
-pub struct ChallengeProof<TreeR: MerkleTreeTrait> {
+pub struct ChallengeProof<TreeR>
+where
+    TreeR: MerkleTreeTrait<Hasher = TreeRHasher>,
+{
     pub leaf_r_old: Option<Fr>,
     pub path_r_old: Vec<Vec<Option<Fr>>>,
     pub leaf_d_new: Option<Fr>,
@@ -117,25 +64,41 @@ pub struct ChallengeProof<TreeR: MerkleTreeTrait> {
 }
 
 // Implement `Clone` by hand because `MerkleTreeTrait` does not implement `Clone`.
-impl<TreeR: MerkleTreeTrait> std::clone::Clone for ChallengeProof<TreeR> {
+impl<TreeR> Clone for ChallengeProof<TreeR>
+where
+    TreeR: MerkleTreeTrait<Hasher = TreeRHasher>,
+{
     fn clone(&self) -> Self {
         ChallengeProof {
-            leaf_r_old: self.leaf_r_old.clone(),
+            leaf_r_old: self.leaf_r_old,
             path_r_old: self.path_r_old.clone(),
-            leaf_d_new: self.leaf_d_new.clone(),
+            leaf_d_new: self.leaf_d_new,
             path_d_new: self.path_d_new.clone(),
-            leaf_r_new: self.leaf_r_new.clone(),
+            leaf_r_new: self.leaf_r_new,
             path_r_new: self.path_r_new.clone(),
             _tree_r: PhantomData,
         }
     }
 }
 
-impl<TreeR: MerkleTreeTrait> ChallengeProof<TreeR> {
+impl<TreeR> ChallengeProof<TreeR>
+where
+    TreeR: MerkleTreeTrait<Hasher = TreeRHasher>,
+{
     pub fn from_merkle_proofs(
-        proof_r_old: MerkleProof<TreeR>,
-        proof_d_new: MerkleProof<TreeD>,
-        proof_r_new: MerkleProof<TreeR>,
+        proof_r_old: MerkleProof<
+            TreeRHasher,
+            TreeR::Arity,
+            TreeR::SubTreeArity,
+            TreeR::TopTreeArity,
+        >,
+        proof_d_new: MerkleProof<TreeDHasher, TreeDArity>,
+        proof_r_new: MerkleProof<
+            TreeRHasher,
+            TreeR::Arity,
+            TreeR::SubTreeArity,
+            TreeR::TopTreeArity,
+        >,
     ) -> Self {
         let leaf_r_old = Some(proof_r_old.leaf().into());
         let path_r_old: Vec<Vec<Option<Fr>>> = proof_r_old
@@ -210,7 +173,10 @@ impl<TreeR: MerkleTreeTrait> ChallengeProof<TreeR> {
     }
 }
 
-pub struct EmptySectorUpdateCircuit<TreeR: MerkleTreeTrait> {
+pub struct EmptySectorUpdateCircuit<TreeR>
+where
+    TreeR: MerkleTreeTrait<Hasher = TreeRHasher>,
+{
     pub pub_params: PublicParams,
 
     // Public-inputs
@@ -225,14 +191,22 @@ pub struct EmptySectorUpdateCircuit<TreeR: MerkleTreeTrait> {
     pub comm_r_last_old: Option<Fr>,
     pub comm_r_last_new: Option<Fr>,
     pub apex_leafs: Vec<Option<Fr>>,
-    pub partition_path: Vec<Vec<Option<Fr>>>,
     pub challenge_proofs: Vec<ChallengeProof<TreeR>>,
 }
 
-impl<TreeR: MerkleTreeTrait> EmptySectorUpdateCircuit<TreeR> {
+impl<TreeR> CircuitComponent for EmptySectorUpdateCircuit<TreeR>
+where
+    TreeR: MerkleTreeTrait<Hasher = TreeRHasher>,
+{
+    type ComponentPrivateInputs = ();
+}
+
+impl<TreeR> EmptySectorUpdateCircuit<TreeR>
+where
+    TreeR: MerkleTreeTrait<Hasher = TreeRHasher>,
+{
     pub fn blank(pub_params: PublicParams) -> Self {
         let apex_leafs = vec![None; pub_params.apex_leaf_count];
-        let partition_path = vec![vec![None]; pub_params.partition_bit_len];
         let challenge_proofs =
             vec![ChallengeProof::blank(pub_params.sector_nodes); pub_params.challenge_count];
         EmptySectorUpdateCircuit {
@@ -246,14 +220,16 @@ impl<TreeR: MerkleTreeTrait> EmptySectorUpdateCircuit<TreeR> {
             comm_r_last_old: None,
             comm_r_last_new: None,
             apex_leafs,
-            partition_path,
             challenge_proofs,
         }
     }
 }
 
-impl<TreeR: MerkleTreeTrait> Circuit<Bls12> for EmptySectorUpdateCircuit<TreeR> {
-    fn synthesize<CS: ConstraintSystem<Bls12>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
+impl<TreeR> Circuit<Fr> for EmptySectorUpdateCircuit<TreeR>
+where
+    TreeR: MerkleTreeTrait<Hasher = TreeRHasher>,
+{
+    fn synthesize<CS: ConstraintSystem<Fr>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
         let EmptySectorUpdateCircuit {
             pub_params,
             k,
@@ -265,7 +241,6 @@ impl<TreeR: MerkleTreeTrait> Circuit<Bls12> for EmptySectorUpdateCircuit<TreeR> 
             comm_r_last_old,
             comm_r_last_new,
             apex_leafs,
-            partition_path,
             challenge_proofs,
         } = self;
 
@@ -279,10 +254,13 @@ impl<TreeR: MerkleTreeTrait> Circuit<Bls12> for EmptySectorUpdateCircuit<TreeR> 
             apex_select_bit_len,
         } = pub_params;
 
+        validate_tree_r_shape::<TreeR>(sector_nodes);
         let hs = hs(sector_nodes);
         let h_select_bit_len = hs.len();
 
-        assert!(tree_shape_is_valid::<TreeR>(sector_nodes));
+        let partition_path =
+            challenge_proofs[0].path_d_new[challenge_bit_len - partition_bit_len..].to_vec();
+
         if let Some(k) = k {
             let repr = k.to_bytes_le();
             assert!(
@@ -291,7 +269,7 @@ impl<TreeR: MerkleTreeTrait> Circuit<Bls12> for EmptySectorUpdateCircuit<TreeR> 
             );
         }
         // Assert that `h_select` is valid. HSelect should be a uint whose binary representation has
-        // exactly 1 of its first 6 (i.e. `h_select_bit_len`) bits set.
+        // exactly 1 of its first `h_select_bit_len` (i.e. 6) bits set.
         if let Some(h_select) = h_select {
             let mut allowed_h_select_values = (0..h_select_bit_len).map(|i| Fr::from(1u64 << i));
             assert!(allowed_h_select_values.any(|allowed_h_select| allowed_h_select == h_select));
@@ -300,6 +278,13 @@ impl<TreeR: MerkleTreeTrait> Circuit<Bls12> for EmptySectorUpdateCircuit<TreeR> 
         assert_eq!(partition_path.len(), partition_bit_len);
         assert!(partition_path.iter().all(|siblings| siblings.len() == 1));
         assert_eq!(challenge_proofs.len(), challenge_count);
+        // Check that all partition challenge's have the same same partition path.
+        for challenge_proof in &challenge_proofs[1..] {
+            assert_eq!(
+                &challenge_proof.path_d_new[challenge_bit_len - partition_bit_len..],
+                partition_path,
+            );
+        }
 
         // Allocate public-inputs.
 
@@ -373,7 +358,7 @@ impl<TreeR: MerkleTreeTrait> Circuit<Bls12> for EmptySectorUpdateCircuit<TreeR> 
                     leaf.ok_or(SynthesisError::AssignmentMissing)
                 })
             })
-            .collect::<Result<Vec<AllocatedNum<Bls12>>, SynthesisError>>()?;
+            .collect::<Result<Vec<AllocatedNum<Fr>>, SynthesisError>>()?;
 
         let partition_path = partition_path
             .iter()
@@ -385,7 +370,7 @@ impl<TreeR: MerkleTreeTrait> Circuit<Bls12> for EmptySectorUpdateCircuit<TreeR> 
                 )
                 .map(|sibling| vec![sibling])
             })
-            .collect::<Result<Vec<Vec<AllocatedNum<Bls12>>>, SynthesisError>>()?;
+            .collect::<Result<Vec<Vec<AllocatedNum<Fr>>>, SynthesisError>>()?;
 
         // Assert that the witnessed `comm_r_last_old` and `comm_r_last_new` are consistent with the
         // public `comm_r_old` and `comm_r_new` via `comm_r = H(comm_c || comm_r_last)`.
@@ -417,8 +402,8 @@ impl<TreeR: MerkleTreeTrait> Circuit<Bls12> for EmptySectorUpdateCircuit<TreeR> 
             cs.namespace(|| "apex_gadget"),
             apex_leafs.clone(),
             partition_bits.clone(),
-            partition_path.clone(),
-            comm_d_new.clone(),
+            partition_path,
+            comm_d_new,
         )?;
 
         // Generate `challenge_sans_partition_bit_len` number of random bits for each challenge.
@@ -427,7 +412,7 @@ impl<TreeR: MerkleTreeTrait> Circuit<Bls12> for EmptySectorUpdateCircuit<TreeR> 
         // producing a challenge in `0..sector_nodes` which is guaranteed to lie within this
         // partition's subset of leafs.
         let challenge_sans_partition_bit_len = challenge_bit_len - partition_bit_len;
-        let generated_bits = gen_challenge_bits::<TreeR::Hasher, _>(
+        let generated_bits = gen_challenge_bits(
             cs.namespace(|| "gen_challenge_bits"),
             &comm_r_new,
             &partition,
@@ -437,19 +422,15 @@ impl<TreeR: MerkleTreeTrait> Circuit<Bls12> for EmptySectorUpdateCircuit<TreeR> 
 
         for (c_index, c_bits_without_partition) in generated_bits.into_iter().enumerate() {
             let c_bits: Vec<AllocatedBit> = c_bits_without_partition
-                .into_iter()
-                .chain(partition_bits.iter().cloned())
+                .iter()
+                .chain(partition_bits.iter())
+                .cloned()
                 .collect();
-
-            // TODO: the high bits should not include the partition index.
 
             // Compute this challenge's `rho`.
             let c_high = get_challenge_high_bits(
                 cs.namespace(|| format!("get_challenge_high_bits (c_index={})", c_index)),
-                // TODO: remove comments
-                // &c_bits_without_partition,
-                // &partition_bits,
-                &c_bits,
+                &c_bits_without_partition,
                 &h_select_bits,
                 &hs,
             )?;
@@ -510,9 +491,9 @@ impl<TreeR: MerkleTreeTrait> Circuit<Bls12> for EmptySectorUpdateCircuit<TreeR> 
                                 || sibling.ok_or(SynthesisError::AssignmentMissing),
                             )
                         })
-                        .collect::<Result<Vec<AllocatedNum<Bls12>>, SynthesisError>>()
+                        .collect::<Result<Vec<AllocatedNum<Fr>>, SynthesisError>>()
                 })
-                .collect::<Result<Vec<Vec<AllocatedNum<Bls12>>>, SynthesisError>>()?;
+                .collect::<Result<Vec<Vec<AllocatedNum<Fr>>>, SynthesisError>>()?;
 
             por_no_challenge_input::<TreeR, _>(
                 cs.namespace(|| format!("por tree_r_old (c_index={})", c_index)),
@@ -540,9 +521,9 @@ impl<TreeR: MerkleTreeTrait> Circuit<Bls12> for EmptySectorUpdateCircuit<TreeR> 
                                 || sibling.ok_or(SynthesisError::AssignmentMissing),
                             )
                         })
-                        .collect::<Result<Vec<AllocatedNum<Bls12>>, SynthesisError>>()
+                        .collect::<Result<Vec<AllocatedNum<Fr>>, SynthesisError>>()
                 })
-                .collect::<Result<Vec<Vec<AllocatedNum<Bls12>>>, SynthesisError>>()?;
+                .collect::<Result<Vec<Vec<AllocatedNum<Fr>>>, SynthesisError>>()?;
 
             por_no_challenge_input::<TreeR, _>(
                 cs.namespace(|| format!("por tree_r_new (c_index={})", c_index)),
@@ -590,7 +571,7 @@ impl<TreeR: MerkleTreeTrait> Circuit<Bls12> for EmptySectorUpdateCircuit<TreeR> 
                     )
                     .map(|sibling| vec![sibling])
                 })
-                .collect::<Result<Vec<Vec<AllocatedNum<Bls12>>>, SynthesisError>>()?;
+                .collect::<Result<Vec<Vec<AllocatedNum<Fr>>>, SynthesisError>>()?;
 
             por_no_challenge_input::<TreeD, _>(
                 cs.namespace(|| format!("por to_apex_leaf (c_index={})", c_index)),
@@ -605,18 +586,35 @@ impl<TreeR: MerkleTreeTrait> Circuit<Bls12> for EmptySectorUpdateCircuit<TreeR> 
     }
 }
 
-/*
 #[cfg(test)]
 mod tests {
     use super::*;
 
+    use std::path::Path;
+
+    use bellperson::util_cs::test_cs::TestConstraintSystem;
     use filecoin_hashers::Domain;
+    use generic_array::typenum::{U0, U2, U4, U8};
+    use merkletree::store::{DiskStore, StoreConfig};
     use rand::SeedableRng;
     use rand_xorshift::XorShiftRng;
     use storage_proofs_core::{
-        merkle::{create_base_merkle_tree, MerkleProof, MerkleProofTrait},
+        merkle::{MerkleProofTrait, MerkleTreeWrapper},
+        util::default_rows_to_discard,
         TEST_SEED,
     };
+    use tempfile::tempdir;
+
+    use crate::{
+        constants::{
+            apex_leaf_count, partition_count, SECTOR_SIZE_16_KIB, SECTOR_SIZE_1_KIB,
+            SECTOR_SIZE_2_KIB, SECTOR_SIZE_32_KIB, SECTOR_SIZE_4_KIB, SECTOR_SIZE_8_KIB,
+        },
+        Challenges,
+    };
+
+    // Selects a value for `h` via `h = hs[log2(h_select)]`; default to taking `h = hs[2]`.
+    const H_SELECT: u64 = 1 << 2;
 
     fn create_tree<Tree: MerkleTreeTrait>(
         labels: &[<<Tree as MerkleTreeTrait>::Hasher as Hasher>::Domain],
@@ -630,8 +628,6 @@ mod tests {
         Tree::TopTreeArity,
     > {
         let sector_nodes = labels.len();
-        assert!(tree_shape_is_valid::<Tree>(sector_nodes));
-
         let base_arity = Tree::Arity::to_usize();
         let sub_arity = Tree::SubTreeArity::to_usize();
         let top_arity = Tree::TopTreeArity::to_usize();
@@ -650,36 +646,31 @@ mod tests {
         } else if top_arity == 0 {
             let base_tree_count = sub_arity;
             let leafs_per_base_tree = sector_nodes / base_tree_count;
-            let base_rows_to_discard = default_rows_to_discard(leafs_per_base_tree, base_arity);
-
-            let base_trees: Vec<MerkleTreeWrapper<Tree::Hasher, Tree::Store, Tree::Arity>> =
-                (0..base_tree_count)
-                    .map(|i| {
-                        let leafs = labels[i * leafs_per_base_tree..(i + 1) * leafs_per_base_tree]
-                            .iter()
-                            .copied()
-                            .map(Ok);
-                        let config = StoreConfig::new(
-                            tmp_path,
-                            format!("{}-base-{}", tree_name, i),
-                            base_rows_to_discard,
-                        );
-                        MerkleTreeWrapper::try_from_iter_with_config(leafs, config).expect(
-                            &format!("failed to create {} base-tree {}", tree_name, i),
-                        )
-                    })
-                    .collect();
-
+            let rows_to_discard = default_rows_to_discard(leafs_per_base_tree, base_arity);
+            let base_trees: Vec<MerkleTreeWrapper<Tree::Hasher, Tree::Store, Tree::Arity>> = (0
+                ..base_tree_count)
+                .map(|i| {
+                    let config = StoreConfig::new(
+                        tmp_path,
+                        format!("{}-base-{}", tree_name, i),
+                        rows_to_discard,
+                    );
+                    let leafs = labels[i * leafs_per_base_tree..(i + 1) * leafs_per_base_tree]
+                        .iter()
+                        .copied()
+                        .map(Ok);
+                    MerkleTreeWrapper::try_from_iter_with_config(leafs, config)
+                        .expect(&format!("failed to create {} base-tree {}", tree_name, i))
+                })
+                .collect();
             MerkleTreeWrapper::from_trees(base_trees)
                 .expect(&format!("failed to create {} from base-trees", tree_name))
         } else {
             let base_tree_count = top_arity * sub_arity;
-            let leafs_per_base_tree = sector_nodes / base_tree_count;
-            let base_rows_to_discard = default_rows_to_discard(leafs_per_base_tree, base_arity);
-
             let sub_tree_count = top_arity;
+            let leafs_per_base_tree = sector_nodes / base_tree_count;
             let base_trees_per_sub_tree = sub_arity;
-
+            let rows_to_discard = default_rows_to_discard(leafs_per_base_tree, base_arity);
             let sub_trees: Vec<
                 MerkleTreeWrapper<Tree::Hasher, Tree::Store, Tree::Arity, Tree::SubTreeArity>,
             > = (0..sub_tree_count)
@@ -688,62 +679,287 @@ mod tests {
                     let base_trees: Vec<MerkleTreeWrapper<Tree::Hasher, Tree::Store, Tree::Arity>> =
                         (0..base_trees_per_sub_tree)
                             .map(|base_index| {
-                                let first_base_leaf =
-                                    first_sub_leaf + base_index * leafs_per_base_tree;
-                                let leafs =
-                                    labels[first_base_leaf..first_base_leaf + leafs_per_base_tree]
-                                        .iter()
-                                        .copied()
-                                        .map(Ok);
                                 let config = StoreConfig::new(
                                     tmp_path,
                                     format!("{}-sub-{}-base-{}", tree_name, sub_index, base_index),
-                                    base_rows_to_discard,
+                                    rows_to_discard,
                                 );
+                                let first_base_leaf =
+                                    first_sub_leaf + base_index * leafs_per_base_tree;
+                                let leafs = labels
+                                    [first_base_leaf..first_base_leaf + leafs_per_base_tree]
+                                    .iter()
+                                    .copied()
+                                    .map(Ok);
                                 MerkleTreeWrapper::try_from_iter_with_config(leafs, config).expect(
                                     &format!(
                                         "failed to create {} sub-tree {} base-tree {}",
-                                        tree_name,
-                                        sub_index,
-                                        base_index,
+                                        tree_name, sub_index, base_index,
                                     ),
                                 )
                             })
                             .collect();
                     MerkleTreeWrapper::from_trees(base_trees).expect(&format!(
                         "failed to create {} sub-tree {} from base-trees",
-                        tree_name,
-                        sub_index,
+                        tree_name, sub_index,
                     ))
                 })
                 .collect();
-
             MerkleTreeWrapper::from_sub_trees(sub_trees)
                 .expect(&format!("failed to create {} from sub-trees", tree_name))
         }
     }
 
-    #[test]
-    fn test_empty_sector_update_circuit() {
+    fn get_apex_leafs(
+        tree_d_new: &MerkleTreeWrapper<
+            <TreeD as MerkleTreeTrait>::Hasher,
+            <TreeD as MerkleTreeTrait>::Store,
+            <TreeD as MerkleTreeTrait>::Arity,
+            <TreeD as MerkleTreeTrait>::SubTreeArity,
+            <TreeD as MerkleTreeTrait>::TopTreeArity,
+        >,
+        k: usize,
+    ) -> Vec<TreeDDomain> {
+        let sector_nodes = tree_d_new.leafs();
+        let tree_d_height = sector_nodes.trailing_zeros() as usize;
+        let partition_count = partition_count(sector_nodes);
+        let partition_tree_height = partition_count.trailing_zeros() as usize;
+        let apex_leafs_per_partition = apex_leaf_count(sector_nodes);
+        let apex_tree_height = apex_leafs_per_partition.trailing_zeros() as usize;
+        let apex_leafs_height = tree_d_height - partition_tree_height - apex_tree_height;
 
+        let mut apex_leafs_start = sector_nodes;
+        for i in 1..apex_leafs_height {
+            apex_leafs_start += sector_nodes >> i;
+        }
+        apex_leafs_start += k * apex_leafs_per_partition;
+        let apex_leafs_stop = apex_leafs_start + apex_leafs_per_partition;
+        tree_d_new
+            .read_range(apex_leafs_start, apex_leafs_stop)
+            .expect(&format!(
+                "failed to read tree_d_new apex-leafs (k={}, range={}..{})",
+                k, apex_leafs_start, apex_leafs_stop,
+            ))
+    }
+
+    fn encode_new_replica(
+        labels_r_old: &[TreeRDomain],
+        labels_d_new: &[TreeDDomain],
+        phi: &TreeRDomain,
+        h: usize,
+    ) -> Vec<TreeRDomain> {
+        let sector_nodes = labels_r_old.len();
+        assert_eq!(sector_nodes, labels_d_new.len());
+
+        let node_index_bit_len = sector_nodes.trailing_zeros() as usize;
+        let partition_count = partition_count(sector_nodes);
+        let partition_bit_len = partition_count.trailing_zeros() as usize;
+
+        // The bit-length of a node-index after the partition bits have been stripped.
+        let node_index_sans_partition_bit_len = node_index_bit_len - partition_bit_len;
+        // Bitwise AND-mask which removes the partition bits from each node-index.
+        let remove_partition_mask = (1 << node_index_sans_partition_bit_len) - 1;
+        let get_high_bits_shr = node_index_sans_partition_bit_len - h;
+
+        (0..sector_nodes)
+            .map(|node| {
+                // Remove the partition-index from the node-index then take the `h` high bits.
+                let high: TreeRDomain = {
+                    let node_sans_partition = node & remove_partition_mask;
+                    let high = node_sans_partition >> get_high_bits_shr;
+                    Fr::from(high as u64).into()
+                };
+
+                // `rho = H(phi || high)`
+                let rho: Fr = <TreeRHasher as Hasher>::Function::hash2(phi, &high).into();
+
+                // `label_r_new = label_r_old + label_d_new * rho`
+                let label_r_old: Fr = labels_r_old[node].into();
+                let label_d_new: Fr = labels_d_new[node].into();
+                (label_r_old + label_d_new * rho).into()
+            })
+            .collect()
+    }
+
+    fn test_empty_sector_update_circuit<TreeR>(sector_nodes: usize)
+    where
+        TreeR: MerkleTreeTrait<Hasher = TreeRHasher>,
+    {
+        validate_tree_r_shape::<TreeR>(sector_nodes);
+
+        let sector_bytes = sector_nodes << 5;
+        let hs = hs(sector_nodes);
+        let h = hs[H_SELECT.trailing_zeros() as usize];
+
+        let mut rng = XorShiftRng::from_seed(TEST_SEED);
+
+        // Merkle tree storage directory.
+        let tmp_dir = tempdir().unwrap();
+        let tmp_path = tmp_dir.path();
+
+        // Create random TreeROld.
+        let labels_r_old: Vec<TreeRDomain> = (0..sector_nodes)
+            .map(|_| TreeRDomain::random(&mut rng))
+            .collect();
+        let tree_r_old = create_tree::<TreeR>(&labels_r_old, tmp_path, "tree-r-old");
+        let comm_r_last_old = tree_r_old.root();
+        let comm_c = TreeRDomain::random(&mut rng);
+        let comm_r_old = <TreeRHasher as Hasher>::Function::hash2(&comm_c, &comm_r_last_old);
+
+        // Create random TreeDNew.
+        let labels_d_new: Vec<TreeDDomain> = (0..sector_nodes)
+            .map(|_| TreeDDomain::random(&mut rng))
+            .collect();
+        let tree_d_new = create_tree::<TreeD>(&labels_d_new, tmp_path, "tree-d-new");
+        let comm_d_new = tree_d_new.root();
+
+        // `phi = H(comm_d_new || comm_r_old)`
+        let phi =
+            <TreeRHasher as Hasher>::Function::hash2(&Fr::from(comm_d_new).into(), &comm_r_old);
+
+        // Encode `labels_d_new` into `labels_r_new` and create TreeRNew.
+        let labels_r_new = encode_new_replica(&labels_r_old, &labels_d_new, &phi, h);
+        let tree_r_new = create_tree::<TreeR>(&labels_r_new, tmp_path, "tree-r-new");
+        let comm_r_last_new = tree_r_new.root();
+        let comm_r_new = <TreeRHasher as Hasher>::Function::hash2(&comm_c, &comm_r_last_new);
+
+        let pub_params = PublicParams::from_sector_size(sector_bytes as u64);
+
+        for k in 0..pub_params.partition_count {
+            let pub_inputs = PublicInputs {
+                k,
+                comm_r_old,
+                comm_d_new,
+                comm_r_new,
+                h_select: H_SELECT,
+            };
+
+            let apex_leafs: Vec<Option<Fr>> = get_apex_leafs(&tree_d_new, k)
+                .into_iter()
+                .map(|apex_leaf| Some(apex_leaf.into()))
+                .collect();
+
+            let challenge_proofs: Vec<ChallengeProof<TreeR>> =
+                Challenges::new(sector_nodes, comm_r_new, k)
+                    .enumerate()
+                    .take(pub_params.challenge_count)
+                    .map(|(i, c)| {
+                        let proof_r_old = tree_r_old.gen_proof(c).expect(&format!(
+                            "failed to generate `proof_r_old` for c_{}={}",
+                            i, c
+                        ));
+                        let proof_d_new = tree_d_new.gen_proof(c).expect(&format!(
+                            "failed to generate `proof_d_new` for c_{}={}",
+                            i, c
+                        ));
+                        let proof_r_new = tree_r_new.gen_proof(c).expect(&format!(
+                            "failed to generate `proof_r_new` for c_{}={}",
+                            i, c
+                        ));
+
+                        let path_r_old: Vec<Vec<Option<Fr>>> = proof_r_old
+                            .path()
+                            .into_iter()
+                            .map(|(siblings, _insert)| {
+                                siblings.into_iter().map(|s| Some(s.into())).collect()
+                            })
+                            .collect();
+                        let path_d_new: Vec<Vec<Option<Fr>>> = proof_d_new
+                            .path()
+                            .into_iter()
+                            .map(|(siblings, _insert)| {
+                                siblings.into_iter().map(|s| Some(s.into())).collect()
+                            })
+                            .collect();
+                        let path_r_new: Vec<Vec<Option<Fr>>> = proof_r_new
+                            .path()
+                            .into_iter()
+                            .map(|(siblings, _insert)| {
+                                siblings.into_iter().map(|s| Some(s.into())).collect()
+                            })
+                            .collect();
+
+                        ChallengeProof {
+                            leaf_r_old: Some(proof_r_old.leaf().into()),
+                            path_r_old,
+                            leaf_d_new: Some(proof_d_new.leaf().into()),
+                            path_d_new,
+                            leaf_r_new: Some(proof_r_new.leaf().into()),
+                            path_r_new,
+                            _tree_r: PhantomData,
+                        }
+                    })
+                    .collect();
+
+            let circuit = EmptySectorUpdateCircuit::<TreeR> {
+                pub_params: pub_params.clone(),
+                k: Some(Fr::from(pub_inputs.k as u64)),
+                comm_r_old: Some(pub_inputs.comm_r_old.into()),
+                comm_d_new: Some(pub_inputs.comm_d_new.into()),
+                comm_r_new: Some(pub_inputs.comm_r_new.into()),
+                h_select: Some(Fr::from(pub_inputs.h_select)),
+                comm_c: Some(comm_c.into()),
+                comm_r_last_old: Some(comm_r_last_old.into()),
+                comm_r_last_new: Some(comm_r_last_new.into()),
+                apex_leafs,
+                challenge_proofs: challenge_proofs,
+            };
+
+            let mut cs = TestConstraintSystem::<Fr>::new();
+            circuit.synthesize(&mut cs).expect("failed to synthesize");
+            assert!(cs.is_satisfied());
+            assert!(cs.verify(&pub_inputs.to_vec()));
+        }
+    }
+
+    #[test]
+    fn test_empty_sector_update_circuit_1kib() {
+        type TreeR = MerkleTreeWrapper<TreeRHasher, DiskStore<TreeRDomain>, U8, U4, U0>;
+        test_empty_sector_update_circuit::<TreeR>(SECTOR_SIZE_1_KIB);
+    }
+
+    #[test]
+    fn test_empty_sector_update_circuit_2kib() {
+        type TreeR = MerkleTreeWrapper<TreeRHasher, DiskStore<TreeRDomain>, U8, U0, U0>;
+        test_empty_sector_update_circuit::<TreeR>(SECTOR_SIZE_2_KIB);
+    }
+
+    #[test]
+    fn test_empty_sector_update_circuit_4kib() {
+        type TreeR = MerkleTreeWrapper<TreeRHasher, DiskStore<TreeRDomain>, U8, U2, U0>;
+        test_empty_sector_update_circuit::<TreeR>(SECTOR_SIZE_4_KIB);
+    }
+
+    #[test]
+    fn test_empty_sector_update_circuit_8kib() {
+        type TreeR = MerkleTreeWrapper<TreeRHasher, DiskStore<TreeRDomain>, U8, U4, U0>;
+        test_empty_sector_update_circuit::<TreeR>(SECTOR_SIZE_8_KIB);
+    }
+
+    #[test]
+    fn test_empty_sector_update_circuit_16kib() {
+        type TreeR = MerkleTreeWrapper<TreeRHasher, DiskStore<TreeRDomain>, U8, U8, U0>;
+        test_empty_sector_update_circuit::<TreeR>(SECTOR_SIZE_16_KIB);
+    }
+
+    #[test]
+    #[ignore]
+    fn test_empty_sector_update_circuit_32kib() {
+        type TreeR = MerkleTreeWrapper<TreeRHasher, DiskStore<TreeRDomain>, U8, U8, U2>;
+        test_empty_sector_update_circuit::<TreeR>(SECTOR_SIZE_32_KIB);
     }
 
     /*
-    use crate::constants::TreeDArity;
-
     #[test]
     fn test_apex_tree() {
         let mut rng = &mut XorShiftRng::from_seed(TEST_SEED);
-
         let n_leafs = PARTITIONS * APEX_LEAFS;
         let leafs: Vec<TreeDDomain> = (0..n_leafs).map(|_| TreeDDomain::random(&mut rng)).collect();
         let data: Vec<u8> = leafs.iter().flat_map(|leaf| leaf.into_bytes()).collect();
         let tree = create_base_merkle_tree::<TreeD>(None, n_leafs, &data)
             .expect("create_base_merkle_tree failure");
         let comm_d = tree.root();
-
         let k = 0;
-
         let merkle_proofs: Vec<MerkleProof<TreeDHasher, TreeDArity>> = (0..APEX_LEAFS)
             .map(|node_index| {
                 tree.gen_proof(node_index).expect(
@@ -751,11 +967,9 @@ mod tests {
                 )
             })
             .collect();
-
         fn apex_root_sibling(merkle_proof: &MerkleProof<TreeDHasher, TreeDArity>) -> TreeDDomain {
             merkle_proof.path()[APEX_HEIGHT].0[0]
         }
-
         fn partition_index(merkle_proof: &MerkleProof<TreeDHasher, TreeDArity>) -> usize {
             let mut k = 0;
             for (i, el) in merkle_proof.path()[APEX_HEIGHT..].iter().enumerate() {
@@ -766,7 +980,6 @@ mod tests {
             assert!(k < PARTITIONS);
             k
         }
-
         assert_eq!(tree.row_count(), APEX_ROWS + PARTITION_ROWS);
         let apex_root = apex_root_sibling(&merkle_proofs[0]);
         for merkle_proof in merkle_proofs.iter() {
@@ -777,4 +990,3 @@ mod tests {
     }
     */
 }
-*/

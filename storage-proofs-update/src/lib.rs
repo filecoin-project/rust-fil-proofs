@@ -1,14 +1,15 @@
+pub mod circuit;
+pub mod compound;
 pub mod constants;
-#[cfg(test)]
-pub(crate) mod encode;
 pub(crate) mod gadgets;
 pub(crate) mod vanilla;
 
 mod challenges;
-mod circuit;
 
 pub use self::challenges::Challenges;
-pub use self::circuit::{
-    ChallengeProof, EmptySectorUpdateCircuit, MerkleProof, PublicInputs, PublicParams,
+pub use self::circuit::EmptySectorUpdateCircuit;
+pub use self::compound::EmptySectorUpdateCompound;
+pub use self::vanilla::{
+    phi, ChallengeProof, EmptySectorUpdate, PartitionProof, PrivateInputs, PublicInputs,
+    PublicParams, SetupParams,
 };
-pub use self::vanilla::{EmptySectorUpdateVanilla, VanillaProof, VanillaUpdateProof};
