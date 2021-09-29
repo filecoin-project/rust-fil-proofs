@@ -6,27 +6,28 @@ use bellperson::{
     },
     ConstraintSystem, LinearCombination, SynthesisError,
 };
-use blstrs::{Bls12, Scalar as Fr};
+use blstrs::Scalar as Fr;
 use ff::{Field, PrimeField};
-use filecoin_hashers::{HashFunction, Hasher};
+use filecoin_hashers::{poseidon::PoseidonHasher, HashFunction, Hasher};
 use generic_array::typenum::Unsigned;
 use storage_proofs_core::{gadgets::insertion::insert, merkle::MerkleTreeTrait};
 
 use crate::constants::{TreeD, TreeDHasher};
 
 // Allocates `num` as `Fr::NUM_BITS` number of bits.
-pub fn allocated_num_to_allocated_bits<CS: ConstraintSystem<Bls12>>(
+pub fn allocated_num_to_allocated_bits<CS: ConstraintSystem<Fr>>(
     mut cs: CS,
-    num: &AllocatedNum<Bls12>,
+    num: &AllocatedNum<Fr>,
 ) -> Result<Vec<AllocatedBit>, SynthesisError> {
     let bits = field_into_allocated_bits_le(&mut cs, num.get_value())?;
     assert_eq!(bits.len(), Fr::NUM_BITS as usize);
 
     // Assert `(2^0 * bits[0] + ... + 2^(n - 1) * bits[n]) * 1 == num`.
-    let mut lc = LinearCombination::<Bls12>::zero();
-    for (i, bit) in bits.iter().enumerate() {
-        let pow2 = Fr::from(1u64 << i);
+    let mut lc = LinearCombination::<Fr>::zero();
+    let mut pow2 = Fr::one();
+    for bit in bits.iter() {
         lc = lc + (pow2, bit.get_variable());
+        pow2 = pow2.double();
     }
     cs.enforce(
         || "binary decomp",
@@ -42,13 +43,13 @@ pub fn por_no_challenge_input<Tree, CS>(
     mut cs: CS,
     // little-endian
     c_bits: Vec<AllocatedBit>,
-    leaf: AllocatedNum<Bls12>,
-    path_values: Vec<Vec<AllocatedNum<Bls12>>>,
-    root: AllocatedNum<Bls12>,
+    leaf: AllocatedNum<Fr>,
+    path_values: Vec<Vec<AllocatedNum<Fr>>>,
+    root: AllocatedNum<Fr>,
 ) -> Result<(), SynthesisError>
 where
     Tree: MerkleTreeTrait,
-    CS: ConstraintSystem<Bls12>,
+    CS: ConstraintSystem<Fr>,
 {
     // This function assumes that `Tree`'s shape is valid, e.g. `base_arity > 0`, `if top_arity > 0
     // then sub_arity > 0`, all arities are a power of two, etc., and that `path_values` corresponds
@@ -61,10 +62,13 @@ where
     let sub_arity_bit_len = sub_arity.trailing_zeros();
     let top_arity_bit_len = top_arity.trailing_zeros();
 
-    let base_path_len = path_values
-        .iter()
-        .take_while(|siblings| siblings.len() == base_arity - 1)
-        .count();
+    let base_path_len = if top_arity > 0 {
+        path_values.len() - 2
+    } else if sub_arity > 0 {
+        path_values.len() - 1
+    } else {
+        path_values.len()
+    };
 
     let mut cur = leaf;
     let mut height = 0;
@@ -151,7 +155,7 @@ where
         )?;
     }
 
-    // Check that no additional challenge bits were provided.
+    // Sanity check that no additional challenge bits were provided.
     assert!(
         c_bits.next().is_none(),
         "challenge bit-length and tree arity do not agree"
@@ -170,14 +174,14 @@ where
     Ok(())
 }
 
-pub fn apex_por<CS: ConstraintSystem<Bls12>>(
+pub fn apex_por<CS: ConstraintSystem<Fr>>(
     mut cs: CS,
-    apex_leafs: Vec<AllocatedNum<Bls12>>,
+    apex_leafs: Vec<AllocatedNum<Fr>>,
     partition_bits: Vec<AllocatedBit>,
-    partition_path: Vec<Vec<AllocatedNum<Bls12>>>,
-    comm_d: AllocatedNum<Bls12>,
+    partition_path: Vec<Vec<AllocatedNum<Fr>>>,
+    comm_d: AllocatedNum<Fr>,
 ) -> Result<(), SynthesisError> {
-    // Assume that `apex_leafs.len()` is a power of two.
+    // `apex_leafs.len()` is guaranteed to be a power of two.
     let apex_height = apex_leafs.len().trailing_zeros() as usize;
     let mut apex_tree = vec![apex_leafs];
     for row_index in 0..apex_height {
@@ -198,7 +202,7 @@ pub fn apex_por<CS: ConstraintSystem<Bls12>>(
                     &siblings[1],
                 )
             })
-            .collect::<Result<Vec<AllocatedNum<Bls12>>, SynthesisError>>()?;
+            .collect::<Result<Vec<AllocatedNum<Fr>>, SynthesisError>>()?;
         apex_tree.push(row);
     }
 
@@ -215,10 +219,10 @@ pub fn apex_por<CS: ConstraintSystem<Bls12>>(
 }
 
 // Generates the bits for this partition's challenges.
-pub fn gen_challenge_bits<H: Hasher, CS: ConstraintSystem<Bls12>>(
+pub fn gen_challenge_bits<CS: ConstraintSystem<Fr>>(
     mut cs: CS,
-    comm_r_new: &AllocatedNum<Bls12>,
-    partition: &AllocatedNum<Bls12>,
+    comm_r_new: &AllocatedNum<Fr>,
+    partition: &AllocatedNum<Fr>,
     challenges: usize,
     bits_per_challenge: usize,
 ) -> Result<Vec<Vec<AllocatedBit>>, SynthesisError> {
@@ -253,8 +257,8 @@ pub fn gen_challenge_bits<H: Hasher, CS: ConstraintSystem<Bls12>>(
             |lc| lc + digest_index.get_variable(),
         );
 
-        // digest = H(comm_r_new || digest_index)
-        let digest = H::Function::hash2_circuit(
+        // `digest = H(comm_r_new || digest_index)`
+        let digest = <PoseidonHasher as Hasher>::Function::hash2_circuit(
             cs.namespace(|| format!("digest_{}", j)),
             &comm_r_new,
             &digest_index,
@@ -284,46 +288,38 @@ pub fn gen_challenge_bits<H: Hasher, CS: ConstraintSystem<Bls12>>(
     Ok(generated_bits)
 }
 
-pub fn get_challenge_high_bits<CS: ConstraintSystem<Bls12>>(
+pub fn get_challenge_high_bits<CS: ConstraintSystem<Fr>>(
     mut cs: CS,
-    // TODO: remove these comments
-    // c_generated_bits: &[AllocatedBit],
-    // partition_bits: &[AllocatedBit],
-    c_bits: &[AllocatedBit],
+    // little-endian
+    c_generated_bits: &[AllocatedBit],
     h_select_bits: &[AllocatedBit],
     hs: &[usize],
-) -> Result<AllocatedNum<Bls12>, SynthesisError> {
+) -> Result<AllocatedNum<Fr>, SynthesisError> {
     assert_eq!(h_select_bits.len(), hs.len());
 
-    /*
-    let c_bits_boolean: Vec<Boolean> = c_generated_bits
-        .iter()
-        .chain(partition_bits.iter())
-        .cloned()
-        .map(Into::into)
-        .collect();
+    let bit_len = c_generated_bits.len();
 
-    let c_bit_len = c_bits_boolean.len();
-    */
+    let c_generated_bits: Vec<Boolean> = c_generated_bits.iter().cloned().map(Into::into).collect();
 
-    let c_bit_len = c_bits.len();
-
-    let c_bits_boolean: Vec<Boolean> = c_bits.iter().cloned().map(Into::into).collect();
-
-    // Get each challenges's `h` high bits then scale each by the corresponding bit of `h_select`.
+    // For each `h in hs`, get the `h` high bits of the challenge's randomly generated bits (i.e.
+    // the challenge's bits sans the partition-index). Scale each "high" value by the corresponding
+    // bit of `h_select` producing a vector containing `hs.len() - 1` zeros and 1 "high" value
+    // selected via `h_select_bits`.
     let c_high_and_zeros = hs
         .iter()
         .zip(h_select_bits.iter())
-        .map(|(h, h_select_bit)| {
+        .enumerate()
+        .map(|(k, (h, h_select_bit))| {
             // Pack the `h` high bits of `c` into a field element.
             let c_high = pack_bits(
-                cs.namespace(|| format!("c_high (h={})", h)),
-                &c_bits_boolean[c_bit_len - h..],
+                cs.namespace(|| format!("c_high (h={}, k={})", h, k)),
+                &c_generated_bits[bit_len - h..],
             )?;
 
-            // Multiply: `c_high * h_select_bit`.
-            let c_high_or_zero =
-                AllocatedNum::alloc(cs.namespace(|| format!("c_high_or_zero (h={})", h)), || {
+            // `c_high * h_select_bit`
+            let c_high_or_zero = AllocatedNum::alloc(
+                cs.namespace(|| format!("c_high_or_zero (h={}, k={})", h, k)),
+                || {
                     if h_select_bit
                         .get_value()
                         .ok_or(SynthesisError::AssignmentMissing)?
@@ -332,10 +328,11 @@ pub fn get_challenge_high_bits<CS: ConstraintSystem<Bls12>>(
                     } else {
                         Ok(Fr::zero())
                     }
-                })?;
+                },
+            )?;
 
             cs.enforce(
-                || format!("c_high_or_zero == c_high * h_select_bit (h={})", h),
+                || format!("c_high_or_zero == c_high * h_select_bit (h={}, k={})", h, k),
                 |lc| lc + c_high.get_variable(),
                 |lc| lc + h_select_bit.get_variable(),
                 |lc| lc + c_high_or_zero.get_variable(),
@@ -343,7 +340,7 @@ pub fn get_challenge_high_bits<CS: ConstraintSystem<Bls12>>(
 
             Ok(c_high_or_zero)
         })
-        .collect::<Result<Vec<AllocatedNum<Bls12>>, SynthesisError>>()?;
+        .collect::<Result<Vec<AllocatedNum<Fr>>, SynthesisError>>()?;
 
     // Summate the scaled `c_high` values. One of the values is the selected `c_high` (chosen
     // via `h_select`) and all other values are zero. Thus, the sum is the selected `c_high`.
@@ -374,12 +371,12 @@ pub fn get_challenge_high_bits<CS: ConstraintSystem<Bls12>>(
     Ok(c_high_selected)
 }
 
-pub fn label_r_new<CS: ConstraintSystem<Bls12>>(
+pub fn label_r_new<CS: ConstraintSystem<Fr>>(
     mut cs: CS,
-    label_r_old: &AllocatedNum<Bls12>,
-    label_d_new: &AllocatedNum<Bls12>,
-    rho: &AllocatedNum<Bls12>,
-) -> Result<AllocatedNum<Bls12>, SynthesisError> {
+    label_r_old: &AllocatedNum<Fr>,
+    label_d_new: &AllocatedNum<Fr>,
+    rho: &AllocatedNum<Fr>,
+) -> Result<AllocatedNum<Fr>, SynthesisError> {
     let label_d_new_rho = label_d_new.mul(cs.namespace(|| "label_d_new * rho"), rho)?;
 
     // `label_r_new = label_r_old + label_d_new * rho`
@@ -401,4 +398,76 @@ pub fn label_r_new<CS: ConstraintSystem<Bls12>>(
     );
 
     Ok(label_r_new)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use bellperson::util_cs::test_cs::TestConstraintSystem;
+    use filecoin_hashers::Domain;
+    use rand::SeedableRng;
+    use rand_xorshift::XorShiftRng;
+    use storage_proofs_core::TEST_SEED;
+
+    use crate::{
+        challenges::Challenges,
+        constants::{challenge_count, partition_count, TreeRDomain, ALLOWED_SECTOR_SIZES},
+    };
+
+    #[test]
+    fn test_gen_challenge_bits_gadget() {
+        let mut rng = XorShiftRng::from_seed(TEST_SEED);
+
+        for sector_nodes in ALLOWED_SECTOR_SIZES.iter().copied() {
+            let comm_r_new = TreeRDomain::random(&mut rng);
+
+            let challenge_bit_len = sector_nodes.trailing_zeros() as usize;
+            let partition_count = partition_count(sector_nodes);
+            let partition_bit_len = partition_count.trailing_zeros() as usize;
+            let rand_challenge_bits = challenge_bit_len - partition_bit_len;
+            let challenge_count = challenge_count(sector_nodes);
+
+            for k in 0..partition_count {
+                let challenges: Vec<usize> = Challenges::new(sector_nodes, comm_r_new, k).collect();
+
+                let mut cs = TestConstraintSystem::<Fr>::new();
+                let comm_r_new =
+                    AllocatedNum::alloc(cs.namespace(|| "comm_r_new"), || Ok(comm_r_new.into()))
+                        .unwrap();
+                let partition =
+                    AllocatedNum::alloc(cs.namespace(|| "k"), || Ok(Fr::from(k as u64))).unwrap();
+                let partition_bits: Vec<AllocatedBit> =
+                    allocated_num_to_allocated_bits(cs.namespace(|| "partition_bits"), &partition)
+                        .unwrap()
+                        .into_iter()
+                        .take(partition_bit_len)
+                        .collect();
+                let generated_bits = gen_challenge_bits(
+                    cs.namespace(|| "gen_challenge_bits"),
+                    &comm_r_new,
+                    &partition,
+                    challenge_count,
+                    rand_challenge_bits,
+                )
+                .unwrap();
+
+                for (c, c_generated_bits) in challenges.into_iter().zip(generated_bits.into_iter())
+                {
+                    assert_eq!(c_generated_bits.len(), rand_challenge_bits);
+                    let mut c_circ: usize = 0;
+                    for (i, bit) in c_generated_bits
+                        .iter()
+                        .chain(partition_bits.iter())
+                        .enumerate()
+                    {
+                        if bit.get_value().unwrap() {
+                            c_circ |= 1 << i;
+                        }
+                    }
+                    assert_eq!(c, c_circ);
+                }
+            }
+        }
+    }
 }
