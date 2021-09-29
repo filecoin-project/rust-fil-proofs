@@ -81,6 +81,7 @@ pub fn generate_fallback_sector_challenges_for_partition<Tree: 'static + MerkleT
     };
 
     let num_sectors_per_chunk = post_config.sector_count;
+    println!("GOT PARTITION INDEX {} AND NUM SECTORS PER CHUNK {}", partition_index, num_sectors_per_chunk);
     let sectors = pub_sectors
         .chunks(num_sectors_per_chunk)
         .nth(partition_index)
@@ -135,11 +136,16 @@ pub fn generate_fallback_sector_challenges<Tree: 'static + MerkleTreeTrait>(
 
     let mut sector_challenges: BTreeMap<SectorId, Vec<u64>> = BTreeMap::new();
 
-    for partition_index in 0..partitions {
+    println!("PUB SECTORS LEN {}", pub_sectors.len());
+    let sectors_per_partition = pub_sectors.len() / partitions;
+    for partition_index in (0..partitions).step_by(sectors_per_partition) {
+        println!("PARTITION INDEX {}/{}", partition_index, partitions);
+        let start = partition_index * sectors_per_partition;
+        let end = start + sectors_per_partition;
         let mut partition_challenges = generate_fallback_sector_challenges_for_partition::<Tree>(
             post_config,
             randomness,
-            pub_sectors,
+            &pub_sectors[start..end],
             partition_index,
         )?;
         sector_challenges.append(&mut partition_challenges);
