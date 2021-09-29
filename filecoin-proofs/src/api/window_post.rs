@@ -14,7 +14,10 @@ use storage_proofs_post::fallback::{
 };
 
 use crate::{
-    api::{as_safe_commitment, get_partitions_for_window_post, partition_vanilla_proofs},
+    api::{
+        as_safe_commitment, get_partitions_for_window_post, partition_vanilla_proofs,
+        partition_vanilla_proofs_for_partition,
+    },
     caches::{get_post_params, get_post_verifying_key},
     parameters::window_post_setup_params,
     types::{
@@ -23,6 +26,75 @@ use crate::{
     },
     PoStType,
 };
+
+/// Generates a Window proof-of-spacetime with provided vanilla proofs for the specified partition.
+pub fn generate_window_post_with_vanilla_for_single_partition<Tree: 'static + MerkleTreeTrait>(
+    post_config: &PoStConfig,
+    randomness: &ChallengeSeed,
+    prover_id: ProverId,
+    vanilla_proofs: Vec<FallbackPoStSectorProof<Tree>>,
+) -> Result<SnarkProof> {
+    info!("generate_window_post_with_vanilla_for_single_partition:start");
+    ensure!(
+        post_config.typ == PoStType::Window,
+        "invalid post config type"
+    );
+
+    let randomness_safe: <Tree::Hasher as Hasher>::Domain =
+        as_safe_commitment(randomness, "randomness")?;
+    let prover_id_safe: <Tree::Hasher as Hasher>::Domain =
+        as_safe_commitment(&prover_id, "prover_id")?;
+
+    let vanilla_params = window_post_setup_params(&post_config);
+    let partitions = Some(1);
+
+    let setup_params = compound_proof::SetupParams {
+        vanilla_params,
+        partitions,
+        priority: post_config.priority,
+    };
+
+    let pub_params: compound_proof::PublicParams<'_, FallbackPoSt<'_, Tree>> =
+        FallbackPoStCompound::setup(&setup_params)?;
+    let groth_params = get_post_params::<Tree>(&post_config)?;
+
+    let mut pub_sectors = Vec::with_capacity(vanilla_proofs.len());
+
+    // Note: it's required that these vanilla proofs were previously
+    // logically partitioned at this point.
+    for vanilla_proof in &vanilla_proofs {
+        pub_sectors.push(PublicSector {
+            id: vanilla_proof.sector_id,
+            comm_r: vanilla_proof.comm_r,
+        });
+    }
+
+    let pub_inputs = fallback::PublicInputs {
+        randomness: randomness_safe,
+        prover_id: prover_id_safe,
+        sectors: pub_sectors,
+        k: None,
+    };
+
+    let partitioned_proofs = partition_vanilla_proofs_for_partition(
+        &post_config,
+        &pub_params.vanilla_params,
+        &pub_inputs,
+        1, /* single partition */
+        &vanilla_proofs,
+    )?;
+
+    let proof = FallbackPoStCompound::prove_with_vanilla(
+        &pub_params,
+        &pub_inputs,
+        partitioned_proofs,
+        &groth_params,
+    )?;
+
+    info!("generate_window_post_with_vanilla_for_single_partition:finish");
+
+    proof.to_vec()
+}
 
 /// Generates a Window proof-of-spacetime with provided vanilla proofs.
 pub fn generate_window_post_with_vanilla<Tree: 'static + MerkleTreeTrait>(

@@ -12,9 +12,11 @@ use ff::Field;
 use filecoin_hashers::Hasher;
 use filecoin_proofs::{
     add_piece, aggregate_seal_commit_proofs, clear_cache, compute_comm_d, fauxrep_aux,
-    generate_fallback_sector_challenges, generate_piece_commitment, generate_single_vanilla_proof,
-    generate_window_post, generate_window_post_with_vanilla, generate_winning_post,
-    generate_winning_post_sector_challenge, generate_winning_post_with_vanilla, get_seal_inputs,
+    generate_fallback_sector_challenges, generate_fallback_sector_challenges_for_partition,
+    generate_piece_commitment, generate_single_vanilla_proof, generate_window_post,
+    generate_window_post_with_vanilla, generate_window_post_with_vanilla_for_single_partition,
+    generate_winning_post, generate_winning_post_sector_challenge,
+    generate_winning_post_with_vanilla, get_partitions_for_window_post, get_seal_inputs,
     seal_commit_phase1, seal_commit_phase2, seal_pre_commit_phase1, seal_pre_commit_phase2,
     unseal_range, validate_cache_for_commit, validate_cache_for_precommit_phase2,
     verify_aggregate_seal_commit_proofs, verify_seal, verify_window_post, verify_winning_post,
@@ -1166,6 +1168,38 @@ fn window_post<Tree: 'static + MerkleTreeTrait>(
 
     let proof =
         generate_window_post_with_vanilla::<Tree>(&config, &randomness, prover_id, vanilla_proofs)?;
+
+    //
+    // 3)
+    //let mut vanilla_proofs_for_partition = Vec::with_capacity(sector_count);
+    let mut post_proofs_for_partition = Vec::with_capacity(sector_count);
+    let partition = get_partitions_for_window_post(replica_sectors.len(), &config).unwrap_or(1);
+    let challenges = generate_fallback_sector_challenges_for_partition::<Tree>(
+        &config,
+        &randomness,
+        &replica_sectors,
+        partition,
+    )?;
+
+    for (sector_id, replica) in priv_replicas.iter() {
+        let single_proof = generate_single_vanilla_proof::<Tree>(
+            &config,
+            *sector_id,
+            &replica,
+            &challenges[sector_id],
+        )?;
+
+        let proof = generate_window_post_with_vanilla_for_single_partition::<Tree>(
+            &config,
+            &randomness,
+            prover_id,
+            vec![single_proof],
+        )?;
+
+        post_proofs_for_partition.push(proof);
+    }
+
+    // FIXME: MERGE WINDOW POST PROOFS (CONCAT)
     /////////////////////////////////////////////
 
     let valid = verify_window_post::<Tree>(&config, &randomness, &pub_replicas, prover_id, &proof)?;
