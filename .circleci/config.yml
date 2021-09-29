@@ -181,7 +181,7 @@ jobs:
             RUST_TEST_THREADS: 1
             FIL_PROOFS_USE_GPU_COLUMN_BUILDER: true
             FIL_PROOFS_USE_GPU_TREE_BUILDER: true
-            BELLMAN_CUDA_NVCC_ARGS: --fatbin --gpu-architecture=sm_75 --generate-code=arch=compute_75,code=sm_75
+            FIL_PROOFS_CUDA_NVCC_ARGS: --fatbin --gpu-architecture=sm_75 --generate-code=arch=compute_75,code=sm_75
 
   test_no_gpu:
     executor: default
