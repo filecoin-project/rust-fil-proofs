@@ -1,58 +1,57 @@
-use std::marker::PhantomData;
-
 use blstrs::Scalar as Fr;
 use ff::{PrimeField, PrimeFieldBits};
-use filecoin_hashers::{HashFunction, Hasher};
+use filecoin_hashers::{poseidon::PoseidonHasher, HashFunction, Hasher};
 
-use crate::constants::{challenge_count, partition_count};
+use crate::constants::{challenge_count, partition_count, TreeRDomain};
 
-pub struct Challenges<TreeRHasher: Hasher> {
-    challenge_bits_from_digest: usize,
-    challenges_per_digest: usize,
-    comm_r_new: TreeRHasher::Domain,
-    // A bit-mask used to add the partition-index `k` (as little-endian bits) to each generated
-    // challenge's bits.
+pub struct Challenges {
+    comm_r_new: TreeRDomain,
+    // The partition-index bits which are appended onto each challenges random bits.
     partition_bits: usize,
-    // The index of the current digest.
-    j: usize,
-    // The index of the current challenge in the `j`-th digest.
+    // The number of bits to generate per challenge.
+    random_bits_per_challenge: usize,
+    // The number of challenges derived per generated digest.
+    challenges_per_digest: usize,
+    // The index of the current digest across all partitions of this proof.
+    digest_index_all_partitions: usize,
+    // The index of the current challenge in the current digest.
     i: usize,
-    // The number of challenges which have yet to be generated for this partition.
+    digest_bits: Vec<bool>,
+    // The number of challenges to be generated for this partition.
     challenges_remaining: usize,
-    digest_j_bits: Vec<bool>,
-    _h: PhantomData<TreeRHasher>,
 }
 
-impl<TreeRHasher: Hasher> Challenges<TreeRHasher> {
-    pub fn new(sector_nodes: usize, comm_r_new: TreeRHasher::Domain, k: usize) -> Self {
+impl Challenges {
+    pub fn new(sector_nodes: usize, comm_r_new: TreeRDomain, k: usize) -> Self {
         let partitions = partition_count(sector_nodes);
         assert!(k < partitions);
-        // The number of partitions is guaranteed to be a power of two.
-        let partition_bit_len = partitions.trailing_zeros() as usize;
 
         let challenge_bit_len = sector_nodes.trailing_zeros() as usize;
-        let challenge_bits_from_digest = challenge_bit_len - partition_bit_len;
-        // `challenge_bit_len` will likely not divide `Fr::CAPACITY`, thus we must round down here.
-        let challenges_per_digest = Fr::CAPACITY as usize / challenge_bits_from_digest;
+        let partition_bit_len = partitions.trailing_zeros() as usize;
+        let random_bits_per_challenge = challenge_bit_len - partition_bit_len;
+        let challenges_per_digest = Fr::CAPACITY as usize / random_bits_per_challenge;
 
-        // let partition_bits: Vec<bool> = (0..partition_bit_len).map(|i| (k >> i) & 1 == 1).collect();
-        let partition_bits: usize = k << challenge_bits_from_digest;
+        let partition_bits = k << random_bits_per_challenge;
+
+        let challenge_count = challenge_count(sector_nodes);
+        let digests_per_partition =
+            (challenge_count as f32 / challenges_per_digest as f32).ceil() as usize;
+        let digest_index_all_partitions = k * digests_per_partition;
 
         Challenges {
-            challenge_bits_from_digest,
-            challenges_per_digest,
             comm_r_new,
             partition_bits,
-            j: 0,
+            random_bits_per_challenge,
+            challenges_per_digest,
+            digest_index_all_partitions,
             i: 0,
-            digest_j_bits: Vec::with_capacity(Fr::NUM_BITS as usize),
-            challenges_remaining: challenge_count(sector_nodes),
-            _h: PhantomData,
+            digest_bits: Vec::with_capacity(Fr::NUM_BITS as usize),
+            challenges_remaining: challenge_count,
         }
     }
 }
 
-impl<TreeRHasher: Hasher> Iterator for Challenges<TreeRHasher> {
+impl Iterator for Challenges {
     // Return a `usize` (as opposed to something smaller like `u32`) because
     // `MerkleTreeTrait::gen_proof()` takes `usize` challenges.
     type Item = usize;
@@ -62,25 +61,27 @@ impl<TreeRHasher: Hasher> Iterator for Challenges<TreeRHasher> {
             return None;
         }
 
-        // Generate the `j`-th digest.
+        // `digest = H(comm_r_new || digest_index)` where `digest_index` is across all partitions.
         if self.i == 0 {
-            let j = Fr::from(self.j as u64);
-            let digest_j: Fr = TreeRHasher::Function::hash2(&self.comm_r_new, &j.into()).into();
-            self.digest_j_bits = digest_j.to_le_bits().into_iter().collect();
+            let digest_index = Fr::from(self.digest_index_all_partitions as u64);
+            let digest: Fr =
+                <PoseidonHasher as Hasher>::Function::hash2(&self.comm_r_new, &digest_index.into())
+                    .into();
+            self.digest_bits = digest.to_le_bits().into_iter().collect();
         }
 
-        // Derive the `i`-th challenge `c` from `digest_j`.
+        // Derive the `i`-th challenge `c` from `digest`.
         let c_bits = {
-            let start = self.i * self.challenge_bits_from_digest;
-            let stop = start + self.challenge_bits_from_digest;
-            &self.digest_j_bits[start..stop]
+            let start = self.i * self.random_bits_per_challenge;
+            let stop = start + self.random_bits_per_challenge;
+            &self.digest_bits[start..stop]
         };
 
-        let mut c: usize = 0;
-        let mut pow2: usize = 1;
-        for bit in c_bits {
-            c += *bit as usize * pow2;
-            pow2 <<= 1;
+        let mut c = 0;
+        for (i, bit) in c_bits.iter().enumerate() {
+            if *bit {
+                c |= 1 << i;
+            }
         }
         // Append the partition-index bits onto the most-significant end of `c`.
         c |= self.partition_bits;
@@ -88,7 +89,7 @@ impl<TreeRHasher: Hasher> Iterator for Challenges<TreeRHasher> {
         self.i += 1;
         if self.i == self.challenges_per_digest {
             self.i = 0;
-            self.j += 1;
+            self.digest_index_all_partitions += 1;
         }
         self.challenges_remaining -= 1;
         Some(c)
@@ -99,44 +100,39 @@ impl<TreeRHasher: Hasher> Iterator for Challenges<TreeRHasher> {
 mod tests {
     use super::*;
 
-    use filecoin_hashers::{
-        poseidon::{PoseidonDomain, PoseidonHasher},
-        Domain,
-    };
+    use filecoin_hashers::Domain;
     use rand::SeedableRng;
     use rand_xorshift::XorShiftRng;
     use storage_proofs_core::TEST_SEED;
 
-    use crate::constants::ALLOWED_SECTOR_SIZES;
+    use crate::constants::{TreeRDomain, ALLOWED_SECTOR_SIZES};
 
     #[test]
     fn test_challenges() {
-        let mut rng = &mut XorShiftRng::from_seed(TEST_SEED);
-        let comm_r_new = PoseidonDomain::random(&mut rng);
+        let mut rng = XorShiftRng::from_seed(TEST_SEED);
 
         for sector_nodes in ALLOWED_SECTOR_SIZES.iter().copied() {
+            let comm_r_new = TreeRDomain::random(&mut rng);
+
             let partitions = partition_count(sector_nodes);
-            let partition_nodes = sector_nodes / partitions;
             let partition_challenges = challenge_count(sector_nodes);
+            let partition_nodes = sector_nodes / partitions;
 
             // Right shift each challenge `c` by `get_partition_shr` to get the partition-index `k`.
             let get_partition_shr =
                 (sector_nodes.trailing_zeros() - partitions.trailing_zeros()) as usize;
 
             for k in 0..partitions {
+                let challenges: Vec<usize> = Challenges::new(sector_nodes, comm_r_new, k).collect();
+                assert_eq!(challenges.len(), partition_challenges);
+
                 let first_partition_node = k * partition_nodes;
                 let last_partition_node = first_partition_node + partition_nodes - 1;
 
-                let challenges: Vec<usize> =
-                    Challenges::<PoseidonHasher>::new(sector_nodes, comm_r_new.clone(), k)
-                        .collect();
-
-                assert_eq!(challenges.len(), partition_challenges);
-
                 for c in challenges.into_iter() {
-                    assert!(c >= first_partition_node);
-                    assert!(c <= last_partition_node);
-                    // This is redundant with the above range check, but let's sanity check anyway.
+                    assert!(first_partition_node <= c && c <= last_partition_node);
+                    // This check is redundant with the above range check, but let's sanity check it
+                    // anyway.
                     assert_eq!(c >> get_partition_shr, k);
                 }
             }

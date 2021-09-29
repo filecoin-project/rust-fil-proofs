@@ -1,26 +1,26 @@
-use filecoin_hashers::{sha256::Sha256Hasher, Hasher};
-use generic_array::typenum::Unsigned;
-use storage_proofs_core::merkle::{BinaryMerkleTree, MerkleTreeTrait};
+use filecoin_hashers::{
+    poseidon::{PoseidonDomain, PoseidonHasher},
+    sha256::{Sha256Domain, Sha256Hasher},
+};
+use generic_array::typenum::{Unsigned, U2};
+use merkletree::store::DiskStore;
+use storage_proofs_core::merkle::{MerkleTreeTrait, MerkleTreeWrapper};
 
-// Allowed sector-sizes, measured in number of nodes.
-// pub const ALLOWED_SECTOR_SIZES: [usize; 5] = [1 << 5, 1 << 18, 1 << 24, 1 << 30, 1 << 31];
-
-// pub const ALLOWED_SECTOR_SIZES: [usize; 5] = [1 << 5, 1 << 18, 1 << 24, 1 << 30, 1 << 31];
-
-const SECTOR_SIZE_1_KIB: usize = 1 << 5;
-const SECTOR_SIZE_2_KIB: usize = 1 << 6;
-const SECTOR_SIZE_4_KIB: usize = 1 << 7;
-const SECTOR_SIZE_8_KIB: usize = 1 << 8;
-const SECTOR_SIZE_16_KIB: usize = 1 << 9;
-const SECTOR_SIZE_32_KIB: usize = 1 << 10;
-const SECTOR_SIZE_8_MIB: usize = 1 << 18;
-const SECTOR_SIZE_16_MIB: usize = 1 << 19;
-const SECTOR_SIZE_512_MIB: usize = 1 << 24;
-const SECTOR_SIZE_32_GIB: usize = 1 << 30;
-const SECTOR_SIZE_64_GIB: usize = 1 << 31;
+// Sector-sizes measured in nodes.
+pub(crate) const SECTOR_SIZE_1_KIB: usize = 1 << 5;
+pub(crate) const SECTOR_SIZE_2_KIB: usize = 1 << 6;
+pub(crate) const SECTOR_SIZE_4_KIB: usize = 1 << 7;
+pub(crate) const SECTOR_SIZE_8_KIB: usize = 1 << 8;
+pub(crate) const SECTOR_SIZE_16_KIB: usize = 1 << 9;
+pub(crate) const SECTOR_SIZE_32_KIB: usize = 1 << 10;
+pub(crate) const SECTOR_SIZE_8_MIB: usize = 1 << 18;
+pub(crate) const SECTOR_SIZE_16_MIB: usize = 1 << 19;
+pub(crate) const SECTOR_SIZE_512_MIB: usize = 1 << 24;
+pub(crate) const SECTOR_SIZE_32_GIB: usize = 1 << 30;
+pub(crate) const SECTOR_SIZE_64_GIB: usize = 1 << 31;
 
 pub const ALLOWED_SECTOR_SIZES: [usize; 11] = [
-    // Testing sector-sizes
+    // testing sector-sizes
     SECTOR_SIZE_1_KIB,
     SECTOR_SIZE_2_KIB,
     SECTOR_SIZE_4_KIB,
@@ -30,17 +30,18 @@ pub const ALLOWED_SECTOR_SIZES: [usize; 11] = [
     SECTOR_SIZE_8_MIB,
     SECTOR_SIZE_16_MIB,
     SECTOR_SIZE_512_MIB,
-    // Published sector-sizes
+    // published sector-sizes
     SECTOR_SIZE_32_GIB,
     SECTOR_SIZE_64_GIB,
 ];
 
-pub const BINARY_ARITY: usize = 2;
+pub type TreeD = MerkleTreeWrapper<Sha256Hasher, DiskStore<Sha256Domain>, U2>;
+pub type TreeDArity = U2;
+pub type TreeDHasher = Sha256Hasher;
+pub type TreeDDomain = Sha256Domain;
 
-pub type TreeD = BinaryMerkleTree<Sha256Hasher>;
-pub type TreeDArity = <TreeD as MerkleTreeTrait>::Arity;
-pub type TreeDHasher = <TreeD as MerkleTreeTrait>::Hasher;
-pub type TreeDDomain = <TreeDHasher as Hasher>::Domain;
+pub type TreeRHasher = PoseidonHasher;
+pub type TreeRDomain = PoseidonDomain;
 
 // The number of partitions for the given sector-size.
 pub fn partition_count(sector_nodes: usize) -> usize {
@@ -84,7 +85,7 @@ pub fn apex_leaf_count(sector_nodes: usize) -> usize {
     }
 }
 
-pub fn tree_shape_is_valid<TreeR: MerkleTreeTrait>(sector_nodes: usize) -> bool {
+pub fn validate_tree_r_shape<TreeR: MerkleTreeTrait>(sector_nodes: usize) {
     let base_arity = TreeR::Arity::to_usize();
     let sub_arity = TreeR::SubTreeArity::to_usize();
     let top_arity = TreeR::TopTreeArity::to_usize();
@@ -94,7 +95,7 @@ pub fn tree_shape_is_valid<TreeR: MerkleTreeTrait>(sector_nodes: usize) -> bool 
         SECTOR_SIZE_1_KIB => (8, 4, 0),
         SECTOR_SIZE_2_KIB => (8, 0, 0),
         SECTOR_SIZE_4_KIB => (8, 2, 0),
-        SECTOR_SIZE_8_KIB => (8, 0, 0),
+        SECTOR_SIZE_8_KIB => (8, 4, 0),
         SECTOR_SIZE_16_KIB => (8, 8, 0),
         SECTOR_SIZE_32_KIB => (8, 8, 2),
         SECTOR_SIZE_8_MIB => (8, 0, 0),
@@ -105,5 +106,5 @@ pub fn tree_shape_is_valid<TreeR: MerkleTreeTrait>(sector_nodes: usize) -> bool 
         _ => unreachable!(),
     };
 
-    arities == arities_expected
+    assert_eq!(arities, arities_expected);
 }
