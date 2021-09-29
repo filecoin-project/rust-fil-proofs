@@ -10,7 +10,7 @@ use bellperson::{
     ConstraintSystem, SynthesisError,
 };
 use blake2s_simd::{Hash as Blake2sHash, Params as Blake2s, State};
-use blstrs::{Bls12, Scalar as Fr};
+use blstrs::Scalar as Fr;
 use ff::{Field, PrimeField};
 use merkletree::{
     hash::{Algorithm, Hashable},
@@ -186,11 +186,11 @@ impl HashFunction<Blake2sDomain> for Blake2sFunction {
             .into()
     }
 
-    fn hash_multi_leaf_circuit<Arity, CS: ConstraintSystem<Bls12>>(
+    fn hash_multi_leaf_circuit<Arity, CS: ConstraintSystem<Fr>>(
         mut cs: CS,
-        leaves: &[AllocatedNum<Bls12>],
+        leaves: &[AllocatedNum<Fr>],
         _height: usize,
-    ) -> Result<AllocatedNum<Bls12>, SynthesisError> {
+    ) -> Result<AllocatedNum<Fr>, SynthesisError> {
         let mut bits = Vec::with_capacity(leaves.len() * Fr::CAPACITY as usize);
         for (i, leaf) in leaves.iter().enumerate() {
             bits.extend_from_slice(
@@ -203,12 +203,12 @@ impl HashFunction<Blake2sDomain> for Blake2sFunction {
         Self::hash_circuit(cs, &bits)
     }
 
-    fn hash_leaf_bits_circuit<CS: ConstraintSystem<Bls12>>(
+    fn hash_leaf_bits_circuit<CS: ConstraintSystem<Fr>>(
         cs: CS,
         left: &[Boolean],
         right: &[Boolean],
         _height: usize,
-    ) -> Result<AllocatedNum<Bls12>, SynthesisError> {
+    ) -> Result<AllocatedNum<Fr>, SynthesisError> {
         let mut preimage: Vec<Boolean> = vec![];
 
         preimage.extend_from_slice(left);
@@ -224,10 +224,10 @@ impl HashFunction<Blake2sDomain> for Blake2sFunction {
         Self::hash_circuit(cs, &preimage[..])
     }
 
-    fn hash_circuit<CS: ConstraintSystem<Bls12>>(
+    fn hash_circuit<CS: ConstraintSystem<Fr>>(
         mut cs: CS,
         bits: &[Boolean],
-    ) -> Result<AllocatedNum<Bls12>, SynthesisError> {
+    ) -> Result<AllocatedNum<Fr>, SynthesisError> {
         let personalization = vec![0u8; 8];
         let alloc_bits = blake2s_circuit(cs.namespace(|| "hash"), bits, &personalization)?;
 
@@ -236,11 +236,11 @@ impl HashFunction<Blake2sDomain> for Blake2sFunction {
 
     fn hash2_circuit<CS>(
         mut cs: CS,
-        a_num: &AllocatedNum<Bls12>,
-        b_num: &AllocatedNum<Bls12>,
-    ) -> Result<AllocatedNum<Bls12>, SynthesisError>
+        a_num: &AllocatedNum<Fr>,
+        b_num: &AllocatedNum<Fr>,
+    ) -> Result<AllocatedNum<Fr>, SynthesisError>
     where
-        CS: ConstraintSystem<Bls12>,
+        CS: ConstraintSystem<Fr>,
     {
         // Allocate as booleans
         let a = a_num.to_bits_le(cs.namespace(|| "a_bits"))?;

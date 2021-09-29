@@ -7,7 +7,7 @@ use bellperson::{
     gadgets::{boolean::Boolean, multipack, num::AllocatedNum, sha256::sha256 as sha256_circuit},
     ConstraintSystem, SynthesisError,
 };
-use blstrs::{Bls12, Scalar as Fr};
+use blstrs::Scalar as Fr;
 use ff::{Field, PrimeField};
 use merkletree::{
     hash::{Algorithm, Hashable},
@@ -161,11 +161,11 @@ impl HashFunction<Sha256Domain> for Sha256Function {
         res
     }
 
-    fn hash_multi_leaf_circuit<Arity, CS: ConstraintSystem<Bls12>>(
+    fn hash_multi_leaf_circuit<Arity, CS: ConstraintSystem<Fr>>(
         mut cs: CS,
-        leaves: &[AllocatedNum<Bls12>],
+        leaves: &[AllocatedNum<Fr>],
         _height: usize,
-    ) -> Result<AllocatedNum<Bls12>, SynthesisError> {
+    ) -> Result<AllocatedNum<Fr>, SynthesisError> {
         let mut bits = Vec::with_capacity(leaves.len() * Fr::CAPACITY as usize);
         for (i, leaf) in leaves.iter().enumerate() {
             let mut padded = leaf.to_bits_le(cs.namespace(|| format!("{}_num_into_bits", i)))?;
@@ -183,12 +183,12 @@ impl HashFunction<Sha256Domain> for Sha256Function {
         Self::hash_circuit(cs, &bits)
     }
 
-    fn hash_leaf_bits_circuit<CS: ConstraintSystem<Bls12>>(
+    fn hash_leaf_bits_circuit<CS: ConstraintSystem<Fr>>(
         cs: CS,
         left: &[Boolean],
         right: &[Boolean],
         _height: usize,
-    ) -> Result<AllocatedNum<Bls12>, SynthesisError> {
+    ) -> Result<AllocatedNum<Fr>, SynthesisError> {
         let mut preimage: Vec<Boolean> = vec![];
 
         let mut left_padded = left.to_vec();
@@ -218,10 +218,10 @@ impl HashFunction<Sha256Domain> for Sha256Function {
         Self::hash_circuit(cs, &preimage[..])
     }
 
-    fn hash_circuit<CS: ConstraintSystem<Bls12>>(
+    fn hash_circuit<CS: ConstraintSystem<Fr>>(
         mut cs: CS,
         bits: &[Boolean],
-    ) -> Result<AllocatedNum<Bls12>, SynthesisError> {
+    ) -> Result<AllocatedNum<Fr>, SynthesisError> {
         let be_bits = sha256_circuit(cs.namespace(|| "hash"), bits)?;
         let le_bits = be_bits
             .chunks(8)
@@ -234,11 +234,11 @@ impl HashFunction<Sha256Domain> for Sha256Function {
 
     fn hash2_circuit<CS>(
         mut cs: CS,
-        a_num: &AllocatedNum<Bls12>,
-        b_num: &AllocatedNum<Bls12>,
-    ) -> Result<AllocatedNum<Bls12>, SynthesisError>
+        a_num: &AllocatedNum<Fr>,
+        b_num: &AllocatedNum<Fr>,
+    ) -> Result<AllocatedNum<Fr>, SynthesisError>
     where
-        CS: ConstraintSystem<Bls12>,
+        CS: ConstraintSystem<Fr>,
     {
         // Allocate as booleans
         let a = a_num.to_bits_le(cs.namespace(|| "a_bits"))?;

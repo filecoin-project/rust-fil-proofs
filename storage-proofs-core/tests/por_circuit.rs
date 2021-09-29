@@ -3,7 +3,7 @@ use bellperson::{
     util_cs::test_cs::TestConstraintSystem,
     Circuit, ConstraintSystem,
 };
-use blstrs::{Bls12, Scalar as Fr};
+use blstrs::Scalar as Fr;
 use ff::Field;
 use filecoin_hashers::{
     blake2s::Blake2sHasher, poseidon::PoseidonHasher, sha256::Sha256Hasher, Domain, Hasher,
@@ -146,7 +146,7 @@ fn test_por_circuit<Tree: 'static + MerkleTreeTrait>(num_inputs: usize, num_cons
 
         // -- Circuit
 
-        let mut cs = TestConstraintSystem::<Bls12>::new();
+        let mut cs = TestConstraintSystem::<Fr>::new();
 
         // Root is public input.
         let por = PoRCircuit::<ResTree<Tree>>::new(proof.proof, false);
@@ -242,7 +242,7 @@ fn test_por_circuit_private_root<Tree: MerkleTreeTrait>(num_constraints: usize) 
 
         // -- Circuit
 
-        let mut cs = TestConstraintSystem::<Bls12>::new();
+        let mut cs = TestConstraintSystem::<Fr>::new();
 
         // Root is private input.
         let por = PoRCircuit::<Tree>::new(proof.proof, true);
@@ -257,7 +257,7 @@ fn test_por_circuit_private_root<Tree: MerkleTreeTrait>(num_constraints: usize) 
         );
 
         let auth_path_bits = challenge_into_auth_path_bits(pub_inputs.challenge, pub_params.leaves);
-        let packed_auth_path = multipack::compute_multipacking::<Bls12>(&auth_path_bits);
+        let packed_auth_path = multipack::compute_multipacking::<Fr>(&auth_path_bits);
 
         let mut expected_inputs = Vec::new();
         expected_inputs.extend(packed_auth_path);
@@ -322,7 +322,7 @@ fn test_por_no_challenge_input() {
     };
 
     // == Test PoR gadget
-    let mut cs = TestConstraintSystem::<Bls12>::new();
+    let mut cs = TestConstraintSystem::<Fr>::new();
 
     let challenge_bit_len = n_leaves.trailing_zeros() as usize;
     let challenge: Vec<AllocatedBit> = (0..challenge_bit_len)
@@ -338,7 +338,7 @@ fn test_por_no_challenge_input() {
     let leaf = AllocatedNum::alloc(cs.namespace(|| "leaf".to_string()), || Ok(leaf))
         .expect("failed to allocate leaf");
 
-    let path_values: Vec<Vec<AllocatedNum<Bls12>>> = proof
+    let path_values: Vec<Vec<AllocatedNum<Fr>>> = proof
         .path()
         .iter()
         .enumerate()

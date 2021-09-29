@@ -1,14 +1,14 @@
 use bellperson::{gadgets::boolean::Boolean, ConstraintSystem, SynthesisError};
-use pairing::Engine;
+use ff::PrimeField;
 
-pub fn xor<E, CS>(
+pub fn xor<Scalar, CS>(
     cs: &mut CS,
     key: &[Boolean],
     input: &[Boolean],
 ) -> Result<Vec<Boolean>, SynthesisError>
 where
-    E: Engine,
-    CS: ConstraintSystem<E>,
+    Scalar: PrimeField,
+    CS: ConstraintSystem<Scalar>,
 {
     let key_len = key.len();
     assert_eq!(key_len, 32 * 8);
@@ -31,7 +31,7 @@ mod tests {
     use super::*;
 
     use bellperson::util_cs::test_cs::TestConstraintSystem;
-    use blstrs::Bls12;
+    use blstrs::Scalar as Fr;
     use rand::{Rng, SeedableRng};
     use rand_xorshift::XorShiftRng;
 
@@ -46,7 +46,7 @@ mod tests {
         let mut rng = XorShiftRng::from_seed(TEST_SEED);
 
         for i in 0..10 {
-            let mut cs = TestConstraintSystem::<Bls12>::new();
+            let mut cs = TestConstraintSystem::<Fr>::new();
 
             let key: Vec<u8> = (0..32).map(|_| rng.gen()).collect();
             let data: Vec<u8> = (0..(i + 1) * 32).map(|_| rng.gen()).collect();

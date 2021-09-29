@@ -2,7 +2,7 @@ use std::marker::PhantomData;
 
 use anyhow::ensure;
 use bellperson::{Circuit, ConstraintSystem, SynthesisError};
-use blstrs::{Bls12, Scalar as Fr};
+use blstrs::Scalar as Fr;
 use generic_array::typenum::U2;
 use storage_proofs_core::{
     compound_proof::{CircuitComponent, CompoundProof},
@@ -25,7 +25,7 @@ where
     _t: PhantomData<Tree>,
 }
 
-impl<C: Circuit<Bls12>, P: ParameterSetMetadata, Tree: MerkleTreeTrait> CacheableParameters<C, P>
+impl<C: Circuit<Fr>, P: ParameterSetMetadata, Tree: MerkleTreeTrait> CacheableParameters<C, P>
     for RationalPoStCompound<Tree>
 {
     fn cache_prefix() -> String {
@@ -151,7 +151,7 @@ where
 
 impl<'a, Tree: 'static + MerkleTreeTrait> RationalPoStCircuit<Tree> {
     #[allow(clippy::type_complexity)]
-    pub fn synthesize<CS: ConstraintSystem<Bls12>>(
+    pub fn synthesize<CS: ConstraintSystem<Fr>>(
         cs: &mut CS,
         leafs: Vec<Option<Fr>>,
         comm_rs: Vec<Option<Fr>>,

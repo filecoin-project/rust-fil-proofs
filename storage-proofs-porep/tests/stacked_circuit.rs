@@ -2,7 +2,7 @@ use bellperson::{
     util_cs::{metric_cs::MetricCS, test_cs::TestConstraintSystem},
     Circuit, ConstraintSystem,
 };
-use blstrs::{Bls12, Scalar as Fr};
+use blstrs::Scalar as Fr;
 use ff::Field;
 use filecoin_hashers::{poseidon::PoseidonHasher, sha256::Sha256Hasher, Hasher};
 use fr32::fr_into_bytes;
@@ -139,7 +139,7 @@ fn test_stacked_porep_circuit<Tree: MerkleTreeTrait + 'static>(
 
     {
         // Verify that MetricCS returns the same metrics as TestConstraintSystem.
-        let mut cs = MetricCS::<Bls12>::new();
+        let mut cs = MetricCS::<Fr>::new();
 
         StackedCompound::<Tree, Sha256Hasher>::circuit(&pub_inputs, (), &proofs[0], &pp, None)
             .expect("circuit failed")
@@ -153,7 +153,7 @@ fn test_stacked_porep_circuit<Tree: MerkleTreeTrait + 'static>(
             "wrong number of constraints"
         );
     }
-    let mut cs = TestConstraintSystem::<Bls12>::new();
+    let mut cs = TestConstraintSystem::<Fr>::new();
 
     StackedCompound::<Tree, Sha256Hasher>::circuit(&pub_inputs, (), &proofs[0], &pp, None)
         .expect("circuit failed")
