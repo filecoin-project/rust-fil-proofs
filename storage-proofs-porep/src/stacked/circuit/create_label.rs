@@ -6,22 +6,21 @@ use bellperson::{
     ConstraintSystem, SynthesisError,
 };
 use ff::PrimeField;
-use pairing::Engine;
 use storage_proofs_core::{gadgets::uint64::UInt64, util::reverse_bit_numbering};
 
 use crate::stacked::vanilla::TOTAL_PARENTS;
 
 /// Compute a single label.
-pub fn create_label_circuit<E, CS>(
+pub fn create_label_circuit<Scalar, CS>(
     mut cs: CS,
     replica_id: &[Boolean],
     parents: Vec<Vec<Boolean>>,
     layer_index: UInt32,
     node: UInt64,
-) -> Result<AllocatedNum<E>, SynthesisError>
+) -> Result<AllocatedNum<Scalar>, SynthesisError>
 where
-    E: Engine,
-    CS: ConstraintSystem<E>,
+    Scalar: PrimeField,
+    CS: ConstraintSystem<Scalar>,
 {
     assert!(replica_id.len() >= 32, "replica id is too small");
     assert!(replica_id.len() <= 256, "replica id is too large");
@@ -65,7 +64,7 @@ where
     let bits = reverse_bit_numbering(alloc_bits);
     multipack::pack_bits(
         cs.namespace(|| "result_num"),
-        &bits[0..(E::Fr::CAPACITY as usize)],
+        &bits[0..(Scalar::CAPACITY as usize)],
     )
 }
 
@@ -74,7 +73,7 @@ mod tests {
     use super::*;
 
     use bellperson::util_cs::test_cs::TestConstraintSystem;
-    use blstrs::{Bls12, Scalar as Fr};
+    use blstrs::Scalar as Fr;
     use ff::Field;
     use filecoin_hashers::sha256::Sha256Hasher;
     use fr32::{bytes_into_fr, fr_into_bytes};
@@ -91,7 +90,7 @@ mod tests {
 
     #[test]
     fn test_create_label() {
-        let mut cs = TestConstraintSystem::<Bls12>::new();
+        let mut cs = TestConstraintSystem::<Fr>::new();
         let mut rng = XorShiftRng::from_seed(TEST_SEED);
 
         let size = 64;

@@ -1,5 +1,5 @@
 use bellperson::{util_cs::test_cs::TestConstraintSystem, ConstraintSystem};
-use blstrs::{Bls12, Scalar as Fr};
+use blstrs::Scalar as Fr;
 use ff::Field;
 use filecoin_hashers::poseidon::PoseidonHasher;
 use fr32::{bytes_into_fr, fr_into_bytes};
@@ -144,7 +144,7 @@ fn test_drg_porep_circuit() {
         "failed to verify data commitment with data"
     );
 
-    let mut cs = TestConstraintSystem::<Bls12>::new();
+    let mut cs = TestConstraintSystem::<Fr>::new();
     DrgPoRepCircuit::<PoseidonHasher>::synthesize(
         cs.namespace(|| "drgporep"),
         vec![replica_node],
@@ -211,7 +211,7 @@ fn test_drg_porep_circuit_inputs_and_constraints() {
     let m = BASE_DEGREE;
     let tree_depth = graph_height::<U2>(n);
 
-    let mut cs = TestConstraintSystem::<Bls12>::new();
+    let mut cs = TestConstraintSystem::<Fr>::new();
     DrgPoRepCircuit::<PoseidonHasher>::synthesize(
         cs.namespace(|| "drgporep"),
         vec![Some(Fr::random(&mut rng)); 1],

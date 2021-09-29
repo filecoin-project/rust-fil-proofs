@@ -5,8 +5,8 @@ use bellperson::{
     gadgets::boolean::{AllocatedBit, Boolean},
     ConstraintSystem, SynthesisError,
 };
+use ff::PrimeField;
 use merkletree::merkle::get_merkle_tree_row_count;
-use pairing::Engine;
 
 use crate::{error::Error, settings::SETTINGS};
 
@@ -54,7 +54,7 @@ pub fn bytes_into_bits_be(bytes: &[u8]) -> Vec<bool> {
 }
 
 /// Converts the bytes into a boolean vector, in little endian format.
-pub fn bytes_into_boolean_vec<E: Engine, CS: ConstraintSystem<E>>(
+pub fn bytes_into_boolean_vec<Scalar: PrimeField, CS: ConstraintSystem<Scalar>>(
     mut cs: CS,
     value: Option<&[u8]>,
     size: usize,
@@ -79,7 +79,7 @@ pub fn bytes_into_boolean_vec<E: Engine, CS: ConstraintSystem<E>>(
 }
 
 /// Converts the bytes into a boolean vector, in big endian format.
-pub fn bytes_into_boolean_vec_be<E: Engine, CS: ConstraintSystem<E>>(
+pub fn bytes_into_boolean_vec_be<Scalar: PrimeField, CS: ConstraintSystem<Scalar>>(
     mut cs: CS,
     value: Option<&[u8]>,
     size: usize,
@@ -183,7 +183,7 @@ mod tests {
     use super::*;
 
     use bellperson::{gadgets::num::AllocatedNum, util_cs::test_cs::TestConstraintSystem};
-    use blstrs::{Bls12, Scalar as Fr};
+    use blstrs::Scalar as Fr;
     use ff::Field;
     use filecoin_hashers::{sha256::Sha256Function, HashFunction};
     use fr32::fr_into_bytes;
@@ -195,7 +195,7 @@ mod tests {
 
     #[test]
     fn test_bytes_into_boolean_vec() {
-        let mut cs = TestConstraintSystem::<Bls12>::new();
+        let mut cs = TestConstraintSystem::<Fr>::new();
         let rng = &mut XorShiftRng::from_seed(TEST_SEED);
 
         for i in 0..100 {
@@ -258,7 +258,7 @@ mod tests {
     #[test]
     fn test_reverse_bit_numbering() {
         for _ in 0..100 {
-            let mut cs = TestConstraintSystem::<Bls12>::new();
+            let mut cs = TestConstraintSystem::<Fr>::new();
             let rng = &mut XorShiftRng::from_seed(TEST_SEED);
 
             let val_fr = Fr::random(rng);
@@ -291,7 +291,7 @@ mod tests {
 
     #[test]
     fn hash_leaf_bits_circuit() {
-        let mut cs = TestConstraintSystem::<Bls12>::new();
+        let mut cs = TestConstraintSystem::<Fr>::new();
         let mut rng = XorShiftRng::from_seed(TEST_SEED);
 
         let left_fr = Fr::random(&mut rng);

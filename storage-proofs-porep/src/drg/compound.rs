@@ -2,7 +2,7 @@ use std::marker::PhantomData;
 
 use anyhow::{ensure, Context};
 use bellperson::Circuit;
-use blstrs::{Bls12, Scalar as Fr};
+use blstrs::Scalar as Fr;
 use filecoin_hashers::Hasher;
 use generic_array::typenum;
 use storage_proofs_core::{
@@ -53,7 +53,7 @@ where
     _g: PhantomData<G>,
 }
 
-impl<C: Circuit<Bls12>, H: Hasher, G: Graph<H>, P: ParameterSetMetadata> CacheableParameters<C, P>
+impl<C: Circuit<Fr>, H: Hasher, G: Graph<H>, P: ParameterSetMetadata> CacheableParameters<C, P>
     for DrgPoRepCompound<H, G>
 where
     G::Key: AsRef<H::Domain>,

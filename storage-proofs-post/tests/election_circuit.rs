@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 use std::marker::PhantomData;
 
 use bellperson::{util_cs::test_cs::TestConstraintSystem, Circuit};
-use blstrs::{Bls12, Scalar as Fr};
+use blstrs::Scalar as Fr;
 use ff::Field;
 use filecoin_hashers::{poseidon::PoseidonHasher, Domain, HashFunction, Hasher};
 use generic_array::typenum::{U0, U8};
@@ -102,7 +102,7 @@ fn test_election_post_circuit<Tree: 'static + MerkleTreeTrait>(expected_constrai
         .collect();
     let leafs: Vec<_> = proof.leafs().iter().map(|l| Some((*l).into())).collect();
 
-    let mut cs = TestConstraintSystem::<Bls12>::new();
+    let mut cs = TestConstraintSystem::<Fr>::new();
 
     let instance = ElectionPoStCircuit::<Tree> {
         leafs,

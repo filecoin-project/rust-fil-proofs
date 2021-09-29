@@ -53,7 +53,7 @@ pub trait CircuitComponent {
 /// See documentation at proof::ProofScheme for details.
 /// Implementations should generally only need to supply circuit and generate_public_inputs.
 /// The remaining trait methods are used internally and implement the necessary plumbing.
-pub trait CompoundProof<'a, S: ProofScheme<'a>, C: Circuit<Bls12> + CircuitComponent + Send>
+pub trait CompoundProof<'a, S: ProofScheme<'a>, C: Circuit<Fr> + CircuitComponent + Send>
 where
     S::Proof: Sync + Send,
     S::PublicParams: ParameterSetMetadata + Sync + Send,

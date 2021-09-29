@@ -5,7 +5,7 @@ use bellperson::{
     },
     ConstraintSystem, SynthesisError,
 };
-use pairing::Engine;
+use ff::PrimeField;
 
 /// Represents an interpretation of 64 `Boolean` objects as an unsigned integer.
 #[derive(Clone)]
@@ -41,19 +41,19 @@ impl UInt64 {
         self.value
     }
 
-    pub fn pack_into_input<E, CS>(&self, cs: CS) -> Result<(), SynthesisError>
+    pub fn pack_into_input<Scalar, CS>(&self, cs: CS) -> Result<(), SynthesisError>
     where
-        E: Engine,
-        CS: ConstraintSystem<E>,
+        Scalar: PrimeField,
+        CS: ConstraintSystem<Scalar>,
     {
         pack_into_inputs(cs, &self.bits)
     }
 
     /// Allocate a `UInt64` in the constraint system
-    pub fn alloc<E, CS>(mut cs: CS, value: Option<u64>) -> Result<Self, SynthesisError>
+    pub fn alloc<Scalar, CS>(mut cs: CS, value: Option<u64>) -> Result<Self, SynthesisError>
     where
-        E: Engine,
-        CS: ConstraintSystem<E>,
+        Scalar: PrimeField,
+        CS: ConstraintSystem<Scalar>,
     {
         let values = match value {
             Some(mut val) => {

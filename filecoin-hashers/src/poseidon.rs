@@ -7,7 +7,7 @@ use bellperson::{
     gadgets::{boolean::Boolean, num::AllocatedNum},
     ConstraintSystem, SynthesisError,
 };
-use blstrs::{Bls12, Scalar as Fr};
+use blstrs::Scalar as Fr;
 use ff::{Field, PrimeField};
 use generic_array::typenum::{marker_traits::Unsigned, U2};
 use merkletree::{
@@ -240,30 +240,30 @@ impl HashFunction<PoseidonDomain> for PoseidonFunction {
             .into()
     }
 
-    fn hash_leaf_circuit<CS: ConstraintSystem<Bls12>>(
+    fn hash_leaf_circuit<CS: ConstraintSystem<Fr>>(
         cs: CS,
-        left: &AllocatedNum<Bls12>,
-        right: &AllocatedNum<Bls12>,
+        left: &AllocatedNum<Fr>,
+        right: &AllocatedNum<Fr>,
         _height: usize,
-    ) -> Result<AllocatedNum<Bls12>, SynthesisError> {
+    ) -> Result<AllocatedNum<Fr>, SynthesisError> {
         let preimage = vec![left.clone(), right.clone()];
 
-        poseidon_hash::<CS, Bls12, U2>(cs, preimage, U2::PARAMETERS())
+        poseidon_hash::<CS, Fr, U2>(cs, preimage, U2::PARAMETERS())
     }
 
-    fn hash_multi_leaf_circuit<Arity: 'static + PoseidonArity, CS: ConstraintSystem<Bls12>>(
+    fn hash_multi_leaf_circuit<Arity: 'static + PoseidonArity, CS: ConstraintSystem<Fr>>(
         cs: CS,
-        leaves: &[AllocatedNum<Bls12>],
+        leaves: &[AllocatedNum<Fr>],
         _height: usize,
-    ) -> Result<AllocatedNum<Bls12>, SynthesisError> {
+    ) -> Result<AllocatedNum<Fr>, SynthesisError> {
         let params = Arity::PARAMETERS();
-        poseidon_hash::<CS, Bls12, Arity>(cs, leaves.to_vec(), params)
+        poseidon_hash::<CS, Fr, Arity>(cs, leaves.to_vec(), params)
     }
 
-    fn hash_md_circuit<CS: ConstraintSystem<Bls12>>(
+    fn hash_md_circuit<CS: ConstraintSystem<Fr>>(
         cs: &mut CS,
-        elements: &[AllocatedNum<Bls12>],
-    ) -> Result<AllocatedNum<Bls12>, SynthesisError> {
+        elements: &[AllocatedNum<Fr>],
+    ) -> Result<AllocatedNum<Fr>, SynthesisError> {
         let params = PoseidonMDArity::PARAMETERS();
         let arity = PoseidonMDArity::to_usize();
 
@@ -284,30 +284,29 @@ impl HashFunction<PoseidonDomain> for PoseidonFunction {
                     .expect("alloc failure");
             }
             let cs = cs.namespace(|| format!("hash md {}", hash_num));
-            hash =
-                poseidon_hash::<_, Bls12, PoseidonMDArity>(cs, preimage.clone(), params)?.clone();
+            hash = poseidon_hash::<_, Fr, PoseidonMDArity>(cs, preimage.clone(), params)?.clone();
         }
 
         Ok(hash)
     }
 
-    fn hash_circuit<CS: ConstraintSystem<Bls12>>(
+    fn hash_circuit<CS: ConstraintSystem<Fr>>(
         _cs: CS,
         _bits: &[Boolean],
-    ) -> Result<AllocatedNum<Bls12>, SynthesisError> {
+    ) -> Result<AllocatedNum<Fr>, SynthesisError> {
         unimplemented!();
     }
 
     fn hash2_circuit<CS>(
         cs: CS,
-        a: &AllocatedNum<Bls12>,
-        b: &AllocatedNum<Bls12>,
-    ) -> Result<AllocatedNum<Bls12>, SynthesisError>
+        a: &AllocatedNum<Fr>,
+        b: &AllocatedNum<Fr>,
+    ) -> Result<AllocatedNum<Fr>, SynthesisError>
     where
-        CS: ConstraintSystem<Bls12>,
+        CS: ConstraintSystem<Fr>,
     {
         let preimage = vec![a.clone(), b.clone()];
-        poseidon_hash::<CS, Bls12, U2>(cs, preimage, U2::PARAMETERS())
+        poseidon_hash::<CS, Fr, U2>(cs, preimage, U2::PARAMETERS())
     }
 }
 
@@ -546,7 +545,7 @@ mod tests {
         let n = 71;
         let data = vec![PoseidonDomain(Fr::one().to_repr()); n];
 
-        let mut cs = TestConstraintSystem::<Bls12>::new();
+        let mut cs = TestConstraintSystem::<Fr>::new();
         let circuit_data = (0..n)
             .map(|n| {
                 AllocatedNum::alloc(cs.namespace(|| format!("input {}", n)), || Ok(Fr::one()))

@@ -2,7 +2,7 @@ use std::marker::PhantomData;
 
 use anyhow::{anyhow, ensure};
 use bellperson::Circuit;
-use blstrs::{Bls12, Scalar as Fr};
+use blstrs::Scalar as Fr;
 use filecoin_hashers::Hasher;
 use sha2::{Digest, Sha256};
 use storage_proofs_core::{
@@ -25,7 +25,7 @@ where
     _t: PhantomData<Tree>,
 }
 
-impl<C: Circuit<Bls12>, P: ParameterSetMetadata, Tree: MerkleTreeTrait> CacheableParameters<C, P>
+impl<C: Circuit<Fr>, P: ParameterSetMetadata, Tree: MerkleTreeTrait> CacheableParameters<C, P>
     for FallbackPoStCompound<Tree>
 {
     fn cache_prefix() -> String {

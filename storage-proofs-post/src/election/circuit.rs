@@ -1,7 +1,7 @@
 use std::marker::PhantomData;
 
 use bellperson::{gadgets::num::AllocatedNum, Circuit, ConstraintSystem, SynthesisError};
-use blstrs::{Bls12, Scalar as Fr};
+use blstrs::Scalar as Fr;
 use ff::Field;
 use filecoin_hashers::{poseidon::PoseidonFunction, HashFunction, Hasher, PoseidonMDArity};
 use generic_array::typenum::Unsigned;
@@ -33,8 +33,8 @@ impl<'a, Tree: MerkleTreeTrait> CircuitComponent for ElectionPoStCircuit<Tree> {
     type ComponentPrivateInputs = ComponentPrivateInputs;
 }
 
-impl<'a, Tree: 'static + MerkleTreeTrait> Circuit<Bls12> for ElectionPoStCircuit<Tree> {
-    fn synthesize<CS: ConstraintSystem<Bls12>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
+impl<'a, Tree: 'static + MerkleTreeTrait> Circuit<Fr> for ElectionPoStCircuit<Tree> {
+    fn synthesize<CS: ConstraintSystem<Fr>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
         let comm_r = self.comm_r;
         let comm_c = self.comm_c;
         let comm_r_last = self.comm_r_last;

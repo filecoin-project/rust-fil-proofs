@@ -1,14 +1,14 @@
 use bellperson::{gadgets::num::AllocatedNum, ConstraintSystem, SynthesisError};
-use pairing::Engine;
+use ff::PrimeField;
 
 /// Adds a constraint to CS, enforcing an equality relationship between the allocated numbers a and b.
 ///
 /// a == b
-pub fn equal<E: Engine, A, AR, CS: ConstraintSystem<E>>(
+pub fn equal<Scalar: PrimeField, A, AR, CS: ConstraintSystem<Scalar>>(
     cs: &mut CS,
     annotation: A,
-    a: &AllocatedNum<E>,
-    b: &AllocatedNum<E>,
+    a: &AllocatedNum<Scalar>,
+    b: &AllocatedNum<Scalar>,
 ) where
     A: FnOnce() -> AR,
     AR: Into<String>,
@@ -25,12 +25,12 @@ pub fn equal<E: Engine, A, AR, CS: ConstraintSystem<E>>(
 /// Adds a constraint to CS, enforcing a add relationship between the allocated numbers a, b, and sum.
 ///
 /// a + b = sum
-pub fn sum<E: Engine, A, AR, CS: ConstraintSystem<E>>(
+pub fn sum<Scalar: PrimeField, A, AR, CS: ConstraintSystem<Scalar>>(
     cs: &mut CS,
     annotation: A,
-    a: &AllocatedNum<E>,
-    b: &AllocatedNum<E>,
-    sum: &AllocatedNum<E>,
+    a: &AllocatedNum<Scalar>,
+    b: &AllocatedNum<Scalar>,
+    sum: &AllocatedNum<Scalar>,
 ) where
     A: FnOnce() -> AR,
     AR: Into<String>,
@@ -44,11 +44,11 @@ pub fn sum<E: Engine, A, AR, CS: ConstraintSystem<E>>(
     );
 }
 
-pub fn add<E: Engine, CS: ConstraintSystem<E>>(
+pub fn add<Scalar: PrimeField, CS: ConstraintSystem<Scalar>>(
     mut cs: CS,
-    a: &AllocatedNum<E>,
-    b: &AllocatedNum<E>,
-) -> Result<AllocatedNum<E>, SynthesisError> {
+    a: &AllocatedNum<Scalar>,
+    b: &AllocatedNum<Scalar>,
+) -> Result<AllocatedNum<Scalar>, SynthesisError> {
     let res = AllocatedNum::alloc(cs.namespace(|| "add_num"), || {
         let mut tmp = a.get_value().ok_or(SynthesisError::AssignmentMissing)?;
         tmp += &b.get_value().ok_or(SynthesisError::AssignmentMissing)?;
@@ -62,11 +62,11 @@ pub fn add<E: Engine, CS: ConstraintSystem<E>>(
     Ok(res)
 }
 
-pub fn sub<E: Engine, CS: ConstraintSystem<E>>(
+pub fn sub<Scalar: PrimeField, CS: ConstraintSystem<Scalar>>(
     mut cs: CS,
-    a: &AllocatedNum<E>,
-    b: &AllocatedNum<E>,
-) -> Result<AllocatedNum<E>, SynthesisError> {
+    a: &AllocatedNum<Scalar>,
+    b: &AllocatedNum<Scalar>,
+) -> Result<AllocatedNum<Scalar>, SynthesisError> {
     let res = AllocatedNum::alloc(cs.namespace(|| "sub_num"), || {
         let mut tmp = a.get_value().ok_or(SynthesisError::AssignmentMissing)?;
         tmp -= &b.get_value().ok_or(SynthesisError::AssignmentMissing)?;
@@ -83,12 +83,12 @@ pub fn sub<E: Engine, CS: ConstraintSystem<E>>(
 /// Adds a constraint to CS, enforcing a difference relationship between the allocated numbers a, b, and difference.
 ///
 /// a - b = difference
-pub fn difference<E: Engine, A, AR, CS: ConstraintSystem<E>>(
+pub fn difference<Scalar: PrimeField, A, AR, CS: ConstraintSystem<Scalar>>(
     cs: &mut CS,
     annotation: A,
-    a: &AllocatedNum<E>,
-    b: &AllocatedNum<E>,
-    difference: &AllocatedNum<E>,
+    a: &AllocatedNum<Scalar>,
+    b: &AllocatedNum<Scalar>,
+    difference: &AllocatedNum<Scalar>,
 ) where
     A: FnOnce() -> AR,
     AR: Into<String>,
@@ -109,7 +109,7 @@ mod tests {
     use super::*;
 
     use bellperson::util_cs::test_cs::TestConstraintSystem;
-    use blstrs::{Bls12, Scalar as Fr};
+    use blstrs::Scalar as Fr;
     use ff::Field;
     use rand::SeedableRng;
     use rand_xorshift::XorShiftRng;
@@ -121,7 +121,7 @@ mod tests {
         let mut rng = XorShiftRng::from_seed(TEST_SEED);
 
         for _ in 0..100 {
-            let mut cs = TestConstraintSystem::<Bls12>::new();
+            let mut cs = TestConstraintSystem::<Fr>::new();
 
             let a = AllocatedNum::alloc(cs.namespace(|| "a"), || Ok(Fr::random(&mut rng)))
                 .expect("alloc failed");
@@ -143,7 +143,7 @@ mod tests {
         let mut rng = XorShiftRng::from_seed(TEST_SEED);
 
         for _ in 0..100 {
-            let mut cs = TestConstraintSystem::<Bls12>::new();
+            let mut cs = TestConstraintSystem::<Fr>::new();
 
             let a = AllocatedNum::alloc(cs.namespace(|| "a"), || Ok(Fr::random(&mut rng)))
                 .expect("alloc failed");
