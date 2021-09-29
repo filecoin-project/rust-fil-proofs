@@ -2,7 +2,7 @@ use std::fs::remove_file;
 use std::str::FromStr;
 
 use bellperson::{util_cs::bench_cs::BenchCS, Circuit};
-use blstrs::Bls12;
+use blstrs::Scalar as Fr;
 use fil_proofs_tooling::{
     measure,
     shared::{create_replicas, PROVER_ID, RANDOMNESS, TICKET_BYTES},
@@ -288,7 +288,7 @@ fn measure_porep_circuit(i: &ProdbenchInputs) -> usize {
 
     let pp = StackedDrg::<ProdbenchTree, Sha256Hasher>::setup(&sp).expect("failed to setup DRG");
 
-    let mut cs = BenchCS::<Bls12>::new();
+    let mut cs = BenchCS::<Fr>::new();
     <StackedCompound<_, _> as CompoundProof<StackedDrg<ProdbenchTree, Sha256Hasher>, _>>::blank_circuit(
         &pp,
     )

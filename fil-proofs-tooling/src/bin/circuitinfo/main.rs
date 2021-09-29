@@ -1,7 +1,7 @@
 use std::str::FromStr;
 
 use bellperson::{util_cs::bench_cs::BenchCS, Circuit};
-use blstrs::Bls12;
+use blstrs::Scalar as Fr;
 use dialoguer::{theme::ColorfulTheme, MultiSelect};
 use filecoin_proofs::{
     parameters::{public_params, window_post_public_params, winning_post_public_params},
@@ -24,7 +24,7 @@ struct CircuitInfo {
     inputs: usize,
 }
 
-fn circuit_info<C: Circuit<Bls12>>(circuit: C) -> CircuitInfo {
+fn circuit_info<C: Circuit<Fr>>(circuit: C) -> CircuitInfo {
     let mut cs_blank = BenchCS::new();
     circuit
         .synthesize(&mut cs_blank)
