@@ -278,7 +278,7 @@ and this project adheres to [Semantic Versioning](https://book.async.rs/overview
 - Initial stable release
 
 [Unreleased]: https://github.com/filecoin-project/rust-fil-proofs/compare/v10.0.0...HEAD
-[10.0.0]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v9.0.2
+[10.0.0]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v10.0.0
 [9.0.2]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v9.0.2
 [9.0.1]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v9.0.1
 [9.0.0]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v9.0.0
