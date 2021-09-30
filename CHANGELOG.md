@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://book.async.rs/overview
 
 ## [10.0.0] - 2021-09-30
 
+- Integrate a variety of zk-SNARK proving related performance improvements. For details see [#220](https://github.com/filecoin-project/bellperson#220)
 - Properly implement and document the CUDA feature [#1507](https://github.com/filecoin-project/rust-fil-proofs/pull/1507)
 - Remove pairing dependency for circuit [#1509](https://github.com/filecoin-project/rust-fil-proofs/pull/1509)
 - Warm up cache for window post verify bench [#1508](https://github.com/filecoin-project/rust-fil-proofs/pull/1508)
