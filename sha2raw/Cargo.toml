@@ -1,6 +1,6 @@
 [package]
 name = "sha2raw"
-version = "4.0.2"
+version = "5.0.0"
 authors = ["RustCrypto Developers", "Friedel Ziegelmayer <me@dignifiedquire.com>"]
 license = "MIT OR Apache-2.0"
 description = "SHA-2 hash function"
