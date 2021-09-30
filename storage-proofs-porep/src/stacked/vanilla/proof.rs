@@ -20,7 +20,7 @@ use merkletree::{
 use rayon::prelude::{
     IndexedParallelIterator, IntoParallelIterator, ParallelIterator, ParallelSliceMut,
 };
-#[cfg(any(feature = "gpu"))]
+#[cfg(any(feature = "cuda", feature = "opencl"))]
 use scheduler_client::{ResourceAlloc, TaskResult};
 use storage_proofs_core::{
     cache_key::CacheKey,
@@ -521,7 +521,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
             batch_hasher::Batcher,
             column_tree_builder::{ColumnTreeBuilder, ColumnTreeBuilderTrait},
         };
-        use rust_gpu_tools::opencl::Device;
+        use rust_gpu_tools::Device;
 
         info!("generating tree c using the GPU");
         // Build the tree for CommC
@@ -635,8 +635,9 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                                     "No resource allocation for TreeBuilder".to_string(),
                                 )
                             })?;
-                            let device = Device::by_unique_id(alloc.devices[0].0).map_err(|e|
-                                Error::Unclassified(e.to_string()))?;
+                            let dev = alloc.devices[0].0;
+                            let device = Device::by_unique_id(dev).ok_or_else(||
+                                Error::Unclassified(format!("GPU device: {:?} not found", dev)))?;
 
                             let column_batcher = match Batcher::new(device, max_gpu_column_batch_size) {
                                 Ok(b) => Some(b),
@@ -1042,7 +1043,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
             batch_hasher::Batcher,
             tree_builder::{TreeBuilder, TreeBuilderTrait},
         };
-        use rust_gpu_tools::opencl::Device;
+        use rust_gpu_tools::Device;
 
         let (configs, replica_config) = split_config_and_replica(
             tree_r_last_config.clone(),
@@ -1119,8 +1120,10 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                             )
                         })?;
 
-                        let device = Device::by_unique_id(alloc.devices[0].0)
-                            .map_err(|e| Error::Unclassified(e.to_string()))?;
+                        let dev = alloc.devices[0].0;
+                        let device = Device::by_unique_id(dev).ok_or_else(|| {
+                            Error::Unclassified(format!("GPU device: {:?} not found", dev))
+                        })?;
 
                         let tree_batcher = match Batcher::new(device, max_gpu_tree_batch_size) {
                             Ok(b) => Some(b),
@@ -1576,6 +1579,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         use std::io::Write;
 
         use crate::stacked::vanilla::proof_ext::Builder;
+        use blstrs::Scalar as Fr;
         use ff::Field;
         use fr32::fr_into_bytes;
         use merkletree::merkle::{get_merkle_tree_cache_size, get_merkle_tree_leafs};
@@ -1583,7 +1587,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
             batch_hasher::Batcher,
             tree_builder::{TreeBuilder, TreeBuilderTrait},
         };
-        use rust_gpu_tools::opencl::Device;
+        use rust_gpu_tools::Device;
 
         let (configs, replica_config) = split_config_and_replica(
             tree_r_last_config.clone(),
@@ -1604,8 +1608,10 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                         Error::Unclassified("No resource allocation for TreeBuilder".to_string())
                     })?;
 
-                    let device = Device::by_unique_id(alloc.devices[0].0)
-                        .map_err(|e| Error::Unclassified(e.to_string()))?;
+                    let dev = alloc.devices[0].0;
+                    let device = Device::by_unique_id(dev).ok_or_else(|| {
+                        Error::Unclassified(format!("GPU device: {:?} not found", dev))
+                    })?;
 
                     let tree_batcher = match Batcher::new(device, max_gpu_tree_batch_size) {
                         Ok(b) => Some(b),

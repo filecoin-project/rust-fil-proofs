@@ -18,7 +18,7 @@ mod memory_handling;
 mod params;
 mod porep;
 mod proof;
-#[cfg(any(feature = "gpu"))]
+#[cfg(any(feature = "cuda", feature = "opencl"))]
 mod proof_ext;
 mod proof_scheme;
 #[cfg(feature = "multicore-sdr")]

@@ -43,8 +43,8 @@ yastl = "0.1.2"
 fil_logger = "0.1"
 pairing = "0.21"
 blstrs = "0.4.0"
-rust-gpu-tools = { git = "https://github.com/filecoin-project/rust-gpu-tools", branch = "master", default-features = false, optional = true }
-scheduler_client = {package = "client", git = "https://github.com/Zondax/filecoin-scheduling.git", branch= "dev", optional = true}
+rust-gpu-tools = { version = "0.5.0", default-features = false, optional = true }
+scheduler_client = {package = "client", git = "https://github.com/Zondax/filecoin-scheduling.git", optional = true}
 
 [target."cfg(target_arch = \"aarch64\")".dependencies]
 sha2 = { version = "0.9.3", features = ["compress", "asm"] }
