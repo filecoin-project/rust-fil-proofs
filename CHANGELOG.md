@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://book.async.rs/overview
 
 ## Unreleased
 
+## [10.0.0] - 2021-09-30
+
+- Integrate a variety of zk-SNARK proving related performance improvements. For details see [#220](https://github.com/filecoin-project/bellperson#220)
+- Properly implement and document the CUDA feature [#1507](https://github.com/filecoin-project/rust-fil-proofs/pull/1507)
+- Remove pairing dependency for circuit [#1509](https://github.com/filecoin-project/rust-fil-proofs/pull/1509)
+- Warm up cache for window post verify bench [#1508](https://github.com/filecoin-project/rust-fil-proofs/pull/1508)
+- Upgrade to dependencies supporting CUDA [#1504](https://github.com/filecoin-project/rust-fil-proofs/pull/1504)
+- Use upstream group, ff and pairing dependencies [#1488](https://github.com/filecoin-project/rust-fil-proofs/pull/1488)
+
 ## [9.0.2] - 2021-09-07
 
 - Use sync channels in PC2 [#1500](https://github.com/filecoin-project/rust-fil-proofs/pull/1500)
@@ -269,7 +278,8 @@ and this project adheres to [Semantic Versioning](https://book.async.rs/overview
 
 - Initial stable release
 
-[Unreleased]: https://github.com/filecoin-project/rust-fil-proofs/compare/v9.0.2...HEAD
+[Unreleased]: https://github.com/filecoin-project/rust-fil-proofs/compare/v10.0.0...HEAD
+[10.0.0]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v10.0.0
 [9.0.2]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v9.0.2
 [9.0.1]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v9.0.1
 [9.0.0]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v9.0.0
