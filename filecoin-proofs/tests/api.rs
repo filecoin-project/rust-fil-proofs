@@ -67,7 +67,7 @@ use rand_xorshift::XorShiftRng;
 use storage_proofs_core::{
     api_version::ApiVersion, is_legacy_porep_id, sector::SectorId, util::NODE_SIZE,
 };
-use storage_proofs_update::constants::{hs, partition_count};
+use storage_proofs_update::constants::{hs, partition_count, TreeRHasher};
 use tempfile::{tempdir, NamedTempFile, TempDir};
 
 // Use a fixed PoRep ID, so that the parents cache can be re-used between some tests.
@@ -302,7 +302,7 @@ fn seal_lifecycle<Tree: 'static + MerkleTreeTrait>(
     Ok(())
 }
 
-fn seal_lifecycle_upgrade<Tree: 'static + MerkleTreeTrait>(
+fn seal_lifecycle_upgrade<Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher>>(
     sector_size: u64,
     porep_id: &[u8; 32],
     api_version: ApiVersion,
@@ -1798,7 +1798,7 @@ fn create_seal_for_aggregation<R: Rng, Tree: 'static + MerkleTreeTrait>(
     )
 }
 
-fn create_seal_for_upgrade<R: Rng, Tree: 'static + MerkleTreeTrait>(
+fn create_seal_for_upgrade<R: Rng, Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher>>(
     rng: &mut R,
     sector_size: u64,
     prover_id: ProverId,

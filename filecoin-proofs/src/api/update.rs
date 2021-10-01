@@ -1,19 +1,21 @@
 use std::fs::{self, metadata, OpenOptions};
-use std::marker::PhantomData;
 use std::path::Path;
 
 use anyhow::{ensure, Context, Error, Result};
 use bincode::deserialize;
 use blstrs::Scalar as Fr;
-use filecoin_hashers::sha256::Sha256Hasher;
+//use filecoin_hashers::sha256::Sha256Hasher;
 use filecoin_hashers::{Domain, Hasher};
 use fr32::bytes_into_fr;
 use log::info;
 use memmap::MmapOptions;
-use storage_proofs_core::{cache_key::CacheKey, merkle::MerkleTreeTrait, util::NODE_SIZE};
+use storage_proofs_core::{
+    cache_key::CacheKey, merkle::MerkleTreeTrait, proof::ProofScheme, util::NODE_SIZE,
+};
 use storage_proofs_porep::stacked::{PersistentAux, TemporaryAux, TemporaryAuxCache};
 use storage_proofs_update::{
-    EmptySectorUpdateVanilla, PublicInputs, PublicParams, VanillaUpdateProof,
+    constants::TreeRHasher, EmptySectorUpdate, PartitionProof, PrivateInputs, PublicInputs,
+    PublicParams,
 };
 
 use crate::{
@@ -86,7 +88,7 @@ pub fn compare_elements(path1: &Path, path2: &Path) -> Result<(), Error> {
 
 /// Encodes data into an existing replica.
 #[allow(clippy::too_many_arguments)]
-pub fn encode_into<Tree: 'static + MerkleTreeTrait>(
+pub fn encode_into<'a, Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher>>(
     porep_config: PoRepConfig,
     new_replica_path: &Path,
     new_cache_path: &Path,
@@ -130,7 +132,7 @@ pub fn encode_into<Tree: 'static + MerkleTreeTrait>(
 
     let nodes_count = u64::from(porep_config.sector_size) as usize / NODE_SIZE;
     let (comm_r_domain, comm_r_last_domain, comm_d_domain) =
-        EmptySectorUpdateVanilla::<Tree, DefaultPieceHasher>::encode_into(
+        EmptySectorUpdate::<'a, Tree>::encode_into(
             nodes_count,
             &t_aux_cache,
             <Tree::Hasher as Hasher>::Domain::try_from_bytes(&p_aux.comm_c.into_bytes())?,
@@ -140,6 +142,7 @@ pub fn encode_into<Tree: 'static + MerkleTreeTrait>(
             &sector_key_path,
             &sector_key_cache_path,
             &staged_data_path,
+            u64::from(HSelect::from(porep_config)) as usize,
         )?;
 
     comm_d_domain.write_bytes(&mut comm_d)?;
@@ -163,7 +166,7 @@ pub fn encode_into<Tree: 'static + MerkleTreeTrait>(
 
 /// Reverses the encoding process and outputs the data into out_data_path.
 #[allow(clippy::too_many_arguments)]
-pub fn decode_from<Tree: 'static + MerkleTreeTrait>(
+pub fn decode_from<'a, Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher>>(
     porep_config: PoRepConfig,
     out_data_path: &Path,
     replica_path: &Path,
@@ -176,15 +179,15 @@ pub fn decode_from<Tree: 'static + MerkleTreeTrait>(
     info!("decode_from:start");
 
     let nodes_count = u64::from(porep_config.sector_size) as usize / NODE_SIZE;
-    EmptySectorUpdateVanilla::<Tree, DefaultPieceHasher>::decode_from(
+    EmptySectorUpdate::<'a, Tree>::decode_from(
         nodes_count,
         out_data_path,
         replica_path,
         sector_key_path,
         sector_key_cache_path,
         comm_d.into(),
-        <Tree::Hasher as Hasher>::Domain::try_from_bytes(&comm_r)?,
         <Tree::Hasher as Hasher>::Domain::try_from_bytes(&comm_sector_key)?,
+        u64::from(HSelect::from(porep_config)) as usize,
     )?;
 
     info!("decode_from:finish");
@@ -193,7 +196,7 @@ pub fn decode_from<Tree: 'static + MerkleTreeTrait>(
 
 /// Removes encoded data and outputs the sector key.
 #[allow(clippy::too_many_arguments)]
-pub fn remove_encoded_data<Tree: 'static + MerkleTreeTrait>(
+pub fn remove_encoded_data<'a, Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher>>(
     porep_config: PoRepConfig,
     sector_key_path: &Path,
     sector_key_cache_path: &Path,
@@ -207,7 +210,7 @@ pub fn remove_encoded_data<Tree: 'static + MerkleTreeTrait>(
     info!("remove_data:start");
 
     let nodes_count = u64::from(porep_config.sector_size) as usize / NODE_SIZE;
-    EmptySectorUpdateVanilla::<Tree, DefaultPieceHasher>::remove_encoded_data(
+    EmptySectorUpdate::<'a, Tree>::remove_encoded_data(
         nodes_count,
         sector_key_path,
         sector_key_cache_path,
@@ -215,15 +218,15 @@ pub fn remove_encoded_data<Tree: 'static + MerkleTreeTrait>(
         replica_cache_path,
         data_path,
         comm_d.into(),
-        <Tree::Hasher as Hasher>::Domain::try_from_bytes(&comm_r)?,
         <Tree::Hasher as Hasher>::Domain::try_from_bytes(&comm_sector_key)?,
+        u64::from(HSelect::from(porep_config)) as usize,
     )?;
 
     info!("remove_data:finish");
     Ok(())
 }
 
-pub fn generate_update_proof<Tree: 'static + MerkleTreeTrait>(
+pub fn generate_update_proof<'a, Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher>>(
     porep_config: PoRepConfig,
     comm_r_old: Commitment,
     comm_r_new: Commitment,
@@ -233,28 +236,17 @@ pub fn generate_update_proof<Tree: 'static + MerkleTreeTrait>(
     sector_key_cache_path: &Path,
     replica_path: &Path,
     replica_cache_path: &Path,
-) -> Result<VanillaUpdateProof<Tree, /*DefaultTreeHasher*/ Sha256Hasher>> {
+) -> Result<Vec<PartitionProof<Tree>>> {
     info!("generate_update_proof:start");
 
-    let nodes_count = u64::from(porep_config.sector_size) as usize / NODE_SIZE;
-
-    let comm_r_old_safe = <Tree::Hasher as Hasher>::Domain::try_from_bytes(&comm_r_old)?;
-    let comm_r_new_safe = <Tree::Hasher as Hasher>::Domain::try_from_bytes(&comm_r_new)?;
-    let comm_r_last_new_safe = <Tree::Hasher as Hasher>::Domain::try_from_bytes(&comm_r_last_new)?;
+    let comm_r_old_safe = <TreeRHasher as Hasher>::Domain::try_from_bytes(&comm_r_old)?;
+    let comm_r_new_safe = <TreeRHasher as Hasher>::Domain::try_from_bytes(&comm_r_new)?;
+    //let comm_r_last_new_safe = <TreeRHasher as Hasher>::Domain::try_from_bytes(&comm_r_last_new)?;
 
     let comm_d_new_safe = DefaultPieceDomain::try_from_bytes(&comm_d_new)?;
 
     let public_params: storage_proofs_update::PublicParams =
         PublicParams::from_sector_size(u64::from(porep_config.sector_size));
-
-    let public_inputs: storage_proofs_update::PublicInputs<Tree> = PublicInputs {
-        k: usize::from(UpdateProofPartitions::from(porep_config)),
-        comm_r_old: comm_r_old_safe,
-        comm_d_new: comm_d_new_safe,
-        comm_r_new: comm_r_new_safe,
-        h_select: u64::from(HSelect::from(porep_config)),
-        _tree_r: PhantomData::default(),
-    };
 
     // NOTE: p_aux has comm_c and comm_r_last
     let p_aux_old: PersistentAux<<Tree::Hasher as Hasher>::Domain> = {
@@ -264,6 +256,15 @@ pub fn generate_update_proof<Tree: 'static + MerkleTreeTrait>(
 
         deserialize(&p_aux_bytes)
     }?;
+
+    let public_inputs: storage_proofs_update::PublicInputs = PublicInputs {
+        k: usize::from(UpdateProofPartitions::from(porep_config)),
+        comm_c: p_aux_old.comm_c,
+        comm_r_old: comm_r_old_safe,
+        comm_d_new: comm_d_new_safe,
+        comm_r_new: comm_r_new_safe,
+        h: u64::from(HSelect::from(porep_config)) as usize,
+    };
 
     // Note: t_aux has labels and tree_d, tree_c, tree_r_last store configs
     let t_aux_old = {
@@ -286,22 +287,18 @@ pub fn generate_update_proof<Tree: 'static + MerkleTreeTrait>(
     let mut t_aux_new = t_aux_old.clone();
     t_aux_new.set_cache_path(replica_cache_path);
 
-    let vanilla_update_proof = EmptySectorUpdateVanilla::<
-        Tree,
-        /*DefaultTreeHasher*/ Sha256Hasher,
-    >::generate_update_proofs(
-        nodes_count,
-        public_params,
-        public_inputs,
-        &t_aux_cache_old,
-        t_aux_new.tree_d_config,
-        t_aux_new.tree_r_last_config,
-        p_aux_old.comm_c,
-        comm_r_old_safe,
-        p_aux_old.comm_r_last,
-        comm_r_last_new_safe,
-        replica_path,
-        replica_cache_path,
+    let private_inputs: PrivateInputs<Tree> = PrivateInputs {
+        t_aux_old: t_aux_cache_old,
+        tree_d_new_config: t_aux_new.tree_d_config,
+        tree_r_new_config: t_aux_new.tree_r_last_config,
+        replica_path: replica_path.to_path_buf(),
+    };
+
+    let vanilla_update_proof = EmptySectorUpdate::<'a, Tree>::prove_all_partitions(
+        &public_params,
+        &public_inputs,
+        &private_inputs,
+        usize::from(UpdateProofPartitions::from(porep_config)),
     )?;
 
     info!("generate_update_proof:finish");
