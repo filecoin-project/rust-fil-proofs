@@ -33,7 +33,7 @@ where
     }
 }
 
-impl<'a, TreeR> CompoundProof<'a, EmptySectorUpdate<'a, TreeR>, EmptySectorUpdateCircuit<TreeR>>
+impl<'a, TreeR> CompoundProof<'a, EmptySectorUpdate<TreeR>, EmptySectorUpdateCircuit<TreeR>>
     for EmptySectorUpdateCompound<TreeR>
 where
     TreeR: 'static + MerkleTreeTrait<Hasher = TreeRHasher>,
