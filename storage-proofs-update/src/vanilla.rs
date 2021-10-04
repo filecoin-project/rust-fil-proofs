@@ -223,14 +223,14 @@ where
 
 #[derive(Debug)]
 #[allow(clippy::upper_case_acronyms)]
-pub struct EmptySectorUpdate<'a, TreeR>
+pub struct EmptySectorUpdate<TreeR>
 where
     TreeR: MerkleTreeTrait<Hasher = TreeRHasher>,
 {
-    _tree_r: PhantomData<&'a TreeR>,
+    _tree_r: PhantomData<TreeR>,
 }
 
-impl<'a, TreeR> ProofScheme<'a> for EmptySectorUpdate<'a, TreeR>
+impl<'a, TreeR> ProofScheme<'a> for EmptySectorUpdate<TreeR>
 where
     TreeR: 'static + MerkleTreeTrait<Hasher = TreeRHasher>,
 {
@@ -725,7 +725,7 @@ fn mmap_write(path: &Path) -> Result<MmapMut, Error> {
 // Note: t_aux has labels and tree_d, tree_c, tree_r_last trees
 #[allow(clippy::too_many_arguments)]
 #[allow(clippy::from_iter_instead_of_collect)]
-impl<'a, TreeR> EmptySectorUpdate<'a, TreeR>
+impl<TreeR> EmptySectorUpdate<TreeR>
 where
     TreeR: 'static + MerkleTreeTrait<Hasher = TreeRHasher>,
 {
@@ -824,7 +824,7 @@ where
         t_aux_new.tree_r_last_config = tree_r_last_config.clone();
 
         // Re-open staged_data as Data (type)
-        let mut new_data: Data<'a> = Data::from_path(staged_data_path.to_path_buf());
+        let mut new_data = Data::from_path(staged_data_path.to_path_buf());
         new_data.ensure_data()?;
 
         // Generate tree_d over the staged_data.

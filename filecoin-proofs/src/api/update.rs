@@ -88,7 +88,7 @@ pub fn compare_elements(path1: &Path, path2: &Path) -> Result<(), Error> {
 
 /// Encodes data into an existing replica.
 #[allow(clippy::too_many_arguments)]
-pub fn encode_into<'a, Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher>>(
+pub fn encode_into<Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher>>(
     porep_config: PoRepConfig,
     new_replica_path: &Path,
     new_cache_path: &Path,
@@ -132,7 +132,7 @@ pub fn encode_into<'a, Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher>>(
 
     let nodes_count = u64::from(porep_config.sector_size) as usize / NODE_SIZE;
     let (comm_r_domain, comm_r_last_domain, comm_d_domain) =
-        EmptySectorUpdate::<'a, Tree>::encode_into(
+        EmptySectorUpdate::<Tree>::encode_into(
             nodes_count,
             &t_aux_cache,
             <Tree::Hasher as Hasher>::Domain::try_from_bytes(&p_aux.comm_c.into_bytes())?,
@@ -166,7 +166,7 @@ pub fn encode_into<'a, Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher>>(
 
 /// Reverses the encoding process and outputs the data into out_data_path.
 #[allow(clippy::too_many_arguments)]
-pub fn decode_from<'a, Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher>>(
+pub fn decode_from<Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher>>(
     porep_config: PoRepConfig,
     out_data_path: &Path,
     replica_path: &Path,
@@ -188,7 +188,7 @@ pub fn decode_from<'a, Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher>>(
     }?;
 
     let nodes_count = u64::from(porep_config.sector_size) as usize / NODE_SIZE;
-    EmptySectorUpdate::<'a, Tree>::decode_from(
+    EmptySectorUpdate::<Tree>::decode_from(
         nodes_count,
         out_data_path,
         replica_path,
@@ -206,7 +206,7 @@ pub fn decode_from<'a, Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher>>(
 
 /// Removes encoded data and outputs the sector key.
 #[allow(clippy::too_many_arguments)]
-pub fn remove_encoded_data<'a, Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher>>(
+pub fn remove_encoded_data<Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher>>(
     porep_config: PoRepConfig,
     sector_key_path: &Path,
     sector_key_cache_path: &Path,
@@ -229,7 +229,7 @@ pub fn remove_encoded_data<'a, Tree: 'static + MerkleTreeTrait<Hasher = TreeRHas
     }?;
 
     let nodes_count = u64::from(porep_config.sector_size) as usize / NODE_SIZE;
-    EmptySectorUpdate::<'a, Tree>::remove_encoded_data(
+    EmptySectorUpdate::<Tree>::remove_encoded_data(
         nodes_count,
         sector_key_path,
         sector_key_cache_path,
@@ -246,7 +246,7 @@ pub fn remove_encoded_data<'a, Tree: 'static + MerkleTreeTrait<Hasher = TreeRHas
     Ok(())
 }
 
-pub fn generate_update_proof<'a, Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher>>(
+pub fn generate_update_proof<Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher>>(
     porep_config: PoRepConfig,
     comm_r_old: Commitment,
     comm_r_new: Commitment,
@@ -312,7 +312,7 @@ pub fn generate_update_proof<'a, Tree: 'static + MerkleTreeTrait<Hasher = TreeRH
         replica_path: replica_path.to_path_buf(),
     };
 
-    let vanilla_update_proof = EmptySectorUpdate::<'a, Tree>::prove_all_partitions(
+    let vanilla_update_proof = EmptySectorUpdate::<Tree>::prove_all_partitions(
         &public_params,
         &public_inputs,
         &private_inputs,
