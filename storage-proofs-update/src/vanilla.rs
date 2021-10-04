@@ -835,18 +835,6 @@ where
 
         let comm_d_new = tree_d.root();
 
-        // `phi = H(comm_d_new || comm_r_old)`
-        // TODO: should this be comm_r_old or comm_r_last_old?
-        /*
-        let poseidon_comm_d_new: PoseidonDomain =
-            <PoseidonDomain as Domain>::try_from_bytes(&comm_d_new.into_bytes())?;
-        let poseidon_comm_r_last_old: PoseidonDomain =
-            <PoseidonDomain as Domain>::try_from_bytes(&comm_r_last_old.into_bytes())?;
-        let phi = <PoseidonHasher as Hasher>::Function::hash2(
-            &poseidon_comm_d_new,
-            &poseidon_comm_r_last_old,
-        );
-        */
         let comm_r_old = <TreeRHasher as Hasher>::Function::hash2(&comm_c, &comm_r_last_old);
         let phi = phi(&comm_d_new, &comm_r_old);
 
@@ -951,6 +939,7 @@ where
         replica_path: &Path,
         sector_key_path: &Path,
         sector_key_cache_path: &Path,
+        comm_c: TreeRDomain,
         comm_d_new: TreeDDomain,
         comm_sector_key: TreeRDomain,
         h: usize,
@@ -1009,18 +998,8 @@ where
         let replica_data = mmap_read(replica_path)?;
         let sector_key_data = mmap_read(sector_key_path)?;
 
-        // TODO: make sure `comm_sector_key` is `comm_r_old`.
-        /*
-        let poseidon_comm_d_new: PoseidonDomain =
-            <PoseidonDomain as Domain>::try_from_bytes(&comm_d_new.into_bytes())?;
-        let poseidon_comm_r_last_old: PoseidonDomain =
-            <PoseidonDomain as Domain>::try_from_bytes(&comm_sector_key.into_bytes())?;
-        let phi = <PoseidonHasher as Hasher>::Function::hash2(
-            &poseidon_comm_d_new,
-            &poseidon_comm_r_last_old,
-        );
-        */
-        let phi = phi(&comm_d_new, &comm_sector_key);
+        let comm_r_old = <TreeRHasher as Hasher>::Function::hash2(&comm_c, &comm_sector_key);
+        let phi = phi(&comm_d_new, &comm_r_old);
 
         let end = replica_path_metadata.len() as u64;
 
@@ -1082,6 +1061,7 @@ where
         replica_path: &Path,
         replica_cache_path: &Path,
         data_path: &Path,
+        comm_c: TreeRDomain,
         comm_d_new: TreeDDomain,
         comm_sector_key: TreeRDomain,
         h: usize,
@@ -1145,18 +1125,8 @@ where
         let replica_data = mmap_read(replica_path)?;
         let data = mmap_read(data_path)?;
 
-        // TODO: make sure `comm_sector_key` is `comm_r_old`.
-        /*
-        let poseidon_comm_d_new: PoseidonDomain =
-            <PoseidonDomain as Domain>::try_from_bytes(&comm_d_new.into_bytes())?;
-        let poseidon_comm_r_last_old: PoseidonDomain =
-            <PoseidonDomain as Domain>::try_from_bytes(&comm_sector_key.into_bytes())?;
-        let phi = <PoseidonHasher as Hasher>::Function::hash2(
-            &poseidon_comm_d_new,
-            &poseidon_comm_r_last_old,
-        );
-        */
-        let phi = phi(&comm_d_new, &comm_sector_key);
+        let comm_r_old = <TreeRHasher as Hasher>::Function::hash2(&comm_c, &comm_sector_key);
+        let phi = phi(&comm_d_new, &comm_r_old);
 
         let end = replica_path_metadata.len() as u64;
 
