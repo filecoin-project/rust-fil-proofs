@@ -81,7 +81,10 @@ pub fn generate_fallback_sector_challenges_for_partition<Tree: 'static + MerkleT
     };
 
     let num_sectors_per_chunk = post_config.sector_count;
-    println!("GOT PARTITION INDEX {} AND NUM SECTORS PER CHUNK {}", partition_index, num_sectors_per_chunk);
+    println!(
+        "GOT PARTITION INDEX {} AND NUM SECTORS PER CHUNK {}",
+        partition_index, num_sectors_per_chunk
+    );
     let sectors = pub_sectors
         .chunks(num_sectors_per_chunk)
         .nth(partition_index)
