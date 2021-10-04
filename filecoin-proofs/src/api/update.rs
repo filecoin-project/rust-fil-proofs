@@ -172,11 +172,20 @@ pub fn decode_from<'a, Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher>>(
     replica_path: &Path,
     sector_key_path: &Path,
     sector_key_cache_path: &Path,
-    comm_d: Commitment,
-    comm_r: Commitment,
-    comm_sector_key: Commitment,
+    comm_d_new: Commitment,
+    comm_r_new: Commitment,
+    comm_sector_key: Commitment, /* comm_r_last_old */
 ) -> Result<()> {
     info!("decode_from:start");
+
+    // NOTE: p_aux has comm_c and comm_r_last
+    let p_aux: PersistentAux<<Tree::Hasher as Hasher>::Domain> = {
+        let p_aux_path = sector_key_cache_path.join(CacheKey::PAux.to_string());
+        let p_aux_bytes = fs::read(&p_aux_path)
+            .with_context(|| format!("could not read file p_aux={:?}", p_aux_path))?;
+
+        deserialize(&p_aux_bytes)
+    }?;
 
     let nodes_count = u64::from(porep_config.sector_size) as usize / NODE_SIZE;
     EmptySectorUpdate::<'a, Tree>::decode_from(
@@ -185,7 +194,8 @@ pub fn decode_from<'a, Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher>>(
         replica_path,
         sector_key_path,
         sector_key_cache_path,
-        comm_d.into(),
+        <Tree::Hasher as Hasher>::Domain::try_from_bytes(&p_aux.comm_c.into_bytes())?,
+        comm_d_new.into(),
         <Tree::Hasher as Hasher>::Domain::try_from_bytes(&comm_sector_key)?,
         u64::from(HSelect::from(porep_config)) as usize,
     )?;
@@ -203,11 +213,20 @@ pub fn remove_encoded_data<'a, Tree: 'static + MerkleTreeTrait<Hasher = TreeRHas
     replica_path: &Path,
     replica_cache_path: &Path,
     data_path: &Path,
-    comm_d: Commitment,
-    comm_r: Commitment,
-    comm_sector_key: Commitment,
+    comm_d_new: Commitment,
+    comm_r_old: Commitment,
+    comm_sector_key: Commitment, /* comm_r_last_old */
 ) -> Result<()> {
     info!("remove_data:start");
+
+    // NOTE: p_aux has comm_c and comm_r_last
+    let p_aux: PersistentAux<<Tree::Hasher as Hasher>::Domain> = {
+        let p_aux_path = replica_cache_path.join(CacheKey::PAux.to_string());
+        let p_aux_bytes = fs::read(&p_aux_path)
+            .with_context(|| format!("could not read file p_aux={:?}", p_aux_path))?;
+
+        deserialize(&p_aux_bytes)
+    }?;
 
     let nodes_count = u64::from(porep_config.sector_size) as usize / NODE_SIZE;
     EmptySectorUpdate::<'a, Tree>::remove_encoded_data(
@@ -217,7 +236,8 @@ pub fn remove_encoded_data<'a, Tree: 'static + MerkleTreeTrait<Hasher = TreeRHas
         replica_path,
         replica_cache_path,
         data_path,
-        comm_d.into(),
+        <Tree::Hasher as Hasher>::Domain::try_from_bytes(&p_aux.comm_c.into_bytes())?,
+        comm_d_new.into(),
         <Tree::Hasher as Hasher>::Domain::try_from_bytes(&comm_sector_key)?,
         u64::from(HSelect::from(porep_config)) as usize,
     )?;
@@ -230,7 +250,6 @@ pub fn generate_update_proof<'a, Tree: 'static + MerkleTreeTrait<Hasher = TreeRH
     porep_config: PoRepConfig,
     comm_r_old: Commitment,
     comm_r_new: Commitment,
-    comm_r_last_new: Commitment,
     comm_d_new: Commitment,
     sector_key_path: &Path,
     sector_key_cache_path: &Path,
@@ -241,7 +260,6 @@ pub fn generate_update_proof<'a, Tree: 'static + MerkleTreeTrait<Hasher = TreeRH
 
     let comm_r_old_safe = <TreeRHasher as Hasher>::Domain::try_from_bytes(&comm_r_old)?;
     let comm_r_new_safe = <TreeRHasher as Hasher>::Domain::try_from_bytes(&comm_r_new)?;
-    //let comm_r_last_new_safe = <TreeRHasher as Hasher>::Domain::try_from_bytes(&comm_r_last_new)?;
 
     let comm_d_new_safe = DefaultPieceDomain::try_from_bytes(&comm_d_new)?;
 

@@ -1894,7 +1894,6 @@ fn create_seal_for_upgrade<R: Rng, Tree: 'static + MerkleTreeTrait<Hasher = Tree
         config,
         comm_r,
         new_comm_r,
-        new_comm_r_last,
         new_comm_d,
         sealed_sector_file.path(), /* sector key file and path */
         cache_dir.path(), /* sector key path needed for t_aux, we don't need sealed_sector_file_path?? */
@@ -1949,12 +1948,16 @@ fn create_seal_for_upgrade<R: Rng, Tree: 'static + MerkleTreeTrait<Hasher = Tree
         .with_context(|| format!("could not open path={:?}", remove_encoded_file.path()))?;
     f_remove_encoded.set_len(remove_encoded_target_len)?;
 
+    // Note: we pass cache_dir to the remove, which is the original
+    // dir where the data was sealed.  If this is an API flow problem,
+    // we really just need it to load p_aux for comm_c and could
+    // instead pass comm_c as a parameter instead(?)
     remove_encoded_data::<Tree>(
         config,
         remove_encoded_file.path(),
         remove_encoded_cache_dir.path(),
         new_sealed_sector_file.path(),
-        new_cache_dir.path(),
+        cache_dir.path(),
         new_staged_sector_file.path(),
         new_comm_d,
         new_comm_r,
