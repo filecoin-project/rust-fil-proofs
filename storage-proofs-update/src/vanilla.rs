@@ -735,8 +735,6 @@ fn mmap_write(path: &Path) -> Result<MmapMut, Error> {
     }
 }
 
-// Note: p_aux has comm_c and comm_r_last
-// Note: t_aux has labels and tree_d, tree_c, tree_r_last trees
 #[allow(clippy::too_many_arguments)]
 #[allow(clippy::from_iter_instead_of_collect)]
 impl<TreeR> EmptySectorUpdate<TreeR>
@@ -746,7 +744,8 @@ where
     /// Returns tuple of (comm_r_new, comm_r_last_new, comm_d_new)
     pub fn encode_into(
         nodes_count: usize,
-        t_aux: &TemporaryAuxCache<TreeR, TreeDHasher>,
+        tree_d_new_config: StoreConfig,
+        tree_r_last_new_config: StoreConfig,
         comm_c: TreeRDomain,
         comm_r_last_old: TreeRDomain,
         new_replica_path: &Path,
@@ -817,32 +816,6 @@ where
         // Setup writable mmap for new_replica_path output.
         let mut new_replica_data = mmap_write(new_replica_path)?;
 
-        // Re-instantiate a t_aux with the new cache path, then use
-        // the tree_d and tree_r_last configs from it.
-        let mut t_aux_new = t_aux.t_aux.clone();
-        t_aux_new.set_cache_path(new_cache_path);
-
-        // With the new cache path set, get the new tree_d and tree_r_last configs.
-        let tree_d_config = StoreConfig::from_config(
-            &t_aux_new.tree_d_config,
-            CacheKey::CommDTree.to_string(),
-            Some(get_merkle_tree_len(
-                base_tree_nodes_count,
-                TreeDArity::to_usize(),
-            )?),
-        );
-
-        let tree_r_last_config = StoreConfig::from_config(
-            &t_aux_new.tree_r_last_config,
-            CacheKey::CommRLastTree.to_string(),
-            Some(get_merkle_tree_len(
-                base_tree_nodes_count,
-                TreeR::Arity::to_usize(),
-            )?),
-        );
-        t_aux_new.tree_d_config = tree_d_config.clone();
-        t_aux_new.tree_r_last_config = tree_r_last_config.clone();
-
         // Re-open staged_data as Data (type)
         let mut new_data = Data::from_path(staged_data_path.to_path_buf());
         new_data.ensure_data()?;
@@ -850,7 +823,7 @@ where
         // Generate tree_d over the staged_data.
         let tree_d = StackedDrg::<TreeR, TreeDHasher>::build_binary_tree::<TreeDHasher>(
             new_data.as_ref(),
-            tree_d_config,
+            tree_d_new_config,
         )?;
 
         let comm_d_new = tree_d.root();
@@ -909,7 +882,7 @@ where
         new_replica_data.flush()?;
 
         let (configs, replica_config) = split_config_and_replica(
-            tree_r_last_config.clone(),
+            tree_r_last_new_config.clone(),
             new_replica_path.to_path_buf(),
             base_tree_nodes_count,
             tree_count,
@@ -942,7 +915,7 @@ where
         let tree_r_last = create_lc_tree::<
             LCTree<TreeRHasher, TreeR::Arity, TreeR::SubTreeArity, TreeR::TopTreeArity>,
         >(
-            tree_r_last_config.size.expect("config size failure"),
+            tree_r_last_new_config.size.expect("config size failure"),
             &configs,
             &replica_config,
         )?;
