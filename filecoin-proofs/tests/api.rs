@@ -31,6 +31,7 @@ use filecoin_proofs::{
 =======
     add_piece, aggregate_seal_commit_proofs, clear_cache, compare_elements, compute_comm_d,
     decode_from, encode_into, fauxrep_aux, generate_fallback_sector_challenges,
+<<<<<<< HEAD
     generate_piece_commitment, generate_single_vanilla_proof, generate_update_proof,
     generate_window_post, generate_window_post_with_vanilla, generate_winning_post,
     generate_winning_post_sector_challenge, generate_winning_post_with_vanilla, get_seal_inputs,
@@ -61,6 +62,23 @@ use filecoin_proofs::{
     SECTOR_SIZE_32_KIB, SECTOR_SIZE_4_KIB, WINDOW_POST_CHALLENGE_COUNT, WINDOW_POST_SECTOR_COUNT,
     WINNING_POST_CHALLENGE_COUNT, WINNING_POST_SECTOR_COUNT,
 >>>>>>> 9389307f (style: cargo fmt)
+=======
+    generate_partition_proofs, generate_piece_commitment, generate_single_partition_proof,
+    generate_single_vanilla_proof, generate_window_post, generate_window_post_with_vanilla,
+    generate_winning_post, generate_winning_post_sector_challenge,
+    generate_winning_post_with_vanilla, get_seal_inputs, remove_encoded_data, seal_commit_phase1,
+    seal_commit_phase2, seal_pre_commit_phase1, seal_pre_commit_phase2, unseal_range,
+    validate_cache_for_commit, validate_cache_for_precommit_phase2,
+    verify_aggregate_seal_commit_proofs, verify_partition_proofs, verify_seal,
+    verify_single_partition_proof, verify_window_post, verify_winning_post, Commitment,
+    DefaultTreeDomain, HSelect, MerkleTreeTrait, PaddedBytesAmount, PieceInfo, PoRepConfig,
+    PoRepProofPartitions, PoStConfig, PoStType, PrivateReplicaInfo, ProverId, PublicReplicaInfo,
+    SealCommitOutput, SealPreCommitOutput, SealPreCommitPhase1Output, SectorShape16KiB,
+    SectorShape2KiB, SectorShape32KiB, SectorShape4KiB, SectorSize, UnpaddedByteIndex,
+    UnpaddedBytesAmount, UpdateProofPartitions, POREP_PARTITIONS, SECTOR_SIZE_16_KIB,
+    SECTOR_SIZE_2_KIB, SECTOR_SIZE_32_KIB, SECTOR_SIZE_4_KIB, WINDOW_POST_CHALLENGE_COUNT,
+    WINDOW_POST_SECTOR_COUNT, WINNING_POST_CHALLENGE_COUNT, WINNING_POST_SECTOR_COUNT,
+>>>>>>> de953475 (feat: complete vanilla proving and verify through tests)
 };
 use rand::{random, Rng, SeedableRng};
 use rand_xorshift::XorShiftRng;
@@ -1835,9 +1853,6 @@ fn create_seal_for_upgrade<R: Rng, Tree: 'static + MerkleTreeTrait<Hasher = Tree
 
     validate_cache_for_commit::<_, _, Tree>(cache_dir.path(), sealed_sector_file.path())?;
 
-    //println!("\nOriginal sealed data {:?}", sealed_sector_file);
-    //dump_elements(sealed_sector_file.path())?;
-
     // Upgrade the cc sector here.
     let new_sealed_sector_file = NamedTempFile::new()?;
     let new_cache_dir = tempdir().expect("failed to create temp dir");
@@ -1858,8 +1873,6 @@ fn create_seal_for_upgrade<R: Rng, Tree: 'static + MerkleTreeTrait<Hasher = Tree
         number_of_bytes_in_piece,
         &[],
     )?;
-    //println!("\nNew staged data {:?}", new_staged_sector_file);
-    //dump_elements(new_staged_sector_file.path())?;
 
     let new_piece_infos = vec![new_piece_info];
 
@@ -1876,7 +1889,7 @@ fn create_seal_for_upgrade<R: Rng, Tree: 'static + MerkleTreeTrait<Hasher = Tree
         .with_context(|| format!("could not open path={:?}", new_sealed_sector_file.path()))?;
     f_sealed_sector.set_len(new_replica_target_len)?;
 
-    let (new_comm_r, new_comm_r_last, new_comm_d) = encode_into::<Tree>(
+    let (new_comm_r, _new_comm_r_last, new_comm_d) = encode_into::<Tree>(
         config,
         new_sealed_sector_file.path(),
         new_cache_dir.path(),
@@ -1884,22 +1897,53 @@ fn create_seal_for_upgrade<R: Rng, Tree: 'static + MerkleTreeTrait<Hasher = Tree
         cache_dir.path(),
         new_staged_sector_file.path(),
         &new_piece_infos,
-        comm_r,
     )?;
-    //println!("\nEncoded new data {:?}", new_sealed_sector_file);
-    //dump_elements(new_sealed_sector_file.path())?;
 
-    // Generate update proof here
-    let vanilla_update_proof = generate_update_proof::<Tree>(
+    // Generate a single partition proof
+    let partition_proof = generate_single_partition_proof::<Tree>(
         config,
         comm_r,
         new_comm_r,
         new_comm_d,
-        sealed_sector_file.path(), /* sector key file and path */
-        cache_dir.path(), /* sector key path needed for t_aux, we don't need sealed_sector_file_path?? */
+        sealed_sector_file.path(), /* sector key file */
+        cache_dir.path(),          /* sector key path needed for p_aux and t_aux */
         new_sealed_sector_file.path(),
         new_cache_dir.path(),
     )?;
+
+    // Verify the single partition proof
+    let proof_is_valid = verify_single_partition_proof::<Tree>(
+        config,
+        partition_proof,
+        comm_r,
+        new_comm_r,
+        new_comm_d,
+        cache_dir.path(), /* sector key path needed for p_aux (for comm_c/comm_r_last) */
+    )?;
+    ensure!(proof_is_valid, "Partition proof (single) failed to verify");
+
+    // Generate all partition proofs
+    let partition_proofs = generate_partition_proofs::<Tree>(
+        config,
+        comm_r,
+        new_comm_r,
+        new_comm_d,
+        sealed_sector_file.path(), /* sector key file */
+        cache_dir.path(),          /* sector key path needed for p_aux and t_aux */
+        new_sealed_sector_file.path(),
+        new_cache_dir.path(),
+    )?;
+
+    // Verify all partition proofs
+    let proofs_are_valid = verify_partition_proofs::<Tree>(
+        config,
+        partition_proofs,
+        comm_r,
+        new_comm_r,
+        new_comm_d,
+        cache_dir.path(), /* sector key path needed for p_aux (for comm_c/comm_r_last) */
+    )?;
+    ensure!(proofs_are_valid, "Partition proofs failed to verify");
 
     let decoded_sector_file = NamedTempFile::new()?;
     // FIXME: New replica (new_sealed_sector_file) is currently 0
@@ -1920,15 +1964,11 @@ fn create_seal_for_upgrade<R: Rng, Tree: 'static + MerkleTreeTrait<Hasher = Tree
         decoded_sector_file.path(),
         new_sealed_sector_file.path(),
         sealed_sector_file.path(),
-        cache_dir.path(),
+        cache_dir.path(), /* sector key path needed for p_aux (for comm_c/comm_r_last) */
         new_comm_d,
-        new_comm_r,
-        comm_r,
     )?;
     // When the data is decoded, it MUST match the original new staged data.
     compare_elements(decoded_sector_file.path(), new_staged_sector_file.path())?;
-    //println!("\nDecoded data {:?}", decoded_sector_file);
-    //dump_elements(decoded_sector_file.path())?;
 
     decoded_sector_file.close()?;
 
@@ -1960,13 +2000,9 @@ fn create_seal_for_upgrade<R: Rng, Tree: 'static + MerkleTreeTrait<Hasher = Tree
         cache_dir.path(),
         new_staged_sector_file.path(),
         new_comm_d,
-        new_comm_r,
-        comm_r,
     )?;
     // When the data is removed, it MUST match the original sealed data.
     compare_elements(remove_encoded_file.path(), sealed_sector_file.path())?;
-    //println!("\nRemoved encoded data {:?}", remove_encoded_file);
-    //dump_elements(remove_encoded_file.path())?;
 
     remove_encoded_file.close()?;
 

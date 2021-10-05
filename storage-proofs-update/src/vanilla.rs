@@ -324,8 +324,10 @@ where
         let tree_d_store =
             DiskStore::<TreeDDomain>::new_from_disk(tree_d_size, tree_d_arity, &tree_d_new_config)
                 .context("tree_d_store")?;
-        // TODO: can we use `tree_d_size` instead of `Store::len()` here?
-        // let tree_d_total_size = Store::len(&tree_d_store);
+        ensure!(
+            tree_d_size == Store::len(&tree_d_store),
+            "TreeD store size mismatch"
+        );
 
         // Total number of nodes in TreeD.
         let total_apex_leafs = partition_count * apex_leaf_count;
@@ -517,6 +519,18 @@ where
                         let proof_d_new = tree_d_new.gen_proof(c)?;
                         let proof_r_new = tree_r_new.gen_cached_proof(c, tree_r_rows_to_discard)?;
                         let proof_r_old = tree_r_old.gen_cached_proof(c, tree_r_rows_to_discard)?;
+                        ensure!(
+                            tree_d_new.root() == proof_d_new.root(),
+                            "mismatch on tree d new roots"
+                        );
+                        ensure!(
+                            tree_r_new.root() == proof_r_new.root(),
+                            "mismatch on tree r new roots"
+                        );
+                        ensure!(
+                            tree_r_old.root() == proof_r_old.root(),
+                            "mismatch on tree r old roots"
+                        );
                         ensure!(
                             proof_d_new.verify(),
                             "invalid TreeDNew Merkle proof for c={}",
@@ -753,7 +767,7 @@ where
         );
 
         let tree_count = get_base_tree_count::<TreeR>();
-        let nodes_count = nodes_count / tree_count;
+        let base_tree_nodes_count = nodes_count / tree_count;
 
         let new_replica_path_metadata = metadata(new_replica_path)?;
         let sector_key_path_metadata = metadata(sector_key_path)?;
@@ -812,13 +826,19 @@ where
         let tree_d_config = StoreConfig::from_config(
             &t_aux_new.tree_d_config,
             CacheKey::CommDTree.to_string(),
-            Some(get_merkle_tree_len(nodes_count, TreeDArity::to_usize())?),
+            Some(get_merkle_tree_len(
+                base_tree_nodes_count,
+                TreeDArity::to_usize(),
+            )?),
         );
 
         let tree_r_last_config = StoreConfig::from_config(
             &t_aux_new.tree_r_last_config,
             CacheKey::CommRLastTree.to_string(),
-            Some(get_merkle_tree_len(nodes_count, TreeR::Arity::to_usize())?),
+            Some(get_merkle_tree_len(
+                base_tree_nodes_count,
+                TreeR::Arity::to_usize(),
+            )?),
         );
         t_aux_new.tree_d_config = tree_d_config.clone();
         t_aux_new.tree_r_last_config = tree_r_last_config.clone();
@@ -841,7 +861,7 @@ where
         let end = staged_data_path_metadata.len() as u64;
 
         // chunk_size is the number of Fr elements to process in parallel chunks.
-        let chunk_size: usize = std::cmp::min(nodes_count, CHUNK_SIZE_MIN);
+        let chunk_size: usize = std::cmp::min(base_tree_nodes_count, CHUNK_SIZE_MIN);
 
         // data_block_size is the segment length that we're processing
         // in Fr elements (i.e. chunk_size * sizeof(Fr)).
@@ -862,7 +882,8 @@ where
                     let output_index = i as usize;
 
                     // Get the `h` high bits from the node-index (sans partition-index).
-                    let input_index_without_k = input_index & remove_k_from_node_index_mask;
+                    let node_index = input_index / FR_SIZE;
+                    let input_index_without_k = node_index & remove_k_from_node_index_mask;
                     let high =
                         input_index_without_k >> (node_index_bit_len - partition_bit_len - h);
                     let rho: Fr = <TreeRHasher as Hasher>::Function::hash2(
@@ -890,22 +911,22 @@ where
         let (configs, replica_config) = split_config_and_replica(
             tree_r_last_config.clone(),
             new_replica_path.to_path_buf(),
-            nodes_count,
+            base_tree_nodes_count,
             tree_count,
         )?;
 
         // Open the new written replica data as a DiskStore.
         let new_replica_store: DiskStore<TreeRDomain> =
-            DiskStore::new_from_slice(nodes_count * tree_count, &new_replica_data[0..])?;
+            DiskStore::new_from_slice(nodes_count, &new_replica_data[0..])?;
 
         let mut start = 0;
-        let mut end = nodes_count;
+        let mut end = base_tree_nodes_count;
 
         for (i, config) in configs.iter().enumerate() {
             let current_data: Vec<TreeRDomain> = new_replica_store.read_range(start..end)?;
 
-            start += nodes_count;
-            end += nodes_count;
+            start += base_tree_nodes_count;
+            end += base_tree_nodes_count;
 
             info!(
                 "building base tree_r_last with CPU {}/{}",
@@ -951,7 +972,7 @@ where
         );
 
         let tree_count = get_base_tree_count::<TreeR>();
-        let nodes_count = nodes_count / tree_count;
+        let base_tree_nodes_count = nodes_count / tree_count;
 
         let out_data_path_metadata = metadata(out_data_path)?;
         let replica_path_metadata = metadata(replica_path)?;
@@ -1004,7 +1025,7 @@ where
         let end = replica_path_metadata.len() as u64;
 
         // chunk_size is the number of Fr elements to process in parallel chunks.
-        let chunk_size: usize = std::cmp::min(nodes_count, CHUNK_SIZE_MIN);
+        let chunk_size: usize = std::cmp::min(base_tree_nodes_count, CHUNK_SIZE_MIN);
 
         // data_block_size is the segment length that we're processing
         // in Fr elements (i.e. chunk_size * sizeof(Fr)).
@@ -1025,7 +1046,8 @@ where
                     let output_index = i as usize;
 
                     // Get the `h` high bits from the node-index (sans partition-index).
-                    let input_index_without_k = input_index & remove_k_from_node_index_mask;
+                    let node_index = input_index / FR_SIZE;
+                    let input_index_without_k = node_index & remove_k_from_node_index_mask;
                     let high =
                         input_index_without_k >> (node_index_bit_len - partition_bit_len - h);
                     let rho: Fr = <TreeRHasher as Hasher>::Function::hash2(
@@ -1077,7 +1099,7 @@ where
         );
 
         let tree_count = get_base_tree_count::<TreeR>();
-        let nodes_count = nodes_count / tree_count;
+        let base_tree_nodes_count = nodes_count / tree_count;
 
         let data_path_metadata = metadata(data_path)?;
         let replica_path_metadata = metadata(replica_path)?;
@@ -1131,7 +1153,7 @@ where
         let end = replica_path_metadata.len() as u64;
 
         // chunk_size is the number of Fr elements to process in parallel chunks.
-        let chunk_size: usize = std::cmp::min(nodes_count, CHUNK_SIZE_MIN);
+        let chunk_size: usize = std::cmp::min(base_tree_nodes_count, CHUNK_SIZE_MIN);
 
         // data_block_size is the segment length that we're processing
         // in Fr elements (i.e. chunk_size * sizeof(Fr)).
@@ -1152,7 +1174,8 @@ where
                     let output_index = i as usize;
 
                     // Get the `h` high bits from the node-index (sans partition-index).
-                    let input_index_without_k = input_index & remove_k_from_node_index_mask;
+                    let node_index = input_index / FR_SIZE;
+                    let input_index_without_k = node_index & remove_k_from_node_index_mask;
                     let high =
                         input_index_without_k >> (node_index_bit_len - partition_bit_len - h);
                     let rho: Fr = <TreeRHasher as Hasher>::Function::hash2(
