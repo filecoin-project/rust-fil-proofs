@@ -13,17 +13,20 @@ use merkletree::merkle::get_merkle_tree_len;
 use merkletree::store::StoreConfig;
 use storage_proofs_core::{
     cache_key::CacheKey,
+    compound_proof::CompoundProof,
     merkle::{get_base_tree_count, MerkleTreeTrait},
+    multi_proof::MultiProof,
     proof::ProofScheme,
     util::NODE_SIZE,
 };
 use storage_proofs_porep::stacked::{PersistentAux, TemporaryAux, BINARY_ARITY};
 use storage_proofs_update::{
-    constants::TreeRHasher, EmptySectorUpdate, PartitionProof, PrivateInputs, PublicInputs,
-    PublicParams,
+    constants::TreeRHasher, EmptySectorUpdate, EmptySectorUpdateCompound, PartitionProof,
+    PrivateInputs, PublicInputs, PublicParams,
 };
 
 use crate::{
+    caches::get_stacked_params,
     constants::{DefaultPieceDomain, DefaultPieceHasher},
     pieces::verify_pieces,
     types::{Commitment, HSelect, PieceInfo, PoRepConfig, UpdateProofPartitions},
@@ -242,80 +245,6 @@ pub fn remove_encoded_data<Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher>
 }
 
 #[allow(clippy::too_many_arguments)]
-pub fn generate_partition_proofs<Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher>>(
-    porep_config: PoRepConfig,
-    comm_r_old: Commitment,
-    comm_r_new: Commitment,
-    comm_d_new: Commitment,
-    sector_key_path: &Path,
-    sector_key_cache_path: &Path,
-    replica_path: &Path,
-    replica_cache_path: &Path,
-) -> Result<Vec<PartitionProof<Tree>>> {
-    info!("generate_partition_proofs:start");
-
-    let comm_r_old_safe = <TreeRHasher as Hasher>::Domain::try_from_bytes(&comm_r_old)?;
-    let comm_r_new_safe = <TreeRHasher as Hasher>::Domain::try_from_bytes(&comm_r_new)?;
-
-    let comm_d_new_safe = DefaultPieceDomain::try_from_bytes(&comm_d_new)?;
-
-    let public_params: storage_proofs_update::PublicParams =
-        PublicParams::from_sector_size(u64::from(porep_config.sector_size));
-
-    // NOTE: p_aux has comm_c and comm_r_last
-    let p_aux_old: PersistentAux<<Tree::Hasher as Hasher>::Domain> = {
-        let p_aux_path = sector_key_cache_path.join(CacheKey::PAux.to_string());
-        let p_aux_bytes = fs::read(&p_aux_path)
-            .with_context(|| format!("could not read file p_aux={:?}", p_aux_path))?;
-
-        deserialize(&p_aux_bytes)
-    }?;
-
-    let public_inputs: storage_proofs_update::PublicInputs = PublicInputs {
-        k: usize::from(UpdateProofPartitions::from(porep_config)),
-        comm_c: p_aux_old.comm_c,
-        comm_r_old: comm_r_old_safe,
-        comm_d_new: comm_d_new_safe,
-        comm_r_new: comm_r_new_safe,
-        h: u64::from(HSelect::from(porep_config)) as usize,
-    };
-
-    // Note: t_aux has labels and tree_d, tree_c, tree_r_last store configs
-    let t_aux_old = {
-        let t_aux_path = sector_key_cache_path.join(CacheKey::TAux.to_string());
-        let t_aux_bytes = fs::read(&t_aux_path)
-            .with_context(|| format!("could not read file t_aux={:?}", t_aux_path))?;
-
-        let res: TemporaryAux<Tree, DefaultPieceHasher> = deserialize(&t_aux_bytes)?;
-        res
-    };
-
-    // Re-instantiate a t_aux with the new replica cache path, then
-    // use new tree_d_config and tree_r_last_config from it.
-    let mut t_aux_new = t_aux_old.clone();
-    t_aux_new.set_cache_path(replica_cache_path);
-
-    let private_inputs: PrivateInputs = PrivateInputs {
-        tree_r_old_config: t_aux_old.tree_r_last_config,
-        old_replica_path: sector_key_path.to_path_buf(),
-        tree_d_new_config: t_aux_new.tree_d_config,
-        tree_r_new_config: t_aux_new.tree_r_last_config,
-        replica_path: replica_path.to_path_buf(),
-    };
-
-    let partition_proof = EmptySectorUpdate::<Tree>::prove_all_partitions(
-        &public_params,
-        &public_inputs,
-        &private_inputs,
-        usize::from(UpdateProofPartitions::from(porep_config)),
-    )?;
-
-    info!("generate_partition_proofs:finish");
-
-    Ok(partition_proof)
-}
-
-#[allow(clippy::too_many_arguments)]
 pub fn generate_single_partition_proof<Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher>>(
     porep_config: PoRepConfig,
     comm_r_old: Commitment,
@@ -385,6 +314,7 @@ pub fn generate_single_partition_proof<Tree: 'static + MerkleTreeTrait<Hasher = 
     Ok(partition_proof)
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn verify_single_partition_proof<Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher>>(
     porep_config: PoRepConfig,
     proof: PartitionProof<Tree>,
@@ -427,6 +357,80 @@ pub fn verify_single_partition_proof<Tree: 'static + MerkleTreeTrait<Hasher = Tr
     info!("verify_single_partition_proof:finish");
 
     Ok(valid)
+}
+
+pub fn generate_partition_proofs<Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher>>(
+>>>>>>> 79aefd57 (feat: expose some required data through filecoin-proofs)
+    porep_config: PoRepConfig,
+    comm_r_old: Commitment,
+    comm_r_new: Commitment,
+    comm_d_new: Commitment,
+    sector_key_path: &Path,
+    sector_key_cache_path: &Path,
+    replica_path: &Path,
+    replica_cache_path: &Path,
+) -> Result<Vec<PartitionProof<Tree>>> {
+    info!("generate_partition_proofs:start");
+
+    let comm_r_old_safe = <TreeRHasher as Hasher>::Domain::try_from_bytes(&comm_r_old)?;
+    let comm_r_new_safe = <TreeRHasher as Hasher>::Domain::try_from_bytes(&comm_r_new)?;
+
+    let comm_d_new_safe = DefaultPieceDomain::try_from_bytes(&comm_d_new)?;
+
+    let public_params: storage_proofs_update::PublicParams =
+        PublicParams::from_sector_size(u64::from(porep_config.sector_size));
+
+    // NOTE: p_aux has comm_c and comm_r_last
+    let p_aux_old: PersistentAux<<Tree::Hasher as Hasher>::Domain> = {
+        let p_aux_path = sector_key_cache_path.join(CacheKey::PAux.to_string());
+        let p_aux_bytes = fs::read(&p_aux_path)
+            .with_context(|| format!("could not read file p_aux={:?}", p_aux_path))?;
+
+        deserialize(&p_aux_bytes)
+    }?;
+
+    let public_inputs: storage_proofs_update::PublicInputs = PublicInputs {
+        k: usize::from(UpdateProofPartitions::from(porep_config)),
+        comm_c: p_aux_old.comm_c,
+        comm_r_old: comm_r_old_safe,
+        comm_d_new: comm_d_new_safe,
+        comm_r_new: comm_r_new_safe,
+        h: u64::from(HSelect::from(porep_config)) as usize,
+    };
+
+    // Note: t_aux has labels and tree_d, tree_c, tree_r_last store configs
+    let t_aux_old = {
+        let t_aux_path = sector_key_cache_path.join(CacheKey::TAux.to_string());
+        let t_aux_bytes = fs::read(&t_aux_path)
+            .with_context(|| format!("could not read file t_aux={:?}", t_aux_path))?;
+
+        let res: TemporaryAux<Tree, DefaultPieceHasher> = deserialize(&t_aux_bytes)?;
+        res
+    };
+
+    // Re-instantiate a t_aux with the new replica cache path, then
+    // use new tree_d_config and tree_r_last_config from it.
+    let mut t_aux_new = t_aux_old.clone();
+    t_aux_new.set_cache_path(replica_cache_path);
+
+    let private_inputs: PrivateInputs = PrivateInputs {
+        tree_r_old_config: t_aux_old.tree_r_last_config,
+        old_replica_path: sector_key_path.to_path_buf(),
+        tree_d_new_config: t_aux_new.tree_d_config,
+        tree_r_new_config: t_aux_new.tree_r_last_config,
+        replica_path: replica_path.to_path_buf(),
+    };
+
+    let partition_proofs = EmptySectorUpdate::<Tree>::prove_all_partitions(
+        &public_params,
+        &public_inputs,
+        &private_inputs,
+        usize::from(UpdateProofPartitions::from(porep_config)),
+    )?;
+
+    info!("generate_partition_proofs:finish");
+
+    Ok(partition_proofs)
 }
 
 pub fn verify_partition_proofs<Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher>>(
@@ -473,3 +477,90 @@ pub fn verify_partition_proofs<Tree: 'static + MerkleTreeTrait<Hasher = TreeRHas
 
     Ok(valid)
 }
+
+/*
+pub fn generate_update_proof<'a, Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher>>(
+    porep_config: PoRepConfig,
+    comm_r_old: Commitment,
+    comm_r_new: Commitment,
+    comm_d_new: Commitment,
+    sector_key_path: &Path,
+    sector_key_cache_path: &Path,
+    replica_path: &Path,
+    replica_cache_path: &Path,
+) -> Result<MultiProof<'a>> {
+    info!("generate_update_proof:start");
+
+    let comm_r_old_safe = <TreeRHasher as Hasher>::Domain::try_from_bytes(&comm_r_old)?;
+    let comm_r_new_safe = <TreeRHasher as Hasher>::Domain::try_from_bytes(&comm_r_new)?;
+
+    let comm_d_new_safe = DefaultPieceDomain::try_from_bytes(&comm_d_new)?;
+
+    let public_params: storage_proofs_update::PublicParams =
+        PublicParams::from_sector_size(u64::from(porep_config.sector_size));
+
+    // NOTE: p_aux has comm_c and comm_r_last
+    let p_aux_old: PersistentAux<<Tree::Hasher as Hasher>::Domain> = {
+        let p_aux_path = sector_key_cache_path.join(CacheKey::PAux.to_string());
+        let p_aux_bytes = fs::read(&p_aux_path)
+            .with_context(|| format!("could not read file p_aux={:?}", p_aux_path))?;
+
+        deserialize(&p_aux_bytes)
+    }?;
+
+    let public_inputs: storage_proofs_update::PublicInputs = PublicInputs {
+        k: usize::from(UpdateProofPartitions::from(porep_config)),
+        comm_c: p_aux_old.comm_c,
+        comm_r_old: comm_r_old_safe,
+        comm_d_new: comm_d_new_safe,
+        comm_r_new: comm_r_new_safe,
+        h: u64::from(HSelect::from(porep_config)) as usize,
+    };
+
+    // Note: t_aux has labels and tree_d, tree_c, tree_r_last store configs
+    let t_aux_old = {
+        let t_aux_path = sector_key_cache_path.join(CacheKey::TAux.to_string());
+        let t_aux_bytes = fs::read(&t_aux_path)
+            .with_context(|| format!("could not read file t_aux={:?}", t_aux_path))?;
+
+        let res: TemporaryAux<Tree, DefaultPieceHasher> = deserialize(&t_aux_bytes)?;
+        res
+    };
+
+    // Re-instantiate a t_aux with the new replica cache path, then
+    // use new tree_d_config and tree_r_last_config from it.
+    let mut t_aux_new = t_aux_old.clone();
+    t_aux_new.set_cache_path(replica_cache_path);
+
+    let private_inputs: PrivateInputs = PrivateInputs {
+        tree_r_old_config: t_aux_old.tree_r_last_config,
+        old_replica_path: sector_key_path.to_path_buf(),
+        tree_d_new_config: t_aux_new.tree_d_config,
+        tree_r_new_config: t_aux_new.tree_r_last_config,
+        replica_path: replica_path.to_path_buf(),
+    };
+
+    let compound_setup_params = compound_proof::SetupParams {
+        vanilla_params: setup_params(
+            PaddedBytesAmount::from(porep_config),
+            usize::from(UpdateProofPartitions::from(porep_config)),
+            porep_config.porep_id,
+            porep_config.api_version,
+        )?,
+        partitions: Some(usize::from(UpdateProofPartitions::from(porep_config))),
+        priority: false,
+    };
+
+    let compound_public_params = <EmptySectorUpdateCompound<Tree, DefaultPieceHasher> as CompoundProof<
+            EmptySectorUpdateCompound<'_, Tree, DefaultPieceHasher>,
+        _,
+        >>::setup(&compound_setup_params)?;
+
+    let groth_params = get_stacked_params::<Tree>(porep_config)?;
+    let proof = EmptySectorUpdateCompound::prove(&pub_params, &public_inputs, &private_inputs, &groth_params)?;
+
+    info!("generate_update_proof:finish");
+
+    Ok(proof)
+}
+ */
