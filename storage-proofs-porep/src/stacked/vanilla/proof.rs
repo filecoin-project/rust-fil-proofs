@@ -1,3 +1,4 @@
+use std::any::TypeId;
 use std::fs;
 use std::marker::PhantomData;
 use std::panic::panic_any;
@@ -7,7 +8,7 @@ use std::sync::Mutex;
 use anyhow::Context;
 use bincode::deserialize;
 use fdlimit::raise_fd_limit;
-use filecoin_hashers::{Domain, HashFunction, Hasher, PoseidonArity};
+use filecoin_hashers::{poseidon::PoseidonHasher, Domain, HashFunction, Hasher, PoseidonArity};
 use generic_array::typenum::{Unsigned, U0, U11, U2, U8};
 use lazy_static::lazy_static;
 use log::{error, info, trace};
@@ -428,7 +429,9 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         ColumnArity: 'static + PoseidonArity,
         TreeArity: PoseidonArity,
     {
-        if SETTINGS.use_gpu_column_builder {
+        if SETTINGS.use_gpu_column_builder
+            && TypeId::of::<Tree::Hasher>() == TypeId::of::<PoseidonHasher>()
+        {
             Self::generate_tree_c_gpu::<ColumnArity, TreeArity>(
                 layers,
                 nodes_count,
@@ -806,7 +809,10 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
     where
         TreeArity: PoseidonArity,
     {
-        if SETTINGS.use_gpu_tree_builder {
+        // The GPU tree builder only support Poseidon hashes.
+        if SETTINGS.use_gpu_tree_builder
+            && TypeId::of::<Tree::Hasher>() == TypeId::of::<PoseidonHasher>()
+        {
             Self::generate_tree_r_last_gpu::<TreeArity>(
                 data,
                 nodes_count,
