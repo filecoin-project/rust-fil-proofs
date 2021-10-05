@@ -125,9 +125,7 @@ pub struct PrivateInputs {
     pub tree_r_old_config: StoreConfig,
     // Path to old replica.
     pub old_replica_path: PathBuf,
-
     pub tree_d_new_config: StoreConfig,
-
     pub tree_r_new_config: StoreConfig,
     // Path to new replica.
     pub replica_path: PathBuf,
@@ -289,67 +287,69 @@ where
 
         // Instantiate TreeD new from the replica cache path. Note that this is similar to what
         // we do when going from t_aux to t_aux cache.
-        let tree_d_size = tree_d_new_config.size.expect("config size failure");
-        let tree_d_leafs = get_merkle_tree_leafs(tree_d_size, tree_d_arity)?;
+        let tree_d_leafs = *sector_nodes;
+        let tree_d_nodes = tree_d_new_config.size.expect("config size failure");
         trace!(
-            "Instantiating TreeDNew: leafs={}, store_size={})",
+            "Instantiating TreeDNew: leafs={}, base_store_size={})",
             tree_d_leafs,
-            tree_d_size
+            tree_d_nodes
         );
         let tree_d_store =
-            DiskStore::<TreeDDomain>::new_from_disk(tree_d_size, tree_d_arity, &tree_d_new_config)
+            DiskStore::<TreeDDomain>::new_from_disk(tree_d_nodes, tree_d_arity, &tree_d_new_config)
                 .context("tree_d_store")?;
         let tree_d_new =
             BinaryMerkleTree::<TreeDHasher>::from_data_store(tree_d_store, tree_d_leafs)
                 .context("tree_d")?;
 
         let tree_r_rows_to_discard = Some(tree_r_old_config.rows_to_discard);
-        let instantiate_tree_r =
-            |tree_r_config: &StoreConfig, replica_path: &PathBuf, name: &str| {
-                // Instantiate TreeR new from the replica_cache_path. Note that this is similar to what we
-                // do when going from t_aux to t_aux cache.
-                let tree_r_size = tree_r_config.size.expect("tree_r config size failure");
-                let tree_r_leafs = get_merkle_tree_leafs(tree_r_size, tree_r_base_arity)?;
-                let tree_r_base_tree_count = get_base_tree_count::<TreeR>();
-                let (tree_r_configs, replica_config) = split_config_and_replica(
-                    tree_r_config.clone(),
-                    replica_path.to_path_buf(),
-                    tree_r_leafs,
-                    tree_r_base_tree_count,
-                )?;
+        let instantiate_tree_r = |tree_r_config: &StoreConfig,
+                                  replica_path: &PathBuf,
+                                  name: &str| {
+            // Instantiate TreeR new from the replica_cache_path. Note that this is similar to what we
+            // do when going from t_aux to t_aux cache.
+            let tree_r_base_tree_nodes = tree_r_config.size.expect("tree_r config size failure");
+            let tree_r_base_tree_leafs =
+                get_merkle_tree_leafs(tree_r_base_tree_nodes, tree_r_base_arity)?;
+            let tree_r_base_tree_count = get_base_tree_count::<TreeR>();
+            let (tree_r_configs, replica_config) = split_config_and_replica(
+                tree_r_config.clone(),
+                replica_path.to_path_buf(),
+                tree_r_base_tree_leafs,
+                tree_r_base_tree_count,
+            )?;
 
-                trace!(
-                    "Instantiating {}: arity={}-{}-{}, base_tree_count={}, store_size={}",
-                    name,
-                    tree_r_base_arity,
-                    tree_r_sub_arity,
-                    tree_r_top_arity,
-                    tree_r_base_tree_count,
-                    tree_r_size,
-                );
-                create_lc_tree::<
-                    LCTree<TreeRHasher, TreeR::Arity, TreeR::SubTreeArity, TreeR::TopTreeArity>,
-                >(tree_r_size, &tree_r_configs, &replica_config)
-            };
+            trace!(
+                "Instantiating {}: arity={}-{}-{}, base_tree_count={}, base_store_size={}",
+                name,
+                tree_r_base_arity,
+                tree_r_sub_arity,
+                tree_r_top_arity,
+                tree_r_base_tree_count,
+                tree_r_base_tree_nodes,
+            );
+            create_lc_tree::<
+                LCTree<TreeRHasher, TreeR::Arity, TreeR::SubTreeArity, TreeR::TopTreeArity>,
+            >(tree_r_base_tree_nodes, &tree_r_configs, &replica_config)
+        };
 
         let tree_r_old = instantiate_tree_r(tree_r_old_config, &old_replica_path, "TreeROld")?;
         let tree_r_new = instantiate_tree_r(tree_r_new_config, &replica_path, "TreeRNew")?;
 
         // tree_d borrowed the store, so re-instantiate it here for reading apex leafs.
         let tree_d_store =
-            DiskStore::<TreeDDomain>::new_from_disk(tree_d_size, tree_d_arity, &tree_d_new_config)
+            DiskStore::<TreeDDomain>::new_from_disk(tree_d_nodes, tree_d_arity, &tree_d_new_config)
                 .context("tree_d_store")?;
         ensure!(
-            tree_d_size == Store::len(&tree_d_store),
+            tree_d_nodes == Store::len(&tree_d_store),
             "TreeD store size mismatch"
         );
 
         // Total number of nodes in TreeD.
         let total_apex_leafs = partition_count * apex_leaf_count;
         // The number of nodes in TreeD from the apex-leafs row to the root.
-        let tree_d_size_apex_leafs_to_root = get_merkle_tree_len(total_apex_leafs, tree_d_arity)?;
+        let tree_d_nodes_apex_leafs_to_root = get_merkle_tree_len(total_apex_leafs, tree_d_arity)?;
         // The number of nodes in TreeD below the apex-leafs row.
-        let tree_d_size_below_apex_leafs = tree_d_size - tree_d_size_apex_leafs_to_root;
+        let tree_d_nodes_below_apex_leafs = tree_d_nodes - tree_d_nodes_apex_leafs_to_root;
         trace!(
             "Apex-leafs info: total_apex_leafs={}, apex_leafs_per_partition={}",
             total_apex_leafs,
@@ -357,7 +357,7 @@ where
         );
 
         // Get this partition's apex-leafs.
-        let apex_leafs_start = tree_d_size_below_apex_leafs + k * apex_leaf_count;
+        let apex_leafs_start = tree_d_nodes_below_apex_leafs + k * apex_leaf_count;
         let apex_leafs_stop = apex_leafs_start + apex_leaf_count;
         trace!(
             "apex_leafs_start={} for partition k={}",
@@ -457,65 +457,65 @@ where
 
         // Instantiate TreeD new from the replica cache path. Note that this is similar to what
         // we do when going from t_aux to t_aux cache.
-        let tree_d_size = tree_d_new_config.size.expect("config size failure");
-        let tree_d_leafs = get_merkle_tree_leafs(tree_d_size, tree_d_arity)?;
+        let tree_d_leafs = *sector_nodes;
+        let tree_d_nodes = tree_d_new_config.size.expect("config size failure");
         trace!(
-            "Instantiating TreeDNew: leafs={}, store_size={})",
+            "Instantiating TreeDNew: leafs={}, base_store_size={})",
             tree_d_leafs,
-            tree_d_size
+            tree_d_nodes,
         );
         let tree_d_store =
-            DiskStore::<TreeDDomain>::new_from_disk(tree_d_size, tree_d_arity, &tree_d_new_config)
+            DiskStore::<TreeDDomain>::new_from_disk(tree_d_nodes, tree_d_arity, &tree_d_new_config)
                 .context("tree_d_store")?;
         let tree_d_new =
             BinaryMerkleTree::<TreeDHasher>::from_data_store(tree_d_store, tree_d_leafs)
                 .context("tree_d")?;
 
         let tree_r_rows_to_discard = Some(tree_r_old_config.rows_to_discard);
-        let instantiate_tree_r =
-            |tree_r_config: &StoreConfig, replica_path: &PathBuf, name: &str| {
-                // Instantiate TreeR new from the replica_cache_path. Note that this is similar to what we
-                // do when going from t_aux to t_aux cache.
-                let tree_r_size = tree_r_config.size.expect("tree_r config size failure");
-                let tree_r_leafs = get_merkle_tree_leafs(tree_r_size, tree_r_base_arity)?;
-                let tree_r_base_tree_count = get_base_tree_count::<TreeR>();
-                let (tree_r_configs, replica_config) = split_config_and_replica(
-                    tree_r_config.clone(),
-                    replica_path.to_path_buf(),
-                    tree_r_leafs,
-                    tree_r_base_tree_count,
-                )?;
+        let instantiate_tree_r = |tree_r_config: &StoreConfig,
+                                  replica_path: &PathBuf,
+                                  name: &str| {
+            // Instantiate TreeR new from the replica_cache_path. Note that this is similar to what we
+            // do when going from t_aux to t_aux cache.
+            let tree_r_base_tree_nodes = tree_r_config.size.expect("tree_r config size failure");
+            let tree_r_base_tree_leafs =
+                get_merkle_tree_leafs(tree_r_base_tree_nodes, tree_r_base_arity)?;
+            let tree_r_base_tree_count = get_base_tree_count::<TreeR>();
+            let (tree_r_configs, replica_config) = split_config_and_replica(
+                tree_r_config.clone(),
+                replica_path.to_path_buf(),
+                tree_r_base_tree_leafs,
+                tree_r_base_tree_count,
+            )?;
 
-                trace!(
-                    "Instantiating {}: arity={}-{}-{}, base_tree_count={}, store_size={}",
-                    name,
-                    tree_r_base_arity,
-                    tree_r_sub_arity,
-                    tree_r_top_arity,
-                    tree_r_base_tree_count,
-                    tree_r_size,
-                );
-                create_lc_tree::<
-                    LCTree<TreeRHasher, TreeR::Arity, TreeR::SubTreeArity, TreeR::TopTreeArity>,
-                >(tree_r_size, &tree_r_configs, &replica_config)
-            };
+            trace!(
+                "Instantiating {}: arity={}-{}-{}, base_tree_count={}, base_store_size={}",
+                name,
+                tree_r_base_arity,
+                tree_r_sub_arity,
+                tree_r_top_arity,
+                tree_r_base_tree_count,
+                tree_r_base_tree_nodes,
+            );
+            create_lc_tree::<
+                LCTree<TreeRHasher, TreeR::Arity, TreeR::SubTreeArity, TreeR::TopTreeArity>,
+            >(tree_r_base_tree_nodes, &tree_r_configs, &replica_config)
+        };
 
         let tree_r_old = instantiate_tree_r(tree_r_old_config, &old_replica_path, "TreeROld")?;
         let tree_r_new = instantiate_tree_r(tree_r_new_config, &replica_path, "TreeRNew")?;
 
         // tree_d borrowed the store, so re-instantiate it here for reading apex leafs.
         let tree_d_store =
-            DiskStore::<TreeDDomain>::new_from_disk(tree_d_size, tree_d_arity, &tree_d_new_config)
+            DiskStore::<TreeDDomain>::new_from_disk(tree_d_nodes, tree_d_arity, &tree_d_new_config)
                 .context("tree_d_store")?;
-        // TODO: can we use `tree_d_size` instead of `Store::len()` here?
-        // let tree_d_total_size = Store::len(&tree_d_store);
 
         // Total number of nodes in TreeD.
         let total_apex_leafs = partition_count * apex_leaf_count;
         // The number of nodes in TreeD from the apex-leafs row to the root.
-        let tree_d_size_apex_leafs_to_root = get_merkle_tree_len(total_apex_leafs, tree_d_arity)?;
+        let tree_d_nodes_apex_leafs_to_root = get_merkle_tree_len(total_apex_leafs, tree_d_arity)?;
         // The number of nodes in TreeD below the apex-leafs row.
-        let tree_d_size_below_apex_leafs = tree_d_size - tree_d_size_apex_leafs_to_root;
+        let tree_d_nodes_below_apex_leafs = tree_d_nodes - tree_d_nodes_apex_leafs_to_root;
         trace!(
             "Apex-leafs info: total_apex_leafs={}, apex_leafs_per_partition={}",
             total_apex_leafs,
@@ -526,7 +526,7 @@ where
             .into_par_iter()
             .map(|k| {
                 // Get this partition's apex-leafs.
-                let apex_leafs_start = tree_d_size_below_apex_leafs + k * apex_leaf_count;
+                let apex_leafs_start = tree_d_nodes_below_apex_leafs + k * apex_leaf_count;
                 let apex_leafs_stop = apex_leafs_start + apex_leaf_count;
                 trace!(
                     "apex_leafs_start={} for partition k={}",

@@ -2,22 +2,22 @@ use filecoin_hashers::{
     poseidon::{PoseidonDomain, PoseidonHasher},
     sha256::{Sha256Domain, Sha256Hasher},
 };
-use generic_array::typenum::{Unsigned, U2};
+use generic_array::typenum::{Unsigned, U0, U2, U8};
 use merkletree::store::DiskStore;
-use storage_proofs_core::merkle::{MerkleTreeTrait, MerkleTreeWrapper};
+use storage_proofs_core::merkle::{LCStore, LCTree, MerkleTreeTrait, MerkleTreeWrapper};
 
 // Sector-sizes measured in nodes.
-pub(crate) const SECTOR_SIZE_1_KIB: usize = 1 << 5;
-pub(crate) const SECTOR_SIZE_2_KIB: usize = 1 << 6;
-pub(crate) const SECTOR_SIZE_4_KIB: usize = 1 << 7;
-pub(crate) const SECTOR_SIZE_8_KIB: usize = 1 << 8;
-pub(crate) const SECTOR_SIZE_16_KIB: usize = 1 << 9;
-pub(crate) const SECTOR_SIZE_32_KIB: usize = 1 << 10;
-pub(crate) const SECTOR_SIZE_8_MIB: usize = 1 << 18;
-pub(crate) const SECTOR_SIZE_16_MIB: usize = 1 << 19;
-pub(crate) const SECTOR_SIZE_512_MIB: usize = 1 << 24;
-pub(crate) const SECTOR_SIZE_32_GIB: usize = 1 << 30;
-pub(crate) const SECTOR_SIZE_64_GIB: usize = 1 << 31;
+pub const SECTOR_SIZE_1_KIB: usize = 1 << 5;
+pub const SECTOR_SIZE_2_KIB: usize = 1 << 6;
+pub const SECTOR_SIZE_4_KIB: usize = 1 << 7;
+pub const SECTOR_SIZE_8_KIB: usize = 1 << 8;
+pub const SECTOR_SIZE_16_KIB: usize = 1 << 9;
+pub const SECTOR_SIZE_32_KIB: usize = 1 << 10;
+pub const SECTOR_SIZE_8_MIB: usize = 1 << 18;
+pub const SECTOR_SIZE_16_MIB: usize = 1 << 19;
+pub const SECTOR_SIZE_512_MIB: usize = 1 << 24;
+pub const SECTOR_SIZE_32_GIB: usize = 1 << 30;
+pub const SECTOR_SIZE_64_GIB: usize = 1 << 31;
 
 pub const ALLOWED_SECTOR_SIZES: [usize; 11] = [
     // testing sector-sizes
@@ -42,6 +42,10 @@ pub type TreeDDomain = Sha256Domain;
 
 pub type TreeRHasher = PoseidonHasher;
 pub type TreeRDomain = PoseidonDomain;
+pub type TreeRStore = LCStore<TreeRDomain>;
+// All valid TreeR's have the same base-tree shape.
+pub type TreeRBaseArity = U8;
+pub type TreeRBaseTree = LCTree<TreeRHasher, TreeRBaseArity, U0, U0>;
 
 // The number of partitions for the given sector-size.
 pub fn partition_count(sector_nodes: usize) -> usize {

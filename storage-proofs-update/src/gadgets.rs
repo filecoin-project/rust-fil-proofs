@@ -470,4 +470,46 @@ mod tests {
             }
         }
     }
+
+    // TODO:
+    /*
+    #[test]
+    fn test_apex_tree() {
+        let mut rng = &mut XorShiftRng::from_seed(TEST_SEED);
+        let n_leafs = PARTITIONS * APEX_LEAFS;
+        let leafs: Vec<TreeDDomain> = (0..n_leafs).map(|_| TreeDDomain::random(&mut rng)).collect();
+        let data: Vec<u8> = leafs.iter().flat_map(|leaf| leaf.into_bytes()).collect();
+        let tree = create_base_merkle_tree::<TreeD>(None, n_leafs, &data)
+            .expect("create_base_merkle_tree failure");
+        let comm_d = tree.root();
+        let k = 0;
+        let merkle_proofs: Vec<MerkleProof<TreeDHasher, TreeDArity>> = (0..APEX_LEAFS)
+            .map(|node_index| {
+                tree.gen_proof(node_index).expect(
+                    &format!("failed to generate merkle proof for node {}", node_index),
+                )
+            })
+            .collect();
+        fn apex_root_sibling(merkle_proof: &MerkleProof<TreeDHasher, TreeDArity>) -> TreeDDomain {
+            merkle_proof.path()[APEX_HEIGHT].0[0]
+        }
+        fn partition_index(merkle_proof: &MerkleProof<TreeDHasher, TreeDArity>) -> usize {
+            let mut k = 0;
+            for (i, el) in merkle_proof.path()[APEX_HEIGHT..].iter().enumerate() {
+                let bit = el.1;
+                assert!(bit <= 1);
+                k += bit * (1 << i);
+            }
+            assert!(k < PARTITIONS);
+            k
+        }
+        assert_eq!(tree.row_count(), APEX_ROWS + PARTITION_ROWS);
+        let apex_root = apex_root_sibling(&merkle_proofs[0]);
+        for merkle_proof in merkle_proofs.iter() {
+            assert_eq!(merkle_proof.path().len(), APEX_ROWS + PARTITION_ROWS - 1);
+            assert_eq!(apex_root_sibling(&merkle_proof), apex_root);
+            assert_eq!(partition_index(&merkle_proof), k);
+        }
+    }
+    */
 }
