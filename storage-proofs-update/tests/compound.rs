@@ -227,7 +227,7 @@ where
 
     let priv_inputs = PrivateInputs {
         tree_r_old_config,
-        old_replica_path: replica_old_path.to_path_buf(),
+        old_replica_path: replica_old_path,
         tree_d_new_config,
         tree_r_new_config,
         replica_path: replica_new_path,

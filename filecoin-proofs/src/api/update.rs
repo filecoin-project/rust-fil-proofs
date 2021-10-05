@@ -110,7 +110,7 @@ pub fn encode_into<Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher>>(
 
     // Re-instantiate a t_aux with the new cache path, then use
     // the tree_d and tree_r_last configs from it.
-    let mut t_aux_new = t_aux.clone();
+    let mut t_aux_new = t_aux;
     t_aux_new.set_cache_path(new_cache_path);
 
     // With the new cache path set, formulate the new tree_d and tree_r_last configs.
@@ -241,6 +241,7 @@ pub fn remove_encoded_data<Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher>
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn generate_partition_proofs<Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher>>(
     porep_config: PoRepConfig,
     comm_r_old: Commitment,
@@ -314,6 +315,7 @@ pub fn generate_partition_proofs<Tree: 'static + MerkleTreeTrait<Hasher = TreeRH
     Ok(partition_proof)
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn generate_single_partition_proof<Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher>>(
     porep_config: PoRepConfig,
     comm_r_old: Commitment,
