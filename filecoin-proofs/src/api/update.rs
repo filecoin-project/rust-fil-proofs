@@ -17,7 +17,7 @@ use storage_proofs_core::{
     proof::ProofScheme,
     util::NODE_SIZE,
 };
-use storage_proofs_porep::stacked::{PersistentAux, TemporaryAux, TemporaryAuxCache, BINARY_ARITY};
+use storage_proofs_porep::stacked::{PersistentAux, TemporaryAux, BINARY_ARITY};
 use storage_proofs_update::{
     constants::TreeRHasher, EmptySectorUpdate, PartitionProof, PrivateInputs, PublicInputs,
     PublicParams,
@@ -285,23 +285,18 @@ pub fn generate_partition_proofs<Tree: 'static + MerkleTreeTrait<Hasher = TreeRH
         let t_aux_bytes = fs::read(&t_aux_path)
             .with_context(|| format!("could not read file t_aux={:?}", t_aux_path))?;
 
-        let res: TemporaryAux<_, _> = deserialize(&t_aux_bytes)?;
+        let res: TemporaryAux<Tree, DefaultPieceHasher> = deserialize(&t_aux_bytes)?;
         res
     };
-
-    // Convert TemporaryAux to TemporaryAuxCache, which instantiates all
-    // elements based on the configs stored in TemporaryAux.
-    let t_aux_cache_old: TemporaryAuxCache<Tree, DefaultPieceHasher> =
-        TemporaryAuxCache::new(&t_aux_old, sector_key_path.to_path_buf())
-            .context("failed to restore contents of t_aux_old")?;
 
     // Re-instantiate a t_aux with the new replica cache path, then
     // use new tree_d_config and tree_r_last_config from it.
     let mut t_aux_new = t_aux_old.clone();
     t_aux_new.set_cache_path(replica_cache_path);
 
-    let private_inputs: PrivateInputs<Tree> = PrivateInputs {
-        t_aux_old: t_aux_cache_old,
+    let private_inputs: PrivateInputs = PrivateInputs {
+        tree_r_old_config: t_aux_old.tree_r_last_config,
+        old_replica_path: sector_key_path.to_path_buf(),
         tree_d_new_config: t_aux_new.tree_d_config,
         tree_r_new_config: t_aux_new.tree_r_last_config,
         replica_path: replica_path.to_path_buf(),
@@ -363,23 +358,18 @@ pub fn generate_single_partition_proof<Tree: 'static + MerkleTreeTrait<Hasher = 
         let t_aux_bytes = fs::read(&t_aux_path)
             .with_context(|| format!("could not read file t_aux={:?}", t_aux_path))?;
 
-        let res: TemporaryAux<_, _> = deserialize(&t_aux_bytes)?;
+        let res: TemporaryAux<Tree, DefaultPieceHasher> = deserialize(&t_aux_bytes)?;
         res
     };
-
-    // Convert TemporaryAux to TemporaryAuxCache, which instantiates all
-    // elements based on the configs stored in TemporaryAux.
-    let t_aux_cache_old: TemporaryAuxCache<Tree, DefaultPieceHasher> =
-        TemporaryAuxCache::new(&t_aux_old, sector_key_path.to_path_buf())
-            .context("failed to restore contents of t_aux_old")?;
 
     // Re-instantiate a t_aux with the new replica cache path, then
     // use new tree_d_config and tree_r_last_config from it.
     let mut t_aux_new = t_aux_old.clone();
     t_aux_new.set_cache_path(replica_cache_path);
 
-    let private_inputs: PrivateInputs<Tree> = PrivateInputs {
-        t_aux_old: t_aux_cache_old,
+    let private_inputs: PrivateInputs = PrivateInputs {
+        tree_r_old_config: t_aux_old.tree_r_last_config,
+        old_replica_path: sector_key_path.to_path_buf(),
         tree_d_new_config: t_aux_new.tree_d_config,
         tree_r_new_config: t_aux_new.tree_r_last_config,
         replica_path: replica_path.to_path_buf(),

@@ -18,7 +18,6 @@ use merkletree::{
 use rayon::{iter::IntoParallelIterator, prelude::*};
 use serde::{Deserialize, Serialize};
 use storage_proofs_core::{
-    cache_key::CacheKey,
     data::Data,
     error::Result,
     merkle::{
@@ -28,7 +27,7 @@ use storage_proofs_core::{
     parameter_cache::ParameterSetMetadata,
     proof::ProofScheme,
 };
-use storage_proofs_porep::stacked::{StackedDrg, TemporaryAuxCache};
+use storage_proofs_porep::stacked::StackedDrg;
 
 use crate::{
     constants::{
@@ -122,13 +121,13 @@ pub struct PublicInputs {
     pub h: usize,
 }
 
-pub struct PrivateInputs<TreeR>
-where
-    TreeR: MerkleTreeTrait<Hasher = TreeRHasher>,
-{
-    // Contains `tree_r_last_old`.
-    pub t_aux_old: TemporaryAuxCache<TreeR, TreeDHasher>,
+pub struct PrivateInputs {
+    pub tree_r_old_config: StoreConfig,
+    // Path to old replica.
+    pub old_replica_path: PathBuf,
+
     pub tree_d_new_config: StoreConfig,
+
     pub tree_r_new_config: StoreConfig,
     // Path to new replica.
     pub replica_path: PathBuf,
@@ -237,7 +236,7 @@ where
     type SetupParams = SetupParams;
     type PublicParams = PublicParams;
     type PublicInputs = PublicInputs;
-    type PrivateInputs = PrivateInputs<TreeR>;
+    type PrivateInputs = PrivateInputs;
     type Proof = PartitionProof<TreeR>;
     type Requirements = ();
 
@@ -260,12 +259,23 @@ where
         let PublicInputs { k, comm_r_new, .. } = pub_inputs;
 
         let PrivateInputs {
-            t_aux_old,
+            tree_r_old_config,
+            old_replica_path,
             tree_d_new_config,
             tree_r_new_config,
             replica_path,
             ..
         } = priv_inputs;
+
+        // Sanity check private input replica path types.
+        ensure!(
+            metadata(old_replica_path)?.is_file(),
+            "old_replica_path must be a file"
+        );
+        ensure!(
+            metadata(replica_path)?.is_file(),
+            "replica_path must be a file"
+        );
 
         info!(
             "Proving EmptySectorUpdate vanilla partition (sector_nodes={}, k={})",
@@ -276,8 +286,6 @@ where
         let tree_r_base_arity = TreeR::Arity::to_usize();
         let tree_r_sub_arity = TreeR::SubTreeArity::to_usize();
         let tree_r_top_arity = TreeR::TopTreeArity::to_usize();
-
-        let tree_r_old = &t_aux_old.tree_r_last;
 
         // Instantiate TreeD new from the replica cache path. Note that this is similar to what
         // we do when going from t_aux to t_aux cache.
@@ -295,30 +303,37 @@ where
             BinaryMerkleTree::<TreeDHasher>::from_data_store(tree_d_store, tree_d_leafs)
                 .context("tree_d")?;
 
-        // Instantiate TreeR new from the replica_cache_path. Note that this is similar to what we
-        // do when going from t_aux to t_aux cache.
-        let tree_r_size = tree_r_new_config.size.expect("tree_r config size failure");
-        let tree_r_leafs = get_merkle_tree_leafs(tree_r_size, tree_r_base_arity)?;
-        let tree_r_base_tree_count = get_base_tree_count::<TreeR>();
-        let (tree_r_new_configs, replica_config) = split_config_and_replica(
-            tree_r_new_config.clone(),
-            replica_path.to_path_buf(),
-            tree_r_leafs,
-            tree_r_base_tree_count,
-        )?;
-        let tree_r_rows_to_discard = Some(tree_r_new_config.rows_to_discard);
+        let tree_r_rows_to_discard = Some(tree_r_old_config.rows_to_discard);
+        let instantiate_tree_r =
+            |tree_r_config: &StoreConfig, replica_path: &PathBuf, name: &str| {
+                // Instantiate TreeR new from the replica_cache_path. Note that this is similar to what we
+                // do when going from t_aux to t_aux cache.
+                let tree_r_size = tree_r_config.size.expect("tree_r config size failure");
+                let tree_r_leafs = get_merkle_tree_leafs(tree_r_size, tree_r_base_arity)?;
+                let tree_r_base_tree_count = get_base_tree_count::<TreeR>();
+                let (tree_r_configs, replica_config) = split_config_and_replica(
+                    tree_r_config.clone(),
+                    replica_path.to_path_buf(),
+                    tree_r_leafs,
+                    tree_r_base_tree_count,
+                )?;
 
-        trace!(
-            "Instantiating TreeRNew: arity={}-{}-{}, base_tree_count={}, store_size={}",
-            tree_r_base_arity,
-            tree_r_sub_arity,
-            tree_r_top_arity,
-            tree_r_base_tree_count,
-            tree_r_size,
-        );
-        let tree_r_new = create_lc_tree::<
-            LCTree<TreeRHasher, TreeR::Arity, TreeR::SubTreeArity, TreeR::TopTreeArity>,
-        >(tree_r_size, &tree_r_new_configs, &replica_config)?;
+                trace!(
+                    "Instantiating {}: arity={}-{}-{}, base_tree_count={}, store_size={}",
+                    name,
+                    tree_r_base_arity,
+                    tree_r_sub_arity,
+                    tree_r_top_arity,
+                    tree_r_base_tree_count,
+                    tree_r_size,
+                );
+                create_lc_tree::<
+                    LCTree<TreeRHasher, TreeR::Arity, TreeR::SubTreeArity, TreeR::TopTreeArity>,
+                >(tree_r_size, &tree_r_configs, &replica_config)
+            };
+
+        let tree_r_old = instantiate_tree_r(tree_r_old_config, &old_replica_path, "TreeROld")?;
+        let tree_r_new = instantiate_tree_r(tree_r_new_config, &replica_path, "TreeRNew")?;
 
         // tree_d borrowed the store, so re-instantiate it here for reading apex leafs.
         let tree_d_store =
@@ -412,12 +427,23 @@ where
         let PublicInputs { comm_r_new, .. } = pub_inputs;
 
         let PrivateInputs {
-            t_aux_old,
+            tree_r_old_config,
+            old_replica_path,
             tree_d_new_config,
             tree_r_new_config,
             replica_path,
             ..
         } = priv_inputs;
+
+        // Sanity check private input replica path types.
+        ensure!(
+            metadata(old_replica_path)?.is_file(),
+            "old_replica_path must be a file"
+        );
+        ensure!(
+            metadata(replica_path)?.is_file(),
+            "replica_path must be a file"
+        );
 
         info!(
             "Proving all EmptySectorUpdate vanilla partitions (sector_nodes={})",
@@ -428,8 +454,6 @@ where
         let tree_r_base_arity = TreeR::Arity::to_usize();
         let tree_r_sub_arity = TreeR::SubTreeArity::to_usize();
         let tree_r_top_arity = TreeR::TopTreeArity::to_usize();
-
-        let tree_r_old = &t_aux_old.tree_r_last;
 
         // Instantiate TreeD new from the replica cache path. Note that this is similar to what
         // we do when going from t_aux to t_aux cache.
@@ -447,30 +471,37 @@ where
             BinaryMerkleTree::<TreeDHasher>::from_data_store(tree_d_store, tree_d_leafs)
                 .context("tree_d")?;
 
-        // Instantiate TreeR new from the replica_cache_path. Note that this is similar to what we
-        // do when going from t_aux to t_aux cache.
-        let tree_r_size = tree_r_new_config.size.expect("tree_r config size failure");
-        let tree_r_leafs = get_merkle_tree_leafs(tree_r_size, tree_r_base_arity)?;
-        let tree_r_base_tree_count = get_base_tree_count::<TreeR>();
-        let (tree_r_new_configs, replica_config) = split_config_and_replica(
-            tree_r_new_config.clone(),
-            replica_path.to_path_buf(),
-            tree_r_leafs,
-            tree_r_base_tree_count,
-        )?;
-        let tree_r_rows_to_discard = Some(tree_r_new_config.rows_to_discard);
+        let tree_r_rows_to_discard = Some(tree_r_old_config.rows_to_discard);
+        let instantiate_tree_r =
+            |tree_r_config: &StoreConfig, replica_path: &PathBuf, name: &str| {
+                // Instantiate TreeR new from the replica_cache_path. Note that this is similar to what we
+                // do when going from t_aux to t_aux cache.
+                let tree_r_size = tree_r_config.size.expect("tree_r config size failure");
+                let tree_r_leafs = get_merkle_tree_leafs(tree_r_size, tree_r_base_arity)?;
+                let tree_r_base_tree_count = get_base_tree_count::<TreeR>();
+                let (tree_r_configs, replica_config) = split_config_and_replica(
+                    tree_r_config.clone(),
+                    replica_path.to_path_buf(),
+                    tree_r_leafs,
+                    tree_r_base_tree_count,
+                )?;
 
-        trace!(
-            "Instantiating TreeRNew: arity={}-{}-{}, base_tree_count={}, store_size={}",
-            tree_r_base_arity,
-            tree_r_sub_arity,
-            tree_r_top_arity,
-            tree_r_base_tree_count,
-            tree_r_size,
-        );
-        let tree_r_new = create_lc_tree::<
-            LCTree<TreeRHasher, TreeR::Arity, TreeR::SubTreeArity, TreeR::TopTreeArity>,
-        >(tree_r_size, &tree_r_new_configs, &replica_config)?;
+                trace!(
+                    "Instantiating {}: arity={}-{}-{}, base_tree_count={}, store_size={}",
+                    name,
+                    tree_r_base_arity,
+                    tree_r_sub_arity,
+                    tree_r_top_arity,
+                    tree_r_base_tree_count,
+                    tree_r_size,
+                );
+                create_lc_tree::<
+                    LCTree<TreeRHasher, TreeR::Arity, TreeR::SubTreeArity, TreeR::TopTreeArity>,
+                >(tree_r_size, &tree_r_configs, &replica_config)
+            };
+
+        let tree_r_old = instantiate_tree_r(tree_r_old_config, &old_replica_path, "TreeROld")?;
+        let tree_r_new = instantiate_tree_r(tree_r_new_config, &replica_path, "TreeRNew")?;
 
         // tree_d borrowed the store, so re-instantiate it here for reading apex leafs.
         let tree_d_store =
