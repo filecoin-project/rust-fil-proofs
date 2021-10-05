@@ -21,6 +21,7 @@ use storage_proofs_porep::{
     stacked::{generate_replica_id, PersistentAux, StackedDrg, TemporaryAux},
     PoRep,
 };
+pub use storage_proofs_update::constants::TreeRHasher;
 use typenum::Unsigned;
 
 use crate::{
@@ -53,6 +54,8 @@ pub use update::*;
 pub use util::*;
 pub use window_post::*;
 pub use winning_post::*;
+
+pub use storage_proofs_update::constants::{hs, partition_count};
 
 /// Unseals the sector at `sealed_path` and returns the bytes for a piece
 /// whose first (unpadded) byte begins at `offset` and ends at `offset` plus
