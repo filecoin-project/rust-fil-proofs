@@ -24,30 +24,6 @@ use crate::{
     types::{Commitment, HSelect, PieceInfo, PoRepConfig, UpdateProofPartitions},
 };
 
-// FIXME: This is a debug only method
-pub fn dump_elements(path: &Path) -> Result<(), Error> {
-    info!("Dumping elements from {:?}", path);
-    let f_data = OpenOptions::new()
-        .read(true)
-        .open(path)
-        .with_context(|| format!("could not open path={:?}", path))?;
-    let data = unsafe {
-        MmapOptions::new()
-            .map(&f_data)
-            .with_context(|| format!("could not mmap path={:?}", path))
-    }?;
-    let fr_size = std::mem::size_of::<Fr>() as usize;
-    let end = metadata(path)?.len() as u64;
-    for i in (0..end).step_by(fr_size) {
-        let index = i as usize;
-        let fr = bytes_into_fr(&data[index..index + fr_size])?;
-        info!("[{}/{}] {:?} ", index, index + fr_size, fr);
-    }
-
-    Ok(())
-}
-
-// FIXME: This is a test only method (add to test module)
 pub fn compare_elements(path1: &Path, path2: &Path) -> Result<(), Error> {
     info!("Comparing elements between {:?} and {:?}", path1, path2);
     let f_data1 = OpenOptions::new()
@@ -96,7 +72,6 @@ pub fn encode_into<Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher>>(
     sector_key_cache_path: &Path,
     staged_data_path: &Path,
     piece_infos: &[PieceInfo],
-    comm_sector_key: Commitment,
 ) -> Result<(Commitment, Commitment, Commitment)> {
     info!("encode_into:start");
     let mut comm_d = [0; 32];
@@ -136,7 +111,7 @@ pub fn encode_into<Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher>>(
             nodes_count,
             &t_aux_cache,
             <Tree::Hasher as Hasher>::Domain::try_from_bytes(&p_aux.comm_c.into_bytes())?,
-            <Tree::Hasher as Hasher>::Domain::try_from_bytes(&comm_sector_key)?,
+            <Tree::Hasher as Hasher>::Domain::try_from_bytes(&p_aux.comm_r_last.into_bytes())?,
             &new_replica_path,
             &new_cache_path,
             &sector_key_path,
@@ -173,8 +148,6 @@ pub fn decode_from<Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher>>(
     sector_key_path: &Path,
     sector_key_cache_path: &Path,
     comm_d_new: Commitment,
-    comm_r_new: Commitment,
-    comm_sector_key: Commitment, /* comm_r_last_old */
 ) -> Result<()> {
     info!("decode_from:start");
 
@@ -196,7 +169,7 @@ pub fn decode_from<Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher>>(
         sector_key_cache_path,
         <Tree::Hasher as Hasher>::Domain::try_from_bytes(&p_aux.comm_c.into_bytes())?,
         comm_d_new.into(),
-        <Tree::Hasher as Hasher>::Domain::try_from_bytes(&comm_sector_key)?,
+        <Tree::Hasher as Hasher>::Domain::try_from_bytes(&p_aux.comm_r_last.into_bytes())?,
         u64::from(HSelect::from(porep_config)) as usize,
     )?;
 
@@ -214,8 +187,6 @@ pub fn remove_encoded_data<Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher>
     replica_cache_path: &Path,
     data_path: &Path,
     comm_d_new: Commitment,
-    comm_r_old: Commitment,
-    comm_sector_key: Commitment, /* comm_r_last_old */
 ) -> Result<()> {
     info!("remove_data:start");
 
@@ -238,7 +209,7 @@ pub fn remove_encoded_data<Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher>
         data_path,
         <Tree::Hasher as Hasher>::Domain::try_from_bytes(&p_aux.comm_c.into_bytes())?,
         comm_d_new.into(),
-        <Tree::Hasher as Hasher>::Domain::try_from_bytes(&comm_sector_key)?,
+        <Tree::Hasher as Hasher>::Domain::try_from_bytes(&p_aux.comm_r_last.into_bytes())?,
         u64::from(HSelect::from(porep_config)) as usize,
     )?;
 
@@ -246,7 +217,7 @@ pub fn remove_encoded_data<Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher>
     Ok(())
 }
 
-pub fn generate_update_proof<Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher>>(
+pub fn generate_partition_proofs<Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher>>(
     porep_config: PoRepConfig,
     comm_r_old: Commitment,
     comm_r_new: Commitment,
@@ -256,7 +227,7 @@ pub fn generate_update_proof<Tree: 'static + MerkleTreeTrait<Hasher = TreeRHashe
     replica_path: &Path,
     replica_cache_path: &Path,
 ) -> Result<Vec<PartitionProof<Tree>>> {
-    info!("generate_update_proof:start");
+    info!("generate_partition_proofs:start");
 
     let comm_r_old_safe = <TreeRHasher as Hasher>::Domain::try_from_bytes(&comm_r_old)?;
     let comm_r_new_safe = <TreeRHasher as Hasher>::Domain::try_from_bytes(&comm_r_new)?;
@@ -312,14 +283,177 @@ pub fn generate_update_proof<Tree: 'static + MerkleTreeTrait<Hasher = TreeRHashe
         replica_path: replica_path.to_path_buf(),
     };
 
-    let vanilla_update_proof = EmptySectorUpdate::<Tree>::prove_all_partitions(
+    let partition_proof = EmptySectorUpdate::<Tree>::prove_all_partitions(
         &public_params,
         &public_inputs,
         &private_inputs,
         usize::from(UpdateProofPartitions::from(porep_config)),
     )?;
 
-    info!("generate_update_proof:finish");
+    info!("generate_partition_proofs:finish");
 
-    Ok(vanilla_update_proof)
+    Ok(partition_proof)
+}
+
+pub fn generate_single_partition_proof<Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher>>(
+    porep_config: PoRepConfig,
+    comm_r_old: Commitment,
+    comm_r_new: Commitment,
+    comm_d_new: Commitment,
+    sector_key_path: &Path,
+    sector_key_cache_path: &Path,
+    replica_path: &Path,
+    replica_cache_path: &Path,
+) -> Result<PartitionProof<Tree>> {
+    info!("generate_single_partition_proof:start");
+
+    let comm_r_old_safe = <TreeRHasher as Hasher>::Domain::try_from_bytes(&comm_r_old)?;
+    let comm_r_new_safe = <TreeRHasher as Hasher>::Domain::try_from_bytes(&comm_r_new)?;
+
+    let comm_d_new_safe = DefaultPieceDomain::try_from_bytes(&comm_d_new)?;
+
+    let public_params: storage_proofs_update::PublicParams =
+        PublicParams::from_sector_size(u64::from(porep_config.sector_size));
+
+    // NOTE: p_aux has comm_c and comm_r_last
+    let p_aux_old: PersistentAux<<Tree::Hasher as Hasher>::Domain> = {
+        let p_aux_path = sector_key_cache_path.join(CacheKey::PAux.to_string());
+        let p_aux_bytes = fs::read(&p_aux_path)
+            .with_context(|| format!("could not read file p_aux={:?}", p_aux_path))?;
+
+        deserialize(&p_aux_bytes)
+    }?;
+
+    let public_inputs: storage_proofs_update::PublicInputs = PublicInputs {
+        k: 0,
+        comm_c: p_aux_old.comm_c,
+        comm_r_old: comm_r_old_safe,
+        comm_d_new: comm_d_new_safe,
+        comm_r_new: comm_r_new_safe,
+        h: u64::from(HSelect::from(porep_config)) as usize,
+    };
+
+    // Note: t_aux has labels and tree_d, tree_c, tree_r_last store configs
+    let t_aux_old = {
+        let t_aux_path = sector_key_cache_path.join(CacheKey::TAux.to_string());
+        let t_aux_bytes = fs::read(&t_aux_path)
+            .with_context(|| format!("could not read file t_aux={:?}", t_aux_path))?;
+
+        let res: TemporaryAux<_, _> = deserialize(&t_aux_bytes)?;
+        res
+    };
+
+    // Convert TemporaryAux to TemporaryAuxCache, which instantiates all
+    // elements based on the configs stored in TemporaryAux.
+    let t_aux_cache_old: TemporaryAuxCache<Tree, DefaultPieceHasher> =
+        TemporaryAuxCache::new(&t_aux_old, sector_key_path.to_path_buf())
+            .context("failed to restore contents of t_aux_old")?;
+
+    // Re-instantiate a t_aux with the new replica cache path, then
+    // use new tree_d_config and tree_r_last_config from it.
+    let mut t_aux_new = t_aux_old.clone();
+    t_aux_new.set_cache_path(replica_cache_path);
+
+    let private_inputs: PrivateInputs<Tree> = PrivateInputs {
+        t_aux_old: t_aux_cache_old,
+        tree_d_new_config: t_aux_new.tree_d_config,
+        tree_r_new_config: t_aux_new.tree_r_last_config,
+        replica_path: replica_path.to_path_buf(),
+    };
+
+    let partition_proof =
+        EmptySectorUpdate::<Tree>::prove(&public_params, &public_inputs, &private_inputs)?;
+
+    info!("generate_single_partition_proof:finish");
+
+    Ok(partition_proof)
+}
+
+pub fn verify_single_partition_proof<Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher>>(
+    porep_config: PoRepConfig,
+    proof: PartitionProof<Tree>,
+    comm_r_old: Commitment,
+    comm_r_new: Commitment,
+    comm_d_new: Commitment,
+    sector_key_cache_path: &Path,
+) -> Result<bool> {
+    info!("verify_single_partition_proof:start");
+
+    let comm_r_old_safe = <TreeRHasher as Hasher>::Domain::try_from_bytes(&comm_r_old)?;
+    let comm_r_new_safe = <TreeRHasher as Hasher>::Domain::try_from_bytes(&comm_r_new)?;
+
+    let comm_d_new_safe = DefaultPieceDomain::try_from_bytes(&comm_d_new)?;
+
+    let public_params: storage_proofs_update::PublicParams =
+        PublicParams::from_sector_size(u64::from(porep_config.sector_size));
+
+    // NOTE: p_aux has comm_c and comm_r_last
+    let p_aux_old: PersistentAux<<Tree::Hasher as Hasher>::Domain> = {
+        let p_aux_path = sector_key_cache_path.join(CacheKey::PAux.to_string());
+        let p_aux_bytes = fs::read(&p_aux_path)
+            .with_context(|| format!("could not read file p_aux={:?}", p_aux_path))?;
+
+        deserialize(&p_aux_bytes)
+    }?;
+
+    let public_inputs: storage_proofs_update::PublicInputs = PublicInputs {
+        k: 0,
+        comm_c: p_aux_old.comm_c,
+        comm_r_old: comm_r_old_safe,
+        comm_d_new: comm_d_new_safe,
+        comm_r_new: comm_r_new_safe,
+        h: u64::from(HSelect::from(porep_config)) as usize,
+    };
+
+    let valid = EmptySectorUpdate::<Tree>::verify(&public_params, &public_inputs, &proof)?;
+    ensure!(valid, "vanilla proof is invalid");
+
+    info!("verify_single_partition_proof:finish");
+
+    Ok(valid)
+}
+
+pub fn verify_partition_proofs<Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher>>(
+    porep_config: PoRepConfig,
+    proofs: Vec<PartitionProof<Tree>>,
+    comm_r_old: Commitment,
+    comm_r_new: Commitment,
+    comm_d_new: Commitment,
+    sector_key_cache_path: &Path,
+) -> Result<bool> {
+    info!("verify_partition_proofs:start");
+
+    let comm_r_old_safe = <TreeRHasher as Hasher>::Domain::try_from_bytes(&comm_r_old)?;
+    let comm_r_new_safe = <TreeRHasher as Hasher>::Domain::try_from_bytes(&comm_r_new)?;
+
+    let comm_d_new_safe = DefaultPieceDomain::try_from_bytes(&comm_d_new)?;
+
+    let public_params: storage_proofs_update::PublicParams =
+        PublicParams::from_sector_size(u64::from(porep_config.sector_size));
+
+    // NOTE: p_aux has comm_c and comm_r_last
+    let p_aux_old: PersistentAux<<Tree::Hasher as Hasher>::Domain> = {
+        let p_aux_path = sector_key_cache_path.join(CacheKey::PAux.to_string());
+        let p_aux_bytes = fs::read(&p_aux_path)
+            .with_context(|| format!("could not read file p_aux={:?}", p_aux_path))?;
+
+        deserialize(&p_aux_bytes)
+    }?;
+
+    let public_inputs: storage_proofs_update::PublicInputs = PublicInputs {
+        k: usize::from(UpdateProofPartitions::from(porep_config)),
+        comm_c: p_aux_old.comm_c,
+        comm_r_old: comm_r_old_safe,
+        comm_d_new: comm_d_new_safe,
+        comm_r_new: comm_r_new_safe,
+        h: u64::from(HSelect::from(porep_config)) as usize,
+    };
+
+    let valid =
+        EmptySectorUpdate::<Tree>::verify_all_partitions(&public_params, &public_inputs, &proofs)?;
+    ensure!(valid, "vanilla proofs are invalid");
+
+    info!("verify_partition_proofs:finish");
+
+    Ok(valid)
 }
