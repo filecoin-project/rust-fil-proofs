@@ -642,7 +642,7 @@ mod tests {
             );
             let leafs = labels.iter().copied().map(Ok);
             MerkleTreeWrapper::try_from_iter_with_config(leafs, config)
-                .expect(&format!("failed to create non-compound-tree {}", tree_name))
+                .unwrap_or_else(|_| panic!("failed to create non-compound-tree {}", tree_name))
         } else if top_arity == 0 {
             let base_tree_count = sub_arity;
             let leafs_per_base_tree = sector_nodes / base_tree_count;
@@ -660,11 +660,11 @@ mod tests {
                         .copied()
                         .map(Ok);
                     MerkleTreeWrapper::try_from_iter_with_config(leafs, config)
-                        .expect(&format!("failed to create {} base-tree {}", tree_name, i))
+                        .unwrap_or_else(|_| panic!("failed to create {} base-tree {}", tree_name, i))
                 })
                 .collect();
             MerkleTreeWrapper::from_trees(base_trees)
-                .expect(&format!("failed to create {} from base-trees", tree_name))
+                .unwrap_or_else(|_| panic!("failed to create {} from base-trees", tree_name))
         } else {
             let base_tree_count = top_arity * sub_arity;
             let sub_tree_count = top_arity;
@@ -691,22 +691,21 @@ mod tests {
                                     .iter()
                                     .copied()
                                     .map(Ok);
-                                MerkleTreeWrapper::try_from_iter_with_config(leafs, config).expect(
-                                    &format!(
+                                MerkleTreeWrapper::try_from_iter_with_config(leafs, config)
+                                    .unwrap_or_else(|_| panic!(
                                         "failed to create {} sub-tree {} base-tree {}",
                                         tree_name, sub_index, base_index,
-                                    ),
-                                )
+                                    ))
                             })
                             .collect();
-                    MerkleTreeWrapper::from_trees(base_trees).expect(&format!(
+                    MerkleTreeWrapper::from_trees(base_trees).unwrap_or_else(|_| panic!(
                         "failed to create {} sub-tree {} from base-trees",
                         tree_name, sub_index,
                     ))
                 })
                 .collect();
             MerkleTreeWrapper::from_sub_trees(sub_trees)
-                .expect(&format!("failed to create {} from sub-trees", tree_name))
+                .unwrap_or_else(|_| panic!("failed to create {} from sub-trees", tree_name))
         }
     }
 
@@ -736,7 +735,7 @@ mod tests {
         let apex_leafs_stop = apex_leafs_start + apex_leafs_per_partition;
         tree_d_new
             .read_range(apex_leafs_start, apex_leafs_stop)
-            .expect(&format!(
+            .unwrap_or_else(|_| panic!(
                 "failed to read tree_d_new apex-leafs (k={}, range={}..{})",
                 k, apex_leafs_start, apex_leafs_stop,
             ))
@@ -844,15 +843,15 @@ mod tests {
                     .enumerate()
                     .take(pub_params.challenge_count)
                     .map(|(i, c)| {
-                        let proof_r_old = tree_r_old.gen_proof(c).expect(&format!(
+                        let proof_r_old = tree_r_old.gen_proof(c).unwrap_or_else(|_| panic!(
                             "failed to generate `proof_r_old` for c_{}={}",
                             i, c
                         ));
-                        let proof_d_new = tree_d_new.gen_proof(c).expect(&format!(
+                        let proof_d_new = tree_d_new.gen_proof(c).unwrap_or_else(|_| panic!(
                             "failed to generate `proof_d_new` for c_{}={}",
                             i, c
                         ));
-                        let proof_r_new = tree_r_new.gen_proof(c).expect(&format!(
+                        let proof_r_new = tree_r_new.gen_proof(c).unwrap_or_else(|_| panic!(
                             "failed to generate `proof_r_new` for c_{}={}",
                             i, c
                         ));
