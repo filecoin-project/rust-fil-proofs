@@ -902,7 +902,7 @@ mod tests {
                 comm_r_last_old: Some(comm_r_last_old.into()),
                 comm_r_last_new: Some(comm_r_last_new.into()),
                 apex_leafs,
-                challenge_proofs: challenge_proofs,
+                challenge_proofs,
             };
 
             let mut cs = TestConstraintSystem::<Fr>::new();
