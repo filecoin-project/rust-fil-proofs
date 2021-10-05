@@ -4,15 +4,20 @@ use std::path::Path;
 use anyhow::{ensure, Context, Error, Result};
 use bincode::deserialize;
 use blstrs::Scalar as Fr;
-//use filecoin_hashers::sha256::Sha256Hasher;
 use filecoin_hashers::{Domain, Hasher};
 use fr32::bytes_into_fr;
+use generic_array::typenum::Unsigned;
 use log::info;
 use memmap::MmapOptions;
+use merkletree::merkle::get_merkle_tree_len;
+use merkletree::store::StoreConfig;
 use storage_proofs_core::{
-    cache_key::CacheKey, merkle::MerkleTreeTrait, proof::ProofScheme, util::NODE_SIZE,
+    cache_key::CacheKey,
+    merkle::{get_base_tree_count, MerkleTreeTrait},
+    proof::ProofScheme,
+    util::NODE_SIZE,
 };
-use storage_proofs_porep::stacked::{PersistentAux, TemporaryAux, TemporaryAuxCache};
+use storage_proofs_porep::stacked::{PersistentAux, TemporaryAux, TemporaryAuxCache, BINARY_ARITY};
 use storage_proofs_update::{
     constants::TreeRHasher, EmptySectorUpdate, PartitionProof, PrivateInputs, PublicInputs,
     PublicParams,
@@ -78,6 +83,10 @@ pub fn encode_into<Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher>>(
     let mut comm_r = [0; 32];
     let mut comm_r_last = [0; 32];
 
+    let nodes_count = u64::from(porep_config.sector_size) as usize / NODE_SIZE;
+    let tree_count = get_base_tree_count::<Tree>();
+    let base_tree_nodes_count = nodes_count / tree_count;
+
     // NOTE: p_aux has comm_c and comm_r_last
     let p_aux: PersistentAux<<Tree::Hasher as Hasher>::Domain> = {
         let p_aux_path = sector_key_cache_path.join(CacheKey::PAux.to_string());
@@ -93,23 +102,38 @@ pub fn encode_into<Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher>>(
         let t_aux_bytes = fs::read(&t_aux_path)
             .with_context(|| format!("could not read file t_aux={:?}", t_aux_path))?;
 
-        let mut res: TemporaryAux<_, _> = deserialize(&t_aux_bytes)?;
+        let mut res: TemporaryAux<Tree, DefaultPieceHasher> = deserialize(&t_aux_bytes)?;
         // Switch t_aux to the passed in cache_path
         res.set_cache_path(sector_key_cache_path);
         res
     };
 
-    // Convert TemporaryAux to TemporaryAuxCache, which instantiates all
-    // elements based on the configs stored in TemporaryAux.
-    let t_aux_cache: TemporaryAuxCache<Tree, DefaultPieceHasher> =
-        TemporaryAuxCache::new(&t_aux, sector_key_path.to_path_buf())
-            .context("failed to restore contents of t_aux")?;
+    // Re-instantiate a t_aux with the new cache path, then use
+    // the tree_d and tree_r_last configs from it.
+    let mut t_aux_new = t_aux.clone();
+    t_aux_new.set_cache_path(new_cache_path);
 
-    let nodes_count = u64::from(porep_config.sector_size) as usize / NODE_SIZE;
+    // With the new cache path set, formulate the new tree_d and tree_r_last configs.
+    let tree_d_new_config = StoreConfig::from_config(
+        &t_aux_new.tree_d_config,
+        CacheKey::CommDTree.to_string(),
+        Some(get_merkle_tree_len(base_tree_nodes_count, BINARY_ARITY)?),
+    );
+
+    let tree_r_last_new_config = StoreConfig::from_config(
+        &t_aux_new.tree_r_last_config,
+        CacheKey::CommRLastTree.to_string(),
+        Some(get_merkle_tree_len(
+            base_tree_nodes_count,
+            Tree::Arity::to_usize(),
+        )?),
+    );
+
     let (comm_r_domain, comm_r_last_domain, comm_d_domain) =
         EmptySectorUpdate::<Tree>::encode_into(
             nodes_count,
-            &t_aux_cache,
+            tree_d_new_config,
+            tree_r_last_new_config,
             <Tree::Hasher as Hasher>::Domain::try_from_bytes(&p_aux.comm_c.into_bytes())?,
             <Tree::Hasher as Hasher>::Domain::try_from_bytes(&p_aux.comm_r_last.into_bytes())?,
             &new_replica_path,
