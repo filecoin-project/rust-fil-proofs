@@ -11,7 +11,7 @@ use fdlimit::raise_fd_limit;
 use filecoin_hashers::{poseidon::PoseidonHasher, Domain, HashFunction, Hasher, PoseidonArity};
 use generic_array::typenum::{Unsigned, U0, U11, U2, U8};
 use lazy_static::lazy_static;
-use log::{error, info, trace};
+use log::{error, info, trace, warn};
 use merkletree::{
     merkle::{get_merkle_tree_len, is_merkle_tree_size_valid},
     store::{Store, StoreConfig},
@@ -594,14 +594,20 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                 });
                 s.execute(move || {
                     let _gpu_lock = GPU_LOCK.lock().expect("failed to get gpu lock");
-                    let tree_batcher = Some(
-                        Batcher::pick_gpu(max_gpu_tree_batch_size)
-                            .expect("failed to create tree gpu batcher"),
-                    );
-                    let column_batcher = Some(
-                        Batcher::pick_gpu(max_gpu_column_batch_size)
-                            .expect("failed to create col gpu batcher"),
-                    );
+                    let tree_batcher = match Batcher::pick_gpu(max_gpu_tree_batch_size) {
+                        Ok(b) => Some(b),
+                        Err(err) => {
+                            warn!("no GPU found, falling back to CPU tree builder: {}", err);
+                            None
+                        }
+                    };
+                    let column_batcher = match Batcher::pick_gpu(max_gpu_column_batch_size) {
+                        Ok(b) => Some(b),
+                        Err(err) => {
+                            warn!("no GPU found, falling back to CPU tree builder: {}", err);
+                            None
+                        }
+                    };
                     let mut column_tree_builder = ColumnTreeBuilder::<ColumnArity, TreeArity>::new(
                         column_batcher,
                         tree_batcher,
@@ -979,10 +985,13 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
             });
             s.execute(move || {
                 let _gpu_lock = GPU_LOCK.lock().expect("failed to get gpu lock");
-                let batcher = Some(
-                    Batcher::pick_gpu(max_gpu_tree_batch_size)
-                        .expect("failed to create gpu batcher"),
-                );
+                let batcher = match Batcher::pick_gpu(max_gpu_tree_batch_size) {
+                    Ok(b) => Some(b),
+                    Err(err) => {
+                        warn!("no GPU found, falling back to CPU tree builder: {}", err);
+                        None
+                    }
+                };
                 let mut tree_builder = TreeBuilder::<Tree::Arity>::new(
                     batcher,
                     nodes_count,
@@ -1443,9 +1452,13 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
             let max_gpu_tree_batch_size = SETTINGS.max_gpu_tree_batch_size as usize;
 
             let _gpu_lock = GPU_LOCK.lock().expect("failed to get gpu lock");
-            let batcher = Some(
-                Batcher::pick_gpu(max_gpu_tree_batch_size).expect("failed to create gpu batcher"),
-            );
+            let batcher = match Batcher::pick_gpu(max_gpu_tree_batch_size) {
+                Ok(b) => Some(b),
+                Err(err) => {
+                    warn!("no GPU found, falling back to CPU tree builder: {}", err);
+                    None
+                }
+            };
             let mut tree_builder = TreeBuilder::<Tree::Arity>::new(
                 batcher,
                 nodes_count,
