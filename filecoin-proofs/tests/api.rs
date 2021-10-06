@@ -30,6 +30,7 @@ use filecoin_proofs::{
     WINNING_POST_CHALLENGE_COUNT, WINNING_POST_SECTOR_COUNT,
 =======
     add_piece, aggregate_seal_commit_proofs, clear_cache, compare_elements, compute_comm_d,
+<<<<<<< HEAD
     decode_from, encode_into, fauxrep_aux, generate_fallback_sector_challenges,
 <<<<<<< HEAD
     generate_piece_commitment, generate_single_vanilla_proof, generate_update_proof,
@@ -70,6 +71,17 @@ use filecoin_proofs::{
     seal_commit_phase2, seal_pre_commit_phase1, seal_pre_commit_phase2, unseal_range,
     validate_cache_for_commit, validate_cache_for_precommit_phase2,
     verify_aggregate_seal_commit_proofs, verify_partition_proofs, verify_seal,
+=======
+    decode_from, encode_into, fauxrep_aux, generate_empty_sector_update_proof,
+    generate_fallback_sector_challenges, generate_partition_proofs, generate_piece_commitment,
+    generate_single_partition_proof, generate_single_vanilla_proof, generate_window_post,
+    generate_window_post_with_vanilla, generate_winning_post,
+    generate_winning_post_sector_challenge, generate_winning_post_with_vanilla, get_seal_inputs,
+    remove_encoded_data, seal_commit_phase1, seal_commit_phase2, seal_pre_commit_phase1,
+    seal_pre_commit_phase2, unseal_range, validate_cache_for_commit,
+    validate_cache_for_precommit_phase2, verify_aggregate_seal_commit_proofs,
+    verify_empty_sector_update_proof, verify_partition_proofs, verify_seal,
+>>>>>>> 63296dd3 (feat: add prove and verify API interfaces)
     verify_single_partition_proof, verify_window_post, verify_winning_post, Commitment,
     DefaultTreeDomain, HSelect, MerkleTreeTrait, PaddedBytesAmount, PieceInfo, PoRepConfig,
     PoRepProofPartitions, PoStConfig, PoStType, PrivateReplicaInfo, ProverId, PublicReplicaInfo,
@@ -1944,6 +1956,26 @@ fn create_seal_for_upgrade<R: Rng, Tree: 'static + MerkleTreeTrait<Hasher = Tree
         cache_dir.path(), /* sector key path needed for p_aux (for comm_c/comm_r_last) */
     )?;
     ensure!(proofs_are_valid, "Partition proofs failed to verify");
+
+    let proof = generate_empty_sector_update_proof::<Tree>(
+        config,
+        comm_r,
+        new_comm_r,
+        new_comm_d,
+        sealed_sector_file.path(), /* sector key file */
+        cache_dir.path(),          /* sector key path needed for p_aux and t_aux */
+        new_sealed_sector_file.path(),
+        new_cache_dir.path(),
+    )?;
+    let valid = verify_empty_sector_update_proof::<Tree>(
+        config,
+        &proof,
+        comm_r,
+        new_comm_r,
+        new_comm_d,
+        cache_dir.path(), /* sector key path needed for p_aux */
+    )?;
+    ensure!(valid, "Compound proof failed to verify");
 
     let decoded_sector_file = NamedTempFile::new()?;
     // FIXME: New replica (new_sealed_sector_file) is currently 0

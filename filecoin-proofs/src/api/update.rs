@@ -13,7 +13,7 @@ use merkletree::merkle::get_merkle_tree_len;
 use merkletree::store::StoreConfig;
 use storage_proofs_core::{
     cache_key::CacheKey,
-    compound_proof::CompoundProof,
+    compound_proof::{self, CompoundProof},
     merkle::{get_base_tree_count, MerkleTreeTrait},
     multi_proof::MultiProof,
     proof::ProofScheme,
@@ -22,14 +22,17 @@ use storage_proofs_core::{
 use storage_proofs_porep::stacked::{PersistentAux, TemporaryAux, BINARY_ARITY};
 use storage_proofs_update::{
     constants::TreeRHasher, EmptySectorUpdate, EmptySectorUpdateCompound, PartitionProof,
-    PrivateInputs, PublicInputs, PublicParams,
+    PrivateInputs, PublicInputs, PublicParams, SetupParams,
 };
 
 use crate::{
-    caches::get_stacked_params,
+    //caches::{get_sector_update_params, get_sector_update_verifying_key},
+    caches::{get_stacked_params, get_stacked_verifying_key},
     constants::{DefaultPieceDomain, DefaultPieceHasher},
     pieces::verify_pieces,
-    types::{Commitment, HSelect, PieceInfo, PoRepConfig, UpdateProofPartitions},
+    types::{
+        Commitment, EmptySectorUpdateProof, HSelect, PieceInfo, PoRepConfig, UpdateProofPartitions,
+    },
 };
 
 pub fn compare_elements(path1: &Path, path2: &Path) -> Result<(), Error> {
@@ -360,7 +363,6 @@ pub fn verify_single_partition_proof<Tree: 'static + MerkleTreeTrait<Hasher = Tr
 }
 
 pub fn generate_partition_proofs<Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher>>(
->>>>>>> 79aefd57 (feat: expose some required data through filecoin-proofs)
     porep_config: PoRepConfig,
     comm_r_old: Commitment,
     comm_r_new: Commitment,
@@ -478,8 +480,10 @@ pub fn verify_partition_proofs<Tree: 'static + MerkleTreeTrait<Hasher = TreeRHas
     Ok(valid)
 }
 
-/*
-pub fn generate_update_proof<'a, Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher>>(
+pub fn generate_empty_sector_update_proof<
+    'a,
+    Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher>,
+>(
     porep_config: PoRepConfig,
     comm_r_old: Commitment,
     comm_r_new: Commitment,
@@ -488,16 +492,13 @@ pub fn generate_update_proof<'a, Tree: 'static + MerkleTreeTrait<Hasher = TreeRH
     sector_key_cache_path: &Path,
     replica_path: &Path,
     replica_cache_path: &Path,
-) -> Result<MultiProof<'a>> {
-    info!("generate_update_proof:start");
+) -> Result<EmptySectorUpdateProof> {
+    info!("generate_empty_sector_update_proof:start");
 
     let comm_r_old_safe = <TreeRHasher as Hasher>::Domain::try_from_bytes(&comm_r_old)?;
     let comm_r_new_safe = <TreeRHasher as Hasher>::Domain::try_from_bytes(&comm_r_new)?;
 
     let comm_d_new_safe = DefaultPieceDomain::try_from_bytes(&comm_d_new)?;
-
-    let public_params: storage_proofs_update::PublicParams =
-        PublicParams::from_sector_size(u64::from(porep_config.sector_size));
 
     // NOTE: p_aux has comm_c and comm_r_last
     let p_aux_old: PersistentAux<<Tree::Hasher as Hasher>::Domain> = {
@@ -509,7 +510,9 @@ pub fn generate_update_proof<'a, Tree: 'static + MerkleTreeTrait<Hasher = TreeRH
     }?;
 
     let public_inputs: storage_proofs_update::PublicInputs = PublicInputs {
-        k: usize::from(UpdateProofPartitions::from(porep_config)),
+        // This `k` value is ignored when proving all partitions; each partition's `k` public-input
+        // is set by `EmptySectorUpdateCompound`.
+        k: 0,
         comm_c: p_aux_old.comm_c,
         comm_r_old: comm_r_old_safe,
         comm_d_new: comm_d_new_safe,
@@ -540,27 +543,89 @@ pub fn generate_update_proof<'a, Tree: 'static + MerkleTreeTrait<Hasher = TreeRH
         replica_path: replica_path.to_path_buf(),
     };
 
-    let compound_setup_params = compound_proof::SetupParams {
-        vanilla_params: setup_params(
-            PaddedBytesAmount::from(porep_config),
-            usize::from(UpdateProofPartitions::from(porep_config)),
-            porep_config.porep_id,
-            porep_config.api_version,
-        )?,
+    let setup_params_compound = compound_proof::SetupParams {
+        vanilla_params: SetupParams {
+            sector_bytes: u64::from(porep_config.sector_size),
+        },
         partitions: Some(usize::from(UpdateProofPartitions::from(porep_config))),
-        priority: false,
+        priority: true,
+    };
+    let pub_params_compound =
+        EmptySectorUpdateCompound::<Tree>::setup(&setup_params_compound).unwrap();
+
+    //let groth_params = get_sector_update_params::<Tree>(porep_config)?;
+    let groth_params = get_stacked_params::<Tree>(porep_config)?;
+    let proof = EmptySectorUpdateCompound::prove(
+        &pub_params_compound,
+        &public_inputs,
+        &private_inputs,
+        &groth_params,
+    )?;
+
+    info!("generate_empty_sector_update_proof:finish");
+
+    proof.to_vec()
+}
+
+pub fn verify_empty_sector_update_proof<
+    'a,
+    Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher>,
+>(
+    porep_config: PoRepConfig,
+    proof: &[u8],
+    comm_r_old: Commitment,
+    comm_r_new: Commitment,
+    comm_d_new: Commitment,
+    sector_key_cache_path: &Path,
+) -> Result<bool> {
+    info!("validate_empty_sector_update_proof:start");
+
+    let comm_r_old_safe = <TreeRHasher as Hasher>::Domain::try_from_bytes(&comm_r_old)?;
+    let comm_r_new_safe = <TreeRHasher as Hasher>::Domain::try_from_bytes(&comm_r_new)?;
+
+    let comm_d_new_safe = DefaultPieceDomain::try_from_bytes(&comm_d_new)?;
+
+    // NOTE: p_aux has comm_c and comm_r_last
+    let p_aux_old: PersistentAux<<Tree::Hasher as Hasher>::Domain> = {
+        let p_aux_path = sector_key_cache_path.join(CacheKey::PAux.to_string());
+        let p_aux_bytes = fs::read(&p_aux_path)
+            .with_context(|| format!("could not read file p_aux={:?}", p_aux_path))?;
+
+        deserialize(&p_aux_bytes)
+    }?;
+
+    let public_inputs: storage_proofs_update::PublicInputs = PublicInputs {
+        // This `k` value is ignored when proving all partitions; each partition's `k` public-input
+        // is set by `EmptySectorUpdateCompound`.
+        k: 0,
+        comm_c: p_aux_old.comm_c,
+        comm_r_old: comm_r_old_safe,
+        comm_d_new: comm_d_new_safe,
+        comm_r_new: comm_r_new_safe,
+        h: u64::from(HSelect::from(porep_config)) as usize,
     };
 
-    let compound_public_params = <EmptySectorUpdateCompound<Tree, DefaultPieceHasher> as CompoundProof<
-            EmptySectorUpdateCompound<'_, Tree, DefaultPieceHasher>,
-        _,
-        >>::setup(&compound_setup_params)?;
+    let setup_params_compound = compound_proof::SetupParams {
+        vanilla_params: SetupParams {
+            sector_bytes: u64::from(porep_config.sector_size),
+        },
+        partitions: Some(usize::from(UpdateProofPartitions::from(porep_config))),
+        priority: true,
+    };
+    let pub_params_compound =
+        EmptySectorUpdateCompound::<Tree>::setup(&setup_params_compound).unwrap();
 
-    let groth_params = get_stacked_params::<Tree>(porep_config)?;
-    let proof = EmptySectorUpdateCompound::prove(&pub_params, &public_inputs, &private_inputs, &groth_params)?;
+    //let verifying_key = get_sector_update_verifying_key::<Tree>(porep_config)?;
+    let verifying_key = get_stacked_verifying_key::<Tree>(porep_config)?;
+    let single_proof = MultiProof::new_from_reader(None, proof, &verifying_key)?;
+    let valid = EmptySectorUpdateCompound::verify(
+        &pub_params_compound,
+        &public_inputs,
+        &single_proof,
+        &(),
+    )?;
 
-    info!("generate_update_proof:finish");
+    info!("validate_empty_sector_update_proof:finish");
 
-    Ok(proof)
+    Ok(valid)
 }
- */
