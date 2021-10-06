@@ -3,12 +3,14 @@ use std::time::Duration;
 
 use criterion::{criterion_group, criterion_main, Criterion, Throughput};
 use filecoin_proofs::{
-    add_piece, get_seal_inputs, PaddedBytesAmount, PoRepConfig, PoRepProofPartitions,
-    SectorShape2KiB, SectorSize, UnpaddedBytesAmount, POREP_PARTITIONS, SECTOR_SIZE_2_KIB,
+    add_piece, get_seal_inputs, HSelect, PaddedBytesAmount, PoRepConfig, PoRepProofPartitions,
+    SectorShape2KiB, SectorSize, UnpaddedBytesAmount, UpdateProofPartitions, POREP_PARTITIONS,
+    SECTOR_SIZE_2_KIB,
 };
 use fr32::Fr32Reader;
 use rand::{thread_rng, Rng};
-use storage_proofs_core::{api_version::ApiVersion, is_legacy_porep_id};
+use storage_proofs_core::{api_version::ApiVersion, is_legacy_porep_id, util::NODE_SIZE};
+use storage_proofs_update::constants::{hs, partition_count};
 
 #[cfg(feature = "cpu-profile")]
 #[inline(always)]
@@ -114,6 +116,7 @@ fn get_seal_inputs_benchmark(c: &mut Criterion) {
     porep_id[..8].copy_from_slice(&porep_id_v1_1.to_le_bytes());
     assert!(!is_legacy_porep_id(porep_id));
 
+    let nodes_count = SECTOR_SIZE_2_KIB as usize / NODE_SIZE;
     let config = PoRepConfig {
         sector_size: SectorSize(SECTOR_SIZE_2_KIB),
         partitions: PoRepProofPartitions(
@@ -123,6 +126,8 @@ fn get_seal_inputs_benchmark(c: &mut Criterion) {
                 .get(&SECTOR_SIZE_2_KIB)
                 .expect("unknown sector size"),
         ),
+        update_partitions: UpdateProofPartitions::from(partition_count(nodes_count)),
+        h_select: HSelect::from(hs(nodes_count)[0]),
         porep_id,
         api_version: ApiVersion::V1_1_0,
     };
