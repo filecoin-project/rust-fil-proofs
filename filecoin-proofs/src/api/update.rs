@@ -26,8 +26,7 @@ use storage_proofs_update::{
 };
 
 use crate::{
-    //caches::{get_sector_update_params, get_sector_update_verifying_key},
-    caches::{get_stacked_params, get_stacked_verifying_key},
+    caches::{get_empty_sector_update_params, get_empty_sector_update_verifying_key},
     constants::{DefaultPieceDomain, DefaultPieceHasher},
     pieces::verify_pieces,
     types::{
@@ -553,8 +552,7 @@ pub fn generate_empty_sector_update_proof<
     let pub_params_compound =
         EmptySectorUpdateCompound::<Tree>::setup(&setup_params_compound).unwrap();
 
-    //let groth_params = get_sector_update_params::<Tree>(porep_config)?;
-    let groth_params = get_stacked_params::<Tree>(porep_config)?;
+    let groth_params = get_empty_sector_update_params::<Tree>(porep_config)?;
     let proof = EmptySectorUpdateCompound::prove(
         &pub_params_compound,
         &public_inputs,
@@ -615,8 +613,7 @@ pub fn verify_empty_sector_update_proof<
     let pub_params_compound =
         EmptySectorUpdateCompound::<Tree>::setup(&setup_params_compound).unwrap();
 
-    //let verifying_key = get_sector_update_verifying_key::<Tree>(porep_config)?;
-    let verifying_key = get_stacked_verifying_key::<Tree>(porep_config)?;
+    let verifying_key = get_empty_sector_update_verifying_key::<Tree>(porep_config)?;
     let single_proof = MultiProof::new_from_reader(None, proof, &verifying_key)?;
     let valid = EmptySectorUpdateCompound::verify(
         &pub_params_compound,
