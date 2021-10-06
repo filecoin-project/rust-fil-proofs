@@ -283,7 +283,6 @@ fn test_empty_sector_update_compound_16kib() {
     test_empty_sector_update_compound::<U8, U8, U0>(SECTOR_SIZE_16_KIB);
 }
 
-#[ignore]
 #[test]
 fn test_empty_sector_update_compound_32kib() {
     test_empty_sector_update_compound::<U8, U8, U2>(SECTOR_SIZE_32_KIB);

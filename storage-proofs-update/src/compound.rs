@@ -38,16 +38,15 @@ impl<'a, TreeR> CompoundProof<'a, EmptySectorUpdate<TreeR>, EmptySectorUpdateCir
 where
     TreeR: 'static + MerkleTreeTrait<Hasher = TreeRHasher>,
 {
-    // Generates a partition circuit's public-inputs. If the `k` argument is `Some` we set
-    // `cicuit::PublicInputs.k` to the `k` argument's value (this happens when
-    // `generate_public_inputs` is called from a function which is generating multiple partition
-    // proofs), otherwise if the `k` argument is `None` we set `circuit::PublicInputs.k` to
+    // Generates a partition circuit's public-inputs. If the `k` argument is `Some` we overwrite
+    // `pub_inputs.k` with the `k` argument's value, otherwise if the `k` argument is `None` we use
+    // `pub_inputs.k` as the circuit's public-input.
     fn generate_public_inputs(
         pub_inputs: &PublicInputs,
         pub_params: &PublicParams,
         k: Option<usize>,
     ) -> Result<Vec<Fr>> {
-        // Prioritize the partition-index provided in the `k` argument; default to `pub_inputs.k`.
+        // Prioritize the partition-index provided via the `k` argument; default to `pub_inputs.k`.
         let k = k.unwrap_or(pub_inputs.k);
 
         let PublicInputs {
@@ -75,20 +74,26 @@ where
         Ok(pub_inputs_circ.to_vec())
     }
 
+    // Generates a partition's circuit. If the `k` argument is `Some` we overwrite `pub_inputs.k`
+    // with the `k` argument's value, otherwise if the `k` argument is `None` we use `pub_inputs.k`
+    // as the circuit's public-input.
     fn circuit(
         pub_inputs: &PublicInputs,
         _priv_inputs: <EmptySectorUpdateCircuit<TreeR> as CircuitComponent>::ComponentPrivateInputs,
         vanilla_proof: &PartitionProof<TreeR>,
         pub_params: &PublicParams,
-        _k: Option<usize>,
+        k: Option<usize>,
     ) -> Result<EmptySectorUpdateCircuit<TreeR>> {
+        // Prioritize the partition-index provided via the `k` argument; default to `pub_inputs.k`.
+        let k = k.unwrap_or(pub_inputs.k);
+
         let PublicInputs {
-            k,
             comm_c,
             comm_r_old,
             comm_d_new,
             comm_r_new,
             h,
+            ..
         } = *pub_inputs;
 
         let h_select = hs(pub_params.sector_nodes)

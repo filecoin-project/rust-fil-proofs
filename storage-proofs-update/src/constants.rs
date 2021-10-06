@@ -3,8 +3,7 @@ use filecoin_hashers::{
     sha256::{Sha256Domain, Sha256Hasher},
 };
 use generic_array::typenum::{Unsigned, U0, U2, U8};
-use merkletree::store::DiskStore;
-use storage_proofs_core::merkle::{LCStore, LCTree, MerkleTreeTrait, MerkleTreeWrapper};
+use storage_proofs_core::merkle::{BinaryMerkleTree, LCStore, LCTree, MerkleTreeTrait};
 
 // Sector-sizes measured in nodes.
 pub const SECTOR_SIZE_1_KIB: usize = 1 << 5;
@@ -35,17 +34,16 @@ pub const ALLOWED_SECTOR_SIZES: [usize; 11] = [
     SECTOR_SIZE_64_GIB,
 ];
 
-pub type TreeD = MerkleTreeWrapper<Sha256Hasher, DiskStore<Sha256Domain>, U2>;
-pub type TreeDArity = U2;
+pub type TreeD = BinaryMerkleTree<TreeDHasher>;
 pub type TreeDHasher = Sha256Hasher;
 pub type TreeDDomain = Sha256Domain;
+pub type TreeDArity = U2;
 
 pub type TreeRHasher = PoseidonHasher;
 pub type TreeRDomain = PoseidonDomain;
 pub type TreeRStore = LCStore<TreeRDomain>;
 // All valid TreeR's have the same base-tree shape.
-pub type TreeRBaseArity = U8;
-pub type TreeRBaseTree = LCTree<TreeRHasher, TreeRBaseArity, U0, U0>;
+pub type TreeRBaseTree = LCTree<TreeRHasher, U8, U0, U0>;
 
 // The number of partitions for the given sector-size.
 pub fn partition_count(sector_nodes: usize) -> usize {
