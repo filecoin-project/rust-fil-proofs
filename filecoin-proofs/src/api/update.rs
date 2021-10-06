@@ -361,6 +361,7 @@ pub fn verify_single_partition_proof<Tree: 'static + MerkleTreeTrait<Hasher = Tr
     Ok(valid)
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn generate_partition_proofs<Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher>>(
     porep_config: PoRepConfig,
     comm_r_old: Commitment,
@@ -479,10 +480,8 @@ pub fn verify_partition_proofs<Tree: 'static + MerkleTreeTrait<Hasher = TreeRHas
     Ok(valid)
 }
 
-pub fn generate_empty_sector_update_proof<
-    'a,
-    Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher>,
->(
+#[allow(clippy::too_many_arguments)]
+pub fn generate_empty_sector_update_proof<Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher>>(
     porep_config: PoRepConfig,
     comm_r_old: Commitment,
     comm_r_new: Commitment,
@@ -549,8 +548,7 @@ pub fn generate_empty_sector_update_proof<
         partitions: Some(usize::from(UpdateProofPartitions::from(porep_config))),
         priority: true,
     };
-    let pub_params_compound =
-        EmptySectorUpdateCompound::<Tree>::setup(&setup_params_compound).unwrap();
+    let pub_params_compound = EmptySectorUpdateCompound::<Tree>::setup(&setup_params_compound)?;
 
     let groth_params = get_empty_sector_update_params::<Tree>(porep_config)?;
     let proof = EmptySectorUpdateCompound::prove(
@@ -565,10 +563,7 @@ pub fn generate_empty_sector_update_proof<
     proof.to_vec()
 }
 
-pub fn verify_empty_sector_update_proof<
-    'a,
-    Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher>,
->(
+pub fn verify_empty_sector_update_proof<Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher>>(
     porep_config: PoRepConfig,
     proof: &[u8],
     comm_r_old: Commitment,
@@ -610,8 +605,7 @@ pub fn verify_empty_sector_update_proof<
         partitions: Some(usize::from(UpdateProofPartitions::from(porep_config))),
         priority: true,
     };
-    let pub_params_compound =
-        EmptySectorUpdateCompound::<Tree>::setup(&setup_params_compound).unwrap();
+    let pub_params_compound = EmptySectorUpdateCompound::<Tree>::setup(&setup_params_compound)?;
 
     let verifying_key = get_empty_sector_update_verifying_key::<Tree>(porep_config)?;
     let single_proof = MultiProof::new_from_reader(None, proof, &verifying_key)?;
