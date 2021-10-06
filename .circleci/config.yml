@@ -153,6 +153,10 @@ jobs:
         description: Addtional arguments for the cargo command
         type: string
         default: ""
+      test-args:
+        description: Additional arguments for the test executable (after the `--`)
+        type: string
+        default: ""
     steps:
       - checkout
       - attach_workspace:
@@ -170,27 +174,14 @@ jobs:
             sudo apt update
             sudo apt install -y ocl-icd-opencl-dev libhwloc-dev
       - run:
-          name: Test with GPU column and tree builders. (regular)
+          name: Test with GPU column and tree builders.
           command: |
             ulimit -n 20000
             ulimit -u 20000
             ulimit -n 20000
-            cargo +<< pipeline.parameters.nightly-toolchain >> test --all --verbose --release << parameters.cargo-args >> -- --nocapture
+            cargo +<< pipeline.parameters.nightly-toolchain >> test --all --verbose --release << parameters.cargo-args >> -- --nocapture << parameters.test-args >>
           no_output_timeout: 30m
           environment:
-            FIL_PROOFS_USE_GPU_COLUMN_BUILDER: true
-            FIL_PROOFS_USE_GPU_TREE_BUILDER: true
-            FIL_PROOFS_CUDA_NVCC_ARGS: --fatbin --gpu-architecture=sm_75 --generate-code=arch=compute_75,code=sm_75
-      - run:
-          name: Test with GPU column and tree builders. (ignored)
-          command: |
-            ulimit -n 20000
-            ulimit -u 20000
-            ulimit -n 20000
-            cargo +<< pipeline.parameters.nightly-toolchain >> test --all --verbose --release << parameters.cargo-args >> -- --ignored --nocapture
-          no_output_timeout: 30m
-          environment:
-            RUST_TEST_THREADS: 1
             FIL_PROOFS_USE_GPU_COLUMN_BUILDER: true
             FIL_PROOFS_USE_GPU_TREE_BUILDER: true
             FIL_PROOFS_CUDA_NVCC_ARGS: --fatbin --gpu-architecture=sm_75 --generate-code=arch=compute_75,code=sm_75
@@ -410,14 +401,29 @@ workflows:
             - ensure_groth_parameters_and_keys_linux
 
       - test_gpu_tree_building:
-          name: test_gpu_tree_building_opencl
+          name: test_gpu_tree_building_opencl (regular)
           requires:
             - cargo_fetch
             - ensure_groth_parameters_and_keys_linux
 
       - test_gpu_tree_building:
-          name: test_gpu_tree_building_cuda
+          name: test_gpu_tree_building_opencl (ignored)
+          test-args: "--ignored"
+          requires:
+            - cargo_fetch
+            - ensure_groth_parameters_and_keys_linux
+
+      - test_gpu_tree_building:
+          name: test_gpu_tree_building_cuda (regular)
           cargo-args: "--features cuda"
+          requires:
+            - cargo_fetch
+            - ensure_groth_parameters_and_keys_linux
+
+      - test_gpu_tree_building:
+          name: test_gpu_tree_building_cuda (ignored)
+          cargo-args: "--features cuda"
+          test-args: "--ignored"
           requires:
             - cargo_fetch
             - ensure_groth_parameters_and_keys_linux
