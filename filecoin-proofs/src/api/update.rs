@@ -571,7 +571,7 @@ pub fn verify_empty_sector_update_proof<Tree: 'static + MerkleTreeTrait<Hasher =
     comm_d_new: Commitment,
     sector_key_cache_path: &Path,
 ) -> Result<bool> {
-    info!("validate_empty_sector_update_proof:start");
+    info!("verify_empty_sector_update_proof:start");
 
     let comm_r_old_safe = <TreeRHasher as Hasher>::Domain::try_from_bytes(&comm_r_old)?;
     let comm_r_new_safe = <TreeRHasher as Hasher>::Domain::try_from_bytes(&comm_r_new)?;
@@ -610,7 +610,7 @@ pub fn verify_empty_sector_update_proof<Tree: 'static + MerkleTreeTrait<Hasher =
     let valid =
         EmptySectorUpdateCompound::verify(&pub_params_compound, &public_inputs, &multi_proof, &())?;
 
-    info!("validate_empty_sector_update_proof:finish");
+    info!("verify_empty_sector_update_proof:finish");
 
     Ok(valid)
 }
