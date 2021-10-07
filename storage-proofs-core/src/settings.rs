@@ -88,20 +88,9 @@ fn set_gpu_framework() {
     }
 }
 
-/// Set CUDA nvcc compile flags (if set) for the dependencies.
-///
-/// If one of those environment variables is already set, it won't be overridden.
-fn set_cuda_nvcc_args() {
-    if let Ok(nvcc_args) = env::var(format!("{}_CUDA_NVCC_ARGS", PREFIX)) {
-        set_env_var_if_unset("BELLMAN_CUDA_NVCC_ARGS", &nvcc_args);
-        set_env_var_if_unset("NEPTUNE_CUDA_NVCC_ARGS", &nvcc_args);
-    }
-}
-
 impl Settings {
     fn new() -> Result<Settings, ConfigError> {
         set_gpu_framework();
-        set_cuda_nvcc_args();
 
         let mut s = Config::new();
 
