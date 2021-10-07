@@ -73,6 +73,7 @@ pub fn compare_elements(path1: &Path, path2: &Path) -> Result<(), Error> {
 }
 
 /// Encodes data into an existing replica.
+/// Returns tuple of (comm_r_new, comm_r_last_new, comm_d_new)
 #[allow(clippy::too_many_arguments)]
 pub fn encode_into<Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher>>(
     porep_config: PoRepConfig,
@@ -507,17 +508,6 @@ pub fn generate_empty_sector_update_proof<Tree: 'static + MerkleTreeTrait<Hasher
         deserialize(&p_aux_bytes)
     }?;
 
-    let public_inputs: storage_proofs_update::PublicInputs = PublicInputs {
-        // This `k` value is ignored when proving all partitions; each partition's `k` public-input
-        // is set by `EmptySectorUpdateCompound`.
-        k: 0,
-        comm_c: p_aux_old.comm_c,
-        comm_r_old: comm_r_old_safe,
-        comm_d_new: comm_d_new_safe,
-        comm_r_new: comm_r_new_safe,
-        h: u64::from(HSelect::from(porep_config)) as usize,
-    };
-
     // Note: t_aux has labels and tree_d, tree_c, tree_r_last store configs
     let t_aux_old = {
         let t_aux_path = sector_key_cache_path.join(CacheKey::TAux.to_string());
@@ -533,6 +523,16 @@ pub fn generate_empty_sector_update_proof<Tree: 'static + MerkleTreeTrait<Hasher
     let mut t_aux_new = t_aux_old.clone();
     t_aux_new.set_cache_path(replica_cache_path);
 
+    let partitions = usize::from(UpdateProofPartitions::from(porep_config));
+    let public_inputs: storage_proofs_update::PublicInputs = PublicInputs {
+        k: partitions,
+        comm_c: p_aux_old.comm_c,
+        comm_r_old: comm_r_old_safe,
+        comm_d_new: comm_d_new_safe,
+        comm_r_new: comm_r_new_safe,
+        h: u64::from(HSelect::from(porep_config)) as usize,
+    };
+
     let private_inputs: PrivateInputs = PrivateInputs {
         tree_r_old_config: t_aux_old.tree_r_last_config,
         old_replica_path: sector_key_path.to_path_buf(),
@@ -545,13 +545,13 @@ pub fn generate_empty_sector_update_proof<Tree: 'static + MerkleTreeTrait<Hasher
         vanilla_params: SetupParams {
             sector_bytes: u64::from(porep_config.sector_size),
         },
-        partitions: Some(usize::from(UpdateProofPartitions::from(porep_config))),
+        partitions: Some(partitions),
         priority: true,
     };
     let pub_params_compound = EmptySectorUpdateCompound::<Tree>::setup(&setup_params_compound)?;
 
     let groth_params = get_empty_sector_update_params::<Tree>(porep_config)?;
-    let proof = EmptySectorUpdateCompound::prove(
+    let multi_proof = EmptySectorUpdateCompound::prove(
         &pub_params_compound,
         &public_inputs,
         &private_inputs,
@@ -560,12 +560,12 @@ pub fn generate_empty_sector_update_proof<Tree: 'static + MerkleTreeTrait<Hasher
 
     info!("generate_empty_sector_update_proof:finish");
 
-    proof.to_vec()
+    multi_proof.to_vec()
 }
 
 pub fn verify_empty_sector_update_proof<Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher>>(
     porep_config: PoRepConfig,
-    proof: &[u8],
+    proof_bytes: &[u8],
     comm_r_old: Commitment,
     comm_r_new: Commitment,
     comm_d_new: Commitment,
@@ -587,34 +587,28 @@ pub fn verify_empty_sector_update_proof<Tree: 'static + MerkleTreeTrait<Hasher =
         deserialize(&p_aux_bytes)
     }?;
 
+    let partitions = usize::from(UpdateProofPartitions::from(porep_config));
     let public_inputs: storage_proofs_update::PublicInputs = PublicInputs {
-        // This `k` value is ignored when proving all partitions; each partition's `k` public-input
-        // is set by `EmptySectorUpdateCompound`.
-        k: 0,
+        k: partitions,
         comm_c: p_aux_old.comm_c,
         comm_r_old: comm_r_old_safe,
         comm_d_new: comm_d_new_safe,
         comm_r_new: comm_r_new_safe,
         h: u64::from(HSelect::from(porep_config)) as usize,
     };
-
     let setup_params_compound = compound_proof::SetupParams {
         vanilla_params: SetupParams {
             sector_bytes: u64::from(porep_config.sector_size),
         },
-        partitions: Some(usize::from(UpdateProofPartitions::from(porep_config))),
+        partitions: Some(partitions),
         priority: true,
     };
     let pub_params_compound = EmptySectorUpdateCompound::<Tree>::setup(&setup_params_compound)?;
 
     let verifying_key = get_empty_sector_update_verifying_key::<Tree>(porep_config)?;
-    let single_proof = MultiProof::new_from_reader(None, proof, &verifying_key)?;
-    let valid = EmptySectorUpdateCompound::verify(
-        &pub_params_compound,
-        &public_inputs,
-        &single_proof,
-        &(),
-    )?;
+    let multi_proof = MultiProof::new_from_bytes(Some(partitions), proof_bytes, &verifying_key)?;
+    let valid =
+        EmptySectorUpdateCompound::verify(&pub_params_compound, &public_inputs, &multi_proof, &())?;
 
     info!("validate_empty_sector_update_proof:finish");
 
