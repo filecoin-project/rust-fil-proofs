@@ -412,7 +412,11 @@ mod tests {
 
     use crate::{
         challenges::Challenges,
-        constants::{challenge_count, partition_count, TreeRDomain, ALLOWED_SECTOR_SIZES},
+        constants::{
+            apex_leaf_count, challenge_count, partition_count, TreeDDomain, TreeDHasher,
+            TreeRDomain, ALLOWED_SECTOR_SIZES, SECTOR_SIZE_16_KIB, SECTOR_SIZE_1_KIB,
+            SECTOR_SIZE_2_KIB, SECTOR_SIZE_32_KIB, SECTOR_SIZE_4_KIB, SECTOR_SIZE_8_KIB,
+        },
     };
 
     #[test]
@@ -471,45 +475,130 @@ mod tests {
         }
     }
 
-    // TODO:
-    /*
-    #[test]
-    fn test_apex_tree() {
-        let mut rng = &mut XorShiftRng::from_seed(TEST_SEED);
-        let n_leafs = PARTITIONS * APEX_LEAFS;
-        let leafs: Vec<TreeDDomain> = (0..n_leafs).map(|_| TreeDDomain::random(&mut rng)).collect();
-        let data: Vec<u8> = leafs.iter().flat_map(|leaf| leaf.into_bytes()).collect();
-        let tree = create_base_merkle_tree::<TreeD>(None, n_leafs, &data)
-            .expect("create_base_merkle_tree failure");
-        let comm_d = tree.root();
-        let k = 0;
-        let merkle_proofs: Vec<MerkleProof<TreeDHasher, TreeDArity>> = (0..APEX_LEAFS)
-            .map(|node_index| {
-                tree.gen_proof(node_index).expect(
-                    &format!("failed to generate merkle proof for node {}", node_index),
-                )
-            })
-            .collect();
-        fn apex_root_sibling(merkle_proof: &MerkleProof<TreeDHasher, TreeDArity>) -> TreeDDomain {
-            merkle_proof.path()[APEX_HEIGHT].0[0]
-        }
-        fn partition_index(merkle_proof: &MerkleProof<TreeDHasher, TreeDArity>) -> usize {
-            let mut k = 0;
-            for (i, el) in merkle_proof.path()[APEX_HEIGHT..].iter().enumerate() {
-                let bit = el.1;
-                assert!(bit <= 1);
-                k += bit * (1 << i);
+    fn test_apex_por_gadget(
+        sector_nodes: usize,
+        partition_count: usize,
+        apex_leafs_per_partition: usize,
+    ) {
+        let height = sector_nodes.trailing_zeros() as usize;
+        let partition_bit_len = partition_count.trailing_zeros() as usize;
+        let apex_tree_height = apex_leafs_per_partition.trailing_zeros() as usize;
+        let apex_leafs_total = partition_count * apex_leafs_per_partition;
+
+        let tree_d: Vec<Vec<TreeDDomain>> = {
+            let mut rng = XorShiftRng::from_seed(TEST_SEED);
+            let leafs: Vec<TreeDDomain> = (0..sector_nodes)
+                .map(|_| TreeDDomain::random(&mut rng))
+                .collect();
+            let mut tree = vec![leafs];
+            for _ in 0..height {
+                let row: Vec<TreeDDomain> = tree
+                    .last()
+                    .unwrap()
+                    .chunks(2)
+                    .map(|siblings| {
+                        <TreeDHasher as Hasher>::Function::hash2(&siblings[0], &siblings[1])
+                    })
+                    .collect();
+                tree.push(row);
             }
-            assert!(k < PARTITIONS);
-            k
-        }
-        assert_eq!(tree.row_count(), APEX_ROWS + PARTITION_ROWS);
-        let apex_root = apex_root_sibling(&merkle_proofs[0]);
-        for merkle_proof in merkle_proofs.iter() {
-            assert_eq!(merkle_proof.path().len(), APEX_ROWS + PARTITION_ROWS - 1);
-            assert_eq!(apex_root_sibling(&merkle_proof), apex_root);
-            assert_eq!(partition_index(&merkle_proof), k);
+            tree
+        };
+
+        assert_eq!(tree_d[height].len(), 1);
+        let comm_d = tree_d[height][0].clone();
+
+        let apex_roots_row = height - partition_bit_len;
+        let apex_leafs_row = apex_roots_row - apex_tree_height;
+        assert_eq!(tree_d[apex_roots_row].len(), partition_count);
+        assert_eq!(tree_d[apex_leafs_row].len(), apex_leafs_total);
+
+        for (k, apex_leafs) in tree_d[apex_leafs_row]
+            .chunks(apex_leafs_per_partition)
+            .enumerate()
+        {
+            let mut cs = TestConstraintSystem::<Fr>::new();
+            let comm_d =
+                AllocatedNum::alloc(cs.namespace(|| "comm_d"), || Ok(comm_d.into())).unwrap();
+
+            let partition_bits: Vec<AllocatedBit> = (0..partition_bit_len)
+                .map(|i| {
+                    let bit = (k >> i) & 1 == 1;
+                    AllocatedBit::alloc(cs.namespace(|| format!("partition_bit_{}", i)), Some(bit))
+                        .unwrap()
+                })
+                .collect();
+
+            let apex_leafs: Vec<AllocatedNum<Fr>> = apex_leafs
+                .iter()
+                .enumerate()
+                .map(|(i, apex_leaf)| {
+                    AllocatedNum::alloc(cs.namespace(|| format!("apex_leaf_{}", i)), || {
+                        Ok(apex_leaf.clone().into())
+                    })
+                    .unwrap()
+                })
+                .collect();
+
+            let partition_path: Vec<Vec<AllocatedNum<Fr>>> = partition_bits
+                .iter()
+                .enumerate()
+                .map(|(i, bit)| {
+                    let row = apex_roots_row + i;
+                    let cur = k >> i;
+                    let sib = if bit.get_value().unwrap() {
+                        cur - 1
+                    } else {
+                        cur + 1
+                    };
+                    let sibling = AllocatedNum::alloc(
+                        cs.namespace(|| format!("partition_path_{}", i)),
+                        || Ok(tree_d[row][sib].into()),
+                    )
+                    .unwrap();
+                    vec![sibling]
+                })
+                .collect();
+
+            apex_por(
+                cs.namespace(|| "apex_por"),
+                apex_leafs,
+                partition_bits,
+                partition_path,
+                comm_d.clone(),
+            )
+            .unwrap();
         }
     }
-    */
+
+    #[test]
+    fn test_apex_por_gadget_16kib_4_8_partitions() {
+        // Hardcode these values to test multiple partitions without using a large sector-size. Use
+        // the row from TreeD which has 64 nodes as the apex-leafs row.
+        let sector_nodes = SECTOR_SIZE_16_KIB;
+        let partition_count = 4;
+        let apex_leafs_per_partition = 16;
+        test_apex_por_gadget(sector_nodes, partition_count, apex_leafs_per_partition);
+
+        let partition_count = 8;
+        let apex_leafs_per_partition = 8;
+        test_apex_por_gadget(sector_nodes, partition_count, apex_leafs_per_partition);
+    }
+
+    #[test]
+    fn test_apex_por_gadget_small_sector_sizes() {
+        let small_sector_sizes = [
+            SECTOR_SIZE_1_KIB,
+            SECTOR_SIZE_2_KIB,
+            SECTOR_SIZE_4_KIB,
+            SECTOR_SIZE_8_KIB,
+            SECTOR_SIZE_16_KIB,
+            SECTOR_SIZE_32_KIB,
+        ];
+        for sector_nodes in small_sector_sizes.iter().copied() {
+            let partition_count = partition_count(sector_nodes);
+            let apex_leafs_per_partition = apex_leaf_count(sector_nodes);
+            test_apex_por_gadget(sector_nodes, partition_count, apex_leafs_per_partition);
+        }
+    }
 }
