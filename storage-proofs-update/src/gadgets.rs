@@ -291,20 +291,19 @@ pub fn gen_challenge_bits<CS: ConstraintSystem<Fr>>(
 pub fn get_challenge_high_bits<CS: ConstraintSystem<Fr>>(
     mut cs: CS,
     // little-endian
-    c_generated_bits: &[AllocatedBit],
+    c_bits: &[AllocatedBit],
     h_select_bits: &[AllocatedBit],
     hs: &[usize],
 ) -> Result<AllocatedNum<Fr>, SynthesisError> {
     assert_eq!(h_select_bits.len(), hs.len());
 
-    let bit_len = c_generated_bits.len();
+    let bit_len = c_bits.len();
 
-    let c_generated_bits: Vec<Boolean> = c_generated_bits.iter().cloned().map(Into::into).collect();
+    let c_bits: Vec<Boolean> = c_bits.iter().cloned().map(Into::into).collect();
 
-    // For each `h in hs`, get the `h` high bits of the challenge's randomly generated bits (i.e.
-    // the challenge's bits sans the partition-index). Scale each "high" value by the corresponding
-    // bit of `h_select` producing a vector containing `hs.len() - 1` zeros and 1 "high" value
-    // selected via `h_select_bits`.
+    // For each `h in hs`, get the `h` high bits of the challenge's bits. Scale each "high" value by
+    // the corresponding bit of `h_select` producing a vector containing `hs.len() - 1` zeros and 1
+    // "high" value selected via `h_select_bits`.
     let c_high_and_zeros = hs
         .iter()
         .zip(h_select_bits.iter())
@@ -313,7 +312,7 @@ pub fn get_challenge_high_bits<CS: ConstraintSystem<Fr>>(
             // Pack the `h` high bits of `c` into a field element.
             let c_high = pack_bits(
                 cs.namespace(|| format!("c_high (h={}, k={})", h, k)),
-                &c_generated_bits[bit_len - h..],
+                &c_bits[bit_len - h..],
             )?;
 
             // `c_high * h_select_bit`
