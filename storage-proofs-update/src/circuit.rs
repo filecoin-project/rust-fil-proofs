@@ -342,6 +342,7 @@ where
             comm_c.ok_or(SynthesisError::AssignmentMissing)
         })?;
 
+        // TODO: rename `comm_r_last_old` and `comm_r_last_new` to `root_r_old` and `root_r_new`.
         let comm_r_last_old = AllocatedNum::alloc(cs.namespace(|| "comm_r_last_old"), || {
             comm_r_last_old.ok_or(SynthesisError::AssignmentMissing)
         })?;
@@ -407,7 +408,7 @@ where
         )?;
 
         // Generate `challenge_sans_partition_bit_len` number of random bits for each challenge.
-        // For each challenge generate a random index in `0..number of leaf's per partition`; we
+        // For each challenge generate a random index in `0..number of leafs per partition`; we
         // append the partition-index's bits onto the random bits generated for each challenge
         // producing a challenge in `0..sector_nodes` which is guaranteed to lie within this
         // partition's subset of leafs.
@@ -430,7 +431,7 @@ where
             // Compute this challenge's `rho`.
             let c_high = get_challenge_high_bits(
                 cs.namespace(|| format!("get_challenge_high_bits (c_index={})", c_index)),
-                &c_bits_without_partition,
+                &c_bits,
                 &h_select_bits,
                 &hs,
             )?;
