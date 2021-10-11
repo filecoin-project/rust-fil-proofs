@@ -116,8 +116,9 @@ pub struct PublicInputs {
     pub comm_r_old: TreeRDomain,
     pub comm_d_new: TreeDDomain,
     pub comm_r_new: TreeRDomain,
-    // The number of high bits to take from each challenge's random bits. Used to verify replica
-    // encoding in vanilla proofs. `h_select` is a circuit-only public-input derived from `h`.
+    // The number of high bits to take from each challenge's bits. Used to verify replica encoding
+    // in the vanilla proof. `h` is only a public-input for the vanilla proof; the circuit takes
+    // `h_select` as a public-input rather than `h`.
     pub h: usize,
 }
 
@@ -663,10 +664,8 @@ where
 
         let phi = phi(&comm_d_new, &comm_r_old);
 
-        // AND-mask to strip partition bits from each `c`.
-        let remove_k_from_c_mask = (1 << (challenge_bit_len - partition_bit_len)) - 1;
-
         let challenges = Challenges::new(*sector_nodes, *comm_r_new, *k);
+        let get_high_bits_shr = challenge_bit_len - h;
 
         for (c, challenge_proof) in challenges.zip(challenge_proofs.iter()) {
             // Verify TreeROld Merkle proof.
@@ -683,11 +682,7 @@ where
             let label_r_old: Fr = challenge_proof.proof_r_old.leaf().into();
             let label_d_new: Fr = challenge_proof.proof_d_new.leaf().into();
             let label_r_new = challenge_proof.proof_r_new.leaf();
-            let c_high = {
-                let c_without_k = c & remove_k_from_c_mask;
-                let c_high = c_without_k >> (challenge_bit_len - partition_bit_len - h);
-                Fr::from(c_high as u64)
-            };
+            let c_high = Fr::from((c >> get_high_bits_shr) as u64);
             let rho: Fr = <TreeRHasher as Hasher>::Function::hash2(&phi, &c_high.into()).into();
             let label_r_new_calc: TreeRDomain = (label_r_old + label_d_new * rho).into();
             if label_r_new_calc != label_r_new {
@@ -871,11 +866,9 @@ where
         // in Fr elements (i.e. chunk_size * sizeof(Fr)).
         let data_block_size: usize = chunk_size * FR_SIZE;
 
-        // AND-mask which strips the partition-index `k` from a node-index.
+        // Right-shift each node-index by `get_high_bits_shr` to get its `h` high bits.
         let node_index_bit_len = nodes_count.trailing_zeros() as usize;
-        let partition_count = partition_count(nodes_count);
-        let partition_bit_len = partition_count.trailing_zeros() as usize;
-        let remove_k_from_node_index_mask = (1 << (node_index_bit_len - partition_bit_len)) - 1;
+        let get_high_bits_shr = node_index_bit_len - h;
 
         Vec::from_iter((0..end).step_by(data_block_size))
             .into_par_iter()
@@ -885,16 +878,11 @@ where
                     let input_index = (chunk_index as usize) + i as usize;
                     let output_index = i as usize;
 
-                    // Get the `h` high bits from the node-index (sans partition-index).
+                    // Get the `h` high bits from the node-index.
                     let node_index = input_index / FR_SIZE;
-                    let input_index_without_k = node_index & remove_k_from_node_index_mask;
-                    let high =
-                        input_index_without_k >> (node_index_bit_len - partition_bit_len - h);
-                    let rho: Fr = <TreeRHasher as Hasher>::Function::hash2(
-                        &phi,
-                        &Fr::from(high as u64).into(),
-                    )
-                    .into();
+                    let high = Fr::from((node_index >> get_high_bits_shr) as u64);
+                    let rho: Fr =
+                        <TreeRHasher as Hasher>::Function::hash2(&phi, &high.into()).into();
 
                     let sector_key_fr =
                         bytes_into_fr(&sector_key_data[input_index..input_index + FR_SIZE])?;
@@ -1035,11 +1023,9 @@ where
         // in Fr elements (i.e. chunk_size * sizeof(Fr)).
         let data_block_size: usize = chunk_size * FR_SIZE;
 
-        // AND-mask which strips the partition-index `k` from a node-index.
+        // Right-shift each node-index by `get_high_bits_shr` to get its `h` high bits.
         let node_index_bit_len = nodes_count.trailing_zeros() as usize;
-        let partition_count = partition_count(nodes_count);
-        let partition_bit_len = partition_count.trailing_zeros() as usize;
-        let remove_k_from_node_index_mask = (1 << (node_index_bit_len - partition_bit_len)) - 1;
+        let get_high_bits_shr = node_index_bit_len - h;
 
         Vec::from_iter((0..end).step_by(data_block_size))
             .into_par_iter()
@@ -1049,16 +1035,11 @@ where
                     let input_index = (chunk_index as usize) + i as usize;
                     let output_index = i as usize;
 
-                    // Get the `h` high bits from the node-index (sans partition-index).
+                    // Get the `h` high bits from the node-index.
                     let node_index = input_index / FR_SIZE;
-                    let input_index_without_k = node_index & remove_k_from_node_index_mask;
-                    let high =
-                        input_index_without_k >> (node_index_bit_len - partition_bit_len - h);
-                    let rho: Fr = <TreeRHasher as Hasher>::Function::hash2(
-                        &phi,
-                        &Fr::from(high as u64).into(),
-                    )
-                    .into();
+                    let high = Fr::from((node_index >> get_high_bits_shr) as u64);
+                    let rho: Fr =
+                        <TreeRHasher as Hasher>::Function::hash2(&phi, &high.into()).into();
 
                     let sector_key_fr =
                         bytes_into_fr(&sector_key_data[input_index..input_index + FR_SIZE])?;
@@ -1163,11 +1144,9 @@ where
         // in Fr elements (i.e. chunk_size * sizeof(Fr)).
         let data_block_size: usize = chunk_size * FR_SIZE;
 
-        // AND-mask which strips the partition-index `k` from a node-index.
+        // Right-shift each node-index by `get_high_bits_shr` to get its `h` high bits.
         let node_index_bit_len = nodes_count.trailing_zeros() as usize;
-        let partition_count = partition_count(nodes_count);
-        let partition_bit_len = partition_count.trailing_zeros() as usize;
-        let remove_k_from_node_index_mask = (1 << (node_index_bit_len - partition_bit_len)) - 1;
+        let get_high_bits_shr = node_index_bit_len - h;
 
         Vec::from_iter((0..end).step_by(data_block_size))
             .into_par_iter()
@@ -1177,16 +1156,11 @@ where
                     let input_index = (chunk_index as usize) + i as usize;
                     let output_index = i as usize;
 
-                    // Get the `h` high bits from the node-index (sans partition-index).
+                    // Get the `h` high bits from the node-index.
                     let node_index = input_index / FR_SIZE;
-                    let input_index_without_k = node_index & remove_k_from_node_index_mask;
-                    let high =
-                        input_index_without_k >> (node_index_bit_len - partition_bit_len - h);
-                    let rho: Fr = <TreeRHasher as Hasher>::Function::hash2(
-                        &phi,
-                        &Fr::from(high as u64).into(),
-                    )
-                    .into();
+                    let high = Fr::from((node_index >> get_high_bits_shr) as u64);
+                    let rho: Fr =
+                        <TreeRHasher as Hasher>::Function::hash2(&phi, &high.into()).into();
 
                     let data_fr = bytes_into_fr(&data[input_index..input_index + FR_SIZE])?;
                     let replica_data_fr =

@@ -67,9 +67,9 @@ pub fn challenge_count(sector_nodes: usize) -> usize {
     }
 }
 
-// Returns the six `h` values allowed for the given sector-size. Each `h` value is a possible number
-// of high bits taken from each generated challenge `c`. The circuit takes `h_select = 2^i` as a
-// public input which is used to choose a value for the constant `h` via `h = hs[i]`.
+// Returns the `h` values allowed for the given sector-size. Each `h` value is a possible number of
+// high bits taken from each challenge `c`. A single value of `h = hs[i]` is taken from `hs` for
+// each proof; the circuit takes `h_select = 2^i` as a public input.
 pub fn hs(sector_nodes: usize) -> [usize; 6] {
     if sector_nodes <= SECTOR_SIZE_32_KIB {
         [1; 6]
