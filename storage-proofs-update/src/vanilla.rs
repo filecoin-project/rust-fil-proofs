@@ -870,6 +870,14 @@ where
         let node_index_bit_len = nodes_count.trailing_zeros() as usize;
         let get_high_bits_shr = node_index_bit_len - h;
 
+        // Precompute all possible `2^h` number of rho values.
+        let rhos: Vec<Fr> = (0..1 << h)
+            .map(|high| {
+                let high: TreeRDomain = Fr::from(high as u64).into();
+                <TreeRHasher as Hasher>::Function::hash2(&phi, &high).into()
+            })
+            .collect();
+
         Vec::from_iter((0..end).step_by(data_block_size))
             .into_par_iter()
             .zip(new_replica_data.par_chunks_mut(data_block_size))
@@ -880,9 +888,8 @@ where
 
                     // Get the `h` high bits from the node-index.
                     let node_index = input_index / FR_SIZE;
-                    let high = Fr::from((node_index >> get_high_bits_shr) as u64);
-                    let rho: Fr =
-                        <TreeRHasher as Hasher>::Function::hash2(&phi, &high.into()).into();
+                    let high = node_index >> get_high_bits_shr;
+                    let rho = rhos[high];
 
                     let sector_key_fr =
                         bytes_into_fr(&sector_key_data[input_index..input_index + FR_SIZE])?;
@@ -1027,6 +1034,15 @@ where
         let node_index_bit_len = nodes_count.trailing_zeros() as usize;
         let get_high_bits_shr = node_index_bit_len - h;
 
+        // Precompute the inverse of all possible `2^h` number of rho values.
+        let rho_invs: Vec<Fr> = (0..1 << h)
+            .map(|high| {
+                let high: TreeRDomain = Fr::from(high as u64).into();
+                let rho: Fr = <TreeRHasher as Hasher>::Function::hash2(&phi, &high).into();
+                rho.invert().unwrap()
+            })
+            .collect();
+
         Vec::from_iter((0..end).step_by(data_block_size))
             .into_par_iter()
             .zip(out_data.par_chunks_mut(data_block_size))
@@ -1037,16 +1053,15 @@ where
 
                     // Get the `h` high bits from the node-index.
                     let node_index = input_index / FR_SIZE;
-                    let high = Fr::from((node_index >> get_high_bits_shr) as u64);
-                    let rho: Fr =
-                        <TreeRHasher as Hasher>::Function::hash2(&phi, &high.into()).into();
+                    let high = node_index >> get_high_bits_shr;
+                    let rho_inv = rho_invs[high];
 
                     let sector_key_fr =
                         bytes_into_fr(&sector_key_data[input_index..input_index + FR_SIZE])?;
                     let replica_data_fr =
                         bytes_into_fr(&replica_data[input_index..input_index + FR_SIZE])?;
 
-                    let out_data_fr = (replica_data_fr - sector_key_fr) * rho.invert().unwrap();
+                    let out_data_fr = (replica_data_fr - sector_key_fr) * rho_inv;
                     let out_data_bytes = fr_into_bytes(&out_data_fr);
 
                     output_data[output_index..output_index + FR_SIZE]
@@ -1148,6 +1163,14 @@ where
         let node_index_bit_len = nodes_count.trailing_zeros() as usize;
         let get_high_bits_shr = node_index_bit_len - h;
 
+        // Precompute all possible `2^h` number of rho values.
+        let rhos: Vec<Fr> = (0..1 << h)
+            .map(|high| {
+                let high: TreeRDomain = Fr::from(high as u64).into();
+                <TreeRHasher as Hasher>::Function::hash2(&phi, &high).into()
+            })
+            .collect();
+
         Vec::from_iter((0..end).step_by(data_block_size))
             .into_par_iter()
             .zip(sector_key_data.par_chunks_mut(data_block_size))
@@ -1158,9 +1181,8 @@ where
 
                     // Get the `h` high bits from the node-index.
                     let node_index = input_index / FR_SIZE;
-                    let high = Fr::from((node_index >> get_high_bits_shr) as u64);
-                    let rho: Fr =
-                        <TreeRHasher as Hasher>::Function::hash2(&phi, &high.into()).into();
+                    let high = node_index >> get_high_bits_shr;
+                    let rho = rhos[high];
 
                     let data_fr = bytes_into_fr(&data[input_index..input_index + FR_SIZE])?;
                     let replica_data_fr =
