@@ -387,8 +387,9 @@ where
     let tmp_path = tmp_dir.path();
 
     // Create random TreeROld.
-    let leafs: Vec<PoseidonDomain> =
-        (0..sector_nodes).map(|_| PoseidonDomain::random(&mut rng)).collect();
+    let leafs: Vec<PoseidonDomain> = (0..sector_nodes)
+        .map(|_| PoseidonDomain::random(&mut rng))
+        .collect();
     let tree = create_tree::<DiskTree<PoseidonHasher, U, V, W>>(&leafs, tmp_path);
     let root = tree.root();
 
@@ -410,27 +411,28 @@ where
                 challenge: c,
                 commitment: None,
             };
-            let priv_inputs = por::PrivateInputs::<DiskTree<PoseidonHasher, U, V, W>> {
-                leaf,
-                tree: &tree,
-            };
+            let priv_inputs =
+                por::PrivateInputs::<DiskTree<PoseidonHasher, U, V, W>> { leaf, tree: &tree };
             let proof = PoR::prove(&pub_params, &pub_inputs, &priv_inputs).expect("proving failed");
-            let is_valid = PoR::<DiskTree<PoseidonHasher, U, V, W>>::verify(
-                &pub_params,
-                &pub_inputs,
-                &proof,
-            )
-            .expect("verification failed");
+            let is_valid =
+                PoR::<DiskTree<PoseidonHasher, U, V, W>>::verify(&pub_params, &pub_inputs, &proof)
+                    .expect("verification failed");
             assert!(is_valid, "failed to verify por proof");
             proof.proof
         };
 
-        let leaf = AllocatedNum::alloc(cs.namespace(|| format!("leaf (c_index={})", c_index)), || Ok(leaf.into())).unwrap();
+        let leaf = AllocatedNum::alloc(
+            cs.namespace(|| format!("leaf (c_index={})", c_index)),
+            || Ok(leaf.into()),
+        )
+        .unwrap();
 
         let c_bits: Vec<AllocatedBit> = (0..challenge_bit_len)
             .map(|i| {
                 AllocatedBit::alloc(
-                    cs.namespace(|| format!("challenge_bit (c_index={}, bit_index={})", c_index, i)),
+                    cs.namespace(|| {
+                        format!("challenge_bit (c_index={}, bit_index={})", c_index, i)
+                    }),
                     Some((c >> i) & 1 == 1),
                 )
                 .unwrap()
@@ -447,12 +449,12 @@ where
                     .enumerate()
                     .map(|(i, sibling)| {
                         AllocatedNum::alloc(
-                            cs.namespace(|| format!(
-                                "merkle path sibling (c_index={}, height={}, sibling_index={})",
-                                c_index,
-                                height,
-                                i,
-                            )),
+                            cs.namespace(|| {
+                                format!(
+                                    "merkle path sibling (c_index={}, height={}, sibling_index={})",
+                                    c_index, height, i,
+                                )
+                            }),
                             || Ok(sibling.into()),
                         )
                         .unwrap()
