@@ -127,7 +127,7 @@ fn get_seal_inputs_benchmark(c: &mut Criterion) {
                 .expect("unknown sector size"),
         ),
         update_partitions: UpdateProofPartitions::from(partition_count(nodes_count)),
-        h_select: HSelect::from(hs(nodes_count)[0]),
+        h_select: HSelect::from(hs(nodes_count)[2]),
         porep_id,
         api_version: ApiVersion::V1_1_0,
     };

@@ -1,14 +1,11 @@
-use std::fs::{self, metadata, OpenOptions};
+use std::fs;
 use std::path::Path;
 
-use anyhow::{ensure, Context, Error, Result};
+use anyhow::{ensure, Context, Result};
 use bincode::deserialize;
-use blstrs::Scalar as Fr;
 use filecoin_hashers::{Domain, Hasher};
-use fr32::bytes_into_fr;
 use generic_array::typenum::Unsigned;
 use log::info;
-use memmap::MmapOptions;
 use merkletree::merkle::get_merkle_tree_len;
 use merkletree::store::StoreConfig;
 use storage_proofs_core::{
@@ -19,10 +16,10 @@ use storage_proofs_core::{
     proof::ProofScheme,
     util::NODE_SIZE,
 };
-use storage_proofs_porep::stacked::{PersistentAux, TemporaryAux, BINARY_ARITY};
+use storage_proofs_porep::stacked::{PersistentAux, TemporaryAux};
 use storage_proofs_update::{
-    constants::TreeRHasher, EmptySectorUpdate, EmptySectorUpdateCompound, PartitionProof,
-    PrivateInputs, PublicInputs, PublicParams, SetupParams,
+    constants::TreeDArity, constants::TreeRHasher, EmptySectorUpdate, EmptySectorUpdateCompound,
+    PartitionProof, PrivateInputs, PublicInputs, PublicParams, SetupParams,
 };
 
 use crate::{
@@ -30,50 +27,15 @@ use crate::{
     constants::{DefaultPieceDomain, DefaultPieceHasher},
     pieces::verify_pieces,
     types::{
-        Commitment, EmptySectorUpdateProof, HSelect, PieceInfo, PoRepConfig, UpdateProofPartitions,
+        Commitment, EmptySectorUpdateEncoded, EmptySectorUpdateProof, HSelect, PieceInfo,
+        PoRepConfig, UpdateProofPartitions,
     },
 };
 
-pub fn compare_elements(path1: &Path, path2: &Path) -> Result<(), Error> {
-    info!("Comparing elements between {:?} and {:?}", path1, path2);
-    let f_data1 = OpenOptions::new()
-        .read(true)
-        .open(path1)
-        .with_context(|| format!("could not open path={:?}", path1))?;
-    let data1 = unsafe {
-        MmapOptions::new()
-            .map(&f_data1)
-            .with_context(|| format!("could not mmap path={:?}", path1))
-    }?;
-    let f_data2 = OpenOptions::new()
-        .read(true)
-        .open(path2)
-        .with_context(|| format!("could not open path={:?}", path2))?;
-    let data2 = unsafe {
-        MmapOptions::new()
-            .map(&f_data2)
-            .with_context(|| format!("could not mmap path={:?}", path2))
-    }?;
-    let fr_size = std::mem::size_of::<Fr>() as usize;
-    let end = metadata(path1)?.len() as u64;
-    ensure!(
-        metadata(path2)?.len() as u64 == end,
-        "File sizes must match"
-    );
-
-    for i in (0..end).step_by(fr_size) {
-        let index = i as usize;
-        let fr1 = bytes_into_fr(&data1[index..index + fr_size])?;
-        let fr2 = bytes_into_fr(&data2[index..index + fr_size])?;
-        ensure!(fr1 == fr2, "Data mismatch when comparing elements");
-    }
-    info!("Match found for {:?} and {:?}", path1, path2);
-
-    Ok(())
-}
-
-/// Encodes data into an existing replica.
-/// Returns tuple of (comm_r_new, comm_r_last_new, comm_d_new)
+/// Encodes data into an existing replica.  The original replica is
+/// not modified and the resulting output data is written as
+/// new_replica_path (with required artifacts located in
+/// new_cache_path).
 #[allow(clippy::too_many_arguments)]
 pub fn encode_into<Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher>>(
     porep_config: PoRepConfig,
@@ -83,7 +45,7 @@ pub fn encode_into<Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher>>(
     sector_key_cache_path: &Path,
     staged_data_path: &Path,
     piece_infos: &[PieceInfo],
-) -> Result<(Commitment, Commitment, Commitment)> {
+) -> Result<EmptySectorUpdateEncoded> {
     info!("encode_into:start");
     let mut comm_d = [0; 32];
     let mut comm_r = [0; 32];
@@ -114,8 +76,15 @@ pub fn encode_into<Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher>>(
         res
     };
 
-    // Re-instantiate a t_aux with the new cache path, then use
-    // the tree_d and tree_r_last configs from it.
+    // Re-instantiate a t_aux with the new cache path, then use the
+    // tree_d and tree_r_last configs from it.  This is done to
+    // preserve the original tree configuration info (in particular,
+    // the 'rows_to_discard' value) rather than re-setting it to the
+    // default in case it was not created with the default.
+    //
+    // If we are sure that this doesn't matter, it would be much
+    // simpler to just create new configs,
+    // e.g. StoreConfig::new(new_cache_path, ...)
     let mut t_aux_new = t_aux;
     t_aux_new.set_cache_path(new_cache_path);
 
@@ -123,7 +92,10 @@ pub fn encode_into<Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher>>(
     let tree_d_new_config = StoreConfig::from_config(
         &t_aux_new.tree_d_config,
         CacheKey::CommDTree.to_string(),
-        Some(get_merkle_tree_len(base_tree_nodes_count, BINARY_ARITY)?),
+        Some(get_merkle_tree_len(
+            base_tree_nodes_count,
+            TreeDArity::to_usize(),
+        )?),
     );
 
     let tree_r_last_new_config = StoreConfig::from_config(
@@ -166,7 +138,12 @@ pub fn encode_into<Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher>>(
     );
 
     info!("encode_into:finish");
-    Ok((comm_r, comm_r_last, comm_d))
+
+    Ok(EmptySectorUpdateEncoded {
+        comm_r_new: comm_r,
+        comm_r_last_new: comm_r_last,
+        comm_d_new: comm_d,
+    })
 }
 
 /// Reverses the encoding process and outputs the data into out_data_path.

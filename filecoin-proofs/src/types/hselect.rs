@@ -1,3 +1,9 @@
+// For production, h_select corresponds to the third element in
+// store_proofs_update::constants::hs i.e. h_select = 1 << 2 for h =
+// hs(nodes_count)[2]
+//
+// hs is a vector containing all allowed values of h for a given
+// sector size.
 #[derive(Clone, Copy, Debug)]
 pub struct HSelect(pub u8);
 

@@ -319,7 +319,7 @@ fn generate_params(i: &ProdbenchInputs) {
         sector_size,
         partitions,
         update_partitions: UpdateProofPartitions::from(partition_count(nodes_count)),
-        h_select: HSelect::from(hs(nodes_count)[0]),
+        h_select: HSelect::from(hs(nodes_count)[2]),
         porep_id: dummy_porep_id,
         api_version: i.api_version(),
     });
