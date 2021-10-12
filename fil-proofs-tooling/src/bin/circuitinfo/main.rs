@@ -150,7 +150,7 @@ fn porep_info(sector_size: u64, api_version: ApiVersion) -> (CircuitInfo, usize)
             sector_size: SectorSize(sector_size),
             partitions,
             update_partitions: UpdateProofPartitions::from(partition_count(nodes_count)),
-            h_select: HSelect::from(hs(nodes_count)[0]), // FIXME: which hselect?
+            h_select: HSelect::from(hs(nodes_count)[2]),
             porep_id: [0; 32],
             api_version,
         }

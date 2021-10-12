@@ -109,3 +109,9 @@ pub struct FallbackPoStSectorProof<Tree: MerkleTreeTrait> {
     ))]
     pub vanilla_proof: VanillaProof<Tree>, // Has comm_c, comm_r_last, inclusion_proofs
 }
+
+pub struct EmptySectorUpdateEncoded {
+    pub comm_r_new: Commitment,
+    pub comm_r_last_new: Commitment,
+    pub comm_d_new: Commitment,
+}
