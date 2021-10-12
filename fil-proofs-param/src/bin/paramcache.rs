@@ -213,7 +213,7 @@ fn generate_params_porep(sector_size: u64, api_version: ApiVersion) {
                     .expect("unknown sector size"),
             ),
             update_partitions: UpdateProofPartitions::from(partition_count(nodes_count)),
-            h_select: HSelect::from(hs(nodes_count)[0]),
+            h_select: HSelect::from(hs(nodes_count)[2]),
             porep_id: [0; 32],
             api_version,
         }
@@ -235,7 +235,7 @@ fn generate_params_empty_sector_update(sector_size: u64, api_version: ApiVersion
                     .expect("unknown sector size"),
             ),
             update_partitions: UpdateProofPartitions::from(partition_count(nodes_count)),
-            h_select: HSelect::from(hs(nodes_count)[0]),
+            h_select: HSelect::from(hs(nodes_count)[2]),
             porep_id: [0; 32],
             api_version,
         }

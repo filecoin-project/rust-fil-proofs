@@ -1,3 +1,5 @@
+// Update Proof Partitions are the number of partitions used in the
+// EmptySectorUpdate code paths per-sector size
 #[derive(Clone, Copy, Debug)]
 pub struct UpdateProofPartitions(pub u8);
 
