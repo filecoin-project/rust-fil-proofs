@@ -132,42 +132,44 @@ where
         }
     }
 
-    pub fn blank(sector_nodes: usize) -> Self {
+    pub fn empty(sector_nodes: usize) -> Self {
         let challenge_bit_len = sector_nodes.trailing_zeros() as usize;
 
-        // TreeD is a non-compound binary-tree.
-        let blank_path_d = vec![vec![None]; challenge_bit_len];
+        // TreeD is a binary-tree.
+        let path_d = vec![vec![None]; challenge_bit_len];
 
-        let blank_path_r = {
+        // TreeROld and TreeRNew have the same shape, thus have the same Merkle path length.
+        let path_r = {
             let base_arity = TreeR::Arity::to_usize();
             let sub_arity = TreeR::SubTreeArity::to_usize();
             let top_arity = TreeR::TopTreeArity::to_usize();
 
             let mut bits_remaining = challenge_bit_len;
             let mut sub_and_top_path = vec![];
+
             if sub_arity > 0 {
-                bits_remaining -= sub_arity.trailing_zeros() as usize;
                 sub_and_top_path.push(vec![None; sub_arity - 1]);
-            }
+                bits_remaining -= sub_arity.trailing_zeros() as usize;
+            };
+
             if top_arity > 0 {
-                bits_remaining -= top_arity.trailing_zeros() as usize;
                 sub_and_top_path.push(vec![None; top_arity - 1]);
-            }
+                bits_remaining -= top_arity.trailing_zeros() as usize;
+            };
+
             let base_path_len = bits_remaining / base_arity.trailing_zeros() as usize;
             let base_path = vec![vec![None; base_arity - 1]; base_path_len];
 
-            let mut blank_path = base_path;
-            blank_path.append(&mut sub_and_top_path);
-            blank_path
+            [base_path, sub_and_top_path].concat()
         };
 
         ChallengeProof {
             leaf_r_old: None,
-            path_r_old: blank_path_r.clone(),
+            path_r_old: path_r.clone(),
             leaf_d_new: None,
-            path_d_new: blank_path_d,
+            path_d_new: path_d,
             leaf_r_new: None,
-            path_r_new: blank_path_r,
+            path_r_new: path_r,
             _tree_r: PhantomData,
         }
     }
@@ -208,7 +210,7 @@ where
     pub fn blank(pub_params: PublicParams) -> Self {
         let apex_leafs = vec![None; pub_params.apex_leaf_count];
         let challenge_proofs =
-            vec![ChallengeProof::blank(pub_params.sector_nodes); pub_params.challenge_count];
+            vec![ChallengeProof::empty(pub_params.sector_nodes); pub_params.challenge_count];
         EmptySectorUpdateCircuit {
             pub_params,
             k: None,
