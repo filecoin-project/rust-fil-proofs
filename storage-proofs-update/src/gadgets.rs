@@ -369,7 +369,7 @@ mod tests {
         };
 
         assert_eq!(tree_d[height].len(), 1);
-        let comm_d = tree_d[height][0].clone();
+        let comm_d = tree_d[height][0];
 
         let apex_roots_row = height - partition_bit_len;
         let apex_leafs_row = apex_roots_row - apex_tree_height;
