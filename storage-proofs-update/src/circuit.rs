@@ -12,7 +12,7 @@ use filecoin_hashers::{HashFunction, Hasher};
 use generic_array::typenum::Unsigned;
 use storage_proofs_core::{
     compound_proof::CircuitComponent,
-    gadgets::insertion::select,
+    gadgets::{insertion::select, por::por_no_challenge_input},
     merkle::{MerkleProof, MerkleProofTrait, MerkleTreeTrait},
 };
 
@@ -23,7 +23,7 @@ use crate::{
     },
     gadgets::{
         allocated_num_to_allocated_bits, apex_por, gen_challenge_bits, get_challenge_high_bits,
-        label_r_new, por_no_challenge_input,
+        label_r_new,
     },
     PublicParams,
 };
