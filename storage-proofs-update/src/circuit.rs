@@ -3,11 +3,13 @@ use std::marker::PhantomData;
 use bellperson::{
     gadgets::{
         boolean::{AllocatedBit, Boolean},
+        multipack::pack_bits,
         num::AllocatedNum,
     },
     Circuit, ConstraintSystem, SynthesisError,
 };
 use blstrs::Scalar as Fr;
+use ff::PrimeFieldBits;
 use filecoin_hashers::{HashFunction, Hasher};
 use generic_array::typenum::Unsigned;
 use storage_proofs_core::{
@@ -18,8 +20,8 @@ use storage_proofs_core::{
 
 use crate::{
     constants::{
-        hs, validate_tree_r_shape, TreeD, TreeDArity, TreeDDomain, TreeDHasher, TreeRDomain,
-        TreeRHasher,
+        hs, partition_count, validate_tree_r_shape, TreeD, TreeDArity, TreeDDomain, TreeDHasher,
+        TreeRDomain, TreeRHasher,
     },
     gadgets::{
         allocated_num_to_allocated_bits, apex_por, gen_challenge_bits, get_challenge_high_bits,
@@ -30,22 +32,59 @@ use crate::{
 
 #[derive(Clone)]
 pub struct PublicInputs {
-    pub k: usize,
-    pub comm_r_old: TreeRDomain,
-    pub comm_d_new: TreeDDomain,
-    pub comm_r_new: TreeRDomain,
-    pub h_select: u64,
+    // Pack `k` and `h_select` into a single public-input; `k` is at most 4 bits and `h_select` is 6
+    // bits.
+    pub k_and_h_select: Option<Fr>,
+    pub comm_r_old: Option<Fr>,
+    pub comm_d_new: Option<Fr>,
+    pub comm_r_new: Option<Fr>,
 }
 
 impl PublicInputs {
-    // Returns public-inputs in the order expected by `ConstraintSystem::verify()`.
+    pub fn new(
+        sector_nodes: usize,
+        k: usize,
+        h: usize,
+        comm_r_old: TreeRDomain,
+        comm_d_new: TreeDDomain,
+        comm_r_new: TreeRDomain,
+    ) -> Self {
+        let partition_count = partition_count(sector_nodes);
+        assert!(k < partition_count);
+
+        let hs = hs(sector_nodes);
+        assert!(hs.contains(&h));
+        let hs_index = hs.iter().position(|h_allowed| *h_allowed == h).unwrap();
+        let h_select = 1u64 << hs_index;
+
+        let partition_bit_len = partition_count.trailing_zeros() as usize;
+        let k_and_h_select = (k as u64) | (h_select << partition_bit_len);
+
+        PublicInputs {
+            k_and_h_select: Some(Fr::from(k_and_h_select)),
+            comm_r_old: Some(comm_r_old.into()),
+            comm_d_new: Some(comm_d_new.into()),
+            comm_r_new: Some(comm_r_new.into()),
+        }
+    }
+
+    // Public-inputs used during Groth16 parameter generation.
+    pub fn empty() -> Self {
+        PublicInputs {
+            k_and_h_select: None,
+            comm_r_old: None,
+            comm_d_new: None,
+            comm_r_new: None,
+        }
+    }
+
+    // The ordered vector used to verify a Groth16 proof.
     pub fn to_vec(&self) -> Vec<Fr> {
         vec![
-            Fr::from(self.k as u64),
-            self.comm_r_old.into(),
-            self.comm_d_new.into(),
-            self.comm_r_new.into(),
-            Fr::from(self.h_select),
+            self.k_and_h_select.unwrap(),
+            self.comm_r_old.unwrap(),
+            self.comm_d_new.unwrap(),
+            self.comm_r_new.unwrap(),
         ]
     }
 }
@@ -182,11 +221,10 @@ where
     pub pub_params: PublicParams,
 
     // Public-inputs
-    pub k: Option<Fr>,
+    pub k_and_h_select: Option<Fr>,
     pub comm_r_old: Option<Fr>,
     pub comm_d_new: Option<Fr>,
     pub comm_r_new: Option<Fr>,
-    pub h_select: Option<Fr>,
 
     // Private-inputs
     pub comm_c: Option<Fr>,
@@ -213,11 +251,10 @@ where
             vec![ChallengeProof::empty(pub_params.sector_nodes); pub_params.challenge_count];
         EmptySectorUpdateCircuit {
             pub_params,
-            k: None,
+            k_and_h_select: None,
             comm_r_old: None,
             comm_d_new: None,
             comm_r_new: None,
-            h_select: None,
             comm_c: None,
             comm_r_last_old: None,
             comm_r_last_new: None,
@@ -234,11 +271,10 @@ where
     fn synthesize<CS: ConstraintSystem<Fr>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
         let EmptySectorUpdateCircuit {
             pub_params,
-            k,
+            k_and_h_select,
             comm_r_old,
             comm_d_new,
             comm_r_new,
-            h_select,
             comm_c,
             comm_r_last_old,
             comm_r_last_new,
@@ -263,23 +299,38 @@ where
         let partition_path =
             challenge_proofs[0].path_d_new[challenge_bit_len - partition_bit_len..].to_vec();
 
-        if let Some(k) = k {
-            let repr = k.to_bytes_le();
+        if let Some(k_and_h_select) = k_and_h_select {
+            let bits: Vec<bool> = k_and_h_select.to_le_bits().into_iter().collect();
+            // Assert that `k` is valid for the sector-size.
+            let k_bits = &bits[..partition_bit_len];
+            let mut k = 0;
+            for (i, bit) in k_bits.iter().enumerate() {
+                if *bit {
+                    k |= 1 << i;
+                }
+            }
             assert!(
-                (repr[0] as usize) < partition_count && repr[1..] == [0u8; 31],
-                "partition-index exceeds partition count",
+                k < partition_count,
+                "partition-index exceeds partition count"
             );
+            // `h_select` should have exactly one bit set.
+            let h_select_bits = &bits[partition_bit_len..partition_bit_len + h_select_bit_len];
+            assert_eq!(
+                h_select_bits.iter().filter(|bit| **bit).count(),
+                1,
+                "h_select does not have exactly one bit set"
+            );
+            // The remanining bits should be zero.
+            assert!(bits[partition_bit_len + h_select_bit_len..]
+                .iter()
+                .all(|bit| !*bit));
         }
-        // Assert that `h_select` is valid. HSelect should be a uint whose binary representation has
-        // exactly 1 of its first `h_select_bit_len` (i.e. 6) bits set.
-        if let Some(h_select) = h_select {
-            let mut allowed_h_select_values = (0..h_select_bit_len).map(|i| Fr::from(1u64 << i));
-            assert!(allowed_h_select_values.any(|allowed_h_select| allowed_h_select == h_select));
-        }
+
         assert_eq!(apex_leafs.len(), apex_leaf_count);
         assert_eq!(partition_path.len(), partition_bit_len);
         assert!(partition_path.iter().all(|siblings| siblings.len() == 1));
         assert_eq!(challenge_proofs.len(), challenge_count);
+
         // Check that all partition challenge's have the same same partition path.
         for challenge_proof in &challenge_proofs[1..] {
             assert_eq!(
@@ -290,10 +341,32 @@ where
 
         // Allocate public-inputs.
 
-        let partition = AllocatedNum::alloc(cs.namespace(|| "partition_index"), || {
-            k.ok_or(SynthesisError::AssignmentMissing)
+        // Add a single public-input for `k` and `h_select` packed into one field element.
+        let k_and_h_select = AllocatedNum::alloc(cs.namespace(|| "k_and_h_select"), || {
+            k_and_h_select.ok_or(SynthesisError::AssignmentMissing)
         })?;
-        partition.inputize(cs.namespace(|| "partition_index (public input)"))?;
+        k_and_h_select.inputize(cs.namespace(|| "k_and_h_select (public input)"))?;
+
+        let (partition_bits, h_select_bits) = {
+            let mut k_and_h_select_bits = allocated_num_to_allocated_bits(
+                cs.namespace(|| "k_and_h_select_bits"),
+                &k_and_h_select,
+            )?;
+            let partition_bits: Vec<AllocatedBit> =
+                k_and_h_select_bits.drain(..partition_bit_len).collect();
+            let h_select_bits: Vec<AllocatedBit> =
+                k_and_h_select_bits.drain(..h_select_bit_len).collect();
+            (partition_bits, h_select_bits)
+        };
+
+        let partition = pack_bits(
+            cs.namespace(|| "pack partition bits"),
+            &partition_bits
+                .iter()
+                .cloned()
+                .map(Into::into)
+                .collect::<Vec<Boolean>>(),
+        )?;
 
         let comm_r_old = AllocatedNum::alloc(cs.namespace(|| "comm_r_old"), || {
             comm_r_old.ok_or(SynthesisError::AssignmentMissing)
@@ -310,28 +383,9 @@ where
         })?;
         comm_r_new.inputize(cs.namespace(|| "comm_r_new_input"))?;
 
-        let h_select = AllocatedNum::alloc(cs.namespace(|| "h_select"), || {
-            h_select.ok_or(SynthesisError::AssignmentMissing)
-        })?;
-        h_select.inputize(cs.namespace(|| "h_select_input"))?;
-
         // Allocate values derived from public-inputs.
 
-        // Allocate the partition-index as bits.
-        let partition_bits: Vec<AllocatedBit> =
-            allocated_num_to_allocated_bits(cs.namespace(|| "partition_bits"), &partition)?
-                .into_iter()
-                .take(partition_bit_len)
-                .collect();
-
-        // Allocate the six least-significant bits of `h_select`.
-        let h_select_bits: Vec<AllocatedBit> =
-            allocated_num_to_allocated_bits(cs.namespace(|| "h_select_bits"), &h_select)?
-                .into_iter()
-                .take(h_select_bit_len)
-                .collect();
-
-        // phi = H(comm_d_new || comm_r_old)
+        // `phi = H(comm_d_new || comm_r_old)`
         let phi = <TreeR::Hasher as Hasher>::Function::hash2_circuit(
             cs.namespace(|| "phi"),
             &comm_d_new,

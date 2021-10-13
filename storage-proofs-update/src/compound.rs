@@ -10,10 +10,8 @@ use storage_proofs_core::{
 };
 
 use crate::{
-    circuit,
-    constants::{hs, TreeRHasher},
-    ChallengeProof, EmptySectorUpdate, EmptySectorUpdateCircuit, PartitionProof, PublicInputs,
-    PublicParams,
+    circuit, constants::TreeRHasher, ChallengeProof, EmptySectorUpdate, EmptySectorUpdateCircuit,
+    PartitionProof, PublicInputs, PublicParams,
 };
 
 pub struct EmptySectorUpdateCompound<TreeR>
@@ -57,19 +55,14 @@ where
             ..
         } = *pub_inputs;
 
-        let h_select = hs(pub_params.sector_nodes)
-            .iter()
-            .position(|h_allowed| *h_allowed == h)
-            .map(|i| 1 << i as u64)
-            .unwrap();
-
-        let pub_inputs_circ = circuit::PublicInputs {
+        let pub_inputs_circ = circuit::PublicInputs::new(
+            pub_params.sector_nodes,
             k,
+            h,
             comm_r_old,
             comm_d_new,
             comm_r_new,
-            h_select,
-        };
+        );
 
         Ok(pub_inputs_circ.to_vec())
     }
@@ -96,11 +89,14 @@ where
             ..
         } = *pub_inputs;
 
-        let h_select = hs(pub_params.sector_nodes)
-            .iter()
-            .position(|h_allowed| *h_allowed == h)
-            .map(|i| 1 << i as u64)
-            .unwrap();
+        let pub_inputs_circ = circuit::PublicInputs::new(
+            pub_params.sector_nodes,
+            k,
+            h,
+            comm_r_old,
+            comm_d_new,
+            comm_r_new,
+        );
 
         let comm_r_last_old = vanilla_proof.challenge_proofs[0].proof_r_old.root();
         let comm_r_last_new = vanilla_proof.challenge_proofs[0].proof_r_new.root();
@@ -128,12 +124,11 @@ where
 
         Ok(EmptySectorUpdateCircuit {
             pub_params: pub_params.clone(),
-            k: Some(Fr::from(k as u64)),
+            k_and_h_select: pub_inputs_circ.k_and_h_select,
+            comm_r_old: pub_inputs_circ.comm_r_old,
+            comm_d_new: pub_inputs_circ.comm_d_new,
+            comm_r_new: pub_inputs_circ.comm_r_new,
             comm_c: Some(comm_c.into()),
-            comm_r_old: Some(comm_r_old.into()),
-            comm_d_new: Some(comm_d_new.into()),
-            comm_r_new: Some(comm_r_new.into()),
-            h_select: Some(Fr::from(h_select)),
             comm_r_last_old: Some(comm_r_last_old.into()),
             comm_r_last_new: Some(comm_r_last_new.into()),
             apex_leafs,
