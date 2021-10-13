@@ -7,8 +7,7 @@ use bincode::deserialize;
 use filecoin_hashers::Hasher;
 use log::{debug, info};
 use storage_proofs_core::{
-    cache_key::CacheKey, compound_proof::PubVanRsp, merkle::MerkleTreeTrait, proof::ProofScheme,
-    sector::SectorId,
+    cache_key::CacheKey, merkle::MerkleTreeTrait, proof::ProofScheme, sector::SectorId,
 };
 use storage_proofs_post::fallback::{self, generate_leaf_challenge, FallbackPoSt, SectorProof};
 
@@ -261,17 +260,6 @@ pub(crate) fn get_partitions_for_window_post(
     }
 }
 
-pub fn get_post_vanilla_params<Tree: 'static + MerkleTreeTrait>(
-    post_config: &PoStConfig,
-) -> Result<PubVanRsp> {
-    let rsp = PubVanRsp {
-        challengecount: post_config.challenge_count,
-        sectorcount: post_config.sector_count,
-    };
-
-    Ok(rsp)
-}
-
 pub fn single_partition_vanilla_proofs<Tree: MerkleTreeTrait>(
     post_config: &PoStConfig,
     pub_params: &fallback::PublicParams,
@@ -396,4 +384,18 @@ pub fn merge_window_post_partition_proofs(
     }
 
     Ok(proof)
+}
+
+pub fn get_num_partition_for_fallback_post(config: &PoStConfig, num_sectors: usize) -> usize {
+    match config.typ {
+        PoStType::Window => {
+            let partitions = ((num_sectors) as f32 / config.sector_count as f32).ceil() as usize;
+            if partitions > 1 {
+                partitions
+            } else {
+                1
+            }
+        }
+        PoStType::Winning => 1,
+    }
 }

@@ -494,9 +494,3 @@ where
         Ok(res)
     }
 }
-
-#[derive(Serialize, Deserialize)]
-pub struct PubVanRsp {
-    pub challengecount: usize,
-    pub sectorcount: usize,
-}
