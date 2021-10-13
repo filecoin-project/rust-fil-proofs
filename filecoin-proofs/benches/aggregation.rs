@@ -40,7 +40,7 @@ fn bench_seal_inputs(c: &mut Criterion) {
                 .expect("unknown sector size"),
         ),
         update_partitions: UpdateProofPartitions::from(partition_count(nodes_count)),
-        h_select: HSelect::from(hs(nodes_count)[2]),
+        h_select: HSelect::from_nodes(nodes_count),
         porep_id,
         api_version: ApiVersion::V1_1_0,
     };
@@ -94,7 +94,7 @@ fn bench_stacked_srs_key(c: &mut Criterion) {
                 .expect("unknown sector size"),
         ),
         update_partitions: UpdateProofPartitions::from(partition_count(nodes_count)),
-        h_select: HSelect::from(hs(nodes_count)[2]),
+        h_select: HSelect::from_nodes(nodes_count),
         porep_id,
         api_version: ApiVersion::V1_1_0,
     };
@@ -138,7 +138,7 @@ fn bench_stacked_srs_verifier_key(c: &mut Criterion) {
                 .expect("unknown sector size"),
         ),
         update_partitions: UpdateProofPartitions::from(partition_count(nodes_count)),
-        h_select: HSelect::from(hs(nodes_count)[2]),
+        h_select: HSelect::from_nodes(nodes_count),
         porep_id,
         api_version: ApiVersion::V1_1_0,
     };

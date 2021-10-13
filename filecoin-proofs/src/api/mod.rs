@@ -512,7 +512,7 @@ fn verify_store(config: &StoreConfig, arity: usize, required_configs: usize) -> 
         for config in &configs {
             let data_path = StoreConfig::data_path(&config.path, &config.id);
             trace!(
-                "verify_store: {:?} has length {}",
+                "verify_store: {:?} has length {} bytes",
                 &data_path,
                 std::fs::metadata(&data_path)?.len()
             );

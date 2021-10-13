@@ -13,9 +13,9 @@ use filecoin_proofs::constants::{
     POREP_PARTITIONS, WINDOW_POST_CHALLENGE_COUNT, WINDOW_POST_SECTOR_COUNT,
 };
 use filecoin_proofs::types::{
-    HSelect, PaddedBytesAmount, PieceInfo, PoRepConfig, PoRepProofPartitions, PoStConfig,
+    PaddedBytesAmount, PieceInfo, PoRepConfig, PoRepProofPartitions, PoStConfig,
     SealCommitPhase1Output, SealPreCommitOutput, SealPreCommitPhase1Output, SectorSize,
-    UnpaddedBytesAmount, UpdateProofPartitions,
+    UnpaddedBytesAmount,
 };
 use filecoin_proofs::{
     add_piece, generate_piece_commitment, generate_window_post, seal_commit_phase1,
@@ -25,11 +25,7 @@ use filecoin_proofs::{
 };
 use log::info;
 use serde::{Deserialize, Serialize};
-use storage_proofs_core::{
-    api_version::ApiVersion, merkle::MerkleTreeTrait, sector::SectorId, util::NODE_SIZE,
-};
-use storage_proofs_update::constants::{hs, partition_count};
-
+use storage_proofs_core::{api_version::ApiVersion, merkle::MerkleTreeTrait, sector::SectorId};
 const SECTOR_ID: u64 = 0;
 
 const PIECE_FILE: &str = "piece-file";
@@ -85,7 +81,6 @@ impl Report {
 fn get_porep_config(sector_size: u64, api_version: ApiVersion) -> PoRepConfig {
     let arbitrary_porep_id = [99; 32];
 
-    let nodes_count = sector_size as usize / NODE_SIZE;
     // Replicate the staged sector, write the replica file to `sealed_path`.
     PoRepConfig {
         sector_size: SectorSize(sector_size),
@@ -96,8 +91,6 @@ fn get_porep_config(sector_size: u64, api_version: ApiVersion) -> PoRepConfig {
                 .get(&(sector_size))
                 .expect("unknown sector size"),
         ),
-        update_partitions: UpdateProofPartitions::from(partition_count(nodes_count)),
-        h_select: HSelect::from(hs(nodes_count)[2]),
         porep_id: arbitrary_porep_id,
         api_version,
     }

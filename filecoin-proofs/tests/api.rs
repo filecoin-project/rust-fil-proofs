@@ -100,6 +100,7 @@ use filecoin_proofs::{
 =======
     verify_aggregate_seal_commit_proofs, verify_empty_sector_update_proof, verify_partition_proofs,
     verify_seal, verify_single_partition_proof, verify_window_post, verify_winning_post,
+<<<<<<< HEAD
     Commitment, DefaultTreeDomain, HSelect, MerkleTreeTrait, PaddedBytesAmount, PieceInfo,
     PoRepConfig, PoRepProofPartitions, PoStConfig, PoStType, PrivateReplicaInfo, ProverId,
     PublicReplicaInfo, SealCommitOutput, SealPreCommitOutput, SealPreCommitPhase1Output,
@@ -109,16 +110,23 @@ use filecoin_proofs::{
     WINDOW_POST_CHALLENGE_COUNT, WINDOW_POST_SECTOR_COUNT, WINNING_POST_CHALLENGE_COUNT,
     WINNING_POST_SECTOR_COUNT,
 >>>>>>> 1f5042b4 (fix: apply some review feedback)
+=======
+    Commitment, DefaultTreeDomain, MerkleTreeTrait, PaddedBytesAmount, PieceInfo, PoRepConfig,
+    PoRepProofPartitions, PoStConfig, PoStType, PrivateReplicaInfo, ProverId, PublicReplicaInfo,
+    SealCommitOutput, SealPreCommitOutput, SealPreCommitPhase1Output, SectorShape16KiB,
+    SectorShape2KiB, SectorShape32KiB, SectorShape4KiB, SectorSize, SectorUpdateConfig,
+    UnpaddedByteIndex, UnpaddedBytesAmount, POREP_PARTITIONS, SECTOR_SIZE_16_KIB,
+    SECTOR_SIZE_2_KIB, SECTOR_SIZE_32_KIB, SECTOR_SIZE_4_KIB, WINDOW_POST_CHALLENGE_COUNT,
+    WINDOW_POST_SECTOR_COUNT, WINNING_POST_CHALLENGE_COUNT, WINNING_POST_SECTOR_COUNT,
+>>>>>>> cd695d8f (fix: apply more feedback)
 };
 use fr32::bytes_into_fr;
 use log::info;
 use memmap::MmapOptions;
 use rand::{random, Rng, SeedableRng};
 use rand_xorshift::XorShiftRng;
-use storage_proofs_core::{
-    api_version::ApiVersion, is_legacy_porep_id, sector::SectorId, util::NODE_SIZE,
-};
-use storage_proofs_update::constants::{hs, partition_count, TreeRHasher};
+use storage_proofs_core::{api_version::ApiVersion, is_legacy_porep_id, sector::SectorId};
+use storage_proofs_update::constants::TreeRHasher;
 use tempfile::{tempdir, NamedTempFile, TempDir};
 
 // Use a fixed PoRep ID, so that the parents cache can be re-used between some tests.
@@ -1524,7 +1532,6 @@ fn generate_piece_file(sector_size: u64) -> Result<(NamedTempFile, Vec<u8>)> {
 }
 
 fn porep_config(sector_size: u64, porep_id: [u8; 32], api_version: ApiVersion) -> PoRepConfig {
-    let nodes_count = sector_size as usize / NODE_SIZE;
     PoRepConfig {
         sector_size: SectorSize(sector_size),
         partitions: PoRepProofPartitions(
@@ -1534,8 +1541,6 @@ fn porep_config(sector_size: u64, porep_id: [u8; 32], api_version: ApiVersion) -
                 .get(&sector_size)
                 .expect("unknown sector size"),
         ),
-        update_partitions: UpdateProofPartitions::from(partition_count(nodes_count)),
-        h_select: HSelect::from(hs(nodes_count)[2]),
         porep_id,
         api_version,
     }
@@ -1900,12 +1905,13 @@ fn create_seal_for_upgrade<R: Rng, Tree: 'static + MerkleTreeTrait<Hasher = Tree
     let sealed_sector_file = NamedTempFile::new()?;
     let cache_dir = tempdir().expect("failed to create temp dir");
 
-    let config = porep_config(sector_size, *porep_id, api_version);
+    let porep_config = porep_config(sector_size, *porep_id, api_version);
+    let config = SectorUpdateConfig::from_porep_config(porep_config);
     let ticket = rng.gen();
     let sector_id = rng.gen::<u64>().into();
 
     let (_piece_infos, phase1_output) = run_seal_pre_commit_phase1::<Tree>(
-        config,
+        porep_config,
         prover_id,
         sector_id,
         ticket,
@@ -1915,7 +1921,7 @@ fn create_seal_for_upgrade<R: Rng, Tree: 'static + MerkleTreeTrait<Hasher = Tree
     )?;
 
     let pre_commit_output = seal_pre_commit_phase2(
-        config,
+        porep_config,
         phase1_output,
         cache_dir.path(),
         sealed_sector_file.path(),
@@ -1931,7 +1937,7 @@ fn create_seal_for_upgrade<R: Rng, Tree: 'static + MerkleTreeTrait<Hasher = Tree
     // create and generate some random data in staged_data_file.
     let (mut new_piece_file, _new_piece_bytes) = generate_piece_file(sector_size)?;
     let number_of_bytes_in_piece =
-        UnpaddedBytesAmount::from(PaddedBytesAmount(config.sector_size.into()));
+        UnpaddedBytesAmount::from(PaddedBytesAmount(porep_config.sector_size.into()));
 
     let new_piece_info =
         generate_piece_commitment(new_piece_file.as_file_mut(), number_of_bytes_in_piece)?;
@@ -1961,7 +1967,7 @@ fn create_seal_for_upgrade<R: Rng, Tree: 'static + MerkleTreeTrait<Hasher = Tree
     f_sealed_sector.set_len(new_replica_target_len)?;
 
     let encoded = encode_into::<Tree>(
-        config,
+        porep_config,
         new_sealed_sector_file.path(),
         new_cache_dir.path(),
         sealed_sector_file.path(),
@@ -2017,7 +2023,7 @@ fn create_seal_for_upgrade<R: Rng, Tree: 'static + MerkleTreeTrait<Hasher = Tree
     ensure!(proofs_are_valid, "Partition proofs failed to verify");
 
     let proofs = generate_empty_sector_update_proof::<Tree>(
-        config,
+        porep_config,
         comm_r,
         encoded.comm_r_new,
         encoded.comm_d_new,
@@ -2027,8 +2033,8 @@ fn create_seal_for_upgrade<R: Rng, Tree: 'static + MerkleTreeTrait<Hasher = Tree
         new_cache_dir.path(),
     )?;
     let valid = verify_empty_sector_update_proof::<Tree>(
-        config,
-        &proofs,
+        porep_config,
+        &proofs.0,
         comm_r,
         encoded.comm_r_new,
         encoded.comm_d_new,

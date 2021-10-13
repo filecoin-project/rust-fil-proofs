@@ -43,7 +43,6 @@ yastl = "0.1.2"
 fil_logger = "0.1"
 pairing = "0.21"
 blstrs = "0.4.0"
-memmap = "0.7"
 
 [target."cfg(target_arch = \"aarch64\")".dependencies]
 sha2 = { version = "0.9.3", features = ["compress", "asm"] }
