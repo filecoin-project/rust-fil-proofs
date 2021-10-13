@@ -16,7 +16,6 @@ use rand::{rngs::OsRng, RngCore};
 use rayon::prelude::{
     IndexedParallelIterator, IntoParallelIterator, IntoParallelRefIterator, ParallelIterator,
 };
-use serde::{Deserialize, Serialize};
 
 use crate::{
     error::Result,
