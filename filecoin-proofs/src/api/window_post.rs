@@ -24,7 +24,7 @@ use crate::{
         ChallengeSeed, FallbackPoStSectorProof, PoStConfig, PrivateReplicaInfo, ProverId,
         PublicReplicaInfo, SnarkProof,
     },
-    PoStType,
+    PartitionSnarkProof, PoStType,
 };
 
 /// Generates a Window proof-of-spacetime with provided vanilla proofs.
@@ -246,14 +246,14 @@ pub fn verify_window_post<Tree: 'static + MerkleTreeTrait>(
     Ok(true)
 }
 
-/// Generates a Window proof-of-spacetime with provided vanilla proofs of a single partition
+/// Generates a Window proof-of-spacetime with provided vanilla proofs of a single partition.
 pub fn generate_single_window_post_with_vanilla<Tree: 'static + MerkleTreeTrait>(
     post_config: &PoStConfig,
     randomness: &ChallengeSeed,
     prover_id: ProverId,
     vanilla_proofs: Vec<FallbackPoStSectorProof<Tree>>,
     partition_index: usize,
-) -> Result<SnarkProof> {
+) -> Result<PartitionSnarkProof> {
     info!("generate_single_window_post_with_vanilla:start");
     ensure!(
         post_config.typ == PoStType::Window,
@@ -273,8 +273,6 @@ pub fn generate_single_window_post_with_vanilla<Tree: 'static + MerkleTreeTrait>
         partitions,
         priority: post_config.priority,
     };
-
-    let partitions = partitions.unwrap_or(1);
 
     let pub_params: compound_proof::PublicParams<'_, FallbackPoSt<'_, Tree>> =
         FallbackPoStCompound::setup(&setup_params)?;
@@ -299,7 +297,6 @@ pub fn generate_single_window_post_with_vanilla<Tree: 'static + MerkleTreeTrait>
         &post_config,
         &pub_params.vanilla_params,
         &pub_inputs,
-        partitions,
         &vanilla_proofs,
         partition_index,
     )?;
@@ -307,11 +304,11 @@ pub fn generate_single_window_post_with_vanilla<Tree: 'static + MerkleTreeTrait>
     let proof = FallbackPoStCompound::prove_with_vanilla(
         &pub_params,
         &pub_inputs,
-        partitioned_proofs,
+        vec![partitioned_proofs],
         &groth_params,
     )?;
 
     info!("generate_single_window_post_with_vanilla:finish");
 
-    proof.to_vec()
+    proof.to_vec().map(PartitionSnarkProof)
 }
