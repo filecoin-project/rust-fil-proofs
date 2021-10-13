@@ -88,17 +88,13 @@ pub trait ProofScheme<'a> {
     fn verify_single_partitions(
         pub_params: &Self::PublicParams,
         pub_in: &Self::PublicInputs,
-        proofs: &[Self::Proof],
-        _sector_idxs: &[u64],
+        proof: &Self::Proof,
+        partition_index: usize,
     ) -> Result<bool> {
-        for (k, proof) in proofs.iter().enumerate() {
-            let partition_pub_in = Self::with_partition((*pub_in).clone(), Some(k)); //
-
-            if !Self::verify(pub_params, &partition_pub_in, proof)? {
-                return Ok(false);
-            }
+        let partition_pub_in = Self::with_partition((*pub_in).clone(), Some(partition_index));
+        if !Self::verify(pub_params, &partition_pub_in, proof)? {
+            return Ok(false);
         }
-
         Ok(true)
     }
 

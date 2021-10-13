@@ -252,7 +252,7 @@ pub fn generate_single_window_post_with_vanilla<Tree: 'static + MerkleTreeTrait>
     randomness: &ChallengeSeed,
     prover_id: ProverId,
     vanilla_proofs: Vec<FallbackPoStSectorProof<Tree>>,
-    sector_idxs: &[u64],
+    partition_index: usize,
 ) -> Result<SnarkProof> {
     info!("generate_single_window_post_with_vanilla:start");
     ensure!(
@@ -301,7 +301,7 @@ pub fn generate_single_window_post_with_vanilla<Tree: 'static + MerkleTreeTrait>
         &pub_inputs,
         partitions,
         &vanilla_proofs,
-        sector_idxs,
+        partition_index,
     )?;
 
     let proof = FallbackPoStCompound::prove_with_vanilla(

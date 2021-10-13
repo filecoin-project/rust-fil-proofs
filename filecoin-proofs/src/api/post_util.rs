@@ -327,7 +327,7 @@ pub fn single_partition_vanilla_proofs<Tree: MerkleTreeTrait>(
     pub_inputs: &fallback::PublicInputs<<Tree::Hasher as Hasher>::Domain>,
     partition_count: usize,
     vanilla_proofs: &[FallbackPoStSectorProof<Tree>],
-    sector_idxs: &[u64],
+    partition_index: usize,
 ) -> Result<Vec<VanillaProof<Tree>>> {
     info!("single_partition_vanilla_proofs:start");
     ensure!(
@@ -433,12 +433,14 @@ pub fn single_partition_vanilla_proofs<Tree: MerkleTreeTrait>(
 
     info!("single_partition_vanilla_proofs:finish");
 
+    assert_eq!(partition_proofs.len(), 1);
+
     ensure!(
         FallbackPoSt::<Tree>::verify_single_partitions(
             pub_params,
             pub_inputs,
-            &partition_proofs,
-            sector_idxs
+            &partition_proofs[0],
+            partition_index,
         )?,
         "partitioned vanilla proofs failed to verify"
     );

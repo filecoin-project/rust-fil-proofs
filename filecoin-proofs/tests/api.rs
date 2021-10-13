@@ -1117,13 +1117,13 @@ fn partition_window_post<Tree: 'static + MerkleTreeTrait>(
 ) -> Result<()> {
     use anyhow::anyhow;
 
-    let rng = &mut XorShiftRng::from_seed(TEST_SEED);
+    let mut rng = XorShiftRng::from_seed(TEST_SEED);
 
     let mut sectors = Vec::with_capacity(total_sector_count);
     let mut pub_replicas = BTreeMap::new();
     let mut priv_replicas = BTreeMap::new();
 
-    let prover_fr: <Tree::Hasher as Hasher>::Domain = Fr::random(rng).into();
+    let prover_fr: <Tree::Hasher as Hasher>::Domain = Fr::random(&mut rng).into();
     let mut prover_id = [0u8; 32];
     prover_id.copy_from_slice(AsRef::<[u8]>::as_ref(&prover_fr));
 
@@ -1134,9 +1134,16 @@ fn partition_window_post<Tree: 'static + MerkleTreeTrait>(
 
     for _ in 0..total_sector_count {
         let (sector_id, replica, comm_r, cache_dir) = if fake {
-            create_fake_seal::<_, Tree>(rng, sector_size, &porep_id, api_version)?
+            create_fake_seal::<_, Tree>(&mut rng, sector_size, &porep_id, api_version)?
         } else {
-            create_seal::<_, Tree>(rng, sector_size, prover_id, true, &porep_id, api_version)?
+            create_seal::<_, Tree>(
+                &mut rng,
+                sector_size,
+                prover_id,
+                true,
+                &porep_id,
+                api_version,
+            )?
         };
         priv_replicas.insert(
             sector_id,
@@ -1149,7 +1156,7 @@ fn partition_window_post<Tree: 'static + MerkleTreeTrait>(
     assert_eq!(pub_replicas.len(), total_sector_count);
     assert_eq!(sectors.len(), total_sector_count);
 
-    let random_fr: <Tree::Hasher as Hasher>::Domain = Fr::random(rng).into();
+    let random_fr: <Tree::Hasher as Hasher>::Domain = Fr::random(&mut rng).into();
     let mut randomness = [0u8; 32];
     randomness.copy_from_slice(AsRef::<[u8]>::as_ref(&random_fr));
 
@@ -1174,8 +1181,6 @@ fn partition_window_post<Tree: 'static + MerkleTreeTrait>(
         prover_id,
     )?;
 
-    let mut start = 0;
-    let mut _end = config.sector_count;
     let num_sectors_per_chunk = config.sector_count;
     let mut proofs = Vec::new();
 
@@ -1209,12 +1214,8 @@ fn partition_window_post<Tree: 'static + MerkleTreeTrait>(
             partition_priv_replicas.insert(*id, p_sector);
         }
 
-        let mut sector_idxs = Vec::new();
         let mut vanilla_proofs = Vec::new();
-        for (i, (sector_id, sector)) in partition_priv_replicas.iter().enumerate() {
-            let sector_index = i + start;
-            sector_idxs.push(sector_index as u64);
-
+        for (sector_id, sector) in partition_priv_replicas.iter() {
             let sector_challenges = &challenges[sector_id];
             let single_proof = generate_single_vanilla_proof::<Tree>(
                 &config,
@@ -1231,7 +1232,7 @@ fn partition_window_post<Tree: 'static + MerkleTreeTrait>(
             &randomness,
             prover_id,
             vanilla_proofs,
-            &sector_idxs,
+            partition_index,
         )?;
 
         if partition_index == 0 {
@@ -1239,9 +1240,6 @@ fn partition_window_post<Tree: 'static + MerkleTreeTrait>(
         } else {
             proofs.append(&mut proof);
         }
-
-        start += config.sector_count;
-        _end += config.sector_count;
     }
 
     let valid =
