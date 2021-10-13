@@ -4,12 +4,11 @@ use std::time::Duration;
 use criterion::{black_box, criterion_group, criterion_main, Criterion, Throughput};
 use filecoin_proofs::{
     caches::{get_stacked_srs_key, get_stacked_srs_verifier_key},
-    get_seal_inputs, HSelect, PoRepConfig, PoRepProofPartitions, SectorShape2KiB, SectorShape32GiB,
-    SectorSize, UpdateProofPartitions, POREP_PARTITIONS, SECTOR_SIZE_2_KIB, SECTOR_SIZE_32_GIB,
+    get_seal_inputs, PoRepConfig, PoRepProofPartitions, SectorShape2KiB, SectorShape32GiB,
+    SectorSize, POREP_PARTITIONS, SECTOR_SIZE_2_KIB, SECTOR_SIZE_32_GIB,
 };
 use rand::{thread_rng, Rng};
-use storage_proofs_core::{api_version::ApiVersion, is_legacy_porep_id, util::NODE_SIZE};
-use storage_proofs_update::constants::{hs, partition_count};
+use storage_proofs_core::{api_version::ApiVersion, is_legacy_porep_id};
 
 static INIT_LOGGER: Once = Once::new();
 fn init_logger() {
@@ -29,7 +28,6 @@ fn bench_seal_inputs(c: &mut Criterion) {
     porep_id[..8].copy_from_slice(&porep_id_v1_1.to_le_bytes());
     assert!(!is_legacy_porep_id(porep_id));
 
-    let nodes_count = SECTOR_SIZE_2_KIB as usize / NODE_SIZE;
     let config = PoRepConfig {
         sector_size: SectorSize(SECTOR_SIZE_2_KIB),
         partitions: PoRepProofPartitions(
@@ -39,8 +37,6 @@ fn bench_seal_inputs(c: &mut Criterion) {
                 .get(&SECTOR_SIZE_2_KIB)
                 .expect("unknown sector size"),
         ),
-        update_partitions: UpdateProofPartitions::from(partition_count(nodes_count)),
-        h_select: HSelect::from_nodes(nodes_count),
         porep_id,
         api_version: ApiVersion::V1_1_0,
     };
@@ -83,7 +79,6 @@ fn bench_stacked_srs_key(c: &mut Criterion) {
     porep_id[..8].copy_from_slice(&porep_id_v1_1.to_le_bytes());
     assert!(!is_legacy_porep_id(porep_id));
 
-    let nodes_count = SECTOR_SIZE_2_KIB as usize / NODE_SIZE;
     let config = PoRepConfig {
         sector_size: SectorSize(SECTOR_SIZE_32_GIB),
         partitions: PoRepProofPartitions(
@@ -93,8 +88,6 @@ fn bench_stacked_srs_key(c: &mut Criterion) {
                 .get(&SECTOR_SIZE_32_GIB)
                 .expect("unknown sector size"),
         ),
-        update_partitions: UpdateProofPartitions::from(partition_count(nodes_count)),
-        h_select: HSelect::from_nodes(nodes_count),
         porep_id,
         api_version: ApiVersion::V1_1_0,
     };
@@ -127,7 +120,6 @@ fn bench_stacked_srs_verifier_key(c: &mut Criterion) {
     porep_id[..8].copy_from_slice(&porep_id_v1_1.to_le_bytes());
     assert!(!is_legacy_porep_id(porep_id));
 
-    let nodes_count = SECTOR_SIZE_2_KIB as usize / NODE_SIZE;
     let config = PoRepConfig {
         sector_size: SectorSize(SECTOR_SIZE_32_GIB),
         partitions: PoRepProofPartitions(
@@ -137,8 +129,6 @@ fn bench_stacked_srs_verifier_key(c: &mut Criterion) {
                 .get(&SECTOR_SIZE_32_GIB)
                 .expect("unknown sector size"),
         ),
-        update_partitions: UpdateProofPartitions::from(partition_count(nodes_count)),
-        h_select: HSelect::from_nodes(nodes_count),
         porep_id,
         api_version: ApiVersion::V1_1_0,
     };
