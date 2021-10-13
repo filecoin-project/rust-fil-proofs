@@ -21,6 +21,7 @@ mod private_replica_info;
 mod public_replica_info;
 mod sector_class;
 mod sector_size;
+mod sector_update_config;
 mod update_proof_partitions;
 
 pub use bytes_amount::*;
@@ -34,6 +35,7 @@ pub use private_replica_info::*;
 pub use public_replica_info::*;
 pub use sector_class::*;
 pub use sector_size::*;
+pub use sector_update_config::*;
 pub use update_proof_partitions::*;
 
 pub type Commitment = [u8; 32];
@@ -94,7 +96,9 @@ pub type SnarkProof = Vec<u8>;
 pub type AggregateSnarkProof = Vec<u8>;
 pub type VanillaProof<Tree> = fallback::Proof<<Tree as MerkleTreeTrait>::Proof>;
 
-pub type EmptySectorUpdateProof = Vec<u8>;
+#[derive(Debug, Clone, PartialEq)]
+#[repr(transparent)]
+pub struct EmptySectorUpdateProof(pub Vec<u8>);
 
 // This FallbackPoStSectorProof is used during Fallback PoSt, but
 // contains only Vanilla proof information and is not a full Fallback
