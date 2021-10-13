@@ -3,15 +3,13 @@ use std::panic::panic_any;
 use blstrs::Scalar as Fr;
 use ff::Field;
 use filecoin_proofs::{
-    as_safe_commitment, verify_seal, DefaultOctLCTree, DefaultTreeDomain, HSelect, PoRepConfig,
-    PoRepProofPartitions, SectorSize, UpdateProofPartitions, POREP_PARTITIONS, SECTOR_SIZE_2_KIB,
-    TEST_SEED,
+    as_safe_commitment, verify_seal, DefaultOctLCTree, DefaultTreeDomain, PoRepConfig,
+    PoRepProofPartitions, SectorSize, POREP_PARTITIONS, SECTOR_SIZE_2_KIB, TEST_SEED,
 };
 use fr32::bytes_into_fr;
 use rand::SeedableRng;
 use rand_xorshift::XorShiftRng;
-use storage_proofs_core::{api_version::ApiVersion, sector::SectorId, util::NODE_SIZE};
-use storage_proofs_update::constants::{hs, partition_count};
+use storage_proofs_core::{api_version::ApiVersion, sector::SectorId};
 
 #[test]
 fn test_verify_seal_fr32_validation() {
@@ -27,7 +25,6 @@ fn test_verify_seal_fr32_validation() {
 
     // Test failure for invalid comm_r conversion.
     {
-        let nodes_count = SECTOR_SIZE_2_KIB as usize / NODE_SIZE;
         let result = verify_seal::<DefaultOctLCTree>(
             PoRepConfig {
                 sector_size: SectorSize(SECTOR_SIZE_2_KIB),
@@ -38,8 +35,6 @@ fn test_verify_seal_fr32_validation() {
                         .get(&SECTOR_SIZE_2_KIB)
                         .expect("unknown sector size"),
                 ),
-                update_partitions: UpdateProofPartitions::from(partition_count(nodes_count)),
-                h_select: HSelect::from(hs(nodes_count)[2]),
                 porep_id: arbitrary_porep_id,
                 api_version: ApiVersion::V1_1_0,
             },
@@ -69,7 +64,6 @@ fn test_verify_seal_fr32_validation() {
 
     // Test failure for invalid comm_d conversion.
     {
-        let nodes_count = SECTOR_SIZE_2_KIB as usize / NODE_SIZE;
         let result = verify_seal::<DefaultOctLCTree>(
             PoRepConfig {
                 sector_size: SectorSize(SECTOR_SIZE_2_KIB),
@@ -80,8 +74,6 @@ fn test_verify_seal_fr32_validation() {
                         .get(&SECTOR_SIZE_2_KIB)
                         .expect("unknown sector size"),
                 ),
-                update_partitions: UpdateProofPartitions::from(partition_count(nodes_count)),
-                h_select: HSelect::from(hs(nodes_count)[2]),
                 porep_id: arbitrary_porep_id,
                 api_version: ApiVersion::V1_1_0,
             },
@@ -115,7 +107,6 @@ fn test_verify_seal_fr32_validation() {
         let out = bytes_into_fr(&non_zero_commitment_fr_bytes);
         assert!(out.is_ok(), "tripwire");
 
-        let nodes_count = SECTOR_SIZE_2_KIB as usize / NODE_SIZE;
         let result = verify_seal::<DefaultOctLCTree>(
             PoRepConfig {
                 sector_size: SectorSize(SECTOR_SIZE_2_KIB),
@@ -126,8 +117,6 @@ fn test_verify_seal_fr32_validation() {
                         .get(&SECTOR_SIZE_2_KIB)
                         .expect("unknown sector size"),
                 ),
-                update_partitions: UpdateProofPartitions::from(partition_count(nodes_count)),
-                h_select: HSelect::from(hs(nodes_count)[2]),
                 porep_id: arbitrary_porep_id,
                 api_version: ApiVersion::V1_1_0,
             },

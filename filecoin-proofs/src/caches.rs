@@ -274,6 +274,8 @@ pub fn get_empty_sector_update_params<Tree: 'static + MerkleTreeTrait<Hasher = T
         PublicParams::from_sector_size(u64::from(porep_config.sector_size));
 
     let parameters_generator = || {
+        // This is required for production and should replace the use
+        // of the RNG below for testing.
         /*<EmptySectorUpdateCompound<Tree> as CompoundProof<
             EmptySectorUpdate<Tree>,
             EmptySectorUpdateCircuit<Tree>,
@@ -446,6 +448,8 @@ pub fn get_empty_sector_update_verifying_key<
         PublicParams::from_sector_size(u64::from(porep_config.sector_size));
 
     let vk_generator = || {
+        // This is required for production and should replace the use
+        // of the RNG below for testing.
         /*let vk = <EmptySectorUpdateCompound<Tree> as CompoundProof<
             EmptySectorUpdate<Tree>,
             EmptySectorUpdateCircuit<Tree>,
