@@ -225,13 +225,8 @@ where
     let pub_params = PublicParams::from_sector_size(sector_bytes as u64);
 
     for k in 0..pub_params.partition_count {
-        let pub_inputs = circuit::PublicInputs {
-            k,
-            comm_r_old,
-            comm_d_new,
-            comm_r_new,
-            h_select: H_SELECT,
-        };
+        let pub_inputs =
+            circuit::PublicInputs::new(sector_nodes, k, h, comm_r_old, comm_d_new, comm_r_new);
 
         let apex_leafs: Vec<Option<Fr>> = get_apex_leafs(&tree_d_new, k)
             .into_iter()
@@ -289,11 +284,10 @@ where
 
         let circuit = EmptySectorUpdateCircuit::<TreeR> {
             pub_params: pub_params.clone(),
-            k: Some(Fr::from(pub_inputs.k as u64)),
-            comm_r_old: Some(pub_inputs.comm_r_old.into()),
-            comm_d_new: Some(pub_inputs.comm_d_new.into()),
-            comm_r_new: Some(pub_inputs.comm_r_new.into()),
-            h_select: Some(Fr::from(pub_inputs.h_select)),
+            k_and_h_select: pub_inputs.k_and_h_select,
+            comm_r_old: pub_inputs.comm_r_old,
+            comm_d_new: pub_inputs.comm_d_new,
+            comm_r_new: pub_inputs.comm_r_new,
             comm_c: Some(comm_c.into()),
             comm_r_last_old: Some(comm_r_last_old.into()),
             comm_r_last_new: Some(comm_r_last_new.into()),
