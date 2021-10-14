@@ -20,14 +20,14 @@ use storage_proofs_core::{
 
 use crate::{
     constants::{
-        hs, partition_count, validate_tree_r_shape, TreeD, TreeDArity, TreeDDomain, TreeDHasher,
-        TreeRDomain, TreeRHasher,
+        apex_leaf_count, challenge_count, hs, partition_count, validate_tree_r_shape, TreeD,
+        TreeDArity, TreeDDomain, TreeDHasher, TreeRDomain, TreeRHasher,
     },
     gadgets::{
         allocated_num_to_allocated_bits, apex_por, gen_challenge_bits, get_challenge_high_bits,
         label_r_new,
     },
-    PublicParams,
+    vanilla, PublicParams,
 };
 
 #[derive(Clone)]
@@ -117,6 +117,20 @@ where
             path_r_new: self.path_r_new.clone(),
             _tree_r: PhantomData,
         }
+    }
+}
+
+impl<TreeR> From<vanilla::ChallengeProof<TreeR>> for ChallengeProof<TreeR>
+where
+    TreeR: MerkleTreeTrait<Hasher = TreeRHasher>,
+{
+    fn from(vanilla_challenge_proof: vanilla::ChallengeProof<TreeR>) -> Self {
+        let vanilla::ChallengeProof {
+            proof_r_old,
+            proof_d_new,
+            proof_r_new,
+        } = vanilla_challenge_proof;
+        ChallengeProof::from_merkle_proofs(proof_r_old, proof_d_new, proof_r_new)
     }
 }
 
@@ -214,24 +228,71 @@ where
     }
 }
 
-pub struct EmptySectorUpdateCircuit<TreeR>
+#[derive(Clone)]
+pub struct PrivateInputs<TreeR>
 where
     TreeR: MerkleTreeTrait<Hasher = TreeRHasher>,
 {
-    pub pub_params: PublicParams,
-
-    // Public-inputs
-    pub k_and_h_select: Option<Fr>,
-    pub comm_r_old: Option<Fr>,
-    pub comm_d_new: Option<Fr>,
-    pub comm_r_new: Option<Fr>,
-
-    // Private-inputs
     pub comm_c: Option<Fr>,
     pub comm_r_last_old: Option<Fr>,
     pub comm_r_last_new: Option<Fr>,
     pub apex_leafs: Vec<Option<Fr>>,
     pub challenge_proofs: Vec<ChallengeProof<TreeR>>,
+}
+
+impl<TreeR> PrivateInputs<TreeR>
+where
+    TreeR: MerkleTreeTrait<Hasher = TreeRHasher>,
+{
+    pub fn new(
+        comm_c: TreeRDomain,
+        apex_leafs: &[TreeDDomain],
+        challenge_proofs: &[vanilla::ChallengeProof<TreeR>],
+    ) -> Self {
+        let comm_r_last_old: Fr = challenge_proofs[0].proof_r_old.root().into();
+        let comm_r_last_new: Fr = challenge_proofs[0].proof_r_new.root().into();
+
+        let apex_leafs: Vec<Option<Fr>> = apex_leafs
+            .iter()
+            .copied()
+            .map(|leaf| Some(leaf.into()))
+            .collect();
+
+        let challenge_proofs: Vec<ChallengeProof<TreeR>> = challenge_proofs
+            .iter()
+            .cloned()
+            .map(ChallengeProof::from)
+            .collect();
+
+        PrivateInputs {
+            comm_c: Some(comm_c.into()),
+            comm_r_last_old: Some(comm_r_last_old),
+            comm_r_last_new: Some(comm_r_last_new),
+            apex_leafs,
+            challenge_proofs,
+        }
+    }
+
+    pub fn empty(sector_nodes: usize) -> Self {
+        let challenge_count = challenge_count(sector_nodes);
+        let apex_leaf_count = apex_leaf_count(sector_nodes);
+        PrivateInputs {
+            comm_c: None,
+            comm_r_last_old: None,
+            comm_r_last_new: None,
+            apex_leafs: vec![None; apex_leaf_count],
+            challenge_proofs: vec![ChallengeProof::empty(sector_nodes); challenge_count],
+        }
+    }
+}
+
+pub struct EmptySectorUpdateCircuit<TreeR>
+where
+    TreeR: MerkleTreeTrait<Hasher = TreeRHasher>,
+{
+    pub pub_params: PublicParams,
+    pub pub_inputs: PublicInputs,
+    pub priv_inputs: PrivateInputs<TreeR>,
 }
 
 impl<TreeR> CircuitComponent for EmptySectorUpdateCircuit<TreeR>
@@ -246,21 +307,9 @@ where
     TreeR: MerkleTreeTrait<Hasher = TreeRHasher>,
 {
     pub fn blank(pub_params: PublicParams) -> Self {
-        let apex_leafs = vec![None; pub_params.apex_leaf_count];
-        let challenge_proofs =
-            vec![ChallengeProof::empty(pub_params.sector_nodes); pub_params.challenge_count];
-        EmptySectorUpdateCircuit {
-            pub_params,
-            k_and_h_select: None,
-            comm_r_old: None,
-            comm_d_new: None,
-            comm_r_new: None,
-            comm_c: None,
-            comm_r_last_old: None,
-            comm_r_last_new: None,
-            apex_leafs,
-            challenge_proofs,
-        }
+        let pub_inputs = PublicInputs::empty();
+        let priv_inputs = PrivateInputs::<TreeR>::empty(pub_params.sector_nodes);
+        EmptySectorUpdateCircuit { pub_params, pub_inputs, priv_inputs }
     }
 }
 
@@ -270,27 +319,29 @@ where
 {
     fn synthesize<CS: ConstraintSystem<Fr>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
         let EmptySectorUpdateCircuit {
-            pub_params,
-            k_and_h_select,
-            comm_r_old,
-            comm_d_new,
-            comm_r_new,
-            comm_c,
-            comm_r_last_old,
-            comm_r_last_new,
-            apex_leafs,
-            challenge_proofs,
+            pub_params: PublicParams {
+                sector_nodes,
+                challenge_count,
+                challenge_bit_len,
+                partition_count,
+                partition_bit_len,
+                apex_leaf_count,
+                apex_select_bit_len,
+            },
+            pub_inputs: PublicInputs {
+                k_and_h_select,
+                comm_r_old,
+                comm_d_new,
+                comm_r_new,
+            },
+            priv_inputs: PrivateInputs {
+                comm_c,
+                comm_r_last_old,
+                comm_r_last_new,
+                apex_leafs,
+                challenge_proofs,
+            },
         } = self;
-
-        let PublicParams {
-            sector_nodes,
-            challenge_count,
-            challenge_bit_len,
-            partition_count,
-            partition_bit_len,
-            apex_leaf_count,
-            apex_select_bit_len,
-        } = pub_params;
 
         validate_tree_r_shape::<TreeR>(sector_nodes);
         let hs = hs(sector_nodes);

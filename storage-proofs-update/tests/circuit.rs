@@ -1,4 +1,3 @@
-use std::marker::PhantomData;
 use std::path::Path;
 
 use bellperson::{util_cs::test_cs::TestConstraintSystem, Circuit};
@@ -9,7 +8,7 @@ use merkletree::store::{DiskStore, StoreConfig};
 use rand::SeedableRng;
 use rand_xorshift::XorShiftRng;
 use storage_proofs_core::{
-    merkle::{MerkleProofTrait, MerkleTreeTrait, MerkleTreeWrapper},
+    merkle::{MerkleTreeTrait, MerkleTreeWrapper},
     util::default_rows_to_discard,
     TEST_SEED,
 };
@@ -20,7 +19,7 @@ use storage_proofs_update::{
         TreeRDomain, TreeRHasher, SECTOR_SIZE_16_KIB, SECTOR_SIZE_1_KIB, SECTOR_SIZE_2_KIB,
         SECTOR_SIZE_32_KIB, SECTOR_SIZE_4_KIB, SECTOR_SIZE_8_KIB,
     },
-    Challenges, EmptySectorUpdateCircuit, PublicParams,
+    vanilla, Challenges, EmptySectorUpdateCircuit, PublicParams,
 };
 use tempfile::tempdir;
 
@@ -225,15 +224,9 @@ where
     let pub_params = PublicParams::from_sector_size(sector_bytes as u64);
 
     for k in 0..pub_params.partition_count {
-        let pub_inputs =
-            circuit::PublicInputs::new(sector_nodes, k, h, comm_r_old, comm_d_new, comm_r_new);
-
-        let apex_leafs: Vec<Option<Fr>> = get_apex_leafs(&tree_d_new, k)
-            .into_iter()
-            .map(|apex_leaf| Some(apex_leaf.into()))
-            .collect();
-
-        let challenge_proofs: Vec<circuit::ChallengeProof<TreeR>> =
+        // Generate vanilla-proof.
+        let apex_leafs = get_apex_leafs(&tree_d_new, k);
+        let challenge_proofs: Vec<vanilla::ChallengeProof<TreeR>> =
             Challenges::new(sector_nodes, comm_r_new, k)
                 .enumerate()
                 .take(pub_params.challenge_count)
@@ -248,57 +241,28 @@ where
                         panic!("failed to generate `proof_r_new` for c_{}={}", i, c)
                     });
 
-                    let path_r_old: Vec<Vec<Option<Fr>>> = proof_r_old
-                        .path()
-                        .into_iter()
-                        .map(|(siblings, _insert)| {
-                            siblings.into_iter().map(|s| Some(s.into())).collect()
-                        })
-                        .collect();
-                    let path_d_new: Vec<Vec<Option<Fr>>> = proof_d_new
-                        .path()
-                        .into_iter()
-                        .map(|(siblings, _insert)| {
-                            siblings.into_iter().map(|s| Some(s.into())).collect()
-                        })
-                        .collect();
-                    let path_r_new: Vec<Vec<Option<Fr>>> = proof_r_new
-                        .path()
-                        .into_iter()
-                        .map(|(siblings, _insert)| {
-                            siblings.into_iter().map(|s| Some(s.into())).collect()
-                        })
-                        .collect();
-
-                    circuit::ChallengeProof {
-                        leaf_r_old: Some(proof_r_old.leaf().into()),
-                        path_r_old,
-                        leaf_d_new: Some(proof_d_new.leaf().into()),
-                        path_d_new,
-                        leaf_r_new: Some(proof_r_new.leaf().into()),
-                        path_r_new,
-                        _tree_r: PhantomData,
-                    }
+                    vanilla::ChallengeProof { proof_r_old, proof_d_new, proof_r_new }
                 })
                 .collect();
 
+        // Create circuit.
+        let pub_inputs =
+            circuit::PublicInputs::new(sector_nodes, k, h, comm_r_old, comm_d_new, comm_r_new);
+
+        let pub_inputs_vec = pub_inputs.to_vec();
+
+        let priv_inputs = circuit::PrivateInputs::new(comm_c, &apex_leafs, &challenge_proofs);
+
         let circuit = EmptySectorUpdateCircuit::<TreeR> {
             pub_params: pub_params.clone(),
-            k_and_h_select: pub_inputs.k_and_h_select,
-            comm_r_old: pub_inputs.comm_r_old,
-            comm_d_new: pub_inputs.comm_d_new,
-            comm_r_new: pub_inputs.comm_r_new,
-            comm_c: Some(comm_c.into()),
-            comm_r_last_old: Some(comm_r_last_old.into()),
-            comm_r_last_new: Some(comm_r_last_new.into()),
-            apex_leafs,
-            challenge_proofs,
+            pub_inputs,
+            priv_inputs,
         };
 
         let mut cs = TestConstraintSystem::<Fr>::new();
         circuit.synthesize(&mut cs).expect("failed to synthesize");
         assert!(cs.is_satisfied());
-        assert!(cs.verify(&pub_inputs.to_vec()));
+        assert!(cs.verify(&pub_inputs_vec));
     }
 }
 
