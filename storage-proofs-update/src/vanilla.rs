@@ -7,7 +7,7 @@ use anyhow::{ensure, Context, Error};
 use blstrs::Scalar as Fr;
 use ff::Field;
 use filecoin_hashers::{HashFunction, Hasher};
-use fr32::{bytes_into_fr, fr_into_bytes};
+use fr32::{bytes_into_fr, fr_into_bytes_slice};
 use generic_array::typenum::{Unsigned, U0};
 use log::{info, trace};
 use memmap::{Mmap, MmapMut, MmapOptions};
@@ -897,10 +897,10 @@ where
                         bytes_into_fr(&staged_data[input_index..input_index + FR_SIZE])?;
 
                     let new_replica_fr = sector_key_fr + (staged_data_fr * rho);
-                    let new_replica_bytes = fr_into_bytes(&new_replica_fr);
-
-                    replica_data[output_index..output_index + FR_SIZE]
-                        .copy_from_slice(&new_replica_bytes);
+                    fr_into_bytes_slice(
+                        &new_replica_fr,
+                        &mut replica_data[output_index..output_index + FR_SIZE],
+                    );
                 }
 
                 Ok(())
@@ -1062,10 +1062,10 @@ where
                         bytes_into_fr(&replica_data[input_index..input_index + FR_SIZE])?;
 
                     let out_data_fr = (replica_data_fr - sector_key_fr) * rho_inv;
-                    let out_data_bytes = fr_into_bytes(&out_data_fr);
-
-                    output_data[output_index..output_index + FR_SIZE]
-                        .copy_from_slice(&out_data_bytes);
+                    fr_into_bytes_slice(
+                        &out_data_fr,
+                        &mut output_data[output_index..output_index + FR_SIZE],
+                    );
                 }
 
                 Ok(())
@@ -1188,12 +1188,11 @@ where
                     let replica_data_fr =
                         bytes_into_fr(&replica_data[input_index..input_index + FR_SIZE])?;
 
-                    // sector_key[i] = replica[i] - data[i] * rho
                     let sector_key_fr = replica_data_fr - (data_fr * rho);
-
-                    let sector_key_bytes = fr_into_bytes(&sector_key_fr);
-                    skey_data[output_index..output_index + FR_SIZE]
-                        .copy_from_slice(&sector_key_bytes);
+                    fr_into_bytes_slice(
+                        &sector_key_fr,
+                        &mut skey_data[output_index..output_index + FR_SIZE],
+                    );
                 }
 
                 Ok(())
