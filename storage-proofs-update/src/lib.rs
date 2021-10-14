@@ -2,7 +2,7 @@ pub mod circuit;
 pub mod compound;
 pub mod constants;
 pub(crate) mod gadgets;
-pub(crate) mod vanilla;
+pub mod vanilla;
 
 mod challenges;
 

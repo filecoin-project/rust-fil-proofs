@@ -5,13 +5,13 @@ use blstrs::Scalar as Fr;
 use storage_proofs_core::{
     compound_proof::{CircuitComponent, CompoundProof},
     error::Result,
-    merkle::{MerkleProofTrait, MerkleTreeTrait},
+    merkle::MerkleTreeTrait,
     parameter_cache::CacheableParameters,
 };
 
 use crate::{
-    circuit, constants::TreeRHasher, ChallengeProof, EmptySectorUpdate, EmptySectorUpdateCircuit,
-    PartitionProof, PublicInputs, PublicParams,
+    circuit, constants::TreeRHasher, EmptySectorUpdate, EmptySectorUpdateCircuit, PartitionProof,
+    PublicInputs, PublicParams,
 };
 
 pub struct EmptySectorUpdateCompound<TreeR>
@@ -89,7 +89,7 @@ where
             ..
         } = *pub_inputs;
 
-        let pub_inputs_circ = circuit::PublicInputs::new(
+        let pub_inputs = circuit::PublicInputs::new(
             pub_params.sector_nodes,
             k,
             h,
@@ -98,41 +98,17 @@ where
             comm_r_new,
         );
 
-        let comm_r_last_old = vanilla_proof.challenge_proofs[0].proof_r_old.root();
-        let comm_r_last_new = vanilla_proof.challenge_proofs[0].proof_r_new.root();
-
-        let apex_leafs: Vec<Option<Fr>> = vanilla_proof
-            .apex_leafs
-            .iter()
-            .copied()
-            .map(|leaf| Some(leaf.into()))
-            .collect();
-
-        let challenge_proofs: Vec<circuit::ChallengeProof<TreeR>> = vanilla_proof
-            .challenge_proofs
-            .iter()
-            .cloned()
-            .map(|challenge_proof| {
-                let ChallengeProof {
-                    proof_r_old,
-                    proof_d_new,
-                    proof_r_new,
-                } = challenge_proof;
-                circuit::ChallengeProof::from_merkle_proofs(proof_r_old, proof_d_new, proof_r_new)
-            })
-            .collect();
+        // `comm_c` is a public-input for the vanilla proof and a private-input for the circuit.
+        let priv_inputs = circuit::PrivateInputs::new(
+            comm_c,
+            &vanilla_proof.apex_leafs,
+            &vanilla_proof.challenge_proofs,
+        );
 
         Ok(EmptySectorUpdateCircuit {
             pub_params: pub_params.clone(),
-            k_and_h_select: pub_inputs_circ.k_and_h_select,
-            comm_r_old: pub_inputs_circ.comm_r_old,
-            comm_d_new: pub_inputs_circ.comm_d_new,
-            comm_r_new: pub_inputs_circ.comm_r_new,
-            comm_c: Some(comm_c.into()),
-            comm_r_last_old: Some(comm_r_last_old.into()),
-            comm_r_last_new: Some(comm_r_last_new.into()),
-            apex_leafs,
-            challenge_proofs,
+            pub_inputs,
+            priv_inputs,
         })
     }
 
