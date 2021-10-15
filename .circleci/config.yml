@@ -346,7 +346,7 @@ commands:
     steps:
       - save_cache:
           name: "Save parameter cache"
-          key: proof-params-v28-h-{{ checksum "filecoin-proofs/parameters.json" }}
+          key: proof-params-v28-i-{{ checksum "filecoin-proofs/parameters.json" }}
           paths:
             - "/tmp/paramcache.awesome"
             - "/tmp/filecoin-proof-parameters/"
@@ -354,7 +354,7 @@ commands:
     steps:
       - restore_cache:
           name: "Restore parameter cache"
-          key: proof-params-v28-h-{{ checksum "filecoin-proofs/parameters.json" }}
+          key: proof-params-v28-i-{{ checksum "filecoin-proofs/parameters.json" }}
 
 workflows:
   version: 2.1
