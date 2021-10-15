@@ -512,16 +512,15 @@ impl<'a, Tree: 'a + MerkleTreeTrait> ProofScheme<'a> for FallbackPoSt<'a, Tree> 
             .zip(pub_inputs.sectors.chunks(num_sectors_per_chunk))
             .enumerate()
         {
-            let is_valid = Self::verify_single_partitions(
+            let is_valid = Self::verify(
                 pub_params,
                 &PublicInputs {
                     randomness: pub_inputs.randomness,
                     prover_id: pub_inputs.prover_id,
                     sectors: pub_sectors_chunk.to_vec(),
-                    k: pub_inputs.k,
+                    k: Some(j),
                 },
                 proof,
-                j,
             )?;
 
             if !is_valid {
@@ -529,6 +528,11 @@ impl<'a, Tree: 'a + MerkleTreeTrait> ProofScheme<'a> for FallbackPoSt<'a, Tree> 
             }
         }
         Ok(true)
+    }
+
+    fn with_partition(mut pub_in: Self::PublicInputs, k: Option<usize>) -> Self::PublicInputs {
+        pub_in.k = k;
+        pub_in
     }
 
     fn satisfies_requirements(
@@ -550,14 +554,16 @@ impl<'a, Tree: 'a + MerkleTreeTrait> ProofScheme<'a> for FallbackPoSt<'a, Tree> 
         checked * public_params.challenge_count >= requirements.minimum_challenge_count
     }
 
-    // Verify vanilla proofs for a single partition.
-    // Calculate the offset for the challenge position of the sector
-    fn verify_single_partitions(
+    fn verify(
         pub_params: &Self::PublicParams,
         pub_inputs: &Self::PublicInputs,
         partition_proof: &Self::Proof,
-        partition_index: usize,
     ) -> Result<bool> {
+        ensure!(
+            pub_inputs.k.is_some(),
+            "must be called with a partition index"
+        );
+        let partition_index = pub_inputs.k.unwrap();
         let challenge_count = pub_params.challenge_count;
         let num_sectors_per_chunk = pub_params.sector_count;
 

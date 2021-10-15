@@ -290,7 +290,7 @@ pub fn generate_single_window_post_with_vanilla<Tree: 'static + MerkleTreeTrait>
         randomness: randomness_safe,
         prover_id: prover_id_safe,
         sectors: pub_sectors,
-        k: None,
+        k: Some(partition_index),
     };
 
     let partitioned_proofs = single_partition_vanilla_proofs(
@@ -298,7 +298,6 @@ pub fn generate_single_window_post_with_vanilla<Tree: 'static + MerkleTreeTrait>
         &pub_params.vanilla_params,
         &pub_inputs,
         &vanilla_proofs,
-        partition_index,
     )?;
 
     let proof = FallbackPoStCompound::prove_with_vanilla(

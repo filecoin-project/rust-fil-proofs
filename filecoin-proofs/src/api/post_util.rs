@@ -215,10 +215,9 @@ pub fn partition_vanilla_proofs<Tree: MerkleTreeTrait>(
                         randomness: pub_inputs.randomness,
                         prover_id: pub_inputs.prover_id,
                         sectors: sectors_chunk.to_vec(),
-                        k: pub_inputs.k,
+                        k: Some(j),
                     },
                     vanilla_proofs,
-                    j,
                 )?;
                 partition_proofs.push(proof);
             }
@@ -228,9 +227,8 @@ pub fn partition_vanilla_proofs<Tree: MerkleTreeTrait>(
                 let proof = single_partition_vanilla_proofs(
                     post_config,
                     pub_params,
-                    pub_inputs,
+                    &fallback::FallbackPoSt::<Tree>::with_partition(pub_inputs.clone(), Some(j)),
                     sectors_chunk,
-                    j,
                 )?;
                 partition_proofs.push(proof);
             }
@@ -265,9 +263,11 @@ pub fn single_partition_vanilla_proofs<Tree: MerkleTreeTrait>(
     pub_params: &fallback::PublicParams,
     pub_inputs: &fallback::PublicInputs<<Tree::Hasher as Hasher>::Domain>,
     vanilla_proofs: &[FallbackPoStSectorProof<Tree>],
-    partition_index: usize,
 ) -> Result<VanillaProof<Tree>> {
     info!("single_partition_vanilla_proofs:start");
+    ensure!(pub_inputs.k.is_some(), "must have a partition index");
+    let partition_index = pub_inputs.k.unwrap();
+
     debug!("processing partition: {}", partition_index);
     ensure!(
         post_config.typ == PoStType::Window || post_config.typ == PoStType::Winning,
@@ -363,12 +363,7 @@ pub fn single_partition_vanilla_proofs<Tree: MerkleTreeTrait>(
     info!("single_partition_vanilla_proofs:finish");
 
     ensure!(
-        FallbackPoSt::<Tree>::verify_single_partitions(
-            pub_params,
-            pub_inputs,
-            &partition_proof,
-            partition_index,
-        )?,
+        FallbackPoSt::<Tree>::verify(pub_params, pub_inputs, &partition_proof,)?,
         "partitioned vanilla proofs failed to verify"
     );
 
