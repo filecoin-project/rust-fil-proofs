@@ -457,7 +457,7 @@ impl<'a, Tree: MerkleTreeTrait> PoRCircuit<Tree> {
 pub fn por_no_challenge_input<Tree, CS>(
     mut cs: CS,
     // little-endian
-    c_bits: Vec<AllocatedBit>,
+    challenge_bits: Vec<AllocatedBit>,
     leaf: AllocatedNum<Fr>,
     path_values: Vec<Vec<AllocatedNum<Fr>>>,
     root: AllocatedNum<Fr>,
@@ -466,13 +466,22 @@ where
     Tree: MerkleTreeTrait,
     CS: ConstraintSystem<Fr>,
 {
-    // This function assumes that `Tree`'s shape is valid, e.g. `base_arity > 0`, `if top_arity > 0
-    // then sub_arity > 0`, all arities are a power of two, etc., and that `path_values` corresponds
-    // to the tree arities.
     let base_arity = Tree::Arity::to_usize();
     let sub_arity = Tree::SubTreeArity::to_usize();
     let top_arity = Tree::TopTreeArity::to_usize();
 
+    // Validate `Tree`'s shape. This gadget requires that all non-zero arities are a power of two.
+    assert!(base_arity.is_power_of_two());
+    assert!(sub_arity.is_power_of_two() || sub_arity == 0);
+    assert!(top_arity.is_power_of_two() || top_arity == 0);
+    if top_arity > 0 {
+        assert!(sub_arity > 0);
+    }
+
+    // All non-zero `Tree` arities are guaranteed to be a power of two, thus the number of low zeros
+    // gives the number of bits required to represent an integer in `0..arity` (a Merkle proof
+    // insertion index). `challenge_bits` is the concatentation of the Merkle proof's insertion
+    // indexes which is equal to the challenge's (an integer in `0..leafs`) binary representation.
     let base_arity_bit_len = base_arity.trailing_zeros();
     let sub_arity_bit_len = sub_arity.trailing_zeros();
     let top_arity_bit_len = top_arity.trailing_zeros();
@@ -488,7 +497,7 @@ where
     let mut cur = leaf;
     let mut height = 0;
     let mut path_values = path_values.into_iter();
-    let mut c_bits = c_bits.into_iter().map(Boolean::from);
+    let mut challenge_bits = challenge_bits.into_iter().map(Boolean::from);
 
     // Hash base-tree Merkle proof elements.
     for _ in 0..base_path_len {
@@ -499,7 +508,7 @@ where
             "path element has incorrect number of siblings"
         );
         let insert_index: Vec<Boolean> = (0..base_arity_bit_len)
-            .map(|_| c_bits.next().expect("no challenge bits remaining"))
+            .map(|_| challenge_bits.next().expect("no challenge bits remaining"))
             .collect();
         let preimg = insert(
             &mut cs.namespace(|| format!("merkle proof insert (height={})", height)),
@@ -526,7 +535,7 @@ where
             "path element has incorrect number of siblings"
         );
         let insert_index: Vec<Boolean> = (0..sub_arity_bit_len)
-            .map(|_| c_bits.next().expect("no challenge bits remaining"))
+            .map(|_| challenge_bits.next().expect("no challenge bits remaining"))
             .collect();
         let preimg = insert(
             &mut cs.namespace(|| format!("merkle proof insert (height={})", height)),
@@ -553,7 +562,7 @@ where
             "path element has incorrect number of siblings"
         );
         let insert_index: Vec<Boolean> = (0..top_arity_bit_len)
-            .map(|_| c_bits.next().expect("no challenge bits remaining"))
+            .map(|_| challenge_bits.next().expect("no challenge bits remaining"))
             .collect();
         let preimg = insert(
             &mut cs.namespace(|| format!("merkle proof insert (height={})", height)),
@@ -570,9 +579,9 @@ where
         )?;
     }
 
-    // Sanity check that no additional challenge bits were provided.
+    // Check that no additional challenge bits were provided.
     assert!(
-        c_bits.next().is_none(),
+        challenge_bits.next().is_none(),
         "challenge bit-length and tree arity do not agree"
     );
 

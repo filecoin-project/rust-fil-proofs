@@ -3,6 +3,7 @@ use filecoin_hashers::{
     sha256::{Sha256Domain, Sha256Hasher},
 };
 use generic_array::typenum::{Unsigned, U0, U2, U8};
+use merkletree::store::DiskStore;
 use storage_proofs_core::merkle::{BinaryMerkleTree, LCStore, LCTree, MerkleTreeTrait};
 
 // Sector-sizes measured in nodes.
@@ -37,6 +38,7 @@ pub const ALLOWED_SECTOR_SIZES: [usize; 11] = [
 pub type TreeD = BinaryMerkleTree<TreeDHasher>;
 pub type TreeDHasher = Sha256Hasher;
 pub type TreeDDomain = Sha256Domain;
+pub type TreeDStore = DiskStore<TreeDDomain>;
 pub type TreeDArity = U2;
 
 pub type TreeRHasher = PoseidonHasher;
@@ -46,7 +48,7 @@ pub type TreeRStore = LCStore<TreeRDomain>;
 pub type TreeRBaseTree = LCTree<TreeRHasher, U8, U0, U0>;
 
 // The number of partitions for the given sector-size.
-pub fn partition_count(sector_nodes: usize) -> usize {
+pub const fn partition_count(sector_nodes: usize) -> usize {
     if sector_nodes <= SECTOR_SIZE_8_KIB {
         1
     } else if sector_nodes <= SECTOR_SIZE_32_KIB {
@@ -59,7 +61,7 @@ pub fn partition_count(sector_nodes: usize) -> usize {
 }
 
 // The number of challenges per partition proof.
-pub fn challenge_count(sector_nodes: usize) -> usize {
+pub const fn challenge_count(sector_nodes: usize) -> usize {
     if sector_nodes <= SECTOR_SIZE_16_MIB {
         10
     } else {
@@ -70,7 +72,7 @@ pub fn challenge_count(sector_nodes: usize) -> usize {
 // Returns the `h` values allowed for the given sector-size. Each `h` value is a possible number of
 // high bits taken from each challenge `c`. A single value of `h = hs[i]` is taken from `hs` for
 // each proof; the circuit takes `h_select = 2^i` as a public input.
-pub fn hs(sector_nodes: usize) -> [usize; 6] {
+pub const fn hs(sector_nodes: usize) -> [usize; 6] {
     if sector_nodes <= SECTOR_SIZE_32_KIB {
         [1; 6]
     } else {
@@ -79,7 +81,7 @@ pub fn hs(sector_nodes: usize) -> [usize; 6] {
 }
 
 // The number of leafs in each partition's apex-tree.
-pub fn apex_leaf_count(sector_nodes: usize) -> usize {
+pub const fn apex_leaf_count(sector_nodes: usize) -> usize {
     if sector_nodes <= SECTOR_SIZE_8_KIB {
         8
     } else {

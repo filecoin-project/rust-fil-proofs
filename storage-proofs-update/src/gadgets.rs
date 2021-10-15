@@ -38,17 +38,22 @@ pub fn allocated_num_to_allocated_bits<CS: ConstraintSystem<Fr>>(
     Ok(bits)
 }
 
+// Computes a partition's apex-tree from `apex_leafs` and asserts that `partition_path` is a valid
+// Merkle path from the apex-tree's root to the TreeD root (`comm_d`). Each partition has a
+// unique `apex_leafs` and `parition_path`. Every challenge for a partition has a TreeD Merkle
+// path which ends with `partition_path`, thus we verify `partition_path` once per partition.
 pub fn apex_por<CS: ConstraintSystem<Fr>>(
     mut cs: CS,
     apex_leafs: Vec<AllocatedNum<Fr>>,
+    // little-endian
     partition_bits: Vec<AllocatedBit>,
     partition_path: Vec<Vec<AllocatedNum<Fr>>>,
     comm_d: AllocatedNum<Fr>,
 ) -> Result<(), SynthesisError> {
     // `apex_leafs.len()` is guaranteed to be a power of two.
-    let apex_height = apex_leafs.len().trailing_zeros() as usize;
+    let apex_tree_height = apex_leafs.len().trailing_zeros() as usize;
     let mut apex_tree = vec![apex_leafs];
-    for row_index in 0..apex_height {
+    for row_index in 0..apex_tree_height {
         let row = apex_tree
             .last()
             .unwrap()
@@ -71,18 +76,18 @@ pub fn apex_por<CS: ConstraintSystem<Fr>>(
     }
 
     // This partition's apex-tree root.
-    let partition_label = apex_tree.last().unwrap()[0].clone();
+    let apex_root = apex_tree.last().unwrap()[0].clone();
 
     por_no_challenge_input::<TreeD, _>(
         cs.namespace(|| "partition-tree por"),
         partition_bits,
-        partition_label,
+        apex_root,
         partition_path,
         comm_d,
     )
 }
 
-// Generates the bits for this partition's challenges.
+// Generates each challenge's random bits for a given partition.
 pub fn gen_challenge_bits<CS: ConstraintSystem<Fr>>(
     mut cs: CS,
     comm_r_new: &AllocatedNum<Fr>,
@@ -152,6 +157,9 @@ pub fn gen_challenge_bits<CS: ConstraintSystem<Fr>>(
     Ok(generated_bits)
 }
 
+// Returns the `h` high-bits of the given challenge's bits `c_bits`. `h` is chosen from `hs` using
+// `h_select_bits` which has exactly one bit set; if that bit has index `i` then
+// `h = hs[i] = dot(hs, h_select_bits)`.
 pub fn get_challenge_high_bits<CS: ConstraintSystem<Fr>>(
     mut cs: CS,
     // little-endian
@@ -234,6 +242,7 @@ pub fn get_challenge_high_bits<CS: ConstraintSystem<Fr>>(
     Ok(c_high_selected)
 }
 
+// Computes the encoding of a sector node.
 pub fn label_r_new<CS: ConstraintSystem<Fr>>(
     mut cs: CS,
     label_r_old: &AllocatedNum<Fr>,
@@ -286,7 +295,13 @@ mod tests {
     fn test_gen_challenge_bits_gadget() {
         let mut rng = XorShiftRng::from_seed(TEST_SEED);
 
-        for sector_nodes in ALLOWED_SECTOR_SIZES.iter().copied() {
+        let num_constraints_expected = [568, 568, 568, 568, 568, 568, 568, 568, 4544, 5680, 5680];
+
+        for (sector_nodes, constraints_expected) in ALLOWED_SECTOR_SIZES
+            .iter()
+            .copied()
+            .zip(num_constraints_expected.iter().copied())
+        {
             let comm_r_new = TreeRDomain::random(&mut rng);
 
             let challenge_bit_len = sector_nodes.trailing_zeros() as usize;
@@ -296,7 +311,7 @@ mod tests {
             let challenge_count = challenge_count(sector_nodes);
 
             for k in 0..partition_count {
-                let challenges: Vec<usize> = Challenges::new(sector_nodes, comm_r_new, k).collect();
+                let challenges: Vec<u32> = Challenges::new(sector_nodes, comm_r_new, k).collect();
 
                 let mut cs = TestConstraintSystem::<Fr>::new();
                 let comm_r_new =
@@ -310,6 +325,7 @@ mod tests {
                         .into_iter()
                         .take(partition_bit_len)
                         .collect();
+                let constraints_before = cs.num_constraints();
                 let generated_bits = gen_challenge_bits(
                     cs.namespace(|| "gen_challenge_bits"),
                     &comm_r_new,
@@ -318,11 +334,14 @@ mod tests {
                     rand_challenge_bits,
                 )
                 .unwrap();
+                let constraints_after = cs.num_constraints();
+                let gadget_constraints = constraints_after - constraints_before;
+                assert_eq!(gadget_constraints, constraints_expected);
 
                 for (c, c_generated_bits) in challenges.into_iter().zip(generated_bits.into_iter())
                 {
                     assert_eq!(c_generated_bits.len(), rand_challenge_bits);
-                    let mut c_circ: usize = 0;
+                    let mut c_circ: u32 = 0;
                     for (i, bit) in c_generated_bits
                         .iter()
                         .chain(partition_bits.iter())
@@ -342,6 +361,7 @@ mod tests {
         sector_nodes: usize,
         partition_count: usize,
         apex_leafs_per_partition: usize,
+        constraints_expected: usize,
     ) {
         let height = sector_nodes.trailing_zeros() as usize;
         let partition_bit_len = partition_count.trailing_zeros() as usize;
@@ -423,6 +443,8 @@ mod tests {
                 })
                 .collect();
 
+            let constraints_before = cs.num_constraints();
+
             apex_por(
                 cs.namespace(|| "apex_por"),
                 apex_leafs,
@@ -431,21 +453,38 @@ mod tests {
                 comm_d.clone(),
             )
             .unwrap();
+
+            let constraints_after = cs.num_constraints();
+            let gadget_constraints = constraints_after - constraints_before;
+            assert_eq!(gadget_constraints, constraints_expected);
         }
     }
 
     #[test]
     fn test_apex_por_gadget_16kib_4_8_partitions() {
-        // Hardcode these values to test multiple partitions without using a large sector-size. Use
-        // the row from TreeD which has 64 nodes as the apex-leafs row.
+        // Hardcode these values to test more than one partition without using a large sector-size.
+        // Use the row from TreeD which has 64 nodes as the apex-leafs row.
         let sector_nodes = SECTOR_SIZE_16_KIB;
+
+        // Total apex leafs = 4 * 16 = 64
         let partition_count = 4;
         let apex_leafs_per_partition = 16;
-        test_apex_por_gadget(sector_nodes, partition_count, apex_leafs_per_partition);
+        test_apex_por_gadget(
+            sector_nodes,
+            partition_count,
+            apex_leafs_per_partition,
+            771448,
+        );
 
+        // Total apex leafs = 8 * 8 = 64
         let partition_count = 8;
         let apex_leafs_per_partition = 8;
-        test_apex_por_gadget(sector_nodes, partition_count, apex_leafs_per_partition);
+        test_apex_por_gadget(
+            sector_nodes,
+            partition_count,
+            apex_leafs_per_partition,
+            453797,
+        );
     }
 
     #[test]
@@ -458,10 +497,20 @@ mod tests {
             SECTOR_SIZE_16_KIB,
             SECTOR_SIZE_32_KIB,
         ];
-        for sector_nodes in small_sector_sizes.iter().copied() {
+        let num_constraints_expected = [317654, 317654, 317654, 317654, 5808515, 5808515];
+        for (sector_nodes, constraints_expected) in small_sector_sizes
+            .iter()
+            .copied()
+            .zip(num_constraints_expected.iter().copied())
+        {
             let partition_count = partition_count(sector_nodes);
             let apex_leafs_per_partition = apex_leaf_count(sector_nodes);
-            test_apex_por_gadget(sector_nodes, partition_count, apex_leafs_per_partition);
+            test_apex_por_gadget(
+                sector_nodes,
+                partition_count,
+                apex_leafs_per_partition,
+                constraints_expected,
+            );
         }
     }
 }

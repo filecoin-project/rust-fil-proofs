@@ -21,8 +21,8 @@ use storage_proofs_core::{
     data::Data,
     error::Result,
     merkle::{
-        create_lc_tree, get_base_tree_count, split_config_and_replica, BinaryMerkleTree, LCTree,
-        MerkleProof, MerkleProofTrait, MerkleTreeTrait,
+        create_lc_tree, get_base_tree_count, split_config_and_replica, LCTree, MerkleProof,
+        MerkleProofTrait, MerkleTreeTrait,
     },
     parameter_cache::ParameterSetMetadata,
     proof::ProofScheme,
@@ -31,8 +31,8 @@ use storage_proofs_porep::stacked::StackedDrg;
 
 use crate::{
     constants::{
-        apex_leaf_count, challenge_count, partition_count, TreeDArity, TreeDDomain, TreeDHasher,
-        TreeRDomain, TreeRHasher, ALLOWED_SECTOR_SIZES,
+        apex_leaf_count, challenge_count, hs, partition_count, TreeD, TreeDArity, TreeDDomain,
+        TreeDHasher, TreeDStore, TreeRDomain, TreeRHasher, ALLOWED_SECTOR_SIZES,
     },
     Challenges,
 };
@@ -177,16 +177,16 @@ where
     pub fn verify_merkle_proofs(
         &self,
         c: usize,
-        comm_r_last_old: &TreeRDomain,
+        root_r_old: &TreeRDomain,
         comm_d_new: &TreeDDomain,
-        comm_r_last_new: &TreeRDomain,
+        root_r_new: &TreeRDomain,
     ) -> bool {
         self.proof_r_old.path_index() == c
             && self.proof_d_new.path_index() == c
             && self.proof_r_new.path_index() == c
-            && self.proof_r_old.root() == *comm_r_last_old
+            && self.proof_r_old.root() == *root_r_old
             && self.proof_d_new.root() == *comm_d_new
-            && self.proof_r_new.root() == *comm_r_last_new
+            && self.proof_r_new.root() == *root_r_new
             && self.proof_r_old.verify()
             && self.proof_d_new.verify()
             && self.proof_r_new.verify()
@@ -248,14 +248,7 @@ where
         pub_inputs: &Self::PublicInputs,
         priv_inputs: &Self::PrivateInputs,
     ) -> Result<Self::Proof> {
-        let PublicParams {
-            sector_nodes,
-            partition_count,
-            apex_leaf_count,
-            ..
-        } = pub_params;
-
-        let PublicInputs { k, comm_r_new, .. } = pub_inputs;
+        let PublicParams { sector_nodes, .. } = *pub_params;
 
         let PrivateInputs {
             tree_r_old_config,
@@ -263,153 +256,20 @@ where
             tree_d_new_config,
             tree_r_new_config,
             replica_path,
-            ..
         } = priv_inputs;
 
-        // Sanity check private input replica path types.
-        ensure!(
-            metadata(old_replica_path)?.is_file(),
-            "old_replica_path must be a file"
-        );
-        ensure!(
-            metadata(replica_path)?.is_file(),
-            "replica_path must be a file"
-        );
+        let tree_d_new = Self::instantiate_tree_d(sector_nodes, tree_d_new_config)?;
+        let tree_r_old = Self::instantiate_tree_r(tree_r_old_config, old_replica_path, "TreeROld")?;
+        let tree_r_new = Self::instantiate_tree_r(tree_r_new_config, replica_path, "TreeRNew")?;
 
-        info!(
-            "Proving EmptySectorUpdate vanilla partition (sector_nodes={}, k={})",
-            sector_nodes, k,
-        );
-
-        let tree_d_arity = TreeDArity::to_usize();
-        let tree_r_base_arity = TreeR::Arity::to_usize();
-        let tree_r_sub_arity = TreeR::SubTreeArity::to_usize();
-        let tree_r_top_arity = TreeR::TopTreeArity::to_usize();
-
-        // Instantiate TreeD new from the replica cache path. Note that this is similar to what
-        // we do when going from t_aux to t_aux cache.
-        let tree_d_leafs = *sector_nodes;
-        let tree_d_nodes = tree_d_new_config.size.expect("config size failure");
-        trace!(
-            "Instantiating TreeDNew: leafs={}, base_store_size={})",
-            tree_d_leafs,
-            tree_d_nodes
-        );
-        let tree_d_store =
-            DiskStore::<TreeDDomain>::new_from_disk(tree_d_nodes, tree_d_arity, &tree_d_new_config)
-                .context("tree_d_store")?;
-        let tree_d_new =
-            BinaryMerkleTree::<TreeDHasher>::from_data_store(tree_d_store, tree_d_leafs)
-                .context("tree_d")?;
-
-        let tree_r_rows_to_discard = Some(tree_r_old_config.rows_to_discard);
-        let instantiate_tree_r = |tree_r_config: &StoreConfig,
-                                  replica_path: &PathBuf,
-                                  name: &str| {
-            // Instantiate TreeR new from the replica_cache_path. Note that this is similar to what we
-            // do when going from t_aux to t_aux cache.
-            let tree_r_base_tree_nodes = tree_r_config.size.expect("tree_r config size failure");
-            let tree_r_base_tree_leafs =
-                get_merkle_tree_leafs(tree_r_base_tree_nodes, tree_r_base_arity)?;
-            let tree_r_base_tree_count = get_base_tree_count::<TreeR>();
-            let (tree_r_configs, replica_config) = split_config_and_replica(
-                tree_r_config.clone(),
-                replica_path.to_path_buf(),
-                tree_r_base_tree_leafs,
-                tree_r_base_tree_count,
-            )?;
-
-            trace!(
-                "Instantiating {}: arity={}-{}-{}, base_tree_count={}, base_store_size={}",
-                name,
-                tree_r_base_arity,
-                tree_r_sub_arity,
-                tree_r_top_arity,
-                tree_r_base_tree_count,
-                tree_r_base_tree_nodes,
-            );
-            create_lc_tree::<
-                LCTree<TreeRHasher, TreeR::Arity, TreeR::SubTreeArity, TreeR::TopTreeArity>,
-            >(tree_r_base_tree_nodes, &tree_r_configs, &replica_config)
-        };
-
-        let tree_r_old = instantiate_tree_r(tree_r_old_config, &old_replica_path, "TreeROld")?;
-        let tree_r_new = instantiate_tree_r(tree_r_new_config, &replica_path, "TreeRNew")?;
-
-        // tree_d borrowed the store, so re-instantiate it here for reading apex leafs.
-        let tree_d_store =
-            DiskStore::<TreeDDomain>::new_from_disk(tree_d_nodes, tree_d_arity, &tree_d_new_config)
-                .context("tree_d_store")?;
-        ensure!(
-            tree_d_nodes == Store::len(&tree_d_store),
-            "TreeD store size mismatch"
-        );
-
-        // Total number of nodes in TreeD.
-        let total_apex_leafs = partition_count * apex_leaf_count;
-        // The number of nodes in TreeD from the apex-leafs row to the root.
-        let tree_d_nodes_apex_leafs_to_root = get_merkle_tree_len(total_apex_leafs, tree_d_arity)?;
-        // The number of nodes in TreeD below the apex-leafs row.
-        let tree_d_nodes_below_apex_leafs = tree_d_nodes - tree_d_nodes_apex_leafs_to_root;
-        trace!(
-            "Apex-leafs info: total_apex_leafs={}, apex_leafs_per_partition={}",
-            total_apex_leafs,
-            apex_leaf_count,
-        );
-
-        // Get this partition's apex-leafs.
-        let apex_leafs_start = tree_d_nodes_below_apex_leafs + k * apex_leaf_count;
-        let apex_leafs_stop = apex_leafs_start + apex_leaf_count;
-        trace!(
-            "apex_leafs_start={} for partition k={}",
-            apex_leafs_start,
-            k
-        );
-        let apex_leafs: Vec<TreeDDomain> =
-            tree_d_store.read_range(apex_leafs_start..apex_leafs_stop)?;
-        info!(
-            "Finished reading apex-leafs from TreeD for partition k={}",
-            k
-        );
-
-        let challenges: Vec<usize> = Challenges::new(*sector_nodes, *comm_r_new, *k).collect();
-
-        // Generate this partition's challenge proofs.
-        let challenge_proofs = challenges
-            .into_par_iter()
-            .map(|c| {
-                let proof_d_new = tree_d_new.gen_proof(c)?;
-                let proof_r_new = tree_r_new.gen_cached_proof(c, tree_r_rows_to_discard)?;
-                let proof_r_old = tree_r_old.gen_cached_proof(c, tree_r_rows_to_discard)?;
-                ensure!(
-                    proof_d_new.verify(),
-                    "invalid TreeDNew Merkle proof for c={}",
-                    c
-                );
-                ensure!(
-                    proof_r_new.verify(),
-                    "invalid TreeRNew Merkle proof for c={}",
-                    c
-                );
-                ensure!(
-                    proof_r_old.verify(),
-                    "invalid TreeROld Merkle proof for c={}",
-                    c
-                );
-                Ok(ChallengeProof {
-                    proof_r_old,
-                    proof_d_new,
-                    proof_r_new,
-                })
-            })
-            .collect::<Result<Vec<ChallengeProof<TreeR>>>>()?;
-
-        info!("finished generating challege-proofs");
-
-        Ok(PartitionProof {
-            apex_leafs,
-            challenge_proofs,
-        })
+        Self::prove_inner(
+            pub_params,
+            pub_inputs,
+            priv_inputs,
+            &tree_r_old,
+            &tree_d_new,
+            &tree_r_new,
+        )
     }
 
     fn prove_all_partitions(
@@ -421,11 +281,8 @@ where
         let PublicParams {
             sector_nodes,
             partition_count,
-            apex_leaf_count,
             ..
-        } = pub_params;
-
-        let PublicInputs { comm_r_new, .. } = pub_inputs;
+        } = *pub_params;
 
         let PrivateInputs {
             tree_r_old_config,
@@ -433,165 +290,24 @@ where
             tree_d_new_config,
             tree_r_new_config,
             replica_path,
-            ..
         } = priv_inputs;
 
-        // Sanity check private input replica path types.
-        ensure!(
-            metadata(old_replica_path)?.is_file(),
-            "old_replica_path must be a file"
-        );
-        ensure!(
-            metadata(replica_path)?.is_file(),
-            "replica_path must be a file"
-        );
+        let tree_d_new = Self::instantiate_tree_d(sector_nodes, tree_d_new_config)?;
+        let tree_r_old = Self::instantiate_tree_r(tree_r_old_config, old_replica_path, "TreeROld")?;
+        let tree_r_new = Self::instantiate_tree_r(tree_r_new_config, replica_path, "TreeRNew")?;
 
-        info!(
-            "Proving all EmptySectorUpdate vanilla partitions (sector_nodes={})",
-            sector_nodes,
-        );
-
-        let tree_d_arity = TreeDArity::to_usize();
-        let tree_r_base_arity = TreeR::Arity::to_usize();
-        let tree_r_sub_arity = TreeR::SubTreeArity::to_usize();
-        let tree_r_top_arity = TreeR::TopTreeArity::to_usize();
-
-        // Instantiate TreeD new from the replica cache path. Note that this is similar to what
-        // we do when going from t_aux to t_aux cache.
-        let tree_d_leafs = *sector_nodes;
-        let tree_d_nodes = tree_d_new_config.size.expect("config size failure");
-        trace!(
-            "Instantiating TreeDNew: leafs={}, base_store_size={})",
-            tree_d_leafs,
-            tree_d_nodes,
-        );
-        let tree_d_store =
-            DiskStore::<TreeDDomain>::new_from_disk(tree_d_nodes, tree_d_arity, &tree_d_new_config)
-                .context("tree_d_store")?;
-        let tree_d_new =
-            BinaryMerkleTree::<TreeDHasher>::from_data_store(tree_d_store, tree_d_leafs)
-                .context("tree_d")?;
-
-        let tree_r_rows_to_discard = Some(tree_r_old_config.rows_to_discard);
-        let instantiate_tree_r = |tree_r_config: &StoreConfig,
-                                  replica_path: &PathBuf,
-                                  name: &str| {
-            // Instantiate TreeR new from the replica_cache_path. Note that this is similar to what we
-            // do when going from t_aux to t_aux cache.
-            let tree_r_base_tree_nodes = tree_r_config.size.expect("tree_r config size failure");
-            let tree_r_base_tree_leafs =
-                get_merkle_tree_leafs(tree_r_base_tree_nodes, tree_r_base_arity)?;
-            let tree_r_base_tree_count = get_base_tree_count::<TreeR>();
-            let (tree_r_configs, replica_config) = split_config_and_replica(
-                tree_r_config.clone(),
-                replica_path.to_path_buf(),
-                tree_r_base_tree_leafs,
-                tree_r_base_tree_count,
-            )?;
-
-            trace!(
-                "Instantiating {}: arity={}-{}-{}, base_tree_count={}, base_store_size={}",
-                name,
-                tree_r_base_arity,
-                tree_r_sub_arity,
-                tree_r_top_arity,
-                tree_r_base_tree_count,
-                tree_r_base_tree_nodes,
-            );
-            create_lc_tree::<
-                LCTree<TreeRHasher, TreeR::Arity, TreeR::SubTreeArity, TreeR::TopTreeArity>,
-            >(tree_r_base_tree_nodes, &tree_r_configs, &replica_config)
-        };
-
-        let tree_r_old = instantiate_tree_r(tree_r_old_config, &old_replica_path, "TreeROld")?;
-        let tree_r_new = instantiate_tree_r(tree_r_new_config, &replica_path, "TreeRNew")?;
-
-        // tree_d borrowed the store, so re-instantiate it here for reading apex leafs.
-        let tree_d_store =
-            DiskStore::<TreeDDomain>::new_from_disk(tree_d_nodes, tree_d_arity, &tree_d_new_config)
-                .context("tree_d_store")?;
-
-        // Total number of nodes in TreeD.
-        let total_apex_leafs = partition_count * apex_leaf_count;
-        // The number of nodes in TreeD from the apex-leafs row to the root.
-        let tree_d_nodes_apex_leafs_to_root = get_merkle_tree_len(total_apex_leafs, tree_d_arity)?;
-        // The number of nodes in TreeD below the apex-leafs row.
-        let tree_d_nodes_below_apex_leafs = tree_d_nodes - tree_d_nodes_apex_leafs_to_root;
-        trace!(
-            "Apex-leafs info: total_apex_leafs={}, apex_leafs_per_partition={}",
-            total_apex_leafs,
-            apex_leaf_count,
-        );
-
-        let vanilla_proofs = (0..*partition_count)
+        let vanilla_proofs = (0..partition_count)
             .into_par_iter()
             .map(|k| {
-                // Get this partition's apex-leafs.
-                let apex_leafs_start = tree_d_nodes_below_apex_leafs + k * apex_leaf_count;
-                let apex_leafs_stop = apex_leafs_start + apex_leaf_count;
-                trace!(
-                    "apex_leafs_start={} for partition k={}",
-                    apex_leafs_start,
-                    k
-                );
-                let apex_leafs: Vec<TreeDDomain> =
-                    tree_d_store.read_range(apex_leafs_start..apex_leafs_stop)?;
-                info!(
-                    "Finished reading apex-leafs from TreeD for partition k={}",
-                    k
-                );
-
-                let challenges: Vec<usize> =
-                    Challenges::new(*sector_nodes, *comm_r_new, k).collect();
-
-                // Generate this partition's challenge proofs.
-                let challenge_proofs = challenges
-                    .into_par_iter()
-                    .map(|c| {
-                        let proof_d_new = tree_d_new.gen_proof(c)?;
-                        let proof_r_new = tree_r_new.gen_cached_proof(c, tree_r_rows_to_discard)?;
-                        let proof_r_old = tree_r_old.gen_cached_proof(c, tree_r_rows_to_discard)?;
-                        ensure!(
-                            tree_d_new.root() == proof_d_new.root(),
-                            "mismatch on tree d new roots"
-                        );
-                        ensure!(
-                            tree_r_new.root() == proof_r_new.root(),
-                            "mismatch on tree r new roots"
-                        );
-                        ensure!(
-                            tree_r_old.root() == proof_r_old.root(),
-                            "mismatch on tree r old roots"
-                        );
-                        ensure!(
-                            proof_d_new.verify(),
-                            "invalid TreeDNew Merkle proof for c={}",
-                            c
-                        );
-                        ensure!(
-                            proof_r_new.verify(),
-                            "invalid TreeRNew Merkle proof for c={}",
-                            c
-                        );
-                        ensure!(
-                            proof_r_old.verify(),
-                            "invalid TreeROld Merkle proof for c={}",
-                            c
-                        );
-                        Ok(ChallengeProof {
-                            proof_r_old,
-                            proof_d_new,
-                            proof_r_new,
-                        })
-                    })
-                    .collect::<Result<Vec<ChallengeProof<TreeR>>>>()?;
-
-                info!("Finished generating Merkle proofs for partition k={}", k);
-
-                Ok(PartitionProof {
-                    apex_leafs,
-                    challenge_proofs,
-                })
+                let pub_inputs = Self::with_partition(pub_inputs.clone(), Some(k));
+                Self::prove_inner(
+                    pub_params,
+                    &pub_inputs,
+                    priv_inputs,
+                    &tree_r_old,
+                    &tree_d_new,
+                    &tree_r_new,
+                )
             })
             .collect::<Result<Vec<PartitionProof<TreeR>>>>()?;
 
@@ -609,11 +325,11 @@ where
             sector_nodes,
             challenge_count,
             challenge_bit_len,
+            partition_count,
             partition_bit_len,
             apex_leaf_count,
             apex_select_bit_len,
-            ..
-        } = pub_params;
+        } = *pub_params;
 
         let PublicInputs {
             k,
@@ -622,20 +338,33 @@ where
             comm_d_new,
             comm_r_new,
             h,
-        } = pub_inputs;
+        } = *pub_inputs;
+
+        // Ensure that public-inputs are valid.
+        ensure!(
+            k < partition_count,
+            "partition-index `k` exceeds partition-count for sector-size"
+        );
+        ensure!(hs(sector_nodes).contains(&h), "invalid `h` for sector-size");
 
         let PartitionProof {
             apex_leafs,
             challenge_proofs,
         } = proof;
 
-        if apex_leafs.len() != *apex_leaf_count || challenge_proofs.len() != *challenge_count {
-            return Ok(false);
-        }
+        // Check for malformed proof.
+        ensure!(
+            apex_leafs.len() == apex_leaf_count,
+            "invalid number of apex-leafs"
+        );
+        ensure!(
+            challenge_proofs.len() == challenge_count,
+            "invalid number of challenge proofs"
+        );
 
         // Compute apex-tree.
         let mut apex_tree: Vec<Vec<TreeDDomain>> = vec![apex_leafs.clone()];
-        for _ in 0..*apex_select_bit_len {
+        for _ in 0..apex_select_bit_len {
             let tree_row: Vec<TreeDDomain> = apex_tree
                 .last()
                 .unwrap()
@@ -651,29 +380,29 @@ where
         // proof path.
         let apex_leafs_height = challenge_bit_len - partition_bit_len - apex_select_bit_len;
 
-        let comm_r_last_old = challenge_proofs[0].proof_r_old.root();
-        let comm_r_last_new = challenge_proofs[0].proof_r_new.root();
+        let root_r_old = challenge_proofs[0].proof_r_old.root();
+        let root_r_new = challenge_proofs[0].proof_r_new.root();
 
         // Verify that the TreeROld and TreeRNew Merkle proofs roots agree with the public CommC,
         // CommROld, and CommRNew.
-        let comm_r_old_calc = <TreeRHasher as Hasher>::Function::hash2(&comm_c, &comm_r_last_old);
-        let comm_r_new_calc = <TreeRHasher as Hasher>::Function::hash2(&comm_c, &comm_r_last_new);
-        if comm_r_old_calc != *comm_r_old || comm_r_new_calc != *comm_r_new {
+        let comm_r_old_calc = <TreeRHasher as Hasher>::Function::hash2(&comm_c, &root_r_old);
+        let comm_r_new_calc = <TreeRHasher as Hasher>::Function::hash2(&comm_c, &root_r_new);
+        if comm_r_old_calc != comm_r_old || comm_r_new_calc != comm_r_new {
             return Ok(false);
         }
 
         let phi = phi(&comm_d_new, &comm_r_old);
 
-        let challenges = Challenges::new(*sector_nodes, *comm_r_new, *k);
+        let challenges = Challenges::new(sector_nodes, comm_r_new, k);
         let get_high_bits_shr = challenge_bit_len - h;
 
         for (c, challenge_proof) in challenges.zip(challenge_proofs.iter()) {
             // Verify TreeROld Merkle proof.
             if !challenge_proof.verify_merkle_proofs(
-                c,
-                &comm_r_last_old,
+                c as usize,
+                &root_r_old,
                 &comm_d_new,
-                &comm_r_last_new,
+                &root_r_new,
             ) {
                 return Ok(false);
             }
@@ -708,12 +437,12 @@ where
         pub_inputs: &Self::PublicInputs,
         partition_proofs: &[Self::Proof],
     ) -> Result<bool> {
-        if partition_proofs.len() != pub_params.partition_count {
-            return Ok(false);
-        }
+        ensure!(
+            partition_proofs.len() == pub_params.partition_count,
+            "invalid number of partition proofs",
+        );
         for (k, partition_proof) in partition_proofs.iter().enumerate() {
-            let mut partition_pub_inputs = pub_inputs.clone();
-            partition_pub_inputs.k = k;
+            let partition_pub_inputs = Self::with_partition(pub_inputs.clone(), Some(k));
             if !Self::verify(pub_params, &partition_pub_inputs, partition_proof)? {
                 return Ok(false);
             }
@@ -722,7 +451,7 @@ where
     }
 
     fn with_partition(mut pub_inputs: Self::PublicInputs, k: Option<usize>) -> Self::PublicInputs {
-        pub_inputs.k = k.unwrap();
+        pub_inputs.k = k.expect("must provide `k` to generate partition's public-inputs");
         pub_inputs
     }
 }
@@ -734,6 +463,17 @@ pub fn phi(comm_d_new: &TreeDDomain, comm_r_old: &TreeRDomain) -> TreeRDomain {
         comm_d_new.into()
     };
     <TreeRHasher as Hasher>::Function::hash2(&comm_d_new, &comm_r_old)
+}
+
+// Computes all `2^h` rho values for the given `phi`. Each rho corresponds to one of the `2^h`
+// possible `high` values where `high` is the `h` high bits of a node-index.
+pub fn rhos(h: usize, phi: &TreeRDomain) -> Vec<Fr> {
+    (0..1 << h)
+        .map(|high| {
+            let high: TreeRDomain = Fr::from(high as u64).into();
+            <TreeRHasher as Hasher>::Function::hash2(&phi, &high).into()
+        })
+        .collect()
 }
 
 fn mmap_read(path: &Path) -> Result<Mmap, Error> {
@@ -767,6 +507,188 @@ impl<TreeR> EmptySectorUpdate<TreeR>
 where
     TreeR: 'static + MerkleTreeTrait<Hasher = TreeRHasher>,
 {
+    pub fn instantiate_tree_d(
+        tree_d_leafs: usize,
+        tree_d_new_config: &StoreConfig,
+    ) -> Result<TreeD> {
+        // Instantiate TreeD new from the replica cache path. Note that this is similar to what
+        // we do when going from t_aux to t_aux cache.
+        let tree_d_arity = TreeDArity::to_usize();
+        let tree_d_nodes = tree_d_new_config.size.expect("config size failure");
+        trace!(
+            "Instantiating TreeDNew: leafs={}, base_store_size={})",
+            tree_d_leafs,
+            tree_d_nodes
+        );
+        let tree_d_store = TreeDStore::new_from_disk(tree_d_nodes, tree_d_arity, tree_d_new_config)
+            .context("tree_d_store")?;
+        TreeD::from_data_store(tree_d_store, tree_d_leafs).context("tree_d")
+    }
+
+    pub fn instantiate_tree_r(
+        tree_r_config: &StoreConfig,
+        replica_path: &Path,
+        name: &str,
+    ) -> Result<LCTree<TreeRHasher, TreeR::Arity, TreeR::SubTreeArity, TreeR::TopTreeArity>> {
+        let tree_r_base_arity = TreeR::Arity::to_usize();
+        let tree_r_sub_arity = TreeR::SubTreeArity::to_usize();
+        let tree_r_top_arity = TreeR::TopTreeArity::to_usize();
+        // Instantiate TreeR new from the replica_cache_path. Note that this is similar to what we
+        // do when going from t_aux to t_aux cache.
+        let tree_r_base_tree_nodes = tree_r_config.size.expect("tree_r config size failure");
+        let tree_r_base_tree_leafs =
+            get_merkle_tree_leafs(tree_r_base_tree_nodes, tree_r_base_arity)?;
+        let tree_r_base_tree_count = get_base_tree_count::<TreeR>();
+        let (tree_r_configs, replica_config) = split_config_and_replica(
+            tree_r_config.clone(),
+            replica_path.to_path_buf(),
+            tree_r_base_tree_leafs,
+            tree_r_base_tree_count,
+        )?;
+        trace!(
+            "Instantiating {}: arity={}-{}-{}, base_tree_count={}, base_store_size={}",
+            name,
+            tree_r_base_arity,
+            tree_r_sub_arity,
+            tree_r_top_arity,
+            tree_r_base_tree_count,
+            tree_r_base_tree_nodes,
+        );
+        create_lc_tree::<LCTree<TreeRHasher, TreeR::Arity, TreeR::SubTreeArity, TreeR::TopTreeArity>>(
+            tree_r_base_tree_nodes,
+            &tree_r_configs,
+            &replica_config,
+        )
+    }
+
+    // Generates a partition proof given instantiated trees TreeROld, TreeDNew, and TreeRNew.
+    pub fn prove_inner(
+        pub_params: &PublicParams,
+        pub_inputs: &PublicInputs,
+        priv_inputs: &PrivateInputs,
+        tree_r_old: &LCTree<TreeRHasher, TreeR::Arity, TreeR::SubTreeArity, TreeR::TopTreeArity>,
+        tree_d_new: &TreeD,
+        tree_r_new: &LCTree<TreeRHasher, TreeR::Arity, TreeR::SubTreeArity, TreeR::TopTreeArity>,
+    ) -> Result<PartitionProof<TreeR>> {
+        let PublicParams {
+            sector_nodes,
+            partition_count,
+            apex_leaf_count,
+            ..
+        } = *pub_params;
+
+        let PublicInputs { k, comm_r_new, .. } = *pub_inputs;
+
+        let PrivateInputs {
+            tree_r_old_config,
+            old_replica_path,
+            tree_d_new_config,
+            replica_path,
+            ..
+        } = priv_inputs;
+
+        ensure!(
+            k < partition_count,
+            "partition-index `k` exceeds partition-count for sector-size"
+        );
+
+        ensure!(
+            metadata(old_replica_path)?.is_file(),
+            "old_replica_path must be a file"
+        );
+        ensure!(
+            metadata(replica_path)?.is_file(),
+            "replica_path must be a file"
+        );
+
+        info!(
+            "Proving EmptySectorUpdate vanilla partition (sector_nodes={}, k={})",
+            sector_nodes, k,
+        );
+
+        let tree_d_arity = TreeDArity::to_usize();
+
+        // Re-instantiate TreeD's store for reading apex leafs.
+        let tree_d_nodes = tree_d_new_config.size.expect("config size failure");
+        let tree_d_store =
+            TreeDStore::new_from_disk(tree_d_nodes, tree_d_arity, &tree_d_new_config)
+                .context("tree_d_store")?;
+        ensure!(
+            tree_d_nodes == Store::len(&tree_d_store),
+            "TreeD store size mismatch"
+        );
+
+        // Total number of apex-leafs in TreeD.
+        let total_apex_leafs = partition_count * apex_leaf_count;
+        // The number of nodes in TreeD from the apex-leafs row to the root.
+        let tree_d_nodes_apex_leafs_to_root = get_merkle_tree_len(total_apex_leafs, tree_d_arity)?;
+        // The number of nodes in TreeD below the apex-leafs row.
+        let tree_d_nodes_below_apex_leafs = tree_d_nodes - tree_d_nodes_apex_leafs_to_root;
+        trace!(
+            "Apex-leafs info: total_apex_leafs={}, apex_leafs_per_partition={}",
+            total_apex_leafs,
+            apex_leaf_count,
+        );
+
+        // Get this partition's apex-leafs.
+        let apex_leafs_start = tree_d_nodes_below_apex_leafs + k * apex_leaf_count;
+        let apex_leafs_stop = apex_leafs_start + apex_leaf_count;
+        trace!(
+            "apex_leafs_start={} for partition k={}",
+            apex_leafs_start,
+            k
+        );
+        let apex_leafs: Vec<TreeDDomain> =
+            tree_d_store.read_range(apex_leafs_start..apex_leafs_stop)?;
+        info!(
+            "Finished reading apex-leafs from TreeD for partition k={}",
+            k
+        );
+
+        let challenges: Vec<usize> = Challenges::new(sector_nodes, comm_r_new, k)
+            .map(|c| c as usize)
+            .collect();
+
+        let tree_r_rows_to_discard = Some(tree_r_old_config.rows_to_discard);
+
+        // Generate this partition's challenge proofs.
+        let challenge_proofs = challenges
+            .into_par_iter()
+            .map(|c| {
+                let proof_d_new = tree_d_new.gen_proof(c)?;
+                let proof_r_new = tree_r_new.gen_cached_proof(c, tree_r_rows_to_discard)?;
+                let proof_r_old = tree_r_old.gen_cached_proof(c, tree_r_rows_to_discard)?;
+                ensure!(
+                    proof_d_new.verify(),
+                    "invalid TreeDNew Merkle proof for c={}",
+                    c
+                );
+                ensure!(
+                    proof_r_new.verify(),
+                    "invalid TreeRNew Merkle proof for c={}",
+                    c
+                );
+                ensure!(
+                    proof_r_old.verify(),
+                    "invalid TreeROld Merkle proof for c={}",
+                    c
+                );
+                Ok(ChallengeProof {
+                    proof_r_old,
+                    proof_d_new,
+                    proof_r_new,
+                })
+            })
+            .collect::<Result<Vec<ChallengeProof<TreeR>>>>()?;
+
+        info!("finished generating challege-proofs for partition k={}", k);
+
+        Ok(PartitionProof {
+            apex_leafs,
+            challenge_proofs,
+        })
+    }
+
     /// Returns tuple of (comm_r_new, comm_r_last_new, comm_d_new)
     pub fn encode_into(
         nodes_count: usize,
@@ -870,13 +792,8 @@ where
         let node_index_bit_len = nodes_count.trailing_zeros() as usize;
         let get_high_bits_shr = node_index_bit_len - h;
 
-        // Precompute all possible `2^h` number of rho values.
-        let rhos: Vec<Fr> = (0..1 << h)
-            .map(|high| {
-                let high: TreeRDomain = Fr::from(high as u64).into();
-                <TreeRHasher as Hasher>::Function::hash2(&phi, &high).into()
-            })
-            .collect();
+        // Precompute all rho values.
+        let rhos = rhos(h, &phi);
 
         Vec::from_iter((0..end).step_by(data_block_size))
             .into_par_iter()
@@ -1034,13 +951,10 @@ where
         let node_index_bit_len = nodes_count.trailing_zeros() as usize;
         let get_high_bits_shr = node_index_bit_len - h;
 
-        // Precompute the inverse of all possible `2^h` number of rho values.
-        let rho_invs: Vec<Fr> = (0..1 << h)
-            .map(|high| {
-                let high: TreeRDomain = Fr::from(high as u64).into();
-                let rho: Fr = <TreeRHasher as Hasher>::Function::hash2(&phi, &high).into();
-                rho.invert().unwrap()
-            })
+        // Precompute all rho^-1 values.
+        let rho_invs: Vec<Fr> = rhos(h, &phi)
+            .into_iter()
+            .map(|rho| rho.invert().unwrap())
             .collect();
 
         Vec::from_iter((0..end).step_by(data_block_size))
@@ -1163,13 +1077,8 @@ where
         let node_index_bit_len = nodes_count.trailing_zeros() as usize;
         let get_high_bits_shr = node_index_bit_len - h;
 
-        // Precompute all possible `2^h` number of rho values.
-        let rhos: Vec<Fr> = (0..1 << h)
-            .map(|high| {
-                let high: TreeRDomain = Fr::from(high as u64).into();
-                <TreeRHasher as Hasher>::Function::hash2(&phi, &high).into()
-            })
-            .collect();
+        // Precompute all rho values.
+        let rhos = rhos(h, &phi);
 
         Vec::from_iter((0..end).step_by(data_block_size))
             .into_par_iter()

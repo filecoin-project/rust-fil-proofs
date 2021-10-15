@@ -6,10 +6,10 @@ use bellperson::{
         multipack::pack_bits,
         num::AllocatedNum,
     },
-    Circuit, ConstraintSystem, SynthesisError,
+    Circuit, ConstraintSystem, LinearCombination, SynthesisError,
 };
 use blstrs::Scalar as Fr;
-use ff::PrimeFieldBits;
+use ff::{Field, PrimeFieldBits};
 use filecoin_hashers::{HashFunction, Hasher};
 use generic_array::typenum::Unsigned;
 use storage_proofs_core::{
@@ -23,20 +23,21 @@ use crate::{
         apex_leaf_count, challenge_count, hs, partition_count, validate_tree_r_shape, TreeD,
         TreeDArity, TreeDDomain, TreeDHasher, TreeRDomain, TreeRHasher,
     },
-    gadgets::{
-        allocated_num_to_allocated_bits, apex_por, gen_challenge_bits, get_challenge_high_bits,
-        label_r_new,
-    },
+    gadgets::{apex_por, gen_challenge_bits, get_challenge_high_bits, label_r_new},
     vanilla, PublicParams,
 };
 
+// The public inputs for `EmptySectorUpdateCircuit`.
 #[derive(Clone)]
 pub struct PublicInputs {
     // Pack `k` and `h_select` into a single public-input; `k` is at most 4 bits and `h_select` is 6
-    // bits.
+    // bits, thus we can pack `k` and `h_select` into a single field element.
     pub k_and_h_select: Option<Fr>,
+    // The SDR-PoRep CommR corresponding to the replica prior to updating the sector data.
     pub comm_r_old: Option<Fr>,
+    // The root of TreeDNew (a bin-tree built over the sector's updated data).
     pub comm_d_new: Option<Fr>,
+    // A commitment to the `EmptySectorUpdate` encoding of the updated sector data.
     pub comm_r_new: Option<Fr>,
 }
 
@@ -50,11 +51,16 @@ impl PublicInputs {
         comm_r_new: TreeRDomain,
     ) -> Self {
         let partition_count = partition_count(sector_nodes);
-        assert!(k < partition_count);
+        assert!(
+            k < partition_count,
+            "partition-index `k` exceeds partition-count for sector-size"
+        );
 
-        let hs = hs(sector_nodes);
-        assert!(hs.contains(&h));
-        let hs_index = hs.iter().position(|h_allowed| *h_allowed == h).unwrap();
+        let hs_index = hs(sector_nodes)
+            .iter()
+            .position(|h_allowed| *h_allowed == h)
+            .expect("invalid `h` for sector-size");
+
         let h_select = 1u64 << hs_index;
 
         let partition_bit_len = partition_count.trailing_zeros() as usize;
@@ -233,10 +239,18 @@ pub struct PrivateInputs<TreeR>
 where
     TreeR: MerkleTreeTrait<Hasher = TreeRHasher>,
 {
+    // CommC created by running SDR-PoRep on the old/un-updated data.
     pub comm_c: Option<Fr>,
-    pub comm_r_last_old: Option<Fr>,
-    pub comm_r_last_new: Option<Fr>,
+    // Root of the replica tree (called TreeR or TreeRLast) output by SDR-PoRep on the
+    // old/un-updated data (here called TreeROld).
+    pub root_r_old: Option<Fr>,
+    // Root of the replica tree build over the new/updated data's replica (TreeRNew).
+    pub root_r_new: Option<Fr>,
+    // The `k`-th chunk of nodes from the apex-leafs layer of TreeDNew (the tree built over the
+    // new/updated data).
     pub apex_leafs: Vec<Option<Fr>>,
+    // Generate three Merkle proofs (TreeROld, TreeDNew, TreeRNew) for each of this partition's
+    // challenges.
     pub challenge_proofs: Vec<ChallengeProof<TreeR>>,
 }
 
@@ -249,8 +263,8 @@ where
         apex_leafs: &[TreeDDomain],
         challenge_proofs: &[vanilla::ChallengeProof<TreeR>],
     ) -> Self {
-        let comm_r_last_old: Fr = challenge_proofs[0].proof_r_old.root().into();
-        let comm_r_last_new: Fr = challenge_proofs[0].proof_r_new.root().into();
+        let root_r_old: Fr = challenge_proofs[0].proof_r_old.root().into();
+        let root_r_new: Fr = challenge_proofs[0].proof_r_new.root().into();
 
         let apex_leafs: Vec<Option<Fr>> = apex_leafs
             .iter()
@@ -266,8 +280,8 @@ where
 
         PrivateInputs {
             comm_c: Some(comm_c.into()),
-            comm_r_last_old: Some(comm_r_last_old),
-            comm_r_last_new: Some(comm_r_last_new),
+            root_r_old: Some(root_r_old),
+            root_r_new: Some(root_r_new),
             apex_leafs,
             challenge_proofs,
         }
@@ -278,8 +292,8 @@ where
         let apex_leaf_count = apex_leaf_count(sector_nodes);
         PrivateInputs {
             comm_c: None,
-            comm_r_last_old: None,
-            comm_r_last_new: None,
+            root_r_old: None,
+            root_r_new: None,
             apex_leafs: vec![None; apex_leaf_count],
             challenge_proofs: vec![ChallengeProof::empty(sector_nodes); challenge_count],
         }
@@ -309,7 +323,11 @@ where
     pub fn blank(pub_params: PublicParams) -> Self {
         let pub_inputs = PublicInputs::empty();
         let priv_inputs = PrivateInputs::<TreeR>::empty(pub_params.sector_nodes);
-        EmptySectorUpdateCircuit { pub_params, pub_inputs, priv_inputs }
+        EmptySectorUpdateCircuit {
+            pub_params,
+            pub_inputs,
+            priv_inputs,
+        }
     }
 }
 
@@ -319,28 +337,31 @@ where
 {
     fn synthesize<CS: ConstraintSystem<Fr>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
         let EmptySectorUpdateCircuit {
-            pub_params: PublicParams {
-                sector_nodes,
-                challenge_count,
-                challenge_bit_len,
-                partition_count,
-                partition_bit_len,
-                apex_leaf_count,
-                apex_select_bit_len,
-            },
-            pub_inputs: PublicInputs {
-                k_and_h_select,
-                comm_r_old,
-                comm_d_new,
-                comm_r_new,
-            },
-            priv_inputs: PrivateInputs {
-                comm_c,
-                comm_r_last_old,
-                comm_r_last_new,
-                apex_leafs,
-                challenge_proofs,
-            },
+            pub_params:
+                PublicParams {
+                    sector_nodes,
+                    challenge_count,
+                    challenge_bit_len,
+                    partition_count,
+                    partition_bit_len,
+                    apex_leaf_count,
+                    apex_select_bit_len,
+                },
+            pub_inputs:
+                PublicInputs {
+                    k_and_h_select,
+                    comm_r_old,
+                    comm_d_new,
+                    comm_r_new,
+                },
+            priv_inputs:
+                PrivateInputs {
+                    comm_c,
+                    root_r_old,
+                    root_r_new,
+                    apex_leafs,
+                    challenge_proofs,
+                },
         } = self;
 
         validate_tree_r_shape::<TreeR>(sector_nodes);
@@ -398,17 +419,47 @@ where
         })?;
         k_and_h_select.inputize(cs.namespace(|| "k_and_h_select (public input)"))?;
 
-        let (partition_bits, h_select_bits) = {
-            let mut k_and_h_select_bits = allocated_num_to_allocated_bits(
-                cs.namespace(|| "k_and_h_select_bits"),
-                &k_and_h_select,
-            )?;
-            let partition_bits: Vec<AllocatedBit> =
-                k_and_h_select_bits.drain(..partition_bit_len).collect();
-            let h_select_bits: Vec<AllocatedBit> =
-                k_and_h_select_bits.drain(..h_select_bit_len).collect();
-            (partition_bits, h_select_bits)
+        // Split `k_and_h_select` into partition and h-select bits.
+        let k_and_h_select_bits = {
+            let bit_len = partition_bit_len + h_select_bit_len;
+
+            let bits: Vec<Option<bool>> = if let Some(k_and_h_select) = k_and_h_select.get_value() {
+                k_and_h_select
+                    .to_le_bits()
+                    .into_iter()
+                    .take(bit_len)
+                    .map(Some)
+                    .collect()
+            } else {
+                vec![None; bit_len]
+            };
+
+            let k_and_h_select_bits = bits
+                .into_iter()
+                .enumerate()
+                .map(|(i, bit)| {
+                    AllocatedBit::alloc(cs.namespace(|| format!("k_and_h_select_bit_{}", i)), bit)
+                })
+                .collect::<Result<Vec<AllocatedBit>, SynthesisError>>()?;
+
+            let mut lc = LinearCombination::<Fr>::zero();
+            let mut pow2 = Fr::one();
+            for bit in k_and_h_select_bits.iter() {
+                lc = lc + (pow2, bit.get_variable());
+                pow2 = pow2.double();
+            }
+            cs.enforce(
+                || "k_and_h_select binary decomp",
+                |_| lc,
+                |lc| lc + CS::one(),
+                |lc| lc + k_and_h_select.get_variable(),
+            );
+
+            k_and_h_select_bits
         };
+
+        let partition_bits = k_and_h_select_bits[..partition_bit_len].to_vec();
+        let h_select_bits = k_and_h_select_bits[partition_bit_len..].to_vec();
 
         let partition = pack_bits(
             cs.namespace(|| "pack partition bits"),
@@ -434,9 +485,7 @@ where
         })?;
         comm_r_new.inputize(cs.namespace(|| "comm_r_new_input"))?;
 
-        // Allocate values derived from public-inputs.
-
-        // `phi = H(comm_d_new || comm_r_old)`
+        // Compute `phi = H(comm_d_new || comm_r_old)` from public-inputs.
         let phi = <TreeR::Hasher as Hasher>::Function::hash2_circuit(
             cs.namespace(|| "phi"),
             &comm_d_new,
@@ -449,13 +498,12 @@ where
             comm_c.ok_or(SynthesisError::AssignmentMissing)
         })?;
 
-        // TODO: rename `comm_r_last_old` and `comm_r_last_new` to `root_r_old` and `root_r_new`.
-        let comm_r_last_old = AllocatedNum::alloc(cs.namespace(|| "comm_r_last_old"), || {
-            comm_r_last_old.ok_or(SynthesisError::AssignmentMissing)
+        let root_r_old = AllocatedNum::alloc(cs.namespace(|| "root_r_old"), || {
+            root_r_old.ok_or(SynthesisError::AssignmentMissing)
         })?;
 
-        let comm_r_last_new = AllocatedNum::alloc(cs.namespace(|| "comm_r_last_new"), || {
-            comm_r_last_new.ok_or(SynthesisError::AssignmentMissing)
+        let root_r_new = AllocatedNum::alloc(cs.namespace(|| "root_r_new"), || {
+            root_r_new.ok_or(SynthesisError::AssignmentMissing)
         })?;
 
         let apex_leafs = apex_leafs
@@ -480,12 +528,12 @@ where
             })
             .collect::<Result<Vec<Vec<AllocatedNum<Fr>>>, SynthesisError>>()?;
 
-        // Assert that the witnessed `comm_r_last_old` and `comm_r_last_new` are consistent with the
-        // public `comm_r_old` and `comm_r_new` via `comm_r = H(comm_c || comm_r_last)`.
+        // Assert that the witnessed `root_r_old` and `root_r_new` are consistent with the
+        // public `comm_r_old` and `comm_r_new` via `comm_r = H(comm_c || root_r)`.
         let comm_r_old_calc = <TreeR::Hasher as Hasher>::Function::hash2_circuit(
             cs.namespace(|| "comm_r_old_calc"),
             &comm_c,
-            &comm_r_last_old,
+            &root_r_old,
         )?;
         cs.enforce(
             || "enforce comm_r_old_calc == comm_r_old",
@@ -496,7 +544,7 @@ where
         let comm_r_new_calc = <TreeR::Hasher as Hasher>::Function::hash2_circuit(
             cs.namespace(|| "comm_r_new_calc"),
             &comm_c,
-            &comm_r_last_new,
+            &root_r_new,
         )?;
         cs.enforce(
             || "enforce comm_r_new_calc == comm_r_new",
@@ -576,7 +624,7 @@ where
                 &rho,
             )?;
 
-            // Check that the calculated value of `leaf_r_new` agrees with the provided value.
+            // Sanity check that the calculated `leaf_r_new` agrees with the provided value.
             if let Some(leaf_r_new) = leaf_r_new.get_value() {
                 assert_eq!(leaf_r_new, challenge_proof.leaf_r_new.unwrap());
             }
@@ -608,7 +656,7 @@ where
                 c_bits.clone(),
                 leaf_r_old.clone(),
                 path_r_old,
-                comm_r_last_old.clone(),
+                root_r_old.clone(),
             )?;
 
             let path_r_new = challenge_proof.path_r_new
@@ -638,7 +686,7 @@ where
                 c_bits.clone(),
                 leaf_r_new.clone(),
                 path_r_new,
-                comm_r_last_new.clone(),
+                root_r_new.clone(),
             )?;
 
             let apex_select_bits: Vec<Boolean> = {
