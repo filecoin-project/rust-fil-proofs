@@ -95,7 +95,7 @@ pub fn run_fallback_post_bench<Tree: 'static + MerkleTreeTrait>(
             &RANDOMNESS,
             &pub_replica_info[..],
             PROVER_ID,
-            &proof,
+            proof,
         )
     })
     .expect("failed to verify winning post proof");

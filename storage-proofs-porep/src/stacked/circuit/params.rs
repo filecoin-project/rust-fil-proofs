@@ -95,6 +95,7 @@ impl<Tree: MerkleTreeTrait, G: 'static + Hasher> Proof<Tree, G> {
 
     /// Circuit synthesis.
     #[allow(clippy::too_many_arguments)]
+    #[allow(clippy::branches_sharing_code)]
     pub fn synthesize<CS: ConstraintSystem<Fr>>(
         self,
         mut cs: CS,

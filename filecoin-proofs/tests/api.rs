@@ -1270,7 +1270,7 @@ fn generate_proof<Tree: 'static + MerkleTreeTrait>(
         ticket,
         seed,
         pre_commit_output.clone(),
-        &piece_infos,
+        piece_infos,
     )?;
 
     clear_cache::<Tree>(cache_dir_path)?;
@@ -1340,7 +1340,7 @@ fn unseal<Tree: 'static + MerkleTreeTrait>(
     assert_eq!(contents.len(), 508);
     assert_eq!(&piece_bytes[508..508 + 508], &contents[..]);
 
-    let computed_comm_d = compute_comm_d(config.sector_size, &piece_infos)?;
+    let computed_comm_d = compute_comm_d(config.sector_size, piece_infos)?;
 
     assert_eq!(
         comm_d, computed_comm_d,

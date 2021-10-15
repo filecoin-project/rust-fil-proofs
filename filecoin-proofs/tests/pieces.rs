@@ -301,7 +301,7 @@ fn test_verify_random_pieces() -> Result<()> {
         println!("--- {:?} ---", sector_size);
         for i in 0..100 {
             println!(" - {} -", i);
-            let unpadded_sector_size: UnpaddedBytesAmount = sector_size.clone().into();
+            let unpadded_sector_size: UnpaddedBytesAmount = (*sector_size).into();
             let sector_size = *sector_size;
             let padded_sector_size: PaddedBytesAmount = sector_size.into();
 

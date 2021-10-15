@@ -46,7 +46,7 @@ pub fn generate_winning_post_with_vanilla<Tree: 'static + MerkleTreeTrait>(
     let prover_id_safe: <Tree::Hasher as Hasher>::Domain =
         as_safe_commitment(&prover_id, "prover_id")?;
 
-    let vanilla_params = winning_post_setup_params(&post_config)?;
+    let vanilla_params = winning_post_setup_params(post_config)?;
 
     let setup_params = compound_proof::SetupParams {
         vanilla_params,
@@ -55,7 +55,7 @@ pub fn generate_winning_post_with_vanilla<Tree: 'static + MerkleTreeTrait>(
     };
     let pub_params: compound_proof::PublicParams<'_, FallbackPoSt<'_, Tree>> =
         FallbackPoStCompound::setup(&setup_params)?;
-    let groth_params = get_post_params::<Tree>(&post_config)?;
+    let groth_params = get_post_params::<Tree>(post_config)?;
 
     let mut pub_sectors = Vec::with_capacity(vanilla_proofs.len());
     for vanilla_proof in &vanilla_proofs {
@@ -74,7 +74,7 @@ pub fn generate_winning_post_with_vanilla<Tree: 'static + MerkleTreeTrait>(
 
     let partitions = pub_params.partitions.unwrap_or(1);
     let partitioned_proofs = partition_vanilla_proofs(
-        &post_config,
+        post_config,
         &pub_params.vanilla_params,
         &pub_inputs,
         partitions,
@@ -117,7 +117,7 @@ pub fn generate_winning_post<Tree: 'static + MerkleTreeTrait>(
     let prover_id_safe: <Tree::Hasher as Hasher>::Domain =
         as_safe_commitment(&prover_id, "prover_id")?;
 
-    let vanilla_params = winning_post_setup_params(&post_config)?;
+    let vanilla_params = winning_post_setup_params(post_config)?;
     let param_sector_count = vanilla_params.sector_count;
 
     let setup_params = compound_proof::SetupParams {
@@ -127,7 +127,7 @@ pub fn generate_winning_post<Tree: 'static + MerkleTreeTrait>(
     };
     let pub_params: compound_proof::PublicParams<'_, FallbackPoSt<'_, Tree>> =
         FallbackPoStCompound::setup(&setup_params)?;
-    let groth_params = get_post_params::<Tree>(&post_config)?;
+    let groth_params = get_post_params::<Tree>(post_config)?;
 
     let trees = replicas
         .iter()
@@ -245,7 +245,7 @@ pub fn verify_winning_post<Tree: 'static + MerkleTreeTrait>(
     let prover_id_safe: <Tree::Hasher as Hasher>::Domain =
         as_safe_commitment(&prover_id, "prover_id")?;
 
-    let vanilla_params = winning_post_setup_params(&post_config)?;
+    let vanilla_params = winning_post_setup_params(post_config)?;
     let param_sector_count = vanilla_params.sector_count;
 
     let setup_params = compound_proof::SetupParams {
@@ -277,7 +277,7 @@ pub fn verify_winning_post<Tree: 'static + MerkleTreeTrait>(
     };
 
     let is_valid = {
-        let verifying_key = get_post_verifying_key::<Tree>(&post_config)?;
+        let verifying_key = get_post_verifying_key::<Tree>(post_config)?;
 
         let single_proof = MultiProof::new_from_reader(None, proof, &verifying_key)?;
         if single_proof.len() != 1 {

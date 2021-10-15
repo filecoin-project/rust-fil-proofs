@@ -80,22 +80,22 @@ fn get_tree_r_last_root(
     } else if is_sector_shape_sub2(sector_size) {
         let tree_r_last = SectorShapeSub2::from_store_configs_and_replica(
             base_tree_leafs,
-            &configs,
-            &replica_config,
+            configs,
+            replica_config,
         )?;
         tree_r_last.root()
     } else if is_sector_shape_sub8(sector_size) {
         let tree_r_last = SectorShapeSub8::from_store_configs_and_replica(
             base_tree_leafs,
-            &configs,
-            &replica_config,
+            configs,
+            replica_config,
         )?;
         tree_r_last.root()
     } else if is_sector_shape_top2(sector_size) {
         let tree_r_last = SectorShapeTop2::from_sub_tree_store_configs_and_replica(
             base_tree_leafs,
-            &configs,
-            &replica_config,
+            configs,
+            replica_config,
         )?;
         tree_r_last.root()
     } else {
@@ -190,7 +190,7 @@ fn run_inspect(sector_size: usize, cache: &Path, replica_path: &Path) -> Result<
         &configs,
         &replica_config,
     )?;
-    let p_aux = get_persistent_aux(&cache)?;
+    let p_aux = get_persistent_aux(cache)?;
 
     println!("CommRLast from p_aux: {:?}", p_aux.comm_r_last);
     println!(
@@ -226,7 +226,7 @@ fn run_verify(sector_size: usize, cache: &Path, replica_path: &Path) -> Result<(
         let store = LCStore::new_from_disk_with_reader(
             base_tree_len,
             OCT_ARITY,
-            &config,
+            config,
             ExternalReader::new_from_config(&replica_config, i)?,
         )?;
         cached_base_tree_roots.push(store.last()?);
@@ -256,7 +256,7 @@ fn run_verify(sector_size: usize, cache: &Path, replica_path: &Path) -> Result<(
     create_dir_all(&tmp_path)?;
 
     let (rebuilt_tree_r_last_root, rebuilt_base_tree_roots) =
-        run_rebuild(sector_size, &tmp_path, &replica_path)?;
+        run_rebuild(sector_size, tmp_path, replica_path)?;
 
     remove_dir_all(&tmp_path)?;
 

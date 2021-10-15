@@ -154,7 +154,7 @@ impl<T: FromByteSlice> CacheReader<T> {
 
     #[inline]
     fn get_bufs(&self) -> &[Mmap] {
-        unsafe { &std::slice::from_raw_parts((*self.bufs.get()).as_ptr(), 2) }
+        unsafe { std::slice::from_raw_parts((*self.bufs.get()).as_ptr(), 2) }
     }
 
     #[inline]

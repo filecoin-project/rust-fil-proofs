@@ -94,10 +94,10 @@ fn thread_fun(
         // already there
         if gpu_stealing {
             // Run the actual proof
-            generate_post_in_priority(&priv_replica_infos);
+            generate_post_in_priority(priv_replica_infos);
         } else {
             // Run the actual proof
-            generate_post(&priv_replica_infos);
+            generate_post(priv_replica_infos);
         }
 
         // Waiting for this thread to be killed
@@ -186,7 +186,7 @@ fn processes_mode(parallel: u8, gpu_stealing: bool) {
     // Put each process into it's own scope (the other one is due to the if statement)
     {
         let name = "high";
-        let child = spawn_process(&name, gpu_stealing);
+        let child = spawn_process(name, gpu_stealing);
         children.insert(name.to_string(), child);
     }
 

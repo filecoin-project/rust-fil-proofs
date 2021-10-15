@@ -23,7 +23,7 @@ pub fn prepare_layers<Tree: 'static + MerkleTreeTrait>(
     layers: usize,
 ) -> Vec<LayerState> {
     let label_configs = (1..=layers).map(|layer| {
-        StoreConfig::from_config(&config, CacheKey::label_layer(layer), Some(graph.size()))
+        StoreConfig::from_config(config, CacheKey::label_layer(layer), Some(graph.size()))
     });
 
     let mut states = Vec::with_capacity(layers);

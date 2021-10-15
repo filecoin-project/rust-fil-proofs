@@ -57,7 +57,7 @@ where
 
         for n in 0..pub_params.challenge_count {
             let challenged_leaf_start = generate_leaf_challenge(
-                &pub_params,
+                pub_params,
                 pub_inputs.randomness,
                 pub_inputs.sector_challenge_index,
                 n as u64,

@@ -122,7 +122,7 @@ where
                 "Cannot create LCTree without replica paths"
             );
             let replica_config = replica_config.expect("replica config failure");
-            lc_store.set_external_reader(ExternalReader::new_from_config(&replica_config, i)?)?;
+            lc_store.set_external_reader(ExternalReader::new_from_config(replica_config, i)?)?;
         }
 
         if configs.len() == 1 {
@@ -195,7 +195,7 @@ pub fn create_base_merkle_tree<Tree: MerkleTreeTrait>(
 
     let f = |i| {
         // TODO Replace `expect()` with `context()` (problem is the parallel iterator)
-        let d = data_at_node(&data, i).expect("data_at_node math failed");
+        let d = data_at_node(data, i).expect("data_at_node math failed");
         // TODO/FIXME: This can panic. FOR NOW, let's leave this since we're experimenting with
         // optimization paths. However, we need to ensure that bad input will not lead to a panic
         // that isn't caught by the FPS API.
@@ -257,7 +257,7 @@ pub fn create_base_lcmerkle_tree<H: Hasher, BaseTreeArity: 'static + PoseidonAri
     );
 
     let f = |i| {
-        let d = data_at_node(&data, i)?;
+        let d = data_at_node(data, i)?;
         H::Domain::try_from_bytes(d)
     };
 

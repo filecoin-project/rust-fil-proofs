@@ -31,7 +31,7 @@ pub fn public_params<Tree: 'static + MerkleTreeTrait>(
 pub fn winning_post_public_params<Tree: 'static + MerkleTreeTrait>(
     post_config: &PoStConfig,
 ) -> Result<WinningPostPublicParams> {
-    FallbackPoSt::<Tree>::setup(&winning_post_setup_params(&post_config)?)
+    FallbackPoSt::<Tree>::setup(&winning_post_setup_params(post_config)?)
 }
 
 pub fn winning_post_setup_params(post_config: &PoStConfig) -> Result<WinningPostSetupParams> {
@@ -62,7 +62,7 @@ pub fn winning_post_setup_params(post_config: &PoStConfig) -> Result<WinningPost
 pub fn window_post_public_params<Tree: 'static + MerkleTreeTrait>(
     post_config: &PoStConfig,
 ) -> Result<WindowPostPublicParams> {
-    FallbackPoSt::<Tree>::setup(&window_post_setup_params(&post_config))
+    FallbackPoSt::<Tree>::setup(&window_post_setup_params(post_config))
 }
 
 pub fn window_post_setup_params(post_config: &PoStConfig) -> WindowPostSetupParams {

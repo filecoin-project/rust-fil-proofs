@@ -384,7 +384,7 @@ where
         let source = BufReader::new(source);
         let mut target = BufWriter::new(target);
 
-        let written_bytes = sum_piece_bytes_with_alignment(&piece_lengths);
+        let written_bytes = sum_piece_bytes_with_alignment(piece_lengths);
         let piece_alignment = get_piece_alignment(written_bytes, piece_size);
         let fr32_reader = Fr32Reader::new(source);
 
@@ -506,7 +506,7 @@ fn verify_store(config: &StoreConfig, arity: usize, required_configs: usize) -> 
         let store_len = config.size.expect("disk store size not configured");
         for config in &configs {
             ensure!(
-                DiskStore::<DefaultPieceDomain>::is_consistent(store_len, arity, &config,)?,
+                DiskStore::<DefaultPieceDomain>::is_consistent(store_len, arity, config,)?,
                 "Store is inconsistent: {:?}",
                 StoreConfig::data_path(&config.path, &config.id)
             );
@@ -516,7 +516,7 @@ fn verify_store(config: &StoreConfig, arity: usize, required_configs: usize) -> 
             DiskStore::<DefaultPieceDomain>::is_consistent(
                 config.size.expect("disk store size not configured"),
                 arity,
-                &config,
+                config,
             )?,
             "Store is inconsistent: {:?}",
             store_path
@@ -573,7 +573,7 @@ fn verify_level_cache_store<Tree: MerkleTreeTrait>(config: &StoreConfig) -> Resu
                 LevelCacheStore::<DefaultPieceDomain, File>::is_consistent(
                     store_len,
                     Tree::Arity::to_usize(),
-                    &config,
+                    config,
                 )?,
                 "Store is inconsistent: {:?}",
                 StoreConfig::data_path(&config.path, &config.id)
@@ -584,7 +584,7 @@ fn verify_level_cache_store<Tree: MerkleTreeTrait>(config: &StoreConfig) -> Resu
             LevelCacheStore::<DefaultPieceDomain, File>::is_consistent(
                 config.size.expect("disk store size not configured"),
                 Tree::Arity::to_usize(),
-                &config,
+                config,
             )?,
             "Store is inconsistent: {:?}",
             store_path

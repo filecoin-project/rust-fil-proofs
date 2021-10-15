@@ -183,7 +183,7 @@ fn create_label_runner(
                 cur_node,
                 parents_cache,
                 pc,
-                &layer_labels,
+                layer_labels,
                 exp_labels,
                 buf,
                 bpm,
@@ -489,7 +489,7 @@ pub fn create_labels_for_encoding<Tree: 'static + MerkleTreeTrait, T: AsRef<[u8]
 
         create_layer_labels(
             &parents_cache,
-            &replica_id.as_ref(),
+            replica_id.as_ref(),
             &mut layer_labels,
             if layer == 1 {
                 None
@@ -579,7 +579,7 @@ pub fn create_labels_for_decoding<Tree: 'static + MerkleTreeTrait, T: AsRef<[u8]
 
         create_layer_labels(
             &parents_cache,
-            &replica_id.as_ref(),
+            replica_id.as_ref(),
             &mut layer_labels,
             if layer == 1 {
                 None

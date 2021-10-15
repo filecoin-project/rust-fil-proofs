@@ -485,7 +485,7 @@ where
             create_base_lcmerkle_tree::<H, <BinaryLCMerkleTree<H> as MerkleTreeTrait>::Arity>(
                 tree_r_last_config,
                 pp.graph.size(),
-                &data.as_ref(),
+                data.as_ref(),
                 &replica_config,
             )?;
 
@@ -511,7 +511,7 @@ where
         node: usize,
         _config: Option<StoreConfig>,
     ) -> Result<()> {
-        let block = decode_block(&pp.graph, replica_id, &data, None, node)?;
+        let block = decode_block(&pp.graph, replica_id, data, None, node)?;
         let start = node * NODE_SIZE;
         let end = start + NODE_SIZE;
         let dest = &mut data[start..end];
@@ -560,8 +560,8 @@ where
 {
     let mut parents = vec![0; graph.degree()];
     graph.parents(v, &mut parents)?;
-    let key = graph.create_key(replica_id, v, &parents, &data, exp_parents_data)?;
-    let node_data = <H as Hasher>::Domain::try_from_bytes(&data_at_node(data, v)?)?;
+    let key = graph.create_key(replica_id, v, &parents, data, exp_parents_data)?;
+    let node_data = <H as Hasher>::Domain::try_from_bytes(data_at_node(data, v)?)?;
 
     Ok(encode::decode(*key.as_ref(), node_data))
 }

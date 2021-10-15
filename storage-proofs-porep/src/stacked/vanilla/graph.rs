@@ -218,7 +218,7 @@ where
 
         // round 3 (9)
         hasher.input(&parents[..8]);
-        hasher.finish_with(&parents[8])
+        hasher.finish_with(parents[8])
     }
 
     fn copy_parents_data_inner(

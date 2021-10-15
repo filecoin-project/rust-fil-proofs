@@ -91,7 +91,7 @@ fn download_ipget(version: &str, verbose: bool) -> Result<()> {
     ))?;
     trace!("making GET request: {}", url.as_str());
     let client = Client::builder()
-        .proxy(Proxy::custom(move |url| env_proxy::for_url(&url).to_url()))
+        .proxy(Proxy::custom(move |url| env_proxy::for_url(url).to_url()))
         .build()?;
     let mut resp = client.get(url).send()?;
     trace!("received GET response");
@@ -162,7 +162,7 @@ fn get_filenames_requiring_download(
                 return true;
             };
             trace!("params file found");
-            let calculated_digest = match get_digest_for_file_within_cache(&filename) {
+            let calculated_digest = match get_digest_for_file_within_cache(filename) {
                 Ok(digest) => digest,
                 Err(e) => {
                     warn!("failed to hash file {}, marking for download", e);

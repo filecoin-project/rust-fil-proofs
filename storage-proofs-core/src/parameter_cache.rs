@@ -640,6 +640,6 @@ where
     G: FnOnce(&'a Path) -> io::Result<LockedFile>,
     E: From<io::Error>,
 {
-    ensure_parent(&file_path)?;
+    ensure_parent(file_path)?;
     f(&mut open_file(file_path)?)
 }

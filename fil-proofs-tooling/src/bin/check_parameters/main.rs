@@ -32,7 +32,7 @@ fn main() {
     match matches.subcommand() {
         ("map", Some(m)) => {
             let parameter_file_str = value_t!(m, "param", String).expect("param failed");
-            run_map(&Path::new(&parameter_file_str)).expect("run_map failed");
+            run_map(Path::new(&parameter_file_str)).expect("run_map failed");
         }
         _ => panic!("Unrecognized subcommand"),
     }

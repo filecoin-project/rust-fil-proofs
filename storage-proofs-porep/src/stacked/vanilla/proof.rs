@@ -243,7 +243,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                             {
                                 let labeled_node = rcp.c_x.get_node_at_layer(layer)?;
                                 assert!(
-                                    proof.verify(&pub_inputs.replica_id, &labeled_node),
+                                    proof.verify(&pub_inputs.replica_id, labeled_node),
                                     "Invalid encoding proof generated at layer {}",
                                     layer,
                                 );
@@ -695,7 +695,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                                 let mut buf = Vec::with_capacity(batch_size * NODE_SIZE);
 
                                 for fr in fr_elements {
-                                    buf.extend(fr_into_bytes(&fr));
+                                    buf.extend(fr_into_bytes(fr));
                                 }
                                 store
                                     .write()
@@ -1072,7 +1072,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
 
         create_lc_tree::<LCTree<Tree::Hasher, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>>(
             tree_r_last_config.size.expect("config size failure"),
-            &configs,
+            configs,
             &replica_config,
         )
     }
