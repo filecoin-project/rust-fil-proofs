@@ -4,10 +4,20 @@ use filecoin_hashers::{poseidon::PoseidonHasher, HashFunction, Hasher};
 
 use crate::constants::{challenge_count, partition_count, TreeRDomain};
 
+// Generates the challenges for partition `k` of an `EmptySectorUpdate` proof. All challenges
+// returned for partition `k` are guaranteed to lie within the `k`-th chunk of sector nodes.
+//
+// `challenge_count(sector_nodes)` number of challenges are generated for each partition;
+// challenges are returned one at a time via the `Iterator` interface.
+//
+// `random_bits_per_challenge` number of random bits are generated per challenge, the
+// partition-index (`partition_bits`) is appended onto the most-significant end of the random bits.
+// Random bits are generated using the Poseidon hash function; each digest generates the random bits
+// for `challenges_per_digest` number challenges.
 pub struct Challenges {
     comm_r_new: TreeRDomain,
     // The partition-index bits which are appended onto each challenges random bits.
-    partition_bits: usize,
+    partition_bits: u32,
     // The number of bits to generate per challenge.
     random_bits_per_challenge: usize,
     // The number of challenges derived per generated digest.
@@ -31,7 +41,7 @@ impl Challenges {
         let random_bits_per_challenge = challenge_bit_len - partition_bit_len;
         let challenges_per_digest = Fr::CAPACITY as usize / random_bits_per_challenge;
 
-        let partition_bits = k << random_bits_per_challenge;
+        let partition_bits = (k << random_bits_per_challenge) as u32;
 
         let challenge_count = challenge_count(sector_nodes);
         let digests_per_partition =
@@ -52,9 +62,8 @@ impl Challenges {
 }
 
 impl Iterator for Challenges {
-    // Return a `usize` (as opposed to something smaller like `u32`) because
-    // `MerkleTreeTrait::gen_proof()` takes `usize` challenges.
-    type Item = usize;
+    // All sector-sizes have challenges that fit within 32 bits.
+    type Item = u32;
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.challenges_remaining == 0 {
@@ -108,7 +117,7 @@ mod tests {
     use crate::constants::{TreeRDomain, ALLOWED_SECTOR_SIZES};
 
     #[test]
-    fn test_challenges() {
+    fn test_challenge_bucketing() {
         let mut rng = XorShiftRng::from_seed(TEST_SEED);
 
         for sector_nodes in ALLOWED_SECTOR_SIZES.iter().copied() {
@@ -116,23 +125,23 @@ mod tests {
 
             let partitions = partition_count(sector_nodes);
             let partition_challenges = challenge_count(sector_nodes);
-            let partition_nodes = sector_nodes / partitions;
+            let partition_nodes = (sector_nodes / partitions) as u32;
 
             // Right shift each challenge `c` by `get_partition_shr` to get the partition-index `k`.
-            let get_partition_shr =
-                (sector_nodes.trailing_zeros() - partitions.trailing_zeros()) as usize;
+            let get_partition_shr = sector_nodes.trailing_zeros() - partitions.trailing_zeros();
 
             for k in 0..partitions {
-                let challenges: Vec<usize> = Challenges::new(sector_nodes, comm_r_new, k).collect();
+                let challenges: Vec<u32> = Challenges::new(sector_nodes, comm_r_new, k).collect();
                 assert_eq!(challenges.len(), partition_challenges);
 
+                let k = k as u32;
                 let first_partition_node = k * partition_nodes;
                 let last_partition_node = first_partition_node + partition_nodes - 1;
 
                 for c in challenges.into_iter() {
                     assert!(first_partition_node <= c && c <= last_partition_node);
-                    // This check is redundant with the above range check, but let's sanity check it
-                    // anyway.
+                    // This check is redundant given the above range check, but let's sanity check
+                    // it anyway.
                     assert_eq!(c >> get_partition_shr, k);
                 }
             }

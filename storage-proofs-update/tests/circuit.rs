@@ -180,7 +180,7 @@ fn encode_new_replica(
         .collect()
 }
 
-fn test_empty_sector_update_circuit<TreeR>(sector_nodes: usize)
+fn test_empty_sector_update_circuit<TreeR>(sector_nodes: usize, constraints_expected: usize)
 where
     TreeR: MerkleTreeTrait<Hasher = TreeRHasher>,
 {
@@ -201,9 +201,9 @@ where
         .map(|_| TreeRDomain::random(&mut rng))
         .collect();
     let tree_r_old = create_tree::<TreeR>(&labels_r_old, tmp_path, "tree-r-old");
-    let comm_r_last_old = tree_r_old.root();
+    let root_r_old = tree_r_old.root();
     let comm_c = TreeRDomain::random(&mut rng);
-    let comm_r_old = <TreeRHasher as Hasher>::Function::hash2(&comm_c, &comm_r_last_old);
+    let comm_r_old = <TreeRHasher as Hasher>::Function::hash2(&comm_c, &root_r_old);
 
     // Create random TreeDNew.
     let labels_d_new: Vec<TreeDDomain> = (0..sector_nodes)
@@ -218,8 +218,8 @@ where
     // Encode `labels_d_new` into `labels_r_new` and create TreeRNew.
     let labels_r_new = encode_new_replica(&labels_r_old, &labels_d_new, &phi, h);
     let tree_r_new = create_tree::<TreeR>(&labels_r_new, tmp_path, "tree-r-new");
-    let comm_r_last_new = tree_r_new.root();
-    let comm_r_new = <TreeRHasher as Hasher>::Function::hash2(&comm_c, &comm_r_last_new);
+    let root_r_new = tree_r_new.root();
+    let comm_r_new = <TreeRHasher as Hasher>::Function::hash2(&comm_c, &root_r_new);
 
     let pub_params = PublicParams::from_sector_size(sector_bytes as u64);
 
@@ -231,6 +231,7 @@ where
                 .enumerate()
                 .take(pub_params.challenge_count)
                 .map(|(i, c)| {
+                    let c = c as usize;
                     let proof_r_old = tree_r_old.gen_proof(c).unwrap_or_else(|_| {
                         panic!("failed to generate `proof_r_old` for c_{}={}", i, c)
                     });
@@ -241,7 +242,11 @@ where
                         panic!("failed to generate `proof_r_new` for c_{}={}", i, c)
                     });
 
-                    vanilla::ChallengeProof { proof_r_old, proof_d_new, proof_r_new }
+                    vanilla::ChallengeProof {
+                        proof_r_old,
+                        proof_d_new,
+                        proof_r_new,
+                    }
                 })
                 .collect();
 
@@ -263,41 +268,42 @@ where
         circuit.synthesize(&mut cs).expect("failed to synthesize");
         assert!(cs.is_satisfied());
         assert!(cs.verify(&pub_inputs_vec));
+        assert_eq!(cs.num_constraints(), constraints_expected);
     }
 }
 
 #[test]
 fn test_empty_sector_update_circuit_1kib() {
     type TreeR = MerkleTreeWrapper<TreeRHasher, DiskStore<TreeRDomain>, U8, U4, U0>;
-    test_empty_sector_update_circuit::<TreeR>(SECTOR_SIZE_1_KIB);
+    test_empty_sector_update_circuit::<TreeR>(SECTOR_SIZE_1_KIB, 1248389);
 }
 
 #[test]
 fn test_empty_sector_update_circuit_2kib() {
     type TreeR = MerkleTreeWrapper<TreeRHasher, DiskStore<TreeRDomain>, U8, U0, U0>;
-    test_empty_sector_update_circuit::<TreeR>(SECTOR_SIZE_2_KIB);
+    test_empty_sector_update_circuit::<TreeR>(SECTOR_SIZE_2_KIB, 1705039);
 }
 
 #[test]
 fn test_empty_sector_update_circuit_4kib() {
     type TreeR = MerkleTreeWrapper<TreeRHasher, DiskStore<TreeRDomain>, U8, U2, U0>;
-    test_empty_sector_update_circuit::<TreeR>(SECTOR_SIZE_4_KIB);
+    test_empty_sector_update_circuit::<TreeR>(SECTOR_SIZE_4_KIB, 2165109);
 }
 
 #[test]
 fn test_empty_sector_update_circuit_8kib() {
     type TreeR = MerkleTreeWrapper<TreeRHasher, DiskStore<TreeRDomain>, U8, U4, U0>;
-    test_empty_sector_update_circuit::<TreeR>(SECTOR_SIZE_8_KIB);
+    test_empty_sector_update_circuit::<TreeR>(SECTOR_SIZE_8_KIB, 2620359);
 }
 
 #[test]
 fn test_empty_sector_update_circuit_16kib() {
     type TreeR = MerkleTreeWrapper<TreeRHasher, DiskStore<TreeRDomain>, U8, U8, U0>;
-    test_empty_sector_update_circuit::<TreeR>(SECTOR_SIZE_16_KIB);
+    test_empty_sector_update_circuit::<TreeR>(SECTOR_SIZE_16_KIB, 6300021);
 }
 
 #[test]
 fn test_empty_sector_update_circuit_32kib() {
     type TreeR = MerkleTreeWrapper<TreeRHasher, DiskStore<TreeRDomain>, U8, U8, U2>;
-    test_empty_sector_update_circuit::<TreeR>(SECTOR_SIZE_32_KIB);
+    test_empty_sector_update_circuit::<TreeR>(SECTOR_SIZE_32_KIB, 6760091);
 }

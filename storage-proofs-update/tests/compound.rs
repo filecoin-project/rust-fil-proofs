@@ -127,8 +127,8 @@ where
         &replica_old_config,
     )
     .expect("failed to create TreeROld");
-    let comm_r_last_old = tree_r_old.root();
-    let comm_r_old = <TreeRHasher as Hasher>::Function::hash2(&comm_c, &comm_r_last_old);
+    let root_r_old = tree_r_old.root();
+    let comm_r_old = <TreeRHasher as Hasher>::Function::hash2(&comm_c, &root_r_old);
 
     // Create random TreeDNew.
     let labels_d_new: Vec<TreeDDomain> = (0..sector_nodes)
@@ -190,8 +190,8 @@ where
         &replica_new_config,
     )
     .expect("failed to create TreeRNew");
-    let comm_r_last_new = tree_r_new.root();
-    let comm_r_new = <TreeRHasher as Hasher>::Function::hash2(&comm_c, &comm_r_last_new);
+    let root_r_new = tree_r_new.root();
+    let comm_r_new = <TreeRHasher as Hasher>::Function::hash2(&comm_c, &root_r_new);
 
     // Setup compound-proof.
     let sector_bytes = (sector_nodes as u64) << 5;
