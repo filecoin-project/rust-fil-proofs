@@ -6,7 +6,7 @@ use std::str::FromStr;
 
 use anyhow::Result;
 use byte_unit::Byte;
-use clap::{value_t, App, Arg, SubCommand};
+use clap::{value_t, App, AppSettings, Arg, SubCommand};
 
 use storage_proofs_core::api_version::ApiVersion;
 
@@ -171,6 +171,7 @@ fn main() -> Result<()> {
         );
 
     let matches = App::new("benchy")
+        .setting(AppSettings::ArgRequiredElseHelp)
         .version("0.1")
         .subcommand(window_post_cmd)
         .subcommand(winning_post_cmd)
@@ -240,7 +241,7 @@ fn main() -> Result<()> {
             serde_json::to_writer(stdout(), &outputs)
                 .expect("failed to write ProdbenchOutput to stdout")
         }
-        _ => panic!("carnation"),
+        _ => unreachable!(),
     }
 
     Ok(())
