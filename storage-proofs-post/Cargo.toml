@@ -21,7 +21,7 @@ serde = { version = "1.0", features = ["derive"]}
 blake2b_simd = "0.5"
 blake2s_simd = "0.5"
 ff = "0.11.0"
-bellperson = "0.17.0"
+bellperson = "0.18.0"
 log = "0.4.7"
 hex = "0.4.0"
 generic-array = "0.14.4"

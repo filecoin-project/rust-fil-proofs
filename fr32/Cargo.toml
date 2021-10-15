@@ -9,7 +9,7 @@ repository = "https://github.com/filecoin-project/rust-fil-proofs"
 
 [dependencies]
 anyhow = "1.0.23"
-bellperson = "0.17.0"
+bellperson = "0.18.0"
 byte-slice-cast = "1.0.0"
 byteorder = "1"
 ff = "0.11.0"
