@@ -563,7 +563,7 @@ impl<'a, Tree: 'a + MerkleTreeTrait> ProofScheme<'a> for FallbackPoSt<'a, Tree> 
             pub_inputs.k.is_some(),
             "must be called with a partition index"
         );
-        let partition_index = pub_inputs.k.unwrap();
+        let partition_index = pub_inputs.k.expect("prechecked");
         let challenge_count = pub_params.challenge_count;
         let num_sectors_per_chunk = pub_params.sector_count;
 

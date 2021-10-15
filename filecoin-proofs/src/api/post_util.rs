@@ -266,7 +266,7 @@ pub fn single_partition_vanilla_proofs<Tree: MerkleTreeTrait>(
 ) -> Result<VanillaProof<Tree>> {
     info!("single_partition_vanilla_proofs:start");
     ensure!(pub_inputs.k.is_some(), "must have a partition index");
-    let partition_index = pub_inputs.k.unwrap();
+    let partition_index = pub_inputs.k.expect("prechecked");
 
     debug!("processing partition: {}", partition_index);
     ensure!(
