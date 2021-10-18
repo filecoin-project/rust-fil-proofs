@@ -109,12 +109,116 @@ impl Iterator for Challenges {
 mod tests {
     use super::*;
 
+    use std::collections::HashMap;
+
     use filecoin_hashers::Domain;
     use rand::SeedableRng;
     use rand_xorshift::XorShiftRng;
     use storage_proofs_core::TEST_SEED;
 
-    use crate::constants::{TreeRDomain, ALLOWED_SECTOR_SIZES};
+    use crate::constants::{
+        TreeRDomain, ALLOWED_SECTOR_SIZES, SECTOR_SIZE_16_KIB, SECTOR_SIZE_16_MIB,
+        SECTOR_SIZE_1_KIB, SECTOR_SIZE_2_KIB, SECTOR_SIZE_32_GIB, SECTOR_SIZE_32_KIB,
+        SECTOR_SIZE_4_KIB, SECTOR_SIZE_512_MIB, SECTOR_SIZE_64_GIB, SECTOR_SIZE_8_KIB,
+        SECTOR_SIZE_8_MIB,
+    };
+
+    #[test]
+    fn test_challenges_against_hardcoded() {
+        type SectorNodes = usize;
+        type PartitionIndex = usize;
+
+        let mut rng = XorShiftRng::from_seed(TEST_SEED);
+        let comm_r_new = TreeRDomain::random(&mut rng);
+
+        let test_vectors: HashMap<(SectorNodes, PartitionIndex), [u32; 5]> = {
+            let mut hm = HashMap::new();
+            hm.insert((SECTOR_SIZE_1_KIB, 0), [5, 9, 2, 0, 31]);
+            hm.insert((SECTOR_SIZE_2_KIB, 0), [37, 36, 0, 60, 37]);
+            hm.insert((SECTOR_SIZE_4_KIB, 0), [37, 18, 64, 47, 26]);
+            hm.insert((SECTOR_SIZE_8_KIB, 0), [37, 9, 240, 165, 89]);
+
+            hm.insert((SECTOR_SIZE_16_KIB, 0), [37, 9, 240, 165, 89]);
+            hm.insert((SECTOR_SIZE_16_KIB, 1), [342, 390, 338, 407, 380]);
+
+            hm.insert((SECTOR_SIZE_32_KIB, 0), [293, 4, 380, 308, 53]);
+            hm.insert((SECTOR_SIZE_32_KIB, 1), [598, 835, 980, 914, 727]);
+
+            hm.insert((SECTOR_SIZE_8_MIB, 0), [2341, 42480, 17241, 30407, 23862]);
+            hm.insert(
+                (SECTOR_SIZE_8_MIB, 1),
+                [99926, 104274, 93564, 74241, 116856],
+            );
+
+            hm.insert((SECTOR_SIZE_16_MIB, 0), [2341, 54008, 118998, 52952, 1491]);
+            hm.insert(
+                (SECTOR_SIZE_16_MIB, 1),
+                [165462, 150441, 154463, 197696, 220295],
+            );
+
+            hm.insert(
+                (SECTOR_SIZE_512_MIB, 0),
+                [2341, 367199, 444227, 381799, 419584],
+            );
+            hm.insert(
+                (SECTOR_SIZE_512_MIB, 1),
+                [1063656, 1540079, 1357979, 1644364, 1394127],
+            );
+            hm.insert(
+                (SECTOR_SIZE_512_MIB, 14),
+                [14789866, 14735953, 15532418, 15676174, 14783566],
+            );
+            hm.insert(
+                (SECTOR_SIZE_512_MIB, 15),
+                [16366137, 15746672, 16416779, 16186611, 16210584],
+            );
+
+            hm.insert(
+                (SECTOR_SIZE_32_GIB, 0),
+                [32508197, 30463593, 30631788, 22649857, 15398760],
+            );
+            hm.insert(
+                (SECTOR_SIZE_32_GIB, 1),
+                [85580133, 87841529, 85791345, 80308353, 101474256],
+            );
+            hm.insert(
+                (SECTOR_SIZE_32_GIB, 14),
+                [979516080, 944706378, 994431438, 945426651, 1005867799],
+            );
+            hm.insert(
+                (SECTOR_SIZE_32_GIB, 15),
+                [1034257159, 1057076592, 1042443489, 1059045736, 1025565787],
+            );
+
+            hm.insert(
+                (SECTOR_SIZE_64_GIB, 0),
+                [99617061, 15231796, 24435163, 69940096, 101625718],
+            );
+            hm.insert(
+                (SECTOR_SIZE_64_GIB, 1),
+                [219797861, 178138492, 155665564, 135867664, 195085821],
+            );
+            hm.insert(
+                (SECTOR_SIZE_64_GIB, 14),
+                [1919040176, 1948748197, 1943106675, 1938506267, 1950303537],
+            );
+            hm.insert(
+                (SECTOR_SIZE_64_GIB, 15),
+                [2040890119, 2072042168, 2022218552, 2112092205, 2031226437],
+            );
+
+            hm
+        };
+
+        for ((sector_nodes, k), challenges_expected) in test_vectors.into_iter() {
+            assert_eq!(
+                Challenges::new(sector_nodes, comm_r_new, k)
+                    .take(5)
+                    .collect::<Vec<u32>>(),
+                challenges_expected,
+            );
+        }
+    }
 
     #[test]
     fn test_challenge_bucketing() {
