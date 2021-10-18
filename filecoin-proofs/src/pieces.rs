@@ -8,7 +8,7 @@ use anyhow::{ensure, Context, Result};
 use filecoin_hashers::{HashFunction, Hasher};
 use fr32::Fr32Reader;
 use lazy_static::lazy_static;
-use log::info;
+use log::trace;
 use storage_proofs_core::util::NODE_SIZE;
 
 use crate::{
@@ -83,7 +83,7 @@ fn empty_comm_d(sector_size: SectorSize) -> Commitment {
 }
 
 pub fn compute_comm_d(sector_size: SectorSize, piece_infos: &[PieceInfo]) -> Result<Commitment> {
-    info!("verifying {} pieces", piece_infos.len());
+    trace!("verifying {} pieces", piece_infos.len());
     if piece_infos.is_empty() {
         return Ok(empty_comm_d(sector_size));
     }
