@@ -294,6 +294,7 @@ jobs:
       - run: rustup default $(cat rust-toolchain)
       - run: cargo update
       - run: cargo fetch
+      - ensure_filecoin_parameters
       - run:
           name: Test Darwin
           command: |
