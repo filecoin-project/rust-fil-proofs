@@ -275,7 +275,7 @@ where
     W: Write,
     Tree: 'static + MerkleTreeTrait,
 {
-    info!("unseal_range_inner:start");
+    trace!("unseal_range_inner:start");
 
     let base_tree_size = get_base_tree_size::<DefaultBinaryTree>(porep_config.sector_size)?;
     let base_tree_leafs = get_base_tree_leafs::<DefaultBinaryTree>(base_tree_size)?;
@@ -310,7 +310,7 @@ where
 
     let amount = UnpaddedBytesAmount(written as u64);
 
-    info!("unseal_range_inner:finish");
+    trace!("unseal_range_inner:finish");
     Ok(amount)
 }
 
@@ -376,7 +376,7 @@ where
     R: Read,
     W: Write,
 {
-    info!("add_piece:start");
+    trace!("add_piece:start");
 
     let result = measure_op(Operation::AddPiece, || {
         ensure_piece_size(piece_size)?;
@@ -417,7 +417,7 @@ where
         Ok((PieceInfo::new(comm, n)?, written))
     });
 
-    info!("add_piece:finish");
+    trace!("add_piece:finish");
     result
 }
 
@@ -705,5 +705,6 @@ where
     verify_level_cache_store::<DefaultOctTree>(&t_aux.tree_r_last_config)?;
 
     info!("validate_cache_for_precommit:finish");
+
     Ok(())
 }
