@@ -61,6 +61,7 @@ storage-proofs-porep = { path = "../storage-proofs-porep", version = "^10.0.0", 
 
 [features]
 default = ["opencl", "multicore-sdr"]
+isolated-testing = []
 opencl = [
     "storage-proofs-core/opencl",
     "storage-proofs-porep/opencl",
