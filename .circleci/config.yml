@@ -92,6 +92,12 @@ jobs:
             ulimit -n 20000
             cargo +$(cat rust-toolchain) test --verbose --release --workspace
             RUSTFLAGS="-D warnings" cargo +$(cat rust-toolchain) build --examples --release --workspace
+            cargo +$(cat rust-toolchain) test -p storage-proofs-update --features isolated-testing --release test_empty_sector_update_circuit_1kib
+            cargo +$(cat rust-toolchain) test -p storage-proofs-update --features isolated-testing --release test_empty_sector_update_circuit_2kib
+            cargo +$(cat rust-toolchain) test -p storage-proofs-update --features isolated-testing --release test_empty_sector_update_circuit_4kib
+            cargo +$(cat rust-toolchain) test -p storage-proofs-update --features isolated-testing --release test_empty_sector_update_circuit_8kib
+            cargo +$(cat rust-toolchain) test -p storage-proofs-update --features isolated-testing --release test_empty_sector_update_circuit_16kib
+            cargo +$(cat rust-toolchain) test -p storage-proofs-update --features isolated-testing --release test_empty_sector_update_circuit_32kib
           no_output_timeout: 30m
 
   test_ignored_release:

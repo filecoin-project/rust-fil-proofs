@@ -273,36 +273,42 @@ where
 }
 
 #[test]
+#[cfg(feature = "isolated-testing")]
 fn test_empty_sector_update_circuit_1kib() {
     type TreeR = MerkleTreeWrapper<TreeRHasher, DiskStore<TreeRDomain>, U8, U4, U0>;
     test_empty_sector_update_circuit::<TreeR>(SECTOR_SIZE_1_KIB, 1248389);
 }
 
 #[test]
+#[cfg(feature = "isolated-testing")]
 fn test_empty_sector_update_circuit_2kib() {
     type TreeR = MerkleTreeWrapper<TreeRHasher, DiskStore<TreeRDomain>, U8, U0, U0>;
     test_empty_sector_update_circuit::<TreeR>(SECTOR_SIZE_2_KIB, 1705039);
 }
 
 #[test]
+#[cfg(feature = "isolated-testing")]
 fn test_empty_sector_update_circuit_4kib() {
     type TreeR = MerkleTreeWrapper<TreeRHasher, DiskStore<TreeRDomain>, U8, U2, U0>;
     test_empty_sector_update_circuit::<TreeR>(SECTOR_SIZE_4_KIB, 2165109);
 }
 
 #[test]
+#[cfg(feature = "isolated-testing")]
 fn test_empty_sector_update_circuit_8kib() {
     type TreeR = MerkleTreeWrapper<TreeRHasher, DiskStore<TreeRDomain>, U8, U4, U0>;
     test_empty_sector_update_circuit::<TreeR>(SECTOR_SIZE_8_KIB, 2620359);
 }
 
 #[test]
+#[cfg(feature = "isolated-testing")]
 fn test_empty_sector_update_circuit_16kib() {
     type TreeR = MerkleTreeWrapper<TreeRHasher, DiskStore<TreeRDomain>, U8, U8, U0>;
     test_empty_sector_update_circuit::<TreeR>(SECTOR_SIZE_16_KIB, 6300021);
 }
 
 #[test]
+#[cfg(feature = "isolated-testing")]
 fn test_empty_sector_update_circuit_32kib() {
     type TreeR = MerkleTreeWrapper<TreeRHasher, DiskStore<TreeRDomain>, U8, U8, U2>;
     test_empty_sector_update_circuit::<TreeR>(SECTOR_SIZE_32_KIB, 6760091);
