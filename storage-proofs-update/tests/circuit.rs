@@ -1,3 +1,5 @@
+#![allow(unused_imports)]
+#![allow(dead_code)]
 use std::path::Path;
 
 use bellperson::{util_cs::test_cs::TestConstraintSystem, Circuit};
