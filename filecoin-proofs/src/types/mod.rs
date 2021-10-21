@@ -83,6 +83,7 @@ pub struct SealPreCommitPhase1Output<Tree: MerkleTreeTrait> {
 }
 
 #[repr(transparent)]
+#[derive(Clone, Debug)]
 pub struct PartitionSnarkProof(pub Vec<u8>);
 
 pub type SnarkProof = Vec<u8>;
