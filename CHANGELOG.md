@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://book.async.rs/overview
 
 ## Unreleased
 
+## [10.1.0] - 2021-10-25
+
+- Allow window post proving on a single partition basis [#1526](https://github.com/filecoin-project/rust-fil-proofs/pull/1526)
+- Update bellperson, neptune, and rust-toolchain [#1529](https://github.com/filecoin-project/rust-fil-proofs/pull/1529)
+- Reduce verbose info logging [#1530](https://github.com/filecoin-project/rust-fil-proofs/pull/1530)
+- Improve benchy by printing help when no command is given [#1527](https://github.com/filecoin-project/rust-fil-proofs/pull/1527)
+- Fall back to CPU if GPU is not available [#1517](https://github.com/filecoin-project/rust-fil-proofs/pull/1517)
+- remove FIL_PROOFS_CUDA_NVCC_ARGS env var [#1520](https://github.com/filecoin-project/rust-fil-proofs/pull/1520)
+- Split GPU Tree builder CI jobs [#1518](https://github.com/filecoin-project/rust-fil-proofs/pull/1518)
+- Use GPU Tree builder only for Poseidon hashes [#1515](https://github.com/filecoin-project/rust-fil-proofs/pull/1515)
+- Run GPU Tree building tests on all CI tests [#1514](https://github.com/filecoin-project/rust-fil-proofs/pull/1514)
+
 ## [10.0.0] - 2021-09-30
 
 - Integrate a variety of zk-SNARK proving related performance improvements. For details see [#220](https://github.com/filecoin-project/bellperson#220)
@@ -278,7 +290,8 @@ and this project adheres to [Semantic Versioning](https://book.async.rs/overview
 
 - Initial stable release
 
-[Unreleased]: https://github.com/filecoin-project/rust-fil-proofs/compare/v10.0.0...HEAD
+[Unreleased]: https://github.com/filecoin-project/rust-fil-proofs/compare/v10.1.0...HEAD
+[10.1.0]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v10.1.0
 [10.0.0]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v10.0.0
 [9.0.2]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v9.0.2
 [9.0.1]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v9.0.1
