@@ -117,7 +117,7 @@ impl Domain for PoseidonDomain {
             "invalid amount of bytes"
         );
         let mut repr = <Fr as PrimeField>::Repr::default();
-        repr.copy_from_slice(&raw);
+        repr.copy_from_slice(raw);
         Ok(PoseidonDomain(repr))
     }
 
@@ -170,7 +170,7 @@ fn shared_hash(data: &[u8]) -> PoseidonDomain {
     // We could truncate so `bytes_into_frs` cannot fail, then ensure `data` is always `fr_safe`.
     let preimage = data
         .chunks(32)
-        .map(|ref chunk| {
+        .map(|chunk| {
             Fr::from_repr_vartime(PoseidonDomain::from_slice(chunk).0).expect("from_repr failure")
         })
         .collect::<Vec<_>>();
@@ -181,19 +181,19 @@ fn shared_hash(data: &[u8]) -> PoseidonDomain {
 fn shared_hash_frs(preimage: &[Fr]) -> Fr {
     match preimage.len() {
         2 => {
-            let mut p = Poseidon::new_with_preimage(&preimage, &POSEIDON_CONSTANTS_2);
+            let mut p = Poseidon::new_with_preimage(preimage, &POSEIDON_CONSTANTS_2);
             p.hash()
         }
         4 => {
-            let mut p = Poseidon::new_with_preimage(&preimage, &POSEIDON_CONSTANTS_4);
+            let mut p = Poseidon::new_with_preimage(preimage, &POSEIDON_CONSTANTS_4);
             p.hash()
         }
         8 => {
-            let mut p = Poseidon::new_with_preimage(&preimage, &POSEIDON_CONSTANTS_8);
+            let mut p = Poseidon::new_with_preimage(preimage, &POSEIDON_CONSTANTS_8);
             p.hash()
         }
         16 => {
-            let mut p = Poseidon::new_with_preimage(&preimage, &POSEIDON_CONSTANTS_16);
+            let mut p = Poseidon::new_with_preimage(preimage, &POSEIDON_CONSTANTS_16);
             p.hash()
         }
 
@@ -413,11 +413,9 @@ mod tests {
         let p = t.gen_proof(0).expect("gen_proof failure"); // create a proof for the first value =k Fr::one()
 
         assert_eq!(*p.path(), vec![0, 0]);
-        assert_eq!(
-            p.validate::<PoseidonFunction>()
-                .expect("failed to validate"),
-            true
-        );
+        assert!(p
+            .validate::<PoseidonFunction>()
+            .expect("failed to validate"));
     }
 
     // #[test]

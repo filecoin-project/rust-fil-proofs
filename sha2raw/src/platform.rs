@@ -79,8 +79,8 @@ impl Implementation {
             Platform::Asm => {
                 let mut buffer = [0u8; 64];
                 for block in blocks.chunks(2) {
-                    buffer[..32].copy_from_slice(&block[0]);
-                    buffer[32..].copy_from_slice(&block[1]);
+                    buffer[..32].copy_from_slice(block[0]);
+                    buffer[32..].copy_from_slice(block[1]);
                     sha2_asm::compress256(state, &[buffer]);
                 }
             }

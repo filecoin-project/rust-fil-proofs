@@ -210,7 +210,7 @@ impl ParentCache {
         // although we don't attempt to match it up to anything.  This is useful for the case of
         // generating new additions to the parent cache manifest since a valid digest is required.
         let (parent_cache_data, verify_cache, is_production, mut digest_hex) =
-            match get_parent_cache_data(&path) {
+            match get_parent_cache_data(path) {
                 None => {
                     info!("[open] Parent cache data is not supported in production");
 
@@ -288,7 +288,7 @@ impl ParentCache {
         }
 
         Ok(ParentCache {
-            cache: CacheData::open(0, len, &path)?,
+            cache: CacheData::open(0, len, path)?,
             path: path.to_path_buf(),
             num_cache_entries: cache_entries,
             sector_size: graph.size() * NODE_SIZE,
@@ -352,7 +352,7 @@ impl ParentCache {
             // Check if current entry is part of the official manifest and verify
             // that what we just generated matches what we expect for this entry
             // (if found). If not, we're dealing with some kind of test sector.
-            match get_parent_cache_data(&path) {
+            match get_parent_cache_data(path) {
                 None => {
                     info!("[generate] Parent cache data is not supported in production");
                 }
@@ -371,7 +371,7 @@ impl ParentCache {
         })?;
 
         Ok(ParentCache {
-            cache: CacheData::open(0, len, &path)?,
+            cache: CacheData::open(0, len, path)?,
             path: path.to_path_buf(),
             num_cache_entries: cache_entries,
             sector_size,

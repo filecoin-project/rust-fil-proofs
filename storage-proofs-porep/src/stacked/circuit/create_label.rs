@@ -183,7 +183,7 @@ mod tests {
         )
         .expect("create_label_exp failed");
 
-        let expected_raw = data_at_node(&l1, node).expect("data_at_node failed");
+        let expected_raw = data_at_node(l1, node).expect("data_at_node failed");
         let expected = bytes_into_fr(expected_raw).expect("bytes_into_fr failed");
 
         assert_eq!(

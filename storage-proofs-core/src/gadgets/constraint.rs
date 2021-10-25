@@ -57,7 +57,7 @@ pub fn add<Scalar: PrimeField, CS: ConstraintSystem<Scalar>>(
     })?;
 
     // a + b = res
-    sum(&mut cs, || "sum constraint", &a, &b, &res);
+    sum(&mut cs, || "sum constraint", a, b, &res);
 
     Ok(res)
 }
@@ -75,7 +75,7 @@ pub fn sub<Scalar: PrimeField, CS: ConstraintSystem<Scalar>>(
     })?;
 
     // a - b = res
-    difference(&mut cs, || "subtraction constraint", &a, &b, &res);
+    difference(&mut cs, || "subtraction constraint", a, b, &res);
 
     Ok(res)
 }

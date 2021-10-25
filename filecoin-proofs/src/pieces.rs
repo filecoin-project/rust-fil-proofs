@@ -277,7 +277,7 @@ pub fn get_piece_start_byte(
     piece_bytes: UnpaddedBytesAmount,
 ) -> UnpaddedByteIndex {
     // sum up all the bytes taken by the ordered pieces
-    let last_byte = sum_piece_bytes_with_alignment(&pieces);
+    let last_byte = sum_piece_bytes_with_alignment(pieces);
     let alignment = get_piece_alignment(last_byte, piece_bytes);
 
     // add only the left padding of the target piece to give the start of that piece's data

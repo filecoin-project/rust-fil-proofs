@@ -47,7 +47,7 @@ pub fn clear_caches<Tree: MerkleTreeTrait>(
     info!("clear_caches:start");
 
     for replica in replicas.values() {
-        clear_cache::<Tree>(&replica.cache_dir.as_path())?;
+        clear_cache::<Tree>(replica.cache_dir.as_path())?;
     }
 
     info!("clear_caches:finish");
@@ -84,7 +84,7 @@ pub fn generate_fallback_sector_challenges<Tree: 'static + MerkleTreeTrait>(
     let num_sectors_per_chunk = post_config.sector_count;
     let partitions = match post_config.typ {
         PoStType::Window => {
-            get_partitions_for_window_post(pub_sectors.len(), &post_config).unwrap_or(1)
+            get_partitions_for_window_post(pub_sectors.len(), post_config).unwrap_or(1)
         }
         PoStType::Winning => 1,
     };

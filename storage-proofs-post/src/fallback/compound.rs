@@ -76,7 +76,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait>
                 let challenged_leaf = generate_leaf_challenge_inner::<
                     <Tree::Hasher as Hasher>::Domain,
                 >(
-                    challenge_hasher.clone(), &pub_params, challenge_index
+                    challenge_hasher.clone(), pub_params, challenge_index
                 );
 
                 let por_pub_inputs = por::PublicInputs {

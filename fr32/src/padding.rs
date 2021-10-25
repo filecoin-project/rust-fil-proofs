@@ -701,7 +701,7 @@ where
         // stream and the same data in the padded layout are not necessarily
         // the same (since the added padding bits shift it).
         let mut recovered = extract_bits_and_shift(
-            &source,
+            source,
             read_pos.total_bits(),
             bits_to_extract,
             write_bit_offset,

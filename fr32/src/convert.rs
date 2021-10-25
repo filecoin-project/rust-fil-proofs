@@ -57,7 +57,7 @@ mod tests {
 
     fn bytes_fr_test(bytes: Fr32Ary, expect_success: bool) {
         let b = &bytes[..];
-        let fr_result = bytes_into_fr(&b);
+        let fr_result = bytes_into_fr(b);
         if expect_success {
             let f = fr_result.expect("Failed to convert bytes to `Fr`");
             let b2 = fr_into_bytes(&f);

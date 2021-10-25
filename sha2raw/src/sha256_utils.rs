@@ -288,8 +288,8 @@ pub fn compress256(state: &mut [u32; 8], blocks: &[&[u8]]) {
     for block in blocks.chunks(2) {
         assert_eq!(block[0].len(), 32);
         assert_eq!(block[1].len(), 32);
-        BE::read_u32_into(&block[0], &mut block_u32[..BLOCK_LEN / 2]);
-        BE::read_u32_into(&block[1], &mut block_u32[BLOCK_LEN / 2..]);
+        BE::read_u32_into(block[0], &mut block_u32[..BLOCK_LEN / 2]);
+        BE::read_u32_into(block[1], &mut block_u32[BLOCK_LEN / 2..]);
 
         sha256_digest_block_u32(state, &block_u32);
     }

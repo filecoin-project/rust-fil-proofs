@@ -26,10 +26,7 @@ fn rand_bytes_with_blake2b() -> Result<(Vec<u8>, String), FailureError> {
 
     io::copy(&mut as_slice, &mut hasher)?;
 
-    Ok((
-        bytes.iter().cloned().collect(),
-        hasher.finalize().to_hex()[..32].into(),
-    ))
+    Ok((bytes.to_vec(), hasher.finalize().to_hex()[..32].into()))
 }
 
 #[test]

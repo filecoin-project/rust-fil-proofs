@@ -104,12 +104,12 @@ pub fn insert_2<Scalar: PrimeField, CS: ConstraintSystem<Scalar>>(
             cs.namespace(|| "binary insert 0"),
             &bits[0],
             &elements[0],
-            &element,
+            element,
         )?,
         pick(
             cs.namespace(|| "binary insert 1"),
             &bits[0],
-            &element,
+            element,
             &elements[0],
         )?,
     ])
@@ -459,7 +459,7 @@ mod tests {
                     &mut cs,
                     &to_insert.clone(),
                     index_bits.as_slice(),
-                    &elements.as_slice(),
+                    elements.as_slice(),
                 )
                 .expect("insert failed");
 

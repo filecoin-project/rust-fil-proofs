@@ -411,7 +411,7 @@ impl<Tree: MerkleTreeTrait, G: Hasher> TemporaryAux<Tree, G> {
             let tree_c_store = DiskStore::<<Tree::Hasher as Hasher>::Domain>::new_from_disk(
                 tree_c_size,
                 Tree::Arity::to_usize(),
-                &config,
+                config,
             )
             .context("tree_c")?;
             // Note: from_data_store requires the base tree leaf count
@@ -673,7 +673,7 @@ impl<Tree: MerkleTreeTrait> Labels<Tree> {
                 let store = DiskStore::new_from_disk(
                     label.size.expect("label size failure"),
                     Tree::Arity::to_usize(),
-                    &label,
+                    label,
                 )?;
                 store.read_at(node as usize)
             })
