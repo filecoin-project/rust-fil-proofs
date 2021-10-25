@@ -82,6 +82,10 @@ pub struct SealPreCommitPhase1Output<Tree: MerkleTreeTrait> {
     pub comm_d: Commitment,
 }
 
+#[repr(transparent)]
+#[derive(Clone, Debug)]
+pub struct PartitionSnarkProof(pub Vec<u8>);
+
 pub type SnarkProof = Vec<u8>;
 pub type AggregateSnarkProof = Vec<u8>;
 pub type VanillaProof<Tree> = fallback::Proof<<Tree as MerkleTreeTrait>::Proof>;
