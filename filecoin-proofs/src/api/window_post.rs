@@ -265,8 +265,8 @@ pub fn generate_single_window_post_with_vanilla<Tree: 'static + MerkleTreeTrait>
     let prover_id_safe: <Tree::Hasher as Hasher>::Domain =
         as_safe_commitment(&prover_id, "prover_id")?;
 
-    let vanilla_params = window_post_setup_params(&post_config);
-    let partitions = get_partitions_for_window_post(vanilla_proofs.len(), &post_config);
+    let vanilla_params = window_post_setup_params(post_config);
+    let partitions = get_partitions_for_window_post(vanilla_proofs.len(), post_config);
 
     let setup_params = compound_proof::SetupParams {
         vanilla_params,
@@ -276,7 +276,7 @@ pub fn generate_single_window_post_with_vanilla<Tree: 'static + MerkleTreeTrait>
 
     let pub_params: compound_proof::PublicParams<'_, FallbackPoSt<'_, Tree>> =
         FallbackPoStCompound::setup(&setup_params)?;
-    let groth_params = get_post_params::<Tree>(&post_config)?;
+    let groth_params = get_post_params::<Tree>(post_config)?;
 
     let mut pub_sectors = Vec::with_capacity(vanilla_proofs.len());
     for vanilla_proof in &vanilla_proofs {
@@ -294,7 +294,7 @@ pub fn generate_single_window_post_with_vanilla<Tree: 'static + MerkleTreeTrait>
     };
 
     let partitioned_proofs = single_partition_vanilla_proofs(
-        &post_config,
+        post_config,
         &pub_params.vanilla_params,
         &pub_inputs,
         &vanilla_proofs,

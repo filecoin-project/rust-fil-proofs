@@ -363,7 +363,7 @@ pub fn single_partition_vanilla_proofs<Tree: MerkleTreeTrait>(
     info!("single_partition_vanilla_proofs:finish");
 
     ensure!(
-        FallbackPoSt::<Tree>::verify(pub_params, pub_inputs, &partition_proof,)?,
+        FallbackPoSt::<Tree>::verify(pub_params, pub_inputs, &partition_proof)?,
         "partitioned vanilla proofs failed to verify"
     );
 
@@ -384,7 +384,7 @@ pub fn merge_window_post_partition_proofs(
 pub fn get_num_partition_for_fallback_post(config: &PoStConfig, num_sectors: usize) -> usize {
     match config.typ {
         PoStType::Window => {
-            let partitions = ((num_sectors) as f32 / config.sector_count as f32).ceil() as usize;
+            let partitions = (num_sectors as f32 / config.sector_count as f32).ceil() as usize;
             if partitions > 1 {
                 partitions
             } else {
