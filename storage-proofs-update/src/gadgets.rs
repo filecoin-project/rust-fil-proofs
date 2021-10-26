@@ -129,7 +129,7 @@ pub fn gen_challenge_bits<CS: ConstraintSystem<Fr>>(
         // `digest = H(comm_r_new || digest_index)`
         let digest = <PoseidonHasher as Hasher>::Function::hash2_circuit(
             cs.namespace(|| format!("digest_{}", j)),
-            &comm_r_new,
+            comm_r_new,
             &digest_index,
         )?;
 
@@ -311,7 +311,7 @@ mod tests {
             let challenge_count = challenge_count(sector_nodes);
 
             for k in 0..partition_count {
-                let challenges: Vec<u32> = Challenges::new(sector_nodes, comm_r_new, k).collect();
+                let challenges = Challenges::new(sector_nodes, comm_r_new, k);
 
                 let mut cs = TestConstraintSystem::<Fr>::new();
                 let comm_r_new =
@@ -338,8 +338,7 @@ mod tests {
                 let gadget_constraints = constraints_after - constraints_before;
                 assert_eq!(gadget_constraints, constraints_expected);
 
-                for (c, c_generated_bits) in challenges.into_iter().zip(generated_bits.into_iter())
-                {
+                for (c, c_generated_bits) in challenges.zip(generated_bits.into_iter()) {
                     assert_eq!(c_generated_bits.len(), rand_challenge_bits);
                     let mut c_circ: u32 = 0;
                     for (i, bit) in c_generated_bits
@@ -417,7 +416,7 @@ mod tests {
                 .enumerate()
                 .map(|(i, apex_leaf)| {
                     AllocatedNum::alloc(cs.namespace(|| format!("apex_leaf_{}", i)), || {
-                        Ok(apex_leaf.clone().into())
+                        Ok((*apex_leaf).into())
                     })
                     .unwrap()
                 })
