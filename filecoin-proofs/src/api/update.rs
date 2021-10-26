@@ -130,11 +130,11 @@ pub fn encode_into<Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher>>(
             tree_r_last_new_config,
             <Tree::Hasher as Hasher>::Domain::try_from_bytes(&p_aux.comm_c.into_bytes())?,
             <Tree::Hasher as Hasher>::Domain::try_from_bytes(&p_aux.comm_r_last.into_bytes())?,
-            &new_replica_path,
-            &new_cache_path,
-            &sector_key_path,
-            &sector_key_cache_path,
-            &staged_data_path,
+            new_replica_path,
+            new_cache_path,
+            sector_key_path,
+            sector_key_cache_path,
+            staged_data_path,
             usize::from(config.h_select),
         )?;
 

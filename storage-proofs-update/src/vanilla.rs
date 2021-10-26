@@ -462,7 +462,7 @@ pub fn phi(comm_d_new: &TreeDDomain, comm_r_old: &TreeRDomain) -> TreeRDomain {
         let comm_d_new: Fr = (*comm_d_new).into();
         comm_d_new.into()
     };
-    <TreeRHasher as Hasher>::Function::hash2(&comm_d_new, &comm_r_old)
+    <TreeRHasher as Hasher>::Function::hash2(&comm_d_new, comm_r_old)
 }
 
 // Computes all `2^h` rho values for the given `phi`. Each rho corresponds to one of the `2^h`
@@ -471,7 +471,7 @@ pub fn rhos(h: usize, phi: &TreeRDomain) -> Vec<Fr> {
     (0..1 << h)
         .map(|high| {
             let high: TreeRDomain = Fr::from(high as u64).into();
-            <TreeRHasher as Hasher>::Function::hash2(&phi, &high).into()
+            <TreeRHasher as Hasher>::Function::hash2(phi, &high).into()
         })
         .collect()
 }
@@ -610,9 +610,8 @@ where
 
         // Re-instantiate TreeD's store for reading apex leafs.
         let tree_d_nodes = tree_d_new_config.size.expect("config size failure");
-        let tree_d_store =
-            TreeDStore::new_from_disk(tree_d_nodes, tree_d_arity, &tree_d_new_config)
-                .context("tree_d_store")?;
+        let tree_d_store = TreeDStore::new_from_disk(tree_d_nodes, tree_d_arity, tree_d_new_config)
+            .context("tree_d_store")?;
         ensure!(
             tree_d_nodes == Store::len(&tree_d_store),
             "TreeD store size mismatch"
