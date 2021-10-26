@@ -567,8 +567,8 @@ where
         let preimg = insert(
             &mut cs.namespace(|| format!("merkle proof insert (height={})", height)),
             &cur,
-            insert_index,
-            siblings,
+            &insert_index,
+            &siblings,
         )?;
         cur = <<Tree::Hasher as Hasher>::Function as HashFunction<
             <Tree::Hasher as Hasher>::Domain,

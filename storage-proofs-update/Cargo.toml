@@ -1,6 +1,6 @@
 [package]
 name = "storage-proofs-update"
-version = "10.0.0"
+version = "10.1.0"
 authors = ["dignifiedquire <me@dignifiedquire.com>"]
 description = "Proof of SDR-PoRep CC-Sector Update"
 license = "MIT OR Apache-2.0"
@@ -24,13 +24,13 @@ rayon = "1.0.0"
 serde = { version = "1.0", features = ["derive"]}
 serde_json = "1.0"
 ff = "0.11.0"
-bellperson = "0.17.0"
+bellperson = "0.18.0"
 blstrs = "0.4.0"
 log = "0.4.7"
 pretty_assertions = "0.6.1"
 generic-array = "0.14.4"
 anyhow = "1.0.23"
-neptune = { version = "5.0.0", features = ["arity2", "arity4", "arity8", "arity11", "arity16", "arity24", "arity36"] }
+neptune = { version = "5.1.0", features = ["arity2", "arity4", "arity8", "arity11", "arity16", "arity24", "arity36"] }
 num_cpus = "1.10.1"
 hex = "0.4.2"
 bincode = "1.1.2"

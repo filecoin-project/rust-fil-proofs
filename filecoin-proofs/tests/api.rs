@@ -11,114 +11,25 @@ use blstrs::{Bls12, Scalar as Fr};
 use ff::Field;
 use filecoin_hashers::Hasher;
 use filecoin_proofs::{
-<<<<<<< HEAD
-<<<<<<< HEAD
-    add_piece, aggregate_seal_commit_proofs, clear_cache, compute_comm_d, fauxrep_aux,
-    generate_fallback_sector_challenges, generate_piece_commitment, generate_single_vanilla_proof,
-    generate_single_window_post_with_vanilla, generate_window_post,
+    add_piece, aggregate_seal_commit_proofs, clear_cache, compute_comm_d, decode_from, encode_into,
+    fauxrep_aux, generate_empty_sector_update_proof, generate_fallback_sector_challenges,
+    generate_partition_proofs, generate_piece_commitment, generate_single_partition_proof,
+    generate_single_vanilla_proof, generate_single_window_post_with_vanilla, generate_window_post,
     generate_window_post_with_vanilla, generate_winning_post,
     generate_winning_post_sector_challenge, generate_winning_post_with_vanilla,
     get_num_partition_for_fallback_post, get_seal_inputs, merge_window_post_partition_proofs,
-    seal_commit_phase1, seal_commit_phase2, seal_pre_commit_phase1, seal_pre_commit_phase2,
-    unseal_range, validate_cache_for_commit, validate_cache_for_precommit_phase2,
-    verify_aggregate_seal_commit_proofs, verify_seal, verify_window_post, verify_winning_post,
-    Commitment, DefaultTreeDomain, MerkleTreeTrait, PaddedBytesAmount, PieceInfo, PoRepConfig,
-    PoRepProofPartitions, PoStConfig, PoStType, PrivateReplicaInfo, ProverId, PublicReplicaInfo,
-    SealCommitOutput, SealPreCommitOutput, SealPreCommitPhase1Output, SectorShape16KiB,
-    SectorShape2KiB, SectorShape32KiB, SectorShape4KiB, SectorSize, UnpaddedByteIndex,
-    UnpaddedBytesAmount, POREP_PARTITIONS, SECTOR_SIZE_16_KIB, SECTOR_SIZE_2_KIB,
-    SECTOR_SIZE_32_KIB, SECTOR_SIZE_4_KIB, WINDOW_POST_CHALLENGE_COUNT, WINDOW_POST_SECTOR_COUNT,
-    WINNING_POST_CHALLENGE_COUNT, WINNING_POST_SECTOR_COUNT,
-=======
-    add_piece, aggregate_seal_commit_proofs, clear_cache, compare_elements, compute_comm_d,
-<<<<<<< HEAD
-    decode_from, encode_into, fauxrep_aux, generate_fallback_sector_challenges,
-<<<<<<< HEAD
-    generate_piece_commitment, generate_single_vanilla_proof, generate_update_proof,
-    generate_window_post, generate_window_post_with_vanilla, generate_winning_post,
-    generate_winning_post_sector_challenge, generate_winning_post_with_vanilla, get_seal_inputs,
-    remove_encoded_data, seal_commit_phase1, seal_commit_phase2, seal_pre_commit_phase1,
-    seal_pre_commit_phase2, unseal_range, validate_cache_for_commit,
-    validate_cache_for_precommit_phase2, verify_aggregate_seal_commit_proofs, verify_seal,
-<<<<<<< HEAD
-    verify_window_post, verify_winning_post, Commitment, DefaultTreeDomain, MerkleTreeTrait,
-    PaddedBytesAmount, PieceInfo, PoRepConfig, PoRepProofPartitions, PoStConfig, PoStType,
-    PrivateReplicaInfo, ProverId, PublicReplicaInfo, SealCommitOutput, SealPreCommitOutput,
-    SealPreCommitPhase1Output, SectorShape16KiB, SectorShape2KiB, SectorShape32KiB,
-    SectorShape4KiB, SectorSize, UnpaddedByteIndex, UnpaddedBytesAmount, POREP_PARTITIONS,
-    SECTOR_SIZE_16_KIB, SECTOR_SIZE_2_KIB, SECTOR_SIZE_32_KIB, SECTOR_SIZE_4_KIB,
-    WINDOW_POST_CHALLENGE_COUNT, WINDOW_POST_SECTOR_COUNT, WINNING_POST_CHALLENGE_COUNT,
-<<<<<<< HEAD
-    WINNING_POST_SECTOR_COUNT,
->>>>>>> 5c046723 (feat: encode/decode/remove_data API with tests)
-=======
-    WINNING_POST_SECTOR_COUNT, HSelect, UpdateProofPartitions,
->>>>>>> db10f80f (feat: add Jake's latest circuit code)
-=======
-    verify_window_post, verify_winning_post, Commitment, DefaultTreeDomain, HSelect,
-    MerkleTreeTrait, PaddedBytesAmount, PieceInfo, PoRepConfig, PoRepProofPartitions, PoStConfig,
-    PoStType, PrivateReplicaInfo, ProverId, PublicReplicaInfo, SealCommitOutput,
-    SealPreCommitOutput, SealPreCommitPhase1Output, SectorShape16KiB, SectorShape2KiB,
-    SectorShape32KiB, SectorShape4KiB, SectorSize, UnpaddedByteIndex, UnpaddedBytesAmount,
-    UpdateProofPartitions, POREP_PARTITIONS, SECTOR_SIZE_16_KIB, SECTOR_SIZE_2_KIB,
-    SECTOR_SIZE_32_KIB, SECTOR_SIZE_4_KIB, WINDOW_POST_CHALLENGE_COUNT, WINDOW_POST_SECTOR_COUNT,
-    WINNING_POST_CHALLENGE_COUNT, WINNING_POST_SECTOR_COUNT,
->>>>>>> 9389307f (style: cargo fmt)
-=======
-=======
-    add_piece, aggregate_seal_commit_proofs, clear_cache, compute_comm_d, decode_from, encode_into,
-    fauxrep_aux, generate_empty_sector_update_proof, generate_fallback_sector_challenges,
->>>>>>> 1f5042b4 (fix: apply some review feedback)
-    generate_partition_proofs, generate_piece_commitment, generate_single_partition_proof,
-    generate_single_vanilla_proof, generate_window_post, generate_window_post_with_vanilla,
-    generate_winning_post, generate_winning_post_sector_challenge,
-    generate_winning_post_with_vanilla, get_seal_inputs, remove_encoded_data, seal_commit_phase1,
-    seal_commit_phase2, seal_pre_commit_phase1, seal_pre_commit_phase2, unseal_range,
-    validate_cache_for_commit, validate_cache_for_precommit_phase2,
-<<<<<<< HEAD
-    verify_aggregate_seal_commit_proofs, verify_partition_proofs, verify_seal,
-=======
-    decode_from, encode_into, fauxrep_aux, generate_empty_sector_update_proof,
-    generate_fallback_sector_challenges, generate_partition_proofs, generate_piece_commitment,
-    generate_single_partition_proof, generate_single_vanilla_proof, generate_window_post,
-    generate_window_post_with_vanilla, generate_winning_post,
-    generate_winning_post_sector_challenge, generate_winning_post_with_vanilla, get_seal_inputs,
     remove_encoded_data, seal_commit_phase1, seal_commit_phase2, seal_pre_commit_phase1,
     seal_pre_commit_phase2, unseal_range, validate_cache_for_commit,
     validate_cache_for_precommit_phase2, verify_aggregate_seal_commit_proofs,
     verify_empty_sector_update_proof, verify_partition_proofs, verify_seal,
->>>>>>> 63296dd3 (feat: add prove and verify API interfaces)
     verify_single_partition_proof, verify_window_post, verify_winning_post, Commitment,
-    DefaultTreeDomain, HSelect, MerkleTreeTrait, PaddedBytesAmount, PieceInfo, PoRepConfig,
-    PoRepProofPartitions, PoStConfig, PoStType, PrivateReplicaInfo, ProverId, PublicReplicaInfo,
-    SealCommitOutput, SealPreCommitOutput, SealPreCommitPhase1Output, SectorShape16KiB,
-    SectorShape2KiB, SectorShape32KiB, SectorShape4KiB, SectorSize, UnpaddedByteIndex,
-    UnpaddedBytesAmount, UpdateProofPartitions, POREP_PARTITIONS, SECTOR_SIZE_16_KIB,
-    SECTOR_SIZE_2_KIB, SECTOR_SIZE_32_KIB, SECTOR_SIZE_4_KIB, WINDOW_POST_CHALLENGE_COUNT,
-    WINDOW_POST_SECTOR_COUNT, WINNING_POST_CHALLENGE_COUNT, WINNING_POST_SECTOR_COUNT,
->>>>>>> de953475 (feat: complete vanilla proving and verify through tests)
-=======
-    verify_aggregate_seal_commit_proofs, verify_empty_sector_update_proof, verify_partition_proofs,
-    verify_seal, verify_single_partition_proof, verify_window_post, verify_winning_post,
-<<<<<<< HEAD
-    Commitment, DefaultTreeDomain, HSelect, MerkleTreeTrait, PaddedBytesAmount, PieceInfo,
-    PoRepConfig, PoRepProofPartitions, PoStConfig, PoStType, PrivateReplicaInfo, ProverId,
-    PublicReplicaInfo, SealCommitOutput, SealPreCommitOutput, SealPreCommitPhase1Output,
-    SectorShape16KiB, SectorShape2KiB, SectorShape32KiB, SectorShape4KiB, SectorSize,
-    UnpaddedByteIndex, UnpaddedBytesAmount, UpdateProofPartitions, POREP_PARTITIONS,
-    SECTOR_SIZE_16_KIB, SECTOR_SIZE_2_KIB, SECTOR_SIZE_32_KIB, SECTOR_SIZE_4_KIB,
-    WINDOW_POST_CHALLENGE_COUNT, WINDOW_POST_SECTOR_COUNT, WINNING_POST_CHALLENGE_COUNT,
-    WINNING_POST_SECTOR_COUNT,
->>>>>>> 1f5042b4 (fix: apply some review feedback)
-=======
-    Commitment, DefaultTreeDomain, MerkleTreeTrait, PaddedBytesAmount, PieceInfo, PoRepConfig,
+    DefaultTreeDomain, MerkleTreeTrait, PaddedBytesAmount, PieceInfo, PoRepConfig,
     PoRepProofPartitions, PoStConfig, PoStType, PrivateReplicaInfo, ProverId, PublicReplicaInfo,
     SealCommitOutput, SealPreCommitOutput, SealPreCommitPhase1Output, SectorShape16KiB,
     SectorShape2KiB, SectorShape32KiB, SectorShape4KiB, SectorSize, SectorUpdateConfig,
     UnpaddedByteIndex, UnpaddedBytesAmount, POREP_PARTITIONS, SECTOR_SIZE_16_KIB,
     SECTOR_SIZE_2_KIB, SECTOR_SIZE_32_KIB, SECTOR_SIZE_4_KIB, WINDOW_POST_CHALLENGE_COUNT,
     WINDOW_POST_SECTOR_COUNT, WINNING_POST_CHALLENGE_COUNT, WINNING_POST_SECTOR_COUNT,
->>>>>>> cd695d8f (fix: apply more feedback)
 };
 use fr32::bytes_into_fr;
 use log::info;
