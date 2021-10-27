@@ -36,7 +36,7 @@ use storage_proofs_core::{
 use storage_proofs_porep::stacked::{StackedDrg, TreeRElementData};
 
 use crate::{
-        constants::{
+    constants::{
         apex_leaf_count, challenge_count, hs, partition_count, TreeD, TreeDArity, TreeDDomain,
         TreeDHasher, TreeDStore, TreeRDomain, TreeRHasher, ALLOWED_SECTOR_SIZES,
         POSEIDON_CONSTANTS_GEN_RANDOMNESS,
