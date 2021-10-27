@@ -1,6 +1,6 @@
 [package]
 name = "storage-proofs-update"
-version = "10.0.0"
+version = "10.1.0"
 authors = ["dignifiedquire <me@dignifiedquire.com>"]
 description = "Proof of SDR-PoRep CC-Sector Update"
 license = "MIT OR Apache-2.0"
