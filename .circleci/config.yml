@@ -36,6 +36,15 @@ jobs:
       - ensure_filecoin_parameters
       - save_parameter_cache
 
+  ensure_groth_parameters_and_keys_darwin:
+    executor: default
+    environment: *setup-env
+    steps:
+      - checkout
+      - restore_parameter_cache
+      - ensure_filecoin_parameters
+      - save_parameter_cache
+
   cargo_fetch:
     executor: default
     environment: *setup-env
@@ -294,6 +303,7 @@ jobs:
       - run: rustup default $(cat rust-toolchain)
       - run: cargo update
       - run: cargo fetch
+      - restore_parameter_cache_darwin
       - ensure_filecoin_parameters
       - run:
           name: Test Darwin
@@ -303,6 +313,7 @@ jobs:
             ulimit -n 20000
             cargo +$(cat rust-toolchain) test --release --verbose --workspace -- --nocapture
           no_output_timeout: 2h
+      - save_parameter_cache_darwin
 
 commands:
   ensure_filecoin_parameters:
@@ -355,6 +366,19 @@ commands:
       - restore_cache:
           name: "Restore parameter cache"
           key: proof-params-v28-f-{{ checksum "filecoin-proofs/parameters.json" }}
+  save_parameter_cache_darwin:
+    steps:
+      - save_cache:
+          name: "Save parameter cache (darwin)"
+          key: proof-params-v28-f-darwin-{{ checksum "filecoin-proofs/parameters.json" }}
+          paths:
+            - "/tmp/paramcache.awesome"
+            - "/tmp/filecoin-proof-parameters/"
+  restore_parameter_cache_darwin:
+    steps:
+      - restore_cache:
+          name: "Restore parameter cache"
+          key: proof-params-v28-f-darwin-{{ checksum "filecoin-proofs/parameters.json" }}
 
 workflows:
   version: 2.1
@@ -484,7 +508,6 @@ workflows:
             - cargo_fetch
             - ensure_groth_parameters_and_keys_linux
 
-
       - test:
           name: test_fil_proofs_param
           crate: "fil-proofs-param"
@@ -508,6 +531,7 @@ workflows:
           requires:
             - cargo_fetch
             - ensure_groth_parameters_and_keys_linux
+
       - test_darwin
 
       - test:
