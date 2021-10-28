@@ -370,7 +370,7 @@ commands:
     steps:
       - save_cache:
           name: "Save parameter cache (darwin)"
-          key: proof-params-v28-f-{{ arch }}-{{ checksum "filecoin-proofs/parameters.json" }}
+          key: {{ arch }}-proof-params-v28-f-{{ checksum "filecoin-proofs/parameters.json" }}
           paths:
             - "/tmp/paramcache.awesome"
             - "/tmp/filecoin-proof-parameters/"
@@ -378,7 +378,7 @@ commands:
     steps:
       - restore_cache:
           name: "Restore parameter cache"
-          key: proof-params-v28-f-{{ arch }}-{{ checksum "filecoin-proofs/parameters.json" }}
+          key: {{ arch }}-proof-params-v28-f-{{ checksum "filecoin-proofs/parameters.json" }}
 
 workflows:
   version: 2.1
