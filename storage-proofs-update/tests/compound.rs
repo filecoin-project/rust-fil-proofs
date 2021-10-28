@@ -209,7 +209,6 @@ where
         // This `k` value is ignored when proving all partitions; each partition's `k` public-input
         // is set by `EmptySectorUpdateCompound`.
         k: 0,
-        comm_c,
         comm_r_old,
         comm_d_new,
         comm_r_new,
@@ -217,6 +216,7 @@ where
     };
 
     let priv_inputs = PrivateInputs {
+        comm_c,
         tree_r_old_config,
         old_replica_path: replica_old_path,
         tree_d_new_config,
