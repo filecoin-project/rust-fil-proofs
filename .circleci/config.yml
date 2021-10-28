@@ -372,8 +372,8 @@ commands:
           name: "Save parameter cache (darwin)"
           key: d-proof-params-v28-f-{{ arch }}-{{ checksum "filecoin-proofs/parameters.json" }}
           paths:
-            - "paramcache.awesome"
-            - "filecoin-proof-parameters/"
+            - "/Users/distiller/crate/paramcache.awesome"
+            - "/Users/distiller/crate/filecoin-proof-parameters/"
   restore_parameter_cache_darwin:
     steps:
       - restore_cache:
