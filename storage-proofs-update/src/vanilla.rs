@@ -1,4 +1,3 @@
-use std::any::TypeId;
 use std::fs::{metadata, OpenOptions};
 use std::iter::FromIterator;
 use std::marker::PhantomData;
@@ -7,7 +6,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{ensure, Context, Error};
 use blstrs::Scalar as Fr;
 use ff::Field;
-use filecoin_hashers::{poseidon::PoseidonHasher, HashFunction, Hasher};
+use filecoin_hashers::{HashFunction, Hasher};
 use fr32::{bytes_into_fr, fr_into_bytes_slice};
 use generic_array::typenum::Unsigned;
 use log::{info, trace};
@@ -31,7 +30,6 @@ use storage_proofs_core::{
     },
     parameter_cache::ParameterSetMetadata,
     proof::ProofScheme,
-    settings::SETTINGS,
 };
 use storage_proofs_porep::stacked::{StackedDrg, TreeRElementData};
 
@@ -729,12 +727,7 @@ where
             .read_range(start..end)
             .expect("failed to read from source");
 
-        // Note: The TreeR type is already constrained to
-        // PoseidonHasher types, but for additional clarity, we add
-        // this check where it's not necessary.
-        if SETTINGS.use_gpu_tree_builder
-            && TypeId::of::<TreeR::Hasher>() == TypeId::of::<PoseidonHasher>()
-        {
+        if StackedDrg::<TreeR, TreeDHasher>::use_gpu_tree_builder() {
             Ok(TreeRElementData::FrList(
                 tree_data.into_par_iter().map(|x| x.into()).collect(),
             ))
