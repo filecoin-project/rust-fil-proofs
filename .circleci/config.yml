@@ -370,15 +370,15 @@ commands:
     steps:
       - save_cache:
           name: "Save parameter cache (darwin)"
-          key: d-proof-params-v28-f-{{ arch }}-{{ checksum "filecoin-proofs/parameters.json" }}
+          key: darwin-proof-params-v28-f-{{ arch }}-{{ checksum "filecoin-proofs/parameters.json" }}
           paths:
-            - "/Users/distiller/crate/paramcache.awesome"
-            - "/Users/distiller/crate/filecoin-proof-parameters/"
+            - "/tmp/paramcache.awesome"
+            - "/tmp/filecoin-proof-parameters/"
   restore_parameter_cache_darwin:
     steps:
       - restore_cache:
           name: "Restore parameter cache"
-          key: d-proof-params-v28-f-{{ arch }}-{{ checksum "filecoin-proofs/parameters.json" }}
+          key: darwin-proof-params-v28-f-{{ arch }}-{{ checksum "filecoin-proofs/parameters.json" }}
 
 workflows:
   version: 2.1
