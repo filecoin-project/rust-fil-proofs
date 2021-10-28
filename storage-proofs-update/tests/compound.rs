@@ -21,7 +21,7 @@ use storage_proofs_update::{
         TreeRDomain, TreeRHasher, SECTOR_SIZE_16_KIB, SECTOR_SIZE_1_KIB, SECTOR_SIZE_2_KIB,
         SECTOR_SIZE_32_KIB, SECTOR_SIZE_4_KIB, SECTOR_SIZE_8_KIB,
     },
-    phi, EmptySectorUpdateCompound, PrivateInputs, PublicInputs, SetupParams,
+    phi, rho, EmptySectorUpdateCompound, PrivateInputs, PublicInputs, SetupParams,
 };
 use tempfile::tempdir;
 
@@ -44,11 +44,9 @@ fn encode_new_replica(
 
     (0..sector_nodes)
         .map(|node| {
-            // Take the `h` high bits from the node-index.
-            let high: TreeRDomain = Fr::from((node >> get_high_bits_shr) as u64).into();
-
-            // `rho = H(phi || high)`
-            let rho: Fr = <TreeRHasher as Hasher>::Function::hash2(phi, &high).into();
+            // Take the `h` high bits from the node-index and compute this node's compute `rho`.
+            let high = (node >> get_high_bits_shr) as u32;
+            let rho = rho(phi, high);
 
             // `label_r_new = label_r_old + label_d_new * rho`
             let label_r_old: Fr = labels_r_old[node].into();

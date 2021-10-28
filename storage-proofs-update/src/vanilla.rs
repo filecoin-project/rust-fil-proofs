@@ -15,6 +15,7 @@ use merkletree::{
     merkle::{get_merkle_tree_leafs, get_merkle_tree_len},
     store::{DiskStore, Store, StoreConfig},
 };
+use neptune::Poseidon;
 use rayon::{iter::IntoParallelIterator, prelude::*};
 use serde::{Deserialize, Serialize};
 use storage_proofs_core::{
@@ -33,6 +34,7 @@ use crate::{
     constants::{
         apex_leaf_count, challenge_count, hs, partition_count, TreeD, TreeDArity, TreeDDomain,
         TreeDHasher, TreeDStore, TreeRDomain, TreeRHasher, ALLOWED_SECTOR_SIZES,
+        POSEIDON_CONSTANTS_GEN_RANDOMNESS,
     },
     Challenges,
 };
@@ -415,8 +417,8 @@ where
             let label_r_old: Fr = challenge_proof.proof_r_old.leaf().into();
             let label_d_new: Fr = challenge_proof.proof_d_new.leaf().into();
             let label_r_new = challenge_proof.proof_r_new.leaf();
-            let c_high = Fr::from((c >> get_high_bits_shr) as u64);
-            let rho: Fr = <TreeRHasher as Hasher>::Function::hash2(&phi, &c_high.into()).into();
+            let c_high = c >> get_high_bits_shr;
+            let rho = rho(&phi, c_high);
             let label_r_new_calc: TreeRDomain = (label_r_old + label_d_new * rho).into();
             if label_r_new_calc != label_r_new {
                 return Ok(false);
@@ -460,24 +462,34 @@ where
     }
 }
 
-// `phi = H(comm_d_new, comm_r_old)`
+// `phi = H(comm_d_new, comm_r_old)` where Poseidon uses the custom "gen randomness" domain
+// separation tag.
+#[inline]
 pub fn phi(comm_d_new: &TreeDDomain, comm_r_old: &TreeRDomain) -> TreeRDomain {
-    let comm_d_new: TreeRDomain = {
-        let comm_d_new: Fr = (*comm_d_new).into();
-        comm_d_new.into()
-    };
-    <TreeRHasher as Hasher>::Function::hash2(&comm_d_new, comm_r_old)
+    let comm_d_new: Fr = (*comm_d_new).into();
+    let comm_r_old: Fr = (*comm_r_old).into();
+    Poseidon::new_with_preimage(
+        &[comm_d_new, comm_r_old],
+        &POSEIDON_CONSTANTS_GEN_RANDOMNESS,
+    )
+    .hash()
+    .into()
+}
+
+// `rho = H(phi, high)` where `high` is the `h` high bits of a node-index and Poseidon uses the
+// custom "gen randomness" domain separation tag.
+#[inline]
+pub fn rho(phi: &TreeRDomain, high: u32) -> Fr {
+    let phi: Fr = (*phi).into();
+    let high = Fr::from(high as u64);
+    Poseidon::new_with_preimage(&[phi, high], &POSEIDON_CONSTANTS_GEN_RANDOMNESS).hash()
 }
 
 // Computes all `2^h` rho values for the given `phi`. Each rho corresponds to one of the `2^h`
 // possible `high` values where `high` is the `h` high bits of a node-index.
+#[inline]
 pub fn rhos(h: usize, phi: &TreeRDomain) -> Vec<Fr> {
-    (0..1 << h)
-        .map(|high| {
-            let high: TreeRDomain = Fr::from(high as u64).into();
-            <TreeRHasher as Hasher>::Function::hash2(phi, &high).into()
-        })
-        .collect()
+    (0..1 << h).map(|high| rho(phi, high)).collect()
 }
 
 fn mmap_read(path: &Path) -> Result<Mmap, Error> {

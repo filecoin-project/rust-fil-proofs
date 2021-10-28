@@ -10,6 +10,6 @@ pub use self::challenges::Challenges;
 pub use self::circuit::EmptySectorUpdateCircuit;
 pub use self::compound::EmptySectorUpdateCompound;
 pub use self::vanilla::{
-    phi, ChallengeProof, EmptySectorUpdate, PartitionProof, PrivateInputs, PublicInputs,
+    phi, rho, ChallengeProof, EmptySectorUpdate, PartitionProof, PrivateInputs, PublicInputs,
     PublicParams, SetupParams,
 };
