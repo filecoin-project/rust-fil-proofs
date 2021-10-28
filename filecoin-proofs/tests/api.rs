@@ -1906,7 +1906,6 @@ fn create_seal_for_upgrade<R: Rng, Tree: 'static + MerkleTreeTrait<Hasher = Tree
         comm_r,
         encoded.comm_r_new,
         encoded.comm_d_new,
-        cache_dir.path(), /* sector key path needed for p_aux (for comm_c/comm_r_last) */
     )?;
     ensure!(proof_is_valid, "Partition proof (single) failed to verify");
 
@@ -1929,7 +1928,6 @@ fn create_seal_for_upgrade<R: Rng, Tree: 'static + MerkleTreeTrait<Hasher = Tree
         comm_r,
         encoded.comm_r_new,
         encoded.comm_d_new,
-        cache_dir.path(), /* sector key path needed for p_aux (for comm_c/comm_r_last) */
     )?;
     ensure!(proofs_are_valid, "Partition proofs failed to verify");
 
@@ -1949,7 +1947,6 @@ fn create_seal_for_upgrade<R: Rng, Tree: 'static + MerkleTreeTrait<Hasher = Tree
         comm_r,
         encoded.comm_r_new,
         encoded.comm_d_new,
-        cache_dir.path(), /* sector key path needed for p_aux */
     )?;
     ensure!(valid, "Compound proof failed to verify");
 

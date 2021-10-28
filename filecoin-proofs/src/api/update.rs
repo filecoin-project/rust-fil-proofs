@@ -255,7 +255,6 @@ pub fn generate_single_partition_proof<Tree: 'static + MerkleTreeTrait<Hasher = 
 
     let public_inputs: storage_proofs_update::PublicInputs = PublicInputs {
         k: 0,
-        comm_c: p_aux_old.comm_c,
         comm_r_old: comm_r_old_safe,
         comm_d_new: comm_d_new_safe,
         comm_r_new: comm_r_new_safe,
@@ -268,6 +267,7 @@ pub fn generate_single_partition_proof<Tree: 'static + MerkleTreeTrait<Hasher = 
         get_new_configs_from_t_aux_old::<Tree>(&t_aux_old, replica_cache_path, config.nodes_count)?;
 
     let private_inputs: PrivateInputs = PrivateInputs {
+        comm_c: p_aux_old.comm_c,
         tree_r_old_config: t_aux_old.tree_r_last_config,
         old_replica_path: sector_key_path.to_path_buf(),
         tree_d_new_config,
@@ -290,7 +290,6 @@ pub fn verify_single_partition_proof<Tree: 'static + MerkleTreeTrait<Hasher = Tr
     comm_r_old: Commitment,
     comm_r_new: Commitment,
     comm_d_new: Commitment,
-    sector_key_cache_path: &Path,
 ) -> Result<bool> {
     info!("verify_single_partition_proof:start");
 
@@ -302,11 +301,8 @@ pub fn verify_single_partition_proof<Tree: 'static + MerkleTreeTrait<Hasher = Tr
     let public_params: storage_proofs_update::PublicParams =
         PublicParams::from_sector_size(u64::from(config.sector_size));
 
-    let p_aux_old = get_p_aux::<Tree>(sector_key_cache_path)?;
-
     let public_inputs: storage_proofs_update::PublicInputs = PublicInputs {
         k: 0,
-        comm_c: p_aux_old.comm_c,
         comm_r_old: comm_r_old_safe,
         comm_d_new: comm_d_new_safe,
         comm_r_new: comm_r_new_safe,
@@ -346,7 +342,6 @@ pub fn generate_partition_proofs<Tree: 'static + MerkleTreeTrait<Hasher = TreeRH
 
     let public_inputs: storage_proofs_update::PublicInputs = PublicInputs {
         k: usize::from(config.update_partitions),
-        comm_c: p_aux_old.comm_c,
         comm_r_old: comm_r_old_safe,
         comm_d_new: comm_d_new_safe,
         comm_r_new: comm_r_new_safe,
@@ -359,6 +354,7 @@ pub fn generate_partition_proofs<Tree: 'static + MerkleTreeTrait<Hasher = TreeRH
         get_new_configs_from_t_aux_old::<Tree>(&t_aux_old, replica_cache_path, config.nodes_count)?;
 
     let private_inputs: PrivateInputs = PrivateInputs {
+        comm_c: p_aux_old.comm_c,
         tree_r_old_config: t_aux_old.tree_r_last_config,
         old_replica_path: sector_key_path.to_path_buf(),
         tree_d_new_config,
@@ -384,7 +380,6 @@ pub fn verify_partition_proofs<Tree: 'static + MerkleTreeTrait<Hasher = TreeRHas
     comm_r_old: Commitment,
     comm_r_new: Commitment,
     comm_d_new: Commitment,
-    sector_key_cache_path: &Path,
 ) -> Result<bool> {
     info!("verify_partition_proofs:start");
 
@@ -396,11 +391,8 @@ pub fn verify_partition_proofs<Tree: 'static + MerkleTreeTrait<Hasher = TreeRHas
     let public_params: storage_proofs_update::PublicParams =
         PublicParams::from_sector_size(u64::from(config.sector_size));
 
-    let p_aux_old = get_p_aux::<Tree>(sector_key_cache_path)?;
-
     let public_inputs: storage_proofs_update::PublicInputs = PublicInputs {
         k: usize::from(config.update_partitions),
-        comm_c: p_aux_old.comm_c,
         comm_r_old: comm_r_old_safe,
         comm_d_new: comm_d_new_safe,
         comm_r_new: comm_r_new_safe,
@@ -441,7 +433,6 @@ pub fn generate_empty_sector_update_proof<Tree: 'static + MerkleTreeTrait<Hasher
     let partitions = usize::from(config.update_partitions);
     let public_inputs: storage_proofs_update::PublicInputs = PublicInputs {
         k: partitions,
-        comm_c: p_aux_old.comm_c,
         comm_r_old: comm_r_old_safe,
         comm_d_new: comm_d_new_safe,
         comm_r_new: comm_r_new_safe,
@@ -454,6 +445,7 @@ pub fn generate_empty_sector_update_proof<Tree: 'static + MerkleTreeTrait<Hasher
         get_new_configs_from_t_aux_old::<Tree>(&t_aux_old, replica_cache_path, config.nodes_count)?;
 
     let private_inputs: PrivateInputs = PrivateInputs {
+        comm_c: p_aux_old.comm_c,
         tree_r_old_config: t_aux_old.tree_r_last_config,
         old_replica_path: sector_key_path.to_path_buf(),
         tree_d_new_config,
@@ -489,7 +481,6 @@ pub fn verify_empty_sector_update_proof<Tree: 'static + MerkleTreeTrait<Hasher =
     comm_r_old: Commitment,
     comm_r_new: Commitment,
     comm_d_new: Commitment,
-    sector_key_cache_path: &Path,
 ) -> Result<bool> {
     info!("verify_empty_sector_update_proof:start");
 
@@ -498,13 +489,10 @@ pub fn verify_empty_sector_update_proof<Tree: 'static + MerkleTreeTrait<Hasher =
 
     let comm_d_new_safe = DefaultPieceDomain::try_from_bytes(&comm_d_new)?;
 
-    let p_aux_old = get_p_aux::<Tree>(sector_key_cache_path)?;
-
     let config = SectorUpdateConfig::from_porep_config(porep_config);
     let partitions = usize::from(config.update_partitions);
     let public_inputs: storage_proofs_update::PublicInputs = PublicInputs {
         k: partitions,
-        comm_c: p_aux_old.comm_c,
         comm_r_old: comm_r_old_safe,
         comm_d_new: comm_d_new_safe,
         comm_r_new: comm_r_new_safe,
