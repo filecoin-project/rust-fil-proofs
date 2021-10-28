@@ -8,10 +8,11 @@ use bellperson::{
 };
 use blstrs::Scalar as Fr;
 use ff::{Field, PrimeField};
-use filecoin_hashers::{poseidon::PoseidonHasher, HashFunction, Hasher};
+use filecoin_hashers::{HashFunction, Hasher};
+use neptune::circuit::poseidon_hash;
 use storage_proofs_core::gadgets::por::por_no_challenge_input;
 
-use crate::constants::{TreeD, TreeDHasher};
+use crate::constants::{TreeD, TreeDHasher, POSEIDON_CONSTANTS_GEN_RANDOMNESS};
 
 // Allocates `num` as `Fr::NUM_BITS` number of bits.
 pub fn allocated_num_to_allocated_bits<CS: ConstraintSystem<Fr>>(
@@ -127,10 +128,10 @@ pub fn gen_challenge_bits<CS: ConstraintSystem<Fr>>(
         );
 
         // `digest = H(comm_r_new || digest_index)`
-        let digest = <PoseidonHasher as Hasher>::Function::hash2_circuit(
+        let digest = poseidon_hash(
             cs.namespace(|| format!("digest_{}", j)),
-            comm_r_new,
-            &digest_index,
+            vec![comm_r_new.clone(), digest_index.clone()],
+            &POSEIDON_CONSTANTS_GEN_RANDOMNESS,
         )?;
 
         // Allocate `digest` as `Fr::NUM_BITS` bits.

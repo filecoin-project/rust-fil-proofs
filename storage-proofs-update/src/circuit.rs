@@ -12,6 +12,7 @@ use blstrs::Scalar as Fr;
 use ff::{Field, PrimeFieldBits};
 use filecoin_hashers::{HashFunction, Hasher};
 use generic_array::typenum::Unsigned;
+use neptune::circuit::poseidon_hash;
 use storage_proofs_core::{
     compound_proof::CircuitComponent,
     gadgets::{insertion::select, por::por_no_challenge_input},
@@ -22,6 +23,7 @@ use crate::{
     constants::{
         apex_leaf_count, challenge_count, hs, partition_count, validate_tree_r_shape, TreeD,
         TreeDArity, TreeDDomain, TreeDHasher, TreeRDomain, TreeRHasher,
+        POSEIDON_CONSTANTS_GEN_RANDOMNESS,
     },
     gadgets::{apex_por, gen_challenge_bits, get_challenge_high_bits, label_r_new},
     vanilla, PublicParams,
@@ -486,10 +488,10 @@ where
         comm_r_new.inputize(cs.namespace(|| "comm_r_new_input"))?;
 
         // Compute `phi = H(comm_d_new || comm_r_old)` from public-inputs.
-        let phi = <TreeR::Hasher as Hasher>::Function::hash2_circuit(
+        let phi = poseidon_hash(
             cs.namespace(|| "phi"),
-            &comm_d_new,
-            &comm_r_old,
+            vec![comm_d_new.clone(), comm_r_old.clone()],
+            &POSEIDON_CONSTANTS_GEN_RANDOMNESS,
         )?;
 
         // Allocate private-inputs; excludes each challenge's Merkle proofs.
@@ -590,10 +592,10 @@ where
                 &h_select_bits,
                 &hs,
             )?;
-            let rho = <TreeR::Hasher as Hasher>::Function::hash2_circuit(
+            let rho = poseidon_hash(
                 cs.namespace(|| format!("rho (c_index={})", c_index)),
-                &phi,
-                &c_high,
+                vec![phi.clone(), c_high.clone()],
+                &POSEIDON_CONSTANTS_GEN_RANDOMNESS,
             )?;
 
             // Validate this challenge's Merkle proofs.

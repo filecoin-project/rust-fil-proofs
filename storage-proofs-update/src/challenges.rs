@@ -1,8 +1,10 @@
 use blstrs::Scalar as Fr;
 use ff::{PrimeField, PrimeFieldBits};
-use filecoin_hashers::{poseidon::PoseidonHasher, HashFunction, Hasher};
+use neptune::poseidon::Poseidon;
 
-use crate::constants::{challenge_count, partition_count, TreeRDomain};
+use crate::constants::{
+    challenge_count, partition_count, TreeRDomain, POSEIDON_CONSTANTS_GEN_RANDOMNESS,
+};
 
 // Generates the challenges for partition `k` of an `EmptySectorUpdate` proof. All challenges
 // returned for partition `k` are guaranteed to lie within the `k`-th chunk of sector nodes.
@@ -73,9 +75,11 @@ impl Iterator for Challenges {
         // `digest = H(comm_r_new || digest_index)` where `digest_index` is across all partitions.
         if self.i == 0 {
             let digest_index = Fr::from(self.digest_index_all_partitions as u64);
-            let digest: Fr =
-                <PoseidonHasher as Hasher>::Function::hash2(&self.comm_r_new, &digest_index.into())
-                    .into();
+            let digest = Poseidon::new_with_preimage(
+                &[self.comm_r_new.into(), digest_index],
+                &POSEIDON_CONSTANTS_GEN_RANDOMNESS,
+            )
+            .hash();
             self.digest_bits = digest.to_le_bits().into_iter().collect();
         }
 
