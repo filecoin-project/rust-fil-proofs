@@ -112,7 +112,6 @@ impl PublicParams {
 #[derive(Clone, Serialize, Deserialize)]
 pub struct PublicInputs {
     pub k: usize,
-    pub comm_c: TreeRDomain,
     pub comm_r_old: TreeRDomain,
     pub comm_d_new: TreeDDomain,
     pub comm_r_new: TreeRDomain,
@@ -123,6 +122,7 @@ pub struct PublicInputs {
 }
 
 pub struct PrivateInputs {
+    pub comm_c: TreeRDomain,
     pub tree_r_old_config: StoreConfig,
     // Path to old replica.
     pub old_replica_path: PathBuf,
@@ -198,6 +198,7 @@ pub struct PartitionProof<TreeR>
 where
     TreeR: MerkleTreeTrait<Hasher = TreeRHasher>,
 {
+    pub comm_c: TreeRDomain,
     pub apex_leafs: Vec<TreeDDomain>,
     #[serde(bound(
         serialize = "ChallengeProof<TreeR>: Serialize",
@@ -213,6 +214,7 @@ where
 {
     fn clone(&self) -> Self {
         PartitionProof {
+            comm_c: self.comm_c,
             apex_leafs: self.apex_leafs.clone(),
             challenge_proofs: self.challenge_proofs.clone(),
         }
@@ -256,6 +258,7 @@ where
             tree_d_new_config,
             tree_r_new_config,
             replica_path,
+            ..
         } = priv_inputs;
 
         let tree_d_new = Self::instantiate_tree_d(sector_nodes, tree_d_new_config)?;
@@ -290,6 +293,7 @@ where
             tree_d_new_config,
             tree_r_new_config,
             replica_path,
+            ..
         } = priv_inputs;
 
         let tree_d_new = Self::instantiate_tree_d(sector_nodes, tree_d_new_config)?;
@@ -333,7 +337,6 @@ where
 
         let PublicInputs {
             k,
-            comm_c,
             comm_r_old,
             comm_d_new,
             comm_r_new,
@@ -348,6 +351,7 @@ where
         ensure!(hs(sector_nodes).contains(&h), "invalid `h` for sector-size");
 
         let PartitionProof {
+            comm_c,
             apex_leafs,
             challenge_proofs,
         } = proof;
@@ -385,8 +389,8 @@ where
 
         // Verify that the TreeROld and TreeRNew Merkle proofs roots agree with the public CommC,
         // CommROld, and CommRNew.
-        let comm_r_old_calc = <TreeRHasher as Hasher>::Function::hash2(&comm_c, &root_r_old);
-        let comm_r_new_calc = <TreeRHasher as Hasher>::Function::hash2(&comm_c, &root_r_new);
+        let comm_r_old_calc = <TreeRHasher as Hasher>::Function::hash2(comm_c, &root_r_old);
+        let comm_r_new_calc = <TreeRHasher as Hasher>::Function::hash2(comm_c, &root_r_new);
         if comm_r_old_calc != comm_r_old || comm_r_new_calc != comm_r_new {
             return Ok(false);
         }
@@ -580,6 +584,7 @@ where
         let PublicInputs { k, comm_r_new, .. } = *pub_inputs;
 
         let PrivateInputs {
+            comm_c,
             tree_r_old_config,
             old_replica_path,
             tree_d_new_config,
@@ -683,6 +688,7 @@ where
         info!("finished generating challege-proofs for partition k={}", k);
 
         Ok(PartitionProof {
+            comm_c: *comm_c,
             apex_leafs,
             challenge_proofs,
         })

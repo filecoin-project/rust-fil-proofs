@@ -81,7 +81,6 @@ where
         let k = k.unwrap_or(pub_inputs.k);
 
         let PublicInputs {
-            comm_c,
             comm_r_old,
             comm_d_new,
             comm_r_new,
@@ -100,7 +99,7 @@ where
 
         // `comm_c` is a public-input for the vanilla proof and a private-input for the circuit.
         let priv_inputs = circuit::PrivateInputs::new(
-            comm_c,
+            vanilla_proof.comm_c,
             &vanilla_proof.apex_leafs,
             &vanilla_proof.challenge_proofs,
         );
