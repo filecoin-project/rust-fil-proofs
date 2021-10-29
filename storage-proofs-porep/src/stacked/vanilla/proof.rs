@@ -630,30 +630,27 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                     let call = |alloc: Option<&ResourceAlloc>| -> Result<TaskResult, Error> {
                         // check to initialize the builder
                         if column_tree_builder.is_none() {
-                            let alloc = alloc.ok_or_else(|| {
-                                Error::Unclassified(
-                                    "No resource allocation for TreeBuilder".to_string(),
-                                )
-                            })?;
-                            let dev = alloc.devices[0].0;
-                            let device = Device::by_unique_id(dev).ok_or_else(||
-                                Error::Unclassified(format!("GPU device: {:?} not found", dev)))?;
+                            let mut column_batcher = None;
+                            let mut tree_batcher = None;
+                            if let Some(Some(dev)) = alloc.map(|a| Device::by_unique_id(a.devices[0].0)) {
+                                column_batcher = match Batcher::new(dev, max_gpu_column_batch_size) {
+                                    Ok(b) => Some(b),
+                                    Err(err) => {
+                                        warn!("no GPU found, falling back to CPU tree builder: {}", err);
+                                        None
+                                    }
+                                };
 
-                            let column_batcher = match Batcher::new(device, max_gpu_column_batch_size) {
-                                Ok(b) => Some(b),
-                                Err(err) => {
-                                    warn!("no GPU found, falling back to CPU tree builder: {}", err);
-                                    None
-                                }
-                            };
-
-                            let tree_batcher = match Batcher::new(device, max_gpu_tree_batch_size) {
-                                Ok(b) => Some(b),
-                                Err(err) => {
-                                    warn!("no GPU found, falling back to CPU tree builder: {}", err);
-                                    None
-                                }
-                            };
+                                tree_batcher = match Batcher::new(dev, max_gpu_tree_batch_size) {
+                                    Ok(b) => Some(b),
+                                    Err(err) => {
+                                        warn!("no GPU found, falling back to CPU tree builder: {}", err);
+                                        None
+                                    }
+                                };
+                        } else {
+                            warn!("no Alloc/GPU found, falling back to CPU tree builder");
+                        }
 
                             column_tree_builder =
                                 Some(ColumnTreeBuilder::<ColumnArity, TreeArity>::new(
@@ -1114,27 +1111,25 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                 let call = |alloc: Option<&ResourceAlloc>| -> Result<TaskResult, Error> {
                     // initialize the tree builder using the resource that the scheduler assigned
                     if tree_builder.is_none() {
-                        let alloc = alloc.ok_or_else(|| {
-                            Error::Unclassified(
-                                "No resource allocation for TreeBuilder".to_string(),
-                            )
-                        })?;
-
-                        let dev = alloc.devices[0].0;
-                        let device = Device::by_unique_id(dev).ok_or_else(|| {
-                            Error::Unclassified(format!("GPU device: {:?} not found", dev))
-                        })?;
-
-                        let tree_batcher = match Batcher::new(device, max_gpu_tree_batch_size) {
-                            Ok(b) => Some(b),
-                            Err(err) => {
-                                warn!("no GPU found, falling back to CPU tree builder: {}", err);
-                                None
-                            }
-                        };
+                        let mut tree_batcher = None;
+                        if let Some(Some(dev)) = alloc.map(|a| Device::by_unique_id(a.devices[0].0))
+                        {
+                            tree_batcher = match Batcher::new(dev, max_gpu_tree_batch_size) {
+                                Ok(b) => Some(b),
+                                Err(err) => {
+                                    warn!(
+                                        "no GPU found, falling back to CPU tree builder: {}",
+                                        err
+                                    );
+                                    None
+                                }
+                            };
+                        } else {
+                            warn!("no Alloc/GPU found, falling back to CPU tree builder");
+                        }
 
                         tree_builder = Some(TreeBuilder::<TreeArity>::new(
-                            Some(tree_batcher),
+                            tree_batcher,
                             nodes_count,
                             tree_r_last_config.rows_to_discard,
                         )?);
@@ -1604,22 +1599,18 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
             // this call-closure would block until it is done building the trees
             let call = |alloc: Option<&ResourceAlloc>| -> Result<TaskResult, Error> {
                 if tree_builder.is_none() {
-                    let alloc = alloc.ok_or_else(|| {
-                        Error::Unclassified("No resource allocation for TreeBuilder".to_string())
-                    })?;
-
-                    let dev = alloc.devices[0].0;
-                    let device = Device::by_unique_id(dev).ok_or_else(|| {
-                        Error::Unclassified(format!("GPU device: {:?} not found", dev))
-                    })?;
-
-                    let tree_batcher = match Batcher::new(device, max_gpu_tree_batch_size) {
-                        Ok(b) => Some(b),
-                        Err(err) => {
-                            warn!("no GPU found, falling back to CPU tree builder: {}", err);
-                            None
-                        }
-                    };
+                    let mut tree_batcher = None;
+                    if let Some(Some(dev)) = alloc.map(|a| Device::by_unique_id(a.devices[0].0)) {
+                        tree_batcher = match Batcher::new(dev, max_gpu_tree_batch_size) {
+                            Ok(b) => Some(b),
+                            Err(err) => {
+                                warn!("no GPU found, falling back to CPU tree builder: {}", err);
+                                None
+                            }
+                        };
+                    } else {
+                        warn!("no Alloc/GPU found, falling back to CPU tree builder ");
+                    }
 
                     tree_builder = Some(
                         TreeBuilder::<Tree::Arity>::new(
@@ -1646,7 +1637,6 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
 
                         if consumed != nodes_count {
                             builder.add_leaves(&zero_leaves[0..batch_size])?;
-                            //.expect("failed to add leaves");
                             continue;
                         };
 
