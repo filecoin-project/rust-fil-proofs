@@ -14,5 +14,5 @@ members = [
 ]
 
 [patch.crates-io]
-bellperson = { git = "https://github.com/Zondax/bellperson.git", branch = "scheduler", version = "0.17", default-features = false }
-neptune = { version = "5.0.0", default-features = false, git = "https://github.com/Zondax/neptune.git", branch = "granularity" }
+bellperson = { git = "https://github.com/Zondax/bellperson.git", branch = "scheduler", version = "0.18" }
+neptune = { version = "5.1.0", git = "https://github.com/Zondax/neptune.git", branch = "granularity" }
