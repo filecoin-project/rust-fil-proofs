@@ -321,11 +321,20 @@ pub fn generate_single_window_post_with_vanilla<Tree: 'static + MerkleTreeTrait>
         &vanilla_proofs,
     )?;
 
+    // tell the scheduler in bellperson what task it is,
+    // so the scheduler can handle timing requirements accordingly
+    // as well as resources that are meant to be used by this task
+    let post_type = match post_config.typ {
+        PoStType::Winning => BellTaskType::WinningPost,
+        PoStType::Window => BellTaskType::WindowPost,
+    };
+
     let proof = FallbackPoStCompound::prove_with_vanilla(
         &pub_params,
         &pub_inputs,
         vec![partitioned_proofs],
         &groth_params,
+        Some(post_type),
     )?;
 
     info!("generate_single_window_post_with_vanilla:finish");
