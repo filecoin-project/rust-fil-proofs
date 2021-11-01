@@ -16,7 +16,10 @@ use merkletree::{
     store::{DiskStore, Store, StoreConfig},
 };
 use neptune::Poseidon;
-use rayon::{iter::IntoParallelIterator, prelude::*};
+use rayon::{
+    iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator},
+    slice::ParallelSliceMut,
+};
 use serde::{Deserialize, Serialize};
 use storage_proofs_core::{
     data::Data,
@@ -53,15 +56,19 @@ pub struct PublicParams {
     pub sector_nodes: usize,
     // The number of challenges per partition proof.
     pub challenge_count: usize,
-    // The number of bits per challenge, i.e. `challenge_bit_len = log2(sector_nodes)`.
+    // The number of bits per challenge, i.e. `challenge_bit_len = log2(sector_nodes)`, which is
+    // also the height of TreeD.
     pub challenge_bit_len: usize,
     // The number of partition proofs for this sector-size.
     pub partition_count: usize,
-    // The bit length of an integer in `0..partition_count`.
+    // The bit length of an integer in `0..partition_count` which is also the height of the
+    // partitions-tree within TreeD, i.e. the top of TreeD starting from the tree row containing
+    // each partition's apex-root and ending at TreeD's root.
     pub partition_bit_len: usize,
     // The number of leafs in the apex-tree.
     pub apex_leaf_count: usize,
-    // The bit length of an integer in `0..apex_leaf_count`.
+    // The bit length of an integer in `0..apex_leaf_count` which is also the height of each
+    // partition's apex-tree.
     pub apex_select_bit_len: usize,
 }
 
@@ -383,7 +390,8 @@ where
         }
 
         // All TreeDNew Merkle proofs should have an apex-leaf at height `apex_leafs_height` in the
-        // proof path.
+        // proof path, i.e. TreeDNew has height `challenge_bit_len`, partition-tree has height
+        // `partition_bit_len`, and apex-tree has height `apex_select_bit_len`.
         let apex_leafs_height = challenge_bit_len - partition_bit_len - apex_select_bit_len;
 
         let root_r_old = challenge_proofs[0].proof_r_old.root();
@@ -399,43 +407,43 @@ where
 
         let phi = phi(&comm_d_new, &comm_r_old);
 
-        let challenges = Challenges::new(sector_nodes, comm_r_new, k);
+        let challenges: Vec<u32> = Challenges::new(sector_nodes, comm_r_new, k).collect();
         let get_high_bits_shr = challenge_bit_len - h;
 
-        for (c, challenge_proof) in challenges.zip(challenge_proofs.iter()) {
-            // Verify TreeROld Merkle proof.
-            if !challenge_proof.verify_merkle_proofs(
-                c as usize,
-                &root_r_old,
-                &comm_d_new,
-                &root_r_new,
-            ) {
-                return Ok(false);
-            }
+        let challenge_proofs_are_valid = challenges
+            .into_par_iter()
+            .zip(challenge_proofs.into_par_iter())
+            .all(|(c, challenge_proof)| {
+                // Verify TreeROld Merkle proof.
+                if !challenge_proof.verify_merkle_proofs(
+                    c as usize,
+                    &root_r_old,
+                    &comm_d_new,
+                    &root_r_new,
+                ) {
+                    return false;
+                }
 
-            // Verify replica encoding.
-            let label_r_old: Fr = challenge_proof.proof_r_old.leaf().into();
-            let label_d_new: Fr = challenge_proof.proof_d_new.leaf().into();
-            let label_r_new = challenge_proof.proof_r_new.leaf();
-            let c_high = c >> get_high_bits_shr;
-            let rho = rho(&phi, c_high);
-            let label_r_new_calc: TreeRDomain = (label_r_old + label_d_new * rho).into();
-            if label_r_new_calc != label_r_new {
-                return Ok(false);
-            }
+                // Verify replica encoding.
+                let label_r_old: Fr = challenge_proof.proof_r_old.leaf().into();
+                let label_d_new: Fr = challenge_proof.proof_d_new.leaf().into();
+                let label_r_new = challenge_proof.proof_r_new.leaf();
+                let c_high = c >> get_high_bits_shr;
+                let rho = rho(&phi, c_high);
+                let label_r_new_calc: TreeRDomain = (label_r_old + label_d_new * rho).into();
+                if label_r_new_calc != label_r_new {
+                    return false;
+                }
 
-            // Verify that TreeDNew Merkle proof and apex-tree agree.
-            if !challenge_proof.proof_d_new.path()
-                [apex_leafs_height..apex_leafs_height + apex_select_bit_len]
-                .iter()
-                .zip(apex_tree.iter())
-                .all(|(path_elem, apex_tree_row)| apex_tree_row.contains(&path_elem.0[0]))
-            {
-                return Ok(false);
-            }
-        }
+                // Verify that the TreeDNew Merkle proof's apex-path is consistent with apex-tree.
+                challenge_proof.proof_d_new.path()
+                    [apex_leafs_height..apex_leafs_height + apex_select_bit_len]
+                    .iter()
+                    .zip(apex_tree.iter())
+                    .all(|(path_elem, apex_tree_row)| apex_tree_row.contains(&path_elem.0[0]))
+            });
 
-        Ok(true)
+        Ok(challenge_proofs_are_valid)
     }
 
     fn verify_all_partitions(
