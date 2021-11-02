@@ -69,7 +69,7 @@ pub struct PublicParams {
     pub apex_leaf_count: usize,
     // The bit length of an integer in `0..apex_leaf_count` which is also the height of each
     // partition's apex-tree.
-    pub apex_select_bit_len: usize,
+    pub apex_leaf_bit_len: usize,
 }
 
 impl ParameterSetMetadata for PublicParams {
@@ -104,7 +104,7 @@ impl PublicParams {
 
         let apex_leaf_count = apex_leaf_count(sector_nodes);
         // `apex_leaf_count` is guaranteed to be a power of two.
-        let apex_select_bit_len = apex_leaf_count.trailing_zeros() as usize;
+        let apex_leaf_bit_len = apex_leaf_count.trailing_zeros() as usize;
 
         PublicParams {
             sector_nodes,
@@ -113,7 +113,7 @@ impl PublicParams {
             partition_count,
             partition_bit_len,
             apex_leaf_count,
-            apex_select_bit_len,
+            apex_leaf_bit_len,
         }
     }
 }
@@ -185,11 +185,12 @@ where
 {
     pub fn verify_merkle_proofs(
         &self,
-        c: usize,
+        c: u32,
         root_r_old: &TreeRDomain,
         comm_d_new: &TreeDDomain,
         root_r_new: &TreeRDomain,
     ) -> bool {
+        let c = c as usize;
         self.proof_r_old.path_index() == c
             && self.proof_d_new.path_index() == c
             && self.proof_r_new.path_index() == c
@@ -341,7 +342,7 @@ where
             partition_count,
             partition_bit_len,
             apex_leaf_count,
-            apex_select_bit_len,
+            apex_leaf_bit_len,
         } = *pub_params;
 
         let PublicInputs {
@@ -377,7 +378,7 @@ where
 
         // Compute apex-tree.
         let mut apex_tree: Vec<Vec<TreeDDomain>> = vec![apex_leafs.clone()];
-        for _ in 0..apex_select_bit_len {
+        for _ in 0..apex_leaf_bit_len {
             let tree_row: Vec<TreeDDomain> = apex_tree
                 .last()
                 .unwrap()
@@ -391,8 +392,8 @@ where
 
         // All TreeDNew Merkle proofs should have an apex-leaf at height `apex_leafs_height` in the
         // proof path, i.e. TreeDNew has height `challenge_bit_len`, partition-tree has height
-        // `partition_bit_len`, and apex-tree has height `apex_select_bit_len`.
-        let apex_leafs_height = challenge_bit_len - partition_bit_len - apex_select_bit_len;
+        // `partition_bit_len`, and apex-tree has height `apex_leaf_bit_len`.
+        let apex_leafs_height = challenge_bit_len - partition_bit_len - apex_leaf_bit_len;
 
         let root_r_old = challenge_proofs[0].proof_r_old.root();
         let root_r_new = challenge_proofs[0].proof_r_new.root();
@@ -414,13 +415,8 @@ where
             .into_par_iter()
             .zip(challenge_proofs.into_par_iter())
             .all(|(c, challenge_proof)| {
-                // Verify TreeROld Merkle proof.
-                if !challenge_proof.verify_merkle_proofs(
-                    c as usize,
-                    &root_r_old,
-                    &comm_d_new,
-                    &root_r_new,
-                ) {
+                // Verify TreeROld, TreeDNew, and TreeRNew Merkle proofs.
+                if !challenge_proof.verify_merkle_proofs(c, &root_r_old, &comm_d_new, &root_r_new) {
                     return false;
                 }
 
@@ -435,12 +431,17 @@ where
                     return false;
                 }
 
-                // Verify that the TreeDNew Merkle proof's apex-path is consistent with apex-tree.
-                challenge_proof.proof_d_new.path()
-                    [apex_leafs_height..apex_leafs_height + apex_select_bit_len]
+                // Check that apex-path is consistent with apex-tree.
+                let apex_path = &challenge_proof.proof_d_new.path()
+                    [apex_leafs_height..apex_leafs_height + apex_leaf_bit_len];
+
+                apex_path
                     .iter()
                     .zip(apex_tree.iter())
-                    .all(|(path_elem, apex_tree_row)| apex_tree_row.contains(&path_elem.0[0]))
+                    .all(|(path_elem, apex_tree_row)| {
+                        let sibling = &path_elem.0[0];
+                        apex_tree_row.contains(sibling)
+                    })
             });
 
         Ok(challenge_proofs_are_valid)
