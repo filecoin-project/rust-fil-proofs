@@ -97,7 +97,6 @@ where
             comm_r_new,
         );
 
-        // `comm_c` is a public-input for the vanilla proof and a private-input for the circuit.
         let priv_inputs = circuit::PrivateInputs::new(
             vanilla_proof.comm_c,
             &vanilla_proof.apex_leafs,

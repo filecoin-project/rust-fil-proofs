@@ -347,7 +347,7 @@ where
                     partition_count,
                     partition_bit_len,
                     apex_leaf_count,
-                    apex_select_bit_len,
+                    apex_leaf_bit_len,
                 },
             pub_inputs:
                 PublicInputs {
@@ -691,9 +691,9 @@ where
                 root_r_new.clone(),
             )?;
 
-            let apex_select_bits: Vec<Boolean> = {
-                let start = challenge_bit_len - partition_bit_len - apex_select_bit_len;
-                let stop = start + apex_select_bit_len;
+            let apex_leaf_bits: Vec<Boolean> = {
+                let start = challenge_bit_len - partition_bit_len - apex_leaf_bit_len;
+                let stop = start + apex_leaf_bit_len;
                 c_bits[start..stop]
                     .iter()
                     .cloned()
@@ -704,10 +704,10 @@ where
             let apex_leaf = select(
                 cs.namespace(|| format!("select_apex_leaf (c_index={})", c_index)),
                 &apex_leafs,
-                &apex_select_bits,
+                &apex_leaf_bits,
             )?;
 
-            let path_len_to_apex_leaf = challenge_bit_len - partition_bit_len - apex_select_bit_len;
+            let path_len_to_apex_leaf = challenge_bit_len - partition_bit_len - apex_leaf_bit_len;
 
             let c_bits_to_apex_leaf: Vec<AllocatedBit> =
                 c_bits.into_iter().take(path_len_to_apex_leaf).collect();
