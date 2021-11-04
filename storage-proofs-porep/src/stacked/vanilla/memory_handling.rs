@@ -183,6 +183,7 @@ impl<T: FromByteSlice> CacheReader<T> {
         let bufs = unsafe { self.get_mut_bufs() };
         bufs[1] = buf1;
         self.cursor.store(0);
+        self.store_consumer(0);
         Ok(())
     }
 
