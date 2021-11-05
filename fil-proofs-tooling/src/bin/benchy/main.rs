@@ -6,7 +6,7 @@ use std::str::FromStr;
 
 use anyhow::Result;
 use byte_unit::Byte;
-use clap::{value_t, App, AppSettings, Arg, SubCommand};
+use clap::{value_t, App, Arg, SubCommand};
 
 use storage_proofs_core::api_version::ApiVersion;
 
@@ -17,6 +17,7 @@ mod merkleproofs;
 mod prodbench;
 mod window_post;
 mod winning_post;
+mod aggregate_proof;
 
 fn main() -> Result<()> {
     fil_logger::init();
@@ -86,6 +87,14 @@ fn main() -> Result<()> {
                 .required(true)
                 .help("The api_version to use (default: 1.0.0)")
                 .default_value("1.0.0")
+                .takes_value(true),
+        )
+        .arg(
+            Arg::with_name("num-sectors")
+                .long("num-sectors")
+                .required(true)
+                .help("The num of sectors (default: 1)")
+                .default_value("1")
                 .takes_value(true),
         );
 
@@ -170,14 +179,32 @@ fn main() -> Result<()> {
                 .takes_value(false),
         );
 
+    let agg_proof_cmd = SubCommand::with_name("aggregate-proof")
+        .about("Benchmark Aggregate Window PoST Proofs")
+        .arg(
+            Arg::with_name("num_agg")
+                .long("num_agg")
+                .required(true)
+                .default_value("128")
+                .help("How many window-post proofs to aggregate (default is 128)")
+                .takes_value(true),
+        )
+        .arg(
+            Arg::with_name("size")
+                .long("size")
+                .required(true)
+                .help("The data size (e.g. 2KiB)")
+                .takes_value(true),
+        );
+
     let matches = App::new("benchy")
-        .setting(AppSettings::ArgRequiredElseHelp)
         .version("0.1")
         .subcommand(window_post_cmd)
         .subcommand(winning_post_cmd)
         .subcommand(hash_cmd)
         .subcommand(prodbench_cmd)
         .subcommand(merkleproof_cmd)
+        .subcommand(agg_proof_cmd)
         .get_matches();
 
     match matches.subcommand() {
@@ -192,8 +219,10 @@ fn main() -> Result<()> {
             let cache_dir = value_t!(m, "cache", String)?;
             let sector_size = Byte::from_str(value_t!(m, "size", String)?)?.get_bytes() as usize;
             let api_version = ApiVersion::from_str(&value_t!(m, "api_version", String)?)?;
+            let num_sectors = Byte::from_str(value_t!(m, "num-sectors", String)?)?.get_bytes() as usize;
             window_post::run(
                 sector_size,
+                num_sectors,
                 api_version,
                 cache_dir,
                 preserve_cache,
@@ -241,7 +270,13 @@ fn main() -> Result<()> {
             serde_json::to_writer(stdout(), &outputs)
                 .expect("failed to write ProdbenchOutput to stdout")
         }
-        _ => unreachable!(),
+        ("aggregate-proof", Some(m)) => {
+            let nums = Byte::from_str(value_t!(m, "num_agg", String)?)?.get_bytes() as usize;
+            let sector_size = Byte::from_str(value_t!(m, "size", String)?)?.get_bytes() as usize;
+            let cache_dir = String::from("/home/bft/tmp/window-post-bench-1627985311877");
+            aggregate_proof::run(cache_dir, sector_size, nums)?;
+        }
+        _ => panic!("carnation"),
     }
 
     Ok(())

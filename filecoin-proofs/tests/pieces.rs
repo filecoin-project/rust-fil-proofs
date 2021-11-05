@@ -2,7 +2,7 @@ use std::io::{Cursor, Read};
 use std::iter::Iterator;
 
 use anyhow::Result;
-use blstrs::Scalar as Fr;
+use bellperson::bls::Fr;
 use filecoin_proofs::{
     add_piece, commitment_from_fr,
     pieces::{
@@ -301,7 +301,7 @@ fn test_verify_random_pieces() -> Result<()> {
         println!("--- {:?} ---", sector_size);
         for i in 0..100 {
             println!(" - {} -", i);
-            let unpadded_sector_size: UnpaddedBytesAmount = (*sector_size).into();
+            let unpadded_sector_size: UnpaddedBytesAmount = sector_size.clone().into();
             let sector_size = *sector_size;
             let padded_sector_size: PaddedBytesAmount = sector_size.into();
 
@@ -325,8 +325,10 @@ fn test_verify_random_pieces() -> Result<()> {
                     let max_exp = (left_power_of_two as f64).log2() as u32;
 
                     let padded_exp = if max_exp > 7 {
-                        // 2**7 == 128
-                        rng.gen_range(7..max_exp)
+                        rng.gen_range(
+                            7, // 2**7 == 128,
+                            max_exp,
+                        )
                     } else {
                         7
                     };

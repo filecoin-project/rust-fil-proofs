@@ -1,4 +1,4 @@
-use blstrs::Scalar as Fr;
+use bellperson::bls::Fr;
 use ff::Field;
 use filecoin_hashers::{blake2s::Blake2sHasher, sha256::Sha256Hasher, Domain, Hasher};
 use fr32::fr_into_bytes;
@@ -199,14 +199,14 @@ fn test_prove_verify_aux<Tree: MerkleTreeTrait>(
 
     // The loop is here in case we need to retry because of an edge case in the test design.
     loop {
-        let mut rng = XorShiftRng::from_seed(TEST_SEED);
+        let rng = &mut XorShiftRng::from_seed(TEST_SEED);
         let degree = BASE_DEGREE;
         let expansion_degree = 0;
 
         let replica_id: <Tree::Hasher as Hasher>::Domain =
-            <Tree::Hasher as Hasher>::Domain::random(&mut rng);
+            <Tree::Hasher as Hasher>::Domain::random(rng);
         let data: Vec<u8> = (0..nodes)
-            .flat_map(|_| fr_into_bytes(&Fr::random(&mut rng)))
+            .flat_map(|_| fr_into_bytes(&Fr::random(rng)))
             .collect();
 
         // MT for original data is always named tree-d, and it will be

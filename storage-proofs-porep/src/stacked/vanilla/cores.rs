@@ -200,10 +200,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(feature = "isolated-testing")]
-    // This test should not be run while other tests are running, as
-    // the cores we're working with may otherwise be busy and cause a
-    // failure.
+    #[cfg(feature = "single-threaded")]
     fn test_checkout_cores() {
         let checkout1 = checkout_core_group();
         dbg!(&checkout1);

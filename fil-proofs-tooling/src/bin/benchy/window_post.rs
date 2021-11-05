@@ -1,27 +1,30 @@
 use std::collections::BTreeMap;
 use std::fs::{create_dir, read, read_to_string, remove_dir_all, File, OpenOptions};
-use std::io::{stdout, Seek, SeekFrom, Write};
+use std::io::{/*stdout,*/ Seek, SeekFrom, Write};
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::Instant;
 
+// use bellperson::bls::Fr;
 use anyhow::{ensure, Context};
 use bincode::{deserialize, serialize};
 use fil_proofs_tooling::measure::FuncMeasurement;
 use fil_proofs_tooling::shared::{PROVER_ID, RANDOMNESS, TICKET_BYTES};
-use fil_proofs_tooling::{measure, Metadata};
+use fil_proofs_tooling::{measure/*, Metadata*/};
 use filecoin_proofs::constants::{
     POREP_PARTITIONS, WINDOW_POST_CHALLENGE_COUNT, WINDOW_POST_SECTOR_COUNT,
 };
 use filecoin_proofs::types::{
     PaddedBytesAmount, PieceInfo, PoRepConfig, PoRepProofPartitions, PoStConfig,
     SealCommitPhase1Output, SealPreCommitOutput, SealPreCommitPhase1Output, SectorSize,
-    UnpaddedBytesAmount,
+    UnpaddedBytesAmount, /*UnpaddedByteIndex,*/ ChallengeSeed,
 };
 use filecoin_proofs::{
-    add_piece, generate_piece_commitment, generate_window_post, seal_commit_phase1,
+    add_piece, /*generate_piece_commitment,*/ /*unseal_range,*/ generate_window_post, seal_commit_phase1,
     seal_commit_phase2, seal_pre_commit_phase1, seal_pre_commit_phase2, validate_cache_for_commit,
-    validate_cache_for_precommit_phase2, verify_window_post, with_shape, PoStType,
-    PrivateReplicaInfo, PublicReplicaInfo,
+    validate_cache_for_precommit_phase2, /*verify_window_post,*/ with_shape, PoStType,
+    PrivateReplicaInfo, PublicReplicaInfo, aggregate_window_post_proofs, verify_aggregate_window_post_proofs,
+    /*get_window_post_inputs,*/
 };
 use log::info;
 use serde::{Deserialize, Serialize};
@@ -29,12 +32,14 @@ use storage_proofs_core::api_version::ApiVersion;
 use storage_proofs_core::merkle::MerkleTreeTrait;
 use storage_proofs_core::sector::SectorId;
 
-const SECTOR_ID: u64 = 0;
+
+// const SECTOR_ID: u64 = 0;
 
 const PIECE_FILE: &str = "piece-file";
 const PIECE_INFOS_FILE: &str = "piece-infos-file";
 const STAGED_FILE: &str = "staged-file";
 const SEALED_FILE: &str = "sealed-file";
+// const UNSEALED_FILE: &str = "unsealed-file";
 const PRECOMMIT_PHASE1_OUTPUT_FILE: &str = "precommit-phase1-output";
 const PRECOMMIT_PHASE2_OUTPUT_FILE: &str = "precommit-phase2-output";
 const COMMIT_PHASE1_OUTPUT_FILE: &str = "commit-phase1-output";
@@ -66,20 +71,20 @@ struct Outputs {
     verify_window_post_wall_time_ms: u64,
 }
 
-#[derive(Serialize, Deserialize)]
-#[serde(rename_all = "kebab-case")]
-struct Report {
-    inputs: Inputs,
-    outputs: Outputs,
-}
+// #[derive(Serialize, Deserialize)]
+// #[serde(rename_all = "kebab-case")]
+// struct Report {
+//     inputs: Inputs,
+//     outputs: Outputs,
+// }
 
-impl Report {
-    /// Print all results to stdout
-    pub fn print(&self) {
-        let wrapped = Metadata::wrap(&self).expect("failed to retrieve metadata");
-        serde_json::to_writer(stdout(), &wrapped).expect("cannot write report JSON to stdout");
-    }
-}
+// impl Report {
+//     /// Print all results to stdout
+//     pub fn print(&self) {
+//         let wrapped = Metadata::wrap(&self).expect("failed to retrieve metadata");
+//         serde_json::to_writer(stdout(), &wrapped).expect("cannot write report JSON to stdout");
+//     }
+// }
 
 fn get_porep_config(sector_size: u64, api_version: ApiVersion) -> PoRepConfig {
     let arbitrary_porep_id = [99; 32];
@@ -103,6 +108,7 @@ fn run_pre_commit_phases<Tree: 'static + MerkleTreeTrait>(
     sector_size: u64,
     api_version: ApiVersion,
     cache_dir: PathBuf,
+    sector_id: u64,
     skip_precommit_phase1: bool,
     skip_precommit_phase2: bool,
     test_resume: bool,
@@ -131,17 +137,33 @@ fn run_pre_commit_phases<Tree: 'static + MerkleTreeTrait>(
             OpenOptions::new().read(true).write(true).create(true).open(&sealed_file_path)
         }?;
 
-        let sector_size_unpadded_bytes_amount =
+        let res_amount =
             UnpaddedBytesAmount::from(PaddedBytesAmount(sector_size));
+        // let sector_size_unpadded_bytes_amount2 =
+        //     UnpaddedBytesAmount::from(PaddedBytesAmount(sector_size/2));
+        
 
         let piece_file_path = cache_dir.join(PIECE_FILE);
+
+        // let real_data_file_path = PathBuf::from("/home/bft/test.dat");
+        // let mut real_data_file = OpenOptions::new().read(true).write(true).open(&real_data_file_path)?;
+
+        // let (piece_info1, written1) = add_piece(
+        //     &mut real_data_file,
+        //     &mut staged_file,
+        //     UnpaddedBytesAmount(2*1024*1024),
+        //     &[],
+        // )?;
+        // res_amount = res_amount - written1;
+
         let mut piece_file = if skip_staging {
             info!("*** Re-using piece file");
             OpenOptions::new().read(true).write(true).open(&piece_file_path)?
         } else {
             // Generate the data from which we will create a replica, we will then prove the continued
             // storage of that replica using the PoSt.
-            let piece_bytes: Vec<u8> = (0..usize::from(sector_size_unpadded_bytes_amount))
+            let piece_bytes: Vec<u8> = (0..usize::from(res_amount))
+            // let piece_bytes: Vec<u8> = (0..usize::from(sector_size_unpadded_bytes_amount))
                 .map(|_| rand::random::<u8>())
                 .collect();
 
@@ -154,19 +176,21 @@ fn run_pre_commit_phases<Tree: 'static + MerkleTreeTrait>(
             piece_file
         };
 
-        let piece_info =
-            generate_piece_commitment(&mut piece_file, sector_size_unpadded_bytes_amount)?;
-        piece_file.seek(SeekFrom::Start(0))?;
+        // let piece_info =
+        //     generate_piece_commitment(&mut piece_file, sector_size_unpadded_bytes_amount)?;
+        // piece_file.seek(SeekFrom::Start(0))?;
 
-        add_piece(
+        let (piece_info, _written) = add_piece(
             &mut piece_file,
             &mut staged_file,
-            sector_size_unpadded_bytes_amount,
+            res_amount,
             &[],
         )?;
 
+        // info!("written1: {:?}, written2: {:?}",written1,written2);
+
         let piece_infos = vec![piece_info];
-        let sector_id = SectorId::from(SECTOR_ID);
+        let sector_id = SectorId::from(sector_id);
         let porep_config = get_porep_config(sector_size, api_version);
 
         let seal_pre_commit_phase1_measurement: FuncMeasurement<SealPreCommitPhase1Output<Tree>> = measure(|| {
@@ -205,7 +229,7 @@ fn run_pre_commit_phases<Tree: 'static + MerkleTreeTrait>(
             info!("Test resume requested.  Removing last layer {:?}", layers[layers.len() - 1]);
             std::fs::remove_file(&layers[layers.len() - 1])?;
 
-            return run_pre_commit_phases::<Tree>(sector_size, api_version, cache_dir, skip_precommit_phase1, skip_precommit_phase2, false, true);
+            return run_pre_commit_phases::<Tree>(sector_size, api_version, cache_dir, u64::from(sector_id), skip_precommit_phase1, skip_precommit_phase2, false, true);
         }
 
         // Persist piece_infos here
@@ -340,8 +364,9 @@ fn run_pre_commit_phases<Tree: 'static + MerkleTreeTrait>(
 #[allow(clippy::too_many_arguments)]
 pub fn run_window_post_bench<Tree: 'static + MerkleTreeTrait>(
     sector_size: u64,
+    aggregate_count: u64,
     api_version: ApiVersion,
-    cache_dir: PathBuf,
+    root_dir: PathBuf,
     preserve_cache: bool,
     skip_precommit_phase1: bool,
     skip_precommit_phase2: bool,
@@ -349,246 +374,320 @@ pub fn run_window_post_bench<Tree: 'static + MerkleTreeTrait>(
     skip_commit_phase2: bool,
     test_resume: bool,
 ) -> anyhow::Result<()> {
-    let (
-        (seal_pre_commit_phase1_cpu_time_ms, seal_pre_commit_phase1_wall_time_ms),
-        (
-            validate_cache_for_precommit_phase2_cpu_time_ms,
-            validate_cache_for_precommit_phase2_wall_time_ms,
-        ),
-        (seal_pre_commit_phase2_cpu_time_ms, seal_pre_commit_phase2_wall_time_ms),
-    ) = if skip_precommit_phase1 && skip_precommit_phase2 {
-        // generate no-op measurements
-        Ok(((0, 0), (0, 0), (0, 0)))
-    } else {
-        run_pre_commit_phases::<Tree>(
-            sector_size,
-            api_version,
-            cache_dir.clone(),
-            skip_precommit_phase1,
-            skip_precommit_phase2,
-            test_resume,
-            false, // skip staging
-        )
-    }?;
+    let mut randomnesses: Vec<ChallengeSeed> = Vec::new();
+    let mut proofs: Vec<Vec<u8>> = Vec::new();
+    let mut pub_replica_infos: Vec<BTreeMap<SectorId, PublicReplicaInfo>> = Vec::new();
+    let mut priv_replica_infos: Vec<BTreeMap<SectorId, PrivateReplicaInfo<Tree>>> = Vec::new();
+    
+    // let aggregate_count = 128;
 
-    let piece_infos = {
-        let piece_infos_path = cache_dir.join(PIECE_INFOS_FILE);
-        info!("*** Restoring piece infos file");
-        let piece_infos_json = read_to_string(&piece_infos_path).with_context(|| {
-            format!(
-                "could not read file piece_infos_path={:?}",
-                piece_infos_path
-            )
-        })?;
-
-        let res: Vec<PieceInfo> = serde_json::from_str(&piece_infos_json)?;
-
-        res
-    };
-
-    let seal_pre_commit_output = {
-        let phase2_output_path = cache_dir.join(PRECOMMIT_PHASE2_OUTPUT_FILE);
-        info!("*** Restoring precommit phase2 output file");
-        let phase2_output_bytes = read(&phase2_output_path).with_context(|| {
-            format!(
-                "could not read file phase2_output_path={:?}",
-                phase2_output_path
-            )
-        })?;
-
-        let res: SealPreCommitOutput = deserialize(&phase2_output_bytes)?;
-
-        res
-    };
-
-    let seed = [0u8; 32];
-    let comm_r = seal_pre_commit_output.comm_r;
-
-    let sector_id = SectorId::from(SECTOR_ID);
-    let porep_config = get_porep_config(sector_size, api_version);
-
-    let sealed_file_path = cache_dir.join(SEALED_FILE);
-
-    let (
-        validate_cache_for_commit_cpu_time_ms,
-        validate_cache_for_commit_wall_time_ms,
-        seal_commit_phase1_cpu_time_ms,
-        seal_commit_phase1_wall_time_ms,
-    ) = if skip_commit_phase1 {
-        // generate no-op measurements
-        (0, 0, 0, 0)
-    } else {
-        let validate_cache_for_commit_measurement = measure(|| {
-            validate_cache_for_commit::<_, _, Tree>(cache_dir.clone(), sealed_file_path.clone())
-        })
-        .expect("failed to validate cache for commit");
-
-        let seal_commit_phase1_measurement = measure(|| {
-            seal_commit_phase1::<_, Tree>(
-                porep_config,
+    for index in 0..aggregate_count{
+        let cache_dir = root_dir.join(format!("cache-{}",index));
+        if !cache_dir.exists() {
+            create_dir(&cache_dir)?;
+        }
+        let (
+            (_seal_pre_commit_phase1_cpu_time_ms, _seal_pre_commit_phase1_wall_time_ms),
+            (
+                _validate_cache_for_precommit_phase2_cpu_time_ms,
+                _validate_cache_for_precommit_phase2_wall_time_ms,
+            ),
+            (_seal_pre_commit_phase2_cpu_time_ms, _seal_pre_commit_phase2_wall_time_ms),
+        ) = if skip_precommit_phase1 && skip_precommit_phase2 {
+            // generate no-op measurements
+            Ok(((0, 0), (0, 0), (0, 0)))
+        } else {
+            run_pre_commit_phases::<Tree>(
+                sector_size,
+                api_version,
                 cache_dir.clone(),
-                sealed_file_path.clone(),
-                PROVER_ID,
-                sector_id,
-                TICKET_BYTES,
-                seed,
-                seal_pre_commit_output,
-                &piece_infos,
+                index as u64,
+                skip_precommit_phase1,
+                skip_precommit_phase2,
+                test_resume,
+                false, // skip staging
             )
-        })
-        .expect("failed in seal_commit_phase1");
-        let phase1_output = seal_commit_phase1_measurement.return_value;
+        }?;
 
-        // Persist commit phase1_output here
-        let phase1_output_path = cache_dir.join(COMMIT_PHASE1_OUTPUT_FILE);
-        let mut f = File::create(&phase1_output_path).with_context(|| {
-            format!(
-                "could not create file phase1_output_path={:?}",
-                phase1_output_path
-            )
-        })?;
-        info!("*** Created commit phase1 output file");
-        let phase1_output_bytes = serialize(&phase1_output)?;
-        f.write_all(&phase1_output_bytes).with_context(|| {
-            format!(
-                "could not write to file phase1_output_path={:?}",
-                phase1_output_path
-            )
-        })?;
-        info!("Persisted commit phase1 output to {:?}", phase1_output_path);
+        let piece_infos = {
+            let piece_infos_path = cache_dir.join(PIECE_INFOS_FILE);
+            info!("*** Restoring piece infos file");
+            let piece_infos_json = read_to_string(&piece_infos_path).with_context(|| {
+                format!(
+                    "could not read file piece_infos_path={:?}",
+                    piece_infos_path
+                )
+            })?;
 
-        (
-            validate_cache_for_commit_measurement.cpu_time.as_millis() as u64,
-            validate_cache_for_commit_measurement.wall_time.as_millis() as u64,
-            seal_commit_phase1_measurement.cpu_time.as_millis() as u64,
-            seal_commit_phase1_measurement.wall_time.as_millis() as u64,
-        )
-    };
-
-    let (seal_commit_phase2_cpu_time_ms, seal_commit_phase2_wall_time_ms) = if skip_commit_phase2 {
-        // generate no-op measurements
-        (0, 0)
-    } else {
-        let commit_phase1_output = {
-            let commit_phase1_output_path = cache_dir.join(COMMIT_PHASE1_OUTPUT_FILE);
-            info!("*** Restoring commit phase1 output file");
-            let commit_phase1_output_bytes =
-                read(&commit_phase1_output_path).with_context(|| {
-                    format!(
-                        "could not read file commit_phase1_output_path={:?}",
-                        commit_phase1_output_path
-                    )
-                })?;
-
-            let res: SealCommitPhase1Output<Tree> = deserialize(&commit_phase1_output_bytes)?;
+            let res: Vec<PieceInfo> = serde_json::from_str(&piece_infos_json)?;
 
             res
         };
 
-        let seal_commit_phase2_measurement = measure(|| {
-            seal_commit_phase2::<Tree>(porep_config, commit_phase1_output, PROVER_ID, sector_id)
-        })
-        .expect("failed in seal_commit_phase2");
+        let seal_pre_commit_output = {
+            let phase2_output_path = cache_dir.join(PRECOMMIT_PHASE2_OUTPUT_FILE);
+            info!("*** Restoring precommit phase2 output file");
+            let phase2_output_bytes = read(&phase2_output_path).with_context(|| {
+                format!(
+                    "could not read file phase2_output_path={:?}",
+                    phase2_output_path
+                )
+            })?;
 
-        (
-            seal_commit_phase2_measurement.cpu_time.as_millis() as u64,
-            seal_commit_phase2_measurement.wall_time.as_millis() as u64,
-        )
-    };
+            let res: SealPreCommitOutput = deserialize(&phase2_output_bytes)?;
 
-    let pub_replica = PublicReplicaInfo::new(comm_r).expect("failed to create public replica info");
+            res
+        };
 
-    let priv_replica = PrivateReplicaInfo::<Tree>::new(sealed_file_path, comm_r, cache_dir.clone())
-        .expect("failed to create private replica info");
+        let seed = [0u8; 32];
+        let comm_r = seal_pre_commit_output.comm_r;
+        let _comm_d = seal_pre_commit_output.comm_d;
 
-    // Store the replica's private and publicly facing info for proving and verifying respectively.
-    let mut pub_replica_info: BTreeMap<SectorId, PublicReplicaInfo> = BTreeMap::new();
-    let mut priv_replica_info: BTreeMap<SectorId, PrivateReplicaInfo<Tree>> = BTreeMap::new();
+        let sector_id = SectorId::from(index);
+        let porep_config = get_porep_config(sector_size, api_version);
 
-    pub_replica_info.insert(sector_id, pub_replica);
-    priv_replica_info.insert(sector_id, priv_replica);
+        let sealed_file_path = cache_dir.join(SEALED_FILE);
 
-    // Measure PoSt generation and verification.
-    let post_config = PoStConfig {
-        sector_size: SectorSize(sector_size),
-        challenge_count: WINDOW_POST_CHALLENGE_COUNT,
-        sector_count: *WINDOW_POST_SECTOR_COUNT
-            .read()
-            .expect("WINDOW_POST_SECTOR_COUNT poisoned")
-            .get(&sector_size)
-            .expect("unknown sector size"),
-        typ: PoStType::Window,
-        priority: true,
-        api_version,
-    };
+        let (
+            _validate_cache_for_commit_cpu_time_ms,
+            _validate_cache_for_commit_wall_time_ms,
+            _seal_commit_phase1_cpu_time_ms,
+            _seal_commit_phase1_wall_time_ms,
+        ) = if skip_commit_phase1 {
+            // generate no-op measurements
+            (0, 0, 0, 0)
+        } else {
+            let validate_cache_for_commit_measurement = measure(|| {
+                validate_cache_for_commit::<_, _, Tree>(cache_dir.clone(), sealed_file_path.clone())
+            })
+            .expect("failed to validate cache for commit");
 
-    let gen_window_post_measurement = measure(|| {
-        generate_window_post::<Tree>(&post_config, &RANDOMNESS, &priv_replica_info, PROVER_ID)
-    })
-    .expect("failed to generate window post");
+            let seal_commit_phase1_measurement = measure(|| {
+                seal_commit_phase1::<_, Tree>(
+                    porep_config,
+                    cache_dir.clone(),
+                    sealed_file_path.clone(),
+                    PROVER_ID,
+                    sector_id,
+                    TICKET_BYTES,
+                    seed,
+                    seal_pre_commit_output,
+                    &piece_infos,
+                )
+            })
+            .expect("failed in seal_commit_phase1");
+            let phase1_output = seal_commit_phase1_measurement.return_value;
 
-    let proof = &gen_window_post_measurement.return_value;
+            // Persist commit phase1_output here
+            let phase1_output_path = cache_dir.join(COMMIT_PHASE1_OUTPUT_FILE);
+            let mut f = File::create(&phase1_output_path).with_context(|| {
+                format!(
+                    "could not create file phase1_output_path={:?}",
+                    phase1_output_path
+                )
+            })?;
+            info!("*** Created commit phase1 output file");
+            let phase1_output_bytes = serialize(&phase1_output)?;
+            f.write_all(&phase1_output_bytes).with_context(|| {
+                format!(
+                    "could not write to file phase1_output_path={:?}",
+                    phase1_output_path
+                )
+            })?;
+            info!("Persisted commit phase1 output to {:?}", phase1_output_path);
 
-    // warmup cache
-    verify_window_post::<Tree>(
-        &post_config,
-        &RANDOMNESS,
-        &pub_replica_info,
-        PROVER_ID,
-        proof,
-    )
-    .unwrap();
-    let verify_window_post_measurement = measure(|| {
-        verify_window_post::<Tree>(
-            &post_config,
-            &RANDOMNESS,
-            &pub_replica_info,
-            PROVER_ID,
-            proof,
-        )
-    })
-    .expect("failed to verify window post proof");
+            (
+                validate_cache_for_commit_measurement.cpu_time.as_millis() as u64,
+                validate_cache_for_commit_measurement.wall_time.as_millis() as u64,
+                seal_commit_phase1_measurement.cpu_time.as_millis() as u64,
+                seal_commit_phase1_measurement.wall_time.as_millis() as u64,
+            )
+        };
 
-    if preserve_cache {
-        info!("Preserving cache directory {:?}", cache_dir);
-    } else {
-        info!("Removing cache directory {:?}", cache_dir);
-        remove_dir_all(cache_dir)?;
+        let (_seal_commit_phase2_cpu_time_ms, _seal_commit_phase2_wall_time_ms) = if skip_commit_phase2 {
+            // generate no-op measurements
+            (0, 0)
+        } else {
+            let commit_phase1_output = {
+                let commit_phase1_output_path = cache_dir.join(COMMIT_PHASE1_OUTPUT_FILE);
+                info!("*** Restoring commit phase1 output file");
+                let commit_phase1_output_bytes =
+                    read(&commit_phase1_output_path).with_context(|| {
+                        format!(
+                            "could not read file commit_phase1_output_path={:?}",
+                            commit_phase1_output_path
+                        )
+                    })?;
+
+                let res: SealCommitPhase1Output<Tree> = deserialize(&commit_phase1_output_bytes)?;
+
+                res
+            };
+
+            let seal_commit_phase2_measurement = measure(|| {
+                seal_commit_phase2::<Tree>(porep_config, commit_phase1_output, PROVER_ID, sector_id)
+            })
+            .expect("failed in seal_commit_phase2");
+
+            (
+                seal_commit_phase2_measurement.cpu_time.as_millis() as u64,
+                seal_commit_phase2_measurement.wall_time.as_millis() as u64,
+            )
+        };
+
+        let pub_replica = PublicReplicaInfo::new(comm_r).expect("failed to create public replica info");
+
+        let priv_replica = PrivateReplicaInfo::<Tree>::new(sealed_file_path, comm_r, cache_dir.clone())
+            .expect("failed to create private replica info");
+
+        // Store the replica's private and publicly facing info for proving and verifying respectively.
+        let mut pub_replica_info: BTreeMap<SectorId, PublicReplicaInfo> = BTreeMap::new();
+        let mut priv_replica_info: BTreeMap<SectorId, PrivateReplicaInfo<Tree>> = BTreeMap::new();
+
+        pub_replica_info.insert(sector_id, pub_replica);
+        priv_replica_info.insert(sector_id, priv_replica);
+
+        pub_replica_infos.push(pub_replica_info.clone());
+        priv_replica_infos.push(priv_replica_info.clone());
+
+
+        // let unsealed_file_path = cache_dir.join(UNSEALED_FILE);
+        // let sealed_file_path = cache_dir.join(SEALED_FILE);
+        // info!("*** Creating unsealed file");
+        // let unsealed_file = OpenOptions::new().read(true).write(true).create(true).open(&unsealed_file_path)?;
+        // let sealed_file = OpenOptions::new().read(true).write(true).open(&sealed_file_path)?;
+
+        // let porep_config = get_porep_config(sector_size, api_version);
+        // let sector_id = SectorId::from(index);
+
+        // let _ = unseal_range::<_,_,_,Tree>(
+        //         porep_config,
+        //         cache_dir.clone(),
+        //         sealed_file,
+        //         unsealed_file,
+        //         PROVER_ID,
+        //         sector_id,
+        //         comm_d,
+        //         TICKET_BYTES,
+        //         UnpaddedByteIndex(256),
+        //         UnpaddedBytesAmount(2048),
+        //         )?;
+
+        // let report = Report {
+        //     inputs: Inputs { sector_size },
+        //     outputs: Outputs {
+        //         seal_pre_commit_phase1_cpu_time_ms,
+        //         seal_pre_commit_phase1_wall_time_ms,
+        //         validate_cache_for_precommit_phase2_cpu_time_ms,
+        //         validate_cache_for_precommit_phase2_wall_time_ms,
+        //         seal_pre_commit_phase2_cpu_time_ms,
+        //         seal_pre_commit_phase2_wall_time_ms,
+        //         validate_cache_for_commit_cpu_time_ms,
+        //         validate_cache_for_commit_wall_time_ms,
+        //         seal_commit_phase1_cpu_time_ms,
+        //         seal_commit_phase1_wall_time_ms,
+        //         seal_commit_phase2_cpu_time_ms,
+        //         seal_commit_phase2_wall_time_ms,
+        //         gen_window_post_cpu_time_ms: gen_window_post_measurement.cpu_time.as_millis() as u64,
+        //         gen_window_post_wall_time_ms: gen_window_post_measurement.wall_time.as_millis() as u64,
+        //         verify_window_post_cpu_time_ms: verify_window_post_measurement.cpu_time.as_millis()
+        //             as u64,
+        //         verify_window_post_wall_time_ms: verify_window_post_measurement.wall_time.as_millis()
+        //             as u64,
+        //     },
+        // };
+        // report.print();
+        // print!("\n");
     }
 
-    let report = Report {
-        inputs: Inputs { sector_size },
-        outputs: Outputs {
-            seal_pre_commit_phase1_cpu_time_ms,
-            seal_pre_commit_phase1_wall_time_ms,
-            validate_cache_for_precommit_phase2_cpu_time_ms,
-            validate_cache_for_precommit_phase2_wall_time_ms,
-            seal_pre_commit_phase2_cpu_time_ms,
-            seal_pre_commit_phase2_wall_time_ms,
-            validate_cache_for_commit_cpu_time_ms,
-            validate_cache_for_commit_wall_time_ms,
-            seal_commit_phase1_cpu_time_ms,
-            seal_commit_phase1_wall_time_ms,
-            seal_commit_phase2_cpu_time_ms,
-            seal_commit_phase2_wall_time_ms,
-            gen_window_post_cpu_time_ms: gen_window_post_measurement.cpu_time.as_millis() as u64,
-            gen_window_post_wall_time_ms: gen_window_post_measurement.wall_time.as_millis() as u64,
-            verify_window_post_cpu_time_ms: verify_window_post_measurement.cpu_time.as_millis()
-                as u64,
-            verify_window_post_wall_time_ms: verify_window_post_measurement.wall_time.as_millis()
-                as u64,
-        },
-    };
+    let start_time = Instant::now();
+    for index in 0..aggregate_count{
+        // Measure PoSt generation and verification.
+        let post_config = PoStConfig {
+            sector_size: SectorSize(sector_size),
+            challenge_count: WINDOW_POST_CHALLENGE_COUNT,
+            sector_count: *WINDOW_POST_SECTOR_COUNT
+                .read()
+                .expect("WINDOW_POST_SECTOR_COUNT poisoned")
+                .get(&sector_size)
+                .expect("unknown sector size"),
+            typ: PoStType::Window,
+            priority: true,
+            api_version,
+        };
 
-    // Create a JSON serializable report that we print to stdout (that will later be parsed using
-    // the CLI JSON parser `jq`).
-    report.print();
+        randomnesses.push(RANDOMNESS);
+        let gen_window_post_measurement = measure(|| {
+            generate_window_post::<Tree>(&post_config, &RANDOMNESS, &priv_replica_infos[index as usize], PROVER_ID)
+        })
+        .expect("failed to generate window post");
+
+        let proof = &gen_window_post_measurement.return_value;
+
+        proofs.push(proof.to_vec());
+
+        // let verify_window_post_measurement = measure(|| {
+        //     verify_window_post::<Tree>(
+        //         &post_config,
+        //         &RANDOMNESS,
+        //         &pub_replica_infos[index],
+        //         PROVER_ID,
+        //         &proof,
+        //     )
+        // })
+        // .expect("failed to verify window post proof");
+    }
+
+    let generate_window_post_time = start_time.elapsed().as_millis();
+
+    let post_config = PoStConfig {
+            sector_size: SectorSize(sector_size),
+            challenge_count: WINDOW_POST_CHALLENGE_COUNT,
+            sector_count: *WINDOW_POST_SECTOR_COUNT
+                .read()
+                .expect("WINDOW_POST_SECTOR_COUNT poisoned")
+                .get(&sector_size)
+                .expect("unknown sector size"),
+            typ: PoStType::Window,
+            priority: true,
+            api_version,
+        };
+
+    let start_time = Instant::now();
+    let aggregate_proof = &aggregate_window_post_proofs::<Tree>(&post_config, randomnesses.as_slice(), proofs.as_slice(), 1)?;
+    let aggregate_window_post_proofs_time = start_time.elapsed().as_millis();
+
+    let start_time = Instant::now();
+    let ok = verify_aggregate_window_post_proofs::<Tree>(&post_config, PROVER_ID, aggregate_proof.to_vec(), randomnesses.as_slice(), pub_replica_infos.as_slice())?;
+    let verify_aggregate_proofs_time = start_time.elapsed().as_millis();
+    
+    if ok {
+        info!("aggregate proofs is true");
+    } else {
+        info!("aggregate proofs is false");
+    }
+
+    info!("#################################################");
+    info!("generate {} window-post using {}", aggregate_count, generate_window_post_time);
+    info!("aggregate {} window-post proofs using {}", aggregate_count, aggregate_window_post_proofs_time);
+    info!("verify_aggregate {} window-post proofs using {}", aggregate_count, verify_aggregate_proofs_time);
+    info!("aggregate proofs size is {}", aggregate_proof.len());
+    info!("#################################################");
+
+    if preserve_cache {
+        info!("Preserving cache directory {:?}", root_dir);
+    } else {
+        info!("Removing cache directory {:?}", root_dir);
+        remove_dir_all(root_dir)?;
+    }
+
     Ok(())
 }
 
 #[allow(clippy::too_many_arguments)]
 pub fn run(
     sector_size: usize,
+    num_sectors: usize,
     api_version: ApiVersion,
     cache: String,
     preserve_cache: bool,
@@ -610,16 +709,16 @@ pub fn run(
         );
     }
 
-    if skip_precommit_phase1 || skip_precommit_phase2 || skip_commit_phase1 || skip_commit_phase2 {
-        ensure!(
-            !preserve_cache,
-            "Preserve cache cannot be used if skipping any stages"
-        );
-        ensure!(
-            cache_dir_specified,
-            "Cache dir is required if skipping any stages"
-        );
-    }
+    // if skip_precommit_phase1 || skip_precommit_phase2 || skip_commit_phase1 || skip_commit_phase2 {
+    //     ensure!(
+    //         !preserve_cache,
+    //         "Preserve cache cannot be used if skipping any stages"
+    //     );
+    //     ensure!(
+    //         cache_dir_specified,
+    //         "Cache dir is required if skipping any stages"
+    //     );
+    // }
 
     let (cache_dir, preserve_cache) = if cache_dir_specified {
         // If a cache dir was specified, automatically preserve it.
@@ -641,6 +740,7 @@ pub fn run(
         sector_size as u64,
         run_window_post_bench,
         sector_size as u64,
+        num_sectors as u64,
         api_version,
         cache_dir,
         preserve_cache,

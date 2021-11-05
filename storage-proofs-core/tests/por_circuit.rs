@@ -1,9 +1,9 @@
 use bellperson::{
+    bls::{Bls12, Fr},
     gadgets::{boolean::AllocatedBit, multipack, num::AllocatedNum},
     util_cs::test_cs::TestConstraintSystem,
     Circuit, ConstraintSystem,
 };
-use blstrs::Scalar as Fr;
 use ff::Field;
 use filecoin_hashers::{
     blake2s::Blake2sHasher, poseidon::PoseidonHasher, sha256::Sha256Hasher, Domain, Hasher,
@@ -107,13 +107,13 @@ fn test_por_circuit_poseidon_top_8_2_4() {
 }
 
 fn test_por_circuit<Tree: 'static + MerkleTreeTrait>(num_inputs: usize, num_constraints: usize) {
-    let mut rng = XorShiftRng::from_seed(TEST_SEED);
+    let rng = &mut XorShiftRng::from_seed(TEST_SEED);
 
     // Ensure arity will evenly fill tree.
     let leaves = 64 * get_base_tree_count::<Tree>();
 
     // -- Basic Setup
-    let (data, tree) = generate_tree::<Tree, _>(&mut rng, leaves, None);
+    let (data, tree) = generate_tree::<Tree, _>(rng, leaves, None);
 
     for i in 0..leaves {
         //println!("challenge: {}, ({})", i, leaves);
@@ -146,7 +146,7 @@ fn test_por_circuit<Tree: 'static + MerkleTreeTrait>(num_inputs: usize, num_cons
 
         // -- Circuit
 
-        let mut cs = TestConstraintSystem::<Fr>::new();
+        let mut cs = TestConstraintSystem::<Bls12>::new();
 
         // Root is public input.
         let por = PoRCircuit::<ResTree<Tree>>::new(proof.proof, false);
@@ -198,14 +198,14 @@ fn test_por_circuit_poseidon_base_8_private_root() {
 }
 
 fn test_por_circuit_private_root<Tree: MerkleTreeTrait>(num_constraints: usize) {
-    let mut rng = XorShiftRng::from_seed(TEST_SEED);
+    let rng = &mut XorShiftRng::from_seed(TEST_SEED);
 
     let leaves = 64 * get_base_tree_count::<Tree>();
     for i in 0..leaves {
         // -- Basic Setup
 
         let data: Vec<u8> = (0..leaves)
-            .flat_map(|_| fr_into_bytes(&Fr::random(&mut rng)))
+            .flat_map(|_| fr_into_bytes(&Fr::random(rng)))
             .collect();
 
         let tree = create_base_merkle_tree::<Tree>(None, leaves, data.as_slice())
@@ -242,7 +242,7 @@ fn test_por_circuit_private_root<Tree: MerkleTreeTrait>(num_constraints: usize) 
 
         // -- Circuit
 
-        let mut cs = TestConstraintSystem::<Fr>::new();
+        let mut cs = TestConstraintSystem::<Bls12>::new();
 
         // Root is private input.
         let por = PoRCircuit::<Tree>::new(proof.proof, true);
@@ -257,7 +257,7 @@ fn test_por_circuit_private_root<Tree: MerkleTreeTrait>(num_constraints: usize) 
         );
 
         let auth_path_bits = challenge_into_auth_path_bits(pub_inputs.challenge, pub_params.leaves);
-        let packed_auth_path = multipack::compute_multipacking::<Fr>(&auth_path_bits);
+        let packed_auth_path = multipack::compute_multipacking::<Bls12>(&auth_path_bits);
 
         let mut expected_inputs = Vec::new();
         expected_inputs.extend(packed_auth_path);
@@ -281,13 +281,13 @@ fn test_por_no_challenge_input() {
     type Tree = TreeBase<PoseidonHasher, Arity>;
 
     // == Setup
-    let mut rng = XorShiftRng::from_seed(TEST_SEED);
+    let rng = &mut XorShiftRng::from_seed(TEST_SEED);
 
     let height = 3;
     let n_leaves = Arity::to_usize() << height;
 
     let data: Vec<u8> = (0..n_leaves)
-        .flat_map(|_| fr_into_bytes(&Fr::random(&mut rng)))
+        .flat_map(|_| fr_into_bytes(&Fr::random(rng)))
         .collect();
 
     let tree = create_base_merkle_tree::<Tree>(None, n_leaves, &data)
@@ -322,7 +322,7 @@ fn test_por_no_challenge_input() {
     };
 
     // == Test PoR gadget
-    let mut cs = TestConstraintSystem::<Fr>::new();
+    let mut cs = TestConstraintSystem::<Bls12>::new();
 
     let challenge_bit_len = n_leaves.trailing_zeros() as usize;
     let challenge: Vec<AllocatedBit> = (0..challenge_bit_len)
@@ -338,7 +338,7 @@ fn test_por_no_challenge_input() {
     let leaf = AllocatedNum::alloc(cs.namespace(|| "leaf".to_string()), || Ok(leaf))
         .expect("failed to allocate leaf");
 
-    let path_values: Vec<Vec<AllocatedNum<Fr>>> = proof
+    let path_values: Vec<Vec<AllocatedNum<Bls12>>> = proof
         .path()
         .iter()
         .enumerate()

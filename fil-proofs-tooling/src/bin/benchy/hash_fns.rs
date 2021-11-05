@@ -1,7 +1,7 @@
+use bellperson::bls::Bls12;
 use bellperson::gadgets::boolean::Boolean;
 use bellperson::util_cs::test_cs::TestConstraintSystem;
 use bellperson::ConstraintSystem;
-use blstrs::Scalar as Fr;
 use fil_proofs_tooling::metadata::Metadata;
 use rand::RngCore;
 use serde::Serialize;
@@ -10,7 +10,7 @@ use storage_proofs_core::util::{bits_to_bytes, bytes_into_boolean_vec, bytes_int
 fn blake2s_count(bytes: usize) -> anyhow::Result<Report> {
     let rng = &mut rand::thread_rng();
 
-    let mut cs = TestConstraintSystem::<Fr>::new();
+    let mut cs = TestConstraintSystem::<Bls12>::new();
     let mut data = vec![0u8; bytes];
     rng.fill_bytes(&mut data);
 
@@ -46,7 +46,7 @@ fn blake2s_count(bytes: usize) -> anyhow::Result<Report> {
 fn sha256_count(bytes: usize) -> anyhow::Result<Report> {
     let mut rng = rand::thread_rng();
 
-    let mut cs = TestConstraintSystem::<Fr>::new();
+    let mut cs = TestConstraintSystem::<Bls12>::new();
     let mut data = vec![0u8; bytes];
     rng.fill_bytes(&mut data);
 

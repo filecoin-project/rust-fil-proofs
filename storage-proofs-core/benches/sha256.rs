@@ -1,4 +1,5 @@
 use bellperson::{
+    bls::Bls12,
     gadgets::{
         boolean::{AllocatedBit, Boolean},
         sha256::sha256 as sha256_circuit,
@@ -7,7 +8,6 @@ use bellperson::{
     util_cs::bench_cs::BenchCS,
     Circuit, ConstraintSystem, SynthesisError,
 };
-use blstrs::{Bls12, Scalar as Fr};
 use criterion::{black_box, criterion_group, criterion_main, Criterion, Throughput};
 use rand::{thread_rng, Rng};
 use sha2::Digest;
@@ -16,8 +16,8 @@ struct Sha256Example<'a> {
     data: &'a [Option<bool>],
 }
 
-impl<'a> Circuit<Fr> for Sha256Example<'a> {
-    fn synthesize<CS: ConstraintSystem<Fr>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
+impl<'a> Circuit<Bls12> for Sha256Example<'a> {
+    fn synthesize<CS: ConstraintSystem<Bls12>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
         let data: Vec<Boolean> = self
             .data
             .iter()
@@ -111,7 +111,7 @@ fn sha256_circuit_benchmark(c: &mut Criterion) {
             let data: Vec<Option<bool>> = (0..bytes * 8).map(|_| Some(rng.gen())).collect();
 
             b.iter(|| {
-                let mut cs = BenchCS::<Fr>::new();
+                let mut cs = BenchCS::<Bls12>::new();
                 Sha256Example {
                     data: data.as_slice(),
                 }

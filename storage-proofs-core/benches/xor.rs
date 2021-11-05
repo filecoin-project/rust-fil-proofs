@@ -1,10 +1,10 @@
 use bellperson::{
+    bls::Bls12,
     gadgets::boolean::{AllocatedBit, Boolean},
     groth16::{create_random_proof, generate_random_parameters},
     util_cs::bench_cs::BenchCS,
     Circuit, ConstraintSystem, SynthesisError,
 };
-use blstrs::{Bls12, Scalar as Fr};
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use rand::{thread_rng, Rng};
 use storage_proofs_core::{crypto::xor, gadgets::xor::xor as xor_circuit};
@@ -14,8 +14,8 @@ struct XorExample<'a> {
     data: &'a [Option<bool>],
 }
 
-impl<'a> Circuit<Fr> for XorExample<'a> {
-    fn synthesize<CS: ConstraintSystem<Fr>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
+impl<'a> Circuit<Bls12> for XorExample<'a> {
+    fn synthesize<CS: ConstraintSystem<Bls12>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
         let key: Vec<Boolean> = self
             .key
             .iter()
@@ -103,7 +103,7 @@ fn xor_circuit_benchmark(c: &mut Criterion) {
             let data: Vec<Option<bool>> = (0..bytes * 8).map(|_| Some(rng.gen())).collect();
 
             b.iter(|| {
-                let mut cs = BenchCS::<Fr>::new();
+                let mut cs = BenchCS::<Bls12>::new();
                 XorExample {
                     key: key.as_slice(),
                     data: data.as_slice(),

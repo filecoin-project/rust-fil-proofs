@@ -1,4 +1,4 @@
-use blstrs::Scalar as Fr;
+use bellperson::bls::Fr;
 use filecoin_hashers::{POSEIDON_CONSTANTS_11, POSEIDON_CONSTANTS_2};
 use neptune::poseidon::Poseidon;
 

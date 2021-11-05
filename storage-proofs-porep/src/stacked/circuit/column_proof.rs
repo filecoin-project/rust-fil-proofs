@@ -1,5 +1,4 @@
-use bellperson::{ConstraintSystem, SynthesisError};
-use blstrs::Scalar as Fr;
+use bellperson::{bls::Bls12, ConstraintSystem, SynthesisError};
 use filecoin_hashers::{Hasher, PoseidonArity};
 use storage_proofs_core::{
     drgraph::Graph,
@@ -44,7 +43,7 @@ impl<
     }
 
     /// Allocate the private inputs for this column proof, and return the inclusion path for verification.
-    pub fn alloc<CS: ConstraintSystem<Fr>>(
+    pub fn alloc<CS: ConstraintSystem<Bls12>>(
         self,
         mut cs: CS,
     ) -> Result<(AllocatedColumn, AuthPath<H, U, V, W>), SynthesisError> {

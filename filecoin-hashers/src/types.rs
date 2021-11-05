@@ -5,11 +5,10 @@ use std::hash::Hash as StdHash;
 pub use crate::poseidon_types::*;
 
 use bellperson::{
+    bls::{Bls12, Fr, FrRepr},
     gadgets::{boolean::Boolean, num::AllocatedNum},
     ConstraintSystem, SynthesisError,
 };
-use blstrs::Scalar as Fr;
-use ff::PrimeField;
 use merkletree::{
     hash::{Algorithm as LightAlgorithm, Hashable as LightHashable},
     merkle::Element,
@@ -28,7 +27,7 @@ pub trait Domain:
     + Send
     + Sync
     + From<Fr>
-    + From<<Fr as PrimeField>::Repr>
+    + From<FrRepr>
     + Into<Fr>
     + Serialize
     + DeserializeOwned
@@ -69,52 +68,52 @@ pub trait HashFunction<T: Domain>: Clone + Debug + Send + Sync + LightAlgorithm<
         a.hash()
     }
 
-    fn hash_leaf_circuit<CS: ConstraintSystem<Fr>>(
+    fn hash_leaf_circuit<CS: ConstraintSystem<Bls12>>(
         mut cs: CS,
-        left: &AllocatedNum<Fr>,
-        right: &AllocatedNum<Fr>,
+        left: &AllocatedNum<Bls12>,
+        right: &AllocatedNum<Bls12>,
         height: usize,
-    ) -> Result<AllocatedNum<Fr>, SynthesisError> {
+    ) -> Result<AllocatedNum<Bls12>, SynthesisError> {
         let left_bits = left.to_bits_le(cs.namespace(|| "left num into bits"))?;
         let right_bits = right.to_bits_le(cs.namespace(|| "right num into bits"))?;
 
         Self::hash_leaf_bits_circuit(cs, &left_bits, &right_bits, height)
     }
 
-    fn hash_multi_leaf_circuit<Arity: 'static + PoseidonArity, CS: ConstraintSystem<Fr>>(
+    fn hash_multi_leaf_circuit<Arity: 'static + PoseidonArity, CS: ConstraintSystem<Bls12>>(
         cs: CS,
-        leaves: &[AllocatedNum<Fr>],
+        leaves: &[AllocatedNum<Bls12>],
         height: usize,
-    ) -> Result<AllocatedNum<Fr>, SynthesisError>;
+    ) -> Result<AllocatedNum<Bls12>, SynthesisError>;
 
-    fn hash_md_circuit<CS: ConstraintSystem<Fr>>(
+    fn hash_md_circuit<CS: ConstraintSystem<Bls12>>(
         _cs: &mut CS,
-        _elements: &[AllocatedNum<Fr>],
-    ) -> Result<AllocatedNum<Fr>, SynthesisError> {
+        _elements: &[AllocatedNum<Bls12>],
+    ) -> Result<AllocatedNum<Bls12>, SynthesisError> {
         unimplemented!();
     }
 
-    fn hash_leaf_bits_circuit<CS: ConstraintSystem<Fr>>(
+    fn hash_leaf_bits_circuit<CS: ConstraintSystem<Bls12>>(
         _cs: CS,
         _left: &[Boolean],
         _right: &[Boolean],
         _height: usize,
-    ) -> Result<AllocatedNum<Fr>, SynthesisError> {
+    ) -> Result<AllocatedNum<Bls12>, SynthesisError> {
         unimplemented!();
     }
 
-    fn hash_circuit<CS: ConstraintSystem<Fr>>(
+    fn hash_circuit<CS: ConstraintSystem<Bls12>>(
         cs: CS,
         bits: &[Boolean],
-    ) -> Result<AllocatedNum<Fr>, SynthesisError>;
+    ) -> Result<AllocatedNum<Bls12>, SynthesisError>;
 
     fn hash2_circuit<CS>(
         cs: CS,
-        a: &AllocatedNum<Fr>,
-        b: &AllocatedNum<Fr>,
-    ) -> Result<AllocatedNum<Fr>, SynthesisError>
+        a: &AllocatedNum<Bls12>,
+        b: &AllocatedNum<Bls12>,
+    ) -> Result<AllocatedNum<Bls12>, SynthesisError>
     where
-        CS: ConstraintSystem<Fr>;
+        CS: ConstraintSystem<Bls12>;
 }
 
 pub trait Hasher: Clone + Debug + Eq + Default + Send + Sync {

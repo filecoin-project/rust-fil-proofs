@@ -1,4 +1,5 @@
 use bellperson::{
+    bls::Bls12,
     gadgets::{
         blake2s::blake2s as blake2s_circuit,
         boolean::{AllocatedBit, Boolean},
@@ -8,7 +9,6 @@ use bellperson::{
     Circuit, ConstraintSystem, SynthesisError,
 };
 use blake2s_simd::blake2s;
-use blstrs::{Bls12, Scalar as Fr};
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use rand::{thread_rng, Rng};
 
@@ -16,8 +16,8 @@ struct Blake2sExample<'a> {
     data: &'a [Option<bool>],
 }
 
-impl<'a> Circuit<Fr> for Blake2sExample<'a> {
-    fn synthesize<CS: ConstraintSystem<Fr>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
+impl<'a> Circuit<Bls12> for Blake2sExample<'a> {
+    fn synthesize<CS: ConstraintSystem<Bls12>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
         let data: Vec<Boolean> = self
             .data
             .iter()
@@ -85,7 +85,7 @@ fn blake2s_circuit_benchmark(c: &mut Criterion) {
                 let mut rng = thread_rng();
                 let data: Vec<Option<bool>> = (0..bytes * 8).map(|_| Some(rng.gen())).collect();
                 b.iter(|| {
-                    let mut cs = BenchCS::<Fr>::new();
+                    let mut cs = BenchCS::<Bls12>::new();
 
                     Blake2sExample {
                         data: data.as_slice(),

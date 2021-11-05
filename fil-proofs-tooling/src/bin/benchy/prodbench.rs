@@ -1,8 +1,7 @@
 use std::fs::remove_file;
 use std::str::FromStr;
 
-use bellperson::{util_cs::bench_cs::BenchCS, Circuit};
-use blstrs::Scalar as Fr;
+use bellperson::{bls::Bls12, util_cs::bench_cs::BenchCS, Circuit};
 use fil_proofs_tooling::{
     measure,
     shared::{create_replicas, PROVER_ID, RANDOMNESS, TICKET_BYTES},
@@ -229,7 +228,7 @@ pub fn run(
                 )?;
 
                 clear_cache::<DefaultOctLCTree>(
-                    replica_info.private_replica_info.cache_dir_path(),
+                    &replica_info.private_replica_info.cache_dir_path(),
                 )?;
 
                 seal_commit_phase2(cfg, phase1_output, PROVER_ID, *sector_id)
@@ -288,7 +287,7 @@ fn measure_porep_circuit(i: &ProdbenchInputs) -> usize {
 
     let pp = StackedDrg::<ProdbenchTree, Sha256Hasher>::setup(&sp).expect("failed to setup DRG");
 
-    let mut cs = BenchCS::<Fr>::new();
+    let mut cs = BenchCS::<Bls12>::new();
     <StackedCompound<_, _> as CompoundProof<StackedDrg<ProdbenchTree, Sha256Hasher>, _>>::blank_circuit(
         &pp,
     )

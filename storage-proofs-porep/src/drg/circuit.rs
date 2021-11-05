@@ -1,10 +1,10 @@
 use std::marker::PhantomData;
 
 use bellperson::{
+    bls::{Bls12, Engine, Fr},
     gadgets::{boolean::Boolean, multipack, num::AllocatedNum, sha256::sha256 as sha256_circuit},
     Circuit, ConstraintSystem, SynthesisError,
 };
-use blstrs::Scalar as Fr;
 use ff::PrimeField;
 use filecoin_hashers::Hasher;
 use storage_proofs_core::{
@@ -41,14 +41,14 @@ pub struct DrgPoRepCircuit<'a, H: Hasher> {
     pub replica_nodes: Vec<Option<Fr>>,
     #[allow(clippy::type_complexity)]
     pub replica_nodes_paths: Vec<Vec<(Vec<Option<Fr>>, Option<usize>)>>,
-    pub replica_root: Root<Fr>,
+    pub replica_root: Root<Bls12>,
     pub replica_parents: Vec<Vec<Option<Fr>>>,
     #[allow(clippy::type_complexity)]
     pub replica_parents_paths: Vec<Vec<Vec<(Vec<Option<Fr>>, Option<usize>)>>>,
     pub data_nodes: Vec<Option<Fr>>,
     #[allow(clippy::type_complexity)]
     pub data_nodes_paths: Vec<Vec<(Vec<Option<Fr>>, Option<usize>)>>,
-    pub data_root: Root<Fr>,
+    pub data_root: Root<Bls12>,
     pub replica_id: Option<Fr>,
     pub private: bool,
     pub _h: PhantomData<&'a H>,
@@ -60,17 +60,17 @@ impl<'a, H: 'static + Hasher> DrgPoRepCircuit<'a, H> {
         mut cs: CS,
         replica_nodes: Vec<Option<Fr>>,
         replica_nodes_paths: Vec<Vec<(Vec<Option<Fr>>, Option<usize>)>>,
-        replica_root: Root<Fr>,
+        replica_root: Root<Bls12>,
         replica_parents: Vec<Vec<Option<Fr>>>,
         replica_parents_paths: Vec<Vec<Vec<(Vec<Option<Fr>>, Option<usize>)>>>,
         data_nodes: Vec<Option<Fr>>,
         data_nodes_paths: Vec<Vec<(Vec<Option<Fr>>, Option<usize>)>>,
-        data_root: Root<Fr>,
+        data_root: Root<Bls12>,
         replica_id: Option<Fr>,
         private: bool,
     ) -> Result<(), SynthesisError>
     where
-        CS: ConstraintSystem<Fr>,
+        CS: ConstraintSystem<Bls12>,
     {
         DrgPoRepCircuit::<H> {
             replica_nodes,
@@ -91,8 +91,8 @@ impl<'a, H: 'static + Hasher> DrgPoRepCircuit<'a, H> {
 
 #[derive(Default, Clone)]
 pub struct ComponentPrivateInputs {
-    pub comm_r: Option<Root<Fr>>,
-    pub comm_d: Option<Root<Fr>>,
+    pub comm_r: Option<Root<Bls12>>,
+    pub comm_d: Option<Root<Bls12>>,
 }
 
 impl<'a, H: Hasher> CircuitComponent for DrgPoRepCircuit<'a, H> {
@@ -122,8 +122,8 @@ impl<'a, H: Hasher> CircuitComponent for DrgPoRepCircuit<'a, H> {
 ///
 /// Total = 2 + replica_parents.len()
 ///
-impl<'a, H: 'static + Hasher> Circuit<Fr> for DrgPoRepCircuit<'a, H> {
-    fn synthesize<CS: ConstraintSystem<Fr>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
+impl<'a, H: 'static + Hasher> Circuit<Bls12> for DrgPoRepCircuit<'a, H> {
+    fn synthesize<CS: ConstraintSystem<Bls12>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
         let replica_id = self.replica_id;
         let replica_root = self.replica_root;
         let data_root = self.data_root;
@@ -246,16 +246,16 @@ impl<'a, H: 'static + Hasher> Circuit<Fr> for DrgPoRepCircuit<'a, H> {
 }
 
 /// Key derivation function.
-fn kdf<Scalar, CS>(
+fn kdf<E, CS>(
     mut cs: CS,
     id: &[Boolean],
     parents: Vec<Vec<Boolean>>,
     window_index: Option<UInt64>,
     node: Option<UInt64>,
-) -> Result<AllocatedNum<Scalar>, SynthesisError>
+) -> Result<AllocatedNum<E>, SynthesisError>
 where
-    Scalar: PrimeField,
-    CS: ConstraintSystem<Scalar>,
+    E: Engine,
+    CS: ConstraintSystem<E>,
 {
     // ciphertexts will become a buffer of the layout
     // id | node | encodedParentNode1 | encodedParentNode1 | ...
@@ -285,13 +285,13 @@ where
             .chunks(8)
             .flat_map(|chunk| chunk.iter().rev())
             .copied()
-            .take(Scalar::CAPACITY as usize)
+            .take(E::Fr::CAPACITY as usize)
             .collect::<Vec<bool>>();
 
-        Ok(multipack::compute_multipacking::<Scalar>(&le_bits)[0])
+        Ok(multipack::compute_multipacking::<E>(&le_bits)[0])
     } else {
         Err(SynthesisError::AssignmentMissing)
     };
 
-    AllocatedNum::<Scalar>::alloc(cs.namespace(|| "result_num"), || fr)
+    AllocatedNum::<E>::alloc(cs.namespace(|| "result_num"), || fr)
 }

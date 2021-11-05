@@ -1,8 +1,9 @@
 use std::collections::BTreeSet;
 use std::fmt::{self, Display, Formatter};
 
-use blstrs::Scalar as Fr;
+use bellperson::bls::{Fr, FrRepr};
 use byteorder::{ByteOrder, LittleEndian};
+use ff::PrimeField;
 use serde::{Deserialize, Serialize};
 
 /// An ordered set of `SectorId`s.
@@ -28,7 +29,7 @@ impl From<SectorId> for u64 {
 
 impl From<SectorId> for Fr {
     fn from(n: SectorId) -> Self {
-        Fr::from(n.0)
+        Fr::from_repr(FrRepr::from(n.0)).expect("from repr failure")
     }
 }
 

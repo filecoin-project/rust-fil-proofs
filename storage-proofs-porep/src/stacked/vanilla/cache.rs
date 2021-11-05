@@ -1,8 +1,7 @@
-use std::collections::{BTreeMap, HashSet};
+use std::collections::BTreeMap;
 use std::fs::{remove_file, File};
 use std::io;
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
 
 use anyhow::{bail, ensure, Context};
 use byteorder::{ByteOrder, LittleEndian};
@@ -39,7 +38,6 @@ pub struct ParentCacheData {
 lazy_static! {
     pub static ref PARENT_CACHE: ParentCacheDataMap =
         serde_json::from_str(PARENT_CACHE_DATA).expect("Invalid parent_cache.json");
-    static ref PARENT_CACHE_ACCESS_LOCK: Mutex<HashSet<String>> = Mutex::new(HashSet::new());
 }
 
 // StackedGraph will hold two different (but related) `ParentCache`,
@@ -157,25 +155,11 @@ impl ParentCache {
         G: Graph<H> + ParameterSetMetadata + Send + Sync,
     {
         let path = cache_path(cache_entries, graph);
-        let generation_key = path.display().to_string();
-        let mut generated = PARENT_CACHE_ACCESS_LOCK
-            .lock()
-            .expect("parent cache generation lock failed");
-
         if path.exists() {
-            // If the cache file exists and we've got the lock, generation has previously been
-            // completed.  Insert that it no longer needs generation at this point unconditionally.
-            if generated.get(&generation_key).is_none() {
-                generated.insert(generation_key);
-            }
             Self::open(len, cache_entries, graph, &path)
         } else {
             match Self::generate(len, cache_entries, graph, &path) {
-                Ok(c) => {
-                    generated.insert(generation_key);
-
-                    Ok(c)
-                }
+                Ok(c) => Ok(c),
                 Err(err) => {
                     match err.downcast::<io::Error>() {
                         Ok(error) if error.kind() == io::ErrorKind::AlreadyExists => {
@@ -210,7 +194,7 @@ impl ParentCache {
         // although we don't attempt to match it up to anything.  This is useful for the case of
         // generating new additions to the parent cache manifest since a valid digest is required.
         let (parent_cache_data, verify_cache, is_production, mut digest_hex) =
-            match get_parent_cache_data(path) {
+            match get_parent_cache_data(&path) {
                 None => {
                     info!("[open] Parent cache data is not supported in production");
 
@@ -288,7 +272,7 @@ impl ParentCache {
         }
 
         Ok(ParentCache {
-            cache: CacheData::open(0, len, path)?,
+            cache: CacheData::open(0, len, &path)?,
             path: path.to_path_buf(),
             num_cache_entries: cache_entries,
             sector_size: graph.size() * NODE_SIZE,
@@ -352,7 +336,7 @@ impl ParentCache {
             // Check if current entry is part of the official manifest and verify
             // that what we just generated matches what we expect for this entry
             // (if found). If not, we're dealing with some kind of test sector.
-            match get_parent_cache_data(path) {
+            match get_parent_cache_data(&path) {
                 None => {
                     info!("[generate] Parent cache data is not supported in production");
                 }
@@ -371,7 +355,7 @@ impl ParentCache {
         })?;
 
         Ok(ParentCache {
-            cache: CacheData::open(0, len, path)?,
+            cache: CacheData::open(0, len, &path)?,
             path: path.to_path_buf(),
             num_cache_entries: cache_entries,
             sector_size,
@@ -451,23 +435,13 @@ where
 mod tests {
     use super::*;
 
-    use std::sync::Once;
-
     use filecoin_hashers::poseidon::PoseidonHasher;
     use storage_proofs_core::api_version::ApiVersion;
 
     use crate::stacked::vanilla::graph::{StackedBucketGraph, EXP_DEGREE};
 
-    static INIT_LOGGER: Once = Once::new();
-    fn init_logger() {
-        INIT_LOGGER.call_once(|| {
-            fil_logger::init();
-        });
-    }
-
     #[test]
     fn test_read_full_range() {
-        init_logger();
         let nodes = 24u32;
         let graph = StackedBucketGraph::<PoseidonHasher>::new_stacked(
             nodes as usize,
@@ -492,93 +466,14 @@ mod tests {
     }
 
     #[test]
-    #[cfg(feature = "isolated-testing")]
-    fn test_parallel_generation_and_read_partial_range_v1_0() {
-        let porep_id = [0u8; 32];
-        test_parallel_generation_and_read_partial_range(ApiVersion::V1_0_0, &porep_id);
-    }
-
-    #[test]
-    #[cfg(feature = "isolated-testing")]
-    fn test_parallel_generation_and_read_partial_range_v1_1() {
-        let porep_id = [1u8; 32]; //needs to be different than v1_0 for a separate graph
-        test_parallel_generation_and_read_partial_range(ApiVersion::V1_1_0, &porep_id);
-    }
-
-    // This removes the parent cache file for the test, then tries to
-    // open or generate it in parallel.  Then we perform the
-    // read_partial_range test, which should pass if the parallel
-    // generation was not corrupted.
-    //
-    // This test should not be run while other tests that use the
-    // parent's cache are running, as it may remove the parent cache
-    // file while another thread is using it.
-    #[cfg(feature = "isolated-testing")]
-    fn test_parallel_generation_and_read_partial_range(
-        api_version: ApiVersion,
-        porep_id: &[u8; 32],
-    ) {
-        use yastl::Pool;
-
-        init_logger();
-        let pool = Pool::new(3);
+    fn test_read_partial_range() {
         let nodes = 48u32;
         let graph = StackedBucketGraph::<PoseidonHasher>::new_stacked(
             nodes as usize,
             BASE_DEGREE,
             EXP_DEGREE,
-            *porep_id,
-            api_version,
-        )
-        .expect("new_stacked failure");
-
-        let path = cache_path(nodes, &graph);
-
-        // If this cache file exists, remove it so that we can be sure
-        // at least one thread will generate it in this test.
-        if std::fs::remove_file(&path).is_ok() {};
-
-        pool.scoped(|s| {
-            for _ in 0..3 {
-                s.execute(move || {
-                    let graph = StackedBucketGraph::<PoseidonHasher>::new_stacked(
-                        nodes as usize,
-                        BASE_DEGREE,
-                        EXP_DEGREE,
-                        *porep_id,
-                        api_version,
-                    )
-                    .expect("new_stacked failure");
-
-                    ParentCache::new(nodes, nodes, &graph).expect("parent cache new failure");
-                });
-            }
-        });
-
-        test_read_partial_range(api_version, porep_id);
-    }
-
-    #[test]
-    fn test_read_partial_range_v1_0() {
-        let porep_id = [0u8; 32];
-        test_read_partial_range(ApiVersion::V1_0_0, &porep_id);
-    }
-
-    #[test]
-    fn test_read_partial_range_v1_1() {
-        let porep_id = [1u8; 32]; //needs to be different than v1_0 for a separate graph
-        test_read_partial_range(ApiVersion::V1_1_0, &porep_id);
-    }
-
-    fn test_read_partial_range(api_version: ApiVersion, porep_id: &[u8; 32]) {
-        init_logger();
-        let nodes = 48u32;
-        let graph = StackedBucketGraph::<PoseidonHasher>::new_stacked(
-            nodes as usize,
-            BASE_DEGREE,
-            EXP_DEGREE,
-            *porep_id,
-            api_version,
+            [0u8; 32],
+            ApiVersion::V1_0_0,
         )
         .expect("new_stacked failure");
 

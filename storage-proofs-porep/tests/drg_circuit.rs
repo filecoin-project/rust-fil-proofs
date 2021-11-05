@@ -1,5 +1,8 @@
-use bellperson::{util_cs::test_cs::TestConstraintSystem, ConstraintSystem};
-use blstrs::Scalar as Fr;
+use bellperson::{
+    bls::{Bls12, Fr},
+    util_cs::test_cs::TestConstraintSystem,
+    ConstraintSystem,
+};
 use ff::Field;
 use filecoin_hashers::poseidon::PoseidonHasher;
 use fr32::{bytes_into_fr, fr_into_bytes};
@@ -29,16 +32,16 @@ use tempfile::tempdir;
 
 #[test]
 fn test_drg_porep_circuit() {
-    let mut rng = XorShiftRng::from_seed(TEST_SEED);
+    let rng = &mut XorShiftRng::from_seed(TEST_SEED);
 
     let nodes = 16;
     let degree = BASE_DEGREE;
     let challenge = 2;
 
-    let replica_id: Fr = Fr::random(&mut rng);
+    let replica_id: Fr = Fr::random(rng);
 
     let data: Vec<u8> = (0..nodes)
-        .flat_map(|_| fr_into_bytes(&Fr::random(&mut rng)))
+        .flat_map(|_| fr_into_bytes(&Fr::random(rng)))
         .collect();
 
     // MT for original data is always named tree-d, and it will be
@@ -144,7 +147,7 @@ fn test_drg_porep_circuit() {
         "failed to verify data commitment with data"
     );
 
-    let mut cs = TestConstraintSystem::<Fr>::new();
+    let mut cs = TestConstraintSystem::<Bls12>::new();
     DrgPoRepCircuit::<PoseidonHasher>::synthesize(
         cs.namespace(|| "drgporep"),
         vec![replica_node],
@@ -204,25 +207,25 @@ fn test_drg_porep_circuit() {
 
 #[test]
 fn test_drg_porep_circuit_inputs_and_constraints() {
-    let mut rng = XorShiftRng::from_seed(TEST_SEED);
+    let rng = &mut XorShiftRng::from_seed(TEST_SEED);
 
     // 1 GB
     let n = (1 << 30) / 32;
     let m = BASE_DEGREE;
     let tree_depth = graph_height::<U2>(n);
 
-    let mut cs = TestConstraintSystem::<Fr>::new();
+    let mut cs = TestConstraintSystem::<Bls12>::new();
     DrgPoRepCircuit::<PoseidonHasher>::synthesize(
         cs.namespace(|| "drgporep"),
-        vec![Some(Fr::random(&mut rng)); 1],
-        vec![vec![(vec![Some(Fr::random(&mut rng))], Some(0)); tree_depth]; 1],
-        Root::Val(Some(Fr::random(&mut rng))),
-        vec![vec![Some(Fr::random(&mut rng)); m]; 1],
-        vec![vec![vec![(vec![Some(Fr::random(&mut rng))], Some(0)); tree_depth]; m]; 1],
-        vec![Some(Fr::random(&mut rng)); 1],
-        vec![vec![(vec![Some(Fr::random(&mut rng))], Some(0)); tree_depth]; 1],
-        Root::Val(Some(Fr::random(&mut rng))),
-        Some(Fr::random(&mut rng)),
+        vec![Some(Fr::random(rng)); 1],
+        vec![vec![(vec![Some(Fr::random(rng))], Some(0)); tree_depth]; 1],
+        Root::Val(Some(Fr::random(rng))),
+        vec![vec![Some(Fr::random(rng)); m]; 1],
+        vec![vec![vec![(vec![Some(Fr::random(rng))], Some(0)); tree_depth]; m]; 1],
+        vec![Some(Fr::random(rng)); 1],
+        vec![vec![(vec![Some(Fr::random(rng))], Some(0)); tree_depth]; 1],
+        Root::Val(Some(Fr::random(rng))),
+        Some(Fr::random(rng)),
         false,
     )
     .expect("failed to synthesize circuit");

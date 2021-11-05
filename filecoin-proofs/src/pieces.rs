@@ -8,7 +8,7 @@ use anyhow::{ensure, Context, Result};
 use filecoin_hashers::{HashFunction, Hasher};
 use fr32::Fr32Reader;
 use lazy_static::lazy_static;
-use log::trace;
+use log::info;
 use storage_proofs_core::util::NODE_SIZE;
 
 use crate::{
@@ -83,7 +83,7 @@ fn empty_comm_d(sector_size: SectorSize) -> Commitment {
 }
 
 pub fn compute_comm_d(sector_size: SectorSize, piece_infos: &[PieceInfo]) -> Result<Commitment> {
-    trace!("verifying {} pieces", piece_infos.len());
+    info!("verifying {} pieces", piece_infos.len());
     if piece_infos.is_empty() {
         return Ok(empty_comm_d(sector_size));
     }
@@ -277,7 +277,7 @@ pub fn get_piece_start_byte(
     piece_bytes: UnpaddedBytesAmount,
 ) -> UnpaddedByteIndex {
     // sum up all the bytes taken by the ordered pieces
-    let last_byte = sum_piece_bytes_with_alignment(pieces);
+    let last_byte = sum_piece_bytes_with_alignment(&pieces);
     let alignment = get_piece_alignment(last_byte, piece_bytes);
 
     // add only the left padding of the target piece to give the start of that piece's data

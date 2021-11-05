@@ -1,4 +1,5 @@
 use bellperson::{
+    bls::Engine,
     gadgets::{
         boolean::Boolean, multipack, num::AllocatedNum, sha256::sha256 as sha256_circuit,
         uint32::UInt32,
@@ -11,16 +12,16 @@ use storage_proofs_core::{gadgets::uint64::UInt64, util::reverse_bit_numbering};
 use crate::stacked::vanilla::TOTAL_PARENTS;
 
 /// Compute a single label.
-pub fn create_label_circuit<Scalar, CS>(
+pub fn create_label_circuit<E, CS>(
     mut cs: CS,
     replica_id: &[Boolean],
     parents: Vec<Vec<Boolean>>,
     layer_index: UInt32,
     node: UInt64,
-) -> Result<AllocatedNum<Scalar>, SynthesisError>
+) -> Result<AllocatedNum<E>, SynthesisError>
 where
-    Scalar: PrimeField,
-    CS: ConstraintSystem<Scalar>,
+    E: Engine,
+    CS: ConstraintSystem<E>,
 {
     assert!(replica_id.len() >= 32, "replica id is too small");
     assert!(replica_id.len() <= 256, "replica id is too large");
@@ -64,7 +65,7 @@ where
     let bits = reverse_bit_numbering(alloc_bits);
     multipack::pack_bits(
         cs.namespace(|| "result_num"),
-        &bits[0..(Scalar::CAPACITY as usize)],
+        &bits[0..(E::Fr::CAPACITY as usize)],
     )
 }
 
@@ -72,8 +73,10 @@ where
 mod tests {
     use super::*;
 
-    use bellperson::util_cs::test_cs::TestConstraintSystem;
-    use blstrs::Scalar as Fr;
+    use bellperson::{
+        bls::{Bls12, Fr},
+        util_cs::test_cs::TestConstraintSystem,
+    };
     use ff::Field;
     use filecoin_hashers::sha256::Sha256Hasher;
     use fr32::{bytes_into_fr, fr_into_bytes};
@@ -90,8 +93,8 @@ mod tests {
 
     #[test]
     fn test_create_label() {
-        let mut cs = TestConstraintSystem::<Fr>::new();
-        let mut rng = XorShiftRng::from_seed(TEST_SEED);
+        let mut cs = TestConstraintSystem::<Bls12>::new();
+        let rng = &mut XorShiftRng::from_seed(TEST_SEED);
 
         let size = 64;
         let porep_id = [32; 32];
@@ -105,13 +108,13 @@ mod tests {
         )
         .expect("stacked bucket graph new_stacked failed");
 
-        let id_fr = Fr::random(&mut rng);
+        let id_fr = Fr::random(rng);
         let id: Vec<u8> = fr_into_bytes(&id_fr);
         let layer = 3;
         let node = 22;
 
         let mut data: Vec<u8> = (0..2 * size)
-            .flat_map(|_| fr_into_bytes(&Fr::random(&mut rng)))
+            .flat_map(|_| fr_into_bytes(&Fr::random(rng)))
             .collect();
 
         let mut parents = vec![0; BASE_DEGREE + EXP_DEGREE];
@@ -183,7 +186,7 @@ mod tests {
         )
         .expect("create_label_exp failed");
 
-        let expected_raw = data_at_node(l1, node).expect("data_at_node failed");
+        let expected_raw = data_at_node(&l1, node).expect("data_at_node failed");
         let expected = bytes_into_fr(expected_raw).expect("bytes_into_fr failed");
 
         assert_eq!(

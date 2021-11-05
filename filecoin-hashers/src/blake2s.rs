@@ -4,14 +4,14 @@ use std::panic::panic_any;
 
 use anyhow::ensure;
 use bellperson::{
+    bls::{Bls12, Fr, FrRepr},
     gadgets::{
         blake2s::blake2s as blake2s_circuit, boolean::Boolean, multipack, num::AllocatedNum,
     },
     ConstraintSystem, SynthesisError,
 };
 use blake2s_simd::{Hash as Blake2sHash, Params as Blake2s, State};
-use blstrs::Scalar as Fr;
-use ff::{Field, PrimeField};
+use ff::{Field, PrimeField, PrimeFieldRepr};
 use merkletree::{
     hash::{Algorithm, Hashable},
     merkle::Element,
@@ -100,7 +100,21 @@ impl Hashable<Blake2sFunction> for Blake2sDomain {
 
 impl From<Fr> for Blake2sDomain {
     fn from(val: Fr) -> Self {
-        Blake2sDomain(val.to_repr())
+        let mut res = Self::default();
+        val.into_repr()
+            .write_le(&mut res.0[0..32])
+            .expect("write_le failure");
+
+        res
+    }
+}
+
+impl From<FrRepr> for Blake2sDomain {
+    fn from(val: FrRepr) -> Self {
+        let mut res = Self::default();
+        val.write_le(&mut res.0[0..32]).expect("write_le failure");
+
+        res
     }
 }
 
@@ -123,7 +137,10 @@ impl Element for Blake2sDomain {
 
 impl From<Blake2sDomain> for Fr {
     fn from(val: Blake2sDomain) -> Self {
-        Fr::from_repr_vartime(val.0).expect("from_repr failure")
+        let mut res = FrRepr::default();
+        res.read_le(&val.0[0..32]).expect("read_le failure");
+
+        Fr::from_repr(res).expect("from_repr failure")
     }
 }
 
@@ -186,11 +203,11 @@ impl HashFunction<Blake2sDomain> for Blake2sFunction {
             .into()
     }
 
-    fn hash_multi_leaf_circuit<Arity, CS: ConstraintSystem<Fr>>(
+    fn hash_multi_leaf_circuit<Arity, CS: ConstraintSystem<Bls12>>(
         mut cs: CS,
-        leaves: &[AllocatedNum<Fr>],
+        leaves: &[AllocatedNum<Bls12>],
         _height: usize,
-    ) -> Result<AllocatedNum<Fr>, SynthesisError> {
+    ) -> Result<AllocatedNum<Bls12>, SynthesisError> {
         let mut bits = Vec::with_capacity(leaves.len() * Fr::CAPACITY as usize);
         for (i, leaf) in leaves.iter().enumerate() {
             bits.extend_from_slice(
@@ -203,12 +220,12 @@ impl HashFunction<Blake2sDomain> for Blake2sFunction {
         Self::hash_circuit(cs, &bits)
     }
 
-    fn hash_leaf_bits_circuit<CS: ConstraintSystem<Fr>>(
+    fn hash_leaf_bits_circuit<CS: ConstraintSystem<Bls12>>(
         cs: CS,
         left: &[Boolean],
         right: &[Boolean],
         _height: usize,
-    ) -> Result<AllocatedNum<Fr>, SynthesisError> {
+    ) -> Result<AllocatedNum<Bls12>, SynthesisError> {
         let mut preimage: Vec<Boolean> = vec![];
 
         preimage.extend_from_slice(left);
@@ -224,10 +241,10 @@ impl HashFunction<Blake2sDomain> for Blake2sFunction {
         Self::hash_circuit(cs, &preimage[..])
     }
 
-    fn hash_circuit<CS: ConstraintSystem<Fr>>(
+    fn hash_circuit<CS: ConstraintSystem<Bls12>>(
         mut cs: CS,
         bits: &[Boolean],
-    ) -> Result<AllocatedNum<Fr>, SynthesisError> {
+    ) -> Result<AllocatedNum<Bls12>, SynthesisError> {
         let personalization = vec![0u8; 8];
         let alloc_bits = blake2s_circuit(cs.namespace(|| "hash"), bits, &personalization)?;
 
@@ -236,11 +253,11 @@ impl HashFunction<Blake2sDomain> for Blake2sFunction {
 
     fn hash2_circuit<CS>(
         mut cs: CS,
-        a_num: &AllocatedNum<Fr>,
-        b_num: &AllocatedNum<Fr>,
-    ) -> Result<AllocatedNum<Fr>, SynthesisError>
+        a_num: &AllocatedNum<Bls12>,
+        b_num: &AllocatedNum<Bls12>,
+    ) -> Result<AllocatedNum<Bls12>, SynthesisError>
     where
-        CS: ConstraintSystem<Fr>,
+        CS: ConstraintSystem<Bls12>,
     {
         // Allocate as booleans
         let a = a_num.to_bits_le(cs.namespace(|| "a_bits"))?;

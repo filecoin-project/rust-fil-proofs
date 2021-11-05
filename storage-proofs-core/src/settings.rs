@@ -63,35 +63,13 @@ impl Default for Settings {
 /// Note that FIL_PROOFS_CACHE_DIR is not a first class setting and can only be set by env var.
 fn cache(s: &str) -> String {
     let cache_var = format!("{}_CACHE_DIR", PREFIX);
-    let mut cache_name = env::var(cache_var).unwrap_or_else(|_| "/var/tmp/".to_string());
+    let mut cache_name = env::var(cache_var).unwrap_or_else(|_| "/home/bft/tmp/".to_string());
     cache_name.push_str(s);
     cache_name
 }
 
-/// Sets an environment variable to a value if it isn't properly set yet.
-fn set_env_var_if_unset(env_var: &str, value: &str) {
-    if env::var(env_var).is_err() {
-        env::set_var(env_var, value);
-    }
-}
-
-/// Set the GPU framework for the dependencies.
-///
-/// If a GPU framework, CUDA and OpenCL is selected, it needs to be communicated some of the
-/// dependnecies. This is done via environment variables.
-///
-/// If one of those environment variables is already set, it won't be overridden.
-fn set_gpu_framework() {
-    if let Ok(framework) = env::var(format!("{}_GPU_FRAMEWORK", PREFIX)) {
-        set_env_var_if_unset("BELLMAN_GPU_FRAMEWORK", &framework);
-        set_env_var_if_unset("NEPTUNE_GPU_FRAMEWORK", &framework);
-    }
-}
-
 impl Settings {
     fn new() -> Result<Settings, ConfigError> {
-        set_gpu_framework();
-
         let mut s = Config::new();
 
         s.merge(File::with_name(SETTINGS_PATH).required(false))?;

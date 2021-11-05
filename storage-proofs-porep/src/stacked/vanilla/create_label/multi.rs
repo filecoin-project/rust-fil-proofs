@@ -183,7 +183,7 @@ fn create_label_runner(
                 cur_node,
                 parents_cache,
                 pc,
-                layer_labels,
+                &layer_labels,
                 exp_labels,
                 buf,
                 bpm,
@@ -308,7 +308,7 @@ fn create_layer_labels(
 
         // Keep track of which node slot in the ring_buffer to use
         let mut cur_slot = 0;
-        let mut count_not_ready = 0;
+        let mut _count_not_ready = 0;
 
         // Calculate nodes 1 to n
 
@@ -317,13 +317,14 @@ fn create_layer_labels(
         let mut i = 1;
         while i < num_nodes {
             // Ensure next buffer is ready
-            let mut counted = false;
+            let mut printed = false;
             let mut producer_val = cur_producer.load(SeqCst);
 
             while producer_val < i {
-                if !counted {
-                    counted = true;
-                    count_not_ready += 1;
+                if !printed {
+                    debug!("PRODUCER NOT READY! {}", i);
+                    printed = true;
+                    _count_not_ready += 1;
                 }
                 thread::sleep(Duration::from_micros(10));
                 producer_val = cur_producer.load(SeqCst);
@@ -425,8 +426,6 @@ fn create_layer_labels(
             }
         }
 
-        debug!("PRODUCER NOT READY: {} times", count_not_ready);
-
         for runner in runners {
             runner.join().expect("join failed");
         }
@@ -489,7 +488,7 @@ pub fn create_labels_for_encoding<Tree: 'static + MerkleTreeTrait, T: AsRef<[u8]
 
         create_layer_labels(
             &parents_cache,
-            replica_id.as_ref(),
+            &replica_id.as_ref(),
             &mut layer_labels,
             if layer == 1 {
                 None
@@ -579,7 +578,7 @@ pub fn create_labels_for_decoding<Tree: 'static + MerkleTreeTrait, T: AsRef<[u8]
 
         create_layer_labels(
             &parents_cache,
-            replica_id.as_ref(),
+            &replica_id.as_ref(),
             &mut layer_labels,
             if layer == 1 {
                 None
@@ -635,7 +634,7 @@ pub fn create_labels_for_decoding<Tree: 'static + MerkleTreeTrait, T: AsRef<[u8]
 mod tests {
     use super::*;
 
-    use blstrs::Scalar as Fr;
+    use bellperson::bls::{Fr, FrRepr};
     use ff::PrimeField;
     use filecoin_hashers::poseidon::PoseidonHasher;
     use generic_array::typenum::{U0, U2, U8};
@@ -659,7 +658,7 @@ mod tests {
             replica_id,
             legacy_porep_id,
             ApiVersion::V1_0_0,
-            Option::from(Fr::from_u64s_le(&[
+            Fr::from_repr(FrRepr([
                 0xd3faa96b9a0fba04,
                 0xea81a283d106485e,
                 0xe3d51b9afa5ac2b3,
@@ -673,7 +672,7 @@ mod tests {
             replica_id,
             legacy_porep_id,
             ApiVersion::V1_0_0,
-            Option::from(Fr::from_u64s_le(&[
+            Fr::from_repr(FrRepr([
                 0x7e191e52c4a8da86,
                 0x5ae8a1c9e6fac148,
                 0xce239f3b88a894b8,
@@ -688,7 +687,7 @@ mod tests {
             replica_id,
             new_porep_id,
             ApiVersion::V1_1_0,
-            Option::from(Fr::from_u64s_le(&[
+            Fr::from_repr(FrRepr([
                 0xabb3f38bb70defcf,
                 0x777a2e4d7769119f,
                 0x3448959d495490bc,
@@ -703,7 +702,7 @@ mod tests {
             replica_id,
             new_porep_id,
             ApiVersion::V1_1_0,
-            Option::from(Fr::from_u64s_le(&[
+            Fr::from_repr(FrRepr([
                 0x22ab81cf68c4676d,
                 0x7a77a82fc7c9c189,
                 0xc6c03d32c1e42d23,
@@ -753,6 +752,6 @@ mod tests {
             .read_at(final_labels.len() - 1)
             .expect("read_at");
         dbg!(&last_label);
-        assert_eq!(expected_last_label.to_repr(), last_label.0);
+        assert_eq!(expected_last_label.into_repr(), last_label.0);
     }
 }

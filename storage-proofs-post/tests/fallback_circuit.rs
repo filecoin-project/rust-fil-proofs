@@ -1,8 +1,8 @@
 use bellperson::{
+    bls::{Bls12, Fr},
     util_cs::{bench_cs::BenchCS, test_cs::TestConstraintSystem},
     Circuit,
 };
-use blstrs::Scalar as Fr;
 use ff::Field;
 use filecoin_hashers::{poseidon::PoseidonHasher, Domain, HashFunction, Hasher};
 use generic_array::typenum::{U0, U2, U4, U8};
@@ -152,7 +152,7 @@ fn test_fallback_post<Tree: 'static + MerkleTreeTrait>(
             .collect::<Result<_>>()
             .expect("circuit sectors failure");
 
-        let mut cs = TestConstraintSystem::<Fr>::new();
+        let mut cs = TestConstraintSystem::<Bls12>::new();
 
         let instance = FallbackPoStCircuit::<Tree> {
             sectors: circuit_sectors,
@@ -214,7 +214,7 @@ fn test_fallback_post_circuit_poseidon_base_8_bench_cs() {
     let pp = FallbackPoSt::<OctMerkleTree<PoseidonHasher>>::setup(&params)
         .expect("fallback post setup failure");
 
-    let mut cs = BenchCS::<Fr>::new();
+    let mut cs = BenchCS::<Bls12>::new();
     FallbackPoStCompound::<OctMerkleTree<PoseidonHasher>>::blank_circuit(&pp)
         .synthesize(&mut cs)
         .expect("blank circuit failure");

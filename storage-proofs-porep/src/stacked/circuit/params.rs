@@ -1,10 +1,10 @@
 use std::marker::PhantomData;
 
 use bellperson::{
+    bls::{Bls12, Fr},
     gadgets::{boolean::Boolean, num::AllocatedNum, uint32::UInt32},
     ConstraintSystem, SynthesisError,
 };
-use blstrs::Scalar as Fr;
 use filecoin_hashers::{Hasher, PoseidonArity};
 use generic_array::typenum::{U0, U2};
 use storage_proofs_core::{
@@ -95,14 +95,13 @@ impl<Tree: MerkleTreeTrait, G: 'static + Hasher> Proof<Tree, G> {
 
     /// Circuit synthesis.
     #[allow(clippy::too_many_arguments)]
-    #[allow(clippy::branches_sharing_code)]
-    pub fn synthesize<CS: ConstraintSystem<Fr>>(
+    pub fn synthesize<CS: ConstraintSystem<Bls12>>(
         self,
         mut cs: CS,
         layers: usize,
-        comm_d: &AllocatedNum<Fr>,
-        comm_c: &AllocatedNum<Fr>,
-        comm_r_last: &AllocatedNum<Fr>,
+        comm_d: &AllocatedNum<Bls12>,
+        comm_c: &AllocatedNum<Bls12>,
+        comm_r_last: &AllocatedNum<Bls12>,
         replica_id: &[Boolean],
     ) -> Result<(), SynthesisError> {
         let Proof {
@@ -312,11 +311,11 @@ where
 }
 
 /// Enforce the inclusion of the given path, to the given leaf and the root.
-fn enforce_inclusion<H, U, V, W, CS: ConstraintSystem<Fr>>(
+fn enforce_inclusion<H, U, V, W, CS: ConstraintSystem<Bls12>>(
     cs: CS,
     path: AuthPath<H, U, V, W>,
-    root: &AllocatedNum<Fr>,
-    leaf: &AllocatedNum<Fr>,
+    root: &AllocatedNum<Bls12>,
+    leaf: &AllocatedNum<Bls12>,
 ) -> Result<(), SynthesisError>
 where
     H: 'static + Hasher,

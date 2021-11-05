@@ -1,28 +1,27 @@
-use bellperson::{gadgets::num::AllocatedNum, ConstraintSystem, SynthesisError};
-use ff::PrimeField;
+use bellperson::{bls::Engine, gadgets::num::AllocatedNum, ConstraintSystem, SynthesisError};
 
 use crate::gadgets::constraint;
 
-pub fn encode<Scalar, CS>(
+pub fn encode<E, CS>(
     mut cs: CS,
-    key: &AllocatedNum<Scalar>,
-    value: &AllocatedNum<Scalar>,
-) -> Result<AllocatedNum<Scalar>, SynthesisError>
+    key: &AllocatedNum<E>,
+    value: &AllocatedNum<E>,
+) -> Result<AllocatedNum<E>, SynthesisError>
 where
-    Scalar: PrimeField,
-    CS: ConstraintSystem<Scalar>,
+    E: Engine,
+    CS: ConstraintSystem<E>,
 {
     constraint::add(cs.namespace(|| "encode_add"), key, value)
 }
 
-pub fn decode<Scalar, CS>(
+pub fn decode<E, CS>(
     mut cs: CS,
-    key: &AllocatedNum<Scalar>,
-    value: &AllocatedNum<Scalar>,
-) -> Result<AllocatedNum<Scalar>, SynthesisError>
+    key: &AllocatedNum<E>,
+    value: &AllocatedNum<E>,
+) -> Result<AllocatedNum<E>, SynthesisError>
 where
-    Scalar: PrimeField,
-    CS: ConstraintSystem<Scalar>,
+    E: Engine,
+    CS: ConstraintSystem<E>,
 {
     constraint::sub(cs.namespace(|| "decode_sub"), value, key)
 }

@@ -1,5 +1,6 @@
 use anyhow::{ensure, Context};
 use bellperson::{
+    bls::{Bls12, Fr},
     groth16::{
         self,
         aggregate::{
@@ -10,7 +11,6 @@ use bellperson::{
     },
     Circuit,
 };
-use blstrs::{Bls12, Scalar as Fr};
 use log::info;
 use rand::{rngs::OsRng, RngCore};
 use rayon::prelude::{
@@ -53,7 +53,7 @@ pub trait CircuitComponent {
 /// See documentation at proof::ProofScheme for details.
 /// Implementations should generally only need to supply circuit and generate_public_inputs.
 /// The remaining trait methods are used internally and implement the necessary plumbing.
-pub trait CompoundProof<'a, S: ProofScheme<'a>, C: Circuit<Fr> + CircuitComponent + Send>
+pub trait CompoundProof<'a, S: ProofScheme<'a>, C: Circuit<Bls12> + CircuitComponent + Send>
 where
     S::Proof: Sync + Send,
     S::PublicParams: ParameterSetMetadata + Sync + Send,
@@ -90,13 +90,17 @@ where
         ensure!(partition_count > 0, "There must be partitions");
 
         info!("vanilla_proofs:start");
-        let vanilla_proofs =
-            S::prove_all_partitions(&pub_params.vanilla_params, pub_in, priv_in, partition_count)?;
+        let vanilla_proofs = S::prove_all_partitions(
+            &pub_params.vanilla_params,
+            &pub_in,
+            priv_in,
+            partition_count,
+        )?;
 
         info!("vanilla_proofs:finish");
 
         let sanity_check =
-            S::verify_all_partitions(&pub_params.vanilla_params, pub_in, &vanilla_proofs)?;
+            S::verify_all_partitions(&pub_params.vanilla_params, &pub_in, &vanilla_proofs)?;
         ensure!(sanity_check, "sanity check failed");
 
         info!("snark_proof:start");
@@ -165,7 +169,7 @@ where
             .collect::<Result<_>>()?;
 
         let proofs: Vec<_> = multi_proof.circuit_proofs.iter().collect();
-        let res = verify_proofs_batch(pvk, &mut OsRng, &proofs, &inputs)?;
+        let res = verify_proofs_batch(&pvk, &mut OsRng, &proofs, &inputs)?;
         Ok(res)
     }
 
@@ -220,7 +224,7 @@ where
             .flat_map(|m| m.circuit_proofs.iter())
             .collect();
 
-        let res = verify_proofs_batch(pvk, &mut OsRng, &circuit_proofs[..], &inputs)?;
+        let res = verify_proofs_batch(&pvk, &mut OsRng, &circuit_proofs[..], &inputs)?;
 
         Ok(res)
     }
@@ -247,10 +251,10 @@ where
             .enumerate()
             .map(|(k, vanilla_proof)| {
                 Self::circuit(
-                    pub_in,
+                    &pub_in,
                     C::ComponentPrivateInputs::default(),
                     &vanilla_proof,
-                    pub_params,
+                    &pub_params,
                     Some(k),
                 )
             })
@@ -426,7 +430,7 @@ where
         );
 
         let partitions_are_verified =
-            S::verify_all_partitions(vanilla_params, public_inputs, &vanilla_proofs)
+            S::verify_all_partitions(vanilla_params, &public_inputs, &vanilla_proofs)
                 .context("failed to verify partition proofs")?;
 
         ensure!(partitions_are_verified, "Vanilla proof didn't verify.");
@@ -470,7 +474,7 @@ where
         );
 
         let partitions_are_verified =
-            S::verify_all_partitions(vanilla_params, public_inputs, &vanilla_proofs)
+            S::verify_all_partitions(vanilla_params, &public_inputs, &vanilla_proofs)
                 .context("failed to verify partition proofs")?;
 
         ensure!(partitions_are_verified, "Vanilla proof didn't verify.");

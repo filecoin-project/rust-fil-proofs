@@ -1,5 +1,8 @@
-use bellperson::{gadgets::num::AllocatedNum, ConstraintSystem, SynthesisError};
-use blstrs::Scalar as Fr;
+use bellperson::{
+    bls::{Bls12, Fr},
+    gadgets::num::AllocatedNum,
+    ConstraintSystem, SynthesisError,
+};
 use filecoin_hashers::Hasher;
 use storage_proofs_core::merkle::MerkleTreeTrait;
 
@@ -12,7 +15,7 @@ pub struct Column {
 
 #[derive(Clone)]
 pub struct AllocatedColumn {
-    rows: Vec<AllocatedNum<Fr>>,
+    rows: Vec<AllocatedNum<Bls12>>,
 }
 
 impl<H: Hasher> From<VanillaColumn<H>> for Column {
@@ -34,7 +37,7 @@ impl Column {
     }
 
     /// Consume this column, and allocate its values in the circuit.
-    pub fn alloc<CS: ConstraintSystem<Fr>>(
+    pub fn alloc<CS: ConstraintSystem<Bls12>>(
         self,
         mut cs: CS,
     ) -> Result<AllocatedColumn, SynthesisError> {
@@ -60,14 +63,14 @@ impl AllocatedColumn {
     }
 
     /// Creates the column hash of this column.
-    pub fn hash<CS: ConstraintSystem<Fr>>(
+    pub fn hash<CS: ConstraintSystem<Bls12>>(
         &self,
         cs: CS,
-    ) -> Result<AllocatedNum<Fr>, SynthesisError> {
+    ) -> Result<AllocatedNum<Bls12>, SynthesisError> {
         hash_single_column(cs, &self.rows)
     }
 
-    pub fn get_value(&self, layer: usize) -> &AllocatedNum<Fr> {
+    pub fn get_value(&self, layer: usize) -> &AllocatedNum<Bls12> {
         assert!(layer > 0, "layers are 1 indexed");
         assert!(
             layer <= self.rows.len(),

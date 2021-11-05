@@ -1,4 +1,4 @@
-use blstrs::Scalar as Fr;
+use bellperson::bls::Fr;
 use filecoin_hashers::Hasher;
 use log::trace;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};

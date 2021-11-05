@@ -1,6 +1,10 @@
-use anyhow::{ensure, Result};
-use blstrs::Scalar as Fr;
+#[cfg(any(feature = "pairing", feature = "blst"))]
+use anyhow::Result;
+use bellperson::bls::{Fr, FrRepr};
+use byteorder::{ByteOrder, LittleEndian};
 use ff::PrimeField;
+#[cfg(feature = "pairing")]
+use ff::PrimeFieldRepr;
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
@@ -20,35 +24,61 @@ pub type Fr32Vec = Vec<u8>;
 /// - Value MUST represent a valid Fr.
 pub type Fr32Ary = [u8; 32];
 
-/// Takes a slice of bytes (little-endian, non-Montgomery form) and returns an Fr if byte slice is
-/// exactly 32 bytes and does not overflow. Otherwise, returns a BadFrBytesError.
-pub fn bytes_into_fr(le_bytes: &[u8]) -> Result<Fr> {
-    ensure!(le_bytes.len() == 32, Error::BadFrBytes);
-    let mut repr = [0u8; 32];
-    repr.copy_from_slice(le_bytes);
-    Fr::from_repr_vartime(repr).ok_or_else(|| Error::BadFrBytes.into())
+/// Takes a slice of bytes and returns an Fr if byte slice is exactly 32 bytes and does not overflow.
+/// Otherwise, returns a BadFrBytesError.
+#[cfg(feature = "pairing")]
+pub fn bytes_into_fr(bytes: &[u8]) -> Result<Fr> {
+    use anyhow::{ensure, Context};
+    ensure!(bytes.len() == 32, Error::BadFrBytes);
+    let mut fr_repr = FrRepr::default();
+    fr_repr.read_le(bytes).context(Error::BadFrBytes)?;
+    Fr::from_repr(fr_repr).map_err(|_| Error::BadFrBytes.into())
 }
 
-/// Converts a slice of 32 bytes (little-endian, non-Montgomery form) into an `Fr::Repr` by
-/// zeroing the most signficant two bits of `le_bytes`.
+#[cfg(feature = "blst")]
+pub fn bytes_into_fr(bytes: &[u8]) -> Result<Fr> {
+    use std::convert::TryInto;
+    Fr::from_bytes_le(bytes.try_into().map_err(|_| Error::BadFrBytes)?)
+        .ok_or_else(|| Error::BadFrBytes.into())
+}
+
+/// Bytes is little-endian.
 #[inline]
-pub fn bytes_into_fr_repr_safe(le_bytes: &[u8]) -> <Fr as PrimeField>::Repr {
-    debug_assert!(le_bytes.len() == 32);
-    let mut repr = [0u8; 32];
-    repr.copy_from_slice(le_bytes);
-    repr[31] &= 0b0011_1111;
-    repr
+pub fn bytes_into_fr_repr_safe(r: &[u8]) -> FrRepr {
+    debug_assert!(r.len() == 32);
+
+    let repr: [u64; 4] = [
+        LittleEndian::read_u64(&r[0..8]),
+        LittleEndian::read_u64(&r[8..16]),
+        LittleEndian::read_u64(&r[16..24]),
+        u64::from(r[31] & 0b0011_1111) << 56
+            | u64::from(r[30]) << 48
+            | u64::from(r[29]) << 40
+            | u64::from(r[28]) << 32
+            | u64::from(r[27]) << 24
+            | u64::from(r[26]) << 16
+            | u64::from(r[25]) << 8
+            | u64::from(r[24]),
+    ];
+
+    FrRepr(repr)
 }
 
 /// Takes an Fr and returns a vector of exactly 32 bytes guaranteed to contain a valid Fr.
-#[inline]
+#[cfg(feature = "pairing")]
 pub fn fr_into_bytes(fr: &Fr) -> Fr32Vec {
-    fr.to_repr().to_vec()
+    let mut out = Vec::with_capacity(32);
+    fr.into_repr().write_le(&mut out).expect("write_le failure");
+    out
 }
 
-#[inline]
+#[cfg(feature = "blst")]
+pub fn fr_into_bytes(fr: &Fr) -> Fr32Vec {
+    fr.to_bytes_le().to_vec()
+}
+
 pub fn u64_into_fr(n: u64) -> Fr {
-    Fr::from(n)
+    Fr::from_repr(FrRepr::from(n)).expect("failed to convert u64 into Fr (should never fail)")
 }
 
 #[cfg(test)]
@@ -57,7 +87,7 @@ mod tests {
 
     fn bytes_fr_test(bytes: Fr32Ary, expect_success: bool) {
         let b = &bytes[..];
-        let fr_result = bytes_into_fr(b);
+        let fr_result = bytes_into_fr(&b);
         if expect_success {
             let f = fr_result.expect("Failed to convert bytes to `Fr`");
             let b2 = fr_into_bytes(&f);

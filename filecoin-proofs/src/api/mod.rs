@@ -275,7 +275,7 @@ where
     W: Write,
     Tree: 'static + MerkleTreeTrait,
 {
-    trace!("unseal_range_inner:start");
+    info!("unseal_range_inner:start");
 
     let base_tree_size = get_base_tree_size::<DefaultBinaryTree>(porep_config.sector_size)?;
     let base_tree_leafs = get_base_tree_leafs::<DefaultBinaryTree>(base_tree_size)?;
@@ -310,7 +310,7 @@ where
 
     let amount = UnpaddedBytesAmount(written as u64);
 
-    trace!("unseal_range_inner:finish");
+    info!("unseal_range_inner:finish");
     Ok(amount)
 }
 
@@ -376,7 +376,7 @@ where
     R: Read,
     W: Write,
 {
-    trace!("add_piece:start");
+    info!("add_piece:start");
 
     let result = measure_op(Operation::AddPiece, || {
         ensure_piece_size(piece_size)?;
@@ -384,7 +384,7 @@ where
         let source = BufReader::new(source);
         let mut target = BufWriter::new(target);
 
-        let written_bytes = sum_piece_bytes_with_alignment(piece_lengths);
+        let written_bytes = sum_piece_bytes_with_alignment(&piece_lengths);
         let piece_alignment = get_piece_alignment(written_bytes, piece_size);
         let fr32_reader = Fr32Reader::new(source);
 
@@ -417,7 +417,7 @@ where
         Ok((PieceInfo::new(comm, n)?, written))
     });
 
-    trace!("add_piece:finish");
+    info!("add_piece:finish");
     result
 }
 
@@ -506,7 +506,7 @@ fn verify_store(config: &StoreConfig, arity: usize, required_configs: usize) -> 
         let store_len = config.size.expect("disk store size not configured");
         for config in &configs {
             ensure!(
-                DiskStore::<DefaultPieceDomain>::is_consistent(store_len, arity, config,)?,
+                DiskStore::<DefaultPieceDomain>::is_consistent(store_len, arity, &config,)?,
                 "Store is inconsistent: {:?}",
                 StoreConfig::data_path(&config.path, &config.id)
             );
@@ -516,7 +516,7 @@ fn verify_store(config: &StoreConfig, arity: usize, required_configs: usize) -> 
             DiskStore::<DefaultPieceDomain>::is_consistent(
                 config.size.expect("disk store size not configured"),
                 arity,
-                config,
+                &config,
             )?,
             "Store is inconsistent: {:?}",
             store_path
@@ -573,7 +573,7 @@ fn verify_level_cache_store<Tree: MerkleTreeTrait>(config: &StoreConfig) -> Resu
                 LevelCacheStore::<DefaultPieceDomain, File>::is_consistent(
                     store_len,
                     Tree::Arity::to_usize(),
-                    config,
+                    &config,
                 )?,
                 "Store is inconsistent: {:?}",
                 StoreConfig::data_path(&config.path, &config.id)
@@ -584,7 +584,7 @@ fn verify_level_cache_store<Tree: MerkleTreeTrait>(config: &StoreConfig) -> Resu
             LevelCacheStore::<DefaultPieceDomain, File>::is_consistent(
                 config.size.expect("disk store size not configured"),
                 Tree::Arity::to_usize(),
-                config,
+                &config,
             )?,
             "Store is inconsistent: {:?}",
             store_path
@@ -705,6 +705,5 @@ where
     verify_level_cache_store::<DefaultOctTree>(&t_aux.tree_r_last_config)?;
 
     info!("validate_cache_for_precommit:finish");
-
     Ok(())
 }

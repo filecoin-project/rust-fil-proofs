@@ -6,9 +6,8 @@ use std::sync::Mutex;
 use std::time::Instant;
 
 use anyhow::bail;
-use bellperson::{groth16, Circuit};
+use bellperson::{bls::Bls12, groth16, Circuit};
 use blake2b_simd::Params as Blake2bParams;
-use blstrs::{Bls12, Scalar as Fr};
 use fs2::FileExt;
 use itertools::Itertools;
 use lazy_static::lazy_static;
@@ -230,7 +229,7 @@ pub struct CacheEntryMetadata {
 
 pub trait CacheableParameters<C, P>
 where
-    C: Circuit<Fr>,
+    C: Circuit<Bls12>,
     P: ParameterSetMetadata,
 {
     fn cache_prefix() -> String;
@@ -337,7 +336,7 @@ where
                     "get_inner_product called with {} [max {}] proofs to aggregate",
                     num_proofs_to_aggregate, SRS_MAX_PROOFS_TO_AGGREGATE
                 );
-                Ok(groth16::aggregate::setup_fake_srs(
+                Ok(groth16::aggregate::setup_random_srs(
                     rng,
                     num_proofs_to_aggregate,
                 ))
@@ -640,6 +639,6 @@ where
     G: FnOnce(&'a Path) -> io::Result<LockedFile>,
     E: From<io::Error>,
 {
-    ensure_parent(file_path)?;
+    ensure_parent(&file_path)?;
     f(&mut open_file(file_path)?)
 }

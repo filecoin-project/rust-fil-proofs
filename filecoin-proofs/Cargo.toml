@@ -1,7 +1,7 @@
 [package]
 name = "filecoin-proofs"
 description = "The Filecoin specific aspects of storage-proofs, including a C based FFI, to generate and verify proofs."
-version = "10.1.0"
+version = "8.0.2"
 authors = ["dignifiedquire <dignifiedquire@gmail.com>", "laser <l@s3r.com>", "porcuquine <porcuquine@users.noreply.github.com>"]
 license = "MIT OR Apache-2.0"
 edition = "2018"
@@ -9,21 +9,21 @@ repository = "https://github.com/filecoin-project/rust-fil-proofs"
 readme = "README.md"
 
 [dependencies]
-storage-proofs-core = { path = "../storage-proofs-core", version = "^10.0.0", default-features = false}
-storage-proofs-porep = { path = "../storage-proofs-porep", version = "^10.0.0", default-features = false }
-storage-proofs-post = { path = "../storage-proofs-post", version = "^10.0.0", default-features = false }
-filecoin-hashers = { version = "^5.0.0", path = "../filecoin-hashers", default-features = false, features = ["poseidon", "sha256"] }
+storage-proofs-core = { path = "../storage-proofs-core", version = "^8.0.0", default-features = false}
+storage-proofs-porep = { path = "../storage-proofs-porep", version = "^8.0.0", default-features = false }
+storage-proofs-post = { path = "../storage-proofs-post", version = "^8.0.0", default-features = false }
+filecoin-hashers = { version = "^3.0.0", path = "../filecoin-hashers", default-features = false, features = ["poseidon", "sha256"] }
 bitvec = "0.17"
-rand = "0.8"
+rand = "0.7"
 lazy_static = "1.2"
 memmap = "0.7"
 byteorder = "1"
 itertools = "0.9"
 serde = { version = "1.0", features = ["rc", "derive"] }
 serde_json = "1.0"
-ff = "0.11.0"
+ff = { version = "0.3.1", package = "fff" }
 blake2b_simd = "0.5"
-bellperson = "0.18.0"
+bellperson = { path = "../../bellperson", version = "0.14.0", default-features = false }
 log = "0.4.7"
 fil_logger = "0.1"
 rayon = "1.1.0"
@@ -32,16 +32,14 @@ hex = "0.4.0"
 merkletree = "0.21.0"
 bincode = "1.1.2"
 anyhow = "1.0.23"
-rand_xorshift = "0.3.0"
+rand_xorshift = "0.2.0"
 sha2 = "0.9.1"
 typenum = "1.11.2"
 gperftools = { version = "0.2", optional = true }
 generic-array = "0.14.4"
-group = "0.11.0"
+groupy = "0.4.1"
 byte-slice-cast = "1.0.0"
-fr32 = { path = "../fr32", version = "^3.0.0", default-features = false }
-once_cell = "1.8.0"
-blstrs = "0.4.0"
+fr32 = { path = "../fr32", version = "^1.0.0", default-features = false }
 
 [dev-dependencies]
 criterion = "0.3"
@@ -51,26 +49,34 @@ failure = "0.1.7"
 tempfile = "3"
 
 [features]
-default = ["opencl"]
+default = ["gpu", "pairing"]
 cpu-profile = ["gperftools"]
 heap-profile = ["gperftools/heap"]
 simd = ["storage-proofs-core/simd"]
 asm = ["storage-proofs-core/asm"]
-cuda = [
-    "storage-proofs-core/cuda",
-    "storage-proofs-porep/cuda",
-    "storage-proofs-post/cuda",
-    "bellperson/cuda",
-    "filecoin-hashers/cuda",
-    "fr32/cuda",
+gpu = [
+    "storage-proofs-core/gpu",
+    "storage-proofs-porep/gpu",
+    "storage-proofs-post/gpu",
+    "bellperson/gpu",
+    "filecoin-hashers/gpu",
+    "fr32/gpu",
 ]
-opencl = [
-    "storage-proofs-core/opencl",
-    "storage-proofs-porep/opencl",
-    "storage-proofs-post/opencl",
-    "bellperson/opencl",
-    "filecoin-hashers/opencl",
-    "fr32/opencl",
+pairing = [
+    "storage-proofs-core/pairing",
+    "storage-proofs-porep/pairing",
+    "storage-proofs-post/pairing",
+    "bellperson/pairing",
+    "filecoin-hashers/pairing",
+    "fr32/pairing",
+]
+blst = [
+    "storage-proofs-core/blst",
+    "storage-proofs-porep/blst",
+    "storage-proofs-post/blst",
+    "bellperson/blst",
+    "filecoin-hashers/blst",
+    "fr32/blst",
 ]
 
 [[bench]]

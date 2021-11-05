@@ -113,6 +113,30 @@ fn cache_window_post_params<Tree: 'static + MerkleTreeTrait>(post_config: &PoStC
             .expect("failed to get verifying key");
 }
 
+fn cache_aggregation_srs_params<Tree: 'static + MerkleTreeTrait>(post_config: &PoStConfig) {
+    info!("generating Aggregation srs params");
+
+    let public_params = window_post_public_params::<Tree>(post_config)
+        .expect("failed to get public params from config");
+
+    let circuit: FallbackPoStCircuit<Tree> = <FallbackPoStCompound<Tree> as CompoundProof<
+        FallbackPoSt<Tree>,
+        FallbackPoStCircuit<Tree>,
+    >>::blank_circuit(&public_params);
+
+    // The SRS file can handle up to (2 << 19) + 1 elements
+    let max_len = (2 << 19) + 1;
+
+    let _ = <FallbackPoStCompound<Tree>>::get_inner_product(
+        Some(&mut OsRng), 
+        circuit, 
+        &public_params, 
+        max_len, 
+    )
+    .expect("failed to get metadata");
+
+}
+
 #[derive(Debug, StructOpt)]
 #[structopt(
     name = "paramcache",
@@ -188,6 +212,25 @@ fn generate_params_porep(sector_size: u64, api_version: ApiVersion) {
     );
 }
 
+fn generate_params_srs(sector_size: u64, api_version: ApiVersion) {
+    with_shape!(
+        sector_size,
+        cache_aggregation_srs_params,
+        &PoStConfig {
+            sector_size: SectorSize(sector_size),
+            challenge_count: WINDOW_POST_CHALLENGE_COUNT,
+            sector_count: *WINDOW_POST_SECTOR_COUNT
+                .read()
+                .expect("WINDOW_POST_SECTOR_COUNT poisoned")
+                .get(&sector_size)
+                .expect("unknown sector size"),
+            typ: PoStType::Window,
+            priority: true,
+            api_version,
+        }
+    );
+}
+
 pub fn main() {
     // Create a stderr logger for all log levels.
     env::set_var("RUST_LOG", "paramcache");
@@ -254,6 +297,8 @@ pub fn main() {
         spinner.enable_steady_tick(100);
 
         generate_params_post(sector_size, api_version);
+
+        generate_params_srs(sector_size, api_version);
 
         if !opts.only_post {
             generate_params_porep(sector_size, api_version);

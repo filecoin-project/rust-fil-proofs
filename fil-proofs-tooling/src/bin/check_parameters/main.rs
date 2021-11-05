@@ -1,8 +1,8 @@
 use std::path::Path;
 
 use anyhow::Result;
+use bellperson::bls::Bls12;
 use bellperson::groth16::MappedParameters;
-use blstrs::Bls12;
 use clap::{value_t, App, Arg, SubCommand};
 
 use storage_proofs_core::parameter_cache::read_cached_params;
@@ -32,7 +32,7 @@ fn main() {
     match matches.subcommand() {
         ("map", Some(m)) => {
             let parameter_file_str = value_t!(m, "param", String).expect("param failed");
-            run_map(Path::new(&parameter_file_str)).expect("run_map failed");
+            run_map(&Path::new(&parameter_file_str)).expect("run_map failed");
         }
         _ => panic!("Unrecognized subcommand"),
     }

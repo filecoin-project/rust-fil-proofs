@@ -1,8 +1,8 @@
 use bellperson::{
+    bls::{Bls12, Fr},
     util_cs::{metric_cs::MetricCS, test_cs::TestConstraintSystem},
     Circuit, ConstraintSystem,
 };
-use blstrs::Scalar as Fr;
 use ff::Field;
 use filecoin_hashers::{poseidon::PoseidonHasher, sha256::Sha256Hasher, Hasher};
 use fr32::fr_into_bytes;
@@ -60,11 +60,11 @@ fn test_stacked_porep_circuit<Tree: MerkleTreeTrait + 'static>(
     let num_layers = 2;
     let layer_challenges = LayerChallenges::new(num_layers, 1);
 
-    let mut rng = XorShiftRng::from_seed(TEST_SEED);
+    let rng = &mut XorShiftRng::from_seed(TEST_SEED);
 
-    let replica_id: Fr = Fr::random(&mut rng);
+    let replica_id: Fr = Fr::random(rng);
     let data: Vec<u8> = (0..nodes)
-        .flat_map(|_| fr_into_bytes(&Fr::random(&mut rng)))
+        .flat_map(|_| fr_into_bytes(&Fr::random(rng)))
         .collect();
 
     // MT for original data is always named tree-d, and it will be
@@ -139,7 +139,7 @@ fn test_stacked_porep_circuit<Tree: MerkleTreeTrait + 'static>(
 
     {
         // Verify that MetricCS returns the same metrics as TestConstraintSystem.
-        let mut cs = MetricCS::<Fr>::new();
+        let mut cs = MetricCS::<Bls12>::new();
 
         StackedCompound::<Tree, Sha256Hasher>::circuit(&pub_inputs, (), &proofs[0], &pp, None)
             .expect("circuit failed")
@@ -153,7 +153,7 @@ fn test_stacked_porep_circuit<Tree: MerkleTreeTrait + 'static>(
             "wrong number of constraints"
         );
     }
-    let mut cs = TestConstraintSystem::<Fr>::new();
+    let mut cs = TestConstraintSystem::<Bls12>::new();
 
     StackedCompound::<Tree, Sha256Hasher>::circuit(&pub_inputs, (), &proofs[0], &pp, None)
         .expect("circuit failed")

@@ -1,7 +1,9 @@
 use std::marker::PhantomData;
 
-use bellperson::Circuit;
-use blstrs::Scalar as Fr;
+use bellperson::{
+    bls::{Bls12, Fr},
+    Circuit,
+};
 use generic_array::typenum::Unsigned;
 use storage_proofs_core::{
     compound_proof::{CircuitComponent, CompoundProof},
@@ -24,7 +26,7 @@ where
     _t: PhantomData<Tree>,
 }
 
-impl<C: Circuit<Fr>, P: ParameterSetMetadata, Tree: MerkleTreeTrait> CacheableParameters<C, P>
+impl<C: Circuit<Bls12>, P: ParameterSetMetadata, Tree: MerkleTreeTrait> CacheableParameters<C, P>
     for ElectionPoStCompound<Tree>
 {
     fn cache_prefix() -> String {
@@ -57,7 +59,7 @@ where
 
         for n in 0..pub_params.challenge_count {
             let challenged_leaf_start = generate_leaf_challenge(
-                pub_params,
+                &pub_params,
                 pub_inputs.randomness,
                 pub_inputs.sector_challenge_index,
                 n as u64,

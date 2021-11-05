@@ -3,6 +3,7 @@ use std::marker::PhantomData;
 
 use anyhow::ensure;
 use bellperson::{
+    bls::{Bls12, Fr, FrRepr},
     gadgets::{
         boolean::{AllocatedBit, Boolean},
         multipack,
@@ -10,7 +11,7 @@ use bellperson::{
     },
     Circuit, ConstraintSystem, SynthesisError,
 };
-use blstrs::Scalar as Fr;
+use ff::PrimeField;
 use filecoin_hashers::{HashFunction, Hasher, PoseidonArity};
 use generic_array::typenum::Unsigned;
 
@@ -34,9 +35,9 @@ use crate::{
 /// * `root` - The merkle root of the tree.
 ///
 pub struct PoRCircuit<Tree: MerkleTreeTrait> {
-    value: Root<Fr>,
+    value: Root<Bls12>,
     auth_path: AuthPath<Tree::Hasher, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>,
-    root: Root<Fr>,
+    root: Root<Bls12>,
     private: bool,
     _tree: PhantomData<Tree>,
 }
@@ -132,11 +133,11 @@ struct PathElement<H: Hasher, Arity: 'static + PoseidonArity> {
 }
 
 impl<H: Hasher, Arity: 'static + PoseidonArity> SubPath<H, Arity> {
-    fn synthesize<CS: ConstraintSystem<Fr>>(
+    fn synthesize<CS: ConstraintSystem<Bls12>>(
         self,
         mut cs: CS,
-        mut cur: AllocatedNum<Fr>,
-    ) -> Result<(AllocatedNum<Fr>, Vec<Boolean>), SynthesisError> {
+        mut cur: AllocatedNum<Bls12>,
+    ) -> Result<(AllocatedNum<Bls12>, Vec<Boolean>), SynthesisError> {
         let arity = Arity::to_usize();
 
         if arity == 0 {
@@ -240,7 +241,7 @@ impl<H: Hasher, U: PoseidonArity, V: PoseidonArity, W: PoseidonArity> AuthPath<H
 }
 
 impl<Tree: MerkleTreeTrait> CircuitComponent for PoRCircuit<Tree> {
-    type ComponentPrivateInputs = Option<Root<Fr>>;
+    type ComponentPrivateInputs = Option<Root<Bls12>>;
 }
 
 pub struct PoRCompound<Tree: MerkleTreeTrait> {
@@ -257,7 +258,7 @@ pub fn challenge_into_auth_path_bits(challenge: usize, leaves: usize) -> Vec<boo
     to_bits(leaves.trailing_zeros(), challenge)
 }
 
-impl<C: Circuit<Fr>, P: ParameterSetMetadata, Tree: MerkleTreeTrait> CacheableParameters<C, P>
+impl<C: Circuit<Bls12>, P: ParameterSetMetadata, Tree: MerkleTreeTrait> CacheableParameters<C, P>
     for PoRCompound<Tree>
 {
     fn cache_prefix() -> String {
@@ -321,8 +322,9 @@ impl<'a, Tree: 'static + MerkleTreeTrait> CompoundProof<'a, PoR<Tree>, PoRCircui
         // Inputs are (currently, inefficiently) packed with one `Fr` per challenge.
         // Boolean/bit auth paths trivially correspond to the challenged node's index within a sector.
         // Defensively convert the challenge with `try_from` as a reminder that we must not truncate.
-        let input_fr =
-            Fr::from(u64::try_from(pub_inputs.challenge).expect("challenge type too wide"));
+        let input_fr = Fr::from_repr(FrRepr::from(
+            u64::try_from(pub_inputs.challenge).expect("challenge type too wide"),
+        ))?;
         inputs.push(input_fr);
 
         if let Some(commitment) = pub_inputs.commitment {
@@ -336,7 +338,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait> CompoundProof<'a, PoR<Tree>, PoRCircui
     }
 }
 
-impl<'a, Tree: MerkleTreeTrait> Circuit<Fr> for PoRCircuit<Tree> {
+impl<'a, Tree: MerkleTreeTrait> Circuit<Bls12> for PoRCircuit<Tree> {
     /// # Public Inputs
     ///
     /// This circuit expects the following public inputs.
@@ -348,7 +350,7 @@ impl<'a, Tree: MerkleTreeTrait> Circuit<Fr> for PoRCircuit<Tree> {
     /// * value_num - packed version of `value` as bits. (might be more than one Fr)
     ///
     /// Note: All public inputs must be provided as `E::Fr`.
-    fn synthesize<CS: ConstraintSystem<Fr>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
+    fn synthesize<CS: ConstraintSystem<Bls12>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
         let value = self.value;
         let auth_path = self.auth_path;
         let root = self.root;
@@ -432,13 +434,13 @@ impl<'a, Tree: MerkleTreeTrait> PoRCircuit<Tree> {
     #[allow(clippy::type_complexity)]
     pub fn synthesize<CS>(
         mut cs: CS,
-        value: Root<Fr>,
+        value: Root<Bls12>,
         auth_path: AuthPath<Tree::Hasher, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>,
-        root: Root<Fr>,
+        root: Root<Bls12>,
         private: bool,
     ) -> Result<(), SynthesisError>
     where
-        CS: ConstraintSystem<Fr>,
+        CS: ConstraintSystem<Bls12>,
     {
         let por = Self {
             value,
@@ -460,13 +462,13 @@ pub fn por_no_challenge_input<Tree, CS>(
     cs: &mut CS,
     // Least significant bit first, most significant bit last.
     challenge_bits: Vec<AllocatedBit>,
-    leaf: AllocatedNum<Fr>,
-    path_values: Vec<Vec<AllocatedNum<Fr>>>,
-    root: AllocatedNum<Fr>,
+    leaf: AllocatedNum<Bls12>,
+    path_values: Vec<Vec<AllocatedNum<Bls12>>>,
+    root: AllocatedNum<Bls12>,
 ) -> Result<(), SynthesisError>
 where
     Tree: MerkleTreeTrait,
-    CS: ConstraintSystem<Fr>,
+    CS: ConstraintSystem<Bls12>,
 {
     let arity = Tree::Arity::to_usize();
     let arity_bit_len = arity.trailing_zeros() as usize;
@@ -493,8 +495,8 @@ where
         let inputs = insert(
             &mut cs.namespace(|| format!("merkle insert, height {}", height)),
             &cur,
-            insert_index,
-            siblings,
+            &insert_index,
+            &siblings,
         )?;
         cur = <<Tree::Hasher as Hasher>::Function as HashFunction<
             <Tree::Hasher as Hasher>::Domain,
@@ -550,12 +552,12 @@ mod tests {
     }
 
     fn por_compound<Tree: 'static + MerkleTreeTrait>() {
-        let mut rng = XorShiftRng::from_seed(TEST_SEED);
+        let rng = &mut XorShiftRng::from_seed(TEST_SEED);
 
         let leaves = 64 * get_base_tree_count::<Tree>();
 
         let data: Vec<u8> = (0..leaves)
-            .flat_map(|_| fr_into_bytes(&Fr::random(&mut rng)))
+            .flat_map(|_| fr_into_bytes(&Fr::random(rng)))
             .collect();
         let tree = create_base_merkle_tree::<Tree>(None, leaves, data.as_slice())
             .expect("create_base_merkle_tree failure");
@@ -585,9 +587,8 @@ mod tests {
             &tree,
         );
 
-        let gparams =
-            PoRCompound::<Tree>::groth_params(Some(&mut rng), &public_params.vanilla_params)
-                .expect("failed to generate groth params");
+        let gparams = PoRCompound::<Tree>::groth_params(Some(rng), &public_params.vanilla_params)
+            .expect("failed to generate groth params");
 
         let proof =
             PoRCompound::<Tree>::prove(&public_params, &public_inputs, &private_inputs, &gparams)
@@ -725,7 +726,7 @@ mod tests {
 
             // -- Circuit
 
-            let mut cs = TestConstraintSystem::<Fr>::new();
+            let mut cs = TestConstraintSystem::<Bls12>::new();
             let por = PoRCircuit::<ResTree<Tree>> {
                 value: Root::Val(Some(proof.data.into())),
                 auth_path: proof.proof.as_options().into(),
@@ -935,14 +936,14 @@ mod tests {
     }
 
     fn test_private_por_input_circuit<Tree: MerkleTreeTrait>(num_constraints: usize) {
-        let mut rng = XorShiftRng::from_seed(TEST_SEED);
+        let rng = &mut XorShiftRng::from_seed(TEST_SEED);
 
         let leaves = 64 * get_base_tree_count::<Tree>();
         for i in 0..leaves {
             // -- Basic Setup
 
             let data: Vec<u8> = (0..leaves)
-                .flat_map(|_| fr_into_bytes(&Fr::random(&mut rng)))
+                .flat_map(|_| fr_into_bytes(&Fr::random(rng)))
                 .collect();
 
             let tree = create_base_merkle_tree::<Tree>(None, leaves, data.as_slice())
@@ -980,7 +981,7 @@ mod tests {
 
             // -- Circuit
 
-            let mut cs = TestConstraintSystem::<Fr>::new();
+            let mut cs = TestConstraintSystem::<Bls12>::new();
 
             let por = PoRCircuit::<Tree> {
                 value: Root::Val(Some(proof.data.into())),
@@ -1002,7 +1003,7 @@ mod tests {
 
             let auth_path_bits =
                 challenge_into_auth_path_bits(pub_inputs.challenge, pub_params.leaves);
-            let packed_auth_path = multipack::compute_multipacking::<Fr>(&auth_path_bits);
+            let packed_auth_path = multipack::compute_multipacking::<Bls12>(&auth_path_bits);
 
             let mut expected_inputs = Vec::new();
             expected_inputs.extend(packed_auth_path);

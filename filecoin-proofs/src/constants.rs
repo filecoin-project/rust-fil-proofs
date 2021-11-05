@@ -11,7 +11,7 @@ use storage_proofs_core::{
     util::NODE_SIZE,
     MAX_LEGACY_POREP_REGISTERED_PROOF_ID,
 };
-use typenum::{U0, U2, U8};
+use typenum::{U0, U2, U4, U8};
 
 use crate::types::UnpaddedBytesAmount;
 
@@ -21,6 +21,10 @@ pub const SECTOR_SIZE_16_KIB: u64 = 1 << 14;
 pub const SECTOR_SIZE_32_KIB: u64 = 1 << 15;
 pub const SECTOR_SIZE_8_MIB: u64 = 1 << 23;
 pub const SECTOR_SIZE_16_MIB: u64 = 1 << 24;
+pub const SECTOR_SIZE_32_MIB: u64 = 1 << 25;
+pub const SECTOR_SIZE_64_MIB: u64 = 1 << 26;
+pub const SECTOR_SIZE_128_MIB: u64 = 1 << 27;
+pub const SECTOR_SIZE_256_MIB: u64 = 1 << 28;
 pub const SECTOR_SIZE_512_MIB: u64 = 1 << 29;
 pub const SECTOR_SIZE_1_GIB: u64 = 1 << 30;
 pub const SECTOR_SIZE_32_GIB: u64 = 1 << 35;
@@ -34,13 +38,17 @@ pub const WINDOW_POST_CHALLENGE_COUNT: usize = 10;
 pub const MAX_LEGACY_REGISTERED_SEAL_PROOF_ID: u64 = MAX_LEGACY_POREP_REGISTERED_PROOF_ID;
 
 /// Sector sizes for which parameters have been published.
-pub const PUBLISHED_SECTOR_SIZES: [u64; 10] = [
+pub const PUBLISHED_SECTOR_SIZES: [u64; 14] = [
     SECTOR_SIZE_2_KIB,
     SECTOR_SIZE_4_KIB,
     SECTOR_SIZE_16_KIB,
     SECTOR_SIZE_32_KIB,
     SECTOR_SIZE_8_MIB,
     SECTOR_SIZE_16_MIB,
+    SECTOR_SIZE_32_MIB,
+    SECTOR_SIZE_64_MIB,
+    SECTOR_SIZE_128_MIB,
+    SECTOR_SIZE_256_MIB,
     SECTOR_SIZE_512_MIB,
     SECTOR_SIZE_1_GIB,
     SECTOR_SIZE_32_GIB,
@@ -56,6 +64,10 @@ lazy_static! {
             (SECTOR_SIZE_32_KIB, 2),
             (SECTOR_SIZE_8_MIB, 2),
             (SECTOR_SIZE_16_MIB, 2),
+            (SECTOR_SIZE_32_MIB, 2),
+            (SECTOR_SIZE_64_MIB, 2),
+            (SECTOR_SIZE_128_MIB, 2),
+            (SECTOR_SIZE_256_MIB, 2),
             (SECTOR_SIZE_512_MIB, 2),
             (SECTOR_SIZE_1_GIB, 2),
             (SECTOR_SIZE_32_GIB, 176),
@@ -73,6 +85,10 @@ lazy_static! {
             (SECTOR_SIZE_32_KIB, 1),
             (SECTOR_SIZE_8_MIB, 1),
             (SECTOR_SIZE_16_MIB, 1),
+            (SECTOR_SIZE_32_MIB, 1),
+            (SECTOR_SIZE_64_MIB, 1),
+            (SECTOR_SIZE_128_MIB, 1),
+            (SECTOR_SIZE_256_MIB, 1),
             (SECTOR_SIZE_512_MIB, 1),
             (SECTOR_SIZE_1_GIB, 1),
             (SECTOR_SIZE_32_GIB, 10),
@@ -90,6 +106,10 @@ lazy_static! {
             (SECTOR_SIZE_32_KIB, 2),
             (SECTOR_SIZE_8_MIB, 2),
             (SECTOR_SIZE_16_MIB, 2),
+            (SECTOR_SIZE_32_MIB, 2),
+            (SECTOR_SIZE_64_MIB, 2),
+            (SECTOR_SIZE_128_MIB, 2),
+            (SECTOR_SIZE_256_MIB, 2),
             (SECTOR_SIZE_512_MIB, 2),
             (SECTOR_SIZE_1_GIB, 2),
             (SECTOR_SIZE_32_GIB, 11),
@@ -104,14 +124,18 @@ lazy_static! {
     // https://github.com/filecoin-project/specs-actors/blob/master/actors/abi/sector.go
     pub static ref WINDOW_POST_SECTOR_COUNT: RwLock<HashMap<u64, usize>> = RwLock::new(
         [
-            (SECTOR_SIZE_2_KIB, 2),
-            (SECTOR_SIZE_4_KIB, 2),
-            (SECTOR_SIZE_16_KIB, 2),
-            (SECTOR_SIZE_32_KIB, 2),
-            (SECTOR_SIZE_8_MIB, 2),
-            (SECTOR_SIZE_16_MIB, 2),
-            (SECTOR_SIZE_512_MIB, 2),
-            (SECTOR_SIZE_1_GIB, 2),
+            (SECTOR_SIZE_2_KIB, 8),
+            (SECTOR_SIZE_4_KIB, 8),
+            (SECTOR_SIZE_16_KIB, 8),
+            (SECTOR_SIZE_32_KIB, 8),
+            (SECTOR_SIZE_8_MIB, 8),
+            (SECTOR_SIZE_16_MIB, 8),
+            (SECTOR_SIZE_32_MIB, 8),
+            (SECTOR_SIZE_64_MIB, 8),
+            (SECTOR_SIZE_128_MIB, 512),
+            (SECTOR_SIZE_256_MIB, 512),
+            (SECTOR_SIZE_512_MIB, 512),
+            (SECTOR_SIZE_1_GIB, 512),
             (SECTOR_SIZE_32_GIB, 2349), // this gives 125,279,217 constraints, fitting in a single partition
             (SECTOR_SIZE_64_GIB, 2300), // this gives 129,887,900 constraints, fitting in a single partition
         ]
@@ -148,6 +172,7 @@ pub type DefaultOctLCTree = OctLCMerkleTree<DefaultTreeHasher>;
 // Generic shapes
 pub type SectorShapeBase = LCTree<DefaultTreeHasher, U8, U0, U0>;
 pub type SectorShapeSub2 = LCTree<DefaultTreeHasher, U8, U2, U0>;
+pub type SectorShapeSub4 = LCTree<DefaultTreeHasher, U8, U4, U0>;
 pub type SectorShapeSub8 = LCTree<DefaultTreeHasher, U8, U8, U0>;
 pub type SectorShapeTop2 = LCTree<DefaultTreeHasher, U8, U8, U2>;
 
@@ -160,10 +185,15 @@ pub type SectorShape4KiB = SectorShapeSub2;
 pub type SectorShape16MiB = SectorShapeSub2;
 pub type SectorShape1GiB = SectorShapeSub2;
 
+pub type SectorShape32MiB = SectorShapeSub4;
+pub type SectorShape256MiB = SectorShapeSub4;
+
 pub type SectorShape16KiB = SectorShapeSub8;
+pub type SectorShape64MiB = SectorShapeSub8;
 pub type SectorShape32GiB = SectorShapeSub8;
 
 pub type SectorShape32KiB = SectorShapeTop2;
+pub type SectorShape128MiB = SectorShapeTop2;
 pub type SectorShape64GiB = SectorShapeTop2;
 
 pub fn is_sector_shape_base(sector_size: u64) -> bool {
@@ -180,12 +210,22 @@ pub fn is_sector_shape_sub2(sector_size: u64) -> bool {
     )
 }
 
+pub fn is_sector_shape_sub4(sector_size: u64) -> bool {
+    matches!(
+        sector_size,
+        SECTOR_SIZE_32_MIB | SECTOR_SIZE_256_MIB
+    )
+}
+
 pub fn is_sector_shape_sub8(sector_size: u64) -> bool {
-    matches!(sector_size, SECTOR_SIZE_16_KIB | SECTOR_SIZE_32_GIB)
+    matches!(
+        sector_size, 
+        SECTOR_SIZE_16_KIB | SECTOR_SIZE_64_MIB | SECTOR_SIZE_32_GIB
+    )
 }
 
 pub fn is_sector_shape_top2(sector_size: u64) -> bool {
-    matches!(sector_size, SECTOR_SIZE_32_KIB | SECTOR_SIZE_64_GIB)
+    matches!(sector_size, SECTOR_SIZE_32_KIB | SECTOR_SIZE_64_GIB | SECTOR_SIZE_128_MIB)
 }
 
 /// Calls a function with the type hint of the sector shape matching the provided sector.
@@ -214,6 +254,18 @@ macro_rules! with_shape {
             },
             _xx if $size == $crate::constants::SECTOR_SIZE_16_MIB => {
               $f::<$crate::constants::SectorShape16MiB>($($args),*)
+            },
+            _xx if $size == $crate::constants::SECTOR_SIZE_32_MIB => {
+              $f::<$crate::constants::SectorShape32MiB>($($args),*)
+            },
+            _xx if $size == $crate::constants::SECTOR_SIZE_64_MIB => {
+              $f::<$crate::constants::SectorShape64MiB>($($args),*)
+            },
+            _xx if $size == $crate::constants::SECTOR_SIZE_128_MIB => {
+              $f::<$crate::constants::SectorShape128MiB>($($args),*)
+            },
+            _xx if $size == $crate::constants::SECTOR_SIZE_256_MIB => {
+              $f::<$crate::constants::SectorShape256MiB>($($args),*)
             },
             _x if $size == $crate::constants::SECTOR_SIZE_512_MIB => {
               $f::<$crate::constants::SectorShape512MiB>($($args),*)

@@ -5,18 +5,16 @@ use std::path::{Path, PathBuf};
 use std::sync::Once;
 
 use anyhow::{ensure, Result};
+use bellperson::bls::{Bls12, Fr};
 use bellperson::groth16;
 use bincode::serialize;
-use blstrs::{Bls12, Scalar as Fr};
 use ff::Field;
 use filecoin_hashers::Hasher;
 use filecoin_proofs::{
     add_piece, aggregate_seal_commit_proofs, clear_cache, compute_comm_d, fauxrep_aux,
     generate_fallback_sector_challenges, generate_piece_commitment, generate_single_vanilla_proof,
-    generate_single_window_post_with_vanilla, generate_window_post,
-    generate_window_post_with_vanilla, generate_winning_post,
-    generate_winning_post_sector_challenge, generate_winning_post_with_vanilla,
-    get_num_partition_for_fallback_post, get_seal_inputs, merge_window_post_partition_proofs,
+    generate_window_post, generate_window_post_with_vanilla, generate_winning_post,
+    generate_winning_post_sector_challenge, generate_winning_post_with_vanilla, get_seal_inputs,
     seal_commit_phase1, seal_commit_phase2, seal_pre_commit_phase1, seal_pre_commit_phase2,
     unseal_range, validate_cache_for_commit, validate_cache_for_precommit_phase2,
     verify_aggregate_seal_commit_proofs, verify_seal, verify_window_post, verify_winning_post,
@@ -191,19 +189,12 @@ fn seal_lifecycle<Tree: 'static + MerkleTreeTrait>(
     porep_id: &[u8; 32],
     api_version: ApiVersion,
 ) -> Result<()> {
-    let mut rng = XorShiftRng::from_seed(TEST_SEED);
-    let prover_fr: DefaultTreeDomain = Fr::random(&mut rng).into();
+    let rng = &mut XorShiftRng::from_seed(TEST_SEED);
+    let prover_fr: DefaultTreeDomain = Fr::random(rng).into();
     let mut prover_id = [0u8; 32];
     prover_id.copy_from_slice(AsRef::<[u8]>::as_ref(&prover_fr));
 
-    create_seal::<_, Tree>(
-        &mut rng,
-        sector_size,
-        prover_id,
-        false,
-        porep_id,
-        api_version,
-    )?;
+    create_seal::<_, Tree>(rng, sector_size, prover_id, false, porep_id, api_version)?;
     Ok(())
 }
 
@@ -392,8 +383,8 @@ fn aggregate_proofs<Tree: 'static + MerkleTreeTrait>(
     api_version: ApiVersion,
     num_proofs_to_aggregate: usize,
 ) -> Result<bool> {
-    let mut rng = XorShiftRng::from_seed(TEST_SEED);
-    let prover_fr: DefaultTreeDomain = Fr::random(&mut rng).into();
+    let rng = &mut XorShiftRng::from_seed(TEST_SEED);
+    let prover_fr: DefaultTreeDomain = Fr::random(rng).into();
     let mut prover_id = [0u8; 32];
     prover_id.copy_from_slice(AsRef::<[u8]>::as_ref(&prover_fr));
 
@@ -402,13 +393,8 @@ fn aggregate_proofs<Tree: 'static + MerkleTreeTrait>(
     let mut seeds = Vec::with_capacity(num_proofs_to_aggregate);
     let mut comm_rs = Vec::with_capacity(num_proofs_to_aggregate);
 
-    let (commit_output, commit_input, seed, comm_r) = create_seal_for_aggregation::<_, Tree>(
-        &mut rng,
-        sector_size,
-        prover_id,
-        porep_id,
-        api_version,
-    )?;
+    let (commit_output, commit_input, seed, comm_r) =
+        create_seal_for_aggregation::<_, Tree>(rng, sector_size, prover_id, porep_id, api_version)?;
 
     for _ in 0..num_proofs_to_aggregate {
         commit_outputs.push(commit_output.clone());
@@ -522,8 +508,8 @@ fn run_resumable_seal<Tree: 'static + MerkleTreeTrait>(
     init_logger();
 
     let sector_size = SECTOR_SIZE_2_KIB;
-    let mut rng = XorShiftRng::from_seed(TEST_SEED);
-    let prover_fr: DefaultTreeDomain = Fr::random(&mut rng).into();
+    let rng = &mut XorShiftRng::from_seed(TEST_SEED);
+    let prover_fr: DefaultTreeDomain = Fr::random(rng).into();
     let mut prover_id = [0u8; 32];
     prover_id.copy_from_slice(AsRef::<[u8]>::as_ref(&prover_fr));
 
@@ -656,9 +642,9 @@ fn test_winning_post_32kib_top_8_8_2() -> Result<()> {
 
 #[test]
 fn test_winning_post_empty_sector_challenge() -> Result<()> {
-    let mut rng = XorShiftRng::from_seed(TEST_SEED);
+    let rng = &mut XorShiftRng::from_seed(TEST_SEED);
 
-    let prover_fr: DefaultTreeDomain = Fr::random(&mut rng).into();
+    let prover_fr: DefaultTreeDomain = Fr::random(rng).into();
     let mut prover_id = [0u8; 32];
     prover_id.copy_from_slice(AsRef::<[u8]>::as_ref(&prover_fr));
 
@@ -667,7 +653,7 @@ fn test_winning_post_empty_sector_challenge() -> Result<()> {
     let api_version = ApiVersion::V1_1_0;
 
     let (_, _, _, _) = create_seal::<_, SectorShape2KiB>(
-        &mut rng,
+        rng,
         sector_size,
         prover_id,
         true,
@@ -704,9 +690,9 @@ fn winning_post<Tree: 'static + MerkleTreeTrait>(
     fake: bool,
     api_version: ApiVersion,
 ) -> Result<()> {
-    let mut rng = XorShiftRng::from_seed(TEST_SEED);
+    let rng = &mut XorShiftRng::from_seed(TEST_SEED);
 
-    let prover_fr: DefaultTreeDomain = Fr::random(&mut rng).into();
+    let prover_fr: DefaultTreeDomain = Fr::random(rng).into();
     let mut prover_id = [0u8; 32];
     prover_id.copy_from_slice(AsRef::<[u8]>::as_ref(&prover_fr));
 
@@ -716,20 +702,13 @@ fn winning_post<Tree: 'static + MerkleTreeTrait>(
     };
 
     let (sector_id, replica, comm_r, cache_dir) = if fake {
-        create_fake_seal::<_, Tree>(&mut rng, sector_size, &porep_id, api_version)?
+        create_fake_seal::<_, Tree>(rng, sector_size, &porep_id, api_version)?
     } else {
-        create_seal::<_, Tree>(
-            &mut rng,
-            sector_size,
-            prover_id,
-            true,
-            &porep_id,
-            api_version,
-        )?
+        create_seal::<_, Tree>(rng, sector_size, prover_id, true, &porep_id, api_version)?
     };
     let sector_count = WINNING_POST_SECTOR_COUNT;
 
-    let random_fr: DefaultTreeDomain = Fr::random(&mut rng).into();
+    let random_fr: DefaultTreeDomain = Fr::random(rng).into();
     let mut randomness = [0u8; 32];
     randomness.copy_from_slice(AsRef::<[u8]>::as_ref(&random_fr));
 
@@ -1076,166 +1055,6 @@ fn test_window_post_single_partition_matching_2kib_base_8() -> Result<()> {
     )
 }
 
-#[test]
-fn test_window_post_partition_matching_2kib_base_8() -> Result<()> {
-    let sector_size = SECTOR_SIZE_2_KIB;
-    let sector_count = *WINDOW_POST_SECTOR_COUNT
-        .read()
-        .expect("WINDOW_POST_SECTOR_COUNT poisoned")
-        .get(&sector_size)
-        .expect("unknown sector size");
-
-    partition_window_post::<SectorShape2KiB>(
-        sector_size,
-        3, // Validate the scenarios of two partition
-        sector_count,
-        false,
-        ApiVersion::V1_0_0,
-    )?;
-    partition_window_post::<SectorShape2KiB>(
-        sector_size,
-        3,
-        sector_count,
-        true,
-        ApiVersion::V1_0_0,
-    )?;
-    partition_window_post::<SectorShape2KiB>(
-        sector_size,
-        3,
-        sector_count,
-        false,
-        ApiVersion::V1_1_0,
-    )?;
-    partition_window_post::<SectorShape2KiB>(sector_size, 3, sector_count, true, ApiVersion::V1_1_0)
-}
-
-fn partition_window_post<Tree: 'static + MerkleTreeTrait>(
-    sector_size: u64,
-    total_sector_count: usize,
-    sector_count: usize,
-    fake: bool,
-    api_version: ApiVersion,
-) -> Result<()> {
-    use anyhow::anyhow;
-
-    let mut rng = XorShiftRng::from_seed(TEST_SEED);
-
-    let mut sectors = Vec::with_capacity(total_sector_count);
-    let mut pub_replicas = BTreeMap::new();
-    let mut priv_replicas = BTreeMap::new();
-
-    let prover_fr: <Tree::Hasher as Hasher>::Domain = Fr::random(&mut rng).into();
-    let mut prover_id = [0u8; 32];
-    prover_id.copy_from_slice(AsRef::<[u8]>::as_ref(&prover_fr));
-
-    let porep_id = match api_version {
-        ApiVersion::V1_0_0 => ARBITRARY_POREP_ID_V1_0_0,
-        ApiVersion::V1_1_0 => ARBITRARY_POREP_ID_V1_1_0,
-    };
-
-    for _ in 0..total_sector_count {
-        let (sector_id, replica, comm_r, cache_dir) = if fake {
-            create_fake_seal::<_, Tree>(&mut rng, sector_size, &porep_id, api_version)?
-        } else {
-            create_seal::<_, Tree>(
-                &mut rng,
-                sector_size,
-                prover_id,
-                true,
-                &porep_id,
-                api_version,
-            )?
-        };
-        priv_replicas.insert(
-            sector_id,
-            PrivateReplicaInfo::new(replica.path().into(), comm_r, cache_dir.path().into())?,
-        );
-        pub_replicas.insert(sector_id, PublicReplicaInfo::new(comm_r)?);
-        sectors.push((sector_id, replica, comm_r, cache_dir, prover_id));
-    }
-    assert_eq!(priv_replicas.len(), total_sector_count);
-    assert_eq!(pub_replicas.len(), total_sector_count);
-    assert_eq!(sectors.len(), total_sector_count);
-
-    let random_fr: <Tree::Hasher as Hasher>::Domain = Fr::random(&mut rng).into();
-    let mut randomness = [0u8; 32];
-    randomness.copy_from_slice(AsRef::<[u8]>::as_ref(&random_fr));
-
-    let config = PoStConfig {
-        sector_size: sector_size.into(),
-        sector_count,
-        challenge_count: WINDOW_POST_CHALLENGE_COUNT,
-        typ: PoStType::Window,
-        priority: false,
-        api_version,
-    };
-
-    let replica_sectors = priv_replicas
-        .iter()
-        .map(|(sector, _replica)| *sector)
-        .collect::<Vec<SectorId>>();
-
-    let challenges = generate_fallback_sector_challenges::<Tree>(
-        &config,
-        &randomness,
-        &replica_sectors,
-        prover_id,
-    )?;
-
-    let num_sectors_per_chunk = config.sector_count;
-    let mut proofs = Vec::new();
-
-    let partitions = get_num_partition_for_fallback_post(&config, replica_sectors.len());
-    for partition_index in 0..partitions {
-        let sector_ids = replica_sectors
-            .chunks(num_sectors_per_chunk)
-            .nth(partition_index)
-            .ok_or_else(|| anyhow!("invalid number of sectors/partition index"))?;
-
-        let mut partition_priv_replicas = BTreeMap::new();
-        for id in sector_ids {
-            let p_sector = match priv_replicas.get(id) {
-                Some(v) => v,
-                _ => {
-                    continue;
-                }
-            };
-
-            partition_priv_replicas.insert(*id, p_sector);
-        }
-
-        let mut vanilla_proofs = Vec::new();
-        for (sector_id, sector) in partition_priv_replicas.iter() {
-            let sector_challenges = &challenges[sector_id];
-            let single_proof = generate_single_vanilla_proof::<Tree>(
-                &config,
-                *sector_id,
-                sector,
-                sector_challenges,
-            )?;
-
-            vanilla_proofs.push(single_proof);
-        }
-
-        let proof = generate_single_window_post_with_vanilla(
-            &config,
-            &randomness,
-            prover_id,
-            vanilla_proofs,
-            partition_index,
-        )?;
-
-        proofs.push(proof);
-    }
-
-    let final_proof = merge_window_post_partition_proofs(proofs)?;
-    let valid =
-        verify_window_post::<Tree>(&config, &randomness, &pub_replicas, prover_id, &final_proof)?;
-    assert!(valid, "proofs did not verify");
-
-    Ok(())
-}
-
 fn window_post<Tree: 'static + MerkleTreeTrait>(
     sector_size: u64,
     total_sector_count: usize,
@@ -1243,13 +1062,13 @@ fn window_post<Tree: 'static + MerkleTreeTrait>(
     fake: bool,
     api_version: ApiVersion,
 ) -> Result<()> {
-    let mut rng = XorShiftRng::from_seed(TEST_SEED);
+    let rng = &mut XorShiftRng::from_seed(TEST_SEED);
 
     let mut sectors = Vec::with_capacity(total_sector_count);
     let mut pub_replicas = BTreeMap::new();
     let mut priv_replicas = BTreeMap::new();
 
-    let prover_fr: <Tree::Hasher as Hasher>::Domain = Fr::random(&mut rng).into();
+    let prover_fr: <Tree::Hasher as Hasher>::Domain = Fr::random(rng).into();
     let mut prover_id = [0u8; 32];
     prover_id.copy_from_slice(AsRef::<[u8]>::as_ref(&prover_fr));
 
@@ -1260,16 +1079,9 @@ fn window_post<Tree: 'static + MerkleTreeTrait>(
 
     for _ in 0..total_sector_count {
         let (sector_id, replica, comm_r, cache_dir) = if fake {
-            create_fake_seal::<_, Tree>(&mut rng, sector_size, &porep_id, api_version)?
+            create_fake_seal::<_, Tree>(rng, sector_size, &porep_id, api_version)?
         } else {
-            create_seal::<_, Tree>(
-                &mut rng,
-                sector_size,
-                prover_id,
-                true,
-                &porep_id,
-                api_version,
-            )?
+            create_seal::<_, Tree>(rng, sector_size, prover_id, true, &porep_id, api_version)?
         };
         priv_replicas.insert(
             sector_id,
@@ -1282,7 +1094,7 @@ fn window_post<Tree: 'static + MerkleTreeTrait>(
     assert_eq!(pub_replicas.len(), total_sector_count);
     assert_eq!(sectors.len(), total_sector_count);
 
-    let random_fr: <Tree::Hasher as Hasher>::Domain = Fr::random(&mut rng).into();
+    let random_fr: <Tree::Hasher as Hasher>::Domain = Fr::random(rng).into();
     let mut randomness = [0u8; 32];
     randomness.copy_from_slice(AsRef::<[u8]>::as_ref(&random_fr));
 
@@ -1432,7 +1244,7 @@ fn generate_proof<Tree: 'static + MerkleTreeTrait>(
         ticket,
         seed,
         pre_commit_output.clone(),
-        piece_infos,
+        &piece_infos,
     )?;
 
     clear_cache::<Tree>(cache_dir_path)?;
@@ -1502,7 +1314,7 @@ fn unseal<Tree: 'static + MerkleTreeTrait>(
     assert_eq!(contents.len(), 508);
     assert_eq!(&piece_bytes[508..508 + 508], &contents[..]);
 
-    let computed_comm_d = compute_comm_d(config.sector_size, piece_infos)?;
+    let computed_comm_d = compute_comm_d(config.sector_size, &piece_infos)?;
 
     assert_eq!(
         comm_d, computed_comm_d,
