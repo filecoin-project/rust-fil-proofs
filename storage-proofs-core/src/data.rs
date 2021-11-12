@@ -100,6 +100,14 @@ impl<'a> Data<'a> {
         }
     }
 
+    pub fn empty() -> Self {
+        Data {
+            raw: None,
+            path: None,
+            len: 0,
+        }
+    }
+
     pub fn len(&self) -> usize {
         self.len
     }
