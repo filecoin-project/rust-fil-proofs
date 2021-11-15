@@ -799,7 +799,7 @@ where
             "New replica and sector key file size mis-match (must be equal)"
         );
         ensure!(
-            staged_data_path_metadata.len() == sector_key_path_metadata.len(),
+            staged_data_path_metadata.len() >= sector_key_path_metadata.len(),
             "Staged data and sector key file size mis-match (must be equal)"
         );
 
