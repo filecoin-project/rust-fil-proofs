@@ -186,6 +186,7 @@ fn test_seal_lifecycle_upgrade_32kib_top_8_8_2_v1_1() -> Result<()> {
 //#[test]
 //#[ignore]
 //fn test_seal_lifecycle_512mib_porep_id_v1_top_8_0_0_api_v1() -> Result<()> {
+//    use filecoin_proofs::{SectorShape512MiB, SECTOR_SIZE_512_MIB};
 //    let porep_id_v1: u64 = 2; // This is a RegisteredSealProof value
 //
 //    let mut porep_id = [0u8; 32];
@@ -197,6 +198,7 @@ fn test_seal_lifecycle_upgrade_32kib_top_8_8_2_v1_1() -> Result<()> {
 //#[test]
 //#[ignore]
 //fn test_seal_lifecycle_512mib_porep_id_v1_top_8_0_0_api_v1_1() -> Result<()> {
+//    use filecoin_proofs::{SectorShape512MiB, SECTOR_SIZE_512_MIB};
 //    let porep_id_v1_1: u64 = 7; // This is a RegisteredSealProof value
 //
 //    let mut porep_id = [0u8; 32];
@@ -207,7 +209,19 @@ fn test_seal_lifecycle_upgrade_32kib_top_8_8_2_v1_1() -> Result<()> {
 
 //#[test]
 //#[ignore]
+//fn test_seal_lifecycle_upgrade_512mib_top_8_0_0_v1_1() -> Result<()> {
+//    use filecoin_proofs::{SectorShape512MiB, SECTOR_SIZE_512_MIB};
+//    seal_lifecycle_upgrade::<SectorShape512MiB>(
+//        SECTOR_SIZE_512_MIB,
+//        &ARBITRARY_POREP_ID_V1_1_0,
+//        ApiVersion::V1_1_0,
+//    )
+//}
+
+//#[test]
+//#[ignore]
 //fn test_seal_lifecycle_32gib_porep_id_v1_top_8_8_0_api_v1() -> Result<()> {
+//    use filecoin_proofs::{SectorShape32GiB, SECTOR_SIZE_32_GIB};
 //    let porep_id_v1: u64 = 3; // This is a RegisteredSealProof value
 //
 //    let mut porep_id = [0u8; 32];
@@ -219,6 +233,7 @@ fn test_seal_lifecycle_upgrade_32kib_top_8_8_2_v1_1() -> Result<()> {
 //#[test]
 //#[ignore]
 //fn test_seal_lifecycle_32gib_porep_id_v1_1_top_8_8_0_api_v1_1() -> Result<()> {
+//    use filecoin_proofs::{SectorShape32GiB, SECTOR_SIZE_32_GIB};
 //    let porep_id_v1_1: u64 = 8; // This is a RegisteredSealProof value
 //
 //    let mut porep_id = [0u8; 32];
@@ -229,7 +244,19 @@ fn test_seal_lifecycle_upgrade_32kib_top_8_8_2_v1_1() -> Result<()> {
 
 //#[test]
 //#[ignore]
+//fn test_seal_lifecycle_upgrade_32gib_top_8_8_0_v1_1() -> Result<()> {
+//    use filecoin_proofs::{SectorShape32GiB, SECTOR_SIZE_32_GIB};
+//    seal_lifecycle_upgrade::<SectorShape32GiB>(
+//        SECTOR_SIZE_32_GIB,
+//        &ARBITRARY_POREP_ID_V1_1_0,
+//        ApiVersion::V1_1_0,
+//    )
+//}
+
+//#[test]
+//#[ignore]
 //fn test_seal_lifecycle_64gib_porep_id_v1_top_8_8_2_api_v1() -> Result<()> {
+//    use filecoin_proofs::{SectorShape64GiB, SECTOR_SIZE_64_GIB};
 //    let porep_id_v1: u64 = 4; // This is a RegisteredSealProof value
 //
 //    let mut porep_id = [0u8; 32];
@@ -241,12 +268,24 @@ fn test_seal_lifecycle_upgrade_32kib_top_8_8_2_v1_1() -> Result<()> {
 //#[test]
 //#[ignore]
 //fn test_seal_lifecycle_64gib_porep_id_v1_1_top_8_8_2_api_v1_1() -> Result<()> {
+//    use filecoin_proofs::{SectorShape64GiB, SECTOR_SIZE_64_GIB};
 //    let porep_id_v1_1: u64 = 9; // This is a RegisteredSealProof value
 //
 //    let mut porep_id = [0u8; 32];
 //    porep_id[..8].copy_from_slice(&porep_id_v1_1.to_le_bytes());
 //    assert!(!is_legacy_porep_id(porep_id));
 //    seal_lifecycle::<SectorShape64GiB>(SECTOR_SIZE_64_GIB, &porep_id, ApiVersion::V1_1_0)
+//}
+
+//#[test]
+//#[ignore]
+//fn test_seal_lifecycle_upgrade_64gib_top_8_8_2_v1_1() -> Result<()> {
+//    use filecoin_proofs::{SectorShape64GiB, SECTOR_SIZE_64_GIB};
+//    seal_lifecycle_upgrade::<SectorShape64GiB>(
+//        SECTOR_SIZE_64_GIB,
+//        &ARBITRARY_POREP_ID_V1_1_0,
+//        ApiVersion::V1_1_0,
+//    )
 //}
 
 fn seal_lifecycle<Tree: 'static + MerkleTreeTrait>(
