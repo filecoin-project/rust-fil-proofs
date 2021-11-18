@@ -230,6 +230,7 @@ pub fn remove_encoded_data<Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher>
     Ok(())
 }
 
+/// Generate a single vanilla partition proof for a specified partition.
 #[allow(clippy::too_many_arguments)]
 pub fn generate_single_partition_proof<Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher>>(
     config: SectorUpdateConfig,
@@ -287,6 +288,7 @@ pub fn generate_single_partition_proof<Tree: 'static + MerkleTreeTrait<Hasher = 
     Ok(partition_proof)
 }
 
+/// Verify a single vanilla partition proof for a specified partition.
 #[allow(clippy::too_many_arguments)]
 pub fn verify_single_partition_proof<Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher>>(
     config: SectorUpdateConfig,
@@ -318,13 +320,13 @@ pub fn verify_single_partition_proof<Tree: 'static + MerkleTreeTrait<Hasher = Tr
     };
 
     let valid = EmptySectorUpdate::<Tree>::verify(&public_params, &public_inputs, &proof)?;
-    ensure!(valid, "vanilla proof is invalid");
 
     info!("verify_single_partition_proof:finish");
 
     Ok(valid)
 }
 
+/// Generate all vanilla partition proofs across all partitions.
 #[allow(clippy::too_many_arguments)]
 pub fn generate_partition_proofs<Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher>>(
     config: SectorUpdateConfig,
@@ -382,6 +384,7 @@ pub fn generate_partition_proofs<Tree: 'static + MerkleTreeTrait<Hasher = TreeRH
     Ok(partition_proofs)
 }
 
+/// Verify all vanilla partition proofs across all partitions.
 pub fn verify_partition_proofs<Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher>>(
     config: SectorUpdateConfig,
     proofs: &[PartitionProof<Tree>],
@@ -409,7 +412,6 @@ pub fn verify_partition_proofs<Tree: 'static + MerkleTreeTrait<Hasher = TreeRHas
 
     let valid =
         EmptySectorUpdate::<Tree>::verify_all_partitions(&public_params, &public_inputs, proofs)?;
-    ensure!(valid, "vanilla proofs are invalid");
 
     info!("verify_partition_proofs:finish");
 
