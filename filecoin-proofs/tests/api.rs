@@ -12,7 +12,8 @@ use ff::Field;
 use filecoin_hashers::Hasher;
 use filecoin_proofs::{
     add_piece, aggregate_seal_commit_proofs, clear_cache, compute_comm_d, decode_from, encode_into,
-    fauxrep_aux, generate_empty_sector_update_proof, generate_fallback_sector_challenges,
+    fauxrep_aux, generate_empty_sector_update_proof,
+    generate_empty_sector_update_proof_with_vanilla, generate_fallback_sector_challenges,
     generate_partition_proofs, generate_piece_commitment, generate_single_partition_proof,
     generate_single_vanilla_proof, generate_single_window_post_with_vanilla, generate_window_post,
     generate_window_post_with_vanilla, generate_winning_post,
@@ -1929,6 +1930,7 @@ fn create_seal_for_upgrade<R: Rng, Tree: 'static + MerkleTreeTrait<Hasher = Tree
     // Generate a single partition proof
     let partition_proof = generate_single_partition_proof::<Tree>(
         config,
+        0, // first partition
         comm_r,
         encoded.comm_r_new,
         encoded.comm_d_new,
@@ -1941,6 +1943,7 @@ fn create_seal_for_upgrade<R: Rng, Tree: 'static + MerkleTreeTrait<Hasher = Tree
     // Verify the single partition proof
     let proof_is_valid = verify_single_partition_proof::<Tree>(
         config,
+        0, // first partition
         partition_proof,
         comm_r,
         encoded.comm_r_new,
@@ -1963,14 +1966,30 @@ fn create_seal_for_upgrade<R: Rng, Tree: 'static + MerkleTreeTrait<Hasher = Tree
     // Verify all partition proofs
     let proofs_are_valid = verify_partition_proofs::<Tree>(
         config,
-        partition_proofs,
+        &partition_proofs,
         comm_r,
         encoded.comm_r_new,
         encoded.comm_d_new,
     )?;
     ensure!(proofs_are_valid, "Partition proofs failed to verify");
 
-    let proofs = generate_empty_sector_update_proof::<Tree>(
+    let proof = generate_empty_sector_update_proof_with_vanilla::<Tree>(
+        porep_config,
+        partition_proofs,
+        comm_r,
+        encoded.comm_r_new,
+        encoded.comm_d_new,
+    )?;
+    let valid = verify_empty_sector_update_proof::<Tree>(
+        porep_config,
+        &proof.0,
+        comm_r,
+        encoded.comm_r_new,
+        encoded.comm_d_new,
+    )?;
+    ensure!(valid, "Compound proof failed to verify");
+
+    let proof = generate_empty_sector_update_proof::<Tree>(
         porep_config,
         comm_r,
         encoded.comm_r_new,
@@ -1982,7 +2001,7 @@ fn create_seal_for_upgrade<R: Rng, Tree: 'static + MerkleTreeTrait<Hasher = Tree
     )?;
     let valid = verify_empty_sector_update_proof::<Tree>(
         porep_config,
-        &proofs.0,
+        &proof.0,
         comm_r,
         encoded.comm_r_new,
         encoded.comm_d_new,
