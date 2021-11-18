@@ -233,6 +233,7 @@ pub fn remove_encoded_data<Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher>
 #[allow(clippy::too_many_arguments)]
 pub fn generate_single_partition_proof<Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher>>(
     config: SectorUpdateConfig,
+    partition_index: usize,
     comm_r_old: Commitment,
     comm_r_new: Commitment,
     comm_d_new: Commitment,
@@ -253,8 +254,11 @@ pub fn generate_single_partition_proof<Tree: 'static + MerkleTreeTrait<Hasher = 
 
     let p_aux_old = get_p_aux::<Tree>(sector_key_cache_path)?;
 
+    let partitions = usize::from(config.update_partitions);
+    ensure!(partition_index < partitions, "invalid partition index");
+
     let public_inputs: storage_proofs_update::PublicInputs = PublicInputs {
-        k: 0,
+        k: partition_index,
         comm_r_old: comm_r_old_safe,
         comm_d_new: comm_d_new_safe,
         comm_r_new: comm_r_new_safe,
@@ -286,6 +290,7 @@ pub fn generate_single_partition_proof<Tree: 'static + MerkleTreeTrait<Hasher = 
 #[allow(clippy::too_many_arguments)]
 pub fn verify_single_partition_proof<Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher>>(
     config: SectorUpdateConfig,
+    partition_index: usize,
     proof: PartitionProof<Tree>,
     comm_r_old: Commitment,
     comm_r_new: Commitment,
@@ -301,8 +306,11 @@ pub fn verify_single_partition_proof<Tree: 'static + MerkleTreeTrait<Hasher = Tr
     let public_params: storage_proofs_update::PublicParams =
         PublicParams::from_sector_size(u64::from(config.sector_size));
 
+    let partitions = usize::from(config.update_partitions);
+    ensure!(partition_index < partitions, "invalid partition index");
+
     let public_inputs: storage_proofs_update::PublicInputs = PublicInputs {
-        k: 0,
+        k: partition_index,
         comm_r_old: comm_r_old_safe,
         comm_d_new: comm_d_new_safe,
         comm_r_new: comm_r_new_safe,
@@ -376,7 +384,7 @@ pub fn generate_partition_proofs<Tree: 'static + MerkleTreeTrait<Hasher = TreeRH
 
 pub fn verify_partition_proofs<Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher>>(
     config: SectorUpdateConfig,
-    proofs: Vec<PartitionProof<Tree>>,
+    proofs: &[PartitionProof<Tree>],
     comm_r_old: Commitment,
     comm_r_new: Commitment,
     comm_d_new: Commitment,
@@ -400,12 +408,62 @@ pub fn verify_partition_proofs<Tree: 'static + MerkleTreeTrait<Hasher = TreeRHas
     };
 
     let valid =
-        EmptySectorUpdate::<Tree>::verify_all_partitions(&public_params, &public_inputs, &proofs)?;
+        EmptySectorUpdate::<Tree>::verify_all_partitions(&public_params, &public_inputs, proofs)?;
     ensure!(valid, "vanilla proofs are invalid");
 
     info!("verify_partition_proofs:finish");
 
     Ok(valid)
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn generate_empty_sector_update_proof_with_vanilla<
+    Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher>,
+>(
+    porep_config: PoRepConfig,
+    vanilla_proofs: Vec<PartitionProof<Tree>>,
+    comm_r_old: Commitment,
+    comm_r_new: Commitment,
+    comm_d_new: Commitment,
+) -> Result<EmptySectorUpdateProof> {
+    info!("generate_empty_sector_update_proof_with_vanilla:start");
+
+    let comm_r_old_safe = <TreeRHasher as Hasher>::Domain::try_from_bytes(&comm_r_old)?;
+    let comm_r_new_safe = <TreeRHasher as Hasher>::Domain::try_from_bytes(&comm_r_new)?;
+
+    let comm_d_new_safe = DefaultPieceDomain::try_from_bytes(&comm_d_new)?;
+
+    let config = SectorUpdateConfig::from_porep_config(porep_config);
+
+    let partitions = usize::from(config.update_partitions);
+    let public_inputs: storage_proofs_update::PublicInputs = PublicInputs {
+        k: partitions,
+        comm_r_old: comm_r_old_safe,
+        comm_d_new: comm_d_new_safe,
+        comm_r_new: comm_r_new_safe,
+        h: usize::from(config.h_select),
+    };
+
+    let setup_params_compound = compound_proof::SetupParams {
+        vanilla_params: SetupParams {
+            sector_bytes: u64::from(config.sector_size),
+        },
+        partitions: Some(partitions),
+        priority: true,
+    };
+    let pub_params_compound = EmptySectorUpdateCompound::<Tree>::setup(&setup_params_compound)?;
+
+    let groth_params = get_empty_sector_update_params::<Tree>(porep_config)?;
+    let multi_proof = EmptySectorUpdateCompound::prove_with_vanilla(
+        &pub_params_compound,
+        &public_inputs,
+        vanilla_proofs,
+        &groth_params,
+    )?;
+
+    info!("generate_empty_sector_update_proof_with_vanilla:finish");
+
+    Ok(EmptySectorUpdateProof(multi_proof.to_vec()?))
 }
 
 #[allow(clippy::too_many_arguments)]
