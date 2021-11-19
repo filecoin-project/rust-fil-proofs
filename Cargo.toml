@@ -11,3 +11,8 @@ members = [
   "sha2raw",
   "filecoin-hashers",
 ]
+
+
+[patch.crates-io]
+merkletree = { git = "https://github.com/filecoin-project/merkletree", branch = "const-arity" }
+neptune = { git = "https://github.com/filecoin-project/neptune", branch = "const-arity" }

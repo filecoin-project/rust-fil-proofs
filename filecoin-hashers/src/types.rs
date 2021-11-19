@@ -81,7 +81,7 @@ pub trait HashFunction<T: Domain>: Clone + Debug + Send + Sync + LightAlgorithm<
         Self::hash_leaf_bits_circuit(cs, &left_bits, &right_bits, height)
     }
 
-    fn hash_multi_leaf_circuit<Arity: 'static + PoseidonArity, CS: ConstraintSystem<Fr>>(
+    fn hash_multi_leaf_circuit<CS: ConstraintSystem<Fr>, const ARITY: usize>(
         cs: CS,
         leaves: &[AllocatedNum<Fr>],
         height: usize,

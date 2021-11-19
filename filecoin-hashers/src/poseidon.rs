@@ -9,18 +9,18 @@ use bellperson::{
 };
 use blstrs::Scalar as Fr;
 use ff::{Field, PrimeField};
-use generic_array::typenum::{marker_traits::Unsigned, U2};
 use merkletree::{
     hash::{Algorithm as LightAlgorithm, Hashable},
     merkle::Element,
 };
-use neptune::{circuit::poseidon_hash, poseidon::Poseidon};
+use neptune::poseidon::Poseidon;
 use rand::RngCore;
 use serde::{Deserialize, Serialize};
 
+use crate::poseidon_circuit_hash;
 use crate::types::{
-    Domain, HashFunction, Hasher, PoseidonArity, PoseidonMDArity, POSEIDON_CONSTANTS_16,
-    POSEIDON_CONSTANTS_2, POSEIDON_CONSTANTS_4, POSEIDON_CONSTANTS_8, POSEIDON_MD_CONSTANTS,
+    Domain, HashFunction, Hasher, PoseidonMDArity, POSEIDON_CONSTANTS_16, POSEIDON_CONSTANTS_2,
+    POSEIDON_CONSTANTS_4, POSEIDON_CONSTANTS_8, POSEIDON_MD_CONSTANTS,
 };
 
 #[derive(Default, Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -218,7 +218,7 @@ impl HashFunction<PoseidonDomain> for PoseidonFunction {
 
     fn hash_md(input: &[PoseidonDomain]) -> PoseidonDomain {
         assert!(input.len() > 1, "hash_md needs more than one element.");
-        let arity = PoseidonMDArity::to_usize();
+        let arity = PoseidonMDArity;
 
         let mut p = Poseidon::new(&*POSEIDON_MD_CONSTANTS);
 
@@ -246,29 +246,26 @@ impl HashFunction<PoseidonDomain> for PoseidonFunction {
         right: &AllocatedNum<Fr>,
         _height: usize,
     ) -> Result<AllocatedNum<Fr>, SynthesisError> {
-        let preimage = vec![left.clone(), right.clone()];
-
-        poseidon_hash::<CS, Fr, U2>(cs, preimage, U2::PARAMETERS())
+        let preimage = [left.clone(), right.clone()];
+        poseidon_circuit_hash::<CS, 2>(cs, &preimage)
     }
 
-    fn hash_multi_leaf_circuit<Arity: 'static + PoseidonArity, CS: ConstraintSystem<Fr>>(
+    fn hash_multi_leaf_circuit<CS: ConstraintSystem<Fr>, const ARITY: usize>(
         cs: CS,
         leaves: &[AllocatedNum<Fr>],
         _height: usize,
     ) -> Result<AllocatedNum<Fr>, SynthesisError> {
-        let params = Arity::PARAMETERS();
-        poseidon_hash::<CS, Fr, Arity>(cs, leaves.to_vec(), params)
+        poseidon_circuit_hash::<CS, ARITY>(cs, &leaves)
     }
 
     fn hash_md_circuit<CS: ConstraintSystem<Fr>>(
         cs: &mut CS,
         elements: &[AllocatedNum<Fr>],
     ) -> Result<AllocatedNum<Fr>, SynthesisError> {
-        let params = PoseidonMDArity::PARAMETERS();
-        let arity = PoseidonMDArity::to_usize();
+        let arity = PoseidonMDArity;
 
         let mut hash = elements[0].clone();
-        let mut preimage = vec![hash.clone(); arity]; // Allocate. This will be overwritten.
+        let mut preimage = vec![hash.clone(); PoseidonMDArity]; // Allocate. This will be overwritten.
         for (hash_num, elts) in elements[1..].chunks(arity - 1).enumerate() {
             preimage[0] = hash;
             for (i, elt) in elts.iter().enumerate() {
@@ -284,7 +281,7 @@ impl HashFunction<PoseidonDomain> for PoseidonFunction {
                     .expect("alloc failure");
             }
             let cs = cs.namespace(|| format!("hash md {}", hash_num));
-            hash = poseidon_hash::<_, Fr, PoseidonMDArity>(cs, preimage.clone(), params)?.clone();
+            hash = poseidon_circuit_hash::<_, PoseidonMDArity>(cs, &preimage)?.clone();
         }
 
         Ok(hash)
@@ -305,8 +302,8 @@ impl HashFunction<PoseidonDomain> for PoseidonFunction {
     where
         CS: ConstraintSystem<Fr>,
     {
-        let preimage = vec![a.clone(), b.clone()];
-        poseidon_hash::<CS, Fr, U2>(cs, preimage, U2::PARAMETERS())
+        let preimage = [a.clone(), b.clone()];
+        poseidon_circuit_hash::<CS, 2>(cs, &preimage)
     }
 }
 
@@ -405,7 +402,7 @@ mod tests {
             PoseidonDomain(Fr::one().to_repr()),
         ];
 
-        let t = MerkleTree::<PoseidonDomain, PoseidonFunction, VecStore<_>, U2>::new(
+        let t = MerkleTree::<PoseidonDomain, PoseidonFunction, VecStore<_>, 2, 0, 0>::new(
             values.iter().copied(),
         )
         .expect("merkle tree new failure");
@@ -434,7 +431,7 @@ mod tests {
             PoseidonDomain(Fr::one().to_repr()),
         ];
 
-        let t = MerkleTree::<PoseidonDomain, PoseidonFunction, VecStore<_>, U2>::new(
+        let t = MerkleTree::<PoseidonDomain, PoseidonFunction, VecStore<_>, 2, 0, 0>::new(
             leaves.iter().copied(),
         )
         .expect("merkle tree new failure");
