@@ -171,6 +171,9 @@ where
     }
 }
 
+// Note: This method verifies that the tree can be build with the size
+// specified.  If the data on disk is longer, this method is safe to
+// use on the first 'size' nodes.
 pub fn create_base_merkle_tree<Tree: MerkleTreeTrait>(
     config: Option<StoreConfig>,
     size: usize,
