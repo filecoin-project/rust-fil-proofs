@@ -832,7 +832,7 @@ where
 
         // Generate tree_d over the staged_data.
         let tree_d = create_base_merkle_tree::<BinaryMerkleTree<TreeDHasher>>(
-            Some(tree_d_new_config.clone()),
+            Some(tree_d_new_config),
             base_tree_nodes_count,
             new_data.as_ref(),
         )?;
