@@ -25,8 +25,8 @@ use storage_proofs_core::{
     data::Data,
     error::Result,
     merkle::{
-        create_lc_tree, get_base_tree_count, split_config_and_replica, LCTree, MerkleProof,
-        MerkleProofTrait, MerkleTreeTrait,
+        create_base_merkle_tree, create_lc_tree, get_base_tree_count, split_config_and_replica,
+        BinaryMerkleTree, LCTree, MerkleProof, MerkleProofTrait, MerkleTreeTrait,
     },
     parameter_cache::ParameterSetMetadata,
     proof::ProofScheme,
@@ -831,9 +831,10 @@ where
         new_data.ensure_data()?;
 
         // Generate tree_d over the staged_data.
-        let tree_d = StackedDrg::<TreeR, TreeDHasher>::build_binary_tree::<TreeDHasher>(
+        let tree_d = create_base_merkle_tree::<BinaryMerkleTree<TreeDHasher>>(
+            Some(tree_d_new_config.clone()),
+            base_tree_nodes_count,
             new_data.as_ref(),
-            tree_d_new_config,
         )?;
 
         let comm_d_new = tree_d.root();
