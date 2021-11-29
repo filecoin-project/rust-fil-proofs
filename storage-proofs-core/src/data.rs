@@ -145,6 +145,36 @@ impl<'a> Data<'a> {
         Ok(())
     }
 
+    pub fn ensure_data_of_len(&mut self, len: usize) -> Result<()> {
+        match self.raw {
+            Some(..) => {}
+            None => {
+                ensure!(self.path.is_some(), "Missing path");
+                let path = self.path.as_ref().expect("path as_ref failure");
+
+                info!("restoring {}", path.display());
+
+                let f_data = OpenOptions::new()
+                    .read(true)
+                    .write(true)
+                    .open(path)
+                    .with_context(|| format!("could not open path={:?}", path))?;
+                let data = unsafe {
+                    MmapOptions::new()
+                        .len(len)
+                        .map_mut(&f_data)
+                        .with_context(|| format!("could not mmap path={:?}", path))?
+                };
+
+                ensure!(len == data.len(), "data length mismatch");
+                self.len = data.len();
+                self.raw = Some(RawData::Mmap(data));
+            }
+        }
+
+        Ok(())
+    }
+
     /// Drops the actual data, if we can recover it.
     pub fn drop_data(&mut self) -> Result<()> {
         if let Some(ref p) = self.path {

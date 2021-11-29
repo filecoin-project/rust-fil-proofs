@@ -828,7 +828,7 @@ where
 
         // Re-open staged_data as Data (type)
         let mut new_data = Data::from_path(staged_data_path.to_path_buf());
-        new_data.ensure_data()?;
+        new_data.ensure_data_of_len(sector_key_path_metadata.len() as usize)?;
 
         // Generate tree_d over the staged_data.
         let tree_d = create_base_merkle_tree::<BinaryMerkleTree<TreeDHasher>>(
