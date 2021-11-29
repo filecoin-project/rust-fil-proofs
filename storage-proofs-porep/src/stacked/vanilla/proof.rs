@@ -829,6 +829,36 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         })
     }
 
+    fn prepare_tree_r_data_cpu(
+        source: &DiskStore<<Tree::Hasher as Hasher>::Domain>,
+        data: Option<&mut Data<'_>>,
+        start: usize,
+        end: usize,
+    ) -> Result<TreeRElementData<Tree>> {
+        let encoded_data: Vec<<Tree::Hasher as Hasher>::Domain> = source
+            .read_range(start..end)?
+            .into_par_iter()
+            .zip(
+                data.expect("failed to unwrap data").as_mut()
+                    [(start * NODE_SIZE)..(end * NODE_SIZE)]
+                    .par_chunks_mut(NODE_SIZE),
+            )
+            .map(|(key, data_node_bytes)| {
+                let data_node = <Tree::Hasher as Hasher>::Domain::try_from_bytes(data_node_bytes)
+                    .expect("try from bytes failed");
+
+                let key_elem = <Tree::Hasher as Hasher>::Domain::try_from_bytes(&key.into_bytes())
+                    .expect("failed to convert key");
+                let encoded_node = encode::<<Tree::Hasher as Hasher>::Domain>(key_elem, data_node);
+                data_node_bytes.copy_from_slice(AsRef::<[u8]>::as_ref(&encoded_node));
+
+                encoded_node
+            })
+            .collect();
+
+        Ok(TreeRElementData::ElementList(encoded_data))
+    }
+
     #[cfg(any(feature = "cuda", feature = "opencl"))]
     fn prepare_tree_r_data(
         source: &DiskStore<<Tree::Hasher as Hasher>::Domain>,
@@ -870,31 +900,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
 
             Ok(TreeRElementData::FrList(encoded_data))
         } else {
-            let encoded_data: Vec<<Tree::Hasher as Hasher>::Domain> = source
-                .read_range(start..end)?
-                .into_par_iter()
-                .zip(
-                    data.expect("failed to unwrap data").as_mut()
-                        [(start * NODE_SIZE)..(end * NODE_SIZE)]
-                        .par_chunks_mut(NODE_SIZE),
-                )
-                .map(|(key, data_node_bytes)| {
-                    let data_node =
-                        <Tree::Hasher as Hasher>::Domain::try_from_bytes(data_node_bytes)
-                            .expect("try from bytes failed");
-
-                    let key_elem =
-                        <Tree::Hasher as Hasher>::Domain::try_from_bytes(&key.into_bytes())
-                            .expect("failed to convert key");
-                    let encoded_node =
-                        encode::<<Tree::Hasher as Hasher>::Domain>(key_elem, data_node);
-                    data_node_bytes.copy_from_slice(AsRef::<[u8]>::as_ref(&encoded_node));
-
-                    encoded_node
-                })
-                .collect();
-
-            Ok(TreeRElementData::ElementList(encoded_data))
+            Self::prepare_tree_r_data_cpu(source, data, start, end)
         }
     }
 
@@ -905,28 +911,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         start: usize,
         end: usize,
     ) -> Result<TreeRElementData<Tree>> {
-        let encoded_data: Vec<<Tree::Hasher as Hasher>::Domain> = source
-            .read_range(start..end)?
-            .into_par_iter()
-            .zip(
-                data.expect("failed to unwrap data").as_mut()
-                    [(start * NODE_SIZE)..(end * NODE_SIZE)]
-                    .par_chunks_mut(NODE_SIZE),
-            )
-            .map(|(key, data_node_bytes)| {
-                let data_node = <Tree::Hasher as Hasher>::Domain::try_from_bytes(data_node_bytes)
-                    .expect("try from bytes failed");
-
-                let key_elem = <Tree::Hasher as Hasher>::Domain::try_from_bytes(&key.into_bytes())
-                    .expect("failed to convert key");
-                let encoded_node = encode::<<Tree::Hasher as Hasher>::Domain>(key_elem, data_node);
-                data_node_bytes.copy_from_slice(AsRef::<[u8]>::as_ref(&encoded_node));
-
-                encoded_node
-            })
-            .collect();
-
-        Ok(TreeRElementData::ElementList(encoded_data))
+        Self::prepare_tree_r_data_cpu(source, data, start, end)
     }
 
     #[cfg(any(feature = "cuda", feature = "opencl"))]
