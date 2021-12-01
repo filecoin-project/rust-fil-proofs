@@ -1038,11 +1038,12 @@ where
         replica_path: &Path,
         replica_cache_path: &Path,
         data_path: &Path,
+        tree_r_last_new_config: StoreConfig,
         comm_c: TreeRDomain,
         comm_d_new: TreeDDomain,
         comm_sector_key: TreeRDomain,
         h: usize,
-    ) -> Result<()> {
+    ) -> Result<TreeRDomain> {
         // Sanity check all input path types.
         ensure!(
             metadata(sector_key_cache_path)?.is_dir(),
@@ -1149,6 +1150,23 @@ where
             })?;
         sector_key_data.flush()?;
 
-        Ok(())
+        // Open the new written sector_key data as a DiskStore.
+        let sector_key_store: DiskStore<TreeRDomain> =
+            DiskStore::new_from_slice(nodes_count, &sector_key_data[0..])?;
+
+        // This argument is currently unused by this invocation, but required for the API.
+        let mut unused_data = Data::empty();
+
+        let tree_r_last = StackedDrg::<TreeR, TreeDHasher>::generate_tree_r_last::<TreeR::Arity>(
+            &mut unused_data,
+            base_tree_nodes_count,
+            tree_count,
+            tree_r_last_new_config,
+            sector_key_cache_path.to_path_buf(),
+            &sector_key_store,
+            Some(Self::prepare_tree_r_data),
+        )?;
+
+        Ok(tree_r_last.root())
     }
 }

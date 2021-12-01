@@ -1,8 +1,9 @@
-use std::fs;
+use std::fs::{self, File};
+use std::io::Write;
 use std::path::Path;
 
 use anyhow::{ensure, Context, Result};
-use bincode::deserialize;
+use bincode::{deserialize, serialize};
 use filecoin_hashers::{Domain, Hasher};
 use generic_array::typenum::Unsigned;
 use log::info;
@@ -44,6 +45,21 @@ fn get_p_aux<Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher>>(
     Ok(p_aux)
 }
 
+fn persist_p_aux<Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher>>(
+    p_aux: &PersistentAux<<Tree::Hasher as Hasher>::Domain>,
+    cache_path: &Path,
+) -> Result<()> {
+    let p_aux_path = cache_path.join(CacheKey::PAux.to_string());
+    let mut f_p_aux = File::create(&p_aux_path)
+        .with_context(|| format!("could not create file p_aux={:?}", p_aux_path))?;
+    let p_aux_bytes = serialize(&p_aux)?;
+    f_p_aux
+        .write_all(&p_aux_bytes)
+        .with_context(|| format!("could not write to file p_aux={:?}", p_aux_path))?;
+
+    Ok(())
+}
+
 // Instantiates t_aux from the specified cache_dir for access to
 // labels and tree_d, tree_c, tree_r_last store configs
 fn get_t_aux<Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher>>(
@@ -56,6 +72,21 @@ fn get_t_aux<Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher>>(
     let res: TemporaryAux<Tree, DefaultPieceHasher> = deserialize(&t_aux_bytes)?;
 
     Ok(res)
+}
+
+fn persist_t_aux<Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher>>(
+    t_aux: &TemporaryAux<Tree, DefaultPieceHasher>,
+    cache_path: &Path,
+) -> Result<()> {
+    let t_aux_path = cache_path.join(CacheKey::TAux.to_string());
+    let mut f_t_aux = File::create(&t_aux_path)
+        .with_context(|| format!("could not create file t_aux={:?}", t_aux_path))?;
+    let t_aux_bytes = serialize(&t_aux)?;
+    f_t_aux
+        .write_all(&t_aux_bytes)
+        .with_context(|| format!("could not write to file t_aux={:?}", t_aux_path))?;
+
+    Ok(())
 }
 
 // Re-instantiate a t_aux with the new cache path, then use the tree_d
@@ -157,6 +188,12 @@ pub fn encode_into<Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher>>(
         "pieces and comm_d do not match"
     );
 
+    // Persist p_aux and t_aux into the new_cache_path here
+    let mut p_aux = p_aux;
+    p_aux.comm_r_last = comm_r_last_domain;
+    persist_p_aux::<Tree>(&p_aux, new_cache_path)?;
+    persist_t_aux::<Tree>(&t_aux, new_cache_path)?;
+
     info!("encode_into:finish");
 
     Ok(EmptySectorUpdateEncoded {
@@ -211,20 +248,31 @@ pub fn remove_encoded_data<Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher>
     info!("remove_data:start");
 
     let p_aux = get_p_aux::<Tree>(replica_cache_path)?;
+    let t_aux = get_t_aux::<Tree>(replica_cache_path)?;
+
+    let (_, tree_r_last_new_config) =
+        get_new_configs_from_t_aux_old::<Tree>(&t_aux, sector_key_cache_path, config.nodes_count)?;
 
     let nodes_count = config.nodes_count;
-    EmptySectorUpdate::<Tree>::remove_encoded_data(
+    let tree_r_last_new = EmptySectorUpdate::<Tree>::remove_encoded_data(
         nodes_count,
         sector_key_path,
         sector_key_cache_path,
         replica_path,
         replica_cache_path,
         data_path,
+        tree_r_last_new_config,
         <Tree::Hasher as Hasher>::Domain::try_from_bytes(&p_aux.comm_c.into_bytes())?,
         comm_d_new.into(),
         <Tree::Hasher as Hasher>::Domain::try_from_bytes(&p_aux.comm_r_last.into_bytes())?,
         usize::from(config.h_select),
     )?;
+
+    // Persist p_aux and t_aux into the sector_key_cache_path here
+    let mut p_aux = p_aux;
+    p_aux.comm_r_last = tree_r_last_new;
+    persist_p_aux::<Tree>(&p_aux, sector_key_cache_path)?;
+    persist_t_aux::<Tree>(&t_aux, sector_key_cache_path)?;
 
     info!("remove_data:finish");
     Ok(())
