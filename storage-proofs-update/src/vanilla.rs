@@ -800,7 +800,7 @@ where
         );
         ensure!(
             staged_data_path_metadata.len() >= sector_key_path_metadata.len(),
-            "Staged data and sector key file size mis-match (must be equal)"
+            "Staged data and sector key file size mis-match (must be equal or greater than)"
         );
 
         info!(
@@ -1076,8 +1076,8 @@ where
             "Replica and sector key file size mis-match (must be equal)"
         );
         ensure!(
-            replica_path_metadata.len() == data_path_metadata.len(),
-            "Replica and data file size mis-match (must be equal)"
+            replica_path_metadata.len() <= data_path_metadata.len(),
+            "Replica and data file size mis-match (must be equal or less than)"
         );
 
         info!(
