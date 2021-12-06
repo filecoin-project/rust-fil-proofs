@@ -27,6 +27,6 @@ impl From<usize> for HSelect {
 
 impl HSelect {
     pub fn from_nodes(nodes_count: usize) -> Self {
-        HSelect::from(storage_proofs_update::constants::hs(nodes_count)[2])
+        HSelect::from(storage_proofs_update::constants::hs(nodes_count)[3])
     }
 }
