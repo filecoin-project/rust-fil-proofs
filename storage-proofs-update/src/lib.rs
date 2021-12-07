@@ -5,6 +5,7 @@ pub(crate) mod gadgets;
 pub mod vanilla;
 
 mod challenges;
+pub mod circuit_poseidon;
 
 pub use self::challenges::Challenges;
 pub use self::circuit::EmptySectorUpdateCircuit;
