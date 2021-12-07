@@ -117,7 +117,7 @@ where
         let priv_inputs = circuit_poseidon::PrivateInputs::new(comm_c, &challenge_proofs);
 
         let circuit = EmptySectorUpdateCircuit::<TreeR> {
-            pub_params: pub_params.clone(),
+            pub_params,
             pub_inputs,
             priv_inputs,
         };
