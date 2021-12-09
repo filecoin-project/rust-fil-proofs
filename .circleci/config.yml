@@ -186,7 +186,7 @@ jobs:
             ulimit -u 20000
             ulimit -n 20000
             cargo +<< pipeline.parameters.nightly-toolchain >> test --all --verbose --release << parameters.cargo-args >> -- --nocapture << parameters.test-args >>
-            cargo +<< pipeline.parameters.nightly-toolchain >> test test_seal_lifecycle_upgrade" --verbose --release << parameters.cargo-args >> -- --nocapture --ignored
+            cargo +<< pipeline.parameters.nightly-toolchain >> test test_seal_lifecycle_upgrade --verbose --release << parameters.cargo-args >> -- --nocapture --ignored
           no_output_timeout: 30m
           environment:
             FIL_PROOFS_USE_GPU_COLUMN_BUILDER: true
