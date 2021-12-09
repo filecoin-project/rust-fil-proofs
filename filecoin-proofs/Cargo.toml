@@ -72,6 +72,7 @@ opencl = [
     "filecoin-hashers/opencl",
     "fr32/opencl",
 ]
+multicore-sdr = ["storage-proofs-porep/multicore-sdr"]
 
 [[bench]]
 name = "preprocessing"
