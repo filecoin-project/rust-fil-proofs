@@ -92,6 +92,12 @@ jobs:
             ulimit -n 20000
             cargo +$(cat rust-toolchain) test --verbose --release --workspace
             RUSTFLAGS="-D warnings" cargo +$(cat rust-toolchain) build --examples --release --workspace
+            cargo +$(cat rust-toolchain) test -p storage-proofs-update --features isolated-testing --release test_empty_sector_update_circuit_1kib
+            cargo +$(cat rust-toolchain) test -p storage-proofs-update --features isolated-testing --release test_empty_sector_update_circuit_2kib
+            cargo +$(cat rust-toolchain) test -p storage-proofs-update --features isolated-testing --release test_empty_sector_update_circuit_4kib
+            cargo +$(cat rust-toolchain) test -p storage-proofs-update --features isolated-testing --release test_empty_sector_update_circuit_8kib
+            cargo +$(cat rust-toolchain) test -p storage-proofs-update --features isolated-testing --release test_empty_sector_update_circuit_16kib
+            cargo +$(cat rust-toolchain) test -p storage-proofs-update --features isolated-testing --release test_empty_sector_update_circuit_32kib
           no_output_timeout: 30m
 
   test_ignored_release:
@@ -180,6 +186,7 @@ jobs:
             ulimit -u 20000
             ulimit -n 20000
             cargo +<< pipeline.parameters.nightly-toolchain >> test --all --verbose --release << parameters.cargo-args >> -- --nocapture << parameters.test-args >>
+            cargo +<< pipeline.parameters.nightly-toolchain >> test test_seal_lifecycle_upgrade --verbose --release << parameters.cargo-args >> -- --nocapture --ignored
           no_output_timeout: 30m
           environment:
             FIL_PROOFS_USE_GPU_COLUMN_BUILDER: true
@@ -346,7 +353,7 @@ commands:
     steps:
       - save_cache:
           name: "Save parameter cache"
-          key: proof-params-v28-f-{{ checksum "filecoin-proofs/parameters.json" }}
+          key: proof-params-v28-k-{{ checksum "filecoin-proofs/parameters.json" }}
           paths:
             - "/tmp/paramcache.awesome"
             - "/tmp/filecoin-proof-parameters/"
@@ -354,7 +361,7 @@ commands:
     steps:
       - restore_cache:
           name: "Restore parameter cache"
-          key: proof-params-v28-f-{{ checksum "filecoin-proofs/parameters.json" }}
+          key: proof-params-v28-k-{{ checksum "filecoin-proofs/parameters.json" }}
 
 workflows:
   version: 2.1
@@ -410,7 +417,7 @@ workflows:
 
       - test_gpu_tree_building:
           name: test_gpu_tree_building_opencl (ignored)
-          test-args: "--ignored"
+          test-args: "--ignored --skip test_seal_lifecycle_upgrade"
           requires:
             - cargo_fetch
             - ensure_groth_parameters_and_keys_linux

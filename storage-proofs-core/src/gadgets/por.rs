@@ -452,13 +452,11 @@ impl<'a, Tree: MerkleTreeTrait> PoRCircuit<Tree> {
     }
 }
 
-/// Synthesizes a non-compound arity PoR without adding a public input for the challenge (whereas
-/// `PoRCircuit` adds one public input for the challenge). This PoR gadget allows the caller to pack
-/// mulitple PoR challenges into a single public input when the challenge bit length is less than
-/// `Fr::Capacity`.
+/// Synthesizes a PoR proof without adding a public input for the challenge (whereas `PoRCircuit`
+/// adds a public input for the packed challenge bits).
 pub fn por_no_challenge_input<Tree, CS>(
-    cs: &mut CS,
-    // Least significant bit first, most significant bit last.
+    mut cs: CS,
+    // little-endian
     challenge_bits: Vec<AllocatedBit>,
     leaf: AllocatedNum<Fr>,
     path_values: Vec<Vec<AllocatedNum<Fr>>>,
@@ -468,44 +466,134 @@ where
     Tree: MerkleTreeTrait,
     CS: ConstraintSystem<Fr>,
 {
-    let arity = Tree::Arity::to_usize();
-    let arity_bit_len = arity.trailing_zeros() as usize;
-    let challenge_bit_len = challenge_bits.len();
-    let height = path_values.len();
+    let base_arity = Tree::Arity::to_usize();
+    let sub_arity = Tree::SubTreeArity::to_usize();
+    let top_arity = Tree::TopTreeArity::to_usize();
 
-    // Check that all path elements are consistent with the arity.
-    assert!(path_values
-        .iter()
-        .all(|siblings| siblings.len() == arity - 1));
+    // Validate `Tree`'s shape. This gadget requires that all non-zero arities are a power of two.
+    assert!(base_arity.is_power_of_two());
+    assert!(sub_arity.is_power_of_two() || sub_arity == 0);
+    assert!(top_arity.is_power_of_two() || top_arity == 0);
+    if top_arity > 0 {
+        assert!(sub_arity > 0);
+    }
 
-    // Check that the challenge bit length is consistent with the height and arity.
-    assert_eq!(challenge_bit_len, arity_bit_len * height);
+    // All non-zero `Tree` arities are guaranteed to be a power of two, thus the number of low zeros
+    // gives the number of bits required to represent an integer in `0..arity` (a Merkle proof
+    // insertion index). `challenge_bits` is the concatentation of the Merkle proof's insertion
+    // indexes which is equal to the challenge's (an integer in `0..leafs`) binary representation.
+    let base_arity_bit_len = base_arity.trailing_zeros();
+    let sub_arity_bit_len = sub_arity.trailing_zeros();
+    let top_arity_bit_len = top_arity.trailing_zeros();
 
-    let challenge_bits: Vec<Boolean> = challenge_bits.into_iter().map(Boolean::from).collect();
+    let base_path_len = if top_arity > 0 {
+        path_values.len() - 2
+    } else if sub_arity > 0 {
+        path_values.len() - 1
+    } else {
+        path_values.len()
+    };
 
-    // Compute a root from the provided path and check equality with the provided root.
     let mut cur = leaf;
-    for (height, (siblings, insert_index)) in path_values
-        .iter()
-        .zip(challenge_bits.chunks(arity_bit_len))
-        .enumerate()
-    {
-        let inputs = insert(
-            &mut cs.namespace(|| format!("merkle insert, height {}", height)),
+    let mut height = 0;
+    let mut path_values = path_values.into_iter();
+    let mut challenge_bits = challenge_bits.into_iter().map(Boolean::from);
+
+    // Hash base-tree Merkle proof elements.
+    for _ in 0..base_path_len {
+        let siblings = path_values.next().expect("no path elements remaining");
+        assert_eq!(
+            siblings.len(),
+            base_arity - 1,
+            "path element has incorrect number of siblings"
+        );
+        let insert_index: Vec<Boolean> = (0..base_arity_bit_len)
+            .map(|_| challenge_bits.next().expect("no challenge bits remaining"))
+            .collect();
+        let preimg = insert(
+            &mut cs.namespace(|| format!("merkle proof insert (height={})", height)),
             &cur,
-            insert_index,
-            siblings,
+            &insert_index,
+            &siblings,
         )?;
         cur = <<Tree::Hasher as Hasher>::Function as HashFunction<
             <Tree::Hasher as Hasher>::Domain,
         >>::hash_multi_leaf_circuit::<Tree::Arity, _>(
-            cs.namespace(|| format!("merkle hash, height {}", height)),
-            &inputs,
+            cs.namespace(|| format!("merkle proof hash (height={})", height)),
+            &preimg,
+            height,
+        )?;
+        height += 1;
+    }
+
+    // If one exists, hash the sub-tree Merkle proof element.
+    if sub_arity > 0 {
+        let siblings = path_values.next().expect("no path elements remaining");
+        assert_eq!(
+            siblings.len(),
+            sub_arity - 1,
+            "path element has incorrect number of siblings"
+        );
+        let insert_index: Vec<Boolean> = (0..sub_arity_bit_len)
+            .map(|_| challenge_bits.next().expect("no challenge bits remaining"))
+            .collect();
+        let preimg = insert(
+            &mut cs.namespace(|| format!("merkle proof insert (height={})", height)),
+            &cur,
+            &insert_index,
+            &siblings,
+        )?;
+        cur = <<Tree::Hasher as Hasher>::Function as HashFunction<
+            <Tree::Hasher as Hasher>::Domain,
+        >>::hash_multi_leaf_circuit::<Tree::SubTreeArity, _>(
+            cs.namespace(|| format!("merkle proof hash (height={})", height)),
+            &preimg,
+            height,
+        )?;
+        height += 1;
+    }
+
+    // If one exists, hash the top-tree Merkle proof element.
+    if top_arity > 0 {
+        let siblings = path_values.next().expect("no path elements remaining");
+        assert_eq!(
+            siblings.len(),
+            top_arity - 1,
+            "path element has incorrect number of siblings"
+        );
+        let insert_index: Vec<Boolean> = (0..top_arity_bit_len)
+            .map(|_| challenge_bits.next().expect("no challenge bits remaining"))
+            .collect();
+        let preimg = insert(
+            &mut cs.namespace(|| format!("merkle proof insert (height={})", height)),
+            &cur,
+            &insert_index,
+            &siblings,
+        )?;
+        cur = <<Tree::Hasher as Hasher>::Function as HashFunction<
+            <Tree::Hasher as Hasher>::Domain,
+        >>::hash_multi_leaf_circuit::<Tree::TopTreeArity, _>(
+            cs.namespace(|| format!("merkle proof hash (height={})", height)),
+            &preimg,
             height,
         )?;
     }
+
+    // Check that no additional challenge bits were provided.
+    assert!(
+        challenge_bits.next().is_none(),
+        "challenge bit-length and tree arity do not agree"
+    );
+
+    // Assert equality between the computed root and the provided root.
     let computed_root = cur;
-    constraint::equal(cs, || "merkle root equality", &computed_root, &root);
+
+    cs.enforce(
+        || "calculated root == provided root",
+        |lc| lc + computed_root.get_variable(),
+        |lc| lc + CS::one(),
+        |lc| lc + root.get_variable(),
+    );
 
     Ok(())
 }

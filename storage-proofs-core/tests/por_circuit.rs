@@ -1,3 +1,5 @@
+use std::path::Path;
+
 use bellperson::{
     gadgets::{boolean::AllocatedBit, multipack, num::AllocatedNum},
     util_cs::test_cs::TestConstraintSystem,
@@ -6,11 +8,14 @@ use bellperson::{
 use blstrs::Scalar as Fr;
 use ff::Field;
 use filecoin_hashers::{
-    blake2s::Blake2sHasher, poseidon::PoseidonHasher, sha256::Sha256Hasher, Domain, Hasher,
+    blake2s::Blake2sHasher,
+    poseidon::{PoseidonDomain, PoseidonHasher},
+    sha256::Sha256Hasher,
+    Domain, Hasher, PoseidonArity,
 };
 use fr32::{bytes_into_fr, fr_into_bytes};
 use generic_array::typenum::{Unsigned, U0, U2, U4, U8};
-use merkletree::store::VecStore;
+use merkletree::store::{StoreConfig, VecStore};
 use pretty_assertions::assert_eq;
 use rand::{Rng, SeedableRng};
 use rand_xorshift::XorShiftRng;
@@ -20,14 +25,15 @@ use storage_proofs_core::{
         challenge_into_auth_path_bits, por_no_challenge_input, PoRCircuit, PoRCompound,
     },
     merkle::{
-        create_base_merkle_tree, generate_tree, get_base_tree_count, MerkleProofTrait,
+        create_base_merkle_tree, generate_tree, get_base_tree_count, DiskTree, MerkleProofTrait,
         MerkleTreeTrait, MerkleTreeWrapper, ResTree,
     },
     por::{self, PoR},
     proof::ProofScheme,
-    util::data_at_node,
+    util::{data_at_node, default_rows_to_discard},
     TEST_SEED,
 };
+use tempfile::tempdir;
 
 type TreeBase<H, A> = MerkleTreeWrapper<H, VecStore<<H as Hasher>::Domain>, A, U0, U0>;
 type TreeSub<H, A, B> = MerkleTreeWrapper<H, VecStore<<H as Hasher>::Domain>, A, B, U0>;
@@ -275,95 +281,229 @@ fn test_por_circuit_private_root<Tree: MerkleTreeTrait>(num_constraints: usize) 
     }
 }
 
-#[test]
-fn test_por_no_challenge_input() {
-    type Arity = U8;
-    type Tree = TreeBase<PoseidonHasher, Arity>;
+fn create_tree<Tree: MerkleTreeTrait>(
+    labels: &[<<Tree as MerkleTreeTrait>::Hasher as Hasher>::Domain],
+    tmp_path: &Path,
+) -> MerkleTreeWrapper<Tree::Hasher, Tree::Store, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>
+{
+    let sector_nodes = labels.len();
+    let tree_name = Tree::display();
+    let base_arity = Tree::Arity::to_usize();
+    let sub_arity = Tree::SubTreeArity::to_usize();
+    let top_arity = Tree::TopTreeArity::to_usize();
 
-    // == Setup
+    // Create a single base-tree, a single sub-tree (out of base-trees), or a single top-tree
+    // (out of sub-trees, each made of base-trees).
+    if sub_arity == 0 && top_arity == 0 {
+        let config = StoreConfig::new(
+            tmp_path,
+            tree_name.clone(),
+            default_rows_to_discard(sector_nodes, base_arity),
+        );
+        let leafs = labels.iter().copied().map(Ok);
+        MerkleTreeWrapper::try_from_iter_with_config(leafs, config)
+            .unwrap_or_else(|_| panic!("failed to create non-compound-tree {}", tree_name))
+    } else if top_arity == 0 {
+        let base_tree_count = sub_arity;
+        let leafs_per_base_tree = sector_nodes / base_tree_count;
+        let rows_to_discard = default_rows_to_discard(leafs_per_base_tree, base_arity);
+        let base_trees: Vec<MerkleTreeWrapper<Tree::Hasher, Tree::Store, Tree::Arity>> = (0
+            ..base_tree_count)
+            .map(|i| {
+                let config = StoreConfig::new(
+                    tmp_path,
+                    format!("{}-base-{}", tree_name, i),
+                    rows_to_discard,
+                );
+                let leafs = labels[i * leafs_per_base_tree..(i + 1) * leafs_per_base_tree]
+                    .iter()
+                    .copied()
+                    .map(Ok);
+                MerkleTreeWrapper::try_from_iter_with_config(leafs, config)
+                    .unwrap_or_else(|_| panic!("failed to create {} base-tree {}", tree_name, i))
+            })
+            .collect();
+        MerkleTreeWrapper::from_trees(base_trees)
+            .unwrap_or_else(|_| panic!("failed to create {} from base-trees", tree_name))
+    } else {
+        let base_tree_count = top_arity * sub_arity;
+        let sub_tree_count = top_arity;
+        let leafs_per_base_tree = sector_nodes / base_tree_count;
+        let base_trees_per_sub_tree = sub_arity;
+        let rows_to_discard = default_rows_to_discard(leafs_per_base_tree, base_arity);
+        let sub_trees: Vec<
+            MerkleTreeWrapper<Tree::Hasher, Tree::Store, Tree::Arity, Tree::SubTreeArity>,
+        > = (0..sub_tree_count)
+            .map(|sub_index| {
+                let first_sub_leaf = sub_index * base_trees_per_sub_tree * leafs_per_base_tree;
+                let base_trees: Vec<MerkleTreeWrapper<Tree::Hasher, Tree::Store, Tree::Arity>> = (0
+                    ..base_trees_per_sub_tree)
+                    .map(|base_index| {
+                        let config = StoreConfig::new(
+                            tmp_path,
+                            format!("{}-sub-{}-base-{}", tree_name, sub_index, base_index),
+                            rows_to_discard,
+                        );
+                        let first_base_leaf = first_sub_leaf + base_index * leafs_per_base_tree;
+                        let leafs = labels[first_base_leaf..first_base_leaf + leafs_per_base_tree]
+                            .iter()
+                            .copied()
+                            .map(Ok);
+                        MerkleTreeWrapper::try_from_iter_with_config(leafs, config).unwrap_or_else(
+                            |_| {
+                                panic!(
+                                    "failed to create {} sub-tree {} base-tree {}",
+                                    tree_name, sub_index, base_index,
+                                )
+                            },
+                        )
+                    })
+                    .collect();
+                MerkleTreeWrapper::from_trees(base_trees).unwrap_or_else(|_| {
+                    panic!(
+                        "failed to create {} sub-tree {} from base-trees",
+                        tree_name, sub_index,
+                    )
+                })
+            })
+            .collect();
+        MerkleTreeWrapper::from_sub_trees(sub_trees)
+            .unwrap_or_else(|_| panic!("failed to create {} from sub-trees", tree_name))
+    }
+}
+
+fn test_por_no_challenge_input<U, V, W>(sector_nodes: usize)
+where
+    U: PoseidonArity,
+    V: PoseidonArity,
+    W: PoseidonArity,
+{
     let mut rng = XorShiftRng::from_seed(TEST_SEED);
 
-    let height = 3;
-    let n_leaves = Arity::to_usize() << height;
+    let challenge_bit_len = sector_nodes.trailing_zeros() as usize;
 
-    let data: Vec<u8> = (0..n_leaves)
-        .flat_map(|_| fr_into_bytes(&Fr::random(&mut rng)))
+    // Merkle tree storage directory.
+    let tmp_dir = tempdir().unwrap();
+    let tmp_path = tmp_dir.path();
+
+    // Create random TreeROld.
+    let leafs: Vec<PoseidonDomain> = (0..sector_nodes)
+        .map(|_| PoseidonDomain::random(&mut rng))
         .collect();
-
-    let tree = create_base_merkle_tree::<Tree>(None, n_leaves, &data)
-        .expect("create_base_merkle_tree failure");
+    let tree = create_tree::<DiskTree<PoseidonHasher, U, V, W>>(&leafs, tmp_path);
     let root = tree.root();
 
-    let challenge = rng.gen::<usize>() % n_leaves;
-    let leaf_bytes = data_at_node(&data, challenge).expect("data_at_node failure");
-    let leaf = bytes_into_fr(leaf_bytes).expect("bytes_into_fr failure");
-
-    // == Vanilla PoR proof
-    let proof = {
-        use por::{PoR, PrivateInputs, PublicInputs, PublicParams};
-        let pub_params = PublicParams {
-            leaves: n_leaves,
-            private: false,
-        };
-        let pub_inputs = PublicInputs {
-            challenge,
-            commitment: None,
-        };
-        let priv_inputs = PrivateInputs {
-            leaf: leaf.into(),
-            tree: &tree,
-        };
-        let proof =
-            PoR::<Tree>::prove(&pub_params, &pub_inputs, &priv_inputs).expect("proving failed");
-        let is_valid =
-            PoR::<Tree>::verify(&pub_params, &pub_inputs, &proof).expect("verification failed");
-        assert!(is_valid, "failed to verify por proof");
-        proof.proof
-    };
-
-    // == Test PoR gadget
     let mut cs = TestConstraintSystem::<Fr>::new();
 
-    let challenge_bit_len = n_leaves.trailing_zeros() as usize;
-    let challenge: Vec<AllocatedBit> = (0..challenge_bit_len)
-        .map(|i| {
-            AllocatedBit::alloc(
-                cs.namespace(|| format!("challenge bit {}", i)),
-                Some((challenge >> i) & 1 == 1),
-            )
-            .expect("failed to allocate challenge bit")
-        })
-        .collect();
+    let root = AllocatedNum::alloc(cs.namespace(|| "root"), || Ok(root.into())).unwrap();
 
-    let leaf = AllocatedNum::alloc(cs.namespace(|| "leaf".to_string()), || Ok(leaf))
-        .expect("failed to allocate leaf");
+    for c_index in 0..100 {
+        let c = rng.gen::<usize>() % sector_nodes;
+        let leaf = leafs[c];
 
-    let path_values: Vec<Vec<AllocatedNum<Fr>>> = proof
-        .path()
-        .iter()
-        .enumerate()
-        .map(|(height, (siblings, _insert_index))| {
-            siblings
-                .iter()
-                .enumerate()
-                .map(|(sib_index, &sib)| {
-                    AllocatedNum::alloc(
-                        cs.namespace(|| format!("sib {}, height {}", sib_index, height)),
-                        || Ok(sib.into()),
-                    )
-                    .expect("failed to allocate sibling")
-                })
-                .collect()
-        })
-        .collect();
+        // Vanilla PoR proof
+        let proof = {
+            let pub_params = por::PublicParams {
+                leaves: sector_nodes,
+                private: false,
+            };
+            let pub_inputs = por::PublicInputs {
+                challenge: c,
+                commitment: None,
+            };
+            let priv_inputs =
+                por::PrivateInputs::<DiskTree<PoseidonHasher, U, V, W>> { leaf, tree: &tree };
+            let proof = PoR::prove(&pub_params, &pub_inputs, &priv_inputs).expect("proving failed");
+            let is_valid =
+                PoR::<DiskTree<PoseidonHasher, U, V, W>>::verify(&pub_params, &pub_inputs, &proof)
+                    .expect("verification failed");
+            assert!(is_valid, "failed to verify por proof");
+            proof.proof
+        };
 
-    let root = AllocatedNum::alloc(cs.namespace(|| "root".to_string()), || Ok(root.into()))
-        .expect("failed to allocate root");
+        let leaf = AllocatedNum::alloc(
+            cs.namespace(|| format!("leaf (c_index={})", c_index)),
+            || Ok(leaf.into()),
+        )
+        .unwrap();
 
-    por_no_challenge_input::<Tree, _>(&mut cs, challenge, leaf, path_values, root)
-        .expect("por gadget failed");
+        let c_bits: Vec<AllocatedBit> = (0..challenge_bit_len)
+            .map(|i| {
+                AllocatedBit::alloc(
+                    cs.namespace(|| {
+                        format!("challenge_bit (c_index={}, bit_index={})", c_index, i)
+                    }),
+                    Some((c >> i) & 1 == 1),
+                )
+                .unwrap()
+            })
+            .collect();
+
+        let path_values: Vec<Vec<AllocatedNum<Fr>>> = proof
+            .path()
+            .into_iter()
+            .enumerate()
+            .map(|(height, (siblings, _insert))| {
+                siblings
+                    .into_iter()
+                    .enumerate()
+                    .map(|(i, sibling)| {
+                        AllocatedNum::alloc(
+                            cs.namespace(|| {
+                                format!(
+                                    "merkle path sibling (c_index={}, height={}, sibling_index={})",
+                                    c_index, height, i,
+                                )
+                            }),
+                            || Ok(sibling.into()),
+                        )
+                        .unwrap()
+                    })
+                    .collect()
+            })
+            .collect();
+
+        por_no_challenge_input::<DiskTree<PoseidonHasher, U, V, W>, _>(
+            cs.namespace(|| format!("por (c_index={})", c_index)),
+            c_bits,
+            leaf,
+            path_values,
+            root.clone(),
+        )
+        .unwrap();
+    }
 
     assert!(cs.is_satisfied());
-    let public_inputs = vec![];
-    assert!(cs.verify(&public_inputs));
+    let pub_inputs = vec![];
+    assert!(cs.verify(&pub_inputs));
+}
+
+// Test non-compound tree.
+#[test]
+fn test_por_no_challenge_input_2kib_8_0_0() {
+    test_por_no_challenge_input::<U8, U0, U0>(1 << 6);
+}
+
+// Test compound base-sub tree with repeated arity.
+#[test]
+fn test_por_no_challenge_input_2kib_8_8_0() {
+    test_por_no_challenge_input::<U8, U8, U0>(1 << 6);
+}
+
+// Test compound base-sub tree.
+#[test]
+fn test_por_no_challenge_input_8kib_8_4_0() {
+    test_por_no_challenge_input::<U8, U4, U0>(1 << 8);
+}
+
+// Test compound base-sub tree.
+#[test]
+fn test_por_no_challenge_input_8kib_8_4_2() {
+    test_por_no_challenge_input::<U8, U4, U2>(1 << 9);
+}
+
+// Test compound base-sub-top tree with repeated arity.
+#[test]
+fn test_por_no_challenge_input_32kib_8_8_2() {
+    test_por_no_challenge_input::<U8, U8, U2>(1 << 10);
 }

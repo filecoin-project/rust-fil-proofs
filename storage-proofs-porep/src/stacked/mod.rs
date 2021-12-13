@@ -1,5 +1,6 @@
 mod circuit;
-mod vanilla;
+
+pub(crate) mod vanilla;
 
 pub use circuit::*;
 pub use vanilla::*;

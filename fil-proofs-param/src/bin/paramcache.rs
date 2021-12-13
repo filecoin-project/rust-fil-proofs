@@ -22,6 +22,11 @@ use storage_proofs_core::{
 };
 use storage_proofs_porep::stacked::{StackedCircuit, StackedCompound, StackedDrg};
 use storage_proofs_post::fallback::{FallbackPoSt, FallbackPoStCircuit, FallbackPoStCompound};
+use storage_proofs_update::constants::TreeRHasher;
+use storage_proofs_update::{
+    circuit::EmptySectorUpdateCircuit, compound::EmptySectorUpdateCompound, EmptySectorUpdate,
+    PublicParams,
+};
 use structopt::StructOpt;
 
 fn cache_porep_params<Tree: 'static + MerkleTreeTrait>(porep_config: PoRepConfig) {
@@ -113,14 +118,37 @@ fn cache_window_post_params<Tree: 'static + MerkleTreeTrait>(post_config: &PoStC
             .expect("failed to get verifying key");
 }
 
+fn cache_empty_sector_update_params<Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher>>(
+    porep_config: PoRepConfig,
+) {
+    info!("generating EmptySectorUpdate groth params");
+
+    let public_params: storage_proofs_update::PublicParams =
+        PublicParams::from_sector_size(u64::from(porep_config.sector_size));
+
+    let _ = <EmptySectorUpdateCompound<Tree> as CompoundProof<
+        EmptySectorUpdate<Tree>,
+        EmptySectorUpdateCircuit<Tree>,
+    >>::groth_params::<OsRng>(Some(&mut OsRng), &public_params)
+    .expect("failed to get groth params");
+
+    let _ = <EmptySectorUpdateCompound<Tree> as CompoundProof<
+        EmptySectorUpdate<Tree>,
+        EmptySectorUpdateCircuit<Tree>,
+    >>::verifying_key::<OsRng>(Some(&mut OsRng), &public_params)
+    .expect("failed to get verifying key");
+}
+
 #[derive(Debug, StructOpt)]
 #[structopt(
     name = "paramcache",
-    about = "generates and caches SDR PoRep, Winning-PoSt, and Window-PoSt groth params"
+    about = "generates and caches SDR PoRep, Winning-PoSt, Window-PoSt, and EmptySectorUpdate groth params"
 )]
 struct Opt {
     #[structopt(long, help = "Only cache PoSt groth params.")]
     only_post: bool,
+    #[structopt(long, help = "Only cache EmptySectorUpdate groth params.")]
+    only_sector_update: bool,
     #[structopt(
         short = "z",
         long,
@@ -173,6 +201,25 @@ fn generate_params_porep(sector_size: u64, api_version: ApiVersion) {
     with_shape!(
         sector_size,
         cache_porep_params,
+        PoRepConfig {
+            sector_size: SectorSize(sector_size),
+            partitions: PoRepProofPartitions(
+                *POREP_PARTITIONS
+                    .read()
+                    .expect("POREP_PARTITIONS poisoned")
+                    .get(&sector_size)
+                    .expect("unknown sector size"),
+            ),
+            porep_id: [0; 32],
+            api_version,
+        }
+    );
+}
+
+fn generate_params_empty_sector_update(sector_size: u64, api_version: ApiVersion) {
+    with_shape!(
+        sector_size,
+        cache_empty_sector_update_params,
         PoRepConfig {
             sector_size: SectorSize(sector_size),
             partitions: PoRepProofPartitions(
@@ -253,10 +300,15 @@ pub fn main() {
         spinner.set_message(&message);
         spinner.enable_steady_tick(100);
 
-        generate_params_post(sector_size, api_version);
+        if opts.only_sector_update {
+            generate_params_empty_sector_update(sector_size, api_version);
+        } else {
+            generate_params_post(sector_size, api_version);
 
-        if !opts.only_post {
-            generate_params_porep(sector_size, api_version);
+            if !opts.only_post {
+                generate_params_porep(sector_size, api_version);
+                generate_params_empty_sector_update(sector_size, api_version);
+            }
         }
 
         spinner.finish_with_message(&format!("✔ {}", &message));

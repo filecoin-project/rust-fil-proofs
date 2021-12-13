@@ -11,6 +11,10 @@ use rand::rngs::OsRng;
 use storage_proofs_core::{compound_proof::CompoundProof, merkle::MerkleTreeTrait};
 use storage_proofs_porep::stacked::{StackedCompound, StackedDrg};
 use storage_proofs_post::fallback::{FallbackPoSt, FallbackPoStCircuit, FallbackPoStCompound};
+use storage_proofs_update::{
+    circuit::EmptySectorUpdateCircuit, compound::EmptySectorUpdateCompound, constants::TreeRHasher,
+    EmptySectorUpdate, PublicParams,
+};
 
 use crate::{
     constants::{DefaultPieceHasher, PUBLISHED_SECTOR_SIZES},
@@ -263,6 +267,38 @@ pub fn get_post_params<Tree: 'static + MerkleTreeTrait>(
     }
 }
 
+pub fn get_empty_sector_update_params<Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher>>(
+    porep_config: PoRepConfig,
+) -> Result<Arc<Bls12GrothParams>> {
+    let public_params: storage_proofs_update::PublicParams =
+        PublicParams::from_sector_size(u64::from(porep_config.sector_size));
+
+    let parameters_generator = || {
+        // This is required for production and should replace the use
+        // of the RNG below for testing.
+        /*<EmptySectorUpdateCompound<Tree> as CompoundProof<
+            EmptySectorUpdate<Tree>,
+            EmptySectorUpdateCircuit<Tree>,
+        >>::groth_params::<OsRng>(None, &public_params)
+        .map_err(Into::into)*/
+
+        let mut rng = rand::rngs::OsRng; // FIXME: test parameters only
+        <EmptySectorUpdateCompound<Tree> as CompoundProof<
+            EmptySectorUpdate<Tree>,
+            EmptySectorUpdateCircuit<Tree>,
+        >>::groth_params::<OsRng>(Some(&mut rng), &public_params)
+        .map_err(Into::into)
+    };
+
+    lookup_groth_params(
+        format!(
+            "SECTOR-UPDATE[{}]",
+            usize::from(PaddedBytesAmount::from(porep_config))
+        ),
+        parameters_generator,
+    )
+}
+
 pub fn get_stacked_verifying_key<Tree: 'static + MerkleTreeTrait>(
     porep_config: PoRepConfig,
 ) -> Result<Arc<Bls12PreparedVerifyingKey>> {
@@ -400,5 +436,38 @@ pub fn get_stacked_srs_verifier_key<Tree: 'static + MerkleTreeTrait>(
             num_proofs_to_aggregate,
         ),
         srs_verifier_generator,
+    )
+}
+
+pub fn get_empty_sector_update_verifying_key<
+    Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher>,
+>(
+    porep_config: PoRepConfig,
+) -> Result<Arc<Bls12PreparedVerifyingKey>> {
+    let public_params: storage_proofs_update::PublicParams =
+        PublicParams::from_sector_size(u64::from(porep_config.sector_size));
+
+    let vk_generator = || {
+        // This is required for production and should replace the use
+        // of the RNG below for testing.
+        /*let vk = <EmptySectorUpdateCompound<Tree> as CompoundProof<
+            EmptySectorUpdate<Tree>,
+            EmptySectorUpdateCircuit<Tree>,
+        >>::verifying_key::<OsRng>(None, &public_params)?;*/
+
+        let mut rng = rand::rngs::OsRng; // FIXME: test parameters only
+        let vk = <EmptySectorUpdateCompound<Tree> as CompoundProof<
+            EmptySectorUpdate<Tree>,
+            EmptySectorUpdateCircuit<Tree>,
+        >>::verifying_key::<OsRng>(Some(&mut rng), &public_params)?;
+        Ok(prepare_verifying_key(&vk))
+    };
+
+    lookup_verifying_key(
+        format!(
+            "SECTOR-UPDATE[{}]",
+            usize::from(PaddedBytesAmount::from(porep_config))
+        ),
+        vk_generator,
     )
 }

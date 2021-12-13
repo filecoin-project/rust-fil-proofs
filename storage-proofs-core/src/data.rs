@@ -100,6 +100,14 @@ impl<'a> Data<'a> {
         }
     }
 
+    pub fn empty() -> Self {
+        Data {
+            raw: None,
+            path: None,
+            len: 0,
+        }
+    }
+
     pub fn len(&self) -> usize {
         self.len
     }
@@ -129,6 +137,36 @@ impl<'a> Data<'a> {
                         .with_context(|| format!("could not mmap path={:?}", path))?
                 };
 
+                self.len = data.len();
+                self.raw = Some(RawData::Mmap(data));
+            }
+        }
+
+        Ok(())
+    }
+
+    pub fn ensure_data_of_len(&mut self, len: usize) -> Result<()> {
+        match self.raw {
+            Some(..) => {}
+            None => {
+                ensure!(self.path.is_some(), "Missing path");
+                let path = self.path.as_ref().expect("path as_ref failure");
+
+                info!("restoring {}", path.display());
+
+                let f_data = OpenOptions::new()
+                    .read(true)
+                    .write(true)
+                    .open(path)
+                    .with_context(|| format!("could not open path={:?}", path))?;
+                let data = unsafe {
+                    MmapOptions::new()
+                        .len(len)
+                        .map_mut(&f_data)
+                        .with_context(|| format!("could not mmap path={:?}", path))?
+                };
+
+                ensure!(len == data.len(), "data length mismatch");
                 self.len = data.len();
                 self.raw = Some(RawData::Mmap(data));
             }

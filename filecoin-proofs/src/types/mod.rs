@@ -11,6 +11,7 @@ use storage_proofs_post::fallback;
 use crate::constants::DefaultPieceHasher;
 
 mod bytes_amount;
+mod hselect;
 mod piece_info;
 mod porep_config;
 mod porep_proof_partitions;
@@ -20,8 +21,11 @@ mod private_replica_info;
 mod public_replica_info;
 mod sector_class;
 mod sector_size;
+mod sector_update_config;
+mod update_proof_partitions;
 
 pub use bytes_amount::*;
+pub use hselect::*;
 pub use piece_info::*;
 pub use porep_config::*;
 pub use porep_proof_partitions::*;
@@ -31,6 +35,8 @@ pub use private_replica_info::*;
 pub use public_replica_info::*;
 pub use sector_class::*;
 pub use sector_size::*;
+pub use sector_update_config::*;
+pub use update_proof_partitions::*;
 
 pub type Commitment = [u8; 32];
 pub type ChallengeSeed = [u8; 32];
@@ -83,12 +89,17 @@ pub struct SealPreCommitPhase1Output<Tree: MerkleTreeTrait> {
 }
 
 #[repr(transparent)]
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct PartitionSnarkProof(pub Vec<u8>);
 
 pub type SnarkProof = Vec<u8>;
 pub type AggregateSnarkProof = Vec<u8>;
 pub type VanillaProof<Tree> = fallback::Proof<<Tree as MerkleTreeTrait>::Proof>;
+pub type PartitionProof<Tree> = storage_proofs_update::vanilla::PartitionProof<Tree>;
+
+#[derive(Debug, Clone, PartialEq)]
+#[repr(transparent)]
+pub struct EmptySectorUpdateProof(pub Vec<u8>);
 
 // This FallbackPoStSectorProof is used during Fallback PoSt, but
 // contains only Vanilla proof information and is not a full Fallback
@@ -102,4 +113,10 @@ pub struct FallbackPoStSectorProof<Tree: MerkleTreeTrait> {
         deserialize = "VanillaProof<Tree>: Deserialize<'de>"
     ))]
     pub vanilla_proof: VanillaProof<Tree>, // Has comm_c, comm_r_last, inclusion_proofs
+}
+
+pub struct EmptySectorUpdateEncoded {
+    pub comm_r_new: Commitment,
+    pub comm_r_last_new: Commitment,
+    pub comm_d_new: Commitment,
 }

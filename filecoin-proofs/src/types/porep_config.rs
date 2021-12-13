@@ -54,7 +54,7 @@ impl From<PoRepConfig> for SectorSize {
 }
 
 impl PoRepConfig {
-    /// Returns the cache identifier as used by `storage-proofs::paramater_cache`.
+    /// Returns the cache identifier as used by `storage-proofs::parameter_cache`.
     pub fn get_cache_identifier<Tree: 'static + MerkleTreeTrait>(&self) -> Result<String> {
         let params = public_params::<Tree>(
             self.sector_size.into(),

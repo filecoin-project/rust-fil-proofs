@@ -25,10 +25,7 @@ use filecoin_proofs::{
 };
 use log::info;
 use serde::{Deserialize, Serialize};
-use storage_proofs_core::api_version::ApiVersion;
-use storage_proofs_core::merkle::MerkleTreeTrait;
-use storage_proofs_core::sector::SectorId;
-
+use storage_proofs_core::{api_version::ApiVersion, merkle::MerkleTreeTrait, sector::SectorId};
 const SECTOR_ID: u64 = 0;
 
 const PIECE_FILE: &str = "piece-file";
