@@ -1,3 +1,5 @@
+//! This circuit is NOT AUDITED, USE AT YOUR OWN RISK.
+
 use std::marker::PhantomData;
 
 use bellperson::{
@@ -347,6 +349,7 @@ impl<TreeR> Circuit<Fr> for EmptySectorUpdateCircuit<TreeR>
 where
     TreeR: MerkleTreeTrait<Hasher = TreeRHasher>,
 {
+    /// This circuit is NOT AUDITED, USE AT YOUR OWN RISK.
     fn synthesize<CS: ConstraintSystem<Fr>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
         #[allow(unused_variables)]
         let EmptySectorUpdateCircuit {
@@ -391,7 +394,7 @@ where
                 1,
                 "h_select does not have exactly one bit set"
             );
-            // The remanining bits should be zero.
+            // The remaining bits should be zero.
             assert!(bits[h_select_bit_len..].iter().all(|bit| !*bit));
         }
 
@@ -506,7 +509,7 @@ where
         );
 
         let partition =
-            AllocatedNum::alloc(cs.namespace(|| "gen_challenge_bits parition zero"), || {
+            AllocatedNum::alloc(cs.namespace(|| "gen_challenge_bits partition zero"), || {
                 Ok(Fr::zero())
             })?;
         // Generate `challenge_bit_len` number of random bits for each challenge.
