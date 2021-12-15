@@ -197,7 +197,7 @@ fn test_empty_sector_update_circuit_32kib() {
 }
 
 #[test]
-#[cfg(feature = "isolated-testing")]
+#[ignore]
 fn test_empty_sector_update_constraints_32gib() {
     type TreeR = MerkleTreeWrapper<TreeRHasher, DiskStore<TreeRDomain>, U8, U8, U0>;
     let pub_inputs = circuit::PublicInputs::empty();

@@ -20,8 +20,7 @@ use storage_proofs_core::{
 
 use crate::{
     constants::{
-        challenge_count, hs, partition_count, validate_tree_r_shape, TreeRDomain, TreeRHasher,
-        POSEIDON_CONSTANTS_GEN_RANDOMNESS,
+        hs, validate_tree_r_shape, TreeRDomain, TreeRHasher, POSEIDON_CONSTANTS_GEN_RANDOMNESS,
     },
     gadgets::{gen_challenge_bits, get_challenge_high_bits, label_r_new},
     PublicParams,
@@ -264,6 +263,11 @@ where
     }
 }
 
+pub const fn challenge_count(sector_nodes: usize) -> usize {
+    use crate::constants::{challenge_count, partition_count};
+    challenge_count(sector_nodes) * partition_count(sector_nodes)
+}
+
 #[derive(Clone)]
 pub struct PrivateInputs<TreeR>
 where
@@ -304,12 +308,14 @@ where
     }
 
     pub fn empty(sector_nodes: usize) -> Self {
-        let challenge_count = challenge_count(sector_nodes) * partition_count(sector_nodes);
         PrivateInputs {
             comm_c: None,
             root_r_old: None,
             root_r_new: None,
-            challenge_proofs: vec![ChallengeProof::empty(sector_nodes); challenge_count],
+            challenge_proofs: vec![
+                ChallengeProof::empty(sector_nodes);
+                challenge_count(sector_nodes)
+            ],
         }
     }
 }
@@ -351,18 +357,8 @@ where
 {
     /// This circuit is NOT AUDITED, USE AT YOUR OWN RISK.
     fn synthesize<CS: ConstraintSystem<Fr>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
-        #[allow(unused_variables)]
         let EmptySectorUpdateCircuit {
-            pub_params:
-                PublicParams {
-                    sector_nodes,
-                    challenge_count,
-                    challenge_bit_len,
-                    partition_count,
-                    partition_bit_len,
-                    apex_leaf_count,
-                    apex_leaf_bit_len,
-                },
+            pub_params: PublicParams { sector_nodes, .. },
             pub_inputs:
                 PublicInputs {
                     h_select,
@@ -375,10 +371,11 @@ where
                     comm_c,
                     root_r_old,
                     root_r_new,
-
                     challenge_proofs,
                 },
         } = self;
+
+        let challenge_bit_len = sector_nodes.trailing_zeros() as usize;
 
         validate_tree_r_shape::<TreeR>(sector_nodes);
         let hs = hs(sector_nodes);
@@ -398,7 +395,7 @@ where
             assert!(bits[h_select_bit_len..].iter().all(|bit| !*bit));
         }
 
-        assert_eq!(challenge_proofs.len(), challenge_count * partition_count);
+        assert_eq!(challenge_proofs.len(), challenge_count(sector_nodes));
 
         // Allocate public-inputs.
 
@@ -408,7 +405,7 @@ where
         })?;
         h_select.inputize(cs.namespace(|| "h_select (public input)"))?;
 
-        // Split `k_and_h_select` into partition and h-select bits.
+        // `h_select` binary decomposition`
         let h_select_bits = {
             let bit_len = h_select_bit_len;
 
@@ -512,15 +509,14 @@ where
             AllocatedNum::alloc(cs.namespace(|| "gen_challenge_bits partition zero"), || {
                 Ok(Fr::zero())
             })?;
+
         // Generate `challenge_bit_len` number of random bits for each challenge.
-        // For each challenge generate a random index in `0..number of leafs per partition`; we
-        // append the partition-index's bits onto the random bits generated for each challenge
-        // producing a challenge in `0..sector_nodes`.
+        // For each challenge generate a random index in `0..sector_nodes`
         let generated_bits = gen_challenge_bits(
             cs.namespace(|| "gen_challenge_bits"),
             &comm_r_new,
             &partition,
-            challenge_count * partition_count,
+            challenge_count(sector_nodes),
             challenge_bit_len,
         )?;
 

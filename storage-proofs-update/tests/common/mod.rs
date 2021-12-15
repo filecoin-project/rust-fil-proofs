@@ -1,31 +1,21 @@
 use std::path::Path;
 
-use bellperson::{util_cs::test_cs::TestConstraintSystem, Circuit};
 use blstrs::Scalar as Fr;
-use filecoin_hashers::{Domain, HashFunction, Hasher};
-use generic_array::typenum::{Unsigned, U0, U2, U4, U8};
-use merkletree::store::{DiskStore, StoreConfig};
-use rand::SeedableRng;
-use rand_xorshift::XorShiftRng;
+use filecoin_hashers::{Domain, Hasher};
+use generic_array::typenum::Unsigned;
+use merkletree::store::StoreConfig;
+
 use storage_proofs_core::{
     merkle::{MerkleTreeTrait, MerkleTreeWrapper},
     util::default_rows_to_discard,
-    TEST_SEED,
 };
-use storage_proofs_update::{
-    circuit,
-    constants::{
-        apex_leaf_count, hs, partition_count, validate_tree_r_shape, TreeD, TreeDDomain,
-        TreeRDomain, TreeRHasher, SECTOR_SIZE_16_KIB, SECTOR_SIZE_1_KIB, SECTOR_SIZE_2_KIB,
-        SECTOR_SIZE_32_KIB, SECTOR_SIZE_4_KIB, SECTOR_SIZE_8_KIB,
-    },
-    phi, rho, vanilla, Challenges, EmptySectorUpdateCircuit, PublicParams,
-};
-use tempfile::tempdir;
+use storage_proofs_update::{constants::TreeRDomain, rho};
 
 // Selects a value for `h` via `h = hs[log2(h_select)]`; default to taking `h = hs[2]`.
+#[allow(dead_code)]
 pub const H_SELECT: u64 = 1 << 2;
 
+#[allow(dead_code)]
 pub fn create_tree<Tree: MerkleTreeTrait>(
     labels: &[<<Tree as MerkleTreeTrait>::Hasher as Hasher>::Domain],
     tmp_path: &Path,

@@ -474,7 +474,7 @@ where
 // `phi = H(comm_d_new, comm_r_old)` where Poseidon uses the custom "gen randomness" domain
 // separation tag.
 #[inline]
-pub fn phi<TreeD: Domain>(comm_d_new: &TreeD, comm_r_old: &TreeRDomain) -> TreeRDomain {
+pub fn phi<TreeDDomain: Domain>(comm_d_new: &TreeDDomain, comm_r_old: &TreeRDomain) -> TreeRDomain {
     let comm_d_new: Fr = (*comm_d_new).into();
     let comm_r_old: Fr = (*comm_r_old).into();
     Poseidon::new_with_preimage(

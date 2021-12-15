@@ -17,7 +17,6 @@ use storage_proofs_core::{
 
 use storage_proofs_update::{
     circuit_poseidon,
-    circuit_poseidon::EmptySectorUpdateCircuit,
     constants::{
         apex_leaf_count, hs, partition_count, validate_tree_r_shape, TreeD, TreeDDomain,
         TreeRDomain, TreeRHasher, SECTOR_SIZE_16_KIB, SECTOR_SIZE_1_KIB, SECTOR_SIZE_2_KIB,
@@ -116,7 +115,7 @@ where
 
         let priv_inputs = circuit_poseidon::PrivateInputs::new(comm_c, &challenge_proofs);
 
-        let circuit = EmptySectorUpdateCircuit::<TreeR> {
+        let circuit = circuit_poseidon::EmptySectorUpdateCircuit::<TreeR> {
             pub_params,
             pub_inputs,
             priv_inputs,
@@ -145,14 +144,14 @@ fn test_empty_sector_update_circuit_8kib() {
 }
 
 #[test]
-#[cfg(feature = "isolated-testing")]
+#[ignore]
 fn test_empty_sector_update_constraints_32gib() {
     type TreeR = MerkleTreeWrapper<TreeRHasher, DiskStore<TreeRDomain>, U8, U8, U0>;
     let pub_inputs = circuit_poseidon::PublicInputs::empty();
 
     let priv_inputs = circuit_poseidon::PrivateInputs::empty(SECTOR_SIZE_32_GIB);
 
-    let circuit = EmptySectorUpdateCircuit::<TreeR> {
+    let circuit = circuit_poseidon::EmptySectorUpdateCircuit::<TreeR> {
         pub_params: PublicParams::from_sector_size(SECTOR_SIZE_32_GIB as u64 * 32),
         pub_inputs,
         priv_inputs,
@@ -160,7 +159,5 @@ fn test_empty_sector_update_constraints_32gib() {
 
     let mut cs = BenchCS::<Fr>::new();
     circuit.synthesize(&mut cs).expect("failed to synthesize");
-    //assert!(cs.is_satisfied());
-    //assert!(cs.verify(&pub_inputs_vec));
     assert_eq!(cs.num_constraints(), 22305906)
 }
