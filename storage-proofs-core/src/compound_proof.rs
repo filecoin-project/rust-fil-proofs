@@ -83,6 +83,7 @@ where
         pub_in: &S::PublicInputs,
         priv_in: &S::PrivateInputs,
         groth_params: &'b groth16::MappedParameters<Bls12>,
+	isWinPost: bool,
     ) -> Result<MultiProof<'b>> {
         let partition_count = Self::partition_count(pub_params);
 
@@ -90,13 +91,17 @@ where
         ensure!(partition_count > 0, "There must be partitions");
 
         info!("vanilla_proofs:start");
-        let vanilla_proofs =
-            S::prove_all_partitions(&pub_params.vanilla_params, pub_in, priv_in, partition_count)?;
+        let vanilla_proofs = S::prove_all_partitions(
+            &pub_params.vanilla_params,
+            &pub_in,
+            priv_in,
+            partition_count,
+        )?;
 
         info!("vanilla_proofs:finish");
 
         let sanity_check =
-            S::verify_all_partitions(&pub_params.vanilla_params, pub_in, &vanilla_proofs)?;
+            S::verify_all_partitions(&pub_params.vanilla_params, &pub_in, &vanilla_proofs)?;
         ensure!(sanity_check, "sanity check failed");
 
         info!("snark_proof:start");
@@ -106,6 +111,7 @@ where
             &pub_params.vanilla_params,
             groth_params,
             pub_params.priority,
+	    isWinPost,
         )?;
         info!("snark_proof:finish");
 
@@ -117,6 +123,7 @@ where
         pub_in: &S::PublicInputs,
         vanilla_proofs: Vec<S::Proof>,
         groth_params: &'b groth16::MappedParameters<Bls12>,
+	isWinPost: bool,
     ) -> Result<MultiProof<'b>> {
         let partition_count = Self::partition_count(pub_params);
 
@@ -130,6 +137,7 @@ where
             &pub_params.vanilla_params,
             groth_params,
             pub_params.priority,
+            isWinPost,
         )?;
         info!("snark_proof:finish");
 
@@ -165,7 +173,7 @@ where
             .collect::<Result<_>>()?;
 
         let proofs: Vec<_> = multi_proof.circuit_proofs.iter().collect();
-        let res = verify_proofs_batch(pvk, &mut OsRng, &proofs, &inputs)?;
+        let res = verify_proofs_batch(&pvk, &mut OsRng, &proofs, &inputs)?;
         Ok(res)
     }
 
@@ -220,7 +228,7 @@ where
             .flat_map(|m| m.circuit_proofs.iter())
             .collect();
 
-        let res = verify_proofs_batch(pvk, &mut OsRng, &circuit_proofs[..], &inputs)?;
+        let res = verify_proofs_batch(&pvk, &mut OsRng, &circuit_proofs[..], &inputs)?;
 
         Ok(res)
     }
@@ -235,6 +243,7 @@ where
         pub_params: &S::PublicParams,
         groth_params: &groth16::MappedParameters<Bls12>,
         priority: bool,
+	isWinPost: bool,
     ) -> Result<Vec<groth16::Proof<Bls12>>> {
         let mut rng = OsRng;
         ensure!(
@@ -247,19 +256,19 @@ where
             .enumerate()
             .map(|(k, vanilla_proof)| {
                 Self::circuit(
-                    pub_in,
+                    &pub_in,
                     C::ComponentPrivateInputs::default(),
                     &vanilla_proof,
-                    pub_params,
+                    &pub_params,
                     Some(k),
                 )
             })
             .collect::<Result<Vec<_>>>()?;
 
         let groth_proofs = if priority {
-            create_random_proof_batch_in_priority(circuits, groth_params, &mut rng)?
+            create_random_proof_batch_in_priority(circuits, groth_params, &mut rng, isWinPost)?
         } else {
-            create_random_proof_batch(circuits, groth_params, &mut rng)?
+            create_random_proof_batch(circuits, groth_params, &mut rng, isWinPost)?
         };
 
         groth_proofs
@@ -426,7 +435,7 @@ where
         );
 
         let partitions_are_verified =
-            S::verify_all_partitions(vanilla_params, public_inputs, &vanilla_proofs)
+            S::verify_all_partitions(vanilla_params, &public_inputs, &vanilla_proofs)
                 .context("failed to verify partition proofs")?;
 
         ensure!(partitions_are_verified, "Vanilla proof didn't verify.");
@@ -470,7 +479,7 @@ where
         );
 
         let partitions_are_verified =
-            S::verify_all_partitions(vanilla_params, public_inputs, &vanilla_proofs)
+            S::verify_all_partitions(vanilla_params, &public_inputs, &vanilla_proofs)
                 .context("failed to verify partition proofs")?;
 
         ensure!(partitions_are_verified, "Vanilla proof didn't verify.");
