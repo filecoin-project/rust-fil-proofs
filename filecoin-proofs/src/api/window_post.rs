@@ -85,7 +85,7 @@ pub fn generate_window_post_with_vanilla<Tree: 'static + MerkleTreeTrait>(
         &pub_inputs,
         partitioned_proofs,
         &groth_params,
-	false,
+	    false,
     )?;
 
     info!("generate_window_post_with_vanilla:finish");

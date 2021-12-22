@@ -86,7 +86,7 @@ pub fn generate_winning_post_with_vanilla<Tree: 'static + MerkleTreeTrait>(
         &pub_inputs,
         partitioned_proofs,
         &groth_params,
-	true,
+	    true,
     )?;
     let proof = proof.to_vec()?;
 

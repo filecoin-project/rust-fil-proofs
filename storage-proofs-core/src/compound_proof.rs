@@ -123,7 +123,7 @@ where
         pub_in: &S::PublicInputs,
         vanilla_proofs: Vec<S::Proof>,
         groth_params: &'b groth16::MappedParameters<Bls12>,
-	isWinPost: bool,
+	    isWinPost: bool,
     ) -> Result<MultiProof<'b>> {
         let partition_count = Self::partition_count(pub_params);
 
