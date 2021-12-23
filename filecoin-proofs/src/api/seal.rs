@@ -513,7 +513,7 @@ pub fn seal_commit_phase2<Tree: 'static + MerkleTreeTrait>(
         &compound_public_params.vanilla_params,
         &groth_params,
         compound_public_params.priority,
-	    false,
+        false,
     )?;
     trace!("snark_proof:finish");
 

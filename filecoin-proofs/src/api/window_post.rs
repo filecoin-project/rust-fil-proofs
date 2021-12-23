@@ -169,7 +169,8 @@ pub fn generate_window_post<Tree: 'static + MerkleTreeTrait>(
         sectors: &priv_sectors,
     };
 
-    let proof = FallbackPoStCompound::prove(&pub_params, &pub_inputs, &priv_inputs, &groth_params, false)?;
+    let proof =
+        FallbackPoStCompound::prove(&pub_params, &pub_inputs, &priv_inputs, &groth_params, false)?;
 
     info!("generate_window_post:finish");
 
