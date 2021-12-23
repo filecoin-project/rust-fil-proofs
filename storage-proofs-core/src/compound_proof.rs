@@ -264,7 +264,7 @@ where
         let groth_proofs = if priority {
             create_random_proof_batch_in_priority(circuits, groth_params, &mut rng, isWinPost)?
         } else {
-            create_random_proof_batch(circuits, groth_params, &mut rng)?
+            create_random_proof_batch(circuits, groth_params, &mut rng, isWinPost)?
         };
 
         groth_proofs
