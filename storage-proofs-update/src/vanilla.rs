@@ -706,7 +706,7 @@ where
             })
             .collect::<Result<Vec<ChallengeProof<TreeR>>>>()?;
 
-        info!("finished generating challege-proofs for partition k={}", k);
+        info!("finished generating challenge-proofs for partition k={}", k);
 
         Ok(PartitionProof {
             comm_c: *comm_c,
