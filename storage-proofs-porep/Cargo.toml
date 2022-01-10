@@ -11,7 +11,7 @@ readme = "README.md"
 [dependencies]
 crossbeam = "0.8"
 digest = "0.9"
-storage-proofs-core = { path = "../storage-proofs-core", version = "^10.0.0", default-features = false}
+storage-proofs-core = { path = "../storage-proofs-core", version = "^11.0.0", default-features = false}
 sha2raw = { path = "../sha2raw", version = "^6.0.0"}
 filecoin-hashers = { path = "../filecoin-hashers", version = "^6.0.0", default-features = false, features = ["poseidon", "sha256"]}
 rand = "0.8"
