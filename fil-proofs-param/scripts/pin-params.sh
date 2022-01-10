@@ -3,12 +3,12 @@ set -Eeuo pipefail
 
 # pin-params.sh
 #
-# - Post the directory of params to cluster.ipfs.io
-# - Grab the CID for the previous params from proofs.filecoin.io
-# - Add the old params as a `prev` dir to the new params dir to keep them around.
+# - Post the directory of params to cluster.ipfs.io
+# - Grab the CID for the previous params from proofs.filecoin.io
+# - TODO: Add the old params as a `prev` dir to the new params dir to keep them around.
 # - Pin the new cid on cluster
-# - Publish the new cid as a dnslink to proofs.filecoin.io
-# - The gateways will pin the new dir by checking proofs.filecoin.io hourly.
+# - Publish the new cid as a dnslink to proofs.filecoin.io
+# - The gateways will pin the new dir by checking proofs.filecoin.io hourly.
 #
 # Requires:
 #  - `ipfs-cluster-ctl` - download from https://dist.ipfs.io/#ipfs-cluster-ctl
@@ -79,7 +79,7 @@ ipfs-cluster-ctl \
 
 echo "ok! Pin request sent to additional cluster"
 
-# Publist the new cid to the dnslink
+# Publish the new cid to the dnslink
 npx dnslink-dnsimple --domain $DNSLINK_DOMAIN --link "/ipfs/$ROOT_CID"
 
 echo "done!"
