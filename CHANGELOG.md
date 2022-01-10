@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://book.async.rs/overview
 
 ## Unreleased
 
+## [11.0.0] - 2022-01-10
+
+- NOTE: This release contains the SnapDeals related API and funtionality, however the parameters referenced in the parameters.json are NOT
+mainnet ready and will be replaced in a future version.  This release is intended for testing SnapDeals only.
+- Update paramcache to properly generate .meta files for Empty Sector Update parameters [#1519](https://github.com/filecoin-project/rust-fil-proofs/pull/1519)
+- Add support for Empty Sector Update proofs (SnapDeal) [#1519](https://github.com/filecoin-project/rust-fil-proofs/pull/1519)
+- Expose multicore sdr feature explicitly [#1510](https://github.com/filecoin-project/rust-fil-proofs/pull/1510)
+- Reset multicore sdr consumer [#1535](https://github.com/filecoin-project/rust-fil-proofs/pull/1535)
+- Update heim dep to current master branch [#1539](https://github.com/filecoin-project/rust-fil-proofs/pull/1539)
+
 ## [10.1.0] - 2021-10-25
 
 - Allow window post proving on a single partition basis [#1526](https://github.com/filecoin-project/rust-fil-proofs/pull/1526)
@@ -290,7 +300,8 @@ and this project adheres to [Semantic Versioning](https://book.async.rs/overview
 
 - Initial stable release
 
-[Unreleased]: https://github.com/filecoin-project/rust-fil-proofs/compare/v10.1.0...HEAD
+[Unreleased]: https://github.com/filecoin-project/rust-fil-proofs/compare/v11.0.0...HEAD
+[11.0.0]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v11.0.0
 [10.1.0]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v10.1.0
 [10.0.0]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v10.0.0
 [9.0.2]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v9.0.2
