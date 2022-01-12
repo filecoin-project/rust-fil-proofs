@@ -153,9 +153,13 @@ fn cache_empty_sector_update_params<Tree: 'static + MerkleTreeTrait<Hasher = Tre
     about = "generates and caches SDR PoRep, Winning-PoSt, Window-PoSt, and EmptySectorUpdate groth params"
 )]
 struct Opt {
-    #[structopt(long, help = "Only cache PoSt groth params.")]
+    #[structopt(long, group = "onlyonecache", help = "Only cache PoSt groth params.")]
     only_post: bool,
-    #[structopt(long, help = "Only cache EmptySectorUpdate groth params.")]
+    #[structopt(
+        long,
+        group = "onlyonecache",
+        help = "Only cache EmptySectorUpdate groth params."
+    )]
     only_sector_update: bool,
     #[structopt(
         short = "z",
