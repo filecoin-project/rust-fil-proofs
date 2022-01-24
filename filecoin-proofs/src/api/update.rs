@@ -6,7 +6,7 @@ use anyhow::{ensure, Context, Result};
 use bincode::{deserialize, serialize};
 use filecoin_hashers::{Domain, Hasher};
 use generic_array::typenum::Unsigned;
-use log::info;
+use log::{info, trace};
 use merkletree::merkle::get_merkle_tree_len;
 use merkletree::store::StoreConfig;
 use storage_proofs_core::{
@@ -66,11 +66,13 @@ fn get_t_aux<Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher>>(
     cache_path: &Path,
 ) -> Result<TemporaryAux<Tree, DefaultPieceHasher>> {
     let t_aux_path = cache_path.join(CacheKey::TAux.to_string());
+    trace!("Instantiating TemporaryAux from {:?}", cache_path);
     let t_aux_bytes = fs::read(&t_aux_path)
         .with_context(|| format!("could not read file t_aux={:?}", t_aux_path))?;
 
     let mut res: TemporaryAux<Tree, DefaultPieceHasher> = deserialize(&t_aux_bytes)?;
     res.set_cache_path(cache_path);
+    trace!("Set TemporaryAux cache_path to {:?}", cache_path);
 
     Ok(res)
 }
