@@ -502,7 +502,7 @@ pub fn generate_empty_sector_update_proof_with_vanilla<
             sector_bytes: u64::from(config.sector_size),
         },
         partitions: Some(partitions),
-        priority: true,
+        priority: false,
     };
     let pub_params_compound = EmptySectorUpdateCompound::<Tree>::setup(&setup_params_compound)?;
 
@@ -569,7 +569,7 @@ pub fn generate_empty_sector_update_proof<Tree: 'static + MerkleTreeTrait<Hasher
             sector_bytes: u64::from(config.sector_size),
         },
         partitions: Some(partitions),
-        priority: true,
+        priority: false,
     };
     let pub_params_compound = EmptySectorUpdateCompound::<Tree>::setup(&setup_params_compound)?;
 
