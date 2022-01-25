@@ -573,7 +573,10 @@ where
 
         trace!("ReplicaConfig Path: {:?}", replica_config.path);
         for config in &tree_r_configs {
-            trace!("StoreConfig: {:?}", StoreConfig::data_path(&config.path, &config.id));
+            trace!(
+                "StoreConfig: {:?}",
+                StoreConfig::data_path(&config.path, &config.id)
+            );
         }
         trace!(
             "Instantiating {}: arity={}-{}-{}, base_tree_count={}, base_store_size={}",
