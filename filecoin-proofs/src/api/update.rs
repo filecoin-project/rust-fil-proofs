@@ -69,7 +69,8 @@ fn get_t_aux<Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher>>(
     let t_aux_bytes = fs::read(&t_aux_path)
         .with_context(|| format!("could not read file t_aux={:?}", t_aux_path))?;
 
-    let res: TemporaryAux<Tree, DefaultPieceHasher> = deserialize(&t_aux_bytes)?;
+    let mut res: TemporaryAux<Tree, DefaultPieceHasher> = deserialize(&t_aux_bytes)?;
+    res.set_cache_path(cache_path);
 
     Ok(res)
 }
