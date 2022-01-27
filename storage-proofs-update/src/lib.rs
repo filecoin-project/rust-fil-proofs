@@ -2,10 +2,10 @@ pub mod circuit;
 pub mod compound;
 pub mod constants;
 pub(crate) mod gadgets;
+pub mod poseidon;
 pub mod vanilla;
 
 mod challenges;
-pub mod circuit_poseidon;
 
 pub use self::challenges::Challenges;
 pub use self::circuit::EmptySectorUpdateCircuit;
