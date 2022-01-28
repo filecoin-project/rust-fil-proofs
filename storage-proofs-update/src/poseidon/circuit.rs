@@ -11,7 +11,6 @@ use ff::{Field, PrimeFieldBits};
 use filecoin_hashers::{HashFunction, Hasher};
 use generic_array::typenum::Unsigned;
 use neptune::circuit::poseidon_hash;
-use serde::{Deserialize, Serialize};
 use storage_proofs_core::{
     compound_proof::CircuitComponent,
     gadgets::por::por_no_challenge_input,
@@ -20,9 +19,11 @@ use storage_proofs_core::{
 
 use crate::{
     constants::{
-        hs, validate_tree_r_shape, TreeRDomain, TreeRHasher, POSEIDON_CONSTANTS_GEN_RANDOMNESS,
+        challenge_count_poseidon, hs, validate_tree_r_shape, TreeRDomain, TreeRHasher,
+        POSEIDON_CONSTANTS_GEN_RANDOMNESS,
     },
     gadgets::{gen_challenge_bits, get_challenge_high_bits, label_r_new},
+    poseidon::vanilla,
     PublicParams,
 };
 
@@ -83,45 +84,6 @@ impl PublicInputs {
     }
 }
 
-#[derive(Serialize, Deserialize)]
-pub struct ChallengeProofVanilla<TreeR>
-where
-    TreeR: MerkleTreeTrait<Hasher = TreeRHasher>,
-{
-    #[serde(bound(
-        serialize = "MerkleProof<TreeRHasher, TreeR::Arity, TreeR::SubTreeArity, TreeR::TopTreeArity>: Serialize",
-        deserialize = "MerkleProof<TreeRHasher, TreeR::Arity, TreeR::SubTreeArity, TreeR::TopTreeArity>: Deserialize<'de>"
-    ))]
-    pub proof_r_old:
-        MerkleProof<TreeRHasher, TreeR::Arity, TreeR::SubTreeArity, TreeR::TopTreeArity>,
-    #[serde(bound(
-        serialize = "MerkleProof<TreeRHasher, TreeR::Arity, TreeR::SubTreeArity, TreeR::TopTreeArity>: Serialize",
-        deserialize = "MerkleProof<TreeRHasher, TreeR::Arity, TreeR::SubTreeArity, TreeR::TopTreeArity>: Deserialize<'de>"
-    ))]
-    pub proof_d_new:
-        MerkleProof<TreeRHasher, TreeR::Arity, TreeR::SubTreeArity, TreeR::TopTreeArity>,
-    #[serde(bound(
-        serialize = "MerkleProof<TreeRHasher, TreeR::Arity, TreeR::SubTreeArity, TreeR::TopTreeArity>: Serialize",
-        deserialize = "MerkleProof<TreeRHasher, TreeR::Arity, TreeR::SubTreeArity, TreeR::TopTreeArity>: Deserialize<'de>"
-    ))]
-    pub proof_r_new:
-        MerkleProof<TreeRHasher, TreeR::Arity, TreeR::SubTreeArity, TreeR::TopTreeArity>,
-}
-
-// Implement `Clone` by hand because `MerkleTreeTrait` does not implement `Clone`.
-impl<TreeR> Clone for ChallengeProofVanilla<TreeR>
-where
-    TreeR: MerkleTreeTrait<Hasher = TreeRHasher>,
-{
-    fn clone(&self) -> Self {
-        ChallengeProofVanilla {
-            proof_r_old: self.proof_r_old.clone(),
-            proof_d_new: self.proof_d_new.clone(),
-            proof_r_new: self.proof_r_new.clone(),
-        }
-    }
-}
-
 pub struct ChallengeProof<TreeR>
 where
     TreeR: MerkleTreeTrait<Hasher = TreeRHasher>,
@@ -153,12 +115,12 @@ where
     }
 }
 
-impl<TreeR> From<ChallengeProofVanilla<TreeR>> for ChallengeProof<TreeR>
+impl<TreeR> From<vanilla::ChallengeProof<TreeR>> for ChallengeProof<TreeR>
 where
     TreeR: MerkleTreeTrait<Hasher = TreeRHasher>,
 {
-    fn from(vanilla_challenge_proof: ChallengeProofVanilla<TreeR>) -> Self {
-        let ChallengeProofVanilla {
+    fn from(vanilla_challenge_proof: vanilla::ChallengeProof<TreeR>) -> Self {
+        let vanilla::ChallengeProof {
             proof_r_old,
             proof_d_new,
             proof_r_new,
@@ -263,11 +225,6 @@ where
     }
 }
 
-pub const fn challenge_count(sector_nodes: usize) -> usize {
-    use crate::constants::{challenge_count, partition_count};
-    challenge_count(sector_nodes) * partition_count(sector_nodes)
-}
-
 #[derive(Clone)]
 pub struct PrivateInputs<TreeR>
 where
@@ -289,7 +246,7 @@ impl<TreeR> PrivateInputs<TreeR>
 where
     TreeR: MerkleTreeTrait<Hasher = TreeRHasher>,
 {
-    pub fn new(comm_c: TreeRDomain, challenge_proofs: &[ChallengeProofVanilla<TreeR>]) -> Self {
+    pub fn new(comm_c: TreeRDomain, challenge_proofs: &[vanilla::ChallengeProof<TreeR>]) -> Self {
         let root_r_old: Fr = challenge_proofs[0].proof_r_old.root().into();
         let root_r_new: Fr = challenge_proofs[0].proof_r_new.root().into();
 
@@ -314,7 +271,7 @@ where
             root_r_new: None,
             challenge_proofs: vec![
                 ChallengeProof::empty(sector_nodes);
-                challenge_count(sector_nodes)
+                challenge_count_poseidon(sector_nodes)
             ],
         }
     }
@@ -341,6 +298,12 @@ where
     TreeR: MerkleTreeTrait<Hasher = TreeRHasher>,
 {
     pub fn blank(pub_params: PublicParams) -> Self {
+        let sector_bytes = (pub_params.sector_nodes as u64) << 5;
+        assert_eq!(
+            PublicParams::from_sector_size_poseidon(sector_bytes),
+            pub_params,
+            "invalid public-params for sector-size",
+        );
         let pub_inputs = PublicInputs::empty();
         let priv_inputs = PrivateInputs::<TreeR>::empty(pub_params.sector_nodes);
         EmptySectorUpdateCircuit {
@@ -376,6 +339,7 @@ where
         } = self;
 
         let challenge_bit_len = sector_nodes.trailing_zeros() as usize;
+        let challenge_count = challenge_count_poseidon(sector_nodes);
 
         validate_tree_r_shape::<TreeR>(sector_nodes);
         let hs = hs(sector_nodes);
@@ -395,7 +359,7 @@ where
             assert!(bits[h_select_bit_len..].iter().all(|bit| !*bit));
         }
 
-        assert_eq!(challenge_proofs.len(), challenge_count(sector_nodes));
+        assert_eq!(challenge_proofs.len(), challenge_count);
 
         // Allocate public-inputs.
 
@@ -516,7 +480,7 @@ where
             cs.namespace(|| "gen_challenge_bits"),
             &comm_r_new,
             &partition,
-            challenge_count(sector_nodes),
+            challenge_count,
             challenge_bit_len,
         )?;
 

@@ -14,18 +14,16 @@ use storage_proofs_core::{
     util::default_rows_to_discard,
     TEST_SEED,
 };
-
 use storage_proofs_update::{
-    circuit_poseidon,
     constants::{
         apex_leaf_count, hs, partition_count, validate_tree_r_shape, TreeD, TreeDDomain,
         TreeRDomain, TreeRHasher, SECTOR_SIZE_16_KIB, SECTOR_SIZE_1_KIB, SECTOR_SIZE_2_KIB,
-        SECTOR_SIZE_32_KIB, SECTOR_SIZE_4_KIB, SECTOR_SIZE_8_KIB,
+        SECTOR_SIZE_32_GIB, SECTOR_SIZE_32_KIB, SECTOR_SIZE_4_KIB, SECTOR_SIZE_8_KIB,
     },
-    phi, rho, vanilla, Challenges, PublicParams,
+    phi,
+    poseidon::{circuit, vanilla, EmptySectorUpdateCircuit},
+    rho, Challenges, PublicParams,
 };
-
-use storage_proofs_update::constants::SECTOR_SIZE_32_GIB;
 use tempfile::tempdir;
 
 mod common;
@@ -71,14 +69,14 @@ where
     let root_r_new = tree_r_new.root();
     let comm_r_new = <TreeRHasher as Hasher>::Function::hash2(&comm_c, &root_r_new);
 
-    let pub_params = PublicParams::from_sector_size(sector_bytes as u64);
+    let pub_params = PublicParams::from_sector_size_poseidon(sector_bytes as u64);
 
     {
         // Generate vanilla-proof.
-        let challenge_proofs: Vec<circuit_poseidon::ChallengeProofVanilla<TreeR>> =
+        let challenge_proofs: Vec<vanilla::ChallengeProof<TreeR>> =
             Challenges::new_poseidon(sector_nodes, comm_r_new)
                 .enumerate()
-                .take(pub_params.challenge_count * pub_params.partition_count)
+                .take(pub_params.challenge_count)
                 .map(|(i, c)| {
                     let c = c as usize;
                     let proof_r_old = tree_r_old.gen_proof(c).unwrap_or_else(|_| {
@@ -91,31 +89,24 @@ where
                         panic!("failed to generate `proof_r_new` for c_{}={}", i, c)
                     });
 
-                    circuit_poseidon::ChallengeProofVanilla {
+                    vanilla::ChallengeProof {
                         proof_r_old,
                         proof_d_new,
                         proof_r_new,
                     }
                 })
                 .collect();
-        assert_eq!(
-            challenge_proofs.len(),
-            pub_params.challenge_count * pub_params.partition_count
-        );
+        assert_eq!(challenge_proofs.len(), pub_params.challenge_count);
+
         // Create circuit.
-        let pub_inputs = circuit_poseidon::PublicInputs::new(
-            sector_nodes,
-            h,
-            comm_r_old,
-            comm_d_new,
-            comm_r_new,
-        );
+        let pub_inputs =
+            circuit::PublicInputs::new(sector_nodes, h, comm_r_old, comm_d_new, comm_r_new);
 
         let pub_inputs_vec = pub_inputs.to_vec();
 
-        let priv_inputs = circuit_poseidon::PrivateInputs::new(comm_c, &challenge_proofs);
+        let priv_inputs = circuit::PrivateInputs::new(comm_c, &challenge_proofs);
 
-        let circuit = circuit_poseidon::EmptySectorUpdateCircuit::<TreeR> {
+        let circuit = EmptySectorUpdateCircuit::<TreeR> {
             pub_params,
             pub_inputs,
             priv_inputs,
@@ -147,12 +138,12 @@ fn test_empty_sector_update_circuit_8kib() {
 #[ignore]
 fn test_empty_sector_update_constraints_32gib() {
     type TreeR = MerkleTreeWrapper<TreeRHasher, DiskStore<TreeRDomain>, U8, U8, U0>;
-    let pub_inputs = circuit_poseidon::PublicInputs::empty();
+    let pub_inputs = circuit::PublicInputs::empty();
 
-    let priv_inputs = circuit_poseidon::PrivateInputs::empty(SECTOR_SIZE_32_GIB);
+    let priv_inputs = circuit::PrivateInputs::empty(SECTOR_SIZE_32_GIB);
 
-    let circuit = circuit_poseidon::EmptySectorUpdateCircuit::<TreeR> {
-        pub_params: PublicParams::from_sector_size(SECTOR_SIZE_32_GIB as u64 * 32),
+    let circuit = EmptySectorUpdateCircuit::<TreeR> {
+        pub_params: PublicParams::from_sector_size_poseidon(SECTOR_SIZE_32_GIB as u64 * 32),
         pub_inputs,
         priv_inputs,
     };

@@ -323,6 +323,12 @@ where
     TreeR: MerkleTreeTrait<Hasher = TreeRHasher>,
 {
     pub fn blank(pub_params: PublicParams) -> Self {
+        let sector_bytes = (pub_params.sector_nodes as u64) << 5;
+        assert_eq!(
+            PublicParams::from_sector_size(sector_bytes),
+            pub_params,
+            "invalid public-params for sector-size",
+        );
         let pub_inputs = PublicInputs::empty();
         let priv_inputs = PrivateInputs::<TreeR>::empty(pub_params.sector_nodes);
         EmptySectorUpdateCircuit {
