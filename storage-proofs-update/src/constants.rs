@@ -84,6 +84,12 @@ pub const fn challenge_count(sector_nodes: usize) -> usize {
     }
 }
 
+// Number of challenges per EmtpySectorUpdate-Poseidon partition proof; note
+// EmptySectorUpdate-Poseidon proofs are single partition.
+pub const fn challenge_count_poseidon(sector_nodes: usize) -> usize {
+    challenge_count(sector_nodes) * partition_count(sector_nodes)
+}
+
 // Returns the `h` values allowed for the given sector-size. Each `h` value is a possible number of
 // high bits taken from each challenge `c`. A single value of `h = hs[i]` is taken from `hs` for
 // each proof; the circuit takes `h_select = 2^i` as a public input.

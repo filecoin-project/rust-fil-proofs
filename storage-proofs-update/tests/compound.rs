@@ -1,7 +1,6 @@
 use std::fs;
 use std::path::Path;
 
-use blstrs::Scalar as Fr;
 use filecoin_hashers::{Domain, HashFunction, Hasher, PoseidonArity};
 use generic_array::typenum::{Unsigned, U0, U2, U4, U8};
 use merkletree::{merkle::get_merkle_tree_len, store::StoreConfig};
@@ -21,40 +20,15 @@ use storage_proofs_update::{
         TreeRDomain, TreeRHasher, SECTOR_SIZE_16_KIB, SECTOR_SIZE_1_KIB, SECTOR_SIZE_2_KIB,
         SECTOR_SIZE_32_KIB, SECTOR_SIZE_4_KIB, SECTOR_SIZE_8_KIB,
     },
-    phi, rho, EmptySectorUpdateCompound, PrivateInputs, PublicInputs, SetupParams,
+    phi, EmptySectorUpdateCompound, PrivateInputs, PublicInputs, SetupParams,
 };
 use tempfile::tempdir;
+
+mod common;
 
 const HS_INDEX: usize = 2;
 
 type TreeR<U, V, W> = LCTree<TreeRHasher, U, V, W>;
-
-fn encode_new_replica(
-    labels_r_old: &[TreeRDomain],
-    labels_d_new: &[TreeDDomain],
-    phi: &TreeRDomain,
-    h: usize,
-) -> Vec<TreeRDomain> {
-    let sector_nodes = labels_r_old.len();
-    assert_eq!(sector_nodes, labels_d_new.len());
-
-    // Right-shift each node-index by `get_high_bits_shr` to get its `h` high bits.
-    let node_index_bit_len = sector_nodes.trailing_zeros() as usize;
-    let get_high_bits_shr = node_index_bit_len - h;
-
-    (0..sector_nodes)
-        .map(|node| {
-            // Take the `h` high bits from the node-index and compute this node's compute `rho`.
-            let high = (node >> get_high_bits_shr) as u32;
-            let rho = rho(phi, high);
-
-            // `label_r_new = label_r_old + label_d_new * rho`
-            let label_r_old: Fr = labels_r_old[node].into();
-            let label_d_new: Fr = labels_d_new[node].into();
-            (label_r_old + label_d_new * rho).into()
-        })
-        .collect()
-}
 
 fn test_empty_sector_update_compound<U, V, W>(sector_nodes: usize)
 where
@@ -149,7 +123,7 @@ where
 
     // Encode `labels_d_new` into `labels_r_new`.
     let phi = phi(&comm_d_new, &comm_r_old);
-    let labels_r_new = encode_new_replica(&labels_r_old, &labels_d_new, &phi, h);
+    let labels_r_new = common::encode_new_replica(&labels_r_old, &labels_d_new, &phi, h);
     // Write new replica to disk.
     let replica_new_path = tmp_path.join(Path::new("replica_new"));
     let replica_new: Vec<u8> = labels_r_new

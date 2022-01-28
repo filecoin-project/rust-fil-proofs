@@ -61,6 +61,28 @@ impl Challenges {
             challenges_remaining: challenge_count,
         }
     }
+
+    pub fn new_poseidon(sector_nodes: usize, comm_r_new: TreeRDomain) -> Self {
+        let repeats = partition_count(sector_nodes);
+
+        let challenge_bit_len = sector_nodes.trailing_zeros() as usize;
+        let random_bits_per_challenge = challenge_bit_len;
+        let challenges_per_digest = Fr::CAPACITY as usize / random_bits_per_challenge;
+
+        let challenge_count = challenge_count(sector_nodes) * repeats;
+        let digest_index_all_partitions = 0;
+
+        Challenges {
+            comm_r_new,
+            partition_bits: 0,
+            random_bits_per_challenge,
+            challenges_per_digest,
+            digest_index_all_partitions,
+            i: 0,
+            digest_bits: Vec::with_capacity(Fr::NUM_BITS as usize),
+            challenges_remaining: challenge_count,
+        }
+    }
 }
 
 impl Iterator for Challenges {

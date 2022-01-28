@@ -1,11 +1,9 @@
+//! This circuit is NOT AUDITED, USE AT YOUR OWN RISK.
+
 use std::marker::PhantomData;
 
 use bellperson::{
-    gadgets::{
-        boolean::{AllocatedBit, Boolean},
-        multipack::pack_bits,
-        num::AllocatedNum,
-    },
+    gadgets::{boolean::AllocatedBit, num::AllocatedNum},
     Circuit, ConstraintSystem, LinearCombination, SynthesisError,
 };
 use blstrs::Scalar as Fr;
@@ -15,29 +13,28 @@ use generic_array::typenum::Unsigned;
 use neptune::circuit::poseidon_hash;
 use storage_proofs_core::{
     compound_proof::CircuitComponent,
-    gadgets::{insertion::select, por::por_no_challenge_input},
+    gadgets::por::por_no_challenge_input,
     merkle::{MerkleProof, MerkleProofTrait, MerkleTreeTrait},
 };
 
 use crate::{
     constants::{
-        apex_leaf_count, challenge_count, hs, partition_count, validate_tree_r_shape, TreeD,
-        TreeDArity, TreeDDomain, TreeDHasher, TreeRDomain, TreeRHasher,
+        challenge_count_poseidon, hs, validate_tree_r_shape, TreeRDomain, TreeRHasher,
         POSEIDON_CONSTANTS_GEN_RANDOMNESS,
     },
-    gadgets::{apex_por, gen_challenge_bits, get_challenge_high_bits, label_r_new},
-    vanilla, PublicParams,
+    gadgets::{gen_challenge_bits, get_challenge_high_bits, label_r_new},
+    poseidon::vanilla,
+    PublicParams,
 };
 
 // The public inputs for `EmptySectorUpdateCircuit`.
 #[derive(Clone)]
 pub struct PublicInputs {
-    // Pack `k` and `h_select` into a single public-input; `k` is at most 4 bits and `h_select` is 6
-    // bits, thus we can pack `k` and `h_select` into a single field element.
-    pub k_and_h_select: Option<Fr>,
+    // `h_select` chooses the number of encoding hashes.`
+    pub h_select: Option<Fr>,
     // The SDR-PoRep CommR corresponding to the replica prior to updating the sector data.
     pub comm_r_old: Option<Fr>,
-    // The root of TreeDNew (a bin-tree built over the sector's updated data).
+    // The root of TreeDNew but with TreeR shape.
     pub comm_d_new: Option<Fr>,
     // A commitment to the `EmptySectorUpdate` encoding of the updated sector data.
     pub comm_r_new: Option<Fr>,
@@ -46,18 +43,11 @@ pub struct PublicInputs {
 impl PublicInputs {
     pub fn new(
         sector_nodes: usize,
-        k: usize,
         h: usize,
         comm_r_old: TreeRDomain,
-        comm_d_new: TreeDDomain,
+        comm_d_new: TreeRDomain,
         comm_r_new: TreeRDomain,
     ) -> Self {
-        let partition_count = partition_count(sector_nodes);
-        assert!(
-            k < partition_count,
-            "partition-index `k` exceeds partition-count for sector-size"
-        );
-
         let hs_index = hs(sector_nodes)
             .iter()
             .position(|h_allowed| *h_allowed == h)
@@ -65,11 +55,8 @@ impl PublicInputs {
 
         let h_select = 1u64 << hs_index;
 
-        let partition_bit_len = partition_count.trailing_zeros() as usize;
-        let k_and_h_select = (k as u64) | (h_select << partition_bit_len);
-
         PublicInputs {
-            k_and_h_select: Some(Fr::from(k_and_h_select)),
+            h_select: Some(Fr::from(h_select)),
             comm_r_old: Some(comm_r_old.into()),
             comm_d_new: Some(comm_d_new.into()),
             comm_r_new: Some(comm_r_new.into()),
@@ -79,7 +66,7 @@ impl PublicInputs {
     // Public-inputs used during Groth16 parameter generation.
     pub fn empty() -> Self {
         PublicInputs {
-            k_and_h_select: None,
+            h_select: None,
             comm_r_old: None,
             comm_d_new: None,
             comm_r_new: None,
@@ -89,7 +76,7 @@ impl PublicInputs {
     // The ordered vector used to verify a Groth16 proof.
     pub fn to_vec(&self) -> Vec<Fr> {
         vec![
-            self.k_and_h_select.unwrap(),
+            self.h_select.unwrap(),
             self.comm_r_old.unwrap(),
             self.comm_d_new.unwrap(),
             self.comm_r_new.unwrap(),
@@ -153,7 +140,12 @@ where
             TreeR::SubTreeArity,
             TreeR::TopTreeArity,
         >,
-        proof_d_new: MerkleProof<TreeDHasher, TreeDArity>,
+        proof_d_new: MerkleProof<
+            TreeRHasher,
+            TreeR::Arity,
+            TreeR::SubTreeArity,
+            TreeR::TopTreeArity,
+        >,
         proof_r_new: MerkleProof<
             TreeRHasher,
             TreeR::Arity,
@@ -196,10 +188,7 @@ where
     pub fn empty(sector_nodes: usize) -> Self {
         let challenge_bit_len = sector_nodes.trailing_zeros() as usize;
 
-        // TreeD is a binary-tree.
-        let path_d = vec![vec![None]; challenge_bit_len];
-
-        // TreeROld and TreeRNew have the same shape, thus have the same Merkle path length.
+        // TreeROld and TreeRNew and TreeD have the same shape, thus have the same Merkle path length.
         let path_r = {
             let base_arity = TreeR::Arity::to_usize();
             let sub_arity = TreeR::SubTreeArity::to_usize();
@@ -228,7 +217,7 @@ where
             leaf_r_old: None,
             path_r_old: path_r.clone(),
             leaf_d_new: None,
-            path_d_new: path_d,
+            path_d_new: path_r.clone(),
             leaf_r_new: None,
             path_r_new: path_r,
             _tree_r: PhantomData,
@@ -248,9 +237,6 @@ where
     pub root_r_old: Option<Fr>,
     // Root of the replica tree build over the new/updated data's replica (TreeRNew).
     pub root_r_new: Option<Fr>,
-    // The `k`-th chunk of nodes from the apex-leafs layer of TreeDNew (the tree built over the
-    // new/updated data).
-    pub apex_leafs: Vec<Option<Fr>>,
     // Generate three Merkle proofs (TreeROld, TreeDNew, TreeRNew) for each of this partition's
     // challenges.
     pub challenge_proofs: Vec<ChallengeProof<TreeR>>,
@@ -260,19 +246,9 @@ impl<TreeR> PrivateInputs<TreeR>
 where
     TreeR: MerkleTreeTrait<Hasher = TreeRHasher>,
 {
-    pub fn new(
-        comm_c: TreeRDomain,
-        apex_leafs: &[TreeDDomain],
-        challenge_proofs: &[vanilla::ChallengeProof<TreeR>],
-    ) -> Self {
+    pub fn new(comm_c: TreeRDomain, challenge_proofs: &[vanilla::ChallengeProof<TreeR>]) -> Self {
         let root_r_old: Fr = challenge_proofs[0].proof_r_old.root().into();
         let root_r_new: Fr = challenge_proofs[0].proof_r_new.root().into();
-
-        let apex_leafs: Vec<Option<Fr>> = apex_leafs
-            .iter()
-            .copied()
-            .map(|leaf| Some(leaf.into()))
-            .collect();
 
         let challenge_proofs: Vec<ChallengeProof<TreeR>> = challenge_proofs
             .iter()
@@ -284,20 +260,19 @@ where
             comm_c: Some(comm_c.into()),
             root_r_old: Some(root_r_old),
             root_r_new: Some(root_r_new),
-            apex_leafs,
             challenge_proofs,
         }
     }
 
     pub fn empty(sector_nodes: usize) -> Self {
-        let challenge_count = challenge_count(sector_nodes);
-        let apex_leaf_count = apex_leaf_count(sector_nodes);
         PrivateInputs {
             comm_c: None,
             root_r_old: None,
             root_r_new: None,
-            apex_leafs: vec![None; apex_leaf_count],
-            challenge_proofs: vec![ChallengeProof::empty(sector_nodes); challenge_count],
+            challenge_proofs: vec![
+                ChallengeProof::empty(sector_nodes);
+                challenge_count_poseidon(sector_nodes)
+            ],
         }
     }
 }
@@ -325,7 +300,7 @@ where
     pub fn blank(pub_params: PublicParams) -> Self {
         let sector_bytes = (pub_params.sector_nodes as u64) << 5;
         assert_eq!(
-            PublicParams::from_sector_size(sector_bytes),
+            PublicParams::from_sector_size_poseidon(sector_bytes),
             pub_params,
             "invalid public-params for sector-size",
         );
@@ -343,21 +318,13 @@ impl<TreeR> Circuit<Fr> for EmptySectorUpdateCircuit<TreeR>
 where
     TreeR: MerkleTreeTrait<Hasher = TreeRHasher>,
 {
+    /// This circuit is NOT AUDITED, USE AT YOUR OWN RISK.
     fn synthesize<CS: ConstraintSystem<Fr>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
         let EmptySectorUpdateCircuit {
-            pub_params:
-                PublicParams {
-                    sector_nodes,
-                    challenge_count,
-                    challenge_bit_len,
-                    partition_count,
-                    partition_bit_len,
-                    apex_leaf_count,
-                    apex_leaf_bit_len,
-                },
+            pub_params: PublicParams { sector_nodes, .. },
             pub_inputs:
                 PublicInputs {
-                    k_and_h_select,
+                    h_select,
                     comm_r_old,
                     comm_d_new,
                     comm_r_new,
@@ -367,72 +334,47 @@ where
                     comm_c,
                     root_r_old,
                     root_r_new,
-                    apex_leafs,
                     challenge_proofs,
                 },
         } = self;
+
+        let challenge_bit_len = sector_nodes.trailing_zeros() as usize;
+        let challenge_count = challenge_count_poseidon(sector_nodes);
 
         validate_tree_r_shape::<TreeR>(sector_nodes);
         let hs = hs(sector_nodes);
         let h_select_bit_len = hs.len();
 
-        let partition_path =
-            challenge_proofs[0].path_d_new[challenge_bit_len - partition_bit_len..].to_vec();
+        if let Some(h_select) = h_select {
+            let bits: Vec<bool> = h_select.to_le_bits().into_iter().collect();
 
-        if let Some(k_and_h_select) = k_and_h_select {
-            let bits: Vec<bool> = k_and_h_select.to_le_bits().into_iter().collect();
-            // Assert that `k` is valid for the sector-size.
-            let k_bits = &bits[..partition_bit_len];
-            let mut k = 0;
-            for (i, bit) in k_bits.iter().enumerate() {
-                if *bit {
-                    k |= 1 << i;
-                }
-            }
-            assert!(
-                k < partition_count,
-                "partition-index exceeds partition count"
-            );
             // `h_select` should have exactly one bit set.
-            let h_select_bits = &bits[partition_bit_len..partition_bit_len + h_select_bit_len];
+            let h_select_bits = &bits[..h_select_bit_len];
             assert_eq!(
                 h_select_bits.iter().filter(|bit| **bit).count(),
                 1,
                 "h_select does not have exactly one bit set"
             );
-            // The remanining bits should be zero.
-            assert!(bits[partition_bit_len + h_select_bit_len..]
-                .iter()
-                .all(|bit| !*bit));
+            // The remaining bits should be zero.
+            assert!(bits[h_select_bit_len..].iter().all(|bit| !*bit));
         }
 
-        assert_eq!(apex_leafs.len(), apex_leaf_count);
-        assert_eq!(partition_path.len(), partition_bit_len);
-        assert!(partition_path.iter().all(|siblings| siblings.len() == 1));
         assert_eq!(challenge_proofs.len(), challenge_count);
-
-        // Check that all partition challenge's have the same same partition path.
-        for challenge_proof in &challenge_proofs[1..] {
-            assert_eq!(
-                &challenge_proof.path_d_new[challenge_bit_len - partition_bit_len..],
-                partition_path,
-            );
-        }
 
         // Allocate public-inputs.
 
-        // Add a single public-input for `k` and `h_select` packed into one field element.
-        let k_and_h_select = AllocatedNum::alloc(cs.namespace(|| "k_and_h_select"), || {
-            k_and_h_select.ok_or(SynthesisError::AssignmentMissing)
+        // Add a public-input `h_select`.
+        let h_select = AllocatedNum::alloc(cs.namespace(|| "h_select"), || {
+            h_select.ok_or(SynthesisError::AssignmentMissing)
         })?;
-        k_and_h_select.inputize(cs.namespace(|| "k_and_h_select (public input)"))?;
+        h_select.inputize(cs.namespace(|| "h_select (public input)"))?;
 
-        // Split `k_and_h_select` into partition and h-select bits.
-        let k_and_h_select_bits = {
-            let bit_len = partition_bit_len + h_select_bit_len;
+        // `h_select` binary decomposition`
+        let h_select_bits = {
+            let bit_len = h_select_bit_len;
 
-            let bits: Vec<Option<bool>> = if let Some(k_and_h_select) = k_and_h_select.get_value() {
-                k_and_h_select
+            let bits: Vec<Option<bool>> = if let Some(h_select) = h_select.get_value() {
+                h_select
                     .to_le_bits()
                     .into_iter()
                     .take(bit_len)
@@ -442,41 +384,29 @@ where
                 vec![None; bit_len]
             };
 
-            let k_and_h_select_bits = bits
+            let h_select_bits = bits
                 .into_iter()
                 .enumerate()
                 .map(|(i, bit)| {
-                    AllocatedBit::alloc(cs.namespace(|| format!("k_and_h_select_bit_{}", i)), bit)
+                    AllocatedBit::alloc(cs.namespace(|| format!("h_select_bit_{}", i)), bit)
                 })
                 .collect::<Result<Vec<AllocatedBit>, SynthesisError>>()?;
 
             let mut lc = LinearCombination::<Fr>::zero();
             let mut pow2 = Fr::one();
-            for bit in k_and_h_select_bits.iter() {
+            for bit in h_select_bits.iter() {
                 lc = lc + (pow2, bit.get_variable());
                 pow2 = pow2.double();
             }
             cs.enforce(
-                || "k_and_h_select binary decomp",
+                || "h_select binary decomp",
                 |_| lc,
                 |lc| lc + CS::one(),
-                |lc| lc + k_and_h_select.get_variable(),
+                |lc| lc + h_select.get_variable(),
             );
 
-            k_and_h_select_bits
+            h_select_bits
         };
-
-        let partition_bits = k_and_h_select_bits[..partition_bit_len].to_vec();
-        let h_select_bits = k_and_h_select_bits[partition_bit_len..].to_vec();
-
-        let partition = pack_bits(
-            cs.namespace(|| "pack partition bits"),
-            &partition_bits
-                .iter()
-                .cloned()
-                .map(Into::into)
-                .collect::<Vec<Boolean>>(),
-        )?;
 
         let comm_r_old = AllocatedNum::alloc(cs.namespace(|| "comm_r_old"), || {
             comm_r_old.ok_or(SynthesisError::AssignmentMissing)
@@ -514,28 +444,6 @@ where
             root_r_new.ok_or(SynthesisError::AssignmentMissing)
         })?;
 
-        let apex_leafs = apex_leafs
-            .iter()
-            .enumerate()
-            .map(|(i, leaf)| {
-                AllocatedNum::alloc(cs.namespace(|| format!("apex_leaf_{}", i)), || {
-                    leaf.ok_or(SynthesisError::AssignmentMissing)
-                })
-            })
-            .collect::<Result<Vec<AllocatedNum<Fr>>, SynthesisError>>()?;
-
-        let partition_path = partition_path
-            .iter()
-            .enumerate()
-            .map(|(i, siblings)| {
-                AllocatedNum::alloc(
-                    cs.namespace(|| format!("partition_path_sibling_{}", i)),
-                    || siblings[0].ok_or(SynthesisError::AssignmentMissing),
-                )
-                .map(|sibling| vec![sibling])
-            })
-            .collect::<Result<Vec<Vec<AllocatedNum<Fr>>>, SynthesisError>>()?;
-
         // Assert that the witnessed `root_r_old` and `root_r_new` are consistent with the
         // public `comm_r_old` and `comm_r_new` via `comm_r = H(comm_c || root_r)`.
         let comm_r_old_calc = <TreeR::Hasher as Hasher>::Function::hash2_circuit(
@@ -561,36 +469,22 @@ where
             |lc| lc + comm_r_new.get_variable(),
         );
 
-        // Assert that this partition's `apex_leafs` are  consistent with the public `comm_d_new`.
-        apex_por(
-            cs.namespace(|| "apex_gadget"),
-            apex_leafs.clone(),
-            partition_bits.clone(),
-            partition_path,
-            comm_d_new,
-        )?;
+        let partition =
+            AllocatedNum::alloc(cs.namespace(|| "gen_challenge_bits partition zero"), || {
+                Ok(Fr::zero())
+            })?;
 
-        // Generate `challenge_sans_partition_bit_len` number of random bits for each challenge.
-        // For each challenge generate a random index in `0..number of leafs per partition`; we
-        // append the partition-index's bits onto the random bits generated for each challenge
-        // producing a challenge in `0..sector_nodes` which is guaranteed to lie within this
-        // partition's subset of leafs.
-        let challenge_sans_partition_bit_len = challenge_bit_len - partition_bit_len;
+        // Generate `challenge_bit_len` number of random bits for each challenge.
+        // For each challenge generate a random index in `0..sector_nodes`
         let generated_bits = gen_challenge_bits(
             cs.namespace(|| "gen_challenge_bits"),
             &comm_r_new,
             &partition,
             challenge_count,
-            challenge_sans_partition_bit_len,
+            challenge_bit_len,
         )?;
 
-        for (c_index, c_bits_without_partition) in generated_bits.into_iter().enumerate() {
-            let c_bits: Vec<AllocatedBit> = c_bits_without_partition
-                .iter()
-                .chain(partition_bits.iter())
-                .cloned()
-                .collect();
-
+        for (c_index, c_bits) in generated_bits.into_iter().enumerate() {
             // Compute this challenge's `rho`.
             let c_high = get_challenge_high_bits(
                 cs.namespace(|| format!("get_challenge_high_bits (c_index={})", c_index)),
@@ -697,52 +591,34 @@ where
                 root_r_new.clone(),
             )?;
 
-            let apex_leaf_bits: Vec<Boolean> = {
-                let start = challenge_bit_len - partition_bit_len - apex_leaf_bit_len;
-                let stop = start + apex_leaf_bit_len;
-                c_bits[start..stop]
-                    .iter()
-                    .cloned()
-                    .map(Into::into)
-                    .collect()
-            };
-
-            let apex_leaf = select(
-                cs.namespace(|| format!("select_apex_leaf (c_index={})", c_index)),
-                &apex_leafs,
-                &apex_leaf_bits,
-            )?;
-
-            let path_len_to_apex_leaf = challenge_bit_len - partition_bit_len - apex_leaf_bit_len;
-
-            let c_bits_to_apex_leaf: Vec<AllocatedBit> =
-                c_bits.into_iter().take(path_len_to_apex_leaf).collect();
-
-            let path_to_apex_leaf = challenge_proof
-                .path_d_new
+            let path_d_new = challenge_proof.path_d_new
                 .iter()
-                .take(path_len_to_apex_leaf)
                 .enumerate()
                 .map(|(tree_row, siblings)| {
-                    AllocatedNum::alloc(
-                        cs.namespace(|| {
-                            format!(
-                                "path_to_apex_leaf sibling (c_index={}, tree_row={})",
-                                c_index, tree_row,
+                    siblings
+                        .iter()
+                        .enumerate()
+                        .map(|(sibling_index, sibling)| {
+                            AllocatedNum::alloc(
+                                cs.namespace(|| format!(
+                                    "path_d_new sibling (c_index={}, tree_row={}, sibling_index={})",
+                                    c_index,
+                                    tree_row,
+                                    sibling_index,
+                                )),
+                                || sibling.ok_or(SynthesisError::AssignmentMissing),
                             )
-                        }),
-                        || siblings[0].ok_or(SynthesisError::AssignmentMissing),
-                    )
-                    .map(|sibling| vec![sibling])
+                        })
+                        .collect::<Result<Vec<AllocatedNum<Fr>>, SynthesisError>>()
                 })
                 .collect::<Result<Vec<Vec<AllocatedNum<Fr>>>, SynthesisError>>()?;
 
-            por_no_challenge_input::<TreeD, _>(
-                cs.namespace(|| format!("por to_apex_leaf (c_index={})", c_index)),
-                c_bits_to_apex_leaf,
-                leaf_d_new,
-                path_to_apex_leaf,
-                apex_leaf,
+            por_no_challenge_input::<TreeR, _>(
+                cs.namespace(|| format!("por tree_d_new (c_index={})", c_index)),
+                c_bits.clone(),
+                leaf_d_new.clone(),
+                path_d_new,
+                comm_d_new.clone(),
             )?;
         }
 
