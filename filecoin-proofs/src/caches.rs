@@ -274,19 +274,10 @@ pub fn get_empty_sector_update_params<Tree: 'static + MerkleTreeTrait<Hasher = T
         PublicParams::from_sector_size(u64::from(porep_config.sector_size));
 
     let parameters_generator = || {
-        // This is required for production and should replace the use
-        // of the RNG below for testing.
-        /*<EmptySectorUpdateCompound<Tree> as CompoundProof<
-            EmptySectorUpdate<Tree>,
-            EmptySectorUpdateCircuit<Tree>,
-        >>::groth_params::<OsRng>(None, &public_params)
-        .map_err(Into::into)*/
-
-        let mut rng = rand::rngs::OsRng; // FIXME: test parameters only
         <EmptySectorUpdateCompound<Tree> as CompoundProof<
             EmptySectorUpdate<Tree>,
             EmptySectorUpdateCircuit<Tree>,
-        >>::groth_params::<OsRng>(Some(&mut rng), &public_params)
+        >>::groth_params::<OsRng>(None, &public_params)
         .map_err(Into::into)
     };
 
@@ -448,18 +439,10 @@ pub fn get_empty_sector_update_verifying_key<
         PublicParams::from_sector_size(u64::from(porep_config.sector_size));
 
     let vk_generator = || {
-        // This is required for production and should replace the use
-        // of the RNG below for testing.
-        /*let vk = <EmptySectorUpdateCompound<Tree> as CompoundProof<
-            EmptySectorUpdate<Tree>,
-            EmptySectorUpdateCircuit<Tree>,
-        >>::verifying_key::<OsRng>(None, &public_params)?;*/
-
-        let mut rng = rand::rngs::OsRng; // FIXME: test parameters only
         let vk = <EmptySectorUpdateCompound<Tree> as CompoundProof<
             EmptySectorUpdate<Tree>,
             EmptySectorUpdateCircuit<Tree>,
-        >>::verifying_key::<OsRng>(Some(&mut rng), &public_params)?;
+        >>::verifying_key::<OsRng>(None, &public_params)?;
         Ok(prepare_verifying_key(&vk))
     };
 
