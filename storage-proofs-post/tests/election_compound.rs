@@ -4,6 +4,7 @@ use bellperson::{
     util_cs::{metric_cs::MetricCS, test_cs::TestConstraintSystem},
     Circuit,
 };
+use blstrs::Scalar as Fr;
 use filecoin_hashers::{poseidon::PoseidonHasher, Domain, HashFunction, Hasher};
 use generic_array::typenum::{U0, U8};
 use rand::SeedableRng;
@@ -24,10 +25,14 @@ use tempfile::tempdir;
 #[ignore]
 #[test]
 fn test_election_post_compound_poseidon() {
-    test_election_post_compound::<LCTree<PoseidonHasher, U8, U0, U0>>();
+    test_election_post_compound::<LCTree<PoseidonHasher<Fr>, U8, U0, U0>>();
 }
 
-fn test_election_post_compound<Tree: 'static + MerkleTreeTrait>() {
+fn test_election_post_compound<Tree>()
+where
+    Tree: 'static + MerkleTreeTrait,
+    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+{
     let rng = &mut XorShiftRng::from_seed(TEST_SEED);
 
     let leaves = 64 * get_base_tree_count::<Tree>();

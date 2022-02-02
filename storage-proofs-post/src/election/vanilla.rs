@@ -3,13 +3,11 @@ use std::fmt::{self, Debug, Formatter};
 use std::marker::PhantomData;
 
 use anyhow::{bail, ensure, Context};
-use blstrs::Scalar as Fr;
 use byteorder::{ByteOrder, LittleEndian};
 use filecoin_hashers::{
     poseidon::{PoseidonDomain, PoseidonFunction},
     Domain, HashFunction, Hasher, PoseidonMDArity,
 };
-use fr32::fr_into_bytes;
 use generic_array::typenum::Unsigned;
 use log::trace;
 use rayon::prelude::{
@@ -67,7 +65,7 @@ pub struct PublicInputs<T: Domain> {
     pub prover_id: T,
     #[serde(bound = "")]
     pub comm_r: T,
-    pub partial_ticket: Fr,
+    pub partial_ticket: [u8; 32],
     pub sector_challenge_index: u64,
 }
 
@@ -88,7 +86,7 @@ pub struct PrivateInputs<Tree: MerkleTreeTrait> {
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Candidate {
     pub sector_id: SectorId,
-    pub partial_ticket: Fr,
+    pub partial_ticket: [u8; 32],
     pub ticket: [u8; 32],
     pub sector_challenge_index: u64,
 }
@@ -97,7 +95,7 @@ impl Debug for Candidate {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         f.debug_struct("Candidate")
             .field("sector_id", &self.sector_id)
-            .field("partial_ticket", &self.partial_ticket)
+            .field("partial_ticket", &hex::encode(&self.partial_ticket))
             .field("ticket", &hex::encode(&self.ticket))
             .field("sector_challenge_index", &self.sector_challenge_index)
             .finish()
@@ -152,7 +150,7 @@ where
 }
 
 #[allow(clippy::type_complexity)]
-pub fn generate_candidates<Tree: MerkleTreeTrait>(
+pub fn generate_candidates<Tree>(
     pub_params: &PublicParams,
     challenged_sectors: &[SectorId],
     trees: &BTreeMap<
@@ -167,7 +165,15 @@ pub fn generate_candidates<Tree: MerkleTreeTrait>(
     >,
     prover_id: <Tree::Hasher as Hasher>::Domain,
     randomness: <Tree::Hasher as Hasher>::Domain,
-) -> Result<Vec<Candidate>> {
+) -> Result<Vec<Candidate>>
+where
+    Tree: MerkleTreeTrait,
+    // Ensure that `PoseidonDomain` and `PoseidonFunction` are defined for `Tree`'s field.
+    PoseidonDomain<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>:
+        Domain<Field = <<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
+    PoseidonFunction<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>:
+        HashFunction<PoseidonDomain<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>>,
+{
     challenged_sectors
         .par_iter()
         .enumerate()
@@ -189,7 +195,7 @@ pub fn generate_candidates<Tree: MerkleTreeTrait>(
         .collect()
 }
 
-fn generate_candidate<Tree: MerkleTreeTrait>(
+fn generate_candidate<Tree>(
     pub_params: &PublicParams,
     tree: &MerkleTreeWrapper<
         Tree::Hasher,
@@ -202,23 +208,32 @@ fn generate_candidate<Tree: MerkleTreeTrait>(
     sector_id: SectorId,
     randomness: <Tree::Hasher as Hasher>::Domain,
     sector_challenge_index: u64,
-) -> Result<Candidate> {
-    let randomness_fr: Fr = randomness.into();
-    let prover_id_fr: Fr = prover_id.into();
-    let mut data: Vec<PoseidonDomain> = vec![
+) -> Result<Candidate>
+where
+    Tree: MerkleTreeTrait,
+    // Ensure that `PoseidonDomain` and `PoseidonFunction` are defined for `Tree`'s field.
+    PoseidonDomain<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>:
+        Domain<Field = <<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
+    PoseidonFunction<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>:
+        HashFunction<PoseidonDomain<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>>,
+{
+    let randomness_fr: <<Tree::Hasher as Hasher>::Domain as Domain>::Field = randomness.into();
+    let prover_id_fr: <<Tree::Hasher as Hasher>::Domain as Domain>::Field = prover_id.into();
+    let mut data: Vec<PoseidonDomain<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>> = vec![
         randomness_fr.into(),
         prover_id_fr.into(),
-        Fr::from(sector_id).into(),
+        <<Tree::Hasher as Hasher>::Domain as Domain>::Field::from(sector_id.into()).into(),
     ];
 
     for n in 0..pub_params.challenge_count {
         let challenge =
             generate_leaf_challenge(pub_params, randomness, sector_challenge_index, n as u64)?;
 
-        let val: Fr = measure_op(Operation::PostReadChallengedRange, || {
-            tree.read_at(challenge as usize)
-        })?
-        .into();
+        let val: <<Tree::Hasher as Hasher>::Domain as Domain>::Field =
+            measure_op(Operation::PostReadChallengedRange, || {
+                tree.read_at(challenge as usize)
+            })?
+            .into();
         data.push(val.into());
     }
 
@@ -228,10 +243,10 @@ fn generate_candidate<Tree: MerkleTreeTrait>(
         data.push(PoseidonDomain::default());
     }
 
-    let partial_ticket: Fr = measure_op(Operation::PostPartialTicketHash, || {
+    let partial_ticket = measure_op(Operation::PostPartialTicketHash, || {
         PoseidonFunction::hash_md(&data)
     })
-    .into();
+    .repr();
 
     // ticket = sha256(partial_ticket)
     let ticket = finalize_ticket(&partial_ticket);
@@ -244,9 +259,8 @@ fn generate_candidate<Tree: MerkleTreeTrait>(
     })
 }
 
-pub fn finalize_ticket(partial_ticket: &Fr) -> [u8; 32] {
-    let bytes = fr_into_bytes(partial_ticket);
-    let ticket_hash = Sha256::digest(&bytes);
+pub fn finalize_ticket(partial_ticket: &[u8; 32]) -> [u8; 32] {
+    let ticket_hash = Sha256::digest(partial_ticket);
     let mut ticket = [0u8; 32];
     ticket.copy_from_slice(&ticket_hash[..]);
     ticket

@@ -2,14 +2,18 @@ use std::marker::PhantomData;
 
 use bellperson::{gadgets::num::AllocatedNum, Circuit, ConstraintSystem, SynthesisError};
 use blstrs::Scalar as Fr;
-use filecoin_hashers::{HashFunction, Hasher};
+use filecoin_hashers::{Domain, HashFunction, Hasher};
 use storage_proofs_core::{
     compound_proof::CircuitComponent, error::Result, gadgets::constraint, gadgets::por::PoRCircuit,
     gadgets::variables::Root, merkle::MerkleTreeTrait,
 };
 
 /// This is the `RationalPoSt` circuit.
-pub struct RationalPoStCircuit<Tree: MerkleTreeTrait> {
+pub struct RationalPoStCircuit<Tree>
+where
+    Tree: MerkleTreeTrait,
+    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+{
     /// Paramters for the engine.
     pub comm_rs: Vec<Option<Fr>>,
     pub comm_cs: Vec<Option<Fr>>,
@@ -23,11 +27,19 @@ pub struct RationalPoStCircuit<Tree: MerkleTreeTrait> {
 #[derive(Clone, Default)]
 pub struct ComponentPrivateInputs {}
 
-impl<'a, Tree: MerkleTreeTrait> CircuitComponent for RationalPoStCircuit<Tree> {
+impl<'a, Tree> CircuitComponent for RationalPoStCircuit<Tree>
+where
+    Tree: MerkleTreeTrait,
+    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+{
     type ComponentPrivateInputs = ComponentPrivateInputs;
 }
 
-impl<'a, Tree: 'static + MerkleTreeTrait> Circuit<Fr> for RationalPoStCircuit<Tree> {
+impl<'a, Tree> Circuit<Fr> for RationalPoStCircuit<Tree>
+where
+    Tree: 'static + MerkleTreeTrait,
+    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+{
     fn synthesize<CS: ConstraintSystem<Fr>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
         let comm_rs = self.comm_rs;
         let comm_cs = self.comm_cs;

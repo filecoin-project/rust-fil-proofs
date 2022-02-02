@@ -41,78 +41,82 @@ type TreeTop<H, A, B, C> = MerkleTreeWrapper<H, VecStore<<H as Hasher>::Domain>,
 
 #[test]
 fn test_por_circuit_blake2s_base_2() {
-    test_por_circuit::<TreeBase<Blake2sHasher, U2>>(3, 129_135);
+    test_por_circuit::<TreeBase<Blake2sHasher<Fr>, U2>>(3, 129_135);
 }
 
 #[test]
 fn test_por_circuit_sha256_base_2() {
-    test_por_circuit::<TreeBase<Sha256Hasher, U2>>(3, 272_295);
+    test_por_circuit::<TreeBase<Sha256Hasher<Fr>, U2>>(3, 272_295);
 }
 
 #[test]
 fn test_por_circuit_poseidon_base_2() {
-    test_por_circuit::<TreeBase<PoseidonHasher, U2>>(3, 1_887);
+    test_por_circuit::<TreeBase<PoseidonHasher<Fr>, U2>>(3, 1_887);
 }
 
 #[test]
 fn test_por_circuit_blake2s_base_4() {
-    test_por_circuit::<TreeBase<Blake2sHasher, U4>>(3, 130_296);
+    test_por_circuit::<TreeBase<Blake2sHasher<Fr>, U4>>(3, 130_296);
 }
 
 #[test]
 fn test_por_circuit_sha256_base_4() {
-    test_por_circuit::<TreeBase<Sha256Hasher, U4>>(3, 216_258);
+    test_por_circuit::<TreeBase<Sha256Hasher<Fr>, U4>>(3, 216_258);
 }
 
 #[test]
 fn test_por_circuit_poseidon_base_4() {
-    test_por_circuit::<TreeBase<PoseidonHasher, U4>>(3, 1_164);
+    test_por_circuit::<TreeBase<PoseidonHasher<Fr>, U4>>(3, 1_164);
 }
 
 #[test]
 fn test_por_circuit_blake2s_base_8() {
-    test_por_circuit::<TreeBase<Blake2sHasher, U8>>(3, 174_503);
+    test_por_circuit::<TreeBase<Blake2sHasher<Fr>, U8>>(3, 174_503);
 }
 
 #[test]
 fn test_por_circuit_sha256_base_8() {
-    test_por_circuit::<TreeBase<Sha256Hasher, U8>>(3, 250_987);
+    test_por_circuit::<TreeBase<Sha256Hasher<Fr>, U8>>(3, 250_987);
 }
 
 #[test]
 fn test_por_circuit_poseidon_base_8() {
-    test_por_circuit::<TreeBase<PoseidonHasher, U8>>(3, 1_063);
+    test_por_circuit::<TreeBase<PoseidonHasher<Fr>, U8>>(3, 1_063);
 }
 
 #[test]
 fn test_por_circuit_poseidon_sub_8_2() {
-    test_por_circuit::<TreeSub<PoseidonHasher, U8, U2>>(3, 1_377);
+    test_por_circuit::<TreeSub<PoseidonHasher<Fr>, U8, U2>>(3, 1_377);
 }
 
 #[test]
 fn test_por_circuit_poseidon_top_8_4_2() {
-    test_por_circuit::<TreeTop<PoseidonHasher, U8, U4, U2>>(3, 1_764);
+    test_por_circuit::<TreeTop<PoseidonHasher<Fr>, U8, U4, U2>>(3, 1_764);
 }
 
 #[test]
 fn test_por_circuit_poseidon_sub_8_8() {
     // This is the shape we want for 32GiB sectors.
-    test_por_circuit::<TreeSub<PoseidonHasher, U8, U8>>(3, 1_593);
+    test_por_circuit::<TreeSub<PoseidonHasher<Fr>, U8, U8>>(3, 1_593);
 }
 #[test]
 fn test_por_circuit_poseidon_top_8_8_2() {
     // This is the shape we want for 64GiB secotrs.
-    test_por_circuit::<TreeTop<PoseidonHasher, U8, U8, U2>>(3, 1_907);
+    test_por_circuit::<TreeTop<PoseidonHasher<Fr>, U8, U8, U2>>(3, 1_907);
 }
 
 #[test]
 fn test_por_circuit_poseidon_top_8_2_4() {
     // We can handle top-heavy trees with a non-zero subtree arity.
     // These should never be produced, though.
-    test_por_circuit::<TreeTop<PoseidonHasher, U8, U2, U4>>(3, 1_764);
+    test_por_circuit::<TreeTop<PoseidonHasher<Fr>, U8, U2, U4>>(3, 1_764);
 }
 
-fn test_por_circuit<Tree: 'static + MerkleTreeTrait>(num_inputs: usize, num_constraints: usize) {
+fn test_por_circuit<Tree>(num_inputs: usize, num_constraints: usize)
+where
+    Tree: 'static + MerkleTreeTrait,
+    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+{
     let mut rng = XorShiftRng::from_seed(TEST_SEED);
 
     // Ensure arity will evenly fill tree.
@@ -190,20 +194,24 @@ fn test_por_circuit<Tree: 'static + MerkleTreeTrait>(num_inputs: usize, num_cons
 
 #[test]
 fn test_por_circuit_poseidon_base_2_private_root() {
-    test_por_circuit_private_root::<TreeBase<PoseidonHasher, U2>>(1_886);
+    test_por_circuit_private_root::<TreeBase<PoseidonHasher<Fr>, U2>>(1_886);
 }
 
 #[test]
 fn test_por_circuit_poseidon_base_4_private_root() {
-    test_por_circuit_private_root::<TreeBase<PoseidonHasher, U4>>(1_163);
+    test_por_circuit_private_root::<TreeBase<PoseidonHasher<Fr>, U4>>(1_163);
 }
 
 #[test]
 fn test_por_circuit_poseidon_base_8_private_root() {
-    test_por_circuit_private_root::<TreeBase<PoseidonHasher, U8>>(1_062);
+    test_por_circuit_private_root::<TreeBase<PoseidonHasher<Fr>, U8>>(1_062);
 }
 
-fn test_por_circuit_private_root<Tree: MerkleTreeTrait>(num_constraints: usize) {
+fn test_por_circuit_private_root<Tree>(num_constraints: usize)
+where
+    Tree: MerkleTreeTrait,
+    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+{
     let mut rng = XorShiftRng::from_seed(TEST_SEED);
 
     let leaves = 64 * get_base_tree_count::<Tree>();
@@ -281,10 +289,13 @@ fn test_por_circuit_private_root<Tree: MerkleTreeTrait>(num_constraints: usize) 
     }
 }
 
-fn create_tree<Tree: MerkleTreeTrait>(
+fn create_tree<Tree>(
     labels: &[<<Tree as MerkleTreeTrait>::Hasher as Hasher>::Domain],
     tmp_path: &Path,
 ) -> MerkleTreeWrapper<Tree::Hasher, Tree::Store, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>
+where
+    Tree: MerkleTreeTrait,
+    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
 {
     let sector_nodes = labels.len();
     let tree_name = Tree::display();
@@ -387,10 +398,10 @@ where
     let tmp_path = tmp_dir.path();
 
     // Create random TreeROld.
-    let leafs: Vec<PoseidonDomain> = (0..sector_nodes)
+    let leafs: Vec<PoseidonDomain<Fr>> = (0..sector_nodes)
         .map(|_| PoseidonDomain::random(&mut rng))
         .collect();
-    let tree = create_tree::<DiskTree<PoseidonHasher, U, V, W>>(&leafs, tmp_path);
+    let tree = create_tree::<DiskTree<PoseidonHasher<Fr>, U, V, W>>(&leafs, tmp_path);
     let root = tree.root();
 
     let mut cs = TestConstraintSystem::<Fr>::new();
@@ -412,11 +423,14 @@ where
                 commitment: None,
             };
             let priv_inputs =
-                por::PrivateInputs::<DiskTree<PoseidonHasher, U, V, W>> { leaf, tree: &tree };
+                por::PrivateInputs::<DiskTree<PoseidonHasher<Fr>, U, V, W>> { leaf, tree: &tree };
             let proof = PoR::prove(&pub_params, &pub_inputs, &priv_inputs).expect("proving failed");
-            let is_valid =
-                PoR::<DiskTree<PoseidonHasher, U, V, W>>::verify(&pub_params, &pub_inputs, &proof)
-                    .expect("verification failed");
+            let is_valid = PoR::<DiskTree<PoseidonHasher<Fr>, U, V, W>>::verify(
+                &pub_params,
+                &pub_inputs,
+                &proof,
+            )
+            .expect("verification failed");
             assert!(is_valid, "failed to verify por proof");
             proof.proof
         };
@@ -463,7 +477,7 @@ where
             })
             .collect();
 
-        por_no_challenge_input::<DiskTree<PoseidonHasher, U, V, W>, _>(
+        por_no_challenge_input::<DiskTree<PoseidonHasher<Fr>, U, V, W>, _>(
             cs.namespace(|| format!("por (c_index={})", c_index)),
             c_bits,
             leaf,

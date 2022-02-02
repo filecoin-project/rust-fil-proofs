@@ -4,7 +4,7 @@ use bellperson::{
 };
 use blstrs::Scalar as Fr;
 use ff::Field;
-use filecoin_hashers::{poseidon::PoseidonHasher, Hasher};
+use filecoin_hashers::{poseidon::PoseidonHasher, Domain, Hasher};
 use fr32::fr_into_bytes;
 use merkletree::store::StoreConfig;
 use pretty_assertions::assert_eq;
@@ -31,10 +31,14 @@ use tempfile::tempdir;
 #[test]
 #[ignore]
 fn test_drg_porep_compound_poseidon() {
-    drg_porep_compound::<BinaryMerkleTree<PoseidonHasher>>();
+    drg_porep_compound::<BinaryMerkleTree<PoseidonHasher<Fr>>>();
 }
 
-fn drg_porep_compound<Tree: 'static + MerkleTreeTrait>() {
+fn drg_porep_compound<Tree>()
+where
+    Tree: 'static + MerkleTreeTrait,
+    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+{
     // femme::pretty::Logger::new()
     //     .start(log::LevelFilter::Trace)
     //     .ok();

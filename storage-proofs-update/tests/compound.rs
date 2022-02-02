@@ -1,6 +1,7 @@
 use std::fs;
 use std::path::Path;
 
+use blstrs::Scalar as Fr;
 use filecoin_hashers::{Domain, HashFunction, Hasher, PoseidonArity};
 use generic_array::typenum::{Unsigned, U0, U2, U4, U8};
 use merkletree::{merkle::get_merkle_tree_len, store::StoreConfig};
@@ -8,17 +9,15 @@ use rand::SeedableRng;
 use rand_xorshift::XorShiftRng;
 use storage_proofs_core::{
     compound_proof::{self, CompoundProof},
-    merkle::{
-        create_lc_tree, get_base_tree_count, split_config_and_replica, LCTree, MerkleTreeTrait,
-    },
+    merkle::{create_lc_tree, get_base_tree_count, split_config_and_replica, MerkleTreeTrait},
     util::default_rows_to_discard,
     TEST_SEED,
 };
 use storage_proofs_update::{
     constants::{
-        hs, partition_count, validate_tree_r_shape, TreeD, TreeDArity, TreeDDomain, TreeRBaseTree,
-        TreeRDomain, TreeRHasher, SECTOR_SIZE_16_KIB, SECTOR_SIZE_1_KIB, SECTOR_SIZE_2_KIB,
-        SECTOR_SIZE_32_KIB, SECTOR_SIZE_4_KIB, SECTOR_SIZE_8_KIB,
+        self, hs, partition_count, validate_tree_r_shape, TreeDArity, SECTOR_SIZE_16_KIB,
+        SECTOR_SIZE_1_KIB, SECTOR_SIZE_2_KIB, SECTOR_SIZE_32_KIB, SECTOR_SIZE_4_KIB,
+        SECTOR_SIZE_8_KIB,
     },
     phi, EmptySectorUpdateCompound, PrivateInputs, PublicInputs, SetupParams,
 };
@@ -28,7 +27,13 @@ mod common;
 
 const HS_INDEX: usize = 2;
 
-type TreeR<U, V, W> = LCTree<TreeRHasher, U, V, W>;
+type TreeD = constants::TreeD<Fr>;
+type TreeDDomain = constants::TreeDDomain<Fr>;
+
+type TreeR<U, V, W> = constants::TreeR<Fr, U, V, W>;
+type TreeRBase = constants::TreeRBase<Fr>;
+type TreeRDomain = constants::TreeRDomain<Fr>;
+type TreeRHasher = constants::TreeRHasher<Fr>;
 
 fn test_empty_sector_update_compound<U, V, W>(sector_nodes: usize)
 where
@@ -36,7 +41,7 @@ where
     V: PoseidonArity,
     W: PoseidonArity,
 {
-    validate_tree_r_shape::<TreeR<U, V, W>>(sector_nodes);
+    validate_tree_r_shape::<U, V, W>(sector_nodes);
 
     let base_arity = U::to_usize();
 
@@ -89,9 +94,8 @@ where
         .zip(replica_old_config.offsets.iter().copied())
     {
         let leafs = &replica_old[leafs_offset..leafs_offset + tree_r_base_tree_leafs_byte_len];
-        let _base_tree =
-            TreeRBaseTree::from_byte_slice_with_config(leafs, base_tree_config.clone())
-                .expect("failed to create base-tree");
+        let _base_tree = TreeRBase::from_byte_slice_with_config(leafs, base_tree_config.clone())
+            .expect("failed to create base-tree");
     }
     let tree_r_old = create_lc_tree::<TreeR<U, V, W>>(
         tree_r_base_tree_nodes,
@@ -152,9 +156,8 @@ where
         .zip(replica_new_config.offsets.iter().copied())
     {
         let leafs = &replica_new[leafs_offset..leafs_offset + tree_r_base_tree_leafs_byte_len];
-        let _base_tree =
-            TreeRBaseTree::from_byte_slice_with_config(leafs, base_tree_config.clone())
-                .expect("failed to create base-tree");
+        let _base_tree = TreeRBase::from_byte_slice_with_config(leafs, base_tree_config.clone())
+            .expect("failed to create base-tree");
     }
     let tree_r_new = create_lc_tree::<TreeR<U, V, W>>(
         tree_r_base_tree_nodes,
@@ -174,7 +177,7 @@ where
         priority: true,
     };
     let pub_params_compound =
-        EmptySectorUpdateCompound::<TreeR<U, V, W>>::setup(&setup_params_compound).unwrap();
+        EmptySectorUpdateCompound::<U, V, W>::setup(&setup_params_compound).unwrap();
 
     // Prove generate vanilla and circuit proofs for all partitions.
     let pub_inputs = PublicInputs {
@@ -196,13 +199,13 @@ where
         replica_path: replica_new_path,
     };
 
-    let blank_groth_params = EmptySectorUpdateCompound::<TreeR<U, V, W>>::groth_params(
+    let blank_groth_params = EmptySectorUpdateCompound::<U, V, W>::groth_params(
         Some(&mut rng),
         &pub_params_compound.vanilla_params,
     )
     .expect("failed to generate groth params");
 
-    let multi_proof = EmptySectorUpdateCompound::<TreeR<U, V, W>>::prove(
+    let multi_proof = EmptySectorUpdateCompound::<U, V, W>::prove(
         &pub_params_compound,
         &pub_inputs,
         &priv_inputs,
@@ -210,7 +213,7 @@ where
     )
     .expect("failed while proving");
 
-    let is_valid = EmptySectorUpdateCompound::<TreeR<U, V, W>>::verify(
+    let is_valid = EmptySectorUpdateCompound::<U, V, W>::verify(
         &pub_params_compound,
         &pub_inputs,
         &multi_proof,

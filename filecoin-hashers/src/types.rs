@@ -4,12 +4,13 @@ use std::hash::Hash as StdHash;
 #[cfg(feature = "poseidon")]
 pub use crate::poseidon_types::*;
 
+use anyhow::ensure;
 use bellperson::{
     gadgets::{boolean::Boolean, num::AllocatedNum},
     ConstraintSystem, SynthesisError,
 };
 use blstrs::Scalar as Fr;
-use ff::PrimeField;
+use ff::{Field, PrimeField};
 use merkletree::{
     hash::{Algorithm as LightAlgorithm, Hashable as LightHashable},
     merkle::Element,
@@ -27,21 +28,49 @@ pub trait Domain:
     + Eq
     + Send
     + Sync
+    // TODO (halo): remove once we have Pasta GPU support.
+    // Currently the `From<Fr> + Into<Fr>` trait bounds are used as a stopgap to prevent
+    // Pasta field domains from being used in GPU code, e.g. currently converting a
+    // `Sha256Domain<Fp>` into an `Fr` panics. Remove theses trait bounds once Pasta fields are
+    // fully supported in `rust-fil-proofs`, e.g. GPU code.
     + From<Fr>
-    + From<<Fr as PrimeField>::Repr>
     + Into<Fr>
+    // Note that `Self::Field` may be `Fr`, in which case the trait bounds
+    // `From<Self::Field> + Into<Self::Field>` are redundant.
+    + From<Self::Field>
+    + Into<Self::Field>
+    + From<[u8; 32]>
     + Serialize
     + DeserializeOwned
     + Element
     + StdHash
 {
-    #[allow(clippy::wrong_self_convention)]
-    fn into_bytes(&self) -> Vec<u8>;
-    fn try_from_bytes(raw: &[u8]) -> anyhow::Result<Self>;
-    /// Write itself into the given slice, LittleEndian bytes.
-    fn write_bytes(&self, _: &mut [u8]) -> anyhow::Result<()>;
+    type Field: PrimeField;
 
-    fn random<R: RngCore>(rng: &mut R) -> Self;
+    #[allow(clippy::wrong_self_convention)]
+    fn into_bytes(&self) -> Vec<u8> {
+        self.as_ref().to_vec()
+    }
+
+    fn try_from_bytes(bytes: &[u8]) -> anyhow::Result<Self> {
+        ensure!(bytes.len() == Self::byte_len(), "invalid number of bytes");
+        let mut array = [0u8; 32];
+        array.copy_from_slice(bytes);
+        Ok(array.into())
+    }
+
+    /// Write itself into the given slice, LittleEndian bytes.
+    fn write_bytes(&self, dest: &mut [u8]) -> anyhow::Result<()> {
+        let n = Self::byte_len();
+        ensure!(dest.len() >= n, "invalid number of bytes");
+        dest[..n].copy_from_slice(self.as_ref());
+        Ok(())
+    }
+
+    fn random<R: RngCore>(rng: &mut R) -> Self {
+        // Generating a field element then converting it ensures that we stay within the field.
+        Self::Field::random(rng).into()
+    }
 }
 
 pub trait HashFunction<T: Domain>: Clone + Debug + Send + Sync + LightAlgorithm<T> {

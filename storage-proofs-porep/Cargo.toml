@@ -39,6 +39,8 @@ fdlimit = "0.2.0"
 fr32 = { path = "../fr32", version = "~4.0.0", default-features = false }
 yastl = "0.1.2"
 blstrs = "0.5.0"
+pasta_curves = "0.3.0"
+typemap = "0.3.3"
 
 [target."cfg(target_arch = \"aarch64\")".dependencies]
 sha2 = { version = "0.10.2", features = ["compress", "asm"] }

@@ -2,6 +2,8 @@ use std::marker::PhantomData;
 
 use bellperson::Circuit;
 use blstrs::Scalar as Fr;
+use ff::PrimeField;
+use filecoin_hashers::{Domain, Hasher};
 use generic_array::typenum::Unsigned;
 use storage_proofs_core::{
     compound_proof::{CircuitComponent, CompoundProof},
@@ -20,12 +22,17 @@ use crate::election::{generate_leaf_challenge, ElectionPoSt, ElectionPoStCircuit
 pub struct ElectionPoStCompound<Tree>
 where
     Tree: MerkleTreeTrait,
+    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
 {
     _t: PhantomData<Tree>,
 }
 
-impl<C: Circuit<Fr>, P: ParameterSetMetadata, Tree: MerkleTreeTrait> CacheableParameters<C, P>
-    for ElectionPoStCompound<Tree>
+impl<C, P, Tree> CacheableParameters<C, P> for ElectionPoStCompound<Tree>
+where
+    C: Circuit<Fr>,
+    P: ParameterSetMetadata,
+    Tree: MerkleTreeTrait,
+    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
 {
     fn cache_prefix() -> String {
         format!("proof-of-spacetime-election-{}", Tree::display())
@@ -36,6 +43,7 @@ impl<'a, Tree> CompoundProof<'a, ElectionPoSt<'a, Tree>, ElectionPoStCircuit<Tre
     for ElectionPoStCompound<Tree>
 where
     Tree: 'static + MerkleTreeTrait,
+    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
 {
     fn generate_public_inputs(
         pub_inputs: &<ElectionPoSt<'a, Tree> as ProofScheme<'a>>::PublicInputs,
@@ -78,7 +86,7 @@ where
         }
 
         // 3. Inputs for verifying partial_ticket generation
-        inputs.push(pub_inputs.partial_ticket);
+        inputs.push(Fr::from_repr_vartime(pub_inputs.partial_ticket).expect("from_repr failure"));
 
         Ok(inputs)
     }
@@ -121,7 +129,9 @@ where
             comm_c: Some(comm_c),
             comm_r_last: Some(comm_r_last),
             paths,
-            partial_ticket: Some(pub_in.partial_ticket),
+            partial_ticket: Some(
+                Fr::from_repr_vartime(pub_in.partial_ticket).expect("from_repr failure"),
+            ),
             randomness: Some(pub_in.randomness.into()),
             prover_id: Some(pub_in.prover_id.into()),
             sector_id: Some(pub_in.sector_id.into()),

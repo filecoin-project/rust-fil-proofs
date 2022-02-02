@@ -25,6 +25,8 @@ neptune = { version = "~7.0.0", features = ["bls", "arity2", "arity4", "arity8",
 lazy_static = "1.2"
 fr32 = { path = "../fr32", version = "~4.0.0", default-features = false }
 memmap = "0.7"
+pasta_curves = "0.3.0"
+typemap = "0.3.3"
 
 [dev-dependencies]
 tempfile = "3"
