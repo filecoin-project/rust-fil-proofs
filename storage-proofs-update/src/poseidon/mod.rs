@@ -4,4 +4,4 @@ pub mod vanilla;
 
 pub use circuit::EmptySectorUpdateCircuit;
 pub use compound::EmptySectorUpdateCompound;
-pub use vanilla::EmptySectorUpdate;
+pub use vanilla::{ChallengeProof, EmptySectorUpdate, PartitionProof, PublicInputs};

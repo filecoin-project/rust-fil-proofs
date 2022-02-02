@@ -81,6 +81,7 @@ mod test {
 
     use std::collections::HashMap;
 
+    use blstrs::Scalar as Fr;
     use filecoin_hashers::sha256::Sha256Domain;
     use rand::{thread_rng, Rng};
 
@@ -101,7 +102,7 @@ mod test {
         let challenges = LayerChallenges::new(layers, n);
         let leaves = 1 << 30;
         let rng = &mut thread_rng();
-        let replica_id: Sha256Domain = Sha256Domain::random(rng);
+        let replica_id = Sha256Domain::<Fr>::random(rng);
         let seed: [u8; 32] = rng.gen();
         let partitions = 5;
         let total_challenges = partitions * n;
@@ -138,7 +139,7 @@ mod test {
         let n = 40;
         let leaves = 1 << 30;
         let rng = &mut thread_rng();
-        let replica_id: Sha256Domain = Sha256Domain::random(rng);
+        let replica_id = Sha256Domain::<Fr>::random(rng);
         let seed: [u8; 32] = rng.gen();
         let partitions = 5;
         let layers = 100;

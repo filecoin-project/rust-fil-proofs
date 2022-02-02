@@ -13,7 +13,7 @@ use fs2::FileExt;
 use itertools::Itertools;
 use lazy_static::lazy_static;
 use log::info;
-use memmap2::MmapOptions;
+use memmap::MmapOptions;
 use rand::RngCore;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};

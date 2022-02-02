@@ -2,7 +2,7 @@ use std::fs::OpenOptions;
 use std::io::Write;
 use std::path::Path;
 
-use memmap2::{MmapMut, MmapOptions};
+use memmap::{MmapMut, MmapOptions};
 
 pub fn setup_replica(data: &[u8], replica_path: &Path) -> MmapMut {
     let mut f = OpenOptions::new()

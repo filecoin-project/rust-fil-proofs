@@ -1,12 +1,13 @@
 use anyhow::{ensure, Result};
+use blstrs::Scalar as Fr;
+use filecoin_hashers::{Domain, Hasher};
 use storage_proofs_core::{api_version::ApiVersion, proof::ProofScheme};
 use storage_proofs_porep::stacked::{self, LayerChallenges, StackedDrg};
 use storage_proofs_post::fallback::{self, FallbackPoSt};
 
 use crate::{
-    constants::{DefaultPieceHasher, DRG_DEGREE, EXP_DEGREE, LAYERS},
+    constants::{DefaultPieceHasher, DRG_DEGREE, EXP_DEGREE, LAYERS, POREP_MINIMUM_CHALLENGES},
     types::{MerkleTreeTrait, PaddedBytesAmount, PoStConfig},
-    POREP_MINIMUM_CHALLENGES,
 };
 
 type WinningPostSetupParams = fallback::SetupParams;
@@ -20,7 +21,10 @@ pub fn public_params<Tree: 'static + MerkleTreeTrait>(
     partitions: usize,
     porep_id: [u8; 32],
     api_version: ApiVersion,
-) -> Result<stacked::PublicParams<Tree>> {
+) -> Result<stacked::PublicParams<Tree>>
+where
+    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+{
     StackedDrg::<Tree, DefaultPieceHasher>::setup(&setup_params(
         sector_bytes,
         partitions,
@@ -31,7 +35,10 @@ pub fn public_params<Tree: 'static + MerkleTreeTrait>(
 
 pub fn winning_post_public_params<Tree: 'static + MerkleTreeTrait>(
     post_config: &PoStConfig,
-) -> Result<WinningPostPublicParams> {
+) -> Result<WinningPostPublicParams>
+where
+    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+{
     FallbackPoSt::<Tree>::setup(&winning_post_setup_params(post_config)?)
 }
 
@@ -62,7 +69,10 @@ pub fn winning_post_setup_params(post_config: &PoStConfig) -> Result<WinningPost
 
 pub fn window_post_public_params<Tree: 'static + MerkleTreeTrait>(
     post_config: &PoStConfig,
-) -> Result<WindowPostPublicParams> {
+) -> Result<WindowPostPublicParams>
+where
+    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+{
     FallbackPoSt::<Tree>::setup(&window_post_setup_params(post_config))
 }
 
@@ -83,7 +93,11 @@ pub fn setup_params(
 ) -> Result<stacked::SetupParams> {
     let layer_challenges = select_challenges(
         partitions,
-        POREP_MINIMUM_CHALLENGES.from_sector_size(u64::from(sector_bytes)),
+        *POREP_MINIMUM_CHALLENGES
+            .read()
+            .expect("POREP_MINIMUM_CHALLENGES poisoned")
+            .get(&u64::from(sector_bytes))
+            .expect("unknown sector size") as usize,
         *LAYERS
             .read()
             .expect("LAYERS poisoned")

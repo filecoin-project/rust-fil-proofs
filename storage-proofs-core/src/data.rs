@@ -4,7 +4,7 @@ use std::path::PathBuf;
 
 use anyhow::{ensure, Context, Result};
 use log::info;
-use memmap2::{MmapMut, MmapOptions};
+use memmap::{MmapMut, MmapOptions};
 
 /// A wrapper around data either on disk or a slice in memory, that can be dropped and read back into memory,
 /// to allow for better control of memory consumption.

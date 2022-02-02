@@ -168,8 +168,9 @@ fn configure_global_config(inputs: &ProdbenchInputs) {
         .expect("POREP_PARTITIONS poisoned")
         .insert(inputs.sector_size_bytes(), inputs.porep_partitions);
     POREP_MINIMUM_CHALLENGES
-        .get_mut()
-        .insert(inputs.sector_size_bytes(), inputs.porep_challenges as usize);
+        .write()
+        .expect("POREP_MINIMUM_CHALLENGES poisoned")
+        .insert(inputs.sector_size_bytes(), inputs.porep_challenges);
 }
 
 pub fn run(
@@ -286,10 +287,11 @@ fn measure_porep_circuit(i: &ProdbenchInputs) -> usize {
         api_version: i.api_version(),
     };
 
-    let pp = StackedDrg::<ProdbenchTree, Sha256Hasher>::setup(&sp).expect("failed to setup DRG");
+    let pp =
+        StackedDrg::<ProdbenchTree, Sha256Hasher<Fr>>::setup(&sp).expect("failed to setup DRG");
 
     let mut cs = BenchCS::<Fr>::new();
-    <StackedCompound<_, _> as CompoundProof<StackedDrg<ProdbenchTree, Sha256Hasher>, _>>::blank_circuit(
+    <StackedCompound<_, _> as CompoundProof<StackedDrg<ProdbenchTree, Sha256Hasher<Fr>>, _>>::blank_circuit(
         &pp,
     )
         .synthesize(&mut cs)
@@ -313,11 +315,12 @@ fn generate_params(i: &ProdbenchInputs) {
     );
     let dummy_porep_id = [0; 32];
 
-    cache_porep_params(PoRepConfig::new_groth16(
-        i.sector_size_bytes(),
-        dummy_porep_id,
-        i.api_version(),
-    ));
+    cache_porep_params(PoRepConfig {
+        sector_size,
+        partitions,
+        porep_id: dummy_porep_id,
+        api_version: i.api_version(),
+    });
 }
 
 fn cache_porep_params(porep_config: PoRepConfig) {
@@ -331,18 +334,21 @@ fn cache_porep_params(porep_config: PoRepConfig) {
 
     {
         let circuit = <StackedCompound<ProdbenchTree, _> as CompoundProof<
-            StackedDrg<ProdbenchTree, Sha256Hasher>,
+            StackedDrg<ProdbenchTree, Sha256Hasher<Fr>>,
             _,
         >>::blank_circuit(&public_params);
-        StackedCompound::<ProdbenchTree, Sha256Hasher>::get_param_metadata(circuit, &public_params)
-            .expect("cannot get param metadata");
+        StackedCompound::<ProdbenchTree, Sha256Hasher<Fr>>::get_param_metadata(
+            circuit,
+            &public_params,
+        )
+        .expect("cannot get param metadata");
     }
     {
         let circuit = <StackedCompound<ProdbenchTree, _> as CompoundProof<
-            StackedDrg<ProdbenchTree, Sha256Hasher>,
+            StackedDrg<ProdbenchTree, Sha256Hasher<Fr>>,
             _,
         >>::blank_circuit(&public_params);
-        StackedCompound::<ProdbenchTree, Sha256Hasher>::get_groth_params(
+        StackedCompound::<ProdbenchTree, Sha256Hasher<Fr>>::get_groth_params(
             Some(&mut XorShiftRng::from_seed(SEED)),
             circuit,
             &public_params,
@@ -351,11 +357,11 @@ fn cache_porep_params(porep_config: PoRepConfig) {
     }
     {
         let circuit = <StackedCompound<ProdbenchTree, _> as CompoundProof<
-            StackedDrg<ProdbenchTree, Sha256Hasher>,
+            StackedDrg<ProdbenchTree, Sha256Hasher<Fr>>,
             _,
         >>::blank_circuit(&public_params);
 
-        StackedCompound::<ProdbenchTree, Sha256Hasher>::get_verifying_key(
+        StackedCompound::<ProdbenchTree, Sha256Hasher<Fr>>::get_verifying_key(
             Some(&mut XorShiftRng::from_seed(SEED)),
             circuit,
             &public_params,
