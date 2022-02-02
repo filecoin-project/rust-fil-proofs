@@ -2,7 +2,7 @@ use std::marker::PhantomData;
 
 use anyhow::ensure;
 use blstrs::Scalar as Fr;
-
+use filecoin_hashers::PoseidonArity;
 use storage_proofs_core::{
     compound_proof::{CircuitComponent, CompoundProof},
     error::Result,
@@ -11,38 +11,47 @@ use storage_proofs_core::{
 };
 
 use crate::{
-    constants::TreeRHasher,
+    constants::TreeR,
     poseidon::{
-        circuit::{self, EmptySectorUpdateCircuit},
-        vanilla::{EmptySectorUpdate, PartitionProof, PublicInputs},
+        circuit, EmptySectorUpdate, EmptySectorUpdateCircuit, PartitionProof, PublicInputs,
     },
     PublicParams,
 };
 
-pub struct EmptySectorUpdateCompound<TreeR>
+pub struct EmptySectorUpdateCompound<U, V, W>
 where
-    TreeR: MerkleTreeTrait<Hasher = TreeRHasher>,
+    U: PoseidonArity,
+    V: PoseidonArity,
+    W: PoseidonArity,
 {
-    pub _tree_r: PhantomData<TreeR>,
+    pub _tree_r: PhantomData<(U, V, W)>,
 }
 
-impl<TreeR> CacheableParameters<EmptySectorUpdateCircuit<TreeR>, PublicParams>
-    for EmptySectorUpdateCompound<TreeR>
+impl<U, V, W> CacheableParameters<EmptySectorUpdateCircuit<U, V, W>, PublicParams>
+    for EmptySectorUpdateCompound<U, V, W>
 where
-    TreeR: MerkleTreeTrait<Hasher = TreeRHasher>,
+    U: PoseidonArity,
+    V: PoseidonArity,
+    W: PoseidonArity,
 {
     fn cache_prefix() -> String {
-        format!("empty-sector-update-poseidon-{}", TreeR::display())
+        format!(
+            "empty-sector-update-poseidon-{}",
+            TreeR::<Fr, U, V, W>::display()
+        )
     }
 }
 
-impl<'a, TreeR> CompoundProof<'a, EmptySectorUpdate<TreeR>, EmptySectorUpdateCircuit<TreeR>>
-    for EmptySectorUpdateCompound<TreeR>
+impl<'a, U, V, W>
+    CompoundProof<'a, EmptySectorUpdate<Fr, U, V, W>, EmptySectorUpdateCircuit<U, V, W>>
+    for EmptySectorUpdateCompound<U, V, W>
 where
-    TreeR: 'static + MerkleTreeTrait<Hasher = TreeRHasher>,
+    U: PoseidonArity,
+    V: PoseidonArity,
+    W: PoseidonArity,
 {
     fn generate_public_inputs(
-        pub_inputs: &PublicInputs,
+        pub_inputs: &PublicInputs<Fr>,
         pub_params: &PublicParams,
         k: Option<usize>,
     ) -> Result<Vec<Fr>> {
@@ -79,12 +88,12 @@ where
     }
 
     fn circuit(
-        pub_inputs: &PublicInputs,
-        _priv_inputs: <EmptySectorUpdateCircuit<TreeR> as CircuitComponent>::ComponentPrivateInputs,
-        vanilla_proof: &PartitionProof<TreeR>,
+        pub_inputs: &PublicInputs<Fr>,
+        _priv_inputs: <EmptySectorUpdateCircuit<U, V, W> as CircuitComponent>::ComponentPrivateInputs,
+        vanilla_proof: &PartitionProof<Fr, U, V, W>,
         pub_params: &PublicParams,
         k: Option<usize>,
-    ) -> Result<EmptySectorUpdateCircuit<TreeR>> {
+    ) -> Result<EmptySectorUpdateCircuit<U, V, W>> {
         // Ensure correctness of arguments.
         let sector_bytes = (pub_params.sector_nodes as u64) << 5;
         ensure!(
@@ -128,7 +137,7 @@ where
         })
     }
 
-    fn blank_circuit(pub_params: &PublicParams) -> EmptySectorUpdateCircuit<TreeR> {
+    fn blank_circuit(pub_params: &PublicParams) -> EmptySectorUpdateCircuit<U, V, W> {
         EmptySectorUpdateCircuit::blank(pub_params.clone())
     }
 }

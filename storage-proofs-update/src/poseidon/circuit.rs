@@ -8,19 +8,18 @@ use bellperson::{
 };
 use blstrs::Scalar as Fr;
 use ff::{Field, PrimeFieldBits};
-use filecoin_hashers::{HashFunction, Hasher};
-use generic_array::typenum::Unsigned;
+use filecoin_hashers::{HashFunction, Hasher, PoseidonArity};
 use neptune::circuit::poseidon_hash;
 use storage_proofs_core::{
     compound_proof::CircuitComponent,
     gadgets::por::por_no_challenge_input,
-    merkle::{MerkleProof, MerkleProofTrait, MerkleTreeTrait},
+    merkle::{MerkleProof, MerkleProofTrait},
 };
 
 use crate::{
     constants::{
-        challenge_count_poseidon, hs, validate_tree_r_shape, TreeRDomain, TreeRHasher,
-        POSEIDON_CONSTANTS_GEN_RANDOMNESS,
+        challenge_count_poseidon, hs, validate_tree_r_shape, TreeR, TreeRDomain, TreeRHasher,
+        POSEIDON_CONSTANTS_GEN_RANDOMNESS_BLS,
     },
     gadgets::{gen_challenge_bits, get_challenge_high_bits, label_r_new},
     poseidon::vanilla,
@@ -44,9 +43,9 @@ impl PublicInputs {
     pub fn new(
         sector_nodes: usize,
         h: usize,
-        comm_r_old: TreeRDomain,
-        comm_d_new: TreeRDomain,
-        comm_r_new: TreeRDomain,
+        comm_r_old: TreeRDomain<Fr>,
+        comm_d_new: TreeRDomain<Fr>,
+        comm_r_new: TreeRDomain<Fr>,
     ) -> Self {
         let hs_index = hs(sector_nodes)
             .iter()
@@ -84,9 +83,12 @@ impl PublicInputs {
     }
 }
 
-pub struct ChallengeProof<TreeR>
+#[derive(Clone)]
+pub struct ChallengeProof<U, V, W>
 where
-    TreeR: MerkleTreeTrait<Hasher = TreeRHasher>,
+    U: PoseidonArity,
+    V: PoseidonArity,
+    W: PoseidonArity,
 {
     pub leaf_r_old: Option<Fr>,
     pub path_r_old: Vec<Vec<Option<Fr>>>,
@@ -94,64 +96,35 @@ where
     pub path_d_new: Vec<Vec<Option<Fr>>>,
     pub leaf_r_new: Option<Fr>,
     pub path_r_new: Vec<Vec<Option<Fr>>>,
-    pub _tree_r: PhantomData<TreeR>,
+    pub _tree_r: PhantomData<(U, V, W)>,
 }
 
-// Implement `Clone` by hand because `MerkleTreeTrait` does not implement `Clone`.
-impl<TreeR> Clone for ChallengeProof<TreeR>
+impl<U, V, W> From<vanilla::ChallengeProof<Fr, U, V, W>> for ChallengeProof<U, V, W>
 where
-    TreeR: MerkleTreeTrait<Hasher = TreeRHasher>,
+    U: PoseidonArity,
+    V: PoseidonArity,
+    W: PoseidonArity,
 {
-    fn clone(&self) -> Self {
-        ChallengeProof {
-            leaf_r_old: self.leaf_r_old,
-            path_r_old: self.path_r_old.clone(),
-            leaf_d_new: self.leaf_d_new,
-            path_d_new: self.path_d_new.clone(),
-            leaf_r_new: self.leaf_r_new,
-            path_r_new: self.path_r_new.clone(),
-            _tree_r: PhantomData,
-        }
-    }
-}
-
-impl<TreeR> From<vanilla::ChallengeProof<TreeR>> for ChallengeProof<TreeR>
-where
-    TreeR: MerkleTreeTrait<Hasher = TreeRHasher>,
-{
-    fn from(vanilla_challenge_proof: vanilla::ChallengeProof<TreeR>) -> Self {
+    fn from(challenge_proof: vanilla::ChallengeProof<Fr, U, V, W>) -> Self {
         let vanilla::ChallengeProof {
             proof_r_old,
             proof_d_new,
             proof_r_new,
-        } = vanilla_challenge_proof;
+        } = challenge_proof;
         ChallengeProof::from_merkle_proofs(proof_r_old, proof_d_new, proof_r_new)
     }
 }
 
-impl<TreeR> ChallengeProof<TreeR>
+impl<U, V, W> ChallengeProof<U, V, W>
 where
-    TreeR: MerkleTreeTrait<Hasher = TreeRHasher>,
+    U: PoseidonArity,
+    V: PoseidonArity,
+    W: PoseidonArity,
 {
     pub fn from_merkle_proofs(
-        proof_r_old: MerkleProof<
-            TreeRHasher,
-            TreeR::Arity,
-            TreeR::SubTreeArity,
-            TreeR::TopTreeArity,
-        >,
-        proof_d_new: MerkleProof<
-            TreeRHasher,
-            TreeR::Arity,
-            TreeR::SubTreeArity,
-            TreeR::TopTreeArity,
-        >,
-        proof_r_new: MerkleProof<
-            TreeRHasher,
-            TreeR::Arity,
-            TreeR::SubTreeArity,
-            TreeR::TopTreeArity,
-        >,
+        proof_r_old: MerkleProof<TreeRHasher<Fr>, U, V, W>,
+        proof_d_new: MerkleProof<TreeRHasher<Fr>, U, V, W>,
+        proof_r_new: MerkleProof<TreeRHasher<Fr>, U, V, W>,
     ) -> Self {
         let leaf_r_old = Some(proof_r_old.leaf().into());
         let path_r_old: Vec<Vec<Option<Fr>>> = proof_r_old
@@ -190,9 +163,9 @@ where
 
         // TreeROld and TreeRNew and TreeD have the same shape, thus have the same Merkle path length.
         let path_r = {
-            let base_arity = TreeR::Arity::to_usize();
-            let sub_arity = TreeR::SubTreeArity::to_usize();
-            let top_arity = TreeR::TopTreeArity::to_usize();
+            let base_arity = U::to_usize();
+            let sub_arity = V::to_usize();
+            let top_arity = W::to_usize();
 
             let mut bits_remaining = challenge_bit_len;
             let mut sub_and_top_path = vec![];
@@ -226,9 +199,11 @@ where
 }
 
 #[derive(Clone)]
-pub struct PrivateInputs<TreeR>
+pub struct PrivateInputs<U, V, W>
 where
-    TreeR: MerkleTreeTrait<Hasher = TreeRHasher>,
+    U: PoseidonArity,
+    V: PoseidonArity,
+    W: PoseidonArity,
 {
     // CommC created by running SDR-PoRep on the old/un-updated data.
     pub comm_c: Option<Fr>,
@@ -239,18 +214,23 @@ where
     pub root_r_new: Option<Fr>,
     // Generate three Merkle proofs (TreeROld, TreeDNew, TreeRNew) for each of this partition's
     // challenges.
-    pub challenge_proofs: Vec<ChallengeProof<TreeR>>,
+    pub challenge_proofs: Vec<ChallengeProof<U, V, W>>,
 }
 
-impl<TreeR> PrivateInputs<TreeR>
+impl<U, V, W> PrivateInputs<U, V, W>
 where
-    TreeR: MerkleTreeTrait<Hasher = TreeRHasher>,
+    U: PoseidonArity,
+    V: PoseidonArity,
+    W: PoseidonArity,
 {
-    pub fn new(comm_c: TreeRDomain, challenge_proofs: &[vanilla::ChallengeProof<TreeR>]) -> Self {
+    pub fn new(
+        comm_c: TreeRDomain<Fr>,
+        challenge_proofs: &[vanilla::ChallengeProof<Fr, U, V, W>],
+    ) -> Self {
         let root_r_old: Fr = challenge_proofs[0].proof_r_old.root().into();
         let root_r_new: Fr = challenge_proofs[0].proof_r_new.root().into();
 
-        let challenge_proofs: Vec<ChallengeProof<TreeR>> = challenge_proofs
+        let challenge_proofs: Vec<ChallengeProof<U, V, W>> = challenge_proofs
             .iter()
             .cloned()
             .map(ChallengeProof::from)
@@ -277,25 +257,31 @@ where
     }
 }
 
-pub struct EmptySectorUpdateCircuit<TreeR>
+pub struct EmptySectorUpdateCircuit<U, V, W>
 where
-    TreeR: MerkleTreeTrait<Hasher = TreeRHasher>,
+    U: PoseidonArity,
+    V: PoseidonArity,
+    W: PoseidonArity,
 {
     pub pub_params: PublicParams,
     pub pub_inputs: PublicInputs,
-    pub priv_inputs: PrivateInputs<TreeR>,
+    pub priv_inputs: PrivateInputs<U, V, W>,
 }
 
-impl<TreeR> CircuitComponent for EmptySectorUpdateCircuit<TreeR>
+impl<U, V, W> CircuitComponent for EmptySectorUpdateCircuit<U, V, W>
 where
-    TreeR: MerkleTreeTrait<Hasher = TreeRHasher>,
+    U: PoseidonArity,
+    V: PoseidonArity,
+    W: PoseidonArity,
 {
     type ComponentPrivateInputs = ();
 }
 
-impl<TreeR> EmptySectorUpdateCircuit<TreeR>
+impl<U, V, W> EmptySectorUpdateCircuit<U, V, W>
 where
-    TreeR: MerkleTreeTrait<Hasher = TreeRHasher>,
+    U: PoseidonArity,
+    V: PoseidonArity,
+    W: PoseidonArity,
 {
     pub fn blank(pub_params: PublicParams) -> Self {
         let sector_bytes = (pub_params.sector_nodes as u64) << 5;
@@ -305,7 +291,7 @@ where
             "invalid public-params for sector-size",
         );
         let pub_inputs = PublicInputs::empty();
-        let priv_inputs = PrivateInputs::<TreeR>::empty(pub_params.sector_nodes);
+        let priv_inputs = PrivateInputs::<U, V, W>::empty(pub_params.sector_nodes);
         EmptySectorUpdateCircuit {
             pub_params,
             pub_inputs,
@@ -314,9 +300,11 @@ where
     }
 }
 
-impl<TreeR> Circuit<Fr> for EmptySectorUpdateCircuit<TreeR>
+impl<U, V, W> Circuit<Fr> for EmptySectorUpdateCircuit<U, V, W>
 where
-    TreeR: MerkleTreeTrait<Hasher = TreeRHasher>,
+    U: PoseidonArity,
+    V: PoseidonArity,
+    W: PoseidonArity,
 {
     /// This circuit is NOT AUDITED, USE AT YOUR OWN RISK.
     fn synthesize<CS: ConstraintSystem<Fr>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
@@ -341,7 +329,7 @@ where
         let challenge_bit_len = sector_nodes.trailing_zeros() as usize;
         let challenge_count = challenge_count_poseidon(sector_nodes);
 
-        validate_tree_r_shape::<TreeR>(sector_nodes);
+        validate_tree_r_shape::<U, V, W>(sector_nodes);
         let hs = hs(sector_nodes);
         let h_select_bit_len = hs.len();
 
@@ -427,7 +415,7 @@ where
         let phi = poseidon_hash(
             cs.namespace(|| "phi"),
             vec![comm_d_new.clone(), comm_r_old.clone()],
-            &POSEIDON_CONSTANTS_GEN_RANDOMNESS,
+            &*POSEIDON_CONSTANTS_GEN_RANDOMNESS_BLS,
         )?;
 
         // Allocate private-inputs; excludes each challenge's Merkle proofs.
@@ -446,7 +434,7 @@ where
 
         // Assert that the witnessed `root_r_old` and `root_r_new` are consistent with the
         // public `comm_r_old` and `comm_r_new` via `comm_r = H(comm_c || root_r)`.
-        let comm_r_old_calc = <TreeR::Hasher as Hasher>::Function::hash2_circuit(
+        let comm_r_old_calc = <TreeRHasher<Fr> as Hasher>::Function::hash2_circuit(
             cs.namespace(|| "comm_r_old_calc"),
             &comm_c,
             &root_r_old,
@@ -457,7 +445,7 @@ where
             |lc| lc + CS::one(),
             |lc| lc + comm_r_old.get_variable(),
         );
-        let comm_r_new_calc = <TreeR::Hasher as Hasher>::Function::hash2_circuit(
+        let comm_r_new_calc = <TreeRHasher<Fr> as Hasher>::Function::hash2_circuit(
             cs.namespace(|| "comm_r_new_calc"),
             &comm_c,
             &root_r_new,
@@ -495,7 +483,7 @@ where
             let rho = poseidon_hash(
                 cs.namespace(|| format!("rho (c_index={})", c_index)),
                 vec![phi.clone(), c_high.clone()],
-                &POSEIDON_CONSTANTS_GEN_RANDOMNESS,
+                &*POSEIDON_CONSTANTS_GEN_RANDOMNESS_BLS,
             )?;
 
             // Validate this challenge's Merkle proofs.
@@ -553,7 +541,7 @@ where
                 })
                 .collect::<Result<Vec<Vec<AllocatedNum<Fr>>>, SynthesisError>>()?;
 
-            por_no_challenge_input::<TreeR, _>(
+            por_no_challenge_input::<TreeR<Fr, U, V, W>, _>(
                 cs.namespace(|| format!("por tree_r_old (c_index={})", c_index)),
                 c_bits.clone(),
                 leaf_r_old.clone(),
@@ -583,7 +571,7 @@ where
                 })
                 .collect::<Result<Vec<Vec<AllocatedNum<Fr>>>, SynthesisError>>()?;
 
-            por_no_challenge_input::<TreeR, _>(
+            por_no_challenge_input::<TreeR<Fr, U, V, W>, _>(
                 cs.namespace(|| format!("por tree_r_new (c_index={})", c_index)),
                 c_bits.clone(),
                 leaf_r_new.clone(),
@@ -613,7 +601,7 @@ where
                 })
                 .collect::<Result<Vec<Vec<AllocatedNum<Fr>>>, SynthesisError>>()?;
 
-            por_no_challenge_input::<TreeR, _>(
+            por_no_challenge_input::<TreeR<Fr, U, V, W>, _>(
                 cs.namespace(|| format!("por tree_d_new (c_index={})", c_index)),
                 c_bits.clone(),
                 leaf_d_new.clone(),

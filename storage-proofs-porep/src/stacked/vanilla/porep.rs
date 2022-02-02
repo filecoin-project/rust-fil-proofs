@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use filecoin_hashers::Hasher;
+use filecoin_hashers::{Domain, Hasher};
 use merkletree::store::StoreConfig;
 use storage_proofs_core::{
     error::Result,
@@ -16,8 +16,11 @@ use crate::{
     PoRep,
 };
 
-impl<'a, 'c, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> PoRep<'a, Tree::Hasher, G>
-    for StackedDrg<'a, Tree, G>
+impl<'a, 'c, Tree, G> PoRep<'a, Tree::Hasher, G> for StackedDrg<'a, Tree, G>
+where
+    Tree: 'static + MerkleTreeTrait,
+    G: 'static + Hasher,
+    G::Domain: Domain<Field = <<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
 {
     type Tau = Tau<<Tree::Hasher as Hasher>::Domain, <G as Hasher>::Domain>;
     type ProverAux = (

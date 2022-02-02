@@ -52,7 +52,7 @@ mod tests {
                 AllocatedNum::alloc(&mut cs, || Ok(b)).expect("alloc failed")
             };
 
-            let out = <PoseidonHasher as Hasher>::Function::hash2_circuit(
+            let out = <PoseidonHasher<Fr> as Hasher>::Function::hash2_circuit(
                 cs.namespace(|| "hash2"),
                 &a_num,
                 &b_num,
@@ -63,7 +63,7 @@ mod tests {
             assert_eq!(cs.num_constraints(), 311);
 
             let expected: Fr =
-                <PoseidonHasher as Hasher>::Function::hash2(&a.into(), &b.into()).into();
+                <PoseidonHasher<Fr> as Hasher>::Function::hash2(&a.into(), &b.into()).into();
 
             assert_eq!(
                 expected,

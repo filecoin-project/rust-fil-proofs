@@ -4,6 +4,7 @@ use std::path::Path;
 
 use anyhow::{Context, Result};
 use bincode::serialize;
+use blstrs::Scalar as Fr;
 use filecoin_hashers::{Domain, Hasher};
 use rand::{thread_rng, Rng};
 use storage_proofs_core::{cache_key::CacheKey, merkle::MerkleTreeTrait};
@@ -14,21 +15,34 @@ use crate::{
     types::{Commitment, PaddedBytesAmount, PoRepConfig},
 };
 
-pub fn fauxrep<R: AsRef<Path>, S: AsRef<Path>, Tree: 'static + MerkleTreeTrait>(
+pub fn fauxrep<R, S, Tree>(
     porep_config: PoRepConfig,
     cache_path: R,
     out_path: S,
-) -> Result<Commitment> {
+) -> Result<Commitment>
+where
+    R: AsRef<Path>,
+    S: AsRef<Path>,
+    Tree: 'static + MerkleTreeTrait,
+    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+{
     let mut rng = thread_rng();
     fauxrep_aux::<_, R, S, Tree>(&mut rng, porep_config, cache_path, out_path)
 }
 
-pub fn fauxrep_aux<R: Rng, S: AsRef<Path>, T: AsRef<Path>, Tree: 'static + MerkleTreeTrait>(
+pub fn fauxrep_aux<R, S, T, Tree>(
     mut rng: &mut R,
     porep_config: PoRepConfig,
     cache_path: S,
     out_path: T,
-) -> Result<Commitment> {
+) -> Result<Commitment>
+where
+    R: Rng,
+    S: AsRef<Path>,
+    T: AsRef<Path>,
+    Tree: 'static + MerkleTreeTrait,
+    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+{
     let sector_bytes = PaddedBytesAmount::from(porep_config).0;
 
     {
@@ -58,10 +72,13 @@ pub fn fauxrep_aux<R: Rng, S: AsRef<Path>, T: AsRef<Path>, Tree: 'static + Merkl
     Ok(commitment)
 }
 
-pub fn fauxrep2<R: AsRef<Path>, S: AsRef<Path>, Tree: 'static + MerkleTreeTrait>(
-    cache_path: R,
-    existing_p_aux_path: S,
-) -> Result<Commitment> {
+pub fn fauxrep2<R, S, Tree>(cache_path: R, existing_p_aux_path: S) -> Result<Commitment>
+where
+    R: AsRef<Path>,
+    S: AsRef<Path>,
+    Tree: 'static + MerkleTreeTrait,
+    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+{
     let mut rng = thread_rng();
 
     let fake_comm_c = <Tree::Hasher as Hasher>::Domain::random(&mut rng);

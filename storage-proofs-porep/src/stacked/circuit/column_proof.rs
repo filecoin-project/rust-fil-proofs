@@ -1,6 +1,6 @@
 use bellperson::{ConstraintSystem, SynthesisError};
 use blstrs::Scalar as Fr;
-use filecoin_hashers::{Hasher, PoseidonArity};
+use filecoin_hashers::{Domain, Hasher, PoseidonArity};
 use storage_proofs_core::{
     drgraph::Graph,
     gadgets::por::AuthPath,
@@ -13,22 +13,25 @@ use crate::stacked::{
 };
 
 #[derive(Debug, Clone)]
-pub struct ColumnProof<
+pub struct ColumnProof<H, U, V, W>
+where
     H: Hasher,
+    H::Domain: Domain<Field = Fr>,
     U: 'static + PoseidonArity,
     V: 'static + PoseidonArity,
     W: 'static + PoseidonArity,
-> {
+{
     column: Column,
     inclusion_path: AuthPath<H, U, V, W>,
 }
 
-impl<
-        H: 'static + Hasher,
-        U: 'static + PoseidonArity,
-        V: 'static + PoseidonArity,
-        W: 'static + PoseidonArity,
-    > ColumnProof<H, U, V, W>
+impl<H, U, V, W> ColumnProof<H, U, V, W>
+where
+    H: 'static + Hasher,
+    H::Domain: Domain<Field = Fr>,
+    U: 'static + PoseidonArity,
+    V: 'static + PoseidonArity,
+    W: 'static + PoseidonArity,
 {
     /// Create an empty `ColumnProof`, used in `blank_circuit`s.
     pub fn empty<
@@ -59,8 +62,11 @@ impl<
     }
 }
 
-impl<Proof: MerkleProofTrait> From<VanillaColumnProof<Proof>>
+impl<Proof> From<VanillaColumnProof<Proof>>
     for ColumnProof<Proof::Hasher, Proof::Arity, Proof::SubTreeArity, Proof::TopTreeArity>
+where
+    Proof: MerkleProofTrait,
+    <Proof::Hasher as Hasher>::Domain: Domain<Field = Fr>,
 {
     fn from(vanilla_proof: VanillaColumnProof<Proof>) -> Self {
         let VanillaColumnProof {
