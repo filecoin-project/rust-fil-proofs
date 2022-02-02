@@ -19,9 +19,11 @@ serde = "1.0.117"
 rand = "0.8.0"
 
 neptune = { version = "5.1.0", optional = true, features = ["arity2", "arity4", "arity8", "arity11", "arity16", "arity24", "arity36"] }
+pasta_curves = "0.3.0"
 lazy_static = { version = "1.4.0", optional = true }
 blake2s_simd = { version = "0.5.11", optional = true }
 sha2 = { version = "0.9.2", optional = true }
+typemap = { version = "0.3.3", optional = true }
 hex = "0.4.2"
 
 [features]
@@ -32,7 +34,7 @@ opencl = ["bellperson/opencl", "neptune/opencl"]
 
 # available hashers
 blake2s = ["blake2s_simd"]
-poseidon = ["neptune", "lazy_static"]
+poseidon = ["neptune", "lazy_static", "typemap"]
 sha256 = ["sha2"]
 
 [dev-dependencies]

@@ -1,43 +1,41 @@
 #![allow(unused_imports)]
 #![allow(dead_code)]
-use std::path::Path;
 
-use bellperson::util_cs::bench_cs::BenchCS;
-use bellperson::{util_cs::test_cs::TestConstraintSystem, Circuit};
+use bellperson::{
+    util_cs::{bench_cs::BenchCS, test_cs::TestConstraintSystem},
+    Circuit,
+};
 use blstrs::Scalar as Fr;
-use filecoin_hashers::{Domain, HashFunction, Hasher};
-use generic_array::typenum::{Unsigned, U0, U2, U4, U8};
-use merkletree::store::{DiskStore, StoreConfig};
+use filecoin_hashers::{Domain, HashFunction, Hasher, PoseidonArity};
+use generic_array::typenum::{U0, U2, U4, U8};
 use rand::SeedableRng;
 use rand_xorshift::XorShiftRng;
-use storage_proofs_core::{
-    merkle::{MerkleTreeTrait, MerkleTreeWrapper},
-    util::default_rows_to_discard,
-    TEST_SEED,
-};
+use storage_proofs_core::{merkle::MerkleTreeTrait, TEST_SEED};
 use storage_proofs_update::{
     circuit,
     constants::{
-        apex_leaf_count, hs, partition_count, validate_tree_r_shape, TreeD, TreeDDomain,
-        TreeRDomain, TreeRHasher, SECTOR_SIZE_16_KIB, SECTOR_SIZE_1_KIB, SECTOR_SIZE_2_KIB,
-        SECTOR_SIZE_32_GIB, SECTOR_SIZE_32_KIB, SECTOR_SIZE_4_KIB, SECTOR_SIZE_8_KIB,
+        self, apex_leaf_count, hs, partition_count, validate_tree_r_shape, SECTOR_SIZE_16_KIB,
+        SECTOR_SIZE_1_KIB, SECTOR_SIZE_2_KIB, SECTOR_SIZE_32_GIB, SECTOR_SIZE_32_KIB,
+        SECTOR_SIZE_4_KIB, SECTOR_SIZE_8_KIB,
     },
-    phi, rho, vanilla, Challenges, EmptySectorUpdateCircuit, PublicParams,
+    phi, vanilla, Challenges, EmptySectorUpdateCircuit, PublicParams,
 };
 use tempfile::tempdir;
 
 mod common;
 
-fn get_apex_leafs(
-    tree_d_new: &MerkleTreeWrapper<
-        <TreeD as MerkleTreeTrait>::Hasher,
-        <TreeD as MerkleTreeTrait>::Store,
-        <TreeD as MerkleTreeTrait>::Arity,
-        <TreeD as MerkleTreeTrait>::SubTreeArity,
-        <TreeD as MerkleTreeTrait>::TopTreeArity,
-    >,
-    k: usize,
-) -> Vec<TreeDDomain> {
+use common::{
+    create_tree_d_new, create_tree_r_new, create_tree_r_old, encode_new_replica, H_SELECT,
+};
+
+type TreeD = constants::TreeD<Fr>;
+type TreeDDomain = constants::TreeDDomain<Fr>;
+
+type TreeR<U, V, W> = constants::TreeR<Fr, U, V, W>;
+type TreeRDomain = constants::TreeRDomain<Fr>;
+type TreeRHasher = constants::TreeRHasher<Fr>;
+
+fn get_apex_leafs(tree_d_new: &TreeD, k: usize) -> Vec<TreeDDomain> {
     let sector_nodes = tree_d_new.leafs();
     let tree_d_height = sector_nodes.trailing_zeros() as usize;
     let partition_count = partition_count(sector_nodes);
@@ -62,15 +60,17 @@ fn get_apex_leafs(
         })
 }
 
-fn test_empty_sector_update_circuit<TreeR>(sector_nodes: usize, constraints_expected: usize)
+fn test_empty_sector_update_circuit<U, V, W>(sector_nodes: usize, constraints_expected: usize)
 where
-    TreeR: MerkleTreeTrait<Hasher = TreeRHasher>,
+    U: PoseidonArity,
+    V: PoseidonArity,
+    W: PoseidonArity,
 {
-    validate_tree_r_shape::<TreeR>(sector_nodes);
+    validate_tree_r_shape::<U, V, W>(sector_nodes);
 
     let sector_bytes = sector_nodes << 5;
     let hs = hs(sector_nodes);
-    let h = hs[common::H_SELECT.trailing_zeros() as usize];
+    let h = hs[H_SELECT.trailing_zeros() as usize];
 
     let mut rng = XorShiftRng::from_seed(TEST_SEED);
 
@@ -82,7 +82,7 @@ where
     let labels_r_old: Vec<TreeRDomain> = (0..sector_nodes)
         .map(|_| TreeRDomain::random(&mut rng))
         .collect();
-    let tree_r_old = common::create_tree::<TreeR>(&labels_r_old, tmp_path, "tree-r-old");
+    let tree_r_old: TreeR<U, V, W> = create_tree_r_old(&labels_r_old, tmp_path);
     let root_r_old = tree_r_old.root();
     let comm_c = TreeRDomain::random(&mut rng);
     let comm_r_old = <TreeRHasher as Hasher>::Function::hash2(&comm_c, &root_r_old);
@@ -91,15 +91,15 @@ where
     let labels_d_new: Vec<TreeDDomain> = (0..sector_nodes)
         .map(|_| TreeDDomain::random(&mut rng))
         .collect();
-    let tree_d_new = common::create_tree::<TreeD>(&labels_d_new, tmp_path, "tree-d-new");
+    let tree_d_new = create_tree_d_new(&labels_d_new, tmp_path);
     let comm_d_new = tree_d_new.root();
 
     // `phi = H(comm_d_new || comm_r_old)`
     let phi = phi(&comm_d_new, &comm_r_old);
 
     // Encode `labels_d_new` into `labels_r_new` and create TreeRNew.
-    let labels_r_new = common::encode_new_replica(&labels_r_old, &labels_d_new, &phi, h);
-    let tree_r_new = common::create_tree::<TreeR>(&labels_r_new, tmp_path, "tree-r-new");
+    let labels_r_new = encode_new_replica(&labels_r_old, &labels_d_new, &phi, h);
+    let tree_r_new: TreeR<U, V, W> = create_tree_r_new(&labels_r_new, tmp_path);
     let root_r_new = tree_r_new.root();
     let comm_r_new = <TreeRHasher as Hasher>::Function::hash2(&comm_c, &root_r_new);
 
@@ -108,7 +108,7 @@ where
     for k in 0..pub_params.partition_count {
         // Generate vanilla-proof.
         let apex_leafs = get_apex_leafs(&tree_d_new, k);
-        let challenge_proofs: Vec<vanilla::ChallengeProof<TreeR>> =
+        let challenge_proofs: Vec<vanilla::ChallengeProof<Fr, U, V, W>> =
             Challenges::new(sector_nodes, comm_r_new, k)
                 .enumerate()
                 .take(pub_params.challenge_count)
@@ -140,13 +140,13 @@ where
 
         let priv_inputs = circuit::PrivateInputs::new(comm_c, &apex_leafs, &challenge_proofs);
 
-        let circuit = EmptySectorUpdateCircuit::<TreeR> {
+        let circuit = EmptySectorUpdateCircuit {
             pub_params: pub_params.clone(),
             pub_inputs,
             priv_inputs,
         };
 
-        let mut cs = TestConstraintSystem::<Fr>::new();
+        let mut cs = TestConstraintSystem::new();
         circuit.synthesize(&mut cs).expect("failed to synthesize");
         assert!(cs.is_satisfied());
         assert!(cs.verify(&pub_inputs_vec));
@@ -154,63 +154,56 @@ where
     }
 }
 
-#[test]
 #[cfg(feature = "isolated-testing")]
+#[test]
 fn test_empty_sector_update_circuit_1kib() {
-    type TreeR = MerkleTreeWrapper<TreeRHasher, DiskStore<TreeRDomain>, U8, U4, U0>;
-    test_empty_sector_update_circuit::<TreeR>(SECTOR_SIZE_1_KIB, 1248389);
+    test_empty_sector_update_circuit::<U8, U4, U0>(SECTOR_SIZE_1_KIB, 1248389);
 }
 
-#[test]
 #[cfg(feature = "isolated-testing")]
+#[test]
 fn test_empty_sector_update_circuit_2kib() {
-    type TreeR = MerkleTreeWrapper<TreeRHasher, DiskStore<TreeRDomain>, U8, U0, U0>;
-    test_empty_sector_update_circuit::<TreeR>(SECTOR_SIZE_2_KIB, 1705039);
+    test_empty_sector_update_circuit::<U8, U0, U0>(SECTOR_SIZE_2_KIB, 1705039);
 }
 
-#[test]
 #[cfg(feature = "isolated-testing")]
+#[test]
 fn test_empty_sector_update_circuit_4kib() {
-    type TreeR = MerkleTreeWrapper<TreeRHasher, DiskStore<TreeRDomain>, U8, U2, U0>;
-    test_empty_sector_update_circuit::<TreeR>(SECTOR_SIZE_4_KIB, 2165109);
+    test_empty_sector_update_circuit::<U8, U2, U0>(SECTOR_SIZE_4_KIB, 2165109);
 }
 
-#[test]
 #[cfg(feature = "isolated-testing")]
+#[test]
 fn test_empty_sector_update_circuit_8kib() {
-    type TreeR = MerkleTreeWrapper<TreeRHasher, DiskStore<TreeRDomain>, U8, U4, U0>;
-    test_empty_sector_update_circuit::<TreeR>(SECTOR_SIZE_8_KIB, 2620359);
+    test_empty_sector_update_circuit::<U8, U4, U0>(SECTOR_SIZE_8_KIB, 2620359);
 }
 
-#[test]
 #[cfg(feature = "isolated-testing")]
+#[test]
 fn test_empty_sector_update_circuit_16kib() {
-    type TreeR = MerkleTreeWrapper<TreeRHasher, DiskStore<TreeRDomain>, U8, U8, U0>;
-    test_empty_sector_update_circuit::<TreeR>(SECTOR_SIZE_16_KIB, 6300021);
+    test_empty_sector_update_circuit::<U8, U8, U0>(SECTOR_SIZE_16_KIB, 6300021);
 }
 
-#[test]
 #[cfg(feature = "isolated-testing")]
+#[test]
 fn test_empty_sector_update_circuit_32kib() {
-    type TreeR = MerkleTreeWrapper<TreeRHasher, DiskStore<TreeRDomain>, U8, U8, U2>;
-    test_empty_sector_update_circuit::<TreeR>(SECTOR_SIZE_32_KIB, 6760091);
+    test_empty_sector_update_circuit::<U8, U8, U2>(SECTOR_SIZE_32_KIB, 6760091);
 }
 
 #[test]
 #[ignore]
 fn test_empty_sector_update_constraints_32gib() {
-    type TreeR = MerkleTreeWrapper<TreeRHasher, DiskStore<TreeRDomain>, U8, U8, U0>;
+    let pub_params = PublicParams::from_sector_size(SECTOR_SIZE_32_GIB as u64 * 32);
     let pub_inputs = circuit::PublicInputs::empty();
+    let priv_inputs = circuit::PrivateInputs::<U8, U8, U0>::empty(SECTOR_SIZE_32_GIB);
 
-    let priv_inputs = circuit::PrivateInputs::empty(SECTOR_SIZE_32_GIB);
-
-    let circuit = EmptySectorUpdateCircuit::<TreeR> {
-        pub_params: PublicParams::from_sector_size(SECTOR_SIZE_32_GIB as u64 * 32),
+    let circuit = EmptySectorUpdateCircuit {
+        pub_params,
         pub_inputs,
         priv_inputs,
     };
 
-    let mut cs = BenchCS::<Fr>::new();
+    let mut cs = BenchCS::new();
     circuit.synthesize(&mut cs).expect("failed to synthesize");
     assert_eq!(cs.num_constraints(), 81049499)
 }

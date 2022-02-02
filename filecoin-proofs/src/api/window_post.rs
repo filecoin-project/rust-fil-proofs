@@ -1,7 +1,8 @@
 use std::collections::BTreeMap;
 
 use anyhow::{ensure, Context, Result};
-use filecoin_hashers::Hasher;
+use blstrs::Scalar as Fr;
+use filecoin_hashers::{Domain, Hasher};
 use log::info;
 use storage_proofs_core::{
     compound_proof::{self, CompoundProof},
@@ -33,7 +34,10 @@ pub fn generate_window_post_with_vanilla<Tree: 'static + MerkleTreeTrait>(
     randomness: &ChallengeSeed,
     prover_id: ProverId,
     vanilla_proofs: Vec<FallbackPoStSectorProof<Tree>>,
-) -> Result<SnarkProof> {
+) -> Result<SnarkProof>
+where
+    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+{
     info!("generate_window_post_with_vanilla:start");
     ensure!(
         post_config.typ == PoStType::Window,
@@ -101,7 +105,10 @@ pub fn generate_window_post<Tree: 'static + MerkleTreeTrait>(
     randomness: &ChallengeSeed,
     replicas: &BTreeMap<SectorId, PrivateReplicaInfo<Tree>>,
     prover_id: ProverId,
-) -> Result<SnarkProof> {
+) -> Result<SnarkProof>
+where
+    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+{
     info!("generate_window_post:start");
     ensure!(
         post_config.typ == PoStType::Window,
@@ -182,7 +189,10 @@ pub fn verify_window_post<Tree: 'static + MerkleTreeTrait>(
     replicas: &BTreeMap<SectorId, PublicReplicaInfo>,
     prover_id: ProverId,
     proof: &[u8],
-) -> Result<bool> {
+) -> Result<bool>
+where
+    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+{
     info!("verify_window_post:start");
 
     ensure!(
@@ -253,7 +263,10 @@ pub fn generate_single_window_post_with_vanilla<Tree: 'static + MerkleTreeTrait>
     prover_id: ProverId,
     vanilla_proofs: Vec<FallbackPoStSectorProof<Tree>>,
     partition_index: usize,
-) -> Result<PartitionSnarkProof> {
+) -> Result<PartitionSnarkProof>
+where
+    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+{
     info!("generate_single_window_post_with_vanilla:start");
     ensure!(
         post_config.typ == PoStType::Window,

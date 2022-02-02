@@ -4,6 +4,7 @@ use std::sync::RwLock;
 pub use storage_proofs_core::drgraph::BASE_DEGREE as DRG_DEGREE;
 pub use storage_proofs_porep::stacked::EXP_DEGREE;
 
+use blstrs::Scalar as Fr;
 use filecoin_hashers::{poseidon::PoseidonHasher, sha256::Sha256Hasher, Hasher};
 use lazy_static::lazy_static;
 use storage_proofs_core::{
@@ -134,11 +135,11 @@ pub const MINIMUM_RESERVED_BYTES_FOR_PIECE_IN_FULLY_ALIGNED_SECTOR: u64 =
 pub const MIN_PIECE_SIZE: UnpaddedBytesAmount = UnpaddedBytesAmount(127);
 
 /// The hasher used for creating comm_d.
-pub type DefaultPieceHasher = Sha256Hasher;
+pub type DefaultPieceHasher = Sha256Hasher<Fr>;
 pub type DefaultPieceDomain = <DefaultPieceHasher as Hasher>::Domain;
 
 /// The default hasher for merkle trees currently in use.
-pub type DefaultTreeHasher = PoseidonHasher;
+pub type DefaultTreeHasher = PoseidonHasher<Fr>;
 pub type DefaultTreeDomain = <DefaultTreeHasher as Hasher>::Domain;
 
 pub type DefaultBinaryTree = BinaryMerkleTree<DefaultTreeHasher>;

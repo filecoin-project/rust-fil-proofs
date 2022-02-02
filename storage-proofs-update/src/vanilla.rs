@@ -5,10 +5,9 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{ensure, Context, Error};
 use blstrs::Scalar as Fr;
-use ff::Field;
-use filecoin_hashers::{Domain, HashFunction, Hasher};
-use fr32::{bytes_into_fr, fr_into_bytes_slice};
-use generic_array::typenum::Unsigned;
+use ff::{PrimeField, PrimeFieldBits};
+use filecoin_hashers::{Domain, FieldArity, HashFunction, Hasher, PoseidonArity};
+use generic_array::typenum::{Unsigned, U2};
 use log::{info, trace};
 use memmap::{Mmap, MmapMut, MmapOptions};
 use merkletree::{
@@ -26,7 +25,7 @@ use storage_proofs_core::{
     error::Result,
     merkle::{
         create_base_merkle_tree, create_lc_tree, get_base_tree_count, split_config_and_replica,
-        BinaryMerkleTree, LCTree, MerkleProof, MerkleProofTrait, MerkleTreeTrait,
+        MerkleProof, MerkleProofTrait, MerkleTreeTrait,
     },
     parameter_cache::ParameterSetMetadata,
     proof::ProofScheme,
@@ -36,7 +35,7 @@ use storage_proofs_porep::stacked::{StackedDrg, TreeRElementData};
 use crate::{
     constants::{
         apex_leaf_count, challenge_count, challenge_count_poseidon, hs, partition_count, TreeD,
-        TreeDArity, TreeDDomain, TreeDHasher, TreeDStore, TreeRDomain, TreeRHasher,
+        TreeDArity, TreeDDomain, TreeDHasher, TreeDStore, TreeR, TreeRDomain, TreeRHasher,
         ALLOWED_SECTOR_SIZES, POSEIDON_CONSTANTS_GEN_RANDOMNESS,
     },
     Challenges,
@@ -140,19 +139,25 @@ impl PublicParams {
 }
 
 #[derive(Clone, Serialize, Deserialize)]
-pub struct PublicInputs {
+pub struct PublicInputs<F> {
     pub k: usize,
-    pub comm_r_old: TreeRDomain,
-    pub comm_d_new: TreeDDomain,
-    pub comm_r_new: TreeRDomain,
+    #[serde(bound(serialize = "TreeRDomain<F>: Serialize"))]
+    #[serde(bound(deserialize = "TreeRDomain<F>: Deserialize<'de>"))]
+    pub comm_r_old: TreeRDomain<F>,
+    #[serde(bound(serialize = "TreeDDomain<F>: Serialize"))]
+    #[serde(bound(deserialize = "TreeDDomain<F>: Deserialize<'de>"))]
+    pub comm_d_new: TreeDDomain<F>,
+    #[serde(bound(serialize = "TreeRDomain<F>: Serialize"))]
+    #[serde(bound(deserialize = "TreeRDomain<F>: Deserialize<'de>"))]
+    pub comm_r_new: TreeRDomain<F>,
     // The number of high bits to take from each challenge's bits. Used to verify replica encoding
     // in the vanilla proof. `h` is only a public-input for the vanilla proof; the circuit takes
     // `h_select` as a public-input rather than `h`.
     pub h: usize,
 }
 
-pub struct PrivateInputs {
-    pub comm_c: TreeRDomain,
+pub struct PrivateInputs<F> {
+    pub comm_c: TreeRDomain<F>,
     pub tree_r_old_config: StoreConfig,
     // Path to old replica.
     pub old_replica_path: PathBuf,
@@ -162,54 +167,41 @@ pub struct PrivateInputs {
     pub replica_path: PathBuf,
 }
 
-#[derive(Serialize, Deserialize)]
-pub struct ChallengeProof<TreeR>
+#[derive(Clone, Serialize, Deserialize)]
+pub struct ChallengeProof<F, U, V, W>
 where
-    TreeR: MerkleTreeTrait<Hasher = TreeRHasher>,
+    TreeDHasher<F>: Hasher,
+    TreeRHasher<F>: Hasher,
+    U: PoseidonArity,
+    V: PoseidonArity,
+    W: PoseidonArity,
 {
-    #[serde(bound(
-        serialize = "MerkleProof<TreeRHasher, TreeR::Arity, TreeR::SubTreeArity, TreeR::TopTreeArity>: Serialize",
-        deserialize = "MerkleProof<TreeRHasher, TreeR::Arity, TreeR::SubTreeArity, TreeR::TopTreeArity>: Deserialize<'de>"
-    ))]
-    pub proof_r_old:
-        MerkleProof<TreeRHasher, TreeR::Arity, TreeR::SubTreeArity, TreeR::TopTreeArity>,
-    #[serde(bound(
-        serialize = "MerkleProof<TreeDHasher, TreeDArity>: Serialize",
-        deserialize = "MerkleProof<TreeDHasher, TreeDArity>: Deserialize<'de>"
-    ))]
-    pub proof_d_new: MerkleProof<TreeDHasher, TreeDArity>,
-    #[serde(bound(
-        serialize = "MerkleProof<TreeRHasher, TreeR::Arity, TreeR::SubTreeArity, TreeR::TopTreeArity>: Serialize",
-        deserialize = "MerkleProof<TreeRHasher, TreeR::Arity, TreeR::SubTreeArity, TreeR::TopTreeArity>: Deserialize<'de>"
-    ))]
-    pub proof_r_new:
-        MerkleProof<TreeRHasher, TreeR::Arity, TreeR::SubTreeArity, TreeR::TopTreeArity>,
+    #[serde(bound(serialize = "MerkleProof<TreeRHasher<F>, U, V, W>: Serialize"))]
+    #[serde(bound(deserialize = "MerkleProof<TreeRHasher<F>, U, V, W>: Deserialize<'de>"))]
+    pub proof_r_old: MerkleProof<TreeRHasher<F>, U, V, W>,
+    #[serde(bound(serialize = "MerkleProof<TreeDHasher<F>, U, V, W>: Serialize"))]
+    #[serde(bound(deserialize = "MerkleProof<TreeDHasher<F>, U, V, W>: Deserialize<'de>"))]
+    pub proof_d_new: MerkleProof<TreeDHasher<F>, TreeDArity>,
+    #[serde(bound(serialize = "MerkleProof<TreeRHasher<F>, U, V, W>: Serialize"))]
+    #[serde(bound(deserialize = "MerkleProof<TreeRHasher<F>, U, V, W>: Deserialize<'de>"))]
+    pub proof_r_new: MerkleProof<TreeRHasher<F>, U, V, W>,
 }
 
-// Implement `Clone` by hand because `MerkleTreeTrait` does not implement `Clone`.
-impl<TreeR> Clone for ChallengeProof<TreeR>
+impl<F, U, V, W> ChallengeProof<F, U, V, W>
 where
-    TreeR: MerkleTreeTrait<Hasher = TreeRHasher>,
-{
-    fn clone(&self) -> Self {
-        ChallengeProof {
-            proof_r_old: self.proof_r_old.clone(),
-            proof_d_new: self.proof_d_new.clone(),
-            proof_r_new: self.proof_r_new.clone(),
-        }
-    }
-}
-
-impl<TreeR> ChallengeProof<TreeR>
-where
-    TreeR: MerkleTreeTrait<Hasher = TreeRHasher>,
+    F: PrimeField,
+    TreeDHasher<F>: Hasher<Domain = TreeDDomain<F>>,
+    TreeRHasher<F>: Hasher<Domain = TreeRDomain<F>>,
+    U: PoseidonArity,
+    V: PoseidonArity,
+    W: PoseidonArity,
 {
     pub fn verify_merkle_proofs(
         &self,
         c: u32,
-        root_r_old: &TreeRDomain,
-        comm_d_new: &TreeDDomain,
-        root_r_new: &TreeRDomain,
+        root_r_old: &TreeRDomain<F>,
+        comm_d_new: &TreeDDomain<F>,
+        root_r_new: &TreeRDomain<F>,
     ) -> bool {
         let c = c as usize;
         self.proof_r_old.path_index() == c
@@ -224,52 +216,47 @@ where
     }
 }
 
-#[derive(Serialize, Deserialize)]
-pub struct PartitionProof<TreeR>
+#[derive(Clone, Serialize, Deserialize)]
+pub struct PartitionProof<F, U, V, W>
 where
-    TreeR: MerkleTreeTrait<Hasher = TreeRHasher>,
+    TreeDHasher<F>: Hasher,
+    TreeRHasher<F>: Hasher,
+    U: PoseidonArity,
+    V: PoseidonArity,
+    W: PoseidonArity,
 {
-    pub comm_c: TreeRDomain,
-    pub apex_leafs: Vec<TreeDDomain>,
-    #[serde(bound(
-        serialize = "ChallengeProof<TreeR>: Serialize",
-        deserialize = "ChallengeProof<TreeR>: Deserialize<'de>"
-    ))]
-    pub challenge_proofs: Vec<ChallengeProof<TreeR>>,
+    #[serde(bound(serialize = "TreeRDomain<F>: Serialize"))]
+    #[serde(bound(deserialize = "TreeRDomain<F>: Deserialize<'de>"))]
+    pub comm_c: TreeRDomain<F>,
+    #[serde(bound(serialize = "TreeDDomain<F>: Serialize"))]
+    #[serde(bound(deserialize = "TreeDDomain<F>: Deserialize<'de>"))]
+    pub apex_leafs: Vec<TreeDDomain<F>>,
+    #[serde(bound(serialize = "ChallengeProof<F, U, V, W>: Serialize"))]
+    #[serde(bound(deserialize = "ChallengeProof<F, U, V, W>: Deserialize<'de>"))]
+    pub challenge_proofs: Vec<ChallengeProof<F, U, V, W>>,
 }
 
-// Implement `Clone` by hand because `MerkleTreeTrait` does not implement `Clone`.
-impl<TreeR> Clone for PartitionProof<TreeR>
-where
-    TreeR: MerkleTreeTrait<Hasher = TreeRHasher>,
-{
-    fn clone(&self) -> Self {
-        PartitionProof {
-            comm_c: self.comm_c,
-            apex_leafs: self.apex_leafs.clone(),
-            challenge_proofs: self.challenge_proofs.clone(),
-        }
-    }
+pub struct EmptySectorUpdate<F, U, V, W> {
+    _f: PhantomData<F>,
+    _tree_r: PhantomData<(U, V, W)>,
 }
 
-#[derive(Debug)]
-#[allow(clippy::upper_case_acronyms)]
-pub struct EmptySectorUpdate<TreeR>
+impl<'a, F, U, V, W> ProofScheme<'a> for EmptySectorUpdate<F, U, V, W>
 where
-    TreeR: MerkleTreeTrait<Hasher = TreeRHasher>,
-{
-    _tree_r: PhantomData<TreeR>,
-}
-
-impl<'a, TreeR> ProofScheme<'a> for EmptySectorUpdate<TreeR>
-where
-    TreeR: 'static + MerkleTreeTrait<Hasher = TreeRHasher>,
+    F: PrimeFieldBits,
+    TreeDHasher<F>: Hasher<Domain = TreeDDomain<F>>,
+    TreeRHasher<F>: Hasher<Domain = TreeRDomain<F>>,
+    TreeDDomain<F>: Domain<Field = F>,
+    TreeRDomain<F>: Domain<Field = F>,
+    U: PoseidonArity,
+    V: PoseidonArity,
+    W: PoseidonArity,
 {
     type SetupParams = SetupParams;
     type PublicParams = PublicParams;
-    type PublicInputs = PublicInputs;
-    type PrivateInputs = PrivateInputs;
-    type Proof = PartitionProof<TreeR>;
+    type PublicInputs = PublicInputs<F>;
+    type PrivateInputs = PrivateInputs<F>;
+    type Proof = PartitionProof<F, U, V, W>;
     type Requirements = ();
 
     fn setup(setup_params: &Self::SetupParams) -> Result<Self::PublicParams> {
@@ -344,7 +331,7 @@ where
                     &tree_r_new,
                 )
             })
-            .collect::<Result<Vec<PartitionProof<TreeR>>>>()?;
+            .collect::<Result<Vec<PartitionProof<F, U, V, W>>>>()?;
 
         info!("Finished generating all partition proofs");
 
@@ -398,14 +385,14 @@ where
         );
 
         // Compute apex-tree.
-        let mut apex_tree: Vec<Vec<TreeDDomain>> = vec![apex_leafs.clone()];
+        let mut apex_tree: Vec<Vec<TreeDDomain<F>>> = vec![apex_leafs.clone()];
         for _ in 0..apex_leaf_bit_len {
-            let tree_row: Vec<TreeDDomain> = apex_tree
+            let tree_row: Vec<TreeDDomain<F>> = apex_tree
                 .last()
                 .unwrap()
                 .chunks(2)
                 .map(|siblings| {
-                    <TreeDHasher as Hasher>::Function::hash2(&siblings[0], &siblings[1])
+                    <TreeDHasher<F> as Hasher>::Function::hash2(&siblings[0], &siblings[1])
                 })
                 .collect();
             apex_tree.push(tree_row);
@@ -421,8 +408,8 @@ where
 
         // Verify that the TreeROld and TreeRNew Merkle proofs roots agree with the public CommC,
         // CommROld, and CommRNew.
-        let comm_r_old_calc = <TreeRHasher as Hasher>::Function::hash2(comm_c, &root_r_old);
-        let comm_r_new_calc = <TreeRHasher as Hasher>::Function::hash2(comm_c, &root_r_new);
+        let comm_r_old_calc = <TreeRHasher<F> as Hasher>::Function::hash2(comm_c, &root_r_old);
+        let comm_r_new_calc = <TreeRHasher<F> as Hasher>::Function::hash2(comm_c, &root_r_new);
         if comm_r_old_calc != comm_r_old || comm_r_new_calc != comm_r_new {
             return Ok(false);
         }
@@ -442,12 +429,12 @@ where
                 }
 
                 // Verify replica encoding.
-                let label_r_old: Fr = challenge_proof.proof_r_old.leaf().into();
-                let label_d_new: Fr = challenge_proof.proof_d_new.leaf().into();
+                let label_r_old: F = challenge_proof.proof_r_old.leaf().into();
+                let label_d_new: F = challenge_proof.proof_d_new.leaf().into();
                 let label_r_new = challenge_proof.proof_r_new.leaf();
                 let c_high = c >> get_high_bits_shr;
                 let rho = rho(&phi, c_high);
-                let label_r_new_calc: TreeRDomain = (label_r_old + label_d_new * rho).into();
+                let label_r_new_calc: TreeRDomain<F> = (label_r_old + label_d_new * rho).into();
                 if label_r_new_calc != label_r_new {
                     return false;
                 }
@@ -494,31 +481,42 @@ where
 
 // `phi = H(comm_d_new, comm_r_old)` where Poseidon uses the custom "gen randomness" domain
 // separation tag.
-#[inline]
-pub fn phi<TreeDDomain: Domain>(comm_d_new: &TreeDDomain, comm_r_old: &TreeRDomain) -> TreeRDomain {
-    let comm_d_new: Fr = (*comm_d_new).into();
-    let comm_r_old: Fr = (*comm_r_old).into();
-    Poseidon::new_with_preimage(
-        &[comm_d_new, comm_r_old],
-        &POSEIDON_CONSTANTS_GEN_RANDOMNESS,
-    )
-    .hash()
-    .into()
+pub fn phi<D>(comm_d_new: &D, comm_r_old: &TreeRDomain<D::Field>) -> TreeRDomain<D::Field>
+where
+    // TreeD domain.
+    D: Domain,
+    // TreeD and TreeR Domains must have the same field.
+    TreeRDomain<D::Field>: Domain<Field = D::Field>,
+{
+    let preimage: [D::Field; 2] = [(*comm_d_new).into(), (*comm_r_old).into()];
+    let consts = POSEIDON_CONSTANTS_GEN_RANDOMNESS
+        .get::<FieldArity<D::Field, U2>>()
+        .expect("arity-2 Poseidon constants not found for field");
+    Poseidon::new_with_preimage(&preimage, consts).hash().into()
 }
 
 // `rho = H(phi, high)` where `high` is the `h` high bits of a node-index and Poseidon uses the
 // custom "gen randomness" domain separation tag.
-#[inline]
-pub fn rho(phi: &TreeRDomain, high: u32) -> Fr {
-    let phi: Fr = (*phi).into();
-    let high = Fr::from(high as u64);
-    Poseidon::new_with_preimage(&[phi, high], &POSEIDON_CONSTANTS_GEN_RANDOMNESS).hash()
+pub fn rho<F>(phi: &TreeRDomain<F>, high: u32) -> F
+where
+    F: PrimeField,
+    TreeRDomain<F>: Domain<Field = F>,
+{
+    let preimage: [F; 2] = [(*phi).into(), F::from(high as u64)];
+    let consts = POSEIDON_CONSTANTS_GEN_RANDOMNESS
+        .get::<FieldArity<F, U2>>()
+        .expect("arity-2 Poseidon constants not found for field");
+    Poseidon::new_with_preimage(&preimage, consts).hash()
 }
 
 // Computes all `2^h` rho values for the given `phi`. Each rho corresponds to one of the `2^h`
 // possible `high` values where `high` is the `h` high bits of a node-index.
 #[inline]
-pub fn rhos(h: usize, phi: &TreeRDomain) -> Vec<Fr> {
+pub fn rhos<F>(h: usize, phi: &TreeRDomain<F>) -> Vec<F>
+where
+    F: PrimeField,
+    TreeRDomain<F>: Domain<Field = F>,
+{
     (0..1 << h).map(|high| rho(phi, high)).collect()
 }
 
@@ -549,14 +547,21 @@ fn mmap_write(path: &Path) -> Result<MmapMut, Error> {
 
 #[allow(clippy::too_many_arguments)]
 #[allow(clippy::from_iter_instead_of_collect)]
-impl<TreeR> EmptySectorUpdate<TreeR>
+impl<F, U, V, W> EmptySectorUpdate<F, U, V, W>
 where
-    TreeR: 'static + MerkleTreeTrait<Hasher = TreeRHasher>,
+    F: PrimeFieldBits,
+    TreeDHasher<F>: Hasher<Domain = TreeDDomain<F>>,
+    TreeRHasher<F>: Hasher<Domain = TreeRDomain<F>>,
+    TreeDDomain<F>: Domain<Field = F>,
+    TreeRDomain<F>: Domain<Field = F>,
+    U: PoseidonArity,
+    V: PoseidonArity,
+    W: PoseidonArity,
 {
     pub fn instantiate_tree_d(
         tree_d_leafs: usize,
         tree_d_new_config: &StoreConfig,
-    ) -> Result<TreeD> {
+    ) -> Result<TreeD<F>> {
         // Instantiate TreeD new from the replica cache path. Note that this is similar to what
         // we do when going from t_aux to t_aux cache.
         let tree_d_arity = TreeDArity::to_usize();
@@ -575,16 +580,16 @@ where
         tree_r_config: &StoreConfig,
         replica_path: &Path,
         name: &str,
-    ) -> Result<LCTree<TreeRHasher, TreeR::Arity, TreeR::SubTreeArity, TreeR::TopTreeArity>> {
-        let tree_r_base_arity = TreeR::Arity::to_usize();
-        let tree_r_sub_arity = TreeR::SubTreeArity::to_usize();
-        let tree_r_top_arity = TreeR::TopTreeArity::to_usize();
+    ) -> Result<TreeR<F, U, V, W>> {
+        let tree_r_base_arity = U::to_usize();
+        let tree_r_sub_arity = V::to_usize();
+        let tree_r_top_arity = W::to_usize();
         // Instantiate TreeR new from the replica_cache_path. Note that this is similar to what we
         // do when going from t_aux to t_aux cache.
         let tree_r_base_tree_nodes = tree_r_config.size.expect("tree_r config size failure");
         let tree_r_base_tree_leafs =
             get_merkle_tree_leafs(tree_r_base_tree_nodes, tree_r_base_arity)?;
-        let tree_r_base_tree_count = get_base_tree_count::<TreeR>();
+        let tree_r_base_tree_count = get_base_tree_count::<TreeR<F, U, V, W>>();
         let (tree_r_configs, replica_config) = split_config_and_replica(
             tree_r_config.clone(),
             replica_path.to_path_buf(),
@@ -609,7 +614,7 @@ where
                 StoreConfig::data_path(&config.path, &config.id)
             );
         }
-        create_lc_tree::<LCTree<TreeRHasher, TreeR::Arity, TreeR::SubTreeArity, TreeR::TopTreeArity>>(
+        create_lc_tree::<TreeR<F, U, V, W>>(
             tree_r_base_tree_nodes,
             &tree_r_configs,
             &replica_config,
@@ -619,12 +624,12 @@ where
     // Generates a partition proof given instantiated trees TreeROld, TreeDNew, and TreeRNew.
     pub fn prove_inner(
         pub_params: &PublicParams,
-        pub_inputs: &PublicInputs,
-        priv_inputs: &PrivateInputs,
-        tree_r_old: &LCTree<TreeRHasher, TreeR::Arity, TreeR::SubTreeArity, TreeR::TopTreeArity>,
-        tree_d_new: &TreeD,
-        tree_r_new: &LCTree<TreeRHasher, TreeR::Arity, TreeR::SubTreeArity, TreeR::TopTreeArity>,
-    ) -> Result<PartitionProof<TreeR>> {
+        pub_inputs: &PublicInputs<F>,
+        priv_inputs: &PrivateInputs<F>,
+        tree_r_old: &TreeR<F, U, V, W>,
+        tree_d_new: &TreeD<F>,
+        tree_r_new: &TreeR<F, U, V, W>,
+    ) -> Result<PartitionProof<F, U, V, W>> {
         let PublicParams {
             sector_nodes,
             partition_count,
@@ -666,8 +671,9 @@ where
 
         // Re-instantiate TreeD's store for reading apex leafs.
         let tree_d_nodes = tree_d_new_config.size.expect("config size failure");
-        let tree_d_store = TreeDStore::new_from_disk(tree_d_nodes, tree_d_arity, tree_d_new_config)
-            .context("tree_d_store")?;
+        let tree_d_store =
+            TreeDStore::<F>::new_from_disk(tree_d_nodes, tree_d_arity, tree_d_new_config)
+                .context("tree_d_store")?;
         ensure!(
             tree_d_nodes == Store::len(&tree_d_store),
             "TreeD store size mismatch"
@@ -693,7 +699,7 @@ where
             apex_leafs_start,
             k
         );
-        let apex_leafs: Vec<TreeDDomain> =
+        let apex_leafs: Vec<TreeDDomain<F>> =
             tree_d_store.read_range(apex_leafs_start..apex_leafs_stop)?;
         info!(
             "Finished reading apex-leafs from TreeD for partition k={}",
@@ -734,7 +740,7 @@ where
                     proof_r_new,
                 })
             })
-            .collect::<Result<Vec<ChallengeProof<TreeR>>>>()?;
+            .collect::<Result<Vec<ChallengeProof<F, U, V, W>>>>()?;
 
         info!("finished generating challenge-proofs for partition k={}", k);
 
@@ -748,16 +754,16 @@ where
     #[cfg(any(feature = "cuda", feature = "opencl"))]
     #[allow(clippy::unnecessary_wraps)]
     fn prepare_tree_r_data(
-        source: &DiskStore<TreeRDomain>,
+        source: &DiskStore<TreeRDomain<F>>,
         _data: Option<&mut Data<'_>>,
         start: usize,
         end: usize,
-    ) -> Result<TreeRElementData<TreeR>> {
-        let tree_data: Vec<TreeRDomain> = source
+    ) -> Result<TreeRElementData<TreeR<F, U, V, W>>> {
+        let tree_data: Vec<TreeRDomain<F>> = source
             .read_range(start..end)
             .expect("failed to read from source");
 
-        if StackedDrg::<TreeR, TreeDHasher>::use_gpu_tree_builder() {
+        if StackedDrg::<TreeR<F, U, V, W>, TreeDHasher<F>>::use_gpu_tree_builder() {
             Ok(TreeRElementData::FrList(
                 tree_data.into_par_iter().map(|x| x.into()).collect(),
             ))
@@ -769,12 +775,12 @@ where
     #[cfg(not(any(feature = "cuda", feature = "opencl")))]
     #[allow(clippy::unnecessary_wraps)]
     fn prepare_tree_r_data(
-        source: &DiskStore<TreeRDomain>,
+        source: &DiskStore<TreeRDomain<F>>,
         _data: Option<&mut Data<'_>>,
         start: usize,
         end: usize,
-    ) -> Result<TreeRElementData<TreeR>> {
-        let tree_data: Vec<TreeRDomain> = source
+    ) -> Result<TreeRElementData<TreeR<F, U, V, W>>> {
+        let tree_data: Vec<TreeRDomain<F>> = source
             .read_range(start..end)
             .expect("failed to read from source");
 
@@ -786,15 +792,15 @@ where
         nodes_count: usize,
         tree_d_new_config: StoreConfig,
         tree_r_last_new_config: StoreConfig,
-        comm_c: TreeRDomain,
-        comm_r_last_old: TreeRDomain,
+        comm_c: TreeRDomain<F>,
+        comm_r_last_old: TreeRDomain<F>,
         new_replica_path: &Path,
         new_cache_path: &Path,
         sector_key_path: &Path,
         sector_key_cache_path: &Path,
         staged_data_path: &Path,
         h: usize,
-    ) -> Result<(TreeRDomain, TreeRDomain, TreeDDomain)> {
+    ) -> Result<(TreeRDomain<F>, TreeRDomain<F>, TreeDDomain<F>)> {
         // Sanity check all input path types.
         ensure!(
             metadata(new_cache_path)?.is_dir(),
@@ -805,7 +811,7 @@ where
             "sector_key_cache_path must be a directory"
         );
 
-        let tree_count = get_base_tree_count::<TreeR>();
+        let tree_count = get_base_tree_count::<TreeR<F, U, V, W>>();
         let base_tree_nodes_count = nodes_count / tree_count;
 
         let new_replica_path_metadata = metadata(new_replica_path)?;
@@ -861,7 +867,7 @@ where
         new_data.ensure_data_of_len(sector_key_path_metadata.len() as usize)?;
 
         // Generate tree_d over the staged_data.
-        let tree_d = create_base_merkle_tree::<BinaryMerkleTree<TreeDHasher>>(
+        let tree_d = create_base_merkle_tree::<TreeD<F>>(
             Some(tree_d_new_config),
             tree_count * base_tree_nodes_count,
             new_data.as_ref(),
@@ -869,7 +875,7 @@ where
 
         let comm_d_new = tree_d.root();
 
-        let comm_r_old = <TreeRHasher as Hasher>::Function::hash2(&comm_c, &comm_r_last_old);
+        let comm_r_old = <TreeRHasher<F> as Hasher>::Function::hash2(&comm_c, &comm_r_last_old);
         let phi = phi(&comm_d_new, &comm_r_old);
 
         let end = staged_data_path_metadata.len() as u64;
@@ -901,16 +907,26 @@ where
                     let high = node_index >> get_high_bits_shr;
                     let rho = rhos[high];
 
-                    let sector_key_fr =
-                        bytes_into_fr(&sector_key_data[input_index..input_index + FR_SIZE])?;
-                    let staged_data_fr =
-                        bytes_into_fr(&staged_data[input_index..input_index + FR_SIZE])?;
+                    let sector_key_fr = {
+                        let mut repr = F::Repr::default();
+                        repr.as_mut()
+                            .copy_from_slice(&sector_key_data[input_index..input_index + FR_SIZE]);
+                        let opt = F::from_repr_vartime(repr);
+                        ensure!(opt.is_some(), "bytes are invalid field repr");
+                        opt.unwrap()
+                    };
+                    let staged_data_fr = {
+                        let mut repr = F::Repr::default();
+                        repr.as_mut()
+                            .copy_from_slice(&staged_data[input_index..input_index + FR_SIZE]);
+                        let opt = F::from_repr_vartime(repr);
+                        ensure!(opt.is_some(), "bytes are invalid field repr");
+                        opt.unwrap()
+                    };
 
                     let new_replica_fr = sector_key_fr + (staged_data_fr * rho);
-                    fr_into_bytes_slice(
-                        &new_replica_fr,
-                        &mut replica_data[output_index..output_index + FR_SIZE],
-                    );
+                    replica_data[output_index..output_index + FR_SIZE]
+                        .copy_from_slice(new_replica_fr.to_repr().as_ref());
                 }
 
                 Ok(())
@@ -918,13 +934,13 @@ where
         new_replica_data.flush()?;
 
         // Open the new written replica data as a DiskStore.
-        let new_replica_store: DiskStore<TreeRDomain> =
+        let new_replica_store: DiskStore<TreeRDomain<F>> =
             DiskStore::new_from_slice(nodes_count, &new_replica_data[0..])?;
 
         // This argument is currently unused by this invocation, but required for the API.
         let mut unused_data = Data::empty();
 
-        let tree_r_last = StackedDrg::<TreeR, TreeDHasher>::generate_tree_r_last::<TreeR::Arity>(
+        let tree_r_last = StackedDrg::<TreeR<F, U, V, W>, TreeDHasher<F>>::generate_tree_r_last::<U>(
             &mut unused_data,
             base_tree_nodes_count,
             tree_count,
@@ -935,7 +951,7 @@ where
         )?;
 
         let comm_r_last_new = tree_r_last.root();
-        let comm_r_new = <TreeRHasher as Hasher>::Function::hash2(&comm_c, &comm_r_last_new);
+        let comm_r_new = <TreeRHasher<F> as Hasher>::Function::hash2(&comm_c, &comm_r_last_new);
 
         Ok((comm_r_new, comm_r_last_new, comm_d_new))
     }
@@ -947,9 +963,9 @@ where
         replica_path: &Path,
         sector_key_path: &Path,
         sector_key_cache_path: &Path,
-        comm_c: TreeRDomain,
-        comm_d_new: TreeDDomain,
-        comm_sector_key: TreeRDomain,
+        comm_c: TreeRDomain<F>,
+        comm_d_new: TreeDDomain<F>,
+        comm_sector_key: TreeRDomain<F>,
         h: usize,
     ) -> Result<()> {
         // Sanity check all input path types.
@@ -958,7 +974,7 @@ where
             "sector_key_cache_path must be a directory"
         );
 
-        let tree_count = get_base_tree_count::<TreeR>();
+        let tree_count = get_base_tree_count::<TreeR<F, U, V, W>>();
         let base_tree_nodes_count = nodes_count / tree_count;
 
         let out_data_path_metadata = metadata(out_data_path)?;
@@ -1006,7 +1022,7 @@ where
         let replica_data = mmap_read(replica_path)?;
         let sector_key_data = mmap_read(sector_key_path)?;
 
-        let comm_r_old = <TreeRHasher as Hasher>::Function::hash2(&comm_c, &comm_sector_key);
+        let comm_r_old = <TreeRHasher<F> as Hasher>::Function::hash2(&comm_c, &comm_sector_key);
         let phi = phi(&comm_d_new, &comm_r_old);
 
         let end = replica_path_metadata.len() as u64;
@@ -1023,7 +1039,7 @@ where
         let get_high_bits_shr = node_index_bit_len - h;
 
         // Precompute all rho^-1 values.
-        let rho_invs: Vec<Fr> = rhos(h, &phi)
+        let rho_invs: Vec<F> = rhos(h, &phi)
             .into_iter()
             .map(|rho| rho.invert().unwrap())
             .collect();
@@ -1041,16 +1057,26 @@ where
                     let high = node_index >> get_high_bits_shr;
                     let rho_inv = rho_invs[high];
 
-                    let sector_key_fr =
-                        bytes_into_fr(&sector_key_data[input_index..input_index + FR_SIZE])?;
-                    let replica_data_fr =
-                        bytes_into_fr(&replica_data[input_index..input_index + FR_SIZE])?;
+                    let sector_key_fr = {
+                        let mut repr = F::Repr::default();
+                        repr.as_mut()
+                            .copy_from_slice(&sector_key_data[input_index..input_index + FR_SIZE]);
+                        let opt = F::from_repr_vartime(repr);
+                        ensure!(opt.is_some(), "bytes are invalid field repr");
+                        opt.unwrap()
+                    };
+                    let replica_data_fr = {
+                        let mut repr = F::Repr::default();
+                        repr.as_mut()
+                            .copy_from_slice(&replica_data[input_index..input_index + FR_SIZE]);
+                        let opt = F::from_repr_vartime(repr);
+                        ensure!(opt.is_some(), "bytes are invalid field repr");
+                        opt.unwrap()
+                    };
 
                     let out_data_fr = (replica_data_fr - sector_key_fr) * rho_inv;
-                    fr_into_bytes_slice(
-                        &out_data_fr,
-                        &mut output_data[output_index..output_index + FR_SIZE],
-                    );
+                    output_data[output_index..output_index + FR_SIZE]
+                        .copy_from_slice(out_data_fr.to_repr().as_ref());
                 }
 
                 Ok(())
@@ -1069,11 +1095,11 @@ where
         replica_cache_path: &Path,
         data_path: &Path,
         tree_r_last_new_config: StoreConfig,
-        comm_c: TreeRDomain,
-        comm_d_new: TreeDDomain,
-        comm_sector_key: TreeRDomain,
+        comm_c: TreeRDomain<F>,
+        comm_d_new: TreeDDomain<F>,
+        comm_sector_key: TreeRDomain<F>,
         h: usize,
-    ) -> Result<TreeRDomain> {
+    ) -> Result<TreeRDomain<F>> {
         // Sanity check all input path types.
         ensure!(
             metadata(sector_key_cache_path)?.is_dir(),
@@ -1084,7 +1110,7 @@ where
             "replica_cache_path must be a directory"
         );
 
-        let tree_count = get_base_tree_count::<TreeR>();
+        let tree_count = get_base_tree_count::<TreeR<F, U, V, W>>();
         let base_tree_nodes_count = nodes_count / tree_count;
 
         let data_path_metadata = metadata(data_path)?;
@@ -1133,7 +1159,7 @@ where
         let replica_data = mmap_read(replica_path)?;
         let data = mmap_read(data_path)?;
 
-        let comm_r_old = <TreeRHasher as Hasher>::Function::hash2(&comm_c, &comm_sector_key);
+        let comm_r_old = <TreeRHasher<F> as Hasher>::Function::hash2(&comm_c, &comm_sector_key);
         let phi = phi(&comm_d_new, &comm_r_old);
 
         let end = replica_path_metadata.len() as u64;
@@ -1165,15 +1191,26 @@ where
                     let high = node_index >> get_high_bits_shr;
                     let rho = rhos[high];
 
-                    let data_fr = bytes_into_fr(&data[input_index..input_index + FR_SIZE])?;
-                    let replica_data_fr =
-                        bytes_into_fr(&replica_data[input_index..input_index + FR_SIZE])?;
+                    let data_fr = {
+                        let mut repr = F::Repr::default();
+                        repr.as_mut()
+                            .copy_from_slice(&data[input_index..input_index + FR_SIZE]);
+                        let opt = F::from_repr_vartime(repr);
+                        ensure!(opt.is_some(), "bytes are invalid field repr");
+                        opt.unwrap()
+                    };
+                    let replica_data_fr = {
+                        let mut repr = F::Repr::default();
+                        repr.as_mut()
+                            .copy_from_slice(&replica_data[input_index..input_index + FR_SIZE]);
+                        let opt = F::from_repr_vartime(repr);
+                        ensure!(opt.is_some(), "bytes are invalid field repr");
+                        opt.unwrap()
+                    };
 
                     let sector_key_fr = replica_data_fr - (data_fr * rho);
-                    fr_into_bytes_slice(
-                        &sector_key_fr,
-                        &mut skey_data[output_index..output_index + FR_SIZE],
-                    );
+                    skey_data[output_index..output_index + FR_SIZE]
+                        .copy_from_slice(sector_key_fr.to_repr().as_ref());
                 }
 
                 Ok(())
@@ -1181,13 +1218,13 @@ where
         sector_key_data.flush()?;
 
         // Open the new written sector_key data as a DiskStore.
-        let sector_key_store: DiskStore<TreeRDomain> =
+        let sector_key_store: DiskStore<TreeRDomain<F>> =
             DiskStore::new_from_slice(nodes_count, &sector_key_data[0..])?;
 
         // This argument is currently unused by this invocation, but required for the API.
         let mut unused_data = Data::empty();
 
-        let tree_r_last = StackedDrg::<TreeR, TreeDHasher>::generate_tree_r_last::<TreeR::Arity>(
+        let tree_r_last = StackedDrg::<TreeR<F, U, V, W>, TreeDHasher<F>>::generate_tree_r_last::<U>(
             &mut unused_data,
             base_tree_nodes_count,
             tree_count,

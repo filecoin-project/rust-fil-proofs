@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
 
 use bellperson::{util_cs::test_cs::TestConstraintSystem, Circuit};
+use blstrs::Scalar as Fr;
 use filecoin_hashers::{poseidon::PoseidonHasher, Domain, HashFunction, Hasher};
 use rand::{Rng, SeedableRng};
 use rand_xorshift::XorShiftRng;
@@ -18,10 +19,14 @@ use tempfile::tempdir;
 #[ignore]
 #[test]
 fn test_rational_post_compound_poseidon() {
-    test_rational_post_compound::<BinaryMerkleTree<PoseidonHasher>>();
+    test_rational_post_compound::<BinaryMerkleTree<PoseidonHasher<Fr>>>();
 }
 
-fn test_rational_post_compound<Tree: 'static + MerkleTreeTrait>() {
+fn test_rational_post_compound<Tree>()
+where
+    Tree: 'static + MerkleTreeTrait,
+    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+{
     let rng = &mut XorShiftRng::from_seed(TEST_SEED);
 
     let leaves = 32 * get_base_tree_count::<Tree>();

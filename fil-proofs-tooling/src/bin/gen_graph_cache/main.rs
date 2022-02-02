@@ -4,8 +4,9 @@ use std::io::BufWriter;
 use std::path::Path;
 
 use anyhow::Result;
+use blstrs::Scalar as Fr;
 use clap::{value_t, App, Arg};
-use filecoin_hashers::sha256::Sha256Hasher;
+use filecoin_hashers::{sha256::Sha256Hasher, Domain, Hasher};
 use filecoin_proofs::{
     with_shape, DRG_DEGREE, EXP_DEGREE, SECTOR_SIZE_2_KIB, SECTOR_SIZE_32_GIB, SECTOR_SIZE_512_MIB,
     SECTOR_SIZE_64_GIB, SECTOR_SIZE_8_MIB,
@@ -24,12 +25,16 @@ pub struct ParentCacheSummary {
     pub digest: String,
 }
 
-fn gen_graph_cache<Tree: 'static + MerkleTreeTrait>(
+fn gen_graph_cache<Tree>(
     sector_size: usize,
     porep_id: [u8; 32],
     api_version: ApiVersion,
     parent_cache_summary_map: &mut ParentCacheSummaryMap,
-) -> Result<()> {
+) -> Result<()>
+where
+    Tree: 'static + MerkleTreeTrait,
+    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+{
     let nodes = (sector_size / 32) as usize;
 
     // Note that layers and challenge_count don't affect the graph, so
@@ -47,7 +52,7 @@ fn gen_graph_cache<Tree: 'static + MerkleTreeTrait>(
         api_version,
     };
 
-    let pp = StackedDrg::<Tree, Sha256Hasher>::setup(&sp).expect("failed to setup DRG");
+    let pp = StackedDrg::<Tree, Sha256Hasher<Fr>>::setup(&sp).expect("failed to setup DRG");
     let parent_cache = pp.graph.parent_cache()?;
 
     let data = ParentCacheSummary {

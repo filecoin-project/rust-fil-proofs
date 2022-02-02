@@ -36,6 +36,7 @@ tempfile = "3"
 pretty_assertions = "0.6.1"
 filecoin-hashers = { path = "../filecoin-hashers", version = "^6.0.0", default-features = false, features = ["poseidon", "sha256", "blake2s"]}
 rand_xorshift = "0.3.0"
+pasta_curves = "0.3.0"
 
 [features]
 default = ["opencl"]

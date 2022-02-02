@@ -41,7 +41,7 @@ fn kdf_benchmark(c: &mut Criterion) {
         data,
         replica_id,
         graph,
-    } = pregenerate_data::<Sha256Hasher>(degree);
+    } = pregenerate_data::<Sha256Hasher<Fr>>(degree);
 
     let mut group = c.benchmark_group("kdf");
     group.sample_size(10);

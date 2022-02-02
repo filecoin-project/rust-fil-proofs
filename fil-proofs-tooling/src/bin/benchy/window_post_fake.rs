@@ -2,8 +2,10 @@ use std::collections::BTreeMap;
 use std::fs::{remove_dir_all, remove_file};
 use std::io::stdout;
 
+use blstrs::Scalar as Fr;
 use fil_proofs_tooling::shared::{create_replica, PROVER_ID, RANDOMNESS};
 use fil_proofs_tooling::{measure, Metadata};
+use filecoin_hashers::{Domain, Hasher};
 use filecoin_proofs::constants::{WINDOW_POST_CHALLENGE_COUNT, WINDOW_POST_SECTOR_COUNT};
 use filecoin_proofs::types::{PoStConfig, SectorSize};
 use filecoin_proofs::{
@@ -45,11 +47,15 @@ impl Report {
     }
 }
 
-pub fn run_window_post_bench<Tree: 'static + MerkleTreeTrait>(
+pub fn run_window_post_bench<Tree>(
     sector_size: u64,
     fake_replica: bool,
     api_version: ApiVersion,
-) -> anyhow::Result<()> {
+) -> anyhow::Result<()>
+where
+    Tree: 'static + MerkleTreeTrait,
+    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+{
     let arbitrary_porep_id = [66; 32];
     let sector_count = *WINDOW_POST_SECTOR_COUNT
         .read()

@@ -96,7 +96,7 @@ mod tests {
         let size = 64;
         let porep_id = [32; 32];
 
-        let graph = StackedBucketGraph::<Sha256Hasher>::new_stacked(
+        let graph = StackedBucketGraph::<Sha256Hasher<Fr>>::new_stacked(
             size,
             BASE_DEGREE,
             EXP_DEGREE,

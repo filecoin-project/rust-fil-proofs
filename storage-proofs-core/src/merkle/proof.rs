@@ -703,6 +703,7 @@ mod tests {
         blake2s::Blake2sHasher, poseidon::PoseidonHasher, sha256::Sha256Hasher, Domain,
     };
     use generic_array::typenum::{U2, U4, U8};
+    use pasta_curves::{Fp, Fq};
     use rand::thread_rng;
 
     use crate::merkle::{
@@ -737,8 +738,8 @@ mod tests {
     fn merklepath_poseidon_2() {
         merklepath::<
             MerkleTreeWrapper<
-                PoseidonHasher,
-                DiskStore<<PoseidonHasher as Hasher>::Domain>,
+                PoseidonHasher<Fr>,
+                DiskStore<<PoseidonHasher<Fr> as Hasher>::Domain>,
                 U2,
                 U0,
                 U0,
@@ -750,8 +751,8 @@ mod tests {
     fn merklepath_poseidon_4() {
         merklepath::<
             MerkleTreeWrapper<
-                PoseidonHasher,
-                DiskStore<<PoseidonHasher as Hasher>::Domain>,
+                PoseidonHasher<Fr>,
+                DiskStore<<PoseidonHasher<Fr> as Hasher>::Domain>,
                 U4,
                 U0,
                 U0,
@@ -763,8 +764,8 @@ mod tests {
     fn merklepath_poseidon_8() {
         merklepath::<
             MerkleTreeWrapper<
-                PoseidonHasher,
-                DiskStore<<PoseidonHasher as Hasher>::Domain>,
+                PoseidonHasher<Fr>,
+                DiskStore<<PoseidonHasher<Fr> as Hasher>::Domain>,
                 U8,
                 U0,
                 U0,
@@ -776,8 +777,8 @@ mod tests {
     fn merklepath_poseidon_8_2() {
         merklepath::<
             MerkleTreeWrapper<
-                PoseidonHasher,
-                DiskStore<<PoseidonHasher as Hasher>::Domain>,
+                PoseidonHasher<Fr>,
+                DiskStore<<PoseidonHasher<Fr> as Hasher>::Domain>,
                 U8,
                 U2,
                 U0,
@@ -789,8 +790,8 @@ mod tests {
     fn merklepath_poseidon_8_4() {
         merklepath::<
             MerkleTreeWrapper<
-                PoseidonHasher,
-                DiskStore<<PoseidonHasher as Hasher>::Domain>,
+                PoseidonHasher<Fr>,
+                DiskStore<<PoseidonHasher<Fr> as Hasher>::Domain>,
                 U8,
                 U4,
                 U0,
@@ -802,8 +803,8 @@ mod tests {
     fn merklepath_poseidon_8_4_2() {
         merklepath::<
             MerkleTreeWrapper<
-                PoseidonHasher,
-                DiskStore<<PoseidonHasher as Hasher>::Domain>,
+                PoseidonHasher<Fr>,
+                DiskStore<<PoseidonHasher<Fr> as Hasher>::Domain>,
                 U8,
                 U4,
                 U2,
@@ -815,8 +816,8 @@ mod tests {
     fn merklepath_sha256_2() {
         merklepath::<
             MerkleTreeWrapper<
-                Sha256Hasher,
-                DiskStore<<Sha256Hasher as Hasher>::Domain>,
+                Sha256Hasher<Fr>,
+                DiskStore<<Sha256Hasher<Fr> as Hasher>::Domain>,
                 U2,
                 U0,
                 U0,
@@ -828,8 +829,8 @@ mod tests {
     fn merklepath_sha256_4() {
         merklepath::<
             MerkleTreeWrapper<
-                Sha256Hasher,
-                DiskStore<<Sha256Hasher as Hasher>::Domain>,
+                Sha256Hasher<Fr>,
+                DiskStore<<Sha256Hasher<Fr> as Hasher>::Domain>,
                 U4,
                 U0,
                 U0,
@@ -841,8 +842,8 @@ mod tests {
     fn merklepath_sha256_2_4() {
         merklepath::<
             MerkleTreeWrapper<
-                Sha256Hasher,
-                DiskStore<<Sha256Hasher as Hasher>::Domain>,
+                Sha256Hasher<Fr>,
+                DiskStore<<Sha256Hasher<Fr> as Hasher>::Domain>,
                 U2,
                 U4,
                 U0,
@@ -854,8 +855,8 @@ mod tests {
     fn merklepath_sha256_top_2_4_2() {
         merklepath::<
             MerkleTreeWrapper<
-                Sha256Hasher,
-                DiskStore<<Sha256Hasher as Hasher>::Domain>,
+                Sha256Hasher<Fr>,
+                DiskStore<<Sha256Hasher<Fr> as Hasher>::Domain>,
                 U2,
                 U4,
                 U2,
@@ -867,8 +868,8 @@ mod tests {
     fn merklepath_blake2s_2() {
         merklepath::<
             MerkleTreeWrapper<
-                Blake2sHasher,
-                DiskStore<<Blake2sHasher as Hasher>::Domain>,
+                Blake2sHasher<Fr>,
+                DiskStore<<Blake2sHasher<Fr> as Hasher>::Domain>,
                 U2,
                 U0,
                 U0,
@@ -880,8 +881,8 @@ mod tests {
     fn merklepath_blake2s_4() {
         merklepath::<
             MerkleTreeWrapper<
-                Blake2sHasher,
-                DiskStore<<Blake2sHasher as Hasher>::Domain>,
+                Blake2sHasher<Fr>,
+                DiskStore<<Blake2sHasher<Fr> as Hasher>::Domain>,
                 U4,
                 U0,
                 U0,
@@ -893,12 +894,103 @@ mod tests {
     fn merklepath_blake2s_8_4_2() {
         merklepath::<
             MerkleTreeWrapper<
-                Blake2sHasher,
-                DiskStore<<Blake2sHasher as Hasher>::Domain>,
+                Blake2sHasher<Fr>,
+                DiskStore<<Blake2sHasher<Fr> as Hasher>::Domain>,
                 U8,
                 U4,
                 U2,
             >,
         >();
+    }
+
+    #[test]
+    fn merklepath_poseidon_2_halo() {
+        type Tree<H> = MerkleTreeWrapper<H, DiskStore<<H as Hasher>::Domain>, U2, U0, U0>;
+        merklepath::<Tree<PoseidonHasher<Fp>>>();
+        merklepath::<Tree<PoseidonHasher<Fq>>>();
+    }
+
+    #[test]
+    fn merklepath_poseidon_4_halo() {
+        type Tree<H> = MerkleTreeWrapper<H, DiskStore<<H as Hasher>::Domain>, U4, U0, U0>;
+        merklepath::<Tree<PoseidonHasher<Fp>>>();
+        merklepath::<Tree<PoseidonHasher<Fq>>>();
+    }
+
+    #[test]
+    fn merklepath_poseidon_8_halo() {
+        type Tree<H> = MerkleTreeWrapper<H, DiskStore<<H as Hasher>::Domain>, U8, U0, U0>;
+        merklepath::<Tree<PoseidonHasher<Fp>>>();
+        merklepath::<Tree<PoseidonHasher<Fq>>>();
+    }
+
+    #[test]
+    fn merklepath_poseidon_8_2_halo() {
+        type Tree<H> = MerkleTreeWrapper<H, DiskStore<<H as Hasher>::Domain>, U8, U2, U0>;
+        merklepath::<Tree<PoseidonHasher<Fp>>>();
+        merklepath::<Tree<PoseidonHasher<Fq>>>();
+    }
+
+    #[test]
+    fn merklepath_poseidon_8_4_halo() {
+        type Tree<H> = MerkleTreeWrapper<H, DiskStore<<H as Hasher>::Domain>, U8, U4, U0>;
+        merklepath::<Tree<PoseidonHasher<Fp>>>();
+        merklepath::<Tree<PoseidonHasher<Fq>>>();
+    }
+
+    #[test]
+    fn merklepath_poseidon_8_4_2_halo() {
+        type Tree<H> = MerkleTreeWrapper<H, DiskStore<<H as Hasher>::Domain>, U8, U4, U2>;
+        merklepath::<Tree<PoseidonHasher<Fp>>>();
+        merklepath::<Tree<PoseidonHasher<Fq>>>();
+    }
+
+    #[test]
+    fn merklepath_sha256_2_halo() {
+        type Tree<H> = MerkleTreeWrapper<H, DiskStore<<H as Hasher>::Domain>, U2, U0, U0>;
+        merklepath::<Tree<Sha256Hasher<Fp>>>();
+        merklepath::<Tree<Sha256Hasher<Fq>>>();
+    }
+
+    #[test]
+    fn merklepath_sha256_4_halo() {
+        type Tree<H> = MerkleTreeWrapper<H, DiskStore<<H as Hasher>::Domain>, U4, U0, U0>;
+        merklepath::<Tree<Sha256Hasher<Fp>>>();
+        merklepath::<Tree<Sha256Hasher<Fq>>>();
+    }
+
+    #[test]
+    fn merklepath_sha256_2_4_halo() {
+        type Tree<H> = MerkleTreeWrapper<H, DiskStore<<H as Hasher>::Domain>, U2, U4, U0>;
+        merklepath::<Tree<Sha256Hasher<Fp>>>();
+        merklepath::<Tree<Sha256Hasher<Fq>>>();
+    }
+
+    #[test]
+    fn merklepath_sha256_2_4_2_halo() {
+        type Tree<H> = MerkleTreeWrapper<H, DiskStore<<H as Hasher>::Domain>, U2, U4, U2>;
+        merklepath::<Tree<Sha256Hasher<Fp>>>();
+        merklepath::<Tree<Sha256Hasher<Fq>>>();
+    }
+
+    #[test]
+    fn merklepath_blake2s_2_halo() {
+        type Tree<H> = MerkleTreeWrapper<H, DiskStore<<H as Hasher>::Domain>, U2, U0, U0>;
+        merklepath::<Tree<Blake2sHasher<Fp>>>();
+        merklepath::<Tree<Blake2sHasher<Fq>>>();
+    }
+
+    #[test]
+    fn merklepath_blake2s_4_halo() {
+        type Tree<H> = MerkleTreeWrapper<H, DiskStore<<H as Hasher>::Domain>, U4, U0, U0>;
+        merklepath::<Tree<Blake2sHasher<Fp>>>();
+        merklepath::<Tree<Blake2sHasher<Fq>>>();
+    }
+
+    #[test]
+    fn merklepath_blake2s_8_4_2_halo() {
+        type Tree<H> = MerkleTreeWrapper<H, DiskStore<<H as Hasher>::Domain>, U8, U4, U2>;
+        merklepath::<Tree<Blake2sHasher<Fp>>>();
+        merklepath::<Tree<Blake2sHasher<Fq>>>();
     }
 }

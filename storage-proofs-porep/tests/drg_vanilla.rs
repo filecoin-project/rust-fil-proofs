@@ -26,12 +26,12 @@ use tempfile::tempdir;
 
 #[test]
 fn text_drg_porep_extract_all_sha256() {
-    test_extract_all::<BinaryMerkleTree<Sha256Hasher>>();
+    test_extract_all::<BinaryMerkleTree<Sha256Hasher<Fr>>>();
 }
 
 #[test]
 fn text_drg_porep_extract_all_blake2s() {
-    test_extract_all::<BinaryMerkleTree<Blake2sHasher>>();
+    test_extract_all::<BinaryMerkleTree<Blake2sHasher<Fr>>>();
 }
 
 fn test_extract_all<Tree: MerkleTreeTrait>() {
@@ -96,12 +96,12 @@ fn test_extract_all<Tree: MerkleTreeTrait>() {
 
 #[test]
 fn test_drg_porep_extract_sha256() {
-    test_extract::<BinaryMerkleTree<Sha256Hasher>>();
+    test_extract::<BinaryMerkleTree<Sha256Hasher<Fr>>>();
 }
 
 #[test]
 fn test_drg_porep_extract_blake2s() {
-    test_extract::<BinaryMerkleTree<Blake2sHasher>>();
+    test_extract::<BinaryMerkleTree<Blake2sHasher<Fr>>>();
 }
 
 fn test_extract<Tree: MerkleTreeTrait>() {
@@ -185,8 +185,8 @@ table_tests! {
 }
 
 fn test_prove_verify(n: usize, i: usize) {
-    test_prove_verify_aux::<BinaryMerkleTree<Sha256Hasher>>(n, i, false, false);
-    test_prove_verify_aux::<BinaryMerkleTree<Blake2sHasher>>(n, i, false, false);
+    test_prove_verify_aux::<BinaryMerkleTree<Sha256Hasher<Fr>>>(n, i, false, false);
+    test_prove_verify_aux::<BinaryMerkleTree<Blake2sHasher<Fr>>>(n, i, false, false);
 }
 
 fn test_prove_verify_aux<Tree: MerkleTreeTrait>(
@@ -372,12 +372,12 @@ fn test_prove_verify_aux<Tree: MerkleTreeTrait>(
 
 #[test]
 fn test_drg_porep_verify_fails_on_wrong_challenge() {
-    test_prove_verify_aux::<BinaryMerkleTree<Sha256Hasher>>(8, 1, true, false);
-    test_prove_verify_aux::<BinaryMerkleTree<Blake2sHasher>>(8, 1, true, false);
+    test_prove_verify_aux::<BinaryMerkleTree<Sha256Hasher<Fr>>>(8, 1, true, false);
+    test_prove_verify_aux::<BinaryMerkleTree<Blake2sHasher<Fr>>>(8, 1, true, false);
 }
 
 #[test]
 fn test_drg_porep_verify_fails_on_wrong_parents() {
-    test_prove_verify_aux::<BinaryMerkleTree<Sha256Hasher>>(8, 5, false, true);
-    test_prove_verify_aux::<BinaryMerkleTree<Blake2sHasher>>(8, 5, false, true);
+    test_prove_verify_aux::<BinaryMerkleTree<Sha256Hasher<Fr>>>(8, 5, false, true);
+    test_prove_verify_aux::<BinaryMerkleTree<Blake2sHasher<Fr>>>(8, 5, false, true);
 }

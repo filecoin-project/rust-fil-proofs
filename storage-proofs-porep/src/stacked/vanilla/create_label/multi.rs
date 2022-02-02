@@ -730,7 +730,7 @@ mod tests {
             nodes.trailing_zeros() as usize,
         );
 
-        let graph = StackedBucketGraph::<PoseidonHasher>::new(
+        let graph = StackedBucketGraph::<PoseidonHasher<Fr>>::new(
             None,
             nodes,
             BASE_DEGREE,
@@ -741,7 +741,7 @@ mod tests {
         .expect("stacked bucket graph new failed");
         let cache = graph.parent_cache().expect("parent_cache failed");
 
-        let labels = create_labels_for_decoding::<LCTree<PoseidonHasher, U8, U0, U2>, _>(
+        let labels = create_labels_for_decoding::<LCTree<PoseidonHasher<Fr>, U8, U0, U2>, _>(
             &graph, &cache, layers, replica_id, config,
         )
         .expect("create_labels_for_decoding failed");
@@ -753,6 +753,6 @@ mod tests {
             .read_at(final_labels.len() - 1)
             .expect("read_at");
         dbg!(&last_label);
-        assert_eq!(expected_last_label.to_repr(), last_label.0);
+        assert_eq!(expected_last_label.to_repr(), last_label.repr());
     }
 }

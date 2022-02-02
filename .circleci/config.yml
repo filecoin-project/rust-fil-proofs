@@ -98,6 +98,8 @@ jobs:
             cargo +$(cat rust-toolchain) test -p storage-proofs-update --features isolated-testing --release test_empty_sector_update_circuit_8kib
             cargo +$(cat rust-toolchain) test -p storage-proofs-update --features isolated-testing --release test_empty_sector_update_circuit_16kib
             cargo +$(cat rust-toolchain) test -p storage-proofs-update --features isolated-testing --release test_empty_sector_update_circuit_32kib
+            cargo +$(cat rust-toolchain) test -p storage-proofs-update --features isolated-testing --release test_empty_sector_update_poseidon_circuit_1kib
+            cargo +$(cat rust-toolchain) test -p storage-proofs-update --features isolated-testing --release test_empty_sector_update_poseidon_circuit_8kib
           no_output_timeout: 30m
 
   test_ignored_release:

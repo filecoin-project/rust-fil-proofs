@@ -453,6 +453,7 @@ mod tests {
 
     use std::sync::Once;
 
+    use blstrs::Scalar as Fr;
     use filecoin_hashers::poseidon::PoseidonHasher;
     use storage_proofs_core::api_version::ApiVersion;
 
@@ -469,7 +470,7 @@ mod tests {
     fn test_read_full_range() {
         init_logger();
         let nodes = 24u32;
-        let graph = StackedBucketGraph::<PoseidonHasher>::new_stacked(
+        let graph = StackedBucketGraph::<PoseidonHasher<Fr>>::new_stacked(
             nodes as usize,
             BASE_DEGREE,
             EXP_DEGREE,
@@ -523,7 +524,7 @@ mod tests {
         init_logger();
         let pool = Pool::new(3);
         let nodes = 48u32;
-        let graph = StackedBucketGraph::<PoseidonHasher>::new_stacked(
+        let graph = StackedBucketGraph::<PoseidonHasher<Fr>>::new_stacked(
             nodes as usize,
             BASE_DEGREE,
             EXP_DEGREE,
@@ -541,7 +542,7 @@ mod tests {
         pool.scoped(|s| {
             for _ in 0..3 {
                 s.execute(move || {
-                    let graph = StackedBucketGraph::<PoseidonHasher>::new_stacked(
+                    let graph = StackedBucketGraph::<PoseidonHasher<Fr>>::new_stacked(
                         nodes as usize,
                         BASE_DEGREE,
                         EXP_DEGREE,
@@ -573,7 +574,7 @@ mod tests {
     fn test_read_partial_range(api_version: ApiVersion, porep_id: &[u8; 32]) {
         init_logger();
         let nodes = 48u32;
-        let graph = StackedBucketGraph::<PoseidonHasher>::new_stacked(
+        let graph = StackedBucketGraph::<PoseidonHasher<Fr>>::new_stacked(
             nodes as usize,
             BASE_DEGREE,
             EXP_DEGREE,
