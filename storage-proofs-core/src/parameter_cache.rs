@@ -400,6 +400,10 @@ pub fn read_cached_params(cache_entry_path: &Path) -> Result<groth16::MappedPara
     info!("checking cache_path: {:?} for parameters", cache_entry_path);
 
     let verify_production_params = SETTINGS.verify_production_params;
+    info!(
+        "Verify production parameters is {}",
+        verify_production_params
+    );
 
     // If the verify production params is set, we make sure that the path being accessed matches a
     // production cache key, found in the 'srs-inner-product.json' file. The parameter data file is
@@ -483,6 +487,10 @@ fn read_cached_srs_key(cache_entry_path: &Path) -> Result<groth16::aggregate::Ge
     info!("checking cache_path: {:?} for srs", cache_entry_path);
 
     let verify_production_params = SETTINGS.verify_production_params;
+    info!(
+        "Verify production parameters is {}",
+        verify_production_params
+    );
 
     // If the verify production params is set, we make sure that the path being accessed matches a
     // production cache key, found in the 'parameters.json' file. The parameter data file is also

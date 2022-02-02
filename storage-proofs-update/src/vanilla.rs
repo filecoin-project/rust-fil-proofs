@@ -562,7 +562,7 @@ where
         let tree_d_arity = TreeDArity::to_usize();
         let tree_d_nodes = tree_d_new_config.size.expect("config size failure");
         trace!(
-            "Instantiating TreeDNew: leafs={}, base_store_size={})",
+            "Instantiating TreeDNew: leafs={}, base_store_size={}",
             tree_d_leafs,
             tree_d_nodes
         );
@@ -592,13 +592,6 @@ where
             tree_r_base_tree_count,
         )?;
 
-        trace!("ReplicaConfig Path: {:?}", replica_config.path);
-        for config in &tree_r_configs {
-            trace!(
-                "StoreConfig: {:?}",
-                StoreConfig::data_path(&config.path, &config.id)
-            );
-        }
         trace!(
             "Instantiating {}: arity={}-{}-{}, base_tree_count={}, base_store_size={}",
             name,
@@ -608,6 +601,14 @@ where
             tree_r_base_tree_count,
             tree_r_base_tree_nodes,
         );
+
+        trace!("ReplicaConfig Path: {:?}", replica_config.path);
+        for config in &tree_r_configs {
+            trace!(
+                "StoreConfig: {:?}",
+                StoreConfig::data_path(&config.path, &config.id)
+            );
+        }
         create_lc_tree::<LCTree<TreeRHasher, TreeR::Arity, TreeR::SubTreeArity, TreeR::TopTreeArity>>(
             tree_r_base_tree_nodes,
             &tree_r_configs,
