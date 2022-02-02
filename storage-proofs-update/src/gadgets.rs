@@ -12,7 +12,7 @@ use filecoin_hashers::{HashFunction, Hasher};
 use neptune::circuit::poseidon_hash;
 use storage_proofs_core::gadgets::por::por_no_challenge_input;
 
-use crate::constants::{TreeD, TreeDHasher, POSEIDON_CONSTANTS_GEN_RANDOMNESS};
+use crate::constants::{TreeD, TreeDHasher, POSEIDON_CONSTANTS_GEN_RANDOMNESS_BLS};
 
 // Allocates `num` as `Fr::NUM_BITS` number of bits.
 pub fn allocated_num_to_allocated_bits<CS: ConstraintSystem<Fr>>(
@@ -61,7 +61,7 @@ pub fn apex_por<CS: ConstraintSystem<Fr>>(
             .chunks(2)
             .enumerate()
             .map(|(i, siblings)| {
-                <TreeDHasher as Hasher>::Function::hash2_circuit(
+                <TreeDHasher<Fr> as Hasher>::Function::hash2_circuit(
                     cs.namespace(|| {
                         format!(
                             "apex_tree generation hash (tree_row={}, siblings={})",
@@ -79,7 +79,7 @@ pub fn apex_por<CS: ConstraintSystem<Fr>>(
     // This partition's apex-tree root.
     let apex_root = apex_tree.last().unwrap()[0].clone();
 
-    por_no_challenge_input::<TreeD, _>(
+    por_no_challenge_input::<TreeD<Fr>, _>(
         cs.namespace(|| "partition-tree por"),
         partition_bits,
         apex_root,
@@ -131,7 +131,7 @@ pub fn gen_challenge_bits<CS: ConstraintSystem<Fr>>(
         let digest = poseidon_hash(
             cs.namespace(|| format!("digest_{}", j)),
             vec![comm_r_new.clone(), digest_index.clone()],
-            &POSEIDON_CONSTANTS_GEN_RANDOMNESS,
+            &*POSEIDON_CONSTANTS_GEN_RANDOMNESS_BLS,
         )?;
 
         // Allocate `digest` as `Fr::NUM_BITS` bits.
@@ -286,11 +286,15 @@ mod tests {
     use crate::{
         challenges::Challenges,
         constants::{
-            apex_leaf_count, challenge_count, partition_count, TreeDDomain, TreeDHasher,
-            TreeRDomain, ALLOWED_SECTOR_SIZES, SECTOR_SIZE_16_KIB, SECTOR_SIZE_1_KIB,
-            SECTOR_SIZE_2_KIB, SECTOR_SIZE_32_KIB, SECTOR_SIZE_4_KIB, SECTOR_SIZE_8_KIB,
+            self, apex_leaf_count, challenge_count, partition_count, ALLOWED_SECTOR_SIZES,
+            SECTOR_SIZE_16_KIB, SECTOR_SIZE_1_KIB, SECTOR_SIZE_2_KIB, SECTOR_SIZE_32_KIB,
+            SECTOR_SIZE_4_KIB, SECTOR_SIZE_8_KIB,
         },
     };
+
+    type TreeDDomain = constants::TreeDDomain<Fr>;
+    type TreeDHasher = constants::TreeDHasher<Fr>;
+    type TreeRDomain = constants::TreeRDomain<Fr>;
 
     #[test]
     fn test_gen_challenge_bits_gadget() {
@@ -314,7 +318,7 @@ mod tests {
             for k in 0..partition_count {
                 let challenges = Challenges::new(sector_nodes, comm_r_new, k);
 
-                let mut cs = TestConstraintSystem::<Fr>::new();
+                let mut cs = TestConstraintSystem::new();
                 let comm_r_new =
                     AllocatedNum::alloc(cs.namespace(|| "comm_r_new"), || Ok(comm_r_new.into()))
                         .unwrap();
@@ -400,7 +404,7 @@ mod tests {
             .chunks(apex_leafs_per_partition)
             .enumerate()
         {
-            let mut cs = TestConstraintSystem::<Fr>::new();
+            let mut cs = TestConstraintSystem::new();
             let comm_d =
                 AllocatedNum::alloc(cs.namespace(|| "comm_d"), || Ok(comm_d.into())).unwrap();
 

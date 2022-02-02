@@ -4,7 +4,7 @@ use bellperson::{
 };
 use blstrs::Scalar as Fr;
 use ff::Field;
-use filecoin_hashers::{poseidon::PoseidonHasher, sha256::Sha256Hasher, Hasher};
+use filecoin_hashers::{poseidon::PoseidonHasher, sha256::Sha256Hasher, Domain, Hasher};
 use fr32::fr_into_bytes;
 use generic_array::typenum::{U0, U2, U4, U8};
 use merkletree::store::StoreConfig;
@@ -32,28 +32,29 @@ use tempfile::tempdir;
 
 #[test]
 fn test_stacked_porep_circuit_poseidon_base_2() {
-    test_stacked_porep_circuit::<DiskTree<PoseidonHasher, U2, U0, U0>>(22, 1_206_212);
+    test_stacked_porep_circuit::<DiskTree<PoseidonHasher<Fr>, U2, U0, U0>>(22, 1_206_212);
 }
 
 #[test]
 fn test_stacked_input_circuit_poseidon_base_8() {
-    test_stacked_porep_circuit::<DiskTree<PoseidonHasher, U8, U0, U0>>(22, 1_199_620);
+    test_stacked_porep_circuit::<DiskTree<PoseidonHasher<Fr>, U8, U0, U0>>(22, 1_199_620);
 }
 
 #[test]
 fn test_stacked_input_circuit_poseidon_sub_8_4() {
-    test_stacked_porep_circuit::<DiskTree<PoseidonHasher, U8, U4, U0>>(22, 1_296_576);
+    test_stacked_porep_circuit::<DiskTree<PoseidonHasher<Fr>, U8, U4, U0>>(22, 1_296_576);
 }
 
 #[test]
 fn test_stacked_input_circuit_poseidon_top_8_4_2() {
-    test_stacked_porep_circuit::<DiskTree<PoseidonHasher, U8, U4, U2>>(22, 1_346_982);
+    test_stacked_porep_circuit::<DiskTree<PoseidonHasher<Fr>, U8, U4, U2>>(22, 1_346_982);
 }
 
-fn test_stacked_porep_circuit<Tree: MerkleTreeTrait + 'static>(
-    expected_inputs: usize,
-    expected_constraints: usize,
-) {
+fn test_stacked_porep_circuit<Tree>(expected_inputs: usize, expected_constraints: usize)
+where
+    Tree: 'static + MerkleTreeTrait,
+    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+{
     let nodes = 8 * get_base_tree_count::<Tree>();
     let degree = BASE_DEGREE;
     let expansion_degree = EXP_DEGREE;
@@ -90,8 +91,8 @@ fn test_stacked_porep_circuit<Tree: MerkleTreeTrait + 'static>(
         api_version: ApiVersion::V1_1_0,
     };
 
-    let pp = StackedDrg::<Tree, Sha256Hasher>::setup(&sp).expect("setup failed");
-    let (tau, (p_aux, t_aux)) = StackedDrg::<Tree, Sha256Hasher>::replicate(
+    let pp = StackedDrg::<Tree, Sha256Hasher<Fr>>::setup(&sp).expect("setup failed");
+    let (tau, (p_aux, t_aux)) = StackedDrg::<Tree, Sha256Hasher<Fr>>::replicate(
         &pp,
         &replica_id.into(),
         (mmapped_data.as_mut()).into(),
@@ -107,7 +108,7 @@ fn test_stacked_porep_circuit<Tree: MerkleTreeTrait + 'static>(
 
     let seed = rng.gen();
     let pub_inputs =
-        PublicInputs::<<Tree::Hasher as Hasher>::Domain, <Sha256Hasher as Hasher>::Domain> {
+        PublicInputs::<<Tree::Hasher as Hasher>::Domain, <Sha256Hasher<Fr> as Hasher>::Domain> {
             replica_id: replica_id.into(),
             seed,
             tau: Some(tau),
@@ -119,29 +120,33 @@ fn test_stacked_porep_circuit<Tree: MerkleTreeTrait + 'static>(
 
     // Convert TemporaryAux to TemporaryAuxCache, which instantiates all
     // elements based on the configs stored in TemporaryAux.
-    let t_aux = TemporaryAuxCache::<Tree, Sha256Hasher>::new(&t_aux, replica_path)
+    let t_aux = TemporaryAuxCache::<Tree, Sha256Hasher<Fr>>::new(&t_aux, replica_path)
         .expect("failed to restore contents of t_aux");
 
-    let priv_inputs = PrivateInputs::<Tree, Sha256Hasher> { p_aux, t_aux };
+    let priv_inputs = PrivateInputs::<Tree, Sha256Hasher<Fr>> { p_aux, t_aux };
 
-    let proofs =
-        StackedDrg::<Tree, Sha256Hasher>::prove_all_partitions(&pp, &pub_inputs, &priv_inputs, 1)
-            .expect("failed to generate partition proofs");
+    let proofs = StackedDrg::<Tree, Sha256Hasher<Fr>>::prove_all_partitions(
+        &pp,
+        &pub_inputs,
+        &priv_inputs,
+        1,
+    )
+    .expect("failed to generate partition proofs");
 
     let proofs_are_valid =
-        StackedDrg::<Tree, Sha256Hasher>::verify_all_partitions(&pp, &pub_inputs, &proofs)
+        StackedDrg::<Tree, Sha256Hasher<Fr>>::verify_all_partitions(&pp, &pub_inputs, &proofs)
             .expect("failed while trying to verify partition proofs");
 
     assert!(proofs_are_valid);
 
     // Discard cached MTs that are no longer needed.
-    TemporaryAux::<Tree, Sha256Hasher>::clear_temp(t_aux_orig).expect("t_aux delete failed");
+    TemporaryAux::<Tree, Sha256Hasher<Fr>>::clear_temp(t_aux_orig).expect("t_aux delete failed");
 
     {
         // Verify that MetricCS returns the same metrics as TestConstraintSystem.
         let mut cs = MetricCS::<Fr>::new();
 
-        StackedCompound::<Tree, Sha256Hasher>::circuit(&pub_inputs, (), &proofs[0], &pp, None)
+        StackedCompound::<Tree, Sha256Hasher<Fr>>::circuit(&pub_inputs, (), &proofs[0], &pp, None)
             .expect("circuit failed")
             .synthesize(&mut cs.namespace(|| "stacked drgporep"))
             .expect("failed to synthesize circuit");
@@ -155,7 +160,7 @@ fn test_stacked_porep_circuit<Tree: MerkleTreeTrait + 'static>(
     }
     let mut cs = TestConstraintSystem::<Fr>::new();
 
-    StackedCompound::<Tree, Sha256Hasher>::circuit(&pub_inputs, (), &proofs[0], &pp, None)
+    StackedCompound::<Tree, Sha256Hasher<Fr>>::circuit(&pub_inputs, (), &proofs[0], &pp, None)
         .expect("circuit failed")
         .synthesize(&mut cs.namespace(|| "stacked drgporep"))
         .expect("failed to synthesize circuit");
@@ -170,8 +175,8 @@ fn test_stacked_porep_circuit<Tree: MerkleTreeTrait + 'static>(
 
     assert_eq!(cs.get_input(0, "ONE"), Fr::one());
 
-    let generated_inputs = <StackedCompound<Tree, Sha256Hasher> as CompoundProof<
-        StackedDrg<'_, Tree, Sha256Hasher>,
+    let generated_inputs = <StackedCompound<Tree, Sha256Hasher<Fr>> as CompoundProof<
+        StackedDrg<'_, Tree, Sha256Hasher<Fr>>,
         _,
     >>::generate_public_inputs(&pub_inputs, &pp, None)
     .expect("failed to generate public inputs");

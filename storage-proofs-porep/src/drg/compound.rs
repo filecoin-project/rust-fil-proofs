@@ -3,7 +3,7 @@ use std::marker::PhantomData;
 use anyhow::{ensure, Context};
 use bellperson::Circuit;
 use blstrs::Scalar as Fr;
-use filecoin_hashers::Hasher;
+use filecoin_hashers::{Domain, Hasher};
 use generic_array::typenum;
 use storage_proofs_core::{
     compound_proof::{CircuitComponent, CompoundProof},
@@ -45,6 +45,7 @@ use crate::drg::{DrgPoRep, DrgPoRepCircuit};
 pub struct DrgPoRepCompound<H, G>
 where
     H: Hasher,
+    H::Domain: Domain<Field = Fr>,
     G::Key: AsRef<H::Domain>,
     G: Graph<H>,
 {
@@ -53,10 +54,14 @@ where
     _g: PhantomData<G>,
 }
 
-impl<C: Circuit<Fr>, H: Hasher, G: Graph<H>, P: ParameterSetMetadata> CacheableParameters<C, P>
-    for DrgPoRepCompound<H, G>
+impl<C, H, G, P> CacheableParameters<C, P> for DrgPoRepCompound<H, G>
 where
+    C: Circuit<Fr>,
+    H: Hasher,
+    H::Domain: Domain<Field = Fr>,
+    G: Graph<H>,
     G::Key: AsRef<H::Domain>,
+    P: ParameterSetMetadata,
 {
     fn cache_prefix() -> String {
         format!("drg-proof-of-replication-{}", H::name())
@@ -67,6 +72,7 @@ impl<'a, H, G> CompoundProof<'a, DrgPoRep<'a, H, G>, DrgPoRepCircuit<'a, H>>
     for DrgPoRepCompound<H, G>
 where
     H: 'static + Hasher,
+    H::Domain: Domain<Field = Fr>,
     G::Key: AsRef<<H as Hasher>::Domain>,
     G: 'a + Graph<H> + ParameterSetMetadata + Sync + Send,
 {

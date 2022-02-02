@@ -2,6 +2,8 @@ use std::cmp::min;
 use std::fs::File;
 use std::io::{BufWriter, Seek, SeekFrom, Write};
 
+use blstrs::Scalar as Fr;
+use filecoin_hashers::{Domain, Hasher};
 use filecoin_proofs::{
     add_piece, fauxrep_aux, seal_pre_commit_phase1, seal_pre_commit_phase2,
     validate_cache_for_precommit_phase2, MerkleTreeTrait, PaddedBytesAmount, PieceInfo,
@@ -29,7 +31,11 @@ pub const PROVER_ID: [u8; 32] = [9; 32];
 pub const RANDOMNESS: [u8; 32] = [44; 32];
 pub const TICKET_BYTES: [u8; 32] = [1; 32];
 
-pub struct PreCommitReplicaOutput<Tree: 'static + MerkleTreeTrait> {
+pub struct PreCommitReplicaOutput<Tree>
+where
+    Tree: 'static + MerkleTreeTrait,
+    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+{
     pub piece_info: Vec<PieceInfo>,
     pub private_replica_info: PrivateReplicaInfo<Tree>,
     pub public_replica_info: PublicReplicaInfo,
@@ -77,12 +83,16 @@ pub fn create_piece(piece_bytes: UnpaddedBytesAmount, use_random: bool) -> Named
 }
 
 /// Create a replica for a single sector
-pub fn create_replica<Tree: 'static + MerkleTreeTrait>(
+pub fn create_replica<Tree>(
     sector_size: u64,
     porep_id: [u8; 32],
     fake_replica: bool,
     api_version: ApiVersion,
-) -> (SectorId, PreCommitReplicaOutput<Tree>) {
+) -> (SectorId, PreCommitReplicaOutput<Tree>)
+where
+    Tree: 'static + MerkleTreeTrait,
+    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+{
     let (_porep_config, result) = create_replicas::<Tree>(
         SectorSize(sector_size),
         1,
@@ -100,7 +110,7 @@ pub fn create_replica<Tree: 'static + MerkleTreeTrait>(
 }
 
 #[allow(clippy::type_complexity)]
-pub fn create_replicas<Tree: 'static + MerkleTreeTrait>(
+pub fn create_replicas<Tree>(
     sector_size: SectorSize,
     qty_sectors: usize,
     only_add: bool,
@@ -113,7 +123,11 @@ pub fn create_replicas<Tree: 'static + MerkleTreeTrait>(
         Vec<(SectorId, PreCommitReplicaOutput<Tree>)>,
         FuncMeasurement<Vec<SealPreCommitOutput>>,
     )>,
-) {
+)
+where
+    Tree: 'static + MerkleTreeTrait,
+    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+{
     info!("creating replicas: {:?} - {}", sector_size, qty_sectors);
     let sector_size_unpadded_bytes_ammount =
         UnpaddedBytesAmount::from(PaddedBytesAmount::from(sector_size));

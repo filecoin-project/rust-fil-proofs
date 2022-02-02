@@ -4,7 +4,7 @@ use bellperson::{
 };
 use blstrs::Scalar as Fr;
 use ff::Field;
-use filecoin_hashers::{poseidon::PoseidonHasher, sha256::Sha256Hasher, Hasher};
+use filecoin_hashers::{poseidon::PoseidonHasher, sha256::Sha256Hasher, Domain, Hasher};
 use fr32::fr_into_bytes;
 use generic_array::typenum::{U0, U2, U4, U8};
 use merkletree::store::StoreConfig;
@@ -32,22 +32,26 @@ use tempfile::tempdir;
 #[test]
 #[ignore]
 fn test_stacked_compound_poseidon_base_8() {
-    test_stacked_compound::<DiskTree<PoseidonHasher, U8, U0, U0>>();
+    test_stacked_compound::<DiskTree<PoseidonHasher<Fr>, U8, U0, U0>>();
 }
 
 #[test]
 #[ignore]
 fn test_stacked_compound_poseidon_sub_8_4() {
-    test_stacked_compound::<DiskTree<PoseidonHasher, U8, U4, U0>>();
+    test_stacked_compound::<DiskTree<PoseidonHasher<Fr>, U8, U4, U0>>();
 }
 
 #[test]
 #[ignore]
 fn test_stacked_compound_poseidon_top_8_4_2() {
-    test_stacked_compound::<DiskTree<PoseidonHasher, U8, U4, U2>>();
+    test_stacked_compound::<DiskTree<PoseidonHasher<Fr>, U8, U4, U2>>();
 }
 
-fn test_stacked_compound<Tree: 'static + MerkleTreeTrait>() {
+fn test_stacked_compound<Tree>()
+where
+    Tree: 'static + MerkleTreeTrait,
+    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+{
     let nodes = 8 * get_base_tree_count::<Tree>();
 
     let degree = BASE_DEGREE;
@@ -107,7 +111,7 @@ fn test_stacked_compound<Tree: 'static + MerkleTreeTrait>() {
 
     let seed = rng.gen();
     let public_inputs =
-        PublicInputs::<<Tree::Hasher as Hasher>::Domain, <Sha256Hasher as Hasher>::Domain> {
+        PublicInputs::<<Tree::Hasher as Hasher>::Domain, <Sha256Hasher<Fr> as Hasher>::Domain> {
             replica_id: replica_id.into(),
             seed,
             tau: Some(tau),
@@ -122,7 +126,7 @@ fn test_stacked_compound<Tree: 'static + MerkleTreeTrait>() {
     let t_aux = TemporaryAuxCache::<Tree, _>::new(&t_aux, replica_path)
         .expect("failed to restore contents of t_aux");
 
-    let private_inputs = PrivateInputs::<Tree, Sha256Hasher> { p_aux, t_aux };
+    let private_inputs = PrivateInputs::<Tree, Sha256Hasher<Fr>> { p_aux, t_aux };
 
     {
         let (circuit, inputs) =
@@ -150,8 +154,8 @@ fn test_stacked_compound<Tree: 'static + MerkleTreeTrait>() {
         let (circuit1, _inputs) =
             StackedCompound::circuit_for_test(&public_params, &public_inputs, &private_inputs)
                 .unwrap();
-        let blank_circuit = <StackedCompound<Tree, Sha256Hasher> as CompoundProof<
-            StackedDrg<'_, Tree, Sha256Hasher>,
+        let blank_circuit = <StackedCompound<Tree, Sha256Hasher<Fr>> as CompoundProof<
+            StackedDrg<'_, Tree, Sha256Hasher<Fr>>,
             _,
         >>::blank_circuit(&public_params.vanilla_params);
 
@@ -171,14 +175,14 @@ fn test_stacked_compound<Tree: 'static + MerkleTreeTrait>() {
         }
     }
 
-    let blank_groth_params = <StackedCompound<Tree, Sha256Hasher> as CompoundProof<
-        StackedDrg<'_, Tree, Sha256Hasher>,
+    let blank_groth_params = <StackedCompound<Tree, Sha256Hasher<Fr>> as CompoundProof<
+        StackedDrg<'_, Tree, Sha256Hasher<Fr>>,
         _,
     >>::groth_params(Some(&mut rng), &public_params.vanilla_params)
     .expect("failed to generate groth params");
 
     // Discard cached MTs that are no longer needed.
-    TemporaryAux::<Tree, Sha256Hasher>::clear_temp(t_aux_orig).expect("t_aux delete failed");
+    TemporaryAux::<Tree, Sha256Hasher<Fr>>::clear_temp(t_aux_orig).expect("t_aux delete failed");
 
     let proof = StackedCompound::prove(
         &public_params,

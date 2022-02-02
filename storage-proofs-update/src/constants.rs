@@ -2,8 +2,9 @@ use blstrs::Scalar as Fr;
 use filecoin_hashers::{
     poseidon::{PoseidonDomain, PoseidonHasher},
     sha256::{Sha256Domain, Sha256Hasher},
+    FieldArity, PoseidonArity,
 };
-use generic_array::typenum::{Unsigned, U0, U2, U8};
+use generic_array::typenum::{U0, U2, U8};
 use lazy_static::lazy_static;
 use merkletree::store::DiskStore;
 use neptune::{
@@ -11,14 +12,38 @@ use neptune::{
     poseidon::PoseidonConstants,
     Strength,
 };
-use storage_proofs_core::merkle::{BinaryMerkleTree, LCStore, LCTree, MerkleTreeTrait};
-
-// Use a custom domain separation tag when generating randomness phi, rho, and challenges bits.
-pub const HASH_TYPE_GEN_RANDOMNESS: HashType<Fr, U2> = HashType::Custom(CType::Arbitrary(1));
+use pasta_curves::{Fp, Fq};
+use storage_proofs_core::merkle::{BinaryMerkleTree, LCTree};
+use typemap::ShareMap;
 
 lazy_static! {
-    pub static ref POSEIDON_CONSTANTS_GEN_RANDOMNESS: PoseidonConstants::<Fr, U2> =
-        PoseidonConstants::new_with_strength_and_type(Strength::Standard, HASH_TYPE_GEN_RANDOMNESS);
+    // Use a custom domain separation tag `HashType` when using Poseidon to generate randomness
+    // (i.e. phi, rho, and challenges bits).
+    pub static ref POSEIDON_CONSTANTS_GEN_RANDOMNESS_BLS: PoseidonConstants<Fr, U2> =
+        PoseidonConstants::new_with_strength_and_type(
+            Strength::Standard,
+            HashType::Custom(CType::Arbitrary(1)),
+        );
+
+    pub static ref POSEIDON_CONSTANTS_GEN_RANDOMNESS_PALLAS: PoseidonConstants<Fp, U2> =
+        PoseidonConstants::new_with_strength_and_type(
+            Strength::Standard,
+            HashType::Custom(CType::Arbitrary(1)),
+        );
+
+    pub static ref POSEIDON_CONSTANTS_GEN_RANDOMNESS_VESTA: PoseidonConstants<Fq, U2> =
+        PoseidonConstants::new_with_strength_and_type(
+            Strength::Standard,
+            HashType::Custom(CType::Arbitrary(1)),
+        );
+
+    pub static ref POSEIDON_CONSTANTS_GEN_RANDOMNESS: ShareMap = {
+        let mut tm = ShareMap::custom();
+        tm.insert::<FieldArity<Fr, U2>>(&*POSEIDON_CONSTANTS_GEN_RANDOMNESS_BLS);
+        tm.insert::<FieldArity<Fp, U2>>(&*POSEIDON_CONSTANTS_GEN_RANDOMNESS_PALLAS);
+        tm.insert::<FieldArity<Fq, U2>>(&*POSEIDON_CONSTANTS_GEN_RANDOMNESS_VESTA);
+        tm
+    };
 }
 
 // Sector-sizes measured in nodes.
@@ -45,22 +70,24 @@ pub const ALLOWED_SECTOR_SIZES: [usize; 11] = [
     SECTOR_SIZE_8_MIB,
     SECTOR_SIZE_16_MIB,
     SECTOR_SIZE_512_MIB,
-    // published sector-sizes
+    // production sector-sizes
     SECTOR_SIZE_32_GIB,
     SECTOR_SIZE_64_GIB,
 ];
 
-pub type TreeD = BinaryMerkleTree<TreeDHasher>;
-pub type TreeDHasher = Sha256Hasher;
-pub type TreeDDomain = Sha256Domain;
-pub type TreeDStore = DiskStore<TreeDDomain>;
+// Note: these TreeD constants are only valid for the non-Poseidon version of EmptySectorUpdate;
+// EmptySectorUpdate-Poseidon uses TreeR for its TreeD.
+pub type TreeD<F> = BinaryMerkleTree<Sha256Hasher<F>>;
 pub type TreeDArity = U2;
+pub type TreeDStore<F> = DiskStore<Sha256Domain<F>>;
+pub type TreeDDomain<F> = Sha256Domain<F>;
+pub type TreeDHasher<F> = Sha256Hasher<F>;
 
-pub type TreeRHasher = PoseidonHasher;
-pub type TreeRDomain = PoseidonDomain;
-pub type TreeRStore = LCStore<TreeRDomain>;
-// All valid TreeR's have the same base-tree shape.
-pub type TreeRBaseTree = LCTree<TreeRHasher, U8, U0, U0>;
+pub type TreeR<F, U, V, W> = LCTree<PoseidonHasher<F>, U, V, W>;
+// All valid TreeR's shapes have the same base-tree shape.
+pub type TreeRBase<F> = LCTree<PoseidonHasher<F>, U8, U0, U0>;
+pub type TreeRDomain<F> = PoseidonDomain<F>;
+pub type TreeRHasher<F> = PoseidonHasher<F>;
 
 // The number of partitions for the given sector-size.
 pub const fn partition_count(sector_nodes: usize) -> usize {
@@ -110,10 +137,15 @@ pub const fn apex_leaf_count(sector_nodes: usize) -> usize {
     }
 }
 
-pub fn validate_tree_r_shape<TreeR: MerkleTreeTrait>(sector_nodes: usize) {
-    let base_arity = TreeR::Arity::to_usize();
-    let sub_arity = TreeR::SubTreeArity::to_usize();
-    let top_arity = TreeR::TopTreeArity::to_usize();
+pub fn validate_tree_r_shape<U, V, W>(sector_nodes: usize)
+where
+    U: PoseidonArity,
+    V: PoseidonArity,
+    W: PoseidonArity,
+{
+    let base_arity = U::to_usize();
+    let sub_arity = V::to_usize();
+    let top_arity = W::to_usize();
     let arities = (base_arity, sub_arity, top_arity);
 
     let arities_expected = match sector_nodes {
@@ -128,7 +160,7 @@ pub fn validate_tree_r_shape<TreeR: MerkleTreeTrait>(sector_nodes: usize) {
         SECTOR_SIZE_512_MIB => (8, 0, 0),
         SECTOR_SIZE_32_GIB => (8, 8, 0),
         SECTOR_SIZE_64_GIB => (8, 8, 2),
-        _ => unreachable!(),
+        _ => unimplemented!("sector-size not supported"),
     };
 
     assert_eq!(arities, arities_expected);
