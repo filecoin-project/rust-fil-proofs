@@ -7,11 +7,22 @@ and this project adheres to [Semantic Versioning](https://book.async.rs/overview
 
 ## Unreleased
 
+## [11.0.1] - 2022-02-03
+
+- NOTE: This release contains the SnapDeals related API and funtionality. The parameters referenced in the parameters.json are now mainnet ready.
+- Update SnapDeal Production Parameters [#1559](https://github.com/filecoin-project/rust-fil-proofs/pull/1559)
+- Add Poseidon version of SnapDeals (concept, not full impl) [#1547](https://github.com/filecoin-project/rust-fil-proofs/pull/1547)
+- Fix empty sector update proof priority and add debugging [#1558](https://github.com/filecoin-project/rust-fil-proofs/pull/1558)
+- Correctly set the cache path for empty sector update proofs [#1557](https://github.com/filecoin-project/rust-fil-proofs/pull/1557)
+- Update project codeowners file [#1555](https://github.com/filecoin-project/rust-fil-proofs/pull/1555)
+- Add releases dir with Cargo.lock files for future releases [#1554](https://github.com/filecoin-project/rust-fil-proofs/pull/1554)
+- Make paramcache arguments mututally exclusive [#1552](https://github.com/filecoin-project/rust-fil-proofs/pull/1552)
+
 ## [11.0.0] - 2022-01-10
 
 - NOTE: This release contains the SnapDeals related API and funtionality, however the parameters referenced in the parameters.json are NOT
 mainnet ready and will be replaced in a future version.  This release is intended for testing SnapDeals only.
-- Update paramcache to properly generate .meta files for Empty Sector Update parameters [#1519](https://github.com/filecoin-project/rust-fil-proofs/pull/1519)
+- Update paramcache to properly generate .meta files for Empty Sector Update parameters [#1551](https://github.com/filecoin-project/rust-fil-proofs/pull/1551)
 - Add support for Empty Sector Update proofs (SnapDeal) [#1519](https://github.com/filecoin-project/rust-fil-proofs/pull/1519)
 - Expose multicore sdr feature explicitly [#1510](https://github.com/filecoin-project/rust-fil-proofs/pull/1510)
 - Reset multicore sdr consumer [#1535](https://github.com/filecoin-project/rust-fil-proofs/pull/1535)
@@ -300,7 +311,8 @@ mainnet ready and will be replaced in a future version.  This release is intende
 
 - Initial stable release
 
-[Unreleased]: https://github.com/filecoin-project/rust-fil-proofs/compare/v11.0.0...HEAD
+[Unreleased]: https://github.com/filecoin-project/rust-fil-proofs/compare/v11.0.1...HEAD
+[11.0.1]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v11.0.1
 [11.0.0]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v11.0.0
 [10.1.0]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v10.1.0
 [10.0.0]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v10.0.0
