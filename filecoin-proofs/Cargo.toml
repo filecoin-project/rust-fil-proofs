@@ -76,6 +76,7 @@ opencl = [
     "fr32/opencl",
 ]
 multicore-sdr = ["storage-proofs-porep/multicore-sdr"]
+big-tests = []
 
 [[bench]]
 name = "preprocessing"
