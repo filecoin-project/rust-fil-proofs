@@ -1904,10 +1904,10 @@ fn create_seal_for_upgrade<R: Rng, Tree: 'static + MerkleTreeTrait<Hasher = Tree
 
     let new_piece_infos = vec![new_piece_info];
 
-    // FIXME: New replica (new_sealed_sector_file) is currently 0
-    // bytes -- set a length here to ensure proper mmap later.  Lotus
-    // will already be passing in a destination path of the proper
-    // size in the future, so this is a test specific work-around.
+    // New replica (new_sealed_sector_file) is currently 0 bytes --
+    // set a length here to ensure proper mmap later.  Lotus will
+    // already be passing in a destination path of the proper size in
+    // the future, so this is a test specific work-around.
     let new_replica_target_len = metadata(&sealed_sector_file)?.len();
     let f_sealed_sector = OpenOptions::new()
         .read(true)
@@ -2009,10 +2009,10 @@ fn create_seal_for_upgrade<R: Rng, Tree: 'static + MerkleTreeTrait<Hasher = Tree
     ensure!(valid, "Compound proof failed to verify");
 
     let decoded_sector_file = NamedTempFile::new()?;
-    // FIXME: New replica (new_sealed_sector_file) is currently 0
-    // bytes -- set a length here to ensure proper mmap later.  Lotus
-    // will already be passing in a destination path of the proper
-    // size in the future, so this is a test specific work-around.
+    // New replica (new_sealed_sector_file) is currently 0 bytes --
+    // set a length here to ensure proper mmap later.  Lotus will
+    // already be passing in a destination path of the proper size in
+    // the future, so this is a test specific work-around.
     let decoded_sector_target_len = metadata(&sealed_sector_file)?.len();
     let f_decoded_sector = OpenOptions::new()
         .read(true)
@@ -2038,10 +2038,10 @@ fn create_seal_for_upgrade<R: Rng, Tree: 'static + MerkleTreeTrait<Hasher = Tree
     // Remove Data here
     let remove_encoded_file = NamedTempFile::new()?;
     let remove_encoded_cache_dir = tempdir().expect("failed to create temp dir");
-    // FIXME: New replica (new_sealed_sector_file) is currently 0
-    // bytes -- set a length here to ensure proper mmap later.  Lotus
-    // will already be passing in a destination path of the proper
-    // size in the future, so this is a test specific work-around.
+    // New replica (new_sealed_sector_file) is currently 0 bytes --
+    // set a length here to ensure proper mmap later.  Lotus will
+    // already be passing in a destination path of the proper size in
+    // the future, so this is a test specific work-around.
     let remove_encoded_target_len = metadata(&sealed_sector_file)?.len();
     let f_remove_encoded = OpenOptions::new()
         .read(true)
@@ -2052,9 +2052,7 @@ fn create_seal_for_upgrade<R: Rng, Tree: 'static + MerkleTreeTrait<Hasher = Tree
     f_remove_encoded.set_len(remove_encoded_target_len)?;
 
     // Note: we pass cache_dir to the remove, which is the original
-    // dir where the data was sealed.  If this is an API flow problem,
-    // we really just need it to load p_aux for comm_c and could
-    // instead pass comm_c as a parameter instead(?)
+    // dir where the data was sealed (for p_aux/t_aux).
     remove_encoded_data::<Tree>(
         config,
         remove_encoded_file.path(),
