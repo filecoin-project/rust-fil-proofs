@@ -41,6 +41,12 @@ use storage_proofs_core::{api_version::ApiVersion, is_legacy_porep_id, sector::S
 use storage_proofs_update::constants::TreeRHasher;
 use tempfile::{tempdir, NamedTempFile, TempDir};
 
+#[cfg(feature = "big-tests")]
+use filecoin_proofs::{
+    SectorShape32GiB, SectorShape512MiB, SectorShape64GiB, SECTOR_SIZE_32_GIB, SECTOR_SIZE_512_MIB,
+    SECTOR_SIZE_64_GIB,
+};
+
 // Use a fixed PoRep ID, so that the parents cache can be re-used between some tests.
 // Note however, that parents caches cannot be shared when testing the differences
 // between API v1 and v2 behaviour (since the parent caches will be different for the
@@ -184,110 +190,103 @@ fn test_seal_lifecycle_upgrade_32kib_top_8_8_2_v1_1() -> Result<()> {
 
 // These tests are good to run, but take a long time.
 
-//#[test]
-//#[ignore]
-//fn test_seal_lifecycle_512mib_porep_id_v1_top_8_0_0_api_v1() -> Result<()> {
-//    use filecoin_proofs::{SectorShape512MiB, SECTOR_SIZE_512_MIB};
-//    let porep_id_v1: u64 = 2; // This is a RegisteredSealProof value
-//
-//    let mut porep_id = [0u8; 32];
-//    porep_id[..8].copy_from_slice(&porep_id_v1.to_le_bytes());
-//    assert!(is_legacy_porep_id(porep_id));
-//    seal_lifecycle::<SectorShape512MiB>(SECTOR_SIZE_512_MIB, &porep_id, ApiVersion::V1_0_0)
-//}
+#[cfg(feature = "big-tests")]
+#[test]
+fn test_seal_lifecycle_512mib_porep_id_v1_top_8_0_0_api_v1() -> Result<()> {
+    use filecoin_proofs::{SectorShape512MiB, SECTOR_SIZE_512_MIB};
+    let porep_id_v1: u64 = 2; // This is a RegisteredSealProof value
 
-//#[test]
-//#[ignore]
-//fn test_seal_lifecycle_512mib_porep_id_v1_top_8_0_0_api_v1_1() -> Result<()> {
-//    use filecoin_proofs::{SectorShape512MiB, SECTOR_SIZE_512_MIB};
-//    let porep_id_v1_1: u64 = 7; // This is a RegisteredSealProof value
-//
-//    let mut porep_id = [0u8; 32];
-//    porep_id[..8].copy_from_slice(&porep_id_v1_1.to_le_bytes());
-//    assert!(!is_legacy_porep_id(porep_id));
-//    seal_lifecycle::<SectorShape512MiB>(SECTOR_SIZE_512_MIB, &porep_id, ApiVersion::V1_1_0)
-//}
+    let mut porep_id = [0u8; 32];
+    porep_id[..8].copy_from_slice(&porep_id_v1.to_le_bytes());
+    assert!(is_legacy_porep_id(porep_id));
+    seal_lifecycle::<SectorShape512MiB>(SECTOR_SIZE_512_MIB, &porep_id, ApiVersion::V1_0_0)
+}
 
-//#[test]
-//#[ignore]
-//fn test_seal_lifecycle_upgrade_512mib_top_8_0_0_v1_1() -> Result<()> {
-//    use filecoin_proofs::{SectorShape512MiB, SECTOR_SIZE_512_MIB};
-//    seal_lifecycle_upgrade::<SectorShape512MiB>(
-//        SECTOR_SIZE_512_MIB,
-//        &ARBITRARY_POREP_ID_V1_1_0,
-//        ApiVersion::V1_1_0,
-//    )
-//}
+#[cfg(feature = "big-tests")]
+#[test]
+fn test_seal_lifecycle_512mib_porep_id_v1_top_8_0_0_api_v1_1() -> Result<()> {
+    use filecoin_proofs::{SectorShape512MiB, SECTOR_SIZE_512_MIB};
+    let porep_id_v1_1: u64 = 7; // This is a RegisteredSealProof value
 
-//#[test]
-//#[ignore]
-//fn test_seal_lifecycle_32gib_porep_id_v1_top_8_8_0_api_v1() -> Result<()> {
-//    use filecoin_proofs::{SectorShape32GiB, SECTOR_SIZE_32_GIB};
-//    let porep_id_v1: u64 = 3; // This is a RegisteredSealProof value
-//
-//    let mut porep_id = [0u8; 32];
-//    porep_id[..8].copy_from_slice(&porep_id_v1.to_le_bytes());
-//    assert!(is_legacy_porep_id(porep_id));
-//    seal_lifecycle::<SectorShape32GiB>(SECTOR_SIZE_32_GIB, &porep_id, ApiVersion::V1_0_0)
-//}
+    let mut porep_id = [0u8; 32];
+    porep_id[..8].copy_from_slice(&porep_id_v1_1.to_le_bytes());
+    assert!(!is_legacy_porep_id(porep_id));
+    seal_lifecycle::<SectorShape512MiB>(SECTOR_SIZE_512_MIB, &porep_id, ApiVersion::V1_1_0)
+}
 
-//#[test]
-//#[ignore]
-//fn test_seal_lifecycle_32gib_porep_id_v1_1_top_8_8_0_api_v1_1() -> Result<()> {
-//    use filecoin_proofs::{SectorShape32GiB, SECTOR_SIZE_32_GIB};
-//    let porep_id_v1_1: u64 = 8; // This is a RegisteredSealProof value
-//
-//    let mut porep_id = [0u8; 32];
-//    porep_id[..8].copy_from_slice(&porep_id_v1_1.to_le_bytes());
-//    assert!(!is_legacy_porep_id(porep_id));
-//    seal_lifecycle::<SectorShape32GiB>(SECTOR_SIZE_32_GIB, &porep_id, ApiVersion::V1_1_0)
-//}
+#[cfg(feature = "big-tests")]
+#[test]
+fn test_seal_lifecycle_upgrade_512mib_top_8_0_0_v1_1() -> Result<()> {
+    seal_lifecycle_upgrade::<SectorShape512MiB>(
+        SECTOR_SIZE_512_MIB,
+        &ARBITRARY_POREP_ID_V1_1_0,
+        ApiVersion::V1_1_0,
+    )
+}
 
-//#[test]
-//#[ignore]
-//fn test_seal_lifecycle_upgrade_32gib_top_8_8_0_v1_1() -> Result<()> {
-//    use filecoin_proofs::{SectorShape32GiB, SECTOR_SIZE_32_GIB};
-//    seal_lifecycle_upgrade::<SectorShape32GiB>(
-//        SECTOR_SIZE_32_GIB,
-//        &ARBITRARY_POREP_ID_V1_1_0,
-//        ApiVersion::V1_1_0,
-//    )
-//}
+#[cfg(feature = "big-tests")]
+#[test]
+fn test_seal_lifecycle_32gib_porep_id_v1_top_8_8_0_api_v1() -> Result<()> {
+    let porep_id_v1: u64 = 3; // This is a RegisteredSealProof value
 
-//#[test]
-//#[ignore]
-//fn test_seal_lifecycle_64gib_porep_id_v1_top_8_8_2_api_v1() -> Result<()> {
-//    use filecoin_proofs::{SectorShape64GiB, SECTOR_SIZE_64_GIB};
-//    let porep_id_v1: u64 = 4; // This is a RegisteredSealProof value
-//
-//    let mut porep_id = [0u8; 32];
-//    porep_id[..8].copy_from_slice(&porep_id_v1.to_le_bytes());
-//    assert!(is_legacy_porep_id(porep_id));
-//    seal_lifecycle::<SectorShape64GiB>(SECTOR_SIZE_64_GIB, &porep_id, ApiVersion::V1_0_0)
-//}
+    let mut porep_id = [0u8; 32];
+    porep_id[..8].copy_from_slice(&porep_id_v1.to_le_bytes());
+    assert!(is_legacy_porep_id(porep_id));
+    seal_lifecycle::<SectorShape32GiB>(SECTOR_SIZE_32_GIB, &porep_id, ApiVersion::V1_0_0)
+}
 
-//#[test]
-//#[ignore]
-//fn test_seal_lifecycle_64gib_porep_id_v1_1_top_8_8_2_api_v1_1() -> Result<()> {
-//    use filecoin_proofs::{SectorShape64GiB, SECTOR_SIZE_64_GIB};
-//    let porep_id_v1_1: u64 = 9; // This is a RegisteredSealProof value
-//
-//    let mut porep_id = [0u8; 32];
-//    porep_id[..8].copy_from_slice(&porep_id_v1_1.to_le_bytes());
-//    assert!(!is_legacy_porep_id(porep_id));
-//    seal_lifecycle::<SectorShape64GiB>(SECTOR_SIZE_64_GIB, &porep_id, ApiVersion::V1_1_0)
-//}
+#[cfg(feature = "big-tests")]
+#[test]
+fn test_seal_lifecycle_32gib_porep_id_v1_1_top_8_8_0_api_v1_1() -> Result<()> {
+    let porep_id_v1_1: u64 = 8; // This is a RegisteredSealProof value
 
-//#[test]
-//#[ignore]
-//fn test_seal_lifecycle_upgrade_64gib_top_8_8_2_v1_1() -> Result<()> {
-//    use filecoin_proofs::{SectorShape64GiB, SECTOR_SIZE_64_GIB};
-//    seal_lifecycle_upgrade::<SectorShape64GiB>(
-//        SECTOR_SIZE_64_GIB,
-//        &ARBITRARY_POREP_ID_V1_1_0,
-//        ApiVersion::V1_1_0,
-//    )
-//}
+    let mut porep_id = [0u8; 32];
+    porep_id[..8].copy_from_slice(&porep_id_v1_1.to_le_bytes());
+    assert!(!is_legacy_porep_id(porep_id));
+    seal_lifecycle::<SectorShape32GiB>(SECTOR_SIZE_32_GIB, &porep_id, ApiVersion::V1_1_0)
+}
+
+#[cfg(feature = "big-tests")]
+#[test]
+fn test_seal_lifecycle_upgrade_32gib_top_8_8_0_v1_1() -> Result<()> {
+    seal_lifecycle_upgrade::<SectorShape32GiB>(
+        SECTOR_SIZE_32_GIB,
+        &ARBITRARY_POREP_ID_V1_1_0,
+        ApiVersion::V1_1_0,
+    )
+}
+
+#[cfg(feature = "big-tests")]
+#[test]
+fn test_seal_lifecycle_64gib_porep_id_v1_top_8_8_2_api_v1() -> Result<()> {
+    let porep_id_v1: u64 = 4; // This is a RegisteredSealProof value
+
+    let mut porep_id = [0u8; 32];
+    porep_id[..8].copy_from_slice(&porep_id_v1.to_le_bytes());
+    assert!(is_legacy_porep_id(porep_id));
+    seal_lifecycle::<SectorShape64GiB>(SECTOR_SIZE_64_GIB, &porep_id, ApiVersion::V1_0_0)
+}
+
+#[cfg(feature = "big-tests")]
+#[test]
+fn test_seal_lifecycle_64gib_porep_id_v1_1_top_8_8_2_api_v1_1() -> Result<()> {
+    let porep_id_v1_1: u64 = 9; // This is a RegisteredSealProof value
+
+    let mut porep_id = [0u8; 32];
+    porep_id[..8].copy_from_slice(&porep_id_v1_1.to_le_bytes());
+    assert!(!is_legacy_porep_id(porep_id));
+    seal_lifecycle::<SectorShape64GiB>(SECTOR_SIZE_64_GIB, &porep_id, ApiVersion::V1_1_0)
+}
+
+#[cfg(feature = "big-tests")]
+#[test]
+fn test_seal_lifecycle_upgrade_64gib_top_8_8_2_v1_1() -> Result<()> {
+    seal_lifecycle_upgrade::<SectorShape64GiB>(
+        SECTOR_SIZE_64_GIB,
+        &ARBITRARY_POREP_ID_V1_1_0,
+        ApiVersion::V1_1_0,
+    )
+}
 
 fn seal_lifecycle<Tree: 'static + MerkleTreeTrait>(
     sector_size: u64,
@@ -1904,10 +1903,10 @@ fn create_seal_for_upgrade<R: Rng, Tree: 'static + MerkleTreeTrait<Hasher = Tree
 
     let new_piece_infos = vec![new_piece_info];
 
-    // FIXME: New replica (new_sealed_sector_file) is currently 0
-    // bytes -- set a length here to ensure proper mmap later.  Lotus
-    // will already be passing in a destination path of the proper
-    // size in the future, so this is a test specific work-around.
+    // New replica (new_sealed_sector_file) is currently 0 bytes --
+    // set a length here to ensure proper mmap later.  Lotus will
+    // already be passing in a destination path of the proper size in
+    // the future, so this is a test specific work-around.
     let new_replica_target_len = metadata(&sealed_sector_file)?.len();
     let f_sealed_sector = OpenOptions::new()
         .read(true)
@@ -2009,10 +2008,10 @@ fn create_seal_for_upgrade<R: Rng, Tree: 'static + MerkleTreeTrait<Hasher = Tree
     ensure!(valid, "Compound proof failed to verify");
 
     let decoded_sector_file = NamedTempFile::new()?;
-    // FIXME: New replica (new_sealed_sector_file) is currently 0
-    // bytes -- set a length here to ensure proper mmap later.  Lotus
-    // will already be passing in a destination path of the proper
-    // size in the future, so this is a test specific work-around.
+    // New replica (new_sealed_sector_file) is currently 0 bytes --
+    // set a length here to ensure proper mmap later.  Lotus will
+    // already be passing in a destination path of the proper size in
+    // the future, so this is a test specific work-around.
     let decoded_sector_target_len = metadata(&sealed_sector_file)?.len();
     let f_decoded_sector = OpenOptions::new()
         .read(true)
@@ -2038,10 +2037,10 @@ fn create_seal_for_upgrade<R: Rng, Tree: 'static + MerkleTreeTrait<Hasher = Tree
     // Remove Data here
     let remove_encoded_file = NamedTempFile::new()?;
     let remove_encoded_cache_dir = tempdir().expect("failed to create temp dir");
-    // FIXME: New replica (new_sealed_sector_file) is currently 0
-    // bytes -- set a length here to ensure proper mmap later.  Lotus
-    // will already be passing in a destination path of the proper
-    // size in the future, so this is a test specific work-around.
+    // New replica (new_sealed_sector_file) is currently 0 bytes --
+    // set a length here to ensure proper mmap later.  Lotus will
+    // already be passing in a destination path of the proper size in
+    // the future, so this is a test specific work-around.
     let remove_encoded_target_len = metadata(&sealed_sector_file)?.len();
     let f_remove_encoded = OpenOptions::new()
         .read(true)
@@ -2052,9 +2051,7 @@ fn create_seal_for_upgrade<R: Rng, Tree: 'static + MerkleTreeTrait<Hasher = Tree
     f_remove_encoded.set_len(remove_encoded_target_len)?;
 
     // Note: we pass cache_dir to the remove, which is the original
-    // dir where the data was sealed.  If this is an API flow problem,
-    // we really just need it to load p_aux for comm_c and could
-    // instead pass comm_c as a parameter instead(?)
+    // dir where the data was sealed (for p_aux/t_aux).
     remove_encoded_data::<Tree>(
         config,
         remove_encoded_file.path(),
