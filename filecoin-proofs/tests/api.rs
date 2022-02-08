@@ -2067,6 +2067,7 @@ fn create_seal_for_upgrade<R: Rng, Tree: 'static + MerkleTreeTrait<Hasher = Tree
     remove_encoded_file.close()?;
 
     clear_cache::<Tree>(cache_dir.path())?;
+    clear_cache::<Tree>(new_cache_dir.path())?;
 
     Ok((sector_id, sealed_sector_file, comm_r, cache_dir))
 }
