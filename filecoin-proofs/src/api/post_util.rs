@@ -4,7 +4,7 @@ use std::path::Path;
 
 use anyhow::{anyhow, ensure, Context, Result};
 use bincode::deserialize;
-use filecoin_hashers::Hasher;
+use filecoin_hashers::{sha256::Sha256Hasher, Hasher};
 use log::{debug, info};
 use storage_proofs_core::{
     cache_key::CacheKey, merkle::MerkleTreeTrait, proof::ProofScheme, sector::SectorId,
@@ -25,7 +25,7 @@ use crate::{
 pub fn clear_cache<Tree: MerkleTreeTrait>(cache_dir: &Path) -> Result<()> {
     info!("clear_cache:start");
 
-    let t_aux = {
+    let mut t_aux: TemporaryAux<Tree, Sha256Hasher> = {
         let f_aux_path = cache_dir.to_path_buf().join(CacheKey::TAux.to_string());
         let aux_bytes = fs::read(&f_aux_path)
             .with_context(|| format!("could not read from path={:?}", f_aux_path))?;
@@ -33,6 +33,7 @@ pub fn clear_cache<Tree: MerkleTreeTrait>(cache_dir: &Path) -> Result<()> {
         deserialize(&aux_bytes)
     }?;
 
+    t_aux.set_cache_path(cache_dir);
     let result = TemporaryAux::<Tree, DefaultPieceHasher>::clear_temp(t_aux);
 
     info!("clear_cache:finish");
