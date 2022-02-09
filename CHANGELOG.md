@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://book.async.rs/overview
 
 ## Unreleased
 
+## [11.0.2] - 2022-02-09
+
+- Fix cache clearing by resetting the cache path first [#1563](https://github.com/filecoin-project/rust-fil-proofs/pull/1563)
+- Test updates and clean-ups [#1562](https://github.com/filecoin-project/rust-fil-proofs/pull/1562)
+
 ## [11.0.1] - 2022-02-03
 
 - NOTE: This release contains the SnapDeals related API and funtionality. The parameters referenced in the parameters.json are now mainnet ready.
@@ -311,7 +316,8 @@ mainnet ready and will be replaced in a future version.  This release is intende
 
 - Initial stable release
 
-[Unreleased]: https://github.com/filecoin-project/rust-fil-proofs/compare/v11.0.1...HEAD
+[Unreleased]: https://github.com/filecoin-project/rust-fil-proofs/compare/v11.0.2...HEAD
+[11.0.2]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v11.0.2
 [11.0.1]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v11.0.1
 [11.0.0]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v11.0.0
 [10.1.0]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v10.1.0
