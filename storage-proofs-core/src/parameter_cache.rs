@@ -440,7 +440,6 @@ pub fn verify_production_entry(
         }
         None => {
             return Err(Error::InvalidParameters(cache_entry_path.display().to_string()).into());
-            //return Ok(false)
         }
     }
 
