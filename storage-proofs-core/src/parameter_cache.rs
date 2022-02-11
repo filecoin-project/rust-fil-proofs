@@ -12,7 +12,7 @@ use blstrs::{Bls12, Scalar as Fr};
 use fs2::FileExt;
 use itertools::Itertools;
 use lazy_static::lazy_static;
-use log::{info, trace};
+use log::info;
 use memmap::MmapOptions;
 use rand::RngCore;
 use serde::{Deserialize, Serialize};
@@ -394,6 +394,58 @@ fn ensure_parent(path: &Path) -> io::Result<()> {
     }
 }
 
+type GetParameterDataCallback = fn(&str) -> Option<&ParameterData>;
+
+// This method verifies that the parameter/verifying_key file
+// specified appears in the parameters.json manifest and that the
+// content digest matches the recorded entry.
+pub fn verify_production_entry(
+    cache_entry_path: &Path,
+    cache_key: String,
+    selector: GetParameterDataCallback,
+) -> Result<bool> {
+    match selector(&cache_key) {
+        Some(data) => {
+            // Verify the actual hash only once per parameters file
+            let not_yet_verified = VERIFIED_PARAMETERS
+                .lock()
+                .expect("verified parameters lock failed")
+                .get(&cache_key)
+                .is_none();
+            if not_yet_verified {
+                info!("generating consistency digest for parameters");
+                let hash =
+                    with_exclusive_read_lock::<_, io::Error, _>(cache_entry_path, |mut file| {
+                        let mut hasher = Blake2bParams::new().to_state();
+                        io::copy(&mut file, &mut hasher).expect("copying file into hasher failed");
+                        Ok(hasher.finalize())
+                    })?;
+                info!("generated consistency digest for parameters");
+
+                // The hash in the parameters file is truncated to 256 bits.
+                let digest_hex = &hash.to_hex()[..32];
+                if digest_hex != data.digest {
+                    info!("parameter data is INVALID [{}]", digest_hex);
+                    return Err(
+                        Error::InvalidParameters(cache_entry_path.display().to_string()).into(),
+                    );
+                }
+
+                info!("parameter data is VALID [{}]", digest_hex);
+                VERIFIED_PARAMETERS
+                    .lock()
+                    .expect("verified parameters lock failed")
+                    .insert(cache_key);
+            }
+        }
+        None => {
+            return Err(Error::InvalidParameters(cache_entry_path.display().to_string()).into());
+        }
+    }
+
+    Ok(true)
+}
+
 // Reads parameter mappings using mmap so that they can be lazily
 // loaded later.
 pub fn read_cached_params(cache_entry_path: &Path) -> Result<groth16::MappedParameters<Bls12>> {
@@ -405,59 +457,21 @@ pub fn read_cached_params(cache_entry_path: &Path) -> Result<groth16::MappedPara
         verify_production_params
     );
 
-    // If the verify production params is set, we make sure that the path being accessed matches a
-    // production cache key, found in the 'srs-inner-product.json' file. The parameter data file is
-    // also hashed and matched against the hash in the 'srs-inner-product.json' file.
+    // If the verify production params setting is used, we make sure
+    // that the path being accessed matches a production cache key,
+    // found in the 'parameters.json' file. The parameter data file is
+    // also hashed and matched against the hash in the
+    // 'parameters.json' file.
     if verify_production_params {
         let cache_key = cache_entry_path
             .file_name()
-            .expect("failed to get cached srs filename")
+            .expect("failed to get cached parameter filename")
             .to_str()
             .expect("failed to convert to str")
             .to_string();
 
-        match get_parameter_data_from_id(&cache_key) {
-            Some(data) => {
-                // Verify the actual hash only once per parameters file
-                let not_yet_verified = VERIFIED_PARAMETERS
-                    .lock()
-                    .expect("verified parameters lock failed")
-                    .get(&cache_key)
-                    .is_none();
-                if not_yet_verified {
-                    info!("generating consistency digest for parameters");
-                    let hash = with_exclusive_read_lock::<_, io::Error, _>(
-                        cache_entry_path,
-                        |mut file| {
-                            let mut hasher = Blake2bParams::new().to_state();
-                            io::copy(&mut file, &mut hasher)
-                                .expect("copying file into hasher failed");
-                            Ok(hasher.finalize())
-                        },
-                    )?;
-                    info!("generated consistency digest for parameters");
-
-                    // The hash in the parameters file is truncated to 256 bits.
-                    let digest_hex = &hash.to_hex()[..32];
-
-                    if digest_hex != data.digest {
-                        return Err(Error::InvalidParameters(
-                            cache_entry_path.display().to_string(),
-                        )
-                        .into());
-                    }
-
-                    trace!("parameter data is valid [{}]", digest_hex);
-                    VERIFIED_PARAMETERS
-                        .lock()
-                        .expect("verified parameters lock failed")
-                        .insert(cache_key);
-                }
-            }
-            None => {
-                return Err(Error::InvalidParameters(cache_entry_path.display().to_string()).into())
-            }
-        }
+        let selector: GetParameterDataCallback = get_parameter_data_from_id;
+        verify_production_entry(cache_entry_path, cache_key, selector)?;
     }
 
     with_exclusive_read_lock::<_, io::Error, _>(cache_entry_path, |_file| {
@@ -470,11 +484,35 @@ pub fn read_cached_params(cache_entry_path: &Path) -> Result<groth16::MappedPara
     .map_err(Into::into)
 }
 
-fn read_cached_verifying_key(cache_entry_path: &Path) -> io::Result<groth16::VerifyingKey<Bls12>> {
+fn read_cached_verifying_key(cache_entry_path: &Path) -> Result<groth16::VerifyingKey<Bls12>> {
     info!(
         "checking cache_path: {:?} for verifying key",
         cache_entry_path
     );
+
+    let verify_production_params = SETTINGS.verify_production_params;
+    info!(
+        "Verify production parameters is {}",
+        verify_production_params
+    );
+
+    // If the verify production params setting is used, we make sure
+    // that the path being accessed matches a production cache key,
+    // found in the 'parameters.json' file. The parameter data file is
+    // also hashed and matched against the hash in the
+    // 'parameters.json' file.
+    if verify_production_params {
+        let cache_key = cache_entry_path
+            .file_name()
+            .expect("failed to get cached verifying key filename")
+            .to_str()
+            .expect("failed to convert to str")
+            .to_string();
+
+        let selector: GetParameterDataCallback = get_parameter_data_from_id;
+        verify_production_entry(cache_entry_path, cache_key, selector)?;
+    }
+
     with_exclusive_read_lock(cache_entry_path, |mut file| {
         let key = groth16::VerifyingKey::read(&mut file)?;
         info!("read verifying key from cache {:?} ", cache_entry_path);
@@ -492,9 +530,11 @@ fn read_cached_srs_key(cache_entry_path: &Path) -> Result<groth16::aggregate::Ge
         verify_production_params
     );
 
-    // If the verify production params is set, we make sure that the path being accessed matches a
-    // production cache key, found in the 'parameters.json' file. The parameter data file is also
-    // hashed and matched against the hash in the `parameters.json` file.
+    // If the verify production params setting is used, we make sure
+    // that the path being accessed matches a production cache key,
+    // found in the 'srs-inner-product.json' file. The parameter data
+    // file is also hashed and matched against the hash in the
+    // 'srs-inner-product.json' file.
     if verify_production_params {
         let cache_key = cache_entry_path
             .file_name()
@@ -503,48 +543,8 @@ fn read_cached_srs_key(cache_entry_path: &Path) -> Result<groth16::aggregate::Ge
             .expect("failed to convert to str")
             .to_string();
 
-        match get_srs_parameter_data_from_id(&cache_key) {
-            Some(data) => {
-                // Verify the actual hash only once per parameters file
-                let not_yet_verified = VERIFIED_PARAMETERS
-                    .lock()
-                    .expect("verified parameters lock failed")
-                    .get(&cache_key)
-                    .is_none();
-                if not_yet_verified {
-                    info!("generating consistency digest for srs");
-                    let hash = with_exclusive_read_lock::<_, io::Error, _>(
-                        cache_entry_path,
-                        |mut file| {
-                            let mut hasher = Blake2bParams::new().to_state();
-                            io::copy(&mut file, &mut hasher)
-                                .expect("copying file into hasher failed");
-                            Ok(hasher.finalize())
-                        },
-                    )?;
-                    info!("generated consistency digest for srs");
-
-                    // The hash in the parameters file is truncated to 256 bits.
-                    let digest_hex = &hash.to_hex()[..32];
-
-                    if digest_hex != data.digest {
-                        return Err(Error::InvalidParameters(
-                            cache_entry_path.display().to_string(),
-                        )
-                        .into());
-                    }
-
-                    trace!("srs data is valid [{}]", digest_hex);
-                    VERIFIED_PARAMETERS
-                        .lock()
-                        .expect("verified parameters lock failed")
-                        .insert(cache_key);
-                }
-            }
-            None => {
-                return Err(Error::InvalidParameters(cache_entry_path.display().to_string()).into())
-            }
-        }
+        let selector: GetParameterDataCallback = get_srs_parameter_data_from_id;
+        verify_production_entry(cache_entry_path, cache_key, selector)?;
     }
 
     with_exclusive_read_lock(cache_entry_path, |file| {
