@@ -16,6 +16,7 @@ mod hash_fns;
 mod merkleproofs;
 mod prodbench;
 mod window_post;
+mod window_post_fake;
 mod winning_post;
 
 fn main() -> Result<()> {
@@ -84,8 +85,8 @@ fn main() -> Result<()> {
             Arg::with_name("api_version")
                 .long("api-version")
                 .required(true)
-                .help("The api_version to use (default: 1.0.0)")
-                .default_value("1.0.0")
+                .help("The api_version to use (default: 1.1.0)")
+                .default_value("1.1.0")
                 .takes_value(true),
         );
 
@@ -99,11 +100,41 @@ fn main() -> Result<()> {
                 .takes_value(true),
         )
         .arg(
+            Arg::with_name("fake")
+                .long("fake")
+                .help("Use fake replica (default: false)")
+                .takes_value(false),
+        )
+        .arg(
             Arg::with_name("api_version")
                 .long("api-version")
                 .required(true)
-                .help("The api_version to use (default: 1.0.0)")
-                .default_value("1.0.0")
+                .help("The api_version to use (default: 1.1.0)")
+                .default_value("1.1.0")
+                .takes_value(true),
+        );
+
+    let window_post_fake_cmd = SubCommand::with_name("window-post-fake")
+        .about("Benchmark Window PoST Fake")
+        .arg(
+            Arg::with_name("size")
+                .long("size")
+                .required(true)
+                .help("The data size (e.g. 2KiB)")
+                .takes_value(true),
+        )
+        .arg(
+            Arg::with_name("fake")
+                .long("fake")
+                .help("Use fake replica (default: false)")
+                .takes_value(false),
+        )
+        .arg(
+            Arg::with_name("api_version")
+                .long("api-version")
+                .required(true)
+                .help("The api_version to use (default: 1.1.0)")
+                .default_value("1.1.0")
                 .takes_value(true),
         );
 
@@ -174,6 +205,7 @@ fn main() -> Result<()> {
         .setting(AppSettings::ArgRequiredElseHelp)
         .version("0.1")
         .subcommand(window_post_cmd)
+        .subcommand(window_post_fake_cmd)
         .subcommand(winning_post_cmd)
         .subcommand(hash_cmd)
         .subcommand(prodbench_cmd)
@@ -206,8 +238,15 @@ fn main() -> Result<()> {
         }
         ("winning-post", Some(m)) => {
             let sector_size = Byte::from_str(value_t!(m, "size", String)?)?.get_bytes() as usize;
+            let fake_replica = m.is_present("fake");
             let api_version = ApiVersion::from_str(&value_t!(m, "api_version", String)?)?;
-            winning_post::run(sector_size, api_version)?;
+            winning_post::run(sector_size, fake_replica, api_version)?;
+        }
+        ("window-post-fake", Some(m)) => {
+            let sector_size = Byte::from_str(value_t!(m, "size", String)?)?.get_bytes() as usize;
+            let fake_replica = m.is_present("fake");
+            let api_version = ApiVersion::from_str(&value_t!(m, "api_version", String)?)?;
+            window_post_fake::run(sector_size, fake_replica, api_version)?;
         }
         ("hash-constraints", Some(_m)) => {
             hash_fns::run()?;
