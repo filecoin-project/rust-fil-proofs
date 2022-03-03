@@ -31,7 +31,8 @@ pretty_assertions = "1.2.0"
 filecoin-hashers = { path = "../filecoin-hashers", version = "~7.0.0", default-features = false, features = ["poseidon", "sha256", "blake2s"]}
 rand = "0.8"
 rand_xorshift = "0.3.0"
-pasta_curves = "0.3.0"
+# pasta_curves = "0.3.0"
+pasta_curves = { git = "https://github.com/vmx/pasta_curves", branch = "ec-gpu", features = ["gpu"] }
 
 [features]
 default = ["opencl"]

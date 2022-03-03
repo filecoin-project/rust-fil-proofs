@@ -343,9 +343,9 @@ fn enforce_inclusion<H, U, V, W, CS>(
 where
     H: 'static + Hasher,
     H::Domain: Domain<Field = Fr>,
-    U: 'static + PoseidonArity,
-    V: 'static + PoseidonArity,
-    W: 'static + PoseidonArity,
+    U: PoseidonArity<Fr>,
+    V: PoseidonArity<Fr>,
+    W: PoseidonArity<Fr>,
     CS: ConstraintSystem<Fr>,
 {
     let root = Root::from_allocated::<CS>(root.clone());
