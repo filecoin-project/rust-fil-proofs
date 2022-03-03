@@ -76,63 +76,25 @@ lazy_static! {
 pub struct FieldArity<F, A>(PhantomData<(F, A)>)
 where
     F: PrimeField,
-    A: Arity<F>;
+    A: PoseidonArity<F>;
 
 impl<F, A> typemap::Key for FieldArity<F, A>
 where
     F: PrimeField,
-    A: Arity<F>,
+    A: PoseidonArity<F>,
 {
     type Value = &'static PoseidonConstants<F, A>;
 }
 
-pub trait PoseidonArity: Arity<Fr> + Send + Sync + Clone + Debug {
-    #[allow(non_snake_case)]
-    fn PARAMETERS() -> &'static PoseidonConstants<Fr, Self>;
-}
+// A marker trait for arities which are in `POSEIDON_CONSTANTS`; we require that 'PoseidonArity<F>`
+// implements `Send + Sync` because those traits are required by `lazy_static`.
+pub trait PoseidonArity<F: PrimeField>: Arity<F> + Send + Sync + Clone + Debug {}
 
-impl PoseidonArity for U0 {
-    fn PARAMETERS() -> &'static PoseidonConstants<Fr, Self> {
-        unreachable!("dummy implementation, do not ever call me")
-    }
-}
-
-impl PoseidonArity for U2 {
-    fn PARAMETERS() -> &'static PoseidonConstants<Fr, Self> {
-        &*POSEIDON_CONSTANTS_2
-    }
-}
-
-impl PoseidonArity for U4 {
-    fn PARAMETERS() -> &'static PoseidonConstants<Fr, Self> {
-        &*POSEIDON_CONSTANTS_4
-    }
-}
-
-impl PoseidonArity for U8 {
-    fn PARAMETERS() -> &'static PoseidonConstants<Fr, Self> {
-        &*POSEIDON_CONSTANTS_8
-    }
-}
-
-impl PoseidonArity for U11 {
-    fn PARAMETERS() -> &'static PoseidonConstants<Fr, Self> {
-        &*POSEIDON_CONSTANTS_11
-    }
-}
-
-impl PoseidonArity for U16 {
-    fn PARAMETERS() -> &'static PoseidonConstants<Fr, Self> {
-        &*POSEIDON_CONSTANTS_16
-    }
-}
-impl PoseidonArity for U24 {
-    fn PARAMETERS() -> &'static PoseidonConstants<Fr, Self> {
-        &*POSEIDON_CONSTANTS_24
-    }
-}
-impl PoseidonArity for U36 {
-    fn PARAMETERS() -> &'static PoseidonConstants<Fr, Self> {
-        &*POSEIDON_CONSTANTS_36
-    }
-}
+// We must implement `PoseidonArity<F> for U0` because the `U0` arity is used in compound trees
+// (each compound tree arity must implement `PoseidonArity`).
+impl<F: PrimeField> PoseidonArity<F> for U0 {}
+impl<F: PrimeField> PoseidonArity<F> for U2 {}
+impl<F: PrimeField> PoseidonArity<F> for U4 {}
+impl<F: PrimeField> PoseidonArity<F> for U8 {}
+impl<F: PrimeField> PoseidonArity<F> for U11 {}
+impl<F: PrimeField> PoseidonArity<F> for PoseidonMDArity {}

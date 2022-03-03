@@ -78,31 +78,6 @@ impl Into<Fq> for Sha256Domain<Fq> {
     }
 }
 
-// Currently, these panics serve as a stopgap to prevent accidental conversions of a Pasta field
-// domains to/from a BLS12-381 scalar field domain.
-impl From<Fr> for Sha256Domain<Fp> {
-    fn from(_f: Fr) -> Self {
-        panic!("cannot convert BLS12-381 scalar into Sha256Domain<Fp>")
-    }
-}
-#[allow(clippy::from_over_into)]
-impl Into<Fr> for Sha256Domain<Fp> {
-    fn into(self) -> Fr {
-        panic!("cannot convert Sha256Domain<Fp> into BLS12-381 scalar");
-    }
-}
-impl From<Fr> for Sha256Domain<Fq> {
-    fn from(_f: Fr) -> Self {
-        panic!("cannot convert BLS12-381 scalar into Sha256Domain<Fq>")
-    }
-}
-#[allow(clippy::from_over_into)]
-impl Into<Fr> for Sha256Domain<Fq> {
-    fn into(self) -> Fr {
-        panic!("cannot convert Sha256Domain<Fq> into BLS12-381 scalar");
-    }
-}
-
 impl<F> From<[u8; 32]> for Sha256Domain<F> {
     fn from(bytes: [u8; 32]) -> Self {
         Sha256Domain {

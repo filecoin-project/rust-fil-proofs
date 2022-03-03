@@ -62,9 +62,9 @@ fn get_apex_leafs(tree_d_new: &TreeD, k: usize) -> Vec<TreeDDomain> {
 
 fn test_empty_sector_update_circuit<U, V, W>(sector_nodes: usize, constraints_expected: usize)
 where
-    U: PoseidonArity,
-    V: PoseidonArity,
-    W: PoseidonArity,
+    U: PoseidonArity<Fr>,
+    V: PoseidonArity<Fr>,
+    W: PoseidonArity<Fr>,
 {
     validate_tree_r_shape::<U, V, W>(sector_nodes);
 

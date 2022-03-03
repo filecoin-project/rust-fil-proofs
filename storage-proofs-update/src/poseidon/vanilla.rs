@@ -1,7 +1,7 @@
 use std::marker::PhantomData;
 
-use ff::PrimeFieldBits;
-use filecoin_hashers::{Hasher, PoseidonArity};
+use ff::{PrimeField, PrimeFieldBits};
+use filecoin_hashers::{Domain, Hasher, PoseidonArity};
 use serde::{Deserialize, Serialize};
 use storage_proofs_core::{error::Result, merkle::MerkleProof, proof::ProofScheme};
 
@@ -30,10 +30,12 @@ pub struct PublicInputs<F> {
 #[derive(Clone, Serialize, Deserialize)]
 pub struct ChallengeProof<F, U, V, W>
 where
+    F: PrimeField,
     TreeRHasher<F>: Hasher,
-    U: PoseidonArity,
-    V: PoseidonArity,
-    W: PoseidonArity,
+    <TreeRHasher<F> as Hasher>::Domain: Domain<Field = F>,
+    U: PoseidonArity<F>,
+    V: PoseidonArity<F>,
+    W: PoseidonArity<F>,
 {
     #[serde(bound(serialize = "MerkleProof<TreeRHasher<F>, U, V, W>: Serialize"))]
     #[serde(bound(deserialize = "MerkleProof<TreeRHasher<F>, U, V, W>: Deserialize<'de>"))]
@@ -49,10 +51,12 @@ where
 #[derive(Clone, Serialize, Deserialize)]
 pub struct PartitionProof<F, U, V, W>
 where
+    F: PrimeField,
     TreeRHasher<F>: Hasher,
-    U: PoseidonArity,
-    V: PoseidonArity,
-    W: PoseidonArity,
+    <TreeRHasher<F> as Hasher>::Domain: Domain<Field = F>,
+    U: PoseidonArity<F>,
+    V: PoseidonArity<F>,
+    W: PoseidonArity<F>,
 {
     #[serde(bound(serialize = "TreeRDomain<F>: Serialize"))]
     #[serde(bound(deserialize = "TreeRDomain<F>: Deserialize<'de>"))]
@@ -72,9 +76,10 @@ impl<'a, F, U, V, W> ProofScheme<'a> for EmptySectorUpdate<F, U, V, W>
 where
     F: PrimeFieldBits,
     TreeRHasher<F>: Hasher<Domain = TreeRDomain<F>>,
-    U: PoseidonArity,
-    V: PoseidonArity,
-    W: PoseidonArity,
+    TreeRDomain<F>: Domain<Field = F>,
+    U: PoseidonArity<F>,
+    V: PoseidonArity<F>,
+    W: PoseidonArity<F>,
 {
     type SetupParams = SetupParams;
     type PublicParams = PublicParams;

@@ -37,9 +37,9 @@ type TreeRHasher = constants::TreeRHasher<Fr>;
 
 fn test_empty_sector_update_compound<U, V, W>(sector_nodes: usize)
 where
-    U: PoseidonArity,
-    V: PoseidonArity,
-    W: PoseidonArity,
+    U: PoseidonArity<Fr>,
+    V: PoseidonArity<Fr>,
+    W: PoseidonArity<Fr>,
 {
     validate_tree_r_shape::<U, V, W>(sector_nodes);
 

@@ -170,11 +170,14 @@ pub struct PrivateInputs<F> {
 #[derive(Clone, Serialize, Deserialize)]
 pub struct ChallengeProof<F, U, V, W>
 where
+    F: PrimeField,
     TreeDHasher<F>: Hasher,
     TreeRHasher<F>: Hasher,
-    U: PoseidonArity,
-    V: PoseidonArity,
-    W: PoseidonArity,
+    <TreeDHasher<F> as Hasher>::Domain: Domain<Field = F>,
+    <TreeRHasher<F> as Hasher>::Domain: Domain<Field = F>,
+    U: PoseidonArity<F>,
+    V: PoseidonArity<F>,
+    W: PoseidonArity<F>,
 {
     #[serde(bound(serialize = "MerkleProof<TreeRHasher<F>, U, V, W>: Serialize"))]
     #[serde(bound(deserialize = "MerkleProof<TreeRHasher<F>, U, V, W>: Deserialize<'de>"))]
@@ -192,9 +195,11 @@ where
     F: PrimeField,
     TreeDHasher<F>: Hasher<Domain = TreeDDomain<F>>,
     TreeRHasher<F>: Hasher<Domain = TreeRDomain<F>>,
-    U: PoseidonArity,
-    V: PoseidonArity,
-    W: PoseidonArity,
+    TreeDDomain<F>: Domain<Field = F>,
+    TreeRDomain<F>: Domain<Field = F>,
+    U: PoseidonArity<F>,
+    V: PoseidonArity<F>,
+    W: PoseidonArity<F>,
 {
     pub fn verify_merkle_proofs(
         &self,
@@ -219,11 +224,14 @@ where
 #[derive(Clone, Serialize, Deserialize)]
 pub struct PartitionProof<F, U, V, W>
 where
+    F: PrimeField,
     TreeDHasher<F>: Hasher,
     TreeRHasher<F>: Hasher,
-    U: PoseidonArity,
-    V: PoseidonArity,
-    W: PoseidonArity,
+    <TreeDHasher<F> as Hasher>::Domain: Domain<Field = F>,
+    <TreeRHasher<F> as Hasher>::Domain: Domain<Field = F>,
+    U: PoseidonArity<F>,
+    V: PoseidonArity<F>,
+    W: PoseidonArity<F>,
 {
     #[serde(bound(serialize = "TreeRDomain<F>: Serialize"))]
     #[serde(bound(deserialize = "TreeRDomain<F>: Deserialize<'de>"))]
@@ -248,9 +256,9 @@ where
     TreeRHasher<F>: Hasher<Domain = TreeRDomain<F>>,
     TreeDDomain<F>: Domain<Field = F>,
     TreeRDomain<F>: Domain<Field = F>,
-    U: PoseidonArity,
-    V: PoseidonArity,
-    W: PoseidonArity,
+    U: PoseidonArity<F>,
+    V: PoseidonArity<F>,
+    W: PoseidonArity<F>,
 {
     type SetupParams = SetupParams;
     type PublicParams = PublicParams;
@@ -554,9 +562,9 @@ where
     TreeRHasher<F>: Hasher<Domain = TreeRDomain<F>>,
     TreeDDomain<F>: Domain<Field = F>,
     TreeRDomain<F>: Domain<Field = F>,
-    U: PoseidonArity,
-    V: PoseidonArity,
-    W: PoseidonArity,
+    U: PoseidonArity<F>,
+    V: PoseidonArity<F>,
+    W: PoseidonArity<F>,
 {
     pub fn instantiate_tree_d(
         tree_d_leafs: usize,

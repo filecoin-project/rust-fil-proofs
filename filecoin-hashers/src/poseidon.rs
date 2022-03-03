@@ -63,7 +63,6 @@ impl Into<Fr> for PoseidonDomain<Fr> {
         Fr::from_repr_vartime(self.repr).expect("from_repr failure")
     }
 }
-
 #[allow(clippy::from_over_into)]
 impl Into<Fp> for PoseidonDomain<Fp> {
     fn into(self) -> Fp {
@@ -74,32 +73,6 @@ impl Into<Fp> for PoseidonDomain<Fp> {
 impl Into<Fq> for PoseidonDomain<Fq> {
     fn into(self) -> Fq {
         Fq::from_repr_vartime(self.repr).expect("from_repr failure")
-    }
-}
-
-// Currently, these panics serve as a stopgap to prevent accidental conversions of a Pasta field
-// domains to/from a BLS12-381 scalar field domain.
-impl From<Fr> for PoseidonDomain<Fp> {
-    fn from(_f: Fr) -> Self {
-        panic!("cannot convert BLS12-381 scalar into PoseidonDomain<Fp>")
-    }
-}
-
-#[allow(clippy::from_over_into)]
-impl Into<Fr> for PoseidonDomain<Fp> {
-    fn into(self) -> Fr {
-        panic!("cannot convert PoseidonDomain<Fp> into BLS12-381 scalar");
-    }
-}
-impl From<Fr> for PoseidonDomain<Fq> {
-    fn from(_f: Fr) -> Self {
-        panic!("cannot convert BLS12-381 scalar into PoseidonDomain<Fq>")
-    }
-}
-#[allow(clippy::from_over_into)]
-impl Into<Fr> for PoseidonDomain<Fq> {
-    fn into(self) -> Fr {
-        panic!("cannot convert PoseidonDomain<Fq> into BLS12-381 scalar");
     }
 }
 
@@ -379,7 +352,7 @@ impl HashFunction<PoseidonDomain<Fr>> for PoseidonFunction<Fr> {
         Self::hash2_circuit(cs, left, right)
     }
 
-    fn hash_multi_leaf_circuit<Arity: 'static + PoseidonArity, CS: ConstraintSystem<Fr>>(
+    fn hash_multi_leaf_circuit<Arity: PoseidonArity<Fr>, CS: ConstraintSystem<Fr>>(
         cs: CS,
         leaves: &[AllocatedNum<Fr>],
         _height: usize,
@@ -499,7 +472,7 @@ impl HashFunction<PoseidonDomain<Fp>> for PoseidonFunction<Fp> {
         unimplemented!("PoseidonFunction<Fp> cannot be used within Groth16 circuits")
     }
 
-    fn hash_multi_leaf_circuit<Arity: 'static + PoseidonArity, CS: ConstraintSystem<Fr>>(
+    fn hash_multi_leaf_circuit<Arity: PoseidonArity<Fr>, CS: ConstraintSystem<Fr>>(
         _cs: CS,
         _leaves: &[AllocatedNum<Fr>],
         _height: usize,
@@ -586,7 +559,7 @@ impl HashFunction<PoseidonDomain<Fq>> for PoseidonFunction<Fq> {
         unimplemented!("PoseidonFunction<Fq> cannot be used within Groth16 circuits")
     }
 
-    fn hash_multi_leaf_circuit<Arity: 'static + PoseidonArity, CS: ConstraintSystem<Fr>>(
+    fn hash_multi_leaf_circuit<Arity: PoseidonArity<Fr>, CS: ConstraintSystem<Fr>>(
         _cs: CS,
         _leaves: &[AllocatedNum<Fr>],
         _height: usize,

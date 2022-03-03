@@ -99,9 +99,9 @@ impl PublicInputs {
 #[derive(Clone)]
 pub struct ChallengeProof<U, V, W>
 where
-    U: PoseidonArity,
-    V: PoseidonArity,
-    W: PoseidonArity,
+    U: PoseidonArity<Fr>,
+    V: PoseidonArity<Fr>,
+    W: PoseidonArity<Fr>,
 {
     pub leaf_r_old: Option<Fr>,
     pub path_r_old: Vec<Vec<Option<Fr>>>,
@@ -114,9 +114,9 @@ where
 
 impl<U, V, W> From<vanilla::ChallengeProof<Fr, U, V, W>> for ChallengeProof<U, V, W>
 where
-    U: PoseidonArity,
-    V: PoseidonArity,
-    W: PoseidonArity,
+    U: PoseidonArity<Fr>,
+    V: PoseidonArity<Fr>,
+    W: PoseidonArity<Fr>,
 {
     fn from(challenge_proof: vanilla::ChallengeProof<Fr, U, V, W>) -> Self {
         let vanilla::ChallengeProof {
@@ -130,9 +130,9 @@ where
 
 impl<U, V, W> ChallengeProof<U, V, W>
 where
-    U: PoseidonArity,
-    V: PoseidonArity,
-    W: PoseidonArity,
+    U: PoseidonArity<Fr>,
+    V: PoseidonArity<Fr>,
+    W: PoseidonArity<Fr>,
 {
     pub fn from_merkle_proofs(
         proof_r_old: MerkleProof<TreeRHasher<Fr>, U, V, W>,
@@ -217,9 +217,9 @@ where
 #[derive(Clone)]
 pub struct PrivateInputs<U, V, W>
 where
-    U: PoseidonArity,
-    V: PoseidonArity,
-    W: PoseidonArity,
+    U: PoseidonArity<Fr>,
+    V: PoseidonArity<Fr>,
+    W: PoseidonArity<Fr>,
 {
     // CommC created by running SDR-PoRep on the old/un-updated data.
     pub comm_c: Option<Fr>,
@@ -238,9 +238,9 @@ where
 
 impl<U, V, W> PrivateInputs<U, V, W>
 where
-    U: PoseidonArity,
-    V: PoseidonArity,
-    W: PoseidonArity,
+    U: PoseidonArity<Fr>,
+    V: PoseidonArity<Fr>,
+    W: PoseidonArity<Fr>,
 {
     pub fn new(
         comm_c: TreeRDomain<Fr>,
@@ -286,9 +286,9 @@ where
 
 pub struct EmptySectorUpdateCircuit<U, V, W>
 where
-    U: PoseidonArity,
-    V: PoseidonArity,
-    W: PoseidonArity,
+    U: PoseidonArity<Fr>,
+    V: PoseidonArity<Fr>,
+    W: PoseidonArity<Fr>,
 {
     pub pub_params: PublicParams,
     pub pub_inputs: PublicInputs,
@@ -297,18 +297,18 @@ where
 
 impl<U, V, W> CircuitComponent for EmptySectorUpdateCircuit<U, V, W>
 where
-    U: PoseidonArity,
-    V: PoseidonArity,
-    W: PoseidonArity,
+    U: PoseidonArity<Fr>,
+    V: PoseidonArity<Fr>,
+    W: PoseidonArity<Fr>,
 {
     type ComponentPrivateInputs = ();
 }
 
 impl<U, V, W> EmptySectorUpdateCircuit<U, V, W>
 where
-    U: PoseidonArity,
-    V: PoseidonArity,
-    W: PoseidonArity,
+    U: PoseidonArity<Fr>,
+    V: PoseidonArity<Fr>,
+    W: PoseidonArity<Fr>,
 {
     pub fn blank(pub_params: PublicParams) -> Self {
         let sector_bytes = (pub_params.sector_nodes as u64) << 5;
@@ -329,9 +329,9 @@ where
 
 impl<U, V, W> Circuit<Fr> for EmptySectorUpdateCircuit<U, V, W>
 where
-    U: PoseidonArity,
-    V: PoseidonArity,
-    W: PoseidonArity,
+    U: PoseidonArity<Fr>,
+    V: PoseidonArity<Fr>,
+    W: PoseidonArity<Fr>,
 {
     fn synthesize<CS: ConstraintSystem<Fr>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
         let EmptySectorUpdateCircuit {

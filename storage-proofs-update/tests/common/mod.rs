@@ -23,6 +23,7 @@ pub fn create_tree_d_new<F>(labels_d_new: &[TreeDDomain<F>], tmp_dir: &Path) -> 
 where
     F: PrimeField,
     TreeDHasher<F>: Hasher<Domain = TreeDDomain<F>>,
+    TreeDDomain<F>: Domain<Field = F>,
 {
     let num_leafs = labels_d_new.len();
     let arity = TreeDArity::to_usize();
@@ -47,9 +48,9 @@ where
     F: PrimeField,
     TreeRHasher<F>: Hasher<Domain = TreeRDomain<F>>,
     TreeRDomain<F>: Domain<Field = F>,
-    U: PoseidonArity,
-    V: PoseidonArity,
-    W: PoseidonArity,
+    U: PoseidonArity<F>,
+    V: PoseidonArity<F>,
+    W: PoseidonArity<F>,
 {
     create_tree_r(labels_d_new, tmp_dir, "tree-d-new", "data_new")
 }
@@ -63,9 +64,9 @@ where
     F: PrimeField,
     TreeRHasher<F>: Hasher<Domain = TreeRDomain<F>>,
     TreeRDomain<F>: Domain<Field = F>,
-    U: PoseidonArity,
-    V: PoseidonArity,
-    W: PoseidonArity,
+    U: PoseidonArity<F>,
+    V: PoseidonArity<F>,
+    W: PoseidonArity<F>,
 {
     create_tree_r(replica_old, tmp_dir, "tree-r-old", "replica_old")
 }
@@ -79,9 +80,9 @@ where
     F: PrimeField,
     TreeRHasher<F>: Hasher<Domain = TreeRDomain<F>>,
     TreeRDomain<F>: Domain<Field = F>,
-    U: PoseidonArity,
-    V: PoseidonArity,
-    W: PoseidonArity,
+    U: PoseidonArity<F>,
+    V: PoseidonArity<F>,
+    W: PoseidonArity<F>,
 {
     create_tree_r(replica_new, tmp_dir, "tree-r-new", "replica_new")
 }
@@ -96,9 +97,9 @@ where
     F: PrimeField,
     TreeRHasher<F>: Hasher<Domain = TreeRDomain<F>>,
     TreeRDomain<F>: Domain<Field = F>,
-    U: PoseidonArity,
-    V: PoseidonArity,
-    W: PoseidonArity,
+    U: PoseidonArity<F>,
+    V: PoseidonArity<F>,
+    W: PoseidonArity<F>,
 {
     let base_arity = U::to_usize();
 
