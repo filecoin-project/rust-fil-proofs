@@ -1,22 +1,22 @@
-use blstrs::Scalar as Fr;
+use ff::PrimeField;
 
 /// Sloth based encoding.
 #[inline]
-pub fn encode(key: &Fr, plaintext: &Fr) -> Fr {
-    plaintext + key
+pub fn encode<F: PrimeField>(key: &F, plaintext: &F) -> F {
+    *plaintext + *key
 }
 
 /// Sloth based decoding.
 #[inline]
-pub fn decode(key: &Fr, ciphertext: &Fr) -> Fr {
-    ciphertext - key
+pub fn decode<F: PrimeField>(key: &F, ciphertext: &F) -> F {
+    *ciphertext - *key
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    use ff::PrimeField;
+    use blstrs::Scalar as Fr;
     use proptest::{prop_compose, proptest};
 
     // the modulus from `bls12_381::Fr`

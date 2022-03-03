@@ -55,7 +55,7 @@ rand_xorshift = "0.3.0"
 pretty_assertions = "1.2.0"
 sha2raw = { path = "../sha2raw", version = "^6.0.0"}
 filecoin-hashers = { path = "../filecoin-hashers", version = "^6.0.0", default-features = false, features = ["blake2s", "sha256", "poseidon"] }
-pasta_curves = "0.3.0"
+pasta_curves = { version = "0.3.1", package = "fil_pasta_curves" }
 
 [features]
 default = ["opencl"]
@@ -65,8 +65,8 @@ big-sector-sizes-bench = []
 measurements = ["cpu-time", "gperftools"]
 profile = ["measurements"]
 
-cuda = ["bellperson/cuda", "filecoin-hashers/cuda"]
-opencl = ["bellperson/opencl", "filecoin-hashers/opencl"]
+cuda = ["bellperson/cuda", "blstrs/gpu", "filecoin-hashers/cuda"]
+opencl = ["bellperson/opencl", "blstrs/gpu", "filecoin-hashers/opencl"]
 
 [[bench]]
 name = "sha256"

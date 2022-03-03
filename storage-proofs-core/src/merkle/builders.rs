@@ -237,12 +237,16 @@ pub fn create_base_merkle_tree<Tree: MerkleTreeTrait>(
 /// replica path (since the replica file will contain the same data),
 /// we pass both since we have access from all callers and this avoids
 /// reading that data from the replica_config here.
-pub fn create_base_lcmerkle_tree<H: Hasher, BaseTreeArity: 'static + PoseidonArity>(
+pub fn create_base_lcmerkle_tree<H, BaseTreeArity>(
     config: StoreConfig,
     size: usize,
     data: &[u8],
     replica_config: &ReplicaConfig,
-) -> Result<LCMerkleTree<H, BaseTreeArity>> {
+) -> Result<LCMerkleTree<H, BaseTreeArity>>
+where
+    H: Hasher,
+    BaseTreeArity: PoseidonArity<<H::Domain as Domain>::Field>,
+{
     trace!("create_base_lcmerkle_tree called with size {}", size);
     trace!(
         "is_merkle_tree_size_valid({}, arity {}) = {}",

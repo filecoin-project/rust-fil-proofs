@@ -65,6 +65,7 @@ cuda = [
     "filecoin-proofs/cuda",
     "bellperson/cuda",
     "filecoin-hashers/cuda",
+    "blstrs/gpu",
 ]
 opencl = [
     "storage-proofs-core/opencl",
@@ -74,6 +75,7 @@ opencl = [
     "filecoin-proofs/opencl",
     "bellperson/opencl",
     "filecoin-hashers/opencl",
+    "blstrs/gpu",
 ]
 measurements = ["storage-proofs-core/measurements"]
 profile = ["storage-proofs-core/profile", "measurements"]

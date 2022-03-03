@@ -28,7 +28,7 @@ log = "0.4.7"
 pretty_assertions = "1.2.0"
 generic-array = "0.14.4"
 anyhow = "1.0.23"
-neptune = { version = "6.0.0", features = ["arity2", "arity4", "arity8", "arity11", "arity16", "arity24", "arity36", "bls"] }
+neptune = { version = "6.0.0", features = ["arity2", "arity4", "arity8", "arity11", "arity16", "arity24", "arity36", "bls", "pasta"] }
 num_cpus = "1.10.1"
 hex = "0.4.2"
 bincode = "1.1.2"
@@ -43,7 +43,7 @@ yastl = "0.1.2"
 fil_logger = "0.1"
 pairing = "0.21"
 blstrs = "0.4.0"
-pasta_curves = "0.3.0"
+pasta_curves = { version = "0.3.1", package = "fil_pasta_curves" }
 typemap = "0.3.3"
 
 [target."cfg(target_arch = \"aarch64\")".dependencies]
@@ -61,8 +61,8 @@ filecoin-hashers = { path = "../filecoin-hashers", version = "^6.0.0", default-f
 
 [features]
 default = ["opencl", "multicore-sdr"]
-cuda = ["storage-proofs-core/cuda", "filecoin-hashers/cuda", "neptune/cuda", "bellperson/cuda"]
-opencl = ["storage-proofs-core/opencl", "filecoin-hashers/opencl", "neptune/opencl", "bellperson/opencl"]
+cuda = ["storage-proofs-core/cuda", "filecoin-hashers/cuda", "neptune/cuda", "bellperson/cuda", "blstrs/gpu"]
+opencl = ["storage-proofs-core/opencl", "filecoin-hashers/opencl", "neptune/opencl", "bellperson/opencl", "blstrs/gpu"]
 isolated-testing = []
 multicore-sdr = ["hwloc"]
 

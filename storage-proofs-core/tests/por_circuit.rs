@@ -385,9 +385,9 @@ where
 
 fn test_por_no_challenge_input<U, V, W>(sector_nodes: usize)
 where
-    U: PoseidonArity,
-    V: PoseidonArity,
-    W: PoseidonArity,
+    U: PoseidonArity<Fr>,
+    V: PoseidonArity<Fr>,
+    W: PoseidonArity<Fr>,
 {
     let mut rng = XorShiftRng::from_seed(TEST_SEED);
 

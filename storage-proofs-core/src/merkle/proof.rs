@@ -5,8 +5,7 @@ use std::marker::PhantomData;
 use std::slice::Iter;
 
 use anyhow::{ensure, Result};
-use blstrs::Scalar as Fr;
-use filecoin_hashers::{Hasher, PoseidonArity};
+use filecoin_hashers::{Domain, Hasher, PoseidonArity};
 use generic_array::typenum::{Unsigned, U0};
 use merkletree::hash::Algorithm;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
@@ -16,16 +15,22 @@ use crate::drgraph::graph_height;
 /// Trait to abstract over the concept of Merkle Proof.
 pub trait MerkleProofTrait: Clone + Serialize + DeserializeOwned + Debug + Sync + Send {
     type Hasher: Hasher;
-    type Arity: 'static + PoseidonArity;
-    type SubTreeArity: 'static + PoseidonArity;
-    type TopTreeArity: 'static + PoseidonArity;
+    type Arity: PoseidonArity<<<Self::Hasher as Hasher>::Domain as Domain>::Field>;
+    type SubTreeArity: PoseidonArity<<<Self::Hasher as Hasher>::Domain as Domain>::Field>;
+    type TopTreeArity: PoseidonArity<<<Self::Hasher as Hasher>::Domain as Domain>::Field>;
 
     /// Try to convert a merkletree proof into this structure.
     fn try_from_proof(
         p: merkletree::proof::Proof<<Self::Hasher as Hasher>::Domain, Self::Arity>,
     ) -> Result<Self>;
 
-    fn as_options(&self) -> Vec<(Vec<Option<Fr>>, Option<usize>)> {
+    #[allow(clippy::type_complexity)]
+    fn as_options(
+        &self,
+    ) -> Vec<(
+        Vec<Option<<<Self::Hasher as Hasher>::Domain as Domain>::Field>>,
+        Option<usize>,
+    )> {
         self.path()
             .iter()
             .map(|v| {
@@ -37,7 +42,16 @@ pub trait MerkleProofTrait: Clone + Serialize + DeserializeOwned + Debug + Sync 
             .collect::<Vec<_>>()
     }
 
-    fn into_options_with_leaf(self) -> (Option<Fr>, Vec<(Vec<Option<Fr>>, Option<usize>)>) {
+    #[allow(clippy::type_complexity)]
+    fn into_options_with_leaf(
+        self,
+    ) -> (
+        Option<<<Self::Hasher as Hasher>::Domain as Domain>::Field>,
+        Vec<(
+            Vec<Option<<<Self::Hasher as Hasher>::Domain as Domain>::Field>>,
+            Option<usize>,
+        )>,
+    ) {
         let leaf = self.leaf();
         let path = self.path();
         (
@@ -52,7 +66,12 @@ pub trait MerkleProofTrait: Clone + Serialize + DeserializeOwned + Debug + Sync 
                 .collect::<Vec<_>>(),
         )
     }
-    fn as_pairs(&self) -> Vec<(Vec<Fr>, usize)> {
+    fn as_pairs(
+        &self,
+    ) -> Vec<(
+        Vec<<<Self::Hasher as Hasher>::Domain as Domain>::Field>,
+        usize,
+    )> {
         self.path()
             .iter()
             .map(|v| (v.0.iter().copied().map(Into::into).collect(), v.1))
@@ -165,7 +184,11 @@ macro_rules! forward_method {
 }
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
-pub struct InclusionPath<H: Hasher, Arity: PoseidonArity> {
+pub struct InclusionPath<H, Arity>
+where
+    H: Hasher,
+    Arity: PoseidonArity<<H::Domain as Domain>::Field>,
+{
     #[serde(bound(
         serialize = "H::Domain: Serialize",
         deserialize = "H::Domain: Deserialize<'de>"
@@ -173,13 +196,21 @@ pub struct InclusionPath<H: Hasher, Arity: PoseidonArity> {
     path: Vec<PathElement<H, Arity>>,
 }
 
-impl<H: Hasher, Arity: PoseidonArity> From<Vec<PathElement<H, Arity>>> for InclusionPath<H, Arity> {
+impl<H, Arity> From<Vec<PathElement<H, Arity>>> for InclusionPath<H, Arity>
+where
+    H: Hasher,
+    Arity: PoseidonArity<<H::Domain as Domain>::Field>,
+{
     fn from(path: Vec<PathElement<H, Arity>>) -> Self {
         Self { path }
     }
 }
 
-impl<H: Hasher, Arity: PoseidonArity> InclusionPath<H, Arity> {
+impl<H, Arity> InclusionPath<H, Arity>
+where
+    H: Hasher,
+    Arity: PoseidonArity<<H::Domain as Domain>::Field>,
+{
     /// Calculate the root of this path, given the leaf as input.
     pub fn root(&self, leaf: H::Domain) -> H::Domain {
         let mut a = H::Function::default();
@@ -215,7 +246,11 @@ impl<H: Hasher, Arity: PoseidonArity> InclusionPath<H, Arity> {
 }
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
-pub struct PathElement<H: Hasher, Arity: PoseidonArity> {
+pub struct PathElement<H, Arity>
+where
+    H: Hasher,
+    Arity: PoseidonArity<<H::Domain as Domain>::Field>,
+{
     #[serde(bound(
         serialize = "H::Domain: Serialize",
         deserialize = "H::Domain: Deserialize<'de>"
@@ -230,9 +265,9 @@ pub struct PathElement<H: Hasher, Arity: PoseidonArity> {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MerkleProof<
     H: Hasher,
-    BaseArity: PoseidonArity,
-    SubTreeArity: PoseidonArity = U0,
-    TopTreeArity: PoseidonArity = U0,
+    BaseArity: PoseidonArity<<H::Domain as Domain>::Field>,
+    SubTreeArity: PoseidonArity<<H::Domain as Domain>::Field> = U0,
+    TopTreeArity: PoseidonArity<<H::Domain as Domain>::Field> = U0,
 > {
     #[serde(bound(
         serialize = "H::Domain: Serialize",
@@ -241,12 +276,13 @@ pub struct MerkleProof<
     data: ProofData<H, BaseArity, SubTreeArity, TopTreeArity>,
 }
 
-impl<
-        H: Hasher,
-        Arity: 'static + PoseidonArity,
-        SubTreeArity: 'static + PoseidonArity,
-        TopTreeArity: 'static + PoseidonArity,
-    > MerkleProofTrait for MerkleProof<H, Arity, SubTreeArity, TopTreeArity>
+impl<H, Arity, SubTreeArity, TopTreeArity> MerkleProofTrait
+    for MerkleProof<H, Arity, SubTreeArity, TopTreeArity>
+where
+    H: Hasher,
+    Arity: PoseidonArity<<H::Domain as Domain>::Field>,
+    SubTreeArity: PoseidonArity<<H::Domain as Domain>::Field>,
+    TopTreeArity: PoseidonArity<<H::Domain as Domain>::Field>,
 {
     type Hasher = H;
     type Arity = Arity;
@@ -296,12 +332,13 @@ impl<
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-enum ProofData<
+enum ProofData<H, BaseArity, SubTreeArity, TopTreeArity>
+where
     H: Hasher,
-    BaseArity: PoseidonArity,
-    SubTreeArity: PoseidonArity,
-    TopTreeArity: PoseidonArity,
-> {
+    BaseArity: PoseidonArity<<H::Domain as Domain>::Field>,
+    SubTreeArity: PoseidonArity<<H::Domain as Domain>::Field>,
+    TopTreeArity: PoseidonArity<<H::Domain as Domain>::Field>,
+{
     #[serde(bound(
         serialize = "H::Domain: Serialize",
         deserialize = "H::Domain: Deserialize<'de>"
@@ -320,7 +357,11 @@ enum ProofData<
 }
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
-struct SingleProof<H: Hasher, Arity: PoseidonArity> {
+struct SingleProof<H, Arity>
+where
+    H: Hasher,
+    Arity: PoseidonArity<<H::Domain as Domain>::Field>,
+{
     /// Root of the merkle tree.
     #[serde(bound(
         serialize = "H::Domain: Serialize",
@@ -341,14 +382,23 @@ struct SingleProof<H: Hasher, Arity: PoseidonArity> {
     path: InclusionPath<H, Arity>,
 }
 
-impl<H: Hasher, Arity: PoseidonArity> SingleProof<H, Arity> {
+impl<H, Arity> SingleProof<H, Arity>
+where
+    H: Hasher,
+    Arity: PoseidonArity<<H::Domain as Domain>::Field>,
+{
     pub fn new(path: InclusionPath<H, Arity>, root: H::Domain, leaf: H::Domain) -> Self {
         SingleProof { root, leaf, path }
     }
 }
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
-struct SubProof<H: Hasher, BaseArity: PoseidonArity, SubTreeArity: PoseidonArity> {
+struct SubProof<H, BaseArity, SubTreeArity>
+where
+    H: Hasher,
+    BaseArity: PoseidonArity<<H::Domain as Domain>::Field>,
+    SubTreeArity: PoseidonArity<<H::Domain as Domain>::Field>,
+{
     #[serde(bound(
         serialize = "H::Domain: Serialize",
         deserialize = "H::Domain: Deserialize<'de>"
@@ -373,8 +423,11 @@ struct SubProof<H: Hasher, BaseArity: PoseidonArity, SubTreeArity: PoseidonArity
     leaf: H::Domain,
 }
 
-impl<H: Hasher, BaseArity: PoseidonArity, SubTreeArity: PoseidonArity>
-    SubProof<H, BaseArity, SubTreeArity>
+impl<H, BaseArity, SubTreeArity> SubProof<H, BaseArity, SubTreeArity>
+where
+    H: Hasher,
+    BaseArity: PoseidonArity<<H::Domain as Domain>::Field>,
+    SubTreeArity: PoseidonArity<<H::Domain as Domain>::Field>,
 {
     pub fn new(
         base_proof: InclusionPath<H, BaseArity>,
@@ -392,12 +445,13 @@ impl<H: Hasher, BaseArity: PoseidonArity, SubTreeArity: PoseidonArity>
 }
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
-struct TopProof<
+struct TopProof<H, BaseArity, SubTreeArity, TopTreeArity>
+where
     H: Hasher,
-    BaseArity: PoseidonArity,
-    SubTreeArity: PoseidonArity,
-    TopTreeArity: PoseidonArity,
-> {
+    BaseArity: PoseidonArity<<H::Domain as Domain>::Field>,
+    SubTreeArity: PoseidonArity<<H::Domain as Domain>::Field>,
+    TopTreeArity: PoseidonArity<<H::Domain as Domain>::Field>,
+{
     #[serde(bound(
         serialize = "H::Domain: Serialize",
         deserialize = "H::Domain: Deserialize<'de>"
@@ -427,12 +481,12 @@ struct TopProof<
     leaf: H::Domain,
 }
 
-impl<
-        H: Hasher,
-        BaseArity: PoseidonArity,
-        SubTreeArity: PoseidonArity,
-        TopTreeArity: PoseidonArity,
-    > TopProof<H, BaseArity, SubTreeArity, TopTreeArity>
+impl<H, BaseArity, SubTreeArity, TopTreeArity> TopProof<H, BaseArity, SubTreeArity, TopTreeArity>
+where
+    H: Hasher,
+    BaseArity: PoseidonArity<<H::Domain as Domain>::Field>,
+    SubTreeArity: PoseidonArity<<H::Domain as Domain>::Field>,
+    TopTreeArity: PoseidonArity<<H::Domain as Domain>::Field>,
 {
     pub fn new(
         base_proof: InclusionPath<H, BaseArity>,
@@ -451,12 +505,12 @@ impl<
     }
 }
 
-impl<
-        H: Hasher,
-        BaseArity: PoseidonArity,
-        SubTreeArity: PoseidonArity,
-        TopTreeArity: PoseidonArity,
-    > MerkleProof<H, BaseArity, SubTreeArity, TopTreeArity>
+impl<H, BaseArity, SubTreeArity, TopTreeArity> MerkleProof<H, BaseArity, SubTreeArity, TopTreeArity>
+where
+    H: Hasher,
+    BaseArity: PoseidonArity<<H::Domain as Domain>::Field>,
+    SubTreeArity: PoseidonArity<<H::Domain as Domain>::Field>,
+    TopTreeArity: PoseidonArity<<H::Domain as Domain>::Field>,
 {
     pub fn new(n: usize) -> Self {
         let root = Default::default();
@@ -474,11 +528,16 @@ impl<
 }
 
 /// Converts a merkle_light proof to a SingleProof
-fn proof_to_single<H: Hasher, Arity: PoseidonArity, TargetArity: PoseidonArity>(
+fn proof_to_single<H, Arity, TargetArity>(
     proof: &merkletree::proof::Proof<H::Domain, Arity>,
     lemma_start_index: usize,
     sub_root: Option<H::Domain>,
-) -> SingleProof<H, TargetArity> {
+) -> SingleProof<H, TargetArity>
+where
+    H: Hasher,
+    Arity: PoseidonArity<<H::Domain as Domain>::Field>,
+    TargetArity: PoseidonArity<<H::Domain as Domain>::Field>,
+{
     let root = proof.root();
     let leaf = if let Some(sub_root) = sub_root {
         sub_root
@@ -493,11 +552,15 @@ fn proof_to_single<H: Hasher, Arity: PoseidonArity, TargetArity: PoseidonArity>(
 /// 'lemma_start_index' is required because sub/top proofs start at
 /// index 0 and base proofs start at index 1 (skipping the leaf at the
 /// front)
-fn extract_path<H: Hasher, Arity: PoseidonArity>(
+fn extract_path<H, Arity>(
     lemma: &[H::Domain],
     path: &[usize],
     lemma_start_index: usize,
-) -> InclusionPath<H, Arity> {
+) -> InclusionPath<H, Arity>
+where
+    H: Hasher,
+    Arity: PoseidonArity<<H::Domain as Domain>::Field>,
+{
     let path = lemma[lemma_start_index..lemma.len() - 1]
         .chunks(Arity::to_usize() - 1)
         .zip(path.iter())
@@ -511,7 +574,11 @@ fn extract_path<H: Hasher, Arity: PoseidonArity>(
     path.into()
 }
 
-impl<H: Hasher, Arity: 'static + PoseidonArity> SingleProof<H, Arity> {
+impl<H, Arity> SingleProof<H, Arity>
+where
+    H: Hasher,
+    Arity: PoseidonArity<<H::Domain as Domain>::Field>,
+{
     fn try_from_proof(p: merkletree::proof::Proof<<H as Hasher>::Domain, Arity>) -> Result<Self> {
         Ok(proof_to_single(&p, 1, None))
     }
@@ -545,8 +612,11 @@ impl<H: Hasher, Arity: 'static + PoseidonArity> SingleProof<H, Arity> {
     }
 }
 
-impl<H: Hasher, Arity: 'static + PoseidonArity, SubTreeArity: 'static + PoseidonArity>
-    SubProof<H, Arity, SubTreeArity>
+impl<H, Arity, SubTreeArity> SubProof<H, Arity, SubTreeArity>
+where
+    H: Hasher,
+    Arity: PoseidonArity<<H::Domain as Domain>::Field>,
+    SubTreeArity: PoseidonArity<<H::Domain as Domain>::Field>,
 {
     fn try_from_proof(p: merkletree::proof::Proof<<H as Hasher>::Domain, Arity>) -> Result<Self> {
         ensure!(
@@ -607,12 +677,12 @@ impl<H: Hasher, Arity: 'static + PoseidonArity, SubTreeArity: 'static + Poseidon
     }
 }
 
-impl<
-        H: Hasher,
-        Arity: 'static + PoseidonArity,
-        SubTreeArity: 'static + PoseidonArity,
-        TopTreeArity: 'static + PoseidonArity,
-    > TopProof<H, Arity, SubTreeArity, TopTreeArity>
+impl<H, Arity, SubTreeArity, TopTreeArity> TopProof<H, Arity, SubTreeArity, TopTreeArity>
+where
+    H: Hasher,
+    Arity: PoseidonArity<<H::Domain as Domain>::Field>,
+    SubTreeArity: PoseidonArity<<H::Domain as Domain>::Field>,
+    TopTreeArity: PoseidonArity<<H::Domain as Domain>::Field>,
 {
     fn try_from_proof(p: merkletree::proof::Proof<<H as Hasher>::Domain, Arity>) -> Result<Self> {
         ensure!(
@@ -699,6 +769,7 @@ impl<
 mod tests {
     use super::*;
 
+    use blstrs::Scalar as Fr;
     use filecoin_hashers::{
         blake2s::Blake2sHasher, poseidon::PoseidonHasher, sha256::Sha256Hasher, Domain,
     };
@@ -745,6 +816,15 @@ mod tests {
                 U0,
             >,
         >();
+        merklepath::<
+            MerkleTreeWrapper<
+                PoseidonHasher<Fp>,
+                DiskStore<<PoseidonHasher<Fp> as Hasher>::Domain>,
+                U2,
+                U0,
+                U0,
+            >,
+        >();
     }
 
     #[test]
@@ -753,6 +833,15 @@ mod tests {
             MerkleTreeWrapper<
                 PoseidonHasher<Fr>,
                 DiskStore<<PoseidonHasher<Fr> as Hasher>::Domain>,
+                U4,
+                U0,
+                U0,
+            >,
+        >();
+        merklepath::<
+            MerkleTreeWrapper<
+                PoseidonHasher<Fq>,
+                DiskStore<<PoseidonHasher<Fq> as Hasher>::Domain>,
                 U4,
                 U0,
                 U0,
@@ -771,6 +860,15 @@ mod tests {
                 U0,
             >,
         >();
+        merklepath::<
+            MerkleTreeWrapper<
+                PoseidonHasher<Fp>,
+                DiskStore<<PoseidonHasher<Fp> as Hasher>::Domain>,
+                U8,
+                U0,
+                U0,
+            >,
+        >();
     }
 
     #[test]
@@ -779,6 +877,15 @@ mod tests {
             MerkleTreeWrapper<
                 PoseidonHasher<Fr>,
                 DiskStore<<PoseidonHasher<Fr> as Hasher>::Domain>,
+                U8,
+                U2,
+                U0,
+            >,
+        >();
+        merklepath::<
+            MerkleTreeWrapper<
+                PoseidonHasher<Fq>,
+                DiskStore<<PoseidonHasher<Fq> as Hasher>::Domain>,
                 U8,
                 U2,
                 U0,
@@ -797,6 +904,15 @@ mod tests {
                 U0,
             >,
         >();
+        merklepath::<
+            MerkleTreeWrapper<
+                PoseidonHasher<Fp>,
+                DiskStore<<PoseidonHasher<Fp> as Hasher>::Domain>,
+                U8,
+                U4,
+                U0,
+            >,
+        >();
     }
 
     #[test]
@@ -805,6 +921,15 @@ mod tests {
             MerkleTreeWrapper<
                 PoseidonHasher<Fr>,
                 DiskStore<<PoseidonHasher<Fr> as Hasher>::Domain>,
+                U8,
+                U4,
+                U2,
+            >,
+        >();
+        merklepath::<
+            MerkleTreeWrapper<
+                PoseidonHasher<Fq>,
+                DiskStore<<PoseidonHasher<Fq> as Hasher>::Domain>,
                 U8,
                 U4,
                 U2,
@@ -823,6 +948,15 @@ mod tests {
                 U0,
             >,
         >();
+        merklepath::<
+            MerkleTreeWrapper<
+                Sha256Hasher<Fp>,
+                DiskStore<<Sha256Hasher<Fp> as Hasher>::Domain>,
+                U2,
+                U0,
+                U0,
+            >,
+        >();
     }
 
     #[test]
@@ -831,6 +965,15 @@ mod tests {
             MerkleTreeWrapper<
                 Sha256Hasher<Fr>,
                 DiskStore<<Sha256Hasher<Fr> as Hasher>::Domain>,
+                U4,
+                U0,
+                U0,
+            >,
+        >();
+        merklepath::<
+            MerkleTreeWrapper<
+                Sha256Hasher<Fq>,
+                DiskStore<<Sha256Hasher<Fq> as Hasher>::Domain>,
                 U4,
                 U0,
                 U0,
@@ -849,6 +992,15 @@ mod tests {
                 U0,
             >,
         >();
+        merklepath::<
+            MerkleTreeWrapper<
+                Sha256Hasher<Fp>,
+                DiskStore<<Sha256Hasher<Fp> as Hasher>::Domain>,
+                U2,
+                U4,
+                U0,
+            >,
+        >();
     }
 
     #[test]
@@ -857,6 +1009,15 @@ mod tests {
             MerkleTreeWrapper<
                 Sha256Hasher<Fr>,
                 DiskStore<<Sha256Hasher<Fr> as Hasher>::Domain>,
+                U2,
+                U4,
+                U2,
+            >,
+        >();
+        merklepath::<
+            MerkleTreeWrapper<
+                Sha256Hasher<Fq>,
+                DiskStore<<Sha256Hasher<Fq> as Hasher>::Domain>,
                 U2,
                 U4,
                 U2,
@@ -875,6 +1036,15 @@ mod tests {
                 U0,
             >,
         >();
+        merklepath::<
+            MerkleTreeWrapper<
+                Blake2sHasher<Fp>,
+                DiskStore<<Blake2sHasher<Fp> as Hasher>::Domain>,
+                U2,
+                U0,
+                U0,
+            >,
+        >();
     }
 
     #[test]
@@ -883,6 +1053,15 @@ mod tests {
             MerkleTreeWrapper<
                 Blake2sHasher<Fr>,
                 DiskStore<<Blake2sHasher<Fr> as Hasher>::Domain>,
+                U4,
+                U0,
+                U0,
+            >,
+        >();
+        merklepath::<
+            MerkleTreeWrapper<
+                Blake2sHasher<Fq>,
+                DiskStore<<Blake2sHasher<Fq> as Hasher>::Domain>,
                 U4,
                 U0,
                 U0,
@@ -901,96 +1080,14 @@ mod tests {
                 U2,
             >,
         >();
-    }
-
-    #[test]
-    fn merklepath_poseidon_2_halo() {
-        type Tree<H> = MerkleTreeWrapper<H, DiskStore<<H as Hasher>::Domain>, U2, U0, U0>;
-        merklepath::<Tree<PoseidonHasher<Fp>>>();
-        merklepath::<Tree<PoseidonHasher<Fq>>>();
-    }
-
-    #[test]
-    fn merklepath_poseidon_4_halo() {
-        type Tree<H> = MerkleTreeWrapper<H, DiskStore<<H as Hasher>::Domain>, U4, U0, U0>;
-        merklepath::<Tree<PoseidonHasher<Fp>>>();
-        merklepath::<Tree<PoseidonHasher<Fq>>>();
-    }
-
-    #[test]
-    fn merklepath_poseidon_8_halo() {
-        type Tree<H> = MerkleTreeWrapper<H, DiskStore<<H as Hasher>::Domain>, U8, U0, U0>;
-        merklepath::<Tree<PoseidonHasher<Fp>>>();
-        merklepath::<Tree<PoseidonHasher<Fq>>>();
-    }
-
-    #[test]
-    fn merklepath_poseidon_8_2_halo() {
-        type Tree<H> = MerkleTreeWrapper<H, DiskStore<<H as Hasher>::Domain>, U8, U2, U0>;
-        merklepath::<Tree<PoseidonHasher<Fp>>>();
-        merklepath::<Tree<PoseidonHasher<Fq>>>();
-    }
-
-    #[test]
-    fn merklepath_poseidon_8_4_halo() {
-        type Tree<H> = MerkleTreeWrapper<H, DiskStore<<H as Hasher>::Domain>, U8, U4, U0>;
-        merklepath::<Tree<PoseidonHasher<Fp>>>();
-        merklepath::<Tree<PoseidonHasher<Fq>>>();
-    }
-
-    #[test]
-    fn merklepath_poseidon_8_4_2_halo() {
-        type Tree<H> = MerkleTreeWrapper<H, DiskStore<<H as Hasher>::Domain>, U8, U4, U2>;
-        merklepath::<Tree<PoseidonHasher<Fp>>>();
-        merklepath::<Tree<PoseidonHasher<Fq>>>();
-    }
-
-    #[test]
-    fn merklepath_sha256_2_halo() {
-        type Tree<H> = MerkleTreeWrapper<H, DiskStore<<H as Hasher>::Domain>, U2, U0, U0>;
-        merklepath::<Tree<Sha256Hasher<Fp>>>();
-        merklepath::<Tree<Sha256Hasher<Fq>>>();
-    }
-
-    #[test]
-    fn merklepath_sha256_4_halo() {
-        type Tree<H> = MerkleTreeWrapper<H, DiskStore<<H as Hasher>::Domain>, U4, U0, U0>;
-        merklepath::<Tree<Sha256Hasher<Fp>>>();
-        merklepath::<Tree<Sha256Hasher<Fq>>>();
-    }
-
-    #[test]
-    fn merklepath_sha256_2_4_halo() {
-        type Tree<H> = MerkleTreeWrapper<H, DiskStore<<H as Hasher>::Domain>, U2, U4, U0>;
-        merklepath::<Tree<Sha256Hasher<Fp>>>();
-        merklepath::<Tree<Sha256Hasher<Fq>>>();
-    }
-
-    #[test]
-    fn merklepath_sha256_2_4_2_halo() {
-        type Tree<H> = MerkleTreeWrapper<H, DiskStore<<H as Hasher>::Domain>, U2, U4, U2>;
-        merklepath::<Tree<Sha256Hasher<Fp>>>();
-        merklepath::<Tree<Sha256Hasher<Fq>>>();
-    }
-
-    #[test]
-    fn merklepath_blake2s_2_halo() {
-        type Tree<H> = MerkleTreeWrapper<H, DiskStore<<H as Hasher>::Domain>, U2, U0, U0>;
-        merklepath::<Tree<Blake2sHasher<Fp>>>();
-        merklepath::<Tree<Blake2sHasher<Fq>>>();
-    }
-
-    #[test]
-    fn merklepath_blake2s_4_halo() {
-        type Tree<H> = MerkleTreeWrapper<H, DiskStore<<H as Hasher>::Domain>, U4, U0, U0>;
-        merklepath::<Tree<Blake2sHasher<Fp>>>();
-        merklepath::<Tree<Blake2sHasher<Fq>>>();
-    }
-
-    #[test]
-    fn merklepath_blake2s_8_4_2_halo() {
-        type Tree<H> = MerkleTreeWrapper<H, DiskStore<<H as Hasher>::Domain>, U8, U4, U2>;
-        merklepath::<Tree<Blake2sHasher<Fp>>>();
-        merklepath::<Tree<Blake2sHasher<Fq>>>();
+        merklepath::<
+            MerkleTreeWrapper<
+                Blake2sHasher<Fp>,
+                DiskStore<<Blake2sHasher<Fp> as Hasher>::Domain>,
+                U8,
+                U4,
+                U2,
+            >,
+        >();
     }
 }
