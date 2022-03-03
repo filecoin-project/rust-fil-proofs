@@ -10,16 +10,18 @@ readme = "README.md"
 
 [dependencies]
 bellperson = "0.18.0"
-blstrs = "0.4.0"
+blstrs = { version = "0.4.0", features = ["gpu"] }
 generic-array = "0.14.4"
 merkletree = "0.21.0"
+ec-gpu = "0.1.0"
 ff = "0.11.0"
 anyhow = "1.0.34"
 serde = "1.0.117"
 rand = "0.8.0"
-
-neptune = { version = "5.1.0", optional = true, features = ["arity2", "arity4", "arity8", "arity11", "arity16", "arity24", "arity36"] }
-pasta_curves = "0.3.0"
+# neptune = { version = "5.1.0", optional = true, features = ["arity2", "arity4", "arity8", "arity11", "arity16", "arity24", "arity36"] }
+# pasta_curves = "0.3.0"
+neptune = { git = "https://github.com/filecoin-project/neptune", branch = "fr-as-trait", optional = true, features = ["bls", "pasta", "arity2", "arity4", "arity8", "arity11", "arity16", "arity24", "arity36"] }
+pasta_curves = { git = "https://github.com/vmx/pasta_curves", branch = "ec-gpu", features = ["gpu"] }
 lazy_static = { version = "1.4.0", optional = true }
 blake2s_simd = { version = "0.5.11", optional = true }
 sha2 = { version = "0.9.2", optional = true }

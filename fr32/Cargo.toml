@@ -14,13 +14,14 @@ byte-slice-cast = "1.0.0"
 byteorder = "1"
 ff = "0.11.0"
 thiserror = "1.0.6"
-blstrs = "0.4.0"
+blstrs = { version = "0.4.0", features = ["gpu"] }
 
 [dev-dependencies]
 bitvec = "0.17"
 criterion = "0.3"
 itertools = "0.9"
-pasta_curves = "0.3.0"
+# pasta_curves = "0.3.0"
+pasta_curves = { git = "https://github.com/vmx/pasta_curves", branch = "ec-gpu", features = ["gpu"] }
 pretty_assertions = "0.6.1"
 rand = "0.8"
 rand_xorshift = "0.3"

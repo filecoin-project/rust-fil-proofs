@@ -53,7 +53,7 @@ fdlimit = "0.2.0"
 dialoguer = "0.8.0"
 structopt = "0.3.12"
 humansize = "1.1.0"
-blstrs = "0.4.0"
+blstrs = { version = "0.4.0", features = ["gpu"] }
 
 [features]
 default = ["opencl", "measurements"]

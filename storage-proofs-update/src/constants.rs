@@ -2,9 +2,9 @@ use blstrs::Scalar as Fr;
 use filecoin_hashers::{
     poseidon::{PoseidonDomain, PoseidonHasher},
     sha256::{Sha256Domain, Sha256Hasher},
-    FieldArity, PoseidonArity,
+    FieldArity,
 };
-use generic_array::typenum::{U0, U2, U8};
+use generic_array::typenum::{Unsigned, U0, U2, U8};
 use lazy_static::lazy_static;
 use merkletree::store::DiskStore;
 use neptune::{
@@ -139,9 +139,11 @@ pub const fn apex_leaf_count(sector_nodes: usize) -> usize {
 
 pub fn validate_tree_r_shape<U, V, W>(sector_nodes: usize)
 where
-    U: PoseidonArity,
-    V: PoseidonArity,
-    W: PoseidonArity,
+    // Use `Unsigned` rather than `PoseidonArity<F>` because `PoseidonArity` requires adding an
+    // additional type parameter `F: PrimeField` to this function (which we don't need).
+    U: Unsigned,
+    V: Unsigned,
+    W: Unsigned,
 {
     let base_arity = U::to_usize();
     let sub_arity = V::to_usize();

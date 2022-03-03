@@ -80,31 +80,6 @@ impl Into<Fq> for Blake2sDomain<Fq> {
     }
 }
 
-// Currently, these panics serve as a stopgap to prevent accidental conversions of a Pasta field
-// domains to/from a BLS12-381 scalar field domain.
-impl From<Fr> for Blake2sDomain<Fp> {
-    fn from(_f: Fr) -> Self {
-        panic!("cannot convert BLS12-381 scalar into Blake2sDomain<Fp>")
-    }
-}
-#[allow(clippy::from_over_into)]
-impl Into<Fr> for Blake2sDomain<Fq> {
-    fn into(self) -> Fr {
-        panic!("cannot convert Blake2sDomain<Fq> into BLS12-381 scalar");
-    }
-}
-impl From<Fr> for Blake2sDomain<Fq> {
-    fn from(_f: Fr) -> Self {
-        panic!("cannot convert BLS12-381 scalar into Blake2sDomain<Fq>")
-    }
-}
-#[allow(clippy::from_over_into)]
-impl Into<Fr> for Blake2sDomain<Fp> {
-    fn into(self) -> Fr {
-        panic!("cannot convert Blake2sDomain<Fp> into BLS12-381 scalar");
-    }
-}
-
 impl<F> From<[u8; 32]> for Blake2sDomain<F> {
     fn from(bytes: [u8; 32]) -> Self {
         Blake2sDomain {
