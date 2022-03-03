@@ -10,6 +10,7 @@ use bellperson::{
     ConstraintSystem, SynthesisError,
 };
 use blstrs::Scalar as Fr;
+use ec_gpu::GpuField;
 use ff::{Field, PrimeField};
 use merkletree::{
     hash::{Algorithm as LightAlgorithm, Hashable as LightHashable},
@@ -28,15 +29,6 @@ pub trait Domain:
     + Eq
     + Send
     + Sync
-    // TODO (halo): remove once we have Pasta GPU support.
-    // Currently the `From<Fr> + Into<Fr>` trait bounds are used as a stopgap to prevent
-    // Pasta field domains from being used in GPU code, e.g. currently converting a
-    // `Sha256Domain<Fp>` into an `Fr` panics. Remove theses trait bounds once Pasta fields are
-    // fully supported in `rust-fil-proofs`, e.g. GPU code.
-    + From<Fr>
-    + Into<Fr>
-    // Note that `Self::Field` may be `Fr`, in which case the trait bounds
-    // `From<Self::Field> + Into<Self::Field>` are redundant.
     + From<Self::Field>
     + Into<Self::Field>
     + From<[u8; 32]>
@@ -45,7 +37,7 @@ pub trait Domain:
     + Element
     + StdHash
 {
-    type Field: PrimeField;
+    type Field: PrimeField + GpuField;
 
     #[allow(clippy::wrong_self_convention)]
     fn into_bytes(&self) -> Vec<u8> {
@@ -110,7 +102,7 @@ pub trait HashFunction<T: Domain>: Clone + Debug + Send + Sync + LightAlgorithm<
         Self::hash_leaf_bits_circuit(cs, &left_bits, &right_bits, height)
     }
 
-    fn hash_multi_leaf_circuit<Arity: 'static + PoseidonArity, CS: ConstraintSystem<Fr>>(
+    fn hash_multi_leaf_circuit<Arity: PoseidonArity<Fr>, CS: ConstraintSystem<Fr>>(
         cs: CS,
         leaves: &[AllocatedNum<Fr>],
         height: usize,

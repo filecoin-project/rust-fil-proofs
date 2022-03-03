@@ -50,9 +50,9 @@ pub struct AuthPath<H, U, V, W>
 where
     H: Hasher,
     H::Domain: Domain<Field = Fr>,
-    U: 'static + PoseidonArity,
-    V: 'static + PoseidonArity,
-    W: 'static + PoseidonArity,
+    U: PoseidonArity<Fr>,
+    V: PoseidonArity<Fr>,
+    W: PoseidonArity<Fr>,
 {
     base: SubPath<H, U>,
     sub: SubPath<H, V>,
@@ -63,9 +63,9 @@ impl<H, U, V, W> From<Vec<(Vec<Option<Fr>>, Option<usize>)>> for AuthPath<H, U, 
 where
     H: Hasher,
     H::Domain: Domain<Field = Fr>,
-    U: 'static + PoseidonArity,
-    V: 'static + PoseidonArity,
-    W: 'static + PoseidonArity,
+    U: PoseidonArity<Fr>,
+    V: PoseidonArity<Fr>,
+    W: PoseidonArity<Fr>,
 {
     fn from(mut base_opts: Vec<(Vec<Option<Fr>>, Option<usize>)>) -> Self {
         let has_top = W::to_usize() > 0;
@@ -130,7 +130,7 @@ struct SubPath<H, Arity>
 where
     H: Hasher,
     H::Domain: Domain<Field = Fr>,
-    Arity: 'static + PoseidonArity,
+    Arity: PoseidonArity<Fr>,
 {
     path: Vec<PathElement<H, Arity>>,
 }
@@ -140,7 +140,7 @@ struct PathElement<H, Arity>
 where
     H: Hasher,
     H::Domain: Domain<Field = Fr>,
-    Arity: 'static + PoseidonArity,
+    Arity: PoseidonArity<Fr>,
 {
     hashes: Vec<Option<Fr>>,
     index: Option<usize>,
@@ -152,7 +152,7 @@ impl<H, Arity> SubPath<H, Arity>
 where
     H: Hasher,
     H::Domain: Domain<Field = Fr>,
-    Arity: 'static + PoseidonArity,
+    Arity: PoseidonArity<Fr>,
 {
     fn synthesize<CS: ConstraintSystem<Fr>>(
         self,
@@ -219,9 +219,9 @@ impl<H, U, V, W> AuthPath<H, U, V, W>
 where
     H: Hasher,
     H::Domain: Domain<Field = Fr>,
-    U: PoseidonArity,
-    V: PoseidonArity,
-    W: PoseidonArity,
+    U: PoseidonArity<Fr>,
+    V: PoseidonArity<Fr>,
+    W: PoseidonArity<Fr>,
 {
     pub fn blank(leaves: usize) -> Self {
         let has_sub = V::to_usize() > 0;

@@ -17,9 +17,9 @@ pub struct ColumnProof<H, U, V, W>
 where
     H: Hasher,
     H::Domain: Domain<Field = Fr>,
-    U: 'static + PoseidonArity,
-    V: 'static + PoseidonArity,
-    W: 'static + PoseidonArity,
+    U: PoseidonArity<Fr>,
+    V: PoseidonArity<Fr>,
+    W: PoseidonArity<Fr>,
 {
     column: Column,
     inclusion_path: AuthPath<H, U, V, W>,
@@ -29,9 +29,9 @@ impl<H, U, V, W> ColumnProof<H, U, V, W>
 where
     H: 'static + Hasher,
     H::Domain: Domain<Field = Fr>,
-    U: 'static + PoseidonArity,
-    V: 'static + PoseidonArity,
-    W: 'static + PoseidonArity,
+    U: PoseidonArity<Fr>,
+    V: PoseidonArity<Fr>,
+    W: PoseidonArity<Fr>,
 {
     /// Create an empty `ColumnProof`, used in `blank_circuit`s.
     pub fn empty<

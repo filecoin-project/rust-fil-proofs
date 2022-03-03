@@ -16,9 +16,9 @@ use crate::{
 
 pub struct EmptySectorUpdateCompound<U, V, W>
 where
-    U: PoseidonArity,
-    V: PoseidonArity,
-    W: PoseidonArity,
+    U: PoseidonArity<Fr>,
+    V: PoseidonArity<Fr>,
+    W: PoseidonArity<Fr>,
 {
     pub _tree_r: PhantomData<(U, V, W)>,
 }
@@ -26,9 +26,9 @@ where
 impl<U, V, W> CacheableParameters<EmptySectorUpdateCircuit<U, V, W>, PublicParams>
     for EmptySectorUpdateCompound<U, V, W>
 where
-    U: PoseidonArity,
-    V: PoseidonArity,
-    W: PoseidonArity,
+    U: PoseidonArity<Fr>,
+    V: PoseidonArity<Fr>,
+    W: PoseidonArity<Fr>,
 {
     fn cache_prefix() -> String {
         format!("empty-sector-update-{}", TreeR::<Fr, U, V, W>::display())
@@ -39,9 +39,9 @@ impl<'a, U, V, W>
     CompoundProof<'a, EmptySectorUpdate<Fr, U, V, W>, EmptySectorUpdateCircuit<U, V, W>>
     for EmptySectorUpdateCompound<U, V, W>
 where
-    U: PoseidonArity,
-    V: PoseidonArity,
-    W: PoseidonArity,
+    U: PoseidonArity<Fr>,
+    V: PoseidonArity<Fr>,
+    W: PoseidonArity<Fr>,
 {
     // Generates a partition circuit's public-inputs. If the `k` argument is `Some` we overwrite
     // `pub_inputs.k` with the `k` argument's value, otherwise if the `k` argument is `None` we use

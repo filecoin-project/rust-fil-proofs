@@ -26,7 +26,8 @@ log = "0.4.7"
 pretty_assertions = "1.2.0"
 generic-array = "0.14.4"
 anyhow = "1.0.23"
-neptune = { version = "~7.0.0", features = ["bls", "arity2", "arity4", "arity8", "arity11", "arity16", "arity24", "arity36"] }
+# neptune = { version = "~7.0.0", features = ["bls", "arity2", "arity4", "arity8", "arity11", "arity16", "arity24", "arity36"] }
+neptune = { git = "https://github.com/filecoin-project/neptune", branch = "fr-as-trait", features = ["bls", "pasta", "arity2", "arity4", "arity8", "arity11", "arity16", "arity24", "arity36"] }
 num_cpus = "1.10.1"
 hex = "0.4.2"
 bincode = "1.1.2"
@@ -39,7 +40,8 @@ fdlimit = "0.2.0"
 fr32 = { path = "../fr32", version = "~4.0.0", default-features = false }
 yastl = "0.1.2"
 blstrs = "0.5.0"
-pasta_curves = "0.3.0"
+# pasta_curves = "0.3.0"
+pasta_curves = { git = "https://github.com/vmx/pasta_curves", branch = "ec-gpu", features = ["gpu"] }
 typemap = "0.3.3"
 
 [target."cfg(target_arch = \"aarch64\")".dependencies]

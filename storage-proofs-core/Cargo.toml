@@ -41,6 +41,7 @@ semver = "1.0.6"
 fr32 = { path = "../fr32", version = "~4.0.0"}
 blstrs = "0.5.0"
 cbc = { version = "0.1.2", features = ["std"] }
+blstrs = { version = "0.4.0", features = ["gpu"] }
 
 [dev-dependencies]
 proptest = "1.0.0"
@@ -51,7 +52,8 @@ sha2raw = { path = "../sha2raw", version = "~6.0.0"}
 filecoin-hashers = { path = "../filecoin-hashers", version = "~6.0.0", default-features = false, features = ["blake2s", "sha256", "poseidon"] }
 tempfile = "3"
 blake2s_simd = "1.0.0"
-pasta_curves = "0.3.0"
+# pasta_curves = "0.3.0"
+pasta_curves = { git = "https://github.com/vmx/pasta_curves", branch = "ec-gpu", features = ["gpu"] }
 
 [features]
 default = ["opencl"]

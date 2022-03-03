@@ -24,66 +24,36 @@ type TreeBase<H, U> = MerkleTreeWrapper<H, DiskStore<<H as Hasher>::Domain>, U, 
 #[test]
 fn test_por_poseidon_base_2() {
     test_por::<TreeBase<PoseidonHasher<Fr>, U2>>();
+    test_por::<TreeBase<PoseidonHasher<Fp>, U2>>();
 }
 
 #[test]
 fn test_por_sha256_base_2() {
     test_por::<TreeBase<Sha256Hasher<Fr>, U2>>();
+    test_por::<TreeBase<Sha256Hasher<Fq>, U2>>();
 }
 
 #[test]
 fn test_por_blake2s_base_2() {
     test_por::<TreeBase<Blake2sHasher<Fr>, U2>>();
-}
-
-#[test]
-fn test_por_poseidon_base_2_halo() {
-    test_por::<TreeBase<PoseidonHasher<Fp>, U2>>();
-    test_por::<TreeBase<PoseidonHasher<Fq>, U2>>();
-}
-
-#[test]
-fn test_por_sha256_base_2_halo() {
-    test_por::<TreeBase<Sha256Hasher<Fp>, U2>>();
-    test_por::<TreeBase<Sha256Hasher<Fq>, U2>>();
-}
-
-#[test]
-fn test_por_blake2s_base_2_halo() {
     test_por::<TreeBase<Blake2sHasher<Fp>, U2>>();
-    test_por::<TreeBase<Blake2sHasher<Fq>, U2>>();
 }
 
 #[test]
 fn test_por_poseidon_base_4() {
     test_por::<TreeBase<PoseidonHasher<Fr>, U4>>();
+    test_por::<TreeBase<PoseidonHasher<Fq>, U4>>();
 }
 
 #[test]
 fn test_por_sha256_base_4() {
     test_por::<TreeBase<Sha256Hasher<Fr>, U4>>();
+    test_por::<TreeBase<Sha256Hasher<Fp>, U4>>();
 }
 
 #[test]
 fn test_por_blake2s_base_4() {
     test_por::<TreeBase<Blake2sHasher<Fr>, U4>>();
-}
-
-#[test]
-fn test_por_poseidon_base_4_halo() {
-    test_por::<TreeBase<PoseidonHasher<Fp>, U4>>();
-    test_por::<TreeBase<PoseidonHasher<Fq>, U4>>();
-}
-
-#[test]
-fn test_por_sha256_base_4_halo() {
-    test_por::<TreeBase<Sha256Hasher<Fp>, U4>>();
-    test_por::<TreeBase<Sha256Hasher<Fq>, U4>>();
-}
-
-#[test]
-fn test_por_blake2s_base_4_halo() {
-    test_por::<TreeBase<Blake2sHasher<Fp>, U4>>();
     test_por::<TreeBase<Blake2sHasher<Fq>, U4>>();
 }
 
@@ -128,66 +98,36 @@ fn test_por<Tree: MerkleTreeTrait>() {
 #[test]
 fn test_por_validates_proof_sha256_base_2() {
     test_por_validates_proof::<TreeBase<Sha256Hasher<Fr>, U2>>();
+    test_por_validates_proof::<TreeBase<Sha256Hasher<Fp>, U2>>();
 }
 
 #[test]
 fn test_por_validates_proof_blake2s_base_2() {
     test_por_validates_proof::<TreeBase<Blake2sHasher<Fr>, U2>>();
+    test_por_validates_proof::<TreeBase<Blake2sHasher<Fq>, U2>>();
 }
 
 #[test]
 fn test_por_validates_proof_poseidon_base_2() {
     test_por_validates_proof::<TreeBase<PoseidonHasher<Fr>, U2>>();
-}
-
-#[test]
-fn test_por_validates_proof_sha256_base_2_halo() {
-    test_por_validates_proof::<TreeBase<Sha256Hasher<Fp>, U2>>();
-    test_por_validates_proof::<TreeBase<Sha256Hasher<Fq>, U2>>();
-}
-
-#[test]
-fn test_por_validates_proof_blake2s_base_2_halo() {
-    test_por_validates_proof::<TreeBase<Blake2sHasher<Fp>, U2>>();
-    test_por_validates_proof::<TreeBase<Blake2sHasher<Fq>, U2>>();
-}
-
-#[test]
-fn test_por_validates_proof_poseidon_base_2_halo() {
     test_por_validates_proof::<TreeBase<PoseidonHasher<Fp>, U2>>();
-    test_por_validates_proof::<TreeBase<PoseidonHasher<Fq>, U2>>();
 }
 
 #[test]
 fn test_por_validates_proof_sha256_base_4() {
     test_por_validates_proof::<TreeBase<Sha256Hasher<Fr>, U4>>();
+    test_por_validates_proof::<TreeBase<Sha256Hasher<Fq>, U4>>();
 }
 
 #[test]
 fn test_por_validates_proof_blake2s_base_4() {
     test_por_validates_proof::<TreeBase<Blake2sHasher<Fr>, U4>>();
+    test_por_validates_proof::<TreeBase<Blake2sHasher<Fp>, U4>>();
 }
 
 #[test]
 fn test_por_validates_proof_poseidon_base_4() {
     test_por_validates_proof::<TreeBase<PoseidonHasher<Fr>, U4>>();
-}
-
-#[test]
-fn test_por_validates_proof_sha256_base_4_halo() {
-    test_por_validates_proof::<TreeBase<Sha256Hasher<Fp>, U4>>();
-    test_por_validates_proof::<TreeBase<Sha256Hasher<Fq>, U4>>();
-}
-
-#[test]
-fn test_por_validates_proof_blake2s_base_4_halo() {
-    test_por_validates_proof::<TreeBase<Blake2sHasher<Fp>, U4>>();
-    test_por_validates_proof::<TreeBase<Blake2sHasher<Fq>, U4>>();
-}
-
-#[test]
-fn test_por_validates_proof_poseidon_base_4_halo() {
-    test_por_validates_proof::<TreeBase<PoseidonHasher<Fp>, U4>>();
     test_por_validates_proof::<TreeBase<PoseidonHasher<Fq>, U4>>();
 }
 
@@ -248,66 +188,36 @@ fn test_por_validates_proof<Tree: MerkleTreeTrait>() {
 #[test]
 fn test_por_validates_challenge_sha256_base_2() {
     test_por_validates_challenge::<TreeBase<Sha256Hasher<Fr>, U2>>();
+    test_por_validates_challenge::<TreeBase<Sha256Hasher<Fp>, U2>>();
 }
 
 #[test]
 fn test_por_validates_challenge_blake2s_base_2() {
     test_por_validates_challenge::<TreeBase<Blake2sHasher<Fr>, U2>>();
+    test_por_validates_challenge::<TreeBase<Blake2sHasher<Fq>, U2>>();
 }
 
 #[test]
 fn test_por_validates_challenge_poseidon_base_2() {
     test_por_validates_challenge::<TreeBase<PoseidonHasher<Fr>, U2>>();
-}
-
-#[test]
-fn test_por_validates_challenge_sha256_base_2_halo() {
-    test_por_validates_challenge::<TreeBase<Sha256Hasher<Fp>, U2>>();
-    test_por_validates_challenge::<TreeBase<Sha256Hasher<Fq>, U2>>();
-}
-
-#[test]
-fn test_por_validates_challenge_blake2s_base_2_halo() {
-    test_por_validates_challenge::<TreeBase<Blake2sHasher<Fp>, U2>>();
-    test_por_validates_challenge::<TreeBase<Blake2sHasher<Fq>, U2>>();
-}
-
-#[test]
-fn test_por_validates_challenge_poseidon_base_2_halo() {
     test_por_validates_challenge::<TreeBase<PoseidonHasher<Fp>, U2>>();
-    test_por_validates_challenge::<TreeBase<PoseidonHasher<Fq>, U2>>();
 }
 
 #[test]
 fn test_por_validates_challenge_sha256_base_4() {
     test_por_validates_challenge::<TreeBase<Sha256Hasher<Fr>, U4>>();
+    test_por_validates_challenge::<TreeBase<Sha256Hasher<Fq>, U4>>();
 }
 
 #[test]
 fn test_por_validates_challenge_blake2s_base_4() {
     test_por_validates_challenge::<TreeBase<Blake2sHasher<Fr>, U4>>();
+    test_por_validates_challenge::<TreeBase<Blake2sHasher<Fp>, U4>>();
 }
 
 #[test]
 fn test_por_validates_challenge_poseidon_base_4() {
     test_por_validates_challenge::<TreeBase<PoseidonHasher<Fr>, U4>>();
-}
-
-#[test]
-fn test_por_validates_challenge_sha256_base_4_halo() {
-    test_por_validates_challenge::<TreeBase<Sha256Hasher<Fp>, U4>>();
-    test_por_validates_challenge::<TreeBase<Sha256Hasher<Fq>, U4>>();
-}
-
-#[test]
-fn test_por_validates_challenge_blake2s_base_4_halo() {
-    test_por_validates_challenge::<TreeBase<Blake2sHasher<Fp>, U4>>();
-    test_por_validates_challenge::<TreeBase<Blake2sHasher<Fq>, U4>>();
-}
-
-#[test]
-fn test_por_validates_challenge_poseidon_base_4_halo() {
-    test_por_validates_challenge::<TreeBase<PoseidonHasher<Fp>, U4>>();
     test_por_validates_challenge::<TreeBase<PoseidonHasher<Fq>, U4>>();
 }
 

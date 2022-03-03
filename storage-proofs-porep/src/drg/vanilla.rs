@@ -134,7 +134,11 @@ where
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DataProof<H: Hasher, U: PoseidonArity> {
+pub struct DataProof<H, U>
+where
+    H: Hasher,
+    U: PoseidonArity<<H::Domain as Domain>::Field>,
+{
     #[serde(bound(
         serialize = "MerkleProof<H, U>: Serialize",
         deserialize = "MerkleProof<H, U>: Deserialize<'de>"
@@ -143,7 +147,11 @@ pub struct DataProof<H: Hasher, U: PoseidonArity> {
     pub data: H::Domain,
 }
 
-impl<H: Hasher, U: 'static + PoseidonArity> DataProof<H, U> {
+impl<H, U> DataProof<H, U>
+where
+    H: Hasher,
+    U: PoseidonArity<<H::Domain as Domain>::Field>,
+{
     pub fn new(n: usize) -> Self {
         DataProof {
             proof: MerkleProof::new(n),
@@ -584,12 +592,16 @@ where
 /// Creates the encoding key from a `MerkleTree`.
 /// The algorithm for that is `Blake2s(id | encodedParentNode1 | encodedParentNode1 | ...)`.
 /// It is only public so that it can be used for benchmarking
-pub fn create_key_from_tree<H: Hasher, U: 'static + PoseidonArity>(
+pub fn create_key_from_tree<H, U>(
     id: &H::Domain,
     node: usize,
     parents: &[u32],
     tree: &LCMerkleTree<H, U>,
-) -> Result<H::Domain> {
+) -> Result<H::Domain>
+where
+    H: Hasher,
+    U: PoseidonArity<<H::Domain as Domain>::Field>,
+{
     let mut hasher = Sha256::new();
     hasher.update(AsRef::<[u8]>::as_ref(&id));
 

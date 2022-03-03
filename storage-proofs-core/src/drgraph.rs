@@ -3,7 +3,7 @@ use std::fmt::Debug;
 use std::marker::PhantomData;
 
 use anyhow::ensure;
-use filecoin_hashers::{Hasher, PoseidonArity};
+use filecoin_hashers::{Domain, Hasher, PoseidonArity};
 use fr32::bytes_into_fr_repr_safe;
 use generic_array::typenum::Unsigned;
 use merkletree::merkle::get_merkle_tree_row_count;
@@ -37,7 +37,10 @@ pub trait Graph<H: Hasher>: Debug + Clone + PartialEq + Eq {
     }
 
     /// Returns the merkle tree depth.
-    fn merkle_tree_depth<U: 'static + PoseidonArity>(&self) -> u64 {
+    fn merkle_tree_depth<U>(&self) -> u64
+    where
+        U: PoseidonArity<<H::Domain as Domain>::Field>,
+    {
         graph_height::<U>(self.size()) as u64
     }
 
@@ -365,7 +368,11 @@ mod tests {
         graph_bucket::<Blake2sHasher<Fq>>();
     }
 
-    fn gen_proof<H: 'static + Hasher, U: 'static + PoseidonArity>(config: Option<StoreConfig>) {
+    fn gen_proof<H, U>(config: Option<StoreConfig>)
+    where
+        H: 'static + Hasher,
+        U: PoseidonArity<<H::Domain as Domain>::Field>,
+    {
         let leafs = 64;
         let porep_id = [1; 32];
         let g = BucketGraph::<H>::new(leafs, BASE_DEGREE, 0, porep_id, ApiVersion::V1_1_0)

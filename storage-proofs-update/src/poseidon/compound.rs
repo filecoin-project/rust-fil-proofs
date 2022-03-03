@@ -20,9 +20,9 @@ use crate::{
 
 pub struct EmptySectorUpdateCompound<U, V, W>
 where
-    U: PoseidonArity,
-    V: PoseidonArity,
-    W: PoseidonArity,
+    U: PoseidonArity<Fr>,
+    V: PoseidonArity<Fr>,
+    W: PoseidonArity<Fr>,
 {
     pub _tree_r: PhantomData<(U, V, W)>,
 }
@@ -30,9 +30,9 @@ where
 impl<U, V, W> CacheableParameters<EmptySectorUpdateCircuit<U, V, W>, PublicParams>
     for EmptySectorUpdateCompound<U, V, W>
 where
-    U: PoseidonArity,
-    V: PoseidonArity,
-    W: PoseidonArity,
+    U: PoseidonArity<Fr>,
+    V: PoseidonArity<Fr>,
+    W: PoseidonArity<Fr>,
 {
     fn cache_prefix() -> String {
         format!(
@@ -46,9 +46,9 @@ impl<'a, U, V, W>
     CompoundProof<'a, EmptySectorUpdate<Fr, U, V, W>, EmptySectorUpdateCircuit<U, V, W>>
     for EmptySectorUpdateCompound<U, V, W>
 where
-    U: PoseidonArity,
-    V: PoseidonArity,
-    W: PoseidonArity,
+    U: PoseidonArity<Fr>,
+    V: PoseidonArity<Fr>,
+    W: PoseidonArity<Fr>,
 {
     fn generate_public_inputs(
         pub_inputs: &PublicInputs<Fr>,

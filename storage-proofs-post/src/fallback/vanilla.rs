@@ -2,7 +2,6 @@ use std::collections::BTreeSet;
 use std::marker::PhantomData;
 
 use anyhow::ensure;
-use blstrs::Scalar as Fr;
 use byteorder::{ByteOrder, LittleEndian};
 use filecoin_hashers::{Domain, HashFunction, Hasher};
 use generic_array::typenum::Unsigned;
@@ -150,7 +149,15 @@ impl<P: MerkleProofTrait> SectorProof<P> {
             .collect()
     }
 
-    pub fn as_options(&self) -> Vec<Vec<(Vec<Option<Fr>>, Option<usize>)>> {
+    #[allow(clippy::type_complexity)]
+    pub fn as_options(
+        &self,
+    ) -> Vec<
+        Vec<(
+            Vec<Option<<<P::Hasher as Hasher>::Domain as Domain>::Field>>,
+            Option<usize>,
+        )>,
+    > {
         self.inclusion_proofs
             .iter()
             .map(MerkleProofTrait::as_options)
