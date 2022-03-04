@@ -5,7 +5,7 @@ use bellperson::{
         aggregate::{
             aggregate_proofs, verify_aggregate_proof, AggregateProof, ProverSRS, VerifierSRS,
         },
-        create_random_proof_batch, create_random_proof_batch_in_priority, verify_proofs_batch,
+        create_proof_batch, create_proof_batch_in_priority, verify_proofs_batch,
         PreparedVerifyingKey,
     },
     Circuit,
@@ -16,6 +16,7 @@ use rand::{rngs::OsRng, RngCore};
 use rayon::prelude::{
     IndexedParallelIterator, IntoParallelIterator, IntoParallelRefIterator, ParallelIterator,
 };
+use ff::Field;
 
 use crate::{
     error::Result,
@@ -236,7 +237,6 @@ where
         groth_params: &groth16::MappedParameters<Bls12>,
         priority: bool,
     ) -> Result<Vec<groth16::Proof<Bls12>>> {
-        let mut rng = OsRng;
         ensure!(
             !vanilla_proofs.is_empty(),
             "cannot create a circuit proof over missing vanilla proofs"
@@ -256,10 +256,16 @@ where
             })
             .collect::<Result<Vec<_>>>()?;
 
+        let r_s = (0..circuits.len())
+            .map(|_| Fr::zero())
+            .collect();
+        let s_s = (0..circuits.len())
+            .map(|_| Fr::zero())
+            .collect();
         let groth_proofs = if priority {
-            create_random_proof_batch_in_priority(circuits, groth_params, &mut rng)?
+            create_proof_batch_in_priority(circuits, groth_params, r_s, s_s)?
         } else {
-            create_random_proof_batch(circuits, groth_params, &mut rng)?
+            create_proof_batch(circuits, groth_params, r_s, s_s)?
         };
 
         groth_proofs
