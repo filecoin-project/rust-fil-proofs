@@ -1,18 +1,26 @@
 use std::cmp::min;
+use std::fs::File;
 use std::io::{BufWriter, Seek, SeekFrom, Write};
 
 use filecoin_proofs::{
-    add_piece, seal_pre_commit_phase1, seal_pre_commit_phase2, validate_cache_for_precommit_phase2,
-    MerkleTreeTrait, PaddedBytesAmount, PieceInfo, PoRepConfig, PoRepProofPartitions,
-    PrivateReplicaInfo, PublicReplicaInfo, SealPreCommitOutput, SectorSize, UnpaddedBytesAmount,
-    POREP_PARTITIONS,
+    add_piece, fauxrep_aux, seal_pre_commit_phase1, seal_pre_commit_phase2,
+    validate_cache_for_precommit_phase2, MerkleTreeTrait, PaddedBytesAmount, PieceInfo,
+    PoRepConfig, PoRepProofPartitions, PrivateReplicaInfo, PublicReplicaInfo, SealPreCommitOutput,
+    SealPreCommitPhase1Output, SectorSize, UnpaddedBytesAmount, POREP_PARTITIONS,
 };
+use generic_array::typenum::Unsigned;
 use log::info;
+use merkletree::store::StoreConfig;
 use rand::{random, thread_rng, RngCore};
 use rayon::prelude::{
     IndexedParallelIterator, IntoParallelIterator, IntoParallelRefIterator, ParallelIterator,
 };
-use storage_proofs_core::{api_version::ApiVersion, sector::SectorId};
+use storage_proofs_core::{
+    api_version::ApiVersion,
+    sector::SectorId,
+    util::{default_rows_to_discard, NODE_SIZE},
+};
+use storage_proofs_porep::stacked::Labels;
 use tempfile::{tempdir, NamedTempFile};
 
 use crate::{measure, FuncMeasurement};
@@ -27,13 +35,13 @@ pub struct PreCommitReplicaOutput<Tree: 'static + MerkleTreeTrait> {
     pub public_replica_info: PublicReplicaInfo,
 }
 
-pub fn create_piece(piece_bytes: UnpaddedBytesAmount) -> NamedTempFile {
+pub fn create_piece(piece_bytes: UnpaddedBytesAmount, use_random: bool) -> NamedTempFile {
     info!("create_piece");
     let mut file = NamedTempFile::new().expect("failed to create piece file");
-    {
+    if use_random {
         let mut writer = BufWriter::new(&mut file);
         let mut len = u64::from(piece_bytes) as usize;
-        let chunk_size = 8 * 1024 * 1024;
+        let chunk_size = 256 * 1024 * 1024;
         let mut buffer = vec![0u8; chunk_size];
         thread_rng().fill_bytes(&mut buffer);
 
@@ -44,6 +52,10 @@ pub fn create_piece(piece_bytes: UnpaddedBytesAmount) -> NamedTempFile {
                 .expect("failed to write buffer");
             len -= to_write;
         }
+    } else {
+        let f = File::create(file.path()).expect("failed to create piece file");
+        f.set_len(u64::from(piece_bytes))
+            .expect("failed to set file length");
     }
     assert_eq!(
         u64::from(piece_bytes),
@@ -68,10 +80,17 @@ pub fn create_piece(piece_bytes: UnpaddedBytesAmount) -> NamedTempFile {
 pub fn create_replica<Tree: 'static + MerkleTreeTrait>(
     sector_size: u64,
     porep_id: [u8; 32],
+    fake_replica: bool,
     api_version: ApiVersion,
 ) -> (SectorId, PreCommitReplicaOutput<Tree>) {
-    let (_porep_config, result) =
-        create_replicas::<Tree>(SectorSize(sector_size), 1, false, porep_id, api_version);
+    let (_porep_config, result) = create_replicas::<Tree>(
+        SectorSize(sector_size),
+        1,
+        false,
+        fake_replica,
+        porep_id,
+        api_version,
+    );
     // Extract the sector ID and replica output out of the result
     result
         .expect("create_replicas() failed when called with only_add==false")
@@ -85,6 +104,7 @@ pub fn create_replicas<Tree: 'static + MerkleTreeTrait>(
     sector_size: SectorSize,
     qty_sectors: usize,
     only_add: bool,
+    fake_replicas: bool,
     porep_id: [u8; 32],
     api_version: ApiVersion,
 ) -> (
@@ -140,9 +160,10 @@ pub fn create_replicas<Tree: 'static + MerkleTreeTrait>(
     let piece_files: Vec<_> = (0..qty_sectors)
         .into_par_iter()
         .map(|_i| {
-            create_piece(UnpaddedBytesAmount::from(PaddedBytesAmount::from(
-                sector_size,
-            )))
+            create_piece(
+                UnpaddedBytesAmount::from(PaddedBytesAmount::from(sector_size)),
+                !fake_replicas,
+            )
         })
         .collect();
 
@@ -169,40 +190,93 @@ pub fn create_replicas<Tree: 'static + MerkleTreeTrait>(
     }
 
     let seal_pre_commit_outputs = measure(|| {
-        let phase1s = cache_dirs
-            .par_iter()
-            .zip(staged_files.par_iter())
-            .zip(sealed_files.par_iter())
-            .zip(sector_ids.par_iter())
-            .zip(piece_infos.par_iter())
-            .map(
-                |((((cache_dir, staged_file), sealed_file), sector_id), piece_infos)| {
-                    seal_pre_commit_phase1(
-                        porep_config,
-                        cache_dir,
-                        staged_file,
-                        sealed_file,
-                        PROVER_ID,
-                        *sector_id,
-                        TICKET_BYTES,
-                        piece_infos,
-                    )
-                },
-            )
-            .collect::<Result<Vec<_>, _>>()?;
+        if fake_replicas {
+            let mut rng = thread_rng();
 
-        phase1s
-            .into_iter()
-            .enumerate()
-            .map(|(i, phase1)| {
-                validate_cache_for_precommit_phase2::<_, _, Tree>(
-                    &cache_dirs[i],
-                    &sealed_files[i],
-                    &phase1,
-                )?;
-                seal_pre_commit_phase2(porep_config, phase1, &cache_dirs[i], &sealed_files[i])
-            })
-            .collect::<Result<Vec<_>, _>>()
+            let phase1s = cache_dirs
+                .par_iter()
+                .zip(sector_ids.par_iter())
+                .map(|(cache_dir, sector_id)| {
+                    let nodes = sector_size.0 as usize / NODE_SIZE;
+                    let mut tmp_store_config = StoreConfig::new(
+                        &cache_dir.path(),
+                        format!("tmp-config-{}", sector_id),
+                        default_rows_to_discard(nodes, Tree::Arity::to_usize()),
+                    );
+                    tmp_store_config.size = Some(u64::from(sector_size) as usize / NODE_SIZE);
+                    let f = File::create(StoreConfig::data_path(
+                        &tmp_store_config.path,
+                        &tmp_store_config.id,
+                    ))
+                    .expect("failed to create tmp file for fake sealing");
+                    f.set_len(u64::from(sector_size))
+                        .expect("failed to set file length");
+
+                    SealPreCommitPhase1Output {
+                        labels: Labels::new(vec![tmp_store_config.clone(); cache_dirs.len()]),
+                        config: tmp_store_config,
+                        comm_d: [0; 32],
+                    }
+                })
+                .collect::<Vec<_>>();
+
+            phase1s
+                .into_iter()
+                .enumerate()
+                .map(|(i, phase1)| {
+                    validate_cache_for_precommit_phase2::<_, _, Tree>(
+                        &cache_dirs[i],
+                        &sealed_files[i],
+                        &phase1,
+                    )?;
+                    let comm_r = fauxrep_aux::<_, _, _, Tree>(
+                        &mut rng,
+                        porep_config,
+                        &cache_dirs[i].path(),
+                        &sealed_files[i],
+                    )?;
+                    Ok(SealPreCommitOutput {
+                        comm_r,
+                        comm_d: phase1.comm_d,
+                    })
+                })
+                .collect::<Result<Vec<_>, _>>()
+        } else {
+            let phase1s = cache_dirs
+                .par_iter()
+                .zip(staged_files.par_iter())
+                .zip(sealed_files.par_iter())
+                .zip(sector_ids.par_iter())
+                .zip(piece_infos.par_iter())
+                .map(
+                    |((((cache_dir, staged_file), sealed_file), sector_id), piece_infos)| {
+                        seal_pre_commit_phase1(
+                            porep_config,
+                            cache_dir,
+                            staged_file,
+                            sealed_file,
+                            PROVER_ID,
+                            *sector_id,
+                            TICKET_BYTES,
+                            piece_infos,
+                        )
+                    },
+                )
+                .collect::<Result<Vec<_>, _>>()?;
+
+            phase1s
+                .into_iter()
+                .enumerate()
+                .map(|(i, phase1)| {
+                    validate_cache_for_precommit_phase2::<_, _, Tree>(
+                        &cache_dirs[i],
+                        &sealed_files[i],
+                        &phase1,
+                    )?;
+                    seal_pre_commit_phase2(porep_config, phase1, &cache_dirs[i], &sealed_files[i])
+                })
+                .collect::<Result<Vec<_>, _>>()
+        }
     })
     .expect("seal_pre_commit produced an error");
 

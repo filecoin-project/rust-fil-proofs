@@ -1,3 +1,4 @@
+use std::fs::{remove_dir_all, remove_file};
 use std::io::stdout;
 
 use anyhow::anyhow;
@@ -18,6 +19,7 @@ use storage_proofs_core::merkle::MerkleTreeTrait;
 #[serde(rename_all = "kebab-case")]
 struct Inputs {
     sector_size: u64,
+    fake_replica: bool,
 }
 
 #[derive(Serialize)]
@@ -48,6 +50,7 @@ impl Report {
 
 pub fn run_fallback_post_bench<Tree: 'static + MerkleTreeTrait>(
     sector_size: u64,
+    fake_replica: bool,
     api_version: ApiVersion,
 ) -> anyhow::Result<()> {
     if WINNING_POST_SECTOR_COUNT != 1 {
@@ -57,11 +60,11 @@ pub fn run_fallback_post_bench<Tree: 'static + MerkleTreeTrait>(
     }
     let arbitrary_porep_id = [66; 32];
     let (sector_id, replica_output) =
-        create_replica::<Tree>(sector_size, arbitrary_porep_id, api_version);
+        create_replica::<Tree>(sector_size, arbitrary_porep_id, fake_replica, api_version);
 
     // Store the replica's private and publicly facing info for proving and verifying respectively.
-    let pub_replica_info = vec![(sector_id, replica_output.public_replica_info)];
-    let priv_replica_info = vec![(sector_id, replica_output.private_replica_info)];
+    let pub_replica_info = vec![(sector_id, replica_output.public_replica_info.clone())];
+    let priv_replica_info = vec![(sector_id, replica_output.private_replica_info.clone())];
 
     let post_config = PoStConfig {
         sector_size: sector_size.into(),
@@ -100,10 +103,17 @@ pub fn run_fallback_post_bench<Tree: 'static + MerkleTreeTrait>(
     })
     .expect("failed to verify winning post proof");
 
+    // Clean-up sealed file and cache_dir.
+    remove_file(&replica_output.private_replica_info.replica_path())?;
+    remove_dir_all(&replica_output.private_replica_info.cache_dir_path())?;
+
     // Create a JSON serializable report that we print to stdout (that will later be parsed using
     // the CLI JSON parser `jq`).
     let report = Report {
-        inputs: Inputs { sector_size },
+        inputs: Inputs {
+            sector_size,
+            fake_replica,
+        },
         outputs: Outputs {
             gen_winning_post_cpu_time_ms: gen_winning_post_measurement.cpu_time.as_millis() as u64,
             gen_winning_post_wall_time_ms: gen_winning_post_measurement.wall_time.as_millis()
@@ -126,16 +136,17 @@ pub fn run_fallback_post_bench<Tree: 'static + MerkleTreeTrait>(
     Ok(())
 }
 
-pub fn run(sector_size: usize, api_version: ApiVersion) -> anyhow::Result<()> {
+pub fn run(sector_size: usize, fake_replica: bool, api_version: ApiVersion) -> anyhow::Result<()> {
     info!(
-        "Benchy Winning PoSt: sector-size={}, api_version={}",
-        sector_size, api_version
+        "Benchy Winning PoSt: sector-size={}, fake_replica={}, api_version={}",
+        sector_size, fake_replica, api_version
     );
 
     with_shape!(
         sector_size as u64,
         run_fallback_post_bench,
         sector_size as u64,
+        fake_replica,
         api_version,
     )
 }

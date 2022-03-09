@@ -140,7 +140,7 @@ fn threads_mode(parallel: u8, gpu_stealing: bool) {
 
     // Create fixtures only once for both threads
     let (sector_id, replica_output) =
-        create_replica::<MerkleTree>(SECTOR_SIZE, arbitrary_porep_id, FIXED_API_VERSION);
+        create_replica::<MerkleTree>(SECTOR_SIZE, arbitrary_porep_id, false, FIXED_API_VERSION);
     let priv_replica_info = (sector_id, replica_output.private_replica_info);
 
     // Put each proof into it's own scope (the other one is due to the if statement)

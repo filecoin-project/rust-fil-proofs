@@ -193,6 +193,7 @@ pub fn run(
         sector_size,
         inputs.num_sectors as usize,
         only_add_piece,
+        false, /* fake replica */
         arbitrary_porep_id,
         inputs.api_version(),
     );
