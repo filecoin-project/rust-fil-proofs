@@ -3,7 +3,7 @@ version: 2.1
 parameters:
   nightly-toolchain:
     type: string
-    default: "nightly-2021-04-24"
+    default: "nightly-2022-03-10"
 
 executors:
   default:
