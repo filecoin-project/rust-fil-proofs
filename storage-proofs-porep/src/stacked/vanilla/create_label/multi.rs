@@ -487,6 +487,8 @@ pub fn create_labels_for_encoding<Tree: 'static + MerkleTreeTrait, T: AsRef<[u8]
             parents_cache.finish_reset()?;
         }
 
+        parents_cache.store_consumer(0);
+
         create_layer_labels(
             &parents_cache,
             replica_id.as_ref(),
