@@ -23,12 +23,12 @@ rayon = "1.0.0"
 serde = { version = "1.0", features = ["derive"]}
 serde_json = "1.0"
 ff = "0.11.0"
-bellperson = "0.18.0"
+bellperson = "0.19.1"
 log = "0.4.7"
 pretty_assertions = "1.2.0"
 generic-array = "0.14.4"
 anyhow = "1.0.23"
-neptune = { version = "5.1.0", features = ["arity2", "arity4", "arity8", "arity11", "arity16", "arity24", "arity36"] }
+neptune = { version = "6.0.0", features = ["arity2", "arity4", "arity8", "arity11", "arity16", "arity24", "arity36"] }
 num_cpus = "1.10.1"
 hex = "0.4.2"
 bincode = "1.1.2"
@@ -59,8 +59,8 @@ filecoin-hashers = { path = "../filecoin-hashers", version = "^6.0.0", default-f
 
 [features]
 default = ["opencl", "multicore-sdr"]
-cuda = ["storage-proofs-core/cuda", "filecoin-hashers/cuda", "neptune/cuda", "bellperson/cuda", "fr32/cuda"]
-opencl = ["storage-proofs-core/opencl", "filecoin-hashers/opencl", "neptune/opencl", "bellperson/opencl", "fr32/opencl"]
+cuda = ["storage-proofs-core/cuda", "filecoin-hashers/cuda", "neptune/cuda", "bellperson/cuda"]
+opencl = ["storage-proofs-core/opencl", "filecoin-hashers/opencl", "neptune/opencl", "bellperson/opencl"]
 isolated-testing = []
 multicore-sdr = ["hwloc"]
 

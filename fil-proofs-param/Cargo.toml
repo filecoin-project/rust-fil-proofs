@@ -26,7 +26,6 @@ serde = { version = "1.0", features = ["rc", "derive"] }
 serde_json = "1.0"
 ff = "0.11.0"
 blake2b_simd = "1.0.0"
-bellperson = "0.18.0"
 log = "0.4.7"
 fil_logger = "0.1"
 env_proxy = "0.4"
@@ -68,5 +67,5 @@ cpu-profile = ["gperftools"]
 heap-profile = ["gperftools/heap"]
 simd = ["storage-proofs-core/simd"]
 asm = ["storage-proofs-core/asm"]
-cuda = ["storage-proofs-core/cuda", "storage-proofs-porep/cuda", "storage-proofs-post/cuda", "storage-proofs-update/cuda", "bellperson/cuda"]
-opencl = ["storage-proofs-core/opencl", "storage-proofs-porep/opencl", "storage-proofs-post/opencl", "storage-proofs-update/opencl", "bellperson/opencl"]
+cuda = ["storage-proofs-core/cuda", "storage-proofs-porep/cuda", "storage-proofs-post/cuda", "storage-proofs-update/cuda"]
+opencl = ["storage-proofs-core/opencl", "storage-proofs-porep/opencl", "storage-proofs-post/opencl", "storage-proofs-update/opencl"]

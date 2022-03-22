@@ -9,7 +9,6 @@ repository = "https://github.com/filecoin-project/rust-fil-proofs"
 
 [dependencies]
 anyhow = "1.0.23"
-bellperson = "0.18.0"
 byte-slice-cast = "1.0.0"
 byteorder = "1"
 ff = "0.11.0"
@@ -23,11 +22,6 @@ itertools = "0.10.3"
 pretty_assertions = "1.2.0"
 rand = "0.8"
 rand_xorshift = "0.3"
-
-[features]
-default = []
-cuda = ["bellperson/cuda"]
-opencl = ["bellperson/opencl"]
 
 [[bench]]
 name = "fr"
