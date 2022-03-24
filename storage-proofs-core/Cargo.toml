@@ -53,7 +53,7 @@ filecoin-hashers = { path = "../filecoin-hashers", version = "~7.0.0", default-f
 tempfile = "3"
 blake2s_simd = "1.0.0"
 # pasta_curves = "0.3.0"
-pasta_curves = { git = "https://github.com/vmx/pasta_curves", branch = "ec-gpu", features = ["gpu"] }
+pasta_curves = { git = "https://github.com/zcash/pasta_curves", rev = "2796b6b", features = ["gpu"] }
 
 [features]
 default = ["opencl"]
