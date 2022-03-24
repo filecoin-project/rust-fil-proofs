@@ -151,10 +151,7 @@ impl HashFunction<Sha256Domain> for Sha256Function {
     }
 
     fn hash2(a: &Sha256Domain, b: &Sha256Domain) -> Sha256Domain {
-        let hashed = Sha256::new()
-            .chain(AsRef::<[u8]>::as_ref(a))
-            .chain(AsRef::<[u8]>::as_ref(b))
-            .finalize();
+        let hashed = Sha256::new().chain_update(a).chain_update(b).finalize();
         let mut res = Sha256Domain::default();
         res.0.copy_from_slice(&hashed[..]);
         res.trim_to_fr32();
