@@ -11,8 +11,8 @@ categories = ["cryptography", "no-std"]
 edition = "2018"
 
 [dependencies]
-digest = "0.9"
-block-buffer = "0.9"
+digest = "0.10.3"
+block-buffer = "0.10.2"
 fake-simd = "0.1"
 opaque-debug = "0.3"
 sha2-asm = { version = "0.6", optional = true }
@@ -22,13 +22,13 @@ byteorder = "1.3.4"
 version = "1.4.0"
 
 [target.'cfg(target_arch = "x86_64")'.dependencies]
-cpuid-bool = "0.1.0"
+cpufeatures = "0.2.2"
 
 [dev-dependencies]
-digest = { version = "0.9", features = ["dev", "std"] }
-sha2 = "0.9.1"
-rand = "0.7.3"
-rand_xorshift = "0.2.0"
+digest = { version = "0.10.3", features = ["dev", "std"] }
+sha2 = "0.10.2"
+rand = "0.8.5"
+rand_xorshift = "0.3.0"
 
 [features]
 default = ["asm"]

@@ -1,6 +1,7 @@
-use aes::Aes256;
+use aes::cipher::block_padding::ZeroPadding;
+use aes::cipher::crypto_common::KeyIvInit;
+use aes::cipher::{BlockDecryptMut, BlockEncryptMut};
 use anyhow::{ensure, Context};
-use block_modes::{block_padding::ZeroPadding, BlockMode, Cbc};
 
 use crate::error::Result;
 
@@ -9,17 +10,19 @@ const IV: [u8; 16] = [0u8; 16];
 pub fn encode(key: &[u8], plaintext: &[u8]) -> Result<Vec<u8>> {
     ensure!(key.len() == 32, "invalid key length");
 
-    let mode = Cbc::<Aes256, ZeroPadding>::new_var(key, &IV).context("invalid key")?;
+    let mode = cbc::Encryptor::<aes::Aes256>::new_from_slices(key, &IV).context("invalid key")?;
 
-    Ok(mode.encrypt_vec(plaintext))
+    Ok(mode.encrypt_padded_vec_mut::<ZeroPadding>(plaintext))
 }
 
 pub fn decode(key: &[u8], ciphertext: &[u8]) -> Result<Vec<u8>> {
     ensure!(key.len() == 32, "invalid key length");
 
-    let mode = Cbc::<Aes256, ZeroPadding>::new_var(key, &IV).context("invalid key")?;
+    let mode = cbc::Decryptor::<aes::Aes256>::new_from_slices(key, &IV).context("invalid key")?;
 
-    let res = mode.decrypt_vec(ciphertext).context("failed to decrypt")?;
+    let res = mode
+        .decrypt_padded_vec_mut::<ZeroPadding>(ciphertext)
+        .context("failed to decrypt")?;
     Ok(res)
 }
 

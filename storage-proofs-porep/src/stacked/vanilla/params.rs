@@ -764,11 +764,11 @@ pub fn generate_replica_id<H: Hasher, T: AsRef<[u8]>>(
     porep_seed: &[u8; 32],
 ) -> H::Domain {
     let hash = Sha256::new()
-        .chain(prover_id)
-        .chain(&sector_id.to_be_bytes()[..])
-        .chain(ticket)
-        .chain(AsRef::<[u8]>::as_ref(&comm_d))
-        .chain(porep_seed)
+        .chain_update(prover_id)
+        .chain_update(&sector_id.to_be_bytes())
+        .chain_update(ticket)
+        .chain_update(&comm_d)
+        .chain_update(porep_seed)
         .finalize();
 
     bytes_into_fr_repr_safe(hash.as_ref()).into()

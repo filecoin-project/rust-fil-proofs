@@ -43,7 +43,9 @@ impl Implementation {
     pub fn sha_if_supported() -> Option<Self> {
         // Use raw_cpuid instead of is_x86_feature_detected, to ensure the check
         // never happens at compile time.
-        let is_runtime_ok = cpuid_bool::cpuid_bool!("sha");
+        cpufeatures::new!(cpuid_sha, "sha");
+
+        let is_runtime_ok = cpuid_sha::get();
 
         #[cfg(target_feature = "sha")]
         {
