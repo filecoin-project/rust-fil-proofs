@@ -12,6 +12,9 @@ use storage_proofs_core::{
 use storage_proofs_post::fallback::{
     self, FallbackPoSt, FallbackPoStCompound, PrivateSector, PublicSector,
 };
+use rayon::prelude::{
+    IntoParallelRefIterator, ParallelIterator,
+};
 
 use crate::{
     api::{
@@ -126,7 +129,7 @@ pub fn generate_window_post<Tree: 'static + MerkleTreeTrait>(
     let groth_params = get_post_params::<Tree>(post_config)?;
 
     let trees: Vec<_> = replicas
-        .iter()
+        .par_iter()
         .map(|(sector_id, replica)| {
             replica
                 .merkle_tree(post_config.sector_size)
