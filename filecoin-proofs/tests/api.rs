@@ -9,7 +9,7 @@ use bellperson::groth16;
 use bincode::serialize;
 use blstrs::{Bls12, Scalar as Fr};
 use ff::Field;
-use filecoin_hashers::Hasher;
+use filecoin_hashers::{Domain, Hasher};
 use filecoin_proofs::{
     add_piece, aggregate_seal_commit_proofs, clear_cache, compute_comm_d, decode_from, encode_into,
     fauxrep_aux, generate_empty_sector_update_proof,
@@ -292,7 +292,10 @@ fn seal_lifecycle<Tree: 'static + MerkleTreeTrait>(
     sector_size: u64,
     porep_id: &[u8; 32],
     api_version: ApiVersion,
-) -> Result<()> {
+) -> Result<()>
+where
+    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+{
     let mut rng = XorShiftRng::from_seed(TEST_SEED);
     let prover_fr: DefaultTreeDomain = Fr::random(&mut rng).into();
     let mut prover_id = [0u8; 32];
@@ -311,11 +314,14 @@ fn seal_lifecycle<Tree: 'static + MerkleTreeTrait>(
     Ok(())
 }
 
-fn seal_lifecycle_upgrade<Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher>>(
+fn seal_lifecycle_upgrade<Tree>(
     sector_size: u64,
     porep_id: &[u8; 32],
     api_version: ApiVersion,
-) -> Result<()> {
+) -> Result<()>
+where
+    Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher<Fr>>,
+{
     let mut rng = &mut XorShiftRng::from_seed(TEST_SEED);
     let prover_fr: DefaultTreeDomain = Fr::random(&mut rng).into();
     let mut prover_id = [0u8; 32];
@@ -512,12 +518,16 @@ fn test_seal_proof_aggregation_818_32kib_porep_id_v1_1_base_8() -> Result<()> {
 //    inner_test_seal_proof_aggregation_2kib_porep_id_v1_1_base_8(proofs_to_aggregate)
 //}
 
-fn aggregate_proofs<Tree: 'static + MerkleTreeTrait>(
+fn aggregate_proofs<Tree>(
     sector_size: u64,
     porep_id: &[u8; 32],
     api_version: ApiVersion,
     num_proofs_to_aggregate: usize,
-) -> Result<bool> {
+) -> Result<bool>
+where
+    Tree: 'static + MerkleTreeTrait,
+    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+{
     let mut rng = XorShiftRng::from_seed(TEST_SEED);
     let prover_fr: DefaultTreeDomain = Fr::random(&mut rng).into();
     let mut prover_id = [0u8; 32];
@@ -639,12 +649,15 @@ fn test_resumable_seal_v1_1() {
 ///
 /// The current code works on two layers only. The `layer_to_delete` specifies (zero-based) which
 /// layer should be deleted.
-fn run_resumable_seal<Tree: 'static + MerkleTreeTrait>(
+fn run_resumable_seal<Tree>(
     skip_proofs: bool,
     layer_to_delete: usize,
     porep_id: &[u8; 32],
     api_version: ApiVersion,
-) {
+) where
+    Tree: 'static + MerkleTreeTrait,
+    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+{
     init_logger();
 
     let sector_size = SECTOR_SIZE_2_KIB;
@@ -827,11 +840,11 @@ fn test_winning_post_empty_sector_challenge() -> Result<()> {
     Ok(())
 }
 
-fn winning_post<Tree: 'static + MerkleTreeTrait>(
-    sector_size: u64,
-    fake: bool,
-    api_version: ApiVersion,
-) -> Result<()> {
+fn winning_post<Tree>(sector_size: u64, fake: bool, api_version: ApiVersion) -> Result<()>
+where
+    Tree: 'static + MerkleTreeTrait,
+    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+{
     let mut rng = XorShiftRng::from_seed(TEST_SEED);
 
     let prover_fr: DefaultTreeDomain = Fr::random(&mut rng).into();
@@ -1239,13 +1252,17 @@ fn test_window_post_partition_matching_2kib_base_8() -> Result<()> {
     partition_window_post::<SectorShape2KiB>(sector_size, 3, sector_count, true, ApiVersion::V1_1_0)
 }
 
-fn partition_window_post<Tree: 'static + MerkleTreeTrait>(
+fn partition_window_post<Tree>(
     sector_size: u64,
     total_sector_count: usize,
     sector_count: usize,
     fake: bool,
     api_version: ApiVersion,
-) -> Result<()> {
+) -> Result<()>
+where
+    Tree: 'static + MerkleTreeTrait,
+    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+{
     use anyhow::anyhow;
 
     let mut rng = XorShiftRng::from_seed(TEST_SEED);
@@ -1366,13 +1383,17 @@ fn partition_window_post<Tree: 'static + MerkleTreeTrait>(
     Ok(())
 }
 
-fn window_post<Tree: 'static + MerkleTreeTrait>(
+fn window_post<Tree>(
     sector_size: u64,
     total_sector_count: usize,
     sector_count: usize,
     fake: bool,
     api_version: ApiVersion,
-) -> Result<()> {
+) -> Result<()>
+where
+    Tree: 'static + MerkleTreeTrait,
+    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+{
     let mut rng = XorShiftRng::from_seed(TEST_SEED);
 
     let mut sectors = Vec::with_capacity(total_sector_count);
@@ -1496,7 +1517,7 @@ fn porep_config(sector_size: u64, porep_id: [u8; 32], api_version: ApiVersion) -
     }
 }
 
-fn run_seal_pre_commit_phase1<Tree: 'static + MerkleTreeTrait>(
+fn run_seal_pre_commit_phase1<Tree>(
     config: PoRepConfig,
     prover_id: ProverId,
     sector_id: SectorId,
@@ -1504,7 +1525,11 @@ fn run_seal_pre_commit_phase1<Tree: 'static + MerkleTreeTrait>(
     cache_dir: &TempDir,
     mut piece_file: &mut NamedTempFile,
     sealed_sector_file: &NamedTempFile,
-) -> Result<(Vec<PieceInfo>, SealPreCommitPhase1Output<Tree>)> {
+) -> Result<(Vec<PieceInfo>, SealPreCommitPhase1Output<Tree>)>
+where
+    Tree: 'static + MerkleTreeTrait,
+    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+{
     let number_of_bytes_in_piece =
         UnpaddedBytesAmount::from(PaddedBytesAmount(config.sector_size.into()));
 
@@ -1542,7 +1567,7 @@ fn run_seal_pre_commit_phase1<Tree: 'static + MerkleTreeTrait>(
 }
 
 #[allow(clippy::too_many_arguments)]
-fn generate_proof<Tree: 'static + MerkleTreeTrait>(
+fn generate_proof<Tree>(
     config: PoRepConfig,
     cache_dir_path: &Path,
     sealed_sector_file: &NamedTempFile,
@@ -1552,7 +1577,11 @@ fn generate_proof<Tree: 'static + MerkleTreeTrait>(
     seed: [u8; 32],
     pre_commit_output: &SealPreCommitOutput,
     piece_infos: &[PieceInfo],
-) -> Result<(SealCommitOutput, Vec<Vec<Fr>>, [u8; 32], [u8; 32])> {
+) -> Result<(SealCommitOutput, Vec<Vec<Fr>>, [u8; 32], [u8; 32])>
+where
+    Tree: 'static + MerkleTreeTrait,
+    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+{
     let phase1_output = seal_commit_phase1::<_, Tree>(
         config,
         cache_dir_path,
@@ -1592,7 +1621,7 @@ fn generate_proof<Tree: 'static + MerkleTreeTrait>(
 }
 
 #[allow(clippy::too_many_arguments)]
-fn unseal<Tree: 'static + MerkleTreeTrait>(
+fn unseal<Tree>(
     config: PoRepConfig,
     cache_dir_path: &Path,
     sealed_sector_file: &NamedTempFile,
@@ -1604,7 +1633,11 @@ fn unseal<Tree: 'static + MerkleTreeTrait>(
     piece_infos: &[PieceInfo],
     piece_bytes: &[u8],
     commit_output: &SealCommitOutput,
-) -> Result<()> {
+) -> Result<()>
+where
+    Tree: 'static + MerkleTreeTrait,
+    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+{
     let comm_d = pre_commit_output.comm_d;
     let comm_r = pre_commit_output.comm_r;
 
@@ -1654,7 +1687,7 @@ fn unseal<Tree: 'static + MerkleTreeTrait>(
 }
 
 #[allow(clippy::too_many_arguments)]
-fn proof_and_unseal<Tree: 'static + MerkleTreeTrait>(
+fn proof_and_unseal<Tree>(
     config: PoRepConfig,
     cache_dir_path: &Path,
     sealed_sector_file: &NamedTempFile,
@@ -1665,7 +1698,11 @@ fn proof_and_unseal<Tree: 'static + MerkleTreeTrait>(
     pre_commit_output: SealPreCommitOutput,
     piece_infos: &[PieceInfo],
     piece_bytes: &[u8],
-) -> Result<()> {
+) -> Result<()>
+where
+    Tree: 'static + MerkleTreeTrait,
+    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+{
     let (commit_output, _commit_inputs, _seed, _comm_r) = generate_proof::<Tree>(
         config,
         cache_dir_path,
@@ -1693,14 +1730,19 @@ fn proof_and_unseal<Tree: 'static + MerkleTreeTrait>(
     )
 }
 
-fn create_seal<R: Rng, Tree: 'static + MerkleTreeTrait>(
+fn create_seal<R, Tree>(
     rng: &mut R,
     sector_size: u64,
     prover_id: ProverId,
     skip_proof: bool,
     porep_id: &[u8; 32],
     api_version: ApiVersion,
-) -> Result<(SectorId, NamedTempFile, Commitment, TempDir)> {
+) -> Result<(SectorId, NamedTempFile, Commitment, TempDir)>
+where
+    R: Rng,
+    Tree: 'static + MerkleTreeTrait,
+    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+{
     init_logger();
 
     let (mut piece_file, piece_bytes) = generate_piece_file(sector_size)?;
@@ -1754,13 +1796,18 @@ fn create_seal<R: Rng, Tree: 'static + MerkleTreeTrait>(
     Ok((sector_id, sealed_sector_file, comm_r, cache_dir))
 }
 
-fn create_seal_for_aggregation<R: Rng, Tree: 'static + MerkleTreeTrait>(
+fn create_seal_for_aggregation<R, Tree>(
     rng: &mut R,
     sector_size: u64,
     prover_id: ProverId,
     porep_id: &[u8; 32],
     api_version: ApiVersion,
-) -> Result<(SealCommitOutput, Vec<Vec<Fr>>, [u8; 32], [u8; 32])> {
+) -> Result<(SealCommitOutput, Vec<Vec<Fr>>, [u8; 32], [u8; 32])>
+where
+    R: Rng,
+    Tree: 'static + MerkleTreeTrait,
+    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+{
     init_logger();
 
     let (mut piece_file, _piece_bytes) = generate_piece_file(sector_size)?;
@@ -1842,13 +1889,17 @@ fn compare_elements(path1: &Path, path2: &Path) -> Result<(), Error> {
     Ok(())
 }
 
-fn create_seal_for_upgrade<R: Rng, Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher>>(
+fn create_seal_for_upgrade<R, Tree>(
     rng: &mut R,
     sector_size: u64,
     prover_id: ProverId,
     porep_id: &[u8; 32],
     api_version: ApiVersion,
-) -> Result<(SectorId, NamedTempFile, Commitment, TempDir)> {
+) -> Result<(SectorId, NamedTempFile, Commitment, TempDir)>
+where
+    R: Rng,
+    Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher<Fr>>,
+{
     init_logger();
 
     let (mut piece_file, _piece_bytes) = generate_piece_file(sector_size)?;
@@ -2072,12 +2123,17 @@ fn create_seal_for_upgrade<R: Rng, Tree: 'static + MerkleTreeTrait<Hasher = Tree
     Ok((sector_id, sealed_sector_file, comm_r, cache_dir))
 }
 
-fn create_fake_seal<R: rand::Rng, Tree: 'static + MerkleTreeTrait>(
+fn create_fake_seal<R, Tree>(
     mut rng: &mut R,
     sector_size: u64,
     porep_id: &[u8; 32],
     api_version: ApiVersion,
-) -> Result<(SectorId, NamedTempFile, Commitment, TempDir)> {
+) -> Result<(SectorId, NamedTempFile, Commitment, TempDir)>
+where
+    R: Rng,
+    Tree: 'static + MerkleTreeTrait,
+    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+{
     init_logger();
 
     let sealed_sector_file = NamedTempFile::new()?;

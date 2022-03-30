@@ -6,9 +6,11 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use anyhow::{ensure, Context};
 use bincode::{deserialize, serialize};
+use blstrs::Scalar as Fr;
 use fil_proofs_tooling::measure::FuncMeasurement;
 use fil_proofs_tooling::shared::{PROVER_ID, RANDOMNESS, TICKET_BYTES};
 use fil_proofs_tooling::{measure, Metadata};
+use filecoin_hashers::{Domain, Hasher};
 use filecoin_proofs::constants::{
     POREP_PARTITIONS, WINDOW_POST_CHALLENGE_COUNT, WINDOW_POST_SECTOR_COUNT,
 };
@@ -96,7 +98,7 @@ fn get_porep_config(sector_size: u64, api_version: ApiVersion) -> PoRepConfig {
     }
 }
 
-fn run_pre_commit_phases<Tree: 'static + MerkleTreeTrait>(
+fn run_pre_commit_phases<Tree>(
     sector_size: u64,
     api_version: ApiVersion,
     cache_dir: PathBuf,
@@ -104,7 +106,11 @@ fn run_pre_commit_phases<Tree: 'static + MerkleTreeTrait>(
     skip_precommit_phase2: bool,
     test_resume: bool,
     skip_staging: bool,
-) -> anyhow::Result<((u64, u64), (u64, u64), (u64, u64))> {
+) -> anyhow::Result<((u64, u64), (u64, u64), (u64, u64))>
+where
+    Tree: 'static + MerkleTreeTrait,
+    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+{
     let (seal_pre_commit_phase1_measurement_cpu_time, seal_pre_commit_phase1_measurement_wall_time): (u64, u64) = if skip_precommit_phase1 {
             // generate no-op measurements
         (0, 0)
@@ -335,7 +341,7 @@ fn run_pre_commit_phases<Tree: 'static + MerkleTreeTrait>(
 }
 
 #[allow(clippy::too_many_arguments)]
-pub fn run_window_post_bench<Tree: 'static + MerkleTreeTrait>(
+pub fn run_window_post_bench<Tree>(
     sector_size: u64,
     api_version: ApiVersion,
     cache_dir: PathBuf,
@@ -345,7 +351,11 @@ pub fn run_window_post_bench<Tree: 'static + MerkleTreeTrait>(
     skip_commit_phase1: bool,
     skip_commit_phase2: bool,
     test_resume: bool,
-) -> anyhow::Result<()> {
+) -> anyhow::Result<()>
+where
+    Tree: 'static + MerkleTreeTrait,
+    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+{
     let (
         (seal_pre_commit_phase1_cpu_time_ms, seal_pre_commit_phase1_wall_time_ms),
         (

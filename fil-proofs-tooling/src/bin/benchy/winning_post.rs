@@ -2,8 +2,10 @@ use std::fs::{remove_dir_all, remove_file};
 use std::io::stdout;
 
 use anyhow::anyhow;
+use blstrs::Scalar as Fr;
 use fil_proofs_tooling::shared::{create_replica, PROVER_ID, RANDOMNESS};
 use fil_proofs_tooling::{measure, Metadata};
+use filecoin_hashers::{Domain, Hasher};
 use filecoin_proofs::constants::{WINNING_POST_CHALLENGE_COUNT, WINNING_POST_SECTOR_COUNT};
 use filecoin_proofs::types::PoStConfig;
 use filecoin_proofs::{
@@ -48,11 +50,15 @@ impl Report {
     }
 }
 
-pub fn run_fallback_post_bench<Tree: 'static + MerkleTreeTrait>(
+pub fn run_fallback_post_bench<Tree>(
     sector_size: u64,
     fake_replica: bool,
     api_version: ApiVersion,
-) -> anyhow::Result<()> {
+) -> anyhow::Result<()>
+where
+    Tree: 'static + MerkleTreeTrait,
+    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+{
     if WINNING_POST_SECTOR_COUNT != 1 {
         return Err(anyhow!(
             "This benchmark only works with WINNING_POST_SECTOR_COUNT == 1"

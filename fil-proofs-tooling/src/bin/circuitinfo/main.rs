@@ -3,6 +3,7 @@ use std::str::FromStr;
 use bellperson::{util_cs::bench_cs::BenchCS, Circuit};
 use blstrs::Scalar as Fr;
 use dialoguer::{theme::ColorfulTheme, MultiSelect};
+use filecoin_hashers::{Domain, Hasher};
 use filecoin_proofs::{
     parameters::{public_params, window_post_public_params, winning_post_public_params},
     with_shape, DefaultPieceHasher, PaddedBytesAmount, PoRepConfig, PoRepProofPartitions,
@@ -36,7 +37,11 @@ fn circuit_info<C: Circuit<Fr>>(circuit: C) -> CircuitInfo {
     }
 }
 
-fn get_porep_info<Tree: 'static + MerkleTreeTrait>(porep_config: PoRepConfig) -> CircuitInfo {
+fn get_porep_info<Tree>(porep_config: PoRepConfig) -> CircuitInfo
+where
+    Tree: 'static + MerkleTreeTrait,
+    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+{
     info!("PoRep info");
 
     let public_params = public_params(
@@ -55,7 +60,11 @@ fn get_porep_info<Tree: 'static + MerkleTreeTrait>(porep_config: PoRepConfig) ->
     circuit_info(circuit)
 }
 
-fn get_winning_post_info<Tree: 'static + MerkleTreeTrait>(post_config: &PoStConfig) -> CircuitInfo {
+fn get_winning_post_info<Tree>(post_config: &PoStConfig) -> CircuitInfo
+where
+    Tree: 'static + MerkleTreeTrait,
+    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+{
     info!("Winning PoSt info");
 
     let post_public_params = winning_post_public_params::<Tree>(post_config)
@@ -69,7 +78,11 @@ fn get_winning_post_info<Tree: 'static + MerkleTreeTrait>(post_config: &PoStConf
     circuit_info(circuit)
 }
 
-fn get_window_post_info<Tree: 'static + MerkleTreeTrait>(post_config: &PoStConfig) -> CircuitInfo {
+fn get_window_post_info<Tree>(post_config: &PoStConfig) -> CircuitInfo
+where
+    Tree: 'static + MerkleTreeTrait,
+    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+{
     info!("Window PoSt info");
 
     let post_public_params = window_post_public_params::<Tree>(post_config)

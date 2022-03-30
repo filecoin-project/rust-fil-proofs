@@ -2,7 +2,9 @@ use std::env;
 use std::process::exit;
 use std::str::FromStr;
 
+use blstrs::Scalar as Fr;
 use dialoguer::{theme::ColorfulTheme, MultiSelect};
+use filecoin_hashers::{Domain, Hasher};
 use filecoin_proofs::{
     constants::{
         DefaultPieceHasher, POREP_PARTITIONS, PUBLISHED_SECTOR_SIZES, WINDOW_POST_CHALLENGE_COUNT,
@@ -22,14 +24,14 @@ use storage_proofs_core::{
 };
 use storage_proofs_porep::stacked::{StackedCircuit, StackedCompound, StackedDrg};
 use storage_proofs_post::fallback::{FallbackPoSt, FallbackPoStCircuit, FallbackPoStCompound};
-use storage_proofs_update::constants::TreeRHasher;
-use storage_proofs_update::{
-    circuit::EmptySectorUpdateCircuit, compound::EmptySectorUpdateCompound, EmptySectorUpdate,
-    PublicParams,
-};
+use storage_proofs_update::{constants::TreeRHasher, EmptySectorUpdateCompound};
 use structopt::StructOpt;
 
-fn cache_porep_params<Tree: 'static + MerkleTreeTrait>(porep_config: PoRepConfig) {
+fn cache_porep_params<Tree>(porep_config: PoRepConfig)
+where
+    Tree: 'static + MerkleTreeTrait,
+    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+{
     info!("generating PoRep groth params");
 
     let public_params = public_params(
@@ -66,7 +68,11 @@ fn cache_porep_params<Tree: 'static + MerkleTreeTrait>(porep_config: PoRepConfig
     .expect("failed to get verifying key");
 }
 
-fn cache_winning_post_params<Tree: 'static + MerkleTreeTrait>(post_config: &PoStConfig) {
+fn cache_winning_post_params<Tree>(post_config: &PoStConfig)
+where
+    Tree: 'static + MerkleTreeTrait,
+    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+{
     info!("generating Winning-PoSt groth params");
 
     let public_params = winning_post_public_params::<Tree>(post_config)
@@ -92,7 +98,11 @@ fn cache_winning_post_params<Tree: 'static + MerkleTreeTrait>(post_config: &PoSt
             .expect("failed to get verifying key");
 }
 
-fn cache_window_post_params<Tree: 'static + MerkleTreeTrait>(post_config: &PoStConfig) {
+fn cache_window_post_params<Tree>(post_config: &PoStConfig)
+where
+    Tree: 'static + MerkleTreeTrait,
+    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+{
     info!("generating Window-PoSt groth params");
 
     let public_params = window_post_public_params::<Tree>(post_config)
@@ -118,32 +128,36 @@ fn cache_window_post_params<Tree: 'static + MerkleTreeTrait>(post_config: &PoStC
             .expect("failed to get verifying key");
 }
 
-fn cache_empty_sector_update_params<Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher>>(
-    porep_config: PoRepConfig,
-) {
+fn cache_empty_sector_update_params<Tree>(porep_config: PoRepConfig)
+where
+    Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher<Fr>>,
+{
     info!("generating EmptySectorUpdate groth params");
 
-    let public_params: storage_proofs_update::PublicParams =
-        PublicParams::from_sector_size(u64::from(porep_config.sector_size));
+    let public_params =
+        storage_proofs_update::PublicParams::from_sector_size(u64::from(porep_config.sector_size));
 
-    let circuit = <EmptySectorUpdateCompound<Tree> as CompoundProof<
-        EmptySectorUpdate<Tree>,
-        EmptySectorUpdateCircuit<Tree>,
-    >>::blank_circuit(&public_params);
+    let circuit = EmptySectorUpdateCompound::<
+        Tree::Arity,
+        Tree::SubTreeArity,
+        Tree::TopTreeArity,
+    >::blank_circuit(&public_params);
 
-    let _ = <EmptySectorUpdateCompound<Tree> as CompoundProof<
-        EmptySectorUpdate<Tree>,
-        EmptySectorUpdateCircuit<Tree>,
-    >>::groth_params::<OsRng>(Some(&mut OsRng), &public_params)
+    let _ = EmptySectorUpdateCompound::<
+        Tree::Arity,
+        Tree::SubTreeArity,
+        Tree::TopTreeArity,
+    >::groth_params(Some(&mut OsRng), &public_params)
     .expect("failed to get groth params");
 
-    let _ = <EmptySectorUpdateCompound<Tree>>::get_param_metadata(circuit, &public_params)
+    let _ = EmptySectorUpdateCompound::get_param_metadata(circuit, &public_params)
         .expect("failed to get metadata");
 
-    let _ = <EmptySectorUpdateCompound<Tree> as CompoundProof<
-        EmptySectorUpdate<Tree>,
-        EmptySectorUpdateCircuit<Tree>,
-    >>::verifying_key::<OsRng>(Some(&mut OsRng), &public_params)
+    let _ = EmptySectorUpdateCompound::<
+        Tree::Arity,
+        Tree::SubTreeArity,
+        Tree::TopTreeArity,
+    >::verifying_key(Some(&mut OsRng), &public_params)
     .expect("failed to get verifying key");
 }
 

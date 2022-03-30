@@ -1,7 +1,9 @@
+use blstrs::Scalar as Fr;
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use filecoin_hashers::{blake2s::Blake2sHasher, sha256::Sha256Hasher, Hasher};
 #[cfg(feature = "cpu-profile")]
 use gperftools::profiler::PROFILER;
+use pasta_curves::Fp;
 use storage_proofs_core::{
     api_version::ApiVersion,
     drgraph::{Graph, BASE_DEGREE},
@@ -50,16 +52,28 @@ fn parents_loop_benchmark(c: &mut Criterion) {
     let mut group = c.benchmark_group("parents in a loop");
     for size in sizes {
         group.bench_function(format!("Blake2s-{}", size), |b| {
-            let graph = pregenerate_graph::<Blake2sHasher>(size, ApiVersion::V1_1_0);
+            let graph = pregenerate_graph::<Blake2sHasher<Fr>>(size, ApiVersion::V1_1_0);
             let mut parents = vec![0; graph.degree()];
             start_profile(&format!("parents-blake2s-{}", size));
-            b.iter(|| black_box(parents_loop::<Blake2sHasher, _>(&graph, &mut parents)));
+            b.iter(|| black_box(parents_loop::<Blake2sHasher<Fr>, _>(&graph, &mut parents)));
             stop_profile();
         });
         group.bench_function(format!("Sha256-{}", size), |b| {
-            let graph = pregenerate_graph::<Sha256Hasher>(size, ApiVersion::V1_1_0);
+            let graph = pregenerate_graph::<Sha256Hasher<Fr>>(size, ApiVersion::V1_1_0);
             let mut parents = vec![0; graph.degree()];
-            b.iter(|| black_box(parents_loop::<Sha256Hasher, _>(&graph, &mut parents)))
+            b.iter(|| black_box(parents_loop::<Sha256Hasher<Fr>, _>(&graph, &mut parents)))
+        });
+        group.bench_function(format!("Blake2s-pallas-{}", size), |b| {
+            let graph = pregenerate_graph::<Blake2sHasher<Fp>>(size, ApiVersion::V1_1_0);
+            let mut parents = vec![0; graph.degree()];
+            start_profile(&format!("parents-blake2s-{}", size));
+            b.iter(|| black_box(parents_loop::<Blake2sHasher<Fp>, _>(&graph, &mut parents)));
+            stop_profile();
+        });
+        group.bench_function(format!("Sha256-pallas-{}", size), |b| {
+            let graph = pregenerate_graph::<Sha256Hasher<Fp>>(size, ApiVersion::V1_1_0);
+            let mut parents = vec![0; graph.degree()];
+            b.iter(|| black_box(parents_loop::<Sha256Hasher<Fp>, _>(&graph, &mut parents)))
         });
     }
 

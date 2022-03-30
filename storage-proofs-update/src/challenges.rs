@@ -1,5 +1,6 @@
-use blstrs::Scalar as Fr;
-use ff::{PrimeField, PrimeFieldBits};
+use ff::PrimeFieldBits;
+use filecoin_hashers::{Domain, FieldArity};
+use generic_array::typenum::U2;
 use neptune::poseidon::Poseidon;
 
 use crate::constants::{
@@ -16,8 +17,12 @@ use crate::constants::{
 // partition-index (`partition_bits`) is appended onto the most-significant end of the random bits.
 // Random bits are generated using the Poseidon hash function; each digest generates the random bits
 // for `challenges_per_digest` number challenges.
-pub struct Challenges {
-    comm_r_new: TreeRDomain,
+pub struct Challenges<F>
+where
+    F: PrimeFieldBits,
+    TreeRDomain<F>: Domain<Field = F>,
+{
+    comm_r_new: TreeRDomain<F>,
     // The partition-index bits which are appended onto each challenges random bits.
     partition_bits: u32,
     // The number of bits to generate per challenge.
@@ -33,15 +38,19 @@ pub struct Challenges {
     challenges_remaining: usize,
 }
 
-impl Challenges {
-    pub fn new(sector_nodes: usize, comm_r_new: TreeRDomain, k: usize) -> Self {
+impl<F> Challenges<F>
+where
+    F: PrimeFieldBits,
+    TreeRDomain<F>: Domain<Field = F>,
+{
+    pub fn new(sector_nodes: usize, comm_r_new: TreeRDomain<F>, k: usize) -> Self {
         let partitions = partition_count(sector_nodes);
         assert!(k < partitions);
 
         let challenge_bit_len = sector_nodes.trailing_zeros() as usize;
         let partition_bit_len = partitions.trailing_zeros() as usize;
         let random_bits_per_challenge = challenge_bit_len - partition_bit_len;
-        let challenges_per_digest = Fr::CAPACITY as usize / random_bits_per_challenge;
+        let challenges_per_digest = F::CAPACITY as usize / random_bits_per_challenge;
 
         let partition_bits = (k << random_bits_per_challenge) as u32;
 
@@ -57,17 +66,17 @@ impl Challenges {
             challenges_per_digest,
             digest_index_all_partitions,
             i: 0,
-            digest_bits: Vec::with_capacity(Fr::NUM_BITS as usize),
+            digest_bits: Vec::with_capacity(F::NUM_BITS as usize),
             challenges_remaining: challenge_count,
         }
     }
 
-    pub fn new_poseidon(sector_nodes: usize, comm_r_new: TreeRDomain) -> Self {
+    pub fn new_poseidon(sector_nodes: usize, comm_r_new: TreeRDomain<F>) -> Self {
         let repeats = partition_count(sector_nodes);
 
         let challenge_bit_len = sector_nodes.trailing_zeros() as usize;
         let random_bits_per_challenge = challenge_bit_len;
-        let challenges_per_digest = Fr::CAPACITY as usize / random_bits_per_challenge;
+        let challenges_per_digest = F::CAPACITY as usize / random_bits_per_challenge;
 
         let challenge_count = challenge_count(sector_nodes) * repeats;
         let digest_index_all_partitions = 0;
@@ -79,13 +88,17 @@ impl Challenges {
             challenges_per_digest,
             digest_index_all_partitions,
             i: 0,
-            digest_bits: Vec::with_capacity(Fr::NUM_BITS as usize),
+            digest_bits: Vec::with_capacity(F::NUM_BITS as usize),
             challenges_remaining: challenge_count,
         }
     }
 }
 
-impl Iterator for Challenges {
+impl<F> Iterator for Challenges<F>
+where
+    F: PrimeFieldBits,
+    TreeRDomain<F>: Domain<Field = F>,
+{
     // All sector-sizes have challenges that fit within 32 bits.
     type Item = u32;
 
@@ -96,12 +109,12 @@ impl Iterator for Challenges {
 
         // `digest = H(comm_r_new || digest_index)` where `digest_index` is across all partitions.
         if self.i == 0 {
-            let digest_index = Fr::from(self.digest_index_all_partitions as u64);
-            let digest = Poseidon::new_with_preimage(
-                &[self.comm_r_new.into(), digest_index],
-                &POSEIDON_CONSTANTS_GEN_RANDOMNESS,
-            )
-            .hash();
+            let digest_index = F::from(self.digest_index_all_partitions as u64);
+            let consts = POSEIDON_CONSTANTS_GEN_RANDOMNESS
+                .get::<FieldArity<F, U2>>()
+                .expect("arity-2 Poseidon constants not found for field");
+            let digest =
+                Poseidon::new_with_preimage(&[self.comm_r_new.into(), digest_index], consts).hash();
             self.digest_bits = digest.to_le_bits().into_iter().collect();
         }
 
@@ -137,6 +150,7 @@ mod tests {
 
     use std::collections::HashMap;
 
+    use blstrs::Scalar as Fr;
     use filecoin_hashers::Domain;
     use rand::SeedableRng;
     use rand_xorshift::XorShiftRng;
@@ -155,7 +169,7 @@ mod tests {
         type PartitionIndex = usize;
 
         let mut rng = XorShiftRng::from_seed(TEST_SEED);
-        let comm_r_new = TreeRDomain::random(&mut rng);
+        let comm_r_new = TreeRDomain::<Fr>::random(&mut rng);
 
         let test_vectors: HashMap<(SectorNodes, PartitionIndex), [u32; 5]> = {
             let mut hm = HashMap::new();
@@ -254,7 +268,7 @@ mod tests {
         let mut rng = XorShiftRng::from_seed(TEST_SEED);
 
         for sector_nodes in ALLOWED_SECTOR_SIZES.iter().copied() {
-            let comm_r_new = TreeRDomain::random(&mut rng);
+            let comm_r_new = TreeRDomain::<Fr>::random(&mut rng);
 
             let partitions = partition_count(sector_nodes);
             let partition_challenges = challenge_count(sector_nodes);

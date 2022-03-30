@@ -25,42 +25,43 @@ use tempfile::tempdir;
 
 #[test]
 fn test_fallback_post_circuit_poseidon_single_partition_base_8() {
-    test_fallback_post::<LCTree<PoseidonHasher, U8, U0, U0>>(3, 3, 1, 19, 16_869);
+    test_fallback_post::<LCTree<PoseidonHasher<Fr>, U8, U0, U0>>(3, 3, 1, 19, 16_869);
 }
 
 #[test]
 fn test_fallback_post_circuit_poseidon_single_partition_sub_8_4() {
-    test_fallback_post::<LCTree<PoseidonHasher, U8, U4, U0>>(3, 3, 1, 19, 22_674);
+    test_fallback_post::<LCTree<PoseidonHasher<Fr>, U8, U4, U0>>(3, 3, 1, 19, 22_674);
 }
 
 #[test]
 fn test_fallback_post_circuit_poseidon_single_partition_top_8_4_2() {
-    test_fallback_post::<LCTree<PoseidonHasher, U8, U4, U2>>(3, 3, 1, 19, 27_384);
+    test_fallback_post::<LCTree<PoseidonHasher<Fr>, U8, U4, U2>>(3, 3, 1, 19, 27_384);
 }
 
 #[test]
 fn test_fallback_post_circuit_poseidon_two_partitions_base_8() {
-    test_fallback_post::<LCTree<PoseidonHasher, U8, U0, U0>>(4, 2, 2, 13, 11_246);
+    test_fallback_post::<LCTree<PoseidonHasher<Fr>, U8, U0, U0>>(4, 2, 2, 13, 11_246);
 }
 
 #[test]
 fn test_fallback_post_circuit_poseidon_single_partition_smaller_base_8() {
-    test_fallback_post::<LCTree<PoseidonHasher, U8, U0, U0>>(2, 3, 1, 19, 16_869);
+    test_fallback_post::<LCTree<PoseidonHasher<Fr>, U8, U0, U0>>(2, 3, 1, 19, 16_869);
 }
 
 #[test]
 fn test_fallback_post_circuit_poseidon_two_partitions_smaller_base_8() {
-    test_fallback_post::<LCTree<PoseidonHasher, U8, U0, U0>>(5, 3, 2, 19, 16_869);
+    test_fallback_post::<LCTree<PoseidonHasher<Fr>, U8, U0, U0>>(5, 3, 2, 19, 16_869);
 }
 
-fn test_fallback_post<Tree: 'static + MerkleTreeTrait>(
+fn test_fallback_post<Tree>(
     total_sector_count: usize,
     sector_count: usize,
     partitions: usize,
     expected_num_inputs: usize,
     expected_constraints: usize,
 ) where
-    Tree::Store: 'static,
+    Tree: 'static + MerkleTreeTrait,
+    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
 {
     let rng = &mut XorShiftRng::from_seed(TEST_SEED);
 
@@ -211,11 +212,11 @@ fn test_fallback_post_circuit_poseidon_base_8_bench_cs() {
         api_version: ApiVersion::V1_1_0,
     };
 
-    let pp = FallbackPoSt::<OctMerkleTree<PoseidonHasher>>::setup(&params)
+    let pp = FallbackPoSt::<OctMerkleTree<PoseidonHasher<Fr>>>::setup(&params)
         .expect("fallback post setup failure");
 
     let mut cs = BenchCS::<Fr>::new();
-    FallbackPoStCompound::<OctMerkleTree<PoseidonHasher>>::blank_circuit(&pp)
+    FallbackPoStCompound::<OctMerkleTree<PoseidonHasher<Fr>>>::blank_circuit(&pp)
         .synthesize(&mut cs)
         .expect("blank circuit failure");
 

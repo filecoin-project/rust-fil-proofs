@@ -192,7 +192,9 @@ mod tests {
     use std::io::Cursor;
 
     use bitvec::{order::Lsb0 as LittleEndian, vec::BitVec};
+    use ff::PrimeField;
     use itertools::Itertools;
+    use pasta_curves::{Fp, Fq};
     use pretty_assertions::assert_eq;
     use rand::random;
 
@@ -356,14 +358,29 @@ mod tests {
     fn validate_fr32(bytes: &[u8]) {
         let chunks = (bytes.len() as f64 / 32_f64).ceil() as usize;
         for (i, chunk) in bytes.chunks(32).enumerate() {
-            let _ = bytes_into_fr(chunk).unwrap_or_else(|_| {
-                panic!(
-                    "chunk {}/{} cannot be converted to valid Fr: {:?}",
-                    i + 1,
-                    chunks,
-                    chunk
-                )
-            });
+            assert!(
+                bytes_into_fr(chunk).is_ok(),
+                "chunk {}/{} cannot be converted to valid Fr: {:?}",
+                i + 1,
+                chunks,
+                chunk,
+            );
+            let mut repr = [0u8; 32];
+            repr.copy_from_slice(chunk);
+            assert!(
+                Fp::from_repr_vartime(repr).is_some(),
+                "chunk {}/{} cannot be converted to valid Fp (Pallas): {:?}",
+                i + i,
+                chunks,
+                chunk,
+            );
+            assert!(
+                Fq::from_repr_vartime(repr).is_some(),
+                "chunk {}/{} cannot be converted to valid Fq (Vesta): {:?}",
+                i + i,
+                chunks,
+                chunk,
+            );
         }
     }
 

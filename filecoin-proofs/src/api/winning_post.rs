@@ -1,5 +1,6 @@
 use anyhow::{ensure, Context, Result};
-use filecoin_hashers::Hasher;
+use blstrs::Scalar as Fr;
+use filecoin_hashers::{Domain, Hasher};
 use log::info;
 use storage_proofs_core::{
     compound_proof::{self, CompoundProof},
@@ -29,7 +30,10 @@ pub fn generate_winning_post_with_vanilla<Tree: 'static + MerkleTreeTrait>(
     randomness: &ChallengeSeed,
     prover_id: ProverId,
     vanilla_proofs: Vec<FallbackPoStSectorProof<Tree>>,
-) -> Result<SnarkProof> {
+) -> Result<SnarkProof>
+where
+    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+{
     info!("generate_winning_post_with_vanilla:start");
     ensure!(
         post_config.typ == PoStType::Winning,
@@ -100,7 +104,10 @@ pub fn generate_winning_post<Tree: 'static + MerkleTreeTrait>(
     randomness: &ChallengeSeed,
     replicas: &[(SectorId, PrivateReplicaInfo<Tree>)],
     prover_id: ProverId,
-) -> Result<SnarkProof> {
+) -> Result<SnarkProof>
+where
+    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+{
     info!("generate_winning_post:start");
     ensure!(
         post_config.typ == PoStType::Winning,
@@ -192,7 +199,10 @@ pub fn generate_winning_post_sector_challenge<Tree: MerkleTreeTrait>(
     randomness: &ChallengeSeed,
     sector_set_size: u64,
     prover_id: Commitment,
-) -> Result<Vec<u64>> {
+) -> Result<Vec<u64>>
+where
+    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+{
     info!("generate_winning_post_sector_challenge:start");
     ensure!(sector_set_size != 0, "empty sector set is invalid");
     ensure!(
@@ -228,7 +238,10 @@ pub fn verify_winning_post<Tree: 'static + MerkleTreeTrait>(
     replicas: &[(SectorId, PublicReplicaInfo)],
     prover_id: ProverId,
     proof: &[u8],
-) -> Result<bool> {
+) -> Result<bool>
+where
+    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+{
     info!("verify_winning_post:start");
 
     ensure!(

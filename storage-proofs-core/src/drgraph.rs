@@ -3,7 +3,7 @@ use std::fmt::Debug;
 use std::marker::PhantomData;
 
 use anyhow::ensure;
-use filecoin_hashers::{Hasher, PoseidonArity};
+use filecoin_hashers::{Domain, Hasher, PoseidonArity};
 use fr32::bytes_into_fr_repr_safe;
 use generic_array::typenum::Unsigned;
 use merkletree::merkle::get_merkle_tree_row_count;
@@ -37,7 +37,10 @@ pub trait Graph<H: Hasher>: Debug + Clone + PartialEq + Eq {
     }
 
     /// Returns the merkle tree depth.
-    fn merkle_tree_depth<U: 'static + PoseidonArity>(&self) -> u64 {
+    fn merkle_tree_depth<U>(&self) -> u64
+    where
+        U: PoseidonArity<<H::Domain as Domain>::Field>,
+    {
         graph_height::<U>(self.size()) as u64
     }
 
@@ -255,12 +258,14 @@ pub fn derive_drg_seed(porep_id: PoRepID) -> [u8; 28] {
 mod tests {
     use super::*;
 
+    use blstrs::Scalar as Fr;
     use filecoin_hashers::{
         blake2s::Blake2sHasher, poseidon::PoseidonHasher, sha256::Sha256Hasher,
     };
     use generic_array::typenum::{U0, U2, U4, U8};
     use memmap::{MmapMut, MmapOptions};
     use merkletree::store::StoreConfig;
+    use pasta_curves::{Fp, Fq};
 
     use crate::merkle::{
         create_base_merkle_tree, DiskStore, MerkleProofTrait, MerkleTreeTrait, MerkleTreeWrapper,
@@ -351,15 +356,23 @@ mod tests {
 
     #[test]
     fn graph_bucket_sha256() {
-        graph_bucket::<Sha256Hasher>();
+        graph_bucket::<Sha256Hasher<Fr>>();
+        graph_bucket::<Sha256Hasher<Fp>>();
+        graph_bucket::<Sha256Hasher<Fq>>();
     }
 
     #[test]
     fn graph_bucket_blake2s() {
-        graph_bucket::<Blake2sHasher>();
+        graph_bucket::<Blake2sHasher<Fr>>();
+        graph_bucket::<Blake2sHasher<Fp>>();
+        graph_bucket::<Blake2sHasher<Fq>>();
     }
 
-    fn gen_proof<H: 'static + Hasher, U: 'static + PoseidonArity>(config: Option<StoreConfig>) {
+    fn gen_proof<H, U>(config: Option<StoreConfig>)
+    where
+        H: 'static + Hasher,
+        U: PoseidonArity<<H::Domain as Domain>::Field>,
+    {
         let leafs = 64;
         let porep_id = [1; 32];
         let g = BucketGraph::<H>::new(leafs, BASE_DEGREE, 0, porep_id, ApiVersion::V1_1_0)
@@ -381,36 +394,50 @@ mod tests {
 
     #[test]
     fn gen_proof_poseidon_binary() {
-        gen_proof::<PoseidonHasher, U2>(None);
+        gen_proof::<PoseidonHasher<Fr>, U2>(None);
+        gen_proof::<PoseidonHasher<Fp>, U2>(None);
+        gen_proof::<PoseidonHasher<Fq>, U2>(None);
     }
 
     #[test]
     fn gen_proof_sha256_binary() {
-        gen_proof::<Sha256Hasher, U2>(None);
+        gen_proof::<Sha256Hasher<Fr>, U2>(None);
+        gen_proof::<Sha256Hasher<Fp>, U2>(None);
+        gen_proof::<Sha256Hasher<Fq>, U2>(None);
     }
 
     #[test]
     fn gen_proof_blake2s_binary() {
-        gen_proof::<Blake2sHasher, U2>(None);
+        gen_proof::<Blake2sHasher<Fr>, U2>(None);
+        gen_proof::<Blake2sHasher<Fp>, U2>(None);
+        gen_proof::<Blake2sHasher<Fq>, U2>(None);
     }
 
     #[test]
     fn gen_proof_poseidon_quad() {
-        gen_proof::<PoseidonHasher, U4>(None);
+        gen_proof::<PoseidonHasher<Fr>, U4>(None);
+        gen_proof::<PoseidonHasher<Fp>, U4>(None);
+        gen_proof::<PoseidonHasher<Fq>, U4>(None);
     }
 
     #[test]
     fn gen_proof_sha256_quad() {
-        gen_proof::<Sha256Hasher, U4>(None);
+        gen_proof::<Sha256Hasher<Fr>, U4>(None);
+        gen_proof::<Sha256Hasher<Fp>, U4>(None);
+        gen_proof::<Sha256Hasher<Fq>, U4>(None);
     }
 
     #[test]
     fn gen_proof_blake2s_quad() {
-        gen_proof::<Blake2sHasher, U4>(None);
+        gen_proof::<Blake2sHasher<Fr>, U4>(None);
+        gen_proof::<Blake2sHasher<Fp>, U4>(None);
+        gen_proof::<Blake2sHasher<Fq>, U4>(None);
     }
 
     #[test]
     fn gen_proof_poseidon_oct() {
-        gen_proof::<PoseidonHasher, U8>(None);
+        gen_proof::<PoseidonHasher<Fr>, U8>(None);
+        gen_proof::<PoseidonHasher<Fp>, U8>(None);
+        gen_proof::<PoseidonHasher<Fq>, U8>(None);
     }
 }

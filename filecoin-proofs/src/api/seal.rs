@@ -50,7 +50,7 @@ use crate::{
 };
 
 #[allow(clippy::too_many_arguments)]
-pub fn seal_pre_commit_phase1<R, S, T, Tree: 'static + MerkleTreeTrait>(
+pub fn seal_pre_commit_phase1<R, S, T, Tree>(
     porep_config: PoRepConfig,
     cache_path: R,
     in_path: S,
@@ -64,6 +64,8 @@ where
     R: AsRef<Path>,
     S: AsRef<Path>,
     T: AsRef<Path>,
+    Tree: 'static + MerkleTreeTrait,
+    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
 {
     info!("seal_pre_commit_phase1:start: {:?}", sector_id);
 
@@ -198,7 +200,7 @@ where
 }
 
 #[allow(clippy::too_many_arguments)]
-pub fn seal_pre_commit_phase2<R, S, Tree: 'static + MerkleTreeTrait>(
+pub fn seal_pre_commit_phase2<R, S, Tree>(
     porep_config: PoRepConfig,
     phase1_output: SealPreCommitPhase1Output<Tree>,
     cache_path: S,
@@ -207,6 +209,8 @@ pub fn seal_pre_commit_phase2<R, S, Tree: 'static + MerkleTreeTrait>(
 where
     R: AsRef<Path>,
     S: AsRef<Path>,
+    Tree: 'static + MerkleTreeTrait,
+    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
 {
     info!("seal_pre_commit_phase2:start");
 
@@ -322,7 +326,7 @@ where
 }
 
 #[allow(clippy::too_many_arguments)]
-pub fn seal_commit_phase1<T: AsRef<Path>, Tree: 'static + MerkleTreeTrait>(
+pub fn seal_commit_phase1<T, Tree>(
     porep_config: PoRepConfig,
     cache_path: T,
     replica_path: T,
@@ -332,7 +336,12 @@ pub fn seal_commit_phase1<T: AsRef<Path>, Tree: 'static + MerkleTreeTrait>(
     seed: Ticket,
     pre_commit: SealPreCommitOutput,
     piece_infos: &[PieceInfo],
-) -> Result<SealCommitPhase1Output<Tree>> {
+) -> Result<SealCommitPhase1Output<Tree>>
+where
+    T: AsRef<Path>,
+    Tree: 'static + MerkleTreeTrait,
+    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+{
     info!("seal_commit_phase1:start: {:?}", sector_id);
 
     // Sanity check all input path types.
@@ -450,12 +459,16 @@ pub fn seal_commit_phase1<T: AsRef<Path>, Tree: 'static + MerkleTreeTrait>(
 }
 
 #[allow(clippy::too_many_arguments)]
-pub fn seal_commit_phase2<Tree: 'static + MerkleTreeTrait>(
+pub fn seal_commit_phase2<Tree>(
     porep_config: PoRepConfig,
     phase1_output: SealCommitPhase1Output<Tree>,
     prover_id: ProverId,
     sector_id: SectorId,
-) -> Result<SealCommitOutput> {
+) -> Result<SealCommitOutput>
+where
+    Tree: 'static + MerkleTreeTrait,
+    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+{
     info!("seal_commit_phase2:start: {:?}", sector_id);
 
     let SealCommitPhase1Output {
@@ -560,7 +573,7 @@ pub fn seal_commit_phase2<Tree: 'static + MerkleTreeTrait>(
 /// * `sector_id` - the sector_id of this sector.
 /// * `ticket` - the ticket used to generate this sector's replica-id.
 /// * `seed` - the seed used to derive the porep challenges.
-pub fn get_seal_inputs<Tree: 'static + MerkleTreeTrait>(
+pub fn get_seal_inputs<Tree>(
     porep_config: PoRepConfig,
     comm_r: Commitment,
     comm_d: Commitment,
@@ -568,7 +581,11 @@ pub fn get_seal_inputs<Tree: 'static + MerkleTreeTrait>(
     sector_id: SectorId,
     ticket: Ticket,
     seed: Ticket,
-) -> Result<Vec<Vec<Fr>>> {
+) -> Result<Vec<Vec<Fr>>>
+where
+    Tree: 'static + MerkleTreeTrait,
+    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+{
     trace!("get_seal_inputs:start");
 
     ensure!(comm_d != [0; 32], "Invalid all zero commitment (comm_d)");
@@ -719,12 +736,16 @@ fn pad_inputs_to_target(
 /// * `porep_config` - this sector's porep config that contains the number of bytes in the sector.
 /// * `seeds` - an ordered list of seeds used to derive the PoRep challenges.
 /// * `commit_outputs` - an ordered list of seal proof outputs returned from 'seal_commit_phase2'.
-pub fn aggregate_seal_commit_proofs<Tree: 'static + MerkleTreeTrait>(
+pub fn aggregate_seal_commit_proofs<Tree>(
     porep_config: PoRepConfig,
     comm_rs: &[[u8; 32]],
     seeds: &[[u8; 32]],
     commit_outputs: &[SealCommitOutput],
-) -> Result<AggregateSnarkProof> {
+) -> Result<AggregateSnarkProof>
+where
+    Tree: 'static + MerkleTreeTrait,
+    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+{
     info!("aggregate_seal_commit_proofs:start");
 
     ensure!(
@@ -803,13 +824,17 @@ pub fn aggregate_seal_commit_proofs<Tree: 'static + MerkleTreeTrait>(
 /// * `aggregate_proof_bytes` - the returned aggregate proof from 'aggreate_seal_commit_proofs'.
 /// * `commit_inputs` - a flattened/combined and ordered list of all public inputs, which must match
 ///    the ordering of the seal proofs when aggregated.
-pub fn verify_aggregate_seal_commit_proofs<Tree: 'static + MerkleTreeTrait>(
+pub fn verify_aggregate_seal_commit_proofs<Tree>(
     porep_config: PoRepConfig,
     aggregate_proof_bytes: AggregateSnarkProof,
     comm_rs: &[[u8; 32]],
     seeds: &[[u8; 32]],
     commit_inputs: Vec<Vec<Fr>>,
-) -> Result<bool> {
+) -> Result<bool>
+where
+    Tree: 'static + MerkleTreeTrait,
+    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+{
     info!("verify_aggregate_seal_commit_proofs:start");
 
     let aggregate_proof =
@@ -914,7 +939,7 @@ pub fn compute_comm_d(sector_size: SectorSize, piece_infos: &[PieceInfo]) -> Res
 /// * `seed` - the seed used to derive the porep challenges.
 /// * `proof_vec` - the porep circuit proof serialized into a vector of bytes.
 #[allow(clippy::too_many_arguments)]
-pub fn verify_seal<Tree: 'static + MerkleTreeTrait>(
+pub fn verify_seal<Tree>(
     porep_config: PoRepConfig,
     comm_r_in: Commitment,
     comm_d_in: Commitment,
@@ -923,7 +948,11 @@ pub fn verify_seal<Tree: 'static + MerkleTreeTrait>(
     ticket: Ticket,
     seed: Ticket,
     proof_vec: &[u8],
-) -> Result<bool> {
+) -> Result<bool>
+where
+    Tree: 'static + MerkleTreeTrait,
+    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+{
     info!("verify_seal:start: {:?}", sector_id);
 
     ensure!(comm_d_in != [0; 32], "Invalid all zero commitment (comm_d)");
@@ -1011,7 +1040,7 @@ pub fn verify_seal<Tree: 'static + MerkleTreeTrait>(
 /// * `[seeds]` - list of seeds used to derive the porep challenges.
 /// * `[proof_vecs]` - list of porep circuit proofs serialized into a vector of bytes.
 #[allow(clippy::too_many_arguments)]
-pub fn verify_batch_seal<Tree: 'static + MerkleTreeTrait>(
+pub fn verify_batch_seal<Tree>(
     porep_config: PoRepConfig,
     comm_r_ins: &[Commitment],
     comm_d_ins: &[Commitment],
@@ -1020,7 +1049,11 @@ pub fn verify_batch_seal<Tree: 'static + MerkleTreeTrait>(
     tickets: &[Ticket],
     seeds: &[Ticket],
     proof_vecs: &[&[u8]],
-) -> Result<bool> {
+) -> Result<bool>
+where
+    Tree: 'static + MerkleTreeTrait,
+    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+{
     info!("verify_batch_seal:start");
     ensure!(!comm_r_ins.is_empty(), "Cannot prove empty batch");
     let l = comm_r_ins.len();

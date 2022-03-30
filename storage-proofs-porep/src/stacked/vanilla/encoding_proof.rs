@@ -1,7 +1,6 @@
 use std::marker::PhantomData;
 
-use blstrs::Scalar as Fr;
-use filecoin_hashers::Hasher;
+use filecoin_hashers::{Domain, Hasher};
 use fr32::bytes_into_fr_repr_safe;
 use log::trace;
 use serde::{Deserialize, Serialize};
@@ -50,15 +49,19 @@ impl<H: Hasher> EncodingProof<H> {
         bytes_into_fr_repr_safe(hasher.finalize().as_ref()).into()
     }
 
-    pub fn verify<G: Hasher>(
+    pub fn verify<D>(
         &self,
         replica_id: &H::Domain,
         exp_encoded_node: &H::Domain,
-        decoded_node: &G::Domain,
-    ) -> bool {
+        decoded_node: &D,
+    ) -> bool
+    where
+        // TreeD and TreeR domains must use the same field.
+        D: Domain<Field = <H::Domain as Domain>::Field>,
+    {
         let key = self.create_key(replica_id);
 
-        let fr: Fr = (*decoded_node).into();
+        let fr: D::Field = (*decoded_node).into();
         let encoded_node = encode(key, fr.into());
 
         check_eq!(exp_encoded_node, &encoded_node);

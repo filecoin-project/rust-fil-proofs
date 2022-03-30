@@ -454,6 +454,7 @@ mod tests {
 
     use std::collections::HashSet;
 
+    use blstrs::Scalar as Fr;
     use filecoin_hashers::poseidon::PoseidonHasher;
 
     // Test that 3 (or more) rounds of the Feistel cipher can be used
@@ -534,7 +535,7 @@ mod tests {
             ApiVersion::V1_1_0 => false,
         };
 
-        let graph = StackedBucketGraph::<PoseidonHasher>::new_stacked(
+        let graph = StackedBucketGraph::<PoseidonHasher<Fr>>::new_stacked(
             nodes as usize,
             BASE_DEGREE,
             EXP_DEGREE,
@@ -601,7 +602,7 @@ mod tests {
         let mut porep_id = [0u8; 32];
         porep_id[..8].copy_from_slice(&5u64.to_le_bytes());
 
-        let graph = StackedBucketGraph::<PoseidonHasher>::new_stacked(
+        let graph = StackedBucketGraph::<PoseidonHasher<Fr>>::new_stacked(
             N_NODES,
             BASE_DEGREE,
             EXP_DEGREE,
@@ -651,7 +652,7 @@ mod tests {
         let mut porep_id = [0u8; 32];
         porep_id[..8].copy_from_slice(&5u64.to_le_bytes());
 
-        let graph = StackedBucketGraph::<PoseidonHasher>::new_stacked(
+        let graph = StackedBucketGraph::<PoseidonHasher<Fr>>::new_stacked(
             N_NODES,
             BASE_DEGREE,
             EXP_DEGREE,

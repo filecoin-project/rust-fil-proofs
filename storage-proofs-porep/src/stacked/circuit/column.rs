@@ -1,6 +1,6 @@
 use bellperson::{gadgets::num::AllocatedNum, ConstraintSystem, SynthesisError};
 use blstrs::Scalar as Fr;
-use filecoin_hashers::Hasher;
+use filecoin_hashers::{Domain, Hasher};
 use storage_proofs_core::merkle::MerkleTreeTrait;
 
 use crate::stacked::{circuit::hash::hash_single_column, Column as VanillaColumn, PublicParams};
@@ -15,7 +15,11 @@ pub struct AllocatedColumn {
     rows: Vec<AllocatedNum<Fr>>,
 }
 
-impl<H: Hasher> From<VanillaColumn<H>> for Column {
+impl<H> From<VanillaColumn<H>> for Column
+where
+    H: Hasher,
+    H::Domain: Domain<Field = Fr>,
+{
     fn from(other: VanillaColumn<H>) -> Self {
         let VanillaColumn { rows, .. } = other;
 

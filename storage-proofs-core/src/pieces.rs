@@ -106,6 +106,7 @@ fn subtree_capacity(pos: usize, total: usize) -> Result<usize> {
 mod tests {
     use super::*;
 
+    use blstrs::Scalar as Fr;
     use filecoin_hashers::poseidon::PoseidonHasher;
 
     #[test]
@@ -153,13 +154,16 @@ mod tests {
     fn test_generate_piece_commitment_bytes_from_source() -> Result<()> {
         let some_bytes: Vec<u8> = vec![0; 64];
         let mut some_bytes_slice: &[u8] = &some_bytes;
-        generate_piece_commitment_bytes_from_source::<PoseidonHasher>(&mut some_bytes_slice, 64)
-            .expect("threshold for sufficient bytes is 32");
+        generate_piece_commitment_bytes_from_source::<PoseidonHasher<Fr>>(
+            &mut some_bytes_slice,
+            64,
+        )
+        .expect("threshold for sufficient bytes is 32");
 
         let not_enough_bytes: Vec<u8> = vec![0; 7];
         let mut not_enough_bytes_slice: &[u8] = &not_enough_bytes;
         assert!(
-            generate_piece_commitment_bytes_from_source::<PoseidonHasher>(
+            generate_piece_commitment_bytes_from_source::<PoseidonHasher<Fr>>(
                 &mut not_enough_bytes_slice,
                 7
             )

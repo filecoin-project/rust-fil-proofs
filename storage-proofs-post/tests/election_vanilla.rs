@@ -1,7 +1,12 @@
 use std::collections::BTreeMap;
 
-use filecoin_hashers::{poseidon::PoseidonHasher, Domain, HashFunction, Hasher};
+use blstrs::Scalar as Fr;
+use filecoin_hashers::{
+    poseidon::{PoseidonDomain, PoseidonFunction, PoseidonHasher},
+    Domain, HashFunction, Hasher,
+};
 use generic_array::typenum::{U0, U2, U8};
+use pasta_curves::{Fp, Fq};
 use rand::SeedableRng;
 use rand_xorshift::XorShiftRng;
 use storage_proofs_core::{
@@ -18,20 +23,31 @@ use tempfile::tempdir;
 
 #[test]
 fn test_election_post_poseidon_base_8() {
-    test_election_post::<LCTree<PoseidonHasher, U8, U0, U0>>();
+    test_election_post::<LCTree<PoseidonHasher<Fr>, U8, U0, U0>>();
+    test_election_post::<LCTree<PoseidonHasher<Fp>, U8, U0, U0>>();
 }
 
 #[test]
 fn test_election_post_poseidon_sub_8_8() {
-    test_election_post::<LCTree<PoseidonHasher, U8, U8, U0>>();
+    test_election_post::<LCTree<PoseidonHasher<Fr>, U8, U8, U0>>();
+    test_election_post::<LCTree<PoseidonHasher<Fq>, U8, U8, U0>>();
 }
 
 #[test]
 fn test_election_post_poseidon_top_8_8_2() {
-    test_election_post::<LCTree<PoseidonHasher, U8, U8, U2>>();
+    test_election_post::<LCTree<PoseidonHasher<Fr>, U8, U8, U2>>();
+    test_election_post::<LCTree<PoseidonHasher<Fp>, U8, U8, U2>>();
 }
 
-fn test_election_post<Tree: 'static + MerkleTreeTrait>() {
+fn test_election_post<Tree>()
+where
+    Tree: 'static + MerkleTreeTrait,
+    // Ensure that `PoseidonDomain` and `PoseidonFunction` are defined for `Tree`'s field.
+    PoseidonDomain<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>:
+        Domain<Field = <<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
+    PoseidonFunction<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>:
+        HashFunction<PoseidonDomain<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>>,
+{
     let rng = &mut XorShiftRng::from_seed(TEST_SEED);
 
     let leaves = 64 * get_base_tree_count::<Tree>();

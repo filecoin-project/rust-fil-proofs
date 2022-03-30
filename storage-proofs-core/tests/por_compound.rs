@@ -4,7 +4,7 @@ use bellperson::{
 };
 use blstrs::Scalar as Fr;
 use ff::Field;
-use filecoin_hashers::{poseidon::PoseidonHasher, Hasher};
+use filecoin_hashers::{poseidon::PoseidonHasher, Domain, Hasher};
 use fr32::{bytes_into_fr, fr_into_bytes};
 use generic_array::typenum::{U0, U2, U4, U8};
 use merkletree::store::VecStore;
@@ -31,10 +31,14 @@ type TreeTop<H, A, B, C> = MerkleTreeWrapper<H, VecStore<<H as Hasher>::Domain>,
 #[test]
 #[ignore]
 fn test_por_compound_poseidon_base_8() {
-    por_compound::<TreeBase<PoseidonHasher, U8>>();
+    por_compound::<TreeBase<PoseidonHasher<Fr>, U8>>();
 }
 
-fn por_compound<Tree: 'static + MerkleTreeTrait>() {
+fn por_compound<Tree>()
+where
+    Tree: 'static + MerkleTreeTrait,
+    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+{
     let mut rng = XorShiftRng::from_seed(TEST_SEED);
 
     let leaves = 64 * get_base_tree_count::<Tree>();
@@ -95,46 +99,50 @@ fn por_compound<Tree: 'static + MerkleTreeTrait>() {
 #[ignore]
 #[test]
 fn test_por_compound_poseidon_base_2_private_root() {
-    por_compound_private_root::<TreeBase<PoseidonHasher, U2>>();
+    por_compound_private_root::<TreeBase<PoseidonHasher<Fr>, U2>>();
 }
 
 #[ignore]
 #[test]
 fn test_por_compound_poseidon_base_4_private_root() {
-    por_compound_private_root::<TreeBase<PoseidonHasher, U4>>();
+    por_compound_private_root::<TreeBase<PoseidonHasher<Fr>, U4>>();
 }
 
 #[ignore]
 #[test]
 fn test_por_compound_poseidon_sub_8_2_private_root() {
-    por_compound_private_root::<TreeSub<PoseidonHasher, U8, U2>>();
+    por_compound_private_root::<TreeSub<PoseidonHasher<Fr>, U8, U2>>();
 }
 
 #[ignore]
 #[test]
 fn test_por_compound_poseidon_top_8_4_2_private_root() {
-    por_compound_private_root::<TreeTop<PoseidonHasher, U8, U4, U2>>();
+    por_compound_private_root::<TreeTop<PoseidonHasher<Fr>, U8, U4, U2>>();
 }
 
 #[ignore]
 #[test]
 fn test_por_compound_poseidon_sub_8_8_private_root() {
-    por_compound_private_root::<TreeSub<PoseidonHasher, U8, U8>>();
+    por_compound_private_root::<TreeSub<PoseidonHasher<Fr>, U8, U8>>();
 }
 
 #[ignore]
 #[test]
 fn test_por_compound_poseidon_top_8_8_2_private_root() {
-    por_compound_private_root::<TreeTop<PoseidonHasher, U8, U8, U2>>();
+    por_compound_private_root::<TreeTop<PoseidonHasher<Fr>, U8, U8, U2>>();
 }
 
 #[ignore]
 #[test]
 fn test_por_compound_poseidon_top_8_2_4_private_root() {
-    por_compound_private_root::<TreeTop<PoseidonHasher, U8, U2, U4>>();
+    por_compound_private_root::<TreeTop<PoseidonHasher<Fr>, U8, U2, U4>>();
 }
 
-fn por_compound_private_root<Tree: 'static + MerkleTreeTrait>() {
+fn por_compound_private_root<Tree>()
+where
+    Tree: 'static + MerkleTreeTrait,
+    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+{
     let mut rng = XorShiftRng::from_seed(TEST_SEED);
 
     // Ensure arity will evenly fill tree.

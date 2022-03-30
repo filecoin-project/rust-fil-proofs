@@ -22,10 +22,14 @@ use tempfile::tempdir;
 
 #[test]
 fn test_rational_post_circuit_poseidon() {
-    test_rational_post_circuit::<BinaryMerkleTree<PoseidonHasher>>(3_770);
+    test_rational_post_circuit::<BinaryMerkleTree<PoseidonHasher<Fr>>>(3_770);
 }
 
-fn test_rational_post_circuit<Tree: 'static + MerkleTreeTrait>(expected_constraints: usize) {
+fn test_rational_post_circuit<Tree>(expected_constraints: usize)
+where
+    Tree: 'static + MerkleTreeTrait,
+    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+{
     let rng = &mut XorShiftRng::from_seed(TEST_SEED);
 
     let leaves = 32 * get_base_tree_count::<Tree>();

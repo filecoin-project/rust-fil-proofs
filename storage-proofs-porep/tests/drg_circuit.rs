@@ -73,9 +73,9 @@ fn test_drg_porep_circuit() {
         api_version: ApiVersion::V1_1_0,
     };
 
-    let pp = DrgPoRep::<PoseidonHasher, BucketGraph<_>>::setup(&sp)
+    let pp = DrgPoRep::<PoseidonHasher<Fr>, BucketGraph<_>>::setup(&sp)
         .expect("failed to create drgporep setup");
-    let (tau, aux) = DrgPoRep::<PoseidonHasher, _>::replicate(
+    let (tau, aux) = DrgPoRep::<PoseidonHasher<Fr>, _>::replicate(
         &pp,
         &replica_id.into(),
         (mmapped_data.as_mut()).into(),
@@ -91,17 +91,17 @@ fn test_drg_porep_circuit() {
         tau: Some(tau),
     };
 
-    let priv_inputs = drg::PrivateInputs::<PoseidonHasher> {
+    let priv_inputs = drg::PrivateInputs::<PoseidonHasher<Fr>> {
         tree_d: &aux.tree_d,
         tree_r: &aux.tree_r,
         tree_r_config_rows_to_discard: default_rows_to_discard(nodes, BINARY_ARITY),
     };
 
-    let proof_nc = DrgPoRep::<PoseidonHasher, _>::prove(&pp, &pub_inputs, &priv_inputs)
+    let proof_nc = DrgPoRep::<PoseidonHasher<Fr>, _>::prove(&pp, &pub_inputs, &priv_inputs)
         .expect("failed to prove");
 
     assert!(
-        DrgPoRep::<PoseidonHasher, _>::verify(&pp, &pub_inputs, &proof_nc)
+        DrgPoRep::<PoseidonHasher<Fr>, _>::verify(&pp, &pub_inputs, &proof_nc)
             .expect("failed to verify"),
         "failed to verify (non circuit)"
     );
@@ -145,7 +145,7 @@ fn test_drg_porep_circuit() {
     );
 
     let mut cs = TestConstraintSystem::<Fr>::new();
-    DrgPoRepCircuit::<PoseidonHasher>::synthesize(
+    DrgPoRepCircuit::<PoseidonHasher<Fr>>::synthesize(
         cs.namespace(|| "drgporep"),
         vec![replica_node],
         vec![replica_node_path],
@@ -212,7 +212,7 @@ fn test_drg_porep_circuit_inputs_and_constraints() {
     let tree_depth = graph_height::<U2>(n);
 
     let mut cs = TestConstraintSystem::<Fr>::new();
-    DrgPoRepCircuit::<PoseidonHasher>::synthesize(
+    DrgPoRepCircuit::<PoseidonHasher<Fr>>::synthesize(
         cs.namespace(|| "drgporep"),
         vec![Some(Fr::random(&mut rng)); 1],
         vec![vec![(vec![Some(Fr::random(&mut rng))], Some(0)); tree_depth]; 1],

@@ -1,7 +1,7 @@
 use bellperson::{gadgets::num::AllocatedNum, Circuit, ConstraintSystem, SynthesisError};
 use blstrs::Scalar as Fr;
 use ff::Field;
-use filecoin_hashers::{HashFunction, Hasher};
+use filecoin_hashers::{Domain, HashFunction, Hasher};
 use rayon::prelude::{ParallelIterator, ParallelSlice};
 use storage_proofs_core::{
     compound_proof::CircuitComponent,
@@ -20,7 +20,11 @@ use storage_proofs_core::{
 use crate::fallback::{PublicParams, PublicSector, SectorProof};
 
 /// This is the `FallbackPoSt` circuit.
-pub struct FallbackPoStCircuit<Tree: MerkleTreeTrait> {
+pub struct FallbackPoStCircuit<Tree>
+where
+    Tree: MerkleTreeTrait,
+    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+{
     pub prover_id: Option<Fr>,
     pub sectors: Vec<Sector<Tree>>,
 }
@@ -29,7 +33,11 @@ pub struct FallbackPoStCircuit<Tree: MerkleTreeTrait> {
 // #[derive(Clone)]) because derive(Clone) will only expand for MerkleTreeTrait types that also
 // implement Clone. Not every MerkleTreeTrait type is Clone-able because not all merkel Store's are
 // Clone-able, therefore deriving Clone would impl Clone for less than all possible Tree types.
-impl<Tree: 'static + MerkleTreeTrait> Clone for FallbackPoStCircuit<Tree> {
+impl<Tree> Clone for FallbackPoStCircuit<Tree>
+where
+    Tree: 'static + MerkleTreeTrait,
+    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+{
     fn clone(&self) -> Self {
         FallbackPoStCircuit {
             prover_id: self.prover_id,
@@ -38,7 +46,11 @@ impl<Tree: 'static + MerkleTreeTrait> Clone for FallbackPoStCircuit<Tree> {
     }
 }
 
-pub struct Sector<Tree: MerkleTreeTrait> {
+pub struct Sector<Tree>
+where
+    Tree: MerkleTreeTrait,
+    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+{
     pub comm_r: Option<Fr>,
     pub comm_c: Option<Fr>,
     pub comm_r_last: Option<Fr>,
@@ -49,7 +61,11 @@ pub struct Sector<Tree: MerkleTreeTrait> {
 
 // We must manually implement Clone for all types generic over MerkleTreeTrait (instead of using
 // #derive(Clone)).
-impl<Tree: MerkleTreeTrait> Clone for Sector<Tree> {
+impl<Tree> Clone for Sector<Tree>
+where
+    Tree: MerkleTreeTrait,
+    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+{
     fn clone(&self) -> Self {
         Sector {
             comm_r: self.comm_r,
@@ -62,7 +78,11 @@ impl<Tree: MerkleTreeTrait> Clone for Sector<Tree> {
     }
 }
 
-impl<Tree: 'static + MerkleTreeTrait> Sector<Tree> {
+impl<Tree> Sector<Tree>
+where
+    Tree: 'static + MerkleTreeTrait,
+    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+{
     pub fn circuit(
         sector: &PublicSector<<Tree::Hasher as Hasher>::Domain>,
         vanilla_proof: &SectorProof<Tree::Proof>,
@@ -111,7 +131,11 @@ impl<Tree: 'static + MerkleTreeTrait> Sector<Tree> {
     }
 }
 
-impl<Tree: 'static + MerkleTreeTrait> Circuit<Fr> for &Sector<Tree> {
+impl<Tree> Circuit<Fr> for &Sector<Tree>
+where
+    Tree: 'static + MerkleTreeTrait,
+    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+{
     fn synthesize<CS: ConstraintSystem<Fr>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
         let Sector {
             comm_r,
@@ -180,11 +204,19 @@ impl<Tree: 'static + MerkleTreeTrait> Circuit<Fr> for &Sector<Tree> {
 #[derive(Clone, Default)]
 pub struct ComponentPrivateInputs {}
 
-impl<Tree: MerkleTreeTrait> CircuitComponent for FallbackPoStCircuit<Tree> {
+impl<Tree> CircuitComponent for FallbackPoStCircuit<Tree>
+where
+    Tree: MerkleTreeTrait,
+    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+{
     type ComponentPrivateInputs = ComponentPrivateInputs;
 }
 
-impl<Tree: 'static + MerkleTreeTrait> Circuit<Fr> for FallbackPoStCircuit<Tree> {
+impl<Tree> Circuit<Fr> for FallbackPoStCircuit<Tree>
+where
+    Tree: 'static + MerkleTreeTrait,
+    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+{
     fn synthesize<CS: ConstraintSystem<Fr>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
         if CS::is_extensible() {
             return self.synthesize_extendable(cs);
@@ -194,7 +226,11 @@ impl<Tree: 'static + MerkleTreeTrait> Circuit<Fr> for FallbackPoStCircuit<Tree> 
     }
 }
 
-impl<Tree: 'static + MerkleTreeTrait> FallbackPoStCircuit<Tree> {
+impl<Tree> FallbackPoStCircuit<Tree>
+where
+    Tree: 'static + MerkleTreeTrait,
+    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+{
     fn synthesize_default<CS: ConstraintSystem<Fr>>(
         self,
         cs: &mut CS,

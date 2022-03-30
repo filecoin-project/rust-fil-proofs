@@ -4,12 +4,14 @@ use std::hash::Hash as StdHash;
 #[cfg(feature = "poseidon")]
 pub use crate::poseidon_types::*;
 
+use anyhow::ensure;
 use bellperson::{
     gadgets::{boolean::Boolean, num::AllocatedNum},
     ConstraintSystem, SynthesisError,
 };
 use blstrs::Scalar as Fr;
-use ff::PrimeField;
+use ec_gpu::GpuField;
+use ff::{Field, PrimeField};
 use merkletree::{
     hash::{Algorithm as LightAlgorithm, Hashable as LightHashable},
     merkle::Element,
@@ -27,21 +29,40 @@ pub trait Domain:
     + Eq
     + Send
     + Sync
-    + From<Fr>
-    + From<<Fr as PrimeField>::Repr>
-    + Into<Fr>
+    + From<Self::Field>
+    + Into<Self::Field>
+    + From<[u8; 32]>
     + Serialize
     + DeserializeOwned
     + Element
     + StdHash
 {
-    #[allow(clippy::wrong_self_convention)]
-    fn into_bytes(&self) -> Vec<u8>;
-    fn try_from_bytes(raw: &[u8]) -> anyhow::Result<Self>;
-    /// Write itself into the given slice, LittleEndian bytes.
-    fn write_bytes(&self, _: &mut [u8]) -> anyhow::Result<()>;
+    type Field: PrimeField + GpuField;
 
-    fn random<R: RngCore>(rng: &mut R) -> Self;
+    #[allow(clippy::wrong_self_convention)]
+    fn into_bytes(&self) -> Vec<u8> {
+        self.as_ref().to_vec()
+    }
+
+    fn try_from_bytes(bytes: &[u8]) -> anyhow::Result<Self> {
+        ensure!(bytes.len() == Self::byte_len(), "invalid number of bytes");
+        let mut array = [0u8; 32];
+        array.copy_from_slice(bytes);
+        Ok(array.into())
+    }
+
+    /// Write itself into the given slice, LittleEndian bytes.
+    fn write_bytes(&self, dest: &mut [u8]) -> anyhow::Result<()> {
+        let n = Self::byte_len();
+        ensure!(dest.len() >= n, "invalid number of bytes");
+        dest[..n].copy_from_slice(self.as_ref());
+        Ok(())
+    }
+
+    fn random<R: RngCore>(rng: &mut R) -> Self {
+        // Generating a field element then converting it ensures that we stay within the field.
+        Self::Field::random(rng).into()
+    }
 }
 
 pub trait HashFunction<T: Domain>: Clone + Debug + Send + Sync + LightAlgorithm<T> {
@@ -81,7 +102,7 @@ pub trait HashFunction<T: Domain>: Clone + Debug + Send + Sync + LightAlgorithm<
         Self::hash_leaf_bits_circuit(cs, &left_bits, &right_bits, height)
     }
 
-    fn hash_multi_leaf_circuit<Arity: 'static + PoseidonArity, CS: ConstraintSystem<Fr>>(
+    fn hash_multi_leaf_circuit<Arity: PoseidonArity<Fr>, CS: ConstraintSystem<Fr>>(
         cs: CS,
         leaves: &[AllocatedNum<Fr>],
         height: usize,

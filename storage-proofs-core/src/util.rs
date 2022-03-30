@@ -311,7 +311,7 @@ mod tests {
                 .expect("right bits failure")
         };
 
-        let out = Sha256Function::hash_leaf_bits_circuit(
+        let out = Sha256Function::<Fr>::hash_leaf_bits_circuit(
             cs.namespace(|| "hash_leaf_circuit"),
             &left_bits,
             &right_bits,
@@ -322,7 +322,7 @@ mod tests {
         assert!(cs.is_satisfied(), "constraints not satisfied");
         assert_eq!(cs.num_constraints(), 45_387);
 
-        let expected: Fr = Sha256Function::default()
+        let expected: Fr = Sha256Function::<Fr>::default()
             .node(left_fr.into(), right_fr.into(), height)
             .into();
 

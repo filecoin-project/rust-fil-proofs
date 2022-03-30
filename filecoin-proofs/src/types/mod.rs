@@ -2,7 +2,8 @@ pub use merkletree::store::StoreConfig;
 pub use storage_proofs_core::merkle::{MerkleProof, MerkleTreeTrait};
 pub use storage_proofs_porep::stacked::{Labels, PersistentAux, TemporaryAux};
 
-use filecoin_hashers::Hasher;
+use blstrs::Scalar as Fr;
+use filecoin_hashers::{Domain, Hasher};
 use serde::{Deserialize, Serialize};
 use storage_proofs_core::{merkle::BinaryMerkleTree, sector::SectorId};
 use storage_proofs_porep::stacked;
@@ -59,7 +60,11 @@ pub struct SealPreCommitOutput {
 pub type VanillaSealProof<Tree> = stacked::Proof<Tree, DefaultPieceHasher>;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct SealCommitPhase1Output<Tree: MerkleTreeTrait> {
+pub struct SealCommitPhase1Output<Tree>
+where
+    Tree: MerkleTreeTrait,
+    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+{
     #[serde(bound(
         serialize = "VanillaSealProof<Tree>: Serialize",
         deserialize = "VanillaSealProof<Tree>: Deserialize<'de>"
@@ -95,7 +100,7 @@ pub struct PartitionSnarkProof(pub Vec<u8>);
 pub type SnarkProof = Vec<u8>;
 pub type AggregateSnarkProof = Vec<u8>;
 pub type VanillaProof<Tree> = fallback::Proof<<Tree as MerkleTreeTrait>::Proof>;
-pub type PartitionProof<Tree> = storage_proofs_update::vanilla::PartitionProof<Tree>;
+pub type PartitionProof<U, V, W> = storage_proofs_update::vanilla::PartitionProof<Fr, U, V, W>;
 
 #[derive(Debug, Clone, PartialEq)]
 #[repr(transparent)]

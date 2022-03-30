@@ -2,6 +2,7 @@ use bellperson::{
     util_cs::{metric_cs::MetricCS, test_cs::TestConstraintSystem},
     Circuit,
 };
+use blstrs::Scalar as Fr;
 use filecoin_hashers::{poseidon::PoseidonHasher, Domain, HashFunction, Hasher};
 use generic_array::typenum::{U0, U2, U4, U8};
 use pretty_assertions::assert_eq;
@@ -23,52 +24,53 @@ use tempfile::tempdir;
 #[ignore]
 #[test]
 fn test_fallback_post_compound_poseidon_single_partition_base_8() {
-    fallback_post::<LCTree<PoseidonHasher, U8, U0, U0>>(15, 15, 1, ApiVersion::V1_0_0);
-    fallback_post::<LCTree<PoseidonHasher, U8, U0, U0>>(15, 15, 1, ApiVersion::V1_1_0);
+    fallback_post::<LCTree<PoseidonHasher<Fr>, U8, U0, U0>>(15, 15, 1, ApiVersion::V1_0_0);
+    fallback_post::<LCTree<PoseidonHasher<Fr>, U8, U0, U0>>(15, 15, 1, ApiVersion::V1_1_0);
 }
 
 #[ignore]
 #[test]
 fn test_fallback_post_compound_poseidon_single_partition_sub_8_4() {
-    fallback_post::<LCTree<PoseidonHasher, U8, U4, U0>>(3, 3, 1, ApiVersion::V1_0_0);
-    fallback_post::<LCTree<PoseidonHasher, U8, U4, U0>>(3, 3, 1, ApiVersion::V1_1_0);
+    fallback_post::<LCTree<PoseidonHasher<Fr>, U8, U4, U0>>(3, 3, 1, ApiVersion::V1_0_0);
+    fallback_post::<LCTree<PoseidonHasher<Fr>, U8, U4, U0>>(3, 3, 1, ApiVersion::V1_1_0);
 }
 
 #[ignore]
 #[test]
 fn test_fallback_post_compound_poseidon_single_partition_top_8_4_2() {
-    fallback_post::<LCTree<PoseidonHasher, U8, U4, U2>>(3, 3, 1, ApiVersion::V1_0_0);
-    fallback_post::<LCTree<PoseidonHasher, U8, U4, U2>>(3, 3, 1, ApiVersion::V1_1_0);
+    fallback_post::<LCTree<PoseidonHasher<Fr>, U8, U4, U2>>(3, 3, 1, ApiVersion::V1_0_0);
+    fallback_post::<LCTree<PoseidonHasher<Fr>, U8, U4, U2>>(3, 3, 1, ApiVersion::V1_1_0);
 }
 
 #[ignore]
 #[test]
 fn test_fallback_post_compound_poseidon_single_partition_smaller_base_8() {
-    fallback_post::<LCTree<PoseidonHasher, U8, U0, U0>>(2, 3, 1, ApiVersion::V1_0_0);
-    fallback_post::<LCTree<PoseidonHasher, U8, U0, U0>>(2, 3, 1, ApiVersion::V1_1_0);
+    fallback_post::<LCTree<PoseidonHasher<Fr>, U8, U0, U0>>(2, 3, 1, ApiVersion::V1_0_0);
+    fallback_post::<LCTree<PoseidonHasher<Fr>, U8, U0, U0>>(2, 3, 1, ApiVersion::V1_1_0);
 }
 
 #[ignore]
 #[test]
 fn test_fallback_post_compound_poseidon_two_partitions_base_8() {
-    fallback_post::<LCTree<PoseidonHasher, U8, U0, U0>>(4, 2, 2, ApiVersion::V1_0_0);
-    fallback_post::<LCTree<PoseidonHasher, U8, U0, U0>>(4, 2, 2, ApiVersion::V1_1_0);
+    fallback_post::<LCTree<PoseidonHasher<Fr>, U8, U0, U0>>(4, 2, 2, ApiVersion::V1_0_0);
+    fallback_post::<LCTree<PoseidonHasher<Fr>, U8, U0, U0>>(4, 2, 2, ApiVersion::V1_1_0);
 }
 
 #[ignore]
 #[test]
 fn test_fallback_post_compound_poseidon_two_partitions_smaller_base_8() {
-    fallback_post::<LCTree<PoseidonHasher, U8, U0, U0>>(5, 3, 2, ApiVersion::V1_0_0);
-    fallback_post::<LCTree<PoseidonHasher, U8, U0, U0>>(5, 3, 2, ApiVersion::V1_1_0);
+    fallback_post::<LCTree<PoseidonHasher<Fr>, U8, U0, U0>>(5, 3, 2, ApiVersion::V1_0_0);
+    fallback_post::<LCTree<PoseidonHasher<Fr>, U8, U0, U0>>(5, 3, 2, ApiVersion::V1_1_0);
 }
 
-fn fallback_post<Tree: 'static + MerkleTreeTrait>(
+fn fallback_post<Tree>(
     total_sector_count: usize,
     sector_count: usize,
     partitions: usize,
     api_version: ApiVersion,
 ) where
-    Tree::Store: 'static,
+    Tree: 'static + MerkleTreeTrait,
+    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
 {
     let rng = &mut XorShiftRng::from_seed(TEST_SEED);
 
