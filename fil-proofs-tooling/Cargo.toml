@@ -16,7 +16,7 @@ storage-proofs-post = { path = "../storage-proofs-post", version = "^11.0.0", de
 storage-proofs-update = { path = "../storage-proofs-update", version = "^11.0.0", default-features = false }
 filecoin-proofs = { path = "../filecoin-proofs", default-features = false }
 filecoin-hashers = { path = "../filecoin-hashers", default-features = false, features = ["poseidon", "blake2s", "sha256"] }
-clap = "2"
+clap = { version = "3.1.6", features = ["derive"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 toml = "0.5"
@@ -30,13 +30,13 @@ bellperson = "0.18.0"
 rand = "0.8"
 tempfile = "3.0.8"
 cpu-time = "1.0.0"
-git2 = "0.13.6"
+git2 = "0.14.2"
 heim = { git = "https://github.com/heim-rs/heim", rev = "b292f15", features = ["host", "memory", "cpu"] }
 async-std = "1.6"
-blake2s_simd = "0.5.6"
+blake2s_simd = "1.0.0"
 fil_logger = "0.1"
 log = "0.4.8"
-uom = "0.30"
+uom = "0.32.0"
 merkletree = "0.21.0"
 bincode = "1.1.2"
 anyhow = "1.0.23"
@@ -44,16 +44,16 @@ ff = "0.11.0"
 rand_xorshift = "0.3.0"
 bytefmt = "0.1.7"
 rayon = "1.3.0"
-flexi_logger = "0.16.1"
+flexi_logger = "0.22.3"
 typenum = "1.11.2"
 generic-array = "0.14.4"
-# `byte-unit = 4.0.13` is the final version that uses Rust 2018 edition.
-byte-unit = "=4.0.13"
+byte-unit = "4.0.14"
 fdlimit = "0.2.0"
-dialoguer = "0.8.0"
+dialoguer = "0.10.0"
 structopt = "0.3.12"
 humansize = "1.1.0"
 blstrs = "0.4.0"
+time = "0.3.9"
 
 [features]
 default = ["opencl", "measurements"]
@@ -79,4 +79,4 @@ measurements = ["storage-proofs-core/measurements"]
 profile = ["storage-proofs-core/profile", "measurements"]
 
 [target.'cfg(target_arch = "x86_64")'.dependencies]
-raw-cpuid = "8.1.2"
+raw-cpuid = "10.3.0"

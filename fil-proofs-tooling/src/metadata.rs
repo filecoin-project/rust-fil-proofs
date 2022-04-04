@@ -82,8 +82,8 @@ impl SystemMetadata {
             {
                 let cpuid = raw_cpuid::CpuId::new();
                 let processor = cpuid
-                    .get_extended_function_info()
-                    .and_then(|info| info.processor_brand_string().map(|s| s.to_string()))
+                    .get_processor_brand_string()
+                    .map(|s| s.as_str().to_owned())
                     .unwrap_or_default();
                 let (base, max) = cpuid
                     .get_processor_frequency_info()

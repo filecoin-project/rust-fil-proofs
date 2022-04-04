@@ -10,14 +10,14 @@ readme = "README.md"
 
 [dependencies]
 crossbeam = "0.8"
-digest = "0.9"
+digest = "0.10.3"
 storage-proofs-core = { path = "../storage-proofs-core", version = "^11.0.0", default-features = false}
 sha2raw = { path = "../sha2raw", version = "^6.0.0"}
 filecoin-hashers = { path = "../filecoin-hashers", version = "^6.0.0", default-features = false, features = ["poseidon", "sha256"]}
 rand = "0.8"
 merkletree = "0.21.0"
 mapr = "0.8.0"
-num-bigint = "0.2"
+num-bigint = "0.4.3"
 num-traits = "0.2"
 rayon = "1.0.0"
 serde = { version = "1.0", features = ["derive"]}
@@ -25,7 +25,7 @@ serde_json = "1.0"
 ff = "0.11.0"
 bellperson = "0.18.0"
 log = "0.4.7"
-pretty_assertions = "0.6.1"
+pretty_assertions = "1.2.0"
 generic-array = "0.14.4"
 anyhow = "1.0.23"
 neptune = { version = "5.1.0", features = ["arity2", "arity4", "arity8", "arity11", "arity16", "arity24", "arity36"] }
@@ -35,7 +35,7 @@ bincode = "1.1.2"
 byteorder = "1.3.4"
 lazy_static = "1.2"
 byte-slice-cast = "1.0.0"
-hwloc = { version = "0.3.0", optional = true }
+hwloc = { version = "0.5.0", optional = true }
 libc = "0.2"
 fdlimit = "0.2.0"
 fr32 = { path = "../fr32", version = "^4.0.0", default-features = false }
@@ -45,9 +45,9 @@ pairing = "0.21"
 blstrs = "0.4.0"
 
 [target."cfg(target_arch = \"aarch64\")".dependencies]
-sha2 = { version = "0.9.3", features = ["compress", "asm"] }
+sha2 = { version = "0.10.2", features = ["compress", "asm"] }
 [target."cfg(not(target_arch = \"aarch64\"))".dependencies]
-sha2 = { version = "0.9.3", features = ["compress"] }
+sha2 = { version = "0.10.2", features = ["compress"] }
 
 [dev-dependencies]
 tempfile = "3"
