@@ -31,7 +31,7 @@ blake2b_simd = "0.5"
 blake2s_simd = "0.5"
 toml = "0.5"
 ff = "0.11.0"
-bellperson = "0.18.0"
+bellperson = "0.19"
 serde_json = "1.0"
 log = "0.4.7"
 rand_chacha = "0.3"
@@ -66,8 +66,8 @@ big-sector-sizes-bench = []
 measurements = ["cpu-time", "gperftools"]
 profile = ["measurements"]
 
-cuda = ["bellperson/cuda", "neptune/cuda", "filecoin-hashers/cuda", "fr32/cuda"]
-opencl = ["bellperson/opencl", "neptune/opencl", "filecoin-hashers/opencl", "fr32/opencl"]
+cuda = ["bellperson/cuda", "neptune/cuda", "filecoin-hashers/cuda",]
+opencl = ["bellperson/opencl", "neptune/opencl", "filecoin-hashers/opencl"]
 
 [[bench]]
 name = "sha256"

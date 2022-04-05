@@ -24,7 +24,7 @@ rayon = "1.0.0"
 serde = { version = "1.0", features = ["derive"]}
 serde_json = "1.0"
 ff = "0.11.0"
-bellperson = "0.18.0"
+bellperson = "0.19"
 blstrs = { version = "0.4.0", features = ["gpu"] }
 log = "0.4.7"
 pretty_assertions = "0.6.1"
@@ -70,7 +70,6 @@ opencl = [
     "filecoin-hashers/opencl",
     "neptune/opencl",
     "bellperson/opencl",
-    "fr32/opencl",
 ]
 cuda = [
     "storage-proofs-core/cuda",
@@ -78,7 +77,6 @@ cuda = [
     "filecoin-hashers/cuda",
     "neptune/cuda",
     "bellperson/cuda",
-    "fr32/cuda",
 ]
 multicore-sdr = [
     "storage-proofs-porep/multicore-sdr",

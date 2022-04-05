@@ -24,7 +24,7 @@ serde = { version = "1.0", features = ["rc", "derive"] }
 serde_json = "1.0"
 ff = "0.11.0"
 blake2b_simd = "0.5"
-bellperson = "0.18.0"
+bellperson = "0.19"
 log = "0.4.7"
 fil_logger = "0.1"
 rayon = "1.1.0"
@@ -64,7 +64,6 @@ cuda = [
     "storage-proofs-update/cuda",
     "bellperson/cuda",
     "filecoin-hashers/cuda",
-    "fr32/cuda",
 ]
 opencl = [
     "storage-proofs-core/opencl",
@@ -73,7 +72,6 @@ opencl = [
     "storage-proofs-update/opencl",
     "bellperson/opencl",
     "filecoin-hashers/opencl",
-    "fr32/opencl",
 ]
 multicore-sdr = ["storage-proofs-porep/multicore-sdr"]
 big-tests = []
