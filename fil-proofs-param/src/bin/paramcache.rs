@@ -309,7 +309,7 @@ pub fn main() {
         info!("{}", &message);
 
         let spinner = ProgressBar::new_spinner();
-        spinner.set_message(&message);
+        spinner.set_message(message);
         spinner.enable_steady_tick(100);
 
         if opts.only_sector_update {
@@ -323,6 +323,6 @@ pub fn main() {
             }
         }
 
-        spinner.finish_with_message(&format!("✔ {}", &message));
+        spinner.finish_with_message(format!("✔ Generated sector size: {}", human_size));
     }
 }

@@ -14,27 +14,27 @@ storage-proofs-porep = { path = "../storage-proofs-porep", version = "^11.0.0", 
 storage-proofs-post = { path = "../storage-proofs-post", version = "^11.0.0", default-features = false }
 storage-proofs-update = { path = "../storage-proofs-update", version = "^11.0.0", default-features = false }
 filecoin-hashers = { version = "^6.0.0", path = "../filecoin-hashers", default-features = false, features = ["poseidon", "sha256"] }
-bitvec = "0.17"
+bitvec = "1.0.0"
 rand = "0.8"
 lazy_static = "1.2"
 memmap = "0.7"
 byteorder = "1"
-itertools = "0.9"
+itertools = "0.10.3"
 serde = { version = "1.0", features = ["rc", "derive"] }
 serde_json = "1.0"
 ff = "0.11.0"
-blake2b_simd = "0.5"
+blake2b_simd = "1.0.0"
 bellperson = "0.18.0"
 log = "0.4.7"
 fil_logger = "0.1"
 rayon = "1.1.0"
-blake2s_simd = "0.5.8"
+blake2s_simd = "1.0.0"
 hex = "0.4.0"
 merkletree = "0.21.0"
 bincode = "1.1.2"
 anyhow = "1.0.23"
 rand_xorshift = "0.3.0"
-sha2 = "0.9.1"
+sha2 = "0.10.2"
 typenum = "1.11.2"
 gperftools = { version = "0.2", optional = true }
 generic-array = "0.14.4"
@@ -47,7 +47,7 @@ blstrs = "0.4.0"
 [dev-dependencies]
 criterion = "0.3"
 rexpect = "0.4.0"
-pretty_assertions = "0.6.1"
+pretty_assertions = "1.2.0"
 failure = "0.1.7"
 tempfile = "3"
 

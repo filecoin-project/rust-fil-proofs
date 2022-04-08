@@ -3,12 +3,12 @@
 
 use std::collections::HashMap;
 use std::process::{self, Child, Command, Stdio};
-use std::str;
+use std::str::{self, FromStr};
 use std::sync::mpsc::{self, Receiver, Sender, TryRecvError};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use clap::{arg_enum, value_t, App, Arg};
+use clap::Arg;
 use fil_proofs_tooling::shared::{create_replica, PROVER_ID, RANDOMNESS};
 use filecoin_proofs::constants::{SectorShape8MiB, SECTOR_SIZE_8_MIB};
 use filecoin_proofs::types::{PoStConfig, SectorSize};
@@ -34,11 +34,24 @@ const POST_CONFIG: PoStConfig = PoStConfig {
     api_version: FIXED_API_VERSION,
 };
 
-arg_enum! {
-    #[derive(Debug)]
-    pub enum Mode {
-        Threads,
-        Processes,
+#[derive(Debug, Clone)]
+pub enum Mode {
+    Threads,
+    Processes,
+}
+
+impl FromStr for Mode {
+    type Err = clap::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "threads" => Ok(Mode::Threads),
+            "processes" => Ok(Mode::Processes),
+            _ => Err(clap::Error::raw(
+                clap::ErrorKind::InvalidValue,
+                format!("unknown mode '{}'", s),
+            )),
+        }
     }
 }
 
@@ -57,12 +70,14 @@ pub fn colored_with_thread(
     write!(
         writer,
         "{} {} {} {} {} > {}",
-        now.now().format("%Y-%m-%dT%H:%M:%S%.3f"),
+        now.now()
+            .format(time::macros::format_description!("%Y-%m-%dT%H:%M:%S%.3f"))
+            .expect("failed to format time"),
         process::id(),
         thread::current()
             .name()
             .unwrap_or(&format!("{:?}", thread::current().id())),
-        flexi_logger::style(level, level),
+        flexi_logger::style(level).paint(level.to_string()),
         record.module_path().unwrap_or("<unnamed>"),
         record.args(),
     )
@@ -140,7 +155,7 @@ fn threads_mode(parallel: u8, gpu_stealing: bool) {
 
     // Create fixtures only once for both threads
     let (sector_id, replica_output) =
-        create_replica::<MerkleTree>(SECTOR_SIZE, arbitrary_porep_id, FIXED_API_VERSION);
+        create_replica::<MerkleTree>(SECTOR_SIZE, arbitrary_porep_id, false, FIXED_API_VERSION);
     let priv_replica_info = (sector_id, replica_output.private_replica_info);
 
     // Put each proof into it's own scope (the other one is due to the if statement)
@@ -227,49 +242,56 @@ fn spawn_process(name: &str, gpu_stealing: bool) -> Child {
 }
 
 fn main() {
-    flexi_logger::Logger::with_env()
+    flexi_logger::Logger::try_with_env()
+        .expect("Initializing logger from env failed")
         .format(colored_with_thread)
         .start()
         .expect("Initializing logger failed. Was another logger already initialized?");
 
-    let matches = App::new("gpu-cpu-test")
+    let matches = clap::Command::new("gpu-cpu-test")
         .version("0.1")
         .about("Tests if moving proofs from GPU to CPU works")
         .arg(
-            Arg::with_name("parallel")
+            Arg::new("parallel")
                 .long("parallel")
                 .help("Run multiple proofs in parallel.")
                 .default_value("3"),
         )
         .arg(
-            Arg::with_name("gpu-stealing")
+            Arg::new("gpu-stealing")
                 .long("gpu-stealing")
                 .help("Force high priority proof on the GPU and let low priority one continue on CPU.")
                 .default_value("true"),
         )
         .arg(
-            Arg::with_name("mode")
+            Arg::new("mode")
               .long("mode")
               .help("Whether to run with threads or processes.")
-               .possible_values(&["threads", "processes"])
-               .case_insensitive(true)
-               .default_value("threads"),
+              .possible_values(&["threads", "processes"])
+              .ignore_case(true)
+              .default_value("threads"),
         )
         .get_matches();
 
-    let parallel = value_t!(matches, "parallel", u8).expect("failed to get parallel");
+    let parallel = matches
+        .value_of_t::<u8>("parallel")
+        .expect("failed to get parallel");
     if parallel == 1 {
         info!("Running high priority proof only")
     } else {
         info!("Running high and low priority proofs in parallel")
     }
-    let gpu_stealing = value_t!(matches, "gpu-stealing", bool).expect("failed to get gpu-stealing");
+    let gpu_stealing = matches
+        .value_of_t::<bool>("gpu-stealing")
+        .expect("failed to get gpu-stealing");
     if gpu_stealing {
         info!("Force low piority proofs to CPU")
     } else {
         info!("Let everyone queue up to run on GPU")
     }
-    let mode = value_t!(matches, "mode", Mode).unwrap_or_else(|e| e.exit());
+    let mode = matches
+        .value_of_t::<Mode>("mode")
+        .unwrap_or_else(|e| e.exit());
     match mode {
         Mode::Threads => info!("Using threads"),
         Mode::Processes => info!("Using processes"),

@@ -3,7 +3,7 @@ version: 2.1
 parameters:
   nightly-toolchain:
     type: string
-    default: "nightly-2021-04-24"
+    default: "nightly-2022-03-10"
 
 executors:
   default:
@@ -27,6 +27,21 @@ setup-env: &setup-env
 
 
 jobs:
+  # This job is needed for macOS, which doesn't support restoring caches that
+  # were created on Linux. This job will run on Linux, restore the cache and
+  # then persist it to the workspace, so that the macOS job can then use the
+  # files from the workspace.
+  persist_parameters_to_workspace:
+    executor: default
+    environment: *setup-env
+    steps:
+      - checkout
+      - restore_parameter_cache
+      - persist_to_workspace:
+          root: /tmp
+          paths:
+            - filecoin-proof-parameters
+
   ensure_groth_parameters_and_keys_linux:
     executor: default
     environment: *setup-env
@@ -283,6 +298,9 @@ jobs:
     environment: *setup-env
     steps:
       - checkout
+      # In case of macOS, the workspace contains the parameter files.
+      - attach_workspace:
+          at: "/tmp"
       - run:
           name: Install hwloc 2.3.0
           command: |
@@ -315,6 +333,9 @@ commands:
   ensure_filecoin_parameters:
     steps:
       - run:
+          name: Create parameters directory
+          command: mkdir -p ${FIL_PROOFS_PARAMETER_CACHE}
+      - run:
           name: Build paramcache if it doesn't already exist
           command: |
             set -x; test -f /tmp/paramcache.awesome \
@@ -326,8 +347,11 @@ commands:
       - run:
           name: Obtain filecoin ipp parameter file
           command: |
-            cargo run --release --bin paramfetch -- -a -j srs-inner-product.json
-          no_output_timeout: 60m
+            # paramfetch is using `ipget` which currently always times out on
+            # CI, hence get this file via HTTP instead.
+            #cargo run --release --bin paramfetch -- -a -j srs-inner-product.json
+            # `--insecure` is needed due to an outdated base systems.
+            curl --insecure https://proofs.filecoin.io/v28-fil-inner-product-v1.srs --output ${FIL_PROOFS_PARAMETER_CACHE}v28-fil-inner-product-v1.srs
       - run:
           name: Make the parameters world readable
           command: chmod -R 755 ${FIL_PROOFS_PARAMETER_CACHE}
@@ -368,6 +392,9 @@ workflows:
   test_all:
     jobs:
       - ensure_groth_parameters_and_keys_linux
+      - persist_parameters_to_workspace:
+          requires:
+            - ensure_groth_parameters_and_keys_linux
       - cargo_fetch
       - rustfmt:
           requires:
@@ -515,7 +542,9 @@ workflows:
           requires:
             - cargo_fetch
             - ensure_groth_parameters_and_keys_linux
-      - test_darwin
+      - test_darwin:
+          requires:
+            - persist_parameters_to_workspace
 
       - test:
           name: test_fr32

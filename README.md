@@ -103,12 +103,14 @@ $ cargo +nightly build -p filecoin-proofs --release --target aarch64-unknown-lin
 
 ## Benchmarks
 
-The main benchmarking tool is called `benchy`.  `benchy` has several subcommands, including `merkleproofs`, `prodbench`, `winning_post` and `window_post`.  You can run them with various configuration options, but some examples are below:
+The main benchmarking tool is called `benchy`.  `benchy` has several subcommands, including `merkleproofs`, `prodbench`, `winning_post`, `window_post` and `window_post_fake` (uses fake sealing for faster benching).  Note that `winning_post` now has a `--fake` option for also running fake sealing for faster benching.  You can run them with various configuration options, but some examples are below:
 
 ```
 > cargo run --release --bin benchy -- merkleproofs --size 2KiB
 > cargo run --release --bin benchy -- winning-post --size 2KiB
+> cargo run --release --bin benchy -- winning-post --size 2KiB --fake
 > cargo run --release --bin benchy -- window-post --size 2KiB
+> cargo run --release --bin benchy -- window-post-fake --size 2KiB --fake
 > cargo run --release --bin benchy -- prodbench
 ```
 

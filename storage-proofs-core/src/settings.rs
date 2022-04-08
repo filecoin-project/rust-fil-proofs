@@ -92,11 +92,10 @@ impl Settings {
     fn new() -> Result<Settings, ConfigError> {
         set_gpu_framework();
 
-        let mut s = Config::new();
-
-        s.merge(File::with_name(SETTINGS_PATH).required(false))?;
-        s.merge(Environment::with_prefix(PREFIX))?;
-
-        s.try_into()
+        Config::builder()
+            .add_source(File::with_name(SETTINGS_PATH).required(false))
+            .add_source(Environment::with_prefix(PREFIX))
+            .build()?
+            .try_deserialize()
     }
 }

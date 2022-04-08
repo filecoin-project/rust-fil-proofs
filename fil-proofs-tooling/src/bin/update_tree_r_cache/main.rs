@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{ensure, Context, Result};
 use bincode::deserialize;
-use clap::{value_t, App, Arg, SubCommand};
+use clap::{Arg, Command};
 use filecoin_hashers::Hasher;
 use filecoin_proofs::{
     is_sector_shape_base, is_sector_shape_sub2, is_sector_shape_sub8, is_sector_shape_top2,
@@ -313,10 +313,10 @@ fn run_verify(sector_size: usize, cache: &Path, replica_path: &Path) -> Result<(
 fn main() -> Result<()> {
     fil_logger::init();
 
-    let rebuild_cmd = SubCommand::with_name("rebuild")
+    let rebuild_cmd = Command::new("rebuild")
         .about("Rebuild tree_r_last trees from replica")
         .arg(
-            Arg::with_name("size")
+            Arg::new("size")
                 .required(true)
                 .long("size")
                 .default_value("34359738368")
@@ -324,24 +324,24 @@ fn main() -> Result<()> {
                 .takes_value(true),
         )
         .arg(
-            Arg::with_name("replica")
+            Arg::new("replica")
                 .long("replica")
                 .help("The replica file")
                 .required(true)
                 .takes_value(true),
         )
         .arg(
-            Arg::with_name("cache")
+            Arg::new("cache")
                 .long("cache")
                 .help("The cache directory for the output trees")
                 .required(true)
                 .takes_value(true),
         );
 
-    let inspect_cmd = SubCommand::with_name("inspect")
+    let inspect_cmd = Command::new("inspect")
         .about("Inspect tree_r_last trees and match with p_aux in cache")
         .arg(
-            Arg::with_name("size")
+            Arg::new("size")
                 .required(true)
                 .long("size")
                 .default_value("34359738368")
@@ -349,24 +349,24 @@ fn main() -> Result<()> {
                 .takes_value(true),
         )
         .arg(
-            Arg::with_name("replica")
+            Arg::new("replica")
                 .long("replica")
                 .help("The replica file")
                 .required(true)
                 .takes_value(true),
         )
         .arg(
-            Arg::with_name("cache")
+            Arg::new("cache")
                 .long("cache")
                 .help("The cache directory for the output trees")
                 .required(true)
                 .takes_value(true),
         );
 
-    let verify_cmd = SubCommand::with_name("verify")
+    let verify_cmd = Command::new("verify")
         .about("Verify tree_r_last trees and check for cache mis-match")
         .arg(
-            Arg::with_name("size")
+            Arg::new("size")
                 .required(true)
                 .long("size")
                 .default_value("34359738368")
@@ -374,21 +374,21 @@ fn main() -> Result<()> {
                 .takes_value(true),
         )
         .arg(
-            Arg::with_name("replica")
+            Arg::new("replica")
                 .long("replica")
                 .help("The replica file")
                 .required(true)
                 .takes_value(true),
         )
         .arg(
-            Arg::with_name("cache")
+            Arg::new("cache")
                 .long("cache")
                 .help("The cache directory for the output trees")
                 .required(true)
                 .takes_value(true),
         );
 
-    let matches = App::new("update_tree_r_cache")
+    let matches = Command::new("update_tree_r_cache")
         .version("0.1")
         .subcommand(rebuild_cmd)
         .subcommand(inspect_cmd)
@@ -396,24 +396,27 @@ fn main() -> Result<()> {
         .get_matches();
 
     match matches.subcommand() {
-        ("rebuild", Some(m)) => {
-            let cache = value_t!(m, "cache", PathBuf)?;
-            let replica = value_t!(m, "replica", PathBuf)?;
-            let size = value_t!(m, "size", usize)
+        Some(("rebuild", m)) => {
+            let cache = m.value_of_t::<PathBuf>("cache")?;
+            let replica = m.value_of_t::<PathBuf>("replica")?;
+            let size = m
+                .value_of_t::<usize>("size")
                 .expect("could not convert `size` CLI argument to `usize`");
             run_rebuild(size, cache.as_path(), replica.as_path())?;
         }
-        ("inspect", Some(m)) => {
-            let cache = value_t!(m, "cache", PathBuf)?;
-            let replica = value_t!(m, "replica", PathBuf)?;
-            let size = value_t!(m, "size", usize)
+        Some(("inspect", m)) => {
+            let cache = m.value_of_t::<PathBuf>("cache")?;
+            let replica = m.value_of_t::<PathBuf>("replica")?;
+            let size = m
+                .value_of_t::<usize>("size")
                 .expect("could not convert `size` CLI argument to `usize`");
             run_inspect(size, cache.as_path(), replica.as_path())?;
         }
-        ("verify", Some(m)) => {
-            let cache = value_t!(m, "cache", PathBuf)?;
-            let replica = value_t!(m, "replica", PathBuf)?;
-            let size = value_t!(m, "size", usize)
+        Some(("verify", m)) => {
+            let cache = m.value_of_t::<PathBuf>("cache")?;
+            let replica = m.value_of_t::<PathBuf>("replica")?;
+            let size = m
+                .value_of_t::<usize>("size")
                 .expect("could not convert `size` CLI argument to `usize`");
             run_verify(size, cache.as_path(), replica.as_path())?;
         }
