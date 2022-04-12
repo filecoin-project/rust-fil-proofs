@@ -12,3 +12,6 @@ members = [
   "filecoin-hashers",
   "storage-proofs-update",
 ]
+
+[patch.crates-io]
+neptune = { git = "https://github.com/filecoin-project/neptune", branch = "fr-as-trait" } #1db5cc48cdcd690c970fe6073a4ad79f7699878f"
