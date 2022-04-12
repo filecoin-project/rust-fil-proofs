@@ -220,7 +220,7 @@ jobs:
       - run:
           name: Test with no gpu
           command: |
-            cargo +<< pipeline.parameters.nightly-toolchain >> test --all --verbose --no-default-features
+            cargo +<< pipeline.parameters.nightly-toolchain >> test --all --verbose --release --no-default-features
           no_output_timeout: 30m
 
   test_arm_no_gpu:
