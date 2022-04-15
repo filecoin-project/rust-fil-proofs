@@ -263,9 +263,9 @@ mod tests {
         blake2s::Blake2sHasher, poseidon::PoseidonHasher, sha256::Sha256Hasher,
     };
     use generic_array::typenum::{U0, U2, U4, U8};
+    use halo2_proofs::pasta::{Fp, Fq};
     use memmap::{MmapMut, MmapOptions};
     use merkletree::store::StoreConfig;
-    use pasta_curves::{Fp, Fq};
 
     use crate::merkle::{
         create_base_merkle_tree, DiskStore, MerkleProofTrait, MerkleTreeTrait, MerkleTreeWrapper,

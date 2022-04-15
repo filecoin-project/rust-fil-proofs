@@ -20,7 +20,9 @@ blstrs = { version = "0.4.0", features = ["gpu"] }
 bitvec = "0.17"
 criterion = "0.3"
 itertools = "0.9"
-pasta_curves = { git = "https://github.com/zcash/pasta_curves", rev = "2796b6b", features = ["gpu"] }
+# pasta_curves = { git = "https://github.com/zcash/pasta_curves", rev = "2796b6b", features = ["gpu"] }
+# halo2_proofs = { git = "https://github.com/drpetervannostrand/halo2", branch = "sha256-chip" }
+halo2_proofs = { git = "https://github.com/drpetervannostrand/halo2" }
 pretty_assertions = "0.6.1"
 rand = "0.8"
 rand_xorshift = "0.3"

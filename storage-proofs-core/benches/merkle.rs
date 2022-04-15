@@ -1,7 +1,7 @@
 use blstrs::Scalar as Fr;
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use filecoin_hashers::{poseidon::PoseidonHasher, sha256::Sha256Hasher, Domain, Hasher};
-use pasta_curves::{Fp, Fq};
+use halo2_proofs::pasta::{Fp, Fq};
 use rand::thread_rng;
 use storage_proofs_core::merkle::{create_base_merkle_tree, BinaryMerkleTree};
 

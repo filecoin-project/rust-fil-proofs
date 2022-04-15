@@ -193,8 +193,8 @@ mod tests {
 
     use bitvec::{order::Lsb0 as LittleEndian, vec::BitVec};
     use ff::PrimeField;
+    use halo2_proofs::pasta::{Fp, Fq};
     use itertools::Itertools;
-    use pasta_curves::{Fp, Fq};
     use pretty_assertions::assert_eq;
     use rand::random;
 
