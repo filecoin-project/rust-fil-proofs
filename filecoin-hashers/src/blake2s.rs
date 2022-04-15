@@ -11,11 +11,11 @@ use bellperson::{
 use blake2s_simd::{Hash as Blake2sHash, Params as Blake2sBuilder, State};
 use blstrs::Scalar as Fr;
 use ff::PrimeField;
+use halo2_proofs::pasta::{Fp, Fq};
 use merkletree::{
     hash::{Algorithm, Hashable},
     merkle::Element,
 };
-use pasta_curves::{Fp, Fq};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::{Domain, HashFunction, Hasher};

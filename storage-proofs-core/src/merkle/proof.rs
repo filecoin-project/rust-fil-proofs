@@ -774,7 +774,7 @@ mod tests {
         blake2s::Blake2sHasher, poseidon::PoseidonHasher, sha256::Sha256Hasher, Domain,
     };
     use generic_array::typenum::{U2, U4, U8};
-    use pasta_curves::{Fp, Fq};
+    use halo2_proofs::pasta::{Fp, Fq};
     use rand::thread_rng;
 
     use crate::merkle::{

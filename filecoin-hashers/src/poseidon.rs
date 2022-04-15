@@ -7,19 +7,30 @@ use bellperson::{
 };
 use blstrs::Scalar as Fr;
 use ff::{Field, PrimeField};
+use fil_halo2_gadgets::NumCols;
 use generic_array::typenum::{Unsigned, U2, U4, U8};
+use halo2_proofs::{
+    arithmetic::FieldExt,
+    circuit::{AssignedCell, Layouter},
+    pasta::{Fp, Fq},
+    plonk::{self, Advice, Column, Fixed},
+};
 use merkletree::{
     hash::{Algorithm, Hashable},
     merkle::Element,
 };
-use neptune::{circuit::poseidon_hash, Poseidon};
-use pasta_curves::{Fp, Fq};
+use neptune::{
+    circuit::poseidon_hash,
+    halo2_circuit::{PoseidonChip, PoseidonConfig},
+    Poseidon,
+};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::{
-    Domain, FieldArity, HashFunction, Hasher, PoseidonArity, PoseidonMDArity, POSEIDON_CONSTANTS,
-    POSEIDON_CONSTANTS_2, POSEIDON_CONSTANTS_2_PALLAS, POSEIDON_CONSTANTS_2_VESTA,
-    POSEIDON_MD_CONSTANTS, POSEIDON_MD_CONSTANTS_PALLAS, POSEIDON_MD_CONSTANTS_VESTA,
+    Domain, FieldArity, HaloHasher, HashFunction, HashInstructions, Hasher, PoseidonArity,
+    PoseidonMDArity, POSEIDON_CONSTANTS, POSEIDON_CONSTANTS_2, POSEIDON_CONSTANTS_2_PALLAS,
+    POSEIDON_CONSTANTS_2_VESTA, POSEIDON_MD_CONSTANTS, POSEIDON_MD_CONSTANTS_PALLAS,
+    POSEIDON_MD_CONSTANTS_VESTA,
 };
 
 #[derive(Default, Copy, Clone, Debug)]
@@ -628,5 +639,91 @@ impl Hasher for PoseidonHasher<Fq> {
 
     fn name() -> String {
         "poseidon_hasher_vesta".into()
+    }
+}
+
+impl<F, A> HashInstructions<F> for PoseidonChip<F, A>
+where
+    F: FieldExt,
+    A: PoseidonArity<F>,
+{
+    fn hash(
+        &self,
+        layouter: impl Layouter<F>,
+        preimage: &[AssignedCell<F, F>],
+    ) -> Result<AssignedCell<F, F>, plonk::Error> {
+        let consts = POSEIDON_CONSTANTS
+            .get::<FieldArity<F, A>>()
+            .unwrap_or_else(|| {
+                panic!(
+                    "arity-{} poseidon constants not found for field",
+                    A::to_usize()
+                )
+            });
+        self.hash(layouter, preimage, *consts)
+    }
+}
+
+impl<F, A> HaloHasher<A> for PoseidonHasher<F>
+where
+    Self: Hasher,
+    Self::Domain: Domain<Field = F>,
+    F: FieldExt,
+    A: PoseidonArity<F>,
+{
+    type Chip = PoseidonChip<F, A>;
+    type Config = PoseidonConfig<F, A>;
+
+    fn construct(config: Self::Config) -> Self::Chip {
+        PoseidonChip::construct(config)
+    }
+
+    fn num_cols() -> NumCols {
+        let width = A::to_usize() + 1;
+        NumCols {
+            advice_eq: width,
+            advice_neq: 1,
+            // Poseidon requires `2 * width` fixed columns.
+            fixed_eq: 1,
+            fixed_neq: 2 * width - 1,
+        }
+    }
+
+    #[allow(clippy::unwrap_used)]
+    fn configure(
+        meta: &mut plonk::ConstraintSystem<F>,
+        advice_eq: &[Column<Advice>],
+        advice_neq: &[Column<Advice>],
+        fixed_eq: &[Column<Fixed>],
+        fixed_neq: &[Column<Fixed>],
+    ) -> Self::Config {
+        let num_cols = <Self as HaloHasher<A>>::num_cols();
+
+        // Check that we have enough equality enabled and total columns.
+        let advice_eq_len = advice_eq.len();
+        let advice_neq_len = advice_neq.len();
+        let fixed_eq_len = fixed_eq.len();
+        let fixed_neq_len = fixed_neq.len();
+        assert!(advice_eq_len >= num_cols.advice_eq);
+        assert!(fixed_eq_len >= num_cols.fixed_eq);
+        assert!(advice_eq_len + advice_neq_len >= num_cols.advice_eq + num_cols.advice_neq);
+        assert!(fixed_eq_len + fixed_neq_len >= num_cols.fixed_eq + num_cols.fixed_neq);
+
+        let mut advice = advice_eq.iter().chain(advice_neq.iter()).copied();
+
+        let state: Vec<Column<Advice>> = (0..num_cols.advice_eq)
+            .map(|_| advice.next().unwrap())
+            .collect();
+
+        let extra = advice.next().unwrap();
+
+        let fixed: Vec<Column<Fixed>> = fixed_eq
+            .iter()
+            .chain(fixed_neq.iter())
+            .copied()
+            .take(num_cols.fixed_eq + num_cols.fixed_neq)
+            .collect();
+
+        PoseidonChip::<F, A>::configure(meta, state, extra, fixed)
     }
 }

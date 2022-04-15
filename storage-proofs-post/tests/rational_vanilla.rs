@@ -6,7 +6,7 @@ use filecoin_hashers::{
     Hasher,
 };
 use generic_array::typenum::{U0, U2, U8};
-use pasta_curves::{Fp, Fq};
+use halo2_proofs::pasta::{Fp, Fq};
 use rand::{Rng, SeedableRng};
 use rand_xorshift::XorShiftRng;
 use storage_proofs_core::{
