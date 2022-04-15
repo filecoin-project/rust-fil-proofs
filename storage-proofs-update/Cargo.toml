@@ -22,11 +22,14 @@ log = "0.4.7"
 generic-array = "0.14.4"
 anyhow = "1.0.23"
 # neptune = { version = "~7.0.0", features = ["bls", "arity2", "arity4", "arity8", "arity11", "arity16", "arity24", "arity36"] }
-neptune = { git = "https://github.com/filecoin-project/neptune", branch = "fr-as-trait", features = ["bls", "pasta", "arity2", "arity4", "arity8", "arity11", "arity16", "arity24", "arity36"] }
+# neptune = { git = "https://github.com/filecoin-project/neptune", branch = "fr-as-trait", features = ["bls", "pasta", "arity2", "arity4", "arity8", "arity11", "arity16", "arity24", "arity36"] }
+neptune = { git = "https://github.com/filecoin-project/neptune", branch = "fr-as-trait-halo2-circuit", features = ["bls", "pasta", "arity2", "arity4", "arity8", "arity11", "arity16", "arity24", "arity36"] }
 lazy_static = "1.2"
 fr32 = { path = "../fr32", version = "~4.0.0", default-features = false }
 memmap = "0.7"
-pasta_curves = { git = "https://github.com/zcash/pasta_curves", rev = "2796b6b", features = ["gpu"] }
+# pasta_curves = { git = "https://github.com/zcash/pasta_curves", rev = "2796b6b", features = ["gpu"] }
+# halo2_proofs = { git = "https://github.com/drpetervannostrand/halo2", branch = "sha256-chip" }
+halo2_proofs = { git = "https://github.com/drpetervannostrand/halo2" }
 typemap = "0.3.3"
 
 [dev-dependencies]

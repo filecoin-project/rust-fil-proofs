@@ -1,4 +1,5 @@
 use std::cmp::Ordering;
+use std::convert::TryInto;
 use std::fmt::{self, Debug, Formatter};
 use std::marker::PhantomData;
 
@@ -8,15 +9,25 @@ use bellperson::{
 };
 use blstrs::Scalar as Fr;
 use ff::PrimeField;
+use fil_halo2_gadgets::{
+    sha256::{Sha256Chip, Sha256Config},
+    uint32::{U32DecompChip, U32StripBitsChip, U32_DECOMP_NUM_COLS},
+    NumCols,
+};
+use halo2_proofs::{
+    arithmetic::FieldExt,
+    circuit::{AssignedCell, Layouter},
+    pasta::{Fp, Fq},
+    plonk::{self, Advice, Column, Fixed},
+};
 use merkletree::{
     hash::{Algorithm, Hashable},
     merkle::Element,
 };
-use pasta_curves::{Fp, Fq};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use sha2::{Digest, Sha256};
 
-use crate::{Domain, HashFunction, Hasher};
+use crate::{Domain, HaloHasher, HashFunction, HashInstructions, Hasher, PoseidonArity};
 
 #[derive(Copy, Clone, Default)]
 pub struct Sha256Domain<F> {
@@ -542,5 +553,60 @@ impl Hasher for Sha256Hasher<Fq> {
 
     fn name() -> String {
         "sha256_hasher_vesta".into()
+    }
+}
+
+impl<F: FieldExt> HashInstructions<F> for Sha256Chip<F> {
+    fn hash(
+        &self,
+        layouter: impl Layouter<F>,
+        preimage: &[AssignedCell<F, F>],
+    ) -> Result<AssignedCell<F, F>, plonk::Error> {
+        self.hash_field_elems(layouter, preimage)
+    }
+}
+
+impl<F, A> HaloHasher<A> for Sha256Hasher<F>
+where
+    Self: Hasher,
+    Self::Domain: Domain<Field = F>,
+    F: FieldExt,
+    A: PoseidonArity<F>,
+{
+    type Chip = Sha256Chip<F>;
+    type Config = Sha256Config<F>;
+
+    fn load(
+        layouter: &mut impl Layouter<<Self::Domain as Domain>::Field>,
+        config: &Self::Config,
+    ) -> Result<(), plonk::Error> {
+        Sha256Chip::load(layouter, config)
+    }
+
+    fn construct(config: Self::Config) -> Self::Chip {
+        Sha256Chip::construct(config)
+    }
+
+    fn num_cols() -> NumCols {
+        U32_DECOMP_NUM_COLS
+    }
+
+    #[allow(clippy::unwrap_used)]
+    fn configure(
+        meta: &mut plonk::ConstraintSystem<F>,
+        advice_eq: &[Column<Advice>],
+        advice_neq: &[Column<Advice>],
+        _fixed_eq: &[Column<Fixed>],
+        _fixed_neq: &[Column<Fixed>],
+    ) -> Self::Config {
+        let num_cols = <Self as HaloHasher<A>>::num_cols();
+        assert!(advice_eq.len() >= num_cols.advice_eq);
+        assert!(advice_neq.len() >= num_cols.advice_neq);
+
+        let advice = advice_eq[..num_cols.advice_eq].try_into().unwrap();
+        let u32_decomp = U32DecompChip::configure(meta, advice);
+        let strip_bits = U32StripBitsChip::configure(meta, advice);
+
+        Sha256Chip::configure_with_packing(meta, u32_decomp, strip_bits)
     }
 }

@@ -6,7 +6,7 @@ use filecoin_hashers::{
     blake2s::Blake2sHasher, poseidon::PoseidonHasher, sha256::Sha256Hasher, Domain, Hasher,
 };
 use generic_array::typenum::{U0, U2, U4};
-use pasta_curves::{Fp, Fq};
+use halo2_proofs::pasta::{Fp, Fq};
 use rand::SeedableRng;
 use rand_xorshift::XorShiftRng;
 use storage_proofs_core::{

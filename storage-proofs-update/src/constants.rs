@@ -5,6 +5,7 @@ use filecoin_hashers::{
     FieldArity,
 };
 use generic_array::typenum::{Unsigned, U0, U2, U8};
+use halo2_proofs::pasta::{Fp, Fq};
 use lazy_static::lazy_static;
 use merkletree::store::DiskStore;
 use neptune::{
@@ -12,7 +13,6 @@ use neptune::{
     poseidon::PoseidonConstants,
     Strength,
 };
-use pasta_curves::{Fp, Fq};
 use storage_proofs_core::merkle::{BinaryMerkleTree, LCTree};
 use typemap::ShareMap;
 
