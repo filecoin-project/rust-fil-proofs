@@ -42,6 +42,11 @@ fr32 = { path = "../fr32", version = "~5.0.0"}
 blstrs = "0.5.0"
 cbc = { version = "0.1.2", features = ["std"] }
 blstrs = { version = "0.4.0", features = ["gpu"] }
+# halo2_gadgets = { git = "https://github.com/drpetervannostrand/halo2", branch = "sha256-chip" }
+# halo2_proofs = { git = "https://github.com/drpetervannostrand/halo2", branch = "sha256-chip" }
+halo2_gadgets = { git = "https://github.com/drpetervannostrand/halo2" }
+halo2_proofs = { git = "https://github.com/drpetervannostrand/halo2" }
+fil-halo2-gadgets = { path = "../fil-halo2-gadgets" }
 
 [dev-dependencies]
 proptest = "1.0.0"
@@ -53,7 +58,7 @@ filecoin-hashers = { path = "../filecoin-hashers", version = "~7.0.0", default-f
 tempfile = "3"
 blake2s_simd = "1.0.0"
 # pasta_curves = "0.3.0"
-pasta_curves = { git = "https://github.com/zcash/pasta_curves", rev = "2796b6b", features = ["gpu"] }
+# pasta_curves = { git = "https://github.com/zcash/pasta_curves", rev = "2796b6b", features = ["gpu"] }
 
 [features]
 default = ["opencl"]
