@@ -139,11 +139,12 @@ jobs:
             ulimit -u 20000
             ulimit -n 20000
             cargo test --all --verbose --release lifecycle -- --ignored --nocapture
-            cargo test -p storage-proofs-porep --features isolated-testing --release checkout_cores -- --test-threads=1
+            cargo test -p storage-proofs-porep --features isolated-testing --release --lib stacked::vanilla::cores
             cargo test -p storage-proofs-porep --features isolated-testing --release test_parallel_generation_and_read_partial_range_v1_0
             cargo test -p storage-proofs-porep --features isolated-testing --release test_parallel_generation_and_read_partial_range_v1_1
           no_output_timeout: 30m
           environment:
+            RUST_LOG: debug
             RUST_TEST_THREADS: 1
             FIL_PROOFS_USE_MULTICORE_SDR: true
 
