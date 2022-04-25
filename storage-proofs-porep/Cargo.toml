@@ -40,8 +40,8 @@ libc = "0.2"
 fdlimit = "0.2.0"
 fr32 = { path = "../fr32", version = "^4.0.0", default-features = false }
 yastl = "0.1.2"
-fil_logger = "0.1"
 pairing = "0.21"
+fil_logger = "0.1.6"
 blstrs = "0.4.0"
 
 [target."cfg(target_arch = \"aarch64\")".dependencies]
@@ -54,7 +54,6 @@ tempfile = "3"
 rand_xorshift = "0.3.0"
 criterion = "0.3.2"
 glob = "0.3.0"
-pretty_env_logger = "0.4.0"
 filecoin-hashers = { path = "../filecoin-hashers", version = "^6.0.0", default-features = false, features = ["poseidon", "sha256", "blake2s"]}
 
 [features]
