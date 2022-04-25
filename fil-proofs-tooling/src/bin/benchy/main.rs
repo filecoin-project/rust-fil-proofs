@@ -84,7 +84,6 @@ fn main() -> Result<()> {
         .arg(
             Arg::new("api_version")
                 .long("api-version")
-                .required(true)
                 .help("The api_version to use (default: 1.1.0)")
                 .default_value("1.1.0")
                 .takes_value(true),
@@ -108,7 +107,6 @@ fn main() -> Result<()> {
         .arg(
             Arg::new("api_version")
                 .long("api-version")
-                .required(true)
                 .help("The api_version to use (default: 1.1.0)")
                 .default_value("1.1.0")
                 .takes_value(true),
@@ -132,7 +130,6 @@ fn main() -> Result<()> {
         .arg(
             Arg::new("api_version")
                 .long("api-version")
-                .required(true)
                 .help("The api_version to use (default: 1.1.0)")
                 .default_value("1.1.0")
                 .takes_value(true),

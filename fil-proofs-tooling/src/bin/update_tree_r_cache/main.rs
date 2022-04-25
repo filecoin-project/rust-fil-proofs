@@ -317,7 +317,6 @@ fn main() -> Result<()> {
         .about("Rebuild tree_r_last trees from replica")
         .arg(
             Arg::new("size")
-                .required(true)
                 .long("size")
                 .default_value("34359738368")
                 .help("The data size in bytes")
@@ -342,7 +341,6 @@ fn main() -> Result<()> {
         .about("Inspect tree_r_last trees and match with p_aux in cache")
         .arg(
             Arg::new("size")
-                .required(true)
                 .long("size")
                 .default_value("34359738368")
                 .help("The data size in bytes")
@@ -367,7 +365,6 @@ fn main() -> Result<()> {
         .about("Verify tree_r_last trees and check for cache mis-match")
         .arg(
             Arg::new("size")
-                .required(true)
                 .long("size")
                 .default_value("34359738368")
                 .help("The data size in bytes")
