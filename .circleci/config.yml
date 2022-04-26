@@ -184,7 +184,7 @@ jobs:
             ulimit -n 20000
             ulimit -u 20000
             ulimit -n 20000
-            cargo test --all --verbose --release << parameters.cargo-args >> -- --nocapture << parameters.test-args >>
+            cargo test --verbose --release << parameters.cargo-args >> -- --nocapture << parameters.test-args >>
           no_output_timeout: 30m
           environment:
             FIL_PROOFS_USE_GPU_COLUMN_BUILDER: true
@@ -416,12 +416,22 @@ workflows:
 
       - test_gpu_tree_building:
           name: test_gpu_tree_building_opencl (regular)
+          cargo-args: "--workspace"
           requires:
             - cargo_fetch
             - ensure_groth_parameters_and_keys_linux
 
       - test_gpu_tree_building:
-          name: test_gpu_tree_building_opencl (ignored)
+          name: test_gpu_tree_building_opencl (ignored, filecoin-proofs, storage-proofs-update)
+          cargo-args: "--package filecoin-proofs --package storage-proofs-update"
+          test-args: "--ignored"
+          requires:
+            - cargo_fetch
+            - ensure_groth_parameters_and_keys_linux
+
+      - test_gpu_tree_building:
+          name: test_gpu_tree_building_opencl (ignored, rest)
+          cargo-args: "--workspace --exclude filecoin-proofs --exclude storage-proofs-update"
           test-args: "--ignored"
           requires:
             - cargo_fetch
@@ -429,14 +439,22 @@ workflows:
 
       - test_gpu_tree_building:
           name: test_gpu_tree_building_cuda (regular)
-          cargo-args: "--features cuda"
+          cargo-args: "--workspace --features cuda"
           requires:
             - cargo_fetch
             - ensure_groth_parameters_and_keys_linux
 
       - test_gpu_tree_building:
-          name: test_gpu_tree_building_cuda (ignored)
-          cargo-args: "--features cuda"
+          name: test_gpu_tree_building_cuda (ignored, filecoin-proofs, storage-proofs-update)
+          cargo-args: "--package filecoin-proofs --package storage-proofs-update --features cuda"
+          test-args: "--ignored"
+          requires:
+            - cargo_fetch
+            - ensure_groth_parameters_and_keys_linux
+
+      - test_gpu_tree_building:
+          name: test_gpu_tree_building_cuda (ignored, rest)
+          cargo-args: "--workspace --exclude filecoin-proofs --exclude storage-proofs-update --features cuda"
           test-args: "--ignored"
           requires:
             - cargo_fetch
