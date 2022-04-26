@@ -222,31 +222,37 @@ where
 }
 
 #[test]
+#[ignore]
 fn test_empty_sector_update_compound_1kib() {
     test_empty_sector_update_compound::<U8, U4, U0>(SECTOR_SIZE_1_KIB);
 }
 
 #[test]
+#[ignore]
 fn test_empty_sector_update_compound_2kib() {
     test_empty_sector_update_compound::<U8, U0, U0>(SECTOR_SIZE_2_KIB);
 }
 
 #[test]
+#[ignore]
 fn test_empty_sector_update_compound_4kib() {
     test_empty_sector_update_compound::<U8, U2, U0>(SECTOR_SIZE_4_KIB);
 }
 
 #[test]
+#[ignore]
 fn test_empty_sector_update_compound_8kib() {
     test_empty_sector_update_compound::<U8, U4, U0>(SECTOR_SIZE_8_KIB);
 }
 
 #[test]
+#[ignore]
 fn test_empty_sector_update_compound_16kib() {
     test_empty_sector_update_compound::<U8, U8, U0>(SECTOR_SIZE_16_KIB);
 }
 
 #[test]
+#[ignore]
 fn test_empty_sector_update_compound_32kib() {
     test_empty_sector_update_compound::<U8, U8, U2>(SECTOR_SIZE_32_KIB);
 }
