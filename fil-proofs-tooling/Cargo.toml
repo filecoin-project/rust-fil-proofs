@@ -34,7 +34,7 @@ git2 = "0.14.2"
 heim = { git = "https://github.com/heim-rs/heim", rev = "b292f15", features = ["host", "memory", "cpu"] }
 async-std = "1.6"
 blake2s_simd = "1.0.0"
-fil_logger = "0.1"
+fil_logger = "0.1.6"
 log = "0.4.8"
 uom = "0.32.0"
 merkletree = "0.21.0"

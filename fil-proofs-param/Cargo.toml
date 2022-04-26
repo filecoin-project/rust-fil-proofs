@@ -28,7 +28,7 @@ ff = "0.11.0"
 blake2b_simd = "1.0.0"
 bellperson = "0.18.0"
 log = "0.4.7"
-fil_logger = "0.1"
+fil_logger = "0.1.6"
 env_proxy = "0.4"
 flate2 = { version = "1.0.9", features = ["rust_backend"]}
 tar = "0.4.26"

@@ -2,7 +2,6 @@ use std::collections::BTreeMap;
 use std::fs::{metadata, read_dir, remove_file, OpenOptions};
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
-use std::sync::Once;
 
 use anyhow::{ensure, Context, Error, Result};
 use bellperson::groth16;
@@ -53,13 +52,6 @@ use filecoin_proofs::{
 // same porep_ids).
 const ARBITRARY_POREP_ID_V1_0_0: [u8; 32] = [127; 32];
 const ARBITRARY_POREP_ID_V1_1_0: [u8; 32] = [128; 32];
-
-static INIT_LOGGER: Once = Once::new();
-fn init_logger() {
-    INIT_LOGGER.call_once(|| {
-        fil_logger::init();
-    });
-}
 
 const TEST_SEED: [u8; 16] = [
     0x59, 0x62, 0xbe, 0x5d, 0x76, 0x3d, 0x31, 0x8d, 0x17, 0xdb, 0x37, 0x32, 0x54, 0x06, 0xbc, 0xe5,
@@ -645,7 +637,7 @@ fn run_resumable_seal<Tree: 'static + MerkleTreeTrait>(
     porep_id: &[u8; 32],
     api_version: ApiVersion,
 ) {
-    init_logger();
+    fil_logger::maybe_init();
 
     let sector_size = SECTOR_SIZE_2_KIB;
     let mut rng = XorShiftRng::from_seed(TEST_SEED);
@@ -1701,7 +1693,7 @@ fn create_seal<R: Rng, Tree: 'static + MerkleTreeTrait>(
     porep_id: &[u8; 32],
     api_version: ApiVersion,
 ) -> Result<(SectorId, NamedTempFile, Commitment, TempDir)> {
-    init_logger();
+    fil_logger::maybe_init();
 
     let (mut piece_file, piece_bytes) = generate_piece_file(sector_size)?;
     let sealed_sector_file = NamedTempFile::new()?;
@@ -1761,7 +1753,7 @@ fn create_seal_for_aggregation<R: Rng, Tree: 'static + MerkleTreeTrait>(
     porep_id: &[u8; 32],
     api_version: ApiVersion,
 ) -> Result<(SealCommitOutput, Vec<Vec<Fr>>, [u8; 32], [u8; 32])> {
-    init_logger();
+    fil_logger::maybe_init();
 
     let (mut piece_file, _piece_bytes) = generate_piece_file(sector_size)?;
     let sealed_sector_file = NamedTempFile::new()?;
@@ -1849,7 +1841,7 @@ fn create_seal_for_upgrade<R: Rng, Tree: 'static + MerkleTreeTrait<Hasher = Tree
     porep_id: &[u8; 32],
     api_version: ApiVersion,
 ) -> Result<(SectorId, NamedTempFile, Commitment, TempDir)> {
-    init_logger();
+    fil_logger::maybe_init();
 
     let (mut piece_file, _piece_bytes) = generate_piece_file(sector_size)?;
     let sealed_sector_file = NamedTempFile::new()?;
@@ -2078,7 +2070,7 @@ fn create_fake_seal<R: rand::Rng, Tree: 'static + MerkleTreeTrait>(
     porep_id: &[u8; 32],
     api_version: ApiVersion,
 ) -> Result<(SectorId, NamedTempFile, Commitment, TempDir)> {
-    init_logger();
+    fil_logger::maybe_init();
 
     let sealed_sector_file = NamedTempFile::new()?;
 

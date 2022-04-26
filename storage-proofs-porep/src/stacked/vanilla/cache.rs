@@ -451,23 +451,14 @@ where
 mod tests {
     use super::*;
 
-    use std::sync::Once;
-
     use filecoin_hashers::poseidon::PoseidonHasher;
     use storage_proofs_core::api_version::ApiVersion;
 
     use crate::stacked::vanilla::graph::{StackedBucketGraph, EXP_DEGREE};
 
-    static INIT_LOGGER: Once = Once::new();
-    fn init_logger() {
-        INIT_LOGGER.call_once(|| {
-            fil_logger::init();
-        });
-    }
-
     #[test]
     fn test_read_full_range() {
-        init_logger();
+        fil_logger::maybe_init();
         let nodes = 24u32;
         let graph = StackedBucketGraph::<PoseidonHasher>::new_stacked(
             nodes as usize,
@@ -520,7 +511,7 @@ mod tests {
     ) {
         use yastl::Pool;
 
-        init_logger();
+        fil_logger::maybe_init();
         let pool = Pool::new(3);
         let nodes = 48u32;
         let graph = StackedBucketGraph::<PoseidonHasher>::new_stacked(
@@ -571,7 +562,7 @@ mod tests {
     }
 
     fn test_read_partial_range(api_version: ApiVersion, porep_id: &[u8; 32]) {
-        init_logger();
+        fil_logger::maybe_init();
         let nodes = 48u32;
         let graph = StackedBucketGraph::<PoseidonHasher>::new_stacked(
             nodes as usize,
