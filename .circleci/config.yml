@@ -63,7 +63,6 @@ jobs:
       - restore_rustup_cache
       - run: rustup install $(cat rust-toolchain)
       - run: rustup default $(cat rust-toolchain)
-      - run: rustup install << pipeline.parameters.nightly-toolchain >>
       - run: cargo update
       - run: cargo fetch
       - run: rustc +$(cat rust-toolchain) --version
@@ -157,10 +156,10 @@ jobs:
             ulimit -n 20000
             ulimit -u 20000
             ulimit -n 20000
-            cargo +<< pipeline.parameters.nightly-toolchain >> test --all --verbose --release lifecycle -- --ignored --nocapture
-            cargo +<< pipeline.parameters.nightly-toolchain >> test -p storage-proofs-porep --features isolated-testing --release checkout_cores -- --test-threads=1
-            cargo +<< pipeline.parameters.nightly-toolchain >> test -p storage-proofs-porep --features isolated-testing --release test_parallel_generation_and_read_partial_range_v1_0
-            cargo +<< pipeline.parameters.nightly-toolchain >> test -p storage-proofs-porep --features isolated-testing --release test_parallel_generation_and_read_partial_range_v1_1
+            cargo test --all --verbose --release lifecycle -- --ignored --nocapture
+            cargo test -p storage-proofs-porep --features isolated-testing --release checkout_cores -- --test-threads=1
+            cargo test -p storage-proofs-porep --features isolated-testing --release test_parallel_generation_and_read_partial_range_v1_0
+            cargo test -p storage-proofs-porep --features isolated-testing --release test_parallel_generation_and_read_partial_range_v1_1
           no_output_timeout: 30m
           environment:
             RUST_TEST_THREADS: 1
@@ -200,8 +199,7 @@ jobs:
             ulimit -n 20000
             ulimit -u 20000
             ulimit -n 20000
-            cargo +<< pipeline.parameters.nightly-toolchain >> test --all --verbose --release << parameters.cargo-args >> -- --nocapture << parameters.test-args >>
-            cargo +<< pipeline.parameters.nightly-toolchain >> test test_seal_lifecycle_upgrade --verbose --release << parameters.cargo-args >> -- --nocapture --ignored
+            cargo test --all --verbose --release << parameters.cargo-args >> -- --nocapture << parameters.test-args >>
           no_output_timeout: 30m
           environment:
             FIL_PROOFS_USE_GPU_COLUMN_BUILDER: true
@@ -221,7 +219,7 @@ jobs:
       - run:
           name: Test with no gpu
           command: |
-            cargo +<< pipeline.parameters.nightly-toolchain >> test --all --verbose --no-default-features
+            cargo test --all --verbose --release --no-default-features
           no_output_timeout: 30m
 
   test_arm_no_gpu:
@@ -444,7 +442,7 @@ workflows:
 
       - test_gpu_tree_building:
           name: test_gpu_tree_building_opencl (ignored)
-          test-args: "--ignored --skip test_seal_lifecycle_upgrade"
+          test-args: "--ignored"
           requires:
             - cargo_fetch
             - ensure_groth_parameters_and_keys_linux
