@@ -39,6 +39,7 @@ type TreeBase<H, A> = MerkleTreeWrapper<H, VecStore<<H as Hasher>::Domain>, A, U
 type TreeSub<H, A, B> = MerkleTreeWrapper<H, VecStore<<H as Hasher>::Domain>, A, B, U0>;
 type TreeTop<H, A, B, C> = MerkleTreeWrapper<H, VecStore<<H as Hasher>::Domain>, A, B, C>;
 
+#[ignore]
 #[test]
 fn test_por_circuit_blake2s_base_2() {
     test_por_circuit::<TreeBase<Blake2sHasher, U2>>(3, 129_135);
@@ -54,6 +55,7 @@ fn test_por_circuit_poseidon_base_2() {
     test_por_circuit::<TreeBase<PoseidonHasher, U2>>(3, 1_887);
 }
 
+#[ignore]
 #[test]
 fn test_por_circuit_blake2s_base_4() {
     test_por_circuit::<TreeBase<Blake2sHasher, U4>>(3, 130_296);
@@ -69,6 +71,7 @@ fn test_por_circuit_poseidon_base_4() {
     test_por_circuit::<TreeBase<PoseidonHasher, U4>>(3, 1_164);
 }
 
+#[ignore]
 #[test]
 fn test_por_circuit_blake2s_base_8() {
     test_por_circuit::<TreeBase<Blake2sHasher, U8>>(3, 174_503);

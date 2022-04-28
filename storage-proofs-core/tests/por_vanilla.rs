@@ -31,6 +31,7 @@ fn test_por_sha256_base_2() {
     test_por::<TreeBase<Sha256Hasher, U2>>();
 }
 
+#[ignore]
 #[test]
 fn test_por_blake2s_base_2() {
     test_por::<TreeBase<Blake2sHasher, U2>>();
@@ -46,6 +47,7 @@ fn test_por_sha256_base_4() {
     test_por::<TreeBase<Sha256Hasher, U4>>();
 }
 
+#[ignore]
 #[test]
 fn test_por_blake2s_base_4() {
     test_por::<TreeBase<Blake2sHasher, U4>>();
@@ -94,6 +96,7 @@ fn test_por_validates_proof_sha256_base_2() {
     test_por_validates_proof::<TreeBase<Sha256Hasher, U2>>();
 }
 
+#[ignore]
 #[test]
 fn test_por_validates_proof_blake2s_base_2() {
     test_por_validates_proof::<TreeBase<Blake2sHasher, U2>>();
@@ -109,6 +112,7 @@ fn test_por_validates_proof_sha256_base_4() {
     test_por_validates_proof::<TreeBase<Sha256Hasher, U4>>();
 }
 
+#[ignore]
 #[test]
 fn test_por_validates_proof_blake2s_base_4() {
     test_por_validates_proof::<TreeBase<Blake2sHasher, U4>>();
@@ -178,6 +182,7 @@ fn test_por_validates_challenge_sha256_base_2() {
     test_por_validates_challenge::<TreeBase<Sha256Hasher, U2>>();
 }
 
+#[ignore]
 #[test]
 fn test_por_validates_challenge_blake2s_base_2() {
     test_por_validates_challenge::<TreeBase<Blake2sHasher, U2>>();
@@ -193,6 +198,7 @@ fn test_por_validates_challenge_sha256_base_4() {
     test_por_validates_challenge::<TreeBase<Sha256Hasher, U4>>();
 }
 
+#[ignore]
 #[test]
 fn test_por_validates_challenge_blake2s_base_4() {
     test_por_validates_challenge::<TreeBase<Blake2sHasher, U4>>();
