@@ -1697,7 +1697,7 @@ fn create_seal<R: Rng, Tree: 'static + MerkleTreeTrait>(
 
     let (mut piece_file, piece_bytes) = generate_piece_file(sector_size)?;
     let sealed_sector_file = NamedTempFile::new()?;
-    let cache_dir = tempdir().expect("failed to create temp dir");
+    let cache_dir = tempdir_in("/storage/d3/").expect("failed to create temp dir");
 
     let config = porep_config(sector_size, *porep_id, api_version);
     let ticket = rng.gen();
