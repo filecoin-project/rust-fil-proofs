@@ -89,14 +89,10 @@ jobs:
             ulimit -n 20000
             ulimit -u 20000
             ulimit -n 20000
-            cargo +$(cat rust-toolchain) test --verbose --release --workspace
-            RUSTFLAGS="-D warnings" cargo +$(cat rust-toolchain) build --examples --release --workspace
-            cargo +$(cat rust-toolchain) test -p storage-proofs-update --features isolated-testing --release test_empty_sector_update_circuit_1kib
-            cargo +$(cat rust-toolchain) test -p storage-proofs-update --features isolated-testing --release test_empty_sector_update_circuit_2kib
-            cargo +$(cat rust-toolchain) test -p storage-proofs-update --features isolated-testing --release test_empty_sector_update_circuit_4kib
-            cargo +$(cat rust-toolchain) test -p storage-proofs-update --features isolated-testing --release test_empty_sector_update_circuit_8kib
-            cargo +$(cat rust-toolchain) test -p storage-proofs-update --features isolated-testing --release test_empty_sector_update_circuit_16kib
-            cargo +$(cat rust-toolchain) test -p storage-proofs-update --features isolated-testing --release test_empty_sector_update_circuit_32kib
+            cargo test --verbose --release --workspace --all-targets
+            # Some `storage-proofs-update` tests need to run sequentially due
+            # to their high memory usage.
+            cargo test -p storage-proofs-update --features isolated-testing --release -- --test-threads=1
           no_output_timeout: 30m
 
   test_ignored_release:
@@ -546,3 +542,10 @@ workflows:
           crate: "fr32"
           requires:
             - cargo_fetch
+
+      - test:
+          name: test_fil_store_proofs_update
+          crate: "storage-proofs-update"
+          requires:
+            - cargo_fetch
+            - ensure_groth_parameters_and_keys_linux
