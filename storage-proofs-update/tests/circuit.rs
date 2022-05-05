@@ -25,7 +25,8 @@ use tempfile::tempdir;
 mod common;
 
 use common::{
-    create_tree_d_new, create_tree_r_new, create_tree_r_old, encode_new_replica, H_SELECT,
+    create_tree_d_new, create_tree_r_new, create_tree_r_old, encode_new_replica, get_apex_leafs,
+    H_SELECT,
 };
 
 type TreeD = constants::TreeD<Fr>;
@@ -34,31 +35,6 @@ type TreeDDomain = constants::TreeDDomain<Fr>;
 type TreeR<U, V, W> = constants::TreeR<Fr, U, V, W>;
 type TreeRDomain = constants::TreeRDomain<Fr>;
 type TreeRHasher = constants::TreeRHasher<Fr>;
-
-fn get_apex_leafs(tree_d_new: &TreeD, k: usize) -> Vec<TreeDDomain> {
-    let sector_nodes = tree_d_new.leafs();
-    let tree_d_height = sector_nodes.trailing_zeros() as usize;
-    let partition_count = partition_count(sector_nodes);
-    let partition_tree_height = partition_count.trailing_zeros() as usize;
-    let apex_leafs_per_partition = apex_leaf_count(sector_nodes);
-    let apex_tree_height = apex_leafs_per_partition.trailing_zeros() as usize;
-    let apex_leafs_height = tree_d_height - partition_tree_height - apex_tree_height;
-
-    let mut apex_leafs_start = sector_nodes;
-    for i in 1..apex_leafs_height {
-        apex_leafs_start += sector_nodes >> i;
-    }
-    apex_leafs_start += k * apex_leafs_per_partition;
-    let apex_leafs_stop = apex_leafs_start + apex_leafs_per_partition;
-    tree_d_new
-        .read_range(apex_leafs_start, apex_leafs_stop)
-        .unwrap_or_else(|_| {
-            panic!(
-                "failed to read tree_d_new apex-leafs (k={}, range={}..{})",
-                k, apex_leafs_start, apex_leafs_stop,
-            )
-        })
-}
 
 fn test_empty_sector_update_circuit<U, V, W>(sector_nodes: usize, constraints_expected: usize)
 where

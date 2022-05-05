@@ -2,6 +2,7 @@ pub mod circuit;
 pub mod compound;
 pub mod constants;
 pub(crate) mod gadgets;
+pub mod halo2;
 pub mod poseidon;
 pub mod vanilla;
 

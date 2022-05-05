@@ -31,6 +31,7 @@ memmap = "0.7"
 # halo2_proofs = { git = "https://github.com/drpetervannostrand/halo2", branch = "sha256-chip" }
 halo2_proofs = { git = "https://github.com/drpetervannostrand/halo2" }
 typemap = "0.3.3"
+fil-halo2-gadgets = { path = "../fil-halo2-gadgets" }
 
 [dev-dependencies]
 tempfile = "3"

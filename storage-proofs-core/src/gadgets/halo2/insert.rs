@@ -2,10 +2,10 @@ use std::marker::PhantomData;
 
 use fil_halo2_gadgets::{
     boolean::{and, nor, AssignedBit},
+    utilities::ternary,
     NumCols,
 };
 use filecoin_hashers::PoseidonArity;
-use halo2_gadgets::utilities::ternary;
 use halo2_proofs::{
     arithmetic::FieldExt,
     circuit::{AssignedCell, Layouter},
