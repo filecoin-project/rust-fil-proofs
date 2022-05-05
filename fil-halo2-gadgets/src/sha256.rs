@@ -10,12 +10,14 @@ use std::iter;
 use halo2_proofs::{
     arithmetic::FieldExt,
     circuit::{AssignedCell, Chip, Layouter},
-    plonk::{Advice, Column, ConstraintSystem, Error},
+    plonk::{Advice, Column, ConstraintSystem, Error, Expression, Selector},
+    poly::Rotation,
 };
 
 use crate::{
     boolean::AssignedBits,
-    uint32::{U32DecompChip, U32DecompConfig, U32StripBitsChip, U32StripBitsConfig},
+    uint32::{self, U32DecompChip, U32DecompConfig, StripBitsChip, StripBitsConfig},
+    AdviceIter,
 };
 
 // Don't reformat code copied from `halo2_gadgets` repo.
@@ -187,7 +189,7 @@ pub struct Sha256Config<F: FieldExt> {
     compression: CompressionConfig<F>,
     // Set to `None` if Sha256 is used to hash 32-bit words exclusively, otherwise set to `Some` if
     // Sha256 is used to hash 256-bit field elements.
-    packing: Option<(U32DecompConfig<F>, U32StripBitsConfig<F>)>,
+    packing: Option<(U32DecompConfig<F>, StripBitsConfig<F>)>,
     // Columns that are equality enabled and not used for lookup inputs, i.e. `a_3, ..., a_8`. These
     // columns can be used to assign padding.
     advice: [Column<Advice>; 6],
@@ -224,7 +226,7 @@ impl<F: FieldExt> Sha256Chip<F> {
     pub fn configure_with_packing(
         meta: &mut ConstraintSystem<F>,
         u32_decomp: U32DecompConfig<F>,
-        strip_bits: U32StripBitsConfig<F>,
+        strip_bits: StripBitsConfig<F>,
     ) -> Sha256Config<F> {
         let advice = u32_decomp.limbs[..6].try_into().unwrap();
         let extra = u32_decomp.limbs[6];
@@ -443,7 +445,7 @@ impl<F: FieldExt> Sha256Chip<F> {
         );
         let (u32_decomp_config, strip_bits_config) = self.config.packing.clone().unwrap();
         let u32_decomp_chip = U32DecompChip::construct(u32_decomp_config);
-        let strip_bits_chip = U32StripBitsChip::construct(strip_bits_config);
+        let strip_bits_chip = StripBitsChip::construct(strip_bits_config);
 
         // Decompose each preimage element into eight 32-bit words.
         let mut preimage_words =
@@ -466,6 +468,329 @@ impl<F: FieldExt> Sha256Chip<F> {
 
         // Pack the digest words into a field element.
         u32_decomp_chip.pack(layouter.namespace(|| "pack digest"), &digest_words)
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct Sha256PackedConfig<F: FieldExt> {
+    lookup: SpreadTableConfig,
+    message_schedule: MessageScheduleConfig<F>,
+    compression: CompressionConfig<F>,
+    // Equality enabled advice.
+    advice: [Column<Advice>; uint32::NUM_ADVICE_EQ],
+    s_u32_decomp: Selector,
+    strip_bits: StripBitsConfig<F>,
+}
+
+#[derive(Debug)]
+pub struct Sha256PackedChip<F: FieldExt> {
+    config: Sha256PackedConfig<F>,
+}
+
+impl<F: FieldExt> Chip<F> for Sha256PackedChip<F> {
+    type Config = Sha256PackedConfig<F>;
+    type Loaded = ();
+
+    fn config(&self) -> &Self::Config {
+        &self.config
+    }
+
+    fn loaded(&self) -> &Self::Loaded {
+        &()
+    }
+}
+
+impl<F: FieldExt> Sha256PackedChip<F> {
+    pub fn construct(config: Sha256PackedConfig<F>) -> Self {
+        Sha256PackedChip { config }
+    }
+
+    /// Loads the lookup table required by this chip into the circuit.
+    pub fn load(layouter: &mut impl Layouter<F>, config: &Sha256PackedConfig<F>) -> Result<(), Error> {
+        SpreadTableChip::load(config.lookup.clone(), layouter)
+    }
+
+    // # Side Effects
+    //
+    // `advice[..uint32::NUM_ADVICE_EQ]` will be equality constrained.
+    pub fn configure(
+        meta: &mut ConstraintSystem<F>,
+        advice: &[Column<Advice>],
+    ) -> Sha256PackedConfig<F> {
+        assert!(advice.len() >= uint32::NUM_ADVICE_EQ);
+        let advice: [Column<Advice>; uint32::NUM_ADVICE_EQ] =
+            advice[..uint32::NUM_ADVICE_EQ].try_into().unwrap();
+
+        // Lookup table input columns cannot be repurposed by the caller; create those columns here
+        // and store privately.
+        let input_tag = meta.advice_column();
+        let input_dense = meta.advice_column();
+        let input_spread = meta.advice_column();
+
+        // Add all advice columns to permutation
+        for col in [input_tag, input_dense, input_spread].iter().chain(advice.iter()) {
+            meta.enable_equality(*col);
+        }
+
+        // Rename these here for ease of matching the gates to the specification.
+        let _a_0 = input_tag;
+        let _a_1 = input_dense;
+        let _a_2 = input_spread;
+        let [a_3, a_4, a_5, a_6, a_7, a_8, a_9, ..] = advice;
+
+        let lookup = SpreadTableChip::configure(meta, input_tag, input_dense, input_spread);
+
+        let compression = CompressionConfig::configure(
+            meta,
+            lookup.input.clone(),
+            [a_3, a_4, a_5, a_6, a_7, a_8, a_9],
+        );
+
+        let message_schedule = a_5;
+        let message_schedule = MessageScheduleConfig::configure(
+            meta,
+            lookup.input.clone(),
+            message_schedule,
+            [a_3, a_4, a_6, a_7, a_8, a_9],
+        );
+
+        let s_u32_decomp = meta.selector();
+
+        // `[2^32, (2^32)^2, .., (2^32)^7]`
+        let mut powers_of_u32_radix = Vec::with_capacity(7);
+        let radix = F::from(1 << 32);
+        powers_of_u32_radix.push(radix);
+        for i in 0..6 {
+            powers_of_u32_radix.push(powers_of_u32_radix[i] * radix);
+        }
+
+        meta.create_gate("field_into_u32s", |meta| {
+            let s = meta.query_selector(s_u32_decomp);
+            let value = meta.query_advice(advice[0], Rotation::cur());
+            let mut expr = meta.query_advice(advice[1], Rotation::cur());
+            for (col, radix_pow) in advice[2..].iter().zip(powers_of_u32_radix.iter()) {
+                let limb = meta.query_advice(*col, Rotation::cur());
+                expr = expr + Expression::Constant(*radix_pow) * limb;
+            }
+            vec![s * (expr - value)]
+        });
+
+        let strip_bits = StripBitsChip::configure(meta, advice);
+
+        Sha256PackedConfig {
+            lookup,
+            message_schedule,
+            compression,
+            advice,
+            s_u32_decomp,
+            strip_bits,
+        }
+    }
+
+    /// Pad and assign the preimage as 32-bit words.
+    fn assign_preimage(
+        &self,
+        layouter: &mut impl Layouter<F>,
+        preimage: &[AssignedCell<F, F>],
+    ) -> Result<Vec<AssignedBits<F, 32>>, Error> {
+        let preimage_len = preimage.len();
+        let preimage_words = 8 * preimage_len;
+        let preimage_bits = 256 * preimage_len;
+
+        // The padding scheme requires that there are at least 3 unutilized words (or one
+        // field element) in the preimage's last block; one word to append a `1` bit onto
+        // the end of the preimage (i.e. the word `2^31`) and two words to encode the
+        // preimage length in bits. If there is less than 3 unutilized words in the
+        // preimage's last block (i.e. one field element), add padding until the end of the
+        // next block.
+        let last_block_words_used = preimage_words % BLOCK_SIZE;
+        let last_block_words_rem = BLOCK_SIZE - last_block_words_used;
+        let num_pad_words = if last_block_words_rem >= 1 {
+            last_block_words_rem
+        } else {
+            last_block_words_rem + BLOCK_SIZE
+        };
+
+        let mut padding = vec![0u32; num_pad_words];
+        padding[0] = 1 << 31;
+        padding[num_pad_words - 2] = (preimage_bits >> 32) as u32;
+        padding[num_pad_words - 1] = (preimage_bits & 0xffffffff) as u32;
+
+        layouter.assign_region(
+            || "assign padded preimage",
+            |mut region| {
+                let mut offset = 0;
+
+                let mut padded_preimage = Vec::<AssignedBits<F, 32>>::with_capacity(
+                    preimage_words + num_pad_words,
+                );
+
+                // Copy and decompose each preimage element.
+                for (i, elem) in preimage.iter().enumerate() {
+                    self.config.s_u32_decomp.enable(&mut region, offset)?;
+
+                    let elem = elem.copy_advice(
+                        || format!("preimage elem {}", i),
+                        &mut region,
+                        self.config.advice[0],
+                        offset,
+                    )?;
+
+                    let repr = elem.value().map(|elem| elem.to_repr().as_ref().to_vec());
+
+                    for (j, col) in self.config.advice[1..].iter().enumerate() {
+                        let word = repr.as_ref().map(|repr| {
+                            u32::from_le_bytes(repr[j * 4..(j + 1) * 4].try_into().unwrap())
+                        });
+                        let word = AssignedBits::<F, 32>::assign(
+                            &mut region,
+                            || format!("preimage elem {}, word {}", i, j),
+                            *col,
+                            offset,
+                            word,
+                        )?;
+                        padded_preimage.push(word);
+                    }
+
+                    offset += 1;
+                }
+
+                let mut advice_iter = AdviceIter::new(offset, self.config.advice.to_vec());
+
+                // Assign padding.
+                for (i, pad_word) in padding.iter().enumerate() {
+                    let (offset, col) = advice_iter.next().unwrap();
+                    let pad_word = AssignedBits::<F, 32>::assign(
+                        &mut region,
+                        || format!("padding word {}", i),
+                        col,
+                        offset,
+                        Some(*pad_word),
+                    )?;
+                    padded_preimage.push(pad_word);
+                }
+
+                Ok(padded_preimage)
+            },
+        )
+    }
+
+    fn initialization_vector(&self, layouter: &mut impl Layouter<F>) -> Result<State<F>, Error> {
+        self.config.compression.initialize_with_iv(layouter, IV)
+    }
+
+    fn initialization(
+        &self,
+        layouter: &mut impl Layouter<F>,
+        init_state: State<F>,
+    ) -> Result<State<F>, Error> {
+        self.config
+            .compression
+            .initialize_with_state(layouter, init_state)
+    }
+
+    fn compress(
+        &self,
+        layouter: &mut impl Layouter<F>,
+        initialized_state: State<F>,
+        input: [AssignedBits<F, 32>; BLOCK_SIZE],
+    ) -> Result<State<F>, Error> {
+        let (_, w_halves) = self
+            .config
+            .message_schedule
+            .process_assigned(layouter, input)?;
+        self.config
+            .compression
+            .compress(layouter, initialized_state, w_halves)
+    }
+
+    fn assign_digest(
+        &self,
+        layouter: &mut impl Layouter<F>,
+        state: State<F>,
+    ) -> Result<AssignedCell<F, F>, Error> {
+        let mut digest_words = self.config.compression.digest(layouter, state)?;
+
+        // Ensure that the packed digest is a valid field element by stripping its two most
+        // significant bits.
+        digest_words[7] = StripBitsChip::construct(self.config.strip_bits.clone())
+            .strip_bits(layouter.namespace(|| "strip digest bits"), &digest_words[7])?;
+
+        // Pack digest into a field element.
+        let mut packed_digest_repr = Some(F::Repr::default());
+        for (i, word) in digest_words.iter().enumerate() {
+            let word_bytes = word.value_u32().map(|word| word.to_le_bytes());
+            packed_digest_repr = packed_digest_repr.zip(word_bytes).map(|(mut repr, word_bytes)| {
+                repr.as_mut()[i * 4..(i + 1) * 4].copy_from_slice(&word_bytes);
+                repr
+            });
+        }
+
+        let packed_digest = packed_digest_repr.map(|repr| {
+            F::from_repr_vartime(repr).expect("packed digest is invalid field element")
+        });
+
+        layouter.assign_region(
+            || "pack digest",
+            |mut region| {
+                let offset = 0;
+                self.config.s_u32_decomp.enable(&mut region, offset)?;
+                let packed_digest = region.assign_advice(
+                    || "packed digest",
+                    self.config.advice[0],
+                    offset,
+                    || packed_digest.ok_or(Error::Synthesis),
+                )?;
+                for (i, (word, col)) in
+                    digest_words.iter().zip(self.config.advice[1..].iter()).enumerate()
+                {
+                    word.copy_advice(
+                        || format!("copy digest word {}", i),
+                        &mut region,
+                        *col,
+                        offset,
+                    )?;
+                }
+                Ok(packed_digest)
+            },
+        )
+    }
+
+    pub fn hash_field_elems(
+        &self,
+        mut layouter: impl Layouter<F>,
+        preimage: &[AssignedCell<F, F>],
+    ) -> Result<AssignedCell<F, F>, Error> {
+        let padded_preimage = self.assign_preimage(&mut layouter, preimage)?;
+
+        assert_eq!(
+            padded_preimage.len() % BLOCK_SIZE,
+            0,
+            "padded preimage length is not divisible by block size",
+        );
+
+        let mut blocks = padded_preimage.chunks(BLOCK_SIZE);
+
+        // Process the first block.
+        let mut state = self.initialization_vector(&mut layouter)?;
+        state = self.compress(
+            &mut layouter,
+            state.clone(),
+            blocks.next().unwrap().to_vec().try_into().unwrap(),
+        )?;
+
+        // Process any additional blocks.
+        for block in blocks {
+            state = self.initialization(&mut layouter, state.clone())?;
+            state = self.compress(
+                &mut layouter,
+                state.clone(),
+                block.to_vec().try_into().unwrap(),
+            )?;
+        }
+
+        // Compute digest.
+        self.assign_digest(&mut layouter, state)
     }
 }
 
@@ -627,7 +952,7 @@ mod tests {
                     meta.advice_column(),
                 ];
                 let u32_decomp = U32DecompChip::configure(meta, advice);
-                let strip_bits = U32StripBitsChip::configure(meta, advice);
+                let strip_bits = StripBitsChip::configure(meta, advice);
                 Sha256Chip::configure_with_packing(meta, u32_decomp, strip_bits)
             }
 

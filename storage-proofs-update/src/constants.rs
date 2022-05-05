@@ -27,13 +27,13 @@ lazy_static! {
 
     pub static ref POSEIDON_CONSTANTS_GEN_RANDOMNESS_PALLAS: PoseidonConstants<Fp, U2> =
         PoseidonConstants::new_with_strength_and_type(
-            Strength::Standard,
+            Strength::Halo,
             HashType::Custom(CType::Arbitrary(1)),
         );
 
     pub static ref POSEIDON_CONSTANTS_GEN_RANDOMNESS_VESTA: PoseidonConstants<Fq, U2> =
         PoseidonConstants::new_with_strength_and_type(
-            Strength::Standard,
+            Strength::Halo,
             HashType::Custom(CType::Arbitrary(1)),
         );
 

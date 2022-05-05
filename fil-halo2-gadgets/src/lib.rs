@@ -1,11 +1,14 @@
 pub mod boolean;
+pub mod select;
 pub mod sha256;
 pub mod uint32;
+pub mod utilities;
 
 use std::cmp::max;
 
 use halo2_proofs::{
     arithmetic::FieldExt,
+    circuit::AssignedCell,
     plonk::{Advice, Column, ConstraintSystem, Fixed},
 };
 
@@ -61,5 +64,44 @@ impl NumCols {
         let fixed_eq = (0..self.fixed_eq).map(|_| meta.fixed_column()).collect();
         let fixed_neq = (0..self.fixed_neq).map(|_| meta.fixed_column()).collect();
         (advice_eq, advice_neq, fixed_eq, fixed_neq)
+    }
+}
+
+pub enum WitnessOrCopy<T, F: FieldExt> {
+    Witness(Option<T>),
+    Copy(AssignedCell<T, F>),
+}
+
+pub struct AdviceIter {
+    offset: usize,
+    cols: Vec<Column<Advice>>,
+    col_index: usize,
+}
+
+impl Iterator for AdviceIter {
+    type Item = (usize, Column<Advice>);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let offset_col = match self.cols.get(self.col_index) {
+            Some(col) => (self.offset, *col),
+            None => {
+                self.offset += 1;
+                self.col_index = 0;
+                (self.offset, self.cols[self.col_index])
+            }
+        };
+        self.col_index += 1;
+        Some(offset_col)
+    }
+}
+
+impl AdviceIter {
+    pub fn new(offset: usize, cols: Vec<Column<Advice>>) -> Self {
+        assert!(!cols.is_empty());
+        AdviceIter {
+            offset,
+            cols,
+            col_index: 0,
+        }
     }
 }

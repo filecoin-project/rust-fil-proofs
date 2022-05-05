@@ -14,6 +14,8 @@ use crate::{
     NumCols,
 };
 
+pub const NUM_ADVICE_EQ: usize = 9;
+
 pub const U32_DECOMP_NUM_COLS: NumCols = NumCols {
     advice_eq: 9,
     advice_neq: 0,
@@ -454,26 +456,26 @@ impl<F: FieldExt> UInt32Chip<F> {
 }
 
 #[derive(Clone, Debug)]
-pub struct U32StripBitsConfig<F: FieldExt> {
+pub struct StripBitsConfig<F: FieldExt> {
     value: Column<Advice>,
     bits: [Column<Advice>; 8],
     s_strip_bits: Selector,
     _f: PhantomData<F>,
 }
 
-pub struct U32StripBitsChip<F: FieldExt> {
-    config: U32StripBitsConfig<F>,
+pub struct StripBitsChip<F: FieldExt> {
+    config: StripBitsConfig<F>,
 }
 
-impl<F: FieldExt> U32StripBitsChip<F> {
-    pub fn construct(config: U32StripBitsConfig<F>) -> Self {
-        U32StripBitsChip { config }
+impl<F: FieldExt> StripBitsChip<F> {
+    pub fn construct(config: StripBitsConfig<F>) -> Self {
+        StripBitsChip { config }
     }
 
     pub fn configure(
         meta: &mut ConstraintSystem<F>,
         advice: [Column<Advice>; 9],
-    ) -> U32StripBitsConfig<F> {
+    ) -> StripBitsConfig<F> {
         for col in advice.iter() {
             meta.enable_equality(*col);
         }
@@ -532,7 +534,7 @@ impl<F: FieldExt> U32StripBitsChip<F> {
             )
         });
 
-        U32StripBitsConfig {
+        StripBitsConfig {
             value,
             bits,
             s_strip_bits,
@@ -613,7 +615,7 @@ mod tests {
     }
 
     impl<F: FieldExt> Circuit<F> for MyCircuit<F> {
-        type Config = (U32DecompConfig<F>, U32StripBitsConfig<F>);
+        type Config = (U32DecompConfig<F>, StripBitsConfig<F>);
         type FloorPlanner = SimpleFloorPlanner;
 
         fn without_witnesses(&self) -> Self {
@@ -633,7 +635,7 @@ mod tests {
                 meta.advice_column(),
             ];
             let decomp = U32DecompChip::configure(meta, advice);
-            let strip_bits = U32StripBitsChip::configure(meta, advice);
+            let strip_bits = StripBitsChip::configure(meta, advice);
             (decomp, strip_bits)
         }
 
@@ -645,7 +647,7 @@ mod tests {
             let (decomp_config, strip_bits_config) = config;
 
             let decomp_chip = U32DecompChip::construct(decomp_config);
-            let strip_bits_chip = U32StripBitsChip::construct(strip_bits_config);
+            let strip_bits_chip = StripBitsChip::construct(strip_bits_config);
 
             let u32s =
                 decomp_chip.witness_decompose(layouter.namespace(|| "decomp"), self.value)?;
