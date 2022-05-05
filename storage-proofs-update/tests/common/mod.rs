@@ -10,7 +10,8 @@ use merkletree::{merkle::get_merkle_tree_len, store::StoreConfig};
 use storage_proofs_core::merkle::{create_lc_tree, get_base_tree_count, split_config_and_replica};
 use storage_proofs_update::{
     constants::{
-        TreeD, TreeDArity, TreeDDomain, TreeDHasher, TreeR, TreeRBase, TreeRDomain, TreeRHasher,
+        apex_leaf_count, partition_count, TreeD, TreeDArity, TreeDDomain, TreeDHasher, TreeR,
+        TreeRBase, TreeRDomain, TreeRHasher,
     },
     rho,
 };
@@ -53,6 +54,37 @@ where
     W: PoseidonArity<F>,
 {
     create_tree_r(labels_d_new, tmp_dir, "tree-d-new", "data_new")
+}
+
+// Get EmptySectorUpdate partition `k`'s apex leafs from TreeDNew.
+pub fn get_apex_leafs<F>(tree_d_new: &TreeD<F>, k: usize) -> Vec<TreeDDomain<F>>
+where
+    F: PrimeField,
+    TreeDHasher<F>: Hasher<Domain = TreeDDomain<F>>,
+    TreeDDomain<F>: Domain<Field = F>,
+{
+    let sector_nodes = tree_d_new.leafs();
+    let tree_d_height = sector_nodes.trailing_zeros() as usize;
+    let partition_count = partition_count(sector_nodes);
+    let partition_tree_height = partition_count.trailing_zeros() as usize;
+    let apex_leafs_per_partition = apex_leaf_count(sector_nodes);
+    let apex_tree_height = apex_leafs_per_partition.trailing_zeros() as usize;
+    let apex_leafs_height = tree_d_height - partition_tree_height - apex_tree_height;
+
+    let mut apex_leafs_start = sector_nodes;
+    for i in 1..apex_leafs_height {
+        apex_leafs_start += sector_nodes >> i;
+    }
+    apex_leafs_start += k * apex_leafs_per_partition;
+    let apex_leafs_stop = apex_leafs_start + apex_leafs_per_partition;
+    tree_d_new
+        .read_range(apex_leafs_start, apex_leafs_stop)
+        .unwrap_or_else(|_| {
+            panic!(
+                "failed to read tree_d_new apex-leafs (k={}, range={}..{})",
+                k, apex_leafs_start, apex_leafs_stop,
+            )
+        })
 }
 
 #[inline]
