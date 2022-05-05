@@ -1,5 +1,6 @@
-use fil_halo2_gadgets::boolean::AssignedBit;
+use fil_halo2_gadgets::{boolean::AssignedBit, WitnessOrCopy};
 use filecoin_hashers::{Domain, HaloHasher, HashInstructions, PoseidonArity};
+use generic_array::typenum::U0;
 use halo2_proofs::{
     arithmetic::FieldExt,
     circuit::{AssignedCell, Layouter},
@@ -8,7 +9,7 @@ use halo2_proofs::{
 
 use crate::gadgets::halo2::insert::InsertChip;
 
-pub struct MerkleChip<H, U, V, W>
+pub struct MerkleChip<H, U, V = U0, W = U0>
 where
     H: HaloHasher<U> + HaloHasher<V> + HaloHasher<W>,
     <H::Domain as Domain>::Field: FieldExt,
@@ -36,7 +37,7 @@ where
     V: PoseidonArity<<H::Domain as Domain>::Field>,
     W: PoseidonArity<<H::Domain as Domain>::Field>,
 {
-    pub fn new(
+    pub fn with_subchips(
         base_hasher: <H as HaloHasher<U>>::Chip,
         base_insert: InsertChip<<H::Domain as Domain>::Field, U>,
         sub_hasher_insert: Option<(
@@ -66,16 +67,45 @@ where
         }
     }
 
-    #[allow(unused_assignments)]
-    #[allow(clippy::unwrap_used)]
     pub fn compute_root(
         &self,
-        mut layouter: impl Layouter<<H::Domain as Domain>::Field>,
+        layouter: impl Layouter<<H::Domain as Domain>::Field>,
         challenge_bits: &[AssignedBit<<H::Domain as Domain>::Field>],
         leaf: &Option<<H::Domain as Domain>::Field>,
         path: &[Vec<Option<<H::Domain as Domain>::Field>>],
-    ) -> Result<AssignedCell<<H::Domain as Domain>::Field, <H::Domain as Domain>::Field>, Error>
-    {
+    ) -> Result<AssignedCell<<H::Domain as Domain>::Field, <H::Domain as Domain>::Field>, Error> {
+        self.compute_root_inner(
+            layouter,
+            challenge_bits,
+            WitnessOrCopy::Witness(*leaf),
+            path,
+        )
+    }
+
+    pub fn copy_leaf_compute_root(
+        &self,
+        layouter: impl Layouter<<H::Domain as Domain>::Field>,
+        challenge_bits: &[AssignedBit<<H::Domain as Domain>::Field>],
+        leaf: &AssignedCell<<H::Domain as Domain>::Field, <H::Domain as Domain>::Field>,
+        path: &[Vec<Option<<H::Domain as Domain>::Field>>],
+    ) -> Result<AssignedCell<<H::Domain as Domain>::Field, <H::Domain as Domain>::Field>, Error> {
+        self.compute_root_inner(
+            layouter,
+            challenge_bits,
+            WitnessOrCopy::Copy(leaf.clone()),
+            path,
+        )
+    }
+
+    #[allow(unused_assignments)]
+    #[allow(clippy::unwrap_used)]
+    fn compute_root_inner(
+        &self,
+        mut layouter: impl Layouter<<H::Domain as Domain>::Field>,
+        challenge_bits: &[AssignedBit<<H::Domain as Domain>::Field>],
+        leaf: WitnessOrCopy<<H::Domain as Domain>::Field, <H::Domain as Domain>::Field>,
+        path: &[Vec<Option<<H::Domain as Domain>::Field>>],
+    ) -> Result<AssignedCell<<H::Domain as Domain>::Field, <H::Domain as Domain>::Field>, Error> {
         let base_arity = U::to_usize();
         let sub_arity = V::to_usize();
         let top_arity = W::to_usize();
@@ -117,12 +147,24 @@ where
                 .collect();
 
             let preimage = if height == 0 {
-                self.base_insert.witness_insert(
-                    layouter.namespace(|| format!("base insert (height {})", height)),
-                    siblings,
-                    leaf,
-                    &index_bits,
-                )?
+                match leaf {
+                    WitnessOrCopy::Witness(ref leaf) => {
+                        self.base_insert.witness_insert(
+                            layouter.namespace(|| format!("base insert (height {})", height)),
+                            siblings,
+                            leaf,
+                            &index_bits,
+                        )?
+                    }
+                    WitnessOrCopy::Copy(ref leaf) => {
+                        self.base_insert.copy_insert(
+                            layouter.namespace(|| format!("base insert (height {})", height)),
+                            siblings,
+                            leaf,
+                            &index_bits,
+                        )?
+                    }
+                }
             } else {
                 self.base_insert.copy_insert(
                     layouter.namespace(|| format!("base insert (height {})", height)),
@@ -423,7 +465,7 @@ mod test {
                 (hasher_chip, insert_chip)
             });
 
-            let merkle_chip = MerkleChip::<H, U, V, W>::new(
+            let merkle_chip = MerkleChip::<H, U, V, W>::with_subchips(
                 base_hasher_chip,
                 base_insert_chip,
                 sub_hasher_insert_chips,

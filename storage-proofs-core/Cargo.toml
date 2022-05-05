@@ -50,7 +50,6 @@ pairing = "0.21"
 blstrs = { version = "0.4.0", features = ["gpu"] }
 # halo2_gadgets = { git = "https://github.com/drpetervannostrand/halo2", branch = "sha256-chip" }
 # halo2_proofs = { git = "https://github.com/drpetervannostrand/halo2", branch = "sha256-chip" }
-halo2_gadgets = { git = "https://github.com/drpetervannostrand/halo2" }
 halo2_proofs = { git = "https://github.com/drpetervannostrand/halo2" }
 fil-halo2-gadgets = { path = "../fil-halo2-gadgets" }
 

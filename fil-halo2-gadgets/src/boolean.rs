@@ -1,16 +1,22 @@
 use std::convert::TryInto;
 
+pub use halo2_gadgets::utilities::bool_check;
+
 use ff::PrimeFieldBits;
-use halo2_gadgets::utilities::{
-    bool_check,
-    decompose_running_sum::{RunningSum, RunningSumConfig},
-};
+use halo2_gadgets::utilities::decompose_running_sum::{RunningSum, RunningSumConfig};
 use halo2_proofs::{
     arithmetic::FieldExt,
     circuit::{AssignedCell, Layouter, Region},
     plonk::{Advice, Any, Assigned, Column, ConstraintSystem, Error, Expression},
     poly::Rotation,
 };
+
+// Equal to `F::NUM_BITS`.
+const FIELD_BITS: usize = 255;
+
+// Decompose each field element into 3-bit windows.
+const WINDOW_BITS: usize = 3;
+const NUM_WINDOWS: usize = FIELD_BITS / WINDOW_BITS;
 
 // Returns `1` if both `b0` and `b1` are `1`.
 //
@@ -26,225 +32,6 @@ pub fn and<F: FieldExt>(bit_0: Expression<F>, bit_1: Expression<F>) -> Expressio
 #[inline]
 pub fn nor<F: FieldExt>(bit_0: Expression<F>, bit_1: Expression<F>) -> Expression<F> {
     (Expression::Constant(F::one()) - bit_0) * (Expression::Constant(F::one()) - bit_1)
-}
-
-pub type AssignedBit<F> = AssignedCell<Bit, F>;
-
-#[derive(Clone, Debug)]
-pub struct Bit(pub bool);
-
-impl<F: FieldExt> From<&Bit> for Assigned<F> {
-    fn from(bit: &Bit) -> Self {
-        if bit.0 {
-            F::one().into()
-        } else {
-            F::zero().into()
-        }
-    }
-}
-
-impl From<bool> for Bit {
-    fn from(bit: bool) -> Self {
-        Bit(bit)
-    }
-}
-
-impl From<Bit> for bool {
-    fn from(bit: Bit) -> Self {
-        bit.0
-    }
-}
-
-impl From<&Bit> for bool {
-    fn from(bit: &Bit) -> Self {
-        bit.0
-    }
-}
-
-const FIELD_BITS: usize = 255;
-// Decompose each field element into 3-bit windows.
-const WINDOW_BITS: usize = 3;
-const NUM_WINDOWS: usize = FIELD_BITS / WINDOW_BITS;
-
-#[derive(Clone, Debug)]
-pub struct LeBitsConfig<F>
-where
-    F: FieldExt + PrimeFieldBits,
-{
-    // One column to store a field element to be decomposed (as well as each of the element's
-    // running sum windows `z_i`) and one column for each of the window's 3 bits.
-    advice: [Column<Advice>; 1 + WINDOW_BITS],
-    running_sum: RunningSumConfig<F, WINDOW_BITS>,
-}
-
-pub struct LeBitsChip<F>
-where
-    F: FieldExt + PrimeFieldBits,
-{
-    config: LeBitsConfig<F>,
-}
-
-impl<F> LeBitsChip<F>
-where
-    F: FieldExt + PrimeFieldBits,
-{
-    pub fn construct(config: LeBitsConfig<F>) -> Self {
-        LeBitsChip { config }
-    }
-
-    // # Side Effects
-    //
-    // `advice[0]` will be equality constrained.
-    pub fn configure(
-        meta: &mut ConstraintSystem<F>,
-        advice: [Column<Advice>; 1 + WINDOW_BITS],
-    ) -> LeBitsConfig<F> {
-        // Running sum chip requires one fixed column.
-        let fixed = meta.fixed_column();
-        meta.enable_constant(fixed);
-        let s_running_sum = meta.selector();
-        let running_sum = RunningSumConfig::configure(meta, s_running_sum, advice[0]);
-
-        let two = F::from(2);
-        let four = F::from(4);
-        let radix = F::from(1 << WINDOW_BITS);
-
-        meta.create_gate("kbits", |meta| {
-            // Reuse the running sum's selector.
-            let s_running_sum = meta.query_selector(s_running_sum);
-
-            let z_cur = meta.query_advice(advice[0], Rotation::cur());
-            let z_next = meta.query_advice(advice[0], Rotation::next());
-            let bit_1 = meta.query_advice(advice[1], Rotation::cur());
-            let bit_2 = meta.query_advice(advice[2], Rotation::cur());
-            let bit_3 = meta.query_advice(advice[3], Rotation::cur());
-
-            let bool_check_1 = bool_check(bit_1.clone());
-            let bool_check_2 = bool_check(bit_2.clone());
-            let bool_check_3 = bool_check(bit_3.clone());
-
-            let k_cur = z_cur - Expression::Constant(radix) * z_next;
-            let k_cur_from_bits =
-                bit_1 + bit_2 * Expression::Constant(two) + bit_3 * Expression::Constant(four);
-
-            vec![
-                s_running_sum.clone() * bool_check_1,
-                s_running_sum.clone() * bool_check_2,
-                s_running_sum.clone() * bool_check_3,
-                s_running_sum * (k_cur_from_bits - k_cur),
-            ]
-        });
-
-        LeBitsConfig {
-            advice,
-            running_sum,
-        }
-    }
-
-    pub fn witness_decompose(
-        &self,
-        mut layouter: impl Layouter<F>,
-        val: Option<F>,
-    ) -> Result<Vec<AssignedBit<F>>, Error> {
-        layouter.assign_region(
-            || "le_bits",
-            |mut region| {
-                let offset = 0;
-                self.witness_decompose_within_region(&mut region, offset, val)
-            },
-        )
-    }
-
-    pub fn copy_decompose(
-        &self,
-        mut layouter: impl Layouter<F>,
-        val: AssignedCell<F, F>,
-    ) -> Result<Vec<AssignedBit<F>>, Error> {
-        layouter.assign_region(
-            || "le_bits",
-            move |mut region| {
-                let offset = 0;
-                self.copy_decompose_within_region(&mut region, offset, val.clone())
-            },
-        )
-    }
-
-    pub fn witness_decompose_within_region(
-        &self,
-        region: &mut Region<'_, F>,
-        offset: usize,
-        val: Option<F>,
-    ) -> Result<Vec<AssignedBit<F>>, Error> {
-        let zs = self.config.running_sum.witness_decompose(
-            region,
-            offset,
-            val,
-            true,
-            FIELD_BITS,
-            NUM_WINDOWS,
-        )?;
-        self.assign_bits(region, offset, zs)
-    }
-
-    pub fn copy_decompose_within_region(
-        &self,
-        region: &mut Region<'_, F>,
-        offset: usize,
-        val: AssignedCell<F, F>,
-    ) -> Result<Vec<AssignedBit<F>>, Error> {
-        let zs = self.config.running_sum.copy_decompose(
-            region,
-            offset,
-            val,
-            true,
-            FIELD_BITS,
-            NUM_WINDOWS,
-        )?;
-        self.assign_bits(region, offset, zs)
-    }
-
-    fn assign_bits(
-        &self,
-        region: &mut Region<'_, F>,
-        mut offset: usize,
-        zs: RunningSum<F>,
-    ) -> Result<Vec<AssignedBit<F>>, Error> {
-        let mut bits = Vec::with_capacity(FIELD_BITS);
-        let mut bit_index = 0;
-        let radix = F::from(1 << WINDOW_BITS);
-
-        for z_index in 0..NUM_WINDOWS {
-            let z_cur = zs[z_index].value();
-            let z_next = zs[z_index + 1].value();
-
-            let k_cur = z_cur.zip(z_next).map(|(z_cur, z_next)| {
-                let k_cur = *z_cur - radix * z_next;
-                // The running sum guarantees that each `k_i` is in `0..2^3`.
-                k_cur.to_repr().as_ref()[0]
-            });
-
-            for i in 0..WINDOW_BITS {
-                let bit = region.assign_advice(
-                    || format!("bit {}", bit_index),
-                    // The first advice column stores `z_i`, the remaining advice columns
-                    // store `k_i`'s bits.
-                    self.config.advice[1 + i],
-                    offset,
-                    || {
-                        k_cur
-                            .map(|k_cur| Bit(k_cur >> i & 1 == 1))
-                            .ok_or(Error::Synthesis)
-                    },
-                )?;
-                bits.push(bit);
-                bit_index += 1;
-            }
-
-            offset += 1;
-        }
-
-        Ok(bits)
-    }
 }
 
 pub fn lebs2ip<const K: usize>(bits: &[bool; K]) -> u64 {
@@ -298,6 +85,39 @@ pub fn spread_bits<const DENSE: usize, const SPREAD: usize>(
     }
 
     spread
+}
+
+pub type AssignedBit<F> = AssignedCell<Bit, F>;
+
+#[derive(Clone, Debug)]
+pub struct Bit(pub bool);
+
+impl<F: FieldExt> From<&Bit> for Assigned<F> {
+    fn from(bit: &Bit) -> Self {
+        if bit.0 {
+            F::one().into()
+        } else {
+            F::zero().into()
+        }
+    }
+}
+
+impl From<bool> for Bit {
+    fn from(bit: bool) -> Self {
+        Bit(bit)
+    }
+}
+
+impl From<Bit> for bool {
+    fn from(bit: Bit) -> Self {
+        bit.0
+    }
+}
+
+impl From<&Bit> for bool {
+    fn from(bit: &Bit) -> Self {
+        bit.0
+    }
 }
 
 /// Little-endian bits (up to 64 bits)
@@ -473,6 +293,187 @@ impl<F: FieldExt> AssignedBits<F, 32> {
             _ => panic!("Cannot assign to instance column"),
         }
         .map(AssignedBits)
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct LeBitsConfig<F>
+where
+    F: FieldExt + PrimeFieldBits,
+{
+    // One column to store a field element to be decomposed (as well as each of the element's
+    // running sum windows `z_i`) and one column for each of the window's 3 bits.
+    advice: [Column<Advice>; 1 + WINDOW_BITS],
+    running_sum: RunningSumConfig<F, WINDOW_BITS>,
+}
+
+pub struct LeBitsChip<F>
+where
+    F: FieldExt + PrimeFieldBits,
+{
+    config: LeBitsConfig<F>,
+}
+
+impl<F> LeBitsChip<F>
+where
+    F: FieldExt + PrimeFieldBits,
+{
+    pub fn construct(config: LeBitsConfig<F>) -> Self {
+        LeBitsChip { config }
+    }
+
+    // # Side Effects
+    //
+    // `advice[0]` will be equality constrained.
+    pub fn configure(
+        meta: &mut ConstraintSystem<F>,
+        advice: [Column<Advice>; 1 + WINDOW_BITS],
+    ) -> LeBitsConfig<F> {
+        // Running sum chip requires one fixed column.
+        let fixed = meta.fixed_column();
+        meta.enable_constant(fixed);
+        let s_running_sum = meta.selector();
+        let running_sum = RunningSumConfig::configure(meta, s_running_sum, advice[0]);
+
+        let two = F::from(2);
+        let four = F::from(4);
+        let radix = F::from(1 << WINDOW_BITS);
+
+        meta.create_gate("pack window bits", |meta| {
+            // Reuse the running sum's selector.
+            let s_running_sum = meta.query_selector(s_running_sum);
+
+            let z_cur = meta.query_advice(advice[0], Rotation::cur());
+            let z_next = meta.query_advice(advice[0], Rotation::next());
+            let bit_1 = meta.query_advice(advice[1], Rotation::cur());
+            let bit_2 = meta.query_advice(advice[2], Rotation::cur());
+            let bit_3 = meta.query_advice(advice[3], Rotation::cur());
+
+            let bool_check_1 = bool_check(bit_1.clone());
+            let bool_check_2 = bool_check(bit_2.clone());
+            let bool_check_3 = bool_check(bit_3.clone());
+
+            let k_cur = z_cur - Expression::Constant(radix) * z_next;
+            let k_cur_from_bits =
+                bit_1 + bit_2 * Expression::Constant(two) + bit_3 * Expression::Constant(four);
+
+            vec![
+                s_running_sum.clone() * bool_check_1,
+                s_running_sum.clone() * bool_check_2,
+                s_running_sum.clone() * bool_check_3,
+                s_running_sum * (k_cur_from_bits - k_cur),
+            ]
+        });
+
+        LeBitsConfig {
+            advice,
+            running_sum,
+        }
+    }
+
+    pub fn witness_decompose(
+        &self,
+        mut layouter: impl Layouter<F>,
+        val: Option<F>,
+    ) -> Result<Vec<AssignedBit<F>>, Error> {
+        layouter.assign_region(
+            || "le_bits",
+            |mut region| {
+                let offset = 0;
+                self.witness_decompose_within_region(&mut region, offset, val)
+            },
+        )
+    }
+
+    pub fn copy_decompose(
+        &self,
+        mut layouter: impl Layouter<F>,
+        val: AssignedCell<F, F>,
+    ) -> Result<Vec<AssignedBit<F>>, Error> {
+        layouter.assign_region(
+            || "le_bits",
+            move |mut region| {
+                let offset = 0;
+                self.copy_decompose_within_region(&mut region, offset, val.clone())
+            },
+        )
+    }
+
+    pub fn witness_decompose_within_region(
+        &self,
+        region: &mut Region<'_, F>,
+        offset: usize,
+        val: Option<F>,
+    ) -> Result<Vec<AssignedBit<F>>, Error> {
+        let zs = self.config.running_sum.witness_decompose(
+            region,
+            offset,
+            val,
+            true,
+            FIELD_BITS,
+            NUM_WINDOWS,
+        )?;
+        self.assign_bits(region, offset, zs)
+    }
+
+    pub fn copy_decompose_within_region(
+        &self,
+        region: &mut Region<'_, F>,
+        offset: usize,
+        val: AssignedCell<F, F>,
+    ) -> Result<Vec<AssignedBit<F>>, Error> {
+        let zs = self.config.running_sum.copy_decompose(
+            region,
+            offset,
+            val,
+            true,
+            FIELD_BITS,
+            NUM_WINDOWS,
+        )?;
+        self.assign_bits(region, offset, zs)
+    }
+
+    fn assign_bits(
+        &self,
+        region: &mut Region<'_, F>,
+        mut offset: usize,
+        zs: RunningSum<F>,
+    ) -> Result<Vec<AssignedBit<F>>, Error> {
+        let mut bits = Vec::with_capacity(FIELD_BITS);
+        let mut bit_index = 0;
+        let radix = F::from(1 << WINDOW_BITS);
+
+        for z_index in 0..NUM_WINDOWS {
+            let z_cur = zs[z_index].value();
+            let z_next = zs[z_index + 1].value();
+
+            let k_cur = z_cur.zip(z_next).map(|(z_cur, z_next)| {
+                let k_cur = *z_cur - radix * z_next;
+                // The running sum guarantees that each `k_i` is in `0..2^3`.
+                k_cur.to_repr().as_ref()[0]
+            });
+
+            for i in 0..WINDOW_BITS {
+                let bit = region.assign_advice(
+                    || format!("bit {}", bit_index),
+                    // The first advice column stores `z_i`, the remaining advice columns
+                    // store `k_i`'s bits.
+                    self.config.advice[1 + i],
+                    offset,
+                    || {
+                        k_cur
+                            .map(|k_cur| Bit(k_cur >> i & 1 == 1))
+                            .ok_or(Error::Synthesis)
+                    },
+                )?;
+                bits.push(bit);
+                bit_index += 1;
+            }
+
+            offset += 1;
+        }
+
+        Ok(bits)
     }
 }
 

@@ -10,8 +10,8 @@ use bellperson::{
 use blstrs::Scalar as Fr;
 use ff::PrimeField;
 use fil_halo2_gadgets::{
-    sha256::{Sha256Chip, Sha256Config},
-    uint32::{U32DecompChip, U32StripBitsChip, U32_DECOMP_NUM_COLS},
+    sha256::{Sha256PackedChip, Sha256PackedConfig},
+    uint32::U32_DECOMP_NUM_COLS,
     NumCols,
 };
 use halo2_proofs::{
@@ -558,7 +558,7 @@ impl Hasher for Sha256Hasher<Fq> {
     }
 }
 
-impl<F: FieldExt> HashInstructions<F> for Sha256Chip<F> {
+impl<F: FieldExt> HashInstructions<F> for Sha256PackedChip<F> {
     fn hash(
         &self,
         layouter: impl Layouter<F>,
@@ -575,18 +575,18 @@ where
     F: FieldExt,
     A: PoseidonArity<F>,
 {
-    type Chip = Sha256Chip<F>;
-    type Config = Sha256Config<F>;
+    type Chip = Sha256PackedChip<F>;
+    type Config = Sha256PackedConfig<F>;
 
     fn load(
         layouter: &mut impl Layouter<<Self::Domain as Domain>::Field>,
         config: &Self::Config,
     ) -> Result<(), plonk::Error> {
-        Sha256Chip::load(layouter, config)
+        Sha256PackedChip::load(layouter, config)
     }
 
     fn construct(config: Self::Config) -> Self::Chip {
-        Sha256Chip::construct(config)
+        Sha256PackedChip::construct(config)
     }
 
     fn num_cols() -> NumCols {
@@ -597,18 +597,13 @@ where
     fn configure(
         meta: &mut plonk::ConstraintSystem<F>,
         advice_eq: &[Column<Advice>],
-        advice_neq: &[Column<Advice>],
+        _advice_neq: &[Column<Advice>],
         _fixed_eq: &[Column<Fixed>],
         _fixed_neq: &[Column<Fixed>],
     ) -> Self::Config {
         let num_cols = <Self as HaloHasher<A>>::num_cols();
         assert!(advice_eq.len() >= num_cols.advice_eq);
-        assert!(advice_neq.len() >= num_cols.advice_neq);
-
         let advice = advice_eq[..num_cols.advice_eq].try_into().unwrap();
-        let u32_decomp = U32DecompChip::configure(meta, advice);
-        let strip_bits = U32StripBitsChip::configure(meta, advice);
-
-        Sha256Chip::configure_with_packing(meta, u32_decomp, strip_bits)
+        Sha256PackedChip::configure(meta, advice)
     }
 }
