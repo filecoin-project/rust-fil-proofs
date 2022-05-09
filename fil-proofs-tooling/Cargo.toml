@@ -13,15 +13,11 @@ readme = "README.md"
 storage-proofs-core = { path = "../storage-proofs-core", version = "^11.0.0", default-features = false}
 storage-proofs-porep = { path = "../storage-proofs-porep", version = "^11.0.0", default-features = false }
 storage-proofs-post = { path = "../storage-proofs-post", version = "^11.0.0", default-features = false }
-storage-proofs-update = { path = "../storage-proofs-update", version = "^11.0.0", default-features = false }
 filecoin-proofs = { path = "../filecoin-proofs", default-features = false }
 filecoin-hashers = { path = "../filecoin-hashers", default-features = false, features = ["poseidon", "blake2s", "sha256"] }
 clap = { version = "3.1.6", features = ["derive"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-toml = "0.5"
-lazy_static = "1.2"
-glob = "0.3"
 regex = "1.3.7"
 commandspec = "0.12.2"
 chrono = { version = "0.4.7", features = ["serde"] }
@@ -36,11 +32,9 @@ async-std = "1.6"
 blake2s_simd = "1.0.0"
 fil_logger = "0.1.6"
 log = "0.4.8"
-uom = "0.32.0"
 merkletree = "0.21.0"
 bincode = "1.1.2"
 anyhow = "1.0.23"
-ff = "0.11.0"
 rand_xorshift = "0.3.0"
 bytefmt = "0.1.7"
 rayon = "1.3.0"
@@ -61,7 +55,6 @@ cuda = [
     "storage-proofs-core/cuda",
     "storage-proofs-porep/cuda",
     "storage-proofs-post/cuda",
-    "storage-proofs-update/cuda",
     "filecoin-proofs/cuda",
     "bellperson/cuda",
     "filecoin-hashers/cuda",
@@ -70,7 +63,6 @@ opencl = [
     "storage-proofs-core/opencl",
     "storage-proofs-porep/opencl",
     "storage-proofs-post/opencl",
-    "storage-proofs-update/opencl",
     "filecoin-proofs/opencl",
     "bellperson/opencl",
     "filecoin-hashers/opencl",
