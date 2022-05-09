@@ -11,23 +11,17 @@ readme = "README.md"
 [dependencies]
 storage-proofs-core = { path = "../storage-proofs-core", version = "^11.0.0", default-features = false}
 filecoin-hashers = { path = "../filecoin-hashers", version = "^6.0.0", default-features = false, features = ["poseidon", "sha256"]}
-rand = "0.8"
-merkletree = "0.21.0"
 byteorder = "1"
-crossbeam = "0.8"
 sha2 = "0.10.2"
 rayon = "1.0.0"
 serde = { version = "1.0", features = ["derive"]}
 blake2b_simd = "1.0.0"
-blake2s_simd = "1.0.0"
 ff = "0.11.0"
 bellperson = "0.18.0"
 log = "0.4.7"
 hex = "0.4.0"
 generic-array = "0.14.4"
 anyhow = "1.0.23"
-neptune = { version = "5.1.0", features = ["arity2", "arity4", "arity8", "arity11", "arity16", "arity24", "arity36"] }
-num_cpus = "1.10.1"
 fr32 = { path = "../fr32", version = "^4.0.0", default-features = false }
 blstrs = "0.4.0"
 
@@ -35,9 +29,10 @@ blstrs = "0.4.0"
 tempfile = "3"
 pretty_assertions = "1.2.0"
 filecoin-hashers = { path = "../filecoin-hashers", version = "^6.0.0", default-features = false, features = ["poseidon", "sha256", "blake2s"]}
+rand = "0.8"
 rand_xorshift = "0.3.0"
 
 [features]
 default = ["opencl"]
-cuda = ["storage-proofs-core/cuda", "filecoin-hashers/cuda", "fr32/cuda", "neptune/cuda"]
-opencl = ["storage-proofs-core/opencl", "filecoin-hashers/opencl", "fr32/opencl", "neptune/opencl"]
+cuda = ["storage-proofs-core/cuda", "filecoin-hashers/cuda", "fr32/cuda"]
+opencl = ["storage-proofs-core/opencl", "filecoin-hashers/opencl", "fr32/opencl"]

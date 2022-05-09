@@ -12,7 +12,6 @@ edition = "2018"
 
 [dependencies]
 digest = "0.10.3"
-block-buffer = "0.10.2"
 fake-simd = "0.1"
 opaque-debug = "0.3"
 sha2-asm = { version = "0.6", optional = true }
@@ -25,7 +24,6 @@ version = "1.4.0"
 cpufeatures = "0.2.2"
 
 [dev-dependencies]
-digest = { version = "0.10.3", features = ["dev", "std"] }
 sha2 = "0.10.2"
 rand = "0.8.5"
 rand_xorshift = "0.3.0"
