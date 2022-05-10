@@ -55,7 +55,6 @@ cuda = [
     "storage-proofs-update/cuda",
     "bellperson/cuda",
     "filecoin-hashers/cuda",
-    "fr32/cuda",
 ]
 opencl = [
     "storage-proofs-core/opencl",
@@ -64,7 +63,6 @@ opencl = [
     "storage-proofs-update/opencl",
     "bellperson/opencl",
     "filecoin-hashers/opencl",
-    "fr32/opencl",
 ]
 multicore-sdr = ["storage-proofs-porep/multicore-sdr"]
 big-tests = []

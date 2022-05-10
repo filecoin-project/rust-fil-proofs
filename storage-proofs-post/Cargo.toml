@@ -34,5 +34,5 @@ rand_xorshift = "0.3.0"
 
 [features]
 default = ["opencl"]
-cuda = ["storage-proofs-core/cuda", "filecoin-hashers/cuda", "fr32/cuda"]
-opencl = ["storage-proofs-core/opencl", "filecoin-hashers/opencl", "fr32/opencl"]
+cuda = ["storage-proofs-core/cuda", "filecoin-hashers/cuda"]
+opencl = ["storage-proofs-core/opencl", "filecoin-hashers/opencl"]
