@@ -16,12 +16,12 @@ merkletree = "0.21.0"
 rayon = "1.0.0"
 serde = { version = "1.0", features = ["derive"]}
 ff = "0.11.0"
-bellperson = "0.18.0"
+bellperson = "0.20.0"
 blstrs = "0.4.0"
 log = "0.4.7"
 generic-array = "0.14.4"
 anyhow = "1.0.23"
-neptune = { version = "5.1.0", features = ["arity2", "arity4", "arity8", "arity11", "arity16", "arity24", "arity36"] }
+neptune = { version = "6.1.0", features = ["arity2", "arity4", "arity8", "arity11", "arity16", "arity24", "arity36"] }
 lazy_static = "1.2"
 fr32 = { path = "../fr32", version = "^4.0.0", default-features = false }
 memmap = "0.7"
