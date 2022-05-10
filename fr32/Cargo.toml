@@ -23,11 +23,6 @@ pretty_assertions = "1.2.0"
 rand = "0.8"
 rand_xorshift = "0.3"
 
-[features]
-default = []
-cuda = []
-opencl = []
-
 [[bench]]
 name = "fr"
 harness = false

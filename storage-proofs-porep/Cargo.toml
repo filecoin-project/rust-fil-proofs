@@ -56,8 +56,8 @@ fil_logger = "0.1.6"
 
 [features]
 default = ["opencl", "multicore-sdr"]
-cuda = ["storage-proofs-core/cuda", "filecoin-hashers/cuda", "neptune/cuda", "bellperson/cuda", "fr32/cuda"]
-opencl = ["storage-proofs-core/opencl", "filecoin-hashers/opencl", "neptune/opencl", "bellperson/opencl", "fr32/opencl"]
+cuda = ["storage-proofs-core/cuda", "filecoin-hashers/cuda", "neptune/cuda", "bellperson/cuda"]
+opencl = ["storage-proofs-core/opencl", "filecoin-hashers/opencl", "neptune/opencl", "bellperson/opencl"]
 isolated-testing = []
 multicore-sdr = ["hwloc"]
 
