@@ -17,7 +17,6 @@ use halo2_proofs::{
     plonk::{Advice, Circuit, Column, ConstraintSystem, Error, Instance},
 };
 use storage_proofs_core::{
-    error::Result,
     gadgets::halo2::{
         insert::{InsertChip, InsertConfig},
         por::MerkleChip,
@@ -544,6 +543,9 @@ where
         );
 
         let insert_2 = InsertChip::configure(meta, &advice_eq, &advice_neq);
+
+        // TODO (jake): reuse hasher and insert configs (so we don't duplicate selectors) when
+        // arities match.
 
         let poseidon_2 = <TreeRHasher<F> as HaloHasher<U2>>::configure(
             meta,
