@@ -3,8 +3,9 @@ use filecoin_hashers::{Domain, FieldArity};
 use generic_array::typenum::U2;
 use neptune::poseidon::Poseidon;
 
-use crate::constants::{
-    challenge_count, partition_count, TreeRDomain, POSEIDON_CONSTANTS_GEN_RANDOMNESS,
+use crate::{
+    constants::{challenge_count, partition_count, TreeRDomain, POSEIDON_CONSTANTS_GEN_RANDOMNESS},
+    vanilla::rhos,
 };
 
 // Generates the challenges for partition `k` of an `EmptySectorUpdate` proof. All challenges
@@ -91,6 +92,25 @@ where
             digest_bits: Vec::with_capacity(F::NUM_BITS as usize),
             challenges_remaining: challenge_count,
         }
+    }
+
+    // Returns the challenges as a vector, rather than an iterator.
+    pub fn vec(sector_nodes: usize, comm_r_new: TreeRDomain<F>, k: usize) -> Vec<u32> {
+        Self::new(sector_nodes, comm_r_new, k).collect()
+    }
+
+    // Returns each challenge's `rho`.
+    pub fn rhos(sector_nodes: usize, challenges: &[u32], h: usize, phi: &TreeRDomain<F>) -> Vec<F> {
+        let rhos = rhos(h, &phi);
+        let challenge_bit_len = sector_nodes.trailing_zeros() as usize;
+        let get_high_bits_shr = challenge_bit_len - h;
+        challenges
+            .iter()
+            .map(|c| {
+                let high = (c >> get_high_bits_shr) as usize;
+                rhos[high]
+            })
+            .collect()
     }
 }
 
