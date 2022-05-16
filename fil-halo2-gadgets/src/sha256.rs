@@ -6,6 +6,7 @@ use std::cmp::min;
 use std::convert::TryInto;
 use std::fmt;
 use std::iter;
+use std::marker::PhantomData;
 
 use halo2_proofs::{
     arithmetic::FieldExt,
@@ -15,7 +16,7 @@ use halo2_proofs::{
 };
 
 use crate::{
-    boolean::AssignedBits,
+    boolean::{AssignedBits, Bit},
     uint32::{self, U32DecompChip, U32DecompConfig, StripBitsChip, StripBitsConfig},
     AdviceIter,
 };
@@ -791,6 +792,302 @@ impl<F: FieldExt> Sha256PackedChip<F> {
 
         // Compute digest.
         self.assign_digest(&mut layouter, state)
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct AssignPreimageConfig<F: FieldExt> {
+    // Equality enabled advice.
+    advice: [Column<Advice>; 9],
+    s_field_into_u32s: Selector,
+    s_reorder_u32_bits: Selector,
+    _f: PhantomData<F>,
+}
+
+#[derive(Debug)]
+pub struct AssignPreimageChip<F: FieldExt> {
+    config: AssignPreimageConfig<F>,
+}
+
+impl<F: FieldExt> Chip<F> for AssignPreimageChip<F> {
+    type Config = AssignPreimageConfig<F>;
+    type Loaded = ();
+
+    fn config(&self) -> &Self::Config {
+        &self.config
+    }
+
+    fn loaded(&self) -> &Self::Loaded {
+        &()
+    }
+}
+
+impl<F: FieldExt> AssignPreimageChip<F> {
+    pub fn construct(config: AssignPreimageConfig<F>) -> Self {
+        AssignPreimageChip { config }
+    }
+
+    pub fn configure(
+        meta: &mut ConstraintSystem<F>,
+        advice: [Column<Advice>; 9],
+    ) -> AssignPreimageConfig<F> {
+        for col in advice.iter() {
+            meta.enable_equality(*col);
+        }
+
+        let s_field_into_u32s = meta.selector();
+        {
+            let radix = F::from(1 << 32);
+            // `[2^32, (2^32)^2, .., (2^32)^7]`
+            let mut radix_pows = Vec::with_capacity(7);
+            radix_pows.push(radix);
+            for i in 0..6 {
+                radix_pows.push(radix_pows[i] * radix);
+            }
+
+            meta.create_gate("field_into_u32s", |meta| {
+                let s = meta.query_selector(s_field_into_u32s);
+                let f = meta.query_advice(advice[0], Rotation::cur());
+                let mut expr = meta.query_advice(advice[1], Rotation::cur());
+                for (col, radix_pow) in advice[2..].iter().zip(radix_pows.iter()) {
+                    let uint32 = meta.query_advice(*col, Rotation::cur());
+                    expr = expr + Expression::Constant(*radix_pow) * uint32;
+                }
+                [s * (expr - f)]
+            });
+        }
+
+        let s_reorder_u32_bits = meta.selector();
+        {
+            let radix = F::from(2);
+            // `[2^1, ..., 2^31]`
+            let mut radix_pows = Vec::with_capacity(31);
+            radix_pows.push(radix);
+            for i in 0..30 {
+                radix_pows.push(radix_pows[i] * radix);
+            }
+
+            meta.create_gate("u32_into_word", |meta| {
+                let s = meta.query_selector(s_reorder_u32_bits);
+
+                // `u32` binary decomposition.
+                let uint32 = meta.query_advice(advice[0], Rotation::cur());
+                let mut u32_expr = meta.query_advice(advice[1], Rotation::cur());
+                let mut radix_pows_iter = radix_pows.iter();
+                for col in &advice[2..] {
+                    let bit = meta.query_advice(*col, Rotation::cur());
+                    let radix_pow = radix_pows_iter.next().unwrap();
+                    u32_expr = u32_expr + Expression::Constant(*radix_pow) * bit;
+                }
+                for byte_index in 1..=3 {
+                    let offset = Rotation(byte_index as i32);
+                    for col in &advice[1..] {
+                        let bit = meta.query_advice(*col, offset);
+                        let radix_pow = radix_pows_iter.next().unwrap();
+                        u32_expr = u32_expr + Expression::Constant(*radix_pow) * bit;
+                    }
+                }
+
+                // Reverse the bit order of each `u32` byte and pack the result into `word`.
+                let word = meta.query_advice(advice[0], Rotation::next());
+                let mut word_expr = meta.query_advice(advice[1], Rotation::cur());
+                let mut radix_pows_iter = radix_pows.iter();
+                for col in advice[2..].iter().rev() {
+                    let bit = meta.query_advice(*col, Rotation::cur());
+                    let radix_pow = radix_pows_iter.next().unwrap();
+                    word_expr = word_expr + Expression::Constant(*radix_pow) * bit;
+                }
+                for byte_index in 1..=3 {
+                    let offset = Rotation(byte_index as i32);
+                    for col in advice[1..].iter().rev() {
+                        let bit = meta.query_advice(*col, offset);
+                        let radix_pow = radix_pows_iter.next().unwrap();
+                        word_expr = word_expr + Expression::Constant(*radix_pow) * bit;
+                    }
+                }
+
+                [
+                    ("u32 binary decomp", s.clone() * (u32_expr - uint32)),
+                    ("reorder u32 bits into word", s * (word_expr - word)),
+                ]
+            });
+        }
+
+        AssignPreimageConfig {
+            advice,
+            s_field_into_u32s,
+            s_reorder_u32_bits,
+            _f: PhantomData,
+        }
+    }
+
+    pub fn assign_preimage_and_padding(
+        &self,
+        layouter: &mut impl Layouter<F>,
+        preimage: &[AssignedCell<F, F>],
+    ) -> Result<Vec<AssignedBits<F, 32>>, Error> {
+        const FIELD_WORDS: usize = 8;
+        const FIELD_BITS: usize = 256;
+
+        let preimage_len = preimage.len();
+        let preimage_words = preimage_len * FIELD_WORDS;
+        let preimage_bits = preimage_len * FIELD_BITS;
+
+        // The padding scheme requires that there are at least 3 unutilized words (or one
+        // field element) in the preimage's last block; one word to append a `1` bit onto
+        // the end of the preimage (i.e. the word `2^31`) and two words to append the preimage's
+        // bit length. If there is less than 3 unutilized words (i.e. one field element) in the
+        // preimage's last block, pad until the end of the next block.
+        let last_block_words_used = preimage_words % BLOCK_SIZE;
+        let last_block_words_rem = BLOCK_SIZE - last_block_words_used;
+        let pad_words = if last_block_words_rem >= 1 {
+            last_block_words_rem
+        } else {
+            last_block_words_rem + BLOCK_SIZE
+        };
+
+        let mut padding = vec![0u32; pad_words];
+        padding[0] = 1 << 31;
+        padding[pad_words - 2] = (preimage_bits >> 32) as u32;
+        padding[pad_words - 1] = (preimage_bits & 0xffffffff) as u32;
+
+        layouter.assign_region(
+            || "assign preimage and padding",
+            |mut region| {
+                let mut offset = 0;
+
+                let mut padded_preimage =
+                    Vec::<AssignedBits<F, 32>>::with_capacity(preimage_words + pad_words);
+
+                // Copy each preimage field element and decompose each into eight u32s.
+                for (elem_index, elem) in preimage.iter().enumerate() {
+                    self.config.s_field_into_u32s.enable(&mut region, offset)?;
+
+                    let elem = elem.copy_advice(
+                        || format!("copy preimage elem {}", elem_index),
+                        &mut region,
+                        self.config.advice[0],
+                        offset,
+                    )?;
+
+                    let u32s = match elem.value() {
+                        Some(elem) => {
+                            elem
+                                .to_repr()
+                                .as_ref()
+                                .chunks(4)
+                                .map(|u32_bytes| {
+                                    let u32_bytes: [u8; 4] = u32_bytes.try_into().unwrap();
+                                    Some(u32::from_le_bytes(u32_bytes))
+                                })
+                                .collect()
+                        }
+                        None => vec![None; FIELD_WORDS],
+                    };
+
+                    let u32s = u32s
+                        .iter()
+                        .zip(self.config.advice[1..].iter())
+                        .enumerate()
+                        .map(|(u32_index, (uint32, col))| {
+                            AssignedBits::<F, 32>::assign(
+                                &mut region,
+                                || format!("preimage elem {} u32 {}", elem_index, u32_index),
+                                *col,
+                                offset,
+                                *uint32,
+                            )
+                        })
+                        .collect::<Result<Vec<AssignedBits<F, 32>>, Error>>()?;
+
+                    offset += 1;
+
+                    for (u32_index, uint32) in u32s.iter().enumerate() {
+                        self.config.s_reorder_u32_bits.enable(&mut region, offset)?;
+
+                        // Copy `u32`.
+                        uint32.copy_advice(
+                            || format!("copy preimage elem {} u32 {}", elem_index, u32_index),
+                            &mut region,
+                            self.config.advice[0],
+                            offset,
+                        )?;
+
+                        // Assign `u32`'s bits.
+                        let uint32_bits = match uint32.value() {
+                            Some(uint32) => {
+                                let mut bits = Vec::<Option<bool>>::with_capacity(32);
+                                for byte in u32::from(uint32).to_le_bytes().iter() {
+                                    for i in 0..8 {
+                                        bits.push(Some(byte >> i & 1 == 1));
+                                    }
+                                }
+                                bits
+                            }
+                            None => vec![None; 32],
+                        };
+
+                        for (byte_index, byte_bits) in uint32_bits.chunks(8).enumerate() {
+                            for (bit_index, (bit, col)) in byte_bits
+                                .iter()
+                                .zip(self.config.advice[1..].iter())
+                                .enumerate()
+                            {
+                                region.assign_advice(
+                                    || format!(
+                                        "preimage elem {} u32 {} bit {}",
+                                        elem_index,
+                                        u32_index,
+                                        bit_index,
+                                    ),
+                                    *col,
+                                    offset + byte_index,
+                                    || bit.map(Bit).ok_or(Error::Synthesis),
+                                )?;
+                            }
+                        }
+
+                        // Assign `u32` where each byte's bit order is reversed (from lsb first to
+                        // msb first).
+                        let word = uint32.value().map(|uint32| {
+                            let mut bytes = u32::from(uint32).to_le_bytes();
+                            for byte in bytes.iter_mut() {
+                                *byte = byte.reverse_bits();
+                            }
+                            u32::from_le_bytes(bytes)
+                        });
+
+                        let word = AssignedBits::<F, 32>::assign(
+                            &mut region,
+                            || format!("preimage elem {} word {}", elem_index, u32_index),
+                            self.config.advice[0],
+                            offset + 1,
+                            word,
+                        )?;
+
+                        padded_preimage.push(word);
+                        offset += 4;
+                    }
+                }
+
+                let mut advice_iter = AdviceIter::new(offset, self.config.advice.to_vec());
+
+                // Assign padding.
+                for (i, pad_word) in padding.iter().enumerate() {
+                    let (offset, col) = advice_iter.next().unwrap();
+                    let pad_word = AssignedBits::<F, 32>::assign(
+                        &mut region,
+                        || format!("padding word {}", i),
+                        col,
+                        offset,
+                        Some(*pad_word),
+                    )?;
+                    padded_preimage.push(pad_word);
+                }
+
+                Ok(padded_preimage)
+            },
+        )
     }
 }
 
