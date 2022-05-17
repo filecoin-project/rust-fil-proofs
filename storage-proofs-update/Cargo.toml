@@ -40,7 +40,6 @@ opencl = [
     "filecoin-hashers/opencl",
     "neptune/opencl",
     "bellperson/opencl",
-    "fr32/opencl",
 ]
 cuda = [
     "storage-proofs-core/cuda",
@@ -48,7 +47,6 @@ cuda = [
     "filecoin-hashers/cuda",
     "neptune/cuda",
     "bellperson/cuda",
-    "fr32/cuda",
 ]
 multicore-sdr = [
     "storage-proofs-porep/multicore-sdr",
