@@ -11,6 +11,7 @@ use halo2_proofs::{
     circuit::AssignedCell,
     plonk::{Advice, Column, ConstraintSystem, Fixed},
 };
+use neptune::{halo2_circuit::PoseidonChip, Arity};
 
 #[cfg(test)]
 pub(crate) const TEST_SEED: [u8; 16] = [
@@ -102,6 +103,66 @@ impl AdviceIter {
             offset,
             cols,
             col_index: 0,
+        }
+    }
+}
+
+
+pub trait ColumnCount {
+    fn num_cols() -> NumCols;
+}
+
+#[derive(Default)]
+pub struct ColumnBuilder(NumCols);
+
+impl ColumnBuilder {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn with_chip<C: ColumnCount>(mut self) -> Self {
+        let chip = C::num_cols();
+
+        let advice_total =
+            max(self.0.advice_eq + self.0.advice_neq, chip.advice_eq + chip.advice_neq);
+        let advice_eq = max(self.0.advice_eq, chip.advice_eq);
+        let advice_neq = advice_total - advice_eq;
+
+        let fixed_total = max(self.0.fixed_eq + self.0.fixed_neq, chip.fixed_eq + chip.fixed_neq);
+        let fixed_eq = max(chip.fixed_eq, self.0.fixed_eq);
+        let fixed_neq = fixed_total - fixed_eq;
+
+        self.0 = NumCols {
+            advice_eq,
+            advice_neq,
+            fixed_eq,
+            fixed_neq,
+        };
+
+        self
+    }
+
+    pub fn create_columns<F: FieldExt>(
+        &self,
+        meta: &mut ConstraintSystem<F>,
+    ) -> (AdviceEq, AdviceNeq, FixedEq, FixedNeq) {
+        let advice_eq = (0..self.0.advice_eq).map(|_| meta.advice_column()).collect();
+        let advice_neq = (0..self.0.advice_neq).map(|_| meta.advice_column()).collect();
+        let fixed_eq = (0..self.0.fixed_eq).map(|_| meta.fixed_column()).collect();
+        let fixed_neq = (0..self.0.fixed_neq).map(|_| meta.fixed_column()).collect();
+        (advice_eq, advice_neq, fixed_eq, fixed_neq)
+    }
+}
+
+impl<F: FieldExt, A: Arity<F>> ColumnCount for PoseidonChip<F, A> {
+    fn num_cols() -> NumCols {
+        let width = A::to_usize() + 1;
+        NumCols {
+            advice_eq: width,
+            advice_neq: 1,
+            // Poseidon requires `2 * width` fixed columns.
+            fixed_eq: 1,
+            fixed_neq: 2 * width - 1,
         }
     }
 }
