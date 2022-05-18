@@ -17,8 +17,10 @@ use halo2_proofs::{
 
 use crate::{
     boolean::{AssignedBits, Bit},
-    uint32::{self, U32DecompChip, U32DecompConfig, StripBitsChip, StripBitsConfig},
-    AdviceIter,
+    uint32::{
+        self, U32DecompChip, U32DecompConfig, StripBitsChip, StripBitsConfig, U32_DECOMP_NUM_COLS,
+    },
+    AdviceIter, ColumnCount, NumCols,
 };
 
 // Don't reformat code copied from `halo2_gadgets` repo.
@@ -498,6 +500,12 @@ impl<F: FieldExt> Chip<F> for Sha256PackedChip<F> {
 
     fn loaded(&self) -> &Self::Loaded {
         &()
+    }
+}
+
+impl<F: FieldExt> ColumnCount for Sha256PackedChip<F> {
+    fn num_cols() -> NumCols {
+        U32_DECOMP_NUM_COLS
     }
 }
 

@@ -12,6 +12,7 @@ ff = "0.11.0"
 # halo2_proofs = { git = "https://github.com/drpetervannostrand/halo2", branch = "sha256-chip" }
 halo2_gadgets = { git = "https://github.com/drpetervannostrand/halo2" }
 halo2_proofs = { git = "https://github.com/drpetervannostrand/halo2" }
+neptune = { git = "https://github.com/filecoin-project/neptune", branch = "fr-as-trait-halo2-circuit" }
 
 [dev-dependencies]
 rand = "0.8"
