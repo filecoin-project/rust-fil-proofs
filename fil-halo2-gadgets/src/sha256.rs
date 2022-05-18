@@ -11,16 +11,17 @@ use std::marker::PhantomData;
 use halo2_proofs::{
     arithmetic::FieldExt,
     circuit::{AssignedCell, Chip, Layouter},
-    plonk::{Advice, Column, ConstraintSystem, Error, Expression, Selector},
+    plonk::{Advice, Column, ConstraintSystem, Error, Expression, Instance, Selector},
     poly::Rotation,
 };
 
 use crate::{
     boolean::{AssignedBits, Bit},
     uint32::{
-        self, U32DecompChip, U32DecompConfig, StripBitsChip, StripBitsConfig, U32_DECOMP_NUM_COLS,
+        self, AssignedU32, U32DecompChip, U32DecompConfig, StripBitsChip, StripBitsConfig,
+        U32_DECOMP_NUM_COLS,
     },
-    AdviceIter, ColumnCount, NumCols,
+    AdviceIter, ColumnCount, NumCols, WitnessOrCopy,
 };
 
 // Don't reformat code copied from `halo2_gadgets` repo.
@@ -198,7 +199,7 @@ pub struct Sha256Config<F: FieldExt> {
     advice: [Column<Advice>; 6],
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Sha256Chip<F: FieldExt> {
     config: Sha256Config<F>,
 }
@@ -485,7 +486,7 @@ pub struct Sha256PackedConfig<F: FieldExt> {
     strip_bits: StripBitsConfig<F>,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Sha256PackedChip<F: FieldExt> {
     config: Sha256PackedConfig<F>,
 }
@@ -668,7 +669,7 @@ impl<F: FieldExt> Sha256PackedChip<F> {
 
                 // Assign padding.
                 for (i, pad_word) in padding.iter().enumerate() {
-                    let (offset, col) = advice_iter.next().unwrap();
+                    let (offset, col) = advice_iter.next();
                     let pad_word = AssignedBits::<F, 32>::assign(
                         &mut region,
                         || format!("padding word {}", i),
@@ -724,6 +725,9 @@ impl<F: FieldExt> Sha256PackedChip<F> {
         // significant bits.
         digest_words[7] = StripBitsChip::construct(self.config.strip_bits.clone())
             .strip_bits(layouter.namespace(|| "strip digest bits"), &digest_words[7])?;
+
+        // TODO (jake): is this the correct way to pack field elements from `u32`s or do we need to
+        // reverse each byte's bit order?
 
         // Pack digest into a field element.
         let mut packed_digest_repr = Some(F::Repr::default());
@@ -801,8 +805,61 @@ impl<F: FieldExt> Sha256PackedChip<F> {
         // Compute digest.
         self.assign_digest(&mut layouter, state)
     }
+
+    pub fn hash_words_nopad(
+        &self,
+        mut layouter: impl Layouter<F>,
+        padded_preimage: &[AssignedU32<F>],
+    ) -> Result<AssignedCell<F, F>, Error> {
+        assert_eq!(padded_preimage.len() % BLOCK_SIZE, 0);
+
+        let mut blocks = padded_preimage.chunks(BLOCK_SIZE);
+
+        // Process the first block.
+        let mut state = self.initialization_vector(&mut layouter)?;
+        state = self.compress(
+            &mut layouter,
+            state.clone(),
+            blocks.next().unwrap().to_vec().try_into().unwrap(),
+        )?;
+
+        // Process any additional blocks.
+        for block in blocks {
+            state = self.initialization(&mut layouter, state.clone())?;
+            state = self.compress(
+                &mut layouter,
+                state.clone(),
+                block.to_vec().try_into().unwrap(),
+            )?;
+        }
+
+        self.assign_digest(&mut layouter, state)
+    }
 }
 
+pub fn get_padding(preimage_words: usize) -> Vec<u32> {
+    let preimage_bits = preimage_words as u64 * 32;
+
+    // The padding scheme requires that there are at least 3 unutilized words in the preimage's last
+    // block: one word to append a `1` bit onto the end of the preimage and two words to append the
+    // unpadded preimage's bit length. If there is less than 3 unutilized words in the preimage's
+    // last block, pad until the end of the next block.
+    let last_block_words = preimage_words % BLOCK_SIZE;
+    let unused_words = BLOCK_SIZE - last_block_words;
+    let pad_words = if unused_words >= 3 {
+        unused_words
+    } else {
+        unused_words + BLOCK_SIZE
+    };
+
+    let mut padding = vec![0u32; pad_words];
+    padding[0] = 1 << 31;
+    padding[pad_words - 2] = (preimage_bits >> 32) as u32;
+    padding[pad_words - 1] = preimage_bits as u32;
+    padding
+}
+
+/*
 #[derive(Clone, Debug)]
 pub struct AssignPreimageConfig<F: FieldExt> {
     // Equality enabled advice.
@@ -1082,7 +1139,7 @@ impl<F: FieldExt> AssignPreimageChip<F> {
 
                 // Assign padding.
                 for (i, pad_word) in padding.iter().enumerate() {
-                    let (offset, col) = advice_iter.next().unwrap();
+                    let (offset, col) = advice_iter.next();
                     let pad_word = AssignedBits::<F, 32>::assign(
                         &mut region,
                         || format!("padding word {}", i),
@@ -1094,6 +1151,294 @@ impl<F: FieldExt> AssignPreimageChip<F> {
                 }
 
                 Ok(padded_preimage)
+            },
+        )
+    }
+}
+*/
+
+#[derive(Clone, Debug)]
+pub struct Sha256WordsConfig<F: FieldExt> {
+    // Equality enabled advice.
+    advice: [Column<Advice>; 9],
+    s_field_into_u32s: Selector,
+    s_u32_reorder_bits: Selector,
+    _f: PhantomData<F>,
+}
+
+#[derive(Debug)]
+pub struct Sha256WordsChip<F: FieldExt> {
+    config: Sha256WordsConfig<F>,
+}
+
+impl<F: FieldExt> Chip<F> for Sha256WordsChip<F> {
+    type Config = Sha256WordsConfig<F>;
+    type Loaded = ();
+
+    fn config(&self) -> &Self::Config {
+        &self.config
+    }
+
+    fn loaded(&self) -> &Self::Loaded {
+        &()
+    }
+}
+
+impl<F: FieldExt> ColumnCount for Sha256WordsChip<F> {
+    fn num_cols() -> NumCols {
+        U32_DECOMP_NUM_COLS
+    }
+}
+
+impl<F: FieldExt> Sha256WordsChip<F> {
+    pub fn construct(config: Sha256WordsConfig<F>) -> Self {
+        Sha256WordsChip { config }
+    }
+
+    pub fn configure(
+        meta: &mut ConstraintSystem<F>,
+        advice: [Column<Advice>; 9],
+    ) -> Sha256WordsConfig<F> {
+        for col in advice.iter() {
+            meta.enable_equality(*col);
+        }
+
+        let s_field_into_u32s = meta.selector();
+        {
+            // `[2^32, (2^32)^2, .., (2^32)^7]`
+            let mut radix_pows = Vec::with_capacity(7);
+            let radix = F::from(1u64 << 32);
+            radix_pows.push(radix);
+            for i in 0..6 {
+                radix_pows.push(radix_pows[i] * radix);
+            }
+
+            meta.create_gate("field_into_u32s", |meta| {
+                let s = meta.query_selector(s_field_into_u32s);
+                let field = meta.query_advice(advice[0], Rotation::cur());
+
+                let mut expr = meta.query_advice(advice[1], Rotation::cur());
+                for (col, radix_pow) in advice[2..].iter().zip(radix_pows.iter()) {
+                    let uint32 = meta.query_advice(*col, Rotation::cur());
+                    expr = expr + Expression::Constant(*radix_pow) * uint32;
+                }
+
+                [s * (expr - field)]
+            });
+        }
+
+        let s_u32_reorder_bits = meta.selector();
+        {
+            // `[2^1, ..., 2^31]`
+            let mut radix_pows = Vec::with_capacity(31);
+            let radix = F::from(2);
+            radix_pows.push(radix);
+            for i in 0..30 {
+                radix_pows.push(radix_pows[i] * radix);
+            }
+
+            meta.create_gate("u32_reorder_bits", |meta| {
+                let s = meta.query_selector(s_u32_reorder_bits);
+                let uint32 = meta.query_advice(advice[0], Rotation::cur());
+                let reordered = meta.query_advice(advice[0], Rotation::next());
+
+                // Query the `u32`'s bits; eight bits per row.
+                let mut le_bits = Vec::<Expression<F>>::with_capacity(32);
+                for offset in 0..4 {
+                    let offset = Rotation(offset as i32);
+                    for col in &advice[1..] {
+                        le_bits.push(meta.query_advice(*col, offset));
+                    }
+                }
+
+                // `u32` binary decomposition.
+                let mut uint32_expr = le_bits[0].clone();
+                for (bit, radix_pow) in le_bits[1..].iter().zip(radix_pows.iter()) {
+                    uint32_expr = uint32_expr + Expression::Constant(*radix_pow) * bit.clone();
+                }
+
+                // Reorder `u32`'s bits.
+                let mut reordered_bits = le_bits.chunks(8).map(|byte| byte.iter().rev()).flatten();
+                let mut reordered_expr = reordered_bits.next().unwrap().clone();
+                for (bit, radix_pow) in reordered_bits.zip(radix_pows.iter()) {
+                    reordered_expr = reordered_expr + Expression::Constant(*radix_pow) * bit.clone();
+                }
+
+                [
+                    ("u32 binary decomp", s.clone() * (uint32_expr - uint32)),
+                    ("reorder u32 bits", s * (reordered_expr - reordered)),
+                ]
+            });
+        }
+
+        Sha256WordsConfig {
+            advice,
+            s_field_into_u32s,
+            s_u32_reorder_bits,
+            _f: PhantomData,
+        }
+    }
+
+    pub fn witness_into_words(
+        &self,
+        layouter: impl Layouter<F>,
+        field: Option<F>,
+    ) -> Result<[AssignedU32<F>; 8], Error> {
+        self.into_words_inner(layouter, WitnessOrCopy::Witness(field))
+    }
+
+    pub fn copy_into_words(
+        &self,
+        layouter: impl Layouter<F>,
+        field: AssignedCell<F, F>,
+    ) -> Result<[AssignedU32<F>; 8], Error> {
+        self.into_words_inner(layouter, WitnessOrCopy::Copy(field))
+    }
+
+    pub fn pi_into_words(
+        &self,
+        layouter: impl Layouter<F>,
+        pi_col: Column<Instance>,
+        // Absolute row.
+        pi_row: usize,
+    ) -> Result<[AssignedU32<F>; 8], Error> {
+        self.into_words_inner(layouter, WitnessOrCopy::PiCopy(pi_col, pi_row))
+    }
+
+    #[allow(clippy::wrong_self_convention)]
+    fn into_words_inner(
+        &self,
+        mut layouter: impl Layouter<F>,
+        field: WitnessOrCopy<F, F>,
+    ) -> Result<[AssignedU32<F>; 8], Error> {
+        layouter.assign_region(
+            || "decompose field element into sha256 words",
+            |mut region| {
+                let mut offset = 0;
+                self.config.s_field_into_u32s.enable(&mut region, offset)?;
+
+                // Witness or copy the field element to be decomposed.
+                let field = match field {
+                    WitnessOrCopy::Witness(field) => {
+                        region.assign_advice(
+                            || "witness field element",
+                            self.config.advice[0],
+                            offset,
+                            || field.ok_or(Error::Synthesis),
+                        )?
+                    }
+                    WitnessOrCopy::Copy(ref field) => {
+                        field.copy_advice(
+                            || "copy field element",
+                            &mut region,
+                            self.config.advice[0],
+                            offset,
+                        )?
+                    }
+                    WitnessOrCopy::PiCopy(pi_col, pi_row) => {
+                        region.assign_advice_from_instance(
+                            || "copy field element public input",
+                            pi_col,
+                            pi_row,
+                            self.config.advice[0],
+                            offset,
+                        )?
+                    },
+                };
+
+                let u32s: [Option<u32>; 8] = match field.value() {
+                    Some(field) => {
+                        field
+                            .to_repr()
+                            .as_ref()
+                            .chunks(4)
+                            .map(|bytes| Some(u32::from_le_bytes(bytes.try_into().unwrap())))
+                            .collect::<Vec<Option<u32>>>()
+                            .try_into()
+                            .unwrap()
+                    }
+                    None => [None; 8],
+                };
+
+                // Assign `u32` decomposition.
+                let u32s = u32s
+                    .iter()
+                    .zip(self.config.advice[1..].iter())
+                    .enumerate()
+                    .map(|(i, (uint32, col))| {
+                        AssignedBits::<F, 32>::assign(
+                            &mut region,
+                            || format!("u32 {}", i),
+                            *col,
+                            offset,
+                            *uint32,
+                        )
+                    })
+                    .collect::<Result<Vec<AssignedBits<F, 32>>, Error>>()?;
+
+                offset += 1;
+
+                let mut words = Vec::with_capacity(8);
+
+                // Copy and decompose each `u32` into 32 little-endian bits (one byte per row);
+                // reorder each byte's bit order and pack the four bytes into a 32-bit word.
+                for (uint32_index, uint32) in u32s.iter().enumerate() {
+                    self.config.s_u32_reorder_bits.enable(&mut region, offset)?;
+
+                    // Copy `u32`.
+                    uint32.copy_advice(
+                        || format!("copy u32 {}", uint32_index),
+                        &mut region,
+                        self.config.advice[0],
+                        offset,
+                    )?;
+
+                    let (le_bits, reordered) = match uint32.value_u32() {
+                        Some(uint32) => {
+                            let mut le_bits = [None; 32];
+                            for (i, bit) in le_bits.iter_mut().enumerate() {
+                                *bit = Some(uint32 >> i & 1 == 1);
+                            }
+
+                            let mut reordered = 0u32;
+                            for (byte_index, byte) in uint32.to_le_bytes().iter().enumerate() {
+                                let byte = byte.reverse_bits() as u32;
+                                reordered |= byte << (8 * byte_index);
+                            }
+
+                            (le_bits, Some(reordered))
+                        }
+                        None => ([None; 32], None),
+                    };
+
+                    // Assign `u32`'s little-endian bits (eight bits per row).
+                    let mut bit_index = 0;
+                    for (byte_index, byte) in le_bits.chunks(8).enumerate() {
+                        for (bit, col) in byte.iter().zip(self.config.advice[1..].iter()) {
+                            region.assign_advice(
+                                || format!("u32 {} bit {}", uint32_index, bit_index),
+                                *col,
+                                offset + byte_index,
+                                || bit.map(Bit).ok_or(Error::Synthesis),
+                            )?;
+                            bit_index += 1;
+                        }
+                    }
+
+                    // Assign the reordered bits as a `u32`.
+                    let reordered = AssignedBits::<F, 32>::assign(
+                        &mut region,
+                        || format!("u32 {} reordered", uint32_index),
+                        self.config.advice[0],
+                        offset + 1,
+                        reordered,
+                    )?;
+
+                    words.push(reordered);
+                    offset += 4;
+                }
+
+                Ok(words.try_into().unwrap())
             },
         )
     }
