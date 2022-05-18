@@ -5,7 +5,7 @@ use halo2_gadgets::utilities::bool_check;
 use halo2_proofs::{
     arithmetic::FieldExt,
     circuit::{AssignedCell, Layouter, Region},
-    plonk::{Advice, Column, ConstraintSystem, Constraints, Error, Expression, Selector},
+    plonk::{Advice, Column, ConstraintSystem, Constraints, Error, Expression, Instance, Selector},
     poly::Rotation,
 };
 
@@ -348,7 +348,7 @@ impl<F: FieldExt> U32DecompChip<F> {
 pub struct UInt32Config<F: FieldExt> {
     value: Column<Advice>,
     bits: [Column<Advice>; 8],
-    s_u32_into_bits: Selector,
+    s_field_into_32_bits: Selector,
     _f: PhantomData<F>,
 }
 
@@ -383,29 +383,28 @@ impl<F: FieldExt> UInt32Chip<F> {
         let value = advice[0];
         let bits: [Column<Advice>; 8] = advice[1..].try_into().unwrap();
 
-        let s_u32_into_bits = meta.selector();
-
         let mut radix_pows = Vec::with_capacity(31);
-        let radix = F::from(2);
-        radix_pows.push(radix);
+        radix_pows.push(F::from(2));
         for i in 0..30 {
-            radix_pows.push(radix_pows[i] * radix);
+            radix_pows.push(radix_pows[i].double());
         }
 
-        meta.create_gate("u32_into_bits", |meta| {
-            let s = meta.query_selector(s_u32_into_bits);
+        let s_field_into_32_bits = meta.selector();
+        meta.create_gate("field into 32 bits", |meta| {
+            let s = meta.query_selector(s_field_into_32_bits);
             let value = meta.query_advice(value, Rotation::cur());
 
             let mut radix_pows = radix_pows.into_iter().map(Expression::Constant);
 
             let mut expr = meta.query_advice(bits[0], Rotation::cur());
-            for col in bits[1..].iter() {
+            for col in &bits[1..] {
                 let bit = meta.query_advice(*col, Rotation::cur());
                 expr = expr + radix_pows.next().unwrap() * bit;
             }
-            for row in 1..4 {
-                for col in bits.iter() {
-                    let bit = meta.query_advice(*col, Rotation(row as i32));
+            for offset in 1..4 {
+                let offset = Rotation(offset as i32);
+                for col in &bits {
+                    let bit = meta.query_advice(*col, offset);
                     expr = expr + radix_pows.next().unwrap() * bit;
                 }
             }
@@ -416,7 +415,7 @@ impl<F: FieldExt> UInt32Chip<F> {
         UInt32Config {
             value,
             bits,
-            s_u32_into_bits,
+            s_field_into_32_bits,
             _f: PhantomData,
         }
     }
@@ -427,7 +426,7 @@ impl<F: FieldExt> UInt32Chip<F> {
         mut offset: usize,
         value: AssignedU32<F>,
     ) -> Result<[AssignedBit<F>; 32], Error> {
-        self.config.s_u32_into_bits.enable(region, offset)?;
+        self.config.s_field_into_32_bits.enable(region, offset)?;
 
         let val = value.value_u32();
 
@@ -452,6 +451,52 @@ impl<F: FieldExt> UInt32Chip<F> {
         }
 
         Ok(bits.try_into().unwrap())
+    }
+
+    pub fn pi_assign_bits(
+        &self,
+        mut layouter: impl Layouter<F>,
+        pi_col: Column<Instance>,
+        pi_row: usize,
+    ) -> Result<[AssignedBit<F>; 32], Error> {
+        layouter.assign_region(
+            || "assign public input as 32 bits",
+            |mut region| {
+                let offset = 0;
+                self.config.s_field_into_32_bits.enable(&mut region, offset)?;
+
+                // Copy challenge public input.
+                let pi = region.assign_advice_from_instance(
+                    || "copy public input",
+                    pi_col,
+                    pi_row,
+                    self.config.value,
+                    offset,
+                )?;
+
+                let pi_bytes: Option<[u8; 4]> =
+                    pi.value().map(|pi| pi.to_repr().as_ref()[..4].try_into().unwrap());
+
+                let mut pi_bits = Vec::with_capacity(32);
+                let mut bit_index = 0;
+
+                for byte_index in 0..4 {
+                    let byte = pi_bytes.map(|bytes| bytes[byte_index]);
+                    for i in 0..8 {
+                        let bit = region.assign_advice(
+                            || format!("bit {}", bit_index),
+                            self.config.bits[i],
+                            byte_index,
+                            || byte.map(|byte| Bit(byte >> i & 1 == 1)).ok_or(Error::Synthesis),
+                        )?;
+                        pi_bits.push(bit);
+                        bit_index += 1;
+                    }
+                }
+
+                Ok(pi_bits.try_into().unwrap())
+            },
+        )
     }
 }
 
