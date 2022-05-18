@@ -11,13 +11,13 @@ use halo2_proofs::{
 
 use crate::{
     boolean::{AssignedBit, AssignedBits, Bit},
-    NumCols,
+    ColumnCount, NumCols,
 };
 
 pub const NUM_ADVICE_EQ: usize = 9;
 
 pub const U32_DECOMP_NUM_COLS: NumCols = NumCols {
-    advice_eq: 9,
+    advice_eq: NUM_ADVICE_EQ,
     advice_neq: 0,
     fixed_eq: 0,
     fixed_neq: 0,
@@ -361,6 +361,12 @@ impl<F: FieldExt> UInt32Config<F> {
 #[derive(Clone, Debug)]
 pub struct UInt32Chip<F: FieldExt> {
     config: UInt32Config<F>,
+}
+
+impl<F: FieldExt> ColumnCount for UInt32Chip<F> {
+    fn num_cols() -> NumCols {
+        U32_DECOMP_NUM_COLS
+    }
 }
 
 impl<F: FieldExt> UInt32Chip<F> {
