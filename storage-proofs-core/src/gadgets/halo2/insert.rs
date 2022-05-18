@@ -3,7 +3,7 @@ use std::marker::PhantomData;
 use fil_halo2_gadgets::{
     boolean::{and, nor, AssignedBit},
     utilities::ternary,
-    NumCols,
+    ColumnCount, NumCols,
 };
 use filecoin_hashers::PoseidonArity;
 use halo2_proofs::{
@@ -62,6 +62,25 @@ where
     }
 }
 */
+
+impl<F, A> ColumnCount for InsertChip<F, A>
+where
+    F: FieldExt,
+    A: PoseidonArity<F>,
+{
+    fn num_cols() -> NumCols {
+        let arity = A::to_usize();
+        let index_bit_len = arity.trailing_zeros() as usize;
+        NumCols {
+            // The index bits, insertion value, and inserted array must be equality constrained.
+            advice_eq: index_bit_len + 1 + arity,
+            // Witness the uninserted array.
+            advice_neq: arity - 1,
+            fixed_eq: 0,
+            fixed_neq: 0,
+        }
+    }
+}
 
 impl<F, A> InsertChip<F, A>
 where
