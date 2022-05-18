@@ -691,7 +691,7 @@ where
                     .iter()
                     .enumerate()
                     .map(|(i, bit)| {
-                        let (offset, col) = advice_iter.next().unwrap();
+                        let (offset, col) = advice_iter.next();
                         region.assign_advice(
                             || format!("partition bit {}", i),
                             col,
@@ -702,7 +702,7 @@ where
                     .collect::<Result<Vec<AssignedBit<F>>, Error>>()?;
 
                 let comm_c = {
-                    let (offset, col) = advice_iter.next().unwrap();
+                    let (offset, col) = advice_iter.next();
                     region.assign_advice(
                         || "comm_c",
                         col,
@@ -712,7 +712,7 @@ where
                 };
 
                 let root_r_old = {
-                    let (offset, col) = advice_iter.next().unwrap();
+                    let (offset, col) = advice_iter.next();
                     region.assign_advice(
                         || "root_r_old",
                         col,
@@ -722,7 +722,7 @@ where
                 };
 
                 let root_r_new = {
-                    let (offset, col) = advice_iter.next().unwrap();
+                    let (offset, col) = advice_iter.next();
                     region.assign_advice(
                         || "root_r_new",
                         col,
@@ -736,7 +736,7 @@ where
                     .iter()
                     .enumerate()
                     .map(|(i, apex_leaf)| {
-                        let (offset, col) = advice_iter.next().unwrap();
+                        let (offset, col) = advice_iter.next();
                         region.assign_advice(
                             || format!("apex_leaf {}", i),
                             col,
