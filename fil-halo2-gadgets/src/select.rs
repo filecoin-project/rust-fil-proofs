@@ -202,7 +202,7 @@ mod tests {
                         .iter()
                         .enumerate()
                         .map(|(i, elem)| {
-                            let (offset, col) = advice_iter.next().unwrap();
+                            let (offset, col) = advice_iter.next();
                             region.assign_advice(
                                 || format!("elem {}", i),
                                 col,
@@ -217,7 +217,7 @@ mod tests {
                         .iter()
                         .enumerate()
                         .map(|(i, bit)| {
-                            let (offset, col) = advice_iter.next().unwrap();
+                            let (offset, col) = advice_iter.next();
                             region.assign_advice(
                                 || format!("bit {}", i),
                                 col,

@@ -9,7 +9,7 @@ use std::cmp::max;
 use halo2_proofs::{
     arithmetic::FieldExt,
     circuit::AssignedCell,
-    plonk::{Advice, Column, ConstraintSystem, Fixed},
+    plonk::{Advice, Column, ConstraintSystem, Fixed, Instance},
 };
 use neptune::{halo2_circuit::PoseidonChip, Arity};
 
@@ -71,48 +71,46 @@ impl NumCols {
 pub enum WitnessOrCopy<T, F: FieldExt> {
     Witness(Option<T>),
     Copy(AssignedCell<T, F>),
+    // Public input `(column, absolute row)`.
+    PiCopy(Column<Instance>, usize),
 }
 
 pub struct AdviceIter {
     offset: usize,
-    cols: Vec<Column<Advice>>,
+    advice: Vec<Column<Advice>>,
+    num_cols: usize,
     col_index: usize,
 }
 
 impl From<Vec<Column<Advice>>> for AdviceIter {
-    fn from(cols: Vec<Column<Advice>>) -> Self {
-        Self::new(0, cols)
-    }
-}
-
-impl Iterator for AdviceIter {
-    type Item = (usize, Column<Advice>);
-
-    fn next(&mut self) -> Option<Self::Item> {
-        let offset_col = match self.cols.get(self.col_index) {
-            Some(col) => (self.offset, *col),
-            None => {
-                self.offset += 1;
-                self.col_index = 0;
-                (self.offset, self.cols[self.col_index])
-            }
-        };
-        self.col_index += 1;
-        Some(offset_col)
+    fn from(advice: Vec<Column<Advice>>) -> Self {
+        Self::new(0, advice)
     }
 }
 
 impl AdviceIter {
-    pub fn new(offset: usize, cols: Vec<Column<Advice>>) -> Self {
-        assert!(!cols.is_empty());
+    pub fn new(offset: usize, advice: Vec<Column<Advice>>) -> Self {
+        let num_cols = advice.len();
+        assert_ne!(num_cols, 0);
         AdviceIter {
             offset,
-            cols,
+            advice,
             col_index: 0,
+            num_cols,
         }
     }
-}
 
+    #[allow(clippy::should_implement_trait)]
+    pub fn next(&mut self) -> (usize, Column<Advice>) {
+        if self.col_index == self.num_cols {
+            self.offset += 1;
+            self.col_index = 0;
+        }
+        let ret = (self.offset, self.advice[self.col_index]);
+        self.col_index += 1;
+        ret
+    }
+}
 
 pub trait ColumnCount {
     fn num_cols() -> NumCols;

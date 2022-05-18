@@ -459,6 +459,46 @@ impl<F: FieldExt> UInt32Chip<F> {
         Ok(bits.try_into().unwrap())
     }
 
+    pub fn witness_assign_bits(
+        &self,
+        mut layouter: impl Layouter<F>,
+        value: Option<u32>,
+    ) -> Result<(AssignedU32<F>, [AssignedBit<F>; 32]), Error> {
+        layouter.assign_region(
+            || "assign as 32 bits",
+            |mut region| {
+                let offset = 0;
+                self.config.s_field_into_32_bits.enable(&mut region, offset)?;
+
+                let uint32 =
+                    AssignedU32::assign(&mut region, || "value", self.config.value, offset, value)?;
+
+                let bits: Vec<Option<bool>> = match uint32.value_u32() {
+                    Some(uint32) => (0..32).map(|i| Some(uint32 >> i & 1 == 1)).collect(),
+                    None => vec![None; 32],
+                };
+
+                let mut assigned_bits = Vec::with_capacity(32);
+                let mut bit_index = 0;
+
+                for (offset, byte) in bits.chunks(8).enumerate() {
+                    for (bit, col) in byte.iter().zip(self.config.bits.iter()) {
+                        let bit = region.assign_advice(
+                            || format!("bit {}", bit_index),
+                            *col,
+                            offset,
+                            || bit.map(Bit).ok_or(Error::Synthesis)
+                        )?;
+                        assigned_bits.push(bit);
+                        bit_index += 1;
+                    }
+                }
+
+                Ok((uint32, assigned_bits.try_into().unwrap()))
+            },
+        )
+    }
+
     pub fn pi_assign_bits(
         &self,
         mut layouter: impl Layouter<F>,
@@ -471,8 +511,8 @@ impl<F: FieldExt> UInt32Chip<F> {
                 let offset = 0;
                 self.config.s_field_into_32_bits.enable(&mut region, offset)?;
 
-                // Copy challenge public input.
-                let pi = region.assign_advice_from_instance(
+                // Copy public input.
+                let uint32 = region.assign_advice_from_instance(
                     || "copy public input",
                     pi_col,
                     pi_row,
@@ -480,14 +520,14 @@ impl<F: FieldExt> UInt32Chip<F> {
                     offset,
                 )?;
 
-                let pi_bytes: Option<[u8; 4]> =
-                    pi.value().map(|pi| pi.to_repr().as_ref()[..4].try_into().unwrap());
+                let bytes: Option<[u8; 4]> =
+                    uint32.value().map(|uint32| uint32.to_repr().as_ref()[..4].try_into().unwrap());
 
-                let mut pi_bits = Vec::with_capacity(32);
+                let mut bits = Vec::with_capacity(32);
                 let mut bit_index = 0;
 
                 for byte_index in 0..4 {
-                    let byte = pi_bytes.map(|bytes| bytes[byte_index]);
+                    let byte = bytes.map(|bytes| bytes[byte_index]);
                     for i in 0..8 {
                         let bit = region.assign_advice(
                             || format!("bit {}", bit_index),
@@ -495,12 +535,12 @@ impl<F: FieldExt> UInt32Chip<F> {
                             byte_index,
                             || byte.map(|byte| Bit(byte >> i & 1 == 1)).ok_or(Error::Synthesis),
                         )?;
-                        pi_bits.push(bit);
+                        bits.push(bit);
                         bit_index += 1;
                     }
                 }
 
-                Ok(pi_bits.try_into().unwrap())
+                Ok(bits.try_into().unwrap())
             },
         )
     }
