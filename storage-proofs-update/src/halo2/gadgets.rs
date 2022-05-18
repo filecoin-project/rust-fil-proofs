@@ -99,17 +99,17 @@ impl<F: FieldExt, const SECTOR_NODES: usize> ChallengeBitsChip<F, SECTOR_NODES> 
             let s_challenge_bits = meta.query_selector(s_challenge_bits);
 
             let challenge = {
-                let (offset, col) = advice_iter.next().unwrap();
+                let (offset, col) = advice_iter.next();
                 meta.query_advice(col, Rotation(offset as i32))
             };
 
             let mut expr = {
-                let (offset, col) = advice_iter.next().unwrap();
+                let (offset, col) = advice_iter.next();
                 meta.query_advice(col, Rotation(offset as i32))
             };
             let mut radix_pow = F::from(2);
             for _ in 0..challenge_sans_partition_bit_len - 1 {
-                let (offset, col) = advice_iter.next().unwrap();
+                let (offset, col) = advice_iter.next();
                 let bit = meta.query_advice(col, Rotation(offset as i32));
                 expr = expr + Expression::Constant(radix_pow) * bit;
                 radix_pow = radix_pow.double();
@@ -142,7 +142,7 @@ impl<F: FieldExt, const SECTOR_NODES: usize> ChallengeBitsChip<F, SECTOR_NODES> 
 
                 // Copy challenge public input.
                 let challenge = {
-                    let (offset, col) = advice_iter.next().unwrap();
+                    let (offset, col) = advice_iter.next();
                     region.assign_advice_from_instance(
                         || "copy challenge public input",
                         pi_col,
@@ -175,7 +175,7 @@ impl<F: FieldExt, const SECTOR_NODES: usize> ChallengeBitsChip<F, SECTOR_NODES> 
                     .iter()
                     .enumerate()
                     .map(|(i, bit)| {
-                        let (offset, col) = advice_iter.next().unwrap();
+                        let (offset, col) = advice_iter.next();
                         region.assign_advice(
                             || format!("bit {}", i),
                             col,
@@ -368,7 +368,7 @@ mod tests {
                         .iter()
                         .enumerate()
                         .map(|(i, apex_leaf)| {
-                            let (offset, col) = advice_iter.next().unwrap();
+                            let (offset, col) = advice_iter.next();
                             region.assign_advice(
                                 || format!("apex_leaf {}", i),
                                 col,

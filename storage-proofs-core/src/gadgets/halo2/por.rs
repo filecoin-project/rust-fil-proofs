@@ -164,6 +164,7 @@ where
                             &index_bits,
                         )?
                     }
+                    _ => unimplemented!(),
                 }
             } else {
                 self.base_insert.copy_insert(
@@ -257,6 +258,41 @@ where
 
         Ok(cur.unwrap())
     }
+}
+
+pub fn empty_path<F, U, V, W, const NUM_LEAFS: usize>() -> Vec<Vec<Option<F>>>
+where
+    F: FieldExt,
+    U: PoseidonArity<F>,
+    V: PoseidonArity<F>,
+    W: PoseidonArity<F>,
+{
+    let base_arity = U::to_usize();
+    let sub_arity = V::to_usize();
+    let top_arity = W::to_usize();
+
+    let challenge_bit_len = NUM_LEAFS.trailing_zeros() as usize;
+
+    let base_height = {
+        let mut base_challenge_bit_len = challenge_bit_len;
+        if sub_arity != 0 {
+            base_challenge_bit_len -= sub_arity.trailing_zeros() as usize;
+        }
+        if top_arity != 0 {
+            base_challenge_bit_len -= top_arity.trailing_zeros() as usize;
+        }
+        base_challenge_bit_len / (base_arity.trailing_zeros() as usize)
+    };
+
+    let mut path = vec![vec![None; base_arity - 1]; base_height];
+    if sub_arity != 0 {
+        path.push(vec![None; sub_arity - 1]);
+    }
+    if top_arity != 0 {
+        path.push(vec![None; top_arity - 1]);
+    }
+
+    path
 }
 
 #[cfg(test)]
@@ -677,7 +713,7 @@ mod test {
         test_merkle_chip_inner::<PoseidonHasher<Fp>, U8, U4, U2>();
     }
 
-    // TODO: fix failing test.
+    // TODO (jake): fix failing test.
     /*
     #[test]
     fn test_merkle_chip_sha256_2() {
