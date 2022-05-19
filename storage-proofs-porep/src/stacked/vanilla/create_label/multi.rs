@@ -239,7 +239,8 @@ fn create_layer_labels(
     // Next node to be filled
     let cur_awaiting = AtomicU64::new(1);
 
-    // These UnsafeSlices are managed through the 3 Atomics above, to minimize any locking overhead.
+    // These UnsafeSlices are managed through the 2 Atomics above and the `CacheReader`, to
+    // minimize any locking overhead.
     let layer_labels = UnsafeSlice::from_slice(
         layer_labels
             .as_mut_slice_of::<u32>()
