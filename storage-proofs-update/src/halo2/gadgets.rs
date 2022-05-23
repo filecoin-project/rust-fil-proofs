@@ -94,8 +94,7 @@ impl<F: FieldExt, const SECTOR_NODES: usize> ChallengeBitsChip<F, SECTOR_NODES> 
 
         let s_challenge_bits = meta.selector();
         meta.create_gate("challenge into bits", |meta| {
-            let offset = 0;
-            let mut advice_iter = AdviceIter::new(offset, advice.to_vec());
+            let mut advice_iter = AdviceIter::from(advice.to_vec());
 
             let s_challenge_bits = meta.query_selector(s_challenge_bits);
 
@@ -364,8 +363,7 @@ mod tests {
             let apex_leafs = layouter.assign_region(
                 || "assign apex_leafs",
                 |mut region| {
-                    let offset = 0;
-                    let mut advice_iter = AdviceIter::new(offset, advice.clone());
+                    let mut advice_iter = AdviceIter::from(advice.clone());
                     self.apex_leafs
                         .iter()
                         .enumerate()

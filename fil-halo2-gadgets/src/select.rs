@@ -195,8 +195,7 @@ mod tests {
             let (arr, bits) = layouter.assign_region(
                 || "assign arr and bits",
                 |mut region| {
-                    let offset = 0;
-                    let mut advice_iter = AdviceIter::new(offset, advice.to_vec());
+                    let mut advice_iter = AdviceIter::from(advice.to_vec());
 
                     let arr = self
                         .arr

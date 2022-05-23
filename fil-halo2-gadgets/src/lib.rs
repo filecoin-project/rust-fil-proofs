@@ -79,6 +79,12 @@ pub struct AdviceIter {
     col_index: usize,
 }
 
+impl From<Vec<Column<Advice>>> for AdviceIter {
+    fn from(cols: Vec<Column<Advice>>) -> Self {
+        Self::new(0, cols)
+    }
+}
+
 impl Iterator for AdviceIter {
     type Item = (usize, Column<Advice>);
 
