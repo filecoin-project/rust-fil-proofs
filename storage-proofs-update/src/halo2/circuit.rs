@@ -684,8 +684,7 @@ where
         let (partition_bits, comm_c, root_r_old, root_r_new, apex_leafs) = layouter.assign_region(
             || "witness partition_bits, comm_c, root_r_old, root_r_new, apex_leafs",
             |mut region| {
-                let offset = 0;
-                let mut advice_iter = AdviceIter::new(offset, advice.clone());
+                let mut advice_iter = AdviceIter::from(advice.clone());
 
                 let partition_bits = pub_inputs
                     .partition_bits
