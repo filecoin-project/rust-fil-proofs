@@ -33,6 +33,7 @@ fr32 = { path = "../fr32", version = "^4.0.0", default-features = false }
 blstrs = { version = "0.4.0", features = ["gpu"] }
 # halo2_proofs = { git = "https://github.com/drpetervannostrand/halo2", branch = "sha256-chip" }
 halo2_proofs = { git = "https://github.com/drpetervannostrand/halo2" }
+fil-halo2-gadgets = { path = "../fil-halo2-gadgets" }
 
 [dev-dependencies]
 tempfile = "3"
