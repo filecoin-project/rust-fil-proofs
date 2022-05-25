@@ -3,4 +3,5 @@
 
 pub mod election;
 pub mod fallback;
+pub mod halo2;
 pub mod rational;
