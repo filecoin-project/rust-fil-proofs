@@ -27,8 +27,6 @@ where
     TreeRHasher<F>: Hasher<Domain = TreeRDomain<F>>,
     TreeRDomain<F>: Domain<Field = F>,
 {
-    const K: u32 = 17;
-
     type Circuit = EmptySectorUpdateCircuit<F, U, V, W, SECTOR_SIZE_1_KIB>;
 
     fn prove_with_vanilla_partition(
