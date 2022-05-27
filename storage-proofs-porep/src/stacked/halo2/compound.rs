@@ -32,8 +32,6 @@ where
     TreeR:
         MerkleTreeTrait<Hasher = PoseidonHasher<F>, Arity = U, SubTreeArity = V, TopTreeArity = W>,
 {
-    const K: u32 = 18;
-
     type Circuit = SdrPorepCircuit<F, U, V, W, SECTOR_NODES_2_KIB>;
 
     fn prove_with_vanilla_partition(

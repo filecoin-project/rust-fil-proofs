@@ -7,6 +7,7 @@ use halo2_proofs::{arithmetic::FieldExt, dev::MockProver, pasta::Fp};
 use rand::SeedableRng;
 use rand_xorshift::XorShiftRng;
 use storage_proofs_core::{
+    halo2_proofs::CircuitRows,
     merkle::{MerkleProof, MerkleTreeTrait},
     TEST_SEED,
 };
@@ -148,8 +149,7 @@ where
             priv_inputs,
         };
 
-        let k = EmptySectorUpdateCircuit::<F, U, V, W, SECTOR_NODES>::k();
-        let prover = MockProver::run(k, &circ, pub_inputs_vec).unwrap();
+        let prover = MockProver::run(circ.k(), &circ, pub_inputs_vec).unwrap();
         assert!(prover.verify().is_ok());
     }
 }
