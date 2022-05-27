@@ -25,6 +25,7 @@ use storage_proofs_core::{
         insert::{InsertChip, InsertConfig},
         por::{self, MerkleChip},
     },
+    halo2_proofs::CircuitRows,
     merkle::{MerkleProofTrait, MerkleTreeTrait},
 };
 
@@ -1120,7 +1121,8 @@ where
     }
 }
 
-impl<F, U, V, W, const SECTOR_NODES: usize> SdrPorepCircuit<F, U, V, W, SECTOR_NODES>
+impl<F, U, V, W, const SECTOR_NODES: usize> CircuitRows
+    for SdrPorepCircuit<F, U, V, W, SECTOR_NODES>
 where
     F: FieldExt,
     U: PoseidonArity<F>,
@@ -1131,7 +1133,7 @@ where
     PoseidonHasher<F>: Hasher,
     <PoseidonHasher<F> as Hasher>::Domain: Domain<Field = F>,
 {
-    pub fn k() -> u32 {
+    fn k(&self) -> u32 {
         match SECTOR_NODES {
             SECTOR_NODES_2_KIB => 18,
             SECTOR_NODES_4_KIB => 18,
