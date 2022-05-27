@@ -149,18 +149,20 @@ impl FieldProvingCurves for Fq {
     type Affine = <Self::Curve as CurveExt>::AffineExt;
 }
 
+pub trait CircuitRows {
+    fn k(&self) -> u32;
+}
+
 pub trait CompoundProof<'a, F, const SECTOR_NODES: usize>: ProofScheme<'a>
 where
     F: FieldExt + FieldProvingCurves,
 {
-    const K: u32;
-
-    type Circuit: Circuit<F>;
+    type Circuit: Circuit<F> + CircuitRows;
 
     fn keypair(
         circ: &Self::Circuit,
     ) -> Result<Halo2Keypair<<F as FieldProvingCurves>::Affine, Self::Circuit>, Error> {
-        Halo2Keypair::create(Self::K, circ)
+        Halo2Keypair::create(circ.k(), circ)
     }
 
     fn prove_with_vanilla_partition(

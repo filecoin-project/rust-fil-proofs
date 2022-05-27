@@ -7,8 +7,8 @@ use merkletree::store::StoreConfig;
 use rand::{Rng, SeedableRng};
 use rand_xorshift::XorShiftRng;
 use storage_proofs_core::{
-    api_version::ApiVersion, cache_key::CacheKey, merkle::DiskTree, proof::ProofScheme,
-    test_helper::setup_replica, util::default_rows_to_discard, TEST_SEED,
+    api_version::ApiVersion, cache_key::CacheKey, halo2_proofs::CircuitRows, merkle::DiskTree,
+    proof::ProofScheme, test_helper::setup_replica, util::default_rows_to_discard, TEST_SEED,
 };
 use storage_proofs_porep::{
     stacked::{
@@ -137,8 +137,7 @@ where
         priv_inputs,
     };
 
-    let k = SdrPorepCircuit::<F, U, V, W, SECTOR_NODES>::k();
-    let prover = MockProver::run(k, &circ, pub_inputs_vec).unwrap();
+    let prover = MockProver::run(circ.k(), &circ, pub_inputs_vec).unwrap();
     assert!(prover.verify().is_ok());
 }
 

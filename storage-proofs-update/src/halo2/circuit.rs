@@ -21,6 +21,7 @@ use storage_proofs_core::{
         insert::{InsertChip, InsertConfig},
         por::MerkleChip,
     },
+    halo2_proofs::CircuitRows,
     merkle::{MerkleProof, MerkleProofTrait},
 };
 
@@ -925,7 +926,8 @@ where
     }
 }
 
-impl<F, U, V, W, const SECTOR_NODES: usize> EmptySectorUpdateCircuit<F, U, V, W, SECTOR_NODES>
+impl<F, U, V, W, const SECTOR_NODES: usize> CircuitRows
+    for EmptySectorUpdateCircuit<F, U, V, W, SECTOR_NODES>
 where
     F: FieldExt,
     U: PoseidonArity<F>,
@@ -937,7 +939,7 @@ where
     TreeRHasher<F>: Hasher,
     <TreeRHasher<F> as Hasher>::Domain: Domain<Field = F>,
 {
-    pub fn k() -> u32 {
+    fn k(&self) -> u32 {
         match SECTOR_NODES {
             SECTOR_SIZE_1_KIB => 17,
             SECTOR_SIZE_2_KIB => 18,
