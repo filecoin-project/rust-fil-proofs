@@ -311,7 +311,7 @@ impl ParentCache {
         let mut digest_hex: String = "".to_string();
         let sector_size = graph.size() * NODE_SIZE;
 
-        with_exclusive_lock(&path.to_path_buf(), |file| {
+        with_exclusive_lock(path, |file| {
             let cache_size = cache_entries as usize * NODE_BYTES * DEGREE;
             file.as_ref()
                 .set_len(cache_size as u64)

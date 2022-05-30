@@ -116,10 +116,29 @@ impl ParamPublishSessionBuilder {
 
     /// Launch parampublish in an environment configured by the builder.
     pub fn build(self) -> (ParamPublishSession, Vec<PathBuf>) {
-        let mut p = spawn_bash_with_retries(10, Some(self.session_timeout_ms))
-            .unwrap_or_else(|err| panic_any(err));
+        let session = match spawn_bash_with_retries(10, Some(self.session_timeout_ms)) {
+            Err(err) => panic_any(err),
+            Ok(mut session) => {
+                let cache_dir_path = format!("{:?}", self.cache_dir.path());
 
-        let cache_dir_path = format!("{:?}", self.cache_dir.path());
+                let parampublish_path = cargo_bin("parampublish");
+
+                let cmd = format!(
+                    "{}={} {:?} {} --ipfs-bin={:?} --json={:?}",
+                    "FIL_PROOFS_PARAMETER_CACHE", // related to var name in core/src/settings.rs
+                    cache_dir_path,
+                    parampublish_path,
+                    if self.list_all_files { "-a" } else { "" },
+                    self.ipfs_bin_path,
+                    self.manifest
+                );
+
+                session
+                    .execute(&cmd, ".*")
+                    .expect("could not execute parampublish");
+                session
+            }
+        };
 
         let cache_contents: Vec<PathBuf> = read_dir(&self.cache_dir)
             .unwrap_or_else(|_| panic_any(format!("failed to read cache dir {:?}", self.cache_dir)))
@@ -127,24 +146,9 @@ impl ParamPublishSessionBuilder {
             .map(|x| x.path())
             .collect();
 
-        let parampublish_path = cargo_bin("parampublish");
-
-        let cmd = format!(
-            "{}={} {:?} {} --ipfs-bin={:?} --json={:?}",
-            "FIL_PROOFS_PARAMETER_CACHE", // related to var name in core/src/settings.rs
-            cache_dir_path,
-            parampublish_path,
-            if self.list_all_files { "-a" } else { "" },
-            self.ipfs_bin_path,
-            self.manifest
-        );
-
-        p.execute(&cmd, ".*")
-            .expect("could not execute parampublish");
-
         (
             ParamPublishSession {
-                pty_session: p,
+                pty_session: session,
                 _cache_dir: self.cache_dir,
             },
             cache_contents,

@@ -8,7 +8,7 @@ use clap::{Arg, Command};
 use storage_proofs_core::parameter_cache::read_cached_params;
 
 fn run_map(parameter_file: &Path) -> Result<MappedParameters<Bls12>> {
-    read_cached_params(&parameter_file.to_path_buf())
+    read_cached_params(parameter_file)
 }
 
 fn main() {

@@ -63,42 +63,47 @@ impl ParamFetchSessionBuilder {
 
     /// Launch paramfetch in an environment configured by the builder.
     pub fn build(self) -> ParamFetchSession {
-        let mut p = spawn_bash_with_retries(10, Some(self.session_timeout_ms))
-            .unwrap_or_else(|err| panic_any(err));
+        let session = match spawn_bash_with_retries(10, Some(self.session_timeout_ms)) {
+            Err(e) => panic_any(e),
+            Ok(mut session) => {
+                let cache_dir_path = format!("{:?}", self.cache_dir.path());
 
-        let cache_dir_path = format!("{:?}", self.cache_dir.path());
+                let paramfetch_path = cargo_bin("paramfetch");
 
-        let paramfetch_path = cargo_bin("paramfetch");
+                let whitelist: String = self
+                    .whitelisted_sector_sizes
+                    .map(|wl| {
+                        let mut s = "--sector-sizes=".to_string();
+                        s.push_str(&wl.join(","));
+                        s
+                    })
+                    .unwrap_or_else(|| "".to_string());
 
-        let whitelist: String = self
-            .whitelisted_sector_sizes
-            .map(|wl| {
-                let mut s = "--sector-sizes=".to_string();
-                s.push_str(&wl.join(","));
-                s
-            })
-            .unwrap_or_else(|| "".to_string());
+                let json_argument = if self.manifest.is_some() {
+                    format!("--json={:?}", self.manifest.expect("missing manifest"))
+                } else {
+                    "".to_string()
+                };
 
-        let json_argument = if self.manifest.is_some() {
-            format!("--json={:?}", self.manifest.expect("missing manifest"))
-        } else {
-            "".to_string()
+                let cmd = format!(
+                    "{}={} {:?} {} {} {}",
+                    "FIL_PROOFS_PARAMETER_CACHE", // related to var name in core/src/settings.rs
+                    cache_dir_path,
+                    paramfetch_path,
+                    if self.prompt_enabled { "" } else { "--all" },
+                    json_argument,
+                    whitelist,
+                );
+
+                session
+                    .execute(&cmd, ".*")
+                    .expect("could not execute paramfetch");
+                session
+            }
         };
 
-        let cmd = format!(
-            "{}={} {:?} {} {} {}",
-            "FIL_PROOFS_PARAMETER_CACHE", // related to var name in core/src/settings.rs
-            cache_dir_path,
-            paramfetch_path,
-            if self.prompt_enabled { "" } else { "--all" },
-            json_argument,
-            whitelist,
-        );
-
-        p.execute(&cmd, ".*").expect("could not execute paramfetch");
-
         ParamFetchSession {
-            pty_session: p,
+            pty_session: session,
             _cache_dir: self.cache_dir,
         }
     }

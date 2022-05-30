@@ -1,4 +1,5 @@
 #![deny(clippy::all, clippy::perf, clippy::correctness, rust_2018_idioms)]
+#![allow(clippy::mut_from_ref)]
 #![warn(clippy::unwrap_used)]
 #![cfg_attr(target_arch = "aarch64", feature(stdsimd))]
 #![warn(clippy::unnecessary_wraps)]
