@@ -77,7 +77,7 @@ fn get_filenames_in_cache_dir() -> Vec<String> {
 fn publish_file(ipfs_bin: &str, filename: &str) -> Result<String> {
     let path = get_full_path_for_file_within_cache(filename);
     let output = Command::new(ipfs_bin)
-        .args(&["add", path.to_str().unwrap()])
+        .args(&["add", "-Q", path.to_str().unwrap()])
         .output()
         .expect("failed to run ipfs subprocess");
     stderr()

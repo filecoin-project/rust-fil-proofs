@@ -25,6 +25,7 @@ impl FakeIpfsBin {
     pub fn compute_checksum<P: AsRef<Path>>(&self, path: P) -> Result<String, failure::Error> {
         let output = Command::new(&self.bin_path)
             .arg("add")
+            .arg("-Q")
             .arg(path.as_ref())
             .output()?;
 

@@ -116,7 +116,7 @@ impl ParamPublishSessionBuilder {
 
     /// Launch parampublish in an environment configured by the builder.
     pub fn build(self) -> (ParamPublishSession, Vec<PathBuf>) {
-        let session = match spawn_bash_with_retries(10, Some(self.session_timeout_ms)) {
+        let pty_session = match spawn_bash_with_retries(10, Some(self.session_timeout_ms)) {
             Err(err) => panic_any(err),
             Ok(mut session) => {
                 let cache_dir_path = format!("{:?}", self.cache_dir.path());
@@ -148,7 +148,7 @@ impl ParamPublishSessionBuilder {
 
         (
             ParamPublishSession {
-                pty_session: session,
+                pty_session,
                 _cache_dir: self.cache_dir,
             },
             cache_contents,

@@ -63,7 +63,7 @@ impl ParamFetchSessionBuilder {
 
     /// Launch paramfetch in an environment configured by the builder.
     pub fn build(self) -> ParamFetchSession {
-        let session = match spawn_bash_with_retries(10, Some(self.session_timeout_ms)) {
+        let pty_session = match spawn_bash_with_retries(10, Some(self.session_timeout_ms)) {
             Err(e) => panic_any(e),
             Ok(mut session) => {
                 let cache_dir_path = format!("{:?}", self.cache_dir.path());
@@ -103,7 +103,7 @@ impl ParamFetchSessionBuilder {
         };
 
         ParamFetchSession {
-            pty_session: session,
+            pty_session,
             _cache_dir: self.cache_dir,
         }
     }

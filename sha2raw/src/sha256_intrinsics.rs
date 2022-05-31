@@ -14,11 +14,16 @@ use x86::{
 
 /// Process a block with the SHA-256 algorithm.
 /// Based on https://github.com/noloader/SHA-Intrinsics/blob/master/sha256-x86.c
+#[allow(clippy::needless_late_init)]
 #[inline(always)]
 pub unsafe fn compress256(state: &mut [u32; 8], blocks: &[&[u8]]) {
     assert_eq!(blocks.len() % 2, 0);
 
+    let mut state0: __m128i;
+    let mut state1: __m128i;
+
     let mut msg: __m128i;
+    let mut tmp: __m128i;
 
     let mut msg0: __m128i;
     let mut msg1: __m128i;
@@ -35,12 +40,12 @@ pub unsafe fn compress256(state: &mut [u32; 8], blocks: &[&[u8]]) {
     );
 
     // Load initial values
-    let mut tmp = _mm_loadu_si128(state.as_ptr().add(0) as *const __m128i);
-    let mut state1 = _mm_loadu_si128(state.as_ptr().add(4) as *const __m128i);
+    tmp = _mm_loadu_si128(state.as_ptr().add(0) as *const __m128i);
+    state1 = _mm_loadu_si128(state.as_ptr().add(4) as *const __m128i);
 
     tmp = _mm_shuffle_epi32(tmp, 0xB1); // CDAB
     state1 = _mm_shuffle_epi32(state1, 0x1B); // EFGH
-    let mut state0 = _mm_alignr_epi8(tmp, state1, 8); // ABEF
+    state0 = _mm_alignr_epi8(tmp, state1, 8); // ABEF
     state1 = _mm_blend_epi16(state1, tmp, 0xF0); // CDGH
 
     for i in (0..blocks.len()).step_by(2) {
