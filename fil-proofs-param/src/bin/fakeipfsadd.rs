@@ -17,7 +17,7 @@ enum Cli {
         #[structopt(help = "Positional argument for the path to the file to add.")]
         file_path: String,
         #[structopt(short = "Q", help = "Simulates the -Q argument to `ipfs add`.")]
-        quieter: bool,
+        _quieter: bool,
     },
 }
 

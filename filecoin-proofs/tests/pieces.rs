@@ -64,9 +64,7 @@ fn test_get_piece_alignment() {
         (300, 300, (208, 208)),
     ];
 
-    for (bytes_in_sector, bytes_in_piece, (expected_left_align, expected_right_align)) in
-        table.clone()
-    {
+    for (bytes_in_sector, bytes_in_piece, (expected_left_align, expected_right_align)) in table {
         let PieceAlignment {
             left_bytes: UnpaddedBytesAmount(actual_left_align),
             right_bytes: UnpaddedBytesAmount(actual_right_align),

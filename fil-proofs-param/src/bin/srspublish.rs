@@ -103,14 +103,6 @@ fn write_param_map_to_disk(param_map: &ParameterMap, json_path: &str) -> Result<
 #[structopt(name = "srspublish", version = "1.0", about = CLI_ABOUT.as_str())]
 struct Cli {
     #[structopt(
-        long = "list-all",
-        short = "a",
-        help = "The user will be prompted to select the files to publish from the set of all files \
-            found in the cache dir. Excluding the -a/--list-all flag will result in the user being \
-            prompted for a single param version number for filtering-in files in the cache dir."
-    )]
-    list_all_files: bool,
-    #[structopt(
         long = "ipfs-bin",
         value_name = "PATH TO IPFS BINARY",
         default_value = "ipfs",
