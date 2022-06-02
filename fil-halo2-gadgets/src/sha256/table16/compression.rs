@@ -20,6 +20,9 @@ mod subregion_main;
 
 use compression_gates::CompressionGate;
 
+// TODO (jake): remove
+pub use compression_util::{get_d_row, get_h_row, match_state, RoundIdx};
+
 pub trait UpperSigmaVar<
     const A_LEN: usize,
     const B_LEN: usize,
@@ -257,7 +260,8 @@ impl<F: FieldExt> UpperSigmaVar<12, 10, 28, 14> for EfghVar<F> {
 }
 
 #[derive(Clone, Debug)]
-pub struct RoundWordDense<F: FieldExt>(AssignedBits<F, 16>, AssignedBits<F, 16>);
+// TODO (jake): remove `pub`s.
+pub struct RoundWordDense<F: FieldExt>(pub AssignedBits<F, 16>, pub AssignedBits<F, 16>);
 
 impl<F: FieldExt> From<(AssignedBits<F, 16>, AssignedBits<F, 16>)> for RoundWordDense<F> {
     fn from(halves: (AssignedBits<F, 16>, AssignedBits<F, 16>)) -> Self {
@@ -295,7 +299,8 @@ impl<F: FieldExt> RoundWordSpread<F> {
 #[derive(Clone, Debug)]
 pub struct RoundWordA<F: FieldExt> {
     pieces: Option<AbcdVar<F>>,
-    dense_halves: RoundWordDense<F>,
+    // TODO (jake): remove `pub`
+    pub dense_halves: RoundWordDense<F>,
     spread_halves: Option<RoundWordSpread<F>>,
 }
 
@@ -324,7 +329,8 @@ impl<F: FieldExt> RoundWordA<F> {
 #[derive(Clone, Debug)]
 pub struct RoundWordE<F: FieldExt> {
     pieces: Option<EfghVar<F>>,
-    dense_halves: RoundWordDense<F>,
+    // TODO (jake): remove `pub`
+    pub dense_halves: RoundWordDense<F>,
     spread_halves: Option<RoundWordSpread<F>>,
 }
 
@@ -352,7 +358,8 @@ impl<F: FieldExt> RoundWordE<F> {
 
 #[derive(Clone, Debug)]
 pub struct RoundWord<F: FieldExt> {
-    dense_halves: RoundWordDense<F>,
+    // TODO (jake): remove `pub`
+    pub dense_halves: RoundWordDense<F>,
     spread_halves: RoundWordSpread<F>,
 }
 
@@ -432,7 +439,8 @@ pub enum StateWord<F: FieldExt> {
 #[derive(Clone, Debug)]
 pub struct CompressionConfig<F: FieldExt> {
     lookup: SpreadInputs,
-    advice: [Column<Advice>; 7],
+    // TODO (jake): remove `pub`
+    pub advice: [Column<Advice>; 7],
 
     s_ch: Selector,
     s_ch_neg: Selector,
@@ -449,7 +457,8 @@ pub struct CompressionConfig<F: FieldExt> {
     // Decomposition gate for EfghVar
     s_decompose_efgh: Selector,
 
-    s_digest: Selector,
+    // TODO (jake): remove `pub`
+    pub s_digest: Selector,
 
     _f: PhantomData<F>,
 }
