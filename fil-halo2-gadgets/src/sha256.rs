@@ -5,8 +5,6 @@
 use std::cmp::min;
 use std::convert::TryInto;
 use std::fmt;
-use std::iter;
-use std::marker::PhantomData;
 
 use halo2_proofs::{
     arithmetic::FieldExt,
@@ -16,11 +14,8 @@ use halo2_proofs::{
 };
 
 use crate::{
-    boolean::{AssignedBits, Bit},
-    uint32::{
-        self, AssignedU32, U32DecompChip, U32DecompConfig, StripBitsChip, StripBitsConfig,
-        U32_DECOMP_NUM_COLS,
-    },
+    boolean::AssignedBits,
+    uint32::{AssignedU32, StripBitsChip, StripBitsConfig},
     AdviceIter, ColumnCount, NumCols, WitnessOrCopy,
 };
 
@@ -31,8 +26,11 @@ mod table16;
 pub use table16::{BlockWord, Table16Chip, Table16Config};
 
 use table16::{
-    CompressionConfig, MessageScheduleConfig, SpreadTableChip, SpreadTableConfig, State, IV,
+    CompressionConfig, MessageScheduleConfig, SpreadTableChip, SpreadTableConfig, State, IV, STATE,
 };
+
+// TODO (jake): remove
+use table16::{get_d_row, get_h_row, match_state, StateWord, RoundIdx};
 
 /// The size of a SHA-256 block, in 32-bit words.
 pub const BLOCK_SIZE: usize = 16;
@@ -40,10 +38,10 @@ pub const BLOCK_SIZE: usize = 16;
 pub const DIGEST_SIZE: usize = 8;
 
 // Each field element is eight 32-bit words.
-const FIELD_WORDS: usize = 8;
+const FIELD_WORD_LEN: usize = 8;
 
 /// The set of circuit instructions required to use the [`Sha256`] gadget.
-pub trait Sha256Instructions<F: FieldExt>: Chip<F> {
+trait Sha256Instructions<F: FieldExt>: Chip<F> {
     /// Variable representing the SHA-256 internal state.
     type State: Clone + fmt::Debug;
     /// Variable representing a 32-bit word of the input block to the SHA-256 compression
@@ -79,12 +77,12 @@ pub trait Sha256Instructions<F: FieldExt>: Chip<F> {
 
 /// The output of a SHA-256 circuit invocation.
 #[derive(Debug)]
-pub struct Sha256Digest<BlockWord>([BlockWord; DIGEST_SIZE]);
+struct Sha256Digest<BlockWord>([BlockWord; DIGEST_SIZE]);
 
 /// A gadget that constrains a SHA-256 invocation. It supports input at a granularity of
 /// 32 bits.
 #[derive(Debug)]
-pub struct Sha256<F: FieldExt, CS: Sha256Instructions<F>> {
+struct Sha256<F: FieldExt, CS: Sha256Instructions<F>> {
     chip: CS,
     state: CS::State,
     cur_block: Vec<CS::BlockWord>,
@@ -93,7 +91,7 @@ pub struct Sha256<F: FieldExt, CS: Sha256Instructions<F>> {
 
 impl<F: FieldExt, Sha256Chip: Sha256Instructions<F>> Sha256<F, Sha256Chip> {
     /// Create a new hasher instance.
-    pub fn new(chip: Sha256Chip, mut layouter: impl Layouter<F>) -> Result<Self, Error> {
+    fn new(chip: Sha256Chip, mut layouter: impl Layouter<F>) -> Result<Self, Error> {
         let state = chip.initialization_vector(&mut layouter)?;
         Ok(Sha256 {
             chip,
@@ -104,7 +102,7 @@ impl<F: FieldExt, Sha256Chip: Sha256Instructions<F>> Sha256<F, Sha256Chip> {
     }
 
     /// Digest data, updating the internal state.
-    pub fn update(
+    fn update(
         &mut self,
         mut layouter: impl Layouter<F>,
         mut data: &[Sha256Chip::BlockWord],
@@ -151,7 +149,7 @@ impl<F: FieldExt, Sha256Chip: Sha256Instructions<F>> Sha256<F, Sha256Chip> {
     }
 
     /// Retrieve result and consume hasher instance.
-    pub fn finalize(
+    fn finalize(
         mut self,
         mut layouter: impl Layouter<F>,
     ) -> Result<Sha256Digest<Sha256Chip::BlockWord>, Error> {
@@ -175,7 +173,7 @@ impl<F: FieldExt, Sha256Chip: Sha256Instructions<F>> Sha256<F, Sha256Chip> {
 
     /// Convenience function to compute hash of the data. It will handle hasher creation,
     /// data feeding and finalization.
-    pub fn digest(
+    fn digest(
         chip: Sha256Chip,
         mut layouter: impl Layouter<F>,
         data: &[Sha256Chip::BlockWord],
@@ -183,657 +181,6 @@ impl<F: FieldExt, Sha256Chip: Sha256Instructions<F>> Sha256<F, Sha256Chip> {
         let mut hasher = Self::new(chip, layouter.namespace(|| "init"))?;
         hasher.update(layouter.namespace(|| "update"), data)?;
         hasher.finalize(layouter.namespace(|| "finalize"))
-    }
-}
-
-#[derive(Clone, Debug)]
-pub struct Sha256Config<F: FieldExt> {
-    lookup: SpreadTableConfig,
-    message_schedule: MessageScheduleConfig<F>,
-    compression: CompressionConfig<F>,
-    // Set to `None` if Sha256 is used to hash 32-bit words exclusively, otherwise set to `Some` if
-    // Sha256 is used to hash 256-bit field elements.
-    packing: Option<(U32DecompConfig<F>, StripBitsConfig<F>)>,
-    // Columns that are equality enabled and not used for lookup inputs, i.e. `a_3, ..., a_8`. These
-    // columns can be used to assign padding.
-    advice: [Column<Advice>; 6],
-}
-
-#[derive(Clone, Debug)]
-pub struct Sha256Chip<F: FieldExt> {
-    config: Sha256Config<F>,
-}
-
-impl<F: FieldExt> Chip<F> for Sha256Chip<F> {
-    type Config = Sha256Config<F>;
-    type Loaded = ();
-
-    fn config(&self) -> &Self::Config {
-        &self.config
-    }
-
-    fn loaded(&self) -> &Self::Loaded {
-        &()
-    }
-}
-
-impl<F: FieldExt> Sha256Chip<F> {
-    pub fn construct(config: Sha256Config<F>) -> Self {
-        Sha256Chip { config }
-    }
-
-    /// Loads the lookup table required by this chip into the circuit.
-    pub fn load(layouter: &mut impl Layouter<F>, config: &Sha256Config<F>) -> Result<(), Error> {
-        SpreadTableChip::load(config.lookup.clone(), layouter)
-    }
-
-    pub fn configure_with_packing(
-        meta: &mut ConstraintSystem<F>,
-        u32_decomp: U32DecompConfig<F>,
-        strip_bits: StripBitsConfig<F>,
-    ) -> Sha256Config<F> {
-        let advice = u32_decomp.limbs[..6].try_into().unwrap();
-        let extra = u32_decomp.limbs[6];
-        let mut config = Self::configure_without_packing(meta, advice, extra);
-        config.packing = Some((u32_decomp, strip_bits));
-        config
-    }
-
-    pub fn configure_without_packing(
-        meta: &mut ConstraintSystem<F>,
-        advice: [Column<Advice>; 6],
-        extra: Column<Advice>,
-    ) -> Sha256Config<F> {
-        // Lookup table inputs cannot be repurposed by the caller; create those columns here and store
-        // them privately.
-        let input_tag = meta.advice_column();
-        let input_dense = meta.advice_column();
-        let input_spread = meta.advice_column();
-
-        // Rename these here for ease of matching the gates to the specification.
-        let _a_0 = input_tag;
-        let a_1 = input_dense;
-        let a_2 = input_spread;
-        let [a_3, a_4, a_5, a_6, a_7, a_8] = advice;
-        let a_9 = extra;
-
-        // Add all advice columns to permutation
-        for col in [a_1, a_2, a_3, a_4, a_5, a_6, a_7, a_8].iter() {
-            meta.enable_equality(*col);
-        }
-
-        let lookup = SpreadTableChip::configure(meta, input_tag, input_dense, input_spread);
-
-        let compression = CompressionConfig::configure(
-            meta,
-            lookup.input.clone(),
-            [a_3, a_4, a_5, a_6, a_7, a_8, a_9],
-        );
-
-        let message_schedule = a_5;
-
-        let message_schedule = MessageScheduleConfig::configure(
-            meta,
-            lookup.input.clone(),
-            message_schedule,
-            [a_3, a_4, a_6, a_7, a_8, a_9],
-        );
-
-        Sha256Config {
-            lookup,
-            message_schedule,
-            compression,
-            packing: None,
-            advice,
-        }
-    }
-
-    /// Assign the padding for an assigned, but not yet padded, preimage.
-    fn assign_padding(
-        &self,
-        layouter: &mut impl Layouter<F>,
-        preimage: &[AssignedBits<F, 32>],
-    ) -> Result<Vec<AssignedBits<F, 32>>, Error> {
-        layouter.assign_region(
-            || "padding",
-            |mut region| {
-                let words_utilized = preimage.len();
-                let bits_utilized = 32 * words_utilized;
-
-                // The padding scheme requires that there are at least 3 unutilized words in the
-                // preimage's last block: one word to append a `1` bit onto the end of the preimage
-                // (i.e. append the word `2u32^31`) and two words to encode the number of preimage
-                // bits (note: the number of preimage bits is a `u64`, thus requires two 32-bit
-                // words to encode). If there is less than 3 unutilized words in the preimage's last
-                // block, add a full block of padding.
-                let mut pad_words = BLOCK_SIZE - (words_utilized % BLOCK_SIZE);
-                if pad_words < 3 {
-                    pad_words += BLOCK_SIZE;
-                }
-                let num_zeros = pad_words - 3;
-
-                let mut padding_iter = iter::once(1 << 31)
-                    .chain(iter::repeat(0).take(num_zeros))
-                    .chain(iter::once((bits_utilized >> 32) as u32))
-                    .chain(iter::once((bits_utilized & 0xffffffff) as u32));
-
-                let padding_rows = {
-                    let cols = self.config.advice.len();
-                    let mut rows = pad_words / cols;
-                    if pad_words % cols > 0 {
-                        rows += 1;
-                    };
-                    rows
-                };
-
-                let mut padding = Vec::<AssignedBits<F, 32>>::with_capacity(pad_words);
-                let mut word_index = 0;
-
-                'outer: for row in 0..padding_rows {
-                    for col in self.config.advice.iter() {
-                        match padding_iter.next() {
-                            Some(word) => {
-                                let word = AssignedBits::<F, 32>::assign(
-                                    &mut region,
-                                    || format!("padding {}", word_index),
-                                    *col,
-                                    row,
-                                    Some(word),
-                                )?;
-                                padding.push(word);
-                                word_index += 1;
-                            }
-                            None => break 'outer,
-                        };
-                    }
-                }
-
-                Ok(padding)
-            },
-        )
-    }
-
-    fn initialization_vector(&self, layouter: &mut impl Layouter<F>) -> Result<State<F>, Error> {
-        self.config.compression.initialize_with_iv(layouter, IV)
-    }
-
-    fn initialization(
-        &self,
-        layouter: &mut impl Layouter<F>,
-        init_state: State<F>,
-    ) -> Result<State<F>, Error> {
-        self.config
-            .compression
-            .initialize_with_state(layouter, init_state)
-    }
-
-    fn compress(
-        &self,
-        layouter: &mut impl Layouter<F>,
-        initialized_state: State<F>,
-        input: [AssignedBits<F, 32>; BLOCK_SIZE],
-    ) -> Result<State<F>, Error> {
-        let (_, w_halves) = self
-            .config
-            .message_schedule
-            .process_assigned(layouter, input)?;
-        self.config
-            .compression
-            .compress(layouter, initialized_state, w_halves)
-    }
-
-    fn assign_digest(
-        &self,
-        layouter: &mut impl Layouter<F>,
-        state: State<F>,
-    ) -> Result<[AssignedBits<F, 32>; DIGEST_SIZE], Error> {
-        self.config.compression.digest(layouter, state)
-    }
-
-    /// Hash without padding `preimage`; `preimage` must must be assigned in columns which are
-    /// equality enabled.
-    pub fn hash_nopad(
-        &self,
-        mut layouter: impl Layouter<F>,
-        preimage: &[AssignedBits<F, 32>],
-    ) -> Result<[AssignedBits<F, 32>; DIGEST_SIZE], Error> {
-        assert_eq!(
-            preimage.len() % BLOCK_SIZE,
-            0,
-            "preimage length must be divisible by block size",
-        );
-
-        let mut blocks = preimage.chunks(BLOCK_SIZE);
-
-        // Process the first block.
-        let mut state = self.initialization_vector(&mut layouter)?;
-        state = self.compress(
-            &mut layouter,
-            state.clone(),
-            blocks.next().unwrap().to_vec().try_into().unwrap(),
-        )?;
-
-        // Process any additional blocks.
-        for block in blocks {
-            state = self.initialization(&mut layouter, state.clone())?;
-            state = self.compress(
-                &mut layouter,
-                state.clone(),
-                block.to_vec().try_into().unwrap(),
-            )?;
-        }
-
-        self.assign_digest(&mut layouter, state)
-    }
-
-    /// Hash `preimage`; `preimage` must must be assigned in columns which are equality enabled.
-    pub fn hash(
-        &self,
-        mut layouter: impl Layouter<F>,
-        preimage: &[AssignedBits<F, 32>],
-    ) -> Result<[AssignedBits<F, 32>; DIGEST_SIZE], Error> {
-        let mut padding = self.assign_padding(&mut layouter, preimage)?;
-        let padded_preimage: Vec<AssignedBits<F, 32>> =
-            preimage.iter().cloned().chain(padding.drain(..)).collect();
-        self.hash_nopad(layouter, &padded_preimage)
-    }
-
-    pub fn hash_field_elems(
-        &self,
-        mut layouter: impl Layouter<F>,
-        preimage: &[AssignedCell<F, F>],
-    ) -> Result<AssignedCell<F, F>, Error> {
-        assert!(
-            self.config.packing.is_some(),
-            "sha256 chip is not configured to hash field elements",
-        );
-        let (u32_decomp_config, strip_bits_config) = self.config.packing.clone().unwrap();
-        let u32_decomp_chip = U32DecompChip::construct(u32_decomp_config);
-        let strip_bits_chip = StripBitsChip::construct(strip_bits_config);
-
-        // Decompose each preimage element into eight 32-bit words.
-        let mut preimage_words =
-            Vec::<AssignedBits<F, 32>>::with_capacity(FIELD_WORDS * preimage.len());
-        for (i, elem) in preimage.iter().enumerate() {
-            let words = u32_decomp_chip.copy_decompose(
-                layouter.namespace(|| format!("preimage elem {} into u32s", i)),
-                elem.clone(),
-            )?;
-            preimage_words.extend(words);
-        }
-
-        // Pad the preimage words and hash.
-        let mut digest_words = self.hash(layouter.namespace(|| "hash"), &preimage_words)?;
-
-        // Ensure that the packed digest is a valid field element by stripping its two most
-        // significant bits.
-        digest_words[7] =
-            strip_bits_chip.strip_bits(layouter.namespace(|| "strip bits"), &digest_words[7])?;
-
-        // Pack the digest words into a field element.
-        u32_decomp_chip.pack(layouter.namespace(|| "pack digest"), &digest_words)
-    }
-}
-
-#[derive(Clone, Debug)]
-pub struct Sha256PackedConfig<F: FieldExt> {
-    lookup: SpreadTableConfig,
-    message_schedule: MessageScheduleConfig<F>,
-    compression: CompressionConfig<F>,
-    // Equality enabled advice.
-    advice: [Column<Advice>; uint32::NUM_ADVICE_EQ],
-    s_u32_decomp: Selector,
-    strip_bits: StripBitsConfig<F>,
-}
-
-#[derive(Clone, Debug)]
-pub struct Sha256PackedChip<F: FieldExt> {
-    config: Sha256PackedConfig<F>,
-}
-
-impl<F: FieldExt> Chip<F> for Sha256PackedChip<F> {
-    type Config = Sha256PackedConfig<F>;
-    type Loaded = ();
-
-    fn config(&self) -> &Self::Config {
-        &self.config
-    }
-
-    fn loaded(&self) -> &Self::Loaded {
-        &()
-    }
-}
-
-impl<F: FieldExt> ColumnCount for Sha256PackedChip<F> {
-    fn num_cols() -> NumCols {
-        U32_DECOMP_NUM_COLS
-    }
-}
-
-impl<F: FieldExt> Sha256PackedChip<F> {
-    pub fn construct(config: Sha256PackedConfig<F>) -> Self {
-        Sha256PackedChip { config }
-    }
-
-    /// Loads the lookup table required by this chip into the circuit.
-    pub fn load(layouter: &mut impl Layouter<F>, config: &Sha256PackedConfig<F>) -> Result<(), Error> {
-        SpreadTableChip::load(config.lookup.clone(), layouter)
-    }
-
-    // # Side Effects
-    //
-    // `advice[..uint32::NUM_ADVICE_EQ]` will be equality constrained.
-    pub fn configure(
-        meta: &mut ConstraintSystem<F>,
-        advice: &[Column<Advice>],
-    ) -> Sha256PackedConfig<F> {
-        assert!(advice.len() >= uint32::NUM_ADVICE_EQ);
-        let advice: [Column<Advice>; uint32::NUM_ADVICE_EQ] =
-            advice[..uint32::NUM_ADVICE_EQ].try_into().unwrap();
-
-        // Lookup table input columns cannot be repurposed by the caller; create those columns here
-        // and store privately.
-        let input_tag = meta.advice_column();
-        let input_dense = meta.advice_column();
-        let input_spread = meta.advice_column();
-
-        // Add all advice columns to permutation
-        for col in [input_tag, input_dense, input_spread].iter().chain(advice.iter()) {
-            meta.enable_equality(*col);
-        }
-
-        // Rename these here for ease of matching the gates to the specification.
-        let _a_0 = input_tag;
-        let _a_1 = input_dense;
-        let _a_2 = input_spread;
-        let [a_3, a_4, a_5, a_6, a_7, a_8, a_9, ..] = advice;
-
-        let lookup = SpreadTableChip::configure(meta, input_tag, input_dense, input_spread);
-
-        let compression = CompressionConfig::configure(
-            meta,
-            lookup.input.clone(),
-            [a_3, a_4, a_5, a_6, a_7, a_8, a_9],
-        );
-
-        let message_schedule = a_5;
-        let message_schedule = MessageScheduleConfig::configure(
-            meta,
-            lookup.input.clone(),
-            message_schedule,
-            [a_3, a_4, a_6, a_7, a_8, a_9],
-        );
-
-        let s_u32_decomp = meta.selector();
-
-        // `[2^32, (2^32)^2, .., (2^32)^7]`
-        let mut powers_of_u32_radix = Vec::with_capacity(7);
-        let radix = F::from(1 << 32);
-        powers_of_u32_radix.push(radix);
-        for i in 0..6 {
-            powers_of_u32_radix.push(powers_of_u32_radix[i] * radix);
-        }
-
-        meta.create_gate("field_into_u32s", |meta| {
-            let s = meta.query_selector(s_u32_decomp);
-            let value = meta.query_advice(advice[0], Rotation::cur());
-            let mut expr = meta.query_advice(advice[1], Rotation::cur());
-            for (col, radix_pow) in advice[2..].iter().zip(powers_of_u32_radix.iter()) {
-                let limb = meta.query_advice(*col, Rotation::cur());
-                expr = expr + Expression::Constant(*radix_pow) * limb;
-            }
-            vec![s * (expr - value)]
-        });
-
-        let strip_bits = StripBitsChip::configure(meta, advice);
-
-        Sha256PackedConfig {
-            lookup,
-            message_schedule,
-            compression,
-            advice,
-            s_u32_decomp,
-            strip_bits,
-        }
-    }
-
-    /// Pad and assign the preimage as 32-bit words.
-    fn assign_preimage(
-        &self,
-        layouter: &mut impl Layouter<F>,
-        preimage: &[AssignedCell<F, F>],
-    ) -> Result<Vec<AssignedBits<F, 32>>, Error> {
-        let preimage_len = preimage.len();
-        let preimage_words = 8 * preimage_len;
-        let preimage_bits = 256 * preimage_len;
-
-        // The padding scheme requires that there are at least 3 unutilized words (or one
-        // field element) in the preimage's last block; one word to append a `1` bit onto
-        // the end of the preimage (i.e. the word `2^31`) and two words to encode the
-        // preimage length in bits. If there is less than 3 unutilized words in the
-        // preimage's last block (i.e. one field element), add padding until the end of the
-        // next block.
-        let last_block_words_used = preimage_words % BLOCK_SIZE;
-        let last_block_words_rem = BLOCK_SIZE - last_block_words_used;
-        let num_pad_words = if last_block_words_rem >= 1 {
-            last_block_words_rem
-        } else {
-            last_block_words_rem + BLOCK_SIZE
-        };
-
-        let mut padding = vec![0u32; num_pad_words];
-        padding[0] = 1 << 31;
-        padding[num_pad_words - 2] = (preimage_bits >> 32) as u32;
-        padding[num_pad_words - 1] = (preimage_bits & 0xffffffff) as u32;
-
-        layouter.assign_region(
-            || "assign padded preimage",
-            |mut region| {
-                let mut offset = 0;
-
-                let mut padded_preimage = Vec::<AssignedBits<F, 32>>::with_capacity(
-                    preimage_words + num_pad_words,
-                );
-
-                // Copy and decompose each preimage element.
-                for (i, elem) in preimage.iter().enumerate() {
-                    self.config.s_u32_decomp.enable(&mut region, offset)?;
-
-                    let elem = elem.copy_advice(
-                        || format!("preimage elem {}", i),
-                        &mut region,
-                        self.config.advice[0],
-                        offset,
-                    )?;
-
-                    let repr = elem.value().map(|elem| elem.to_repr().as_ref().to_vec());
-
-                    for (j, col) in self.config.advice[1..].iter().enumerate() {
-                        let word = repr.as_ref().map(|repr| {
-                            u32::from_le_bytes(repr[j * 4..(j + 1) * 4].try_into().unwrap())
-                        });
-                        let word = AssignedBits::<F, 32>::assign(
-                            &mut region,
-                            || format!("preimage elem {}, word {}", i, j),
-                            *col,
-                            offset,
-                            word,
-                        )?;
-                        padded_preimage.push(word);
-                    }
-
-                    offset += 1;
-                }
-
-                let mut advice_iter = AdviceIter::new(offset, self.config.advice.to_vec());
-
-                // Assign padding.
-                for (i, pad_word) in padding.iter().enumerate() {
-                    let (offset, col) = advice_iter.next();
-                    let pad_word = AssignedBits::<F, 32>::assign(
-                        &mut region,
-                        || format!("padding word {}", i),
-                        col,
-                        offset,
-                        Some(*pad_word),
-                    )?;
-                    padded_preimage.push(pad_word);
-                }
-
-                Ok(padded_preimage)
-            },
-        )
-    }
-
-    fn initialization_vector(&self, layouter: &mut impl Layouter<F>) -> Result<State<F>, Error> {
-        self.config.compression.initialize_with_iv(layouter, IV)
-    }
-
-    fn initialization(
-        &self,
-        layouter: &mut impl Layouter<F>,
-        init_state: State<F>,
-    ) -> Result<State<F>, Error> {
-        self.config
-            .compression
-            .initialize_with_state(layouter, init_state)
-    }
-
-    fn compress(
-        &self,
-        layouter: &mut impl Layouter<F>,
-        initialized_state: State<F>,
-        input: [AssignedBits<F, 32>; BLOCK_SIZE],
-    ) -> Result<State<F>, Error> {
-        let (_, w_halves) = self
-            .config
-            .message_schedule
-            .process_assigned(layouter, input)?;
-        self.config
-            .compression
-            .compress(layouter, initialized_state, w_halves)
-    }
-
-    fn assign_digest(
-        &self,
-        layouter: &mut impl Layouter<F>,
-        state: State<F>,
-    ) -> Result<AssignedCell<F, F>, Error> {
-        let mut digest_words = self.config.compression.digest(layouter, state)?;
-
-        // Ensure that the packed digest is a valid field element by stripping its two most
-        // significant bits.
-        digest_words[7] = StripBitsChip::construct(self.config.strip_bits.clone())
-            .strip_bits(layouter.namespace(|| "strip digest bits"), &digest_words[7])?;
-
-        // TODO (jake): is this the correct way to pack field elements from `u32`s or do we need to
-        // reverse each byte's bit order?
-
-        // Pack digest into a field element.
-        let mut packed_digest_repr = Some(F::Repr::default());
-        for (i, word) in digest_words.iter().enumerate() {
-            let word_bytes = word.value_u32().map(|word| word.to_le_bytes());
-            packed_digest_repr = packed_digest_repr.zip(word_bytes).map(|(mut repr, word_bytes)| {
-                repr.as_mut()[i * 4..(i + 1) * 4].copy_from_slice(&word_bytes);
-                repr
-            });
-        }
-
-        let packed_digest = packed_digest_repr.map(|repr| {
-            F::from_repr_vartime(repr).expect("packed digest is invalid field element")
-        });
-
-        layouter.assign_region(
-            || "pack digest",
-            |mut region| {
-                let offset = 0;
-                self.config.s_u32_decomp.enable(&mut region, offset)?;
-                let packed_digest = region.assign_advice(
-                    || "packed digest",
-                    self.config.advice[0],
-                    offset,
-                    || packed_digest.ok_or(Error::Synthesis),
-                )?;
-                for (i, (word, col)) in
-                    digest_words.iter().zip(self.config.advice[1..].iter()).enumerate()
-                {
-                    word.copy_advice(
-                        || format!("copy digest word {}", i),
-                        &mut region,
-                        *col,
-                        offset,
-                    )?;
-                }
-                Ok(packed_digest)
-            },
-        )
-    }
-
-    pub fn hash_field_elems(
-        &self,
-        mut layouter: impl Layouter<F>,
-        preimage: &[AssignedCell<F, F>],
-    ) -> Result<AssignedCell<F, F>, Error> {
-        let padded_preimage = self.assign_preimage(&mut layouter, preimage)?;
-
-        assert_eq!(
-            padded_preimage.len() % BLOCK_SIZE,
-            0,
-            "padded preimage length is not divisible by block size",
-        );
-
-        let mut blocks = padded_preimage.chunks(BLOCK_SIZE);
-
-        // Process the first block.
-        let mut state = self.initialization_vector(&mut layouter)?;
-        state = self.compress(
-            &mut layouter,
-            state.clone(),
-            blocks.next().unwrap().to_vec().try_into().unwrap(),
-        )?;
-
-        // Process any additional blocks.
-        for block in blocks {
-            state = self.initialization(&mut layouter, state.clone())?;
-            state = self.compress(
-                &mut layouter,
-                state.clone(),
-                block.to_vec().try_into().unwrap(),
-            )?;
-        }
-
-        // Compute digest.
-        self.assign_digest(&mut layouter, state)
-    }
-
-    pub fn hash_words_nopad(
-        &self,
-        mut layouter: impl Layouter<F>,
-        padded_preimage: &[AssignedU32<F>],
-    ) -> Result<AssignedCell<F, F>, Error> {
-        assert_eq!(padded_preimage.len() % BLOCK_SIZE, 0);
-
-        let mut blocks = padded_preimage.chunks(BLOCK_SIZE);
-
-        // Process the first block.
-        let mut state = self.initialization_vector(&mut layouter)?;
-        state = self.compress(
-            &mut layouter,
-            state.clone(),
-            blocks.next().unwrap().to_vec().try_into().unwrap(),
-        )?;
-
-        // Process any additional blocks.
-        for block in blocks {
-            state = self.initialization(&mut layouter, state.clone())?;
-            state = self.compress(
-                &mut layouter,
-                state.clone(),
-                block.to_vec().try_into().unwrap(),
-            )?;
-        }
-
-        self.assign_digest(&mut layouter, state)
     }
 }
 
@@ -859,23 +206,24 @@ pub fn get_padding(preimage_words: usize) -> Vec<u32> {
     padding
 }
 
-/*
 #[derive(Clone, Debug)]
-pub struct AssignPreimageConfig<F: FieldExt> {
+pub struct Sha256Config<F: FieldExt> {
+    lookup: SpreadTableConfig,
+    message_schedule: MessageScheduleConfig<F>,
+    compression: CompressionConfig<F>,
     // Equality enabled advice.
-    advice: [Column<Advice>; 9],
-    s_field_into_u32s: Selector,
-    s_reorder_u32_bits: Selector,
-    _f: PhantomData<F>,
+    advice: [Column<Advice>; DIGEST_SIZE],
+    // Adds (mod 2^32) two words from a compression's input and output states.
+    s_add_state_words: Selector,
 }
 
-#[derive(Debug)]
-pub struct AssignPreimageChip<F: FieldExt> {
-    config: AssignPreimageConfig<F>,
+#[derive(Clone, Debug)]
+pub struct Sha256Chip<F: FieldExt> {
+    config: Sha256Config<F>,
 }
 
-impl<F: FieldExt> Chip<F> for AssignPreimageChip<F> {
-    type Config = AssignPreimageConfig<F>;
+impl<F: FieldExt> Chip<F> for Sha256Chip<F> {
+    type Config = Sha256Config<F>;
     type Loaded = ();
 
     fn config(&self) -> &Self::Config {
@@ -887,283 +235,766 @@ impl<F: FieldExt> Chip<F> for AssignPreimageChip<F> {
     }
 }
 
-impl<F: FieldExt> AssignPreimageChip<F> {
-    pub fn construct(config: AssignPreimageConfig<F>) -> Self {
-        AssignPreimageChip { config }
+impl<F: FieldExt> ColumnCount for Sha256Chip<F> {
+    fn num_cols() -> NumCols {
+        NumCols {
+            advice_eq: 8,
+            advice_neq: 0,
+            fixed_eq: 0,
+            fixed_neq: 0,
+        }
+    }
+}
+
+impl<F: FieldExt> Sha256Chip<F> {
+    pub fn construct(config: Sha256Config<F>) -> Self {
+        Sha256Chip { config }
+    }
+
+    /// Loads the lookup table required by this chip into the circuit.
+    pub fn load(layouter: &mut impl Layouter<F>, config: &Sha256Config<F>) -> Result<(), Error> {
+        SpreadTableChip::load(config.lookup.clone(), layouter)
     }
 
     pub fn configure(
         meta: &mut ConstraintSystem<F>,
-        advice: [Column<Advice>; 9],
-    ) -> AssignPreimageConfig<F> {
+        advice: [Column<Advice>; 8],
+    ) -> Sha256Config<F> {
+        // Lookup table inputs cannot be repurposed by the caller; create those columns here and store
+        // them privately.
+        let input_tag = meta.advice_column();
+        let input_dense = meta.advice_column();
+        let input_spread = meta.advice_column();
+
+        meta.enable_equality(input_dense);
+        meta.enable_equality(input_spread);
         for col in advice.iter() {
             meta.enable_equality(*col);
         }
 
-        let s_field_into_u32s = meta.selector();
-        {
-            let radix = F::from(1 << 32);
-            // `[2^32, (2^32)^2, .., (2^32)^7]`
-            let mut radix_pows = Vec::with_capacity(7);
-            radix_pows.push(radix);
-            for i in 0..6 {
-                radix_pows.push(radix_pows[i] * radix);
-            }
+        // Rename these here for ease of matching the gates to the specification.
+        let _a_0 = input_tag;
+        let _a_1 = input_dense;
+        let _a_2 = input_spread;
+        let [a_3, a_4, a_5, a_6, a_7, a_8, a_9, ..] = advice;
 
-            meta.create_gate("field_into_u32s", |meta| {
-                let s = meta.query_selector(s_field_into_u32s);
-                let f = meta.query_advice(advice[0], Rotation::cur());
-                let mut expr = meta.query_advice(advice[1], Rotation::cur());
-                for (col, radix_pow) in advice[2..].iter().zip(radix_pows.iter()) {
-                    let uint32 = meta.query_advice(*col, Rotation::cur());
-                    expr = expr + Expression::Constant(*radix_pow) * uint32;
-                }
-                [s * (expr - f)]
-            });
-        }
+        let lookup = SpreadTableChip::configure(meta, input_tag, input_dense, input_spread);
 
-        let s_reorder_u32_bits = meta.selector();
-        {
-            let radix = F::from(2);
-            // `[2^1, ..., 2^31]`
-            let mut radix_pows = Vec::with_capacity(31);
-            radix_pows.push(radix);
-            for i in 0..30 {
-                radix_pows.push(radix_pows[i] * radix);
-            }
+        let compression = CompressionConfig::configure(
+            meta,
+            lookup.input.clone(),
+            [a_3, a_4, a_5, a_6, a_7, a_8, a_9],
+        );
 
-            meta.create_gate("u32_into_word", |meta| {
-                let s = meta.query_selector(s_reorder_u32_bits);
+        let message_schedule = a_5;
 
-                // `u32` binary decomposition.
-                let uint32 = meta.query_advice(advice[0], Rotation::cur());
-                let mut u32_expr = meta.query_advice(advice[1], Rotation::cur());
-                let mut radix_pows_iter = radix_pows.iter();
-                for col in &advice[2..] {
-                    let bit = meta.query_advice(*col, Rotation::cur());
-                    let radix_pow = radix_pows_iter.next().unwrap();
-                    u32_expr = u32_expr + Expression::Constant(*radix_pow) * bit;
-                }
-                for byte_index in 1..=3 {
-                    let offset = Rotation(byte_index as i32);
-                    for col in &advice[1..] {
-                        let bit = meta.query_advice(*col, offset);
-                        let radix_pow = radix_pows_iter.next().unwrap();
-                        u32_expr = u32_expr + Expression::Constant(*radix_pow) * bit;
-                    }
-                }
+        let message_schedule = MessageScheduleConfig::configure(
+            meta,
+            lookup.input.clone(),
+            message_schedule,
+            [a_3, a_4, a_6, a_7, a_8, a_9],
+        );
 
-                // Reverse the bit order of each `u32` byte and pack the result into `word`.
-                let word = meta.query_advice(advice[0], Rotation::next());
-                let mut word_expr = meta.query_advice(advice[1], Rotation::cur());
-                let mut radix_pows_iter = radix_pows.iter();
-                for col in advice[2..].iter().rev() {
-                    let bit = meta.query_advice(*col, Rotation::cur());
-                    let radix_pow = radix_pows_iter.next().unwrap();
-                    word_expr = word_expr + Expression::Constant(*radix_pow) * bit;
-                }
-                for byte_index in 1..=3 {
-                    let offset = Rotation(byte_index as i32);
-                    for col in advice[1..].iter().rev() {
-                        let bit = meta.query_advice(*col, offset);
-                        let radix_pow = radix_pows_iter.next().unwrap();
-                        word_expr = word_expr + Expression::Constant(*radix_pow) * bit;
-                    }
-                }
+        let s_add_state_words = meta.selector();
+        meta.create_gate("add_compression_state_words", |meta| {
+            let s = meta.query_selector(s_add_state_words);
 
-                [
-                    ("u32 binary decomp", s.clone() * (u32_expr - uint32)),
-                    ("reorder u32 bits into word", s * (word_expr - word)),
-                ]
-            });
-        }
+            // Compression input/output state word's low/high 16-bit halves, i.e.
+            // `input_word = in_lo(2^16)^0 + in_hi(2^16)^1`.
+            let in_lo = meta.query_advice(advice[0], Rotation::cur());
+            let in_hi = meta.query_advice(advice[1], Rotation::cur());
+            let out_lo = meta.query_advice(advice[2], Rotation::cur());
+            let out_hi = meta.query_advice(advice[3], Rotation::cur());
 
-        AssignPreimageConfig {
+            // The sum of the input and output states' 32-bit words is a 33-bit integer decomposed
+            // into low/high base-2^32 digits, i.e. `sum = sum_lo(2^32)^0 + sum_hi(2^32)^1`.
+            let sum_lo = meta.query_advice(advice[4], Rotation::cur());
+            let sum_hi = meta.query_advice(advice[5], Rotation::cur());
+
+            // 32-bit input/output state words.
+            let two_pow_16 = F::from(1u64 << 16);
+            let word_in = in_lo + in_hi * Expression::Constant(two_pow_16);
+            let word_out = out_lo + out_hi * Expression::Constant(two_pow_16);
+
+            // 33-bit input/output state words.
+            let sum = sum_lo + sum_hi * Expression::Constant(F::from(1u64 << 32));
+
+            [(
+                "compression_input_state_word + compression_output_state_word",
+                s * (word_in + word_out - sum),
+            )]
+        });
+
+        Sha256Config {
+            lookup,
+            message_schedule,
+            compression,
             advice,
-            s_field_into_u32s,
-            s_reorder_u32_bits,
-            _f: PhantomData,
+            s_add_state_words,
         }
     }
 
-    pub fn assign_preimage_and_padding(
+    /// Assign the padding for an assigned, but not yet padded, preimage.
+    fn assign_padding(
         &self,
         layouter: &mut impl Layouter<F>,
-        preimage: &[AssignedCell<F, F>],
+        unpadded_preimage_word_len: usize,
     ) -> Result<Vec<AssignedBits<F, 32>>, Error> {
-        const FIELD_WORDS: usize = 8;
-        const FIELD_BITS: usize = 256;
-
-        let preimage_len = preimage.len();
-        let preimage_words = preimage_len * FIELD_WORDS;
-        let preimage_bits = preimage_len * FIELD_BITS;
-
-        // The padding scheme requires that there are at least 3 unutilized words (or one
-        // field element) in the preimage's last block; one word to append a `1` bit onto
-        // the end of the preimage (i.e. the word `2^31`) and two words to append the preimage's
-        // bit length. If there is less than 3 unutilized words (i.e. one field element) in the
-        // preimage's last block, pad until the end of the next block.
-        let last_block_words_used = preimage_words % BLOCK_SIZE;
-        let last_block_words_rem = BLOCK_SIZE - last_block_words_used;
-        let pad_words = if last_block_words_rem >= 1 {
-            last_block_words_rem
-        } else {
-            last_block_words_rem + BLOCK_SIZE
-        };
-
-        let mut padding = vec![0u32; pad_words];
-        padding[0] = 1 << 31;
-        padding[pad_words - 2] = (preimage_bits >> 32) as u32;
-        padding[pad_words - 1] = (preimage_bits & 0xffffffff) as u32;
-
         layouter.assign_region(
-            || "assign preimage and padding",
+            || "assign padding",
             |mut region| {
-                let mut offset = 0;
-
-                let mut padded_preimage =
-                    Vec::<AssignedBits<F, 32>>::with_capacity(preimage_words + pad_words);
-
-                // Copy each preimage field element and decompose each into eight u32s.
-                for (elem_index, elem) in preimage.iter().enumerate() {
-                    self.config.s_field_into_u32s.enable(&mut region, offset)?;
-
-                    let elem = elem.copy_advice(
-                        || format!("copy preimage elem {}", elem_index),
-                        &mut region,
-                        self.config.advice[0],
-                        offset,
-                    )?;
-
-                    let u32s = match elem.value() {
-                        Some(elem) => {
-                            elem
-                                .to_repr()
-                                .as_ref()
-                                .chunks(4)
-                                .map(|u32_bytes| {
-                                    let u32_bytes: [u8; 4] = u32_bytes.try_into().unwrap();
-                                    Some(u32::from_le_bytes(u32_bytes))
-                                })
-                                .collect()
-                        }
-                        None => vec![None; FIELD_WORDS],
-                    };
-
-                    let u32s = u32s
-                        .iter()
-                        .zip(self.config.advice[1..].iter())
-                        .enumerate()
-                        .map(|(u32_index, (uint32, col))| {
-                            AssignedBits::<F, 32>::assign(
-                                &mut region,
-                                || format!("preimage elem {} u32 {}", elem_index, u32_index),
-                                *col,
-                                offset,
-                                *uint32,
-                            )
-                        })
-                        .collect::<Result<Vec<AssignedBits<F, 32>>, Error>>()?;
-
-                    offset += 1;
-
-                    for (u32_index, uint32) in u32s.iter().enumerate() {
-                        self.config.s_reorder_u32_bits.enable(&mut region, offset)?;
-
-                        // Copy `u32`.
-                        uint32.copy_advice(
-                            || format!("copy preimage elem {} u32 {}", elem_index, u32_index),
+                let mut advice_iter = AdviceIter::from(self.config.advice.to_vec());
+                get_padding(unpadded_preimage_word_len)
+                    .iter()
+                    .enumerate()
+                    .map(|(i, pad_word)| {
+                        let (offset, col) = advice_iter.next();
+                        AssignedBits::<F, 32>::assign(
                             &mut region,
-                            self.config.advice[0],
+                            || format!("padding word {}", i),
+                            col,
                             offset,
-                        )?;
-
-                        // Assign `u32`'s bits.
-                        let uint32_bits = match uint32.value() {
-                            Some(uint32) => {
-                                let mut bits = Vec::<Option<bool>>::with_capacity(32);
-                                for byte in u32::from(uint32).to_le_bytes().iter() {
-                                    for i in 0..8 {
-                                        bits.push(Some(byte >> i & 1 == 1));
-                                    }
-                                }
-                                bits
-                            }
-                            None => vec![None; 32],
-                        };
-
-                        for (byte_index, byte_bits) in uint32_bits.chunks(8).enumerate() {
-                            for (bit_index, (bit, col)) in byte_bits
-                                .iter()
-                                .zip(self.config.advice[1..].iter())
-                                .enumerate()
-                            {
-                                region.assign_advice(
-                                    || format!(
-                                        "preimage elem {} u32 {} bit {}",
-                                        elem_index,
-                                        u32_index,
-                                        bit_index,
-                                    ),
-                                    *col,
-                                    offset + byte_index,
-                                    || bit.map(Bit).ok_or(Error::Synthesis),
-                                )?;
-                            }
-                        }
-
-                        // Assign `u32` where each byte's bit order is reversed (from lsb first to
-                        // msb first).
-                        let word = uint32.value().map(|uint32| {
-                            let mut bytes = u32::from(uint32).to_le_bytes();
-                            for byte in bytes.iter_mut() {
-                                *byte = byte.reverse_bits();
-                            }
-                            u32::from_le_bytes(bytes)
-                        });
-
-                        let word = AssignedBits::<F, 32>::assign(
-                            &mut region,
-                            || format!("preimage elem {} word {}", elem_index, u32_index),
-                            self.config.advice[0],
-                            offset + 1,
-                            word,
-                        )?;
-
-                        padded_preimage.push(word);
-                        offset += 4;
-                    }
-                }
-
-                let mut advice_iter = AdviceIter::new(offset, self.config.advice.to_vec());
-
-                // Assign padding.
-                for (i, pad_word) in padding.iter().enumerate() {
-                    let (offset, col) = advice_iter.next();
-                    let pad_word = AssignedBits::<F, 32>::assign(
-                        &mut region,
-                        || format!("padding word {}", i),
-                        col,
-                        offset,
-                        Some(*pad_word),
-                    )?;
-                    padded_preimage.push(pad_word);
-                }
-
-                Ok(padded_preimage)
+                            Some(*pad_word),
+                        )
+                    })
+                    .collect()
             },
         )
     }
+
+    fn initialization_vector(&self, layouter: &mut impl Layouter<F>) -> Result<State<F>, Error> {
+        self.config.compression.initialize_with_iv(layouter, IV)
+    }
+
+    fn compress(
+        &self,
+        layouter: &mut impl Layouter<F>,
+        initialized_state: State<F>,
+        input: [AssignedBits<F, 32>; BLOCK_SIZE],
+    ) -> Result<State<F>, Error> {
+        let (_, w_halves) = self
+            .config
+            .message_schedule
+            .process_assigned(layouter, input)?;
+        self.config
+            .compression
+            .compress(layouter, initialized_state, w_halves)
+    }
+
+    fn add_compression_states(
+        &self,
+        layouter: &mut impl Layouter<F>,
+        state_in: State<F>,
+        state_out: State<F>,
+    ) -> Result<[AssignedBits<F, 32>; STATE], Error> {
+        layouter.assign_region(
+            || "add compression's input and output states",
+            |mut region| {
+                let mut offset = 0;
+
+                let (a_in, b_in, c_in, d_in, e_in, f_in, g_in, h_in) = match_state(state_in.clone());
+                let (a_out, b_out, c_out, d_out, e_out, f_out, g_out, h_out) = match_state(state_out.clone());
+
+                // Copy input/output `a`'s low/high 16-bit halves.
+                self.config.s_add_state_words.enable(&mut region, offset)?;
+                a_in.dense_halves.0.copy_advice(
+                    || "copy a_in_lo",
+                    &mut region,
+                    self.config.advice[0],
+                    offset,
+                )?;
+                a_in.dense_halves.1.copy_advice(
+                    || "copy a_in_hi",
+                    &mut region,
+                    self.config.advice[1],
+                    offset,
+                )?;
+                a_out.dense_halves.0.copy_advice(
+                    || "copy a_out_lo",
+                    &mut region,
+                    self.config.advice[2],
+                    offset,
+                )?;
+                a_out.dense_halves.1.copy_advice(
+                    || "copy a_out_hi",
+                    &mut region,
+                    self.config.advice[3],
+                    offset,
+                )?;
+                let a_sum = a_in
+                    .dense_halves
+                    .value()
+                    .zip(a_out.dense_halves.value())
+                    .map(|(a_in, a_out)| a_in as u64 + a_out as u64);
+                // Assign the sum `a_in + a_out = a_lo + a_hi` as two base-2^32 digits.
+                let a_lo = AssignedBits::<F, 32>::assign(
+                    &mut region,
+                    || "a_lo",
+                    self.config.advice[4],
+                    offset,
+                    a_sum.map(|a_sum| a_sum as u32),
+                )?;
+                let _a_hi = AssignedBits::<F, 32>::assign(
+                    &mut region,
+                    || "a_hi",
+                    self.config.advice[5],
+                    offset,
+                    a_sum.map(|a_sum| (a_sum >> 32) as u32),
+                )?;
+                offset += 1;
+
+                // Copy input/output `b`'s low/high 16-bit halves.
+                self.config.s_add_state_words.enable(&mut region, offset)?;
+                b_in.dense_halves.0.copy_advice(
+                    || "copy b_in_lo",
+                    &mut region,
+                    self.config.advice[0],
+                    offset,
+                )?;
+                b_in.dense_halves.1.copy_advice(
+                    || "copy b_in_hi",
+                    &mut region,
+                    self.config.advice[1],
+                    offset,
+                )?;
+                b_out.dense_halves.0.copy_advice(
+                    || "copy b_out_lo",
+                    &mut region,
+                    self.config.advice[2],
+                    offset,
+                )?;
+                b_out.dense_halves.1.copy_advice(
+                    || "copy b_out_hi",
+                    &mut region,
+                    self.config.advice[3],
+                    offset,
+                )?;
+                let b_sum = b_in
+                    .dense_halves
+                    .value()
+                    .zip(b_out.dense_halves.value())
+                    .map(|(b_in, b_out)| b_in as u64 + b_out as u64);
+                // Assign the sum `b_in + b_out = b_lo + b_hi` as two base-2^32 digits.
+                let b_lo = AssignedBits::<F, 32>::assign(
+                    &mut region,
+                    || "b_lo",
+                    self.config.advice[4],
+                    offset,
+                    b_sum.map(|b_sum| b_sum as u32),
+                )?;
+                let _b_hi = AssignedBits::<F, 32>::assign(
+                    &mut region,
+                    || "b_hi",
+                    self.config.advice[5],
+                    offset,
+                    b_sum.map(|b_sum| (b_sum >> 32) as u32),
+                )?;
+                offset += 1;
+
+                // Copy input/output `c`'s low/high 16-bit halves.
+                self.config.s_add_state_words.enable(&mut region, offset)?;
+                c_in.dense_halves.0.copy_advice(
+                    || "copy c_in_lo",
+                    &mut region,
+                    self.config.advice[0],
+                    offset,
+                )?;
+                c_in.dense_halves.1.copy_advice(
+                    || "copy c_in_hi",
+                    &mut region,
+                    self.config.advice[1],
+                    offset,
+                )?;
+                c_out.dense_halves.0.copy_advice(
+                    || "copy c_out_lo",
+                    &mut region,
+                    self.config.advice[2],
+                    offset,
+                )?;
+                c_out.dense_halves.1.copy_advice(
+                    || "copy c_out_hi",
+                    &mut region,
+                    self.config.advice[3],
+                    offset,
+                )?;
+                let c_sum = c_in
+                    .dense_halves
+                    .value()
+                    .zip(c_out.dense_halves.value())
+                    .map(|(c_in, c_out)| c_in as u64 + c_out as u64);
+                // Assign the sum `c_in + c_out = c_lo + c_hi` as two base-2^32 digits.
+                let c_lo = AssignedBits::<F, 32>::assign(
+                    &mut region,
+                    || "c_lo",
+                    self.config.advice[4],
+                    offset,
+                    c_sum.map(|c_sum| c_sum as u32),
+                )?;
+                let _c_hi = AssignedBits::<F, 32>::assign(
+                    &mut region,
+                    || "c_hi",
+                    self.config.advice[5],
+                    offset,
+                    c_sum.map(|c_sum| (c_sum >> 32) as u32),
+                )?;
+                offset += 1;
+
+                // Copy input/output `d`'s low/high 16-bit halves.
+                self.config.s_add_state_words.enable(&mut region, offset)?;
+                d_in.0.copy_advice(
+                    || "copy d_in_lo",
+                    &mut region,
+                    self.config.advice[0],
+                    offset,
+                )?;
+                d_in.1.copy_advice(
+                    || "copy d_in_hi",
+                    &mut region,
+                    self.config.advice[1],
+                    offset,
+                )?;
+                d_out.0.copy_advice(
+                    || "copy d_out_lo",
+                    &mut region,
+                    self.config.advice[2],
+                    offset,
+                )?;
+                d_out.1.copy_advice(
+                    || "copy d_out_hi",
+                    &mut region,
+                    self.config.advice[3],
+                    offset,
+                )?;
+                let d_sum = d_in
+                    .value()
+                    .zip(d_out.value())
+                    .map(|(d_in, d_out)| d_in as u64 + d_out as u64);
+                // Assign the sum `d_in + d_out = d_lo + d_hi` as two base-2^32 digits.
+                let d_lo = AssignedBits::<F, 32>::assign(
+                    &mut region,
+                    || "d_lo",
+                    self.config.advice[4],
+                    offset,
+                    d_sum.map(|d_sum| d_sum as u32),
+                )?;
+                let _d_hi = AssignedBits::<F, 32>::assign(
+                    &mut region,
+                    || "d_hi",
+                    self.config.advice[5],
+                    offset,
+                    d_sum.map(|d_sum| (d_sum >> 32) as u32),
+                )?;
+                offset += 1;
+
+                // Copy input/output `e`'s low/high 16-bit halves.
+                self.config.s_add_state_words.enable(&mut region, offset)?;
+                e_in.dense_halves.0.copy_advice(
+                    || "copy e_in_lo",
+                    &mut region,
+                    self.config.advice[0],
+                    offset,
+                )?;
+                e_in.dense_halves.1.copy_advice(
+                    || "copy e_in_hi",
+                    &mut region,
+                    self.config.advice[1],
+                    offset,
+                )?;
+                e_out.dense_halves.0.copy_advice(
+                    || "copy e_out_lo",
+                    &mut region,
+                    self.config.advice[2],
+                    offset,
+                )?;
+                e_out.dense_halves.1.copy_advice(
+                    || "copy e_out_hi",
+                    &mut region,
+                    self.config.advice[3],
+                    offset,
+                )?;
+                let e_sum = e_in
+                    .dense_halves
+                    .value()
+                    .zip(e_out.dense_halves.value())
+                    .map(|(e_in, e_out)| e_in as u64 + e_out as u64);
+                // Assign the sum `e_in + e_out = e_lo + e_hi` as two base-2^32 digits.
+                let e_lo = AssignedBits::<F, 32>::assign(
+                    &mut region,
+                    || "e_lo",
+                    self.config.advice[4],
+                    offset,
+                    e_sum.map(|e_sum| e_sum as u32),
+                )?;
+                let _e_hi = AssignedBits::<F, 32>::assign(
+                    &mut region,
+                    || "e_hi",
+                    self.config.advice[5],
+                    offset,
+                    e_sum.map(|e_sum| (e_sum >> 32) as u32),
+                )?;
+                offset += 1;
+
+                // Copy input/output `f`'s low/high 16-bit halves.
+                self.config.s_add_state_words.enable(&mut region, offset)?;
+                f_in.dense_halves.0.copy_advice(
+                    || "copy f_in_lo",
+                    &mut region,
+                    self.config.advice[0],
+                    offset,
+                )?;
+                f_in.dense_halves.1.copy_advice(
+                    || "copy f_in_hi",
+                    &mut region,
+                    self.config.advice[1],
+                    offset,
+                )?;
+                f_out.dense_halves.0.copy_advice(
+                    || "copy f_out_lo",
+                    &mut region,
+                    self.config.advice[2],
+                    offset,
+                )?;
+                f_out.dense_halves.1.copy_advice(
+                    || "copy f_out_hi",
+                    &mut region,
+                    self.config.advice[3],
+                    offset,
+                )?;
+                let f_sum = f_in
+                    .dense_halves
+                    .value()
+                    .zip(f_out.dense_halves.value())
+                    .map(|(f_in, f_out)| f_in as u64 + f_out as u64);
+                // Assign the sum `f_in + f_out = f_lo + f_hi` as two base-2^32 digits.
+                let f_lo = AssignedBits::<F, 32>::assign(
+                    &mut region,
+                    || "f_lo",
+                    self.config.advice[4],
+                    offset,
+                    f_sum.map(|f_sum| f_sum as u32),
+                )?;
+                let _f_hi = AssignedBits::<F, 32>::assign(
+                    &mut region,
+                    || "f_hi",
+                    self.config.advice[5],
+                    offset,
+                    f_sum.map(|f_sum| (f_sum >> 32) as u32),
+                )?;
+                offset += 1;
+
+                // Copy input/output `g`'s low/high 16-bit halves.
+                self.config.s_add_state_words.enable(&mut region, offset)?;
+                g_in.dense_halves.0.copy_advice(
+                    || "copy g_in_lo",
+                    &mut region,
+                    self.config.advice[0],
+                    offset,
+                )?;
+                g_in.dense_halves.1.copy_advice(
+                    || "copy g_in_hi",
+                    &mut region,
+                    self.config.advice[1],
+                    offset,
+                )?;
+                g_out.dense_halves.0.copy_advice(
+                    || "copy g_out_lo",
+                    &mut region,
+                    self.config.advice[2],
+                    offset,
+                )?;
+                g_out.dense_halves.1.copy_advice(
+                    || "copy g_out_hi",
+                    &mut region,
+                    self.config.advice[3],
+                    offset,
+                )?;
+                let g_sum = g_in
+                    .dense_halves
+                    .value()
+                    .zip(g_out.dense_halves.value())
+                    .map(|(g_in, g_out)| g_in as u64 + g_out as u64);
+                // Assign the sum `g_in + g_out = g_lo + g_hi` as two base-2^32 digits.
+                let g_lo = AssignedBits::<F, 32>::assign(
+                    &mut region,
+                    || "g_lo",
+                    self.config.advice[4],
+                    offset,
+                    g_sum.map(|g_sum| g_sum as u32),
+                )?;
+                let _g_hi = AssignedBits::<F, 32>::assign(
+                    &mut region,
+                    || "g_hi",
+                    self.config.advice[5],
+                    offset,
+                    g_sum.map(|g_sum| (g_sum >> 32) as u32),
+                )?;
+                offset += 1;
+
+                // Copy input/output `h`'s low/high 16-bit halves.
+                self.config.s_add_state_words.enable(&mut region, offset)?;
+                h_in.0.copy_advice(
+                    || "copy h_in_lo",
+                    &mut region,
+                    self.config.advice[0],
+                    offset,
+                )?;
+                h_in.1.copy_advice(
+                    || "copy h_in_hi",
+                    &mut region,
+                    self.config.advice[1],
+                    offset,
+                )?;
+                h_out.0.copy_advice(
+                    || "copy h_out_lo",
+                    &mut region,
+                    self.config.advice[2],
+                    offset,
+                )?;
+                h_out.1.copy_advice(
+                    || "copy h_out_hi",
+                    &mut region,
+                    self.config.advice[3],
+                    offset,
+                )?;
+                let h_sum = h_in
+                    .value()
+                    .zip(h_out.value())
+                    .map(|(h_in, h_out)| h_in as u64 + h_out as u64);
+                // Assign the sum `h_in + h_out = h_lo + h_hi` as two base-2^32 digits.
+                let h_lo = AssignedBits::<F, 32>::assign(
+                    &mut region,
+                    || "h_lo",
+                    self.config.advice[4],
+                    offset,
+                    h_sum.map(|h_sum| h_sum as u32),
+                )?;
+                let _h_hi = AssignedBits::<F, 32>::assign(
+                    &mut region,
+                    || "h_hi",
+                    self.config.advice[5],
+                    offset,
+                    h_sum.map(|h_sum| (h_sum >> 32) as u32),
+                )?;
+
+                Ok([a_lo, b_lo, c_lo, d_lo, e_lo, f_lo, g_lo, h_lo])
+            },
+        )
+    }
+
+    fn add_compression_states_then_intialize(
+        &self,
+        layouter: &mut impl Layouter<F>,
+        state_in: State<F>,
+        state_out: State<F>,
+    ) -> Result<State<F>, Error> {
+        let [a, b, c, d, e, f, g, h] = self.add_compression_states(layouter, state_in, state_out)?;
+
+        layouter.assign_region(
+            || "initialize_with_state",
+            |mut region| {
+                let [.., a_7, _a_8, _a_9] = self.config.compression.advice;
+                // TODO (jake): shouldn't initialization use `AssignedBits<F, 32>` rather than `Option<u32>`?
+                let e = self.config.compression.decompose_e(&mut region, RoundIdx::Init, e.value_u32())?;
+                let f = self.config.compression.decompose_f(&mut region, RoundIdx::Init, f.value_u32())?;
+                let g = self.config.compression.decompose_g(&mut region, RoundIdx::Init, g.value_u32())?;
+                let h_row = get_h_row(RoundIdx::Init);
+                let h = self.config.compression.assign_word_halves_dense(&mut region, h_row, a_7, h_row + 1, a_7, h.value_u32())?;
+                let a = self.config.compression.decompose_a(&mut region, RoundIdx::Init, a.value_u32())?;
+                let b = self.config.compression.decompose_b(&mut region, RoundIdx::Init, b.value_u32())?;
+                let c = self.config.compression.decompose_c(&mut region, RoundIdx::Init, c.value_u32())?;
+                let d_row = get_d_row(RoundIdx::Init);
+                let d = self.config.compression.assign_word_halves_dense(&mut region, d_row, a_7, d_row + 1, a_7, d.value_u32())?;
+                Ok(State::new(
+                    StateWord::A(a),
+                    StateWord::B(b),
+                    StateWord::C(c),
+                    StateWord::D(d),
+                    StateWord::E(e),
+                    StateWord::F(f),
+                    StateWord::G(g),
+                    StateWord::H(h),
+                ))
+            },
+        )
+    }
+
+    /// Hash without padding `preimage`; `preimage` must must be assigned in columns which are
+    /// equality enabled.
+    pub fn hash_nopad(
+        &self,
+        mut layouter: impl Layouter<F>,
+        preimage: &[AssignedBits<F, 32>],
+    ) -> Result<[AssignedBits<F, 32>; DIGEST_SIZE], Error> {
+        assert_eq!(
+            preimage.len() % BLOCK_SIZE,
+            0,
+            "preimage length must be divisible by block size",
+        );
+
+        let blocks: Vec<[AssignedBits<F, 32>; BLOCK_SIZE]> = preimage
+            .chunks(BLOCK_SIZE)
+            .map(|block| block.to_vec().try_into().unwrap())
+            .collect();
+
+        let num_blocks = blocks.len();
+
+        // Process the first block.
+        let mut state_in = self.initialization_vector(&mut layouter)?;
+        let mut state_out = self.compress(&mut layouter, state_in.clone(), blocks[0].clone())?;
+        if num_blocks == 1 {
+            return self.add_compression_states(&mut layouter, state_in, state_out);
+        }
+
+        // Process all remaining blocks except for the last.
+        for block in &blocks[1..num_blocks - 1] {
+            state_in = self.add_compression_states_then_intialize(
+                &mut layouter,
+                state_in.clone(),
+                state_out.clone(),
+            )?;
+            state_out = self.compress(&mut layouter, state_in.clone(), block.clone())?;
+        }
+
+        // Process the last block.
+        state_in = self.add_compression_states_then_intialize(
+            &mut layouter,
+            state_in.clone(),
+            state_out.clone(),
+        )?;
+        state_out = self.compress(&mut layouter, state_in.clone(), blocks[num_blocks - 1].clone())?;
+        self.add_compression_states(&mut layouter, state_in, state_out)
+    }
+
+    /// Hash `preimage`; `preimage` must must be assigned in columns which are equality enabled.
+    pub fn hash(
+        &self,
+        mut layouter: impl Layouter<F>,
+        preimage: &[AssignedBits<F, 32>],
+    ) -> Result<[AssignedBits<F, 32>; DIGEST_SIZE], Error> {
+        let preimage_words_len = preimage.len();
+        let padding = self.assign_padding(&mut layouter, preimage_words_len)?;
+
+        let mut padded_preimage = Vec::with_capacity(preimage_words_len + padding.len());
+        padded_preimage.extend_from_slice(preimage);
+        padded_preimage.extend_from_slice(&padding);
+
+        self.hash_nopad(layouter, &padded_preimage)
+    }
 }
-*/
+
+#[derive(Clone, Debug)]
+pub struct Sha256FieldConfig<F: FieldExt> {
+    sha256: Sha256Config<F>,
+    // Field element to/from sha256 words conversion.
+    sha256_words: Sha256WordsConfig<F>,
+}
+
+#[derive(Clone, Debug)]
+pub struct Sha256FieldChip<F: FieldExt> {
+    config: Sha256FieldConfig<F>,
+}
+
+impl<F: FieldExt> Chip<F> for Sha256FieldChip<F> {
+    type Config = Sha256FieldConfig<F>;
+    type Loaded = ();
+
+    fn config(&self) -> &Self::Config {
+        &self.config
+    }
+
+    fn loaded(&self) -> &Self::Loaded {
+        &()
+    }
+}
+
+impl<F: FieldExt> ColumnCount for Sha256FieldChip<F> {
+    fn num_cols() -> NumCols {
+        NumCols {
+            advice_eq: 9,
+            advice_neq: 0,
+            fixed_eq: 0,
+            fixed_neq: 0,
+        }
+    }
+}
+
+impl<F: FieldExt> Sha256FieldChip<F> {
+    pub fn construct(config: Sha256FieldConfig<F>) -> Self {
+        Sha256FieldChip { config }
+    }
+
+    /// Loads the lookup table required by this chip into the circuit.
+    pub fn load(layouter: &mut impl Layouter<F>, config: &Sha256FieldConfig<F>) -> Result<(), Error> {
+        Sha256Chip::load(layouter, &config.sha256)
+    }
+
+    // # Side Effects
+    //
+    // `advice` will be equality enabled.
+    pub fn configure(
+        meta: &mut ConstraintSystem<F>,
+        advice: [Column<Advice>; 9],
+    ) -> Sha256FieldConfig<F> {
+        let sha256 = Sha256Chip::configure(meta, advice[..8].try_into().unwrap());
+        let sha256_words = Sha256WordsChip::configure(meta, advice);
+        Sha256FieldConfig {
+            sha256,
+            sha256_words,
+        }
+    }
+
+    pub fn hash_words_nopad(
+        &self,
+        layouter: impl Layouter<F>,
+        preimage: &[AssignedBits<F, 32>],
+    ) -> Result<[AssignedBits<F, 32>; DIGEST_SIZE], Error> {
+        Sha256Chip::construct(self.config.sha256.clone()).hash_nopad(layouter, preimage)
+    }
+
+    pub fn hash_words(
+        &self,
+        layouter: impl Layouter<F>,
+        preimage: &[AssignedBits<F, 32>],
+    ) -> Result<[AssignedBits<F, 32>; DIGEST_SIZE], Error> {
+        Sha256Chip::construct(self.config.sha256.clone()).hash(layouter, preimage)
+    }
+
+    pub fn hash_field_elems(
+        &self,
+        mut layouter: impl Layouter<F>,
+        preimage: &[AssignedCell<F, F>],
+    ) -> Result<AssignedCell<F, F>, Error> {
+        let words_chip = Sha256WordsChip::construct(self.config.sha256_words.clone());
+
+        // Assign preimage as sha256 words.
+        let mut preimage_words = Vec::with_capacity(preimage.len() * FIELD_WORD_LEN);
+        for (i, elem) in preimage.iter().enumerate() {
+            let words = words_chip.into_words(
+                layouter.namespace(|| format!("preimage elem {} into words", i)),
+                elem.clone(),
+            )?;
+            preimage_words.extend(words);
+        }
+
+        // Compute digest.
+        let digest_words = Sha256Chip::construct(self.config.sha256.clone())
+            .hash(layouter.namespace(|| "sha256"), &preimage_words)?;
+
+        // Pack digest words into a field element.
+        words_chip.pack_digest(layouter.namespace(|| "pack digest"), &digest_words)
+    }
+}
 
 #[derive(Clone, Debug)]
 pub struct Sha256WordsConfig<F: FieldExt> {
     // Equality enabled advice.
     advice: [Column<Advice>; 9],
+    // Decomposes a field element in eight little-endian `u32`s.
     s_field_into_u32s: Selector,
-    s_u32_reorder_bits: Selector,
-    _f: PhantomData<F>,
+    // Changes a `u32`'s byte order from little to big endian.
+    s_u32_reverse_bytes: Selector,
+    // Strips the two most significant bits from a `u32`.
+    strip_bits: StripBitsConfig<F>,
 }
 
 #[derive(Debug)]
@@ -1186,7 +1017,12 @@ impl<F: FieldExt> Chip<F> for Sha256WordsChip<F> {
 
 impl<F: FieldExt> ColumnCount for Sha256WordsChip<F> {
     fn num_cols() -> NumCols {
-        U32_DECOMP_NUM_COLS
+        NumCols {
+            advice_eq: 9,
+            advice_neq: 0,
+            fixed_eq: 0,
+            fixed_neq: 0,
+        }
     }
 }
 
@@ -1199,9 +1035,7 @@ impl<F: FieldExt> Sha256WordsChip<F> {
         meta: &mut ConstraintSystem<F>,
         advice: [Column<Advice>; 9],
     ) -> Sha256WordsConfig<F> {
-        for col in advice.iter() {
-            meta.enable_equality(*col);
-        }
+        let strip_bits = StripBitsChip::configure(meta, advice.clone());
 
         let s_field_into_u32s = meta.selector();
         {
@@ -1227,94 +1061,66 @@ impl<F: FieldExt> Sha256WordsChip<F> {
             });
         }
 
-        let s_u32_reorder_bits = meta.selector();
+        let s_u32_reverse_bytes = meta.selector();
         {
-            // `[2^1, ..., 2^31]`
-            let mut radix_pows = Vec::with_capacity(31);
-            let radix = F::from(2);
+            // `[(2^8)^1, ..., (2^8)^3]`
+            let mut radix_pows = Vec::with_capacity(3);
+            let radix = F::from(256);
             radix_pows.push(radix);
-            for i in 0..30 {
+            for i in 0..3 {
                 radix_pows.push(radix_pows[i] * radix);
             }
 
-            meta.create_gate("u32_reorder_bits", |meta| {
-                let s = meta.query_selector(s_u32_reorder_bits);
-                let uint32 = meta.query_advice(advice[0], Rotation::cur());
-                let reordered = meta.query_advice(advice[0], Rotation::next());
+            meta.create_gate("u32_reverse_bytes", |meta| {
+                let s = meta.query_selector(s_u32_reverse_bytes);
+                let u32_le = meta.query_advice(advice[0], Rotation::cur());
 
-                // Query the `u32`'s bits; eight bits per row.
-                let mut le_bits = Vec::<Expression<F>>::with_capacity(32);
-                for offset in 0..4 {
-                    let offset = Rotation(offset as i32);
-                    for col in &advice[1..] {
-                        le_bits.push(meta.query_advice(*col, offset));
-                    }
-                }
+                // The `u32`'s four little-endian bytes.
+                let le_bytes = [
+                    meta.query_advice(advice[1], Rotation::cur()),
+                    meta.query_advice(advice[2], Rotation::cur()),
+                    meta.query_advice(advice[3], Rotation::cur()),
+                    meta.query_advice(advice[4], Rotation::cur()),
+                ];
 
-                // `u32` binary decomposition.
-                let mut uint32_expr = le_bits[0].clone();
-                for (bit, radix_pow) in le_bits[1..].iter().zip(radix_pows.iter()) {
-                    uint32_expr = uint32_expr + Expression::Constant(*radix_pow) * bit.clone();
-                }
+                let u32_be = meta.query_advice(advice[5], Rotation::cur());
 
-                // Reorder `u32`'s bits.
-                let mut reordered_bits = le_bits.chunks(8).map(|byte| byte.iter().rev()).flatten();
-                let mut reordered_expr = reordered_bits.next().unwrap().clone();
-                for (bit, radix_pow) in reordered_bits.zip(radix_pows.iter()) {
-                    reordered_expr = reordered_expr + Expression::Constant(*radix_pow) * bit.clone();
-                }
+                // `u32`'s little-endian byte decomposition.
+                let le_expr = le_bytes[0].clone()
+                    + le_bytes[1].clone() * Expression::Constant(radix_pows[0])
+                    + le_bytes[2].clone() * Expression::Constant(radix_pows[1])
+                    + le_bytes[3].clone() * Expression::Constant(radix_pows[2]);
 
+                // `u32`'s big-endian byte decomposition.
+                let be_expr = le_bytes[3].clone()
+                    + le_bytes[2].clone() * Expression::Constant(radix_pows[0])
+                    + le_bytes[1].clone() * Expression::Constant(radix_pows[1])
+                    + le_bytes[0].clone() * Expression::Constant(radix_pows[2]);
+                
                 [
-                    ("u32 binary decomp", s.clone() * (uint32_expr - uint32)),
-                    ("reorder u32 bits", s * (reordered_expr - reordered)),
+                    ("u32 le-bytes decomp", s.clone() * (u32_le - le_expr)),
+                    ("u32 be-bytes decomp", s * (u32_be - be_expr)),
                 ]
             });
         }
 
         Sha256WordsConfig {
             advice,
+            strip_bits,
             s_field_into_u32s,
-            s_u32_reorder_bits,
-            _f: PhantomData,
+            s_u32_reverse_bytes,
         }
     }
 
-    pub fn witness_into_words(
+    fn u32_decomp(
         &self,
-        layouter: impl Layouter<F>,
-        field: Option<F>,
-    ) -> Result<[AssignedU32<F>; 8], Error> {
-        self.into_words_inner(layouter, WitnessOrCopy::Witness(field))
-    }
-
-    pub fn copy_into_words(
-        &self,
-        layouter: impl Layouter<F>,
-        field: AssignedCell<F, F>,
-    ) -> Result<[AssignedU32<F>; 8], Error> {
-        self.into_words_inner(layouter, WitnessOrCopy::Copy(field))
-    }
-
-    pub fn pi_into_words(
-        &self,
-        layouter: impl Layouter<F>,
-        pi_col: Column<Instance>,
-        // Absolute row.
-        pi_row: usize,
-    ) -> Result<[AssignedU32<F>; 8], Error> {
-        self.into_words_inner(layouter, WitnessOrCopy::PiCopy(pi_col, pi_row))
-    }
-
-    #[allow(clippy::wrong_self_convention)]
-    fn into_words_inner(
-        &self,
-        mut layouter: impl Layouter<F>,
+        layouter: &mut impl Layouter<F>,
         field: WitnessOrCopy<F, F>,
-    ) -> Result<[AssignedU32<F>; 8], Error> {
+    ) -> Result<[AssignedBits<F, 32>; 8], Error> {
         layouter.assign_region(
-            || "decompose field element into sha256 words",
+            || "decompose field element into eight u32s",
             |mut region| {
-                let mut offset = 0;
+                let offset = 0;
                 self.config.s_field_into_u32s.enable(&mut region, offset)?;
 
                 // Witness or copy the field element to be decomposed.
@@ -1346,7 +1152,7 @@ impl<F: FieldExt> Sha256WordsChip<F> {
                     },
                 };
 
-                let u32s: [Option<u32>; 8] = match field.value() {
+                let le_u32s: [Option<u32>; 8] = match field.value() {
                     Some(field) => {
                         field
                             .to_repr()
@@ -1361,7 +1167,7 @@ impl<F: FieldExt> Sha256WordsChip<F> {
                 };
 
                 // Assign `u32` decomposition.
-                let u32s = u32s
+                let le_u32s = le_u32s
                     .iter()
                     .zip(self.config.advice[1..].iter())
                     .enumerate()
@@ -1376,216 +1182,195 @@ impl<F: FieldExt> Sha256WordsChip<F> {
                     })
                     .collect::<Result<Vec<AssignedBits<F, 32>>, Error>>()?;
 
-                offset += 1;
+                Ok(le_u32s.try_into().unwrap())
+            },
+        )
+    }
 
-                let mut words = Vec::with_capacity(8);
+    fn u32_reverse_bytes(
+        &self,
+        mut layouter: impl Layouter<F>,
+        word: &AssignedBits<F, 32>,
+    ) -> Result<AssignedBits<F, 32>, Error> {
+        layouter.assign_region(
+            || "u32 reverse bytes",
+            |mut region| {
+                let offset = 0;
+                self.config.s_u32_reverse_bytes.enable(&mut region, offset)?;
 
-                // Copy and decompose each `u32` into 32 little-endian bits (one byte per row);
-                // reorder each byte's bit order and pack the four bytes into a 32-bit word.
-                for (uint32_index, uint32) in u32s.iter().enumerate() {
-                    self.config.s_u32_reorder_bits.enable(&mut region, offset)?;
+                // Copy `u32`.
+                word.copy_advice(|| "copy word", &mut region, self.config.advice[0], offset)?;
 
-                    // Copy `u32`.
-                    uint32.copy_advice(
-                        || format!("copy u32 {}", uint32_index),
-                        &mut region,
-                        self.config.advice[0],
+                let le_bytes: Vec<Option<u8>> = match word.value_u32() {
+                    Some(word) => word.to_le_bytes().iter().copied().map(Some).collect(),
+                    None => vec![None; 4],
+                };
+
+                // Assign `words`'s little-endian bytes.
+                for (byte_index, (byte, col)) in
+                    le_bytes.iter().zip(self.config.advice[1..=4].iter()).enumerate()
+                {
+                    region.assign_advice(
+                        || format!("word le-byte {}", byte_index),
+                        *col,
                         offset,
+                        || byte.map(|byte| F::from(byte as u64)).ok_or(Error::Synthesis),
                     )?;
-
-                    let (le_bits, reordered) = match uint32.value_u32() {
-                        Some(uint32) => {
-                            let mut le_bits = [None; 32];
-                            for (i, bit) in le_bits.iter_mut().enumerate() {
-                                *bit = Some(uint32 >> i & 1 == 1);
-                            }
-
-                            let mut reordered = 0u32;
-                            for (byte_index, byte) in uint32.to_le_bytes().iter().enumerate() {
-                                let byte = byte.reverse_bits() as u32;
-                                reordered |= byte << (8 * byte_index);
-                            }
-
-                            (le_bits, Some(reordered))
-                        }
-                        None => ([None; 32], None),
-                    };
-
-                    // Assign `u32`'s little-endian bits (eight bits per row).
-                    let mut bit_index = 0;
-                    for (byte_index, byte) in le_bits.chunks(8).enumerate() {
-                        for (bit, col) in byte.iter().zip(self.config.advice[1..].iter()) {
-                            region.assign_advice(
-                                || format!("u32 {} bit {}", uint32_index, bit_index),
-                                *col,
-                                offset + byte_index,
-                                || bit.map(Bit).ok_or(Error::Synthesis),
-                            )?;
-                            bit_index += 1;
-                        }
-                    }
-
-                    // Assign the reordered bits as a `u32`.
-                    let reordered = AssignedBits::<F, 32>::assign(
-                        &mut region,
-                        || format!("u32 {} reordered", uint32_index),
-                        self.config.advice[0],
-                        offset + 1,
-                        reordered,
-                    )?;
-
-                    words.push(reordered);
-                    offset += 4;
                 }
 
-                Ok(words.try_into().unwrap())
+                // Assign the `u32` from big-endian bytes.
+                AssignedBits::<F, 32>::assign(
+                    &mut region,
+                    || "word_be",
+                    self.config.advice[5],
+                    offset,
+                    word.value_u32().map(u32::swap_bytes),
+                )
+            },
+        )
+    }
+
+    pub fn into_words(
+        &self,
+        layouter: impl Layouter<F>,
+        field: AssignedCell<F, F>,
+    ) -> Result<[AssignedU32<F>; 8], Error> {
+        self.into_words_inner(layouter, WitnessOrCopy::Copy(field))
+    }
+
+    pub fn witness_into_words(
+        &self,
+        layouter: impl Layouter<F>,
+        field: Option<F>,
+    ) -> Result<[AssignedU32<F>; 8], Error> {
+        self.into_words_inner(layouter, WitnessOrCopy::Witness(field))
+    }
+
+    pub fn pi_into_words(
+        &self,
+        layouter: impl Layouter<F>,
+        pi_col: Column<Instance>,
+        // Absolute row.
+        pi_row: usize,
+    ) -> Result<[AssignedU32<F>; 8], Error> {
+        self.into_words_inner(layouter, WitnessOrCopy::PiCopy(pi_col, pi_row))
+    }
+
+    #[allow(clippy::wrong_self_convention)]
+    fn into_words_inner(
+        &self,
+        mut layouter: impl Layouter<F>,
+        field: WitnessOrCopy<F, F>,
+    ) -> Result<[AssignedU32<F>; 8], Error> {
+        let le_u32s = self.u32_decomp(&mut layouter, field)?;
+
+        let words = le_u32s
+            .iter()
+            .enumerate()
+            .map(|(i, uint32)| {
+                self.u32_reverse_bytes(
+                    layouter.namespace(|| format!("u32 {} reverse bytes", i)),
+                    uint32,
+                )
+            })
+            .collect::<Result<Vec<AssignedBits<F, 32>>, Error>>()?;
+
+        Ok(words.try_into().unwrap())
+    }
+
+    pub fn pack_digest(
+        &self,
+        mut layouter: impl Layouter<F>,
+        digest_words: &[AssignedBits<F, 32>; 8],
+    ) -> Result<AssignedCell<F, F>, Error> {
+        let mut reordered_words = digest_words
+            .iter()
+            .enumerate()
+            .map(|(word_index, word)| {
+                self.u32_reverse_bytes(
+                    layouter.namespace(|| format!("reverse digest word {} bytes", word_index)),
+                    word,
+                )
+            })
+            .collect::<Result<Vec<AssignedBits<F, 32>>, Error>>()?;
+
+        reordered_words[7] = StripBitsChip::construct(self.config.strip_bits.clone())
+            .strip_bits(layouter.namespace(|| "strip bits from digest"), &reordered_words[7])?;
+
+        // Pack the reorderd words into a field element.
+        layouter.assign_region(
+            || "pack reordered words into field element",
+            |mut region| {
+                let offset = 0;
+                self.config.s_field_into_u32s.enable(&mut region, offset)?;
+
+                let mut packed_repr = Some(Vec::<u8>::with_capacity(32));
+
+                for (word_index, (word, col)) in reordered_words
+                    .iter()
+                    .zip(&self.config.advice[1..])
+                    .enumerate()
+                {
+                    word.copy_advice(
+                        || format!("copy reordered word {}", word_index),
+                        &mut region,
+                        *col,
+                        offset,
+                    )?;
+                    packed_repr.as_mut().zip(word.value_u32()).map(|(repr, word)| {
+                        repr.extend(word.to_le_bytes());
+                    });
+                };
+
+                region.assign_advice(
+                    || "pack reordered words into field element",
+                    self.config.advice[0],
+                    offset,
+                    || packed_repr
+                        .as_ref()
+                        .map(|repr_bytes| {
+                            let mut repr = F::Repr::default();
+                            repr.as_mut().copy_from_slice(&repr_bytes);
+                            F::from_repr_vartime(repr).expect("words are invalid field element")
+                        })
+                        .ok_or(Error::Synthesis),
+                )
             },
         )
     }
 }
 
-// TODO: fix failing tests.
-/*
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    use ff::Field;
+    use ff::PrimeField;
     use halo2_proofs::{circuit::SimpleFloorPlanner, dev::MockProver, pasta::Fp, plonk::Circuit};
-    use rand::SeedableRng;
-    use rand_xorshift::XorShiftRng;
     use sha2::{Digest, Sha256};
 
-    use crate::{
-        uint32::{U32DecompChip, U32DecompConfig},
-        TEST_SEED,
-    };
-
-    const PREIMAGE_LEN: usize = 2;
+    use crate::AdviceIter;
 
     #[test]
-    fn test_sha256_arity_2_circuit() {
+    fn test_sha256_hash_words_nopad() {
         #[derive(Clone)]
         struct MyConfig<F: FieldExt> {
-            u32_decomp: U32DecompConfig<F>,
             sha256: Sha256Config<F>,
+            advice: [Column<Advice>; 8],
         }
 
-        struct MyCircuit<F: FieldExt> {
-            preimage: [Option<F>; PREIMAGE_LEN],
+        struct MyCircuit {
+            preimage: [Option<u32>; BLOCK_SIZE],
+            expected_digest: Option<[u32; DIGEST_SIZE]>,
         }
 
-        impl<F: FieldExt> Circuit<F> for MyCircuit<F> {
+        impl<F: FieldExt> Circuit<F> for MyCircuit {
             type Config = MyConfig<F>;
             type FloorPlanner = SimpleFloorPlanner;
 
             fn without_witnesses(&self) -> Self {
                 MyCircuit {
-                    preimage: [None; PREIMAGE_LEN],
-                }
-            }
-
-            fn configure(meta: &mut ConstraintSystem<F>) -> Self::Config {
-                let advice: Vec<Column<Advice>> = (0..9).map(|_| meta.advice_column()).collect();
-
-                // Enables equality for all `advice` columns.
-                let u32_decomp = U32DecompChip::configure(meta, advice.clone().try_into().unwrap());
-
-                let sha256 = Sha256Chip::configure_without_packing(
-                    meta,
-                    advice[..6].try_into().unwrap(),
-                    advice[6],
-                );
-
-                MyConfig { u32_decomp, sha256 }
-            }
-
-            fn synthesize(
-                &self,
-                config: Self::Config,
-                mut layouter: impl Layouter<F>,
-            ) -> Result<(), Error> {
-                let MyConfig {
-                    u32_decomp: u32_decomp_config,
-                    sha256: sha256_config,
-                } = config;
-
-                Sha256Chip::load(&mut layouter, &sha256_config)?;
-
-                let u32_decomp_chip = U32DecompChip::construct(u32_decomp_config);
-                let sha256_chip = Sha256Chip::construct(sha256_config);
-
-                let mut preimage =
-                    Vec::<AssignedBits<F, 32>>::with_capacity(FIELD_WORDS * PREIMAGE_LEN);
-
-                for (i, elem) in self.preimage.iter().enumerate() {
-                    let u32s = u32_decomp_chip
-                        .witness_decompose(layouter.namespace(|| format!("elem {}", i)), *elem)?;
-                    preimage.extend(u32s);
-                }
-
-                let digest: Vec<u32> = sha256_chip
-                    .hash(layouter.namespace(|| "sha256"), &preimage)?
-                    .iter()
-                    .map(|word| word.value_u32().unwrap())
-                    .collect();
-
-                let expected_digest: Vec<u32> = {
-                    let mut preimage = Vec::<u8>::with_capacity(32 * PREIMAGE_LEN);
-                    for elem in self.preimage {
-                        preimage.extend_from_slice(elem.unwrap().to_repr().as_ref());
-                    }
-                    Sha256::digest(&preimage)
-                        .chunks(4)
-                        .map(|chunk| u32::from_le_bytes(chunk.try_into().unwrap()))
-                        .collect()
-                };
-
-                // TODO: fix this failing test
-                dbg!(&digest);
-                dbg!(&expected_digest);
-                assert_eq!(digest, expected_digest);
-
-                Ok(())
-            }
-        }
-
-        impl<F: FieldExt> MyCircuit<F> {
-            fn k() -> u32 {
-                17
-            }
-        }
-
-        let mut rng = XorShiftRng::from_seed(TEST_SEED);
-
-        let preimage = (0..PREIMAGE_LEN)
-            .map(|_| Some(Fp::random(&mut rng)))
-            .collect::<Vec<Option<Fp>>>()
-            .try_into()
-            .unwrap();
-
-        let circ = MyCircuit { preimage };
-
-        let k = MyCircuit::<Fp>::k();
-        let prover = MockProver::run(k, &circ, vec![]).unwrap();
-        assert!(prover.verify().is_ok());
-    }
-
-    #[test]
-    fn test_sha256_two_preimages_circuit() {
-        struct MyCircuit<F: FieldExt> {
-            preimage_1: [Option<F>; PREIMAGE_LEN],
-            preimage_2: [Option<F>; PREIMAGE_LEN],
-        }
-
-        impl<F: FieldExt> Circuit<F> for MyCircuit<F> {
-            type Config = Sha256Config<F>;
-            type FloorPlanner = SimpleFloorPlanner;
-
-            fn without_witnesses(&self) -> Self {
-                MyCircuit {
-                    preimage_1: [None; PREIMAGE_LEN],
-                    preimage_2: [None; PREIMAGE_LEN],
+                    preimage: [None; BLOCK_SIZE],
+                    expected_digest: None,
                 }
             }
 
@@ -1599,11 +1384,9 @@ mod tests {
                     meta.advice_column(),
                     meta.advice_column(),
                     meta.advice_column(),
-                    meta.advice_column(),
                 ];
-                let u32_decomp = U32DecompChip::configure(meta, advice);
-                let strip_bits = StripBitsChip::configure(meta, advice);
-                Sha256Chip::configure_with_packing(meta, u32_decomp, strip_bits)
+                let sha256 = Sha256Chip::configure(meta, advice.clone());
+                MyConfig { sha256, advice }
             }
 
             fn synthesize(
@@ -1611,81 +1394,519 @@ mod tests {
                 config: Self::Config,
                 mut layouter: impl Layouter<F>,
             ) -> Result<(), Error> {
-                Sha256Chip::load(&mut layouter, &config)?;
+                let MyConfig {
+                    sha256: sha256_config,
+                    advice,
+                } = config;
 
-                let advice = config.advice;
-                let sha256_chip = Sha256Chip::construct(config);
+                Sha256Chip::load(&mut layouter, &sha256_config)?;
+                let sha256_chip = Sha256Chip::construct(sha256_config);
 
-                let (preimage_1, preimage_2) = layouter.assign_region(
-                    || "assign preimages",
+                let preimage = layouter.assign_region(
+                    || "assign preimage",
                     |mut region| {
-                        let mut offset = 0;
-
-                        let preimage_1 = self
-                            .preimage_1
+                        let mut advice_iter = AdviceIter::from(advice.to_vec());
+                        self
+                            .preimage
                             .iter()
                             .enumerate()
-                            .map(|(i, elem)| {
-                                region.assign_advice(
-                                    || format!("preimage 1 elem {}", i),
-                                    advice[i],
+                            .map(|(i, word)| {
+                                let (offset, col) = advice_iter.next();
+                                AssignedBits::<F, 32>::assign(
+                                    &mut region,
+                                    || format!("preimage word {}", i),
+                                    col,
                                     offset,
-                                    || elem.ok_or(Error::Synthesis),
+                                    Some(word.unwrap()),
                                 )
                             })
-                            .collect::<Result<Vec<AssignedCell<F, F>>, Error>>()?;
-
-                        offset += 1;
-
-                        let preimage_2 = self
-                            .preimage_2
-                            .iter()
-                            .enumerate()
-                            .map(|(i, elem)| {
-                                region.assign_advice(
-                                    || format!("preimage 2 elem {}", i),
-                                    advice[i],
-                                    offset,
-                                    || elem.ok_or(Error::Synthesis),
-                                )
-                            })
-                            .collect::<Result<Vec<AssignedCell<F, F>>, Error>>()?;
-
-                        Ok((preimage_1, preimage_2))
+                            .collect::<Result<Vec<AssignedBits<F, 32>>, Error>>()
                     },
                 )?;
 
-                let _digest_1 =
-                    sha256_chip.hash_field_elems(layouter.namespace(|| "hash 1"), &preimage_1)?;
+                let digest: [u32; DIGEST_SIZE] = sha256_chip
+                    .hash_nopad(layouter.namespace(|| "sha256"), &preimage)?
+                    .iter()
+                    .map(|digest_word| digest_word.value_u32().unwrap())
+                    .collect::<Vec<u32>>()
+                    .try_into()
+                    .unwrap();
 
-                let _digest_2 =
-                    sha256_chip.hash_field_elems(layouter.namespace(|| "hash 2"), &preimage_2)?;
+                assert_eq!(digest, self.expected_digest.unwrap());
 
                 Ok(())
             }
         }
 
-        let mut rng = XorShiftRng::from_seed(TEST_SEED);
+        // "abcd"
+        let preimage_bytes = vec![97u8, 98, 99, 100];
 
-        let preimage_1 = (0..PREIMAGE_LEN)
-            .map(|_| Some(Fp::random(&mut rng)))
-            .collect::<Vec<Option<Fp>>>()
-            .try_into()
-            .unwrap();
+        // Only tests preimages of 32-bit words.
+        assert_eq!(preimage_bytes.len() % 4, 0);
 
-        let preimage_2 = (0..PREIMAGE_LEN)
-            .map(|_| Some(Fp::random(&mut rng)))
-            .collect::<Vec<Option<Fp>>>()
-            .try_into()
-            .unwrap();
+        let unpadded_preimage: Vec<Option<u32>> = preimage_bytes
+            .chunks(4)
+            .map(|bytes| Some(u32::from_be_bytes(bytes.try_into().unwrap())))
+            .collect();
 
-        let circ = MyCircuit {
-            preimage_1,
-            preimage_2,
+        let padded_preimage: [Option<u32>; BLOCK_SIZE] = {
+            let mut padded_preimage = Vec::with_capacity(BLOCK_SIZE);
+            padded_preimage.extend_from_slice(&unpadded_preimage);
+            for pad_word in get_padding(unpadded_preimage.len()) {
+                padded_preimage.push(Some(pad_word));
+            }
+            // Only test preimages of one block.
+            assert_eq!(padded_preimage.len(), BLOCK_SIZE);
+            padded_preimage.try_into().unwrap()
         };
 
-        let prover = MockProver::run(17, &circ, vec![]).unwrap();
+        let expected_digest: [u32; DIGEST_SIZE] = Sha256::digest(&preimage_bytes)
+            .chunks(4)
+            .map(|bytes| u32::from_be_bytes(bytes.try_into().unwrap()))
+            .collect::<Vec<u32>>()
+            .try_into()
+            .unwrap();
+
+        // Test `Sha256Chip::hash_nopad` (chip caller pads the preimage).
+        let circ = MyCircuit {
+            preimage: padded_preimage,
+            expected_digest: Some(expected_digest),
+        };
+        let prover = MockProver::<Fp>::run(17, &circ, vec![]).unwrap();
+        assert!(prover.verify().is_ok());
+    }
+
+    #[test]
+    fn test_sha256_pad_and_hash_words() {
+        #[derive(Clone)]
+        struct MyConfig<F: FieldExt> {
+            sha256: Sha256Config<F>,
+            advice: [Column<Advice>; 8],
+        }
+
+        struct MyCircuit {
+            preimage: Vec<Option<u32>>,
+            expected_digest: Option<[u32; DIGEST_SIZE]>,
+        }
+
+        impl<F: FieldExt> Circuit<F> for MyCircuit {
+            type Config = MyConfig<F>;
+            type FloorPlanner = SimpleFloorPlanner;
+
+            fn without_witnesses(&self) -> Self {
+                MyCircuit {
+                    preimage: vec![None; self.preimage.len()],
+                    expected_digest: None,
+                }
+            }
+
+            fn configure(meta: &mut ConstraintSystem<F>) -> Self::Config {
+                let advice = [
+                    meta.advice_column(),
+                    meta.advice_column(),
+                    meta.advice_column(),
+                    meta.advice_column(),
+                    meta.advice_column(),
+                    meta.advice_column(),
+                    meta.advice_column(),
+                    meta.advice_column(),
+                ];
+                let sha256 = Sha256Chip::configure(meta, advice.clone());
+                MyConfig { sha256, advice }
+            }
+
+            fn synthesize(
+                &self,
+                config: Self::Config,
+                mut layouter: impl Layouter<F>,
+            ) -> Result<(), Error> {
+                let MyConfig {
+                    sha256: sha256_config,
+                    advice,
+                } = config;
+
+                Sha256Chip::load(&mut layouter, &sha256_config)?;
+                let sha256_chip = Sha256Chip::construct(sha256_config);
+
+                let preimage = layouter.assign_region(
+                    || "assign preimage",
+                    |mut region| {
+                        let mut advice_iter = AdviceIter::from(advice.to_vec());
+                        self
+                            .preimage
+                            .iter()
+                            .enumerate()
+                            .map(|(i, word)| {
+                                let (offset, col) = advice_iter.next();
+                                AssignedBits::<F, 32>::assign(
+                                    &mut region,
+                                    || format!("preimage word {}", i),
+                                    col,
+                                    offset,
+                                    Some(word.unwrap()),
+                                )
+                            })
+                            .collect::<Result<Vec<AssignedBits<F, 32>>, Error>>()
+                    },
+                )?;
+
+                let digest: [u32; DIGEST_SIZE] = sha256_chip
+                    .hash(layouter.namespace(|| "sha256"), &preimage)?
+                    .iter()
+                    .map(|digest_word| digest_word.value_u32().unwrap())
+                    .collect::<Vec<u32>>()
+                    .try_into()
+                    .unwrap();
+
+                assert_eq!(digest, self.expected_digest.unwrap());
+
+                Ok(())
+            }
+        }
+
+        // "a" unicode byte.
+        let a = 'a' as u8;
+
+        let preimages = [
+            // One block preimage.
+            vec![a; 4],
+            // One block preimage requiring an additional block of padding.
+            vec![a; 64],
+            // Two block preimage.
+            vec![a; 68],
+            // Two block preimage requiring an additional block of padding.
+            vec![a; 96],
+        ];
+
+        for preimage_bytes in &preimages {
+            let preimage_byte_len = preimage_bytes.len();
+            assert_eq!(preimage_byte_len % 4, 0, "preimage byte length not divisible by word size");
+
+            let unpadded_preimage: Vec<Option<u32>> = preimage_bytes
+                .chunks(4)
+                .map(|bytes| Some(u32::from_be_bytes(bytes.try_into().unwrap())))
+                .collect();
+
+            let expected_digest: [u32; DIGEST_SIZE] = Sha256::digest(&preimage_bytes)
+                .chunks(4)
+                .map(|bytes| u32::from_be_bytes(bytes.try_into().unwrap()))
+                .collect::<Vec<u32>>()
+                .try_into()
+                .unwrap();
+
+            let circ = MyCircuit {
+                preimage: unpadded_preimage,
+                expected_digest: Some(expected_digest),
+            };
+
+            let prover = MockProver::<Fp>::run(17, &circ, vec![]).unwrap();
+            assert!(prover.verify().is_ok());
+        }
+    }
+
+    #[test]
+    fn test_sha256_hash_field_elems() {
+        struct MyCircuit;
+
+        impl Circuit<Fp> for MyCircuit {
+            type Config = (Sha256FieldConfig<Fp>, [Column<Advice>; 9]);
+            type FloorPlanner = SimpleFloorPlanner;
+
+            fn without_witnesses(&self) -> Self {
+                MyCircuit
+            }
+
+            fn configure(meta: &mut ConstraintSystem<Fp>) -> Self::Config {
+                let advice = [
+                    meta.advice_column(),
+                    meta.advice_column(),
+                    meta.advice_column(),
+                    meta.advice_column(),
+                    meta.advice_column(),
+                    meta.advice_column(),
+                    meta.advice_column(),
+                    meta.advice_column(),
+                    meta.advice_column(),
+                ];
+                let sha256 = Sha256FieldChip::configure(meta, advice.clone());
+                (sha256, advice)
+            }
+
+            fn synthesize(
+                &self,
+                config: Self::Config,
+                mut layouter: impl Layouter<Fp>,
+            ) -> Result<(), Error> {
+                let (sha256_config, advice) = config;
+
+                Sha256FieldChip::load(&mut layouter, &sha256_config)?;
+                let sha256_chip = Sha256FieldChip::construct(sha256_config);
+
+                // Test constant preimages against their known digests.
+
+                // "abc"
+                let abc = layouter.assign_region(
+                    || "assign abc",
+                    |mut region| {
+                        let offset = 0;
+                        region.assign_advice(
+                            || "abc",
+                            advice[0],
+                            offset,
+                            || {
+                                let mut repr = [0u8; 32];
+                                repr[..3].copy_from_slice(&[97u8, 98, 99]);
+                                Ok(Fp::from_repr_vartime(repr).unwrap())
+                            }
+                        )
+                    },
+                )?;
+
+                // One block preimage.
+                {
+                    let preimage = [abc.clone()];
+
+                    let digest: Vec<u32> = sha256_chip
+                        .hash_field_elems(layouter.namespace(|| "hash preimage 1"), &preimage)?
+                        .value()
+                        .unwrap()
+                        .to_repr()
+                        .chunks(4)
+                        .map(|bytes| u32::from_be_bytes(bytes.try_into().unwrap()))
+                        .collect();
+
+                    let expected_digest: [u32; 8] = [
+                        0x26426d7c,
+                        0xb06a1264,
+                        0x3ccfe841,
+                        0x07603083,
+                        0xd835c37f,
+                        0x000a12f7,
+                        0x34137a0c,
+                        0x8df77f26,
+                    ];
+
+                    assert_eq!(digest, expected_digest);
+                }
+
+                // One block preimage requiring an additional block of padding.
+                {
+                    let preimage = [abc.clone(), abc];
+
+                    let digest: Vec<u32> = sha256_chip
+                        .hash_field_elems(layouter.namespace(|| "hash preimage 2"), &preimage)?
+                        .value()
+                        .unwrap()
+                        .to_repr()
+                        .chunks(4)
+                        .map(|bytes| u32::from_be_bytes(bytes.try_into().unwrap()))
+                        .collect();
+
+                    let expected_digest: [u32; 8] = [
+                        0x76629a59,
+                        0xa5b36f76,
+                        0x6f1ef203,
+                        0x8ce1271b,
+                        0xe300f38f,
+                        0x737a4316,
+                        0x87252d8f,
+                        0x7781af3f,
+                    ];
+
+                    assert_eq!(digest, expected_digest);
+                }
+
+                Ok(())
+            }
+        }
+
+        let circ = MyCircuit;
+        let prover = MockProver::<Fp>::run(17, &circ, vec![]).unwrap();
+        assert!(prover.verify().is_ok());
+    }
+
+    #[test]
+    fn test_sha256_field_words_conversion() {
+        struct MyCircuit;
+
+        impl Circuit<Fp> for MyCircuit {
+            type Config = (Sha256WordsConfig<Fp>, [Column<Advice>; 9]);
+            type FloorPlanner = SimpleFloorPlanner;
+
+            fn without_witnesses(&self) -> Self {
+                MyCircuit
+            }
+
+            fn configure(meta: &mut ConstraintSystem<Fp>) -> Self::Config {
+                let advice = [
+                    meta.advice_column(),
+                    meta.advice_column(),
+                    meta.advice_column(),
+                    meta.advice_column(),
+                    meta.advice_column(),
+                    meta.advice_column(),
+                    meta.advice_column(),
+                    meta.advice_column(),
+                    meta.advice_column(),
+                ];
+                let sha256_words = Sha256WordsChip::configure(meta, advice.clone());
+                (sha256_words, advice)
+            }
+
+            fn synthesize(
+                &self,
+                config: Self::Config,
+                mut layouter: impl Layouter<Fp>,
+            ) -> Result<(), Error> {
+                let (sha256_words_config, advice) = config;
+
+                let sha256_words_chip = Sha256WordsChip::construct(sha256_words_config);
+
+                // Test converting field elements against their known preimage words.
+
+                // `1`
+                let words_1: Vec<u32> = sha256_words_chip.witness_into_words(
+                    layouter.namespace(|| "1 into words"),
+                    Some(Fp::one()),
+                )?
+                .iter()
+                .map(|word| word.value_u32().unwrap())
+                .collect();
+                assert_eq!(words_1, [u32::from_be_bytes([1, 0, 0, 0]), 0, 0, 0, 0, 0, 0, 0]);
+
+                // `2^32 - 1` (first word contains 32 `1` bits).
+                let words_2: Vec<u32> = sha256_words_chip.witness_into_words(
+                    layouter.namespace(|| "2^32 - 1 into words"),
+                    Some(Fp::from((1u64 << 32) - 1)),
+                )?
+                .iter()
+                .map(|word| word.value_u32().unwrap())
+                .collect();
+                assert_eq!(words_2, [u32::max_value(), 0, 0, 0, 0, 0, 0, 0]);
+
+                // `2^32` (first word contains 32 `0` bits; second word contains one `1` bit).
+                let words_3: Vec<u32> = sha256_words_chip.witness_into_words(
+                    layouter.namespace(|| "2^32 into words"),
+                    Some(Fp::from(1u64 << 32)),
+                )?
+                .iter()
+                .map(|word| word.value_u32().unwrap())
+                .collect();
+                assert_eq!(words_3, [0, u32::from_be_bytes([1, 0, 0, 0]), 0, 0, 0, 0, 0, 0]);
+
+                // `2^66 + 2^72 + 2^95` (first two words each contain 32 `0` bits; third word
+                // contains three `1` bits).
+                let words_4: Vec<u32> = {
+                    let mut repr = [0u8; 32];
+                    // `2^66 + 2^72 + 2^95`
+                    repr[8..12]
+                        .copy_from_slice(&0b10000000_00000000_00000001_00000100u32.to_le_bytes());
+                    sha256_words_chip.witness_into_words(
+                        layouter.namespace(|| "2^66 + 2^95 into words"),
+                        Some(Fp::from_repr_vartime(repr).unwrap()),
+                    )?
+                    .iter()
+                    .map(|word| word.value_u32().unwrap())
+                    .collect()
+                };
+                assert_eq!(
+                    words_4,
+                    [0, 0, u32::from_be_bytes([0b100, 1, 0, 0b10000000]), 0, 0, 0, 0, 0],
+                );
+
+                // `-1 mod p`
+                let neg_1 = Fp::zero() - Fp::one();
+                let words_5: Vec<u32> = sha256_words_chip.witness_into_words(
+                    layouter.namespace(|| "-1 into words"),
+                    Some(neg_1),
+                )?
+                .iter()
+                .map(|word| word.value_u32().unwrap())
+                .collect();
+                assert_eq!(
+                    words_5,
+                    neg_1
+                        .to_repr()
+                        .as_ref()
+                        .chunks(4)
+                        .map(|bytes| u32::from_be_bytes(bytes.try_into().unwrap()))
+                        .collect::<Vec<u32>>(),
+                );
+
+                // Test packing a sha256 digest (eight 32-bit words) into a field element.
+
+                // The two most significant bits of the last word's least significant byte are `0`
+                // to ensure that the packed digest fits within a 255-bit field element.
+                let digest_words = [1u32, 2, 3, 4, 5, 6, 7, 0b11111111_11000000_00001000_00111111];
+
+                // Set the two bits which should be stripped during packing.
+                let last_word_unstripped = digest_words[7] | 0b11000000u32;
+
+                let expected_packed_digest = {
+                    let repr: [u8; 32] = digest_words
+                        .iter()
+                        .copied()
+                        .flat_map(u32::to_be_bytes)
+                        .collect::<Vec<u8>>()
+                        .try_into()
+                        .unwrap();
+                    Fp::from_repr_vartime(repr).unwrap()
+                };
+
+                let (digest_1, digest_2) = layouter.assign_region(
+                    || "assign digest words",
+                    |mut region| {
+                        let offset = 0;
+
+                        let digest_1: [AssignedBits<Fp, 32>; 8] = digest_words
+                            .iter()
+                            .zip(advice[..8].iter())
+                            .enumerate()
+                            .map(|(word_index, (word, col))| {
+                                AssignedBits::<Fp, 32>::assign(
+                                    &mut region,
+                                    || format!("digest_1 word {}", word_index),
+                                    *col,
+                                    offset,
+                                    Some(*word),
+                                )
+                            })
+                            .collect::<Result<Vec<AssignedBits<Fp, 32>>, Error>>()?
+                            .try_into()
+                            .unwrap();
+
+                        let mut digest_2 = digest_1.clone();
+                        digest_2[7] = AssignedBits::<Fp, 32>::assign(
+                            &mut region,
+                            || "word 7 unstripped",
+                            advice[8],
+                            offset,
+                            Some(last_word_unstripped),
+                        )?;
+
+                        Ok((digest_1, digest_2))
+                    },
+                )?;
+
+                // Test packing a 254-bit sha256 digest into a field element.
+                let packed_digest_1 = sha256_words_chip
+                    .pack_digest(layouter.namespace(|| "pack digest_1"), &digest_1)?;
+
+                assert_eq!(packed_digest_1.value().unwrap(), &expected_packed_digest);
+
+                // Test that packing a 256-bit sha256 digest into a field element strips the two
+                // most significant bits of the last word's least significant byte.
+                let packed_digest_2 = sha256_words_chip
+                    .pack_digest(layouter.namespace(|| "pack digest_2"), &digest_2)?;
+
+                assert_eq!(packed_digest_2.value().unwrap(), &expected_packed_digest);
+
+                Ok(())
+            }
+        }
+
+        let circ = MyCircuit;
+        let prover = MockProver::<Fp>::run(8, &circ, vec![]).unwrap();
         assert!(prover.verify().is_ok());
     }
 }
-*/

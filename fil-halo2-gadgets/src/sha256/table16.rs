@@ -23,8 +23,11 @@ use gates::*;
 use message_schedule::*;
 use spread_table::*;
 
+// TODO (jake): remove
+pub use compression::{get_d_row, get_h_row, match_state, RoundIdx, StateWord};
+
 const ROUNDS: usize = 64;
-const STATE: usize = 8;
+pub(super) const STATE: usize = 8;
 
 #[allow(clippy::unreadable_literal)]
 pub(crate) const ROUND_CONSTANTS: [u32; ROUNDS] = [
