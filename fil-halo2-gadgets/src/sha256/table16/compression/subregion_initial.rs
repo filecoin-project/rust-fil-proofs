@@ -96,7 +96,8 @@ impl<F: FieldExt> CompressionConfig<F> {
         ))
     }
 
-    fn decompose_b(
+    // TODO (jake): remove `pub`.
+    pub fn decompose_b(
         &self,
         region: &mut Region<'_, F>,
         round_idx: RoundIdx,
@@ -109,7 +110,8 @@ impl<F: FieldExt> CompressionConfig<F> {
         Ok(RoundWord::new(dense_halves, spread_halves))
     }
 
-    fn decompose_c(
+    // TODO (jake): remove `pub`.
+    pub fn decompose_c(
         &self,
         region: &mut Region<'_, F>,
         round_idx: RoundIdx,
@@ -122,7 +124,8 @@ impl<F: FieldExt> CompressionConfig<F> {
         Ok(RoundWord::new(dense_halves, spread_halves))
     }
 
-    fn decompose_f(
+    // TODO (jake): remove `pub`.
+    pub fn decompose_f(
         &self,
         region: &mut Region<'_, F>,
         round_idx: RoundIdx,
@@ -135,7 +138,8 @@ impl<F: FieldExt> CompressionConfig<F> {
         Ok(RoundWord::new(dense_halves, spread_halves))
     }
 
-    fn decompose_g(
+    // TODO (jake): remove `pub`.
+    pub fn decompose_g(
         &self,
         region: &mut Region<'_, F>,
         round_idx: RoundIdx,
