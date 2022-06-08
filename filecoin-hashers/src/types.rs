@@ -12,7 +12,7 @@ use bellperson::{
 use blstrs::Scalar as Fr;
 use ec_gpu::GpuField;
 use ff::{Field, PrimeField};
-use fil_halo2_gadgets::NumCols;
+use fil_halo2_gadgets::ColumnCount;
 use halo2_proofs::{
     arithmetic::FieldExt,
     circuit::{AssignedCell, Layouter},
@@ -164,7 +164,7 @@ where
     <Self::Domain as Domain>::Field: FieldExt,
     A: PoseidonArity<<Self::Domain as Domain>::Field>,
 {
-    type Chip: HashInstructions<<Self::Domain as Domain>::Field>;
+    type Chip: HashInstructions<<Self::Domain as Domain>::Field> + ColumnCount;
     type Config: Clone;
 
     fn load(
@@ -175,8 +175,6 @@ where
     }
 
     fn construct(config: Self::Config) -> Self::Chip;
-
-    fn num_cols() -> NumCols;
 
     fn configure(
         meta: &mut plonk::ConstraintSystem<<Self::Domain as Domain>::Field>,

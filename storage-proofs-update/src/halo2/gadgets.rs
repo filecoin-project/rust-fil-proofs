@@ -296,6 +296,7 @@ mod tests {
 
     use std::convert::TryInto;
 
+    use fil_halo2_gadgets::ColumnBuilder;
     use halo2_proofs::{circuit::SimpleFloorPlanner, dev::MockProver, pasta::Fp, plonk::Circuit};
 
     #[derive(Clone)]
@@ -329,8 +330,9 @@ mod tests {
         }
 
         fn configure(meta: &mut ConstraintSystem<F>) -> Self::Config {
-            let (advice_eq, advice_neq, fixed_eq, fixed_neq) =
-                <TreeDHasher<F> as HaloHasher<TreeDArity>>::num_cols().configure(meta);
+            let (advice_eq, advice_neq, fixed_eq, fixed_neq) = ColumnBuilder::new()
+                .with_chip::<<TreeDHasher<F> as HaloHasher<TreeDArity>>::Chip>()
+                .create_columns(meta);
 
             let sha256_config = <TreeDHasher<F> as HaloHasher<TreeDArity>>::configure(
                 meta,

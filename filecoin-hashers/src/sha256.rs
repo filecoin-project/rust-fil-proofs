@@ -11,8 +11,7 @@ use blstrs::Scalar as Fr;
 use ff::PrimeField;
 use fil_halo2_gadgets::{
     sha256::{Sha256FieldChip, Sha256FieldConfig},
-    uint32::U32_DECOMP_NUM_COLS,
-    NumCols,
+    ColumnCount,
 };
 use halo2_proofs::{
     arithmetic::FieldExt,
@@ -589,10 +588,6 @@ where
         Sha256FieldChip::construct(config)
     }
 
-    fn num_cols() -> NumCols {
-        U32_DECOMP_NUM_COLS
-    }
-
     #[allow(clippy::unwrap_used)]
     fn configure(
         meta: &mut plonk::ConstraintSystem<F>,
@@ -601,7 +596,7 @@ where
         _fixed_eq: &[Column<Fixed>],
         _fixed_neq: &[Column<Fixed>],
     ) -> Self::Config {
-        let num_cols = <Self as HaloHasher<A>>::num_cols();
+        let num_cols = <Self as HaloHasher<A>>::Chip::num_cols();
         assert!(advice_eq.len() >= num_cols.advice_eq);
         let advice = advice_eq[..num_cols.advice_eq].try_into().unwrap();
         Sha256FieldChip::configure(meta, advice)
