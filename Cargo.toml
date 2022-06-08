@@ -12,3 +12,7 @@ members = [
   "filecoin-hashers",
   "storage-proofs-update",
 ]
+
+[patch.crates-io]
+async-global-executor = { git = "https://github.com/async-rs/async-global-executor", rev = "v2.0.4" }
+bellperson = { git = "https://github.com/filecoin-project/bellman", branch = "v0-18-release-branch" }
