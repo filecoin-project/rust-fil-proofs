@@ -3,6 +3,7 @@
 use std::any::TypeId;
 use std::convert::TryInto;
 use std::marker::PhantomData;
+use std::mem;
 
 use fil_halo2_gadgets::{
     sha256::{Sha256WordsChip, Sha256WordsConfig},
@@ -626,8 +627,8 @@ where
 
         let (poseidon_base, insert_base) = if base_arity_type == tree_d_arity_type {
             // Convert each chip's `U2` type parameter to `U`.
-            let poseidon_base = unsafe { std::mem::transmute(poseidon_2.clone()) };
-            let insert_base = unsafe { std::mem::transmute(insert_2.clone()) };
+            let poseidon_base = unsafe { mem::transmute(poseidon_2.clone()) };
+            let insert_base = unsafe { mem::transmute(insert_2.clone()) };
             (poseidon_base, insert_base)
         } else {
             let poseidon_base = <PoseidonHasher<F> as HaloHasher<U>>::configure(
@@ -645,13 +646,13 @@ where
             None
         } else if sub_arity_type == tree_d_arity_type {
             // Convert each chip's `U2` type parameter to `V`.
-            let poseidon_sub = unsafe { std::mem::transmute(poseidon_2.clone()) };
-            let insert_sub = unsafe { std::mem::transmute(insert_2.clone()) };
+            let poseidon_sub = unsafe { mem::transmute(poseidon_2.clone()) };
+            let insert_sub = unsafe { mem::transmute(insert_2.clone()) };
             Some((poseidon_sub, insert_sub))
         } else if sub_arity_type == base_arity_type {
             // Convert each chip's `U` type parameter to `V`.
-            let poseidon_sub = unsafe { std::mem::transmute(poseidon_base.clone()) };
-            let insert_sub = unsafe { std::mem::transmute(insert_base.clone()) };
+            let poseidon_sub = unsafe { mem::transmute(poseidon_base.clone()) };
+            let insert_sub = unsafe { mem::transmute(insert_base.clone()) };
             Some((poseidon_sub, insert_sub))
         } else {
             let poseidon_sub = <PoseidonHasher<F> as HaloHasher<V>>::configure(
@@ -669,19 +670,19 @@ where
             None
         } else if top_arity_type == tree_d_arity_type {
             // Convert each chip's `U2` type parameter to `W`.
-            let poseidon_top = unsafe { std::mem::transmute(poseidon_2.clone()) };
-            let insert_top = unsafe { std::mem::transmute(insert_2.clone()) };
+            let poseidon_top = unsafe { mem::transmute(poseidon_2.clone()) };
+            let insert_top = unsafe { mem::transmute(insert_2.clone()) };
             Some((poseidon_top, insert_top))
         } else if top_arity_type == base_arity_type {
             // Convert each chip's `U` type parameter to `W`.
-            let poseidon_top = unsafe { std::mem::transmute(poseidon_base.clone()) };
-            let insert_top = unsafe { std::mem::transmute(insert_base.clone()) };
+            let poseidon_top = unsafe { mem::transmute(poseidon_base.clone()) };
+            let insert_top = unsafe { mem::transmute(insert_base.clone()) };
             Some((poseidon_top, insert_top))
         } else if top_arity_type == sub_arity_type {
             // Convert each chip's `V` type parameter to `W`.
             let (poseidon_sub, insert_sub) = sub.as_ref().unwrap();
-            let poseidon_top = unsafe { std::mem::transmute(poseidon_sub.clone()) };
-            let insert_top = unsafe { std::mem::transmute(insert_sub.clone()) };
+            let poseidon_top = unsafe { mem::transmute(poseidon_sub.clone()) };
+            let insert_top = unsafe { mem::transmute(insert_sub.clone()) };
             Some((poseidon_top, insert_top))
         } else {
             let poseidon_top = <PoseidonHasher<F> as HaloHasher<W>>::configure(
@@ -841,7 +842,7 @@ where
         // Compute `comm_r = H(comm_c, root_r)` and constrain with public input.
         let comm_r = poseidon_2_chip.hash(
             layouter.namespace(|| "calculate comm_r"),
-            &[comm_c.clone(), root_r],
+            &[comm_c.clone(), root_r.clone()],
             POSEIDON_CONSTANTS.get::<FieldArity<F, U2>>().unwrap(),
         )?;
         layouter.constrain_instance(comm_r.cell(), pi_col, Self::COMM_R_ROW)?;
@@ -871,8 +872,7 @@ where
                 leaf_d,
                 &challenge_proof.path_d,
             )?;
-            // TODO (jake): uncomment when sha256 chip is fixed
-            // layouter.constrain_instance(comm_d.cell(), pi_col, Self::COMM_D_ROW)?;
+            layouter.constrain_instance(comm_d.cell(), pi_col, Self::COMM_D_ROW)?;
 
             // Assign the challenge's parent columns.
             let (drg_parent_columns, exp_parent_columns) = layouter.assign_region(
@@ -1017,7 +1017,7 @@ where
                     .map(|parent_column| parent_column[layer_index].clone())
                     .enumerate()
                 {
-                    let parent_label = sha256_words_chip.copy_into_words(
+                    let parent_label = sha256_words_chip.into_words(
                         layouter.namespace(|| {
                             format!(
                                 "drg parent {} layer {} label into sha256 words",
@@ -1036,7 +1036,7 @@ where
                         .map(|parent_column| parent_column[layer_index - 1].clone())
                         .enumerate()
                     {
-                        let parent_label = sha256_words_chip.copy_into_words(
+                        let parent_label = sha256_words_chip.into_words(
                             layouter.namespace(|| {
                                 format!(
                                     "exp parent {} layer {} label into sha256 words",
@@ -1083,14 +1083,10 @@ where
                 &leaf_c,
                 &challenge_proof.path_c,
             )?;
-            // TODO (jake): uncomment once sha256 chip is fixed (which would allow the labeling chip
-            // to return the correct layer labels).
-            /*
             layouter.assign_region(
                 || "constrain challenge's comm_c",
                 |mut region| region.constrain_equal(comm_c.cell(), comm_c_calc.cell()),
             )?;
-            */
 
             // Compute the challenge's encoding `leaf_r = leaf_d + key`, where the encoding key is
             // the challenge's last layer label.
@@ -1107,14 +1103,10 @@ where
                 &leaf_r,
                 &challenge_proof.path_r,
             )?;
-            // TODO (jake): uncomment once sha256 chip is fixed (which would allow the labeling chip
-            // to return the correct layer labels).
-            /*
             layouter.assign_region(
                 || "constrain challenge's root_r",
                 |mut region| region.constrain_equal(root_r_calc.cell(), root_r.cell()),
             )?;
-            */
         }
 
         Ok(())

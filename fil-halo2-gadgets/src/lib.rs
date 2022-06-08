@@ -31,87 +31,6 @@ pub struct NumCols {
     pub fixed_neq: usize,
 }
 
-impl NumCols {
-    pub fn for_circuit(chips: &[NumCols]) -> Self {
-        let mut advice_total = 0;
-        let mut fixed_total = 0;
-        let mut advice_eq = 0;
-        let mut fixed_eq = 0;
-
-        for chip in chips {
-            advice_total = max(chip.advice_eq + chip.advice_neq, advice_total);
-            fixed_total = max(chip.fixed_eq + chip.fixed_neq, fixed_total);
-            advice_eq = max(chip.advice_eq, advice_eq);
-            fixed_eq = max(chip.fixed_eq, fixed_eq);
-        }
-
-        let advice_neq = advice_total - advice_eq;
-        let fixed_neq = fixed_total - fixed_eq;
-
-        NumCols {
-            advice_eq,
-            advice_neq,
-            fixed_eq,
-            fixed_neq,
-        }
-    }
-
-    pub fn configure<F: FieldExt>(
-        &self,
-        meta: &mut ConstraintSystem<F>,
-    ) -> (AdviceEq, AdviceNeq, FixedEq, FixedNeq) {
-        let advice_eq = (0..self.advice_eq).map(|_| meta.advice_column()).collect();
-        let advice_neq = (0..self.advice_neq).map(|_| meta.advice_column()).collect();
-        let fixed_eq = (0..self.fixed_eq).map(|_| meta.fixed_column()).collect();
-        let fixed_neq = (0..self.fixed_neq).map(|_| meta.fixed_column()).collect();
-        (advice_eq, advice_neq, fixed_eq, fixed_neq)
-    }
-}
-
-pub enum WitnessOrCopy<T, F: FieldExt> {
-    Witness(Option<T>),
-    Copy(AssignedCell<T, F>),
-    // Public input `(column, absolute row)`.
-    PiCopy(Column<Instance>, usize),
-}
-
-pub struct AdviceIter {
-    offset: usize,
-    advice: Vec<Column<Advice>>,
-    num_cols: usize,
-    col_index: usize,
-}
-
-impl From<Vec<Column<Advice>>> for AdviceIter {
-    fn from(advice: Vec<Column<Advice>>) -> Self {
-        Self::new(0, advice)
-    }
-}
-
-impl AdviceIter {
-    pub fn new(offset: usize, advice: Vec<Column<Advice>>) -> Self {
-        let num_cols = advice.len();
-        assert_ne!(num_cols, 0);
-        AdviceIter {
-            offset,
-            advice,
-            col_index: 0,
-            num_cols,
-        }
-    }
-
-    #[allow(clippy::should_implement_trait)]
-    pub fn next(&mut self) -> (usize, Column<Advice>) {
-        if self.col_index == self.num_cols {
-            self.offset += 1;
-            self.col_index = 0;
-        }
-        let ret = (self.offset, self.advice[self.col_index]);
-        self.col_index += 1;
-        ret
-    }
-}
-
 pub trait ColumnCount {
     fn num_cols() -> NumCols;
 }
@@ -168,5 +87,49 @@ impl<F: FieldExt, A: Arity<F>> ColumnCount for PoseidonChip<F, A> {
             fixed_eq: 1,
             fixed_neq: 2 * width - 1,
         }
+    }
+}
+
+pub enum WitnessOrCopy<T, F: FieldExt> {
+    Witness(Option<T>),
+    Copy(AssignedCell<T, F>),
+    // Public input `(column, absolute row)`.
+    PiCopy(Column<Instance>, usize),
+}
+
+pub struct AdviceIter {
+    offset: usize,
+    advice: Vec<Column<Advice>>,
+    num_cols: usize,
+    col_index: usize,
+}
+
+impl From<Vec<Column<Advice>>> for AdviceIter {
+    fn from(advice: Vec<Column<Advice>>) -> Self {
+        Self::new(0, advice)
+    }
+}
+
+impl AdviceIter {
+    pub fn new(offset: usize, advice: Vec<Column<Advice>>) -> Self {
+        let num_cols = advice.len();
+        assert_ne!(num_cols, 0);
+        AdviceIter {
+            offset,
+            advice,
+            col_index: 0,
+            num_cols,
+        }
+    }
+
+    #[allow(clippy::should_implement_trait)]
+    pub fn next(&mut self) -> (usize, Column<Advice>) {
+        if self.col_index == self.num_cols {
+            self.offset += 1;
+            self.col_index = 0;
+        }
+        let ret = (self.offset, self.advice[self.col_index]);
+        self.col_index += 1;
+        ret
     }
 }

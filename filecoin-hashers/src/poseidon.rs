@@ -7,7 +7,7 @@ use bellperson::{
 };
 use blstrs::Scalar as Fr;
 use ff::{Field, PrimeField};
-use fil_halo2_gadgets::NumCols;
+use fil_halo2_gadgets::ColumnCount;
 use generic_array::typenum::{Unsigned, U2, U4, U8};
 use halo2_proofs::{
     arithmetic::FieldExt,
@@ -678,17 +678,6 @@ where
         PoseidonChip::construct(config)
     }
 
-    fn num_cols() -> NumCols {
-        let width = A::to_usize() + 1;
-        NumCols {
-            advice_eq: width,
-            advice_neq: 1,
-            // Poseidon requires `2 * width` fixed columns.
-            fixed_eq: 1,
-            fixed_neq: 2 * width - 1,
-        }
-    }
-
     #[allow(clippy::unwrap_used)]
     fn configure(
         meta: &mut plonk::ConstraintSystem<F>,
@@ -697,7 +686,7 @@ where
         fixed_eq: &[Column<Fixed>],
         fixed_neq: &[Column<Fixed>],
     ) -> Self::Config {
-        let num_cols = <Self as HaloHasher<A>>::num_cols();
+        let num_cols = <Self as HaloHasher<A>>::Chip::num_cols();
 
         // Check that we have enough equality enabled and total columns.
         let advice_eq_len = advice_eq.len();
