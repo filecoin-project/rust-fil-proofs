@@ -270,7 +270,7 @@ where
 
     pub fn label(
         &self,
-        layouter: impl Layouter<F>,
+        mut layouter: impl Layouter<F>,
         labeling_constants: &LabelingConstants<F, SECTOR_NODES>,
         layer_index: usize,
         replica_id: &[AssignedU32<F>; 8],
@@ -297,8 +297,13 @@ where
             .cloned()
             .collect();
 
-        <Sha256Hasher<F> as HaloHasher<U2>>::construct(self.config.sha256.clone())
-            .hash_words_nopad(layouter, &preimage)
+        let sha256_chip =
+            <Sha256Hasher<F> as HaloHasher<U2>>::construct(self.config.sha256.clone());
+
+        let digest_words =
+            sha256_chip.hash_words_nopad(layouter.namespace(|| "sha256"), &preimage)?;
+
+        sha256_chip.pack_digest(layouter.namespace(|| "pack digest"), &digest_words)
     }
 }
 

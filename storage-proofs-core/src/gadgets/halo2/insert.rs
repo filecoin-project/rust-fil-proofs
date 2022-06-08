@@ -91,19 +91,6 @@ where
         InsertChip { config }
     }
 
-    pub fn num_cols() -> NumCols {
-        let arity = A::to_usize();
-        let index_bit_len = arity.trailing_zeros() as usize;
-        NumCols {
-            // The index bits, insertion value, and inserted array must be equality constrained.
-            advice_eq: index_bit_len + 1 + arity,
-            // Witness the uninserted array.
-            advice_neq: arity - 1,
-            fixed_eq: 0,
-            fixed_neq: 0,
-        }
-    }
-
     // # Side Effects
     //
     // The first `Self::num_cols().advice_eq` columns of `advice_eq` will be equality enabled.

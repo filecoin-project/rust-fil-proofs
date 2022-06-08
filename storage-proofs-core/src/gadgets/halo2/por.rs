@@ -306,7 +306,7 @@ mod test {
     use ff::PrimeField;
     use fil_halo2_gadgets::{
         uint32::{AssignedU32, UInt32Chip, UInt32Config},
-        NumCols,
+        ColumnBuilder,
     };
     use filecoin_hashers::{poseidon::PoseidonHasher, sha256::Sha256Hasher, HashFunction};
     use generic_array::typenum::{U0, U2, U4, U8};
@@ -395,15 +395,14 @@ mod test {
 
         #[allow(clippy::unwrap_used)]
         fn configure(meta: &mut ConstraintSystem<<H::Domain as Domain>::Field>) -> Self::Config {
-            let uint32_cols = UInt32Chip::<<H::Domain as Domain>::Field>::num_cols();
-            let hasher_cols = <H as HaloHasher<U>>::num_cols();
-            let insert_cols = InsertChip::<<H::Domain as Domain>::Field, U>::num_cols();
-
-            let (advice_eq, advice_neq, fixed_eq, fixed_neq) =
-                NumCols::for_circuit(&[uint32_cols, hasher_cols, insert_cols]).configure(meta);
+            let (advice_eq, advice_neq, fixed_eq, fixed_neq) = ColumnBuilder::new()
+                .with_chip::<UInt32Chip<<H::Domain as Domain>::Field>>()
+                .with_chip::<<H as HaloHasher<U>>::Chip>()
+                .with_chip::<InsertChip::<<H::Domain as Domain>::Field, U>>()
+                .create_columns(meta);
 
             let uint32 =
-                UInt32Chip::configure(meta, advice_eq[..uint32_cols.advice_eq].try_into().unwrap());
+                UInt32Chip::configure(meta, advice_eq[..9].try_into().unwrap());
 
             let base_hasher = <H as HaloHasher<U>>::configure(
                 meta,
@@ -418,6 +417,8 @@ mod test {
                 &advice_eq,
                 &advice_neq,
             );
+
+            // TODO (jake): do not configure hash circuits for duplicate arities.
 
             let sub = if V::to_usize() == 0 {
                 None
@@ -671,7 +672,7 @@ mod test {
             &mut rng, num_leafs, None,
         );
 
-        for _ in 0..50 {
+        for _ in 0..10 {
             let challenge = rng.gen::<usize>() % num_leafs;
             let merkle_proof = tree.gen_proof(challenge).unwrap();
             let circ = MyCircuit::<H, U, V, W>::with_witness(challenge as u32, &merkle_proof);
@@ -713,11 +714,8 @@ mod test {
         test_merkle_chip_inner::<PoseidonHasher<Fp>, U8, U4, U2>();
     }
 
-    // TODO (jake): fix failing test.
-    /*
     #[test]
     fn test_merkle_chip_sha256_2() {
         test_merkle_chip_inner::<Sha256Hasher<Fp>, U2, U0, U0>();
     }
-    */
 }

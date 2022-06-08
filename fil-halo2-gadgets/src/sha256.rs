@@ -983,6 +983,15 @@ impl<F: FieldExt> Sha256FieldChip<F> {
         // Pack digest words into a field element.
         words_chip.pack_digest(layouter.namespace(|| "pack digest"), &digest_words)
     }
+
+    pub fn pack_digest(
+        &self,
+        layouter: impl Layouter<F>,
+        digest_words: &[AssignedBits<F, 32>; 8],
+    ) -> Result<AssignedCell<F, F>, Error> {
+        Sha256WordsChip::construct(self.config.sha256_words.clone())
+            .pack_digest(layouter, &digest_words)
+    }
 }
 
 #[derive(Clone, Debug)]
