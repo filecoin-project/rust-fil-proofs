@@ -10,7 +10,7 @@ use bellperson::{
 use blstrs::Scalar as Fr;
 use ff::PrimeField;
 use fil_halo2_gadgets::{
-    sha256::{Sha256PackedChip, Sha256PackedConfig},
+    sha256::{Sha256FieldChip, Sha256FieldConfig},
     uint32::U32_DECOMP_NUM_COLS,
     NumCols,
 };
@@ -558,7 +558,7 @@ impl Hasher for Sha256Hasher<Fq> {
     }
 }
 
-impl<F: FieldExt> HashInstructions<F> for Sha256PackedChip<F> {
+impl<F: FieldExt> HashInstructions<F> for Sha256FieldChip<F> {
     fn hash(
         &self,
         layouter: impl Layouter<F>,
@@ -575,18 +575,18 @@ where
     F: FieldExt,
     A: PoseidonArity<F>,
 {
-    type Chip = Sha256PackedChip<F>;
-    type Config = Sha256PackedConfig<F>;
+    type Chip = Sha256FieldChip<F>;
+    type Config = Sha256FieldConfig<F>;
 
     fn load(
         layouter: &mut impl Layouter<<Self::Domain as Domain>::Field>,
         config: &Self::Config,
     ) -> Result<(), plonk::Error> {
-        Sha256PackedChip::load(layouter, config)
+        Sha256FieldChip::load(layouter, config)
     }
 
     fn construct(config: Self::Config) -> Self::Chip {
-        Sha256PackedChip::construct(config)
+        Sha256FieldChip::construct(config)
     }
 
     fn num_cols() -> NumCols {
@@ -604,6 +604,202 @@ where
         let num_cols = <Self as HaloHasher<A>>::num_cols();
         assert!(advice_eq.len() >= num_cols.advice_eq);
         let advice = advice_eq[..num_cols.advice_eq].try_into().unwrap();
-        Sha256PackedChip::configure(meta, advice)
+        Sha256FieldChip::configure(meta, advice)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use bellperson::{
+        gadgets::num::AllocatedNum, util_cs::test_cs::TestConstraintSystem, ConstraintSystem as _,
+    };
+    use blstrs::Scalar as Fr;
+    use ff::{Field, PrimeField};
+    use fil_halo2_gadgets::AdviceIter;
+    use generic_array::typenum::U2;
+    use halo2_proofs::{
+        arithmetic::FieldExt,
+        circuit::{AssignedCell, Layouter, SimpleFloorPlanner},
+        dev::MockProver,
+        pasta::{Fp, Fq},
+        plonk::{Advice, Circuit, Column, ConstraintSystem, Error},
+    };
+
+    #[test]
+    fn test_sha256_bls_pasta_compat() {
+        // Test two one-block and two two-block preimages.
+        let preimages = [vec![1u8], vec![0, 55, 0, 0], vec![1; 64], vec![1; 100]];
+        for preimage in &preimages {
+            let digest_fr =
+                <<Sha256Hasher<Fr> as Hasher>::Function as HashFunction<Sha256Domain<Fr>>>::hash(
+                    &preimage,
+                );
+            let digest_fp =
+                <<Sha256Hasher<Fp> as Hasher>::Function as HashFunction<Sha256Domain<Fp>>>::hash(
+                    &preimage,
+                );
+            let digest_fq =
+                <<Sha256Hasher<Fq> as Hasher>::Function as HashFunction<Sha256Domain<Fq>>>::hash(
+                    &preimage,
+                );
+            assert_eq!(digest_fr.state, digest_fp.state);
+            assert_eq!(digest_fr.state, digest_fq.state);
+        }
+    }
+
+    // Choose an arbitrary arity type because it is ignored by the sha256 circuit.
+    type A = U2;
+
+    struct Sha256Circuit<F>
+    where
+        F: FieldExt,
+        Sha256Hasher<F>: HaloHasher<A>,
+        <Sha256Hasher<F> as Hasher>::Domain: Domain<Field = F>,
+    {
+        preimage: Vec<Option<F>>,
+        groth_digest: Fr,
+    }
+
+    impl<F> Circuit<F> for Sha256Circuit<F>
+    where
+        F: FieldExt,
+        Sha256Hasher<F>: HaloHasher<A>,
+        <Sha256Hasher<F> as Hasher>::Domain: Domain<Field = F>,
+    {
+        type Config = (<Sha256Hasher<F> as HaloHasher<A>>::Config, [Column<Advice>; 9]);
+        type FloorPlanner = SimpleFloorPlanner;
+
+        fn without_witnesses(&self) -> Self {
+            Sha256Circuit {
+                preimage: vec![None; self.preimage.len()],
+                groth_digest: Fr::zero(),
+            }
+        }
+
+        fn configure(meta: &mut ConstraintSystem<F>) -> Self::Config {
+            let advice = [
+                meta.advice_column(),
+                meta.advice_column(),
+                meta.advice_column(),
+                meta.advice_column(),
+                meta.advice_column(),
+                meta.advice_column(),
+                meta.advice_column(),
+                meta.advice_column(),
+                meta.advice_column(),
+            ];
+            let sha256 =
+                <Sha256Hasher<F> as HaloHasher<A>>::configure(meta, &advice, &[], &[], &[]);
+            (sha256, advice)
+        }
+
+        fn synthesize(
+            &self,
+            config: Self::Config,
+            mut layouter: impl Layouter<F>,
+        ) -> Result<(), Error> {
+            let (sha256_config, advice) = config;
+
+            <Sha256Hasher<F> as HaloHasher<A>>::load(&mut layouter, &sha256_config)?;
+            let sha256_chip = <Sha256Hasher<F> as HaloHasher<A>>::construct(sha256_config);
+
+            let preimage = layouter.assign_region(
+                || "assign preimage",
+                |mut region| {
+                    let mut advice_iter = AdviceIter::from(advice.to_vec());
+                    self
+                        .preimage
+                        .iter()
+                        .enumerate()
+                        .map(|(i, elem)| {
+                            let (offset, col) = advice_iter.next();
+                            region.assign_advice(
+                                || format!("preimage elem {}", i),
+                                col,
+                                offset,
+                                || elem.ok_or(Error::Synthesis),
+                            )
+                        })
+                        .collect::<Result<Vec<AssignedCell<F, F>>, Error>>()
+                },
+            )?;
+
+            let digest = <<Sha256Hasher<F> as HaloHasher<A>>::Chip as HashInstructions<F>>::hash(
+                &sha256_chip,
+                layouter.namespace(|| "sha256"),
+                &preimage,
+            )?;
+
+            assert_eq!(
+                digest.value().unwrap().to_repr().as_ref(),
+                self.groth_digest.to_repr().as_ref(),
+            );
+
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn test_sha256_groth16_halo2_compat() {
+        // Test one-element preimage.
+        {
+            let groth_digest: Fr = {
+                let mut cs = TestConstraintSystem::<Fr>::new();
+                let preimage = [AllocatedNum::alloc(&mut cs, || Ok(Fr::one())).unwrap()];
+                <Sha256Hasher<Fr> as Hasher>::Function::hash_multi_leaf_circuit::<A, _>(&mut cs, &preimage, 0)
+                    .unwrap()
+                    .get_value()
+                    .unwrap()
+            };
+
+            // Compute Halo2 digest using Pallas field.
+            let circ = Sha256Circuit {
+                preimage: vec![Some(Fp::one())],
+                groth_digest,
+            };
+            let prover = MockProver::run(17, &circ, vec![]).unwrap();
+            assert!(prover.verify().is_ok());
+
+            // Compute Halo2 digest using Vesta field.
+            let circ = Sha256Circuit {
+                preimage: vec![Some(Fq::one())],
+                groth_digest,
+            };
+            let prover = MockProver::run(17, &circ, vec![]).unwrap();
+            assert!(prover.verify().is_ok());
+        }
+
+        // Test two-element preimage.
+        {
+            let groth_digest: Fr = {
+                let mut cs = TestConstraintSystem::<Fr>::new();
+                let preimage = [
+                    AllocatedNum::alloc(cs.namespace(|| "preimage elem 1"), || Ok(Fr::one())).unwrap(),
+                    AllocatedNum::alloc(cs.namespace(|| "preimage elem 2"), || Ok(Fr::from(55))).unwrap(),
+                ];
+                <Sha256Hasher<Fr> as Hasher>::Function::hash_multi_leaf_circuit::<A, _>(&mut cs, &preimage, 0)
+                    .unwrap()
+                    .get_value()
+                    .unwrap()
+            };
+
+            // Compute Halo2 digest using Pallas field.
+            let circ = Sha256Circuit {
+                preimage: vec![Some(Fp::one()), Some(Fp::from(55))],
+                groth_digest,
+            };
+            let prover = MockProver::run(17, &circ, vec![]).unwrap();
+            assert!(prover.verify().is_ok());
+
+            // Compute Halo2 digest using Vesta field.
+            let circ = Sha256Circuit {
+                preimage: vec![Some(Fq::one()), Some(Fq::from(55))],
+                groth_digest,
+            };
+            let prover = MockProver::run(17, &circ, vec![]).unwrap();
+            assert!(prover.verify().is_ok());
+        }
     }
 }

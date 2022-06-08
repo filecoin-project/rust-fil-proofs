@@ -41,7 +41,7 @@ pub const DIGEST_SIZE: usize = 8;
 const FIELD_WORD_LEN: usize = 8;
 
 /// The set of circuit instructions required to use the [`Sha256`] gadget.
-trait Sha256Instructions<F: FieldExt>: Chip<F> {
+pub trait Sha256Instructions<F: FieldExt>: Chip<F> {
     /// Variable representing the SHA-256 internal state.
     type State: Clone + fmt::Debug;
     /// Variable representing a 32-bit word of the input block to the SHA-256 compression
@@ -77,12 +77,12 @@ trait Sha256Instructions<F: FieldExt>: Chip<F> {
 
 /// The output of a SHA-256 circuit invocation.
 #[derive(Debug)]
-struct Sha256Digest<BlockWord>([BlockWord; DIGEST_SIZE]);
+pub struct Sha256Digest<BlockWord>([BlockWord; DIGEST_SIZE]);
 
 /// A gadget that constrains a SHA-256 invocation. It supports input at a granularity of
 /// 32 bits.
 #[derive(Debug)]
-struct Sha256<F: FieldExt, CS: Sha256Instructions<F>> {
+pub struct Sha256<F: FieldExt, CS: Sha256Instructions<F>> {
     chip: CS,
     state: CS::State,
     cur_block: Vec<CS::BlockWord>,
@@ -91,7 +91,7 @@ struct Sha256<F: FieldExt, CS: Sha256Instructions<F>> {
 
 impl<F: FieldExt, Sha256Chip: Sha256Instructions<F>> Sha256<F, Sha256Chip> {
     /// Create a new hasher instance.
-    fn new(chip: Sha256Chip, mut layouter: impl Layouter<F>) -> Result<Self, Error> {
+    pub fn new(chip: Sha256Chip, mut layouter: impl Layouter<F>) -> Result<Self, Error> {
         let state = chip.initialization_vector(&mut layouter)?;
         Ok(Sha256 {
             chip,
@@ -102,7 +102,7 @@ impl<F: FieldExt, Sha256Chip: Sha256Instructions<F>> Sha256<F, Sha256Chip> {
     }
 
     /// Digest data, updating the internal state.
-    fn update(
+    pub fn update(
         &mut self,
         mut layouter: impl Layouter<F>,
         mut data: &[Sha256Chip::BlockWord],
@@ -149,7 +149,7 @@ impl<F: FieldExt, Sha256Chip: Sha256Instructions<F>> Sha256<F, Sha256Chip> {
     }
 
     /// Retrieve result and consume hasher instance.
-    fn finalize(
+    pub fn finalize(
         mut self,
         mut layouter: impl Layouter<F>,
     ) -> Result<Sha256Digest<Sha256Chip::BlockWord>, Error> {
@@ -173,7 +173,7 @@ impl<F: FieldExt, Sha256Chip: Sha256Instructions<F>> Sha256<F, Sha256Chip> {
 
     /// Convenience function to compute hash of the data. It will handle hasher creation,
     /// data feeding and finalization.
-    fn digest(
+    pub fn digest(
         chip: Sha256Chip,
         mut layouter: impl Layouter<F>,
         data: &[Sha256Chip::BlockWord],
