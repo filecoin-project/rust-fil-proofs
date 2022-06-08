@@ -1,13 +1,13 @@
-// TODO (jake): remove this once sha256 chip is fixed
-#![allow(unused_variables)]
-
+use std::any::TypeId;
 use std::convert::TryInto;
 use std::marker::PhantomData;
+use std::mem;
+use std::ops::Range;
 
 use fil_halo2_gadgets::{
     boolean::{AssignedBit, Bit},
     select::{SelectChip, SelectConfig},
-    AdviceIter, NumCols,
+    AdviceIter, ColumnBuilder,
 };
 use filecoin_hashers::{Domain, FieldArity, HaloHasher, Hasher, PoseidonArity, POSEIDON_CONSTANTS};
 use generic_array::typenum::U2;
@@ -49,6 +49,22 @@ trait CircuitParams<const SECTOR_NODES: usize> {
         Self::CHALLENGE_BIT_LEN - Self::PARTITION_BIT_LEN;
     const CHALLENGE_TO_APEX_LEAF_BIT_LEN: usize =
         Self::CHALLENGE_SANS_PARTITION_BIT_LEN - Self::APEX_LEAF_BIT_LEN;
+    const PARTITION_BITS_ROWS: Range<usize> = 0..Self::PARTITION_BIT_LEN;
+    const COMM_R_OLD_ROW: usize = Self::PARTITION_BIT_LEN;
+    const COMM_D_NEW_ROW: usize = Self::COMM_R_OLD_ROW + 1;
+    const COMM_R_NEW_ROW: usize = Self::COMM_D_NEW_ROW + 1;
+    const FIRST_CHALLENGE_ROW: usize = Self::COMM_R_NEW_ROW + 1;
+    const FIRST_RHO_ROW: usize = Self::FIRST_CHALLENGE_ROW + Self::CHALLENGE_COUNT;
+
+    #[inline]
+    fn challenge_row(challenge_index: usize) -> usize {
+        Self::FIRST_CHALLENGE_ROW + challenge_index
+    }
+
+    #[inline]
+    fn challenge_rho_row(challenge_index: usize) -> usize {
+        Self::FIRST_RHO_ROW + challenge_index
+    }
 }
 
 #[derive(Clone)]
@@ -528,12 +544,11 @@ where
     }
 
     fn configure(meta: &mut ConstraintSystem<F>) -> Self::Config {
-        let (advice_eq, advice_neq, fixed_eq, fixed_neq) = NumCols::for_circuit(&[
-            <TreeDHasher<F> as HaloHasher<TreeDArity>>::num_cols(),
-            <TreeRHasher<F> as HaloHasher<U>>::num_cols(),
-            InsertChip::<F, U>::num_cols(),
-        ])
-        .configure(meta);
+        let (advice_eq, advice_neq, fixed_eq, fixed_neq) = ColumnBuilder::new()
+            .with_chip::<<TreeDHasher<F> as HaloHasher<TreeDArity>>::Chip>()
+            .with_chip::<<TreeRHasher<F> as HaloHasher<U>>::Chip>()
+            .with_chip::<InsertChip<F, U>>()
+            .create_columns(meta);
 
         let sha256_2 = <TreeDHasher<F> as HaloHasher<TreeDArity>>::configure(
             meta,
@@ -543,10 +558,7 @@ where
             &fixed_neq,
         );
 
-        let insert_2 = InsertChip::configure(meta, &advice_eq, &advice_neq);
-
-        // TODO (jake): reuse hasher and insert configs (so we don't duplicate selectors) when
-        // arities match.
+        let insert_2 = InsertChip::<F, U2>::configure(meta, &advice_eq, &advice_neq);
 
         let poseidon_2 = <TreeRHasher<F> as HaloHasher<U2>>::configure(
             meta,
@@ -556,18 +568,40 @@ where
             &fixed_neq,
         );
 
-        let poseidon_base = <TreeRHasher<F> as HaloHasher<U>>::configure(
-            meta,
-            &advice_eq,
-            &advice_neq,
-            &fixed_eq,
-            &fixed_neq,
-        );
+        let tree_d_arity_type = TypeId::of::<U2>();
+        let base_arity_type = TypeId::of::<U>();
+        let sub_arity_type = TypeId::of::<V>();
+        let top_arity_type = TypeId::of::<W>();
 
-        let insert_base = InsertChip::configure(meta, &advice_eq, &advice_neq);
+        let (poseidon_base, insert_base) = if base_arity_type == tree_d_arity_type {
+            // Convert each chip's `U2` type parameter to `U`.
+            let poseidon_base = unsafe { mem::transmute(poseidon_2.clone()) };
+            let insert_base = unsafe { mem::transmute(insert_2.clone()) };
+            (poseidon_base, insert_base)
+        } else {
+            let poseidon_base = <TreeRHasher<F> as HaloHasher<U>>::configure(
+                meta,
+                &advice_eq,
+                &advice_neq,
+                &fixed_eq,
+                &fixed_neq,
+            );
+            let insert_base = InsertChip::<F, U>::configure(meta, &advice_eq, &advice_neq);
+            (poseidon_base, insert_base)
+        };
 
         let sub = if V::to_usize() == 0 {
             None
+        } else if sub_arity_type == tree_d_arity_type {
+            // Convert each chip's `U2` type parameter to `V`.
+            let poseidon_sub = unsafe { mem::transmute(poseidon_2.clone()) };
+            let insert_sub = unsafe { mem::transmute(insert_2.clone()) };
+            Some((poseidon_sub, insert_sub))
+        } else if sub_arity_type == base_arity_type {
+            // Convert each chip's `U` type parameter to `V`.
+            let poseidon_sub = unsafe { mem::transmute(poseidon_base.clone()) };
+            let insert_sub = unsafe { mem::transmute(insert_base.clone()) };
+            Some((poseidon_sub, insert_sub))
         } else {
             let poseidon_sub = <TreeRHasher<F> as HaloHasher<V>>::configure(
                 meta,
@@ -576,12 +610,28 @@ where
                 &fixed_eq,
                 &fixed_neq,
             );
-            let insert_sub = InsertChip::configure(meta, &advice_eq, &advice_neq);
+            let insert_sub = InsertChip::<F, V>::configure(meta, &advice_eq, &advice_neq);
             Some((poseidon_sub, insert_sub))
         };
 
         let top = if W::to_usize() == 0 {
             None
+        } else if top_arity_type == tree_d_arity_type {
+            // Convert each chip's `U2` type parameter to `W`.
+            let poseidon_top = unsafe { mem::transmute(poseidon_2.clone()) };
+            let insert_top = unsafe { mem::transmute(insert_2.clone()) };
+            Some((poseidon_top, insert_top))
+        } else if top_arity_type == base_arity_type {
+            // Convert each chip's `U` type parameter to `W`.
+            let poseidon_top = unsafe { mem::transmute(poseidon_base.clone()) };
+            let insert_top = unsafe { mem::transmute(insert_base.clone()) };
+            Some((poseidon_top, insert_top))
+        } else if top_arity_type == sub_arity_type {
+            // Convert each chip's `V` type parameter to `W`.
+            let (poseidon_sub, insert_sub) = sub.as_ref().unwrap();
+            let poseidon_top = unsafe { mem::transmute(poseidon_sub.clone()) };
+            let insert_top = unsafe { mem::transmute(insert_sub.clone()) };
+            Some((poseidon_top, insert_top))
         } else {
             let poseidon_top = <TreeRHasher<F> as HaloHasher<W>>::configure(
                 meta,
@@ -590,7 +640,7 @@ where
                 &fixed_eq,
                 &fixed_neq,
             );
-            let insert_top = InsertChip::configure(meta, &advice_eq, &advice_neq);
+            let insert_top = InsertChip::<F, W>::configure(meta, &advice_eq, &advice_neq);
             Some((poseidon_top, insert_top))
         };
 
@@ -751,12 +801,9 @@ where
             },
         )?;
 
-        let mut pi_row = 0;
-
         // Constrain partition bits with public inputs.
-        for bit in partition_bits.iter() {
+        for (bit, pi_row) in partition_bits.iter().zip(Self::PARTITION_BITS_ROWS) {
             layouter.constrain_instance(bit.cell(), pi_col, pi_row)?;
-            pi_row += 1;
         }
 
         // Compute `comm_r_old = H(comm_c, root_r_old)`.
@@ -790,28 +837,22 @@ where
         };
 
         // Constrain witnessed commitments with public inputs.
-        layouter.constrain_instance(comm_r_old.cell(), pi_col, pi_row)?;
-        pi_row += 1;
-        // TODO (jake): uncomment this line when sha256 chip is fixed
-        // layouter.constrain_instance(comm_d_new.cell(), pi_col, pi_row)?;
-        pi_row += 1;
-        layouter.constrain_instance(comm_r_new.cell(), pi_col, pi_row)?;
-        pi_row += 1;
+        layouter.constrain_instance(comm_r_old.cell(), pi_col, Self::COMM_R_OLD_ROW)?;
+        layouter.constrain_instance(comm_d_new.cell(), pi_col, Self::COMM_D_NEW_ROW)?;
+        layouter.constrain_instance(comm_r_new.cell(), pi_col, Self::COMM_R_NEW_ROW)?;
 
         // Decompose public challenges into bits.
-        let challenge_bits = (0..Self::CHALLENGE_COUNT)
+        let challenges_bits = (0..Self::CHALLENGE_COUNT)
             .map(|i| {
-                let challenge_bits = challenge_bits_chip.decompose(
+                challenge_bits_chip.decompose(
                     layouter.namespace(|| format!("decompose challenge {}", i)),
                     pi_col,
-                    pi_row,
-                )?;
-                pi_row += 1;
-                Ok(challenge_bits)
+                    Self::challenge_row(i),
+                )
             })
             .collect::<Result<Vec<Vec<AssignedBit<F>>>, Error>>()?;
 
-        for (i, (challenge_bits, challenge_proof)) in challenge_bits
+        for (i, (challenge_bits, challenge_proof)) in challenges_bits
             .iter()
             .zip(priv_inputs.challenge_proofs.iter())
             .enumerate()
@@ -822,9 +863,8 @@ where
                 &challenge_proof.leaf_d_new,
                 &challenge_proof.leaf_r_new,
                 pi_col,
-                pi_row,
+                Self::challenge_rho_row(i),
             )?;
-            pi_row += 1;
 
             let challenge_and_partition_bits: Vec<AssignedBit<F>> = challenge_bits
                 .iter()
@@ -839,6 +879,10 @@ where
                 &label_r_old,
                 &challenge_proof.path_r_old,
             )?;
+            layouter.assign_region(
+                || format!("check challenge {} root_r_old_calc", i),
+                |mut region| region.constrain_equal(root_r_old.cell(), root_r_old_calc.cell()),
+            )?;
 
             let root_r_new_calc = tree_r_merkle_chip.copy_leaf_compute_root(
                 layouter
@@ -846,6 +890,10 @@ where
                 &challenge_and_partition_bits,
                 &label_r_new,
                 &challenge_proof.path_r_new,
+            )?;
+            layouter.assign_region(
+                || format!("check challenge {} root_r_new_calc", i),
+                |mut region| region.constrain_equal(root_r_new.cell(), root_r_new_calc.cell()),
             )?;
 
             let (challenge_bits_to_apex_leaf, apex_leaf_bits) =
@@ -867,58 +915,9 @@ where
                 &label_d_new,
                 path_to_apex_leaf,
             )?;
-
             layouter.assign_region(
-                || format!("check merkle proof roots for challenge {}", i),
-                |mut region| {
-                    let offset = 0;
-
-                    // TODO (jake): are these copies necessary?
-                    let root_r_old = root_r_old.copy_advice(
-                        || "copy root_r_old",
-                        &mut region,
-                        advice[0],
-                        offset,
-                    )?;
-                    let root_r_old_calc = root_r_old_calc.copy_advice(
-                        || "copy root_r_old_calc",
-                        &mut region,
-                        advice[1],
-                        offset,
-                    )?;
-                    region.constrain_equal(root_r_old.cell(), root_r_old_calc.cell())?;
-
-                    // TODO (jake): are these copies necessary?
-                    let root_r_new = root_r_new.copy_advice(
-                        || "copy root_r_new",
-                        &mut region,
-                        advice[2],
-                        offset,
-                    )?;
-                    let root_r_new_calc = root_r_new_calc.copy_advice(
-                        || "copy root_r_new_calc",
-                        &mut region,
-                        advice[3],
-                        offset,
-                    )?;
-                    region.constrain_equal(root_r_new.cell(), root_r_new_calc.cell())?;
-
-                    let apex_leaf = apex_leaf.copy_advice(
-                        || "copy apex_leaf",
-                        &mut region,
-                        advice[4],
-                        offset,
-                    )?;
-                    let apex_leaf_calc = apex_leaf_calc.copy_advice(
-                        || "copy apex_leaf_calc",
-                        &mut region,
-                        advice[5],
-                        offset,
-                    )?;
-                    // TODO (jake): uncomment this line when sha256 chip is fixed
-                    // region.constrain_equal(apex_leaf.cell(), apex_leaf_calc.cell())
-                    Ok(())
-                },
+                || format!("check challenge {} apex_leaf_calc", i),
+                |mut region| region.constrain_equal(apex_leaf.cell(), apex_leaf_calc.cell()),
             )?;
         }
 

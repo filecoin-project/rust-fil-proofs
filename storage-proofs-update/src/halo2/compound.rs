@@ -1,3 +1,6 @@
+// TODO (jake): remove once `CompoundProof` api is finished.
+#![allow(unused_imports)]
+
 use filecoin_hashers::{Domain, FieldArity, HaloHasher, Hasher, PoseidonArity, POSEIDON_CONSTANTS};
 use ff::PrimeFieldBits;
 use halo2_proofs::{arithmetic::FieldExt, plonk::Error};
