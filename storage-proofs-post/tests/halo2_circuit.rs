@@ -7,7 +7,7 @@ use halo2_proofs::{arithmetic::FieldExt, dev::MockProver, pasta::Fp};
 use rand::SeedableRng;
 use rand_xorshift::XorShiftRng;
 use storage_proofs_core::{
-    halo2_proofs::CircuitRows,
+    halo2::CircuitRows,
     merkle::{generate_tree, DiskTree, MerkleProofTrait, MerkleTreeTrait},
     TEST_SEED,
 };

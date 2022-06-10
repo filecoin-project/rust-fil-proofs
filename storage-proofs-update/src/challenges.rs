@@ -33,7 +33,7 @@ where
     F: PrimeField,
     TreeRDomain<F>: Domain<Field = F>,
 {
-    let rhos = rhos(h, &phi);
+    let rhos = rhos(h, phi);
     let challenge_bit_len = sector_nodes.trailing_zeros() as usize;
     let get_high_bits_shr = challenge_bit_len - h;
     challenges

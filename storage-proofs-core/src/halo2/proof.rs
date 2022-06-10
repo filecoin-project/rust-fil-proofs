@@ -221,9 +221,9 @@ where
     type Circuit: Circuit<F> + CircuitRows;
 
     #[inline]
-    fn create_keypair(empty_circuit: &Self::Circuit) ->
-        Result<Halo2Keypair<<F as FieldProvingCurves>::Affine, Self::Circuit>, Error>
-    {
+    fn create_keypair(
+        empty_circuit: &Self::Circuit,
+    ) -> Result<Halo2Keypair<<F as FieldProvingCurves>::Affine, Self::Circuit>, Error> {
         Halo2Keypair::create(empty_circuit)
     }
 
