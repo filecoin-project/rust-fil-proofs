@@ -427,16 +427,14 @@ where
             let bit_len = partition_bit_len + h_select_bit_len;
 
             let bits: Vec<Option<bool>> = match k_and_h_select.get_value() {
-                Some(k_and_h_select) => {
-                    k_and_h_select
-                        .to_repr()
-                        .as_ref()
-                        .iter()
-                        .flat_map(|byte| (0..8).map(|i| byte >> i & 1 == 1).collect::<Vec<bool>>())
-                        .take(bit_len)
-                        .map(Some)
-                        .collect()
-                }
+                Some(k_and_h_select) => k_and_h_select
+                    .to_repr()
+                    .as_ref()
+                    .iter()
+                    .flat_map(|byte| (0..8).map(|i| byte >> i & 1 == 1).collect::<Vec<bool>>())
+                    .take(bit_len)
+                    .map(Some)
+                    .collect(),
                 None => vec![None; bit_len],
             };
 

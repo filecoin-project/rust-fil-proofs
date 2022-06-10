@@ -14,7 +14,7 @@ use sha2::{Digest, Sha256};
 use storage_proofs_core::{halo2::CircuitRows, merkle::MerkleProofTrait};
 
 use crate::{
-    fallback  as vanilla,
+    fallback as vanilla,
     halo2::{
         constants::{SECTOR_NODES_32_GIB, SECTOR_NODES_64_GIB},
         shared::{CircuitConfig, SectorProof},
@@ -92,11 +92,15 @@ where
     PoseidonHasher<F>: Hasher,
     <PoseidonHasher<F> as Hasher>::Domain: Domain<Field = F>,
 {
+    #[allow(clippy::unwrap_used)]
     fn from(
         vanilla_pub_inputs: vanilla::PublicInputs<<PoseidonHasher<F> as Hasher>::Domain>,
     ) -> Self {
         let sectors_challenged_per_partition = challenged_sector_count::<SECTOR_NODES>();
-        assert_eq!(vanilla_pub_inputs.sectors.len() % sectors_challenged_per_partition, 0);
+        assert_eq!(
+            vanilla_pub_inputs.sectors.len() % sectors_challenged_per_partition,
+            0
+        );
         assert!(vanilla_pub_inputs.k.is_some());
 
         let randomness: F = vanilla_pub_inputs.randomness.into();

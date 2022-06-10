@@ -30,7 +30,7 @@ use table16::{
 };
 
 // TODO (jake): remove
-use table16::{get_d_row, get_h_row, match_state, StateWord, RoundIdx};
+use table16::{get_d_row, get_h_row, match_state, RoundIdx, StateWord};
 
 /// The size of a SHA-256 block, in 32-bit words.
 pub const BLOCK_SIZE: usize = 16;
@@ -392,8 +392,10 @@ impl<F: FieldExt> Sha256Chip<F> {
             |mut region| {
                 let mut offset = 0;
 
-                let (a_in, b_in, c_in, d_in, e_in, f_in, g_in, h_in) = match_state(state_in.clone());
-                let (a_out, b_out, c_out, d_out, e_out, f_out, g_out, h_out) = match_state(state_out.clone());
+                let (a_in, b_in, c_in, d_in, e_in, f_in, g_in, h_in) =
+                    match_state(state_in.clone());
+                let (a_out, b_out, c_out, d_out, e_out, f_out, g_out, h_out) =
+                    match_state(state_out.clone());
 
                 // Copy input/output `a`'s low/high 16-bit halves.
                 self.config.s_add_state_words.enable(&mut region, offset)?;
@@ -781,29 +783,69 @@ impl<F: FieldExt> Sha256Chip<F> {
         )
     }
 
+    #[allow(clippy::many_single_char_names)]
     fn add_compression_states_then_intialize(
         &self,
         layouter: &mut impl Layouter<F>,
         state_in: State<F>,
         state_out: State<F>,
     ) -> Result<State<F>, Error> {
-        let [a, b, c, d, e, f, g, h] = self.add_compression_states(layouter, state_in, state_out)?;
+        let [a, b, c, d, e, f, g, h] =
+            self.add_compression_states(layouter, state_in, state_out)?;
 
         layouter.assign_region(
             || "initialize_with_state",
             |mut region| {
                 let [.., a_7, _a_8, _a_9] = self.config.compression.advice;
                 // TODO (jake): shouldn't initialization use `AssignedBits<F, 32>` rather than `Option<u32>`?
-                let e = self.config.compression.decompose_e(&mut region, RoundIdx::Init, e.value_u32())?;
-                let f = self.config.compression.decompose_f(&mut region, RoundIdx::Init, f.value_u32())?;
-                let g = self.config.compression.decompose_g(&mut region, RoundIdx::Init, g.value_u32())?;
+                let e = self.config.compression.decompose_e(
+                    &mut region,
+                    RoundIdx::Init,
+                    e.value_u32(),
+                )?;
+                let f = self.config.compression.decompose_f(
+                    &mut region,
+                    RoundIdx::Init,
+                    f.value_u32(),
+                )?;
+                let g = self.config.compression.decompose_g(
+                    &mut region,
+                    RoundIdx::Init,
+                    g.value_u32(),
+                )?;
                 let h_row = get_h_row(RoundIdx::Init);
-                let h = self.config.compression.assign_word_halves_dense(&mut region, h_row, a_7, h_row + 1, a_7, h.value_u32())?;
-                let a = self.config.compression.decompose_a(&mut region, RoundIdx::Init, a.value_u32())?;
-                let b = self.config.compression.decompose_b(&mut region, RoundIdx::Init, b.value_u32())?;
-                let c = self.config.compression.decompose_c(&mut region, RoundIdx::Init, c.value_u32())?;
+                let h = self.config.compression.assign_word_halves_dense(
+                    &mut region,
+                    h_row,
+                    a_7,
+                    h_row + 1,
+                    a_7,
+                    h.value_u32(),
+                )?;
+                let a = self.config.compression.decompose_a(
+                    &mut region,
+                    RoundIdx::Init,
+                    a.value_u32(),
+                )?;
+                let b = self.config.compression.decompose_b(
+                    &mut region,
+                    RoundIdx::Init,
+                    b.value_u32(),
+                )?;
+                let c = self.config.compression.decompose_c(
+                    &mut region,
+                    RoundIdx::Init,
+                    c.value_u32(),
+                )?;
                 let d_row = get_d_row(RoundIdx::Init);
-                let d = self.config.compression.assign_word_halves_dense(&mut region, d_row, a_7, d_row + 1, a_7, d.value_u32())?;
+                let d = self.config.compression.assign_word_halves_dense(
+                    &mut region,
+                    d_row,
+                    a_7,
+                    d_row + 1,
+                    a_7,
+                    d.value_u32(),
+                )?;
                 Ok(State::new(
                     StateWord::A(a),
                     StateWord::B(b),
@@ -861,7 +903,11 @@ impl<F: FieldExt> Sha256Chip<F> {
             state_in.clone(),
             state_out.clone(),
         )?;
-        state_out = self.compress(&mut layouter, state_in.clone(), blocks[num_blocks - 1].clone())?;
+        state_out = self.compress(
+            &mut layouter,
+            state_in.clone(),
+            blocks[num_blocks - 1].clone(),
+        )?;
         self.add_compression_states(&mut layouter, state_in, state_out)
     }
 
@@ -924,7 +970,10 @@ impl<F: FieldExt> Sha256FieldChip<F> {
     }
 
     /// Loads the lookup table required by this chip into the circuit.
-    pub fn load(layouter: &mut impl Layouter<F>, config: &Sha256FieldConfig<F>) -> Result<(), Error> {
+    pub fn load(
+        layouter: &mut impl Layouter<F>,
+        config: &Sha256FieldConfig<F>,
+    ) -> Result<(), Error> {
         Sha256Chip::load(layouter, &config.sha256)
     }
 
@@ -990,7 +1039,7 @@ impl<F: FieldExt> Sha256FieldChip<F> {
         digest_words: &[AssignedBits<F, 32>; 8],
     ) -> Result<AssignedCell<F, F>, Error> {
         Sha256WordsChip::construct(self.config.sha256_words.clone())
-            .pack_digest(layouter, &digest_words)
+            .pack_digest(layouter, digest_words)
     }
 }
 
@@ -1044,7 +1093,7 @@ impl<F: FieldExt> Sha256WordsChip<F> {
         meta: &mut ConstraintSystem<F>,
         advice: [Column<Advice>; 9],
     ) -> Sha256WordsConfig<F> {
-        let strip_bits = StripBitsChip::configure(meta, advice.clone());
+        let strip_bits = StripBitsChip::configure(meta, advice);
 
         let s_field_into_u32s = meta.selector();
         {
@@ -1105,7 +1154,7 @@ impl<F: FieldExt> Sha256WordsChip<F> {
                     + le_bytes[2].clone() * Expression::Constant(radix_pows[0])
                     + le_bytes[1].clone() * Expression::Constant(radix_pows[1])
                     + le_bytes[0].clone() * Expression::Constant(radix_pows[2]);
-                
+
                 [
                     ("u32 le-bytes decomp", s.clone() * (u32_le - le_expr)),
                     ("u32 be-bytes decomp", s * (u32_be - be_expr)),
@@ -1134,44 +1183,36 @@ impl<F: FieldExt> Sha256WordsChip<F> {
 
                 // Witness or copy the field element to be decomposed.
                 let field = match field {
-                    WitnessOrCopy::Witness(field) => {
-                        region.assign_advice(
-                            || "witness field element",
-                            self.config.advice[0],
-                            offset,
-                            || field.ok_or(Error::Synthesis),
-                        )?
-                    }
-                    WitnessOrCopy::Copy(ref field) => {
-                        field.copy_advice(
-                            || "copy field element",
-                            &mut region,
-                            self.config.advice[0],
-                            offset,
-                        )?
-                    }
-                    WitnessOrCopy::PiCopy(pi_col, pi_row) => {
-                        region.assign_advice_from_instance(
-                            || "copy field element public input",
-                            pi_col,
-                            pi_row,
-                            self.config.advice[0],
-                            offset,
-                        )?
-                    },
+                    WitnessOrCopy::Witness(field) => region.assign_advice(
+                        || "witness field element",
+                        self.config.advice[0],
+                        offset,
+                        || field.ok_or(Error::Synthesis),
+                    )?,
+                    WitnessOrCopy::Copy(ref field) => field.copy_advice(
+                        || "copy field element",
+                        &mut region,
+                        self.config.advice[0],
+                        offset,
+                    )?,
+                    WitnessOrCopy::PiCopy(pi_col, pi_row) => region.assign_advice_from_instance(
+                        || "copy field element public input",
+                        pi_col,
+                        pi_row,
+                        self.config.advice[0],
+                        offset,
+                    )?,
                 };
 
                 let le_u32s: [Option<u32>; 8] = match field.value() {
-                    Some(field) => {
-                        field
-                            .to_repr()
-                            .as_ref()
-                            .chunks(4)
-                            .map(|bytes| Some(u32::from_le_bytes(bytes.try_into().unwrap())))
-                            .collect::<Vec<Option<u32>>>()
-                            .try_into()
-                            .unwrap()
-                    }
+                    Some(field) => field
+                        .to_repr()
+                        .as_ref()
+                        .chunks(4)
+                        .map(|bytes| Some(u32::from_le_bytes(bytes.try_into().unwrap())))
+                        .collect::<Vec<Option<u32>>>()
+                        .try_into()
+                        .unwrap(),
                     None => [None; 8],
                 };
 
@@ -1205,7 +1246,9 @@ impl<F: FieldExt> Sha256WordsChip<F> {
             || "u32 reverse bytes",
             |mut region| {
                 let offset = 0;
-                self.config.s_u32_reverse_bytes.enable(&mut region, offset)?;
+                self.config
+                    .s_u32_reverse_bytes
+                    .enable(&mut region, offset)?;
 
                 // Copy `u32`.
                 word.copy_advice(|| "copy word", &mut region, self.config.advice[0], offset)?;
@@ -1216,14 +1259,19 @@ impl<F: FieldExt> Sha256WordsChip<F> {
                 };
 
                 // Assign `words`'s little-endian bytes.
-                for (byte_index, (byte, col)) in
-                    le_bytes.iter().zip(self.config.advice[1..=4].iter()).enumerate()
+                for (byte_index, (byte, col)) in le_bytes
+                    .iter()
+                    .zip(self.config.advice[1..=4].iter())
+                    .enumerate()
                 {
                     region.assign_advice(
                         || format!("word le-byte {}", byte_index),
                         *col,
                         offset,
-                        || byte.map(|byte| F::from(byte as u64)).ok_or(Error::Synthesis),
+                        || {
+                            byte.map(|byte| F::from(byte as u64))
+                                .ok_or(Error::Synthesis)
+                        },
                     )?;
                 }
 
@@ -1303,8 +1351,10 @@ impl<F: FieldExt> Sha256WordsChip<F> {
             })
             .collect::<Result<Vec<AssignedBits<F, 32>>, Error>>()?;
 
-        reordered_words[7] = StripBitsChip::construct(self.config.strip_bits.clone())
-            .strip_bits(layouter.namespace(|| "strip bits from digest"), &reordered_words[7])?;
+        reordered_words[7] = StripBitsChip::construct(self.config.strip_bits.clone()).strip_bits(
+            layouter.namespace(|| "strip bits from digest"),
+            &reordered_words[7],
+        )?;
 
         // Pack the reorderd words into a field element.
         layouter.assign_region(
@@ -1326,23 +1376,25 @@ impl<F: FieldExt> Sha256WordsChip<F> {
                         *col,
                         offset,
                     )?;
-                    packed_repr.as_mut().zip(word.value_u32()).map(|(repr, word)| {
+                    if let Some((repr, word)) = packed_repr.as_mut().zip(word.value_u32()) {
                         repr.extend(word.to_le_bytes());
-                    });
-                };
+                    }
+                }
 
                 region.assign_advice(
                     || "pack reordered words into field element",
                     self.config.advice[0],
                     offset,
-                    || packed_repr
-                        .as_ref()
-                        .map(|repr_bytes| {
-                            let mut repr = F::Repr::default();
-                            repr.as_mut().copy_from_slice(&repr_bytes);
-                            F::from_repr_vartime(repr).expect("words are invalid field element")
-                        })
-                        .ok_or(Error::Synthesis),
+                    || {
+                        packed_repr
+                            .as_ref()
+                            .map(|repr_bytes| {
+                                let mut repr = F::Repr::default();
+                                repr.as_mut().copy_from_slice(repr_bytes);
+                                F::from_repr_vartime(repr).expect("words are invalid field element")
+                            })
+                            .ok_or(Error::Synthesis)
+                    },
                 )
             },
         )
@@ -1394,7 +1446,7 @@ mod tests {
                     meta.advice_column(),
                     meta.advice_column(),
                 ];
-                let sha256 = Sha256Chip::configure(meta, advice.clone());
+                let sha256 = Sha256Chip::configure(meta, advice);
                 MyConfig { sha256, advice }
             }
 
@@ -1415,8 +1467,7 @@ mod tests {
                     || "assign preimage",
                     |mut region| {
                         let mut advice_iter = AdviceIter::from(advice.to_vec());
-                        self
-                            .preimage
+                        self.preimage
                             .iter()
                             .enumerate()
                             .map(|(i, word)| {
@@ -1520,7 +1571,7 @@ mod tests {
                     meta.advice_column(),
                     meta.advice_column(),
                 ];
-                let sha256 = Sha256Chip::configure(meta, advice.clone());
+                let sha256 = Sha256Chip::configure(meta, advice);
                 MyConfig { sha256, advice }
             }
 
@@ -1541,8 +1592,7 @@ mod tests {
                     || "assign preimage",
                     |mut region| {
                         let mut advice_iter = AdviceIter::from(advice.to_vec());
-                        self
-                            .preimage
+                        self.preimage
                             .iter()
                             .enumerate()
                             .map(|(i, word)| {
@@ -1574,7 +1624,7 @@ mod tests {
         }
 
         // "a" unicode byte.
-        let a = 'a' as u8;
+        let a = 97u8;
 
         let preimages = [
             // One block preimage.
@@ -1589,14 +1639,18 @@ mod tests {
 
         for preimage_bytes in &preimages {
             let preimage_byte_len = preimage_bytes.len();
-            assert_eq!(preimage_byte_len % 4, 0, "preimage byte length not divisible by word size");
+            assert_eq!(
+                preimage_byte_len % 4,
+                0,
+                "preimage byte length not divisible by word size"
+            );
 
             let unpadded_preimage: Vec<Option<u32>> = preimage_bytes
                 .chunks(4)
                 .map(|bytes| Some(u32::from_be_bytes(bytes.try_into().unwrap())))
                 .collect();
 
-            let expected_digest: [u32; DIGEST_SIZE] = Sha256::digest(&preimage_bytes)
+            let expected_digest: [u32; DIGEST_SIZE] = Sha256::digest(preimage_bytes)
                 .chunks(4)
                 .map(|bytes| u32::from_be_bytes(bytes.try_into().unwrap()))
                 .collect::<Vec<u32>>()
@@ -1637,7 +1691,7 @@ mod tests {
                     meta.advice_column(),
                     meta.advice_column(),
                 ];
-                let sha256 = Sha256FieldChip::configure(meta, advice.clone());
+                let sha256 = Sha256FieldChip::configure(meta, advice);
                 (sha256, advice)
             }
 
@@ -1666,7 +1720,7 @@ mod tests {
                                 let mut repr = [0u8; 32];
                                 repr[..3].copy_from_slice(&[97u8, 98, 99]);
                                 Ok(Fp::from_repr_vartime(repr).unwrap())
-                            }
+                            },
                         )
                     },
                 )?;
@@ -1685,14 +1739,8 @@ mod tests {
                         .collect();
 
                     let expected_digest: [u32; 8] = [
-                        0x26426d7c,
-                        0xb06a1264,
-                        0x3ccfe841,
-                        0x07603083,
-                        0xd835c37f,
-                        0x000a12f7,
-                        0x34137a0c,
-                        0x8df77f26,
+                        0x26426d7c, 0xb06a1264, 0x3ccfe841, 0x07603083, 0xd835c37f, 0x000a12f7,
+                        0x34137a0c, 0x8df77f26,
                     ];
 
                     assert_eq!(digest, expected_digest);
@@ -1712,14 +1760,8 @@ mod tests {
                         .collect();
 
                     let expected_digest: [u32; 8] = [
-                        0x76629a59,
-                        0xa5b36f76,
-                        0x6f1ef203,
-                        0x8ce1271b,
-                        0xe300f38f,
-                        0x737a4316,
-                        0x87252d8f,
-                        0x7781af3f,
+                        0x76629a59, 0xa5b36f76, 0x6f1ef203, 0x8ce1271b, 0xe300f38f, 0x737a4316,
+                        0x87252d8f, 0x7781af3f,
                     ];
 
                     assert_eq!(digest, expected_digest);
@@ -1758,10 +1800,11 @@ mod tests {
                     meta.advice_column(),
                     meta.advice_column(),
                 ];
-                let sha256_words = Sha256WordsChip::configure(meta, advice.clone());
+                let sha256_words = Sha256WordsChip::configure(meta, advice);
                 (sha256_words, advice)
             }
 
+            #[allow(clippy::unusual_byte_groupings)]
             fn synthesize(
                 &self,
                 config: Self::Config,
@@ -1774,34 +1817,40 @@ mod tests {
                 // Test converting field elements against their known preimage words.
 
                 // `1`
-                let words_1: Vec<u32> = sha256_words_chip.witness_into_words(
-                    layouter.namespace(|| "1 into words"),
-                    Some(Fp::one()),
-                )?
-                .iter()
-                .map(|word| word.value_u32().unwrap())
-                .collect();
-                assert_eq!(words_1, [u32::from_be_bytes([1, 0, 0, 0]), 0, 0, 0, 0, 0, 0, 0]);
+                let words_1: Vec<u32> = sha256_words_chip
+                    .witness_into_words(layouter.namespace(|| "1 into words"), Some(Fp::one()))?
+                    .iter()
+                    .map(|word| word.value_u32().unwrap())
+                    .collect();
+                assert_eq!(
+                    words_1,
+                    [u32::from_be_bytes([1, 0, 0, 0]), 0, 0, 0, 0, 0, 0, 0]
+                );
 
                 // `2^32 - 1` (first word contains 32 `1` bits).
-                let words_2: Vec<u32> = sha256_words_chip.witness_into_words(
-                    layouter.namespace(|| "2^32 - 1 into words"),
-                    Some(Fp::from((1u64 << 32) - 1)),
-                )?
-                .iter()
-                .map(|word| word.value_u32().unwrap())
-                .collect();
+                let words_2: Vec<u32> = sha256_words_chip
+                    .witness_into_words(
+                        layouter.namespace(|| "2^32 - 1 into words"),
+                        Some(Fp::from((1u64 << 32) - 1)),
+                    )?
+                    .iter()
+                    .map(|word| word.value_u32().unwrap())
+                    .collect();
                 assert_eq!(words_2, [u32::max_value(), 0, 0, 0, 0, 0, 0, 0]);
 
                 // `2^32` (first word contains 32 `0` bits; second word contains one `1` bit).
-                let words_3: Vec<u32> = sha256_words_chip.witness_into_words(
-                    layouter.namespace(|| "2^32 into words"),
-                    Some(Fp::from(1u64 << 32)),
-                )?
-                .iter()
-                .map(|word| word.value_u32().unwrap())
-                .collect();
-                assert_eq!(words_3, [0, u32::from_be_bytes([1, 0, 0, 0]), 0, 0, 0, 0, 0, 0]);
+                let words_3: Vec<u32> = sha256_words_chip
+                    .witness_into_words(
+                        layouter.namespace(|| "2^32 into words"),
+                        Some(Fp::from(1u64 << 32)),
+                    )?
+                    .iter()
+                    .map(|word| word.value_u32().unwrap())
+                    .collect();
+                assert_eq!(
+                    words_3,
+                    [0, u32::from_be_bytes([1, 0, 0, 0]), 0, 0, 0, 0, 0, 0]
+                );
 
                 // `2^66 + 2^72 + 2^95` (first two words each contain 32 `0` bits; third word
                 // contains three `1` bits).
@@ -1810,28 +1859,36 @@ mod tests {
                     // `2^66 + 2^72 + 2^95`
                     repr[8..12]
                         .copy_from_slice(&0b10000000_00000000_00000001_00000100u32.to_le_bytes());
-                    sha256_words_chip.witness_into_words(
-                        layouter.namespace(|| "2^66 + 2^95 into words"),
-                        Some(Fp::from_repr_vartime(repr).unwrap()),
-                    )?
-                    .iter()
-                    .map(|word| word.value_u32().unwrap())
-                    .collect()
+                    sha256_words_chip
+                        .witness_into_words(
+                            layouter.namespace(|| "2^66 + 2^95 into words"),
+                            Some(Fp::from_repr_vartime(repr).unwrap()),
+                        )?
+                        .iter()
+                        .map(|word| word.value_u32().unwrap())
+                        .collect()
                 };
                 assert_eq!(
                     words_4,
-                    [0, 0, u32::from_be_bytes([0b100, 1, 0, 0b10000000]), 0, 0, 0, 0, 0],
+                    [
+                        0,
+                        0,
+                        u32::from_be_bytes([0b100, 1, 0, 0b10000000]),
+                        0,
+                        0,
+                        0,
+                        0,
+                        0
+                    ],
                 );
 
                 // `-1 mod p`
                 let neg_1 = Fp::zero() - Fp::one();
-                let words_5: Vec<u32> = sha256_words_chip.witness_into_words(
-                    layouter.namespace(|| "-1 into words"),
-                    Some(neg_1),
-                )?
-                .iter()
-                .map(|word| word.value_u32().unwrap())
-                .collect();
+                let words_5: Vec<u32> = sha256_words_chip
+                    .witness_into_words(layouter.namespace(|| "-1 into words"), Some(neg_1))?
+                    .iter()
+                    .map(|word| word.value_u32().unwrap())
+                    .collect();
                 assert_eq!(
                     words_5,
                     neg_1
@@ -1846,7 +1903,16 @@ mod tests {
 
                 // The two most significant bits of the last word's least significant byte are `0`
                 // to ensure that the packed digest fits within a 255-bit field element.
-                let digest_words = [1u32, 2, 3, 4, 5, 6, 7, 0b11111111_11000000_00001000_00111111];
+                let digest_words = [
+                    1u32,
+                    2,
+                    3,
+                    4,
+                    5,
+                    6,
+                    7,
+                    0b11111111_11000000_00001000_00111111,
+                ];
 
                 // Set the two bits which should be stripped during packing.
                 let last_word_unstripped = digest_words[7] | 0b11000000u32;

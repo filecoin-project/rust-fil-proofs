@@ -171,7 +171,7 @@ mod tests {
                 meta.advice_column(),
                 meta.advice_column(),
             ];
-            
+
             let select_config = SelectChip::configure(meta, advice);
 
             Config {
@@ -228,7 +228,7 @@ mod tests {
                         .collect::<Result<Vec<AssignedBit<F>>, Error>>()?;
 
                     Ok((arr, bits))
-                }
+                },
             )?;
 
             let out = select_chip.select(layouter.namespace(|| "select"), &arr, &bits)?;
@@ -244,7 +244,7 @@ mod tests {
             let num_bits = len.trailing_zeros() as usize;
             let arr: Vec<Option<Fp>> = (0..len).map(|i| Some(Fp::from(i as u64))).collect();
             let mut circ = SelectCircuit {
-                arr: arr,
+                arr,
                 bits: Vec::with_capacity(num_bits),
                 expected: None,
             };

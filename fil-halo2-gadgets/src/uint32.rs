@@ -468,7 +468,9 @@ impl<F: FieldExt> UInt32Chip<F> {
             || "assign as 32 bits",
             |mut region| {
                 let offset = 0;
-                self.config.s_field_into_32_bits.enable(&mut region, offset)?;
+                self.config
+                    .s_field_into_32_bits
+                    .enable(&mut region, offset)?;
 
                 let uint32 =
                     AssignedU32::assign(&mut region, || "value", self.config.value, offset, value)?;
@@ -487,7 +489,7 @@ impl<F: FieldExt> UInt32Chip<F> {
                             || format!("bit {}", bit_index),
                             *col,
                             offset,
-                            || bit.map(Bit).ok_or(Error::Synthesis)
+                            || bit.map(Bit).ok_or(Error::Synthesis),
                         )?;
                         assigned_bits.push(bit);
                         bit_index += 1;
@@ -509,7 +511,9 @@ impl<F: FieldExt> UInt32Chip<F> {
             || "assign public input as 32 bits",
             |mut region| {
                 let offset = 0;
-                self.config.s_field_into_32_bits.enable(&mut region, offset)?;
+                self.config
+                    .s_field_into_32_bits
+                    .enable(&mut region, offset)?;
 
                 // Copy public input.
                 let uint32 = region.assign_advice_from_instance(
@@ -520,8 +524,9 @@ impl<F: FieldExt> UInt32Chip<F> {
                     offset,
                 )?;
 
-                let bytes: Option<[u8; 4]> =
-                    uint32.value().map(|uint32| uint32.to_repr().as_ref()[..4].try_into().unwrap());
+                let bytes: Option<[u8; 4]> = uint32
+                    .value()
+                    .map(|uint32| uint32.to_repr().as_ref()[..4].try_into().unwrap());
 
                 let mut bits = Vec::with_capacity(32);
                 let mut bit_index = 0;
@@ -533,7 +538,10 @@ impl<F: FieldExt> UInt32Chip<F> {
                             || format!("bit {}", bit_index),
                             self.config.bits[i],
                             byte_index,
-                            || byte.map(|byte| Bit(byte >> i & 1 == 1)).ok_or(Error::Synthesis),
+                            || {
+                                byte.map(|byte| Bit(byte >> i & 1 == 1))
+                                    .ok_or(Error::Synthesis)
+                            },
                         )?;
                         bits.push(bit);
                         bit_index += 1;
