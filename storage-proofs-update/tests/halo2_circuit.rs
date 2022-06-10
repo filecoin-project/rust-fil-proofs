@@ -1,13 +1,12 @@
 #![cfg(feature = "isolated-testing")]
 
-use ff::PrimeFieldBits;
 use filecoin_hashers::{Domain, HashFunction, Hasher, PoseidonArity};
 use generic_array::typenum::{U0, U2, U4, U8};
 use halo2_proofs::{arithmetic::FieldExt, dev::MockProver, pasta::Fp};
 use rand::SeedableRng;
 use rand_xorshift::XorShiftRng;
 use storage_proofs_core::{
-    halo2_proofs::CircuitRows,
+    halo2::CircuitRows,
     merkle::{MerkleProof, MerkleTreeTrait},
     TEST_SEED,
 };
@@ -31,7 +30,7 @@ use common::{
 
 fn test_empty_sector_update_circuit<F, U, V, W, const SECTOR_NODES: usize>()
 where
-    F: FieldExt + PrimeFieldBits,
+    F: FieldExt,
     U: PoseidonArity<F>,
     V: PoseidonArity<F>,
     W: PoseidonArity<F>,

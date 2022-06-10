@@ -15,7 +15,7 @@ use halo2_proofs::{
     plonk::{Advice, Column, ConstraintSystem, Instance},
 };
 use storage_proofs_core::{
-    gadgets::halo2::{
+    halo2::gadgets::{
         insert::{InsertChip, InsertConfig},
         por::{self, MerkleChip},
     },

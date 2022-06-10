@@ -6,19 +6,39 @@ use halo2_proofs::{
 };
 use rand::rngs::OsRng;
 use storage_proofs_core::{
-    halo2_proofs::{create_proof, CircuitRows, CompoundProof, FieldProvingCurves, Halo2Proof},
+    halo2::{
+        create_proof, verify_proof, CircuitRows, CompoundProof, FieldProvingCurves, Halo2Keypair,
+        Halo2Proof,
+    },
     merkle::MerkleTreeTrait,
 };
 
 use crate::{
-    fallback::FallbackPoSt,
+    fallback::{FallbackPoSt, SetupParams},
     halo2::{
-        constants::SECTOR_NODES_2_KIB,
+        constants::{
+            SECTOR_NODES_1_GIB, SECTOR_NODES_16_KIB, SECTOR_NODES_16_MIB, SECTOR_NODES_2_KIB,
+            SECTOR_NODES_32_GIB, SECTOR_NODES_32_KIB, SECTOR_NODES_4_KIB, SECTOR_NODES_512_MIB,
+            SECTOR_NODES_64_GIB, SECTOR_NODES_8_MIB,
+        },
         shared::CircuitConfig,
         window::{self, WindowPostCircuit},
         winning::{self, WinningPostCircuit},
     },
 };
+
+fn is_winning<const SECTOR_NODES: usize>(setup_params: &SetupParams) -> bool {
+    assert_eq!(setup_params.sector_size >> 5, SECTOR_NODES as u64);
+    match (setup_params.challenge_count, setup_params.sector_count) {
+        (winning::CHALLENGE_COUNT, 1) => true,
+        (window::SECTOR_CHALLENGES, sectors)
+            if sectors == window::challenged_sector_count::<SECTOR_NODES>() =>
+        {
+            false
+        }
+        _ => panic!("setup params do not match winning or window post params"),
+    }
+}
 
 #[derive(Clone)]
 pub enum PostCircuit<F, U, V, W, const SECTOR_NODES: usize>
@@ -118,84 +138,160 @@ where
     }
 }
 
-impl<'a, F, U, V, W, TreeR> CompoundProof<'a, F, SECTOR_NODES_2_KIB> for FallbackPoSt<'a, TreeR>
-where
-    F: FieldExt + FieldProvingCurves,
-    U: PoseidonArity<F>,
-    V: PoseidonArity<F>,
-    W: PoseidonArity<F>,
-    PoseidonHasher<F>: Hasher,
-    <PoseidonHasher<F> as Hasher>::Domain: Domain<Field = F>,
-    TreeR:
-        MerkleTreeTrait<Hasher = PoseidonHasher<F>, Arity = U, SubTreeArity = V, TopTreeArity = W>,
-{
-    type Circuit = PostCircuit<F, U, V, W, SECTOR_NODES_2_KIB>;
-
-    fn prove_with_vanilla_partition(
-        setup_params: Self::SetupParams,
-        vanilla_pub_inputs: Self::PublicInputs,
-        partition_proof: Self::Proof,
-    ) -> Result<Halo2Proof<<F as FieldProvingCurves>::Affine, Self::Circuit>, Error> {
-        let total_prover_sectors = vanilla_pub_inputs.sectors.len();
-        assert_eq!(
-            total_prover_sectors % setup_params.sector_count,
-            0,
-            "prover's sector set length is not divisible by the number of sectors challenged per
-            partition",
-        );
-
-        assert_eq!(partition_proof.sectors.len(), setup_params.sector_count);
-        assert!(partition_proof.sectors.iter().all(|sector_proof| {
-            sector_proof.inclusion_proofs.len() == setup_params.challenge_count
-        }));
-
-        let is_winning = match (setup_params.challenge_count, setup_params.sector_count) {
-            (winning::CHALLENGE_COUNT, 1) => true,
-            (window::SECTOR_CHALLENGES, sectors)
-                if sectors == window::challenged_sector_count::<SECTOR_NODES_2_KIB>() =>
+macro_rules! impl_compound_proof {
+    ($($sector_nodes:expr),*) => {
+        $(
+            impl<'a, F, U, V, W, TreeR> CompoundProof<'a, F, $sector_nodes> for FallbackPoSt<'a, TreeR>
+            where
+                F: FieldExt + FieldProvingCurves,
+                U: PoseidonArity<F>,
+                V: PoseidonArity<F>,
+                W: PoseidonArity<F>,
+                PoseidonHasher<F>: Hasher,
+                <PoseidonHasher<F> as Hasher>::Domain: Domain<Field = F>,
+                TreeR:
+                    MerkleTreeTrait<Hasher = PoseidonHasher<F>, Arity = U, SubTreeArity = V, TopTreeArity = W>,
             {
-                false
+                type Circuit = PostCircuit<F, U, V, W, $sector_nodes>;
+
+                fn prove_partition_with_vanilla(
+                    setup_params: &Self::SetupParams,
+                    vanilla_pub_inputs: &Self::PublicInputs,
+                    vanilla_partition_proof: &Self::Proof,
+                    keypair: &Halo2Keypair<<F as FieldProvingCurves>::Affine, Self::Circuit>,
+                ) -> Result<Halo2Proof<<F as FieldProvingCurves>::Affine, Self::Circuit>, Error> {
+                    let is_winning = is_winning::<$sector_nodes>(setup_params);
+
+                    let (circ, pub_inputs_vec) = if is_winning {
+                        let pub_inputs =
+                            winning::PublicInputs::<F, $sector_nodes>::from(vanilla_pub_inputs.clone());
+
+                        let pub_inputs_vec = pub_inputs.to_vec();
+
+                        let priv_inputs = winning::PrivateInputs::<F, U, V, W, $sector_nodes>::from(
+                            &vanilla_partition_proof.sectors[0],
+                        );
+
+                        let circ = PostCircuit::from(WinningPostCircuit {
+                            pub_inputs,
+                            priv_inputs,
+                        });
+
+                        (circ, pub_inputs_vec)
+                    } else {
+                        let pub_inputs =
+                            window::PublicInputs::<F, $sector_nodes>::from(vanilla_pub_inputs.clone());
+
+                        let pub_inputs_vec = pub_inputs.to_vec();
+
+                        let priv_inputs = window::PrivateInputs::<F, U, V, W, $sector_nodes>::from(
+                            &vanilla_partition_proof.sectors,
+                        );
+
+                        let circ = PostCircuit::from(WindowPostCircuit {
+                            pub_inputs,
+                            priv_inputs,
+                        });
+
+                        (circ, pub_inputs_vec)
+                    };
+
+                    create_proof(keypair, circ, &pub_inputs_vec, &mut OsRng)
+                }
+
+                fn prove_all_partitions_with_vanilla(
+                    setup_params: &Self::SetupParams,
+                    vanilla_pub_inputs: &[&Self::PublicInputs],
+                    vanilla_proofs: &[&Self::Proof],
+                    keypair: &Halo2Keypair<<F as FieldProvingCurves>::Affine, Self::Circuit>,
+                ) -> Result<Vec<Halo2Proof<<F as FieldProvingCurves>::Affine, Self::Circuit>>, Error> {
+                    assert_eq!(vanilla_pub_inputs.len(), vanilla_proofs.len());
+
+                    // The only public input field which whould change is `k`.
+                    assert!(
+                        vanilla_pub_inputs
+                            .iter()
+                            .enumerate()
+                            .all(|(i, partition_pub_inputs)| {
+                                partition_pub_inputs.randomness == vanilla_pub_inputs[0].randomness &&
+                                    partition_pub_inputs.prover_id == vanilla_pub_inputs[0].prover_id &&
+                                    partition_pub_inputs.sectors == vanilla_pub_inputs[0].sectors &&
+                                    partition_pub_inputs.k == Some(i)
+                            })
+                    );
+
+                    vanilla_pub_inputs
+                        .iter()
+                        .zip(vanilla_proofs.iter())
+                        .map(|(pub_inputs, partition_proof)| {
+                            <Self as CompoundProof<'_, F, $sector_nodes>>::prove_partition_with_vanilla(
+                                setup_params,
+                                pub_inputs,
+                                partition_proof,
+                                keypair,
+                            )
+                        })
+                        .collect()
+                }
+
+                fn verify_partition(
+                    setup_params: &Self::SetupParams,
+                    vanilla_pub_inputs: &Self::PublicInputs,
+                    circ_proof: &Halo2Proof<<F as FieldProvingCurves>::Affine, Self::Circuit>,
+                    keypair: &Halo2Keypair<<F as FieldProvingCurves>::Affine, Self::Circuit>,
+                ) -> Result<(), Error> {
+                    let is_winning = is_winning::<$sector_nodes>(setup_params);
+
+                    let pub_inputs_vec = if is_winning {
+                        winning::PublicInputs::<F, $sector_nodes>::from(vanilla_pub_inputs.clone())
+                            .to_vec()
+                    } else {
+                        window::PublicInputs::<F, $sector_nodes>::from(vanilla_pub_inputs.clone()).to_vec()
+                    };
+
+                    verify_proof(keypair, circ_proof, &pub_inputs_vec)
+                }
+
+                fn verify_all_partitions(
+                    setup_params: &Self::SetupParams,
+                    vanilla_pub_inputs: &[&Self::PublicInputs],
+                    circ_proofs: &[&Halo2Proof<<F as FieldProvingCurves>::Affine, Self::Circuit>],
+                    keypair: &Halo2Keypair<<F as FieldProvingCurves>::Affine, Self::Circuit>,
+                ) -> Result<(), Error> {
+                    assert_eq!(vanilla_pub_inputs.len(), circ_proofs.len());
+
+                    // The only public input field which whould change is `k`.
+                    assert!(
+                        vanilla_pub_inputs
+                            .iter()
+                            .enumerate()
+                            .all(|(i, partition_pub_inputs)| {
+                                partition_pub_inputs.randomness == vanilla_pub_inputs[0].randomness &&
+                                    partition_pub_inputs.prover_id == vanilla_pub_inputs[0].prover_id &&
+                                    partition_pub_inputs.sectors == vanilla_pub_inputs[0].sectors &&
+                                    partition_pub_inputs.k == Some(i)
+                            })
+                    );
+
+                    for (vanilla_pub_inputs, circ_proof) in vanilla_pub_inputs.iter().zip(circ_proofs.iter()) {
+                        <Self as CompoundProof<'_, F, $sector_nodes>>::verify_partition(setup_params, vanilla_pub_inputs, circ_proof, keypair)?;
+                    }
+                    Ok(())
+                }
             }
-            _ => panic!("setup params do not match winning or window post params"),
-        };
-
-        let (circ, pub_inputs_vec) = if is_winning {
-            let pub_inputs = winning::PublicInputs::<F, SECTOR_NODES_2_KIB>::from(
-                setup_params,
-                vanilla_pub_inputs,
-            );
-            let pub_inputs_vec = pub_inputs.to_vec();
-
-            let priv_inputs = winning::PrivateInputs::<F, U, V, W, SECTOR_NODES_2_KIB>::from(
-                &partition_proof.sectors[0],
-            );
-
-            let circ = PostCircuit::from(WinningPostCircuit {
-                pub_inputs,
-                priv_inputs,
-            });
-
-            (circ, pub_inputs_vec)
-        } else {
-            let pub_inputs = window::PublicInputs::<F, SECTOR_NODES_2_KIB>::from(
-                setup_params,
-                vanilla_pub_inputs,
-            );
-            let pub_inputs_vec = pub_inputs.to_vec();
-
-            let priv_inputs = window::PrivateInputs::<F, U, V, W, SECTOR_NODES_2_KIB>::from(
-                &partition_proof.sectors,
-            );
-
-            let circ = PostCircuit::from(WindowPostCircuit {
-                pub_inputs,
-                priv_inputs,
-            });
-
-            (circ, pub_inputs_vec)
-        };
-
-        let keypair = Self::keypair(&circ)?;
-        create_proof(&keypair, circ, &pub_inputs_vec, &mut OsRng)
+        )*
     }
 }
+
+impl_compound_proof!(
+    SECTOR_NODES_2_KIB,
+    SECTOR_NODES_4_KIB,
+    SECTOR_NODES_16_KIB,
+    SECTOR_NODES_32_KIB,
+    SECTOR_NODES_8_MIB,
+    SECTOR_NODES_16_MIB,
+    SECTOR_NODES_512_MIB,
+    SECTOR_NODES_1_GIB,
+    SECTOR_NODES_32_GIB,
+    SECTOR_NODES_64_GIB
+);

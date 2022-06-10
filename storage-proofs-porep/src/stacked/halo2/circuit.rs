@@ -22,11 +22,13 @@ use halo2_proofs::{
 };
 use storage_proofs_core::{
     drgraph::Graph,
-    gadgets::halo2::{
-        insert::{InsertChip, InsertConfig},
-        por::{self, MerkleChip},
+    halo2::{
+        gadgets::{
+            insert::{InsertChip, InsertConfig},
+            por::{self, MerkleChip},
+        },
+        CircuitRows,
     },
-    halo2_proofs::CircuitRows,
     merkle::{MerkleProofTrait, MerkleTreeTrait},
 };
 

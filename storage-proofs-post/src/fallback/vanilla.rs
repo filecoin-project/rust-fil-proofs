@@ -76,7 +76,7 @@ pub struct PublicInputs<T: Domain> {
     pub k: Option<usize>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct PublicSector<T: Domain> {
     pub id: SectorId,
     #[serde(bound = "")]

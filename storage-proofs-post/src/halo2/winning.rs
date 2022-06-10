@@ -11,10 +11,10 @@ use halo2_proofs::{
     plonk::{Circuit, ConstraintSystem, Error},
 };
 use sha2::{Digest, Sha256};
-use storage_proofs_core::halo2_proofs::CircuitRows;
+use storage_proofs_core::halo2::CircuitRows;
 
 use crate::{
-    fallback::{self as vanilla, SetupParams},
+    fallback as vanilla,
     halo2::shared::{CircuitConfig, SectorProof},
 };
 
@@ -60,26 +60,24 @@ where
     pub challenges: [Option<u32>; CHALLENGE_COUNT],
 }
 
-impl<F, const SECTOR_NODES: usize> PublicInputs<F, SECTOR_NODES>
+impl<F, const SECTOR_NODES: usize>
+    From<vanilla::PublicInputs<<PoseidonHasher<F> as Hasher>::Domain>>
+    for PublicInputs<F, SECTOR_NODES>
 where
     F: FieldExt,
     PoseidonHasher<F>: Hasher,
     <PoseidonHasher<F> as Hasher>::Domain: Domain<Field = F>,
 {
-    #[allow(clippy::unwrap_used)]
-    pub fn from(
-        setup_params: SetupParams,
+    fn from(
         vanilla_pub_inputs: vanilla::PublicInputs<<PoseidonHasher<F> as Hasher>::Domain>,
     ) -> Self {
-        assert_eq!(setup_params.sector_size >> 5, SECTOR_NODES as u64);
-        assert_eq!(setup_params.challenge_count, CHALLENGE_COUNT);
-        assert_eq!(setup_params.sector_count, 1);
         assert_eq!(vanilla_pub_inputs.sectors.len(), 1);
+        assert!(vanilla_pub_inputs.k.is_some());
 
         let randomness: F = vanilla_pub_inputs.randomness.into();
         let sector_id: u64 = vanilla_pub_inputs.sectors[0].id.into();
         let comm_r: F = vanilla_pub_inputs.sectors[0].comm_r.into();
-        let k = vanilla_pub_inputs.k.unwrap_or(0);
+        let k = vanilla_pub_inputs.k.unwrap();
 
         let challenges = generate_challenges::<F, SECTOR_NODES>(randomness, sector_id, k)
             .iter()
@@ -94,7 +92,14 @@ where
             challenges,
         }
     }
+}
 
+impl<F, const SECTOR_NODES: usize> PublicInputs<F, SECTOR_NODES>
+where
+    F: FieldExt,
+    PoseidonHasher<F>: Hasher,
+    <PoseidonHasher<F> as Hasher>::Domain: Domain<Field = F>,
+{
     pub fn empty() -> Self {
         PublicInputs {
             comm_r: None,

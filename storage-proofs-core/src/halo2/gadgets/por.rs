@@ -7,7 +7,7 @@ use halo2_proofs::{
     plonk::Error,
 };
 
-use crate::gadgets::halo2::insert::InsertChip;
+use crate::halo2::gadgets::insert::InsertChip;
 
 pub struct MerkleChip<H, U, V = U0, W = U0>
 where
@@ -321,7 +321,7 @@ mod test {
     use rand_xorshift::XorShiftRng;
 
     use crate::{
-        gadgets::halo2::insert::InsertConfig,
+        halo2::gadgets::insert::InsertConfig,
         merkle::{
             generate_tree, MerkleProof, MerkleProofTrait, MerkleTreeTrait, MerkleTreeWrapper,
         },

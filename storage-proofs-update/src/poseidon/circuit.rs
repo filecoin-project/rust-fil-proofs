@@ -7,7 +7,7 @@ use bellperson::{
     Circuit, ConstraintSystem, LinearCombination, SynthesisError,
 };
 use blstrs::Scalar as Fr;
-use ff::{Field, PrimeFieldBits};
+use ff::{Field, PrimeField};
 use filecoin_hashers::{HashFunction, Hasher, PoseidonArity};
 use neptune::circuit::poseidon_hash;
 use storage_proofs_core::{
@@ -334,7 +334,12 @@ where
         let h_select_bit_len = hs.len();
 
         if let Some(h_select) = h_select {
-            let bits: Vec<bool> = h_select.to_le_bits().into_iter().collect();
+            let bits: Vec<bool> = h_select
+                .to_repr()
+                .as_ref()
+                .iter()
+                .flat_map(|byte| (0..8).map(|i| byte >> i & 1 == 1).collect::<Vec<bool>>())
+                .collect();
 
             // `h_select` should have exactly one bit set.
             let h_select_bits = &bits[..h_select_bit_len];
@@ -363,8 +368,10 @@ where
 
             let bits: Vec<Option<bool>> = if let Some(h_select) = h_select.get_value() {
                 h_select
-                    .to_le_bits()
-                    .into_iter()
+                    .to_repr()
+                    .as_ref()
+                    .iter()
+                    .flat_map(|byte| (0..8).map(|i| byte >> i & 1 == 1).collect::<Vec<bool>>())
                     .take(bit_len)
                     .map(Some)
                     .collect()
