@@ -1,6 +1,6 @@
 use std::marker::PhantomData;
 
-use ff::{PrimeField, PrimeFieldBits};
+use ff::PrimeField;
 use filecoin_hashers::{Domain, Hasher, PoseidonArity};
 use serde::{Deserialize, Serialize};
 use storage_proofs_core::{error::Result, merkle::MerkleProof, proof::ProofScheme};
@@ -74,7 +74,7 @@ pub struct EmptySectorUpdate<F, U, V, W> {
 
 impl<'a, F, U, V, W> ProofScheme<'a> for EmptySectorUpdate<F, U, V, W>
 where
-    F: PrimeFieldBits,
+    F: PrimeField,
     TreeRHasher<F>: Hasher<Domain = TreeRDomain<F>>,
     TreeRDomain<F>: Domain<Field = F>,
     U: PoseidonArity<F>,

@@ -11,10 +11,10 @@ use halo2_proofs::{
     plonk::{Circuit, ConstraintSystem, Error},
 };
 use sha2::{Digest, Sha256};
-use storage_proofs_core::{halo2_proofs::CircuitRows, merkle::MerkleProofTrait};
+use storage_proofs_core::{halo2::CircuitRows, merkle::MerkleProofTrait};
 
 use crate::{
-    fallback::{self as vanilla, SetupParams},
+    fallback  as vanilla,
     halo2::{
         constants::{SECTOR_NODES_32_GIB, SECTOR_NODES_64_GIB},
         shared::{CircuitConfig, SectorProof},
@@ -84,27 +84,23 @@ where
     pub challenges: Vec<[Option<u32>; SECTOR_CHALLENGES]>,
 }
 
-impl<F, const SECTOR_NODES: usize> PublicInputs<F, SECTOR_NODES>
+impl<F, const SECTOR_NODES: usize>
+    From<vanilla::PublicInputs<<PoseidonHasher<F> as Hasher>::Domain>>
+    for PublicInputs<F, SECTOR_NODES>
 where
     F: FieldExt,
     PoseidonHasher<F>: Hasher,
     <PoseidonHasher<F> as Hasher>::Domain: Domain<Field = F>,
 {
-    #[allow(clippy::unwrap_used)]
-    pub fn from(
-        setup_params: SetupParams,
+    fn from(
         vanilla_pub_inputs: vanilla::PublicInputs<<PoseidonHasher<F> as Hasher>::Domain>,
     ) -> Self {
         let sectors_challenged_per_partition = challenged_sector_count::<SECTOR_NODES>();
-        let total_prover_sectors = vanilla_pub_inputs.sectors.len();
-
-        assert_eq!(setup_params.sector_size >> 5, SECTOR_NODES as u64);
-        assert_eq!(setup_params.challenge_count, SECTOR_CHALLENGES);
-        assert_eq!(setup_params.sector_count, sectors_challenged_per_partition);
-        assert_eq!(total_prover_sectors % setup_params.sector_count, 0);
+        assert_eq!(vanilla_pub_inputs.sectors.len() % sectors_challenged_per_partition, 0);
+        assert!(vanilla_pub_inputs.k.is_some());
 
         let randomness: F = vanilla_pub_inputs.randomness.into();
-        let k = vanilla_pub_inputs.k.unwrap_or(0);
+        let k = vanilla_pub_inputs.k.unwrap();
 
         let partition_sectors = vanilla_pub_inputs
             .sectors
@@ -139,7 +135,14 @@ where
 
         pub_inputs
     }
+}
 
+impl<F, const SECTOR_NODES: usize> PublicInputs<F, SECTOR_NODES>
+where
+    F: FieldExt,
+    PoseidonHasher<F>: Hasher,
+    <PoseidonHasher<F> as Hasher>::Domain: Domain<Field = F>,
+{
     pub fn empty() -> Self {
         let challenged_sector_count = challenged_sector_count::<SECTOR_NODES>();
         PublicInputs {

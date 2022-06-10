@@ -1,4 +1,4 @@
-use ff::PrimeFieldBits;
+use ff::PrimeField;
 use filecoin_hashers::{Domain, FieldArity};
 use generic_array::typenum::U2;
 use neptune::poseidon::Poseidon;
@@ -7,6 +7,43 @@ use crate::{
     constants::{challenge_count, partition_count, TreeRDomain, POSEIDON_CONSTANTS_GEN_RANDOMNESS},
     vanilla::rhos,
 };
+
+// Generates the challenge set for a single `EmptySectorUpdate` partition.
+#[inline]
+pub fn gen_partition_challenges<F>(
+    sector_nodes: usize,
+    comm_r_new: TreeRDomain<F>,
+    k: usize,
+) -> Vec<u32>
+where
+    F: PrimeField,
+    TreeRDomain<F>: Domain<Field = F>,
+{
+    Challenges::new(sector_nodes, comm_r_new, k).collect()
+}
+
+// Returns each partition challenge's `rho`.
+pub fn gen_partition_rhos<F>(
+    sector_nodes: usize,
+    challenges: &[u32],
+    phi: &TreeRDomain<F>,
+    h: usize,
+) -> Vec<F>
+where
+    F: PrimeField,
+    TreeRDomain<F>: Domain<Field = F>,
+{
+    let rhos = rhos(h, &phi);
+    let challenge_bit_len = sector_nodes.trailing_zeros() as usize;
+    let get_high_bits_shr = challenge_bit_len - h;
+    challenges
+        .iter()
+        .map(|c| {
+            let high = (c >> get_high_bits_shr) as usize;
+            rhos[high]
+        })
+        .collect()
+}
 
 // Generates the challenges for partition `k` of an `EmptySectorUpdate` proof. All challenges
 // returned for partition `k` are guaranteed to lie within the `k`-th chunk of sector nodes.
@@ -20,7 +57,7 @@ use crate::{
 // for `challenges_per_digest` number challenges.
 pub struct Challenges<F>
 where
-    F: PrimeFieldBits,
+    F: PrimeField,
     TreeRDomain<F>: Domain<Field = F>,
 {
     comm_r_new: TreeRDomain<F>,
@@ -41,7 +78,7 @@ where
 
 impl<F> Challenges<F>
 where
-    F: PrimeFieldBits,
+    F: PrimeField,
     TreeRDomain<F>: Domain<Field = F>,
 {
     pub fn new(sector_nodes: usize, comm_r_new: TreeRDomain<F>, k: usize) -> Self {
@@ -93,30 +130,11 @@ where
             challenges_remaining: challenge_count,
         }
     }
-
-    // Returns the challenges as a vector, rather than an iterator.
-    pub fn vec(sector_nodes: usize, comm_r_new: TreeRDomain<F>, k: usize) -> Vec<u32> {
-        Self::new(sector_nodes, comm_r_new, k).collect()
-    }
-
-    // Returns each challenge's `rho`.
-    pub fn rhos(sector_nodes: usize, challenges: &[u32], h: usize, phi: &TreeRDomain<F>) -> Vec<F> {
-        let rhos = rhos(h, &phi);
-        let challenge_bit_len = sector_nodes.trailing_zeros() as usize;
-        let get_high_bits_shr = challenge_bit_len - h;
-        challenges
-            .iter()
-            .map(|c| {
-                let high = (c >> get_high_bits_shr) as usize;
-                rhos[high]
-            })
-            .collect()
-    }
 }
 
 impl<F> Iterator for Challenges<F>
 where
-    F: PrimeFieldBits,
+    F: PrimeField,
     TreeRDomain<F>: Domain<Field = F>,
 {
     // All sector-sizes have challenges that fit within 32 bits.
@@ -135,7 +153,13 @@ where
                 .expect("arity-2 Poseidon constants not found for field");
             let digest =
                 Poseidon::new_with_preimage(&[self.comm_r_new.into(), digest_index], consts).hash();
-            self.digest_bits = digest.to_le_bits().into_iter().collect();
+            self.digest_bits = digest
+                .to_repr()
+                .as_ref()
+                .iter()
+                .flat_map(|byte| (0..8).map(|i| byte >> i & 1 == 1).collect::<Vec<bool>>())
+                .take(F::NUM_BITS as usize)
+                .collect();
         }
 
         // Derive the `i`-th challenge `c` from `digest`.
