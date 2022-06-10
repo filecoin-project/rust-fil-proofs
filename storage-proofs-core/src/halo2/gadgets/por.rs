@@ -73,7 +73,8 @@ where
         challenge_bits: &[AssignedBit<<H::Domain as Domain>::Field>],
         leaf: &Option<<H::Domain as Domain>::Field>,
         path: &[Vec<Option<<H::Domain as Domain>::Field>>],
-    ) -> Result<AssignedCell<<H::Domain as Domain>::Field, <H::Domain as Domain>::Field>, Error> {
+    ) -> Result<AssignedCell<<H::Domain as Domain>::Field, <H::Domain as Domain>::Field>, Error>
+    {
         self.compute_root_inner(
             layouter,
             challenge_bits,
@@ -88,7 +89,8 @@ where
         challenge_bits: &[AssignedBit<<H::Domain as Domain>::Field>],
         leaf: &AssignedCell<<H::Domain as Domain>::Field, <H::Domain as Domain>::Field>,
         path: &[Vec<Option<<H::Domain as Domain>::Field>>],
-    ) -> Result<AssignedCell<<H::Domain as Domain>::Field, <H::Domain as Domain>::Field>, Error> {
+    ) -> Result<AssignedCell<<H::Domain as Domain>::Field, <H::Domain as Domain>::Field>, Error>
+    {
         self.compute_root_inner(
             layouter,
             challenge_bits,
@@ -105,7 +107,8 @@ where
         challenge_bits: &[AssignedBit<<H::Domain as Domain>::Field>],
         leaf: WitnessOrCopy<<H::Domain as Domain>::Field, <H::Domain as Domain>::Field>,
         path: &[Vec<Option<<H::Domain as Domain>::Field>>],
-    ) -> Result<AssignedCell<<H::Domain as Domain>::Field, <H::Domain as Domain>::Field>, Error> {
+    ) -> Result<AssignedCell<<H::Domain as Domain>::Field, <H::Domain as Domain>::Field>, Error>
+    {
         let base_arity = U::to_usize();
         let sub_arity = V::to_usize();
         let top_arity = W::to_usize();
@@ -148,22 +151,18 @@ where
 
             let preimage = if height == 0 {
                 match leaf {
-                    WitnessOrCopy::Witness(ref leaf) => {
-                        self.base_insert.witness_insert(
-                            layouter.namespace(|| format!("base insert (height {})", height)),
-                            siblings,
-                            leaf,
-                            &index_bits,
-                        )?
-                    }
-                    WitnessOrCopy::Copy(ref leaf) => {
-                        self.base_insert.copy_insert(
-                            layouter.namespace(|| format!("base insert (height {})", height)),
-                            siblings,
-                            leaf,
-                            &index_bits,
-                        )?
-                    }
+                    WitnessOrCopy::Witness(ref leaf) => self.base_insert.witness_insert(
+                        layouter.namespace(|| format!("base insert (height {})", height)),
+                        siblings,
+                        leaf,
+                        &index_bits,
+                    )?,
+                    WitnessOrCopy::Copy(ref leaf) => self.base_insert.copy_insert(
+                        layouter.namespace(|| format!("base insert (height {})", height)),
+                        siblings,
+                        leaf,
+                        &index_bits,
+                    )?,
                     _ => unimplemented!(),
                 }
             } else {
@@ -398,11 +397,10 @@ mod test {
             let (advice_eq, advice_neq, fixed_eq, fixed_neq) = ColumnBuilder::new()
                 .with_chip::<UInt32Chip<<H::Domain as Domain>::Field>>()
                 .with_chip::<<H as HaloHasher<U>>::Chip>()
-                .with_chip::<InsertChip::<<H::Domain as Domain>::Field, U>>()
+                .with_chip::<InsertChip<<H::Domain as Domain>::Field, U>>()
                 .create_columns(meta);
 
-            let uint32 =
-                UInt32Chip::configure(meta, advice_eq[..9].try_into().unwrap());
+            let uint32 = UInt32Chip::configure(meta, advice_eq[..9].try_into().unwrap());
 
             let base_hasher = <H as HaloHasher<U>>::configure(
                 meta,

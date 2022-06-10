@@ -627,18 +627,15 @@ mod tests {
         // Test two one-block and two two-block preimages.
         let preimages = [vec![1u8], vec![0, 55, 0, 0], vec![1; 64], vec![1; 100]];
         for preimage in &preimages {
-            let digest_fr =
-                <<Sha256Hasher<Fr> as Hasher>::Function as HashFunction<Sha256Domain<Fr>>>::hash(
-                    &preimage,
-                );
-            let digest_fp =
-                <<Sha256Hasher<Fp> as Hasher>::Function as HashFunction<Sha256Domain<Fp>>>::hash(
-                    &preimage,
-                );
-            let digest_fq =
-                <<Sha256Hasher<Fq> as Hasher>::Function as HashFunction<Sha256Domain<Fq>>>::hash(
-                    &preimage,
-                );
+            let digest_fr = <<Sha256Hasher<Fr> as Hasher>::Function as HashFunction<
+                Sha256Domain<Fr>,
+            >>::hash(preimage);
+            let digest_fp = <<Sha256Hasher<Fp> as Hasher>::Function as HashFunction<
+                Sha256Domain<Fp>,
+            >>::hash(preimage);
+            let digest_fq = <<Sha256Hasher<Fq> as Hasher>::Function as HashFunction<
+                Sha256Domain<Fq>,
+            >>::hash(preimage);
             assert_eq!(digest_fr.state, digest_fp.state);
             assert_eq!(digest_fr.state, digest_fq.state);
         }
@@ -663,7 +660,10 @@ mod tests {
         Sha256Hasher<F>: HaloHasher<A>,
         <Sha256Hasher<F> as Hasher>::Domain: Domain<Field = F>,
     {
-        type Config = (<Sha256Hasher<F> as HaloHasher<A>>::Config, [Column<Advice>; 9]);
+        type Config = (
+            <Sha256Hasher<F> as HaloHasher<A>>::Config,
+            [Column<Advice>; 9],
+        );
         type FloorPlanner = SimpleFloorPlanner;
 
         fn without_witnesses(&self) -> Self {
@@ -690,6 +690,7 @@ mod tests {
             (sha256, advice)
         }
 
+        #[allow(clippy::unwrap_used)]
         fn synthesize(
             &self,
             config: Self::Config,
@@ -704,8 +705,7 @@ mod tests {
                 || "assign preimage",
                 |mut region| {
                     let mut advice_iter = AdviceIter::from(advice.to_vec());
-                    self
-                        .preimage
+                    self.preimage
                         .iter()
                         .enumerate()
                         .map(|(i, elem)| {
@@ -737,16 +737,19 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::unwrap_used)]
     fn test_sha256_groth16_halo2_compat() {
         // Test one-element preimage.
         {
             let groth_digest: Fr = {
                 let mut cs = TestConstraintSystem::<Fr>::new();
                 let preimage = [AllocatedNum::alloc(&mut cs, || Ok(Fr::one())).unwrap()];
-                <Sha256Hasher<Fr> as Hasher>::Function::hash_multi_leaf_circuit::<A, _>(&mut cs, &preimage, 0)
-                    .unwrap()
-                    .get_value()
-                    .unwrap()
+                <Sha256Hasher<Fr> as Hasher>::Function::hash_multi_leaf_circuit::<A, _>(
+                    &mut cs, &preimage, 0,
+                )
+                .unwrap()
+                .get_value()
+                .unwrap()
             };
 
             // Compute Halo2 digest using Pallas field.
@@ -771,13 +774,17 @@ mod tests {
             let groth_digest: Fr = {
                 let mut cs = TestConstraintSystem::<Fr>::new();
                 let preimage = [
-                    AllocatedNum::alloc(cs.namespace(|| "preimage elem 1"), || Ok(Fr::one())).unwrap(),
-                    AllocatedNum::alloc(cs.namespace(|| "preimage elem 2"), || Ok(Fr::from(55))).unwrap(),
+                    AllocatedNum::alloc(cs.namespace(|| "preimage elem 1"), || Ok(Fr::one()))
+                        .unwrap(),
+                    AllocatedNum::alloc(cs.namespace(|| "preimage elem 2"), || Ok(Fr::from(55)))
+                        .unwrap(),
                 ];
-                <Sha256Hasher<Fr> as Hasher>::Function::hash_multi_leaf_circuit::<A, _>(&mut cs, &preimage, 0)
-                    .unwrap()
-                    .get_value()
-                    .unwrap()
+                <Sha256Hasher<Fr> as Hasher>::Function::hash_multi_leaf_circuit::<A, _>(
+                    &mut cs, &preimage, 0,
+                )
+                .unwrap()
+                .get_value()
+                .unwrap()
             };
 
             // Compute Halo2 digest using Pallas field.
