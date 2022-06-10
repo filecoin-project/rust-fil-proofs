@@ -46,12 +46,17 @@ impl ColumnBuilder {
     pub fn with_chip<C: ColumnCount>(mut self) -> Self {
         let chip = C::num_cols();
 
-        let advice_total =
-            max(self.0.advice_eq + self.0.advice_neq, chip.advice_eq + chip.advice_neq);
+        let advice_total = max(
+            self.0.advice_eq + self.0.advice_neq,
+            chip.advice_eq + chip.advice_neq,
+        );
         let advice_eq = max(self.0.advice_eq, chip.advice_eq);
         let advice_neq = advice_total - advice_eq;
 
-        let fixed_total = max(self.0.fixed_eq + self.0.fixed_neq, chip.fixed_eq + chip.fixed_neq);
+        let fixed_total = max(
+            self.0.fixed_eq + self.0.fixed_neq,
+            chip.fixed_eq + chip.fixed_neq,
+        );
         let fixed_eq = max(chip.fixed_eq, self.0.fixed_eq);
         let fixed_neq = fixed_total - fixed_eq;
 
@@ -69,8 +74,12 @@ impl ColumnBuilder {
         &self,
         meta: &mut ConstraintSystem<F>,
     ) -> (AdviceEq, AdviceNeq, FixedEq, FixedNeq) {
-        let advice_eq = (0..self.0.advice_eq).map(|_| meta.advice_column()).collect();
-        let advice_neq = (0..self.0.advice_neq).map(|_| meta.advice_column()).collect();
+        let advice_eq = (0..self.0.advice_eq)
+            .map(|_| meta.advice_column())
+            .collect();
+        let advice_neq = (0..self.0.advice_neq)
+            .map(|_| meta.advice_column())
+            .collect();
         let fixed_eq = (0..self.0.fixed_eq).map(|_| meta.fixed_column()).collect();
         let fixed_neq = (0..self.0.fixed_neq).map(|_| meta.fixed_column()).collect();
         (advice_eq, advice_neq, fixed_eq, fixed_neq)

@@ -7,7 +7,7 @@ use merkletree::store::StoreConfig;
 use rand::{Rng, SeedableRng};
 use rand_xorshift::XorShiftRng;
 use storage_proofs_core::{
-    api_version::ApiVersion, cache_key::CacheKey, halo2_proofs::CircuitRows, merkle::DiskTree,
+    api_version::ApiVersion, cache_key::CacheKey, halo2::CircuitRows, merkle::DiskTree,
     proof::ProofScheme, test_helper::setup_replica, util::default_rows_to_discard, TEST_SEED,
 };
 use storage_proofs_porep::{
@@ -74,7 +74,7 @@ where
         degree: DRG_PARENTS,
         expansion_degree: EXP_PARENTS,
         porep_id: [44; 32],
-        layer_challenges: layer_challenges.clone(),
+        layer_challenges,
         api_version: ApiVersion::V1_1_0,
     };
 

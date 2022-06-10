@@ -4,7 +4,9 @@ use filecoin_hashers::{
 use halo2_proofs::{arithmetic::FieldExt, plonk::Error};
 use rand::rngs::OsRng;
 use storage_proofs_core::{
-    halo2::{create_proof, verify_proof, CompoundProof, FieldProvingCurves, Halo2Keypair, Halo2Proof},
+    halo2::{
+        create_proof, verify_proof, CompoundProof, FieldProvingCurves, Halo2Keypair, Halo2Proof,
+    },
     merkle::MerkleTreeTrait,
 };
 

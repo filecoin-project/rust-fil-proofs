@@ -30,16 +30,17 @@ use storage_proofs_core::{
 use crate::{
     constants::{
         apex_leaf_count, challenge_count, partition_count, validate_tree_r_shape, TreeDArity,
-        TreeDDomain,
-        TreeDHasher, TreeRDomain, TreeRHasher, SECTOR_SIZE_1_KIB, SECTOR_SIZE_2_KIB, SECTOR_SIZE_4_KIB, SECTOR_SIZE_8_KIB, SECTOR_SIZE_16_KIB,
-        SECTOR_SIZE_32_KIB, SECTOR_SIZE_8_MIB, SECTOR_SIZE_16_MIB, SECTOR_SIZE_512_MIB,
-        SECTOR_SIZE_32_GIB, SECTOR_SIZE_64_GIB,
+        TreeDDomain, TreeDHasher, TreeRDomain, TreeRHasher, SECTOR_SIZE_16_KIB, SECTOR_SIZE_16_MIB,
+        SECTOR_SIZE_1_KIB, SECTOR_SIZE_2_KIB, SECTOR_SIZE_32_GIB, SECTOR_SIZE_32_KIB,
+        SECTOR_SIZE_4_KIB, SECTOR_SIZE_512_MIB, SECTOR_SIZE_64_GIB, SECTOR_SIZE_8_KIB,
+        SECTOR_SIZE_8_MIB,
     },
+    gen_partition_challenges, gen_partition_rhos,
     halo2::gadgets::{
         ApexTreeChip, ChallengeBitsChip, ChallengeBitsConfig, ChallengeLabelsChip,
         ChallengeLabelsConfig,
     },
-    gen_partition_challenges, gen_partition_rhos, phi, vanilla,
+    phi, vanilla,
 };
 
 trait CircuitParams<const SECTOR_NODES: usize> {
@@ -98,7 +99,14 @@ where
         let challenges = gen_partition_challenges(SECTOR_NODES, comm_r_new, k);
         let phi = phi(&comm_d_new, &comm_r_old);
         let rhos = gen_partition_rhos(SECTOR_NODES, &challenges, &phi, h);
-        Self::new(k, comm_r_old.into(), comm_d_new.into(), comm_r_new.into(), challenges, rhos)
+        Self::new(
+            k,
+            comm_r_old.into(),
+            comm_d_new.into(),
+            comm_r_new.into(),
+            challenges,
+            rhos,
+        )
     }
 }
 
@@ -357,14 +365,30 @@ where
 {
     fn from(vanilla_partition_proof: vanilla::PartitionProof<F, U, V, W>) -> Self {
         let comm_c: F = vanilla_partition_proof.comm_c.into();
-        let root_r_old: F = vanilla_partition_proof.challenge_proofs[0].proof_r_old.root().into();
-        let root_r_new: F = vanilla_partition_proof.challenge_proofs[0].proof_r_new.root().into();
+        let root_r_old: F = vanilla_partition_proof.challenge_proofs[0]
+            .proof_r_old
+            .root()
+            .into();
+        let root_r_new: F = vanilla_partition_proof.challenge_proofs[0]
+            .proof_r_new
+            .root()
+            .into();
 
-        let apex_leafs: Vec<Option<F>> =
-            vanilla_partition_proof.apex_leafs.iter().copied().map(Into::into).map(Some).collect();
+        let apex_leafs: Vec<Option<F>> = vanilla_partition_proof
+            .apex_leafs
+            .iter()
+            .copied()
+            .map(Into::into)
+            .map(Some)
+            .collect();
 
         let challenge_proofs: Vec<ChallengeProof<F, U, V, W, SECTOR_NODES>> =
-            vanilla_partition_proof.challenge_proofs.iter().cloned().map(Into::into).collect();
+            vanilla_partition_proof
+                .challenge_proofs
+                .iter()
+                .cloned()
+                .map(Into::into)
+                .collect();
 
         PrivateInputs {
             comm_c: Some(comm_c),

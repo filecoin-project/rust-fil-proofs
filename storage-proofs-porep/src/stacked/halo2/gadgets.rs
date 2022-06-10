@@ -214,10 +214,9 @@ where
 
                 let zero = {
                     let (offset, col) = advice_iter.next();
-                    let zero = AssignedU32::assign(&mut region, || "zero", col, offset, Some(0))?;
+                    AssignedU32::assign(&mut region, || "zero", col, offset, Some(0))?
                     // TODO (jake): do we need to call `.constrain_constant()`?
                     // region.constrain_constant(zero.cell(), F::zero())?;
-                    zero
                 };
 
                 let layers = (1..=num_layers)
