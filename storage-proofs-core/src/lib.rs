@@ -19,7 +19,7 @@ pub mod data;
 pub mod drgraph;
 pub mod error;
 pub mod gadgets;
-pub mod halo2_proofs;
+pub mod halo2;
 pub mod measurements;
 pub mod merkle;
 pub mod multi_proof;

@@ -9,7 +9,7 @@ use bellperson::{
     Circuit, ConstraintSystem, LinearCombination, SynthesisError,
 };
 use blstrs::Scalar as Fr;
-use ff::{Field, PrimeFieldBits};
+use ff::{Field, PrimeField};
 use filecoin_hashers::{HashFunction, Hasher, PoseidonArity};
 use neptune::circuit::poseidon_hash;
 use storage_proofs_core::{
@@ -370,7 +370,12 @@ where
             challenge_proofs[0].path_d_new[challenge_bit_len - partition_bit_len..].to_vec();
 
         if let Some(k_and_h_select) = k_and_h_select {
-            let bits: Vec<bool> = k_and_h_select.to_le_bits().into_iter().collect();
+            let bits: Vec<bool> = k_and_h_select
+                .to_repr()
+                .as_ref()
+                .iter()
+                .flat_map(|byte| (0..8).map(|i| byte >> i & 1 == 1).collect::<Vec<bool>>())
+                .collect();
             // Assert that `k` is valid for the sector-size.
             let k_bits = &bits[..partition_bit_len];
             let mut k = 0;
@@ -421,15 +426,18 @@ where
         let k_and_h_select_bits = {
             let bit_len = partition_bit_len + h_select_bit_len;
 
-            let bits: Vec<Option<bool>> = if let Some(k_and_h_select) = k_and_h_select.get_value() {
-                k_and_h_select
-                    .to_le_bits()
-                    .into_iter()
-                    .take(bit_len)
-                    .map(Some)
-                    .collect()
-            } else {
-                vec![None; bit_len]
+            let bits: Vec<Option<bool>> = match k_and_h_select.get_value() {
+                Some(k_and_h_select) => {
+                    k_and_h_select
+                        .to_repr()
+                        .as_ref()
+                        .iter()
+                        .flat_map(|byte| (0..8).map(|i| byte >> i & 1 == 1).collect::<Vec<bool>>())
+                        .take(bit_len)
+                        .map(Some)
+                        .collect()
+                }
+                None => vec![None; bit_len],
             };
 
             let k_and_h_select_bits = bits

@@ -1,97 +1,128 @@
-// TODO (jake): remove once `CompoundProof` api is finished.
-#![allow(unused_imports)]
-
-use filecoin_hashers::{Domain, FieldArity, HaloHasher, Hasher, PoseidonArity, POSEIDON_CONSTANTS};
-use ff::PrimeFieldBits;
+use filecoin_hashers::{Domain, Hasher, PoseidonArity};
 use halo2_proofs::{arithmetic::FieldExt, plonk::Error};
 use rand::rngs::OsRng;
-use storage_proofs_core::{
-    halo2_proofs::{create_proof, CompoundProof, FieldProvingCurves, Halo2Keypair, Halo2Proof},
-    merkle::MerkleProofTrait,
-    proof::ProofScheme,
+use storage_proofs_core::halo2::{
+    create_proof, verify_proof, CompoundProof, FieldProvingCurves, Halo2Keypair, Halo2Proof,
 };
 
 use crate::{
-    constants::{TreeDArity, TreeDDomain, TreeDHasher, TreeRDomain, TreeRHasher, SECTOR_SIZE_1_KIB},
-    halo2::circuit::{ChallengeProof, EmptySectorUpdateCircuit, PrivateInputs, PublicInputs},
-    vanilla::{self, phi},
-    Challenges, EmptySectorUpdate,
+    constants::{
+        TreeDArity, TreeDDomain, TreeDHasher, TreeRDomain, TreeRHasher, SECTOR_SIZE_1_KIB,
+        SECTOR_SIZE_2_KIB, SECTOR_SIZE_4_KIB, SECTOR_SIZE_8_KIB, SECTOR_SIZE_16_KIB,
+        SECTOR_SIZE_32_KIB, SECTOR_SIZE_8_MIB, SECTOR_SIZE_16_MIB, SECTOR_SIZE_512_MIB,
+        SECTOR_SIZE_32_GIB, SECTOR_SIZE_64_GIB,
+    },
+    halo2::circuit::{self, EmptySectorUpdateCircuit},
+    EmptySectorUpdate,
 };
 
-impl<'a, F, U, V, W> CompoundProof<'a, F, SECTOR_SIZE_1_KIB> for EmptySectorUpdate<F, U, V, W>
-where
-    F: FieldExt + PrimeFieldBits + FieldProvingCurves,
-    U: PoseidonArity<F>,
-    V: PoseidonArity<F>,
-    W: PoseidonArity<F>,
-    TreeDArity: PoseidonArity<F>,
-    TreeDHasher<F>: Hasher<Domain = TreeDDomain<F>>,
-    TreeDDomain<F>: Domain<Field = F>,
-    TreeRHasher<F>: Hasher<Domain = TreeRDomain<F>>,
-    TreeRDomain<F>: Domain<Field = F>,
-{
-    type Circuit = EmptySectorUpdateCircuit<F, U, V, W, SECTOR_SIZE_1_KIB>;
+macro_rules! impl_compound_proof {
+    ($($sector_nodes:expr),*) => {
+        $(
+            impl<'a, F, U, V, W> CompoundProof<'a, F, $sector_nodes> for EmptySectorUpdate<F, U, V, W>
+            where
+                F: FieldExt + FieldProvingCurves,
+                U: PoseidonArity<F>,
+                V: PoseidonArity<F>,
+                W: PoseidonArity<F>,
+                TreeDArity: PoseidonArity<F>,
+                TreeDHasher<F>: Hasher<Domain = TreeDDomain<F>>,
+                TreeDDomain<F>: Domain<Field = F>,
+                TreeRHasher<F>: Hasher<Domain = TreeRDomain<F>>,
+                TreeRDomain<F>: Domain<Field = F>,
+            {
+                type Circuit = EmptySectorUpdateCircuit<F, U, V, W, $sector_nodes>;
 
-    fn prove_with_vanilla_partition(
-        setup_params: Self::SetupParams,
-        vanilla_pub_inputs: Self::PublicInputs,
-        vanilla_proof: Self::Proof,
-        // TODO (jake): allow loading keypair from disk.
-        // keypair: &Halo2Keypair<<F as FieldProvingCurves>::Affine, Self::Circuit>,
-    ) -> Result<Halo2Proof<<F as FieldProvingCurves>::Affine, Self::Circuit>, Error> {
-        assert_eq!(
-            setup_params.sector_bytes as usize,
-            SECTOR_SIZE_1_KIB << 5,
-            "setup params contain incorrect sector size",
-        );
+                fn prove_partition_with_vanilla(
+                    setup_params: &Self::SetupParams,
+                    vanilla_pub_inputs: &Self::PublicInputs,
+                    vanilla_partition_proof: &Self::Proof,
+                    keypair: &Halo2Keypair<<F as FieldProvingCurves>::Affine, Self::Circuit>,
+                ) -> Result<Halo2Proof<<F as FieldProvingCurves>::Affine, Self::Circuit>, Error> {
+                    assert_eq!(setup_params.sector_bytes >> 5, $sector_nodes as u64);
 
-        let vanilla::PublicInputs {
-            k,
-            comm_r_old,
-            comm_d_new,
-            comm_r_new,
-            h,
-        } = vanilla_pub_inputs;
+                    let pub_inputs =
+                        circuit::PublicInputs::<F, $sector_nodes>::from(vanilla_pub_inputs.clone());
 
-        let challenges = Challenges::vec(SECTOR_SIZE_1_KIB, comm_r_new, k);
-        let phi = phi(&comm_d_new, &comm_r_old);
-        let rhos = Challenges::rhos(SECTOR_SIZE_1_KIB, &challenges, h, &phi);
+                    let pub_inputs_vec = pub_inputs.to_vec();
 
-        let circ_pub_inputs = PublicInputs::<F, SECTOR_SIZE_1_KIB>::new(
-            k,
-            comm_r_old.into(),
-            comm_d_new.into(),
-            comm_r_new.into(),
-            challenges,
-            rhos,
-        );
+                    let priv_inputs =
+                        circuit::PrivateInputs::<F, U, V, W, $sector_nodes>::from(vanilla_partition_proof.clone());
 
-        let circ_pub_inputs_vec = circ_pub_inputs.to_vec();
+                    let circ = EmptySectorUpdateCircuit {
+                        pub_inputs,
+                        priv_inputs,
+                    };
 
-        let comm_c: F = vanilla_proof.comm_c.into();
-        let root_r_old: F = vanilla_proof.challenge_proofs[0].proof_r_old.root().into();
-        let root_r_new: F = vanilla_proof.challenge_proofs[0].proof_r_new.root().into();
+                    create_proof(&keypair, circ, &pub_inputs_vec, &mut OsRng)
+                }
 
-        let apex_leafs: Vec<Option<F>> =
-            vanilla_proof.apex_leafs.iter().copied().map(Into::into).map(Some).collect();
+                fn prove_all_partitions_with_vanilla(
+                    setup_params: &Self::SetupParams,
+                    vanilla_pub_inputs: &[&Self::PublicInputs],
+                    vanilla_proofs: &[&Self::Proof],
+                    keypair: &Halo2Keypair<<F as FieldProvingCurves>::Affine, Self::Circuit>,
+                ) -> Result<Vec<Halo2Proof<<F as FieldProvingCurves>::Affine, Self::Circuit>>, Error> {
+                    assert_eq!(vanilla_pub_inputs.len(), vanilla_proofs.len());
+                    vanilla_pub_inputs
+                        .iter()
+                        .zip(vanilla_proofs.iter())
+                        .map(|(pub_inputs, partition_proof)| {
+                            <Self as CompoundProof<'_, F, $sector_nodes>>::prove_partition_with_vanilla(
+                                setup_params,
+                                pub_inputs,
+                                partition_proof,
+                                keypair,
+                            )
+                        })
+                        .collect()
+                }
 
-        let challenge_proofs: Vec<ChallengeProof<F, U, V, W, SECTOR_SIZE_1_KIB>> =
-            vanilla_proof.challenge_proofs.iter().cloned().map(Into::into).collect();
+                fn verify_partition(
+                    setup_params: &Self::SetupParams,
+                    vanilla_pub_inputs: &Self::PublicInputs,
+                    circ_proof: &Halo2Proof<<F as FieldProvingCurves>::Affine, Self::Circuit>,
+                    keypair: &Halo2Keypair<<F as FieldProvingCurves>::Affine, Self::Circuit>,
+                ) -> Result<(), Error> {
+                    assert_eq!(setup_params.sector_bytes >> 5, $sector_nodes as u64);
+                    let pub_inputs =
+                        circuit::PublicInputs::<F, $sector_nodes>::from(vanilla_pub_inputs.clone());
+                    let pub_inputs_vec = pub_inputs.to_vec();
+                    verify_proof(keypair, circ_proof, &pub_inputs_vec)
+                }
 
-        let circ_priv_inputs = PrivateInputs {
-            comm_c: Some(comm_c),
-            root_r_old: Some(root_r_old),
-            root_r_new: Some(root_r_new),
-            apex_leafs,
-            challenge_proofs,
-        };
-
-        let circ = EmptySectorUpdateCircuit {
-            pub_inputs: circ_pub_inputs,
-            priv_inputs: circ_priv_inputs,
-        };
-
-        let keypair = Self::keypair(&circ)?;
-        create_proof(&keypair, circ, &circ_pub_inputs_vec, &mut OsRng)
+                fn verify_all_partitions(
+                    setup_params: &Self::SetupParams,
+                    vanilla_pub_inputs: &[&Self::PublicInputs],
+                    circ_proofs: &[&Halo2Proof<<F as FieldProvingCurves>::Affine, Self::Circuit>],
+                    keypair: &Halo2Keypair<<F as FieldProvingCurves>::Affine, Self::Circuit>,
+                ) -> Result<(), Error> {
+                    assert_eq!(vanilla_pub_inputs.len(), circ_proofs.len());
+                    for (vanilla_pub_inputs, circ_proof) in vanilla_pub_inputs.iter().zip(circ_proofs.iter()) {
+                        <Self as CompoundProof<'_, F, $sector_nodes>>::verify_partition(
+                            setup_params,
+                            vanilla_pub_inputs,
+                            circ_proof,
+                            keypair,
+                        )?;
+                    }
+                    Ok(())
+                }
+            }
+        )*
     }
 }
+
+impl_compound_proof!(
+    SECTOR_SIZE_1_KIB,
+    SECTOR_SIZE_2_KIB,
+    SECTOR_SIZE_4_KIB,
+    SECTOR_SIZE_8_KIB,
+    SECTOR_SIZE_16_KIB,
+    SECTOR_SIZE_32_KIB,
+    SECTOR_SIZE_8_MIB,
+    SECTOR_SIZE_16_MIB,
+    SECTOR_SIZE_512_MIB,
+    SECTOR_SIZE_32_GIB,
+    SECTOR_SIZE_64_GIB
+);

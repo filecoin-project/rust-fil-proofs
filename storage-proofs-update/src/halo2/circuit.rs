@@ -17,25 +17,29 @@ use halo2_proofs::{
     plonk::{Advice, Circuit, Column, ConstraintSystem, Error, Instance},
 };
 use storage_proofs_core::{
-    gadgets::halo2::{
-        insert::{InsertChip, InsertConfig},
-        por::MerkleChip,
+    halo2::{
+        gadgets::{
+            insert::{InsertChip, InsertConfig},
+            por::MerkleChip,
+        },
+        CircuitRows,
     },
-    halo2_proofs::CircuitRows,
     merkle::{MerkleProof, MerkleProofTrait},
 };
 
 use crate::{
     constants::{
         apex_leaf_count, challenge_count, partition_count, validate_tree_r_shape, TreeDArity,
-        TreeDHasher, TreeRHasher, SECTOR_SIZE_16_KIB, SECTOR_SIZE_1_KIB, SECTOR_SIZE_2_KIB,
-        SECTOR_SIZE_32_KIB, SECTOR_SIZE_4_KIB, SECTOR_SIZE_8_KIB,
+        TreeDDomain,
+        TreeDHasher, TreeRDomain, TreeRHasher, SECTOR_SIZE_1_KIB, SECTOR_SIZE_2_KIB, SECTOR_SIZE_4_KIB, SECTOR_SIZE_8_KIB, SECTOR_SIZE_16_KIB,
+        SECTOR_SIZE_32_KIB, SECTOR_SIZE_8_MIB, SECTOR_SIZE_16_MIB, SECTOR_SIZE_512_MIB,
+        SECTOR_SIZE_32_GIB, SECTOR_SIZE_64_GIB,
     },
     halo2::gadgets::{
         ApexTreeChip, ChallengeBitsChip, ChallengeBitsConfig, ChallengeLabelsChip,
         ChallengeLabelsConfig,
     },
-    vanilla,
+    gen_partition_challenges, gen_partition_rhos, phi, vanilla,
 };
 
 trait CircuitParams<const SECTOR_NODES: usize> {
@@ -75,6 +79,27 @@ pub struct PublicInputs<F: FieldExt, const SECTOR_NODES: usize> {
     comm_r_new: Option<F>,
     challenges: Vec<Option<u32>>,
     rhos: Vec<Option<F>>,
+}
+
+impl<F, const SECTOR_NODES: usize> From<vanilla::PublicInputs<F>> for PublicInputs<F, SECTOR_NODES>
+where
+    F: FieldExt,
+    TreeDDomain<F>: Domain<Field = F>,
+    TreeRDomain<F>: Domain<Field = F>,
+{
+    fn from(vanilla_pub_inputs: vanilla::PublicInputs<F>) -> Self {
+        let vanilla::PublicInputs {
+            k,
+            comm_r_old,
+            comm_d_new,
+            comm_r_new,
+            h,
+        } = vanilla_pub_inputs;
+        let challenges = gen_partition_challenges(SECTOR_NODES, comm_r_new, k);
+        let phi = phi(&comm_d_new, &comm_r_old);
+        let rhos = gen_partition_rhos(SECTOR_NODES, &challenges, &phi, h);
+        Self::new(k, comm_r_old.into(), comm_d_new.into(), comm_r_new.into(), challenges, rhos)
+    }
 }
 
 impl<F: FieldExt, const SECTOR_NODES: usize> PublicInputs<F, SECTOR_NODES> {
@@ -315,6 +340,40 @@ where
     pub root_r_new: Option<F>,
     pub apex_leafs: Vec<Option<F>>,
     pub challenge_proofs: Vec<ChallengeProof<F, U, V, W, SECTOR_NODES>>,
+}
+
+impl<F, U, V, W, const SECTOR_NODES: usize> From<vanilla::PartitionProof<F, U, V, W>>
+    for PrivateInputs<F, U, V, W, SECTOR_NODES>
+where
+    F: FieldExt,
+    U: PoseidonArity<F>,
+    V: PoseidonArity<F>,
+    W: PoseidonArity<F>,
+    TreeDArity: PoseidonArity<F>,
+    TreeDHasher<F>: Hasher<Domain = TreeDDomain<F>>,
+    TreeRHasher<F>: Hasher<Domain = TreeRDomain<F>>,
+    TreeDDomain<F>: Domain<Field = F>,
+    TreeRDomain<F>: Domain<Field = F>,
+{
+    fn from(vanilla_partition_proof: vanilla::PartitionProof<F, U, V, W>) -> Self {
+        let comm_c: F = vanilla_partition_proof.comm_c.into();
+        let root_r_old: F = vanilla_partition_proof.challenge_proofs[0].proof_r_old.root().into();
+        let root_r_new: F = vanilla_partition_proof.challenge_proofs[0].proof_r_new.root().into();
+
+        let apex_leafs: Vec<Option<F>> =
+            vanilla_partition_proof.apex_leafs.iter().copied().map(Into::into).map(Some).collect();
+
+        let challenge_proofs: Vec<ChallengeProof<F, U, V, W, SECTOR_NODES>> =
+            vanilla_partition_proof.challenge_proofs.iter().cloned().map(Into::into).collect();
+
+        PrivateInputs {
+            comm_c: Some(comm_c),
+            root_r_old: Some(root_r_old),
+            root_r_new: Some(root_r_new),
+            apex_leafs,
+            challenge_proofs,
+        }
+    }
 }
 
 impl<F, U, V, W, const SECTOR_NODES: usize> PrivateInputs<F, U, V, W, SECTOR_NODES>
@@ -946,8 +1005,52 @@ where
             SECTOR_SIZE_8_KIB => 18,
             SECTOR_SIZE_16_KIB => 20,
             SECTOR_SIZE_32_KIB => 20,
+            SECTOR_SIZE_8_MIB => 20,
+            SECTOR_SIZE_16_MIB => 20,
             // TODO (jake): add reminaing sector sizes
-            _ => unimplemented!(),
+            SECTOR_SIZE_512_MIB => unimplemented!(),
+            SECTOR_SIZE_32_GIB => unimplemented!(),
+            SECTOR_SIZE_64_GIB => unimplemented!(),
+            _ => unreachable!(),
+        }
+    }
+}
+
+impl<F, U, V, W, const SECTOR_NODES: usize> EmptySectorUpdateCircuit<F, U, V, W, SECTOR_NODES>
+where
+    F: FieldExt,
+    U: PoseidonArity<F>,
+    V: PoseidonArity<F>,
+    W: PoseidonArity<F>,
+    TreeDArity: PoseidonArity<F>,
+    TreeDHasher<F>: Hasher,
+    <TreeDHasher<F> as Hasher>::Domain: Domain<Field = F>,
+    TreeRHasher<F>: Hasher,
+    <TreeRHasher<F> as Hasher>::Domain: Domain<Field = F>,
+{
+    // Same as `Circuit::without_witnesses` except this associated function does not take `&self`.
+    pub fn blank_circuit() -> Self {
+        let partition_count = partition_count(SECTOR_NODES);
+        let partition_bit_len = partition_count.trailing_zeros() as usize;
+        let challenge_count = challenge_count(SECTOR_NODES);
+        let apex_leaf_count = apex_leaf_count(SECTOR_NODES);
+
+        EmptySectorUpdateCircuit {
+            pub_inputs: PublicInputs {
+                partition_bits: vec![None; partition_bit_len],
+                comm_r_old: None,
+                comm_d_new: None,
+                comm_r_new: None,
+                challenges: vec![None; challenge_count],
+                rhos: vec![None; challenge_count],
+            },
+            priv_inputs: PrivateInputs {
+                comm_c: None,
+                root_r_old: None,
+                root_r_new: None,
+                apex_leafs: vec![None; apex_leaf_count],
+                challenge_proofs: vec![ChallengeProof::empty(); challenge_count],
+            },
         }
     }
 }
