@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{ensure, Context, Error};
 use blstrs::Scalar as Fr;
-use ff::{PrimeField, PrimeFieldBits};
+use ff::PrimeField;
 use filecoin_hashers::{Domain, FieldArity, HashFunction, Hasher, PoseidonArity};
 use generic_array::typenum::{Unsigned, U2};
 use log::{info, trace};
@@ -251,7 +251,7 @@ pub struct EmptySectorUpdate<F, U, V, W> {
 
 impl<'a, F, U, V, W> ProofScheme<'a> for EmptySectorUpdate<F, U, V, W>
 where
-    F: PrimeFieldBits,
+    F: PrimeField,
     TreeDHasher<F>: Hasher<Domain = TreeDDomain<F>>,
     TreeRHasher<F>: Hasher<Domain = TreeRDomain<F>>,
     TreeDDomain<F>: Domain<Field = F>,
@@ -557,7 +557,7 @@ fn mmap_write(path: &Path) -> Result<MmapMut, Error> {
 #[allow(clippy::from_iter_instead_of_collect)]
 impl<F, U, V, W> EmptySectorUpdate<F, U, V, W>
 where
-    F: PrimeFieldBits,
+    F: PrimeField,
     TreeDHasher<F>: Hasher<Domain = TreeDDomain<F>>,
     TreeRHasher<F>: Hasher<Domain = TreeRDomain<F>>,
     TreeDDomain<F>: Domain<Field = F>,
