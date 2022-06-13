@@ -343,15 +343,7 @@ fn test_seal_proof_aggregation_1_2kib_porep_id_v1_1_base_8() -> Result<()> {
     let mut porep_id = [0u8; 32];
     porep_id[..8].copy_from_slice(&porep_id_v1_1.to_le_bytes());
     assert!(!is_legacy_porep_id(porep_id));
-    let verified = aggregate_proofs::<SectorShape2KiB>(
-        SECTOR_SIZE_2_KIB,
-        &porep_id,
-        ApiVersion::V1_1_0,
-        proofs_to_aggregate,
-    )?;
-    assert!(verified);
-
-    Ok(())
+    aggregate_proofs::<SectorShape2KiB>(SECTOR_SIZE_2_KIB, &porep_id, proofs_to_aggregate)
 }
 
 #[test]
@@ -361,15 +353,7 @@ fn test_seal_proof_aggregation_3_2kib_porep_id_v1_1_base_8() -> Result<()> {
 
     let porep_id = ARBITRARY_POREP_ID_V1_1_0;
     assert!(!is_legacy_porep_id(porep_id));
-    let verified = aggregate_proofs::<SectorShape2KiB>(
-        SECTOR_SIZE_2_KIB,
-        &porep_id,
-        ApiVersion::V1_1_0,
-        proofs_to_aggregate,
-    )?;
-    assert!(verified);
-
-    Ok(())
+    aggregate_proofs::<SectorShape2KiB>(SECTOR_SIZE_2_KIB, &porep_id, proofs_to_aggregate)
 }
 
 #[test]
@@ -379,15 +363,7 @@ fn test_seal_proof_aggregation_5_2kib_porep_id_v1_1_base_8() -> Result<()> {
 
     let porep_id = ARBITRARY_POREP_ID_V1_1_0;
     assert!(!is_legacy_porep_id(porep_id));
-    let verified = aggregate_proofs::<SectorShape2KiB>(
-        SECTOR_SIZE_2_KIB,
-        &porep_id,
-        ApiVersion::V1_1_0,
-        proofs_to_aggregate,
-    )?;
-    assert!(verified);
-
-    Ok(())
+    aggregate_proofs::<SectorShape2KiB>(SECTOR_SIZE_2_KIB, &porep_id, proofs_to_aggregate)
 }
 
 #[test]
@@ -397,15 +373,7 @@ fn test_seal_proof_aggregation_257_2kib_porep_id_v1_1_base_8() -> Result<()> {
 
     let porep_id = ARBITRARY_POREP_ID_V1_1_0;
     assert!(!is_legacy_porep_id(porep_id));
-    let verified = aggregate_proofs::<SectorShape2KiB>(
-        SECTOR_SIZE_2_KIB,
-        &porep_id,
-        ApiVersion::V1_1_0,
-        proofs_to_aggregate,
-    )?;
-    assert!(verified);
-
-    Ok(())
+    aggregate_proofs::<SectorShape2KiB>(SECTOR_SIZE_2_KIB, &porep_id, proofs_to_aggregate)
 }
 
 #[test]
@@ -415,15 +383,7 @@ fn test_seal_proof_aggregation_2_4kib_porep_id_v1_1_base_8() -> Result<()> {
 
     let porep_id = ARBITRARY_POREP_ID_V1_1_0;
     assert!(!is_legacy_porep_id(porep_id));
-    let verified = aggregate_proofs::<SectorShape4KiB>(
-        SECTOR_SIZE_4_KIB,
-        &porep_id,
-        ApiVersion::V1_1_0,
-        proofs_to_aggregate,
-    )?;
-    assert!(verified);
-
-    Ok(())
+    aggregate_proofs::<SectorShape4KiB>(SECTOR_SIZE_4_KIB, &porep_id, proofs_to_aggregate)
 }
 
 #[test]
@@ -433,15 +393,7 @@ fn test_seal_proof_aggregation_1_32kib_porep_id_v1_1_base_8() -> Result<()> {
 
     let porep_id = ARBITRARY_POREP_ID_V1_1_0;
     assert!(!is_legacy_porep_id(porep_id));
-    let verified = aggregate_proofs::<SectorShape32KiB>(
-        SECTOR_SIZE_32_KIB,
-        &porep_id,
-        ApiVersion::V1_1_0,
-        proofs_to_aggregate,
-    )?;
-    assert!(verified);
-
-    Ok(())
+    aggregate_proofs::<SectorShape32KiB>(SECTOR_SIZE_32_KIB, &porep_id, proofs_to_aggregate)
 }
 
 #[test]
@@ -451,15 +403,7 @@ fn test_seal_proof_aggregation_818_32kib_porep_id_v1_1_base_8() -> Result<()> {
 
     let porep_id = ARBITRARY_POREP_ID_V1_1_0;
     assert!(!is_legacy_porep_id(porep_id));
-    let verified = aggregate_proofs::<SectorShape32KiB>(
-        SECTOR_SIZE_32_KIB,
-        &porep_id,
-        ApiVersion::V1_1_0,
-        proofs_to_aggregate,
-    )?;
-    assert!(verified);
-
-    Ok(())
+    aggregate_proofs::<SectorShape32KiB>(SECTOR_SIZE_32_KIB, &porep_id, proofs_to_aggregate)
 }
 
 //#[test]
@@ -515,44 +459,73 @@ fn test_seal_proof_aggregation_818_32kib_porep_id_v1_1_base_8() -> Result<()> {
 fn aggregate_proofs<Tree: 'static + MerkleTreeTrait>(
     sector_size: u64,
     porep_id: &[u8; 32],
-    api_version: ApiVersion,
     num_proofs_to_aggregate: usize,
-) -> Result<bool> {
+) -> Result<()> {
     let mut rng = XorShiftRng::from_seed(TEST_SEED);
     let prover_fr: DefaultTreeDomain = Fr::random(&mut rng).into();
     let mut prover_id = [0u8; 32];
     prover_id.copy_from_slice(AsRef::<[u8]>::as_ref(&prover_fr));
 
-    let mut commit_outputs = Vec::with_capacity(num_proofs_to_aggregate);
-    let mut commit_inputs = Vec::with_capacity(num_proofs_to_aggregate);
-    let mut seeds = Vec::with_capacity(num_proofs_to_aggregate);
-    let mut comm_rs = Vec::with_capacity(num_proofs_to_aggregate);
+    let api_version = ApiVersion::V1_1_0;
+    let aggregate_versions = vec![
+        groth16::aggregate::AggregateVersion::V1,
+        groth16::aggregate::AggregateVersion::V2,
+    ];
+    for aggregate_version in aggregate_versions {
+        let mut commit_outputs = Vec::with_capacity(num_proofs_to_aggregate);
+        let mut commit_inputs = Vec::with_capacity(num_proofs_to_aggregate);
+        let mut seeds = Vec::with_capacity(num_proofs_to_aggregate);
+        let mut comm_rs = Vec::with_capacity(num_proofs_to_aggregate);
 
-    let (commit_output, commit_input, seed, comm_r) = create_seal_for_aggregation::<_, Tree>(
-        &mut rng,
-        sector_size,
-        prover_id,
-        porep_id,
-        api_version,
-    )?;
+        let (commit_output, commit_input, seed, comm_r) = create_seal_for_aggregation::<_, Tree>(
+            &mut rng,
+            sector_size,
+            prover_id,
+            porep_id,
+            api_version,
+        )?;
 
-    for _ in 0..num_proofs_to_aggregate {
-        commit_outputs.push(commit_output.clone());
-        commit_inputs.extend(commit_input.clone());
-        seeds.push(seed);
-        comm_rs.push(comm_r);
+        for _ in 0..num_proofs_to_aggregate {
+            commit_outputs.push(commit_output.clone());
+            commit_inputs.extend(commit_input.clone());
+            seeds.push(seed);
+            comm_rs.push(comm_r);
+        }
+
+        let config = porep_config(sector_size, *porep_id, api_version);
+        let aggregate_proof = aggregate_seal_commit_proofs::<Tree>(
+            config,
+            &comm_rs,
+            &seeds,
+            commit_outputs.as_slice(),
+            aggregate_version,
+        )?;
+        assert!(verify_aggregate_seal_commit_proofs::<Tree>(
+            config,
+            aggregate_proof.clone(),
+            &comm_rs,
+            &seeds,
+            commit_inputs.clone(),
+            aggregate_version,
+        )?);
+
+        // This ensures that once we generate an snarkpack proof
+        // with one version, it cannot verify with another.
+        let conflicting_aggregate_version = match aggregate_version {
+            groth16::aggregate::AggregateVersion::V1 => groth16::aggregate::AggregateVersion::V2,
+            groth16::aggregate::AggregateVersion::V2 => groth16::aggregate::AggregateVersion::V1,
+        };
+        assert!(!verify_aggregate_seal_commit_proofs::<Tree>(
+            config,
+            aggregate_proof,
+            &comm_rs,
+            &seeds,
+            commit_inputs,
+            conflicting_aggregate_version,
+        )?);
     }
 
-    let config = porep_config(sector_size, *porep_id, api_version);
-    let aggregate_proof =
-        aggregate_seal_commit_proofs::<Tree>(config, &comm_rs, &seeds, commit_outputs.as_slice())?;
-    verify_aggregate_seal_commit_proofs::<Tree>(
-        config,
-        aggregate_proof,
-        &comm_rs,
-        &seeds,
-        commit_inputs,
-    )
+    Ok(())
 }
 
 fn get_layer_file_paths(cache_dir: &tempfile::TempDir) -> Vec<PathBuf> {
@@ -811,7 +784,7 @@ fn test_winning_post_empty_sector_challenge() -> Result<()> {
         challenge_count: WINNING_POST_CHALLENGE_COUNT,
         typ: PoStType::Winning,
         priority: false,
-        api_version: ApiVersion::V1_0_0,
+        api_version,
     };
 
     assert!(generate_winning_post_sector_challenge::<SectorShape2KiB>(
@@ -936,34 +909,19 @@ fn test_window_post_single_partition_smaller_2kib_base_8() -> Result<()> {
         .get(&sector_size)
         .expect("unknown sector size");
 
-    window_post::<SectorShape2KiB>(
-        sector_size,
-        sector_count / 2,
-        sector_count,
-        false,
-        ApiVersion::V1_0_0,
-    )?;
-    window_post::<SectorShape2KiB>(
-        sector_size,
-        sector_count / 2,
-        sector_count,
-        true,
-        ApiVersion::V1_0_0,
-    )?;
-    window_post::<SectorShape2KiB>(
-        sector_size,
-        sector_count / 2,
-        sector_count,
-        false,
-        ApiVersion::V1_1_0,
-    )?;
-    window_post::<SectorShape2KiB>(
-        sector_size,
-        sector_count / 2,
-        sector_count,
-        true,
-        ApiVersion::V1_1_0,
-    )
+    let versions = vec![ApiVersion::V1_0_0, ApiVersion::V1_1_0];
+    for version in versions {
+        window_post::<SectorShape2KiB>(
+            sector_size,
+            sector_count / 2,
+            sector_count,
+            false,
+            version,
+        )?;
+        window_post::<SectorShape2KiB>(sector_size, sector_count / 2, sector_count, true, version)?;
+    }
+
+    Ok(())
 }
 
 #[test]
@@ -976,34 +934,19 @@ fn test_window_post_two_partitions_matching_2kib_base_8() -> Result<()> {
         .get(&sector_size)
         .expect("unknown sector size");
 
-    window_post::<SectorShape2KiB>(
-        sector_size,
-        2 * sector_count,
-        sector_count,
-        false,
-        ApiVersion::V1_0_0,
-    )?;
-    window_post::<SectorShape2KiB>(
-        sector_size,
-        2 * sector_count,
-        sector_count,
-        true,
-        ApiVersion::V1_0_0,
-    )?;
-    window_post::<SectorShape2KiB>(
-        sector_size,
-        2 * sector_count,
-        sector_count,
-        false,
-        ApiVersion::V1_1_0,
-    )?;
-    window_post::<SectorShape2KiB>(
-        sector_size,
-        2 * sector_count,
-        sector_count,
-        true,
-        ApiVersion::V1_1_0,
-    )
+    let versions = vec![ApiVersion::V1_0_0, ApiVersion::V1_1_0];
+    for version in versions {
+        window_post::<SectorShape2KiB>(
+            sector_size,
+            2 * sector_count,
+            sector_count,
+            false,
+            version,
+        )?;
+        window_post::<SectorShape2KiB>(sector_size, 2 * sector_count, sector_count, true, version)?;
+    }
+
+    Ok(())
 }
 
 #[test]
@@ -1016,34 +959,19 @@ fn test_window_post_two_partitions_matching_4kib_sub_8_2() -> Result<()> {
         .get(&sector_size)
         .expect("unknown sector size");
 
-    window_post::<SectorShape4KiB>(
-        sector_size,
-        2 * sector_count,
-        sector_count,
-        false,
-        ApiVersion::V1_0_0,
-    )?;
-    window_post::<SectorShape4KiB>(
-        sector_size,
-        2 * sector_count,
-        sector_count,
-        true,
-        ApiVersion::V1_0_0,
-    )?;
-    window_post::<SectorShape4KiB>(
-        sector_size,
-        2 * sector_count,
-        sector_count,
-        false,
-        ApiVersion::V1_1_0,
-    )?;
-    window_post::<SectorShape4KiB>(
-        sector_size,
-        2 * sector_count,
-        sector_count,
-        true,
-        ApiVersion::V1_1_0,
-    )
+    let versions = vec![ApiVersion::V1_0_0, ApiVersion::V1_1_0];
+    for version in versions {
+        window_post::<SectorShape4KiB>(
+            sector_size,
+            2 * sector_count,
+            sector_count,
+            false,
+            version,
+        )?;
+        window_post::<SectorShape4KiB>(sector_size, 2 * sector_count, sector_count, true, version)?;
+    }
+
+    Ok(())
 }
 
 #[test]
@@ -1056,34 +984,25 @@ fn test_window_post_two_partitions_matching_16kib_sub_8_8() -> Result<()> {
         .get(&sector_size)
         .expect("unknown sector size");
 
-    window_post::<SectorShape16KiB>(
-        sector_size,
-        2 * sector_count,
-        sector_count,
-        false,
-        ApiVersion::V1_0_0,
-    )?;
-    window_post::<SectorShape16KiB>(
-        sector_size,
-        2 * sector_count,
-        sector_count,
-        true,
-        ApiVersion::V1_0_0,
-    )?;
-    window_post::<SectorShape16KiB>(
-        sector_size,
-        2 * sector_count,
-        sector_count,
-        false,
-        ApiVersion::V1_1_0,
-    )?;
-    window_post::<SectorShape16KiB>(
-        sector_size,
-        2 * sector_count,
-        sector_count,
-        true,
-        ApiVersion::V1_1_0,
-    )
+    let versions = vec![ApiVersion::V1_0_0, ApiVersion::V1_1_0];
+    for version in versions {
+        window_post::<SectorShape16KiB>(
+            sector_size,
+            2 * sector_count,
+            sector_count,
+            false,
+            version,
+        )?;
+        window_post::<SectorShape16KiB>(
+            sector_size,
+            2 * sector_count,
+            sector_count,
+            true,
+            version,
+        )?;
+    }
+
+    Ok(())
 }
 
 #[test]
@@ -1096,34 +1015,25 @@ fn test_window_post_two_partitions_matching_32kib_top_8_8_2() -> Result<()> {
         .get(&sector_size)
         .expect("unknown sector size");
 
-    window_post::<SectorShape32KiB>(
-        sector_size,
-        2 * sector_count,
-        sector_count,
-        false,
-        ApiVersion::V1_0_0,
-    )?;
-    window_post::<SectorShape32KiB>(
-        sector_size,
-        2 * sector_count,
-        sector_count,
-        true,
-        ApiVersion::V1_0_0,
-    )?;
-    window_post::<SectorShape32KiB>(
-        sector_size,
-        2 * sector_count,
-        sector_count,
-        false,
-        ApiVersion::V1_1_0,
-    )?;
-    window_post::<SectorShape32KiB>(
-        sector_size,
-        2 * sector_count,
-        sector_count,
-        true,
-        ApiVersion::V1_1_0,
-    )
+    let versions = vec![ApiVersion::V1_0_0, ApiVersion::V1_1_0];
+    for version in versions {
+        window_post::<SectorShape32KiB>(
+            sector_size,
+            2 * sector_count,
+            sector_count,
+            false,
+            version,
+        )?;
+        window_post::<SectorShape32KiB>(
+            sector_size,
+            2 * sector_count,
+            sector_count,
+            true,
+            version,
+        )?;
+    }
+
+    Ok(())
 }
 
 #[test]
@@ -1136,34 +1046,25 @@ fn test_window_post_two_partitions_smaller_2kib_base_8() -> Result<()> {
         .get(&sector_size)
         .expect("unknown sector size");
 
-    window_post::<SectorShape2KiB>(
-        sector_size,
-        2 * sector_count - 1,
-        sector_count,
-        false,
-        ApiVersion::V1_0_0,
-    )?;
-    window_post::<SectorShape2KiB>(
-        sector_size,
-        2 * sector_count - 1,
-        sector_count,
-        true,
-        ApiVersion::V1_0_0,
-    )?;
-    window_post::<SectorShape2KiB>(
-        sector_size,
-        2 * sector_count - 1,
-        sector_count,
-        false,
-        ApiVersion::V1_1_0,
-    )?;
-    window_post::<SectorShape2KiB>(
-        sector_size,
-        2 * sector_count - 1,
-        sector_count,
-        true,
-        ApiVersion::V1_1_0,
-    )
+    let versions = vec![ApiVersion::V1_0_0, ApiVersion::V1_1_0];
+    for version in versions {
+        window_post::<SectorShape2KiB>(
+            sector_size,
+            2 * sector_count - 1,
+            sector_count,
+            false,
+            version,
+        )?;
+        window_post::<SectorShape2KiB>(
+            sector_size,
+            2 * sector_count - 1,
+            sector_count,
+            true,
+            version,
+        )?;
+    }
+
+    Ok(())
 }
 
 #[test]
@@ -1176,34 +1077,13 @@ fn test_window_post_single_partition_matching_2kib_base_8() -> Result<()> {
         .get(&sector_size)
         .expect("unknown sector size");
 
-    window_post::<SectorShape2KiB>(
-        sector_size,
-        sector_count,
-        sector_count,
-        false,
-        ApiVersion::V1_0_0,
-    )?;
-    window_post::<SectorShape2KiB>(
-        sector_size,
-        sector_count,
-        sector_count,
-        true,
-        ApiVersion::V1_0_0,
-    )?;
-    window_post::<SectorShape2KiB>(
-        sector_size,
-        sector_count,
-        sector_count,
-        false,
-        ApiVersion::V1_1_0,
-    )?;
-    window_post::<SectorShape2KiB>(
-        sector_size,
-        sector_count,
-        sector_count,
-        true,
-        ApiVersion::V1_1_0,
-    )
+    let versions = vec![ApiVersion::V1_0_0, ApiVersion::V1_1_0];
+    for version in versions {
+        window_post::<SectorShape2KiB>(sector_size, sector_count, sector_count, false, version)?;
+        window_post::<SectorShape2KiB>(sector_size, sector_count, sector_count, true, version)?;
+    }
+
+    Ok(())
 }
 
 #[test]
@@ -1215,28 +1095,19 @@ fn test_window_post_partition_matching_2kib_base_8() -> Result<()> {
         .get(&sector_size)
         .expect("unknown sector size");
 
-    partition_window_post::<SectorShape2KiB>(
-        sector_size,
-        3, // Validate the scenarios of two partition
-        sector_count,
-        false,
-        ApiVersion::V1_0_0,
-    )?;
-    partition_window_post::<SectorShape2KiB>(
-        sector_size,
-        3,
-        sector_count,
-        true,
-        ApiVersion::V1_0_0,
-    )?;
-    partition_window_post::<SectorShape2KiB>(
-        sector_size,
-        3,
-        sector_count,
-        false,
-        ApiVersion::V1_1_0,
-    )?;
-    partition_window_post::<SectorShape2KiB>(sector_size, 3, sector_count, true, ApiVersion::V1_1_0)
+    let versions = vec![ApiVersion::V1_0_0, ApiVersion::V1_1_0];
+    for version in versions {
+        partition_window_post::<SectorShape2KiB>(
+            sector_size,
+            3, // Validate the scenarios of two partition
+            sector_count,
+            false,
+            version,
+        )?;
+        partition_window_post::<SectorShape2KiB>(sector_size, 3, sector_count, true, version)?;
+    }
+
+    Ok(())
 }
 
 fn partition_window_post<Tree: 'static + MerkleTreeTrait>(

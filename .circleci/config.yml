@@ -3,7 +3,7 @@ version: 2.1
 parameters:
   nightly-toolchain:
     type: string
-    default: "nightly-2021-04-24"
+    default: "nightly-2022-05-09"
 
 executors:
   default:
@@ -136,6 +136,7 @@ jobs:
           at: "."
       - restore_rustup_cache
       - restore_parameter_cache
+      - run: rustup install << pipeline.parameters.nightly-toolchain >>
       - run:
           name: Test with use_multicore_sdr
           command: |

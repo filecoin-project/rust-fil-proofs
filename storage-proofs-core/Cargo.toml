@@ -31,7 +31,7 @@ blake2b_simd = "0.5"
 blake2s_simd = "0.5"
 toml = "0.5"
 ff = "0.11.0"
-bellperson = "0.18.0"
+bellperson = "0.21.0"
 serde_json = "1.0"
 log = "0.4.7"
 rand_chacha = "0.3"
@@ -39,7 +39,7 @@ hex = "0.4.0"
 generic-array = "0.14.4"
 anyhow = "1.0.23"
 thiserror = "1.0.6"
-neptune = { version = "5.1.0", features = ["arity2", "arity4", "arity8", "arity11", "arity16", "arity24", "arity36"] }
+neptune = { version = "5.2.0", features = ["arity2", "arity4", "arity8", "arity11", "arity16", "arity24", "arity36"] }
 cpu-time = { version = "1.0", optional = true }
 gperftools = { version = "0.2", optional = true }
 num_cpus = "1.10.1"

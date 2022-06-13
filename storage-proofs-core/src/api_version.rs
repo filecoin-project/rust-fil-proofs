@@ -63,4 +63,8 @@ fn test_fmt() {
 fn test_as_semver() {
     assert_eq!(ApiVersion::V1_0_0.as_semver().major, 1);
     assert_eq!(ApiVersion::V1_1_0.as_semver().major, 1);
+    assert_eq!(ApiVersion::V1_0_0.as_semver().minor, 0);
+    assert_eq!(ApiVersion::V1_1_0.as_semver().minor, 1);
+    assert_eq!(ApiVersion::V1_0_0.as_semver().patch, 0);
+    assert_eq!(ApiVersion::V1_1_0.as_semver().patch, 0);
 }
