@@ -136,6 +136,7 @@ jobs:
           at: "."
       - restore_rustup_cache
       - restore_parameter_cache
+      - run: rustup install << pipeline.parameters.nightly-toolchain >>
       - run:
           name: Test with use_multicore_sdr
           command: |
