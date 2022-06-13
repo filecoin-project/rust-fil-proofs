@@ -9,8 +9,8 @@ repository = "https://github.com/filecoin-project/rust-fil-proofs"
 readme = "README.md"
 
 [dependencies]
-storage-proofs-core = { path = "../storage-proofs-core", version = "^11.0.0", default-features = false}
-filecoin-hashers = { path = "../filecoin-hashers", version = "^6.0.0", default-features = false, features = ["poseidon", "sha256"]}
+storage-proofs-core = { path = "../storage-proofs-core", version = "~11.1.0", default-features = false}
+filecoin-hashers = { path = "../filecoin-hashers", version = "~6.1.0", default-features = false, features = ["poseidon", "sha256"]}
 rand = "0.8"
 merkletree = "0.21.0"
 byteorder = "1"
@@ -26,15 +26,15 @@ log = "0.4.7"
 hex = "0.4.0"
 generic-array = "0.14.4"
 anyhow = "1.0.23"
-neptune = { version = "5.2.0", features = ["arity2", "arity4", "arity8", "arity11", "arity16", "arity24", "arity36"] }
+neptune = { version = "~5.2.0", features = ["arity2", "arity4", "arity8", "arity11", "arity16", "arity24", "arity36"] }
 num_cpus = "1.10.1"
-fr32 = { path = "../fr32", version = "^4.0.0", default-features = false }
+fr32 = { path = "../fr32", version = "~4.1.0", default-features = false }
 blstrs = "0.4.0"
 
 [dev-dependencies]
 tempfile = "3"
 pretty_assertions = "0.6.1"
-filecoin-hashers = { path = "../filecoin-hashers", version = "^6.0.0", default-features = false, features = ["poseidon", "sha256", "blake2s"]}
+filecoin-hashers = { path = "../filecoin-hashers", version = "~6.1.0", default-features = false, features = ["poseidon", "sha256", "blake2s"]}
 rand_xorshift = "0.3.0"
 
 [features]
