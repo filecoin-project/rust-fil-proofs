@@ -15,4 +15,4 @@ members = [
 
 [patch.crates-io]
 bellperson = { git = "https://github.com/filecoin-project/bellperson", branch = "forward-port-updates" }
-neptune = { path = "/home/nemo/pl/neptune" }
+neptune = { git = "https://github.com/filecoin-project/neptune", branch = "updated-deps" }
