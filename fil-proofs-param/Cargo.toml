@@ -9,11 +9,11 @@ repository = "https://github.com/filecoin-project/rust-fil-proofs"
 readme = "README.md"
 
 [dependencies]
-storage-proofs-core = { path = "../storage-proofs-core", version = "^11.0.0", default-features = false}
-storage-proofs-porep = { path = "../storage-proofs-porep", version = "^11.0.0", default-features = false }
-storage-proofs-post = { path = "../storage-proofs-post", version = "^11.0.0", default-features = false }
-storage-proofs-update = { path = "../storage-proofs-update", version = "^11.0.0", default-features = false }
-filecoin-proofs = { version = "^11.0.0", path = "../filecoin-proofs", default-features = false }
+storage-proofs-core = { path = "../storage-proofs-core", version = "~11.0.0", default-features = false}
+storage-proofs-porep = { path = "../storage-proofs-porep", version = "~11.0.0", default-features = false }
+storage-proofs-post = { path = "../storage-proofs-post", version = "~11.0.0", default-features = false }
+storage-proofs-update = { path = "../storage-proofs-update", version = "~11.0.0", default-features = false }
+filecoin-proofs = { version = "~11.0.0", path = "../filecoin-proofs", default-features = false }
 rand = "0.8"
 lazy_static = "1.2"
 pbr = "1.0"

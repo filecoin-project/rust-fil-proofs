@@ -31,7 +31,7 @@ lazy_static! {
 }
 
 const DEFAULT_JSON: &str = include_str!("../../parameters.json");
-const DEFAULT_IPGET_VERSION: &str = "v0.6.0";
+const DEFAULT_IPGET_VERSION: &str = "v0.8.1";
 
 #[inline]
 fn get_ipget_dir(version: &str) -> String {
