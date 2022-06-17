@@ -14,4 +14,4 @@ members = [
 ]
 
 [patch.crates-io]
-neptune = { git = "https://github.com/filecoin-project/neptune", branch = "updated-deps" }
+neptune = { git = "https://github.com/filecoin-project/neptune" }
