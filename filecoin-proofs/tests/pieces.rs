@@ -32,7 +32,7 @@ fn test_empty_source() {
 #[test]
 fn test_compute_comm_d_empty() {
     let comm_d =
-        compute_comm_d(SectorSize(2048), &[]).expect("failed to verify pieces, empty piece infos");
+        compute_comm_d::<Fr>(SectorSize(2048), &[]).expect("failed to verify pieces, empty piece infos");
     assert_eq!(
         comm_d,
         [
@@ -41,7 +41,7 @@ fn test_compute_comm_d_empty() {
         ]
     );
 
-    let comm_d = compute_comm_d(SectorSize(128), &[]).expect("failed to verify pieces");
+    let comm_d = compute_comm_d::<Fr>(SectorSize(128), &[]).expect("failed to verify pieces");
     assert_eq!(
         hex::encode(&comm_d),
         "3731bb99ac689f66eef5973e4a94da188f4ddcae580724fc6f3fd60dfd488333",
@@ -116,15 +116,15 @@ fn test_verify_simple_pieces() {
     let (val_a, val_b, val_c, val_d): ([u8; 32], [u8; 32], [u8; 32], [u8; 32]) = rng.gen();
 
     let mut val_e = [0u8; 32];
-    let val_h = piece_hash(&val_a, &val_b);
+    let val_h = piece_hash::<Fr>(&val_a, &val_b);
     val_e.copy_from_slice(val_h.as_ref());
 
     let mut val_f = [0u8; 32];
-    let val_h = piece_hash(&val_c, &val_d);
+    let val_h = piece_hash::<Fr>(&val_c, &val_d);
     val_f.copy_from_slice(val_h.as_ref());
 
     let mut val_g = [0u8; 32];
-    let val_h = piece_hash(&val_e, &val_f);
+    let val_h = piece_hash::<Fr>(&val_e, &val_f);
     val_g.copy_from_slice(val_h.as_ref());
 
     let val_a =
@@ -151,7 +151,7 @@ fn test_verify_simple_pieces() {
     // println!("g: {:?}", g);
 
     assert!(
-        verify_pieces(
+        verify_pieces::<Fr>(
             &comm_d,
             &[val_a.clone(), val_b.clone(), val_c.clone(), val_d.clone()],
             sector_size
@@ -161,23 +161,23 @@ fn test_verify_simple_pieces() {
     );
 
     assert!(
-        verify_pieces(&comm_d, &[val_e.clone(), val_c, val_d], sector_size)
+        verify_pieces::<Fr>(&comm_d, &[val_e.clone(), val_c, val_d], sector_size)
             .expect("failed to verify"),
         "[val_e, val_c, val_d]"
     );
 
     assert!(
-        verify_pieces(&comm_d, &[val_e, val_f.clone()], sector_size).expect("failed to verify"),
+        verify_pieces::<Fr>(&comm_d, &[val_e, val_f.clone()], sector_size).expect("failed to verify"),
         "[val_e, val_f]"
     );
 
     assert!(
-        verify_pieces(&comm_d, &[val_a, val_b, val_f], sector_size).expect("failed to verify"),
+        verify_pieces::<Fr>(&comm_d, &[val_a, val_b, val_f], sector_size).expect("failed to verify"),
         "[val_a, val_b, val_f]"
     );
 
     assert!(
-        verify_pieces(&comm_d, &[val_g], sector_size).expect("failed to verify"),
+        verify_pieces::<Fr>(&comm_d, &[val_g], sector_size).expect("failed to verify"),
         "[val_g]"
     );
 }
@@ -195,7 +195,7 @@ fn test_verify_padded_pieces() {
     // ]
 
     let sector_size = SectorSize(32 * 128);
-    let pad = zero_padding(UnpaddedBytesAmount(127)).expect("failed to create pad");
+    let pad = zero_padding::<Fr>(UnpaddedBytesAmount(127)).expect("failed to create pad");
 
     let pieces = vec![
         PieceInfo::new([1u8; 32], UnpaddedBytesAmount(1 * 127))
@@ -237,7 +237,7 @@ fn test_verify_padded_pieces() {
     ];
 
     let hash = |val_a, val_b| {
-        let hash = piece_hash(val_a, val_b);
+        let hash = piece_hash::<Fr>(val_a, val_b);
         let mut res = [0u8; 32];
         res.copy_from_slice(hash.as_ref());
         res
@@ -282,7 +282,7 @@ fn test_verify_padded_pieces() {
 
     let comm_d = hash(&layer4[0], &layer4[1]); // 32
 
-    assert!(verify_pieces(&comm_d, &pieces, sector_size).expect("failed to verify pieces"));
+    assert!(verify_pieces::<Fr>(&comm_d, &pieces, sector_size).expect("failed to verify pieces"));
 }
 
 #[test]
@@ -359,7 +359,7 @@ fn test_verify_random_pieces() -> Result<()> {
             let (comm_d, piece_infos) = build_sector(&piece_sizes, sector_size)?;
 
             assert!(
-                verify_pieces(&comm_d, &piece_infos, sector_size)?,
+                verify_pieces::<Fr>(&comm_d, &piece_infos, sector_size)?,
                 "invalid pieces"
             );
         }
@@ -374,7 +374,7 @@ fn build_sector(
 ) -> Result<(Commitment, Vec<PieceInfo>)> {
     let rng = &mut XorShiftRng::from_seed(TEST_SEED);
     let porep_id = [32; 32];
-    let graph = StackedBucketGraph::<DefaultPieceHasher>::new_stacked(
+    let graph = StackedBucketGraph::<DefaultPieceHasher<Fr>>::new_stacked(
         u64::from(sector_size) as usize / NODE_SIZE,
         DRG_DEGREE,
         EXP_DEGREE,
@@ -393,7 +393,7 @@ fn build_sector(
 
         let mut piece_file = Cursor::new(&mut piece_bytes);
 
-        let (piece_info, _) = add_piece(
+        let (piece_info, _) = add_piece::<_, _, Fr>(
             &mut piece_file,
             &mut staged_sector_io,
             *piece_size,
@@ -404,8 +404,8 @@ fn build_sector(
     }
     assert_eq!(staged_sector.len(), u64::from(sector_size) as usize);
 
-    let data_tree: DataTree =
-        create_base_merkle_tree::<DataTree>(None, graph.size(), &staged_sector)
+    let data_tree: DataTree<Fr> =
+        create_base_merkle_tree::<DataTree<Fr>>(None, graph.size(), &staged_sector)
             .expect("failed to create data tree");
     let comm_d_root: Fr = data_tree.root().into();
     let comm_d = commitment_from_fr(comm_d_root);

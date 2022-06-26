@@ -8,7 +8,7 @@ use anyhow::{ensure, Context, Error, Result};
 use bellperson::groth16;
 use bincode::serialize;
 use blstrs::{Bls12, Scalar as Fr};
-use ff::Field;
+use ff::{Field, PrimeField};
 use filecoin_hashers::{Domain, Hasher};
 use filecoin_proofs::{
     add_piece, aggregate_seal_commit_proofs, clear_cache, compute_comm_d, decode_from, encode_into,
@@ -23,8 +23,9 @@ use filecoin_proofs::{
     seal_pre_commit_phase2, unseal_range, validate_cache_for_commit,
     validate_cache_for_precommit_phase2, verify_aggregate_seal_commit_proofs,
     verify_empty_sector_update_proof, verify_partition_proofs, verify_seal,
-    verify_single_partition_proof, verify_window_post, verify_winning_post, Commitment,
-    DefaultTreeDomain, MerkleTreeTrait, PaddedBytesAmount, PieceInfo, PoRepConfig,
+    verify_single_partition_proof, verify_window_post, verify_winning_post, CircuitPublicInputs, Commitment,
+    DefaultPieceDomain, DefaultPieceHasher, DefaultTreeDomain, DefaultTreeHasher, MerkleTreeTrait,
+    PaddedBytesAmount, PieceInfo, PoseidonArityAllFields, PoRepConfig,
     PoRepProofPartitions, PoStConfig, PoStType, PrivateReplicaInfo, ProverId, PublicReplicaInfo,
     SealCommitOutput, SealPreCommitOutput, SealPreCommitPhase1Output, SectorShape16KiB,
     SectorShape2KiB, SectorShape32KiB, SectorShape4KiB, SectorSize, SectorUpdateConfig,
@@ -32,13 +33,12 @@ use filecoin_proofs::{
     SECTOR_SIZE_2_KIB, SECTOR_SIZE_32_KIB, SECTOR_SIZE_4_KIB, WINDOW_POST_CHALLENGE_COUNT,
     WINDOW_POST_SECTOR_COUNT, WINNING_POST_CHALLENGE_COUNT, WINNING_POST_SECTOR_COUNT,
 };
-use fr32::bytes_into_fr;
 use log::info;
 use memmap::MmapOptions;
 use rand::{random, Rng, SeedableRng};
 use rand_xorshift::XorShiftRng;
 use storage_proofs_core::{api_version::ApiVersion, is_legacy_porep_id, sector::SectorId};
-use storage_proofs_update::constants::TreeRHasher;
+use storage_proofs_update::constants::{TreeDDomain, TreeDHasher, TreeRDomain, TreeRHasher};
 use tempfile::{tempdir, NamedTempFile, TempDir};
 
 #[cfg(feature = "big-tests")]
@@ -73,7 +73,7 @@ fn test_seal_lifecycle_2kib_porep_id_v1_base_8() -> Result<()> {
     let mut porep_id = [0u8; 32];
     porep_id[..8].copy_from_slice(&porep_id_v1.to_le_bytes());
     assert!(is_legacy_porep_id(porep_id));
-    seal_lifecycle::<SectorShape2KiB>(SECTOR_SIZE_2_KIB, &porep_id, ApiVersion::V1_0_0)
+    seal_lifecycle::<SectorShape2KiB<Fr>>(SECTOR_SIZE_2_KIB, &porep_id, ApiVersion::V1_0_0)
 }
 
 #[test]
@@ -84,7 +84,7 @@ fn test_seal_lifecycle_2kib_porep_id_v1_1_base_8() -> Result<()> {
     let mut porep_id = [0u8; 32];
     porep_id[..8].copy_from_slice(&porep_id_v1_1.to_le_bytes());
     assert!(!is_legacy_porep_id(porep_id));
-    seal_lifecycle::<SectorShape2KiB>(SECTOR_SIZE_2_KIB, &porep_id, ApiVersion::V1_1_0)
+    seal_lifecycle::<SectorShape2KiB<Fr>>(SECTOR_SIZE_2_KIB, &porep_id, ApiVersion::V1_1_0)
 }
 
 #[test]
@@ -95,13 +95,13 @@ fn test_seal_lifecycle_upgrade_2kib_porep_id_v1_1_base_8() -> Result<()> {
     let mut porep_id = [0u8; 32];
     porep_id[..8].copy_from_slice(&porep_id_v1_1.to_le_bytes());
     assert!(!is_legacy_porep_id(porep_id));
-    seal_lifecycle_upgrade::<SectorShape2KiB>(SECTOR_SIZE_2_KIB, &porep_id, ApiVersion::V1_1_0)
+    seal_lifecycle_upgrade::<SectorShape2KiB<Fr>, Fr>(SECTOR_SIZE_2_KIB, &porep_id, ApiVersion::V1_1_0)
 }
 
 #[test]
 #[ignore]
 fn test_seal_lifecycle_4kib_sub_8_2_v1() -> Result<()> {
-    seal_lifecycle::<SectorShape4KiB>(
+    seal_lifecycle::<SectorShape4KiB<Fr>>(
         SECTOR_SIZE_4_KIB,
         &ARBITRARY_POREP_ID_V1_0_0,
         ApiVersion::V1_0_0,
@@ -111,7 +111,7 @@ fn test_seal_lifecycle_4kib_sub_8_2_v1() -> Result<()> {
 #[test]
 #[ignore]
 fn test_seal_lifecycle_4kib_sub_8_2_v1_1() -> Result<()> {
-    seal_lifecycle::<SectorShape4KiB>(
+    seal_lifecycle::<SectorShape4KiB<Fr>>(
         SECTOR_SIZE_4_KIB,
         &ARBITRARY_POREP_ID_V1_1_0,
         ApiVersion::V1_1_0,
@@ -121,7 +121,7 @@ fn test_seal_lifecycle_4kib_sub_8_2_v1_1() -> Result<()> {
 #[test]
 #[ignore]
 fn test_seal_lifecycle_upgrade_4kib_sub_8_2_v1_1() -> Result<()> {
-    seal_lifecycle_upgrade::<SectorShape4KiB>(
+    seal_lifecycle_upgrade::<SectorShape4KiB<Fr>, Fr>(
         SECTOR_SIZE_4_KIB,
         &ARBITRARY_POREP_ID_V1_1_0,
         ApiVersion::V1_1_0,
@@ -131,7 +131,7 @@ fn test_seal_lifecycle_upgrade_4kib_sub_8_2_v1_1() -> Result<()> {
 #[test]
 #[ignore]
 fn test_seal_lifecycle_16kib_sub_8_2_v1() -> Result<()> {
-    seal_lifecycle::<SectorShape16KiB>(
+    seal_lifecycle::<SectorShape16KiB<Fr>>(
         SECTOR_SIZE_16_KIB,
         &ARBITRARY_POREP_ID_V1_0_0,
         ApiVersion::V1_0_0,
@@ -141,7 +141,7 @@ fn test_seal_lifecycle_16kib_sub_8_2_v1() -> Result<()> {
 #[test]
 #[ignore]
 fn test_seal_lifecycle_16kib_sub_8_2_v1_1() -> Result<()> {
-    seal_lifecycle::<SectorShape16KiB>(
+    seal_lifecycle::<SectorShape16KiB<Fr>>(
         SECTOR_SIZE_16_KIB,
         &ARBITRARY_POREP_ID_V1_1_0,
         ApiVersion::V1_1_0,
@@ -151,7 +151,7 @@ fn test_seal_lifecycle_16kib_sub_8_2_v1_1() -> Result<()> {
 #[test]
 #[ignore]
 fn test_seal_lifecycle_upgrade_16kib_sub_8_2_v1_1() -> Result<()> {
-    seal_lifecycle_upgrade::<SectorShape16KiB>(
+    seal_lifecycle_upgrade::<SectorShape16KiB<Fr>, Fr>(
         SECTOR_SIZE_16_KIB,
         &ARBITRARY_POREP_ID_V1_1_0,
         ApiVersion::V1_1_0,
@@ -161,7 +161,7 @@ fn test_seal_lifecycle_upgrade_16kib_sub_8_2_v1_1() -> Result<()> {
 #[test]
 #[ignore]
 fn test_seal_lifecycle_32kib_top_8_8_2_v1() -> Result<()> {
-    seal_lifecycle::<SectorShape32KiB>(
+    seal_lifecycle::<SectorShape32KiB<Fr>>(
         SECTOR_SIZE_32_KIB,
         &ARBITRARY_POREP_ID_V1_0_0,
         ApiVersion::V1_0_0,
@@ -171,7 +171,7 @@ fn test_seal_lifecycle_32kib_top_8_8_2_v1() -> Result<()> {
 #[test]
 #[ignore]
 fn test_seal_lifecycle_32kib_top_8_8_2_v1_1() -> Result<()> {
-    seal_lifecycle::<SectorShape32KiB>(
+    seal_lifecycle::<SectorShape32KiB<Fr>>(
         SECTOR_SIZE_32_KIB,
         &ARBITRARY_POREP_ID_V1_1_0,
         ApiVersion::V1_1_0,
@@ -181,7 +181,7 @@ fn test_seal_lifecycle_32kib_top_8_8_2_v1_1() -> Result<()> {
 #[test]
 #[ignore]
 fn test_seal_lifecycle_upgrade_32kib_top_8_8_2_v1_1() -> Result<()> {
-    seal_lifecycle_upgrade::<SectorShape32KiB>(
+    seal_lifecycle_upgrade::<SectorShape32KiB<Fr>, Fr>(
         SECTOR_SIZE_32_KIB,
         &ARBITRARY_POREP_ID_V1_1_0,
         ApiVersion::V1_1_0,
@@ -193,31 +193,29 @@ fn test_seal_lifecycle_upgrade_32kib_top_8_8_2_v1_1() -> Result<()> {
 #[cfg(feature = "big-tests")]
 #[test]
 fn test_seal_lifecycle_512mib_porep_id_v1_top_8_0_0_api_v1() -> Result<()> {
-    use filecoin_proofs::{SectorShape512MiB, SECTOR_SIZE_512_MIB};
     let porep_id_v1: u64 = 2; // This is a RegisteredSealProof value
 
     let mut porep_id = [0u8; 32];
     porep_id[..8].copy_from_slice(&porep_id_v1.to_le_bytes());
     assert!(is_legacy_porep_id(porep_id));
-    seal_lifecycle::<SectorShape512MiB>(SECTOR_SIZE_512_MIB, &porep_id, ApiVersion::V1_0_0)
+    seal_lifecycle::<SectorShape512MiB<Fr>>(SECTOR_SIZE_512_MIB, &porep_id, ApiVersion::V1_0_0)
 }
 
 #[cfg(feature = "big-tests")]
 #[test]
 fn test_seal_lifecycle_512mib_porep_id_v1_top_8_0_0_api_v1_1() -> Result<()> {
-    use filecoin_proofs::{SectorShape512MiB, SECTOR_SIZE_512_MIB};
     let porep_id_v1_1: u64 = 7; // This is a RegisteredSealProof value
 
     let mut porep_id = [0u8; 32];
     porep_id[..8].copy_from_slice(&porep_id_v1_1.to_le_bytes());
     assert!(!is_legacy_porep_id(porep_id));
-    seal_lifecycle::<SectorShape512MiB>(SECTOR_SIZE_512_MIB, &porep_id, ApiVersion::V1_1_0)
+    seal_lifecycle::<SectorShape512MiB<Fr>>(SECTOR_SIZE_512_MIB, &porep_id, ApiVersion::V1_1_0)
 }
 
 #[cfg(feature = "big-tests")]
 #[test]
 fn test_seal_lifecycle_upgrade_512mib_top_8_0_0_v1_1() -> Result<()> {
-    seal_lifecycle_upgrade::<SectorShape512MiB>(
+    seal_lifecycle_upgrade::<SectorShape512MiB<Fr>, Fr>(
         SECTOR_SIZE_512_MIB,
         &ARBITRARY_POREP_ID_V1_1_0,
         ApiVersion::V1_1_0,
@@ -232,7 +230,7 @@ fn test_seal_lifecycle_32gib_porep_id_v1_top_8_8_0_api_v1() -> Result<()> {
     let mut porep_id = [0u8; 32];
     porep_id[..8].copy_from_slice(&porep_id_v1.to_le_bytes());
     assert!(is_legacy_porep_id(porep_id));
-    seal_lifecycle::<SectorShape32GiB>(SECTOR_SIZE_32_GIB, &porep_id, ApiVersion::V1_0_0)
+    seal_lifecycle::<SectorShape32GiB<Fr>>(SECTOR_SIZE_32_GIB, &porep_id, ApiVersion::V1_0_0)
 }
 
 #[cfg(feature = "big-tests")]
@@ -243,13 +241,13 @@ fn test_seal_lifecycle_32gib_porep_id_v1_1_top_8_8_0_api_v1_1() -> Result<()> {
     let mut porep_id = [0u8; 32];
     porep_id[..8].copy_from_slice(&porep_id_v1_1.to_le_bytes());
     assert!(!is_legacy_porep_id(porep_id));
-    seal_lifecycle::<SectorShape32GiB>(SECTOR_SIZE_32_GIB, &porep_id, ApiVersion::V1_1_0)
+    seal_lifecycle::<SectorShape32GiB<Fr>>(SECTOR_SIZE_32_GIB, &porep_id, ApiVersion::V1_1_0)
 }
 
 #[cfg(feature = "big-tests")]
 #[test]
 fn test_seal_lifecycle_upgrade_32gib_top_8_8_0_v1_1() -> Result<()> {
-    seal_lifecycle_upgrade::<SectorShape32GiB>(
+    seal_lifecycle_upgrade::<SectorShape32GiB<Fr>, Fr>(
         SECTOR_SIZE_32_GIB,
         &ARBITRARY_POREP_ID_V1_1_0,
         ApiVersion::V1_1_0,
@@ -264,7 +262,7 @@ fn test_seal_lifecycle_64gib_porep_id_v1_top_8_8_2_api_v1() -> Result<()> {
     let mut porep_id = [0u8; 32];
     porep_id[..8].copy_from_slice(&porep_id_v1.to_le_bytes());
     assert!(is_legacy_porep_id(porep_id));
-    seal_lifecycle::<SectorShape64GiB>(SECTOR_SIZE_64_GIB, &porep_id, ApiVersion::V1_0_0)
+    seal_lifecycle::<SectorShape64GiB<Fr>>(SECTOR_SIZE_64_GIB, &porep_id, ApiVersion::V1_0_0)
 }
 
 #[cfg(feature = "big-tests")]
@@ -275,29 +273,39 @@ fn test_seal_lifecycle_64gib_porep_id_v1_1_top_8_8_2_api_v1_1() -> Result<()> {
     let mut porep_id = [0u8; 32];
     porep_id[..8].copy_from_slice(&porep_id_v1_1.to_le_bytes());
     assert!(!is_legacy_porep_id(porep_id));
-    seal_lifecycle::<SectorShape64GiB>(SECTOR_SIZE_64_GIB, &porep_id, ApiVersion::V1_1_0)
+    seal_lifecycle::<SectorShape64GiB<Fr>>(SECTOR_SIZE_64_GIB, &porep_id, ApiVersion::V1_1_0)
 }
 
 #[cfg(feature = "big-tests")]
 #[test]
 fn test_seal_lifecycle_upgrade_64gib_top_8_8_2_v1_1() -> Result<()> {
-    seal_lifecycle_upgrade::<SectorShape64GiB>(
+    seal_lifecycle_upgrade::<SectorShape64GiB<Fr>, Fr>(
         SECTOR_SIZE_64_GIB,
         &ARBITRARY_POREP_ID_V1_1_0,
         ApiVersion::V1_1_0,
     )
 }
 
-fn seal_lifecycle<Tree: 'static + MerkleTreeTrait>(
+fn seal_lifecycle<Tree>(
     sector_size: u64,
     porep_id: &[u8; 32],
     api_version: ApiVersion,
 ) -> Result<()>
 where
-    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+    Tree: 'static + MerkleTreeTrait,
+    Tree::Arity: PoseidonArityAllFields,
+    Tree::SubTreeArity: PoseidonArityAllFields,
+    Tree::TopTreeArity: PoseidonArityAllFields,
+    DefaultPieceHasher<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>: Hasher,
+    DefaultPieceDomain<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>:
+        Domain<Field = <<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
+    DefaultTreeHasher<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>: Hasher,
+    DefaultTreeDomain<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>:
+        Domain<Field = <<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
 {
     let mut rng = XorShiftRng::from_seed(TEST_SEED);
-    let prover_fr: DefaultTreeDomain = Fr::random(&mut rng).into();
+    let prover_fr =
+        DefaultTreeDomain::<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>::random(&mut rng);
     let mut prover_id = [0u8; 32];
     prover_id.copy_from_slice(AsRef::<[u8]>::as_ref(&prover_fr));
 
@@ -314,20 +322,33 @@ where
     Ok(())
 }
 
-fn seal_lifecycle_upgrade<Tree>(
+fn seal_lifecycle_upgrade<Tree, F>(
     sector_size: u64,
     porep_id: &[u8; 32],
     api_version: ApiVersion,
 ) -> Result<()>
 where
-    Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher<Fr>>,
+    Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher<F>>,
+    Tree::Arity: PoseidonArityAllFields,
+    Tree::SubTreeArity: PoseidonArityAllFields,
+    Tree::TopTreeArity: PoseidonArityAllFields,
+    F: PrimeField,
+    TreeDHasher<F>: Hasher<Domain = TreeDDomain<F>>,
+    TreeDDomain<F>: Domain<Field = F>,
+    TreeRHasher<F>: Hasher<Domain = TreeRDomain<F>>,
+    TreeRDomain<F>: Domain<Field = F>,
 {
     let mut rng = &mut XorShiftRng::from_seed(TEST_SEED);
-    let prover_fr: DefaultTreeDomain = Fr::random(&mut rng).into();
+    let prover_fr =
+        DefaultTreeDomain::<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>::random(&mut rng);
     let mut prover_id = [0u8; 32];
     prover_id.copy_from_slice(AsRef::<[u8]>::as_ref(&prover_fr));
 
-    let (_, replica, _, _) = create_seal_for_upgrade::<_, Tree>(
+    let (_, replica, _, _) = create_seal_for_upgrade::<
+        _,
+        Tree,
+        <<Tree::Hasher as Hasher>::Domain as Domain>::Field,
+    >(
         &mut rng,
         sector_size,
         prover_id,
@@ -349,7 +370,7 @@ fn test_seal_proof_aggregation_1_2kib_porep_id_v1_1_base_8() -> Result<()> {
     let mut porep_id = [0u8; 32];
     porep_id[..8].copy_from_slice(&porep_id_v1_1.to_le_bytes());
     assert!(!is_legacy_porep_id(porep_id));
-    let verified = aggregate_proofs::<SectorShape2KiB>(
+    let verified = aggregate_proofs::<SectorShape2KiB<Fr>>(
         SECTOR_SIZE_2_KIB,
         &porep_id,
         ApiVersion::V1_1_0,
@@ -367,7 +388,7 @@ fn test_seal_proof_aggregation_3_2kib_porep_id_v1_1_base_8() -> Result<()> {
 
     let porep_id = ARBITRARY_POREP_ID_V1_1_0;
     assert!(!is_legacy_porep_id(porep_id));
-    let verified = aggregate_proofs::<SectorShape2KiB>(
+    let verified = aggregate_proofs::<SectorShape2KiB<Fr>>(
         SECTOR_SIZE_2_KIB,
         &porep_id,
         ApiVersion::V1_1_0,
@@ -385,7 +406,7 @@ fn test_seal_proof_aggregation_5_2kib_porep_id_v1_1_base_8() -> Result<()> {
 
     let porep_id = ARBITRARY_POREP_ID_V1_1_0;
     assert!(!is_legacy_porep_id(porep_id));
-    let verified = aggregate_proofs::<SectorShape2KiB>(
+    let verified = aggregate_proofs::<SectorShape2KiB<Fr>>(
         SECTOR_SIZE_2_KIB,
         &porep_id,
         ApiVersion::V1_1_0,
@@ -403,7 +424,7 @@ fn test_seal_proof_aggregation_257_2kib_porep_id_v1_1_base_8() -> Result<()> {
 
     let porep_id = ARBITRARY_POREP_ID_V1_1_0;
     assert!(!is_legacy_porep_id(porep_id));
-    let verified = aggregate_proofs::<SectorShape2KiB>(
+    let verified = aggregate_proofs::<SectorShape2KiB<Fr>>(
         SECTOR_SIZE_2_KIB,
         &porep_id,
         ApiVersion::V1_1_0,
@@ -421,7 +442,7 @@ fn test_seal_proof_aggregation_2_4kib_porep_id_v1_1_base_8() -> Result<()> {
 
     let porep_id = ARBITRARY_POREP_ID_V1_1_0;
     assert!(!is_legacy_porep_id(porep_id));
-    let verified = aggregate_proofs::<SectorShape4KiB>(
+    let verified = aggregate_proofs::<SectorShape4KiB<Fr>>(
         SECTOR_SIZE_4_KIB,
         &porep_id,
         ApiVersion::V1_1_0,
@@ -439,7 +460,7 @@ fn test_seal_proof_aggregation_1_32kib_porep_id_v1_1_base_8() -> Result<()> {
 
     let porep_id = ARBITRARY_POREP_ID_V1_1_0;
     assert!(!is_legacy_porep_id(porep_id));
-    let verified = aggregate_proofs::<SectorShape32KiB>(
+    let verified = aggregate_proofs::<SectorShape32KiB<Fr>>(
         SECTOR_SIZE_32_KIB,
         &porep_id,
         ApiVersion::V1_1_0,
@@ -457,7 +478,7 @@ fn test_seal_proof_aggregation_818_32kib_porep_id_v1_1_base_8() -> Result<()> {
 
     let porep_id = ARBITRARY_POREP_ID_V1_1_0;
     assert!(!is_legacy_porep_id(porep_id));
-    let verified = aggregate_proofs::<SectorShape32KiB>(
+    let verified = aggregate_proofs::<SectorShape32KiB<Fr>>(
         SECTOR_SIZE_32_KIB,
         &porep_id,
         ApiVersion::V1_1_0,
@@ -527,9 +548,14 @@ fn aggregate_proofs<Tree>(
 where
     Tree: 'static + MerkleTreeTrait,
     <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+    Tree::Arity: PoseidonArityAllFields,
+    Tree::SubTreeArity: PoseidonArityAllFields,
+    Tree::TopTreeArity: PoseidonArityAllFields,
+    DefaultPieceHasher<Fr>: Hasher,
+    DefaultPieceDomain<Fr>: Domain,
 {
     let mut rng = XorShiftRng::from_seed(TEST_SEED);
-    let prover_fr: DefaultTreeDomain = Fr::random(&mut rng).into();
+    let prover_fr: DefaultTreeDomain<Fr> = Fr::random(&mut rng).into();
     let mut prover_id = [0u8; 32];
     prover_id.copy_from_slice(AsRef::<[u8]>::as_ref(&prover_fr));
 
@@ -606,8 +632,8 @@ fn test_resumable_seal_skip_proofs_v1() {
     let mut porep_id = [0u8; 32];
     porep_id[..8].copy_from_slice(&porep_id_v1.to_le_bytes());
     assert!(is_legacy_porep_id(porep_id));
-    run_resumable_seal::<SectorShape2KiB>(true, 0, &porep_id, ApiVersion::V1_0_0);
-    run_resumable_seal::<SectorShape2KiB>(true, 1, &porep_id, ApiVersion::V1_0_0);
+    run_resumable_seal::<SectorShape2KiB<Fr>>(true, 0, &porep_id, ApiVersion::V1_0_0);
+    run_resumable_seal::<SectorShape2KiB<Fr>>(true, 1, &porep_id, ApiVersion::V1_0_0);
 }
 
 #[test]
@@ -617,8 +643,8 @@ fn test_resumable_seal_skip_proofs_v1_1() {
     let mut porep_id = [0u8; 32];
     porep_id[..8].copy_from_slice(&porep_id_v1_1.to_le_bytes());
     assert!(!is_legacy_porep_id(porep_id));
-    run_resumable_seal::<SectorShape2KiB>(true, 0, &porep_id, ApiVersion::V1_1_0);
-    run_resumable_seal::<SectorShape2KiB>(true, 1, &porep_id, ApiVersion::V1_1_0);
+    run_resumable_seal::<SectorShape2KiB<Fr>>(true, 0, &porep_id, ApiVersion::V1_1_0);
+    run_resumable_seal::<SectorShape2KiB<Fr>>(true, 1, &porep_id, ApiVersion::V1_1_0);
 }
 
 #[test]
@@ -629,8 +655,8 @@ fn test_resumable_seal_v1() {
     let mut porep_id = [0u8; 32];
     porep_id[..8].copy_from_slice(&porep_id_v1.to_le_bytes());
     assert!(is_legacy_porep_id(porep_id));
-    run_resumable_seal::<SectorShape2KiB>(false, 0, &porep_id, ApiVersion::V1_0_0);
-    run_resumable_seal::<SectorShape2KiB>(false, 1, &porep_id, ApiVersion::V1_0_0);
+    run_resumable_seal::<SectorShape2KiB<Fr>>(false, 0, &porep_id, ApiVersion::V1_0_0);
+    run_resumable_seal::<SectorShape2KiB<Fr>>(false, 1, &porep_id, ApiVersion::V1_0_0);
 }
 
 #[test]
@@ -641,8 +667,8 @@ fn test_resumable_seal_v1_1() {
     let mut porep_id = [0u8; 32];
     porep_id[..8].copy_from_slice(&porep_id_v1_1.to_le_bytes());
     assert!(!is_legacy_porep_id(porep_id));
-    run_resumable_seal::<SectorShape2KiB>(false, 0, &porep_id, ApiVersion::V1_1_0);
-    run_resumable_seal::<SectorShape2KiB>(false, 1, &porep_id, ApiVersion::V1_1_0);
+    run_resumable_seal::<SectorShape2KiB<Fr>>(false, 0, &porep_id, ApiVersion::V1_1_0);
+    run_resumable_seal::<SectorShape2KiB<Fr>>(false, 1, &porep_id, ApiVersion::V1_1_0);
 }
 
 /// Create a seal, delete a layer and resume
@@ -656,13 +682,22 @@ fn run_resumable_seal<Tree>(
     api_version: ApiVersion,
 ) where
     Tree: 'static + MerkleTreeTrait,
-    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+    Tree::Arity: PoseidonArityAllFields,
+    Tree::SubTreeArity: PoseidonArityAllFields,
+    Tree::TopTreeArity: PoseidonArityAllFields,
+    DefaultPieceHasher<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>: Hasher,
+    DefaultPieceDomain<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>:
+        Domain<Field = <<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
+    DefaultTreeHasher<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>: Hasher,
+    DefaultTreeDomain<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>:
+        Domain<Field = <<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
 {
     init_logger();
 
     let sector_size = SECTOR_SIZE_2_KIB;
     let mut rng = XorShiftRng::from_seed(TEST_SEED);
-    let prover_fr: DefaultTreeDomain = Fr::random(&mut rng).into();
+    let prover_fr =
+        DefaultTreeDomain::<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>::random(&mut rng);
     let mut prover_id = [0u8; 32];
     prover_id.copy_from_slice(AsRef::<[u8]>::as_ref(&prover_fr));
 
@@ -760,44 +795,44 @@ fn run_resumable_seal<Tree>(
 #[test]
 #[ignore]
 fn test_winning_post_2kib_base_8() -> Result<()> {
-    winning_post::<SectorShape2KiB>(SECTOR_SIZE_2_KIB, false, ApiVersion::V1_0_0)?;
-    winning_post::<SectorShape2KiB>(SECTOR_SIZE_2_KIB, true, ApiVersion::V1_0_0)?;
-    winning_post::<SectorShape2KiB>(SECTOR_SIZE_2_KIB, false, ApiVersion::V1_1_0)?;
-    winning_post::<SectorShape2KiB>(SECTOR_SIZE_2_KIB, true, ApiVersion::V1_1_0)
+    winning_post::<SectorShape2KiB<Fr>>(SECTOR_SIZE_2_KIB, false, ApiVersion::V1_0_0)?;
+    winning_post::<SectorShape2KiB<Fr>>(SECTOR_SIZE_2_KIB, true, ApiVersion::V1_0_0)?;
+    winning_post::<SectorShape2KiB<Fr>>(SECTOR_SIZE_2_KIB, false, ApiVersion::V1_1_0)?;
+    winning_post::<SectorShape2KiB<Fr>>(SECTOR_SIZE_2_KIB, true, ApiVersion::V1_1_0)
 }
 
 #[test]
 #[ignore]
 fn test_winning_post_4kib_sub_8_2() -> Result<()> {
-    winning_post::<SectorShape4KiB>(SECTOR_SIZE_4_KIB, false, ApiVersion::V1_0_0)?;
-    winning_post::<SectorShape4KiB>(SECTOR_SIZE_4_KIB, true, ApiVersion::V1_0_0)?;
-    winning_post::<SectorShape4KiB>(SECTOR_SIZE_4_KIB, false, ApiVersion::V1_1_0)?;
-    winning_post::<SectorShape4KiB>(SECTOR_SIZE_4_KIB, true, ApiVersion::V1_1_0)
+    winning_post::<SectorShape4KiB<Fr>>(SECTOR_SIZE_4_KIB, false, ApiVersion::V1_0_0)?;
+    winning_post::<SectorShape4KiB<Fr>>(SECTOR_SIZE_4_KIB, true, ApiVersion::V1_0_0)?;
+    winning_post::<SectorShape4KiB<Fr>>(SECTOR_SIZE_4_KIB, false, ApiVersion::V1_1_0)?;
+    winning_post::<SectorShape4KiB<Fr>>(SECTOR_SIZE_4_KIB, true, ApiVersion::V1_1_0)
 }
 
 #[test]
 #[ignore]
 fn test_winning_post_16kib_sub_8_8() -> Result<()> {
-    winning_post::<SectorShape16KiB>(SECTOR_SIZE_16_KIB, false, ApiVersion::V1_0_0)?;
-    winning_post::<SectorShape16KiB>(SECTOR_SIZE_16_KIB, true, ApiVersion::V1_0_0)?;
-    winning_post::<SectorShape16KiB>(SECTOR_SIZE_16_KIB, false, ApiVersion::V1_1_0)?;
-    winning_post::<SectorShape16KiB>(SECTOR_SIZE_16_KIB, true, ApiVersion::V1_1_0)
+    winning_post::<SectorShape16KiB<Fr>>(SECTOR_SIZE_16_KIB, false, ApiVersion::V1_0_0)?;
+    winning_post::<SectorShape16KiB<Fr>>(SECTOR_SIZE_16_KIB, true, ApiVersion::V1_0_0)?;
+    winning_post::<SectorShape16KiB<Fr>>(SECTOR_SIZE_16_KIB, false, ApiVersion::V1_1_0)?;
+    winning_post::<SectorShape16KiB<Fr>>(SECTOR_SIZE_16_KIB, true, ApiVersion::V1_1_0)
 }
 
 #[test]
 #[ignore]
 fn test_winning_post_32kib_top_8_8_2() -> Result<()> {
-    winning_post::<SectorShape32KiB>(SECTOR_SIZE_32_KIB, false, ApiVersion::V1_0_0)?;
-    winning_post::<SectorShape32KiB>(SECTOR_SIZE_32_KIB, true, ApiVersion::V1_0_0)?;
-    winning_post::<SectorShape32KiB>(SECTOR_SIZE_32_KIB, false, ApiVersion::V1_1_0)?;
-    winning_post::<SectorShape32KiB>(SECTOR_SIZE_32_KIB, true, ApiVersion::V1_1_0)
+    winning_post::<SectorShape32KiB<Fr>>(SECTOR_SIZE_32_KIB, false, ApiVersion::V1_0_0)?;
+    winning_post::<SectorShape32KiB<Fr>>(SECTOR_SIZE_32_KIB, true, ApiVersion::V1_0_0)?;
+    winning_post::<SectorShape32KiB<Fr>>(SECTOR_SIZE_32_KIB, false, ApiVersion::V1_1_0)?;
+    winning_post::<SectorShape32KiB<Fr>>(SECTOR_SIZE_32_KIB, true, ApiVersion::V1_1_0)
 }
 
 #[test]
 fn test_winning_post_empty_sector_challenge() -> Result<()> {
     let mut rng = XorShiftRng::from_seed(TEST_SEED);
 
-    let prover_fr: DefaultTreeDomain = Fr::random(&mut rng).into();
+    let prover_fr = DefaultTreeDomain::<Fr>::random(&mut rng);
     let mut prover_id = [0u8; 32];
     prover_id.copy_from_slice(AsRef::<[u8]>::as_ref(&prover_fr));
 
@@ -805,7 +840,7 @@ fn test_winning_post_empty_sector_challenge() -> Result<()> {
     let sector_size = SECTOR_SIZE_2_KIB;
     let api_version = ApiVersion::V1_1_0;
 
-    let (_, replica, _, _) = create_seal::<_, SectorShape2KiB>(
+    let (_, replica, _, _) = create_seal::<_, SectorShape2KiB<Fr>>(
         &mut rng,
         sector_size,
         prover_id,
@@ -814,7 +849,7 @@ fn test_winning_post_empty_sector_challenge() -> Result<()> {
         api_version,
     )?;
 
-    let random_fr: DefaultTreeDomain = Fr::random(rng).into();
+    let random_fr = DefaultTreeDomain::<Fr>::random(&mut rng);
     let mut randomness = [0u8; 32];
     randomness.copy_from_slice(AsRef::<[u8]>::as_ref(&random_fr));
 
@@ -827,7 +862,7 @@ fn test_winning_post_empty_sector_challenge() -> Result<()> {
         api_version: ApiVersion::V1_0_0,
     };
 
-    assert!(generate_winning_post_sector_challenge::<SectorShape2KiB>(
+    assert!(generate_winning_post_sector_challenge::<SectorShape2KiB<Fr>>(
         &config,
         &randomness,
         sector_count as u64,
@@ -843,11 +878,19 @@ fn test_winning_post_empty_sector_challenge() -> Result<()> {
 fn winning_post<Tree>(sector_size: u64, fake: bool, api_version: ApiVersion) -> Result<()>
 where
     Tree: 'static + MerkleTreeTrait,
-    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+    Tree::Arity: PoseidonArityAllFields,
+    Tree::SubTreeArity: PoseidonArityAllFields,
+    Tree::TopTreeArity: PoseidonArityAllFields,
+    DefaultPieceHasher<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>: Hasher,
+    DefaultPieceDomain<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>:
+        Domain<Field = <<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
+    DefaultTreeHasher<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>: Hasher,
+    DefaultTreeDomain<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>:
+        Domain<Field = <<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
 {
     let mut rng = XorShiftRng::from_seed(TEST_SEED);
 
-    let prover_fr: DefaultTreeDomain = Fr::random(&mut rng).into();
+    let prover_fr = DefaultTreeDomain::random(&mut rng);
     let mut prover_id = [0u8; 32];
     prover_id.copy_from_slice(AsRef::<[u8]>::as_ref(&prover_fr));
 
@@ -870,7 +913,7 @@ where
     };
     let sector_count = WINNING_POST_SECTOR_COUNT;
 
-    let random_fr: DefaultTreeDomain = Fr::random(&mut rng).into();
+    let random_fr = DefaultTreeDomain::random(&mut rng);
     let mut randomness = [0u8; 32];
     randomness.copy_from_slice(AsRef::<[u8]>::as_ref(&random_fr));
 
@@ -949,28 +992,28 @@ fn test_window_post_single_partition_smaller_2kib_base_8() -> Result<()> {
         .get(&sector_size)
         .expect("unknown sector size");
 
-    window_post::<SectorShape2KiB>(
+    window_post::<SectorShape2KiB<Fr>>(
         sector_size,
         sector_count / 2,
         sector_count,
         false,
         ApiVersion::V1_0_0,
     )?;
-    window_post::<SectorShape2KiB>(
+    window_post::<SectorShape2KiB<Fr>>(
         sector_size,
         sector_count / 2,
         sector_count,
         true,
         ApiVersion::V1_0_0,
     )?;
-    window_post::<SectorShape2KiB>(
+    window_post::<SectorShape2KiB<Fr>>(
         sector_size,
         sector_count / 2,
         sector_count,
         false,
         ApiVersion::V1_1_0,
     )?;
-    window_post::<SectorShape2KiB>(
+    window_post::<SectorShape2KiB<Fr>>(
         sector_size,
         sector_count / 2,
         sector_count,
@@ -989,28 +1032,28 @@ fn test_window_post_two_partitions_matching_2kib_base_8() -> Result<()> {
         .get(&sector_size)
         .expect("unknown sector size");
 
-    window_post::<SectorShape2KiB>(
+    window_post::<SectorShape2KiB<Fr>>(
         sector_size,
         2 * sector_count,
         sector_count,
         false,
         ApiVersion::V1_0_0,
     )?;
-    window_post::<SectorShape2KiB>(
+    window_post::<SectorShape2KiB<Fr>>(
         sector_size,
         2 * sector_count,
         sector_count,
         true,
         ApiVersion::V1_0_0,
     )?;
-    window_post::<SectorShape2KiB>(
+    window_post::<SectorShape2KiB<Fr>>(
         sector_size,
         2 * sector_count,
         sector_count,
         false,
         ApiVersion::V1_1_0,
     )?;
-    window_post::<SectorShape2KiB>(
+    window_post::<SectorShape2KiB<Fr>>(
         sector_size,
         2 * sector_count,
         sector_count,
@@ -1029,28 +1072,28 @@ fn test_window_post_two_partitions_matching_4kib_sub_8_2() -> Result<()> {
         .get(&sector_size)
         .expect("unknown sector size");
 
-    window_post::<SectorShape4KiB>(
+    window_post::<SectorShape4KiB<Fr>>(
         sector_size,
         2 * sector_count,
         sector_count,
         false,
         ApiVersion::V1_0_0,
     )?;
-    window_post::<SectorShape4KiB>(
+    window_post::<SectorShape4KiB<Fr>>(
         sector_size,
         2 * sector_count,
         sector_count,
         true,
         ApiVersion::V1_0_0,
     )?;
-    window_post::<SectorShape4KiB>(
+    window_post::<SectorShape4KiB<Fr>>(
         sector_size,
         2 * sector_count,
         sector_count,
         false,
         ApiVersion::V1_1_0,
     )?;
-    window_post::<SectorShape4KiB>(
+    window_post::<SectorShape4KiB<Fr>>(
         sector_size,
         2 * sector_count,
         sector_count,
@@ -1069,28 +1112,28 @@ fn test_window_post_two_partitions_matching_16kib_sub_8_8() -> Result<()> {
         .get(&sector_size)
         .expect("unknown sector size");
 
-    window_post::<SectorShape16KiB>(
+    window_post::<SectorShape16KiB<Fr>>(
         sector_size,
         2 * sector_count,
         sector_count,
         false,
         ApiVersion::V1_0_0,
     )?;
-    window_post::<SectorShape16KiB>(
+    window_post::<SectorShape16KiB<Fr>>(
         sector_size,
         2 * sector_count,
         sector_count,
         true,
         ApiVersion::V1_0_0,
     )?;
-    window_post::<SectorShape16KiB>(
+    window_post::<SectorShape16KiB<Fr>>(
         sector_size,
         2 * sector_count,
         sector_count,
         false,
         ApiVersion::V1_1_0,
     )?;
-    window_post::<SectorShape16KiB>(
+    window_post::<SectorShape16KiB<Fr>>(
         sector_size,
         2 * sector_count,
         sector_count,
@@ -1109,28 +1152,28 @@ fn test_window_post_two_partitions_matching_32kib_top_8_8_2() -> Result<()> {
         .get(&sector_size)
         .expect("unknown sector size");
 
-    window_post::<SectorShape32KiB>(
+    window_post::<SectorShape32KiB<Fr>>(
         sector_size,
         2 * sector_count,
         sector_count,
         false,
         ApiVersion::V1_0_0,
     )?;
-    window_post::<SectorShape32KiB>(
+    window_post::<SectorShape32KiB<Fr>>(
         sector_size,
         2 * sector_count,
         sector_count,
         true,
         ApiVersion::V1_0_0,
     )?;
-    window_post::<SectorShape32KiB>(
+    window_post::<SectorShape32KiB<Fr>>(
         sector_size,
         2 * sector_count,
         sector_count,
         false,
         ApiVersion::V1_1_0,
     )?;
-    window_post::<SectorShape32KiB>(
+    window_post::<SectorShape32KiB<Fr>>(
         sector_size,
         2 * sector_count,
         sector_count,
@@ -1149,28 +1192,28 @@ fn test_window_post_two_partitions_smaller_2kib_base_8() -> Result<()> {
         .get(&sector_size)
         .expect("unknown sector size");
 
-    window_post::<SectorShape2KiB>(
+    window_post::<SectorShape2KiB<Fr>>(
         sector_size,
         2 * sector_count - 1,
         sector_count,
         false,
         ApiVersion::V1_0_0,
     )?;
-    window_post::<SectorShape2KiB>(
+    window_post::<SectorShape2KiB<Fr>>(
         sector_size,
         2 * sector_count - 1,
         sector_count,
         true,
         ApiVersion::V1_0_0,
     )?;
-    window_post::<SectorShape2KiB>(
+    window_post::<SectorShape2KiB<Fr>>(
         sector_size,
         2 * sector_count - 1,
         sector_count,
         false,
         ApiVersion::V1_1_0,
     )?;
-    window_post::<SectorShape2KiB>(
+    window_post::<SectorShape2KiB<Fr>>(
         sector_size,
         2 * sector_count - 1,
         sector_count,
@@ -1189,28 +1232,28 @@ fn test_window_post_single_partition_matching_2kib_base_8() -> Result<()> {
         .get(&sector_size)
         .expect("unknown sector size");
 
-    window_post::<SectorShape2KiB>(
+    window_post::<SectorShape2KiB<Fr>>(
         sector_size,
         sector_count,
         sector_count,
         false,
         ApiVersion::V1_0_0,
     )?;
-    window_post::<SectorShape2KiB>(
+    window_post::<SectorShape2KiB<Fr>>(
         sector_size,
         sector_count,
         sector_count,
         true,
         ApiVersion::V1_0_0,
     )?;
-    window_post::<SectorShape2KiB>(
+    window_post::<SectorShape2KiB<Fr>>(
         sector_size,
         sector_count,
         sector_count,
         false,
         ApiVersion::V1_1_0,
     )?;
-    window_post::<SectorShape2KiB>(
+    window_post::<SectorShape2KiB<Fr>>(
         sector_size,
         sector_count,
         sector_count,
@@ -1228,28 +1271,28 @@ fn test_window_post_partition_matching_2kib_base_8() -> Result<()> {
         .get(&sector_size)
         .expect("unknown sector size");
 
-    partition_window_post::<SectorShape2KiB>(
+    partition_window_post::<SectorShape2KiB<Fr>>(
         sector_size,
         3, // Validate the scenarios of two partition
         sector_count,
         false,
         ApiVersion::V1_0_0,
     )?;
-    partition_window_post::<SectorShape2KiB>(
+    partition_window_post::<SectorShape2KiB<Fr>>(
         sector_size,
         3,
         sector_count,
         true,
         ApiVersion::V1_0_0,
     )?;
-    partition_window_post::<SectorShape2KiB>(
+    partition_window_post::<SectorShape2KiB<Fr>>(
         sector_size,
         3,
         sector_count,
         false,
         ApiVersion::V1_1_0,
     )?;
-    partition_window_post::<SectorShape2KiB>(sector_size, 3, sector_count, true, ApiVersion::V1_1_0)
+    partition_window_post::<SectorShape2KiB<Fr>>(sector_size, 3, sector_count, true, ApiVersion::V1_1_0)
 }
 
 fn partition_window_post<Tree>(
@@ -1261,7 +1304,15 @@ fn partition_window_post<Tree>(
 ) -> Result<()>
 where
     Tree: 'static + MerkleTreeTrait,
-    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+    Tree::Arity: PoseidonArityAllFields,
+    Tree::SubTreeArity: PoseidonArityAllFields,
+    Tree::TopTreeArity: PoseidonArityAllFields,
+    DefaultPieceHasher<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>: Hasher,
+    DefaultPieceDomain<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>:
+        Domain<Field = <<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
+    DefaultTreeHasher<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>: Hasher,
+    DefaultTreeDomain<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>:
+        Domain<Field = <<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
 {
     use anyhow::anyhow;
 
@@ -1271,7 +1322,7 @@ where
     let mut pub_replicas = BTreeMap::new();
     let mut priv_replicas = BTreeMap::new();
 
-    let prover_fr: <Tree::Hasher as Hasher>::Domain = Fr::random(&mut rng).into();
+    let prover_fr = <Tree::Hasher as Hasher>::Domain::random(&mut rng);
     let mut prover_id = [0u8; 32];
     prover_id.copy_from_slice(AsRef::<[u8]>::as_ref(&prover_fr));
 
@@ -1304,7 +1355,7 @@ where
     assert_eq!(pub_replicas.len(), total_sector_count);
     assert_eq!(sectors.len(), total_sector_count);
 
-    let random_fr: <Tree::Hasher as Hasher>::Domain = Fr::random(&mut rng).into();
+    let random_fr = <Tree::Hasher as Hasher>::Domain::random(&mut rng);
     let mut randomness = [0u8; 32];
     randomness.copy_from_slice(AsRef::<[u8]>::as_ref(&random_fr));
 
@@ -1392,7 +1443,15 @@ fn window_post<Tree>(
 ) -> Result<()>
 where
     Tree: 'static + MerkleTreeTrait,
-    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+    Tree::Arity: PoseidonArityAllFields,
+    Tree::SubTreeArity: PoseidonArityAllFields,
+    Tree::TopTreeArity: PoseidonArityAllFields,
+    DefaultPieceHasher<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>: Hasher,
+    DefaultPieceDomain<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>:
+        Domain<Field = <<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
+    DefaultTreeHasher<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>: Hasher,
+    DefaultTreeDomain<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>:
+        Domain<Field = <<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
 {
     let mut rng = XorShiftRng::from_seed(TEST_SEED);
 
@@ -1400,7 +1459,7 @@ where
     let mut pub_replicas = BTreeMap::new();
     let mut priv_replicas = BTreeMap::new();
 
-    let prover_fr: <Tree::Hasher as Hasher>::Domain = Fr::random(&mut rng).into();
+    let prover_fr = <Tree::Hasher as Hasher>::Domain::random(&mut rng);
     let mut prover_id = [0u8; 32];
     prover_id.copy_from_slice(AsRef::<[u8]>::as_ref(&prover_fr));
 
@@ -1433,7 +1492,7 @@ where
     assert_eq!(pub_replicas.len(), total_sector_count);
     assert_eq!(sectors.len(), total_sector_count);
 
-    let random_fr: <Tree::Hasher as Hasher>::Domain = Fr::random(&mut rng).into();
+    let random_fr = <Tree::Hasher as Hasher>::Domain::random(&mut rng);
     let mut randomness = [0u8; 32];
     randomness.copy_from_slice(AsRef::<[u8]>::as_ref(&random_fr));
 
@@ -1528,7 +1587,12 @@ fn run_seal_pre_commit_phase1<Tree>(
 ) -> Result<(Vec<PieceInfo>, SealPreCommitPhase1Output<Tree>)>
 where
     Tree: 'static + MerkleTreeTrait,
-    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+    DefaultPieceHasher<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>: Hasher,
+    DefaultPieceDomain<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>:
+        Domain<Field = <<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
+    DefaultTreeHasher<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>: Hasher,
+    DefaultTreeDomain<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>:
+        Domain<Field = <<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
 {
     let number_of_bytes_in_piece =
         UnpaddedBytesAmount::from(PaddedBytesAmount(config.sector_size.into()));
@@ -1577,10 +1641,15 @@ fn generate_proof<Tree>(
     seed: [u8; 32],
     pre_commit_output: &SealPreCommitOutput,
     piece_infos: &[PieceInfo],
-) -> Result<(SealCommitOutput, Vec<Vec<Fr>>, [u8; 32], [u8; 32])>
+) -> Result<(SealCommitOutput, Vec<CircuitPublicInputs>, [u8; 32], [u8; 32])>
 where
     Tree: 'static + MerkleTreeTrait,
-    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+    Tree::Arity: PoseidonArityAllFields,
+    Tree::SubTreeArity: PoseidonArityAllFields,
+    Tree::TopTreeArity: PoseidonArityAllFields,
+    DefaultPieceHasher<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>: Hasher,
+    DefaultPieceDomain<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>:
+        Domain<Field = <<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
 {
     let phase1_output = seal_commit_phase1::<_, Tree>(
         config,
@@ -1636,7 +1705,15 @@ fn unseal<Tree>(
 ) -> Result<()>
 where
     Tree: 'static + MerkleTreeTrait,
-    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+    Tree::Arity: PoseidonArityAllFields,
+    Tree::SubTreeArity: PoseidonArityAllFields,
+    Tree::TopTreeArity: PoseidonArityAllFields,
+    DefaultPieceHasher<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>: Hasher,
+    DefaultPieceDomain<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>:
+        Domain<Field = <<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
+    DefaultTreeHasher<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>: Hasher,
+    DefaultTreeDomain<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>:
+        Domain<Field = <<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
 {
     let comm_d = pre_commit_output.comm_d;
     let comm_r = pre_commit_output.comm_r;
@@ -1701,7 +1778,15 @@ fn proof_and_unseal<Tree>(
 ) -> Result<()>
 where
     Tree: 'static + MerkleTreeTrait,
-    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+    Tree::Arity: PoseidonArityAllFields,
+    Tree::SubTreeArity: PoseidonArityAllFields,
+    Tree::TopTreeArity: PoseidonArityAllFields,
+    DefaultPieceHasher<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>: Hasher,
+    DefaultPieceDomain<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>:
+        Domain<Field = <<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
+    DefaultTreeHasher<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>: Hasher,
+    DefaultTreeDomain<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>:
+        Domain<Field = <<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
 {
     let (commit_output, _commit_inputs, _seed, _comm_r) = generate_proof::<Tree>(
         config,
@@ -1741,7 +1826,15 @@ fn create_seal<R, Tree>(
 where
     R: Rng,
     Tree: 'static + MerkleTreeTrait,
-    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+    Tree::Arity: PoseidonArityAllFields,
+    Tree::SubTreeArity: PoseidonArityAllFields,
+    Tree::TopTreeArity: PoseidonArityAllFields,
+    DefaultPieceHasher<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>: Hasher,
+    DefaultPieceDomain<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>:
+        Domain<Field = <<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
+    DefaultTreeHasher<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>: Hasher,
+    DefaultTreeDomain<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>:
+        Domain<Field = <<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
 {
     init_logger();
 
@@ -1807,6 +1900,11 @@ where
     R: Rng,
     Tree: 'static + MerkleTreeTrait,
     <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+    Tree::Arity: PoseidonArityAllFields,
+    Tree::SubTreeArity: PoseidonArityAllFields,
+    Tree::TopTreeArity: PoseidonArityAllFields,
+    DefaultPieceHasher<Fr>: Hasher,
+    DefaultPieceDomain<Fr>: Domain,
 {
     init_logger();
 
@@ -1849,9 +1947,13 @@ where
         &pre_commit_output,
         &piece_infos,
     )
+    .map(|(result, inputs, seed, comm_r)| {
+        let inputs: Vec<Vec<Fr>> = inputs.into_iter().map(Into::into).collect();
+        (result, inputs, seed, comm_r)
+    })
 }
 
-fn compare_elements(path1: &Path, path2: &Path) -> Result<(), Error> {
+fn compare_elements<F: PrimeField>(path1: &Path, path2: &Path) -> Result<(), Error> {
     info!("Comparing elements between {:?} and {:?}", path1, path2);
     let f_data1 = OpenOptions::new()
         .read(true)
@@ -1871,17 +1973,17 @@ fn compare_elements(path1: &Path, path2: &Path) -> Result<(), Error> {
             .map(&f_data2)
             .with_context(|| format!("could not mmap path={:?}", path2))
     }?;
-    let fr_size = std::mem::size_of::<Fr>() as usize;
+    let field_size = 32;
     let end = metadata(path1)?.len() as u64;
     ensure!(
         metadata(path2)?.len() as u64 == end,
         "File sizes must match"
     );
 
-    for i in (0..end).step_by(fr_size) {
+    for i in (0..end).step_by(field_size) {
         let index = i as usize;
-        let fr1 = bytes_into_fr(&data1[index..index + fr_size])?;
-        let fr2 = bytes_into_fr(&data2[index..index + fr_size])?;
+        let fr1 = bytes_into_field::<F>(&data1[index..index + field_size])?;
+        let fr2 = bytes_into_field::<F>(&data2[index..index + field_size])?;
         ensure!(fr1 == fr2, "Data mismatch when comparing elements");
     }
     info!("Match found for {:?} and {:?}", path1, path2);
@@ -1889,7 +1991,14 @@ fn compare_elements(path1: &Path, path2: &Path) -> Result<(), Error> {
     Ok(())
 }
 
-fn create_seal_for_upgrade<R, Tree>(
+#[inline]
+fn bytes_into_field<F: PrimeField>(le_bytes: &[u8]) -> Result<F> {
+    let mut repr = F::Repr::default();
+    repr.as_mut().copy_from_slice(le_bytes);
+    F::from_repr_vartime(repr).ok_or_else(|| fr32::Error::BadFrBytes.into())
+}
+
+fn create_seal_for_upgrade<R, Tree, F>(
     rng: &mut R,
     sector_size: u64,
     prover_id: ProverId,
@@ -1898,7 +2007,15 @@ fn create_seal_for_upgrade<R, Tree>(
 ) -> Result<(SectorId, NamedTempFile, Commitment, TempDir)>
 where
     R: Rng,
-    Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher<Fr>>,
+    Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher<F>>,
+    Tree::Arity: PoseidonArityAllFields,
+    Tree::SubTreeArity: PoseidonArityAllFields,
+    Tree::TopTreeArity: PoseidonArityAllFields,
+    F: PrimeField,
+    TreeDHasher<F>: Hasher<Domain = TreeDDomain<F>>,
+    TreeDDomain<F>: Domain<Field = F>,
+    TreeRHasher<F>: Hasher<Domain = TreeRDomain<F>>,
+    TreeRDomain<F>: Domain<Field = F>,
 {
     init_logger();
 
@@ -1967,7 +2084,7 @@ where
         .with_context(|| format!("could not open path={:?}", new_sealed_sector_file.path()))?;
     f_sealed_sector.set_len(new_replica_target_len)?;
 
-    let encoded = encode_into::<Tree>(
+    let encoded = encode_into::<Tree, F>(
         porep_config,
         new_sealed_sector_file.path(),
         new_cache_dir.path(),
@@ -1978,7 +2095,7 @@ where
     )?;
 
     // Generate a single partition proof
-    let partition_proof = generate_single_partition_proof::<Tree>(
+    let partition_proof = generate_single_partition_proof::<Tree, F>(
         config,
         0, // first partition
         comm_r,
@@ -1991,7 +2108,7 @@ where
     )?;
 
     // Verify the single partition proof
-    let proof_is_valid = verify_single_partition_proof::<Tree>(
+    let proof_is_valid = verify_single_partition_proof::<Tree, F>(
         config,
         0, // first partition
         partition_proof,
@@ -2002,7 +2119,7 @@ where
     ensure!(proof_is_valid, "Partition proof (single) failed to verify");
 
     // Generate all partition proofs
-    let partition_proofs = generate_partition_proofs::<Tree>(
+    let partition_proofs = generate_partition_proofs::<Tree, F>(
         config,
         comm_r,
         encoded.comm_r_new,
@@ -2014,7 +2131,7 @@ where
     )?;
 
     // Verify all partition proofs
-    let proofs_are_valid = verify_partition_proofs::<Tree>(
+    let proofs_are_valid = verify_partition_proofs::<Tree, F>(
         config,
         &partition_proofs,
         comm_r,
@@ -2023,14 +2140,14 @@ where
     )?;
     ensure!(proofs_are_valid, "Partition proofs failed to verify");
 
-    let proof = generate_empty_sector_update_proof_with_vanilla::<Tree>(
+    let proof = generate_empty_sector_update_proof_with_vanilla::<Tree, F>(
         porep_config,
         partition_proofs,
         comm_r,
         encoded.comm_r_new,
         encoded.comm_d_new,
     )?;
-    let valid = verify_empty_sector_update_proof::<Tree>(
+    let valid = verify_empty_sector_update_proof::<Tree, F>(
         porep_config,
         &proof.0,
         comm_r,
@@ -2039,7 +2156,7 @@ where
     )?;
     ensure!(valid, "Compound proof failed to verify");
 
-    let proof = generate_empty_sector_update_proof::<Tree>(
+    let proof = generate_empty_sector_update_proof::<Tree, F>(
         porep_config,
         comm_r,
         encoded.comm_r_new,
@@ -2049,7 +2166,7 @@ where
         new_sealed_sector_file.path(),
         new_cache_dir.path(),
     )?;
-    let valid = verify_empty_sector_update_proof::<Tree>(
+    let valid = verify_empty_sector_update_proof::<Tree, F>(
         porep_config,
         &proof.0,
         comm_r,
@@ -2072,7 +2189,7 @@ where
         .with_context(|| format!("could not open path={:?}", decoded_sector_file.path()))?;
     f_decoded_sector.set_len(decoded_sector_target_len)?;
 
-    decode_from::<Tree>(
+    decode_from::<Tree, F>(
         config,
         decoded_sector_file.path(),
         new_sealed_sector_file.path(),
@@ -2081,7 +2198,7 @@ where
         encoded.comm_d_new,
     )?;
     // When the data is decoded, it MUST match the original new staged data.
-    compare_elements(decoded_sector_file.path(), new_staged_sector_file.path())?;
+    compare_elements::<F>(decoded_sector_file.path(), new_staged_sector_file.path())?;
 
     decoded_sector_file.close()?;
 
@@ -2103,7 +2220,7 @@ where
 
     // Note: we pass cache_dir to the remove, which is the original
     // dir where the data was sealed (for p_aux/t_aux).
-    remove_encoded_data::<Tree>(
+    remove_encoded_data::<Tree, F>(
         config,
         remove_encoded_file.path(),
         remove_encoded_cache_dir.path(),
@@ -2113,7 +2230,7 @@ where
         encoded.comm_d_new,
     )?;
     // When the data is removed, it MUST match the original sealed data.
-    compare_elements(remove_encoded_file.path(), sealed_sector_file.path())?;
+    compare_elements::<F>(remove_encoded_file.path(), sealed_sector_file.path())?;
 
     remove_encoded_file.close()?;
 
@@ -2132,7 +2249,9 @@ fn create_fake_seal<R, Tree>(
 where
     R: Rng,
     Tree: 'static + MerkleTreeTrait,
-    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+    DefaultPieceHasher<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>: Hasher,
+    DefaultPieceDomain<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>:
+        Domain<Field = <<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
 {
     init_logger();
 

@@ -4,7 +4,6 @@ use std::sync::RwLock;
 pub use storage_proofs_core::drgraph::BASE_DEGREE as DRG_DEGREE;
 pub use storage_proofs_porep::stacked::EXP_DEGREE;
 
-use blstrs::Scalar as Fr;
 use filecoin_hashers::{poseidon::PoseidonHasher, sha256::Sha256Hasher, Hasher};
 use lazy_static::lazy_static;
 use storage_proofs_core::{
@@ -135,37 +134,37 @@ pub const MINIMUM_RESERVED_BYTES_FOR_PIECE_IN_FULLY_ALIGNED_SECTOR: u64 =
 pub const MIN_PIECE_SIZE: UnpaddedBytesAmount = UnpaddedBytesAmount(127);
 
 /// The hasher used for creating comm_d.
-pub type DefaultPieceHasher = Sha256Hasher<Fr>;
-pub type DefaultPieceDomain = <DefaultPieceHasher as Hasher>::Domain;
+pub type DefaultPieceHasher<F> = Sha256Hasher<F>;
+pub type DefaultPieceDomain<F> = <DefaultPieceHasher<F> as Hasher>::Domain;
 
 /// The default hasher for merkle trees currently in use.
-pub type DefaultTreeHasher = PoseidonHasher<Fr>;
-pub type DefaultTreeDomain = <DefaultTreeHasher as Hasher>::Domain;
+pub type DefaultTreeHasher<F> = PoseidonHasher<F>;
+pub type DefaultTreeDomain<F> = <DefaultTreeHasher<F> as Hasher>::Domain;
 
-pub type DefaultBinaryTree = BinaryMerkleTree<DefaultTreeHasher>;
-pub type DefaultOctTree = OctMerkleTree<DefaultTreeHasher>;
-pub type DefaultOctLCTree = OctLCMerkleTree<DefaultTreeHasher>;
+pub type DefaultBinaryTree<F> = BinaryMerkleTree<DefaultTreeHasher<F>>;
+pub type DefaultOctTree<F> = OctMerkleTree<DefaultTreeHasher<F>>;
+pub type DefaultOctLCTree<F> = OctLCMerkleTree<DefaultTreeHasher<F>>;
 
 // Generic shapes
-pub type SectorShapeBase = LCTree<DefaultTreeHasher, U8, U0, U0>;
-pub type SectorShapeSub2 = LCTree<DefaultTreeHasher, U8, U2, U0>;
-pub type SectorShapeSub8 = LCTree<DefaultTreeHasher, U8, U8, U0>;
-pub type SectorShapeTop2 = LCTree<DefaultTreeHasher, U8, U8, U2>;
+pub type SectorShapeBase<F> = LCTree<DefaultTreeHasher<F>, U8, U0, U0>;
+pub type SectorShapeSub2<F> = LCTree<DefaultTreeHasher<F>, U8, U2, U0>;
+pub type SectorShapeSub8<F> = LCTree<DefaultTreeHasher<F>, U8, U8, U0>;
+pub type SectorShapeTop2<F> = LCTree<DefaultTreeHasher<F>, U8, U8, U2>;
 
 // Specific size constants by shape
-pub type SectorShape2KiB = SectorShapeBase;
-pub type SectorShape8MiB = SectorShapeBase;
-pub type SectorShape512MiB = SectorShapeBase;
+pub type SectorShape2KiB<F> = SectorShapeBase<F>;
+pub type SectorShape8MiB<F> = SectorShapeBase<F>;
+pub type SectorShape512MiB<F> = SectorShapeBase<F>;
 
-pub type SectorShape4KiB = SectorShapeSub2;
-pub type SectorShape16MiB = SectorShapeSub2;
-pub type SectorShape1GiB = SectorShapeSub2;
+pub type SectorShape4KiB<F> = SectorShapeSub2<F>;
+pub type SectorShape16MiB<F> = SectorShapeSub2<F>;
+pub type SectorShape1GiB<F> = SectorShapeSub2<F>;
 
-pub type SectorShape16KiB = SectorShapeSub8;
-pub type SectorShape32GiB = SectorShapeSub8;
+pub type SectorShape16KiB<F> = SectorShapeSub8<F>;
+pub type SectorShape32GiB<F> = SectorShapeSub8<F>;
 
-pub type SectorShape32KiB = SectorShapeTop2;
-pub type SectorShape64GiB = SectorShapeTop2;
+pub type SectorShape32KiB<F> = SectorShapeTop2<F>;
+pub type SectorShape64GiB<F> = SectorShapeTop2<F>;
 
 pub fn is_sector_shape_base(sector_size: u64) -> bool {
     matches!(
@@ -194,45 +193,45 @@ pub fn is_sector_shape_top2(sector_size: u64) -> bool {
 #[macro_export]
 macro_rules! with_shape {
     ($size:expr, $f:ident) => {
-        with_shape!($size, $f,)
+        with_shape!($size, $f, blstrs::Scalar,)
     };
-    ($size:expr, $f:ident, $($args:expr,)*) => {
+    ($size:expr, $f:ident, $field:ty, $($args:expr,)*) => {
         match $size {
             _x if $size == $crate::constants::SECTOR_SIZE_2_KIB => {
-              $f::<$crate::constants::SectorShape2KiB>($($args),*)
+              $f::<$crate::constants::SectorShape2KiB<$field>>($($args),*)
             },
             _x if $size == $crate::constants::SECTOR_SIZE_4_KIB => {
-              $f::<$crate::constants::SectorShape4KiB>($($args),*)
+              $f::<$crate::constants::SectorShape4KiB<$field>>($($args),*)
             },
             _x if $size == $crate::constants::SECTOR_SIZE_16_KIB => {
-              $f::<$crate::constants::SectorShape16KiB>($($args),*)
+              $f::<$crate::constants::SectorShape16KiB<$field>>($($args),*)
             },
             _x if $size == $crate::constants::SECTOR_SIZE_32_KIB => {
-              $f::<$crate::constants::SectorShape32KiB>($($args),*)
+              $f::<$crate::constants::SectorShape32KiB<$field>>($($args),*)
             },
             _xx if $size == $crate::constants::SECTOR_SIZE_8_MIB => {
-              $f::<$crate::constants::SectorShape8MiB>($($args),*)
+              $f::<$crate::constants::SectorShape8MiB<$field>>($($args),*)
             },
             _xx if $size == $crate::constants::SECTOR_SIZE_16_MIB => {
-              $f::<$crate::constants::SectorShape16MiB>($($args),*)
+              $f::<$crate::constants::SectorShape16MiB<$field>>($($args),*)
             },
             _x if $size == $crate::constants::SECTOR_SIZE_512_MIB => {
-              $f::<$crate::constants::SectorShape512MiB>($($args),*)
+              $f::<$crate::constants::SectorShape512MiB<$field>>($($args),*)
             },
             _x if $size == $crate::constants::SECTOR_SIZE_1_GIB => {
-              $f::<$crate::constants::SectorShape1GiB>($($args),*)
+              $f::<$crate::constants::SectorShape1GiB<$field>>($($args),*)
             },
             _x if $size == $crate::constants::SECTOR_SIZE_32_GIB => {
-              $f::<$crate::constants::SectorShape32GiB>($($args),*)
+              $f::<$crate::constants::SectorShape32GiB<$field>>($($args),*)
             },
             _x if $size == $crate::constants::SECTOR_SIZE_64_GIB => {
-              $f::<$crate::constants::SectorShape64GiB>($($args),*)
+              $f::<$crate::constants::SectorShape64GiB<$field>>($($args),*)
             },
             _ => panic!("unsupported sector size: {}", $size),
         }
     };
     ($size:expr, $f:ident, $($args:expr),*) => {
-        with_shape!($size, $f, $($args,)*)
+        with_shape!($size, $f, blstrs::Scalar, $($args,)*)
     };
 }
 
