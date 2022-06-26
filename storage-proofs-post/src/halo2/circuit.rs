@@ -1,3 +1,5 @@
+#![allow(unused_imports)]
+
 use std::any::TypeId;
 use std::convert::TryInto;
 use std::iter;
@@ -12,19 +14,37 @@ use filecoin_hashers::{poseidon::PoseidonHasher, Domain, HaloHasher, Hasher, Pos
 use generic_array::typenum::U2;
 use halo2_proofs::{
     arithmetic::FieldExt,
-    plonk::{Advice, Column, ConstraintSystem, Instance},
+    circuit::{Layouter, SimpleFloorPlanner},
+    plonk::{Advice, Circuit, Column, ConstraintSystem, Error, Instance},
 };
+use rand::rngs::OsRng;
 use storage_proofs_core::{
-    halo2::gadgets::{
-        insert::{InsertChip, InsertConfig},
-        por::{self, MerkleChip},
+    halo2::{
+        create_batch_proof, create_proof,
+        gadgets::{
+            insert::{InsertChip, InsertConfig},
+            por::{self, MerkleChip},
+        },
+        verify_batch_proof, verify_proof, CircuitRows, CompoundProof, FieldProvingCurves,
+        Halo2Keypair, Halo2Proof,
     },
-    merkle::MerkleProofTrait,
+    merkle::{MerkleProofTrait, MerkleTreeTrait},
 };
 
-use crate::fallback as vanilla;
+use crate::{
+    fallback::{self as vanilla, FallbackPoSt, SetupParams},
+    halo2::{
+        constants::{
+            SECTOR_NODES_16_KIB, SECTOR_NODES_16_MIB, SECTOR_NODES_1_GIB, SECTOR_NODES_2_KIB,
+            SECTOR_NODES_32_GIB, SECTOR_NODES_32_KIB, SECTOR_NODES_4_KIB, SECTOR_NODES_512_MIB,
+            SECTOR_NODES_64_GIB, SECTOR_NODES_8_MIB,
+        },
+        window::{self, WindowPostCircuit},
+        winning::{self, WinningPostCircuit},
+    },
+};
 
-// Circuit private inputs for a challenged sector.
+// The subset of a PoSt circuit's private inputs corresponding to a single challenged sector.
 #[derive(Clone)]
 pub struct SectorProof<F, U, V, W, const SECTOR_NODES: usize, const SECTOR_CHALLENGES: usize>
 where
@@ -124,7 +144,7 @@ where
 }
 
 #[derive(Clone)]
-pub struct CircuitConfig<F, U, V, W, const SECTOR_NODES: usize>
+pub struct PostConfig<F, U, V, W, const SECTOR_NODES: usize>
 where
     F: FieldExt,
     U: PoseidonArity<F>,
@@ -156,7 +176,7 @@ where
     pub pi: Column<Instance>,
 }
 
-impl<F, U, V, W, const SECTOR_NODES: usize> CircuitConfig<F, U, V, W, SECTOR_NODES>
+impl<F, U, V, W, const SECTOR_NODES: usize> PostConfig<F, U, V, W, SECTOR_NODES>
 where
     F: FieldExt,
     U: PoseidonArity<F>,
@@ -261,7 +281,7 @@ where
         let pi = meta.instance_column();
         meta.enable_equality(pi);
 
-        CircuitConfig {
+        PostConfig {
             uint32,
             poseidon_2,
             tree_r: (
@@ -282,7 +302,7 @@ where
         <PoseidonHasher<F> as HaloHasher<U2>>::Chip,
         MerkleChip<PoseidonHasher<F>, U, V, W>,
     ) {
-        let CircuitConfig {
+        let PostConfig {
             uint32: uint32_config,
             poseidon_2: poseidon_2_config,
             tree_r: (poseidon_base_config, insert_base_config, sub_config, top_config),
@@ -318,5 +338,116 @@ where
         };
 
         (uint32_chip, poseidon_2_chip, tree_r_merkle_chip)
+    }
+}
+
+#[derive(Clone)]
+pub enum PostCircuit<F, U, V, W, const SECTOR_NODES: usize>
+where
+    F: FieldExt,
+    U: PoseidonArity<F>,
+    V: PoseidonArity<F>,
+    W: PoseidonArity<F>,
+    PoseidonHasher<F>: Hasher,
+    <PoseidonHasher<F> as Hasher>::Domain: Domain<Field = F>,
+{
+    Winning(WinningPostCircuit<F, U, V, W, SECTOR_NODES>),
+    Window(WindowPostCircuit<F, U, V, W, SECTOR_NODES>),
+}
+
+impl<F, U, V, W, const SECTOR_NODES: usize> From<WinningPostCircuit<F, U, V, W, SECTOR_NODES>>
+    for PostCircuit<F, U, V, W, SECTOR_NODES>
+where
+    F: FieldExt,
+    U: PoseidonArity<F>,
+    V: PoseidonArity<F>,
+    W: PoseidonArity<F>,
+    PoseidonHasher<F>: Hasher,
+    <PoseidonHasher<F> as Hasher>::Domain: Domain<Field = F>,
+{
+    fn from(circ: WinningPostCircuit<F, U, V, W, SECTOR_NODES>) -> Self {
+        PostCircuit::Winning(circ)
+    }
+}
+
+impl<F, U, V, W, const SECTOR_NODES: usize> From<WindowPostCircuit<F, U, V, W, SECTOR_NODES>>
+    for PostCircuit<F, U, V, W, SECTOR_NODES>
+where
+    F: FieldExt,
+    U: PoseidonArity<F>,
+    V: PoseidonArity<F>,
+    W: PoseidonArity<F>,
+    PoseidonHasher<F>: Hasher,
+    <PoseidonHasher<F> as Hasher>::Domain: Domain<Field = F>,
+{
+    fn from(circ: WindowPostCircuit<F, U, V, W, SECTOR_NODES>) -> Self {
+        PostCircuit::Window(circ)
+    }
+}
+
+impl<F, U, V, W, const SECTOR_NODES: usize> Circuit<F> for PostCircuit<F, U, V, W, SECTOR_NODES>
+where
+    F: FieldExt,
+    U: PoseidonArity<F>,
+    V: PoseidonArity<F>,
+    W: PoseidonArity<F>,
+    PoseidonHasher<F>: Hasher,
+    <PoseidonHasher<F> as Hasher>::Domain: Domain<Field = F>,
+{
+    type Config = PostConfig<F, U, V, W, SECTOR_NODES>;
+    type FloorPlanner = SimpleFloorPlanner;
+
+    fn without_witnesses(&self) -> Self {
+        if self.is_winning() {
+            WinningPostCircuit::blank_circuit().into()
+        } else {
+            WindowPostCircuit::blank_circuit().into()
+        }
+    }
+
+    fn configure(meta: &mut ConstraintSystem<F>) -> Self::Config {
+        PostConfig::configure(meta)
+    }
+
+    fn synthesize(&self, config: Self::Config, layouter: impl Layouter<F>) -> Result<(), Error> {
+        match self {
+            PostCircuit::Winning(circ) => circ.synthesize(config, layouter),
+            PostCircuit::Window(circ) => circ.synthesize(config, layouter),
+        }
+    }
+}
+
+impl<F, U, V, W, const SECTOR_NODES: usize> CircuitRows for PostCircuit<F, U, V, W, SECTOR_NODES>
+where
+    F: FieldExt,
+    U: PoseidonArity<F>,
+    V: PoseidonArity<F>,
+    W: PoseidonArity<F>,
+    PoseidonHasher<F>: Hasher,
+    <PoseidonHasher<F> as Hasher>::Domain: Domain<Field = F>,
+{
+    fn k(&self) -> u32 {
+        match self {
+            PostCircuit::Winning(circ) => circ.k(),
+            PostCircuit::Window(circ) => circ.k(),
+        }
+    }
+}
+
+impl<F, U, V, W, const SECTOR_NODES: usize> PostCircuit<F, U, V, W, SECTOR_NODES>
+where
+    F: FieldExt,
+    U: PoseidonArity<F>,
+    V: PoseidonArity<F>,
+    W: PoseidonArity<F>,
+    PoseidonHasher<F>: Hasher,
+    <PoseidonHasher<F> as Hasher>::Domain: Domain<Field = F>,
+{
+    fn is_winning(&self) -> bool {
+        if let PostCircuit::Winning(_) = self {
+            true
+        } else {
+            false
+        }
     }
 }

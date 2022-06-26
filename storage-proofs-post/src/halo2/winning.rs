@@ -15,7 +15,7 @@ use storage_proofs_core::halo2::CircuitRows;
 
 use crate::{
     fallback as vanilla,
-    halo2::shared::{CircuitConfig, SectorProof},
+    halo2::circuit::{PostConfig, SectorProof},
 };
 
 pub const CHALLENGE_COUNT: usize = 66;
@@ -73,7 +73,7 @@ where
         vanilla_pub_inputs: vanilla::PublicInputs<<PoseidonHasher<F> as Hasher>::Domain>,
     ) -> Self {
         assert_eq!(vanilla_pub_inputs.sectors.len(), 1);
-        assert!(vanilla_pub_inputs.k.is_some());
+        assert_eq!(vanilla_pub_inputs.k, Some(0));
 
         let randomness: F = vanilla_pub_inputs.randomness.into();
         let sector_id: u64 = vanilla_pub_inputs.sectors[0].id.into();
@@ -147,7 +147,7 @@ where
     PoseidonHasher<F>: Hasher,
     <PoseidonHasher<F> as Hasher>::Domain: Domain<Field = F>,
 {
-    type Config = CircuitConfig<F, U, V, W, SECTOR_NODES>;
+    type Config = PostConfig<F, U, V, W, SECTOR_NODES>;
     type FloorPlanner = SimpleFloorPlanner;
 
     fn without_witnesses(&self) -> Self {
@@ -158,7 +158,7 @@ where
     }
 
     fn configure(meta: &mut ConstraintSystem<F>) -> Self::Config {
-        CircuitConfig::configure(meta)
+        PostConfig::configure(meta)
     }
 
     #[allow(clippy::unwrap_used)]
@@ -258,6 +258,23 @@ where
             SECTOR_NODES_32_KIB => 14,
             // TODO (jake): add more sector sizes
             _ => unimplemented!(),
+        }
+    }
+}
+
+impl<F, U, V, W, const SECTOR_NODES: usize> WinningPostCircuit<F, U, V, W, SECTOR_NODES>
+where
+    F: FieldExt,
+    U: PoseidonArity<F>,
+    V: PoseidonArity<F>,
+    W: PoseidonArity<F>,
+    PoseidonHasher<F>: Hasher,
+    <PoseidonHasher<F> as Hasher>::Domain: Domain<Field = F>,
+{
+    pub fn blank_circuit() -> Self {
+        WinningPostCircuit {
+            pub_inputs: PublicInputs::empty(),
+            priv_inputs: PrivateInputs::empty(),
         }
     }
 }

@@ -143,7 +143,7 @@ where
     PoseidonHasher<F>: Hasher,
     <PoseidonHasher<F> as Hasher>::Domain: Domain<Field = F>,
 {
-    let challenged_sector_count = window::challenged_sector_count::<SECTOR_NODES>();
+    let challenged_sector_count = window::sectors_challenged_per_partition::<SECTOR_NODES>();
     let k = 0;
 
     let mut rng = XorShiftRng::from_seed(TEST_SEED);
