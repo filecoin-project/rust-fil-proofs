@@ -1,3 +1,4 @@
+use std::any::Any;
 use std::fs::{self, File};
 use std::io::Write;
 use std::path::Path;
@@ -5,40 +6,48 @@ use std::path::Path;
 use anyhow::{ensure, Context, Result};
 use bincode::{deserialize, serialize};
 use blstrs::Scalar as Fr;
-use filecoin_hashers::{Domain, Hasher};
+use ff::PrimeField;
+use filecoin_hashers::{Domain, Hasher, PoseidonArity};
 use generic_array::typenum::Unsigned;
+use halo2_proofs::{arithmetic::FieldExt, pasta::{Fp, Fq}};
 use log::{info, trace};
 use merkletree::merkle::get_merkle_tree_len;
 use merkletree::store::StoreConfig;
 use storage_proofs_core::{
     cache_key::CacheKey,
     compound_proof::{self, CompoundProof},
-    merkle::{get_base_tree_count, MerkleTreeTrait},
+    halo2::{self, FieldProvingCurves, Halo2Proof},
+    merkle::{get_base_tree_count, MerkleTreeTrait, MerkleTreeWrapper},
     multi_proof::MultiProof,
     proof::ProofScheme,
 };
 use storage_proofs_porep::stacked::{PersistentAux, TemporaryAux};
 use storage_proofs_update::{
-    constants::{TreeDArity, TreeRHasher},
+    constants::{
+        TreeDArity, TreeDDomain, TreeDHasher, TreeRDomain, TreeRHasher, SECTOR_SIZE_1_KIB, SECTOR_SIZE_2_KIB,
+        SECTOR_SIZE_4_KIB, SECTOR_SIZE_8_KIB, SECTOR_SIZE_16_KIB, SECTOR_SIZE_32_KIB, SECTOR_SIZE_8_MIB,
+        SECTOR_SIZE_16_MIB, SECTOR_SIZE_512_MIB, SECTOR_SIZE_32_GIB, SECTOR_SIZE_64_GIB,
+    },
+    halo2::circuit::EmptySectorUpdateCircuit,
     EmptySectorUpdate, EmptySectorUpdateCompound, PrivateInputs, PublicInputs, PublicParams,
     SetupParams,
 };
 
 use crate::{
+    api::{get_proof_system, MockStore, PoseidonArityAllFields, ProofSystem},
     caches::{get_empty_sector_update_params, get_empty_sector_update_verifying_key},
     constants::{DefaultPieceDomain, DefaultPieceHasher},
     pieces::verify_pieces,
     types::{
         Commitment, EmptySectorUpdateEncoded, EmptySectorUpdateProof, PartitionProof, PieceInfo,
-        PoRepConfig, SectorUpdateConfig,
+        PoRepConfig, SectorUpdateConfig, SnarkProof,
     },
 };
 
 // Instantiates p_aux from the specified cache_dir for access to comm_c and comm_r_last
-fn get_p_aux<Tree>(cache_path: &Path) -> Result<PersistentAux<<Tree::Hasher as Hasher>::Domain>>
-where
-    Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher<Fr>>,
-{
+fn get_p_aux<Tree: 'static + MerkleTreeTrait>(
+    cache_path: &Path,
+) -> Result<PersistentAux<<Tree::Hasher as Hasher>::Domain>> {
     let p_aux_path = cache_path.join(CacheKey::PAux.to_string());
     let p_aux_bytes = fs::read(&p_aux_path)
         .with_context(|| format!("could not read file p_aux={:?}", p_aux_path))?;
@@ -48,13 +57,10 @@ where
     Ok(p_aux)
 }
 
-fn persist_p_aux<Tree>(
+fn persist_p_aux<Tree: 'static + MerkleTreeTrait>(
     p_aux: &PersistentAux<<Tree::Hasher as Hasher>::Domain>,
     cache_path: &Path,
-) -> Result<()>
-where
-    Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher<Fr>>,
-{
+) -> Result<()> {
     let p_aux_path = cache_path.join(CacheKey::PAux.to_string());
     let mut f_p_aux = File::create(&p_aux_path)
         .with_context(|| format!("could not create file p_aux={:?}", p_aux_path))?;
@@ -68,16 +74,25 @@ where
 
 // Instantiates t_aux from the specified cache_dir for access to
 // labels and tree_d, tree_c, tree_r_last store configs
-fn get_t_aux<Tree>(cache_path: &Path) -> Result<TemporaryAux<Tree, DefaultPieceHasher>>
+fn get_t_aux<Tree>(cache_path: &Path) -> Result<TemporaryAux<
+    Tree,
+    DefaultPieceHasher<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
+>>
 where
-    Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher<Fr>>,
+    Tree: 'static + MerkleTreeTrait,
+    DefaultPieceHasher<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>: Hasher,
+    DefaultPieceDomain<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>:
+        Domain<Field = <<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
 {
     let t_aux_path = cache_path.join(CacheKey::TAux.to_string());
     trace!("Instantiating TemporaryAux from {:?}", cache_path);
     let t_aux_bytes = fs::read(&t_aux_path)
         .with_context(|| format!("could not read file t_aux={:?}", t_aux_path))?;
 
-    let mut res: TemporaryAux<Tree, DefaultPieceHasher> = deserialize(&t_aux_bytes)?;
+    let mut res: TemporaryAux<
+        Tree,
+        DefaultPieceHasher<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
+    > = deserialize(&t_aux_bytes)?;
     res.set_cache_path(cache_path);
     trace!("Set TemporaryAux cache_path to {:?}", cache_path);
 
@@ -85,11 +100,17 @@ where
 }
 
 fn persist_t_aux<Tree>(
-    t_aux: &TemporaryAux<Tree, DefaultPieceHasher>,
+    t_aux: &TemporaryAux<
+        Tree,
+        DefaultPieceHasher<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
+    >,
     cache_path: &Path,
 ) -> Result<()>
 where
-    Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher<Fr>>,
+    Tree: 'static + MerkleTreeTrait,
+    DefaultPieceHasher<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>: Hasher,
+    <DefaultPieceHasher<<<Tree::Hasher as Hasher>::Domain as Domain>::Field> as Hasher>::Domain:
+        Domain<Field = <<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
 {
     let t_aux_path = cache_path.join(CacheKey::TAux.to_string());
     let mut f_t_aux = File::create(&t_aux_path)
@@ -114,12 +135,18 @@ where
 //
 // Returns a pair of the new tree_d_config and tree_r_last configs
 fn get_new_configs_from_t_aux_old<Tree>(
-    t_aux_old: &TemporaryAux<Tree, DefaultPieceHasher>,
+    t_aux_old: &TemporaryAux<
+        Tree,
+        DefaultPieceHasher<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
+    >,
     new_cache_path: &Path,
     nodes_count: usize,
 ) -> Result<(StoreConfig, StoreConfig)>
 where
-    Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher<Fr>>,
+    Tree: 'static + MerkleTreeTrait,
+    DefaultPieceHasher<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>: Hasher,
+    <DefaultPieceHasher<<<Tree::Hasher as Hasher>::Domain as Domain>::Field> as Hasher>::Domain:
+        Domain<Field = <<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
 {
     let mut t_aux_new = t_aux_old.clone();
     t_aux_new.set_cache_path(new_cache_path);
@@ -152,7 +179,7 @@ where
 /// new_replica_path (with required artifacts located in
 /// new_cache_path).
 #[allow(clippy::too_many_arguments)]
-pub fn encode_into<Tree>(
+pub fn encode_into<Tree, F>(
     porep_config: PoRepConfig,
     new_replica_path: &Path,
     new_cache_path: &Path,
@@ -162,7 +189,12 @@ pub fn encode_into<Tree>(
     piece_infos: &[PieceInfo],
 ) -> Result<EmptySectorUpdateEncoded>
 where
-    Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher<Fr>>,
+    Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher<F>>,
+    F: PrimeField,
+    TreeDHasher<F>: Hasher<Domain = TreeDDomain<F>>,
+    TreeDDomain<F>: Domain<Field = F>,
+    TreeRHasher<F>: Hasher<Domain = TreeRDomain<F>>,
+    TreeRDomain<F>: Domain<Field = F>,
 {
     info!("encode_into:start");
     let config = SectorUpdateConfig::from_porep_config(porep_config);
@@ -174,7 +206,7 @@ where
         get_new_configs_from_t_aux_old::<Tree>(&t_aux, new_cache_path, config.nodes_count)?;
 
     let (comm_r_domain, comm_r_last_domain, comm_d_domain) =
-        EmptySectorUpdate::<Fr, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>::encode_into(
+        EmptySectorUpdate::<F, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>::encode_into(
             config.nodes_count,
             tree_d_new_config,
             tree_r_last_new_config,
@@ -224,7 +256,7 @@ where
 
 /// Reverses the encoding process and outputs the data into out_data_path.
 #[allow(clippy::too_many_arguments)]
-pub fn decode_from<Tree>(
+pub fn decode_from<Tree, F>(
     config: SectorUpdateConfig,
     out_data_path: &Path,
     replica_path: &Path,
@@ -233,14 +265,19 @@ pub fn decode_from<Tree>(
     comm_d_new: Commitment,
 ) -> Result<()>
 where
-    Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher<Fr>>,
+    Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher<F>>,
+    F: PrimeField,
+    TreeDHasher<F>: Hasher<Domain = TreeDDomain<F>>,
+    TreeDDomain<F>: Domain<Field = F>,
+    TreeRHasher<F>: Hasher<Domain = TreeRDomain<F>>,
+    TreeRDomain<F>: Domain<Field = F>,
 {
     info!("decode_from:start");
 
     let p_aux = get_p_aux::<Tree>(sector_key_cache_path)?;
 
     let nodes_count = config.nodes_count;
-    EmptySectorUpdate::<Fr, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>::decode_from(
+    EmptySectorUpdate::<F, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>::decode_from(
         nodes_count,
         out_data_path,
         replica_path,
@@ -258,7 +295,7 @@ where
 
 /// Removes encoded data and outputs the sector key.
 #[allow(clippy::too_many_arguments)]
-pub fn remove_encoded_data<Tree>(
+pub fn remove_encoded_data<Tree, F>(
     config: SectorUpdateConfig,
     sector_key_path: &Path,
     sector_key_cache_path: &Path,
@@ -268,7 +305,12 @@ pub fn remove_encoded_data<Tree>(
     comm_d_new: Commitment,
 ) -> Result<()>
 where
-    Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher<Fr>>,
+    Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher<F>>,
+    F: PrimeField,
+    TreeDHasher<F>: Hasher<Domain = TreeDDomain<F>>,
+    TreeDDomain<F>: Domain<Field = F>,
+    TreeRHasher<F>: Hasher<Domain = TreeRDomain<F>>,
+    TreeRDomain<F>: Domain<Field = F>,
 {
     info!("remove_data:start");
 
@@ -280,7 +322,7 @@ where
 
     let nodes_count = config.nodes_count;
     let tree_r_last_new = EmptySectorUpdate::<
-        Fr,
+        F,
         Tree::Arity,
         Tree::SubTreeArity,
         Tree::TopTreeArity,
@@ -310,7 +352,7 @@ where
 
 /// Generate a single vanilla partition proof for a specified partition.
 #[allow(clippy::too_many_arguments)]
-pub fn generate_single_partition_proof<Tree>(
+pub fn generate_single_partition_proof<Tree, F>(
     config: SectorUpdateConfig,
     partition_index: usize,
     comm_r_old: Commitment,
@@ -320,19 +362,23 @@ pub fn generate_single_partition_proof<Tree>(
     sector_key_cache_path: &Path,
     replica_path: &Path,
     replica_cache_path: &Path,
-) -> Result<PartitionProof<Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>>
+) -> Result<PartitionProof<F, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>>
 where
-    Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher<Fr>>,
+    Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher<F>>,
+    F: PrimeField,
+    TreeDHasher<F>: Hasher<Domain = TreeDDomain<F>>,
+    TreeDDomain<F>: Domain<Field = F>,
+    TreeRHasher<F>: Hasher<Domain = TreeRDomain<F>>,
+    TreeRDomain<F>: Domain<Field = F>,
 {
     info!("generate_single_partition_proof:start");
 
-    let comm_r_old_safe = <TreeRHasher<Fr> as Hasher>::Domain::try_from_bytes(&comm_r_old)?;
-    let comm_r_new_safe = <TreeRHasher<Fr> as Hasher>::Domain::try_from_bytes(&comm_r_new)?;
+    let comm_r_old_safe = <TreeRHasher<F> as Hasher>::Domain::try_from_bytes(&comm_r_old)?;
+    let comm_r_new_safe = <TreeRHasher<F> as Hasher>::Domain::try_from_bytes(&comm_r_new)?;
 
     let comm_d_new_safe = DefaultPieceDomain::try_from_bytes(&comm_d_new)?;
 
-    let public_params: storage_proofs_update::PublicParams =
-        PublicParams::from_sector_size(u64::from(config.sector_size));
+    let public_params = PublicParams::from_sector_size(u64::from(config.sector_size));
 
     let p_aux_old = get_p_aux::<Tree>(sector_key_cache_path)?;
 
@@ -349,8 +395,11 @@ where
 
     let t_aux_old = get_t_aux::<Tree>(sector_key_cache_path)?;
 
-    let (tree_d_new_config, tree_r_last_new_config) =
-        get_new_configs_from_t_aux_old::<Tree>(&t_aux_old, replica_cache_path, config.nodes_count)?;
+    let (tree_d_new_config, tree_r_last_new_config) = get_new_configs_from_t_aux_old::<Tree>(
+        &t_aux_old,
+        replica_cache_path,
+        config.nodes_count,
+    )?;
 
     let private_inputs = PrivateInputs {
         comm_c: p_aux_old.comm_c,
@@ -362,7 +411,7 @@ where
     };
 
     let partition_proof = EmptySectorUpdate::<
-        Fr,
+        F,
         Tree::Arity,
         Tree::SubTreeArity,
         Tree::TopTreeArity,
@@ -375,26 +424,30 @@ where
 
 /// Verify a single vanilla partition proof for a specified partition.
 #[allow(clippy::too_many_arguments)]
-pub fn verify_single_partition_proof<Tree>(
+pub fn verify_single_partition_proof<Tree, F>(
     config: SectorUpdateConfig,
     partition_index: usize,
-    proof: PartitionProof<Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>,
+    proof: PartitionProof<F, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>,
     comm_r_old: Commitment,
     comm_r_new: Commitment,
     comm_d_new: Commitment,
 ) -> Result<bool>
 where
-    Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher<Fr>>,
+    Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher<F>>,
+    F: PrimeField,
+    TreeDHasher<F>: Hasher<Domain = TreeDDomain<F>>,
+    TreeDDomain<F>: Domain<Field = F>,
+    TreeRHasher<F>: Hasher<Domain = TreeRDomain<F>>,
+    TreeRDomain<F>: Domain<Field = F>,
 {
     info!("verify_single_partition_proof:start");
 
-    let comm_r_old_safe = <TreeRHasher<Fr> as Hasher>::Domain::try_from_bytes(&comm_r_old)?;
-    let comm_r_new_safe = <TreeRHasher<Fr> as Hasher>::Domain::try_from_bytes(&comm_r_new)?;
+    let comm_r_old_safe = <TreeRHasher<F> as Hasher>::Domain::try_from_bytes(&comm_r_old)?;
+    let comm_r_new_safe = <TreeRHasher<F> as Hasher>::Domain::try_from_bytes(&comm_r_new)?;
 
     let comm_d_new_safe = DefaultPieceDomain::try_from_bytes(&comm_d_new)?;
 
-    let public_params: storage_proofs_update::PublicParams =
-        PublicParams::from_sector_size(u64::from(config.sector_size));
+    let public_params = PublicParams::from_sector_size(u64::from(config.sector_size));
 
     let partitions = usize::from(config.update_partitions);
     ensure!(partition_index < partitions, "invalid partition index");
@@ -408,7 +461,7 @@ where
     };
 
     let valid =
-        EmptySectorUpdate::<Fr, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>::verify(
+        EmptySectorUpdate::<F, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>::verify(
             &public_params,
             &public_inputs,
             &proof,
@@ -421,7 +474,7 @@ where
 
 /// Generate all vanilla partition proofs across all partitions.
 #[allow(clippy::too_many_arguments)]
-pub fn generate_partition_proofs<Tree>(
+pub fn generate_partition_proofs<Tree, F>(
     config: SectorUpdateConfig,
     comm_r_old: Commitment,
     comm_r_new: Commitment,
@@ -430,24 +483,28 @@ pub fn generate_partition_proofs<Tree>(
     sector_key_cache_path: &Path,
     replica_path: &Path,
     replica_cache_path: &Path,
-) -> Result<Vec<PartitionProof<Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>>>
+) -> Result<Vec<PartitionProof<F, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>>>
 where
-    Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher<Fr>>,
+    Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher<F>>,
+    F: PrimeField,
+    TreeDHasher<F>: Hasher<Domain = TreeDDomain<F>>,
+    TreeDDomain<F>: Domain<Field = F>,
+    TreeRHasher<F>: Hasher<Domain = TreeRDomain<F>>,
+    TreeRDomain<F>: Domain<Field = F>,
 {
     info!("generate_partition_proofs:start");
 
-    let comm_r_old_safe = <TreeRHasher<Fr> as Hasher>::Domain::try_from_bytes(&comm_r_old)?;
-    let comm_r_new_safe = <TreeRHasher<Fr> as Hasher>::Domain::try_from_bytes(&comm_r_new)?;
+    let comm_r_old_safe = <TreeRHasher<F> as Hasher>::Domain::try_from_bytes(&comm_r_old)?;
+    let comm_r_new_safe = <TreeRHasher<F> as Hasher>::Domain::try_from_bytes(&comm_r_new)?;
 
     let comm_d_new_safe = DefaultPieceDomain::try_from_bytes(&comm_d_new)?;
 
-    let public_params: storage_proofs_update::PublicParams =
-        PublicParams::from_sector_size(u64::from(config.sector_size));
+    let public_params = PublicParams::from_sector_size(u64::from(config.sector_size));
 
     let p_aux_old = get_p_aux::<Tree>(sector_key_cache_path)?;
 
     let public_inputs = PublicInputs {
-        k: usize::from(config.update_partitions),
+        k: 0,
         comm_r_old: comm_r_old_safe,
         comm_d_new: comm_d_new_safe,
         comm_r_new: comm_r_new_safe,
@@ -469,7 +526,7 @@ where
     };
 
     let partition_proofs = EmptySectorUpdate::<
-        Fr,
+        F,
         Tree::Arity,
         Tree::SubTreeArity,
         Tree::TopTreeArity,
@@ -486,28 +543,32 @@ where
 }
 
 /// Verify all vanilla partition proofs across all partitions.
-pub fn verify_partition_proofs<Tree>(
+pub fn verify_partition_proofs<Tree, F>(
     config: SectorUpdateConfig,
-    proofs: &[PartitionProof<Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>],
+    proofs: &[PartitionProof<F, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>],
     comm_r_old: Commitment,
     comm_r_new: Commitment,
     comm_d_new: Commitment,
 ) -> Result<bool>
 where
-    Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher<Fr>>,
+    Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher<F>>,
+    F: PrimeField,
+    TreeDHasher<F>: Hasher<Domain = TreeDDomain<F>>,
+    TreeDDomain<F>: Domain<Field = F>,
+    TreeRHasher<F>: Hasher<Domain = TreeRDomain<F>>,
+    TreeRDomain<F>: Domain<Field = F>,
 {
     info!("verify_partition_proofs:start");
 
-    let comm_r_old_safe = <TreeRHasher<Fr> as Hasher>::Domain::try_from_bytes(&comm_r_old)?;
-    let comm_r_new_safe = <TreeRHasher<Fr> as Hasher>::Domain::try_from_bytes(&comm_r_new)?;
+    let comm_r_old_safe = <TreeRHasher<F> as Hasher>::Domain::try_from_bytes(&comm_r_old)?;
+    let comm_r_new_safe = <TreeRHasher<F> as Hasher>::Domain::try_from_bytes(&comm_r_new)?;
 
     let comm_d_new_safe = DefaultPieceDomain::try_from_bytes(&comm_d_new)?;
 
-    let public_params: storage_proofs_update::PublicParams =
-        PublicParams::from_sector_size(u64::from(config.sector_size));
+    let public_params = PublicParams::from_sector_size(u64::from(config.sector_size));
 
     let public_inputs = PublicInputs {
-        k: usize::from(config.update_partitions),
+        k: 0,
         comm_r_old: comm_r_old_safe,
         comm_d_new: comm_d_new_safe,
         comm_r_new: comm_r_new_safe,
@@ -515,7 +576,7 @@ where
     };
 
     let valid =
-        EmptySectorUpdate::<Fr, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>::verify_all_partitions(&public_params, &public_inputs, proofs)?;
+        EmptySectorUpdate::<F, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>::verify_all_partitions(&public_params, &public_inputs, proofs)?;
 
     info!("verify_partition_proofs:finish");
 
@@ -523,28 +584,91 @@ where
 }
 
 #[allow(clippy::too_many_arguments)]
-pub fn generate_empty_sector_update_proof_with_vanilla<Tree>(
+pub fn generate_empty_sector_update_proof_with_vanilla<Tree, F>(
     porep_config: PoRepConfig,
-    vanilla_proofs: Vec<PartitionProof<Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>>,
+    vanilla_proofs: Vec<PartitionProof<F, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>>,
     comm_r_old: Commitment,
     comm_r_new: Commitment,
     comm_d_new: Commitment,
 ) -> Result<EmptySectorUpdateProof>
 where
-    Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher<Fr>>,
+    Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher<F>>,
+    Tree::Arity: PoseidonArityAllFields,
+    Tree::SubTreeArity: PoseidonArityAllFields,
+    Tree::TopTreeArity: PoseidonArityAllFields,
+    F: PrimeField,
+    TreeDHasher<F>: Hasher<Domain = TreeDDomain<F>>,
+    TreeDDomain<F>: Domain<Field = F>,
+    TreeRHasher<F>: Hasher<Domain = TreeRDomain<F>>,
+    TreeRDomain<F>: Domain<Field = F>,
 {
     info!("generate_empty_sector_update_proof_with_vanilla:start");
 
+    let proof_bytes = match get_proof_system::<Tree>() {
+        ProofSystem::Groth => {
+            let vanilla_proofs: Vec<
+                PartitionProof<Fr, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>
+            > = unsafe { std::mem::transmute(vanilla_proofs) };
+
+            groth16_generate_empty_sector_update_proof_with_vanilla::<
+                Tree::Arity,
+                Tree::SubTreeArity,
+                Tree::TopTreeArity,
+            >(porep_config, vanilla_proofs, comm_r_old, comm_r_new, comm_d_new)?
+        }
+        ProofSystem::HaloPallas => {
+            let vanilla_proofs: Vec<
+                PartitionProof<Fp, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>
+            > = unsafe { std::mem::transmute(vanilla_proofs) };
+
+            halo2_generate_empty_sector_update_proof_with_vanilla::<
+                Fp,
+                Tree::Arity,
+                Tree::SubTreeArity,
+                Tree::TopTreeArity,
+            >(porep_config, vanilla_proofs, comm_r_old, comm_r_new, comm_d_new)?
+        }
+        ProofSystem::HaloVesta => {
+            let vanilla_proofs: Vec<
+                PartitionProof<Fq, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>
+            > = unsafe { std::mem::transmute(vanilla_proofs) };
+
+            halo2_generate_empty_sector_update_proof_with_vanilla::<
+                Fq,
+                Tree::Arity,
+                Tree::SubTreeArity,
+                Tree::TopTreeArity,
+            >(porep_config, vanilla_proofs, comm_r_old, comm_r_new, comm_d_new)?
+        }
+    };
+
+    info!("generate_empty_sector_update_proof_with_vanilla:finish");
+
+    Ok(EmptySectorUpdateProof(proof_bytes))
+}
+
+fn groth16_generate_empty_sector_update_proof_with_vanilla<U, V, W>(
+    porep_config: PoRepConfig,
+    vanilla_proofs: Vec<PartitionProof<Fr, U, V, W>>,
+    comm_r_old: Commitment,
+    comm_r_new: Commitment,
+    comm_d_new: Commitment,
+) -> Result<SnarkProof>
+where
+    U: PoseidonArity<Fr>,
+    V: PoseidonArity<Fr>,
+    W: PoseidonArity<Fr>,
+{
     let comm_r_old_safe = <TreeRHasher<Fr> as Hasher>::Domain::try_from_bytes(&comm_r_old)?;
     let comm_r_new_safe = <TreeRHasher<Fr> as Hasher>::Domain::try_from_bytes(&comm_r_new)?;
 
-    let comm_d_new_safe = DefaultPieceDomain::try_from_bytes(&comm_d_new)?;
+    let comm_d_new_safe = DefaultPieceDomain::<Fr>::try_from_bytes(&comm_d_new)?;
 
     let config = SectorUpdateConfig::from_porep_config(porep_config);
 
     let partitions = usize::from(config.update_partitions);
     let public_inputs = PublicInputs {
-        k: partitions,
+        k: 0,
         comm_r_old: comm_r_old_safe,
         comm_d_new: comm_d_new_safe,
         comm_r_new: comm_r_new_safe,
@@ -558,12 +682,11 @@ where
         partitions: Some(partitions),
         priority: false,
     };
-    let pub_params_compound =
-        EmptySectorUpdateCompound::<Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>::setup(
-            &setup_params_compound,
-        )?;
+    let pub_params_compound = EmptySectorUpdateCompound::<U, V, W>::setup(&setup_params_compound)?;
 
-    let groth_params = get_empty_sector_update_params::<Tree>(porep_config)?;
+    let groth_params = get_empty_sector_update_params::<
+        MerkleTreeWrapper<TreeRHasher<Fr>, MockStore, U, V, W>,
+    >(porep_config)?;
     let multi_proof = EmptySectorUpdateCompound::prove_with_vanilla(
         &pub_params_compound,
         &public_inputs,
@@ -571,13 +694,331 @@ where
         &groth_params,
     )?;
 
-    info!("generate_empty_sector_update_proof_with_vanilla:finish");
+    multi_proof.to_vec()
+}
 
-    Ok(EmptySectorUpdateProof(multi_proof.to_vec()?))
+fn halo2_generate_empty_sector_update_proof_with_vanilla<F, U, V, W>(
+    porep_config: PoRepConfig,
+    vanilla_partition_proofs: Vec<PartitionProof<F, U, V, W>>,
+    comm_r_old: Commitment,
+    comm_r_new: Commitment,
+    comm_d_new: Commitment,
+) -> Result<SnarkProof>
+where
+    F: FieldExt + FieldProvingCurves,
+    U: PoseidonArity<F>,
+    V: PoseidonArity<F>,
+    W: PoseidonArity<F>,
+    TreeDHasher<F>: Hasher<Domain = TreeDDomain<F>>,
+    TreeDDomain<F>: Domain<Field = F>,
+    TreeRHasher<F>: Hasher<Domain = TreeRDomain<F>>,
+    TreeRDomain<F>: Domain<Field = F>,
+{
+    let comm_r_old_safe = <TreeRHasher<F> as Hasher>::Domain::try_from_bytes(&comm_r_old)?;
+    let comm_r_new_safe = <TreeRHasher<F> as Hasher>::Domain::try_from_bytes(&comm_r_new)?;
+
+    let comm_d_new_safe = DefaultPieceDomain::<F>::try_from_bytes(&comm_d_new)?;
+
+    let config = SectorUpdateConfig::from_porep_config(porep_config);
+
+    let vanilla_setup_params = SetupParams {
+        sector_bytes: config.sector_size.into(),
+    };
+
+    let vanilla_pub_inputs = PublicInputs {
+        k: 0,
+        comm_r_old: comm_r_old_safe,
+        comm_d_new: comm_d_new_safe,
+        comm_r_new: comm_r_new_safe,
+        h: usize::from(config.h_select),
+    };
+
+    let sector_nodes = config.nodes_count;
+
+    let proof_bytes = match sector_nodes {
+        SECTOR_SIZE_1_KIB => {
+            let circ = EmptySectorUpdateCircuit::<
+                F,
+                U,
+                V,
+                W,
+                SECTOR_SIZE_1_KIB,
+            >::blank_circuit();
+
+            let keypair = <EmptySectorUpdate<F, U, V, W>
+                as halo2::CompoundProof<'_, F, SECTOR_SIZE_1_KIB>>::create_keypair(&circ)?;
+
+            let circ_partition_proofs = <EmptySectorUpdate<F, U, V, W>
+                as halo2::CompoundProof<'_, F, SECTOR_SIZE_1_KIB>>::prove_all_partitions_with_vanilla(
+                &vanilla_setup_params,
+                &vanilla_pub_inputs,
+                &vanilla_partition_proofs,
+                &keypair,
+            )?;
+
+            circ_partition_proofs
+                .iter()
+                .flat_map(|halo_proof| halo_proof.as_bytes().to_vec())
+                .collect()
+        },
+        SECTOR_SIZE_2_KIB => {
+            let circ = EmptySectorUpdateCircuit::<
+                F,
+                U,
+                V,
+                W,
+                SECTOR_SIZE_2_KIB,
+            >::blank_circuit();
+
+            let keypair = <EmptySectorUpdate<F, U, V, W>
+                as halo2::CompoundProof<'_, F, SECTOR_SIZE_2_KIB>>::create_keypair(&circ)?;
+
+            let circ_partition_proofs = <EmptySectorUpdate<F, U, V, W>
+                as halo2::CompoundProof<'_, F, SECTOR_SIZE_2_KIB>>::prove_all_partitions_with_vanilla(
+                &vanilla_setup_params,
+                &vanilla_pub_inputs,
+                &vanilla_partition_proofs,
+                &keypair,
+            )?;
+
+            circ_partition_proofs
+                .iter()
+                .flat_map(|halo_proof| halo_proof.as_bytes().to_vec())
+                .collect()
+        },
+        SECTOR_SIZE_4_KIB => {
+            let circ = EmptySectorUpdateCircuit::<
+                F,
+                U,
+                V,
+                W,
+                SECTOR_SIZE_4_KIB,
+            >::blank_circuit();
+
+            let keypair = <EmptySectorUpdate<F, U, V, W>
+                as halo2::CompoundProof<'_, F, SECTOR_SIZE_4_KIB>>::create_keypair(&circ)?;
+
+            let circ_partition_proofs = <EmptySectorUpdate<F, U, V, W>
+                as halo2::CompoundProof<'_, F, SECTOR_SIZE_4_KIB>>::prove_all_partitions_with_vanilla(
+                &vanilla_setup_params,
+                &vanilla_pub_inputs,
+                &vanilla_partition_proofs,
+                &keypair,
+            )?;
+
+            circ_partition_proofs
+                .iter()
+                .flat_map(|halo_proof| halo_proof.as_bytes().to_vec())
+                .collect()
+        },
+        SECTOR_SIZE_8_KIB => {
+            let circ = EmptySectorUpdateCircuit::<
+                F,
+                U,
+                V,
+                W,
+                SECTOR_SIZE_8_KIB,
+            >::blank_circuit();
+
+            let keypair = <EmptySectorUpdate<F, U, V, W>
+                as halo2::CompoundProof<'_, F, SECTOR_SIZE_8_KIB>>::create_keypair(&circ)?;
+
+            let circ_partition_proofs = <EmptySectorUpdate<F, U, V, W>
+                as halo2::CompoundProof<'_, F, SECTOR_SIZE_8_KIB>>::prove_all_partitions_with_vanilla(
+                &vanilla_setup_params,
+                &vanilla_pub_inputs,
+                &vanilla_partition_proofs,
+                &keypair,
+            )?;
+
+            circ_partition_proofs
+                .iter()
+                .flat_map(|halo_proof| halo_proof.as_bytes().to_vec())
+                .collect()
+        },
+        SECTOR_SIZE_16_KIB => {
+            let circ = EmptySectorUpdateCircuit::<
+                F,
+                U,
+                V,
+                W,
+                SECTOR_SIZE_16_KIB,
+            >::blank_circuit();
+
+            let keypair = <EmptySectorUpdate<F, U, V, W>
+                as halo2::CompoundProof<'_, F, SECTOR_SIZE_16_KIB>>::create_keypair(&circ)?;
+
+            let circ_partition_proofs = <EmptySectorUpdate<F, U, V, W>
+                as halo2::CompoundProof<'_, F, SECTOR_SIZE_16_KIB>>::prove_all_partitions_with_vanilla(
+                &vanilla_setup_params,
+                &vanilla_pub_inputs,
+                &vanilla_partition_proofs,
+                &keypair,
+            )?;
+
+            circ_partition_proofs
+                .iter()
+                .flat_map(|halo_proof| halo_proof.as_bytes().to_vec())
+                .collect()
+        },
+        SECTOR_SIZE_32_KIB => {
+            let circ = EmptySectorUpdateCircuit::<
+                F,
+                U,
+                V,
+                W,
+                SECTOR_SIZE_32_KIB,
+            >::blank_circuit();
+
+            let keypair = <EmptySectorUpdate<F, U, V, W>
+                as halo2::CompoundProof<'_, F, SECTOR_SIZE_32_KIB>>::create_keypair(&circ)?;
+
+            let circ_partition_proofs = <EmptySectorUpdate<F, U, V, W>
+                as halo2::CompoundProof<'_, F, SECTOR_SIZE_32_KIB>>::prove_all_partitions_with_vanilla(
+                &vanilla_setup_params,
+                &vanilla_pub_inputs,
+                &vanilla_partition_proofs,
+                &keypair,
+            )?;
+
+            circ_partition_proofs
+                .iter()
+                .flat_map(|halo_proof| halo_proof.as_bytes().to_vec())
+                .collect()
+        },
+        SECTOR_SIZE_8_MIB => {
+            let circ = EmptySectorUpdateCircuit::<
+                F,
+                U,
+                V,
+                W,
+                SECTOR_SIZE_8_MIB,
+            >::blank_circuit();
+
+            let keypair = <EmptySectorUpdate<F, U, V, W>
+                as halo2::CompoundProof<'_, F, SECTOR_SIZE_8_MIB>>::create_keypair(&circ)?;
+
+            let circ_partition_proofs = <EmptySectorUpdate<F, U, V, W>
+                as halo2::CompoundProof<'_, F, SECTOR_SIZE_8_MIB>>::prove_all_partitions_with_vanilla(
+                &vanilla_setup_params,
+                &vanilla_pub_inputs,
+                &vanilla_partition_proofs,
+                &keypair,
+            )?;
+
+            circ_partition_proofs
+                .iter()
+                .flat_map(|halo_proof| halo_proof.as_bytes().to_vec())
+                .collect()
+        },
+        SECTOR_SIZE_16_MIB => {
+            let circ = EmptySectorUpdateCircuit::<
+                F,
+                U,
+                V,
+                W,
+                SECTOR_SIZE_16_MIB,
+            >::blank_circuit();
+
+            let keypair = <EmptySectorUpdate<F, U, V, W>
+                as halo2::CompoundProof<'_, F, SECTOR_SIZE_16_MIB>>::create_keypair(&circ)?;
+
+            let circ_partition_proofs = <EmptySectorUpdate<F, U, V, W>
+                as halo2::CompoundProof<'_, F, SECTOR_SIZE_16_MIB>>::prove_all_partitions_with_vanilla(
+                &vanilla_setup_params,
+                &vanilla_pub_inputs,
+                &vanilla_partition_proofs,
+                &keypair,
+            )?;
+
+            circ_partition_proofs
+                .iter()
+                .flat_map(|halo_proof| halo_proof.as_bytes().to_vec())
+                .collect()
+        },
+        SECTOR_SIZE_512_MIB => {
+            let circ = EmptySectorUpdateCircuit::<
+                F,
+                U,
+                V,
+                W,
+                SECTOR_SIZE_512_MIB,
+            >::blank_circuit();
+
+            let keypair = <EmptySectorUpdate<F, U, V, W>
+                as halo2::CompoundProof<'_, F, SECTOR_SIZE_512_MIB>>::create_keypair(&circ)?;
+
+            let circ_partition_proofs = <EmptySectorUpdate<F, U, V, W>
+                as halo2::CompoundProof<'_, F, SECTOR_SIZE_512_MIB>>::prove_all_partitions_with_vanilla(
+                &vanilla_setup_params,
+                &vanilla_pub_inputs,
+                &vanilla_partition_proofs,
+                &keypair,
+            )?;
+
+            circ_partition_proofs
+                .iter()
+                .flat_map(|halo_proof| halo_proof.as_bytes().to_vec())
+                .collect()
+        },
+        SECTOR_SIZE_32_GIB => {
+            let circ = EmptySectorUpdateCircuit::<
+                F,
+                U,
+                V,
+                W,
+                SECTOR_SIZE_32_GIB,
+            >::blank_circuit();
+
+            let keypair = <EmptySectorUpdate<F, U, V, W>
+                as halo2::CompoundProof<'_, F, SECTOR_SIZE_32_GIB>>::create_keypair(&circ)?;
+
+            let circ_partition_proofs = <EmptySectorUpdate<F, U, V, W>
+                as halo2::CompoundProof<'_, F, SECTOR_SIZE_32_GIB>>::prove_all_partitions_with_vanilla(
+                &vanilla_setup_params,
+                &vanilla_pub_inputs,
+                &vanilla_partition_proofs,
+                &keypair,
+            )?;
+
+            circ_partition_proofs
+                .iter()
+                .flat_map(|halo_proof| halo_proof.as_bytes().to_vec())
+                .collect()
+        },
+        SECTOR_SIZE_64_GIB => {
+            let circ = EmptySectorUpdateCircuit::<
+                F,
+                U,
+                V,
+                W,
+                SECTOR_SIZE_64_GIB,
+            >::blank_circuit();
+
+            let keypair = <EmptySectorUpdate<F, U, V, W>
+                as halo2::CompoundProof<'_, F, SECTOR_SIZE_64_GIB>>::create_keypair(&circ)?;
+
+            let circ_partition_proofs = <EmptySectorUpdate<F, U, V, W>
+                as halo2::CompoundProof<'_, F, SECTOR_SIZE_64_GIB>>::prove_all_partitions_with_vanilla(
+                &vanilla_setup_params,
+                &vanilla_pub_inputs,
+                &vanilla_partition_proofs,
+                &keypair,
+            )?;
+
+            circ_partition_proofs
+                .iter()
+                .flat_map(|halo_proof| halo_proof.as_bytes().to_vec())
+                .collect()
+        },
+        _ => unreachable!(),
+    };
+
+    Ok(proof_bytes)
 }
 
 #[allow(clippy::too_many_arguments)]
-pub fn generate_empty_sector_update_proof<Tree>(
+pub fn generate_empty_sector_update_proof<Tree, F>(
     porep_config: PoRepConfig,
     comm_r_old: Commitment,
     comm_r_new: Commitment,
@@ -588,35 +1029,114 @@ pub fn generate_empty_sector_update_proof<Tree>(
     replica_cache_path: &Path,
 ) -> Result<EmptySectorUpdateProof>
 where
-    Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher<Fr>>,
+    Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher<F>>,
+    Tree::Arity: PoseidonArityAllFields,
+    Tree::SubTreeArity: PoseidonArityAllFields,
+    Tree::TopTreeArity: PoseidonArityAllFields,
+    F: PrimeField,
+    TreeRHasher<F>: Hasher<Domain = TreeRDomain<F>>,
+    TreeRDomain<F>: Domain<Field = F>,
 {
     info!("generate_empty_sector_update_proof:start");
 
+    let proof_bytes = match get_proof_system::<Tree>() {
+        ProofSystem::Groth => groth16_generate_empty_sector_update_proof_without_vanilla::<
+            Tree::Arity,
+            Tree::SubTreeArity,
+            Tree::TopTreeArity,
+        >(
+            porep_config,
+            comm_r_old,
+            comm_r_new,
+            comm_d_new,
+            sector_key_path,
+            sector_key_cache_path,
+            replica_path,
+            replica_cache_path,
+        )?,
+        ProofSystem::HaloPallas => halo2_generate_empty_sector_update_proof_without_vanilla::<
+            Fp,
+            Tree::Arity,
+            Tree::SubTreeArity,
+            Tree::TopTreeArity,
+        >(
+            porep_config,
+            comm_r_old,
+            comm_r_new,
+            comm_d_new,
+            sector_key_path,
+            sector_key_cache_path,
+            replica_path,
+            replica_cache_path,
+        )?,
+        ProofSystem::HaloVesta => halo2_generate_empty_sector_update_proof_without_vanilla::<
+            Fq,
+            Tree::Arity,
+            Tree::SubTreeArity,
+            Tree::TopTreeArity,
+        >(
+            porep_config,
+            comm_r_old,
+            comm_r_new,
+            comm_d_new,
+            sector_key_path,
+            sector_key_cache_path,
+            replica_path,
+            replica_cache_path,
+        )?,
+    };
+
+    info!("generate_empty_sector_update_proof:finish");
+
+    Ok(EmptySectorUpdateProof(proof_bytes))
+}
+
+fn groth16_generate_empty_sector_update_proof_without_vanilla<U, V, W>(
+    porep_config: PoRepConfig,
+    comm_r_old: Commitment,
+    comm_r_new: Commitment,
+    comm_d_new: Commitment,
+    sector_key_path: &Path,
+    sector_key_cache_path: &Path,
+    replica_path: &Path,
+    replica_cache_path: &Path,
+) -> Result<SnarkProof>
+where
+    U: PoseidonArity<Fr>,
+    V: PoseidonArity<Fr>,
+    W: PoseidonArity<Fr>,
+{
     let comm_r_old_safe = <TreeRHasher<Fr> as Hasher>::Domain::try_from_bytes(&comm_r_old)?;
     let comm_r_new_safe = <TreeRHasher<Fr> as Hasher>::Domain::try_from_bytes(&comm_r_new)?;
 
-    let comm_d_new_safe = DefaultPieceDomain::try_from_bytes(&comm_d_new)?;
+    let comm_d_new_safe = DefaultPieceDomain::<Fr>::try_from_bytes(&comm_d_new)?;
 
     let config = SectorUpdateConfig::from_porep_config(porep_config);
 
-    let p_aux_old = get_p_aux::<Tree>(sector_key_cache_path)?;
+    let p_aux_old = get_p_aux::<
+        MerkleTreeWrapper<TreeRHasher<Fr>, MockStore, U, V, W>,
+    >(sector_key_cache_path)?;
+    let comm_c = *(&p_aux_old.comm_c as &dyn Any).downcast_ref::<TreeRDomain<Fr>>().unwrap();
 
     let partitions = usize::from(config.update_partitions);
     let public_inputs = PublicInputs {
-        k: partitions,
+        k: 0,
         comm_r_old: comm_r_old_safe,
         comm_d_new: comm_d_new_safe,
         comm_r_new: comm_r_new_safe,
         h: usize::from(config.h_select),
     };
 
-    let t_aux_old = get_t_aux::<Tree>(sector_key_cache_path)?;
+    let t_aux_old = get_t_aux::<
+        MerkleTreeWrapper<TreeRHasher<Fr>, MockStore, U, V, W>,
+    >(sector_key_cache_path)?;
 
-    let (tree_d_new_config, tree_r_last_new_config) =
-        get_new_configs_from_t_aux_old::<Tree>(&t_aux_old, replica_cache_path, config.nodes_count)?;
+    let (tree_d_new_config, tree_r_last_new_config) = get_new_configs_from_t_aux_old::<
+        MerkleTreeWrapper<TreeRHasher<Fr>, MockStore, U, V, W>,
+    >(&t_aux_old, replica_cache_path, config.nodes_count)?;
 
     let private_inputs = PrivateInputs {
-        comm_c: p_aux_old.comm_c,
+        comm_c: comm_c,
         tree_r_old_config: t_aux_old.tree_r_last_config,
         old_replica_path: sector_key_path.to_path_buf(),
         tree_d_new_config,
@@ -631,12 +1151,11 @@ where
         partitions: Some(partitions),
         priority: false,
     };
-    let pub_params_compound =
-        EmptySectorUpdateCompound::<Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>::setup(
-            &setup_params_compound,
-        )?;
+    let pub_params_compound = EmptySectorUpdateCompound::<U, V, W>::setup(&setup_params_compound)?;
 
-    let groth_params = get_empty_sector_update_params::<Tree>(porep_config)?;
+    let groth_params = get_empty_sector_update_params::<
+        MerkleTreeWrapper<TreeRHasher<Fr>, MockStore, U, V, W>,
+    >(porep_config)?;
     let multi_proof = EmptySectorUpdateCompound::prove(
         &pub_params_compound,
         &public_inputs,
@@ -644,12 +1163,358 @@ where
         &groth_params,
     )?;
 
-    info!("generate_empty_sector_update_proof:finish");
-
-    Ok(EmptySectorUpdateProof(multi_proof.to_vec()?))
+    multi_proof.to_vec()
 }
 
-pub fn verify_empty_sector_update_proof<Tree>(
+fn halo2_generate_empty_sector_update_proof_without_vanilla<F, U, V, W>(
+    porep_config: PoRepConfig,
+    comm_r_old: Commitment,
+    comm_r_new: Commitment,
+    comm_d_new: Commitment,
+    sector_key_path: &Path,
+    sector_key_cache_path: &Path,
+    replica_path: &Path,
+    replica_cache_path: &Path,
+) -> Result<SnarkProof>
+where
+    F: FieldExt + FieldProvingCurves,
+    U: PoseidonArity<F>,
+    V: PoseidonArity<F>,
+    W: PoseidonArity<F>,
+    TreeDHasher<F>: Hasher<Domain = TreeDDomain<F>>,
+    TreeDDomain<F>: Domain<Field = F>,
+    TreeRHasher<F>: Hasher<Domain = TreeRDomain<F>>,
+    TreeRDomain<F>: Domain<Field = F>,
+{
+    let config = SectorUpdateConfig::from_porep_config(porep_config);
+    let sector_bytes: u64 = config.sector_size.into();
+    let sector_nodes = config.nodes_count;
+    let partition_count: usize = config.update_partitions.into();
+
+    let vanilla_setup_params = SetupParams { sector_bytes };
+
+    let vanilla_pub_params = EmptySectorUpdate::<F, U, V, W>::setup(&vanilla_setup_params)?;
+
+    let comm_r_old_safe = <TreeRHasher<F> as Hasher>::Domain::try_from_bytes(&comm_r_old)?;
+    let comm_r_new_safe = <TreeRHasher<F> as Hasher>::Domain::try_from_bytes(&comm_r_new)?;
+    let comm_d_new_safe = DefaultPieceDomain::<F>::try_from_bytes(&comm_d_new)?;
+
+    let vanilla_pub_inputs = PublicInputs {
+        k: 0,
+        comm_r_old: comm_r_old_safe,
+        comm_d_new: comm_d_new_safe,
+        comm_r_new: comm_r_new_safe,
+        h: usize::from(config.h_select),
+    };
+
+    let p_aux_old =
+        get_p_aux::<MerkleTreeWrapper<TreeRHasher<F>, MockStore, U, V, W>>(
+            sector_key_cache_path,
+        )?;
+    let comm_c = *(&p_aux_old.comm_c as &dyn Any).downcast_ref::<TreeRDomain<F>>().unwrap();
+
+    let t_aux_old =
+        get_t_aux::<MerkleTreeWrapper<TreeRHasher<F>, MockStore, U, V, W>>(
+            sector_key_cache_path,
+        )?;
+
+    let (tree_d_new_config, tree_r_last_new_config) = get_new_configs_from_t_aux_old::<
+        MerkleTreeWrapper<TreeRHasher<F>, MockStore, U, V, W>,
+    >(&t_aux_old, replica_cache_path, sector_nodes)?;
+
+    let vanilla_priv_inputs = PrivateInputs {
+        comm_c,
+        tree_r_old_config: t_aux_old.tree_r_last_config,
+        old_replica_path: sector_key_path.to_path_buf(),
+        tree_d_new_config,
+        tree_r_new_config: tree_r_last_new_config,
+        replica_path: replica_path.to_path_buf(),
+    };
+
+    let vanilla_partition_proofs = EmptySectorUpdate::<F, U, V, W>::prove_all_partitions(
+        &vanilla_pub_params,
+        &vanilla_pub_inputs,
+        &vanilla_priv_inputs,
+        partition_count,
+    )?;
+
+    let proof_bytes = match sector_nodes {
+        SECTOR_SIZE_1_KIB => {
+            let circ = EmptySectorUpdateCircuit::<F, U, V, W, SECTOR_SIZE_1_KIB>::blank_circuit();
+
+            let keypair = <EmptySectorUpdate<F, U, V, W>
+                as halo2::CompoundProof<'_, F, SECTOR_SIZE_1_KIB>>::create_keypair(&circ)?;
+
+            let circ_partition_proofs = <EmptySectorUpdate<F, U, V, W>
+                as halo2::CompoundProof<'_, F, SECTOR_SIZE_1_KIB>>::prove_all_partitions_with_vanilla(
+                &vanilla_setup_params,
+                &vanilla_pub_inputs,
+                &vanilla_partition_proofs,
+                &keypair,
+            )?;
+
+            circ_partition_proofs
+                .iter()
+                .flat_map(|halo_proof| halo_proof.as_bytes().to_vec())
+                .collect()
+        },
+        SECTOR_SIZE_2_KIB => {
+            let circ = EmptySectorUpdateCircuit::<
+                F,
+                U,
+                V,
+                W,
+                SECTOR_SIZE_2_KIB,
+            >::blank_circuit();
+
+            let keypair = <EmptySectorUpdate<F, U, V, W>
+                as halo2::CompoundProof<'_, F, SECTOR_SIZE_2_KIB>>::create_keypair(&circ)?;
+
+            let circ_partition_proofs = <EmptySectorUpdate<F, U, V, W>
+                as halo2::CompoundProof<'_, F, SECTOR_SIZE_2_KIB>>::prove_all_partitions_with_vanilla(
+                &vanilla_setup_params,
+                &vanilla_pub_inputs,
+                &vanilla_partition_proofs,
+                &keypair,
+            )?;
+
+            circ_partition_proofs
+                .iter()
+                .flat_map(|halo_proof| halo_proof.as_bytes().to_vec())
+                .collect()
+        },
+        SECTOR_SIZE_4_KIB => {
+            let circ = EmptySectorUpdateCircuit::<
+                F,
+                U,
+                V,
+                W,
+                SECTOR_SIZE_4_KIB,
+            >::blank_circuit();
+
+            let keypair = <EmptySectorUpdate<F, U, V, W>
+                as halo2::CompoundProof<'_, F, SECTOR_SIZE_4_KIB>>::create_keypair(&circ)?;
+
+            let circ_partition_proofs = <EmptySectorUpdate<F, U, V, W>
+                as halo2::CompoundProof<'_, F, SECTOR_SIZE_4_KIB>>::prove_all_partitions_with_vanilla(
+                &vanilla_setup_params,
+                &vanilla_pub_inputs,
+                &vanilla_partition_proofs,
+                &keypair,
+            )?;
+
+            circ_partition_proofs
+                .iter()
+                .flat_map(|halo_proof| halo_proof.as_bytes().to_vec())
+                .collect()
+        },
+        SECTOR_SIZE_8_KIB => {
+            let circ = EmptySectorUpdateCircuit::<
+                F,
+                U,
+                V,
+                W,
+                SECTOR_SIZE_8_KIB,
+            >::blank_circuit();
+
+            let keypair = <EmptySectorUpdate<F, U, V, W>
+                as halo2::CompoundProof<'_, F, SECTOR_SIZE_8_KIB>>::create_keypair(&circ)?;
+
+            let circ_partition_proofs = <EmptySectorUpdate<F, U, V, W>
+                as halo2::CompoundProof<'_, F, SECTOR_SIZE_8_KIB>>::prove_all_partitions_with_vanilla(
+                &vanilla_setup_params,
+                &vanilla_pub_inputs,
+                &vanilla_partition_proofs,
+                &keypair,
+            )?;
+
+            circ_partition_proofs
+                .iter()
+                .flat_map(|halo_proof| halo_proof.as_bytes().to_vec())
+                .collect()
+        },
+        SECTOR_SIZE_16_KIB => {
+            let circ = EmptySectorUpdateCircuit::<
+                F,
+                U,
+                V,
+                W,
+                SECTOR_SIZE_16_KIB,
+            >::blank_circuit();
+
+            let keypair = <EmptySectorUpdate<F, U, V, W>
+                as halo2::CompoundProof<'_, F, SECTOR_SIZE_16_KIB>>::create_keypair(&circ)?;
+
+            let circ_partition_proofs = <EmptySectorUpdate<F, U, V, W>
+                as halo2::CompoundProof<'_, F, SECTOR_SIZE_16_KIB>>::prove_all_partitions_with_vanilla(
+                &vanilla_setup_params,
+                &vanilla_pub_inputs,
+                &vanilla_partition_proofs,
+                &keypair,
+            )?;
+
+            circ_partition_proofs
+                .iter()
+                .flat_map(|halo_proof| halo_proof.as_bytes().to_vec())
+                .collect()
+        },
+        SECTOR_SIZE_32_KIB => {
+            let circ = EmptySectorUpdateCircuit::<
+                F,
+                U,
+                V,
+                W,
+                SECTOR_SIZE_32_KIB,
+            >::blank_circuit();
+
+            let keypair = <EmptySectorUpdate<F, U, V, W>
+                as halo2::CompoundProof<'_, F, SECTOR_SIZE_32_KIB>>::create_keypair(&circ)?;
+
+            let circ_partition_proofs = <EmptySectorUpdate<F, U, V, W>
+                as halo2::CompoundProof<'_, F, SECTOR_SIZE_32_KIB>>::prove_all_partitions_with_vanilla(
+                &vanilla_setup_params,
+                &vanilla_pub_inputs,
+                &vanilla_partition_proofs,
+                &keypair,
+            )?;
+
+            circ_partition_proofs
+                .iter()
+                .flat_map(|halo_proof| halo_proof.as_bytes().to_vec())
+                .collect()
+        },
+        SECTOR_SIZE_8_MIB => {
+            let circ = EmptySectorUpdateCircuit::<
+                F,
+                U,
+                V,
+                W,
+                SECTOR_SIZE_8_MIB,
+            >::blank_circuit();
+
+            let keypair = <EmptySectorUpdate<F, U, V, W>
+                as halo2::CompoundProof<'_, F, SECTOR_SIZE_8_MIB>>::create_keypair(&circ)?;
+
+            let circ_partition_proofs = <EmptySectorUpdate<F, U, V, W>
+                as halo2::CompoundProof<'_, F, SECTOR_SIZE_8_MIB>>::prove_all_partitions_with_vanilla(
+                &vanilla_setup_params,
+                &vanilla_pub_inputs,
+                &vanilla_partition_proofs,
+                &keypair,
+            )?;
+
+            circ_partition_proofs
+                .iter()
+                .flat_map(|halo_proof| halo_proof.as_bytes().to_vec())
+                .collect()
+        },
+        SECTOR_SIZE_16_MIB => {
+            let circ = EmptySectorUpdateCircuit::<
+                F,
+                U,
+                V,
+                W,
+                SECTOR_SIZE_16_MIB,
+            >::blank_circuit();
+
+            let keypair = <EmptySectorUpdate<F, U, V, W>
+                as halo2::CompoundProof<'_, F, SECTOR_SIZE_16_MIB>>::create_keypair(&circ)?;
+
+            let circ_partition_proofs = <EmptySectorUpdate<F, U, V, W>
+                as halo2::CompoundProof<'_, F, SECTOR_SIZE_16_MIB>>::prove_all_partitions_with_vanilla(
+                &vanilla_setup_params,
+                &vanilla_pub_inputs,
+                &vanilla_partition_proofs,
+                &keypair,
+            )?;
+
+            circ_partition_proofs
+                .iter()
+                .flat_map(|halo_proof| halo_proof.as_bytes().to_vec())
+                .collect()
+        },
+        SECTOR_SIZE_512_MIB => {
+            let circ = EmptySectorUpdateCircuit::<
+                F,
+                U,
+                V,
+                W,
+                SECTOR_SIZE_512_MIB,
+            >::blank_circuit();
+
+            let keypair = <EmptySectorUpdate<F, U, V, W>
+                as halo2::CompoundProof<'_, F, SECTOR_SIZE_512_MIB>>::create_keypair(&circ)?;
+
+            let circ_partition_proofs = <EmptySectorUpdate<F, U, V, W>
+                as halo2::CompoundProof<'_, F, SECTOR_SIZE_512_MIB>>::prove_all_partitions_with_vanilla(
+                &vanilla_setup_params,
+                &vanilla_pub_inputs,
+                &vanilla_partition_proofs,
+                &keypair,
+            )?;
+
+            circ_partition_proofs
+                .iter()
+                .flat_map(|halo_proof| halo_proof.as_bytes().to_vec())
+                .collect()
+        },
+        SECTOR_SIZE_32_GIB => {
+            let circ = EmptySectorUpdateCircuit::<
+                F,
+                U,
+                V,
+                W,
+                SECTOR_SIZE_32_GIB,
+            >::blank_circuit();
+
+            let keypair = <EmptySectorUpdate<F, U, V, W>
+                as halo2::CompoundProof<'_, F, SECTOR_SIZE_32_GIB>>::create_keypair(&circ)?;
+
+            let circ_partition_proofs = <EmptySectorUpdate<F, U, V, W>
+                as halo2::CompoundProof<'_, F, SECTOR_SIZE_32_GIB>>::prove_all_partitions_with_vanilla(
+                &vanilla_setup_params,
+                &vanilla_pub_inputs,
+                &vanilla_partition_proofs,
+                &keypair,
+            )?;
+
+            circ_partition_proofs
+                .iter()
+                .flat_map(|halo_proof| halo_proof.as_bytes().to_vec())
+                .collect()
+        },
+        SECTOR_SIZE_64_GIB => {
+            let circ = EmptySectorUpdateCircuit::<
+                F,
+                U,
+                V,
+                W,
+                SECTOR_SIZE_64_GIB,
+            >::blank_circuit();
+
+            let keypair = <EmptySectorUpdate<F, U, V, W>
+                as halo2::CompoundProof<'_, F, SECTOR_SIZE_64_GIB>>::create_keypair(&circ)?;
+
+            let circ_partition_proofs = <EmptySectorUpdate<F, U, V, W>
+                as halo2::CompoundProof<'_, F, SECTOR_SIZE_64_GIB>>::prove_all_partitions_with_vanilla(
+                &vanilla_setup_params,
+                &vanilla_pub_inputs,
+                &vanilla_partition_proofs,
+                &keypair,
+            )?;
+
+            circ_partition_proofs
+                .iter()
+                .flat_map(|halo_proof| halo_proof.as_bytes().to_vec())
+                .collect()
+        },
+        _ => unreachable!(),
+    };
+
+    Ok(proof_bytes)
+}
+
+pub fn verify_empty_sector_update_proof<Tree, F>(
     porep_config: PoRepConfig,
     proof_bytes: &[u8],
     comm_r_old: Commitment,
@@ -657,19 +1522,62 @@ pub fn verify_empty_sector_update_proof<Tree>(
     comm_d_new: Commitment,
 ) -> Result<bool>
 where
-    Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher<Fr>>,
+    Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher<F>>,
+    Tree::Arity: PoseidonArityAllFields,
+    Tree::SubTreeArity: PoseidonArityAllFields,
+    Tree::TopTreeArity: PoseidonArityAllFields,
+    F: PrimeField,
+    TreeRHasher<F>: Hasher<Domain = TreeRDomain<F>>,
+    TreeRDomain<F>: Domain<Field = F>,
 {
     info!("verify_empty_sector_update_proof:start");
 
+    let is_valid = match get_proof_system::<Tree>() {
+        ProofSystem::Groth => groth16_verify_empty_sector_update_proof::<
+            Tree::Arity,
+            Tree::SubTreeArity,
+            Tree::TopTreeArity,
+        >(porep_config, proof_bytes, comm_r_old, comm_r_new, comm_d_new)?,
+        ProofSystem::HaloPallas => halo2_verify_empty_sector_update_proof::<
+            Fp,
+            Tree::Arity,
+            Tree::SubTreeArity,
+            Tree::TopTreeArity,
+        >(porep_config, proof_bytes, comm_r_old, comm_r_new, comm_d_new)?,
+        ProofSystem::HaloVesta => halo2_verify_empty_sector_update_proof::<
+            Fq,
+            Tree::Arity,
+            Tree::SubTreeArity,
+            Tree::TopTreeArity,
+        >(porep_config, proof_bytes, comm_r_old, comm_r_new, comm_d_new)?,
+    };
+
+    info!("verify_empty_sector_update_proof:finish");
+
+    Ok(is_valid)
+}
+
+fn groth16_verify_empty_sector_update_proof<U, V, W>(
+    porep_config: PoRepConfig,
+    proof_bytes: &[u8],
+    comm_r_old: Commitment,
+    comm_r_new: Commitment,
+    comm_d_new: Commitment,
+) -> Result<bool>
+where
+    U: PoseidonArity<Fr>,
+    V: PoseidonArity<Fr>,
+    W: PoseidonArity<Fr>,
+{
     let comm_r_old_safe = <TreeRHasher<Fr> as Hasher>::Domain::try_from_bytes(&comm_r_old)?;
     let comm_r_new_safe = <TreeRHasher<Fr> as Hasher>::Domain::try_from_bytes(&comm_r_new)?;
 
-    let comm_d_new_safe = DefaultPieceDomain::try_from_bytes(&comm_d_new)?;
+    let comm_d_new_safe = DefaultPieceDomain::<Fr>::try_from_bytes(&comm_d_new)?;
 
     let config = SectorUpdateConfig::from_porep_config(porep_config);
     let partitions = usize::from(config.update_partitions);
     let public_inputs = PublicInputs {
-        k: partitions,
+        k: 0,
         comm_r_old: comm_r_old_safe,
         comm_d_new: comm_d_new_safe,
         comm_r_new: comm_r_new_safe,
@@ -683,16 +1591,292 @@ where
         priority: true,
     };
     let pub_params_compound =
-        EmptySectorUpdateCompound::<Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>::setup(
+        EmptySectorUpdateCompound::<U, V, W>::setup(
             &setup_params_compound,
         )?;
 
-    let verifying_key = get_empty_sector_update_verifying_key::<Tree>(porep_config)?;
+    let verifying_key = get_empty_sector_update_verifying_key::<
+        MerkleTreeWrapper<TreeRHasher<Fr>, MockStore, U, V, W>,
+    >(porep_config)?;
     let multi_proof = MultiProof::new_from_bytes(Some(partitions), proof_bytes, &verifying_key)?;
-    let valid =
-        EmptySectorUpdateCompound::verify(&pub_params_compound, &public_inputs, &multi_proof, &())?;
+    EmptySectorUpdateCompound::verify(&pub_params_compound, &public_inputs, &multi_proof, &())
+}
 
-    info!("verify_empty_sector_update_proof:finish");
+fn halo2_verify_empty_sector_update_proof<F, U, V, W>(
+    porep_config: PoRepConfig,
+    proof_bytes: &[u8],
+    comm_r_old: Commitment,
+    comm_r_new: Commitment,
+    comm_d_new: Commitment,
+) -> Result<bool>
+where
+    F: FieldExt + FieldProvingCurves,
+    U: PoseidonArity<F>,
+    V: PoseidonArity<F>,
+    W: PoseidonArity<F>,
+    TreeDHasher<F>: Hasher<Domain = TreeDDomain<F>>,
+    TreeDDomain<F>: Domain<Field = F>,
+    TreeRHasher<F>: Hasher<Domain = TreeRDomain<F>>,
+    TreeRDomain<F>: Domain<Field = F>,
+{
+    let config = SectorUpdateConfig::from_porep_config(porep_config);
+    let sector_nodes = config.nodes_count;
+    let sector_bytes: u64 = config.sector_size.into();
+    let partition_count: usize = config.update_partitions.into();
 
-    Ok(valid)
+    let vanilla_setup_params = SetupParams { sector_bytes };
+
+    let comm_r_old_safe = <TreeRHasher<F> as Hasher>::Domain::try_from_bytes(&comm_r_old)?;
+    let comm_r_new_safe = <TreeRHasher<F> as Hasher>::Domain::try_from_bytes(&comm_r_new)?;
+    let comm_d_new_safe = DefaultPieceDomain::<F>::try_from_bytes(&comm_d_new)?;
+
+    let vanilla_pub_inputs = PublicInputs {
+        k: 0,
+        comm_r_old: comm_r_old_safe,
+        comm_d_new: comm_d_new_safe,
+        comm_r_new: comm_r_new_safe,
+        h: usize::from(config.h_select),
+    };
+
+    let proofs_byte_len = proof_bytes.len();
+    assert_eq!(proofs_byte_len % partition_count, 0);
+    let proof_byte_len = proofs_byte_len / partition_count;
+    let proofs_bytes = proof_bytes.chunks(proof_byte_len).map(Vec::<u8>::from);
+
+    match sector_nodes {
+        SECTOR_SIZE_1_KIB => {
+            let circ_partition_proofs: Vec<Halo2Proof<
+                <F as FieldProvingCurves>::Affine,
+                EmptySectorUpdateCircuit<F, U, V, W, SECTOR_SIZE_1_KIB>,
+            >> = proofs_bytes.map(Into::into).collect();
+
+            let circ = EmptySectorUpdateCircuit::<F, U, V, W, SECTOR_SIZE_1_KIB>::blank_circuit();
+
+            let keypair = <
+                EmptySectorUpdate<F, U, V, W> as halo2::CompoundProof<'_, F, SECTOR_SIZE_1_KIB>
+            >::create_keypair(&circ)?;
+
+            <
+                EmptySectorUpdate<F, U, V, W> as halo2::CompoundProof<'_, F, SECTOR_SIZE_1_KIB>
+            >::verify_all_partitions(
+                &vanilla_setup_params,
+                &vanilla_pub_inputs,
+                &circ_partition_proofs,
+                &keypair,
+            )?;
+        },
+        SECTOR_SIZE_2_KIB => {
+            let circ_partition_proofs: Vec<Halo2Proof<
+                <F as FieldProvingCurves>::Affine,
+                EmptySectorUpdateCircuit<F, U, V, W, SECTOR_SIZE_2_KIB>,
+            >> = proofs_bytes.map(Into::into).collect();
+
+            let circ = EmptySectorUpdateCircuit::<F, U, V, W, SECTOR_SIZE_2_KIB>::blank_circuit();
+
+            let keypair = <
+                EmptySectorUpdate<F, U, V, W> as halo2::CompoundProof<'_, F, SECTOR_SIZE_2_KIB>
+            >::create_keypair(&circ)?;
+
+            <
+                EmptySectorUpdate<F, U, V, W> as halo2::CompoundProof<'_, F, SECTOR_SIZE_2_KIB>
+            >::verify_all_partitions(
+                &vanilla_setup_params,
+                &vanilla_pub_inputs,
+                &circ_partition_proofs,
+                &keypair,
+            )?;
+        },
+        SECTOR_SIZE_4_KIB => {
+            let circ_partition_proofs: Vec<Halo2Proof<
+                <F as FieldProvingCurves>::Affine,
+                EmptySectorUpdateCircuit<F, U, V, W, SECTOR_SIZE_4_KIB>,
+            >> = proofs_bytes.map(Into::into).collect();
+
+            let circ = EmptySectorUpdateCircuit::<F, U, V, W, SECTOR_SIZE_4_KIB>::blank_circuit();
+
+            let keypair = <
+                EmptySectorUpdate<F, U, V, W> as halo2::CompoundProof<'_, F, SECTOR_SIZE_4_KIB>
+            >::create_keypair(&circ)?;
+
+            <
+                EmptySectorUpdate<F, U, V, W> as halo2::CompoundProof<'_, F, SECTOR_SIZE_4_KIB>
+            >::verify_all_partitions(
+                &vanilla_setup_params,
+                &vanilla_pub_inputs,
+                &circ_partition_proofs,
+                &keypair,
+            )?;
+        },
+        SECTOR_SIZE_8_KIB => {
+            let circ_partition_proofs: Vec<Halo2Proof<
+                <F as FieldProvingCurves>::Affine,
+                EmptySectorUpdateCircuit<F, U, V, W, SECTOR_SIZE_8_KIB>,
+            >> = proofs_bytes.map(Into::into).collect();
+
+            let circ = EmptySectorUpdateCircuit::<F, U, V, W, SECTOR_SIZE_8_KIB>::blank_circuit();
+
+            let keypair = <
+                EmptySectorUpdate<F, U, V, W> as halo2::CompoundProof<'_, F, SECTOR_SIZE_8_KIB>
+            >::create_keypair(&circ)?;
+
+            <
+                EmptySectorUpdate<F, U, V, W> as halo2::CompoundProof<'_, F, SECTOR_SIZE_8_KIB>
+            >::verify_all_partitions(
+                &vanilla_setup_params,
+                &vanilla_pub_inputs,
+                &circ_partition_proofs,
+                &keypair,
+            )?;
+        },
+        SECTOR_SIZE_16_KIB => {
+            let circ_partition_proofs: Vec<Halo2Proof<
+                <F as FieldProvingCurves>::Affine,
+                EmptySectorUpdateCircuit<F, U, V, W, SECTOR_SIZE_16_KIB>,
+            >> = proofs_bytes.map(Into::into).collect();
+
+            let circ = EmptySectorUpdateCircuit::<F, U, V, W, SECTOR_SIZE_16_KIB>::blank_circuit();
+
+            let keypair = <
+                EmptySectorUpdate<F, U, V, W> as halo2::CompoundProof<'_, F, SECTOR_SIZE_16_KIB>
+            >::create_keypair(&circ)?;
+
+            <
+                EmptySectorUpdate<F, U, V, W> as halo2::CompoundProof<'_, F, SECTOR_SIZE_16_KIB>
+            >::verify_all_partitions(
+                &vanilla_setup_params,
+                &vanilla_pub_inputs,
+                &circ_partition_proofs,
+                &keypair,
+            )?;
+        },
+        SECTOR_SIZE_32_KIB => {
+            let circ_partition_proofs: Vec<Halo2Proof<
+                <F as FieldProvingCurves>::Affine,
+                EmptySectorUpdateCircuit<F, U, V, W, SECTOR_SIZE_32_KIB>,
+            >> = proofs_bytes.map(Into::into).collect();
+
+            let circ = EmptySectorUpdateCircuit::<F, U, V, W, SECTOR_SIZE_32_KIB>::blank_circuit();
+
+            let keypair = <
+                EmptySectorUpdate<F, U, V, W> as halo2::CompoundProof<'_, F, SECTOR_SIZE_32_KIB>
+            >::create_keypair(&circ)?;
+
+            <
+                EmptySectorUpdate<F, U, V, W> as halo2::CompoundProof<'_, F, SECTOR_SIZE_32_KIB>
+            >::verify_all_partitions(
+                &vanilla_setup_params,
+                &vanilla_pub_inputs,
+                &circ_partition_proofs,
+                &keypair,
+            )?;
+        },
+        SECTOR_SIZE_8_MIB => {
+            let circ_partition_proofs: Vec<Halo2Proof<
+                <F as FieldProvingCurves>::Affine,
+                EmptySectorUpdateCircuit<F, U, V, W, SECTOR_SIZE_8_MIB>,
+            >> = proofs_bytes.map(Into::into).collect();
+
+            let circ = EmptySectorUpdateCircuit::<F, U, V, W, SECTOR_SIZE_8_MIB>::blank_circuit();
+
+            let keypair = <
+                EmptySectorUpdate<F, U, V, W> as halo2::CompoundProof<'_, F, SECTOR_SIZE_8_MIB>
+            >::create_keypair(&circ)?;
+
+            <
+                EmptySectorUpdate<F, U, V, W> as halo2::CompoundProof<'_, F, SECTOR_SIZE_8_MIB>
+            >::verify_all_partitions(
+                &vanilla_setup_params,
+                &vanilla_pub_inputs,
+                &circ_partition_proofs,
+                &keypair,
+            )?;
+        },
+        SECTOR_SIZE_16_MIB => {
+            let circ_partition_proofs: Vec<Halo2Proof<
+                <F as FieldProvingCurves>::Affine,
+                EmptySectorUpdateCircuit<F, U, V, W, SECTOR_SIZE_16_MIB>,
+            >> = proofs_bytes.map(Into::into).collect();
+
+            let circ = EmptySectorUpdateCircuit::<F, U, V, W, SECTOR_SIZE_16_MIB>::blank_circuit();
+
+            let keypair = <
+                EmptySectorUpdate<F, U, V, W> as halo2::CompoundProof<'_, F, SECTOR_SIZE_16_MIB>
+            >::create_keypair(&circ)?;
+
+            <
+                EmptySectorUpdate<F, U, V, W> as halo2::CompoundProof<'_, F, SECTOR_SIZE_16_MIB>
+            >::verify_all_partitions(
+                &vanilla_setup_params,
+                &vanilla_pub_inputs,
+                &circ_partition_proofs,
+                &keypair,
+            )?;
+        },
+        SECTOR_SIZE_512_MIB => {
+            let circ_partition_proofs: Vec<Halo2Proof<
+                <F as FieldProvingCurves>::Affine,
+                EmptySectorUpdateCircuit<F, U, V, W, SECTOR_SIZE_512_MIB>,
+            >> = proofs_bytes.map(Into::into).collect();
+
+            let circ = EmptySectorUpdateCircuit::<F, U, V, W, SECTOR_SIZE_512_MIB>::blank_circuit();
+
+            let keypair = <
+                EmptySectorUpdate<F, U, V, W> as halo2::CompoundProof<'_, F, SECTOR_SIZE_512_MIB>
+            >::create_keypair(&circ)?;
+
+            <
+                EmptySectorUpdate<F, U, V, W> as halo2::CompoundProof<'_, F, SECTOR_SIZE_512_MIB>
+            >::verify_all_partitions(
+                &vanilla_setup_params,
+                &vanilla_pub_inputs,
+                &circ_partition_proofs,
+                &keypair,
+            )?;
+        },
+        SECTOR_SIZE_32_GIB => {
+            let circ_partition_proofs: Vec<Halo2Proof<
+                <F as FieldProvingCurves>::Affine,
+                EmptySectorUpdateCircuit<F, U, V, W, SECTOR_SIZE_32_GIB>,
+            >> = proofs_bytes.map(Into::into).collect();
+
+            let circ = EmptySectorUpdateCircuit::<F, U, V, W, SECTOR_SIZE_32_GIB>::blank_circuit();
+
+            let keypair = <
+                EmptySectorUpdate<F, U, V, W> as halo2::CompoundProof<'_, F, SECTOR_SIZE_32_GIB>
+            >::create_keypair(&circ)?;
+
+            <
+                EmptySectorUpdate<F, U, V, W> as halo2::CompoundProof<'_, F, SECTOR_SIZE_32_GIB>
+            >::verify_all_partitions(
+                &vanilla_setup_params,
+                &vanilla_pub_inputs,
+                &circ_partition_proofs,
+                &keypair,
+            )?;
+        },
+        SECTOR_SIZE_64_GIB => {
+            let circ_partition_proofs: Vec<Halo2Proof<
+                <F as FieldProvingCurves>::Affine,
+                EmptySectorUpdateCircuit<F, U, V, W, SECTOR_SIZE_64_GIB>,
+            >> = proofs_bytes.map(Into::into).collect();
+
+            let circ = EmptySectorUpdateCircuit::<F, U, V, W, SECTOR_SIZE_64_GIB>::blank_circuit();
+
+            let keypair = <
+                EmptySectorUpdate<F, U, V, W> as halo2::CompoundProof<'_, F, SECTOR_SIZE_64_GIB>
+            >::create_keypair(&circ)?;
+
+            <
+                EmptySectorUpdate<F, U, V, W> as halo2::CompoundProof<'_, F, SECTOR_SIZE_64_GIB>
+            >::verify_all_partitions(
+                &vanilla_setup_params,
+                &vanilla_pub_inputs,
+                &circ_partition_proofs,
+                &keypair,
+            )?;
+        },
+        _ => unreachable!(),
+    };
+
+    Ok(true)
 }

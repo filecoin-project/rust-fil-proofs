@@ -4,14 +4,13 @@ use std::path::Path;
 
 use anyhow::{Context, Result};
 use bincode::serialize;
-use blstrs::Scalar as Fr;
 use filecoin_hashers::{Domain, Hasher};
 use rand::{thread_rng, Rng};
 use storage_proofs_core::{cache_key::CacheKey, merkle::MerkleTreeTrait};
 use storage_proofs_porep::stacked::StackedDrg;
 
 use crate::{
-    constants::DefaultPieceHasher,
+    constants::{DefaultPieceDomain, DefaultPieceHasher},
     types::{Commitment, PaddedBytesAmount, PoRepConfig},
 };
 
@@ -24,7 +23,9 @@ where
     R: AsRef<Path>,
     S: AsRef<Path>,
     Tree: 'static + MerkleTreeTrait,
-    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+    DefaultPieceHasher<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>: Hasher,
+    DefaultPieceDomain<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>:
+        Domain<Field = <<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
 {
     let mut rng = thread_rng();
     fauxrep_aux::<_, R, S, Tree>(&mut rng, porep_config, cache_path, out_path)
@@ -41,7 +42,9 @@ where
     S: AsRef<Path>,
     T: AsRef<Path>,
     Tree: 'static + MerkleTreeTrait,
-    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+    DefaultPieceHasher<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>: Hasher,
+    DefaultPieceDomain<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>:
+        Domain<Field = <<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
 {
     let sector_bytes = PaddedBytesAmount::from(porep_config).0;
 
@@ -52,7 +55,10 @@ where
     }
 
     let fake_comm_c = <Tree::Hasher as Hasher>::Domain::random(&mut rng);
-    let (comm_r, p_aux) = StackedDrg::<Tree, DefaultPieceHasher>::fake_replicate_phase2(
+    let (comm_r, p_aux) = StackedDrg::<
+        Tree,
+        DefaultPieceHasher<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
+    >::fake_replicate_phase2(
         fake_comm_c,
         out_path,
         &cache_path,
@@ -77,14 +83,18 @@ where
     R: AsRef<Path>,
     S: AsRef<Path>,
     Tree: 'static + MerkleTreeTrait,
-    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+    DefaultPieceHasher<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>: Hasher,
+    DefaultPieceDomain<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>:
+        Domain<Field = <<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
 {
     let mut rng = thread_rng();
 
     let fake_comm_c = <Tree::Hasher as Hasher>::Domain::random(&mut rng);
 
-    let (comm_r, p_aux) =
-        StackedDrg::<Tree, DefaultPieceHasher>::fake_comm_r(fake_comm_c, existing_p_aux_path)?;
+    let (comm_r, p_aux) = StackedDrg::<
+        Tree,
+        DefaultPieceHasher<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
+    >::fake_comm_r(fake_comm_c, existing_p_aux_path)?;
 
     let p_aux_path = cache_path.as_ref().join(CacheKey::PAux.to_string());
     let mut f_p_aux = File::create(&p_aux_path)
