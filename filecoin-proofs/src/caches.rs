@@ -209,8 +209,8 @@ where
     )?;
 
     let parameters_generator = || {
-        <StackedCompound<Tree, DefaultPieceHasher> as CompoundProof<
-            StackedDrg<'_, Tree, DefaultPieceHasher>,
+        <StackedCompound<Tree, DefaultPieceHasher<Fr>> as CompoundProof<
+            StackedDrg<'_, Tree, DefaultPieceHasher<Fr>>,
             _,
         >>::groth_params::<OsRng>(None, &public_params)
         .map_err(Into::into)
@@ -313,8 +313,8 @@ where
     )?;
 
     let vk_generator = || {
-        let vk = <StackedCompound<Tree, DefaultPieceHasher> as CompoundProof<
-            StackedDrg<'_, Tree, DefaultPieceHasher>,
+        let vk = <StackedCompound<Tree, DefaultPieceHasher<Fr>> as CompoundProof<
+            StackedDrg<'_, Tree, DefaultPieceHasher<Fr>>,
             _,
         >>::verifying_key::<OsRng>(None, &public_params)?;
         Ok(prepare_verifying_key(&vk))
@@ -399,8 +399,8 @@ where
             usize::from(PaddedBytesAmount::from(porep_config)),
             num_proofs_to_aggregate,
         );
-        <StackedCompound<Tree, DefaultPieceHasher> as CompoundProof<
-            StackedDrg<'_, Tree, DefaultPieceHasher>,
+        <StackedCompound<Tree, DefaultPieceHasher<Fr>> as CompoundProof<
+            StackedDrg<'_, Tree, DefaultPieceHasher<Fr>>,
             _,
         >>::srs_key::<rand::rngs::OsRng>(None, &public_params, num_proofs_to_aggregate)
     };
@@ -436,8 +436,8 @@ where
             usize::from(PaddedBytesAmount::from(porep_config)),
             num_proofs_to_aggregate,
         );
-        <StackedCompound<Tree, DefaultPieceHasher> as CompoundProof<
-            StackedDrg<'_, Tree, DefaultPieceHasher>,
+        <StackedCompound<Tree, DefaultPieceHasher<Fr>> as CompoundProof<
+            StackedDrg<'_, Tree, DefaultPieceHasher<Fr>>,
             _,
         >>::srs_verifier_key::<rand::rngs::OsRng>(
             None, &public_params, num_proofs_to_aggregate

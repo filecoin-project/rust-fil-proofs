@@ -11,7 +11,7 @@ use crate::{api::as_safe_commitment, types::Commitment};
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct PublicReplicaInfo {
     /// The replica commitment.
-    comm_r: Commitment,
+    pub(crate) comm_r: Commitment,
 }
 
 impl Ord for PublicReplicaInfo {

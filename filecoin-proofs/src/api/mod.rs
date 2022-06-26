@@ -4,9 +4,10 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{ensure, Context, Result};
 use bincode::deserialize;
-use blstrs::Scalar as Fr;
+use ff::PrimeField;
 use filecoin_hashers::{Domain, Hasher};
 use fr32::{write_unpadded, Fr32Reader};
+use generic_array::typenum::{U2, U8};
 use log::{info, trace};
 use memmap::MmapOptions;
 use merkletree::store::{DiskStore, LevelCacheStore, StoreConfig};
@@ -29,6 +30,7 @@ use crate::{
     commitment_reader::CommitmentReader,
     constants::{
         DefaultBinaryTree, DefaultOctTree, DefaultPieceDomain, DefaultPieceHasher,
+        DefaultTreeDomain, DefaultTreeHasher,
         MINIMUM_RESERVED_BYTES_FOR_PIECE_IN_FULLY_ALIGNED_SECTOR as MINIMUM_PIECE_SIZE,
     },
     parameters::public_params,
@@ -57,6 +59,9 @@ pub use window_post::*;
 pub use winning_post::*;
 
 pub use storage_proofs_update::constants::{hs, partition_count};
+
+type BinaryTreeArity = U2;
+type OctTreeArity = U8;
 
 /// Unseals the sector at `sealed_path` and returns the bytes for a piece
 /// whose first (unpadded) byte begins at `offset` and ends at `offset` plus
@@ -91,7 +96,12 @@ pub fn get_unsealed_range<T, Tree>(
 where
     T: Into<PathBuf> + AsRef<Path>,
     Tree: 'static + MerkleTreeTrait,
-    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+    DefaultPieceHasher<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>: Hasher,
+    DefaultPieceDomain<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>:
+        Domain<Field = <<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
+    DefaultTreeHasher<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>: Hasher,
+    DefaultTreeDomain<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>:
+        Domain<Field = <<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
 {
     info!("get_unsealed_range:start");
 
@@ -152,13 +162,20 @@ where
     R: Read,
     W: Write,
     Tree: 'static + MerkleTreeTrait,
-    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+    DefaultPieceHasher<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>: Hasher,
+    DefaultPieceDomain<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>:
+        Domain<Field = <<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
+    DefaultTreeHasher<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>: Hasher,
+    DefaultTreeDomain<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>:
+        Domain<Field = <<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
 {
     info!("unseal_range:start");
     ensure!(comm_d != [0; 32], "Invalid all zero commitment (comm_d)");
 
-    let comm_d =
-        as_safe_commitment::<<DefaultPieceHasher as Hasher>::Domain, _>(&comm_d, "comm_d")?;
+    let comm_d = as_safe_commitment::<
+        DefaultPieceDomain<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
+        _,
+    >(&comm_d, "comm_d")?;
 
     let replica_id = generate_replica_id::<Tree::Hasher, _>(
         &prover_id,
@@ -220,13 +237,20 @@ where
     P: Into<PathBuf> + AsRef<Path>,
     W: Write,
     Tree: 'static + MerkleTreeTrait,
-    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+    DefaultPieceHasher<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>: Hasher,
+    DefaultPieceDomain<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>:
+        Domain<Field = <<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
+    DefaultTreeHasher<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>: Hasher,
+    DefaultTreeDomain<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>:
+        Domain<Field = <<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
 {
     info!("unseal_range_mapped:start");
     ensure!(comm_d != [0; 32], "Invalid all zero commitment (comm_d)");
 
-    let comm_d =
-        as_safe_commitment::<<DefaultPieceHasher as Hasher>::Domain, _>(&comm_d, "comm_d")?;
+    let comm_d = as_safe_commitment::<
+        DefaultPieceDomain<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
+        _,
+    >(&comm_d, "comm_d")?;
 
     let replica_id = generate_replica_id::<Tree::Hasher, _>(
         &prover_id,
@@ -287,21 +311,30 @@ where
     P: Into<PathBuf> + AsRef<Path>,
     W: Write,
     Tree: 'static + MerkleTreeTrait,
-    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+    DefaultPieceHasher<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>: Hasher,
+    DefaultPieceDomain<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>:
+        Domain<Field = <<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
+    DefaultTreeHasher<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>: Hasher,
+    DefaultTreeDomain<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>:
+        Domain<Field = <<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
 {
     trace!("unseal_range_inner:start");
 
-    let base_tree_size = get_base_tree_size::<DefaultBinaryTree>(porep_config.sector_size)?;
-    let base_tree_leafs = get_base_tree_leafs::<DefaultBinaryTree>(base_tree_size)?;
+    let base_tree_size = get_base_tree_size::<
+        DefaultBinaryTree<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
+    >(porep_config.sector_size)?;
+    let base_tree_leafs = get_base_tree_leafs::<
+        DefaultBinaryTree<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
+    >(base_tree_size)?;
     let config = StoreConfig::new(
         cache_path.as_ref(),
         CacheKey::CommDTree.to_string(),
         default_rows_to_discard(
             base_tree_leafs,
-            <DefaultBinaryTree as MerkleTreeTrait>::Arity::to_usize(),
+            BinaryTreeArity::to_usize(),
         ),
     );
-    let pp = public_params(
+    let pp = public_params::<Tree>(
         PaddedBytesAmount::from(porep_config),
         usize::from(PoRepProofPartitions::from(porep_config)),
         porep_config.porep_id,
@@ -311,7 +344,10 @@ where
     let offset_padded: PaddedBytesAmount = UnpaddedBytesAmount::from(offset).into();
     let num_bytes_padded: PaddedBytesAmount = num_bytes.into();
 
-    StackedDrg::<Tree, DefaultPieceHasher>::extract_all(&pp, &replica_id, data, Some(config))?;
+    StackedDrg::<
+        Tree,
+        DefaultPieceHasher<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
+    >::extract_all(&pp, &replica_id, data, Some(config))?;
     let start: usize = offset_padded.into();
     let end = start + usize::from(num_bytes_padded);
     let unsealed = &data[start..end];
@@ -336,10 +372,15 @@ where
 /// * `source` - a readable source of unprocessed piece bytes. The piece's commitment will be
 /// generated for the bytes read from the source plus any added padding.
 /// * `piece_size` - the number of unpadded user-bytes which can be read from source before EOF.
-pub fn generate_piece_commitment<T: Read>(
+pub fn generate_piece_commitment<T, F>(
     source: T,
     piece_size: UnpaddedBytesAmount,
-) -> Result<PieceInfo> {
+) -> Result<PieceInfo>
+where
+    T: Read,
+    F: PrimeField,
+    DefaultPieceHasher<F>: Hasher,
+{
     trace!("generate_piece_commitment:start");
 
     let result = measure_op(Operation::GeneratePieceCommitment, || {
@@ -349,7 +390,7 @@ pub fn generate_piece_commitment<T: Read>(
         let source = BufReader::new(source);
         let mut fr32_reader = Fr32Reader::new(source);
 
-        let commitment = generate_piece_commitment_bytes_from_source::<DefaultPieceHasher>(
+        let commitment = generate_piece_commitment_bytes_from_source::<DefaultPieceHasher<F>>(
             &mut fr32_reader,
             PaddedBytesAmount::from(piece_size).into(),
         )?;
@@ -380,7 +421,7 @@ pub fn generate_piece_commitment<T: Read>(
 /// * `target` - a writer where we will write the processed piece bytes.
 /// * `piece_size` - the number of unpadded user-bytes which can be read from source before EOF.
 /// * `piece_lengths` - the number of bytes for each previous piece in the sector.
-pub fn add_piece<R, W>(
+pub fn add_piece<R, W, F>(
     source: R,
     target: W,
     piece_size: UnpaddedBytesAmount,
@@ -389,6 +430,8 @@ pub fn add_piece<R, W>(
 where
     R: Read,
     W: Write,
+    F: PrimeField,
+    DefaultPieceHasher<F>: Hasher,
 {
     trace!("add_piece:start");
 
@@ -407,7 +450,7 @@ where
             target.write_all(&[0u8][..])?;
         }
 
-        let mut commitment_reader = CommitmentReader::new(fr32_reader);
+        let mut commitment_reader = CommitmentReader::<_, F>::new(fr32_reader);
         let n = io::copy(&mut commitment_reader, &mut target)
             .context("failed to write and preprocess bytes")?;
 
@@ -466,7 +509,7 @@ fn ensure_piece_size(piece_size: UnpaddedBytesAmount) -> Result<()> {
 /// * `source` - a readable source of unprocessed piece bytes.
 /// * `target` - a writer where we will write the processed piece bytes.
 /// * `piece_size` - the number of unpadded user-bytes which can be read from source before EOF.
-pub fn write_and_preprocess<R, W>(
+pub fn write_and_preprocess<R, W, F>(
     source: R,
     target: W,
     piece_size: UnpaddedBytesAmount,
@@ -474,12 +517,18 @@ pub fn write_and_preprocess<R, W>(
 where
     R: Read,
     W: Write,
+    F: PrimeField,
+    DefaultPieceHasher<F>: Hasher,
 {
-    add_piece(source, target, piece_size, Default::default())
+    add_piece::<_, _, F>(source, target, piece_size, Default::default())
 }
 
 // Verifies if a DiskStore specified by a config (or set of 'required_configs' is consistent).
-fn verify_store(config: &StoreConfig, arity: usize, required_configs: usize) -> Result<()> {
+fn verify_store<F>(config: &StoreConfig, arity: usize, required_configs: usize) -> Result<()>
+where
+    F: PrimeField,
+    DefaultPieceHasher<F>: Hasher,
+{
     let store_path = StoreConfig::data_path(&config.path, &config.id);
     if !Path::new(&store_path).exists() {
         // Configs may have split due to sector size, so we need to
@@ -526,7 +575,7 @@ fn verify_store(config: &StoreConfig, arity: usize, required_configs: usize) -> 
                 std::fs::metadata(&data_path)?.len()
             );
             ensure!(
-                DiskStore::<DefaultPieceDomain>::is_consistent(store_len, arity, config,)?,
+                DiskStore::<DefaultPieceDomain<F>>::is_consistent(store_len, arity, config,)?,
                 "Store is inconsistent: {:?}",
                 &data_path
             );
@@ -538,7 +587,7 @@ fn verify_store(config: &StoreConfig, arity: usize, required_configs: usize) -> 
             std::fs::metadata(&store_path)?.len()
         );
         ensure!(
-            DiskStore::<DefaultPieceDomain>::is_consistent(
+            DiskStore::<DefaultPieceDomain<F>>::is_consistent(
                 config.size.expect("disk store size not configured"),
                 arity,
                 config,
@@ -555,7 +604,7 @@ fn verify_store(config: &StoreConfig, arity: usize, required_configs: usize) -> 
 fn verify_level_cache_store<Tree>(config: &StoreConfig) -> Result<()>
 where
     Tree: MerkleTreeTrait,
-    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+    DefaultPieceHasher<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>: Hasher,
 {
     let store_path = StoreConfig::data_path(&config.path, &config.id);
     if !Path::new(&store_path).exists() {
@@ -605,7 +654,10 @@ where
                 std::fs::metadata(&data_path)?.len()
             );
             ensure!(
-                LevelCacheStore::<DefaultPieceDomain, File>::is_consistent(
+                LevelCacheStore::<
+                    DefaultPieceDomain<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
+                    File,
+                >::is_consistent(
                     store_len,
                     Tree::Arity::to_usize(),
                     config,
@@ -621,7 +673,10 @@ where
             std::fs::metadata(&store_path)?.len()
         );
         ensure!(
-            LevelCacheStore::<DefaultPieceDomain, File>::is_consistent(
+            LevelCacheStore::<
+                DefaultPieceDomain<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
+                File,
+            >::is_consistent(
                 config.size.expect("disk store size not configured"),
                 Tree::Arity::to_usize(),
                 config,
@@ -644,7 +699,7 @@ where
     R: AsRef<Path>,
     T: AsRef<Path>,
     Tree: MerkleTreeTrait,
-    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+    DefaultPieceHasher<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>: Hasher,
 {
     info!("validate_cache_for_precommit_phase2:start");
 
@@ -659,7 +714,7 @@ where
     let cache = cache_path.as_ref().to_path_buf();
     seal_precommit_phase1_output
         .labels
-        .verify_stores(verify_store, &cache)?;
+        .verify_stores(verify_store::<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>, &cache)?;
 
     // Update the previous phase store path to the current cache_path.
     let mut config = StoreConfig::from_config(
@@ -669,9 +724,9 @@ where
     );
     config.path = cache_path.as_ref().into();
 
-    let result = verify_store(
+    let result = verify_store::<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>(
         &config,
-        <DefaultBinaryTree as MerkleTreeTrait>::Arity::to_usize(),
+        BinaryTreeArity::to_usize(),
         get_base_tree_count::<Tree>(),
     );
 
@@ -687,7 +742,12 @@ where
     R: AsRef<Path>,
     T: AsRef<Path>,
     Tree: MerkleTreeTrait,
-    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+    DefaultPieceHasher<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>: Hasher,
+    DefaultPieceDomain<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>:
+        Domain<Field = <<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
+    DefaultTreeHasher<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>: Hasher,
+    DefaultTreeDomain<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>:
+        Domain<Field = <<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
 {
     info!("validate_cache_for_commit:start");
 
@@ -721,7 +781,10 @@ where
         let t_aux_bytes = fs::read(&t_aux_path)
             .with_context(|| format!("could not read file t_aux={:?}", t_aux_path))?;
 
-        let mut res: TemporaryAux<Tree, DefaultPieceHasher> = deserialize(&t_aux_bytes)?;
+        let mut res: TemporaryAux<
+            Tree,
+            DefaultPieceHasher<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
+        > = deserialize(&t_aux_bytes)?;
 
         // Switch t_aux to the passed in cache_path
         res.set_cache_path(&cache_path);
@@ -730,20 +793,22 @@ where
 
     // Verify all stores/labels within the Labels object.
     let cache = cache_path.as_ref().to_path_buf();
-    t_aux.labels.verify_stores(verify_store, &cache)?;
+    t_aux.labels.verify_stores(verify_store::<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>, &cache)?;
 
     // Verify each tree disk store.
-    verify_store(
+    verify_store::<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>(
         &t_aux.tree_d_config,
-        <DefaultBinaryTree as MerkleTreeTrait>::Arity::to_usize(),
+        BinaryTreeArity::to_usize(),
         get_base_tree_count::<Tree>(),
     )?;
-    verify_store(
+    verify_store::<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>(
         &t_aux.tree_c_config,
-        <DefaultOctTree as MerkleTreeTrait>::Arity::to_usize(),
+        OctTreeArity::to_usize(),
         get_base_tree_count::<Tree>(),
     )?;
-    verify_level_cache_store::<DefaultOctTree>(&t_aux.tree_r_last_config)?;
+    verify_level_cache_store::<
+        DefaultOctTree<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
+    >(&t_aux.tree_r_last_config)?;
 
     info!("validate_cache_for_commit:finish");
 

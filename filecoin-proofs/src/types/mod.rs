@@ -1,15 +1,18 @@
+use std::any::TypeId;
+
 pub use merkletree::store::StoreConfig;
 pub use storage_proofs_core::merkle::{MerkleProof, MerkleTreeTrait};
 pub use storage_proofs_porep::stacked::{Labels, PersistentAux, TemporaryAux};
 
 use blstrs::Scalar as Fr;
 use filecoin_hashers::{Domain, Hasher};
+use halo2_proofs::{arithmetic::FieldExt, pasta::{Fp, Fq}};
 use serde::{Deserialize, Serialize};
 use storage_proofs_core::{merkle::BinaryMerkleTree, sector::SectorId};
 use storage_proofs_porep::stacked;
 use storage_proofs_post::fallback;
 
-use crate::constants::DefaultPieceHasher;
+use crate::constants::{DefaultPieceDomain, DefaultPieceHasher};
 
 mod bytes_amount;
 mod hselect;
@@ -43,7 +46,7 @@ pub type Commitment = [u8; 32];
 pub type ChallengeSeed = [u8; 32];
 pub type ProverId = [u8; 32];
 pub type Ticket = [u8; 32];
-pub type DataTree = BinaryMerkleTree<DefaultPieceHasher>;
+pub type DataTree<F> = BinaryMerkleTree<DefaultPieceHasher<F>>;
 
 /// Arity for oct trees, used for comm_r_last.
 pub const OCT_ARITY: usize = 8;
@@ -57,13 +60,18 @@ pub struct SealPreCommitOutput {
     pub comm_d: Commitment,
 }
 
-pub type VanillaSealProof<Tree> = stacked::Proof<Tree, DefaultPieceHasher>;
+pub type VanillaSealProof<Tree> = stacked::Proof<
+    Tree,
+    DefaultPieceHasher<<<<Tree as MerkleTreeTrait>::Hasher as Hasher>::Domain as Domain>::Field>,
+>;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct SealCommitPhase1Output<Tree>
 where
     Tree: MerkleTreeTrait,
-    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+    DefaultPieceHasher<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>: Hasher,
+    DefaultPieceDomain<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>:
+        Domain<Field = <<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
 {
     #[serde(bound(
         serialize = "VanillaSealProof<Tree>: Serialize",
@@ -93,6 +101,70 @@ pub struct SealPreCommitPhase1Output<Tree: MerkleTreeTrait> {
     pub comm_d: Commitment,
 }
 
+// The circuit public inputs for a partition.
+#[derive(Clone)]
+pub enum CircuitPublicInputs {
+    Groth(Vec<Fr>),
+    HaloPallas(Vec<Vec<Fp>>),
+    HaloVesta(Vec<Vec<Fq>>),
+}
+
+impl From<Vec<Fr>> for CircuitPublicInputs {
+    fn from(pub_inputs: Vec<Fr>) -> Self {
+        CircuitPublicInputs::Groth(pub_inputs)
+    }
+}
+
+impl<F: FieldExt> From<Vec<Vec<F>>> for CircuitPublicInputs {
+    fn from(pub_inputs: Vec<Vec<F>>) -> Self {
+        let field = TypeId::of::<F>();
+        if field == TypeId::of::<Fp>() {
+            unsafe { CircuitPublicInputs::HaloPallas(std::mem::transmute(pub_inputs)) }
+        } else if field == TypeId::of::<Fq>() {
+            unsafe { CircuitPublicInputs::HaloVesta(std::mem::transmute(pub_inputs)) }
+        } else {
+            panic!("public inputs field must be pallas or vesta")
+        }
+    }
+}
+
+impl Into<Vec<Fr>> for CircuitPublicInputs {
+    fn into(self) -> Vec<Fr> {
+        match self {
+            CircuitPublicInputs::Groth(pub_inputs) => pub_inputs,
+            CircuitPublicInputs::HaloPallas(_) =>
+                panic!("cannot convert halo2-pallas public inputs into groth16 public inputs"),
+            CircuitPublicInputs::HaloVesta(_) =>
+                panic!("cannot convert halo2-vesta public inputs into groth16 public inputs"),
+        }
+    }
+}
+
+impl<F: FieldExt> Into<Vec<Vec<F>>> for CircuitPublicInputs {
+    fn into(self) -> Vec<Vec<F>> {
+        match self {
+            CircuitPublicInputs::Groth(_) =>
+                panic!("cannot convert halo2 public inputs into groth16 public inputs"),
+            CircuitPublicInputs::HaloPallas(pub_inputs) => {
+                assert_eq!(
+                    TypeId::of::<F>(),
+                    TypeId::of::<Fp>(),
+                    "cannot convert halo2-pallas public inputs into halo2-vesta public inputs"
+                );
+                unsafe { std::mem::transmute(pub_inputs) }
+            }
+            CircuitPublicInputs::HaloVesta(pub_inputs) => {
+                assert_eq!(
+                    TypeId::of::<F>(),
+                    TypeId::of::<Fq>(),
+                    "cannot convert halo2-vesta public inputs into halo2-pallas public inputs"
+                );
+                unsafe { std::mem::transmute(pub_inputs) }
+            }
+        }
+    }
+}
+
 #[repr(transparent)]
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct PartitionSnarkProof(pub Vec<u8>);
@@ -100,7 +172,7 @@ pub struct PartitionSnarkProof(pub Vec<u8>);
 pub type SnarkProof = Vec<u8>;
 pub type AggregateSnarkProof = Vec<u8>;
 pub type VanillaProof<Tree> = fallback::Proof<<Tree as MerkleTreeTrait>::Proof>;
-pub type PartitionProof<U, V, W> = storage_proofs_update::vanilla::PartitionProof<Fr, U, V, W>;
+pub type PartitionProof<F, U, V, W> = storage_proofs_update::vanilla::PartitionProof<F, U, V, W>;
 
 #[derive(Debug, Clone, PartialEq)]
 #[repr(transparent)]

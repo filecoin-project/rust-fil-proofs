@@ -25,7 +25,7 @@ fn test_verify_seal_fr32_validation() {
 
     // Test failure for invalid comm_r conversion.
     {
-        let result = verify_seal::<DefaultOctLCTree>(
+        let result = verify_seal::<DefaultOctLCTree<Fr>>(
             PoRepConfig {
                 sector_size: SectorSize(SECTOR_SIZE_2_KIB),
                 partitions: PoRepProofPartitions(
@@ -64,7 +64,7 @@ fn test_verify_seal_fr32_validation() {
 
     // Test failure for invalid comm_d conversion.
     {
-        let result = verify_seal::<DefaultOctLCTree>(
+        let result = verify_seal::<DefaultOctLCTree<Fr>>(
             PoRepConfig {
                 sector_size: SectorSize(SECTOR_SIZE_2_KIB),
                 partitions: PoRepProofPartitions(
@@ -107,7 +107,7 @@ fn test_verify_seal_fr32_validation() {
         let out = bytes_into_fr(&non_zero_commitment_fr_bytes);
         assert!(out.is_ok(), "tripwire");
 
-        let result = verify_seal::<DefaultOctLCTree>(
+        let result = verify_seal::<DefaultOctLCTree<Fr>>(
             PoRepConfig {
                 sector_size: SectorSize(SECTOR_SIZE_2_KIB),
                 partitions: PoRepProofPartitions(
@@ -150,10 +150,10 @@ fn test_random_domain_element() {
     let mut rng = XorShiftRng::from_seed(TEST_SEED);
 
     for _ in 0..100 {
-        let random_el: DefaultTreeDomain = Fr::random(&mut rng).into();
+        let random_el: DefaultTreeDomain<Fr> = Fr::random(&mut rng).into();
         let mut randomness = [0u8; 32];
         randomness.copy_from_slice(AsRef::<[u8]>::as_ref(&random_el));
-        let back: DefaultTreeDomain =
+        let back: DefaultTreeDomain<Fr> =
             as_safe_commitment(&randomness, "test").expect("failed to get domain from randomness");
         assert_eq!(back, random_el);
     }
