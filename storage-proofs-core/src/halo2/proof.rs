@@ -236,10 +236,17 @@ where
 
     fn prove_all_partitions_with_vanilla(
         setup_params: &Self::SetupParams,
-        vanilla_pub_inputs: &[&Self::PublicInputs],
-        vanilla_proofs: &[&Self::Proof],
+        vanilla_pub_inputs: &Self::PublicInputs,
+        vanilla_proofs: &[Self::Proof],
         keypair: &Halo2Keypair<<F as FieldProvingCurves>::Affine, Self::Circuit>,
     ) -> Result<Vec<Halo2Proof<<F as FieldProvingCurves>::Affine, Self::Circuit>>, Error>;
+
+    fn batch_prove_all_partitions_with_vanilla(
+        setup_params: &Self::SetupParams,
+        vanilla_pub_inputs: &Self::PublicInputs,
+        vanilla_proofs: &[Self::Proof],
+        keypair: &Halo2Keypair<<F as FieldProvingCurves>::Affine, Self::Circuit>,
+    ) -> Result<Halo2Proof<<F as FieldProvingCurves>::Affine, Self::Circuit>, Error>;
 
     fn verify_partition(
         setup_params: &Self::SetupParams,
@@ -250,8 +257,15 @@ where
 
     fn verify_all_partitions(
         setup_params: &Self::SetupParams,
-        vanilla_pub_inputs: &[&Self::PublicInputs],
-        circ_proofs: &[&Halo2Proof<<F as FieldProvingCurves>::Affine, Self::Circuit>],
+        vanilla_pub_inputs: &Self::PublicInputs,
+        circ_proofs: &[Halo2Proof<<F as FieldProvingCurves>::Affine, Self::Circuit>],
+        keypair: &Halo2Keypair<<F as FieldProvingCurves>::Affine, Self::Circuit>,
+    ) -> Result<(), Error>;
+
+    fn batch_verify_all_partitions(
+        setup_params: &Self::SetupParams,
+        vanilla_pub_inputs: &Self::PublicInputs,
+        circ_proofs: &Halo2Proof<<F as FieldProvingCurves>::Affine, Self::Circuit>,
         keypair: &Halo2Keypair<<F as FieldProvingCurves>::Affine, Self::Circuit>,
     ) -> Result<(), Error>;
 }
