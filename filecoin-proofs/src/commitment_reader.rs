@@ -2,6 +2,7 @@ use std::cmp::min;
 use std::io::{self, Read};
 
 use anyhow::{ensure, Result};
+use ff::PrimeField;
 use filecoin_hashers::{HashFunction, Hasher};
 use rayon::prelude::{ParallelIterator, ParallelSlice};
 
@@ -9,14 +10,23 @@ use crate::{constants::DefaultPieceHasher, pieces::piece_hash};
 
 /// Calculates comm-d of the data piped through to it.
 /// Data must be bit padded and power of 2 bytes.
-pub struct CommitmentReader<R> {
+pub struct CommitmentReader<R, F>
+where
+    F: PrimeField,
+    DefaultPieceHasher<F>: Hasher,
+{
     source: R,
     buffer: [u8; 64],
     buffer_pos: usize,
-    current_tree: Vec<<DefaultPieceHasher as Hasher>::Domain>,
+    current_tree: Vec<<DefaultPieceHasher<F> as Hasher>::Domain>,
 }
 
-impl<R: Read> CommitmentReader<R> {
+impl<R, F> CommitmentReader<R, F>
+where
+    R: Read,
+    F: PrimeField,
+    DefaultPieceHasher<F>: Hasher,
+{
     pub fn new(source: R) -> Self {
         CommitmentReader {
             source,
@@ -33,14 +43,14 @@ impl<R: Read> CommitmentReader<R> {
         }
 
         // WARNING: keep in sync with DefaultPieceHasher and its .node impl
-        let hash = <DefaultPieceHasher as Hasher>::Function::hash(&self.buffer);
+        let hash = <DefaultPieceHasher<F> as Hasher>::Function::hash(&self.buffer);
         self.current_tree.push(hash);
         self.buffer_pos = 0;
 
         // TODO: reduce hashes when possible, instead of keeping them around.
     }
 
-    pub fn finish(self) -> Result<<DefaultPieceHasher as Hasher>::Domain> {
+    pub fn finish(self) -> Result<<DefaultPieceHasher<F> as Hasher>::Domain> {
         ensure!(self.buffer_pos == 0, "not enough inputs provided");
 
         let CommitmentReader { current_tree, .. } = self;
@@ -64,7 +74,12 @@ impl<R: Read> CommitmentReader<R> {
     }
 }
 
-impl<R: Read> Read for CommitmentReader<R> {
+impl<R, F> Read for CommitmentReader<R, F>
+where
+    R: Read,
+    F: PrimeField,
+    DefaultPieceHasher<F>: Hasher,
+{
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         let start = self.buffer_pos;
         let left = 64 - self.buffer_pos;
@@ -91,6 +106,7 @@ mod tests {
 
     use std::io::Cursor;
 
+    use blstrs::Scalar as Fr;
     use fr32::Fr32Reader;
     use storage_proofs_core::pieces::generate_piece_commitment_bytes_from_source;
 
@@ -102,14 +118,14 @@ mod tests {
         let source = vec![255u8; piece_size];
         let mut fr32_reader = Fr32Reader::new(Cursor::new(&source));
 
-        let commitment1 = generate_piece_commitment_bytes_from_source::<DefaultPieceHasher>(
+        let commitment1 = generate_piece_commitment_bytes_from_source::<DefaultPieceHasher<Fr>>(
             &mut fr32_reader,
             PaddedBytesAmount::from(UnpaddedBytesAmount(piece_size as u64)).into(),
         )
         .expect("failed to generate piece commitment bytes from source");
 
         let fr32_reader = Fr32Reader::new(Cursor::new(&source));
-        let mut commitment_reader = CommitmentReader::new(fr32_reader);
+        let mut commitment_reader = CommitmentReader::<_, Fr>::new(fr32_reader);
         io::copy(&mut commitment_reader, &mut io::sink()).expect("io copy failed");
 
         let commitment2 = commitment_reader.finish().expect("failed to finish");

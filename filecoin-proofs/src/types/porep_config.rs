@@ -70,8 +70,8 @@ impl PoRepConfig {
         )?;
 
         Ok(
-            <StackedCompound<Tree, DefaultPieceHasher> as CacheableParameters<
-                StackedCircuit<'_, Tree, DefaultPieceHasher>,
+            <StackedCompound<Tree, DefaultPieceHasher<Fr>> as CacheableParameters<
+                StackedCircuit<'_, Tree, DefaultPieceHasher<Fr>>,
                 _,
             >>::cache_identifier(&params),
         )

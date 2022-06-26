@@ -2,9 +2,11 @@ use std::cmp::min;
 use std::collections::HashMap;
 use std::io::{self, Cursor, Read};
 use std::iter::Iterator;
+use std::marker::PhantomData;
 use std::sync::Mutex;
 
 use anyhow::{ensure, Context, Result};
+use ff::PrimeField;
 use filecoin_hashers::{HashFunction, Hasher};
 use fr32::Fr32Reader;
 use lazy_static::lazy_static;
@@ -24,12 +26,16 @@ use crate::{
 };
 
 /// Verify that the provided `piece_infos` and `comm_d` match.
-pub fn verify_pieces(
+pub fn verify_pieces<F>(
     comm_d: &Commitment,
     piece_infos: &[PieceInfo],
     sector_size: SectorSize,
-) -> Result<bool> {
-    let comm_d_calculated = compute_comm_d(sector_size, piece_infos)?;
+) -> Result<bool>
+where
+    F: PrimeField,
+    DefaultPieceHasher<F>: Hasher,
+{
+    let comm_d_calculated = compute_comm_d::<F>(sector_size, piece_infos)?;
 
     Ok(&comm_d_calculated == comm_d)
 }
@@ -61,13 +67,17 @@ impl Read for EmptySource {
     }
 }
 
-fn empty_comm_d(sector_size: SectorSize) -> Commitment {
+fn empty_comm_d<F>(sector_size: SectorSize) -> Commitment
+where
+    F: PrimeField,
+    DefaultPieceHasher<F>: Hasher,
+{
     let map = &mut *COMMITMENTS.lock().expect("COMMITMENTS poisoned");
 
     *map.entry(sector_size).or_insert_with(|| {
         let size: UnpaddedBytesAmount = sector_size.into();
         let fr32_reader = Fr32Reader::new(EmptySource::new(size.into()));
-        let mut commitment_reader = CommitmentReader::new(fr32_reader);
+        let mut commitment_reader = CommitmentReader::<_, F>::new(fr32_reader);
         io::copy(&mut commitment_reader, &mut io::sink())
             .expect("failed to copy commitment to sink");
 
@@ -82,10 +92,14 @@ fn empty_comm_d(sector_size: SectorSize) -> Commitment {
     })
 }
 
-pub fn compute_comm_d(sector_size: SectorSize, piece_infos: &[PieceInfo]) -> Result<Commitment> {
+pub fn compute_comm_d<F>(sector_size: SectorSize, piece_infos: &[PieceInfo]) -> Result<Commitment>
+where
+    F: PrimeField,
+    DefaultPieceHasher<F>: Hasher,
+{
     trace!("verifying {} pieces", piece_infos.len());
     if piece_infos.is_empty() {
-        return Ok(empty_comm_d(sector_size));
+        return Ok(empty_comm_d::<F>(sector_size));
     }
 
     let unpadded_sector: UnpaddedBytesAmount = sector_size.into();
@@ -106,7 +120,7 @@ pub fn compute_comm_d(sector_size: SectorSize, piece_infos: &[PieceInfo]) -> Res
         "Piece is larger than sector."
     );
 
-    let mut stack = Stack::new();
+    let mut stack = Stack::<F>::new();
 
     let first = piece_infos
         .first()
@@ -127,14 +141,14 @@ pub fn compute_comm_d(sector_size: SectorSize, piece_infos: &[PieceInfo]) -> Res
         );
 
         while stack.peek().size < piece_info.size {
-            stack.shift_reduce(zero_padding(stack.peek().size)?)?
+            stack.shift_reduce(zero_padding::<F>(stack.peek().size)?)?
         }
 
         stack.shift_reduce(piece_info.clone())?;
     }
 
     while stack.len() > 1 {
-        stack.shift_reduce(zero_padding(stack.peek().size)?)?;
+        stack.shift_reduce(zero_padding::<F>(stack.peek().size)?)?;
     }
 
     ensure!(stack.len() == 1, "Stack size ({}) must be 1.", stack.len());
@@ -145,12 +159,16 @@ pub fn compute_comm_d(sector_size: SectorSize, piece_infos: &[PieceInfo]) -> Res
 }
 
 /// Stack used for piece reduction.
-struct Stack(Vec<PieceInfo>);
+struct Stack<F>(Vec<PieceInfo>, PhantomData<F>);
 
-impl Stack {
+impl<F> Stack<F>
+where
+    F: PrimeField,
+    DefaultPieceHasher<F>: Hasher,
+{
     /// Creates a new stack.
     fn new() -> Self {
-        Stack(Vec::new())
+        Stack(Vec::new(), PhantomData)
     }
 
     /// Pushes a single element onto the stack.
@@ -181,7 +199,7 @@ impl Stack {
         if self.peek().size == self.peek2().size {
             let right = self.pop()?;
             let left = self.pop()?;
-            let joined = join_piece_infos(left, right)?;
+            let joined = join_piece_infos::<F>(left, right)?;
             self.shift(joined);
             return Ok(true);
         }
@@ -205,17 +223,21 @@ impl Stack {
 }
 
 /// Create a padding `PieceInfo` of size `size`.
-pub fn zero_padding(size: UnpaddedBytesAmount) -> Result<PieceInfo> {
+pub fn zero_padding<F>(size: UnpaddedBytesAmount) -> Result<PieceInfo>
+where
+    F: PrimeField,
+    DefaultPieceHasher<F>: Hasher,
+{
     let padded_size: PaddedBytesAmount = size.into();
     let mut commitment = [0u8; 32];
 
     // TODO: cache common piece hashes
     let mut hashed_size = 64;
-    let h1 = piece_hash(&commitment, &commitment);
+    let h1 = piece_hash::<F>(&commitment, &commitment);
     commitment.copy_from_slice(h1.as_ref());
 
     while hashed_size < u64::from(padded_size) {
-        let h = piece_hash(&commitment, &commitment);
+        let h = piece_hash::<F>(&commitment, &commitment);
         commitment.copy_from_slice(h.as_ref());
         hashed_size *= 2;
     }
@@ -229,25 +251,33 @@ pub fn zero_padding(size: UnpaddedBytesAmount) -> Result<PieceInfo> {
 }
 
 /// Join two equally sized `PieceInfo`s together, by hashing them and adding their sizes.
-fn join_piece_infos(mut left: PieceInfo, right: PieceInfo) -> Result<PieceInfo> {
+fn join_piece_infos<F>(mut left: PieceInfo, right: PieceInfo) -> Result<PieceInfo>
+where
+    F: PrimeField,
+    DefaultPieceHasher<F>: Hasher,
+{
     ensure!(
         left.size == right.size,
         "Piece sizes must be equal (left: {:?}, right: {:?})",
         left.size,
         right.size
     );
-    let h = piece_hash(&left.commitment, &right.commitment);
+    let h = piece_hash::<F>(&left.commitment, &right.commitment);
 
     left.commitment.copy_from_slice(AsRef::<[u8]>::as_ref(&h));
     left.size = left.size + right.size;
     Ok(left)
 }
 
-pub fn piece_hash(a: &[u8], b: &[u8]) -> <DefaultPieceHasher as Hasher>::Domain {
+pub fn piece_hash<F>(a: &[u8], b: &[u8]) -> <DefaultPieceHasher<F> as Hasher>::Domain
+where
+    F: PrimeField,
+    DefaultPieceHasher<F>: Hasher,
+{
     let mut buf = [0u8; NODE_SIZE * 2];
     buf[..NODE_SIZE].copy_from_slice(a);
     buf[NODE_SIZE..].copy_from_slice(b);
-    <DefaultPieceHasher as Hasher>::Function::hash(&buf)
+    <DefaultPieceHasher<F> as Hasher>::Function::hash(&buf)
 }
 
 #[derive(Debug, Clone)]

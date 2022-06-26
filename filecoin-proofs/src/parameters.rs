@@ -1,12 +1,11 @@
 use anyhow::{ensure, Result};
-use blstrs::Scalar as Fr;
 use filecoin_hashers::{Domain, Hasher};
 use storage_proofs_core::{api_version::ApiVersion, proof::ProofScheme};
 use storage_proofs_porep::stacked::{self, LayerChallenges, StackedDrg};
 use storage_proofs_post::fallback::{self, FallbackPoSt};
 
 use crate::{
-    constants::{DefaultPieceHasher, DRG_DEGREE, EXP_DEGREE, LAYERS, POREP_MINIMUM_CHALLENGES},
+    constants::{DefaultPieceDomain, DefaultPieceHasher, DRG_DEGREE, EXP_DEGREE, LAYERS, POREP_MINIMUM_CHALLENGES},
     types::{MerkleTreeTrait, PaddedBytesAmount, PoStConfig},
 };
 
@@ -23,9 +22,11 @@ pub fn public_params<Tree: 'static + MerkleTreeTrait>(
     api_version: ApiVersion,
 ) -> Result<stacked::PublicParams<Tree>>
 where
-    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+    DefaultPieceHasher<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>: Hasher,
+    DefaultPieceDomain<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>:
+        Domain<Field = <<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
 {
-    StackedDrg::<Tree, DefaultPieceHasher>::setup(&setup_params(
+    StackedDrg::<Tree, DefaultPieceHasher<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>>::setup(&setup_params(
         sector_bytes,
         partitions,
         porep_id,
@@ -35,10 +36,7 @@ where
 
 pub fn winning_post_public_params<Tree: 'static + MerkleTreeTrait>(
     post_config: &PoStConfig,
-) -> Result<WinningPostPublicParams>
-where
-    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
-{
+) -> Result<WinningPostPublicParams> {
     FallbackPoSt::<Tree>::setup(&winning_post_setup_params(post_config)?)
 }
 
@@ -69,10 +67,7 @@ pub fn winning_post_setup_params(post_config: &PoStConfig) -> Result<WinningPost
 
 pub fn window_post_public_params<Tree: 'static + MerkleTreeTrait>(
     post_config: &PoStConfig,
-) -> Result<WindowPostPublicParams>
-where
-    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
-{
+) -> Result<WindowPostPublicParams> {
     FallbackPoSt::<Tree>::setup(&window_post_setup_params(post_config))
 }
 
@@ -145,6 +140,8 @@ fn select_challenges(
 mod tests {
     use super::*;
 
+    use blstrs::Scalar as Fr;
+
     use crate::{DefaultOctLCTree, PoRepProofPartitions, PoStType};
 
     #[test]
@@ -170,7 +167,7 @@ mod tests {
         };
 
         let params =
-            winning_post_public_params::<DefaultOctLCTree>(&config).expect("failed to get params");
+            winning_post_public_params::<DefaultOctLCTree<Fr>>(&config).expect("failed to get params");
         assert_eq!(params.sector_count, 66);
         assert_eq!(params.challenge_count, 1);
         assert_eq!(params.sector_size, 2048);

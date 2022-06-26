@@ -29,15 +29,15 @@ use crate::{
 #[derive(Debug)]
 pub struct PrivateReplicaInfo<Tree: MerkleTreeTrait> {
     /// Path to the replica.
-    replica: PathBuf,
+    pub(crate) replica: PathBuf,
     /// The replica commitment.
-    comm_r: Commitment,
+    pub(crate) comm_r: Commitment,
     /// Persistent Aux.
-    aux: PersistentAux<<Tree::Hasher as Hasher>::Domain>,
+    pub(crate) aux: PersistentAux<<Tree::Hasher as Hasher>::Domain>,
     /// Contains sector-specific (e.g. merkle trees) assets
     pub cache_dir: PathBuf,
 
-    _t: PhantomData<Tree>,
+    pub(crate) _t: PhantomData<Tree>,
 }
 
 impl<Tree: MerkleTreeTrait> Clone for PrivateReplicaInfo<Tree> {

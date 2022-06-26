@@ -4,8 +4,7 @@ use std::path::Path;
 
 use anyhow::{anyhow, ensure, Context, Result};
 use bincode::deserialize;
-use blstrs::Scalar as Fr;
-use filecoin_hashers::{sha256::Sha256Hasher, Domain, Hasher};
+use filecoin_hashers::{Domain, Hasher};
 use log::{debug, info};
 use storage_proofs_core::{
     cache_key::CacheKey, merkle::MerkleTreeTrait, proof::ProofScheme, sector::SectorId,
@@ -14,7 +13,7 @@ use storage_proofs_post::fallback::{self, generate_leaf_challenge, FallbackPoSt,
 
 use crate::{
     api::as_safe_commitment,
-    constants::DefaultPieceHasher,
+    constants::{DefaultPieceDomain, DefaultPieceHasher},
     types::{
         ChallengeSeed, FallbackPoStSectorProof, PoStConfig, PrivateReplicaInfo, ProverId,
         TemporaryAux, VanillaProof,
@@ -26,11 +25,16 @@ use crate::{
 pub fn clear_cache<Tree>(cache_dir: &Path) -> Result<()>
 where
     Tree: MerkleTreeTrait,
-    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+    DefaultPieceHasher<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>: Hasher,
+    DefaultPieceDomain<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>:
+        Domain<Field = <<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
 {
     info!("clear_cache:start");
 
-    let mut t_aux: TemporaryAux<Tree, Sha256Hasher<Fr>> = {
+    let mut t_aux: TemporaryAux<
+        Tree,
+        DefaultPieceHasher<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
+    > = {
         let f_aux_path = cache_dir.to_path_buf().join(CacheKey::TAux.to_string());
         let aux_bytes = fs::read(&f_aux_path)
             .with_context(|| format!("could not read from path={:?}", f_aux_path))?;
@@ -39,7 +43,10 @@ where
     }?;
 
     t_aux.set_cache_path(cache_dir);
-    let result = TemporaryAux::<Tree, DefaultPieceHasher>::clear_temp(t_aux);
+    let result = TemporaryAux::<
+        Tree,
+        DefaultPieceHasher<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
+    >::clear_temp(t_aux);
 
     info!("clear_cache:finish");
 
@@ -50,7 +57,9 @@ where
 pub fn clear_caches<Tree>(replicas: &BTreeMap<SectorId, PrivateReplicaInfo<Tree>>) -> Result<()>
 where
     Tree: MerkleTreeTrait,
-    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+    DefaultPieceHasher<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>: Hasher,
+    DefaultPieceDomain<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>:
+        Domain<Field = <<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
 {
     info!("clear_caches:start");
 
@@ -65,16 +74,12 @@ where
 
 /// Generates the challenges per SectorId required for either a Window
 /// proof-of-spacetime or a Winning proof-of-spacetime.
-pub fn generate_fallback_sector_challenges<Tree>(
+pub fn generate_fallback_sector_challenges<Tree: 'static + MerkleTreeTrait>(
     post_config: &PoStConfig,
     randomness: &ChallengeSeed,
     pub_sectors: &[SectorId],
     _prover_id: ProverId,
-) -> Result<BTreeMap<SectorId, Vec<u64>>>
-where
-    Tree: 'static + MerkleTreeTrait,
-    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
-{
+) -> Result<BTreeMap<SectorId, Vec<u64>>> {
     info!("generate_sector_challenges:start");
     ensure!(
         post_config.typ == PoStType::Window || post_config.typ == PoStType::Winning,
@@ -134,16 +139,12 @@ where
 
 /// Generates a single vanilla proof required for either Window proof-of-spacetime
 /// or Winning proof-of-spacetime.
-pub fn generate_single_vanilla_proof<Tree>(
+pub fn generate_single_vanilla_proof<Tree: 'static + MerkleTreeTrait>(
     post_config: &PoStConfig,
     sector_id: SectorId,
     replica: &PrivateReplicaInfo<Tree>,
     challenges: &[u64],
-) -> Result<FallbackPoStSectorProof<Tree>>
-where
-    Tree: 'static + MerkleTreeTrait,
-    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
-{
+) -> Result<FallbackPoStSectorProof<Tree>> {
     info!("generate_single_vanilla_proof:start: {:?}", sector_id);
 
     let tree = &replica
@@ -193,17 +194,13 @@ where
 // Partition a flat vector of vanilla sector proofs.  The post_config
 // (PoSt) type is required in order to determine the proper shape of
 // the returned partitioned proofs.
-pub fn partition_vanilla_proofs<Tree>(
+pub fn partition_vanilla_proofs<Tree: MerkleTreeTrait>(
     post_config: &PoStConfig,
     pub_params: &fallback::PublicParams,
     pub_inputs: &fallback::PublicInputs<<Tree::Hasher as Hasher>::Domain>,
     partition_count: usize,
     vanilla_proofs: &[FallbackPoStSectorProof<Tree>],
-) -> Result<Vec<VanillaProof<Tree>>>
-where
-    Tree: MerkleTreeTrait,
-    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
-{
+) -> Result<Vec<VanillaProof<Tree>>> {
     info!("partition_vanilla_proofs:start");
     ensure!(
         post_config.typ == PoStType::Window || post_config.typ == PoStType::Winning,
@@ -278,16 +275,12 @@ pub(crate) fn get_partitions_for_window_post(
     }
 }
 
-pub fn single_partition_vanilla_proofs<Tree>(
+pub fn single_partition_vanilla_proofs<Tree: MerkleTreeTrait>(
     post_config: &PoStConfig,
     pub_params: &fallback::PublicParams,
     pub_inputs: &fallback::PublicInputs<<Tree::Hasher as Hasher>::Domain>,
     vanilla_proofs: &[FallbackPoStSectorProof<Tree>],
-) -> Result<VanillaProof<Tree>>
-where
-    Tree: MerkleTreeTrait,
-    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
-{
+) -> Result<VanillaProof<Tree>> {
     info!("single_partition_vanilla_proofs:start");
     ensure!(pub_inputs.k.is_some(), "must have a partition index");
     let partition_index = pub_inputs.k.expect("prechecked");
