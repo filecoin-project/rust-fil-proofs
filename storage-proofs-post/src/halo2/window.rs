@@ -1,5 +1,4 @@
 use std::convert::TryInto;
-use std::iter;
 
 use filecoin_hashers::{
     poseidon::PoseidonHasher, Domain, FieldArity, Hasher, PoseidonArity, POSEIDON_CONSTANTS,
@@ -17,7 +16,7 @@ use crate::{
     fallback as vanilla,
     halo2::{
         constants::{SECTOR_NODES_32_GIB, SECTOR_NODES_64_GIB},
-        shared::{CircuitConfig, SectorProof},
+        circuit::{PostConfig, SectorProof},
     },
 };
 
@@ -25,7 +24,7 @@ use crate::{
 pub const SECTOR_CHALLENGES: usize = 10;
 
 // The number of challenged sectors per partition.
-pub const fn challenged_sector_count<const SECTOR_NODES: usize>() -> usize {
+pub const fn sectors_challenged_per_partition<const SECTOR_NODES: usize>() -> usize {
     match SECTOR_NODES {
         SECTOR_NODES_32_GIB => 2349,
         SECTOR_NODES_64_GIB => 2300,
@@ -56,7 +55,7 @@ pub fn generate_challenges<F: FieldExt, const SECTOR_NODES: usize>(
     hasher.update(sector_id.to_le_bytes());
 
     let mut challenges = [0u32; SECTOR_CHALLENGES];
-    let partition_sectors = challenged_sector_count::<SECTOR_NODES>();
+    let partition_sectors = sectors_challenged_per_partition::<SECTOR_NODES>();
     let mut challenge_index = (k * partition_sectors + sector_index) * SECTOR_CHALLENGES;
 
     for challenge in challenges.iter_mut() {
@@ -96,15 +95,16 @@ where
     fn from(
         vanilla_pub_inputs: vanilla::PublicInputs<<PoseidonHasher<F> as Hasher>::Domain>,
     ) -> Self {
-        let sectors_challenged_per_partition = challenged_sector_count::<SECTOR_NODES>();
-        assert_eq!(
-            vanilla_pub_inputs.sectors.len() % sectors_challenged_per_partition,
-            0
-        );
+        let total_prover_sectors = vanilla_pub_inputs.sectors.len();
+        let sectors_challenged_per_partition = sectors_challenged_per_partition::<SECTOR_NODES>();
+        assert_eq!(total_prover_sectors % sectors_challenged_per_partition, 0);
+        let partition_count = total_prover_sectors / sectors_challenged_per_partition;
+
         assert!(vanilla_pub_inputs.k.is_some());
+        let k = vanilla_pub_inputs.k.unwrap();
+        assert!(k < partition_count);
 
         let randomness: F = vanilla_pub_inputs.randomness.into();
-        let k = vanilla_pub_inputs.k.unwrap();
 
         let partition_sectors = vanilla_pub_inputs
             .sectors
@@ -148,10 +148,10 @@ where
     <PoseidonHasher<F> as Hasher>::Domain: Domain<Field = F>,
 {
     pub fn empty() -> Self {
-        let challenged_sector_count = challenged_sector_count::<SECTOR_NODES>();
+        let challenged_sectors = sectors_challenged_per_partition::<SECTOR_NODES>();
         PublicInputs {
-            comms_r: vec![None; challenged_sector_count],
-            challenges: vec![[None; SECTOR_CHALLENGES]; challenged_sector_count],
+            comms_r: vec![None; challenged_sectors],
+            challenges: vec![[None; SECTOR_CHALLENGES]; challenged_sectors],
         }
     }
 
@@ -234,11 +234,9 @@ where
     <PoseidonHasher<F> as Hasher>::Domain: Domain<Field = F>,
 {
     pub fn empty() -> Self {
-        let challenged_sector_count = challenged_sector_count::<SECTOR_NODES>();
+        let challenged_sectors = sectors_challenged_per_partition::<SECTOR_NODES>();
         PrivateInputs {
-            sector_proofs: iter::repeat(SectorProof::empty())
-                .take(challenged_sector_count)
-                .collect(),
+            sector_proofs: vec![SectorProof::empty(); challenged_sectors]
         }
     }
 }
@@ -267,7 +265,7 @@ where
     PoseidonHasher<F>: Hasher,
     <PoseidonHasher<F> as Hasher>::Domain: Domain<Field = F>,
 {
-    type Config = CircuitConfig<F, U, V, W, SECTOR_NODES>;
+    type Config = PostConfig<F, U, V, W, SECTOR_NODES>;
     type FloorPlanner = SimpleFloorPlanner;
 
     fn without_witnesses(&self) -> Self {
@@ -278,7 +276,7 @@ where
     }
 
     fn configure(meta: &mut ConstraintSystem<F>) -> Self::Config {
-        CircuitConfig::configure(meta)
+        PostConfig::configure(meta)
     }
 
     #[allow(clippy::unwrap_used)]
@@ -289,8 +287,8 @@ where
     ) -> Result<(), Error> {
         let WindowPostCircuit { priv_inputs, .. } = self;
 
-        let challenged_sector_count = challenged_sector_count::<SECTOR_NODES>();
-        assert_eq!(priv_inputs.sector_proofs.len(), challenged_sector_count);
+        let challenged_sectors = sectors_challenged_per_partition::<SECTOR_NODES>();
+        assert_eq!(priv_inputs.sector_proofs.len(), challenged_sectors);
 
         let advice = config.advice;
         let pi_col = config.pi;
@@ -392,6 +390,23 @@ where
             SECTOR_NODES_32_KIB => 12,
             // TODO (jake): add more sector sizes
             _ => unimplemented!(),
+        }
+    }
+}
+
+impl<F, U, V, W, const SECTOR_NODES: usize> WindowPostCircuit<F, U, V, W, SECTOR_NODES>
+where
+    F: FieldExt,
+    U: PoseidonArity<F>,
+    V: PoseidonArity<F>,
+    W: PoseidonArity<F>,
+    PoseidonHasher<F>: Hasher,
+    <PoseidonHasher<F> as Hasher>::Domain: Domain<Field = F>,
+{
+    pub fn blank_circuit() -> Self {
+        WindowPostCircuit {
+            pub_inputs: PublicInputs::empty(),
+            priv_inputs: PrivateInputs::empty(),
         }
     }
 }

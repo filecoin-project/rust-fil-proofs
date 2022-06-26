@@ -211,9 +211,9 @@ where
     PoseidonHasher<F>: Hasher,
     <PoseidonHasher<F> as Hasher>::Domain: Domain<Field = F>,
 {
-    column: Vec<Option<F>>,
-    path_c: Vec<Vec<Option<F>>>,
-    _tree_r: PhantomData<(U, V, W)>,
+    pub column: Vec<Option<F>>,
+    pub path_c: Vec<Vec<Option<F>>>,
+    pub _tree_r: PhantomData<(U, V, W)>,
 }
 
 impl<F, U, V, W, const SECTOR_NODES: usize> ParentProof<F, U, V, W, SECTOR_NODES>
@@ -248,12 +248,12 @@ where
     PoseidonHasher<F>: Hasher,
     <PoseidonHasher<F> as Hasher>::Domain: Domain<Field = F>,
 {
-    leaf_d: Option<F>,
-    path_d: Vec<Vec<Option<F>>>,
-    path_c: Vec<Vec<Option<F>>>,
-    path_r: Vec<Vec<Option<F>>>,
-    drg_parent_proofs: [ParentProof<F, U, V, W, SECTOR_NODES>; DRG_PARENTS],
-    exp_parent_proofs: [ParentProof<F, U, V, W, SECTOR_NODES>; EXP_PARENTS],
+    pub leaf_d: Option<F>,
+    pub path_d: Vec<Vec<Option<F>>>,
+    pub path_c: Vec<Vec<Option<F>>>,
+    pub path_r: Vec<Vec<Option<F>>>,
+    pub drg_parent_proofs: [ParentProof<F, U, V, W, SECTOR_NODES>; DRG_PARENTS],
+    pub exp_parent_proofs: [ParentProof<F, U, V, W, SECTOR_NODES>; EXP_PARENTS],
 }
 
 impl<F, U, V, W, TreeR, const SECTOR_NODES: usize>
@@ -1136,6 +1136,36 @@ where
             SECTOR_NODES_32_KIB => 18,
             // TODO (jake): add more sector sizes
             _ => unimplemented!(),
+        }
+    }
+}
+
+impl<F, U, V, W, const SECTOR_NODES: usize> SdrPorepCircuit<F, U, V, W, SECTOR_NODES>
+where
+    F: FieldExt,
+    U: PoseidonArity<F>,
+    V: PoseidonArity<F>,
+    W: PoseidonArity<F>,
+    Sha256Hasher<F>: Hasher,
+    <Sha256Hasher<F> as Hasher>::Domain: Domain<Field = F>,
+    PoseidonHasher<F>: Hasher,
+    <PoseidonHasher<F> as Hasher>::Domain: Domain<Field = F>,
+{
+    // Same as `Circuit::without_witnesses` except this associated function does not take `&self`.
+    pub fn blank_circuit() -> Self {
+        SdrPorepCircuit {
+            pub_inputs: PublicInputs {
+                replica_id: None,
+                comm_d: None,
+                comm_r: None,
+                challenges: vec![None; Self::CHALLENGE_COUNT],
+                parents: vec![vec![None; DRG_PARENTS + EXP_PARENTS]; Self::CHALLENGE_COUNT],
+            },
+            priv_inputs: PrivateInputs {
+                comm_c: None,
+                root_r: None,
+                challenge_proofs: vec![ChallengeProof::empty(); Self::CHALLENGE_COUNT],
+            },
         }
     }
 }
