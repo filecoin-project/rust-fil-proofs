@@ -43,10 +43,8 @@ fn test_election_post<Tree>()
 where
     Tree: 'static + MerkleTreeTrait,
     // Ensure that `PoseidonDomain` and `PoseidonFunction` are defined for `Tree`'s field.
-    PoseidonDomain<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>:
-        Domain<Field = <<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
-    PoseidonFunction<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>:
-        HashFunction<PoseidonDomain<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>>,
+    PoseidonDomain<Tree::Field>: Domain<Field = Tree::Field>,
+    PoseidonFunction<Tree::Field>: HashFunction<PoseidonDomain<Tree::Field>>,
 {
     let rng = &mut XorShiftRng::from_seed(TEST_SEED);
 

@@ -184,7 +184,10 @@ mod tests {
     use bellperson::{gadgets::num::AllocatedNum, util_cs::test_cs::TestConstraintSystem};
     use blstrs::Scalar as Fr;
     use ff::Field;
-    use filecoin_hashers::{sha256::Sha256Function, HashFunction};
+    use filecoin_hashers::{
+        sha256::{Sha256Function, Sha256Hasher},
+        Groth16Hasher,
+    };
     use fr32::fr_into_bytes;
     use merkletree::hash::Algorithm;
     use rand::{Rng, SeedableRng};
@@ -310,7 +313,7 @@ mod tests {
                 .expect("right bits failure")
         };
 
-        let out = Sha256Function::<Fr>::hash_leaf_bits_circuit(
+        let out = Sha256Hasher::<Fr>::hash_leaf_bits_circuit(
             cs.namespace(|| "hash_leaf_circuit"),
             &left_bits,
             &right_bits,

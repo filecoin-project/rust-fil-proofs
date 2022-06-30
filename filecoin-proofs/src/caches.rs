@@ -4,7 +4,7 @@ use std::sync::{Arc, Mutex};
 use anyhow::Result;
 use bellperson::groth16::{self, prepare_verifying_key};
 use blstrs::{Bls12, Scalar as Fr};
-use filecoin_hashers::{Domain, Hasher};
+use filecoin_hashers::Groth16Hasher;
 use lazy_static::lazy_static;
 use log::{info, trace};
 use once_cell::sync::OnceCell;
@@ -198,8 +198,8 @@ where
 
 pub fn get_stacked_params<Tree>(porep_config: PoRepConfig) -> Result<Arc<Bls12GrothParams>>
 where
-    Tree: 'static + MerkleTreeTrait,
-    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+    Tree: 'static + MerkleTreeTrait<Field = Fr>,
+    Tree::Hasher: Groth16Hasher,
 {
     let public_params = public_params::<Tree>(
         PaddedBytesAmount::from(porep_config),
@@ -227,8 +227,8 @@ where
 
 pub fn get_post_params<Tree>(post_config: &PoStConfig) -> Result<Arc<Bls12GrothParams>>
 where
-    Tree: 'static + MerkleTreeTrait,
-    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+    Tree: 'static + MerkleTreeTrait<Field = Fr>,
+    Tree::Hasher: Groth16Hasher,
 {
     match post_config.typ {
         PoStType::Winning => {
@@ -276,7 +276,7 @@ pub fn get_empty_sector_update_params<Tree>(
     porep_config: PoRepConfig,
 ) -> Result<Arc<Bls12GrothParams>>
 where
-    Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher<Fr>>,
+    Tree: 'static + MerkleTreeTrait<Field = Fr, Hasher = TreeRHasher<Fr>>,
 {
     let public_params: storage_proofs_update::PublicParams =
         PublicParams::from_sector_size(u64::from(porep_config.sector_size));
@@ -302,8 +302,8 @@ pub fn get_stacked_verifying_key<Tree>(
     porep_config: PoRepConfig,
 ) -> Result<Arc<Bls12PreparedVerifyingKey>>
 where
-    Tree: 'static + MerkleTreeTrait,
-    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+    Tree: 'static + MerkleTreeTrait<Field = Fr>,
+    Tree::Hasher: Groth16Hasher,
 {
     let public_params = public_params(
         PaddedBytesAmount::from(porep_config),
@@ -333,8 +333,8 @@ pub fn get_post_verifying_key<Tree>(
     post_config: &PoStConfig,
 ) -> Result<Arc<Bls12PreparedVerifyingKey>>
 where
-    Tree: 'static + MerkleTreeTrait,
-    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+    Tree: 'static + MerkleTreeTrait<Field = Fr>,
+    Tree::Hasher: Groth16Hasher,
 {
     match post_config.typ {
         PoStType::Winning => {
@@ -383,8 +383,8 @@ pub fn get_stacked_srs_key<Tree>(
     num_proofs_to_aggregate: usize,
 ) -> Result<Arc<Bls12ProverSRSKey>>
 where
-    Tree: 'static + MerkleTreeTrait,
-    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+    Tree: 'static + MerkleTreeTrait<Field = Fr>,
+    Tree::Hasher: Groth16Hasher,
 {
     let public_params = public_params(
         PaddedBytesAmount::from(porep_config),
@@ -420,8 +420,8 @@ pub fn get_stacked_srs_verifier_key<Tree>(
     num_proofs_to_aggregate: usize,
 ) -> Result<Arc<Bls12VerifierSRSKey>>
 where
-    Tree: 'static + MerkleTreeTrait,
-    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+    Tree: 'static + MerkleTreeTrait<Field = Fr>,
+    Tree::Hasher: Groth16Hasher,
 {
     let public_params = public_params(
         PaddedBytesAmount::from(porep_config),
@@ -458,7 +458,7 @@ pub fn get_empty_sector_update_verifying_key<Tree>(
     porep_config: PoRepConfig,
 ) -> Result<Arc<Bls12PreparedVerifyingKey>>
 where
-    Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher<Fr>>,
+    Tree: 'static + MerkleTreeTrait<Field = Fr, Hasher = TreeRHasher<Fr>>,
 {
     let public_params: storage_proofs_update::PublicParams =
         PublicParams::from_sector_size(u64::from(porep_config.sector_size));

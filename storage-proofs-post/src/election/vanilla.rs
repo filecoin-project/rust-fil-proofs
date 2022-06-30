@@ -169,10 +169,8 @@ pub fn generate_candidates<Tree>(
 where
     Tree: MerkleTreeTrait,
     // Ensure that `PoseidonDomain` and `PoseidonFunction` are defined for `Tree`'s field.
-    PoseidonDomain<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>:
-        Domain<Field = <<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
-    PoseidonFunction<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>:
-        HashFunction<PoseidonDomain<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>>,
+    PoseidonDomain<Tree::Field>: Domain<Field = Tree::Field>,
+    PoseidonFunction<Tree::Field>: HashFunction<PoseidonDomain<Tree::Field>>,
 {
     challenged_sectors
         .par_iter()
@@ -212,24 +210,22 @@ fn generate_candidate<Tree>(
 where
     Tree: MerkleTreeTrait,
     // Ensure that `PoseidonDomain` and `PoseidonFunction` are defined for `Tree`'s field.
-    PoseidonDomain<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>:
-        Domain<Field = <<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
-    PoseidonFunction<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>:
-        HashFunction<PoseidonDomain<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>>,
+    PoseidonDomain<Tree::Field>: Domain<Field = Tree::Field>,
+    PoseidonFunction<Tree::Field>: HashFunction<PoseidonDomain<Tree::Field>>,
 {
-    let randomness_fr: <<Tree::Hasher as Hasher>::Domain as Domain>::Field = randomness.into();
-    let prover_id_fr: <<Tree::Hasher as Hasher>::Domain as Domain>::Field = prover_id.into();
-    let mut data: Vec<PoseidonDomain<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>> = vec![
+    let randomness_fr: Tree::Field = randomness.into();
+    let prover_id_fr: Tree::Field = prover_id.into();
+    let mut data: Vec<PoseidonDomain<Tree::Field>> = vec![
         randomness_fr.into(),
         prover_id_fr.into(),
-        <<Tree::Hasher as Hasher>::Domain as Domain>::Field::from(sector_id.into()).into(),
+        Tree::Field::from(sector_id.into()).into(),
     ];
 
     for n in 0..pub_params.challenge_count {
         let challenge =
             generate_leaf_challenge(pub_params, randomness, sector_challenge_index, n as u64)?;
 
-        let val: <<Tree::Hasher as Hasher>::Domain as Domain>::Field =
+        let val: Tree::Field =
             measure_op(Operation::PostReadChallengedRange, || {
                 tree.read_at(challenge as usize)
             })?

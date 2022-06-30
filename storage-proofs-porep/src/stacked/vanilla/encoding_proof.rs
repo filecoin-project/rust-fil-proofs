@@ -57,7 +57,7 @@ impl<H: Hasher> EncodingProof<H> {
     ) -> bool
     where
         // TreeD and TreeR domains must use the same field.
-        D: Domain<Field = <H::Domain as Domain>::Field>,
+        D: Domain<Field = H::Field>,
     {
         let key = self.create_key(replica_id);
 

@@ -113,9 +113,11 @@ where
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct PublicInputs<T: Domain, S: Domain>
+pub struct PublicInputs<T, S>
 where
-    T: Domain<Field = S::Field>,
+    T: Domain,
+    // TreeD and TreeR must have the same field.
+    S: Domain<Field = T::Field>,
 {
     #[serde(bound = "")]
     pub replica_id: T,
@@ -126,9 +128,10 @@ where
     pub k: Option<usize>,
 }
 
-impl<T: Domain, S: Domain> PublicInputs<T, S>
+impl<T, S> PublicInputs<T, S>
 where
-    T: Domain<Field = S::Field>,
+    T: Domain,
+    S: Domain<Field = T::Field>,
 {
     pub fn challenges(
         &self,
@@ -146,8 +149,8 @@ where
 pub struct PrivateInputs<Tree, G>
 where
     Tree: MerkleTreeTrait,
-    G: Hasher,
-    G::Domain: Domain<Field = <<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
+    // TreeD and TreeR must use the same field.
+    G: Hasher<Field = Tree::Field>,
 {
     pub p_aux: PersistentAux<<Tree::Hasher as Hasher>::Domain>,
     pub t_aux: TemporaryAuxCache<Tree, G>,
@@ -157,8 +160,7 @@ where
 pub struct Proof<Tree, G>
 where
     Tree: MerkleTreeTrait,
-    G: Hasher,
-    G::Domain: Domain<Field = <<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
+    G: Hasher<Field = Tree::Field>,
 {
     #[serde(bound(
         serialize = "MerkleProof<G, U2>: Serialize",
@@ -194,8 +196,7 @@ where
 impl<Tree, G> Clone for Proof<Tree, G>
 where
     Tree: MerkleTreeTrait,
-    G: Hasher,
-    G::Domain: Domain<Field = <<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
+    G: Hasher<Field = Tree::Field>,
 {
     fn clone(&self) -> Self {
         Self {
@@ -211,8 +212,7 @@ where
 impl<Tree, G> Proof<Tree, G>
 where
     Tree: MerkleTreeTrait,
-    G: Hasher,
-    G::Domain: Domain<Field = <<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
+    G: Hasher<Field = Tree::Field>,
 {
     pub fn comm_r_last(&self) -> <Tree::Hasher as Hasher>::Domain {
         self.comm_r_last_proof.root()
@@ -374,8 +374,7 @@ pub struct PersistentAux<D> {
 pub struct TemporaryAux<Tree, G>
 where
     Tree: MerkleTreeTrait,
-    G: Hasher,
-    G::Domain: Domain<Field = <<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
+    G: Hasher<Field = Tree::Field>,
 {
     /// The encoded nodes for 1..layers.
     #[serde(bound(
@@ -392,8 +391,7 @@ where
 impl<Tree, G> Clone for TemporaryAux<Tree, G>
 where
     Tree: MerkleTreeTrait,
-    G: Hasher,
-    G::Domain: Domain<Field = <<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
+    G: Hasher<Field = Tree::Field>,
 {
     fn clone(&self) -> Self {
         Self {
@@ -409,8 +407,7 @@ where
 impl<Tree, G> TemporaryAux<Tree, G>
 where
     Tree: MerkleTreeTrait,
-    G: Hasher,
-    G::Domain: Domain<Field = <<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
+    G: Hasher<Field = Tree::Field>,
 {
     pub fn set_cache_path<P: AsRef<Path>>(&mut self, cache_path: P) {
         let cp = cache_path.as_ref().to_path_buf();
@@ -528,8 +525,7 @@ where
 pub struct TemporaryAuxCache<Tree, G>
 where
     Tree: MerkleTreeTrait,
-    G: Hasher,
-    G::Domain: Domain<Field = <<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
+    G: Hasher<Field = Tree::Field>,
 {
     /// The encoded nodes for 1..layers.
     pub labels: LabelsCache<Tree>,
@@ -550,8 +546,7 @@ where
 impl<Tree, G> TemporaryAuxCache<Tree, G>
 where
     Tree: MerkleTreeTrait,
-    G: Hasher,
-    G::Domain: Domain<Field = <<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
+    G: Hasher<Field = Tree::Field>,
 {
     pub fn new(t_aux: &TemporaryAux<Tree, G>, replica_path: PathBuf) -> Result<Self> {
         // tree_d_size stored in the config is the base tree size

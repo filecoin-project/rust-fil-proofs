@@ -53,7 +53,7 @@ pub enum ProofSystem {
 }
 
 pub fn get_proof_system<Tree: MerkleTreeTrait>() -> ProofSystem {
-    let field = TypeId::of::<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>();
+    let field = TypeId::of::<Tree::Field>();
     let fr = TypeId::of::<Fr>();
     let fp = TypeId::of::<Fp>();
     let fq = TypeId::of::<Fq>();

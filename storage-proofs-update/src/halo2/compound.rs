@@ -1,13 +1,13 @@
-use filecoin_hashers::{Domain, Hasher, PoseidonArity};
-use halo2_proofs::{arithmetic::FieldExt, plonk::Error};
+use filecoin_hashers::{Hasher, PoseidonArity};
+use halo2_proofs::plonk::Error;
 use rand::rngs::OsRng;
 use storage_proofs_core::halo2::{
-    create_batch_proof, create_proof, verify_batch_proof, verify_proof, CompoundProof, FieldProvingCurves, Halo2Keypair, Halo2Proof,
+    create_batch_proof, create_proof, verify_batch_proof, verify_proof, CompoundProof, Halo2Field, Halo2Keypair, Halo2Proof,
 };
 
 use crate::{
     constants::{
-        partition_count, TreeDArity, TreeDDomain, TreeDHasher, TreeRDomain, TreeRHasher, SECTOR_SIZE_16_KIB,
+        partition_count, TreeDHasher, TreeRHasher, SECTOR_SIZE_16_KIB,
         SECTOR_SIZE_16_MIB, SECTOR_SIZE_1_KIB, SECTOR_SIZE_2_KIB, SECTOR_SIZE_32_GIB,
         SECTOR_SIZE_32_KIB, SECTOR_SIZE_4_KIB, SECTOR_SIZE_512_MIB, SECTOR_SIZE_64_GIB,
         SECTOR_SIZE_8_KIB, SECTOR_SIZE_8_MIB,
@@ -21,15 +21,12 @@ macro_rules! impl_compound_proof {
         $(
             impl<'a, F, U, V, W> CompoundProof<'a, F, $sector_nodes> for EmptySectorUpdate<F, U, V, W>
             where
-                F: FieldExt + FieldProvingCurves,
+                F: Halo2Field,
                 U: PoseidonArity<F>,
                 V: PoseidonArity<F>,
                 W: PoseidonArity<F>,
-                TreeDArity: PoseidonArity<F>,
-                TreeDHasher<F>: Hasher<Domain = TreeDDomain<F>>,
-                TreeDDomain<F>: Domain<Field = F>,
-                TreeRHasher<F>: Hasher<Domain = TreeRDomain<F>>,
-                TreeRDomain<F>: Domain<Field = F>,
+                TreeDHasher<F>: Hasher<Field = F>,
+                TreeRHasher<F>: Hasher<Field = F>,
             {
                 type Circuit = EmptySectorUpdateCircuit<F, U, V, W, $sector_nodes>;
 
@@ -37,8 +34,8 @@ macro_rules! impl_compound_proof {
                     setup_params: &Self::SetupParams,
                     vanilla_pub_inputs: &Self::PublicInputs,
                     vanilla_partition_proof: &Self::Proof,
-                    keypair: &Halo2Keypair<<F as FieldProvingCurves>::Affine, Self::Circuit>,
-                ) -> Result<Halo2Proof<<F as FieldProvingCurves>::Affine, Self::Circuit>, Error> {
+                    keypair: &Halo2Keypair<F::Affine, Self::Circuit>,
+                ) -> Result<Halo2Proof<F::Affine, Self::Circuit>, Error> {
                     assert_eq!(setup_params.sector_bytes >> 5, $sector_nodes as u64);
 
                     let pub_inputs =
@@ -61,8 +58,8 @@ macro_rules! impl_compound_proof {
                     setup_params: &Self::SetupParams,
                     vanilla_pub_inputs: &Self::PublicInputs,
                     vanilla_proofs: &[Self::Proof],
-                    keypair: &Halo2Keypair<<F as FieldProvingCurves>::Affine, Self::Circuit>,
-                ) -> Result<Vec<Halo2Proof<<F as FieldProvingCurves>::Affine, Self::Circuit>>, Error> {
+                    keypair: &Halo2Keypair<F::Affine, Self::Circuit>,
+                ) -> Result<Vec<Halo2Proof<F::Affine, Self::Circuit>>, Error> {
                     assert_eq!(setup_params.sector_bytes >> 5, $sector_nodes as u64);
                     let partition_count = partition_count($sector_nodes);
                     assert_eq!(vanilla_proofs.len(), partition_count);
@@ -89,8 +86,8 @@ macro_rules! impl_compound_proof {
                     setup_params: &Self::SetupParams,
                     vanilla_pub_inputs: &Self::PublicInputs,
                     vanilla_proofs: &[Self::Proof],
-                    keypair: &Halo2Keypair<<F as FieldProvingCurves>::Affine, Self::Circuit>,
-                ) -> Result<Halo2Proof<<F as FieldProvingCurves>::Affine, Self::Circuit>, Error> {
+                    keypair: &Halo2Keypair<F::Affine, Self::Circuit>,
+                ) -> Result<Halo2Proof<F::Affine, Self::Circuit>, Error> {
                     assert_eq!(setup_params.sector_bytes >> 5, $sector_nodes as u64);
 
                     let partition_count = partition_count($sector_nodes);
@@ -126,8 +123,8 @@ macro_rules! impl_compound_proof {
                 fn verify_partition(
                     setup_params: &Self::SetupParams,
                     vanilla_pub_inputs: &Self::PublicInputs,
-                    circ_proof: &Halo2Proof<<F as FieldProvingCurves>::Affine, Self::Circuit>,
-                    keypair: &Halo2Keypair<<F as FieldProvingCurves>::Affine, Self::Circuit>,
+                    circ_proof: &Halo2Proof<F::Affine, Self::Circuit>,
+                    keypair: &Halo2Keypair<F::Affine, Self::Circuit>,
                 ) -> Result<(), Error> {
                     assert_eq!(setup_params.sector_bytes >> 5, $sector_nodes as u64);
                     let pub_inputs =
@@ -139,8 +136,8 @@ macro_rules! impl_compound_proof {
                 fn verify_all_partitions(
                     setup_params: &Self::SetupParams,
                     vanilla_pub_inputs: &Self::PublicInputs,
-                    circ_proofs: &[Halo2Proof<<F as FieldProvingCurves>::Affine, Self::Circuit>],
-                    keypair: &Halo2Keypair<<F as FieldProvingCurves>::Affine, Self::Circuit>,
+                    circ_proofs: &[Halo2Proof<F::Affine, Self::Circuit>],
+                    keypair: &Halo2Keypair<F::Affine, Self::Circuit>,
                 ) -> Result<(), Error> {
                     assert_eq!(setup_params.sector_bytes >> 5, $sector_nodes as u64);
                     let partition_count = partition_count($sector_nodes);
@@ -164,8 +161,8 @@ macro_rules! impl_compound_proof {
                 fn batch_verify_all_partitions(
                     setup_params: &Self::SetupParams,
                     vanilla_pub_inputs: &Self::PublicInputs,
-                    batch_proof: &Halo2Proof<<F as FieldProvingCurves>::Affine, Self::Circuit>,
-                    keypair: &Halo2Keypair<<F as FieldProvingCurves>::Affine, Self::Circuit>,
+                    batch_proof: &Halo2Proof<F::Affine, Self::Circuit>,
+                    keypair: &Halo2Keypair<F::Affine, Self::Circuit>,
                 ) -> Result<(), Error> {
                     assert_eq!(setup_params.sector_bytes >> 5, $sector_nodes as u64);
 

@@ -4,7 +4,7 @@ use bellperson::{
 };
 use blstrs::Scalar as Fr;
 use ff::Field;
-use filecoin_hashers::{poseidon::PoseidonHasher, Domain, Hasher};
+use filecoin_hashers::{poseidon::PoseidonHasher, Groth16Hasher, Hasher};
 use fr32::fr_into_bytes;
 use merkletree::store::StoreConfig;
 use pretty_assertions::assert_eq;
@@ -36,8 +36,8 @@ fn test_drg_porep_compound_poseidon() {
 
 fn drg_porep_compound<Tree>()
 where
-    Tree: 'static + MerkleTreeTrait,
-    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+    Tree: 'static + MerkleTreeTrait<Field = Fr>,
+    Tree::Hasher: Groth16Hasher,
 {
     // femme::pretty::Logger::new()
     //     .start(log::LevelFilter::Trace)

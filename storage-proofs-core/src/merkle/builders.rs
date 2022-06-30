@@ -245,7 +245,7 @@ pub fn create_base_lcmerkle_tree<H, BaseTreeArity>(
 ) -> Result<LCMerkleTree<H, BaseTreeArity>>
 where
     H: Hasher,
-    BaseTreeArity: PoseidonArity<<H::Domain as Domain>::Field>,
+    BaseTreeArity: PoseidonArity<H::Field>,
 {
     trace!("create_base_lcmerkle_tree called with size {}", size);
     trace!(

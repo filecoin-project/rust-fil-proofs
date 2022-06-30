@@ -5,7 +5,7 @@ use std::marker::PhantomData;
 use std::slice::Iter;
 
 use anyhow::{ensure, Result};
-use filecoin_hashers::{Domain, Hasher, PoseidonArity};
+use filecoin_hashers::{Hasher, PoseidonArity};
 use generic_array::typenum::{Unsigned, U0};
 use merkletree::hash::Algorithm;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
@@ -15,9 +15,9 @@ use crate::drgraph::graph_height;
 /// Trait to abstract over the concept of Merkle Proof.
 pub trait MerkleProofTrait: Clone + Serialize + DeserializeOwned + Debug + Sync + Send {
     type Hasher: Hasher;
-    type Arity: PoseidonArity<<<Self::Hasher as Hasher>::Domain as Domain>::Field>;
-    type SubTreeArity: PoseidonArity<<<Self::Hasher as Hasher>::Domain as Domain>::Field>;
-    type TopTreeArity: PoseidonArity<<<Self::Hasher as Hasher>::Domain as Domain>::Field>;
+    type Arity: PoseidonArity<<Self::Hasher as Hasher>::Field>;
+    type SubTreeArity: PoseidonArity<<Self::Hasher as Hasher>::Field>;
+    type TopTreeArity: PoseidonArity<<Self::Hasher as Hasher>::Field>;
 
     /// Try to convert a merkletree proof into this structure.
     fn try_from_proof(
@@ -28,7 +28,7 @@ pub trait MerkleProofTrait: Clone + Serialize + DeserializeOwned + Debug + Sync 
     fn as_options(
         &self,
     ) -> Vec<(
-        Vec<Option<<<Self::Hasher as Hasher>::Domain as Domain>::Field>>,
+        Vec<Option<<Self::Hasher as Hasher>::Field>>,
         Option<usize>,
     )> {
         self.path()
@@ -46,9 +46,9 @@ pub trait MerkleProofTrait: Clone + Serialize + DeserializeOwned + Debug + Sync 
     fn into_options_with_leaf(
         self,
     ) -> (
-        Option<<<Self::Hasher as Hasher>::Domain as Domain>::Field>,
+        Option<<Self::Hasher as Hasher>::Field>,
         Vec<(
-            Vec<Option<<<Self::Hasher as Hasher>::Domain as Domain>::Field>>,
+            Vec<Option<<Self::Hasher as Hasher>::Field>>,
             Option<usize>,
         )>,
     ) {
@@ -69,7 +69,7 @@ pub trait MerkleProofTrait: Clone + Serialize + DeserializeOwned + Debug + Sync 
     fn as_pairs(
         &self,
     ) -> Vec<(
-        Vec<<<Self::Hasher as Hasher>::Domain as Domain>::Field>,
+        Vec<<Self::Hasher as Hasher>::Field>,
         usize,
     )> {
         self.path()
@@ -187,7 +187,7 @@ macro_rules! forward_method {
 pub struct InclusionPath<H, Arity>
 where
     H: Hasher,
-    Arity: PoseidonArity<<H::Domain as Domain>::Field>,
+    Arity: PoseidonArity<H::Field>,
 {
     #[serde(bound(
         serialize = "H::Domain: Serialize",
@@ -199,7 +199,7 @@ where
 impl<H, Arity> From<Vec<PathElement<H, Arity>>> for InclusionPath<H, Arity>
 where
     H: Hasher,
-    Arity: PoseidonArity<<H::Domain as Domain>::Field>,
+    Arity: PoseidonArity<H::Field>,
 {
     fn from(path: Vec<PathElement<H, Arity>>) -> Self {
         Self { path }
@@ -209,7 +209,7 @@ where
 impl<H, Arity> InclusionPath<H, Arity>
 where
     H: Hasher,
-    Arity: PoseidonArity<<H::Domain as Domain>::Field>,
+    Arity: PoseidonArity<H::Field>,
 {
     /// Calculate the root of this path, given the leaf as input.
     pub fn root(&self, leaf: H::Domain) -> H::Domain {
@@ -249,7 +249,7 @@ where
 pub struct PathElement<H, Arity>
 where
     H: Hasher,
-    Arity: PoseidonArity<<H::Domain as Domain>::Field>,
+    Arity: PoseidonArity<H::Field>,
 {
     #[serde(bound(
         serialize = "H::Domain: Serialize",
@@ -265,9 +265,9 @@ where
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MerkleProof<
     H: Hasher,
-    BaseArity: PoseidonArity<<H::Domain as Domain>::Field>,
-    SubTreeArity: PoseidonArity<<H::Domain as Domain>::Field> = U0,
-    TopTreeArity: PoseidonArity<<H::Domain as Domain>::Field> = U0,
+    BaseArity: PoseidonArity<H::Field>,
+    SubTreeArity: PoseidonArity<H::Field> = U0,
+    TopTreeArity: PoseidonArity<H::Field> = U0,
 > {
     #[serde(bound(
         serialize = "H::Domain: Serialize",
@@ -280,9 +280,9 @@ impl<H, Arity, SubTreeArity, TopTreeArity> MerkleProofTrait
     for MerkleProof<H, Arity, SubTreeArity, TopTreeArity>
 where
     H: Hasher,
-    Arity: PoseidonArity<<H::Domain as Domain>::Field>,
-    SubTreeArity: PoseidonArity<<H::Domain as Domain>::Field>,
-    TopTreeArity: PoseidonArity<<H::Domain as Domain>::Field>,
+    Arity: PoseidonArity<H::Field>,
+    SubTreeArity: PoseidonArity<H::Field>,
+    TopTreeArity: PoseidonArity<H::Field>,
 {
     type Hasher = H;
     type Arity = Arity;
@@ -335,9 +335,9 @@ where
 enum ProofData<H, BaseArity, SubTreeArity, TopTreeArity>
 where
     H: Hasher,
-    BaseArity: PoseidonArity<<H::Domain as Domain>::Field>,
-    SubTreeArity: PoseidonArity<<H::Domain as Domain>::Field>,
-    TopTreeArity: PoseidonArity<<H::Domain as Domain>::Field>,
+    BaseArity: PoseidonArity<H::Field>,
+    SubTreeArity: PoseidonArity<H::Field>,
+    TopTreeArity: PoseidonArity<H::Field>,
 {
     #[serde(bound(
         serialize = "H::Domain: Serialize",
@@ -360,7 +360,7 @@ where
 struct SingleProof<H, Arity>
 where
     H: Hasher,
-    Arity: PoseidonArity<<H::Domain as Domain>::Field>,
+    Arity: PoseidonArity<H::Field>,
 {
     /// Root of the merkle tree.
     #[serde(bound(
@@ -385,7 +385,7 @@ where
 impl<H, Arity> SingleProof<H, Arity>
 where
     H: Hasher,
-    Arity: PoseidonArity<<H::Domain as Domain>::Field>,
+    Arity: PoseidonArity<H::Field>,
 {
     pub fn new(path: InclusionPath<H, Arity>, root: H::Domain, leaf: H::Domain) -> Self {
         SingleProof { root, leaf, path }
@@ -396,8 +396,8 @@ where
 struct SubProof<H, BaseArity, SubTreeArity>
 where
     H: Hasher,
-    BaseArity: PoseidonArity<<H::Domain as Domain>::Field>,
-    SubTreeArity: PoseidonArity<<H::Domain as Domain>::Field>,
+    BaseArity: PoseidonArity<H::Field>,
+    SubTreeArity: PoseidonArity<H::Field>,
 {
     #[serde(bound(
         serialize = "H::Domain: Serialize",
@@ -426,8 +426,8 @@ where
 impl<H, BaseArity, SubTreeArity> SubProof<H, BaseArity, SubTreeArity>
 where
     H: Hasher,
-    BaseArity: PoseidonArity<<H::Domain as Domain>::Field>,
-    SubTreeArity: PoseidonArity<<H::Domain as Domain>::Field>,
+    BaseArity: PoseidonArity<H::Field>,
+    SubTreeArity: PoseidonArity<H::Field>,
 {
     pub fn new(
         base_proof: InclusionPath<H, BaseArity>,
@@ -448,9 +448,9 @@ where
 struct TopProof<H, BaseArity, SubTreeArity, TopTreeArity>
 where
     H: Hasher,
-    BaseArity: PoseidonArity<<H::Domain as Domain>::Field>,
-    SubTreeArity: PoseidonArity<<H::Domain as Domain>::Field>,
-    TopTreeArity: PoseidonArity<<H::Domain as Domain>::Field>,
+    BaseArity: PoseidonArity<H::Field>,
+    SubTreeArity: PoseidonArity<H::Field>,
+    TopTreeArity: PoseidonArity<H::Field>,
 {
     #[serde(bound(
         serialize = "H::Domain: Serialize",
@@ -484,9 +484,9 @@ where
 impl<H, BaseArity, SubTreeArity, TopTreeArity> TopProof<H, BaseArity, SubTreeArity, TopTreeArity>
 where
     H: Hasher,
-    BaseArity: PoseidonArity<<H::Domain as Domain>::Field>,
-    SubTreeArity: PoseidonArity<<H::Domain as Domain>::Field>,
-    TopTreeArity: PoseidonArity<<H::Domain as Domain>::Field>,
+    BaseArity: PoseidonArity<H::Field>,
+    SubTreeArity: PoseidonArity<H::Field>,
+    TopTreeArity: PoseidonArity<H::Field>,
 {
     pub fn new(
         base_proof: InclusionPath<H, BaseArity>,
@@ -508,9 +508,9 @@ where
 impl<H, BaseArity, SubTreeArity, TopTreeArity> MerkleProof<H, BaseArity, SubTreeArity, TopTreeArity>
 where
     H: Hasher,
-    BaseArity: PoseidonArity<<H::Domain as Domain>::Field>,
-    SubTreeArity: PoseidonArity<<H::Domain as Domain>::Field>,
-    TopTreeArity: PoseidonArity<<H::Domain as Domain>::Field>,
+    BaseArity: PoseidonArity<H::Field>,
+    SubTreeArity: PoseidonArity<H::Field>,
+    TopTreeArity: PoseidonArity<H::Field>,
 {
     pub fn new(n: usize) -> Self {
         let root = Default::default();
@@ -535,8 +535,8 @@ fn proof_to_single<H, Arity, TargetArity>(
 ) -> SingleProof<H, TargetArity>
 where
     H: Hasher,
-    Arity: PoseidonArity<<H::Domain as Domain>::Field>,
-    TargetArity: PoseidonArity<<H::Domain as Domain>::Field>,
+    Arity: PoseidonArity<H::Field>,
+    TargetArity: PoseidonArity<H::Field>,
 {
     let root = proof.root();
     let leaf = if let Some(sub_root) = sub_root {
@@ -559,7 +559,7 @@ fn extract_path<H, Arity>(
 ) -> InclusionPath<H, Arity>
 where
     H: Hasher,
-    Arity: PoseidonArity<<H::Domain as Domain>::Field>,
+    Arity: PoseidonArity<H::Field>,
 {
     let path = lemma[lemma_start_index..lemma.len() - 1]
         .chunks(Arity::to_usize() - 1)
@@ -577,7 +577,7 @@ where
 impl<H, Arity> SingleProof<H, Arity>
 where
     H: Hasher,
-    Arity: PoseidonArity<<H::Domain as Domain>::Field>,
+    Arity: PoseidonArity<H::Field>,
 {
     fn try_from_proof(p: merkletree::proof::Proof<<H as Hasher>::Domain, Arity>) -> Result<Self> {
         Ok(proof_to_single(&p, 1, None))
@@ -615,8 +615,8 @@ where
 impl<H, Arity, SubTreeArity> SubProof<H, Arity, SubTreeArity>
 where
     H: Hasher,
-    Arity: PoseidonArity<<H::Domain as Domain>::Field>,
-    SubTreeArity: PoseidonArity<<H::Domain as Domain>::Field>,
+    Arity: PoseidonArity<H::Field>,
+    SubTreeArity: PoseidonArity<H::Field>,
 {
     fn try_from_proof(p: merkletree::proof::Proof<<H as Hasher>::Domain, Arity>) -> Result<Self> {
         ensure!(
@@ -680,9 +680,9 @@ where
 impl<H, Arity, SubTreeArity, TopTreeArity> TopProof<H, Arity, SubTreeArity, TopTreeArity>
 where
     H: Hasher,
-    Arity: PoseidonArity<<H::Domain as Domain>::Field>,
-    SubTreeArity: PoseidonArity<<H::Domain as Domain>::Field>,
-    TopTreeArity: PoseidonArity<<H::Domain as Domain>::Field>,
+    Arity: PoseidonArity<H::Field>,
+    SubTreeArity: PoseidonArity<H::Field>,
+    TopTreeArity: PoseidonArity<H::Field>,
 {
     fn try_from_proof(p: merkletree::proof::Proof<<H as Hasher>::Domain, Arity>) -> Result<Self> {
         ensure!(

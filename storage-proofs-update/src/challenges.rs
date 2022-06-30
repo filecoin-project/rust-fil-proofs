@@ -1,10 +1,10 @@
 use ff::PrimeField;
-use filecoin_hashers::{Domain, FieldArity};
+use filecoin_hashers::{FieldArity, Hasher};
 use generic_array::typenum::U2;
 use neptune::poseidon::Poseidon;
 
 use crate::{
-    constants::{challenge_count, partition_count, TreeRDomain, POSEIDON_CONSTANTS_GEN_RANDOMNESS},
+    constants::{challenge_count, partition_count, TreeRDomain, TreeRHasher, POSEIDON_CONSTANTS_GEN_RANDOMNESS},
     vanilla::rhos,
 };
 
@@ -17,7 +17,7 @@ pub fn gen_partition_challenges<F>(
 ) -> Vec<u32>
 where
     F: PrimeField,
-    TreeRDomain<F>: Domain<Field = F>,
+    TreeRHasher<F>: Hasher<Field = F>,
 {
     Challenges::new(sector_nodes, comm_r_new, k).collect()
 }
@@ -31,7 +31,7 @@ pub fn gen_partition_rhos<F>(
 ) -> Vec<F>
 where
     F: PrimeField,
-    TreeRDomain<F>: Domain<Field = F>,
+    TreeRHasher<F>: Hasher<Field = F>,
 {
     let rhos = rhos(h, phi);
     let challenge_bit_len = sector_nodes.trailing_zeros() as usize;
@@ -58,7 +58,7 @@ where
 pub struct Challenges<F>
 where
     F: PrimeField,
-    TreeRDomain<F>: Domain<Field = F>,
+    TreeRHasher<F>: Hasher<Field = F>,
 {
     comm_r_new: TreeRDomain<F>,
     // The partition-index bits which are appended onto each challenges random bits.
@@ -79,7 +79,7 @@ where
 impl<F> Challenges<F>
 where
     F: PrimeField,
-    TreeRDomain<F>: Domain<Field = F>,
+    TreeRHasher<F>: Hasher<Field = F>,
 {
     pub fn new(sector_nodes: usize, comm_r_new: TreeRDomain<F>, k: usize) -> Self {
         let partitions = partition_count(sector_nodes);
@@ -135,7 +135,7 @@ where
 impl<F> Iterator for Challenges<F>
 where
     F: PrimeField,
-    TreeRDomain<F>: Domain<Field = F>,
+    TreeRHasher<F>: Hasher<Field = F>,
 {
     // All sector-sizes have challenges that fit within 32 bits.
     type Item = u32;
@@ -299,7 +299,7 @@ mod tests {
 
         for ((sector_nodes, k), challenges_expected) in test_vectors.into_iter() {
             assert_eq!(
-                Challenges::new(sector_nodes, comm_r_new, k)
+                Challenges::<Fr>::new(sector_nodes, comm_r_new, k)
                     .take(5)
                     .collect::<Vec<u32>>(),
                 challenges_expected,
@@ -322,7 +322,7 @@ mod tests {
             let get_partition_shr = sector_nodes.trailing_zeros() - partitions.trailing_zeros();
 
             for k in 0..partitions {
-                let challenges: Vec<u32> = Challenges::new(sector_nodes, comm_r_new, k).collect();
+                let challenges: Vec<u32> = Challenges::<Fr>::new(sector_nodes, comm_r_new, k).collect();
                 assert_eq!(challenges.len(), partition_challenges);
 
                 let k = k as u32;

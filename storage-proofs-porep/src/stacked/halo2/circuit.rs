@@ -11,8 +11,8 @@ use fil_halo2_gadgets::{
     AdviceIter, ColumnBuilder,
 };
 use filecoin_hashers::{
-    poseidon::PoseidonHasher, sha256::Sha256Hasher, Domain, FieldArity, HaloHasher,
-    HashInstructions, Hasher, PoseidonArity, POSEIDON_CONSTANTS,
+    poseidon::PoseidonHasher, sha256::Sha256Hasher, get_poseidon_constants, Halo2Hasher,
+    HashInstructions, Hasher, PoseidonArity,
 };
 use generic_array::typenum::U2;
 use halo2_proofs::{
@@ -77,10 +77,8 @@ trait CircuitParams<const SECTOR_NODES: usize> {
 pub struct PublicInputs<F, const SECTOR_NODES: usize>
 where
     F: FieldExt,
-    Sha256Hasher<F>: Hasher,
-    <Sha256Hasher<F> as Hasher>::Domain: Domain<Field = F>,
-    PoseidonHasher<F>: Hasher,
-    <PoseidonHasher<F> as Hasher>::Domain: Domain<Field = F>,
+    Sha256Hasher<F>: Hasher<Field = F>,
+    PoseidonHasher<F>: Hasher<Field = F>,
 {
     pub replica_id: Option<F>,
     pub comm_d: Option<F>,
@@ -92,10 +90,8 @@ where
 impl<F, const SECTOR_NODES: usize> PublicInputs<F, SECTOR_NODES>
 where
     F: FieldExt,
-    Sha256Hasher<F>: Hasher,
-    <Sha256Hasher<F> as Hasher>::Domain: Domain<Field = F>,
-    PoseidonHasher<F>: Hasher,
-    <PoseidonHasher<F> as Hasher>::Domain: Domain<Field = F>,
+    Sha256Hasher<F>: Hasher<Field = F>,
+    PoseidonHasher<F>: Hasher<Field = F>,
 {
     pub fn from(
         setup_params: SetupParams,
@@ -206,10 +202,8 @@ where
     U: PoseidonArity<F>,
     V: PoseidonArity<F>,
     W: PoseidonArity<F>,
-    Sha256Hasher<F>: Hasher,
-    <Sha256Hasher<F> as Hasher>::Domain: Domain<Field = F>,
-    PoseidonHasher<F>: Hasher,
-    <PoseidonHasher<F> as Hasher>::Domain: Domain<Field = F>,
+    Sha256Hasher<F>: Hasher<Field = F>,
+    PoseidonHasher<F>: Hasher<Field = F>,
 {
     pub column: Vec<Option<F>>,
     pub path_c: Vec<Vec<Option<F>>>,
@@ -222,10 +216,8 @@ where
     U: PoseidonArity<F>,
     V: PoseidonArity<F>,
     W: PoseidonArity<F>,
-    Sha256Hasher<F>: Hasher,
-    <Sha256Hasher<F> as Hasher>::Domain: Domain<Field = F>,
-    PoseidonHasher<F>: Hasher,
-    <PoseidonHasher<F> as Hasher>::Domain: Domain<Field = F>,
+    Sha256Hasher<F>: Hasher<Field = F>,
+    PoseidonHasher<F>: Hasher<Field = F>,
 {
     pub fn empty() -> Self {
         ParentProof {
@@ -243,10 +235,8 @@ where
     U: PoseidonArity<F>,
     V: PoseidonArity<F>,
     W: PoseidonArity<F>,
-    Sha256Hasher<F>: Hasher,
-    <Sha256Hasher<F> as Hasher>::Domain: Domain<Field = F>,
-    PoseidonHasher<F>: Hasher,
-    <PoseidonHasher<F> as Hasher>::Domain: Domain<Field = F>,
+    Sha256Hasher<F>: Hasher<Field = F>,
+    PoseidonHasher<F>: Hasher<Field = F>,
 {
     pub leaf_d: Option<F>,
     pub path_d: Vec<Vec<Option<F>>>,
@@ -256,20 +246,14 @@ where
     pub exp_parent_proofs: [ParentProof<F, U, V, W, SECTOR_NODES>; EXP_PARENTS],
 }
 
-impl<F, U, V, W, TreeR, const SECTOR_NODES: usize>
+impl<F, TreeR, const SECTOR_NODES: usize>
     From<&VanillaChallengeProof<TreeR, Sha256Hasher<F>>>
-    for ChallengeProof<F, U, V, W, SECTOR_NODES>
+    for ChallengeProof<F, TreeR::Arity, TreeR::SubTreeArity, TreeR::TopTreeArity, SECTOR_NODES>
 where
     F: FieldExt,
-    U: PoseidonArity<F>,
-    V: PoseidonArity<F>,
-    W: PoseidonArity<F>,
-    Sha256Hasher<F>: Hasher,
-    <Sha256Hasher<F> as Hasher>::Domain: Domain<Field = F>,
-    PoseidonHasher<F>: Hasher,
-    <PoseidonHasher<F> as Hasher>::Domain: Domain<Field = F>,
-    TreeR:
-        MerkleTreeTrait<Hasher = PoseidonHasher<F>, Arity = U, SubTreeArity = V, TopTreeArity = W>,
+    TreeR: MerkleTreeTrait<Field = F, Hasher = PoseidonHasher<F>>,
+    Sha256Hasher<F>: Hasher<Field = F>,
+    PoseidonHasher<F>: Hasher<Field = F>,
 {
     #[allow(clippy::unwrap_used)]
     fn from(challenge_proof: &VanillaChallengeProof<TreeR, Sha256Hasher<F>>) -> Self {
@@ -323,7 +307,7 @@ where
                     _tree_r: PhantomData,
                 }
             })
-            .collect::<Vec<ParentProof<F, U, V, W, SECTOR_NODES>>>()
+            .collect::<Vec<ParentProof<F, TreeR::Arity, TreeR::SubTreeArity, TreeR::TopTreeArity, SECTOR_NODES>>>()
             .try_into()
             .unwrap();
 
@@ -352,7 +336,7 @@ where
                     _tree_r: PhantomData,
                 }
             })
-            .collect::<Vec<ParentProof<F, U, V, W, SECTOR_NODES>>>()
+            .collect::<Vec<ParentProof<F, TreeR::Arity, TreeR::SubTreeArity, TreeR::TopTreeArity, SECTOR_NODES>>>()
             .try_into()
             .unwrap();
 
@@ -373,10 +357,8 @@ where
     U: PoseidonArity<F>,
     V: PoseidonArity<F>,
     W: PoseidonArity<F>,
-    Sha256Hasher<F>: Hasher,
-    <Sha256Hasher<F> as Hasher>::Domain: Domain<Field = F>,
-    PoseidonHasher<F>: Hasher,
-    <PoseidonHasher<F> as Hasher>::Domain: Domain<Field = F>,
+    Sha256Hasher<F>: Hasher<Field = F>,
+    PoseidonHasher<F>: Hasher<Field = F>,
 {
     pub fn empty() -> Self {
         let challenge_bit_len = SECTOR_NODES.trailing_zeros() as usize;
@@ -417,10 +399,8 @@ where
     U: PoseidonArity<F>,
     V: PoseidonArity<F>,
     W: PoseidonArity<F>,
-    Sha256Hasher<F>: Hasher,
-    <Sha256Hasher<F> as Hasher>::Domain: Domain<Field = F>,
-    PoseidonHasher<F>: Hasher,
-    <PoseidonHasher<F> as Hasher>::Domain: Domain<Field = F>,
+    Sha256Hasher<F>: Hasher<Field = F>,
+    PoseidonHasher<F>: Hasher<Field = F>,
 {
     pub comm_c: Option<F>,
     // `root_r` is `comm_r_last`.
@@ -428,19 +408,13 @@ where
     pub challenge_proofs: Vec<ChallengeProof<F, U, V, W, SECTOR_NODES>>,
 }
 
-impl<F, U, V, W, TreeR, const SECTOR_NODES: usize>
-    From<&VanillaPartitionProof<TreeR, Sha256Hasher<F>>> for PrivateInputs<F, U, V, W, SECTOR_NODES>
+impl<F, TreeR, const SECTOR_NODES: usize> From<&VanillaPartitionProof<TreeR, Sha256Hasher<F>>>
+    for PrivateInputs<F, TreeR::Arity, TreeR::SubTreeArity, TreeR::TopTreeArity, SECTOR_NODES>
 where
     F: FieldExt,
-    U: PoseidonArity<F>,
-    V: PoseidonArity<F>,
-    W: PoseidonArity<F>,
-    Sha256Hasher<F>: Hasher,
-    <Sha256Hasher<F> as Hasher>::Domain: Domain<Field = F>,
-    PoseidonHasher<F>: Hasher,
-    <PoseidonHasher<F> as Hasher>::Domain: Domain<Field = F>,
-    TreeR:
-        MerkleTreeTrait<Hasher = PoseidonHasher<F>, Arity = U, SubTreeArity = V, TopTreeArity = W>,
+    TreeR: MerkleTreeTrait<Field = F, Hasher = PoseidonHasher<F>>,
+    Sha256Hasher<F>: Hasher<Field = F>,
+    PoseidonHasher<F>: Hasher<Field = F>,
 {
     fn from(partition_proof: &VanillaPartitionProof<TreeR, Sha256Hasher<F>>) -> Self {
         PrivateInputs {
@@ -451,19 +425,13 @@ where
     }
 }
 
-impl<F, U, V, W, TreeR, const SECTOR_NODES: usize>
-    From<VanillaPartitionProof<TreeR, Sha256Hasher<F>>> for PrivateInputs<F, U, V, W, SECTOR_NODES>
+impl<F, TreeR, const SECTOR_NODES: usize> From<VanillaPartitionProof<TreeR, Sha256Hasher<F>>>
+    for PrivateInputs<F, TreeR::Arity, TreeR::SubTreeArity, TreeR::TopTreeArity, SECTOR_NODES>
 where
     F: FieldExt,
-    U: PoseidonArity<F>,
-    V: PoseidonArity<F>,
-    W: PoseidonArity<F>,
-    Sha256Hasher<F>: Hasher,
-    <Sha256Hasher<F> as Hasher>::Domain: Domain<Field = F>,
-    PoseidonHasher<F>: Hasher,
-    <PoseidonHasher<F> as Hasher>::Domain: Domain<Field = F>,
-    TreeR:
-        MerkleTreeTrait<Hasher = PoseidonHasher<F>, Arity = U, SubTreeArity = V, TopTreeArity = W>,
+    TreeR: MerkleTreeTrait<Field = F, Hasher = PoseidonHasher<F>>,
+    Sha256Hasher<F>: Hasher<Field = F>,
+    PoseidonHasher<F>: Hasher<Field = F>,
 {
     fn from(partition_proof: VanillaPartitionProof<TreeR, Sha256Hasher<F>>) -> Self {
         Self::from(&partition_proof)
@@ -477,36 +445,25 @@ where
     U: PoseidonArity<F>,
     V: PoseidonArity<F>,
     W: PoseidonArity<F>,
-    Sha256Hasher<F>: Hasher,
-    <Sha256Hasher<F> as Hasher>::Domain: Domain<Field = F>,
-    PoseidonHasher<F>: Hasher,
-    <PoseidonHasher<F> as Hasher>::Domain: Domain<Field = F>,
+    Sha256Hasher<F>: Hasher<Field = F>,
+    PoseidonHasher<F>: Hasher<Field = F>,
 {
     // Decomposes a challenge into 32 bits.
     uint32: UInt32Config<F>,
     // Converts a field element into eight `u32` words having sha256 bit order.
     sha256_words: Sha256WordsConfig<F>,
     // Computes CommR.
-    poseidon_2: <PoseidonHasher<F> as HaloHasher<U2>>::Config,
+    poseidon_2: <PoseidonHasher<F> as Halo2Hasher<U2>>::Config,
     // Computes a column digest.
     column_hasher: ColumnHasherConfig<F, SECTOR_NODES>,
     // TreeD Merkle proof.
-    tree_d: (
-        <Sha256Hasher<F> as HaloHasher<U2>>::Config,
-        InsertConfig<F, U2>,
-    ),
+    tree_d: (<Sha256Hasher<F> as Halo2Hasher<U2>>::Config, InsertConfig<F, U2>),
     // TreeR Merkle proof.
     tree_r: (
-        <PoseidonHasher<F> as HaloHasher<U>>::Config,
+        <PoseidonHasher<F> as Halo2Hasher<U>>::Config,
         InsertConfig<F, U>,
-        Option<(
-            <PoseidonHasher<F> as HaloHasher<V>>::Config,
-            InsertConfig<F, V>,
-        )>,
-        Option<(
-            <PoseidonHasher<F> as HaloHasher<W>>::Config,
-            InsertConfig<F, W>,
-        )>,
+        Option<(<PoseidonHasher<F> as Halo2Hasher<V>>::Config, InsertConfig<F, V>)>,
+        Option<(<PoseidonHasher<F> as Halo2Hasher<W>>::Config, InsertConfig<F, W>)>,
     ),
     // Computes a challenge's layer label.
     labeling: LabelingConfig<F, SECTOR_NODES>,
@@ -524,10 +481,8 @@ where
     U: PoseidonArity<F>,
     V: PoseidonArity<F>,
     W: PoseidonArity<F>,
-    Sha256Hasher<F>: Hasher,
-    <Sha256Hasher<F> as Hasher>::Domain: Domain<Field = F>,
-    PoseidonHasher<F>: Hasher,
-    <PoseidonHasher<F> as Hasher>::Domain: Domain<Field = F>,
+    Sha256Hasher<F>: Hasher<Field = F>,
+    PoseidonHasher<F>: Hasher<Field = F>,
 {
     pub pub_inputs: PublicInputs<F, SECTOR_NODES>,
     pub priv_inputs: PrivateInputs<F, U, V, W, SECTOR_NODES>,
@@ -540,10 +495,8 @@ where
     U: PoseidonArity<F>,
     V: PoseidonArity<F>,
     W: PoseidonArity<F>,
-    Sha256Hasher<F>: Hasher,
-    <Sha256Hasher<F> as Hasher>::Domain: Domain<Field = F>,
-    PoseidonHasher<F>: Hasher,
-    <PoseidonHasher<F> as Hasher>::Domain: Domain<Field = F>,
+    Sha256Hasher<F>: Hasher<Field = F>,
+    PoseidonHasher<F>: Hasher<Field = F>,
 {
 }
 
@@ -553,10 +506,8 @@ where
     U: PoseidonArity<F>,
     V: PoseidonArity<F>,
     W: PoseidonArity<F>,
-    Sha256Hasher<F>: Hasher,
-    <Sha256Hasher<F> as Hasher>::Domain: Domain<Field = F>,
-    PoseidonHasher<F>: Hasher,
-    <PoseidonHasher<F> as Hasher>::Domain: Domain<Field = F>,
+    Sha256Hasher<F>: Hasher<Field = F>,
+    PoseidonHasher<F>: Hasher<Field = F>,
 {
     type Config = SdrPorepConfig<F, U, V, W, SECTOR_NODES>;
     type FloorPlanner = SimpleFloorPlanner;
@@ -587,17 +538,17 @@ where
             .with_chip::<UInt32Chip<F>>()
             .with_chip::<Sha256WordsChip<F>>()
             .with_chip::<ColumnHasherChip<F, SECTOR_NODES>>()
-            .with_chip::<<Sha256Hasher<F> as HaloHasher<U2>>::Chip>()
+            .with_chip::<<Sha256Hasher<F> as Halo2Hasher<U2>>::Chip>()
             // Only use the base arity because it is the largest TreeR arity and requires the
             // greatest number of columns.
-            .with_chip::<<PoseidonHasher<F> as HaloHasher<U>>::Chip>()
+            .with_chip::<<PoseidonHasher<F> as Halo2Hasher<U>>::Chip>()
             .with_chip::<InsertChip<F, U>>()
             .create_columns(meta);
 
         let uint32 = UInt32Chip::configure(meta, advice_eq[..9].try_into().unwrap());
         let sha256_words = Sha256WordsChip::configure(meta, advice_eq[..9].try_into().unwrap());
 
-        let poseidon_2 = <PoseidonHasher<F> as HaloHasher<U2>>::configure(
+        let poseidon_2 = <PoseidonHasher<F> as Halo2Hasher<U2>>::configure(
             meta,
             &advice_eq,
             &advice_neq,
@@ -612,7 +563,7 @@ where
             _ => unreachable!(),
         };
 
-        let sha256 = <Sha256Hasher<F> as HaloHasher<U2>>::configure(
+        let sha256 = <Sha256Hasher<F> as Halo2Hasher<U2>>::configure(
             meta,
             &advice_eq,
             &advice_neq,
@@ -633,7 +584,7 @@ where
             let insert_base = unsafe { mem::transmute(insert_2.clone()) };
             (poseidon_base, insert_base)
         } else {
-            let poseidon_base = <PoseidonHasher<F> as HaloHasher<U>>::configure(
+            let poseidon_base = <PoseidonHasher<F> as Halo2Hasher<U>>::configure(
                 meta,
                 &advice_eq,
                 &advice_neq,
@@ -657,7 +608,7 @@ where
             let insert_sub = unsafe { mem::transmute(insert_base.clone()) };
             Some((poseidon_sub, insert_sub))
         } else {
-            let poseidon_sub = <PoseidonHasher<F> as HaloHasher<V>>::configure(
+            let poseidon_sub = <PoseidonHasher<F> as Halo2Hasher<V>>::configure(
                 meta,
                 &advice_eq,
                 &advice_neq,
@@ -687,7 +638,7 @@ where
             let insert_top = unsafe { mem::transmute(insert_sub.clone()) };
             Some((poseidon_top, insert_top))
         } else {
-            let poseidon_top = <PoseidonHasher<F> as HaloHasher<W>>::configure(
+            let poseidon_top = <PoseidonHasher<F> as Halo2Hasher<W>>::configure(
                 meta,
                 &advice_eq,
                 &advice_neq,
@@ -750,34 +701,34 @@ where
             pi: pi_col,
         } = config;
 
-        <Sha256Hasher<F> as HaloHasher<U2>>::load(&mut layouter, &sha256_config)?;
+        <Sha256Hasher<F> as Halo2Hasher<U2>>::load(&mut layouter, &sha256_config)?;
 
         let uint32_chip = UInt32Chip::construct(uint32_config);
         let sha256_words_chip = Sha256WordsChip::construct(sha256_words_config);
-        let poseidon_2_chip = <PoseidonHasher<F> as HaloHasher<U2>>::construct(poseidon_2_config);
+        let poseidon_2_chip = <PoseidonHasher<F> as Halo2Hasher<U2>>::construct(poseidon_2_config);
         let column_hasher_chip = ColumnHasherChip::construct(column_hasher_config);
         let labeling_chip = LabelingChip::construct(labeling_config);
         let encoding_chip = EncodingChip::construct(encoding_config);
 
         let tree_d_merkle_chip = {
-            let sha256_chip = <Sha256Hasher<F> as HaloHasher<U2>>::construct(sha256_config);
+            let sha256_chip = <Sha256Hasher<F> as Halo2Hasher<U2>>::construct(sha256_config);
             let insert_2_chip = InsertChip::construct(insert_2_config);
             MerkleChip::<Sha256Hasher<F>, U2>::with_subchips(sha256_chip, insert_2_chip, None, None)
         };
 
         let tree_r_merkle_chip = {
             let poseidon_base_chip =
-                <PoseidonHasher<F> as HaloHasher<U>>::construct(poseidon_base_config);
+                <PoseidonHasher<F> as Halo2Hasher<U>>::construct(poseidon_base_config);
             let insert_base_chip = InsertChip::construct(insert_base_config);
             let sub_chips = sub_config.map(|(poseidon_sub, insert_sub)| {
                 (
-                    <PoseidonHasher<F> as HaloHasher<V>>::construct(poseidon_sub),
+                    <PoseidonHasher<F> as Halo2Hasher<V>>::construct(poseidon_sub),
                     InsertChip::construct(insert_sub),
                 )
             });
             let top_chips = top_config.map(|(poseidon_top, insert_top)| {
                 (
-                    <PoseidonHasher<F> as HaloHasher<W>>::construct(poseidon_top),
+                    <PoseidonHasher<F> as Halo2Hasher<W>>::construct(poseidon_top),
                     InsertChip::construct(insert_top),
                 )
             });
@@ -845,7 +796,7 @@ where
         let comm_r = poseidon_2_chip.hash(
             layouter.namespace(|| "calculate comm_r"),
             &[comm_c.clone(), root_r.clone()],
-            POSEIDON_CONSTANTS.get::<FieldArity<F, U2>>().unwrap(),
+            get_poseidon_constants::<F, U2>(),
         )?;
         layouter.constrain_instance(comm_r.cell(), pi_col, Self::COMM_R_ROW)?;
 
@@ -1122,10 +1073,8 @@ where
     U: PoseidonArity<F>,
     V: PoseidonArity<F>,
     W: PoseidonArity<F>,
-    Sha256Hasher<F>: Hasher,
-    <Sha256Hasher<F> as Hasher>::Domain: Domain<Field = F>,
-    PoseidonHasher<F>: Hasher,
-    <PoseidonHasher<F> as Hasher>::Domain: Domain<Field = F>,
+    Sha256Hasher<F>: Hasher<Field = F>,
+    PoseidonHasher<F>: Hasher<Field = F>,
 {
     fn k(&self) -> u32 {
         match SECTOR_NODES {
@@ -1146,10 +1095,8 @@ where
     U: PoseidonArity<F>,
     V: PoseidonArity<F>,
     W: PoseidonArity<F>,
-    Sha256Hasher<F>: Hasher,
-    <Sha256Hasher<F> as Hasher>::Domain: Domain<Field = F>,
-    PoseidonHasher<F>: Hasher,
-    <PoseidonHasher<F> as Hasher>::Domain: Domain<Field = F>,
+    Sha256Hasher<F>: Hasher<Field = F>,
+    PoseidonHasher<F>: Hasher<Field = F>,
 {
     // Same as `Circuit::without_witnesses` except this associated function does not take `&self`.
     pub fn blank_circuit() -> Self {

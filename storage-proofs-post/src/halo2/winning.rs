@@ -1,9 +1,7 @@
 use std::convert::TryInto;
 use std::ops::RangeInclusive;
 
-use filecoin_hashers::{
-    poseidon::PoseidonHasher, Domain, FieldArity, Hasher, PoseidonArity, POSEIDON_CONSTANTS,
-};
+use filecoin_hashers::{get_poseidon_constants, poseidon::PoseidonHasher, Hasher, PoseidonArity};
 use generic_array::typenum::U2;
 use halo2_proofs::{
     arithmetic::FieldExt,
@@ -53,8 +51,7 @@ pub fn generate_challenges<F: FieldExt, const SECTOR_NODES: usize>(
 pub struct PublicInputs<F, const SECTOR_NODES: usize>
 where
     F: FieldExt,
-    PoseidonHasher<F>: Hasher,
-    <PoseidonHasher<F> as Hasher>::Domain: Domain<Field = F>,
+    PoseidonHasher<F>: Hasher<Field = F>,
 {
     pub comm_r: Option<F>,
     pub challenges: [Option<u32>; CHALLENGE_COUNT],
@@ -65,8 +62,7 @@ impl<F, const SECTOR_NODES: usize>
     for PublicInputs<F, SECTOR_NODES>
 where
     F: FieldExt,
-    PoseidonHasher<F>: Hasher,
-    <PoseidonHasher<F> as Hasher>::Domain: Domain<Field = F>,
+    PoseidonHasher<F>: Hasher<Field = F>,
 {
     #[allow(clippy::unwrap_used)]
     fn from(
@@ -98,8 +94,7 @@ where
 impl<F, const SECTOR_NODES: usize> PublicInputs<F, SECTOR_NODES>
 where
     F: FieldExt,
-    PoseidonHasher<F>: Hasher,
-    <PoseidonHasher<F> as Hasher>::Domain: Domain<Field = F>,
+    PoseidonHasher<F>: Hasher<Field = F>,
 {
     pub fn empty() -> Self {
         PublicInputs {
@@ -130,8 +125,7 @@ where
     U: PoseidonArity<F>,
     V: PoseidonArity<F>,
     W: PoseidonArity<F>,
-    PoseidonHasher<F>: Hasher,
-    <PoseidonHasher<F> as Hasher>::Domain: Domain<Field = F>,
+    PoseidonHasher<F>: Hasher<Field = F>,
 {
     pub pub_inputs: PublicInputs<F, SECTOR_NODES>,
     pub priv_inputs: PrivateInputs<F, U, V, W, SECTOR_NODES>,
@@ -144,8 +138,7 @@ where
     U: PoseidonArity<F>,
     V: PoseidonArity<F>,
     W: PoseidonArity<F>,
-    PoseidonHasher<F>: Hasher,
-    <PoseidonHasher<F> as Hasher>::Domain: Domain<Field = F>,
+    PoseidonHasher<F>: Hasher<Field = F>,
 {
     type Config = PostConfig<F, U, V, W, SECTOR_NODES>;
     type FloorPlanner = SimpleFloorPlanner;
@@ -201,7 +194,7 @@ where
         let comm_r = poseidon_2_chip.hash(
             layouter.namespace(|| "calculate comm_r"),
             &[comm_c, root_r.clone()],
-            POSEIDON_CONSTANTS.get::<FieldArity<F, U2>>().unwrap(),
+            get_poseidon_constants::<F, U2>(),
         )?;
         layouter.constrain_instance(comm_r.cell(), pi_col, COMM_R_ROW)?;
 
@@ -246,8 +239,7 @@ where
     U: PoseidonArity<F>,
     V: PoseidonArity<F>,
     W: PoseidonArity<F>,
-    PoseidonHasher<F>: Hasher,
-    <PoseidonHasher<F> as Hasher>::Domain: Domain<Field = F>,
+    PoseidonHasher<F>: Hasher<Field = F>,
 {
     fn k(&self) -> u32 {
         use crate::halo2::constants::*;
@@ -268,8 +260,7 @@ where
     U: PoseidonArity<F>,
     V: PoseidonArity<F>,
     W: PoseidonArity<F>,
-    PoseidonHasher<F>: Hasher,
-    <PoseidonHasher<F> as Hasher>::Domain: Domain<Field = F>,
+    PoseidonHasher<F>: Hasher<Field = F>,
 {
     pub fn blank_circuit() -> Self {
         WinningPostCircuit {

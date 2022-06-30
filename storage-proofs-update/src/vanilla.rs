@@ -139,7 +139,12 @@ impl PublicParams {
 }
 
 #[derive(Clone, Serialize, Deserialize)]
-pub struct PublicInputs<F> {
+pub struct PublicInputs<F>
+where
+    // Ensure that `TreeDDomain<F>` and `TreeRDomain<F>` implement `Domain`.
+    TreeDHasher<F>: Hasher<Field = F>,
+    TreeRHasher<F>: Hasher<Field = F>,
+{
     pub k: usize,
     #[serde(bound(serialize = "TreeRDomain<F>: Serialize"))]
     #[serde(bound(deserialize = "TreeRDomain<F>: Deserialize<'de>"))]
@@ -156,7 +161,11 @@ pub struct PublicInputs<F> {
     pub h: usize,
 }
 
-pub struct PrivateInputs<F> {
+pub struct PrivateInputs<F>
+where
+    // Ensure that `TreeRDomain<F>` implements `Domain`.
+    TreeRHasher<F>: Hasher<Field = F>,
+{
     pub comm_c: TreeRDomain<F>,
     pub tree_r_old_config: StoreConfig,
     // Path to old replica.
@@ -171,13 +180,11 @@ pub struct PrivateInputs<F> {
 pub struct ChallengeProof<F, U, V, W>
 where
     F: PrimeField,
-    TreeDHasher<F>: Hasher,
-    TreeRHasher<F>: Hasher,
-    <TreeDHasher<F> as Hasher>::Domain: Domain<Field = F>,
-    <TreeRHasher<F> as Hasher>::Domain: Domain<Field = F>,
     U: PoseidonArity<F>,
     V: PoseidonArity<F>,
     W: PoseidonArity<F>,
+    TreeDHasher<F>: Hasher<Field = F>,
+    TreeRHasher<F>: Hasher<Field = F>,
 {
     #[serde(bound(serialize = "MerkleProof<TreeRHasher<F>, U, V, W>: Serialize"))]
     #[serde(bound(deserialize = "MerkleProof<TreeRHasher<F>, U, V, W>: Deserialize<'de>"))]
@@ -193,13 +200,11 @@ where
 impl<F, U, V, W> ChallengeProof<F, U, V, W>
 where
     F: PrimeField,
-    TreeDHasher<F>: Hasher<Domain = TreeDDomain<F>>,
-    TreeRHasher<F>: Hasher<Domain = TreeRDomain<F>>,
-    TreeDDomain<F>: Domain<Field = F>,
-    TreeRDomain<F>: Domain<Field = F>,
     U: PoseidonArity<F>,
     V: PoseidonArity<F>,
     W: PoseidonArity<F>,
+    TreeDHasher<F>: Hasher<Field = F>,
+    TreeRHasher<F>: Hasher<Field = F>,
 {
     pub fn verify_merkle_proofs(
         &self,
@@ -225,13 +230,11 @@ where
 pub struct PartitionProof<F, U, V, W>
 where
     F: PrimeField,
-    TreeDHasher<F>: Hasher,
-    TreeRHasher<F>: Hasher,
-    <TreeDHasher<F> as Hasher>::Domain: Domain<Field = F>,
-    <TreeRHasher<F> as Hasher>::Domain: Domain<Field = F>,
     U: PoseidonArity<F>,
     V: PoseidonArity<F>,
     W: PoseidonArity<F>,
+    TreeDHasher<F>: Hasher<Field = F>,
+    TreeRHasher<F>: Hasher<Field = F>,
 {
     #[serde(bound(serialize = "TreeRDomain<F>: Serialize"))]
     #[serde(bound(deserialize = "TreeRDomain<F>: Deserialize<'de>"))]
@@ -252,13 +255,11 @@ pub struct EmptySectorUpdate<F, U, V, W> {
 impl<'a, F, U, V, W> ProofScheme<'a> for EmptySectorUpdate<F, U, V, W>
 where
     F: PrimeField,
-    TreeDHasher<F>: Hasher<Domain = TreeDDomain<F>>,
-    TreeRHasher<F>: Hasher<Domain = TreeRDomain<F>>,
-    TreeDDomain<F>: Domain<Field = F>,
-    TreeRDomain<F>: Domain<Field = F>,
     U: PoseidonArity<F>,
     V: PoseidonArity<F>,
     W: PoseidonArity<F>,
+    TreeDHasher<F>: Hasher<Field = F>,
+    TreeRHasher<F>: Hasher<Field = F>,
 {
     type SetupParams = SetupParams;
     type PublicParams = PublicParams;
@@ -494,7 +495,7 @@ where
     // TreeD domain.
     D: Domain,
     // TreeD and TreeR Domains must have the same field.
-    TreeRDomain<D::Field>: Domain<Field = D::Field>,
+    TreeRHasher<D::Field>: Hasher<Field = D::Field>,
 {
     let preimage: [D::Field; 2] = [(*comm_d_new).into(), (*comm_r_old).into()];
     let consts = POSEIDON_CONSTANTS_GEN_RANDOMNESS
@@ -508,7 +509,7 @@ where
 pub fn rho<F>(phi: &TreeRDomain<F>, high: u32) -> F
 where
     F: PrimeField,
-    TreeRDomain<F>: Domain<Field = F>,
+    TreeRHasher<F>: Hasher<Field = F>,
 {
     let preimage: [F; 2] = [(*phi).into(), F::from(high as u64)];
     let consts = POSEIDON_CONSTANTS_GEN_RANDOMNESS
@@ -523,7 +524,7 @@ where
 pub fn rhos<F>(h: usize, phi: &TreeRDomain<F>) -> Vec<F>
 where
     F: PrimeField,
-    TreeRDomain<F>: Domain<Field = F>,
+    TreeRHasher<F>: Hasher<Field = F>,
 {
     (0..1 << h).map(|high| rho(phi, high)).collect()
 }
@@ -558,13 +559,11 @@ fn mmap_write(path: &Path) -> Result<MmapMut, Error> {
 impl<F, U, V, W> EmptySectorUpdate<F, U, V, W>
 where
     F: PrimeField,
-    TreeDHasher<F>: Hasher<Domain = TreeDDomain<F>>,
-    TreeRHasher<F>: Hasher<Domain = TreeRDomain<F>>,
-    TreeDDomain<F>: Domain<Field = F>,
-    TreeRDomain<F>: Domain<Field = F>,
     U: PoseidonArity<F>,
     V: PoseidonArity<F>,
     W: PoseidonArity<F>,
+    TreeDHasher<F>: Hasher<Field = F>,
+    TreeRHasher<F>: Hasher<Field = F>,
 {
     pub fn instantiate_tree_d(
         tree_d_leafs: usize,

@@ -8,7 +8,7 @@ use bellperson::groth16;
 use bincode::serialize;
 use blstrs::{Bls12, Scalar as Fr};
 use ff::{Field, PrimeField};
-use filecoin_hashers::{Domain, Hasher};
+use filecoin_hashers::{Domain, Groth16Hasher, Hasher};
 use filecoin_proofs::{
     add_piece, aggregate_seal_commit_proofs, clear_cache, compute_comm_d, decode_from, encode_into,
     fauxrep_aux, generate_empty_sector_update_proof,
@@ -23,7 +23,7 @@ use filecoin_proofs::{
     validate_cache_for_precommit_phase2, verify_aggregate_seal_commit_proofs,
     verify_empty_sector_update_proof, verify_partition_proofs, verify_seal,
     verify_single_partition_proof, verify_window_post, verify_winning_post, CircuitPublicInputs, Commitment,
-    DefaultPieceDomain, DefaultPieceHasher, DefaultTreeDomain, DefaultTreeHasher, MerkleTreeTrait,
+    DefaultPieceHasher, DefaultTreeDomain, DefaultTreeHasher, MerkleTreeTrait,
     PaddedBytesAmount, PieceInfo, PoseidonArityAllFields, PoRepConfig,
     PoRepProofPartitions, PoStConfig, PoStType, PrivateReplicaInfo, ProverId, PublicReplicaInfo,
     SealCommitOutput, SealPreCommitOutput, SealPreCommitPhase1Output, SectorShape16KiB,
@@ -37,7 +37,7 @@ use memmap::MmapOptions;
 use rand::{random, Rng, SeedableRng};
 use rand_xorshift::XorShiftRng;
 use storage_proofs_core::{api_version::ApiVersion, is_legacy_porep_id, sector::SectorId};
-use storage_proofs_update::constants::{TreeDDomain, TreeDHasher, TreeRDomain, TreeRHasher};
+use storage_proofs_update::constants::{TreeDHasher, TreeRHasher};
 use tempfile::{tempdir, NamedTempFile, TempDir};
 
 #[cfg(feature = "big-tests")]
@@ -288,16 +288,12 @@ where
     Tree::Arity: PoseidonArityAllFields,
     Tree::SubTreeArity: PoseidonArityAllFields,
     Tree::TopTreeArity: PoseidonArityAllFields,
-    DefaultPieceHasher<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>: Hasher,
-    DefaultPieceDomain<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>:
-        Domain<Field = <<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
-    DefaultTreeHasher<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>: Hasher,
-    DefaultTreeDomain<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>:
-        Domain<Field = <<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
+    DefaultPieceHasher<Tree::Field>: Hasher<Field = Tree::Field>,
+    DefaultTreeHasher<Tree::Field>: Hasher<Field = Tree::Field>,
 {
     let mut rng = XorShiftRng::from_seed(TEST_SEED);
     let prover_fr =
-        DefaultTreeDomain::<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>::random(&mut rng);
+        DefaultTreeDomain::<Tree::Field>::random(&mut rng);
     let mut prover_id = [0u8; 32];
     prover_id.copy_from_slice(AsRef::<[u8]>::as_ref(&prover_fr));
 
@@ -320,26 +316,24 @@ fn seal_lifecycle_upgrade<Tree, F>(
     api_version: ApiVersion,
 ) -> Result<()>
 where
-    Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher<F>>,
+    Tree: 'static + MerkleTreeTrait<Field = F, Hasher = TreeRHasher<F>>,
     Tree::Arity: PoseidonArityAllFields,
     Tree::SubTreeArity: PoseidonArityAllFields,
     Tree::TopTreeArity: PoseidonArityAllFields,
     F: PrimeField,
-    TreeDHasher<F>: Hasher<Domain = TreeDDomain<F>>,
-    TreeDDomain<F>: Domain<Field = F>,
-    TreeRHasher<F>: Hasher<Domain = TreeRDomain<F>>,
-    TreeRDomain<F>: Domain<Field = F>,
+    DefaultPieceHasher<F>: Hasher<Field = F>,
+    DefaultTreeHasher<F>: Hasher<Field = F>,
 {
     let mut rng = &mut XorShiftRng::from_seed(TEST_SEED);
     let prover_fr =
-        DefaultTreeDomain::<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>::random(&mut rng);
+        DefaultTreeDomain::<Tree::Field>::random(&mut rng);
     let mut prover_id = [0u8; 32];
     prover_id.copy_from_slice(AsRef::<[u8]>::as_ref(&prover_fr));
 
     let (_, replica, _, _) = create_seal_for_upgrade::<
         _,
         Tree,
-        <<Tree::Hasher as Hasher>::Domain as Domain>::Field,
+        Tree::Field,
     >(
         &mut rng,
         sector_size,
@@ -481,13 +475,11 @@ fn aggregate_proofs<Tree>(
     num_proofs_to_aggregate: usize,
 ) -> Result<()>
 where
-    Tree: 'static + MerkleTreeTrait,
-    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+    Tree: 'static + MerkleTreeTrait<Field = Fr>,
+    Tree::Hasher: Groth16Hasher,
     Tree::Arity: PoseidonArityAllFields,
     Tree::SubTreeArity: PoseidonArityAllFields,
     Tree::TopTreeArity: PoseidonArityAllFields,
-    DefaultPieceHasher<Fr>: Hasher,
-    DefaultPieceDomain<Fr>: Domain,
 {
     let mut rng = XorShiftRng::from_seed(TEST_SEED);
     let prover_fr: DefaultTreeDomain<Fr> = Fr::random(&mut rng).into();
@@ -650,19 +642,15 @@ fn run_resumable_seal<Tree>(
     Tree::Arity: PoseidonArityAllFields,
     Tree::SubTreeArity: PoseidonArityAllFields,
     Tree::TopTreeArity: PoseidonArityAllFields,
-    DefaultPieceHasher<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>: Hasher,
-    DefaultPieceDomain<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>:
-        Domain<Field = <<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
-    DefaultTreeHasher<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>: Hasher,
-    DefaultTreeDomain<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>:
-        Domain<Field = <<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
+    DefaultPieceHasher<Tree::Field>: Hasher<Field = Tree::Field>,
+    DefaultTreeHasher<Tree::Field>: Hasher<Field = Tree::Field>,
 {
     fil_logger::maybe_init();
 
     let sector_size = SECTOR_SIZE_2_KIB;
     let mut rng = XorShiftRng::from_seed(TEST_SEED);
     let prover_fr =
-        DefaultTreeDomain::<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>::random(&mut rng);
+        DefaultTreeDomain::<Tree::Field>::random(&mut rng);
     let mut prover_id = [0u8; 32];
     prover_id.copy_from_slice(AsRef::<[u8]>::as_ref(&prover_fr));
 
@@ -846,12 +834,8 @@ where
     Tree::Arity: PoseidonArityAllFields,
     Tree::SubTreeArity: PoseidonArityAllFields,
     Tree::TopTreeArity: PoseidonArityAllFields,
-    DefaultPieceHasher<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>: Hasher,
-    DefaultPieceDomain<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>:
-        Domain<Field = <<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
-    DefaultTreeHasher<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>: Hasher,
-    DefaultTreeDomain<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>:
-        Domain<Field = <<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
+    DefaultPieceHasher<Tree::Field>: Hasher<Field = Tree::Field>,
+    DefaultTreeHasher<Tree::Field>: Hasher<Field = Tree::Field>,
 {
     let mut rng = XorShiftRng::from_seed(TEST_SEED);
 
@@ -1178,12 +1162,8 @@ where
     Tree::Arity: PoseidonArityAllFields,
     Tree::SubTreeArity: PoseidonArityAllFields,
     Tree::TopTreeArity: PoseidonArityAllFields,
-    DefaultPieceHasher<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>: Hasher,
-    DefaultPieceDomain<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>:
-        Domain<Field = <<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
-    DefaultTreeHasher<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>: Hasher,
-    DefaultTreeDomain<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>:
-        Domain<Field = <<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
+    DefaultPieceHasher<Tree::Field>: Hasher<Field = Tree::Field>,
+    DefaultTreeHasher<Tree::Field>: Hasher<Field = Tree::Field>,
 {
     use anyhow::anyhow;
 
@@ -1329,12 +1309,8 @@ where
     Tree::Arity: PoseidonArityAllFields,
     Tree::SubTreeArity: PoseidonArityAllFields,
     Tree::TopTreeArity: PoseidonArityAllFields,
-    DefaultPieceHasher<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>: Hasher,
-    DefaultPieceDomain<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>:
-        Domain<Field = <<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
-    DefaultTreeHasher<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>: Hasher,
-    DefaultTreeDomain<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>:
-        Domain<Field = <<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
+    DefaultPieceHasher<Tree::Field>: Hasher<Field = Tree::Field>,
+    DefaultTreeHasher<Tree::Field>: Hasher<Field = Tree::Field>,
 {
     let mut rng = XorShiftRng::from_seed(TEST_SEED);
 
@@ -1482,12 +1458,8 @@ fn run_seal_pre_commit_phase1<Tree>(
 ) -> Result<(Vec<PieceInfo>, SealPreCommitPhase1Output<Tree>)>
 where
     Tree: 'static + MerkleTreeTrait,
-    DefaultPieceHasher<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>: Hasher,
-    DefaultPieceDomain<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>:
-        Domain<Field = <<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
-    DefaultTreeHasher<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>: Hasher,
-    DefaultTreeDomain<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>:
-        Domain<Field = <<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
+    DefaultPieceHasher<Tree::Field>: Hasher<Field = Tree::Field>,
+    DefaultTreeHasher<Tree::Field>: Hasher<Field = Tree::Field>,
 {
     let number_of_bytes_in_piece =
         UnpaddedBytesAmount::from(PaddedBytesAmount(config.sector_size.into()));
@@ -1542,9 +1514,7 @@ where
     Tree::Arity: PoseidonArityAllFields,
     Tree::SubTreeArity: PoseidonArityAllFields,
     Tree::TopTreeArity: PoseidonArityAllFields,
-    DefaultPieceHasher<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>: Hasher,
-    DefaultPieceDomain<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>:
-        Domain<Field = <<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
+    DefaultPieceHasher<Tree::Field>: Hasher<Field = Tree::Field>,
 {
     let phase1_output = seal_commit_phase1::<_, Tree>(
         config,
@@ -1603,12 +1573,8 @@ where
     Tree::Arity: PoseidonArityAllFields,
     Tree::SubTreeArity: PoseidonArityAllFields,
     Tree::TopTreeArity: PoseidonArityAllFields,
-    DefaultPieceHasher<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>: Hasher,
-    DefaultPieceDomain<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>:
-        Domain<Field = <<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
-    DefaultTreeHasher<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>: Hasher,
-    DefaultTreeDomain<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>:
-        Domain<Field = <<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
+    DefaultPieceHasher<Tree::Field>: Hasher<Field = Tree::Field>,
+    DefaultTreeHasher<Tree::Field>: Hasher<Field = Tree::Field>,
 {
     let comm_d = pre_commit_output.comm_d;
     let comm_r = pre_commit_output.comm_r;
@@ -1676,12 +1642,8 @@ where
     Tree::Arity: PoseidonArityAllFields,
     Tree::SubTreeArity: PoseidonArityAllFields,
     Tree::TopTreeArity: PoseidonArityAllFields,
-    DefaultPieceHasher<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>: Hasher,
-    DefaultPieceDomain<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>:
-        Domain<Field = <<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
-    DefaultTreeHasher<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>: Hasher,
-    DefaultTreeDomain<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>:
-        Domain<Field = <<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
+    DefaultPieceHasher<Tree::Field>: Hasher<Field = Tree::Field>,
+    DefaultTreeHasher<Tree::Field>: Hasher<Field = Tree::Field>,
 {
     let (commit_output, _commit_inputs, _seed, _comm_r) = generate_proof::<Tree>(
         config,
@@ -1724,12 +1686,8 @@ where
     Tree::Arity: PoseidonArityAllFields,
     Tree::SubTreeArity: PoseidonArityAllFields,
     Tree::TopTreeArity: PoseidonArityAllFields,
-    DefaultPieceHasher<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>: Hasher,
-    DefaultPieceDomain<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>:
-        Domain<Field = <<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
-    DefaultTreeHasher<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>: Hasher,
-    DefaultTreeDomain<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>:
-        Domain<Field = <<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
+    DefaultPieceHasher<Tree::Field>: Hasher<Field = Tree::Field>,
+    DefaultTreeHasher<Tree::Field>: Hasher<Field = Tree::Field>,
 {
     fil_logger::maybe_init();
 
@@ -1793,13 +1751,10 @@ fn create_seal_for_aggregation<R, Tree>(
 ) -> Result<(SealCommitOutput, Vec<Vec<Fr>>, [u8; 32], [u8; 32])>
 where
     R: Rng,
-    Tree: 'static + MerkleTreeTrait,
-    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+    Tree: 'static + MerkleTreeTrait<Field = Fr>,
     Tree::Arity: PoseidonArityAllFields,
     Tree::SubTreeArity: PoseidonArityAllFields,
     Tree::TopTreeArity: PoseidonArityAllFields,
-    DefaultPieceHasher<Fr>: Hasher,
-    DefaultPieceDomain<Fr>: Domain,
 {
     fil_logger::maybe_init();
 
@@ -1902,15 +1857,13 @@ fn create_seal_for_upgrade<R, Tree, F>(
 ) -> Result<(SectorId, NamedTempFile, Commitment, TempDir)>
 where
     R: Rng,
-    Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher<F>>,
+    Tree: 'static + MerkleTreeTrait<Field = F, Hasher = TreeRHasher<F>>,
     Tree::Arity: PoseidonArityAllFields,
     Tree::SubTreeArity: PoseidonArityAllFields,
     Tree::TopTreeArity: PoseidonArityAllFields,
     F: PrimeField,
-    TreeDHasher<F>: Hasher<Domain = TreeDDomain<F>>,
-    TreeDDomain<F>: Domain<Field = F>,
-    TreeRHasher<F>: Hasher<Domain = TreeRDomain<F>>,
-    TreeRDomain<F>: Domain<Field = F>,
+    TreeDHasher<F>: Hasher<Field = F>,
+    TreeRHasher<F>: Hasher<Field = F>,
 {
     fil_logger::maybe_init();
 
@@ -2144,9 +2097,7 @@ fn create_fake_seal<R, Tree>(
 where
     R: Rng,
     Tree: 'static + MerkleTreeTrait,
-    DefaultPieceHasher<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>: Hasher,
-    DefaultPieceDomain<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>:
-        Domain<Field = <<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
+    DefaultPieceHasher<Tree::Field>: Hasher<Field = Tree::Field>,
 {
     fil_logger::maybe_init();
 

@@ -59,7 +59,7 @@ pub fn generate_piece_commitment_bytes_from_source<H: Hasher>(
 
     let tree = BinaryMerkleTree::<H>::try_from_iter((0..parts).map(|_| {
         source.read_exact(&mut buf)?;
-        <H::Domain as Domain>::try_from_bytes(&buf).context("invalid Fr element")
+        H::Domain::try_from_bytes(&buf).context("invalid Fr element")
     }))
     .context("failed to build tree")?;
 
