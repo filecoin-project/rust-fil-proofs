@@ -5,14 +5,14 @@ pub use storage_proofs_core::merkle::{MerkleProof, MerkleTreeTrait};
 pub use storage_proofs_porep::stacked::{Labels, PersistentAux, TemporaryAux};
 
 use blstrs::Scalar as Fr;
-use filecoin_hashers::{Domain, Hasher};
+use filecoin_hashers::Hasher;
 use halo2_proofs::{arithmetic::FieldExt, pasta::{Fp, Fq}};
 use serde::{Deserialize, Serialize};
 use storage_proofs_core::{merkle::BinaryMerkleTree, sector::SectorId};
 use storage_proofs_porep::stacked;
 use storage_proofs_post::fallback;
 
-use crate::constants::{DefaultPieceDomain, DefaultPieceHasher};
+use crate::constants::DefaultPieceHasher;
 
 mod bytes_amount;
 mod hselect;
@@ -60,18 +60,14 @@ pub struct SealPreCommitOutput {
     pub comm_d: Commitment,
 }
 
-pub type VanillaSealProof<Tree> = stacked::Proof<
-    Tree,
-    DefaultPieceHasher<<<<Tree as MerkleTreeTrait>::Hasher as Hasher>::Domain as Domain>::Field>,
->;
+pub type VanillaSealProof<Tree> =
+    stacked::Proof<Tree, DefaultPieceHasher<<Tree as MerkleTreeTrait>::Field>>;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct SealCommitPhase1Output<Tree>
 where
     Tree: MerkleTreeTrait,
-    DefaultPieceHasher<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>: Hasher,
-    DefaultPieceDomain<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>:
-        Domain<Field = <<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
+    DefaultPieceHasher<Tree::Field>: Hasher<Field = Tree::Field>,
 {
     #[serde(bound(
         serialize = "VanillaSealProof<Tree>: Serialize",
@@ -101,7 +97,40 @@ pub struct SealPreCommitPhase1Output<Tree: MerkleTreeTrait> {
     pub comm_d: Commitment,
 }
 
-// The circuit public inputs for a partition.
+#[repr(transparent)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct PartitionSnarkProof(pub Vec<u8>);
+
+pub type SnarkProof = Vec<u8>;
+pub type AggregateSnarkProof = Vec<u8>;
+pub type VanillaProof<Tree> = fallback::Proof<<Tree as MerkleTreeTrait>::Proof>;
+pub type PartitionProof<F, U, V, W> = storage_proofs_update::vanilla::PartitionProof<F, U, V, W>;
+
+#[derive(Debug, Clone, PartialEq)]
+#[repr(transparent)]
+pub struct EmptySectorUpdateProof(pub Vec<u8>);
+
+// This FallbackPoStSectorProof is used during Fallback PoSt, but
+// contains only Vanilla proof information and is not a full Fallback
+// PoSt proof.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct FallbackPoStSectorProof<Tree: MerkleTreeTrait> {
+    pub sector_id: SectorId,
+    pub comm_r: <Tree::Hasher as Hasher>::Domain,
+    #[serde(bound(
+        serialize = "VanillaProof<Tree>: Serialize",
+        deserialize = "VanillaProof<Tree>: Deserialize<'de>"
+    ))]
+    pub vanilla_proof: VanillaProof<Tree>, // Has comm_c, comm_r_last, inclusion_proofs
+}
+
+pub struct EmptySectorUpdateEncoded {
+    pub comm_r_new: Commitment,
+    pub comm_r_last_new: Commitment,
+    pub comm_d_new: Commitment,
+}
+
+// A partition circuit's public inputs.
 #[derive(Clone)]
 pub enum CircuitPublicInputs {
     Groth(Vec<Fr>),
@@ -163,37 +192,4 @@ impl<F: FieldExt> Into<Vec<Vec<F>>> for CircuitPublicInputs {
             }
         }
     }
-}
-
-#[repr(transparent)]
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct PartitionSnarkProof(pub Vec<u8>);
-
-pub type SnarkProof = Vec<u8>;
-pub type AggregateSnarkProof = Vec<u8>;
-pub type VanillaProof<Tree> = fallback::Proof<<Tree as MerkleTreeTrait>::Proof>;
-pub type PartitionProof<F, U, V, W> = storage_proofs_update::vanilla::PartitionProof<F, U, V, W>;
-
-#[derive(Debug, Clone, PartialEq)]
-#[repr(transparent)]
-pub struct EmptySectorUpdateProof(pub Vec<u8>);
-
-// This FallbackPoStSectorProof is used during Fallback PoSt, but
-// contains only Vanilla proof information and is not a full Fallback
-// PoSt proof.
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct FallbackPoStSectorProof<Tree: MerkleTreeTrait> {
-    pub sector_id: SectorId,
-    pub comm_r: <Tree::Hasher as Hasher>::Domain,
-    #[serde(bound(
-        serialize = "VanillaProof<Tree>: Serialize",
-        deserialize = "VanillaProof<Tree>: Deserialize<'de>"
-    ))]
-    pub vanilla_proof: VanillaProof<Tree>, // Has comm_c, comm_r_last, inclusion_proofs
-}
-
-pub struct EmptySectorUpdateEncoded {
-    pub comm_r_new: Commitment,
-    pub comm_r_last_new: Commitment,
-    pub comm_d_new: Commitment,
 }

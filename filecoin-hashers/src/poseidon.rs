@@ -15,6 +15,7 @@ use halo2_proofs::{
     pasta::{Fp, Fq},
     plonk::{self, Advice, Column, Fixed},
 };
+use lazy_static::lazy_static;
 use merkletree::{
     hash::{Algorithm, Hashable},
     merkle::Element,
@@ -25,13 +26,24 @@ use neptune::{
     Poseidon,
 };
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use typemap::ShareMap;
 
 use crate::{
-    Domain, FieldArity, HaloHasher, HashFunction, HashInstructions, Hasher, PoseidonArity,
-    PoseidonMDArity, POSEIDON_CONSTANTS, POSEIDON_CONSTANTS_2, POSEIDON_CONSTANTS_2_PALLAS,
-    POSEIDON_CONSTANTS_2_VESTA, POSEIDON_MD_CONSTANTS, POSEIDON_MD_CONSTANTS_PALLAS,
+    get_poseidon_constants, Domain, FieldArity, Groth16Hasher, Halo2Hasher, HashFunction, HashInstructions, Hasher,
+    PoseidonArity, PoseidonMDArity, POSEIDON_CONSTANTS_2,
+    POSEIDON_MD_CONSTANTS as POSEIDON_MD_CONSTANTS_BLS, POSEIDON_MD_CONSTANTS_PALLAS,
     POSEIDON_MD_CONSTANTS_VESTA,
 };
+
+lazy_static! {
+    pub static ref POSEIDON_MD_CONSTANTS: ShareMap = {
+        let mut tm = ShareMap::custom();
+        tm.insert::<FieldArity<Fr, PoseidonMDArity>>(&*POSEIDON_MD_CONSTANTS_BLS);
+        tm.insert::<FieldArity<Fp, PoseidonMDArity>>(&*POSEIDON_MD_CONSTANTS_PALLAS);
+        tm.insert::<FieldArity<Fq, PoseidonMDArity>>(&*POSEIDON_MD_CONSTANTS_VESTA);
+        tm
+    };
+}
 
 #[derive(Default, Copy, Clone, Debug)]
 pub struct PoseidonDomain<F> {
@@ -96,6 +108,12 @@ impl<F> From<[u8; 32]> for PoseidonDomain<F> {
     }
 }
 
+impl<F> Into<[u8; 32]> for PoseidonDomain<F> {
+    fn into(self) -> [u8; 32] {
+        self.repr
+    }
+}
+
 impl<F> AsRef<[u8]> for PoseidonDomain<F> {
     fn as_ref(&self) -> &[u8] {
         &self.repr
@@ -129,8 +147,8 @@ impl<F> Ord for PoseidonDomain<F> {
     }
 }
 
-// Must add the trait bound `F: PrimeField` because `Element` requires that `F` implements `Clone`,
-// `Send`, and `Sync`.
+// The trait bound `F: PrimeField` is necessary because `Element` requires that `F` implements
+// `Clone + Send + Sync`.
 impl<F: PrimeField> Element for PoseidonDomain<F> {
     fn byte_len() -> usize {
         32
@@ -166,8 +184,6 @@ impl<'de, F> Deserialize<'de> for PoseidonDomain<F> {
     }
 }
 
-// Implementing `Domain` for specific fields (rather than blanket implementing for all `F`) restricts
-// users to using the fields which are compatible with `rust-fil-proofs`.
 impl Domain for PoseidonDomain<Fr> {
     type Field = Fr;
 }
@@ -184,11 +200,7 @@ impl<F> PoseidonDomain<F> {
     }
 }
 
-fn shared_hash<F>(data: &[u8]) -> PoseidonDomain<F>
-where
-    F: PrimeField,
-    PoseidonDomain<F>: Domain<Field = F>,
-{
+fn shared_hash<F: PrimeField>(data: &[u8]) -> F {
     let preimage: Vec<F> = data
         .chunks(32)
         .map(|chunk| {
@@ -201,28 +213,22 @@ where
         })
         .collect();
 
-    shared_hash_frs(&preimage).into()
+    shared_hash_frs(&preimage)
 }
 
 // Must add trait bound `F: PrimeField` because `FieldArity<F, A>` requires `F: PrimeField`.
 fn shared_hash_frs<F: PrimeField>(preimage: &[F]) -> F {
     match preimage.len() {
         2 => {
-            let consts = &POSEIDON_CONSTANTS
-                .get::<FieldArity<F, U2>>()
-                .expect("arity-2 Poseidon constants not found for field");
+            let consts = get_poseidon_constants::<F, U2>();
             Poseidon::new_with_preimage(preimage, consts).hash()
         }
         4 => {
-            let consts = &POSEIDON_CONSTANTS
-                .get::<FieldArity<F, U4>>()
-                .expect("arity-4 Poseidon constants not found for field");
+            let consts = get_poseidon_constants::<F, U4>();
             Poseidon::new_with_preimage(preimage, consts).hash()
         }
         8 => {
-            let consts = &POSEIDON_CONSTANTS
-                .get::<FieldArity<F, U8>>()
-                .expect("arity-8 Poseidon constants not found for field");
+            let consts = get_poseidon_constants::<F, U8>();
             Poseidon::new_with_preimage(preimage, consts).hash()
         }
         n => panic!("unsupported arity for Poseidon hasher: {}", n),
@@ -238,7 +244,7 @@ where
     PoseidonDomain<F>: Domain<Field = F>,
 {
     fn write(&mut self, preimage: &[u8]) {
-        self.0 = shared_hash(preimage).into();
+        self.0 = shared_hash::<F>(preimage).into();
     }
 
     fn finish(&self) -> u64 {
@@ -256,8 +262,9 @@ where
     }
 }
 
-// We can't blanket `impl Hashable<PoseidonFunction<F>> for F where F: PrimeField` because we can't
-// implement an external trait `Hashable` for an external type `F: PrimeField`.
+// We can't blanket `impl<F: PrimeField> Hashable<PoseidonFunction<F>> for F` because both
+// `Hashable` and `PrimeField` are external traits (the compiler forbids implementing external
+// traits on external types).
 impl Hashable<PoseidonFunction<Fr>> for Fr {
     fn hash(&self, hasher: &mut PoseidonFunction<Fr>) {
         <PoseidonFunction<Fr> as std::hash::Hasher>::write(hasher, &self.to_repr())
@@ -276,8 +283,6 @@ impl Hashable<PoseidonFunction<Fq>> for Fq {
 
 impl<F> Algorithm<PoseidonDomain<F>> for PoseidonFunction<F>
 where
-    // Must add the trait bounds `F: PrimeField` and `PoseidonDomain<F>: Domain<Field = F>` because
-    // they are required by `shared_hash_frs`.
     F: PrimeField,
     PoseidonDomain<F>: Domain<Field = F>,
 {
@@ -303,40 +308,44 @@ where
     }
 
     fn multi_node(&mut self, preimage: &[PoseidonDomain<F>], _height: usize) -> PoseidonDomain<F> {
-        match preimage.len() {
-            2 | 4 | 8 => {
-                let preimage: Vec<F> = preimage.iter().map(|domain| (*domain).into()).collect();
-                shared_hash_frs(&preimage).into()
-            }
-            arity => panic!("unsupported Halo Poseidon hasher arity: {}", arity),
-        }
+        let preimage: Vec<F> = preimage.iter().copied().map(Into::into).collect();
+        shared_hash_frs(&preimage).into()
     }
 }
 
-// Specialized implementation of `HashFunction` over the BLS12-381 scalar field `Fr` because `Fr`
-// is the only field which is compatible with `HashFunction`'s Groth16 circuit interfaces.
-impl HashFunction<PoseidonDomain<Fr>> for PoseidonFunction<Fr> {
-    fn hash(data: &[u8]) -> PoseidonDomain<Fr> {
-        shared_hash(data)
+impl<F> HashFunction<PoseidonDomain<F>> for PoseidonFunction<F>
+where
+    F: PrimeField,
+    PoseidonDomain<F>: Domain<Field = F>,
+{
+    fn hash(data: &[u8]) -> PoseidonDomain<F> {
+        shared_hash::<F>(data).into()
     }
 
-    fn hash2(a: &PoseidonDomain<Fr>, b: &PoseidonDomain<Fr>) -> PoseidonDomain<Fr> {
+    fn hash2(a: &PoseidonDomain<F>, b: &PoseidonDomain<F>) -> PoseidonDomain<F> {
         let preimage = [(*a).into(), (*b).into()];
-        Poseidon::new_with_preimage(&preimage, &*POSEIDON_CONSTANTS_2)
-            .hash()
-            .into()
+        let consts = get_poseidon_constants::<F, U2>();
+        Poseidon::new_with_preimage(&preimage, consts).hash().into()
     }
 
-    fn hash_md(input: &[PoseidonDomain<Fr>]) -> PoseidonDomain<Fr> {
+    fn hash_md(input: &[PoseidonDomain<F>]) -> PoseidonDomain<F> {
         assert!(
             input.len() > 1,
             "hash_md preimage must contain more than one element"
         );
 
         let arity = PoseidonMDArity::to_usize();
-        let mut p = Poseidon::new(&*POSEIDON_MD_CONSTANTS);
+        let consts = POSEIDON_MD_CONSTANTS
+            .get::<FieldArity<F, PoseidonMDArity>>()
+            .unwrap_or_else(|| {
+                panic!(
+                    "arity-{} poseidon constants not found for field",
+                    PoseidonMDArity::to_usize()
+                )
+            });
+        let mut p = Poseidon::new(&*consts);
 
-        let fr_input: Vec<Fr> = input.iter().map(|domain| (*domain).into()).collect();
+        let fr_input: Vec<F> = input.iter().map(|domain| (*domain).into()).collect();
 
         fr_input[1..]
             .chunks(arity - 1)
@@ -353,7 +362,47 @@ impl HashFunction<PoseidonDomain<Fr>> for PoseidonFunction<Fr> {
             })
             .into()
     }
+}
 
+#[derive(Default, Copy, Clone, Debug, PartialEq, Eq)]
+pub struct PoseidonHasher<F> {
+    _f: PhantomData<F>,
+}
+
+// TODO (jake): should hashers over different fields have different names?
+const HASHER_NAME: &str = "poseidon_hasher";
+
+impl Hasher for PoseidonHasher<Fr> {
+    type Field = Fr;
+    type Domain = PoseidonDomain<Self::Field>;
+    type Function = PoseidonFunction<Self::Field>;
+
+    fn name() -> String {
+        HASHER_NAME.into()
+    }
+}
+impl Hasher for PoseidonHasher<Fp> {
+    type Field = Fp;
+    type Domain = PoseidonDomain<Self::Field>;
+    type Function = PoseidonFunction<Self::Field>;
+
+    fn name() -> String {
+        HASHER_NAME.into()
+    }
+}
+impl Hasher for PoseidonHasher<Fq> {
+    type Field = Fq;
+    type Domain = PoseidonDomain<Self::Field>;
+    type Function = PoseidonFunction<Self::Field>;
+
+    fn name() -> String {
+        HASHER_NAME.into()
+    }
+}
+
+// Only implement `Groth16Hasher` for `PoseidonHasher<Fr>` because `Fr` is the only field which is
+// compatible with Groth16.
+impl Groth16Hasher for PoseidonHasher<Fr> {
     fn hash_leaf_circuit<CS: ConstraintSystem<Fr>>(
         cs: CS,
         left: &AllocatedNum<Fr>,
@@ -363,20 +412,13 @@ impl HashFunction<PoseidonDomain<Fr>> for PoseidonFunction<Fr> {
         Self::hash2_circuit(cs, left, right)
     }
 
-    fn hash_multi_leaf_circuit<Arity: PoseidonArity<Fr>, CS: ConstraintSystem<Fr>>(
+    fn hash_multi_leaf_circuit<A: PoseidonArity<Fr>, CS: ConstraintSystem<Fr>>(
         cs: CS,
         leaves: &[AllocatedNum<Fr>],
         _height: usize,
     ) -> Result<AllocatedNum<Fr>, SynthesisError> {
-        let consts = &POSEIDON_CONSTANTS
-            .get::<FieldArity<Fr, Arity>>()
-            .unwrap_or_else(|| {
-                panic!(
-                    "arity-{} Poseidon constants not found for field",
-                    Arity::to_usize(),
-                )
-            });
-        poseidon_hash::<CS, Fr, Arity>(cs, leaves.to_vec(), consts)
+        let consts = get_poseidon_constants::<Fr, A>();
+        poseidon_hash(cs, leaves.to_vec(), consts)
     }
 
     fn hash_md_circuit<CS: ConstraintSystem<Fr>>(
@@ -402,12 +444,7 @@ impl HashFunction<PoseidonDomain<Fr>> for PoseidonFunction<Fr> {
                     .expect("alloc failure");
             }
             let cs = cs.namespace(|| format!("hash md {}", hash_num));
-            hash = poseidon_hash::<_, Fr, PoseidonMDArity>(
-                cs,
-                preimage.clone(),
-                &*POSEIDON_MD_CONSTANTS,
-            )?
-            .clone();
+            hash = poseidon_hash(cs, preimage.clone(), &*POSEIDON_MD_CONSTANTS_BLS)?.clone();
         }
 
         Ok(hash)
@@ -420,225 +457,13 @@ impl HashFunction<PoseidonDomain<Fr>> for PoseidonFunction<Fr> {
         unimplemented!();
     }
 
-    fn hash2_circuit<CS>(
+    fn hash2_circuit<CS: ConstraintSystem<Fr>>(
         cs: CS,
         a: &AllocatedNum<Fr>,
         b: &AllocatedNum<Fr>,
-    ) -> Result<AllocatedNum<Fr>, SynthesisError>
-    where
-        CS: ConstraintSystem<Fr>,
-    {
+    ) -> Result<AllocatedNum<Fr>, SynthesisError> {
         let preimage = vec![a.clone(), b.clone()];
-        poseidon_hash::<CS, Fr, U2>(cs, preimage, &*POSEIDON_CONSTANTS_2)
-    }
-}
-
-// Specialized implementation of `HashFunction` over the Pasta scalar fields `Fp` and `Fq` because
-// those fields are incompatible with `HashFunction`'s Groth16 circuit interfaces.
-impl HashFunction<PoseidonDomain<Fp>> for PoseidonFunction<Fp> {
-    fn hash(data: &[u8]) -> PoseidonDomain<Fp> {
-        shared_hash(data)
-    }
-
-    fn hash2(a: &PoseidonDomain<Fp>, b: &PoseidonDomain<Fp>) -> PoseidonDomain<Fp> {
-        let preimage = [(*a).into(), (*b).into()];
-        Poseidon::new_with_preimage(&preimage, &*POSEIDON_CONSTANTS_2_PALLAS)
-            .hash()
-            .into()
-    }
-
-    fn hash_md(input: &[PoseidonDomain<Fp>]) -> PoseidonDomain<Fp> {
-        assert!(
-            input.len() > 1,
-            "hash_md preimage must contain more than one element"
-        );
-
-        let arity = PoseidonMDArity::to_usize();
-        let mut p = Poseidon::new(&*POSEIDON_MD_CONSTANTS_PALLAS);
-
-        let fr_input: Vec<Fp> = input.iter().map(|domain| (*domain).into()).collect();
-
-        fr_input[1..]
-            .chunks(arity - 1)
-            .fold(fr_input[0], |acc, frs| {
-                p.reset();
-                // Calling `.expect()` will panic iff we call `.input()` more that `arity` number
-                // of times prior to resetting the hasher (i.e. if we exceed the arity of the
-                // Poseidon constants) or if `preimge.len() == 1`; we prevent both scenarios.
-                p.input(acc).expect("input failure");
-                for fr in frs {
-                    p.input(*fr).expect("input failure");
-                }
-                p.hash()
-            })
-            .into()
-    }
-
-    fn hash_leaf_circuit<CS: ConstraintSystem<Fr>>(
-        _cs: CS,
-        _left: &AllocatedNum<Fr>,
-        _right: &AllocatedNum<Fr>,
-        _height: usize,
-    ) -> Result<AllocatedNum<Fr>, SynthesisError> {
-        unimplemented!("PoseidonFunction<Fp> cannot be used within Groth16 circuits")
-    }
-
-    fn hash_multi_leaf_circuit<Arity: PoseidonArity<Fr>, CS: ConstraintSystem<Fr>>(
-        _cs: CS,
-        _leaves: &[AllocatedNum<Fr>],
-        _height: usize,
-    ) -> Result<AllocatedNum<Fr>, SynthesisError> {
-        unimplemented!("PoseidonFunction<Fp> cannot be used within Groth16 circuits")
-    }
-
-    fn hash_md_circuit<CS: ConstraintSystem<Fr>>(
-        _cs: &mut CS,
-        _elements: &[AllocatedNum<Fr>],
-    ) -> Result<AllocatedNum<Fr>, SynthesisError> {
-        unimplemented!("PoseidonFunction<Fp> cannot be used within Groth16 circuits")
-    }
-
-    fn hash_leaf_bits_circuit<CS: ConstraintSystem<Fr>>(
-        _cs: CS,
-        _left: &[Boolean],
-        _right: &[Boolean],
-        _height: usize,
-    ) -> Result<AllocatedNum<Fr>, SynthesisError> {
-        unimplemented!("PoseidonFunction<Fp> cannot be used within Groth16 circuits")
-    }
-
-    fn hash_circuit<CS: ConstraintSystem<Fr>>(
-        _cs: CS,
-        _bits: &[Boolean],
-    ) -> Result<AllocatedNum<Fr>, SynthesisError> {
-        unimplemented!("PoseidonFunction<Fp> cannot be used within Groth16 circuits")
-    }
-
-    fn hash2_circuit<CS: ConstraintSystem<Fr>>(
-        _cs: CS,
-        _a: &AllocatedNum<Fr>,
-        _b: &AllocatedNum<Fr>,
-    ) -> Result<AllocatedNum<Fr>, SynthesisError> {
-        unimplemented!("PoseidonFunction<Fp> cannot be used within Groth16 circuits")
-    }
-}
-impl HashFunction<PoseidonDomain<Fq>> for PoseidonFunction<Fq> {
-    fn hash(data: &[u8]) -> PoseidonDomain<Fq> {
-        shared_hash(data)
-    }
-
-    fn hash2(a: &PoseidonDomain<Fq>, b: &PoseidonDomain<Fq>) -> PoseidonDomain<Fq> {
-        let preimage = [(*a).into(), (*b).into()];
-        Poseidon::new_with_preimage(&preimage, &*POSEIDON_CONSTANTS_2_VESTA)
-            .hash()
-            .into()
-    }
-
-    fn hash_md(input: &[PoseidonDomain<Fq>]) -> PoseidonDomain<Fq> {
-        assert!(
-            input.len() > 1,
-            "hash_md preimage must contain more than one element"
-        );
-
-        let arity = PoseidonMDArity::to_usize();
-        let mut p = Poseidon::new(&*POSEIDON_MD_CONSTANTS_VESTA);
-
-        let fr_input: Vec<Fq> = input.iter().map(|domain| (*domain).into()).collect();
-
-        fr_input[1..]
-            .chunks(arity - 1)
-            .fold(fr_input[0], |acc, frs| {
-                p.reset();
-                // Calling `.expect()` will panic iff we call `.input()` more that `arity` number
-                // of times prior to resetting the hasher (i.e. if we exceed the arity of the
-                // Poseidon constants) or if `preimge.len() == 1`; we prevent both scenarios.
-                p.input(acc).expect("input failure");
-                for fr in frs {
-                    p.input(*fr).expect("input failure");
-                }
-                p.hash()
-            })
-            .into()
-    }
-
-    fn hash_leaf_circuit<CS: ConstraintSystem<Fr>>(
-        _cs: CS,
-        _left: &AllocatedNum<Fr>,
-        _right: &AllocatedNum<Fr>,
-        _height: usize,
-    ) -> Result<AllocatedNum<Fr>, SynthesisError> {
-        unimplemented!("PoseidonFunction<Fq> cannot be used within Groth16 circuits")
-    }
-
-    fn hash_multi_leaf_circuit<Arity: PoseidonArity<Fr>, CS: ConstraintSystem<Fr>>(
-        _cs: CS,
-        _leaves: &[AllocatedNum<Fr>],
-        _height: usize,
-    ) -> Result<AllocatedNum<Fr>, SynthesisError> {
-        unimplemented!("PoseidonFunction<Fq> cannot be used within Groth16 circuits")
-    }
-
-    fn hash_md_circuit<CS: ConstraintSystem<Fr>>(
-        _cs: &mut CS,
-        _elements: &[AllocatedNum<Fr>],
-    ) -> Result<AllocatedNum<Fr>, SynthesisError> {
-        unimplemented!("PoseidonFunction<Fq> cannot be used within Groth16 circuits")
-    }
-
-    fn hash_leaf_bits_circuit<CS: ConstraintSystem<Fr>>(
-        _cs: CS,
-        _left: &[Boolean],
-        _right: &[Boolean],
-        _height: usize,
-    ) -> Result<AllocatedNum<Fr>, SynthesisError> {
-        unimplemented!("PoseidonFunction<Fq> cannot be used within Groth16 circuits")
-    }
-
-    fn hash_circuit<CS: ConstraintSystem<Fr>>(
-        _cs: CS,
-        _bits: &[Boolean],
-    ) -> Result<AllocatedNum<Fr>, SynthesisError> {
-        unimplemented!("PoseidonFunction<Fq> cannot be used within Groth16 circuits")
-    }
-
-    fn hash2_circuit<CS: ConstraintSystem<Fr>>(
-        _cs: CS,
-        _a: &AllocatedNum<Fr>,
-        _b: &AllocatedNum<Fr>,
-    ) -> Result<AllocatedNum<Fr>, SynthesisError> {
-        unimplemented!("PoseidonFunction<Fq> cannot be used within Groth16 circuits")
-    }
-}
-
-#[derive(Default, Copy, Clone, Debug, PartialEq, Eq)]
-pub struct PoseidonHasher<F> {
-    _f: PhantomData<F>,
-}
-
-// Implementing `Hasher` for specific fields (rather than blanket implementing for all `F`) restricts
-// users to using the fields which are compatible with `rust-fil-proofs`.
-impl Hasher for PoseidonHasher<Fr> {
-    type Domain = PoseidonDomain<Fr>;
-    type Function = PoseidonFunction<Fr>;
-
-    fn name() -> String {
-        "poseidon_hasher".into()
-    }
-}
-impl Hasher for PoseidonHasher<Fp> {
-    type Domain = PoseidonDomain<Fp>;
-    type Function = PoseidonFunction<Fp>;
-
-    fn name() -> String {
-        "poseidon_hasher_pallas".into()
-    }
-}
-impl Hasher for PoseidonHasher<Fq> {
-    type Domain = PoseidonDomain<Fq>;
-    type Function = PoseidonFunction<Fq>;
-
-    fn name() -> String {
-        "poseidon_hasher_vesta".into()
+        poseidon_hash(cs, preimage, &*POSEIDON_CONSTANTS_2)
     }
 }
 
@@ -652,22 +477,14 @@ where
         layouter: impl Layouter<F>,
         preimage: &[AssignedCell<F, F>],
     ) -> Result<AssignedCell<F, F>, plonk::Error> {
-        let consts = POSEIDON_CONSTANTS
-            .get::<FieldArity<F, A>>()
-            .unwrap_or_else(|| {
-                panic!(
-                    "arity-{} poseidon constants not found for field",
-                    A::to_usize()
-                )
-            });
-        self.hash(layouter, preimage, *consts)
+        let consts = get_poseidon_constants::<F, A>();
+        self.hash(layouter, preimage, consts)
     }
 }
 
-impl<F, A> HaloHasher<A> for PoseidonHasher<F>
+impl<F, A> Halo2Hasher<A> for PoseidonHasher<F>
 where
-    Self: Hasher,
-    Self::Domain: Domain<Field = F>,
+    Self: Hasher<Field = F>,
     F: FieldExt,
     A: PoseidonArity<F>,
 {
@@ -686,16 +503,17 @@ where
         fixed_eq: &[Column<Fixed>],
         fixed_neq: &[Column<Fixed>],
     ) -> Self::Config {
-        let num_cols = <Self as HaloHasher<A>>::Chip::num_cols();
+        let num_cols = Self::Chip::num_cols();
 
-        // Check that we have enough equality enabled and total columns.
+        // Check that the caller provided enough equality enabled and total columns.
         let advice_eq_len = advice_eq.len();
         let advice_neq_len = advice_neq.len();
+        assert!(advice_eq_len >= num_cols.advice_eq);
+        assert!(advice_eq_len + advice_neq_len >= num_cols.advice_eq + num_cols.advice_neq);
+
         let fixed_eq_len = fixed_eq.len();
         let fixed_neq_len = fixed_neq.len();
-        assert!(advice_eq_len >= num_cols.advice_eq);
         assert!(fixed_eq_len >= num_cols.fixed_eq);
-        assert!(advice_eq_len + advice_neq_len >= num_cols.advice_eq + num_cols.advice_neq);
         assert!(fixed_eq_len + fixed_neq_len >= num_cols.fixed_eq + num_cols.fixed_neq);
 
         let mut advice = advice_eq.iter().chain(advice_neq.iter()).copied();

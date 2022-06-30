@@ -5,14 +5,10 @@ use generic_array::typenum::{U0, U2, U4, U8};
 use halo2_proofs::{arithmetic::FieldExt, dev::MockProver, pasta::Fp};
 use rand::SeedableRng;
 use rand_xorshift::XorShiftRng;
-use storage_proofs_core::{
-    halo2::CircuitRows,
-    merkle::{MerkleProof, MerkleTreeTrait},
-    TEST_SEED,
-};
+use storage_proofs_core::{halo2::CircuitRows, merkle::MerkleTreeTrait, TEST_SEED};
 use storage_proofs_update::{
     constants::{
-        hs, validate_tree_r_shape, TreeDArity, TreeDDomain, TreeDHasher, TreeR, TreeRDomain,
+        hs, validate_tree_r_shape, TreeDDomain, TreeDHasher, TreeR, TreeRDomain,
         TreeRHasher, SECTOR_SIZE_16_KIB, SECTOR_SIZE_1_KIB, SECTOR_SIZE_2_KIB, SECTOR_SIZE_32_KIB,
         SECTOR_SIZE_4_KIB, SECTOR_SIZE_8_KIB,
     },
@@ -34,13 +30,8 @@ where
     U: PoseidonArity<F>,
     V: PoseidonArity<F>,
     W: PoseidonArity<F>,
-    TreeDArity: PoseidonArity<F>,
-    TreeDHasher<F>: Hasher<Domain = TreeDDomain<F>>,
-    TreeDDomain<F>: Domain<Field = F>,
-    TreeRHasher<F>: Hasher<Domain = TreeRDomain<F>>,
-    TreeRDomain<F>: Domain<Field = F>,
-    TreeR<F, U, V, W>:
-        MerkleTreeTrait<Hasher = TreeRHasher<F>, Proof = MerkleProof<TreeRHasher<F>, U, V, W>>,
+    TreeDHasher<F>: Hasher<Field = F>,
+    TreeRHasher<F>: Hasher<Field = F>,
 {
     validate_tree_r_shape::<U, V, W>(SECTOR_NODES);
 

@@ -3,7 +3,7 @@ use std::marker::PhantomData;
 use anyhow::ensure;
 use bellperson::{Circuit, ConstraintSystem, SynthesisError};
 use blstrs::Scalar as Fr;
-use filecoin_hashers::{Domain, Hasher};
+use filecoin_hashers::Groth16Hasher;
 use generic_array::typenum::U2;
 use storage_proofs_core::{
     compound_proof::{CircuitComponent, CompoundProof},
@@ -21,8 +21,8 @@ use crate::rational::{RationalPoSt, RationalPoStCircuit};
 
 pub struct RationalPoStCompound<Tree>
 where
-    Tree: MerkleTreeTrait,
-    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+    Tree: MerkleTreeTrait<Field = Fr>,
+    Tree::Hasher: Groth16Hasher,
 {
     _t: PhantomData<Tree>,
 }
@@ -31,8 +31,8 @@ impl<C, P, Tree> CacheableParameters<C, P> for RationalPoStCompound<Tree>
 where
     C: Circuit<Fr>,
     P: ParameterSetMetadata,
-    Tree: MerkleTreeTrait,
-    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+    Tree: MerkleTreeTrait<Field = Fr>,
+    Tree::Hasher: Groth16Hasher,
 {
     fn cache_prefix() -> String {
         format!("proof-of-spacetime-rational-{}", Tree::display())
@@ -42,8 +42,8 @@ where
 impl<'a, Tree> CompoundProof<'a, RationalPoSt<'a, Tree>, RationalPoStCircuit<Tree>>
     for RationalPoStCompound<Tree>
 where
-    Tree: 'static + MerkleTreeTrait,
-    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+    Tree: 'static + MerkleTreeTrait<Field = Fr>,
+    Tree::Hasher: Groth16Hasher,
 {
     fn generate_public_inputs(
         pub_in: &<RationalPoSt<'a, Tree> as ProofScheme<'a>>::PublicInputs,
@@ -157,8 +157,8 @@ where
 
 impl<'a, Tree> RationalPoStCircuit<Tree>
 where
-    Tree: 'static + MerkleTreeTrait,
-    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+    Tree: 'static + MerkleTreeTrait<Field = Fr>,
+    Tree::Hasher: Groth16Hasher,
 {
     #[allow(clippy::type_complexity)]
     pub fn synthesize<CS: ConstraintSystem<Fr>>(

@@ -3,7 +3,7 @@ use std::marker::PhantomData;
 use anyhow::{ensure, Context};
 use bellperson::Circuit;
 use blstrs::Scalar as Fr;
-use filecoin_hashers::{Domain, Hasher};
+use filecoin_hashers::Groth16Hasher;
 use generic_array::typenum;
 use storage_proofs_core::{
     compound_proof::{CircuitComponent, CompoundProof},
@@ -44,10 +44,9 @@ use crate::drg::{DrgPoRep, DrgPoRepCircuit};
 
 pub struct DrgPoRepCompound<H, G>
 where
-    H: Hasher,
-    H::Domain: Domain<Field = Fr>,
-    G::Key: AsRef<H::Domain>,
+    H: Groth16Hasher,
     G: Graph<H>,
+    G::Key: AsRef<H::Domain>,
 {
     // Sad phantom is sad
     _h: PhantomData<H>,
@@ -57,8 +56,7 @@ where
 impl<C, H, G, P> CacheableParameters<C, P> for DrgPoRepCompound<H, G>
 where
     C: Circuit<Fr>,
-    H: Hasher,
-    H::Domain: Domain<Field = Fr>,
+    H: Groth16Hasher,
     G: Graph<H>,
     G::Key: AsRef<H::Domain>,
     P: ParameterSetMetadata,
@@ -71,10 +69,9 @@ where
 impl<'a, H, G> CompoundProof<'a, DrgPoRep<'a, H, G>, DrgPoRepCircuit<'a, H>>
     for DrgPoRepCompound<H, G>
 where
-    H: 'static + Hasher,
-    H::Domain: Domain<Field = Fr>,
-    G::Key: AsRef<<H as Hasher>::Domain>,
+    H: 'static + Groth16Hasher,
     G: 'a + Graph<H> + ParameterSetMetadata + Sync + Send,
+    G::Key: AsRef<H::Domain>,
 {
     fn generate_public_inputs(
         pub_in: &<DrgPoRep<'a, H, G> as ProofScheme<'a>>::PublicInputs,

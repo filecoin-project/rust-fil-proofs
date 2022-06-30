@@ -4,7 +4,7 @@ use bellperson::{
 };
 use blstrs::Scalar as Fr;
 use ff::Field;
-use filecoin_hashers::{poseidon::PoseidonHasher, sha256::Sha256Hasher, Domain, Hasher};
+use filecoin_hashers::{poseidon::PoseidonHasher, sha256::Sha256Hasher, Groth16Hasher, Hasher};
 use fr32::fr_into_bytes;
 use generic_array::typenum::{U0, U2, U4, U8};
 use merkletree::store::StoreConfig;
@@ -52,8 +52,8 @@ fn test_stacked_input_circuit_poseidon_top_8_4_2() {
 
 fn test_stacked_porep_circuit<Tree>(expected_inputs: usize, expected_constraints: usize)
 where
-    Tree: 'static + MerkleTreeTrait,
-    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+    Tree: 'static + MerkleTreeTrait<Field = Fr>,
+    Tree::Hasher: Groth16Hasher,
 {
     let nodes = 8 * get_base_tree_count::<Tree>();
     let degree = BASE_DEGREE;

@@ -1,7 +1,7 @@
 use std::convert::TryInto;
 use std::marker::PhantomData;
 
-use filecoin_hashers::{poseidon::PoseidonHasher, Domain, HashFunction, Hasher, PoseidonArity};
+use filecoin_hashers::{poseidon::PoseidonHasher, HashFunction, Hasher, PoseidonArity};
 use generic_array::typenum::{U0, U2, U8};
 use halo2_proofs::{arithmetic::FieldExt, dev::MockProver, pasta::Fp};
 use rand::SeedableRng;
@@ -25,8 +25,7 @@ where
     U: PoseidonArity<F>,
     V: PoseidonArity<F>,
     W: PoseidonArity<F>,
-    PoseidonHasher<F>: Hasher,
-    <PoseidonHasher<F> as Hasher>::Domain: Domain<Field = F>,
+    PoseidonHasher<F>: Hasher<Field = F>,
 {
     let sector_id = 0u64;
     let k = 0;
@@ -140,8 +139,7 @@ where
     U: PoseidonArity<F>,
     V: PoseidonArity<F>,
     W: PoseidonArity<F>,
-    PoseidonHasher<F>: Hasher,
-    <PoseidonHasher<F> as Hasher>::Domain: Domain<Field = F>,
+    PoseidonHasher<F>: Hasher<Field = F>,
 {
     let challenged_sector_count = window::sectors_challenged_per_partition::<SECTOR_NODES>();
     let k = 0;

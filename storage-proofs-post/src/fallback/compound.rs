@@ -3,7 +3,7 @@ use std::marker::PhantomData;
 use anyhow::{anyhow, ensure};
 use bellperson::Circuit;
 use blstrs::Scalar as Fr;
-use filecoin_hashers::{Domain, Hasher};
+use filecoin_hashers::{Groth16Hasher, Hasher};
 use sha2::{Digest, Sha256};
 use storage_proofs_core::{
     compound_proof::{CircuitComponent, CompoundProof},
@@ -20,8 +20,8 @@ use crate::fallback::{generate_leaf_challenge_inner, FallbackPoSt, FallbackPoStC
 
 pub struct FallbackPoStCompound<Tree>
 where
-    Tree: MerkleTreeTrait,
-    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+    Tree: MerkleTreeTrait<Field = Fr>,
+    Tree::Hasher: Groth16Hasher,
 {
     _t: PhantomData<Tree>,
 }
@@ -30,8 +30,8 @@ impl<C, P, Tree> CacheableParameters<C, P> for FallbackPoStCompound<Tree>
 where
     C: Circuit<Fr>,
     P: ParameterSetMetadata,
-    Tree: MerkleTreeTrait,
-    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+    Tree: MerkleTreeTrait<Field = Fr>,
+    Tree::Hasher: Groth16Hasher,
 {
     fn cache_prefix() -> String {
         format!("proof-of-spacetime-fallback-{}", Tree::display())
@@ -41,8 +41,8 @@ where
 impl<'a, Tree> CompoundProof<'a, FallbackPoSt<'a, Tree>, FallbackPoStCircuit<Tree>>
     for FallbackPoStCompound<Tree>
 where
-    Tree: 'static + MerkleTreeTrait,
-    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+    Tree: 'static + MerkleTreeTrait<Field = Fr>,
+    Tree::Hasher: Groth16Hasher,
 {
     fn generate_public_inputs(
         pub_inputs: &<FallbackPoSt<'a, Tree> as ProofScheme<'a>>::PublicInputs,

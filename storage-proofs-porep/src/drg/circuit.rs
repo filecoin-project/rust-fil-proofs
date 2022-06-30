@@ -6,7 +6,7 @@ use bellperson::{
 };
 use blstrs::Scalar as Fr;
 use ff::PrimeField;
-use filecoin_hashers::{Domain, Hasher};
+use filecoin_hashers::Groth16Hasher;
 use storage_proofs_core::{
     compound_proof::CircuitComponent,
     error::Result,
@@ -37,11 +37,7 @@ use storage_proofs_core::{
 /// * `replica_id` - The id of the replica.
 ///
 
-pub struct DrgPoRepCircuit<'a, H>
-where
-    H: Hasher,
-    H::Domain: Domain<Field = Fr>,
-{
+pub struct DrgPoRepCircuit<'a, H: Groth16Hasher> {
     pub replica_nodes: Vec<Option<Fr>>,
     #[allow(clippy::type_complexity)]
     pub replica_nodes_paths: Vec<Vec<(Vec<Option<Fr>>, Option<usize>)>>,
@@ -58,11 +54,7 @@ where
     pub _h: PhantomData<&'a H>,
 }
 
-impl<'a, H> DrgPoRepCircuit<'a, H>
-where
-    H: 'static + Hasher,
-    H::Domain: Domain<Field = Fr>,
-{
+impl<'a, H: 'static + Groth16Hasher> DrgPoRepCircuit<'a, H> {
     #[allow(clippy::type_complexity, clippy::too_many_arguments)]
     pub fn synthesize<CS>(
         mut cs: CS,
@@ -103,11 +95,7 @@ pub struct ComponentPrivateInputs {
     pub comm_d: Option<Root<Fr>>,
 }
 
-impl<'a, H> CircuitComponent for DrgPoRepCircuit<'a, H>
-where
-    H: Hasher,
-    H::Domain: Domain<Field = Fr>,
-{
+impl<'a, H: Groth16Hasher> CircuitComponent for DrgPoRepCircuit<'a, H> {
     type ComponentPrivateInputs = ComponentPrivateInputs;
 }
 
@@ -134,11 +122,7 @@ where
 ///
 /// Total = 2 + replica_parents.len()
 ///
-impl<'a, H> Circuit<Fr> for DrgPoRepCircuit<'a, H>
-where
-    H: 'static + Hasher,
-    H::Domain: Domain<Field = Fr>,
-{
+impl<'a, H: 'static + Groth16Hasher> Circuit<Fr> for DrgPoRepCircuit<'a, H> {
     fn synthesize<CS: ConstraintSystem<Fr>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
         let replica_id = self.replica_id;
         let replica_root = self.replica_root;
@@ -262,16 +246,15 @@ where
 }
 
 /// Key derivation function.
-fn kdf<Scalar, CS>(
+fn kdf<CS>(
     mut cs: CS,
     id: &[Boolean],
     parents: Vec<Vec<Boolean>>,
     window_index: Option<UInt64>,
     node: Option<UInt64>,
-) -> Result<AllocatedNum<Scalar>, SynthesisError>
+) -> Result<AllocatedNum<Fr>, SynthesisError>
 where
-    Scalar: PrimeField,
-    CS: ConstraintSystem<Scalar>,
+    CS: ConstraintSystem<Fr>,
 {
     // ciphertexts will become a buffer of the layout
     // id | node | encodedParentNode1 | encodedParentNode1 | ...
@@ -301,13 +284,13 @@ where
             .chunks(8)
             .flat_map(|chunk| chunk.iter().rev())
             .copied()
-            .take(Scalar::CAPACITY as usize)
+            .take(Fr::CAPACITY as usize)
             .collect::<Vec<bool>>();
 
-        Ok(multipack::compute_multipacking::<Scalar>(&le_bits)[0])
+        Ok(multipack::compute_multipacking(&le_bits)[0])
     } else {
         Err(SynthesisError::AssignmentMissing)
     };
 
-    AllocatedNum::<Scalar>::alloc(cs.namespace(|| "result_num"), || fr)
+    AllocatedNum::alloc(cs.namespace(|| "result_num"), || fr)
 }

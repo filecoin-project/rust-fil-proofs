@@ -4,7 +4,7 @@ use bellperson::{
 };
 use blstrs::Scalar as Fr;
 use ff::Field;
-use filecoin_hashers::{poseidon::PoseidonHasher, Domain, Hasher};
+use filecoin_hashers::{poseidon::PoseidonHasher, Groth16Hasher, Hasher};
 use fr32::{bytes_into_fr, fr_into_bytes};
 use generic_array::typenum::{U0, U2, U4, U8};
 use merkletree::store::VecStore;
@@ -36,8 +36,8 @@ fn test_por_compound_poseidon_base_8() {
 
 fn por_compound<Tree>()
 where
-    Tree: 'static + MerkleTreeTrait,
-    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+    Tree: 'static + MerkleTreeTrait<Field = Fr>,
+    Tree::Hasher: Groth16Hasher,
 {
     let mut rng = XorShiftRng::from_seed(TEST_SEED);
 
@@ -140,8 +140,8 @@ fn test_por_compound_poseidon_top_8_2_4_private_root() {
 
 fn por_compound_private_root<Tree>()
 where
-    Tree: 'static + MerkleTreeTrait,
-    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+    Tree: 'static + MerkleTreeTrait<Field = Fr>,
+    Tree::Hasher: Groth16Hasher,
 {
     let mut rng = XorShiftRng::from_seed(TEST_SEED);
 

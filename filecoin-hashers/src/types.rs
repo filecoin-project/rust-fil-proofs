@@ -38,6 +38,7 @@ pub trait Domain:
     + From<Self::Field>
     + Into<Self::Field>
     + From<[u8; 32]>
+    + Into<[u8; 32]>
     + Serialize
     + DeserializeOwned
     + Element
@@ -95,7 +96,17 @@ pub trait HashFunction<T: Domain>: Clone + Debug + Send + Sync + LightAlgorithm<
         data.hash(&mut a);
         a.hash()
     }
+}
 
+pub trait Hasher: Clone + Debug + Eq + Default + Send + Sync {
+    type Field: PrimeField + GpuField;
+    type Domain: Domain<Field = Self::Field> + LightHashable<Self::Function> + AsRef<Self::Domain>;
+    type Function: HashFunction<Self::Domain>;
+
+    fn name() -> String;
+}
+
+pub trait Groth16Hasher: Hasher<Field = Fr> {
     fn hash_leaf_circuit<CS: ConstraintSystem<Fr>>(
         mut cs: CS,
         left: &AllocatedNum<Fr>,
@@ -135,20 +146,11 @@ pub trait HashFunction<T: Domain>: Clone + Debug + Send + Sync + LightAlgorithm<
         bits: &[Boolean],
     ) -> Result<AllocatedNum<Fr>, SynthesisError>;
 
-    fn hash2_circuit<CS>(
+    fn hash2_circuit<CS: ConstraintSystem<Fr>>(
         cs: CS,
         a: &AllocatedNum<Fr>,
         b: &AllocatedNum<Fr>,
-    ) -> Result<AllocatedNum<Fr>, SynthesisError>
-    where
-        CS: ConstraintSystem<Fr>;
-}
-
-pub trait Hasher: Clone + Debug + Eq + Default + Send + Sync {
-    type Domain: Domain + LightHashable<Self::Function> + AsRef<Self::Domain>;
-    type Function: HashFunction<Self::Domain>;
-
-    fn name() -> String;
+    ) -> Result<AllocatedNum<Fr>, SynthesisError>;
 }
 
 pub trait HashInstructions<F: FieldExt> {
@@ -159,16 +161,18 @@ pub trait HashInstructions<F: FieldExt> {
     ) -> Result<AssignedCell<F, F>, plonk::Error>;
 }
 
-pub trait HaloHasher<A>: Hasher
+// The `A` type parameter is necessary because we may need to specify a unique halo2 chip and
+// config for each preimage length `A`.
+pub trait Halo2Hasher<A>: Hasher
 where
-    <Self::Domain as Domain>::Field: FieldExt,
-    A: PoseidonArity<<Self::Domain as Domain>::Field>,
+    Self::Field: FieldExt,
+    A: PoseidonArity<Self::Field>,
 {
-    type Chip: HashInstructions<<Self::Domain as Domain>::Field> + ColumnCount;
+    type Chip: HashInstructions<Self::Field> + ColumnCount;
     type Config: Clone;
 
     fn load(
-        _layouter: &mut impl Layouter<<Self::Domain as Domain>::Field>,
+        _layouter: &mut impl Layouter<Self::Field>,
         _config: &Self::Config,
     ) -> Result<(), plonk::Error> {
         Ok(())
@@ -177,7 +181,7 @@ where
     fn construct(config: Self::Config) -> Self::Chip;
 
     fn configure(
-        meta: &mut plonk::ConstraintSystem<<Self::Domain as Domain>::Field>,
+        meta: &mut plonk::ConstraintSystem<Self::Field>,
         advice_eq: &[Column<Advice>],
         advice_neq: &[Column<Advice>],
         fixed_eq: &[Column<Fixed>],

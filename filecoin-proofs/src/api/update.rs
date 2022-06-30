@@ -9,14 +9,14 @@ use blstrs::Scalar as Fr;
 use ff::PrimeField;
 use filecoin_hashers::{Domain, Hasher, PoseidonArity};
 use generic_array::typenum::Unsigned;
-use halo2_proofs::{arithmetic::FieldExt, pasta::{Fp, Fq}};
+use halo2_proofs::pasta::{Fp, Fq};
 use log::{info, trace};
 use merkletree::merkle::get_merkle_tree_len;
 use merkletree::store::StoreConfig;
 use storage_proofs_core::{
     cache_key::CacheKey,
     compound_proof::{self, CompoundProof},
-    halo2::{self, FieldProvingCurves, Halo2Proof},
+    halo2::{self, Halo2Field, Halo2Proof},
     merkle::{get_base_tree_count, MerkleTreeTrait, MerkleTreeWrapper},
     multi_proof::MultiProof,
     proof::ProofScheme,
@@ -36,7 +36,7 @@ use storage_proofs_update::{
 use crate::{
     api::{get_proof_system, MockStore, PoseidonArityAllFields, ProofSystem},
     caches::{get_empty_sector_update_params, get_empty_sector_update_verifying_key},
-    constants::{DefaultPieceDomain, DefaultPieceHasher},
+    constants::DefaultPieceHasher,
     pieces::verify_pieces,
     types::{
         Commitment, EmptySectorUpdateEncoded, EmptySectorUpdateProof, PartitionProof, PieceInfo,
@@ -74,25 +74,17 @@ fn persist_p_aux<Tree: 'static + MerkleTreeTrait>(
 
 // Instantiates t_aux from the specified cache_dir for access to
 // labels and tree_d, tree_c, tree_r_last store configs
-fn get_t_aux<Tree>(cache_path: &Path) -> Result<TemporaryAux<
-    Tree,
-    DefaultPieceHasher<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
->>
+fn get_t_aux<Tree>(cache_path: &Path) -> Result<TemporaryAux<Tree, DefaultPieceHasher<Tree::Field>>>
 where
     Tree: 'static + MerkleTreeTrait,
-    DefaultPieceHasher<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>: Hasher,
-    DefaultPieceDomain<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>:
-        Domain<Field = <<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
+    DefaultPieceHasher<Tree::Field>: Hasher<Field = Tree::Field>,
 {
     let t_aux_path = cache_path.join(CacheKey::TAux.to_string());
     trace!("Instantiating TemporaryAux from {:?}", cache_path);
     let t_aux_bytes = fs::read(&t_aux_path)
         .with_context(|| format!("could not read file t_aux={:?}", t_aux_path))?;
 
-    let mut res: TemporaryAux<
-        Tree,
-        DefaultPieceHasher<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
-    > = deserialize(&t_aux_bytes)?;
+    let mut res: TemporaryAux<Tree, DefaultPieceHasher<Tree::Field>> = deserialize(&t_aux_bytes)?;
     res.set_cache_path(cache_path);
     trace!("Set TemporaryAux cache_path to {:?}", cache_path);
 
@@ -100,17 +92,12 @@ where
 }
 
 fn persist_t_aux<Tree>(
-    t_aux: &TemporaryAux<
-        Tree,
-        DefaultPieceHasher<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
-    >,
+    t_aux: &TemporaryAux<Tree, DefaultPieceHasher<Tree::Field>>,
     cache_path: &Path,
 ) -> Result<()>
 where
     Tree: 'static + MerkleTreeTrait,
-    DefaultPieceHasher<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>: Hasher,
-    <DefaultPieceHasher<<<Tree::Hasher as Hasher>::Domain as Domain>::Field> as Hasher>::Domain:
-        Domain<Field = <<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
+    DefaultPieceHasher<Tree::Field>: Hasher<Field = Tree::Field>,
 {
     let t_aux_path = cache_path.join(CacheKey::TAux.to_string());
     let mut f_t_aux = File::create(&t_aux_path)
@@ -135,18 +122,13 @@ where
 //
 // Returns a pair of the new tree_d_config and tree_r_last configs
 fn get_new_configs_from_t_aux_old<Tree>(
-    t_aux_old: &TemporaryAux<
-        Tree,
-        DefaultPieceHasher<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
-    >,
+    t_aux_old: &TemporaryAux<Tree, DefaultPieceHasher<Tree::Field>>,
     new_cache_path: &Path,
     nodes_count: usize,
 ) -> Result<(StoreConfig, StoreConfig)>
 where
     Tree: 'static + MerkleTreeTrait,
-    DefaultPieceHasher<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>: Hasher,
-    <DefaultPieceHasher<<<Tree::Hasher as Hasher>::Domain as Domain>::Field> as Hasher>::Domain:
-        Domain<Field = <<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
+    DefaultPieceHasher<Tree::Field>: Hasher<Field = Tree::Field>,
 {
     let mut t_aux_new = t_aux_old.clone();
     t_aux_new.set_cache_path(new_cache_path);
@@ -189,12 +171,10 @@ pub fn encode_into<Tree, F>(
     piece_infos: &[PieceInfo],
 ) -> Result<EmptySectorUpdateEncoded>
 where
-    Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher<F>>,
+    Tree: 'static + MerkleTreeTrait<Field = F, Hasher = TreeRHasher<F>>,
     F: PrimeField,
-    TreeDHasher<F>: Hasher<Domain = TreeDDomain<F>>,
-    TreeDDomain<F>: Domain<Field = F>,
-    TreeRHasher<F>: Hasher<Domain = TreeRDomain<F>>,
-    TreeRDomain<F>: Domain<Field = F>,
+    TreeDHasher<F>: Hasher<Field = F>,
+    TreeRHasher<F>: Hasher<Field = F>,
 {
     info!("encode_into:start");
     let config = SectorUpdateConfig::from_porep_config(porep_config);
@@ -210,8 +190,8 @@ where
             config.nodes_count,
             tree_d_new_config,
             tree_r_last_new_config,
-            <Tree::Hasher as Hasher>::Domain::try_from_bytes(&p_aux.comm_c.into_bytes())?,
-            <Tree::Hasher as Hasher>::Domain::try_from_bytes(&p_aux.comm_r_last.into_bytes())?,
+            TreeRDomain::try_from_bytes(&p_aux.comm_c.into_bytes())?,
+            TreeRDomain::try_from_bytes(&p_aux.comm_r_last.into_bytes())?,
             new_replica_path,
             new_cache_path,
             sector_key_path,
@@ -265,12 +245,10 @@ pub fn decode_from<Tree, F>(
     comm_d_new: Commitment,
 ) -> Result<()>
 where
-    Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher<F>>,
+    Tree: 'static + MerkleTreeTrait<Field = F, Hasher = TreeRHasher<F>>,
     F: PrimeField,
-    TreeDHasher<F>: Hasher<Domain = TreeDDomain<F>>,
-    TreeDDomain<F>: Domain<Field = F>,
-    TreeRHasher<F>: Hasher<Domain = TreeRDomain<F>>,
-    TreeRDomain<F>: Domain<Field = F>,
+    TreeDHasher<F>: Hasher<Field = F>,
+    TreeRHasher<F>: Hasher<Field = F>,
 {
     info!("decode_from:start");
 
@@ -283,9 +261,9 @@ where
         replica_path,
         sector_key_path,
         sector_key_cache_path,
-        <Tree::Hasher as Hasher>::Domain::try_from_bytes(&p_aux.comm_c.into_bytes())?,
+        TreeRDomain::try_from_bytes(&p_aux.comm_c.into_bytes())?,
         comm_d_new.into(),
-        <Tree::Hasher as Hasher>::Domain::try_from_bytes(&p_aux.comm_r_last.into_bytes())?,
+        TreeRDomain::try_from_bytes(&p_aux.comm_r_last.into_bytes())?,
         usize::from(config.h_select),
     )?;
 
@@ -305,12 +283,10 @@ pub fn remove_encoded_data<Tree, F>(
     comm_d_new: Commitment,
 ) -> Result<()>
 where
-    Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher<F>>,
+    Tree: 'static + MerkleTreeTrait<Field = F, Hasher = TreeRHasher<F>>,
     F: PrimeField,
-    TreeDHasher<F>: Hasher<Domain = TreeDDomain<F>>,
-    TreeDDomain<F>: Domain<Field = F>,
-    TreeRHasher<F>: Hasher<Domain = TreeRDomain<F>>,
-    TreeRDomain<F>: Domain<Field = F>,
+    TreeDHasher<F>: Hasher<Field = F>,
+    TreeRHasher<F>: Hasher<Field = F>,
 {
     info!("remove_data:start");
 
@@ -334,9 +310,9 @@ where
         replica_cache_path,
         data_path,
         tree_r_last_new_config,
-        <Tree::Hasher as Hasher>::Domain::try_from_bytes(&p_aux.comm_c.into_bytes())?,
+        TreeRDomain::try_from_bytes(&p_aux.comm_c.into_bytes())?,
         comm_d_new.into(),
-        <Tree::Hasher as Hasher>::Domain::try_from_bytes(&p_aux.comm_r_last.into_bytes())?,
+        TreeRDomain::try_from_bytes(&p_aux.comm_r_last.into_bytes())?,
         usize::from(config.h_select),
     )?;
 
@@ -364,19 +340,16 @@ pub fn generate_single_partition_proof<Tree, F>(
     replica_cache_path: &Path,
 ) -> Result<PartitionProof<F, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>>
 where
-    Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher<F>>,
+    Tree: 'static + MerkleTreeTrait<Field = F, Hasher = TreeRHasher<F>>,
     F: PrimeField,
-    TreeDHasher<F>: Hasher<Domain = TreeDDomain<F>>,
-    TreeDDomain<F>: Domain<Field = F>,
-    TreeRHasher<F>: Hasher<Domain = TreeRDomain<F>>,
-    TreeRDomain<F>: Domain<Field = F>,
+    TreeDHasher<F>: Hasher<Field = F>,
+    TreeRHasher<F>: Hasher<Field = F>,
 {
     info!("generate_single_partition_proof:start");
 
-    let comm_r_old_safe = <TreeRHasher<F> as Hasher>::Domain::try_from_bytes(&comm_r_old)?;
-    let comm_r_new_safe = <TreeRHasher<F> as Hasher>::Domain::try_from_bytes(&comm_r_new)?;
-
-    let comm_d_new_safe = DefaultPieceDomain::try_from_bytes(&comm_d_new)?;
+    let comm_r_old_safe = TreeRDomain::<F>::try_from_bytes(&comm_r_old)?;
+    let comm_r_new_safe = TreeRDomain::<F>::try_from_bytes(&comm_r_new)?;
+    let comm_d_new_safe = TreeDDomain::<F>::try_from_bytes(&comm_d_new)?;
 
     let public_params = PublicParams::from_sector_size(u64::from(config.sector_size));
 
@@ -433,19 +406,16 @@ pub fn verify_single_partition_proof<Tree, F>(
     comm_d_new: Commitment,
 ) -> Result<bool>
 where
-    Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher<F>>,
+    Tree: 'static + MerkleTreeTrait<Field = F, Hasher = TreeRHasher<F>>,
     F: PrimeField,
-    TreeDHasher<F>: Hasher<Domain = TreeDDomain<F>>,
-    TreeDDomain<F>: Domain<Field = F>,
-    TreeRHasher<F>: Hasher<Domain = TreeRDomain<F>>,
-    TreeRDomain<F>: Domain<Field = F>,
+    TreeDHasher<F>: Hasher<Field = F>,
+    TreeRHasher<F>: Hasher<Field = F>,
 {
     info!("verify_single_partition_proof:start");
 
-    let comm_r_old_safe = <TreeRHasher<F> as Hasher>::Domain::try_from_bytes(&comm_r_old)?;
-    let comm_r_new_safe = <TreeRHasher<F> as Hasher>::Domain::try_from_bytes(&comm_r_new)?;
-
-    let comm_d_new_safe = DefaultPieceDomain::try_from_bytes(&comm_d_new)?;
+    let comm_r_old_safe = TreeRDomain::<F>::try_from_bytes(&comm_r_old)?;
+    let comm_r_new_safe = TreeRDomain::<F>::try_from_bytes(&comm_r_new)?;
+    let comm_d_new_safe = TreeDDomain::<F>::try_from_bytes(&comm_d_new)?;
 
     let public_params = PublicParams::from_sector_size(u64::from(config.sector_size));
 
@@ -485,19 +455,16 @@ pub fn generate_partition_proofs<Tree, F>(
     replica_cache_path: &Path,
 ) -> Result<Vec<PartitionProof<F, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>>>
 where
-    Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher<F>>,
+    Tree: 'static + MerkleTreeTrait<Field = F, Hasher = TreeRHasher<F>>,
     F: PrimeField,
-    TreeDHasher<F>: Hasher<Domain = TreeDDomain<F>>,
-    TreeDDomain<F>: Domain<Field = F>,
-    TreeRHasher<F>: Hasher<Domain = TreeRDomain<F>>,
-    TreeRDomain<F>: Domain<Field = F>,
+    TreeDHasher<F>: Hasher<Field = F>,
+    TreeRHasher<F>: Hasher<Field = F>,
 {
     info!("generate_partition_proofs:start");
 
-    let comm_r_old_safe = <TreeRHasher<F> as Hasher>::Domain::try_from_bytes(&comm_r_old)?;
-    let comm_r_new_safe = <TreeRHasher<F> as Hasher>::Domain::try_from_bytes(&comm_r_new)?;
-
-    let comm_d_new_safe = DefaultPieceDomain::try_from_bytes(&comm_d_new)?;
+    let comm_r_old_safe = TreeRDomain::<F>::try_from_bytes(&comm_r_old)?;
+    let comm_r_new_safe = TreeRDomain::<F>::try_from_bytes(&comm_r_new)?;
+    let comm_d_new_safe = TreeDDomain::<F>::try_from_bytes(&comm_d_new)?;
 
     let public_params = PublicParams::from_sector_size(u64::from(config.sector_size));
 
@@ -551,19 +518,16 @@ pub fn verify_partition_proofs<Tree, F>(
     comm_d_new: Commitment,
 ) -> Result<bool>
 where
-    Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher<F>>,
+    Tree: 'static + MerkleTreeTrait<Field = F, Hasher = TreeRHasher<F>>,
     F: PrimeField,
-    TreeDHasher<F>: Hasher<Domain = TreeDDomain<F>>,
-    TreeDDomain<F>: Domain<Field = F>,
-    TreeRHasher<F>: Hasher<Domain = TreeRDomain<F>>,
-    TreeRDomain<F>: Domain<Field = F>,
+    TreeDHasher<F>: Hasher<Field = F>,
+    TreeRHasher<F>: Hasher<Field = F>,
 {
     info!("verify_partition_proofs:start");
 
-    let comm_r_old_safe = <TreeRHasher<F> as Hasher>::Domain::try_from_bytes(&comm_r_old)?;
-    let comm_r_new_safe = <TreeRHasher<F> as Hasher>::Domain::try_from_bytes(&comm_r_new)?;
-
-    let comm_d_new_safe = DefaultPieceDomain::try_from_bytes(&comm_d_new)?;
+    let comm_r_old_safe = TreeRDomain::<F>::try_from_bytes(&comm_r_old)?;
+    let comm_r_new_safe = TreeRDomain::<F>::try_from_bytes(&comm_r_new)?;
+    let comm_d_new_safe = TreeDDomain::<F>::try_from_bytes(&comm_d_new)?;
 
     let public_params = PublicParams::from_sector_size(u64::from(config.sector_size));
 
@@ -592,15 +556,13 @@ pub fn generate_empty_sector_update_proof_with_vanilla<Tree, F>(
     comm_d_new: Commitment,
 ) -> Result<EmptySectorUpdateProof>
 where
-    Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher<F>>,
+    Tree: 'static + MerkleTreeTrait<Field = F, Hasher = TreeRHasher<F>>,
     Tree::Arity: PoseidonArityAllFields,
     Tree::SubTreeArity: PoseidonArityAllFields,
     Tree::TopTreeArity: PoseidonArityAllFields,
     F: PrimeField,
-    TreeDHasher<F>: Hasher<Domain = TreeDDomain<F>>,
-    TreeDDomain<F>: Domain<Field = F>,
-    TreeRHasher<F>: Hasher<Domain = TreeRDomain<F>>,
-    TreeRDomain<F>: Domain<Field = F>,
+    TreeDHasher<F>: Hasher<Field = F>,
+    TreeRHasher<F>: Hasher<Field = F>,
 {
     info!("generate_empty_sector_update_proof_with_vanilla:start");
 
@@ -659,10 +621,9 @@ where
     V: PoseidonArity<Fr>,
     W: PoseidonArity<Fr>,
 {
-    let comm_r_old_safe = <TreeRHasher<Fr> as Hasher>::Domain::try_from_bytes(&comm_r_old)?;
-    let comm_r_new_safe = <TreeRHasher<Fr> as Hasher>::Domain::try_from_bytes(&comm_r_new)?;
-
-    let comm_d_new_safe = DefaultPieceDomain::<Fr>::try_from_bytes(&comm_d_new)?;
+    let comm_r_old_safe = TreeRDomain::<Fr>::try_from_bytes(&comm_r_old)?;
+    let comm_r_new_safe = TreeRDomain::<Fr>::try_from_bytes(&comm_r_new)?;
+    let comm_d_new_safe = TreeDDomain::<Fr>::try_from_bytes(&comm_d_new)?;
 
     let config = SectorUpdateConfig::from_porep_config(porep_config);
 
@@ -705,19 +666,16 @@ fn halo2_generate_empty_sector_update_proof_with_vanilla<F, U, V, W>(
     comm_d_new: Commitment,
 ) -> Result<SnarkProof>
 where
-    F: FieldExt + FieldProvingCurves,
+    F: Halo2Field,
     U: PoseidonArity<F>,
     V: PoseidonArity<F>,
     W: PoseidonArity<F>,
-    TreeDHasher<F>: Hasher<Domain = TreeDDomain<F>>,
-    TreeDDomain<F>: Domain<Field = F>,
-    TreeRHasher<F>: Hasher<Domain = TreeRDomain<F>>,
-    TreeRDomain<F>: Domain<Field = F>,
+    TreeDHasher<F>: Hasher<Field = F>,
+    TreeRHasher<F>: Hasher<Field = F>,
 {
-    let comm_r_old_safe = <TreeRHasher<F> as Hasher>::Domain::try_from_bytes(&comm_r_old)?;
-    let comm_r_new_safe = <TreeRHasher<F> as Hasher>::Domain::try_from_bytes(&comm_r_new)?;
-
-    let comm_d_new_safe = DefaultPieceDomain::<F>::try_from_bytes(&comm_d_new)?;
+    let comm_r_old_safe = TreeRDomain::<F>::try_from_bytes(&comm_r_old)?;
+    let comm_r_new_safe = TreeRDomain::<F>::try_from_bytes(&comm_r_new)?;
+    let comm_d_new_safe = TreeDDomain::<F>::try_from_bytes(&comm_d_new)?;
 
     let config = SectorUpdateConfig::from_porep_config(porep_config);
 
@@ -1033,9 +991,6 @@ where
     Tree::Arity: PoseidonArityAllFields,
     Tree::SubTreeArity: PoseidonArityAllFields,
     Tree::TopTreeArity: PoseidonArityAllFields,
-    F: PrimeField,
-    TreeRHasher<F>: Hasher<Domain = TreeRDomain<F>>,
-    TreeRDomain<F>: Domain<Field = F>,
 {
     info!("generate_empty_sector_update_proof:start");
 
@@ -1106,10 +1061,10 @@ where
     V: PoseidonArity<Fr>,
     W: PoseidonArity<Fr>,
 {
-    let comm_r_old_safe = <TreeRHasher<Fr> as Hasher>::Domain::try_from_bytes(&comm_r_old)?;
-    let comm_r_new_safe = <TreeRHasher<Fr> as Hasher>::Domain::try_from_bytes(&comm_r_new)?;
+    let comm_r_old_safe = TreeRDomain::<Fr>::try_from_bytes(&comm_r_old)?;
+    let comm_r_new_safe = TreeRDomain::<Fr>::try_from_bytes(&comm_r_new)?;
 
-    let comm_d_new_safe = DefaultPieceDomain::<Fr>::try_from_bytes(&comm_d_new)?;
+    let comm_d_new_safe = TreeDDomain::<Fr>::try_from_bytes(&comm_d_new)?;
 
     let config = SectorUpdateConfig::from_porep_config(porep_config);
 
@@ -1177,14 +1132,12 @@ fn halo2_generate_empty_sector_update_proof_without_vanilla<F, U, V, W>(
     replica_cache_path: &Path,
 ) -> Result<SnarkProof>
 where
-    F: FieldExt + FieldProvingCurves,
+    F: Halo2Field,
     U: PoseidonArity<F>,
     V: PoseidonArity<F>,
     W: PoseidonArity<F>,
-    TreeDHasher<F>: Hasher<Domain = TreeDDomain<F>>,
-    TreeDDomain<F>: Domain<Field = F>,
-    TreeRHasher<F>: Hasher<Domain = TreeRDomain<F>>,
-    TreeRDomain<F>: Domain<Field = F>,
+    TreeDHasher<F>: Hasher<Field = F>,
+    TreeRHasher<F>: Hasher<Field = F>,
 {
     let config = SectorUpdateConfig::from_porep_config(porep_config);
     let sector_bytes: u64 = config.sector_size.into();
@@ -1195,9 +1148,9 @@ where
 
     let vanilla_pub_params = EmptySectorUpdate::<F, U, V, W>::setup(&vanilla_setup_params)?;
 
-    let comm_r_old_safe = <TreeRHasher<F> as Hasher>::Domain::try_from_bytes(&comm_r_old)?;
-    let comm_r_new_safe = <TreeRHasher<F> as Hasher>::Domain::try_from_bytes(&comm_r_new)?;
-    let comm_d_new_safe = DefaultPieceDomain::<F>::try_from_bytes(&comm_d_new)?;
+    let comm_r_old_safe = TreeRDomain::<F>::try_from_bytes(&comm_r_old)?;
+    let comm_r_new_safe = TreeRDomain::<F>::try_from_bytes(&comm_r_new)?;
+    let comm_d_new_safe = TreeDDomain::<F>::try_from_bytes(&comm_d_new)?;
 
     let vanilla_pub_inputs = PublicInputs {
         k: 0,
@@ -1214,9 +1167,7 @@ where
     let comm_c = *(&p_aux_old.comm_c as &dyn Any).downcast_ref::<TreeRDomain<F>>().unwrap();
 
     let t_aux_old =
-        get_t_aux::<MerkleTreeWrapper<TreeRHasher<F>, MockStore, U, V, W>>(
-            sector_key_cache_path,
-        )?;
+        get_t_aux::<MerkleTreeWrapper<TreeRHasher<F>, MockStore, U, V, W>>(sector_key_cache_path)?;
 
     let (tree_d_new_config, tree_r_last_new_config) = get_new_configs_from_t_aux_old::<
         MerkleTreeWrapper<TreeRHasher<F>, MockStore, U, V, W>,
@@ -1526,9 +1477,6 @@ where
     Tree::Arity: PoseidonArityAllFields,
     Tree::SubTreeArity: PoseidonArityAllFields,
     Tree::TopTreeArity: PoseidonArityAllFields,
-    F: PrimeField,
-    TreeRHasher<F>: Hasher<Domain = TreeRDomain<F>>,
-    TreeRDomain<F>: Domain<Field = F>,
 {
     info!("verify_empty_sector_update_proof:start");
 
@@ -1569,10 +1517,10 @@ where
     V: PoseidonArity<Fr>,
     W: PoseidonArity<Fr>,
 {
-    let comm_r_old_safe = <TreeRHasher<Fr> as Hasher>::Domain::try_from_bytes(&comm_r_old)?;
-    let comm_r_new_safe = <TreeRHasher<Fr> as Hasher>::Domain::try_from_bytes(&comm_r_new)?;
+    let comm_r_old_safe = TreeRDomain::<Fr>::try_from_bytes(&comm_r_old)?;
+    let comm_r_new_safe = TreeRDomain::<Fr>::try_from_bytes(&comm_r_new)?;
 
-    let comm_d_new_safe = DefaultPieceDomain::<Fr>::try_from_bytes(&comm_d_new)?;
+    let comm_d_new_safe = TreeDDomain::<Fr>::try_from_bytes(&comm_d_new)?;
 
     let config = SectorUpdateConfig::from_porep_config(porep_config);
     let partitions = usize::from(config.update_partitions);
@@ -1610,14 +1558,12 @@ fn halo2_verify_empty_sector_update_proof<F, U, V, W>(
     comm_d_new: Commitment,
 ) -> Result<bool>
 where
-    F: FieldExt + FieldProvingCurves,
+    F: Halo2Field,
     U: PoseidonArity<F>,
     V: PoseidonArity<F>,
     W: PoseidonArity<F>,
-    TreeDHasher<F>: Hasher<Domain = TreeDDomain<F>>,
-    TreeDDomain<F>: Domain<Field = F>,
-    TreeRHasher<F>: Hasher<Domain = TreeRDomain<F>>,
-    TreeRDomain<F>: Domain<Field = F>,
+    TreeDHasher<F>: Hasher<Field = F>,
+    TreeRHasher<F>: Hasher<Field = F>,
 {
     let config = SectorUpdateConfig::from_porep_config(porep_config);
     let sector_nodes = config.nodes_count;
@@ -1626,9 +1572,9 @@ where
 
     let vanilla_setup_params = SetupParams { sector_bytes };
 
-    let comm_r_old_safe = <TreeRHasher<F> as Hasher>::Domain::try_from_bytes(&comm_r_old)?;
-    let comm_r_new_safe = <TreeRHasher<F> as Hasher>::Domain::try_from_bytes(&comm_r_new)?;
-    let comm_d_new_safe = DefaultPieceDomain::<F>::try_from_bytes(&comm_d_new)?;
+    let comm_r_old_safe = TreeRDomain::<F>::try_from_bytes(&comm_r_old)?;
+    let comm_r_new_safe = TreeRDomain::<F>::try_from_bytes(&comm_r_new)?;
+    let comm_d_new_safe = TreeDDomain::<F>::try_from_bytes(&comm_d_new)?;
 
     let vanilla_pub_inputs = PublicInputs {
         k: 0,
@@ -1646,7 +1592,7 @@ where
     match sector_nodes {
         SECTOR_SIZE_1_KIB => {
             let circ_partition_proofs: Vec<Halo2Proof<
-                <F as FieldProvingCurves>::Affine,
+                F::Affine,
                 EmptySectorUpdateCircuit<F, U, V, W, SECTOR_SIZE_1_KIB>,
             >> = proofs_bytes.map(Into::into).collect();
 
@@ -1667,7 +1613,7 @@ where
         },
         SECTOR_SIZE_2_KIB => {
             let circ_partition_proofs: Vec<Halo2Proof<
-                <F as FieldProvingCurves>::Affine,
+                F::Affine,
                 EmptySectorUpdateCircuit<F, U, V, W, SECTOR_SIZE_2_KIB>,
             >> = proofs_bytes.map(Into::into).collect();
 
@@ -1688,7 +1634,7 @@ where
         },
         SECTOR_SIZE_4_KIB => {
             let circ_partition_proofs: Vec<Halo2Proof<
-                <F as FieldProvingCurves>::Affine,
+                F::Affine,
                 EmptySectorUpdateCircuit<F, U, V, W, SECTOR_SIZE_4_KIB>,
             >> = proofs_bytes.map(Into::into).collect();
 
@@ -1709,7 +1655,7 @@ where
         },
         SECTOR_SIZE_8_KIB => {
             let circ_partition_proofs: Vec<Halo2Proof<
-                <F as FieldProvingCurves>::Affine,
+                F::Affine,
                 EmptySectorUpdateCircuit<F, U, V, W, SECTOR_SIZE_8_KIB>,
             >> = proofs_bytes.map(Into::into).collect();
 
@@ -1730,7 +1676,7 @@ where
         },
         SECTOR_SIZE_16_KIB => {
             let circ_partition_proofs: Vec<Halo2Proof<
-                <F as FieldProvingCurves>::Affine,
+                F::Affine,
                 EmptySectorUpdateCircuit<F, U, V, W, SECTOR_SIZE_16_KIB>,
             >> = proofs_bytes.map(Into::into).collect();
 
@@ -1751,7 +1697,7 @@ where
         },
         SECTOR_SIZE_32_KIB => {
             let circ_partition_proofs: Vec<Halo2Proof<
-                <F as FieldProvingCurves>::Affine,
+                F::Affine,
                 EmptySectorUpdateCircuit<F, U, V, W, SECTOR_SIZE_32_KIB>,
             >> = proofs_bytes.map(Into::into).collect();
 
@@ -1772,7 +1718,7 @@ where
         },
         SECTOR_SIZE_8_MIB => {
             let circ_partition_proofs: Vec<Halo2Proof<
-                <F as FieldProvingCurves>::Affine,
+                F::Affine,
                 EmptySectorUpdateCircuit<F, U, V, W, SECTOR_SIZE_8_MIB>,
             >> = proofs_bytes.map(Into::into).collect();
 
@@ -1793,7 +1739,7 @@ where
         },
         SECTOR_SIZE_16_MIB => {
             let circ_partition_proofs: Vec<Halo2Proof<
-                <F as FieldProvingCurves>::Affine,
+                F::Affine,
                 EmptySectorUpdateCircuit<F, U, V, W, SECTOR_SIZE_16_MIB>,
             >> = proofs_bytes.map(Into::into).collect();
 
@@ -1814,7 +1760,7 @@ where
         },
         SECTOR_SIZE_512_MIB => {
             let circ_partition_proofs: Vec<Halo2Proof<
-                <F as FieldProvingCurves>::Affine,
+                F::Affine,
                 EmptySectorUpdateCircuit<F, U, V, W, SECTOR_SIZE_512_MIB>,
             >> = proofs_bytes.map(Into::into).collect();
 
@@ -1835,7 +1781,7 @@ where
         },
         SECTOR_SIZE_32_GIB => {
             let circ_partition_proofs: Vec<Halo2Proof<
-                <F as FieldProvingCurves>::Affine,
+                F::Affine,
                 EmptySectorUpdateCircuit<F, U, V, W, SECTOR_SIZE_32_GIB>,
             >> = proofs_bytes.map(Into::into).collect();
 
@@ -1856,7 +1802,7 @@ where
         },
         SECTOR_SIZE_64_GIB => {
             let circ_partition_proofs: Vec<Halo2Proof<
-                <F as FieldProvingCurves>::Affine,
+                F::Affine,
                 EmptySectorUpdateCircuit<F, U, V, W, SECTOR_SIZE_64_GIB>,
             >> = proofs_bytes.map(Into::into).collect();
 

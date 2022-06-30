@@ -10,7 +10,7 @@ use bellperson::{
 };
 use blstrs::Scalar as Fr;
 use ff::{Field, PrimeField};
-use filecoin_hashers::{HashFunction, Hasher, PoseidonArity};
+use filecoin_hashers::{Groth16Hasher, PoseidonArity};
 use neptune::circuit::poseidon_hash;
 use storage_proofs_core::{
     compound_proof::CircuitComponent,
@@ -534,7 +534,7 @@ where
 
         // Assert that the witnessed `root_r_old` and `root_r_new` are consistent with the
         // public `comm_r_old` and `comm_r_new` via `comm_r = H(comm_c || root_r)`.
-        let comm_r_old_calc = <TreeRHasher<Fr> as Hasher>::Function::hash2_circuit(
+        let comm_r_old_calc = TreeRHasher::<Fr>::hash2_circuit(
             cs.namespace(|| "comm_r_old_calc"),
             &comm_c,
             &root_r_old,
@@ -545,7 +545,7 @@ where
             |lc| lc + CS::one(),
             |lc| lc + comm_r_old.get_variable(),
         );
-        let comm_r_new_calc = <TreeRHasher<Fr> as Hasher>::Function::hash2_circuit(
+        let comm_r_new_calc = TreeRHasher::<Fr>::hash2_circuit(
             cs.namespace(|| "comm_r_new_calc"),
             &comm_c,
             &root_r_new,

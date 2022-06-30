@@ -1,5 +1,5 @@
 use filecoin_hashers::{
-    poseidon::PoseidonHasher, sha256::Sha256Hasher, Domain, Hasher, PoseidonArity,
+    poseidon::PoseidonHasher, sha256::Sha256Hasher, Hasher, PoseidonArity,
 };
 use generic_array::typenum::{U0, U2, U4, U8};
 use halo2_proofs::{arithmetic::FieldExt, dev::MockProver, pasta::Fp};
@@ -35,10 +35,8 @@ where
     U: PoseidonArity<F>,
     V: PoseidonArity<F>,
     W: PoseidonArity<F>,
-    Sha256Hasher<F>: Hasher,
-    <Sha256Hasher<F> as Hasher>::Domain: Domain<Field = F>,
-    PoseidonHasher<F>: Hasher,
-    <PoseidonHasher<F> as Hasher>::Domain: Domain<Field = F>,
+    Sha256Hasher<F>: Hasher<Field = F>,
+    PoseidonHasher<F>: Hasher<Field = F>,
 {
     let sector_bytes = SECTOR_NODES << 5;
     let num_layers = num_layers::<SECTOR_NODES>();

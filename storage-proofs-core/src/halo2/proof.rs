@@ -18,17 +18,17 @@ type Challenge<C> = Challenge255<C>;
 type TranscriptReader<'proof, C> = Blake2bRead<&'proof [u8], C, Challenge<C>>;
 type TranscriptWriter<C> = Blake2bWrite<Vec<u8>, C, Challenge<C>>;
 
-pub trait FieldProvingCurves: FieldExt {
+pub trait Halo2Field: FieldExt {
     type Curve: CurveExt<ScalarExt = Self>;
     type Affine: CurveAffine<ScalarExt = Self>;
 }
 
-impl FieldProvingCurves for Fp {
+impl Halo2Field for Fp {
     type Curve = Eq;
     type Affine = <Self::Curve as CurveExt>::AffineExt;
 }
 
-impl FieldProvingCurves for Fq {
+impl Halo2Field for Fq {
     type Curve = Ep;
     type Affine = <Self::Curve as CurveExt>::AffineExt;
 }
@@ -216,14 +216,14 @@ where
 
 pub trait CompoundProof<'a, F, const SECTOR_NODES: usize>: ProofScheme<'a>
 where
-    F: FieldExt + FieldProvingCurves,
+    F: Halo2Field,
 {
     type Circuit: Circuit<F> + CircuitRows;
 
     #[inline]
     fn create_keypair(
         empty_circuit: &Self::Circuit,
-    ) -> Result<Halo2Keypair<<F as FieldProvingCurves>::Affine, Self::Circuit>, Error> {
+    ) -> Result<Halo2Keypair<F::Affine, Self::Circuit>, Error> {
         Halo2Keypair::create(empty_circuit)
     }
 
@@ -231,41 +231,41 @@ where
         setup_params: &Self::SetupParams,
         vanilla_pub_inputs: &Self::PublicInputs,
         vanilla_proof: &Self::Proof,
-        keypair: &Halo2Keypair<<F as FieldProvingCurves>::Affine, Self::Circuit>,
-    ) -> Result<Halo2Proof<<F as FieldProvingCurves>::Affine, Self::Circuit>, Error>;
+        keypair: &Halo2Keypair<F::Affine, Self::Circuit>,
+    ) -> Result<Halo2Proof<F::Affine, Self::Circuit>, Error>;
 
     fn prove_all_partitions_with_vanilla(
         setup_params: &Self::SetupParams,
         vanilla_pub_inputs: &Self::PublicInputs,
         vanilla_proofs: &[Self::Proof],
-        keypair: &Halo2Keypair<<F as FieldProvingCurves>::Affine, Self::Circuit>,
-    ) -> Result<Vec<Halo2Proof<<F as FieldProvingCurves>::Affine, Self::Circuit>>, Error>;
+        keypair: &Halo2Keypair<F::Affine, Self::Circuit>,
+    ) -> Result<Vec<Halo2Proof<F::Affine, Self::Circuit>>, Error>;
 
     fn batch_prove_all_partitions_with_vanilla(
         setup_params: &Self::SetupParams,
         vanilla_pub_inputs: &Self::PublicInputs,
         vanilla_proofs: &[Self::Proof],
-        keypair: &Halo2Keypair<<F as FieldProvingCurves>::Affine, Self::Circuit>,
-    ) -> Result<Halo2Proof<<F as FieldProvingCurves>::Affine, Self::Circuit>, Error>;
+        keypair: &Halo2Keypair<F::Affine, Self::Circuit>,
+    ) -> Result<Halo2Proof<F::Affine, Self::Circuit>, Error>;
 
     fn verify_partition(
         setup_params: &Self::SetupParams,
         vanilla_pub_inputs: &Self::PublicInputs,
-        circ_proof: &Halo2Proof<<F as FieldProvingCurves>::Affine, Self::Circuit>,
-        keypair: &Halo2Keypair<<F as FieldProvingCurves>::Affine, Self::Circuit>,
+        circ_proof: &Halo2Proof<F::Affine, Self::Circuit>,
+        keypair: &Halo2Keypair<F::Affine, Self::Circuit>,
     ) -> Result<(), Error>;
 
     fn verify_all_partitions(
         setup_params: &Self::SetupParams,
         vanilla_pub_inputs: &Self::PublicInputs,
-        circ_proofs: &[Halo2Proof<<F as FieldProvingCurves>::Affine, Self::Circuit>],
-        keypair: &Halo2Keypair<<F as FieldProvingCurves>::Affine, Self::Circuit>,
+        circ_proofs: &[Halo2Proof<F::Affine, Self::Circuit>],
+        keypair: &Halo2Keypair<F::Affine, Self::Circuit>,
     ) -> Result<(), Error>;
 
     fn batch_verify_all_partitions(
         setup_params: &Self::SetupParams,
         vanilla_pub_inputs: &Self::PublicInputs,
-        circ_proofs: &Halo2Proof<<F as FieldProvingCurves>::Affine, Self::Circuit>,
-        keypair: &Halo2Keypair<<F as FieldProvingCurves>::Affine, Self::Circuit>,
+        circ_proofs: &Halo2Proof<F::Affine, Self::Circuit>,
+        keypair: &Halo2Keypair<F::Affine, Self::Circuit>,
     ) -> Result<(), Error>;
 }

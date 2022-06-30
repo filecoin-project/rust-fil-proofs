@@ -91,9 +91,7 @@ fn test_extract_all<Tree>()
 where
     Tree: 'static + MerkleTreeTrait,
     // Ensure that `Blake2sHasher` is a valid hasher for `Tree`'s field.
-    Blake2sHasher<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>: Hasher,
-    <Blake2sHasher<<<Tree::Hasher as Hasher>::Domain as Domain>::Field> as Hasher>::Domain:
-        Domain<Field = <<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
+    Blake2sHasher<Tree::Field>: Hasher<Field = Tree::Field>,
 {
     // pretty_env_logger::try_init();
 
@@ -133,9 +131,9 @@ where
         api_version: ApiVersion::V1_1_0,
     };
 
-    let pp = StackedDrg::<Tree, Blake2sHasher<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>>::setup(&sp).expect("setup failed");
+    let pp = StackedDrg::<Tree, Blake2sHasher<Tree::Field>>::setup(&sp).expect("setup failed");
 
-    StackedDrg::<Tree, Blake2sHasher<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>>::replicate(
+    StackedDrg::<Tree, Blake2sHasher<Tree::Field>>::replicate(
         &pp,
         &replica_id,
         (mmapped_data.as_mut()).into(),
@@ -150,7 +148,7 @@ where
 
     let (_, label_states) = StackedDrg::<
         Tree,
-        Blake2sHasher<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
+        Blake2sHasher<Tree::Field>,
     >::generate_labels_for_encoding(
         &pp.graph, &layer_challenges, &replica_id, config.clone()
     )
@@ -168,7 +166,7 @@ where
 
     let (_, label_states) = StackedDrg::<
         Tree,
-        Blake2sHasher<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
+        Blake2sHasher<Tree::Field>,
     >::generate_labels_for_encoding(
         &pp.graph, &layer_challenges, &replica_id, config.clone()
     )
@@ -182,7 +180,7 @@ where
 
     assert_ne!(data, &mmapped_data[..], "replication did not change data");
 
-    StackedDrg::<Tree, Blake2sHasher<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>>::extract_all(&pp, &replica_id, mmapped_data.as_mut(), Some(config))
+    StackedDrg::<Tree, Blake2sHasher<Tree::Field>>::extract_all(&pp, &replica_id, mmapped_data.as_mut(), Some(config))
         .expect("failed to extract data");
 
     assert_eq!(data, mmapped_data.as_ref());
@@ -381,9 +379,7 @@ fn test_prove_verify<Tree>(n: usize, challenges: LayerChallenges)
 where
     Tree: 'static + MerkleTreeTrait,
     // Ensure that `Blake2sHasher` is a valid hasher for `Tree`'s field.
-    Blake2sHasher<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>: Hasher,
-    <Blake2sHasher<<<Tree::Hasher as Hasher>::Domain as Domain>::Field> as Hasher>::Domain:
-        Domain<Field = <<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
+    Blake2sHasher<Tree::Field>: Hasher<Field = Tree::Field>,
 {
     // This will be called multiple times, only the first one succeeds, and that is ok.
     // femme::pretty::Logger::new()
@@ -426,10 +422,10 @@ where
         api_version: ApiVersion::V1_1_0,
     };
 
-    let pp = StackedDrg::<Tree, Blake2sHasher<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>>::setup(&sp).expect("setup failed");
+    let pp = StackedDrg::<Tree, Blake2sHasher<Tree::Field>>::setup(&sp).expect("setup failed");
     let (tau, (p_aux, t_aux)) = StackedDrg::<
         Tree,
-        Blake2sHasher<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
+        Blake2sHasher<Tree::Field>,
     >::replicate(
         &pp,
         &replica_id,

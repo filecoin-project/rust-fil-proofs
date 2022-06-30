@@ -23,8 +23,7 @@ pub const H_SELECT: u64 = 1 << 3;
 pub fn create_tree_d_new<F>(labels_d_new: &[TreeDDomain<F>], tmp_dir: &Path) -> TreeD<F>
 where
     F: PrimeField,
-    TreeDHasher<F>: Hasher<Domain = TreeDDomain<F>>,
-    TreeDDomain<F>: Domain<Field = F>,
+    TreeDHasher<F>: Hasher<Field = F>,
 {
     let num_leafs = labels_d_new.len();
     let arity = TreeDArity::to_usize();
@@ -47,11 +46,11 @@ pub fn create_tree_d_new_poseidon<F, U, V, W>(
 ) -> TreeR<F, U, V, W>
 where
     F: PrimeField,
-    TreeRHasher<F>: Hasher<Domain = TreeRDomain<F>>,
-    TreeRDomain<F>: Domain<Field = F>,
     U: PoseidonArity<F>,
     V: PoseidonArity<F>,
     W: PoseidonArity<F>,
+    TreeDHasher<F>: Hasher<Field = F>,
+    TreeRHasher<F>: Hasher<Field = F>,
 {
     create_tree_r(labels_d_new, tmp_dir, "tree-d-new", "data_new")
 }
@@ -60,8 +59,7 @@ where
 pub fn get_apex_leafs<F>(tree_d_new: &TreeD<F>, k: usize) -> Vec<TreeDDomain<F>>
 where
     F: PrimeField,
-    TreeDHasher<F>: Hasher<Domain = TreeDDomain<F>>,
-    TreeDDomain<F>: Domain<Field = F>,
+    TreeDHasher<F>: Hasher<Field = F>,
 {
     let sector_nodes = tree_d_new.leafs();
     let tree_d_height = sector_nodes.trailing_zeros() as usize;
@@ -94,11 +92,10 @@ pub fn create_tree_r_old<F, U, V, W>(
 ) -> TreeR<F, U, V, W>
 where
     F: PrimeField,
-    TreeRHasher<F>: Hasher<Domain = TreeRDomain<F>>,
-    TreeRDomain<F>: Domain<Field = F>,
     U: PoseidonArity<F>,
     V: PoseidonArity<F>,
     W: PoseidonArity<F>,
+    TreeRHasher<F>: Hasher<Field = F>,
 {
     create_tree_r(replica_old, tmp_dir, "tree-r-old", "replica_old")
 }
@@ -110,11 +107,11 @@ pub fn create_tree_r_new<F, U, V, W>(
 ) -> TreeR<F, U, V, W>
 where
     F: PrimeField,
-    TreeRHasher<F>: Hasher<Domain = TreeRDomain<F>>,
-    TreeRDomain<F>: Domain<Field = F>,
     U: PoseidonArity<F>,
     V: PoseidonArity<F>,
     W: PoseidonArity<F>,
+    TreeDHasher<F>: Hasher<Field = F>,
+    TreeRHasher<F>: Hasher<Field = F>,
 {
     create_tree_r(replica_new, tmp_dir, "tree-r-new", "replica_new")
 }
@@ -127,11 +124,10 @@ fn create_tree_r<F, U, V, W>(
 ) -> TreeR<F, U, V, W>
 where
     F: PrimeField,
-    TreeRHasher<F>: Hasher<Domain = TreeRDomain<F>>,
-    TreeRDomain<F>: Domain<Field = F>,
     U: PoseidonArity<F>,
     V: PoseidonArity<F>,
     W: PoseidonArity<F>,
+    TreeRHasher<F>: Hasher<Field = F>,
 {
     let base_arity = U::to_usize();
 
@@ -183,7 +179,7 @@ where
     // TreeD domain.
     D: Domain,
     // TreeD and TreeR Domains must use the same field.
-    TreeRDomain<D::Field>: Domain<Field = D::Field>,
+    TreeRHasher<D::Field>: Hasher<Field = D::Field>,
 {
     let sector_nodes = labels_r_old.len();
     assert_eq!(sector_nodes, labels_d_new.len());

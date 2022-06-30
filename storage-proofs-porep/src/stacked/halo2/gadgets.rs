@@ -4,7 +4,7 @@ use std::marker::PhantomData;
 
 use fil_halo2_gadgets::{sha256, uint32::AssignedU32, AdviceIter, ColumnCount, NumCols};
 use filecoin_hashers::{
-    poseidon::PoseidonHasher, sha256::Sha256Hasher, Domain, HaloHasher, HashInstructions, Hasher,
+    poseidon::PoseidonHasher, sha256::Sha256Hasher, Halo2Hasher, HashInstructions, Hasher,
 };
 use generic_array::typenum::{U11, U2};
 use halo2_proofs::{
@@ -22,33 +22,30 @@ use crate::stacked::halo2::constants::{
 pub enum ColumnHasherConfig<F, const SECTOR_NODES: usize>
 where
     F: FieldExt,
-    PoseidonHasher<F>: Hasher,
-    <PoseidonHasher<F> as Hasher>::Domain: Domain<Field = F>,
+    PoseidonHasher<F>: Hasher<Field = F>,
 {
-    Arity2(<PoseidonHasher<F> as HaloHasher<U2>>::Config),
-    Arity11(<PoseidonHasher<F> as HaloHasher<U11>>::Config),
+    Arity2(<PoseidonHasher<F> as Halo2Hasher<U2>>::Config),
+    Arity11(<PoseidonHasher<F> as Halo2Hasher<U11>>::Config),
 }
 
 pub enum ColumnHasherChip<F, const SECTOR_NODES: usize>
 where
     F: FieldExt,
-    PoseidonHasher<F>: Hasher,
-    <PoseidonHasher<F> as Hasher>::Domain: Domain<Field = F>,
+    PoseidonHasher<F>: Hasher<Field = F>,
 {
-    Arity2(<PoseidonHasher<F> as HaloHasher<U2>>::Chip),
-    Arity11(<PoseidonHasher<F> as HaloHasher<U11>>::Chip),
+    Arity2(<PoseidonHasher<F> as Halo2Hasher<U2>>::Chip),
+    Arity11(<PoseidonHasher<F> as Halo2Hasher<U11>>::Chip),
 }
 
 impl<F, const SECTOR_NODES: usize> ColumnCount for ColumnHasherChip<F, SECTOR_NODES>
 where
     F: FieldExt,
-    PoseidonHasher<F>: Hasher,
-    <PoseidonHasher<F> as Hasher>::Domain: Domain<Field = F>,
+    PoseidonHasher<F>: Hasher<Field = F>,
 {
     fn num_cols() -> NumCols {
         match num_layers::<SECTOR_NODES>() {
-            2 => <PoseidonHasher<F> as HaloHasher<U2>>::Chip::num_cols(),
-            11 => <PoseidonHasher<F> as HaloHasher<U11>>::Chip::num_cols(),
+            2 => <PoseidonHasher<F> as Halo2Hasher<U2>>::Chip::num_cols(),
+            11 => <PoseidonHasher<F> as Halo2Hasher<U11>>::Chip::num_cols(),
             _ => unreachable!(),
         }
     }
@@ -57,8 +54,7 @@ where
 impl<F, const SECTOR_NODES: usize> HashInstructions<F> for ColumnHasherChip<F, SECTOR_NODES>
 where
     F: FieldExt,
-    PoseidonHasher<F>: Hasher,
-    <PoseidonHasher<F> as Hasher>::Domain: Domain<Field = F>,
+    PoseidonHasher<F>: Hasher<Field = F>,
 {
     fn hash(
         &self,
@@ -70,13 +66,13 @@ where
         match self {
             ColumnHasherChip::Arity2(chip) => {
                 assert_eq!(num_layers, 2);
-                <<PoseidonHasher<F> as HaloHasher<U2>>::Chip as HashInstructions<F>>::hash(
+                <<PoseidonHasher<F> as Halo2Hasher<U2>>::Chip as HashInstructions<F>>::hash(
                     chip, layouter, preimage,
                 )
             }
             ColumnHasherChip::Arity11(chip) => {
                 assert_eq!(num_layers, 11);
-                <<PoseidonHasher<F> as HaloHasher<U11>>::Chip as HashInstructions<F>>::hash(
+                <<PoseidonHasher<F> as Halo2Hasher<U11>>::Chip as HashInstructions<F>>::hash(
                     chip, layouter, preimage,
                 )
             }
@@ -87,20 +83,19 @@ where
 impl<F, const SECTOR_NODES: usize> ColumnHasherChip<F, SECTOR_NODES>
 where
     F: FieldExt,
-    PoseidonHasher<F>: Hasher,
-    <PoseidonHasher<F> as Hasher>::Domain: Domain<Field = F>,
+    PoseidonHasher<F>: Hasher<Field = F>,
 {
     pub fn construct(config: ColumnHasherConfig<F, SECTOR_NODES>) -> Self {
         let num_layers = num_layers::<SECTOR_NODES>();
         match config {
             ColumnHasherConfig::Arity2(config) => {
                 assert_eq!(num_layers, 2);
-                let chip = <PoseidonHasher<F> as HaloHasher<U2>>::construct(config);
+                let chip = <PoseidonHasher<F> as Halo2Hasher<U2>>::construct(config);
                 ColumnHasherChip::Arity2(chip)
             }
             ColumnHasherConfig::Arity11(config) => {
                 assert_eq!(num_layers, 11);
-                let chip = <PoseidonHasher<F> as HaloHasher<U11>>::construct(config);
+                let chip = <PoseidonHasher<F> as Halo2Hasher<U11>>::construct(config);
                 ColumnHasherChip::Arity11(chip)
             }
         }
@@ -115,13 +110,13 @@ where
     ) -> ColumnHasherConfig<F, SECTOR_NODES> {
         match num_layers::<SECTOR_NODES>() {
             2 => {
-                let config = <PoseidonHasher<F> as HaloHasher<U2>>::configure(
+                let config = <PoseidonHasher<F> as Halo2Hasher<U2>>::configure(
                     meta, advice_eq, advice_neq, fixed_eq, fixed_neq,
                 );
                 ColumnHasherConfig::Arity2(config)
             }
             11 => {
-                let config = <PoseidonHasher<F> as HaloHasher<U11>>::configure(
+                let config = <PoseidonHasher<F> as Halo2Hasher<U11>>::configure(
                     meta, advice_eq, advice_neq, fixed_eq, fixed_neq,
                 );
                 ColumnHasherConfig::Arity11(config)
@@ -135,12 +130,11 @@ where
 pub struct LabelingConfig<F, const SECTOR_NODES: usize>
 where
     F: FieldExt,
-    Sha256Hasher<F>: Hasher,
-    <Sha256Hasher<F> as Hasher>::Domain: Domain<Field = F>,
+    Sha256Hasher<F>: Hasher<Field = F>,
 {
     // The sha256 chip is the same for all arities; use arity `U2` here because `SdrPorepCircuit`
     // will have already instantiated a sha256 chip for arity `U2` to verify TreeD Merkle proofs.
-    sha256: <Sha256Hasher<F> as HaloHasher<U2>>::Config,
+    sha256: <Sha256Hasher<F> as Halo2Hasher<U2>>::Config,
     // Equality enabled advice.
     advice: Vec<Column<Advice>>,
 }
@@ -148,8 +142,7 @@ where
 pub struct LabelingConstants<F, const SECTOR_NODES: usize>
 where
     F: FieldExt,
-    Sha256Hasher<F>: Hasher,
-    <Sha256Hasher<F> as Hasher>::Domain: Domain<Field = F>,
+    Sha256Hasher<F>: Hasher<Field = F>,
 {
     zero: AssignedU32<F>,
     layers: Vec<AssignedU32<F>>,
@@ -160,8 +153,7 @@ where
 pub struct LabelingChip<F, const SECTOR_NODES: usize>
 where
     F: FieldExt,
-    Sha256Hasher<F>: Hasher,
-    <Sha256Hasher<F> as Hasher>::Domain: Domain<Field = F>,
+    Sha256Hasher<F>: Hasher<Field = F>,
 {
     config: LabelingConfig<F, SECTOR_NODES>,
 }
@@ -176,8 +168,7 @@ where
 impl<F, const SECTOR_NODES: usize> LabelingChip<F, SECTOR_NODES>
 where
     F: FieldExt,
-    Sha256Hasher<F>: Hasher,
-    <Sha256Hasher<F> as Hasher>::Domain: Domain<Field = F>,
+    Sha256Hasher<F>: Hasher<Field = F>,
 {
     pub fn construct(config: LabelingConfig<F, SECTOR_NODES>) -> Self {
         LabelingChip { config }
@@ -185,7 +176,7 @@ where
 
     pub fn configure(
         meta: &mut ConstraintSystem<F>,
-        sha256: <Sha256Hasher<F> as HaloHasher<U2>>::Config,
+        sha256: <Sha256Hasher<F> as Halo2Hasher<U2>>::Config,
         advice: &[Column<Advice>],
         // TODO (jake): do we need to equality constraint against constants?
         // fixed: Column<Fixed>,
@@ -193,7 +184,7 @@ where
         for col in advice.iter() {
             meta.enable_equality(*col);
         }
-        // TODO (jake):
+        // TODO (jake): do we need to equality constraint against constants?
         // meta.enable_constant(fixed);
         LabelingConfig {
             sha256,
@@ -297,7 +288,7 @@ where
             .collect();
 
         let sha256_chip =
-            <Sha256Hasher<F> as HaloHasher<U2>>::construct(self.config.sha256.clone());
+            <Sha256Hasher<F> as Halo2Hasher<U2>>::construct(self.config.sha256.clone());
 
         let digest_words =
             sha256_chip.hash_words_nopad(layouter.namespace(|| "sha256"), &preimage)?;

@@ -173,8 +173,8 @@ fn test_por_validates_proof<Tree: MerkleTreeTrait>() {
     // Invalidate the proof.
     let bad_proof = {
         let mut proof = good_proof;
-        let mut bad_leaf: <<Tree::Hasher as Hasher>::Domain as Domain>::Field = proof.data.into();
-        bad_leaf += <<Tree::Hasher as Hasher>::Domain as Domain>::Field::one();
+        let mut bad_leaf: Tree::Field = proof.data.into();
+        bad_leaf += Tree::Field::one();
         proof.data = bad_leaf.into();
         proof
     };

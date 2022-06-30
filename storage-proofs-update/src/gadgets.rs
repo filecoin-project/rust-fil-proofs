@@ -8,7 +8,7 @@ use bellperson::{
 };
 use blstrs::Scalar as Fr;
 use ff::{Field, PrimeField};
-use filecoin_hashers::{HashFunction, Hasher};
+use filecoin_hashers::Groth16Hasher;
 use neptune::circuit::poseidon_hash;
 use storage_proofs_core::gadgets::por::por_no_challenge_input;
 
@@ -61,7 +61,7 @@ pub fn apex_por<CS: ConstraintSystem<Fr>>(
             .chunks(2)
             .enumerate()
             .map(|(i, siblings)| {
-                <TreeDHasher<Fr> as Hasher>::Function::hash2_circuit(
+                TreeDHasher::<Fr>::hash2_circuit(
                     cs.namespace(|| {
                         format!(
                             "apex_tree generation hash (tree_row={}, siblings={})",
@@ -278,7 +278,7 @@ mod tests {
     use super::*;
 
     use bellperson::util_cs::test_cs::TestConstraintSystem;
-    use filecoin_hashers::Domain;
+    use filecoin_hashers::{Domain, HashFunction, Hasher};
     use rand::SeedableRng;
     use rand_xorshift::XorShiftRng;
     use storage_proofs_core::TEST_SEED;
@@ -316,7 +316,7 @@ mod tests {
             let challenge_count = challenge_count(sector_nodes);
 
             for k in 0..partition_count {
-                let challenges = Challenges::new(sector_nodes, comm_r_new, k);
+                let challenges = Challenges::<Fr>::new(sector_nodes, comm_r_new, k);
 
                 let mut cs = TestConstraintSystem::new();
                 let comm_r_new =

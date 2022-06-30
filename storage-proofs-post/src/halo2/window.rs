@@ -1,8 +1,6 @@
 use std::convert::TryInto;
 
-use filecoin_hashers::{
-    poseidon::PoseidonHasher, Domain, FieldArity, Hasher, PoseidonArity, POSEIDON_CONSTANTS,
-};
+use filecoin_hashers::{get_poseidon_constants, poseidon::PoseidonHasher, Hasher, PoseidonArity};
 use generic_array::typenum::U2;
 use halo2_proofs::{
     arithmetic::FieldExt,
@@ -74,8 +72,7 @@ pub fn generate_challenges<F: FieldExt, const SECTOR_NODES: usize>(
 pub struct PublicInputs<F, const SECTOR_NODES: usize>
 where
     F: FieldExt,
-    PoseidonHasher<F>: Hasher,
-    <PoseidonHasher<F> as Hasher>::Domain: Domain<Field = F>,
+    PoseidonHasher<F>: Hasher<Field = F>,
 {
     // Each challenged sector's `comm_r`.
     pub comms_r: Vec<Option<F>>,
@@ -88,8 +85,7 @@ impl<F, const SECTOR_NODES: usize>
     for PublicInputs<F, SECTOR_NODES>
 where
     F: FieldExt,
-    PoseidonHasher<F>: Hasher,
-    <PoseidonHasher<F> as Hasher>::Domain: Domain<Field = F>,
+    PoseidonHasher<F>: Hasher<Field = F>,
 {
     #[allow(clippy::unwrap_used)]
     fn from(
@@ -144,8 +140,7 @@ where
 impl<F, const SECTOR_NODES: usize> PublicInputs<F, SECTOR_NODES>
 where
     F: FieldExt,
-    PoseidonHasher<F>: Hasher,
-    <PoseidonHasher<F> as Hasher>::Domain: Domain<Field = F>,
+    PoseidonHasher<F>: Hasher<Field = F>,
 {
     pub fn empty() -> Self {
         let challenged_sectors = sectors_challenged_per_partition::<SECTOR_NODES>();
@@ -184,22 +179,17 @@ where
     U: PoseidonArity<F>,
     V: PoseidonArity<F>,
     W: PoseidonArity<F>,
-    PoseidonHasher<F>: Hasher,
-    <PoseidonHasher<F> as Hasher>::Domain: Domain<Field = F>,
+    PoseidonHasher<F>: Hasher<Field = F>,
 {
     pub sector_proofs: Vec<SectorProof<F, U, V, W, SECTOR_NODES, SECTOR_CHALLENGES>>,
 }
 
-impl<F, U, V, W, P, const SECTOR_NODES: usize> From<&[vanilla::SectorProof<P>]>
-    for PrivateInputs<F, U, V, W, SECTOR_NODES>
+impl<F, P, const SECTOR_NODES: usize> From<&[vanilla::SectorProof<P>]>
+    for PrivateInputs<F, P::Arity, P::SubTreeArity, P::TopTreeArity, SECTOR_NODES>
 where
     F: FieldExt,
-    U: PoseidonArity<F>,
-    V: PoseidonArity<F>,
-    W: PoseidonArity<F>,
-    PoseidonHasher<F>: Hasher,
-    <PoseidonHasher<F> as Hasher>::Domain: Domain<Field = F>,
-    P: MerkleProofTrait<Hasher = PoseidonHasher<F>, Arity = U, SubTreeArity = V, TopTreeArity = W>,
+    P: MerkleProofTrait<Hasher = PoseidonHasher<F>>,
+    PoseidonHasher<F>: Hasher<Field = F>,
 {
     fn from(sector_proofs: &[vanilla::SectorProof<P>]) -> Self {
         PrivateInputs {
@@ -208,16 +198,12 @@ where
     }
 }
 
-impl<F, U, V, W, P, const SECTOR_NODES: usize> From<&Vec<vanilla::SectorProof<P>>>
-    for PrivateInputs<F, U, V, W, SECTOR_NODES>
+impl<F, P, const SECTOR_NODES: usize> From<&Vec<vanilla::SectorProof<P>>>
+    for PrivateInputs<F, P::Arity, P::SubTreeArity, P::TopTreeArity, SECTOR_NODES>
 where
     F: FieldExt,
-    U: PoseidonArity<F>,
-    V: PoseidonArity<F>,
-    W: PoseidonArity<F>,
-    PoseidonHasher<F>: Hasher,
-    <PoseidonHasher<F> as Hasher>::Domain: Domain<Field = F>,
-    P: MerkleProofTrait<Hasher = PoseidonHasher<F>, Arity = U, SubTreeArity = V, TopTreeArity = W>,
+    P: MerkleProofTrait<Hasher = PoseidonHasher<F>>,
+    PoseidonHasher<F>: Hasher<Field = F>,
 {
     fn from(sector_proofs: &Vec<vanilla::SectorProof<P>>) -> Self {
         Self::from(sector_proofs.as_slice())
@@ -230,8 +216,7 @@ where
     U: PoseidonArity<F>,
     V: PoseidonArity<F>,
     W: PoseidonArity<F>,
-    PoseidonHasher<F>: Hasher,
-    <PoseidonHasher<F> as Hasher>::Domain: Domain<Field = F>,
+    PoseidonHasher<F>: Hasher<Field = F>,
 {
     pub fn empty() -> Self {
         let challenged_sectors = sectors_challenged_per_partition::<SECTOR_NODES>();
@@ -248,8 +233,7 @@ where
     U: PoseidonArity<F>,
     V: PoseidonArity<F>,
     W: PoseidonArity<F>,
-    PoseidonHasher<F>: Hasher,
-    <PoseidonHasher<F> as Hasher>::Domain: Domain<Field = F>,
+    PoseidonHasher<F>: Hasher<Field = F>,
 {
     pub pub_inputs: PublicInputs<F, SECTOR_NODES>,
     pub priv_inputs: PrivateInputs<F, U, V, W, SECTOR_NODES>,
@@ -262,8 +246,7 @@ where
     U: PoseidonArity<F>,
     V: PoseidonArity<F>,
     W: PoseidonArity<F>,
-    PoseidonHasher<F>: Hasher,
-    <PoseidonHasher<F> as Hasher>::Domain: Domain<Field = F>,
+    PoseidonHasher<F>: Hasher<Field = F>,
 {
     type Config = PostConfig<F, U, V, W, SECTOR_NODES>;
     type FloorPlanner = SimpleFloorPlanner;
@@ -321,7 +304,7 @@ where
             let comm_r = poseidon_2_chip.hash(
                 layouter.namespace(|| "calculate comm_r"),
                 &[comm_c, root_r.clone()],
-                POSEIDON_CONSTANTS.get::<FieldArity<F, U2>>().unwrap(),
+                get_poseidon_constants::<F, U2>(),
             )?;
             layouter.constrain_instance(comm_r.cell(), pi_col, comm_r_row(sector_index))?;
 
@@ -378,8 +361,7 @@ where
     U: PoseidonArity<F>,
     V: PoseidonArity<F>,
     W: PoseidonArity<F>,
-    PoseidonHasher<F>: Hasher,
-    <PoseidonHasher<F> as Hasher>::Domain: Domain<Field = F>,
+    PoseidonHasher<F>: Hasher<Field = F>,
 {
     fn k(&self) -> u32 {
         use crate::halo2::constants::*;
@@ -400,8 +382,7 @@ where
     U: PoseidonArity<F>,
     V: PoseidonArity<F>,
     W: PoseidonArity<F>,
-    PoseidonHasher<F>: Hasher,
-    <PoseidonHasher<F> as Hasher>::Domain: Domain<Field = F>,
+    PoseidonHasher<F>: Hasher<Field = F>,
 {
     pub fn blank_circuit() -> Self {
         WindowPostCircuit {

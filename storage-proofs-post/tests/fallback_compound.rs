@@ -3,7 +3,7 @@ use bellperson::{
     Circuit,
 };
 use blstrs::Scalar as Fr;
-use filecoin_hashers::{poseidon::PoseidonHasher, Domain, HashFunction, Hasher};
+use filecoin_hashers::{poseidon::PoseidonHasher, Domain, Groth16Hasher, HashFunction, Hasher};
 use generic_array::typenum::{U0, U2, U4, U8};
 use pretty_assertions::assert_eq;
 use rand::SeedableRng;
@@ -69,8 +69,8 @@ fn fallback_post<Tree>(
     partitions: usize,
     api_version: ApiVersion,
 ) where
-    Tree: 'static + MerkleTreeTrait,
-    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+    Tree: 'static + MerkleTreeTrait<Field = Fr>,
+    Tree::Hasher: Groth16Hasher,
 {
     let rng = &mut XorShiftRng::from_seed(TEST_SEED);
 
