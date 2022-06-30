@@ -76,7 +76,7 @@ where
     {
         // Generate vanilla-proof.
         let challenge_proofs: Vec<vanilla::ChallengeProof<Fr, U, V, W>> =
-            Challenges::new_poseidon(sector_nodes, comm_r_new)
+            Challenges::<Fr>::new_poseidon(sector_nodes, comm_r_new)
                 .enumerate()
                 .take(pub_params.challenge_count)
                 .map(|(i, c)| {

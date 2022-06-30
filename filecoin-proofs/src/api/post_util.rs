@@ -4,7 +4,7 @@ use std::path::Path;
 
 use anyhow::{anyhow, ensure, Context, Result};
 use bincode::deserialize;
-use filecoin_hashers::{Domain, Hasher};
+use filecoin_hashers::Hasher;
 use log::{debug, info};
 use storage_proofs_core::{
     cache_key::CacheKey, merkle::MerkleTreeTrait, proof::ProofScheme, sector::SectorId,
@@ -13,7 +13,7 @@ use storage_proofs_post::fallback::{self, generate_leaf_challenge, FallbackPoSt,
 
 use crate::{
     api::as_safe_commitment,
-    constants::{DefaultPieceDomain, DefaultPieceHasher},
+    constants::DefaultPieceHasher,
     types::{
         ChallengeSeed, FallbackPoStSectorProof, PoStConfig, PrivateReplicaInfo, ProverId,
         TemporaryAux, VanillaProof,
@@ -25,16 +25,11 @@ use crate::{
 pub fn clear_cache<Tree>(cache_dir: &Path) -> Result<()>
 where
     Tree: MerkleTreeTrait,
-    DefaultPieceHasher<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>: Hasher,
-    DefaultPieceDomain<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>:
-        Domain<Field = <<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
+    DefaultPieceHasher<Tree::Field>: Hasher<Field = Tree::Field>,
 {
     info!("clear_cache:start");
 
-    let mut t_aux: TemporaryAux<
-        Tree,
-        DefaultPieceHasher<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
-    > = {
+    let mut t_aux: TemporaryAux<Tree, DefaultPieceHasher<Tree::Field>> = {
         let f_aux_path = cache_dir.to_path_buf().join(CacheKey::TAux.to_string());
         let aux_bytes = fs::read(&f_aux_path)
             .with_context(|| format!("could not read from path={:?}", f_aux_path))?;
@@ -43,10 +38,7 @@ where
     }?;
 
     t_aux.set_cache_path(cache_dir);
-    let result = TemporaryAux::<
-        Tree,
-        DefaultPieceHasher<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
-    >::clear_temp(t_aux);
+    let result = TemporaryAux::<Tree, DefaultPieceHasher<Tree::Field>>::clear_temp(t_aux);
 
     info!("clear_cache:finish");
 
@@ -57,9 +49,7 @@ where
 pub fn clear_caches<Tree>(replicas: &BTreeMap<SectorId, PrivateReplicaInfo<Tree>>) -> Result<()>
 where
     Tree: MerkleTreeTrait,
-    DefaultPieceHasher<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>: Hasher,
-    DefaultPieceDomain<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>:
-        Domain<Field = <<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
+    DefaultPieceHasher<Tree::Field>: Hasher<Field = Tree::Field>,
 {
     info!("clear_caches:start");
 

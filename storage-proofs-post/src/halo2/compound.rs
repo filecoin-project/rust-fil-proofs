@@ -1,13 +1,12 @@
-use filecoin_hashers::{poseidon::PoseidonHasher, Domain, Hasher, PoseidonArity};
-use halo2_proofs::{arithmetic::FieldExt, plonk::Error};
+use filecoin_hashers::{poseidon::PoseidonHasher, Hasher};
+use halo2_proofs::plonk::Error;
 use rand::rngs::OsRng;
 use storage_proofs_core::{
     halo2::{
-        create_batch_proof, create_proof, verify_batch_proof, verify_proof, CompoundProof, FieldProvingCurves, Halo2Keypair,
+        create_batch_proof, create_proof, verify_batch_proof, verify_proof, CompoundProof, Halo2Field, Halo2Keypair,
         Halo2Proof,
     },
     merkle::MerkleTreeTrait,
-    proof::ProofScheme,
 };
 
 use crate::{
@@ -40,25 +39,20 @@ fn is_winning<const SECTOR_NODES: usize>(setup_params: &SetupParams) -> bool {
 macro_rules! impl_compound_proof {
     ($($sector_nodes:expr),*) => {
         $(
-            impl<'a, F, U, V, W, TreeR> CompoundProof<'a, F, $sector_nodes> for FallbackPoSt<'a, TreeR>
+            impl<'a, F, TreeR> CompoundProof<'a, F, $sector_nodes> for FallbackPoSt<'a, TreeR>
             where
-                F: FieldExt + FieldProvingCurves,
-                U: PoseidonArity<F>,
-                V: PoseidonArity<F>,
-                W: PoseidonArity<F>,
-                PoseidonHasher<F>: Hasher,
-                <PoseidonHasher<F> as Hasher>::Domain: Domain<Field = F>,
-                TreeR:
-                    MerkleTreeTrait<Hasher = PoseidonHasher<F>, Arity = U, SubTreeArity = V, TopTreeArity = W>,
+                F: Halo2Field,
+                TreeR: MerkleTreeTrait<Field = F, Hasher = PoseidonHasher<F>>,
+                PoseidonHasher<F>: Hasher<Field = F>,
             {
-                type Circuit = PostCircuit<F, U, V, W, $sector_nodes>;
+                type Circuit = PostCircuit<F, TreeR::Arity, TreeR::SubTreeArity, TreeR::TopTreeArity, $sector_nodes>;
 
                 fn prove_partition_with_vanilla(
                     setup_params: &Self::SetupParams,
                     vanilla_pub_inputs: &Self::PublicInputs,
                     vanilla_partition_proof: &Self::Proof,
-                    keypair: &Halo2Keypair<<F as FieldProvingCurves>::Affine, Self::Circuit>,
-                ) -> Result<Halo2Proof<<F as FieldProvingCurves>::Affine, Self::Circuit>, Error> {
+                    keypair: &Halo2Keypair<F::Affine, Self::Circuit>,
+                ) -> Result<Halo2Proof<F::Affine, Self::Circuit>, Error> {
                     let is_winning = is_winning::<$sector_nodes>(setup_params);
 
                     let (circ, pub_inputs_vec) = if is_winning {
@@ -67,7 +61,7 @@ macro_rules! impl_compound_proof {
 
                         let pub_inputs_vec = pub_inputs.to_vec();
 
-                        let priv_inputs = winning::PrivateInputs::<F, U, V, W, $sector_nodes>::from(
+                        let priv_inputs = winning::PrivateInputs::<F, TreeR::Arity, TreeR::SubTreeArity, TreeR::TopTreeArity, $sector_nodes>::from(
                             &vanilla_partition_proof.sectors[0],
                         );
 
@@ -83,7 +77,7 @@ macro_rules! impl_compound_proof {
 
                         let pub_inputs_vec = pub_inputs.to_vec();
 
-                        let priv_inputs = window::PrivateInputs::<F, U, V, W, $sector_nodes>::from(
+                        let priv_inputs = window::PrivateInputs::<F, TreeR::Arity, TreeR::SubTreeArity, TreeR::TopTreeArity, $sector_nodes>::from(
                             &vanilla_partition_proof.sectors,
                         );
 
@@ -102,8 +96,8 @@ macro_rules! impl_compound_proof {
                     setup_params: &Self::SetupParams,
                     vanilla_pub_inputs: &Self::PublicInputs,
                     vanilla_proofs: &[Self::Proof],
-                    keypair: &Halo2Keypair<<F as FieldProvingCurves>::Affine, Self::Circuit>,
-                ) -> Result<Vec<Halo2Proof<<F as FieldProvingCurves>::Affine, Self::Circuit>>, Error> {
+                    keypair: &Halo2Keypair<F::Affine, Self::Circuit>,
+                ) -> Result<Vec<Halo2Proof<F::Affine, Self::Circuit>>, Error> {
                     let is_winning = is_winning::<$sector_nodes>(setup_params);
 
                     let partition_count = if is_winning {
@@ -139,8 +133,8 @@ macro_rules! impl_compound_proof {
                     setup_params: &Self::SetupParams,
                     vanilla_pub_inputs: &Self::PublicInputs,
                     vanilla_proofs: &[Self::Proof],
-                    keypair: &Halo2Keypair<<F as FieldProvingCurves>::Affine, Self::Circuit>,
-                ) -> Result<Halo2Proof<<F as FieldProvingCurves>::Affine, Self::Circuit>, Error> {
+                    keypair: &Halo2Keypair<F::Affine, Self::Circuit>,
+                ) -> Result<Halo2Proof<F::Affine, Self::Circuit>, Error> {
                     let is_winning = is_winning::<$sector_nodes>(setup_params);
 
                     let partition_count = if is_winning {
@@ -196,8 +190,8 @@ macro_rules! impl_compound_proof {
                 fn verify_partition(
                     setup_params: &Self::SetupParams,
                     vanilla_pub_inputs: &Self::PublicInputs,
-                    circ_proof: &Halo2Proof<<F as FieldProvingCurves>::Affine, Self::Circuit>,
-                    keypair: &Halo2Keypair<<F as FieldProvingCurves>::Affine, Self::Circuit>,
+                    circ_proof: &Halo2Proof<F::Affine, Self::Circuit>,
+                    keypair: &Halo2Keypair<F::Affine, Self::Circuit>,
                 ) -> Result<(), Error> {
                     let is_winning = is_winning::<$sector_nodes>(setup_params);
 
@@ -214,8 +208,8 @@ macro_rules! impl_compound_proof {
                 fn verify_all_partitions(
                     setup_params: &Self::SetupParams,
                     vanilla_pub_inputs: &Self::PublicInputs,
-                    circ_proofs: &[Halo2Proof<<F as FieldProvingCurves>::Affine, Self::Circuit>],
-                    keypair: &Halo2Keypair<<F as FieldProvingCurves>::Affine, Self::Circuit>,
+                    circ_proofs: &[Halo2Proof<F::Affine, Self::Circuit>],
+                    keypair: &Halo2Keypair<F::Affine, Self::Circuit>,
                 ) -> Result<(), Error> {
                     let is_winning = is_winning::<$sector_nodes>(setup_params);
 
@@ -248,8 +242,8 @@ macro_rules! impl_compound_proof {
                 fn batch_verify_all_partitions(
                     setup_params: &Self::SetupParams,
                     vanilla_pub_inputs: &Self::PublicInputs,
-                    batch_proof: &Halo2Proof<<F as FieldProvingCurves>::Affine, Self::Circuit>,
-                    keypair: &Halo2Keypair<<F as FieldProvingCurves>::Affine, Self::Circuit>,
+                    batch_proof: &Halo2Proof<F::Affine, Self::Circuit>,
+                    keypair: &Halo2Keypair<F::Affine, Self::Circuit>,
                 ) -> Result<(), Error> {
                     let is_winning = is_winning::<$sector_nodes>(setup_params);
 
@@ -295,6 +289,8 @@ impl_compound_proof!(
     SECTOR_NODES_64_GIB
 );
 
+// TODO (jake): remove this?
+/*
 pub fn winning_post_prove_all<'a, TreeR, const SECTOR_NODES: usize>(
     vanilla_setup_params: &<FallbackPoSt::<'a, TreeR> as ProofScheme<'a>>::SetupParams,
     vanilla_pub_inputs: &<FallbackPoSt::<'a, TreeR> as ProofScheme<'a>>::PublicInputs,
@@ -302,7 +298,7 @@ pub fn winning_post_prove_all<'a, TreeR, const SECTOR_NODES: usize>(
 ) -> Result<Vec<u8>, Error>
 where
     TreeR: 'a + MerkleTreeTrait,
-    <<TreeR::Hasher as Hasher>::Domain as Domain>::Field: FieldExt + FieldProvingCurves,
+    <<TreeR::Hasher as Hasher>::Domain as Domain>::Field: FieldExt + Halo2Field,
     PoseidonHasher<<<TreeR::Hasher as Hasher>::Domain as Domain>::Field>: Hasher,
     <PoseidonHasher<<<TreeR::Hasher as Hasher>::Domain as Domain>::Field> as Hasher>::Domain:
         Domain<Field = <<TreeR::Hasher as Hasher>::Domain as Domain>::Field>,
@@ -354,3 +350,4 @@ where
 
     Ok(proof_bytes)
 }
+*/

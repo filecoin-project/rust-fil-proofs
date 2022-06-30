@@ -1,6 +1,6 @@
 use std::marker::PhantomData;
 
-use filecoin_hashers::{Domain, Hasher};
+use filecoin_hashers::Hasher;
 use serde::{Deserialize, Serialize};
 use storage_proofs_core::{
     error::Result,
@@ -38,7 +38,7 @@ impl<H: Hasher> Column<H> {
     }
 
     /// Calculate the column hashes `C_i = H(E_i, O_i)` for the passed in column.
-    pub fn hash(&self) -> <H::Domain as Domain>::Field {
+    pub fn hash(&self) -> H::Field {
         hash_single_column(
             &self
                 .rows

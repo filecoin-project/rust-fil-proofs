@@ -1,5 +1,5 @@
 use anyhow::ensure;
-use filecoin_hashers::{Domain, HashFunction, Hasher};
+use filecoin_hashers::{HashFunction, Hasher};
 use log::trace;
 use rayon::prelude::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use storage_proofs_core::{
@@ -16,8 +16,7 @@ use crate::stacked::vanilla::{
 impl<'a, 'c, Tree, G> ProofScheme<'a> for StackedDrg<'c, Tree, G>
 where
     Tree: 'static + MerkleTreeTrait,
-    G: 'static + Hasher,
-    G::Domain: Domain<Field = <<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
+    G: 'static + Hasher<Field = Tree::Field>,
 {
     type PublicParams = PublicParams<Tree>;
     type SetupParams = SetupParams;

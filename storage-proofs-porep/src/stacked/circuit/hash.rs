@@ -25,7 +25,7 @@ mod tests {
 
     use bellperson::util_cs::test_cs::TestConstraintSystem;
     use ff::Field;
-    use filecoin_hashers::{poseidon::PoseidonHasher, HashFunction, Hasher};
+    use filecoin_hashers::{poseidon::PoseidonHasher, Groth16Hasher, HashFunction, Hasher};
     use rand::SeedableRng;
     use rand_xorshift::XorShiftRng;
     use storage_proofs_core::TEST_SEED;
@@ -52,7 +52,7 @@ mod tests {
                 AllocatedNum::alloc(&mut cs, || Ok(b)).expect("alloc failed")
             };
 
-            let out = <PoseidonHasher<Fr> as Hasher>::Function::hash2_circuit(
+            let out = PoseidonHasher::<Fr>::hash2_circuit(
                 cs.namespace(|| "hash2"),
                 &a_num,
                 &b_num,

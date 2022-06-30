@@ -1,7 +1,7 @@
 use std::marker::PhantomData;
 
 use ff::PrimeField;
-use filecoin_hashers::{Domain, Hasher, PoseidonArity};
+use filecoin_hashers::{Hasher, PoseidonArity};
 use serde::{Deserialize, Serialize};
 use storage_proofs_core::{error::Result, merkle::MerkleProof, proof::ProofScheme};
 
@@ -11,7 +11,11 @@ use crate::{
 };
 
 #[derive(Clone, Serialize, Deserialize)]
-pub struct PublicInputs<F> {
+pub struct PublicInputs<F>
+where
+    // Ensure that `TreeRDomain<F>` implements `Domain`.
+    TreeRHasher<F>: Hasher<Field = F>,
+{
     #[serde(bound(serialize = "TreeRDomain<F>: Serialize"))]
     #[serde(bound(deserialize = "TreeRDomain<F>: Deserialize<'de>"))]
     pub comm_r_old: TreeRDomain<F>,
@@ -31,11 +35,10 @@ pub struct PublicInputs<F> {
 pub struct ChallengeProof<F, U, V, W>
 where
     F: PrimeField,
-    TreeRHasher<F>: Hasher,
-    <TreeRHasher<F> as Hasher>::Domain: Domain<Field = F>,
     U: PoseidonArity<F>,
     V: PoseidonArity<F>,
     W: PoseidonArity<F>,
+    TreeRHasher<F>: Hasher<Field = F>,
 {
     #[serde(bound(serialize = "MerkleProof<TreeRHasher<F>, U, V, W>: Serialize"))]
     #[serde(bound(deserialize = "MerkleProof<TreeRHasher<F>, U, V, W>: Deserialize<'de>"))]
@@ -52,11 +55,10 @@ where
 pub struct PartitionProof<F, U, V, W>
 where
     F: PrimeField,
-    TreeRHasher<F>: Hasher,
-    <TreeRHasher<F> as Hasher>::Domain: Domain<Field = F>,
     U: PoseidonArity<F>,
     V: PoseidonArity<F>,
     W: PoseidonArity<F>,
+    TreeRHasher<F>: Hasher<Field = F>,
 {
     #[serde(bound(serialize = "TreeRDomain<F>: Serialize"))]
     #[serde(bound(deserialize = "TreeRDomain<F>: Deserialize<'de>"))]
@@ -75,11 +77,10 @@ pub struct EmptySectorUpdate<F, U, V, W> {
 impl<'a, F, U, V, W> ProofScheme<'a> for EmptySectorUpdate<F, U, V, W>
 where
     F: PrimeField,
-    TreeRHasher<F>: Hasher<Domain = TreeRDomain<F>>,
-    TreeRDomain<F>: Domain<Field = F>,
     U: PoseidonArity<F>,
     V: PoseidonArity<F>,
     W: PoseidonArity<F>,
+    TreeRHasher<F>: Hasher<Field = F>,
 {
     type SetupParams = SetupParams;
     type PublicParams = PublicParams;

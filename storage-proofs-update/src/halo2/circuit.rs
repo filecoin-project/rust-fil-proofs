@@ -9,7 +9,7 @@ use fil_halo2_gadgets::{
     select::{SelectChip, SelectConfig},
     AdviceIter, ColumnBuilder,
 };
-use filecoin_hashers::{Domain, FieldArity, HaloHasher, Hasher, PoseidonArity, POSEIDON_CONSTANTS};
+use filecoin_hashers::{get_poseidon_constants, Halo2Hasher, Hasher, PoseidonArity};
 use generic_array::typenum::U2;
 use halo2_proofs::{
     arithmetic::FieldExt,
@@ -30,7 +30,7 @@ use storage_proofs_core::{
 use crate::{
     constants::{
         apex_leaf_count, challenge_count, partition_count, validate_tree_r_shape, TreeDArity,
-        TreeDDomain, TreeDHasher, TreeRDomain, TreeRHasher, SECTOR_SIZE_16_KIB, SECTOR_SIZE_16_MIB,
+        TreeDHasher, TreeRHasher, SECTOR_SIZE_16_KIB, SECTOR_SIZE_16_MIB,
         SECTOR_SIZE_1_KIB, SECTOR_SIZE_2_KIB, SECTOR_SIZE_32_GIB, SECTOR_SIZE_32_KIB,
         SECTOR_SIZE_4_KIB, SECTOR_SIZE_512_MIB, SECTOR_SIZE_64_GIB, SECTOR_SIZE_8_KIB,
         SECTOR_SIZE_8_MIB,
@@ -85,8 +85,8 @@ pub struct PublicInputs<F: FieldExt, const SECTOR_NODES: usize> {
 impl<F, const SECTOR_NODES: usize> From<vanilla::PublicInputs<F>> for PublicInputs<F, SECTOR_NODES>
 where
     F: FieldExt,
-    TreeDDomain<F>: Domain<Field = F>,
-    TreeRDomain<F>: Domain<Field = F>,
+    TreeDHasher<F>: Hasher<Field = F>,
+    TreeRHasher<F>: Hasher<Field = F>,
 {
     fn from(vanilla_pub_inputs: vanilla::PublicInputs<F>) -> Self {
         let vanilla::PublicInputs {
@@ -200,11 +200,8 @@ where
     U: PoseidonArity<F>,
     V: PoseidonArity<F>,
     W: PoseidonArity<F>,
-    TreeDArity: PoseidonArity<F>,
-    TreeDHasher<F>: Hasher,
-    <TreeDHasher<F> as Hasher>::Domain: Domain<Field = F>,
-    TreeRHasher<F>: Hasher,
-    <TreeRHasher<F> as Hasher>::Domain: Domain<Field = F>,
+    TreeDHasher<F>: Hasher<Field = F>,
+    TreeRHasher<F>: Hasher<Field = F>,
 {
     leaf_r_old: Option<F>,
     path_r_old: Vec<Vec<Option<F>>>,
@@ -222,11 +219,8 @@ where
     U: PoseidonArity<F>,
     V: PoseidonArity<F>,
     W: PoseidonArity<F>,
-    TreeDArity: PoseidonArity<F>,
-    TreeDHasher<F>: Hasher,
-    <TreeDHasher<F> as Hasher>::Domain: Domain<Field = F>,
-    TreeRHasher<F>: Hasher,
-    <TreeRHasher<F> as Hasher>::Domain: Domain<Field = F>,
+    TreeDHasher<F>: Hasher<Field = F>,
+    TreeRHasher<F>: Hasher<Field = F>,
 {
     fn from(challenge_proof: vanilla::ChallengeProof<F, U, V, W>) -> Self {
         let vanilla::ChallengeProof {
@@ -244,11 +238,8 @@ where
     U: PoseidonArity<F>,
     V: PoseidonArity<F>,
     W: PoseidonArity<F>,
-    TreeDArity: PoseidonArity<F>,
-    TreeDHasher<F>: Hasher,
-    <TreeDHasher<F> as Hasher>::Domain: Domain<Field = F>,
-    TreeRHasher<F>: Hasher,
-    <TreeRHasher<F> as Hasher>::Domain: Domain<Field = F>,
+    TreeDHasher<F>: Hasher<Field = F>,
+    TreeRHasher<F>: Hasher<Field = F>,
 {
     pub fn from_merkle_proofs(
         proof_r_old: MerkleProof<TreeRHasher<F>, U, V, W>,
@@ -337,11 +328,8 @@ where
     U: PoseidonArity<F>,
     V: PoseidonArity<F>,
     W: PoseidonArity<F>,
-    TreeDArity: PoseidonArity<F>,
-    TreeDHasher<F>: Hasher,
-    <TreeDHasher<F> as Hasher>::Domain: Domain<Field = F>,
-    TreeRHasher<F>: Hasher,
-    <TreeRHasher<F> as Hasher>::Domain: Domain<Field = F>,
+    TreeDHasher<F>: Hasher<Field = F>,
+    TreeRHasher<F>: Hasher<Field = F>,
 {
     pub comm_c: Option<F>,
     pub root_r_old: Option<F>,
@@ -357,11 +345,8 @@ where
     U: PoseidonArity<F>,
     V: PoseidonArity<F>,
     W: PoseidonArity<F>,
-    TreeDArity: PoseidonArity<F>,
-    TreeDHasher<F>: Hasher<Domain = TreeDDomain<F>>,
-    TreeRHasher<F>: Hasher<Domain = TreeRDomain<F>>,
-    TreeDDomain<F>: Domain<Field = F>,
-    TreeRDomain<F>: Domain<Field = F>,
+    TreeDHasher<F>: Hasher<Field = F>,
+    TreeRHasher<F>: Hasher<Field = F>,
 {
     fn from(vanilla_partition_proof: vanilla::PartitionProof<F, U, V, W>) -> Self {
         let comm_c: F = vanilla_partition_proof.comm_c.into();
@@ -406,11 +391,8 @@ where
     U: PoseidonArity<F>,
     V: PoseidonArity<F>,
     W: PoseidonArity<F>,
-    TreeDArity: PoseidonArity<F>,
-    TreeDHasher<F>: Hasher,
-    <TreeDHasher<F> as Hasher>::Domain: Domain<Field = F>,
-    TreeRHasher<F>: Hasher,
-    <TreeRHasher<F> as Hasher>::Domain: Domain<Field = F>,
+    TreeDHasher<F>: Hasher<Field = F>,
+    TreeRHasher<F>: Hasher<Field = F>,
 {
     pub fn new(
         comm_c: F,
@@ -445,23 +427,20 @@ where
     U: PoseidonArity<F>,
     V: PoseidonArity<F>,
     W: PoseidonArity<F>,
-    TreeDArity: PoseidonArity<F>,
-    TreeDHasher<F>: Hasher,
-    <TreeDHasher<F> as Hasher>::Domain: Domain<Field = F>,
-    TreeRHasher<F>: Hasher,
-    <TreeRHasher<F> as Hasher>::Domain: Domain<Field = F>,
+    TreeDHasher<F>: Hasher<Field = F>,
+    TreeRHasher<F>: Hasher<Field = F>,
 {
-    sha256_2: <TreeDHasher<F> as HaloHasher<TreeDArity>>::Config,
+    sha256_2: <TreeDHasher<F> as Halo2Hasher<TreeDArity>>::Config,
     insert_2: InsertConfig<F, TreeDArity>,
-    poseidon_2: <TreeRHasher<F> as HaloHasher<U2>>::Config,
-    poseidon_base: <TreeRHasher<F> as HaloHasher<U>>::Config,
+    poseidon_2: <TreeRHasher<F> as Halo2Hasher<U2>>::Config,
+    poseidon_base: <TreeRHasher<F> as Halo2Hasher<U>>::Config,
     insert_base: InsertConfig<F, U>,
     sub: Option<(
-        <TreeRHasher<F> as HaloHasher<V>>::Config,
+        <TreeRHasher<F> as Halo2Hasher<V>>::Config,
         InsertConfig<F, V>,
     )>,
     top: Option<(
-        <TreeRHasher<F> as HaloHasher<W>>::Config,
+        <TreeRHasher<F> as Halo2Hasher<W>>::Config,
         InsertConfig<F, W>,
     )>,
     select: SelectConfig<F>,
@@ -477,11 +456,8 @@ where
     U: PoseidonArity<F>,
     V: PoseidonArity<F>,
     W: PoseidonArity<F>,
-    TreeDArity: PoseidonArity<F>,
-    TreeDHasher<F>: Hasher,
-    <TreeDHasher<F> as Hasher>::Domain: Domain<Field = F>,
-    TreeRHasher<F>: Hasher,
-    <TreeRHasher<F> as Hasher>::Domain: Domain<Field = F>,
+    TreeDHasher<F>: Hasher<Field = F>,
+    TreeRHasher<F>: Hasher<Field = F>,
 {
     pub pub_inputs: PublicInputs<F, SECTOR_NODES>,
     pub priv_inputs: PrivateInputs<F, U, V, W, SECTOR_NODES>,
@@ -493,11 +469,8 @@ where
     U: PoseidonArity<F>,
     V: PoseidonArity<F>,
     W: PoseidonArity<F>,
-    TreeDArity: PoseidonArity<F>,
-    TreeDHasher<F>: Hasher,
-    <TreeDHasher<F> as Hasher>::Domain: Domain<Field = F>,
-    TreeRHasher<F>: Hasher,
-    <TreeRHasher<F> as Hasher>::Domain: Domain<Field = F>,
+    TreeDHasher<F>: Hasher<Field = F>,
+    TreeRHasher<F>: Hasher<Field = F>,
 {
     #[allow(clippy::type_complexity)]
     fn create_chips(
@@ -507,7 +480,7 @@ where
         (
             MerkleChip<TreeDHasher<F>, TreeDArity>,
             MerkleChip<TreeRHasher<F>, U, V, W>,
-            <TreeRHasher<F> as HaloHasher<U2>>::Chip,
+            <TreeRHasher<F> as Halo2Hasher<U2>>::Chip,
             ApexTreeChip<F>,
             SelectChip<F>,
             ChallengeBitsChip<F, SECTOR_NODES>,
@@ -515,31 +488,31 @@ where
         ),
         Error,
     > {
-        <TreeDHasher<F> as HaloHasher<TreeDArity>>::load(layouter, &self.sha256_2)?;
+        <TreeDHasher<F> as Halo2Hasher<TreeDArity>>::load(layouter, &self.sha256_2)?;
 
         let tree_d_merkle_chip = {
             let sha256_2_chip =
-                <TreeDHasher<F> as HaloHasher<TreeDArity>>::construct(self.sha256_2.clone());
+                <TreeDHasher<F> as Halo2Hasher<TreeDArity>>::construct(self.sha256_2.clone());
             let insert_2_chip = InsertChip::construct(self.insert_2.clone());
             MerkleChip::with_subchips(sha256_2_chip, insert_2_chip, None, None)
         };
 
         let tree_r_merkle_chip = {
             let poseidon_base_chip =
-                <TreeRHasher<F> as HaloHasher<U>>::construct(self.poseidon_base.clone());
+                <TreeRHasher<F> as Halo2Hasher<U>>::construct(self.poseidon_base.clone());
 
             let insert_base_chip = InsertChip::construct(self.insert_base.clone());
 
             let sub_chips = self.sub.as_ref().map(|(poseidon_config, insert_config)| {
                 (
-                    <TreeRHasher<F> as HaloHasher<V>>::construct(poseidon_config.clone()),
+                    <TreeRHasher<F> as Halo2Hasher<V>>::construct(poseidon_config.clone()),
                     InsertChip::construct(insert_config.clone()),
                 )
             });
 
             let top_chips = self.top.as_ref().map(|(poseidon_config, insert_config)| {
                 (
-                    <TreeRHasher<F> as HaloHasher<W>>::construct(poseidon_config.clone()),
+                    <TreeRHasher<F> as Halo2Hasher<W>>::construct(poseidon_config.clone()),
                     InsertChip::construct(insert_config.clone()),
                 )
             });
@@ -548,11 +521,11 @@ where
         };
 
         let poseidon_2_chip =
-            <TreeRHasher<F> as HaloHasher<U2>>::construct(self.poseidon_2.clone());
+            <TreeRHasher<F> as Halo2Hasher<U2>>::construct(self.poseidon_2.clone());
 
         let apex_tree_chip = {
             let sha256_2_chip =
-                <TreeDHasher<F> as HaloHasher<TreeDArity>>::construct(self.sha256_2.clone());
+                <TreeDHasher<F> as Halo2Hasher<TreeDArity>>::construct(self.sha256_2.clone());
             ApexTreeChip::with_subchips(sha256_2_chip)
         };
 
@@ -579,11 +552,8 @@ where
     U: PoseidonArity<F>,
     V: PoseidonArity<F>,
     W: PoseidonArity<F>,
-    TreeDArity: PoseidonArity<F>,
-    TreeDHasher<F>: Hasher,
-    <TreeDHasher<F> as Hasher>::Domain: Domain<Field = F>,
-    TreeRHasher<F>: Hasher,
-    <TreeRHasher<F> as Hasher>::Domain: Domain<Field = F>,
+    TreeDHasher<F>: Hasher<Field = F>,
+    TreeRHasher<F>: Hasher<Field = F>,
 {
 }
 
@@ -594,11 +564,8 @@ where
     U: PoseidonArity<F>,
     V: PoseidonArity<F>,
     W: PoseidonArity<F>,
-    TreeDArity: PoseidonArity<F>,
-    TreeDHasher<F>: Hasher,
-    <TreeDHasher<F> as Hasher>::Domain: Domain<Field = F>,
-    TreeRHasher<F>: Hasher,
-    <TreeRHasher<F> as Hasher>::Domain: Domain<Field = F>,
+    TreeDHasher<F>: Hasher<Field = F>,
+    TreeRHasher<F>: Hasher<Field = F>,
 {
     type Config = EmptySectorUpdateConfig<F, U, V, W, SECTOR_NODES>;
     type FloorPlanner = SimpleFloorPlanner;
@@ -628,12 +595,12 @@ where
 
     fn configure(meta: &mut ConstraintSystem<F>) -> Self::Config {
         let (advice_eq, advice_neq, fixed_eq, fixed_neq) = ColumnBuilder::new()
-            .with_chip::<<TreeDHasher<F> as HaloHasher<TreeDArity>>::Chip>()
-            .with_chip::<<TreeRHasher<F> as HaloHasher<U>>::Chip>()
+            .with_chip::<<TreeDHasher<F> as Halo2Hasher<TreeDArity>>::Chip>()
+            .with_chip::<<TreeRHasher<F> as Halo2Hasher<U>>::Chip>()
             .with_chip::<InsertChip<F, U>>()
             .create_columns(meta);
 
-        let sha256_2 = <TreeDHasher<F> as HaloHasher<TreeDArity>>::configure(
+        let sha256_2 = <TreeDHasher<F> as Halo2Hasher<TreeDArity>>::configure(
             meta,
             &advice_eq,
             &advice_neq,
@@ -643,7 +610,7 @@ where
 
         let insert_2 = InsertChip::<F, U2>::configure(meta, &advice_eq, &advice_neq);
 
-        let poseidon_2 = <TreeRHasher<F> as HaloHasher<U2>>::configure(
+        let poseidon_2 = <TreeRHasher<F> as Halo2Hasher<U2>>::configure(
             meta,
             &advice_eq,
             &advice_neq,
@@ -662,7 +629,7 @@ where
             let insert_base = unsafe { mem::transmute(insert_2.clone()) };
             (poseidon_base, insert_base)
         } else {
-            let poseidon_base = <TreeRHasher<F> as HaloHasher<U>>::configure(
+            let poseidon_base = <TreeRHasher<F> as Halo2Hasher<U>>::configure(
                 meta,
                 &advice_eq,
                 &advice_neq,
@@ -686,7 +653,7 @@ where
             let insert_sub = unsafe { mem::transmute(insert_base.clone()) };
             Some((poseidon_sub, insert_sub))
         } else {
-            let poseidon_sub = <TreeRHasher<F> as HaloHasher<V>>::configure(
+            let poseidon_sub = <TreeRHasher<F> as Halo2Hasher<V>>::configure(
                 meta,
                 &advice_eq,
                 &advice_neq,
@@ -716,7 +683,7 @@ where
             let insert_top = unsafe { mem::transmute(insert_sub.clone()) };
             Some((poseidon_top, insert_top))
         } else {
-            let poseidon_top = <TreeRHasher<F> as HaloHasher<W>>::configure(
+            let poseidon_top = <TreeRHasher<F> as Halo2Hasher<W>>::configure(
                 meta,
                 &advice_eq,
                 &advice_neq,
@@ -889,18 +856,20 @@ where
             layouter.constrain_instance(bit.cell(), pi_col, pi_row)?;
         }
 
+        let poseidon_2_consts = get_poseidon_constants::<F, U2>();
+
         // Compute `comm_r_old = H(comm_c, root_r_old)`.
         let comm_r_old = poseidon_2_chip.hash(
             layouter.namespace(|| "calculate comm_r_old"),
             &[comm_c.clone(), root_r_old.clone()],
-            POSEIDON_CONSTANTS.get::<FieldArity<F, U2>>().unwrap(),
+            poseidon_2_consts,
         )?;
 
         // Compute `comm_r_new = H(comm_c, root_r_new)`.
         let comm_r_new = poseidon_2_chip.hash(
             layouter.namespace(|| "calculate comm_r_new"),
             &[comm_c, root_r_new.clone()],
-            POSEIDON_CONSTANTS.get::<FieldArity<F, U2>>().unwrap(),
+            poseidon_2_consts,
         )?;
 
         // Compute apex root from apex leafs.
@@ -1015,11 +984,8 @@ where
     U: PoseidonArity<F>,
     V: PoseidonArity<F>,
     W: PoseidonArity<F>,
-    TreeDArity: PoseidonArity<F>,
-    TreeDHasher<F>: Hasher,
-    <TreeDHasher<F> as Hasher>::Domain: Domain<Field = F>,
-    TreeRHasher<F>: Hasher,
-    <TreeRHasher<F> as Hasher>::Domain: Domain<Field = F>,
+    TreeDHasher<F>: Hasher<Field = F>,
+    TreeRHasher<F>: Hasher<Field = F>,
 {
     fn k(&self) -> u32 {
         match SECTOR_NODES {
@@ -1046,11 +1012,8 @@ where
     U: PoseidonArity<F>,
     V: PoseidonArity<F>,
     W: PoseidonArity<F>,
-    TreeDArity: PoseidonArity<F>,
-    TreeDHasher<F>: Hasher,
-    <TreeDHasher<F> as Hasher>::Domain: Domain<Field = F>,
-    TreeRHasher<F>: Hasher,
-    <TreeRHasher<F> as Hasher>::Domain: Domain<Field = F>,
+    TreeDHasher<F>: Hasher<Field = F>,
+    TreeRHasher<F>: Hasher<Field = F>,
 {
     // Same as `Circuit::without_witnesses` except this associated function does not take `&self`.
     pub fn blank_circuit() -> Self {

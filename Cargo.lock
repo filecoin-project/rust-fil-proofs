@@ -3662,6 +3662,7 @@ dependencies = [
  "config",
  "cpu-time",
  "criterion",
+ "ec-gpu",
  "ff",
  "fil-halo2-gadgets",
  "filecoin-hashers",

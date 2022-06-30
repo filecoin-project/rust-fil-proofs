@@ -11,7 +11,7 @@ use bellperson::{
     Circuit, ConstraintSystem, SynthesisError,
 };
 use blstrs::Scalar as Fr;
-use filecoin_hashers::{Domain, HashFunction, Hasher, PoseidonArity};
+use filecoin_hashers::{Groth16Hasher, PoseidonArity};
 use generic_array::typenum::Unsigned;
 
 use crate::{
@@ -35,8 +35,8 @@ use crate::{
 ///
 pub struct PoRCircuit<Tree>
 where
-    Tree: MerkleTreeTrait,
-    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+    Tree: MerkleTreeTrait<Field = Fr>,
+    Tree::Hasher: Groth16Hasher,
 {
     value: Root<Fr>,
     auth_path: AuthPath<Tree::Hasher, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>,
@@ -48,8 +48,7 @@ where
 #[derive(Debug, Clone)]
 pub struct AuthPath<H, U, V, W>
 where
-    H: Hasher,
-    H::Domain: Domain<Field = Fr>,
+    H: Groth16Hasher,
     U: PoseidonArity<Fr>,
     V: PoseidonArity<Fr>,
     W: PoseidonArity<Fr>,
@@ -61,8 +60,7 @@ where
 
 impl<H, U, V, W> From<Vec<(Vec<Option<Fr>>, Option<usize>)>> for AuthPath<H, U, V, W>
 where
-    H: Hasher,
-    H::Domain: Domain<Field = Fr>,
+    H: Groth16Hasher,
     U: PoseidonArity<Fr>,
     V: PoseidonArity<Fr>,
     W: PoseidonArity<Fr>,
@@ -128,8 +126,7 @@ where
 #[derive(Debug, Clone)]
 struct SubPath<H, Arity>
 where
-    H: Hasher,
-    H::Domain: Domain<Field = Fr>,
+    H: Groth16Hasher,
     Arity: PoseidonArity<Fr>,
 {
     path: Vec<PathElement<H, Arity>>,
@@ -138,8 +135,7 @@ where
 #[derive(Debug, Clone)]
 struct PathElement<H, Arity>
 where
-    H: Hasher,
-    H::Domain: Domain<Field = Fr>,
+    H: Groth16Hasher,
     Arity: PoseidonArity<Fr>,
 {
     hashes: Vec<Option<Fr>>,
@@ -150,8 +146,7 @@ where
 
 impl<H, Arity> SubPath<H, Arity>
 where
-    H: Hasher,
-    H::Domain: Domain<Field = Fr>,
+    H: Groth16Hasher,
     Arity: PoseidonArity<Fr>,
 {
     fn synthesize<CS: ConstraintSystem<Fr>>(
@@ -204,7 +199,7 @@ where
             let inserted = insert(cs, &cur, &index_bits, &path_hash_nums)?;
 
             // Compute the new subtree value
-            cur = H::Function::hash_multi_leaf_circuit::<Arity, _>(
+            cur = H::hash_multi_leaf_circuit::<Arity, _>(
                 cs.namespace(|| "computation of commitment hash"),
                 &inserted,
                 i,
@@ -217,8 +212,7 @@ where
 
 impl<H, U, V, W> AuthPath<H, U, V, W>
 where
-    H: Hasher,
-    H::Domain: Domain<Field = Fr>,
+    H: Groth16Hasher,
     U: PoseidonArity<Fr>,
     V: PoseidonArity<Fr>,
     W: PoseidonArity<Fr>,
@@ -270,16 +264,16 @@ where
 
 impl<Tree> CircuitComponent for PoRCircuit<Tree>
 where
-    Tree: MerkleTreeTrait,
-    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+    Tree: MerkleTreeTrait<Field = Fr>,
+    Tree::Hasher: Groth16Hasher,
 {
     type ComponentPrivateInputs = Option<Root<Fr>>;
 }
 
 pub struct PoRCompound<Tree>
 where
-    Tree: MerkleTreeTrait,
-    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+    Tree: MerkleTreeTrait<Field = Fr>,
+    Tree::Hasher: Groth16Hasher,
 {
     _tree: PhantomData<Tree>,
 }
@@ -298,8 +292,8 @@ impl<C, P, Tree> CacheableParameters<C, P> for PoRCompound<Tree>
 where
     C: Circuit<Fr>,
     P: ParameterSetMetadata,
-    Tree: MerkleTreeTrait,
-    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+    Tree: MerkleTreeTrait<Field = Fr>,
+    Tree::Hasher: Groth16Hasher,
 {
     fn cache_prefix() -> String {
         format!("proof-of-retrievability-{}", Tree::display())
@@ -309,8 +303,8 @@ where
 // can only implment for Bls12 because por is not generic over the engine.
 impl<'a, Tree> CompoundProof<'a, PoR<Tree>, PoRCircuit<Tree>> for PoRCompound<Tree>
 where
-    Tree: 'static + MerkleTreeTrait,
-    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+    Tree: 'static + MerkleTreeTrait<Field = Fr>,
+    Tree::Hasher: Groth16Hasher,
 {
     fn circuit<'b>(
         public_inputs: &<PoR<Tree> as ProofScheme<'a>>::PublicInputs,
@@ -381,8 +375,8 @@ where
 
 impl<Tree> Circuit<Fr> for PoRCircuit<Tree>
 where
-    Tree: MerkleTreeTrait,
-    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+    Tree: MerkleTreeTrait<Field = Fr>,
+    Tree::Hasher: Groth16Hasher,
 {
     /// # Public Inputs
     ///
@@ -467,8 +461,8 @@ where
 
 impl<Tree> PoRCircuit<Tree>
 where
-    Tree: MerkleTreeTrait,
-    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+    Tree: MerkleTreeTrait<Field = Fr>,
+    Tree::Hasher: Groth16Hasher,
 {
     pub fn new(proof: Tree::Proof, private: bool) -> Self {
         PoRCircuit::<Tree> {
@@ -514,8 +508,8 @@ pub fn por_no_challenge_input<Tree, CS>(
     root: AllocatedNum<Fr>,
 ) -> Result<(), SynthesisError>
 where
-    Tree: MerkleTreeTrait,
-    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+    Tree: MerkleTreeTrait<Field = Fr>,
+    Tree::Hasher: Groth16Hasher,
     CS: ConstraintSystem<Fr>,
 {
     let base_arity = Tree::Arity::to_usize();
@@ -568,9 +562,7 @@ where
             &insert_index,
             &siblings,
         )?;
-        cur = <<Tree::Hasher as Hasher>::Function as HashFunction<
-            <Tree::Hasher as Hasher>::Domain,
-        >>::hash_multi_leaf_circuit::<Tree::Arity, _>(
+        cur = Tree::Hasher::hash_multi_leaf_circuit::<Tree::Arity, _>(
             cs.namespace(|| format!("merkle proof hash (height={})", height)),
             &preimg,
             height,
@@ -595,9 +587,7 @@ where
             &insert_index,
             &siblings,
         )?;
-        cur = <<Tree::Hasher as Hasher>::Function as HashFunction<
-            <Tree::Hasher as Hasher>::Domain,
-        >>::hash_multi_leaf_circuit::<Tree::SubTreeArity, _>(
+        cur = Tree::Hasher::hash_multi_leaf_circuit::<Tree::SubTreeArity, _>(
             cs.namespace(|| format!("merkle proof hash (height={})", height)),
             &preimg,
             height,
@@ -622,9 +612,7 @@ where
             &insert_index,
             &siblings,
         )?;
-        cur = <<Tree::Hasher as Hasher>::Function as HashFunction<
-            <Tree::Hasher as Hasher>::Domain,
-        >>::hash_multi_leaf_circuit::<Tree::TopTreeArity, _>(
+        cur = Tree::Hasher::hash_multi_leaf_circuit::<Tree::TopTreeArity, _>(
             cs.namespace(|| format!("merkle proof hash (height={})", height)),
             &preimg,
             height,

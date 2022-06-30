@@ -137,7 +137,7 @@ where
 pub struct DataProof<H, U>
 where
     H: Hasher,
-    U: PoseidonArity<<H::Domain as Domain>::Field>,
+    U: PoseidonArity<H::Field>,
 {
     #[serde(bound(
         serialize = "MerkleProof<H, U>: Serialize",
@@ -150,7 +150,7 @@ where
 impl<H, U> DataProof<H, U>
 where
     H: Hasher,
-    U: PoseidonArity<<H::Domain as Domain>::Field>,
+    U: PoseidonArity<H::Field>,
 {
     pub fn new(n: usize) -> Self {
         DataProof {
@@ -580,10 +580,7 @@ pub fn decode_domain_block<H: Hasher>(
     node: usize,
     node_data: H::Domain,
     parents: &[u32],
-) -> Result<H::Domain>
-where
-    H: Hasher,
-{
+) -> Result<H::Domain> {
     let key = create_key_from_tree::<H, _>(replica_id, node, parents, tree)?;
 
     Ok(encode::decode(key, node_data))
@@ -600,7 +597,7 @@ pub fn create_key_from_tree<H, U>(
 ) -> Result<H::Domain>
 where
     H: Hasher,
-    U: PoseidonArity<<H::Domain as Domain>::Field>,
+    U: PoseidonArity<H::Field>,
 {
     let mut hasher = Sha256::new();
     hasher.update(AsRef::<[u8]>::as_ref(&id));
@@ -628,8 +625,8 @@ pub fn replica_id<H: Hasher>(prover_id: [u8; 32], sector_id: [u8; 32]) -> H::Dom
 
 fn sloth_encode<H: Hasher>(key: &H::Domain, ciphertext: &H::Domain) -> H::Domain {
     // TODO: validate this is how sloth should work in this case
-    let k = (*key).into();
-    let c = (*ciphertext).into();
+    let k: H::Field = (*key).into();
+    let c: H::Field = (*ciphertext).into();
 
     sloth::encode(&k, &c).into()
 }

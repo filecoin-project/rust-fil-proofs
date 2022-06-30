@@ -71,9 +71,8 @@ lazy_static! {
 pub struct StackedDrg<'a, Tree, G>
 where
     Tree: MerkleTreeTrait,
-    G: Hasher,
     // TreeD and TreeR hashers must use the same field.
-    G::Domain: Domain<Field = <<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
+    G: Hasher<Field = Tree::Field>,
 {
     _a: PhantomData<&'a Tree>,
     _b: PhantomData<&'a G>,
@@ -86,7 +85,7 @@ pub struct LayerState {
 }
 
 pub enum TreeRElementData<Tree: MerkleTreeTrait> {
-    FrList(Vec<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>),
+    FrList(Vec<Tree::Field>),
     ElementList(Vec<<Tree::Hasher as Hasher>::Domain>),
 }
 
@@ -102,8 +101,7 @@ pub type PrepareTreeRDataCallback<Tree: 'static + MerkleTreeTrait> =
 impl<'a, Tree, G> StackedDrg<'a, Tree, G>
 where
     Tree: 'static + MerkleTreeTrait,
-    G: 'static + Hasher,
-    G::Domain: Domain<Field = <<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
+    G: 'static + Hasher<Field = Tree::Field>,
 {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn prove_layers(
@@ -481,8 +479,8 @@ where
         labels: &LabelsCache<Tree>,
     ) -> Result<DiskTree<Tree::Hasher, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>>
     where
-        ColumnArity: PoseidonArity<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
-        TreeArity: PoseidonArity<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
+        ColumnArity: PoseidonArity<Tree::Field>,
+        TreeArity: PoseidonArity<Tree::Field>,
     {
         if Self::use_gpu_column_builder() {
             Self::generate_tree_c_gpu::<ColumnArity, TreeArity>(
@@ -512,8 +510,8 @@ where
         labels: &LabelsCache<Tree>,
     ) -> Result<DiskTree<Tree::Hasher, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>>
     where
-        ColumnArity: PoseidonArity<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
-        TreeArity: PoseidonArity<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
+        ColumnArity: PoseidonArity<Tree::Field>,
+        TreeArity: PoseidonArity<Tree::Field>,
     {
         Self::generate_tree_c_cpu::<ColumnArity, TreeArity>(
             layers,
@@ -534,8 +532,8 @@ where
         labels: &LabelsCache<Tree>,
     ) -> Result<DiskTree<Tree::Hasher, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>>
     where
-        ColumnArity: PoseidonArity<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
-        TreeArity: PoseidonArity<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
+        ColumnArity: PoseidonArity<Tree::Field>,
+        TreeArity: PoseidonArity<Tree::Field>,
     {
         use std::cmp::min;
         use std::sync::mpsc::sync_channel as channel;
@@ -573,14 +571,10 @@ where
             let config_count = configs.len(); // Don't move config into closure below.
             THREAD_POOL.scoped(|s| {
                 // This channel will receive the finished tree data to be written to disk.
-                let (writer_tx, writer_rx) = channel::<(
-                    Vec<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
-                    Vec<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
-                )>(0);
+                let (writer_tx, writer_rx) = channel::<(Vec<Tree::Field>, Vec<Tree::Field>)>(0);
 
                 s.execute(move || {
-                    let field_size =
-                        std::mem::size_of::<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>();
+                    let field_size = std::mem::size_of::<Tree::Field>();
 
                     for i in 0..config_count {
                         let mut node_index = 0;
@@ -595,10 +589,7 @@ where
                                 chunked_nodes_count,
                             );
 
-                            let columns: Vec<GenericArray<
-                                <<Tree::Hasher as Hasher>::Domain as Domain>::Field,
-                                ColumnArity,
-                            >> = {
+                            let columns: Vec<GenericArray<Tree::Field, ColumnArity>> = {
                                 // Allocate layer data array and insert a placeholder for each layer.
                                 let mut layer_data: Vec<Vec<u8>> =
                                     vec![vec![0u8; chunked_nodes_count * field_size]; layers];
@@ -621,18 +612,14 @@ where
                                     .map(|index| {
                                         (0..layers)
                                             .map(|layer_index| {
-                                                let mut repr = <<<Tree::Hasher as Hasher>::Domain as
-                                                    Domain>::Field as PrimeField>::Repr::default();
+                                                let mut repr = <Tree::Field as PrimeField>::Repr::default();
                                                 repr.as_mut().copy_from_slice(
                                                     &layer_data[layer_index][field_size * index..field_size * (index + 1)]
                                                 );
-                                                <<Tree::Hasher as Hasher>::Domain as Domain>::Field::from_repr_vartime(repr)
+                                                Tree::Field::from_repr_vartime(repr)
                                                     .expect("bytes are invalid field element")
                                             })
-                                            .collect::<GenericArray<
-                                                <<Tree::Hasher as Hasher>::Domain as Domain>::Field,
-                                                ColumnArity,
-                                            >>()
+                                            .collect::<GenericArray<Tree::Field, ColumnArity>>()
                                     })
                                     .collect()
                             };
@@ -669,7 +656,7 @@ where
                         }
                     };
                     let mut column_tree_builder = ColumnTreeBuilder::<
-                        <<Tree::Hasher as Hasher>::Domain as Domain>::Field,
+                        Tree::Field,
                         ColumnArity,
                         TreeArity,
                     >::new(
@@ -682,7 +669,7 @@ where
                     // Loop until all trees for all configs have been built.
                     for i in 0..config_count {
                         loop {
-                            let (columns, is_final): (Vec<GenericArray<<<Tree::Hasher as Hasher>::Domain as Domain>::Field, ColumnArity>>, bool) =
+                            let (columns, is_final): (Vec<GenericArray<Tree::Field, ColumnArity>>, bool) =
                                 builder_rx.recv().expect("failed to recv columns");
 
                             // Just add non-final column batches.
@@ -751,7 +738,7 @@ where
 
                     let store = Arc::new(RwLock::new(tree_c_store));
                     let batch_size = min(base_data.len(), column_write_batch_size);
-                    let flatten_and_write_store = |data: &Vec<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>, offset| {
+                    let flatten_and_write_store = |data: &Vec<Tree::Field>, offset| {
                         data.into_par_iter()
                             .chunks(batch_size)
                             .enumerate()
@@ -807,8 +794,8 @@ where
         labels: &LabelsCache<Tree>,
     ) -> Result<DiskTree<Tree::Hasher, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>>
     where
-        ColumnArity: PoseidonArity<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
-        TreeArity: PoseidonArity<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
+        ColumnArity: PoseidonArity<Tree::Field>,
+        TreeArity: PoseidonArity<Tree::Field>,
     {
         info!("generating tree c using the CPU");
         measure_op(Operation::GenerateTreeC, || {
@@ -834,16 +821,15 @@ where
 
                         s.execute(move || {
                             for (j, hash) in hashes_chunk.iter_mut().enumerate() {
-                                let data: Vec<<<Tree::Hasher as Hasher>::Domain as Domain>::Field> =
-                                    (1..=layers)
-                                        .map(|layer| {
-                                            let store = labels.labels_for_layer(layer);
-                                            let el: <Tree::Hasher as Hasher>::Domain = store
-                                                .read_at((i * nodes_count) + j + chunk * chunk_size)
-                                                .expect("store read_at failure");
-                                            el.into()
-                                        })
-                                        .collect();
+                                let data: Vec<Tree::Field> = (1..=layers)
+                                    .map(|layer| {
+                                        let store = labels.labels_for_layer(layer);
+                                        let el: <Tree::Hasher as Hasher>::Domain = store
+                                            .read_at((i * nodes_count) + j + chunk * chunk_size)
+                                            .expect("store read_at failure");
+                                        el.into()
+                                    })
+                                    .collect();
 
                                 *hash = hash_single_column(&data).into();
                             }
@@ -910,8 +896,7 @@ where
         use crate::encode::encode_fr;
 
         if Self::use_gpu_tree_builder() {
-            let field_size =
-                std::mem::size_of::<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>();
+            let field_size = std::mem::size_of::<Tree::Field>();
 
             let mut layer_bytes = vec![0u8; (end - start) * field_size];
             source
@@ -922,11 +907,9 @@ where
                 .into_par_iter()
                 .chunks(field_size)
                 .map(|chunk| {
-                    let mut repr =
-                        <<<Tree::Hasher as Hasher>::Domain as Domain>::Field as PrimeField>::Repr::default();
+                    let mut repr = <Tree::Field as PrimeField>::Repr::default();
                     repr.as_mut().copy_from_slice(&chunk);
-                    <<Tree::Hasher as Hasher>::Domain as Domain>::Field::from_repr_vartime(repr)
-                        .expect("bytes are invalid field element")
+                    Tree::Field::from_repr_vartime(repr).expect("bytes are invalid field element")
                 })
                 .zip(
                     data.expect("failed to unwrap data").as_mut()
@@ -939,7 +922,7 @@ where
                             .expect("try_from_bytes failed");
 
                     let mut encoded_fr = key;
-                    let data_node_fr: <<Tree::Hasher as Hasher>::Domain as Domain>::Field = data_node.into();
+                    let data_node_fr: Tree::Field = data_node.into();
                     encode_fr(&mut encoded_fr, data_node_fr);
                     let encoded_fr_repr = encoded_fr.to_repr();
                     data_node_bytes.copy_from_slice(AsRef::<[u8]>::as_ref(&encoded_fr_repr));
@@ -975,7 +958,7 @@ where
         callback: Option<PrepareTreeRDataCallback<Tree>>,
     ) -> Result<LCTree<Tree::Hasher, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>>
     where
-        TreeArity: PoseidonArity<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
+        TreeArity: PoseidonArity<Tree::Field>,
     {
         let encode_data = match callback {
             Some(x) => x,
@@ -1016,7 +999,7 @@ where
         callback: Option<PrepareTreeRDataCallback<Tree>>,
     ) -> Result<LCTree<Tree::Hasher, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>>
     where
-        TreeArity: PoseidonArity<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
+        TreeArity: PoseidonArity<Tree::Field>,
     {
         let encode_data = match callback {
             Some(x) => x,
@@ -1045,7 +1028,7 @@ where
         callback: PrepareTreeRDataCallback<Tree>,
     ) -> Result<LCTree<Tree::Hasher, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>>
     where
-        TreeArity: PoseidonArity<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
+        TreeArity: PoseidonArity<Tree::Field>,
     {
         use std::cmp::min;
         use std::fs::OpenOptions;
@@ -1071,10 +1054,7 @@ where
         let max_gpu_tree_batch_size = SETTINGS.max_gpu_tree_batch_size as usize;
 
         // This channel will receive batches of leaf nodes and add them to the TreeBuilder.
-        let (builder_tx, builder_rx) = channel::<(
-            Vec<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
-            bool,
-        )>(0);
+        let (builder_tx, builder_rx) = channel::<(Vec<Tree::Field>, bool)>(0);
         let config_count = configs.len(); // Don't move config into closure below.
         let configs = &configs;
         let tree_r_last_config = &tree_r_last_config;
@@ -1082,7 +1062,7 @@ where
         THREAD_POOL.scoped(|s| {
             // This channel will receive the finished tree data to be written to disk.
             let (writer_tx, writer_rx) =
-                channel::<Vec<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>>(0);
+                channel::<Vec<Tree::Field>>(0);
 
             s.execute(move || {
                 for i in 0..config_count {
@@ -1134,10 +1114,7 @@ where
                         None
                     }
                 };
-                let mut tree_builder = TreeBuilder::<
-                    <<Tree::Hasher as Hasher>::Domain as Domain>::Field,
-                    Tree::Arity,
-                >::new(
+                let mut tree_builder = TreeBuilder::<Tree::Field, Tree::Arity>::new(
                     batcher, nodes_count, tree_r_last_config.rows_to_discard
                 )
                 .expect("failed to create TreeBuilder");
@@ -1230,7 +1207,7 @@ where
         callback: PrepareTreeRDataCallback<Tree>,
     ) -> Result<LCTree<Tree::Hasher, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>>
     where
-        TreeArity: PoseidonArity<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
+        TreeArity: PoseidonArity<Tree::Field>,
     {
         let (configs, replica_config) = split_config_and_replica(
             tree_r_last_config.clone(),
@@ -1563,7 +1540,7 @@ where
         replica_path: PathBuf,
     ) -> Result<LCTree<Tree::Hasher, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>>
     where
-        TreeArity: PoseidonArity<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
+        TreeArity: PoseidonArity<Tree::Field>,
     {
         use std::fs::OpenOptions;
         use std::io::Write;
@@ -1595,19 +1572,14 @@ where
                     None
                 }
             };
-            let mut tree_builder = TreeBuilder::<
-                <<Tree::Hasher as Hasher>::Domain as Domain>::Field,
-                Tree::Arity,
-            >::new(
-                batcher, nodes_count, tree_r_last_config.rows_to_discard
+            let mut tree_builder = TreeBuilder::<Tree::Field, Tree::Arity>::new(
+                batcher, nodes_count,
+                tree_r_last_config.rows_to_discard,
             )
             .expect("failed to create TreeBuilder");
 
             // Allocate zeros once and reuse.
-            let zero_leaves = vec![
-                <<Tree::Hasher as Hasher>::Domain as Domain>::Field::zero();
-                max_gpu_tree_batch_size
-            ];
+            let zero_leaves = vec![Tree::Field::zero(); max_gpu_tree_batch_size];
             for (i, config) in configs.iter().enumerate() {
                 let mut consumed = 0;
                 while consumed < nodes_count {
@@ -1702,7 +1674,7 @@ where
         replica_path: PathBuf,
     ) -> Result<LCTree<Tree::Hasher, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>>
     where
-        TreeArity: PoseidonArity<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
+        TreeArity: PoseidonArity<Tree::Field>,
     {
         let (configs, replica_config) = split_config_and_replica(
             tree_r_last_config.clone(),

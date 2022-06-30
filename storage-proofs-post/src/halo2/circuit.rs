@@ -1,5 +1,3 @@
-#![allow(unused_imports)]
-
 use std::any::TypeId;
 use std::convert::TryInto;
 use std::iter;
@@ -10,38 +8,27 @@ use fil_halo2_gadgets::{
     uint32::{UInt32Chip, UInt32Config},
     ColumnBuilder,
 };
-use filecoin_hashers::{poseidon::PoseidonHasher, Domain, HaloHasher, Hasher, PoseidonArity};
+use filecoin_hashers::{poseidon::PoseidonHasher, Halo2Hasher, Hasher, PoseidonArity};
 use generic_array::typenum::U2;
 use halo2_proofs::{
     arithmetic::FieldExt,
     circuit::{Layouter, SimpleFloorPlanner},
     plonk::{Advice, Circuit, Column, ConstraintSystem, Error, Instance},
 };
-use rand::rngs::OsRng;
 use storage_proofs_core::{
     halo2::{
-        create_batch_proof, create_proof,
         gadgets::{
             insert::{InsertChip, InsertConfig},
             por::{self, MerkleChip},
         },
-        verify_batch_proof, verify_proof, CircuitRows, CompoundProof, FieldProvingCurves,
-        Halo2Keypair, Halo2Proof,
+        CircuitRows,
     },
-    merkle::{MerkleProofTrait, MerkleTreeTrait},
+    merkle::MerkleProofTrait,
 };
 
 use crate::{
-    fallback::{self as vanilla, FallbackPoSt, SetupParams},
-    halo2::{
-        constants::{
-            SECTOR_NODES_16_KIB, SECTOR_NODES_16_MIB, SECTOR_NODES_1_GIB, SECTOR_NODES_2_KIB,
-            SECTOR_NODES_32_GIB, SECTOR_NODES_32_KIB, SECTOR_NODES_4_KIB, SECTOR_NODES_512_MIB,
-            SECTOR_NODES_64_GIB, SECTOR_NODES_8_MIB,
-        },
-        window::{self, WindowPostCircuit},
-        winning::{self, WinningPostCircuit},
-    },
+    fallback as vanilla,
+    halo2::{WindowPostCircuit, WinningPostCircuit},
 };
 
 // The subset of a PoSt circuit's private inputs corresponding to a single challenged sector.
@@ -52,8 +39,7 @@ where
     U: PoseidonArity<F>,
     V: PoseidonArity<F>,
     W: PoseidonArity<F>,
-    PoseidonHasher<F>: Hasher,
-    <PoseidonHasher<F> as Hasher>::Domain: Domain<Field = F>,
+    PoseidonHasher<F>: Hasher<Field = F>,
 {
     pub comm_c: Option<F>,
     pub root_r: Option<F>,
@@ -62,16 +48,12 @@ where
     pub _tree_r: PhantomData<(U, V, W)>,
 }
 
-impl<F, U, V, W, P, const SECTOR_NODES: usize, const SECTOR_CHALLENGES: usize>
-    From<&vanilla::SectorProof<P>> for SectorProof<F, U, V, W, SECTOR_NODES, SECTOR_CHALLENGES>
+impl<F, P, const SECTOR_NODES: usize, const SECTOR_CHALLENGES: usize> From<&vanilla::SectorProof<P>>
+    for SectorProof<F, P::Arity, P::SubTreeArity, P::TopTreeArity, SECTOR_NODES, SECTOR_CHALLENGES>
 where
     F: FieldExt,
-    U: PoseidonArity<F>,
-    V: PoseidonArity<F>,
-    W: PoseidonArity<F>,
-    PoseidonHasher<F>: Hasher,
-    <PoseidonHasher<F> as Hasher>::Domain: Domain<Field = F>,
-    P: MerkleProofTrait<Hasher = PoseidonHasher<F>, Arity = U, SubTreeArity = V, TopTreeArity = W>,
+    P: MerkleProofTrait<Hasher = PoseidonHasher<F>>,
+    PoseidonHasher<F>: Hasher<Field = F>,
 {
     #[allow(clippy::unwrap_used)]
     fn from(vanilla_proof: &vanilla::SectorProof<P>) -> Self {
@@ -101,16 +83,12 @@ where
     }
 }
 
-impl<F, U, V, W, P, const SECTOR_NODES: usize, const SECTOR_CHALLENGES: usize>
-    From<vanilla::SectorProof<P>> for SectorProof<F, U, V, W, SECTOR_NODES, SECTOR_CHALLENGES>
+impl<F, P, const SECTOR_NODES: usize, const SECTOR_CHALLENGES: usize> From<vanilla::SectorProof<P>>
+    for SectorProof<F, P::Arity, P::SubTreeArity, P::TopTreeArity, SECTOR_NODES, SECTOR_CHALLENGES>
 where
     F: FieldExt,
-    U: PoseidonArity<F>,
-    V: PoseidonArity<F>,
-    W: PoseidonArity<F>,
-    PoseidonHasher<F>: Hasher,
-    <PoseidonHasher<F> as Hasher>::Domain: Domain<Field = F>,
-    P: MerkleProofTrait<Hasher = PoseidonHasher<F>, Arity = U, SubTreeArity = V, TopTreeArity = W>,
+    P: MerkleProofTrait<Hasher = PoseidonHasher<F>>,
+    PoseidonHasher<F>: Hasher<Field = F>,
 {
     fn from(vanilla_proof: vanilla::SectorProof<P>) -> Self {
         Self::from(&vanilla_proof)
@@ -124,8 +102,7 @@ where
     U: PoseidonArity<F>,
     V: PoseidonArity<F>,
     W: PoseidonArity<F>,
-    PoseidonHasher<F>: Hasher,
-    <PoseidonHasher<F> as Hasher>::Domain: Domain<Field = F>,
+    PoseidonHasher<F>: Hasher<Field = F>,
 {
     #[allow(clippy::unwrap_used)]
     pub fn empty() -> Self {
@@ -150,26 +127,19 @@ where
     U: PoseidonArity<F>,
     V: PoseidonArity<F>,
     W: PoseidonArity<F>,
-    PoseidonHasher<F>: Hasher,
-    <PoseidonHasher<F> as Hasher>::Domain: Domain<Field = F>,
+    PoseidonHasher<F>: Hasher<Field = F>,
 {
     // Decomposes each Merkle challenge public input into 32 bits.
     pub uint32: UInt32Config<F>,
     // Computes `comm_r`.
-    pub poseidon_2: <PoseidonHasher<F> as HaloHasher<U2>>::Config,
+    pub poseidon_2: <PoseidonHasher<F> as Halo2Hasher<U2>>::Config,
     // Computes TreeR root from each challenge's Merkle proof.
     #[allow(clippy::type_complexity)]
     pub tree_r: (
-        <PoseidonHasher<F> as HaloHasher<U>>::Config,
+        <PoseidonHasher<F> as Halo2Hasher<U>>::Config,
         InsertConfig<F, U>,
-        Option<(
-            <PoseidonHasher<F> as HaloHasher<V>>::Config,
-            InsertConfig<F, V>,
-        )>,
-        Option<(
-            <PoseidonHasher<F> as HaloHasher<W>>::Config,
-            InsertConfig<F, W>,
-        )>,
+        Option<(<PoseidonHasher<F> as Halo2Hasher<V>>::Config, InsertConfig<F, V>)>,
+        Option<(<PoseidonHasher<F> as Halo2Hasher<W>>::Config, InsertConfig<F, W>)>,
     ),
     // Equality enabled columns.
     pub advice: [Column<Advice>; 2],
@@ -182,21 +152,20 @@ where
     U: PoseidonArity<F>,
     V: PoseidonArity<F>,
     W: PoseidonArity<F>,
-    PoseidonHasher<F>: Hasher,
-    <PoseidonHasher<F> as Hasher>::Domain: Domain<Field = F>,
+    PoseidonHasher<F>: Hasher<Field = F>,
 {
     #[allow(clippy::unwrap_used)]
     pub fn configure(meta: &mut ConstraintSystem<F>) -> Self {
         let (advice_eq, advice_neq, fixed_eq, fixed_neq) = ColumnBuilder::new()
             .with_chip::<UInt32Chip<F>>()
-            .with_chip::<<PoseidonHasher<F> as HaloHasher<U2>>::Chip>()
-            .with_chip::<<PoseidonHasher<F> as HaloHasher<U>>::Chip>()
+            .with_chip::<<PoseidonHasher<F> as Halo2Hasher<U2>>::Chip>()
+            .with_chip::<<PoseidonHasher<F> as Halo2Hasher<U>>::Chip>()
             .with_chip::<InsertChip<F, U>>()
             .create_columns(meta);
 
         let uint32 = UInt32Chip::configure(meta, advice_eq[..9].try_into().unwrap());
 
-        let poseidon_2 = <PoseidonHasher<F> as HaloHasher<U2>>::configure(
+        let poseidon_2 = <PoseidonHasher<F> as Halo2Hasher<U2>>::configure(
             meta,
             &advice_eq,
             &advice_neq,
@@ -215,7 +184,7 @@ where
         let poseidon_base = if base_arity_type == binary_arity_type {
             unsafe { mem::transmute(poseidon_2.clone()) }
         } else {
-            <PoseidonHasher<F> as HaloHasher<U>>::configure(
+            <PoseidonHasher<F> as Halo2Hasher<U>>::configure(
                 meta,
                 &advice_eq,
                 &advice_neq,
@@ -233,7 +202,7 @@ where
         } else if sub_arity_type == base_arity_type {
             unsafe { Some(mem::transmute(poseidon_base.clone())) }
         } else {
-            Some(<PoseidonHasher<F> as HaloHasher<V>>::configure(
+            Some(<PoseidonHasher<F> as Halo2Hasher<V>>::configure(
                 meta,
                 &advice_eq,
                 &advice_neq,
@@ -259,7 +228,7 @@ where
         } else if top_arity_type == sub_arity_type {
             unsafe { Some(mem::transmute(poseidon_sub.clone())) }
         } else {
-            Some(<PoseidonHasher<F> as HaloHasher<W>>::configure(
+            Some(<PoseidonHasher<F> as Halo2Hasher<W>>::configure(
                 meta,
                 &advice_eq,
                 &advice_neq,
@@ -299,7 +268,7 @@ where
         self,
     ) -> (
         UInt32Chip<F>,
-        <PoseidonHasher<F> as HaloHasher<U2>>::Chip,
+        <PoseidonHasher<F> as Halo2Hasher<U2>>::Chip,
         MerkleChip<PoseidonHasher<F>, U, V, W>,
     ) {
         let PostConfig {
@@ -311,21 +280,21 @@ where
 
         let uint32_chip = UInt32Chip::construct(uint32_config);
 
-        let poseidon_2_chip = <PoseidonHasher<F> as HaloHasher<U2>>::construct(poseidon_2_config);
+        let poseidon_2_chip = <PoseidonHasher<F> as Halo2Hasher<U2>>::construct(poseidon_2_config);
 
         let tree_r_merkle_chip = {
             let poseidon_base_chip =
-                <PoseidonHasher<F> as HaloHasher<U>>::construct(poseidon_base_config);
+                <PoseidonHasher<F> as Halo2Hasher<U>>::construct(poseidon_base_config);
             let insert_base_chip = InsertChip::construct(insert_base_config);
             let sub_chips = sub_config.map(|(poseidon_sub, insert_sub)| {
                 (
-                    <PoseidonHasher<F> as HaloHasher<V>>::construct(poseidon_sub),
+                    <PoseidonHasher<F> as Halo2Hasher<V>>::construct(poseidon_sub),
                     InsertChip::construct(insert_sub),
                 )
             });
             let top_chips = top_config.map(|(poseidon_top, insert_top)| {
                 (
-                    <PoseidonHasher<F> as HaloHasher<W>>::construct(poseidon_top),
+                    <PoseidonHasher<F> as Halo2Hasher<W>>::construct(poseidon_top),
                     InsertChip::construct(insert_top),
                 )
             });
@@ -348,8 +317,7 @@ where
     U: PoseidonArity<F>,
     V: PoseidonArity<F>,
     W: PoseidonArity<F>,
-    PoseidonHasher<F>: Hasher,
-    <PoseidonHasher<F> as Hasher>::Domain: Domain<Field = F>,
+    PoseidonHasher<F>: Hasher<Field = F>,
 {
     Winning(WinningPostCircuit<F, U, V, W, SECTOR_NODES>),
     Window(WindowPostCircuit<F, U, V, W, SECTOR_NODES>),
@@ -362,8 +330,7 @@ where
     U: PoseidonArity<F>,
     V: PoseidonArity<F>,
     W: PoseidonArity<F>,
-    PoseidonHasher<F>: Hasher,
-    <PoseidonHasher<F> as Hasher>::Domain: Domain<Field = F>,
+    PoseidonHasher<F>: Hasher<Field = F>,
 {
     fn from(circ: WinningPostCircuit<F, U, V, W, SECTOR_NODES>) -> Self {
         PostCircuit::Winning(circ)
@@ -377,8 +344,7 @@ where
     U: PoseidonArity<F>,
     V: PoseidonArity<F>,
     W: PoseidonArity<F>,
-    PoseidonHasher<F>: Hasher,
-    <PoseidonHasher<F> as Hasher>::Domain: Domain<Field = F>,
+    PoseidonHasher<F>: Hasher<Field = F>,
 {
     fn from(circ: WindowPostCircuit<F, U, V, W, SECTOR_NODES>) -> Self {
         PostCircuit::Window(circ)
@@ -391,8 +357,7 @@ where
     U: PoseidonArity<F>,
     V: PoseidonArity<F>,
     W: PoseidonArity<F>,
-    PoseidonHasher<F>: Hasher,
-    <PoseidonHasher<F> as Hasher>::Domain: Domain<Field = F>,
+    PoseidonHasher<F>: Hasher<Field = F>,
 {
     type Config = PostConfig<F, U, V, W, SECTOR_NODES>;
     type FloorPlanner = SimpleFloorPlanner;
@@ -423,8 +388,7 @@ where
     U: PoseidonArity<F>,
     V: PoseidonArity<F>,
     W: PoseidonArity<F>,
-    PoseidonHasher<F>: Hasher,
-    <PoseidonHasher<F> as Hasher>::Domain: Domain<Field = F>,
+    PoseidonHasher<F>: Hasher<Field = F>,
 {
     fn k(&self) -> u32 {
         match self {
@@ -440,8 +404,7 @@ where
     U: PoseidonArity<F>,
     V: PoseidonArity<F>,
     W: PoseidonArity<F>,
-    PoseidonHasher<F>: Hasher,
-    <PoseidonHasher<F> as Hasher>::Domain: Domain<Field = F>,
+    PoseidonHasher<F>: Hasher<Field = F>,
 {
     fn is_winning(&self) -> bool {
         if let PostCircuit::Winning(_) = self {

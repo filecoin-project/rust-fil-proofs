@@ -1,11 +1,9 @@
-use filecoin_hashers::{
-    poseidon::PoseidonHasher, sha256::Sha256Hasher, Domain, Hasher, PoseidonArity,
-};
-use halo2_proofs::{arithmetic::FieldExt, plonk::Error};
+use filecoin_hashers::{poseidon::PoseidonHasher, sha256::Sha256Hasher, Hasher};
+use halo2_proofs::plonk::Error;
 use rand::rngs::OsRng;
 use storage_proofs_core::{
     halo2::{
-        create_batch_proof, create_proof, verify_batch_proof, verify_proof, CompoundProof, FieldProvingCurves, Halo2Keypair, Halo2Proof,
+        create_batch_proof, create_proof, verify_batch_proof, verify_proof, CompoundProof, Halo2Field, Halo2Keypair, Halo2Proof,
     },
     merkle::MerkleTreeTrait,
 };
@@ -25,28 +23,22 @@ use crate::stacked::{
 macro_rules! impl_compound_proof {
     ($($sector_nodes:expr),*) => {
         $(
-            impl<F, U, V, W, TreeR> CompoundProof<'_, F, $sector_nodes>
+            impl<F, TreeR> CompoundProof<'_, F, $sector_nodes>
                 for StackedDrg<'static, TreeR, Sha256Hasher<F>>
             where
-                F: FieldExt + FieldProvingCurves,
-                U: PoseidonArity<F>,
-                V: PoseidonArity<F>,
-                W: PoseidonArity<F>,
-                Sha256Hasher<F>: Hasher,
-                <Sha256Hasher<F> as Hasher>::Domain: Domain<Field = F>,
-                PoseidonHasher<F>: Hasher,
-                <PoseidonHasher<F> as Hasher>::Domain: Domain<Field = F>,
-                TreeR:
-                    MerkleTreeTrait<Hasher = PoseidonHasher<F>, Arity = U, SubTreeArity = V, TopTreeArity = W>,
+                F: Halo2Field,
+                TreeR: MerkleTreeTrait<Field = F, Hasher = PoseidonHasher<F>>,
+                Sha256Hasher<F>: Hasher<Field = F>,
+                PoseidonHasher<F>: Hasher<Field = F>,
             {
-                type Circuit = SdrPorepCircuit<F, U, V, W, $sector_nodes>;
+                type Circuit = SdrPorepCircuit<F, TreeR::Arity, TreeR::SubTreeArity, TreeR::TopTreeArity, $sector_nodes>;
 
                 fn prove_partition_with_vanilla(
                     setup_params: &Self::SetupParams,
                     vanilla_pub_inputs: &Self::PublicInputs,
                     vanilla_partition_proof: &Self::Proof,
-                    keypair: &Halo2Keypair<<F as FieldProvingCurves>::Affine, Self::Circuit>,
-                ) -> Result<Halo2Proof<<F as FieldProvingCurves>::Affine, Self::Circuit>, Error> {
+                    keypair: &Halo2Keypair<F::Affine, Self::Circuit>,
+                ) -> Result<Halo2Proof<F::Affine, Self::Circuit>, Error> {
                     let pub_inputs =
                         circuit::PublicInputs::<F, $sector_nodes>::from(setup_params.clone(),
                         vanilla_pub_inputs.clone());
@@ -54,7 +46,7 @@ macro_rules! impl_compound_proof {
                     let pub_inputs_vec = pub_inputs.to_vec();
 
                     let priv_inputs =
-                        circuit::PrivateInputs::<F, U, V, W, $sector_nodes>::from(vanilla_partition_proof);
+                        circuit::PrivateInputs::<F, TreeR::Arity, TreeR::SubTreeArity, TreeR::TopTreeArity, $sector_nodes>::from(vanilla_partition_proof);
 
                     let circ = SdrPorepCircuit {
                         pub_inputs,
@@ -68,8 +60,8 @@ macro_rules! impl_compound_proof {
                     setup_params: &Self::SetupParams,
                     vanilla_pub_inputs: &Self::PublicInputs,
                     vanilla_proofs: &[Self::Proof],
-                    keypair: &Halo2Keypair<<F as FieldProvingCurves>::Affine, Self::Circuit>,
-                ) -> Result<Vec<Halo2Proof<<F as FieldProvingCurves>::Affine, Self::Circuit>>, Error> {
+                    keypair: &Halo2Keypair<F::Affine, Self::Circuit>,
+                ) -> Result<Vec<Halo2Proof<F::Affine, Self::Circuit>>, Error> {
                     let partition_count = partition_count::<$sector_nodes>();
                     assert_eq!(vanilla_proofs.len(), partition_count);
 
@@ -99,8 +91,8 @@ macro_rules! impl_compound_proof {
                     setup_params: &Self::SetupParams,
                     vanilla_pub_inputs: &Self::PublicInputs,
                     vanilla_proofs: &[Self::Proof],
-                    keypair: &Halo2Keypair<<F as FieldProvingCurves>::Affine, Self::Circuit>,
-                ) -> Result<Halo2Proof<<F as FieldProvingCurves>::Affine, Self::Circuit>, Error> {
+                    keypair: &Halo2Keypair<F::Affine, Self::Circuit>,
+                ) -> Result<Halo2Proof<F::Affine, Self::Circuit>, Error> {
                     let partition_count = partition_count::<$sector_nodes>();
                     assert_eq!(vanilla_proofs.len(), partition_count);
 
@@ -136,8 +128,8 @@ macro_rules! impl_compound_proof {
                 fn verify_partition(
                     setup_params: &Self::SetupParams,
                     vanilla_pub_inputs: &Self::PublicInputs,
-                    circ_proof: &Halo2Proof<<F as FieldProvingCurves>::Affine, Self::Circuit>,
-                    keypair: &Halo2Keypair<<F as FieldProvingCurves>::Affine, Self::Circuit>,
+                    circ_proof: &Halo2Proof<F::Affine, Self::Circuit>,
+                    keypair: &Halo2Keypair<F::Affine, Self::Circuit>,
                 ) -> Result<(), Error> {
                     let pub_inputs = circuit::PublicInputs::<F, $sector_nodes>::from(
                         setup_params.clone(),
@@ -150,8 +142,8 @@ macro_rules! impl_compound_proof {
                 fn verify_all_partitions(
                     setup_params: &Self::SetupParams,
                     vanilla_pub_inputs: &Self::PublicInputs,
-                    circ_proofs: &[Halo2Proof<<F as FieldProvingCurves>::Affine, Self::Circuit>],
-                    keypair: &Halo2Keypair<<F as FieldProvingCurves>::Affine, Self::Circuit>,
+                    circ_proofs: &[Halo2Proof<F::Affine, Self::Circuit>],
+                    keypair: &Halo2Keypair<F::Affine, Self::Circuit>,
                 ) -> Result<(), Error> {
                     let partition_count = partition_count::<$sector_nodes>();
                     assert_eq!(circ_proofs.len(), partition_count);
@@ -174,8 +166,8 @@ macro_rules! impl_compound_proof {
                 fn batch_verify_all_partitions(
                     setup_params: &Self::SetupParams,
                     vanilla_pub_inputs: &Self::PublicInputs,
-                    batch_proof: &Halo2Proof<<F as FieldProvingCurves>::Affine, Self::Circuit>,
-                    keypair: &Halo2Keypair<<F as FieldProvingCurves>::Affine, Self::Circuit>,
+                    batch_proof: &Halo2Proof<F::Affine, Self::Circuit>,
+                    keypair: &Halo2Keypair<F::Affine, Self::Circuit>,
                 ) -> Result<(), Error> {
                     let partition_count = partition_count::<$sector_nodes>();
 

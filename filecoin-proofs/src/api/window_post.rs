@@ -4,13 +4,13 @@ use std::marker::PhantomData;
 
 use anyhow::{ensure, Context, Result};
 use blstrs::Scalar as Fr;
-use filecoin_hashers::{Domain, Hasher, PoseidonArity};
-use halo2_proofs::{arithmetic::FieldExt, pasta::{Fp, Fq}};
+use filecoin_hashers::{Hasher, PoseidonArity};
+use halo2_proofs::pasta::{Fp, Fq};
 use log::info;
 use rayon::prelude::{IntoParallelRefIterator, ParallelIterator};
 use storage_proofs_core::{
     compound_proof::{self, CompoundProof},
-    halo2::{self, FieldProvingCurves, Halo2Proof},
+    halo2::{self, Halo2Field, Halo2Proof},
     merkle::{MerkleTreeTrait, MerkleTreeWrapper},
     multi_proof::MultiProof,
     proof::ProofScheme,
@@ -62,21 +62,25 @@ where
         post_config.typ == PoStType::Window,
         "invalid post config type"
     );
+    ensure!(
+        TypeId::of::<Tree::Hasher>() == TypeId::of::<DefaultTreeHasher<Tree::Field>>(),
+        "tree hasher must be poseidon",
+    );
 
     let proof_bytes = match get_proof_system::<Tree>() {
-        ProofSystem::Groth => groth16_generate_window_post_with_vanilla(
+        ProofSystem::Groth => groth16_generate_window_post_with_vanilla::<Tree>(
             post_config,
             randomness,
             prover_id,
             vanilla_proofs,
         )?,
-        ProofSystem::HaloPallas => halo2_generate_window_post_with_vanilla::<_, Fp>(
+        ProofSystem::HaloPallas => halo2_generate_window_post_with_vanilla::<Tree, Fp>(
             post_config,
             randomness,
             prover_id,
             vanilla_proofs,
         )?,
-        ProofSystem::HaloVesta => halo2_generate_window_post_with_vanilla::<_, Fq>(
+        ProofSystem::HaloVesta => halo2_generate_window_post_with_vanilla::<Tree, Fq>(
             post_config,
             randomness,
             prover_id,
@@ -100,8 +104,6 @@ where
     Tree::SubTreeArity: PoseidonArity<Fr>,
     Tree::TopTreeArity: PoseidonArity<Fr>,
 {
-    assert_eq!(TypeId::of::<Tree::Hasher>(), TypeId::of::<DefaultTreeHasher<Fr>>());
-
     let randomness_safe: DefaultTreeDomain<Fr> =
         as_safe_commitment(randomness, "randomness")?;
     let prover_id_safe: DefaultTreeDomain<Fr> =
@@ -186,15 +188,12 @@ fn halo2_generate_window_post_with_vanilla<Tree, F>(
 ) -> Result<SnarkProof>
 where
     Tree: 'static + MerkleTreeTrait,
-    F: FieldExt + FieldProvingCurves,
+    F: Halo2Field,
     Tree::Arity: PoseidonArity<F>,
     Tree::SubTreeArity: PoseidonArity<F>,
     Tree::TopTreeArity: PoseidonArity<F>,
-    DefaultTreeHasher<F>: Hasher,
-    DefaultTreeDomain<F>: Domain<Field = F>,
+    DefaultTreeHasher<F>: Hasher<Field = F>,
 {
-    assert_eq!(TypeId::of::<Tree::Hasher>(), TypeId::of::<DefaultTreeHasher<F>>());
-
     let randomness_safe: DefaultTreeDomain<F> =
         as_safe_commitment(randomness, "randomness")?;
     let prover_id_safe: DefaultTreeDomain<F> =
@@ -620,6 +619,10 @@ where
         post_config.typ == PoStType::Window,
         "invalid post config type"
     );
+    ensure!(
+        TypeId::of::<Tree::Hasher>() == TypeId::of::<DefaultTreeHasher<Tree::Field>>(),
+        "tree hasher must be poseidon",
+    );
 
     let proof_bytes = match get_proof_system::<Tree>() {
         ProofSystem::Groth => groth16_generate_window_post_without_vanilla(
@@ -628,13 +631,13 @@ where
             replicas,
             prover_id,
         )?,
-        ProofSystem::HaloPallas => halo2_generate_window_post_without_vanilla::<_, Fp>(
+        ProofSystem::HaloPallas => halo2_generate_window_post_without_vanilla::<Tree, Fp>(
             post_config,
             randomness,
             replicas,
             prover_id,
         )?,
-        ProofSystem::HaloVesta => halo2_generate_window_post_without_vanilla::<_, Fq>(
+        ProofSystem::HaloVesta => halo2_generate_window_post_without_vanilla::<Tree, Fq>(
             post_config,
             randomness,
             replicas,
@@ -658,8 +661,6 @@ where
     Tree::SubTreeArity: PoseidonArity<Fr>,
     Tree::TopTreeArity: PoseidonArity<Fr>,
 {
-    assert_eq!(TypeId::of::<Tree::Hasher>(), TypeId::of::<DefaultTreeHasher<Fr>>());
-
     let randomness_safe: DefaultTreeDomain<Fr> =
         as_safe_commitment(randomness, "randomness")?;
     let prover_id_safe: DefaultTreeDomain<Fr> =
@@ -785,15 +786,12 @@ fn halo2_generate_window_post_without_vanilla<Tree, F>(
 ) -> Result<SnarkProof>
 where
     Tree: 'static + MerkleTreeTrait,
-    F: FieldExt + FieldProvingCurves,
+    F: Halo2Field,
     Tree::Arity: PoseidonArity<F>,
     Tree::SubTreeArity: PoseidonArity<F>,
     Tree::TopTreeArity: PoseidonArity<F>,
-    DefaultTreeHasher<F>: Hasher,
-    DefaultTreeDomain<F>: Domain<Field = F>,
+    DefaultTreeHasher<F>: Hasher<Field = F>,
 {
-    assert_eq!(TypeId::of::<Tree::Hasher>(), TypeId::of::<DefaultTreeHasher<F>>());
-
     let randomness_safe: DefaultTreeDomain<F> =
         as_safe_commitment(randomness, "randomness")?;
     let prover_id_safe: DefaultTreeDomain<F> =
@@ -1277,6 +1275,10 @@ where
         post_config.typ == PoStType::Window,
         "invalid post config type"
     );
+    ensure!(
+        TypeId::of::<Tree::Hasher>() == TypeId::of::<DefaultTreeHasher<Tree::Field>>(),
+        "tree hasher must be poseidon",
+    );
 
     let is_valid = match get_proof_system::<Tree>() {
         ProofSystem::Groth => groth16_verify_window_post::<Tree>(
@@ -1286,14 +1288,14 @@ where
             prover_id,
             proof,
         )?,
-        ProofSystem::HaloPallas => halo2_verify_window_post::<Tree, Fp>(
+        ProofSystem::HaloPallas => halo2_verify_window_post::<Fp, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>(
             post_config,
             randomness,
             replicas,
             prover_id,
             proof,
         )?,
-        ProofSystem::HaloVesta => halo2_verify_window_post::<Tree, Fq>(
+        ProofSystem::HaloVesta => halo2_verify_window_post::<Fq, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>(
             post_config,
             randomness,
             replicas,
@@ -1323,8 +1325,6 @@ where
     Tree::SubTreeArity: PoseidonArity<Fr>,
     Tree::TopTreeArity: PoseidonArity<Fr>,
 {
-    assert_eq!(TypeId::of::<Tree::Hasher>(), TypeId::of::<DefaultTreeHasher<Fr>>());
-
     let randomness_safe: DefaultTreeDomain<Fr> =
         as_safe_commitment(randomness, "randomness")?;
     let prover_id_safe: DefaultTreeDomain<Fr> =
@@ -1387,7 +1387,7 @@ where
     )
 }
 
-fn halo2_verify_window_post<Tree, F>(
+fn halo2_verify_window_post<F, U, V, W>(
     post_config: &PoStConfig,
     randomness: &ChallengeSeed,
     replicas: &BTreeMap<SectorId, PublicReplicaInfo>,
@@ -1395,16 +1395,12 @@ fn halo2_verify_window_post<Tree, F>(
     proof: &[u8],
 ) -> Result<bool>
 where
-    Tree: 'static + MerkleTreeTrait,
-    F: FieldExt + FieldProvingCurves,
-    Tree::Arity: PoseidonArity<F>,
-    Tree::SubTreeArity: PoseidonArity<F>,
-    Tree::TopTreeArity: PoseidonArity<F>,
-    DefaultTreeHasher<F>: Hasher,
-    DefaultTreeDomain<F>: Domain<Field = F>,
+    F: Halo2Field,
+    U: PoseidonArity<F>,
+    V: PoseidonArity<F>,
+    W: PoseidonArity<F>,
+    DefaultTreeHasher<F>: Hasher<Field = F>,
 {
-    assert_eq!(TypeId::of::<Tree::Hasher>(), TypeId::of::<DefaultTreeHasher<F>>());
-
     let randomness_safe: DefaultTreeDomain<F> =
         as_safe_commitment(randomness, "randomness")?;
     let prover_id_safe: DefaultTreeDomain<F> =
@@ -1443,38 +1439,38 @@ where
     match sector_nodes {
         SECTOR_NODES_2_KIB => {
             let circ_partition_proofs: Vec<Halo2Proof<
-                <F as FieldProvingCurves>::Affine,
+                F::Affine,
                 PostCircuit<
                     F,
-                    Tree::Arity,
-                    Tree::SubTreeArity,
-                    Tree::TopTreeArity,
+                    U,
+                    V,
+                    W,
                     SECTOR_NODES_2_KIB,
                 >,
             >> = proofs_bytes.map(Into::into).collect();
 
             let circ = PostCircuit::from(WindowPostCircuit::<
                 F,
-                Tree::Arity,
-                Tree::SubTreeArity,
-                Tree::TopTreeArity,
+                U,
+                V,
+                W,
                 SECTOR_NODES_2_KIB,
             >::blank_circuit());
 
             let keypair = <FallbackPoSt<'_, MerkleTreeWrapper<
                 DefaultTreeHasher<F>,
                 MockStore,
-                Tree::Arity,
-                Tree::SubTreeArity,
-                Tree::TopTreeArity,
+                U,
+                V,
+                W,
             >> as halo2::CompoundProof<'_, F, SECTOR_NODES_2_KIB>>::create_keypair(&circ)?;
 
             <FallbackPoSt<'_, MerkleTreeWrapper<
                 DefaultTreeHasher<F>,
                 MockStore,
-                Tree::Arity,
-                Tree::SubTreeArity,
-                Tree::TopTreeArity,
+                U,
+                V,
+                W,
             >> as halo2::CompoundProof<'_, F, SECTOR_NODES_2_KIB>>::verify_all_partitions(
                 &vanilla_setup_params,
                 &vanilla_pub_inputs,
@@ -1484,38 +1480,38 @@ where
         }
         SECTOR_NODES_4_KIB => {
             let circ_partition_proofs: Vec<Halo2Proof<
-                <F as FieldProvingCurves>::Affine,
+                F::Affine,
                 PostCircuit<
                     F,
-                    Tree::Arity,
-                    Tree::SubTreeArity,
-                    Tree::TopTreeArity,
+                    U,
+                    V,
+                    W,
                     SECTOR_NODES_4_KIB,
                 >,
             >> = proofs_bytes.map(Into::into).collect();
 
             let circ = PostCircuit::from(WindowPostCircuit::<
                 F,
-                Tree::Arity,
-                Tree::SubTreeArity,
-                Tree::TopTreeArity,
+                U,
+                V,
+                W,
                 SECTOR_NODES_4_KIB,
             >::blank_circuit());
 
             let keypair = <FallbackPoSt<'_, MerkleTreeWrapper<
                 DefaultTreeHasher<F>,
                 MockStore,
-                Tree::Arity,
-                Tree::SubTreeArity,
-                Tree::TopTreeArity,
+                U,
+                V,
+                W,
             >> as halo2::CompoundProof<'_, F, SECTOR_NODES_4_KIB>>::create_keypair(&circ)?;
 
             <FallbackPoSt<'_, MerkleTreeWrapper<
                 DefaultTreeHasher<F>,
                 MockStore,
-                Tree::Arity,
-                Tree::SubTreeArity,
-                Tree::TopTreeArity,
+                U,
+                V,
+                W,
             >> as halo2::CompoundProof<'_, F, SECTOR_NODES_4_KIB>>::verify_all_partitions(
                 &vanilla_setup_params,
                 &vanilla_pub_inputs,
@@ -1525,38 +1521,38 @@ where
         }
         SECTOR_NODES_16_KIB => {
             let circ_partition_proofs: Vec<Halo2Proof<
-                <F as FieldProvingCurves>::Affine,
+                F::Affine,
                 PostCircuit<
                     F,
-                    Tree::Arity,
-                    Tree::SubTreeArity,
-                    Tree::TopTreeArity,
+                    U,
+                    V,
+                    W,
                     SECTOR_NODES_16_KIB,
                 >,
             >> = proofs_bytes.map(Into::into).collect();
 
             let circ = PostCircuit::from(WindowPostCircuit::<
                 F,
-                Tree::Arity,
-                Tree::SubTreeArity,
-                Tree::TopTreeArity,
+                U,
+                V,
+                W,
                 SECTOR_NODES_16_KIB,
             >::blank_circuit());
 
             let keypair = <FallbackPoSt<'_, MerkleTreeWrapper<
                 DefaultTreeHasher<F>,
                 MockStore,
-                Tree::Arity,
-                Tree::SubTreeArity,
-                Tree::TopTreeArity,
+                U,
+                V,
+                W,
             >> as halo2::CompoundProof<'_, F, SECTOR_NODES_16_KIB>>::create_keypair(&circ)?;
 
             <FallbackPoSt<'_, MerkleTreeWrapper<
                 DefaultTreeHasher<F>,
                 MockStore,
-                Tree::Arity,
-                Tree::SubTreeArity,
-                Tree::TopTreeArity,
+                U,
+                V,
+                W,
             >> as halo2::CompoundProof<'_, F, SECTOR_NODES_16_KIB>>::verify_all_partitions(
                 &vanilla_setup_params,
                 &vanilla_pub_inputs,
@@ -1566,38 +1562,38 @@ where
         }
         SECTOR_NODES_32_KIB => {
             let circ_partition_proofs: Vec<Halo2Proof<
-                <F as FieldProvingCurves>::Affine,
+                F::Affine,
                 PostCircuit<
                     F,
-                    Tree::Arity,
-                    Tree::SubTreeArity,
-                    Tree::TopTreeArity,
+                    U,
+                    V,
+                    W,
                     SECTOR_NODES_32_KIB,
                 >,
             >> = proofs_bytes.map(Into::into).collect();
 
             let circ = PostCircuit::from(WindowPostCircuit::<
                 F,
-                Tree::Arity,
-                Tree::SubTreeArity,
-                Tree::TopTreeArity,
+                U,
+                V,
+                W,
                 SECTOR_NODES_32_KIB,
             >::blank_circuit());
 
             let keypair = <FallbackPoSt<'_, MerkleTreeWrapper<
                 DefaultTreeHasher<F>,
                 MockStore,
-                Tree::Arity,
-                Tree::SubTreeArity,
-                Tree::TopTreeArity,
+                U,
+                V,
+                W,
             >> as halo2::CompoundProof<'_, F, SECTOR_NODES_32_KIB>>::create_keypair(&circ)?;
 
             <FallbackPoSt<'_, MerkleTreeWrapper<
                 DefaultTreeHasher<F>,
                 MockStore,
-                Tree::Arity,
-                Tree::SubTreeArity,
-                Tree::TopTreeArity,
+                U,
+                V,
+                W,
             >> as halo2::CompoundProof<'_, F, SECTOR_NODES_32_KIB>>::verify_all_partitions(
                 &vanilla_setup_params,
                 &vanilla_pub_inputs,
@@ -1607,38 +1603,38 @@ where
         }
         SECTOR_NODES_8_MIB => {
             let circ_partition_proofs: Vec<Halo2Proof<
-                <F as FieldProvingCurves>::Affine,
+                F::Affine,
                 PostCircuit<
                     F,
-                    Tree::Arity,
-                    Tree::SubTreeArity,
-                    Tree::TopTreeArity,
+                    U,
+                    V,
+                    W,
                     SECTOR_NODES_8_MIB,
                 >,
             >> = proofs_bytes.map(Into::into).collect();
 
             let circ = PostCircuit::from(WindowPostCircuit::<
                 F,
-                Tree::Arity,
-                Tree::SubTreeArity,
-                Tree::TopTreeArity,
+                U,
+                V,
+                W,
                 SECTOR_NODES_8_MIB,
             >::blank_circuit());
 
             let keypair = <FallbackPoSt<'_, MerkleTreeWrapper<
                 DefaultTreeHasher<F>,
                 MockStore,
-                Tree::Arity,
-                Tree::SubTreeArity,
-                Tree::TopTreeArity,
+                U,
+                V,
+                W,
             >> as halo2::CompoundProof<'_, F, SECTOR_NODES_8_MIB>>::create_keypair(&circ)?;
 
             <FallbackPoSt<'_, MerkleTreeWrapper<
                 DefaultTreeHasher<F>,
                 MockStore,
-                Tree::Arity,
-                Tree::SubTreeArity,
-                Tree::TopTreeArity,
+                U,
+                V,
+                W,
             >> as halo2::CompoundProof<'_, F, SECTOR_NODES_8_MIB>>::verify_all_partitions(
                 &vanilla_setup_params,
                 &vanilla_pub_inputs,
@@ -1648,38 +1644,38 @@ where
         }
         SECTOR_NODES_16_MIB => {
             let circ_partition_proofs: Vec<Halo2Proof<
-                <F as FieldProvingCurves>::Affine,
+                F::Affine,
                 PostCircuit<
                     F,
-                    Tree::Arity,
-                    Tree::SubTreeArity,
-                    Tree::TopTreeArity,
+                    U,
+                    V,
+                    W,
                     SECTOR_NODES_16_MIB,
                 >,
             >> = proofs_bytes.map(Into::into).collect();
 
             let circ = PostCircuit::from(WindowPostCircuit::<
                 F,
-                Tree::Arity,
-                Tree::SubTreeArity,
-                Tree::TopTreeArity,
+                U,
+                V,
+                W,
                 SECTOR_NODES_16_MIB,
             >::blank_circuit());
 
             let keypair = <FallbackPoSt<'_, MerkleTreeWrapper<
                 DefaultTreeHasher<F>,
                 MockStore,
-                Tree::Arity,
-                Tree::SubTreeArity,
-                Tree::TopTreeArity,
+                U,
+                V,
+                W,
             >> as halo2::CompoundProof<'_, F, SECTOR_NODES_16_MIB>>::create_keypair(&circ)?;
 
             <FallbackPoSt<'_, MerkleTreeWrapper<
                 DefaultTreeHasher<F>,
                 MockStore,
-                Tree::Arity,
-                Tree::SubTreeArity,
-                Tree::TopTreeArity,
+                U,
+                V,
+                W,
             >> as halo2::CompoundProof<'_, F, SECTOR_NODES_16_MIB>>::verify_all_partitions(
                 &vanilla_setup_params,
                 &vanilla_pub_inputs,
@@ -1689,38 +1685,38 @@ where
         }
         SECTOR_NODES_512_MIB => {
             let circ_partition_proofs: Vec<Halo2Proof<
-                <F as FieldProvingCurves>::Affine,
+                F::Affine,
                 PostCircuit<
                     F,
-                    Tree::Arity,
-                    Tree::SubTreeArity,
-                    Tree::TopTreeArity,
+                    U,
+                    V,
+                    W,
                     SECTOR_NODES_512_MIB,
                 >,
             >> = proofs_bytes.map(Into::into).collect();
 
             let circ = PostCircuit::from(WindowPostCircuit::<
                 F,
-                Tree::Arity,
-                Tree::SubTreeArity,
-                Tree::TopTreeArity,
+                U,
+                V,
+                W,
                 SECTOR_NODES_512_MIB,
             >::blank_circuit());
 
             let keypair = <FallbackPoSt<'_, MerkleTreeWrapper<
                 DefaultTreeHasher<F>,
                 MockStore,
-                Tree::Arity,
-                Tree::SubTreeArity,
-                Tree::TopTreeArity,
+                U,
+                V,
+                W,
             >> as halo2::CompoundProof<'_, F, SECTOR_NODES_512_MIB>>::create_keypair(&circ)?;
 
             <FallbackPoSt<'_, MerkleTreeWrapper<
                 DefaultTreeHasher<F>,
                 MockStore,
-                Tree::Arity,
-                Tree::SubTreeArity,
-                Tree::TopTreeArity,
+                U,
+                V,
+                W,
             >> as halo2::CompoundProof<'_, F, SECTOR_NODES_512_MIB>>::verify_all_partitions(
                 &vanilla_setup_params,
                 &vanilla_pub_inputs,
@@ -1730,38 +1726,38 @@ where
         }
         SECTOR_NODES_1_GIB => {
             let circ_partition_proofs: Vec<Halo2Proof<
-                <F as FieldProvingCurves>::Affine,
+                F::Affine,
                 PostCircuit<
                     F,
-                    Tree::Arity,
-                    Tree::SubTreeArity,
-                    Tree::TopTreeArity,
+                    U,
+                    V,
+                    W,
                     SECTOR_NODES_1_GIB,
                 >,
             >> = proofs_bytes.map(Into::into).collect();
 
             let circ = PostCircuit::from(WindowPostCircuit::<
                 F,
-                Tree::Arity,
-                Tree::SubTreeArity,
-                Tree::TopTreeArity,
+                U,
+                V,
+                W,
                 SECTOR_NODES_1_GIB,
             >::blank_circuit());
 
             let keypair = <FallbackPoSt<'_, MerkleTreeWrapper<
                 DefaultTreeHasher<F>,
                 MockStore,
-                Tree::Arity,
-                Tree::SubTreeArity,
-                Tree::TopTreeArity,
+                U,
+                V,
+                W,
             >> as halo2::CompoundProof<'_, F, SECTOR_NODES_1_GIB>>::create_keypair(&circ)?;
 
             <FallbackPoSt<'_, MerkleTreeWrapper<
                 DefaultTreeHasher<F>,
                 MockStore,
-                Tree::Arity,
-                Tree::SubTreeArity,
-                Tree::TopTreeArity,
+                U,
+                V,
+                W,
             >> as halo2::CompoundProof<'_, F, SECTOR_NODES_1_GIB>>::verify_all_partitions(
                 &vanilla_setup_params,
                 &vanilla_pub_inputs,
@@ -1771,38 +1767,38 @@ where
         }
         SECTOR_NODES_32_GIB => {
             let circ_partition_proofs: Vec<Halo2Proof<
-                <F as FieldProvingCurves>::Affine,
+                F::Affine,
                 PostCircuit<
                     F,
-                    Tree::Arity,
-                    Tree::SubTreeArity,
-                    Tree::TopTreeArity,
+                    U,
+                    V,
+                    W,
                     SECTOR_NODES_32_GIB,
                 >,
             >> = proofs_bytes.map(Into::into).collect();
 
             let circ = PostCircuit::from(WindowPostCircuit::<
                 F,
-                Tree::Arity,
-                Tree::SubTreeArity,
-                Tree::TopTreeArity,
+                U,
+                V,
+                W,
                 SECTOR_NODES_32_GIB,
             >::blank_circuit());
 
             let keypair = <FallbackPoSt<'_, MerkleTreeWrapper<
                 DefaultTreeHasher<F>,
                 MockStore,
-                Tree::Arity,
-                Tree::SubTreeArity,
-                Tree::TopTreeArity,
+                U,
+                V,
+                W,
             >> as halo2::CompoundProof<'_, F, SECTOR_NODES_32_GIB>>::create_keypair(&circ)?;
 
             <FallbackPoSt<'_, MerkleTreeWrapper<
                 DefaultTreeHasher<F>,
                 MockStore,
-                Tree::Arity,
-                Tree::SubTreeArity,
-                Tree::TopTreeArity,
+                U,
+                V,
+                W,
             >> as halo2::CompoundProof<'_, F, SECTOR_NODES_32_GIB>>::verify_all_partitions(
                 &vanilla_setup_params,
                 &vanilla_pub_inputs,
@@ -1812,38 +1808,38 @@ where
         }
         SECTOR_NODES_64_GIB => {
             let circ_partition_proofs: Vec<Halo2Proof<
-                <F as FieldProvingCurves>::Affine,
+                F::Affine,
                 PostCircuit<
                     F,
-                    Tree::Arity,
-                    Tree::SubTreeArity,
-                    Tree::TopTreeArity,
+                    U,
+                    V,
+                    W,
                     SECTOR_NODES_64_GIB,
                 >,
             >> = proofs_bytes.map(Into::into).collect();
 
             let circ = PostCircuit::from(WindowPostCircuit::<
                 F,
-                Tree::Arity,
-                Tree::SubTreeArity,
-                Tree::TopTreeArity,
+                U,
+                V,
+                W,
                 SECTOR_NODES_64_GIB,
             >::blank_circuit());
 
             let keypair = <FallbackPoSt<'_, MerkleTreeWrapper<
                 DefaultTreeHasher<F>,
                 MockStore,
-                Tree::Arity,
-                Tree::SubTreeArity,
-                Tree::TopTreeArity,
+                U,
+                V,
+                W,
             >> as halo2::CompoundProof<'_, F, SECTOR_NODES_64_GIB>>::create_keypair(&circ)?;
 
             <FallbackPoSt<'_, MerkleTreeWrapper<
                 DefaultTreeHasher<F>,
                 MockStore,
-                Tree::Arity,
-                Tree::SubTreeArity,
-                Tree::TopTreeArity,
+                U,
+                V,
+                W,
             >> as halo2::CompoundProof<'_, F, SECTOR_NODES_64_GIB>>::verify_all_partitions(
                 &vanilla_setup_params,
                 &vanilla_pub_inputs,
@@ -1875,6 +1871,10 @@ where
     ensure!(
         post_config.typ == PoStType::Window,
         "invalid post config type"
+    );
+    ensure!(
+        TypeId::of::<Tree::Hasher>() == TypeId::of::<DefaultTreeHasher<Tree::Field>>(),
+        "tree hasher must be poseidon",
     );
 
     let proof_bytes = match get_proof_system::<Tree>() {
@@ -1918,8 +1918,6 @@ where
     Tree::SubTreeArity: PoseidonArity<Fr>,
     Tree::TopTreeArity: PoseidonArity<Fr>,
 {
-    assert_eq!(TypeId::of::<Tree::Hasher>(), TypeId::of::<DefaultTreeHasher<Fr>>());
-
     let randomness_safe: DefaultTreeDomain<Fr> =
         as_safe_commitment(randomness, "randomness")?;
     let prover_id_safe: DefaultTreeDomain<Fr> =
@@ -2002,15 +2000,12 @@ fn halo2_generate_single_window_post_with_vanilla<Tree, F>(
 ) -> Result<PartitionSnarkProof>
 where
     Tree: 'static + MerkleTreeTrait,
-    F: FieldExt + FieldProvingCurves,
+    F: Halo2Field,
     Tree::Arity: PoseidonArity<F>,
     Tree::SubTreeArity: PoseidonArity<F>,
     Tree::TopTreeArity: PoseidonArity<F>,
-    DefaultTreeHasher<F>: Hasher,
-    DefaultTreeDomain<F>: Domain<Field = F>,
+    DefaultTreeHasher<F>: Hasher<Field = F>,
 {
-    assert_eq!(TypeId::of::<Tree::Hasher>(), TypeId::of::<DefaultTreeHasher<F>>());
-
     let randomness_safe: DefaultTreeDomain<F> =
         as_safe_commitment(randomness, "randomness")?;
     let prover_id_safe: DefaultTreeDomain<F> =

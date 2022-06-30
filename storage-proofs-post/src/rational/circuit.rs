@@ -2,7 +2,7 @@ use std::marker::PhantomData;
 
 use bellperson::{gadgets::num::AllocatedNum, Circuit, ConstraintSystem, SynthesisError};
 use blstrs::Scalar as Fr;
-use filecoin_hashers::{Domain, HashFunction, Hasher};
+use filecoin_hashers::Groth16Hasher;
 use storage_proofs_core::{
     compound_proof::CircuitComponent, error::Result, gadgets::constraint, gadgets::por::PoRCircuit,
     gadgets::variables::Root, merkle::MerkleTreeTrait,
@@ -11,8 +11,8 @@ use storage_proofs_core::{
 /// This is the `RationalPoSt` circuit.
 pub struct RationalPoStCircuit<Tree>
 where
-    Tree: MerkleTreeTrait,
-    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+    Tree: MerkleTreeTrait<Field = Fr>,
+    Tree::Hasher: Groth16Hasher,
 {
     /// Paramters for the engine.
     pub comm_rs: Vec<Option<Fr>>,
@@ -29,16 +29,16 @@ pub struct ComponentPrivateInputs {}
 
 impl<Tree> CircuitComponent for RationalPoStCircuit<Tree>
 where
-    Tree: MerkleTreeTrait,
-    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+    Tree: MerkleTreeTrait<Field = Fr>,
+    Tree::Hasher: Groth16Hasher,
 {
     type ComponentPrivateInputs = ComponentPrivateInputs;
 }
 
 impl<Tree> Circuit<Fr> for RationalPoStCircuit<Tree>
 where
-    Tree: 'static + MerkleTreeTrait,
-    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+    Tree: 'static + MerkleTreeTrait<Field = Fr>,
+    Tree::Hasher: Groth16Hasher,
 {
     fn synthesize<CS: ConstraintSystem<Fr>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
         let comm_rs = self.comm_rs;
@@ -81,7 +81,7 @@ where
 
             // Verify H(Comm_C || comm_r_last) == comm_r
             {
-                let hash_num = <Tree::Hasher as Hasher>::Function::hash2_circuit(
+                let hash_num = Tree::Hasher::hash2_circuit(
                     cs.namespace(|| format!("H_comm_c_comm_r_last_{}", i)),
                     &comm_c_num,
                     &comm_r_last_num,
