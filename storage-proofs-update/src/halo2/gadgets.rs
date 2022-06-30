@@ -4,7 +4,7 @@ use fil_halo2_gadgets::{
     boolean::{AssignedBit, Bit},
     AdviceIter,
 };
-use filecoin_hashers::{Domain, HaloHasher, HashInstructions, Hasher};
+use filecoin_hashers::{Halo2Hasher, HashInstructions, Hasher};
 use halo2_proofs::{
     arithmetic::FieldExt,
     circuit::{AssignedCell, Layouter},
@@ -17,19 +17,17 @@ use crate::constants::{partition_count, TreeDArity, TreeDHasher};
 pub struct ApexTreeChip<F>
 where
     F: FieldExt,
-    TreeDHasher<F>: HaloHasher<TreeDArity>,
-    <TreeDHasher<F> as Hasher>::Domain: Domain<Field = F>,
+    TreeDHasher<F>: Hasher<Field = F>,
 {
-    hasher_chip: <TreeDHasher<F> as HaloHasher<TreeDArity>>::Chip,
+    hasher_chip: <TreeDHasher<F> as Halo2Hasher<TreeDArity>>::Chip,
 }
 
 impl<F> ApexTreeChip<F>
 where
     F: FieldExt,
-    TreeDHasher<F>: HaloHasher<TreeDArity>,
-    <TreeDHasher<F> as Hasher>::Domain: Domain<Field = F>,
+    TreeDHasher<F>: Hasher<Field = F>,
 {
-    pub fn with_subchips(hasher_chip: <TreeDHasher<F> as HaloHasher<TreeDArity>>::Chip) -> Self {
+    pub fn with_subchips(hasher_chip: <TreeDHasher<F> as Halo2Hasher<TreeDArity>>::Chip) -> Self {
         ApexTreeChip { hasher_chip }
     }
 
@@ -303,10 +301,9 @@ mod tests {
     struct ApexTreeConfig<F>
     where
         F: FieldExt,
-        TreeDHasher<F>: HaloHasher<TreeDArity>,
-        <TreeDHasher<F> as Hasher>::Domain: Domain<Field = F>,
+        TreeDHasher<F>: Hasher<Field = F>,
     {
-        sha256_config: <TreeDHasher<F> as HaloHasher<TreeDArity>>::Config,
+        sha256_config: <TreeDHasher<F> as Halo2Hasher<TreeDArity>>::Config,
         advice: Vec<Column<Advice>>,
     }
 
@@ -317,8 +314,7 @@ mod tests {
     impl<F, const N: usize> Circuit<F> for ApexTreeCircuit<F, N>
     where
         F: FieldExt,
-        TreeDHasher<F>: HaloHasher<TreeDArity>,
-        <TreeDHasher<F> as Hasher>::Domain: Domain<Field = F>,
+        TreeDHasher<F>: Hasher<Field = F>,
     {
         type Config = ApexTreeConfig<F>;
         type FloorPlanner = SimpleFloorPlanner;
@@ -331,10 +327,10 @@ mod tests {
 
         fn configure(meta: &mut ConstraintSystem<F>) -> Self::Config {
             let (advice_eq, advice_neq, fixed_eq, fixed_neq) = ColumnBuilder::new()
-                .with_chip::<<TreeDHasher<F> as HaloHasher<TreeDArity>>::Chip>()
+                .with_chip::<<TreeDHasher<F> as Halo2Hasher<TreeDArity>>::Chip>()
                 .create_columns(meta);
 
-            let sha256_config = <TreeDHasher<F> as HaloHasher<TreeDArity>>::configure(
+            let sha256_config = <TreeDHasher<F> as Halo2Hasher<TreeDArity>>::configure(
                 meta,
                 &advice_eq,
                 &advice_neq,
@@ -358,8 +354,8 @@ mod tests {
                 advice,
             } = config;
 
-            <TreeDHasher<F> as HaloHasher<TreeDArity>>::load(&mut layouter, &sha256_config)?;
-            let sha256_chip = <TreeDHasher<F> as HaloHasher<TreeDArity>>::construct(sha256_config);
+            <TreeDHasher<F> as Halo2Hasher<TreeDArity>>::load(&mut layouter, &sha256_config)?;
+            let sha256_chip = <TreeDHasher<F> as Halo2Hasher<TreeDArity>>::construct(sha256_config);
             let apex_tree_chip = ApexTreeChip::with_subchips(sha256_chip);
 
             let apex_leafs = layouter.assign_region(

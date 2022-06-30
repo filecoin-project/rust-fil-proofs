@@ -3,7 +3,7 @@ use std::marker::PhantomData;
 use bellperson::{gadgets::num::AllocatedNum, Circuit, ConstraintSystem, SynthesisError};
 use blstrs::Scalar as Fr;
 use ff::Field;
-use filecoin_hashers::{poseidon::PoseidonFunction, Domain, HashFunction, Hasher, PoseidonMDArity};
+use filecoin_hashers::{poseidon::PoseidonHasher, Groth16Hasher, PoseidonMDArity};
 use generic_array::typenum::Unsigned;
 use storage_proofs_core::{
     compound_proof::CircuitComponent,
@@ -14,8 +14,8 @@ use storage_proofs_core::{
 /// This is the `ElectionPoSt` circuit.
 pub struct ElectionPoStCircuit<Tree>
 where
-    Tree: MerkleTreeTrait,
-    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+    Tree: MerkleTreeTrait<Field = Fr>,
+    Tree::Hasher: Groth16Hasher,
 {
     pub comm_r: Option<Fr>,
     pub comm_c: Option<Fr>,
@@ -35,16 +35,16 @@ pub struct ComponentPrivateInputs {}
 
 impl<'a, Tree> CircuitComponent for ElectionPoStCircuit<Tree>
 where
-    Tree: MerkleTreeTrait,
-    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+    Tree: MerkleTreeTrait<Field = Fr>,
+    Tree::Hasher: Groth16Hasher,
 {
     type ComponentPrivateInputs = ComponentPrivateInputs;
 }
 
 impl<'a, Tree> Circuit<Fr> for ElectionPoStCircuit<Tree>
 where
-    Tree: 'static + MerkleTreeTrait,
-    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+    Tree: MerkleTreeTrait<Field = Fr>,
+    Tree::Hasher: Groth16Hasher,
 {
     fn synthesize<CS: ConstraintSystem<Fr>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
         let comm_r = self.comm_r;
@@ -83,7 +83,7 @@ where
 
         // Verify H(Comm_C || comm_r_last) == comm_r
         {
-            let hash_num = <Tree::Hasher as Hasher>::Function::hash2_circuit(
+            let hash_num = Tree::Hasher::hash2_circuit(
                 cs.namespace(|| "H_comm_c_comm_r_last"),
                 &comm_c_num,
                 &comm_r_last_num,
@@ -151,7 +151,7 @@ where
         }
 
         // hash it
-        let partial_ticket_num = PoseidonFunction::<Fr>::hash_md_circuit::<_>(
+        let partial_ticket_num = PoseidonHasher::<Fr>::hash_md_circuit::<_>(
             &mut cs.namespace(|| "partial_ticket_hash"),
             &partial_ticket_nums,
         )?;

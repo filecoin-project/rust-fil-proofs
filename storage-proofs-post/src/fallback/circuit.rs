@@ -1,7 +1,7 @@
 use bellperson::{gadgets::num::AllocatedNum, Circuit, ConstraintSystem, SynthesisError};
 use blstrs::Scalar as Fr;
 use ff::Field;
-use filecoin_hashers::{Domain, HashFunction, Hasher};
+use filecoin_hashers::{Groth16Hasher, Hasher};
 use rayon::prelude::{ParallelIterator, ParallelSlice};
 use storage_proofs_core::{
     compound_proof::CircuitComponent,
@@ -22,8 +22,8 @@ use crate::fallback::{PublicParams, PublicSector, SectorProof};
 /// This is the `FallbackPoSt` circuit.
 pub struct FallbackPoStCircuit<Tree>
 where
-    Tree: MerkleTreeTrait,
-    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+    Tree: MerkleTreeTrait<Field = Fr>,
+    Tree::Hasher: Groth16Hasher,
 {
     pub prover_id: Option<Fr>,
     pub sectors: Vec<Sector<Tree>>,
@@ -35,8 +35,8 @@ where
 // Clone-able, therefore deriving Clone would impl Clone for less than all possible Tree types.
 impl<Tree> Clone for FallbackPoStCircuit<Tree>
 where
-    Tree: 'static + MerkleTreeTrait,
-    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+    Tree: 'static + MerkleTreeTrait<Field = Fr>,
+    Tree::Hasher: Groth16Hasher,
 {
     fn clone(&self) -> Self {
         FallbackPoStCircuit {
@@ -48,8 +48,8 @@ where
 
 pub struct Sector<Tree>
 where
-    Tree: MerkleTreeTrait,
-    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+    Tree: MerkleTreeTrait<Field = Fr>,
+    Tree::Hasher: Groth16Hasher,
 {
     pub comm_r: Option<Fr>,
     pub comm_c: Option<Fr>,
@@ -63,8 +63,8 @@ where
 // #derive(Clone)).
 impl<Tree> Clone for Sector<Tree>
 where
-    Tree: MerkleTreeTrait,
-    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+    Tree: MerkleTreeTrait<Field = Fr>,
+    Tree::Hasher: Groth16Hasher,
 {
     fn clone(&self) -> Self {
         Sector {
@@ -80,8 +80,8 @@ where
 
 impl<Tree> Sector<Tree>
 where
-    Tree: 'static + MerkleTreeTrait,
-    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+    Tree: 'static + MerkleTreeTrait<Field = Fr>,
+    Tree::Hasher: Groth16Hasher,
 {
     pub fn circuit(
         sector: &PublicSector<<Tree::Hasher as Hasher>::Domain>,
@@ -133,8 +133,8 @@ where
 
 impl<Tree> Circuit<Fr> for &Sector<Tree>
 where
-    Tree: 'static + MerkleTreeTrait,
-    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+    Tree: 'static + MerkleTreeTrait<Field = Fr>,
+    Tree::Hasher: Groth16Hasher,
 {
     fn synthesize<CS: ConstraintSystem<Fr>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
         let Sector {
@@ -171,7 +171,7 @@ where
 
         // 1. Verify H(Comm_C || comm_r_last) == comm_r
         {
-            let hash_num = <Tree::Hasher as Hasher>::Function::hash2_circuit(
+            let hash_num = Tree::Hasher::hash2_circuit(
                 cs.namespace(|| "H_comm_c_comm_r_last"),
                 &comm_c_num,
                 &comm_r_last_num,
@@ -206,16 +206,16 @@ pub struct ComponentPrivateInputs {}
 
 impl<Tree> CircuitComponent for FallbackPoStCircuit<Tree>
 where
-    Tree: MerkleTreeTrait,
-    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+    Tree: MerkleTreeTrait<Field = Fr>,
+    Tree::Hasher: Groth16Hasher,
 {
     type ComponentPrivateInputs = ComponentPrivateInputs;
 }
 
 impl<Tree> Circuit<Fr> for FallbackPoStCircuit<Tree>
 where
-    Tree: 'static + MerkleTreeTrait,
-    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+    Tree: 'static + MerkleTreeTrait<Field = Fr>,
+    Tree::Hasher: Groth16Hasher,
 {
     fn synthesize<CS: ConstraintSystem<Fr>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
         if CS::is_extensible() {
@@ -228,8 +228,8 @@ where
 
 impl<Tree> FallbackPoStCircuit<Tree>
 where
-    Tree: 'static + MerkleTreeTrait,
-    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+    Tree: 'static + MerkleTreeTrait<Field = Fr>,
+    Tree::Hasher: Groth16Hasher,
 {
     fn synthesize_default<CS: ConstraintSystem<Fr>>(
         self,

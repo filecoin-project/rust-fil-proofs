@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{ensure, Context, Result};
 use bincode::deserialize;
 use ff::PrimeField;
-use filecoin_hashers::{Domain, Hasher};
+use filecoin_hashers::Hasher;
 use fr32::{write_unpadded, Fr32Reader};
 use generic_array::typenum::{U2, U8};
 use log::{info, trace};
@@ -30,7 +30,7 @@ use crate::{
     commitment_reader::CommitmentReader,
     constants::{
         DefaultBinaryTree, DefaultOctTree, DefaultPieceDomain, DefaultPieceHasher,
-        DefaultTreeDomain, DefaultTreeHasher,
+        DefaultTreeHasher,
         MINIMUM_RESERVED_BYTES_FOR_PIECE_IN_FULLY_ALIGNED_SECTOR as MINIMUM_PIECE_SIZE,
     },
     parameters::public_params,
@@ -96,12 +96,8 @@ pub fn get_unsealed_range<T, Tree>(
 where
     T: Into<PathBuf> + AsRef<Path>,
     Tree: 'static + MerkleTreeTrait,
-    DefaultPieceHasher<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>: Hasher,
-    DefaultPieceDomain<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>:
-        Domain<Field = <<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
-    DefaultTreeHasher<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>: Hasher,
-    DefaultTreeDomain<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>:
-        Domain<Field = <<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
+    DefaultPieceHasher<Tree::Field>: Hasher<Field = Tree::Field>,
+    DefaultTreeHasher<Tree::Field>: Hasher<Field = Tree::Field>,
 {
     info!("get_unsealed_range:start");
 
@@ -162,18 +158,14 @@ where
     R: Read,
     W: Write,
     Tree: 'static + MerkleTreeTrait,
-    DefaultPieceHasher<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>: Hasher,
-    DefaultPieceDomain<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>:
-        Domain<Field = <<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
-    DefaultTreeHasher<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>: Hasher,
-    DefaultTreeDomain<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>:
-        Domain<Field = <<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
+    DefaultPieceHasher<Tree::Field>: Hasher<Field = Tree::Field>,
+    DefaultTreeHasher<Tree::Field>: Hasher<Field = Tree::Field>,
 {
     info!("unseal_range:start");
     ensure!(comm_d != [0; 32], "Invalid all zero commitment (comm_d)");
 
     let comm_d = as_safe_commitment::<
-        DefaultPieceDomain<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
+        DefaultPieceDomain<Tree::Field>,
         _,
     >(&comm_d, "comm_d")?;
 
@@ -237,18 +229,14 @@ where
     P: Into<PathBuf> + AsRef<Path>,
     W: Write,
     Tree: 'static + MerkleTreeTrait,
-    DefaultPieceHasher<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>: Hasher,
-    DefaultPieceDomain<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>:
-        Domain<Field = <<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
-    DefaultTreeHasher<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>: Hasher,
-    DefaultTreeDomain<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>:
-        Domain<Field = <<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
+    DefaultPieceHasher<Tree::Field>: Hasher<Field = Tree::Field>,
+    DefaultTreeHasher<Tree::Field>: Hasher<Field = Tree::Field>,
 {
     info!("unseal_range_mapped:start");
     ensure!(comm_d != [0; 32], "Invalid all zero commitment (comm_d)");
 
     let comm_d = as_safe_commitment::<
-        DefaultPieceDomain<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
+        DefaultPieceDomain<Tree::Field>,
         _,
     >(&comm_d, "comm_d")?;
 
@@ -311,20 +299,16 @@ where
     P: Into<PathBuf> + AsRef<Path>,
     W: Write,
     Tree: 'static + MerkleTreeTrait,
-    DefaultPieceHasher<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>: Hasher,
-    DefaultPieceDomain<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>:
-        Domain<Field = <<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
-    DefaultTreeHasher<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>: Hasher,
-    DefaultTreeDomain<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>:
-        Domain<Field = <<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
+    DefaultPieceHasher<Tree::Field>: Hasher<Field = Tree::Field>,
+    DefaultTreeHasher<Tree::Field>: Hasher<Field = Tree::Field>,
 {
     trace!("unseal_range_inner:start");
 
     let base_tree_size = get_base_tree_size::<
-        DefaultBinaryTree<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
+        DefaultBinaryTree<Tree::Field>,
     >(porep_config.sector_size)?;
     let base_tree_leafs = get_base_tree_leafs::<
-        DefaultBinaryTree<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
+        DefaultBinaryTree<Tree::Field>,
     >(base_tree_size)?;
     let config = StoreConfig::new(
         cache_path.as_ref(),
@@ -346,7 +330,7 @@ where
 
     StackedDrg::<
         Tree,
-        DefaultPieceHasher<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
+        DefaultPieceHasher<Tree::Field>,
     >::extract_all(&pp, &replica_id, data, Some(config))?;
     let start: usize = offset_padded.into();
     let end = start + usize::from(num_bytes_padded);
@@ -604,7 +588,7 @@ where
 fn verify_level_cache_store<Tree>(config: &StoreConfig) -> Result<()>
 where
     Tree: MerkleTreeTrait,
-    DefaultPieceHasher<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>: Hasher,
+    DefaultPieceHasher<Tree::Field>: Hasher,
 {
     let store_path = StoreConfig::data_path(&config.path, &config.id);
     if !Path::new(&store_path).exists() {
@@ -655,7 +639,7 @@ where
             );
             ensure!(
                 LevelCacheStore::<
-                    DefaultPieceDomain<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
+                    DefaultPieceDomain<Tree::Field>,
                     File,
                 >::is_consistent(
                     store_len,
@@ -674,7 +658,7 @@ where
         );
         ensure!(
             LevelCacheStore::<
-                DefaultPieceDomain<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
+                DefaultPieceDomain<Tree::Field>,
                 File,
             >::is_consistent(
                 config.size.expect("disk store size not configured"),
@@ -699,7 +683,7 @@ where
     R: AsRef<Path>,
     T: AsRef<Path>,
     Tree: MerkleTreeTrait,
-    DefaultPieceHasher<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>: Hasher,
+    DefaultPieceHasher<Tree::Field>: Hasher,
 {
     info!("validate_cache_for_precommit_phase2:start");
 
@@ -714,7 +698,7 @@ where
     let cache = cache_path.as_ref().to_path_buf();
     seal_precommit_phase1_output
         .labels
-        .verify_stores(verify_store::<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>, &cache)?;
+        .verify_stores(verify_store::<Tree::Field>, &cache)?;
 
     // Update the previous phase store path to the current cache_path.
     let mut config = StoreConfig::from_config(
@@ -724,7 +708,7 @@ where
     );
     config.path = cache_path.as_ref().into();
 
-    let result = verify_store::<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>(
+    let result = verify_store::<Tree::Field>(
         &config,
         BinaryTreeArity::to_usize(),
         get_base_tree_count::<Tree>(),
@@ -742,12 +726,8 @@ where
     R: AsRef<Path>,
     T: AsRef<Path>,
     Tree: MerkleTreeTrait,
-    DefaultPieceHasher<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>: Hasher,
-    DefaultPieceDomain<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>:
-        Domain<Field = <<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
-    DefaultTreeHasher<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>: Hasher,
-    DefaultTreeDomain<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>:
-        Domain<Field = <<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
+    DefaultPieceHasher<Tree::Field>: Hasher<Field = Tree::Field>,
+    DefaultTreeHasher<Tree::Field>: Hasher<Field = Tree::Field>,
 {
     info!("validate_cache_for_commit:start");
 
@@ -783,7 +763,7 @@ where
 
         let mut res: TemporaryAux<
             Tree,
-            DefaultPieceHasher<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
+            DefaultPieceHasher<Tree::Field>,
         > = deserialize(&t_aux_bytes)?;
 
         // Switch t_aux to the passed in cache_path
@@ -793,21 +773,21 @@ where
 
     // Verify all stores/labels within the Labels object.
     let cache = cache_path.as_ref().to_path_buf();
-    t_aux.labels.verify_stores(verify_store::<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>, &cache)?;
+    t_aux.labels.verify_stores(verify_store::<Tree::Field>, &cache)?;
 
     // Verify each tree disk store.
-    verify_store::<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>(
+    verify_store::<Tree::Field>(
         &t_aux.tree_d_config,
         BinaryTreeArity::to_usize(),
         get_base_tree_count::<Tree>(),
     )?;
-    verify_store::<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>(
+    verify_store::<Tree::Field>(
         &t_aux.tree_c_config,
         OctTreeArity::to_usize(),
         get_base_tree_count::<Tree>(),
     )?;
     verify_level_cache_store::<
-        DefaultOctTree<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
+        DefaultOctTree<Tree::Field>,
     >(&t_aux.tree_r_last_config)?;
 
     info!("validate_cache_for_commit:finish");

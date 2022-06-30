@@ -5,7 +5,7 @@ use bellperson::{
     ConstraintSystem, SynthesisError,
 };
 use blstrs::Scalar as Fr;
-use filecoin_hashers::{Domain, Hasher, PoseidonArity};
+use filecoin_hashers::{Groth16Hasher, PoseidonArity};
 use generic_array::typenum::{U0, U2};
 use storage_proofs_core::{
     drgraph::Graph,
@@ -40,10 +40,9 @@ type TreeColumnProof<T> = ColumnProof<
 #[derive(Debug)]
 pub struct Proof<Tree, G>
 where
-    Tree: MerkleTreeTrait,
-    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
-    G: Hasher,
-    G::Domain: Domain<Field = Fr>,
+    Tree: MerkleTreeTrait<Field = Fr>,
+    Tree::Hasher: Groth16Hasher,
+    G: Groth16Hasher,
 {
     /// Inclusion path for the challenged data node in tree D.
     pub comm_d_path: AuthPath<G, U2, U0, U0>,
@@ -68,10 +67,9 @@ where
 // Clone-able, therefore deriving Clone would impl Clone for less than all possible Tree types.
 impl<Tree, G> Clone for Proof<Tree, G>
 where
-    Tree: MerkleTreeTrait,
-    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
-    G: 'static + Hasher,
-    G::Domain: Domain<Field = Fr>,
+    Tree: MerkleTreeTrait<Field = Fr>,
+    Tree::Hasher: Groth16Hasher,
+    G: 'static + Groth16Hasher,
 {
     fn clone(&self) -> Self {
         Proof {
@@ -89,10 +87,9 @@ where
 
 impl<Tree, G> Proof<Tree, G>
 where
-    Tree: MerkleTreeTrait,
-    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
-    G: 'static + Hasher,
-    G::Domain: Domain<Field = Fr>,
+    Tree: MerkleTreeTrait<Field = Fr>,
+    Tree::Hasher: Groth16Hasher,
+    G: 'static + Groth16Hasher,
 {
     /// Create an empty proof, used in `blank_circuit`s.
     pub fn empty(params: &PublicParams<Tree>) -> Self {
@@ -298,11 +295,9 @@ where
 
 impl<Tree, G> From<VanillaProof<Tree, G>> for Proof<Tree, G>
 where
-    Tree: MerkleTreeTrait,
-    Tree::Hasher: 'static,
-    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
-    G: Hasher,
-    G::Domain: Domain<Field = Fr>,
+    Tree: MerkleTreeTrait<Field = Fr>,
+    Tree::Hasher: 'static + Groth16Hasher,
+    G: Groth16Hasher,
 {
     fn from(vanilla_proof: VanillaProof<Tree, G>) -> Self {
         let VanillaProof {
@@ -341,8 +336,7 @@ fn enforce_inclusion<H, U, V, W, CS>(
     leaf: &AllocatedNum<Fr>,
 ) -> Result<(), SynthesisError>
 where
-    H: 'static + Hasher,
-    H::Domain: Domain<Field = Fr>,
+    H: 'static + Groth16Hasher,
     U: PoseidonArity<Fr>,
     V: PoseidonArity<Fr>,
     W: PoseidonArity<Fr>,

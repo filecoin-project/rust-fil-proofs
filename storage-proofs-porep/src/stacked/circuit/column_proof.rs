@@ -1,6 +1,6 @@
 use bellperson::{ConstraintSystem, SynthesisError};
 use blstrs::Scalar as Fr;
-use filecoin_hashers::{Domain, Hasher, PoseidonArity};
+use filecoin_hashers::{Groth16Hasher, PoseidonArity};
 use storage_proofs_core::{
     drgraph::Graph,
     gadgets::por::AuthPath,
@@ -15,8 +15,7 @@ use crate::stacked::{
 #[derive(Debug, Clone)]
 pub struct ColumnProof<H, U, V, W>
 where
-    H: Hasher,
-    H::Domain: Domain<Field = Fr>,
+    H: Groth16Hasher,
     U: PoseidonArity<Fr>,
     V: PoseidonArity<Fr>,
     W: PoseidonArity<Fr>,
@@ -27,8 +26,7 @@ where
 
 impl<H, U, V, W> ColumnProof<H, U, V, W>
 where
-    H: 'static + Hasher,
-    H::Domain: Domain<Field = Fr>,
+    H: 'static + Groth16Hasher,
     U: PoseidonArity<Fr>,
     V: PoseidonArity<Fr>,
     W: PoseidonArity<Fr>,
@@ -66,7 +64,7 @@ impl<Proof> From<VanillaColumnProof<Proof>>
     for ColumnProof<Proof::Hasher, Proof::Arity, Proof::SubTreeArity, Proof::TopTreeArity>
 where
     Proof: MerkleProofTrait,
-    <Proof::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+    Proof::Hasher: Groth16Hasher,
 {
     fn from(vanilla_proof: VanillaColumnProof<Proof>) -> Self {
         let VanillaColumnProof {

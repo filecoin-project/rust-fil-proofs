@@ -4,7 +4,7 @@ use std::marker::PhantomData;
 use bellperson::{util_cs::test_cs::TestConstraintSystem, Circuit};
 use blstrs::Scalar as Fr;
 use ff::{Field, PrimeField};
-use filecoin_hashers::{poseidon::PoseidonHasher, Domain, HashFunction, Hasher};
+use filecoin_hashers::{poseidon::PoseidonHasher, Domain, Groth16Hasher, HashFunction, Hasher};
 use generic_array::typenum::{U0, U8};
 use rand::SeedableRng;
 use rand_xorshift::XorShiftRng;
@@ -28,8 +28,8 @@ fn test_election_post_circuit_poseidon() {
 
 fn test_election_post_circuit<Tree>(expected_constraints: usize)
 where
-    Tree: 'static + MerkleTreeTrait,
-    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+    Tree: 'static + MerkleTreeTrait<Field = Fr>,
+    Tree::Hasher: Groth16Hasher,
 {
     let rng = &mut XorShiftRng::from_seed(TEST_SEED);
 

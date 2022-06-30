@@ -18,7 +18,7 @@ use merkletree::{
 };
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
-use crate::{Domain, HashFunction, Hasher};
+use crate::{Domain, Groth16Hasher, HashFunction, Hasher};
 
 #[derive(Copy, Clone, Default)]
 pub struct Blake2sDomain<F> {
@@ -89,6 +89,12 @@ impl<F> From<[u8; 32]> for Blake2sDomain<F> {
     }
 }
 
+impl<F> Into<[u8; 32]> for Blake2sDomain<F> {
+    fn into(self) -> [u8; 32] {
+        self.state
+    }
+}
+
 impl<F> From<Blake2sHash> for Blake2sDomain<F> {
     fn from(digest: Blake2sHash) -> Self {
         let mut domain = Blake2sDomain {
@@ -126,6 +132,7 @@ impl<F> PartialOrd for Blake2sDomain<F> {
         self.state.partial_cmp(&other.state)
     }
 }
+
 impl<F> Ord for Blake2sDomain<F> {
     fn cmp(&self, other: &Self) -> Ordering {
         self.state.cmp(&other.state)
@@ -167,8 +174,6 @@ impl<'de, F> Deserialize<'de> for Blake2sDomain<F> {
     }
 }
 
-// Implementing `Domain` for specific fields (rather than blanket implementing for all `F`) restricts
-// users to using the fields which are compatible with `rust-fil-proofs`.
 impl Domain for Blake2sDomain<Fr> {
     type Field = Fr;
 }
@@ -219,9 +224,11 @@ impl<F> Hashable<Blake2sFunction<F>> for Blake2sDomain<F> {
     }
 }
 
-// Must add the trait bound `F: PrimeField` because `Algorithm` requires that `F` implements
-// `Clone`.
-impl<F: PrimeField> Algorithm<Blake2sDomain<F>> for Blake2sFunction<F> {
+impl<F> Algorithm<Blake2sDomain<F>> for Blake2sFunction<F>
+where
+    F: PrimeField,
+    Blake2sDomain<F>: Domain<Field = F>,
+{
     fn hash(&mut self) -> Blake2sDomain<F> {
         self.hasher.clone().finalize().into()
     }
@@ -253,10 +260,12 @@ impl<F: PrimeField> Algorithm<Blake2sDomain<F>> for Blake2sFunction<F> {
     }
 }
 
-// Specialized implementation of `HashFunction` over the BLS12-381 scalar field `Fr` because that
-// field is the only one which is compatible with `HashFunction`'s Groth16 circuit interfaces.
-impl HashFunction<Blake2sDomain<Fr>> for Blake2sFunction<Fr> {
-    fn hash(data: &[u8]) -> Blake2sDomain<Fr> {
+impl<F> HashFunction<Blake2sDomain<F>> for Blake2sFunction<F>
+where
+    F: PrimeField,
+    Blake2sDomain<F>: Domain<Field = F>,
+{
+    fn hash(data: &[u8]) -> Blake2sDomain<F> {
         Blake2sBuilder::new()
             .hash_length(32)
             .to_state()
@@ -265,7 +274,7 @@ impl HashFunction<Blake2sDomain<Fr>> for Blake2sFunction<Fr> {
             .into()
     }
 
-    fn hash2(a: &Blake2sDomain<Fr>, b: &Blake2sDomain<Fr>) -> Blake2sDomain<Fr> {
+    fn hash2(a: &Blake2sDomain<F>, b: &Blake2sDomain<F>) -> Blake2sDomain<F> {
         Blake2sBuilder::new()
             .hash_length(32)
             .to_state()
@@ -274,7 +283,47 @@ impl HashFunction<Blake2sDomain<Fr>> for Blake2sFunction<Fr> {
             .finalize()
             .into()
     }
+}
 
+#[derive(Default, Copy, Clone, PartialEq, Eq, Debug)]
+pub struct Blake2sHasher<F> {
+    _f: PhantomData<F>,
+}
+
+// TODO (jake): should hashers over different fields have different names?
+const HASHER_NAME: &str = "Blake2sHasher";
+
+impl Hasher for Blake2sHasher<Fr> {
+    type Field = Fr;
+    type Domain = Blake2sDomain<Self::Field>;
+    type Function = Blake2sFunction<Self::Field>;
+
+    fn name() -> String {
+        HASHER_NAME.into()
+    }
+}
+impl Hasher for Blake2sHasher<Fp> {
+    type Field = Fp;
+    type Domain = Blake2sDomain<Self::Field>;
+    type Function = Blake2sFunction<Self::Field>;
+
+    fn name() -> String {
+        HASHER_NAME.into()
+    }
+}
+impl Hasher for Blake2sHasher<Fq> {
+    type Field = Fq;
+    type Domain = Blake2sDomain<Self::Field>;
+    type Function = Blake2sFunction<Self::Field>;
+
+    fn name() -> String {
+        HASHER_NAME.into()
+    }
+}
+
+// Only implement `Groth16Hasher` for `Blake2sHasher<Fr>` because `Fr` is the only field which is
+// compatible with Groth16.
+impl Groth16Hasher for Blake2sHasher<Fr> {
     fn hash_multi_leaf_circuit<Arity, CS: ConstraintSystem<Fr>>(
         mut cs: CS,
         leaves: &[AllocatedNum<Fr>],
@@ -345,176 +394,5 @@ impl HashFunction<Blake2sDomain<Fr>> for Blake2sFunction<Fr> {
         }
 
         Self::hash_circuit(cs, &preimage[..])
-    }
-}
-
-// Specialized implementation of `HashFunction` over the Pasta scalar fields `Fp` and `Fq` because
-// those fields are incompatible with `HashFunction`'s circuit Groth16 interfaces.
-impl HashFunction<Blake2sDomain<Fp>> for Blake2sFunction<Fp> {
-    fn hash(data: &[u8]) -> Blake2sDomain<Fp> {
-        Blake2sBuilder::new()
-            .hash_length(32)
-            .to_state()
-            .update(data)
-            .finalize()
-            .into()
-    }
-
-    fn hash2(a: &Blake2sDomain<Fp>, b: &Blake2sDomain<Fp>) -> Blake2sDomain<Fp> {
-        Blake2sBuilder::new()
-            .hash_length(32)
-            .to_state()
-            .update(a.as_ref())
-            .update(b.as_ref())
-            .finalize()
-            .into()
-    }
-
-    fn hash_leaf_circuit<CS: ConstraintSystem<Fr>>(
-        mut _cs: CS,
-        _left: &AllocatedNum<Fr>,
-        _right: &AllocatedNum<Fr>,
-        _height: usize,
-    ) -> Result<AllocatedNum<Fr>, SynthesisError> {
-        unimplemented!("Blake2sFunction<Fp> cannot be used within Groth16 circuits")
-    }
-
-    fn hash_multi_leaf_circuit<Arity, CS: ConstraintSystem<Fr>>(
-        mut _cs: CS,
-        _leaves: &[AllocatedNum<Fr>],
-        _height: usize,
-    ) -> Result<AllocatedNum<Fr>, SynthesisError> {
-        unimplemented!("Blake2sFunction<Fp> cannot be used within Groth16 circuits")
-    }
-
-    fn hash_md_circuit<CS: ConstraintSystem<Fr>>(
-        _cs: &mut CS,
-        _elements: &[AllocatedNum<Fr>],
-    ) -> Result<AllocatedNum<Fr>, SynthesisError> {
-        unimplemented!("Blake2sFunction<Fp> cannot be used within Groth16 circuits")
-    }
-
-    fn hash_leaf_bits_circuit<CS: ConstraintSystem<Fr>>(
-        _cs: CS,
-        _left: &[Boolean],
-        _right: &[Boolean],
-        _height: usize,
-    ) -> Result<AllocatedNum<Fr>, SynthesisError> {
-        unimplemented!("Blake2sFunction<Fp> cannot be used within Groth16 circuits")
-    }
-
-    fn hash_circuit<CS: ConstraintSystem<Fr>>(
-        mut _cs: CS,
-        _bits: &[Boolean],
-    ) -> Result<AllocatedNum<Fr>, SynthesisError> {
-        unimplemented!("Blake2sFunction<Fp> cannot be used within Groth16 circuits")
-    }
-
-    fn hash2_circuit<CS: ConstraintSystem<Fr>>(
-        mut _cs: CS,
-        _a_num: &AllocatedNum<Fr>,
-        _b_num: &AllocatedNum<Fr>,
-    ) -> Result<AllocatedNum<Fr>, SynthesisError> {
-        unimplemented!("Blake2sFunction<Fp> cannot be used within Groth16 circuits")
-    }
-}
-impl HashFunction<Blake2sDomain<Fq>> for Blake2sFunction<Fq> {
-    fn hash(data: &[u8]) -> Blake2sDomain<Fq> {
-        Blake2sBuilder::new()
-            .hash_length(32)
-            .to_state()
-            .update(data)
-            .finalize()
-            .into()
-    }
-
-    fn hash2(a: &Blake2sDomain<Fq>, b: &Blake2sDomain<Fq>) -> Blake2sDomain<Fq> {
-        Blake2sBuilder::new()
-            .hash_length(32)
-            .to_state()
-            .update(a.as_ref())
-            .update(b.as_ref())
-            .finalize()
-            .into()
-    }
-
-    fn hash_leaf_circuit<CS: ConstraintSystem<Fr>>(
-        mut _cs: CS,
-        _left: &AllocatedNum<Fr>,
-        _right: &AllocatedNum<Fr>,
-        _height: usize,
-    ) -> Result<AllocatedNum<Fr>, SynthesisError> {
-        unimplemented!("Blake2sFunction<Fq> cannot be used within Groth16 circuits")
-    }
-
-    fn hash_multi_leaf_circuit<Arity, CS: ConstraintSystem<Fr>>(
-        mut _cs: CS,
-        _leaves: &[AllocatedNum<Fr>],
-        _height: usize,
-    ) -> Result<AllocatedNum<Fr>, SynthesisError> {
-        unimplemented!("Blake2sFunction<Fq> cannot be used within Groth16 circuits")
-    }
-
-    fn hash_md_circuit<CS: ConstraintSystem<Fr>>(
-        _cs: &mut CS,
-        _elements: &[AllocatedNum<Fr>],
-    ) -> Result<AllocatedNum<Fr>, SynthesisError> {
-        unimplemented!("Blake2sFunction<Fq> cannot be used within Groth16 circuits")
-    }
-
-    fn hash_leaf_bits_circuit<CS: ConstraintSystem<Fr>>(
-        _cs: CS,
-        _left: &[Boolean],
-        _right: &[Boolean],
-        _height: usize,
-    ) -> Result<AllocatedNum<Fr>, SynthesisError> {
-        unimplemented!("Blake2sFunction<Fq> cannot be used within Groth16 circuits")
-    }
-
-    fn hash_circuit<CS: ConstraintSystem<Fr>>(
-        mut _cs: CS,
-        _bits: &[Boolean],
-    ) -> Result<AllocatedNum<Fr>, SynthesisError> {
-        unimplemented!("Blake2sFunction<Fq> cannot be used within Groth16 circuits")
-    }
-
-    fn hash2_circuit<CS: ConstraintSystem<Fr>>(
-        mut _cs: CS,
-        _a_num: &AllocatedNum<Fr>,
-        _b_num: &AllocatedNum<Fr>,
-    ) -> Result<AllocatedNum<Fr>, SynthesisError> {
-        unimplemented!("Blake2sFunction<Fq> cannot be used within Groth16 circuits")
-    }
-}
-
-#[derive(Default, Copy, Clone, PartialEq, Eq, Debug)]
-pub struct Blake2sHasher<F> {
-    _f: PhantomData<F>,
-}
-
-// Implementing `Hasher` for specific fields (rather than blanket implementing for all `F`) restricts
-// users to using the fields which are compatible with `rust-fil-proofs`.
-impl Hasher for Blake2sHasher<Fr> {
-    type Domain = Blake2sDomain<Fr>;
-    type Function = Blake2sFunction<Fr>;
-
-    fn name() -> String {
-        "Blake2sHasher".into()
-    }
-}
-impl Hasher for Blake2sHasher<Fp> {
-    type Domain = Blake2sDomain<Fp>;
-    type Function = Blake2sFunction<Fp>;
-
-    fn name() -> String {
-        "Blake2sHasher_pallas".into()
-    }
-}
-impl Hasher for Blake2sHasher<Fq> {
-    type Domain = Blake2sDomain<Fq>;
-    type Function = Blake2sFunction<Fq>;
-
-    fn name() -> String {
-        "Blake2sHasher_vesta".into()
     }
 }

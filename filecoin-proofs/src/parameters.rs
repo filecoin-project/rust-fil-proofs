@@ -1,11 +1,11 @@
 use anyhow::{ensure, Result};
-use filecoin_hashers::{Domain, Hasher};
+use filecoin_hashers::Hasher;
 use storage_proofs_core::{api_version::ApiVersion, proof::ProofScheme};
 use storage_proofs_porep::stacked::{self, LayerChallenges, StackedDrg};
 use storage_proofs_post::fallback::{self, FallbackPoSt};
 
 use crate::{
-    constants::{DefaultPieceDomain, DefaultPieceHasher, DRG_DEGREE, EXP_DEGREE, LAYERS, POREP_MINIMUM_CHALLENGES},
+    constants::{DefaultPieceHasher, DRG_DEGREE, EXP_DEGREE, LAYERS, POREP_MINIMUM_CHALLENGES},
     types::{MerkleTreeTrait, PaddedBytesAmount, PoStConfig},
 };
 
@@ -22,11 +22,9 @@ pub fn public_params<Tree: 'static + MerkleTreeTrait>(
     api_version: ApiVersion,
 ) -> Result<stacked::PublicParams<Tree>>
 where
-    DefaultPieceHasher<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>: Hasher,
-    DefaultPieceDomain<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>:
-        Domain<Field = <<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
+    DefaultPieceHasher<Tree::Field>: Hasher<Field = Tree::Field>,
 {
-    StackedDrg::<Tree, DefaultPieceHasher<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>>::setup(&setup_params(
+    StackedDrg::<Tree, DefaultPieceHasher<Tree::Field>>::setup(&setup_params(
         sector_bytes,
         partitions,
         porep_id,

@@ -26,7 +26,7 @@ use merkletree::{
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use sha2::{Digest, Sha256};
 
-use crate::{Domain, HaloHasher, HashFunction, HashInstructions, Hasher, PoseidonArity};
+use crate::{Domain, Groth16Hasher, Halo2Hasher, HashFunction, HashInstructions, Hasher, PoseidonArity};
 
 #[derive(Copy, Clone, Default)]
 pub struct Sha256Domain<F> {
@@ -97,6 +97,12 @@ impl<F> From<[u8; 32]> for Sha256Domain<F> {
     }
 }
 
+impl<F> Into<[u8; 32]> for Sha256Domain<F> {
+    fn into(self) -> [u8; 32] {
+        self.state
+    }
+}
+
 impl<F> AsRef<[u8]> for Sha256Domain<F> {
     fn as_ref(&self) -> &[u8] {
         &self.state
@@ -130,8 +136,8 @@ impl<F> Ord for Sha256Domain<F> {
     }
 }
 
-// Must add the trait bound `F: PrimeField` because `Element` requires that `F` implements `Clone`,
-// `Send`, and `Sync`.
+// The trait bound `F: PrimeField` is necessary because `Element` requires that `F` implements
+// `Clone + Send + Sync`.
 impl<F: PrimeField> Element for Sha256Domain<F> {
     fn byte_len() -> usize {
         32
@@ -167,8 +173,6 @@ impl<'de, F> Deserialize<'de> for Sha256Domain<F> {
     }
 }
 
-// Implementing `Domain` for specific fields (rather than blanket implementing for all `F`) restricts
-// users to using the fields which are compatible with `rust-fil-proofs`.
 impl Domain for Sha256Domain<Fr> {
     type Field = Fr;
 }
@@ -183,7 +187,7 @@ impl<F> Sha256Domain<F> {
     // Strip the last (most-significant) two bits to ensure that we state within the ~256-bit field
     // `F`; note the fields `Fr`, `Fp`, and `Fq` are each 255-bit fields which fully utilize 254
     // bits, i.e. `254 < log2(field_modulus) < 255`.
-    fn trim_to_fr32(&mut self) {
+    pub fn trim_to_fr32(&mut self) {
         self.state[31] &= 0b0011_1111;
     }
 }
@@ -210,9 +214,11 @@ impl<F> Hashable<Sha256Function<F>> for Sha256Domain<F> {
     }
 }
 
-// Must add the trait bound `F: PrimeField` because `Algorithm` requires that `F` implements `Clone`
-// and `Default`.
-impl<F: PrimeField> Algorithm<Sha256Domain<F>> for Sha256Function<F> {
+impl<F> Algorithm<Sha256Domain<F>> for Sha256Function<F>
+where
+    F: PrimeField,
+    Sha256Domain<F>: Domain<Field = F>,
+{
     fn hash(&mut self) -> Sha256Domain<F> {
         let mut digest = [0u8; 32];
         digest.copy_from_slice(self.hasher.clone().finalize().as_ref());
@@ -251,26 +257,68 @@ impl<F: PrimeField> Algorithm<Sha256Domain<F>> for Sha256Function<F> {
     }
 }
 
-// Specialized implementation of `HashFunction` over the BLS12-381 scalar field `Fr` because `Fr`
-// is the only field which is compatible with `HashFunction`'s Groth16 circuit interfaces.
-impl HashFunction<Sha256Domain<Fr>> for Sha256Function<Fr> {
-    fn hash(data: &[u8]) -> Sha256Domain<Fr> {
+impl<F> HashFunction<Sha256Domain<F>> for Sha256Function<F>
+where
+    F: PrimeField,
+    Sha256Domain<F>: Domain<Field = F>,
+{
+    fn hash(data: &[u8]) -> Sha256Domain<F> {
         let mut digest = [0u8; 32];
         digest.copy_from_slice(Sha256::digest(data).as_ref());
-        let mut trimmed: Sha256Domain<Fr> = digest.into();
+        let mut trimmed: Sha256Domain<F> = digest.into();
         trimmed.trim_to_fr32();
         trimmed
     }
 
-    fn hash2(a: &Sha256Domain<Fr>, b: &Sha256Domain<Fr>) -> Sha256Domain<Fr> {
+    fn hash2(a: &Sha256Domain<F>, b: &Sha256Domain<F>) -> Sha256Domain<F> {
         let mut digest = [0u8; 32];
         let hashed = Sha256::new().chain_update(a).chain_update(b).finalize();
         digest.copy_from_slice(hashed.as_ref());
-        let mut trimmed: Sha256Domain<Fr> = digest.into();
+        let mut trimmed: Sha256Domain<F> = digest.into();
         trimmed.trim_to_fr32();
         trimmed
     }
+}
 
+#[derive(Default, Copy, Clone, Debug, PartialEq, Eq)]
+pub struct Sha256Hasher<F> {
+    _f: PhantomData<F>,
+}
+
+// TODO (jake): should hashers over different fields have different names?
+const HASHER_NAME: &str = "sha256_hasher";
+
+impl Hasher for Sha256Hasher<Fr> {
+    type Field = Fr;
+    type Domain = Sha256Domain<Self::Field>;
+    type Function = Sha256Function<Self::Field>;
+
+    fn name() -> String {
+        HASHER_NAME.into()
+    }
+}
+impl Hasher for Sha256Hasher<Fp> {
+    type Field = Fp;
+    type Domain = Sha256Domain<Self::Field>;
+    type Function = Sha256Function<Self::Field>;
+
+    fn name() -> String {
+        HASHER_NAME.into()
+    }
+}
+impl Hasher for Sha256Hasher<Fq> {
+    type Field = Fq;
+    type Domain = Sha256Domain<Self::Field>;
+    type Function = Sha256Function<Self::Field>;
+
+    fn name() -> String {
+        HASHER_NAME.into()
+    }
+}
+
+// Only implement `Groth16Hasher` for `Sha256Hasher<Fr>` because `Fr` is the only field which is
+// compatible with Groth16.
+impl Groth16Hasher for Sha256Hasher<Fr> {
     fn hash_multi_leaf_circuit<Arity, CS: ConstraintSystem<Fr>>(
         mut cs: CS,
         leaves: &[AllocatedNum<Fr>],
@@ -342,14 +390,11 @@ impl HashFunction<Sha256Domain<Fr>> for Sha256Function<Fr> {
         multipack::pack_bits(cs.namespace(|| "pack_le"), &le_bits)
     }
 
-    fn hash2_circuit<CS>(
+    fn hash2_circuit<CS: ConstraintSystem<Fr>>(
         mut cs: CS,
         a_num: &AllocatedNum<Fr>,
         b_num: &AllocatedNum<Fr>,
-    ) -> Result<AllocatedNum<Fr>, SynthesisError>
-    where
-        CS: ConstraintSystem<Fr>,
-    {
+    ) -> Result<AllocatedNum<Fr>, SynthesisError> {
         // Allocate as booleans
         let a = a_num.to_bits_le(cs.namespace(|| "a_bits"))?;
         let b = b_num.to_bits_le(cs.namespace(|| "b_bits"))?;
@@ -384,177 +429,6 @@ impl HashFunction<Sha256Domain<Fr>> for Sha256Function<Fr> {
     }
 }
 
-// Specialized implementation of `HashFunction` over the Pasta scalar fields `Fp` and `Fq` because
-// those fields are incompatible with `HashFunction`'s Groth16 circuit interfaces.
-impl HashFunction<Sha256Domain<Fp>> for Sha256Function<Fp> {
-    fn hash(data: &[u8]) -> Sha256Domain<Fp> {
-        let mut digest = [0u8; 32];
-        digest.copy_from_slice(Sha256::digest(data).as_ref());
-        let mut trimmed: Sha256Domain<Fp> = digest.into();
-        trimmed.trim_to_fr32();
-        trimmed
-    }
-
-    fn hash2(a: &Sha256Domain<Fp>, b: &Sha256Domain<Fp>) -> Sha256Domain<Fp> {
-        let mut digest = [0u8; 32];
-        let hasher = Sha256::new()
-            .chain(AsRef::<[u8]>::as_ref(a))
-            .chain(AsRef::<[u8]>::as_ref(b));
-        digest.copy_from_slice(hasher.finalize().as_ref());
-        let mut trimmed: Sha256Domain<Fp> = digest.into();
-        trimmed.trim_to_fr32();
-        trimmed
-    }
-
-    fn hash_leaf_circuit<CS: ConstraintSystem<Fr>>(
-        mut _cs: CS,
-        _left: &AllocatedNum<Fr>,
-        _right: &AllocatedNum<Fr>,
-        _height: usize,
-    ) -> Result<AllocatedNum<Fr>, SynthesisError> {
-        unimplemented!("Sha256Function<Fp> cannot be used within Groth16 circuits")
-    }
-
-    fn hash_multi_leaf_circuit<Arity, CS: ConstraintSystem<Fr>>(
-        mut _cs: CS,
-        _leaves: &[AllocatedNum<Fr>],
-        _height: usize,
-    ) -> Result<AllocatedNum<Fr>, SynthesisError> {
-        unimplemented!("Sha256Function<Fp> cannot be used within Groth16 circuits")
-    }
-
-    fn hash_md_circuit<CS: ConstraintSystem<Fr>>(
-        _cs: &mut CS,
-        _elements: &[AllocatedNum<Fr>],
-    ) -> Result<AllocatedNum<Fr>, SynthesisError> {
-        unimplemented!("Sha256Function<Fp> cannot be used within Groth16 circuits")
-    }
-
-    fn hash_leaf_bits_circuit<CS: ConstraintSystem<Fr>>(
-        _cs: CS,
-        _left: &[Boolean],
-        _right: &[Boolean],
-        _height: usize,
-    ) -> Result<AllocatedNum<Fr>, SynthesisError> {
-        unimplemented!("Sha256Function<Fp> cannot be used within Groth16 circuits")
-    }
-
-    fn hash_circuit<CS: ConstraintSystem<Fr>>(
-        mut _cs: CS,
-        _bits: &[Boolean],
-    ) -> Result<AllocatedNum<Fr>, SynthesisError> {
-        unimplemented!("Sha256Function<Fp> cannot be used within Groth16 circuits")
-    }
-
-    fn hash2_circuit<CS: ConstraintSystem<Fr>>(
-        mut _cs: CS,
-        _a_num: &AllocatedNum<Fr>,
-        _b_num: &AllocatedNum<Fr>,
-    ) -> Result<AllocatedNum<Fr>, SynthesisError> {
-        unimplemented!("Sha256Function<Fp> cannot be used within Groth16 circuits")
-    }
-}
-impl HashFunction<Sha256Domain<Fq>> for Sha256Function<Fq> {
-    fn hash(data: &[u8]) -> Sha256Domain<Fq> {
-        let mut digest = [0u8; 32];
-        digest.copy_from_slice(Sha256::digest(data).as_ref());
-        let mut trimmed: Sha256Domain<Fq> = digest.into();
-        trimmed.trim_to_fr32();
-        trimmed
-    }
-
-    fn hash2(a: &Sha256Domain<Fq>, b: &Sha256Domain<Fq>) -> Sha256Domain<Fq> {
-        let mut digest = [0u8; 32];
-        let hasher = Sha256::new()
-            .chain(AsRef::<[u8]>::as_ref(a))
-            .chain(AsRef::<[u8]>::as_ref(b));
-        digest.copy_from_slice(hasher.finalize().as_ref());
-        let mut trimmed: Sha256Domain<Fq> = digest.into();
-        trimmed.trim_to_fr32();
-        trimmed
-    }
-
-    fn hash_leaf_circuit<CS: ConstraintSystem<Fr>>(
-        mut _cs: CS,
-        _left: &AllocatedNum<Fr>,
-        _right: &AllocatedNum<Fr>,
-        _height: usize,
-    ) -> Result<AllocatedNum<Fr>, SynthesisError> {
-        unimplemented!("Sha256Function<Fq> cannot be used within Groth16 circuits")
-    }
-
-    fn hash_multi_leaf_circuit<Arity, CS: ConstraintSystem<Fr>>(
-        mut _cs: CS,
-        _leaves: &[AllocatedNum<Fr>],
-        _height: usize,
-    ) -> Result<AllocatedNum<Fr>, SynthesisError> {
-        unimplemented!("Sha256Function<Fq> cannot be used within Groth16 circuits")
-    }
-
-    fn hash_md_circuit<CS: ConstraintSystem<Fr>>(
-        _cs: &mut CS,
-        _elements: &[AllocatedNum<Fr>],
-    ) -> Result<AllocatedNum<Fr>, SynthesisError> {
-        unimplemented!("Sha256Function<Fq> cannot be used within Groth16 circuits")
-    }
-
-    fn hash_leaf_bits_circuit<CS: ConstraintSystem<Fr>>(
-        _cs: CS,
-        _left: &[Boolean],
-        _right: &[Boolean],
-        _height: usize,
-    ) -> Result<AllocatedNum<Fr>, SynthesisError> {
-        unimplemented!("Sha256Function<Fq> cannot be used within Groth16 circuits")
-    }
-
-    fn hash_circuit<CS: ConstraintSystem<Fr>>(
-        mut _cs: CS,
-        _bits: &[Boolean],
-    ) -> Result<AllocatedNum<Fr>, SynthesisError> {
-        unimplemented!("Sha256Function<Fq> cannot be used within Groth16 circuits")
-    }
-
-    fn hash2_circuit<CS: ConstraintSystem<Fr>>(
-        mut _cs: CS,
-        _a_num: &AllocatedNum<Fr>,
-        _b_num: &AllocatedNum<Fr>,
-    ) -> Result<AllocatedNum<Fr>, SynthesisError> {
-        unimplemented!("Sha256Function<Fq> cannot be used within Groth16 circuits")
-    }
-}
-
-#[derive(Default, Copy, Clone, Debug, PartialEq, Eq)]
-pub struct Sha256Hasher<F> {
-    _f: PhantomData<F>,
-}
-
-// Implementing `Hasher` for specific fields (rather than blanket implementing for all `F`)
-// restricts users to using the fields which are compatible with `rust-fil-proofs`.
-impl Hasher for Sha256Hasher<Fr> {
-    type Domain = Sha256Domain<Fr>;
-    type Function = Sha256Function<Fr>;
-
-    fn name() -> String {
-        "sha256_hasher".into()
-    }
-}
-impl Hasher for Sha256Hasher<Fp> {
-    type Domain = Sha256Domain<Fp>;
-    type Function = Sha256Function<Fp>;
-
-    fn name() -> String {
-        "sha256_hasher_pallas".into()
-    }
-}
-impl Hasher for Sha256Hasher<Fq> {
-    type Domain = Sha256Domain<Fq>;
-    type Function = Sha256Function<Fq>;
-
-    fn name() -> String {
-        "sha256_hasher_vesta".into()
-    }
-}
-
 impl<F: FieldExt> HashInstructions<F> for Sha256FieldChip<F> {
     fn hash(
         &self,
@@ -565,10 +439,9 @@ impl<F: FieldExt> HashInstructions<F> for Sha256FieldChip<F> {
     }
 }
 
-impl<F, A> HaloHasher<A> for Sha256Hasher<F>
+impl<F, A> Halo2Hasher<A> for Sha256Hasher<F>
 where
-    Self: Hasher,
-    Self::Domain: Domain<Field = F>,
+    Self: Hasher<Field = F>,
     F: FieldExt,
     A: PoseidonArity<F>,
 {
@@ -576,7 +449,7 @@ where
     type Config = Sha256FieldConfig<F>;
 
     fn load(
-        layouter: &mut impl Layouter<<Self::Domain as Domain>::Field>,
+        layouter: &mut impl Layouter<F>,
         config: &Self::Config,
     ) -> Result<(), plonk::Error> {
         Sha256FieldChip::load(layouter, config)
@@ -594,7 +467,7 @@ where
         _fixed_eq: &[Column<Fixed>],
         _fixed_neq: &[Column<Fixed>],
     ) -> Self::Config {
-        let num_cols = <Self as HaloHasher<A>>::Chip::num_cols();
+        let num_cols = Self::Chip::num_cols();
         assert!(advice_eq.len() >= num_cols.advice_eq);
         let advice = advice_eq[..num_cols.advice_eq].try_into().unwrap();
         Sha256FieldChip::configure(meta, advice)
@@ -625,17 +498,14 @@ mod tests {
         // Test two one-block and two two-block preimages.
         let preimages = [vec![1u8], vec![0, 55, 0, 0], vec![1; 64], vec![1; 100]];
         for preimage in &preimages {
-            let digest_fr = <<Sha256Hasher<Fr> as Hasher>::Function as HashFunction<
-                Sha256Domain<Fr>,
-            >>::hash(preimage);
-            let digest_fp = <<Sha256Hasher<Fp> as Hasher>::Function as HashFunction<
-                Sha256Domain<Fp>,
-            >>::hash(preimage);
-            let digest_fq = <<Sha256Hasher<Fq> as Hasher>::Function as HashFunction<
-                Sha256Domain<Fq>,
-            >>::hash(preimage);
-            assert_eq!(digest_fr.state, digest_fp.state);
-            assert_eq!(digest_fr.state, digest_fq.state);
+            let digest_fr: [u8; 32] =
+                <Sha256Function<Fr> as HashFunction<_>>::hash(preimage).into();
+            let digest_fp: [u8; 32] =
+                <Sha256Function<Fp> as HashFunction<_>>::hash(preimage).into();
+            let digest_fq: [u8; 32] =
+                <Sha256Function<Fq> as HashFunction<_>>::hash(preimage).into();
+            assert_eq!(digest_fr, digest_fp);
+            assert_eq!(digest_fr, digest_fq);
         }
     }
 
@@ -645,8 +515,7 @@ mod tests {
     struct Sha256Circuit<F>
     where
         F: FieldExt,
-        Sha256Hasher<F>: HaloHasher<A>,
-        <Sha256Hasher<F> as Hasher>::Domain: Domain<Field = F>,
+        Sha256Hasher<F>: Hasher<Field = F>,
     {
         preimage: Vec<Option<F>>,
         groth_digest: Fr,
@@ -655,11 +524,10 @@ mod tests {
     impl<F> Circuit<F> for Sha256Circuit<F>
     where
         F: FieldExt,
-        Sha256Hasher<F>: HaloHasher<A>,
-        <Sha256Hasher<F> as Hasher>::Domain: Domain<Field = F>,
+        Sha256Hasher<F>: Hasher<Field = F>,
     {
         type Config = (
-            <Sha256Hasher<F> as HaloHasher<A>>::Config,
+            <Sha256Hasher<F> as Halo2Hasher<A>>::Config,
             [Column<Advice>; 9],
         );
         type FloorPlanner = SimpleFloorPlanner;
@@ -684,7 +552,7 @@ mod tests {
                 meta.advice_column(),
             ];
             let sha256 =
-                <Sha256Hasher<F> as HaloHasher<A>>::configure(meta, &advice, &[], &[], &[]);
+                <Sha256Hasher<F> as Halo2Hasher<A>>::configure(meta, &advice, &[], &[], &[]);
             (sha256, advice)
         }
 
@@ -696,8 +564,8 @@ mod tests {
         ) -> Result<(), Error> {
             let (sha256_config, advice) = config;
 
-            <Sha256Hasher<F> as HaloHasher<A>>::load(&mut layouter, &sha256_config)?;
-            let sha256_chip = <Sha256Hasher<F> as HaloHasher<A>>::construct(sha256_config);
+            <Sha256Hasher<F> as Halo2Hasher<A>>::load(&mut layouter, &sha256_config)?;
+            let sha256_chip = <Sha256Hasher<F> as Halo2Hasher<A>>::construct(sha256_config);
 
             let preimage = layouter.assign_region(
                 || "assign preimage",
@@ -719,7 +587,7 @@ mod tests {
                 },
             )?;
 
-            let digest = <<Sha256Hasher<F> as HaloHasher<A>>::Chip as HashInstructions<F>>::hash(
+            let digest = <<Sha256Hasher<F> as Halo2Hasher<A>>::Chip as HashInstructions<F>>::hash(
                 &sha256_chip,
                 layouter.namespace(|| "sha256"),
                 &preimage,
@@ -740,14 +608,12 @@ mod tests {
         // Test one-element preimage.
         {
             let groth_digest: Fr = {
-                let mut cs = TestConstraintSystem::<Fr>::new();
+                let mut cs = TestConstraintSystem::new();
                 let preimage = [AllocatedNum::alloc(&mut cs, || Ok(Fr::one())).unwrap()];
-                <Sha256Hasher<Fr> as Hasher>::Function::hash_multi_leaf_circuit::<A, _>(
-                    &mut cs, &preimage, 0,
-                )
-                .unwrap()
-                .get_value()
-                .unwrap()
+                Sha256Hasher::hash_multi_leaf_circuit::<A, _>(&mut cs, &preimage, 0)
+                    .unwrap()
+                    .get_value()
+                    .unwrap()
             };
 
             // Compute Halo2 digest using Pallas field.
@@ -770,19 +636,17 @@ mod tests {
         // Test two-element preimage.
         {
             let groth_digest: Fr = {
-                let mut cs = TestConstraintSystem::<Fr>::new();
+                let mut cs = TestConstraintSystem::new();
                 let preimage = [
                     AllocatedNum::alloc(cs.namespace(|| "preimage elem 1"), || Ok(Fr::one()))
                         .unwrap(),
                     AllocatedNum::alloc(cs.namespace(|| "preimage elem 2"), || Ok(Fr::from(55)))
                         .unwrap(),
                 ];
-                <Sha256Hasher<Fr> as Hasher>::Function::hash_multi_leaf_circuit::<A, _>(
-                    &mut cs, &preimage, 0,
-                )
-                .unwrap()
-                .get_value()
-                .unwrap()
+                Sha256Hasher::hash_multi_leaf_circuit::<A, _>(&mut cs, &preimage, 0)
+                    .unwrap()
+                    .get_value()
+                    .unwrap()
             };
 
             // Compute Halo2 digest using Pallas field.

@@ -85,7 +85,7 @@ where
         // Generate vanilla-proof.
         let apex_leafs = get_apex_leafs(&tree_d_new, k);
         let challenge_proofs: Vec<vanilla::ChallengeProof<Fr, U, V, W>> =
-            Challenges::new(sector_nodes, comm_r_new, k)
+            Challenges::<Fr>::new(sector_nodes, comm_r_new, k)
                 .enumerate()
                 .take(pub_params.challenge_count)
                 .map(|(i, c)| {

@@ -8,8 +8,8 @@ use bellperson::groth16;
 use bincode::{deserialize, serialize};
 use blstrs::{Bls12, Scalar as Fr};
 use ff::PrimeField;
-use filecoin_hashers::{Domain, Hasher, PoseidonArity};
-use halo2_proofs::{arithmetic::FieldExt, pasta::{Fp, Fq}};
+use filecoin_hashers::{Domain, Groth16Hasher, Hasher, PoseidonArity};
+use halo2_proofs::pasta::{Fp, Fq};
 use log::{info, trace};
 use memmap::MmapOptions;
 use merkletree::store::{DiskStore, Store, StoreConfig};
@@ -19,7 +19,7 @@ use storage_proofs_core::{
     cache_key::CacheKey,
     compound_proof::{self, CompoundProof},
     drgraph::Graph,
-    halo2::{self, FieldProvingCurves, Halo2Proof},
+    halo2::{self, Halo2Field, Halo2Proof},
     measurements::{measure_op, Operation},
     merkle::{create_base_merkle_tree, BinaryMerkleTree, MerkleTreeTrait, MerkleTreeWrapper},
     multi_proof::MultiProof,
@@ -79,14 +79,15 @@ where
     S: AsRef<Path>,
     T: AsRef<Path>,
     Tree: 'static + MerkleTreeTrait,
-    DefaultPieceHasher<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>: Hasher,
-    DefaultPieceDomain<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>:
-        Domain<Field = <<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
-    DefaultTreeHasher<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>: Hasher,
-    DefaultTreeDomain<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>:
-        Domain<Field = <<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
+    DefaultPieceHasher<Tree::Field>: Hasher<Field = Tree::Field>,
+    DefaultTreeHasher<Tree::Field>: Hasher<Field = Tree::Field>,
 {
     info!("seal_pre_commit_phase1:start: {:?}", sector_id);
+
+    ensure!(
+        TypeId::of::<Tree::Hasher>() == TypeId::of::<DefaultTreeHasher<Tree::Field>>(),
+        "tree hasher must be poseidon",
+    );
 
     // Sanity check all input path types.
     ensure!(
@@ -143,7 +144,7 @@ where
     let vanilla_pub_params = StackedDrg::<
         '_,
         Tree,
-        DefaultPieceHasher<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
+        DefaultPieceHasher<Tree::Field>,
     >::setup(&vanilla_setup_params)?;
 
     let graph_nodes = vanilla_pub_params.graph.size();
@@ -151,11 +152,11 @@ where
     trace!("building merkle tree for the original data");
     let (config, comm_d) = measure_op(Operation::CommD, || -> Result<_> {
         let base_tree_size = get_base_tree_size::<
-            DefaultBinaryTree<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
+            DefaultBinaryTree<Tree::Field>,
         >(porep_config.sector_size)?;
 
         let base_tree_leafs = get_base_tree_leafs::<
-            DefaultBinaryTree<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
+            DefaultBinaryTree<Tree::Field>,
         >(base_tree_size)?;
 
         ensure!(
@@ -177,7 +178,7 @@ where
         );
 
         let data_tree = create_base_merkle_tree::<
-            DefaultBinaryTree<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
+            DefaultBinaryTree<Tree::Field>,
         >(
             Some(config.clone()),
             base_tree_leafs,
@@ -186,7 +187,7 @@ where
         drop(data);
 
         config.size = Some(data_tree.len());
-        let comm_d_root: <<Tree::Hasher as Hasher>::Domain as Domain>::Field = data_tree.root().into();
+        let comm_d_root: Tree::Field = data_tree.root().into();
         let comm_d = commitment_from_fr(comm_d_root);
 
         drop(data_tree);
@@ -211,7 +212,7 @@ where
 
     let labels = StackedDrg::<
         Tree,
-        DefaultPieceHasher<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
+        DefaultPieceHasher<Tree::Field>,
     >::replicate_phase1(&vanilla_pub_params, &replica_id, config.clone())?;
 
     let out = SealPreCommitPhase1Output {
@@ -235,14 +236,15 @@ where
     R: AsRef<Path>,
     S: AsRef<Path>,
     Tree: 'static + MerkleTreeTrait,
-    DefaultPieceHasher<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>: Hasher,
-    DefaultPieceDomain<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>:
-        Domain<Field = <<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
-    DefaultTreeHasher<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>: Hasher,
-    DefaultTreeDomain<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>:
-        Domain<Field = <<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
+    DefaultPieceHasher<Tree::Field>: Hasher<Field = Tree::Field>,
+    DefaultTreeHasher<Tree::Field>: Hasher<Field = Tree::Field>,
 {
     info!("seal_pre_commit_phase2:start");
+
+    ensure!(
+        TypeId::of::<Tree::Hasher>() == TypeId::of::<DefaultTreeHasher<Tree::Field>>(),
+        "tree hasher must be poseidon",
+    );
 
     // Sanity check all input path types.
     ensure!(
@@ -287,10 +289,10 @@ where
     // Load data tree from disk
     let data_tree = {
         let base_tree_size = get_base_tree_size::<
-            DefaultBinaryTree<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
+            DefaultBinaryTree<Tree::Field>,
         >(porep_config.sector_size)?;
         let base_tree_leafs = get_base_tree_leafs::<
-            DefaultBinaryTree<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
+            DefaultBinaryTree<Tree::Field>,
         >(base_tree_size)?;
 
         trace!(
@@ -305,10 +307,10 @@ where
         );
 
         let store = DiskStore::<
-            DefaultPieceDomain<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
+            DefaultPieceDomain<Tree::Field>,
         >::new_from_disk(base_tree_size, BINARY_ARITY, &config)?;
         BinaryMerkleTree::<
-            DefaultPieceHasher<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
+            DefaultPieceHasher<Tree::Field>,
         >::from_data_store(store, base_tree_leafs)?
     };
 
@@ -322,12 +324,12 @@ where
     let vanilla_pub_params = StackedDrg::<
         '_,
         Tree,
-        DefaultPieceHasher<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
+        DefaultPieceHasher<Tree::Field>,
     >::setup(&vanilla_setup_params)?;
 
     let (tau, (p_aux, t_aux)) = StackedDrg::<
         Tree,
-        DefaultPieceHasher<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
+        DefaultPieceHasher<Tree::Field>,
     >::replicate_phase2(
         &vanilla_pub_params,
         labels,
@@ -337,7 +339,7 @@ where
         replica_path.as_ref().to_path_buf(),
     )?;
 
-    let comm_r = commitment_from_fr(tau.comm_r.into());
+    let comm_r = commitment_from_fr::<Tree::Field>(tau.comm_r.into());
 
     // Persist p_aux and t_aux here
     let p_aux_path = cache_path.as_ref().join(CacheKey::PAux.to_string());
@@ -377,11 +379,14 @@ pub fn seal_commit_phase1<T, Tree>(
 where
     T: AsRef<Path>,
     Tree: 'static + MerkleTreeTrait,
-    DefaultPieceHasher<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>: Hasher,
-    DefaultPieceDomain<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>:
-        Domain<Field = <<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
+    DefaultPieceHasher<Tree::Field>: Hasher<Field = Tree::Field>,
 {
     info!("seal_commit_phase1:start: {:?}", sector_id);
+
+    ensure!(
+        TypeId::of::<Tree::Hasher>() == TypeId::of::<DefaultTreeHasher<Tree::Field>>(),
+        "tree hasher must be poseidon",
+    );
 
     // Sanity check all input path types.
     ensure!(
@@ -417,7 +422,7 @@ where
 
         let mut res: TemporaryAux<
             Tree,
-            DefaultPieceHasher<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
+            DefaultPieceHasher<Tree::Field>,
         > = deserialize(&t_aux_bytes)?;
 
         // Switch t_aux to the passed in cache_path
@@ -429,13 +434,13 @@ where
     // elements based on the configs stored in TemporaryAux.
     let t_aux_cache = TemporaryAuxCache::<
         Tree,
-        DefaultPieceHasher<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
+        DefaultPieceHasher<Tree::Field>,
     >::new(&t_aux, replica_path.as_ref().to_path_buf())
         .context("failed to restore contents of t_aux")?;
 
     let comm_r_safe: <Tree::Hasher as Hasher>::Domain = as_safe_commitment(&comm_r, "comm_r")?;
     let comm_d_safe =
-        DefaultPieceDomain::<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>::try_from_bytes(
+        DefaultPieceDomain::<Tree::Field>::try_from_bytes(
             &comm_d,
         )?;
 
@@ -459,7 +464,7 @@ where
 
     let private_inputs = stacked::PrivateInputs::<
         Tree,
-        DefaultPieceHasher<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
+        DefaultPieceHasher<Tree::Field>,
     > {
         p_aux,
         t_aux: t_aux_cache,
@@ -475,7 +480,7 @@ where
     let vanilla_pub_params = StackedDrg::<
         '_,
         Tree,
-        DefaultPieceHasher<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
+        DefaultPieceHasher<Tree::Field>,
     >::setup(&vanilla_setup_params)?;
 
     let partition_count = usize::from(PoRepProofPartitions::from(porep_config));
@@ -489,7 +494,7 @@ where
 
     let sanity_check = StackedDrg::<
         Tree,
-        DefaultPieceHasher<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
+        DefaultPieceHasher<Tree::Field>,
     >::verify_all_partitions(&vanilla_pub_params, &public_inputs, &vanilla_proofs)?;
     ensure!(sanity_check, "Invalid vanilla proof generated");
 
@@ -518,11 +523,14 @@ where
     Tree::Arity: PoseidonArityAllFields,
     Tree::SubTreeArity: PoseidonArityAllFields,
     Tree::TopTreeArity: PoseidonArityAllFields,
-    DefaultPieceHasher<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>: Hasher,
-    DefaultPieceDomain<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>:
-        Domain<Field = <<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
+    DefaultPieceHasher<Tree::Field>: Hasher<Field = Tree::Field>,
 {
     info!("seal_commit_phase2:start: {:?}", sector_id);
+
+    ensure!(
+        TypeId::of::<Tree::Hasher>() == TypeId::of::<DefaultTreeHasher<Tree::Field>>(),
+        "tree hasher must be poseidon",
+    );
 
     let proof_bytes = match get_proof_system::<Tree>() {
         ProofSystem::Groth =>
@@ -548,12 +556,8 @@ where
     Tree::Arity: PoseidonArity<Fr>,
     Tree::SubTreeArity: PoseidonArity<Fr>,
     Tree::TopTreeArity: PoseidonArity<Fr>,
-    DefaultPieceHasher<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>: Hasher,
-    DefaultPieceDomain<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>:
-        Domain<Field = <<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
+    DefaultPieceHasher<Tree::Field>: Hasher<Field = Tree::Field>,
 {
-    assert_eq!(TypeId::of::<Tree::Hasher>(), TypeId::of::<DefaultTreeHasher<Fr>>());
-
     let SealCommitPhase1Output {
         vanilla_proofs,
         comm_d,
@@ -679,20 +683,14 @@ fn halo2_seal_commit_phase2<Tree, F>(
 ) -> Result<SnarkProof>
 where
     Tree: 'static + MerkleTreeTrait,
-    F: FieldExt + FieldProvingCurves,
+    F: Halo2Field,
     Tree::Arity: PoseidonArity<F>,
     Tree::SubTreeArity: PoseidonArity<F>,
     Tree::TopTreeArity: PoseidonArity<F>,
-    DefaultPieceHasher<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>: Hasher,
-    DefaultPieceDomain<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>:
-        Domain<Field = <<Tree::Hasher as Hasher>::Domain as Domain>::Field>,
-    DefaultPieceHasher<F>: Hasher,
-    DefaultPieceDomain<F>: Domain<Field = F>,
-    DefaultTreeHasher<F>: Hasher,
-    DefaultTreeDomain<F>: Domain<Field = F>,
+    DefaultPieceHasher<Tree::Field>: Hasher<Field = Tree::Field>,
+    DefaultPieceHasher<F>: Hasher<Field = F>,
+    DefaultTreeHasher<F>: Hasher<Field = F>,
 {
-    assert_eq!(TypeId::of::<Tree::Hasher>(), TypeId::of::<DefaultTreeHasher<F>>());
-
     let SealCommitPhase1Output {
         vanilla_proofs,
         comm_d,
@@ -1217,16 +1215,7 @@ where
         _ => unimplemented!(),
     };
 
-    halo2_verify_seal::<
-        MerkleTreeWrapper<
-            DefaultTreeHasher<F>,
-            MockStore,
-            Tree::Arity,
-            Tree::SubTreeArity,
-            Tree::TopTreeArity,
-        >,
-        F,
-    >(
+    halo2_verify_seal::<F, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>(
         porep_config,
         comm_r,
         comm_d,
@@ -1274,6 +1263,11 @@ where
 {
     trace!("get_seal_inputs:start");
 
+    ensure!(
+        TypeId::of::<Tree::Hasher>() == TypeId::of::<DefaultTreeHasher<Tree::Field>>(),
+        "tree hasher must be poseidon",
+    );
+
     ensure!(comm_d != [0; 32], "Invalid all zero commitment (comm_d)");
     ensure!(comm_r != [0; 32], "Invalid all zero commitment (comm_r)");
 
@@ -1287,7 +1281,7 @@ where
             ticket,
             seed,
         )?,
-        ProofSystem::HaloPallas => halo2_get_seal_inputs::<Tree, Fp>(
+        ProofSystem::HaloPallas => halo2_get_seal_inputs::<Fp>(
             porep_config,
             comm_r,
             comm_d,
@@ -1296,7 +1290,7 @@ where
             ticket,
             seed,
         )?,
-        ProofSystem::HaloVesta => halo2_get_seal_inputs::<Tree, Fq>(
+        ProofSystem::HaloVesta => halo2_get_seal_inputs::<Fq>(
             porep_config,
             comm_r,
             comm_d,
@@ -1327,8 +1321,6 @@ where
     Tree::SubTreeArity: PoseidonArity<Fr>,
     Tree::TopTreeArity: PoseidonArity<Fr>,
 {
-    assert_eq!(TypeId::of::<Tree::Hasher>(), TypeId::of::<DefaultTreeHasher<Fr>>());
-
     let replica_id = generate_replica_id::<DefaultTreeHasher<Fr>, _>(
         &prover_id,
         sector_id.into(),
@@ -1406,7 +1398,7 @@ where
         .collect::<Result<_>>()
 }
 
-fn halo2_get_seal_inputs<Tree, F>(
+fn halo2_get_seal_inputs<F>(
     porep_config: PoRepConfig,
     comm_r: Commitment,
     comm_d: Commitment,
@@ -1416,18 +1408,10 @@ fn halo2_get_seal_inputs<Tree, F>(
     seed: Ticket,
 ) -> Result<Vec<CircuitPublicInputs>>
 where
-    Tree: 'static + MerkleTreeTrait,
-    F: FieldExt + FieldProvingCurves,
-    Tree::Arity: PoseidonArity<F>,
-    Tree::SubTreeArity: PoseidonArity<F>,
-    Tree::TopTreeArity: PoseidonArity<F>,
-    DefaultPieceHasher<F>: Hasher,
-    DefaultPieceDomain<F>: Domain<Field = F>,
-    DefaultTreeHasher<F>: Hasher,
-    DefaultTreeDomain<F>: Domain<Field = F>,
+    F: Halo2Field,
+    DefaultPieceHasher<F>: Hasher<Field = F>,
+    DefaultTreeHasher<F>: Hasher<Field = F>,
 {
-    assert_eq!(TypeId::of::<Tree::Hasher>(), TypeId::of::<DefaultTreeHasher<F>>());
-
     let sector_bytes: u64 = porep_config.sector_size.into();
     let sector_nodes = sector_bytes as usize >> 5;
     let partition_count: usize = porep_config.partitions.into();
@@ -1585,10 +1569,15 @@ pub fn aggregate_seal_commit_proofs<Tree>(
     aggregate_version: groth16::aggregate::AggregateVersion,
 ) -> Result<AggregateSnarkProof>
 where
-    Tree: 'static + MerkleTreeTrait,
-    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+    Tree: 'static + MerkleTreeTrait<Field = Fr>,
+    Tree::Hasher: Groth16Hasher,
 {
     info!("aggregate_seal_commit_proofs:start");
+
+    ensure!(
+        TypeId::of::<Tree::Hasher>() == TypeId::of::<DefaultTreeHasher<Tree::Field>>(),
+        "tree hasher must be poseidon",
+    );
 
     ensure!(
         !commit_outputs.is_empty(),
@@ -1676,10 +1665,15 @@ pub fn verify_aggregate_seal_commit_proofs<Tree>(
     aggregate_version: groth16::aggregate::AggregateVersion,
 ) -> Result<bool>
 where
-    Tree: 'static + MerkleTreeTrait,
-    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+    Tree: 'static + MerkleTreeTrait<Field = Fr>,
+    Tree::Hasher: Groth16Hasher,
 {
     info!("verify_aggregate_seal_commit_proofs:start");
+
+    ensure!(
+        TypeId::of::<Tree::Hasher>() == TypeId::of::<DefaultTreeHasher<Tree::Field>>(),
+        "tree hasher must be poseidon",
+    );
 
     let aggregate_proof =
         groth16::aggregate::AggregateProof::read(std::io::Cursor::new(&aggregate_proof_bytes))?;
@@ -1803,10 +1797,13 @@ where
     Tree::Arity: PoseidonArityAllFields,
     Tree::SubTreeArity: PoseidonArityAllFields,
     Tree::TopTreeArity: PoseidonArityAllFields,
-    DefaultPieceHasher<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>: Hasher,
-    DefaultPieceDomain<<<Tree::Hasher as Hasher>::Domain as Domain>::Field>: Domain,
 {
     info!("verify_seal:start: {:?}", sector_id);
+
+    ensure!(
+        TypeId::of::<Tree::Hasher>() == TypeId::of::<DefaultTreeHasher<Tree::Field>>(),
+        "tree hasher must be poseidon",
+    );
 
     ensure!(comm_d_in != [0; 32], "Invalid all zero commitment (comm_d)");
     ensure!(comm_r_in != [0; 32], "Invalid all zero commitment (comm_r)");
@@ -1823,7 +1820,7 @@ where
             seed,
             proof_vec,
         ),
-        ProofSystem::HaloPallas => halo2_verify_seal::<Tree, Fp>(
+        ProofSystem::HaloPallas => halo2_verify_seal::<Fp, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>(
             porep_config,
             comm_r_in,
             comm_d_in,
@@ -1833,7 +1830,7 @@ where
             seed,
             proof_vec,
         ),
-        ProofSystem::HaloVesta => halo2_verify_seal::<Tree, Fq>(
+        ProofSystem::HaloVesta => halo2_verify_seal::<Fq, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>(
             porep_config,
             comm_r_in,
             comm_d_in,
@@ -1865,8 +1862,6 @@ where
     Tree::SubTreeArity: PoseidonArity<Fr>,
     Tree::TopTreeArity: PoseidonArity<Fr>,
 {
-    assert_eq!(TypeId::of::<Tree::Hasher>(), TypeId::of::<DefaultTreeHasher<Fr>>());
-
     let comm_r: DefaultTreeDomain<Fr> = as_safe_commitment(&comm_r_in, "comm_r")?;
     let comm_d: DefaultPieceDomain<Fr> = as_safe_commitment(&comm_d_in, "comm_d")?;
 
@@ -1942,7 +1937,7 @@ where
     )
 }
 
-fn halo2_verify_seal<Tree, F>(
+fn halo2_verify_seal<F, U, V, W>(
     porep_config: PoRepConfig,
     comm_r_in: Commitment,
     comm_d_in: Commitment,
@@ -1953,18 +1948,13 @@ fn halo2_verify_seal<Tree, F>(
     proof_bytes: &[u8],
 ) -> Result<bool>
 where
-    Tree: 'static + MerkleTreeTrait,
-    F: FieldExt + FieldProvingCurves,
-    Tree::Arity: PoseidonArity<F>,
-    Tree::SubTreeArity: PoseidonArity<F>,
-    Tree::TopTreeArity: PoseidonArity<F>,
-    DefaultPieceHasher<F>: Hasher,
-    DefaultPieceDomain<F>: Domain<Field = F>,
-    DefaultTreeHasher<F>: Hasher,
-    DefaultTreeDomain<F>: Domain<Field = F>,
+    F: Halo2Field,
+    U: PoseidonArity<F>,
+    V: PoseidonArity<F>,
+    W: PoseidonArity<F>,
+    DefaultPieceHasher<F>: Hasher<Field = F>,
+    DefaultTreeHasher<F>: Hasher<Field = F>,
 {
-    assert_eq!(TypeId::of::<Tree::Hasher>(), TypeId::of::<DefaultTreeHasher<F>>());
-
     let sector_bytes: u64 = porep_config.sector_size.into();
     let sector_nodes = sector_bytes as usize >> 5;
     let partition_count: usize = porep_config.partitions.into();
@@ -2005,21 +1995,21 @@ where
     match sector_nodes {
         SECTOR_NODES_2_KIB => {
             let circ_partition_proofs: Vec<Halo2Proof<
-                <F as FieldProvingCurves>::Affine,
+                F::Affine,
                 SdrPorepCircuit<
                     F,
-                    Tree::Arity,
-                    Tree::SubTreeArity,
-                    Tree::TopTreeArity,
+                    U,
+                    V,
+                    W,
                     SECTOR_NODES_2_KIB,
                 >,
             >> = proofs_bytes.map(Into::into).collect();
 
             let circ = SdrPorepCircuit::<
                 F,
-                Tree::Arity,
-                Tree::SubTreeArity,
-                Tree::TopTreeArity,
+                U,
+                V,
+                W,
                 SECTOR_NODES_2_KIB,
             >::blank_circuit();
         
@@ -2028,9 +2018,9 @@ where
                 MerkleTreeWrapper<
                     DefaultTreeHasher<F>,
                     MockStore,
-                    Tree::Arity,
-                    Tree::SubTreeArity,
-                    Tree::TopTreeArity,
+                    U,
+                    V,
+                    W,
                 >,
                 DefaultPieceHasher<F>,
             > as halo2::CompoundProof<'_, F, SECTOR_NODES_2_KIB>>::create_keypair(&circ)?;
@@ -2045,9 +2035,9 @@ where
                 MerkleTreeWrapper<
                     DefaultTreeHasher<F>,
                     MockStore,
-                    Tree::Arity,
-                    Tree::SubTreeArity,
-                    Tree::TopTreeArity,
+                    U,
+                    V,
+                    W,
                 >,
                 DefaultPieceHasher<F>,
             > as halo2::CompoundProof<'_, F, SECTOR_NODES_2_KIB>>::verify_all_partitions(
@@ -2059,21 +2049,21 @@ where
         }
         SECTOR_NODES_4_KIB => {
             let circ_partition_proofs: Vec<Halo2Proof<
-                <F as FieldProvingCurves>::Affine,
+                F::Affine,
                 SdrPorepCircuit<
                     F,
-                    Tree::Arity,
-                    Tree::SubTreeArity,
-                    Tree::TopTreeArity,
+                    U,
+                    V,
+                    W,
                     SECTOR_NODES_4_KIB,
                 >,
             >> = proofs_bytes.map(Into::into).collect();
 
             let circ = SdrPorepCircuit::<
                 F,
-                Tree::Arity,
-                Tree::SubTreeArity,
-                Tree::TopTreeArity,
+                U,
+                V,
+                W,
                 SECTOR_NODES_4_KIB,
             >::blank_circuit();
         
@@ -2082,9 +2072,9 @@ where
                 MerkleTreeWrapper<
                     DefaultTreeHasher<F>,
                     MockStore,
-                    Tree::Arity,
-                    Tree::SubTreeArity,
-                    Tree::TopTreeArity,
+                    U,
+                    V,
+                    W,
                 >,
                 DefaultPieceHasher<F>,
             > as halo2::CompoundProof<'_, F, SECTOR_NODES_4_KIB>>::create_keypair(&circ)?;
@@ -2099,9 +2089,9 @@ where
                 MerkleTreeWrapper<
                     DefaultTreeHasher<F>,
                     MockStore,
-                    Tree::Arity,
-                    Tree::SubTreeArity,
-                    Tree::TopTreeArity,
+                    U,
+                    V,
+                    W,
                 >,
                 DefaultPieceHasher<F>,
             > as halo2::CompoundProof<'_, F, SECTOR_NODES_4_KIB>>::verify_all_partitions(
@@ -2113,21 +2103,21 @@ where
         }
         SECTOR_NODES_16_KIB => {
             let circ_partition_proofs: Vec<Halo2Proof<
-                <F as FieldProvingCurves>::Affine,
+                F::Affine,
                 SdrPorepCircuit<
                     F,
-                    Tree::Arity,
-                    Tree::SubTreeArity,
-                    Tree::TopTreeArity,
+                    U,
+                    V,
+                    W,
                     SECTOR_NODES_16_KIB,
                 >,
             >> = proofs_bytes.map(Into::into).collect();
 
             let circ = SdrPorepCircuit::<
                 F,
-                Tree::Arity,
-                Tree::SubTreeArity,
-                Tree::TopTreeArity,
+                U,
+                V,
+                W,
                 SECTOR_NODES_16_KIB,
             >::blank_circuit();
         
@@ -2136,9 +2126,9 @@ where
                 MerkleTreeWrapper<
                     DefaultTreeHasher<F>,
                     MockStore,
-                    Tree::Arity,
-                    Tree::SubTreeArity,
-                    Tree::TopTreeArity,
+                    U,
+                    V,
+                    W,
                 >,
                 DefaultPieceHasher<F>,
             > as halo2::CompoundProof<'_, F, SECTOR_NODES_16_KIB>>::create_keypair(&circ)?;
@@ -2153,9 +2143,9 @@ where
                 MerkleTreeWrapper<
                     DefaultTreeHasher<F>,
                     MockStore,
-                    Tree::Arity,
-                    Tree::SubTreeArity,
-                    Tree::TopTreeArity,
+                    U,
+                    V,
+                    W,
                 >,
                 DefaultPieceHasher<F>,
             > as halo2::CompoundProof<'_, F, SECTOR_NODES_16_KIB>>::verify_all_partitions(
@@ -2167,21 +2157,21 @@ where
         }
         SECTOR_NODES_32_KIB => {
             let circ_partition_proofs: Vec<Halo2Proof<
-                <F as FieldProvingCurves>::Affine,
+                F::Affine,
                 SdrPorepCircuit<
                     F,
-                    Tree::Arity,
-                    Tree::SubTreeArity,
-                    Tree::TopTreeArity,
+                    U,
+                    V,
+                    W,
                     SECTOR_NODES_32_KIB,
                 >,
             >> = proofs_bytes.map(Into::into).collect();
 
             let circ = SdrPorepCircuit::<
                 F,
-                Tree::Arity,
-                Tree::SubTreeArity,
-                Tree::TopTreeArity,
+                U,
+                V,
+                W,
                 SECTOR_NODES_32_KIB,
             >::blank_circuit();
         
@@ -2190,9 +2180,9 @@ where
                 MerkleTreeWrapper<
                     DefaultTreeHasher<F>,
                     MockStore,
-                    Tree::Arity,
-                    Tree::SubTreeArity,
-                    Tree::TopTreeArity,
+                    U,
+                    V,
+                    W,
                 >,
                 DefaultPieceHasher<F>,
             > as halo2::CompoundProof<'_, F, SECTOR_NODES_32_KIB>>::create_keypair(&circ)?;
@@ -2207,9 +2197,9 @@ where
                 MerkleTreeWrapper<
                     DefaultTreeHasher<F>,
                     MockStore,
-                    Tree::Arity,
-                    Tree::SubTreeArity,
-                    Tree::TopTreeArity,
+                    U,
+                    V,
+                    W,
                 >,
                 DefaultPieceHasher<F>,
             > as halo2::CompoundProof<'_, F, SECTOR_NODES_32_KIB>>::verify_all_partitions(
@@ -2221,21 +2211,21 @@ where
         }
         SECTOR_NODES_8_MIB => {
             let circ_partition_proofs: Vec<Halo2Proof<
-                <F as FieldProvingCurves>::Affine,
+                F::Affine,
                 SdrPorepCircuit<
                     F,
-                    Tree::Arity,
-                    Tree::SubTreeArity,
-                    Tree::TopTreeArity,
+                    U,
+                    V,
+                    W,
                     SECTOR_NODES_8_MIB,
                 >,
             >> = proofs_bytes.map(Into::into).collect();
 
             let circ = SdrPorepCircuit::<
                 F,
-                Tree::Arity,
-                Tree::SubTreeArity,
-                Tree::TopTreeArity,
+                U,
+                V,
+                W,
                 SECTOR_NODES_8_MIB,
             >::blank_circuit();
         
@@ -2244,9 +2234,9 @@ where
                 MerkleTreeWrapper<
                     DefaultTreeHasher<F>,
                     MockStore,
-                    Tree::Arity,
-                    Tree::SubTreeArity,
-                    Tree::TopTreeArity,
+                    U,
+                    V,
+                    W,
                 >,
                 DefaultPieceHasher<F>,
             > as halo2::CompoundProof<'_, F, SECTOR_NODES_8_MIB>>::create_keypair(&circ)?;
@@ -2261,9 +2251,9 @@ where
                 MerkleTreeWrapper<
                     DefaultTreeHasher<F>,
                     MockStore,
-                    Tree::Arity,
-                    Tree::SubTreeArity,
-                    Tree::TopTreeArity,
+                    U,
+                    V,
+                    W,
                 >,
                 DefaultPieceHasher<F>,
             > as halo2::CompoundProof<'_, F, SECTOR_NODES_8_MIB>>::verify_all_partitions(
@@ -2275,21 +2265,21 @@ where
         }
         SECTOR_NODES_16_MIB => {
             let circ_partition_proofs: Vec<Halo2Proof<
-                <F as FieldProvingCurves>::Affine,
+                F::Affine,
                 SdrPorepCircuit<
                     F,
-                    Tree::Arity,
-                    Tree::SubTreeArity,
-                    Tree::TopTreeArity,
+                    U,
+                    V,
+                    W,
                     SECTOR_NODES_16_MIB,
                 >,
             >> = proofs_bytes.map(Into::into).collect();
 
             let circ = SdrPorepCircuit::<
                 F,
-                Tree::Arity,
-                Tree::SubTreeArity,
-                Tree::TopTreeArity,
+                U,
+                V,
+                W,
                 SECTOR_NODES_16_MIB,
             >::blank_circuit();
         
@@ -2298,9 +2288,9 @@ where
                 MerkleTreeWrapper<
                     DefaultTreeHasher<F>,
                     MockStore,
-                    Tree::Arity,
-                    Tree::SubTreeArity,
-                    Tree::TopTreeArity,
+                    U,
+                    V,
+                    W,
                 >,
                 DefaultPieceHasher<F>,
             > as halo2::CompoundProof<'_, F, SECTOR_NODES_16_MIB>>::create_keypair(&circ)?;
@@ -2315,9 +2305,9 @@ where
                 MerkleTreeWrapper<
                     DefaultTreeHasher<F>,
                     MockStore,
-                    Tree::Arity,
-                    Tree::SubTreeArity,
-                    Tree::TopTreeArity,
+                    U,
+                    V,
+                    W,
                 >,
                 DefaultPieceHasher<F>,
             > as halo2::CompoundProof<'_, F, SECTOR_NODES_16_MIB>>::verify_all_partitions(
@@ -2329,21 +2319,21 @@ where
         }
         SECTOR_NODES_512_MIB => {
             let circ_partition_proofs: Vec<Halo2Proof<
-                <F as FieldProvingCurves>::Affine,
+                F::Affine,
                 SdrPorepCircuit<
                     F,
-                    Tree::Arity,
-                    Tree::SubTreeArity,
-                    Tree::TopTreeArity,
+                    U,
+                    V,
+                    W,
                     SECTOR_NODES_512_MIB,
                 >,
             >> = proofs_bytes.map(Into::into).collect();
 
             let circ = SdrPorepCircuit::<
                 F,
-                Tree::Arity,
-                Tree::SubTreeArity,
-                Tree::TopTreeArity,
+                U,
+                V,
+                W,
                 SECTOR_NODES_512_MIB,
             >::blank_circuit();
         
@@ -2352,9 +2342,9 @@ where
                 MerkleTreeWrapper<
                     DefaultTreeHasher<F>,
                     MockStore,
-                    Tree::Arity,
-                    Tree::SubTreeArity,
-                    Tree::TopTreeArity,
+                    U,
+                    V,
+                    W,
                 >,
                 DefaultPieceHasher<F>,
             > as halo2::CompoundProof<'_, F, SECTOR_NODES_512_MIB>>::create_keypair(&circ)?;
@@ -2369,9 +2359,9 @@ where
                 MerkleTreeWrapper<
                     DefaultTreeHasher<F>,
                     MockStore,
-                    Tree::Arity,
-                    Tree::SubTreeArity,
-                    Tree::TopTreeArity,
+                    U,
+                    V,
+                    W,
                 >,
                 DefaultPieceHasher<F>,
             > as halo2::CompoundProof<'_, F, SECTOR_NODES_512_MIB>>::verify_all_partitions(
@@ -2383,21 +2373,21 @@ where
         }
         SECTOR_NODES_32_GIB => {
             let circ_partition_proofs: Vec<Halo2Proof<
-                <F as FieldProvingCurves>::Affine,
+                F::Affine,
                 SdrPorepCircuit<
                     F,
-                    Tree::Arity,
-                    Tree::SubTreeArity,
-                    Tree::TopTreeArity,
+                    U,
+                    V,
+                    W,
                     SECTOR_NODES_32_GIB,
                 >,
             >> = proofs_bytes.map(Into::into).collect();
 
             let circ = SdrPorepCircuit::<
                 F,
-                Tree::Arity,
-                Tree::SubTreeArity,
-                Tree::TopTreeArity,
+                U,
+                V,
+                W,
                 SECTOR_NODES_32_GIB,
             >::blank_circuit();
         
@@ -2406,9 +2396,9 @@ where
                 MerkleTreeWrapper<
                     DefaultTreeHasher<F>,
                     MockStore,
-                    Tree::Arity,
-                    Tree::SubTreeArity,
-                    Tree::TopTreeArity,
+                    U,
+                    V,
+                    W,
                 >,
                 DefaultPieceHasher<F>,
             > as halo2::CompoundProof<'_, F, SECTOR_NODES_32_GIB>>::create_keypair(&circ)?;
@@ -2423,9 +2413,9 @@ where
                 MerkleTreeWrapper<
                     DefaultTreeHasher<F>,
                     MockStore,
-                    Tree::Arity,
-                    Tree::SubTreeArity,
-                    Tree::TopTreeArity,
+                    U,
+                    V,
+                    W,
                 >,
                 DefaultPieceHasher<F>,
             > as halo2::CompoundProof<'_, F, SECTOR_NODES_32_GIB>>::verify_all_partitions(
@@ -2437,21 +2427,21 @@ where
         }
         SECTOR_NODES_64_GIB => {
             let circ_partition_proofs: Vec<Halo2Proof<
-                <F as FieldProvingCurves>::Affine,
+                F::Affine,
                 SdrPorepCircuit<
                     F,
-                    Tree::Arity,
-                    Tree::SubTreeArity,
-                    Tree::TopTreeArity,
+                    U,
+                    V,
+                    W,
                     SECTOR_NODES_64_GIB,
                 >,
             >> = proofs_bytes.map(Into::into).collect();
 
             let circ = SdrPorepCircuit::<
                 F,
-                Tree::Arity,
-                Tree::SubTreeArity,
-                Tree::TopTreeArity,
+                U,
+                V,
+                W,
                 SECTOR_NODES_64_GIB,
             >::blank_circuit();
         
@@ -2460,9 +2450,9 @@ where
                 MerkleTreeWrapper<
                     DefaultTreeHasher<F>,
                     MockStore,
-                    Tree::Arity,
-                    Tree::SubTreeArity,
-                    Tree::TopTreeArity,
+                    U,
+                    V,
+                    W,
                 >,
                 DefaultPieceHasher<F>,
             > as halo2::CompoundProof<'_, F, SECTOR_NODES_64_GIB>>::create_keypair(&circ)?;
@@ -2477,9 +2467,9 @@ where
                 MerkleTreeWrapper<
                     DefaultTreeHasher<F>,
                     MockStore,
-                    Tree::Arity,
-                    Tree::SubTreeArity,
-                    Tree::TopTreeArity,
+                    U,
+                    V,
+                    W,
                 >,
                 DefaultPieceHasher<F>,
             > as halo2::CompoundProof<'_, F, SECTOR_NODES_64_GIB>>::verify_all_partitions(

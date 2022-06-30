@@ -11,7 +11,7 @@ use filecoin_hashers::{
     blake2s::Blake2sHasher,
     poseidon::{PoseidonDomain, PoseidonHasher},
     sha256::Sha256Hasher,
-    Domain, Hasher, PoseidonArity,
+    Domain, Groth16Hasher, Hasher, PoseidonArity,
 };
 use fr32::{bytes_into_fr, fr_into_bytes};
 use generic_array::typenum::{Unsigned, U0, U2, U4, U8};
@@ -114,8 +114,8 @@ fn test_por_circuit_poseidon_top_8_2_4() {
 
 fn test_por_circuit<Tree>(num_inputs: usize, num_constraints: usize)
 where
-    Tree: 'static + MerkleTreeTrait,
-    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+    Tree: 'static + MerkleTreeTrait<Field = Fr>,
+    Tree::Hasher: Groth16Hasher,
 {
     let mut rng = XorShiftRng::from_seed(TEST_SEED);
 
@@ -209,8 +209,8 @@ fn test_por_circuit_poseidon_base_8_private_root() {
 
 fn test_por_circuit_private_root<Tree>(num_constraints: usize)
 where
-    Tree: MerkleTreeTrait,
-    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+    Tree: MerkleTreeTrait<Field = Fr>,
+    Tree::Hasher: Groth16Hasher,
 {
     let mut rng = XorShiftRng::from_seed(TEST_SEED);
 
@@ -294,8 +294,8 @@ fn create_tree<Tree>(
     tmp_path: &Path,
 ) -> MerkleTreeWrapper<Tree::Hasher, Tree::Store, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>
 where
-    Tree: MerkleTreeTrait,
-    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+    Tree: MerkleTreeTrait<Field = Fr>,
+    Tree::Hasher: Groth16Hasher,
 {
     let sector_nodes = labels.len();
     let tree_name = Tree::display();

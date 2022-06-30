@@ -1,9 +1,5 @@
 use blstrs::Scalar as Fr;
-use filecoin_hashers::{
-    poseidon::{PoseidonDomain, PoseidonHasher},
-    sha256::{Sha256Domain, Sha256Hasher},
-    FieldArity,
-};
+use filecoin_hashers::{poseidon::PoseidonHasher, sha256::Sha256Hasher, FieldArity, Hasher};
 use generic_array::typenum::{Unsigned, U0, U2, U8};
 use halo2_proofs::pasta::{Fp, Fq};
 use lazy_static::lazy_static;
@@ -77,17 +73,17 @@ pub const ALLOWED_SECTOR_SIZES: [usize; 11] = [
 
 // Note: these TreeD constants are only valid for the non-Poseidon version of EmptySectorUpdate;
 // EmptySectorUpdate-Poseidon uses TreeR for its TreeD.
-pub type TreeD<F> = BinaryMerkleTree<Sha256Hasher<F>>;
-pub type TreeDArity = U2;
-pub type TreeDStore<F> = DiskStore<Sha256Domain<F>>;
-pub type TreeDDomain<F> = Sha256Domain<F>;
 pub type TreeDHasher<F> = Sha256Hasher<F>;
+pub type TreeDDomain<F> = <TreeDHasher<F> as Hasher>::Domain;
+pub type TreeD<F> = BinaryMerkleTree<TreeDHasher<F>>;
+pub type TreeDStore<F> = DiskStore<TreeDDomain<F>>;
+pub type TreeDArity = U2;
 
-pub type TreeR<F, U, V, W> = LCTree<PoseidonHasher<F>, U, V, W>;
-// All valid TreeR's shapes have the same base-tree shape.
-pub type TreeRBase<F> = LCTree<PoseidonHasher<F>, U8, U0, U0>;
-pub type TreeRDomain<F> = PoseidonDomain<F>;
 pub type TreeRHasher<F> = PoseidonHasher<F>;
+pub type TreeRDomain<F> = <TreeRHasher<F> as Hasher>::Domain;
+pub type TreeR<F, U, V, W> = LCTree<TreeRHasher<F>, U, V, W>;
+// All valid TreeR shapes have the same base-tree shape.
+pub type TreeRBase<F> = LCTree<TreeRHasher<F>, U8, U0, U0>;
 
 // The number of partitions for the given sector-size.
 pub const fn partition_count(sector_nodes: usize) -> usize {
