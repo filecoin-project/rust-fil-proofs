@@ -1,4 +1,5 @@
 #![allow(dead_code, unused_imports)]
+use std::sync::Once;
 
 use filecoin_hashers::{Domain, HashFunction, Hasher, PoseidonArity};
 use generic_array::typenum::{U0, U2, U4, U8};
@@ -13,9 +14,10 @@ use storage_proofs_core::{
 };
 use storage_proofs_update::{
     constants::{
-        hs, validate_tree_r_shape, TreeDDomain, TreeR, TreeRDomain,
-        TreeRHasher, SECTOR_SIZE_16_KIB, SECTOR_SIZE_1_KIB, SECTOR_SIZE_2_KIB, SECTOR_SIZE_32_KIB,
-        SECTOR_SIZE_4_KIB, SECTOR_SIZE_8_KIB,
+        hs, validate_tree_r_shape, TreeDDomain, TreeR, TreeRDomain, TreeRHasher,
+        SECTOR_SIZE_16_KIB, SECTOR_SIZE_1_KIB, SECTOR_SIZE_2_KIB, SECTOR_SIZE_32_GIB,
+        SECTOR_SIZE_32_KIB, SECTOR_SIZE_4_KIB, SECTOR_SIZE_512_MIB, SECTOR_SIZE_64_GIB,
+        SECTOR_SIZE_8_KIB,
     },
     halo2::circuit::{self, EmptySectorUpdateCircuit},
     phi, vanilla, Challenges, PublicParams,
@@ -238,19 +240,19 @@ fn test_empty_sector_update_circuit_32kib_halo2() {
 #[test]
 fn test_empty_sector_update_circuit_512mib_halo2() {
     init_logger();
-    test_empty_sector_update_circuit::<U8, U0, U0, SECTOR_SIZE_512_MIB>();
+    test_empty_sector_update_circuit::<U8, U0, U0, SECTOR_SIZE_512_MIB>(false);
 }
 
 #[cfg(feature = "big-tests")]
 #[test]
 fn test_empty_sector_update_circuit_32gib_halo2() {
     init_logger();
-    test_empty_sector_update_circuit::<U8, U8, U0, SECTOR_SIZE_32_GIB>();
+    test_empty_sector_update_circuit::<U8, U8, U0, SECTOR_SIZE_32_GIB>(false);
 }
 
 #[cfg(feature = "big-tests")]
 #[test]
 fn test_empty_sector_update_circuit_64gib_halo2() {
     init_logger();
-    test_empty_sector_update_circuit::<U8, U8, U2, SECTOR_SIZE_64_GIB>();
+    test_empty_sector_update_circuit::<U8, U8, U2, SECTOR_SIZE_64_GIB>(false);
 }

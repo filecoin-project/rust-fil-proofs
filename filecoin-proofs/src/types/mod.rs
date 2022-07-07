@@ -6,7 +6,10 @@ pub use storage_proofs_porep::stacked::{Labels, PersistentAux, TemporaryAux};
 
 use blstrs::Scalar as Fr;
 use filecoin_hashers::Hasher;
-use halo2_proofs::{arithmetic::FieldExt, pasta::{Fp, Fq}};
+use halo2_proofs::{
+    arithmetic::FieldExt,
+    pasta::{Fp, Fq},
+};
 use serde::{Deserialize, Serialize};
 use storage_proofs_core::{merkle::BinaryMerkleTree, sector::SectorId};
 use storage_proofs_porep::stacked;

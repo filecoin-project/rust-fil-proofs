@@ -143,23 +143,18 @@ where
         porep_config.api_version,
     )?;
 
-    let vanilla_pub_params = StackedDrg::<
-        '_,
-        Tree,
-        DefaultPieceHasher<Tree::Field>,
-    >::setup(&vanilla_setup_params)?;
+    let vanilla_pub_params =
+        StackedDrg::<'_, Tree, DefaultPieceHasher<Tree::Field>>::setup(&vanilla_setup_params)?;
 
     let graph_nodes = vanilla_pub_params.graph.size();
 
     trace!("building merkle tree for the original data");
     let (config, comm_d) = measure_op(Operation::CommD, || -> Result<_> {
-        let base_tree_size = get_base_tree_size::<
-            DefaultBinaryTree<Tree::Field>,
-        >(porep_config.sector_size)?;
+        let base_tree_size =
+            get_base_tree_size::<DefaultBinaryTree<Tree::Field>>(porep_config.sector_size)?;
 
-        let base_tree_leafs = get_base_tree_leafs::<
-            DefaultBinaryTree<Tree::Field>,
-        >(base_tree_size)?;
+        let base_tree_leafs =
+            get_base_tree_leafs::<DefaultBinaryTree<Tree::Field>>(base_tree_size)?;
 
         ensure!(
             graph_nodes == base_tree_leafs,
@@ -179,9 +174,7 @@ where
             default_rows_to_discard(base_tree_leafs, BINARY_ARITY),
         );
 
-        let data_tree = create_base_merkle_tree::<
-            DefaultBinaryTree<Tree::Field>,
-        >(
+        let data_tree = create_base_merkle_tree::<DefaultBinaryTree<Tree::Field>>(
             Some(config.clone()),
             base_tree_leafs,
             &data,
@@ -212,10 +205,11 @@ where
         &porep_config.porep_id,
     );
 
-    let labels = StackedDrg::<
-        Tree,
-        DefaultPieceHasher<Tree::Field>,
-    >::replicate_phase1(&vanilla_pub_params, &replica_id, config.clone())?;
+    let labels = StackedDrg::<Tree, DefaultPieceHasher<Tree::Field>>::replicate_phase1(
+        &vanilla_pub_params,
+        &replica_id,
+        config.clone(),
+    )?;
 
     let out = SealPreCommitPhase1Output {
         labels,
@@ -290,12 +284,10 @@ where
 
     // Load data tree from disk
     let data_tree = {
-        let base_tree_size = get_base_tree_size::<
-            DefaultBinaryTree<Tree::Field>,
-        >(porep_config.sector_size)?;
-        let base_tree_leafs = get_base_tree_leafs::<
-            DefaultBinaryTree<Tree::Field>,
-        >(base_tree_size)?;
+        let base_tree_size =
+            get_base_tree_size::<DefaultBinaryTree<Tree::Field>>(porep_config.sector_size)?;
+        let base_tree_leafs =
+            get_base_tree_leafs::<DefaultBinaryTree<Tree::Field>>(base_tree_size)?;
 
         trace!(
             "seal phase 2: base tree size {}, base tree leafs {}, rows to discard {}",
@@ -308,12 +300,15 @@ where
             "Invalid cache size specified"
         );
 
-        let store = DiskStore::<
-            DefaultPieceDomain<Tree::Field>,
-        >::new_from_disk(base_tree_size, BINARY_ARITY, &config)?;
-        BinaryMerkleTree::<
-            DefaultPieceHasher<Tree::Field>,
-        >::from_data_store(store, base_tree_leafs)?
+        let store = DiskStore::<DefaultPieceDomain<Tree::Field>>::new_from_disk(
+            base_tree_size,
+            BINARY_ARITY,
+            &config,
+        )?;
+        BinaryMerkleTree::<DefaultPieceHasher<Tree::Field>>::from_data_store(
+            store,
+            base_tree_leafs,
+        )?
     };
 
     let vanilla_setup_params = setup_params(
@@ -323,23 +318,18 @@ where
         porep_config.api_version,
     )?;
 
-    let vanilla_pub_params = StackedDrg::<
-        '_,
-        Tree,
-        DefaultPieceHasher<Tree::Field>,
-    >::setup(&vanilla_setup_params)?;
+    let vanilla_pub_params =
+        StackedDrg::<'_, Tree, DefaultPieceHasher<Tree::Field>>::setup(&vanilla_setup_params)?;
 
-    let (tau, (p_aux, t_aux)) = StackedDrg::<
-        Tree,
-        DefaultPieceHasher<Tree::Field>,
-    >::replicate_phase2(
-        &vanilla_pub_params,
-        labels,
-        data,
-        data_tree,
-        config,
-        replica_path.as_ref().to_path_buf(),
-    )?;
+    let (tau, (p_aux, t_aux)) =
+        StackedDrg::<Tree, DefaultPieceHasher<Tree::Field>>::replicate_phase2(
+            &vanilla_pub_params,
+            labels,
+            data,
+            data_tree,
+            config,
+            replica_path.as_ref().to_path_buf(),
+        )?;
 
     let comm_r = commitment_from_fr::<Tree::Field>(tau.comm_r.into());
 
@@ -422,10 +412,8 @@ where
         let t_aux_bytes = fs::read(&t_aux_path)
             .with_context(|| format!("could not read file t_aux={:?}", t_aux_path))?;
 
-        let mut res: TemporaryAux<
-            Tree,
-            DefaultPieceHasher<Tree::Field>,
-        > = deserialize(&t_aux_bytes)?;
+        let mut res: TemporaryAux<Tree, DefaultPieceHasher<Tree::Field>> =
+            deserialize(&t_aux_bytes)?;
 
         // Switch t_aux to the passed in cache_path
         res.set_cache_path(cache_path);
@@ -434,17 +422,14 @@ where
 
     // Convert TemporaryAux to TemporaryAuxCache, which instantiates all
     // elements based on the configs stored in TemporaryAux.
-    let t_aux_cache = TemporaryAuxCache::<
-        Tree,
-        DefaultPieceHasher<Tree::Field>,
-    >::new(&t_aux, replica_path.as_ref().to_path_buf())
+    let t_aux_cache = TemporaryAuxCache::<Tree, DefaultPieceHasher<Tree::Field>>::new(
+        &t_aux,
+        replica_path.as_ref().to_path_buf(),
+    )
     .context("failed to restore contents of t_aux")?;
 
     let comm_r_safe: <Tree::Hasher as Hasher>::Domain = as_safe_commitment(&comm_r, "comm_r")?;
-    let comm_d_safe =
-        DefaultPieceDomain::<Tree::Field>::try_from_bytes(
-            &comm_d,
-        )?;
+    let comm_d_safe = DefaultPieceDomain::<Tree::Field>::try_from_bytes(&comm_d)?;
 
     let replica_id = generate_replica_id::<Tree::Hasher, _>(
         &prover_id,
@@ -464,10 +449,7 @@ where
         seed,
     };
 
-    let private_inputs = stacked::PrivateInputs::<
-        Tree,
-        DefaultPieceHasher<Tree::Field>,
-    > {
+    let private_inputs = stacked::PrivateInputs::<Tree, DefaultPieceHasher<Tree::Field>> {
         p_aux,
         t_aux: t_aux_cache,
     };
@@ -479,11 +461,8 @@ where
         porep_config.api_version,
     )?;
 
-    let vanilla_pub_params = StackedDrg::<
-        '_,
-        Tree,
-        DefaultPieceHasher<Tree::Field>,
-    >::setup(&vanilla_setup_params)?;
+    let vanilla_pub_params =
+        StackedDrg::<'_, Tree, DefaultPieceHasher<Tree::Field>>::setup(&vanilla_setup_params)?;
 
     let partition_count = usize::from(PoRepProofPartitions::from(porep_config));
 
@@ -494,10 +473,11 @@ where
         partition_count,
     )?;
 
-    let sanity_check = StackedDrg::<
-        Tree,
-        DefaultPieceHasher<Tree::Field>,
-    >::verify_all_partitions(&vanilla_pub_params, &public_inputs, &vanilla_proofs)?;
+    let sanity_check = StackedDrg::<Tree, DefaultPieceHasher<Tree::Field>>::verify_all_partitions(
+        &vanilla_pub_params,
+        &public_inputs,
+        &vanilla_proofs,
+    )?;
     ensure!(sanity_check, "Invalid vanilla proof generated");
 
     let out = SealCommitPhase1Output {
@@ -794,7 +774,9 @@ where
                     Tree::TopTreeArity,
                 >,
                 DefaultPieceHasher<F>,
-            > as halo2::CompoundProof<F, SECTOR_NODES_2_KIB>>::create_keypair(&circ)?;
+            > as halo2::CompoundProof<F, SECTOR_NODES_2_KIB>>::create_keypair(
+                &circ
+            )?;
 
             trace!("got halo2 params ({:?}) while sealing", sector_bytes);
 
@@ -809,10 +791,7 @@ where
                     Tree::TopTreeArity,
                 >,
                 DefaultPieceHasher<F>,
-            > as halo2::CompoundProof<
-                F,
-                SECTOR_NODES_2_KIB,
-            >>::prove_all_partitions_with_vanilla(
+            > as halo2::CompoundProof<F, SECTOR_NODES_2_KIB>>::prove_all_partitions_with_vanilla(
                 &vanilla_setup_params,
                 &vanilla_pub_inputs,
                 &vanilla_proofs,
@@ -844,7 +823,9 @@ where
                     Tree::TopTreeArity,
                 >,
                 DefaultPieceHasher<F>,
-            > as halo2::CompoundProof<F, SECTOR_NODES_4_KIB>>::create_keypair(&circ)?;
+            > as halo2::CompoundProof<F, SECTOR_NODES_4_KIB>>::create_keypair(
+                &circ
+            )?;
 
             trace!("got halo2 params ({:?}) while sealing", sector_bytes);
 
@@ -859,10 +840,7 @@ where
                     Tree::TopTreeArity,
                 >,
                 DefaultPieceHasher<F>,
-            > as halo2::CompoundProof<
-                F,
-                SECTOR_NODES_4_KIB,
-            >>::prove_all_partitions_with_vanilla(
+            > as halo2::CompoundProof<F, SECTOR_NODES_4_KIB>>::prove_all_partitions_with_vanilla(
                 &vanilla_setup_params,
                 &vanilla_pub_inputs,
                 &vanilla_proofs,
@@ -894,7 +872,9 @@ where
                     Tree::TopTreeArity,
                 >,
                 DefaultPieceHasher<F>,
-            > as halo2::CompoundProof<F, SECTOR_NODES_16_KIB>>::create_keypair(&circ)?;
+            > as halo2::CompoundProof<F, SECTOR_NODES_16_KIB>>::create_keypair(
+                &circ
+            )?;
 
             trace!("got halo2 params ({:?}) while sealing", sector_bytes);
 
@@ -909,10 +889,7 @@ where
                     Tree::TopTreeArity,
                 >,
                 DefaultPieceHasher<F>,
-            > as halo2::CompoundProof<
-                F,
-                SECTOR_NODES_16_KIB,
-            >>::prove_all_partitions_with_vanilla(
+            > as halo2::CompoundProof<F, SECTOR_NODES_16_KIB>>::prove_all_partitions_with_vanilla(
                 &vanilla_setup_params,
                 &vanilla_pub_inputs,
                 &vanilla_proofs,
@@ -944,7 +921,9 @@ where
                     Tree::TopTreeArity,
                 >,
                 DefaultPieceHasher<F>,
-            > as halo2::CompoundProof<F, SECTOR_NODES_32_KIB>>::create_keypair(&circ)?;
+            > as halo2::CompoundProof<F, SECTOR_NODES_32_KIB>>::create_keypair(
+                &circ
+            )?;
 
             trace!("got halo2 params ({:?}) while sealing", sector_bytes);
 
@@ -959,10 +938,7 @@ where
                     Tree::TopTreeArity,
                 >,
                 DefaultPieceHasher<F>,
-            > as halo2::CompoundProof<
-                F,
-                SECTOR_NODES_32_KIB,
-            >>::prove_all_partitions_with_vanilla(
+            > as halo2::CompoundProof<F, SECTOR_NODES_32_KIB>>::prove_all_partitions_with_vanilla(
                 &vanilla_setup_params,
                 &vanilla_pub_inputs,
                 &vanilla_proofs,
@@ -994,7 +970,9 @@ where
                     Tree::TopTreeArity,
                 >,
                 DefaultPieceHasher<F>,
-            > as halo2::CompoundProof<F, SECTOR_NODES_8_MIB>>::create_keypair(&circ)?;
+            > as halo2::CompoundProof<F, SECTOR_NODES_8_MIB>>::create_keypair(
+                &circ
+            )?;
 
             trace!("got halo2 params ({:?}) while sealing", sector_bytes);
 
@@ -1009,10 +987,7 @@ where
                     Tree::TopTreeArity,
                 >,
                 DefaultPieceHasher<F>,
-            > as halo2::CompoundProof<
-                F,
-                SECTOR_NODES_8_MIB,
-            >>::prove_all_partitions_with_vanilla(
+            > as halo2::CompoundProof<F, SECTOR_NODES_8_MIB>>::prove_all_partitions_with_vanilla(
                 &vanilla_setup_params,
                 &vanilla_pub_inputs,
                 &vanilla_proofs,
@@ -1044,7 +1019,9 @@ where
                     Tree::TopTreeArity,
                 >,
                 DefaultPieceHasher<F>,
-            > as halo2::CompoundProof<F, SECTOR_NODES_16_MIB>>::create_keypair(&circ)?;
+            > as halo2::CompoundProof<F, SECTOR_NODES_16_MIB>>::create_keypair(
+                &circ
+            )?;
 
             trace!("got halo2 params ({:?}) while sealing", sector_bytes);
 
@@ -1059,10 +1036,7 @@ where
                     Tree::TopTreeArity,
                 >,
                 DefaultPieceHasher<F>,
-            > as halo2::CompoundProof<
-                F,
-                SECTOR_NODES_16_MIB,
-            >>::prove_all_partitions_with_vanilla(
+            > as halo2::CompoundProof<F, SECTOR_NODES_16_MIB>>::prove_all_partitions_with_vanilla(
                 &vanilla_setup_params,
                 &vanilla_pub_inputs,
                 &vanilla_proofs,
@@ -1094,7 +1068,9 @@ where
                     Tree::TopTreeArity,
                 >,
                 DefaultPieceHasher<F>,
-            > as halo2::CompoundProof<F, SECTOR_NODES_512_MIB>>::create_keypair(&circ)?;
+            > as halo2::CompoundProof<F, SECTOR_NODES_512_MIB>>::create_keypair(
+                &circ
+            )?;
 
             trace!("got halo2 params ({:?}) while sealing", sector_bytes);
 
@@ -1109,10 +1085,7 @@ where
                     Tree::TopTreeArity,
                 >,
                 DefaultPieceHasher<F>,
-            > as halo2::CompoundProof<
-                F,
-                SECTOR_NODES_512_MIB,
-            >>::prove_all_partitions_with_vanilla(
+            > as halo2::CompoundProof<F, SECTOR_NODES_512_MIB>>::prove_all_partitions_with_vanilla(
                 &vanilla_setup_params,
                 &vanilla_pub_inputs,
                 &vanilla_proofs,
@@ -1144,7 +1117,9 @@ where
                     Tree::TopTreeArity,
                 >,
                 DefaultPieceHasher<F>,
-            > as halo2::CompoundProof<F, SECTOR_NODES_32_GIB>>::create_keypair(&circ)?;
+            > as halo2::CompoundProof<F, SECTOR_NODES_32_GIB>>::create_keypair(
+                &circ
+            )?;
 
             trace!("got halo2 params ({:?}) while sealing", sector_bytes);
 
@@ -1159,10 +1134,7 @@ where
                     Tree::TopTreeArity,
                 >,
                 DefaultPieceHasher<F>,
-            > as halo2::CompoundProof<
-                F,
-                SECTOR_NODES_32_GIB,
-            >>::prove_all_partitions_with_vanilla(
+            > as halo2::CompoundProof<F, SECTOR_NODES_32_GIB>>::prove_all_partitions_with_vanilla(
                 &vanilla_setup_params,
                 &vanilla_pub_inputs,
                 &vanilla_proofs,
@@ -1194,7 +1166,9 @@ where
                     Tree::TopTreeArity,
                 >,
                 DefaultPieceHasher<F>,
-            > as halo2::CompoundProof<F, SECTOR_NODES_64_GIB>>::create_keypair(&circ)?;
+            > as halo2::CompoundProof<F, SECTOR_NODES_64_GIB>>::create_keypair(
+                &circ
+            )?;
 
             trace!("got halo2 params ({:?}) while sealing", sector_bytes);
 
@@ -1209,10 +1183,7 @@ where
                     Tree::TopTreeArity,
                 >,
                 DefaultPieceHasher<F>,
-            > as halo2::CompoundProof<
-                F,
-                SECTOR_NODES_64_GIB,
-            >>::prove_all_partitions_with_vanilla(
+            > as halo2::CompoundProof<F, SECTOR_NODES_64_GIB>>::prove_all_partitions_with_vanilla(
                 &vanilla_setup_params,
                 &vanilla_pub_inputs,
                 &vanilla_proofs,
@@ -1856,26 +1827,30 @@ where
             seed,
             proof_vec,
         ),
-        ProofSystem::HaloPallas => halo2_verify_seal::<Fp, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>(
-            porep_config,
-            comm_r_in,
-            comm_d_in,
-            prover_id,
-            sector_id,
-            ticket,
-            seed,
-            proof_vec,
-        ),
-        ProofSystem::HaloVesta => halo2_verify_seal::<Fq, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>(
-            porep_config,
-            comm_r_in,
-            comm_d_in,
-            prover_id,
-            sector_id,
-            ticket,
-            seed,
-            proof_vec,
-        ),
+        ProofSystem::HaloPallas => {
+            halo2_verify_seal::<Fp, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>(
+                porep_config,
+                comm_r_in,
+                comm_d_in,
+                prover_id,
+                sector_id,
+                ticket,
+                seed,
+                proof_vec,
+            )
+        }
+        ProofSystem::HaloVesta => {
+            halo2_verify_seal::<Fq, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>(
+                porep_config,
+                comm_r_in,
+                comm_d_in,
+                prover_id,
+                sector_id,
+                ticket,
+                seed,
+                proof_vec,
+            )
+        }
     };
 
     info!("verify_seal:finish: {:?}", sector_id);
@@ -2032,36 +2007,19 @@ where
 
     match sector_nodes {
         SECTOR_NODES_2_KIB => {
-            let circ_partition_proofs: Vec<Halo2Proof<
-                F::Affine,
-                SdrPorepCircuit<
-                    F,
-                    U,
-                    V,
-                    W,
-                    SECTOR_NODES_2_KIB,
-                >,
+            let circ_partition_proofs: Vec<
+                Halo2Proof<F::Affine, SdrPorepCircuit<F, U, V, W, SECTOR_NODES_2_KIB>>,
             > = proofs_bytes.map(Into::into).collect();
 
-            let circ = SdrPorepCircuit::<
-                F,
-                U,
-                V,
-                W,
-                SECTOR_NODES_2_KIB,
-            >::blank_circuit();
+            let circ = SdrPorepCircuit::<F, U, V, W, SECTOR_NODES_2_KIB>::blank_circuit();
 
             let keypair = <StackedDrg<
                 '_,
-                MerkleTreeWrapper<
-                    DefaultTreeHasher<F>,
-                    MockStore,
-                    U,
-                    V,
-                    W,
-                >,
+                MerkleTreeWrapper<DefaultTreeHasher<F>, MockStore, U, V, W>,
                 DefaultPieceHasher<F>,
-            > as halo2::CompoundProof<F, SECTOR_NODES_2_KIB>>::create_keypair(&circ)?;
+            > as halo2::CompoundProof<F, SECTOR_NODES_2_KIB>>::create_keypair(
+                &circ
+            )?;
 
             trace!(
                 "got verifying key ({:?}) while verifying seal",
@@ -2070,13 +2028,7 @@ where
 
             <StackedDrg<
                 '_,
-                MerkleTreeWrapper<
-                    DefaultTreeHasher<F>,
-                    MockStore,
-                    U,
-                    V,
-                    W,
-                >,
+                MerkleTreeWrapper<DefaultTreeHasher<F>, MockStore, U, V, W>,
                 DefaultPieceHasher<F>,
             > as halo2::CompoundProof<F, SECTOR_NODES_2_KIB>>::verify_all_partitions(
                 &vanilla_setup_params,
@@ -2086,36 +2038,19 @@ where
             )?;
         }
         SECTOR_NODES_4_KIB => {
-            let circ_partition_proofs: Vec<Halo2Proof<
-                F::Affine,
-                SdrPorepCircuit<
-                    F,
-                    U,
-                    V,
-                    W,
-                    SECTOR_NODES_4_KIB,
-                >,
+            let circ_partition_proofs: Vec<
+                Halo2Proof<F::Affine, SdrPorepCircuit<F, U, V, W, SECTOR_NODES_4_KIB>>,
             > = proofs_bytes.map(Into::into).collect();
 
-            let circ = SdrPorepCircuit::<
-                F,
-                U,
-                V,
-                W,
-                SECTOR_NODES_4_KIB,
-            >::blank_circuit();
+            let circ = SdrPorepCircuit::<F, U, V, W, SECTOR_NODES_4_KIB>::blank_circuit();
 
             let keypair = <StackedDrg<
                 '_,
-                MerkleTreeWrapper<
-                    DefaultTreeHasher<F>,
-                    MockStore,
-                    U,
-                    V,
-                    W,
-                >,
+                MerkleTreeWrapper<DefaultTreeHasher<F>, MockStore, U, V, W>,
                 DefaultPieceHasher<F>,
-            > as halo2::CompoundProof<F, SECTOR_NODES_4_KIB>>::create_keypair(&circ)?;
+            > as halo2::CompoundProof<F, SECTOR_NODES_4_KIB>>::create_keypair(
+                &circ
+            )?;
 
             trace!(
                 "got verifying key ({:?}) while verifying seal",
@@ -2124,13 +2059,7 @@ where
 
             <StackedDrg<
                 '_,
-                MerkleTreeWrapper<
-                    DefaultTreeHasher<F>,
-                    MockStore,
-                    U,
-                    V,
-                    W,
-                >,
+                MerkleTreeWrapper<DefaultTreeHasher<F>, MockStore, U, V, W>,
                 DefaultPieceHasher<F>,
             > as halo2::CompoundProof<F, SECTOR_NODES_4_KIB>>::verify_all_partitions(
                 &vanilla_setup_params,
@@ -2140,36 +2069,19 @@ where
             )?;
         }
         SECTOR_NODES_16_KIB => {
-            let circ_partition_proofs: Vec<Halo2Proof<
-                F::Affine,
-                SdrPorepCircuit<
-                    F,
-                    U,
-                    V,
-                    W,
-                    SECTOR_NODES_16_KIB,
-                >,
+            let circ_partition_proofs: Vec<
+                Halo2Proof<F::Affine, SdrPorepCircuit<F, U, V, W, SECTOR_NODES_16_KIB>>,
             > = proofs_bytes.map(Into::into).collect();
 
-            let circ = SdrPorepCircuit::<
-                F,
-                U,
-                V,
-                W,
-                SECTOR_NODES_16_KIB,
-            >::blank_circuit();
+            let circ = SdrPorepCircuit::<F, U, V, W, SECTOR_NODES_16_KIB>::blank_circuit();
 
             let keypair = <StackedDrg<
                 '_,
-                MerkleTreeWrapper<
-                    DefaultTreeHasher<F>,
-                    MockStore,
-                    U,
-                    V,
-                    W,
-                >,
+                MerkleTreeWrapper<DefaultTreeHasher<F>, MockStore, U, V, W>,
                 DefaultPieceHasher<F>,
-            > as halo2::CompoundProof<F, SECTOR_NODES_16_KIB>>::create_keypair(&circ)?;
+            > as halo2::CompoundProof<F, SECTOR_NODES_16_KIB>>::create_keypair(
+                &circ
+            )?;
 
             trace!(
                 "got verifying key ({:?}) while verifying seal",
@@ -2178,13 +2090,7 @@ where
 
             <StackedDrg<
                 '_,
-                MerkleTreeWrapper<
-                    DefaultTreeHasher<F>,
-                    MockStore,
-                    U,
-                    V,
-                    W,
-                >,
+                MerkleTreeWrapper<DefaultTreeHasher<F>, MockStore, U, V, W>,
                 DefaultPieceHasher<F>,
             > as halo2::CompoundProof<F, SECTOR_NODES_16_KIB>>::verify_all_partitions(
                 &vanilla_setup_params,
@@ -2194,36 +2100,19 @@ where
             )?;
         }
         SECTOR_NODES_32_KIB => {
-            let circ_partition_proofs: Vec<Halo2Proof<
-                F::Affine,
-                SdrPorepCircuit<
-                    F,
-                    U,
-                    V,
-                    W,
-                    SECTOR_NODES_32_KIB,
-                >,
+            let circ_partition_proofs: Vec<
+                Halo2Proof<F::Affine, SdrPorepCircuit<F, U, V, W, SECTOR_NODES_32_KIB>>,
             > = proofs_bytes.map(Into::into).collect();
 
-            let circ = SdrPorepCircuit::<
-                F,
-                U,
-                V,
-                W,
-                SECTOR_NODES_32_KIB,
-            >::blank_circuit();
+            let circ = SdrPorepCircuit::<F, U, V, W, SECTOR_NODES_32_KIB>::blank_circuit();
 
             let keypair = <StackedDrg<
                 '_,
-                MerkleTreeWrapper<
-                    DefaultTreeHasher<F>,
-                    MockStore,
-                    U,
-                    V,
-                    W,
-                >,
+                MerkleTreeWrapper<DefaultTreeHasher<F>, MockStore, U, V, W>,
                 DefaultPieceHasher<F>,
-            > as halo2::CompoundProof<F, SECTOR_NODES_32_KIB>>::create_keypair(&circ)?;
+            > as halo2::CompoundProof<F, SECTOR_NODES_32_KIB>>::create_keypair(
+                &circ
+            )?;
 
             trace!(
                 "got verifying key ({:?}) while verifying seal",
@@ -2232,13 +2121,7 @@ where
 
             <StackedDrg<
                 '_,
-                MerkleTreeWrapper<
-                    DefaultTreeHasher<F>,
-                    MockStore,
-                    U,
-                    V,
-                    W,
-                >,
+                MerkleTreeWrapper<DefaultTreeHasher<F>, MockStore, U, V, W>,
                 DefaultPieceHasher<F>,
             > as halo2::CompoundProof<F, SECTOR_NODES_32_KIB>>::verify_all_partitions(
                 &vanilla_setup_params,
@@ -2248,36 +2131,19 @@ where
             )?;
         }
         SECTOR_NODES_8_MIB => {
-            let circ_partition_proofs: Vec<Halo2Proof<
-                F::Affine,
-                SdrPorepCircuit<
-                    F,
-                    U,
-                    V,
-                    W,
-                    SECTOR_NODES_8_MIB,
-                >,
+            let circ_partition_proofs: Vec<
+                Halo2Proof<F::Affine, SdrPorepCircuit<F, U, V, W, SECTOR_NODES_8_MIB>>,
             > = proofs_bytes.map(Into::into).collect();
 
-            let circ = SdrPorepCircuit::<
-                F,
-                U,
-                V,
-                W,
-                SECTOR_NODES_8_MIB,
-            >::blank_circuit();
+            let circ = SdrPorepCircuit::<F, U, V, W, SECTOR_NODES_8_MIB>::blank_circuit();
 
             let keypair = <StackedDrg<
                 '_,
-                MerkleTreeWrapper<
-                    DefaultTreeHasher<F>,
-                    MockStore,
-                    U,
-                    V,
-                    W,
-                >,
+                MerkleTreeWrapper<DefaultTreeHasher<F>, MockStore, U, V, W>,
                 DefaultPieceHasher<F>,
-            > as halo2::CompoundProof<F, SECTOR_NODES_8_MIB>>::create_keypair(&circ)?;
+            > as halo2::CompoundProof<F, SECTOR_NODES_8_MIB>>::create_keypair(
+                &circ
+            )?;
 
             trace!(
                 "got verifying key ({:?}) while verifying seal",
@@ -2286,13 +2152,7 @@ where
 
             <StackedDrg<
                 '_,
-                MerkleTreeWrapper<
-                    DefaultTreeHasher<F>,
-                    MockStore,
-                    U,
-                    V,
-                    W,
-                >,
+                MerkleTreeWrapper<DefaultTreeHasher<F>, MockStore, U, V, W>,
                 DefaultPieceHasher<F>,
             > as halo2::CompoundProof<F, SECTOR_NODES_8_MIB>>::verify_all_partitions(
                 &vanilla_setup_params,
@@ -2302,36 +2162,19 @@ where
             )?;
         }
         SECTOR_NODES_16_MIB => {
-            let circ_partition_proofs: Vec<Halo2Proof<
-                F::Affine,
-                SdrPorepCircuit<
-                    F,
-                    U,
-                    V,
-                    W,
-                    SECTOR_NODES_16_MIB,
-                >,
+            let circ_partition_proofs: Vec<
+                Halo2Proof<F::Affine, SdrPorepCircuit<F, U, V, W, SECTOR_NODES_16_MIB>>,
             > = proofs_bytes.map(Into::into).collect();
 
-            let circ = SdrPorepCircuit::<
-                F,
-                U,
-                V,
-                W,
-                SECTOR_NODES_16_MIB,
-            >::blank_circuit();
+            let circ = SdrPorepCircuit::<F, U, V, W, SECTOR_NODES_16_MIB>::blank_circuit();
 
             let keypair = <StackedDrg<
                 '_,
-                MerkleTreeWrapper<
-                    DefaultTreeHasher<F>,
-                    MockStore,
-                    U,
-                    V,
-                    W,
-                >,
+                MerkleTreeWrapper<DefaultTreeHasher<F>, MockStore, U, V, W>,
                 DefaultPieceHasher<F>,
-            > as halo2::CompoundProof<F, SECTOR_NODES_16_MIB>>::create_keypair(&circ)?;
+            > as halo2::CompoundProof<F, SECTOR_NODES_16_MIB>>::create_keypair(
+                &circ
+            )?;
 
             trace!(
                 "got verifying key ({:?}) while verifying seal",
@@ -2340,13 +2183,7 @@ where
 
             <StackedDrg<
                 '_,
-                MerkleTreeWrapper<
-                    DefaultTreeHasher<F>,
-                    MockStore,
-                    U,
-                    V,
-                    W,
-                >,
+                MerkleTreeWrapper<DefaultTreeHasher<F>, MockStore, U, V, W>,
                 DefaultPieceHasher<F>,
             > as halo2::CompoundProof<F, SECTOR_NODES_16_MIB>>::verify_all_partitions(
                 &vanilla_setup_params,
@@ -2356,36 +2193,19 @@ where
             )?;
         }
         SECTOR_NODES_512_MIB => {
-            let circ_partition_proofs: Vec<Halo2Proof<
-                F::Affine,
-                SdrPorepCircuit<
-                    F,
-                    U,
-                    V,
-                    W,
-                    SECTOR_NODES_512_MIB,
-                >,
+            let circ_partition_proofs: Vec<
+                Halo2Proof<F::Affine, SdrPorepCircuit<F, U, V, W, SECTOR_NODES_512_MIB>>,
             > = proofs_bytes.map(Into::into).collect();
 
-            let circ = SdrPorepCircuit::<
-                F,
-                U,
-                V,
-                W,
-                SECTOR_NODES_512_MIB,
-            >::blank_circuit();
+            let circ = SdrPorepCircuit::<F, U, V, W, SECTOR_NODES_512_MIB>::blank_circuit();
 
             let keypair = <StackedDrg<
                 '_,
-                MerkleTreeWrapper<
-                    DefaultTreeHasher<F>,
-                    MockStore,
-                    U,
-                    V,
-                    W,
-                >,
+                MerkleTreeWrapper<DefaultTreeHasher<F>, MockStore, U, V, W>,
                 DefaultPieceHasher<F>,
-            > as halo2::CompoundProof<F, SECTOR_NODES_512_MIB>>::create_keypair(&circ)?;
+            > as halo2::CompoundProof<F, SECTOR_NODES_512_MIB>>::create_keypair(
+                &circ
+            )?;
 
             trace!(
                 "got verifying key ({:?}) while verifying seal",
@@ -2394,13 +2214,7 @@ where
 
             <StackedDrg<
                 '_,
-                MerkleTreeWrapper<
-                    DefaultTreeHasher<F>,
-                    MockStore,
-                    U,
-                    V,
-                    W,
-                >,
+                MerkleTreeWrapper<DefaultTreeHasher<F>, MockStore, U, V, W>,
                 DefaultPieceHasher<F>,
             > as halo2::CompoundProof<F, SECTOR_NODES_512_MIB>>::verify_all_partitions(
                 &vanilla_setup_params,
@@ -2410,36 +2224,19 @@ where
             )?;
         }
         SECTOR_NODES_32_GIB => {
-            let circ_partition_proofs: Vec<Halo2Proof<
-                F::Affine,
-                SdrPorepCircuit<
-                    F,
-                    U,
-                    V,
-                    W,
-                    SECTOR_NODES_32_GIB,
-                >,
+            let circ_partition_proofs: Vec<
+                Halo2Proof<F::Affine, SdrPorepCircuit<F, U, V, W, SECTOR_NODES_32_GIB>>,
             > = proofs_bytes.map(Into::into).collect();
 
-            let circ = SdrPorepCircuit::<
-                F,
-                U,
-                V,
-                W,
-                SECTOR_NODES_32_GIB,
-            >::blank_circuit();
+            let circ = SdrPorepCircuit::<F, U, V, W, SECTOR_NODES_32_GIB>::blank_circuit();
 
             let keypair = <StackedDrg<
                 '_,
-                MerkleTreeWrapper<
-                    DefaultTreeHasher<F>,
-                    MockStore,
-                    U,
-                    V,
-                    W,
-                >,
+                MerkleTreeWrapper<DefaultTreeHasher<F>, MockStore, U, V, W>,
                 DefaultPieceHasher<F>,
-            > as halo2::CompoundProof<F, SECTOR_NODES_32_GIB>>::create_keypair(&circ)?;
+            > as halo2::CompoundProof<F, SECTOR_NODES_32_GIB>>::create_keypair(
+                &circ
+            )?;
 
             trace!(
                 "got verifying key ({:?}) while verifying seal",
@@ -2448,13 +2245,7 @@ where
 
             <StackedDrg<
                 '_,
-                MerkleTreeWrapper<
-                    DefaultTreeHasher<F>,
-                    MockStore,
-                    U,
-                    V,
-                    W,
-                >,
+                MerkleTreeWrapper<DefaultTreeHasher<F>, MockStore, U, V, W>,
                 DefaultPieceHasher<F>,
             > as halo2::CompoundProof<F, SECTOR_NODES_32_GIB>>::verify_all_partitions(
                 &vanilla_setup_params,
@@ -2464,36 +2255,19 @@ where
             )?;
         }
         SECTOR_NODES_64_GIB => {
-            let circ_partition_proofs: Vec<Halo2Proof<
-                F::Affine,
-                SdrPorepCircuit<
-                    F,
-                    U,
-                    V,
-                    W,
-                    SECTOR_NODES_64_GIB,
-                >,
+            let circ_partition_proofs: Vec<
+                Halo2Proof<F::Affine, SdrPorepCircuit<F, U, V, W, SECTOR_NODES_64_GIB>>,
             > = proofs_bytes.map(Into::into).collect();
 
-            let circ = SdrPorepCircuit::<
-                F,
-                U,
-                V,
-                W,
-                SECTOR_NODES_64_GIB,
-            >::blank_circuit();
+            let circ = SdrPorepCircuit::<F, U, V, W, SECTOR_NODES_64_GIB>::blank_circuit();
 
             let keypair = <StackedDrg<
                 '_,
-                MerkleTreeWrapper<
-                    DefaultTreeHasher<F>,
-                    MockStore,
-                    U,
-                    V,
-                    W,
-                >,
+                MerkleTreeWrapper<DefaultTreeHasher<F>, MockStore, U, V, W>,
                 DefaultPieceHasher<F>,
-            > as halo2::CompoundProof<F, SECTOR_NODES_64_GIB>>::create_keypair(&circ)?;
+            > as halo2::CompoundProof<F, SECTOR_NODES_64_GIB>>::create_keypair(
+                &circ
+            )?;
 
             trace!(
                 "got verifying key ({:?}) while verifying seal",
@@ -2502,13 +2276,7 @@ where
 
             <StackedDrg<
                 '_,
-                MerkleTreeWrapper<
-                    DefaultTreeHasher<F>,
-                    MockStore,
-                    U,
-                    V,
-                    W,
-                >,
+                MerkleTreeWrapper<DefaultTreeHasher<F>, MockStore, U, V, W>,
                 DefaultPieceHasher<F>,
             > as halo2::CompoundProof<F, SECTOR_NODES_64_GIB>>::verify_all_partitions(
                 &vanilla_setup_params,

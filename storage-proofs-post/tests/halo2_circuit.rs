@@ -47,11 +47,8 @@ where
     let temp_dir = tempdir().expect("tempdir failure");
     let temp_path = temp_dir.path();
     info!("Creating random TreeR");
-    let (replica, tree_r) = generate_tree::<TreeR<U, V, W>, _>(
-        &mut rng,
-        SECTOR_NODES,
-        Some(temp_path.to_path_buf()),
-    );
+    let (replica, tree_r) =
+        generate_tree::<TreeR<U, V, W>, _>(&mut rng, SECTOR_NODES, Some(temp_path.to_path_buf()));
 
     let root_r = tree_r.root();
     let comm_c = Fp::random(&mut rng);
@@ -184,7 +181,6 @@ fn test_winning_post_circuit_64gib_halo2() {
     test_winning_post_circuit::<U8, U8, U2, SECTOR_NODES_64_GIB>()
 }
 
-
 fn test_window_post_circuit<U, V, W, const SECTOR_NODES: usize>()
 where
     U: PoseidonArity<Fp>,
@@ -217,11 +213,11 @@ where
     // re-generated for each sector (in the interest of runtime)
     trace!("Generating Random TreeR");
     let (replica, tree_r) =
-        generate_tree::<TreeR<F, U, V, W>, _>(&mut rng, SECTOR_NODES, Some(temp_path.clone()));
+        generate_tree::<TreeR<U, V, W>, _>(&mut rng, SECTOR_NODES, Some(temp_path.clone()));
 
     let root_r = tree_r.root();
-    let comm_c = F::random(&mut rng);
-    let comm_r = <PoseidonHasher<F> as Hasher>::Function::hash2(&comm_c.into(), &root_r);
+    let comm_c = Fp::random(&mut rng);
+    let comm_r = <PoseidonHasher<Fp> as Hasher>::Function::hash2(&comm_c.into(), &root_r);
 
     info!(
         "Gathering requirements for WindowPost over {} sectors",
