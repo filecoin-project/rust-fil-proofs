@@ -1,13 +1,14 @@
 use std::convert::TryInto;
 use std::marker::PhantomData;
 
+use ff::{Field, PrimeField};
 use filecoin_hashers::{poseidon::PoseidonHasher, HashFunction, Hasher, PoseidonArity};
 use generic_array::typenum::{U0, U2, U8};
-use halo2_proofs::{arithmetic::FieldExt, dev::MockProver, pasta::Fp};
+use halo2_proofs::{dev::MockProver, pasta::Fp};
 use rand::SeedableRng;
 use rand_xorshift::XorShiftRng;
 use storage_proofs_core::{
-    halo2::CircuitRows,
+    halo2::{create_proof, verify_proof, CircuitRows, Halo2Field, Halo2Keypair},
     merkle::{generate_tree, DiskTree, MerkleProofTrait, MerkleTreeTrait},
     TEST_SEED,
 };
@@ -17,36 +18,33 @@ use storage_proofs_post::halo2::{
 };
 use tempfile::tempdir;
 
-pub type TreeR<F, U, V, W> = DiskTree<PoseidonHasher<F>, U, V, W>;
+pub type TreeR<U, V, W> = DiskTree<PoseidonHasher<Fp>, U, V, W>;
 
-fn test_winning_post_circuit<F, U, V, W, const SECTOR_NODES: usize>()
+fn test_winning_post_circuit<U, V, W, const SECTOR_NODES: usize>()
 where
-    F: FieldExt,
-    U: PoseidonArity<F>,
-    V: PoseidonArity<F>,
-    W: PoseidonArity<F>,
-    PoseidonHasher<F>: Hasher<Field = F>,
+    U: PoseidonArity<Fp>,
+    V: PoseidonArity<Fp>,
+    W: PoseidonArity<Fp>,
 {
     let sector_id = 0u64;
-    let k = 0;
 
     let mut rng = XorShiftRng::from_seed(TEST_SEED);
 
-    let randomness = F::random(&mut rng);
+    let randomness = Fp::random(&mut rng);
 
     let temp_dir = tempdir().expect("tempdir failure");
     let temp_path = temp_dir.path();
-    let (replica, tree_r) = generate_tree::<TreeR<F, U, V, W>, _>(
+    let (replica, tree_r) = generate_tree::<TreeR<U, V, W>, _>(
         &mut rng,
         SECTOR_NODES,
         Some(temp_path.to_path_buf()),
     );
 
     let root_r = tree_r.root();
-    let comm_c = F::random(&mut rng);
-    let comm_r = <PoseidonHasher<F> as Hasher>::Function::hash2(&comm_c.into(), &root_r);
+    let comm_c = Fp::random(&mut rng);
+    let comm_r = <PoseidonHasher<Fp> as Hasher>::Function::hash2(&comm_c.into(), &root_r);
 
-    let challenges = winning::generate_challenges::<F, SECTOR_NODES>(randomness, sector_id, k);
+    let challenges = winning::generate_challenges::<Fp, SECTOR_NODES>(randomness, sector_id);
 
     let leafs_r = challenges
         .iter()
@@ -55,14 +53,14 @@ where
             let c = *c as usize;
             let start = c << 5;
             let leaf_bytes = &replica[start..start + 32];
-            let mut repr = F::Repr::default();
+            let mut repr = <Fp as PrimeField>::Repr::default();
             repr.as_mut().copy_from_slice(leaf_bytes);
-            let leaf = F::from_repr_vartime(repr).unwrap_or_else(|| {
+            let leaf = Fp::from_repr_vartime(repr).unwrap_or_else(|| {
                 panic!("leaf bytes are not a valid field element for c_{}={}", i, c)
             });
             Some(leaf)
         })
-        .collect::<Vec<Option<F>>>()
+        .collect::<Vec<Option<Fp>>>()
         .try_into()
         .unwrap();
 
@@ -78,13 +76,13 @@ where
                 .path()
                 .iter()
                 .map(|(siblings, _)| siblings.iter().map(|&sib| Some(sib.into())).collect())
-                .collect::<Vec<Vec<Option<F>>>>()
+                .collect::<Vec<Vec<Option<Fp>>>>()
         })
-        .collect::<Vec<Vec<Vec<Option<F>>>>>()
+        .collect::<Vec<Vec<Vec<Option<Fp>>>>>()
         .try_into()
         .unwrap();
 
-    let pub_inputs = winning::PublicInputs::<F, SECTOR_NODES> {
+    let pub_inputs = winning::PublicInputs::<Fp, SECTOR_NODES> {
         comm_r: Some(comm_r.into()),
         challenges: challenges
             .iter()
@@ -96,7 +94,7 @@ where
     };
     let pub_inputs_vec = pub_inputs.to_vec();
 
-    let priv_inputs = winning::PrivateInputs::<F, U, V, W, SECTOR_NODES> {
+    let priv_inputs = winning::PrivateInputs::<Fp, U, V, W, SECTOR_NODES> {
         comm_c: Some(comm_c),
         root_r: Some(root_r.into()),
         leafs_r,
@@ -109,69 +107,73 @@ where
         priv_inputs,
     };
 
-    let prover = MockProver::run(circ.k(), &circ, pub_inputs_vec).unwrap();
+    let prover = MockProver::run(circ.k(), &circ, pub_inputs_vec.clone()).unwrap();
     assert!(prover.verify().is_ok());
+
+    let keypair = Halo2Keypair::<<Fp as Halo2Field>::Affine, _>::create(&circ).unwrap();
+    let proof = create_proof(&keypair, circ, &pub_inputs_vec, &mut rng)
+        .expect("failed to generate halo2 proof");
+    verify_proof(&keypair, &proof, &pub_inputs_vec).expect("failed to verify halo2 proof");
 }
 
 #[test]
 fn test_winning_post_circuit_2kib_halo2() {
-    test_winning_post_circuit::<Fp, U8, U0, U0, SECTOR_NODES_2_KIB>()
+    test_winning_post_circuit::<U8, U0, U0, SECTOR_NODES_2_KIB>()
 }
 
 #[test]
 fn test_winning_post_circuit_4kib_halo2() {
-    test_winning_post_circuit::<Fp, U8, U2, U0, SECTOR_NODES_4_KIB>()
+    test_winning_post_circuit::<U8, U2, U0, SECTOR_NODES_4_KIB>()
 }
 
 #[test]
 fn test_winning_post_circuit_16kib_halo2() {
-    test_winning_post_circuit::<Fp, U8, U8, U0, SECTOR_NODES_16_KIB>()
+    test_winning_post_circuit::<U8, U8, U0, SECTOR_NODES_16_KIB>()
 }
 
 #[test]
 fn test_winning_post_circuit_32kib_halo2() {
-    test_winning_post_circuit::<Fp, U8, U8, U2, SECTOR_NODES_32_KIB>()
+    test_winning_post_circuit::<U8, U8, U2, SECTOR_NODES_32_KIB>()
 }
 
-fn test_window_post_circuit<F, U, V, W, const SECTOR_NODES: usize>()
+fn test_window_post_circuit<U, V, W, const SECTOR_NODES: usize>()
 where
-    F: FieldExt,
-    U: PoseidonArity<F>,
-    V: PoseidonArity<F>,
-    W: PoseidonArity<F>,
-    PoseidonHasher<F>: Hasher<Field = F>,
+    U: PoseidonArity<Fp>,
+    V: PoseidonArity<Fp>,
+    W: PoseidonArity<Fp>,
 {
     let challenged_sector_count = window::sectors_challenged_per_partition::<SECTOR_NODES>();
     let k = 0;
 
     let mut rng = XorShiftRng::from_seed(TEST_SEED);
 
-    let randomness = F::random(&mut rng);
+    let randomness = Fp::random(&mut rng);
 
     let temp_dir = tempdir().expect("tempdir failure");
     let temp_path = temp_dir.path().to_path_buf();
 
-    let mut pub_inputs = window::PublicInputs::<F, SECTOR_NODES> {
+    let mut pub_inputs = window::PublicInputs::<Fp, SECTOR_NODES> {
         comms_r: Vec::with_capacity(challenged_sector_count),
         challenges: Vec::with_capacity(challenged_sector_count),
     };
 
-    let mut priv_inputs = window::PrivateInputs::<F, U, V, W, SECTOR_NODES> {
+    let mut priv_inputs = window::PrivateInputs::<Fp, U, V, W, SECTOR_NODES> {
         sector_proofs: Vec::with_capacity(challenged_sector_count),
     };
 
+    // Single partition of sectors.
     for sector_index in 0..challenged_sector_count {
         let sector_id = sector_index as u64;
 
         let (replica, tree_r) =
-            generate_tree::<TreeR<F, U, V, W>, _>(&mut rng, SECTOR_NODES, Some(temp_path.clone()));
+            generate_tree::<TreeR<U, V, W>, _>(&mut rng, SECTOR_NODES, Some(temp_path.clone()));
 
         let root_r = tree_r.root();
-        let comm_c = F::random(&mut rng);
-        let comm_r = <PoseidonHasher<F> as Hasher>::Function::hash2(&comm_c.into(), &root_r);
+        let comm_c = Fp::random(&mut rng);
+        let comm_r = <PoseidonHasher<Fp> as Hasher>::Function::hash2(&comm_c.into(), &root_r);
 
         let challenges =
-            window::generate_challenges::<F, SECTOR_NODES>(randomness, sector_index, sector_id, k);
+            window::generate_challenges::<Fp, SECTOR_NODES>(randomness, k, sector_index, sector_id);
 
         pub_inputs.comms_r.push(Some(comm_r.into()));
         pub_inputs.challenges.push(
@@ -191,9 +193,9 @@ where
                 let c = *c as usize;
                 let start = c << 5;
                 let leaf_bytes = &replica[start..start + 32];
-                let mut repr = F::Repr::default();
+                let mut repr = <Fp as PrimeField>::Repr::default();
                 repr.as_mut().copy_from_slice(leaf_bytes);
-                let leaf = F::from_repr_vartime(repr).unwrap_or_else(|| {
+                let leaf = Fp::from_repr_vartime(repr).unwrap_or_else(|| {
                     panic!(
                         "leaf bytes are not a valid field element for c_{}={} (sector_{})",
                         i, c, sector_index,
@@ -201,7 +203,7 @@ where
                 });
                 Some(leaf)
             })
-            .collect::<Vec<Option<F>>>()
+            .collect::<Vec<Option<Fp>>>()
             .try_into()
             .unwrap();
 
@@ -220,9 +222,9 @@ where
                     .path()
                     .iter()
                     .map(|(siblings, _)| siblings.iter().map(|&sib| Some(sib.into())).collect())
-                    .collect::<Vec<Vec<Option<F>>>>()
+                    .collect::<Vec<Vec<Option<Fp>>>>()
             })
-            .collect::<Vec<Vec<Vec<Option<F>>>>>()
+            .collect::<Vec<Vec<Vec<Option<Fp>>>>>()
             .try_into()
             .unwrap();
 
@@ -242,26 +244,31 @@ where
         priv_inputs,
     };
 
-    let prover = MockProver::run(circ.k(), &circ, pub_inputs_vec).unwrap();
+    let prover = MockProver::run(circ.k(), &circ, pub_inputs_vec.clone()).unwrap();
     assert!(prover.verify().is_ok());
+
+    let keypair = Halo2Keypair::<<Fp as Halo2Field>::Affine, _>::create(&circ).unwrap();
+    let proof = create_proof(&keypair, circ, &pub_inputs_vec, &mut rng)
+        .expect("failed to generate halo2 proof");
+    verify_proof(&keypair, &proof, &pub_inputs_vec).expect("failed to verify halo2 proof");
 }
 
 #[test]
 fn test_window_post_circuit_2kib_halo2() {
-    test_window_post_circuit::<Fp, U8, U0, U0, SECTOR_NODES_2_KIB>()
+    test_window_post_circuit::<U8, U0, U0, SECTOR_NODES_2_KIB>()
 }
 
 #[test]
 fn test_window_post_circuit_4kib_halo2() {
-    test_window_post_circuit::<Fp, U8, U2, U0, SECTOR_NODES_4_KIB>()
+    test_window_post_circuit::<U8, U2, U0, SECTOR_NODES_4_KIB>()
 }
 
 #[test]
 fn test_window_post_circuit_16kib_halo2() {
-    test_window_post_circuit::<Fp, U8, U8, U0, SECTOR_NODES_16_KIB>()
+    test_window_post_circuit::<U8, U8, U0, SECTOR_NODES_16_KIB>()
 }
 
 #[test]
 fn test_window_post_circuit_32kib_halo2() {
-    test_window_post_circuit::<Fp, U8, U8, U2, SECTOR_NODES_32_KIB>()
+    test_window_post_circuit::<U8, U8, U2, SECTOR_NODES_32_KIB>()
 }

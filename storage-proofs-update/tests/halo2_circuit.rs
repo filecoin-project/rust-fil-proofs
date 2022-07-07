@@ -1,14 +1,18 @@
-#![cfg(feature = "isolated-testing")]
+#![allow(dead_code, unused_imports)]
 
 use filecoin_hashers::{Domain, HashFunction, Hasher, PoseidonArity};
 use generic_array::typenum::{U0, U2, U4, U8};
-use halo2_proofs::{arithmetic::FieldExt, dev::MockProver, pasta::Fp};
+use halo2_proofs::{dev::MockProver, pasta::Fp};
 use rand::SeedableRng;
 use rand_xorshift::XorShiftRng;
-use storage_proofs_core::{halo2::CircuitRows, merkle::MerkleTreeTrait, TEST_SEED};
+use storage_proofs_core::{
+    halo2::{create_proof, verify_proof, CircuitRows, Halo2Field, Halo2Keypair},
+    merkle::MerkleTreeTrait,
+    TEST_SEED,
+};
 use storage_proofs_update::{
     constants::{
-        hs, validate_tree_r_shape, TreeDDomain, TreeDHasher, TreeR, TreeRDomain,
+        hs, validate_tree_r_shape, TreeDDomain, TreeR, TreeRDomain,
         TreeRHasher, SECTOR_SIZE_16_KIB, SECTOR_SIZE_1_KIB, SECTOR_SIZE_2_KIB, SECTOR_SIZE_32_KIB,
         SECTOR_SIZE_4_KIB, SECTOR_SIZE_8_KIB,
     },
@@ -24,14 +28,11 @@ use common::{
     H_SELECT,
 };
 
-fn test_empty_sector_update_circuit<F, U, V, W, const SECTOR_NODES: usize>()
+fn test_empty_sector_update_circuit<U, V, W, const SECTOR_NODES: usize>(gen_halo2_proof: bool)
 where
-    F: FieldExt,
-    U: PoseidonArity<F>,
-    V: PoseidonArity<F>,
-    W: PoseidonArity<F>,
-    TreeDHasher<F>: Hasher<Field = F>,
-    TreeRHasher<F>: Hasher<Field = F>,
+    U: PoseidonArity<Fp>,
+    V: PoseidonArity<Fp>,
+    W: PoseidonArity<Fp>,
 {
     validate_tree_r_shape::<U, V, W>(SECTOR_NODES);
 
@@ -45,17 +46,17 @@ where
     let tmp_path = tmp_dir.path();
 
     // Create random TreeROld.
-    let labels_r_old: Vec<TreeRDomain<F>> = (0..SECTOR_NODES)
-        .map(|_| TreeRDomain::random(&mut rng))
+    let labels_r_old: Vec<TreeRDomain<Fp>> = (0..SECTOR_NODES)
+        .map(|_| TreeRDomain::<Fp>::random(&mut rng))
         .collect();
-    let tree_r_old: TreeR<F, U, V, W> = create_tree_r_old(&labels_r_old, tmp_path);
+    let tree_r_old: TreeR<Fp, U, V, W> = create_tree_r_old(&labels_r_old, tmp_path);
     let root_r_old = tree_r_old.root();
-    let comm_c = TreeRDomain::<F>::random(&mut rng);
-    let comm_r_old = <TreeRHasher<F> as Hasher>::Function::hash2(&comm_c, &root_r_old);
+    let comm_c = TreeRDomain::<Fp>::random(&mut rng);
+    let comm_r_old = <TreeRHasher<Fp> as Hasher>::Function::hash2(&comm_c, &root_r_old);
 
     // Create random TreeDNew.
-    let labels_d_new: Vec<TreeDDomain<F>> = (0..SECTOR_NODES)
-        .map(|_| TreeDDomain::random(&mut rng))
+    let labels_d_new: Vec<TreeDDomain<Fp>> = (0..SECTOR_NODES)
+        .map(|_| TreeDDomain::<Fp>::random(&mut rng))
         .collect();
     let tree_d_new = create_tree_d_new(&labels_d_new, tmp_path);
     let comm_d_new = tree_d_new.root();
@@ -65,9 +66,9 @@ where
 
     // Encode `labels_d_new` into `labels_r_new` and create TreeRNew.
     let labels_r_new = encode_new_replica(&labels_r_old, &labels_d_new, &phi, h);
-    let tree_r_new: TreeR<F, U, V, W> = create_tree_r_new(&labels_r_new, tmp_path);
+    let tree_r_new: TreeR<Fp, U, V, W> = create_tree_r_new(&labels_r_new, tmp_path);
     let root_r_new = tree_r_new.root();
-    let comm_r_new = <TreeRHasher<F> as Hasher>::Function::hash2(&comm_c, &root_r_new);
+    let comm_r_new = <TreeRHasher<Fp> as Hasher>::Function::hash2(&comm_c, &root_r_new);
 
     let pub_params = PublicParams::from_sector_size((SECTOR_NODES << 5) as u64);
 
@@ -78,11 +79,11 @@ where
         // Generate vanilla-proof.
         let apex_leafs = get_apex_leafs(&tree_d_new, k);
 
-        let challenges: Vec<u32> = Challenges::new(SECTOR_NODES, comm_r_new, k)
+        let challenges: Vec<u32> = Challenges::<Fp>::new(SECTOR_NODES, comm_r_new, k)
             .take(pub_params.challenge_count)
             .collect();
 
-        let rhos: Vec<F> = challenges
+        let rhos: Vec<Fp> = challenges
             .iter()
             .map(|c| {
                 let high = (c >> get_high_bits_shr) as usize;
@@ -90,7 +91,7 @@ where
             })
             .collect();
 
-        let challenge_proofs: Vec<vanilla::ChallengeProof<F, U, V, W>> = challenges
+        let challenge_proofs: Vec<vanilla::ChallengeProof<Fp, U, V, W>> = challenges
             .iter()
             .enumerate()
             .map(|(i, c)| {
@@ -113,7 +114,7 @@ where
             .collect();
 
         // Create circuit.
-        let pub_inputs = circuit::PublicInputs::<F, SECTOR_NODES>::new(
+        let pub_inputs = circuit::PublicInputs::<Fp, SECTOR_NODES>::new(
             k,
             comm_r_old.into(),
             comm_d_new.into(),
@@ -124,13 +125,13 @@ where
 
         let pub_inputs_vec = pub_inputs.to_vec();
 
-        let priv_inputs = circuit::PrivateInputs::<F, U, V, W, SECTOR_NODES>::new(
+        let priv_inputs = circuit::PrivateInputs::<Fp, U, V, W, SECTOR_NODES>::new(
             comm_c.into(),
             &apex_leafs
                 .iter()
                 .copied()
                 .map(Into::into)
-                .collect::<Vec<F>>(),
+                .collect::<Vec<Fp>>(),
             &challenge_proofs,
         );
 
@@ -139,37 +140,54 @@ where
             priv_inputs,
         };
 
-        let prover = MockProver::run(circ.k(), &circ, pub_inputs_vec).unwrap();
+        let prover = MockProver::run(circ.k(), &circ, pub_inputs_vec.clone())
+            .expect("halo2 MockProver failed");
         assert!(prover.verify().is_ok());
+
+        if gen_halo2_proof {
+            let keypair = Halo2Keypair::<<Fp as Halo2Field>::Affine, _>::create(&circ).unwrap();
+            let proof = create_proof(&keypair, circ, &pub_inputs_vec, &mut rng)
+                .expect("failed to generate halo2 proof");
+            verify_proof(&keypair, &proof, &pub_inputs_vec).expect("failed to verify halo2 proof");
+        }
     }
 }
 
 #[test]
+#[cfg(feature = "isolated-testing")]
 fn test_empty_sector_update_circuit_1kib_halo2() {
-    test_empty_sector_update_circuit::<Fp, U8, U4, U0, SECTOR_SIZE_1_KIB>();
+    // Halo2 keygen, proving, and verifying are slow and consume a lot of memory, thus we only test
+    // those for a small sector size circuit (the halo2 compound proof tests will run the halo2
+    // prover and verifier for larger sector sizes).
+    test_empty_sector_update_circuit::<U8, U4, U0, SECTOR_SIZE_1_KIB>(true);
 }
 
 #[test]
+#[cfg(feature = "isolated-testing")]
 fn test_empty_sector_update_circuit_2kib_halo2() {
-    test_empty_sector_update_circuit::<Fp, U8, U0, U0, SECTOR_SIZE_2_KIB>();
+    test_empty_sector_update_circuit::<U8, U0, U0, SECTOR_SIZE_2_KIB>(false);
 }
 
 #[test]
+#[cfg(feature = "isolated-testing")]
 fn test_empty_sector_update_circuit_4kib_halo2() {
-    test_empty_sector_update_circuit::<Fp, U8, U2, U0, SECTOR_SIZE_4_KIB>();
+    test_empty_sector_update_circuit::<U8, U2, U0, SECTOR_SIZE_4_KIB>(false);
 }
 
 #[test]
+#[cfg(feature = "isolated-testing")]
 fn test_empty_sector_update_circuit_8kib_halo2() {
-    test_empty_sector_update_circuit::<Fp, U8, U4, U0, SECTOR_SIZE_8_KIB>();
+    test_empty_sector_update_circuit::<U8, U4, U0, SECTOR_SIZE_8_KIB>(false);
 }
 
 #[test]
+#[cfg(feature = "isolated-testing")]
 fn test_empty_sector_update_circuit_16kib_halo2() {
-    test_empty_sector_update_circuit::<Fp, U8, U8, U0, SECTOR_SIZE_16_KIB>();
+    test_empty_sector_update_circuit::<U8, U8, U0, SECTOR_SIZE_16_KIB>(false);
 }
 
 #[test]
+#[cfg(feature = "isolated-testing")]
 fn test_empty_sector_update_circuit_32kib_halo2() {
-    test_empty_sector_update_circuit::<Fp, U8, U8, U2, SECTOR_SIZE_32_KIB>();
+    test_empty_sector_update_circuit::<U8, U8, U2, SECTOR_SIZE_32_KIB>(false);
 }

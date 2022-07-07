@@ -1406,7 +1406,16 @@ mod tests {
     use super::*;
 
     use ff::PrimeField;
-    use halo2_proofs::{circuit::SimpleFloorPlanner, dev::MockProver, pasta::Fp, plonk::Circuit};
+    use halo2_proofs::{
+        arithmetic::FieldExt,
+        circuit::SimpleFloorPlanner,
+        dev::MockProver,
+        pasta::{EqAffine, Fp},
+        plonk::{create_proof, keygen_pk, keygen_vk, verify_proof, Circuit, Error, SingleVerifier},
+        poly::commitment::Params,
+        transcript::{Blake2bRead, Blake2bWrite, Challenge255},
+    };
+    use rand::rngs::OsRng;
     use sha2::{Digest, Sha256};
 
     use crate::AdviceIter;
@@ -1729,42 +1738,48 @@ mod tests {
                 {
                     let preimage = [abc.clone()];
 
-                    let digest: Vec<u32> = sha256_chip
+                    let digest: Option<Vec<u32>> = sha256_chip
                         .hash_field_elems(layouter.namespace(|| "hash preimage 1"), &preimage)?
                         .value()
-                        .unwrap()
-                        .to_repr()
-                        .chunks(4)
-                        .map(|bytes| u32::from_be_bytes(bytes.try_into().unwrap()))
-                        .collect();
+                        .map(|field| {
+                            field
+                                .to_repr()
+                                .chunks(4)
+                                .map(|bytes| u32::from_be_bytes(bytes.try_into().unwrap()))
+                                .collect()
+                        });
 
-                    let expected_digest: [u32; 8] = [
-                        0x26426d7c, 0xb06a1264, 0x3ccfe841, 0x07603083, 0xd835c37f, 0x000a12f7,
-                        0x34137a0c, 0x8df77f26,
-                    ];
-
-                    assert_eq!(digest, expected_digest);
+                    if let Some(digest) = digest {
+                        let expected_digest: [u32; 8] = [
+                            0x26426d7c, 0xb06a1264, 0x3ccfe841, 0x07603083, 0xd835c37f, 0x000a12f7,
+                            0x34137a0c, 0x8df77f26,
+                        ];
+                        assert_eq!(digest, expected_digest);
+                    }
                 }
 
                 // One block preimage requiring an additional block of padding.
                 {
                     let preimage = [abc.clone(), abc];
 
-                    let digest: Vec<u32> = sha256_chip
+                    let digest: Option<Vec<u32>> = sha256_chip
                         .hash_field_elems(layouter.namespace(|| "hash preimage 2"), &preimage)?
                         .value()
-                        .unwrap()
-                        .to_repr()
-                        .chunks(4)
-                        .map(|bytes| u32::from_be_bytes(bytes.try_into().unwrap()))
-                        .collect();
+                        .map(|field| {
+                            field
+                                .to_repr()
+                                .chunks(4)
+                                .map(|bytes| u32::from_be_bytes(bytes.try_into().unwrap()))
+                                .collect()
+                        });
 
-                    let expected_digest: [u32; 8] = [
-                        0x76629a59, 0xa5b36f76, 0x6f1ef203, 0x8ce1271b, 0xe300f38f, 0x737a4316,
-                        0x87252d8f, 0x7781af3f,
-                    ];
-
-                    assert_eq!(digest, expected_digest);
+                    if let Some(digest) = digest {
+                        let expected_digest: [u32; 8] = [
+                            0x76629a59, 0xa5b36f76, 0x6f1ef203, 0x8ce1271b, 0xe300f38f, 0x737a4316,
+                            0x87252d8f, 0x7781af3f,
+                        ];
+                        assert_eq!(digest, expected_digest);
+                    }
                 }
 
                 Ok(())
@@ -1772,8 +1787,29 @@ mod tests {
         }
 
         let circ = MyCircuit;
-        let prover = MockProver::<Fp>::run(17, &circ, vec![]).unwrap();
+        let k = 17;
+        let prover = MockProver::<Fp>::run(k, &circ, vec![]).unwrap();
         assert!(prover.verify().is_ok());
+
+        let params = Params::<EqAffine>::new(k);
+        let pk = {
+            let vk = keygen_vk(&params, &circ).expect("failed to create verifying key");
+            keygen_pk(&params, vk, &circ).expect("failed to create proving key")
+        };
+        let vk = pk.get_vk();
+
+        type TranscriptReader<'proof> = Blake2bRead<&'proof [u8], EqAffine, Challenge255<EqAffine>>;
+        type TranscriptWriter = Blake2bWrite<Vec<u8>, EqAffine, Challenge255<EqAffine>>;
+
+        let mut transcript = TranscriptWriter::init(vec![]);
+        create_proof(&params, &pk, &[circ], &[&[]], &mut OsRng, &mut transcript)
+            .expect("failed to create halo2 proof");
+        let proof_bytes: Vec<u8> = transcript.finalize();
+
+        let mut transcript = TranscriptReader::init(&proof_bytes);
+        let verifier_strategy = SingleVerifier::new(&params);
+        verify_proof(&params, vk, verifier_strategy, &[&[]], &mut transcript)
+            .expect("failed to verify halo2 proof");
     }
 
     #[test]

@@ -26,7 +26,6 @@ const CHALLENGE_ROWS: RangeInclusive<usize> = 1..=CHALLENGE_COUNT;
 pub fn generate_challenges<F: FieldExt, const SECTOR_NODES: usize>(
     randomness: F,
     sector_id: u64,
-    k: usize,
 ) -> [u32; CHALLENGE_COUNT] {
     let sector_nodes = SECTOR_NODES as u64;
     let mut hasher = Sha256::new();
@@ -35,8 +34,7 @@ pub fn generate_challenges<F: FieldExt, const SECTOR_NODES: usize>(
 
     let mut challenges = [0u32; CHALLENGE_COUNT];
 
-    for (i, challenge) in challenges.iter_mut().enumerate() {
-        let challenge_index = (k * CHALLENGE_COUNT + i) as u64;
+    for (challenge_index, challenge) in challenges.iter_mut().enumerate() {
         let mut hasher = hasher.clone();
         hasher.update(&challenge_index.to_le_bytes());
         let digest = hasher.finalize();
@@ -74,9 +72,8 @@ where
         let randomness: F = vanilla_pub_inputs.randomness.into();
         let sector_id: u64 = vanilla_pub_inputs.sectors[0].id.into();
         let comm_r: F = vanilla_pub_inputs.sectors[0].comm_r.into();
-        let k = vanilla_pub_inputs.k.unwrap();
 
-        let challenges = generate_challenges::<F, SECTOR_NODES>(randomness, sector_id, k)
+        let challenges = generate_challenges::<F, SECTOR_NODES>(randomness, sector_id)
             .iter()
             .copied()
             .map(Some)

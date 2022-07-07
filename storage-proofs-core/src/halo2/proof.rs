@@ -228,44 +228,191 @@ where
     }
 
     fn prove_partition_with_vanilla(
-        setup_params: &Self::SetupParams,
-        vanilla_pub_inputs: &Self::PublicInputs,
-        vanilla_proof: &Self::Proof,
+        setup_params: &Self::VanillaSetupParams,
+        vanilla_pub_inputs: &Self::VanillaPublicInputs,
+        vanilla_proof: &Self::VanillaPartitionProof,
         keypair: &Halo2Keypair<F::Affine, Self::Circuit>,
     ) -> Result<Halo2Proof<F::Affine, Self::Circuit>, Error>;
 
     fn prove_all_partitions_with_vanilla(
-        setup_params: &Self::SetupParams,
-        vanilla_pub_inputs: &Self::PublicInputs,
-        vanilla_proofs: &[Self::Proof],
+        setup_params: &Self::VanillaSetupParams,
+        vanilla_pub_inputs: &Self::VanillaPublicInputs,
+        vanilla_proofs: &[Self::VanillaPartitionProof],
         keypair: &Halo2Keypair<F::Affine, Self::Circuit>,
     ) -> Result<Vec<Halo2Proof<F::Affine, Self::Circuit>>, Error>;
 
     fn batch_prove_all_partitions_with_vanilla(
-        setup_params: &Self::SetupParams,
-        vanilla_pub_inputs: &Self::PublicInputs,
-        vanilla_proofs: &[Self::Proof],
+        setup_params: &Self::VanillaSetupParams,
+        vanilla_pub_inputs: &Self::VanillaPublicInputs,
+        vanilla_proofs: &[Self::VanillaPartitionProof],
         keypair: &Halo2Keypair<F::Affine, Self::Circuit>,
     ) -> Result<Halo2Proof<F::Affine, Self::Circuit>, Error>;
 
     fn verify_partition(
-        setup_params: &Self::SetupParams,
-        vanilla_pub_inputs: &Self::PublicInputs,
+        setup_params: &Self::VanillaSetupParams,
+        vanilla_pub_inputs: &Self::VanillaPublicInputs,
         circ_proof: &Halo2Proof<F::Affine, Self::Circuit>,
         keypair: &Halo2Keypair<F::Affine, Self::Circuit>,
     ) -> Result<(), Error>;
 
     fn verify_all_partitions(
-        setup_params: &Self::SetupParams,
-        vanilla_pub_inputs: &Self::PublicInputs,
+        setup_params: &Self::VanillaSetupParams,
+        vanilla_pub_inputs: &Self::VanillaPublicInputs,
         circ_proofs: &[Halo2Proof<F::Affine, Self::Circuit>],
         keypair: &Halo2Keypair<F::Affine, Self::Circuit>,
     ) -> Result<(), Error>;
 
     fn batch_verify_all_partitions(
-        setup_params: &Self::SetupParams,
-        vanilla_pub_inputs: &Self::PublicInputs,
+        setup_params: &Self::VanillaSetupParams,
+        vanilla_pub_inputs: &Self::VanillaPublicInputs,
         circ_proofs: &Halo2Proof<F::Affine, Self::Circuit>,
         keypair: &Halo2Keypair<F::Affine, Self::Circuit>,
     ) -> Result<(), Error>;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use halo2_proofs::{
+        circuit::{Layouter, SimpleFloorPlanner},
+        dev::MockProver,
+        plonk::{Advice, Column, ConstraintSystem, Selector},
+        poly::Rotation,
+    };
+    use rand::rngs::OsRng;
+
+    #[derive(Clone)]
+    struct MyConfig {
+        advice: [Column<Advice>; 2],
+        s_add: Selector,
+    }
+
+    #[derive(Clone)]
+    struct MyCircuit {
+        a: Option<Fp>,
+        b: Option<Fp>,
+        c: Option<Fp>,
+    }
+
+    impl Circuit<Fp> for MyCircuit {
+        type Config = MyConfig;
+        type FloorPlanner = SimpleFloorPlanner;
+
+        fn without_witnesses(&self) -> Self {
+            MyCircuit {
+                a: None,
+                b: None,
+                c: None,
+            }
+        }
+
+        fn configure(meta: &mut ConstraintSystem<Fp>) -> Self::Config {
+            let advice = [meta.advice_column(), meta.advice_column()];
+
+            let s_add = meta.selector();
+            meta.create_gate("add", |meta| {
+                let s = meta.query_selector(s_add);
+                let a = meta.query_advice(advice[0], Rotation::cur());
+                let b = meta.query_advice(advice[1], Rotation::cur());
+                let c = meta.query_advice(advice[0], Rotation::next());
+                [s * (a + b - c)]
+            });
+
+            MyConfig {
+                advice,
+                s_add,
+            }
+        }
+
+        fn synthesize(
+            &self,
+            config: Self::Config,
+            mut layouter: impl Layouter<Fp>,
+        ) -> Result<(), Error> {
+            let MyConfig {
+                advice,
+                s_add,
+            } = config;
+
+            layouter.assign_region(
+                || "assign witness",
+                |mut region| {
+                    let mut offset = 0;
+                    s_add.enable(&mut region, offset)?;
+                    region.assign_advice(
+                        || "a",
+                        advice[0],
+                        offset,
+                        || self.a.ok_or(Error::Synthesis),
+                    )?;
+                    region.assign_advice(
+                        || "b",
+                        advice[1],
+                        offset,
+                        || self.b.ok_or(Error::Synthesis),
+                    )?;
+                    offset += 1;
+                    region.assign_advice(
+                        || "c",
+                        advice[0],
+                        offset,
+                        || self.c.ok_or(Error::Synthesis),
+                    )?;
+                    Ok(())
+                },
+            )?;
+
+            Ok(())
+        }
+    }
+
+    impl CircuitRows for MyCircuit {
+        fn k(&self) -> u32 {
+            4
+        }
+    }
+
+    impl MyCircuit {
+        fn blank_circuit() -> Self {
+            MyCircuit {
+                a: None,
+                b: None,
+                c: None,
+            }
+        }
+    }
+
+    #[test]
+    fn test_halo2_prove_verify() {
+        let blank_circuit = MyCircuit::blank_circuit();
+        let keypair = Halo2Keypair::<<Fp as Halo2Field>::Affine, _>::create(&blank_circuit)
+            .expect("failed to create halo2 keypair");
+
+        // Generate and verify a single proof.
+        let circ = MyCircuit {
+            a: Some(Fp::one()),
+            b: Some(Fp::from(2)),
+            c: Some(Fp::from(3)),
+        };
+        let prover = MockProver::run(circ.k(), &circ, vec![]).unwrap();
+        assert!(prover.verify().is_ok());
+        let proof = create_proof(&keypair, circ.clone(), &[], &mut OsRng)
+            .expect("failed to create halo2 proof");
+        verify_proof(&keypair, &proof, &[]).expect("failed to verify halo2 proof");
+
+        // Generate and verify a 2-proof batch proof.
+        let circs = [
+            circ,
+            MyCircuit {
+                a: Some(Fp::from(55)),
+                b: Some(Fp::from(100)),
+                c: Some(Fp::from(155)),
+            },
+        ];
+        let batch_proof = create_batch_proof(&keypair, &circs, &[vec![], vec![]], &mut OsRng)
+            .expect("failed to create halo2 batch proof");
+        verify_batch_proof(&keypair, &batch_proof, &[vec![], vec![]], &mut OsRng)
+            .expect("failed to verify halo2 batch proof");
+    }
 }
