@@ -1,14 +1,19 @@
-use filecoin_hashers::{
-    poseidon::PoseidonHasher, sha256::Sha256Hasher, Hasher, PoseidonArity,
-};
+use ff::{Field, PrimeField};
+use filecoin_hashers::{poseidon::PoseidonHasher, sha256::Sha256Hasher, PoseidonArity};
 use generic_array::typenum::{U0, U2, U4, U8};
-use halo2_proofs::{arithmetic::FieldExt, dev::MockProver, pasta::Fp};
+use halo2_proofs::{dev::MockProver, pasta::Fp};
 use merkletree::store::StoreConfig;
-use rand::{Rng, SeedableRng};
+use rand::{rngs::OsRng, Rng, SeedableRng};
 use rand_xorshift::XorShiftRng;
 use storage_proofs_core::{
-    api_version::ApiVersion, cache_key::CacheKey, halo2::CircuitRows, merkle::DiskTree,
-    proof::ProofScheme, test_helper::setup_replica, util::default_rows_to_discard, TEST_SEED,
+    api_version::ApiVersion,
+    cache_key::CacheKey,
+    halo2::{create_proof, verify_proof, CircuitRows, Halo2Field, Halo2Keypair},
+    merkle::DiskTree,
+    proof::ProofScheme,
+    test_helper::setup_replica,
+    util::default_rows_to_discard,
+    TEST_SEED,
 };
 use storage_proofs_porep::{
     stacked::{
@@ -16,7 +21,7 @@ use storage_proofs_porep::{
         halo2::{
             circuit::{self, SdrPorepCircuit},
             constants::{
-                challenge_count, num_layers, partition_count, DRG_PARENTS, EXP_PARENTS,
+                challenge_count, num_layers, DRG_PARENTS, EXP_PARENTS,
                 SECTOR_NODES_16_KIB, SECTOR_NODES_2_KIB, SECTOR_NODES_32_KIB, SECTOR_NODES_4_KIB,
                 SECTOR_NODES_8_KIB,
             },
@@ -27,31 +32,26 @@ use storage_proofs_porep::{
 };
 use tempfile::tempdir;
 
-type TreeR<F, U, V, W> = DiskTree<PoseidonHasher<F>, U, V, W>;
+type TreeR<U, V, W> = DiskTree<PoseidonHasher<Fp>, U, V, W>;
 
-fn test_sdr_porep_circuit<F, U, V, W, const SECTOR_NODES: usize>()
+fn test_sdr_porep_circuit<U, V, W, const SECTOR_NODES: usize>(gen_halo2_proof: bool)
 where
-    F: FieldExt,
-    U: PoseidonArity<F>,
-    V: PoseidonArity<F>,
-    W: PoseidonArity<F>,
-    Sha256Hasher<F>: Hasher<Field = F>,
-    PoseidonHasher<F>: Hasher<Field = F>,
+    U: PoseidonArity<Fp>,
+    V: PoseidonArity<Fp>,
+    W: PoseidonArity<Fp>,
 {
     let sector_bytes = SECTOR_NODES << 5;
     let num_layers = num_layers::<SECTOR_NODES>();
     let challenge_count = challenge_count::<SECTOR_NODES>();
     let layer_challenges = LayerChallenges::new(num_layers, challenge_count);
-    let partition_count = partition_count::<SECTOR_NODES>();
-    let k = 0;
 
     let mut rng = XorShiftRng::from_seed(TEST_SEED);
 
-    let replica_id = F::random(&mut rng);
+    let replica_id = Fp::random(&mut rng);
 
     let mut data = Vec::<u8>::with_capacity(sector_bytes);
     for _ in 0..SECTOR_NODES {
-        data.extend_from_slice(F::random(&mut rng).to_repr().as_ref());
+        data.extend_from_slice(Fp::random(&mut rng).to_repr().as_ref());
     }
 
     let cache_dir = tempdir().unwrap();
@@ -67,7 +67,7 @@ where
     let replica_path = cache_dir.path().join("replica-path");
     let mut mmapped_data = setup_replica(&data, &replica_path);
 
-    let sp = SetupParams {
+    let vanilla_setup_params = SetupParams {
         nodes: SECTOR_NODES,
         degree: DRG_PARENTS,
         expansion_degree: EXP_PARENTS,
@@ -76,10 +76,11 @@ where
         api_version: ApiVersion::V1_1_0,
     };
 
-    let pp = StackedDrg::<TreeR<F, U, V, W>, Sha256Hasher<F>>::setup(&sp).unwrap();
+    let vanilla_pub_params =
+        StackedDrg::<TreeR<U, V, W>, Sha256Hasher<Fp>>::setup(&vanilla_setup_params).unwrap();
 
-    let (tau, (p_aux, t_aux)) = StackedDrg::<TreeR<F, U, V, W>, Sha256Hasher<F>>::replicate(
-        &pp,
+    let (tau, (p_aux, t_aux)) = StackedDrg::<TreeR<U, V, W>, Sha256Hasher<Fp>>::replicate(
+        &vanilla_pub_params,
         &replica_id.into(),
         (mmapped_data.as_mut()).into(),
         None,
@@ -87,18 +88,6 @@ where
         replica_path.clone(),
     )
     .expect("replication failed");
-
-    let mut copied = vec![0; sector_bytes];
-    copied.copy_from_slice(&mmapped_data);
-    assert_ne!(data, copied, "replication did not change data");
-
-    let seed = rng.gen();
-    let vanilla_pub_inputs = vanilla::PublicInputs {
-        replica_id: replica_id.into(),
-        seed,
-        tau: Some(tau),
-        k: None,
-    };
 
     // Store copy of original t_aux for later resource deletion.
     let t_aux_orig = t_aux.clone();
@@ -108,58 +97,78 @@ where
     let t_aux =
         TemporaryAuxCache::new(&t_aux, replica_path).expect("failed to restore contents of t_aux");
 
-    let priv_inputs = vanilla::PrivateInputs { p_aux, t_aux };
+    let vanilla_pub_inputs = vanilla::PublicInputs {
+        replica_id: replica_id.into(),
+        seed: rng.gen(),
+        tau: Some(tau),
+        k: Some(0),
+    };
 
-    let partition_proofs =
-        StackedDrg::prove_all_partitions(&pp, &vanilla_pub_inputs, &priv_inputs, partition_count)
-            .expect("failed to generate partition proofs");
-    assert_eq!(partition_proofs.len(), partition_count);
+    let vanilla_priv_inputs = vanilla::PrivateInputs { p_aux, t_aux };
 
-    let proofs_are_valid =
-        StackedDrg::verify_all_partitions(&pp, &vanilla_pub_inputs, &partition_proofs)
-            .expect("failed while trying to verify partition proofs");
-    assert!(proofs_are_valid);
+    let vanilla_partition_proof = StackedDrg::prove(
+        &vanilla_pub_params,
+        &vanilla_pub_inputs,
+        &vanilla_priv_inputs,
+    )
+    .expect("failed to generate partition proofs");
 
-    let partition_proof = &partition_proofs[k];
+    let proof_is_valid = StackedDrg::verify_all_partitions(
+        &vanilla_pub_params,
+        &vanilla_pub_inputs,
+        &[vanilla_partition_proof.clone()],
+    )
+    .expect("failed to verify partition proof");
+    assert!(proof_is_valid);
 
     // Discard cached MTs that are no longer needed.
     TemporaryAux::clear_temp(t_aux_orig).expect("t_aux delete failed");
 
-    let pub_inputs = circuit::PublicInputs::from(sp, vanilla_pub_inputs);
-    let pub_inputs_vec = pub_inputs.to_vec();
-
-    let priv_inputs = circuit::PrivateInputs::<F, U, V, W, SECTOR_NODES>::from(partition_proof);
+    let circ_pub_inputs = circuit::PublicInputs::from(vanilla_setup_params, vanilla_pub_inputs);
+    let circ_pub_inputs_vec = circ_pub_inputs.to_vec();
+    let circ_priv_inputs =
+        circuit::PrivateInputs::<Fp, U, V, W, SECTOR_NODES>::from(vanilla_partition_proof);
 
     let circ = SdrPorepCircuit {
-        pub_inputs,
-        priv_inputs,
+        pub_inputs: circ_pub_inputs,
+        priv_inputs: circ_priv_inputs,
     };
 
-    let prover = MockProver::run(circ.k(), &circ, pub_inputs_vec).unwrap();
+    let prover = MockProver::run(circ.k(), &circ, circ_pub_inputs_vec.clone()).unwrap();
     assert!(prover.verify().is_ok());
+
+    if gen_halo2_proof {
+        let keypair = Halo2Keypair::<<Fp as Halo2Field>::Affine, _>::create(&circ).unwrap();
+        let proof = create_proof(&keypair, circ, &circ_pub_inputs_vec, &mut OsRng)
+            .expect("failed to generate halo2 proof");
+        verify_proof(&keypair, &proof, &circ_pub_inputs_vec).expect("failed to verify halo2 proof");
+    }
 }
 
 #[test]
 fn test_sdr_porep_circuit_2kib_halo2() {
-    test_sdr_porep_circuit::<Fp, U8, U0, U0, SECTOR_NODES_2_KIB>();
+    // Halo2 keygen, proving, and verifying are slow and consume a lot of memory, thus we only test
+    // those for a small sector size circuit (the halo2 compound proof tests will run the halo2
+    // prover and verifier for larger sector sizes).
+    test_sdr_porep_circuit::<U8, U0, U0, SECTOR_NODES_2_KIB>(true);
 }
 
 #[test]
 fn test_sdr_porep_circuit_4kib_halo2() {
-    test_sdr_porep_circuit::<Fp, U8, U2, U0, SECTOR_NODES_4_KIB>();
+    test_sdr_porep_circuit::<U8, U2, U0, SECTOR_NODES_4_KIB>(false);
 }
 
 #[test]
 fn test_sdr_porep_circuit_8kib_halo2() {
-    test_sdr_porep_circuit::<Fp, U8, U4, U0, SECTOR_NODES_8_KIB>();
+    test_sdr_porep_circuit::<U8, U4, U0, SECTOR_NODES_8_KIB>(false);
 }
 
 #[test]
 fn test_sdr_porep_circuit_16kib_halo2() {
-    test_sdr_porep_circuit::<Fp, U8, U8, U0, SECTOR_NODES_16_KIB>();
+    test_sdr_porep_circuit::<U8, U8, U0, SECTOR_NODES_16_KIB>(false);
 }
 
 #[test]
 fn test_sdr_porep_circuit_32kib_halo2() {
-    test_sdr_porep_circuit::<Fp, U8, U8, U2, SECTOR_NODES_32_KIB>();
+    test_sdr_porep_circuit::<U8, U8, U2, SECTOR_NODES_32_KIB>(false);
 }

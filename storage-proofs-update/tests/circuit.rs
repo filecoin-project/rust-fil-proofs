@@ -130,38 +130,38 @@ where
     }
 }
 
-#[cfg(feature = "isolated-testing")]
 #[test]
+#[cfg(feature = "isolated-testing")]
 fn test_empty_sector_update_circuit_1kib() {
     test_empty_sector_update_circuit::<U8, U4, U0>(SECTOR_SIZE_1_KIB, 1248389);
 }
 
-#[cfg(feature = "isolated-testing")]
 #[test]
+#[cfg(feature = "isolated-testing")]
 fn test_empty_sector_update_circuit_2kib() {
     test_empty_sector_update_circuit::<U8, U0, U0>(SECTOR_SIZE_2_KIB, 1705039);
 }
 
-#[cfg(feature = "isolated-testing")]
 #[test]
+#[cfg(feature = "isolated-testing")]
 fn test_empty_sector_update_circuit_4kib() {
     test_empty_sector_update_circuit::<U8, U2, U0>(SECTOR_SIZE_4_KIB, 2165109);
 }
 
-#[cfg(feature = "isolated-testing")]
 #[test]
+#[cfg(feature = "isolated-testing")]
 fn test_empty_sector_update_circuit_8kib() {
     test_empty_sector_update_circuit::<U8, U4, U0>(SECTOR_SIZE_8_KIB, 2620359);
 }
 
-#[cfg(feature = "isolated-testing")]
 #[test]
+#[cfg(feature = "isolated-testing")]
 fn test_empty_sector_update_circuit_16kib() {
     test_empty_sector_update_circuit::<U8, U8, U0>(SECTOR_SIZE_16_KIB, 6300021);
 }
 
-#[cfg(feature = "isolated-testing")]
 #[test]
+#[cfg(feature = "isolated-testing")]
 fn test_empty_sector_update_circuit_32kib() {
     test_empty_sector_update_circuit::<U8, U8, U2>(SECTOR_SIZE_32_KIB, 6760091);
 }
