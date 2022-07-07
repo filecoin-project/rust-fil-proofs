@@ -449,6 +449,9 @@ mod test {
         pasta::{Fp, Fq},
         plonk::Circuit,
     };
+    use rand::rngs::OsRng;
+
+    use crate::halo2::{create_proof, verify_proof, CircuitRows, Halo2Field, Halo2Keypair};
 
     #[derive(Clone, Debug)]
     struct MyConfig<F, A>
@@ -553,31 +556,31 @@ mod test {
                 &index_bits,
             )?;
 
-            let index = if self.index_bits.iter().any(|opt| opt.is_none()) {
-                0
-            } else {
-                self.index_bits
+            if self.index_bits.iter().all(Option::is_some) {
+                let insert_pos = self.index_bits
                     .iter()
                     .enumerate()
                     .map(|(i, opt)| (opt.unwrap() as usize) << i)
-                    .reduce(|acc, next| acc + next)
-                    .unwrap()
-            };
-
-            let mut expected = self.uninserted.clone();
-            expected.insert(index, self.value);
-            assert_eq!(
-                inserted
-                    .iter()
-                    .map(|asn| asn.value())
-                    .collect::<Vec<Option<&F>>>(),
-                expected
-                    .iter()
-                    .map(|opt| opt.as_ref())
-                    .collect::<Vec<Option<&F>>>(),
-            );
+                    .sum();
+                let mut expected = self.uninserted.clone();
+                expected.insert(insert_pos, self.value);
+                assert_eq!(
+                    inserted.iter().map(|elem| elem.value()).collect::<Vec<Option<&F>>>(),
+                    expected.iter().map(Option::as_ref).collect::<Vec<Option<&F>>>(),
+                );
+            }
 
             Ok(())
+        }
+    }
+
+    impl<F, A> CircuitRows for MyCircuit<F, A>
+    where
+        F: FieldExt,
+        A: PoseidonArity<F>,
+    {
+        fn k(&self) -> u32 {
+            3
         }
     }
 
@@ -630,5 +633,24 @@ mod test {
         test_insert_chip_inner::<Fq, U2>();
         test_insert_chip_inner::<Fq, U4>();
         test_insert_chip_inner::<Fq, U8>();
+    }
+
+    #[ignore]
+    #[test]
+    fn test_insert_chip_prove_verify() {
+        let len = 4u64;
+        let arr: Vec<Fp> = (0..len - 1).map(Fp::from).collect();
+        let insert_pos = 2;
+        let insert_value = Fp::from(55);
+        let circ = MyCircuit::<Fp, U4>::with_witness(&arr, insert_value, insert_pos);
+
+        let blank_circuit = circ.without_witnesses();
+        let keypair = Halo2Keypair::<<Fp as Halo2Field>::Affine, _>::create(&blank_circuit)
+            .expect("failed to create halo2 keypair");
+
+        let proof =
+            create_proof(&keypair, circ, &[], &mut OsRng).expect("failed to create halo2 proof");
+
+        verify_proof(&keypair, &proof, &[]).expect("failed to verify halo2 proof");
     }
 }
