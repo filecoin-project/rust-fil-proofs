@@ -9,6 +9,7 @@ use storage_proofs_core::{
 };
 
 use crate::stacked::{
+    self as vanilla,
     halo2::{
         circuit::{self, SdrPorepCircuit},
         constants::{
@@ -23,20 +24,25 @@ use crate::stacked::{
 macro_rules! impl_compound_proof {
     ($($sector_nodes:expr),*) => {
         $(
-            impl<F, TreeR> CompoundProof<'_, F, $sector_nodes>
-                for StackedDrg<'static, TreeR, Sha256Hasher<F>>
+            impl<F, TreeR> CompoundProof<F, $sector_nodes> for StackedDrg<'_, TreeR, Sha256Hasher<F>>
             where
                 F: Halo2Field,
-                TreeR: MerkleTreeTrait<Field = F, Hasher = PoseidonHasher<F>>,
+                TreeR: 'static + MerkleTreeTrait<Field = F, Hasher = PoseidonHasher<F>>,
                 Sha256Hasher<F>: Hasher<Field = F>,
                 PoseidonHasher<F>: Hasher<Field = F>,
             {
+                type VanillaSetupParams = vanilla::SetupParams;
+                type VanillaPublicInputs = vanilla::PublicInputs<
+                    <PoseidonHasher<F> as Hasher>::Domain,
+                    <Sha256Hasher<F> as Hasher>::Domain,
+                >;
+                type VanillaPartitionProof = Vec<vanilla::Proof<TreeR, Sha256Hasher<F>>>;
                 type Circuit = SdrPorepCircuit<F, TreeR::Arity, TreeR::SubTreeArity, TreeR::TopTreeArity, $sector_nodes>;
 
                 fn prove_partition_with_vanilla(
-                    setup_params: &Self::SetupParams,
-                    vanilla_pub_inputs: &Self::PublicInputs,
-                    vanilla_partition_proof: &Self::Proof,
+                    setup_params: &Self::VanillaSetupParams,
+                    vanilla_pub_inputs: &Self::VanillaPublicInputs,
+                    vanilla_partition_proof: &Self::VanillaPartitionProof,
                     keypair: &Halo2Keypair<F::Affine, Self::Circuit>,
                 ) -> Result<Halo2Proof<F::Affine, Self::Circuit>, Error> {
                     let pub_inputs =
@@ -57,9 +63,9 @@ macro_rules! impl_compound_proof {
                 }
 
                 fn prove_all_partitions_with_vanilla(
-                    setup_params: &Self::SetupParams,
-                    vanilla_pub_inputs: &Self::PublicInputs,
-                    vanilla_proofs: &[Self::Proof],
+                    setup_params: &Self::VanillaSetupParams,
+                    vanilla_pub_inputs: &Self::VanillaPublicInputs,
+                    vanilla_proofs: &[Self::VanillaPartitionProof],
                     keypair: &Halo2Keypair<F::Affine, Self::Circuit>,
                 ) -> Result<Vec<Halo2Proof<F::Affine, Self::Circuit>>, Error> {
                     let partition_count = partition_count::<$sector_nodes>();
@@ -74,7 +80,6 @@ macro_rules! impl_compound_proof {
                             // The only public input field which should change is `k`.
                             vanilla_pub_inputs.k = Some(k);
                             <Self as CompoundProof<
-                                '_,
                                 F,
                                 $sector_nodes,
                             >>::prove_partition_with_vanilla(
@@ -88,9 +93,9 @@ macro_rules! impl_compound_proof {
                 }
 
                 fn batch_prove_all_partitions_with_vanilla(
-                    setup_params: &Self::SetupParams,
-                    vanilla_pub_inputs: &Self::PublicInputs,
-                    vanilla_proofs: &[Self::Proof],
+                    setup_params: &Self::VanillaSetupParams,
+                    vanilla_pub_inputs: &Self::VanillaPublicInputs,
+                    vanilla_proofs: &[Self::VanillaPartitionProof],
                     keypair: &Halo2Keypair<F::Affine, Self::Circuit>,
                 ) -> Result<Halo2Proof<F::Affine, Self::Circuit>, Error> {
                     let partition_count = partition_count::<$sector_nodes>();
@@ -126,8 +131,8 @@ macro_rules! impl_compound_proof {
                 }
 
                 fn verify_partition(
-                    setup_params: &Self::SetupParams,
-                    vanilla_pub_inputs: &Self::PublicInputs,
+                    setup_params: &Self::VanillaSetupParams,
+                    vanilla_pub_inputs: &Self::VanillaPublicInputs,
                     circ_proof: &Halo2Proof<F::Affine, Self::Circuit>,
                     keypair: &Halo2Keypair<F::Affine, Self::Circuit>,
                 ) -> Result<(), Error> {
@@ -140,8 +145,8 @@ macro_rules! impl_compound_proof {
                 }
 
                 fn verify_all_partitions(
-                    setup_params: &Self::SetupParams,
-                    vanilla_pub_inputs: &Self::PublicInputs,
+                    setup_params: &Self::VanillaSetupParams,
+                    vanilla_pub_inputs: &Self::VanillaPublicInputs,
                     circ_proofs: &[Halo2Proof<F::Affine, Self::Circuit>],
                     keypair: &Halo2Keypair<F::Affine, Self::Circuit>,
                 ) -> Result<(), Error> {
@@ -153,7 +158,7 @@ macro_rules! impl_compound_proof {
                     for (k, partition_proof) in circ_proofs.iter().enumerate() {
                         // The only public input field which should change is `k`.
                         vanilla_pub_inputs.k = Some(k);
-                        <Self as CompoundProof<'_, F, $sector_nodes>>::verify_partition(
+                        <Self as CompoundProof<F, $sector_nodes>>::verify_partition(
                             setup_params,
                             &vanilla_pub_inputs,
                             partition_proof,
@@ -164,8 +169,8 @@ macro_rules! impl_compound_proof {
                 }
 
                 fn batch_verify_all_partitions(
-                    setup_params: &Self::SetupParams,
-                    vanilla_pub_inputs: &Self::PublicInputs,
+                    setup_params: &Self::VanillaSetupParams,
+                    vanilla_pub_inputs: &Self::VanillaPublicInputs,
                     batch_proof: &Halo2Proof<F::Affine, Self::Circuit>,
                     keypair: &Halo2Keypair<F::Affine, Self::Circuit>,
                 ) -> Result<(), Error> {

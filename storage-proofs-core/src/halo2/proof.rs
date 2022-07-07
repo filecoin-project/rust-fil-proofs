@@ -12,8 +12,6 @@ use halo2_proofs::{
 };
 use rand::RngCore;
 
-use crate::proof::ProofScheme;
-
 type Challenge<C> = Challenge255<C>;
 type TranscriptReader<'proof, C> = Blake2bRead<&'proof [u8], C, Challenge<C>>;
 type TranscriptWriter<C> = Blake2bWrite<Vec<u8>, C, Challenge<C>>;
@@ -214,10 +212,10 @@ where
     Ok(())
 }
 
-pub trait CompoundProof<'a, F, const SECTOR_NODES: usize>: ProofScheme<'a>
-where
-    F: Halo2Field,
-{
+pub trait CompoundProof<F: Halo2Field, const SECTOR_NODES: usize> {
+    type VanillaSetupParams;
+    type VanillaPublicInputs;
+    type VanillaPartitionProof;
     type Circuit: Circuit<F> + CircuitRows;
 
     #[inline]
