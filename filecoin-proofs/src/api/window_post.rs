@@ -259,7 +259,7 @@ where
                 Tree::Arity,
                 Tree::SubTreeArity,
                 Tree::TopTreeArity,
-            >> as halo2::CompoundProof<'_, F, SECTOR_NODES_2_KIB>>::create_keypair(&circ)?;
+            >> as halo2::CompoundProof<F, SECTOR_NODES_2_KIB>>::create_keypair(&circ)?;
 
             let circ_partition_proofs = <FallbackPoSt<'_, MerkleTreeWrapper<
                 DefaultTreeHasher<F>,
@@ -267,7 +267,7 @@ where
                 Tree::Arity,
                 Tree::SubTreeArity,
                 Tree::TopTreeArity,
-            >> as halo2::CompoundProof<'_, F, SECTOR_NODES_2_KIB>>::prove_all_partitions_with_vanilla(
+            >> as halo2::CompoundProof<F, SECTOR_NODES_2_KIB>>::prove_all_partitions_with_vanilla(
                 &vanilla_setup_params,
                 &vanilla_pub_inputs,
                 &vanilla_partition_proofs,
@@ -294,7 +294,7 @@ where
                 Tree::Arity,
                 Tree::SubTreeArity,
                 Tree::TopTreeArity,
-            >> as halo2::CompoundProof<'_, F, SECTOR_NODES_4_KIB>>::create_keypair(&circ)?;
+            >> as halo2::CompoundProof<F, SECTOR_NODES_4_KIB>>::create_keypair(&circ)?;
 
             let circ_partition_proofs = <FallbackPoSt<'_, MerkleTreeWrapper<
                 DefaultTreeHasher<F>,
@@ -302,7 +302,7 @@ where
                 Tree::Arity,
                 Tree::SubTreeArity,
                 Tree::TopTreeArity,
-            >> as halo2::CompoundProof<'_, F, SECTOR_NODES_4_KIB>>::prove_all_partitions_with_vanilla(
+            >> as halo2::CompoundProof<F, SECTOR_NODES_4_KIB>>::prove_all_partitions_with_vanilla(
                 &vanilla_setup_params,
                 &vanilla_pub_inputs,
                 &vanilla_partition_proofs,
@@ -329,7 +329,7 @@ where
                 Tree::Arity,
                 Tree::SubTreeArity,
                 Tree::TopTreeArity,
-            >> as halo2::CompoundProof<'_, F, SECTOR_NODES_16_KIB>>::create_keypair(&circ)?;
+            >> as halo2::CompoundProof<F, SECTOR_NODES_16_KIB>>::create_keypair(&circ)?;
 
             let circ_partition_proofs = <FallbackPoSt<'_, MerkleTreeWrapper<
                 DefaultTreeHasher<F>,
@@ -337,7 +337,7 @@ where
                 Tree::Arity,
                 Tree::SubTreeArity,
                 Tree::TopTreeArity,
-            >> as halo2::CompoundProof<'_, F, SECTOR_NODES_16_KIB>>::prove_all_partitions_with_vanilla(
+            >> as halo2::CompoundProof<F, SECTOR_NODES_16_KIB>>::prove_all_partitions_with_vanilla(
                 &vanilla_setup_params,
                 &vanilla_pub_inputs,
                 &vanilla_partition_proofs,
@@ -364,7 +364,7 @@ where
                 Tree::Arity,
                 Tree::SubTreeArity,
                 Tree::TopTreeArity,
-            >> as halo2::CompoundProof<'_, F, SECTOR_NODES_32_KIB>>::create_keypair(&circ)?;
+            >> as halo2::CompoundProof<F, SECTOR_NODES_32_KIB>>::create_keypair(&circ)?;
 
             let circ_partition_proofs = <FallbackPoSt<'_, MerkleTreeWrapper<
                 DefaultTreeHasher<F>,
@@ -372,7 +372,7 @@ where
                 Tree::Arity,
                 Tree::SubTreeArity,
                 Tree::TopTreeArity,
-            >> as halo2::CompoundProof<'_, F, SECTOR_NODES_32_KIB>>::prove_all_partitions_with_vanilla(
+            >> as halo2::CompoundProof<F, SECTOR_NODES_32_KIB>>::prove_all_partitions_with_vanilla(
                 &vanilla_setup_params,
                 &vanilla_pub_inputs,
                 &vanilla_partition_proofs,
@@ -399,7 +399,7 @@ where
                 Tree::Arity,
                 Tree::SubTreeArity,
                 Tree::TopTreeArity,
-            >> as halo2::CompoundProof<'_, F, SECTOR_NODES_8_MIB>>::create_keypair(&circ)?;
+            >> as halo2::CompoundProof<F, SECTOR_NODES_8_MIB>>::create_keypair(&circ)?;
 
             let circ_partition_proofs = <FallbackPoSt<'_, MerkleTreeWrapper<
                 DefaultTreeHasher<F>,
@@ -407,7 +407,7 @@ where
                 Tree::Arity,
                 Tree::SubTreeArity,
                 Tree::TopTreeArity,
-            >> as halo2::CompoundProof<'_, F, SECTOR_NODES_8_MIB>>::prove_all_partitions_with_vanilla(
+            >> as halo2::CompoundProof<F, SECTOR_NODES_8_MIB>>::prove_all_partitions_with_vanilla(
                 &vanilla_setup_params,
                 &vanilla_pub_inputs,
                 &vanilla_partition_proofs,
@@ -434,7 +434,7 @@ where
                 Tree::Arity,
                 Tree::SubTreeArity,
                 Tree::TopTreeArity,
-            >> as halo2::CompoundProof<'_, F, SECTOR_NODES_16_MIB>>::create_keypair(&circ)?;
+            >> as halo2::CompoundProof<F, SECTOR_NODES_16_MIB>>::create_keypair(&circ)?;
 
             let circ_partition_proofs = <FallbackPoSt<'_, MerkleTreeWrapper<
                 DefaultTreeHasher<F>,
@@ -442,7 +442,7 @@ where
                 Tree::Arity,
                 Tree::SubTreeArity,
                 Tree::TopTreeArity,
-            >> as halo2::CompoundProof<'_, F, SECTOR_NODES_16_MIB>>::prove_all_partitions_with_vanilla(
+            >> as halo2::CompoundProof<F, SECTOR_NODES_16_MIB>>::prove_all_partitions_with_vanilla(
                 &vanilla_setup_params,
                 &vanilla_pub_inputs,
                 &vanilla_partition_proofs,
@@ -469,7 +469,7 @@ where
                 Tree::Arity,
                 Tree::SubTreeArity,
                 Tree::TopTreeArity,
-            >> as halo2::CompoundProof<'_, F, SECTOR_NODES_512_MIB>>::create_keypair(&circ)?;
+            >> as halo2::CompoundProof<F, SECTOR_NODES_512_MIB>>::create_keypair(&circ)?;
 
             let circ_partition_proofs = <FallbackPoSt<'_, MerkleTreeWrapper<
                 DefaultTreeHasher<F>,
@@ -477,7 +477,7 @@ where
                 Tree::Arity,
                 Tree::SubTreeArity,
                 Tree::TopTreeArity,
-            >> as halo2::CompoundProof<'_, F, SECTOR_NODES_512_MIB>>::prove_all_partitions_with_vanilla(
+            >> as halo2::CompoundProof<F, SECTOR_NODES_512_MIB>>::prove_all_partitions_with_vanilla(
                 &vanilla_setup_params,
                 &vanilla_pub_inputs,
                 &vanilla_partition_proofs,
@@ -504,7 +504,7 @@ where
                 Tree::Arity,
                 Tree::SubTreeArity,
                 Tree::TopTreeArity,
-            >> as halo2::CompoundProof<'_, F, SECTOR_NODES_1_GIB>>::create_keypair(&circ)?;
+            >> as halo2::CompoundProof<F, SECTOR_NODES_1_GIB>>::create_keypair(&circ)?;
 
             let circ_partition_proofs = <FallbackPoSt<'_, MerkleTreeWrapper<
                 DefaultTreeHasher<F>,
@@ -512,7 +512,7 @@ where
                 Tree::Arity,
                 Tree::SubTreeArity,
                 Tree::TopTreeArity,
-            >> as halo2::CompoundProof<'_, F, SECTOR_NODES_1_GIB>>::prove_all_partitions_with_vanilla(
+            >> as halo2::CompoundProof<F, SECTOR_NODES_1_GIB>>::prove_all_partitions_with_vanilla(
                 &vanilla_setup_params,
                 &vanilla_pub_inputs,
                 &vanilla_partition_proofs,
@@ -539,7 +539,7 @@ where
                 Tree::Arity,
                 Tree::SubTreeArity,
                 Tree::TopTreeArity,
-            >> as halo2::CompoundProof<'_, F, SECTOR_NODES_32_GIB>>::create_keypair(&circ)?;
+            >> as halo2::CompoundProof<F, SECTOR_NODES_32_GIB>>::create_keypair(&circ)?;
 
             let circ_partition_proofs = <FallbackPoSt<'_, MerkleTreeWrapper<
                 DefaultTreeHasher<F>,
@@ -547,7 +547,7 @@ where
                 Tree::Arity,
                 Tree::SubTreeArity,
                 Tree::TopTreeArity,
-            >> as halo2::CompoundProof<'_, F, SECTOR_NODES_32_GIB>>::prove_all_partitions_with_vanilla(
+            >> as halo2::CompoundProof<F, SECTOR_NODES_32_GIB>>::prove_all_partitions_with_vanilla(
                 &vanilla_setup_params,
                 &vanilla_pub_inputs,
                 &vanilla_partition_proofs,
@@ -574,7 +574,7 @@ where
                 Tree::Arity,
                 Tree::SubTreeArity,
                 Tree::TopTreeArity,
-            >> as halo2::CompoundProof<'_, F, SECTOR_NODES_64_GIB>>::create_keypair(&circ)?;
+            >> as halo2::CompoundProof<F, SECTOR_NODES_64_GIB>>::create_keypair(&circ)?;
 
             let circ_partition_proofs = <FallbackPoSt<'_, MerkleTreeWrapper<
                 DefaultTreeHasher<F>,
@@ -582,7 +582,7 @@ where
                 Tree::Arity,
                 Tree::SubTreeArity,
                 Tree::TopTreeArity,
-            >> as halo2::CompoundProof<'_, F, SECTOR_NODES_64_GIB>>::prove_all_partitions_with_vanilla(
+            >> as halo2::CompoundProof<F, SECTOR_NODES_64_GIB>>::prove_all_partitions_with_vanilla(
                 &vanilla_setup_params,
                 &vanilla_pub_inputs,
                 &vanilla_partition_proofs,
@@ -905,7 +905,7 @@ where
                 Tree::Arity,
                 Tree::SubTreeArity,
                 Tree::TopTreeArity,
-            >> as halo2::CompoundProof<'_, F, SECTOR_NODES_2_KIB>>::create_keypair(&circ)?;
+            >> as halo2::CompoundProof<F, SECTOR_NODES_2_KIB>>::create_keypair(&circ)?;
 
             let circ_partition_proofs = <FallbackPoSt<'_, MerkleTreeWrapper<
                 DefaultTreeHasher<F>,
@@ -913,7 +913,7 @@ where
                 Tree::Arity,
                 Tree::SubTreeArity,
                 Tree::TopTreeArity,
-            >> as halo2::CompoundProof<'_, F, SECTOR_NODES_2_KIB>>::prove_all_partitions_with_vanilla(
+            >> as halo2::CompoundProof<F, SECTOR_NODES_2_KIB>>::prove_all_partitions_with_vanilla(
                 &vanilla_setup_params,
                 &vanilla_pub_inputs,
                 &vanilla_partition_proofs,
@@ -940,7 +940,7 @@ where
                 Tree::Arity,
                 Tree::SubTreeArity,
                 Tree::TopTreeArity,
-            >> as halo2::CompoundProof<'_, F, SECTOR_NODES_4_KIB>>::create_keypair(&circ)?;
+            >> as halo2::CompoundProof<F, SECTOR_NODES_4_KIB>>::create_keypair(&circ)?;
 
             let circ_partition_proofs = <FallbackPoSt<'_, MerkleTreeWrapper<
                 DefaultTreeHasher<F>,
@@ -948,7 +948,7 @@ where
                 Tree::Arity,
                 Tree::SubTreeArity,
                 Tree::TopTreeArity,
-            >> as halo2::CompoundProof<'_, F, SECTOR_NODES_4_KIB>>::prove_all_partitions_with_vanilla(
+            >> as halo2::CompoundProof<F, SECTOR_NODES_4_KIB>>::prove_all_partitions_with_vanilla(
                 &vanilla_setup_params,
                 &vanilla_pub_inputs,
                 &vanilla_partition_proofs,
@@ -975,7 +975,7 @@ where
                 Tree::Arity,
                 Tree::SubTreeArity,
                 Tree::TopTreeArity,
-            >> as halo2::CompoundProof<'_, F, SECTOR_NODES_16_KIB>>::create_keypair(&circ)?;
+            >> as halo2::CompoundProof<F, SECTOR_NODES_16_KIB>>::create_keypair(&circ)?;
 
             let circ_partition_proofs = <FallbackPoSt<'_, MerkleTreeWrapper<
                 DefaultTreeHasher<F>,
@@ -983,7 +983,7 @@ where
                 Tree::Arity,
                 Tree::SubTreeArity,
                 Tree::TopTreeArity,
-            >> as halo2::CompoundProof<'_, F, SECTOR_NODES_16_KIB>>::prove_all_partitions_with_vanilla(
+            >> as halo2::CompoundProof<F, SECTOR_NODES_16_KIB>>::prove_all_partitions_with_vanilla(
                 &vanilla_setup_params,
                 &vanilla_pub_inputs,
                 &vanilla_partition_proofs,
@@ -1010,7 +1010,7 @@ where
                 Tree::Arity,
                 Tree::SubTreeArity,
                 Tree::TopTreeArity,
-            >> as halo2::CompoundProof<'_, F, SECTOR_NODES_32_KIB>>::create_keypair(&circ)?;
+            >> as halo2::CompoundProof<F, SECTOR_NODES_32_KIB>>::create_keypair(&circ)?;
 
             let circ_partition_proofs = <FallbackPoSt<'_, MerkleTreeWrapper<
                 DefaultTreeHasher<F>,
@@ -1018,7 +1018,7 @@ where
                 Tree::Arity,
                 Tree::SubTreeArity,
                 Tree::TopTreeArity,
-            >> as halo2::CompoundProof<'_, F, SECTOR_NODES_32_KIB>>::prove_all_partitions_with_vanilla(
+            >> as halo2::CompoundProof<F, SECTOR_NODES_32_KIB>>::prove_all_partitions_with_vanilla(
                 &vanilla_setup_params,
                 &vanilla_pub_inputs,
                 &vanilla_partition_proofs,
@@ -1045,7 +1045,7 @@ where
                 Tree::Arity,
                 Tree::SubTreeArity,
                 Tree::TopTreeArity,
-            >> as halo2::CompoundProof<'_, F, SECTOR_NODES_8_MIB>>::create_keypair(&circ)?;
+            >> as halo2::CompoundProof<F, SECTOR_NODES_8_MIB>>::create_keypair(&circ)?;
 
             let circ_partition_proofs = <FallbackPoSt<'_, MerkleTreeWrapper<
                 DefaultTreeHasher<F>,
@@ -1053,7 +1053,7 @@ where
                 Tree::Arity,
                 Tree::SubTreeArity,
                 Tree::TopTreeArity,
-            >> as halo2::CompoundProof<'_, F, SECTOR_NODES_8_MIB>>::prove_all_partitions_with_vanilla(
+            >> as halo2::CompoundProof<F, SECTOR_NODES_8_MIB>>::prove_all_partitions_with_vanilla(
                 &vanilla_setup_params,
                 &vanilla_pub_inputs,
                 &vanilla_partition_proofs,
@@ -1080,7 +1080,7 @@ where
                 Tree::Arity,
                 Tree::SubTreeArity,
                 Tree::TopTreeArity,
-            >> as halo2::CompoundProof<'_, F, SECTOR_NODES_16_MIB>>::create_keypair(&circ)?;
+            >> as halo2::CompoundProof<F, SECTOR_NODES_16_MIB>>::create_keypair(&circ)?;
 
             let circ_partition_proofs = <FallbackPoSt<'_, MerkleTreeWrapper<
                 DefaultTreeHasher<F>,
@@ -1088,7 +1088,7 @@ where
                 Tree::Arity,
                 Tree::SubTreeArity,
                 Tree::TopTreeArity,
-            >> as halo2::CompoundProof<'_, F, SECTOR_NODES_16_MIB>>::prove_all_partitions_with_vanilla(
+            >> as halo2::CompoundProof<F, SECTOR_NODES_16_MIB>>::prove_all_partitions_with_vanilla(
                 &vanilla_setup_params,
                 &vanilla_pub_inputs,
                 &vanilla_partition_proofs,
@@ -1115,7 +1115,7 @@ where
                 Tree::Arity,
                 Tree::SubTreeArity,
                 Tree::TopTreeArity,
-            >> as halo2::CompoundProof<'_, F, SECTOR_NODES_512_MIB>>::create_keypair(&circ)?;
+            >> as halo2::CompoundProof<F, SECTOR_NODES_512_MIB>>::create_keypair(&circ)?;
 
             let circ_partition_proofs = <FallbackPoSt<'_, MerkleTreeWrapper<
                 DefaultTreeHasher<F>,
@@ -1123,7 +1123,7 @@ where
                 Tree::Arity,
                 Tree::SubTreeArity,
                 Tree::TopTreeArity,
-            >> as halo2::CompoundProof<'_, F, SECTOR_NODES_512_MIB>>::prove_all_partitions_with_vanilla(
+            >> as halo2::CompoundProof<F, SECTOR_NODES_512_MIB>>::prove_all_partitions_with_vanilla(
                 &vanilla_setup_params,
                 &vanilla_pub_inputs,
                 &vanilla_partition_proofs,
@@ -1150,7 +1150,7 @@ where
                 Tree::Arity,
                 Tree::SubTreeArity,
                 Tree::TopTreeArity,
-            >> as halo2::CompoundProof<'_, F, SECTOR_NODES_1_GIB>>::create_keypair(&circ)?;
+            >> as halo2::CompoundProof<F, SECTOR_NODES_1_GIB>>::create_keypair(&circ)?;
 
             let circ_partition_proofs = <FallbackPoSt<'_, MerkleTreeWrapper<
                 DefaultTreeHasher<F>,
@@ -1158,7 +1158,7 @@ where
                 Tree::Arity,
                 Tree::SubTreeArity,
                 Tree::TopTreeArity,
-            >> as halo2::CompoundProof<'_, F, SECTOR_NODES_1_GIB>>::prove_all_partitions_with_vanilla(
+            >> as halo2::CompoundProof<F, SECTOR_NODES_1_GIB>>::prove_all_partitions_with_vanilla(
                 &vanilla_setup_params,
                 &vanilla_pub_inputs,
                 &vanilla_partition_proofs,
@@ -1185,7 +1185,7 @@ where
                 Tree::Arity,
                 Tree::SubTreeArity,
                 Tree::TopTreeArity,
-            >> as halo2::CompoundProof<'_, F, SECTOR_NODES_32_GIB>>::create_keypair(&circ)?;
+            >> as halo2::CompoundProof<F, SECTOR_NODES_32_GIB>>::create_keypair(&circ)?;
 
             let circ_partition_proofs = <FallbackPoSt<'_, MerkleTreeWrapper<
                 DefaultTreeHasher<F>,
@@ -1193,7 +1193,7 @@ where
                 Tree::Arity,
                 Tree::SubTreeArity,
                 Tree::TopTreeArity,
-            >> as halo2::CompoundProof<'_, F, SECTOR_NODES_32_GIB>>::prove_all_partitions_with_vanilla(
+            >> as halo2::CompoundProof<F, SECTOR_NODES_32_GIB>>::prove_all_partitions_with_vanilla(
                 &vanilla_setup_params,
                 &vanilla_pub_inputs,
                 &vanilla_partition_proofs,
@@ -1220,7 +1220,7 @@ where
                 Tree::Arity,
                 Tree::SubTreeArity,
                 Tree::TopTreeArity,
-            >> as halo2::CompoundProof<'_, F, SECTOR_NODES_64_GIB>>::create_keypair(&circ)?;
+            >> as halo2::CompoundProof<F, SECTOR_NODES_64_GIB>>::create_keypair(&circ)?;
 
             let circ_partition_proofs = <FallbackPoSt<'_, MerkleTreeWrapper<
                 DefaultTreeHasher<F>,
@@ -1228,7 +1228,7 @@ where
                 Tree::Arity,
                 Tree::SubTreeArity,
                 Tree::TopTreeArity,
-            >> as halo2::CompoundProof<'_, F, SECTOR_NODES_64_GIB>>::prove_all_partitions_with_vanilla(
+            >> as halo2::CompoundProof<F, SECTOR_NODES_64_GIB>>::prove_all_partitions_with_vanilla(
                 &vanilla_setup_params,
                 &vanilla_pub_inputs,
                 &vanilla_partition_proofs,
@@ -1454,7 +1454,7 @@ where
                 U,
                 V,
                 W,
-            >> as halo2::CompoundProof<'_, F, SECTOR_NODES_2_KIB>>::create_keypair(&circ)?;
+            >> as halo2::CompoundProof<F, SECTOR_NODES_2_KIB>>::create_keypair(&circ)?;
 
             <FallbackPoSt<'_, MerkleTreeWrapper<
                 DefaultTreeHasher<F>,
@@ -1462,7 +1462,7 @@ where
                 U,
                 V,
                 W,
-            >> as halo2::CompoundProof<'_, F, SECTOR_NODES_2_KIB>>::verify_all_partitions(
+            >> as halo2::CompoundProof<F, SECTOR_NODES_2_KIB>>::verify_all_partitions(
                 &vanilla_setup_params,
                 &vanilla_pub_inputs,
                 &circ_partition_proofs,
@@ -1495,7 +1495,7 @@ where
                 U,
                 V,
                 W,
-            >> as halo2::CompoundProof<'_, F, SECTOR_NODES_4_KIB>>::create_keypair(&circ)?;
+            >> as halo2::CompoundProof<F, SECTOR_NODES_4_KIB>>::create_keypair(&circ)?;
 
             <FallbackPoSt<'_, MerkleTreeWrapper<
                 DefaultTreeHasher<F>,
@@ -1503,7 +1503,7 @@ where
                 U,
                 V,
                 W,
-            >> as halo2::CompoundProof<'_, F, SECTOR_NODES_4_KIB>>::verify_all_partitions(
+            >> as halo2::CompoundProof<F, SECTOR_NODES_4_KIB>>::verify_all_partitions(
                 &vanilla_setup_params,
                 &vanilla_pub_inputs,
                 &circ_partition_proofs,
@@ -1536,7 +1536,7 @@ where
                 U,
                 V,
                 W,
-            >> as halo2::CompoundProof<'_, F, SECTOR_NODES_16_KIB>>::create_keypair(&circ)?;
+            >> as halo2::CompoundProof<F, SECTOR_NODES_16_KIB>>::create_keypair(&circ)?;
 
             <FallbackPoSt<'_, MerkleTreeWrapper<
                 DefaultTreeHasher<F>,
@@ -1544,7 +1544,7 @@ where
                 U,
                 V,
                 W,
-            >> as halo2::CompoundProof<'_, F, SECTOR_NODES_16_KIB>>::verify_all_partitions(
+            >> as halo2::CompoundProof<F, SECTOR_NODES_16_KIB>>::verify_all_partitions(
                 &vanilla_setup_params,
                 &vanilla_pub_inputs,
                 &circ_partition_proofs,
@@ -1577,7 +1577,7 @@ where
                 U,
                 V,
                 W,
-            >> as halo2::CompoundProof<'_, F, SECTOR_NODES_32_KIB>>::create_keypair(&circ)?;
+            >> as halo2::CompoundProof<F, SECTOR_NODES_32_KIB>>::create_keypair(&circ)?;
 
             <FallbackPoSt<'_, MerkleTreeWrapper<
                 DefaultTreeHasher<F>,
@@ -1585,7 +1585,7 @@ where
                 U,
                 V,
                 W,
-            >> as halo2::CompoundProof<'_, F, SECTOR_NODES_32_KIB>>::verify_all_partitions(
+            >> as halo2::CompoundProof<F, SECTOR_NODES_32_KIB>>::verify_all_partitions(
                 &vanilla_setup_params,
                 &vanilla_pub_inputs,
                 &circ_partition_proofs,
@@ -1618,7 +1618,7 @@ where
                 U,
                 V,
                 W,
-            >> as halo2::CompoundProof<'_, F, SECTOR_NODES_8_MIB>>::create_keypair(&circ)?;
+            >> as halo2::CompoundProof<F, SECTOR_NODES_8_MIB>>::create_keypair(&circ)?;
 
             <FallbackPoSt<'_, MerkleTreeWrapper<
                 DefaultTreeHasher<F>,
@@ -1626,7 +1626,7 @@ where
                 U,
                 V,
                 W,
-            >> as halo2::CompoundProof<'_, F, SECTOR_NODES_8_MIB>>::verify_all_partitions(
+            >> as halo2::CompoundProof<F, SECTOR_NODES_8_MIB>>::verify_all_partitions(
                 &vanilla_setup_params,
                 &vanilla_pub_inputs,
                 &circ_partition_proofs,
@@ -1659,7 +1659,7 @@ where
                 U,
                 V,
                 W,
-            >> as halo2::CompoundProof<'_, F, SECTOR_NODES_16_MIB>>::create_keypair(&circ)?;
+            >> as halo2::CompoundProof<F, SECTOR_NODES_16_MIB>>::create_keypair(&circ)?;
 
             <FallbackPoSt<'_, MerkleTreeWrapper<
                 DefaultTreeHasher<F>,
@@ -1667,7 +1667,7 @@ where
                 U,
                 V,
                 W,
-            >> as halo2::CompoundProof<'_, F, SECTOR_NODES_16_MIB>>::verify_all_partitions(
+            >> as halo2::CompoundProof<F, SECTOR_NODES_16_MIB>>::verify_all_partitions(
                 &vanilla_setup_params,
                 &vanilla_pub_inputs,
                 &circ_partition_proofs,
@@ -1700,7 +1700,7 @@ where
                 U,
                 V,
                 W,
-            >> as halo2::CompoundProof<'_, F, SECTOR_NODES_512_MIB>>::create_keypair(&circ)?;
+            >> as halo2::CompoundProof<F, SECTOR_NODES_512_MIB>>::create_keypair(&circ)?;
 
             <FallbackPoSt<'_, MerkleTreeWrapper<
                 DefaultTreeHasher<F>,
@@ -1708,7 +1708,7 @@ where
                 U,
                 V,
                 W,
-            >> as halo2::CompoundProof<'_, F, SECTOR_NODES_512_MIB>>::verify_all_partitions(
+            >> as halo2::CompoundProof<F, SECTOR_NODES_512_MIB>>::verify_all_partitions(
                 &vanilla_setup_params,
                 &vanilla_pub_inputs,
                 &circ_partition_proofs,
@@ -1741,7 +1741,7 @@ where
                 U,
                 V,
                 W,
-            >> as halo2::CompoundProof<'_, F, SECTOR_NODES_1_GIB>>::create_keypair(&circ)?;
+            >> as halo2::CompoundProof<F, SECTOR_NODES_1_GIB>>::create_keypair(&circ)?;
 
             <FallbackPoSt<'_, MerkleTreeWrapper<
                 DefaultTreeHasher<F>,
@@ -1749,7 +1749,7 @@ where
                 U,
                 V,
                 W,
-            >> as halo2::CompoundProof<'_, F, SECTOR_NODES_1_GIB>>::verify_all_partitions(
+            >> as halo2::CompoundProof<F, SECTOR_NODES_1_GIB>>::verify_all_partitions(
                 &vanilla_setup_params,
                 &vanilla_pub_inputs,
                 &circ_partition_proofs,
@@ -1782,7 +1782,7 @@ where
                 U,
                 V,
                 W,
-            >> as halo2::CompoundProof<'_, F, SECTOR_NODES_32_GIB>>::create_keypair(&circ)?;
+            >> as halo2::CompoundProof<F, SECTOR_NODES_32_GIB>>::create_keypair(&circ)?;
 
             <FallbackPoSt<'_, MerkleTreeWrapper<
                 DefaultTreeHasher<F>,
@@ -1790,7 +1790,7 @@ where
                 U,
                 V,
                 W,
-            >> as halo2::CompoundProof<'_, F, SECTOR_NODES_32_GIB>>::verify_all_partitions(
+            >> as halo2::CompoundProof<F, SECTOR_NODES_32_GIB>>::verify_all_partitions(
                 &vanilla_setup_params,
                 &vanilla_pub_inputs,
                 &circ_partition_proofs,
@@ -1823,7 +1823,7 @@ where
                 U,
                 V,
                 W,
-            >> as halo2::CompoundProof<'_, F, SECTOR_NODES_64_GIB>>::create_keypair(&circ)?;
+            >> as halo2::CompoundProof<F, SECTOR_NODES_64_GIB>>::create_keypair(&circ)?;
 
             <FallbackPoSt<'_, MerkleTreeWrapper<
                 DefaultTreeHasher<F>,
@@ -1831,7 +1831,7 @@ where
                 U,
                 V,
                 W,
-            >> as halo2::CompoundProof<'_, F, SECTOR_NODES_64_GIB>>::verify_all_partitions(
+            >> as halo2::CompoundProof<F, SECTOR_NODES_64_GIB>>::verify_all_partitions(
                 &vanilla_setup_params,
                 &vanilla_pub_inputs,
                 &circ_partition_proofs,
@@ -2065,7 +2065,7 @@ where
                 Tree::Arity,
                 Tree::SubTreeArity,
                 Tree::TopTreeArity,
-            >> as halo2::CompoundProof<'_, F, SECTOR_NODES_2_KIB>>::create_keypair(&circ)?;
+            >> as halo2::CompoundProof<F, SECTOR_NODES_2_KIB>>::create_keypair(&circ)?;
 
             <FallbackPoSt<'_, MerkleTreeWrapper<
                 DefaultTreeHasher<F>,
@@ -2073,7 +2073,7 @@ where
                 Tree::Arity,
                 Tree::SubTreeArity,
                 Tree::TopTreeArity,
-            >> as halo2::CompoundProof<'_, F, SECTOR_NODES_2_KIB>>::prove_partition_with_vanilla(
+            >> as halo2::CompoundProof<F, SECTOR_NODES_2_KIB>>::prove_partition_with_vanilla(
                 &vanilla_setup_params,
                 &vanilla_pub_inputs,
                 &vanilla_partition_proof,
@@ -2097,7 +2097,7 @@ where
                 Tree::Arity,
                 Tree::SubTreeArity,
                 Tree::TopTreeArity,
-            >> as halo2::CompoundProof<'_, F, SECTOR_NODES_4_KIB>>::create_keypair(&circ)?;
+            >> as halo2::CompoundProof<F, SECTOR_NODES_4_KIB>>::create_keypair(&circ)?;
 
             <FallbackPoSt<'_, MerkleTreeWrapper<
                 DefaultTreeHasher<F>,
@@ -2105,7 +2105,7 @@ where
                 Tree::Arity,
                 Tree::SubTreeArity,
                 Tree::TopTreeArity,
-            >> as halo2::CompoundProof<'_, F, SECTOR_NODES_4_KIB>>::prove_partition_with_vanilla(
+            >> as halo2::CompoundProof<F, SECTOR_NODES_4_KIB>>::prove_partition_with_vanilla(
                 &vanilla_setup_params,
                 &vanilla_pub_inputs,
                 &vanilla_partition_proof,
@@ -2129,7 +2129,7 @@ where
                 Tree::Arity,
                 Tree::SubTreeArity,
                 Tree::TopTreeArity,
-            >> as halo2::CompoundProof<'_, F, SECTOR_NODES_16_KIB>>::create_keypair(&circ)?;
+            >> as halo2::CompoundProof<F, SECTOR_NODES_16_KIB>>::create_keypair(&circ)?;
 
             <FallbackPoSt<'_, MerkleTreeWrapper<
                 DefaultTreeHasher<F>,
@@ -2137,7 +2137,7 @@ where
                 Tree::Arity,
                 Tree::SubTreeArity,
                 Tree::TopTreeArity,
-            >> as halo2::CompoundProof<'_, F, SECTOR_NODES_16_KIB>>::prove_partition_with_vanilla(
+            >> as halo2::CompoundProof<F, SECTOR_NODES_16_KIB>>::prove_partition_with_vanilla(
                 &vanilla_setup_params,
                 &vanilla_pub_inputs,
                 &vanilla_partition_proof,
@@ -2161,7 +2161,7 @@ where
                 Tree::Arity,
                 Tree::SubTreeArity,
                 Tree::TopTreeArity,
-            >> as halo2::CompoundProof<'_, F, SECTOR_NODES_32_KIB>>::create_keypair(&circ)?;
+            >> as halo2::CompoundProof<F, SECTOR_NODES_32_KIB>>::create_keypair(&circ)?;
 
             <FallbackPoSt<'_, MerkleTreeWrapper<
                 DefaultTreeHasher<F>,
@@ -2169,7 +2169,7 @@ where
                 Tree::Arity,
                 Tree::SubTreeArity,
                 Tree::TopTreeArity,
-            >> as halo2::CompoundProof<'_, F, SECTOR_NODES_32_KIB>>::prove_partition_with_vanilla(
+            >> as halo2::CompoundProof<F, SECTOR_NODES_32_KIB>>::prove_partition_with_vanilla(
                 &vanilla_setup_params,
                 &vanilla_pub_inputs,
                 &vanilla_partition_proof,
@@ -2193,7 +2193,7 @@ where
                 Tree::Arity,
                 Tree::SubTreeArity,
                 Tree::TopTreeArity,
-            >> as halo2::CompoundProof<'_, F, SECTOR_NODES_8_MIB>>::create_keypair(&circ)?;
+            >> as halo2::CompoundProof<F, SECTOR_NODES_8_MIB>>::create_keypair(&circ)?;
 
             <FallbackPoSt<'_, MerkleTreeWrapper<
                 DefaultTreeHasher<F>,
@@ -2201,7 +2201,7 @@ where
                 Tree::Arity,
                 Tree::SubTreeArity,
                 Tree::TopTreeArity,
-            >> as halo2::CompoundProof<'_, F, SECTOR_NODES_8_MIB>>::prove_partition_with_vanilla(
+            >> as halo2::CompoundProof<F, SECTOR_NODES_8_MIB>>::prove_partition_with_vanilla(
                 &vanilla_setup_params,
                 &vanilla_pub_inputs,
                 &vanilla_partition_proof,
@@ -2225,7 +2225,7 @@ where
                 Tree::Arity,
                 Tree::SubTreeArity,
                 Tree::TopTreeArity,
-            >> as halo2::CompoundProof<'_, F, SECTOR_NODES_16_MIB>>::create_keypair(&circ)?;
+            >> as halo2::CompoundProof<F, SECTOR_NODES_16_MIB>>::create_keypair(&circ)?;
 
             <FallbackPoSt<'_, MerkleTreeWrapper<
                 DefaultTreeHasher<F>,
@@ -2233,7 +2233,7 @@ where
                 Tree::Arity,
                 Tree::SubTreeArity,
                 Tree::TopTreeArity,
-            >> as halo2::CompoundProof<'_, F, SECTOR_NODES_16_MIB>>::prove_partition_with_vanilla(
+            >> as halo2::CompoundProof<F, SECTOR_NODES_16_MIB>>::prove_partition_with_vanilla(
                 &vanilla_setup_params,
                 &vanilla_pub_inputs,
                 &vanilla_partition_proof,
@@ -2257,7 +2257,7 @@ where
                 Tree::Arity,
                 Tree::SubTreeArity,
                 Tree::TopTreeArity,
-            >> as halo2::CompoundProof<'_, F, SECTOR_NODES_512_MIB>>::create_keypair(&circ)?;
+            >> as halo2::CompoundProof<F, SECTOR_NODES_512_MIB>>::create_keypair(&circ)?;
 
             <FallbackPoSt<'_, MerkleTreeWrapper<
                 DefaultTreeHasher<F>,
@@ -2265,7 +2265,7 @@ where
                 Tree::Arity,
                 Tree::SubTreeArity,
                 Tree::TopTreeArity,
-            >> as halo2::CompoundProof<'_, F, SECTOR_NODES_512_MIB>>::prove_partition_with_vanilla(
+            >> as halo2::CompoundProof<F, SECTOR_NODES_512_MIB>>::prove_partition_with_vanilla(
                 &vanilla_setup_params,
                 &vanilla_pub_inputs,
                 &vanilla_partition_proof,
@@ -2289,7 +2289,7 @@ where
                 Tree::Arity,
                 Tree::SubTreeArity,
                 Tree::TopTreeArity,
-            >> as halo2::CompoundProof<'_, F, SECTOR_NODES_1_GIB>>::create_keypair(&circ)?;
+            >> as halo2::CompoundProof<F, SECTOR_NODES_1_GIB>>::create_keypair(&circ)?;
 
             <FallbackPoSt<'_, MerkleTreeWrapper<
                 DefaultTreeHasher<F>,
@@ -2297,7 +2297,7 @@ where
                 Tree::Arity,
                 Tree::SubTreeArity,
                 Tree::TopTreeArity,
-            >> as halo2::CompoundProof<'_, F, SECTOR_NODES_1_GIB>>::prove_partition_with_vanilla(
+            >> as halo2::CompoundProof<F, SECTOR_NODES_1_GIB>>::prove_partition_with_vanilla(
                 &vanilla_setup_params,
                 &vanilla_pub_inputs,
                 &vanilla_partition_proof,
@@ -2321,7 +2321,7 @@ where
                 Tree::Arity,
                 Tree::SubTreeArity,
                 Tree::TopTreeArity,
-            >> as halo2::CompoundProof<'_, F, SECTOR_NODES_32_GIB>>::create_keypair(&circ)?;
+            >> as halo2::CompoundProof<F, SECTOR_NODES_32_GIB>>::create_keypair(&circ)?;
 
             <FallbackPoSt<'_, MerkleTreeWrapper<
                 DefaultTreeHasher<F>,
@@ -2329,7 +2329,7 @@ where
                 Tree::Arity,
                 Tree::SubTreeArity,
                 Tree::TopTreeArity,
-            >> as halo2::CompoundProof<'_, F, SECTOR_NODES_32_GIB>>::prove_partition_with_vanilla(
+            >> as halo2::CompoundProof<F, SECTOR_NODES_32_GIB>>::prove_partition_with_vanilla(
                 &vanilla_setup_params,
                 &vanilla_pub_inputs,
                 &vanilla_partition_proof,
@@ -2353,7 +2353,7 @@ where
                 Tree::Arity,
                 Tree::SubTreeArity,
                 Tree::TopTreeArity,
-            >> as halo2::CompoundProof<'_, F, SECTOR_NODES_64_GIB>>::create_keypair(&circ)?;
+            >> as halo2::CompoundProof<F, SECTOR_NODES_64_GIB>>::create_keypair(&circ)?;
 
             <FallbackPoSt<'_, MerkleTreeWrapper<
                 DefaultTreeHasher<F>,
@@ -2361,7 +2361,7 @@ where
                 Tree::Arity,
                 Tree::SubTreeArity,
                 Tree::TopTreeArity,
-            >> as halo2::CompoundProof<'_, F, SECTOR_NODES_64_GIB>>::prove_partition_with_vanilla(
+            >> as halo2::CompoundProof<F, SECTOR_NODES_64_GIB>>::prove_partition_with_vanilla(
                 &vanilla_setup_params,
                 &vanilla_pub_inputs,
                 &vanilla_partition_proof,
