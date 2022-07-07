@@ -52,12 +52,8 @@ mod tests {
                 AllocatedNum::alloc(&mut cs, || Ok(b)).expect("alloc failed")
             };
 
-            let out = PoseidonHasher::<Fr>::hash2_circuit(
-                cs.namespace(|| "hash2"),
-                &a_num,
-                &b_num,
-            )
-            .expect("hash2 function failed");
+            let out = PoseidonHasher::<Fr>::hash2_circuit(cs.namespace(|| "hash2"), &a_num, &b_num)
+                .expect("hash2 function failed");
 
             assert!(cs.is_satisfied(), "constraints not satisfied");
             assert_eq!(cs.num_constraints(), 311);

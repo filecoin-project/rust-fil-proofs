@@ -138,8 +138,14 @@ where
     pub tree_r: (
         <PoseidonHasher<F> as Halo2Hasher<U>>::Config,
         InsertConfig<F, U>,
-        Option<(<PoseidonHasher<F> as Halo2Hasher<V>>::Config, InsertConfig<F, V>)>,
-        Option<(<PoseidonHasher<F> as Halo2Hasher<W>>::Config, InsertConfig<F, W>)>,
+        Option<(
+            <PoseidonHasher<F> as Halo2Hasher<V>>::Config,
+            InsertConfig<F, V>,
+        )>,
+        Option<(
+            <PoseidonHasher<F> as Halo2Hasher<W>>::Config,
+            InsertConfig<F, W>,
+        )>,
     ),
     // Equality enabled columns.
     pub advice: [Column<Advice>; 2],

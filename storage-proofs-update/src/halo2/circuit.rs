@@ -30,10 +30,9 @@ use storage_proofs_core::{
 use crate::{
     constants::{
         apex_leaf_count, challenge_count, partition_count, validate_tree_r_shape, TreeDArity,
-        TreeDHasher, TreeRHasher, SECTOR_SIZE_16_KIB, SECTOR_SIZE_16_MIB,
-        SECTOR_SIZE_1_KIB, SECTOR_SIZE_2_KIB, SECTOR_SIZE_32_GIB, SECTOR_SIZE_32_KIB,
-        SECTOR_SIZE_4_KIB, SECTOR_SIZE_512_MIB, SECTOR_SIZE_64_GIB, SECTOR_SIZE_8_KIB,
-        SECTOR_SIZE_8_MIB,
+        TreeDHasher, TreeRHasher, SECTOR_SIZE_16_KIB, SECTOR_SIZE_16_MIB, SECTOR_SIZE_1_KIB,
+        SECTOR_SIZE_2_KIB, SECTOR_SIZE_32_GIB, SECTOR_SIZE_32_KIB, SECTOR_SIZE_4_KIB,
+        SECTOR_SIZE_512_MIB, SECTOR_SIZE_64_GIB, SECTOR_SIZE_8_KIB, SECTOR_SIZE_8_MIB,
     },
     gen_partition_challenges, gen_partition_rhos,
     halo2::gadgets::{

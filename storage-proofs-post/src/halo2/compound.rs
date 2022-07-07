@@ -3,8 +3,8 @@ use halo2_proofs::plonk::Error;
 use rand::rngs::OsRng;
 use storage_proofs_core::{
     halo2::{
-        create_batch_proof, create_proof, verify_batch_proof, verify_proof, CompoundProof, Halo2Field, Halo2Keypair,
-        Halo2Proof,
+        create_batch_proof, create_proof, verify_batch_proof, verify_proof, CompoundProof,
+        Halo2Field, Halo2Keypair, Halo2Proof,
     },
     merkle::MerkleTreeTrait,
 };

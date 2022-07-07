@@ -25,12 +25,7 @@ pub trait MerkleProofTrait: Clone + Serialize + DeserializeOwned + Debug + Sync 
     ) -> Result<Self>;
 
     #[allow(clippy::type_complexity)]
-    fn as_options(
-        &self,
-    ) -> Vec<(
-        Vec<Option<<Self::Hasher as Hasher>::Field>>,
-        Option<usize>,
-    )> {
+    fn as_options(&self) -> Vec<(Vec<Option<<Self::Hasher as Hasher>::Field>>, Option<usize>)> {
         self.path()
             .iter()
             .map(|v| {
@@ -47,10 +42,7 @@ pub trait MerkleProofTrait: Clone + Serialize + DeserializeOwned + Debug + Sync 
         self,
     ) -> (
         Option<<Self::Hasher as Hasher>::Field>,
-        Vec<(
-            Vec<Option<<Self::Hasher as Hasher>::Field>>,
-            Option<usize>,
-        )>,
+        Vec<(Vec<Option<<Self::Hasher as Hasher>::Field>>, Option<usize>)>,
     ) {
         let leaf = self.leaf();
         let path = self.path();
@@ -66,12 +58,7 @@ pub trait MerkleProofTrait: Clone + Serialize + DeserializeOwned + Debug + Sync 
                 .collect::<Vec<_>>(),
         )
     }
-    fn as_pairs(
-        &self,
-    ) -> Vec<(
-        Vec<<Self::Hasher as Hasher>::Field>,
-        usize,
-    )> {
+    fn as_pairs(&self) -> Vec<(Vec<<Self::Hasher as Hasher>::Field>, usize)> {
         self.path()
             .iter()
             .map(|v| (v.0.iter().copied().map(Into::into).collect(), v.1))

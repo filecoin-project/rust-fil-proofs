@@ -23,15 +23,15 @@ use filecoin_proofs::{
     seal_pre_commit_phase2, unseal_range, validate_cache_for_commit,
     validate_cache_for_precommit_phase2, verify_aggregate_seal_commit_proofs,
     verify_empty_sector_update_proof, verify_partition_proofs, verify_seal,
-    verify_single_partition_proof, verify_window_post, verify_winning_post, CircuitPublicInputs, Commitment,
-    DefaultPieceHasher, DefaultTreeDomain, DefaultTreeHasher, MerkleTreeTrait,
-    PaddedBytesAmount, PieceInfo, PoseidonArityAllFields, PoRepConfig,
-    PoRepProofPartitions, PoStConfig, PoStType, PrivateReplicaInfo, ProverId, PublicReplicaInfo,
-    SealCommitOutput, SealPreCommitOutput, SealPreCommitPhase1Output, SectorShape16KiB,
-    SectorShape2KiB, SectorShape32KiB, SectorShape4KiB, SectorSize, SectorUpdateConfig,
-    UnpaddedByteIndex, UnpaddedBytesAmount, POREP_PARTITIONS, SECTOR_SIZE_16_KIB,
-    SECTOR_SIZE_2_KIB, SECTOR_SIZE_32_KIB, SECTOR_SIZE_4_KIB, WINDOW_POST_CHALLENGE_COUNT,
-    WINDOW_POST_SECTOR_COUNT, WINNING_POST_CHALLENGE_COUNT, WINNING_POST_SECTOR_COUNT,
+    verify_single_partition_proof, verify_window_post, verify_winning_post, CircuitPublicInputs,
+    Commitment, DefaultPieceHasher, DefaultTreeDomain, DefaultTreeHasher, MerkleTreeTrait,
+    PaddedBytesAmount, PieceInfo, PoRepConfig, PoRepProofPartitions, PoStConfig, PoStType,
+    PoseidonArityAllFields, PrivateReplicaInfo, ProverId, PublicReplicaInfo, SealCommitOutput,
+    SealPreCommitOutput, SealPreCommitPhase1Output, SectorShape16KiB, SectorShape2KiB,
+    SectorShape32KiB, SectorShape4KiB, SectorSize, SectorUpdateConfig, UnpaddedByteIndex,
+    UnpaddedBytesAmount, POREP_PARTITIONS, SECTOR_SIZE_16_KIB, SECTOR_SIZE_2_KIB,
+    SECTOR_SIZE_32_KIB, SECTOR_SIZE_4_KIB, WINDOW_POST_CHALLENGE_COUNT, WINDOW_POST_SECTOR_COUNT,
+    WINNING_POST_CHALLENGE_COUNT, WINNING_POST_SECTOR_COUNT,
 };
 use log::info;
 use memmap::MmapOptions;
@@ -304,8 +304,7 @@ where
     DefaultTreeHasher<Tree::Field>: Hasher<Field = Tree::Field>,
 {
     let mut rng = XorShiftRng::from_seed(TEST_SEED);
-    let prover_fr =
-        DefaultTreeDomain::<Tree::Field>::random(&mut rng);
+    let prover_fr = DefaultTreeDomain::<Tree::Field>::random(&mut rng);
     let mut prover_id = [0u8; 32];
     prover_id.copy_from_slice(AsRef::<[u8]>::as_ref(&prover_fr));
 
@@ -337,16 +336,11 @@ where
     DefaultTreeHasher<F>: Hasher<Field = F>,
 {
     let mut rng = &mut XorShiftRng::from_seed(TEST_SEED);
-    let prover_fr =
-        DefaultTreeDomain::<Tree::Field>::random(&mut rng);
+    let prover_fr = DefaultTreeDomain::<Tree::Field>::random(&mut rng);
     let mut prover_id = [0u8; 32];
     prover_id.copy_from_slice(AsRef::<[u8]>::as_ref(&prover_fr));
 
-    let (_, replica, _, _) = create_seal_for_upgrade::<
-        _,
-        Tree,
-        Tree::Field,
-    >(
+    let (_, replica, _, _) = create_seal_for_upgrade::<_, Tree, Tree::Field>(
         &mut rng,
         sector_size,
         prover_id,
@@ -688,8 +682,7 @@ fn run_resumable_seal<Tree>(
 
     let sector_size = SECTOR_SIZE_2_KIB;
     let mut rng = XorShiftRng::from_seed(TEST_SEED);
-    let prover_fr =
-        DefaultTreeDomain::<Tree::Field>::random(&mut rng);
+    let prover_fr = DefaultTreeDomain::<Tree::Field>::random(&mut rng);
     let mut prover_id = [0u8; 32];
     prover_id.copy_from_slice(AsRef::<[u8]>::as_ref(&prover_fr));
 
