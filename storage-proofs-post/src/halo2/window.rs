@@ -43,9 +43,10 @@ const fn challenge_row(sector_index: usize, challenge_index: usize) -> usize {
 #[allow(clippy::unwrap_used)]
 pub fn generate_challenges<F: FieldExt, const SECTOR_NODES: usize>(
     randomness: F,
+    k: usize,
+    // Sector's index in partition `k`.
     sector_index: usize,
     sector_id: u64,
-    k: usize,
 ) -> [u32; SECTOR_CHALLENGES] {
     let sector_nodes = SECTOR_NODES as u64;
     let mut hasher = Sha256::new();
@@ -120,9 +121,9 @@ where
 
         for (sector_index, sector) in partition_sectors.iter().enumerate() {
             let sector_id: u64 = sector.id.into();
-            let comm_r: F = vanilla_pub_inputs.sectors[0].comm_r.into();
+            let comm_r: F = sector.comm_r.into();
             let challenges =
-                generate_challenges::<F, SECTOR_NODES>(randomness, sector_index, sector_id, k)
+                generate_challenges::<F, SECTOR_NODES>(randomness, k, sector_index, sector_id)
                     .iter()
                     .copied()
                     .map(Some)
