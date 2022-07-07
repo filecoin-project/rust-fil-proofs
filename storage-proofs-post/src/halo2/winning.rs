@@ -245,7 +245,9 @@ where
             SECTOR_NODES_4_KIB => 13,
             SECTOR_NODES_16_KIB => 13,
             SECTOR_NODES_32_KIB => 14,
-            // TODO (jake): add more sector sizes
+            SECTOR_NODES_512_MIB => 14,
+            SECTOR_NODES_32_GIB => 15,
+            SECTOR_NODES_64_GIB => 15,
             _ => unimplemented!(),
         }
     }

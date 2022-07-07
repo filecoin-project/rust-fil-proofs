@@ -997,10 +997,9 @@ where
             SECTOR_SIZE_32_KIB => 20,
             SECTOR_SIZE_8_MIB => 20,
             SECTOR_SIZE_16_MIB => 20,
-            // TODO (jake): add reminaing sector sizes
-            SECTOR_SIZE_512_MIB => unimplemented!(),
-            SECTOR_SIZE_32_GIB => unimplemented!(),
-            SECTOR_SIZE_64_GIB => unimplemented!(),
+            SECTOR_SIZE_512_MIB => 23,
+            SECTOR_SIZE_32_GIB => 23,
+            SECTOR_SIZE_64_GIB => 23,
             _ => unreachable!(),
         }
     }

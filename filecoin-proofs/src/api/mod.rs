@@ -44,10 +44,15 @@ use crate::{
 
 mod fake_seal;
 mod post_util;
+#[allow(clippy::type_complexity)]
+#[allow(clippy::too_many_arguments)]
 mod seal;
+#[allow(clippy::too_many_arguments)]
 mod update;
 mod util;
+#[allow(clippy::type_complexity)]
 mod window_post;
+#[allow(clippy::type_complexity)]
 mod winning_post;
 
 pub use fake_seal::*;
@@ -313,10 +318,7 @@ where
     let config = StoreConfig::new(
         cache_path.as_ref(),
         CacheKey::CommDTree.to_string(),
-        default_rows_to_discard(
-            base_tree_leafs,
-            BinaryTreeArity::to_usize(),
-        ),
+        default_rows_to_discard(base_tree_leafs, BinaryTreeArity::to_usize()),
     );
     let pp = public_params::<Tree>(
         PaddedBytesAmount::from(porep_config),
@@ -641,11 +643,7 @@ where
                 LevelCacheStore::<
                     DefaultPieceDomain<Tree::Field>,
                     File,
-                >::is_consistent(
-                    store_len,
-                    Tree::Arity::to_usize(),
-                    config,
-                )?,
+                >::is_consistent(store_len, Tree::Arity::to_usize(), config,)?,
                 "Store is inconsistent: {:?}",
                 &data_path
             );

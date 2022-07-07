@@ -16,21 +16,29 @@ use storage_proofs_core::{
 };
 use storage_proofs_post::{
     fallback::{
-        self, generate_sector_challenges, FallbackPoSt, FallbackPoStCompound, PrivateSector, PublicSector,
+        self, generate_sector_challenges, FallbackPoSt, FallbackPoStCompound, PrivateSector,
+        PublicSector,
     },
     halo2::{
-        constants::{SECTOR_NODES_2_KIB, SECTOR_NODES_4_KIB, SECTOR_NODES_16_KIB,
-        SECTOR_NODES_32_KIB, SECTOR_NODES_8_MIB, SECTOR_NODES_16_MIB, SECTOR_NODES_512_MIB,
-        SECTOR_NODES_1_GIB, SECTOR_NODES_32_GIB, SECTOR_NODES_64_GIB},
+        constants::{
+            SECTOR_NODES_16_KIB, SECTOR_NODES_16_MIB, SECTOR_NODES_1_GIB, SECTOR_NODES_2_KIB,
+            SECTOR_NODES_32_GIB, SECTOR_NODES_32_KIB, SECTOR_NODES_4_KIB, SECTOR_NODES_512_MIB,
+            SECTOR_NODES_64_GIB, SECTOR_NODES_8_MIB,
+        },
         PostCircuit, WinningPostCircuit,
     },
 };
 
 use crate::{
-    api::{as_safe_commitment, get_proof_system, partition_vanilla_proofs, MockStore,
-    PoseidonArityAllFields, ProofSystem},
+    api::{
+        as_safe_commitment, get_proof_system, partition_vanilla_proofs, MockStore,
+        PoseidonArityAllFields, ProofSystem,
+    },
     caches::{get_post_params, get_post_verifying_key},
-    constants::{DefaultTreeDomain, DefaultTreeHasher, WINNING_POST_CHALLENGE_COUNT, WINNING_POST_SECTOR_COUNT},
+    constants::{
+        DefaultTreeDomain, DefaultTreeHasher, WINNING_POST_CHALLENGE_COUNT,
+        WINNING_POST_SECTOR_COUNT,
+    },
     parameters::winning_post_setup_params,
     types::{
         ChallengeSeed, Commitment, FallbackPoStSectorProof, PersistentAux, PoStConfig,
@@ -69,8 +77,10 @@ where
     ensure!(vanilla_proofs.len() == partition_count);
     ensure!(vanilla_proofs[0].vanilla_proof.sectors.len() == WINNING_POST_SECTOR_COUNT);
     ensure!(
-        vanilla_proofs[0].vanilla_proof.sectors[0].inclusion_proofs.len() ==
-        WINNING_POST_CHALLENGE_COUNT,
+        vanilla_proofs[0].vanilla_proof.sectors[0]
+            .inclusion_proofs
+            .len()
+            == WINNING_POST_CHALLENGE_COUNT,
     );
 
     ensure!(
@@ -128,8 +138,21 @@ where
         priority: post_config.priority,
     };
 
-    let compound_pub_params: compound_proof::PublicParams<'_, FallbackPoSt<
+    let compound_pub_params: compound_proof::PublicParams<
         '_,
+        FallbackPoSt<
+            '_,
+            MerkleTreeWrapper<
+                DefaultTreeHasher<Fr>,
+                MockStore,
+                Tree::Arity,
+                Tree::SubTreeArity,
+                Tree::TopTreeArity,
+            >,
+        >,
+    > = FallbackPoStCompound::setup(&compound_setup_params)?;
+
+    let groth_params = get_post_params::<
         MerkleTreeWrapper<
             DefaultTreeHasher<Fr>,
             MockStore,
@@ -137,23 +160,19 @@ where
             Tree::SubTreeArity,
             Tree::TopTreeArity,
         >,
-    >> = FallbackPoStCompound::setup(&compound_setup_params)?;
+    >(post_config)?;
 
-    let groth_params = get_post_params::<MerkleTreeWrapper<
-        DefaultTreeHasher<Fr>,
-        MockStore,
-        Tree::Arity,
-        Tree::SubTreeArity,
-        Tree::TopTreeArity,
-    >>(post_config)?;
-
-    let vanilla_proofs: Vec<FallbackPoStSectorProof<MerkleTreeWrapper<
-        DefaultTreeHasher<Fr>,
-        MockStore,
-        Tree::Arity,
-        Tree::SubTreeArity,
-        Tree::TopTreeArity,
-    >>> = unsafe { std::mem::transmute(vanilla_proofs) };
+    let vanilla_proofs: Vec<
+        FallbackPoStSectorProof<
+            MerkleTreeWrapper<
+                DefaultTreeHasher<Fr>,
+                MockStore,
+                Tree::Arity,
+                Tree::SubTreeArity,
+                Tree::TopTreeArity,
+            >,
+        >,
+    > = unsafe { std::mem::transmute(vanilla_proofs) };
 
     let mut pub_sectors = Vec::with_capacity(vanilla_proofs.len());
     for vanilla_proof in &vanilla_proofs {
@@ -213,21 +232,27 @@ where
 
     let vanilla_setup_params = winning_post_setup_params(post_config)?;
 
-    let vanilla_pub_params = FallbackPoSt::<MerkleTreeWrapper<
-        DefaultTreeHasher<F>,
-        MockStore,
-        Tree::Arity,
-        Tree::SubTreeArity,
-        Tree::TopTreeArity,
-    >>::setup(&vanilla_setup_params)?;
+    let vanilla_pub_params = FallbackPoSt::<
+        MerkleTreeWrapper<
+            DefaultTreeHasher<F>,
+            MockStore,
+            Tree::Arity,
+            Tree::SubTreeArity,
+            Tree::TopTreeArity,
+        >,
+    >::setup(&vanilla_setup_params)?;
 
-    let vanilla_proofs: Vec<FallbackPoStSectorProof<MerkleTreeWrapper<
-        DefaultTreeHasher<F>,
-        MockStore,
-        Tree::Arity,
-        Tree::SubTreeArity,
-        Tree::TopTreeArity,
-    >>> = unsafe { std::mem::transmute(vanilla_proofs) };
+    let vanilla_proofs: Vec<
+        FallbackPoStSectorProof<
+            MerkleTreeWrapper<
+                DefaultTreeHasher<F>,
+                MockStore,
+                Tree::Arity,
+                Tree::SubTreeArity,
+                Tree::TopTreeArity,
+            >,
+        >,
+    > = unsafe { std::mem::transmute(vanilla_proofs) };
 
     let mut pub_sectors = Vec::with_capacity(vanilla_proofs.len());
     for vanilla_proof in &vanilla_proofs {
@@ -257,7 +282,7 @@ where
     // TODO (jake): is this correct?
     assert_eq!(vanilla_partition_proofs.len(), partition_count);
 
-    let sector_nodes = u64::from(vanilla_setup_params.sector_size) as usize >> 5;
+    let sector_nodes = vanilla_setup_params.sector_size as usize >> 5;
 
     match sector_nodes {
         SECTOR_NODES_2_KIB => {
@@ -293,7 +318,7 @@ where
             // TODO (jake): is this correct?
             assert_eq!(circ_partition_proofs.len(), partition_count);
             Ok(circ_partition_proofs[0].as_bytes().to_vec())
-        },
+        }
         SECTOR_NODES_4_KIB => {
             let circ = PostCircuit::from(WinningPostCircuit::<
                 F,
@@ -327,7 +352,7 @@ where
             // TODO (jake): is this correct?
             assert_eq!(circ_partition_proofs.len(), partition_count);
             Ok(circ_partition_proofs[0].as_bytes().to_vec())
-        },
+        }
         SECTOR_NODES_16_KIB => {
             let circ = PostCircuit::from(WinningPostCircuit::<
                 F,
@@ -361,7 +386,7 @@ where
             // TODO (jake): is this correct?
             assert_eq!(circ_partition_proofs.len(), partition_count);
             Ok(circ_partition_proofs[0].as_bytes().to_vec())
-        },
+        }
         SECTOR_NODES_32_KIB => {
             let circ = PostCircuit::from(WinningPostCircuit::<
                 F,
@@ -395,7 +420,7 @@ where
             // TODO (jake): is this correct?
             assert_eq!(circ_partition_proofs.len(), partition_count);
             Ok(circ_partition_proofs[0].as_bytes().to_vec())
-        },
+        }
         SECTOR_NODES_8_MIB => {
             let circ = PostCircuit::from(WinningPostCircuit::<
                 F,
@@ -429,7 +454,7 @@ where
             // TODO (jake): is this correct?
             assert_eq!(circ_partition_proofs.len(), partition_count);
             Ok(circ_partition_proofs[0].as_bytes().to_vec())
-        },
+        }
         SECTOR_NODES_16_MIB => {
             let circ = PostCircuit::from(WinningPostCircuit::<
                 F,
@@ -463,7 +488,7 @@ where
             // TODO (jake): is this correct?
             assert_eq!(circ_partition_proofs.len(), partition_count);
             Ok(circ_partition_proofs[0].as_bytes().to_vec())
-        },
+        }
         SECTOR_NODES_512_MIB => {
             let circ = PostCircuit::from(WinningPostCircuit::<
                 F,
@@ -497,7 +522,7 @@ where
             // TODO (jake): is this correct?
             assert_eq!(circ_partition_proofs.len(), partition_count);
             Ok(circ_partition_proofs[0].as_bytes().to_vec())
-        },
+        }
         SECTOR_NODES_1_GIB => {
             let circ = PostCircuit::from(WinningPostCircuit::<
                 F,
@@ -531,7 +556,7 @@ where
             // TODO (jake): is this correct?
             assert_eq!(circ_partition_proofs.len(), partition_count);
             Ok(circ_partition_proofs[0].as_bytes().to_vec())
-        },
+        }
         SECTOR_NODES_32_GIB => {
             let circ = PostCircuit::from(WinningPostCircuit::<
                 F,
@@ -565,7 +590,7 @@ where
             // TODO (jake): is this correct?
             assert_eq!(circ_partition_proofs.len(), partition_count);
             Ok(circ_partition_proofs[0].as_bytes().to_vec())
-        },
+        }
         SECTOR_NODES_64_GIB => {
             let circ = PostCircuit::from(WinningPostCircuit::<
                 F,
@@ -599,7 +624,7 @@ where
             // TODO (jake): is this correct?
             assert_eq!(circ_partition_proofs.len(), partition_count);
             Ok(circ_partition_proofs[0].as_bytes().to_vec())
-        },
+        }
         _ => unreachable!(),
     }
 }
@@ -700,13 +725,15 @@ where
 
     let compound_pub_params = FallbackPoStCompound::setup(&compound_setup_params)?;
 
-    let groth_params = get_post_params::<MerkleTreeWrapper<
-        DefaultTreeHasher<Fr>,
-        MockStore,
-        Tree::Arity,
-        Tree::SubTreeArity,
-        Tree::TopTreeArity,
-    >>(post_config)?;
+    let groth_params = get_post_params::<
+        MerkleTreeWrapper<
+            DefaultTreeHasher<Fr>,
+            MockStore,
+            Tree::Arity,
+            Tree::SubTreeArity,
+            Tree::TopTreeArity,
+        >,
+    >(post_config)?;
 
     // Transmute `replicas`' `Tree` type.
     let mut replicas_transmuted = Vec::with_capacity(param_sector_count);
@@ -721,13 +748,15 @@ where
                 .downcast_ref::<DefaultTreeDomain<Fr>>()
                 .unwrap();
 
-            let replica = PrivateReplicaInfo::<MerkleTreeWrapper<
-                DefaultTreeHasher<Fr>,
-                MockStore,
-                Tree::Arity,
-                Tree::SubTreeArity,
-                Tree::TopTreeArity,
-            >> {
+            let replica = PrivateReplicaInfo::<
+                MerkleTreeWrapper<
+                    DefaultTreeHasher<Fr>,
+                    MockStore,
+                    Tree::Arity,
+                    Tree::SubTreeArity,
+                    Tree::TopTreeArity,
+                >,
+            > {
                 replica: replica.replica.clone(),
                 comm_r: replica.comm_r,
                 aux: PersistentAux {
@@ -761,13 +790,15 @@ where
                 id: *sector_id,
                 comm_r,
             });
-            priv_sectors.push(PrivateSector::<MerkleTreeWrapper<
-                DefaultTreeHasher<Fr>,
-                MockStore,
-                Tree::Arity,
-                Tree::SubTreeArity,
-                Tree::TopTreeArity,
-            >> {
+            priv_sectors.push(PrivateSector::<
+                MerkleTreeWrapper<
+                    DefaultTreeHasher<Fr>,
+                    MockStore,
+                    Tree::Arity,
+                    Tree::SubTreeArity,
+                    Tree::TopTreeArity,
+                >,
+            > {
                 tree,
                 comm_c,
                 comm_r_last,
@@ -786,8 +817,13 @@ where
         sectors: &priv_sectors,
     };
 
-    FallbackPoStCompound::prove(&compound_pub_params, &pub_inputs, &priv_inputs, &groth_params)?
-        .to_vec()
+    FallbackPoStCompound::prove(
+        &compound_pub_params,
+        &pub_inputs,
+        &priv_inputs,
+        &groth_params,
+    )?
+    .to_vec()
 }
 
 fn halo2_generate_winning_post_without_vanilla<Tree, F>(
@@ -812,13 +848,15 @@ where
     let vanilla_setup_params = winning_post_setup_params(post_config)?;
     let param_sector_count = vanilla_setup_params.sector_count;
 
-    let vanilla_pub_params = FallbackPoSt::<MerkleTreeWrapper<
-        DefaultTreeHasher<F>,
-        MockStore,
-        Tree::Arity,
-        Tree::SubTreeArity,
-        Tree::TopTreeArity,
-    >>::setup(&vanilla_setup_params)?;
+    let vanilla_pub_params = FallbackPoSt::<
+        MerkleTreeWrapper<
+            DefaultTreeHasher<F>,
+            MockStore,
+            Tree::Arity,
+            Tree::SubTreeArity,
+            Tree::TopTreeArity,
+        >,
+    >::setup(&vanilla_setup_params)?;
 
     // Store the replicas after changing their `Tree` to `MerkleTreeWrapper` and field to `F`.
     let mut replicas_transmuted = Vec::with_capacity(param_sector_count);
@@ -833,13 +871,15 @@ where
                 .downcast_ref::<DefaultTreeDomain<F>>()
                 .unwrap();
 
-            let replica = PrivateReplicaInfo::<MerkleTreeWrapper<
-                DefaultTreeHasher<F>,
-                MockStore,
-                Tree::Arity,
-                Tree::SubTreeArity,
-                Tree::TopTreeArity,
-            >> {
+            let replica = PrivateReplicaInfo::<
+                MerkleTreeWrapper<
+                    DefaultTreeHasher<F>,
+                    MockStore,
+                    Tree::Arity,
+                    Tree::SubTreeArity,
+                    Tree::TopTreeArity,
+                >,
+            > {
                 replica: replica.replica.clone(),
                 comm_r: replica.comm_r,
                 aux: PersistentAux {
@@ -875,13 +915,15 @@ where
                 id: *sector_id,
                 comm_r,
             });
-            priv_sectors.push(PrivateSector::<MerkleTreeWrapper<
-                DefaultTreeHasher<F>,
-                MockStore,
-                Tree::Arity,
-                Tree::SubTreeArity,
-                Tree::TopTreeArity,
-            >> {
+            priv_sectors.push(PrivateSector::<
+                MerkleTreeWrapper<
+                    DefaultTreeHasher<F>,
+                    MockStore,
+                    Tree::Arity,
+                    Tree::SubTreeArity,
+                    Tree::TopTreeArity,
+                >,
+            > {
                 tree,
                 comm_c,
                 comm_r_last,
@@ -910,13 +952,18 @@ where
     )?;
     // TODO (jake): is this correct?
     assert_eq!(vanilla_partition_proofs.len(), partition_count);
-    assert_eq!(vanilla_partition_proofs[0].sectors.len(), WINNING_POST_SECTOR_COUNT);
     assert_eq!(
-        vanilla_partition_proofs[0].sectors[0].inclusion_proofs.len(),
+        vanilla_partition_proofs[0].sectors.len(),
+        WINNING_POST_SECTOR_COUNT
+    );
+    assert_eq!(
+        vanilla_partition_proofs[0].sectors[0]
+            .inclusion_proofs
+            .len(),
         WINNING_POST_CHALLENGE_COUNT,
     );
 
-    let sector_nodes = u64::from(vanilla_setup_params.sector_size) as usize >> 5;
+    let sector_nodes = vanilla_setup_params.sector_size as usize >> 5;
 
     match sector_nodes {
         SECTOR_NODES_2_KIB => {
@@ -952,7 +999,7 @@ where
             // TODO (jake): is this correct?
             assert_eq!(circ_partition_proofs.len(), partition_count);
             Ok(circ_partition_proofs[0].as_bytes().to_vec())
-        },
+        }
         SECTOR_NODES_4_KIB => {
             let circ = PostCircuit::from(WinningPostCircuit::<
                 F,
@@ -986,7 +1033,7 @@ where
             // TODO (jake): is this correct?
             assert_eq!(circ_partition_proofs.len(), partition_count);
             Ok(circ_partition_proofs[0].as_bytes().to_vec())
-        },
+        }
         SECTOR_NODES_16_KIB => {
             let circ = PostCircuit::from(WinningPostCircuit::<
                 F,
@@ -1020,7 +1067,7 @@ where
             // TODO (jake): is this correct?
             assert_eq!(circ_partition_proofs.len(), partition_count);
             Ok(circ_partition_proofs[0].as_bytes().to_vec())
-        },
+        }
         SECTOR_NODES_32_KIB => {
             let circ = PostCircuit::from(WinningPostCircuit::<
                 F,
@@ -1054,7 +1101,7 @@ where
             // TODO (jake): is this correct?
             assert_eq!(circ_partition_proofs.len(), partition_count);
             Ok(circ_partition_proofs[0].as_bytes().to_vec())
-        },
+        }
         SECTOR_NODES_8_MIB => {
             let circ = PostCircuit::from(WinningPostCircuit::<
                 F,
@@ -1088,7 +1135,7 @@ where
             // TODO (jake): is this correct?
             assert_eq!(circ_partition_proofs.len(), partition_count);
             Ok(circ_partition_proofs[0].as_bytes().to_vec())
-        },
+        }
         SECTOR_NODES_16_MIB => {
             let circ = PostCircuit::from(WinningPostCircuit::<
                 F,
@@ -1122,7 +1169,7 @@ where
             // TODO (jake): is this correct?
             assert_eq!(circ_partition_proofs.len(), partition_count);
             Ok(circ_partition_proofs[0].as_bytes().to_vec())
-        },
+        }
         SECTOR_NODES_512_MIB => {
             let circ = PostCircuit::from(WinningPostCircuit::<
                 F,
@@ -1156,7 +1203,7 @@ where
             // TODO (jake): is this correct?
             assert_eq!(circ_partition_proofs.len(), partition_count);
             Ok(circ_partition_proofs[0].as_bytes().to_vec())
-        },
+        }
         SECTOR_NODES_1_GIB => {
             let circ = PostCircuit::from(WinningPostCircuit::<
                 F,
@@ -1190,7 +1237,7 @@ where
             // TODO (jake): is this correct?
             assert_eq!(circ_partition_proofs.len(), partition_count);
             Ok(circ_partition_proofs[0].as_bytes().to_vec())
-        },
+        }
         SECTOR_NODES_32_GIB => {
             let circ = PostCircuit::from(WinningPostCircuit::<
                 F,
@@ -1224,7 +1271,7 @@ where
             // TODO (jake): is this correct?
             assert_eq!(circ_partition_proofs.len(), partition_count);
             Ok(circ_partition_proofs[0].as_bytes().to_vec())
-        },
+        }
         SECTOR_NODES_64_GIB => {
             let circ = PostCircuit::from(WinningPostCircuit::<
                 F,
@@ -1258,7 +1305,7 @@ where
             // TODO (jake): is this correct?
             assert_eq!(circ_partition_proofs.len(), partition_count);
             Ok(circ_partition_proofs[0].as_bytes().to_vec())
-        },
+        }
         _ => unreachable!(),
     }
 }
@@ -1375,23 +1422,24 @@ where
 {
     let vanilla_setup_params = winning_post_setup_params(post_config)?;
 
-    let randomness_safe: DefaultTreeDomain<Fr> =
-        as_safe_commitment(randomness, "randomness")?;
-    let prover_id_safe: DefaultTreeDomain<Fr> =
-        as_safe_commitment(&prover_id, "prover_id")?;
+    let randomness_safe: DefaultTreeDomain<Fr> = as_safe_commitment(randomness, "randomness")?;
+    let prover_id_safe: DefaultTreeDomain<Fr> = as_safe_commitment(&prover_id, "prover_id")?;
 
     let param_sector_count = vanilla_setup_params.sector_count;
 
-    let compound_setup_params = compound_proof::SetupParams::<'_, FallbackPoSt<
+    let compound_setup_params = compound_proof::SetupParams::<
         '_,
-        MerkleTreeWrapper<
-            DefaultTreeHasher<Fr>,
-            MockStore,
-            Tree::Arity,
-            Tree::SubTreeArity,
-            Tree::TopTreeArity,
+        FallbackPoSt<
+            '_,
+            MerkleTreeWrapper<
+                DefaultTreeHasher<Fr>,
+                MockStore,
+                Tree::Arity,
+                Tree::SubTreeArity,
+                Tree::TopTreeArity,
+            >,
         >,
-    >> {
+    > {
         vanilla_params: vanilla_setup_params,
         partitions: None,
         priority: false,
@@ -1419,13 +1467,15 @@ where
         k: None,
     };
 
-    let verifying_key = get_post_verifying_key::<MerkleTreeWrapper<
-        DefaultTreeHasher<Fr>,
-        MockStore,
-        Tree::Arity,
-        Tree::SubTreeArity,
-        Tree::TopTreeArity,
-    >>(post_config)?;
+    let verifying_key = get_post_verifying_key::<
+        MerkleTreeWrapper<
+            DefaultTreeHasher<Fr>,
+            MockStore,
+            Tree::Arity,
+            Tree::SubTreeArity,
+            Tree::TopTreeArity,
+        >,
+    >(post_config)?;
 
     let single_proof = MultiProof::new_from_reader(None, proof_bytes, &verifying_key)?;
     if single_proof.len() != 1 {
@@ -1458,13 +1508,11 @@ where
 {
     let vanilla_setup_params = winning_post_setup_params(post_config)?;
 
-    let sector_nodes = u64::from(vanilla_setup_params.sector_size) as usize >> 5;
+    let sector_nodes = vanilla_setup_params.sector_size as usize >> 5;
     let param_sector_count = vanilla_setup_params.sector_count;
 
-    let randomness_safe: DefaultTreeDomain<F> =
-        as_safe_commitment(randomness, "randomness")?;
-    let prover_id_safe: DefaultTreeDomain<F> =
-        as_safe_commitment(&prover_id, "prover_id")?;
+    let randomness_safe: DefaultTreeDomain<F> = as_safe_commitment(randomness, "randomness")?;
+    let prover_id_safe: DefaultTreeDomain<F> = as_safe_commitment(&prover_id, "prover_id")?;
 
     let mut pub_sectors = Vec::with_capacity(param_sector_count);
     for _ in 0..param_sector_count {

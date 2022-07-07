@@ -407,10 +407,6 @@ where
     PoseidonHasher<F>: Hasher<Field = F>,
 {
     fn is_winning(&self) -> bool {
-        if let PostCircuit::Winning(_) = self {
-            true
-        } else {
-            false
-        }
+        matches!(self, PostCircuit::Winning(_))
     }
 }

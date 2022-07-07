@@ -3,6 +3,7 @@
 use filecoin_hashers::{Domain, HashFunction, Hasher, PoseidonArity};
 use generic_array::typenum::{U0, U2, U4, U8};
 use halo2_proofs::{dev::MockProver, pasta::Fp};
+use log::{info, trace};
 use rand::SeedableRng;
 use rand_xorshift::XorShiftRng;
 use storage_proofs_core::{
@@ -28,12 +29,23 @@ use common::{
     H_SELECT,
 };
 
+static INIT_LOGGER: Once = Once::new();
+fn init_logger() {
+    INIT_LOGGER.call_once(|| {
+        fil_logger::init();
+    });
+}
+
 fn test_empty_sector_update_circuit<U, V, W, const SECTOR_NODES: usize>(gen_halo2_proof: bool)
 where
     U: PoseidonArity<Fp>,
     V: PoseidonArity<Fp>,
     W: PoseidonArity<Fp>,
 {
+    info!(
+        "test_empty_sector_update_circuit [SectorNodes={}]",
+        SECTOR_NODES
+    );
     validate_tree_r_shape::<U, V, W>(SECTOR_NODES);
 
     let hs = hs(SECTOR_NODES);
@@ -46,6 +58,7 @@ where
     let tmp_path = tmp_dir.path();
 
     // Create random TreeROld.
+    info!("Creating random TreeROld");
     let labels_r_old: Vec<TreeRDomain<Fp>> = (0..SECTOR_NODES)
         .map(|_| TreeRDomain::<Fp>::random(&mut rng))
         .collect();
@@ -55,6 +68,7 @@ where
     let comm_r_old = <TreeRHasher<Fp> as Hasher>::Function::hash2(&comm_c, &root_r_old);
 
     // Create random TreeDNew.
+    info!("Creating random TreeDNew");
     let labels_d_new: Vec<TreeDDomain<Fp>> = (0..SECTOR_NODES)
         .map(|_| TreeDDomain::<Fp>::random(&mut rng))
         .collect();
@@ -65,8 +79,13 @@ where
     let phi = phi(&comm_d_new, &comm_r_old);
 
     // Encode `labels_d_new` into `labels_r_new` and create TreeRNew.
+    info!("Encoding new replica");
     let labels_r_new = encode_new_replica(&labels_r_old, &labels_d_new, &phi, h);
+    trace!("Encoding new replica complete");
+    info!("Creating TreeRNew");
     let tree_r_new: TreeR<Fp, U, V, W> = create_tree_r_new(&labels_r_new, tmp_path);
+    trace!("Creating TreeRNew complete");
+
     let root_r_new = tree_r_new.root();
     let comm_r_new = <TreeRHasher<Fp> as Hasher>::Function::hash2(&comm_c, &root_r_new);
 
@@ -77,12 +96,17 @@ where
 
     for k in 0..pub_params.partition_count {
         // Generate vanilla-proof.
+        info!("Proving partition {}/{}", k, pub_params.partition_count);
+
+        trace!("Getting apex leaves");
         let apex_leafs = get_apex_leafs(&tree_d_new, k);
 
+        trace!("Getting challenges");
         let challenges: Vec<u32> = Challenges::<Fp>::new(SECTOR_NODES, comm_r_new, k)
             .take(pub_params.challenge_count)
             .collect();
 
+        trace!("Precomputing rhos");
         let rhos: Vec<Fp> = challenges
             .iter()
             .map(|c| {
@@ -91,6 +115,7 @@ where
             })
             .collect();
 
+        trace!("Generating challenge proofs");
         let challenge_proofs: Vec<vanilla::ChallengeProof<Fp, U, V, W>> = challenges
             .iter()
             .enumerate()
@@ -112,8 +137,10 @@ where
                 }
             })
             .collect();
+        trace!("Generating challenge proofs complete");
 
         // Create circuit.
+        trace!("Creating circuit");
         let pub_inputs = circuit::PublicInputs::<Fp, SECTOR_NODES>::new(
             k,
             comm_r_old.into(),
@@ -125,6 +152,7 @@ where
 
         let pub_inputs_vec = pub_inputs.to_vec();
 
+        trace!("Forming private inputs");
         let priv_inputs = circuit::PrivateInputs::<Fp, U, V, W, SECTOR_NODES>::new(
             comm_c.into(),
             &apex_leafs
@@ -144,6 +172,14 @@ where
             .expect("halo2 MockProver failed");
         assert!(prover.verify().is_ok());
 
+        info!("Sector Update Circuit Prover starting [Partition {}]", k);
+        let prover = MockProver::run(circ.k(), &circ, pub_inputs_vec.clone()).unwrap();
+        trace!("Sector Update Circuit Prover complete [Partition {}]", k);
+
+        info!("Sector Update Circuit Verify starting [Partition {}]", k);
+        assert!(prover.verify().is_ok());
+        trace!("Sector Update Circuit Verify complete [Partition {}]", k);
+
         if gen_halo2_proof {
             let keypair = Halo2Keypair::<<Fp as Halo2Field>::Affine, _>::create(&circ).unwrap();
             let proof = create_proof(&keypair, circ, &pub_inputs_vec, &mut rng)
@@ -159,35 +195,62 @@ fn test_empty_sector_update_circuit_1kib_halo2() {
     // Halo2 keygen, proving, and verifying are slow and consume a lot of memory, thus we only test
     // those for a small sector size circuit (the halo2 compound proof tests will run the halo2
     // prover and verifier for larger sector sizes).
+    init_logger();
     test_empty_sector_update_circuit::<U8, U4, U0, SECTOR_SIZE_1_KIB>(true);
 }
 
 #[test]
 #[cfg(feature = "isolated-testing")]
 fn test_empty_sector_update_circuit_2kib_halo2() {
+    init_logger();
     test_empty_sector_update_circuit::<U8, U0, U0, SECTOR_SIZE_2_KIB>(false);
 }
 
 #[test]
 #[cfg(feature = "isolated-testing")]
 fn test_empty_sector_update_circuit_4kib_halo2() {
+    init_logger();
     test_empty_sector_update_circuit::<U8, U2, U0, SECTOR_SIZE_4_KIB>(false);
 }
 
 #[test]
 #[cfg(feature = "isolated-testing")]
 fn test_empty_sector_update_circuit_8kib_halo2() {
+    init_logger();
     test_empty_sector_update_circuit::<U8, U4, U0, SECTOR_SIZE_8_KIB>(false);
 }
 
 #[test]
 #[cfg(feature = "isolated-testing")]
 fn test_empty_sector_update_circuit_16kib_halo2() {
+    init_logger();
     test_empty_sector_update_circuit::<U8, U8, U0, SECTOR_SIZE_16_KIB>(false);
 }
 
 #[test]
 #[cfg(feature = "isolated-testing")]
 fn test_empty_sector_update_circuit_32kib_halo2() {
+    init_logger();
     test_empty_sector_update_circuit::<U8, U8, U2, SECTOR_SIZE_32_KIB>(false);
+}
+
+#[cfg(feature = "big-tests")]
+#[test]
+fn test_empty_sector_update_circuit_512mib_halo2() {
+    init_logger();
+    test_empty_sector_update_circuit::<U8, U0, U0, SECTOR_SIZE_512_MIB>();
+}
+
+#[cfg(feature = "big-tests")]
+#[test]
+fn test_empty_sector_update_circuit_32gib_halo2() {
+    init_logger();
+    test_empty_sector_update_circuit::<U8, U8, U0, SECTOR_SIZE_32_GIB>();
+}
+
+#[cfg(feature = "big-tests")]
+#[test]
+fn test_empty_sector_update_circuit_64gib_halo2() {
+    init_logger();
+    test_empty_sector_update_circuit::<U8, U8, U2, SECTOR_SIZE_64_GIB>();
 }

@@ -2,9 +2,11 @@ use ff::{Field, PrimeField};
 use filecoin_hashers::{poseidon::PoseidonHasher, sha256::Sha256Hasher, PoseidonArity};
 use generic_array::typenum::{U0, U2, U4, U8};
 use halo2_proofs::{dev::MockProver, pasta::Fp};
+use log::{info, trace};
 use merkletree::store::StoreConfig;
 use rand::{rngs::OsRng, Rng, SeedableRng};
 use rand_xorshift::XorShiftRng;
+use std::sync::Once;
 use storage_proofs_core::{
     api_version::ApiVersion,
     cache_key::CacheKey,
@@ -21,9 +23,9 @@ use storage_proofs_porep::{
         halo2::{
             circuit::{self, SdrPorepCircuit},
             constants::{
-                challenge_count, num_layers, DRG_PARENTS, EXP_PARENTS,
-                SECTOR_NODES_16_KIB, SECTOR_NODES_2_KIB, SECTOR_NODES_32_KIB, SECTOR_NODES_4_KIB,
-                SECTOR_NODES_8_KIB,
+                challenge_count, num_layers, partition_count, DRG_PARENTS, EXP_PARENTS,
+                SECTOR_NODES_16_KIB, SECTOR_NODES_2_KIB, SECTOR_NODES_32_GIB, SECTOR_NODES_32_KIB,
+                SECTOR_NODES_4_KIB, SECTOR_NODES_512_MIB, SECTOR_NODES_64_GIB, SECTOR_NODES_8_KIB,
             },
         },
         LayerChallenges, SetupParams, StackedDrg, TemporaryAux, TemporaryAuxCache, BINARY_ARITY,
@@ -34,12 +36,23 @@ use tempfile::tempdir;
 
 type TreeR<U, V, W> = DiskTree<PoseidonHasher<Fp>, U, V, W>;
 
+static INIT_LOGGER: Once = Once::new();
+fn init_logger() {
+    INIT_LOGGER.call_once(|| {
+        fil_logger::init();
+    });
+}
+
 fn test_sdr_porep_circuit<U, V, W, const SECTOR_NODES: usize>(gen_halo2_proof: bool)
 where
     U: PoseidonArity<Fp>,
     V: PoseidonArity<Fp>,
     W: PoseidonArity<Fp>,
 {
+    info!(
+        "test_sdr_porep_circuit started [SectorNodes {}]",
+        SECTOR_NODES
+    );
     let sector_bytes = SECTOR_NODES << 5;
     let num_layers = num_layers::<SECTOR_NODES>();
     let challenge_count = challenge_count::<SECTOR_NODES>();
@@ -49,6 +62,7 @@ where
 
     let replica_id = Fp::random(&mut rng);
 
+    info!("Generating random data");
     let mut data = Vec::<u8>::with_capacity(sector_bytes);
     for _ in 0..SECTOR_NODES {
         data.extend_from_slice(Fp::random(&mut rng).to_repr().as_ref());
@@ -64,6 +78,7 @@ where
     );
 
     // Create replica.
+    info!("Creating replica");
     let replica_path = cache_dir.path().join("replica-path");
     let mut mmapped_data = setup_replica(&data, &replica_path);
 
@@ -88,6 +103,7 @@ where
         replica_path.clone(),
     )
     .expect("replication failed");
+    info!("Replicate complete");
 
     // Store copy of original t_aux for later resource deletion.
     let t_aux_orig = t_aux.clone();
@@ -106,13 +122,16 @@ where
 
     let vanilla_priv_inputs = vanilla::PrivateInputs { p_aux, t_aux };
 
+    info!("Proving vanilla partition");
     let vanilla_partition_proof = StackedDrg::prove(
         &vanilla_pub_params,
         &vanilla_pub_inputs,
         &vanilla_priv_inputs,
     )
     .expect("failed to generate partition proofs");
+    trace!("Proving vanilla partition complete");
 
+    info!("Verifying all partitions");
     let proof_is_valid = StackedDrg::verify_all_partitions(
         &vanilla_pub_params,
         &vanilla_pub_inputs,
@@ -120,6 +139,7 @@ where
     )
     .expect("failed to verify partition proof");
     assert!(proof_is_valid);
+    trace!("Verifying all partitions complete");
 
     // Discard cached MTs that are no longer needed.
     TemporaryAux::clear_temp(t_aux_orig).expect("t_aux delete failed");
@@ -134,8 +154,13 @@ where
         priv_inputs: circ_priv_inputs,
     };
 
-    let prover = MockProver::run(circ.k(), &circ, circ_pub_inputs_vec.clone()).unwrap();
+    info!("Prover starting");
+    let prover = MockProver::run(circ.k(), &circ, pub_inputs_vec).unwrap();
+    trace!("Prover complete");
+
+    info!("Verify starting");
     assert!(prover.verify().is_ok());
+    trace!("Verify complete");
 
     if gen_halo2_proof {
         let keypair = Halo2Keypair::<<Fp as Halo2Field>::Affine, _>::create(&circ).unwrap();
@@ -150,25 +175,51 @@ fn test_sdr_porep_circuit_2kib_halo2() {
     // Halo2 keygen, proving, and verifying are slow and consume a lot of memory, thus we only test
     // those for a small sector size circuit (the halo2 compound proof tests will run the halo2
     // prover and verifier for larger sector sizes).
+    init_logger();
     test_sdr_porep_circuit::<U8, U0, U0, SECTOR_NODES_2_KIB>(true);
 }
 
 #[test]
 fn test_sdr_porep_circuit_4kib_halo2() {
+    init_logger();
     test_sdr_porep_circuit::<U8, U2, U0, SECTOR_NODES_4_KIB>(false);
 }
 
 #[test]
 fn test_sdr_porep_circuit_8kib_halo2() {
+    init_logger();
     test_sdr_porep_circuit::<U8, U4, U0, SECTOR_NODES_8_KIB>(false);
 }
 
 #[test]
 fn test_sdr_porep_circuit_16kib_halo2() {
+    init_logger();
     test_sdr_porep_circuit::<U8, U8, U0, SECTOR_NODES_16_KIB>(false);
 }
 
 #[test]
 fn test_sdr_porep_circuit_32kib_halo2() {
+    init_logger();
     test_sdr_porep_circuit::<U8, U8, U2, SECTOR_NODES_32_KIB>(false);
+}
+
+#[cfg(feature = "big-tests")]
+#[test]
+fn test_sdr_porep_circuit_512mib_halo2() {
+    init_logger();
+    test_sdr_porep_circuit::<Fp, U8, U0, U0, SECTOR_NODES_512_MIB>();
+}
+
+#[cfg(feature = "big-tests")]
+#[test]
+fn test_sdr_porep_circuit_32gib_halo2() {
+    init_logger();
+    test_sdr_porep_circuit::<Fp, U8, U8, U0, SECTOR_NODES_32_GIB>();
+}
+
+#[cfg(feature = "big-tests")]
+#[test]
+fn test_sdr_porep_circuit_64gib_halo2() {
+    init_logger();
+    test_sdr_porep_circuit::<Fp, U8, U8, U2, SECTOR_NODES_64_GIB>();
 }

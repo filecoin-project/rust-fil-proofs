@@ -55,10 +55,7 @@ where
         Tree,
         DefaultPieceHasher<Tree::Field>,
     >::fake_replicate_phase2(
-        fake_comm_c,
-        out_path,
-        &cache_path,
-        sector_bytes as usize,
+        fake_comm_c, out_path, &cache_path, sector_bytes as usize
     )?;
 
     let p_aux_path = cache_path.as_ref().join(CacheKey::PAux.to_string());

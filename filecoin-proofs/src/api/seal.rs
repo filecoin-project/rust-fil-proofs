@@ -30,12 +30,12 @@ use storage_proofs_core::{
     Data,
 };
 use storage_proofs_porep::stacked::{
-    self,
-    generate_replica_id,
+    self, generate_replica_id,
     halo2::{
         constants::{
-            SECTOR_NODES_16_MIB, SECTOR_NODES_2_KIB, SECTOR_NODES_32_GIB, SECTOR_NODES_32_KIB, SECTOR_NODES_4_KIB,
-            SECTOR_NODES_512_MIB, SECTOR_NODES_64_GIB, SECTOR_NODES_16_KIB, SECTOR_NODES_8_MIB,
+            SECTOR_NODES_16_KIB, SECTOR_NODES_16_MIB, SECTOR_NODES_2_KIB, SECTOR_NODES_32_GIB,
+            SECTOR_NODES_32_KIB, SECTOR_NODES_4_KIB, SECTOR_NODES_512_MIB, SECTOR_NODES_64_GIB,
+            SECTOR_NODES_8_MIB,
         },
         SdrPorepCircuit,
     },
@@ -51,13 +51,15 @@ use crate::{
         get_stacked_params, get_stacked_srs_key, get_stacked_srs_verifier_key,
         get_stacked_verifying_key,
     },
-    constants::{DefaultBinaryTree, DefaultPieceDomain, DefaultPieceHasher, DefaultTreeDomain,
-    DefaultTreeHasher, POREP_MINIMUM_CHALLENGES, SINGLE_PARTITION_PROOF_LEN},
+    constants::{
+        DefaultBinaryTree, DefaultPieceDomain, DefaultPieceHasher, DefaultTreeDomain,
+        DefaultTreeHasher, POREP_MINIMUM_CHALLENGES, SINGLE_PARTITION_PROOF_LEN,
+    },
     parameters::setup_params,
     pieces::{self, verify_pieces},
     types::{
-        AggregateSnarkProof, CircuitPublicInputs, Commitment, PaddedBytesAmount, PieceInfo, PoRepConfig,
-        PoRepProofPartitions, ProverId, SealCommitOutput, SealCommitPhase1Output,
+        AggregateSnarkProof, CircuitPublicInputs, Commitment, PaddedBytesAmount, PieceInfo,
+        PoRepConfig, PoRepProofPartitions, ProverId, SealCommitOutput, SealCommitPhase1Output,
         SealPreCommitOutput, SealPreCommitPhase1Output, SectorSize, SnarkProof, Ticket,
         VanillaSealProof, BINARY_ARITY,
     },
@@ -436,7 +438,7 @@ where
         Tree,
         DefaultPieceHasher<Tree::Field>,
     >::new(&t_aux, replica_path.as_ref().to_path_buf())
-        .context("failed to restore contents of t_aux")?;
+    .context("failed to restore contents of t_aux")?;
 
     let comm_r_safe: <Tree::Hasher as Hasher>::Domain = as_safe_commitment(&comm_r, "comm_r")?;
     let comm_d_safe =
@@ -533,12 +535,15 @@ where
     );
 
     let proof_bytes = match get_proof_system::<Tree>() {
-        ProofSystem::Groth =>
-            groth16_seal_commit_phase2(porep_config, phase1_output, prover_id, sector_id)?,
-        ProofSystem::HaloPallas =>
-            halo2_seal_commit_phase2::<_, Fp>(porep_config, phase1_output, prover_id, sector_id)?,
-        ProofSystem::HaloVesta =>
-            halo2_seal_commit_phase2::<_, Fq>(porep_config, phase1_output, prover_id, sector_id)?,
+        ProofSystem::Groth => {
+            groth16_seal_commit_phase2(porep_config, phase1_output, prover_id, sector_id)?
+        }
+        ProofSystem::HaloPallas => {
+            halo2_seal_commit_phase2::<_, Fp>(porep_config, phase1_output, prover_id, sector_id)?
+        }
+        ProofSystem::HaloVesta => {
+            halo2_seal_commit_phase2::<_, Fq>(porep_config, phase1_output, prover_id, sector_id)?
+        }
     };
 
     info!("seal_commit_phase2:finish: {:?}", sector_id);
@@ -579,7 +584,8 @@ where
         porep_config.api_version,
     )?;
 
-    let vanilla_pub_params = StackedDrg::<'_,
+    let vanilla_pub_params = StackedDrg::<
+        '_,
         MerkleTreeWrapper<
             DefaultTreeHasher<Fr>,
             MockStore,
@@ -607,21 +613,29 @@ where
         seed,
     };
 
-    let vanilla_proofs: Vec<Vec<VanillaSealProof<MerkleTreeWrapper<
-        DefaultTreeHasher<Fr>,
-        MockStore,
-        Tree::Arity,
-        Tree::SubTreeArity,
-        Tree::TopTreeArity,
-    >>>> = unsafe { std::mem::transmute(vanilla_proofs) };
+    let vanilla_proofs: Vec<
+        Vec<
+            VanillaSealProof<
+                MerkleTreeWrapper<
+                    DefaultTreeHasher<Fr>,
+                    MockStore,
+                    Tree::Arity,
+                    Tree::SubTreeArity,
+                    Tree::TopTreeArity,
+                >,
+            >,
+        >,
+    > = unsafe { std::mem::transmute(vanilla_proofs) };
 
-    let groth_params = get_stacked_params::<MerkleTreeWrapper<
-        DefaultTreeHasher<Fr>,
-        MockStore,
-        Tree::Arity,
-        Tree::SubTreeArity,
-        Tree::TopTreeArity,
-    >>(porep_config)?;
+    let groth_params = get_stacked_params::<
+        MerkleTreeWrapper<
+            DefaultTreeHasher<Fr>,
+            MockStore,
+            Tree::Arity,
+            Tree::SubTreeArity,
+            Tree::TopTreeArity,
+        >,
+    >(porep_config)?;
 
     trace!(
         "got groth params ({}) while sealing",
@@ -654,13 +668,15 @@ where
 
     // Verification is cheap when parameters are cached,
     // and it is never correct to return a proof which does not verify.
-    groth16_verify_seal::<MerkleTreeWrapper<
-        DefaultTreeHasher<Fr>,
-        MockStore,
-        Tree::Arity,
-        Tree::SubTreeArity,
-        Tree::TopTreeArity,
-    >>(
+    groth16_verify_seal::<
+        MerkleTreeWrapper<
+            DefaultTreeHasher<Fr>,
+            MockStore,
+            Tree::Arity,
+            Tree::SubTreeArity,
+            Tree::TopTreeArity,
+        >,
+    >(
         porep_config,
         comm_r,
         comm_d,
@@ -742,13 +758,19 @@ where
         seed,
     };
 
-    let vanilla_proofs: Vec<Vec<VanillaSealProof<MerkleTreeWrapper<
-        DefaultTreeHasher<F>,
-        MockStore,
-        Tree::Arity,
-        Tree::SubTreeArity,
-        Tree::TopTreeArity,
-    >>>> = unsafe { std::mem::transmute(vanilla_proofs) };
+    let vanilla_proofs: Vec<
+        Vec<
+            VanillaSealProof<
+                MerkleTreeWrapper<
+                    DefaultTreeHasher<F>,
+                    MockStore,
+                    Tree::Arity,
+                    Tree::SubTreeArity,
+                    Tree::TopTreeArity,
+                >,
+            >,
+        >,
+    > = unsafe { std::mem::transmute(vanilla_proofs) };
 
     let sector_nodes = vanilla_pub_params.graph.size();
 
@@ -774,7 +796,7 @@ where
                 DefaultPieceHasher<F>,
             > as halo2::CompoundProof<F, SECTOR_NODES_2_KIB>>::create_keypair(&circ)?;
 
-            trace!("got halo2 params ({}) while sealing", u64::from(sector_bytes));
+            trace!("got halo2 params ({:?}) while sealing", sector_bytes);
 
             trace!("snark_proof:start");
             let circ_partition_proofs = <StackedDrg<
@@ -824,7 +846,7 @@ where
                 DefaultPieceHasher<F>,
             > as halo2::CompoundProof<F, SECTOR_NODES_4_KIB>>::create_keypair(&circ)?;
 
-            trace!("got halo2 params ({}) while sealing", u64::from(sector_bytes));
+            trace!("got halo2 params ({:?}) while sealing", sector_bytes);
 
             trace!("snark_proof:start");
             let circ_partition_proofs = <StackedDrg<
@@ -874,7 +896,7 @@ where
                 DefaultPieceHasher<F>,
             > as halo2::CompoundProof<F, SECTOR_NODES_16_KIB>>::create_keypair(&circ)?;
 
-            trace!("got halo2 params ({}) while sealing", u64::from(sector_bytes));
+            trace!("got halo2 params ({:?}) while sealing", sector_bytes);
 
             trace!("snark_proof:start");
             let circ_partition_proofs = <StackedDrg<
@@ -924,7 +946,7 @@ where
                 DefaultPieceHasher<F>,
             > as halo2::CompoundProof<F, SECTOR_NODES_32_KIB>>::create_keypair(&circ)?;
 
-            trace!("got halo2 params ({}) while sealing", u64::from(sector_bytes));
+            trace!("got halo2 params ({:?}) while sealing", sector_bytes);
 
             trace!("snark_proof:start");
             let circ_partition_proofs = <StackedDrg<
@@ -974,7 +996,7 @@ where
                 DefaultPieceHasher<F>,
             > as halo2::CompoundProof<F, SECTOR_NODES_8_MIB>>::create_keypair(&circ)?;
 
-            trace!("got halo2 params ({}) while sealing", u64::from(sector_bytes));
+            trace!("got halo2 params ({:?}) while sealing", sector_bytes);
 
             trace!("snark_proof:start");
             let circ_partition_proofs = <StackedDrg<
@@ -1024,7 +1046,7 @@ where
                 DefaultPieceHasher<F>,
             > as halo2::CompoundProof<F, SECTOR_NODES_16_MIB>>::create_keypair(&circ)?;
 
-            trace!("got halo2 params ({}) while sealing", u64::from(sector_bytes));
+            trace!("got halo2 params ({:?}) while sealing", sector_bytes);
 
             trace!("snark_proof:start");
             let circ_partition_proofs = <StackedDrg<
@@ -1074,7 +1096,7 @@ where
                 DefaultPieceHasher<F>,
             > as halo2::CompoundProof<F, SECTOR_NODES_512_MIB>>::create_keypair(&circ)?;
 
-            trace!("got halo2 params ({}) while sealing", u64::from(sector_bytes));
+            trace!("got halo2 params ({:?}) while sealing", sector_bytes);
 
             trace!("snark_proof:start");
             let circ_partition_proofs = <StackedDrg<
@@ -1124,7 +1146,7 @@ where
                 DefaultPieceHasher<F>,
             > as halo2::CompoundProof<F, SECTOR_NODES_32_GIB>>::create_keypair(&circ)?;
 
-            trace!("got halo2 params ({}) while sealing", u64::from(sector_bytes));
+            trace!("got halo2 params ({:?}) while sealing", sector_bytes);
 
             trace!("snark_proof:start");
             let circ_partition_proofs = <StackedDrg<
@@ -1174,7 +1196,7 @@ where
                 DefaultPieceHasher<F>,
             > as halo2::CompoundProof<F, SECTOR_NODES_64_GIB>>::create_keypair(&circ)?;
 
-            trace!("got halo2 params ({}) while sealing", u64::from(sector_bytes));
+            trace!("got halo2 params ({:?}) while sealing", sector_bytes);
 
             trace!("snark_proof:start");
             let circ_partition_proofs = <StackedDrg<
@@ -1351,7 +1373,7 @@ where
             Tree::Arity,
             Tree::SubTreeArity,
             Tree::TopTreeArity,
-        >, 
+        >,
         DefaultPieceHasher<Fr>,
     >::setup(&compound_setup_params)?;
 
@@ -1362,7 +1384,7 @@ where
             Tree::Arity,
             Tree::SubTreeArity,
             Tree::TopTreeArity,
-        >, 
+        >,
         DefaultPieceHasher<Fr>,
     >::partition_count(&compound_public_params);
 
@@ -1377,7 +1399,7 @@ where
                     Tree::Arity,
                     Tree::SubTreeArity,
                     Tree::TopTreeArity,
-                >, 
+                >,
                 DefaultPieceHasher<Fr>,
             >::generate_public_inputs(
                 &public_inputs,
@@ -1440,24 +1462,51 @@ where
                 seed,
             };
             match sector_nodes {
-                SECTOR_NODES_2_KIB =>
-                    PublicInputs::<F, SECTOR_NODES_2_KIB>::from(setup_params, pub_inputs).to_vec().into(),
-                SECTOR_NODES_4_KIB =>
-                    PublicInputs::<F, SECTOR_NODES_4_KIB>::from(setup_params, pub_inputs).to_vec().into(),
-                SECTOR_NODES_16_KIB =>
-                    PublicInputs::<F, SECTOR_NODES_16_KIB>::from(setup_params, pub_inputs).to_vec().into(),
-                SECTOR_NODES_32_KIB =>
-                    PublicInputs::<F, SECTOR_NODES_32_KIB>::from(setup_params, pub_inputs).to_vec().into(),
-                SECTOR_NODES_8_MIB =>
-                    PublicInputs::<F, SECTOR_NODES_8_MIB>::from(setup_params, pub_inputs).to_vec().into(),
-                SECTOR_NODES_16_MIB =>
-                    PublicInputs::<F, SECTOR_NODES_16_MIB>::from(setup_params, pub_inputs).to_vec().into(),
-                SECTOR_NODES_512_MIB =>
-                    PublicInputs::<F, SECTOR_NODES_512_MIB>::from(setup_params, pub_inputs).to_vec().into(),
-                SECTOR_NODES_32_GIB =>
-                    PublicInputs::<F, SECTOR_NODES_32_GIB>::from(setup_params, pub_inputs).to_vec().into(),
-                SECTOR_NODES_64_GIB =>
-                    PublicInputs::<F, SECTOR_NODES_64_GIB>::from(setup_params, pub_inputs).to_vec().into(),
+                SECTOR_NODES_2_KIB => {
+                    PublicInputs::<F, SECTOR_NODES_2_KIB>::from(setup_params, pub_inputs)
+                        .to_vec()
+                        .into()
+                }
+                SECTOR_NODES_4_KIB => {
+                    PublicInputs::<F, SECTOR_NODES_4_KIB>::from(setup_params, pub_inputs)
+                        .to_vec()
+                        .into()
+                }
+                SECTOR_NODES_16_KIB => {
+                    PublicInputs::<F, SECTOR_NODES_16_KIB>::from(setup_params, pub_inputs)
+                        .to_vec()
+                        .into()
+                }
+                SECTOR_NODES_32_KIB => {
+                    PublicInputs::<F, SECTOR_NODES_32_KIB>::from(setup_params, pub_inputs)
+                        .to_vec()
+                        .into()
+                }
+                SECTOR_NODES_8_MIB => {
+                    PublicInputs::<F, SECTOR_NODES_8_MIB>::from(setup_params, pub_inputs)
+                        .to_vec()
+                        .into()
+                }
+                SECTOR_NODES_16_MIB => {
+                    PublicInputs::<F, SECTOR_NODES_16_MIB>::from(setup_params, pub_inputs)
+                        .to_vec()
+                        .into()
+                }
+                SECTOR_NODES_512_MIB => {
+                    PublicInputs::<F, SECTOR_NODES_512_MIB>::from(setup_params, pub_inputs)
+                        .to_vec()
+                        .into()
+                }
+                SECTOR_NODES_32_GIB => {
+                    PublicInputs::<F, SECTOR_NODES_32_GIB>::from(setup_params, pub_inputs)
+                        .to_vec()
+                        .into()
+                }
+                SECTOR_NODES_64_GIB => {
+                    PublicInputs::<F, SECTOR_NODES_64_GIB>::from(setup_params, pub_inputs)
+                        .to_vec()
+                        .into()
+                }
                 _ => unreachable!(),
             }
         })
@@ -1871,17 +1920,20 @@ where
         priority: false,
     };
 
-    let compound_public_params: compound_proof::PublicParams<'_, StackedDrg<
+    let compound_public_params: compound_proof::PublicParams<
         '_,
-        MerkleTreeWrapper<
-            DefaultTreeHasher<Fr>,
-            MockStore,
-            Tree::Arity,
-            Tree::SubTreeArity,
-            Tree::TopTreeArity,
+        StackedDrg<
+            '_,
+            MerkleTreeWrapper<
+                DefaultTreeHasher<Fr>,
+                MockStore,
+                Tree::Arity,
+                Tree::SubTreeArity,
+                Tree::TopTreeArity,
+            >,
+            DefaultPieceHasher<Fr>,
         >,
-        DefaultPieceHasher<Fr>,
-    >> = StackedCompound::setup(&compound_setup_params)?;
+    > = StackedCompound::setup(&compound_setup_params)?;
 
     let public_inputs = stacked::PublicInputs::<DefaultTreeDomain<Fr>, DefaultPieceDomain<Fr>> {
         replica_id,
@@ -1891,17 +1943,19 @@ where
     };
 
     let sector_bytes = PaddedBytesAmount::from(porep_config);
-    let verifying_key = get_stacked_verifying_key::<MerkleTreeWrapper<
-        DefaultTreeHasher<Fr>,
-        MockStore,
-        Tree::Arity,
-        Tree::SubTreeArity,
-        Tree::TopTreeArity,
-    >>(porep_config)?;
+    let verifying_key = get_stacked_verifying_key::<
+        MerkleTreeWrapper<
+            DefaultTreeHasher<Fr>,
+            MockStore,
+            Tree::Arity,
+            Tree::SubTreeArity,
+            Tree::TopTreeArity,
+        >,
+    >(porep_config)?;
 
     trace!(
-        "got verifying key ({}) while verifying seal",
-        u64::from(sector_bytes)
+        "got verifying key ({:?}) while verifying seal",
+        sector_bytes
     );
 
     let proof = MultiProof::new_from_reader(
@@ -1966,10 +2020,7 @@ where
 
     let vanilla_pub_inputs = stacked::PublicInputs {
         replica_id,
-        tau: Some(Tau {
-            comm_d,
-            comm_r,
-        }),
+        tau: Some(Tau { comm_d, comm_r }),
         k: None,
         seed,
     };
@@ -1990,7 +2041,7 @@ where
                     W,
                     SECTOR_NODES_2_KIB,
                 >,
-            >> = proofs_bytes.map(Into::into).collect();
+            > = proofs_bytes.map(Into::into).collect();
 
             let circ = SdrPorepCircuit::<
                 F,
@@ -1999,7 +2050,7 @@ where
                 W,
                 SECTOR_NODES_2_KIB,
             >::blank_circuit();
-        
+
             let keypair = <StackedDrg<
                 '_,
                 MerkleTreeWrapper<
@@ -2013,8 +2064,8 @@ where
             > as halo2::CompoundProof<F, SECTOR_NODES_2_KIB>>::create_keypair(&circ)?;
 
             trace!(
-                "got verifying key ({}) while verifying seal",
-                u64::from(sector_bytes)
+                "got verifying key ({:?}) while verifying seal",
+                sector_bytes
             );
 
             <StackedDrg<
@@ -2044,7 +2095,7 @@ where
                     W,
                     SECTOR_NODES_4_KIB,
                 >,
-            >> = proofs_bytes.map(Into::into).collect();
+            > = proofs_bytes.map(Into::into).collect();
 
             let circ = SdrPorepCircuit::<
                 F,
@@ -2053,7 +2104,7 @@ where
                 W,
                 SECTOR_NODES_4_KIB,
             >::blank_circuit();
-        
+
             let keypair = <StackedDrg<
                 '_,
                 MerkleTreeWrapper<
@@ -2067,8 +2118,8 @@ where
             > as halo2::CompoundProof<F, SECTOR_NODES_4_KIB>>::create_keypair(&circ)?;
 
             trace!(
-                "got verifying key ({}) while verifying seal",
-                u64::from(sector_bytes)
+                "got verifying key ({:?}) while verifying seal",
+                sector_bytes
             );
 
             <StackedDrg<
@@ -2098,7 +2149,7 @@ where
                     W,
                     SECTOR_NODES_16_KIB,
                 >,
-            >> = proofs_bytes.map(Into::into).collect();
+            > = proofs_bytes.map(Into::into).collect();
 
             let circ = SdrPorepCircuit::<
                 F,
@@ -2107,7 +2158,7 @@ where
                 W,
                 SECTOR_NODES_16_KIB,
             >::blank_circuit();
-        
+
             let keypair = <StackedDrg<
                 '_,
                 MerkleTreeWrapper<
@@ -2121,8 +2172,8 @@ where
             > as halo2::CompoundProof<F, SECTOR_NODES_16_KIB>>::create_keypair(&circ)?;
 
             trace!(
-                "got verifying key ({}) while verifying seal",
-                u64::from(sector_bytes)
+                "got verifying key ({:?}) while verifying seal",
+                sector_bytes
             );
 
             <StackedDrg<
@@ -2152,7 +2203,7 @@ where
                     W,
                     SECTOR_NODES_32_KIB,
                 >,
-            >> = proofs_bytes.map(Into::into).collect();
+            > = proofs_bytes.map(Into::into).collect();
 
             let circ = SdrPorepCircuit::<
                 F,
@@ -2161,7 +2212,7 @@ where
                 W,
                 SECTOR_NODES_32_KIB,
             >::blank_circuit();
-        
+
             let keypair = <StackedDrg<
                 '_,
                 MerkleTreeWrapper<
@@ -2175,8 +2226,8 @@ where
             > as halo2::CompoundProof<F, SECTOR_NODES_32_KIB>>::create_keypair(&circ)?;
 
             trace!(
-                "got verifying key ({}) while verifying seal",
-                u64::from(sector_bytes)
+                "got verifying key ({:?}) while verifying seal",
+                sector_bytes
             );
 
             <StackedDrg<
@@ -2206,7 +2257,7 @@ where
                     W,
                     SECTOR_NODES_8_MIB,
                 >,
-            >> = proofs_bytes.map(Into::into).collect();
+            > = proofs_bytes.map(Into::into).collect();
 
             let circ = SdrPorepCircuit::<
                 F,
@@ -2215,7 +2266,7 @@ where
                 W,
                 SECTOR_NODES_8_MIB,
             >::blank_circuit();
-        
+
             let keypair = <StackedDrg<
                 '_,
                 MerkleTreeWrapper<
@@ -2229,8 +2280,8 @@ where
             > as halo2::CompoundProof<F, SECTOR_NODES_8_MIB>>::create_keypair(&circ)?;
 
             trace!(
-                "got verifying key ({}) while verifying seal",
-                u64::from(sector_bytes)
+                "got verifying key ({:?}) while verifying seal",
+                sector_bytes
             );
 
             <StackedDrg<
@@ -2260,7 +2311,7 @@ where
                     W,
                     SECTOR_NODES_16_MIB,
                 >,
-            >> = proofs_bytes.map(Into::into).collect();
+            > = proofs_bytes.map(Into::into).collect();
 
             let circ = SdrPorepCircuit::<
                 F,
@@ -2269,7 +2320,7 @@ where
                 W,
                 SECTOR_NODES_16_MIB,
             >::blank_circuit();
-        
+
             let keypair = <StackedDrg<
                 '_,
                 MerkleTreeWrapper<
@@ -2283,8 +2334,8 @@ where
             > as halo2::CompoundProof<F, SECTOR_NODES_16_MIB>>::create_keypair(&circ)?;
 
             trace!(
-                "got verifying key ({}) while verifying seal",
-                u64::from(sector_bytes)
+                "got verifying key ({:?}) while verifying seal",
+                sector_bytes
             );
 
             <StackedDrg<
@@ -2314,7 +2365,7 @@ where
                     W,
                     SECTOR_NODES_512_MIB,
                 >,
-            >> = proofs_bytes.map(Into::into).collect();
+            > = proofs_bytes.map(Into::into).collect();
 
             let circ = SdrPorepCircuit::<
                 F,
@@ -2323,7 +2374,7 @@ where
                 W,
                 SECTOR_NODES_512_MIB,
             >::blank_circuit();
-        
+
             let keypair = <StackedDrg<
                 '_,
                 MerkleTreeWrapper<
@@ -2337,8 +2388,8 @@ where
             > as halo2::CompoundProof<F, SECTOR_NODES_512_MIB>>::create_keypair(&circ)?;
 
             trace!(
-                "got verifying key ({}) while verifying seal",
-                u64::from(sector_bytes)
+                "got verifying key ({:?}) while verifying seal",
+                sector_bytes
             );
 
             <StackedDrg<
@@ -2368,7 +2419,7 @@ where
                     W,
                     SECTOR_NODES_32_GIB,
                 >,
-            >> = proofs_bytes.map(Into::into).collect();
+            > = proofs_bytes.map(Into::into).collect();
 
             let circ = SdrPorepCircuit::<
                 F,
@@ -2377,7 +2428,7 @@ where
                 W,
                 SECTOR_NODES_32_GIB,
             >::blank_circuit();
-        
+
             let keypair = <StackedDrg<
                 '_,
                 MerkleTreeWrapper<
@@ -2391,8 +2442,8 @@ where
             > as halo2::CompoundProof<F, SECTOR_NODES_32_GIB>>::create_keypair(&circ)?;
 
             trace!(
-                "got verifying key ({}) while verifying seal",
-                u64::from(sector_bytes)
+                "got verifying key ({:?}) while verifying seal",
+                sector_bytes
             );
 
             <StackedDrg<
@@ -2422,7 +2473,7 @@ where
                     W,
                     SECTOR_NODES_64_GIB,
                 >,
-            >> = proofs_bytes.map(Into::into).collect();
+            > = proofs_bytes.map(Into::into).collect();
 
             let circ = SdrPorepCircuit::<
                 F,
@@ -2431,7 +2482,7 @@ where
                 W,
                 SECTOR_NODES_64_GIB,
             >::blank_circuit();
-        
+
             let keypair = <StackedDrg<
                 '_,
                 MerkleTreeWrapper<
@@ -2445,8 +2496,8 @@ where
             > as halo2::CompoundProof<F, SECTOR_NODES_64_GIB>>::create_keypair(&circ)?;
 
             trace!(
-                "got verifying key ({}) while verifying seal",
-                u64::from(sector_bytes)
+                "got verifying key ({:?}) while verifying seal",
+                sector_bytes
             );
 
             <StackedDrg<

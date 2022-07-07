@@ -164,8 +164,8 @@ mod tests {
             api_version: ApiVersion::V1_0_0,
         };
 
-        let params =
-            winning_post_public_params::<DefaultOctLCTree<Fr>>(&config).expect("failed to get params");
+        let params = winning_post_public_params::<DefaultOctLCTree<Fr>>(&config)
+            .expect("failed to get params");
         assert_eq!(params.sector_count, 66);
         assert_eq!(params.challenge_count, 1);
         assert_eq!(params.sector_size, 2048);

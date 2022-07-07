@@ -95,7 +95,11 @@ fn test_seal_lifecycle_upgrade_2kib_porep_id_v1_1_base_8() -> Result<()> {
     let mut porep_id = [0u8; 32];
     porep_id[..8].copy_from_slice(&porep_id_v1_1.to_le_bytes());
     assert!(!is_legacy_porep_id(porep_id));
-    seal_lifecycle_upgrade::<SectorShape2KiB<Fr>, Fr>(SECTOR_SIZE_2_KIB, &porep_id, ApiVersion::V1_1_0)
+    seal_lifecycle_upgrade::<SectorShape2KiB<Fr>, Fr>(
+        SECTOR_SIZE_2_KIB,
+        &porep_id,
+        ApiVersion::V1_1_0,
+    )
 }
 
 #[test]
@@ -850,13 +854,15 @@ fn test_winning_post_empty_sector_challenge() -> Result<()> {
         api_version: ApiVersion::V1_0_0,
     };
 
-    assert!(generate_winning_post_sector_challenge::<SectorShape2KiB<Fr>>(
-        &config,
-        &randomness,
-        sector_count as u64,
-        prover_id
-    )
-    .is_err());
+    assert!(
+        generate_winning_post_sector_challenge::<SectorShape2KiB<Fr>>(
+            &config,
+            &randomness,
+            sector_count as u64,
+            prover_id
+        )
+        .is_err()
+    );
 
     replica.close()?;
 
@@ -1276,7 +1282,13 @@ fn test_window_post_partition_matching_2kib_base_8() -> Result<()> {
         false,
         ApiVersion::V1_1_0,
     )?;
-    partition_window_post::<SectorShape2KiB<Fr>>(sector_size, 3, sector_count, true, ApiVersion::V1_1_0)
+    partition_window_post::<SectorShape2KiB<Fr>>(
+        sector_size,
+        3,
+        sector_count,
+        true,
+        ApiVersion::V1_1_0,
+    )
 }
 
 fn partition_window_post<Tree>(
@@ -1613,7 +1625,12 @@ fn generate_proof<Tree>(
     seed: [u8; 32],
     pre_commit_output: &SealPreCommitOutput,
     piece_infos: &[PieceInfo],
-) -> Result<(SealCommitOutput, Vec<CircuitPublicInputs>, [u8; 32], [u8; 32])>
+) -> Result<(
+    SealCommitOutput,
+    Vec<CircuitPublicInputs>,
+    [u8; 32],
+    [u8; 32],
+)>
 where
     Tree: 'static + MerkleTreeTrait,
     Tree::Arity: PoseidonArityAllFields,
