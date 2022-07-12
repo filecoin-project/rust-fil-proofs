@@ -45,6 +45,22 @@ where
     _tree: PhantomData<Tree>,
 }
 
+impl<Tree> Clone for PoRCircuit<Tree>
+where
+    Tree: MerkleTreeTrait<Field = Fr>,
+    Tree::Hasher: Groth16Hasher,
+{
+    fn clone(&self) -> Self {
+        PoRCircuit {
+            value: self.value.clone(),
+            auth_path: self.auth_path.clone(),
+            root: self.root.clone(),
+            private: self.private,
+            _tree: PhantomData,
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct AuthPath<H, U, V, W>
 where

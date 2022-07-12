@@ -96,5 +96,9 @@ name = "merkle"
 harness = false
 
 [[bench]]
+name = "merkle_groth16_halo2"
+harness = false
+
+[[bench]]
 name = "misc"
 harness = false
