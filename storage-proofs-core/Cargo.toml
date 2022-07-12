@@ -46,6 +46,7 @@ blstrs = { version = "0.5.0", features = ["gpu"] }
 halo2_proofs = { git = "https://github.com/drpetervannostrand/halo2" }
 fil-halo2-gadgets = { path = "../fil-halo2-gadgets" }
 ec-gpu = "0.1.0"
+typemap = "0.3.3"
 
 [dev-dependencies]
 proptest = "1.0.0"
