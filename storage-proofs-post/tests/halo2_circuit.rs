@@ -15,10 +15,7 @@ use storage_proofs_core::{
     TEST_SEED,
 };
 use storage_proofs_post::halo2::{
-    constants::{
-        SECTOR_NODES_16_KIB, SECTOR_NODES_2_KIB, SECTOR_NODES_32_GIB, SECTOR_NODES_32_KIB,
-        SECTOR_NODES_4_KIB, SECTOR_NODES_512_MIB, SECTOR_NODES_64_GIB,
-    },
+    constants::{SECTOR_NODES_16_KIB, SECTOR_NODES_2_KIB, SECTOR_NODES_32_KIB, SECTOR_NODES_4_KIB},
     window, winning, SectorProof, WindowPostCircuit, WinningPostCircuit,
 };
 use tempfile::tempdir;
@@ -161,18 +158,21 @@ fn test_winning_post_circuit_32kib_halo2() {
 #[cfg(feature = "big-tests")]
 #[test]
 fn test_winning_post_circuit_512mib_halo2() {
+    use storage_proofs_post::halo2::constants::SECTOR_NODES_512_MIB;
     test_winning_post_circuit::<U8, U0, U0, SECTOR_NODES_512_MIB>()
 }
 
 #[cfg(feature = "big-tests")]
 #[test]
 fn test_winning_post_circuit_32gib_halo2() {
+    use storage_proofs_post::halo2::constants::SECTOR_NODES_32_GIB;
     test_winning_post_circuit::<U8, U8, U0, SECTOR_NODES_32_GIB>()
 }
 
 #[cfg(feature = "big-tests")]
 #[test]
 fn test_winning_post_circuit_64gib_halo2() {
+    use storage_proofs_post::halo2::constants::SECTOR_NODES_64_GIB;
     test_winning_post_circuit::<U8, U8, U2, SECTOR_NODES_64_GIB>()
 }
 
@@ -342,17 +342,20 @@ fn test_window_post_circuit_32kib_halo2() {
 #[cfg(feature = "big-tests")]
 #[test]
 fn test_window_post_circuit_512mib_halo2() {
+    use storage_proofs_post::halo2::constants::SECTOR_NODES_512_MIB;
     test_window_post_circuit::<U8, U0, U0, SECTOR_NODES_512_MIB>()
 }
 
 #[cfg(feature = "big-tests")]
 #[test]
 fn test_window_post_circuit_32gib_halo2() {
+    use storage_proofs_post::halo2::constants::SECTOR_NODES_32_GIB;
     test_window_post_circuit::<U8, U8, U0, SECTOR_NODES_32_GIB>()
 }
 
 #[cfg(feature = "big-tests")]
 #[test]
 fn test_window_post_circuit_64gib_halo2() {
+    use storage_proofs_post::halo2::constants::SECTOR_NODES_64_GIB;
     test_window_post_circuit::<U8, U8, U2, SECTOR_NODES_64_GIB>()
 }
