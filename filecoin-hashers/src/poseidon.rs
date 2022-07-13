@@ -29,8 +29,8 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use typemap::ShareMap;
 
 use crate::{
-    get_poseidon_constants, Domain, FieldArity, Groth16Hasher, Halo2Hasher, HashFunction, HashInstructions, Hasher,
-    PoseidonArity, PoseidonMDArity, POSEIDON_CONSTANTS_2,
+    get_poseidon_constants, Domain, FieldArity, Groth16Hasher, Halo2Hasher, HashFunction,
+    HashInstructions, Hasher, PoseidonArity, PoseidonMDArity, POSEIDON_CONSTANTS_2,
     POSEIDON_MD_CONSTANTS as POSEIDON_MD_CONSTANTS_BLS, POSEIDON_MD_CONSTANTS_PALLAS,
     POSEIDON_MD_CONSTANTS_VESTA,
 };

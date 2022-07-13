@@ -12,7 +12,7 @@ use merkletree::{
     store::{Store, StoreConfig},
 };
 use storage_proofs_core::merkle::{get_base_tree_count, MerkleTreeTrait};
-use typenum::{U0, U2, U8, Unsigned};
+use typenum::{Unsigned, U0, U2, U8};
 
 use crate::types::{Commitment, SectorSize};
 
@@ -172,7 +172,10 @@ impl<E: Element> Store<E> for MockStore {
 }
 
 // A marker trait for arity types that are implemented for all fields.
-pub trait PoseidonArityAllFields: PoseidonArity<Fr> + PoseidonArity<Fp> + PoseidonArity<Fq> {}
+pub trait PoseidonArityAllFields:
+    PoseidonArity<Fr> + PoseidonArity<Fp> + PoseidonArity<Fq>
+{
+}
 
 impl PoseidonArityAllFields for U0 {}
 impl PoseidonArityAllFields for U2 {}

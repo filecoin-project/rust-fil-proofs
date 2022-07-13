@@ -23,15 +23,15 @@ use filecoin_proofs::{
     seal_pre_commit_phase2, unseal_range, validate_cache_for_commit,
     validate_cache_for_precommit_phase2, verify_aggregate_seal_commit_proofs,
     verify_empty_sector_update_proof, verify_partition_proofs, verify_seal,
-    verify_single_partition_proof, verify_window_post, verify_winning_post, CircuitPublicInputs, Commitment,
-    DefaultPieceHasher, DefaultTreeDomain, DefaultTreeHasher, MerkleTreeTrait,
-    PaddedBytesAmount, PieceInfo, PoseidonArityAllFields, PoRepConfig,
-    PoRepProofPartitions, PoStConfig, PoStType, PrivateReplicaInfo, ProverId, PublicReplicaInfo,
-    SealCommitOutput, SealPreCommitOutput, SealPreCommitPhase1Output, SectorShape16KiB,
-    SectorShape2KiB, SectorShape32KiB, SectorShape4KiB, SectorSize, SectorUpdateConfig,
-    UnpaddedByteIndex, UnpaddedBytesAmount, POREP_PARTITIONS, SECTOR_SIZE_16_KIB,
-    SECTOR_SIZE_2_KIB, SECTOR_SIZE_32_KIB, SECTOR_SIZE_4_KIB, WINDOW_POST_CHALLENGE_COUNT,
-    WINDOW_POST_SECTOR_COUNT, WINNING_POST_CHALLENGE_COUNT, WINNING_POST_SECTOR_COUNT,
+    verify_single_partition_proof, verify_window_post, verify_winning_post, CircuitPublicInputs,
+    Commitment, DefaultPieceHasher, DefaultTreeDomain, DefaultTreeHasher, MerkleTreeTrait,
+    PaddedBytesAmount, PieceInfo, PoRepConfig, PoRepProofPartitions, PoStConfig, PoStType,
+    PoseidonArityAllFields, PrivateReplicaInfo, ProverId, PublicReplicaInfo, SealCommitOutput,
+    SealPreCommitOutput, SealPreCommitPhase1Output, SectorShape16KiB, SectorShape2KiB,
+    SectorShape32KiB, SectorShape4KiB, SectorSize, SectorUpdateConfig, UnpaddedByteIndex,
+    UnpaddedBytesAmount, POREP_PARTITIONS, SECTOR_SIZE_16_KIB, SECTOR_SIZE_2_KIB,
+    SECTOR_SIZE_32_KIB, SECTOR_SIZE_4_KIB, WINDOW_POST_CHALLENGE_COUNT, WINDOW_POST_SECTOR_COUNT,
+    WINNING_POST_CHALLENGE_COUNT, WINNING_POST_SECTOR_COUNT,
 };
 use log::info;
 use memmap::MmapOptions;
@@ -95,7 +95,11 @@ fn test_seal_lifecycle_upgrade_2kib_porep_id_v1_1_base_8() -> Result<()> {
     let mut porep_id = [0u8; 32];
     porep_id[..8].copy_from_slice(&porep_id_v1_1.to_le_bytes());
     assert!(!is_legacy_porep_id(porep_id));
-    seal_lifecycle_upgrade::<SectorShape2KiB<Fr>, Fr>(SECTOR_SIZE_2_KIB, &porep_id, ApiVersion::V1_1_0)
+    seal_lifecycle_upgrade::<SectorShape2KiB<Fr>, Fr>(
+        SECTOR_SIZE_2_KIB,
+        &porep_id,
+        ApiVersion::V1_1_0,
+    )
 }
 
 #[test]
@@ -300,8 +304,7 @@ where
     DefaultTreeHasher<Tree::Field>: Hasher<Field = Tree::Field>,
 {
     let mut rng = XorShiftRng::from_seed(TEST_SEED);
-    let prover_fr =
-        DefaultTreeDomain::<Tree::Field>::random(&mut rng);
+    let prover_fr = DefaultTreeDomain::<Tree::Field>::random(&mut rng);
     let mut prover_id = [0u8; 32];
     prover_id.copy_from_slice(AsRef::<[u8]>::as_ref(&prover_fr));
 
@@ -333,16 +336,11 @@ where
     DefaultTreeHasher<F>: Hasher<Field = F>,
 {
     let mut rng = &mut XorShiftRng::from_seed(TEST_SEED);
-    let prover_fr =
-        DefaultTreeDomain::<Tree::Field>::random(&mut rng);
+    let prover_fr = DefaultTreeDomain::<Tree::Field>::random(&mut rng);
     let mut prover_id = [0u8; 32];
     prover_id.copy_from_slice(AsRef::<[u8]>::as_ref(&prover_fr));
 
-    let (_, replica, _, _) = create_seal_for_upgrade::<
-        _,
-        Tree,
-        Tree::Field,
-    >(
+    let (_, replica, _, _) = create_seal_for_upgrade::<_, Tree, Tree::Field>(
         &mut rng,
         sector_size,
         prover_id,
@@ -684,8 +682,7 @@ fn run_resumable_seal<Tree>(
 
     let sector_size = SECTOR_SIZE_2_KIB;
     let mut rng = XorShiftRng::from_seed(TEST_SEED);
-    let prover_fr =
-        DefaultTreeDomain::<Tree::Field>::random(&mut rng);
+    let prover_fr = DefaultTreeDomain::<Tree::Field>::random(&mut rng);
     let mut prover_id = [0u8; 32];
     prover_id.copy_from_slice(AsRef::<[u8]>::as_ref(&prover_fr));
 
@@ -850,13 +847,15 @@ fn test_winning_post_empty_sector_challenge() -> Result<()> {
         api_version: ApiVersion::V1_0_0,
     };
 
-    assert!(generate_winning_post_sector_challenge::<SectorShape2KiB<Fr>>(
-        &config,
-        &randomness,
-        sector_count as u64,
-        prover_id
-    )
-    .is_err());
+    assert!(
+        generate_winning_post_sector_challenge::<SectorShape2KiB<Fr>>(
+            &config,
+            &randomness,
+            sector_count as u64,
+            prover_id
+        )
+        .is_err()
+    );
 
     replica.close()?;
 
@@ -1276,7 +1275,13 @@ fn test_window_post_partition_matching_2kib_base_8() -> Result<()> {
         false,
         ApiVersion::V1_1_0,
     )?;
-    partition_window_post::<SectorShape2KiB<Fr>>(sector_size, 3, sector_count, true, ApiVersion::V1_1_0)
+    partition_window_post::<SectorShape2KiB<Fr>>(
+        sector_size,
+        3,
+        sector_count,
+        true,
+        ApiVersion::V1_1_0,
+    )
 }
 
 fn partition_window_post<Tree>(
@@ -1613,7 +1618,12 @@ fn generate_proof<Tree>(
     seed: [u8; 32],
     pre_commit_output: &SealPreCommitOutput,
     piece_infos: &[PieceInfo],
-) -> Result<(SealCommitOutput, Vec<CircuitPublicInputs>, [u8; 32], [u8; 32])>
+) -> Result<(
+    SealCommitOutput,
+    Vec<CircuitPublicInputs>,
+    [u8; 32],
+    [u8; 32],
+)>
 where
     Tree: 'static + MerkleTreeTrait,
     Tree::Arity: PoseidonArityAllFields,

@@ -1,7 +1,5 @@
 use ff::{Field, PrimeField};
-use filecoin_hashers::{
-    poseidon::PoseidonHasher, sha256::Sha256Hasher, Hasher, PoseidonArity,
-};
+use filecoin_hashers::{poseidon::PoseidonHasher, sha256::Sha256Hasher, Hasher, PoseidonArity};
 use generic_array::typenum::{U0, U2, U4, U8};
 use halo2_proofs::pasta::Fp;
 use merkletree::store::StoreConfig;

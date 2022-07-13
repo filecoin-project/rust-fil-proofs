@@ -1061,8 +1061,7 @@ where
 
         THREAD_POOL.scoped(|s| {
             // This channel will receive the finished tree data to be written to disk.
-            let (writer_tx, writer_rx) =
-                channel::<Vec<Tree::Field>>(0);
+            let (writer_tx, writer_rx) = channel::<Vec<Tree::Field>>(0);
 
             s.execute(move || {
                 for i in 0..config_count {
@@ -1115,7 +1114,9 @@ where
                     }
                 };
                 let mut tree_builder = TreeBuilder::<Tree::Field, Tree::Arity>::new(
-                    batcher, nodes_count, tree_r_last_config.rows_to_discard
+                    batcher,
+                    nodes_count,
+                    tree_r_last_config.rows_to_discard,
                 )
                 .expect("failed to create TreeBuilder");
 
@@ -1573,7 +1574,8 @@ where
                 }
             };
             let mut tree_builder = TreeBuilder::<Tree::Field, Tree::Arity>::new(
-                batcher, nodes_count,
+                batcher,
+                nodes_count,
                 tree_r_last_config.rows_to_discard,
             )
             .expect("failed to create TreeBuilder");

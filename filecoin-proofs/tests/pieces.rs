@@ -31,8 +31,8 @@ fn test_empty_source() {
 
 #[test]
 fn test_compute_comm_d_empty() {
-    let comm_d =
-        compute_comm_d::<Fr>(SectorSize(2048), &[]).expect("failed to verify pieces, empty piece infos");
+    let comm_d = compute_comm_d::<Fr>(SectorSize(2048), &[])
+        .expect("failed to verify pieces, empty piece infos");
     assert_eq!(
         comm_d,
         [
@@ -167,12 +167,14 @@ fn test_verify_simple_pieces() {
     );
 
     assert!(
-        verify_pieces::<Fr>(&comm_d, &[val_e, val_f.clone()], sector_size).expect("failed to verify"),
+        verify_pieces::<Fr>(&comm_d, &[val_e, val_f.clone()], sector_size)
+            .expect("failed to verify"),
         "[val_e, val_f]"
     );
 
     assert!(
-        verify_pieces::<Fr>(&comm_d, &[val_a, val_b, val_f], sector_size).expect("failed to verify"),
+        verify_pieces::<Fr>(&comm_d, &[val_a, val_b, val_f], sector_size)
+            .expect("failed to verify"),
         "[val_a, val_b, val_f]"
     );
 
