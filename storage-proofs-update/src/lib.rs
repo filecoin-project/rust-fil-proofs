@@ -12,6 +12,6 @@ pub use self::challenges::{gen_partition_challenges, gen_partition_rhos, Challen
 pub use self::circuit::EmptySectorUpdateCircuit;
 pub use self::compound::EmptySectorUpdateCompound;
 pub use self::vanilla::{
-    phi, rho, ChallengeProof, EmptySectorUpdate, PartitionProof, PrivateInputs, PublicInputs,
+    phi, rho, rhos, ChallengeProof, EmptySectorUpdate, PartitionProof, PrivateInputs, PublicInputs,
     PublicParams, SetupParams,
 };
