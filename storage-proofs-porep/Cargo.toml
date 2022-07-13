@@ -68,6 +68,7 @@ cuda = ["storage-proofs-core/cuda", "filecoin-hashers/cuda", "neptune/cuda", "be
 opencl = ["storage-proofs-core/opencl", "filecoin-hashers/opencl", "neptune/opencl", "bellperson/opencl"]
 isolated-testing = []
 multicore-sdr = ["hwloc"]
+big-tests = []
 
 [[bench]]
 name = "encode"

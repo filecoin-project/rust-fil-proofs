@@ -3,7 +3,8 @@ use halo2_proofs::plonk::Error;
 use rand::rngs::OsRng;
 use storage_proofs_core::{
     halo2::{
-        create_batch_proof, create_proof, verify_batch_proof, verify_proof, CompoundProof, Halo2Field, Halo2Keypair, Halo2Proof,
+        create_batch_proof, create_proof, verify_batch_proof, verify_proof, CompoundProof,
+        Halo2Field, Halo2Keypair, Halo2Proof,
     },
     merkle::MerkleTreeTrait,
 };
@@ -13,9 +14,9 @@ use crate::stacked::{
     halo2::{
         circuit::{self, SdrPorepCircuit},
         constants::{
-            partition_count, SECTOR_NODES_16_KIB, SECTOR_NODES_16_MIB, SECTOR_NODES_2_KIB, SECTOR_NODES_32_GIB,
-            SECTOR_NODES_32_KIB, SECTOR_NODES_4_KIB, SECTOR_NODES_512_MIB, SECTOR_NODES_64_GIB,
-            SECTOR_NODES_8_KIB, SECTOR_NODES_8_MIB,
+            partition_count, SECTOR_NODES_16_KIB, SECTOR_NODES_16_MIB, SECTOR_NODES_2_KIB,
+            SECTOR_NODES_32_GIB, SECTOR_NODES_32_KIB, SECTOR_NODES_4_KIB, SECTOR_NODES_512_MIB,
+            SECTOR_NODES_64_GIB, SECTOR_NODES_8_KIB, SECTOR_NODES_8_MIB,
         },
     },
     StackedDrg,

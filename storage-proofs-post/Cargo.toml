@@ -11,6 +11,7 @@ readme = "README.md"
 [dependencies]
 storage-proofs-core = { path = "../storage-proofs-core", version = "~11.0.0", default-features = false}
 filecoin-hashers = { path = "../filecoin-hashers", version = "~6.0.0", default-features = false, features = ["poseidon", "sha256"]}
+fil_logger = "0.1"
 byteorder = "1"
 sha2 = "0.10.2"
 rayon = "1.0.0"
@@ -40,3 +41,4 @@ rand_xorshift = "0.3.0"
 default = ["opencl"]
 cuda = ["storage-proofs-core/cuda", "filecoin-hashers/cuda"]
 opencl = ["storage-proofs-core/opencl", "filecoin-hashers/opencl"]
+big-tests = []

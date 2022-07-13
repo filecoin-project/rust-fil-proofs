@@ -13,8 +13,8 @@ use storage_proofs_core::{halo2::CircuitRows, merkle::MerkleProofTrait};
 use crate::{
     fallback as vanilla,
     halo2::{
-        constants::{SECTOR_NODES_32_GIB, SECTOR_NODES_64_GIB},
         circuit::{PostConfig, SectorProof},
+        constants::{SECTOR_NODES_32_GIB, SECTOR_NODES_64_GIB},
     },
 };
 
@@ -222,7 +222,7 @@ where
     pub fn empty() -> Self {
         let challenged_sectors = sectors_challenged_per_partition::<SECTOR_NODES>();
         PrivateInputs {
-            sector_proofs: vec![SectorProof::empty(); challenged_sectors]
+            sector_proofs: vec![SectorProof::empty(); challenged_sectors],
         }
     }
 }
@@ -371,7 +371,9 @@ where
             SECTOR_NODES_4_KIB => 12,
             SECTOR_NODES_16_KIB => 12,
             SECTOR_NODES_32_KIB => 12,
-            // TODO (jake): add more sector sizes
+            SECTOR_NODES_512_MIB => 13,
+            SECTOR_NODES_32_GIB => 24,
+            SECTOR_NODES_64_GIB => 24,
             _ => unimplemented!(),
         }
     }

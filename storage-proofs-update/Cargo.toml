@@ -12,6 +12,7 @@ readme = "README.md"
 storage-proofs-core = { path = "../storage-proofs-core", version = "~11.0.0", default-features = false}
 storage-proofs-porep = { path = "../storage-proofs-porep", version = "~11.0.0", default-features = false}
 filecoin-hashers = { path = "../filecoin-hashers", version = "~6.0.0", default-features = false, features = ["poseidon", "sha256"]}
+rand = "0.8"
 merkletree = "0.22.0"
 rayon = "1.0.0"
 serde = { version = "1.0", features = ["derive"]}
@@ -26,6 +27,7 @@ anyhow = "1.0.23"
 neptune = { git = "https://github.com/filecoin-project/neptune", branch = "fr-as-trait-halo2-circuit", features = ["bls", "pasta", "arity2", "arity4", "arity8", "arity11", "arity16", "arity24", "arity36"] }
 lazy_static = "1.2"
 fr32 = { path = "../fr32", version = "~4.0.0", default-features = false }
+fil_logger = "0.1.6"
 memmap = "0.7"
 # pasta_curves = { git = "https://github.com/zcash/pasta_curves", rev = "2796b6b", features = ["gpu"] }
 # halo2_proofs = { git = "https://github.com/drpetervannostrand/halo2", branch = "sha256-chip" }
@@ -35,11 +37,11 @@ fil-halo2-gadgets = { path = "../fil-halo2-gadgets" }
 
 [dev-dependencies]
 tempfile = "3"
-rand = "0.8"
 rand_xorshift = "0.3.0"
 
 [features]
 default = ["opencl", "multicore-sdr"]
+big-tests = []
 isolated-testing = []
 opencl = [
     "storage-proofs-core/opencl",

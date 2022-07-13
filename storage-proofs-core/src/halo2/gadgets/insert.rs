@@ -557,7 +557,8 @@ mod test {
             )?;
 
             if self.index_bits.iter().all(Option::is_some) {
-                let insert_pos = self.index_bits
+                let insert_pos = self
+                    .index_bits
                     .iter()
                     .enumerate()
                     .map(|(i, opt)| (opt.unwrap() as usize) << i)
@@ -565,8 +566,14 @@ mod test {
                 let mut expected = self.uninserted.clone();
                 expected.insert(insert_pos, self.value);
                 assert_eq!(
-                    inserted.iter().map(|elem| elem.value()).collect::<Vec<Option<&F>>>(),
-                    expected.iter().map(Option::as_ref).collect::<Vec<Option<&F>>>(),
+                    inserted
+                        .iter()
+                        .map(|elem| elem.value())
+                        .collect::<Vec<Option<&F>>>(),
+                    expected
+                        .iter()
+                        .map(Option::as_ref)
+                        .collect::<Vec<Option<&F>>>(),
                 );
             }
 

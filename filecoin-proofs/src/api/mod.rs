@@ -44,10 +44,15 @@ use crate::{
 
 mod fake_seal;
 mod post_util;
+#[allow(clippy::type_complexity)]
+#[allow(clippy::too_many_arguments)]
 mod seal;
+#[allow(clippy::too_many_arguments)]
 mod update;
 mod util;
+#[allow(clippy::type_complexity)]
 mod window_post;
+#[allow(clippy::type_complexity)]
 mod winning_post;
 
 pub use fake_seal::*;
@@ -164,10 +169,7 @@ where
     info!("unseal_range:start");
     ensure!(comm_d != [0; 32], "Invalid all zero commitment (comm_d)");
 
-    let comm_d = as_safe_commitment::<
-        DefaultPieceDomain<Tree::Field>,
-        _,
-    >(&comm_d, "comm_d")?;
+    let comm_d = as_safe_commitment::<DefaultPieceDomain<Tree::Field>, _>(&comm_d, "comm_d")?;
 
     let replica_id = generate_replica_id::<Tree::Hasher, _>(
         &prover_id,
@@ -235,10 +237,7 @@ where
     info!("unseal_range_mapped:start");
     ensure!(comm_d != [0; 32], "Invalid all zero commitment (comm_d)");
 
-    let comm_d = as_safe_commitment::<
-        DefaultPieceDomain<Tree::Field>,
-        _,
-    >(&comm_d, "comm_d")?;
+    let comm_d = as_safe_commitment::<DefaultPieceDomain<Tree::Field>, _>(&comm_d, "comm_d")?;
 
     let replica_id = generate_replica_id::<Tree::Hasher, _>(
         &prover_id,
@@ -304,19 +303,13 @@ where
 {
     trace!("unseal_range_inner:start");
 
-    let base_tree_size = get_base_tree_size::<
-        DefaultBinaryTree<Tree::Field>,
-    >(porep_config.sector_size)?;
-    let base_tree_leafs = get_base_tree_leafs::<
-        DefaultBinaryTree<Tree::Field>,
-    >(base_tree_size)?;
+    let base_tree_size =
+        get_base_tree_size::<DefaultBinaryTree<Tree::Field>>(porep_config.sector_size)?;
+    let base_tree_leafs = get_base_tree_leafs::<DefaultBinaryTree<Tree::Field>>(base_tree_size)?;
     let config = StoreConfig::new(
         cache_path.as_ref(),
         CacheKey::CommDTree.to_string(),
-        default_rows_to_discard(
-            base_tree_leafs,
-            BinaryTreeArity::to_usize(),
-        ),
+        default_rows_to_discard(base_tree_leafs, BinaryTreeArity::to_usize()),
     );
     let pp = public_params::<Tree>(
         PaddedBytesAmount::from(porep_config),
@@ -328,10 +321,12 @@ where
     let offset_padded: PaddedBytesAmount = UnpaddedBytesAmount::from(offset).into();
     let num_bytes_padded: PaddedBytesAmount = num_bytes.into();
 
-    StackedDrg::<
-        Tree,
-        DefaultPieceHasher<Tree::Field>,
-    >::extract_all(&pp, &replica_id, data, Some(config))?;
+    StackedDrg::<Tree, DefaultPieceHasher<Tree::Field>>::extract_all(
+        &pp,
+        &replica_id,
+        data,
+        Some(config),
+    )?;
     let start: usize = offset_padded.into();
     let end = start + usize::from(num_bytes_padded);
     let unsealed = &data[start..end];
@@ -638,10 +633,7 @@ where
                 std::fs::metadata(&data_path)?.len()
             );
             ensure!(
-                LevelCacheStore::<
-                    DefaultPieceDomain<Tree::Field>,
-                    File,
-                >::is_consistent(
+                LevelCacheStore::<DefaultPieceDomain<Tree::Field>, File>::is_consistent(
                     store_len,
                     Tree::Arity::to_usize(),
                     config,
@@ -657,10 +649,7 @@ where
             std::fs::metadata(&store_path)?.len()
         );
         ensure!(
-            LevelCacheStore::<
-                DefaultPieceDomain<Tree::Field>,
-                File,
-            >::is_consistent(
+            LevelCacheStore::<DefaultPieceDomain<Tree::Field>, File>::is_consistent(
                 config.size.expect("disk store size not configured"),
                 Tree::Arity::to_usize(),
                 config,
@@ -761,10 +750,8 @@ where
         let t_aux_bytes = fs::read(&t_aux_path)
             .with_context(|| format!("could not read file t_aux={:?}", t_aux_path))?;
 
-        let mut res: TemporaryAux<
-            Tree,
-            DefaultPieceHasher<Tree::Field>,
-        > = deserialize(&t_aux_bytes)?;
+        let mut res: TemporaryAux<Tree, DefaultPieceHasher<Tree::Field>> =
+            deserialize(&t_aux_bytes)?;
 
         // Switch t_aux to the passed in cache_path
         res.set_cache_path(&cache_path);
@@ -773,7 +760,9 @@ where
 
     // Verify all stores/labels within the Labels object.
     let cache = cache_path.as_ref().to_path_buf();
-    t_aux.labels.verify_stores(verify_store::<Tree::Field>, &cache)?;
+    t_aux
+        .labels
+        .verify_stores(verify_store::<Tree::Field>, &cache)?;
 
     // Verify each tree disk store.
     verify_store::<Tree::Field>(
@@ -786,9 +775,7 @@ where
         OctTreeArity::to_usize(),
         get_base_tree_count::<Tree>(),
     )?;
-    verify_level_cache_store::<
-        DefaultOctTree<Tree::Field>,
-    >(&t_aux.tree_r_last_config)?;
+    verify_level_cache_store::<DefaultOctTree<Tree::Field>>(&t_aux.tree_r_last_config)?;
 
     info!("validate_cache_for_commit:finish");
 

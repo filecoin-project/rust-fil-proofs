@@ -26,7 +26,9 @@ use merkletree::{
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use sha2::{Digest, Sha256};
 
-use crate::{Domain, Groth16Hasher, Halo2Hasher, HashFunction, HashInstructions, Hasher, PoseidonArity};
+use crate::{
+    Domain, Groth16Hasher, Halo2Hasher, HashFunction, HashInstructions, Hasher, PoseidonArity,
+};
 
 #[derive(Copy, Clone, Default)]
 pub struct Sha256Domain<F> {
@@ -448,10 +450,7 @@ where
     type Chip = Sha256FieldChip<F>;
     type Config = Sha256FieldConfig<F>;
 
-    fn load(
-        layouter: &mut impl Layouter<F>,
-        config: &Self::Config,
-    ) -> Result<(), plonk::Error> {
+    fn load(layouter: &mut impl Layouter<F>, config: &Self::Config) -> Result<(), plonk::Error> {
         Sha256FieldChip::load(layouter, config)
     }
 

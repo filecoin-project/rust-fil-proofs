@@ -11,7 +11,7 @@ use fil_halo2_gadgets::{
     AdviceIter, ColumnBuilder,
 };
 use filecoin_hashers::{
-    poseidon::PoseidonHasher, sha256::Sha256Hasher, get_poseidon_constants, Halo2Hasher,
+    get_poseidon_constants, poseidon::PoseidonHasher, sha256::Sha256Hasher, Halo2Hasher,
     HashInstructions, Hasher, PoseidonArity,
 };
 use generic_array::typenum::U2;
@@ -38,7 +38,8 @@ use crate::stacked::{
         constants::{
             challenge_count, num_layers, partition_count, DRG_PARENTS, EXP_PARENTS, LABEL_WORD_LEN,
             REPEATED_PARENT_LABELS_WORD_LEN, SECTOR_NODES_16_KIB, SECTOR_NODES_2_KIB,
-            SECTOR_NODES_32_KIB, SECTOR_NODES_4_KIB, SECTOR_NODES_8_KIB,
+            SECTOR_NODES_32_GIB, SECTOR_NODES_32_KIB, SECTOR_NODES_4_KIB, SECTOR_NODES_512_MIB,
+            SECTOR_NODES_64_GIB, SECTOR_NODES_8_KIB,
         },
         gadgets::{
             ColumnHasherChip, ColumnHasherConfig, EncodingChip, EncodingConfig, LabelingChip,
@@ -246,8 +247,7 @@ where
     pub exp_parent_proofs: [ParentProof<F, U, V, W, SECTOR_NODES>; EXP_PARENTS],
 }
 
-impl<F, TreeR, const SECTOR_NODES: usize>
-    From<&VanillaChallengeProof<TreeR, Sha256Hasher<F>>>
+impl<F, TreeR, const SECTOR_NODES: usize> From<&VanillaChallengeProof<TreeR, Sha256Hasher<F>>>
     for ChallengeProof<F, TreeR::Arity, TreeR::SubTreeArity, TreeR::TopTreeArity, SECTOR_NODES>
 where
     F: FieldExt,
@@ -307,7 +307,15 @@ where
                     _tree_r: PhantomData,
                 }
             })
-            .collect::<Vec<ParentProof<F, TreeR::Arity, TreeR::SubTreeArity, TreeR::TopTreeArity, SECTOR_NODES>>>()
+            .collect::<Vec<
+                ParentProof<
+                    F,
+                    TreeR::Arity,
+                    TreeR::SubTreeArity,
+                    TreeR::TopTreeArity,
+                    SECTOR_NODES,
+                >,
+            >>()
             .try_into()
             .unwrap();
 
@@ -336,7 +344,15 @@ where
                     _tree_r: PhantomData,
                 }
             })
-            .collect::<Vec<ParentProof<F, TreeR::Arity, TreeR::SubTreeArity, TreeR::TopTreeArity, SECTOR_NODES>>>()
+            .collect::<Vec<
+                ParentProof<
+                    F,
+                    TreeR::Arity,
+                    TreeR::SubTreeArity,
+                    TreeR::TopTreeArity,
+                    SECTOR_NODES,
+                >,
+            >>()
             .try_into()
             .unwrap();
 
@@ -457,13 +473,22 @@ where
     // Computes a column digest.
     column_hasher: ColumnHasherConfig<F, SECTOR_NODES>,
     // TreeD Merkle proof.
-    tree_d: (<Sha256Hasher<F> as Halo2Hasher<U2>>::Config, InsertConfig<F, U2>),
+    tree_d: (
+        <Sha256Hasher<F> as Halo2Hasher<U2>>::Config,
+        InsertConfig<F, U2>,
+    ),
     // TreeR Merkle proof.
     tree_r: (
         <PoseidonHasher<F> as Halo2Hasher<U>>::Config,
         InsertConfig<F, U>,
-        Option<(<PoseidonHasher<F> as Halo2Hasher<V>>::Config, InsertConfig<F, V>)>,
-        Option<(<PoseidonHasher<F> as Halo2Hasher<W>>::Config, InsertConfig<F, W>)>,
+        Option<(
+            <PoseidonHasher<F> as Halo2Hasher<V>>::Config,
+            InsertConfig<F, V>,
+        )>,
+        Option<(
+            <PoseidonHasher<F> as Halo2Hasher<W>>::Config,
+            InsertConfig<F, W>,
+        )>,
     ),
     // Computes a challenge's layer label.
     labeling: LabelingConfig<F, SECTOR_NODES>,
@@ -1083,7 +1108,9 @@ where
             SECTOR_NODES_8_KIB => 18,
             SECTOR_NODES_16_KIB => 18,
             SECTOR_NODES_32_KIB => 18,
-            // TODO (jake): add more sector sizes
+            SECTOR_NODES_512_MIB => 19,
+            SECTOR_NODES_32_GIB => 27,
+            SECTOR_NODES_64_GIB => 27,
             _ => unimplemented!(),
         }
     }

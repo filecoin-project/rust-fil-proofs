@@ -14,7 +14,9 @@ use storage_proofs_core::{
 use storage_proofs_post::{
     fallback::{self as vanilla, FallbackPoSt, SetupParams},
     halo2::{
-        constants::{SECTOR_NODES_16_KIB, SECTOR_NODES_2_KIB, SECTOR_NODES_32_KIB, SECTOR_NODES_4_KIB},
+        constants::{
+            SECTOR_NODES_16_KIB, SECTOR_NODES_2_KIB, SECTOR_NODES_32_KIB, SECTOR_NODES_4_KIB,
+        },
         window, winning, PostCircuit, WindowPostCircuit, WinningPostCircuit,
     },
 };
@@ -54,11 +56,8 @@ where
     let sector_id = 55u64;
     let temp_dir = tempdir().expect("tempdir failure");
     let temp_path = temp_dir.path();
-    let (_replica, tree_r) = generate_tree::<TreeR<U, V, W>, _>(
-        &mut rng,
-        SECTOR_NODES,
-        Some(temp_path.to_path_buf()),
-    );
+    let (_replica, tree_r) =
+        generate_tree::<TreeR<U, V, W>, _>(&mut rng, SECTOR_NODES, Some(temp_path.to_path_buf()));
     let comm_c = Fp::random(&mut rng);
     let root_r = tree_r.root();
     let comm_r = <PoseidonHasher<Fp> as Hasher>::Function::hash2(&comm_c.into(), &root_r);
@@ -233,7 +232,10 @@ where
     )
     .expect("failed to generate vanilla_partition proofs");
     assert_eq!(vanilla_partition_proofs.len(), partition_count);
-    assert_eq!(vanilla_partition_proofs[0].sectors.len(), sectors_challenged_per_partition);
+    assert_eq!(
+        vanilla_partition_proofs[0].sectors.len(),
+        sectors_challenged_per_partition
+    );
 
     let keypair = {
         let circ =
