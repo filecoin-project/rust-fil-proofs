@@ -24,8 +24,7 @@ use storage_proofs_porep::{
             circuit::{self, SdrPorepCircuit},
             constants::{
                 challenge_count, num_layers, DRG_PARENTS, EXP_PARENTS, SECTOR_NODES_16_KIB,
-                SECTOR_NODES_2_KIB, SECTOR_NODES_32_GIB, SECTOR_NODES_32_KIB, SECTOR_NODES_4_KIB,
-                SECTOR_NODES_512_MIB, SECTOR_NODES_64_GIB, SECTOR_NODES_8_KIB,
+                SECTOR_NODES_2_KIB, SECTOR_NODES_32_KIB, SECTOR_NODES_4_KIB, SECTOR_NODES_8_KIB,
             },
         },
         LayerChallenges, SetupParams, StackedDrg, TemporaryAux, TemporaryAuxCache, BINARY_ARITY,
@@ -202,17 +201,20 @@ fn test_sdr_porep_circuit_32kib_halo2() {
 #[cfg(feature = "big-tests")]
 #[test]
 fn test_sdr_porep_circuit_512mib_halo2() {
+    use storage_proofs_porep::stacked::halo2::constants::SECTOR_NODES_512_MIB;
     test_sdr_porep_circuit::<U8, U0, U0, SECTOR_NODES_512_MIB>(false);
 }
 
 #[cfg(feature = "big-tests")]
 #[test]
 fn test_sdr_porep_circuit_32gib_halo2() {
+    test_sdr_porep_circuit::<U8, U8, U2, SECTOR_NODES_32_GIB>(false);
     test_sdr_porep_circuit::<U8, U8, U0, SECTOR_NODES_32_GIB>(false);
 }
 
 #[cfg(feature = "big-tests")]
 #[test]
 fn test_sdr_porep_circuit_64gib_halo2() {
+    use storage_proofs_porep::stacked::halo2::constants::SECTOR_NODES_64_GIB;
     test_sdr_porep_circuit::<U8, U8, U2, SECTOR_NODES_64_GIB>(false);
 }
