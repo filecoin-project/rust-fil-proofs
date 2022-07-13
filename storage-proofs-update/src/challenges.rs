@@ -4,7 +4,10 @@ use generic_array::typenum::U2;
 use neptune::poseidon::Poseidon;
 
 use crate::{
-    constants::{challenge_count, partition_count, TreeRDomain, TreeRHasher, POSEIDON_CONSTANTS_GEN_RANDOMNESS},
+    constants::{
+        challenge_count, partition_count, TreeRDomain, TreeRHasher,
+        POSEIDON_CONSTANTS_GEN_RANDOMNESS,
+    },
     vanilla::rhos,
 };
 
@@ -322,7 +325,8 @@ mod tests {
             let get_partition_shr = sector_nodes.trailing_zeros() - partitions.trailing_zeros();
 
             for k in 0..partitions {
-                let challenges: Vec<u32> = Challenges::<Fr>::new(sector_nodes, comm_r_new, k).collect();
+                let challenges: Vec<u32> =
+                    Challenges::<Fr>::new(sector_nodes, comm_r_new, k).collect();
                 assert_eq!(challenges.len(), partition_challenges);
 
                 let k = k as u32;

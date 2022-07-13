@@ -34,14 +34,8 @@ where
     pub fn with_subchips(
         base_hasher: <H as Halo2Hasher<U>>::Chip,
         base_insert: InsertChip<H::Field, U>,
-        sub_hasher_insert: Option<(
-            <H as Halo2Hasher<V>>::Chip,
-            InsertChip<H::Field, V>,
-        )>,
-        top_hasher_insert: Option<(
-            <H as Halo2Hasher<W>>::Chip,
-            InsertChip<H::Field, W>,
-        )>,
+        sub_hasher_insert: Option<(<H as Halo2Hasher<V>>::Chip, InsertChip<H::Field, V>)>,
+        top_hasher_insert: Option<(<H as Halo2Hasher<W>>::Chip, InsertChip<H::Field, W>)>,
     ) -> Self {
         if V::to_usize() == 0 {
             assert!(sub_hasher_insert.is_none());
@@ -67,8 +61,7 @@ where
         challenge_bits: &[AssignedBit<H::Field>],
         leaf: &Option<H::Field>,
         path: &[Vec<Option<H::Field>>],
-    ) -> Result<AssignedCell<H::Field, H::Field>, Error>
-    {
+    ) -> Result<AssignedCell<H::Field, H::Field>, Error> {
         self.compute_root_inner(
             layouter,
             challenge_bits,
@@ -83,8 +76,7 @@ where
         challenge_bits: &[AssignedBit<H::Field>],
         leaf: &AssignedCell<H::Field, H::Field>,
         path: &[Vec<Option<H::Field>>],
-    ) -> Result<AssignedCell<H::Field, H::Field>, Error>
-    {
+    ) -> Result<AssignedCell<H::Field, H::Field>, Error> {
         self.compute_root_inner(
             layouter,
             challenge_bits,
@@ -101,8 +93,7 @@ where
         challenge_bits: &[AssignedBit<H::Field>],
         leaf: WitnessOrCopy<H::Field, H::Field>,
         path: &[Vec<Option<H::Field>>],
-    ) -> Result<AssignedCell<H::Field, H::Field>, Error>
-    {
+    ) -> Result<AssignedCell<H::Field, H::Field>, Error> {
         let base_arity = U::to_usize();
         let sub_arity = V::to_usize();
         let top_arity = W::to_usize();
@@ -133,8 +124,7 @@ where
                 "path element has incorrect number of siblings"
             );
 
-            let index_bits: Vec<AssignedBit<H::Field>> = (0
-                ..base_arity_bit_len)
+            let index_bits: Vec<AssignedBit<H::Field>> = (0..base_arity_bit_len)
                 .map(|_| {
                     challenge_bits
                         .next()
@@ -398,11 +388,7 @@ mod test {
                 &fixed_neq,
             );
 
-            let base_insert = InsertChip::<H::Field, U>::configure(
-                meta,
-                &advice_eq,
-                &advice_neq,
-            );
+            let base_insert = InsertChip::<H::Field, U>::configure(meta, &advice_eq, &advice_neq);
 
             // TODO (jake): do not configure hash circuits for duplicate arities.
 
@@ -416,11 +402,8 @@ mod test {
                     &fixed_eq,
                     &fixed_neq,
                 );
-                let sub_insert = InsertChip::<H::Field, V>::configure(
-                    meta,
-                    &advice_eq,
-                    &advice_neq,
-                );
+                let sub_insert =
+                    InsertChip::<H::Field, V>::configure(meta, &advice_eq, &advice_neq);
                 Some((sub_hasher, sub_insert))
             };
 
@@ -434,11 +417,8 @@ mod test {
                     &fixed_eq,
                     &fixed_neq,
                 );
-                let top_insert = InsertChip::<H::Field, W>::configure(
-                    meta,
-                    &advice_eq,
-                    &advice_neq,
-                );
+                let top_insert =
+                    InsertChip::<H::Field, W>::configure(meta, &advice_eq, &advice_neq);
                 Some((top_hasher, top_insert))
             };
 
@@ -471,20 +451,17 @@ mod test {
 
             <H as Halo2Hasher<U>>::load(&mut layouter, &base_hasher_config)?;
             let base_hasher_chip = <H as Halo2Hasher<U>>::construct(base_hasher_config);
-            let base_insert_chip =
-                InsertChip::<H::Field, U>::construct(base_insert_config);
+            let base_insert_chip = InsertChip::<H::Field, U>::construct(base_insert_config);
 
             let sub_hasher_insert_chips = sub_config.map(|(hasher_config, insert_config)| {
                 let hasher_chip = <H as Halo2Hasher<V>>::construct(hasher_config);
-                let insert_chip =
-                    InsertChip::<H::Field, V>::construct(insert_config);
+                let insert_chip = InsertChip::<H::Field, V>::construct(insert_config);
                 (hasher_chip, insert_chip)
             });
 
             let top_hasher_insert_chips = top_config.map(|(hasher_config, insert_config)| {
                 let hasher_chip = <H as Halo2Hasher<W>>::construct(hasher_config);
-                let insert_chip =
-                    InsertChip::<H::Field, W>::construct(insert_config);
+                let insert_chip = InsertChip::<H::Field, W>::construct(insert_config);
                 (hasher_chip, insert_chip)
             });
 

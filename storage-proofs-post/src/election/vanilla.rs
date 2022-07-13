@@ -225,11 +225,10 @@ where
         let challenge =
             generate_leaf_challenge(pub_params, randomness, sector_challenge_index, n as u64)?;
 
-        let val: Tree::Field =
-            measure_op(Operation::PostReadChallengedRange, || {
-                tree.read_at(challenge as usize)
-            })?
-            .into();
+        let val: Tree::Field = measure_op(Operation::PostReadChallengedRange, || {
+            tree.read_at(challenge as usize)
+        })?
+        .into();
         data.push(val.into());
     }
 

@@ -317,10 +317,7 @@ mod tests {
                 [s * (a + b - c)]
             });
 
-            MyConfig {
-                advice,
-                s_add,
-            }
+            MyConfig { advice, s_add }
         }
 
         fn synthesize(
@@ -328,10 +325,7 @@ mod tests {
             config: Self::Config,
             mut layouter: impl Layouter<Fp>,
         ) -> Result<(), Error> {
-            let MyConfig {
-                advice,
-                s_add,
-            } = config;
+            let MyConfig { advice, s_add } = config;
 
             layouter.assign_region(
                 || "assign witness",

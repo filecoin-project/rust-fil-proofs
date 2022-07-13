@@ -230,9 +230,7 @@ where
         leafs: usize,
     ) -> Result<MerkleTreeWrapper<H, S, U, V, U0>> {
         let tree =
-            MerkleTree::<H::Domain, H::Function, S, U, V, U0>::from_slices(
-                tree_data, leafs,
-            )?;
+            MerkleTree::<H::Domain, H::Function, S, U, V, U0>::from_slices(tree_data, leafs)?;
         Ok(tree.into())
     }
 

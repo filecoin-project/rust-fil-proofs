@@ -146,13 +146,14 @@ where
     // The layers are still in the cache dir, so rerunning the label generation should
     // not do any work.
 
-    let (_, label_states) = StackedDrg::<
-        Tree,
-        Blake2sHasher<Tree::Field>,
-    >::generate_labels_for_encoding(
-        &pp.graph, &layer_challenges, &replica_id, config.clone()
-    )
-    .expect("label generation failed");
+    let (_, label_states) =
+        StackedDrg::<Tree, Blake2sHasher<Tree::Field>>::generate_labels_for_encoding(
+            &pp.graph,
+            &layer_challenges,
+            &replica_id,
+            config.clone(),
+        )
+        .expect("label generation failed");
     for state in &label_states {
         assert!(state.generated);
     }
@@ -164,13 +165,14 @@ where
         remove_file(data_path).expect("failed to delete layer cache");
     }
 
-    let (_, label_states) = StackedDrg::<
-        Tree,
-        Blake2sHasher<Tree::Field>,
-    >::generate_labels_for_encoding(
-        &pp.graph, &layer_challenges, &replica_id, config.clone()
-    )
-    .expect("label generation failed");
+    let (_, label_states) =
+        StackedDrg::<Tree, Blake2sHasher<Tree::Field>>::generate_labels_for_encoding(
+            &pp.graph,
+            &layer_challenges,
+            &replica_id,
+            config.clone(),
+        )
+        .expect("label generation failed");
     for state in &label_states[..off] {
         assert!(state.generated);
     }
@@ -180,8 +182,13 @@ where
 
     assert_ne!(data, &mmapped_data[..], "replication did not change data");
 
-    StackedDrg::<Tree, Blake2sHasher<Tree::Field>>::extract_all(&pp, &replica_id, mmapped_data.as_mut(), Some(config))
-        .expect("failed to extract data");
+    StackedDrg::<Tree, Blake2sHasher<Tree::Field>>::extract_all(
+        &pp,
+        &replica_id,
+        mmapped_data.as_mut(),
+        Some(config),
+    )
+    .expect("failed to extract data");
 
     assert_eq!(data, mmapped_data.as_ref());
 
@@ -423,10 +430,7 @@ where
     };
 
     let pp = StackedDrg::<Tree, Blake2sHasher<Tree::Field>>::setup(&sp).expect("setup failed");
-    let (tau, (p_aux, t_aux)) = StackedDrg::<
-        Tree,
-        Blake2sHasher<Tree::Field>,
-    >::replicate(
+    let (tau, (p_aux, t_aux)) = StackedDrg::<Tree, Blake2sHasher<Tree::Field>>::replicate(
         &pp,
         &replica_id,
         (mmapped_data.as_mut()).into(),
