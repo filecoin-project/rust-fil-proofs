@@ -31,12 +31,14 @@ fn init_logger() {
         fil_logger::init();
     });
 }
+
 fn test_winning_post_circuit<U, V, W, const SECTOR_NODES: usize>()
 where
     U: PoseidonArity<Fp>,
     V: PoseidonArity<Fp>,
     W: PoseidonArity<Fp>,
 {
+    init_logger();
     info!("test_winning_post_circuit [SectorNodes={}]", SECTOR_NODES);
     let sector_id = 0u64;
 
@@ -138,46 +140,39 @@ where
 
 #[test]
 fn test_winning_post_circuit_2kib_halo2() {
-    init_logger();
     test_winning_post_circuit::<U8, U0, U0, SECTOR_NODES_2_KIB>()
 }
 
 #[test]
 fn test_winning_post_circuit_4kib_halo2() {
-    init_logger();
     test_winning_post_circuit::<U8, U2, U0, SECTOR_NODES_4_KIB>()
 }
 
 #[test]
 fn test_winning_post_circuit_16kib_halo2() {
-    init_logger();
     test_winning_post_circuit::<U8, U8, U0, SECTOR_NODES_16_KIB>()
 }
 
 #[test]
 fn test_winning_post_circuit_32kib_halo2() {
-    init_logger();
     test_winning_post_circuit::<U8, U8, U2, SECTOR_NODES_32_KIB>()
 }
 
 #[cfg(feature = "big-tests")]
 #[test]
 fn test_winning_post_circuit_512mib_halo2() {
-    init_logger();
     test_winning_post_circuit::<U8, U0, U0, SECTOR_NODES_512_MIB>()
 }
 
 #[cfg(feature = "big-tests")]
 #[test]
 fn test_winning_post_circuit_32gib_halo2() {
-    init_logger();
     test_winning_post_circuit::<U8, U8, U0, SECTOR_NODES_32_GIB>()
 }
 
 #[cfg(feature = "big-tests")]
 #[test]
 fn test_winning_post_circuit_64gib_halo2() {
-    init_logger();
     test_winning_post_circuit::<U8, U8, U2, SECTOR_NODES_64_GIB>()
 }
 
@@ -187,6 +182,7 @@ where
     V: PoseidonArity<Fp>,
     W: PoseidonArity<Fp>,
 {
+    init_logger();
     info!("test_window_post_circuit [SectorNodes={}]", SECTOR_NODES);
     let challenged_sector_count = window::sectors_challenged_per_partition::<SECTOR_NODES>();
     let k = 0;
@@ -325,45 +321,38 @@ where
 
 #[test]
 fn test_window_post_circuit_2kib_halo2() {
-    init_logger();
     test_window_post_circuit::<U8, U0, U0, SECTOR_NODES_2_KIB>()
 }
 
 #[test]
 fn test_window_post_circuit_4kib_halo2() {
-    init_logger();
     test_window_post_circuit::<U8, U2, U0, SECTOR_NODES_4_KIB>()
 }
 
 #[test]
 fn test_window_post_circuit_16kib_halo2() {
-    init_logger();
     test_window_post_circuit::<U8, U8, U0, SECTOR_NODES_16_KIB>()
 }
 
 #[test]
 fn test_window_post_circuit_32kib_halo2() {
-    init_logger();
     test_window_post_circuit::<U8, U8, U2, SECTOR_NODES_32_KIB>()
 }
 
 #[cfg(feature = "big-tests")]
 #[test]
 fn test_window_post_circuit_512mib_halo2() {
-    init_logger();
     test_window_post_circuit::<U8, U0, U0, SECTOR_NODES_512_MIB>()
 }
 
 #[cfg(feature = "big-tests")]
 #[test]
 fn test_window_post_circuit_32gib_halo2() {
-    init_logger();
     test_window_post_circuit::<U8, U8, U0, SECTOR_NODES_32_GIB>()
 }
 
 #[cfg(feature = "big-tests")]
 #[test]
 fn test_window_post_circuit_64gib_halo2() {
-    init_logger();
     test_window_post_circuit::<U8, U8, U2, SECTOR_NODES_64_GIB>()
 }

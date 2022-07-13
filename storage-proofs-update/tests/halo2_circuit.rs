@@ -44,6 +44,7 @@ where
     V: PoseidonArity<Fp>,
     W: PoseidonArity<Fp>,
 {
+    init_logger();
     info!(
         "test_empty_sector_update_circuit [SectorNodes={}]",
         SECTOR_NODES
@@ -197,62 +198,53 @@ fn test_empty_sector_update_circuit_1kib_halo2() {
     // Halo2 keygen, proving, and verifying are slow and consume a lot of memory, thus we only test
     // those for a small sector size circuit (the halo2 compound proof tests will run the halo2
     // prover and verifier for larger sector sizes).
-    init_logger();
     test_empty_sector_update_circuit::<U8, U4, U0, SECTOR_SIZE_1_KIB>(true);
 }
 
 #[test]
 #[cfg(feature = "isolated-testing")]
 fn test_empty_sector_update_circuit_2kib_halo2() {
-    init_logger();
     test_empty_sector_update_circuit::<U8, U0, U0, SECTOR_SIZE_2_KIB>(false);
 }
 
 #[test]
 #[cfg(feature = "isolated-testing")]
 fn test_empty_sector_update_circuit_4kib_halo2() {
-    init_logger();
     test_empty_sector_update_circuit::<U8, U2, U0, SECTOR_SIZE_4_KIB>(false);
 }
 
 #[test]
 #[cfg(feature = "isolated-testing")]
 fn test_empty_sector_update_circuit_8kib_halo2() {
-    init_logger();
     test_empty_sector_update_circuit::<U8, U4, U0, SECTOR_SIZE_8_KIB>(false);
 }
 
 #[test]
 #[cfg(feature = "isolated-testing")]
 fn test_empty_sector_update_circuit_16kib_halo2() {
-    init_logger();
     test_empty_sector_update_circuit::<U8, U8, U0, SECTOR_SIZE_16_KIB>(false);
 }
 
 #[test]
 #[cfg(feature = "isolated-testing")]
 fn test_empty_sector_update_circuit_32kib_halo2() {
-    init_logger();
     test_empty_sector_update_circuit::<U8, U8, U2, SECTOR_SIZE_32_KIB>(false);
 }
 
 #[cfg(feature = "big-tests")]
 #[test]
 fn test_empty_sector_update_circuit_512mib_halo2() {
-    init_logger();
     test_empty_sector_update_circuit::<U8, U0, U0, SECTOR_SIZE_512_MIB>(false);
 }
 
 #[cfg(feature = "big-tests")]
 #[test]
 fn test_empty_sector_update_circuit_32gib_halo2() {
-    init_logger();
     test_empty_sector_update_circuit::<U8, U8, U0, SECTOR_SIZE_32_GIB>(false);
 }
 
 #[cfg(feature = "big-tests")]
 #[test]
 fn test_empty_sector_update_circuit_64gib_halo2() {
-    init_logger();
     test_empty_sector_update_circuit::<U8, U8, U2, SECTOR_SIZE_64_GIB>(false);
 }
