@@ -7,13 +7,14 @@ use ff::PrimeField;
 use filecoin_hashers::{Domain, Hasher, PoseidonArity};
 use generic_array::typenum::Unsigned;
 use merkletree::{merkle::get_merkle_tree_len, store::StoreConfig};
+use rayon::iter::{IntoParallelIterator, ParallelExtend, ParallelIterator};
 use storage_proofs_core::merkle::{create_lc_tree, get_base_tree_count, split_config_and_replica};
 use storage_proofs_update::{
     constants::{
         apex_leaf_count, partition_count, TreeD, TreeDArity, TreeDDomain, TreeDHasher, TreeR,
         TreeRBase, TreeRDomain, TreeRHasher,
     },
-    rho,
+    rhos,
 };
 
 // Selects a value for `h` via `h = hs[log2(h_select)]`; default tests to use `h = hs[3]`.
@@ -188,16 +189,16 @@ where
     let node_index_bit_len = sector_nodes.trailing_zeros() as usize;
     let get_high_bits_shr = node_index_bit_len - h;
 
-    (0..sector_nodes)
-        .map(|node| {
-            // Take the `h` high bits from the node-index and compute this node's compute `rho`.
-            let high = (node >> get_high_bits_shr) as u32;
-            let rho = rho(phi, high);
+    let rhos = rhos(h, phi);
 
-            // `label_r_new = label_r_old + label_d_new * rho`
-            let label_r_old: D::Field = labels_r_old[node].into();
-            let label_d_new: D::Field = labels_d_new[node].into();
-            (label_r_old + label_d_new * rho).into()
-        })
-        .collect()
+    let mut replica_new = Vec::with_capacity(sector_nodes);
+    replica_new.par_extend((0..sector_nodes).into_par_iter().map(|node| {
+        let high = node >> get_high_bits_shr;
+        let rho = rhos[high];
+        let label_r_old: D::Field = labels_r_old[node].into();
+        let label_d_new: D::Field = labels_d_new[node].into();
+        let label_r_new = label_r_old + label_d_new * rho;
+        TreeRDomain::<D::Field>::from(label_r_new)
+    }));
+    replica_new
 }
