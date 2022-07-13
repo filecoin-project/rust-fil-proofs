@@ -6,7 +6,10 @@ pub use storage_proofs_porep::stacked::{Labels, PersistentAux, TemporaryAux};
 
 use blstrs::Scalar as Fr;
 use filecoin_hashers::Hasher;
-use halo2_proofs::{arithmetic::FieldExt, pasta::{Fp, Fq}};
+use halo2_proofs::{
+    arithmetic::FieldExt,
+    pasta::{Fp, Fq},
+};
 use serde::{Deserialize, Serialize};
 use storage_proofs_core::{merkle::BinaryMerkleTree, sector::SectorId};
 use storage_proofs_porep::stacked;
@@ -157,23 +160,28 @@ impl<F: FieldExt> From<Vec<Vec<F>>> for CircuitPublicInputs {
     }
 }
 
+#[allow(clippy::from_over_into)]
 impl Into<Vec<Fr>> for CircuitPublicInputs {
     fn into(self) -> Vec<Fr> {
         match self {
             CircuitPublicInputs::Groth(pub_inputs) => pub_inputs,
-            CircuitPublicInputs::HaloPallas(_) =>
-                panic!("cannot convert halo2-pallas public inputs into groth16 public inputs"),
-            CircuitPublicInputs::HaloVesta(_) =>
-                panic!("cannot convert halo2-vesta public inputs into groth16 public inputs"),
+            CircuitPublicInputs::HaloPallas(_) => {
+                panic!("cannot convert halo2-pallas public inputs into groth16 public inputs")
+            }
+            CircuitPublicInputs::HaloVesta(_) => {
+                panic!("cannot convert halo2-vesta public inputs into groth16 public inputs")
+            }
         }
     }
 }
 
+#[allow(clippy::from_over_into)]
 impl<F: FieldExt> Into<Vec<Vec<F>>> for CircuitPublicInputs {
     fn into(self) -> Vec<Vec<F>> {
         match self {
-            CircuitPublicInputs::Groth(_) =>
-                panic!("cannot convert halo2 public inputs into groth16 public inputs"),
+            CircuitPublicInputs::Groth(_) => {
+                panic!("cannot convert halo2 public inputs into groth16 public inputs")
+            }
             CircuitPublicInputs::HaloPallas(pub_inputs) => {
                 assert_eq!(
                     TypeId::of::<F>(),

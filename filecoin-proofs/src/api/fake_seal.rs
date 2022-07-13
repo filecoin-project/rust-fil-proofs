@@ -51,15 +51,13 @@ where
     }
 
     let fake_comm_c = <Tree::Hasher as Hasher>::Domain::random(&mut rng);
-    let (comm_r, p_aux) = StackedDrg::<
-        Tree,
-        DefaultPieceHasher<Tree::Field>,
-    >::fake_replicate_phase2(
-        fake_comm_c,
-        out_path,
-        &cache_path,
-        sector_bytes as usize,
-    )?;
+    let (comm_r, p_aux) =
+        StackedDrg::<Tree, DefaultPieceHasher<Tree::Field>>::fake_replicate_phase2(
+            fake_comm_c,
+            out_path,
+            &cache_path,
+            sector_bytes as usize,
+        )?;
 
     let p_aux_path = cache_path.as_ref().join(CacheKey::PAux.to_string());
     let mut f_p_aux = File::create(&p_aux_path)

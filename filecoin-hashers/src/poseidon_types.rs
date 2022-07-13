@@ -102,9 +102,14 @@ where
     F: PrimeField,
     A: PoseidonArity<F>,
 {
-    *POSEIDON_CONSTANTS.get::<FieldArity<F, A>>().unwrap_or_else(|| {
-        panic!("arity-{} Poseidon constants not found for field", A::to_usize())
-    })
+    *POSEIDON_CONSTANTS
+        .get::<FieldArity<F, A>>()
+        .unwrap_or_else(|| {
+            panic!(
+                "arity-{} Poseidon constants not found for field",
+                A::to_usize()
+            )
+        })
 }
 
 // A marker trait for arities which are in `POSEIDON_CONSTANTS`; we require that 'PoseidonArity<F>`

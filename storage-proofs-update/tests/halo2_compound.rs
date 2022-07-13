@@ -73,8 +73,9 @@ where
     let tree_r_base_nodes = get_merkle_tree_len(tree_r_base_leafs, tree_r_base_arity).unwrap();
 
     // Create random replica-old and write TreeROld.
-    let labels_r_old: Vec<TreeRDomain> =
-        (0..SECTOR_NODES).map(|_| TreeRDomain::random(&mut rng)).collect();
+    let labels_r_old: Vec<TreeRDomain> = (0..SECTOR_NODES)
+        .map(|_| TreeRDomain::random(&mut rng))
+        .collect();
     // Write old replica-old to disk.
     let replica_old_path = tmp_path.join(Path::new("replica_old"));
     let replica_old: Vec<u8> = labels_r_old.iter().flat_map(Domain::into_bytes).collect();
@@ -116,8 +117,9 @@ where
     let comm_r_old = <TreeRHasher as Hasher>::Function::hash2(&comm_c, &root_r_old);
 
     // Create random date-new and write TreeDNew.
-    let labels_d_new: Vec<TreeDDomain> =
-        (0..SECTOR_NODES).map(|_| TreeDDomain::random(&mut rng)).collect();
+    let labels_d_new: Vec<TreeDDomain> = (0..SECTOR_NODES)
+        .map(|_| TreeDDomain::random(&mut rng))
+        .collect();
     let tree_d_arity = TreeDArity::to_usize();
     let tree_d_rows_to_discard = default_rows_to_discard(SECTOR_NODES, tree_d_arity);
     let tree_d_nodes = get_merkle_tree_len(SECTOR_NODES, tree_d_arity).unwrap();

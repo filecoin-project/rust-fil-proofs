@@ -39,9 +39,8 @@ gperftools = { version = "0.2", optional = true }
 num_cpus = "1.10.1"
 semver = "1.0.6"
 fr32 = { path = "../fr32", version = "~5.0.0"}
-blstrs = "0.5.0"
 cbc = { version = "0.1.2", features = ["std"] }
-blstrs = { version = "0.4.0", features = ["gpu"] }
+blstrs = { version = "0.5.0", features = ["gpu"] }
 # halo2_gadgets = { git = "https://github.com/drpetervannostrand/halo2", branch = "sha256-chip" }
 # halo2_proofs = { git = "https://github.com/drpetervannostrand/halo2", branch = "sha256-chip" }
 halo2_proofs = { git = "https://github.com/drpetervannostrand/halo2" }

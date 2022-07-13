@@ -30,10 +30,9 @@ use storage_proofs_core::{
 use crate::{
     constants::{
         apex_leaf_count, challenge_count, partition_count, validate_tree_r_shape, TreeDArity,
-        TreeDHasher, TreeRHasher, SECTOR_SIZE_16_KIB, SECTOR_SIZE_16_MIB,
-        SECTOR_SIZE_1_KIB, SECTOR_SIZE_2_KIB, SECTOR_SIZE_32_GIB, SECTOR_SIZE_32_KIB,
-        SECTOR_SIZE_4_KIB, SECTOR_SIZE_512_MIB, SECTOR_SIZE_64_GIB, SECTOR_SIZE_8_KIB,
-        SECTOR_SIZE_8_MIB,
+        TreeDHasher, TreeRHasher, SECTOR_SIZE_16_KIB, SECTOR_SIZE_16_MIB, SECTOR_SIZE_1_KIB,
+        SECTOR_SIZE_2_KIB, SECTOR_SIZE_32_GIB, SECTOR_SIZE_32_KIB, SECTOR_SIZE_4_KIB,
+        SECTOR_SIZE_512_MIB, SECTOR_SIZE_64_GIB, SECTOR_SIZE_8_KIB, SECTOR_SIZE_8_MIB,
     },
     gen_partition_challenges, gen_partition_rhos,
     halo2::gadgets::{
@@ -997,10 +996,9 @@ where
             SECTOR_SIZE_32_KIB => 20,
             SECTOR_SIZE_8_MIB => 20,
             SECTOR_SIZE_16_MIB => 20,
-            // TODO (jake): add reminaing sector sizes
-            SECTOR_SIZE_512_MIB => unimplemented!(),
-            SECTOR_SIZE_32_GIB => unimplemented!(),
-            SECTOR_SIZE_64_GIB => unimplemented!(),
+            SECTOR_SIZE_512_MIB => 23,
+            SECTOR_SIZE_32_GIB => 23,
+            SECTOR_SIZE_64_GIB => 23,
             _ => unreachable!(),
         }
     }
