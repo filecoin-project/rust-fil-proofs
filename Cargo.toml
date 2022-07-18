@@ -1,15 +1,15 @@
 [workspace]
 
 members = [
-  "filecoin-proofs",
-  "storage-proofs-core",
-  "storage-proofs-porep",
-  "storage-proofs-post",
+#  "filecoin-proofs",
+#  "storage-proofs-core",
+#  "storage-proofs-porep",
+#  "storage-proofs-post",
 #  "fil-proofs-tooling",
 #  "fil-proofs-param",
-  "fr32",
-  "sha2raw",
-  "filecoin-hashers",
-  "storage-proofs-update",
+#  "fr32",
+#  "sha2raw",
+#  "filecoin-hashers",
+#  "storage-proofs-update",
   "fil-halo2-gadgets",
 ]

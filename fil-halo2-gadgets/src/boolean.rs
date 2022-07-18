@@ -6,7 +6,7 @@ use ff::PrimeFieldBits;
 use halo2_gadgets::utilities::decompose_running_sum::{RunningSum, RunningSumConfig};
 use halo2_proofs::{
     arithmetic::FieldExt,
-    circuit::{AssignedCell, Layouter, Region},
+    circuit::{AssignedCell, Layouter, Region, Value},
     plonk::{Advice, Any, Assigned, Column, ConstraintSystem, Error, Expression},
     poly::Rotation,
 };
@@ -89,7 +89,7 @@ pub fn spread_bits<const DENSE: usize, const SPREAD: usize>(
 
 pub type AssignedBit<F> = AssignedCell<Bit, F>;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Copy, Debug)]
 pub struct Bit(pub bool);
 
 impl<F: FieldExt> From<&Bit> for Assigned<F> {
@@ -198,26 +198,26 @@ impl<F: FieldExt, const LEN: usize> AssignedBits<F, LEN> {
         annotation: A,
         column: impl Into<Column<Any>>,
         offset: usize,
-        value: Option<T>,
+        value: Value<T>,
     ) -> Result<Self, Error>
     where
         A: Fn() -> AR,
         AR: Into<String>,
         <T as TryInto<[bool; LEN]>>::Error: std::fmt::Debug,
     {
-        let value: Option<[bool; LEN]> = value.map(|v| v.try_into().unwrap());
-        let value: Option<Bits<LEN>> = value.map(|v| v.into());
+        let value: Value<[bool; LEN]> = value.map(|v| v.try_into().unwrap());
+        let value: Value<Bits<LEN>> = value.map(|v| v.into());
 
         let column: Column<Any> = column.into();
         match column.column_type() {
             Any::Advice => {
                 region.assign_advice(annotation, column.try_into().unwrap(), offset, || {
-                    value.clone().ok_or(Error::Synthesis)
+                    value.clone()
                 })
             }
             Any::Fixed => {
                 region.assign_fixed(annotation, column.try_into().unwrap(), offset, || {
-                    value.clone().ok_or(Error::Synthesis)
+                    value.clone()
                 })
             }
             _ => panic!("Cannot assign to instance column"),
@@ -227,7 +227,7 @@ impl<F: FieldExt, const LEN: usize> AssignedBits<F, LEN> {
 }
 
 impl<F: FieldExt> AssignedBits<F, 16> {
-    pub fn value_u16(&self) -> Option<u16> {
+    pub fn value_u16(&self) -> Value<u16> {
         self.value().map(|v| v.into())
     }
 
@@ -236,23 +236,23 @@ impl<F: FieldExt> AssignedBits<F, 16> {
         annotation: A,
         column: impl Into<Column<Any>>,
         offset: usize,
-        value: Option<u16>,
+        value: Value<u16>,
     ) -> Result<Self, Error>
     where
         A: Fn() -> AR,
         AR: Into<String>,
     {
         let column: Column<Any> = column.into();
-        let value: Option<Bits<16>> = value.map(|v| v.into());
+        let value: Value<Bits<16>> = value.map(|v| v.into());
         match column.column_type() {
             Any::Advice => {
                 region.assign_advice(annotation, column.try_into().unwrap(), offset, || {
-                    value.clone().ok_or(Error::Synthesis)
+                    value.clone()
                 })
             }
             Any::Fixed => {
                 region.assign_fixed(annotation, column.try_into().unwrap(), offset, || {
-                    value.clone().ok_or(Error::Synthesis)
+                    value.clone()
                 })
             }
             _ => panic!("Cannot assign to instance column"),
@@ -262,7 +262,7 @@ impl<F: FieldExt> AssignedBits<F, 16> {
 }
 
 impl<F: FieldExt> AssignedBits<F, 32> {
-    pub fn value_u32(&self) -> Option<u32> {
+    pub fn value_u32(&self) -> Value<u32> {
         self.value().map(|v| v.into())
     }
 
@@ -271,23 +271,23 @@ impl<F: FieldExt> AssignedBits<F, 32> {
         annotation: A,
         column: impl Into<Column<Any>>,
         offset: usize,
-        value: Option<u32>,
+        value: Value<u32>,
     ) -> Result<Self, Error>
     where
         A: Fn() -> AR,
         AR: Into<String>,
     {
         let column: Column<Any> = column.into();
-        let value: Option<Bits<32>> = value.map(|v| v.into());
+        let value: Value<Bits<32>> = value.map(|v| v.into());
         match column.column_type() {
             Any::Advice => {
                 region.assign_advice(annotation, column.try_into().unwrap(), offset, || {
-                    value.clone().ok_or(Error::Synthesis)
+                    value.clone()
                 })
             }
             Any::Fixed => {
                 region.assign_fixed(annotation, column.try_into().unwrap(), offset, || {
-                    value.clone().ok_or(Error::Synthesis)
+                    value.clone()
                 })
             }
             _ => panic!("Cannot assign to instance column"),
@@ -374,7 +374,7 @@ where
     pub fn witness_decompose(
         &self,
         mut layouter: impl Layouter<F>,
-        val: Option<F>,
+        val: Value<F>,
     ) -> Result<Vec<AssignedBit<F>>, Error> {
         layouter.assign_region(
             || "le_bits",
@@ -403,7 +403,7 @@ where
         &self,
         region: &mut Region<'_, F>,
         offset: usize,
-        val: Option<F>,
+        val: Value<F>,
     ) -> Result<Vec<AssignedBit<F>>, Error> {
         let zs = self.config.running_sum.witness_decompose(
             region,
@@ -460,11 +460,7 @@ where
                     // store `k_i`'s bits.
                     self.config.advice[1 + i],
                     offset,
-                    || {
-                        k_cur
-                            .map(|k_cur| Bit(k_cur >> i & 1 == 1))
-                            .ok_or(Error::Synthesis)
-                    },
+                    || k_cur.map(|k_cur| Bit(k_cur >> i & 1 == 1)),
                 )?;
                 bits.push(bit);
                 bit_index += 1;
@@ -494,7 +490,7 @@ mod tests {
     where
         F: FieldExt + PrimeFieldBits,
     {
-        value: Option<F>,
+        value: Value<F>,
     }
 
     impl<F> Circuit<F> for MyCircuit<F>
@@ -505,7 +501,9 @@ mod tests {
         type FloorPlanner = SimpleFloorPlanner;
 
         fn without_witnesses(&self) -> Self {
-            MyCircuit { value: None }
+            MyCircuit {
+                value: Value::unknown(),
+            }
         }
 
         fn configure(meta: &mut ConstraintSystem<F>) -> Self::Config {
@@ -529,7 +527,7 @@ mod tests {
 
             let le_bits_chip = LeBitsChip::construct(config);
 
-            let bits: Vec<Option<bool>> = layouter
+            let bits: Vec<Value<bool>> = layouter
                 .assign_region(
                     || "decompose",
                     |mut region| {
@@ -538,7 +536,7 @@ mod tests {
                             || "value",
                             value_col,
                             offset,
-                            || self.value.ok_or(Error::Synthesis),
+                            || self.value,
                         )?;
                         offset += 1;
                         le_bits_chip.copy_decompose_within_region(&mut region, offset, value)
@@ -548,21 +546,25 @@ mod tests {
                 .map(|asn| asn.value().map(Into::into))
                 .collect();
 
-            let expected_bits = if bits.iter().any(Option::is_none) {
-                assert!(self.value.is_none());
-                vec![None; FIELD_BITS]
-            } else {
-                assert!(self.value.is_some());
-                self.value
-                    .unwrap()
-                    .to_le_bits()
-                    .into_iter()
-                    .map(Some)
-                    .take(FIELD_BITS)
-                    .collect()
-            };
+            let expected_bits: [Value<bool>; FIELD_BITS] = self.value
+                .map(|field| {
+                    let le_bits: [bool; FIELD_BITS] = field
+                        .to_le_bits()
+                        .into_iter()
+                        .take(FIELD_BITS)
+                        .collect::<Vec<bool>>()
+                        .try_into()
+                        .unwrap();
+                    le_bits
+                })
+                // Convert `Value<[bool; FIELD_BITS]>` into `[Value<bool>; FIELD_BITS]`.
+                .transpose_array();
 
-            assert_eq!(bits, expected_bits);
+            for (bit, expected_bit) in bits.iter().zip(expected_bits.iter()) {
+                bit.zip(*expected_bit).map(|(bit, expected_bit)| {
+                    assert_eq!(bit, expected_bit);
+                });
+            }
 
             Ok(())
         }
@@ -582,10 +584,13 @@ mod tests {
     #[test]
     fn test_le_bits_chip() {
         let mut rng = XorShiftRng::from_seed(TEST_SEED);
-        let value = Some(Fp::random(&mut rng));
-        let circ = MyCircuit { value };
         let k = MyCircuit::<Fp>::k();
-        let prover = MockProver::run(k, &circ, vec![]).unwrap();
-        assert!(prover.verify().is_ok());
+        for _ in 0..10 {
+            let circ = MyCircuit {
+                value: Value::known(Fp::random(&mut rng)),
+            };
+            let prover = MockProver::run(k, &circ, vec![]).unwrap();
+            assert!(prover.verify().is_ok());
+        }
     }
 }
