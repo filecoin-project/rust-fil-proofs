@@ -43,7 +43,10 @@ cbc = { version = "0.1.2", features = ["std"] }
 blstrs = { version = "0.5.0", features = ["gpu"] }
 # halo2_gadgets = { git = "https://github.com/drpetervannostrand/halo2", branch = "sha256-chip" }
 # halo2_proofs = { git = "https://github.com/drpetervannostrand/halo2", branch = "sha256-chip" }
-halo2_proofs = { git = "https://github.com/drpetervannostrand/halo2" }
+#
+# halo2_proofs = { git = "https://github.com/drpetervannostrand/halo2" }
+#
+halo2_proofs = "0.2.0"
 fil-halo2-gadgets = { path = "../fil-halo2-gadgets" }
 ec-gpu = "0.1.0"
 typemap = "0.3.3"
@@ -59,6 +62,7 @@ tempfile = "3"
 blake2s_simd = "1.0.0"
 # pasta_curves = "0.3.0"
 # pasta_curves = { git = "https://github.com/zcash/pasta_curves", rev = "2796b6b", features = ["gpu"] }
+neptune = { git = "https://github.com/filecoin-project/neptune", rev = "866ea96e879d79461183cfb0b4272af8768af7d4", features = ["bls", "pasta", "arity2", "arity4", "arity8", "arity11", "arity16", "arity24", "arity36"] }
 
 [features]
 default = ["opencl"]

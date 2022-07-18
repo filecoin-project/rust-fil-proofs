@@ -1,7 +1,5 @@
-use std::any::TypeId;
 use std::convert::TryInto;
 use std::marker::PhantomData;
-use std::mem;
 use std::ops::Range;
 
 use fil_halo2_gadgets::{
@@ -13,14 +11,14 @@ use filecoin_hashers::{get_poseidon_constants, Halo2Hasher, Hasher, PoseidonArit
 use generic_array::typenum::U2;
 use halo2_proofs::{
     arithmetic::FieldExt,
-    circuit::{AssignedCell, Layouter, SimpleFloorPlanner},
+    circuit::{AssignedCell, Layouter, SimpleFloorPlanner, Value},
     plonk::{Advice, Circuit, Column, ConstraintSystem, Error, Instance},
 };
 use storage_proofs_core::{
     halo2::{
         gadgets::{
             insert::{InsertChip, InsertConfig},
-            por::MerkleChip,
+            por::{self, MerkleChip},
         },
         CircuitRows,
     },
@@ -202,12 +200,12 @@ where
     TreeDHasher<F>: Hasher<Field = F>,
     TreeRHasher<F>: Hasher<Field = F>,
 {
-    leaf_r_old: Option<F>,
-    path_r_old: Vec<Vec<Option<F>>>,
-    leaf_d_new: Option<F>,
-    path_d_new: Vec<Vec<Option<F>>>,
-    leaf_r_new: Option<F>,
-    path_r_new: Vec<Vec<Option<F>>>,
+    leaf_r_old: Value<F>,
+    path_r_old: Vec<Vec<Value<F>>>,
+    leaf_d_new: Value<F>,
+    path_d_new: Vec<Vec<Value<F>>>,
+    leaf_r_new: Value<F>,
+    path_r_new: Vec<Vec<Value<F>>>,
     _tree_r: PhantomData<(U, V, W)>,
 }
 
@@ -245,25 +243,25 @@ where
         proof_d_new: MerkleProof<TreeDHasher<F>, TreeDArity>,
         proof_r_new: MerkleProof<TreeRHasher<F>, U, V, W>,
     ) -> Self {
-        let leaf_r_old = Some(proof_r_old.leaf().into());
-        let path_r_old: Vec<Vec<Option<F>>> = proof_r_old
+        let leaf_r_old = Value::known(proof_r_old.leaf().into());
+        let path_r_old: Vec<Vec<Value<F>>> = proof_r_old
             .path()
             .iter()
-            .map(|(siblings, _insert)| siblings.iter().map(|&s| Some(s.into())).collect())
+            .map(|(siblings, _insert)| siblings.iter().map(|&s| Value::known(s.into())).collect())
             .collect();
 
-        let leaf_d_new = Some(proof_d_new.leaf().into());
-        let path_d_new: Vec<Vec<Option<F>>> = proof_d_new
+        let leaf_d_new = Value::known(proof_d_new.leaf().into());
+        let path_d_new: Vec<Vec<Value<F>>> = proof_d_new
             .path()
             .iter()
-            .map(|(siblings, _insert)| siblings.iter().map(|&s| Some(s.into())).collect())
+            .map(|(siblings, _insert)| siblings.iter().map(|&s| Value::known(s.into())).collect())
             .collect();
 
-        let leaf_r_new = Some(proof_r_new.leaf().into());
-        let path_r_new: Vec<Vec<Option<F>>> = proof_r_new
+        let leaf_r_new = Value::known(proof_r_new.leaf().into());
+        let path_r_new: Vec<Vec<Value<F>>> = proof_r_new
             .path()
             .iter()
-            .map(|(siblings, _insert)| siblings.iter().map(|&s| Some(s.into())).collect())
+            .map(|(siblings, _insert)| siblings.iter().map(|&s| Value::known(s.into())).collect())
             .collect();
 
         ChallengeProof {
@@ -281,9 +279,11 @@ where
         let challenge_bit_len = SECTOR_NODES.trailing_zeros() as usize;
 
         // TreeD is a binary-tree.
-        let path_d = vec![vec![None]; challenge_bit_len];
+        let path_d_new = vec![vec![Value::unknown()]; challenge_bit_len];
 
         // TreeROld and TreeRNew have the same shape, thus have the same Merkle path length.
+        // TODO (jake):
+        /*
         let path_r = {
             let base_arity = U::to_usize();
             let sub_arity = V::to_usize();
@@ -293,28 +293,31 @@ where
             let mut sub_and_top_path = vec![];
 
             if sub_arity > 0 {
-                sub_and_top_path.push(vec![None; sub_arity - 1]);
+                sub_and_top_path.push(vec![Value::unknown(); sub_arity - 1]);
                 bits_remaining -= sub_arity.trailing_zeros() as usize;
             };
 
             if top_arity > 0 {
-                sub_and_top_path.push(vec![None; top_arity - 1]);
+                sub_and_top_path.push(vec![Value::unknown(); top_arity - 1]);
                 bits_remaining -= top_arity.trailing_zeros() as usize;
             };
 
             let base_path_len = bits_remaining / base_arity.trailing_zeros() as usize;
-            let base_path = vec![vec![None; base_arity - 1]; base_path_len];
+            let base_path = vec![vec![Value::unknown(); base_arity - 1]; base_path_len];
 
             [base_path, sub_and_top_path].concat()
         };
+        */
+        let path_r_old = por::empty_path::<F, U, V, W, SECTOR_NODES>();
+        let path_r_new = path_r_old.clone();
 
         ChallengeProof {
-            leaf_r_old: None,
-            path_r_old: path_r.clone(),
-            leaf_d_new: None,
-            path_d_new: path_d,
-            leaf_r_new: None,
-            path_r_new: path_r,
+            leaf_r_old: Value::unknown(),
+            path_r_old,
+            leaf_d_new: Value::unknown(),
+            path_d_new,
+            leaf_r_new: Value::unknown(),
+            path_r_new,
             _tree_r: PhantomData,
         }
     }
@@ -330,10 +333,10 @@ where
     TreeDHasher<F>: Hasher<Field = F>,
     TreeRHasher<F>: Hasher<Field = F>,
 {
-    pub comm_c: Option<F>,
-    pub root_r_old: Option<F>,
-    pub root_r_new: Option<F>,
-    pub apex_leafs: Vec<Option<F>>,
+    pub comm_c: Value<F>,
+    pub root_r_old: Value<F>,
+    pub root_r_new: Value<F>,
+    pub apex_leafs: Vec<Value<F>>,
     pub challenge_proofs: Vec<ChallengeProof<F, U, V, W, SECTOR_NODES>>,
 }
 
@@ -358,12 +361,11 @@ where
             .root()
             .into();
 
-        let apex_leafs: Vec<Option<F>> = vanilla_partition_proof
+        let apex_leafs: Vec<Value<F>> = vanilla_partition_proof
             .apex_leafs
             .iter()
             .copied()
-            .map(Into::into)
-            .map(Some)
+            .map(|leaf| Value::known(leaf.into()))
             .collect();
 
         let challenge_proofs: Vec<ChallengeProof<F, U, V, W, SECTOR_NODES>> =
@@ -371,13 +373,13 @@ where
                 .challenge_proofs
                 .iter()
                 .cloned()
-                .map(Into::into)
+                .map(ChallengeProof::from)
                 .collect();
 
         PrivateInputs {
-            comm_c: Some(comm_c),
-            root_r_old: Some(root_r_old),
-            root_r_new: Some(root_r_new),
+            comm_c: Value::known(comm_c),
+            root_r_old: Value::known(root_r_old),
+            root_r_new: Value::known(root_r_new),
             apex_leafs,
             challenge_proofs,
         }
@@ -401,7 +403,7 @@ where
         let root_r_old: F = challenge_proofs[0].proof_r_old.root().into();
         let root_r_new: F = challenge_proofs[0].proof_r_new.root().into();
 
-        let apex_leafs: Vec<Option<F>> = apex_leafs.iter().copied().map(Some).collect();
+        let apex_leafs: Vec<Value<F>> = apex_leafs.iter().copied().map(Value::known).collect();
 
         let challenge_proofs: Vec<ChallengeProof<F, U, V, W, SECTOR_NODES>> = challenge_proofs
             .iter()
@@ -410,9 +412,9 @@ where
             .collect();
 
         PrivateInputs {
-            comm_c: Some(comm_c),
-            root_r_old: Some(root_r_old),
-            root_r_new: Some(root_r_new),
+            comm_c: Value::known(comm_c),
+            root_r_old: Value::known(root_r_old),
+            root_r_new: Value::known(root_r_new),
             apex_leafs,
             challenge_proofs,
         }
@@ -570,32 +572,17 @@ where
     type FloorPlanner = SimpleFloorPlanner;
 
     fn without_witnesses(&self) -> Self {
-        EmptySectorUpdateCircuit {
-            pub_inputs: PublicInputs {
-                partition_bits: vec![None; self.pub_inputs.partition_bits.len()],
-                comm_r_old: None,
-                comm_d_new: None,
-                comm_r_new: None,
-                challenges: vec![None; self.pub_inputs.challenges.len()],
-                rhos: vec![None; self.pub_inputs.rhos.len()],
-            },
-            priv_inputs: PrivateInputs {
-                comm_c: None,
-                root_r_old: None,
-                root_r_new: None,
-                apex_leafs: vec![None; self.priv_inputs.apex_leafs.len()],
-                challenge_proofs: vec![
-                    ChallengeProof::empty();
-                    self.priv_inputs.challenge_proofs.len()
-                ],
-            },
-        }
+        Self::blank_circuit()
     }
 
     fn configure(meta: &mut ConstraintSystem<F>) -> Self::Config {
         let (advice_eq, advice_neq, fixed_eq, fixed_neq) = ColumnBuilder::new()
             .with_chip::<<TreeDHasher<F> as Halo2Hasher<TreeDArity>>::Chip>()
             .with_chip::<<TreeRHasher<F> as Halo2Hasher<U>>::Chip>()
+            .with_chip::<<TreeRHasher<F> as Halo2Hasher<V>>::Chip>()
+            .with_chip::<<TreeRHasher<F> as Halo2Hasher<W>>::Chip>()
+            // Only need the base arity here because it is guaranteed to be the largest arity, thus
+            // all other arity insert chips will use a subset of the base arity's columns.
             .with_chip::<InsertChip<F, U>>()
             .create_columns(meta);
 
@@ -617,16 +604,16 @@ where
             &fixed_neq,
         );
 
-        let tree_d_arity_type = TypeId::of::<U2>();
-        let base_arity_type = TypeId::of::<U>();
-        let sub_arity_type = TypeId::of::<V>();
-        let top_arity_type = TypeId::of::<W>();
+        let binary_arity = 2;
+        let base_arity = U::to_usize();
+        let sub_arity = V::to_usize();
+        let top_arity = W::to_usize();
 
-        let (poseidon_base, insert_base) = if base_arity_type == tree_d_arity_type {
-            // Convert each chip's `U2` type parameter to `U`.
-            let poseidon_base = unsafe { mem::transmute(poseidon_2.clone()) };
-            let insert_base = unsafe { mem::transmute(insert_2.clone()) };
-            (poseidon_base, insert_base)
+        let (poseidon_base, insert_base) = if base_arity == binary_arity {
+            por::change_hasher_insert_arity::<TreeRHasher<F>, U2, U>(
+                poseidon_2.clone(),
+                insert_2.clone(),
+            )
         } else {
             let poseidon_base = <TreeRHasher<F> as Halo2Hasher<U>>::configure(
                 meta,
@@ -635,22 +622,22 @@ where
                 &fixed_eq,
                 &fixed_neq,
             );
-            let insert_base = InsertChip::<F, U>::configure(meta, &advice_eq, &advice_neq);
+            let insert_base = InsertChip::configure(meta, &advice_eq, &advice_neq);
             (poseidon_base, insert_base)
         };
 
-        let sub = if V::to_usize() == 0 {
+        let sub = if sub_arity == 0 {
             None
-        } else if sub_arity_type == tree_d_arity_type {
-            // Convert each chip's `U2` type parameter to `V`.
-            let poseidon_sub = unsafe { mem::transmute(poseidon_2.clone()) };
-            let insert_sub = unsafe { mem::transmute(insert_2.clone()) };
-            Some((poseidon_sub, insert_sub))
-        } else if sub_arity_type == base_arity_type {
-            // Convert each chip's `U` type parameter to `V`.
-            let poseidon_sub = unsafe { mem::transmute(poseidon_base.clone()) };
-            let insert_sub = unsafe { mem::transmute(insert_base.clone()) };
-            Some((poseidon_sub, insert_sub))
+        } else if sub_arity == binary_arity {
+            Some(por::change_hasher_insert_arity::<TreeRHasher<F>, U2, V>(
+                poseidon_2.clone(),
+                insert_2.clone(),
+            ))
+        } else if sub_arity == base_arity {
+            Some(por::change_hasher_insert_arity::<TreeRHasher<F>, U, V>(
+                poseidon_base.clone(),
+                insert_base.clone(),
+            ))
         } else {
             let poseidon_sub = <TreeRHasher<F> as Halo2Hasher<V>>::configure(
                 meta,
@@ -659,28 +646,28 @@ where
                 &fixed_eq,
                 &fixed_neq,
             );
-            let insert_sub = InsertChip::<F, V>::configure(meta, &advice_eq, &advice_neq);
+            let insert_sub = InsertChip::configure(meta, &advice_eq, &advice_neq);
             Some((poseidon_sub, insert_sub))
         };
 
         let top = if W::to_usize() == 0 {
             None
-        } else if top_arity_type == tree_d_arity_type {
-            // Convert each chip's `U2` type parameter to `W`.
-            let poseidon_top = unsafe { mem::transmute(poseidon_2.clone()) };
-            let insert_top = unsafe { mem::transmute(insert_2.clone()) };
-            Some((poseidon_top, insert_top))
-        } else if top_arity_type == base_arity_type {
-            // Convert each chip's `U` type parameter to `W`.
-            let poseidon_top = unsafe { mem::transmute(poseidon_base.clone()) };
-            let insert_top = unsafe { mem::transmute(insert_base.clone()) };
-            Some((poseidon_top, insert_top))
-        } else if top_arity_type == sub_arity_type {
-            // Convert each chip's `V` type parameter to `W`.
-            let (poseidon_sub, insert_sub) = sub.as_ref().unwrap();
-            let poseidon_top = unsafe { mem::transmute(poseidon_sub.clone()) };
-            let insert_top = unsafe { mem::transmute(insert_sub.clone()) };
-            Some((poseidon_top, insert_top))
+        } else if top_arity == binary_arity {
+            Some(por::change_hasher_insert_arity::<TreeRHasher<F>, U2, W>(
+                poseidon_2.clone(),
+                insert_2.clone(),
+            ))
+        } else if top_arity == base_arity {
+            Some(por::change_hasher_insert_arity::<TreeRHasher<F>, U, W>(
+                poseidon_base.clone(),
+                insert_base.clone(),
+            ))
+        } else if top_arity == sub_arity {
+            let (poseidon_sub, insert_sub) = sub.clone().unwrap();
+            Some(por::change_hasher_insert_arity::<TreeRHasher<F>, V, W>(
+                poseidon_sub,
+                insert_sub,
+            ))
         } else {
             let poseidon_top = <TreeRHasher<F> as Halo2Hasher<W>>::configure(
                 meta,
@@ -689,7 +676,7 @@ where
                 &fixed_eq,
                 &fixed_neq,
             );
-            let insert_top = InsertChip::<F, W>::configure(meta, &advice_eq, &advice_neq);
+            let insert_top = InsertChip::configure(meta, &advice_eq, &advice_neq);
             Some((poseidon_top, insert_top))
         };
 
@@ -737,12 +724,12 @@ where
 
         // Check that `k` is valid for the sector-size.
         if pub_inputs.partition_bits.iter().all(Option::is_some) {
-            let mut k = 0;
-            for (i, bit) in pub_inputs.partition_bits.iter().enumerate() {
-                if bit.unwrap() {
-                    k |= 1 << i;
-                }
-            }
+            let k: usize = pub_inputs
+                .partition_bits
+                .iter()
+                .enumerate()
+                .map(|(i, bit)| usize::from(bit.unwrap()) << i)
+                .sum();
             assert!(
                 k < Self::PARTITION_COUNT,
                 "partition-index exceeds partition count",
@@ -761,10 +748,19 @@ where
 
         // Check that all partition challenge's have the same same partition path.
         for challenge_proof in &priv_inputs.challenge_proofs[1..] {
-            assert_eq!(
-                &challenge_proof.path_d_new[Self::CHALLENGE_SANS_PARTITION_BIT_LEN..],
-                partition_path,
-            );
+            let challenge_partition_path =
+                &challenge_proof.path_d_new[Self::CHALLENGE_SANS_PARTITION_BIT_LEN..];
+
+            assert_eq!(challenge_partition_path.len(), partition_path.len());
+
+            for (siblings, expected_siblings) in
+                challenge_partition_path.iter().zip(partition_path.iter())
+            {
+                assert_eq!(siblings.len(), 1);
+                siblings[0]
+                    .zip(expected_siblings[0])
+                    .assert_if_known(|(sib, expected_sib)| sib == expected_sib);
+            }
         }
 
         let (
@@ -790,45 +786,34 @@ where
                     .partition_bits
                     .iter()
                     .enumerate()
-                    .map(|(i, bit)| {
+                    .map(|(i, bit_opt)| {
                         let (offset, col) = advice_iter.next();
+                        let bit = match bit_opt {
+                            Some(bit) => Value::known(*bit),
+                            None => Value::unknown(),
+                        };
                         region.assign_advice(
-                            || format!("partition bit {}", i),
+                            || format!("partition_bit_{}", i),
                             col,
                             offset,
-                            || bit.map(Bit).ok_or(Error::Synthesis),
+                            || bit.map(Bit),
                         )
                     })
                     .collect::<Result<Vec<AssignedBit<F>>, Error>>()?;
 
                 let comm_c = {
                     let (offset, col) = advice_iter.next();
-                    region.assign_advice(
-                        || "comm_c",
-                        col,
-                        offset,
-                        || priv_inputs.comm_c.ok_or(Error::Synthesis),
-                    )?
+                    region.assign_advice(|| "comm_c", col, offset, || priv_inputs.comm_c)?
                 };
 
                 let root_r_old = {
                     let (offset, col) = advice_iter.next();
-                    region.assign_advice(
-                        || "root_r_old",
-                        col,
-                        offset,
-                        || priv_inputs.root_r_old.ok_or(Error::Synthesis),
-                    )?
+                    region.assign_advice(|| "root_r_old", col, offset, || priv_inputs.root_r_old)?
                 };
 
                 let root_r_new = {
                     let (offset, col) = advice_iter.next();
-                    region.assign_advice(
-                        || "root_r_new",
-                        col,
-                        offset,
-                        || priv_inputs.root_r_new.ok_or(Error::Synthesis),
-                    )?
+                    region.assign_advice(|| "root_r_new", col, offset, || priv_inputs.root_r_new)?
                 };
 
                 let apex_leafs = priv_inputs
@@ -838,10 +823,10 @@ where
                     .map(|(i, apex_leaf)| {
                         let (offset, col) = advice_iter.next();
                         region.assign_advice(
-                            || format!("apex_leaf {}", i),
+                            || format!("apex_leaf_{}", i),
                             col,
                             offset,
-                            || apex_leaf.ok_or(Error::Synthesis),
+                            || *apex_leaf,
                         )
                     })
                     .collect::<Result<Vec<AssignedCell<F, F>>, Error>>()?;
@@ -910,9 +895,9 @@ where
         {
             let (label_r_old, label_d_new, label_r_new) = challenge_labels_chip.assign_labels(
                 layouter.namespace(|| format!("challenge {} labels", i)),
-                &challenge_proof.leaf_r_old,
-                &challenge_proof.leaf_d_new,
-                &challenge_proof.leaf_r_new,
+                challenge_proof.leaf_r_old,
+                challenge_proof.leaf_d_new,
+                challenge_proof.leaf_r_new,
                 pi_col,
                 Self::challenge_rho_row(i),
             )?;
@@ -1030,10 +1015,10 @@ where
                 rhos: vec![None; challenge_count],
             },
             priv_inputs: PrivateInputs {
-                comm_c: None,
-                root_r_old: None,
-                root_r_new: None,
-                apex_leafs: vec![None; apex_leaf_count],
+                comm_c: Value::unknown(),
+                root_r_old: Value::unknown(),
+                root_r_new: Value::unknown(),
+                apex_leafs: vec![Value::unknown(); apex_leaf_count],
                 challenge_proofs: vec![ChallengeProof::empty(); challenge_count],
             },
         }

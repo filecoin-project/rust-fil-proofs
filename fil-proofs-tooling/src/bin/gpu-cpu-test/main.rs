@@ -8,6 +8,7 @@ use std::sync::mpsc::{self, Receiver, Sender, TryRecvError};
 use std::thread;
 use std::time::{Duration, Instant};
 
+use blstrs::Scalar as Fr;
 use clap::Arg;
 use fil_proofs_tooling::shared::{create_replica, PROVER_ID, RANDOMNESS};
 use filecoin_proofs::constants::{SectorShape8MiB, SECTOR_SIZE_8_MIB};
@@ -22,7 +23,8 @@ use storage_proofs_core::sector::SectorId;
 
 const FIXED_API_VERSION: ApiVersion = ApiVersion::V1_0_0;
 
-type MerkleTree = SectorShape8MiB;
+// TODO (jake): make this work with pasta fields once their GPU implementations are finalized.
+type MerkleTree = SectorShape8MiB<Fr>;
 const SECTOR_SIZE: u64 = SECTOR_SIZE_8_MIB;
 const TIMEOUT: u64 = 5 * 60;
 const POST_CONFIG: PoStConfig = PoStConfig {

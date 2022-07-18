@@ -60,12 +60,14 @@ unsafe impl<C, Circ> Send for Halo2Keypair<C, Circ>
 where
     C: CurveAffine,
     Circ: Circuit<C::Scalar> + CircuitRows,
-{}
+{
+}
 unsafe impl<C, Circ> Sync for Halo2Keypair<C, Circ>
 where
     C: CurveAffine,
     Circ: Circuit<C::Scalar> + CircuitRows,
-{}
+{
+}
 
 impl<C, Circ> Halo2Keypair<C, Circ>
 where
@@ -118,7 +120,9 @@ where
     C: 'static + Circuit<F> + CircuitRows,
     F: Halo2Field,
 {
-    let keystore_reader = KEYSTORE.read().expect("failed to aquire read lock for halo2 keystore");
+    let keystore_reader = KEYSTORE
+        .read()
+        .expect("failed to aquire read lock for halo2 keystore");
     let keypair_opt = keystore_reader.get::<KeypairLookup<C, F>>();
     if let Some(keypair) = keypair_opt {
         // `keypair` is a reference that will not outlive this function call's lifetime; we must
@@ -248,32 +252,18 @@ where
     )
 }
 
-pub fn verify_batch_proof<C, Circ, R>(
+pub fn verify_batch_proof<C, Circ>(
     keypair: &Halo2Keypair<C, Circ>,
     batch_proof: &Halo2Proof<C, Circ>,
     pub_inputs: &[Vec<Vec<C::Scalar>>],
-    rng: R,
-) -> Result<(), Error>
+) -> bool
 where
     C: CurveAffine,
     Circ: Circuit<C::Scalar> + CircuitRows,
-    R: RngCore,
 {
-    let strategy = BatchVerifier::new(keypair.params(), rng);
-    let pub_inputs: Vec<Vec<&[C::Scalar]>> = pub_inputs
-        .iter()
-        .map(|partition_pub_inputs| partition_pub_inputs.iter().map(Vec::as_slice).collect())
-        .collect();
-    let pub_inputs: Vec<&[&[C::Scalar]]> = pub_inputs.iter().map(Vec::as_slice).collect();
-    let mut transcript = TranscriptReader::init(batch_proof.as_bytes());
-    let _strategy = plonk::verify_proof(
-        keypair.params(),
-        keypair.vk(),
-        strategy,
-        &pub_inputs,
-        &mut transcript,
-    )?;
-    Ok(())
+    let mut batch = BatchVerifier::new();
+    batch.add_proof(pub_inputs.to_vec(), batch_proof.as_bytes().to_vec());
+    batch.finalize(keypair.params(), keypair.vk())
 }
 
 pub trait CompoundProof<F: Halo2Field, const SECTOR_NODES: usize> {
@@ -329,7 +319,7 @@ pub trait CompoundProof<F: Halo2Field, const SECTOR_NODES: usize> {
         vanilla_pub_inputs: &Self::VanillaPublicInputs,
         circ_proofs: &Halo2Proof<F::Affine, Self::Circuit>,
         keypair: &Halo2Keypair<F::Affine, Self::Circuit>,
-    ) -> Result<(), Error>;
+    ) -> bool;
 }
 
 #[cfg(test)]
@@ -337,7 +327,7 @@ mod tests {
     use super::*;
 
     use halo2_proofs::{
-        circuit::{Layouter, SimpleFloorPlanner},
+        circuit::{Layouter, SimpleFloorPlanner, Value},
         dev::MockProver,
         plonk::{Advice, Column, ConstraintSystem, Selector},
         poly::Rotation,
@@ -352,9 +342,9 @@ mod tests {
 
     #[derive(Clone)]
     struct MyCircuit {
-        a: Option<Fp>,
-        b: Option<Fp>,
-        c: Option<Fp>,
+        a: Value<Fp>,
+        b: Value<Fp>,
+        c: Value<Fp>,
     }
 
     impl Circuit<Fp> for MyCircuit {
@@ -362,11 +352,7 @@ mod tests {
         type FloorPlanner = SimpleFloorPlanner;
 
         fn without_witnesses(&self) -> Self {
-            MyCircuit {
-                a: None,
-                b: None,
-                c: None,
-            }
+            Self::blank_circuit()
         }
 
         fn configure(meta: &mut ConstraintSystem<Fp>) -> Self::Config {
@@ -396,25 +382,10 @@ mod tests {
                 |mut region| {
                     let mut offset = 0;
                     s_add.enable(&mut region, offset)?;
-                    region.assign_advice(
-                        || "a",
-                        advice[0],
-                        offset,
-                        || self.a.ok_or(Error::Synthesis),
-                    )?;
-                    region.assign_advice(
-                        || "b",
-                        advice[1],
-                        offset,
-                        || self.b.ok_or(Error::Synthesis),
-                    )?;
+                    region.assign_advice(|| "a", advice[0], offset, || self.a)?;
+                    region.assign_advice(|| "b", advice[1], offset, || self.b)?;
                     offset += 1;
-                    region.assign_advice(
-                        || "c",
-                        advice[0],
-                        offset,
-                        || self.c.ok_or(Error::Synthesis),
-                    )?;
+                    region.assign_advice(|| "c", advice[0], offset, || self.c)?;
                     Ok(())
                 },
             )?;
@@ -432,9 +403,9 @@ mod tests {
     impl MyCircuit {
         fn blank_circuit() -> Self {
             MyCircuit {
-                a: None,
-                b: None,
-                c: None,
+                a: Value::unknown(),
+                b: Value::unknown(),
+                c: Value::unknown(),
             }
         }
     }
@@ -447,9 +418,9 @@ mod tests {
 
         // Generate and verify a single proof.
         let circ = MyCircuit {
-            a: Some(Fp::one()),
-            b: Some(Fp::from(2)),
-            c: Some(Fp::from(3)),
+            a: Value::known(Fp::one()),
+            b: Value::known(Fp::from(2)),
+            c: Value::known(Fp::from(3)),
         };
         let prover = MockProver::run(circ.k(), &circ, vec![]).unwrap();
         assert!(prover.verify().is_ok());
@@ -461,14 +432,17 @@ mod tests {
         let circs = [
             circ,
             MyCircuit {
-                a: Some(Fp::from(55)),
-                b: Some(Fp::from(100)),
-                c: Some(Fp::from(155)),
+                a: Value::known(Fp::from(55)),
+                b: Value::known(Fp::from(100)),
+                c: Value::known(Fp::from(155)),
             },
         ];
         let batch_proof = create_batch_proof(&keypair, &circs, &[vec![], vec![]], &mut OsRng)
             .expect("failed to create halo2 batch proof");
-        verify_batch_proof(&keypair, &batch_proof, &[vec![], vec![]], &mut OsRng)
-            .expect("failed to verify halo2 batch proof");
+        assert!(verify_batch_proof(
+            &keypair,
+            &batch_proof,
+            &[vec![], vec![]]
+        ));
     }
 }

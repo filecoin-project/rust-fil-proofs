@@ -13,6 +13,7 @@ crossbeam = "0.8"
 storage-proofs-core = { path = "../storage-proofs-core", version = "~12.0.0", default-features = false}
 sha2raw = { path = "../sha2raw", version = "~7.0.0"}
 filecoin-hashers = { path = "../filecoin-hashers", version = "~7.0.0", default-features = false, features = ["poseidon", "sha256"]}
+rand = "0.8"
 merkletree = "0.22.0"
 memmap2 = "0.5.6"
 num-bigint = "0.4.3"
@@ -28,7 +29,11 @@ generic-array = "0.14.4"
 anyhow = "1.0.23"
 # neptune = { version = "~7.0.0", features = ["bls", "arity2", "arity4", "arity8", "arity11", "arity16", "arity24", "arity36"] }
 # neptune = { git = "https://github.com/filecoin-project/neptune", branch = "fr-as-trait", features = ["bls", "pasta", "arity2", "arity4", "arity8", "arity11", "arity16", "arity24", "arity36"] }
-neptune = { git = "https://github.com/filecoin-project/neptune", branch = "fr-as-trait-halo2-circuit", features = ["bls", "pasta", "arity2", "arity4", "arity8", "arity11", "arity16", "arity24", "arity36"] }
+#
+# neptune = { git = "https://github.com/filecoin-project/neptune", branch = "fr-as-trait-halo2-circuit", features = ["bls", "pasta", "arity2", "arity4", "arity8", "arity11", "arity16", "arity24", "arity36"] }
+
+#
+neptune = { git = "https://github.com/filecoin-project/neptune", rev = "866ea96e879d79461183cfb0b4272af8768af7d4", features = ["bls", "pasta", "arity2", "arity4", "arity8", "arity11", "arity16", "arity24", "arity36"] }
 num_cpus = "1.10.1"
 hex = "0.4.2"
 bincode = "1.1.2"
@@ -45,7 +50,9 @@ blstrs = "0.5.0"
 typemap = "0.3.3"
 # halo2_gadgets = { git = "https://github.com/drpetervannostrand/halo2", branch = "sha256-chip" }
 # halo2_proofs = { git = "https://github.com/drpetervannostrand/halo2", branch = "sha256-chip" }
-halo2_proofs = { git = "https://github.com/drpetervannostrand/halo2" }
+#
+# halo2_proofs = { git = "https://github.com/drpetervannostrand/halo2" }
+halo2_proofs = "0.2.0"
 fil-halo2-gadgets = { path = "../fil-halo2-gadgets" }
 
 [target."cfg(target_arch = \"aarch64\")".dependencies]
@@ -55,7 +62,6 @@ sha2 = { version = "0.10.2", features = ["compress"] }
 
 [dev-dependencies]
 tempfile = "3"
-rand = "0.8"
 rand_xorshift = "0.3.0"
 criterion = "0.3.2"
 glob = "0.3.0"

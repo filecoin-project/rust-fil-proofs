@@ -4,7 +4,7 @@ use std::marker::PhantomData;
 use halo2_gadgets::utilities::bool_check;
 use halo2_proofs::{
     arithmetic::FieldExt,
-    circuit::{AssignedCell, Layouter, Region},
+    circuit::{AssignedCell, Layouter, Region, Value},
     plonk::{Advice, Column, ConstraintSystem, Constraints, Error, Expression, Instance, Selector},
     poly::Rotation,
 };
@@ -25,6 +25,7 @@ pub const U32_DECOMP_NUM_COLS: NumCols = NumCols {
 
 pub type AssignedU32<F> = AssignedBits<F, 32>;
 
+// TODO (jake): remove this?
 #[derive(Clone, Debug)]
 pub struct U32DecompConfig<F: FieldExt> {
     pub(crate) value: Column<Advice>,
@@ -162,18 +163,13 @@ impl<F: FieldExt> U32DecompChip<F> {
     pub fn witness_decompose(
         &self,
         mut layouter: impl Layouter<F>,
-        val: Option<F>,
+        val: Value<F>,
     ) -> Result<[AssignedU32<F>; 8], Error> {
         layouter.assign_region(
             || "le_u32s",
             |mut region| {
                 let offset = 0;
-                let val = region.assign_advice(
-                    || "val",
-                    self.config.value,
-                    offset,
-                    || val.ok_or(Error::Synthesis),
-                )?;
+                let val = region.assign_advice(|| "value", self.config.value, offset, || val)?;
                 self.assign_u32s(&mut region, offset, val)
                     .map(|u32s_and_bits| u32s_and_bits.0)
             },
@@ -200,14 +196,9 @@ impl<F: FieldExt> U32DecompChip<F> {
         &self,
         region: &mut Region<'_, F>,
         offset: usize,
-        val: Option<F>,
+        val: Value<F>,
     ) -> Result<[AssignedU32<F>; 8], Error> {
-        let val = region.assign_advice(
-            || "val",
-            self.config.value,
-            offset,
-            || val.ok_or(Error::Synthesis),
-        )?;
+        let val = region.assign_advice(|| "val", self.config.value, offset, || val)?;
         self.assign_u32s(region, offset, val)
             .map(|u32s_and_bits| u32s_and_bits.0)
     }
@@ -231,17 +222,17 @@ impl<F: FieldExt> U32DecompChip<F> {
     ) -> Result<([AssignedU32<F>; 8], Option<[AssignedBit<F>; 256]>), Error> {
         self.config.s_field_into_u32s.enable(region, offset)?;
 
-        let le_bytes = val.value().map(|val| val.to_repr().as_ref().to_vec());
+        let le_bytes: Value<Vec<u8>> = val.value().map(|val| val.to_repr().as_ref().to_vec());
 
         // Assign `val`'s `u32` limbs in the current row.
         let u32s: [AssignedU32<F>; 8] = (0..8)
             .map(|i| {
-                let limb = le_bytes.as_ref().map(|le_bytes| {
+                let limb: Value<u32> = le_bytes.as_ref().map(|le_bytes| {
                     u32::from_le_bytes(le_bytes[i * 4..(i + 1) * 4].try_into().unwrap())
                 });
                 AssignedU32::assign(
                     region,
-                    || format!("u32 {}", i),
+                    || format!("u32_{}", i),
                     self.config.limbs[i],
                     offset,
                     limb,
@@ -267,25 +258,22 @@ impl<F: FieldExt> U32DecompChip<F> {
                 .enable(region, offset)?;
 
             limb.copy_advice(
-                || format!("u32 {}", limb_index),
+                || format!("copy u32_{}", limb_index),
                 region,
                 self.config.value,
                 offset,
             )?;
 
-            let bytes = limb.value_u32().map(|limb| limb.to_le_bytes());
+            let bytes: Value<[u8; 4]> = limb.value_u32().map(|limb| limb.to_le_bytes());
 
             for byte_index in 0..4 {
-                let byte = bytes.as_ref().map(|bytes| bytes[byte_index]);
+                let byte: Value<u8> = bytes.as_ref().map(|bytes| bytes[byte_index]);
                 for i in 0..8 {
                     let bit = region.assign_advice(
-                        || format!("u32 {} bit {}", limb_index, bit_index),
+                        || format!("u32_{} bit_{}", limb_index, bit_index),
                         self.config.limbs[i],
                         offset,
-                        || {
-                            byte.map(|byte| Bit(byte >> i & 1 == 1))
-                                .ok_or(Error::Synthesis)
-                        },
+                        || byte.map(|byte| Bit(byte >> i & 1 == 1)),
                     )?;
                     bits.push(bit);
                     bit_index += 1;
@@ -309,36 +297,24 @@ impl<F: FieldExt> U32DecompChip<F> {
             || "pack_u32s",
             |mut region| {
                 let offset = 0;
-
                 self.config.s_field_into_u32s.enable(&mut region, offset)?;
 
-                let limbs = limbs
-                    .iter()
-                    .zip(self.config.limbs.iter())
-                    .enumerate()
-                    .map(|(i, (limb, col))| {
-                        limb.copy_advice(|| format!("copy limb {}", i), &mut region, *col, offset)
-                            .map(AssignedBits)
-                    })
-                    .collect::<Result<Vec<AssignedU32<F>>, Error>>()?;
+                let mut packed_repr = Value::known(F::Repr::default());
 
-                let mut repr = Some(F::Repr::default());
-                for (i, limb) in limbs.iter().enumerate() {
-                    let limb_bytes = limb.value_u32().map(|limb| limb.to_le_bytes());
-                    repr = repr.zip(limb_bytes).map(|(mut repr, limb_bytes)| {
-                        repr.as_mut()[i * 4..(i + 1) * 4].copy_from_slice(&limb_bytes);
-                        repr
-                    });
+                for (i, (limb, col)) in limbs.iter().zip(self.config.limbs.iter()).enumerate() {
+                    limb.copy_advice(|| format!("copy u32_{}", i), &mut region, *col, offset)?
+                        .value()
+                        .zip(packed_repr.as_mut())
+                        .map(|(limb_bits, repr)| {
+                            let limb_bytes = u32::from(limb_bits).to_le_bytes();
+                            repr.as_mut()[i * 4..(i + 1) * 4].copy_from_slice(&limb_bytes);
+                        });
                 }
-                let packed =
-                    repr.map(|repr| F::from_repr_vartime(repr).expect("limbs are invalid repr"));
 
-                region.assign_advice(
-                    || "val",
-                    self.config.value,
-                    offset,
-                    || packed.ok_or(Error::Synthesis),
-                )
+                let packed = packed_repr
+                    .map(|repr| F::from_repr_vartime(repr).expect("limbs are invalid repr"));
+
+                region.assign_advice(|| "packed", self.config.value, offset, || packed)
             },
         )
     }
@@ -442,13 +418,10 @@ impl<F: FieldExt> UInt32Chip<F> {
         for _ in 0..4 {
             for col in self.config.bits.iter() {
                 let bit = region.assign_advice(
-                    || format!("bit {}", bit_index),
+                    || format!("bit_{}", bit_index),
                     *col,
                     offset,
-                    || {
-                        val.map(|val| Bit(val >> bit_index & 1 == 1))
-                            .ok_or(Error::Synthesis)
-                    },
+                    || val.map(|val| Bit(val >> bit_index & 1 == 1)),
                 )?;
                 bits.push(bit);
                 bit_index += 1;
@@ -462,10 +435,10 @@ impl<F: FieldExt> UInt32Chip<F> {
     pub fn witness_assign_bits(
         &self,
         mut layouter: impl Layouter<F>,
-        value: Option<u32>,
+        value: Value<u32>,
     ) -> Result<(AssignedU32<F>, [AssignedBit<F>; 32]), Error> {
         layouter.assign_region(
-            || "assign as 32 bits",
+            || "assign u32 and bits",
             |mut region| {
                 let offset = 0;
                 self.config
@@ -473,12 +446,12 @@ impl<F: FieldExt> UInt32Chip<F> {
                     .enable(&mut region, offset)?;
 
                 let uint32 =
-                    AssignedU32::assign(&mut region, || "value", self.config.value, offset, value)?;
+                    AssignedU32::assign(&mut region, || "u32", self.config.value, offset, value)?;
+                let uint32_value: Value<u32> = uint32.value_u32();
 
-                let bits: Vec<Option<bool>> = match uint32.value_u32() {
-                    Some(uint32) => (0..32).map(|i| Some(uint32 >> i & 1 == 1)).collect(),
-                    None => vec![None; 32],
-                };
+                let bits: Vec<Value<bool>> = (0..32)
+                    .map(|i| uint32_value.map(|uint32| uint32 >> i & 1 == 1))
+                    .collect();
 
                 let mut assigned_bits = Vec::with_capacity(32);
                 let mut bit_index = 0;
@@ -486,10 +459,10 @@ impl<F: FieldExt> UInt32Chip<F> {
                 for (offset, byte) in bits.chunks(8).enumerate() {
                     for (bit, col) in byte.iter().zip(self.config.bits.iter()) {
                         let bit = region.assign_advice(
-                            || format!("bit {}", bit_index),
+                            || format!("bit_{}", bit_index),
                             *col,
                             offset,
-                            || bit.map(Bit).ok_or(Error::Synthesis),
+                            || bit.map(Bit),
                         )?;
                         assigned_bits.push(bit);
                         bit_index += 1;
@@ -524,7 +497,7 @@ impl<F: FieldExt> UInt32Chip<F> {
                     offset,
                 )?;
 
-                let bytes: Option<[u8; 4]> = uint32
+                let bytes: Value<[u8; 4]> = uint32
                     .value()
                     .map(|uint32| uint32.to_repr().as_ref()[..4].try_into().unwrap());
 
@@ -535,13 +508,10 @@ impl<F: FieldExt> UInt32Chip<F> {
                     let byte = bytes.map(|bytes| bytes[byte_index]);
                     for i in 0..8 {
                         let bit = region.assign_advice(
-                            || format!("bit {}", bit_index),
+                            || format!("bit_{}", bit_index),
                             self.config.bits[i],
                             byte_index,
-                            || {
-                                byte.map(|byte| Bit(byte >> i & 1 == 1))
-                                    .ok_or(Error::Synthesis)
-                            },
+                            || byte.map(|byte| Bit(byte >> i & 1 == 1)),
                         )?;
                         bits.push(bit);
                         bit_index += 1;
@@ -651,46 +621,43 @@ impl<F: FieldExt> StripBitsChip<F> {
     pub fn strip_bits(
         &self,
         mut layouter: impl Layouter<F>,
-        value_u32: &AssignedU32<F>,
+        uint32: &AssignedU32<F>,
     ) -> Result<AssignedU32<F>, Error> {
         layouter.assign_region(
             || "u32_strip_bits",
             |mut region| {
-                let mut offset = 0;
-
+                let offset = 0;
                 self.config.s_strip_bits.enable(&mut region, offset)?;
 
-                let value_u32 = value_u32
-                    .copy_advice(|| "copy value_u32", &mut region, self.config.value, offset)
-                    .map(AssignedBits)?;
+                let value_u32: Value<u32> = uint32
+                    .copy_advice(|| "copy u32", &mut region, self.config.value, offset)
+                    .map(AssignedBits::<F, 32>)?
+                    .value_u32();
 
-                let value_u32 = value_u32.value_u32();
-                let mut bits_iter = (0..32).map(|i| value_u32.map(|val| val >> i & 1 == 1));
-                let mut bits = Vec::with_capacity(32);
+                let le_bits: Vec<Value<Bit>> = (0..32)
+                    .map(|i| value_u32.map(|val| Bit(val >> i & 1 == 1)))
+                    .collect();
+
                 let mut bit_index = 0;
-
-                for offset in 0..4 {
-                    for col in self.config.bits.iter() {
-                        let bit = region.assign_advice(
-                            || format!("bit {}", bit_index),
+                for (offset, bits) in le_bits.chunks(8).enumerate() {
+                    for (bit, col) in bits.iter().zip(self.config.bits.iter()) {
+                        region.assign_advice(
+                            || format!("bit_{}", bit_index),
                             *col,
                             offset,
-                            || bits_iter.next().unwrap().map(Bit).ok_or(Error::Synthesis),
+                            || *bit,
                         )?;
-                        bits.push(bit);
                         bit_index += 1;
                     }
                 }
-
-                offset += 1;
 
                 // `mask = 0b00111111_11111111_11111111_11111111`
                 let mask = (1 << 30) - 1;
                 AssignedU32::assign(
                     &mut region,
-                    || "value_u30",
+                    || "stripped",
                     self.config.value,
-                    offset,
+                    offset + 1,
                     value_u32.map(|val| val & mask),
                 )
             },
@@ -710,7 +677,7 @@ mod tests {
     use crate::TEST_SEED;
 
     struct MyCircuit<F: FieldExt> {
-        value: Option<F>,
+        value: Value<F>,
     }
 
     impl<F: FieldExt> Circuit<F> for MyCircuit<F> {
@@ -718,7 +685,9 @@ mod tests {
         type FloorPlanner = SimpleFloorPlanner;
 
         fn without_witnesses(&self) -> Self {
-            MyCircuit { value: None }
+            MyCircuit {
+                value: Value::unknown(),
+            }
         }
 
         fn configure(meta: &mut ConstraintSystem<F>) -> Self::Config {
@@ -750,33 +719,47 @@ mod tests {
 
             let u32s =
                 decomp_chip.witness_decompose(layouter.namespace(|| "decomp"), self.value)?;
-            let packed = decomp_chip.pack(layouter.namespace(|| "pack"), &u32s)?;
-            let stripped =
-                strip_bits_chip.strip_bits(layouter.namespace(|| "strip bits"), &u32s[0])?;
 
-            let expected_u32s: Vec<u32> = self
+            let expected_u32s: Vec<Value<u32>> = self
                 .value
-                .unwrap()
-                .to_repr()
-                .as_ref()
-                .chunks(4)
-                .map(|chunk| u32::from_le_bytes(chunk.try_into().unwrap()))
-                .collect();
-            let expected_packed = self.value.unwrap();
-            let expected_stripped = {
-                let mut repr: [u8; 4] = expected_packed.to_repr().as_ref()[..4].try_into().unwrap();
-                repr[3] &= 0b0011_1111;
-                u32::from_le_bytes(repr)
-            };
+                .map(|field| {
+                    field
+                        .to_repr()
+                        .as_ref()
+                        .chunks(4)
+                        .map(|bytes| u32::from_le_bytes(bytes.try_into().unwrap()))
+                        .collect::<Vec<u32>>()
+                })
+                .transpose_vec(8);
 
-            assert_eq!(
-                u32s.iter()
-                    .map(|limb| limb.value_u32().unwrap())
-                    .collect::<Vec<u32>>(),
-                expected_u32s,
-            );
-            assert_eq!(packed.value().unwrap(), &expected_packed);
-            assert_eq!(stripped.value_u32().unwrap(), expected_stripped);
+            for (uint32, u32_expected) in u32s.iter().zip(expected_u32s.into_iter()) {
+                uint32
+                    .value_u32()
+                    .zip(u32_expected)
+                    .map(|(u32_value, u32_expected)| {
+                        assert_eq!(u32_value, u32_expected);
+                    });
+            }
+
+            let packed = decomp_chip.pack(layouter.namespace(|| "pack"), &u32s)?;
+
+            packed
+                .value()
+                .zip(self.value.as_ref())
+                .map(|(packed, expected)| assert_eq!(packed, expected));
+
+            let stripped = strip_bits_chip.strip_bits(layouter.namespace(|| "strip"), &u32s[0])?;
+
+            let expected_stripped: Value<u32> = self.value.map(|field| {
+                let mut stripped_bytes: [u8; 4] = field.to_repr().as_ref()[..4].try_into().unwrap();
+                stripped_bytes[3] &= 0b0011_1111;
+                u32::from_le_bytes(stripped_bytes)
+            });
+
+            stripped
+                .value_u32()
+                .zip(expected_stripped)
+                .map(|(stripped, expected)| assert_eq!(stripped, expected));
 
             Ok(())
         }
@@ -788,14 +771,14 @@ mod tests {
 
         // Test using a random field element.
         let circ = MyCircuit {
-            value: Some(Fp::random(&mut rng)),
+            value: Value::known(Fp::random(&mut rng)),
         };
         let prover = MockProver::run(4, &circ, vec![]).unwrap();
         assert!(prover.verify().is_ok());
 
         // Test using the largest field element `p - 1`.
         let circ = MyCircuit {
-            value: Some(Fp::zero() - Fp::one()),
+            value: Value::known(Fp::zero() - Fp::one()),
         };
         let prover = MockProver::run(4, &circ, vec![]).unwrap();
         assert!(prover.verify().is_ok());

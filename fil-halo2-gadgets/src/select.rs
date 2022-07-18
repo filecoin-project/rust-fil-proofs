@@ -115,7 +115,7 @@ impl<F: FieldExt> SelectChip<F> {
                                 || format!("out for pair {} of bit {}", j, i),
                                 self.config.out,
                                 offset,
-                                || out.ok_or(Error::Synthesis),
+                                || out,
                             )?;
                             offset += 1;
                             Ok(out)
@@ -134,7 +134,12 @@ impl<F: FieldExt> SelectChip<F> {
 mod tests {
     use super::*;
 
-    use halo2_proofs::{circuit::SimpleFloorPlanner, dev::MockProver, pasta::Fp, plonk::Circuit};
+    use halo2_proofs::{
+        circuit::{SimpleFloorPlanner, Value},
+        dev::MockProver,
+        pasta::Fp,
+        plonk::Circuit,
+    };
 
     use crate::{boolean::Bit, AdviceIter};
 
@@ -145,9 +150,9 @@ mod tests {
     }
 
     struct SelectCircuit<F: FieldExt> {
-        arr: Vec<Option<F>>,
-        bits: Vec<Option<bool>>,
-        expected: Option<F>,
+        arr: Vec<Value<F>>,
+        bits: Vec<Value<bool>>,
+        expected: Value<F>,
     }
 
     impl<F: FieldExt> Circuit<F> for SelectCircuit<F> {
@@ -158,9 +163,9 @@ mod tests {
             let len = self.arr.len();
             let num_bits = len.trailing_zeros() as usize;
             SelectCircuit {
-                arr: vec![None; len],
-                bits: vec![None; num_bits],
-                expected: None,
+                arr: vec![Value::unknown(); len],
+                bits: vec![Value::unknown(); num_bits],
+                expected: Value::unknown(),
             }
         }
 
@@ -204,10 +209,10 @@ mod tests {
                         .map(|(i, elem)| {
                             let (offset, col) = advice_iter.next();
                             region.assign_advice(
-                                || format!("elem {}", i),
+                                || format!("assign arr[{}]", i),
                                 col,
                                 offset,
-                                || elem.ok_or(Error::Synthesis),
+                                || *elem,
                             )
                         })
                         .collect::<Result<Vec<AssignedCell<F, F>>, Error>>()?;
@@ -219,10 +224,10 @@ mod tests {
                         .map(|(i, bit)| {
                             let (offset, col) = advice_iter.next();
                             region.assign_advice(
-                                || format!("bit {}", i),
+                                || format!("assign bit_{}", i),
                                 col,
                                 offset,
-                                || bit.map(Bit).ok_or(Error::Synthesis),
+                                || bit.map(Bit),
                             )
                         })
                         .collect::<Result<Vec<AssignedBit<F>>, Error>>()?;
@@ -231,8 +236,11 @@ mod tests {
                 },
             )?;
 
-            let out = select_chip.select(layouter.namespace(|| "select"), &arr, &bits)?;
-            assert_eq!(out.value(), self.expected.as_ref());
+            select_chip
+                .select(layouter.namespace(|| "select"), &arr, &bits)?
+                .value()
+                .zip(self.expected.as_ref())
+                .map(|(out, expected)| assert_eq!(out, expected));
 
             Ok(())
         }
@@ -241,16 +249,16 @@ mod tests {
     #[test]
     fn test_select_chip() {
         for len in [2usize, 4, 8, 64] {
-            let num_bits = len.trailing_zeros() as usize;
-            let arr: Vec<Option<Fp>> = (0..len).map(|i| Some(Fp::from(i as u64))).collect();
-            let mut circ = SelectCircuit {
-                arr,
-                bits: Vec::with_capacity(num_bits),
-                expected: None,
-            };
+            let bit_len = len.trailing_zeros() as usize;
+            let arr: Vec<Value<Fp>> = (0..len as u64).map(|i| Value::known(Fp::from(i))).collect();
             for index in 0..len {
-                circ.bits = (0..num_bits).map(|i| Some(index >> i & 1 == 1)).collect();
-                circ.expected = circ.arr[index];
+                let circ = SelectCircuit {
+                    arr: arr.clone(),
+                    bits: (0..bit_len)
+                        .map(|i| Value::known(index >> i & 1 == 1))
+                        .collect(),
+                    expected: arr[index],
+                };
                 let prover = MockProver::run(7, &circ, vec![]).unwrap();
                 assert!(prover.verify().is_ok());
             }

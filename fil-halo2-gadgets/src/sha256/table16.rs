@@ -1,7 +1,7 @@
 use super::Sha256Instructions;
 use halo2_proofs::{
     arithmetic::FieldExt,
-    circuit::{Chip, Layouter, Region},
+    circuit::{Chip, Layouter, Region, Value},
     plonk::{Advice, Column, ConstraintSystem, Error},
 };
 
@@ -55,7 +55,7 @@ pub(crate) const IV: [u32; STATE] = [
 #[derive(Clone, Copy, Debug, Default)]
 /// A word in a `Table16` message block.
 // TODO: Make the internals of this struct private.
-pub struct BlockWord(pub Option<u32>);
+pub struct BlockWord(pub Value<u32>);
 
 /// Configuration for a [`Table16Chip`].
 #[derive(Clone, Debug)]
@@ -222,10 +222,10 @@ trait Table16Assignment<F: FieldExt> {
         lookup: &SpreadInputs,
         a_3: Column<Advice>,
         row: usize,
-        r_0_even: Option<[bool; 16]>,
-        r_0_odd: Option<[bool; 16]>,
-        r_1_even: Option<[bool; 16]>,
-        r_1_odd: Option<[bool; 16]>,
+        r_0_even: Value<[bool; 16]>,
+        r_0_odd: Value<[bool; 16]>,
+        r_1_even: Value<[bool; 16]>,
+        r_1_odd: Value<[bool; 16]>,
     ) -> Result<
         (
             (AssignedBits<F, 16>, AssignedBits<F, 16>),
@@ -274,10 +274,10 @@ trait Table16Assignment<F: FieldExt> {
         lookup: &SpreadInputs,
         a_3: Column<Advice>,
         row: usize,
-        r_0_even: Option<[bool; 16]>,
-        r_0_odd: Option<[bool; 16]>,
-        r_1_even: Option<[bool; 16]>,
-        r_1_odd: Option<[bool; 16]>,
+        r_0_even: Value<[bool; 16]>,
+        r_0_odd: Value<[bool; 16]>,
+        r_1_even: Value<[bool; 16]>,
+        r_1_odd: Value<[bool; 16]>,
     ) -> Result<(AssignedBits<F, 16>, AssignedBits<F, 16>), Error> {
         let (even, _odd) = self.assign_spread_outputs(
             region, lookup, a_3, row, r_0_even, r_0_odd, r_1_even, r_1_odd,

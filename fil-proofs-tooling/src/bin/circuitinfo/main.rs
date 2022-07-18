@@ -3,7 +3,7 @@ use std::str::FromStr;
 use bellperson::{util_cs::bench_cs::BenchCS, Circuit};
 use blstrs::Scalar as Fr;
 use dialoguer::{theme::ColorfulTheme, MultiSelect};
-use filecoin_hashers::{Domain, Hasher};
+use filecoin_hashers::Groth16Hasher;
 use filecoin_proofs::{
     parameters::{public_params, window_post_public_params, winning_post_public_params},
     with_shape, DefaultPieceHasher, PaddedBytesAmount, PoRepConfig, PoRepProofPartitions,
@@ -39,8 +39,8 @@ fn circuit_info<C: Circuit<Fr>>(circuit: C) -> CircuitInfo {
 
 fn get_porep_info<Tree>(porep_config: PoRepConfig) -> CircuitInfo
 where
-    Tree: 'static + MerkleTreeTrait,
-    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+    Tree: 'static + MerkleTreeTrait<Field = Fr>,
+    Tree::Hasher: Groth16Hasher,
 {
     info!("PoRep info");
 
@@ -52,8 +52,8 @@ where
     )
     .expect("failed to get public params from config");
 
-    let circuit = <StackedCompound<Tree, DefaultPieceHasher> as CompoundProof<
-        StackedDrg<Tree, DefaultPieceHasher>,
+    let circuit = <StackedCompound<Tree, DefaultPieceHasher<Tree::Field>> as CompoundProof<
+        StackedDrg<Tree, DefaultPieceHasher<Tree::Field>>,
         _,
     >>::blank_circuit(&public_params);
 
@@ -62,8 +62,8 @@ where
 
 fn get_winning_post_info<Tree>(post_config: &PoStConfig) -> CircuitInfo
 where
-    Tree: 'static + MerkleTreeTrait,
-    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+    Tree: 'static + MerkleTreeTrait<Field = Fr>,
+    Tree::Hasher: Groth16Hasher,
 {
     info!("Winning PoSt info");
 
@@ -80,8 +80,8 @@ where
 
 fn get_window_post_info<Tree>(post_config: &PoStConfig) -> CircuitInfo
 where
-    Tree: 'static + MerkleTreeTrait,
-    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+    Tree: 'static + MerkleTreeTrait<Field = Fr>,
+    Tree::Hasher: Groth16Hasher,
 {
     info!("Window PoSt info");
 
@@ -114,6 +114,7 @@ struct Opt {
 fn winning_post_info(sector_size: u64, api_version: ApiVersion) -> CircuitInfo {
     with_shape!(
         sector_size,
+        Fr,
         get_winning_post_info,
         &PoStConfig {
             sector_size: SectorSize(sector_size),
@@ -129,6 +130,7 @@ fn winning_post_info(sector_size: u64, api_version: ApiVersion) -> CircuitInfo {
 fn window_post_info(sector_size: u64, api_version: ApiVersion) -> CircuitInfo {
     with_shape!(
         sector_size,
+        Fr,
         get_window_post_info,
         &PoStConfig {
             sector_size: SectorSize(sector_size),
@@ -155,6 +157,7 @@ fn porep_info(sector_size: u64, api_version: ApiVersion) -> (CircuitInfo, usize)
     );
     let info = with_shape!(
         sector_size,
+        Fr,
         get_porep_info,
         PoRepConfig {
             sector_size: SectorSize(sector_size),

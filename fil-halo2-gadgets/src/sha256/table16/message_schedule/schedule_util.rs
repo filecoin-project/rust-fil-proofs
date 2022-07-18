@@ -1,5 +1,9 @@
 use super::MessageScheduleConfig;
-use halo2_proofs::{arithmetic::FieldExt, circuit::Region, plonk::Error};
+use halo2_proofs::{
+    arithmetic::FieldExt,
+    circuit::{Region, Value},
+    plonk::Error,
+};
 
 #[cfg(test)]
 use super::super::{super::BLOCK_SIZE, BlockWord, ROUNDS};
@@ -58,22 +62,22 @@ pub fn get_word_row(word_idx: usize) -> usize {
 #[cfg(test)]
 pub fn msg_schedule_test_input() -> [BlockWord; BLOCK_SIZE] {
     [
-        BlockWord(Some(0b01100001011000100110001110000000)),
-        BlockWord(Some(0b00000000000000000000000000000000)),
-        BlockWord(Some(0b00000000000000000000000000000000)),
-        BlockWord(Some(0b00000000000000000000000000000000)),
-        BlockWord(Some(0b00000000000000000000000000000000)),
-        BlockWord(Some(0b00000000000000000000000000000000)),
-        BlockWord(Some(0b00000000000000000000000000000000)),
-        BlockWord(Some(0b00000000000000000000000000000000)),
-        BlockWord(Some(0b00000000000000000000000000000000)),
-        BlockWord(Some(0b00000000000000000000000000000000)),
-        BlockWord(Some(0b00000000000000000000000000000000)),
-        BlockWord(Some(0b00000000000000000000000000000000)),
-        BlockWord(Some(0b00000000000000000000000000000000)),
-        BlockWord(Some(0b00000000000000000000000000000000)),
-        BlockWord(Some(0b00000000000000000000000000000000)),
-        BlockWord(Some(0b00000000000000000000000000011000)),
+        BlockWord(Value::known(0b01100001011000100110001110000000)),
+        BlockWord(Value::known(0b00000000000000000000000000000000)),
+        BlockWord(Value::known(0b00000000000000000000000000000000)),
+        BlockWord(Value::known(0b00000000000000000000000000000000)),
+        BlockWord(Value::known(0b00000000000000000000000000000000)),
+        BlockWord(Value::known(0b00000000000000000000000000000000)),
+        BlockWord(Value::known(0b00000000000000000000000000000000)),
+        BlockWord(Value::known(0b00000000000000000000000000000000)),
+        BlockWord(Value::known(0b00000000000000000000000000000000)),
+        BlockWord(Value::known(0b00000000000000000000000000000000)),
+        BlockWord(Value::known(0b00000000000000000000000000000000)),
+        BlockWord(Value::known(0b00000000000000000000000000000000)),
+        BlockWord(Value::known(0b00000000000000000000000000000000)),
+        BlockWord(Value::known(0b00000000000000000000000000000000)),
+        BlockWord(Value::known(0b00000000000000000000000000000000)),
+        BlockWord(Value::known(0b00000000000000000000000000011000)),
     ]
 }
 
@@ -150,7 +154,7 @@ impl<F: FieldExt> MessageScheduleConfig<F> {
     pub fn assign_word_and_halves(
         &self,
         region: &mut Region<'_, F>,
-        word: Option<u32>,
+        word: Value<u32>,
         word_idx: usize,
     ) -> Result<(AssignedBits<F, 32>, (AssignedBits<F, 16>, AssignedBits<F, 16>)), Error> {
         // Rename these here for ease of matching the gates to the specification.

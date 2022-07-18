@@ -89,6 +89,7 @@ impl<F> From<[u8; 32]> for Blake2sDomain<F> {
     }
 }
 
+#[allow(clippy::from_over_into)]
 impl<F> Into<[u8; 32]> for Blake2sDomain<F> {
     fn into(self) -> [u8; 32] {
         self.state
