@@ -8,10 +8,10 @@ use std::cmp::max;
 
 use halo2_proofs::{
     arithmetic::FieldExt,
-    circuit::AssignedCell,
+    circuit::{AssignedCell, Value},
     plonk::{Advice, Column, ConstraintSystem, Fixed, Instance},
 };
-use neptune::{halo2_circuit::PoseidonChip, Arity};
+use neptune::{halo2_circuit::PoseidonChipStd, Arity};
 
 #[cfg(test)]
 pub(crate) const TEST_SEED: [u8; 16] = [
@@ -86,21 +86,23 @@ impl ColumnBuilder {
     }
 }
 
-impl<F: FieldExt, A: Arity<F>> ColumnCount for PoseidonChip<F, A> {
+impl<F, A> ColumnCount for PoseidonChipStd<F, A>
+where
+    F: FieldExt,
+    A: Arity<F>,
+{
     fn num_cols() -> NumCols {
-        let width = A::to_usize() + 1;
         NumCols {
-            advice_eq: width,
-            advice_neq: 1,
-            // Poseidon requires `2 * width` fixed columns.
-            fixed_eq: 1,
-            fixed_neq: 2 * width - 1,
+            advice_eq: Self::num_advice_eq(),
+            advice_neq: Self::num_advice_neq(),
+            fixed_eq: Self::num_fixed_eq(),
+            fixed_neq: Self::num_fixed_neq(),
         }
     }
 }
 
 pub enum WitnessOrCopy<T, F: FieldExt> {
-    Witness(Option<T>),
+    Witness(Value<T>),
     Copy(AssignedCell<T, F>),
     // Public input `(column, absolute row)`.
     PiCopy(Column<Instance>, usize),

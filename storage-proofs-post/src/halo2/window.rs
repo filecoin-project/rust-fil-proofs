@@ -289,13 +289,13 @@ where
                         || "comm_c",
                         advice[0],
                         offset,
-                        || sector_proof.comm_c.ok_or(Error::Synthesis),
+                        || sector_proof.comm_c,
                     )?;
                     let root_r = region.assign_advice(
                         || "root_r",
                         advice[1],
                         offset,
-                        || sector_proof.root_r.ok_or(Error::Synthesis),
+                        || sector_proof.root_r,
                     )?;
                     Ok((comm_c, root_r))
                 },
@@ -336,7 +336,7 @@ where
                         )
                     }),
                     &challenge_bits,
-                    leaf_r,
+                    *leaf_r,
                     path_r,
                 )?;
                 layouter.assign_region(
@@ -367,10 +367,10 @@ where
     fn k(&self) -> u32 {
         use crate::halo2::constants::*;
         match SECTOR_NODES {
-            SECTOR_NODES_2_KIB => 11,
-            SECTOR_NODES_4_KIB => 12,
-            SECTOR_NODES_16_KIB => 12,
-            SECTOR_NODES_32_KIB => 12,
+            SECTOR_NODES_2_KIB => 12,
+            SECTOR_NODES_4_KIB => 13,
+            SECTOR_NODES_16_KIB => 13,
+            SECTOR_NODES_32_KIB => 13,
             SECTOR_NODES_512_MIB => 13,
             SECTOR_NODES_32_GIB => 24,
             SECTOR_NODES_64_GIB => 24,

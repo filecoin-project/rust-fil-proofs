@@ -3,7 +3,7 @@ use filecoin_hashers::{Halo2Hasher, HashInstructions, PoseidonArity};
 use generic_array::typenum::U0;
 use halo2_proofs::{
     arithmetic::FieldExt,
-    circuit::{AssignedCell, Layouter},
+    circuit::{AssignedCell, Layouter, Value},
     plonk::Error,
 };
 
@@ -59,15 +59,10 @@ where
         &self,
         layouter: impl Layouter<H::Field>,
         challenge_bits: &[AssignedBit<H::Field>],
-        leaf: &Option<H::Field>,
-        path: &[Vec<Option<H::Field>>],
+        leaf: Value<H::Field>,
+        path: &[Vec<Value<H::Field>>],
     ) -> Result<AssignedCell<H::Field, H::Field>, Error> {
-        self.compute_root_inner(
-            layouter,
-            challenge_bits,
-            WitnessOrCopy::Witness(*leaf),
-            path,
-        )
+        self.compute_root_inner(layouter, challenge_bits, WitnessOrCopy::Witness(leaf), path)
     }
 
     pub fn copy_leaf_compute_root(
@@ -75,7 +70,7 @@ where
         layouter: impl Layouter<H::Field>,
         challenge_bits: &[AssignedBit<H::Field>],
         leaf: &AssignedCell<H::Field, H::Field>,
-        path: &[Vec<Option<H::Field>>],
+        path: &[Vec<Value<H::Field>>],
     ) -> Result<AssignedCell<H::Field, H::Field>, Error> {
         self.compute_root_inner(
             layouter,
@@ -92,7 +87,7 @@ where
         mut layouter: impl Layouter<H::Field>,
         challenge_bits: &[AssignedBit<H::Field>],
         leaf: WitnessOrCopy<H::Field, H::Field>,
-        path: &[Vec<Option<H::Field>>],
+        path: &[Vec<Value<H::Field>>],
     ) -> Result<AssignedCell<H::Field, H::Field>, Error> {
         let base_arity = U::to_usize();
         let sub_arity = V::to_usize();
@@ -243,7 +238,7 @@ where
     }
 }
 
-pub fn empty_path<F, U, V, W, const NUM_LEAFS: usize>() -> Vec<Vec<Option<F>>>
+pub fn empty_path<F, U, V, W, const NUM_LEAFS: usize>() -> Vec<Vec<Value<F>>>
 where
     F: FieldExt,
     U: PoseidonArity<F>,
@@ -267,12 +262,12 @@ where
         base_challenge_bit_len / (base_arity.trailing_zeros() as usize)
     };
 
-    let mut path = vec![vec![None; base_arity - 1]; base_height];
+    let mut path = vec![vec![Value::unknown(); base_arity - 1]; base_height];
     if sub_arity != 0 {
-        path.push(vec![None; sub_arity - 1]);
+        path.push(vec![Value::unknown(); sub_arity - 1]);
     }
     if top_arity != 0 {
-        path.push(vec![None; top_arity - 1]);
+        path.push(vec![Value::unknown(); top_arity - 1]);
     }
 
     path
@@ -336,9 +331,9 @@ mod test {
         V: PoseidonArity<H::Field>,
         W: PoseidonArity<H::Field>,
     {
-        challenge: Option<u32>,
-        leaf: Option<H::Field>,
-        path: Vec<Vec<Option<H::Field>>>,
+        challenge: Value<u32>,
+        leaf: Value<H::Field>,
+        path: Vec<Vec<Value<H::Field>>>,
         _u: PhantomData<U>,
         _v: PhantomData<V>,
         _w: PhantomData<W>,
@@ -357,12 +352,12 @@ mod test {
 
         fn without_witnesses(&self) -> Self {
             MyCircuit {
-                challenge: None,
-                leaf: None,
+                challenge: Value::unknown(),
+                leaf: Value::unknown(),
                 path: self
                     .path
                     .iter()
-                    .map(|sibs| vec![None; sibs.len()])
+                    .map(|sibs| vec![Value::unknown(); sibs.len()])
                     .collect(),
                 _u: PhantomData,
                 _v: PhantomData,
@@ -372,9 +367,15 @@ mod test {
 
         #[allow(clippy::unwrap_used)]
         fn configure(meta: &mut ConstraintSystem<H::Field>) -> Self::Config {
+            let base_arity = U::to_usize();
+            let sub_arity = V::to_usize();
+            let top_arity = W::to_usize();
+
             let (advice_eq, advice_neq, fixed_eq, fixed_neq) = ColumnBuilder::new()
                 .with_chip::<UInt32Chip<H::Field>>()
                 .with_chip::<<H as Halo2Hasher<U>>::Chip>()
+                .with_chip::<<H as Halo2Hasher<V>>::Chip>()
+                .with_chip::<<H as Halo2Hasher<W>>::Chip>()
                 .with_chip::<InsertChip<H::Field, U>>()
                 .create_columns(meta);
 
@@ -387,13 +388,15 @@ mod test {
                 &fixed_eq,
                 &fixed_neq,
             );
+            let base_insert = InsertChip::configure(meta, &advice_eq, &advice_neq);
 
-            let base_insert = InsertChip::<H::Field, U>::configure(meta, &advice_eq, &advice_neq);
-
-            // TODO (jake): do not configure hash circuits for duplicate arities.
-
-            let sub = if V::to_usize() == 0 {
+            let sub = if sub_arity == 0 {
                 None
+            } else if sub_arity == base_arity {
+                let sub_hasher =
+                    <H as Halo2Hasher<U>>::change_config_arity::<V>(base_hasher.clone());
+                let sub_insert = base_insert.clone().change_arity();
+                Some((sub_hasher, sub_insert))
             } else {
                 let sub_hasher = <H as Halo2Hasher<V>>::configure(
                     meta,
@@ -402,13 +405,23 @@ mod test {
                     &fixed_eq,
                     &fixed_neq,
                 );
-                let sub_insert =
-                    InsertChip::<H::Field, V>::configure(meta, &advice_eq, &advice_neq);
+                let sub_insert = InsertChip::configure(meta, &advice_eq, &advice_neq);
                 Some((sub_hasher, sub_insert))
             };
 
-            let top = if W::to_usize() == 0 {
+            let top = if top_arity == 0 {
                 None
+            } else if top_arity == base_arity {
+                let top_hasher =
+                    <H as Halo2Hasher<U>>::change_config_arity::<W>(base_hasher.clone());
+                let top_insert = base_insert.clone().change_arity();
+                Some((top_hasher, top_insert))
+            } else if top_arity == sub_arity {
+                let (sub_hasher, sub_insert) = sub.clone().unwrap();
+                let top_hasher =
+                    <H as Halo2Hasher<V>>::change_config_arity::<W>(sub_hasher.clone());
+                let top_insert = sub_insert.clone().change_arity();
+                Some((top_hasher, top_insert))
             } else {
                 let top_hasher = <H as Halo2Hasher<W>>::configure(
                     meta,
@@ -417,8 +430,7 @@ mod test {
                     &fixed_eq,
                     &fixed_neq,
                 );
-                let top_insert =
-                    InsertChip::<H::Field, W>::configure(meta, &advice_eq, &advice_neq);
+                let top_insert = InsertChip::configure(meta, &advice_eq, &advice_neq);
                 Some((top_hasher, top_insert))
             };
 
@@ -451,17 +463,17 @@ mod test {
 
             <H as Halo2Hasher<U>>::load(&mut layouter, &base_hasher_config)?;
             let base_hasher_chip = <H as Halo2Hasher<U>>::construct(base_hasher_config);
-            let base_insert_chip = InsertChip::<H::Field, U>::construct(base_insert_config);
+            let base_insert_chip = InsertChip::construct(base_insert_config);
 
             let sub_hasher_insert_chips = sub_config.map(|(hasher_config, insert_config)| {
                 let hasher_chip = <H as Halo2Hasher<V>>::construct(hasher_config);
-                let insert_chip = InsertChip::<H::Field, V>::construct(insert_config);
+                let insert_chip = InsertChip::construct(insert_config);
                 (hasher_chip, insert_chip)
             });
 
             let top_hasher_insert_chips = top_config.map(|(hasher_config, insert_config)| {
                 let hasher_chip = <H as Halo2Hasher<W>>::construct(hasher_config);
-                let insert_chip = InsertChip::<H::Field, W>::construct(insert_config);
+                let insert_chip = InsertChip::construct(insert_config);
                 (hasher_chip, insert_chip)
             });
 
@@ -487,9 +499,11 @@ mod test {
                 },
             )?;
 
-            let root =
-                merkle_chip.compute_root(layouter, &challenge_bits, &self.leaf, &self.path)?;
-            assert_eq!(root.value().unwrap(), &self.expected_root());
+            merkle_chip
+                .compute_root(layouter, &challenge_bits, self.leaf, &self.path)?
+                .value()
+                .zip(Value::known(self.expected_root()).as_ref())
+                .assert_if_known(|(root, expected_root)| root == expected_root);
 
             Ok(())
         }
@@ -507,11 +521,16 @@ mod test {
             let path = merkle_proof
                 .path()
                 .iter()
-                .map(|(sibs, _)| sibs.iter().copied().map(|sib| Some(sib.into())).collect())
+                .map(|(sibs, _)| {
+                    sibs.iter()
+                        .copied()
+                        .map(|sib| Value::known(sib.into()))
+                        .collect()
+                })
                 .collect();
             MyCircuit {
-                challenge: Some(challenge),
-                leaf: Some(merkle_proof.leaf().into()),
+                challenge: Value::known(challenge),
+                leaf: Value::known(merkle_proof.leaf().into()),
                 path,
                 _u: PhantomData,
                 _v: PhantomData,
@@ -520,9 +539,11 @@ mod test {
         }
 
         fn k(num_leafs: usize) -> u32 {
-            if TypeId::of::<H>() == TypeId::of::<Sha256Hasher<H::Field>>() {
+            let hasher_type = TypeId::of::<H>();
+            if hasher_type == TypeId::of::<Sha256Hasher<H::Field>>() {
                 return 17;
             }
+            assert_eq!(hasher_type, TypeId::of::<PoseidonHasher<H::Field>>());
 
             let challenge_bit_len = num_leafs.trailing_zeros() as usize;
 
@@ -542,23 +563,10 @@ mod test {
                 challenge_bit_len / base_bit_len
             };
 
-            let base_hasher_rows = match base_arity {
-                2 | 4 => 36,
-                8 => 37,
-                _ => unimplemented!(),
-            };
-            let sub_hasher_rows = match sub_arity {
-                0 => 0,
-                2 | 4 => 36,
-                8 => 37,
-                _ => unimplemented!(),
-            };
-            let top_hasher_rows = match top_arity {
-                0 => 0,
-                2 | 4 => 36,
-                8 => 37,
-                _ => unimplemented!(),
-            };
+            use neptune::halo2_circuit::PoseidonChipStd;
+            let base_hasher_rows = PoseidonChipStd::<H::Field, U>::num_rows();
+            let sub_hasher_rows = PoseidonChipStd::<H::Field, V>::num_rows();
+            let top_hasher_rows = PoseidonChipStd::<H::Field, W>::num_rows();
             let insert_rows = 1;
 
             // Four rows for decomposing the challenge into 32 bits.
@@ -576,10 +584,19 @@ mod test {
 
         #[allow(clippy::unwrap_used)]
         fn expected_root(&self) -> H::Field {
-            let challenge = self.challenge.unwrap() as usize;
-            let mut challenge_bits = (0..32).map(|i| challenge >> i & 1);
+            let challenge = self.challenge.map(|c| c as usize);
+            let mut challenge_bits = vec![0; 32];
+            for i in 0..32 {
+                challenge.map(|c| {
+                    challenge_bits[i] = c >> i & 1;
+                });
+            }
+            let mut challenge_bits = challenge_bits.into_iter();
 
-            let mut cur = self.leaf.unwrap();
+            let mut cur = H::Field::default();
+            self.leaf.map(|leaf| {
+                cur = leaf;
+            });
 
             for siblings in self.path.iter() {
                 let arity = siblings.len() + 1;
@@ -593,11 +610,15 @@ mod test {
                 // Insert `cur` into `siblings` at position `index`.
                 let mut preimage = Vec::<u8>::with_capacity(arity * NODE_SIZE);
                 for sib in &siblings[..index] {
-                    preimage.extend_from_slice(sib.as_ref().unwrap().to_repr().as_ref())
+                    sib.map(|sib| {
+                        preimage.extend_from_slice(sib.to_repr().as_ref());
+                    });
                 }
                 preimage.extend_from_slice(cur.to_repr().as_ref());
                 for sib in &siblings[index..] {
-                    preimage.extend_from_slice(sib.as_ref().unwrap().to_repr().as_ref())
+                    sib.map(|sib| {
+                        preimage.extend_from_slice(sib.to_repr().as_ref());
+                    });
                 }
 
                 cur = H::Function::hash(&preimage).into();
@@ -635,8 +656,13 @@ mod test {
             &mut rng, num_leafs, None,
         );
 
-        for _ in 0..10 {
-            let challenge = rng.gen::<usize>() % num_leafs;
+        let challenges: Vec<usize> = if num_leafs < 10 {
+            (0..num_leafs).collect()
+        } else {
+            (0..10).map(|_| rng.gen::<usize>() % num_leafs).collect()
+        };
+
+        for challenge in challenges {
             let merkle_proof = tree.gen_proof(challenge).unwrap();
             let circ = MyCircuit::<H, U, V, W>::with_witness(challenge as u32, &merkle_proof);
             let k = MyCircuit::<H, U, V, W>::k(num_leafs);

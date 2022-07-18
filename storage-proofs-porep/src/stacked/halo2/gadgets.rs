@@ -9,7 +9,7 @@ use filecoin_hashers::{
 use generic_array::typenum::{U11, U2};
 use halo2_proofs::{
     arithmetic::FieldExt,
-    circuit::{AssignedCell, Layouter},
+    circuit::{AssignedCell, Layouter, Value},
     plonk::{Advice, Column, ConstraintSystem, Error, Fixed, Selector},
     poly::Rotation,
 };
@@ -205,7 +205,7 @@ where
 
                 let zero = {
                     let (offset, col) = advice_iter.next();
-                    AssignedU32::assign(&mut region, || "zero", col, offset, Some(0))?
+                    AssignedU32::assign(&mut region, || "zero", col, offset, Value::known(0))?
                     // TODO (jake): do we need to call `.constrain_constant()`?
                     // region.constrain_constant(zero.cell(), F::zero())?;
                 };
@@ -218,7 +218,7 @@ where
                             || format!("layer {}", layer),
                             col,
                             offset,
-                            Some(layer as u32),
+                            Value::known(layer as u32),
                         )?;
                         // region.constrain_constant(assigned_layer.cell(), F::from(layer as u64))?;
                         Ok(assigned_layer)
@@ -235,7 +235,7 @@ where
                             || format!("padding word {}", i),
                             col,
                             offset,
-                            Some(*pad_word),
+                            Value::known(*pad_word),
                         )?;
                         /*
                         region.constrain_constant(
@@ -371,12 +371,7 @@ impl<F: FieldExt> EncodingChip<F> {
                     .zip(key.value())
                     .map(|(label_d, key)| *label_d + key);
 
-                region.assign_advice(
-                    || "label_r",
-                    self.config.label_r,
-                    offset,
-                    || label_r.ok_or(Error::Synthesis),
-                )
+                region.assign_advice(|| "label_r", self.config.label_r, offset, || label_r)
             },
         )
     }

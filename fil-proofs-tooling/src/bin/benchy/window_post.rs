@@ -6,13 +6,13 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use anyhow::{ensure, Context};
 use bincode::{deserialize, serialize};
-use blstrs::Scalar as Fr;
+use ff::PrimeField;
 use fil_proofs_tooling::measure::FuncMeasurement;
 use fil_proofs_tooling::shared::{PROVER_ID, RANDOMNESS, TICKET_BYTES};
 use fil_proofs_tooling::{measure, Metadata};
-use filecoin_hashers::{Domain, Hasher};
+use filecoin_hashers::Hasher;
 use filecoin_proofs::constants::{
-    POREP_PARTITIONS, WINDOW_POST_CHALLENGE_COUNT, WINDOW_POST_SECTOR_COUNT,
+    DefaultPieceHasher, DefaultTreeHasher, POREP_PARTITIONS, WINDOW_POST_CHALLENGE_COUNT, WINDOW_POST_SECTOR_COUNT,
 };
 use filecoin_proofs::types::{
     PaddedBytesAmount, PieceInfo, PoRepConfig, PoRepProofPartitions, PoStConfig,
@@ -22,7 +22,7 @@ use filecoin_proofs::types::{
 use filecoin_proofs::{
     add_piece, generate_piece_commitment, generate_window_post, seal_commit_phase1,
     seal_commit_phase2, seal_pre_commit_phase1, seal_pre_commit_phase2, validate_cache_for_commit,
-    validate_cache_for_precommit_phase2, verify_window_post, with_shape, PoStType,
+    validate_cache_for_precommit_phase2, verify_window_post, with_shape, PoseidonArityAllFields, PoStType,
     PrivateReplicaInfo, PublicReplicaInfo,
 };
 use log::info;
@@ -109,7 +109,8 @@ fn run_pre_commit_phases<Tree>(
 ) -> anyhow::Result<((u64, u64), (u64, u64), (u64, u64))>
 where
     Tree: 'static + MerkleTreeTrait,
-    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+    DefaultPieceHasher<Tree::Field>: Hasher<Field = Tree::Field>,
+    DefaultTreeHasher<Tree::Field>: Hasher<Field = Tree::Field>,
 {
     let (seal_pre_commit_phase1_measurement_cpu_time, seal_pre_commit_phase1_measurement_wall_time): (u64, u64) = if skip_precommit_phase1 {
             // generate no-op measurements
@@ -354,7 +355,11 @@ pub fn run_window_post_bench<Tree>(
 ) -> anyhow::Result<()>
 where
     Tree: 'static + MerkleTreeTrait,
-    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+    Tree::Arity: PoseidonArityAllFields,
+    Tree::SubTreeArity: PoseidonArityAllFields,
+    Tree::TopTreeArity: PoseidonArityAllFields,
+    DefaultPieceHasher<Tree::Field>: Hasher<Field = Tree::Field>,
+    DefaultTreeHasher<Tree::Field>: Hasher<Field = Tree::Field>,
 {
     let (
         (seal_pre_commit_phase1_cpu_time_ms, seal_pre_commit_phase1_wall_time_ms),
@@ -594,7 +599,7 @@ where
 }
 
 #[allow(clippy::too_many_arguments)]
-pub fn run(
+pub fn run<F>(
     sector_size: usize,
     api_version: ApiVersion,
     cache: String,
@@ -604,7 +609,12 @@ pub fn run(
     skip_commit_phase1: bool,
     skip_commit_phase2: bool,
     test_resume: bool,
-) -> anyhow::Result<()> {
+) -> anyhow::Result<()>
+where
+    F: PrimeField,
+    DefaultPieceHasher<F>: Hasher<Field = F>,
+    DefaultTreeHasher<F>: Hasher<Field = F>,
+{
     info!("Benchy Window PoSt: sector-size={}, api_version={}, preserve_cache={}, skip_precommit_phase1={}, skip_precommit_phase2={}, skip_commit_phase1={}, skip_commit_phase2={}, test_resume={}", sector_size, api_version, preserve_cache, skip_precommit_phase1, skip_precommit_phase2, skip_commit_phase1, skip_commit_phase2, test_resume);
 
     let cache_dir_specified = !cache.is_empty();
@@ -646,6 +656,7 @@ pub fn run(
 
     with_shape!(
         sector_size as u64,
+        F,
         run_window_post_bench,
         sector_size as u64,
         api_version,

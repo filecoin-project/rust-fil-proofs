@@ -5,7 +5,7 @@ use super::{
 use crate::sha256::table16::{util::*, SpreadVar, SpreadWord, StateWord, Table16Assignment};
 use halo2_proofs::{
     arithmetic::FieldExt,
-    circuit::Region,
+    circuit::{Region, Value},
     plonk::{Advice, Column, Error},
 };
 use std::convert::TryInto;
@@ -204,14 +204,14 @@ impl<F: FieldExt> CompressionConfig<F> {
         &self,
         region: &mut Region<'_, F>,
         row: usize,
-        val: Option<u32>,
+        val: Value<u32>,
     ) -> Result<AbcdVar<F>, Error> {
         self.s_decompose_abcd.enable(region, row)?;
 
         let [a_3, a_4, a_5, a_6, ..] = self.advice;
 
         let spread_pieces = val.map(AbcdVar::<F>::pieces);
-        let spread_pieces = transpose_option_vec(spread_pieces, 6);
+        let spread_pieces = spread_pieces.transpose_vec(6);
 
         let a = SpreadVar::without_lookup(
             region,
@@ -272,14 +272,14 @@ impl<F: FieldExt> CompressionConfig<F> {
         &self,
         region: &mut Region<'_, F>,
         row: usize,
-        val: Option<u32>,
+        val: Value<u32>,
     ) -> Result<EfghVar<F>, Error> {
         self.s_decompose_efgh.enable(region, row)?;
 
         let [a_3, a_4, a_5, a_6, ..] = self.advice;
 
         let spread_pieces = val.map(EfghVar::<F>::pieces);
-        let spread_pieces = transpose_option_vec(spread_pieces, 6);
+        let spread_pieces = spread_pieces.transpose_vec(6);
 
         let a_lo = SpreadVar::without_lookup(
             region,
@@ -341,7 +341,7 @@ impl<F: FieldExt> CompressionConfig<F> {
         &self,
         region: &mut Region<'_, F>,
         round_idx: RoundIdx,
-        a_val: Option<u32>,
+        a_val: Value<u32>,
     ) -> Result<RoundWordA<F>, Error> {
         let row = get_decompose_a_row(round_idx);
 
@@ -355,7 +355,7 @@ impl<F: FieldExt> CompressionConfig<F> {
         &self,
         region: &mut Region<'_, F>,
         round_idx: RoundIdx,
-        e_val: Option<u32>,
+        e_val: Value<u32>,
     ) -> Result<RoundWordE<F>, Error> {
         let row = get_decompose_e_row(round_idx);
 
@@ -400,11 +400,11 @@ impl<F: FieldExt> CompressionConfig<F> {
 
         // Calculate R_0^{even}, R_0^{odd}, R_1^{even}, R_1^{odd}
         let r = word.xor_upper_sigma();
-        let r_0: Option<[bool; 32]> = r.map(|r| r[..32].try_into().unwrap());
+        let r_0: Value<[bool; 32]> = r.map(|r| r[..32].try_into().unwrap());
         let r_0_even = r_0.map(even_bits);
         let r_0_odd = r_0.map(odd_bits);
 
-        let r_1: Option<[bool; 32]> = r.map(|r| r[32..].try_into().unwrap());
+        let r_1: Value<[bool; 32]> = r.map(|r| r[32..].try_into().unwrap());
         let r_1_even = r_1.map(even_bits);
         let r_1_odd = r_1.map(odd_bits);
 
@@ -457,11 +457,11 @@ impl<F: FieldExt> CompressionConfig<F> {
         // Calculate R_0^{even}, R_0^{odd}, R_1^{even}, R_1^{odd}
         // Calculate R_0^{even}, R_0^{odd}, R_1^{even}, R_1^{odd}
         let r = word.xor_upper_sigma();
-        let r_0: Option<[bool; 32]> = r.map(|r| r[..32].try_into().unwrap());
+        let r_0: Value<[bool; 32]> = r.map(|r| r[..32].try_into().unwrap());
         let r_0_even = r_0.map(even_bits);
         let r_0_odd = r_0.map(odd_bits);
 
-        let r_1: Option<[bool; 32]> = r.map(|r| r[32..].try_into().unwrap());
+        let r_1: Value<[bool; 32]> = r.map(|r| r[32..].try_into().unwrap());
         let r_1_even = r_1.map(even_bits);
         let r_1_odd = r_1.map(odd_bits);
 
@@ -481,10 +481,10 @@ impl<F: FieldExt> CompressionConfig<F> {
         &self,
         region: &mut Region<'_, F>,
         row: usize,
-        r_0_even: Option<[bool; 16]>,
-        r_0_odd: Option<[bool; 16]>,
-        r_1_even: Option<[bool; 16]>,
-        r_1_odd: Option<[bool; 16]>,
+        r_0_even: Value<[bool; 16]>,
+        r_0_odd: Value<[bool; 16]>,
+        r_1_even: Value<[bool; 16]>,
+        r_1_odd: Value<[bool; 16]>,
     ) -> Result<(AssignedBits<F, 16>, AssignedBits<F, 16>), Error> {
         let a_3 = self.advice[0];
 
@@ -531,16 +531,16 @@ impl<F: FieldExt> CompressionConfig<F> {
             .1
             .copy_advice(|| "spread_f_hi", region, a_4, row + 1)?;
 
-        let p: Option<[bool; 64]> = spread_halves_e
+        let p: Value<[bool; 64]> = spread_halves_e
             .value()
             .zip(spread_halves_f.value())
             .map(|(e, f)| i2lebsp(e + f));
 
-        let p_0: Option<[bool; 32]> = p.map(|p| p[..32].try_into().unwrap());
+        let p_0: Value<[bool; 32]> = p.map(|p| p[..32].try_into().unwrap());
         let p_0_even = p_0.map(even_bits);
         let p_0_odd = p_0.map(odd_bits);
 
-        let p_1: Option<[bool; 32]> = p.map(|p| p[32..].try_into().unwrap());
+        let p_1: Value<[bool; 32]> = p.map(|p| p[32..].try_into().unwrap());
         let p_1_even = p_1.map(even_bits);
         let p_1_odd = p_1.map(odd_bits);
 
@@ -604,7 +604,7 @@ impl<F: FieldExt> CompressionConfig<F> {
             spread_neg_e_hi,
         )?;
 
-        let p: Option<[bool; 64]> = {
+        let p: Value<[bool; 64]> = {
             let spread_neg_e = spread_neg_e_lo
                 .zip(spread_neg_e_hi)
                 .map(|(lo, hi)| lebs2ip(&lo) + (1 << 32) * lebs2ip(&hi));
@@ -613,11 +613,11 @@ impl<F: FieldExt> CompressionConfig<F> {
                 .map(|(neg_e, g)| i2lebsp(neg_e + g))
         };
 
-        let p_0: Option<[bool; 32]> = p.map(|p| p[..32].try_into().unwrap());
+        let p_0: Value<[bool; 32]> = p.map(|p| p[..32].try_into().unwrap());
         let p_0_even = p_0.map(even_bits);
         let p_0_odd = p_0.map(odd_bits);
 
-        let p_1: Option<[bool; 32]> = p.map(|p| p[32..].try_into().unwrap());
+        let p_1: Value<[bool; 32]> = p.map(|p| p[32..].try_into().unwrap());
         let p_1_even = p_1.map(even_bits);
         let p_1_odd = p_1.map(odd_bits);
 
@@ -628,10 +628,10 @@ impl<F: FieldExt> CompressionConfig<F> {
         &self,
         region: &mut Region<'_, F>,
         row: usize,
-        r_0_even: Option<[bool; 16]>,
-        r_0_odd: Option<[bool; 16]>,
-        r_1_even: Option<[bool; 16]>,
-        r_1_odd: Option<[bool; 16]>,
+        r_0_even: Value<[bool; 16]>,
+        r_0_odd: Value<[bool; 16]>,
+        r_1_even: Value<[bool; 16]>,
+        r_1_odd: Value<[bool; 16]>,
     ) -> Result<(AssignedBits<F, 16>, AssignedBits<F, 16>), Error> {
         let a_3 = self.advice[0];
         let (_even, odd) = self.assign_spread_outputs(
@@ -686,17 +686,17 @@ impl<F: FieldExt> CompressionConfig<F> {
             .1
             .copy_advice(|| "spread_c_hi", region, a_5, row + 1)?;
 
-        let m: Option<[bool; 64]> = spread_halves_a
+        let m: Value<[bool; 64]> = spread_halves_a
             .value()
             .zip(spread_halves_b.value())
             .zip(spread_halves_c.value())
             .map(|((a, b), c)| i2lebsp(a + b + c));
 
-        let m_0: Option<[bool; 32]> = m.map(|m| m[..32].try_into().unwrap());
+        let m_0: Value<[bool; 32]> = m.map(|m| m[..32].try_into().unwrap());
         let m_0_even = m_0.map(even_bits);
         let m_0_odd = m_0.map(odd_bits);
 
-        let m_1: Option<[bool; 32]> = m.map(|m| m[32..].try_into().unwrap());
+        let m_1: Value<[bool; 32]> = m.map(|m| m[32..].try_into().unwrap());
         let m_1_even = m_1.map(even_bits);
         let m_1_odd = m_1.map(odd_bits);
 
@@ -734,8 +734,8 @@ impl<F: FieldExt> CompressionConfig<F> {
         let k_lo: [bool; 16] = k[..16].try_into().unwrap();
         let k_hi: [bool; 16] = k[16..].try_into().unwrap();
         {
-            AssignedBits::<F, 16>::assign_bits(region, || "k_lo", a_6, row - 1, Some(k_lo))?;
-            AssignedBits::<F, 16>::assign_bits(region, || "k_hi", a_6, row, Some(k_hi))?;
+            AssignedBits::<F, 16>::assign_bits(region, || "k_lo", a_6, row - 1, Value::known(k_lo))?;
+            AssignedBits::<F, 16>::assign_bits(region, || "k_hi", a_6, row, Value::known(k_hi))?;
         }
 
         // Assign and copy w
@@ -756,7 +756,10 @@ impl<F: FieldExt> CompressionConfig<F> {
                 (ch.0.value_u16(), ch.1.value_u16()),
                 (ch_neg.0.value_u16(), ch_neg.1.value_u16()),
                 (sigma_1.0.value_u16(), sigma_1.1.value_u16()),
-                (Some(lebs2ip(&k_lo) as u16), Some(lebs2ip(&k_hi) as u16)),
+                (
+                    Value::known(lebs2ip(&k_lo) as u16),
+                    Value::known(lebs2ip(&k_hi) as u16),
+                ),
                 (w.0.value_u16(), w.1.value_u16()),
             ]);
 
@@ -764,16 +767,12 @@ impl<F: FieldExt> CompressionConfig<F> {
                 || "h_prime_carry",
                 a_9,
                 row + 1,
-                || {
-                    h_prime_carry
-                        .map(|value| F::from(value as u64))
-                        .ok_or(Error::Synthesis)
-                },
+                || h_prime_carry.map(|value| F::from(value as u64)),
             )?;
 
-            let h_prime: Option<[bool; 32]> = h_prime.map(|w| i2lebsp(w.into()));
-            let h_prime_lo: Option<[bool; 16]> = h_prime.map(|w| w[..16].try_into().unwrap());
-            let h_prime_hi: Option<[bool; 16]> = h_prime.map(|w| w[16..].try_into().unwrap());
+            let h_prime: Value<[bool; 32]> = h_prime.map(|w| i2lebsp(w.into()));
+            let h_prime_lo: Value<[bool; 16]> = h_prime.map(|w| w[..16].try_into().unwrap());
+            let h_prime_hi: Value<[bool; 16]> = h_prime.map(|w| w[16..].try_into().unwrap());
 
             let h_prime_lo =
                 AssignedBits::<F, 16>::assign_bits(region, || "h_prime_lo", a_7, row + 1, h_prime_lo)?;
@@ -813,7 +812,7 @@ impl<F: FieldExt> CompressionConfig<F> {
             || "e_new_carry",
             a_9,
             row + 1,
-            || e_new_carry.map(F::from).ok_or(Error::Synthesis),
+            || e_new_carry.map(F::from),
         )?;
 
         Ok(e_new_dense)
@@ -863,7 +862,7 @@ impl<F: FieldExt> CompressionConfig<F> {
             || "a_new_carry",
             a_9,
             row,
-            || a_new_carry.map(F::from).ok_or(Error::Synthesis),
+            || a_new_carry.map(F::from),
         )?;
 
         Ok(a_new_dense)
@@ -876,17 +875,17 @@ impl<F: FieldExt> CompressionConfig<F> {
         lo_col: Column<Advice>,
         hi_row: usize,
         hi_col: Column<Advice>,
-        word: Option<u32>,
+        word: Value<u32>,
     ) -> Result<RoundWordDense<F>, Error> {
-        let word: Option<[bool; 32]> = word.map(|w| i2lebsp(w.into()));
+        let word: Value<[bool; 32]> = word.map(|w| i2lebsp(w.into()));
 
         let lo = {
-            let lo: Option<[bool; 16]> = word.map(|w| w[..16].try_into().unwrap());
+            let lo: Value<[bool; 16]> = word.map(|w| w[..16].try_into().unwrap());
             AssignedBits::<F, 16>::assign_bits(region, || "lo", lo_col, lo_row, lo)?
         };
 
         let hi = {
-            let hi: Option<[bool; 16]> = word.map(|w| w[16..].try_into().unwrap());
+            let hi: Value<[bool; 16]> = word.map(|w| w[16..].try_into().unwrap());
             AssignedBits::<F, 16>::assign_bits(region, || "hi", hi_col, hi_row, hi)?
         };
 
@@ -899,14 +898,14 @@ impl<F: FieldExt> CompressionConfig<F> {
         &self,
         region: &mut Region<'_, F>,
         row: usize,
-        word: Option<u32>,
+        word: Value<u32>,
     ) -> Result<(RoundWordDense<F>, RoundWordSpread<F>), Error> {
         // Rename these here for ease of matching the gates to the specification.
         let [.., a_7, a_8, _a_9] = self.advice;
 
-        let word: Option<[bool; 32]> = word.map(|w| i2lebsp(w.into()));
-        let lo: Option<[bool; 16]> = word.map(|w| w[..16].try_into().unwrap());
-        let hi: Option<[bool; 16]> = word.map(|w| w[16..].try_into().unwrap());
+        let word: Value<[bool; 32]> = word.map(|w| i2lebsp(w.into()));
+        let lo: Value<[bool; 16]> = word.map(|w| w[..16].try_into().unwrap());
+        let hi: Value<[bool; 16]> = word.map(|w| w[16..].try_into().unwrap());
 
         let w_lo = SpreadVar::without_lookup(region, a_7, row, a_8, row, lo.map(SpreadWord::new))?;
         let w_hi =

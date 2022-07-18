@@ -174,7 +174,7 @@ macro_rules! impl_compound_proof {
                     vanilla_pub_inputs: &Self::VanillaPublicInputs,
                     batch_proof: &Halo2Proof<F::Affine, Self::Circuit>,
                     keypair: &Halo2Keypair<F::Affine, Self::Circuit>,
-                ) -> Result<(), Error> {
+                ) -> bool {
                     let partition_count = partition_count::<$sector_nodes>();
 
                     let circ_pub_inputs_vecs: Vec<Vec<Vec<F>>> = (0..partition_count)
@@ -190,7 +190,7 @@ macro_rules! impl_compound_proof {
                         })
                         .collect();
 
-                    verify_batch_proof(keypair, batch_proof, &circ_pub_inputs_vecs, &mut OsRng)
+                    verify_batch_proof(keypair, batch_proof, &circ_pub_inputs_vecs)
                 }
             }
         )*

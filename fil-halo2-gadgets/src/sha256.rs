@@ -8,7 +8,7 @@ use std::fmt;
 
 use halo2_proofs::{
     arithmetic::FieldExt,
-    circuit::{AssignedCell, Chip, Layouter},
+    circuit::{AssignedCell, Chip, Layouter, Value},
     plonk::{Advice, Column, ConstraintSystem, Error, Expression, Instance, Selector},
     poly::Rotation,
 };
@@ -354,7 +354,7 @@ impl<F: FieldExt> Sha256Chip<F> {
                             || format!("padding word {}", i),
                             col,
                             offset,
-                            Some(*pad_word),
+                            Value::known(*pad_word),
                         )
                     })
                     .collect()
@@ -1187,7 +1187,7 @@ impl<F: FieldExt> Sha256WordsChip<F> {
                         || "witness field element",
                         self.config.advice[0],
                         offset,
-                        || field.ok_or(Error::Synthesis),
+                        || field,
                     )?,
                     WitnessOrCopy::Copy(ref field) => field.copy_advice(
                         || "copy field element",
@@ -1204,30 +1204,23 @@ impl<F: FieldExt> Sha256WordsChip<F> {
                     )?,
                 };
 
-                let le_u32s: [Option<u32>; 8] = match field.value() {
-                    Some(field) => field
-                        .to_repr()
-                        .as_ref()
-                        .chunks(4)
-                        .map(|bytes| Some(u32::from_le_bytes(bytes.try_into().unwrap())))
-                        .collect::<Vec<Option<u32>>>()
-                        .try_into()
-                        .unwrap(),
-                    None => [None; 8],
-                };
+                let repr = field.value().map(|field| field.to_repr());
 
                 // Assign `u32` decomposition.
-                let le_u32s = le_u32s
+                let le_u32s = self.config.advice[1..]
                     .iter()
-                    .zip(self.config.advice[1..].iter())
                     .enumerate()
-                    .map(|(i, (uint32, col))| {
+                    .map(|(i, col)| {
+                        let uint32: Value<u32> = repr.map(|repr| {
+                            let le_bytes = &repr.as_ref()[i * 4..(i + 1) * 4];
+                            u32::from_le_bytes(le_bytes.try_into().unwrap())
+                        });
                         AssignedBits::<F, 32>::assign(
                             &mut region,
-                            || format!("u32 {}", i),
+                            || format!("u32_{}", i),
                             *col,
                             offset,
-                            *uint32,
+                            uint32,
                         )
                     })
                     .collect::<Result<Vec<AssignedBits<F, 32>>, Error>>()?;
@@ -1253,25 +1246,18 @@ impl<F: FieldExt> Sha256WordsChip<F> {
                 // Copy `u32`.
                 word.copy_advice(|| "copy word", &mut region, self.config.advice[0], offset)?;
 
-                let le_bytes: Vec<Option<u8>> = match word.value_u32() {
-                    Some(word) => word.to_le_bytes().iter().copied().map(Some).collect(),
-                    None => vec![None; 4],
-                };
+                let le_bytes: [Value<u8>; 4] =
+                    word.value_u32().map(u32::to_le_bytes).transpose_array();
 
                 // Assign `words`'s little-endian bytes.
-                for (byte_index, (byte, col)) in le_bytes
-                    .iter()
-                    .zip(self.config.advice[1..=4].iter())
-                    .enumerate()
+                for (byte_index, (byte, col)) in
+                    le_bytes.iter().zip(&self.config.advice[1..=4]).enumerate()
                 {
                     region.assign_advice(
                         || format!("word le-byte {}", byte_index),
                         *col,
                         offset,
-                        || {
-                            byte.map(|byte| F::from(byte as u64))
-                                .ok_or(Error::Synthesis)
-                        },
+                        || byte.map(|byte| F::from(byte as u64)),
                     )?;
                 }
 
@@ -1298,7 +1284,7 @@ impl<F: FieldExt> Sha256WordsChip<F> {
     pub fn witness_into_words(
         &self,
         layouter: impl Layouter<F>,
-        field: Option<F>,
+        field: Value<F>,
     ) -> Result<[AssignedU32<F>; 8], Error> {
         self.into_words_inner(layouter, WitnessOrCopy::Witness(field))
     }
@@ -1363,7 +1349,7 @@ impl<F: FieldExt> Sha256WordsChip<F> {
                 let offset = 0;
                 self.config.s_field_into_u32s.enable(&mut region, offset)?;
 
-                let mut packed_repr = Some(Vec::<u8>::with_capacity(32));
+                let mut packed_repr = Value::known(F::Repr::default());
 
                 for (word_index, (word, col)) in reordered_words
                     .iter()
@@ -1375,10 +1361,14 @@ impl<F: FieldExt> Sha256WordsChip<F> {
                         &mut region,
                         *col,
                         offset,
-                    )?;
-                    if let Some((repr, word)) = packed_repr.as_mut().zip(word.value_u32()) {
-                        repr.extend(word.to_le_bytes());
-                    }
+                    )
+                    .map(AssignedBits::<F, 32>)?
+                    .value_u32()
+                    .zip(packed_repr.as_mut())
+                    .map(|(word, repr)| {
+                        repr.as_mut()[word_index * 4..(word_index + 1) * 4]
+                            .copy_from_slice(&word.to_le_bytes());
+                    });
                 }
 
                 region.assign_advice(
@@ -1386,14 +1376,9 @@ impl<F: FieldExt> Sha256WordsChip<F> {
                     self.config.advice[0],
                     offset,
                     || {
-                        packed_repr
-                            .as_ref()
-                            .map(|repr_bytes| {
-                                let mut repr = F::Repr::default();
-                                repr.as_mut().copy_from_slice(repr_bytes);
-                                F::from_repr_vartime(repr).expect("words are invalid field element")
-                            })
-                            .ok_or(Error::Synthesis)
+                        packed_repr.map(|repr| {
+                            F::from_repr_vartime(repr).expect("words are invalid field element")
+                        })
                     },
                 )
             },
@@ -1429,8 +1414,8 @@ mod tests {
         }
 
         struct MyCircuit {
-            preimage: [Option<u32>; BLOCK_SIZE],
-            expected_digest: Option<[u32; DIGEST_SIZE]>,
+            preimage: [Value<u32>; BLOCK_SIZE],
+            expected_digest: [Value<u32>; DIGEST_SIZE],
         }
 
         impl<F: FieldExt> Circuit<F> for MyCircuit {
@@ -1439,8 +1424,8 @@ mod tests {
 
             fn without_witnesses(&self) -> Self {
                 MyCircuit {
-                    preimage: [None; BLOCK_SIZE],
-                    expected_digest: None,
+                    preimage: [Value::unknown(); BLOCK_SIZE],
+                    expected_digest: [Value::unknown(); DIGEST_SIZE],
                 }
             }
 
@@ -1486,22 +1471,21 @@ mod tests {
                                     || format!("preimage word {}", i),
                                     col,
                                     offset,
-                                    Some(word.unwrap()),
+                                    *word,
                                 )
                             })
                             .collect::<Result<Vec<AssignedBits<F, 32>>, Error>>()
                     },
                 )?;
 
-                let digest: [u32; DIGEST_SIZE] = sha256_chip
-                    .hash_nopad(layouter.namespace(|| "sha256"), &preimage)?
-                    .iter()
-                    .map(|digest_word| digest_word.value_u32().unwrap())
-                    .collect::<Vec<u32>>()
-                    .try_into()
-                    .unwrap();
+                let digest_words =
+                    sha256_chip.hash_nopad(layouter.namespace(|| "sha256"), &preimage)?;
 
-                assert_eq!(digest, self.expected_digest.unwrap());
+                for (word, expected_word) in digest_words.iter().zip(self.expected_digest.iter()) {
+                    word.value_u32()
+                        .zip(expected_word.as_ref())
+                        .assert_if_known(|(word, expected_word)| word == *expected_word);
+                }
 
                 Ok(())
             }
@@ -1513,33 +1497,33 @@ mod tests {
         // Only tests preimages of 32-bit words.
         assert_eq!(preimage_bytes.len() % 4, 0);
 
-        let unpadded_preimage: Vec<Option<u32>> = preimage_bytes
+        let unpadded_preimage: Vec<Value<u32>> = preimage_bytes
             .chunks(4)
-            .map(|bytes| Some(u32::from_be_bytes(bytes.try_into().unwrap())))
+            .map(|bytes| Value::known(u32::from_be_bytes(bytes.try_into().unwrap())))
             .collect();
 
-        let padded_preimage: [Option<u32>; BLOCK_SIZE] = {
+        let padded_preimage: [Value<u32>; BLOCK_SIZE] = {
             let mut padded_preimage = Vec::with_capacity(BLOCK_SIZE);
             padded_preimage.extend_from_slice(&unpadded_preimage);
             for pad_word in get_padding(unpadded_preimage.len()) {
-                padded_preimage.push(Some(pad_word));
+                padded_preimage.push(Value::known(pad_word));
             }
             // Only test preimages of one block.
             assert_eq!(padded_preimage.len(), BLOCK_SIZE);
             padded_preimage.try_into().unwrap()
         };
 
-        let expected_digest: [u32; DIGEST_SIZE] = Sha256::digest(&preimage_bytes)
+        let expected_digest: [Value<u32>; DIGEST_SIZE] = Sha256::digest(&preimage_bytes)
             .chunks(4)
-            .map(|bytes| u32::from_be_bytes(bytes.try_into().unwrap()))
-            .collect::<Vec<u32>>()
+            .map(|bytes| Value::known(u32::from_be_bytes(bytes.try_into().unwrap())))
+            .collect::<Vec<Value<u32>>>()
             .try_into()
             .unwrap();
 
         // Test `Sha256Chip::hash_nopad` (chip caller pads the preimage).
         let circ = MyCircuit {
             preimage: padded_preimage,
-            expected_digest: Some(expected_digest),
+            expected_digest,
         };
         let prover = MockProver::<Fp>::run(17, &circ, vec![]).unwrap();
         assert!(prover.verify().is_ok());
@@ -1554,8 +1538,8 @@ mod tests {
         }
 
         struct MyCircuit {
-            preimage: Vec<Option<u32>>,
-            expected_digest: Option<[u32; DIGEST_SIZE]>,
+            preimage: Vec<Value<u32>>,
+            expected_digest: [Value<u32>; DIGEST_SIZE],
         }
 
         impl<F: FieldExt> Circuit<F> for MyCircuit {
@@ -1564,8 +1548,8 @@ mod tests {
 
             fn without_witnesses(&self) -> Self {
                 MyCircuit {
-                    preimage: vec![None; self.preimage.len()],
-                    expected_digest: None,
+                    preimage: vec![Value::unknown(); self.preimage.len()],
+                    expected_digest: [Value::unknown(); DIGEST_SIZE],
                 }
             }
 
@@ -1611,22 +1595,20 @@ mod tests {
                                     || format!("preimage word {}", i),
                                     col,
                                     offset,
-                                    Some(word.unwrap()),
+                                    *word,
                                 )
                             })
                             .collect::<Result<Vec<AssignedBits<F, 32>>, Error>>()
                     },
                 )?;
 
-                let digest: [u32; DIGEST_SIZE] = sha256_chip
-                    .hash(layouter.namespace(|| "sha256"), &preimage)?
-                    .iter()
-                    .map(|digest_word| digest_word.value_u32().unwrap())
-                    .collect::<Vec<u32>>()
-                    .try_into()
-                    .unwrap();
+                let digest_words = sha256_chip.hash(layouter.namespace(|| "sha256"), &preimage)?;
 
-                assert_eq!(digest, self.expected_digest.unwrap());
+                for (word, expected_word) in digest_words.iter().zip(self.expected_digest.iter()) {
+                    word.value_u32()
+                        .zip(expected_word.as_ref())
+                        .assert_if_known(|(word, expected_word)| word == *expected_word);
+                }
 
                 Ok(())
             }
@@ -1654,21 +1636,21 @@ mod tests {
                 "preimage byte length not divisible by word size"
             );
 
-            let unpadded_preimage: Vec<Option<u32>> = preimage_bytes
+            let unpadded_preimage: Vec<Value<u32>> = preimage_bytes
                 .chunks(4)
-                .map(|bytes| Some(u32::from_be_bytes(bytes.try_into().unwrap())))
+                .map(|bytes| Value::known(u32::from_be_bytes(bytes.try_into().unwrap())))
                 .collect();
 
-            let expected_digest: [u32; DIGEST_SIZE] = Sha256::digest(preimage_bytes)
+            let expected_digest = Sha256::digest(preimage_bytes)
                 .chunks(4)
-                .map(|bytes| u32::from_be_bytes(bytes.try_into().unwrap()))
-                .collect::<Vec<u32>>()
+                .map(|bytes| Value::known(u32::from_be_bytes(bytes.try_into().unwrap())))
+                .collect::<Vec<Value<u32>>>()
                 .try_into()
                 .unwrap();
 
             let circ = MyCircuit {
                 preimage: unpadded_preimage,
-                expected_digest: Some(expected_digest),
+                expected_digest,
             };
 
             let prover = MockProver::<Fp>::run(17, &circ, vec![]).unwrap();
@@ -1728,7 +1710,7 @@ mod tests {
                             || {
                                 let mut repr = [0u8; 32];
                                 repr[..3].copy_from_slice(&[97u8, 98, 99]);
-                                Ok(Fp::from_repr_vartime(repr).unwrap())
+                                Value::known(Fp::from_repr_vartime(repr).unwrap())
                             },
                         )
                     },
@@ -1738,7 +1720,7 @@ mod tests {
                 {
                     let preimage = [abc.clone()];
 
-                    let digest: Option<Vec<u32>> = sha256_chip
+                    let digest_words: Vec<Value<u32>> = sha256_chip
                         .hash_field_elems(layouter.namespace(|| "hash preimage 1"), &preimage)?
                         .value()
                         .map(|field| {
@@ -1746,15 +1728,24 @@ mod tests {
                                 .to_repr()
                                 .chunks(4)
                                 .map(|bytes| u32::from_be_bytes(bytes.try_into().unwrap()))
-                                .collect()
-                        });
+                                .collect::<Vec<u32>>()
+                        })
+                        .transpose_vec(8);
 
-                    if let Some(digest) = digest {
-                        let expected_digest: [u32; 8] = [
-                            0x26426d7c, 0xb06a1264, 0x3ccfe841, 0x07603083, 0xd835c37f, 0x000a12f7,
-                            0x34137a0c, 0x8df77f26,
-                        ];
-                        assert_eq!(digest, expected_digest);
+                    let expected_digest: [Value<u32>; 8] = [
+                        Value::known(0x26426d7c),
+                        Value::known(0xb06a1264),
+                        Value::known(0x3ccfe841),
+                        Value::known(0x07603083),
+                        Value::known(0xd835c37f),
+                        Value::known(0x000a12f7),
+                        Value::known(0x34137a0c),
+                        Value::known(0x8df77f26),
+                    ];
+
+                    for (word, expected_word) in digest_words.iter().zip(expected_digest.iter()) {
+                        word.zip(*expected_word)
+                            .assert_if_known(|(word, expected_word)| word == expected_word);
                     }
                 }
 
@@ -1762,7 +1753,7 @@ mod tests {
                 {
                     let preimage = [abc.clone(), abc];
 
-                    let digest: Option<Vec<u32>> = sha256_chip
+                    let digest_words: Vec<Value<u32>> = sha256_chip
                         .hash_field_elems(layouter.namespace(|| "hash preimage 2"), &preimage)?
                         .value()
                         .map(|field| {
@@ -1770,15 +1761,24 @@ mod tests {
                                 .to_repr()
                                 .chunks(4)
                                 .map(|bytes| u32::from_be_bytes(bytes.try_into().unwrap()))
-                                .collect()
-                        });
+                                .collect::<Vec<u32>>()
+                        })
+                        .transpose_vec(8);
 
-                    if let Some(digest) = digest {
-                        let expected_digest: [u32; 8] = [
-                            0x76629a59, 0xa5b36f76, 0x6f1ef203, 0x8ce1271b, 0xe300f38f, 0x737a4316,
-                            0x87252d8f, 0x7781af3f,
-                        ];
-                        assert_eq!(digest, expected_digest);
+                    let expected_digest: [Value<u32>; 8] = [
+                        Value::known(0x76629a59),
+                        Value::known(0xa5b36f76),
+                        Value::known(0x6f1ef203),
+                        Value::known(0x8ce1271b),
+                        Value::known(0xe300f38f),
+                        Value::known(0x737a4316),
+                        Value::known(0x87252d8f),
+                        Value::known(0x7781af3f),
+                    ];
+
+                    for (word, expected_word) in digest_words.iter().zip(expected_digest.iter()) {
+                        word.zip(*expected_word)
+                            .assert_if_known(|(word, expected_word)| word == expected_word);
                     }
                 }
 
@@ -1853,44 +1853,80 @@ mod tests {
                 // Test converting field elements against their known preimage words.
 
                 // `1`
-                let words_1: Vec<u32> = sha256_words_chip
-                    .witness_into_words(layouter.namespace(|| "1 into words"), Some(Fp::one()))?
+                let words_1: Vec<Value<u32>> = sha256_words_chip
+                    .witness_into_words(
+                        layouter.namespace(|| "1 into words"),
+                        Value::known(Fp::one()),
+                    )?
                     .iter()
-                    .map(|word| word.value_u32().unwrap())
+                    .map(|word| word.value_u32())
                     .collect();
-                assert_eq!(
-                    words_1,
-                    [u32::from_be_bytes([1, 0, 0, 0]), 0, 0, 0, 0, 0, 0, 0]
-                );
+                let expected_words_1 = [
+                    Value::known(u32::from_be_bytes([1, 0, 0, 0])),
+                    Value::known(0),
+                    Value::known(0),
+                    Value::known(0),
+                    Value::known(0),
+                    Value::known(0),
+                    Value::known(0),
+                    Value::known(0),
+                ];
+                for (word, expected_word) in words_1.iter().zip(expected_words_1.iter()) {
+                    word.zip(*expected_word)
+                        .assert_if_known(|(word, expected_word)| word == expected_word);
+                }
 
                 // `2^32 - 1` (first word contains 32 `1` bits).
-                let words_2: Vec<u32> = sha256_words_chip
+                let words_2: Vec<Value<u32>> = sha256_words_chip
                     .witness_into_words(
                         layouter.namespace(|| "2^32 - 1 into words"),
-                        Some(Fp::from((1u64 << 32) - 1)),
+                        Value::known(Fp::from((1u64 << 32) - 1)),
                     )?
                     .iter()
-                    .map(|word| word.value_u32().unwrap())
+                    .map(|word| word.value_u32())
                     .collect();
-                assert_eq!(words_2, [u32::max_value(), 0, 0, 0, 0, 0, 0, 0]);
+                let expected_words_2 = [
+                    Value::known(u32::max_value()),
+                    Value::known(0),
+                    Value::known(0),
+                    Value::known(0),
+                    Value::known(0),
+                    Value::known(0),
+                    Value::known(0),
+                    Value::known(0),
+                ];
+                for (word, expected_word) in words_2.iter().zip(expected_words_2.iter()) {
+                    word.zip(*expected_word)
+                        .assert_if_known(|(word, expected_word)| word == expected_word);
+                }
 
                 // `2^32` (first word contains 32 `0` bits; second word contains one `1` bit).
-                let words_3: Vec<u32> = sha256_words_chip
+                let words_3: Vec<Value<u32>> = sha256_words_chip
                     .witness_into_words(
                         layouter.namespace(|| "2^32 into words"),
-                        Some(Fp::from(1u64 << 32)),
+                        Value::known(Fp::from(1u64 << 32)),
                     )?
                     .iter()
-                    .map(|word| word.value_u32().unwrap())
+                    .map(|word| word.value_u32())
                     .collect();
-                assert_eq!(
-                    words_3,
-                    [0, u32::from_be_bytes([1, 0, 0, 0]), 0, 0, 0, 0, 0, 0]
-                );
+                let expected_words_3 = [
+                    Value::known(0),
+                    Value::known(u32::from_be_bytes([1, 0, 0, 0])),
+                    Value::known(0),
+                    Value::known(0),
+                    Value::known(0),
+                    Value::known(0),
+                    Value::known(0),
+                    Value::known(0),
+                ];
+                for (word, expected_word) in words_3.iter().zip(expected_words_3.iter()) {
+                    word.zip(*expected_word)
+                        .assert_if_known(|(word, expected_word)| word == expected_word);
+                }
 
                 // `2^66 + 2^72 + 2^95` (first two words each contain 32 `0` bits; third word
                 // contains three `1` bits).
-                let words_4: Vec<u32> = {
+                let words_4: Vec<Value<u32>> = {
                     let mut repr = [0u8; 32];
                     // `2^66 + 2^72 + 2^95`
                     repr[8..12]
@@ -1898,42 +1934,47 @@ mod tests {
                     sha256_words_chip
                         .witness_into_words(
                             layouter.namespace(|| "2^66 + 2^95 into words"),
-                            Some(Fp::from_repr_vartime(repr).unwrap()),
+                            Value::known(Fp::from_repr_vartime(repr).unwrap()),
                         )?
                         .iter()
-                        .map(|word| word.value_u32().unwrap())
+                        .map(|word| word.value_u32())
                         .collect()
                 };
-                assert_eq!(
-                    words_4,
-                    [
-                        0,
-                        0,
-                        u32::from_be_bytes([0b100, 1, 0, 0b10000000]),
-                        0,
-                        0,
-                        0,
-                        0,
-                        0
-                    ],
-                );
+                let expected_words_4 = [
+                    Value::known(0),
+                    Value::known(0),
+                    Value::known(u32::from_be_bytes([0b100, 1, 0, 0b10000000])),
+                    Value::known(0),
+                    Value::known(0),
+                    Value::known(0),
+                    Value::known(0),
+                    Value::known(0),
+                ];
+                for (word, expected_word) in words_4.iter().zip(expected_words_4.iter()) {
+                    word.zip(*expected_word)
+                        .assert_if_known(|(word, expected_word)| word == expected_word);
+                }
 
                 // `-1 mod p`
                 let neg_1 = Fp::zero() - Fp::one();
-                let words_5: Vec<u32> = sha256_words_chip
-                    .witness_into_words(layouter.namespace(|| "-1 into words"), Some(neg_1))?
+                let words_5: Vec<Value<u32>> = sha256_words_chip
+                    .witness_into_words(
+                        layouter.namespace(|| "-1 into words"),
+                        Value::known(neg_1),
+                    )?
                     .iter()
-                    .map(|word| word.value_u32().unwrap())
+                    .map(|word| word.value_u32())
                     .collect();
-                assert_eq!(
-                    words_5,
-                    neg_1
-                        .to_repr()
-                        .as_ref()
-                        .chunks(4)
-                        .map(|bytes| u32::from_be_bytes(bytes.try_into().unwrap()))
-                        .collect::<Vec<u32>>(),
-                );
+                let expected_words_5: Vec<Value<u32>> = neg_1
+                    .to_repr()
+                    .as_ref()
+                    .chunks(4)
+                    .map(|bytes| Value::known(u32::from_be_bytes(bytes.try_into().unwrap())))
+                    .collect();
+                for (word, expected_word) in words_5.iter().zip(expected_words_5.iter()) {
+                    word.zip(*expected_word)
+                        .assert_if_known(|(word, expected_word)| word == expected_word);
+                }
 
                 // Test packing a sha256 digest (eight 32-bit words) into a field element.
 
@@ -1961,7 +2002,7 @@ mod tests {
                         .collect::<Vec<u8>>()
                         .try_into()
                         .unwrap();
-                    Fp::from_repr_vartime(repr).unwrap()
+                    Value::known(Fp::from_repr_vartime(repr).unwrap())
                 };
 
                 let (digest_1, digest_2) = layouter.assign_region(
@@ -1979,7 +2020,7 @@ mod tests {
                                     || format!("digest_1 word {}", word_index),
                                     *col,
                                     offset,
-                                    Some(*word),
+                                    Value::known(*word),
                                 )
                             })
                             .collect::<Result<Vec<AssignedBits<Fp, 32>>, Error>>()?
@@ -1992,7 +2033,7 @@ mod tests {
                             || "word 7 unstripped",
                             advice[8],
                             offset,
-                            Some(last_word_unstripped),
+                            Value::known(last_word_unstripped),
                         )?;
 
                         Ok((digest_1, digest_2))
@@ -2000,17 +2041,19 @@ mod tests {
                 )?;
 
                 // Test packing a 254-bit sha256 digest into a field element.
-                let packed_digest_1 = sha256_words_chip
-                    .pack_digest(layouter.namespace(|| "pack digest_1"), &digest_1)?;
-
-                assert_eq!(packed_digest_1.value().unwrap(), &expected_packed_digest);
+                sha256_words_chip
+                    .pack_digest(layouter.namespace(|| "pack digest_1"), &digest_1)?
+                    .value()
+                    .zip(expected_packed_digest.as_ref())
+                    .assert_if_known(|(packed, expected)| packed == expected);
 
                 // Test that packing a 256-bit sha256 digest into a field element strips the two
                 // most significant bits of the last word's least significant byte.
-                let packed_digest_2 = sha256_words_chip
-                    .pack_digest(layouter.namespace(|| "pack digest_2"), &digest_2)?;
-
-                assert_eq!(packed_digest_2.value().unwrap(), &expected_packed_digest);
+                sha256_words_chip
+                    .pack_digest(layouter.namespace(|| "pack digest_2"), &digest_2)?
+                    .value()
+                    .zip(expected_packed_digest.as_ref())
+                    .assert_if_known(|(packed, expected)| packed == expected);
 
                 Ok(())
             }

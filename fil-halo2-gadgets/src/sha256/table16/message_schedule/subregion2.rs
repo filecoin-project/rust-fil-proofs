@@ -1,6 +1,10 @@
 use super::super::{util::*, SpreadVar, SpreadWord, Table16Assignment};
 use super::{schedule_util::*, MessageScheduleConfig, MessageWord};
-use halo2_proofs::{arithmetic::FieldExt, circuit::Region, plonk::Error};
+use halo2_proofs::{
+    arithmetic::FieldExt,
+    circuit::{Region, Value},
+    plonk::Error,
+};
 use std::convert::TryInto;
 
 use crate::boolean::{i2lebsp, lebs2ip, spread_bits, AssignedBits, Bits};
@@ -22,35 +26,35 @@ pub struct Subregion2Word<F: FieldExt> {
 }
 
 impl<F: FieldExt> Subregion2Word<F> {
-    fn spread_a(&self) -> Option<[bool; 6]> {
+    fn spread_a(&self) -> Value<[bool; 6]> {
         self.a.value().map(|v| v.spread())
     }
 
-    fn spread_b(&self) -> Option<[bool; 8]> {
+    fn spread_b(&self) -> Value<[bool; 8]> {
         self.b.value().map(|v| v.spread())
     }
 
-    fn spread_c(&self) -> Option<[bool; 6]> {
+    fn spread_c(&self) -> Value<[bool; 6]> {
         self.c.value().map(|v| v.spread())
     }
 
-    fn spread_d(&self) -> Option<[bool; 14]> {
+    fn spread_d(&self) -> Value<[bool; 14]> {
         self.spread_d.value().map(|v| v.0)
     }
 
-    fn spread_e(&self) -> Option<[bool; 2]> {
+    fn spread_e(&self) -> Value<[bool; 2]> {
         self.e.value().map(|v| v.spread())
     }
 
-    fn spread_f(&self) -> Option<[bool; 2]> {
+    fn spread_f(&self) -> Value<[bool; 2]> {
         self.f.value().map(|v| v.spread())
     }
 
-    fn spread_g(&self) -> Option<[bool; 26]> {
+    fn spread_g(&self) -> Value<[bool; 26]> {
         self.spread_g.value().map(|v| v.0)
     }
 
-    fn xor_sigma_0(&self) -> Option<[bool; 64]> {
+    fn xor_sigma_0(&self) -> Value<[bool; 64]> {
         self.spread_a()
             .zip(self.spread_b())
             .zip(self.spread_c())
@@ -100,7 +104,7 @@ impl<F: FieldExt> Subregion2Word<F> {
             })
     }
 
-    fn xor_sigma_1(&self) -> Option<[bool; 64]> {
+    fn xor_sigma_1(&self) -> Value<[bool; 64]> {
         self.spread_a()
             .zip(self.spread_b())
             .zip(self.spread_c())
@@ -250,20 +254,13 @@ impl<F: FieldExt> MessageScheduleConfig<F> {
                 || format!("W_{}", new_word_idx),
                 a_5,
                 get_word_row(new_word_idx - 16) + 1,
-                || {
-                    word.map(|word| F::from(word as u64))
-                        .ok_or(Error::Synthesis)
-                },
+                || word.map(|word| F::from(word as u64)),
             )?;
             region.assign_advice(
                 || format!("carry_{}", new_word_idx),
                 a_9,
                 get_word_row(new_word_idx - 16) + 1,
-                || {
-                    carry
-                        .map(|carry| F::from(carry as u64))
-                        .ok_or(Error::Synthesis)
-                },
+                || carry.map(|carry| F::from(carry as u64)),
             )?;
             let (word, halves) = self.assign_word_and_halves(region, word, new_word_idx)?;
             w.push(MessageWord(word));
@@ -293,7 +290,7 @@ impl<F: FieldExt> MessageScheduleConfig<F> {
     fn decompose_word(
         &self,
         region: &mut Region<'_, F>,
-        word: Option<&Bits<32>>,
+        word: Value<&Bits<32>>,
         index: usize,
     ) -> Result<Subregion2Word<F>, Error> {
         let row = get_word_row(index);
@@ -309,7 +306,7 @@ impl<F: FieldExt> MessageScheduleConfig<F> {
                 word[19..32].to_vec(),
             ]
         });
-        let pieces = transpose_option_vec(pieces, 7);
+        let pieces = pieces.transpose_vec(7);
 
         // Rename these here for ease of matching the gates to the specification.
         let [a_3, a_4, ..] = self.advice;
@@ -318,14 +315,14 @@ impl<F: FieldExt> MessageScheduleConfig<F> {
         let a = AssignedBits::<F, 3>::assign_bits(region, || "a", a_3, row - 1, pieces[0].clone())?;
 
         // Assign `b` (4-bit piece) lookup
-        let spread_b: Option<SpreadWord<4, 8>> = pieces[1].clone().map(SpreadWord::try_new);
+        let spread_b: Value<SpreadWord<4, 8>> = pieces[1].clone().map(SpreadWord::try_new);
         let spread_b = SpreadVar::with_lookup(region, &self.lookup, row + 1, spread_b)?;
 
         // Assign `c` (3-bit piece)
         let c = AssignedBits::<F, 3>::assign_bits(region, || "c", a_4, row - 1, pieces[2].clone())?;
 
         // Assign `d` (7-bit piece) lookup
-        let spread_d: Option<SpreadWord<7, 14>> = pieces[3].clone().map(SpreadWord::try_new);
+        let spread_d: Value<SpreadWord<7, 14>> = pieces[3].clone().map(SpreadWord::try_new);
         let spread_d = SpreadVar::with_lookup(region, &self.lookup, row, spread_d)?;
 
         // Assign `e` (1-bit piece)
@@ -373,7 +370,7 @@ impl<F: FieldExt> MessageScheduleConfig<F> {
         // Split `b` (4-bit chunk) into `b_hi` and `b_lo`
         // Assign `b_lo`, `spread_b_lo`
 
-        let b_lo: Option<[bool; 2]> = word.b.value().map(|b| b.0[..2].try_into().unwrap());
+        let b_lo: Value<[bool; 2]> = word.b.value().map(|b| b.0[..2].try_into().unwrap());
         let spread_b_lo = b_lo.map(spread_bits);
         {
             AssignedBits::<F, 2>::assign_bits(region, || "b_lo", a_3, row - 1, b_lo)?;
@@ -383,7 +380,7 @@ impl<F: FieldExt> MessageScheduleConfig<F> {
 
         // Split `b` (2-bit chunk) into `b_hi` and `b_lo`
         // Assign `b_hi`, `spread_b_hi`
-        let b_hi: Option<[bool; 2]> = word.b.value().map(|b| b.0[2..].try_into().unwrap());
+        let b_hi: Value<[bool; 2]> = word.b.value().map(|b| b.0[2..].try_into().unwrap());
         let spread_b_hi = b_hi.map(spread_bits);
         {
             AssignedBits::<F, 2>::assign_bits(region, || "b_hi", a_5, row - 1, b_hi)?;
@@ -428,11 +425,11 @@ impl<F: FieldExt> MessageScheduleConfig<F> {
 
         // Calculate R_0^{even}, R_0^{odd}, R_1^{even}, R_1^{odd}
         let r = word.xor_sigma_0();
-        let r_0: Option<[bool; 32]> = r.map(|r| r[..32].try_into().unwrap());
+        let r_0: Value<[bool; 32]> = r.map(|r| r[..32].try_into().unwrap());
         let r_0_even = r_0.map(even_bits);
         let r_0_odd = r_0.map(odd_bits);
 
-        let r_1: Option<[bool; 32]> = r.map(|r| r[32..].try_into().unwrap());
+        let r_1: Value<[bool; 32]> = r.map(|r| r[32..].try_into().unwrap());
         let r_1_even = r_1.map(even_bits);
         let r_1_odd = r_1.map(odd_bits);
 
@@ -463,11 +460,11 @@ impl<F: FieldExt> MessageScheduleConfig<F> {
         // Calculate R_0^{even}, R_0^{odd}, R_1^{even}, R_1^{odd}
         // Calculate R_0^{even}, R_0^{odd}, R_1^{even}, R_1^{odd}
         let r = word.xor_sigma_1();
-        let r_0: Option<[bool; 32]> = r.map(|r| r[..32].try_into().unwrap());
+        let r_0: Value<[bool; 32]> = r.map(|r| r[..32].try_into().unwrap());
         let r_0_even = r_0.map(even_bits);
         let r_0_odd = r_0.map(odd_bits);
 
-        let r_1: Option<[bool; 32]> = r.map(|r| r[32..].try_into().unwrap());
+        let r_1: Value<[bool; 32]> = r.map(|r| r[32..].try_into().unwrap());
         let r_1_even = r_1.map(even_bits);
         let r_1_odd = r_1.map(odd_bits);
 

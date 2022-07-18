@@ -3,7 +3,7 @@ use std::marker::PhantomData;
 use super::{super::DIGEST_SIZE, SpreadInputs, SpreadVar, Table16Assignment, ROUNDS, STATE};
 use halo2_proofs::{
     arithmetic::FieldExt,
-    circuit::Layouter,
+    circuit::{Layouter, Value},
     plonk::{Advice, Column, ConstraintSystem, Error, Selector},
     poly::Rotation,
 };
@@ -30,12 +30,12 @@ pub trait UpperSigmaVar<
     const D_LEN: usize,
 >
 {
-    fn spread_a(&self) -> Option<[bool; A_LEN]>;
-    fn spread_b(&self) -> Option<[bool; B_LEN]>;
-    fn spread_c(&self) -> Option<[bool; C_LEN]>;
-    fn spread_d(&self) -> Option<[bool; D_LEN]>;
+    fn spread_a(&self) -> Value<[bool; A_LEN]>;
+    fn spread_b(&self) -> Value<[bool; B_LEN]>;
+    fn spread_c(&self) -> Value<[bool; C_LEN]>;
+    fn spread_d(&self) -> Value<[bool; D_LEN]>;
 
-    fn xor_upper_sigma(&self) -> Option<[bool; 64]> {
+    fn xor_upper_sigma(&self) -> Value<[bool; 64]> {
         self.spread_a()
             .zip(self.spread_b())
             .zip(self.spread_c())
@@ -131,15 +131,15 @@ impl<F: FieldExt> AbcdVar<F> {
 }
 
 impl<F: FieldExt> UpperSigmaVar<4, 22, 18, 20> for AbcdVar<F> {
-    fn spread_a(&self) -> Option<[bool; 4]> {
+    fn spread_a(&self) -> Value<[bool; 4]> {
         self.a.spread.value().map(|v| v.0)
     }
 
-    fn spread_b(&self) -> Option<[bool; 22]> {
+    fn spread_b(&self) -> Value<[bool; 22]> {
         self.b.spread.value().map(|v| v.0)
     }
 
-    fn spread_c(&self) -> Option<[bool; 18]> {
+    fn spread_c(&self) -> Value<[bool; 18]> {
         self.c_lo
             .spread
             .value()
@@ -156,7 +156,7 @@ impl<F: FieldExt> UpperSigmaVar<4, 22, 18, 20> for AbcdVar<F> {
             })
     }
 
-    fn spread_d(&self) -> Option<[bool; 20]> {
+    fn spread_d(&self) -> Value<[bool; 20]> {
         self.d.spread.value().map(|v| v.0)
     }
 }
@@ -220,7 +220,7 @@ impl<F: FieldExt> EfghVar<F> {
 }
 
 impl<F: FieldExt> UpperSigmaVar<12, 10, 28, 14> for EfghVar<F> {
-    fn spread_a(&self) -> Option<[bool; 12]> {
+    fn spread_a(&self) -> Value<[bool; 12]> {
         self.a_lo
             .spread
             .value()
@@ -235,7 +235,7 @@ impl<F: FieldExt> UpperSigmaVar<12, 10, 28, 14> for EfghVar<F> {
             })
     }
 
-    fn spread_b(&self) -> Option<[bool; 10]> {
+    fn spread_b(&self) -> Value<[bool; 10]> {
         self.b_lo
             .spread
             .value()
@@ -250,11 +250,11 @@ impl<F: FieldExt> UpperSigmaVar<12, 10, 28, 14> for EfghVar<F> {
             })
     }
 
-    fn spread_c(&self) -> Option<[bool; 28]> {
+    fn spread_c(&self) -> Value<[bool; 28]> {
         self.c.spread.value().map(|v| v.0)
     }
 
-    fn spread_d(&self) -> Option<[bool; 14]> {
+    fn spread_d(&self) -> Value<[bool; 14]> {
         self.d.spread.value().map(|v| v.0)
     }
 }
@@ -270,7 +270,7 @@ impl<F: FieldExt> From<(AssignedBits<F, 16>, AssignedBits<F, 16>)> for RoundWord
 }
 
 impl<F: FieldExt> RoundWordDense<F> {
-    pub fn value(&self) -> Option<u32> {
+    pub fn value(&self) -> Value<u32> {
         self.0
             .value_u16()
             .zip(self.1.value_u16())
@@ -288,7 +288,7 @@ impl<F: FieldExt> From<(AssignedBits<F, 32>, AssignedBits<F, 32>)> for RoundWord
 }
 
 impl<F: FieldExt> RoundWordSpread<F> {
-    pub fn value(&self) -> Option<u64> {
+    pub fn value(&self) -> Value<u64> {
         self.0
             .value_u32()
             .zip(self.1.value_u32())
@@ -992,10 +992,10 @@ mod tests {
 
                 let digest = config.compression.digest(&mut layouter, state)?;
                 for (idx, digest_word) in digest.iter().enumerate() {
-                    assert_eq!(
-                        (digest_word.value_u32().unwrap() as u64 + IV[idx] as u64) as u32,
-                        super::compression_util::COMPRESSION_OUTPUT[idx]
-                    );
+                    digest_word.value_u32().assert_if_known(|digest_word| {
+                        (*digest_word as u64 + IV[idx] as u64) as u32
+                            == super::compression_util::COMPRESSION_OUTPUT[idx]
+                    });
                 }
 
                 Ok(())

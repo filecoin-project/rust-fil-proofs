@@ -4,7 +4,7 @@ use std::marker::PhantomData;
 use super::{super::BLOCK_SIZE, BlockWord, SpreadInputs, Table16Assignment, ROUNDS};
 use halo2_proofs::{
     arithmetic::FieldExt,
-    circuit::{Layouter, Region},
+    circuit::{Layouter, Region, Value},
     plonk::{Advice, Column, ConstraintSystem, Error, Selector},
     poly::Rotation,
 };
@@ -423,7 +423,7 @@ impl<F: FieldExt> MessageScheduleConfig<F> {
             &w[1..14]
                 .iter()
                 .map(|word| word.value_u32())
-                .collect::<Vec<Option<u32>>>(),
+                .collect::<Vec<Value<u32>>>(),
         )?;
 
         // sigma_0_v2 and sigma_1_v2 on W_[14..49]
@@ -501,8 +501,10 @@ mod tests {
                 // Run message_scheduler to get W_[0..64]
                 let (w, _) = config.message_schedule.process(&mut layouter, inputs)?;
                 for (word, test_word) in w.iter().zip(MSG_SCHEDULE_TEST_OUTPUT.iter()) {
-                    let word: u32 = lebs2ip(word.value().unwrap()) as u32;
-                    assert_eq!(word, *test_word);
+                    word.value().assert_if_known(|bits| {
+                        let word: u32 = lebs2ip(bits) as u32;
+                        word == *test_word
+                    });
                 }
                 Ok(())
             }
