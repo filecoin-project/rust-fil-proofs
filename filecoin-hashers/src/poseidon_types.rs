@@ -6,7 +6,7 @@ use ff::PrimeField;
 use generic_array::typenum::{U0, U11, U16, U2, U24, U36, U4, U8};
 use halo2_proofs::pasta::{Fp, Fq};
 use lazy_static::lazy_static;
-use neptune::{poseidon::PoseidonConstants, Arity, Strength};
+use neptune::{poseidon::PoseidonConstants, Arity};
 use typemap::ShareMap;
 
 pub type PoseidonBinaryArity = U2;
@@ -31,35 +31,25 @@ lazy_static! {
     pub static ref POSEIDON_MD_CONSTANTS: PoseidonConstants::<Fr, PoseidonMDArity> =
         PoseidonConstants::new();
     pub static ref POSEIDON_CONSTANTS_2_PALLAS: PoseidonConstants::<Fp, U2> =
-        // PoseidonConstants::new();
-        PoseidonConstants::<Fp, U2>::new_with_strength(Strength::Halo);
+        PoseidonConstants::new();
     pub static ref POSEIDON_CONSTANTS_4_PALLAS: PoseidonConstants::<Fp, U4> =
-        // PoseidonConstants::new();
-        PoseidonConstants::<Fp, U4>::new_with_strength(Strength::Halo);
+        PoseidonConstants::new();
     pub static ref POSEIDON_CONSTANTS_8_PALLAS: PoseidonConstants::<Fp, U8> =
-        // PoseidonConstants::new();
-        PoseidonConstants::<Fp, U8>::new_with_strength(Strength::Halo);
+        PoseidonConstants::new();
     pub static ref POSEIDON_CONSTANTS_11_PALLAS: PoseidonConstants::<Fp, U11> =
-        // PoseidonConstants::new();
-        PoseidonConstants::<Fp, U11>::new_with_strength(Strength::Halo);
+        PoseidonConstants::new();
     pub static ref POSEIDON_MD_CONSTANTS_PALLAS: PoseidonConstants::<Fp, PoseidonMDArity> =
-        // PoseidonConstants::new();
-        PoseidonConstants::<Fp, PoseidonMDArity>::new_with_strength(Strength::Halo);
+        PoseidonConstants::new();
     pub static ref POSEIDON_CONSTANTS_2_VESTA: PoseidonConstants::<Fq, U2> =
-        // PoseidonConstants::new();
-        PoseidonConstants::<Fq, U2>::new_with_strength(Strength::Halo);
+        PoseidonConstants::new();
     pub static ref POSEIDON_CONSTANTS_4_VESTA: PoseidonConstants::<Fq, U4> =
-        // PoseidonConstants::new();
-        PoseidonConstants::<Fq, U4>::new_with_strength(Strength::Halo);
+        PoseidonConstants::new();
     pub static ref POSEIDON_CONSTANTS_8_VESTA: PoseidonConstants::<Fq, U8> =
-        // PoseidonConstants::new();
-        PoseidonConstants::<Fq, U8>::new_with_strength(Strength::Halo);
+        PoseidonConstants::new();
     pub static ref POSEIDON_CONSTANTS_11_VESTA: PoseidonConstants::<Fq, U11> =
-        // PoseidonConstants::new();
-        PoseidonConstants::<Fq, U11>::new_with_strength(Strength::Halo);
+        PoseidonConstants::new();
     pub static ref POSEIDON_MD_CONSTANTS_VESTA: PoseidonConstants::<Fq, PoseidonMDArity> =
-        // PoseidonConstants::new();
-        PoseidonConstants::<Fq, PoseidonMDArity>::new_with_strength(Strength::Halo);
+        PoseidonConstants::new();
     pub static ref POSEIDON_CONSTANTS: ShareMap = {
         let mut tm = ShareMap::custom();
 

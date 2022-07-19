@@ -7,7 +7,6 @@ use bellperson::{
 };
 use blstrs::Scalar as Fr;
 use ff::{Field, PrimeField};
-use fil_halo2_gadgets::ColumnCount;
 use generic_array::typenum::{Unsigned, U2, U4, U8};
 use halo2_proofs::{
     arithmetic::FieldExt,
@@ -22,7 +21,7 @@ use merkletree::{
 };
 use neptune::{
     circuit::poseidon_hash,
-    halo2_circuit::{PoseidonChip, PoseidonConfig},
+    halo2_circuit::{PoseidonChipStd, PoseidonConfigStd},
     Poseidon,
 };
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
@@ -108,6 +107,7 @@ impl<F> From<[u8; 32]> for PoseidonDomain<F> {
     }
 }
 
+#[allow(clippy::from_over_into)]
 impl<F> Into<[u8; 32]> for PoseidonDomain<F> {
     fn into(self) -> [u8; 32] {
         self.repr
@@ -244,7 +244,7 @@ where
     PoseidonDomain<F>: Domain<Field = F>,
 {
     fn write(&mut self, preimage: &[u8]) {
-        self.0 = shared_hash::<F>(preimage).into();
+        self.0 = shared_hash::<F>(preimage);
     }
 
     fn finish(&self) -> u64 {
@@ -343,7 +343,7 @@ where
                     PoseidonMDArity::to_usize()
                 )
             });
-        let mut p = Poseidon::new(&*consts);
+        let mut p = Poseidon::new(*consts);
 
         let fr_input: Vec<F> = input.iter().map(|domain| (*domain).into()).collect();
 
@@ -467,7 +467,7 @@ impl Groth16Hasher for PoseidonHasher<Fr> {
     }
 }
 
-impl<F, A> HashInstructions<F> for PoseidonChip<F, A>
+impl<F, A> HashInstructions<F> for PoseidonChipStd<F, A>
 where
     F: FieldExt,
     A: PoseidonArity<F>,
@@ -484,18 +484,17 @@ where
 
 impl<F, A> Halo2Hasher<A> for PoseidonHasher<F>
 where
-    Self: Hasher<Field = F>,
     F: FieldExt,
     A: PoseidonArity<F>,
+    Self: Hasher<Field = F>,
 {
-    type Chip = PoseidonChip<F, A>;
-    type Config = PoseidonConfig<F, A>;
+    type Chip = PoseidonChipStd<F, A>;
+    type Config = PoseidonConfigStd<F, A>;
 
     fn construct(config: Self::Config) -> Self::Chip {
-        PoseidonChip::construct(config)
+        Self::Chip::construct(config)
     }
 
-    #[allow(clippy::unwrap_used)]
     fn configure(
         meta: &mut plonk::ConstraintSystem<F>,
         advice_eq: &[Column<Advice>],
@@ -503,34 +502,42 @@ where
         fixed_eq: &[Column<Fixed>],
         fixed_neq: &[Column<Fixed>],
     ) -> Self::Config {
-        let num_cols = Self::Chip::num_cols();
+        let num_advice_eq = Self::Chip::num_advice_eq();
+        let num_advice_total = Self::Chip::num_advice_total();
+        let num_fixed_eq = Self::Chip::num_fixed_eq();
+        let num_fixed_total = Self::Chip::num_fixed_total();
 
-        // Check that the caller provided enough equality enabled and total columns.
+        // Check that the caller provided enough equality enabled and total columns. Note that
+        // equality enabled columns can be used as non-equality-enabled columns, but not vice versa.
         let advice_eq_len = advice_eq.len();
-        let advice_neq_len = advice_neq.len();
-        assert!(advice_eq_len >= num_cols.advice_eq);
-        assert!(advice_eq_len + advice_neq_len >= num_cols.advice_eq + num_cols.advice_neq);
+        assert!(advice_eq_len >= num_advice_eq);
+        assert!(advice_eq_len + advice_neq.len() >= num_advice_total);
 
         let fixed_eq_len = fixed_eq.len();
-        let fixed_neq_len = fixed_neq.len();
-        assert!(fixed_eq_len >= num_cols.fixed_eq);
-        assert!(fixed_eq_len + fixed_neq_len >= num_cols.fixed_eq + num_cols.fixed_neq);
+        assert!(fixed_eq_len >= num_fixed_eq);
+        assert!(fixed_eq_len + fixed_neq.len() >= num_fixed_total);
 
-        let mut advice = advice_eq.iter().chain(advice_neq.iter()).copied();
-
-        let state: Vec<Column<Advice>> = (0..num_cols.advice_eq)
-            .map(|_| advice.next().unwrap())
+        let advice: Vec<Column<Advice>> = advice_eq
+            .iter()
+            .chain(advice_neq.iter())
+            .copied()
+            .take(num_advice_total)
             .collect();
-
-        let extra = advice.next().unwrap();
 
         let fixed: Vec<Column<Fixed>> = fixed_eq
             .iter()
             .chain(fixed_neq.iter())
             .copied()
-            .take(num_cols.fixed_eq + num_cols.fixed_neq)
+            .take(num_fixed_total)
             .collect();
 
-        PoseidonChip::<F, A>::configure(meta, state, extra, fixed)
+        Self::Chip::configure(meta, &advice, &fixed)
+    }
+
+    fn change_config_arity<A2>(config: Self::Config) -> <Self as Halo2Hasher<A2>>::Config
+    where
+        A2: PoseidonArity<Self::Field>,
+    {
+        config.change_arity()
     }
 }
