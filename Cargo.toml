@@ -9,7 +9,7 @@ members = [
 #  "fil-proofs-param",
 #  "fr32",
 #  "sha2raw",
-#  "filecoin-hashers",
+  "filecoin-hashers",
 #  "storage-proofs-update",
   "fil-halo2-gadgets",
 ]

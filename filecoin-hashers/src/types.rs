@@ -187,4 +187,15 @@ where
         fixed_eq: &[Column<Fixed>],
         fixed_neq: &[Column<Fixed>],
     ) -> Self::Config;
+
+    // If you have two arities `A1` and `A2` which you know are the same type (but where the
+    // compiler doesn't) `change_config_arity` can be used to convert the `A1` config into the `A2`
+    // config without having to call `<Self as Halo2Hasher<A2>>::configure` (which would duplicate
+    // the `A1` configuration in the constraint system).
+    fn change_config_arity<A2>(
+        config: <Self as Halo2Hasher<A>>::Config,
+    ) -> <Self as Halo2Hasher<A2>>::Config
+    where
+        A2: PoseidonArity<Self::Field>,
+        Self: Halo2Hasher<A2>;
 }
