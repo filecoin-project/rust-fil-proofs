@@ -3,7 +3,7 @@
 members = [
 #  "filecoin-proofs",
   "storage-proofs-core",
-#  "storage-proofs-porep",
+  "storage-proofs-porep",
 #  "storage-proofs-post",
 #  "fil-proofs-tooling",
 #  "fil-proofs-param",
