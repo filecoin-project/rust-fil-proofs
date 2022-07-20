@@ -11,7 +11,7 @@ use fil_halo2_gadgets::{
 use filecoin_hashers::{poseidon::PoseidonHasher, sha256::Sha256Hasher, Halo2Hasher};
 use generic_array::typenum::{U0, U2, U8};
 use halo2_proofs::{
-    circuit::{Layouter, SimpleFloorPlanner},
+    circuit::{Layouter, SimpleFloorPlanner, Value},
     pasta::Fp,
     plonk::{self, Column, Instance},
 };
@@ -42,7 +42,7 @@ fn bench_groth16_halo2_poseidon_arity_8(c: &mut Criterion) {
     type TreeFp = MerkleTree<PoseidonHasher<Fp>, U8>;
 
     let mut rng = thread_rng();
-    let benchmark_prefix = format!("groth16-vs-halo2-merkle-poseidon-arity-8-leafs-{}", NUM_LEAFS);
+    let benchmark_prefix = format!("poseidon-arity-8-leafs-{}", NUM_LEAFS);
 
     #[derive(Clone)]
     struct MerkleConfig {
@@ -54,8 +54,8 @@ fn bench_groth16_halo2_poseidon_arity_8(c: &mut Criterion) {
 
     #[derive(Clone)]
     struct MerkleCircuit {
-        leaf: Option<Fp>,
-        path: Vec<Vec<Option<Fp>>>,
+        leaf: Value<Fp>,
+        path: Vec<Vec<Value<Fp>>>,
     }
 
     impl plonk::Circuit<Fp> for MerkleCircuit {
@@ -64,7 +64,7 @@ fn bench_groth16_halo2_poseidon_arity_8(c: &mut Criterion) {
 
         fn without_witnesses(&self) -> Self {
             MerkleCircuit {
-                leaf: None,
+                leaf: Value::unknown(),
                 path: empty_path::<Fp, U8, U0, U0, NUM_LEAFS>(),
             }
         }
@@ -134,7 +134,7 @@ fn bench_groth16_halo2_poseidon_arity_8(c: &mut Criterion) {
             let root = merkle_chip.compute_root(
                 layouter.namespace(|| "compute merkle root"),
                 &challenge_bits,
-                &self.leaf,
+                self.leaf,
                 &self.path,
             )?;
             layouter.constrain_instance(root.cell(), pi_col, ROOT_ROW)
@@ -149,12 +149,12 @@ fn bench_groth16_halo2_poseidon_arity_8(c: &mut Criterion) {
 
             // Decomposing a `u32` challenge into 32 bits requires 4 rows.
             let challenge_decomp_rows = 4;
-            // A single poseidon arity-8 haher requires 37 rows.
-            let hasher_rows = 37;
+            // Poseidon arity-8 hash function rows.
+            let hasher_rows = <PoseidonHasher<Fp> as Halo2Hasher<U8>>::Chip::num_rows();
             // A single arity-8 insert requires 1 row.
             let insert_rows = 1;
-
             let num_rows = challenge_decomp_rows + path_len * (hasher_rows + insert_rows);
+
             // Add one to the computed `k` to ensure that there are enough rows.
             (num_rows as f32).log2().ceil() as u32 + 1
         }
@@ -205,11 +205,11 @@ fn bench_groth16_halo2_poseidon_arity_8(c: &mut Criterion) {
         let merkle_proof = tree.gen_proof(CHALLENGE).expect("failed to create merkle proof");
 
         let circ = MerkleCircuit {
-            leaf: Some(leaf),
+            leaf: Value::known(leaf),
             path: merkle_proof
                 .path()
                 .iter()
-                .map(|(sibs, _)| sibs.iter().copied().map(|domain| Some(domain.into())).collect())
+                .map(|(sibs, _)| sibs.iter().copied().map(|domain| Value::known(domain.into())).collect())
                 .collect(),
         };
 
@@ -251,7 +251,7 @@ fn bench_groth16_halo2_poseidon_arity_8(c: &mut Criterion) {
 
 fn bench_groth16_halo2_sha256_arity_2(c: &mut Criterion) {
     // Configure the tree height here:
-    const HEIGHT: u32 = 26;
+    const HEIGHT: u32 = 10;
     const ARITY: usize = 2;
     const NUM_LEAFS: usize = ARITY.pow(HEIGHT);
     const CHALLENGE: usize = NUM_LEAFS / 2;
@@ -260,7 +260,7 @@ fn bench_groth16_halo2_sha256_arity_2(c: &mut Criterion) {
     type TreeFp = MerkleTree<Sha256Hasher<Fp>, U2>;
 
     let mut rng = thread_rng();
-    let benchmark_prefix = format!("groth16-vs-halo2-merkle-sha256-arity-2-leafs-{}", NUM_LEAFS);
+    let benchmark_prefix = format!("sha256-arity-2-leafs-{}", NUM_LEAFS);
 
     #[derive(Clone)]
     struct MerkleConfig {
@@ -272,8 +272,8 @@ fn bench_groth16_halo2_sha256_arity_2(c: &mut Criterion) {
 
     #[derive(Clone)]
     struct MerkleCircuit {
-        leaf: Option<Fp>,
-        path: Vec<Vec<Option<Fp>>>,
+        leaf: Value<Fp>,
+        path: Vec<Vec<Value<Fp>>>,
     }
 
     impl plonk::Circuit<Fp> for MerkleCircuit {
@@ -282,7 +282,7 @@ fn bench_groth16_halo2_sha256_arity_2(c: &mut Criterion) {
 
         fn without_witnesses(&self) -> Self {
             MerkleCircuit {
-                leaf: None,
+                leaf: Value::unknown(),
                 path: empty_path::<Fp, U2, U0, U0, NUM_LEAFS>(),
             }
         }
@@ -354,7 +354,7 @@ fn bench_groth16_halo2_sha256_arity_2(c: &mut Criterion) {
             let root = merkle_chip.compute_root(
                 layouter.namespace(|| "compute merkle root"),
                 &challenge_bits,
-                &self.leaf,
+                self.leaf,
                 &self.path,
             )?;
             layouter.constrain_instance(root.cell(), pi_col, ROOT_ROW)
@@ -363,7 +363,6 @@ fn bench_groth16_halo2_sha256_arity_2(c: &mut Criterion) {
 
     impl CircuitRows for MerkleCircuit {
         fn k(&self) -> u32 {
-            // TODO (jake): add more `k` values
             17
         }
     }
@@ -413,11 +412,11 @@ fn bench_groth16_halo2_sha256_arity_2(c: &mut Criterion) {
         let merkle_proof = tree.gen_proof(CHALLENGE).expect("failed to create merkle proof");
 
         let circ = MerkleCircuit {
-            leaf: Some(leaf),
+            leaf: Value::known(leaf),
             path: merkle_proof
                 .path()
                 .iter()
-                .map(|(sibs, _)| sibs.iter().copied().map(|domain| Some(domain.into())).collect())
+                .map(|(sibs, _)| sibs.iter().copied().map(|domain| Value::known(domain.into())).collect())
                 .collect(),
         };
 
@@ -445,7 +444,8 @@ fn bench_groth16_halo2_sha256_arity_2(c: &mut Criterion) {
             halo2_create_proof(&halo2_keypair, halo2_circ.clone(), &halo2_pub_inputs, &mut rng)
                 .expect("failed to create halo2 proof")
         );
-        println!("\nhalo2 proving time (height={}): {}s\n", HEIGHT, start.elapsed().as_secs_f32());
+        println!("\n{}-prover/halo2", benchmark_prefix);
+        println!("\t\t\ttime:\t{}s", start.elapsed().as_secs_f32());
     }
     prover_benchmarks.finish();
 
@@ -462,7 +462,8 @@ fn bench_groth16_halo2_sha256_arity_2(c: &mut Criterion) {
             halo2_verify_proof(&halo2_keypair, &halo2_proof, &halo2_pub_inputs)
                 .expect("failed to verify halo2 proof")
         );
-        println!("\nhalo2 verifying time (height={}): {}s\n", HEIGHT, start.elapsed().as_secs_f32());
+        println!("\n{}-verifier/halo2", benchmark_prefix);
+        println!("\t\t\ttime:\t{}s", start.elapsed().as_secs_f32());
     }
     verifier_benchmarks.finish();
 }

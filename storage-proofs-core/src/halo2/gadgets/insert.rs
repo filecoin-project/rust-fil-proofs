@@ -3,12 +3,12 @@ use std::marker::PhantomData;
 use fil_halo2_gadgets::{
     boolean::{and, nor, AssignedBit},
     utilities::ternary,
-    ColumnCount, NumCols,
+    ColumnCount, NumCols, WitnessOrCopy,
 };
 use filecoin_hashers::PoseidonArity;
 use halo2_proofs::{
     arithmetic::FieldExt,
-    circuit::{AssignedCell, Layouter},
+    circuit::{AssignedCell, Layouter, Value},
     plonk::{Advice, Column, ConstraintSystem, Constraints, Error, Expression, Selector},
     poly::Rotation,
 };
@@ -34,6 +34,29 @@ where
     s_insert: Selector,
     _f: PhantomData<F>,
     _a: PhantomData<A>,
+}
+
+impl<F, A1> InsertConfig<F, A1>
+where
+    F: FieldExt,
+    A1: PoseidonArity<F>,
+{
+    // If you have two arities `A1` and `A2` which you know are the same type (but where the
+    // compiler doesn't) `change_arity` can be used to convert the `A1` config into the `A2` config
+    // without having to call `InsertChip::<F, A2>::configure` (which would duplicate the
+    // `A1` configuration in the constraint system).
+    pub fn change_arity<A2: PoseidonArity<F>>(self) -> InsertConfig<F, A2> {
+        assert_eq!(A1::to_usize(), A2::to_usize());
+        InsertConfig {
+            uninserted: self.uninserted,
+            value: self.value,
+            index_bits: self.index_bits,
+            inserted: self.inserted,
+            s_insert: self.s_insert,
+            _f: PhantomData,
+            _a: PhantomData,
+        }
+    }
 }
 
 pub struct InsertChip<F, A>
@@ -290,12 +313,32 @@ where
     }
 
     // Copies the insertion value and witnesses the uninserted array elements.
-    #[allow(clippy::unwrap_used)]
     pub fn copy_insert(
         &self,
-        mut layouter: impl Layouter<F>,
-        uninserted: &[Option<F>],
+        layouter: impl Layouter<F>,
+        uninserted: &[Value<F>],
         value: &AssignedCell<F, F>,
+        index_bits: &[AssignedBit<F>],
+    ) -> Result<Vec<AssignedCell<F, F>>, Error> {
+        self.insert_inner(layouter, uninserted, WitnessOrCopy::Copy(value.clone()), index_bits)
+    }
+
+    // Witnesses the insertion value and the uninserted array elements.
+    pub fn witness_insert(
+        &self,
+        layouter: impl Layouter<F>,
+        uninserted: &[Value<F>],
+        value: &Value<F>,
+        index_bits: &[AssignedBit<F>],
+    ) -> Result<Vec<AssignedCell<F, F>>, Error> {
+        self.insert_inner(layouter, uninserted, WitnessOrCopy::Witness(*value), index_bits)
+    }
+
+    fn insert_inner(
+        &self,
+        mut layouter: impl Layouter<F>,
+        uninserted: &[Value<F>],
+        value: WitnessOrCopy<F, F>,
         index_bits: &[AssignedBit<F>],
     ) -> Result<Vec<AssignedCell<F, F>>, Error> {
         let arity = A::to_usize();
@@ -304,132 +347,58 @@ where
         let index_bit_len = arity.trailing_zeros() as usize;
         assert_eq!(index_bits.len(), index_bit_len);
 
-        let index_opt: Option<usize> = index_bits
-            .iter()
-            .enumerate()
-            .map(|(i, assigned_bit)| assigned_bit.value().map(|bit| (bit.0 as usize) << i))
-            .reduce(|acc, opt| acc.zip(opt).map(|(acc, val)| acc + val))
-            .unwrap();
-
-        let mut inserted: Vec<Option<&F>> = uninserted.iter().map(|opt| opt.as_ref()).collect();
-        inserted.insert(index_opt.unwrap_or(0), value.value());
+        let mut index = 0;
+        for (i, bit) in index_bits.iter().enumerate() {
+            bit.value().map(|bit| {
+                index += (bool::from(bit) as usize) << i;
+            });
+        }
 
         layouter.assign_region(
             || format!("insert_{}", arity),
             |mut region| {
-                let row = 0;
-
-                self.config.s_insert.enable(&mut region, row)?;
+                let offset = 0;
+                self.config.s_insert.enable(&mut region, offset)?;
 
                 // Copy the insertion index.
                 for (i, (bit, col)) in index_bits
                     .iter()
-                    .zip(self.config.index_bits.iter())
+                    .zip(&self.config.index_bits)
                     .enumerate()
                 {
-                    bit.copy_advice(|| format!("index bit {}", i), &mut region, *col, row)?;
+                    bit.copy_advice(|| format!("index_bit_{}", i), &mut region, *col, offset)?;
                 }
 
-                // Copy insertion value.
-                value.copy_advice(|| "value", &mut region, self.config.value, row)?;
+                // Assign or copy insertion value.
+                let value = match value {
+                    WitnessOrCopy::Witness(ref value) => {
+                        region.assign_advice(|| "value", self.config.value, offset, || *value)?
+                    }
+                    WitnessOrCopy::Copy(ref value) => {
+                        value.copy_advice(|| "copy value", &mut region, self.config.value, offset)?
+                    }
+                    _ => unreachable!(),
+                };
 
                 // Allocate uninserted array.
-                for (i, opt) in uninserted.iter().enumerate() {
-                    region.assign_advice(
-                        || format!("uninserted {}", i),
-                        self.config.uninserted[i],
-                        row,
-                        || opt.ok_or(Error::Synthesis),
-                    )?;
+                for (i, (val, col)) in uninserted
+                    .iter()
+                    .zip(&self.config.uninserted)
+                    .enumerate()
+                {
+                    region.assign_advice(|| format!("uninserted[{}]", i), *col, offset, || *val)?;
                 }
+
+                let mut inserted: Vec<Value<F>> = uninserted.to_vec();
+                inserted.insert(index, value.value().copied());
 
                 // Allocate the inserted array.
                 inserted
                     .iter()
+                    .zip(&self.config.inserted)
                     .enumerate()
-                    .map(|(i, opt)| {
-                        region.assign_advice(
-                            || format!("inserted {}", i),
-                            self.config.inserted[i],
-                            row,
-                            || opt.cloned().ok_or(Error::Synthesis),
-                        )
-                    })
-                    .collect()
-            },
-        )
-    }
-
-    // Witnesses the insertion value and the uninserted array elements.
-    #[allow(clippy::unwrap_used)]
-    pub fn witness_insert(
-        &self,
-        mut layouter: impl Layouter<F>,
-        uninserted: &[Option<F>],
-        value: &Option<F>,
-        index_bits: &[AssignedBit<F>],
-    ) -> Result<Vec<AssignedCell<F, F>>, Error> {
-        let arity = A::to_usize();
-        assert_eq!(uninserted.len(), arity - 1);
-
-        let index_bit_len = arity.trailing_zeros() as usize;
-        assert_eq!(index_bits.len(), index_bit_len);
-
-        let index_opt: Option<usize> = index_bits
-            .iter()
-            .enumerate()
-            .map(|(i, assigned_bit)| assigned_bit.value().map(|bit| (bit.0 as usize) << i))
-            .reduce(|acc, opt| acc.zip(opt).map(|(acc, val)| acc + val))
-            .unwrap();
-
-        let mut inserted: Vec<Option<&F>> = uninserted.iter().map(|opt| opt.as_ref()).collect();
-        inserted.insert(index_opt.unwrap_or(0), value.as_ref());
-
-        layouter.assign_region(
-            || format!("insert_{}", arity),
-            |mut region| {
-                let row = 0;
-
-                self.config.s_insert.enable(&mut region, row)?;
-
-                // Copy the insertion index.
-                for (i, (bit, col)) in index_bits
-                    .iter()
-                    .zip(self.config.index_bits.iter())
-                    .enumerate()
-                {
-                    bit.copy_advice(|| format!("index bit {}", i), &mut region, *col, row)?;
-                }
-
-                // Allocate insertion value.
-                region.assign_advice(
-                    || "value",
-                    self.config.value,
-                    row,
-                    || value.ok_or(Error::Synthesis),
-                )?;
-
-                // Allocate uninserted array.
-                for (i, opt) in uninserted.iter().enumerate() {
-                    region.assign_advice(
-                        || format!("uninserted {}", i),
-                        self.config.uninserted[i],
-                        row,
-                        || opt.ok_or(Error::Synthesis),
-                    )?;
-                }
-
-                // Allocate inserted array.
-                inserted
-                    .iter()
-                    .enumerate()
-                    .map(|(i, opt)| {
-                        region.assign_advice(
-                            || format!("inserted {}", i),
-                            self.config.inserted[i],
-                            row,
-                            || opt.cloned().ok_or(Error::Synthesis),
-                        )
+                    .map(|(i, (val, col))| {
+                        region.assign_advice(|| format!("inserted[{}]", i), *col, offset, || *val)
                     })
                     .collect()
             },
@@ -468,9 +437,9 @@ mod test {
         F: FieldExt,
         A: PoseidonArity<F>,
     {
-        uninserted: Vec<Option<F>>,
-        value: Option<F>,
-        index_bits: Vec<Option<bool>>,
+        uninserted: Vec<Value<F>>,
+        value: Value<F>,
+        index_bits: Vec<Value<bool>>,
         _a: PhantomData<A>,
     }
 
@@ -486,9 +455,9 @@ mod test {
             let arity = A::to_usize();
             let index_bit_len = arity.trailing_zeros() as usize;
             MyCircuit {
-                uninserted: vec![None; arity - 1],
-                value: None,
-                index_bits: vec![None; index_bit_len],
+                uninserted: vec![Value::unknown(); arity - 1],
+                value: Value::unknown(),
+                index_bits: vec![Value::unknown(); index_bit_len],
                 _a: PhantomData,
             }
         }
@@ -520,14 +489,14 @@ mod test {
             let (value, index_bits) = layouter.assign_region(
                 || "value",
                 |mut region| {
-                    let row = 0;
+                    let offset = 0;
 
                     // Allocate insertion value.
                     let value = region.assign_advice(
                         || "value",
                         config.advice_eq[0],
-                        row,
-                        || self.value.ok_or(Error::Synthesis),
+                        offset,
+                        || self.value,
                     )?;
 
                     // Allocate insertion index.
@@ -535,12 +504,12 @@ mod test {
                         .index_bits
                         .iter()
                         .enumerate()
-                        .map(|(i, opt)| {
+                        .map(|(i, bit)| {
                             region.assign_advice(
-                                || format!("index bit {}", i),
+                                || format!("index_bit_{}", i),
                                 config.advice_eq[1 + i],
-                                row,
-                                || opt.map(Bit).ok_or(Error::Synthesis),
+                                offset,
+                                || bit.map(Bit),
                             )
                         })
                         .collect::<Result<Vec<AssignedBit<F>>, Error>>()?;
@@ -556,25 +525,20 @@ mod test {
                 &index_bits,
             )?;
 
-            if self.index_bits.iter().all(Option::is_some) {
-                let insert_pos = self
-                    .index_bits
-                    .iter()
-                    .enumerate()
-                    .map(|(i, opt)| (opt.unwrap() as usize) << i)
-                    .sum();
-                let mut expected = self.uninserted.clone();
-                expected.insert(insert_pos, self.value);
-                assert_eq!(
-                    inserted
-                        .iter()
-                        .map(|elem| elem.value())
-                        .collect::<Vec<Option<&F>>>(),
-                    expected
-                        .iter()
-                        .map(Option::as_ref)
-                        .collect::<Vec<Option<&F>>>(),
-                );
+            let mut index = 0;
+            for (i, bit) in self.index_bits.iter().enumerate() {
+                bit.map(|bit| {
+                    index += (bit as usize) << i;
+                });
+            }
+            let mut expected = self.uninserted.clone();
+            expected.insert(index, self.value);
+
+            for (val, expected) in inserted.iter().zip(expected.iter()) {
+                val
+                    .value()
+                    .zip(expected.as_ref())
+                    .assert_if_known(|(val, expected)| val == expected);
             }
 
             Ok(())
@@ -602,13 +566,13 @@ mod test {
 
             let index_bit_len = arity.trailing_zeros() as usize;
 
-            let index_bits: Vec<Option<bool>> = (0..index_bit_len)
-                .map(|i| Some((index >> i) & 1 == 1))
+            let index_bits: Vec<Value<bool>> = (0..index_bit_len)
+                .map(|i| Value::known((index >> i) & 1 == 1))
                 .collect();
 
             MyCircuit {
-                uninserted: uninserted.iter().map(|elem| Some(*elem)).collect(),
-                value: Some(value),
+                uninserted: uninserted.iter().map(|elem| Value::known(*elem)).collect(),
+                value: Value::known(value),
                 index_bits,
                 _a: PhantomData,
             }
