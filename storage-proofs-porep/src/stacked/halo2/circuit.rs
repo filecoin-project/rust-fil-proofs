@@ -3,7 +3,6 @@
 use std::any::TypeId;
 use std::convert::TryInto;
 use std::marker::PhantomData;
-use std::mem;
 
 use fil_halo2_gadgets::{
     sha256::{Sha256WordsChip, Sha256WordsConfig},
@@ -17,7 +16,7 @@ use filecoin_hashers::{
 use generic_array::typenum::U2;
 use halo2_proofs::{
     arithmetic::FieldExt,
-    circuit::{AssignedCell, Layouter, SimpleFloorPlanner},
+    circuit::{AssignedCell, Layouter, SimpleFloorPlanner, Value},
     plonk::{Advice, Circuit, Column, ConstraintSystem, Error, Instance},
 };
 use storage_proofs_core::{
@@ -206,8 +205,8 @@ where
     Sha256Hasher<F>: Hasher<Field = F>,
     PoseidonHasher<F>: Hasher<Field = F>,
 {
-    pub column: Vec<Option<F>>,
-    pub path_c: Vec<Vec<Option<F>>>,
+    pub column: Vec<Value<F>>,
+    pub path_c: Vec<Vec<Value<F>>>,
     pub _tree_r: PhantomData<(U, V, W)>,
 }
 
@@ -222,7 +221,7 @@ where
 {
     pub fn empty() -> Self {
         ParentProof {
-            column: vec![None; num_layers::<SECTOR_NODES>()],
+            column: vec![Value::unknown(); num_layers::<SECTOR_NODES>()],
             path_c: por::empty_path::<F, U, V, W, SECTOR_NODES>(),
             _tree_r: PhantomData,
         }
@@ -239,10 +238,10 @@ where
     Sha256Hasher<F>: Hasher<Field = F>,
     PoseidonHasher<F>: Hasher<Field = F>,
 {
-    pub leaf_d: Option<F>,
-    pub path_d: Vec<Vec<Option<F>>>,
-    pub path_c: Vec<Vec<Option<F>>>,
-    pub path_r: Vec<Vec<Option<F>>>,
+    pub leaf_d: Value<F>,
+    pub path_d: Vec<Vec<Value<F>>>,
+    pub path_c: Vec<Vec<Value<F>>>,
+    pub path_r: Vec<Vec<Value<F>>>,
     pub drg_parent_proofs: [ParentProof<F, U, V, W, SECTOR_NODES>; DRG_PARENTS],
     pub exp_parent_proofs: [ParentProof<F, U, V, W, SECTOR_NODES>; EXP_PARENTS],
 }
@@ -257,29 +256,29 @@ where
 {
     #[allow(clippy::unwrap_used)]
     fn from(challenge_proof: &VanillaChallengeProof<TreeR, Sha256Hasher<F>>) -> Self {
-        let leaf_d: Option<F> = Some(challenge_proof.comm_d_proofs.leaf().into());
+        let leaf_d = Value::known(challenge_proof.comm_d_proofs.leaf().into());
 
-        let path_d: Vec<Vec<Option<F>>> = challenge_proof
+        let path_d: Vec<Vec<Value<F>>> = challenge_proof
             .comm_d_proofs
             .path()
             .iter()
-            .map(|(siblings, _)| siblings.iter().map(|&s| Some(s.into())).collect())
+            .map(|(siblings, _)| siblings.iter().map(|&s| Value::known(s.into())).collect())
             .collect();
 
-        let path_c: Vec<Vec<Option<F>>> = challenge_proof
+        let path_c: Vec<Vec<Value<F>>> = challenge_proof
             .replica_column_proofs
             .c_x
             .inclusion_proof
             .path()
             .iter()
-            .map(|(siblings, _)| siblings.iter().map(|&s| Some(s.into())).collect())
+            .map(|(siblings, _)| siblings.iter().map(|&s| Value::known(s.into())).collect())
             .collect();
 
-        let path_r: Vec<Vec<Option<F>>> = challenge_proof
+        let path_r: Vec<Vec<Value<F>>> = challenge_proof
             .comm_r_last_proof
             .path()
             .iter()
-            .map(|(siblings, _)| siblings.iter().map(|&s| Some(s.into())).collect())
+            .map(|(siblings, _)| siblings.iter().map(|&s| Value::known(s.into())).collect())
             .collect();
 
         let drg_parent_proofs = challenge_proof
@@ -291,14 +290,14 @@ where
                     .column
                     .rows
                     .iter()
-                    .map(|&label| Some(label.into()))
+                    .map(|&label| Value::known(label.into()))
                     .collect();
 
                 let path_c = parent_proof
                     .inclusion_proof
                     .path()
                     .iter()
-                    .map(|(siblings, _)| siblings.iter().map(|&s| Some(s.into())).collect())
+                    .map(|(siblings, _)| siblings.iter().map(|&s| Value::known(s.into())).collect())
                     .collect();
 
                 ParentProof {
@@ -328,14 +327,14 @@ where
                     .column
                     .rows
                     .iter()
-                    .map(|&label| Some(label.into()))
+                    .map(|&label| Value::known(label.into()))
                     .collect();
 
                 let path_c = parent_proof
                     .inclusion_proof
                     .path()
                     .iter()
-                    .map(|(siblings, _)| siblings.iter().map(|&s| Some(s.into())).collect())
+                    .map(|(siblings, _)| siblings.iter().map(|&s| Value::known(s.into())).collect())
                     .collect();
 
                 ParentProof {
@@ -378,11 +377,11 @@ where
 {
     pub fn empty() -> Self {
         let challenge_bit_len = SECTOR_NODES.trailing_zeros() as usize;
-        let path_d = vec![vec![None]; challenge_bit_len];
+        let path_d = vec![vec![Value::unknown()]; challenge_bit_len];
         let path_r = por::empty_path::<F, U, V, W, SECTOR_NODES>();
 
         ChallengeProof {
-            leaf_d: None,
+            leaf_d: Value::unknown(),
             path_d,
             path_c: path_r.clone(),
             path_r,
@@ -418,9 +417,9 @@ where
     Sha256Hasher<F>: Hasher<Field = F>,
     PoseidonHasher<F>: Hasher<Field = F>,
 {
-    pub comm_c: Option<F>,
+    pub comm_c: Value<F>,
     // `root_r` is `comm_r_last`.
-    pub root_r: Option<F>,
+    pub root_r: Value<F>,
     pub challenge_proofs: Vec<ChallengeProof<F, U, V, W, SECTOR_NODES>>,
 }
 
@@ -434,8 +433,8 @@ where
 {
     fn from(partition_proof: &VanillaPartitionProof<TreeR, Sha256Hasher<F>>) -> Self {
         PrivateInputs {
-            comm_c: Some(partition_proof[0].comm_c().into()),
-            root_r: Some(partition_proof[0].comm_r_last().into()),
+            comm_c: Value::known(partition_proof[0].comm_c().into()),
+            root_r: Value::known(partition_proof[0].comm_r_last().into()),
             challenge_proofs: partition_proof.iter().map(Into::into).collect(),
         }
     }
@@ -547,8 +546,8 @@ where
                 parents: vec![vec![None; DRG_PARENTS + EXP_PARENTS]; self.pub_inputs.parents.len()],
             },
             priv_inputs: PrivateInputs {
-                comm_c: None,
-                root_r: None,
+                comm_c: Value::unknown(),
+                root_r: Value::unknown(),
                 challenge_proofs: vec![
                     ChallengeProof::empty();
                     self.priv_inputs.challenge_proofs.len()
@@ -564,9 +563,9 @@ where
             .with_chip::<Sha256WordsChip<F>>()
             .with_chip::<ColumnHasherChip<F, SECTOR_NODES>>()
             .with_chip::<<Sha256Hasher<F> as Halo2Hasher<U2>>::Chip>()
-            // Only use the base arity because it is the largest TreeR arity and requires the
-            // greatest number of columns.
             .with_chip::<<PoseidonHasher<F> as Halo2Hasher<U>>::Chip>()
+            .with_chip::<<PoseidonHasher<F> as Halo2Hasher<V>>::Chip>()
+            .with_chip::<<PoseidonHasher<F> as Halo2Hasher<W>>::Chip>()
             .with_chip::<InsertChip<F, U>>()
             .create_columns(meta);
 
@@ -604,9 +603,10 @@ where
         let top_arity_type = TypeId::of::<W>();
 
         let (poseidon_base, insert_base) = if base_arity_type == tree_d_arity_type {
-            // Convert each chip's `U2` type parameter to `U`.
-            let poseidon_base = unsafe { mem::transmute(poseidon_2.clone()) };
-            let insert_base = unsafe { mem::transmute(insert_2.clone()) };
+            let poseidon_base = <PoseidonHasher<F> as Halo2Hasher<U2>>::change_config_arity::<U>(
+                poseidon_2.clone(),
+            );
+            let insert_base = insert_2.clone().change_arity();
             (poseidon_base, insert_base)
         } else {
             let poseidon_base = <PoseidonHasher<F> as Halo2Hasher<U>>::configure(
@@ -623,14 +623,16 @@ where
         let sub = if V::to_usize() == 0 {
             None
         } else if sub_arity_type == tree_d_arity_type {
-            // Convert each chip's `U2` type parameter to `V`.
-            let poseidon_sub = unsafe { mem::transmute(poseidon_2.clone()) };
-            let insert_sub = unsafe { mem::transmute(insert_2.clone()) };
+            let poseidon_sub = <PoseidonHasher<F> as Halo2Hasher<U2>>::change_config_arity::<V>(
+                poseidon_2.clone(),
+            );
+            let insert_sub = insert_2.clone().change_arity();
             Some((poseidon_sub, insert_sub))
         } else if sub_arity_type == base_arity_type {
-            // Convert each chip's `U` type parameter to `V`.
-            let poseidon_sub = unsafe { mem::transmute(poseidon_base.clone()) };
-            let insert_sub = unsafe { mem::transmute(insert_base.clone()) };
+            let poseidon_sub = <PoseidonHasher<F> as Halo2Hasher<U>>::change_config_arity::<V>(
+                poseidon_base.clone(),
+            );
+            let insert_sub = insert_base.clone().change_arity();
             Some((poseidon_sub, insert_sub))
         } else {
             let poseidon_sub = <PoseidonHasher<F> as Halo2Hasher<V>>::configure(
@@ -648,19 +650,23 @@ where
             None
         } else if top_arity_type == tree_d_arity_type {
             // Convert each chip's `U2` type parameter to `W`.
-            let poseidon_top = unsafe { mem::transmute(poseidon_2.clone()) };
-            let insert_top = unsafe { mem::transmute(insert_2.clone()) };
+            let poseidon_top = <PoseidonHasher<F> as Halo2Hasher<U2>>::change_config_arity::<W>(
+                poseidon_2.clone(),
+            );
+            let insert_top = insert_2.clone().change_arity();
             Some((poseidon_top, insert_top))
         } else if top_arity_type == base_arity_type {
-            // Convert each chip's `U` type parameter to `W`.
-            let poseidon_top = unsafe { mem::transmute(poseidon_base.clone()) };
-            let insert_top = unsafe { mem::transmute(insert_base.clone()) };
+            let poseidon_top = <PoseidonHasher<F> as Halo2Hasher<U>>::change_config_arity::<W>(
+                poseidon_base.clone(),
+            );
+            let insert_top = insert_base.clone().change_arity();
             Some((poseidon_top, insert_top))
         } else if top_arity_type == sub_arity_type {
-            // Convert each chip's `V` type parameter to `W`.
-            let (poseidon_sub, insert_sub) = sub.as_ref().unwrap();
-            let poseidon_top = unsafe { mem::transmute(poseidon_sub.clone()) };
-            let insert_top = unsafe { mem::transmute(insert_sub.clone()) };
+            let (poseidon_sub, insert_sub) = sub.clone().unwrap();
+            let poseidon_top = <PoseidonHasher<F> as Halo2Hasher<V>>::change_config_arity::<W>(
+                poseidon_sub.clone(),
+            );
+            let insert_top = insert_sub.clone().change_arity();
             Some((poseidon_top, insert_top))
         } else {
             let poseidon_top = <PoseidonHasher<F> as Halo2Hasher<W>>::configure(
@@ -784,7 +790,7 @@ where
                         || "comm_c",
                         col,
                         offset,
-                        || priv_inputs.comm_c.ok_or(Error::Synthesis),
+                        || priv_inputs.comm_c,
                     )?
                 };
 
@@ -794,7 +800,7 @@ where
                         || "root_r",
                         col,
                         offset,
-                        || priv_inputs.root_r.ok_or(Error::Synthesis),
+                        || priv_inputs.root_r,
                     )?
                 };
 
@@ -808,7 +814,7 @@ where
                             || format!("challenge {} leaf_d", i),
                             col,
                             offset,
-                            || challenge_proof.leaf_d.ok_or(Error::Synthesis),
+                            || challenge_proof.leaf_d,
                         )
                     })
                     .collect::<Result<Vec<AssignedCell<F, F>>, Error>>()?;
@@ -828,7 +834,7 @@ where
         // Assign constants that can be reused across challenge labelings.
         let labeling_constants = labeling_chip.assign_constants(&mut layouter)?;
 
-        for (i, (challenge, (leaf_d, challenge_proof))) in pub_inputs
+        for (i, (challenge_opt, (leaf_d, challenge_proof))) in pub_inputs
             .challenges
             .iter()
             .zip(leafs_d.iter().zip(priv_inputs.challenge_proofs.iter()))
@@ -836,10 +842,15 @@ where
         {
             let mut layouter = layouter.namespace(|| format!("challenge {}", i));
 
+            let challenge = match challenge_opt {
+                Some(challenge) => Value::known(*challenge),
+                None => Value::unknown(),
+            };
+
             // Assign the challenge as 32 bits and constrain with public input.
             let (challenge, challenge_bits) = uint32_chip.witness_assign_bits(
                 layouter.namespace(|| "assign challenge as 32 bits"),
-                *challenge,
+                challenge,
             )?;
             layouter.constrain_instance(challenge.cell(), pi_col, Self::challenge_row(i))?;
 
@@ -878,7 +889,7 @@ where
                                         },
                                         col,
                                         offset,
-                                        || label.ok_or(Error::Synthesis),
+                                        || *label,
                                     )
                                 })
                                 .collect::<Result<Vec<AssignedCell<F, F>>, Error>>()
@@ -905,7 +916,7 @@ where
                                         },
                                         col,
                                         offset,
-                                        || label.ok_or(Error::Synthesis),
+                                        || *label,
                                     )
                                 })
                                 .collect::<Result<Vec<AssignedCell<F, F>>, Error>>()
@@ -1037,7 +1048,7 @@ where
                 // Compute challenge's layer label.
                 let challenge_label = labeling_chip.label(
                     layouter.namespace(|| {
-                        format!("calculate challenge's layer {} label", layer_index,)
+                        format!("calculate challenge's layer {} label", layer_index)
                     }),
                     &labeling_constants,
                     layer_index,
@@ -1107,7 +1118,7 @@ where
             SECTOR_NODES_4_KIB => 18,
             SECTOR_NODES_8_KIB => 18,
             SECTOR_NODES_16_KIB => 18,
-            SECTOR_NODES_32_KIB => 18,
+            SECTOR_NODES_32_KIB => 19,
             SECTOR_NODES_512_MIB => 19,
             SECTOR_NODES_32_GIB => 27,
             SECTOR_NODES_64_GIB => 27,
@@ -1136,8 +1147,8 @@ where
                 parents: vec![vec![None; DRG_PARENTS + EXP_PARENTS]; Self::CHALLENGE_COUNT],
             },
             priv_inputs: PrivateInputs {
-                comm_c: None,
-                root_r: None,
+                comm_c: Value::unknown(),
+                root_r: Value::unknown(),
                 challenge_proofs: vec![ChallengeProof::empty(); Self::CHALLENGE_COUNT],
             },
         }
