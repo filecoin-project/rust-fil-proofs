@@ -354,7 +354,7 @@ fn test_seal_proof_aggregation_1_2kib_porep_id_v1_1_base_8() -> Result<()> {
     let mut porep_id = [0u8; 32];
     porep_id[..8].copy_from_slice(&porep_id_v1_1.to_le_bytes());
     assert!(!is_legacy_porep_id(porep_id));
-    aggregate_proofs::<SectorShape2KiB>(SECTOR_SIZE_2_KIB<Fr>, &porep_id, proofs_to_aggregate)
+    aggregate_proofs::<SectorShape2KiB<Fr>>(SECTOR_SIZE_2_KIB, &porep_id, proofs_to_aggregate)
 }
 
 #[test]
@@ -365,6 +365,7 @@ fn test_seal_proof_aggregation_3_2kib_porep_id_v1_1_base_8() -> Result<()> {
     let porep_id = ARBITRARY_POREP_ID_V1_1_0;
     assert!(!is_legacy_porep_id(porep_id));
     aggregate_proofs::<SectorShape2KiB>(SECTOR_SIZE_2_KIB<Fr>, &porep_id, proofs_to_aggregate)
+    aggregate_proofs::<SectorShape2KiB<Fr>>(SECTOR_SIZE_2_KIB, &porep_id, proofs_to_aggregate)
 }
 
 #[test]
@@ -374,7 +375,7 @@ fn test_seal_proof_aggregation_5_2kib_porep_id_v1_1_base_8() -> Result<()> {
 
     let porep_id = ARBITRARY_POREP_ID_V1_1_0;
     assert!(!is_legacy_porep_id(porep_id));
-    aggregate_proofs::<SectorShape2KiB>(SECTOR_SIZE_2_KIB<Fr>, &porep_id, proofs_to_aggregate)
+    aggregate_proofs::<SectorShape2KiB<Fr>>(SECTOR_SIZE_2_KIB, &porep_id, proofs_to_aggregate)
 }
 
 #[test]
@@ -384,7 +385,7 @@ fn test_seal_proof_aggregation_257_2kib_porep_id_v1_1_base_8() -> Result<()> {
 
     let porep_id = ARBITRARY_POREP_ID_V1_1_0;
     assert!(!is_legacy_porep_id(porep_id));
-    aggregate_proofs::<SectorShape2KiB>(SECTOR_SIZE_2_KIB<Fr>, &porep_id, proofs_to_aggregate)
+    aggregate_proofs::<SectorShape2KiB<Fr>>(SECTOR_SIZE_2_KIB, &porep_id, proofs_to_aggregate)
 }
 
 #[test]
@@ -394,7 +395,7 @@ fn test_seal_proof_aggregation_2_4kib_porep_id_v1_1_base_8() -> Result<()> {
 
     let porep_id = ARBITRARY_POREP_ID_V1_1_0;
     assert!(!is_legacy_porep_id(porep_id));
-    aggregate_proofs::<SectorShape4KiB>(SECTOR_SIZE_4_KIB<Fr>, &porep_id, proofs_to_aggregate)
+    aggregate_proofs::<SectorShape4KiB<Fr>>(SECTOR_SIZE_4_KIB, &porep_id, proofs_to_aggregate)
 }
 
 #[test]
@@ -404,7 +405,7 @@ fn test_seal_proof_aggregation_1_32kib_porep_id_v1_1_base_8() -> Result<()> {
 
     let porep_id = ARBITRARY_POREP_ID_V1_1_0;
     assert!(!is_legacy_porep_id(porep_id));
-    aggregate_proofs::<SectorShape32KiB>(SECTOR_SIZE_32_KIB<Fr>, &porep_id, proofs_to_aggregate)
+    aggregate_proofs::<SectorShape32KiB<Fr>>(SECTOR_SIZE_32_KIB, &porep_id, proofs_to_aggregate)
 }
 
 #[test]
@@ -414,7 +415,7 @@ fn test_seal_proof_aggregation_818_32kib_porep_id_v1_1_base_8() -> Result<()> {
 
     let porep_id = ARBITRARY_POREP_ID_V1_1_0;
     assert!(!is_legacy_porep_id(porep_id));
-    aggregate_proofs::<SectorShape32KiB>(SECTOR_SIZE_32_KIB<Fr>, &porep_id, proofs_to_aggregate)
+    aggregate_proofs::<SectorShape32KiB<Fr>>(SECTOR_SIZE_32_KIB, &porep_id, proofs_to_aggregate)
 }
 
 //#[test]
