@@ -1,7 +1,5 @@
-use std::any::TypeId;
 use std::convert::TryInto;
 use std::marker::PhantomData;
-use std::mem;
 
 use fil_halo2_gadgets::{
     uint32::{UInt32Chip, UInt32Config},
@@ -66,7 +64,12 @@ where
             let path_r: Vec<Vec<Value<F>>> = merkle_proof
                 .path()
                 .iter()
-                .map(|(siblings, _)| siblings.iter().map(|&sib| Value::known(sib.into())).collect())
+                .map(|(siblings, _)| {
+                    siblings
+                        .iter()
+                        .map(|&sib| Value::known(sib.into()))
+                        .collect()
+                })
                 .collect();
             leafs_r.push(leaf_r);
             paths_r.push(path_r);
@@ -163,6 +166,10 @@ where
             .with_chip::<UInt32Chip<F>>()
             .with_chip::<<PoseidonHasher<F> as Halo2Hasher<U2>>::Chip>()
             .with_chip::<<PoseidonHasher<F> as Halo2Hasher<U>>::Chip>()
+            .with_chip::<<PoseidonHasher<F> as Halo2Hasher<V>>::Chip>()
+            .with_chip::<<PoseidonHasher<F> as Halo2Hasher<W>>::Chip>()
+            // Only need the base arity here because it is guaranteed to be the largest arity, thus
+            // all other arity insert chips will use a subset of the base arity's columns.
             .with_chip::<InsertChip<F, U>>()
             .create_columns(meta);
 
@@ -176,16 +183,13 @@ where
             &fixed_neq,
         );
 
-        let binary_arity_type = TypeId::of::<U2>();
-        let base_arity_type = TypeId::of::<U>();
-        let sub_arity_type = TypeId::of::<V>();
-        let top_arity_type = TypeId::of::<W>();
-
+        let binary_arity = 2;
+        let base_arity = U::to_usize();
         let sub_arity = V::to_usize();
         let top_arity = W::to_usize();
 
-        let poseidon_base = if base_arity_type == binary_arity_type {
-            unsafe { mem::transmute(poseidon_2.clone()) }
+        let poseidon_base = if base_arity == binary_arity {
+            <PoseidonHasher<F> as Halo2Hasher<U2>>::change_config_arity::<U>(poseidon_2.clone())
         } else {
             <PoseidonHasher<F> as Halo2Hasher<U>>::configure(
                 meta,
@@ -195,59 +199,58 @@ where
                 &fixed_neq,
             )
         };
-
         let insert_base = InsertChip::<F, U>::configure(meta, &advice_eq, &advice_neq);
 
-        let poseidon_sub = if sub_arity == 0 {
+        let sub = if sub_arity == 0 {
             None
-        } else if sub_arity_type == binary_arity_type {
-            unsafe { Some(mem::transmute(poseidon_2.clone())) }
-        } else if sub_arity_type == base_arity_type {
-            unsafe { Some(mem::transmute(poseidon_base.clone())) }
-        } else {
-            Some(<PoseidonHasher<F> as Halo2Hasher<V>>::configure(
-                meta,
-                &advice_eq,
-                &advice_neq,
-                &fixed_eq,
-                &fixed_neq,
+        } else if sub_arity == base_arity {
+            Some(por::change_hasher_insert_arity::<PoseidonHasher<F>, U, V>(
+                poseidon_base.clone(),
+                insert_base.clone(),
             ))
+        } else {
+            let poseidon_sub = if sub_arity == binary_arity {
+                <PoseidonHasher<F> as Halo2Hasher<U2>>::change_config_arity::<V>(poseidon_2.clone())
+            } else {
+                <PoseidonHasher<F> as Halo2Hasher<V>>::configure(
+                    meta,
+                    &advice_eq,
+                    &advice_neq,
+                    &fixed_eq,
+                    &fixed_neq,
+                )
+            };
+            let insert_sub = InsertChip::configure(meta, &advice_eq, &advice_neq);
+            Some((poseidon_sub, insert_sub))
         };
 
-        let insert_sub = if sub_arity == 0 {
+        let top = if top_arity == 0 {
             None
-        } else if sub_arity_type == base_arity_type {
-            unsafe { Some(mem::transmute(insert_base.clone())) }
-        } else {
-            Some(InsertChip::<F, V>::configure(meta, &advice_eq, &advice_neq))
-        };
-
-        let poseidon_top = if top_arity == 0 {
-            None
-        } else if top_arity_type == binary_arity_type {
-            unsafe { Some(mem::transmute(poseidon_2.clone())) }
-        } else if top_arity_type == base_arity_type {
-            unsafe { Some(mem::transmute(poseidon_base.clone())) }
-        } else if top_arity_type == sub_arity_type {
-            unsafe { Some(mem::transmute(poseidon_sub.clone())) }
-        } else {
-            Some(<PoseidonHasher<F> as Halo2Hasher<W>>::configure(
-                meta,
-                &advice_eq,
-                &advice_neq,
-                &fixed_eq,
-                &fixed_neq,
+        } else if top_arity == base_arity {
+            Some(por::change_hasher_insert_arity::<PoseidonHasher<F>, U, W>(
+                poseidon_base.clone(),
+                insert_base.clone(),
             ))
-        };
-
-        let insert_top = if top_arity == 0 {
-            None
-        } else if top_arity_type == base_arity_type {
-            unsafe { Some(mem::transmute(insert_base.clone())) }
-        } else if top_arity_type == sub_arity_type {
-            unsafe { Some(mem::transmute(insert_sub.clone())) }
+        } else if top_arity == sub_arity {
+            let (poseidon_sub, insert_sub) = sub.clone().unwrap();
+            Some(por::change_hasher_insert_arity::<PoseidonHasher<F>, V, W>(
+                poseidon_sub,
+                insert_sub,
+            ))
         } else {
-            Some(InsertChip::<F, W>::configure(meta, &advice_eq, &advice_neq))
+            let poseidon_top = if top_arity == binary_arity {
+                <PoseidonHasher<F> as Halo2Hasher<U2>>::change_config_arity::<W>(poseidon_2.clone())
+            } else {
+                <PoseidonHasher<F> as Halo2Hasher<W>>::configure(
+                    meta,
+                    &advice_eq,
+                    &advice_neq,
+                    &fixed_eq,
+                    &fixed_neq,
+                )
+            };
+            let insert_top = InsertChip::configure(meta, &advice_eq, &advice_neq);
+            Some((poseidon_top, insert_top))
         };
 
         let pi = meta.instance_column();
@@ -256,12 +259,7 @@ where
         PostConfig {
             uint32,
             poseidon_2,
-            tree_r: (
-                poseidon_base,
-                insert_base,
-                poseidon_sub.zip(insert_sub),
-                poseidon_top.zip(insert_top),
-            ),
+            tree_r: (poseidon_base, insert_base, sub, top),
             advice: [advice_eq[0], advice_eq[1]],
             pi,
         }

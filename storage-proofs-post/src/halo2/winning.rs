@@ -169,19 +169,11 @@ where
             || "witness comm_c and root_r",
             |mut region| {
                 let offset = 0;
-                let comm_c = region.assign_advice(
-                    || "comm_c",
-                    advice[0],
-                    offset,
-                    || priv_inputs.comm_c,
-                )?;
+                let comm_c =
+                    region.assign_advice(|| "comm_c", advice[0], offset, || priv_inputs.comm_c)?;
 
-                let root_r = region.assign_advice(
-                    || "root_r",
-                    advice[1],
-                    offset,
-                    || priv_inputs.root_r,
-                )?;
+                let root_r =
+                    region.assign_advice(|| "root_r", advice[1], offset, || priv_inputs.root_r)?;
 
                 Ok((comm_c, root_r))
             },
