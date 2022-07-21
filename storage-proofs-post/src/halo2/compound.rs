@@ -42,7 +42,7 @@ macro_rules! impl_compound_proof {
             impl<F, TreeR> CompoundProof<F, $sector_nodes> for FallbackPoSt<'_, TreeR>
             where
                 F: Halo2Field,
-                TreeR: MerkleTreeTrait<Field = F, Hasher = PoseidonHasher<F>>,
+                TreeR: 'static + MerkleTreeTrait<Field = F, Hasher = PoseidonHasher<F>>,
                 PoseidonHasher<F>: Hasher<Field = F>,
             {
                 type VanillaSetupParams = SetupParams;
@@ -248,7 +248,7 @@ macro_rules! impl_compound_proof {
                     vanilla_pub_inputs: &Self::VanillaPublicInputs,
                     batch_proof: &Halo2Proof<F::Affine, Self::Circuit>,
                     keypair: &Halo2Keypair<F::Affine, Self::Circuit>,
-                ) -> Result<(), Error> {
+                ) -> bool {
                     let is_winning = is_winning::<$sector_nodes>(setup_params);
 
                     let circ_pub_inputs_vecs: Vec<Vec<Vec<F>>> = if is_winning {
@@ -273,7 +273,7 @@ macro_rules! impl_compound_proof {
                             .collect()
                     };
 
-                    verify_batch_proof(keypair, batch_proof, &circ_pub_inputs_vecs, &mut OsRng)
+                    verify_batch_proof(keypair, batch_proof, &circ_pub_inputs_vecs)
                 }
             }
         )*

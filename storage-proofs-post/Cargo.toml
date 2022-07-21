@@ -12,6 +12,7 @@ readme = "README.md"
 storage-proofs-core = { path = "../storage-proofs-core", version = "~11.0.0", default-features = false}
 filecoin-hashers = { path = "../filecoin-hashers", version = "~6.0.0", default-features = false, features = ["poseidon", "sha256"]}
 fil_logger = "0.1"
+rand = "0.8"
 byteorder = "1"
 sha2 = "0.10.2"
 rayon = "1.0.0"
@@ -26,7 +27,10 @@ anyhow = "1.0.23"
 fr32 = { path = "../fr32", version = "~4.0.0", default-features = false }
 blstrs = "0.5.0"
 # halo2_proofs = { git = "https://github.com/drpetervannostrand/halo2", branch = "sha256-chip" }
-halo2_proofs = { git = "https://github.com/drpetervannostrand/halo2" }
+#
+# halo2_proofs = { git = "https://github.com/drpetervannostrand/halo2" }
+#
+halo2_proofs = "0.2.0"
 fil-halo2-gadgets = { path = "../fil-halo2-gadgets" }
 
 [dev-dependencies]

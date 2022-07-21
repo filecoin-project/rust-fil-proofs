@@ -5,7 +5,7 @@ use std::sync::Once;
 use ff::{Field, PrimeField};
 use filecoin_hashers::{poseidon::PoseidonHasher, HashFunction, Hasher, PoseidonArity};
 use generic_array::typenum::{U0, U2, U8};
-use halo2_proofs::{dev::MockProver, pasta::Fp};
+use halo2_proofs::{circuit::Value, dev::MockProver, pasta::Fp};
 use log::{info, trace};
 use rand::SeedableRng;
 use rand_xorshift::XorShiftRng;
@@ -69,9 +69,9 @@ where
             let leaf = Fp::from_repr_vartime(repr).unwrap_or_else(|| {
                 panic!("leaf bytes are not a valid field element for c_{}={}", i, c)
             });
-            Some(leaf)
+            Value::known(leaf)
         })
-        .collect::<Vec<Option<Fp>>>()
+        .collect::<Vec<Value<Fp>>>()
         .try_into()
         .unwrap();
 
@@ -87,10 +87,10 @@ where
             merkle_proof
                 .path()
                 .iter()
-                .map(|(siblings, _)| siblings.iter().map(|&sib| Some(sib.into())).collect())
-                .collect::<Vec<Vec<Option<Fp>>>>()
+                .map(|(siblings, _)| siblings.iter().map(|&sib| Value::known(sib.into())).collect())
+                .collect::<Vec<Vec<Value<Fp>>>>()
         })
-        .collect::<Vec<Vec<Vec<Option<Fp>>>>>()
+        .collect::<Vec<Vec<Vec<Value<Fp>>>>>()
         .try_into()
         .unwrap();
 
@@ -109,8 +109,8 @@ where
 
     trace!("Forming private inputs");
     let priv_inputs = winning::PrivateInputs::<Fp, U, V, W, SECTOR_NODES> {
-        comm_c: Some(comm_c),
-        root_r: Some(root_r.into()),
+        comm_c: Value::known(comm_c),
+        root_r: Value::known(root_r.into()),
         leafs_r,
         paths_r,
         _tree_r: PhantomData,
@@ -258,9 +258,9 @@ where
                         i, c, sector_index,
                     )
                 });
-                Some(leaf)
+                Value::known(leaf)
             })
-            .collect::<Vec<Option<Fp>>>()
+            .collect::<Vec<Value<Fp>>>()
             .try_into()
             .unwrap();
 
@@ -282,16 +282,16 @@ where
                 merkle_proof
                     .path()
                     .iter()
-                    .map(|(siblings, _)| siblings.iter().map(|&sib| Some(sib.into())).collect())
-                    .collect::<Vec<Vec<Option<Fp>>>>()
+                    .map(|(siblings, _)| siblings.iter().map(|&sib| Value::known(sib.into())).collect())
+                    .collect::<Vec<Vec<Value<Fp>>>>()
             })
-            .collect::<Vec<Vec<Vec<Option<Fp>>>>>()
+            .collect::<Vec<Vec<Vec<Value<Fp>>>>>()
             .try_into()
             .unwrap();
 
         priv_inputs.sector_proofs.push(SectorProof {
-            comm_c: Some(comm_c),
-            root_r: Some(root_r.into()),
+            comm_c: Value::known(comm_c),
+            root_r: Value::known(root_r.into()),
             leafs_r,
             paths_r,
             _tree_r: PhantomData,
