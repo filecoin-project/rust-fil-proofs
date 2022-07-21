@@ -13,7 +13,7 @@ fil_logger = "0.1"
 storage-proofs-core = { path = "../storage-proofs-core", version = "^11.0.0", default-features = false}
 filecoin-hashers = { path = "../filecoin-hashers", version = "^6.0.0", default-features = false, features = ["poseidon", "sha256"]}
 rand = "0.8"
-merkletree = "0.21.0"
+merkletree = "0.22.0"
 byteorder = "1"
 crossbeam = "0.8"
 sha2 = "0.9.1"
@@ -21,19 +21,25 @@ rayon = "1.0.0"
 serde = { version = "1.0", features = ["derive"]}
 blake2b_simd = "0.5"
 blake2s_simd = "0.5"
-ff = "0.11.0"
-bellperson = "0.19"
+ff = "0.12.0"
+bellperson = "0.22.0"
 log = "0.4.7"
 hex = "0.4.0"
 generic-array = "0.14.4"
 anyhow = "1.0.23"
 # neptune = { git = "https://github.com/filecoin-project/neptune", branch = "fr-as-trait", features = ["bls", "pasta", "arity2", "arity4", "arity8", "arity11", "arity16", "arity24", "arity36"] }
-neptune = { git = "https://github.com/filecoin-project/neptune", branch = "fr-as-trait-halo2-circuit", optional = true, features = ["bls", "pasta", "arity2", "arity4", "arity8", "arity11", "arity16", "arity24", "arity36"] }
+#
+# neptune = { git = "https://github.com/filecoin-project/neptune", branch = "fr-as-trait-halo2-circuit", optional = true, features = ["bls", "pasta", "arity2", "arity4", "arity8", "arity11", "arity16", "arity24", "arity36"] }
+#
+neptune = { git = "https://github.com/filecoin-project/neptune", rev = "866ea96e879d79461183cfb0b4272af8768af7d4", optional = true, features = ["bls", "pasta", "arity2", "arity4", "arity8", "arity11", "arity16", "arity24", "arity36"] }
 num_cpus = "1.10.1"
 fr32 = { path = "../fr32", version = "^4.0.0", default-features = false }
-blstrs = { version = "0.4.0", features = ["gpu"] }
+blstrs = "0.5.0"
 # halo2_proofs = { git = "https://github.com/drpetervannostrand/halo2", branch = "sha256-chip" }
-halo2_proofs = { git = "https://github.com/drpetervannostrand/halo2" }
+#
+# halo2_proofs = { git = "https://github.com/drpetervannostrand/halo2" }
+#
+halo2_proofs = "0.2.0"
 fil-halo2-gadgets = { path = "../fil-halo2-gadgets" }
 
 [dev-dependencies]

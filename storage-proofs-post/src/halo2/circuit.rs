@@ -1,6 +1,5 @@
 use std::any::TypeId;
 use std::convert::TryInto;
-use std::iter;
 use std::marker::PhantomData;
 use std::mem;
 
@@ -12,7 +11,7 @@ use filecoin_hashers::{poseidon::PoseidonHasher, Halo2Hasher, Hasher, PoseidonAr
 use generic_array::typenum::U2;
 use halo2_proofs::{
     arithmetic::FieldExt,
-    circuit::{Layouter, SimpleFloorPlanner},
+    circuit::{Layouter, SimpleFloorPlanner, Value},
     plonk::{Advice, Circuit, Column, ConstraintSystem, Error, Instance},
 };
 use storage_proofs_core::{
@@ -41,10 +40,10 @@ where
     W: PoseidonArity<F>,
     PoseidonHasher<F>: Hasher<Field = F>,
 {
-    pub comm_c: Option<F>,
-    pub root_r: Option<F>,
-    pub leafs_r: [Option<F>; SECTOR_CHALLENGES],
-    pub paths_r: [Vec<Vec<Option<F>>>; SECTOR_CHALLENGES],
+    pub comm_c: Value<F>,
+    pub root_r: Value<F>,
+    pub leafs_r: [Value<F>; SECTOR_CHALLENGES],
+    pub paths_r: [Vec<Vec<Value<F>>>; SECTOR_CHALLENGES],
     pub _tree_r: PhantomData<(U, V, W)>,
 }
 
@@ -63,19 +62,19 @@ where
         let mut paths_r = Vec::with_capacity(SECTOR_CHALLENGES);
 
         for merkle_proof in vanilla_proof.inclusion_proofs.iter() {
-            let leaf_r: Option<F> = Some(merkle_proof.leaf().into());
-            let path_r: Vec<Vec<Option<F>>> = merkle_proof
+            let leaf_r: Value<F> = Value::known(merkle_proof.leaf().into());
+            let path_r: Vec<Vec<Value<F>>> = merkle_proof
                 .path()
                 .iter()
-                .map(|(siblings, _)| siblings.iter().map(|&sib| Some(sib.into())).collect())
+                .map(|(siblings, _)| siblings.iter().map(|&sib| Value::known(sib.into())).collect())
                 .collect();
             leafs_r.push(leaf_r);
             paths_r.push(path_r);
         }
 
         SectorProof {
-            comm_c: Some(vanilla_proof.comm_c.into()),
-            root_r: Some(vanilla_proof.comm_r_last.into()),
+            comm_c: Value::known(vanilla_proof.comm_c.into()),
+            root_r: Value::known(vanilla_proof.comm_r_last.into()),
             leafs_r: leafs_r.try_into().unwrap(),
             paths_r: paths_r.try_into().unwrap(),
             _tree_r: PhantomData,
@@ -107,12 +106,10 @@ where
     #[allow(clippy::unwrap_used)]
     pub fn empty() -> Self {
         SectorProof {
-            comm_c: None,
-            root_r: None,
-            leafs_r: [None; SECTOR_CHALLENGES],
-            paths_r: iter::repeat(por::empty_path::<F, U, V, W, SECTOR_NODES>())
-                .take(SECTOR_CHALLENGES)
-                .collect::<Vec<Vec<Vec<Option<F>>>>>()
+            comm_c: Value::unknown(),
+            root_r: Value::unknown(),
+            leafs_r: [Value::unknown(); SECTOR_CHALLENGES],
+            paths_r: vec![por::empty_path::<F, U, V, W, SECTOR_NODES>(); SECTOR_CHALLENGES]
                 .try_into()
                 .unwrap(),
             _tree_r: PhantomData,

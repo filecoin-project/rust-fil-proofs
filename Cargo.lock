@@ -2323,6 +2323,39 @@ dependencies = [
 ]
 
 [[package]]
+name = "storage-proofs-post"
+version = "11.0.2"
+dependencies = [
+ "anyhow",
+ "bellperson",
+ "blake2b_simd 0.5.11",
+ "blake2s_simd",
+ "blstrs",
+ "byteorder 1.4.3",
+ "crossbeam",
+ "ff 0.12.0",
+ "fil-halo2-gadgets",
+ "fil_logger",
+ "filecoin-hashers",
+ "fr32",
+ "generic-array 0.14.5",
+ "halo2_proofs",
+ "hex",
+ "log",
+ "merkletree",
+ "neptune",
+ "num_cpus",
+ "pretty_assertions",
+ "rand 0.8.5",
+ "rand_xorshift 0.3.0",
+ "rayon",
+ "serde",
+ "sha2 0.9.9",
+ "storage-proofs-core",
+ "tempfile",
+]
+
+[[package]]
 name = "subtle"
 version = "2.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
