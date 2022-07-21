@@ -7,7 +7,7 @@ use halo2_proofs::{
     plonk::Error,
 };
 
-use crate::halo2::gadgets::insert::InsertChip;
+use crate::halo2::gadgets::insert::{InsertChip, InsertConfig};
 
 pub struct MerkleChip<H, U, V = U0, W = U0>
 where
@@ -273,6 +273,23 @@ where
     path
 }
 
+#[inline]
+pub fn change_hasher_insert_arity<H, A1, A2>(
+    hasher_config: <H as Halo2Hasher<A1>>::Config,
+    insert_config: InsertConfig<H::Field, A1>,
+) -> (<H as Halo2Hasher<A2>>::Config, InsertConfig<H::Field, A2>)
+where
+    H::Field: FieldExt,
+    H: Halo2Hasher<A1> + Halo2Hasher<A2>,
+    A1: PoseidonArity<H::Field>,
+    A2: PoseidonArity<H::Field>,
+{
+    (
+        <H as Halo2Hasher<A1>>::change_config_arity::<A2>(hasher_config),
+        insert_config.change_arity::<A2>(),
+    )
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
@@ -376,6 +393,8 @@ mod test {
                 .with_chip::<<H as Halo2Hasher<U>>::Chip>()
                 .with_chip::<<H as Halo2Hasher<V>>::Chip>()
                 .with_chip::<<H as Halo2Hasher<W>>::Chip>()
+                // Only need the base arity here because it is guaranteed to be the largest arity,
+                // thus all other arity insert chips will use a subset of the base arity's columns.
                 .with_chip::<InsertChip<H::Field, U>>()
                 .create_columns(meta);
 
@@ -393,10 +412,10 @@ mod test {
             let sub = if sub_arity == 0 {
                 None
             } else if sub_arity == base_arity {
-                let sub_hasher =
-                    <H as Halo2Hasher<U>>::change_config_arity::<V>(base_hasher.clone());
-                let sub_insert = base_insert.clone().change_arity();
-                Some((sub_hasher, sub_insert))
+                Some(change_hasher_insert_arity::<H, U, V>(
+                    base_hasher.clone(),
+                    base_insert.clone(),
+                ))
             } else {
                 let sub_hasher = <H as Halo2Hasher<V>>::configure(
                     meta,
@@ -412,16 +431,15 @@ mod test {
             let top = if top_arity == 0 {
                 None
             } else if top_arity == base_arity {
-                let top_hasher =
-                    <H as Halo2Hasher<U>>::change_config_arity::<W>(base_hasher.clone());
-                let top_insert = base_insert.clone().change_arity();
-                Some((top_hasher, top_insert))
+                Some(change_hasher_insert_arity::<H, U, W>(
+                    base_hasher.clone(),
+                    base_insert.clone(),
+                ))
             } else if top_arity == sub_arity {
                 let (sub_hasher, sub_insert) = sub.clone().unwrap();
-                let top_hasher =
-                    <H as Halo2Hasher<V>>::change_config_arity::<W>(sub_hasher.clone());
-                let top_insert = sub_insert.clone().change_arity();
-                Some((top_hasher, top_insert))
+                Some(change_hasher_insert_arity::<H, V, W>(
+                    sub_hasher, sub_insert,
+                ))
             } else {
                 let top_hasher = <H as Halo2Hasher<W>>::configure(
                     meta,

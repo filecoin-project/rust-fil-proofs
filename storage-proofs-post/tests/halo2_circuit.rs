@@ -87,7 +87,12 @@ where
             merkle_proof
                 .path()
                 .iter()
-                .map(|(siblings, _)| siblings.iter().map(|&sib| Value::known(sib.into())).collect())
+                .map(|(siblings, _)| {
+                    siblings
+                        .iter()
+                        .map(|&sib| Value::known(sib.into()))
+                        .collect()
+                })
                 .collect::<Vec<Vec<Value<Fp>>>>()
         })
         .collect::<Vec<Vec<Vec<Value<Fp>>>>>()
@@ -282,7 +287,12 @@ where
                 merkle_proof
                     .path()
                     .iter()
-                    .map(|(siblings, _)| siblings.iter().map(|&sib| Value::known(sib.into())).collect())
+                    .map(|(siblings, _)| {
+                        siblings
+                            .iter()
+                            .map(|&sib| Value::known(sib.into()))
+                            .collect()
+                    })
                     .collect::<Vec<Vec<Value<Fp>>>>()
             })
             .collect::<Vec<Vec<Vec<Value<Fp>>>>>()
