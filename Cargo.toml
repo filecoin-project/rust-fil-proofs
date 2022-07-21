@@ -12,6 +12,3 @@ members = [
   "filecoin-hashers",
   "storage-proofs-update",
 ]
-
-[patch.crates-io]
-neptune = { git = "https://github.com/filecoin-project/neptune" }
