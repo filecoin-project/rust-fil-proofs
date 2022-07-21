@@ -10,6 +10,6 @@ members = [
   "fr32",
 #  "sha2raw",
   "filecoin-hashers",
-#  "storage-proofs-update",
+  "storage-proofs-update",
   "fil-halo2-gadgets",
 ]

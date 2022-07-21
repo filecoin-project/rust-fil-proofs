@@ -7,7 +7,7 @@ use fil_halo2_gadgets::{
 use filecoin_hashers::{Halo2Hasher, HashInstructions, Hasher};
 use halo2_proofs::{
     arithmetic::FieldExt,
-    circuit::{AssignedCell, Layouter},
+    circuit::{AssignedCell, Layouter, Value},
     plonk::{Advice, Column, ConstraintSystem, Error, Expression, Instance, Selector},
     poly::Rotation,
 };
@@ -92,9 +92,9 @@ impl<F: FieldExt, const SECTOR_NODES: usize> ChallengeBitsChip<F, SECTOR_NODES> 
 
         let s_challenge_bits = meta.selector();
         meta.create_gate("challenge into bits", |meta| {
-            let mut advice_iter = AdviceIter::from(advice.to_vec());
-
             let s_challenge_bits = meta.query_selector(s_challenge_bits);
+
+            let mut advice_iter = AdviceIter::from(advice.to_vec());
 
             let challenge = {
                 let (offset, col) = advice_iter.next();
@@ -150,36 +150,26 @@ impl<F: FieldExt, const SECTOR_NODES: usize> ChallengeBitsChip<F, SECTOR_NODES> 
                     )?
                 };
 
-                let challenge_bits = match challenge.value() {
-                    Some(c) => {
-                        let repr = c.to_repr();
-                        let mut bits: Vec<Option<bool>> = repr
+                // Assign challenge bits.
+                challenge
+                    .value()
+                    // Convert `Value<F>` into `Value<Vec<bool>>`.
+                    .map(|field| {
+                        field
+                            .to_repr()
                             .as_ref()
                             .iter()
-                            .flat_map(|byte| {
-                                (0..8)
-                                    .map(|i| Some(byte >> i & 1 == 1))
-                                    .collect::<Vec<Option<bool>>>()
-                            })
-                            .collect();
-                        bits.truncate(self.config.challenge_sans_partition_bit_len);
-                        bits
-                    }
-                    None => vec![None; self.config.challenge_sans_partition_bit_len],
-                };
-
-                // Assign challenge bits.
-                challenge_bits
+                            .flat_map(|byte| (0..8).map(move |i| byte >> i & 1 == 1))
+                            .take(self.config.challenge_sans_partition_bit_len)
+                            .collect::<Vec<bool>>()
+                    })
+                    // Convert `Value<Vec<bool>>` into `Vec<Value<bool>>`.
+                    .transpose_vec(self.config.challenge_sans_partition_bit_len)
                     .iter()
                     .enumerate()
                     .map(|(i, bit)| {
                         let (offset, col) = advice_iter.next();
-                        region.assign_advice(
-                            || format!("bit {}", i),
-                            col,
-                            offset,
-                            || bit.map(Bit).ok_or(Error::Synthesis),
-                        )
+                        region.assign_advice(|| format!("bit_{}", i), col, offset, || bit.map(Bit))
                     })
                     .collect::<Result<Vec<AssignedBit<F>>, Error>>()
             },
@@ -240,9 +230,9 @@ impl<F: FieldExt> ChallengeLabelsChip<F> {
     pub fn assign_labels(
         &self,
         mut layouter: impl Layouter<F>,
-        label_r_old: &Option<F>,
-        label_d_new: &Option<F>,
-        label_r_new: &Option<F>,
+        label_r_old: Value<F>,
+        label_d_new: Value<F>,
+        label_r_new: Value<F>,
         pi_col: Column<Instance>,
         pi_row: usize,
     ) -> Result<(AssignedCell<F, F>, AssignedCell<F, F>, AssignedCell<F, F>), Error> {
@@ -250,7 +240,6 @@ impl<F: FieldExt> ChallengeLabelsChip<F> {
             || "challenge labels",
             |mut region| {
                 let offset = 0;
-
                 self.config.s_label_r_new.enable(&mut region, offset)?;
 
                 region.assign_advice_from_instance(
@@ -265,21 +254,21 @@ impl<F: FieldExt> ChallengeLabelsChip<F> {
                     || "label_r_old",
                     self.config.label_r_old,
                     offset,
-                    || label_r_old.ok_or(Error::Synthesis),
+                    || label_r_old,
                 )?;
 
                 let label_d_new = region.assign_advice(
                     || "label_d_new",
                     self.config.label_d_new,
                     offset,
-                    || label_d_new.ok_or(Error::Synthesis),
+                    || label_d_new,
                 )?;
 
                 let label_r_new = region.assign_advice(
                     || "label_r_new",
                     self.config.label_r_new,
                     offset,
-                    || label_r_new.ok_or(Error::Synthesis),
+                    || label_r_new,
                 )?;
 
                 Ok((label_r_old, label_d_new, label_r_new))
@@ -308,7 +297,7 @@ mod tests {
     }
 
     struct ApexTreeCircuit<F: FieldExt, const N: usize> {
-        apex_leafs: [Option<F>; N],
+        apex_leafs: [Value<F>; N],
     }
 
     impl<F, const N: usize> Circuit<F> for ApexTreeCircuit<F, N>
@@ -321,7 +310,7 @@ mod tests {
 
         fn without_witnesses(&self) -> Self {
             ApexTreeCircuit {
-                apex_leafs: [None; N],
+                apex_leafs: [Value::unknown(); N],
             }
         }
 
@@ -368,10 +357,10 @@ mod tests {
                         .map(|(i, apex_leaf)| {
                             let (offset, col) = advice_iter.next();
                             region.assign_advice(
-                                || format!("apex_leaf {}", i),
+                                || format!("apex_leaf_{}", i),
                                 col,
                                 offset,
-                                || apex_leaf.ok_or(Error::Synthesis),
+                                || *apex_leaf,
                             )
                         })
                         .collect::<Result<Vec<AssignedCell<F, F>>, Error>>()
@@ -389,8 +378,8 @@ mod tests {
     fn test_apex_tree_8_chip() {
         let circ = ApexTreeCircuit::<Fp, 8> {
             apex_leafs: (0..8)
-                .map(|i| Some(Fp::from(i)))
-                .collect::<Vec<Option<Fp>>>()
+                .map(|i| Value::known(Fp::from(i)))
+                .collect::<Vec<Value<Fp>>>()
                 .try_into()
                 .unwrap(),
         };
@@ -402,8 +391,8 @@ mod tests {
     fn test_apex_tree_128_chip() {
         let circ = ApexTreeCircuit::<Fp, 128> {
             apex_leafs: (0..128)
-                .map(|i| Some(Fp::from(i)))
-                .collect::<Vec<Option<Fp>>>()
+                .map(|i| Value::known(Fp::from(i)))
+                .collect::<Vec<Value<Fp>>>()
                 .try_into()
                 .unwrap(),
         };
