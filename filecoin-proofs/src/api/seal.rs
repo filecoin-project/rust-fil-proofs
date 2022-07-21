@@ -1577,6 +1577,7 @@ pub fn aggregate_seal_commit_proofs<Tree>(
     comm_rs: &[[u8; 32]],
     seeds: &[[u8; 32]],
     commit_outputs: &[SealCommitOutput],
+    aggregate_version: groth16::aggregate::AggregateVersion,
 ) -> Result<AggregateSnarkProof>
 where
     Tree: 'static + MerkleTreeTrait<Field = Fr>,
@@ -1646,6 +1647,7 @@ where
         &srs_prover_key,
         &hashed_seeds_and_comm_rs,
         proofs.as_slice(),
+        aggregate_version,
     )?;
     let mut aggregate_proof_bytes = Vec::new();
     aggregate_proof.write(&mut aggregate_proof_bytes)?;
@@ -1671,6 +1673,7 @@ pub fn verify_aggregate_seal_commit_proofs<Tree>(
     comm_rs: &[[u8; 32]],
     seeds: &[[u8; 32]],
     commit_inputs: Vec<Vec<Fr>>,
+    aggregate_version: groth16::aggregate::AggregateVersion,
 ) -> Result<bool>
 where
     Tree: 'static + MerkleTreeTrait<Field = Fr>,
@@ -1749,6 +1752,7 @@ where
         &hashed_seeds_and_comm_rs,
         commit_inputs.as_slice(),
         &aggregate_proof,
+        aggregate_version,
     )?;
     trace!("end verifying aggregate proof");
 
