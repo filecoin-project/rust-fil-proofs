@@ -3,11 +3,13 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{ensure, Context, Result};
 use bincode::deserialize;
+use blstrs::Scalar as Fr;
 use clap::{Arg, Command};
+use ff::PrimeField;
 use filecoin_hashers::Hasher;
 use filecoin_proofs::{
     is_sector_shape_base, is_sector_shape_sub2, is_sector_shape_sub8, is_sector_shape_top2,
-    with_shape, DefaultTreeDomain, PersistentAux, SectorShapeBase, SectorShapeSub2,
+    with_shape, DefaultTreeDomain, DefaultTreeHasher, PersistentAux, SectorShapeBase, SectorShapeSub2,
     SectorShapeSub8, SectorShapeTop2, OCT_ARITY,
 };
 use generic_array::typenum::Unsigned;
@@ -16,6 +18,7 @@ use merkletree::{
     merkle::get_merkle_tree_len,
     store::{ExternalReader, ReplicaConfig, Store, StoreConfig},
 };
+use pasta_curves::{Fp, Fq};
 use storage_proofs_core::{
     cache_key::CacheKey,
     merkle::{
@@ -31,7 +34,7 @@ fn get_tree_r_info(
     cache: &Path,
     replica_path: &Path,
 ) -> Result<(usize, usize, Vec<StoreConfig>, ReplicaConfig)> {
-    let tree_count = with_shape!(sector_size as u64, get_base_tree_count);
+    let tree_count = with_shape!(sector_size as u64, Fr, get_base_tree_count);
 
     // Number of nodes per base tree
     let base_tree_leafs = sector_size / NODE_SIZE / tree_count;
@@ -59,40 +62,44 @@ fn get_tree_r_info(
     Ok((tree_count, base_tree_leafs, configs, replica_config))
 }
 
-fn get_tree_r_last_root(
+fn get_tree_r_last_root<F>(
     base_tree_leafs: usize,
     sector_size: u64,
     configs: &[StoreConfig],
     replica_config: &ReplicaConfig,
-) -> Result<DefaultTreeDomain> {
+) -> Result<DefaultTreeDomain<F>>
+where
+    F: PrimeField,
+    DefaultTreeHasher<F>: Hasher,
+{
     let base_tree_len = get_merkle_tree_len(base_tree_leafs, OCT_ARITY)?;
     let tree_r_last_root = if is_sector_shape_base(sector_size) {
         ensure!(configs.len() == 1, "Invalid tree-shape specified");
-        let store = LCStore::<DefaultTreeDomain>::new_from_disk_with_reader(
+        let store = LCStore::<DefaultTreeDomain<F>>::new_from_disk_with_reader(
             base_tree_len,
             OCT_ARITY,
             &configs[0],
             ExternalReader::new_from_path(&replica_config.path)?,
         )?;
 
-        let tree_r_last = SectorShapeBase::from_data_store(store, base_tree_leafs)?;
+        let tree_r_last = SectorShapeBase::<F>::from_data_store(store, base_tree_leafs)?;
         tree_r_last.root()
     } else if is_sector_shape_sub2(sector_size) {
-        let tree_r_last = SectorShapeSub2::from_store_configs_and_replica(
+        let tree_r_last = SectorShapeSub2::<F>::from_store_configs_and_replica(
             base_tree_leafs,
             configs,
             replica_config,
         )?;
         tree_r_last.root()
     } else if is_sector_shape_sub8(sector_size) {
-        let tree_r_last = SectorShapeSub8::from_store_configs_and_replica(
+        let tree_r_last = SectorShapeSub8::<F>::from_store_configs_and_replica(
             base_tree_leafs,
             configs,
             replica_config,
         )?;
         tree_r_last.root()
     } else if is_sector_shape_top2(sector_size) {
-        let tree_r_last = SectorShapeTop2::from_sub_tree_store_configs_and_replica(
+        let tree_r_last = SectorShapeTop2::<F>::from_sub_tree_store_configs_and_replica(
             base_tree_leafs,
             configs,
             replica_config,
@@ -105,8 +112,12 @@ fn get_tree_r_last_root(
     Ok(tree_r_last_root)
 }
 
-fn get_persistent_aux(cache: &Path) -> Result<PersistentAux<DefaultTreeDomain>> {
-    let p_aux: PersistentAux<DefaultTreeDomain> = {
+fn get_persistent_aux<F>(cache: &Path) -> Result<PersistentAux<DefaultTreeDomain<F>>>
+where
+    F: PrimeField,
+    DefaultTreeHasher<F>: Hasher,
+{
+    let p_aux: PersistentAux<DefaultTreeDomain<F>> = {
         let p_aux_path = cache.join(CacheKey::PAux.to_string());
         let p_aux_bytes = fs::read(&p_aux_path)
             .with_context(|| format!("could not read file p_aux={:?}", p_aux_path))?;
@@ -117,11 +128,15 @@ fn get_persistent_aux(cache: &Path) -> Result<PersistentAux<DefaultTreeDomain>> 
     Ok(p_aux)
 }
 
-fn build_tree_r_last<Tree: MerkleTreeTrait>(
+fn build_tree_r_last<Tree>(
     sector_size: usize,
     cache: &Path,
     replica_path: &Path,
-) -> Result<(<Tree::Hasher as Hasher>::Domain, Vec<DefaultTreeDomain>)> {
+) -> Result<(<Tree::Hasher as Hasher>::Domain, Vec<DefaultTreeDomain<Tree::Field>>)>
+where
+    Tree: MerkleTreeTrait,
+    DefaultTreeHasher<Tree::Field>: Hasher,
+{
     let (tree_count, base_tree_leafs, configs, replica_config) =
         get_tree_r_info(sector_size, cache, replica_path)?;
 
@@ -136,7 +151,7 @@ fn build_tree_r_last<Tree: MerkleTreeTrait>(
             .with_context(|| format!("could not mmap replica_path={:?}", replica_path))?
     };
 
-    let mut base_tree_roots: Vec<DefaultTreeDomain> = Vec::with_capacity(tree_count);
+    let mut base_tree_roots: Vec<DefaultTreeDomain<Tree::Field>> = Vec::with_capacity(tree_count);
     for (i, config) in configs.iter().enumerate().take(tree_count) {
         let offset = replica_config.offsets[i];
 
@@ -152,7 +167,7 @@ fn build_tree_r_last<Tree: MerkleTreeTrait>(
             (offset + (sector_size / tree_count)),
             &store_path
         );
-        let tree = SectorShapeBase::from_byte_slice_with_config(slice, config.clone())?;
+        let tree = SectorShapeBase::<Tree::Field>::from_byte_slice_with_config(slice, config.clone())?;
         base_tree_roots.push(tree.root());
     }
 
@@ -167,30 +182,39 @@ fn build_tree_r_last<Tree: MerkleTreeTrait>(
     Ok((tree_r_last.root(), base_tree_roots))
 }
 
-fn run_rebuild(
+fn run_rebuild<F>(
     sector_size: usize,
     cache: &Path,
     replica_path: &Path,
-) -> Result<(DefaultTreeDomain, Vec<DefaultTreeDomain>)> {
+) -> Result<(DefaultTreeDomain<F>, Vec<DefaultTreeDomain<F>>)>
+where
+    F: PrimeField,
+    DefaultTreeHasher<F>: Hasher<Field = F>,
+{
     with_shape!(
         sector_size as u64,
+        F,
         build_tree_r_last,
         sector_size,
         cache,
-        replica_path
+        replica_path,
     )
 }
 
-fn run_inspect(sector_size: usize, cache: &Path, replica_path: &Path) -> Result<()> {
+fn run_inspect<F>(sector_size: usize, cache: &Path, replica_path: &Path) -> Result<()>
+where
+    F: PrimeField,
+    DefaultTreeHasher<F>: Hasher<Field = F>,
+{
     let (_tree_count, base_tree_leafs, configs, replica_config) =
         get_tree_r_info(sector_size, cache, replica_path)?;
-    let tree_r_last_root = get_tree_r_last_root(
+    let tree_r_last_root = get_tree_r_last_root::<F>(
         base_tree_leafs,
         sector_size as u64,
         &configs,
         &replica_config,
     )?;
-    let p_aux = get_persistent_aux(cache)?;
+    let p_aux = get_persistent_aux::<F>(cache)?;
 
     println!("CommRLast from p_aux: {:?}", p_aux.comm_r_last);
     println!(
@@ -207,7 +231,11 @@ fn run_inspect(sector_size: usize, cache: &Path, replica_path: &Path) -> Result<
     Ok(())
 }
 
-fn run_verify(sector_size: usize, cache: &Path, replica_path: &Path) -> Result<()> {
+fn run_verify<F>(sector_size: usize, cache: &Path, replica_path: &Path) -> Result<()>
+where
+    F: PrimeField,
+    DefaultTreeHasher<F>: Hasher<Field = F>,
+{
     let (tree_count, base_tree_leafs, configs, replica_config) =
         get_tree_r_info(sector_size, cache, replica_path)?;
     let base_tree_len = get_merkle_tree_len(base_tree_leafs, OCT_ARITY)?;
@@ -221,7 +249,7 @@ fn run_verify(sector_size: usize, cache: &Path, replica_path: &Path) -> Result<(
     };
 
     // First, read the roots from the cached trees on disk
-    let mut cached_base_tree_roots: Vec<DefaultTreeDomain> = Vec::with_capacity(tree_count);
+    let mut cached_base_tree_roots: Vec<DefaultTreeDomain<F>> = Vec::with_capacity(tree_count);
     for (i, config) in configs.iter().enumerate().take(tree_count) {
         let store = LCStore::new_from_disk_with_reader(
             base_tree_len,
@@ -233,7 +261,7 @@ fn run_verify(sector_size: usize, cache: &Path, replica_path: &Path) -> Result<(
     }
 
     // Retrieve the tree_r_last root from the cached trees on disk.
-    let tree_r_last_root = get_tree_r_last_root(
+    let tree_r_last_root = get_tree_r_last_root::<F>(
         base_tree_leafs,
         sector_size as u64,
         &configs,
@@ -241,7 +269,7 @@ fn run_verify(sector_size: usize, cache: &Path, replica_path: &Path) -> Result<(
     )?;
 
     // Read comm_r_last from the persistent aux in the cache dir
-    let p_aux: PersistentAux<DefaultTreeDomain> = {
+    let p_aux: PersistentAux<DefaultTreeDomain<F>> = {
         let p_aux_path = cache.join(CacheKey::PAux.to_string());
         let p_aux_bytes = fs::read(&p_aux_path)
             .with_context(|| format!("could not read file p_aux={:?}", p_aux_path))?;
@@ -256,7 +284,7 @@ fn run_verify(sector_size: usize, cache: &Path, replica_path: &Path) -> Result<(
     create_dir_all(&tmp_path)?;
 
     let (rebuilt_tree_r_last_root, rebuilt_base_tree_roots) =
-        run_rebuild(sector_size, tmp_path, replica_path)?;
+        run_rebuild::<F>(sector_size, tmp_path, replica_path)?;
 
     remove_dir_all(&tmp_path)?;
 
@@ -323,6 +351,14 @@ fn main() -> Result<()> {
                 .takes_value(true),
         )
         .arg(
+            Arg::new("field")
+                .long("field")
+                .help("The tree hasher's field")
+                .takes_value(true)
+                .possible_values(&["bls", "pallas", "vesta"])
+                .default_value("bls"),
+        )
+        .arg(
             Arg::new("replica")
                 .long("replica")
                 .help("The replica file")
@@ -347,6 +383,14 @@ fn main() -> Result<()> {
                 .takes_value(true),
         )
         .arg(
+            Arg::new("field")
+                .long("field")
+                .help("The tree hasher's field")
+                .takes_value(true)
+                .possible_values(&["bls", "pallas", "vesta"])
+                .default_value("bls"),
+        )
+        .arg(
             Arg::new("replica")
                 .long("replica")
                 .help("The replica file")
@@ -369,6 +413,14 @@ fn main() -> Result<()> {
                 .default_value("34359738368")
                 .help("The data size in bytes")
                 .takes_value(true),
+        )
+        .arg(
+            Arg::new("field")
+                .long("field")
+                .help("The tree hasher's field")
+                .takes_value(true)
+                .possible_values(&["bls", "pallas", "vesta"])
+                .default_value("bls"),
         )
         .arg(
             Arg::new("replica")
@@ -399,7 +451,18 @@ fn main() -> Result<()> {
             let size = m
                 .value_of_t::<usize>("size")
                 .expect("could not convert `size` CLI argument to `usize`");
-            run_rebuild(size, cache.as_path(), replica.as_path())?;
+            match m.value_of("field") {
+                Some("bls") => {
+                    run_rebuild::<Fr>(size, cache.as_path(), replica.as_path())?;
+                },
+                Some("pallas") => {
+                    run_rebuild::<Fp>(size, cache.as_path(), replica.as_path())?;
+                },
+                Some("vesta") => {
+                    run_rebuild::<Fq>(size, cache.as_path(), replica.as_path())?;
+                },
+                _ => unreachable!(),
+            };
         }
         Some(("inspect", m)) => {
             let cache = m.value_of_t::<PathBuf>("cache")?;
@@ -407,7 +470,12 @@ fn main() -> Result<()> {
             let size = m
                 .value_of_t::<usize>("size")
                 .expect("could not convert `size` CLI argument to `usize`");
-            run_inspect(size, cache.as_path(), replica.as_path())?;
+            match m.value_of("field") {
+                Some("bls") => run_inspect::<Fr>(size, cache.as_path(), replica.as_path())?,
+                Some("pallas") => run_inspect::<Fp>(size, cache.as_path(), replica.as_path())?,
+                Some("vesta") => run_inspect::<Fq>(size, cache.as_path(), replica.as_path())?,
+                _ => unreachable!(),
+            };
         }
         Some(("verify", m)) => {
             let cache = m.value_of_t::<PathBuf>("cache")?;
@@ -415,7 +483,12 @@ fn main() -> Result<()> {
             let size = m
                 .value_of_t::<usize>("size")
                 .expect("could not convert `size` CLI argument to `usize`");
-            run_verify(size, cache.as_path(), replica.as_path())?;
+            match m.value_of("field") {
+                Some("bls") => run_verify::<Fr>(size, cache.as_path(), replica.as_path())?,
+                Some("pallas") => run_verify::<Fp>(size, cache.as_path(), replica.as_path())?,
+                Some("vesta") => run_verify::<Fq>(size, cache.as_path(), replica.as_path())?,
+                _ => unreachable!(),
+            };
         }
         _ => panic!("Unrecognized subcommand"),
     }

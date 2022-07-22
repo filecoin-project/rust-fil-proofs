@@ -1,17 +1,19 @@
+use std::any::TypeId;
 use std::fs::remove_file;
 use std::str::FromStr;
 
 use bellperson::{util_cs::bench_cs::BenchCS, Circuit};
 use blstrs::Scalar as Fr;
+use ff::PrimeField;
 use fil_proofs_tooling::{
     measure,
     shared::{create_replicas, PROVER_ID, RANDOMNESS, TICKET_BYTES},
     Metadata,
 };
-use filecoin_hashers::sha256::Sha256Hasher;
+use filecoin_hashers::{sha256::Sha256Hasher, Hasher};
 use filecoin_proofs::{
     clear_cache, parameters::public_params, seal_commit_phase1, seal_commit_phase2,
-    validate_cache_for_commit, DefaultOctLCTree, DefaultOctTree, PaddedBytesAmount, PoRepConfig,
+    validate_cache_for_commit, DefaultOctLCTree, DefaultOctTree, DefaultTreeHasher, PaddedBytesAmount, PoRepConfig,
     PoRepProofPartitions, SectorSize, DRG_DEGREE, EXP_DEGREE, LAYERS, POREP_MINIMUM_CHALLENGES,
     POREP_PARTITIONS,
 };
@@ -31,7 +33,7 @@ const SEED: [u8; 16] = [
     0x59, 0x62, 0xbe, 0x5d, 0x76, 0x3d, 0x31, 0x8d, 0x17, 0xdb, 0x37, 0x32, 0x54, 0x06, 0xbc, 0xe5,
 ];
 
-type ProdbenchTree = DefaultOctTree;
+type ProdbenchTree<F> = DefaultOctTree<F>;
 
 #[derive(Default, Debug, Serialize)]
 pub struct ProdbenchReport {
@@ -173,13 +175,18 @@ fn configure_global_config(inputs: &ProdbenchInputs) {
         .insert(inputs.sector_size_bytes(), inputs.porep_challenges);
 }
 
-pub fn run(
+pub fn run<F>(
     inputs: ProdbenchInputs,
     skip_seal_proof: bool,
     skip_post_proof: bool,
     only_replicate: bool,
     only_add_piece: bool,
-) -> Metadata<ProdbenchReport> {
+) -> Metadata<ProdbenchReport>
+where
+    F: PrimeField,
+    Sha256Hasher<F>: Hasher<Field = F>,
+    DefaultTreeHasher<F>: Hasher<Field = F>,
+{
     configure_global_config(&inputs);
 
     let mut outputs = ProdbenchOutputs::default();
@@ -189,7 +196,7 @@ pub fn run(
 
     assert!(inputs.num_sectors > 0, "Missing num_sectors");
 
-    let (cfg, repls) = create_replicas::<DefaultOctLCTree>(
+    let (cfg, repls) = create_replicas::<DefaultOctLCTree<F>>(
         sector_size,
         inputs.num_sectors as usize,
         only_add_piece,
@@ -212,12 +219,12 @@ pub fn run(
             replica_measurement.return_value.iter().zip(created.iter())
         {
             let measured = measure(|| {
-                validate_cache_for_commit::<_, _, DefaultOctLCTree>(
+                validate_cache_for_commit::<_, _, DefaultOctLCTree<F>>(
                     &replica_info.private_replica_info.cache_dir_path(),
                     &replica_info.private_replica_info.replica_path(),
                 )?;
 
-                let phase1_output = seal_commit_phase1::<_, DefaultOctLCTree>(
+                let phase1_output = seal_commit_phase1::<_, DefaultOctLCTree<F>>(
                     cfg,
                     &replica_info.private_replica_info.cache_dir_path(),
                     &replica_info.private_replica_info.replica_path(),
@@ -229,7 +236,7 @@ pub fn run(
                     &replica_info.piece_info,
                 )?;
 
-                clear_cache::<DefaultOctLCTree>(
+                clear_cache::<DefaultOctLCTree<F>>(
                     replica_info.private_replica_info.cache_dir_path(),
                 )?;
 
@@ -253,7 +260,11 @@ pub fn run(
     }
 
     augment_with_op_measurements(&mut outputs);
-    outputs.circuits = run_measure_circuits(&inputs);
+
+    // Only measure circuits when benching the BLS13-381 scalar field.
+    if TypeId::of::<F>() == TypeId::of::<Fr>() {
+        outputs.circuits = run_measure_circuits(&inputs);
+    }
 
     Metadata::wrap(ProdbenchReport { inputs, outputs }).expect("failed to retrieve metadata")
 }
@@ -288,10 +299,10 @@ fn measure_porep_circuit(i: &ProdbenchInputs) -> usize {
     };
 
     let pp =
-        StackedDrg::<ProdbenchTree, Sha256Hasher<Fr>>::setup(&sp).expect("failed to setup DRG");
+        StackedDrg::<ProdbenchTree<Fr>, Sha256Hasher<Fr>>::setup(&sp).expect("failed to setup DRG");
 
     let mut cs = BenchCS::<Fr>::new();
-    <StackedCompound<_, _> as CompoundProof<StackedDrg<ProdbenchTree, Sha256Hasher<Fr>>, _>>::blank_circuit(
+    <StackedCompound<_, _> as CompoundProof<StackedDrg<ProdbenchTree<Fr>, Sha256Hasher<Fr>>, _>>::blank_circuit(
         &pp,
     )
         .synthesize(&mut cs)
@@ -333,22 +344,22 @@ fn cache_porep_params(porep_config: PoRepConfig) {
     .expect("failed to get public_params");
 
     {
-        let circuit = <StackedCompound<ProdbenchTree, _> as CompoundProof<
-            StackedDrg<ProdbenchTree, Sha256Hasher<Fr>>,
+        let circuit = <StackedCompound<ProdbenchTree<Fr>, _> as CompoundProof<
+            StackedDrg<ProdbenchTree<Fr>, Sha256Hasher<Fr>>,
             _,
         >>::blank_circuit(&public_params);
-        StackedCompound::<ProdbenchTree, Sha256Hasher<Fr>>::get_param_metadata(
+        StackedCompound::<ProdbenchTree<Fr>, Sha256Hasher<Fr>>::get_param_metadata(
             circuit,
             &public_params,
         )
         .expect("cannot get param metadata");
     }
     {
-        let circuit = <StackedCompound<ProdbenchTree, _> as CompoundProof<
-            StackedDrg<ProdbenchTree, Sha256Hasher<Fr>>,
+        let circuit = <StackedCompound<ProdbenchTree<Fr>, _> as CompoundProof<
+            StackedDrg<ProdbenchTree<Fr>, Sha256Hasher<Fr>>,
             _,
         >>::blank_circuit(&public_params);
-        StackedCompound::<ProdbenchTree, Sha256Hasher<Fr>>::get_groth_params(
+        StackedCompound::<ProdbenchTree<Fr>, Sha256Hasher<Fr>>::get_groth_params(
             Some(&mut XorShiftRng::from_seed(SEED)),
             circuit,
             &public_params,
@@ -356,12 +367,12 @@ fn cache_porep_params(porep_config: PoRepConfig) {
         .expect("failed to get groth params");
     }
     {
-        let circuit = <StackedCompound<ProdbenchTree, _> as CompoundProof<
-            StackedDrg<ProdbenchTree, Sha256Hasher<Fr>>,
+        let circuit = <StackedCompound<ProdbenchTree<Fr>, _> as CompoundProof<
+            StackedDrg<ProdbenchTree<Fr>, Sha256Hasher<Fr>>,
             _,
         >>::blank_circuit(&public_params);
 
-        StackedCompound::<ProdbenchTree, Sha256Hasher<Fr>>::get_verifying_key(
+        StackedCompound::<ProdbenchTree<Fr>, Sha256Hasher<Fr>>::get_verifying_key(
             Some(&mut XorShiftRng::from_seed(SEED)),
             circuit,
             &public_params,

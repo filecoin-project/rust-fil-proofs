@@ -2,15 +2,15 @@ use std::fs::{remove_dir_all, remove_file};
 use std::io::stdout;
 
 use anyhow::anyhow;
-use blstrs::Scalar as Fr;
+use ff::PrimeField;
 use fil_proofs_tooling::shared::{create_replica, PROVER_ID, RANDOMNESS};
 use fil_proofs_tooling::{measure, Metadata};
-use filecoin_hashers::{Domain, Hasher};
-use filecoin_proofs::constants::{WINNING_POST_CHALLENGE_COUNT, WINNING_POST_SECTOR_COUNT};
+use filecoin_hashers::Hasher;
+use filecoin_proofs::constants::{DefaultPieceHasher, DefaultTreeHasher, WINNING_POST_CHALLENGE_COUNT, WINNING_POST_SECTOR_COUNT};
 use filecoin_proofs::types::PoStConfig;
 use filecoin_proofs::{
     generate_winning_post, generate_winning_post_sector_challenge, verify_winning_post, with_shape,
-    PoStType,
+    PoseidonArityAllFields, PoStType,
 };
 use log::info;
 use serde::Serialize;
@@ -57,7 +57,11 @@ pub fn run_fallback_post_bench<Tree>(
 ) -> anyhow::Result<()>
 where
     Tree: 'static + MerkleTreeTrait,
-    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+    Tree::Arity: PoseidonArityAllFields,
+    Tree::SubTreeArity: PoseidonArityAllFields,
+    Tree::TopTreeArity: PoseidonArityAllFields,
+    DefaultPieceHasher<Tree::Field>: Hasher<Field = Tree::Field>,
+    DefaultTreeHasher<Tree::Field>: Hasher<Field = Tree::Field>,
 {
     if WINNING_POST_SECTOR_COUNT != 1 {
         return Err(anyhow!(
@@ -142,7 +146,12 @@ where
     Ok(())
 }
 
-pub fn run(sector_size: usize, fake_replica: bool, api_version: ApiVersion) -> anyhow::Result<()> {
+pub fn run<F>(sector_size: usize, fake_replica: bool, api_version: ApiVersion) -> anyhow::Result<()>
+where
+    F: PrimeField,
+    DefaultPieceHasher<F>: Hasher<Field = F>,
+    DefaultTreeHasher<F>: Hasher<Field = F>,
+{
     info!(
         "Benchy Winning PoSt: sector-size={}, fake_replica={}, api_version={}",
         sector_size, fake_replica, api_version
@@ -150,6 +159,7 @@ pub fn run(sector_size: usize, fake_replica: bool, api_version: ApiVersion) -> a
 
     with_shape!(
         sector_size as u64,
+        F,
         run_fallback_post_bench,
         sector_size as u64,
         fake_replica,

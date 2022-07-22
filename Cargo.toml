@@ -5,7 +5,7 @@ members = [
   "storage-proofs-core",
   "storage-proofs-porep",
   "storage-proofs-post",
-#  "fil-proofs-tooling",
+  "fil-proofs-tooling",
 #  "fil-proofs-param",
   "fr32",
   "sha2raw",
