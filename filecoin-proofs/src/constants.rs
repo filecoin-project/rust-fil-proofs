@@ -192,10 +192,10 @@ pub fn is_sector_shape_top2(sector_size: u64) -> bool {
 /// Panics if provided with an unknown sector size.
 #[macro_export]
 macro_rules! with_shape {
-    ($size:expr, $f:ident) => {
-        with_shape!($size, $f, blstrs::Scalar,)
+    ($size:expr, $field:ty, $f:ident) => {
+        with_shape!($size, $field, $f,)
     };
-    ($size:expr, $f:ident, $field:ty, $($args:expr,)*) => {
+    ($size:expr, $field:ty, $f:ident, $($args:expr),* $(,)?) => {
         match $size {
             _x if $size == $crate::constants::SECTOR_SIZE_2_KIB => {
               $f::<$crate::constants::SectorShape2KiB<$field>>($($args),*)
@@ -229,9 +229,6 @@ macro_rules! with_shape {
             },
             _ => panic!("unsupported sector size: {}", $size),
         }
-    };
-    ($size:expr, $f:ident, $($args:expr),*) => {
-        with_shape!($size, $f, blstrs::Scalar, $($args,)*)
     };
 }
 
