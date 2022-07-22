@@ -5,8 +5,10 @@ use std::io::{stdin, stdout};
 use std::str::FromStr;
 
 use anyhow::Result;
+use blstrs::Scalar as Fr;
 use byte_unit::Byte;
 use clap::{value_t, App, AppSettings, Arg, SubCommand};
+use pasta_curves::{Fp, Fq};
 
 use storage_proofs_core::api_version::ApiVersion;
 
@@ -82,6 +84,14 @@ fn main() -> Result<()> {
                 .takes_value(true),
         )
         .arg(
+            Arg::with_name("field")
+                .long("field")
+                .help("The tree hasher's field")
+                .takes_value(true)
+                .possible_values(&["bls", "pallas", "vesta"])
+                .default_value("bls"),
+        )
+        .arg(
             Arg::with_name("api_version")
                 .long("api-version")
                 .required(true)
@@ -98,6 +108,14 @@ fn main() -> Result<()> {
                 .required(true)
                 .help("The data size (e.g. 2KiB)")
                 .takes_value(true),
+        )
+        .arg(
+            Arg::with_name("field")
+                .long("field")
+                .help("The tree hasher's field")
+                .takes_value(true)
+                .possible_values(&["bls", "pallas", "vesta"])
+                .default_value("bls"),
         )
         .arg(
             Arg::with_name("fake")
@@ -122,6 +140,14 @@ fn main() -> Result<()> {
                 .required(true)
                 .help("The data size (e.g. 2KiB)")
                 .takes_value(true),
+        )
+        .arg(
+            Arg::with_name("field")
+                .long("field")
+                .help("The tree hasher's field")
+                .takes_value(true)
+                .possible_values(&["bls", "pallas", "vesta"])
+                .default_value("bls"),
         )
         .arg(
             Arg::with_name("fake")
@@ -185,6 +211,14 @@ fn main() -> Result<()> {
                 .takes_value(true),
         )
         .arg(
+            Arg::with_name("field")
+                .long("field")
+                .help("The tree hasher's field")
+                .takes_value(true)
+                .possible_values(&["bls", "pallas", "vesta"])
+                .default_value("bls"),
+        )
+        .arg(
             Arg::with_name("proofs")
                 .long("proofs")
                 .default_value("1024")
@@ -224,29 +258,64 @@ fn main() -> Result<()> {
             let cache_dir = value_t!(m, "cache", String)?;
             let sector_size = Byte::from_str(value_t!(m, "size", String)?)?.get_bytes() as usize;
             let api_version = ApiVersion::from_str(&value_t!(m, "api_version", String)?)?;
-            window_post::run(
-                sector_size,
-                api_version,
-                cache_dir,
-                preserve_cache,
-                skip_precommit_phase1,
-                skip_precommit_phase2,
-                skip_commit_phase1,
-                skip_commit_phase2,
-                test_resume,
-            )?;
+            match m.value_of("field") {
+                Some("bls") => window_post::run::<Fr>(
+                    sector_size,
+                    api_version,
+                    cache_dir,
+                    preserve_cache,
+                    skip_precommit_phase1,
+                    skip_precommit_phase2,
+                    skip_commit_phase1,
+                    skip_commit_phase2,
+                    test_resume,
+                )?,
+                Some("pallas") => window_post::run::<Fp>(
+                    sector_size,
+                    api_version,
+                    cache_dir,
+                    preserve_cache,
+                    skip_precommit_phase1,
+                    skip_precommit_phase2,
+                    skip_commit_phase1,
+                    skip_commit_phase2,
+                    test_resume,
+                )?,
+                Some("vesta") => window_post::run::<Fq>(
+                    sector_size,
+                    api_version,
+                    cache_dir,
+                    preserve_cache,
+                    skip_precommit_phase1,
+                    skip_precommit_phase2,
+                    skip_commit_phase1,
+                    skip_commit_phase2,
+                    test_resume,
+                )?,
+                _ => unreachable!(),
+            };
         }
         ("winning-post", Some(m)) => {
             let sector_size = Byte::from_str(value_t!(m, "size", String)?)?.get_bytes() as usize;
             let fake_replica = m.is_present("fake");
             let api_version = ApiVersion::from_str(&value_t!(m, "api_version", String)?)?;
-            winning_post::run(sector_size, fake_replica, api_version)?;
+            match m.value_of("field") {
+                Some("bls") => winning_post::run::<Fr>(sector_size, fake_replica, api_version)?,
+                Some("pallas") => winning_post::run::<Fp>(sector_size, fake_replica, api_version)?,
+                Some("vesta") => winning_post::run::<Fq>(sector_size, fake_replica, api_version)?,
+                _ => unreachable!(),
+            };
         }
         ("window-post-fake", Some(m)) => {
             let sector_size = Byte::from_str(value_t!(m, "size", String)?)?.get_bytes() as usize;
             let fake_replica = m.is_present("fake");
             let api_version = ApiVersion::from_str(&value_t!(m, "api_version", String)?)?;
-            window_post_fake::run(sector_size, fake_replica, api_version)?;
+            match m.value_of("field") {
+                Some("bls") => window_post_fake::run::<Fr>(sector_size, fake_replica, api_version)?,
+                Some("pallas") => winning_post::run::<Fp>(sector_size, fake_replica, api_version)?,
+                Some("vesta") => winning_post::run::<Fq>(sector_size, fake_replica, api_version)?,
+                _ => unreachable!(),
+            };
         }
         ("hash-constraints", Some(_m)) => {
             hash_fns::run()?;
@@ -255,7 +324,12 @@ fn main() -> Result<()> {
             let size = Byte::from_str(value_t!(m, "size", String)?)?.get_bytes() as usize;
 
             let proofs = value_t!(m, "proofs", usize)?;
-            merkleproofs::run(size, proofs, m.is_present("validate"))?;
+            match m.value_of("field") {
+                Some("bls") => merkleproofs::run::<Fr>(size, proofs, m.is_present("validate"))?,
+                Some("pallas") => merkleproofs::run::<Fp>(size, proofs, m.is_present("validate"))?,
+                Some("vesta") => merkleproofs::run::<Fq>(size, proofs, m.is_present("validate"))?,
+                _ => unreachable!(),
+            };
         }
         ("prodbench", Some(m)) => {
             let inputs: ProdbenchInputs = if m.is_present("config") {
@@ -269,13 +343,35 @@ fn main() -> Result<()> {
             }
             .expect("failed to deserialize stdin to ProdbenchInputs");
 
-            let outputs = prodbench::run(
-                inputs,
-                m.is_present("skip-seal-proof"),
-                m.is_present("skip-post-proof"),
-                m.is_present("only-replicate"),
-                m.is_present("only-add-piece"),
-            );
+            let skip_seal_proof = m.is_present("skip-seal-proof");
+            let skip_post_proof = m.is_present("skip-post-proof");
+            let only_replicate = m.is_present("only-replicate");
+            let only_add_piece = m.is_present("only_add_piece");
+
+            let outputs = match m.value_of("field") {
+                Some("bls") => prodbench::run::<Fr>(
+                    inputs,
+                    skip_seal_proof,
+                    skip_post_proof,
+                    only_replicate,
+                    only_add_piece,
+                ),
+                Some("pallas") => prodbench::run::<Fp>(
+                    inputs,
+                    skip_seal_proof,
+                    skip_post_proof,
+                    only_replicate,
+                    only_add_piece,
+                ),
+                Some("vesta") => prodbench::run::<Fq>(
+                    inputs,
+                    skip_seal_proof,
+                    skip_post_proof,
+                    only_replicate,
+                    only_add_piece,
+                ),
+                _ => unreachable!(),
+            };
 
             serde_json::to_writer(stdout(), &outputs)
                 .expect("failed to write ProdbenchOutput to stdout")

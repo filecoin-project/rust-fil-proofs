@@ -2,14 +2,14 @@ use std::collections::BTreeMap;
 use std::fs::{remove_dir_all, remove_file};
 use std::io::stdout;
 
-use blstrs::Scalar as Fr;
+use ff::PrimeField;
 use fil_proofs_tooling::shared::{create_replica, PROVER_ID, RANDOMNESS};
 use fil_proofs_tooling::{measure, Metadata};
-use filecoin_hashers::{Domain, Hasher};
-use filecoin_proofs::constants::{WINDOW_POST_CHALLENGE_COUNT, WINDOW_POST_SECTOR_COUNT};
+use filecoin_hashers::Hasher;
+use filecoin_proofs::constants::{DefaultPieceHasher, DefaultTreeHasher, WINDOW_POST_CHALLENGE_COUNT, WINDOW_POST_SECTOR_COUNT};
 use filecoin_proofs::types::{PoStConfig, SectorSize};
 use filecoin_proofs::{
-    generate_window_post, verify_window_post, with_shape, PoStType, PrivateReplicaInfo,
+    generate_window_post, verify_window_post, with_shape, PoseidonArityAllFields, PoStType, PrivateReplicaInfo,
     PublicReplicaInfo,
 };
 use log::info;
@@ -54,7 +54,11 @@ pub fn run_window_post_bench<Tree>(
 ) -> anyhow::Result<()>
 where
     Tree: 'static + MerkleTreeTrait,
-    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+    Tree::Arity: PoseidonArityAllFields,
+    Tree::SubTreeArity: PoseidonArityAllFields,
+    Tree::TopTreeArity: PoseidonArityAllFields,
+    DefaultPieceHasher<Tree::Field>: Hasher<Field = Tree::Field>,
+    DefaultTreeHasher<Tree::Field>: Hasher<Field = Tree::Field>,
 {
     let arbitrary_porep_id = [66; 32];
     let sector_count = *WINDOW_POST_SECTOR_COUNT
@@ -125,7 +129,12 @@ where
     Ok(())
 }
 
-pub fn run(sector_size: usize, fake_replica: bool, api_version: ApiVersion) -> anyhow::Result<()> {
+pub fn run<F>(sector_size: usize, fake_replica: bool, api_version: ApiVersion) -> anyhow::Result<()>
+where
+    F: PrimeField,
+    DefaultPieceHasher<F>: Hasher<Field = F>,
+    DefaultTreeHasher<F>: Hasher<Field = F>,
+{
     info!(
         "Benchy Window PoSt Fake: sector-size={}, fake_replica={}, api_version={}",
         sector_size, fake_replica, api_version
@@ -133,6 +142,7 @@ pub fn run(sector_size: usize, fake_replica: bool, api_version: ApiVersion) -> a
 
     with_shape!(
         sector_size as u64,
+        F,
         run_window_post_bench,
         sector_size as u64,
         fake_replica,

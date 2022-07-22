@@ -6,7 +6,7 @@ use std::path::Path;
 use anyhow::Result;
 use blstrs::Scalar as Fr;
 use clap::{value_t, App, Arg};
-use filecoin_hashers::{sha256::Sha256Hasher, Domain, Hasher};
+use filecoin_hashers::{sha256::Sha256Hasher, Hasher};
 use filecoin_proofs::{
     with_shape, DRG_DEGREE, EXP_DEGREE, SECTOR_SIZE_2_KIB, SECTOR_SIZE_32_GIB, SECTOR_SIZE_512_MIB,
     SECTOR_SIZE_64_GIB, SECTOR_SIZE_8_MIB,
@@ -33,7 +33,7 @@ fn gen_graph_cache<Tree>(
 ) -> Result<()>
 where
     Tree: 'static + MerkleTreeTrait,
-    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+    Sha256Hasher<Tree::Field>: Hasher<Field = Tree::Field>,
 {
     let nodes = (sector_size / 32) as usize;
 
@@ -52,7 +52,7 @@ where
         api_version,
     };
 
-    let pp = StackedDrg::<Tree, Sha256Hasher<Fr>>::setup(&sp).expect("failed to setup DRG");
+    let pp = StackedDrg::<Tree, Sha256Hasher<Tree::Field>>::setup(&sp).expect("failed to setup DRG");
     let parent_cache = pp.graph.parent_cache()?;
 
     let data = ParentCacheSummary {
@@ -213,8 +213,12 @@ fn main() -> Result<()> {
             continue;
         }
 
+        // TODO (jake): should the parent cache depend on the field; should the parent cache
+        // identifier contain the field name (currently the hasher name does not depend on the
+        // field, therefore using `Fr` versus a field, passed in via the cli, has not effect here)?
         with_shape!(
             sector_size as u64,
+            Fr,
             gen_graph_cache,
             sector_size as usize,
             porep_id,

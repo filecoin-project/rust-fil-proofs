@@ -2,8 +2,9 @@ use std::fs::{create_dir, remove_dir_all};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use anyhow::{ensure, Result};
+use ff::PrimeField;
 use filecoin_hashers::Hasher;
-use filecoin_proofs::with_shape;
+use filecoin_proofs::{with_shape, DefaultTreeHasher};
 use log::{debug, info};
 use rand::{thread_rng, Rng};
 use storage_proofs_core::merkle::{
@@ -101,9 +102,14 @@ pub fn run_merkleproofs_bench<Tree: 'static + MerkleTreeTrait>(
     Ok(())
 }
 
-pub fn run(size: usize, proofs_count: usize, validate: bool) -> Result<()> {
+pub fn run<F>(size: usize, proofs_count: usize, validate: bool) -> Result<()>
+where
+    F: PrimeField,
+    DefaultTreeHasher<F>: Hasher,
+{
     with_shape!(
         size as u64,
+        F,
         run_merkleproofs_bench,
         size,
         proofs_count,
