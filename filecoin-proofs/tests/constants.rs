@@ -1,3 +1,4 @@
+use blstrs::Scalar as Fr;
 use filecoin_proofs::{
     with_shape, SECTOR_SIZE_16_MIB, SECTOR_SIZE_1_GIB, SECTOR_SIZE_2_KIB, SECTOR_SIZE_32_GIB,
     SECTOR_SIZE_4_KIB, SECTOR_SIZE_512_MIB, SECTOR_SIZE_64_GIB, SECTOR_SIZE_8_MIB,
@@ -76,7 +77,7 @@ fn test_with_shape_macro() {
 
 fn test_with_shape_macro_aux(sector_size: u64) {
     let expected = canonical_shape(sector_size);
-    let arities = with_shape!(sector_size, arities_to_usize);
+    let arities = with_shape!(sector_size, Fr, arities_to_usize);
     assert_eq!(
         arities, expected,
         "Wrong shape for sector size {}: have {:?} but need {:?}.",
