@@ -4,7 +4,6 @@ use std::str::FromStr;
 
 use blstrs::Scalar as Fr;
 use dialoguer::{theme::ColorfulTheme, MultiSelect};
-use filecoin_hashers::{Domain, Hasher};
 use filecoin_proofs::{
     constants::{
         DefaultPieceHasher, POREP_PARTITIONS, PUBLISHED_SECTOR_SIZES, WINDOW_POST_CHALLENGE_COUNT,
@@ -29,8 +28,7 @@ use structopt::StructOpt;
 
 fn cache_porep_params<Tree>(porep_config: PoRepConfig)
 where
-    Tree: 'static + MerkleTreeTrait,
-    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+    Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher<Fr>, Field = Fr>,
 {
     info!("generating PoRep groth params");
 
@@ -42,25 +40,25 @@ where
     )
     .expect("failed to get public params from config");
 
-    let circuit = <StackedCompound<Tree, DefaultPieceHasher> as CompoundProof<
-        StackedDrg<Tree, DefaultPieceHasher>,
-        StackedCircuit<Tree, DefaultPieceHasher>,
+    let circuit = <StackedCompound<Tree, DefaultPieceHasher<Fr>> as CompoundProof<
+        StackedDrg<Tree, DefaultPieceHasher<Fr>>,
+        StackedCircuit<Tree, DefaultPieceHasher<Fr>>,
     >>::blank_circuit(&public_params);
 
-    let _ = StackedCompound::<Tree, DefaultPieceHasher>::get_param_metadata(
+    let _ = StackedCompound::<Tree, DefaultPieceHasher<Fr>>::get_param_metadata(
         circuit.clone(),
         &public_params,
     )
     .expect("failed to get metadata");
 
-    let _ = StackedCompound::<Tree, DefaultPieceHasher>::get_groth_params(
+    let _ = StackedCompound::<Tree, DefaultPieceHasher<Fr>>::get_groth_params(
         Some(&mut OsRng),
         circuit.clone(),
         &public_params,
     )
     .expect("failed to get groth params");
 
-    let _ = StackedCompound::<Tree, DefaultPieceHasher>::get_verifying_key(
+    let _ = StackedCompound::<Tree, DefaultPieceHasher<Fr>>::get_verifying_key(
         Some(&mut OsRng),
         circuit,
         &public_params,
@@ -70,8 +68,7 @@ where
 
 fn cache_winning_post_params<Tree>(post_config: &PoStConfig)
 where
-    Tree: 'static + MerkleTreeTrait,
-    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+    Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher<Fr>, Field = Fr>,
 {
     info!("generating Winning-PoSt groth params");
 
@@ -100,8 +97,7 @@ where
 
 fn cache_window_post_params<Tree>(post_config: &PoStConfig)
 where
-    Tree: 'static + MerkleTreeTrait,
-    <Tree::Hasher as Hasher>::Domain: Domain<Field = Fr>,
+    Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher<Fr>, Field = Fr>,
 {
     info!("generating Window-PoSt groth params");
 
@@ -130,7 +126,7 @@ where
 
 fn cache_empty_sector_update_params<Tree>(porep_config: PoRepConfig)
 where
-    Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher<Fr>>,
+    Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher<Fr>, Field = Fr>,
 {
     info!("generating EmptySectorUpdate groth params");
 
@@ -194,6 +190,7 @@ struct Opt {
 fn generate_params_post(sector_size: u64, api_version: ApiVersion) {
     with_shape!(
         sector_size,
+        Fr,
         cache_winning_post_params,
         &PoStConfig {
             sector_size: SectorSize(sector_size),
@@ -207,6 +204,7 @@ fn generate_params_post(sector_size: u64, api_version: ApiVersion) {
 
     with_shape!(
         sector_size,
+        Fr,
         cache_window_post_params,
         &PoStConfig {
             sector_size: SectorSize(sector_size),
@@ -226,6 +224,7 @@ fn generate_params_post(sector_size: u64, api_version: ApiVersion) {
 fn generate_params_porep(sector_size: u64, api_version: ApiVersion) {
     with_shape!(
         sector_size,
+        Fr,
         cache_porep_params,
         PoRepConfig {
             sector_size: SectorSize(sector_size),
@@ -245,6 +244,7 @@ fn generate_params_porep(sector_size: u64, api_version: ApiVersion) {
 fn generate_params_empty_sector_update(sector_size: u64, api_version: ApiVersion) {
     with_shape!(
         sector_size,
+        Fr,
         cache_empty_sector_update_params,
         PoRepConfig {
             sector_size: SectorSize(sector_size),
