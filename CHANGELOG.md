@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://book.async.rs/overview
 
 ## Unreleased
 
+## [11.1.1] - 2022-06-15
+
+- Lock versions to the correct minor number [#1614](https://github.com/filecoin-project/rust-fil-proofs/pull/1614)
+
+## [11.1.0] - 2022-06-13
+
+- Updates for aggregate proof versioning support [#1612](https://github.com/filecoin-project/rust-fil-proofs/pull/1612)
+
 ## [11.0.2] - 2022-02-09
 
 - Fix cache clearing by resetting the cache path first [#1563](https://github.com/filecoin-project/rust-fil-proofs/pull/1563)
@@ -316,7 +324,9 @@ mainnet ready and will be replaced in a future version.  This release is intende
 
 - Initial stable release
 
-[Unreleased]: https://github.com/filecoin-project/rust-fil-proofs/compare/v11.0.2...HEAD
+[Unreleased]: https://github.com/filecoin-project/rust-fil-proofs/compare/v11.1.1...HEAD
+[11.1.1]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v11.1.1
+[11.1.0]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v11.1.0
 [11.0.2]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v11.0.2
 [11.0.1]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v11.0.1
 [11.0.0]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v11.0.0

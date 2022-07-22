@@ -23,8 +23,7 @@ use tar::Archive;
 
 lazy_static! {
     static ref CLI_ABOUT: String = format!(
-        "Downloads missing or outdated Groth parameter files from ipfs using ipget.\n\
-        \n\
+        "Downloads missing or outdated Groth parameter files from ipfs using ipget.\n\n
         Set the $FIL_PROOFS_PARAMETER_CACHE env-var to specify the path to the parameter cache
         directory (location where params are written), otherwise params will be written to '{}'.",
         parameter_cache_dir_name(),
@@ -32,7 +31,7 @@ lazy_static! {
 }
 
 const DEFAULT_JSON: &str = include_str!("../../parameters.json");
-const DEFAULT_IPGET_VERSION: &str = "v0.6.0";
+const DEFAULT_IPGET_VERSION: &str = "v0.8.1";
 
 #[inline]
 fn get_ipget_dir(version: &str) -> String {

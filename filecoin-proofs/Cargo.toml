@@ -9,36 +9,36 @@ repository = "https://github.com/filecoin-project/rust-fil-proofs"
 readme = "README.md"
 
 [dependencies]
-storage-proofs-core = { path = "../storage-proofs-core", version = "^11.0.0", default-features = false}
-storage-proofs-porep = { path = "../storage-proofs-porep", version = "^11.0.0", default-features = false }
-storage-proofs-post = { path = "../storage-proofs-post", version = "^11.0.0", default-features = false }
-storage-proofs-update = { path = "../storage-proofs-update", version = "^11.0.0", default-features = false }
-filecoin-hashers = { version = "^6.0.0", path = "../filecoin-hashers", default-features = false, features = ["poseidon", "sha256"] }
+storage-proofs-core = { path = "../storage-proofs-core", version = "~11.0.0", default-features = false}
+storage-proofs-porep = { path = "../storage-proofs-porep", version = "~11.0.0", default-features = false }
+storage-proofs-post = { path = "../storage-proofs-post", version = "~11.0.0", default-features = false }
+storage-proofs-update = { path = "../storage-proofs-update", version = "~11.0.0", default-features = false }
+filecoin-hashers = { version = "~6.0.0", path = "../filecoin-hashers", default-features = false, features = ["poseidon", "sha256"] }
 rand = "0.8"
 lazy_static = "1.2"
 memmap = "0.7"
 serde = { version = "1.0", features = ["rc", "derive"] }
 serde_json = "1.0"
 blake2b_simd = "1.0.0"
-bellperson = "0.18.0"
+bellperson = "0.22.0"
 log = "0.4.7"
 rayon = "1.1.0"
 hex = "0.4.0"
-merkletree = "0.21.0"
+merkletree = "0.22.0"
 bincode = "1.1.2"
 anyhow = "1.0.23"
 sha2 = "0.10.2"
 typenum = "1.11.2"
 gperftools = { version = "0.2", optional = true }
 generic-array = "0.14.4"
-fr32 = { path = "../fr32", version = "^4.0.0", default-features = false }
+fr32 = { path = "../fr32", version = "~4.0.0", default-features = false }
 once_cell = "1.8.0"
-blstrs = "0.4.0"
+blstrs = "0.5.0"
 
 [dev-dependencies]
 criterion = "0.3"
 tempfile = "3"
-ff = "0.11.0"
+ff = "0.12.0"
 fil_logger = "0.1.6"
 rand_xorshift = "0.3.0"
 
