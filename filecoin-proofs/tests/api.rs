@@ -364,7 +364,6 @@ fn test_seal_proof_aggregation_3_2kib_porep_id_v1_1_base_8() -> Result<()> {
 
     let porep_id = ARBITRARY_POREP_ID_V1_1_0;
     assert!(!is_legacy_porep_id(porep_id));
-    aggregate_proofs::<SectorShape2KiB>(SECTOR_SIZE_2_KIB<Fr>, &porep_id, proofs_to_aggregate)
     aggregate_proofs::<SectorShape2KiB<Fr>>(SECTOR_SIZE_2_KIB, &porep_id, proofs_to_aggregate)
 }
 
