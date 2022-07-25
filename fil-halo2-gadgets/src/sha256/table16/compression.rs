@@ -21,7 +21,7 @@ mod subregion_main;
 use compression_gates::CompressionGate;
 
 // TODO (jake): remove
-pub use compression_util::{get_d_row, get_h_row, match_state, RoundIdx};
+pub use compression_util::{get_d_row, get_h_row, match_state, InitialRound, RoundIdx};
 
 pub trait UpperSigmaVar<
     const A_LEN: usize,

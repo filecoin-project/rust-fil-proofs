@@ -19,8 +19,8 @@ impl<F: FieldExt> CompressionConfig<F> {
         let e = self.decompose_e(region, RoundIdx::Init, Value::known(iv[4]))?;
 
         // Decompose F, G
-        let f = self.decompose_f(region, RoundIdx::Init, Value::known(iv[5]))?;
-        let g = self.decompose_g(region, RoundIdx::Init, Value::known(iv[6]))?;
+        let f = self.decompose_f(region, InitialRound, Value::known(iv[5]))?;
+        let g = self.decompose_g(region, InitialRound, Value::known(iv[6]))?;
 
         // Assign H
         let h_row = get_h_row(RoundIdx::Init);
@@ -30,8 +30,8 @@ impl<F: FieldExt> CompressionConfig<F> {
         let a = self.decompose_a(region, RoundIdx::Init, Value::known(iv[0]))?;
 
         // Decompose B, C
-        let b = self.decompose_b(region, RoundIdx::Init, Value::known(iv[1]))?;
-        let c = self.decompose_c(region, RoundIdx::Init, Value::known(iv[2]))?;
+        let b = self.decompose_b(region, InitialRound, Value::known(iv[1]))?;
+        let c = self.decompose_c(region, InitialRound, Value::known(iv[2]))?;
 
         // Assign D
         let d_row = get_d_row(RoundIdx::Init);
@@ -64,9 +64,9 @@ impl<F: FieldExt> CompressionConfig<F> {
 
         // Decompose F, G
         let f = f.dense_halves.value();
-        let f = self.decompose_f(region, RoundIdx::Init, f)?;
+        let f = self.decompose_f(region, InitialRound, f)?;
         let g = g.dense_halves.value();
-        let g = self.decompose_g(region, RoundIdx::Init, g)?;
+        let g = self.decompose_g(region, InitialRound, g)?;
 
         // Assign H
         let h = h.value();
@@ -79,9 +79,9 @@ impl<F: FieldExt> CompressionConfig<F> {
 
         // Decompose B, C
         let b = b.dense_halves.value();
-        let b = self.decompose_b(region, RoundIdx::Init, b)?;
+        let b = self.decompose_b(region, InitialRound, b)?;
         let c = c.dense_halves.value();
-        let c = self.decompose_c(region, RoundIdx::Init, c)?;
+        let c = self.decompose_c(region, InitialRound, c)?;
 
         // Assign D
         let d = d.value();
@@ -104,7 +104,7 @@ impl<F: FieldExt> CompressionConfig<F> {
     pub fn decompose_b(
         &self,
         region: &mut Region<'_, F>,
-        round_idx: RoundIdx,
+        round_idx: InitialRound,
         b_val: Value<u32>,
     ) -> Result<RoundWord<F>, Error> {
         let row = get_decompose_b_row(round_idx);
@@ -118,7 +118,7 @@ impl<F: FieldExt> CompressionConfig<F> {
     pub fn decompose_c(
         &self,
         region: &mut Region<'_, F>,
-        round_idx: RoundIdx,
+        round_idx: InitialRound,
         c_val: Value<u32>,
     ) -> Result<RoundWord<F>, Error> {
         let row = get_decompose_c_row(round_idx);
@@ -132,7 +132,7 @@ impl<F: FieldExt> CompressionConfig<F> {
     pub fn decompose_f(
         &self,
         region: &mut Region<'_, F>,
-        round_idx: RoundIdx,
+        round_idx: InitialRound,
         f_val: Value<u32>,
     ) -> Result<RoundWord<F>, Error> {
         let row = get_decompose_f_row(round_idx);
@@ -146,7 +146,7 @@ impl<F: FieldExt> CompressionConfig<F> {
     pub fn decompose_g(
         &self,
         region: &mut Region<'_, F>,
-        round_idx: RoundIdx,
+        round_idx: InitialRound,
         g_val: Value<u32>,
     ) -> Result<RoundWord<F>, Error> {
         let row = get_decompose_g_row(round_idx);
