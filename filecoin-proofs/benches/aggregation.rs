@@ -1,6 +1,7 @@
 use std::sync::Once;
 use std::time::Duration;
 
+use blstrs::Scalar as Fr;
 use criterion::{black_box, criterion_group, criterion_main, Criterion, Throughput};
 use filecoin_proofs::{
     caches::{get_stacked_srs_key, get_stacked_srs_verifier_key},
@@ -54,7 +55,7 @@ fn bench_seal_inputs(c: &mut Criterion) {
             .bench_function(format!("get-seal-inputs-{}", iterations), |b| {
                 b.iter(|| {
                     for _ in 0..iterations {
-                        get_seal_inputs::<SectorShape2KiB>(
+                        get_seal_inputs::<SectorShape2KiB<Fr>>(
                             config, comm_r, comm_d, prover_id, sector_id, ticket, seed,
                         )
                         .expect("get seal inputs failed");
@@ -99,7 +100,7 @@ fn bench_stacked_srs_key(c: &mut Criterion) {
             |b| {
                 b.iter(|| {
                     black_box(
-                        get_stacked_srs_key::<SectorShape32GiB>(config, num_proofs_to_aggregate)
+                        get_stacked_srs_key::<SectorShape32GiB<Fr>>(config, num_proofs_to_aggregate)
                             .expect("get stacked srs key failed"),
                     )
                 })
@@ -141,7 +142,7 @@ fn bench_stacked_srs_verifier_key(c: &mut Criterion) {
                 |b| {
                     b.iter(|| {
                         black_box(
-                            get_stacked_srs_verifier_key::<SectorShape32GiB>(
+                            get_stacked_srs_verifier_key::<SectorShape32GiB<Fr>>(
                                 config,
                                 num_proofs_to_aggregate,
                             )

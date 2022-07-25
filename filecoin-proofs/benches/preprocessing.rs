@@ -1,6 +1,7 @@
 use std::io::{Cursor, Read};
 use std::time::Duration;
 
+use blstrs::Scalar as Fr;
 use criterion::{criterion_group, criterion_main, Criterion, Throughput};
 use filecoin_proofs::{
     add_piece, get_seal_inputs, PaddedBytesAmount, PoRepConfig, PoRepProofPartitions,
@@ -84,7 +85,7 @@ fn add_piece_benchmark(c: &mut Criterion) {
 
                 start_profile(&format!("add_piece_{}", size));
                 b.iter(|| {
-                    add_piece(
+                    add_piece::<_, _, Fr>(
                         Cursor::new(&data),
                         &mut buf,
                         unpadded_size,
@@ -141,7 +142,7 @@ fn get_seal_inputs_benchmark(c: &mut Criterion) {
                 start_profile(&format!("get_seal_inputs_{}", iterations));
                 b.iter(|| {
                     for _ in 0..iterations {
-                        get_seal_inputs::<SectorShape2KiB>(
+                        get_seal_inputs::<SectorShape2KiB<Fr>>(
                             config, comm_r, comm_d, prover_id, sector_id, ticket, seed,
                         )
                         .unwrap();
