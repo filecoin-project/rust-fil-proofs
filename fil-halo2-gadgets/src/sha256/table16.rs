@@ -24,7 +24,7 @@ use message_schedule::*;
 use spread_table::*;
 
 // TODO (jake): remove
-pub use compression::{get_d_row, get_h_row, match_state, RoundIdx, StateWord};
+pub use compression::{get_d_row, get_h_row, match_state, InitialRound, RoundIdx, StateWord};
 
 const ROUNDS: usize = 64;
 pub(super) const STATE: usize = 8;

@@ -21,6 +21,7 @@ use crate::{
 
 // Don't reformat code copied from `halo2_gadgets` repo.
 #[rustfmt::skip]
+#[allow(dead_code)]
 mod table16;
 
 pub use table16::{BlockWord, Table16Chip, Table16Config};
@@ -30,7 +31,7 @@ use table16::{
 };
 
 // TODO (jake): remove
-use table16::{get_d_row, get_h_row, match_state, RoundIdx, StateWord};
+use table16::{get_d_row, get_h_row, match_state, InitialRound, RoundIdx, StateWord};
 
 /// The size of a SHA-256 block, in 32-bit words.
 pub const BLOCK_SIZE: usize = 16;
@@ -805,12 +806,12 @@ impl<F: FieldExt> Sha256Chip<F> {
                 )?;
                 let f = self.config.compression.decompose_f(
                     &mut region,
-                    RoundIdx::Init,
+                    InitialRound,
                     f.value_u32(),
                 )?;
                 let g = self.config.compression.decompose_g(
                     &mut region,
-                    RoundIdx::Init,
+                    InitialRound,
                     g.value_u32(),
                 )?;
                 let h_row = get_h_row(RoundIdx::Init);
@@ -829,12 +830,12 @@ impl<F: FieldExt> Sha256Chip<F> {
                 )?;
                 let b = self.config.compression.decompose_b(
                     &mut region,
-                    RoundIdx::Init,
+                    InitialRound,
                     b.value_u32(),
                 )?;
                 let c = self.config.compression.decompose_c(
                     &mut region,
-                    RoundIdx::Init,
+                    InitialRound,
                     c.value_u32(),
                 )?;
                 let d_row = get_d_row(RoundIdx::Init);
@@ -1406,7 +1407,7 @@ mod tests {
     use crate::AdviceIter;
 
     #[test]
-    fn test_sha256_hash_words_nopad() {
+    fn test_sha256_chip_hash_words_nopad() {
         #[derive(Clone)]
         struct MyConfig<F: FieldExt> {
             sha256: Sha256Config<F>,
@@ -1530,7 +1531,7 @@ mod tests {
     }
 
     #[test]
-    fn test_sha256_pad_and_hash_words() {
+    fn test_sha256_chip_pad_and_hash_words() {
         #[derive(Clone)]
         struct MyConfig<F: FieldExt> {
             sha256: Sha256Config<F>,
@@ -1659,7 +1660,7 @@ mod tests {
     }
 
     #[test]
-    fn test_sha256_hash_field_elems() {
+    fn test_sha256_chip_hash_field_elems() {
         struct MyCircuit;
 
         impl Circuit<Fp> for MyCircuit {
@@ -1813,7 +1814,7 @@ mod tests {
     }
 
     #[test]
-    fn test_sha256_field_words_conversion() {
+    fn test_sha256_chip_field_words_conversion() {
         struct MyCircuit;
 
         impl Circuit<Fp> for MyCircuit {

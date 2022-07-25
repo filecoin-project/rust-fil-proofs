@@ -9,12 +9,10 @@ impl<F: FieldExt> CompressionConfig<F> {
     pub fn assign_round(
         &self,
         region: &mut Region<'_, F>,
-        round_idx: RoundIdx,
+        round_idx: MainRoundIdx,
         state: State<F>,
         schedule_word: &(AssignedBits<F, 16>, AssignedBits<F, 16>),
     ) -> Result<State<F>, Error> {
-        assert!(matches!(round_idx, RoundIdx::Main(_)));
-
         let [a_3, a_4, _a_5, _a_6, a_7, ..] = self.advice;
 
         let (a, b, c, d, e, f, g, h) = match_state(state);
@@ -70,7 +68,7 @@ impl<F: FieldExt> CompressionConfig<F> {
 
         if round_idx < 63.into() {
             // Assign and copy A_new
-            let a_new_row = get_decompose_a_row(round_idx + 1);
+            let a_new_row = get_decompose_a_row((round_idx + 1).into());
             a_new_dense
                 .0
                 .copy_advice(|| "a_new_lo", region, a_7, a_new_row)?;
@@ -79,7 +77,7 @@ impl<F: FieldExt> CompressionConfig<F> {
                 .copy_advice(|| "a_new_hi", region, a_7, a_new_row + 1)?;
 
             // Assign and copy E_new
-            let e_new_row = get_decompose_e_row(round_idx + 1);
+            let e_new_row = get_decompose_e_row((round_idx + 1).into());
             e_new_dense
                 .0
                 .copy_advice(|| "e_new_lo", region, a_7, e_new_row)?;
@@ -88,10 +86,10 @@ impl<F: FieldExt> CompressionConfig<F> {
                 .copy_advice(|| "e_new_hi", region, a_7, e_new_row + 1)?;
 
             // Decompose A into (2, 11, 9, 10)-bit chunks
-            let a_new = self.decompose_a(region, round_idx + 1, a_new_val)?;
+            let a_new = self.decompose_a(region, (round_idx + 1).into(), a_new_val)?;
 
             // Decompose E into (6, 5, 14, 7)-bit chunks
-            let e_new = self.decompose_e(region, round_idx + 1, e_new_val)?;
+            let e_new = self.decompose_e(region, (round_idx + 1).into(), e_new_val)?;
 
             Ok(State::new(
                 StateWord::A(a_new),
