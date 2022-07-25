@@ -208,7 +208,7 @@ fn test_sdr_porep_circuit_512mib_halo2() {
 #[cfg(feature = "big-tests")]
 #[test]
 fn test_sdr_porep_circuit_32gib_halo2() {
-    test_sdr_porep_circuit::<U8, U8, U2, SECTOR_NODES_32_GIB>(false);
+    use storage_proofs_porep::stacked::halo2::constants::SECTOR_NODES_32_GIB;
     test_sdr_porep_circuit::<U8, U8, U0, SECTOR_NODES_32_GIB>(false);
 }
 
