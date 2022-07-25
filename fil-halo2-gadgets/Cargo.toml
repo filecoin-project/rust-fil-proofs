@@ -8,17 +8,9 @@ repository = "https://github.com/filecoin-project/rust-fil-proofs"
 
 [dependencies]
 ff = "0.12.0"
-# halo2_gadgets = { git = "https://github.com/drpetervannostrand/halo2", branch = "sha256-chip", features = ["unstable"] }
-# halo2_proofs = { git = "https://github.com/drpetervannostrand/halo2", branch = "sha256-chip" }
-#
-# halo2_gadgets = { git = "https://github.com/drpetervannostrand/halo2" }
-# halo2_proofs = { git = "https://github.com/drpetervannostrand/halo2" }
-#
 halo2_proofs = "0.2.0"
 halo2_gadgets = "0.2.0"
-# neptune = { git = "https://github.com/filecoin-project/neptune", branch = "fr-as-trait-halo2-circuit" }
-#
-neptune = { git = "https://github.com/filecoin-project/neptune", rev =  "866ea96e879d79461183cfb0b4272af8768af7d4" }
+neptune = { git = "https://github.com/filecoin-project/neptune", branch = "fr-as-trait-halo2-circuit" }
 
 [dev-dependencies]
 rand = "0.8"

@@ -2475,8 +2475,8 @@ dependencies = [
 
 [[package]]
 name = "neptune"
-version = "6.2.0"
-source = "git+https://github.com/filecoin-project/neptune?rev=866ea96e879d79461183cfb0b4272af8768af7d4#866ea96e879d79461183cfb0b4272af8768af7d4"
+version = "7.0.0"
+source = "git+https://github.com/filecoin-project/neptune?branch=fr-as-trait-halo2-circuit#b6ef0c8e8d932a755174918015bb1a1bddda4a2d"
 dependencies = [
  "bellperson",
  "blake2s_simd",
