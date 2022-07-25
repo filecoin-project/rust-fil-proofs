@@ -581,10 +581,10 @@ mod test {
                 challenge_bit_len / base_bit_len
             };
 
-            use neptune::halo2_circuit::PoseidonChipStd;
-            let base_hasher_rows = PoseidonChipStd::<H::Field, U>::num_rows();
-            let sub_hasher_rows = PoseidonChipStd::<H::Field, V>::num_rows();
-            let top_hasher_rows = PoseidonChipStd::<H::Field, W>::num_rows();
+            use neptune::halo2_circuit::PoseidonChip;
+            let base_hasher_rows = PoseidonChip::<H::Field, U>::num_rows();
+            let sub_hasher_rows = PoseidonChip::<H::Field, V>::num_rows();
+            let top_hasher_rows = PoseidonChip::<H::Field, W>::num_rows();
             let insert_rows = 1;
 
             // Four rows for decomposing the challenge into 32 bits.

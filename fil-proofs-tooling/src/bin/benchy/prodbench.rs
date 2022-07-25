@@ -13,9 +13,9 @@ use fil_proofs_tooling::{
 use filecoin_hashers::{sha256::Sha256Hasher, Hasher};
 use filecoin_proofs::{
     clear_cache, parameters::public_params, seal_commit_phase1, seal_commit_phase2,
-    validate_cache_for_commit, DefaultOctLCTree, DefaultOctTree, DefaultTreeHasher, PaddedBytesAmount, PoRepConfig,
-    PoRepProofPartitions, SectorSize, DRG_DEGREE, EXP_DEGREE, LAYERS, POREP_MINIMUM_CHALLENGES,
-    POREP_PARTITIONS,
+    validate_cache_for_commit, DefaultOctLCTree, DefaultOctTree, DefaultTreeHasher,
+    PaddedBytesAmount, PoRepConfig, PoRepProofPartitions, SectorSize, DRG_DEGREE, EXP_DEGREE,
+    LAYERS, POREP_MINIMUM_CHALLENGES, POREP_PARTITIONS,
 };
 use log::info;
 use rand::SeedableRng;

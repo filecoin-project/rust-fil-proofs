@@ -6,11 +6,13 @@ use ff::PrimeField;
 use fil_proofs_tooling::shared::{create_replica, PROVER_ID, RANDOMNESS};
 use fil_proofs_tooling::{measure, Metadata};
 use filecoin_hashers::Hasher;
-use filecoin_proofs::constants::{DefaultPieceHasher, DefaultTreeHasher, WINNING_POST_CHALLENGE_COUNT, WINNING_POST_SECTOR_COUNT};
+use filecoin_proofs::constants::{
+    DefaultPieceHasher, DefaultTreeHasher, WINNING_POST_CHALLENGE_COUNT, WINNING_POST_SECTOR_COUNT,
+};
 use filecoin_proofs::types::PoStConfig;
 use filecoin_proofs::{
     generate_winning_post, generate_winning_post_sector_challenge, verify_winning_post, with_shape,
-    PoseidonArityAllFields, PoStType,
+    PoStType, PoseidonArityAllFields,
 };
 use log::info;
 use serde::Serialize;

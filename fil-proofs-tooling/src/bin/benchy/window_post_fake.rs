@@ -6,11 +6,13 @@ use ff::PrimeField;
 use fil_proofs_tooling::shared::{create_replica, PROVER_ID, RANDOMNESS};
 use fil_proofs_tooling::{measure, Metadata};
 use filecoin_hashers::Hasher;
-use filecoin_proofs::constants::{DefaultPieceHasher, DefaultTreeHasher, WINDOW_POST_CHALLENGE_COUNT, WINDOW_POST_SECTOR_COUNT};
+use filecoin_proofs::constants::{
+    DefaultPieceHasher, DefaultTreeHasher, WINDOW_POST_CHALLENGE_COUNT, WINDOW_POST_SECTOR_COUNT,
+};
 use filecoin_proofs::types::{PoStConfig, SectorSize};
 use filecoin_proofs::{
-    generate_window_post, verify_window_post, with_shape, PoseidonArityAllFields, PoStType, PrivateReplicaInfo,
-    PublicReplicaInfo,
+    generate_window_post, verify_window_post, with_shape, PoStType, PoseidonArityAllFields,
+    PrivateReplicaInfo, PublicReplicaInfo,
 };
 use log::info;
 use serde::Serialize;
