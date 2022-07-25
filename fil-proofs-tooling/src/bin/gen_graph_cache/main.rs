@@ -52,7 +52,8 @@ where
         api_version,
     };
 
-    let pp = StackedDrg::<Tree, Sha256Hasher<Tree::Field>>::setup(&sp).expect("failed to setup DRG");
+    let pp =
+        StackedDrg::<Tree, Sha256Hasher<Tree::Field>>::setup(&sp).expect("failed to setup DRG");
     let parent_cache = pp.graph.parent_cache()?;
 
     let data = ParentCacheSummary {

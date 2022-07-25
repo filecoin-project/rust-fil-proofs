@@ -100,8 +100,11 @@ fn bench_stacked_srs_key(c: &mut Criterion) {
             |b| {
                 b.iter(|| {
                     black_box(
-                        get_stacked_srs_key::<SectorShape32GiB<Fr>>(config, num_proofs_to_aggregate)
-                            .expect("get stacked srs key failed"),
+                        get_stacked_srs_key::<SectorShape32GiB<Fr>>(
+                            config,
+                            num_proofs_to_aggregate,
+                        )
+                        .expect("get stacked srs key failed"),
                     )
                 })
             },

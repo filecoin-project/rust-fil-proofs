@@ -12,7 +12,8 @@ use fil_proofs_tooling::shared::{PROVER_ID, RANDOMNESS, TICKET_BYTES};
 use fil_proofs_tooling::{measure, Metadata};
 use filecoin_hashers::Hasher;
 use filecoin_proofs::constants::{
-    DefaultPieceHasher, DefaultTreeHasher, POREP_PARTITIONS, WINDOW_POST_CHALLENGE_COUNT, WINDOW_POST_SECTOR_COUNT,
+    DefaultPieceHasher, DefaultTreeHasher, POREP_PARTITIONS, WINDOW_POST_CHALLENGE_COUNT,
+    WINDOW_POST_SECTOR_COUNT,
 };
 use filecoin_proofs::types::{
     PaddedBytesAmount, PieceInfo, PoRepConfig, PoRepProofPartitions, PoStConfig,
@@ -22,8 +23,8 @@ use filecoin_proofs::types::{
 use filecoin_proofs::{
     add_piece, generate_piece_commitment, generate_window_post, seal_commit_phase1,
     seal_commit_phase2, seal_pre_commit_phase1, seal_pre_commit_phase2, validate_cache_for_commit,
-    validate_cache_for_precommit_phase2, verify_window_post, with_shape, PoseidonArityAllFields, PoStType,
-    PrivateReplicaInfo, PublicReplicaInfo,
+    validate_cache_for_precommit_phase2, verify_window_post, with_shape, PoStType,
+    PoseidonArityAllFields, PrivateReplicaInfo, PublicReplicaInfo,
 };
 use log::info;
 use serde::{Deserialize, Serialize};

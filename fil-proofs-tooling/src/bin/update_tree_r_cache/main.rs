@@ -9,8 +9,8 @@ use ff::PrimeField;
 use filecoin_hashers::Hasher;
 use filecoin_proofs::{
     is_sector_shape_base, is_sector_shape_sub2, is_sector_shape_sub8, is_sector_shape_top2,
-    with_shape, DefaultTreeDomain, DefaultTreeHasher, PersistentAux, SectorShapeBase, SectorShapeSub2,
-    SectorShapeSub8, SectorShapeTop2, OCT_ARITY,
+    with_shape, DefaultTreeDomain, DefaultTreeHasher, PersistentAux, SectorShapeBase,
+    SectorShapeSub2, SectorShapeSub8, SectorShapeTop2, OCT_ARITY,
 };
 use generic_array::typenum::Unsigned;
 use memmap::MmapOptions;
@@ -132,7 +132,10 @@ fn build_tree_r_last<Tree>(
     sector_size: usize,
     cache: &Path,
     replica_path: &Path,
-) -> Result<(<Tree::Hasher as Hasher>::Domain, Vec<DefaultTreeDomain<Tree::Field>>)>
+) -> Result<(
+    <Tree::Hasher as Hasher>::Domain,
+    Vec<DefaultTreeDomain<Tree::Field>>,
+)>
 where
     Tree: MerkleTreeTrait,
     DefaultTreeHasher<Tree::Field>: Hasher,
@@ -167,7 +170,8 @@ where
             (offset + (sector_size / tree_count)),
             &store_path
         );
-        let tree = SectorShapeBase::<Tree::Field>::from_byte_slice_with_config(slice, config.clone())?;
+        let tree =
+            SectorShapeBase::<Tree::Field>::from_byte_slice_with_config(slice, config.clone())?;
         base_tree_roots.push(tree.root());
     }
 
@@ -454,13 +458,13 @@ fn main() -> Result<()> {
             match m.value_of("field") {
                 Some("bls") => {
                     run_rebuild::<Fr>(size, cache.as_path(), replica.as_path())?;
-                },
+                }
                 Some("pallas") => {
                     run_rebuild::<Fp>(size, cache.as_path(), replica.as_path())?;
-                },
+                }
                 Some("vesta") => {
                     run_rebuild::<Fq>(size, cache.as_path(), replica.as_path())?;
-                },
+                }
                 _ => unreachable!(),
             };
         }

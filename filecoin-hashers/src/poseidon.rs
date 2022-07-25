@@ -21,7 +21,7 @@ use merkletree::{
 };
 use neptune::{
     circuit::poseidon_hash,
-    halo2_circuit::{PoseidonChipStd, PoseidonConfigStd},
+    halo2_circuit::{PoseidonChip, PoseidonConfig},
     Poseidon,
 };
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
@@ -467,7 +467,7 @@ impl Groth16Hasher for PoseidonHasher<Fr> {
     }
 }
 
-impl<F, A> HashInstructions<F> for PoseidonChipStd<F, A>
+impl<F, A> HashInstructions<F> for PoseidonChip<F, A>
 where
     F: FieldExt,
     A: PoseidonArity<F>,
@@ -488,8 +488,8 @@ where
     A: PoseidonArity<F>,
     Self: Hasher<Field = F>,
 {
-    type Chip = PoseidonChipStd<F, A>;
-    type Config = PoseidonConfigStd<F, A>;
+    type Chip = PoseidonChip<F, A>;
+    type Config = PoseidonConfig<F, A>;
 
     fn construct(config: Self::Config) -> Self::Chip {
         Self::Chip::construct(config)

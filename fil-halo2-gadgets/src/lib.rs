@@ -11,7 +11,7 @@ use halo2_proofs::{
     circuit::{AssignedCell, Value},
     plonk::{Advice, Column, ConstraintSystem, Fixed, Instance},
 };
-use neptune::{halo2_circuit::PoseidonChipStd, Arity};
+use neptune::{halo2_circuit::PoseidonChip, Arity};
 
 #[cfg(test)]
 pub(crate) const TEST_SEED: [u8; 16] = [
@@ -86,7 +86,7 @@ impl ColumnBuilder {
     }
 }
 
-impl<F, A> ColumnCount for PoseidonChipStd<F, A>
+impl<F, A> ColumnCount for PoseidonChip<F, A>
 where
     F: FieldExt,
     A: Arity<F>,
