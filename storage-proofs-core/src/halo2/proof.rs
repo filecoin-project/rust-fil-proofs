@@ -252,6 +252,33 @@ where
     )
 }
 
+// Verify multiple proofs (in a single transcript `proofs`) using `SingleVerifier`.
+pub fn verify_proofs<C, Circ>(
+    keypair: &Halo2Keypair<C, Circ>,
+    proofs: &Halo2Proof<C, Circ>,
+    pub_inputs: &[Vec<Vec<C::Scalar>>],
+) -> Result<(), Error>
+where
+    C: CurveAffine,
+    Circ: Circuit<C::Scalar> + CircuitRows,
+{
+    let strategy = SingleVerifier::new(keypair.params());
+    let pub_inputs: Vec<Vec<&[C::Scalar]>> = pub_inputs
+        .iter()
+        .map(|pub_inputs| pub_inputs.iter().map(Vec::as_slice).collect())
+        .collect();
+    let pub_inputs: Vec<&[&[C::Scalar]]> = pub_inputs.iter().map(Vec::as_slice).collect();
+    let mut transcript = TranscriptReader::init(proofs.as_bytes());
+    plonk::verify_proof(
+        keypair.params(),
+        keypair.vk(),
+        strategy,
+        &pub_inputs,
+        &mut transcript,
+    )
+}
+
+// Verify multiple proofs (in a single transcript `proofs`) using `BatchVerifier`.
 pub fn verify_batch_proof<C, Circ>(
     keypair: &Halo2Keypair<C, Circ>,
     batch_proof: &Halo2Proof<C, Circ>,

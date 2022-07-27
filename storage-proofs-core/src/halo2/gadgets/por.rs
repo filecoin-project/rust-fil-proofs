@@ -290,6 +290,292 @@ where
     )
 }
 
+pub mod test_circuit {
+    use super::*;
+
+    use std::any::TypeId;
+    use std::convert::TryInto;
+    use std::marker::PhantomData;
+
+    use fil_halo2_gadgets::{
+        uint32::{UInt32Chip, UInt32Config},
+        ColumnBuilder,
+    };
+    use filecoin_hashers::{poseidon::PoseidonHasher, sha256::Sha256Hasher};
+    use halo2_proofs::{
+        circuit::SimpleFloorPlanner,
+        plonk::{Circuit, Column, ConstraintSystem, Instance},
+    };
+
+    use crate::halo2::{CircuitRows, Halo2Field};
+
+    #[derive(Clone)]
+    pub struct MerkleCircuitConfig<H, U, V, W, const LEAFS: usize>
+    where
+        H: 'static + Halo2Hasher<U> + Halo2Hasher<V> + Halo2Hasher<W>,
+        H::Field: Halo2Field,
+        U: PoseidonArity<H::Field>,
+        V: PoseidonArity<H::Field>,
+        W: PoseidonArity<H::Field>,
+    {
+        pub uint32: UInt32Config<H::Field>,
+        pub base_hasher: <H as Halo2Hasher<U>>::Config,
+        pub base_insert: InsertConfig<H::Field, U>,
+        pub sub: Option<(<H as Halo2Hasher<V>>::Config, InsertConfig<H::Field, V>)>,
+        pub top: Option<(<H as Halo2Hasher<W>>::Config, InsertConfig<H::Field, W>)>,
+        pub pi: Column<Instance>,
+    }
+
+    #[derive(Clone)]
+    pub struct MerkleCircuit<H, U, V, W, const LEAFS: usize>
+    where
+        H: 'static + Halo2Hasher<U> + Halo2Hasher<V> + Halo2Hasher<W>,
+        H::Field: Halo2Field,
+        U: PoseidonArity<H::Field>,
+        V: PoseidonArity<H::Field>,
+        W: PoseidonArity<H::Field>,
+    {
+        pub leaf: Value<H::Field>,
+        pub path: Vec<Vec<Value<H::Field>>>,
+        pub _tree: std::marker::PhantomData<(H, U, V, W)>,
+    }
+
+    impl<H, U, V, W, const LEAFS: usize> Circuit<H::Field> for MerkleCircuit<H, U, V, W, LEAFS>
+    where
+        H: 'static + Halo2Hasher<U> + Halo2Hasher<V> + Halo2Hasher<W>,
+        H::Field: Halo2Field,
+        U: PoseidonArity<H::Field>,
+        V: PoseidonArity<H::Field>,
+        W: PoseidonArity<H::Field>,
+    {
+        type Config = MerkleCircuitConfig<H, U, V, W, LEAFS>;
+        type FloorPlanner = SimpleFloorPlanner;
+
+        fn without_witnesses(&self) -> Self {
+            MerkleCircuit {
+                leaf: Value::unknown(),
+                path: empty_path::<H::Field, U, V, W, LEAFS>(),
+                _tree: PhantomData,
+            }
+        }
+
+        #[allow(clippy::unwrap_used)]
+        fn configure(meta: &mut ConstraintSystem<H::Field>) -> Self::Config {
+            let (advice_eq, advice_neq, fixed_eq, fixed_neq) = ColumnBuilder::new()
+                .with_chip::<UInt32Chip<H::Field>>()
+                .with_chip::<<H as Halo2Hasher<U>>::Chip>()
+                .with_chip::<<H as Halo2Hasher<V>>::Chip>()
+                .with_chip::<<H as Halo2Hasher<W>>::Chip>()
+                .with_chip::<InsertChip<H::Field, U>>()
+                .create_columns(meta);
+
+            let uint32 = UInt32Chip::configure(meta, advice_eq[..9].try_into().unwrap());
+            let base_hasher = <H as Halo2Hasher<U>>::configure(
+                meta,
+                &advice_eq,
+                &advice_neq,
+                &fixed_eq,
+                &fixed_neq,
+            );
+            let base_insert = InsertChip::configure(meta, &advice_eq, &advice_neq);
+
+            let base_arity = U::to_usize();
+            let sub_arity = V::to_usize();
+            let top_arity = W::to_usize();
+
+            let sub = if sub_arity == 0 {
+                None
+            } else if sub_arity == base_arity {
+                Some(change_hasher_insert_arity::<H, U, V>(
+                    base_hasher.clone(),
+                    base_insert.clone(),
+                ))
+            } else {
+                let sub_hasher = <H as Halo2Hasher<V>>::configure(
+                    meta,
+                    &advice_eq,
+                    &advice_neq,
+                    &fixed_eq,
+                    &fixed_neq,
+                );
+                let sub_insert = InsertChip::configure(meta, &advice_eq, &advice_neq);
+                Some((sub_hasher, sub_insert))
+            };
+
+            let top = if top_arity == 0 {
+                None
+            } else if top_arity == base_arity {
+                Some(change_hasher_insert_arity::<H, U, W>(
+                    base_hasher.clone(),
+                    base_insert.clone(),
+                ))
+            } else if top_arity == sub_arity {
+                let (sub_hasher, sub_insert) = sub.clone().unwrap();
+                Some(change_hasher_insert_arity::<H, V, W>(
+                    sub_hasher, sub_insert,
+                ))
+            } else {
+                let top_hasher = <H as Halo2Hasher<W>>::configure(
+                    meta,
+                    &advice_eq,
+                    &advice_neq,
+                    &fixed_eq,
+                    &fixed_neq,
+                );
+                let top_insert = InsertChip::configure(meta, &advice_eq, &advice_neq);
+                Some((top_hasher, top_insert))
+            };
+
+            let pi = meta.instance_column();
+            meta.enable_equality(pi);
+
+            MerkleCircuitConfig {
+                uint32,
+                base_hasher,
+                base_insert,
+                sub,
+                top,
+                pi,
+            }
+        }
+
+        fn synthesize(
+            &self,
+            config: Self::Config,
+            mut layouter: impl Layouter<H::Field>,
+        ) -> Result<(), Error> {
+            // Absolute rows of public inputs.
+            const CHALLENGE_ROW: usize = 0;
+            const ROOT_ROW: usize = 1;
+
+            let MerkleCircuitConfig {
+                uint32: uint32_config,
+                base_hasher: base_hasher_config,
+                base_insert: base_insert_config,
+                sub: sub_config,
+                top: top_config,
+                pi: pi_col,
+            } = config;
+
+            let uint32_chip = UInt32Chip::construct(uint32_config);
+
+            <H as Halo2Hasher<U>>::load(&mut layouter, &base_hasher_config)?;
+            let base_hasher_chip = <H as Halo2Hasher<U>>::construct(base_hasher_config);
+            let base_insert_chip = InsertChip::construct(base_insert_config);
+
+            let sub_chips = sub_config.map(|(hasher_config, insert_config)| {
+                let hasher_chip = <H as Halo2Hasher<V>>::construct(hasher_config);
+                let insert_chip = InsertChip::construct(insert_config);
+                (hasher_chip, insert_chip)
+            });
+
+            let top_chips = top_config.map(|(hasher_config, insert_config)| {
+                let hasher_chip = <H as Halo2Hasher<W>>::construct(hasher_config);
+                let insert_chip = InsertChip::construct(insert_config);
+                (hasher_chip, insert_chip)
+            });
+
+            let merkle_chip = MerkleChip::<H, U, V, W>::with_subchips(
+                base_hasher_chip,
+                base_insert_chip,
+                sub_chips,
+                top_chips,
+            );
+
+            let challenge_bits = uint32_chip.pi_assign_bits(
+                layouter.namespace(|| "assign challenge pi as 32 bits"),
+                pi_col,
+                CHALLENGE_ROW,
+            )?;
+
+            let root = merkle_chip.compute_root(
+                layouter.namespace(|| "compute merkle root"),
+                &challenge_bits,
+                self.leaf,
+                &self.path,
+            )?;
+            layouter.constrain_instance(root.cell(), pi_col, ROOT_ROW)
+        }
+    }
+
+    impl<H, U, V, W, const LEAFS: usize> CircuitRows for MerkleCircuit<H, U, V, W, LEAFS>
+    where
+        H: 'static + Halo2Hasher<U> + Halo2Hasher<V> + Halo2Hasher<W>,
+        H::Field: Halo2Field,
+        U: PoseidonArity<H::Field>,
+        V: PoseidonArity<H::Field>,
+        W: PoseidonArity<H::Field>,
+    {
+        fn k(&self) -> u32 {
+            let hasher_type = TypeId::of::<H>();
+            if hasher_type == TypeId::of::<Sha256Hasher<H::Field>>() {
+                // TODO (jake): under which arities and tree size does this increase?
+                17
+            } else if hasher_type == TypeId::of::<PoseidonHasher<H::Field>>() {
+                use neptune::halo2_circuit::PoseidonChip;
+
+                let base_arity = U::to_usize();
+                let sub_arity = V::to_usize();
+                let top_arity = W::to_usize();
+
+                let base_bit_len = base_arity.trailing_zeros() as usize;
+                let sub_bit_len = sub_arity.trailing_zeros() as usize;
+                let top_bit_len = top_arity.trailing_zeros() as usize;
+
+                let mut base_challenge_bit_len = LEAFS.trailing_zeros() as usize;
+                if sub_arity > 0 {
+                    base_challenge_bit_len -= sub_bit_len;
+                }
+                if top_arity > 0 {
+                    base_challenge_bit_len -= top_bit_len;
+                }
+                let base_path_len = base_challenge_bit_len / base_bit_len;
+
+                // Four rows for decomposing the challenge into 32 bits.
+                let challenge_decomp_rows = 4;
+                let base_hasher_rows = PoseidonChip::<H::Field, U>::num_rows();
+                let sub_hasher_rows = PoseidonChip::<H::Field, V>::num_rows();
+                let top_hasher_rows = PoseidonChip::<H::Field, W>::num_rows();
+                // One row per insert.
+                let insert_rows = 1;
+
+                let mut rows = challenge_decomp_rows;
+                rows += base_path_len * (base_hasher_rows + insert_rows);
+                if sub_arity > 0 {
+                    rows += sub_hasher_rows + insert_rows;
+                }
+                if top_arity > 0 {
+                    rows += top_hasher_rows + insert_rows;
+                };
+
+                (rows as f32).log2().ceil() as u32
+            } else {
+                unimplemented!("hasher must be poseidon or sha256");
+            }
+        }
+    }
+
+    impl<H, U, V, W, const LEAFS: usize> MerkleCircuit<H, U, V, W, LEAFS>
+    where
+        H: 'static + Halo2Hasher<U> + Halo2Hasher<V> + Halo2Hasher<W>,
+        H::Field: Halo2Field,
+        U: PoseidonArity<H::Field>,
+        V: PoseidonArity<H::Field>,
+        W: PoseidonArity<H::Field>,
+    {
+        pub fn new(leaf: H::Field, path: Vec<Vec<H::Field>>) -> Self {
+            MerkleCircuit {
+                leaf: Value::known(leaf),
+                path: path
+                    .iter()
+                    .map(|sibs| sibs.iter().copied().map(Value::known).collect())
+                    .collect(),
+                _tree: PhantomData,
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
