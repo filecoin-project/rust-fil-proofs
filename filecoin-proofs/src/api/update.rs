@@ -1040,6 +1040,7 @@ where
     Ok(EmptySectorUpdateProof(proof_bytes))
 }
 
+#[allow(clippy::unwrap_used)]
 fn groth16_generate_empty_sector_update_proof_without_vanilla<U, V, W>(
     porep_config: PoRepConfig,
     comm_r_old: Commitment,
@@ -1118,6 +1119,7 @@ where
     multi_proof.to_vec()
 }
 
+#[allow(clippy::unwrap_used)]
 fn halo2_generate_empty_sector_update_proof_without_vanilla<F, U, V, W>(
     porep_config: PoRepConfig,
     comm_r_old: Commitment,

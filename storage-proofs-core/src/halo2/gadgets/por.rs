@@ -889,12 +889,13 @@ mod test {
         #[allow(clippy::unwrap_used)]
         fn expected_root(&self) -> H::Field {
             let challenge = self.challenge.map(|c| c as usize);
+
             let mut challenge_bits = vec![0; 32];
-            for i in 0..32 {
-                challenge.map(|c| {
-                    challenge_bits[i] = c >> i & 1;
-                });
-            }
+            challenge.map(|challenge| {
+                for (i, bit) in challenge_bits.iter_mut().enumerate() {
+                    *bit = challenge >> i & 1;
+                }
+            });
             let mut challenge_bits = challenge_bits.into_iter();
 
             let mut cur = H::Field::default();

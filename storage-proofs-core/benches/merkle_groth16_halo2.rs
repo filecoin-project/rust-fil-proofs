@@ -17,6 +17,7 @@ use storage_proofs_core::{
     por as vanilla,
 };
 
+#[allow(clippy::unit_arg)]
 fn bench_groth16_halo2_poseidon(c: &mut Criterion) {
     // Configure the tree height, arity, and whether or not to benchmark batch proving here:
     const HEIGHT: u32 = 10;
@@ -64,7 +65,7 @@ fn bench_groth16_halo2_poseidon(c: &mut Criterion) {
         )
         .expect("failed to create groth16 public inputs");
 
-        let circ = PoRCircuit::<TreeFr>::new(merkle_proof.clone(), false);
+        let circ = PoRCircuit::<TreeFr>::new(merkle_proof, false);
 
         let proof = groth16::create_random_proof(circ.clone(), &params, &mut rng)
             .expect("failed to create groth16 proof");
@@ -233,6 +234,7 @@ fn bench_groth16_halo2_poseidon(c: &mut Criterion) {
     }
 }
 
+#[allow(clippy::unit_arg)]
 fn bench_groth16_halo2_sha256_arity_2(c: &mut Criterion) {
     // Configure the tree height and arity here:
     const HEIGHT: u32 = 10;
@@ -279,7 +281,7 @@ fn bench_groth16_halo2_sha256_arity_2(c: &mut Criterion) {
         )
         .expect("failed to create groth16 public inputs");
 
-        let circ = PoRCircuit::<TreeFr>::new(merkle_proof.clone(), false);
+        let circ = PoRCircuit::<TreeFr>::new(merkle_proof, false);
 
         let proof = groth16::create_random_proof(circ.clone(), &params, &mut rng)
             .expect("failed to create groth16 proof");
@@ -333,13 +335,8 @@ fn bench_groth16_halo2_sha256_arity_2(c: &mut Criterion) {
     {
         let start = Instant::now();
         black_box(
-            halo2::create_proof(
-                &halo2_keypair,
-                halo2_circ.clone(),
-                &halo2_pub_inputs,
-                &mut rng,
-            )
-            .expect("failed to create halo2 proof"),
+            halo2::create_proof(&halo2_keypair, halo2_circ, &halo2_pub_inputs, &mut rng)
+                .expect("failed to create halo2 proof"),
         );
         println!("\n{}-prover/halo2", benchmark_prefix);
         println!("\t\t\ttime:\t{}s", start.elapsed().as_secs_f32());
@@ -370,6 +367,7 @@ fn bench_groth16_halo2_sha256_arity_2(c: &mut Criterion) {
 
 criterion_group!(
     benches,
-    bench_groth16_halo2_poseidon /*, bench_groth16_halo2_sha256_arity_2*/
+    bench_groth16_halo2_poseidon,
+    bench_groth16_halo2_sha256_arity_2,
 );
 criterion_main!(benches);
