@@ -438,6 +438,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::unwrap_used)]
     fn test_halo2_prove_verify() {
         let blank_circuit = MyCircuit::blank_circuit();
         let keypair = Halo2Keypair::<<Fp as Halo2Field>::Affine, _>::create(&blank_circuit)

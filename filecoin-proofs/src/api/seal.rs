@@ -530,6 +530,7 @@ where
     Ok(SealCommitOutput { proof: proof_bytes })
 }
 
+#[allow(clippy::unwrap_used)]
 fn groth16_seal_commit_phase2<Tree>(
     porep_config: PoRepConfig,
     phase1_output: SealCommitPhase1Output<Tree>,
@@ -671,6 +672,7 @@ where
     Ok(buf)
 }
 
+#[allow(clippy::unwrap_used)]
 fn halo2_seal_commit_phase2<Tree, F>(
     porep_config: PoRepConfig,
     phase1_output: SealCommitPhase1Output<Tree>,
