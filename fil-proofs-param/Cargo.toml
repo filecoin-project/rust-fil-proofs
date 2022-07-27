@@ -31,7 +31,6 @@ structopt = "0.3.12"
 humansize = "1.1.0"
 indicatif = "0.16.2"
 dialoguer = "0.10.0"
-clap = "3.1.6"
 blstrs = "0.5.0"
 
 [dependencies.reqwest]
