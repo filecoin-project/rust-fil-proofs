@@ -949,7 +949,13 @@ fn test_window_post_single_partition_smaller_2kib_base_8() -> Result<()> {
             false,
             version,
         )?;
-        window_post::<SectorShape2KiB<Fr>>(sector_size, sector_count / 2, sector_count, true, version)?;
+        window_post::<SectorShape2KiB<Fr>>(
+            sector_size,
+            sector_count / 2,
+            sector_count,
+            true,
+            version,
+        )?;
     }
 
     Ok(())
@@ -974,7 +980,13 @@ fn test_window_post_two_partitions_matching_2kib_base_8() -> Result<()> {
             false,
             version,
         )?;
-        window_post::<SectorShape2KiB<Fr>>(sector_size, 2 * sector_count, sector_count, true, version)?;
+        window_post::<SectorShape2KiB<Fr>>(
+            sector_size,
+            2 * sector_count,
+            sector_count,
+            true,
+            version,
+        )?;
     }
 
     Ok(())
@@ -999,7 +1011,13 @@ fn test_window_post_two_partitions_matching_4kib_sub_8_2() -> Result<()> {
             false,
             version,
         )?;
-        window_post::<SectorShape4KiB<Fr>>(sector_size, 2 * sector_count, sector_count, true, version)?;
+        window_post::<SectorShape4KiB<Fr>>(
+            sector_size,
+            2 * sector_count,
+            sector_count,
+            true,
+            version,
+        )?;
     }
 
     Ok(())
@@ -1110,7 +1128,13 @@ fn test_window_post_single_partition_matching_2kib_base_8() -> Result<()> {
 
     let versions = vec![ApiVersion::V1_0_0, ApiVersion::V1_1_0];
     for version in versions {
-        window_post::<SectorShape2KiB<Fr>>(sector_size, sector_count, sector_count, false, version)?;
+        window_post::<SectorShape2KiB<Fr>>(
+            sector_size,
+            sector_count,
+            sector_count,
+            false,
+            version,
+        )?;
         window_post::<SectorShape2KiB<Fr>>(sector_size, sector_count, sector_count, true, version)?;
     }
 

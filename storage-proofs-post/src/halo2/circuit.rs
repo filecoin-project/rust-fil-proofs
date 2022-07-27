@@ -64,7 +64,12 @@ where
             let path_r: Vec<Vec<Value<F>>> = merkle_proof
                 .path()
                 .iter()
-                .map(|(siblings, _)| siblings.iter().map(|&sib| Value::known(sib.into())).collect())
+                .map(|(siblings, _)| {
+                    siblings
+                        .iter()
+                        .map(|&sib| Value::known(sib.into()))
+                        .collect()
+                })
                 .collect();
             leafs_r.push(leaf_r);
             paths_r.push(path_r);

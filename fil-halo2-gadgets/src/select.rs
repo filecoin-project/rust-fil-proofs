@@ -254,7 +254,9 @@ mod tests {
             for index in 0..len {
                 let circ = SelectCircuit {
                     arr: arr.clone(),
-                    bits: (0..bit_len).map(|i| Value::known(index >> i & 1 == 1)).collect(),
+                    bits: (0..bit_len)
+                        .map(|i| Value::known(index >> i & 1 == 1))
+                        .collect(),
                     expected: arr[index],
                 };
                 let prover = MockProver::run(7, &circ, vec![]).unwrap();

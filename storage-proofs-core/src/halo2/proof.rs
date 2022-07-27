@@ -60,12 +60,14 @@ unsafe impl<C, Circ> Send for Halo2Keypair<C, Circ>
 where
     C: CurveAffine,
     Circ: Circuit<C::Scalar> + CircuitRows,
-{}
+{
+}
 unsafe impl<C, Circ> Sync for Halo2Keypair<C, Circ>
 where
     C: CurveAffine,
     Circ: Circuit<C::Scalar> + CircuitRows,
-{}
+{
+}
 
 impl<C, Circ> Halo2Keypair<C, Circ>
 where
@@ -118,7 +120,9 @@ where
     C: 'static + Circuit<F> + CircuitRows,
     F: Halo2Field,
 {
-    let keystore_reader = KEYSTORE.read().expect("failed to aquire read lock for halo2 keystore");
+    let keystore_reader = KEYSTORE
+        .read()
+        .expect("failed to aquire read lock for halo2 keystore");
     let keypair_opt = keystore_reader.get::<KeypairLookup<C, F>>();
     if let Some(keypair) = keypair_opt {
         // `keypair` is a reference that will not outlive this function call's lifetime; we must
@@ -405,25 +409,10 @@ mod tests {
                 |mut region| {
                     let mut offset = 0;
                     s_add.enable(&mut region, offset)?;
-                    region.assign_advice(
-                        || "a",
-                        advice[0],
-                        offset,
-                        || self.a,
-                    )?;
-                    region.assign_advice(
-                        || "b",
-                        advice[1],
-                        offset,
-                        || self.b,
-                    )?;
+                    region.assign_advice(|| "a", advice[0], offset, || self.a)?;
+                    region.assign_advice(|| "b", advice[1], offset, || self.b)?;
                     offset += 1;
-                    region.assign_advice(
-                        || "c",
-                        advice[0],
-                        offset,
-                        || self.c,
-                    )?;
+                    region.assign_advice(|| "c", advice[0], offset, || self.c)?;
                     Ok(())
                 },
             )?;
@@ -449,6 +438,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::unwrap_used)]
     fn test_halo2_prove_verify() {
         let blank_circuit = MyCircuit::blank_circuit();
         let keypair = Halo2Keypair::<<Fp as Halo2Field>::Affine, _>::create(&blank_circuit)
@@ -477,6 +467,10 @@ mod tests {
         ];
         let batch_proof = create_batch_proof(&keypair, &circs, &[vec![], vec![]], &mut OsRng)
             .expect("failed to create halo2 batch proof");
-        assert!(verify_batch_proof(&keypair, &batch_proof, &[vec![], vec![]]));
+        assert!(verify_batch_proof(
+            &keypair,
+            &batch_proof,
+            &[vec![], vec![]]
+        ));
     }
 }

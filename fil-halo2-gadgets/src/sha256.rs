@@ -1251,10 +1251,8 @@ impl<F: FieldExt> Sha256WordsChip<F> {
                     word.value_u32().map(u32::to_le_bytes).transpose_array();
 
                 // Assign `words`'s little-endian bytes.
-                for (byte_index, (byte, col)) in le_bytes
-                    .iter()
-                    .zip(&self.config.advice[1..=4])
-                    .enumerate()
+                for (byte_index, (byte, col)) in
+                    le_bytes.iter().zip(&self.config.advice[1..=4]).enumerate()
                 {
                     region.assign_advice(
                         || format!("word le-byte {}", byte_index),
@@ -1359,21 +1357,19 @@ impl<F: FieldExt> Sha256WordsChip<F> {
                     .zip(&self.config.advice[1..])
                     .enumerate()
                 {
-                    word
-                        .copy_advice(
-                            || format!("copy reordered word {}", word_index),
-                            &mut region,
-                            *col,
-                            offset,
-                        )
-                        .map(AssignedBits::<F, 32>)?
-                        .value_u32()
-                        .zip(packed_repr.as_mut())
-                        .map(|(word, repr)| {
-                            repr
-                                .as_mut()[word_index * 4..(word_index + 1) * 4]
-                                .copy_from_slice(&word.to_le_bytes());
-                        });
+                    word.copy_advice(
+                        || format!("copy reordered word {}", word_index),
+                        &mut region,
+                        *col,
+                        offset,
+                    )
+                    .map(AssignedBits::<F, 32>)?
+                    .value_u32()
+                    .zip(packed_repr.as_mut())
+                    .map(|(word, repr)| {
+                        repr.as_mut()[word_index * 4..(word_index + 1) * 4]
+                            .copy_from_slice(&word.to_le_bytes());
+                    });
                 }
 
                 region.assign_advice(
@@ -1381,9 +1377,9 @@ impl<F: FieldExt> Sha256WordsChip<F> {
                     self.config.advice[0],
                     offset,
                     || {
-                        packed_repr
-                            .map(|repr| F::from_repr_vartime(repr)
-                            .expect("words are invalid field element"))
+                        packed_repr.map(|repr| {
+                            F::from_repr_vartime(repr).expect("words are invalid field element")
+                        })
                     },
                 )
             },
@@ -1487,8 +1483,7 @@ mod tests {
                     sha256_chip.hash_nopad(layouter.namespace(|| "sha256"), &preimage)?;
 
                 for (word, expected_word) in digest_words.iter().zip(self.expected_digest.iter()) {
-                    word
-                        .value_u32()
+                    word.value_u32()
                         .zip(expected_word.as_ref())
                         .assert_if_known(|(word, expected_word)| word == *expected_word);
                 }
@@ -1611,8 +1606,7 @@ mod tests {
                 let digest_words = sha256_chip.hash(layouter.namespace(|| "sha256"), &preimage)?;
 
                 for (word, expected_word) in digest_words.iter().zip(self.expected_digest.iter()) {
-                    word
-                        .value_u32()
+                    word.value_u32()
                         .zip(expected_word.as_ref())
                         .assert_if_known(|(word, expected_word)| word == *expected_word);
                 }
@@ -1751,8 +1745,7 @@ mod tests {
                     ];
 
                     for (word, expected_word) in digest_words.iter().zip(expected_digest.iter()) {
-                        word
-                            .zip(*expected_word)
+                        word.zip(*expected_word)
                             .assert_if_known(|(word, expected_word)| word == expected_word);
                     }
                 }
@@ -1785,8 +1778,7 @@ mod tests {
                     ];
 
                     for (word, expected_word) in digest_words.iter().zip(expected_digest.iter()) {
-                        word
-                            .zip(*expected_word)
+                        word.zip(*expected_word)
                             .assert_if_known(|(word, expected_word)| word == expected_word);
                     }
                 }
@@ -1863,7 +1855,10 @@ mod tests {
 
                 // `1`
                 let words_1: Vec<Value<u32>> = sha256_words_chip
-                    .witness_into_words(layouter.namespace(|| "1 into words"), Value::known(Fp::one()))?
+                    .witness_into_words(
+                        layouter.namespace(|| "1 into words"),
+                        Value::known(Fp::one()),
+                    )?
                     .iter()
                     .map(|word| word.value_u32())
                     .collect();
@@ -1878,8 +1873,7 @@ mod tests {
                     Value::known(0),
                 ];
                 for (word, expected_word) in words_1.iter().zip(expected_words_1.iter()) {
-                    word
-                        .zip(*expected_word)
+                    word.zip(*expected_word)
                         .assert_if_known(|(word, expected_word)| word == expected_word);
                 }
 
@@ -1903,8 +1897,7 @@ mod tests {
                     Value::known(0),
                 ];
                 for (word, expected_word) in words_2.iter().zip(expected_words_2.iter()) {
-                    word
-                        .zip(*expected_word)
+                    word.zip(*expected_word)
                         .assert_if_known(|(word, expected_word)| word == expected_word);
                 }
 
@@ -1928,8 +1921,7 @@ mod tests {
                     Value::known(0),
                 ];
                 for (word, expected_word) in words_3.iter().zip(expected_words_3.iter()) {
-                    word
-                        .zip(*expected_word)
+                    word.zip(*expected_word)
                         .assert_if_known(|(word, expected_word)| word == expected_word);
                 }
 
@@ -1960,15 +1952,17 @@ mod tests {
                     Value::known(0),
                 ];
                 for (word, expected_word) in words_4.iter().zip(expected_words_4.iter()) {
-                    word
-                        .zip(*expected_word)
+                    word.zip(*expected_word)
                         .assert_if_known(|(word, expected_word)| word == expected_word);
                 }
 
                 // `-1 mod p`
                 let neg_1 = Fp::zero() - Fp::one();
                 let words_5: Vec<Value<u32>> = sha256_words_chip
-                    .witness_into_words(layouter.namespace(|| "-1 into words"), Value::known(neg_1))?
+                    .witness_into_words(
+                        layouter.namespace(|| "-1 into words"),
+                        Value::known(neg_1),
+                    )?
                     .iter()
                     .map(|word| word.value_u32())
                     .collect();
@@ -1979,8 +1973,7 @@ mod tests {
                     .map(|bytes| Value::known(u32::from_be_bytes(bytes.try_into().unwrap())))
                     .collect();
                 for (word, expected_word) in words_5.iter().zip(expected_words_5.iter()) {
-                    word
-                        .zip(*expected_word)
+                    word.zip(*expected_word)
                         .assert_if_known(|(word, expected_word)| word == expected_word);
                 }
 

@@ -87,7 +87,12 @@ where
             merkle_proof
                 .path()
                 .iter()
-                .map(|(siblings, _)| siblings.iter().map(|&sib| Value::known(sib.into())).collect())
+                .map(|(siblings, _)| {
+                    siblings
+                        .iter()
+                        .map(|&sib| Value::known(sib.into()))
+                        .collect()
+                })
                 .collect::<Vec<Vec<Value<Fp>>>>()
         })
         .collect::<Vec<Vec<Vec<Value<Fp>>>>>()
@@ -209,7 +214,7 @@ where
     // re-generated for each sector (in the interest of runtime)
     trace!("Generating Random TreeR");
     let (replica, tree_r) =
-        generate_tree::<TreeR<U, V, W>, _>(&mut rng, SECTOR_NODES, Some(temp_path.clone()));
+        generate_tree::<TreeR<U, V, W>, _>(&mut rng, SECTOR_NODES, Some(temp_path));
 
     let root_r = tree_r.root();
     let comm_c = Fp::random(&mut rng);
@@ -282,7 +287,12 @@ where
                 merkle_proof
                     .path()
                     .iter()
-                    .map(|(siblings, _)| siblings.iter().map(|&sib| Value::known(sib.into())).collect())
+                    .map(|(siblings, _)| {
+                        siblings
+                            .iter()
+                            .map(|&sib| Value::known(sib.into()))
+                            .collect()
+                    })
                     .collect::<Vec<Vec<Value<Fp>>>>()
             })
             .collect::<Vec<Vec<Vec<Value<Fp>>>>>()

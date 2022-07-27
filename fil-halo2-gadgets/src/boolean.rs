@@ -52,10 +52,10 @@ pub fn i2lebsp<const NUM_BITS: usize>(int: u64) -> [bool; NUM_BITS] {
 
     fn gen_const_array_with_default<Output: Copy, const LEN: usize>(
         default_value: Output,
-        mut closure: impl FnMut(usize) -> Output,
+        closure: impl FnMut(usize) -> Output,
     ) -> [Output; LEN] {
         let mut ret: [Output; LEN] = [default_value; LEN];
-        for (bit, val) in ret.iter_mut().zip((0..LEN).map(|idx| closure(idx))) {
+        for (bit, val) in ret.iter_mut().zip((0..LEN).map(closure)) {
             *bit = val;
         }
         ret
@@ -532,12 +532,8 @@ mod tests {
                     || "decompose",
                     |mut region| {
                         let mut offset = 0;
-                        let value = region.assign_advice(
-                            || "value",
-                            value_col,
-                            offset,
-                            || self.value,
-                        )?;
+                        let value =
+                            region.assign_advice(|| "value", value_col, offset, || self.value)?;
                         offset += 1;
                         le_bits_chip.copy_decompose_within_region(&mut region, offset, value)
                     },
@@ -546,7 +542,8 @@ mod tests {
                 .map(|asn| asn.value().map(Into::into))
                 .collect();
 
-            let expected_bits: [Value<bool>; FIELD_BITS] = self.value
+            let expected_bits: [Value<bool>; FIELD_BITS] = self
+                .value
                 .map(|field| {
                     let le_bits: [bool; FIELD_BITS] = field
                         .to_le_bits()

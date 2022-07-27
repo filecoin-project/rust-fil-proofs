@@ -711,6 +711,7 @@ where
     Ok(proof_bytes)
 }
 
+#[allow(clippy::unwrap_used)]
 fn groth16_generate_window_post_without_vanilla<Tree>(
     post_config: &PoStConfig,
     randomness: &ChallengeSeed,
@@ -847,6 +848,7 @@ where
     FallbackPoStCompound::prove(&pub_params, &pub_inputs, &priv_inputs, &groth_params)?.to_vec()
 }
 
+#[allow(clippy::unwrap_used)]
 fn halo2_generate_window_post_without_vanilla<Tree, F>(
     post_config: &PoStConfig,
     randomness: &ChallengeSeed,
@@ -2000,6 +2002,7 @@ where
     proof.to_vec().map(PartitionSnarkProof)
 }
 
+#[allow(clippy::unwrap_used)]
 fn halo2_generate_single_window_post_with_vanilla<Tree, F>(
     post_config: &PoStConfig,
     randomness: &ChallengeSeed,

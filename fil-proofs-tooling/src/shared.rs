@@ -5,9 +5,10 @@ use std::io::{BufWriter, Seek, SeekFrom, Write};
 use filecoin_hashers::Hasher;
 use filecoin_proofs::{
     add_piece, fauxrep_aux, seal_pre_commit_phase1, seal_pre_commit_phase2,
-    validate_cache_for_precommit_phase2, DefaultPieceHasher, DefaultTreeHasher, MerkleTreeTrait, PaddedBytesAmount, PieceInfo,
-    PoRepConfig, PoRepProofPartitions, PrivateReplicaInfo, PublicReplicaInfo, SealPreCommitOutput,
-    SealPreCommitPhase1Output, SectorSize, UnpaddedBytesAmount, POREP_PARTITIONS,
+    validate_cache_for_precommit_phase2, DefaultPieceHasher, DefaultTreeHasher, MerkleTreeTrait,
+    PaddedBytesAmount, PieceInfo, PoRepConfig, PoRepProofPartitions, PrivateReplicaInfo,
+    PublicReplicaInfo, SealPreCommitOutput, SealPreCommitPhase1Output, SectorSize,
+    UnpaddedBytesAmount, POREP_PARTITIONS,
 };
 use generic_array::typenum::Unsigned;
 use log::info;

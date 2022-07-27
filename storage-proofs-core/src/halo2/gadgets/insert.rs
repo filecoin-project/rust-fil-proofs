@@ -320,7 +320,12 @@ where
         value: &AssignedCell<F, F>,
         index_bits: &[AssignedBit<F>],
     ) -> Result<Vec<AssignedCell<F, F>>, Error> {
-        self.insert_inner(layouter, uninserted, WitnessOrCopy::Copy(value.clone()), index_bits)
+        self.insert_inner(
+            layouter,
+            uninserted,
+            WitnessOrCopy::Copy(value.clone()),
+            index_bits,
+        )
     }
 
     // Witnesses the insertion value and the uninserted array elements.
@@ -331,7 +336,12 @@ where
         value: &Value<F>,
         index_bits: &[AssignedBit<F>],
     ) -> Result<Vec<AssignedCell<F, F>>, Error> {
-        self.insert_inner(layouter, uninserted, WitnessOrCopy::Witness(*value), index_bits)
+        self.insert_inner(
+            layouter,
+            uninserted,
+            WitnessOrCopy::Witness(*value),
+            index_bits,
+        )
     }
 
     fn insert_inner(
@@ -361,11 +371,7 @@ where
                 self.config.s_insert.enable(&mut region, offset)?;
 
                 // Copy the insertion index.
-                for (i, (bit, col)) in index_bits
-                    .iter()
-                    .zip(&self.config.index_bits)
-                    .enumerate()
-                {
+                for (i, (bit, col)) in index_bits.iter().zip(&self.config.index_bits).enumerate() {
                     bit.copy_advice(|| format!("index_bit_{}", i), &mut region, *col, offset)?;
                 }
 
@@ -374,18 +380,17 @@ where
                     WitnessOrCopy::Witness(ref value) => {
                         region.assign_advice(|| "value", self.config.value, offset, || *value)?
                     }
-                    WitnessOrCopy::Copy(ref value) => {
-                        value.copy_advice(|| "copy value", &mut region, self.config.value, offset)?
-                    }
+                    WitnessOrCopy::Copy(ref value) => value.copy_advice(
+                        || "copy value",
+                        &mut region,
+                        self.config.value,
+                        offset,
+                    )?,
                     _ => unreachable!(),
                 };
 
                 // Allocate uninserted array.
-                for (i, (val, col)) in uninserted
-                    .iter()
-                    .zip(&self.config.uninserted)
-                    .enumerate()
-                {
+                for (i, (val, col)) in uninserted.iter().zip(&self.config.uninserted).enumerate() {
                     region.assign_advice(|| format!("uninserted[{}]", i), *col, offset, || *val)?;
                 }
 
@@ -535,8 +540,7 @@ mod test {
             expected.insert(index, self.value);
 
             for (val, expected) in inserted.iter().zip(expected.iter()) {
-                val
-                    .value()
+                val.value()
                     .zip(expected.as_ref())
                     .assert_if_known(|(val, expected)| val == expected);
             }

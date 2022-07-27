@@ -6,15 +6,18 @@ use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use filecoin_hashers::{poseidon::PoseidonHasher, sha256::Sha256Hasher};
 use generic_array::typenum::{Unsigned, U0};
 use halo2_proofs::pasta::Fp;
+use rand::thread_rng;
 use storage_proofs_core::{
     compound_proof::CompoundProof as _,
     gadgets::por::{PoRCircuit, PoRCompound},
-    halo2::{self, gadgets::por::test_circuit::MerkleCircuit, CircuitRows, Halo2Field, Halo2Keypair},
-    merkle::{MerkleTree, MerkleProofTrait, MerkleTreeTrait},
+    halo2::{
+        self, gadgets::por::test_circuit::MerkleCircuit, CircuitRows, Halo2Field, Halo2Keypair,
+    },
+    merkle::{MerkleProofTrait, MerkleTree, MerkleTreeTrait},
     por as vanilla,
 };
-use rand::thread_rng;
 
+#[allow(clippy::unit_arg)]
 fn bench_groth16_halo2_poseidon(c: &mut Criterion) {
     // Configure the tree height, arity, and whether or not to benchmark batch proving here:
     const HEIGHT: u32 = 10;
@@ -47,7 +50,9 @@ fn bench_groth16_halo2_poseidon(c: &mut Criterion) {
 
         let leafs = (0..NUM_LEAFS as u64).map(|i| Fr::from(i).into());
         let tree = TreeFr::new(leafs).expect("failed to create merkle tree");
-        let merkle_proof = tree.gen_proof(CHALLENGE).expect("failed to create merkle proof");
+        let merkle_proof = tree
+            .gen_proof(CHALLENGE)
+            .expect("failed to create merkle proof");
 
         let vanilla_pub_inputs = vanilla::PublicInputs {
             commitment: Some(tree.root()),
@@ -60,7 +65,7 @@ fn bench_groth16_halo2_poseidon(c: &mut Criterion) {
         )
         .expect("failed to create groth16 public inputs");
 
-        let circ = PoRCircuit::<TreeFr>::new(merkle_proof.clone(), false);
+        let circ = PoRCircuit::<TreeFr>::new(merkle_proof, false);
 
         let proof = groth16::create_random_proof(circ.clone(), &params, &mut rng)
             .expect("failed to create groth16 proof");
@@ -74,7 +79,9 @@ fn bench_groth16_halo2_poseidon(c: &mut Criterion) {
         let leaf = Fp::from(CHALLENGE as u64);
         let tree = TreeFp::new(leafs).expect("failed to create merkle tree");
         let root: Fp = tree.root().into();
-        let merkle_proof = tree.gen_proof(CHALLENGE).expect("failed to create merkle proof");
+        let merkle_proof = tree
+            .gen_proof(CHALLENGE)
+            .expect("failed to create merkle proof");
         let path: Vec<Vec<Fp>> = merkle_proof
             .path()
             .iter()
@@ -100,26 +107,47 @@ fn bench_groth16_halo2_poseidon(c: &mut Criterion) {
     if BATCH_SIZE.is_none() {
         let mut prover_benchmarks = c.benchmark_group(format!("{}-prover", benchmark_prefix));
         prover_benchmarks.sample_size(10);
-        prover_benchmarks.bench_function("groth16", |b| b.iter(|| black_box(
-            groth16::create_random_proof(groth16_circ.clone(), &groth16_params, &mut rng)
-                .expect("failed to create groth16 proof")
-        )));
-        prover_benchmarks.bench_function("halo2", |b| b.iter(|| black_box(
-            halo2::create_proof(&halo2_keypair, halo2_circ.clone(), &halo2_pub_inputs, &mut rng)
-                .expect("failed to create halo2 proof")
-        )));
+        prover_benchmarks.bench_function("groth16", |b| {
+            b.iter(|| {
+                black_box(
+                    groth16::create_random_proof(groth16_circ.clone(), &groth16_params, &mut rng)
+                        .expect("failed to create groth16 proof"),
+                )
+            })
+        });
+        prover_benchmarks.bench_function("halo2", |b| {
+            b.iter(|| {
+                black_box(
+                    halo2::create_proof(
+                        &halo2_keypair,
+                        halo2_circ.clone(),
+                        &halo2_pub_inputs,
+                        &mut rng,
+                    )
+                    .expect("failed to create halo2 proof"),
+                )
+            })
+        });
         prover_benchmarks.finish();
 
         let mut verifier_benchmarks = c.benchmark_group(format!("{}-verifier", benchmark_prefix));
         verifier_benchmarks.sample_size(10);
-        verifier_benchmarks.bench_function("groth16", |b| b.iter(|| black_box(
-            groth16::verify_proof(&groth16_vk, &groth16_proof, &groth16_pub_inputs)
-                .expect("failed to verify groth16 proof")
-        )));
-        verifier_benchmarks.bench_function("halo2", |b| b.iter(|| black_box(
-            halo2::verify_proof(&halo2_keypair, &halo2_proof, &halo2_pub_inputs)
-                .expect("failed to verify halo2 proof")
-        )));
+        verifier_benchmarks.bench_function("groth16", |b| {
+            b.iter(|| {
+                black_box(
+                    groth16::verify_proof(&groth16_vk, &groth16_proof, &groth16_pub_inputs)
+                        .expect("failed to verify groth16 proof"),
+                )
+            })
+        });
+        verifier_benchmarks.bench_function("halo2", |b| {
+            b.iter(|| {
+                black_box(
+                    halo2::verify_proof(&halo2_keypair, &halo2_proof, &halo2_pub_inputs)
+                        .expect("failed to verify halo2 proof"),
+                )
+            })
+        });
         verifier_benchmarks.finish();
     } else {
         let batch_size = BATCH_SIZE.unwrap();
@@ -148,30 +176,65 @@ fn bench_groth16_halo2_poseidon(c: &mut Criterion) {
 
         let mut prover_benchmarks = c.benchmark_group(format!("{}-prover", benchmark_prefix));
         prover_benchmarks.sample_size(10);
-        prover_benchmarks.bench_function("groth16", |b| b.iter(|| black_box(
-            groth16::create_random_proof_batch(groth16_batch_circs.clone(), &groth16_params, &mut rng)
-                .expect("failed to create groth16 batch proof")
-        )));
-        prover_benchmarks.bench_function("halo2", |b| b.iter(|| black_box(
-            halo2::create_batch_proof(&halo2_keypair, &halo2_batch_circs, &halo2_batch_pub_inputs, &mut rng)
-                .expect("failed to create halo2 batch proof")
-        )));
+        prover_benchmarks.bench_function("groth16", |b| {
+            b.iter(|| {
+                black_box(
+                    groth16::create_random_proof_batch(
+                        groth16_batch_circs.clone(),
+                        &groth16_params,
+                        &mut rng,
+                    )
+                    .expect("failed to create groth16 batch proof"),
+                )
+            })
+        });
+        prover_benchmarks.bench_function("halo2", |b| {
+            b.iter(|| {
+                black_box(
+                    halo2::create_batch_proof(
+                        &halo2_keypair,
+                        &halo2_batch_circs,
+                        &halo2_batch_pub_inputs,
+                        &mut rng,
+                    )
+                    .expect("failed to create halo2 batch proof"),
+                )
+            })
+        });
         prover_benchmarks.finish();
 
         let mut verifier_benchmarks = c.benchmark_group(format!("{}-verifier", benchmark_prefix));
         verifier_benchmarks.sample_size(10);
-        verifier_benchmarks.bench_function("groth16", |b| b.iter(|| black_box(
-            groth16::verify_proofs_batch(&groth16_vk, &mut rng, &groth16_batch_proofs, &groth16_batch_pub_inputs)
-                .expect("failed to verify groth16 batch proof")
-        )));
-        verifier_benchmarks.bench_function("halo2", |b| b.iter(|| black_box(
-            halo2::verify_proofs(&halo2_keypair, &halo2_batch_proof, &halo2_batch_pub_inputs)
-                .expect("failed to verify halo2 batch proof")
-        )));
+        verifier_benchmarks.bench_function("groth16", |b| {
+            b.iter(|| {
+                black_box(
+                    groth16::verify_proofs_batch(
+                        &groth16_vk,
+                        &mut rng,
+                        &groth16_batch_proofs,
+                        &groth16_batch_pub_inputs,
+                    )
+                    .expect("failed to verify groth16 batch proof"),
+                )
+            })
+        });
+        verifier_benchmarks.bench_function("halo2", |b| {
+            b.iter(|| {
+                black_box(
+                    halo2::verify_proofs(
+                        &halo2_keypair,
+                        &halo2_batch_proof,
+                        &halo2_batch_pub_inputs,
+                    )
+                    .expect("failed to verify halo2 batch proof"),
+                )
+            })
+        });
         verifier_benchmarks.finish();
     }
 }
 
+#[allow(clippy::unit_arg)]
 fn bench_groth16_halo2_sha256_arity_2(c: &mut Criterion) {
     // Configure the tree height and arity here:
     const HEIGHT: u32 = 10;
@@ -203,7 +266,9 @@ fn bench_groth16_halo2_sha256_arity_2(c: &mut Criterion) {
 
         let leafs = (0..NUM_LEAFS as u64).map(|i| Fr::from(i).into());
         let tree = TreeFr::new(leafs).expect("failed to create merkle tree");
-        let merkle_proof = tree.gen_proof(CHALLENGE).expect("failed to create merkle proof");
+        let merkle_proof = tree
+            .gen_proof(CHALLENGE)
+            .expect("failed to create merkle proof");
 
         let vanilla_pub_inputs = vanilla::PublicInputs {
             commitment: Some(tree.root()),
@@ -216,7 +281,7 @@ fn bench_groth16_halo2_sha256_arity_2(c: &mut Criterion) {
         )
         .expect("failed to create groth16 public inputs");
 
-        let circ = PoRCircuit::<TreeFr>::new(merkle_proof.clone(), false);
+        let circ = PoRCircuit::<TreeFr>::new(merkle_proof, false);
 
         let proof = groth16::create_random_proof(circ.clone(), &params, &mut rng)
             .expect("failed to create groth16 proof");
@@ -230,7 +295,9 @@ fn bench_groth16_halo2_sha256_arity_2(c: &mut Criterion) {
         let leaf = Fp::from(CHALLENGE as u64);
         let tree = TreeFp::new(leafs).expect("failed to create merkle tree");
         let root: Fp = tree.root().into();
-        let merkle_proof = tree.gen_proof(CHALLENGE).expect("failed to create merkle proof");
+        let merkle_proof = tree
+            .gen_proof(CHALLENGE)
+            .expect("failed to create merkle proof");
         let path: Vec<Vec<Fp>> = merkle_proof
             .path()
             .iter()
@@ -247,7 +314,7 @@ fn bench_groth16_halo2_sha256_arity_2(c: &mut Criterion) {
             .expect("failed to create halo2 proof");
 
         let k = circ.k();
-    
+
         (circ, pub_inputs, proof, keypair, k)
     };
 
@@ -255,17 +322,21 @@ fn bench_groth16_halo2_sha256_arity_2(c: &mut Criterion) {
 
     let mut prover_benchmarks = c.benchmark_group(format!("{}-prover", benchmark_prefix));
     prover_benchmarks.sample_size(10);
-    prover_benchmarks.bench_function("groth16", |b| b.iter(|| black_box(
-        groth16::create_random_proof(groth16_circ.clone(), &groth16_params, &mut rng)
-            .expect("failed to create groth16 proof")
-    )));
+    prover_benchmarks.bench_function("groth16", |b| {
+        b.iter(|| {
+            black_box(
+                groth16::create_random_proof(groth16_circ.clone(), &groth16_params, &mut rng)
+                    .expect("failed to create groth16 proof"),
+            )
+        })
+    });
     prover_benchmarks.finish();
     // Only benchmark halo2 once because it takes a long time to run.
     {
         let start = Instant::now();
         black_box(
-            halo2::create_proof(&halo2_keypair, halo2_circ.clone(), &halo2_pub_inputs, &mut rng)
-                .expect("failed to create halo2 proof")
+            halo2::create_proof(&halo2_keypair, halo2_circ, &halo2_pub_inputs, &mut rng)
+                .expect("failed to create halo2 proof"),
         );
         println!("\n{}-prover/halo2", benchmark_prefix);
         println!("\t\t\ttime:\t{}s", start.elapsed().as_secs_f32());
@@ -273,22 +344,30 @@ fn bench_groth16_halo2_sha256_arity_2(c: &mut Criterion) {
 
     let mut verifier_benchmarks = c.benchmark_group(format!("{}-verifier", benchmark_prefix));
     verifier_benchmarks.sample_size(10);
-    verifier_benchmarks.bench_function("groth16", |b| b.iter(|| black_box(
-        groth16::verify_proof(&groth16_vk, &groth16_proof, &groth16_pub_inputs)
-            .expect("failed to verify groth16 proof")
-    )));
+    verifier_benchmarks.bench_function("groth16", |b| {
+        b.iter(|| {
+            black_box(
+                groth16::verify_proof(&groth16_vk, &groth16_proof, &groth16_pub_inputs)
+                    .expect("failed to verify groth16 proof"),
+            )
+        })
+    });
     verifier_benchmarks.finish();
     // Only benchmark halo2 once because it takes a long time to run.
     {
         let start = Instant::now();
         black_box(
             halo2::verify_proof(&halo2_keypair, &halo2_proof, &halo2_pub_inputs)
-                .expect("failed to verify halo2 proof")
+                .expect("failed to verify halo2 proof"),
         );
         println!("\n{}-verifier/halo2", benchmark_prefix);
         println!("\t\t\ttime:\t{}s", start.elapsed().as_secs_f32());
     }
 }
 
-criterion_group!(benches, bench_groth16_halo2_poseidon/*, bench_groth16_halo2_sha256_arity_2*/);
+criterion_group!(
+    benches,
+    bench_groth16_halo2_poseidon,
+    bench_groth16_halo2_sha256_arity_2,
+);
 criterion_main!(benches);

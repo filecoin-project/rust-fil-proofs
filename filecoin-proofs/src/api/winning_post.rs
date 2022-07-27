@@ -761,6 +761,7 @@ where
     Ok(proof_bytes)
 }
 
+#[allow(clippy::unwrap_used)]
 pub fn groth16_generate_winning_post_without_vanilla<Tree>(
     post_config: &PoStConfig,
     randomness: &ChallengeSeed,
@@ -900,6 +901,7 @@ where
     .to_vec()
 }
 
+#[allow(clippy::unwrap_used)]
 fn halo2_generate_winning_post_without_vanilla<Tree, F>(
     post_config: &PoStConfig,
     randomness: &ChallengeSeed,

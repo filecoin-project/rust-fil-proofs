@@ -664,7 +664,10 @@ where
             ))
         } else if top_arity == sub_arity {
             let (poseidon_sub, insert_sub) = sub.clone().unwrap();
-            Some(por::change_hasher_insert_arity::<TreeRHasher<F>, V, W>(poseidon_sub, insert_sub))
+            Some(por::change_hasher_insert_arity::<TreeRHasher<F>, V, W>(
+                poseidon_sub,
+                insert_sub,
+            ))
         } else {
             let poseidon_top = <TreeRHasher<F> as Halo2Hasher<W>>::configure(
                 meta,
@@ -721,7 +724,8 @@ where
 
         // Check that `k` is valid for the sector-size.
         if pub_inputs.partition_bits.iter().all(Option::is_some) {
-            let k: usize = pub_inputs.partition_bits
+            let k: usize = pub_inputs
+                .partition_bits
                 .iter()
                 .enumerate()
                 .map(|(i, bit)| usize::from(bit.unwrap()) << i)

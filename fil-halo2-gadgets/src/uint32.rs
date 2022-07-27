@@ -169,12 +169,7 @@ impl<F: FieldExt> U32DecompChip<F> {
             || "le_u32s",
             |mut region| {
                 let offset = 0;
-                let val = region.assign_advice(
-                    || "value",
-                    self.config.value,
-                    offset,
-                    || val,
-                )?;
+                let val = region.assign_advice(|| "value", self.config.value, offset, || val)?;
                 self.assign_u32s(&mut region, offset, val)
                     .map(|u32s_and_bits| u32s_and_bits.0)
             },
@@ -307,8 +302,7 @@ impl<F: FieldExt> U32DecompChip<F> {
                 let mut packed_repr = Value::known(F::Repr::default());
 
                 for (i, (limb, col)) in limbs.iter().zip(self.config.limbs.iter()).enumerate() {
-                    limb
-                        .copy_advice(|| format!("copy u32_{}", i), &mut region, *col, offset)?
+                    limb.copy_advice(|| format!("copy u32_{}", i), &mut region, *col, offset)?
                         .value()
                         .zip(packed_repr.as_mut())
                         .map(|(limb_bits, repr)| {
@@ -647,8 +641,12 @@ impl<F: FieldExt> StripBitsChip<F> {
                 let mut bit_index = 0;
                 for (offset, bits) in le_bits.chunks(8).enumerate() {
                     for (bit, col) in bits.iter().zip(self.config.bits.iter()) {
-                        region
-                            .assign_advice(|| format!("bit_{}", bit_index), *col, offset, || *bit)?;
+                        region.assign_advice(
+                            || format!("bit_{}", bit_index),
+                            *col,
+                            offset,
+                            || *bit,
+                        )?;
                         bit_index += 1;
                     }
                 }
@@ -719,7 +717,8 @@ mod tests {
             let decomp_chip = U32DecompChip::construct(decomp_config);
             let strip_bits_chip = StripBitsChip::construct(strip_bits_config);
 
-            let u32s = decomp_chip.witness_decompose(layouter.namespace(|| "decomp"), self.value)?;
+            let u32s =
+                decomp_chip.witness_decompose(layouter.namespace(|| "decomp"), self.value)?;
 
             let expected_u32s: Vec<Value<u32>> = self
                 .value
@@ -734,9 +733,12 @@ mod tests {
                 .transpose_vec(8);
 
             for (uint32, u32_expected) in u32s.iter().zip(expected_u32s.into_iter()) {
-                uint32.value_u32().zip(u32_expected).map(|(u32_value, u32_expected)| {
-                    assert_eq!(u32_value, u32_expected);
-                });
+                uint32
+                    .value_u32()
+                    .zip(u32_expected)
+                    .map(|(u32_value, u32_expected)| {
+                        assert_eq!(u32_value, u32_expected);
+                    });
             }
 
             let packed = decomp_chip.pack(layouter.namespace(|| "pack"), &u32s)?;
@@ -749,8 +751,7 @@ mod tests {
             let stripped = strip_bits_chip.strip_bits(layouter.namespace(|| "strip"), &u32s[0])?;
 
             let expected_stripped: Value<u32> = self.value.map(|field| {
-                let mut stripped_bytes: [u8; 4] =
-                    field.to_repr().as_ref()[..4].try_into().unwrap();
+                let mut stripped_bytes: [u8; 4] = field.to_repr().as_ref()[..4].try_into().unwrap();
                 stripped_bytes[3] &= 0b0011_1111;
                 u32::from_le_bytes(stripped_bytes)
             });

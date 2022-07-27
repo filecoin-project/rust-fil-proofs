@@ -62,12 +62,7 @@ where
         leaf: Value<H::Field>,
         path: &[Vec<Value<H::Field>>],
     ) -> Result<AssignedCell<H::Field, H::Field>, Error> {
-        self.compute_root_inner(
-            layouter,
-            challenge_bits,
-            WitnessOrCopy::Witness(leaf),
-            path,
-        )
+        self.compute_root_inner(layouter, challenge_bits, WitnessOrCopy::Witness(leaf), path)
     }
 
     pub fn copy_leaf_compute_root(
@@ -416,7 +411,9 @@ pub mod test_circuit {
                 ))
             } else if top_arity == sub_arity {
                 let (sub_hasher, sub_insert) = sub.clone().unwrap();
-                Some(change_hasher_insert_arity::<H, V, W>(sub_hasher, sub_insert))
+                Some(change_hasher_insert_arity::<H, V, W>(
+                    sub_hasher, sub_insert,
+                ))
             } else {
                 let top_hasher = <H as Halo2Hasher<W>>::configure(
                     meta,
@@ -726,7 +723,9 @@ mod test {
                 ))
             } else if top_arity == sub_arity {
                 let (sub_hasher, sub_insert) = sub.clone().unwrap();
-                Some(change_hasher_insert_arity::<H, V, W>(sub_hasher, sub_insert))
+                Some(change_hasher_insert_arity::<H, V, W>(
+                    sub_hasher, sub_insert,
+                ))
             } else {
                 let top_hasher = <H as Halo2Hasher<W>>::configure(
                     meta,
@@ -826,7 +825,12 @@ mod test {
             let path = merkle_proof
                 .path()
                 .iter()
-                .map(|(sibs, _)| sibs.iter().copied().map(|sib| Value::known(sib.into())).collect())
+                .map(|(sibs, _)| {
+                    sibs.iter()
+                        .copied()
+                        .map(|sib| Value::known(sib.into()))
+                        .collect()
+                })
                 .collect();
             MyCircuit {
                 challenge: Value::known(challenge),
@@ -885,12 +889,13 @@ mod test {
         #[allow(clippy::unwrap_used)]
         fn expected_root(&self) -> H::Field {
             let challenge = self.challenge.map(|c| c as usize);
+
             let mut challenge_bits = vec![0; 32];
-            for i in 0..32 {
-                challenge.map(|c| {
-                    challenge_bits[i] = c >> i & 1;
-                });
-            }
+            challenge.map(|challenge| {
+                for (i, bit) in challenge_bits.iter_mut().enumerate() {
+                    *bit = challenge >> i & 1;
+                }
+            });
             let mut challenge_bits = challenge_bits.into_iter();
 
             let mut cur = H::Field::default();

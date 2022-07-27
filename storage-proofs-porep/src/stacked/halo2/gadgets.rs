@@ -371,12 +371,7 @@ impl<F: FieldExt> EncodingChip<F> {
                     .zip(key.value())
                     .map(|(label_d, key)| *label_d + key);
 
-                region.assign_advice(
-                    || "label_r",
-                    self.config.label_r,
-                    offset,
-                    || label_r,
-                )
+                region.assign_advice(|| "label_r", self.config.label_r, offset, || label_r)
             },
         )
     }

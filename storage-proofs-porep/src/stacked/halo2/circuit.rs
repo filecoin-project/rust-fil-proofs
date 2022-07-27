@@ -781,22 +781,12 @@ where
 
                 let comm_c = {
                     let (offset, col) = advice_iter.next();
-                    region.assign_advice(
-                        || "comm_c",
-                        col,
-                        offset,
-                        || priv_inputs.comm_c,
-                    )?
+                    region.assign_advice(|| "comm_c", col, offset, || priv_inputs.comm_c)?
                 };
 
                 let root_r = {
                     let (offset, col) = advice_iter.next();
-                    region.assign_advice(
-                        || "root_r",
-                        col,
-                        offset,
-                        || priv_inputs.root_r,
-                    )?
+                    region.assign_advice(|| "root_r", col, offset, || priv_inputs.root_r)?
                 };
 
                 let leafs_d = priv_inputs
@@ -1042,9 +1032,8 @@ where
 
                 // Compute challenge's layer label.
                 let challenge_label = labeling_chip.label(
-                    layouter.namespace(|| {
-                        format!("calculate challenge's layer {} label", layer_index)
-                    }),
+                    layouter
+                        .namespace(|| format!("calculate challenge's layer {} label", layer_index)),
                     &labeling_constants,
                     layer_index,
                     &replica_id,
