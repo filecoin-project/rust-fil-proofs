@@ -1271,7 +1271,6 @@ dependencies = [
  "anyhow",
  "blake2b_simd",
  "blstrs",
- "clap 3.2.15",
  "dialoguer",
  "env_proxy",
  "failure",
