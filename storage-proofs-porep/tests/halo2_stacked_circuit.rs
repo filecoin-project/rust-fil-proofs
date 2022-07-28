@@ -1,3 +1,5 @@
+#![allow(unused_imports, dead_code)]
+
 use ff::{Field, PrimeField};
 use filecoin_hashers::{poseidon::PoseidonHasher, sha256::Sha256Hasher, PoseidonArity};
 use generic_array::typenum::{U0, U2, U4, U8};
@@ -170,6 +172,7 @@ where
     }
 }
 
+#[cfg(feature = "isolated-testing")]
 #[test]
 fn test_sdr_porep_circuit_2kib_halo2() {
     // Halo2 keygen, proving, and verifying are slow and consume a lot of memory, thus we only test
@@ -178,21 +181,25 @@ fn test_sdr_porep_circuit_2kib_halo2() {
     test_sdr_porep_circuit::<U8, U0, U0, SECTOR_NODES_2_KIB>(true);
 }
 
+#[cfg(feature = "isolated-testing")]
 #[test]
 fn test_sdr_porep_circuit_4kib_halo2() {
     test_sdr_porep_circuit::<U8, U2, U0, SECTOR_NODES_4_KIB>(false);
 }
 
+#[cfg(feature = "isolated-testing")]
 #[test]
 fn test_sdr_porep_circuit_8kib_halo2() {
     test_sdr_porep_circuit::<U8, U4, U0, SECTOR_NODES_8_KIB>(false);
 }
 
+#[cfg(feature = "isolated-testing")]
 #[test]
 fn test_sdr_porep_circuit_16kib_halo2() {
     test_sdr_porep_circuit::<U8, U8, U0, SECTOR_NODES_16_KIB>(false);
 }
 
+#[cfg(feature = "isolated-testing")]
 #[test]
 fn test_sdr_porep_circuit_32kib_halo2() {
     test_sdr_porep_circuit::<U8, U8, U2, SECTOR_NODES_32_KIB>(false);

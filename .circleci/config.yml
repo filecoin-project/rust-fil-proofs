@@ -89,10 +89,40 @@ jobs:
             ulimit -n 20000
             ulimit -u 20000
             ulimit -n 20000
-            cargo test --verbose --release --workspace --all-targets
-            # Some `storage-proofs-update` tests need to run sequentially due
-            # to their high memory usage.
-            cargo test -p storage-proofs-update --features isolated-testing --release -- --test-threads=1
+            cargo test -p fr32 --verbose --release --all-targets
+            cargo test -p sha2raw --verbose --release --all-targets
+            cargo test -p fil-halo2-gadgets --verbose --release --all-targets
+            cargo test -p filecoin-hashers --verbose --release --all-targets
+            cargo test -p storage-proofs-core --verbose --release --all-targets
+            cargo test -p storage-proofs-porep --verbose --release --all-targets
+            cargo test -p storage-proofs-post --verbose --release --all-targets
+            cargo test -p storage-proofs-update --verbose --release --all-targets
+            cargo test -p filecoin-proofs --verbose --release --all-targets
+            cargo test -p fil-proofs-tooling --verbose --release --all-targets
+            cargo test -p fil-proofs-param --verbose --release --all-targets
+            # Run sdr-porep halo2 circuit and compound-proof tests sequentially (as running in
+            # parallel requires too much memory).
+            cargo test -p storage-proofs-porep --release --features isolated-testing test_sdr_porep_circuit_2kib_halo2
+            cargo test -p storage-proofs-porep --release --features isolated-testing test_sdr_porep_circuit_4kib_halo2
+            cargo test -p storage-proofs-porep --release --features isolated-testing test_sdr_porep_circuit_8kib_halo2
+            cargo test -p storage-proofs-porep --release --features isolated-testing test_sdr_porep_circuit_16kib_halo2
+            cargo test -p storage-proofs-porep --release --features isolated-testing test_sdr_porep_circuit_32kib_halo2
+            cargo test -p storage-proofs-porep --release --features isolated-testing test_sdr_porep_compound_2kib_halo2
+            cargo test -p storage-proofs-porep --release --features isolated-testing test_sdr_porep_compound_4kib_halo2
+            cargo test -p storage-proofs-porep --release --features isolated-testing test_sdr_porep_compound_8kib_halo2
+            cargo test -p storage-proofs-porep --release --features isolated-testing test_sdr_porep_compound_16kib_halo2
+            cargo test -p storage-proofs-porep --release --features isolated-testing test_sdr_porep_compound_32kib_halo2
+            # Some `storage-proofs-update` tests need to run sequentially due to their high memory usage.
+            cargo test -p storage-proofs-update --release --features isolated-testing test_empty_sector_update -- --test-threads=1
+            # Run filecoin-proofs tests in chunks to reduce compilation memory usage.
+            cargo test -p filecoin-proofs --release --features test-seal test_seal_lifecycle
+            cargo test -p filecoin-proofs --release --features test-upgrade test_seal_lifecycle_upgrade
+            cargo test -p filecoin-proofs --release --features test-aggregate aggregat
+            cargo test -p filecoin-proofs --release --features test-resume test_resume
+            cargo test -p filecoin-proofs --release --features test-winning test_winning
+            cargo test -p filecoin-proofs --release --features test-winning,big-tests test_winning
+            cargo test -p filecoin-proofs --release --features test-window test_window
+            cargo test -p filecoin-proofs --release --features test-window,big-tests test_window
           no_output_timeout: 30m
 
   test_ignored_release:
@@ -119,6 +149,34 @@ jobs:
             RUST_TEST_THREADS: 1
           no_output_timeout: 30m
 
+  test_ignored_release_filecoin_proofs:
+    executor: default
+    environment: *setup-env
+    steps:
+      - checkout
+      - attach_workspace:
+          at: "."
+      - restore_rustup_cache
+      - restore_parameter_cache
+      - run:
+          name: Test filecoin_proofs ignored in release profile
+          command: |
+              ulimit -n 20000
+              ulimit -u 20000
+              ulimit -n 20000
+              cd filecoin-proofs
+              # Run filecoin-proofs tests in chunks to reduce compilation memory usage.
+              cargo test --release --features test-seal -- --ignored
+              cargo test --release --features test-upgrade -- --ignored
+              cargo test --release --features test-aggregate -- --ignored
+              cargo test --release --features test-resume -- --ignored
+              cargo test --release --features test-winning -- --ignored
+              cargo test --release --features test-winning,big-tests -- --ignored
+              cargo test --release --features test-window -- --ignored
+              cargo test --release --features test-window,big-tests -- --ignored
+          environment:
+            RUST_TEST_THREADS: 1
+          no_output_timeout: 30m
 
   # Running with `use_multicore_sdr=true` should be integrated directly into the test code. For now we
   # just re-run the lifecycle tests to exercise the use_multicore_sdr code path with that setting set.
@@ -138,8 +196,10 @@ jobs:
             ulimit -n 20000
             ulimit -u 20000
             ulimit -n 20000
-            cargo test --all --verbose --release lifecycle -- --ignored --nocapture
-            cargo test -p storage-proofs-porep --features isolated-testing --release --lib stacked::vanilla::cores
+            # Break up compilation of `filecoin-proofs` tests; not doing so causes CI to run out of memory.
+            cargo test -p filecoin-proofs --release --features test-seal lifecycle -- --ignored
+            cargo test -p filecoin-proofs --release --features test-upgrade lifecycle -- --ignored
+            cargo test -p storage-proofs-porep --features isolated-testing --release checkout_cores -- --test-threads=1
             cargo test -p storage-proofs-porep --features isolated-testing --release test_parallel_generation_and_read_partial_range_v1_0
             cargo test -p storage-proofs-porep --features isolated-testing --release test_parallel_generation_and_read_partial_range_v1_1
           no_output_timeout: 30m
@@ -183,7 +243,7 @@ jobs:
             ulimit -u 20000
             ulimit -n 20000
             cargo test --verbose --release << parameters.cargo-args >> -- --nocapture << parameters.test-args >>
-          no_output_timeout: 30m
+          no_output_timeout: 60m
           environment:
             FIL_PROOFS_USE_GPU_COLUMN_BUILDER: true
             FIL_PROOFS_USE_GPU_TREE_BUILDER: true
@@ -231,7 +291,22 @@ jobs:
       - run:
           name: Test arm with no gpu
           command: |
-            cargo +<< pipeline.parameters.nightly-toolchain >> -Zpackage-features test --release --all --verbose --no-default-features
+            # cargo +<< pipeline.parameters.nightly-toolchain >> -Zpackage-features test -p fr32 --release --no-default-features
+            # cargo +<< pipeline.parameters.nightly-toolchain >> -Zpackage-features test -p sha2raw --release --no-default-features
+            # cargo +<< pipeline.parameters.nightly-toolchain >> -Zpackage-features test -p filecoin-hashers --release --no-default-features --features sha256,poseidon,blake2s
+            # cargo +<< pipeline.parameters.nightly-toolchain >> -Zpackage-features test -p storage-proofs-core --release --no-default-features
+            # cargo +<< pipeline.parameters.nightly-toolchain >> -Zpackage-features test -p storage-proofs-porep --release --no-default-features
+            # cargo +<< pipeline.parameters.nightly-toolchain >> -Zpackage-features test -p storage-proofs-post --release --no-default-features
+            cargo +<< pipeline.parameters.nightly-toolchain >> -Zpackage-features test -p storage-proofs-update --release --no-default-features
+            # Run filecoin-proofs tests in chunks to reduce compilation memory usage.
+            cargo +<< pipeline.parameters.nightly-toolchain >> -Zpackage-features test -p filecoin-proofs --release --no-default-features --features test-seal
+            # cargo +<< pipeline.parameters.nightly-toolchain >> -Zpackage-features test -p filecoin-proofs --release --no-default-features --features test-upgrade
+            # cargo +<< pipeline.parameters.nightly-toolchain >> -Zpackage-features test -p filecoin-proofs --release --no-default-features --features test-aggregate
+            # cargo +<< pipeline.parameters.nightly-toolchain >> -Zpackage-features test -p filecoin-proofs --release --no-default-features --features test-resume
+            # cargo +<< pipeline.parameters.nightly-toolchain >> -Zpackage-features test -p filecoin-proofs --release --no-default-features --features test-winning
+            # cargo +<< pipeline.parameters.nightly-toolchain >> -Zpackage-features test -p filecoin-proofs --release --no-default-features --features test-window
+            cargo +<< pipeline.parameters.nightly-toolchain >> -Zpackage-features test -p fil-proofs-tooling --release --no-default-features
+            cargo +<< pipeline.parameters.nightly-toolchain >> -Zpackage-features test -p fil-proofs-param --release --no-default-features
           no_output_timeout: 90m
 
   bench:
@@ -407,31 +482,29 @@ workflows:
           requires:
             - cargo_fetch
             - ensure_groth_parameters_and_keys_linux
-            
+
       - test_ignored_release:
           name: test_ignored_release_storage_proofs_post
           crate: "storage-proofs-post"
           requires:
             - cargo_fetch
             - ensure_groth_parameters_and_keys_linux
-            
+
       - test_ignored_release:
           name: test_ignored_release_storage_proofs_core
           crate: "storage-proofs-core"
           requires:
             - cargo_fetch
             - ensure_groth_parameters_and_keys_linux
-            
+
       - test_ignored_release:
           name: test_ignored_release_storage_proofs_porep
           crate: "storage-proofs-porep"
           requires:
             - cargo_fetch
             - ensure_groth_parameters_and_keys_linux
-            
-      - test_ignored_release:
-          name: test_ignored_release_filecoin_proofs
-          crate: "filecoin-proofs"
+
+      - test_ignored_release_filecoin_proofs:
           requires:
             - cargo_fetch
             - ensure_groth_parameters_and_keys_linux
@@ -550,18 +623,18 @@ workflows:
             - cargo_fetch
             - ensure_groth_parameters_and_keys_linux
 
-      - test_arm_no_gpu:
-          name: test_arm_no_gpu
-          requires:
-            - cargo_fetch
-            - ensure_groth_parameters_and_keys_linux
+#      - test_arm_no_gpu:
+#          name: test_arm_no_gpu
+#          requires:
+#            - cargo_fetch
+#            - ensure_groth_parameters_and_keys_linux
 
       - bench:
           requires:
             - cargo_fetch
             - ensure_groth_parameters_and_keys_linux
 
-      - test_darwin
+#      - test_darwin
 
       - test:
           name: test_fr32
