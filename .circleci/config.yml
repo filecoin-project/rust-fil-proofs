@@ -90,6 +90,17 @@ jobs:
             ulimit -u 20000
             ulimit -n 20000
             cargo test --verbose --release --workspace --all-targets
+            # Run sdr-porep halo2 circuit and compound-proof tests sequentially.
+            cargo test -p storage-proofs-porep --features isolated-testing --release test_sdr_porep_circuit_2kib_halo2
+            cargo test -p storage-proofs-porep --features isolated-testing --release test_sdr_porep_circuit_4kib_halo2
+            cargo test -p storage-proofs-porep --features isolated-testing --release test_sdr_porep_circuit_8kib_halo2
+            cargo test -p storage-proofs-porep --features isolated-testing --release test_sdr_porep_circuit_16kib_halo2
+            cargo test -p storage-proofs-porep --features isolated-testing --release test_sdr_porep_circuit_32kib_halo2
+            cargo test -p storage-proofs-porep --features isolated-testing --release test_sdr_porep_compound_2kib_halo2
+            cargo test -p storage-proofs-porep --features isolated-testing --release test_sdr_porep_compound_4kib_halo2
+            cargo test -p storage-proofs-porep --features isolated-testing --release test_sdr_porep_compound_8kib_halo2
+            cargo test -p storage-proofs-porep --features isolated-testing --release test_sdr_porep_compound_16kib_halo2
+            cargo test -p storage-proofs-porep --features isolated-testing --release test_sdr_porep_compound_32kib_halo2
             # Some `storage-proofs-update` tests need to run sequentially due
             # to their high memory usage.
             cargo test -p storage-proofs-update --features isolated-testing --release -- --test-threads=1

@@ -1,3 +1,5 @@
+#![allow(unused_imports, dead_code)]
+
 use ff::{Field, PrimeField};
 use filecoin_hashers::{poseidon::PoseidonHasher, sha256::Sha256Hasher, Hasher, PoseidonArity};
 use generic_array::typenum::{U0, U2, U4, U8};
@@ -158,26 +160,31 @@ where
     cache_dir.close().expect("Failed to remove cache dir");
 }
 
+#[cfg(feature = "isolated-testing")]
 #[test]
 fn test_sdr_porep_compound_2kib_halo2() {
     test_sdr_porep_compound::<U8, U0, U0, SECTOR_NODES_2_KIB>();
 }
 
+#[cfg(feature = "isolated-testing")]
 #[test]
 fn test_sdr_porep_compound_4kib_halo2() {
     test_sdr_porep_compound::<U8, U2, U0, SECTOR_NODES_4_KIB>();
 }
 
+#[cfg(feature = "isolated-testing")]
 #[test]
 fn test_sdr_porep_compound_8kib_halo2() {
     test_sdr_porep_compound::<U8, U4, U0, SECTOR_NODES_8_KIB>();
 }
 
+#[cfg(feature = "isolated-testing")]
 #[test]
 fn test_sdr_porep_compound_16kib_halo2() {
     test_sdr_porep_compound::<U8, U8, U0, SECTOR_NODES_16_KIB>();
 }
 
+#[cfg(feature = "isolated-testing")]
 #[test]
 fn test_sdr_porep_compound_32kib_halo2() {
     test_sdr_porep_compound::<U8, U8, U2, SECTOR_NODES_32_KIB>();
