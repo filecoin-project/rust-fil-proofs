@@ -141,7 +141,7 @@ pub type DefaultPieceDomain<F> = <DefaultPieceHasher<F> as Hasher>::Domain;
 pub type DefaultTreeHasher<F> = PoseidonHasher<F>;
 pub type DefaultTreeDomain<F> = <DefaultTreeHasher<F> as Hasher>::Domain;
 
-pub type DefaultBinaryTree<F> = BinaryMerkleTree<DefaultTreeHasher<F>>;
+pub type DefaultBinaryTree<F> = BinaryMerkleTree<DefaultPieceHasher<F>>;
 pub type DefaultOctTree<F> = OctMerkleTree<DefaultTreeHasher<F>>;
 pub type DefaultOctLCTree<F> = OctLCMerkleTree<DefaultTreeHasher<F>>;
 
