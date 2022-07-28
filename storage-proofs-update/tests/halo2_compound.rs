@@ -261,13 +261,13 @@ fn test_empty_sector_update_compound_8kib_halo2() {
 }
 
 #[test]
-#[cfg(feature = "isolated-testing")]
+#[cfg(feature = "big-tests")]
 fn test_empty_sector_update_compound_16kib_halo2() {
     test_empty_sector_update_compound::<U8, U8, U0, SECTOR_SIZE_16_KIB>();
 }
 
 #[test]
-#[cfg(feature = "isolated-testing")]
+#[cfg(feature = "big-tests")]
 fn test_empty_sector_update_compound_32kib_halo2() {
     test_empty_sector_update_compound::<U8, U8, U2, SECTOR_SIZE_32_KIB>();
 }

@@ -69,6 +69,13 @@ opencl = [
 ]
 multicore-sdr = ["storage-proofs-porep/multicore-sdr"]
 big-tests = []
+test-seal = []
+test-upgrade = []
+test-aggregate = []
+test-resume = []
+test-winning = []
+test-window = []
+test-all-proofs = ["test-seal", "test-upgrade", "test-aggregate", "test-resume", "test-winning", "test-window"]
 
 [[bench]]
 name = "preprocessing"
