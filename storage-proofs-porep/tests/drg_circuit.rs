@@ -1,5 +1,3 @@
-use std::fs::remove_dir_all;
-
 use bellperson::{util_cs::test_cs::TestConstraintSystem, ConstraintSystem};
 use blstrs::Scalar as Fr;
 use ff::Field;
@@ -201,7 +199,8 @@ fn test_drg_porep_circuit() {
         "inputs are not the same length"
     );
 
-    remove_dir_all(&cache_dir).expect("Failed to remove cache dir");
+    // TODO (jake): do we need `remove_dir_all` here?
+    // std::fs::remove_dir_all(&cache_dir).expect("Failed to remove cache dir");
     cache_dir.close().expect("Failed to close cache dir");
 }
 
