@@ -193,7 +193,7 @@ jobs:
             ulimit -u 20000
             ulimit -n 20000
             cargo test --verbose --release << parameters.cargo-args >> -- --nocapture << parameters.test-args >>
-          no_output_timeout: 30m
+          no_output_timeout: 60m
           environment:
             FIL_PROOFS_USE_GPU_COLUMN_BUILDER: true
             FIL_PROOFS_USE_GPU_TREE_BUILDER: true
