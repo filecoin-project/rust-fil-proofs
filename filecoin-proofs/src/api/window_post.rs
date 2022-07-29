@@ -5,6 +5,7 @@ use std::marker::PhantomData;
 use anyhow::{ensure, Context, Result};
 use blstrs::Scalar as Fr;
 use filecoin_hashers::{Hasher, PoseidonArity};
+use generic_array::typenum::U8;
 use halo2_proofs::pasta::{Fp, Fq};
 use log::info;
 use rayon::prelude::{IntoParallelRefIterator, ParallelIterator};
@@ -35,7 +36,7 @@ use crate::{
         PoseidonArityAllFields, ProofSystem,
     },
     caches::{get_post_params, get_post_verifying_key},
-    constants::{DefaultTreeDomain, DefaultTreeHasher},
+    constants::{DefaultOctTreeStore, DefaultTreeDomain, DefaultTreeHasher},
     parameters::window_post_setup_params,
     types::{
         ChallengeSeed, FallbackPoStSectorProof, PersistentAux, PoStConfig, PrivateReplicaInfo,
@@ -675,15 +676,26 @@ where
     Tree::Arity: PoseidonArityAllFields,
     Tree::SubTreeArity: PoseidonArityAllFields,
     Tree::TopTreeArity: PoseidonArityAllFields,
+    DefaultTreeHasher<Tree::Field>: Hasher,
 {
     info!("generate_window_post:start");
     ensure!(
         post_config.typ == PoStType::Window,
         "invalid post config type"
     );
+    // Ensure that `Tree`'s associated types are as expected; necessary for changing `Tree::Field`
+    // into a concrete field type (`Fr`, `Fp`,  or `Fq`).
     ensure!(
         TypeId::of::<Tree::Hasher>() == TypeId::of::<DefaultTreeHasher<Tree::Field>>(),
         "tree hasher must be poseidon",
+    );
+    ensure!(
+        TypeId::of::<Tree::Store>() == TypeId::of::<DefaultOctTreeStore<Tree::Field>>(),
+        "tree store must be `LCStore`",
+    );
+    ensure!(
+        TypeId::of::<Tree::Arity>() == TypeId::of::<U8>(),
+        "tree base arity must be 8"
     );
 
     let proof_bytes = match get_proof_system::<Tree>() {
@@ -743,7 +755,7 @@ where
             '_,
             MerkleTreeWrapper<
                 DefaultTreeHasher<Fr>,
-                MockStore,
+                DefaultOctTreeStore<Fr>,
                 Tree::Arity,
                 Tree::SubTreeArity,
                 Tree::TopTreeArity,
@@ -754,7 +766,7 @@ where
     let groth_params = get_post_params::<
         MerkleTreeWrapper<
             DefaultTreeHasher<Fr>,
-            MockStore,
+            DefaultOctTreeStore<Fr>,
             Tree::Arity,
             Tree::SubTreeArity,
             Tree::TopTreeArity,
@@ -775,7 +787,7 @@ where
             let replica = PrivateReplicaInfo::<
                 MerkleTreeWrapper<
                     DefaultTreeHasher<Fr>,
-                    MockStore,
+                    DefaultOctTreeStore<Fr>,
                     Tree::Arity,
                     Tree::SubTreeArity,
                     Tree::TopTreeArity,
@@ -822,7 +834,7 @@ where
         priv_sectors.push(PrivateSector::<
             MerkleTreeWrapper<
                 DefaultTreeHasher<Fr>,
-                MockStore,
+                DefaultOctTreeStore<Fr>,
                 Tree::Arity,
                 Tree::SubTreeArity,
                 Tree::TopTreeArity,
@@ -893,7 +905,7 @@ where
             let replica = PrivateReplicaInfo::<
                 MerkleTreeWrapper<
                     DefaultTreeHasher<F>,
-                    MockStore,
+                    DefaultOctTreeStore<F>,
                     Tree::Arity,
                     Tree::SubTreeArity,
                     Tree::TopTreeArity,
@@ -940,7 +952,7 @@ where
         priv_sectors.push(PrivateSector::<
             MerkleTreeWrapper<
                 DefaultTreeHasher<F>,
-                MockStore,
+                DefaultOctTreeStore<F>,
                 Tree::Arity,
                 Tree::SubTreeArity,
                 Tree::TopTreeArity,
