@@ -89,21 +89,37 @@ jobs:
             ulimit -n 20000
             ulimit -u 20000
             ulimit -n 20000
-            cargo test --verbose --release --workspace --all-targets
+            cargo test -p fr32 --verbose --release --all-targets
+            cargo test -p sha2raw --verbose --release --all-targets
+            cargo test -p fil-halo2-gadgets --verbose --release --all-targets
+            cargo test -p filecoin-hashers --verbose --release --all-targets
+            cargo test -p storage-proofs-core --verbose --release --all-targets
+            cargo test -p storage-proofs-porep --verbose --release --all-targets
+            cargo test -p storage-proofs-post --verbose --release --all-targets
+            cargo test -p storage-proofs-update --verbose --release --all-targets
+            cargo test -p filecoin-proofs --verbose --release --all-targets
+            cargo test -p fil-proofs-tooling --verbose --release --all-targets
+            cargo test -p fil-proofs-param --verbose --release --all-targets
             # Run sdr-porep halo2 circuit and compound-proof tests sequentially.
-            cargo test -p storage-proofs-porep --features isolated-testing --release test_sdr_porep_circuit_2kib_halo2
-            cargo test -p storage-proofs-porep --features isolated-testing --release test_sdr_porep_circuit_4kib_halo2
-            cargo test -p storage-proofs-porep --features isolated-testing --release test_sdr_porep_circuit_8kib_halo2
-            cargo test -p storage-proofs-porep --features isolated-testing --release test_sdr_porep_circuit_16kib_halo2
-            cargo test -p storage-proofs-porep --features isolated-testing --release test_sdr_porep_circuit_32kib_halo2
-            cargo test -p storage-proofs-porep --features isolated-testing --release test_sdr_porep_compound_2kib_halo2
-            cargo test -p storage-proofs-porep --features isolated-testing --release test_sdr_porep_compound_4kib_halo2
-            cargo test -p storage-proofs-porep --features isolated-testing --release test_sdr_porep_compound_8kib_halo2
-            cargo test -p storage-proofs-porep --features isolated-testing --release test_sdr_porep_compound_16kib_halo2
-            cargo test -p storage-proofs-porep --features isolated-testing --release test_sdr_porep_compound_32kib_halo2
-            # Some `storage-proofs-update` tests need to run sequentially due
-            # to their high memory usage.
-            cargo test -p storage-proofs-update --features isolated-testing --release -- --test-threads=1
+            cargo test -p storage-proofs-porep --release --features isolated-testing test_sdr_porep_circuit_2kib_halo2
+            cargo test -p storage-proofs-porep --release --features isolated-testing test_sdr_porep_circuit_4kib_halo2
+            cargo test -p storage-proofs-porep --release --features isolated-testing test_sdr_porep_circuit_8kib_halo2
+            cargo test -p storage-proofs-porep --release --features isolated-testing test_sdr_porep_circuit_16kib_halo2
+            cargo test -p storage-proofs-porep --release --features isolated-testing test_sdr_porep_circuit_32kib_halo2
+            cargo test -p storage-proofs-porep --release --features isolated-testing test_sdr_porep_compound_2kib_halo2
+            cargo test -p storage-proofs-porep --release --features isolated-testing test_sdr_porep_compound_4kib_halo2
+            cargo test -p storage-proofs-porep --release --features isolated-testing test_sdr_porep_compound_8kib_halo2
+            cargo test -p storage-proofs-porep --release --features isolated-testing test_sdr_porep_compound_16kib_halo2
+            cargo test -p storage-proofs-porep --release --features isolated-testing test_sdr_porep_compound_32kib_halo2
+            # Some `storage-proofs-update` tests need to run sequentially due to their high memory usage.
+            cargo test -p storage-proofs-update --release --features isolated-testing -- --test-threads=1
+            # Run filecoin-proofs tests in chunks to reduce compile time and memory usage.
+            cargo test -p filecoin-proofs -v --release --features=test-seal test_seal_lifecycle
+            cargo test -p filecoin-proofs -v --release --features=test-upgrade test_seal_lifecycle_upgrade
+            cargo test -p filecoin-proofs -v --release --features=test-aggregate aggregat
+            cargo test -p filecoin-proofs -v --release --features=test-resume test_resumable
+            cargo test -p filecoin-proofs -v --release --features=test-winning test_winning
+            cargo test -p filecoin-proofs -v --release --features=test-window test_window
           no_output_timeout: 30m
 
   test_ignored_release:
@@ -394,170 +410,170 @@ workflows:
             - cargo_fetch
             - ensure_groth_parameters_and_keys_linux
             
-      - test_ignored_release:
-          name: test_ignored_release_storage_proofs_post
-          crate: "storage-proofs-post"
-          requires:
-            - cargo_fetch
-            - ensure_groth_parameters_and_keys_linux
-            
-      - test_ignored_release:
-          name: test_ignored_release_storage_proofs_core
-          crate: "storage-proofs-core"
-          requires:
-            - cargo_fetch
-            - ensure_groth_parameters_and_keys_linux
-            
-      - test_ignored_release:
-          name: test_ignored_release_storage_proofs_porep
-          crate: "storage-proofs-porep"
-          requires:
-            - cargo_fetch
-            - ensure_groth_parameters_and_keys_linux
-            
-      - test_ignored_release:
-          name: test_ignored_release_filecoin_proofs
-          crate: "filecoin-proofs"
-          requires:
-            - cargo_fetch
-            - ensure_groth_parameters_and_keys_linux
-
-      - test_gpu_tree_building:
-          name: test_gpu_tree_building_opencl (regular)
-          cargo-args: "--workspace"
-          requires:
-            - cargo_fetch
-            - ensure_groth_parameters_and_keys_linux
-
-      - test_gpu_tree_building:
-          name: test_gpu_tree_building_opencl (ignored, filecoin-proofs, storage-proofs-update)
-          cargo-args: "--package filecoin-proofs --package storage-proofs-update"
-          test-args: "--ignored"
-          requires:
-            - cargo_fetch
-            - ensure_groth_parameters_and_keys_linux
-
-      - test_gpu_tree_building:
-          name: test_gpu_tree_building_opencl (ignored, rest)
-          cargo-args: "--workspace --exclude filecoin-proofs --exclude storage-proofs-update"
-          test-args: "--ignored"
-          requires:
-            - cargo_fetch
-            - ensure_groth_parameters_and_keys_linux
-
-      - test_gpu_tree_building:
-          name: test_gpu_tree_building_cuda (regular)
-          cargo-args: "--workspace --features cuda"
-          requires:
-            - cargo_fetch
-            - ensure_groth_parameters_and_keys_linux
-
-      - test_gpu_tree_building:
-          name: test_gpu_tree_building_cuda (ignored, filecoin-proofs, storage-proofs-update)
-          cargo-args: "--package filecoin-proofs --package storage-proofs-update --features cuda"
-          test-args: "--ignored"
-          requires:
-            - cargo_fetch
-            - ensure_groth_parameters_and_keys_linux
-
-      - test_gpu_tree_building:
-          name: test_gpu_tree_building_cuda (ignored, rest)
-          cargo-args: "--workspace --exclude filecoin-proofs --exclude storage-proofs-update --features cuda"
-          test-args: "--ignored"
-          requires:
-            - cargo_fetch
-            - ensure_groth_parameters_and_keys_linux
-
-      - test_multicore_sdr:
-          requires:
-            - cargo_fetch
-            - ensure_groth_parameters_and_keys_linux
-
-      - test:
-          name: test_filecoin_proofs
-          crate: "filecoin-proofs"
-          requires:
-            - cargo_fetch
-            - ensure_groth_parameters_and_keys_linux
-
-      - test:
-          name: test_storage_proofs_core
-          crate: "storage-proofs-core"
-          requires:
-            - cargo_fetch
-            - ensure_groth_parameters_and_keys_linux
-
-      - test:
-          name: test_storage_proofs_post
-          crate: "storage-proofs-post"
-          requires:
-            - cargo_fetch
-            - ensure_groth_parameters_and_keys_linux
-
-      - test:
-          name: test_storage_proofs_porep
-          crate: "storage-proofs-porep"
-          requires:
-            - cargo_fetch
-            - ensure_groth_parameters_and_keys_linux
-
-      - test:
-          name: test_fil_proofs_tooling
-          crate: "fil-proofs-tooling"
-          requires:
-            - cargo_fetch
-            - ensure_groth_parameters_and_keys_linux
-
-      - test:
-          name: test_sha2raw
-          crate: "sha2raw"
-          requires:
-            - cargo_fetch
-            - ensure_groth_parameters_and_keys_linux
-
-      - test:
-          name: test_filecoin_hashers
-          crate: "filecoin-hashers"
-          requires:
-            - cargo_fetch
-            - ensure_groth_parameters_and_keys_linux
-
-
-      - test:
-          name: test_fil_proofs_param
-          crate: "fil-proofs-param"
-          requires:
-            - cargo_fetch
-            - ensure_groth_parameters_and_keys_linux
-
-      - test_no_gpu:
-          name: test_no_gpu
-          requires:
-            - cargo_fetch
-            - ensure_groth_parameters_and_keys_linux
-
-      - test_arm_no_gpu:
-          name: test_arm_no_gpu
-          requires:
-            - cargo_fetch
-            - ensure_groth_parameters_and_keys_linux
-
-      - bench:
-          requires:
-            - cargo_fetch
-            - ensure_groth_parameters_and_keys_linux
-
-      - test_darwin
-
-      - test:
-          name: test_fr32
-          crate: "fr32"
-          requires:
-            - cargo_fetch
-
-      - test:
-          name: test_fil_store_proofs_update
-          crate: "storage-proofs-update"
-          requires:
-            - cargo_fetch
-            - ensure_groth_parameters_and_keys_linux
+#      - test_ignored_release:
+#          name: test_ignored_release_storage_proofs_post
+#          crate: "storage-proofs-post"
+#          requires:
+#            - cargo_fetch
+#            - ensure_groth_parameters_and_keys_linux
+#            
+#      - test_ignored_release:
+#          name: test_ignored_release_storage_proofs_core
+#          crate: "storage-proofs-core"
+#          requires:
+#            - cargo_fetch
+#            - ensure_groth_parameters_and_keys_linux
+#            
+#      - test_ignored_release:
+#          name: test_ignored_release_storage_proofs_porep
+#          crate: "storage-proofs-porep"
+#          requires:
+#            - cargo_fetch
+#            - ensure_groth_parameters_and_keys_linux
+#            
+#      - test_ignored_release:
+#          name: test_ignored_release_filecoin_proofs
+#          crate: "filecoin-proofs"
+#          requires:
+#            - cargo_fetch
+#            - ensure_groth_parameters_and_keys_linux
+#
+#      - test_gpu_tree_building:
+#          name: test_gpu_tree_building_opencl (regular)
+#          cargo-args: "--workspace"
+#          requires:
+#            - cargo_fetch
+#            - ensure_groth_parameters_and_keys_linux
+#
+#      - test_gpu_tree_building:
+#          name: test_gpu_tree_building_opencl (ignored, filecoin-proofs, storage-proofs-update)
+#          cargo-args: "--package filecoin-proofs --package storage-proofs-update"
+#          test-args: "--ignored"
+#          requires:
+#            - cargo_fetch
+#            - ensure_groth_parameters_and_keys_linux
+#
+#      - test_gpu_tree_building:
+#          name: test_gpu_tree_building_opencl (ignored, rest)
+#          cargo-args: "--workspace --exclude filecoin-proofs --exclude storage-proofs-update"
+#          test-args: "--ignored"
+#          requires:
+#            - cargo_fetch
+#            - ensure_groth_parameters_and_keys_linux
+#
+#      - test_gpu_tree_building:
+#          name: test_gpu_tree_building_cuda (regular)
+#          cargo-args: "--workspace --features cuda"
+#          requires:
+#            - cargo_fetch
+#            - ensure_groth_parameters_and_keys_linux
+#
+#      - test_gpu_tree_building:
+#          name: test_gpu_tree_building_cuda (ignored, filecoin-proofs, storage-proofs-update)
+#          cargo-args: "--package filecoin-proofs --package storage-proofs-update --features cuda"
+#          test-args: "--ignored"
+#          requires:
+#            - cargo_fetch
+#            - ensure_groth_parameters_and_keys_linux
+#
+#      - test_gpu_tree_building:
+#          name: test_gpu_tree_building_cuda (ignored, rest)
+#          cargo-args: "--workspace --exclude filecoin-proofs --exclude storage-proofs-update --features cuda"
+#          test-args: "--ignored"
+#          requires:
+#            - cargo_fetch
+#            - ensure_groth_parameters_and_keys_linux
+#
+#      - test_multicore_sdr:
+#          requires:
+#            - cargo_fetch
+#            - ensure_groth_parameters_and_keys_linux
+#
+#      - test:
+#          name: test_filecoin_proofs
+#          crate: "filecoin-proofs"
+#          requires:
+#            - cargo_fetch
+#            - ensure_groth_parameters_and_keys_linux
+#
+#      - test:
+#          name: test_storage_proofs_core
+#          crate: "storage-proofs-core"
+#          requires:
+#            - cargo_fetch
+#            - ensure_groth_parameters_and_keys_linux
+#
+#      - test:
+#          name: test_storage_proofs_post
+#          crate: "storage-proofs-post"
+#          requires:
+#            - cargo_fetch
+#            - ensure_groth_parameters_and_keys_linux
+#
+#      - test:
+#          name: test_storage_proofs_porep
+#          crate: "storage-proofs-porep"
+#          requires:
+#            - cargo_fetch
+#            - ensure_groth_parameters_and_keys_linux
+#
+#      - test:
+#          name: test_fil_proofs_tooling
+#          crate: "fil-proofs-tooling"
+#          requires:
+#            - cargo_fetch
+#            - ensure_groth_parameters_and_keys_linux
+#
+#      - test:
+#          name: test_sha2raw
+#          crate: "sha2raw"
+#          requires:
+#            - cargo_fetch
+#            - ensure_groth_parameters_and_keys_linux
+#
+#      - test:
+#          name: test_filecoin_hashers
+#          crate: "filecoin-hashers"
+#          requires:
+#            - cargo_fetch
+#            - ensure_groth_parameters_and_keys_linux
+#
+#
+#      - test:
+#          name: test_fil_proofs_param
+#          crate: "fil-proofs-param"
+#          requires:
+#            - cargo_fetch
+#            - ensure_groth_parameters_and_keys_linux
+#
+#      - test_no_gpu:
+#          name: test_no_gpu
+#          requires:
+#            - cargo_fetch
+#            - ensure_groth_parameters_and_keys_linux
+#
+#      - test_arm_no_gpu:
+#          name: test_arm_no_gpu
+#          requires:
+#            - cargo_fetch
+#            - ensure_groth_parameters_and_keys_linux
+#
+#      - bench:
+#          requires:
+#            - cargo_fetch
+#            - ensure_groth_parameters_and_keys_linux
+#
+#      - test_darwin
+#
+#      - test:
+#          name: test_fr32
+#          crate: "fr32"
+#          requires:
+#            - cargo_fetch
+#
+#      - test:
+#          name: test_fil_store_proofs_update
+#          crate: "storage-proofs-update"
+#          requires:
+#            - cargo_fetch
+#            - ensure_groth_parameters_and_keys_linux
