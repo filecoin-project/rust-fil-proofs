@@ -294,7 +294,7 @@ fn seal_lifecycle<Tree: 'static + MerkleTreeTrait>(
         &mut rng,
         sector_size,
         prover_id,
-        false,
+        true,
         porep_id,
         api_version,
     )?;
