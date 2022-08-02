@@ -116,7 +116,7 @@ jobs:
             # Run filecoin-proofs tests in chunks to reduce compile time and memory usage.
             cargo test -p filecoin-proofs -v --release --features=test-seal test_seal_lifecycle
             cargo test -p filecoin-proofs -v --release --features=test-upgrade test_seal_lifecycle_upgrade
-            # cargo test -p filecoin-proofs -v --release --features=test-aggregate aggregat
+            cargo test -p filecoin-proofs -v --release --features=test-aggregate aggregat
             # cargo test -p filecoin-proofs -v --release --features=test-resume test_resume
             # cargo test -p filecoin-proofs -v --release --features=test-winning test_winning
             # cargo test -p filecoin-proofs -v --release --features=test-window test_window
