@@ -22,16 +22,16 @@ use api_shared::{
     create_fake_seal, create_seal, ARBITRARY_POREP_ID_V1_0_0, ARBITRARY_POREP_ID_V1_1_0, TEST_SEED,
 };
 
-/*
 #[test]
-#[ignore]
+// #[ignore]
 fn test_winning_post_2kib_base_8() -> Result<()> {
     winning_post::<SectorShape2KiB<Fr>>(SECTOR_SIZE_2_KIB, false, ApiVersion::V1_0_0)?;
-    winning_post::<SectorShape2KiB<Fr>>(SECTOR_SIZE_2_KIB, true, ApiVersion::V1_0_0)?;
-    winning_post::<SectorShape2KiB<Fr>>(SECTOR_SIZE_2_KIB, false, ApiVersion::V1_1_0)?;
-    winning_post::<SectorShape2KiB<Fr>>(SECTOR_SIZE_2_KIB, true, ApiVersion::V1_1_0)
+    // winning_post::<SectorShape2KiB<Fr>>(SECTOR_SIZE_2_KIB, true, ApiVersion::V1_0_0)?;
+    // winning_post::<SectorShape2KiB<Fr>>(SECTOR_SIZE_2_KIB, false, ApiVersion::V1_1_0)?;
+    // winning_post::<SectorShape2KiB<Fr>>(SECTOR_SIZE_2_KIB, true, ApiVersion::V1_1_0)
 }
 
+/*
 #[test]
 #[ignore]
 fn test_winning_post_4kib_sub_8_2() -> Result<()> {
@@ -94,6 +94,7 @@ where
     };
     let sector_count = WINNING_POST_SECTOR_COUNT;
 
+    /*
     let random_fr = DefaultTreeDomain::random(&mut rng);
     let mut randomness = [0u8; 32];
     randomness.copy_from_slice(AsRef::<[u8]>::as_ref(&random_fr));
@@ -159,6 +160,7 @@ where
     assert!(valid, "proof did not verify");
 
     replica.close()?;
+    */
 
     Ok(())
 }
