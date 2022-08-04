@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://book.async.rs/overview
 
 ## Unreleased
 
+## [12.0.0] - 2022-08-04
+
+- Add additional sector logging [#1610](https://github.com/filecoin-project/rust-fil-proofs/pull/1610)
+- Make it possible bind to cores using multicore SDR if units > groups [#1588](https://github.com/filecoin-project/rust-fil-proofs/pull/1588)
+- Update repo dependencies and forward port v11.x release updates [#1615](https://github.com/filecoin-project/rust-fil-proofs/pull/1615)
+- Update rust-toolchain to 1.59.0 [#1607](https://github.com/filecoin-project/rust-fil-proofs/pull/1607)
+- Correct comment in SDR code [#1603](https://github.com/filecoin-project/rust-fil-proofs/pull/1603)
+- Remove unused dependencies [#1600](https://github.com/filecoin-project/rust-fil-proofs/pull/1600)
+- CI: run storage-proofs-update tests [#1599](https://github.com/filecoin-project/rust-fil-proofs/pull/1599)
+- CI: split GPU tree building test runs [#1594](https://github.com/filecoin-project/rust-fil-proofs/pull/1594)
+- CI: improve tests on MacOS [#1597](https://github.com/filecoin-project/rust-fil-proofs/pull/1597)
+- Remove unused dependencies from storage-proofs-update [#1593](https://github.com/filecoin-project/rust-fil-proofs/pull/1593)
+- Add SectorUpdate Compount tests to ignored [#1592](https://github.com/filecoin-project/rust-fil-proofs/pull/1592)
+- Update fil_logger due to failures [#1591](https://github.com/filecoin-project/rust-fil-proofs/pull/1591)
+- Update CLI to properly use default values [#1590](https://github.com/filecoin-project/rust-fil-proofs/pull/1590)
+- CI: run most tests on specified rust-toolchain [#1587](https://github.com/filecoin-project/rust-fil-proofs/pull/1587)
+- CI: run no GPU tests in release mode [#1586](https://github.com/filecoin-project/rust-fil-proofs/pull/1586)
+- CI: remove redundant test [#1585](https://github.com/filecoin-project/rust-fil-proofs/pull/1585)
+- Update repo dependencies and cleanups [#1584](https://github.com/filecoin-project/rust-fil-proofs/pull/1584)
+- Increase parallelism in Window PoSt [#1580](https://github.com/filecoin-project/rust-fil-proofs/pull/1580)
+- CI: Use parameter cache on MacOS [#1583](https://github.com/filecoin-project/rust-fil-proofs/pull/1583)
+- CI: Resolve timeout due to ipget issue [#1582](https://github.com/filecoin-project/rust-fil-proofs/pull/1582)
+- Update rust-toolchain to 1.56.0 [#1576](https://github.com/filecoin-project/rust-fil-proofs/pull/1576)
+- Extend winning_post bench to allow fake sealing [#1571](https://github.com/filecoin-project/rust-fil-proofs/pull/1571)
+- Update byte-unit version [#1574](https://github.com/filecoin-project/rust-fil-proofs/pull/1574)
+- Fix incorrect sector size in README [#1566](https://github.com/filecoin-project/rust-fil-proofs/pull/1566)
+- Re-use method for parameter verification [#1567](https://github.com/filecoin-project/rust-fil-proofs/pull/1567)
+
 ## [11.1.1] - 2022-06-15
 
 - Lock versions to the correct minor number [#1614](https://github.com/filecoin-project/rust-fil-proofs/pull/1614)
@@ -324,7 +352,8 @@ mainnet ready and will be replaced in a future version.  This release is intende
 
 - Initial stable release
 
-[Unreleased]: https://github.com/filecoin-project/rust-fil-proofs/compare/v11.1.1...HEAD
+[Unreleased]: https://github.com/filecoin-project/rust-fil-proofs/compare/v12.0.0...HEAD
+[12.0.0]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v12.0.0
 [11.1.1]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v11.1.1
 [11.1.0]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v11.1.0
 [11.0.2]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v11.0.2
