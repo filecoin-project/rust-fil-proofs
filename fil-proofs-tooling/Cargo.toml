@@ -12,7 +12,7 @@ readme = "README.md"
 [dependencies]
 storage-proofs-core = { path = "../storage-proofs-core", version = "~12.0.0", default-features = false}
 storage-proofs-porep = { path = "../storage-proofs-porep", version = "~12.0.0", default-features = false }
-storage-proofs-post = { path = "../storage-proofs-post", version = "~11.0.0", default-features = false }
+storage-proofs-post = { path = "../storage-proofs-post", version = "~12.0.0", default-features = false }
 filecoin-proofs = { path = "../filecoin-proofs", version = "~11.0.0", default-features = false }
 filecoin-hashers = { path = "../filecoin-hashers", version = "~7.0.0", default-features = false, features = ["poseidon", "blake2s", "sha256"] }
 clap = { version = "3.1.6", features = ["derive"] }
