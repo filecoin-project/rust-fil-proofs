@@ -23,7 +23,7 @@ generic-array = "0.14.4"
 anyhow = "1.0.23"
 neptune = { version = "~7.0.0", features = ["bls", "arity2", "arity4", "arity8", "arity11", "arity16", "arity24", "arity36"] }
 lazy_static = "1.2"
-fr32 = { path = "../fr32", version = "~4.0.0", default-features = false }
+fr32 = { path = "../fr32", version = "~5.0.0", default-features = false }
 memmap = "0.7"
 
 [dev-dependencies]
