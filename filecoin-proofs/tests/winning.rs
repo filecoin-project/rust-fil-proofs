@@ -137,7 +137,6 @@ where
     let challenges =
         generate_fallback_sector_challenges::<Tree>(&config, &randomness, &[sector_id], prover_id)?;
 
-    /*
     let single_proof = generate_single_vanilla_proof::<Tree>(
         &config,
         sector_id,
@@ -147,6 +146,7 @@ where
 
     vanilla_proofs.push(single_proof);
 
+    /*
     let proof = generate_winning_post_with_vanilla::<Tree>(
         &config,
         &randomness,
