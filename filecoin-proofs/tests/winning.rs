@@ -127,11 +127,11 @@ where
     let priv_replicas = vec![(sector_id, private_replica_info.clone())];
     let proof = generate_winning_post::<Tree>(&config, &randomness, &priv_replicas[..], prover_id)?;
 
-    /*
     let valid =
         verify_winning_post::<Tree>(&config, &randomness, &pub_replicas[..], prover_id, &proof)?;
     assert!(valid, "proof did not verify");
 
+    /*
     //
     // 2)
     let mut vanilla_proofs = Vec::with_capacity(sector_count);
