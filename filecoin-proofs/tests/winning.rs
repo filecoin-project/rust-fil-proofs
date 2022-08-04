@@ -58,6 +58,7 @@ fn test_winning_post_32kib_top_8_8_2() -> Result<()> {
     winning_post::<SectorShape32KiB<Fr>>(SECTOR_SIZE_32_KIB, false, ApiVersion::V1_1_0)?;
     winning_post::<SectorShape32KiB<Fr>>(SECTOR_SIZE_32_KIB, true, ApiVersion::V1_1_0)
 }
+*/
 
 fn winning_post<Tree>(sector_size: u64, fake: bool, api_version: ApiVersion) -> Result<()>
 where
@@ -93,6 +94,7 @@ where
     };
     let sector_count = WINNING_POST_SECTOR_COUNT;
 
+    /*
     let random_fr = DefaultTreeDomain::random(&mut rng);
     let mut randomness = [0u8; 32];
     randomness.copy_from_slice(AsRef::<[u8]>::as_ref(&random_fr));
@@ -158,10 +160,10 @@ where
     assert!(valid, "proof did not verify");
 
     replica.close()?;
+    */
 
     Ok(())
 }
-*/
 
 #[test]
 fn test_winning_post_empty_sector_challenge() -> Result<()> {

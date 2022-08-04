@@ -398,12 +398,12 @@ workflows:
     jobs:
       - ensure_groth_parameters_and_keys_linux
       - cargo_fetch
-      - rustfmt:
-          requires:
-            - cargo_fetch
-      - clippy:
-          requires:
-            - cargo_fetch
+#      - rustfmt:
+#          requires:
+#            - cargo_fetch
+#      - clippy:
+#          requires:
+#            - cargo_fetch
 
       - test_release:
           requires:
