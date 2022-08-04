@@ -29,6 +29,7 @@ fn test_winning_post_2kib_base_8() -> Result<()> {
     // winning_post::<SectorShape2KiB<Fr>>(SECTOR_SIZE_2_KIB, true, ApiVersion::V1_0_0)?;
     // winning_post::<SectorShape2KiB<Fr>>(SECTOR_SIZE_2_KIB, false, ApiVersion::V1_1_0)?;
     // winning_post::<SectorShape2KiB<Fr>>(SECTOR_SIZE_2_KIB, true, ApiVersion::V1_1_0)
+    Ok(())
 }
 
 /*
@@ -94,7 +95,6 @@ where
     };
     let sector_count = WINNING_POST_SECTOR_COUNT;
 
-    /*
     let random_fr = DefaultTreeDomain::random(&mut rng);
     let mut randomness = [0u8; 32];
     randomness.copy_from_slice(AsRef::<[u8]>::as_ref(&random_fr));
@@ -121,6 +121,7 @@ where
     let private_replica_info =
         PrivateReplicaInfo::new(replica.path().into(), comm_r, cache_dir.path().into())?;
 
+    /*
     /////////////////////////////////////////////
     // The following methods of proof generation are functionally equivalent:
     // 1)
