@@ -22,6 +22,7 @@ use api_shared::{
     create_fake_seal, create_seal, ARBITRARY_POREP_ID_V1_0_0, ARBITRARY_POREP_ID_V1_1_0, TEST_SEED,
 };
 
+/*
 #[test]
 #[ignore]
 fn test_winning_post_2kib_base_8() -> Result<()> {
@@ -160,6 +161,7 @@ where
 
     Ok(())
 }
+*/
 
 #[test]
 fn test_winning_post_empty_sector_challenge() -> Result<()> {
