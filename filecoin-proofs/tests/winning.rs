@@ -146,7 +146,6 @@ where
 
     vanilla_proofs.push(single_proof);
 
-    /*
     let proof = generate_winning_post_with_vanilla::<Tree>(
         &config,
         &randomness,
@@ -160,7 +159,6 @@ where
     assert!(valid, "proof did not verify");
 
     replica.close()?;
-    */
 
     Ok(())
 }
