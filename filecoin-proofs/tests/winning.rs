@@ -116,7 +116,6 @@ where
     assert_eq!(challenged_sectors.len(), sector_count);
     assert_eq!(challenged_sectors[0], 0); // with a sector_count of 1, the only valid index is 0
 
-    /*
     let pub_replicas = vec![(sector_id, PublicReplicaInfo::new(comm_r)?)];
     let private_replica_info =
         PrivateReplicaInfo::new(replica.path().into(), comm_r, cache_dir.path().into())?;
@@ -128,6 +127,7 @@ where
     let priv_replicas = vec![(sector_id, private_replica_info.clone())];
     let proof = generate_winning_post::<Tree>(&config, &randomness, &priv_replicas[..], prover_id)?;
 
+    /*
     let valid =
         verify_winning_post::<Tree>(&config, &randomness, &pub_replicas[..], prover_id, &proof)?;
     assert!(valid, "proof did not verify");
