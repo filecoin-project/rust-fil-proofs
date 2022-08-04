@@ -12,7 +12,7 @@ readme = "README.md"
 crossbeam = "0.8"
 storage-proofs-core = { path = "../storage-proofs-core", version = "~11.0.0", default-features = false}
 sha2raw = { path = "../sha2raw", version = "~6.0.0"}
-filecoin-hashers = { path = "../filecoin-hashers", version = "~6.0.0", default-features = false, features = ["poseidon", "sha256"]}
+filecoin-hashers = { path = "../filecoin-hashers", version = "~7.0.0", default-features = false, features = ["poseidon", "sha256"]}
 merkletree = "0.22.0"
 mapr = "0.8.0"
 num-bigint = "0.4.3"
@@ -51,7 +51,7 @@ rand = "0.8"
 rand_xorshift = "0.3.0"
 criterion = "0.3.2"
 glob = "0.3.0"
-filecoin-hashers = { path = "../filecoin-hashers", version = "~6.0.0", default-features = false, features = ["poseidon", "sha256", "blake2s"]}
+filecoin-hashers = { path = "../filecoin-hashers", version = "~7.0.0", default-features = false, features = ["poseidon", "sha256", "blake2s"]}
 fil_logger = "0.1.6"
 
 [features]
