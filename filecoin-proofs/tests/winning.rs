@@ -23,7 +23,7 @@ use api_shared::{
 };
 
 #[test]
-#[ignore]
+// #[ignore]
 fn test_winning_post_2kib_base_8() -> Result<()> {
     winning_post::<SectorShape2KiB<Fr>>(SECTOR_SIZE_2_KIB, false, ApiVersion::V1_0_0)?;
     winning_post::<SectorShape2KiB<Fr>>(SECTOR_SIZE_2_KIB, true, ApiVersion::V1_0_0)?;
@@ -31,9 +31,8 @@ fn test_winning_post_2kib_base_8() -> Result<()> {
     winning_post::<SectorShape2KiB<Fr>>(SECTOR_SIZE_2_KIB, true, ApiVersion::V1_1_0)
 }
 
-/*
 #[test]
-#[ignore]
+// #[ignore]
 fn test_winning_post_4kib_sub_8_2() -> Result<()> {
     winning_post::<SectorShape4KiB<Fr>>(SECTOR_SIZE_4_KIB, false, ApiVersion::V1_0_0)?;
     winning_post::<SectorShape4KiB<Fr>>(SECTOR_SIZE_4_KIB, true, ApiVersion::V1_0_0)?;
@@ -41,6 +40,7 @@ fn test_winning_post_4kib_sub_8_2() -> Result<()> {
     winning_post::<SectorShape4KiB<Fr>>(SECTOR_SIZE_4_KIB, true, ApiVersion::V1_1_0)
 }
 
+/*
 #[test]
 #[ignore]
 fn test_winning_post_16kib_sub_8_8() -> Result<()> {
