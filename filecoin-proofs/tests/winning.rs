@@ -155,13 +155,11 @@ where
     )?;
     /////////////////////////////////////////////
 
-    /*
     let valid =
         verify_winning_post::<Tree>(&config, &randomness, &pub_replicas[..], prover_id, &proof)?;
     assert!(valid, "proof did not verify");
 
     replica.close()?;
-    */
 
     Ok(())
 }
