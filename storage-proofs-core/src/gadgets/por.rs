@@ -336,7 +336,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait> CompoundProof<'a, PoR<Tree>, PoRCircui
     }
 }
 
-impl<'a, Tree: MerkleTreeTrait> Circuit<Fr> for PoRCircuit<Tree> {
+impl<Tree: MerkleTreeTrait> Circuit<Fr> for PoRCircuit<Tree> {
     /// # Public Inputs
     ///
     /// This circuit expects the following public inputs.
@@ -418,7 +418,7 @@ impl<'a, Tree: MerkleTreeTrait> Circuit<Fr> for PoRCircuit<Tree> {
     }
 }
 
-impl<'a, Tree: MerkleTreeTrait> PoRCircuit<Tree> {
+impl<Tree: MerkleTreeTrait> PoRCircuit<Tree> {
     pub fn new(proof: Tree::Proof, private: bool) -> Self {
         PoRCircuit::<Tree> {
             value: Root::Val(Some(proof.leaf().into())),
