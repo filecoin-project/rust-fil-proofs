@@ -132,7 +132,6 @@ where
         verify_winning_post::<Tree>(&config, &randomness, &pub_replicas[..], prover_id, &proof)?;
     assert!(valid, "proof did not verify");
 
-    /*
     //
     // 2)
     let mut vanilla_proofs = Vec::with_capacity(sector_count);
@@ -148,6 +147,7 @@ where
 
     vanilla_proofs.push(single_proof);
 
+    /*
     let proof = generate_winning_post_with_vanilla::<Tree>(
         &config,
         &randomness,
