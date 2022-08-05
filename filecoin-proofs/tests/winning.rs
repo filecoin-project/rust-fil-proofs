@@ -147,7 +147,6 @@ where
 
     vanilla_proofs.push(single_proof);
 
-    /*
     let proof = generate_winning_post_with_vanilla::<Tree>(
         &config,
         &randomness,
@@ -156,6 +155,7 @@ where
     )?;
     /////////////////////////////////////////////
 
+    /*
     let valid =
         verify_winning_post::<Tree>(&config, &randomness, &pub_replicas[..], prover_id, &proof)?;
     assert!(valid, "proof did not verify");
