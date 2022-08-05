@@ -42,7 +42,7 @@ fn is_well_formed_filename(filename: &str) -> bool {
         return false;
     }
     let version_is_valid =
-        version.get(0..1).unwrap() == "v" && version[1..].chars().all(|c| c.is_digit(10));
+        version.get(0..1).unwrap() == "v" && version[1..].chars().all(|c| c.is_ascii_digit());
     if !version_is_valid {
         warn!(
             "filename does not start with version: {}, ignoring file",

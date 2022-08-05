@@ -223,8 +223,8 @@ impl HashFunction<Sha256Domain> for Sha256Function {
         let le_bits = be_bits
             .chunks(8)
             .flat_map(|chunk| chunk.iter().rev())
-            .cloned()
             .take(Fr::CAPACITY as usize)
+            .cloned()
             .collect::<Vec<_>>();
         multipack::pack_bits(cs.namespace(|| "pack_le"), &le_bits)
     }
