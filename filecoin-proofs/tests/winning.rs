@@ -24,6 +24,7 @@ use api_shared::{
     create_fake_seal, create_seal, ARBITRARY_POREP_ID_V1_0_0, ARBITRARY_POREP_ID_V1_1_0, TEST_SEED,
 };
 
+#[cfg(not(feature = "big-tests"))]
 #[test]
 // #[ignore]
 fn test_winning_post_2kib_base_8() -> Result<()> {
@@ -33,6 +34,7 @@ fn test_winning_post_2kib_base_8() -> Result<()> {
     winning_post::<SectorShape2KiB<Fr>>(SECTOR_SIZE_2_KIB, true, ApiVersion::V1_1_0)
 }
 
+#[cfg(not(feature = "big-tests"))]
 #[test]
 // #[ignore]
 fn test_winning_post_4kib_sub_8_2() -> Result<()> {
