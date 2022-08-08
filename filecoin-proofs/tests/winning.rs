@@ -40,7 +40,6 @@ fn test_winning_post_4kib_sub_8_2() -> Result<()> {
     winning_post::<SectorShape4KiB<Fr>>(SECTOR_SIZE_4_KIB, true, ApiVersion::V1_1_0)
 }
 
-/*
 #[test]
 #[ignore]
 fn test_winning_post_16kib_sub_8_8() -> Result<()> {
@@ -50,6 +49,7 @@ fn test_winning_post_16kib_sub_8_8() -> Result<()> {
     winning_post::<SectorShape16KiB<Fr>>(SECTOR_SIZE_16_KIB, true, ApiVersion::V1_1_0)
 }
 
+/*
 #[test]
 #[ignore]
 fn test_winning_post_32kib_top_8_8_2() -> Result<()> {
