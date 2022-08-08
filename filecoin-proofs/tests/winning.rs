@@ -1,5 +1,7 @@
 #![cfg(feature = "test-winning")]
 
+#![allow(unused_imports)]
+
 use anyhow::Result;
 use blstrs::Scalar as Fr;
 use filecoin_hashers::{Domain, Hasher};
