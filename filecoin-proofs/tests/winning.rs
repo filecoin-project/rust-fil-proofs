@@ -54,16 +54,15 @@ fn test_winning_post_16kib_sub_8_8() -> Result<()> {
     winning_post::<SectorShape16KiB<Fr>>(SECTOR_SIZE_16_KIB, true, ApiVersion::V1_1_0)
 }
 
-/*
+#[cfg(feature = "big-tests")]
 #[test]
-#[ignore]
+// #[ignore]
 fn test_winning_post_32kib_top_8_8_2() -> Result<()> {
     winning_post::<SectorShape32KiB<Fr>>(SECTOR_SIZE_32_KIB, false, ApiVersion::V1_0_0)?;
     winning_post::<SectorShape32KiB<Fr>>(SECTOR_SIZE_32_KIB, true, ApiVersion::V1_0_0)?;
     winning_post::<SectorShape32KiB<Fr>>(SECTOR_SIZE_32_KIB, false, ApiVersion::V1_1_0)?;
     winning_post::<SectorShape32KiB<Fr>>(SECTOR_SIZE_32_KIB, true, ApiVersion::V1_1_0)
 }
-*/
 
 fn winning_post<Tree>(sector_size: u64, fake: bool, api_version: ApiVersion) -> Result<()>
 where
