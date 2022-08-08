@@ -42,16 +42,14 @@ fn test_winning_post_4kib_sub_8_2() -> Result<()> {
     winning_post::<SectorShape4KiB<Fr>>(SECTOR_SIZE_4_KIB, true, ApiVersion::V1_1_0)
 }
 
+#[cfg(feature = "big-tests")]
 #[test]
 // #[ignore]
 fn test_winning_post_16kib_sub_8_8() -> Result<()> {
-    /*
     winning_post::<SectorShape16KiB<Fr>>(SECTOR_SIZE_16_KIB, false, ApiVersion::V1_0_0)?;
     winning_post::<SectorShape16KiB<Fr>>(SECTOR_SIZE_16_KIB, true, ApiVersion::V1_0_0)?;
     winning_post::<SectorShape16KiB<Fr>>(SECTOR_SIZE_16_KIB, false, ApiVersion::V1_1_0)?;
     winning_post::<SectorShape16KiB<Fr>>(SECTOR_SIZE_16_KIB, true, ApiVersion::V1_1_0)
-    */
-    Ok(())
 }
 
 /*
