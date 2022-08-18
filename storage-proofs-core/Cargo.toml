@@ -63,8 +63,8 @@ big-sector-sizes-bench = []
 measurements = ["cpu-time", "gperftools"]
 profile = ["measurements"]
 
-cuda = ["bellperson/cuda", "filecoin-hashers/cuda"]
-opencl = ["bellperson/opencl", "filecoin-hashers/opencl"]
+cuda = ["bellperson/cuda", "filecoin-hashers/cuda", "halo2_proofs/cuda"]
+opencl = ["bellperson/opencl", "filecoin-hashers/opencl", "halo2_proofs/opencl"]
 
 [[bench]]
 name = "sha256"
