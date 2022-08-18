@@ -36,9 +36,9 @@ type Challenge<C> = Challenge255<C>;
 type TranscriptReader<'proof, C> = Blake2bRead<&'proof [u8], C, Challenge<C>>;
 type TranscriptWriter<C> = Blake2bWrite<Vec<u8>, C, Challenge<C>>;
 
-pub trait Halo2Field: FieldExt {
+pub trait Halo2Field: FieldExt + DeserializeOwned + Serialize {
     type Curve: CurveExt<ScalarExt = Self>;
-    type Affine: CurveAffine<ScalarExt = Self>;
+    type Affine: CurveAffine<ScalarExt = Self> + DeserializeOwned + Serialize;
 }
 
 impl Halo2Field for Fp {
@@ -495,7 +495,7 @@ where
 
 pub trait CompoundProof<F, const SECTOR_NODES: usize>
 where
-    F: Halo2Field + DeserializeOwned + Serialize,
+    F: Halo2Field,
 {
     type VanillaSetupParams;
     type VanillaPublicInputs;

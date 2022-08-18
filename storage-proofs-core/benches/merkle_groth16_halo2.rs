@@ -368,6 +368,6 @@ fn bench_groth16_halo2_sha256_arity_2(c: &mut Criterion) {
 criterion_group!(
     benches,
     bench_groth16_halo2_poseidon,
-    bench_groth16_halo2_sha256_arity_2,
+    //bench_groth16_halo2_sha256_arity_2,
 );
 criterion_main!(benches);

@@ -389,7 +389,7 @@ where
     }
 }
 
-impl<'a, Tree> Circuit<Fr> for PoRCircuit<Tree>
+impl<Tree> Circuit<Fr> for PoRCircuit<Tree>
 where
     Tree: MerkleTreeTrait<Field = Fr>,
     Tree::Hasher: Groth16Hasher,
@@ -475,7 +475,7 @@ where
     }
 }
 
-impl<'a, Tree> PoRCircuit<Tree>
+impl<Tree> PoRCircuit<Tree>
 where
     Tree: MerkleTreeTrait<Field = Fr>,
     Tree::Hasher: Groth16Hasher,

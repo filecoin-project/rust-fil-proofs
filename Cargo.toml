@@ -14,5 +14,16 @@ members = [
   "fil-halo2-gadgets",
 ]
 
+#[patch.crates-io]
+#ff = { git = "https://github.com/filecoin-project/ff", branch = "add-gpu-feature"}
+#halo2_proofs = { git = "https://github.com/filecoin-project/halo2", branch = "gpu-multiexp" }
+#pasta_curves = { git = "https://github.com/filecoin-project/pasta_curves", branch = "ff-field-trait" }
+#[patch."https://github.com/filecoin-project/neptune"]
+#neptune = { path = "../neptune" }
+
 [patch.crates-io]
+bellperson = { git = "https://github.com/filecoin-project/bellperson", branch = "program-macro" }
+blstrs = { git = "https://github.com/filecoin-project/blstrs", branch = "gpuname-fp6-fp12" }
 halo2_proofs = { git = "https://github.com/filecoin-project/halo2", branch = "serialize-vk-pk" }
+neptune = { git = "https://github.com/filecoin-project/neptune", branch = "halo2-gpu" }
+pasta_curves = { git = "https://github.com/filecoin-project/pasta_curves", branch = "halo2-gpu" }

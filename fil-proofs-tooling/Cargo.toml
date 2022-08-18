@@ -47,7 +47,7 @@ fdlimit = "0.2.0"
 dialoguer = "0.10.0"
 structopt = "0.3.12"
 humansize = "1.1.0"
-blstrs = "0.5.0"
+blstrs = "0.6.0"
 time = "0.3.9"
 pasta_curves = "0.4.0"
 
