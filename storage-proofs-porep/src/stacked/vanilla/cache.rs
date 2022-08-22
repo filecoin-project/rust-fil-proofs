@@ -9,7 +9,7 @@ use byteorder::{ByteOrder, LittleEndian};
 use filecoin_hashers::Hasher;
 use lazy_static::lazy_static;
 use log::{info, trace};
-use mapr::{Mmap, MmapOptions};
+use memmap2::{Mmap, MmapOptions};
 use rayon::prelude::{IndexedParallelIterator, ParallelIterator, ParallelSliceMut};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
