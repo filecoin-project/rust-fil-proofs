@@ -766,6 +766,7 @@ where
                 SECTOR_NODES_2_KIB,
             >::blank_circuit();
 
+            trace!("creating halo2 params ({:?}) while sealing", sector_bytes);
             let keypair = <StackedDrg<
                 '_,
                 MerkleTreeWrapper<
@@ -815,6 +816,7 @@ where
                 SECTOR_NODES_4_KIB,
             >::blank_circuit();
 
+            trace!("creating halo2 params ({:?}) while sealing", sector_bytes);
             let keypair = <StackedDrg<
                 '_,
                 MerkleTreeWrapper<
@@ -864,6 +866,7 @@ where
                 SECTOR_NODES_16_KIB,
             >::blank_circuit();
 
+            trace!("creating halo2 params ({:?}) while sealing", sector_bytes);
             let keypair = <StackedDrg<
                 '_,
                 MerkleTreeWrapper<
@@ -913,6 +916,7 @@ where
                 SECTOR_NODES_32_KIB,
             >::blank_circuit();
 
+            trace!("creating halo2 params ({:?}) while sealing", sector_bytes);
             let keypair = <StackedDrg<
                 '_,
                 MerkleTreeWrapper<
@@ -962,6 +966,7 @@ where
                 SECTOR_NODES_8_MIB,
             >::blank_circuit();
 
+            trace!("creating halo2 params ({:?}) while sealing", sector_bytes);
             let keypair = <StackedDrg<
                 '_,
                 MerkleTreeWrapper<
@@ -1011,6 +1016,7 @@ where
                 SECTOR_NODES_16_MIB,
             >::blank_circuit();
 
+            trace!("creating halo2 params ({:?}) while sealing", sector_bytes);
             let keypair = <StackedDrg<
                 '_,
                 MerkleTreeWrapper<
@@ -1060,6 +1066,7 @@ where
                 SECTOR_NODES_512_MIB,
             >::blank_circuit();
 
+            trace!("creating halo2 params ({:?}) while sealing", sector_bytes);
             let keypair = <StackedDrg<
                 '_,
                 MerkleTreeWrapper<
@@ -1109,6 +1116,7 @@ where
                 SECTOR_NODES_32_GIB,
             >::blank_circuit();
 
+            trace!("creating halo2 params ({:?}) while sealing", sector_bytes);
             let keypair = <StackedDrg<
                 '_,
                 MerkleTreeWrapper<
@@ -1158,6 +1166,7 @@ where
                 SECTOR_NODES_64_GIB,
             >::blank_circuit();
 
+            trace!("creating halo2 params ({:?}) while sealing", sector_bytes);
             let keypair = <StackedDrg<
                 '_,
                 MerkleTreeWrapper<
@@ -2019,6 +2028,10 @@ where
 
             let circ = SdrPorepCircuit::<F, U, V, W, SECTOR_NODES_2_KIB>::blank_circuit();
 
+            trace!(
+                "creating halo2 params ({:?}) while verifying seal",
+                sector_bytes
+            );
             let keypair = <StackedDrg<
                 '_,
                 MerkleTreeWrapper<DefaultTreeHasher<F>, MockStore, U, V, W>,
@@ -2050,6 +2063,10 @@ where
 
             let circ = SdrPorepCircuit::<F, U, V, W, SECTOR_NODES_4_KIB>::blank_circuit();
 
+            trace!(
+                "creating halo2 params ({:?}) while verifying seal",
+                sector_bytes
+            );
             let keypair = <StackedDrg<
                 '_,
                 MerkleTreeWrapper<DefaultTreeHasher<F>, MockStore, U, V, W>,
@@ -2081,6 +2098,10 @@ where
 
             let circ = SdrPorepCircuit::<F, U, V, W, SECTOR_NODES_16_KIB>::blank_circuit();
 
+            trace!(
+                "creating halo2 params ({:?}) while verifying seal",
+                sector_bytes
+            );
             let keypair = <StackedDrg<
                 '_,
                 MerkleTreeWrapper<DefaultTreeHasher<F>, MockStore, U, V, W>,
@@ -2112,6 +2133,10 @@ where
 
             let circ = SdrPorepCircuit::<F, U, V, W, SECTOR_NODES_32_KIB>::blank_circuit();
 
+            trace!(
+                "creating halo2 params ({:?}) while verifying seal",
+                sector_bytes
+            );
             let keypair = <StackedDrg<
                 '_,
                 MerkleTreeWrapper<DefaultTreeHasher<F>, MockStore, U, V, W>,
@@ -2143,6 +2168,10 @@ where
 
             let circ = SdrPorepCircuit::<F, U, V, W, SECTOR_NODES_8_MIB>::blank_circuit();
 
+            trace!(
+                "creating halo2 params ({:?}) while verifying seal",
+                sector_bytes
+            );
             let keypair = <StackedDrg<
                 '_,
                 MerkleTreeWrapper<DefaultTreeHasher<F>, MockStore, U, V, W>,
@@ -2174,6 +2203,10 @@ where
 
             let circ = SdrPorepCircuit::<F, U, V, W, SECTOR_NODES_16_MIB>::blank_circuit();
 
+            trace!(
+                "creating halo2 params ({:?}) while verifying seal",
+                sector_bytes
+            );
             let keypair = <StackedDrg<
                 '_,
                 MerkleTreeWrapper<DefaultTreeHasher<F>, MockStore, U, V, W>,
@@ -2205,6 +2238,10 @@ where
 
             let circ = SdrPorepCircuit::<F, U, V, W, SECTOR_NODES_512_MIB>::blank_circuit();
 
+            trace!(
+                "creating halo2 params ({:?}) while verifying seal",
+                sector_bytes
+            );
             let keypair = <StackedDrg<
                 '_,
                 MerkleTreeWrapper<DefaultTreeHasher<F>, MockStore, U, V, W>,
@@ -2236,6 +2273,10 @@ where
 
             let circ = SdrPorepCircuit::<F, U, V, W, SECTOR_NODES_32_GIB>::blank_circuit();
 
+            trace!(
+                "creating halo2 params ({:?}) while verifying seal",
+                sector_bytes
+            );
             let keypair = <StackedDrg<
                 '_,
                 MerkleTreeWrapper<DefaultTreeHasher<F>, MockStore, U, V, W>,
@@ -2267,6 +2308,10 @@ where
 
             let circ = SdrPorepCircuit::<F, U, V, W, SECTOR_NODES_64_GIB>::blank_circuit();
 
+            trace!(
+                "creating halo2 params ({:?}) while verifying seal",
+                sector_bytes
+            );
             let keypair = <StackedDrg<
                 '_,
                 MerkleTreeWrapper<DefaultTreeHasher<F>, MockStore, U, V, W>,

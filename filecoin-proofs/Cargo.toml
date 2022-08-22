@@ -83,3 +83,7 @@ harness = false
 [[bench]]
 name = "aggregation"
 harness = false
+
+[[bench]]
+name = "halo2_keypairs"
+harness = false
