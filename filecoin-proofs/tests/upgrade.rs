@@ -27,6 +27,7 @@ use filecoin_proofs::{
     SectorShape32GiB, SectorShape512MiB, SectorShape64GiB, SECTOR_SIZE_32_GIB, SECTOR_SIZE_512_MIB,
     SECTOR_SIZE_64_GIB,
 };
+use halo2_proofs::pasta::{Fp, Fq};
 use log::info;
 use memmap::MmapOptions;
 use rand::{Rng, SeedableRng};
@@ -61,6 +62,26 @@ fn test_seal_lifecycle_upgrade_2kib_porep_id_v1_1_base_8() -> Result<()> {
 }
 
 #[cfg(not(feature = "big-tests"))]
+#[test]
+#[ignore]
+fn test_halo2_seal_lifecycle_upgrade_2kib_porep_id_v1_1_base_8() -> Result<()> {
+    let porep_id_v1_1: u64 = 5; // This is a RegisteredSealProof value
+
+    let mut porep_id = [0u8; 32];
+    porep_id[..8].copy_from_slice(&porep_id_v1_1.to_le_bytes());
+    assert!(!is_legacy_porep_id(porep_id));
+    seal_lifecycle_upgrade::<SectorShape2KiB<Fp>, Fp>(
+        SECTOR_SIZE_2_KIB,
+        &porep_id,
+        ApiVersion::V1_1_0,
+    )?;
+    seal_lifecycle_upgrade::<SectorShape2KiB<Fq>, Fq>(
+        SECTOR_SIZE_2_KIB,
+        &porep_id,
+        ApiVersion::V1_1_0,
+    )
+}
+
 #[test]
 #[ignore]
 fn test_seal_lifecycle_upgrade_4kib_sub_8_2_v1_1() -> Result<()> {
