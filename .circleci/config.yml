@@ -89,39 +89,40 @@ jobs:
             ulimit -n 20000
             ulimit -u 20000
             ulimit -n 20000
-            # cargo test -p fr32 --verbose --release --all-targets
-            # cargo test -p sha2raw --verbose --release --all-targets
-            # cargo test -p fil-halo2-gadgets --verbose --release --all-targets
-            # cargo test -p filecoin-hashers --verbose --release --all-targets
-            # cargo test -p storage-proofs-core --verbose --release --all-targets
-            # cargo test -p storage-proofs-porep --verbose --release --all-targets
-            # cargo test -p storage-proofs-post --verbose --release --all-targets
-            # cargo test -p storage-proofs-update --verbose --release --all-targets
-            # cargo test -p filecoin-proofs --verbose --release --all-targets
-            # cargo test -p fil-proofs-tooling --verbose --release --all-targets
-            # cargo test -p fil-proofs-param --verbose --release --all-targets
-            # # Run sdr-porep halo2 circuit and compound-proof tests sequentially.
-            # cargo test -p storage-proofs-porep --release --features isolated-testing test_sdr_porep_circuit_2kib_halo2
-            # cargo test -p storage-proofs-porep --release --features isolated-testing test_sdr_porep_circuit_4kib_halo2
-            # cargo test -p storage-proofs-porep --release --features isolated-testing test_sdr_porep_circuit_8kib_halo2
-            # cargo test -p storage-proofs-porep --release --features isolated-testing test_sdr_porep_circuit_16kib_halo2
-            # cargo test -p storage-proofs-porep --release --features isolated-testing test_sdr_porep_circuit_32kib_halo2
-            # cargo test -p storage-proofs-porep --release --features isolated-testing test_sdr_porep_compound_2kib_halo2
-            # cargo test -p storage-proofs-porep --release --features isolated-testing test_sdr_porep_compound_4kib_halo2
-            # cargo test -p storage-proofs-porep --release --features isolated-testing test_sdr_porep_compound_8kib_halo2
-            # cargo test -p storage-proofs-porep --release --features isolated-testing test_sdr_porep_compound_16kib_halo2
-            # cargo test -p storage-proofs-porep --release --features isolated-testing test_sdr_porep_compound_32kib_halo2
-            # # Some `storage-proofs-update` tests need to run sequentially due to their high memory usage.
-            # cargo test -p storage-proofs-update --release --features isolated-testing test_empty_sector_update -- --test-threads=1
-            # Run filecoin-proofs tests in chunks to reduce compile time and memory usage.
-            cargo test -p filecoin-proofs -v --release --features=test-seal test_seal_lifecycle
-            cargo test -p filecoin-proofs -v --release --features=test-upgrade test_seal_lifecycle_upgrade
-            cargo test -p filecoin-proofs -v --release --features=test-aggregate aggregat
-            cargo test -p filecoin-proofs -v --release --features=test-resume test_resume
-            cargo test -p filecoin-proofs -v --release --features=test-winning test_winning
-            cargo test -p filecoin-proofs -v --release --features=test-winning,big-tests test_winning
-            cargo test -p filecoin-proofs -v --release --features=test-window test_window
-            cargo test -p filecoin-proofs -v --release --features=test-window,big-tests test_window
+            cargo test -p fr32 --verbose --release --all-targets
+            cargo test -p sha2raw --verbose --release --all-targets
+            cargo test -p fil-halo2-gadgets --verbose --release --all-targets
+            cargo test -p filecoin-hashers --verbose --release --all-targets
+            cargo test -p storage-proofs-core --verbose --release --all-targets
+            cargo test -p storage-proofs-porep --verbose --release --all-targets
+            cargo test -p storage-proofs-post --verbose --release --all-targets
+            cargo test -p storage-proofs-update --verbose --release --all-targets
+            cargo test -p filecoin-proofs --verbose --release --all-targets
+            cargo test -p fil-proofs-tooling --verbose --release --all-targets
+            cargo test -p fil-proofs-param --verbose --release --all-targets
+            # Run sdr-porep halo2 circuit and compound-proof tests sequentially (as running in
+            # parallel requires too much memory).
+            cargo test -p storage-proofs-porep --release --features isolated-testing test_sdr_porep_circuit_2kib_halo2
+            cargo test -p storage-proofs-porep --release --features isolated-testing test_sdr_porep_circuit_4kib_halo2
+            cargo test -p storage-proofs-porep --release --features isolated-testing test_sdr_porep_circuit_8kib_halo2
+            cargo test -p storage-proofs-porep --release --features isolated-testing test_sdr_porep_circuit_16kib_halo2
+            cargo test -p storage-proofs-porep --release --features isolated-testing test_sdr_porep_circuit_32kib_halo2
+            cargo test -p storage-proofs-porep --release --features isolated-testing test_sdr_porep_compound_2kib_halo2
+            cargo test -p storage-proofs-porep --release --features isolated-testing test_sdr_porep_compound_4kib_halo2
+            cargo test -p storage-proofs-porep --release --features isolated-testing test_sdr_porep_compound_8kib_halo2
+            cargo test -p storage-proofs-porep --release --features isolated-testing test_sdr_porep_compound_16kib_halo2
+            cargo test -p storage-proofs-porep --release --features isolated-testing test_sdr_porep_compound_32kib_halo2
+            # Some `storage-proofs-update` tests need to run sequentially due to their high memory usage.
+            cargo test -p storage-proofs-update --release --features isolated-testing test_empty_sector_update -- --test-threads=1
+            # Run filecoin-proofs tests in chunks to reduce compilation memory usage.
+            cargo test -p filecoin-proofs --release --features test-seal test_seal_lifecycle
+            cargo test -p filecoin-proofs --release --features test-upgrade test_seal_lifecycle_upgrade
+            cargo test -p filecoin-proofs --release --features test-aggregate aggregat
+            cargo test -p filecoin-proofs --release --features test-resume test_resume
+            cargo test -p filecoin-proofs --release --features test-winning test_winning
+            cargo test -p filecoin-proofs --release --features test-winning,big-tests test_winning
+            cargo test -p filecoin-proofs --release --features test-window test_window
+            cargo test -p filecoin-proofs --release --features test-window,big-tests test_window
           no_output_timeout: 30m
 
   test_ignored_release:
