@@ -120,7 +120,8 @@ jobs:
             cargo test -p filecoin-proofs -v --release --features=test-resume test_resume
             cargo test -p filecoin-proofs -v --release --features=test-winning test_winning
             cargo test -p filecoin-proofs -v --release --features=test-winning,big-tests test_winning
-            # cargo test -p filecoin-proofs -v --release --features=test-window test_window
+            cargo test -p filecoin-proofs -v --release --features=test-window test_window
+            cargo test -p filecoin-proofs -v --release --features=test-window,big-tests test_window
           no_output_timeout: 30m
 
   test_ignored_release:

@@ -11,10 +11,12 @@ use filecoin_proofs::{
     generate_window_post_with_vanilla, get_num_partition_for_fallback_post,
     merge_window_post_partition_proofs, verify_window_post, DefaultPieceHasher, DefaultTreeHasher,
     MerkleTreeTrait, PoStConfig, PoStType, PoseidonArityAllFields, PrivateReplicaInfo,
-    PublicReplicaInfo, SectorShape16KiB, SectorShape2KiB, SectorShape32KiB, SectorShape4KiB,
-    SECTOR_SIZE_16_KIB, SECTOR_SIZE_2_KIB, SECTOR_SIZE_32_KIB, SECTOR_SIZE_4_KIB,
-    WINDOW_POST_CHALLENGE_COUNT, WINDOW_POST_SECTOR_COUNT,
+    PublicReplicaInfo, WINDOW_POST_CHALLENGE_COUNT, WINDOW_POST_SECTOR_COUNT,
 };
+#[cfg(not(feature = "big-tests"))]
+use filecoin_proofs::{SectorShape2KiB, SectorShape4KiB, SECTOR_SIZE_2_KIB, SECTOR_SIZE_4_KIB};
+#[cfg(feature = "big-tests")]
+use filecoin_proofs::{SectorShape16KiB, SectorShape32KiB, SECTOR_SIZE_16_KIB, SECTOR_SIZE_32_KIB};
 use rand::SeedableRng;
 use rand_xorshift::XorShiftRng;
 use storage_proofs_core::{api_version::ApiVersion, sector::SectorId};
@@ -25,6 +27,7 @@ use api_shared::{
     create_fake_seal, create_seal, ARBITRARY_POREP_ID_V1_0_0, ARBITRARY_POREP_ID_V1_1_0, TEST_SEED,
 };
 
+#[cfg(not(feature = "big-tests"))]
 #[test]
 #[ignore]
 fn test_window_post_single_partition_smaller_2kib_base_8() -> Result<()> {
@@ -56,6 +59,7 @@ fn test_window_post_single_partition_smaller_2kib_base_8() -> Result<()> {
     Ok(())
 }
 
+#[cfg(not(feature = "big-tests"))]
 #[test]
 #[ignore]
 fn test_window_post_two_partitions_matching_2kib_base_8() -> Result<()> {
@@ -87,6 +91,7 @@ fn test_window_post_two_partitions_matching_2kib_base_8() -> Result<()> {
     Ok(())
 }
 
+#[cfg(not(feature = "big-tests"))]
 #[test]
 #[ignore]
 fn test_window_post_two_partitions_matching_4kib_sub_8_2() -> Result<()> {
@@ -118,6 +123,7 @@ fn test_window_post_two_partitions_matching_4kib_sub_8_2() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "big-tests")]
 #[test]
 #[ignore]
 fn test_window_post_two_partitions_matching_16kib_sub_8_8() -> Result<()> {
@@ -149,6 +155,7 @@ fn test_window_post_two_partitions_matching_16kib_sub_8_8() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "big-tests")]
 #[test]
 #[ignore]
 fn test_window_post_two_partitions_matching_32kib_top_8_8_2() -> Result<()> {
@@ -180,6 +187,7 @@ fn test_window_post_two_partitions_matching_32kib_top_8_8_2() -> Result<()> {
     Ok(())
 }
 
+#[cfg(not(feature = "big-tests"))]
 #[test]
 #[ignore]
 fn test_window_post_two_partitions_smaller_2kib_base_8() -> Result<()> {
@@ -211,6 +219,7 @@ fn test_window_post_two_partitions_smaller_2kib_base_8() -> Result<()> {
     Ok(())
 }
 
+#[cfg(not(feature = "big-tests"))]
 #[test]
 #[ignore]
 fn test_window_post_single_partition_matching_2kib_base_8() -> Result<()> {
@@ -344,6 +353,7 @@ where
     Ok(())
 }
 
+#[cfg(not(feature = "big-tests"))]
 #[test]
 fn test_window_post_partition_matching_2kib_base_8() -> Result<()> {
     let sector_size = SECTOR_SIZE_2_KIB;
