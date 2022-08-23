@@ -196,7 +196,9 @@ jobs:
             ulimit -n 20000
             ulimit -u 20000
             ulimit -n 20000
-            cargo test --all --verbose --release lifecycle -- --ignored --nocapture
+            # Break up compilation of `filecoin-proofs` tests; not doing so causes CI to run out of memory.
+            cargo test -p filecoin-proofs --release --features test-seal lifecycle -- --ignored
+            cargo test -p filecoin-proofs --release --features test-upgrade lifecycle -- --ignored
             cargo test -p storage-proofs-porep --features isolated-testing --release checkout_cores -- --test-threads=1
             cargo test -p storage-proofs-porep --features isolated-testing --release test_parallel_generation_and_read_partial_range_v1_0
             cargo test -p storage-proofs-porep --features isolated-testing --release test_parallel_generation_and_read_partial_range_v1_1
@@ -462,11 +464,10 @@ workflows:
 #            - cargo_fetch
 #            - ensure_groth_parameters_and_keys_linux
 #
-      - test_ignored_release_filecoin_proofs:
-          requires:
-            - cargo_fetch
-            - ensure_groth_parameters_and_keys_linux
-
+#      - test_ignored_release_filecoin_proofs:
+#          requires:
+#            - cargo_fetch
+#            - ensure_groth_parameters_and_keys_linux
 #
 #      - test_gpu_tree_building:
 #          name: test_gpu_tree_building_opencl (regular)
@@ -514,11 +515,11 @@ workflows:
 #            - cargo_fetch
 #            - ensure_groth_parameters_and_keys_linux
 #
-#      - test_multicore_sdr:
-#          requires:
-#            - cargo_fetch
-#            - ensure_groth_parameters_and_keys_linux
-#
+      - test_multicore_sdr:
+          requires:
+            - cargo_fetch
+            - ensure_groth_parameters_and_keys_linux
+
 #      - test:
 #          name: test_filecoin_proofs
 #          crate: "filecoin-proofs"
