@@ -149,6 +149,34 @@ jobs:
             RUST_TEST_THREADS: 1
           no_output_timeout: 30m
 
+  test_ignored_release_filecoin_proofs:
+    executor: default
+    environment: *setup-env
+    steps:
+      - checkout
+      - attach_workspace:
+          at: "."
+      - restore_rustup_cache
+      - restore_parameter_cache
+      - run:
+          name: Test filecoin_proofs ignored in release profile
+          command: |
+              ulimit -n 20000
+              ulimit -u 20000
+              ulimit -n 20000
+              cd filecoin-proofs
+              # Run filecoin-proofs tests in chunks to reduce compilation memory usage.
+              cargo test --release --features test-seal -- --ignored
+              cargo test --release --features test-upgrade -- --ignored
+              cargo test --release --features test-aggregate -- --ignored
+              cargo test --release --features test-resume -- --ignored
+              cargo test --release --features test-winning -- --ignored
+              cargo test --release --features test-winning,big-tests -- --ignored
+              cargo test --release --features test-window -- --ignored
+              cargo test --release --features test-window,big-tests -- --ignored
+          environment:
+            RUST_TEST_THREADS: 1
+          no_output_timeout: 30m
 
   # Running with `use_multicore_sdr=true` should be integrated directly into the test code. For now we
   # just re-run the lifecycle tests to exercise the use_multicore_sdr code path with that setting set.
@@ -407,12 +435,12 @@ workflows:
 #      - clippy:
 #          requires:
 #            - cargo_fetch
-
-      - test_release:
-          requires:
-            - cargo_fetch
-            - ensure_groth_parameters_and_keys_linux
-            
+#
+#      - test_release:
+#          requires:
+#            - cargo_fetch
+#            - ensure_groth_parameters_and_keys_linux
+#
 #      - test_ignored_release:
 #          name: test_ignored_release_storage_proofs_post
 #          crate: "storage-proofs-post"
@@ -433,13 +461,12 @@ workflows:
 #          requires:
 #            - cargo_fetch
 #            - ensure_groth_parameters_and_keys_linux
-#            
-#      - test_ignored_release:
-#          name: test_ignored_release_filecoin_proofs
-#          crate: "filecoin-proofs"
-#          requires:
-#            - cargo_fetch
-#            - ensure_groth_parameters_and_keys_linux
+#
+      - test_ignored_release_filecoin_proofs:
+          requires:
+            - cargo_fetch
+            - ensure_groth_parameters_and_keys_linux
+
 #
 #      - test_gpu_tree_building:
 #          name: test_gpu_tree_building_opencl (regular)
