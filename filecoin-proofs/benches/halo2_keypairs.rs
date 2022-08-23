@@ -11,7 +11,7 @@ use storage_proofs_porep::stacked::{
     halo2::{
         constants::{
             SECTOR_NODES_16_KIB, SECTOR_NODES_16_MIB, SECTOR_NODES_2_KIB, SECTOR_NODES_32_GIB,
-            SECTOR_NODES_4_KIB, SECTOR_NODES_512_MIB, SECTOR_NODES_64_GIB,
+            SECTOR_NODES_4_KIB, SECTOR_NODES_512_MIB, SECTOR_NODES_64_GIB, SECTOR_NODES_8_MIB,
         },
         SdrPorepCircuit,
     },
@@ -64,6 +64,47 @@ fn bench_halo2_keypair_base(c: &mut Criterion) {
                                 MerkleTreeWrapper<DefaultTreeHasher<Fp>, MockStore, U8, U0, U0>,
                                 DefaultPieceHasher<Fp>,
                             > as halo2::CompoundProof<Fp, SECTOR_NODES_2_KIB>>::create_keypair(
+                                &circ,
+                            )
+                            .expect("failed to create halo2 keypair");
+                        });
+                    })
+                });
+                keypair_benchmarks.finish();
+
+                println!("\n{}-keypair-base/halo2", benchmark_prefix);
+                println!("\t\t\ttime:\t{}s", start.elapsed().as_secs_f32());
+            }
+            SECTOR_NODES_8_MIB => {
+                let start = Instant::now();
+                let circ = SdrPorepCircuit::<Fp, U8, U0, U0, SECTOR_NODES_8_MIB>::blank_circuit();
+                println!("\n{}-keypair-base-BlankCircuit/halo2", benchmark_prefix);
+                println!("\t\t\ttime:\t{}s", start.elapsed().as_secs_f32());
+
+                let start = Instant::now();
+                let _keypair = <StackedDrg<
+                    '_,
+                    MerkleTreeWrapper<DefaultTreeHasher<Fp>, MockStore, U8, U0, U0>,
+                    DefaultPieceHasher<Fp>,
+                > as halo2::CompoundProof<Fp, SECTOR_NODES_8_MIB>>::create_keypair(
+                    &circ
+                )
+                .expect("failed to create halo2 keypair");
+                println!("\n{}-keypair-base-FirstTime/halo2", benchmark_prefix);
+                println!("\t\t\ttime:\t{}s", start.elapsed().as_secs_f32());
+
+                let mut keypair_benchmarks =
+                    c.benchmark_group(format!("{}-keypair-base", benchmark_prefix));
+                keypair_benchmarks.sample_size(10);
+                let start = Instant::now();
+                keypair_benchmarks.bench_function("Halo2Keypair::create", |b| {
+                    b.iter(|| {
+                        black_box({
+                            <StackedDrg<
+                                '_,
+                                MerkleTreeWrapper<DefaultTreeHasher<Fp>, MockStore, U8, U0, U0>,
+                                DefaultPieceHasher<Fp>,
+                            > as halo2::CompoundProof<Fp, SECTOR_NODES_8_MIB>>::create_keypair(
                                 &circ,
                             )
                             .expect("failed to create halo2 keypair");

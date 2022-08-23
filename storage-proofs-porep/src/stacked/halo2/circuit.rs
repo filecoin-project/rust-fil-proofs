@@ -35,9 +35,9 @@ use crate::stacked::{
     halo2::{
         constants::{
             challenge_count, num_layers, partition_count, DRG_PARENTS, EXP_PARENTS, LABEL_WORD_LEN,
-            REPEATED_PARENT_LABELS_WORD_LEN, SECTOR_NODES_16_KIB, SECTOR_NODES_2_KIB,
-            SECTOR_NODES_32_GIB, SECTOR_NODES_32_KIB, SECTOR_NODES_4_KIB, SECTOR_NODES_512_MIB,
-            SECTOR_NODES_64_GIB, SECTOR_NODES_8_KIB,
+            REPEATED_PARENT_LABELS_WORD_LEN, SECTOR_NODES_16_KIB, SECTOR_NODES_16_MIB,
+            SECTOR_NODES_2_KIB, SECTOR_NODES_32_GIB, SECTOR_NODES_32_KIB, SECTOR_NODES_4_KIB,
+            SECTOR_NODES_512_MIB, SECTOR_NODES_64_GIB, SECTOR_NODES_8_KIB, SECTOR_NODES_8_MIB,
         },
         gadgets::{
             ColumnHasherChip, ColumnHasherConfig, EncodingChip, EncodingConfig, LabelingChip,
@@ -1103,6 +1103,8 @@ where
             SECTOR_NODES_8_KIB => 18,
             SECTOR_NODES_16_KIB => 18,
             SECTOR_NODES_32_KIB => 19,
+            SECTOR_NODES_8_MIB => 19,
+            SECTOR_NODES_16_MIB => 19,
             SECTOR_NODES_512_MIB => 19,
             SECTOR_NODES_32_GIB => 27,
             SECTOR_NODES_64_GIB => 27,
