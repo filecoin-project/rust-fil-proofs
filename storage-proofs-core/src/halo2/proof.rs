@@ -1,4 +1,7 @@
+use std::fs::File;
+use std::io::Read;
 use std::marker::PhantomData;
+use std::path::Path;
 use std::sync::RwLock;
 
 use halo2_proofs::{
@@ -12,8 +15,11 @@ use halo2_proofs::{
     transcript::{Blake2bRead, Blake2bWrite, Challenge255},
 };
 use lazy_static::lazy_static;
+use log::{info, trace};
 use rand::RngCore;
 use typemap::ShareMap;
+
+use crate::parameter_cache::parameter_cache_dir;
 
 lazy_static! {
     // Maps each halo2 circuit type to its keypair stored in memory; allows generating each
@@ -75,7 +81,35 @@ where
     Circ: Circuit<C::Scalar> + CircuitRows,
 {
     pub fn create(empty_circuit: &Circ) -> Result<Self, Error> {
-        let params = Params::new(empty_circuit.k());
+        let params = {
+            let path = format!(
+                "{}/halo2-keypair-params-{}",
+                parameter_cache_dir().display(),
+                empty_circuit.k()
+            );
+            info!("checking for halo2 params at path {}", path);
+            if Path::new(&path).exists() {
+                info!("reading existing halo2 params at path {}", path);
+                let mut params_buffer = vec![];
+                let mut f = File::open(&path)?;
+                f.read_to_end(&mut params_buffer)?;
+                match Params::read(&mut &params_buffer[..]) {
+                    Ok(x) => x,
+                    Err(_) => Params::new(empty_circuit.k()),
+                }
+            } else {
+                trace!("generating new halo2 params ...");
+                let p = Params::new(empty_circuit.k());
+                trace!("done generating new halo2 params");
+                info!("creating new halo2 params at path {}", path);
+                let mut f = File::create(&path)?;
+                println!("writing generated halo2 params at path {}", path);
+                p.write(&mut f)?;
+                println!("wrote generated halo2 params at path {}", path);
+
+                p
+            }
+        };
         let vk = keygen_vk(&params, empty_circuit)?;
         let pk = keygen_pk(&params, vk, empty_circuit)?;
         Ok(Halo2Keypair {
