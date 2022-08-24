@@ -1,8 +1,5 @@
 #![cfg(feature = "test-winning")]
 
-// TODO (jake): remove (import specific sector shapes when `big-tests` is enabled or not).
-#![allow(unused_imports)]
-
 use anyhow::Result;
 use blstrs::Scalar as Fr;
 use filecoin_hashers::{Domain, Hasher};
@@ -11,10 +8,12 @@ use filecoin_proofs::{
     generate_winning_post_sector_challenge, generate_winning_post_with_vanilla,
     verify_winning_post, DefaultPieceHasher, DefaultTreeDomain, DefaultTreeHasher, MerkleTreeTrait,
     PoStConfig, PoStType, PoseidonArityAllFields, PrivateReplicaInfo, PublicReplicaInfo,
-    SectorShape16KiB, SectorShape2KiB, SectorShape32KiB, SectorShape4KiB, SECTOR_SIZE_16_KIB,
-    SECTOR_SIZE_2_KIB, SECTOR_SIZE_32_KIB, SECTOR_SIZE_4_KIB, WINNING_POST_CHALLENGE_COUNT,
-    WINNING_POST_SECTOR_COUNT,
+    WINNING_POST_CHALLENGE_COUNT, WINNING_POST_SECTOR_COUNT,
 };
+#[cfg(feature = "big-tests")]
+use filecoin_proofs::{SectorShape16KiB, SectorShape32KiB, SECTOR_SIZE_16_KIB, SECTOR_SIZE_32_KIB};
+#[cfg(not(feature = "big-tests"))]
+use filecoin_proofs::{SectorShape2KiB, SectorShape4KiB, SECTOR_SIZE_2_KIB, SECTOR_SIZE_4_KIB};
 use rand::SeedableRng;
 use rand_xorshift::XorShiftRng;
 use storage_proofs_core::api_version::ApiVersion;

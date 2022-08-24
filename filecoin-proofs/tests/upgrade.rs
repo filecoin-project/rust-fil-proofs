@@ -15,8 +15,11 @@ use filecoin_proofs::{
     seal_pre_commit_phase2, validate_cache_for_commit, verify_empty_sector_update_proof,
     verify_partition_proofs, verify_single_partition_proof, Commitment, DefaultPieceHasher,
     DefaultTreeDomain, DefaultTreeHasher, MerkleTreeTrait, PaddedBytesAmount,
-    PoseidonArityAllFields, ProverId, SectorShape16KiB, SectorShape2KiB, SectorShape32KiB,
-    SectorShape4KiB, SectorUpdateConfig, UnpaddedBytesAmount, SECTOR_SIZE_16_KIB,
+    PoseidonArityAllFields, ProverId, SectorUpdateConfig, UnpaddedBytesAmount,
+};
+#[cfg(not(feature = "big-tests"))]
+use filecoin_proofs::{
+    SectorShape16KiB, SectorShape2KiB, SectorShape32KiB, SectorShape4KiB, SECTOR_SIZE_16_KIB,
     SECTOR_SIZE_2_KIB, SECTOR_SIZE_32_KIB, SECTOR_SIZE_4_KIB,
 };
 #[cfg(feature = "big-tests")]
@@ -28,7 +31,9 @@ use log::info;
 use memmap::MmapOptions;
 use rand::{Rng, SeedableRng};
 use rand_xorshift::XorShiftRng;
-use storage_proofs_core::{api_version::ApiVersion, is_legacy_porep_id, sector::SectorId};
+#[cfg(not(feature = "big-tests"))]
+use storage_proofs_core::is_legacy_porep_id;
+use storage_proofs_core::{api_version::ApiVersion, sector::SectorId};
 use storage_proofs_update::constants::{TreeDHasher, TreeRHasher};
 use tempfile::{tempdir, NamedTempFile, TempDir};
 
@@ -39,6 +44,7 @@ use api_shared::{
     TEST_SEED,
 };
 
+#[cfg(not(feature = "big-tests"))]
 #[test]
 #[ignore]
 fn test_seal_lifecycle_upgrade_2kib_porep_id_v1_1_base_8() -> Result<()> {
@@ -54,6 +60,7 @@ fn test_seal_lifecycle_upgrade_2kib_porep_id_v1_1_base_8() -> Result<()> {
     )
 }
 
+#[cfg(not(feature = "big-tests"))]
 #[test]
 #[ignore]
 fn test_seal_lifecycle_upgrade_4kib_sub_8_2_v1_1() -> Result<()> {
@@ -64,6 +71,7 @@ fn test_seal_lifecycle_upgrade_4kib_sub_8_2_v1_1() -> Result<()> {
     )
 }
 
+#[cfg(not(feature = "big-tests"))]
 #[test]
 #[ignore]
 fn test_seal_lifecycle_upgrade_16kib_sub_8_2_v1_1() -> Result<()> {
@@ -74,6 +82,7 @@ fn test_seal_lifecycle_upgrade_16kib_sub_8_2_v1_1() -> Result<()> {
     )
 }
 
+#[cfg(not(feature = "big-tests"))]
 #[test]
 #[ignore]
 fn test_seal_lifecycle_upgrade_32kib_top_8_8_2_v1_1() -> Result<()> {

@@ -5,8 +5,12 @@ use blstrs::Scalar as Fr;
 use filecoin_hashers::{Domain, Hasher};
 use filecoin_proofs::{
     DefaultPieceHasher, DefaultTreeDomain, DefaultTreeHasher, MerkleTreeTrait,
-    PoseidonArityAllFields, SectorShape16KiB, SectorShape2KiB, SectorShape32KiB, SectorShape4KiB,
-    SECTOR_SIZE_16_KIB, SECTOR_SIZE_2_KIB, SECTOR_SIZE_32_KIB, SECTOR_SIZE_4_KIB,
+    PoseidonArityAllFields,
+};
+#[cfg(not(feature = "big-tests"))]
+use filecoin_proofs::{
+    SectorShape16KiB, SectorShape2KiB, SectorShape32KiB, SectorShape4KiB, SECTOR_SIZE_16_KIB,
+    SECTOR_SIZE_2_KIB, SECTOR_SIZE_32_KIB, SECTOR_SIZE_4_KIB,
 };
 #[cfg(feature = "big-tests")]
 use filecoin_proofs::{
@@ -19,8 +23,11 @@ use storage_proofs_core::{api_version::ApiVersion, is_legacy_porep_id};
 
 mod api_shared;
 
-use api_shared::{create_seal, ARBITRARY_POREP_ID_V1_0_0, ARBITRARY_POREP_ID_V1_1_0, TEST_SEED};
+use api_shared::{create_seal, TEST_SEED};
+#[cfg(not(feature = "big-tests"))]
+use api_shared::{ARBITRARY_POREP_ID_V1_0_0, ARBITRARY_POREP_ID_V1_1_0};
 
+#[cfg(not(feature = "big-tests"))]
 #[test]
 #[ignore]
 fn test_seal_lifecycle_2kib_porep_id_v1_base_8() -> Result<()> {
@@ -32,6 +39,7 @@ fn test_seal_lifecycle_2kib_porep_id_v1_base_8() -> Result<()> {
     seal_lifecycle::<SectorShape2KiB<Fr>>(SECTOR_SIZE_2_KIB, &porep_id, ApiVersion::V1_0_0)
 }
 
+#[cfg(not(feature = "big-tests"))]
 #[test]
 #[ignore]
 fn test_seal_lifecycle_2kib_porep_id_v1_1_base_8() -> Result<()> {
@@ -43,6 +51,7 @@ fn test_seal_lifecycle_2kib_porep_id_v1_1_base_8() -> Result<()> {
     seal_lifecycle::<SectorShape2KiB<Fr>>(SECTOR_SIZE_2_KIB, &porep_id, ApiVersion::V1_1_0)
 }
 
+#[cfg(not(feature = "big-tests"))]
 #[test]
 #[ignore]
 fn test_seal_lifecycle_4kib_sub_8_2_v1() -> Result<()> {
@@ -53,6 +62,7 @@ fn test_seal_lifecycle_4kib_sub_8_2_v1() -> Result<()> {
     )
 }
 
+#[cfg(not(feature = "big-tests"))]
 #[test]
 #[ignore]
 fn test_seal_lifecycle_4kib_sub_8_2_v1_1() -> Result<()> {
@@ -63,6 +73,7 @@ fn test_seal_lifecycle_4kib_sub_8_2_v1_1() -> Result<()> {
     )
 }
 
+#[cfg(not(feature = "big-tests"))]
 #[test]
 #[ignore]
 fn test_seal_lifecycle_16kib_sub_8_2_v1() -> Result<()> {
@@ -73,6 +84,7 @@ fn test_seal_lifecycle_16kib_sub_8_2_v1() -> Result<()> {
     )
 }
 
+#[cfg(not(feature = "big-tests"))]
 #[test]
 #[ignore]
 fn test_seal_lifecycle_16kib_sub_8_2_v1_1() -> Result<()> {
@@ -83,6 +95,7 @@ fn test_seal_lifecycle_16kib_sub_8_2_v1_1() -> Result<()> {
     )
 }
 
+#[cfg(not(feature = "big-tests"))]
 #[test]
 #[ignore]
 fn test_seal_lifecycle_32kib_top_8_8_2_v1() -> Result<()> {
@@ -93,6 +106,7 @@ fn test_seal_lifecycle_32kib_top_8_8_2_v1() -> Result<()> {
     )
 }
 
+#[cfg(not(feature = "big-tests"))]
 #[test]
 #[ignore]
 fn test_seal_lifecycle_32kib_top_8_8_2_v1_1() -> Result<()> {

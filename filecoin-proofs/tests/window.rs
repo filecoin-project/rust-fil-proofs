@@ -13,10 +13,10 @@ use filecoin_proofs::{
     MerkleTreeTrait, PoStConfig, PoStType, PoseidonArityAllFields, PrivateReplicaInfo,
     PublicReplicaInfo, WINDOW_POST_CHALLENGE_COUNT, WINDOW_POST_SECTOR_COUNT,
 };
-#[cfg(not(feature = "big-tests"))]
-use filecoin_proofs::{SectorShape2KiB, SectorShape4KiB, SECTOR_SIZE_2_KIB, SECTOR_SIZE_4_KIB};
 #[cfg(feature = "big-tests")]
 use filecoin_proofs::{SectorShape16KiB, SectorShape32KiB, SECTOR_SIZE_16_KIB, SECTOR_SIZE_32_KIB};
+#[cfg(not(feature = "big-tests"))]
+use filecoin_proofs::{SectorShape2KiB, SectorShape4KiB, SECTOR_SIZE_2_KIB, SECTOR_SIZE_4_KIB};
 use rand::SeedableRng;
 use rand_xorshift::XorShiftRng;
 use storage_proofs_core::{api_version::ApiVersion, sector::SectorId};
