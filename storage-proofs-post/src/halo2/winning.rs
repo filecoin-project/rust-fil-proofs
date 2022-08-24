@@ -230,6 +230,11 @@ where
     W: PoseidonArity<F>,
     PoseidonHasher<F>: Hasher<Field = F>,
 {
+    fn id(&self) -> String {
+        use super::circuit::WINNING_POST_CIRCUIT_ID;
+        WINNING_POST_CIRCUIT_ID.to_string()
+    }
+
     fn k(&self) -> u32 {
         use crate::halo2::constants::*;
         match SECTOR_NODES {

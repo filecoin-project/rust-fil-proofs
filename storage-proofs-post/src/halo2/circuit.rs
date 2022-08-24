@@ -28,6 +28,9 @@ use crate::{
     halo2::{WindowPostCircuit, WinningPostCircuit},
 };
 
+pub const WINDOW_POST_CIRCUIT_ID: &str = "window-post-circuit";
+pub const WINNING_POST_CIRCUIT_ID: &str = "winning-post-circuit";
+
 // The subset of a PoSt circuit's private inputs corresponding to a single challenged sector.
 #[derive(Clone)]
 pub struct SectorProof<F, U, V, W, const SECTOR_NODES: usize, const SECTOR_CHALLENGES: usize>
@@ -391,6 +394,13 @@ where
     W: PoseidonArity<F>,
     PoseidonHasher<F>: Hasher<Field = F>,
 {
+    fn id(&self) -> String {
+        match self {
+            PostCircuit::Winning(circ) => circ.id(),
+            PostCircuit::Window(circ) => circ.id(),
+        }
+    }
+
     fn k(&self) -> u32 {
         match self {
             PostCircuit::Winning(circ) => circ.k(),

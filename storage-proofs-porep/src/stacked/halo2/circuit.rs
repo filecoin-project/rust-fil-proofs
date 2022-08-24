@@ -36,8 +36,9 @@ use crate::stacked::{
         constants::{
             challenge_count, num_layers, partition_count, DRG_PARENTS, EXP_PARENTS, LABEL_WORD_LEN,
             REPEATED_PARENT_LABELS_WORD_LEN, SECTOR_NODES_16_KIB, SECTOR_NODES_16_MIB,
-            SECTOR_NODES_2_KIB, SECTOR_NODES_32_GIB, SECTOR_NODES_32_KIB, SECTOR_NODES_4_KIB,
-            SECTOR_NODES_512_MIB, SECTOR_NODES_64_GIB, SECTOR_NODES_8_KIB, SECTOR_NODES_8_MIB,
+            SECTOR_NODES_1_GIB, SECTOR_NODES_2_KIB, SECTOR_NODES_32_GIB, SECTOR_NODES_32_KIB,
+            SECTOR_NODES_4_KIB, SECTOR_NODES_512_MIB, SECTOR_NODES_64_GIB, SECTOR_NODES_8_KIB,
+            SECTOR_NODES_8_MIB,
         },
         gadgets::{
             ColumnHasherChip, ColumnHasherConfig, EncodingChip, EncodingConfig, LabelingChip,
@@ -48,6 +49,8 @@ use crate::stacked::{
 };
 
 type VanillaPartitionProof<TreeR, G> = Vec<VanillaChallengeProof<TreeR, G>>;
+
+pub const SDR_POREP_CIRCUIT_ID: &str = "sdr-porep-circuit";
 
 trait CircuitParams<const SECTOR_NODES: usize> {
     const PARTITION_COUNT: usize = partition_count::<SECTOR_NODES>();
@@ -507,6 +510,7 @@ where
     Sha256Hasher<F>: Hasher<Field = F>,
     PoseidonHasher<F>: Hasher<Field = F>,
 {
+    pub id: String,
     pub pub_inputs: PublicInputs<F, SECTOR_NODES>,
     pub priv_inputs: PrivateInputs<F, U, V, W, SECTOR_NODES>,
 }
@@ -537,6 +541,7 @@ where
 
     fn without_witnesses(&self) -> Self {
         SdrPorepCircuit {
+            id: SDR_POREP_CIRCUIT_ID.to_string(),
             pub_inputs: PublicInputs {
                 replica_id: None,
                 comm_d: None,
@@ -702,6 +707,7 @@ where
         mut layouter: impl Layouter<F>,
     ) -> Result<(), Error> {
         let SdrPorepCircuit {
+            id: _,
             pub_inputs,
             priv_inputs,
         } = self;
@@ -1096,6 +1102,10 @@ where
     Sha256Hasher<F>: Hasher<Field = F>,
     PoseidonHasher<F>: Hasher<Field = F>,
 {
+    fn id(&self) -> String {
+        SDR_POREP_CIRCUIT_ID.to_string()
+    }
+
     fn k(&self) -> u32 {
         match SECTOR_NODES {
             SECTOR_NODES_2_KIB => 18,
@@ -1106,6 +1116,7 @@ where
             SECTOR_NODES_8_MIB => 19,
             SECTOR_NODES_16_MIB => 19,
             SECTOR_NODES_512_MIB => 19,
+            SECTOR_NODES_1_GIB => 19,
             SECTOR_NODES_32_GIB => 27,
             SECTOR_NODES_64_GIB => 27,
             _ => unimplemented!(),
@@ -1125,6 +1136,7 @@ where
     // Same as `Circuit::without_witnesses` except this associated function does not take `&self`.
     pub fn blank_circuit() -> Self {
         SdrPorepCircuit {
+            id: SDR_POREP_CIRCUIT_ID.to_string(),
             pub_inputs: PublicInputs {
                 replica_id: None,
                 comm_d: None,

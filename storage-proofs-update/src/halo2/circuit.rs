@@ -40,6 +40,8 @@ use crate::{
     phi, vanilla,
 };
 
+pub const EMPTY_SECTOR_UPDATE_CIRCUIT_ID: &str = "empty-sector-update-circuit";
+
 trait CircuitParams<const SECTOR_NODES: usize> {
     const PARTITION_COUNT: usize = partition_count(SECTOR_NODES);
     const PARTITION_BIT_LEN: usize = Self::PARTITION_COUNT.trailing_zeros() as usize;
@@ -971,6 +973,10 @@ where
     TreeDHasher<F>: Hasher<Field = F>,
     TreeRHasher<F>: Hasher<Field = F>,
 {
+    fn id(&self) -> String {
+        EMPTY_SECTOR_UPDATE_CIRCUIT_ID.to_string()
+    }
+
     fn k(&self) -> u32 {
         match SECTOR_NODES {
             SECTOR_SIZE_1_KIB => 17,

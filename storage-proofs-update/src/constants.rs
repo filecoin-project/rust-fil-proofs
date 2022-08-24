@@ -52,10 +52,11 @@ pub const SECTOR_SIZE_32_KIB: usize = 1 << 10;
 pub const SECTOR_SIZE_8_MIB: usize = 1 << 18;
 pub const SECTOR_SIZE_16_MIB: usize = 1 << 19;
 pub const SECTOR_SIZE_512_MIB: usize = 1 << 24;
+pub const SECTOR_SIZE_1_GIB: usize = 1 << 25;
 pub const SECTOR_SIZE_32_GIB: usize = 1 << 30;
 pub const SECTOR_SIZE_64_GIB: usize = 1 << 31;
 
-pub const ALLOWED_SECTOR_SIZES: [usize; 11] = [
+pub const ALLOWED_SECTOR_SIZES: [usize; 12] = [
     // testing sector-sizes
     SECTOR_SIZE_1_KIB,
     SECTOR_SIZE_2_KIB,
@@ -66,6 +67,7 @@ pub const ALLOWED_SECTOR_SIZES: [usize; 11] = [
     SECTOR_SIZE_8_MIB,
     SECTOR_SIZE_16_MIB,
     SECTOR_SIZE_512_MIB,
+    SECTOR_SIZE_1_GIB,
     // production sector-sizes
     SECTOR_SIZE_32_GIB,
     SECTOR_SIZE_64_GIB,
@@ -156,6 +158,7 @@ where
         SECTOR_SIZE_8_MIB => (8, 0, 0),
         SECTOR_SIZE_16_MIB => (8, 2, 0),
         SECTOR_SIZE_512_MIB => (8, 0, 0),
+        SECTOR_SIZE_1_GIB => (8, 2, 0),
         SECTOR_SIZE_32_GIB => (8, 8, 0),
         SECTOR_SIZE_64_GIB => (8, 8, 2),
         _ => unimplemented!("sector-size not supported"),

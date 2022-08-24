@@ -25,9 +25,10 @@ use crate::{
 
 /// Bump this when circuits change to invalidate the cache.
 pub const VERSION: usize = 28;
-pub const SRS_MAX_PROOFS_TO_AGGREGATE: usize = 65536; // FIXME: placeholder value
+pub const SRS_MAX_PROOFS_TO_AGGREGATE: usize = 65536;
 
 pub const GROTH_PARAMETER_EXT: &str = "params";
+pub const HALO2_PARAMETER_EXT: &str = "params";
 pub const PARAMETER_METADATA_EXT: &str = "meta";
 pub const VERIFYING_KEY_EXT: &str = "vk";
 pub const SRS_KEY_EXT: &str = "srs";
