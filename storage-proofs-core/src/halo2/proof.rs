@@ -1,8 +1,14 @@
-use std::fs::File;
+use std::collections::{BTreeMap, HashSet};
+use std::fs::{create_dir_all, File, OpenOptions};
+use std::io::{self, Seek, SeekFrom, Write};
+use std::path::{Path, PathBuf};
+use std::sync::Mutex;
+use std::time::Instant;
+
 use std::marker::PhantomData;
-use std::path::Path;
 use std::sync::RwLock;
 
+use fs2::FileExt;
 use halo2_proofs::{
     arithmetic::{CurveAffine, CurveExt, FieldExt},
     pasta::{Ep, Eq, Fp, Fq},
@@ -14,11 +20,14 @@ use halo2_proofs::{
     transcript::{Blake2bRead, Blake2bWrite, Challenge255},
 };
 use lazy_static::lazy_static;
-use log::{info, trace};
+use log::info;
 use rand::RngCore;
 use typemap::ShareMap;
 
-use crate::parameter_cache::{parameter_cache_dir, VERSION, HALO2_PARAMETER_EXT};
+use crate::parameter_cache::{
+    parameter_cache_dir, with_exclusive_lock, with_exclusive_read_lock, LockedFile,
+    HALO2_PARAMETER_EXT, VERSION,
+};
 
 lazy_static! {
     // Maps each halo2 circuit type to its keypair stored in memory; allows generating each
@@ -82,6 +91,7 @@ where
 {
     pub fn create(empty_circuit: &Circ) -> Result<Self, Error> {
         let params = {
+            // MUST match path format in is_cached method below
             let path = format!(
                 //"{}v{}-halo2-{}-keypair-params-{}.{}",
                 "{}v{}-halo2-keypair-params-{}.{}",
@@ -94,42 +104,69 @@ where
             info!("checking for halo2 params at path {}", path);
             if Path::new(&path).exists() {
                 info!("reading existing halo2 params at path {}", path);
-                let f = File::open(&path)?;
-                match Params::read(&mut &f) {
-                    Ok(x) => {
-                        info!("finished reading existing halo2 params at path {}", path);
-                        x
-                    },
-                    Err(_) => {
-                        trace!("generating new halo2 params ...");
-                        let p = Params::new(empty_circuit.k());
-                        trace!("done generating new halo2 params");
-                        p
-                    },
-                }
+                let p = with_exclusive_read_lock::<_, io::Error, _>(Path::new(&path), |file| {
+                    let p = match Params::read(file) {
+                        Ok(x) => {
+                            info!("finished reading existing halo2 params at path {}", path);
+                            x
+                        }
+                        Err(_) => {
+                            info!("generating new halo2 params ...");
+                            let p = Params::new(empty_circuit.k());
+                            info!("done generating new halo2 params");
+                            p
+                        }
+                    };
+                    Ok(p)
+                })?;
+
+                p
             } else {
-                trace!("generating new halo2 params ...");
+                info!("generating new halo2 params ...");
                 let p = Params::new(empty_circuit.k());
-                trace!("done generating new halo2 params");
-                info!("creating new halo2 params at path {}", path);
-                let mut f = File::create(&path)?;
-                println!("writing generated halo2 params at path {}", path);
-                p.write(&mut f)?;
-                println!("wrote generated halo2 params at path {}", path);
+                info!("done generating new halo2 params");
+
+                let p = with_exclusive_lock::<_, Error, _>(Path::new(&path), |mut file| {
+                    info!("writing generated halo2 params at path {}", path);
+                    p.write(&mut file)?;
+                    file.flush()?;
+                    info!("wrote generated halo2 params at path {}", path);
+                    Ok(p)
+                })?;
+
                 p
             }
         };
-        trace!("generating halo2 vk ...");
+        info!("generating halo2 vk ...");
         let vk = keygen_vk(&params, empty_circuit)?; // TODO: Persist this
-        trace!("done generating halo2 vk ...");
-        trace!("generating halo2 pk ...");
+        info!("done generating halo2 vk ...");
+        info!("generating halo2 pk ...");
         let pk = keygen_pk(&params, vk, empty_circuit)?;
-        trace!("done generating halo2 pk ...");
+        info!("done generating halo2 pk ...");
         Ok(Halo2Keypair {
             params,
             pk,
             _circ: PhantomData,
         })
+    }
+
+    pub fn is_cached(empty_circuit: &Circ) -> bool {
+        // MUST match path format in create method above
+        let path = format!(
+            //"{}v{}-halo2-{}-keypair-params-{}.{}",
+            "{}v{}-halo2-keypair-params-{}.{}",
+            parameter_cache_dir().display(),
+            VERSION,
+            //empty_circuit.id(),
+            empty_circuit.k(),
+            HALO2_PARAMETER_EXT,
+        );
+        let res = Path::new(&path).exists();
+        info!(
+            "checking for cached halo2 params at path {} ... {}",
+            path, res
+        );
+        res
     }
 
     pub fn params(&self) -> &Params<C> {
