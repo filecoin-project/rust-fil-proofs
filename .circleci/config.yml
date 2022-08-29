@@ -326,8 +326,8 @@ jobs:
             -v "${PWD}:/volume"
             -v "${FIL_PROOFS_PARAMETER_CACHE}:/var/tmp/filecoin-proof-parameters/"
             xd009642/tarpaulin
-            sh -c "apt update && apt install -y libssl-dev ocl-icd-opencl-dev libhwloc-dev && cargo tarpaulin --timeout 600 --release -v --ignored"
-
+            sh -c "apt update && apt install -y libssl-dev ocl-icd-opencl-dev libhwloc-dev && cargo tarpaulin --timeout 1800 --release -v --ignored"
+          no_output_timeout: 30m
 commands:
   ensure_filecoin_parameters:
     steps:
