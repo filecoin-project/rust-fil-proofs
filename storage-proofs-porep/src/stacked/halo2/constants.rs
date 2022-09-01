@@ -10,6 +10,7 @@ pub const SECTOR_NODES_32_KIB: usize = 1 << 10;
 pub const SECTOR_NODES_8_MIB: usize = 1 << 18;
 pub const SECTOR_NODES_16_MIB: usize = 1 << 19;
 pub const SECTOR_NODES_512_MIB: usize = 1 << 24;
+pub const SECTOR_NODES_1_GIB: usize = 1 << 25;
 pub const SECTOR_NODES_32_GIB: usize = 1 << 30;
 pub const SECTOR_NODES_64_GIB: usize = 1 << 31;
 
