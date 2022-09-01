@@ -1275,9 +1275,12 @@ dependencies = [
  "env_proxy",
  "failure",
  "fil_logger",
+ "filecoin-hashers",
  "filecoin-proofs",
  "flate2",
+ "generic-array 0.14.5",
  "gperftools",
+ "halo2_proofs",
  "humansize",
  "indicatif",
  "itertools 0.10.3",
@@ -1295,6 +1298,7 @@ dependencies = [
  "structopt",
  "tar",
  "tempfile",
+ "typenum",
 ]
 
 [[package]]

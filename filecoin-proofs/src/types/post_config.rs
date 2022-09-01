@@ -49,6 +49,13 @@ impl From<PoStConfig> for UnpaddedBytesAmount {
     }
 }
 
+impl From<PoStConfig> for SectorSize {
+    fn from(x: PoStConfig) -> Self {
+        let PoStConfig { sector_size, .. } = x;
+        sector_size
+    }
+}
+
 impl PoStConfig {
     pub fn new_halo2(
         sector_size: SectorSize,
