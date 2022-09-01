@@ -307,6 +307,27 @@ jobs:
             cargo test --release --verbose --workspace -- --nocapture
           no_output_timeout: 2h
 
+  # Code coverage, using tarpaulin tool (https://github.com/xd009642/tarpaulin)
+  coverage-with-tarpaulin:
+    environment: *setup-env
+    machine: true
+    resource_class: 2xlarge
+    steps:
+      - checkout
+      - restore_parameter_cache
+      - run:
+          name: Pull xd009642/tarpaulin:latest
+          command: docker pull xd009642/tarpaulin:latest
+      - run:
+          name: Get coverage result
+          command: >-
+            docker run
+            --security-opt seccomp=unconfined
+            -v "${PWD}:/volume"
+            -v "${FIL_PROOFS_PARAMETER_CACHE}:/var/tmp/filecoin-proof-parameters/"
+            xd009642/tarpaulin
+            sh -c "apt update && apt install -y libssl-dev ocl-icd-opencl-dev libhwloc-dev && cargo tarpaulin --timeout 1800 --release -v"
+          no_output_timeout: 30m
 commands:
   ensure_filecoin_parameters:
     steps:
@@ -553,4 +574,8 @@ workflows:
           crate: "storage-proofs-update"
           requires:
             - cargo_fetch
+            - ensure_groth_parameters_and_keys_linux
+
+      - coverage-with-tarpaulin:
+          requires:
             - ensure_groth_parameters_and_keys_linux
