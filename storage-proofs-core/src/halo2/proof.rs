@@ -512,6 +512,10 @@ mod tests {
     }
 
     impl CircuitRows for MyCircuit {
+        fn id(&self) -> String {
+            "my-circuit".to_string()
+        }
+
         fn k(&self) -> u32 {
             4
         }

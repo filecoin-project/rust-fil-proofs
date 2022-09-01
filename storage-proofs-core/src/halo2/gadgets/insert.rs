@@ -554,6 +554,10 @@ mod test {
         F: FieldExt,
         A: PoseidonArity<F>,
     {
+        fn id(&self) -> String {
+            "my-circuit".to_string()
+        }
+
         fn k(&self) -> u32 {
             3
         }

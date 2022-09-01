@@ -23,7 +23,7 @@ use storage_proofs_porep::{
     stacked::{
         self as vanilla,
         halo2::{
-            circuit::{self, SdrPorepCircuit},
+            circuit::{self, SdrPorepCircuit, SDR_POREP_CIRCUIT_ID},
             constants::{
                 challenge_count, num_layers, DRG_PARENTS, EXP_PARENTS, SECTOR_NODES_16_KIB,
                 SECTOR_NODES_2_KIB, SECTOR_NODES_32_KIB, SECTOR_NODES_4_KIB, SECTOR_NODES_8_KIB,
@@ -152,6 +152,7 @@ where
         circuit::PrivateInputs::<Fp, U, V, W, SECTOR_NODES>::from(vanilla_partition_proof);
 
     let circ = SdrPorepCircuit {
+        id: SDR_POREP_CIRCUIT_ID.to_string(),
         pub_inputs: circ_pub_inputs,
         priv_inputs: circ_priv_inputs,
     };
