@@ -1275,6 +1275,7 @@ dependencies = [
  "env_proxy",
  "failure",
  "fil_logger",
+ "filecoin-hashers",
  "filecoin-proofs",
  "flate2",
  "generic-array 0.14.5",

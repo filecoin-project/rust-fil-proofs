@@ -1,14 +1,10 @@
-use std::collections::{BTreeMap, HashSet};
-use std::fs::{create_dir_all, File, OpenOptions};
-use std::io::{self, Seek, SeekFrom, Write};
-use std::path::{Path, PathBuf};
-use std::sync::Mutex;
-use std::time::Instant;
+use std::any::TypeId;
+use std::io::{self, Write};
+use std::path::Path;
 
 use std::marker::PhantomData;
 use std::sync::RwLock;
 
-use fs2::FileExt;
 use halo2_proofs::{
     arithmetic::{CurveAffine, CurveExt, FieldExt},
     pasta::{Ep, Eq, Fp, Fq},
@@ -25,8 +21,8 @@ use rand::RngCore;
 use typemap::ShareMap;
 
 use crate::parameter_cache::{
-    parameter_cache_dir, with_exclusive_lock, with_exclusive_read_lock, LockedFile,
-    HALO2_PARAMETER_EXT, VERSION,
+    parameter_cache_dir, with_exclusive_lock, with_exclusive_read_lock, HALO2_PARAMETER_EXT,
+    VERSION,
 };
 
 lazy_static! {
@@ -69,6 +65,18 @@ where
     _circ: PhantomData<Circ>,
 }
 
+pub fn get_field_from_circuit_scalar<F: FieldExt>() -> String {
+    let field = TypeId::of::<F>();
+    let fp = TypeId::of::<Fp>();
+    let fq = TypeId::of::<Fq>();
+    assert!(field == fp || field == fq);
+    if field == fp {
+        "fp".to_string()
+    } else {
+        "fq".to_string()
+    }
+}
+
 // Manually implement `Send` and `Sync` for `Halo2Keypair` so we can store keypairs within a
 // `lazy_static` lookup table.
 unsafe impl<C, Circ> Send for Halo2Keypair<C, Circ>
@@ -93,11 +101,10 @@ where
         let params = {
             // MUST match path format in is_cached method below
             let path = format!(
-                //"{}v{}-halo2-{}-keypair-params-{}.{}",
-                "{}v{}-halo2-keypair-params-{}.{}",
+                "{}v{}-halo2-{}-keypair-params-{}.{}",
                 parameter_cache_dir().display(),
                 VERSION,
-                //empty_circuit.id(),
+                get_field_from_circuit_scalar::<C::Scalar>(),
                 empty_circuit.k(),
                 HALO2_PARAMETER_EXT,
             );
@@ -153,11 +160,10 @@ where
     pub fn is_cached(empty_circuit: &Circ) -> bool {
         // MUST match path format in create method above
         let path = format!(
-            //"{}v{}-halo2-{}-keypair-params-{}.{}",
-            "{}v{}-halo2-keypair-params-{}.{}",
+            "{}v{}-halo2-{}-keypair-params-{}.{}",
             parameter_cache_dir().display(),
             VERSION,
-            //empty_circuit.id(),
+            get_field_from_circuit_scalar::<C::Scalar>(),
             empty_circuit.k(),
             HALO2_PARAMETER_EXT,
         );
