@@ -31,6 +31,7 @@ pub const GROTH_PARAMETER_EXT: &str = "params";
 pub const HALO2_PARAMETER_EXT: &str = "params";
 pub const PARAMETER_METADATA_EXT: &str = "meta";
 pub const VERIFYING_KEY_EXT: &str = "vk";
+pub const PROVING_KEY_EXT: &str = "pk";
 pub const SRS_KEY_EXT: &str = "srs";
 pub const SRS_SHARED_KEY_NAME: &str = "fil-inner-product-v1";
 

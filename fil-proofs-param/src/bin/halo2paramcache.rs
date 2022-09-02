@@ -52,101 +52,71 @@ where
         SECTOR_NODES_2_KIB => {
             let circ =
                 SdrPorepCircuit::<Tree::Field, U8, U0, U0, SECTOR_NODES_2_KIB>::blank_circuit();
-            if !Halo2Keypair::<<Tree::Field as Halo2Field>::Affine, _>::is_cached(&circ) {
-                let _keypair =
-                    Halo2Keypair::<<Tree::Field as Halo2Field>::Affine, _>::create(&circ)
-                        .expect("failed to create halo2 keypair");
-            }
+            let _keypair = Halo2Keypair::<<Tree::Field as Halo2Field>::Affine, _>::create(&circ)
+                .expect("failed to create halo2 keypair");
         }
         // base shape
         SECTOR_NODES_8_MIB => {
             let circ =
                 SdrPorepCircuit::<Tree::Field, U8, U0, U0, SECTOR_NODES_8_MIB>::blank_circuit();
-            if !Halo2Keypair::<<Tree::Field as Halo2Field>::Affine, _>::is_cached(&circ) {
-                let _keypair =
-                    Halo2Keypair::<<Tree::Field as Halo2Field>::Affine, _>::create(&circ)
-                        .expect("failed to create halo2 keypair");
-            }
+            let _keypair = Halo2Keypair::<<Tree::Field as Halo2Field>::Affine, _>::create(&circ)
+                .expect("failed to create halo2 keypair");
         }
         // base shape
         SECTOR_NODES_512_MIB => {
             let circ =
                 SdrPorepCircuit::<Tree::Field, U8, U0, U0, SECTOR_NODES_512_MIB>::blank_circuit();
-            if !Halo2Keypair::<<Tree::Field as Halo2Field>::Affine, _>::is_cached(&circ) {
-                let _keypair =
-                    Halo2Keypair::<<Tree::Field as Halo2Field>::Affine, _>::create(&circ)
-                        .expect("failed to create halo2 keypair");
-            }
+            let _keypair = Halo2Keypair::<<Tree::Field as Halo2Field>::Affine, _>::create(&circ)
+                .expect("failed to create halo2 keypair");
         }
         // sub2 shape
         SECTOR_NODES_4_KIB => {
             let circ =
                 SdrPorepCircuit::<Tree::Field, U8, U2, U0, SECTOR_NODES_4_KIB>::blank_circuit();
-            if !Halo2Keypair::<<Tree::Field as Halo2Field>::Affine, _>::is_cached(&circ) {
-                let _keypair =
-                    Halo2Keypair::<<Tree::Field as Halo2Field>::Affine, _>::create(&circ)
-                        .expect("failed to create halo2 keypair");
-            }
+            let _keypair = Halo2Keypair::<<Tree::Field as Halo2Field>::Affine, _>::create(&circ)
+                .expect("failed to create halo2 keypair");
         }
         // sub2 shape
         SECTOR_NODES_16_MIB => {
             let circ =
                 SdrPorepCircuit::<Tree::Field, U8, U2, U0, SECTOR_NODES_16_MIB>::blank_circuit();
-            if !Halo2Keypair::<<Tree::Field as Halo2Field>::Affine, _>::is_cached(&circ) {
-                let _keypair =
-                    Halo2Keypair::<<Tree::Field as Halo2Field>::Affine, _>::create(&circ)
-                        .expect("failed to create halo2 keypair");
-            }
+            let _keypair = Halo2Keypair::<<Tree::Field as Halo2Field>::Affine, _>::create(&circ)
+                .expect("failed to create halo2 keypair");
         }
         // sub2 shape
         SECTOR_NODES_1_GIB => {
             let circ =
                 SdrPorepCircuit::<Tree::Field, U8, U2, U0, SECTOR_NODES_1_GIB>::blank_circuit();
-            if !Halo2Keypair::<<Tree::Field as Halo2Field>::Affine, _>::is_cached(&circ) {
-                let _keypair =
-                    Halo2Keypair::<<Tree::Field as Halo2Field>::Affine, _>::create(&circ)
-                        .expect("failed to create halo2 keypair");
-            }
+            let _keypair = Halo2Keypair::<<Tree::Field as Halo2Field>::Affine, _>::create(&circ)
+                .expect("failed to create halo2 keypair");
         }
         // sub8 shape
         SECTOR_NODES_16_KIB => {
             let circ =
                 SdrPorepCircuit::<Tree::Field, U8, U8, U0, SECTOR_NODES_16_KIB>::blank_circuit();
-            if !Halo2Keypair::<<Tree::Field as Halo2Field>::Affine, _>::is_cached(&circ) {
-                let _keypair =
-                    Halo2Keypair::<<Tree::Field as Halo2Field>::Affine, _>::create(&circ)
-                        .expect("failed to create halo2 keypair");
-            }
+            let _keypair = Halo2Keypair::<<Tree::Field as Halo2Field>::Affine, _>::create(&circ)
+                .expect("failed to create halo2 keypair");
         }
         // sub8 shape
         SECTOR_NODES_32_GIB => {
             let circ =
                 SdrPorepCircuit::<Tree::Field, U8, U8, U0, SECTOR_NODES_32_GIB>::blank_circuit();
-            if !Halo2Keypair::<<Tree::Field as Halo2Field>::Affine, _>::is_cached(&circ) {
-                let _keypair =
-                    Halo2Keypair::<<Tree::Field as Halo2Field>::Affine, _>::create(&circ)
-                        .expect("failed to create halo2 keypair");
-            }
+            let _keypair = Halo2Keypair::<<Tree::Field as Halo2Field>::Affine, _>::create(&circ)
+                .expect("failed to create halo2 keypair");
         }
         // top2 shape
         SECTOR_NODES_32_KIB => {
             let circ =
                 SdrPorepCircuit::<Tree::Field, U8, U8, U2, SECTOR_NODES_32_KIB>::blank_circuit();
-            if !Halo2Keypair::<<Tree::Field as Halo2Field>::Affine, _>::is_cached(&circ) {
-                let _keypair =
-                    Halo2Keypair::<<Tree::Field as Halo2Field>::Affine, _>::create(&circ)
-                        .expect("failed to create halo2 keypair");
-            }
+            let _keypair = Halo2Keypair::<<Tree::Field as Halo2Field>::Affine, _>::create(&circ)
+                .expect("failed to create halo2 keypair");
         }
         // top2 shape
         SECTOR_NODES_64_GIB => {
             let circ =
                 SdrPorepCircuit::<Tree::Field, U8, U8, U2, SECTOR_NODES_64_GIB>::blank_circuit();
-            if !Halo2Keypair::<<Tree::Field as Halo2Field>::Affine, _>::is_cached(&circ) {
-                let _keypair =
-                    Halo2Keypair::<<Tree::Field as Halo2Field>::Affine, _>::create(&circ)
-                        .expect("failed to create halo2 keypair");
-            }
+            let _keypair = Halo2Keypair::<<Tree::Field as Halo2Field>::Affine, _>::create(&circ)
+                .expect("failed to create halo2 keypair");
         }
         _ => panic!("Unsupported sector size!"),
     }
@@ -174,11 +144,8 @@ where
                 U0,
                 SECTOR_NODES_2_KIB,
             >::blank_circuit());
-            if !Halo2Keypair::<<Tree::Field as Halo2Field>::Affine, _>::is_cached(&circ) {
-                let _keypair =
-                    Halo2Keypair::<<Tree::Field as Halo2Field>::Affine, _>::create(&circ)
-                        .expect("failed to create halo2 keypair");
-            }
+            let _keypair = Halo2Keypair::<<Tree::Field as Halo2Field>::Affine, _>::create(&circ)
+                .expect("failed to create halo2 keypair");
         }
         // base shape
         SECTOR_NODES_8_MIB => {
@@ -189,11 +156,8 @@ where
                 U0,
                 SECTOR_NODES_8_MIB,
             >::blank_circuit());
-            if !Halo2Keypair::<<Tree::Field as Halo2Field>::Affine, _>::is_cached(&circ) {
-                let _keypair =
-                    Halo2Keypair::<<Tree::Field as Halo2Field>::Affine, _>::create(&circ)
-                        .expect("failed to create halo2 keypair");
-            }
+            let _keypair = Halo2Keypair::<<Tree::Field as Halo2Field>::Affine, _>::create(&circ)
+                .expect("failed to create halo2 keypair");
         }
         // base shape
         SECTOR_NODES_512_MIB => {
@@ -204,11 +168,8 @@ where
                 U0,
                 SECTOR_NODES_512_MIB,
             >::blank_circuit());
-            if !Halo2Keypair::<<Tree::Field as Halo2Field>::Affine, _>::is_cached(&circ) {
-                let _keypair =
-                    Halo2Keypair::<<Tree::Field as Halo2Field>::Affine, _>::create(&circ)
-                        .expect("failed to create halo2 keypair");
-            }
+            let _keypair = Halo2Keypair::<<Tree::Field as Halo2Field>::Affine, _>::create(&circ)
+                .expect("failed to create halo2 keypair");
         }
         // sub2 shape
         SECTOR_NODES_4_KIB => {
@@ -219,11 +180,8 @@ where
                 U0,
                 SECTOR_NODES_4_KIB,
             >::blank_circuit());
-            if !Halo2Keypair::<<Tree::Field as Halo2Field>::Affine, _>::is_cached(&circ) {
-                let _keypair =
-                    Halo2Keypair::<<Tree::Field as Halo2Field>::Affine, _>::create(&circ)
-                        .expect("failed to create halo2 keypair");
-            }
+            let _keypair = Halo2Keypair::<<Tree::Field as Halo2Field>::Affine, _>::create(&circ)
+                .expect("failed to create halo2 keypair");
         }
         // sub2 shape
         SECTOR_NODES_16_MIB => {
@@ -234,11 +192,8 @@ where
                 U0,
                 SECTOR_NODES_16_MIB,
             >::blank_circuit());
-            if !Halo2Keypair::<<Tree::Field as Halo2Field>::Affine, _>::is_cached(&circ) {
-                let _keypair =
-                    Halo2Keypair::<<Tree::Field as Halo2Field>::Affine, _>::create(&circ)
-                        .expect("failed to create halo2 keypair");
-            }
+            let _keypair = Halo2Keypair::<<Tree::Field as Halo2Field>::Affine, _>::create(&circ)
+                .expect("failed to create halo2 keypair");
         }
         // sub2 shape
         SECTOR_NODES_1_GIB => {
@@ -249,11 +204,8 @@ where
                 U0,
                 SECTOR_NODES_1_GIB,
             >::blank_circuit());
-            if !Halo2Keypair::<<Tree::Field as Halo2Field>::Affine, _>::is_cached(&circ) {
-                let _keypair =
-                    Halo2Keypair::<<Tree::Field as Halo2Field>::Affine, _>::create(&circ)
-                        .expect("failed to create halo2 keypair");
-            }
+            let _keypair = Halo2Keypair::<<Tree::Field as Halo2Field>::Affine, _>::create(&circ)
+                .expect("failed to create halo2 keypair");
         }
         // sub8 shape
         SECTOR_NODES_16_KIB => {
@@ -264,11 +216,8 @@ where
                 U0,
                 SECTOR_NODES_16_KIB,
             >::blank_circuit());
-            if !Halo2Keypair::<<Tree::Field as Halo2Field>::Affine, _>::is_cached(&circ) {
-                let _keypair =
-                    Halo2Keypair::<<Tree::Field as Halo2Field>::Affine, _>::create(&circ)
-                        .expect("failed to create halo2 keypair");
-            }
+            let _keypair = Halo2Keypair::<<Tree::Field as Halo2Field>::Affine, _>::create(&circ)
+                .expect("failed to create halo2 keypair");
         }
         // sub8 shape
         SECTOR_NODES_32_GIB => {
@@ -279,11 +228,8 @@ where
                 U0,
                 SECTOR_NODES_32_GIB,
             >::blank_circuit());
-            if !Halo2Keypair::<<Tree::Field as Halo2Field>::Affine, _>::is_cached(&circ) {
-                let _keypair =
-                    Halo2Keypair::<<Tree::Field as Halo2Field>::Affine, _>::create(&circ)
-                        .expect("failed to create halo2 keypair");
-            }
+            let _keypair = Halo2Keypair::<<Tree::Field as Halo2Field>::Affine, _>::create(&circ)
+                .expect("failed to create halo2 keypair");
         }
         // top2 shape
         SECTOR_NODES_32_KIB => {
@@ -294,11 +240,8 @@ where
                 U2,
                 SECTOR_NODES_32_KIB,
             >::blank_circuit());
-            if !Halo2Keypair::<<Tree::Field as Halo2Field>::Affine, _>::is_cached(&circ) {
-                let _keypair =
-                    Halo2Keypair::<<Tree::Field as Halo2Field>::Affine, _>::create(&circ)
-                        .expect("failed to create halo2 keypair");
-            }
+            let _keypair = Halo2Keypair::<<Tree::Field as Halo2Field>::Affine, _>::create(&circ)
+                .expect("failed to create halo2 keypair");
         }
         // top2 shape
         SECTOR_NODES_64_GIB => {
@@ -309,11 +252,8 @@ where
                 U2,
                 SECTOR_NODES_64_GIB,
             >::blank_circuit());
-            if !Halo2Keypair::<<Tree::Field as Halo2Field>::Affine, _>::is_cached(&circ) {
-                let _keypair =
-                    Halo2Keypair::<<Tree::Field as Halo2Field>::Affine, _>::create(&circ)
-                        .expect("failed to create halo2 keypair");
-            }
+            let _keypair = Halo2Keypair::<<Tree::Field as Halo2Field>::Affine, _>::create(&circ)
+                .expect("failed to create halo2 keypair");
         }
         _ => panic!("Unsupported sector size!"),
     }
@@ -341,11 +281,8 @@ where
                 U0,
                 SECTOR_NODES_2_KIB,
             >::blank_circuit());
-            if !Halo2Keypair::<<Tree::Field as Halo2Field>::Affine, _>::is_cached(&circ) {
-                let _keypair =
-                    Halo2Keypair::<<Tree::Field as Halo2Field>::Affine, _>::create(&circ)
-                        .expect("failed to create halo2 keypair");
-            }
+            let _keypair = Halo2Keypair::<<Tree::Field as Halo2Field>::Affine, _>::create(&circ)
+                .expect("failed to create halo2 keypair");
         }
         // base shape
         SECTOR_NODES_8_MIB => {
@@ -356,11 +293,8 @@ where
                 U0,
                 SECTOR_NODES_8_MIB,
             >::blank_circuit());
-            if !Halo2Keypair::<<Tree::Field as Halo2Field>::Affine, _>::is_cached(&circ) {
-                let _keypair =
-                    Halo2Keypair::<<Tree::Field as Halo2Field>::Affine, _>::create(&circ)
-                        .expect("failed to create halo2 keypair");
-            }
+            let _keypair = Halo2Keypair::<<Tree::Field as Halo2Field>::Affine, _>::create(&circ)
+                .expect("failed to create halo2 keypair");
         }
         // base shape
         SECTOR_NODES_512_MIB => {
@@ -371,11 +305,8 @@ where
                 U0,
                 SECTOR_NODES_512_MIB,
             >::blank_circuit());
-            if !Halo2Keypair::<<Tree::Field as Halo2Field>::Affine, _>::is_cached(&circ) {
-                let _keypair =
-                    Halo2Keypair::<<Tree::Field as Halo2Field>::Affine, _>::create(&circ)
-                        .expect("failed to create halo2 keypair");
-            }
+            let _keypair = Halo2Keypair::<<Tree::Field as Halo2Field>::Affine, _>::create(&circ)
+                .expect("failed to create halo2 keypair");
         }
         // sub2 shape
         SECTOR_NODES_4_KIB => {
@@ -386,11 +317,8 @@ where
                 U0,
                 SECTOR_NODES_4_KIB,
             >::blank_circuit());
-            if !Halo2Keypair::<<Tree::Field as Halo2Field>::Affine, _>::is_cached(&circ) {
-                let _keypair =
-                    Halo2Keypair::<<Tree::Field as Halo2Field>::Affine, _>::create(&circ)
-                        .expect("failed to create halo2 keypair");
-            }
+            let _keypair = Halo2Keypair::<<Tree::Field as Halo2Field>::Affine, _>::create(&circ)
+                .expect("failed to create halo2 keypair");
         }
         // sub2 shape
         SECTOR_NODES_16_MIB => {
@@ -401,11 +329,8 @@ where
                 U0,
                 SECTOR_NODES_16_MIB,
             >::blank_circuit());
-            if !Halo2Keypair::<<Tree::Field as Halo2Field>::Affine, _>::is_cached(&circ) {
-                let _keypair =
-                    Halo2Keypair::<<Tree::Field as Halo2Field>::Affine, _>::create(&circ)
-                        .expect("failed to create halo2 keypair");
-            }
+            let _keypair = Halo2Keypair::<<Tree::Field as Halo2Field>::Affine, _>::create(&circ)
+                .expect("failed to create halo2 keypair");
         }
         // sub2 shape
         SECTOR_NODES_1_GIB => {
@@ -416,11 +341,8 @@ where
                 U0,
                 SECTOR_NODES_1_GIB,
             >::blank_circuit());
-            if !Halo2Keypair::<<Tree::Field as Halo2Field>::Affine, _>::is_cached(&circ) {
-                let _keypair =
-                    Halo2Keypair::<<Tree::Field as Halo2Field>::Affine, _>::create(&circ)
-                        .expect("failed to create halo2 keypair");
-            }
+            let _keypair = Halo2Keypair::<<Tree::Field as Halo2Field>::Affine, _>::create(&circ)
+                .expect("failed to create halo2 keypair");
         }
         // sub8 shape
         SECTOR_NODES_16_KIB => {
@@ -431,11 +353,8 @@ where
                 U0,
                 SECTOR_NODES_16_KIB,
             >::blank_circuit());
-            if !Halo2Keypair::<<Tree::Field as Halo2Field>::Affine, _>::is_cached(&circ) {
-                let _keypair =
-                    Halo2Keypair::<<Tree::Field as Halo2Field>::Affine, _>::create(&circ)
-                        .expect("failed to create halo2 keypair");
-            }
+            let _keypair = Halo2Keypair::<<Tree::Field as Halo2Field>::Affine, _>::create(&circ)
+                .expect("failed to create halo2 keypair");
         }
         // sub8 shape
         SECTOR_NODES_32_GIB => {
@@ -446,11 +365,8 @@ where
                 U0,
                 SECTOR_NODES_32_GIB,
             >::blank_circuit());
-            if !Halo2Keypair::<<Tree::Field as Halo2Field>::Affine, _>::is_cached(&circ) {
-                let _keypair =
-                    Halo2Keypair::<<Tree::Field as Halo2Field>::Affine, _>::create(&circ)
-                        .expect("failed to create halo2 keypair");
-            }
+            let _keypair = Halo2Keypair::<<Tree::Field as Halo2Field>::Affine, _>::create(&circ)
+                .expect("failed to create halo2 keypair");
         }
         // top2 shape
         SECTOR_NODES_32_KIB => {
@@ -461,11 +377,8 @@ where
                 U2,
                 SECTOR_NODES_32_KIB,
             >::blank_circuit());
-            if !Halo2Keypair::<<Tree::Field as Halo2Field>::Affine, _>::is_cached(&circ) {
-                let _keypair =
-                    Halo2Keypair::<<Tree::Field as Halo2Field>::Affine, _>::create(&circ)
-                        .expect("failed to create halo2 keypair");
-            }
+            let _keypair = Halo2Keypair::<<Tree::Field as Halo2Field>::Affine, _>::create(&circ)
+                .expect("failed to create halo2 keypair");
         }
         // top2 shape
         SECTOR_NODES_64_GIB => {
@@ -476,11 +389,8 @@ where
                 U2,
                 SECTOR_NODES_64_GIB,
             >::blank_circuit());
-            if !Halo2Keypair::<<Tree::Field as Halo2Field>::Affine, _>::is_cached(&circ) {
-                let _keypair =
-                    Halo2Keypair::<<Tree::Field as Halo2Field>::Affine, _>::create(&circ)
-                        .expect("failed to create halo2 keypair");
-            }
+            let _keypair = Halo2Keypair::<<Tree::Field as Halo2Field>::Affine, _>::create(&circ)
+                .expect("failed to create halo2 keypair");
         }
         _ => panic!("Unsupported sector size!"),
     }
@@ -503,101 +413,71 @@ where
         SECTOR_NODES_2_KIB => {
             let circ =
                 EmptySectorUpdateCircuit::<Tree::Field, U8, U0, U0, SECTOR_NODES_2_KIB>::blank_circuit();
-            if !Halo2Keypair::<<Tree::Field as Halo2Field>::Affine, _>::is_cached(&circ) {
-                let _keypair =
-                    Halo2Keypair::<<Tree::Field as Halo2Field>::Affine, _>::create(&circ)
-                        .expect("failed to create halo2 keypair");
-            }
+            let _keypair = Halo2Keypair::<<Tree::Field as Halo2Field>::Affine, _>::create(&circ)
+                .expect("failed to create halo2 keypair");
         }
         // base shape
         SECTOR_NODES_8_MIB => {
             let circ =
                 EmptySectorUpdateCircuit::<Tree::Field, U8, U0, U0, SECTOR_NODES_8_MIB>::blank_circuit();
-            if !Halo2Keypair::<<Tree::Field as Halo2Field>::Affine, _>::is_cached(&circ) {
-                let _keypair =
-                    Halo2Keypair::<<Tree::Field as Halo2Field>::Affine, _>::create(&circ)
-                        .expect("failed to create halo2 keypair");
-            }
+            let _keypair = Halo2Keypair::<<Tree::Field as Halo2Field>::Affine, _>::create(&circ)
+                .expect("failed to create halo2 keypair");
         }
         // base shape
         SECTOR_NODES_512_MIB => {
             let circ =
                 EmptySectorUpdateCircuit::<Tree::Field, U8, U0, U0, SECTOR_NODES_512_MIB>::blank_circuit();
-            if !Halo2Keypair::<<Tree::Field as Halo2Field>::Affine, _>::is_cached(&circ) {
-                let _keypair =
-                    Halo2Keypair::<<Tree::Field as Halo2Field>::Affine, _>::create(&circ)
-                        .expect("failed to create halo2 keypair");
-            }
+            let _keypair = Halo2Keypair::<<Tree::Field as Halo2Field>::Affine, _>::create(&circ)
+                .expect("failed to create halo2 keypair");
         }
         // sub2 shape
         SECTOR_NODES_4_KIB => {
             let circ =
                 EmptySectorUpdateCircuit::<Tree::Field, U8, U2, U0, SECTOR_NODES_4_KIB>::blank_circuit();
-            if !Halo2Keypair::<<Tree::Field as Halo2Field>::Affine, _>::is_cached(&circ) {
-                let _keypair =
-                    Halo2Keypair::<<Tree::Field as Halo2Field>::Affine, _>::create(&circ)
-                        .expect("failed to create halo2 keypair");
-            }
+            let _keypair = Halo2Keypair::<<Tree::Field as Halo2Field>::Affine, _>::create(&circ)
+                .expect("failed to create halo2 keypair");
         }
         // sub2 shape
         SECTOR_NODES_16_MIB => {
             let circ =
                 EmptySectorUpdateCircuit::<Tree::Field, U8, U2, U0, SECTOR_NODES_16_MIB>::blank_circuit();
-            if !Halo2Keypair::<<Tree::Field as Halo2Field>::Affine, _>::is_cached(&circ) {
-                let _keypair =
-                    Halo2Keypair::<<Tree::Field as Halo2Field>::Affine, _>::create(&circ)
-                        .expect("failed to create halo2 keypair");
-            }
+            let _keypair = Halo2Keypair::<<Tree::Field as Halo2Field>::Affine, _>::create(&circ)
+                .expect("failed to create halo2 keypair");
         }
         // sub2 shape
         SECTOR_NODES_1_GIB => {
             let circ =
                 EmptySectorUpdateCircuit::<Tree::Field, U8, U2, U0, SECTOR_NODES_1_GIB>::blank_circuit();
-            if !Halo2Keypair::<<Tree::Field as Halo2Field>::Affine, _>::is_cached(&circ) {
-                let _keypair =
-                    Halo2Keypair::<<Tree::Field as Halo2Field>::Affine, _>::create(&circ)
-                        .expect("failed to create halo2 keypair");
-            }
+            let _keypair = Halo2Keypair::<<Tree::Field as Halo2Field>::Affine, _>::create(&circ)
+                .expect("failed to create halo2 keypair");
         }
         // sub8 shape
         SECTOR_NODES_16_KIB => {
             let circ =
                 EmptySectorUpdateCircuit::<Tree::Field, U8, U8, U0, SECTOR_NODES_16_KIB>::blank_circuit();
-            if !Halo2Keypair::<<Tree::Field as Halo2Field>::Affine, _>::is_cached(&circ) {
-                let _keypair =
-                    Halo2Keypair::<<Tree::Field as Halo2Field>::Affine, _>::create(&circ)
-                        .expect("failed to create halo2 keypair");
-            }
+            let _keypair = Halo2Keypair::<<Tree::Field as Halo2Field>::Affine, _>::create(&circ)
+                .expect("failed to create halo2 keypair");
         }
         // sub8 shape
         SECTOR_NODES_32_GIB => {
             let circ =
                 EmptySectorUpdateCircuit::<Tree::Field, U8, U8, U0, SECTOR_NODES_32_GIB>::blank_circuit();
-            if !Halo2Keypair::<<Tree::Field as Halo2Field>::Affine, _>::is_cached(&circ) {
-                let _keypair =
-                    Halo2Keypair::<<Tree::Field as Halo2Field>::Affine, _>::create(&circ)
-                        .expect("failed to create halo2 keypair");
-            }
+            let _keypair = Halo2Keypair::<<Tree::Field as Halo2Field>::Affine, _>::create(&circ)
+                .expect("failed to create halo2 keypair");
         }
         // top2 shape
         SECTOR_NODES_32_KIB => {
             let circ =
                 EmptySectorUpdateCircuit::<Tree::Field, U8, U8, U2, SECTOR_NODES_32_KIB>::blank_circuit();
-            if !Halo2Keypair::<<Tree::Field as Halo2Field>::Affine, _>::is_cached(&circ) {
-                let _keypair =
-                    Halo2Keypair::<<Tree::Field as Halo2Field>::Affine, _>::create(&circ)
-                        .expect("failed to create halo2 keypair");
-            }
+            let _keypair = Halo2Keypair::<<Tree::Field as Halo2Field>::Affine, _>::create(&circ)
+                .expect("failed to create halo2 keypair");
         }
         // top2 shape
         SECTOR_NODES_64_GIB => {
             let circ =
                 EmptySectorUpdateCircuit::<Tree::Field, U8, U8, U2, SECTOR_NODES_64_GIB>::blank_circuit();
-            if !Halo2Keypair::<<Tree::Field as Halo2Field>::Affine, _>::is_cached(&circ) {
-                let _keypair =
-                    Halo2Keypair::<<Tree::Field as Halo2Field>::Affine, _>::create(&circ)
-                        .expect("failed to create halo2 keypair");
-            }
+            let _keypair = Halo2Keypair::<<Tree::Field as Halo2Field>::Affine, _>::create(&circ)
+                .expect("failed to create halo2 keypair");
         }
         _ => panic!("Unsupported sector size!"),
     }
