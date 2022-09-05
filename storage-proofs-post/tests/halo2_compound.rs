@@ -159,7 +159,9 @@ where
     let partition_count = 2;
     let sectors_challenged_per_partition =
         window::sectors_challenged_per_partition::<SECTOR_NODES>();
-    let total_prover_sectors = partition_count * sectors_challenged_per_partition;
+    // Test when the prover's sector set length is not divisible by the number of sectors challenged
+    // per partition.
+    let total_prover_sectors = partition_count * sectors_challenged_per_partition - 1;
 
     let vanilla_setup_params = SetupParams {
         sector_size: (SECTOR_NODES << 5) as u64,
@@ -232,10 +234,10 @@ where
     )
     .expect("failed to generate vanilla_partition proofs");
     assert_eq!(vanilla_partition_proofs.len(), partition_count);
-    assert_eq!(
-        vanilla_partition_proofs[0].sectors.len(),
-        sectors_challenged_per_partition
-    );
+    // The vanilla prover should perform sector padding.
+    assert!(vanilla_partition_proofs
+        .iter()
+        .all(|proof| proof.sectors.len() == sectors_challenged_per_partition));
 
     let keypair = {
         let circ =
