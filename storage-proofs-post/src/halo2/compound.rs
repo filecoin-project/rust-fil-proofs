@@ -110,7 +110,11 @@ macro_rules! impl_compound_proof {
                         let total_prover_sectors = vanilla_pub_inputs.sectors.len();
                         let sectors_challenged_per_partition =
                             window::sectors_challenged_per_partition::<$sector_nodes>();
-                        total_prover_sectors / sectors_challenged_per_partition
+                        // The prover's sector set length may not be divsible by the number of
+                        // sectors challenged per partition; calling `ceil` accounts for this case
+                        // where we pad the last partition with the prover's last sector.
+                        (total_prover_sectors as f32 / sectors_challenged_per_partition as f32)
+                            .ceil() as usize
                     };
 
                     assert_eq!(vanilla_proofs.len(), partition_count);
@@ -147,7 +151,11 @@ macro_rules! impl_compound_proof {
                         let total_prover_sectors = vanilla_pub_inputs.sectors.len();
                         let sectors_challenged_per_partition =
                             window::sectors_challenged_per_partition::<$sector_nodes>();
-                        total_prover_sectors / sectors_challenged_per_partition
+                        // The prover's sector set length may not be divsible by the number of
+                        // sectors challenged per partition; calling `ceil` accounts for this case
+                        // where we pad the last partition with the prover's last sector.
+                        (total_prover_sectors as f32 / sectors_challenged_per_partition as f32)
+                            .ceil() as usize
                     };
 
                     assert_eq!(vanilla_proofs.len(), partition_count);
@@ -223,7 +231,11 @@ macro_rules! impl_compound_proof {
                         let total_prover_sectors = vanilla_pub_inputs.sectors.len();
                         let sectors_challenged_per_partition =
                             window::sectors_challenged_per_partition::<$sector_nodes>();
-                        total_prover_sectors / sectors_challenged_per_partition
+                        // The prover's sector set length may not be divsible by the number of
+                        // sectors challenged per partition; calling `ceil` accounts for this case
+                        // where we pad the last partition with the prover's last sector.
+                        (total_prover_sectors as f32 / sectors_challenged_per_partition as f32)
+                            .ceil() as usize
                     };
 
                     assert_eq!(circ_proofs.len(), partition_count);
@@ -260,8 +272,12 @@ macro_rules! impl_compound_proof {
                         let total_prover_sectors = vanilla_pub_inputs.sectors.len();
                         let sectors_challenged_per_partition =
                             window::sectors_challenged_per_partition::<$sector_nodes>();
+                        // The prover's sector set length may not be divsible by the number of
+                        // sectors challenged per partition; calling `ceil` accounts for this case
+                        // where we pad the last partition with the prover's last sector.
                         let partition_count =
-                            total_prover_sectors / sectors_challenged_per_partition;
+                            (total_prover_sectors as f32 / sectors_challenged_per_partition as f32)
+                                .ceil() as usize;
                         (0..partition_count)
                             .map(|k| {
                                 // The only public input field which should change is `k`.
