@@ -226,7 +226,7 @@ where
     if Path::new(&path).exists() {
         info!("reading existing halo2 proving key at path {}", path);
         let deserialized =
-            with_exclusive_read_lock(Path::new(&path), |file| bincode::deserialize_from(file));
+            with_exclusive_read_lock(Path::new(&path), |file| ProvingKey::read(file, vk));
         match deserialized {
             Ok(pk) => {
                 info!(
@@ -251,12 +251,7 @@ where
 
         with_exclusive_lock::<_, io::Error, _>(Path::new(&path), |mut file| {
             info!("writing generated halo2 proving key at path {}", path);
-            bincode::serialize_into(&mut file, &pk).map_err(|_| {
-                io::Error::new(
-                    io::ErrorKind::Other,
-                    format!("Cannot serialize halo2 proving keys at path {}", path),
-                )
-            })?;
+            pk.write(&mut file)?;
             file.flush()?;
             info!("wrote generated halo2 proving key at path {}", path);
             Ok(())
