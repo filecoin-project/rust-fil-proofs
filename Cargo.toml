@@ -22,7 +22,7 @@ members = [
 #neptune = { path = "../neptune" }
 
 [patch.crates-io]
-bellperson = { git = "https://github.com/filecoin-project/bellperson", branch = "program-macro" }
+bellperson = { git = "https://github.com/filecoin-project/bellperson", branch = "master" }
 blstrs = { git = "https://github.com/filecoin-project/blstrs", branch = "gpuname-fp6-fp12" }
 halo2_proofs = { git = "https://github.com/filecoin-project/halo2", branch = "serialize-vk-pk" }
 neptune = { git = "https://github.com/filecoin-project/neptune", branch = "halo2-gpu" }

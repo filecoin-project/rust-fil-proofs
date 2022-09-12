@@ -280,7 +280,7 @@ checksum = "904dfeac50f3cdaba28fc6f57fdcddb75f49ed61346676a78c4ffe55877802fd"
 [[package]]
 name = "bellperson"
 version = "0.22.0"
-source = "git+https://github.com/filecoin-project/bellperson?branch=program-macro#a77d53f727cb4f27fd16d5e5be2f6dbac84e688b"
+source = "git+https://github.com/filecoin-project/bellperson?branch=master#4f34d1c78bff62486b489f69bc00c73d0aa511d8"
 dependencies = [
  "bincode",
  "bitvec 0.22.3",
