@@ -901,7 +901,7 @@ fn test_window_post_single_partition_smaller_2kib_base_8() -> Result<()> {
         .get(&sector_size)
         .expect("unknown sector size");
 
-    let versions = vec![ApiVersion::V1_0_0, ApiVersion::V1_1_0];
+    let versions = vec![/*ApiVersion::V1_0_0, */ ApiVersion::V1_1_0];
     for version in versions {
         window_post::<SectorShape2KiB>(
             sector_size,
@@ -910,7 +910,7 @@ fn test_window_post_single_partition_smaller_2kib_base_8() -> Result<()> {
             false,
             version,
         )?;
-        window_post::<SectorShape2KiB>(sector_size, sector_count / 2, sector_count, true, version)?;
+        //window_post::<SectorShape2KiB>(sector_size, sector_count / 2, sector_count, true, version)?;
     }
 
     Ok(())
@@ -1310,6 +1310,19 @@ fn window_post<Tree: 'static + MerkleTreeTrait>(
     )?;
 
     let mut vanilla_proofs = Vec::with_capacity(replica_sectors.len());
+
+    let temp_dir = std::env::var("TMPDIR").expect("couldn't get value of TEMPDIR");
+    let temp_dir = std::fs::canonicalize(PathBuf::from(temp_dir))
+        .expect("couldn't get absolute path of sectors");
+    let metadata = temp_dir.metadata().expect("couldn't get metadata");
+    let mut permissions = metadata.permissions();
+    permissions.set_readonly(true);
+    std::fs::set_permissions(temp_dir.clone(), permissions)
+        .expect("couldn't apply read-only permissions");
+    println!(
+        "read-only permissions have been applied successfully to {:?}",
+        temp_dir
+    );
 
     for (sector_id, replica) in priv_replicas.iter() {
         let sector_challenges = &challenges[sector_id];
