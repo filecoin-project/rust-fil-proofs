@@ -1271,6 +1271,20 @@ fn window_post<Tree: 'static + MerkleTreeTrait>(
         pub_replicas.insert(sector_id, PublicReplicaInfo::new(comm_r)?);
         sectors.push((sector_id, replica, comm_r, cache_dir, prover_id));
     }
+
+    let temp_dir = std::env::var("TMPDIR").expect("couldn't get value of TEMPDIR");
+    let temp_dir = std::fs::canonicalize(PathBuf::from(temp_dir))
+        .expect("couldn't get absolute path of sectors");
+    let metadata = temp_dir.metadata().expect("couldn't get metadata");
+    let mut permissions = metadata.permissions();
+    permissions.set_readonly(true);
+    std::fs::set_permissions(temp_dir.clone(), permissions)
+        .expect("couldn't apply read-only permissions");
+    println!(
+        "read-only permissions have been applied successfully to {:?}",
+        temp_dir
+    );
+
     assert_eq!(priv_replicas.len(), total_sector_count);
     assert_eq!(pub_replicas.len(), total_sector_count);
     assert_eq!(sectors.len(), total_sector_count);
@@ -1310,20 +1324,6 @@ fn window_post<Tree: 'static + MerkleTreeTrait>(
     )?;
 
     let mut vanilla_proofs = Vec::with_capacity(replica_sectors.len());
-
-    let temp_dir = std::env::var("TMPDIR").expect("couldn't get value of TEMPDIR");
-    let temp_dir = std::fs::canonicalize(PathBuf::from(temp_dir))
-        .expect("couldn't get absolute path of sectors");
-    let metadata = temp_dir.metadata().expect("couldn't get metadata");
-    let mut permissions = metadata.permissions();
-    permissions.set_readonly(true);
-    std::fs::set_permissions(temp_dir.clone(), permissions)
-        .expect("couldn't apply read-only permissions");
-    println!(
-        "read-only permissions have been applied successfully to {:?}",
-        temp_dir
-    );
-
     for (sector_id, replica) in priv_replicas.iter() {
         let sector_challenges = &challenges[sector_id];
         let single_proof =
