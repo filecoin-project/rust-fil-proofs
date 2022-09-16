@@ -1,3 +1,7 @@
+use std::any::TypeId;
+use std::io::{self, Write};
+use std::path::Path;
+
 use std::marker::PhantomData;
 use std::sync::RwLock;
 
@@ -12,8 +16,14 @@ use halo2_proofs::{
     transcript::{Blake2bRead, Blake2bWrite, Challenge255},
 };
 use lazy_static::lazy_static;
+use log::{error, info};
 use rand::RngCore;
 use typemap::ShareMap;
+
+use crate::parameter_cache::{
+    parameter_cache_dir, with_exclusive_lock, with_exclusive_read_lock, HALO2_PARAMETER_EXT,
+    PROVING_KEY_EXT, VERIFYING_KEY_EXT, VERSION,
+};
 
 lazy_static! {
     // Maps each halo2 circuit type to its keypair stored in memory; allows generating each
@@ -57,6 +67,18 @@ where
     _circ: PhantomData<Circ>,
 }
 
+pub fn get_field_from_circuit_scalar<F: FieldExt>() -> String {
+    let field = TypeId::of::<F>();
+    let fp = TypeId::of::<Fp>();
+    let fq = TypeId::of::<Fq>();
+    assert!(field == fp || field == fq);
+    if field == fp {
+        "fp".to_string()
+    } else {
+        "fq".to_string()
+    }
+}
+
 // Manually implement `Send` and `Sync` for `Halo2Keypair` so we can store keypairs within a
 // `lazy_static` lookup table.
 unsafe impl<C, Circ> Send for Halo2Keypair<C, Circ>
@@ -72,15 +94,181 @@ where
 {
 }
 
+fn create_params<C, Circ>(circuit: &Circ) -> Result<Params<C>, Error>
+where
+    C: CurveAffine,
+    Circ: Circuit<C::Scalar> + CircuitRows,
+{
+    let path = format!(
+        "{}v{}-halo2-{}-keypair-params-{}.{}",
+        parameter_cache_dir().display(),
+        VERSION,
+        get_field_from_circuit_scalar::<C::Scalar>(),
+        circuit.k(),
+        HALO2_PARAMETER_EXT,
+    );
+    info!("checking for halo2 params at path {}", path);
+    if Path::new(&path).exists() {
+        info!("reading existing halo2 params at path {}", path);
+        //with_exclusive_read_lock::<_, io::Error, _>(Path::new(&path), |file| {
+        let deserialized = with_exclusive_read_lock(Path::new(&path), |file| Params::read(file));
+        match deserialized {
+            Ok(params) => {
+                info!("finished reading existing halo2 params at path {}", path);
+                Ok(params)
+            }
+            Err(_) => {
+                error!("reading existing halo2 params failed");
+                Err(io::Error::new(
+                    io::ErrorKind::Other,
+                    format!("Cannot read halo2 params at path {}", path),
+                )
+                .into())
+            }
+        }
+    } else {
+        info!("generating new halo2 params ...");
+        let params = Params::new(circuit.k());
+        info!("done generating new halo2 params");
+
+        with_exclusive_lock::<_, io::Error, _>(Path::new(&path), |mut file| {
+            info!("writing generated halo2 params at path {}", path);
+            params.write(&mut file)?;
+            file.flush()?;
+            info!("wrote generated halo2 params at path {}", path);
+            Ok(())
+        })?;
+
+        Ok(params)
+    }
+}
+
+fn create_vk<C, Circ>(params: &Params<C>, circuit: &Circ) -> Result<VerifyingKey<C>, Error>
+where
+    C: CurveAffine,
+    Circ: Circuit<C::Scalar> + CircuitRows,
+{
+    let path = format!(
+        "{}v{}-halo2-{}-keypair-{}-{}-{}.{}",
+        parameter_cache_dir().display(),
+        VERSION,
+        get_field_from_circuit_scalar::<C::Scalar>(),
+        circuit.id(),
+        circuit.k(),
+        circuit.sector_size(),
+        VERIFYING_KEY_EXT,
+    );
+    info!("checking for halo2 verifying key at path {}", path);
+    if Path::new(&path).exists() {
+        info!("reading existing halo2 verifying key at path {}", path);
+        let deserialized = with_exclusive_read_lock(Path::new(&path), |file| {
+            VerifyingKey::read(file, params, circuit)
+        });
+        match deserialized {
+            Ok(vk) => {
+                info!(
+                    "finished reading existing halo2 verifying key at path {}",
+                    path
+                );
+                Ok(vk)
+            }
+            Err(_) => {
+                error!(
+                    "reading existing halo2 verifying key failed at path {}",
+                    path
+                );
+                Err(io::Error::new(
+                    io::ErrorKind::Other,
+                    format!("Cannot read halo2 verifying keys at path {}", path),
+                )
+                .into())
+            }
+        }
+    } else {
+        info!("generating new halo2 verifying key ...");
+        let vk = keygen_vk(params, circuit)?;
+        info!("done generating new halo2 verifying key");
+
+        with_exclusive_lock::<_, io::Error, _>(Path::new(&path), |mut file| {
+            info!("writing generated halo2 verifying key at path {}", path);
+            vk.write(&mut file)?;
+            file.flush()?;
+            info!("wrote generated halo2 verifying key at path {}", path);
+            Ok(())
+        })?;
+
+        Ok(vk)
+    }
+}
+
+fn create_pk<C, Circ>(
+    params: &Params<C>,
+    vk: VerifyingKey<C>,
+    circuit: &Circ,
+) -> Result<ProvingKey<C>, Error>
+where
+    C: CurveAffine,
+    Circ: Circuit<C::Scalar> + CircuitRows,
+{
+    let path = format!(
+        "{}v{}-halo2-{}-keypair-{}-{}-{}.{}",
+        parameter_cache_dir().display(),
+        VERSION,
+        get_field_from_circuit_scalar::<C::Scalar>(),
+        circuit.id(),
+        circuit.k(),
+        circuit.sector_size(),
+        PROVING_KEY_EXT,
+    );
+    info!("checking for halo2 proving key at path {}", path);
+    if Path::new(&path).exists() {
+        info!("reading existing halo2 proving key at path {}", path);
+        let deserialized =
+            with_exclusive_read_lock(Path::new(&path), |file| ProvingKey::read(file, vk));
+        match deserialized {
+            Ok(pk) => {
+                info!(
+                    "finished reading existing halo2 proving key at path {}",
+                    path
+                );
+                Ok(pk)
+            }
+            Err(_) => {
+                error!("reading existing halo2 proving key failed at path {}", path);
+                Err(io::Error::new(
+                    io::ErrorKind::Other,
+                    format!("Cannot read halo2 proving keys at path {}", path),
+                )
+                .into())
+            }
+        }
+    } else {
+        info!("generating new halo2 proving key ...");
+        let pk = keygen_pk(params, vk, circuit)?;
+        info!("done generating new halo2 proving key");
+
+        with_exclusive_lock::<_, io::Error, _>(Path::new(&path), |mut file| {
+            info!("writing generated halo2 proving key at path {}", path);
+            pk.write(&mut file)?;
+            file.flush()?;
+            info!("wrote generated halo2 proving key at path {}", path);
+            Ok(())
+        })?;
+
+        Ok(pk)
+    }
+}
+
 impl<C, Circ> Halo2Keypair<C, Circ>
 where
     C: CurveAffine,
     Circ: Circuit<C::Scalar> + CircuitRows,
 {
     pub fn create(empty_circuit: &Circ) -> Result<Self, Error> {
-        let params = Params::new(empty_circuit.k());
-        let vk = keygen_vk(&params, empty_circuit)?;
-        let pk = keygen_pk(&params, vk, empty_circuit)?;
+        let params = create_params(empty_circuit)?;
+        let vk = create_vk(&params, empty_circuit)?;
+        let pk = create_pk(&params, vk, empty_circuit)?;
+
         Ok(Halo2Keypair {
             params,
             pk,
