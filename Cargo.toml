@@ -13,3 +13,6 @@ members = [
   "storage-proofs-update",
   "fil-halo2-gadgets",
 ]
+
+[patch.crates-io]
+halo2_proofs = { git = "https://github.com/filecoin-project/halo2", branch = "serialize-vk-pk" }

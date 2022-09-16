@@ -1794,8 +1794,7 @@ dependencies = [
 [[package]]
 name = "halo2_proofs"
 version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cff771b9a2445cd2545c9ef26d863c290fbb44ae440c825a20eb7156f67a949a"
+source = "git+https://github.com/filecoin-project/halo2?branch=serialize-vk-pk#9006851467729e3afc868074c251bfb3a05da03e"
 dependencies = [
  "blake2b_simd",
  "ff",
