@@ -1229,7 +1229,7 @@ fn partition_window_post<Tree: 'static + MerkleTreeTrait>(
     Ok(())
 }
 
-/// Make all files recursively read-only/writeable, starting at the given directory.
+/// Make all files recursively read-only/writeable, starting at the given directory/file.
 fn set_readonly_flag(path: &Path, readonly: bool) {
     for entry in walkdir::WalkDir::new(path) {
         let entry = entry.expect("couldn't get file");
@@ -1324,7 +1324,8 @@ fn window_post<Tree: 'static + MerkleTreeTrait>(
     let mut vanilla_proofs = Vec::with_capacity(replica_sectors.len());
 
     // Make sure that files can be read-only for a window post.
-    for (_, _, _, cache_dir, _) in &sectors {
+    for (_, replica, _, cache_dir, _) in &sectors {
+        set_readonly_flag(replica.path(), true);
         set_readonly_flag(cache_dir.path(), true);
     }
 
@@ -1344,7 +1345,8 @@ fn window_post<Tree: 'static + MerkleTreeTrait>(
     assert!(valid, "proof did not verify");
 
     // Make files writeable again, so that the temporary directory can be removed.
-    for (_, _, _, cache_dir, _) in &sectors {
+    for (_, replica, _, cache_dir, _) in &sectors {
+        set_readonly_flag(replica.path(), false);
         set_readonly_flag(cache_dir.path(), false);
     }
 
