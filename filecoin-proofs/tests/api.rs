@@ -865,6 +865,10 @@ fn winning_post<Tree: 'static + MerkleTreeTrait>(
     let challenges =
         generate_fallback_sector_challenges::<Tree>(&config, &randomness, &[sector_id], prover_id)?;
 
+    // Make sure that files can be read-only for a window post.
+    set_readonly_flag(replica.path(), true);
+    set_readonly_flag(cache_dir.path(), true);
+
     let single_proof = generate_single_vanilla_proof::<Tree>(
         &config,
         sector_id,
@@ -885,6 +889,10 @@ fn winning_post<Tree: 'static + MerkleTreeTrait>(
     let valid =
         verify_winning_post::<Tree>(&config, &randomness, &pub_replicas[..], prover_id, &proof)?;
     assert!(valid, "proof did not verify");
+
+    // Make files writeable again, so that the temporary directory can be removed.
+    set_readonly_flag(replica.path(), false);
+    set_readonly_flag(cache_dir.path(), false);
 
     replica.close()?;
 
