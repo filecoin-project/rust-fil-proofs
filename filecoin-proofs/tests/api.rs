@@ -865,6 +865,10 @@ fn winning_post<Tree: 'static + MerkleTreeTrait>(
     let challenges =
         generate_fallback_sector_challenges::<Tree>(&config, &randomness, &[sector_id], prover_id)?;
 
+    // Make sure that files can be read-only for a window post.
+    set_readonly_flag(replica.path(), true);
+    set_readonly_flag(cache_dir.path(), true);
+
     let single_proof = generate_single_vanilla_proof::<Tree>(
         &config,
         sector_id,
@@ -885,6 +889,10 @@ fn winning_post<Tree: 'static + MerkleTreeTrait>(
     let valid =
         verify_winning_post::<Tree>(&config, &randomness, &pub_replicas[..], prover_id, &proof)?;
     assert!(valid, "proof did not verify");
+
+    // Make files writeable again, so that the temporary directory can be removed.
+    set_readonly_flag(replica.path(), false);
+    set_readonly_flag(cache_dir.path(), false);
 
     replica.close()?;
 
@@ -1229,6 +1237,18 @@ fn partition_window_post<Tree: 'static + MerkleTreeTrait>(
     Ok(())
 }
 
+/// Make all files recursively read-only/writeable, starting at the given directory/file.
+fn set_readonly_flag(path: &Path, readonly: bool) {
+    for entry in walkdir::WalkDir::new(path) {
+        let entry = entry.expect("couldn't get file");
+        let metadata = entry.metadata().expect("couldn't get metadata");
+        let mut permissions = metadata.permissions();
+        permissions.set_readonly(readonly);
+        std::fs::set_permissions(entry.path(), permissions)
+            .expect("couldn't apply read-only permissions");
+    }
+}
+
 fn window_post<Tree: 'static + MerkleTreeTrait>(
     sector_size: u64,
     total_sector_count: usize,
@@ -1311,6 +1331,12 @@ fn window_post<Tree: 'static + MerkleTreeTrait>(
 
     let mut vanilla_proofs = Vec::with_capacity(replica_sectors.len());
 
+    // Make sure that files can be read-only for a window post.
+    for (_, replica, _, cache_dir, _) in &sectors {
+        set_readonly_flag(replica.path(), true);
+        set_readonly_flag(cache_dir.path(), true);
+    }
+
     for (sector_id, replica) in priv_replicas.iter() {
         let sector_challenges = &challenges[sector_id];
         let single_proof =
@@ -1325,6 +1351,12 @@ fn window_post<Tree: 'static + MerkleTreeTrait>(
 
     let valid = verify_window_post::<Tree>(&config, &randomness, &pub_replicas, prover_id, &proof)?;
     assert!(valid, "proof did not verify");
+
+    // Make files writeable again, so that the temporary directory can be removed.
+    for (_, replica, _, cache_dir, _) in &sectors {
+        set_readonly_flag(replica.path(), false);
+        set_readonly_flag(cache_dir.path(), false);
+    }
 
     Ok(())
 }

@@ -41,6 +41,7 @@ tempfile = "3"
 ff = "0.12.0"
 fil_logger = "0.1.6"
 rand_xorshift = "0.3.0"
+walkdir = "2.3.2"
 
 [features]
 default = ["opencl"]
