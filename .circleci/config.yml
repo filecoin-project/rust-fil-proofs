@@ -27,7 +27,7 @@ setup-env: &setup-env
 
 
 jobs:
-  ensure_groth_parameters_and_keys_linux:
+  ensure_parameters_and_keys_linux:
     executor: default
     environment: *setup-env
     steps:
@@ -368,7 +368,7 @@ jobs:
       - run: cargo fetch
       # On CircleCI you cannot create a cache on Linux and restore it on macOS.
       # Hence we need a separate cache for macOS that we create and restore. It
-      # is not a separate job (like `ensure_groth_parameters_and_keys_linux`,
+      # is not a separate job (like `ensure_parameters_and_keys_linux`,
       # as there is only this single job that runs on macOS.
       - restore_parameter_cache
       - ensure_filecoin_parameters
@@ -427,8 +427,19 @@ commands:
             # `--insecure` is needed due to an outdated base systems.
             curl --insecure https://proofs.filecoin.io/v28-fil-inner-product-v1.srs --output ${FIL_PROOFS_PARAMETER_CACHE}v28-fil-inner-product-v1.srs
       - run:
+          name: Build halo2paramcache if it doesn't already exist
+          command: |
+            set -x; test -f /tmp/halo2paramcache.awesome \
+            || (cargo build --release --bin halo2paramcache && find . -type f -name halo2paramcache | xargs -I {} mv {} /tmp/halo2paramcache.awesome)
+      - run:
+          name: Obtain filecoin Halo2 parameters
+          command: /tmp/halo2paramcache.awesome --sector-sizes='2048,4096,16384,32768'
+      - run:
           name: Make the parameters world readable
           command: chmod -R 755 ${FIL_PROOFS_PARAMETER_CACHE}
+      - run:
+          name: List parameters
+          command: ls -lh ${FIL_PROOFS_PARAMETER_CACHE}
   save_rustup_cache:
     steps:
       # Move things from the home directory to `/tmp` first, so that it can be
@@ -453,9 +464,10 @@ commands:
       - run: uname > os.txt
       - save_cache:
           name: "Save parameter cache"
-          key: proof-params-v28-l-{{ checksum "os.txt" }}-{{ checksum "filecoin-proofs/parameters.json" }}
+          key: proof-params-v28-n-{{ checksum "os.txt" }}-{{ checksum "filecoin-proofs/parameters.json" }}
           paths:
             - "/tmp/paramcache.awesome"
+            - "/tmp/halo2paramcache.awesome"
             - "/tmp/filecoin-proof-parameters/"
   restore_parameter_cache:
     steps:
@@ -463,13 +475,13 @@ commands:
       - run: uname > os.txt
       - restore_cache:
           name: "Restore parameter cache"
-          key: proof-params-v28-l-{{ checksum "os.txt" }}-{{ checksum "filecoin-proofs/parameters.json" }}
+          key: proof-params-v28-n-{{ checksum "os.txt" }}-{{ checksum "filecoin-proofs/parameters.json" }}
 
 workflows:
   version: 2.1
   test_all:
     jobs:
-      - ensure_groth_parameters_and_keys_linux
+      - ensure_parameters_and_keys_linux
       - cargo_fetch
       - rustfmt:
           requires:
@@ -481,40 +493,40 @@ workflows:
       - test_release:
           requires:
             - cargo_fetch
-            - ensure_groth_parameters_and_keys_linux
+            - ensure_parameters_and_keys_linux
 
       - test_ignored_release:
           name: test_ignored_release_storage_proofs_post
           crate: "storage-proofs-post"
           requires:
             - cargo_fetch
-            - ensure_groth_parameters_and_keys_linux
+            - ensure_parameters_and_keys_linux
 
       - test_ignored_release:
           name: test_ignored_release_storage_proofs_core
           crate: "storage-proofs-core"
           requires:
             - cargo_fetch
-            - ensure_groth_parameters_and_keys_linux
+            - ensure_parameters_and_keys_linux
 
       - test_ignored_release:
           name: test_ignored_release_storage_proofs_porep
           crate: "storage-proofs-porep"
           requires:
             - cargo_fetch
-            - ensure_groth_parameters_and_keys_linux
+            - ensure_parameters_and_keys_linux
 
       - test_ignored_release_filecoin_proofs:
           requires:
             - cargo_fetch
-            - ensure_groth_parameters_and_keys_linux
+            - ensure_parameters_and_keys_linux
 
       - test_gpu_tree_building:
           name: test_gpu_tree_building_opencl (regular)
           cargo-args: "--workspace"
           requires:
             - cargo_fetch
-            - ensure_groth_parameters_and_keys_linux
+            - ensure_parameters_and_keys_linux
 
       - test_gpu_tree_building:
           name: test_gpu_tree_building_opencl (ignored, filecoin-proofs, storage-proofs-update)
@@ -522,7 +534,7 @@ workflows:
           test-args: "--ignored"
           requires:
             - cargo_fetch
-            - ensure_groth_parameters_and_keys_linux
+            - ensure_parameters_and_keys_linux
 
       - test_gpu_tree_building:
           name: test_gpu_tree_building_opencl (ignored, rest)
@@ -530,14 +542,14 @@ workflows:
           test-args: "--ignored"
           requires:
             - cargo_fetch
-            - ensure_groth_parameters_and_keys_linux
+            - ensure_parameters_and_keys_linux
 
       - test_gpu_tree_building:
           name: test_gpu_tree_building_cuda (regular)
           cargo-args: "--workspace --features cuda"
           requires:
             - cargo_fetch
-            - ensure_groth_parameters_and_keys_linux
+            - ensure_parameters_and_keys_linux
 
       - test_gpu_tree_building:
           name: test_gpu_tree_building_cuda (ignored, filecoin-proofs, storage-proofs-update)
@@ -545,7 +557,7 @@ workflows:
           test-args: "--ignored"
           requires:
             - cargo_fetch
-            - ensure_groth_parameters_and_keys_linux
+            - ensure_parameters_and_keys_linux
 
       - test_gpu_tree_building:
           name: test_gpu_tree_building_cuda (ignored, rest)
@@ -553,61 +565,61 @@ workflows:
           test-args: "--ignored"
           requires:
             - cargo_fetch
-            - ensure_groth_parameters_and_keys_linux
+            - ensure_parameters_and_keys_linux
 
       - test_multicore_sdr:
           requires:
             - cargo_fetch
-            - ensure_groth_parameters_and_keys_linux
+            - ensure_parameters_and_keys_linux
 
       - test:
           name: test_filecoin_proofs
           crate: "filecoin-proofs"
           requires:
             - cargo_fetch
-            - ensure_groth_parameters_and_keys_linux
+            - ensure_parameters_and_keys_linux
 
       - test:
           name: test_storage_proofs_core
           crate: "storage-proofs-core"
           requires:
             - cargo_fetch
-            - ensure_groth_parameters_and_keys_linux
+            - ensure_parameters_and_keys_linux
 
       - test:
           name: test_storage_proofs_post
           crate: "storage-proofs-post"
           requires:
             - cargo_fetch
-            - ensure_groth_parameters_and_keys_linux
+            - ensure_parameters_and_keys_linux
 
       - test:
           name: test_storage_proofs_porep
           crate: "storage-proofs-porep"
           requires:
             - cargo_fetch
-            - ensure_groth_parameters_and_keys_linux
+            - ensure_parameters_and_keys_linux
 
       - test:
           name: test_fil_proofs_tooling
           crate: "fil-proofs-tooling"
           requires:
             - cargo_fetch
-            - ensure_groth_parameters_and_keys_linux
+            - ensure_parameters_and_keys_linux
 
       - test:
           name: test_sha2raw
           crate: "sha2raw"
           requires:
             - cargo_fetch
-            - ensure_groth_parameters_and_keys_linux
+            - ensure_parameters_and_keys_linux
 
       - test:
           name: test_filecoin_hashers
           crate: "filecoin-hashers"
           requires:
             - cargo_fetch
-            - ensure_groth_parameters_and_keys_linux
+            - ensure_parameters_and_keys_linux
 
 
       - test:
@@ -615,24 +627,24 @@ workflows:
           crate: "fil-proofs-param"
           requires:
             - cargo_fetch
-            - ensure_groth_parameters_and_keys_linux
+            - ensure_parameters_and_keys_linux
 
       - test_no_gpu:
           name: test_no_gpu
           requires:
             - cargo_fetch
-            - ensure_groth_parameters_and_keys_linux
+            - ensure_parameters_and_keys_linux
 
 #      - test_arm_no_gpu:
 #          name: test_arm_no_gpu
 #          requires:
 #            - cargo_fetch
-#            - ensure_groth_parameters_and_keys_linux
+#            - ensure_parameters_and_keys_linux
 
       - bench:
           requires:
             - cargo_fetch
-            - ensure_groth_parameters_and_keys_linux
+            - ensure_parameters_and_keys_linux
 
 #      - test_darwin
 
@@ -647,8 +659,8 @@ workflows:
           crate: "storage-proofs-update"
           requires:
             - cargo_fetch
-            - ensure_groth_parameters_and_keys_linux
+            - ensure_parameters_and_keys_linux
 
       - coverage-with-tarpaulin:
           requires:
-            - ensure_groth_parameters_and_keys_linux
+            - ensure_parameters_and_keys_linux
