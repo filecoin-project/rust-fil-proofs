@@ -1,12 +1,13 @@
 use anyhow::{ensure, Result};
+use ff::PrimeField;
 use filecoin_hashers::Hasher;
-use storage_proofs_core::{api_version::ApiVersion, proof::ProofScheme};
+use storage_proofs_core::{api_version::ApiVersion, proof::ProofScheme, util::is_groth16_field};
 use storage_proofs_porep::stacked::{self, LayerChallenges, StackedDrg};
 use storage_proofs_post::fallback::{self, FallbackPoSt};
 
 use crate::{
     constants::{DefaultPieceHasher, DRG_DEGREE, EXP_DEGREE, LAYERS, POREP_MINIMUM_CHALLENGES},
-    types::{MerkleTreeTrait, PaddedBytesAmount, PoStConfig},
+    types::{MerkleTreeTrait, PaddedBytesAmount, PoStConfig, SectorUpdateConfig},
 };
 
 type WinningPostSetupParams = fallback::SetupParams;
@@ -24,7 +25,7 @@ pub fn public_params<Tree: 'static + MerkleTreeTrait>(
 where
     DefaultPieceHasher<Tree::Field>: Hasher<Field = Tree::Field>,
 {
-    StackedDrg::<Tree, DefaultPieceHasher<Tree::Field>>::setup(&setup_params(
+    StackedDrg::<Tree, DefaultPieceHasher<Tree::Field>>::setup(&setup_params::<Tree::Field>(
         sector_bytes,
         partitions,
         porep_id,
@@ -78,25 +79,12 @@ pub fn window_post_setup_params(post_config: &PoStConfig) -> WindowPostSetupPara
     }
 }
 
-pub fn setup_params(
+pub fn setup_params<F: PrimeField>(
     sector_bytes: PaddedBytesAmount,
     partitions: usize,
     porep_id: [u8; 32],
     api_version: ApiVersion,
 ) -> Result<stacked::SetupParams> {
-    let layer_challenges = select_challenges(
-        partitions,
-        *POREP_MINIMUM_CHALLENGES
-            .read()
-            .expect("POREP_MINIMUM_CHALLENGES poisoned")
-            .get(&u64::from(sector_bytes))
-            .expect("unknown sector size") as usize,
-        *LAYERS
-            .read()
-            .expect("LAYERS poisoned")
-            .get(&u64::from(sector_bytes))
-            .expect("unknown sector size"),
-    );
     let sector_bytes = u64::from(sector_bytes);
 
     ensure!(
@@ -108,6 +96,35 @@ pub fn setup_params(
     let nodes = (sector_bytes / 32) as usize;
     let degree = DRG_DEGREE;
     let expansion_degree = EXP_DEGREE;
+
+    let num_layers = *LAYERS
+        .read()
+        .expect("LAYERS poisoned")
+        .get(&sector_bytes)
+        .expect("unknown sector size");
+
+    let layer_challenges = if is_groth16_field::<F>() {
+        select_challenges(
+            partitions,
+            *POREP_MINIMUM_CHALLENGES
+                .read()
+                .expect("POREP_MINIMUM_CHALLENGES poisoned")
+                .get(&sector_bytes)
+                .expect("unknown sector size") as usize,
+            num_layers,
+        )
+    } else {
+        ensure!(
+            partitions == stacked::halo2::partition_count(nodes),
+            "unexpected number of halo2 partitions",
+        );
+        ensure!(
+            num_layers == stacked::halo2::num_layers(nodes),
+            "unexpected number of layers",
+        );
+        let challenge_count = stacked::halo2::challenge_count(nodes);
+        LayerChallenges::new(num_layers, challenge_count)
+    };
 
     Ok(stacked::SetupParams {
         nodes,
@@ -132,6 +149,23 @@ fn select_challenges(
     }
 
     guess
+}
+
+#[inline]
+pub fn sector_update_public_params<F: PrimeField>(
+    config: &SectorUpdateConfig,
+) -> Result<storage_proofs_update::PublicParams> {
+    let sector_bytes = u64::from(config.sector_size);
+    let pub_params = if is_groth16_field::<F>() {
+        storage_proofs_update::PublicParams::from_sector_size(sector_bytes)
+    } else {
+        storage_proofs_update::PublicParams::from_sector_size_halo2(sector_bytes)
+    };
+    ensure!(
+        pub_params.partition_count == usize::from(config.update_partitions),
+        "SectorUpdateConfig contains invalid number of partition",
+    );
+    Ok(pub_params)
 }
 
 #[cfg(test)]

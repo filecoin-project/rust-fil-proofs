@@ -85,7 +85,7 @@ pub type TreeR<F, U, V, W> = LCTree<TreeRHasher<F>, U, V, W>;
 // All valid TreeR shapes have the same base-tree shape.
 pub type TreeRBase<F> = LCTree<TreeRHasher<F>, U8, U0, U0>;
 
-// The number of partitions for the given sector-size.
+// The number of groth16 partitions for the given sector size.
 pub const fn partition_count(sector_nodes: usize) -> usize {
     if sector_nodes <= SECTOR_SIZE_8_KIB {
         1
@@ -98,7 +98,7 @@ pub const fn partition_count(sector_nodes: usize) -> usize {
     }
 }
 
-// The number of challenges per partition proof.
+// The number of challenges per groth16 partition proof.
 pub const fn challenge_count(sector_nodes: usize) -> usize {
     if sector_nodes <= SECTOR_SIZE_16_MIB {
         10

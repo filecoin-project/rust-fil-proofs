@@ -56,8 +56,8 @@ where
         SECTOR_NODES
     );
     let sector_bytes = SECTOR_NODES << 5;
-    let num_layers = num_layers::<SECTOR_NODES>();
-    let challenge_count = challenge_count::<SECTOR_NODES>();
+    let num_layers = num_layers(SECTOR_NODES);
+    let challenge_count = challenge_count(SECTOR_NODES);
     let layer_challenges = LayerChallenges::new(num_layers, challenge_count);
 
     let mut rng = XorShiftRng::from_seed(TEST_SEED);

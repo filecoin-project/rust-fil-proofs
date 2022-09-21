@@ -50,6 +50,34 @@ impl From<PoStConfig> for UnpaddedBytesAmount {
 }
 
 impl PoStConfig {
+    pub fn new_halo2(
+        sector_size: SectorSize,
+        typ: PoStType,
+        priority: bool,
+        api_version: ApiVersion,
+    ) -> Self {
+        use storage_proofs_post::halo2::{window, winning};
+
+        let sector_nodes = u64::from(sector_size) as usize >> 5;
+
+        let (sector_count, challenge_count) = match typ {
+            PoStType::Winning => (winning::SECTORS_CHALLENGED, winning::CHALLENGE_COUNT),
+            PoStType::Window => (
+                window::sectors_challenged_per_partition(sector_nodes),
+                window::SECTOR_CHALLENGES,
+            ),
+        };
+
+        PoStConfig {
+            sector_size,
+            challenge_count,
+            sector_count,
+            typ,
+            priority,
+            api_version,
+        }
+    }
+
     pub fn padded_sector_size(&self) -> PaddedBytesAmount {
         PaddedBytesAmount::from(self.sector_size)
     }

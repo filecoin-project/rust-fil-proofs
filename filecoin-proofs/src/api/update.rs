@@ -30,14 +30,14 @@ use storage_proofs_update::{
         SECTOR_SIZE_8_KIB, SECTOR_SIZE_8_MIB,
     },
     halo2::circuit::EmptySectorUpdateCircuit,
-    EmptySectorUpdate, EmptySectorUpdateCompound, PrivateInputs, PublicInputs, PublicParams,
-    SetupParams,
+    EmptySectorUpdate, EmptySectorUpdateCompound, PrivateInputs, PublicInputs, SetupParams,
 };
 
 use crate::{
     api::{get_proof_system, MockStore, PoseidonArityAllFields, ProofSystem},
     caches::{get_empty_sector_update_params, get_empty_sector_update_verifying_key},
     constants::DefaultPieceHasher,
+    parameters::sector_update_public_params,
     pieces::verify_pieces,
     types::{
         Commitment, EmptySectorUpdateEncoded, EmptySectorUpdateProof, PartitionProof, PieceInfo,
@@ -178,7 +178,7 @@ where
     TreeRHasher<F>: Hasher<Field = F>,
 {
     info!("encode_into:start");
-    let config = SectorUpdateConfig::from_porep_config(porep_config);
+    let config = SectorUpdateConfig::from_sector_size::<F>(porep_config.sector_size);
 
     let p_aux = get_p_aux::<Tree>(sector_key_cache_path)?;
     let t_aux = get_t_aux::<Tree>(sector_key_cache_path)?;
@@ -352,12 +352,13 @@ where
     let comm_r_new_safe = TreeRDomain::<F>::try_from_bytes(&comm_r_new)?;
     let comm_d_new_safe = TreeDDomain::<F>::try_from_bytes(&comm_d_new)?;
 
-    let public_params = PublicParams::from_sector_size(u64::from(config.sector_size));
+    let public_params = sector_update_public_params::<F>(&config)?;
+    ensure!(
+        partition_index < public_params.partition_count,
+        "invalid partition index"
+    );
 
     let p_aux_old = get_p_aux::<Tree>(sector_key_cache_path)?;
-
-    let partitions = usize::from(config.update_partitions);
-    ensure!(partition_index < partitions, "invalid partition index");
 
     let public_inputs = PublicInputs {
         k: partition_index,
@@ -415,10 +416,11 @@ where
     let comm_r_new_safe = TreeRDomain::<F>::try_from_bytes(&comm_r_new)?;
     let comm_d_new_safe = TreeDDomain::<F>::try_from_bytes(&comm_d_new)?;
 
-    let public_params = PublicParams::from_sector_size(u64::from(config.sector_size));
-
-    let partitions = usize::from(config.update_partitions);
-    ensure!(partition_index < partitions, "invalid partition index");
+    let public_params = sector_update_public_params::<F>(&config)?;
+    ensure!(
+        partition_index < public_params.partition_count,
+        "invalid partition index"
+    );
 
     let public_inputs = PublicInputs {
         k: partition_index,
@@ -464,7 +466,7 @@ where
     let comm_r_new_safe = TreeRDomain::<F>::try_from_bytes(&comm_r_new)?;
     let comm_d_new_safe = TreeDDomain::<F>::try_from_bytes(&comm_d_new)?;
 
-    let public_params = PublicParams::from_sector_size(u64::from(config.sector_size));
+    let public_params = sector_update_public_params::<F>(&config)?;
 
     let p_aux_old = get_p_aux::<Tree>(sector_key_cache_path)?;
 
@@ -527,7 +529,7 @@ where
     let comm_r_new_safe = TreeRDomain::<F>::try_from_bytes(&comm_r_new)?;
     let comm_d_new_safe = TreeDDomain::<F>::try_from_bytes(&comm_d_new)?;
 
-    let public_params = PublicParams::from_sector_size(u64::from(config.sector_size));
+    let public_params = sector_update_public_params::<F>(&config)?;
 
     let public_inputs = PublicInputs {
         k: 0,
@@ -641,7 +643,7 @@ where
     let comm_r_new_safe = TreeRDomain::<Fr>::try_from_bytes(&comm_r_new)?;
     let comm_d_new_safe = TreeDDomain::<Fr>::try_from_bytes(&comm_d_new)?;
 
-    let config = SectorUpdateConfig::from_porep_config(porep_config);
+    let config = SectorUpdateConfig::from_sector_size::<Fr>(porep_config.sector_size);
 
     let partitions = usize::from(config.update_partitions);
     let public_inputs = PublicInputs {
@@ -693,7 +695,7 @@ where
     let comm_r_new_safe = TreeRDomain::<F>::try_from_bytes(&comm_r_new)?;
     let comm_d_new_safe = TreeDDomain::<F>::try_from_bytes(&comm_d_new)?;
 
-    let config = SectorUpdateConfig::from_porep_config(porep_config);
+    let config = SectorUpdateConfig::from_sector_size::<F>(porep_config.sector_size);
 
     let vanilla_setup_params = SetupParams {
         sector_bytes: config.sector_size.into(),
@@ -1061,7 +1063,7 @@ where
 
     let comm_d_new_safe = TreeDDomain::<Fr>::try_from_bytes(&comm_d_new)?;
 
-    let config = SectorUpdateConfig::from_porep_config(porep_config);
+    let config = SectorUpdateConfig::from_sector_size::<Fr>(porep_config.sector_size);
 
     let p_aux_old =
         get_p_aux::<MerkleTreeWrapper<TreeRHasher<Fr>, MockStore, U, V, W>>(sector_key_cache_path)?;
@@ -1138,7 +1140,7 @@ where
     TreeDHasher<F>: Hasher<Field = F>,
     TreeRHasher<F>: Hasher<Field = F>,
 {
-    let config = SectorUpdateConfig::from_porep_config(porep_config);
+    let config = SectorUpdateConfig::from_sector_size::<F>(porep_config.sector_size);
     let sector_bytes: u64 = config.sector_size.into();
     let sector_nodes = config.nodes_count;
     let partition_count: usize = config.update_partitions.into();
@@ -1526,7 +1528,7 @@ where
 
     let comm_d_new_safe = TreeDDomain::<Fr>::try_from_bytes(&comm_d_new)?;
 
-    let config = SectorUpdateConfig::from_porep_config(porep_config);
+    let config = SectorUpdateConfig::from_sector_size::<Fr>(porep_config.sector_size);
     let partitions = usize::from(config.update_partitions);
     let public_inputs = PublicInputs {
         k: 0,
@@ -1566,7 +1568,7 @@ where
     TreeDHasher<F>: Hasher<Field = F>,
     TreeRHasher<F>: Hasher<Field = F>,
 {
-    let config = SectorUpdateConfig::from_porep_config(porep_config);
+    let config = SectorUpdateConfig::from_sector_size::<F>(porep_config.sector_size);
     let sector_nodes = config.nodes_count;
     let sector_bytes: u64 = config.sector_size.into();
     let partition_count: usize = config.update_partitions.into();

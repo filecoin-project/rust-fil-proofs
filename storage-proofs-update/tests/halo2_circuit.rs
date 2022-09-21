@@ -19,8 +19,9 @@ use storage_proofs_update::{
         SECTOR_SIZE_32_KIB, SECTOR_SIZE_4_KIB, SECTOR_SIZE_512_MIB, SECTOR_SIZE_64_GIB,
         SECTOR_SIZE_8_KIB,
     },
-    halo2::circuit::{self, EmptySectorUpdateCircuit},
-    phi, vanilla, Challenges, PublicParams,
+    gen_partition_challenges,
+    halo2::{apex_leaf_count, circuit, EmptySectorUpdateCircuit},
+    phi, vanilla, PublicParams,
 };
 use tempfile::tempdir;
 
@@ -92,7 +93,7 @@ where
     let root_r_new = tree_r_new.root();
     let comm_r_new = <TreeRHasher<Fp> as Hasher>::Function::hash2(&comm_c, &root_r_new);
 
-    let pub_params = PublicParams::from_sector_size((SECTOR_NODES << 5) as u64);
+    let pub_params = PublicParams::from_sector_size_halo2((SECTOR_NODES << 5) as u64);
 
     let get_high_bits_shr = pub_params.challenge_bit_len - h;
     let rhos = vanilla::rhos(h, &phi);
@@ -102,12 +103,14 @@ where
         info!("Proving partition {}/{}", k, pub_params.partition_count);
 
         trace!("Getting apex leaves");
-        let apex_leafs = get_apex_leafs(&tree_d_new, k);
+        let apex_leafs = if apex_leaf_count(SECTOR_NODES) == 0 {
+            vec![]
+        } else {
+            get_apex_leafs(&tree_d_new, k)
+        };
 
         trace!("Getting challenges");
-        let challenges: Vec<u32> = Challenges::<Fp>::new(SECTOR_NODES, comm_r_new, k)
-            .take(pub_params.challenge_count)
-            .collect();
+        let challenges = gen_partition_challenges::<Fp>(SECTOR_NODES, comm_r_new, k);
 
         trace!("Precomputing rhos");
         let rhos: Vec<Fp> = challenges
@@ -171,12 +174,9 @@ where
             priv_inputs,
         };
 
-        let prover = MockProver::run(circ.k(), &circ, pub_inputs_vec.clone())
-            .expect("halo2 MockProver failed");
-        assert!(prover.verify().is_ok());
-
         info!("Sector Update Circuit Prover starting [Partition {}]", k);
-        let prover = MockProver::run(circ.k(), &circ, pub_inputs_vec.clone()).unwrap();
+        let prover =
+            MockProver::run(circ.k(), &circ, pub_inputs_vec.clone()).expect("halo2 proving failed");
         trace!("Sector Update Circuit Prover complete [Partition {}]", k);
 
         info!("Sector Update Circuit Verify starting [Partition {}]", k);
@@ -184,7 +184,8 @@ where
         trace!("Sector Update Circuit Verify complete [Partition {}]", k);
 
         if gen_halo2_proof {
-            let keypair = Halo2Keypair::<<Fp as Halo2Field>::Affine, _>::create(&circ).unwrap();
+            let keypair = Halo2Keypair::<<Fp as Halo2Field>::Affine, _>::create(&circ)
+                .expect("failed to generate halo2 keypair");
             let proof = create_proof(&keypair, circ, &pub_inputs_vec, &mut rng)
                 .expect("failed to generate halo2 proof");
             verify_proof(&keypair, &proof, &pub_inputs_vec).expect("failed to verify halo2 proof");

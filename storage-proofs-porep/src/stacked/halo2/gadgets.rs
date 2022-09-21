@@ -43,7 +43,7 @@ where
     PoseidonHasher<F>: Hasher<Field = F>,
 {
     fn num_cols() -> NumCols {
-        match num_layers::<SECTOR_NODES>() {
+        match num_layers(SECTOR_NODES) {
             2 => <PoseidonHasher<F> as Halo2Hasher<U2>>::Chip::num_cols(),
             11 => <PoseidonHasher<F> as Halo2Hasher<U11>>::Chip::num_cols(),
             _ => unreachable!(),
@@ -61,7 +61,7 @@ where
         layouter: impl Layouter<F>,
         preimage: &[AssignedCell<F, F>],
     ) -> Result<AssignedCell<F, F>, Error> {
-        let num_layers = num_layers::<SECTOR_NODES>();
+        let num_layers = num_layers(SECTOR_NODES);
         assert_eq!(preimage.len(), num_layers);
         match self {
             ColumnHasherChip::Arity2(chip) => {
@@ -86,7 +86,7 @@ where
     PoseidonHasher<F>: Hasher<Field = F>,
 {
     pub fn construct(config: ColumnHasherConfig<F, SECTOR_NODES>) -> Self {
-        let num_layers = num_layers::<SECTOR_NODES>();
+        let num_layers = num_layers(SECTOR_NODES);
         match config {
             ColumnHasherConfig::Arity2(config) => {
                 assert_eq!(num_layers, 2);
@@ -108,7 +108,7 @@ where
         fixed_eq: &[Column<Fixed>],
         fixed_neq: &[Column<Fixed>],
     ) -> ColumnHasherConfig<F, SECTOR_NODES> {
-        match num_layers::<SECTOR_NODES>() {
+        match num_layers(SECTOR_NODES) {
             2 => {
                 let config = <PoseidonHasher<F> as Halo2Hasher<U2>>::configure(
                     meta, advice_eq, advice_neq, fixed_eq, fixed_neq,
@@ -197,7 +197,7 @@ where
         &self,
         layouter: &mut impl Layouter<F>,
     ) -> Result<LabelingConstants<F, SECTOR_NODES>, Error> {
-        let num_layers = num_layers::<SECTOR_NODES>();
+        let num_layers = num_layers(SECTOR_NODES);
         layouter.assign_region(
             || "assign labeling constants",
             |mut region| {

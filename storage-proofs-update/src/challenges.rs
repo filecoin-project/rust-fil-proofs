@@ -2,16 +2,17 @@ use ff::PrimeField;
 use filecoin_hashers::{FieldArity, Hasher};
 use generic_array::typenum::U2;
 use neptune::poseidon::Poseidon;
+use storage_proofs_core::util::is_groth16_field;
 
 use crate::{
     constants::{
         challenge_count, partition_count, TreeRDomain, TreeRHasher,
         POSEIDON_CONSTANTS_GEN_RANDOMNESS,
     },
-    vanilla::rhos,
+    halo2, rho,
 };
 
-// Generates the challenge set for a single `EmptySectorUpdate` partition.
+// Generates the challenge set for a single `EmptySectorUpdate` partition (Groth16 or Halo2).
 #[inline]
 pub fn gen_partition_challenges<F>(
     sector_nodes: usize,
@@ -22,7 +23,25 @@ where
     F: PrimeField,
     TreeRHasher<F>: Hasher<Field = F>,
 {
-    Challenges::new(sector_nodes, comm_r_new, k).collect()
+    if is_groth16_field::<F>() {
+        Challenges::new(sector_nodes, comm_r_new, k).collect()
+    } else {
+        Challenges::new_halo2(sector_nodes, comm_r_new, k).collect()
+    }
+}
+
+// Generates the challenge set for the single `EmptySectorUpdate-Poseidon` partition.
+#[allow(dead_code)]
+#[inline]
+pub fn gen_partition_challenges_poseidon<F>(
+    sector_nodes: usize,
+    comm_r_new: TreeRDomain<F>,
+) -> Vec<u32>
+where
+    F: PrimeField,
+    TreeRHasher<F>: Hasher<Field = F>,
+{
+    Challenges::new_poseidon(sector_nodes, comm_r_new).collect()
 }
 
 // Returns each partition challenge's `rho`.
@@ -36,14 +55,15 @@ where
     F: PrimeField,
     TreeRHasher<F>: Hasher<Field = F>,
 {
-    let rhos = rhos(h, phi);
     let challenge_bit_len = sector_nodes.trailing_zeros() as usize;
     let get_high_bits_shr = challenge_bit_len - h;
+    // Don't generate full rho set here because the number of partition challenges will always be
+    // less than the total number of possible rhos (i.e. `2^h`).
     challenges
         .iter()
         .map(|c| {
-            let high = (c >> get_high_bits_shr) as usize;
-            rhos[high]
+            let c_high = c >> get_high_bits_shr;
+            rho(phi, c_high)
         })
         .collect()
 }
@@ -113,6 +133,9 @@ where
     }
 
     pub fn new_poseidon(sector_nodes: usize, comm_r_new: TreeRDomain<F>) -> Self {
+        // TODO: remove this once halo2 poseidon circuit is implemented.
+        assert!(is_groth16_field::<F>());
+
         let repeats = partition_count(sector_nodes);
 
         let challenge_bit_len = sector_nodes.trailing_zeros() as usize;
@@ -131,6 +154,26 @@ where
             i: 0,
             digest_bits: Vec::with_capacity(F::NUM_BITS as usize),
             challenges_remaining: challenge_count,
+        }
+    }
+
+    pub fn new_halo2(sector_nodes: usize, comm_r_new: TreeRDomain<F>, k: usize) -> Self {
+        if halo2::GROTH16_PARTITIONING {
+            return Self::new(sector_nodes, comm_r_new, k);
+        }
+        assert!(k < halo2::partition_count(sector_nodes));
+        assert_eq!(halo2::challenge_count(sector_nodes), 1);
+        assert_eq!(halo2::partition_bit_len(sector_nodes), 0);
+        let challenge_bit_len = sector_nodes.trailing_zeros() as usize;
+        Challenges {
+            comm_r_new,
+            partition_bits: 0,
+            random_bits_per_challenge: challenge_bit_len,
+            challenges_per_digest: 1,
+            digest_index_all_partitions: k,
+            i: 0,
+            digest_bits: Vec::with_capacity(F::NUM_BITS as usize),
+            challenges_remaining: 1,
         }
     }
 }
