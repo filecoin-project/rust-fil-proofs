@@ -1,4 +1,7 @@
 # Filecoin Proving Subsystem
+[![Build Status][circleci-image]][circleci-link]
+
+[![BuildBot Status][buildbot-image]][buildbot-link]
 
 The **Filecoin Proving Subsystem** (or FPS) provides the storage proofs required by the Filecoin protocol. It is implemented entirely in Rust, as a series of partially inter-dependent crates – some of which export C bindings to the supported API.
 
@@ -393,3 +396,8 @@ The Filecoin Project is dual-licensed under Apache 2.0 and MIT terms:
 
 - Apache License, Version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
 - MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
+
+[circleci-image]: https://circleci.com/gh/filecoin-project/rust-fil-proofs.svg?branch=master&style=shield
+[circleci-link]: https://app.circleci.com/pipelines/github/filecoin-project/rust-fil-proofs?branch=master
+[buildbot-image]: https://dl.circleci.com/status-badge/img/gh/filecoin-project/proofs-buildbot/tree/main.svg?style=shield&circle-token=e27b010167b44cdb03704bf1df30573ee2963b7f
+[buildbot-link]: https://dl.circleci.com/status-badge/redirect/gh/filecoin-project/proofs-buildbot/tree/main
