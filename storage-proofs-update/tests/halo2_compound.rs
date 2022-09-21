@@ -18,11 +18,10 @@ use storage_proofs_core::{
 };
 use storage_proofs_update::{
     constants::{
-        self, hs, partition_count, validate_tree_r_shape, TreeDArity, SECTOR_SIZE_16_KIB,
-        SECTOR_SIZE_1_KIB, SECTOR_SIZE_2_KIB, SECTOR_SIZE_32_KIB, SECTOR_SIZE_4_KIB,
-        SECTOR_SIZE_8_KIB,
+        self, hs, validate_tree_r_shape, TreeDArity, SECTOR_SIZE_16_KIB, SECTOR_SIZE_1_KIB,
+        SECTOR_SIZE_2_KIB, SECTOR_SIZE_32_KIB, SECTOR_SIZE_4_KIB, SECTOR_SIZE_8_KIB,
     },
-    halo2::EmptySectorUpdateCircuit,
+    halo2::{partition_count, EmptySectorUpdateCircuit},
     phi, vanilla, EmptySectorUpdate, SetupParams,
 };
 use tempfile::tempdir;
@@ -213,6 +212,14 @@ where
     )
     .expect("failed to generate vanilla partition proofs");
     assert_eq!(vanilla_partition_proofs.len(), partition_count);
+
+    let is_valid = <EmptySectorUpdate<Fp, U, V, W> as ProofScheme<'_>>::verify_all_partitions(
+        &vanilla_pub_params,
+        &vanilla_pub_inputs,
+        &vanilla_partition_proofs,
+    )
+    .expect("failed to verify vanilla partition proofs");
+    assert!(is_valid, "invalid vanilla partition proof(s)");
 
     let keypair = {
         let circ = EmptySectorUpdateCircuit::blank_circuit();

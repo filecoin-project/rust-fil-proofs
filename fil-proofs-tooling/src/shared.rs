@@ -142,7 +142,7 @@ where
                 .read()
                 .expect("poisoned read access")
                 .get(&u64::from(sector_size))
-                .expect("unknown sector size"),
+                .expect("unknown sector size") as usize,
         ),
         porep_id,
         api_version,

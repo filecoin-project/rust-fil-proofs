@@ -13,9 +13,20 @@ use storage_proofs_core::halo2::CircuitRows;
 
 use crate::{
     fallback as vanilla,
-    halo2::circuit::{PostConfig, SectorProof},
+    halo2::{
+        circuit::{PostConfig, SectorProof},
+        constants::{
+            SECTOR_NODES_16_KIB, SECTOR_NODES_2_KIB, SECTOR_NODES_32_GIB, SECTOR_NODES_32_KIB,
+            SECTOR_NODES_4_KIB, SECTOR_NODES_512_MIB, SECTOR_NODES_64_GIB,
+        },
+    },
 };
 
+// The number of partitions per Winning-PoSt proof.
+pub const PARTITION_COUNT: usize = 1;
+// The number of sectors challenged per partition.
+pub const SECTORS_CHALLENGED: usize = 1;
+// The number of Merkle challenges per sector.
 pub const CHALLENGE_COUNT: usize = 66;
 
 // Absolute rows of public inputs.
@@ -66,7 +77,7 @@ where
     fn from(
         vanilla_pub_inputs: vanilla::PublicInputs<<PoseidonHasher<F> as Hasher>::Domain>,
     ) -> Self {
-        assert_eq!(vanilla_pub_inputs.sectors.len(), 1);
+        assert_eq!(vanilla_pub_inputs.sectors.len(), SECTORS_CHALLENGED);
         assert_eq!(vanilla_pub_inputs.k, Some(0));
 
         let randomness: F = vanilla_pub_inputs.randomness.into();
@@ -231,15 +242,15 @@ where
     PoseidonHasher<F>: Hasher<Field = F>,
 {
     fn k(&self) -> u32 {
-        use crate::halo2::constants::*;
+        // Values were computed using `get_k` test.
         match SECTOR_NODES {
             SECTOR_NODES_2_KIB => 14,
             SECTOR_NODES_4_KIB => 14,
             SECTOR_NODES_16_KIB => 14,
             SECTOR_NODES_32_KIB => 15,
-            SECTOR_NODES_512_MIB => 15,
-            SECTOR_NODES_32_GIB => 15,
-            SECTOR_NODES_64_GIB => 15,
+            SECTOR_NODES_512_MIB => 16,
+            SECTOR_NODES_32_GIB => 16,
+            SECTOR_NODES_64_GIB => 16,
             _ => unimplemented!(),
         }
     }
@@ -259,4 +270,88 @@ where
             priv_inputs: PrivateInputs::empty(),
         }
     }
+
+    #[allow(clippy::unwrap_used)]
+    pub fn compute_k(k_start: Option<u32>) -> u32 {
+        use halo2_proofs::{circuit::Value, dev::MockProver};
+        use storage_proofs_core::halo2::gadgets::por;
+
+        let pub_inputs = PublicInputs {
+            comm_r: Some(F::zero()),
+            challenges: [Some(0); CHALLENGE_COUNT],
+        };
+        let pub_inputs_vec = pub_inputs.to_vec();
+
+        let priv_inputs = {
+            let mut path_r = por::empty_path::<F, U, V, W, SECTOR_NODES>();
+            for sibs in path_r.iter_mut() {
+                *sibs = vec![Value::known(F::zero()); sibs.len()];
+            }
+            SectorProof {
+                comm_c: Value::known(F::zero()),
+                root_r: Value::known(F::zero()),
+                leafs_r: [Value::known(F::zero()); CHALLENGE_COUNT],
+                paths_r: vec![path_r; CHALLENGE_COUNT].try_into().unwrap(),
+                _tree_r: std::marker::PhantomData,
+            }
+        };
+
+        let circ = WinningPostCircuit::<F, U, V, W, SECTOR_NODES> {
+            pub_inputs,
+            priv_inputs,
+        };
+
+        // If a minimum `k` value is not supplied, use poseidon's.
+        let mut k = k_start.unwrap_or(7);
+        loop {
+            // println!("Trying k = {}", k);
+            match MockProver::run(k, &circ, pub_inputs_vec.clone()) {
+                Ok(_) => return k,
+                Err(Error::NotEnoughRowsAvailable { .. }) | Err(Error::InstanceTooLarge) => k += 1,
+                err => panic!("Unexpected error: {:?}", err),
+            };
+        }
+    }
+}
+
+#[test]
+#[ignore]
+fn get_k() {
+    use generic_array::typenum::{U0, U8};
+    use halo2_proofs::pasta::Fp;
+
+    let mut k = WinningPostCircuit::<Fp, U8, U0, U0, SECTOR_NODES_2_KIB>::compute_k(None);
+    println!("Found k = {} (sector-size = 2kib)", k);
+
+    k = WinningPostCircuit::<Fp, U8, U2, U0, SECTOR_NODES_4_KIB>::compute_k(Some(k));
+    println!("Found k = {} (sector-size = 4kib)", k);
+
+    /*
+    use generic_array::typenum::U4;
+    k = WinningPostCircuit::<Fp, U8, U4, U0, SECTOR_NODES_8_KIB>::compute_k(Some(k));
+    println!("Found k = {} (sector-size = 8kib)", k);
+    */
+
+    k = WinningPostCircuit::<Fp, U8, U8, U0, SECTOR_NODES_16_KIB>::compute_k(Some(k));
+    println!("Found k = {} (sector-size = 16kib)", k);
+
+    k = WinningPostCircuit::<Fp, U8, U8, U2, SECTOR_NODES_32_KIB>::compute_k(Some(k));
+    println!("Found k = {} (sector-size = 32kib)", k);
+
+    /*
+    k = WinningPostCircuit::<Fp, U8, U0, U0, SECTOR_NODES_8_MIB>::compute_k(Some(k));
+    println!("Found k = {} (sector-size = 8mib)", k);
+
+    k = WinningPostCircuit::<Fp, U8, U2, U0, SECTOR_NODES_16_MIB>::compute_k(Some(k));
+    println!("Found k = {} (sector-size = 16mib)", k);
+    */
+
+    k = WinningPostCircuit::<Fp, U8, U0, U0, SECTOR_NODES_512_MIB>::compute_k(Some(k));
+    println!("Found k = {} (sector-size = 512mib)", k);
+
+    k = WinningPostCircuit::<Fp, U8, U8, U0, SECTOR_NODES_32_GIB>::compute_k(Some(k));
+    println!("Found k = {} (sector-size = 32gib)", k);
+
+    k = WinningPostCircuit::<Fp, U8, U8, U2, SECTOR_NODES_64_GIB>::compute_k(Some(k));
+    println!("Found k = {} (sector-size = 64gib)", k);
 }

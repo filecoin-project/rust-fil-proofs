@@ -26,9 +26,9 @@ use crate::{
 fn is_winning<const SECTOR_NODES: usize>(setup_params: &SetupParams) -> bool {
     assert_eq!(setup_params.sector_size >> 5, SECTOR_NODES as u64);
     match (setup_params.challenge_count, setup_params.sector_count) {
-        (winning::CHALLENGE_COUNT, 1) => true,
+        (winning::CHALLENGE_COUNT, winning::SECTORS_CHALLENGED) => true,
         (window::SECTOR_CHALLENGES, sectors)
-            if sectors == window::sectors_challenged_per_partition::<SECTOR_NODES>() =>
+            if sectors == window::sectors_challenged_per_partition(SECTOR_NODES) =>
         {
             false
         }
@@ -105,18 +105,11 @@ macro_rules! impl_compound_proof {
                     let is_winning = is_winning::<$sector_nodes>(setup_params);
 
                     let partition_count = if is_winning {
-                        1
+                        winning::PARTITION_COUNT
                     } else {
                         let total_prover_sectors = vanilla_pub_inputs.sectors.len();
-                        let sectors_challenged_per_partition =
-                            window::sectors_challenged_per_partition::<$sector_nodes>();
-                        // The prover's sector set length may not be divsible by the number of
-                        // sectors challenged per partition; calling `ceil` accounts for this case
-                        // where we pad the last partition with the prover's last sector.
-                        (total_prover_sectors as f32 / sectors_challenged_per_partition as f32)
-                            .ceil() as usize
+                        window::partition_count::<$sector_nodes>(total_prover_sectors)
                     };
-
                     assert_eq!(vanilla_proofs.len(), partition_count);
 
                     let mut vanilla_pub_inputs = vanilla_pub_inputs.clone();
@@ -146,18 +139,11 @@ macro_rules! impl_compound_proof {
                     let is_winning = is_winning::<$sector_nodes>(setup_params);
 
                     let partition_count = if is_winning {
-                        1
+                        winning::PARTITION_COUNT
                     } else {
                         let total_prover_sectors = vanilla_pub_inputs.sectors.len();
-                        let sectors_challenged_per_partition =
-                            window::sectors_challenged_per_partition::<$sector_nodes>();
-                        // The prover's sector set length may not be divsible by the number of
-                        // sectors challenged per partition; calling `ceil` accounts for this case
-                        // where we pad the last partition with the prover's last sector.
-                        (total_prover_sectors as f32 / sectors_challenged_per_partition as f32)
-                            .ceil() as usize
+                        window::partition_count::<$sector_nodes>(total_prover_sectors)
                     };
-
                     assert_eq!(vanilla_proofs.len(), partition_count);
 
                     let mut circ_pub_inputs_vecs = Vec::with_capacity(partition_count);
@@ -226,18 +212,11 @@ macro_rules! impl_compound_proof {
                     let is_winning = is_winning::<$sector_nodes>(setup_params);
 
                     let partition_count = if is_winning {
-                        1
+                        winning::PARTITION_COUNT
                     } else {
                         let total_prover_sectors = vanilla_pub_inputs.sectors.len();
-                        let sectors_challenged_per_partition =
-                            window::sectors_challenged_per_partition::<$sector_nodes>();
-                        // The prover's sector set length may not be divsible by the number of
-                        // sectors challenged per partition; calling `ceil` accounts for this case
-                        // where we pad the last partition with the prover's last sector.
-                        (total_prover_sectors as f32 / sectors_challenged_per_partition as f32)
-                            .ceil() as usize
+                        window::partition_count::<$sector_nodes>(total_prover_sectors)
                     };
-
                     assert_eq!(circ_proofs.len(), partition_count);
 
                     let mut vanilla_pub_inputs = vanilla_pub_inputs.clone();
@@ -270,14 +249,8 @@ macro_rules! impl_compound_proof {
                         vec![pub_inputs.to_vec()]
                     } else {
                         let total_prover_sectors = vanilla_pub_inputs.sectors.len();
-                        let sectors_challenged_per_partition =
-                            window::sectors_challenged_per_partition::<$sector_nodes>();
-                        // The prover's sector set length may not be divsible by the number of
-                        // sectors challenged per partition; calling `ceil` accounts for this case
-                        // where we pad the last partition with the prover's last sector.
                         let partition_count =
-                            (total_prover_sectors as f32 / sectors_challenged_per_partition as f32)
-                                .ceil() as usize;
+                            window::partition_count::<$sector_nodes>(total_prover_sectors);
                         (0..partition_count)
                             .map(|k| {
                                 // The only public input field which should change is `k`.

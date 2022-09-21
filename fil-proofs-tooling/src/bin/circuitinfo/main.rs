@@ -153,7 +153,7 @@ fn porep_info(sector_size: u64, api_version: ApiVersion) -> (CircuitInfo, usize)
             .read()
             .expect("POREP_PARTITIONS poisoned")
             .get(&sector_size)
-            .expect("unknown sector size"),
+            .expect("unknown sector size") as usize,
     );
     let info = with_shape!(
         sector_size,

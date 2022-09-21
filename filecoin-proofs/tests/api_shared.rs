@@ -53,7 +53,7 @@ pub fn porep_config(sector_size: u64, porep_id: [u8; 32], api_version: ApiVersio
                 .read()
                 .expect("POREP_PARTITIONS poisoned")
                 .get(&sector_size)
-                .expect("unknown sector size"),
+                .expect("unknown sector size") as usize,
         ),
         porep_id,
         api_version,

@@ -69,7 +69,7 @@ macro_rules! impl_compound_proof {
                     vanilla_proofs: &[Self::VanillaPartitionProof],
                     keypair: &Halo2Keypair<F::Affine, Self::Circuit>,
                 ) -> Result<Vec<Halo2Proof<F::Affine, Self::Circuit>>, Error> {
-                    let partition_count = partition_count::<$sector_nodes>();
+                    let partition_count = partition_count($sector_nodes);
                     assert_eq!(vanilla_proofs.len(), partition_count);
 
                     let mut vanilla_pub_inputs = vanilla_pub_inputs.clone();
@@ -99,7 +99,7 @@ macro_rules! impl_compound_proof {
                     vanilla_proofs: &[Self::VanillaPartitionProof],
                     keypair: &Halo2Keypair<F::Affine, Self::Circuit>,
                 ) -> Result<Halo2Proof<F::Affine, Self::Circuit>, Error> {
-                    let partition_count = partition_count::<$sector_nodes>();
+                    let partition_count = partition_count($sector_nodes);
                     assert_eq!(vanilla_proofs.len(), partition_count);
 
                     let mut circ_pub_inputs_vecs = Vec::with_capacity(partition_count);
@@ -151,7 +151,7 @@ macro_rules! impl_compound_proof {
                     circ_proofs: &[Halo2Proof<F::Affine, Self::Circuit>],
                     keypair: &Halo2Keypair<F::Affine, Self::Circuit>,
                 ) -> Result<(), Error> {
-                    let partition_count = partition_count::<$sector_nodes>();
+                    let partition_count = partition_count($sector_nodes);
                     assert_eq!(circ_proofs.len(), partition_count);
 
                     let mut vanilla_pub_inputs = vanilla_pub_inputs.clone();
@@ -175,7 +175,7 @@ macro_rules! impl_compound_proof {
                     batch_proof: &Halo2Proof<F::Affine, Self::Circuit>,
                     keypair: &Halo2Keypair<F::Affine, Self::Circuit>,
                 ) -> bool {
-                    let partition_count = partition_count::<$sector_nodes>();
+                    let partition_count = partition_count($sector_nodes);
 
                     let circ_pub_inputs_vecs: Vec<Vec<Vec<F>>> = (0..partition_count)
                         .map(|k| {

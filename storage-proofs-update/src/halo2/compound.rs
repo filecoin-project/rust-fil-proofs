@@ -8,12 +8,11 @@ use storage_proofs_core::halo2::{
 
 use crate::{
     constants::{
-        partition_count, TreeDHasher, TreeRHasher, SECTOR_SIZE_16_KIB, SECTOR_SIZE_16_MIB,
-        SECTOR_SIZE_1_KIB, SECTOR_SIZE_2_KIB, SECTOR_SIZE_32_GIB, SECTOR_SIZE_32_KIB,
-        SECTOR_SIZE_4_KIB, SECTOR_SIZE_512_MIB, SECTOR_SIZE_64_GIB, SECTOR_SIZE_8_KIB,
-        SECTOR_SIZE_8_MIB,
+        TreeDHasher, TreeRHasher, SECTOR_SIZE_16_KIB, SECTOR_SIZE_16_MIB, SECTOR_SIZE_1_KIB,
+        SECTOR_SIZE_2_KIB, SECTOR_SIZE_32_GIB, SECTOR_SIZE_32_KIB, SECTOR_SIZE_4_KIB,
+        SECTOR_SIZE_512_MIB, SECTOR_SIZE_64_GIB, SECTOR_SIZE_8_KIB, SECTOR_SIZE_8_MIB,
     },
-    halo2::circuit::{self, EmptySectorUpdateCircuit},
+    halo2::{circuit, partition_count, EmptySectorUpdateCircuit},
     vanilla, EmptySectorUpdate, SetupParams,
 };
 

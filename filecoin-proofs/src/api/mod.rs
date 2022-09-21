@@ -63,8 +63,6 @@ pub use util::*;
 pub use window_post::*;
 pub use winning_post::*;
 
-pub use storage_proofs_update::constants::{hs, partition_count};
-
 type BinaryTreeArity = U2;
 type OctTreeArity = U8;
 

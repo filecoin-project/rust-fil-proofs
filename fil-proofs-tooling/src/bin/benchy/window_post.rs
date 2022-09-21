@@ -92,7 +92,7 @@ fn get_porep_config(sector_size: u64, api_version: ApiVersion) -> PoRepConfig {
                 .read()
                 .expect("POREP_PARTITONS poisoned")
                 .get(&(sector_size))
-                .expect("unknown sector size"),
+                .expect("unknown sector size") as usize,
         ),
         porep_id: arbitrary_porep_id,
         api_version,

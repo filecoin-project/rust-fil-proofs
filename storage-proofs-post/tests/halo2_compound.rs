@@ -83,16 +83,18 @@ where
         sectors: &priv_sectors,
     };
 
-    let partition_count = 1;
     let vanilla_partition_proofs = FallbackPoSt::prove_all_partitions(
         &vanilla_pub_params,
         &vanilla_pub_inputs,
         &vanilla_priv_inputs,
-        partition_count,
+        winning::PARTITION_COUNT,
     )
-    .expect("failed to generate vanilla_partition proofs");
-    assert_eq!(vanilla_partition_proofs.len(), partition_count);
-    assert_eq!(vanilla_partition_proofs[0].sectors.len(), 1);
+    .expect("failed to generate vanilla partition proofs");
+    assert_eq!(vanilla_partition_proofs.len(), winning::PARTITION_COUNT);
+    assert_eq!(
+        vanilla_partition_proofs[0].sectors.len(),
+        winning::SECTORS_CHALLENGED
+    );
 
     let keypair = {
         let circ =
@@ -156,12 +158,11 @@ where
 {
     let mut rng = XorShiftRng::from_seed(TEST_SEED);
 
-    let partition_count = 2;
-    let sectors_challenged_per_partition =
-        window::sectors_challenged_per_partition::<SECTOR_NODES>();
-    // Test when the prover's sector set length is not divisible by the number of sectors challenged
-    // per partition.
-    let total_prover_sectors = partition_count * sectors_challenged_per_partition - 1;
+    let sectors_challenged_per_partition = window::sectors_challenged_per_partition(SECTOR_NODES);
+    // When using groth16 partitioning, test when the prover's sector set length is not divisible
+    // by the number of sectors challenged per partition.
+    let total_prover_sectors = 3 * sectors_challenged_per_partition - 1;
+    let partition_count = window::partition_count::<SECTOR_NODES>(total_prover_sectors);
 
     let vanilla_setup_params = SetupParams {
         sector_size: (SECTOR_NODES << 5) as u64,

@@ -34,10 +34,10 @@ use crate::stacked::{
     self as vanilla,
     halo2::{
         constants::{
-            challenge_count, num_layers, partition_count, DRG_PARENTS, EXP_PARENTS, LABEL_WORD_LEN,
-            REPEATED_PARENT_LABELS_WORD_LEN, SECTOR_NODES_16_KIB, SECTOR_NODES_2_KIB,
-            SECTOR_NODES_32_GIB, SECTOR_NODES_32_KIB, SECTOR_NODES_4_KIB, SECTOR_NODES_512_MIB,
-            SECTOR_NODES_64_GIB, SECTOR_NODES_8_KIB,
+            challenge_count, num_layers, DRG_PARENTS, EXP_PARENTS, GROTH16_PARTITIONING,
+            LABEL_WORD_LEN, REPEATED_PARENT_LABELS_WORD_LEN, SECTOR_NODES_16_KIB,
+            SECTOR_NODES_2_KIB, SECTOR_NODES_32_GIB, SECTOR_NODES_32_KIB, SECTOR_NODES_4_KIB,
+            SECTOR_NODES_512_MIB, SECTOR_NODES_64_GIB, SECTOR_NODES_8_KIB,
         },
         gadgets::{
             ColumnHasherChip, ColumnHasherConfig, EncodingChip, EncodingConfig, LabelingChip,
@@ -49,27 +49,25 @@ use crate::stacked::{
 
 type VanillaPartitionProof<TreeR, G> = Vec<VanillaChallengeProof<TreeR, G>>;
 
-trait CircuitParams<const SECTOR_NODES: usize> {
-    const PARTITION_COUNT: usize = partition_count::<SECTOR_NODES>();
-    const CHALLENGE_COUNT: usize = challenge_count::<SECTOR_NODES>();
-    const NUM_LAYERS: usize = num_layers::<SECTOR_NODES>();
-    // Absolute rows of public inputs.
-    const REPLICA_ID_ROW: usize = 0;
-    const COMM_D_ROW: usize = 1;
-    const COMM_R_ROW: usize = 2;
-    const FIRST_CHALLENGE_ROW: usize = 3;
+// Public input rows.
+const REPLICA_ID_ROW: usize = 0;
+const COMM_D_ROW: usize = 1;
+const COMM_R_ROW: usize = 2;
+const FIRST_CHALLENGE_ROW: usize = 3;
 
-    fn challenge_row(challenge_index: usize) -> usize {
-        Self::FIRST_CHALLENGE_ROW + challenge_index * (1 + DRG_PARENTS + EXP_PARENTS)
-    }
+#[inline]
+const fn challenge_row(challenge_index: usize) -> usize {
+    FIRST_CHALLENGE_ROW + challenge_index * (1 + DRG_PARENTS + EXP_PARENTS)
+}
 
-    fn drg_parent_row(challenge_index: usize, drg_parent_index: usize) -> usize {
-        Self::challenge_row(challenge_index) + 1 + drg_parent_index
-    }
+#[inline]
+const fn drg_parent_row(challenge_index: usize, drg_parent_index: usize) -> usize {
+    challenge_row(challenge_index) + 1 + drg_parent_index
+}
 
-    fn exp_parent_row(challenge_index: usize, exp_parent_index: usize) -> usize {
-        Self::challenge_row(challenge_index) + 1 + DRG_PARENTS + exp_parent_index
-    }
+#[inline]
+const fn exp_parent_row(challenge_index: usize, exp_parent_index: usize) -> usize {
+    challenge_row(challenge_index) + 1 + DRG_PARENTS + exp_parent_index
 }
 
 #[derive(Clone)]
@@ -136,10 +134,8 @@ where
         let Tau { comm_d, comm_r } = tau.expect("public inputs missing `tau`");
         let k = k.unwrap_or(0);
 
-        let layer_challenges = LayerChallenges::new(
-            num_layers::<SECTOR_NODES>(),
-            challenge_count::<SECTOR_NODES>(),
-        );
+        let layer_challenges =
+            LayerChallenges::new(num_layers(SECTOR_NODES), challenge_count(SECTOR_NODES));
 
         let (challenges, parents): (Vec<Option<u32>>, Vec<Vec<Option<u32>>>) = layer_challenges
             .derive(SECTOR_NODES, &replica_id, &challenge_seed, k as u8)
@@ -220,7 +216,7 @@ where
 {
     pub fn empty() -> Self {
         ParentProof {
-            column: vec![Value::unknown(); num_layers::<SECTOR_NODES>()],
+            column: vec![Value::unknown(); num_layers(SECTOR_NODES)],
             path_c: por::empty_path::<F, U, V, W, SECTOR_NODES>(),
             _tree_r: PhantomData,
         }
@@ -511,18 +507,6 @@ where
     pub priv_inputs: PrivateInputs<F, U, V, W, SECTOR_NODES>,
 }
 
-impl<F, U, V, W, const SECTOR_NODES: usize> CircuitParams<SECTOR_NODES>
-    for SdrPorepCircuit<F, U, V, W, SECTOR_NODES>
-where
-    F: FieldExt,
-    U: PoseidonArity<F>,
-    V: PoseidonArity<F>,
-    W: PoseidonArity<F>,
-    Sha256Hasher<F>: Hasher<Field = F>,
-    PoseidonHasher<F>: Hasher<Field = F>,
-{
-}
-
 impl<F, U, V, W, const SECTOR_NODES: usize> Circuit<F> for SdrPorepCircuit<F, U, V, W, SECTOR_NODES>
 where
     F: FieldExt,
@@ -536,21 +520,29 @@ where
     type FloorPlanner = SimpleFloorPlanner;
 
     fn without_witnesses(&self) -> Self {
+        let challenge_count = challenge_count(SECTOR_NODES);
+
+        assert_eq!(self.pub_inputs.challenges.len(), challenge_count);
+        assert_eq!(self.pub_inputs.parents.len(), challenge_count);
+        assert!(self
+            .pub_inputs
+            .parents
+            .iter()
+            .all(|parents| parents.len() == DRG_PARENTS + EXP_PARENTS));
+        assert_eq!(self.priv_inputs.challenge_proofs.len(), challenge_count);
+
         SdrPorepCircuit {
             pub_inputs: PublicInputs {
                 replica_id: None,
                 comm_d: None,
                 comm_r: None,
-                challenges: vec![None; self.pub_inputs.challenges.len()],
-                parents: vec![vec![None; DRG_PARENTS + EXP_PARENTS]; self.pub_inputs.parents.len()],
+                challenges: vec![None; challenge_count],
+                parents: vec![vec![None; DRG_PARENTS + EXP_PARENTS]; challenge_count],
             },
             priv_inputs: PrivateInputs {
                 comm_c: Value::unknown(),
                 root_r: Value::unknown(),
-                challenge_proofs: vec![
-                    ChallengeProof::empty();
-                    self.priv_inputs.challenge_proofs.len()
-                ],
+                challenge_proofs: vec![ChallengeProof::empty(); challenge_count],
             },
         }
     }
@@ -582,7 +574,7 @@ where
             &fixed_neq,
         );
 
-        let column_hasher = match Self::NUM_LAYERS {
+        let column_hasher = match num_layers(SECTOR_NODES) {
             // Reuse arity-2 poseidon hasher if possible.
             2 => ColumnHasherConfig::Arity2(poseidon_2.clone()),
             11 => ColumnHasherChip::configure(meta, &advice_eq, &advice_neq, &fixed_eq, &fixed_neq),
@@ -706,13 +698,16 @@ where
             priv_inputs,
         } = self;
 
-        assert_eq!(pub_inputs.challenges.len(), Self::CHALLENGE_COUNT);
-        assert_eq!(pub_inputs.parents.len(), Self::CHALLENGE_COUNT);
+        let challenge_count = challenge_count(SECTOR_NODES);
+        let num_layers = num_layers(SECTOR_NODES);
+
+        assert_eq!(pub_inputs.challenges.len(), challenge_count);
+        assert_eq!(pub_inputs.parents.len(), challenge_count);
         assert!(pub_inputs
             .parents
             .iter()
-            .all(|parents| parents.len() == DRG_PARENTS + EXP_PARENTS),);
-        assert_eq!(priv_inputs.challenge_proofs.len(), Self::CHALLENGE_COUNT);
+            .all(|parents| parents.len() == DRG_PARENTS + EXP_PARENTS));
+        assert_eq!(priv_inputs.challenge_proofs.len(), challenge_count);
 
         let SdrPorepConfig {
             uint32: uint32_config,
@@ -770,7 +765,7 @@ where
         let replica_id = sha256_words_chip.pi_into_words(
             layouter.namespace(|| "decompose replica-id into sha256 words"),
             pi_col,
-            Self::REPLICA_ID_ROW,
+            REPLICA_ID_ROW,
         )?;
 
         // Witness `comm_c`, `root_r`, and each challenge's TreeD leaf.
@@ -814,7 +809,7 @@ where
             &[comm_c.clone(), root_r.clone()],
             get_poseidon_constants::<F, U2>(),
         )?;
-        layouter.constrain_instance(comm_r.cell(), pi_col, Self::COMM_R_ROW)?;
+        layouter.constrain_instance(comm_r.cell(), pi_col, COMM_R_ROW)?;
 
         // Assign constants that can be reused across challenge labelings.
         let labeling_constants = labeling_chip.assign_constants(&mut layouter)?;
@@ -837,7 +832,7 @@ where
                 layouter.namespace(|| "assign challenge as 32 bits"),
                 challenge,
             )?;
-            layouter.constrain_instance(challenge.cell(), pi_col, Self::challenge_row(i))?;
+            layouter.constrain_instance(challenge.cell(), pi_col, challenge_row(i))?;
 
             // Verify the challenge's TreeD merkle proof.
             let comm_d = tree_d_merkle_chip.copy_leaf_compute_root(
@@ -846,7 +841,7 @@ where
                 leaf_d,
                 &challenge_proof.path_d,
             )?;
-            layouter.constrain_instance(comm_d.cell(), pi_col, Self::COMM_D_ROW)?;
+            layouter.constrain_instance(comm_d.cell(), pi_col, COMM_D_ROW)?;
 
             // Assign the challenge's parent columns.
             let (drg_parent_columns, exp_parent_columns) = layouter.assign_region(
@@ -921,7 +916,7 @@ where
                 let parent_bits = uint32_chip.pi_assign_bits(
                     layouter.namespace(|| format!("assign drg parent {} as 32 bits", parent_index)),
                     pi_col,
-                    Self::drg_parent_row(i, parent_index),
+                    drg_parent_row(i, parent_index),
                 )?;
                 // Compute parent's column digest.
                 let leaf_c = column_hasher_chip.hash(
@@ -953,7 +948,7 @@ where
                 let parent_bits = uint32_chip.pi_assign_bits(
                     layouter.namespace(|| format!("assign exp parent {} as 32 bits", parent_index)),
                     pi_col,
-                    Self::exp_parent_row(i, parent_index),
+                    exp_parent_row(i, parent_index),
                 )?;
                 let leaf_c = column_hasher_chip.hash(
                     layouter.namespace(|| format!("exp parent {} column digest", parent_index)),
@@ -976,10 +971,10 @@ where
                 )?;
             }
 
-            let mut challenge_column = Vec::<AssignedCell<F, F>>::with_capacity(Self::NUM_LAYERS);
+            let mut challenge_column = Vec::<AssignedCell<F, F>>::with_capacity(num_layers);
 
             // Compute the challenge's label in each layer.
-            for layer_index in 0..Self::NUM_LAYERS {
+            for layer_index in 0..num_layers {
                 let mut parent_labels: Vec<AssignedU32<F>> = if layer_index == 0 {
                     Vec::with_capacity(DRG_PARENTS * LABEL_WORD_LEN)
                 } else {
@@ -1066,7 +1061,7 @@ where
             let leaf_r = encoding_chip.encode(
                 layouter.namespace(|| "encode challenge"),
                 leaf_d,
-                &challenge_column[Self::NUM_LAYERS - 1],
+                &challenge_column[num_layers - 1],
             )?;
 
             // Verify the challenge's TreeR Merkle proof.
@@ -1097,16 +1092,31 @@ where
     PoseidonHasher<F>: Hasher<Field = F>,
 {
     fn k(&self) -> u32 {
-        match SECTOR_NODES {
-            SECTOR_NODES_2_KIB => 18,
-            SECTOR_NODES_4_KIB => 18,
-            SECTOR_NODES_8_KIB => 18,
-            SECTOR_NODES_16_KIB => 18,
-            SECTOR_NODES_32_KIB => 19,
-            SECTOR_NODES_512_MIB => 19,
-            SECTOR_NODES_32_GIB => 27,
-            SECTOR_NODES_64_GIB => 27,
-            _ => unimplemented!(),
+        // Values were computed using `get_k` test.
+        if GROTH16_PARTITIONING {
+            match SECTOR_NODES {
+                SECTOR_NODES_2_KIB => 18,
+                SECTOR_NODES_4_KIB => 18,
+                SECTOR_NODES_8_KIB => 18,
+                SECTOR_NODES_16_KIB => 18,
+                SECTOR_NODES_32_KIB => 19,
+                SECTOR_NODES_512_MIB => 19,
+                SECTOR_NODES_32_GIB => 27,
+                SECTOR_NODES_64_GIB => 27,
+                _ => unimplemented!(),
+            }
+        } else {
+            match SECTOR_NODES {
+                SECTOR_NODES_2_KIB => 17,
+                SECTOR_NODES_4_KIB => 17,
+                SECTOR_NODES_8_KIB => 17,
+                SECTOR_NODES_16_KIB => 17,
+                SECTOR_NODES_32_KIB => 18,
+                SECTOR_NODES_512_MIB => 18,
+                SECTOR_NODES_32_GIB => 20,
+                SECTOR_NODES_64_GIB => 20,
+                _ => unimplemented!(),
+            }
         }
     }
 }
@@ -1122,19 +1132,134 @@ where
 {
     // Same as `Circuit::without_witnesses` except this associated function does not take `&self`.
     pub fn blank_circuit() -> Self {
+        let challenge_count = challenge_count(SECTOR_NODES);
         SdrPorepCircuit {
             pub_inputs: PublicInputs {
                 replica_id: None,
                 comm_d: None,
                 comm_r: None,
-                challenges: vec![None; Self::CHALLENGE_COUNT],
-                parents: vec![vec![None; DRG_PARENTS + EXP_PARENTS]; Self::CHALLENGE_COUNT],
+                challenges: vec![None; challenge_count],
+                parents: vec![vec![None; DRG_PARENTS + EXP_PARENTS]; challenge_count],
             },
             priv_inputs: PrivateInputs {
                 comm_c: Value::unknown(),
                 root_r: Value::unknown(),
-                challenge_proofs: vec![ChallengeProof::empty(); Self::CHALLENGE_COUNT],
+                challenge_proofs: vec![ChallengeProof::empty(); challenge_count],
             },
         }
     }
+
+    #[allow(clippy::unwrap_used)]
+    pub fn compute_k(k_start: Option<u32>) -> u32 {
+        use generic_array::typenum::U0;
+        use halo2_proofs::dev::MockProver;
+
+        let challenge_count = challenge_count(SECTOR_NODES);
+
+        let pub_inputs = PublicInputs {
+            replica_id: Some(F::zero()),
+            comm_d: Some(F::zero()),
+            comm_r: Some(F::zero()),
+            challenges: vec![Some(0); challenge_count],
+            parents: vec![vec![Some(0); DRG_PARENTS + EXP_PARENTS]; challenge_count],
+        };
+        let pub_inputs_vec = pub_inputs.to_vec();
+
+        let priv_inputs = {
+            let mut path_d = por::empty_path::<F, U2, U0, U0, SECTOR_NODES>();
+            let mut path_r = por::empty_path::<F, U, V, W, SECTOR_NODES>();
+            for sibs in path_d.iter_mut().chain(path_r.iter_mut()) {
+                *sibs = vec![Value::known(F::zero()); sibs.len()];
+            }
+            let path_c = path_r.clone();
+
+            let mut parent_proof = ParentProof::<F, U, V, W, SECTOR_NODES>::empty();
+            parent_proof.column = vec![Value::known(F::zero()); parent_proof.column.len()];
+            parent_proof.path_c = path_c.clone();
+
+            let drg_parent_proofs = (0..DRG_PARENTS)
+                .map(|_| parent_proof.clone())
+                .collect::<Vec<ParentProof<F, U, V, W, SECTOR_NODES>>>()
+                .try_into()
+                .unwrap();
+
+            let exp_parent_proofs = (0..EXP_PARENTS)
+                .map(|_| parent_proof.clone())
+                .collect::<Vec<ParentProof<F, U, V, W, SECTOR_NODES>>>()
+                .try_into()
+                .unwrap();
+
+            let challenge_proof = ChallengeProof {
+                leaf_d: Value::known(F::zero()),
+                path_d,
+                path_c,
+                path_r,
+                drg_parent_proofs,
+                exp_parent_proofs,
+            };
+
+            PrivateInputs {
+                comm_c: Value::known(F::zero()),
+                root_r: Value::known(F::zero()),
+                challenge_proofs: vec![challenge_proof; challenge_count],
+            }
+        };
+
+        let circ = SdrPorepCircuit {
+            pub_inputs,
+            priv_inputs,
+        };
+
+        // If a minimum `k` value is not supplied, use sha256's.
+        let mut k = k_start.unwrap_or(17);
+        loop {
+            // println!("Trying k = {}", k);
+            match MockProver::run(k, &circ, pub_inputs_vec.clone()) {
+                Ok(_) => return k,
+                Err(Error::NotEnoughRowsAvailable { .. }) | Err(Error::InstanceTooLarge) => k += 1,
+                err => panic!("Unexpected error: {:?}", err),
+            };
+        }
+    }
+}
+
+#[test]
+#[ignore]
+fn get_k() {
+    use generic_array::typenum::{U0, U4, U8};
+    use halo2_proofs::pasta::Fp;
+
+    let mut k = SdrPorepCircuit::<Fp, U8, U0, U0, SECTOR_NODES_2_KIB>::compute_k(None);
+    println!("Found k = {} (sector-size = 2kib)", k);
+
+    k = SdrPorepCircuit::<Fp, U8, U2, U0, SECTOR_NODES_4_KIB>::compute_k(Some(k));
+    println!("Found k = {} (sector-size = 4kib)", k);
+
+    k = SdrPorepCircuit::<Fp, U8, U4, U0, SECTOR_NODES_8_KIB>::compute_k(Some(k));
+    println!("Found k = {} (sector-size = 8kib)", k);
+
+    k = SdrPorepCircuit::<Fp, U8, U8, U0, SECTOR_NODES_16_KIB>::compute_k(Some(k));
+    println!("Found k = {} (sector-size = 16kib)", k);
+
+    k = SdrPorepCircuit::<Fp, U8, U8, U2, SECTOR_NODES_32_KIB>::compute_k(Some(k));
+    println!("Found k = {} (sector-size = 32kib)", k);
+
+    /*
+    use crate::stacked::halo2::constants::SECTOR_NODES_8_MIB;
+    k = SdrPorepCircuit::<Fp, U8, U0, U0, SECTOR_NODES_8_MIB>::compute_k(Some(k));
+    println!("Found k = {} (sector-size = 8mib)", k);
+
+    use crate::stacked::halo2::constants::SECTOR_NODES_16_MIB;
+    k = SdrPorepCircuit::<Fp, U8, U2, U0, SECTOR_NODES_16_MIB>::compute_k(Some(k));
+    println!("Found k = {} (sector-size = 16mib)", k);
+    */
+
+    k = SdrPorepCircuit::<Fp, U8, U0, U0, SECTOR_NODES_512_MIB>::compute_k(Some(k));
+    println!("Found k = {} (sector-size = 512mib)", k);
+
+    k = SdrPorepCircuit::<Fp, U8, U8, U0, SECTOR_NODES_32_GIB>::compute_k(Some(k));
+    println!("Found k = {} (sector-size = 32gib)", k);
+
+    k = SdrPorepCircuit::<Fp, U8, U8, U2, SECTOR_NODES_64_GIB>::compute_k(Some(k));
+    println!("Found k = {} (sector-size = 64gib)", k);
 }
