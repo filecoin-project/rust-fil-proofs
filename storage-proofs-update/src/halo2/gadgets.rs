@@ -12,7 +12,10 @@ use halo2_proofs::{
     poly::Rotation,
 };
 
-use crate::constants::{partition_count, TreeDArity, TreeDHasher};
+use crate::{
+    constants::{TreeDArity, TreeDHasher},
+    halo2::partition_bit_len,
+};
 
 pub struct ApexTreeChip<F>
 where
@@ -85,8 +88,7 @@ impl<F: FieldExt, const SECTOR_NODES: usize> ChallengeBitsChip<F, SECTOR_NODES> 
 
         let challenge_sans_partition_bit_len = {
             let challenge_and_partition_bit_len = SECTOR_NODES.trailing_zeros() as usize;
-            let partition_count = partition_count(SECTOR_NODES);
-            let partition_bit_len = partition_count.trailing_zeros() as usize;
+            let partition_bit_len = partition_bit_len(SECTOR_NODES);
             challenge_and_partition_bit_len - partition_bit_len
         };
 

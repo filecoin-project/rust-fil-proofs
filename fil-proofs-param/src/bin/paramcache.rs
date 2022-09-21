@@ -233,7 +233,7 @@ fn generate_params_porep(sector_size: u64, api_version: ApiVersion) {
                     .read()
                     .expect("POREP_PARTITIONS poisoned")
                     .get(&sector_size)
-                    .expect("unknown sector size"),
+                    .expect("unknown sector size") as usize,
             ),
             porep_id: [0; 32],
             api_version,
@@ -253,7 +253,7 @@ fn generate_params_empty_sector_update(sector_size: u64, api_version: ApiVersion
                     .read()
                     .expect("POREP_PARTITIONS poisoned")
                     .get(&sector_size)
-                    .expect("unknown sector size"),
+                    .expect("unknown sector size") as usize,
             ),
             porep_id: [0; 32],
             api_version,

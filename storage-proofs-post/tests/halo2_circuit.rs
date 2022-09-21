@@ -189,7 +189,7 @@ where
 {
     init_logger();
     info!("test_window_post_circuit [SectorNodes={}]", SECTOR_NODES);
-    let challenged_sector_count = window::sectors_challenged_per_partition::<SECTOR_NODES>();
+    let challenged_sector_count = window::sectors_challenged_per_partition(SECTOR_NODES);
     let k = 0;
 
     let mut rng = XorShiftRng::from_seed(TEST_SEED);

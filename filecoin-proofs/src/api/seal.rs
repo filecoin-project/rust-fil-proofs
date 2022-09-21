@@ -136,7 +136,7 @@ where
             .with_context(|| format!("could not mmap out_path={:?}", out_path.as_ref().display()))?
     };
 
-    let vanilla_setup_params = setup_params(
+    let vanilla_setup_params = setup_params::<Tree::Field>(
         PaddedBytesAmount::from(porep_config),
         usize::from(PoRepProofPartitions::from(porep_config)),
         porep_config.porep_id,
@@ -311,7 +311,7 @@ where
         )?
     };
 
-    let vanilla_setup_params = setup_params(
+    let vanilla_setup_params = setup_params::<Tree::Field>(
         PaddedBytesAmount::from(porep_config),
         usize::from(PoRepProofPartitions::from(porep_config)),
         porep_config.porep_id,
@@ -454,7 +454,7 @@ where
         t_aux: t_aux_cache,
     };
 
-    let vanilla_setup_params = setup_params(
+    let vanilla_setup_params = setup_params::<Tree::Field>(
         PaddedBytesAmount::from(porep_config),
         usize::from(PoRepProofPartitions::from(porep_config)),
         porep_config.porep_id,
@@ -558,7 +558,7 @@ where
 
     let partition_count = PoRepProofPartitions::from(porep_config).into();
 
-    let vanilla_setup_params = setup_params(
+    let vanilla_setup_params = setup_params::<Fr>(
         PaddedBytesAmount::from(porep_config),
         partition_count,
         porep_config.porep_id,
@@ -704,7 +704,7 @@ where
     let partition_count = PoRepProofPartitions::from(porep_config).into();
     let sector_bytes = PaddedBytesAmount::from(porep_config);
 
-    let vanilla_setup_params = setup_params(
+    let vanilla_setup_params = setup_params::<F>(
         sector_bytes,
         partition_count,
         porep_config.porep_id,
@@ -1329,7 +1329,7 @@ where
     };
 
     let compound_setup_params = compound_proof::SetupParams {
-        vanilla_params: setup_params(
+        vanilla_params: setup_params::<Fr>(
             PaddedBytesAmount::from(porep_config),
             usize::from(PoRepProofPartitions::from(porep_config)),
             porep_config.porep_id,
@@ -1402,7 +1402,7 @@ where
     let sector_nodes = sector_bytes as usize >> 5;
     let partition_count: usize = porep_config.partitions.into();
 
-    let vanilla_setup_params = setup_params(
+    let vanilla_setup_params = setup_params::<F>(
         porep_config.sector_size.into(),
         partition_count,
         porep_config.porep_id,
@@ -1891,7 +1891,7 @@ where
     );
 
     let compound_setup_params = compound_proof::SetupParams {
-        vanilla_params: setup_params(
+        vanilla_params: setup_params::<Fr>(
             PaddedBytesAmount::from(porep_config),
             usize::from(PoRepProofPartitions::from(porep_config)),
             porep_config.porep_id,
@@ -1981,7 +1981,7 @@ where
     let sector_nodes = sector_bytes as usize >> 5;
     let partition_count: usize = porep_config.partitions.into();
 
-    let vanilla_setup_params = setup_params(
+    let vanilla_setup_params = setup_params::<F>(
         porep_config.sector_size.into(),
         porep_config.partitions.into(),
         porep_config.porep_id,

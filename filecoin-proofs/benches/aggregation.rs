@@ -36,7 +36,7 @@ fn bench_seal_inputs(c: &mut Criterion) {
                 .read()
                 .expect("POREP_PARTITIONS poisoned")
                 .get(&SECTOR_SIZE_2_KIB)
-                .expect("unknown sector size"),
+                .expect("unknown sector size") as usize,
         ),
         porep_id,
         api_version: ApiVersion::V1_1_0,
@@ -87,7 +87,7 @@ fn bench_stacked_srs_key(c: &mut Criterion) {
                 .read()
                 .expect("POREP_PARTITIONS poisoned")
                 .get(&SECTOR_SIZE_32_GIB)
-                .expect("unknown sector size"),
+                .expect("unknown sector size") as usize,
         ),
         porep_id,
         api_version: ApiVersion::V1_1_0,
@@ -131,7 +131,7 @@ fn bench_stacked_srs_verifier_key(c: &mut Criterion) {
                 .read()
                 .expect("POREP_PARTITIONS poisoned")
                 .get(&SECTOR_SIZE_32_GIB)
-                .expect("unknown sector size"),
+                .expect("unknown sector size") as usize,
         ),
         porep_id,
         api_version: ApiVersion::V1_1_0,

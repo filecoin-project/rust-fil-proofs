@@ -178,7 +178,7 @@ where
     let cache_dir = tempdir().expect("failed to create temp dir");
 
     let porep_config = porep_config(sector_size, *porep_id, api_version);
-    let config = SectorUpdateConfig::from_porep_config(porep_config);
+    let config = SectorUpdateConfig::from_sector_size::<F>(porep_config.sector_size);
     let ticket = rng.gen();
     let sector_id = rng.gen::<u64>().into();
 

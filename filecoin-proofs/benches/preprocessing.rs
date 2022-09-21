@@ -122,7 +122,7 @@ fn get_seal_inputs_benchmark(c: &mut Criterion) {
                 .read()
                 .expect("POREP_PARTITIONS poisoned")
                 .get(&SECTOR_SIZE_2_KIB)
-                .expect("unknown sector size"),
+                .expect("unknown sector size") as usize,
         ),
         porep_id,
         api_version: ApiVersion::V1_1_0,

@@ -29,6 +29,7 @@ use storage_proofs_core::{
     },
     parameter_cache::ParameterSetMetadata,
     proof::ProofScheme,
+    util::is_groth16_field,
 };
 use storage_proofs_porep::stacked::{StackedDrg, TreeRElementData};
 
@@ -38,11 +39,17 @@ use crate::{
         TreeDArity, TreeDDomain, TreeDHasher, TreeDStore, TreeR, TreeRDomain, TreeRHasher,
         ALLOWED_SECTOR_SIZES, POSEIDON_CONSTANTS_GEN_RANDOMNESS,
     },
-    Challenges,
+    gen_partition_challenges, halo2,
 };
 
 const CHUNK_SIZE_MIN: usize = 4096;
 const FR_SIZE: usize = std::mem::size_of::<Fr>() as usize;
+
+#[inline]
+fn is_valid_sector_size(sector_bytes: u64) -> bool {
+    let sector_nodes = sector_bytes as usize >> 5;
+    sector_bytes.is_power_of_two() && ALLOWED_SECTOR_SIZES.contains(&sector_nodes)
+}
 
 #[derive(Clone)]
 pub struct SetupParams {
@@ -85,13 +92,13 @@ impl ParameterSetMetadata for PublicParams {
 }
 
 impl PublicParams {
+    // Groth16 public params.
     pub fn from_sector_size(sector_bytes: u64) -> Self {
-        // The sector-size measured in 32-byte nodes.
-        let sector_nodes = ALLOWED_SECTOR_SIZES
-            .iter()
-            .copied()
-            .find(|allowed_nodes| (allowed_nodes << 5) as u64 == sector_bytes)
-            .expect("provided sector-size is not allowed");
+        assert!(
+            is_valid_sector_size(sector_bytes),
+            "provided sector size is not allowed"
+        );
+        let sector_nodes = sector_bytes as usize >> 5;
 
         // `sector_nodes` is guaranteed to be a power of two.
         let challenge_bit_len = sector_nodes.trailing_zeros() as usize;
@@ -116,12 +123,13 @@ impl PublicParams {
         }
     }
 
+    // Groth16 empty-sector-update-poseidon public params.
     pub fn from_sector_size_poseidon(sector_bytes: u64) -> Self {
-        let sector_nodes = ALLOWED_SECTOR_SIZES
-            .iter()
-            .copied()
-            .find(|allowed_nodes| (allowed_nodes << 5) as u64 == sector_bytes)
-            .expect("provided sector-size is not allowed");
+        assert!(
+            is_valid_sector_size(sector_bytes),
+            "provided sector size is not allowed"
+        );
+        let sector_nodes = sector_bytes as usize >> 5;
 
         let challenge_bit_len = sector_nodes.trailing_zeros() as usize;
         let challenge_count = challenge_count_poseidon(sector_nodes);
@@ -134,6 +142,35 @@ impl PublicParams {
             partition_bit_len: 0,
             apex_leaf_count: 0,
             apex_leaf_bit_len: 0,
+        }
+    }
+
+    // Halo2 public params.
+    pub fn from_sector_size_halo2(sector_bytes: u64) -> Self {
+        assert!(
+            is_valid_sector_size(sector_bytes),
+            "provided sector size is not allowed"
+        );
+        let sector_nodes = sector_bytes as usize >> 5;
+
+        // `sector_nodes` is guaranteed to be a power of two.
+        let challenge_bit_len = sector_nodes.trailing_zeros() as usize;
+        let challenge_count = halo2::challenge_count(sector_nodes);
+
+        let partition_count = halo2::partition_count(sector_nodes);
+        let partition_bit_len = halo2::partition_bit_len(sector_nodes);
+
+        let apex_leaf_count = halo2::apex_leaf_count(sector_nodes);
+        let apex_leaf_bit_len = halo2::apex_leaf_bit_len(sector_nodes);
+
+        PublicParams {
+            sector_nodes,
+            challenge_count,
+            challenge_bit_len,
+            partition_count,
+            partition_bit_len,
+            apex_leaf_count,
+            apex_leaf_bit_len,
         }
     }
 }
@@ -269,7 +306,13 @@ where
     type Requirements = ();
 
     fn setup(setup_params: &Self::SetupParams) -> Result<Self::PublicParams> {
-        Ok(PublicParams::from_sector_size(setup_params.sector_bytes))
+        if is_groth16_field::<F>() {
+            Ok(PublicParams::from_sector_size(setup_params.sector_bytes))
+        } else {
+            Ok(PublicParams::from_sector_size_halo2(
+                setup_params.sector_bytes,
+            ))
+        }
     }
 
     fn prove(
@@ -425,7 +468,7 @@ where
 
         let phi = phi(&comm_d_new, &comm_r_old);
 
-        let challenges: Vec<u32> = Challenges::new(sector_nodes, comm_r_new, k).collect();
+        let challenges: Vec<u32> = gen_partition_challenges::<F>(sector_nodes, comm_r_new, k);
         let get_high_bits_shr = challenge_bit_len - h;
 
         let challenge_proofs_are_valid = challenges
@@ -674,46 +717,53 @@ where
             sector_nodes, k,
         );
 
-        let tree_d_arity = TreeDArity::to_usize();
+        let apex_leafs = if apex_leaf_count == 0 {
+            vec![]
+        } else {
+            let tree_d_arity = TreeDArity::to_usize();
 
-        // Re-instantiate TreeD's store for reading apex leafs.
-        let tree_d_nodes = tree_d_new_config.size.expect("config size failure");
-        let tree_d_store =
-            TreeDStore::<F>::new_from_disk(tree_d_nodes, tree_d_arity, tree_d_new_config)
-                .context("tree_d_store")?;
-        ensure!(
-            tree_d_nodes == Store::len(&tree_d_store),
-            "TreeD store size mismatch"
-        );
+            // Re-instantiate TreeD's store for reading apex leafs.
+            let tree_d_nodes = tree_d_new_config.size.expect("config size failure");
+            let tree_d_store =
+                TreeDStore::<F>::new_from_disk(tree_d_nodes, tree_d_arity, tree_d_new_config)
+                    .context("tree_d_store")?;
+            ensure!(
+                tree_d_nodes == Store::len(&tree_d_store),
+                "TreeD store size mismatch"
+            );
 
-        // Total number of apex-leafs in TreeD.
-        let total_apex_leafs = partition_count * apex_leaf_count;
-        // The number of nodes in TreeD from the apex-leafs row to the root.
-        let tree_d_nodes_apex_leafs_to_root = get_merkle_tree_len(total_apex_leafs, tree_d_arity)?;
-        // The number of nodes in TreeD below the apex-leafs row.
-        let tree_d_nodes_below_apex_leafs = tree_d_nodes - tree_d_nodes_apex_leafs_to_root;
-        trace!(
-            "Apex-leafs info: total_apex_leafs={}, apex_leafs_per_partition={}",
-            total_apex_leafs,
-            apex_leaf_count,
-        );
+            // Total number of apex-leafs in TreeD.
+            let total_apex_leafs = partition_count * apex_leaf_count;
+            // The number of nodes in TreeD from the apex-leafs row to the root.
+            let tree_d_nodes_apex_leafs_to_root =
+                get_merkle_tree_len(total_apex_leafs, tree_d_arity)?;
+            // The number of nodes in TreeD below the apex-leafs row.
+            let tree_d_nodes_below_apex_leafs = tree_d_nodes - tree_d_nodes_apex_leafs_to_root;
+            trace!(
+                "Apex-leafs info: total_apex_leafs={}, apex_leafs_per_partition={}",
+                total_apex_leafs,
+                apex_leaf_count,
+            );
 
-        // Get this partition's apex-leafs.
-        let apex_leafs_start = tree_d_nodes_below_apex_leafs + k * apex_leaf_count;
-        let apex_leafs_stop = apex_leafs_start + apex_leaf_count;
-        trace!(
-            "apex_leafs_start={} for partition k={}",
-            apex_leafs_start,
-            k
-        );
-        let apex_leafs: Vec<TreeDDomain<F>> =
-            tree_d_store.read_range(apex_leafs_start..apex_leafs_stop)?;
-        info!(
-            "Finished reading apex-leafs from TreeD for partition k={}",
-            k
-        );
+            // Get this partition's apex-leafs.
+            let apex_leafs_start = tree_d_nodes_below_apex_leafs + k * apex_leaf_count;
+            let apex_leafs_stop = apex_leafs_start + apex_leaf_count;
+            trace!(
+                "apex_leafs_start={} for partition k={}",
+                apex_leafs_start,
+                k
+            );
+            let apex_leafs: Vec<TreeDDomain<F>> =
+                tree_d_store.read_range(apex_leafs_start..apex_leafs_stop)?;
+            info!(
+                "Finished reading apex-leafs from TreeD for partition k={}",
+                k
+            );
+            apex_leafs
+        };
 
-        let challenges: Vec<usize> = Challenges::new(sector_nodes, comm_r_new, k)
+        let challenges: Vec<usize> = gen_partition_challenges(sector_nodes, comm_r_new, k)
+            .into_iter()
             .map(|c| c as usize)
             .collect();
 

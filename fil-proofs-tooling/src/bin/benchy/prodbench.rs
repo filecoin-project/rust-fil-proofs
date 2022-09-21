@@ -318,7 +318,7 @@ fn generate_params(i: &ProdbenchInputs) {
             .read()
             .expect("POREP_PARTITIONS poisoned")
             .get(&i.sector_size_bytes())
-            .expect("unknown sector size"),
+            .expect("unknown sector size") as usize,
     );
     info!(
         "generating params: porep: (size: {:?}, partitions: {:?})",

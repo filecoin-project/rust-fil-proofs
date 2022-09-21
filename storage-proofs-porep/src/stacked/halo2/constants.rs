@@ -23,22 +23,37 @@ pub const REPEATED_PARENT_LABELS_WORD_LEN: usize = REPEATED_PARENTS * LABEL_WORD
 // challenge (64 bits) | 5x zeros (160 bits) | parent labels (9472 bits).
 pub const LABEL_PREIMAGE_WORD_LEN: usize = 8 + 1 + 2 + 5 + REPEATED_PARENT_LABELS_WORD_LEN;
 
-pub const fn challenge_count<const SECTOR_NODES: usize>() -> usize {
-    match SECTOR_NODES {
-        SECTOR_NODES_32_GIB | SECTOR_NODES_64_GIB => 176,
-        _ => 2,
+// Configures whether or not to use the same number of partitions as Groth16 (for production sector
+// sizes).
+pub const GROTH16_PARTITIONING: bool = false;
+
+const fn challenge_count_all_partitions(sector_nodes: usize) -> usize {
+    if sector_nodes >= SECTOR_NODES_32_GIB {
+        1760
+    } else {
+        2
     }
 }
 
-pub const fn partition_count<const SECTOR_NODES: usize>() -> usize {
-    match SECTOR_NODES {
-        SECTOR_NODES_32_GIB | SECTOR_NODES_64_GIB => 10,
-        _ => 1,
+pub const fn challenge_count(sector_nodes: usize) -> usize {
+    if GROTH16_PARTITIONING {
+        // 10 partitions for production sector sizes; 1 partition for test sector sizes.
+        if sector_nodes >= SECTOR_NODES_32_GIB {
+            176
+        } else {
+            2
+        }
+    } else {
+        1
     }
 }
 
-pub const fn num_layers<const SECTOR_NODES: usize>() -> usize {
-    match SECTOR_NODES {
+pub const fn partition_count(sector_nodes: usize) -> usize {
+    challenge_count_all_partitions(sector_nodes) / challenge_count(sector_nodes)
+}
+
+pub const fn num_layers(sector_nodes: usize) -> usize {
+    match sector_nodes {
         SECTOR_NODES_32_GIB | SECTOR_NODES_64_GIB => 11,
         _ => 2,
     }

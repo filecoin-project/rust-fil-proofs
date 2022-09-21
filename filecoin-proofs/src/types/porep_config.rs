@@ -56,6 +56,17 @@ impl From<PoRepConfig> for SectorSize {
 }
 
 impl PoRepConfig {
+    pub fn new_halo2(sector_size: SectorSize, porep_id: [u8; 32], api_version: ApiVersion) -> Self {
+        let sector_nodes = u64::from(sector_size) as usize >> 5;
+        let partitions = storage_proofs_porep::stacked::halo2::partition_count(sector_nodes);
+        PoRepConfig {
+            sector_size,
+            partitions: PoRepProofPartitions::from(partitions),
+            porep_id,
+            api_version,
+        }
+    }
+
     /// Returns the cache identifier as used by `storage-proofs::parameter_cache`.
     pub fn get_cache_identifier<Tree>(&self) -> Result<String>
     where
