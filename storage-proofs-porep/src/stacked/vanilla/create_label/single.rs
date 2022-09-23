@@ -1,6 +1,6 @@
 use std::convert::TryFrom;
 use std::fs::File;
-use std::io::{Read, Seek, SeekFrom};
+use std::io::{BufReader, BufWriter, Read, Seek, SeekFrom, Write};
 use std::marker::PhantomData;
 use std::mem;
 use std::ops::{Index, IndexMut};
@@ -375,38 +375,43 @@ pub fn create_label_exp<H: Hasher, T: AsRef<[u8]>>(
 
 /// A wrapper around a file to read out nodes by giving an index.
 pub struct NodesFile {
-    file: File,
-    /// The current file size.
-    size: usize,
+    //reader: BufReader<File>,
+    reader: File,
+    writer: BufWriter<File>,
 }
 
 impl NodesFile {
     pub fn new(path: &PathBuf) -> Self {
-        let file = File::options()
+        let writer = File::options()
             .create(true)
             .append(true)
-            .read(true)
             .open(path)
             .unwrap();
-        Self { file, size: 0 }
+        //let reader = BufReader::new(File::open(path).unwrap());
+        let reader = File::open(path).unwrap();
+        Self {
+            reader,
+            writer: BufWriter::with_capacity(16777216, writer),
+        }
     }
 
     fn at(&mut self, node: usize) -> [u8; 32] {
         let mut buf = [0u8; 32];
         let pos = node * NODE_SIZE;
-        self.file
+        // GO ON HERE vmx 2022-09-23: keep recently stored nodes in a cache, so that we don't need
+        // to flush here.
+        self.writer.flush().unwrap();
+        self.reader
             .seek(SeekFrom::Start(u64::try_from(pos).unwrap()))
             .unwrap();
-        self.file.read_exact(&mut buf).unwrap();
+        self.reader.read_exact(&mut buf).unwrap();
         buf
     }
 
     /// Appends a node to the end of the file
     pub fn append(&mut self, node: &[u8; 32]) {
-        self.file.seek(SeekFrom::End(0));
-        self.file
-            .write_all_at(node, u64::try_from(self.size).unwrap());
-        self.size += NODE_SIZE;
+        debug!("vmx: append to file");
+        self.writer.write_all(node).unwrap();
     }
 
     pub fn close(self) {
