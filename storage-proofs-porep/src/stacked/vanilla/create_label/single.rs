@@ -397,7 +397,6 @@ impl NodesFile {
         self.file
             .seek(SeekFrom::Start(u64::try_from(pos).unwrap()))
             .unwrap();
-        debug!("vmx: nodesfile: at: pos: {}", pos);
         self.file.read_exact(&mut buf).unwrap();
         buf
     }
