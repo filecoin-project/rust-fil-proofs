@@ -24,6 +24,8 @@ use filecoin_proofs::{
     PrivateReplicaInfo, PublicReplicaInfo,
 };
 use log::info;
+use rand::{RngCore, SeedableRng};
+use rand_xorshift::XorShiftRng;
 use serde::{Deserialize, Serialize};
 use storage_proofs_core::{api_version::ApiVersion, merkle::MerkleTreeTrait, sector::SectorId};
 const SECTOR_ID: u64 = 0;
@@ -138,9 +140,9 @@ fn run_pre_commit_phases<Tree: 'static + MerkleTreeTrait>(
         } else {
             // Generate the data from which we will create a replica, we will then prove the continued
             // storage of that replica using the PoSt.
-            let piece_bytes: Vec<u8> = (0..usize::from(sector_size_unpadded_bytes_amount))
-                .map(|_| rand::random::<u8>())
-                .collect();
+            let mut rng = XorShiftRng::from_seed([0; 16]);
+            let mut piece_bytes: Vec<u8> = vec![0; usize::from(sector_size_unpadded_bytes_amount)];
+            rng.fill_bytes(&mut piece_bytes);
 
             info!("*** Created piece file");
             let mut piece_file = OpenOptions::new().read(true).write(true).create(true).open(&piece_file_path)?;
@@ -154,6 +156,7 @@ fn run_pre_commit_phases<Tree: 'static + MerkleTreeTrait>(
         let piece_info =
             generate_piece_commitment(&mut piece_file, sector_size_unpadded_bytes_amount)?;
         piece_file.seek(SeekFrom::Start(0))?;
+        info!("vmx: piece info: {:?}", piece_info);
 
         if !skip_staging {
             add_piece(
