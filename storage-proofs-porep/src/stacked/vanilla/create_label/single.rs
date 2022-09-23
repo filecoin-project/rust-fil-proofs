@@ -1,4 +1,4 @@
-use std::convert::TryFrom;
+use std::convert::{TryFrom, TryInto};
 use std::fs::File;
 use std::io::{BufReader, BufWriter, Read, Seek, SeekFrom, Write};
 use std::marker::PhantomData;
@@ -373,11 +373,18 @@ pub fn create_label_exp<H: Hasher, T: AsRef<[u8]>>(
     Ok(())
 }
 
+const WRITE_BUFFER_SIZE: usize = 128 * 1024 * 1024;
+
 /// A wrapper around a file to read out nodes by giving an index.
 pub struct NodesFile {
     //reader: BufReader<File>,
     reader: File,
-    writer: BufWriter<File>,
+    //writer: BufWriter<File>,
+    writer: File,
+    /// The offset up to which the data is already written to disk.
+    written_offset: usize,
+    /// The buffer that is filled before writing to disk. This reduces `write` syscalls.
+    write_buffer: Vec<u8>,
 }
 
 impl NodesFile {
@@ -389,33 +396,46 @@ impl NodesFile {
             .unwrap();
         //let reader = BufReader::new(File::open(path).unwrap());
         let reader = File::open(path).unwrap();
+        assert_eq!(
+            WRITE_BUFFER_SIZE % NODE_SIZE,
+            0,
+            "Full nodes can be written into write buffer."
+        );
         Self {
             reader,
-            writer: BufWriter::with_capacity(16777216, writer),
+            //writer: BufWriter::with_capacity(16777216, writer),
+            writer,
+            written_offset: 0,
+            write_buffer: Vec::with_capacity(WRITE_BUFFER_SIZE),
         }
     }
 
     fn at(&mut self, node: usize) -> [u8; 32] {
-        let mut buf = [0u8; 32];
         let pos = node * NODE_SIZE;
-        // GO ON HERE vmx 2022-09-23: keep recently stored nodes in a cache, so that we don't need
-        // to flush here.
-        self.writer.flush().unwrap();
-        self.reader
-            .seek(SeekFrom::Start(u64::try_from(pos).unwrap()))
-            .unwrap();
-        self.reader.read_exact(&mut buf).unwrap();
-        buf
+        if pos < self.written_offset {
+            let mut buf = [0u8; 32];
+            self.reader
+                .seek(SeekFrom::Start(u64::try_from(pos).unwrap()))
+                .unwrap();
+            self.reader.read_exact(&mut buf).unwrap();
+            buf
+        } else {
+            let buffer_pos = pos - self.written_offset;
+            self.write_buffer[buffer_pos..buffer_pos + NODE_SIZE]
+                .try_into()
+                .unwrap()
+        }
     }
 
     /// Appends a node to the end of the file
     pub fn append(&mut self, node: &[u8; 32]) {
-        debug!("vmx: append to file");
-        self.writer.write_all(node).unwrap();
-    }
-
-    pub fn close(self) {
-        // Dropping the file will sync and close it.
+        self.write_buffer.extend_from_slice(node);
+        if self.write_buffer.len() == WRITE_BUFFER_SIZE {
+            self.writer.write_all(&self.write_buffer).unwrap();
+            // TODO vmx 2022-09-24: Check if there's a faster way than using `clear()`.
+            self.write_buffer.clear();
+            self.written_offset += WRITE_BUFFER_SIZE;
+        }
     }
 }
 
