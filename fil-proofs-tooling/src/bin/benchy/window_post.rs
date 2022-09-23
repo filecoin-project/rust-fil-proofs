@@ -153,10 +153,19 @@ fn run_pre_commit_phases<Tree: 'static + MerkleTreeTrait>(
             piece_file
         };
 
-        let piece_info =
-            generate_piece_commitment(&mut piece_file, sector_size_unpadded_bytes_amount)?;
-        piece_file.seek(SeekFrom::Start(0))?;
-        info!("vmx: piece info: {:?}", piece_info);
+        let piece_info = if skip_staging {
+            let commitment = match sector_size {
+                2097152 => [0x61,0xbd,0xca,0xac,0x37,0x9c,0xc3,0x55,0x00,0xe6,0x43,0x30,0x3f,0x4c,0xdb,0xc0,0x5e,0x93,0xcf,0xef,0xdc,0xe6,0xb6,0x9f,0xcc,0x81,0xf5,0x4a,0x9b,0x01,0xba,0x1f],
+                34359738368 => [0x82,0xce,0x4a,0x36,0x31,0xd7,0x11,0xd7,0x3a,0x9e,0x6c,0x71,0xbb,0x3a,0xa6,0x05,0x2a,0x01,0x7f,0xcb,0x05,0xf1,0xb6,0x41,0x9a,0x14,0xc4,0xca,0x0b,0x55,0x09,0x0a],
+                _ => panic!("You can only skip this step on known sector sizes"),
+            };
+            PieceInfo::new(commitment, sector_size_unpadded_bytes_amount)?
+        } else {
+            let info = generate_piece_commitment(&mut piece_file, sector_size_unpadded_bytes_amount)?;
+            piece_file.seek(SeekFrom::Start(0))?;
+            info!("vmx: piece info: {:?}", info);
+            info
+        };
 
         if !skip_staging {
             add_piece(
