@@ -67,6 +67,13 @@ fn main() -> Result<()> {
                 .takes_value(false),
         )
         .arg(
+            Arg::new("skip-staging")
+                .long("skip-staging")
+                .required(false)
+                .help("Re-use existing unsealed, piece and sealed file")
+                .takes_value(false),
+        )
+        .arg(
             Arg::new("cache")
                 .long("cache")
                 .required(false)
@@ -218,6 +225,7 @@ fn main() -> Result<()> {
             let skip_commit_phase1 = m.is_present("skip-commit-phase1");
             let skip_commit_phase2 = m.is_present("skip-commit-phase2");
             let test_resume = m.is_present("test-resume");
+            let skip_staging = m.is_present("skip-staging");
             let cache_dir = m.value_of_t::<String>("cache")?;
             let sector_size = Byte::from_str(m.value_of_t::<String>("size")?)?.get_bytes() as usize;
             let api_version = ApiVersion::from_str(&m.value_of_t::<String>("api_version")?)?;
@@ -231,6 +239,7 @@ fn main() -> Result<()> {
                 skip_commit_phase1,
                 skip_commit_phase2,
                 test_resume,
+                skip_staging,
             )?;
         }
         Some(("winning-post", m)) => {

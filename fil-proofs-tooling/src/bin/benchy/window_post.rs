@@ -155,12 +155,14 @@ fn run_pre_commit_phases<Tree: 'static + MerkleTreeTrait>(
             generate_piece_commitment(&mut piece_file, sector_size_unpadded_bytes_amount)?;
         piece_file.seek(SeekFrom::Start(0))?;
 
-        add_piece(
-            &mut piece_file,
-            &mut staged_file,
-            sector_size_unpadded_bytes_amount,
-            &[],
-        )?;
+        if !skip_staging {
+            add_piece(
+                &mut piece_file,
+                &mut staged_file,
+                sector_size_unpadded_bytes_amount,
+                &[],
+            )?;
+        }
 
         let piece_infos = vec![piece_info];
         let sector_id = SectorId::from(SECTOR_ID);
@@ -345,6 +347,7 @@ pub fn run_window_post_bench<Tree: 'static + MerkleTreeTrait>(
     skip_commit_phase1: bool,
     skip_commit_phase2: bool,
     test_resume: bool,
+    skip_staging: bool,
 ) -> anyhow::Result<()> {
     let (
         (seal_pre_commit_phase1_cpu_time_ms, seal_pre_commit_phase1_wall_time_ms),
@@ -364,7 +367,7 @@ pub fn run_window_post_bench<Tree: 'static + MerkleTreeTrait>(
             skip_precommit_phase1,
             skip_precommit_phase2,
             test_resume,
-            false, // skip staging
+            skip_staging,
         )
     }?;
 
@@ -594,8 +597,9 @@ pub fn run(
     skip_commit_phase1: bool,
     skip_commit_phase2: bool,
     test_resume: bool,
+    skip_staging: bool,
 ) -> anyhow::Result<()> {
-    info!("Benchy Window PoSt: sector-size={}, api_version={}, preserve_cache={}, skip_precommit_phase1={}, skip_precommit_phase2={}, skip_commit_phase1={}, skip_commit_phase2={}, test_resume={}", sector_size, api_version, preserve_cache, skip_precommit_phase1, skip_precommit_phase2, skip_commit_phase1, skip_commit_phase2, test_resume);
+    info!("Benchy Window PoSt: sector-size={}, api_version={}, preserve_cache={}, skip_precommit_phase1={}, skip_precommit_phase2={}, skip_commit_phase1={}, skip_commit_phase2={}, test_resume={}, skip_staging={}", sector_size, api_version, preserve_cache, skip_precommit_phase1, skip_precommit_phase2, skip_commit_phase1, skip_commit_phase2, test_resume, skip_staging);
 
     let cache_dir_specified = !cache.is_empty();
 
@@ -646,5 +650,6 @@ pub fn run(
         skip_commit_phase1,
         skip_commit_phase2,
         test_resume,
+        skip_staging,
     )
 }
