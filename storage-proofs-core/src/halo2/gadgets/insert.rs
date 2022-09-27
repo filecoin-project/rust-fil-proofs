@@ -554,8 +554,17 @@ mod test {
         F: FieldExt,
         A: PoseidonArity<F>,
     {
+        fn id(&self) -> String {
+            "mycircuit".to_string()
+        }
+
         fn k(&self) -> u32 {
             3
+        }
+
+        fn sector_size(&self) -> usize {
+            // This circuit is independent of the sector size, hence it returns 0.
+            0
         }
     }
 

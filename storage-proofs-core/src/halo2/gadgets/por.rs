@@ -9,6 +9,8 @@ use halo2_proofs::{
 
 use crate::halo2::gadgets::insert::{InsertChip, InsertConfig};
 
+pub const MERKLE_CIRCUIT_ID: &str = "merkle";
+
 pub struct MerkleChip<H, U, V = U0, W = U0>
 where
     H: Halo2Hasher<U> + Halo2Hasher<V> + Halo2Hasher<W>,
@@ -506,6 +508,10 @@ pub mod test_circuit {
         V: PoseidonArity<H::Field>,
         W: PoseidonArity<H::Field>,
     {
+        fn id(&self) -> String {
+            MERKLE_CIRCUIT_ID.to_string()
+        }
+
         fn k(&self) -> u32 {
             let hasher_type = TypeId::of::<H>();
             if hasher_type == TypeId::of::<Sha256Hasher<H::Field>>() {
@@ -552,6 +558,11 @@ pub mod test_circuit {
             } else {
                 unimplemented!("hasher must be poseidon or sha256");
             }
+        }
+
+        fn sector_size(&self) -> usize {
+            // The merkle circuit is independent of the sector size, hence it returns 0.
+            0
         }
     }
 

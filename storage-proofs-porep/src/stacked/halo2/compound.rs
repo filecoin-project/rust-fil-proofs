@@ -12,7 +12,7 @@ use storage_proofs_core::{
 use crate::stacked::{
     self as vanilla,
     halo2::{
-        circuit::{self, SdrPorepCircuit},
+        circuit::{self, SdrPorepCircuit, SDR_POREP_CIRCUIT_ID},
         constants::{
             partition_count, SECTOR_NODES_16_KIB, SECTOR_NODES_16_MIB, SECTOR_NODES_2_KIB,
             SECTOR_NODES_32_GIB, SECTOR_NODES_32_KIB, SECTOR_NODES_4_KIB, SECTOR_NODES_512_MIB,
@@ -56,6 +56,7 @@ macro_rules! impl_compound_proof {
                         circuit::PrivateInputs::<F, TreeR::Arity, TreeR::SubTreeArity, TreeR::TopTreeArity, $sector_nodes>::from(vanilla_partition_proof);
 
                     let circ = SdrPorepCircuit {
+                        id: SDR_POREP_CIRCUIT_ID.to_string(),
                         pub_inputs,
                         priv_inputs,
                     };
@@ -122,6 +123,7 @@ macro_rules! impl_compound_proof {
                             let priv_inputs = circuit::PrivateInputs::from(vanilla_proof);
 
                             SdrPorepCircuit {
+                                id: SDR_POREP_CIRCUIT_ID.to_string(),
                                 pub_inputs,
                                 priv_inputs,
                             }

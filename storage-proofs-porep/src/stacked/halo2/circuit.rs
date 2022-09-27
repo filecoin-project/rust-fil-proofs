@@ -28,6 +28,7 @@ use storage_proofs_core::{
         CircuitRows,
     },
     merkle::{MerkleProofTrait, MerkleTreeTrait},
+    util::NODE_SIZE,
 };
 
 use crate::stacked::{
@@ -48,6 +49,8 @@ use crate::stacked::{
 };
 
 type VanillaPartitionProof<TreeR, G> = Vec<VanillaChallengeProof<TreeR, G>>;
+
+pub const SDR_POREP_CIRCUIT_ID: &str = "sdr";
 
 // Public input rows.
 const REPLICA_ID_ROW: usize = 0;
@@ -503,6 +506,7 @@ where
     Sha256Hasher<F>: Hasher<Field = F>,
     PoseidonHasher<F>: Hasher<Field = F>,
 {
+    pub id: String,
     pub pub_inputs: PublicInputs<F, SECTOR_NODES>,
     pub priv_inputs: PrivateInputs<F, U, V, W, SECTOR_NODES>,
 }
@@ -532,6 +536,7 @@ where
         assert_eq!(self.priv_inputs.challenge_proofs.len(), challenge_count);
 
         SdrPorepCircuit {
+            id: SDR_POREP_CIRCUIT_ID.to_string(),
             pub_inputs: PublicInputs {
                 replica_id: None,
                 comm_d: None,
@@ -694,6 +699,7 @@ where
         mut layouter: impl Layouter<F>,
     ) -> Result<(), Error> {
         let SdrPorepCircuit {
+            id: _,
             pub_inputs,
             priv_inputs,
         } = self;
@@ -1091,6 +1097,10 @@ where
     Sha256Hasher<F>: Hasher<Field = F>,
     PoseidonHasher<F>: Hasher<Field = F>,
 {
+    fn id(&self) -> String {
+        SDR_POREP_CIRCUIT_ID.to_string()
+    }
+
     fn k(&self) -> u32 {
         // Values were computed using `get_k` test.
         if GROTH16_PARTITIONING {
@@ -1119,6 +1129,10 @@ where
             }
         }
     }
+
+    fn sector_size(&self) -> usize {
+        (SECTOR_NODES * NODE_SIZE) / 1024
+    }
 }
 
 impl<F, U, V, W, const SECTOR_NODES: usize> SdrPorepCircuit<F, U, V, W, SECTOR_NODES>
@@ -1134,6 +1148,7 @@ where
     pub fn blank_circuit() -> Self {
         let challenge_count = challenge_count(SECTOR_NODES);
         SdrPorepCircuit {
+            id: SDR_POREP_CIRCUIT_ID.to_string(),
             pub_inputs: PublicInputs {
                 replica_id: None,
                 comm_d: None,
@@ -1206,6 +1221,7 @@ where
         };
 
         let circ = SdrPorepCircuit {
+            id: SDR_POREP_CIRCUIT_ID.to_string(),
             pub_inputs,
             priv_inputs,
         };

@@ -8,7 +8,7 @@ use halo2_proofs::{
     plonk::{Circuit, ConstraintSystem, Error},
 };
 use sha2::{Digest, Sha256};
-use storage_proofs_core::{halo2::CircuitRows, merkle::MerkleProofTrait};
+use storage_proofs_core::{halo2::CircuitRows, merkle::MerkleProofTrait, util::NODE_SIZE};
 
 use crate::{
     fallback as vanilla,
@@ -405,6 +405,11 @@ where
     W: PoseidonArity<F>,
     PoseidonHasher<F>: Hasher<Field = F>,
 {
+    fn id(&self) -> String {
+        use super::circuit::WINDOW_POST_CIRCUIT_ID;
+        WINDOW_POST_CIRCUIT_ID.to_string()
+    }
+
     fn k(&self) -> u32 {
         if GROTH16_PARTITIONING {
             match SECTOR_NODES {
@@ -429,6 +434,10 @@ where
                 _ => unimplemented!(),
             }
         }
+    }
+
+    fn sector_size(&self) -> usize {
+        (SECTOR_NODES * NODE_SIZE) / 1024
     }
 }
 
