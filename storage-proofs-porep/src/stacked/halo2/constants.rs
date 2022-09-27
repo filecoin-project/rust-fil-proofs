@@ -27,19 +27,20 @@ pub const LABEL_PREIMAGE_WORD_LEN: usize = 8 + 1 + 2 + 5 + REPEATED_PARENT_LABEL
 // sizes).
 pub const GROTH16_PARTITIONING: bool = false;
 
+// Number of porep challenges across all partitions.
 const fn challenge_count_all_partitions(sector_nodes: usize) -> usize {
     if sector_nodes >= SECTOR_NODES_32_GIB {
-        1760
+        180
     } else {
         2
     }
 }
 
+// Number of porep challenges per partition.
 pub const fn challenge_count(sector_nodes: usize) -> usize {
     if GROTH16_PARTITIONING {
-        // 10 partitions for production sector sizes; 1 partition for test sector sizes.
         if sector_nodes >= SECTOR_NODES_32_GIB {
-            176
+            18
         } else {
             2
         }
@@ -49,12 +50,15 @@ pub const fn challenge_count(sector_nodes: usize) -> usize {
 }
 
 pub const fn partition_count(sector_nodes: usize) -> usize {
+    // Groth16 partitioning uses 10 partitions for production sectors and 1 partition for test
+    // sectors; Halo2 partitioning uses 1 partition per porep challenge.
     challenge_count_all_partitions(sector_nodes) / challenge_count(sector_nodes)
 }
 
 pub const fn num_layers(sector_nodes: usize) -> usize {
-    match sector_nodes {
-        SECTOR_NODES_32_GIB | SECTOR_NODES_64_GIB => 11,
-        _ => 2,
+    if sector_nodes >= SECTOR_NODES_32_GIB {
+        11
+    } else {
+        2
     }
 }
