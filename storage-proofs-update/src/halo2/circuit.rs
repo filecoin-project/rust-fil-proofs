@@ -23,6 +23,7 @@ use storage_proofs_core::{
         CircuitRows,
     },
     merkle::{MerkleProof, MerkleProofTrait},
+    util::NODE_SIZE,
 };
 
 use crate::{
@@ -43,6 +44,8 @@ use crate::{
     },
     phi, vanilla,
 };
+
+pub const EMPTY_SECTOR_UPDATE_CIRCUIT_ID: &str = "update";
 
 // Calculates the absolute row index for each public input.
 struct PiRows<const SECTOR_NODES: usize> {
@@ -761,6 +764,10 @@ where
     TreeDHasher<F>: Hasher<Field = F>,
     TreeRHasher<F>: Hasher<Field = F>,
 {
+    fn id(&self) -> String {
+        EMPTY_SECTOR_UPDATE_CIRCUIT_ID.to_string()
+    }
+
     fn k(&self) -> u32 {
         // Computed using `Self::compute_k`.
         if GROTH16_PARTITIONING {
@@ -794,6 +801,10 @@ where
                 _ => unreachable!(),
             }
         }
+    }
+
+    fn sector_size(&self) -> usize {
+        (SECTOR_NODES * NODE_SIZE) / 1024
     }
 }
 

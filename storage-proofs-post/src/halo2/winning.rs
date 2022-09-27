@@ -9,7 +9,7 @@ use halo2_proofs::{
     plonk::{Circuit, ConstraintSystem, Error},
 };
 use sha2::{Digest, Sha256};
-use storage_proofs_core::halo2::CircuitRows;
+use storage_proofs_core::{halo2::CircuitRows, util::NODE_SIZE};
 
 use crate::{
     fallback as vanilla,
@@ -241,6 +241,11 @@ where
     W: PoseidonArity<F>,
     PoseidonHasher<F>: Hasher<Field = F>,
 {
+    fn id(&self) -> String {
+        use super::circuit::WINNING_POST_CIRCUIT_ID;
+        WINNING_POST_CIRCUIT_ID.to_string()
+    }
+
     fn k(&self) -> u32 {
         // Values were computed using `get_k` test.
         match SECTOR_NODES {
@@ -253,6 +258,10 @@ where
             SECTOR_NODES_64_GIB => 16,
             _ => unimplemented!(),
         }
+    }
+
+    fn sector_size(&self) -> usize {
+        (SECTOR_NODES * NODE_SIZE) / 1024
     }
 }
 

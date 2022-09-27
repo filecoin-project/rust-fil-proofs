@@ -41,7 +41,10 @@ impl Halo2Field for Fq {
 }
 
 pub trait CircuitRows {
+    fn id(&self) -> String;
     fn k(&self) -> u32;
+    // The sector size in KiB.
+    fn sector_size(&self) -> usize;
 }
 
 pub struct Halo2Keypair<C, Circ>
@@ -422,8 +425,17 @@ mod tests {
     }
 
     impl CircuitRows for MyCircuit {
+        fn id(&self) -> String {
+            "mycircuit".to_string()
+        }
+
         fn k(&self) -> u32 {
             4
+        }
+
+        fn sector_size(&self) -> usize {
+            // This circuit is independent of the sector size, hence it returns 0.
+            0
         }
     }
 
