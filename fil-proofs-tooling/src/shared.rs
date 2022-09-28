@@ -2,13 +2,15 @@ use std::cmp::min;
 use std::fs::File;
 use std::io::{BufWriter, Seek, SeekFrom, Write};
 
+use ff::PrimeField;
 use filecoin_hashers::Hasher;
 use filecoin_proofs::{
     add_piece, fauxrep_aux, seal_pre_commit_phase1, seal_pre_commit_phase2,
     validate_cache_for_precommit_phase2, DefaultPieceHasher, DefaultTreeHasher, MerkleTreeTrait,
-    PaddedBytesAmount, PieceInfo, PoRepConfig, PoRepProofPartitions, PrivateReplicaInfo,
-    PublicReplicaInfo, SealPreCommitOutput, SealPreCommitPhase1Output, SectorSize,
-    UnpaddedBytesAmount, POREP_PARTITIONS,
+    PaddedBytesAmount, PieceInfo, PoRepConfig, PoRepProofPartitions, PoStConfig, PoStType,
+    PrivateReplicaInfo, PublicReplicaInfo, SealPreCommitOutput, SealPreCommitPhase1Output,
+    SectorSize, UnpaddedBytesAmount, POREP_PARTITIONS, WINDOW_POST_CHALLENGE_COUNT,
+    WINDOW_POST_SECTOR_COUNT, WINNING_POST_CHALLENGE_COUNT, WINNING_POST_SECTOR_COUNT,
 };
 use generic_array::typenum::Unsigned;
 use log::info;
@@ -20,7 +22,7 @@ use rayon::prelude::{
 use storage_proofs_core::{
     api_version::ApiVersion,
     sector::SectorId,
-    util::{default_rows_to_discard, NODE_SIZE},
+    util::{self, default_rows_to_discard, NODE_SIZE},
 };
 use storage_proofs_porep::stacked::Labels;
 use tempfile::{tempdir, NamedTempFile};
@@ -334,4 +336,57 @@ where
     }
 
     (porep_config, Some((out, seal_pre_commit_outputs)))
+}
+
+/// Based on the field, it teturns either the config for Groth16 or Halo2.
+pub fn get_porep_config<F: PrimeField>(sector_size: u64, api_version: ApiVersion) -> PoRepConfig {
+    let arbitrary_porep_id = [99; 32];
+
+    if util::is_groth16_field::<F>() {
+        PoRepConfig {
+            sector_size: sector_size.into(),
+            partitions: PoRepProofPartitions(
+                *POREP_PARTITIONS
+                    .read()
+                    .expect("POREP_PARTITONS poisoned")
+                    .get(&(sector_size))
+                    .expect("unknown sector size") as usize,
+            ),
+            porep_id: arbitrary_porep_id,
+            api_version,
+        }
+    } else {
+        PoRepConfig::new_halo2(sector_size.into(), arbitrary_porep_id, api_version)
+    }
+}
+
+/// Based on the field, it teturns either the config for Groth16 or Halo2.
+pub fn get_post_config<F: PrimeField>(
+    sector_size: u64,
+    api_version: ApiVersion,
+    typ: PoStType,
+) -> PoStConfig {
+    if util::is_groth16_field::<F>() {
+        let (challenge_count, sector_count) = match typ {
+            PoStType::Winning => (WINNING_POST_CHALLENGE_COUNT, WINNING_POST_SECTOR_COUNT),
+            PoStType::Window => (
+                WINDOW_POST_CHALLENGE_COUNT,
+                *WINDOW_POST_SECTOR_COUNT
+                    .read()
+                    .expect("WINDOW_POST_SECTOR_COUNT poisoned")
+                    .get(&sector_size)
+                    .expect("unknown sector size"),
+            ),
+        };
+        PoStConfig {
+            sector_size: sector_size.into(),
+            challenge_count,
+            sector_count,
+            typ,
+            priority: true,
+            api_version,
+        }
+    } else {
+        PoStConfig::new_halo2(sector_size.into(), typ, true, api_version)
+    }
 }

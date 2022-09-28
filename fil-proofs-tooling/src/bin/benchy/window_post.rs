@@ -8,17 +8,13 @@ use anyhow::{ensure, Context};
 use bincode::{deserialize, serialize};
 use ff::PrimeField;
 use fil_proofs_tooling::measure::FuncMeasurement;
-use fil_proofs_tooling::shared::{PROVER_ID, RANDOMNESS, TICKET_BYTES};
+use fil_proofs_tooling::shared::{self, PROVER_ID, RANDOMNESS, TICKET_BYTES};
 use fil_proofs_tooling::{measure, Metadata};
 use filecoin_hashers::Hasher;
-use filecoin_proofs::constants::{
-    DefaultPieceHasher, DefaultTreeHasher, POREP_PARTITIONS, WINDOW_POST_CHALLENGE_COUNT,
-    WINDOW_POST_SECTOR_COUNT,
-};
+use filecoin_proofs::constants::{DefaultPieceHasher, DefaultTreeHasher};
 use filecoin_proofs::types::{
-    PaddedBytesAmount, PieceInfo, PoRepConfig, PoRepProofPartitions, PoStConfig,
-    SealCommitPhase1Output, SealPreCommitOutput, SealPreCommitPhase1Output, SectorSize,
-    UnpaddedBytesAmount,
+    PaddedBytesAmount, PieceInfo, SealCommitPhase1Output, SealPreCommitOutput,
+    SealPreCommitPhase1Output, UnpaddedBytesAmount,
 };
 use filecoin_proofs::{
     add_piece, generate_piece_commitment, generate_window_post, seal_commit_phase1,
@@ -78,24 +74,6 @@ impl Report {
     pub fn print(&self) {
         let wrapped = Metadata::wrap(&self).expect("failed to retrieve metadata");
         serde_json::to_writer(stdout(), &wrapped).expect("cannot write report JSON to stdout");
-    }
-}
-
-fn get_porep_config(sector_size: u64, api_version: ApiVersion) -> PoRepConfig {
-    let arbitrary_porep_id = [99; 32];
-
-    // Replicate the staged sector, write the replica file to `sealed_path`.
-    PoRepConfig {
-        sector_size: SectorSize(sector_size),
-        partitions: PoRepProofPartitions(
-            *POREP_PARTITIONS
-                .read()
-                .expect("POREP_PARTITONS poisoned")
-                .get(&(sector_size))
-                .expect("unknown sector size") as usize,
-        ),
-        porep_id: arbitrary_porep_id,
-        api_version,
     }
 }
 
@@ -172,7 +150,7 @@ where
 
         let piece_infos = vec![piece_info];
         let sector_id = SectorId::from(SECTOR_ID);
-        let porep_config = get_porep_config(sector_size, api_version);
+        let porep_config = shared::get_porep_config::<Tree::Field>(sector_size, api_version);
 
         let seal_pre_commit_phase1_measurement: FuncMeasurement<SealPreCommitPhase1Output<Tree>> = measure(|| {
             seal_pre_commit_phase1::<_, _, _, Tree>(
@@ -263,7 +241,7 @@ where
             res
         };
 
-        let porep_config = get_porep_config(sector_size, api_version);
+        let porep_config = shared::get_porep_config::<Tree::Field>(sector_size, api_version);
 
         let sealed_file_path = cache_dir.join(SEALED_FILE);
 
@@ -418,7 +396,7 @@ where
     let comm_r = seal_pre_commit_output.comm_r;
 
     let sector_id = SectorId::from(SECTOR_ID);
-    let porep_config = get_porep_config(sector_size, api_version);
+    let porep_config = shared::get_porep_config::<Tree::Field>(sector_size, api_version);
 
     let sealed_file_path = cache_dir.join(SEALED_FILE);
 
@@ -522,18 +500,8 @@ where
     priv_replica_info.insert(sector_id, priv_replica);
 
     // Measure PoSt generation and verification.
-    let post_config = PoStConfig {
-        sector_size: SectorSize(sector_size),
-        challenge_count: WINDOW_POST_CHALLENGE_COUNT,
-        sector_count: *WINDOW_POST_SECTOR_COUNT
-            .read()
-            .expect("WINDOW_POST_SECTOR_COUNT poisoned")
-            .get(&sector_size)
-            .expect("unknown sector size"),
-        typ: PoStType::Window,
-        priority: true,
-        api_version,
-    };
+    let post_config =
+        shared::get_post_config::<Tree::Field>(sector_size, api_version, PoStType::Window);
 
     let gen_window_post_measurement = measure(|| {
         generate_window_post::<Tree>(&post_config, &RANDOMNESS, &priv_replica_info, PROVER_ID)

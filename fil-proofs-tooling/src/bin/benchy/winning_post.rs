@@ -3,13 +3,12 @@ use std::io::stdout;
 
 use anyhow::anyhow;
 use ff::PrimeField;
-use fil_proofs_tooling::shared::{create_replica, PROVER_ID, RANDOMNESS};
+use fil_proofs_tooling::shared::{self, create_replica, PROVER_ID, RANDOMNESS};
 use fil_proofs_tooling::{measure, Metadata};
 use filecoin_hashers::Hasher;
 use filecoin_proofs::constants::{
-    DefaultPieceHasher, DefaultTreeHasher, WINNING_POST_CHALLENGE_COUNT, WINNING_POST_SECTOR_COUNT,
+    DefaultPieceHasher, DefaultTreeHasher, WINNING_POST_SECTOR_COUNT,
 };
-use filecoin_proofs::types::PoStConfig;
 use filecoin_proofs::{
     generate_winning_post, generate_winning_post_sector_challenge, verify_winning_post, with_shape,
     PoStType, PoseidonArityAllFields,
@@ -78,14 +77,8 @@ where
     let pub_replica_info = vec![(sector_id, replica_output.public_replica_info.clone())];
     let priv_replica_info = vec![(sector_id, replica_output.private_replica_info.clone())];
 
-    let post_config = PoStConfig {
-        sector_size: sector_size.into(),
-        sector_count: WINNING_POST_SECTOR_COUNT,
-        challenge_count: WINNING_POST_CHALLENGE_COUNT,
-        typ: PoStType::Winning,
-        priority: true,
-        api_version,
-    };
+    let post_config =
+        shared::get_post_config::<Tree::Field>(sector_size, api_version, PoStType::Winning);
 
     let gen_winning_post_sector_challenge_measurement = measure(|| {
         generate_winning_post_sector_challenge::<Tree>(

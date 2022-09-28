@@ -7,7 +7,7 @@ use blstrs::Scalar as Fr;
 use ff::PrimeField;
 use fil_proofs_tooling::{
     measure,
-    shared::{create_replicas, PROVER_ID, RANDOMNESS, TICKET_BYTES},
+    shared::{self, create_replicas, PROVER_ID, RANDOMNESS, TICKET_BYTES},
     Metadata,
 };
 use filecoin_hashers::{sha256::Sha256Hasher, Hasher};
@@ -212,7 +212,7 @@ where
     }
 
     let (created, replica_measurement) = repls.expect("unreachable: only_add_piece==false");
-    generate_params(&inputs);
+    generate_params::<F>(&inputs);
 
     if !skip_seal_proof {
         for (value, (sector_id, replica_info)) in
@@ -311,27 +311,13 @@ fn measure_porep_circuit(i: &ProdbenchInputs) -> usize {
     cs.num_constraints()
 }
 
-fn generate_params(i: &ProdbenchInputs) {
-    let sector_size = SectorSize(i.sector_size_bytes());
-    let partitions = PoRepProofPartitions(
-        *POREP_PARTITIONS
-            .read()
-            .expect("POREP_PARTITIONS poisoned")
-            .get(&i.sector_size_bytes())
-            .expect("unknown sector size") as usize,
-    );
+fn generate_params<F: PrimeField>(i: &ProdbenchInputs) {
+    let porep_config = shared::get_porep_config::<F>(i.sector_size_bytes(), i.api_version());
     info!(
         "generating params: porep: (size: {:?}, partitions: {:?})",
-        &sector_size, &partitions
+        &porep_config.sector_size, &porep_config.partitions
     );
-    let dummy_porep_id = [0; 32];
-
-    cache_porep_params(PoRepConfig {
-        sector_size,
-        partitions,
-        porep_id: dummy_porep_id,
-        api_version: i.api_version(),
-    });
+    cache_porep_params(porep_config);
 }
 
 fn cache_porep_params(porep_config: PoRepConfig) {
