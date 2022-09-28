@@ -3,13 +3,10 @@ use std::fs::{remove_dir_all, remove_file};
 use std::io::stdout;
 
 use ff::PrimeField;
-use fil_proofs_tooling::shared::{create_replica, PROVER_ID, RANDOMNESS};
+use fil_proofs_tooling::shared::{self, create_replica, PROVER_ID, RANDOMNESS};
 use fil_proofs_tooling::{measure, Metadata};
 use filecoin_hashers::Hasher;
-use filecoin_proofs::constants::{
-    DefaultPieceHasher, DefaultTreeHasher, WINDOW_POST_CHALLENGE_COUNT, WINDOW_POST_SECTOR_COUNT,
-};
-use filecoin_proofs::types::{PoStConfig, SectorSize};
+use filecoin_proofs::constants::{DefaultPieceHasher, DefaultTreeHasher};
 use filecoin_proofs::{
     generate_window_post, verify_window_post, with_shape, PoStType, PoseidonArityAllFields,
     PrivateReplicaInfo, PublicReplicaInfo,
@@ -63,11 +60,6 @@ where
     DefaultTreeHasher<Tree::Field>: Hasher<Field = Tree::Field>,
 {
     let arbitrary_porep_id = [66; 32];
-    let sector_count = *WINDOW_POST_SECTOR_COUNT
-        .read()
-        .expect("WINDOW_POST_SECTOR_COUNT poisoned")
-        .get(&sector_size)
-        .expect("unknown sector size");
 
     let (sector_id, replica_output) =
         create_replica::<Tree>(sector_size, arbitrary_porep_id, fake_replica, api_version);
@@ -80,14 +72,8 @@ where
     priv_replica_info.insert(sector_id, replica_output.private_replica_info.clone());
 
     // Measure PoSt generation and verification.
-    let post_config = PoStConfig {
-        sector_size: SectorSize(sector_size),
-        challenge_count: WINDOW_POST_CHALLENGE_COUNT,
-        sector_count,
-        typ: PoStType::Window,
-        priority: false,
-        api_version,
-    };
+    let post_config =
+        shared::get_post_config::<Tree::Field>(sector_size, api_version, PoStType::Window);
 
     let gen_window_post_measurement = measure(|| {
         generate_window_post::<Tree>(&post_config, &RANDOMNESS, &priv_replica_info, PROVER_ID)
