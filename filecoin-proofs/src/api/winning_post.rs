@@ -64,12 +64,13 @@ where
     );
 
     ensure!(
-        vanilla_proofs.len() == post_config.sector_count,
-        "invalid amount of vanilla proofs"
+        post_config.sector_count == 1,
+        "invalid Winning PoSt config -- sector_count must be 1"
     );
 
     // TODO (jake): is this correct? Winning-Post should always have a single vanilla (i.e.
     // partition) proof?
+    /* SHAWN
     let partition_count = 1;
     ensure!(vanilla_proofs.len() == partition_count);
     ensure!(vanilla_proofs[0].vanilla_proof.sectors.len() == WINNING_POST_SECTOR_COUNT);
@@ -79,6 +80,18 @@ where
             .len()
             == WINNING_POST_CHALLENGE_COUNT,
     );
+    */
+    ensure!(
+        vanilla_proofs.len() == 1,
+        "expected exactly one vanilla proof"
+    );
+
+    let vanilla_proof = &vanilla_proofs[0];
+    let randomness_safe: <Tree::Hasher as Hasher>::Domain =
+        as_safe_commitment(randomness, "randomness")?;
+    let prover_id_safe: <Tree::Hasher as Hasher>::Domain =
+        as_safe_commitment(&prover_id, "prover_id")?;
+
 
     ensure!(
         TypeId::of::<Tree::Hasher>() == TypeId::of::<DefaultTreeHasher<Tree::Field>>(),
@@ -170,13 +183,13 @@ where
     > = unsafe { std::mem::transmute(vanilla_proofs) };
 
     let mut pub_sectors = Vec::with_capacity(vanilla_proofs.len());
-    for vanilla_proof in &vanilla_proofs {
-        pub_sectors.push(PublicSector {
-            id: vanilla_proof.sector_id,
-            comm_r: vanilla_proof.comm_r,
-        });
-    }
-
+        for vanilla_proof in &vanilla_proofs {
+            pub_sectors.push(PublicSector {
+                id: vanilla_proof.sector_id,
+                comm_r: vanilla_proof.comm_r,
+            });
+        }
+    
     let pub_inputs = fallback::PublicInputs {
         randomness: randomness_safe,
         prover_id: prover_id_safe,
@@ -188,7 +201,6 @@ where
     // TODO (jake): is this correct?
     assert_eq!(partitions, 1);
     let partitioned_proofs = partition_vanilla_proofs(
-        post_config,
         &compound_pub_params.vanilla_params,
         &pub_inputs,
         partitions,
@@ -266,7 +278,6 @@ where
     let partition_count = 1;
     assert_eq!(vanilla_proofs.len(), partition_count);
     let vanilla_partition_proofs = partition_vanilla_proofs(
-        post_config,
         &vanilla_pub_params,
         &vanilla_pub_inputs,
         partition_count,

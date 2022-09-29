@@ -167,7 +167,6 @@ where
     };
 
     let partitioned_proofs = partition_vanilla_proofs(
-        post_config,
         &pub_params.vanilla_params,
         &pub_inputs,
         partitions,
@@ -243,7 +242,6 @@ where
     };
 
     let vanilla_partition_proofs = partition_vanilla_proofs(
-        post_config,
         &vanilla_pub_params,
         &vanilla_pub_inputs,
         partition_count,
@@ -1994,7 +1992,6 @@ where
     };
 
     let partitioned_proofs = single_partition_vanilla_proofs(
-        post_config,
         &pub_params.vanilla_params,
         &pub_inputs,
         &vanilla_proofs,
@@ -2074,7 +2071,6 @@ where
     };
 
     let vanilla_partition_proof = single_partition_vanilla_proofs(
-        post_config,
         &vanilla_pub_params,
         &vanilla_pub_inputs,
         &vanilla_sector_proofs,

@@ -3,7 +3,7 @@ use ff::PrimeField;
 use filecoin_hashers::Hasher;
 use storage_proofs_core::{api_version::ApiVersion, proof::ProofScheme, util::is_groth16_field};
 use storage_proofs_porep::stacked::{self, LayerChallenges, StackedDrg};
-use storage_proofs_post::fallback::{self, FallbackPoSt};
+use storage_proofs_post::fallback::{self, FallbackPoSt, PoStShape};
 
 use crate::{
     constants::{DefaultPieceHasher, DRG_DEGREE, EXP_DEGREE, LAYERS, POREP_MINIMUM_CHALLENGES},
@@ -53,7 +53,7 @@ pub fn winning_post_setup_params(post_config: &PoStConfig) -> Result<WinningPost
         "invald parameters calculated {} * {} != {}",
         param_sector_count,
         param_challenge_count,
-        post_config.challenge_count
+        post_config.challenge_count,
     );
 
     Ok(fallback::SetupParams {
@@ -61,6 +61,7 @@ pub fn winning_post_setup_params(post_config: &PoStConfig) -> Result<WinningPost
         challenge_count: param_challenge_count,
         sector_count: param_sector_count,
         api_version: post_config.api_version,
+        shape: PoStShape::Winning,
     })
 }
 
@@ -76,6 +77,7 @@ pub fn window_post_setup_params(post_config: &PoStConfig) -> WindowPostSetupPara
         challenge_count: post_config.challenge_count,
         sector_count: post_config.sector_count,
         api_version: post_config.api_version,
+        shape: PoStShape::Window,
     }
 }
 
