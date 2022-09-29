@@ -77,7 +77,6 @@ pub fn generate_window_post_with_vanilla<Tree: 'static + MerkleTreeTrait>(
     };
 
     let partitioned_proofs = partition_vanilla_proofs(
-        post_config,
         &pub_params.vanilla_params,
         &pub_inputs,
         partitions,
@@ -295,7 +294,6 @@ pub fn generate_single_window_post_with_vanilla<Tree: 'static + MerkleTreeTrait>
     };
 
     let partitioned_proofs = single_partition_vanilla_proofs(
-        post_config,
         &pub_params.vanilla_params,
         &pub_inputs,
         &vanilla_proofs,

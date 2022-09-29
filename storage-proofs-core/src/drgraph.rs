@@ -165,7 +165,7 @@ impl<H: Hasher> Graph<H> for BucketGraph<H> {
 
                 let (predecessor_index, other_drg_parents) = match self.api_version {
                     ApiVersion::V1_0_0 => (m_prime, &mut parents[..]),
-                    ApiVersion::V1_1_0 => (0, &mut parents[1..]),
+                    _ => (0, &mut parents[1..]),
                 };
 
                 for parent in other_drg_parents.iter_mut().take(m_prime) {

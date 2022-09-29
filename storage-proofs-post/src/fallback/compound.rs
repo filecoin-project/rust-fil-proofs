@@ -6,6 +6,7 @@ use blstrs::Scalar as Fr;
 use filecoin_hashers::Hasher;
 use sha2::{Digest, Sha256};
 use storage_proofs_core::{
+    api_version::ApiVersion,
     compound_proof::{CircuitComponent, CompoundProof},
     error::Result,
     gadgets::por::PoRCompound,
@@ -16,7 +17,7 @@ use storage_proofs_core::{
     util::NODE_SIZE,
 };
 
-use crate::fallback::{generate_leaf_challenge_inner, FallbackPoSt, FallbackPoStCircuit, Sector};
+use crate::fallback::{generate_leaf_challenge_inner, generate_leaf_challenge, FallbackPoSt, FallbackPoStCircuit, Sector, PoStShape};
 
 pub struct FallbackPoStCompound<Tree>
 where
@@ -49,57 +50,106 @@ impl<'a, Tree: 'static + MerkleTreeTrait>
             private: true,
         };
 
-        let num_sectors_per_chunk = pub_params.sector_count;
-
         let partition_index = partition_k.unwrap_or(0);
 
-        let sectors = pub_inputs
-            .sectors
-            .chunks(num_sectors_per_chunk)
-            .nth(partition_index)
-            .ok_or_else(|| anyhow!("invalid number of sectors/partition index"))?;
+        match pub_params.shape {
+            PoStShape::Window => {
+                let num_sectors_per_chunk = pub_params.sector_count;
+                let sectors = pub_inputs
+                    .sectors
+                    .chunks(num_sectors_per_chunk)
+                    .nth(partition_index)
+                    .ok_or_else(|| anyhow!("invalid number of sectors/partition index"))?;
 
-        for (i, sector) in sectors.iter().enumerate() {
-            // 1. Inputs for verifying comm_r = H(comm_c || comm_r_last)
-            inputs.push(sector.comm_r.into());
+                for (i, sector) in sectors.iter().enumerate() {
+                    // 1. Inputs for verifying comm_r = H(comm_c || comm_r_last)
+                    inputs.push(sector.comm_r.into());
 
-            // avoid rehashing fixed inputs
-            let mut challenge_hasher = Sha256::new();
-            challenge_hasher.update(AsRef::<[u8]>::as_ref(&pub_inputs.randomness));
-            challenge_hasher.update(&u64::from(sector.id).to_le_bytes()[..]);
+                    // 2. Inputs for verifying inclusion paths
+                    for n in 0..pub_params.challenge_count {
+                        let challenge_index = match pub_params.api_version {
+                            ApiVersion::V1_0_0 | ApiVersion::V1_1_0  => {
+                                (partition_index * pub_params.sector_count + i)
+                                    * pub_params.challenge_count
+                                    + n
+                            }
+                            _ => n,
+                        } as u64;
 
-            // 2. Inputs for verifying inclusion paths
-            for n in 0..pub_params.challenge_count {
-                let challenge_index = ((partition_index * pub_params.sector_count + i)
-                    * pub_params.challenge_count
-                    + n) as u64;
-                let challenged_leaf = generate_leaf_challenge_inner::<
-                    <Tree::Hasher as Hasher>::Domain,
-                >(
-                    challenge_hasher.clone(), pub_params, challenge_index
+                        // avoid rehashing fixed inputs
+                        let mut challenge_hasher = Sha256::new();
+                        challenge_hasher.update(AsRef::<[u8]>::as_ref(&pub_inputs.randomness));
+                        challenge_hasher.update(&u64::from(sector.id).to_le_bytes()[..]);
+
+                        let challenged_leaf = generate_leaf_challenge_inner::<
+                            <Tree::Hasher as Hasher>::Domain,
+                        >(
+                            challenge_hasher.clone(), pub_params, challenge_index
+                        );
+
+                        let por_pub_inputs = por::PublicInputs {
+                            commitment: None,
+                            challenge: challenged_leaf as usize,
+                        };
+
+                        let por_inputs = PoRCompound::<Tree>::generate_public_inputs(
+                            &por_pub_inputs,
+                            &por_pub_params,
+                            partition_k,
+                        )?;
+
+                        inputs.extend(por_inputs);
+                    }
+                }
+                let num_inputs_per_sector = inputs.len() / sectors.len();
+
+                // duplicate last one if too few sectors available
+                while inputs.len() / num_inputs_per_sector < num_sectors_per_chunk {
+                    let s = inputs[inputs.len() - num_inputs_per_sector..].to_vec();
+                    inputs.extend_from_slice(&s);
+                }
+                assert_eq!(inputs.len(), num_inputs_per_sector * num_sectors_per_chunk);
+            }
+
+            PoStShape::Winning => {
+                ensure!(
+                    partition_index == 0,
+                    "Winning PoSt must have a single partition, but partition_index is {}",
+                    partition_index
                 );
+                ensure!(
+                    pub_params.challenge_count == 1,
+                    "Winning PoSt must have a single partition, but challenge_count is {}",
+                    pub_params.challenge_count
+                );
+                ensure!(pub_inputs.sectors.len() == pub_params.sector_count, "Winning PoSt must have same number of sectors ({}) as specified in public parameters ({})", pub_inputs.sectors.len(), pub_params.sector_count);
+                let sectors = &pub_inputs.sectors;
 
-                let por_pub_inputs = por::PublicInputs {
-                    commitment: None,
-                    challenge: challenged_leaf as usize,
-                };
-                let por_inputs = PoRCompound::<Tree>::generate_public_inputs(
-                    &por_pub_inputs,
-                    &por_pub_params,
-                    partition_k,
-                )?;
+                for (challenge_index, sector) in sectors.iter().enumerate() {
+                    // 1. Inputs for verifying comm_r = H(comm_c || comm_r_last)
+                    inputs.push(sector.comm_r.into());
+                    // 2. Inputs for verifying inclusion paths
+                    let challenged_leaf = generate_leaf_challenge(
+                        &pub_params,
+                        pub_inputs.randomness,
+                        sector.id.into(),
+                        challenge_index as u64,
+                    );
 
-                inputs.extend(por_inputs);
+                    let por_pub_inputs = por::PublicInputs {
+                        commitment: None,
+                        challenge: challenged_leaf as usize,
+                    };
+                    let por_inputs = PoRCompound::<Tree>::generate_public_inputs(
+                        &por_pub_inputs,
+                        &por_pub_params,
+                        partition_k,
+                    )?;
+
+                    inputs.extend(por_inputs);
+                }
             }
         }
-        let num_inputs_per_sector = inputs.len() / sectors.len();
-
-        // duplicate last one if too little sectors available
-        while inputs.len() / num_inputs_per_sector < num_sectors_per_chunk {
-            let s = inputs[inputs.len() - num_inputs_per_sector..].to_vec();
-            inputs.extend_from_slice(&s);
-        }
-        assert_eq!(inputs.len(), num_inputs_per_sector * num_sectors_per_chunk);
 
         Ok(inputs)
     }

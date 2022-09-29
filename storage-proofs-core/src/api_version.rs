@@ -8,6 +8,7 @@ use semver::Version;
 pub enum ApiVersion {
     V1_0_0,
     V1_1_0,
+    V1_2_0,
 }
 
 impl ApiVersion {
@@ -15,6 +16,7 @@ impl ApiVersion {
         match self {
             ApiVersion::V1_0_0 => Version::new(1, 0, 0),
             ApiVersion::V1_1_0 => Version::new(1, 1, 0),
+            ApiVersion::V1_2_0 => Version::new(1, 2, 0),
         }
     }
 }
@@ -40,6 +42,7 @@ impl FromStr for ApiVersion {
         match (api_version.major, api_version.minor, api_version.patch) {
             (1, 0, 0) => Ok(ApiVersion::V1_0_0),
             (1, 1, 0) => Ok(ApiVersion::V1_1_0),
+            (1, 2, 0) => Ok(ApiVersion::V1_2_0),
             (1, 1, _) | (1, 0, _) => Err(format_err!(
                 "Could not parse API Version from string (patch)"
             )),
@@ -57,14 +60,18 @@ impl FromStr for ApiVersion {
 fn test_fmt() {
     assert_eq!(format!("{}", ApiVersion::V1_0_0), "1.0.0");
     assert_eq!(format!("{}", ApiVersion::V1_1_0), "1.1.0");
+    assert_eq!(format!("{}", ApiVersion::V1_2_0), "1.2.0");
 }
 
 #[test]
 fn test_as_semver() {
     assert_eq!(ApiVersion::V1_0_0.as_semver().major, 1);
     assert_eq!(ApiVersion::V1_1_0.as_semver().major, 1);
+    assert_eq!(ApiVersion::V1_2_0.as_semver().major, 1);
     assert_eq!(ApiVersion::V1_0_0.as_semver().minor, 0);
     assert_eq!(ApiVersion::V1_1_0.as_semver().minor, 1);
+    assert_eq!(ApiVersion::V1_2_0.as_semver().minor, 2);
     assert_eq!(ApiVersion::V1_0_0.as_semver().patch, 0);
     assert_eq!(ApiVersion::V1_1_0.as_semver().patch, 0);
+    assert_eq!(ApiVersion::V1_2_0.as_semver().patch, 0);
 }

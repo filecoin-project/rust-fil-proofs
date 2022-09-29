@@ -37,10 +37,16 @@ pub fn generate_winning_post_with_vanilla<Tree: 'static + MerkleTreeTrait>(
     );
 
     ensure!(
-        vanilla_proofs.len() == post_config.sector_count,
-        "invalid amount of vanilla proofs"
+        post_config.sector_count == 1,
+        "invalid Winning PoSt config -- sector_count must be 1"
     );
 
+    ensure!(
+        vanilla_proofs.len() == 1,
+        "expected exactly one vanilla proof"
+    );
+
+    let vanilla_proof = &vanilla_proofs[0];
     let randomness_safe: <Tree::Hasher as Hasher>::Domain =
         as_safe_commitment(randomness, "randomness")?;
     let prover_id_safe: <Tree::Hasher as Hasher>::Domain =
@@ -57,24 +63,18 @@ pub fn generate_winning_post_with_vanilla<Tree: 'static + MerkleTreeTrait>(
         FallbackPoStCompound::setup(&setup_params)?;
     let groth_params = get_post_params::<Tree>(post_config)?;
 
-    let mut pub_sectors = Vec::with_capacity(vanilla_proofs.len());
-    for vanilla_proof in &vanilla_proofs {
-        pub_sectors.push(PublicSector {
-            id: vanilla_proof.sector_id,
-            comm_r: vanilla_proof.comm_r,
-        });
-    }
-
     let pub_inputs = fallback::PublicInputs {
         randomness: randomness_safe,
         prover_id: prover_id_safe,
-        sectors: pub_sectors,
+        sectors: [fallback::PublicSector {
+            id: vanilla_proof.sector_id,
+            comm_r: vanilla_proof.comm_r,
+        }].to_vec(),
         k: None,
     };
 
     let partitions = pub_params.partitions.unwrap_or(1);
     let partitioned_proofs = partition_vanilla_proofs(
-        post_config,
         &pub_params.vanilla_params,
         &pub_inputs,
         partitions,

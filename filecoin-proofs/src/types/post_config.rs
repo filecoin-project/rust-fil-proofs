@@ -9,12 +9,15 @@ use storage_proofs_core::{
         parameter_cache_verifying_key_path, CacheableParameters,
     },
 };
-use storage_proofs_post::fallback::{FallbackPoStCircuit, FallbackPoStCompound};
+use storage_proofs_post::fallback::{FallbackPoStCircuit, FallbackPoStCompound, PoStShape};
 
 use crate::{
     parameters::{window_post_public_params, winning_post_public_params},
     types::{PaddedBytesAmount, SectorSize, UnpaddedBytesAmount},
 };
+
+/// For backward compatibility with external API.
+pub type PoStType = PoStShape;
 
 #[derive(Clone, Debug)]
 pub struct PoStConfig {
@@ -25,12 +28,6 @@ pub struct PoStConfig {
     /// High priority (always runs on GPU) == true
     pub priority: bool,
     pub api_version: ApiVersion,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum PoStType {
-    Winning,
-    Window,
 }
 
 impl From<PoStConfig> for PaddedBytesAmount {

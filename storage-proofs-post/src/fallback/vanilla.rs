@@ -22,6 +22,12 @@ use storage_proofs_core::{
     util::{default_rows_to_discard, NODE_SIZE},
 };
 
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub enum PoStShape {
+    Window,
+    Winning,
+}
+
 #[derive(Debug, Clone)]
 pub struct SetupParams {
     /// Size of the sector in bytes.
@@ -30,6 +36,7 @@ pub struct SetupParams {
     pub challenge_count: usize,
     /// Number of challenged sectors.
     pub sector_count: usize,
+    pub shape: PoStShape,
     pub api_version: ApiVersion,
 }
 
@@ -41,6 +48,7 @@ pub struct PublicParams {
     pub challenge_count: usize,
     /// Number of challenged sectors.
     pub sector_count: usize,
+    pub shape: PoStShape,
     pub api_version: ApiVersion,
 }
 
@@ -317,6 +325,7 @@ impl<'a, Tree: 'a + MerkleTreeTrait> ProofScheme<'a> for FallbackPoSt<'a, Tree> 
             sector_size: sp.sector_size,
             challenge_count: sp.challenge_count,
             sector_count: sp.sector_count,
+            shape: sp.shape,
             api_version: sp.api_version,
         })
     }
@@ -402,9 +411,24 @@ impl<'a, Tree: 'a + MerkleTreeTrait> ProofScheme<'a> for FallbackPoSt<'a, Tree> 
                         .fold(
                             || (Vec::new(), BTreeSet::new()),
                             |(mut inclusion_proofs, mut faults), n| {
-                                let challenge_index =
+                                let legacy_index =
                                     ((j * num_sectors_per_chunk + i) * pub_params.challenge_count
-                                        + n) as u64;
+                                    + n) as u64;
+                                let challenge_index = match pub_params.shape {
+                                    PoStShape::Window => match pub_params.api_version {
+                                        ApiVersion::V1_0_0 | ApiVersion::V1_1_0 => legacy_index,
+                                        _ => n as u64,
+                                    },
+                                    PoStShape::Winning => {
+                                        //ensure!(
+                                        //    legacy_index == i as u64,
+                                        //    "Invalid winning post challenge index"
+                                        //);
+
+                                        legacy_index
+                                    }
+                                } as u64;
+                                    
                                 let challenged_leaf = generate_leaf_challenge_inner::<
                                     <Tree::Hasher as Hasher>::Domain,
                                 >(
