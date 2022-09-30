@@ -192,7 +192,7 @@ where
         let top_arity = W::to_usize();
 
         let poseidon_base = if base_arity == binary_arity {
-            <PoseidonHasher<F> as Halo2Hasher<U2>>::change_config_arity::<U>(poseidon_2.clone())
+            <PoseidonHasher<F> as Halo2Hasher<U2>>::transmute_arity::<U>(poseidon_2.clone())
         } else {
             <PoseidonHasher<F> as Halo2Hasher<U>>::configure(
                 meta,
@@ -207,13 +207,13 @@ where
         let sub = if sub_arity == 0 {
             None
         } else if sub_arity == base_arity {
-            Some(por::change_hasher_insert_arity::<PoseidonHasher<F>, U, V>(
+            Some(por::transmute_arity::<PoseidonHasher<F>, U, V>(
                 poseidon_base.clone(),
                 insert_base.clone(),
             ))
         } else {
             let poseidon_sub = if sub_arity == binary_arity {
-                <PoseidonHasher<F> as Halo2Hasher<U2>>::change_config_arity::<V>(poseidon_2.clone())
+                <PoseidonHasher<F> as Halo2Hasher<U2>>::transmute_arity::<V>(poseidon_2.clone())
             } else {
                 <PoseidonHasher<F> as Halo2Hasher<V>>::configure(
                     meta,
@@ -230,19 +230,19 @@ where
         let top = if top_arity == 0 {
             None
         } else if top_arity == base_arity {
-            Some(por::change_hasher_insert_arity::<PoseidonHasher<F>, U, W>(
+            Some(por::transmute_arity::<PoseidonHasher<F>, U, W>(
                 poseidon_base.clone(),
                 insert_base.clone(),
             ))
         } else if top_arity == sub_arity {
             let (poseidon_sub, insert_sub) = sub.clone().unwrap();
-            Some(por::change_hasher_insert_arity::<PoseidonHasher<F>, V, W>(
+            Some(por::transmute_arity::<PoseidonHasher<F>, V, W>(
                 poseidon_sub,
                 insert_sub,
             ))
         } else {
             let poseidon_top = if top_arity == binary_arity {
-                <PoseidonHasher<F> as Halo2Hasher<U2>>::change_config_arity::<W>(poseidon_2.clone())
+                <PoseidonHasher<F> as Halo2Hasher<U2>>::transmute_arity::<W>(poseidon_2.clone())
             } else {
                 <PoseidonHasher<F> as Halo2Hasher<W>>::configure(
                     meta,

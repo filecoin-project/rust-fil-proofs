@@ -36,17 +36,15 @@ where
     _a: PhantomData<A>,
 }
 
-impl<F, A1> InsertConfig<F, A1>
+impl<F, A> InsertConfig<F, A>
 where
     F: FieldExt,
-    A1: PoseidonArity<F>,
+    A: PoseidonArity<F>,
 {
-    // If you have two arities `A1` and `A2` which you know are the same type (but where the
-    // compiler doesn't) `change_arity` can be used to convert the `A1` config into the `A2` config
-    // without having to call `InsertChip::<F, A2>::configure` (which would duplicate the
-    // `A1` configuration in the constraint system).
-    pub fn change_arity<A2: PoseidonArity<F>>(self) -> InsertConfig<F, A2> {
-        assert_eq!(A1::to_usize(), A2::to_usize());
+    // Changes the chip config's arity from `A` to `B`. This is safe only when arities `A` and `B`
+    // are known to have the same constraint system configuration.
+    pub fn transmute_arity<B: PoseidonArity<F>>(self) -> InsertConfig<F, B> {
+        assert_eq!(A::to_usize(), B::to_usize());
         InsertConfig {
             uninserted: self.uninserted,
             value: self.value,

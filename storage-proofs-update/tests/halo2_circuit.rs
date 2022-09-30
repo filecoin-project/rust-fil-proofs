@@ -98,7 +98,8 @@ where
     let get_high_bits_shr = pub_params.challenge_bit_len - h;
     let rhos = vanilla::rhos(h, &phi);
 
-    for k in 0..pub_params.partition_count {
+    // Only check a subset of the partition proofs.
+    for k in (0..pub_params.partition_count).take(3) {
         // Generate vanilla-proof.
         info!("Proving partition {}/{}", k, pub_params.partition_count);
 

@@ -644,10 +644,7 @@ where
         let top_arity = W::to_usize();
 
         let (poseidon_base, insert_base) = if base_arity == binary_arity {
-            por::change_hasher_insert_arity::<TreeRHasher<F>, U2, U>(
-                poseidon_2.clone(),
-                insert_2.clone(),
-            )
+            por::transmute_arity::<TreeRHasher<F>, U2, U>(poseidon_2.clone(), insert_2.clone())
         } else {
             let poseidon_base = <TreeRHasher<F> as Halo2Hasher<U>>::configure(
                 meta,
@@ -663,12 +660,12 @@ where
         let sub = if sub_arity == 0 {
             None
         } else if sub_arity == binary_arity {
-            Some(por::change_hasher_insert_arity::<TreeRHasher<F>, U2, V>(
+            Some(por::transmute_arity::<TreeRHasher<F>, U2, V>(
                 poseidon_2.clone(),
                 insert_2.clone(),
             ))
         } else if sub_arity == base_arity {
-            Some(por::change_hasher_insert_arity::<TreeRHasher<F>, U, V>(
+            Some(por::transmute_arity::<TreeRHasher<F>, U, V>(
                 poseidon_base.clone(),
                 insert_base.clone(),
             ))
@@ -687,18 +684,18 @@ where
         let top = if W::to_usize() == 0 {
             None
         } else if top_arity == binary_arity {
-            Some(por::change_hasher_insert_arity::<TreeRHasher<F>, U2, W>(
+            Some(por::transmute_arity::<TreeRHasher<F>, U2, W>(
                 poseidon_2.clone(),
                 insert_2.clone(),
             ))
         } else if top_arity == base_arity {
-            Some(por::change_hasher_insert_arity::<TreeRHasher<F>, U, W>(
+            Some(por::transmute_arity::<TreeRHasher<F>, U, W>(
                 poseidon_base.clone(),
                 insert_base.clone(),
             ))
         } else if top_arity == sub_arity {
             let (poseidon_sub, insert_sub) = sub.clone().unwrap();
-            Some(por::change_hasher_insert_arity::<TreeRHasher<F>, V, W>(
+            Some(por::transmute_arity::<TreeRHasher<F>, V, W>(
                 poseidon_sub,
                 insert_sub,
             ))
@@ -770,8 +767,8 @@ where
 
     fn k(&self) -> u32 {
         // Computed using `Self::compute_k`.
-        if GROTH16_PARTITIONING {
-            match SECTOR_NODES {
+        match GROTH16_PARTITIONING {
+            true => match SECTOR_NODES {
                 SECTOR_SIZE_1_KIB => 17,
                 SECTOR_SIZE_2_KIB => 18,
                 SECTOR_SIZE_4_KIB => 18,
@@ -784,9 +781,8 @@ where
                 SECTOR_SIZE_32_GIB => 23,
                 SECTOR_SIZE_64_GIB => 23,
                 _ => unreachable!(),
-            }
-        } else {
-            match SECTOR_NODES {
+            },
+            false => match SECTOR_NODES {
                 SECTOR_SIZE_1_KIB => 17,
                 SECTOR_SIZE_2_KIB => 17,
                 SECTOR_SIZE_4_KIB => 17,
@@ -799,7 +795,7 @@ where
                 SECTOR_SIZE_32_GIB => 17,
                 SECTOR_SIZE_64_GIB => 18,
                 _ => unreachable!(),
-            }
+            },
         }
     }
 

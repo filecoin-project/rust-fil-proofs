@@ -1,5 +1,8 @@
 use blstrs::Scalar as Fr;
-use filecoin_hashers::{poseidon::PoseidonHasher, sha256::Sha256Hasher, FieldArity, Hasher};
+use filecoin_hashers::{
+    poseidon::PoseidonHasher, sha256::Sha256Hasher, FieldArity, Hasher, GROTH16_STRENGTH,
+    HALO2_STRENGTH,
+};
 use generic_array::typenum::{Unsigned, U0, U2, U8};
 use halo2_proofs::pasta::{Fp, Fq};
 use lazy_static::lazy_static;
@@ -7,7 +10,6 @@ use merkletree::store::DiskStore;
 use neptune::{
     hash_type::{CType, HashType},
     poseidon::PoseidonConstants,
-    Strength,
 };
 use storage_proofs_core::merkle::{BinaryMerkleTree, LCTree};
 use typemap::ShareMap;
@@ -17,19 +19,19 @@ lazy_static! {
     // (i.e. phi, rho, and challenges bits).
     pub static ref POSEIDON_CONSTANTS_GEN_RANDOMNESS_BLS: PoseidonConstants<Fr, U2> =
         PoseidonConstants::new_with_strength_and_type(
-            Strength::Standard,
+            GROTH16_STRENGTH,
             HashType::Custom(CType::Arbitrary(1)),
         );
 
     pub static ref POSEIDON_CONSTANTS_GEN_RANDOMNESS_PALLAS: PoseidonConstants<Fp, U2> =
         PoseidonConstants::new_with_strength_and_type(
-            Strength::Standard,
+            HALO2_STRENGTH,
             HashType::Custom(CType::Arbitrary(1)),
         );
 
     pub static ref POSEIDON_CONSTANTS_GEN_RANDOMNESS_VESTA: PoseidonConstants<Fq, U2> =
         PoseidonConstants::new_with_strength_and_type(
-            Strength::Standard,
+            HALO2_STRENGTH,
             HashType::Custom(CType::Arbitrary(1)),
         );
 

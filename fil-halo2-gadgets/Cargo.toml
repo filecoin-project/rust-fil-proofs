@@ -10,7 +10,7 @@ repository = "https://github.com/filecoin-project/rust-fil-proofs"
 ff = "0.12.0"
 halo2_proofs = "0.2.0"
 halo2_gadgets = "0.2.0"
-neptune = { git = "https://github.com/filecoin-project/neptune", branch = "fr-as-trait-halo2-circuit" }
+neptune = { git = "https://github.com/filecoin-project/neptune", branch = "halo2" }
 
 [dev-dependencies]
 rand = "0.8"

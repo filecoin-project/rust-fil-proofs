@@ -473,9 +473,10 @@ where
         Sha256FieldChip::configure(meta, advice)
     }
 
-    fn change_config_arity<A2>(config: Self::Config) -> <Self as Halo2Hasher<A2>>::Config
+    #[inline]
+    fn transmute_arity<B>(config: Self::Config) -> <Self as Halo2Hasher<B>>::Config
     where
-        A2: PoseidonArity<Self::Field>,
+        B: PoseidonArity<Self::Field>,
     {
         config
     }

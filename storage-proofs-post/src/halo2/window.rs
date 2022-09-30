@@ -1,6 +1,8 @@
 use std::convert::TryInto;
 
-use filecoin_hashers::{get_poseidon_constants, poseidon::PoseidonHasher, Hasher, PoseidonArity};
+use filecoin_hashers::{
+    get_poseidon_constants, poseidon::PoseidonHasher, Hasher, PoseidonArity, HALO2_STRENGTH_IS_STD,
+};
 use generic_array::typenum::U2;
 use halo2_proofs::{
     arithmetic::FieldExt,
@@ -411,8 +413,8 @@ where
     }
 
     fn k(&self) -> u32 {
-        if GROTH16_PARTITIONING {
-            match SECTOR_NODES {
+        match (GROTH16_PARTITIONING, HALO2_STRENGTH_IS_STD) {
+            (true, true) => match SECTOR_NODES {
                 SECTOR_NODES_2_KIB => 12,
                 SECTOR_NODES_4_KIB => 13,
                 SECTOR_NODES_16_KIB => 13,
@@ -421,9 +423,19 @@ where
                 SECTOR_NODES_32_GIB => 24,
                 SECTOR_NODES_64_GIB => 24,
                 _ => unimplemented!(),
-            }
-        } else {
-            match SECTOR_NODES {
+            },
+            (true, false) => match SECTOR_NODES {
+                SECTOR_NODES_2_KIB => 11,
+                SECTOR_NODES_4_KIB => 12,
+                SECTOR_NODES_16_KIB => 12,
+                SECTOR_NODES_32_KIB => 12,
+                SECTOR_NODES_512_MIB => 13,
+                // TODO (jake): recompute these `k` values:
+                SECTOR_NODES_32_GIB => unimplemented!("this `k` value needs to be computed"),
+                SECTOR_NODES_64_GIB => unimplemented!("this `k` value needs to be computed"),
+                _ => unimplemented!(),
+            },
+            (false, true) => match SECTOR_NODES {
                 SECTOR_NODES_2_KIB => 11,
                 SECTOR_NODES_4_KIB => 12,
                 SECTOR_NODES_16_KIB => 12,
@@ -432,7 +444,17 @@ where
                 SECTOR_NODES_32_GIB => 13,
                 SECTOR_NODES_64_GIB => 13,
                 _ => unimplemented!(),
-            }
+            },
+            (false, false) => match SECTOR_NODES {
+                SECTOR_NODES_2_KIB => 10,
+                SECTOR_NODES_4_KIB => 11,
+                SECTOR_NODES_16_KIB => 11,
+                SECTOR_NODES_32_KIB => 11,
+                SECTOR_NODES_512_MIB => 12,
+                SECTOR_NODES_32_GIB => 12,
+                SECTOR_NODES_64_GIB => 13,
+                _ => unimplemented!(),
+            },
         }
     }
 
