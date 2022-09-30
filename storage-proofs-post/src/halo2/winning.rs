@@ -1,7 +1,9 @@
 use std::convert::TryInto;
 use std::ops::RangeInclusive;
 
-use filecoin_hashers::{get_poseidon_constants, poseidon::PoseidonHasher, Hasher, PoseidonArity};
+use filecoin_hashers::{
+    get_poseidon_constants, poseidon::PoseidonHasher, Hasher, PoseidonArity, HALO2_STRENGTH_IS_STD,
+};
 use generic_array::typenum::U2;
 use halo2_proofs::{
     arithmetic::FieldExt,
@@ -248,15 +250,27 @@ where
 
     fn k(&self) -> u32 {
         // Values were computed using `get_k` test.
-        match SECTOR_NODES {
-            SECTOR_NODES_2_KIB => 14,
-            SECTOR_NODES_4_KIB => 14,
-            SECTOR_NODES_16_KIB => 14,
-            SECTOR_NODES_32_KIB => 15,
-            SECTOR_NODES_512_MIB => 16,
-            SECTOR_NODES_32_GIB => 16,
-            SECTOR_NODES_64_GIB => 16,
-            _ => unimplemented!(),
+        match HALO2_STRENGTH_IS_STD {
+            true => match SECTOR_NODES {
+                SECTOR_NODES_2_KIB => 14,
+                SECTOR_NODES_4_KIB => 14,
+                SECTOR_NODES_16_KIB => 14,
+                SECTOR_NODES_32_KIB => 15,
+                SECTOR_NODES_512_MIB => 16,
+                SECTOR_NODES_32_GIB => 16,
+                SECTOR_NODES_64_GIB => 16,
+                _ => unimplemented!(),
+            },
+            false => match SECTOR_NODES {
+                SECTOR_NODES_2_KIB => 13,
+                SECTOR_NODES_4_KIB => 13,
+                SECTOR_NODES_16_KIB => 13,
+                SECTOR_NODES_32_KIB => 14,
+                SECTOR_NODES_512_MIB => 15,
+                SECTOR_NODES_32_GIB => 15,
+                SECTOR_NODES_64_GIB => 15,
+                _ => unimplemented!(),
+            },
         }
     }
 

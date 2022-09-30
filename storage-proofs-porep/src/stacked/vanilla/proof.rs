@@ -540,6 +540,7 @@ where
         use std::sync::{Arc, RwLock};
 
         use ff::PrimeField;
+        use filecoin_hashers::poseidon_strength;
         use generic_array::GenericArray;
         use log::warn;
         use neptune::{
@@ -564,6 +565,8 @@ where
             let max_gpu_column_batch_size = SETTINGS.max_gpu_column_batch_size as usize;
             let max_gpu_tree_batch_size = SETTINGS.max_gpu_tree_batch_size as usize;
             let column_write_batch_size = SETTINGS.column_write_batch_size as usize;
+
+            let strength = poseidon_strength::<Tree::Field>();
 
             // This channel will receive batches of columns and add them to the ColumnTreeBuilder.
             let (builder_tx, builder_rx) = channel(0);
@@ -641,14 +644,14 @@ where
                 });
                 s.execute(move || {
                     let _gpu_lock = GPU_LOCK.lock().expect("failed to get gpu lock");
-                    let tree_batcher = match Batcher::pick_gpu(max_gpu_tree_batch_size) {
+                    let tree_batcher = match Batcher::pick_gpu_with_strength(strength, max_gpu_tree_batch_size) {
                         Ok(b) => Some(b),
                         Err(err) => {
                             warn!("no GPU found, falling back to CPU tree builder: {}", err);
                             None
                         }
                     };
-                    let column_batcher = match Batcher::pick_gpu(max_gpu_column_batch_size) {
+                    let column_batcher = match Batcher::pick_gpu_with_strength(strength, max_gpu_column_batch_size) {
                         Ok(b) => Some(b),
                         Err(err) => {
                             warn!("no GPU found, falling back to CPU tree builder: {}", err);
@@ -1036,6 +1039,7 @@ where
         use std::sync::mpsc::sync_channel as channel;
 
         use ff::PrimeField;
+        use filecoin_hashers::poseidon_strength;
         use log::warn;
         use merkletree::merkle::{get_merkle_tree_cache_size, get_merkle_tree_leafs};
         use neptune::{
@@ -1052,6 +1056,7 @@ where
 
         info!("generating tree r last using the GPU");
         let max_gpu_tree_batch_size = SETTINGS.max_gpu_tree_batch_size as usize;
+        let strength = poseidon_strength::<Tree::Field>();
 
         // This channel will receive batches of leaf nodes and add them to the TreeBuilder.
         let (builder_tx, builder_rx) = channel::<(Vec<Tree::Field>, bool)>(0);
@@ -1106,13 +1111,14 @@ where
             });
             s.execute(move || {
                 let _gpu_lock = GPU_LOCK.lock().expect("failed to get gpu lock");
-                let batcher = match Batcher::pick_gpu(max_gpu_tree_batch_size) {
-                    Ok(b) => Some(b),
-                    Err(err) => {
-                        warn!("no GPU found, falling back to CPU tree builder: {}", err);
-                        None
-                    }
-                };
+                let batcher =
+                    match Batcher::pick_gpu_with_strength(strength, max_gpu_tree_batch_size) {
+                        Ok(b) => Some(b),
+                        Err(err) => {
+                            warn!("no GPU found, falling back to CPU tree builder: {}", err);
+                            None
+                        }
+                    };
                 let mut tree_builder = TreeBuilder::<Tree::Field, Tree::Arity>::new(
                     batcher,
                     nodes_count,
@@ -1547,6 +1553,7 @@ where
         use std::io::Write;
 
         use ff::{Field, PrimeField};
+        use filecoin_hashers::poseidon_strength;
         use log::warn;
         use merkletree::merkle::{get_merkle_tree_cache_size, get_merkle_tree_leafs};
         use neptune::{
@@ -1563,10 +1570,11 @@ where
 
         if Self::use_gpu_tree_builder() {
             info!("generating tree r last using the GPU");
+            let strength = poseidon_strength::<Tree::Field>();
             let max_gpu_tree_batch_size = SETTINGS.max_gpu_tree_batch_size as usize;
 
             let _gpu_lock = GPU_LOCK.lock().expect("failed to get gpu lock");
-            let batcher = match Batcher::pick_gpu(max_gpu_tree_batch_size) {
+            let batcher = match Batcher::pick_gpu_with_strength(strength, max_gpu_tree_batch_size) {
                 Ok(b) => Some(b),
                 Err(err) => {
                     warn!("no GPU found, falling back to CPU tree builder: {}", err);

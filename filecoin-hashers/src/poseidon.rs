@@ -19,11 +19,7 @@ use merkletree::{
     hash::{Algorithm, Hashable},
     merkle::Element,
 };
-use neptune::{
-    circuit::poseidon_hash,
-    halo2_circuit::{PoseidonChip, PoseidonConfig},
-    Poseidon,
-};
+use neptune::{circuit::poseidon_hash, halo2_circuit::PoseidonConfig, Poseidon};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use typemap::ShareMap;
 
@@ -467,6 +463,12 @@ impl Groth16Hasher for PoseidonHasher<Fr> {
     }
 }
 
+/// Configures the Halo2 Poseidon strength (via `PoseidonChip`'s `const bool` type parameter).
+pub(crate) const HALO2_STRENGTH: bool = neptune::halo2_circuit::STRENGTH_EVEN;
+
+/// Export the Poseidon chip configured with the chosen strength.
+pub type PoseidonChip<F, A> = neptune::halo2_circuit::PoseidonChip<F, A, HALO2_STRENGTH>;
+
 impl<F, A> HashInstructions<F> for PoseidonChip<F, A>
 where
     F: FieldExt,
@@ -534,10 +536,11 @@ where
         Self::Chip::configure(meta, &advice, &fixed)
     }
 
-    fn change_config_arity<A2>(config: Self::Config) -> <Self as Halo2Hasher<A2>>::Config
+    #[inline]
+    fn transmute_arity<B>(config: Self::Config) -> <Self as Halo2Hasher<B>>::Config
     where
-        A2: PoseidonArity<Self::Field>,
+        B: PoseidonArity<Self::Field>,
     {
-        config.change_arity()
+        config.transmute_arity()
     }
 }

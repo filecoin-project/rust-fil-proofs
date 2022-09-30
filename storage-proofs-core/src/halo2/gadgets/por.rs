@@ -275,23 +275,26 @@ where
     path
 }
 
+// Changes the chip configs' arities from `A` to `B`. This is safe only when arities `A` and `B`
+// are known to have the same constraint system configuration.
 #[inline]
-pub fn change_hasher_insert_arity<H, A1, A2>(
-    hasher_config: <H as Halo2Hasher<A1>>::Config,
-    insert_config: InsertConfig<H::Field, A1>,
-) -> (<H as Halo2Hasher<A2>>::Config, InsertConfig<H::Field, A2>)
+pub fn transmute_arity<H, A, B>(
+    hasher_config: <H as Halo2Hasher<A>>::Config,
+    insert_config: InsertConfig<H::Field, A>,
+) -> (<H as Halo2Hasher<B>>::Config, InsertConfig<H::Field, B>)
 where
     H::Field: FieldExt,
-    H: Halo2Hasher<A1> + Halo2Hasher<A2>,
-    A1: PoseidonArity<H::Field>,
-    A2: PoseidonArity<H::Field>,
+    H: Halo2Hasher<A> + Halo2Hasher<B>,
+    A: PoseidonArity<H::Field>,
+    B: PoseidonArity<H::Field>,
 {
     (
-        <H as Halo2Hasher<A1>>::change_config_arity::<A2>(hasher_config),
-        insert_config.change_arity::<A2>(),
+        <H as Halo2Hasher<A>>::transmute_arity::<B>(hasher_config),
+        insert_config.transmute_arity::<B>(),
     )
 }
 
+// TODO (jake): can this circuit be used in below tests?
 pub mod test_circuit {
     use super::*;
 
@@ -388,7 +391,7 @@ pub mod test_circuit {
             let sub = if sub_arity == 0 {
                 None
             } else if sub_arity == base_arity {
-                Some(change_hasher_insert_arity::<H, U, V>(
+                Some(transmute_arity::<H, U, V>(
                     base_hasher.clone(),
                     base_insert.clone(),
                 ))
@@ -407,15 +410,13 @@ pub mod test_circuit {
             let top = if top_arity == 0 {
                 None
             } else if top_arity == base_arity {
-                Some(change_hasher_insert_arity::<H, U, W>(
+                Some(transmute_arity::<H, U, W>(
                     base_hasher.clone(),
                     base_insert.clone(),
                 ))
             } else if top_arity == sub_arity {
                 let (sub_hasher, sub_insert) = sub.clone().unwrap();
-                Some(change_hasher_insert_arity::<H, V, W>(
-                    sub_hasher, sub_insert,
-                ))
+                Some(transmute_arity::<H, V, W>(sub_hasher, sub_insert))
             } else {
                 let top_hasher = <H as Halo2Hasher<W>>::configure(
                     meta,
@@ -518,7 +519,7 @@ pub mod test_circuit {
                 // TODO (jake): under which arities and tree size does this increase?
                 17
             } else if hasher_type == TypeId::of::<PoseidonHasher<H::Field>>() {
-                use neptune::halo2_circuit::PoseidonChip;
+                use filecoin_hashers::poseidon::PoseidonChip;
 
                 let base_arity = U::to_usize();
                 let sub_arity = V::to_usize();
@@ -709,7 +710,7 @@ mod test {
             let sub = if sub_arity == 0 {
                 None
             } else if sub_arity == base_arity {
-                Some(change_hasher_insert_arity::<H, U, V>(
+                Some(transmute_arity::<H, U, V>(
                     base_hasher.clone(),
                     base_insert.clone(),
                 ))
@@ -728,15 +729,13 @@ mod test {
             let top = if top_arity == 0 {
                 None
             } else if top_arity == base_arity {
-                Some(change_hasher_insert_arity::<H, U, W>(
+                Some(transmute_arity::<H, U, W>(
                     base_hasher.clone(),
                     base_insert.clone(),
                 ))
             } else if top_arity == sub_arity {
                 let (sub_hasher, sub_insert) = sub.clone().unwrap();
-                Some(change_hasher_insert_arity::<H, V, W>(
-                    sub_hasher, sub_insert,
-                ))
+                Some(transmute_arity::<H, V, W>(sub_hasher, sub_insert))
             } else {
                 let top_hasher = <H as Halo2Hasher<W>>::configure(
                     meta,
@@ -878,7 +877,7 @@ mod test {
                 challenge_bit_len / base_bit_len
             };
 
-            use neptune::halo2_circuit::PoseidonChip;
+            use filecoin_hashers::poseidon::PoseidonChip;
             let base_hasher_rows = PoseidonChip::<H::Field, U>::num_rows();
             let sub_hasher_rows = PoseidonChip::<H::Field, V>::num_rows();
             let top_hasher_rows = PoseidonChip::<H::Field, W>::num_rows();

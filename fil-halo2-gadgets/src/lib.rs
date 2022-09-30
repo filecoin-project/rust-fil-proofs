@@ -86,7 +86,7 @@ impl ColumnBuilder {
     }
 }
 
-impl<F, A> ColumnCount for PoseidonChip<F, A>
+impl<F, A, const STRENGTH: bool> ColumnCount for PoseidonChip<F, A, STRENGTH>
 where
     F: FieldExt,
     A: Arity<F>,
