@@ -30,6 +30,7 @@ pub struct Settings {
     pub multicore_sdr_producers: usize,
     pub multicore_sdr_producer_stride: u64,
     pub multicore_sdr_lookahead: usize,
+    pub halo2_update_keys: bool,
 }
 
 impl Default for Settings {
@@ -54,6 +55,7 @@ impl Default for Settings {
             multicore_sdr_producers: 3,
             multicore_sdr_producer_stride: 128,
             multicore_sdr_lookahead: 800,
+            halo2_update_keys: false,
         }
     }
 }
