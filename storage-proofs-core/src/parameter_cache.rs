@@ -106,7 +106,20 @@ impl LockedFile {
         let f = OpenOptions::new()
             .read(true)
             .write(true)
+            // Fails if the file already exists.
             .create_new(true)
+            .open(p)?;
+        f.lock_exclusive()?;
+
+        Ok(LockedFile(f))
+    }
+
+    pub fn open_exclusive_write<P: AsRef<Path>>(p: P) -> io::Result<Self> {
+        let f = OpenOptions::new()
+            .read(true)
+            .write(true)
+            // Opens the file if it already exists; creates the file if it doesn't.
+            .create(true)
             .open(p)?;
         f.lock_exclusive()?;
 
@@ -624,6 +637,7 @@ fn write_cached_params(
     })
 }
 
+// Exclusive creating, reading, and writing to file; fails if file already exists.
 pub fn with_exclusive_lock<T, E, F>(file_path: &Path, f: F) -> std::result::Result<T, E>
 where
     F: FnOnce(&mut LockedFile) -> std::result::Result<T, E>,
@@ -632,6 +646,16 @@ where
     with_open_file(file_path, LockedFile::open_exclusive, f)
 }
 
+// Exclusive creating, reading, and writing to file; does not fail if file already exists.
+pub fn with_exclusive_write_lock<T, E, F>(file_path: &Path, f: F) -> std::result::Result<T, E>
+where
+    F: FnOnce(&mut LockedFile) -> std::result::Result<T, E>,
+    E: From<io::Error>,
+{
+    with_open_file(file_path, LockedFile::open_exclusive_write, f)
+}
+
+// Exclusive reading from file; fails if file does not exist.
 pub fn with_exclusive_read_lock<T, E, F>(file_path: &Path, f: F) -> std::result::Result<T, E>
 where
     F: FnOnce(&mut LockedFile) -> std::result::Result<T, E>,

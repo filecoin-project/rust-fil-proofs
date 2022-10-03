@@ -23,6 +23,8 @@ executors:
 
 setup-env: &setup-env
   FIL_PROOFS_PARAMETER_CACHE: "/tmp/filecoin-proof-parameters/"
+  # TODO (jake): remove this when halo2 circuits are finalized.
+  FIL_PROOFS_HALO2_UPDATE_KEYS: true
   RUST_LOG: info
 
 
