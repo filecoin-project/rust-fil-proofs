@@ -2028,3 +2028,725 @@ fn test_aggregate_proof_encode_decode() -> Result<()> {
 
     Ok(())
 }
+
+use std::convert::TryInto;
+use std::fs;
+use std::io::BufRead;
+use std::str::FromStr;
+
+use bellperson::gadgets::boolean::Boolean;
+use bellperson::gadgets::num::AllocatedNum;
+use bellperson::groth16::{
+    create_random_proof, generate_random_parameters, prepare_verifying_key, verify_proof,
+    Parameters,
+};
+use bellperson::Circuit;
+use bellperson::ConstraintSystem;
+use bellperson::SynthesisError;
+use blstrs::Scalar;
+use rand::rngs::OsRng;
+
+use filecoin_hashers::poseidon::{PoseidonDomain, PoseidonFunction};
+use filecoin_hashers::HashFunction;
+use filecoin_proofs::{ChallengeSeed, Ticket};
+use storage_proofs_core::gadgets::por::{AuthPath, PoRCircuit};
+use storage_proofs_core::gadgets::variables::Root;
+use storage_proofs_core::util::NODE_SIZE;
+use storage_proofs_core::PoRepID;
+use storage_proofs_post::fallback::SectorProof;
+
+#[derive(Default, Debug)]
+struct WinningPostCircuit<Tree: MerkleTreeTrait> {
+    comm_c: Option<PoseidonDomain>,
+    comm_r_last: Option<PoseidonDomain>,
+    comm_r: Option<PoseidonDomain>,
+    vanilla_proof: Option<SectorProof<Tree::Proof>>,
+    sector_size: usize,
+}
+
+impl<Tree: 'static + MerkleTreeTrait> Clone for WinningPostCircuit<Tree> {
+    fn clone(&self) -> Self {
+        WinningPostCircuit {
+            comm_c: self.comm_c,
+            comm_r_last: self.comm_r_last,
+            comm_r: self.comm_r,
+            vanilla_proof: self.vanilla_proof.clone(),
+            sector_size: self.sector_size,
+        }
+    }
+}
+
+impl<Tree: 'static + MerkleTreeTrait> WinningPostCircuit<Tree> {
+    fn circuit_prover(
+        sector_size: usize,
+        comm_c: PoseidonDomain,
+        comm_r_last: PoseidonDomain,
+        comm_r: PoseidonDomain,
+        vanilla_proof: SectorProof<Tree::Proof>,
+    ) -> Self {
+        WinningPostCircuit {
+            comm_c: Some(comm_c),
+            comm_r_last: Some(comm_r_last),
+            comm_r: Some(comm_r),
+            vanilla_proof: Some(vanilla_proof),
+            sector_size,
+        }
+    }
+
+    fn circuit_verifier(sector_size: usize) -> Self {
+        WinningPostCircuit {
+            comm_c: None,
+            comm_r_last: None,
+            comm_r: None,
+            vanilla_proof: None,
+            sector_size,
+        }
+    }
+
+    fn compute_public_inputs(&self, challenges: &[u64]) -> Vec<blstrs::Scalar> {
+        let scalars: Vec<Scalar> = challenges
+            .iter()
+            .map(|challenge| Fr::from(*challenge))
+            .collect();
+
+        scalars
+    }
+}
+
+fn poseidon_cs<CS: ConstraintSystem<Fr>>(
+    mut cs: CS,
+    input1: &AllocatedNum<Scalar>,
+    input2: &AllocatedNum<Scalar>,
+) -> Result<Vec<Boolean>, SynthesisError> {
+    let result =
+        PoseidonFunction::hash2_circuit(cs.namespace(|| "poseidon hashing"), input1, input2)?;
+    result.to_bits_le(cs.namespace(|| "unpacking poseidon result"))
+}
+
+impl<Tree: 'static + MerkleTreeTrait> Circuit<Fr> for WinningPostCircuit<Tree> {
+    fn synthesize<CS: ConstraintSystem<Fr>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
+        let comm_c = AllocatedNum::alloc(cs.namespace(|| "allocate comm_c"), || {
+            self.comm_c
+                .map(Into::into)
+                .ok_or(SynthesisError::AssignmentMissing)
+        })?;
+
+        let comm_r_last = AllocatedNum::alloc(cs.namespace(|| "allocate comm_r_last"), || {
+            self.comm_r_last
+                .map(Into::into)
+                .ok_or(SynthesisError::AssignmentMissing)
+        })?;
+
+        let comm_c_comm_r_last_hash = poseidon_cs(
+            cs.namespace(|| "comm_c || comm_r_last hashing"),
+            &comm_c,
+            &comm_r_last,
+        )?;
+
+        let expected_comm_r =
+            AllocatedNum::alloc(cs.namespace(|| "allocate expected_comm_r"), || {
+                self.comm_r
+                    .map(Into::into)
+                    .ok_or(SynthesisError::AssignmentMissing)
+            })?;
+
+        let expected_comm_r =
+            expected_comm_r.to_bits_le(cs.namespace(|| "unpack allocated expected_comm_r"))?;
+
+        // H(comm_c || comm_r_last) == comm_r
+        comm_c_comm_r_last_hash
+            .into_iter()
+            .zip(expected_comm_r.into_iter())
+            .enumerate()
+            .try_for_each(|(index, (a, b))| {
+                Boolean::enforce_equal(
+                    cs.namespace(|| format!("enforce bits equal at {} position", index)),
+                    &a,
+                    &b,
+                )
+            })?;
+
+        // Usage of MerkleProof gadget
+        let leaves: Vec<Option<Scalar>> = if self.vanilla_proof.is_none() {
+            vec![None; WINNING_POST_CHALLENGE_COUNT]
+        } else {
+            self.vanilla_proof
+                .clone()
+                .unwrap()
+                .leafs()
+                .iter()
+                .map(|l| Some((*l).into()))
+                .collect()
+        };
+
+        let paths: Vec<
+            AuthPath<Tree::Hasher, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>,
+        > = if self.vanilla_proof.is_none() {
+            vec![AuthPath::blank(self.sector_size / NODE_SIZE); WINNING_POST_CHALLENGE_COUNT]
+        } else {
+            self.vanilla_proof
+                .unwrap()
+                .as_options()
+                .into_iter()
+                .map(Into::into)
+                .collect()
+        };
+
+        for (index, (leaf, path)) in leaves.iter().zip(paths.iter()).enumerate() {
+            PoRCircuit::<Tree>::synthesize(
+                cs.namespace(|| format!("challenge_inclusion - {}", index)),
+                Root::Val(*leaf),
+                path.clone(),
+                Root::from_allocated::<CS>(comm_r_last.clone()),
+                true,
+            )?;
+        }
+
+        Ok(())
+    }
+}
+
+#[test]
+fn end_to_end_winning_post() {
+    fn test<Tree: 'static + MerkleTreeTrait>(
+        challenges: &[u64],
+        sector_size: usize,
+        comm_c: PoseidonDomain,
+        comm_r_last: PoseidonDomain,
+        comm_r: PoseidonDomain,
+        vanilla_proof: SectorProof<Tree::Proof>,
+        use_circuit_prover: bool,
+    ) -> bool {
+        let circuit_verifier = WinningPostCircuit::<Tree>::circuit_verifier(sector_size);
+        let circuit_prover = WinningPostCircuit::<Tree>::circuit_prover(
+            sector_size,
+            comm_c,
+            comm_r_last,
+            comm_r,
+            vanilla_proof,
+        );
+
+        let public_inputs_prover = circuit_prover.compute_public_inputs(challenges);
+        let public_inputs_verifier = circuit_verifier.compute_public_inputs(challenges);
+        assert_eq!(public_inputs_prover, public_inputs_verifier);
+
+        let mut rng = OsRng;
+
+        let parameters: Parameters<Bls12> = if use_circuit_prover {
+            generate_random_parameters(circuit_prover.clone(), &mut rng)
+                .expect("can't generate global parameters (circuit prover)")
+        } else {
+            generate_random_parameters(circuit_verifier, &mut rng)
+                .expect("can't generate global parameters (circuit verifier)")
+        };
+
+        let verifier_key = prepare_verifying_key(&parameters.vk);
+
+        let proof = create_random_proof(circuit_prover, &parameters, &mut rng)
+            .expect("can't generate proof");
+
+        verify_proof(&verifier_key, &proof, &public_inputs_verifier).expect("can't verify proof")
+    }
+
+    // enable logger
+    fil_logger::maybe_init();
+
+    // sector's shape should correlate with sector size
+    type TestSectorShape = SectorShape2KiB;
+
+    let location = Path::new("winning_post");
+    let location = fs::canonicalize(&location).expect("couldn't canonicalize path");
+
+    let (
+        replica,
+        commitment,
+        cache_dir,
+        _seed,     // not used for winning_post proving / verifying
+        _ticket,   // not used for winning_post proving / verifying
+        _porep_id, // not used for winning_post proving / verifying
+        sector_id,
+        prover_id,
+        api_version,
+        sector_size,
+    ) = read_seal::<TestSectorShape>(&location).expect("couldn't read sealed sector");
+
+    let private_replica_info =
+        PrivateReplicaInfo::<TestSectorShape>::new(replica, commitment, cache_dir)
+            .expect("couldn't create PrivateReplicaInfo");
+
+    let comm_c = private_replica_info.safe_comm_c();
+    let comm_r_last = private_replica_info.safe_comm_r_last();
+    let comm_r = private_replica_info
+        .safe_comm_r()
+        .expect("couldn't get comm_r");
+
+    let config = PoStConfig {
+        sector_size: sector_size.into(),
+        sector_count: WINNING_POST_SECTOR_COUNT,
+        challenge_count: WINNING_POST_CHALLENGE_COUNT,
+        typ: PoStType::Winning,
+        priority: false,
+        api_version,
+    };
+
+    // generate challenges
+    let random_fr: DefaultTreeDomain = Fr::from(255u64).into();
+    let mut randomness = [0u8; 32];
+    randomness.copy_from_slice(AsRef::<[u8]>::as_ref(&random_fr));
+
+    let challenges = generate_fallback_sector_challenges::<TestSectorShape>(
+        &config,
+        &randomness,
+        &[sector_id],
+        prover_id,
+    )
+    .expect("couldn't generate challenges");
+
+    // generate vanilla proof
+    let vanilla_winning_post_proof = generate_single_vanilla_proof::<TestSectorShape>(
+        &config,
+        sector_id,
+        &private_replica_info,
+        &challenges[&sector_id],
+    )
+    .expect("couldn't create vanilla proof");
+
+    // in winning_post we have only one sector in vanilla_proof
+    assert_eq!(vanilla_winning_post_proof.vanilla_proof.sectors.len(), 1);
+
+    let vanilla_proof = vanilla_winning_post_proof.vanilla_proof.sectors[0].clone();
+
+    // run end-to-end tests
+    assert!(test::<TestSectorShape>(
+        &challenges[&sector_id],
+        sector_size as usize,
+        comm_c,
+        comm_r_last,
+        comm_r,
+        vanilla_proof.clone(),
+        true
+    ));
+    assert!(test::<TestSectorShape>(
+        &challenges[&sector_id],
+        sector_size as usize,
+        comm_c,
+        comm_r_last,
+        comm_r,
+        vanilla_proof,
+        false
+    ));
+}
+
+fn read_seal<Tree: 'static + MerkleTreeTrait>(
+    location: &Path,
+) -> Result<(
+    PathBuf,
+    Commitment,
+    PathBuf,
+    ChallengeSeed,
+    Ticket,
+    PoRepID,
+    SectorId,
+    ProverId,
+    ApiVersion,
+    u64,
+)> {
+    let metadata = fs::File::open(location.join(Path::new("metadata")))?;
+
+    let mut content = std::io::BufReader::new(metadata);
+
+    let mut piece_path = String::new();
+    content.read_line(&mut piece_path)?;
+
+    let mut sealed_sector_path = String::new();
+    content.read_line(&mut sealed_sector_path)?;
+    let sealed_sector_path = sealed_sector_path
+        .replace("sector: ", "")
+        .replace('\"', "")
+        .replace('\n', "");
+    let sealed_sector_path = Path::new(&sealed_sector_path);
+
+    let mut cache_dir_path = String::new();
+    content.read_line(&mut cache_dir_path)?;
+    let cache_dir_path = cache_dir_path
+        .replace("cache: ", "")
+        .replace('\"', "")
+        .replace('\n', "");
+    let cache_dir_path = Path::new(&cache_dir_path);
+
+    let mut commitment = String::new();
+    content.read_line(&mut commitment)?;
+    let commitment = hex::decode(
+        commitment
+            .replace("comm_r: ", "")
+            .replace('\"', "")
+            .replace('\n', ""),
+    )?;
+
+    let mut seed = String::new();
+    content.read_line(&mut seed)?;
+    let seed = hex::decode(
+        seed.replace("seed: ", "")
+            .replace('\"', "")
+            .replace('\n', ""),
+    )?;
+
+    let mut ticket = String::new();
+    content.read_line(&mut ticket)?;
+    let ticket = hex::decode(
+        ticket
+            .replace("ticket: ", "")
+            .replace('\"', "")
+            .replace('\n', ""),
+    )?;
+
+    let mut porep_id = String::new();
+    content.read_line(&mut porep_id)?;
+    let porep_id = hex::decode(
+        porep_id
+            .replace("porep_id: ", "")
+            .replace('\"', "")
+            .replace('\n', ""),
+    )?;
+
+    let mut sector_id = String::new();
+    content.read_line(&mut sector_id)?;
+    let sector_id = hex::decode(
+        sector_id
+            .replace("sector_id: ", "")
+            .replace('\"', "")
+            .replace('\n', ""),
+    )?;
+    let sector_id = u64::from_le_bytes(
+        sector_id
+            .try_into()
+            .expect("couldn't convert sector_id's vector to array"),
+    ); // little-endian
+
+    let mut prover_id = String::new();
+    content.read_line(&mut prover_id)?;
+    let prover_id = hex::decode(
+        prover_id
+            .replace("prover_id: ", "")
+            .replace('\"', "")
+            .replace('\n', ""),
+    )?;
+
+    let mut api_version = String::new();
+    content.read_line(&mut api_version)?;
+    let api_version = api_version
+        .replace("api_version: ", "")
+        .replace('\"', "")
+        .replace('\n', "");
+    let api_version = ApiVersion::from_str(api_version.as_str())?;
+
+    let mut sector_size = String::new();
+    content.read_line(&mut sector_size)?;
+    let sector_size = hex::decode(
+        sector_size
+            .replace("sector_size: ", "")
+            .replace('\"', "")
+            .replace('\n', ""),
+    )?;
+    let sector_size = u64::from_le_bytes(
+        sector_size
+            .try_into()
+            .expect("couldn't convert sector_size's vector to array"),
+    ); // little-endian
+
+    Ok((
+        sealed_sector_path.into(),
+        commitment
+            .try_into()
+            .expect("couldn't convert commitment's vector to array"),
+        cache_dir_path.into(),
+        seed.try_into()
+            .expect("couldn't convert seed's vector to array"),
+        ticket
+            .try_into()
+            .expect("couldn't convert ticket's vector to array"),
+        porep_id
+            .try_into()
+            .expect("couldn't convert porep_id's vector to array"),
+        sector_id.into(),
+        prover_id
+            .try_into()
+            .expect("couldn't convert prover_id's vector to array"),
+        api_version,
+        sector_size,
+    ))
+}
+
+#[allow(clippy::too_many_arguments)]
+#[allow(dead_code)]
+fn generate_seal<Tree: 'static + MerkleTreeTrait>(
+    sector_size: u64,
+    prover_id: ProverId,
+    skip_proof: bool,
+    api_version: ApiVersion,
+    porep_id: [u8; 32],
+    ticket: [u8; 32],
+    seed: [u8; 32],
+    long_term_location: &Path,
+    sector_id: u64,
+) -> Result<Commitment> {
+    let location = tempdir()?;
+    let location = location.path();
+
+    fn generate_piece_file(sector_size: u64, path: &Path) -> Result<(NamedTempFile, Vec<u8>)> {
+        let number_of_bytes_in_piece = UnpaddedBytesAmount::from(PaddedBytesAmount(sector_size));
+
+        let piece_bytes: Vec<u8> = (0..number_of_bytes_in_piece.0)
+            .map(|_| random::<u8>())
+            .collect();
+
+        let mut piece_file = NamedTempFile::new_in(path)?;
+
+        piece_file.write_all(&piece_bytes)?;
+        piece_file.as_file_mut().sync_all()?;
+        piece_file.as_file_mut().seek(SeekFrom::Start(0))?;
+
+        Ok((piece_file, piece_bytes))
+    }
+
+    let (mut piece_file, piece_bytes) = generate_piece_file(sector_size, location)?;
+
+    let sealed_sector_file = NamedTempFile::new_in(location)?;
+
+    let cache_dir = tempfile::tempdir_in(location)?;
+
+    let mut metadata = fs::File::create(long_term_location.join(Path::new("metadata")))?;
+    writeln!(
+        metadata,
+        "piece: {:?}",
+        long_term_location.join(
+            piece_file
+                .path()
+                .file_name()
+                .expect("[generate_seal] couldn't save piece file path into metadata")
+        )
+    )?;
+    writeln!(
+        metadata,
+        "sector: {:?}",
+        long_term_location.join(
+            sealed_sector_file
+                .path()
+                .file_name()
+                .expect("[generate_seal] couldn't save sealed sector file path into metadata")
+        )
+    )?;
+    writeln!(
+        metadata,
+        "cache: {:?}",
+        long_term_location.join(
+            cache_dir
+                .path()
+                .file_name()
+                .expect("[generate_seal] couldn't save cache path into metadata")
+        )
+    )?;
+
+    let config = porep_config(sector_size, porep_id, api_version);
+
+    let (piece_infos, phase1_output) = run_seal_pre_commit_phase1::<Tree>(
+        config,
+        prover_id,
+        SectorId::from(sector_id),
+        ticket,
+        &cache_dir,
+        &mut piece_file,
+        &sealed_sector_file,
+    )?;
+
+    let pre_commit_output = seal_pre_commit_phase2(
+        config,
+        phase1_output,
+        cache_dir.path(),
+        sealed_sector_file.path(),
+    )?;
+
+    let comm_r = pre_commit_output.comm_r;
+
+    writeln!(metadata, "comm_r: {:?}", hex::encode(comm_r))?;
+    writeln!(metadata, "seed: {:?}", hex::encode(seed))?;
+    writeln!(metadata, "ticket: {:?}", hex::encode(ticket))?;
+    writeln!(metadata, "porep_id: {:?}", hex::encode(porep_id))?;
+    writeln!(
+        metadata,
+        "sector_id: {:?}",
+        hex::encode(sector_id.to_le_bytes())
+    )?; // little-endian
+    writeln!(metadata, "prover_id: {:?}", hex::encode(prover_id))?;
+    writeln!(metadata, "api_version: {:?}", api_version.to_string())?;
+    writeln!(
+        metadata,
+        "sector_size: {:?}",
+        hex::encode(sector_size.to_le_bytes())
+    )?; // little-endian
+
+    validate_cache_for_commit::<_, _, Tree>(cache_dir.path(), sealed_sector_file.path())?;
+
+    if skip_proof {
+        clear_cache::<Tree>(cache_dir.path())?;
+    } else {
+        proof_and_unseal::<Tree>(
+            config,
+            cache_dir.path(),
+            &sealed_sector_file,
+            prover_id,
+            SectorId::from(sector_id),
+            ticket,
+            seed,
+            pre_commit_output,
+            &piece_infos,
+            &piece_bytes,
+        )
+        .expect("failed to proof_and_unseal");
+    }
+
+    fn copy_dir_all(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> Result<()> {
+        fs::create_dir_all(&dst)?;
+        for entry in fs::read_dir(src)? {
+            let entry = entry?;
+            let ty = entry.file_type()?;
+            if ty.is_dir() {
+                copy_dir_all(entry.path(), dst.as_ref().join(entry.file_name()))?;
+            } else {
+                fs::copy(entry.path(), dst.as_ref().join(entry.file_name()))?;
+            }
+        }
+        Ok(())
+    }
+
+    copy_dir_all(location, long_term_location)?;
+
+    Ok(comm_r)
+}
+
+#[allow(dead_code)]
+//#[test]
+fn generate_seal_test() {
+    fn set_location(path_str: &str) -> &Path {
+        let path = Path::new(path_str);
+        if path.exists() {
+            fs::remove_dir_all(path).expect("couldn't remove old sector's directory");
+        }
+        std::fs::create_dir(path).expect("couldn't create");
+        path
+    }
+
+    // enable logger
+    fil_logger::maybe_init();
+
+    // set location of where sealed sector is / should be stored for winning post proof
+    let location = set_location("winning_post");
+    let location = fs::canonicalize(&location).expect("couldn't canonicalize path");
+
+    // sector's shape should correlate with sector size
+    type TestSectorShape = SectorShape2KiB;
+
+    // set sector size
+    let sector_size_ = SECTOR_SIZE_2_KIB;
+
+    // set api_version
+    let api_version_ = ApiVersion::V1_1_0;
+
+    // set porep_id
+    let porep_id_ = match api_version_ {
+        ApiVersion::V1_0_0 => ARBITRARY_POREP_ID_V1_0_0,
+        ApiVersion::V1_1_0 => ARBITRARY_POREP_ID_V1_1_0,
+    };
+
+    // set sector_id
+    let sector_id_: u64 = 255;
+
+    // set prover_id
+    let prover_id_: [u8; 32] = [0x01; 32];
+
+    // set ticket
+    let ticket_: [u8; 32] = [0x02; 32];
+
+    // set seed
+    let seed_: [u8; 32] = [0x03; 32];
+
+    let commitment_ = generate_seal::<TestSectorShape>(
+        sector_size_,
+        prover_id_,
+        true,
+        api_version_,
+        porep_id_,
+        ticket_,
+        seed_,
+        &location,
+        sector_id_,
+    )
+    .expect("generate_seal wasn't successful");
+
+    let (
+        replica,
+        commitment,
+        cache_dir,
+        seed,
+        ticket,
+        porep_id,
+        sector_id,
+        prover_id,
+        api_version,
+        sector_size,
+    ) = read_seal::<TestSectorShape>(&location).expect("read seal wasn't successful");
+
+    assert_eq!(commitment_, commitment);
+    assert_eq!(seed_, seed);
+    assert_eq!(ticket_, ticket);
+    assert_eq!(porep_id_, porep_id);
+    assert_eq!(SectorId::from(sector_id_), sector_id);
+    assert_eq!(prover_id_, prover_id);
+    assert_eq!(api_version_, api_version);
+    assert_eq!(sector_size_, sector_size);
+
+    // rest of winning_post computation
+
+    let sector_count = WINNING_POST_SECTOR_COUNT;
+
+    // set randomness for challenges generation
+    let random_fr: DefaultTreeDomain = Fr::from(255u64).into();
+
+    let mut randomness = [0u8; 32];
+    randomness.copy_from_slice(AsRef::<[u8]>::as_ref(&random_fr));
+
+    let config = PoStConfig {
+        sector_size: sector_size.into(),
+        sector_count,
+        challenge_count: WINNING_POST_CHALLENGE_COUNT,
+        typ: PoStType::Winning,
+        priority: false,
+        api_version,
+    };
+
+    let pub_replicas = vec![(
+        sector_id,
+        PublicReplicaInfo::new(commitment).expect("couldn't create PublicReplicaInfo"),
+    )];
+    let private_replica_info = PrivateReplicaInfo::new(replica, commitment, cache_dir)
+        .expect("couldn't create PrivateReplicaInfo");
+
+    let priv_replicas = vec![(sector_id, private_replica_info)];
+    let proof = generate_winning_post::<TestSectorShape>(
+        &config,
+        &randomness,
+        &priv_replicas[..],
+        prover_id,
+    )
+    .expect("couldn't generate window post");
+
+    let valid = verify_winning_post::<TestSectorShape>(
+        &config,
+        &randomness,
+        &pub_replicas[..],
+        prover_id,
+        &proof,
+    )
+    .expect("couldn't verify window_post");
+    assert!(valid, "proof did not verify");
+}
