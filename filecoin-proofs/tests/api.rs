@@ -2103,11 +2103,19 @@ impl<Tree: 'static + MerkleTreeTrait> WinningPostCircuit<Tree> {
         }
     }
 
-    fn compute_public_inputs(&self, challenges: &[u64]) -> Vec<blstrs::Scalar> {
-        let scalars: Vec<Scalar> = challenges
+    fn compute_public_inputs(
+        &self,
+        comm_r: PoseidonDomain,
+        comm_r_last: PoseidonDomain,
+        challenges: &[u64],
+    ) -> Vec<blstrs::Scalar> {
+        let mut scalars: Vec<Scalar> = challenges
             .iter()
-            .map(|challenge| Fr::from(*challenge))
+            .flat_map(|challenge| vec![Fr::from(*challenge), comm_r_last.into()])
             .collect();
+
+        // add expected comm_r to the first place
+        scalars.insert(0, comm_r.into());
 
         scalars
     }
@@ -2137,7 +2145,7 @@ impl<Tree: 'static + MerkleTreeTrait> Circuit<Fr> for WinningPostCircuit<Tree> {
                 .ok_or(SynthesisError::AssignmentMissing)
         })?;
 
-        let comm_c_comm_r_last_hash = poseidon_cs(
+        let actual_comm_r = poseidon_cs(
             cs.namespace(|| "comm_c || comm_r_last hashing"),
             &comm_c,
             &comm_r_last,
@@ -2150,11 +2158,13 @@ impl<Tree: 'static + MerkleTreeTrait> Circuit<Fr> for WinningPostCircuit<Tree> {
                     .ok_or(SynthesisError::AssignmentMissing)
             })?;
 
+        expected_comm_r.inputize(cs.namespace(|| "enforce comm_r's presence in public inputs"))?;
+
         let expected_comm_r =
             expected_comm_r.to_bits_le(cs.namespace(|| "unpack allocated expected_comm_r"))?;
 
         // H(comm_c || comm_r_last) == comm_r
-        comm_c_comm_r_last_hash
+        actual_comm_r
             .into_iter()
             .zip(expected_comm_r.into_iter())
             .enumerate()
@@ -2198,7 +2208,7 @@ impl<Tree: 'static + MerkleTreeTrait> Circuit<Fr> for WinningPostCircuit<Tree> {
                 Root::Val(*leaf),
                 path.clone(),
                 Root::from_allocated::<CS>(comm_r_last.clone()),
-                true,
+                false, // if true (which is default) - we need to remove comm_r_last from public inputs
             )?;
         }
 
@@ -2226,8 +2236,10 @@ fn end_to_end_winning_post() {
             vanilla_proof,
         );
 
-        let public_inputs_prover = circuit_prover.compute_public_inputs(challenges);
-        let public_inputs_verifier = circuit_verifier.compute_public_inputs(challenges);
+        let public_inputs_prover =
+            circuit_prover.compute_public_inputs(comm_r, comm_r_last, challenges);
+        let public_inputs_verifier =
+            circuit_verifier.compute_public_inputs(comm_r, comm_r_last, challenges);
         assert_eq!(public_inputs_prover, public_inputs_verifier);
 
         let mut rng = OsRng;
