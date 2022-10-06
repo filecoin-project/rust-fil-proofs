@@ -1,5 +1,6 @@
 use filecoin_hashers::{poseidon::PoseidonHasher, sha256::Sha256Hasher, Hasher};
 use halo2_proofs::plonk::Error;
+use log::trace;
 use rand::rngs::OsRng;
 use storage_proofs_core::{
     halo2::{
@@ -78,6 +79,7 @@ macro_rules! impl_compound_proof {
                         .iter()
                         .enumerate()
                         .map(|(k, partition_proof)| {
+                            trace!("proving partition {}/{}", k, partition_count);
                             // The only public input field which should change is `k`.
                             vanilla_pub_inputs.k = Some(k);
                             <Self as CompoundProof<
