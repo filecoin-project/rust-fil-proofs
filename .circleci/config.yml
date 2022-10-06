@@ -431,8 +431,9 @@ commands:
       - run:
           name: Build halo2paramcache if it doesn't already exist
           command: |
-            set -x; test -f /tmp/halo2paramcache.awesome \
-            || (cargo build --release --bin halo2paramcache && find . -type f -name halo2paramcache | xargs -I {} mv {} /tmp/halo2paramcache.awesome)
+            # Rebuild `halo2paramcache` if `FIL_PROOFS_HALO2_UPDATE_KEYS` is set or if `halo2paramcache` binary does not exist.
+            set -x; test -n "${FIL_PROOFS_HALO2_UPDATE_KEYS}" -o ! -f /tmp/halo2paramcache.awesome \
+            && (cargo build --release --bin halo2paramcache && find . -type f -name halo2paramcache | xargs -I {} mv {} /tmp/halo2paramcache.awesome)
       - run:
           name: Obtain filecoin Halo2 parameters
           command: /tmp/halo2paramcache.awesome --sector-sizes='2048,4096,16384,32768'
