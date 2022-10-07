@@ -3413,7 +3413,6 @@ dependencies = [
  "sha2raw",
  "tempfile",
  "thiserror",
- "typemap",
 ]
 
 [[package]]

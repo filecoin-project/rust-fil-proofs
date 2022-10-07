@@ -3,7 +3,6 @@ use std::io::{self, Write};
 use std::path::Path;
 
 use std::marker::PhantomData;
-use std::sync::RwLock;
 
 use halo2_proofs::{
     arithmetic::{CurveAffine, CurveExt, FieldExt},
@@ -15,10 +14,8 @@ use halo2_proofs::{
     poly::commitment::Params,
     transcript::{Blake2bRead, Blake2bWrite, Challenge255},
 };
-use lazy_static::lazy_static;
 use log::{error, info};
 use rand::RngCore;
-use typemap::ShareMap;
 
 use crate::{
     parameter_cache::{
@@ -28,12 +25,6 @@ use crate::{
     },
     settings::SETTINGS,
 };
-
-lazy_static! {
-    // Maps each halo2 circuit type to its keypair stored in memory; allows generating each
-    // circuit's keypair once.
-    static ref KEYSTORE: RwLock<ShareMap> = RwLock::new(ShareMap::custom());
-}
 
 type Challenge<C> = Challenge255<C>;
 type TranscriptReader<'proof, C> = Blake2bRead<&'proof [u8], C, Challenge<C>>;
@@ -81,21 +72,6 @@ pub fn get_field_from_circuit_scalar<F: FieldExt>() -> String {
     } else {
         "fq".to_string()
     }
-}
-
-// Manually implement `Send` and `Sync` for `Halo2Keypair` so we can store keypairs within a
-// `lazy_static` lookup table.
-unsafe impl<C, Circ> Send for Halo2Keypair<C, Circ>
-where
-    C: CurveAffine,
-    Circ: Circuit<C::Scalar> + CircuitRows,
-{
-}
-unsafe impl<C, Circ> Sync for Halo2Keypair<C, Circ>
-where
-    C: CurveAffine,
-    Circ: Circuit<C::Scalar> + CircuitRows,
-{
 }
 
 fn create_params<C, Circ>(circuit: &Circ) -> Result<Params<C>, Error>
@@ -392,50 +368,6 @@ where
     pub fn vk(&self) -> &VerifyingKey<C> {
         self.pk.get_vk()
     }
-}
-
-// The `typemap` key used to lookup a halo2 circuit's keypair stored in memory.
-struct KeypairLookup<C, F>(PhantomData<(C, F)>)
-where
-    C: Circuit<F> + CircuitRows,
-    F: Halo2Field;
-
-impl<C, F> typemap::Key for KeypairLookup<C, F>
-where
-    // The `'static' bound is required because `typemap::Key::Value` must be `'static`.
-    C: 'static + Circuit<F> + CircuitRows,
-    F: Halo2Field,
-{
-    type Value = Halo2Keypair<F::Affine, C>;
-}
-
-// Retrieve's the circuit's keypair from the keystore; generating and adding the circuit's keys if
-// they do not exist in the keystore.
-pub fn halo2_keystore<C, F>(circ: &C) -> &Halo2Keypair<F::Affine, C>
-where
-    C: 'static + Circuit<F> + CircuitRows,
-    F: Halo2Field,
-{
-    let keystore_reader = KEYSTORE
-        .read()
-        .expect("failed to aquire read lock for halo2 keystore");
-    let keypair_opt = keystore_reader.get::<KeypairLookup<C, F>>();
-    if let Some(keypair) = keypair_opt {
-        // `keypair` is a reference that will not outlive this function call's lifetime; we must
-        // convert the keypair reference into a raw pointer then back into a reference which will
-        // have a lifetime that outlives this function call.
-        let ptr = keypair as *const Halo2Keypair<F::Affine, C>;
-        return unsafe { &*ptr as &Halo2Keypair<F::Affine, C> };
-    }
-    drop(keystore_reader);
-    let keypair = Halo2Keypair::create(circ).expect("failed to generate halo2 keypair for circ");
-    let keypair = KEYSTORE
-        .write()
-        .expect("failed to aquire write lock for halo2 keystore")
-        .insert::<KeypairLookup<C, F>>(keypair)
-        .expect("failed to add halo2 keypair into keystore");
-    let ptr = &keypair as *const Halo2Keypair<F::Affine, C>;
-    unsafe { &*ptr as &Halo2Keypair<F::Affine, C> }
 }
 
 pub struct Halo2Proof<C, Circ>
