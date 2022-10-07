@@ -79,7 +79,7 @@ where
     C: CurveAffine,
     Circ: Circuit<C::Scalar> + CircuitRows,
 {
-    let path = format!(
+    let path_str = format!(
         "{}v{}-halo2-{}-keypair-params-{}.{}",
         parameter_cache_dir().display(),
         VERSION,
@@ -87,35 +87,35 @@ where
         circuit.k(),
         HALO2_PARAMETER_EXT,
     );
-    let path = Path::new(&path);
-    info!("checking for halo2 params at path {:?}", path);
+    let path = Path::new(&path_str);
+    info!("checking for halo2 params at path {}", path_str);
     if path.exists() {
-        info!("reading halo2 params at path {:?}", path);
+        info!("reading halo2 params at path {}", path_str);
         let res = with_exclusive_read_lock::<_, io::Error, _>(path, Params::read);
         if let Ok(params) = res {
-            info!("successfully read halo2 params at path {:?}", path);
+            info!("successfully read halo2 params at path {}", path_str);
             Ok(params)
         } else {
             // Params for each `k` should not change or need updating.
-            error!("failed to read halo2 params at path {:?}", path);
+            error!("failed to read halo2 params at path {}", path_str);
             Err(Error::from(io::Error::new(
                 io::ErrorKind::Other,
-                format!("Cannot read halo2 params at path {:?}", path),
+                format!("Cannot read halo2 params at path {}", path_str),
             )))
         }
     } else {
-        info!("halo2 params not found at path {:?}", path);
+        info!("halo2 params not found at path {}", path_str);
         info!("generating new halo2 params");
         let params = Params::new(circuit.k());
         info!("successfully generated new halo2 params");
         // Create new params file; fails if file exists.
         with_exclusive_lock::<_, io::Error, _>(path, |mut file| {
-            info!("writing generated halo2 params at path {:?}", path);
+            info!("writing generated halo2 params at path {}", path_str);
             params.write(&mut file)?;
             file.flush()?;
             info!(
-                "successfully wrote generated halo2 params at path {:?}",
-                path
+                "successfully wrote generated halo2 params at path {}",
+                path_str,
             );
             Ok(())
         })
@@ -123,13 +123,16 @@ where
             // It's possible that another process wrote the file during paramgen.
             if io_err.kind() == io::ErrorKind::AlreadyExists {
                 info!(
-                    "failed to write generated halo2 params at path {:?}, file already exists; \
+                    "failed to write generated halo2 params at path {}, file already exists; \
                     returning generated params",
-                    path,
+                    path_str,
                 );
                 Ok(())
             } else {
-                info!("failed to write generated halo2 params at path {:?}", path);
+                info!(
+                    "failed to write generated halo2 params at path {}",
+                    path_str,
+                );
                 Err(io_err)
             }
         })?;
@@ -144,7 +147,7 @@ where
     C: CurveAffine,
     Circ: Circuit<C::Scalar> + CircuitRows,
 {
-    let path = format!(
+    let path_str = format!(
         "{}v{}-halo2-{}-keypair-{}-{}-{}.{}",
         parameter_cache_dir().display(),
         VERSION,
@@ -154,63 +157,82 @@ where
         circuit.sector_size(),
         VERIFYING_KEY_EXT,
     );
-    let path = Path::new(&path);
-    info!("checking for halo2 verifying key at path {:?}", path);
+    let path = Path::new(&path_str);
+    info!("checking for halo2 verifying key at path {}", path_str);
     if path.exists() {
-        info!("reading halo2 verifying key at path {:?}", path);
+        info!("reading halo2 verifying key at path {}", path_str);
         let res = with_exclusive_read_lock(path, |file| VerifyingKey::read(file, params, circuit));
         if let Ok(vk) = res {
-            info!("successfully read halo2 verifying key at path {:?}", path);
+            info!(
+                "successfully read halo2 verifying key at path {} (repr={:?})",
+                path_str,
+                vk.transcript_repr(),
+            );
             return Ok((vk, false));
         }
         // Key file exists, but is not valid for provided circuit.
-        error!("failed to read halo2 verifying key at path {:?}", path);
+        let io_err = res.unwrap_err();
+        error!(
+            "failed to read halo2 verifying key at path {} (io::ErrorKind::{:?}, {:?})",
+            path_str,
+            io_err.kind(),
+            io_err.to_string(),
+        );
         if !SETTINGS.halo2_update_keys {
             return Err(Error::from(io::Error::new(
                 io::ErrorKind::Other,
-                format!("Cannot read halo2 verifying key at path {:?}", path),
+                format!("Cannot read halo2 verifying key at path {}", path_str),
             )));
         }
         // Update key file.
-        info!("updating halo2 verifying key at path {:?}", path);
+        info!("updating halo2 verifying key at path {}", path_str);
         info!("generating new halo2 verifying key");
         let vk = keygen_vk(params, circuit).map_err(|err| {
             error!("faild to generate new halo2 verifying key");
             err
         })?;
-        info!("successfully generated new halo2 verifying key");
+        info!(
+            "successfully generated new halo2 verifying key (repr={:?})",
+            vk.transcript_repr(),
+        );
         // Overwrite existing key file.
         with_exclusive_write_lock::<_, io::Error, _>(path, |mut file| {
-            info!("writing new halo2 verifying key at path {:?}", path);
+            info!("writing new halo2 verifying key at path {}", path_str);
             vk.write(&mut file)?;
             file.flush()?;
             info!(
-                "successfully wrote new halo2 verifying key at path {:?}",
-                path
+                "successfully wrote new halo2 verifying key at path {}",
+                path_str,
             );
             Ok(())
         })
         .map_err(|err| {
-            error!("failed to write new halo2 verifying key at path {:?}", path);
+            error!(
+                "failed to write new halo2 verifying key at path {}",
+                path_str,
+            );
             err
         })?;
         Ok((vk, true))
     } else {
-        info!("halo2 verifying key not found at path {:?}", path);
+        info!("halo2 verifying key not found at path {}", path_str);
         info!("generating new halo2 verifying key");
         let vk = keygen_vk(params, circuit).map_err(|err| {
             error!("faild to generate new halo2 verifying key");
             err
         })?;
-        info!("successfully generated new halo2 verifying key");
+        info!(
+            "successfully generated new halo2 verifying key (repr={:?})",
+            vk.transcript_repr(),
+        );
         // Create new key file; fails if file exists.
         with_exclusive_lock::<_, io::Error, _>(path, |mut file| {
-            info!("writing generated halo2 verifying key at path {:?}", path);
+            info!("writing generated halo2 verifying key at path {}", path_str);
             vk.write(&mut file)?;
             file.flush()?;
             info!(
-                "successfully wrote generated halo2 verifying key at path {:?}",
-                path
+                "successfully wrote generated halo2 verifying key at path {}",
+                path_str,
             );
             Ok(())
         })
@@ -218,15 +240,15 @@ where
             // It's possible that another process wrote the key file during keygen.
             if io_err.kind() == io::ErrorKind::AlreadyExists {
                 info!(
-                    "failed to write generated halo2 verifying key at path {:?}, file already \
+                    "failed to write generated halo2 verifying key at path {}, file already \
                     exists; returning generated verifying key",
-                    path,
+                    path_str,
                 );
                 Ok(())
             } else {
                 info!(
-                    "failed to write generated halo2 verifying key at path {:?}",
-                    path
+                    "failed to write generated halo2 verifying key at path {}",
+                    path_str,
                 );
                 Err(io_err)
             }
@@ -245,7 +267,7 @@ where
     C: CurveAffine,
     Circ: Circuit<C::Scalar> + CircuitRows,
 {
-    let path = format!(
+    let path_str = format!(
         "{}v{}-halo2-{}-keypair-{}-{}-{}.{}",
         parameter_cache_dir().display(),
         VERSION,
@@ -255,11 +277,11 @@ where
         circuit.sector_size(),
         PROVING_KEY_EXT,
     );
-    let path = Path::new(&path);
+    let path = Path::new(&path_str);
 
     // If verifying key was changed on disk, generate new proving key.
     if new_keypair {
-        info!("new halo2 proving key required");
+        info!("halo2 verifying key changed on disk; new proving key required");
         info!("generating new halo2 proving key");
         let pk = keygen_pk(params, vk, circuit).map_err(|err| {
             error!("faild to generate new halo2 proving key");
@@ -268,40 +290,40 @@ where
         info!("successfully generated new halo2 proving key");
         // Create new key file or overwrite existing file.
         with_exclusive_write_lock::<_, io::Error, _>(path, |mut file| {
-            info!("writing new halo2 proving key at path {:?}", path);
+            info!("writing new halo2 proving key at path {}", path_str);
             pk.write(&mut file)?;
             file.flush()?;
             info!(
-                "successfully wrote new halo2 proving key at path {:?}",
-                path
+                "successfully wrote new halo2 proving key at path {}",
+                path_str,
             );
             Ok(())
         })
         .map_err(|err| {
-            error!("failed to write new halo2 proving key at path {:?}", path);
+            error!("failed to write new halo2 proving key at path {}", path_str);
             err
         })?;
         return Ok(pk);
     }
 
-    info!("checking for halo2 proving key at path {:?}", path);
+    info!("checking for halo2 proving key at path {}", path_str);
     if path.exists() {
-        info!("reading halo2 proving key at path {:?}", path);
+        info!("reading halo2 proving key at path {}", path_str);
         let res = with_exclusive_read_lock(path, |file| ProvingKey::read(file, vk));
         if let Ok(pk) = res {
-            info!("successfully read halo2 proving key at path {:?}", path);
+            info!("successfully read halo2 proving key at path {}", path_str);
             Ok(pk)
         } else {
             // If this is not a new kepair (i.e. `new_keypair` is `false`), the existing proving
             // key should be valid.
-            error!("failed to read halo2 proving key at path {:?}", path);
+            error!("failed to read halo2 proving key at path {}", path_str);
             Err(Error::from(io::Error::new(
                 io::ErrorKind::Other,
-                format!("Cannot read halo2 proving key at path {:?}", path),
+                format!("Cannot read halo2 proving key at path {}", path_str),
             )))
         }
     } else {
-        info!("halo2 proving key not found at path {:?}", path);
+        info!("halo2 proving key not found at path {}", path_str);
         info!("generating new halo2 proving key");
         let pk = keygen_pk(params, vk, circuit).map_err(|err| {
             error!("faild to generate new halo2 proving key");
@@ -310,12 +332,12 @@ where
         info!("successfully generated new halo2 proving key");
         // Create new key file; fails if file exists.
         with_exclusive_lock::<_, io::Error, _>(path, |mut file| {
-            info!("writing generated halo2 proving key at path {:?}", path);
+            info!("writing generated halo2 proving key at path {}", path_str);
             pk.write(&mut file)?;
             file.flush()?;
             info!(
-                "successfully wrote generated halo2 proving key at path {:?}",
-                path
+                "successfully wrote generated halo2 proving key at path {}",
+                path_str,
             );
             Ok(())
         })
@@ -323,15 +345,15 @@ where
             // It's possible that another process wrote the key file during keygen.
             if io_err.kind() == io::ErrorKind::AlreadyExists {
                 info!(
-                    "failed to write generated halo2 proving key at path {:?}, file already \
+                    "failed to write generated halo2 proving key at path {}, file already \
                     exists; returning generated proving key",
-                    path,
+                    path_str,
                 );
                 Ok(())
             } else {
                 info!(
-                    "failed to write generated halo2 proving key at path {:?}",
-                    path
+                    "failed to write generated halo2 proving key at path {}",
+                    path_str,
                 );
                 Err(io_err)
             }
