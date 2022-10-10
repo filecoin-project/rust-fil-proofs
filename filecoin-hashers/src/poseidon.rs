@@ -24,8 +24,8 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use typemap::ShareMap;
 
 use crate::{
-    get_poseidon_constants, Domain, FieldArity, Groth16Hasher, Halo2Hasher, HashFunction,
-    HashInstructions, Hasher, PoseidonArity, PoseidonMDArity, POSEIDON_CONSTANTS_2,
+    get_poseidon_constants, Domain, Groth16Hasher, Halo2Hasher, HashFunction, HashInstructions,
+    Hasher, PoseidonArity, PoseidonLookup, PoseidonMDArity, POSEIDON_CONSTANTS_2,
     POSEIDON_MD_CONSTANTS as POSEIDON_MD_CONSTANTS_BLS, POSEIDON_MD_CONSTANTS_PALLAS,
     POSEIDON_MD_CONSTANTS_VESTA,
 };
@@ -33,9 +33,9 @@ use crate::{
 lazy_static! {
     pub static ref POSEIDON_MD_CONSTANTS: ShareMap = {
         let mut tm = ShareMap::custom();
-        tm.insert::<FieldArity<Fr, PoseidonMDArity>>(&*POSEIDON_MD_CONSTANTS_BLS);
-        tm.insert::<FieldArity<Fp, PoseidonMDArity>>(&*POSEIDON_MD_CONSTANTS_PALLAS);
-        tm.insert::<FieldArity<Fq, PoseidonMDArity>>(&*POSEIDON_MD_CONSTANTS_VESTA);
+        tm.insert::<PoseidonLookup<Fr, PoseidonMDArity>>(&*POSEIDON_MD_CONSTANTS_BLS);
+        tm.insert::<PoseidonLookup<Fp, PoseidonMDArity>>(&*POSEIDON_MD_CONSTANTS_PALLAS);
+        tm.insert::<PoseidonLookup<Fq, PoseidonMDArity>>(&*POSEIDON_MD_CONSTANTS_VESTA);
         tm
     };
 }
@@ -212,7 +212,7 @@ fn shared_hash<F: PrimeField>(data: &[u8]) -> F {
     shared_hash_frs(&preimage)
 }
 
-// Must add trait bound `F: PrimeField` because `FieldArity<F, A>` requires `F: PrimeField`.
+// Must add trait bound `F: PrimeField` because `PoseidonLookup<F, A>` requires `F: PrimeField`.
 fn shared_hash_frs<F: PrimeField>(preimage: &[F]) -> F {
     match preimage.len() {
         2 => {
@@ -332,7 +332,7 @@ where
 
         let arity = PoseidonMDArity::to_usize();
         let consts = POSEIDON_MD_CONSTANTS
-            .get::<FieldArity<F, PoseidonMDArity>>()
+            .get::<PoseidonLookup<F, PoseidonMDArity>>()
             .unwrap_or_else(|| {
                 panic!(
                     "arity-{} poseidon constants not found for field",

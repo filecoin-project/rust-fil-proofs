@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{ensure, Context, Error};
 use blstrs::Scalar as Fr;
 use ff::PrimeField;
-use filecoin_hashers::{Domain, FieldArity, HashFunction, Hasher, PoseidonArity};
+use filecoin_hashers::{Domain, HashFunction, Hasher, PoseidonArity, PoseidonLookup};
 use generic_array::typenum::{Unsigned, U2};
 use log::{info, trace};
 use memmap::{Mmap, MmapMut, MmapOptions};
@@ -542,7 +542,7 @@ where
 {
     let preimage: [D::Field; 2] = [(*comm_d_new).into(), (*comm_r_old).into()];
     let consts = POSEIDON_CONSTANTS_GEN_RANDOMNESS
-        .get::<FieldArity<D::Field, U2>>()
+        .get::<PoseidonLookup<D::Field, U2>>()
         .expect("arity-2 Poseidon constants not found for field");
     Poseidon::new_with_preimage(&preimage, consts).hash().into()
 }
@@ -556,7 +556,7 @@ where
 {
     let preimage: [F; 2] = [(*phi).into(), F::from(high as u64)];
     let consts = POSEIDON_CONSTANTS_GEN_RANDOMNESS
-        .get::<FieldArity<F, U2>>()
+        .get::<PoseidonLookup<F, U2>>()
         .expect("arity-2 Poseidon constants not found for field");
     Poseidon::new_with_preimage(&preimage, consts).hash()
 }

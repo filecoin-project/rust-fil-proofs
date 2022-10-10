@@ -1,6 +1,6 @@
 use blstrs::Scalar as Fr;
 use filecoin_hashers::{
-    poseidon::PoseidonHasher, sha256::Sha256Hasher, FieldArity, Hasher, GROTH16_STRENGTH,
+    poseidon::PoseidonHasher, sha256::Sha256Hasher, Hasher, PoseidonLookup, GROTH16_STRENGTH,
     HALO2_STRENGTH,
 };
 use generic_array::typenum::{Unsigned, U0, U2, U8};
@@ -42,9 +42,9 @@ lazy_static! {
 
     pub static ref POSEIDON_CONSTANTS_GEN_RANDOMNESS: ShareMap = {
         let mut tm = ShareMap::custom();
-        tm.insert::<FieldArity<Fr, U2>>(&*POSEIDON_CONSTANTS_GEN_RANDOMNESS_BLS);
-        tm.insert::<FieldArity<Fp, U2>>(&*POSEIDON_CONSTANTS_GEN_RANDOMNESS_PALLAS);
-        tm.insert::<FieldArity<Fq, U2>>(&*POSEIDON_CONSTANTS_GEN_RANDOMNESS_VESTA);
+        tm.insert::<PoseidonLookup<Fr, U2>>(&*POSEIDON_CONSTANTS_GEN_RANDOMNESS_BLS);
+        tm.insert::<PoseidonLookup<Fp, U2>>(&*POSEIDON_CONSTANTS_GEN_RANDOMNESS_PALLAS);
+        tm.insert::<PoseidonLookup<Fq, U2>>(&*POSEIDON_CONSTANTS_GEN_RANDOMNESS_VESTA);
         tm
     };
 }

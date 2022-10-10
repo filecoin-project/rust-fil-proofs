@@ -1,5 +1,5 @@
 use ff::PrimeField;
-use filecoin_hashers::{FieldArity, Hasher};
+use filecoin_hashers::{Hasher, PoseidonLookup};
 use generic_array::typenum::U2;
 use neptune::poseidon::Poseidon;
 use storage_proofs_core::util::is_groth16_field;
@@ -195,7 +195,7 @@ where
         if self.i == 0 {
             let digest_index = F::from(self.digest_index_all_partitions as u64);
             let consts = POSEIDON_CONSTANTS_GEN_RANDOMNESS
-                .get::<FieldArity<F, U2>>()
+                .get::<PoseidonLookup<F, U2>>()
                 .expect("arity-2 Poseidon constants not found for field");
             let digest =
                 Poseidon::new_with_preimage(&[self.comm_r_new.into(), digest_index], consts).hash();

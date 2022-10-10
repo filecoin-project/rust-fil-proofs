@@ -77,32 +77,32 @@ lazy_static! {
     pub static ref POSEIDON_CONSTANTS: ShareMap = {
         let mut tm = ShareMap::custom();
 
-        tm.insert::<FieldArity<Fr, U2>>(&*POSEIDON_CONSTANTS_2);
-        tm.insert::<FieldArity<Fr, U4>>(&*POSEIDON_CONSTANTS_4);
-        tm.insert::<FieldArity<Fr, U8>>(&*POSEIDON_CONSTANTS_8);
-        tm.insert::<FieldArity<Fr, U11>>(&*POSEIDON_CONSTANTS_11);
+        tm.insert::<PoseidonLookup<Fr, U2>>(&*POSEIDON_CONSTANTS_2);
+        tm.insert::<PoseidonLookup<Fr, U4>>(&*POSEIDON_CONSTANTS_4);
+        tm.insert::<PoseidonLookup<Fr, U8>>(&*POSEIDON_CONSTANTS_8);
+        tm.insert::<PoseidonLookup<Fr, U11>>(&*POSEIDON_CONSTANTS_11);
 
-        tm.insert::<FieldArity<Fp, U2>>(&*POSEIDON_CONSTANTS_2_PALLAS);
-        tm.insert::<FieldArity<Fp, U4>>(&*POSEIDON_CONSTANTS_4_PALLAS);
-        tm.insert::<FieldArity<Fp, U8>>(&*POSEIDON_CONSTANTS_8_PALLAS);
-        tm.insert::<FieldArity<Fp, U11>>(&*POSEIDON_CONSTANTS_11_PALLAS);
+        tm.insert::<PoseidonLookup<Fp, U2>>(&*POSEIDON_CONSTANTS_2_PALLAS);
+        tm.insert::<PoseidonLookup<Fp, U4>>(&*POSEIDON_CONSTANTS_4_PALLAS);
+        tm.insert::<PoseidonLookup<Fp, U8>>(&*POSEIDON_CONSTANTS_8_PALLAS);
+        tm.insert::<PoseidonLookup<Fp, U11>>(&*POSEIDON_CONSTANTS_11_PALLAS);
 
-        tm.insert::<FieldArity<Fq, U2>>(&*POSEIDON_CONSTANTS_2_VESTA);
-        tm.insert::<FieldArity<Fq, U4>>(&*POSEIDON_CONSTANTS_4_VESTA);
-        tm.insert::<FieldArity<Fq, U8>>(&*POSEIDON_CONSTANTS_8_VESTA);
-        tm.insert::<FieldArity<Fq, U11>>(&*POSEIDON_CONSTANTS_11_VESTA);
+        tm.insert::<PoseidonLookup<Fq, U2>>(&*POSEIDON_CONSTANTS_2_VESTA);
+        tm.insert::<PoseidonLookup<Fq, U4>>(&*POSEIDON_CONSTANTS_4_VESTA);
+        tm.insert::<PoseidonLookup<Fq, U8>>(&*POSEIDON_CONSTANTS_8_VESTA);
+        tm.insert::<PoseidonLookup<Fq, U11>>(&*POSEIDON_CONSTANTS_11_VESTA);
 
         tm
     };
 }
 
 // Used as the key to lookup Poseidon constants for a field `F` and arity `A`.
-pub struct FieldArity<F, A>(PhantomData<(F, A)>)
+pub struct PoseidonLookup<F, A>(PhantomData<(F, A)>)
 where
     F: PrimeField,
     A: PoseidonArity<F>;
 
-impl<F, A> typemap::Key for FieldArity<F, A>
+impl<F, A> typemap::Key for PoseidonLookup<F, A>
 where
     F: PrimeField,
     A: PoseidonArity<F>,
@@ -117,7 +117,7 @@ where
     A: PoseidonArity<F>,
 {
     *POSEIDON_CONSTANTS
-        .get::<FieldArity<F, A>>()
+        .get::<PoseidonLookup<F, A>>()
         .unwrap_or_else(|| {
             panic!(
                 "arity-{} Poseidon constants not found for field",
