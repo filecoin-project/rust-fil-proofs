@@ -19,7 +19,7 @@ use merkletree::{
     hash::{Algorithm, Hashable},
     merkle::Element,
 };
-use neptune::{circuit::poseidon_hash, halo2_circuit::PoseidonConfig, Poseidon};
+use neptune::{circuit::poseidon_hash, halo2_circuit::PoseidonConfig, Poseidon, Strength};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use typemap::ShareMap;
 
@@ -463,8 +463,12 @@ impl Groth16Hasher for PoseidonHasher<Fr> {
     }
 }
 
-/// Configures the Halo2 Poseidon strength (via `PoseidonChip`'s `const bool` type parameter).
-pub(crate) const HALO2_STRENGTH: bool = neptune::halo2_circuit::STRENGTH_EVEN;
+/// The configured Halo2 Poseidon strength represented as a `bool`.
+const HALO2_STRENGTH: bool = match crate::HALO2_STRENGTH {
+    Strength::Standard => neptune::halo2_circuit::STRENGTH_STD,
+    Strength::EvenPartial => neptune::halo2_circuit::STRENGTH_EVEN,
+    _ => panic!("halo2 strength must be `Standard` or `EvenPartial`"),
+};
 
 /// Export the Poseidon chip configured with the chosen strength.
 pub type PoseidonChip<F, A> = neptune::halo2_circuit::PoseidonChip<F, A, HALO2_STRENGTH>;

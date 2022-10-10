@@ -24,15 +24,14 @@ pub const MERKLE_TREE_ARITY: usize = 2;
 /// Groth16 Poseidon strength.
 pub const GROTH16_STRENGTH: Strength = Strength::Standard;
 
-/// Halo2 Poseidon strength.
-pub const HALO2_STRENGTH: Strength = match crate::poseidon::HALO2_STRENGTH {
-    neptune::halo2_circuit::STRENGTH_STD => Strength::Standard,
-    neptune::halo2_circuit::STRENGTH_EVEN => Strength::EvenPartial,
-};
+/// Configures Halo2 Poseidon strength.
+pub const HALO2_STRENGTH: Strength = Strength::EvenPartial;
 
-pub const HALO2_STRENGTH_IS_STD: bool = match crate::poseidon::HALO2_STRENGTH {
-    neptune::halo2_circuit::STRENGTH_STD => true,
-    neptune::halo2_circuit::STRENGTH_EVEN => false,
+/// Returns `true` if Halo2 uses standard strength Poseidon.
+pub const HALO2_STRENGTH_IS_STD: bool = match HALO2_STRENGTH {
+    Strength::Standard => true,
+    Strength::EvenPartial => false,
+    _ => panic!("halo2 strength must be `Standard` or `EvenPartial`"),
 };
 
 /// Returns the Poseidon strength configured for the given field.
