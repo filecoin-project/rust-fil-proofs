@@ -1,17 +1,18 @@
 use filecoin_hashers::{Hasher, PoseidonArity};
 use halo2_proofs::plonk::Error;
 use rand::rngs::OsRng;
-use storage_proofs_core::halo2::{
-    create_batch_proof, create_proof, verify_batch_proof, verify_proof, CompoundProof, Halo2Field,
-    Halo2Keypair, Halo2Proof,
+use storage_proofs_core::{
+    halo2::{
+        create_batch_proof, create_proof, verify_batch_proof, verify_proof, CompoundProof,
+        Halo2Field, Halo2Keypair, Halo2Proof,
+    },
+    SECTOR_NODES_16_KIB, SECTOR_NODES_16_MIB, SECTOR_NODES_1_KIB, SECTOR_NODES_2_KIB,
+    SECTOR_NODES_32_GIB, SECTOR_NODES_32_KIB, SECTOR_NODES_4_KIB, SECTOR_NODES_512_MIB,
+    SECTOR_NODES_64_GIB, SECTOR_NODES_8_KIB, SECTOR_NODES_8_MIB,
 };
 
 use crate::{
-    constants::{
-        TreeDHasher, TreeRHasher, SECTOR_SIZE_16_KIB, SECTOR_SIZE_16_MIB, SECTOR_SIZE_1_KIB,
-        SECTOR_SIZE_2_KIB, SECTOR_SIZE_32_GIB, SECTOR_SIZE_32_KIB, SECTOR_SIZE_4_KIB,
-        SECTOR_SIZE_512_MIB, SECTOR_SIZE_64_GIB, SECTOR_SIZE_8_KIB, SECTOR_SIZE_8_MIB,
-    },
+    constants::{TreeDHasher, TreeRHasher},
     halo2::{circuit, partition_count, EmptySectorUpdateCircuit},
     vanilla, EmptySectorUpdate, SetupParams,
 };
@@ -189,15 +190,15 @@ macro_rules! impl_compound_proof {
 }
 
 impl_compound_proof!(
-    SECTOR_SIZE_1_KIB,
-    SECTOR_SIZE_2_KIB,
-    SECTOR_SIZE_4_KIB,
-    SECTOR_SIZE_8_KIB,
-    SECTOR_SIZE_16_KIB,
-    SECTOR_SIZE_32_KIB,
-    SECTOR_SIZE_8_MIB,
-    SECTOR_SIZE_16_MIB,
-    SECTOR_SIZE_512_MIB,
-    SECTOR_SIZE_32_GIB,
-    SECTOR_SIZE_64_GIB
+    SECTOR_NODES_1_KIB,
+    SECTOR_NODES_2_KIB,
+    SECTOR_NODES_4_KIB,
+    SECTOR_NODES_8_KIB,
+    SECTOR_NODES_16_KIB,
+    SECTOR_NODES_32_KIB,
+    SECTOR_NODES_8_MIB,
+    SECTOR_NODES_16_MIB,
+    SECTOR_NODES_512_MIB,
+    SECTOR_NODES_32_GIB,
+    SECTOR_NODES_64_GIB
 );

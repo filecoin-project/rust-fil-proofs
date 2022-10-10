@@ -41,6 +41,20 @@ pub const TEST_SEED: [u8; 16] = [
 
 pub const MAX_LEGACY_POREP_REGISTERED_PROOF_ID: u64 = 4;
 
+// Sector sizes measured in nodes.
+pub const SECTOR_NODES_1_KIB: usize = 1 << 5;
+pub const SECTOR_NODES_2_KIB: usize = 1 << 6;
+pub const SECTOR_NODES_4_KIB: usize = 1 << 7;
+pub const SECTOR_NODES_8_KIB: usize = 1 << 8;
+pub const SECTOR_NODES_16_KIB: usize = 1 << 9;
+pub const SECTOR_NODES_32_KIB: usize = 1 << 10;
+pub const SECTOR_NODES_8_MIB: usize = 1 << 18;
+pub const SECTOR_NODES_16_MIB: usize = 1 << 19;
+pub const SECTOR_NODES_512_MIB: usize = 1 << 24;
+pub const SECTOR_NODES_1_GIB: usize = 1 << 25;
+pub const SECTOR_NODES_32_GIB: usize = 1 << 30;
+pub const SECTOR_NODES_64_GIB: usize = 1 << 31;
+
 pub type PoRepID = [u8; 32];
 
 pub fn is_legacy_porep_id(porep_id: PoRepID) -> bool {

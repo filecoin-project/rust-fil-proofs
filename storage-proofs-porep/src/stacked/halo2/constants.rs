@@ -1,18 +1,6 @@
-pub use storage_proofs_core::drgraph::BASE_DEGREE as DRG_PARENTS;
+pub use storage_proofs_core::{drgraph::BASE_DEGREE as DRG_PARENTS, SECTOR_NODES_32_GIB};
 
 pub use crate::stacked::{vanilla::TOTAL_PARENTS as REPEATED_PARENTS, EXP_DEGREE as EXP_PARENTS};
-
-pub const SECTOR_NODES_2_KIB: usize = 1 << 6;
-pub const SECTOR_NODES_4_KIB: usize = 1 << 7;
-pub const SECTOR_NODES_8_KIB: usize = 1 << 8;
-pub const SECTOR_NODES_16_KIB: usize = 1 << 9;
-pub const SECTOR_NODES_32_KIB: usize = 1 << 10;
-pub const SECTOR_NODES_8_MIB: usize = 1 << 18;
-pub const SECTOR_NODES_16_MIB: usize = 1 << 19;
-pub const SECTOR_NODES_512_MIB: usize = 1 << 24;
-pub const SECTOR_NODES_1_GIB: usize = 1 << 25;
-pub const SECTOR_NODES_32_GIB: usize = 1 << 30;
-pub const SECTOR_NODES_64_GIB: usize = 1 << 31;
 
 // Each field element label is decomposed into eight `u32` words.
 pub const LABEL_WORD_LEN: usize = 8;

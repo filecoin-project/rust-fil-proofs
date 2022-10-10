@@ -29,6 +29,8 @@ use storage_proofs_core::{
     },
     merkle::{MerkleProofTrait, MerkleTreeTrait},
     util::NODE_SIZE,
+    SECTOR_NODES_16_KIB, SECTOR_NODES_2_KIB, SECTOR_NODES_32_GIB, SECTOR_NODES_32_KIB,
+    SECTOR_NODES_4_KIB, SECTOR_NODES_512_MIB, SECTOR_NODES_64_GIB, SECTOR_NODES_8_KIB,
 };
 
 use crate::stacked::{
@@ -36,9 +38,7 @@ use crate::stacked::{
     halo2::{
         constants::{
             challenge_count, num_layers, DRG_PARENTS, EXP_PARENTS, GROTH16_PARTITIONING,
-            LABEL_WORD_LEN, REPEATED_PARENT_LABELS_WORD_LEN, SECTOR_NODES_16_KIB,
-            SECTOR_NODES_2_KIB, SECTOR_NODES_32_GIB, SECTOR_NODES_32_KIB, SECTOR_NODES_4_KIB,
-            SECTOR_NODES_512_MIB, SECTOR_NODES_64_GIB, SECTOR_NODES_8_KIB,
+            LABEL_WORD_LEN, REPEATED_PARENT_LABELS_WORD_LEN,
         },
         gadgets::{
             ColumnHasherChip, ColumnHasherConfig, EncodingChip, EncodingConfig, LabelingChip,

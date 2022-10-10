@@ -1,6 +1,5 @@
 pub mod circuit;
 pub mod compound;
-pub mod constants;
 pub mod window;
 pub mod winning;
 

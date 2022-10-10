@@ -20,15 +20,13 @@ use storage_proofs_core::{
     merkle::{get_base_tree_count, MerkleTreeTrait, MerkleTreeWrapper},
     multi_proof::MultiProof,
     proof::ProofScheme,
+    SECTOR_NODES_16_KIB, SECTOR_NODES_16_MIB, SECTOR_NODES_1_KIB, SECTOR_NODES_2_KIB,
+    SECTOR_NODES_32_GIB, SECTOR_NODES_32_KIB, SECTOR_NODES_4_KIB, SECTOR_NODES_512_MIB,
+    SECTOR_NODES_64_GIB, SECTOR_NODES_8_KIB, SECTOR_NODES_8_MIB,
 };
 use storage_proofs_porep::stacked::{PersistentAux, TemporaryAux};
 use storage_proofs_update::{
-    constants::{
-        TreeDArity, TreeDDomain, TreeDHasher, TreeRDomain, TreeRHasher, SECTOR_SIZE_16_KIB,
-        SECTOR_SIZE_16_MIB, SECTOR_SIZE_1_KIB, SECTOR_SIZE_2_KIB, SECTOR_SIZE_32_GIB,
-        SECTOR_SIZE_32_KIB, SECTOR_SIZE_4_KIB, SECTOR_SIZE_512_MIB, SECTOR_SIZE_64_GIB,
-        SECTOR_SIZE_8_KIB, SECTOR_SIZE_8_MIB,
-    },
+    constants::{TreeDArity, TreeDDomain, TreeDHasher, TreeRDomain, TreeRHasher},
     halo2::circuit::EmptySectorUpdateCircuit,
     EmptySectorUpdate, EmptySectorUpdateCompound, PrivateInputs, PublicInputs, SetupParams,
 };
@@ -712,17 +710,17 @@ where
     let sector_nodes = config.nodes_count;
 
     let proof_bytes = match sector_nodes {
-        SECTOR_SIZE_1_KIB => {
-            let circ = EmptySectorUpdateCircuit::<F, U, V, W, SECTOR_SIZE_1_KIB>::blank_circuit();
+        SECTOR_NODES_1_KIB => {
+            let circ = EmptySectorUpdateCircuit::<F, U, V, W, SECTOR_NODES_1_KIB>::blank_circuit();
 
             let keypair = <EmptySectorUpdate<F, U, V, W> as halo2::CompoundProof<
                 F,
-                SECTOR_SIZE_1_KIB,
+                SECTOR_NODES_1_KIB,
             >>::create_keypair(&circ)?;
 
             let circ_partition_proofs = <EmptySectorUpdate<F, U, V, W> as halo2::CompoundProof<
                 F,
-                SECTOR_SIZE_1_KIB,
+                SECTOR_NODES_1_KIB,
             >>::prove_all_partitions_with_vanilla(
                 &vanilla_setup_params,
                 &vanilla_pub_inputs,
@@ -735,17 +733,17 @@ where
                 .flat_map(|halo_proof| halo_proof.as_bytes().to_vec())
                 .collect()
         }
-        SECTOR_SIZE_2_KIB => {
-            let circ = EmptySectorUpdateCircuit::<F, U, V, W, SECTOR_SIZE_2_KIB>::blank_circuit();
+        SECTOR_NODES_2_KIB => {
+            let circ = EmptySectorUpdateCircuit::<F, U, V, W, SECTOR_NODES_2_KIB>::blank_circuit();
 
             let keypair = <EmptySectorUpdate<F, U, V, W> as halo2::CompoundProof<
                 F,
-                SECTOR_SIZE_2_KIB,
+                SECTOR_NODES_2_KIB,
             >>::create_keypair(&circ)?;
 
             let circ_partition_proofs = <EmptySectorUpdate<F, U, V, W> as halo2::CompoundProof<
                 F,
-                SECTOR_SIZE_2_KIB,
+                SECTOR_NODES_2_KIB,
             >>::prove_all_partitions_with_vanilla(
                 &vanilla_setup_params,
                 &vanilla_pub_inputs,
@@ -758,17 +756,17 @@ where
                 .flat_map(|halo_proof| halo_proof.as_bytes().to_vec())
                 .collect()
         }
-        SECTOR_SIZE_4_KIB => {
-            let circ = EmptySectorUpdateCircuit::<F, U, V, W, SECTOR_SIZE_4_KIB>::blank_circuit();
+        SECTOR_NODES_4_KIB => {
+            let circ = EmptySectorUpdateCircuit::<F, U, V, W, SECTOR_NODES_4_KIB>::blank_circuit();
 
             let keypair = <EmptySectorUpdate<F, U, V, W> as halo2::CompoundProof<
                 F,
-                SECTOR_SIZE_4_KIB,
+                SECTOR_NODES_4_KIB,
             >>::create_keypair(&circ)?;
 
             let circ_partition_proofs = <EmptySectorUpdate<F, U, V, W> as halo2::CompoundProof<
                 F,
-                SECTOR_SIZE_4_KIB,
+                SECTOR_NODES_4_KIB,
             >>::prove_all_partitions_with_vanilla(
                 &vanilla_setup_params,
                 &vanilla_pub_inputs,
@@ -781,17 +779,17 @@ where
                 .flat_map(|halo_proof| halo_proof.as_bytes().to_vec())
                 .collect()
         }
-        SECTOR_SIZE_8_KIB => {
-            let circ = EmptySectorUpdateCircuit::<F, U, V, W, SECTOR_SIZE_8_KIB>::blank_circuit();
+        SECTOR_NODES_8_KIB => {
+            let circ = EmptySectorUpdateCircuit::<F, U, V, W, SECTOR_NODES_8_KIB>::blank_circuit();
 
             let keypair = <EmptySectorUpdate<F, U, V, W> as halo2::CompoundProof<
                 F,
-                SECTOR_SIZE_8_KIB,
+                SECTOR_NODES_8_KIB,
             >>::create_keypair(&circ)?;
 
             let circ_partition_proofs = <EmptySectorUpdate<F, U, V, W> as halo2::CompoundProof<
                 F,
-                SECTOR_SIZE_8_KIB,
+                SECTOR_NODES_8_KIB,
             >>::prove_all_partitions_with_vanilla(
                 &vanilla_setup_params,
                 &vanilla_pub_inputs,
@@ -804,17 +802,17 @@ where
                 .flat_map(|halo_proof| halo_proof.as_bytes().to_vec())
                 .collect()
         }
-        SECTOR_SIZE_16_KIB => {
-            let circ = EmptySectorUpdateCircuit::<F, U, V, W, SECTOR_SIZE_16_KIB>::blank_circuit();
+        SECTOR_NODES_16_KIB => {
+            let circ = EmptySectorUpdateCircuit::<F, U, V, W, SECTOR_NODES_16_KIB>::blank_circuit();
 
             let keypair = <EmptySectorUpdate<F, U, V, W> as halo2::CompoundProof<
                 F,
-                SECTOR_SIZE_16_KIB,
+                SECTOR_NODES_16_KIB,
             >>::create_keypair(&circ)?;
 
             let circ_partition_proofs = <EmptySectorUpdate<F, U, V, W> as halo2::CompoundProof<
                 F,
-                SECTOR_SIZE_16_KIB,
+                SECTOR_NODES_16_KIB,
             >>::prove_all_partitions_with_vanilla(
                 &vanilla_setup_params,
                 &vanilla_pub_inputs,
@@ -827,17 +825,17 @@ where
                 .flat_map(|halo_proof| halo_proof.as_bytes().to_vec())
                 .collect()
         }
-        SECTOR_SIZE_32_KIB => {
-            let circ = EmptySectorUpdateCircuit::<F, U, V, W, SECTOR_SIZE_32_KIB>::blank_circuit();
+        SECTOR_NODES_32_KIB => {
+            let circ = EmptySectorUpdateCircuit::<F, U, V, W, SECTOR_NODES_32_KIB>::blank_circuit();
 
             let keypair = <EmptySectorUpdate<F, U, V, W> as halo2::CompoundProof<
                 F,
-                SECTOR_SIZE_32_KIB,
+                SECTOR_NODES_32_KIB,
             >>::create_keypair(&circ)?;
 
             let circ_partition_proofs = <EmptySectorUpdate<F, U, V, W> as halo2::CompoundProof<
                 F,
-                SECTOR_SIZE_32_KIB,
+                SECTOR_NODES_32_KIB,
             >>::prove_all_partitions_with_vanilla(
                 &vanilla_setup_params,
                 &vanilla_pub_inputs,
@@ -850,17 +848,17 @@ where
                 .flat_map(|halo_proof| halo_proof.as_bytes().to_vec())
                 .collect()
         }
-        SECTOR_SIZE_8_MIB => {
-            let circ = EmptySectorUpdateCircuit::<F, U, V, W, SECTOR_SIZE_8_MIB>::blank_circuit();
+        SECTOR_NODES_8_MIB => {
+            let circ = EmptySectorUpdateCircuit::<F, U, V, W, SECTOR_NODES_8_MIB>::blank_circuit();
 
             let keypair = <EmptySectorUpdate<F, U, V, W> as halo2::CompoundProof<
                 F,
-                SECTOR_SIZE_8_MIB,
+                SECTOR_NODES_8_MIB,
             >>::create_keypair(&circ)?;
 
             let circ_partition_proofs = <EmptySectorUpdate<F, U, V, W> as halo2::CompoundProof<
                 F,
-                SECTOR_SIZE_8_MIB,
+                SECTOR_NODES_8_MIB,
             >>::prove_all_partitions_with_vanilla(
                 &vanilla_setup_params,
                 &vanilla_pub_inputs,
@@ -873,17 +871,17 @@ where
                 .flat_map(|halo_proof| halo_proof.as_bytes().to_vec())
                 .collect()
         }
-        SECTOR_SIZE_16_MIB => {
-            let circ = EmptySectorUpdateCircuit::<F, U, V, W, SECTOR_SIZE_16_MIB>::blank_circuit();
+        SECTOR_NODES_16_MIB => {
+            let circ = EmptySectorUpdateCircuit::<F, U, V, W, SECTOR_NODES_16_MIB>::blank_circuit();
 
             let keypair = <EmptySectorUpdate<F, U, V, W> as halo2::CompoundProof<
                 F,
-                SECTOR_SIZE_16_MIB,
+                SECTOR_NODES_16_MIB,
             >>::create_keypair(&circ)?;
 
             let circ_partition_proofs = <EmptySectorUpdate<F, U, V, W> as halo2::CompoundProof<
                 F,
-                SECTOR_SIZE_16_MIB,
+                SECTOR_NODES_16_MIB,
             >>::prove_all_partitions_with_vanilla(
                 &vanilla_setup_params,
                 &vanilla_pub_inputs,
@@ -896,17 +894,18 @@ where
                 .flat_map(|halo_proof| halo_proof.as_bytes().to_vec())
                 .collect()
         }
-        SECTOR_SIZE_512_MIB => {
-            let circ = EmptySectorUpdateCircuit::<F, U, V, W, SECTOR_SIZE_512_MIB>::blank_circuit();
+        SECTOR_NODES_512_MIB => {
+            let circ =
+                EmptySectorUpdateCircuit::<F, U, V, W, SECTOR_NODES_512_MIB>::blank_circuit();
 
             let keypair = <EmptySectorUpdate<F, U, V, W> as halo2::CompoundProof<
                 F,
-                SECTOR_SIZE_512_MIB,
+                SECTOR_NODES_512_MIB,
             >>::create_keypair(&circ)?;
 
             let circ_partition_proofs = <EmptySectorUpdate<F, U, V, W> as halo2::CompoundProof<
                 F,
-                SECTOR_SIZE_512_MIB,
+                SECTOR_NODES_512_MIB,
             >>::prove_all_partitions_with_vanilla(
                 &vanilla_setup_params,
                 &vanilla_pub_inputs,
@@ -919,17 +918,17 @@ where
                 .flat_map(|halo_proof| halo_proof.as_bytes().to_vec())
                 .collect()
         }
-        SECTOR_SIZE_32_GIB => {
-            let circ = EmptySectorUpdateCircuit::<F, U, V, W, SECTOR_SIZE_32_GIB>::blank_circuit();
+        SECTOR_NODES_32_GIB => {
+            let circ = EmptySectorUpdateCircuit::<F, U, V, W, SECTOR_NODES_32_GIB>::blank_circuit();
 
             let keypair = <EmptySectorUpdate<F, U, V, W> as halo2::CompoundProof<
                 F,
-                SECTOR_SIZE_32_GIB,
+                SECTOR_NODES_32_GIB,
             >>::create_keypair(&circ)?;
 
             let circ_partition_proofs = <EmptySectorUpdate<F, U, V, W> as halo2::CompoundProof<
                 F,
-                SECTOR_SIZE_32_GIB,
+                SECTOR_NODES_32_GIB,
             >>::prove_all_partitions_with_vanilla(
                 &vanilla_setup_params,
                 &vanilla_pub_inputs,
@@ -942,17 +941,17 @@ where
                 .flat_map(|halo_proof| halo_proof.as_bytes().to_vec())
                 .collect()
         }
-        SECTOR_SIZE_64_GIB => {
-            let circ = EmptySectorUpdateCircuit::<F, U, V, W, SECTOR_SIZE_64_GIB>::blank_circuit();
+        SECTOR_NODES_64_GIB => {
+            let circ = EmptySectorUpdateCircuit::<F, U, V, W, SECTOR_NODES_64_GIB>::blank_circuit();
 
             let keypair = <EmptySectorUpdate<F, U, V, W> as halo2::CompoundProof<
                 F,
-                SECTOR_SIZE_64_GIB,
+                SECTOR_NODES_64_GIB,
             >>::create_keypair(&circ)?;
 
             let circ_partition_proofs = <EmptySectorUpdate<F, U, V, W> as halo2::CompoundProof<
                 F,
-                SECTOR_SIZE_64_GIB,
+                SECTOR_NODES_64_GIB,
             >>::prove_all_partitions_with_vanilla(
                 &vanilla_setup_params,
                 &vanilla_pub_inputs,
@@ -1194,17 +1193,17 @@ where
     )?;
 
     let proof_bytes = match sector_nodes {
-        SECTOR_SIZE_1_KIB => {
-            let circ = EmptySectorUpdateCircuit::<F, U, V, W, SECTOR_SIZE_1_KIB>::blank_circuit();
+        SECTOR_NODES_1_KIB => {
+            let circ = EmptySectorUpdateCircuit::<F, U, V, W, SECTOR_NODES_1_KIB>::blank_circuit();
 
             let keypair = <EmptySectorUpdate<F, U, V, W> as halo2::CompoundProof<
                 F,
-                SECTOR_SIZE_1_KIB,
+                SECTOR_NODES_1_KIB,
             >>::create_keypair(&circ)?;
 
             let circ_partition_proofs = <EmptySectorUpdate<F, U, V, W> as halo2::CompoundProof<
                 F,
-                SECTOR_SIZE_1_KIB,
+                SECTOR_NODES_1_KIB,
             >>::prove_all_partitions_with_vanilla(
                 &vanilla_setup_params,
                 &vanilla_pub_inputs,
@@ -1217,17 +1216,17 @@ where
                 .flat_map(|halo_proof| halo_proof.as_bytes().to_vec())
                 .collect()
         }
-        SECTOR_SIZE_2_KIB => {
-            let circ = EmptySectorUpdateCircuit::<F, U, V, W, SECTOR_SIZE_2_KIB>::blank_circuit();
+        SECTOR_NODES_2_KIB => {
+            let circ = EmptySectorUpdateCircuit::<F, U, V, W, SECTOR_NODES_2_KIB>::blank_circuit();
 
             let keypair = <EmptySectorUpdate<F, U, V, W> as halo2::CompoundProof<
                 F,
-                SECTOR_SIZE_2_KIB,
+                SECTOR_NODES_2_KIB,
             >>::create_keypair(&circ)?;
 
             let circ_partition_proofs = <EmptySectorUpdate<F, U, V, W> as halo2::CompoundProof<
                 F,
-                SECTOR_SIZE_2_KIB,
+                SECTOR_NODES_2_KIB,
             >>::prove_all_partitions_with_vanilla(
                 &vanilla_setup_params,
                 &vanilla_pub_inputs,
@@ -1240,17 +1239,17 @@ where
                 .flat_map(|halo_proof| halo_proof.as_bytes().to_vec())
                 .collect()
         }
-        SECTOR_SIZE_4_KIB => {
-            let circ = EmptySectorUpdateCircuit::<F, U, V, W, SECTOR_SIZE_4_KIB>::blank_circuit();
+        SECTOR_NODES_4_KIB => {
+            let circ = EmptySectorUpdateCircuit::<F, U, V, W, SECTOR_NODES_4_KIB>::blank_circuit();
 
             let keypair = <EmptySectorUpdate<F, U, V, W> as halo2::CompoundProof<
                 F,
-                SECTOR_SIZE_4_KIB,
+                SECTOR_NODES_4_KIB,
             >>::create_keypair(&circ)?;
 
             let circ_partition_proofs = <EmptySectorUpdate<F, U, V, W> as halo2::CompoundProof<
                 F,
-                SECTOR_SIZE_4_KIB,
+                SECTOR_NODES_4_KIB,
             >>::prove_all_partitions_with_vanilla(
                 &vanilla_setup_params,
                 &vanilla_pub_inputs,
@@ -1263,17 +1262,17 @@ where
                 .flat_map(|halo_proof| halo_proof.as_bytes().to_vec())
                 .collect()
         }
-        SECTOR_SIZE_8_KIB => {
-            let circ = EmptySectorUpdateCircuit::<F, U, V, W, SECTOR_SIZE_8_KIB>::blank_circuit();
+        SECTOR_NODES_8_KIB => {
+            let circ = EmptySectorUpdateCircuit::<F, U, V, W, SECTOR_NODES_8_KIB>::blank_circuit();
 
             let keypair = <EmptySectorUpdate<F, U, V, W> as halo2::CompoundProof<
                 F,
-                SECTOR_SIZE_8_KIB,
+                SECTOR_NODES_8_KIB,
             >>::create_keypair(&circ)?;
 
             let circ_partition_proofs = <EmptySectorUpdate<F, U, V, W> as halo2::CompoundProof<
                 F,
-                SECTOR_SIZE_8_KIB,
+                SECTOR_NODES_8_KIB,
             >>::prove_all_partitions_with_vanilla(
                 &vanilla_setup_params,
                 &vanilla_pub_inputs,
@@ -1286,17 +1285,17 @@ where
                 .flat_map(|halo_proof| halo_proof.as_bytes().to_vec())
                 .collect()
         }
-        SECTOR_SIZE_16_KIB => {
-            let circ = EmptySectorUpdateCircuit::<F, U, V, W, SECTOR_SIZE_16_KIB>::blank_circuit();
+        SECTOR_NODES_16_KIB => {
+            let circ = EmptySectorUpdateCircuit::<F, U, V, W, SECTOR_NODES_16_KIB>::blank_circuit();
 
             let keypair = <EmptySectorUpdate<F, U, V, W> as halo2::CompoundProof<
                 F,
-                SECTOR_SIZE_16_KIB,
+                SECTOR_NODES_16_KIB,
             >>::create_keypair(&circ)?;
 
             let circ_partition_proofs = <EmptySectorUpdate<F, U, V, W> as halo2::CompoundProof<
                 F,
-                SECTOR_SIZE_16_KIB,
+                SECTOR_NODES_16_KIB,
             >>::prove_all_partitions_with_vanilla(
                 &vanilla_setup_params,
                 &vanilla_pub_inputs,
@@ -1309,17 +1308,17 @@ where
                 .flat_map(|halo_proof| halo_proof.as_bytes().to_vec())
                 .collect()
         }
-        SECTOR_SIZE_32_KIB => {
-            let circ = EmptySectorUpdateCircuit::<F, U, V, W, SECTOR_SIZE_32_KIB>::blank_circuit();
+        SECTOR_NODES_32_KIB => {
+            let circ = EmptySectorUpdateCircuit::<F, U, V, W, SECTOR_NODES_32_KIB>::blank_circuit();
 
             let keypair = <EmptySectorUpdate<F, U, V, W> as halo2::CompoundProof<
                 F,
-                SECTOR_SIZE_32_KIB,
+                SECTOR_NODES_32_KIB,
             >>::create_keypair(&circ)?;
 
             let circ_partition_proofs = <EmptySectorUpdate<F, U, V, W> as halo2::CompoundProof<
                 F,
-                SECTOR_SIZE_32_KIB,
+                SECTOR_NODES_32_KIB,
             >>::prove_all_partitions_with_vanilla(
                 &vanilla_setup_params,
                 &vanilla_pub_inputs,
@@ -1332,17 +1331,17 @@ where
                 .flat_map(|halo_proof| halo_proof.as_bytes().to_vec())
                 .collect()
         }
-        SECTOR_SIZE_8_MIB => {
-            let circ = EmptySectorUpdateCircuit::<F, U, V, W, SECTOR_SIZE_8_MIB>::blank_circuit();
+        SECTOR_NODES_8_MIB => {
+            let circ = EmptySectorUpdateCircuit::<F, U, V, W, SECTOR_NODES_8_MIB>::blank_circuit();
 
             let keypair = <EmptySectorUpdate<F, U, V, W> as halo2::CompoundProof<
                 F,
-                SECTOR_SIZE_8_MIB,
+                SECTOR_NODES_8_MIB,
             >>::create_keypair(&circ)?;
 
             let circ_partition_proofs = <EmptySectorUpdate<F, U, V, W> as halo2::CompoundProof<
                 F,
-                SECTOR_SIZE_8_MIB,
+                SECTOR_NODES_8_MIB,
             >>::prove_all_partitions_with_vanilla(
                 &vanilla_setup_params,
                 &vanilla_pub_inputs,
@@ -1355,17 +1354,17 @@ where
                 .flat_map(|halo_proof| halo_proof.as_bytes().to_vec())
                 .collect()
         }
-        SECTOR_SIZE_16_MIB => {
-            let circ = EmptySectorUpdateCircuit::<F, U, V, W, SECTOR_SIZE_16_MIB>::blank_circuit();
+        SECTOR_NODES_16_MIB => {
+            let circ = EmptySectorUpdateCircuit::<F, U, V, W, SECTOR_NODES_16_MIB>::blank_circuit();
 
             let keypair = <EmptySectorUpdate<F, U, V, W> as halo2::CompoundProof<
                 F,
-                SECTOR_SIZE_16_MIB,
+                SECTOR_NODES_16_MIB,
             >>::create_keypair(&circ)?;
 
             let circ_partition_proofs = <EmptySectorUpdate<F, U, V, W> as halo2::CompoundProof<
                 F,
-                SECTOR_SIZE_16_MIB,
+                SECTOR_NODES_16_MIB,
             >>::prove_all_partitions_with_vanilla(
                 &vanilla_setup_params,
                 &vanilla_pub_inputs,
@@ -1378,17 +1377,18 @@ where
                 .flat_map(|halo_proof| halo_proof.as_bytes().to_vec())
                 .collect()
         }
-        SECTOR_SIZE_512_MIB => {
-            let circ = EmptySectorUpdateCircuit::<F, U, V, W, SECTOR_SIZE_512_MIB>::blank_circuit();
+        SECTOR_NODES_512_MIB => {
+            let circ =
+                EmptySectorUpdateCircuit::<F, U, V, W, SECTOR_NODES_512_MIB>::blank_circuit();
 
             let keypair = <EmptySectorUpdate<F, U, V, W> as halo2::CompoundProof<
                 F,
-                SECTOR_SIZE_512_MIB,
+                SECTOR_NODES_512_MIB,
             >>::create_keypair(&circ)?;
 
             let circ_partition_proofs = <EmptySectorUpdate<F, U, V, W> as halo2::CompoundProof<
                 F,
-                SECTOR_SIZE_512_MIB,
+                SECTOR_NODES_512_MIB,
             >>::prove_all_partitions_with_vanilla(
                 &vanilla_setup_params,
                 &vanilla_pub_inputs,
@@ -1401,17 +1401,17 @@ where
                 .flat_map(|halo_proof| halo_proof.as_bytes().to_vec())
                 .collect()
         }
-        SECTOR_SIZE_32_GIB => {
-            let circ = EmptySectorUpdateCircuit::<F, U, V, W, SECTOR_SIZE_32_GIB>::blank_circuit();
+        SECTOR_NODES_32_GIB => {
+            let circ = EmptySectorUpdateCircuit::<F, U, V, W, SECTOR_NODES_32_GIB>::blank_circuit();
 
             let keypair = <EmptySectorUpdate<F, U, V, W> as halo2::CompoundProof<
                 F,
-                SECTOR_SIZE_32_GIB,
+                SECTOR_NODES_32_GIB,
             >>::create_keypair(&circ)?;
 
             let circ_partition_proofs = <EmptySectorUpdate<F, U, V, W> as halo2::CompoundProof<
                 F,
-                SECTOR_SIZE_32_GIB,
+                SECTOR_NODES_32_GIB,
             >>::prove_all_partitions_with_vanilla(
                 &vanilla_setup_params,
                 &vanilla_pub_inputs,
@@ -1424,17 +1424,17 @@ where
                 .flat_map(|halo_proof| halo_proof.as_bytes().to_vec())
                 .collect()
         }
-        SECTOR_SIZE_64_GIB => {
-            let circ = EmptySectorUpdateCircuit::<F, U, V, W, SECTOR_SIZE_64_GIB>::blank_circuit();
+        SECTOR_NODES_64_GIB => {
+            let circ = EmptySectorUpdateCircuit::<F, U, V, W, SECTOR_NODES_64_GIB>::blank_circuit();
 
             let keypair = <EmptySectorUpdate<F, U, V, W> as halo2::CompoundProof<
                 F,
-                SECTOR_SIZE_64_GIB,
+                SECTOR_NODES_64_GIB,
             >>::create_keypair(&circ)?;
 
             let circ_partition_proofs = <EmptySectorUpdate<F, U, V, W> as halo2::CompoundProof<
                 F,
-                SECTOR_SIZE_64_GIB,
+                SECTOR_NODES_64_GIB,
             >>::prove_all_partitions_with_vanilla(
                 &vanilla_setup_params,
                 &vanilla_pub_inputs,
@@ -1593,20 +1593,20 @@ where
     let proofs_bytes = proof_bytes.chunks(proof_byte_len).map(Vec::<u8>::from);
 
     match sector_nodes {
-        SECTOR_SIZE_1_KIB => {
+        SECTOR_NODES_1_KIB => {
             let circ_partition_proofs: Vec<
-                Halo2Proof<F::Affine, EmptySectorUpdateCircuit<F, U, V, W, SECTOR_SIZE_1_KIB>>,
+                Halo2Proof<F::Affine, EmptySectorUpdateCircuit<F, U, V, W, SECTOR_NODES_1_KIB>>,
             > = proofs_bytes.map(Into::into).collect();
 
-            let circ = EmptySectorUpdateCircuit::<F, U, V, W, SECTOR_SIZE_1_KIB>::blank_circuit();
+            let circ = EmptySectorUpdateCircuit::<F, U, V, W, SECTOR_NODES_1_KIB>::blank_circuit();
 
             let keypair = <EmptySectorUpdate<F, U, V, W> as halo2::CompoundProof<
                 F,
-                SECTOR_SIZE_1_KIB,
+                SECTOR_NODES_1_KIB,
             >>::create_keypair(&circ)?;
 
             <
-                EmptySectorUpdate<F, U, V, W> as halo2::CompoundProof<F, SECTOR_SIZE_1_KIB>
+                EmptySectorUpdate<F, U, V, W> as halo2::CompoundProof<F, SECTOR_NODES_1_KIB>
             >::verify_all_partitions(
                 &vanilla_setup_params,
                 &vanilla_pub_inputs,
@@ -1614,20 +1614,20 @@ where
                 &keypair,
             )?;
         }
-        SECTOR_SIZE_2_KIB => {
+        SECTOR_NODES_2_KIB => {
             let circ_partition_proofs: Vec<
-                Halo2Proof<F::Affine, EmptySectorUpdateCircuit<F, U, V, W, SECTOR_SIZE_2_KIB>>,
+                Halo2Proof<F::Affine, EmptySectorUpdateCircuit<F, U, V, W, SECTOR_NODES_2_KIB>>,
             > = proofs_bytes.map(Into::into).collect();
 
-            let circ = EmptySectorUpdateCircuit::<F, U, V, W, SECTOR_SIZE_2_KIB>::blank_circuit();
+            let circ = EmptySectorUpdateCircuit::<F, U, V, W, SECTOR_NODES_2_KIB>::blank_circuit();
 
             let keypair = <EmptySectorUpdate<F, U, V, W> as halo2::CompoundProof<
                 F,
-                SECTOR_SIZE_2_KIB,
+                SECTOR_NODES_2_KIB,
             >>::create_keypair(&circ)?;
 
             <
-                EmptySectorUpdate<F, U, V, W> as halo2::CompoundProof<F, SECTOR_SIZE_2_KIB>
+                EmptySectorUpdate<F, U, V, W> as halo2::CompoundProof<F, SECTOR_NODES_2_KIB>
             >::verify_all_partitions(
                 &vanilla_setup_params,
                 &vanilla_pub_inputs,
@@ -1635,20 +1635,20 @@ where
                 &keypair,
             )?;
         }
-        SECTOR_SIZE_4_KIB => {
+        SECTOR_NODES_4_KIB => {
             let circ_partition_proofs: Vec<
-                Halo2Proof<F::Affine, EmptySectorUpdateCircuit<F, U, V, W, SECTOR_SIZE_4_KIB>>,
+                Halo2Proof<F::Affine, EmptySectorUpdateCircuit<F, U, V, W, SECTOR_NODES_4_KIB>>,
             > = proofs_bytes.map(Into::into).collect();
 
-            let circ = EmptySectorUpdateCircuit::<F, U, V, W, SECTOR_SIZE_4_KIB>::blank_circuit();
+            let circ = EmptySectorUpdateCircuit::<F, U, V, W, SECTOR_NODES_4_KIB>::blank_circuit();
 
             let keypair = <EmptySectorUpdate<F, U, V, W> as halo2::CompoundProof<
                 F,
-                SECTOR_SIZE_4_KIB,
+                SECTOR_NODES_4_KIB,
             >>::create_keypair(&circ)?;
 
             <
-                EmptySectorUpdate<F, U, V, W> as halo2::CompoundProof<F, SECTOR_SIZE_4_KIB>
+                EmptySectorUpdate<F, U, V, W> as halo2::CompoundProof<F, SECTOR_NODES_4_KIB>
             >::verify_all_partitions(
                 &vanilla_setup_params,
                 &vanilla_pub_inputs,
@@ -1656,20 +1656,20 @@ where
                 &keypair,
             )?;
         }
-        SECTOR_SIZE_8_KIB => {
+        SECTOR_NODES_8_KIB => {
             let circ_partition_proofs: Vec<
-                Halo2Proof<F::Affine, EmptySectorUpdateCircuit<F, U, V, W, SECTOR_SIZE_8_KIB>>,
+                Halo2Proof<F::Affine, EmptySectorUpdateCircuit<F, U, V, W, SECTOR_NODES_8_KIB>>,
             > = proofs_bytes.map(Into::into).collect();
 
-            let circ = EmptySectorUpdateCircuit::<F, U, V, W, SECTOR_SIZE_8_KIB>::blank_circuit();
+            let circ = EmptySectorUpdateCircuit::<F, U, V, W, SECTOR_NODES_8_KIB>::blank_circuit();
 
             let keypair = <EmptySectorUpdate<F, U, V, W> as halo2::CompoundProof<
                 F,
-                SECTOR_SIZE_8_KIB,
+                SECTOR_NODES_8_KIB,
             >>::create_keypair(&circ)?;
 
             <
-                EmptySectorUpdate<F, U, V, W> as halo2::CompoundProof<F, SECTOR_SIZE_8_KIB>
+                EmptySectorUpdate<F, U, V, W> as halo2::CompoundProof<F, SECTOR_NODES_8_KIB>
             >::verify_all_partitions(
                 &vanilla_setup_params,
                 &vanilla_pub_inputs,
@@ -1677,20 +1677,20 @@ where
                 &keypair,
             )?;
         }
-        SECTOR_SIZE_16_KIB => {
+        SECTOR_NODES_16_KIB => {
             let circ_partition_proofs: Vec<
-                Halo2Proof<F::Affine, EmptySectorUpdateCircuit<F, U, V, W, SECTOR_SIZE_16_KIB>>,
+                Halo2Proof<F::Affine, EmptySectorUpdateCircuit<F, U, V, W, SECTOR_NODES_16_KIB>>,
             > = proofs_bytes.map(Into::into).collect();
 
-            let circ = EmptySectorUpdateCircuit::<F, U, V, W, SECTOR_SIZE_16_KIB>::blank_circuit();
+            let circ = EmptySectorUpdateCircuit::<F, U, V, W, SECTOR_NODES_16_KIB>::blank_circuit();
 
             let keypair = <EmptySectorUpdate<F, U, V, W> as halo2::CompoundProof<
                 F,
-                SECTOR_SIZE_16_KIB,
+                SECTOR_NODES_16_KIB,
             >>::create_keypair(&circ)?;
 
             <
-                EmptySectorUpdate<F, U, V, W> as halo2::CompoundProof<F, SECTOR_SIZE_16_KIB>
+                EmptySectorUpdate<F, U, V, W> as halo2::CompoundProof<F, SECTOR_NODES_16_KIB>
             >::verify_all_partitions(
                 &vanilla_setup_params,
                 &vanilla_pub_inputs,
@@ -1698,20 +1698,20 @@ where
                 &keypair,
             )?;
         }
-        SECTOR_SIZE_32_KIB => {
+        SECTOR_NODES_32_KIB => {
             let circ_partition_proofs: Vec<
-                Halo2Proof<F::Affine, EmptySectorUpdateCircuit<F, U, V, W, SECTOR_SIZE_32_KIB>>,
+                Halo2Proof<F::Affine, EmptySectorUpdateCircuit<F, U, V, W, SECTOR_NODES_32_KIB>>,
             > = proofs_bytes.map(Into::into).collect();
 
-            let circ = EmptySectorUpdateCircuit::<F, U, V, W, SECTOR_SIZE_32_KIB>::blank_circuit();
+            let circ = EmptySectorUpdateCircuit::<F, U, V, W, SECTOR_NODES_32_KIB>::blank_circuit();
 
             let keypair = <EmptySectorUpdate<F, U, V, W> as halo2::CompoundProof<
                 F,
-                SECTOR_SIZE_32_KIB,
+                SECTOR_NODES_32_KIB,
             >>::create_keypair(&circ)?;
 
             <
-                EmptySectorUpdate<F, U, V, W> as halo2::CompoundProof<F, SECTOR_SIZE_32_KIB>
+                EmptySectorUpdate<F, U, V, W> as halo2::CompoundProof<F, SECTOR_NODES_32_KIB>
             >::verify_all_partitions(
                 &vanilla_setup_params,
                 &vanilla_pub_inputs,
@@ -1719,20 +1719,20 @@ where
                 &keypair,
             )?;
         }
-        SECTOR_SIZE_8_MIB => {
+        SECTOR_NODES_8_MIB => {
             let circ_partition_proofs: Vec<
-                Halo2Proof<F::Affine, EmptySectorUpdateCircuit<F, U, V, W, SECTOR_SIZE_8_MIB>>,
+                Halo2Proof<F::Affine, EmptySectorUpdateCircuit<F, U, V, W, SECTOR_NODES_8_MIB>>,
             > = proofs_bytes.map(Into::into).collect();
 
-            let circ = EmptySectorUpdateCircuit::<F, U, V, W, SECTOR_SIZE_8_MIB>::blank_circuit();
+            let circ = EmptySectorUpdateCircuit::<F, U, V, W, SECTOR_NODES_8_MIB>::blank_circuit();
 
             let keypair = <EmptySectorUpdate<F, U, V, W> as halo2::CompoundProof<
                 F,
-                SECTOR_SIZE_8_MIB,
+                SECTOR_NODES_8_MIB,
             >>::create_keypair(&circ)?;
 
             <
-                EmptySectorUpdate<F, U, V, W> as halo2::CompoundProof<F, SECTOR_SIZE_8_MIB>
+                EmptySectorUpdate<F, U, V, W> as halo2::CompoundProof<F, SECTOR_NODES_8_MIB>
             >::verify_all_partitions(
                 &vanilla_setup_params,
                 &vanilla_pub_inputs,
@@ -1740,20 +1740,20 @@ where
                 &keypair,
             )?;
         }
-        SECTOR_SIZE_16_MIB => {
+        SECTOR_NODES_16_MIB => {
             let circ_partition_proofs: Vec<
-                Halo2Proof<F::Affine, EmptySectorUpdateCircuit<F, U, V, W, SECTOR_SIZE_16_MIB>>,
+                Halo2Proof<F::Affine, EmptySectorUpdateCircuit<F, U, V, W, SECTOR_NODES_16_MIB>>,
             > = proofs_bytes.map(Into::into).collect();
 
-            let circ = EmptySectorUpdateCircuit::<F, U, V, W, SECTOR_SIZE_16_MIB>::blank_circuit();
+            let circ = EmptySectorUpdateCircuit::<F, U, V, W, SECTOR_NODES_16_MIB>::blank_circuit();
 
             let keypair = <EmptySectorUpdate<F, U, V, W> as halo2::CompoundProof<
                 F,
-                SECTOR_SIZE_16_MIB,
+                SECTOR_NODES_16_MIB,
             >>::create_keypair(&circ)?;
 
             <
-                EmptySectorUpdate<F, U, V, W> as halo2::CompoundProof<F, SECTOR_SIZE_16_MIB>
+                EmptySectorUpdate<F, U, V, W> as halo2::CompoundProof<F, SECTOR_NODES_16_MIB>
             >::verify_all_partitions(
                 &vanilla_setup_params,
                 &vanilla_pub_inputs,
@@ -1761,20 +1761,21 @@ where
                 &keypair,
             )?;
         }
-        SECTOR_SIZE_512_MIB => {
+        SECTOR_NODES_512_MIB => {
             let circ_partition_proofs: Vec<
-                Halo2Proof<F::Affine, EmptySectorUpdateCircuit<F, U, V, W, SECTOR_SIZE_512_MIB>>,
+                Halo2Proof<F::Affine, EmptySectorUpdateCircuit<F, U, V, W, SECTOR_NODES_512_MIB>>,
             > = proofs_bytes.map(Into::into).collect();
 
-            let circ = EmptySectorUpdateCircuit::<F, U, V, W, SECTOR_SIZE_512_MIB>::blank_circuit();
+            let circ =
+                EmptySectorUpdateCircuit::<F, U, V, W, SECTOR_NODES_512_MIB>::blank_circuit();
 
             let keypair = <EmptySectorUpdate<F, U, V, W> as halo2::CompoundProof<
                 F,
-                SECTOR_SIZE_512_MIB,
+                SECTOR_NODES_512_MIB,
             >>::create_keypair(&circ)?;
 
             <
-                EmptySectorUpdate<F, U, V, W> as halo2::CompoundProof<F, SECTOR_SIZE_512_MIB>
+                EmptySectorUpdate<F, U, V, W> as halo2::CompoundProof<F, SECTOR_NODES_512_MIB>
             >::verify_all_partitions(
                 &vanilla_setup_params,
                 &vanilla_pub_inputs,
@@ -1782,20 +1783,20 @@ where
                 &keypair,
             )?;
         }
-        SECTOR_SIZE_32_GIB => {
+        SECTOR_NODES_32_GIB => {
             let circ_partition_proofs: Vec<
-                Halo2Proof<F::Affine, EmptySectorUpdateCircuit<F, U, V, W, SECTOR_SIZE_32_GIB>>,
+                Halo2Proof<F::Affine, EmptySectorUpdateCircuit<F, U, V, W, SECTOR_NODES_32_GIB>>,
             > = proofs_bytes.map(Into::into).collect();
 
-            let circ = EmptySectorUpdateCircuit::<F, U, V, W, SECTOR_SIZE_32_GIB>::blank_circuit();
+            let circ = EmptySectorUpdateCircuit::<F, U, V, W, SECTOR_NODES_32_GIB>::blank_circuit();
 
             let keypair = <EmptySectorUpdate<F, U, V, W> as halo2::CompoundProof<
                 F,
-                SECTOR_SIZE_32_GIB,
+                SECTOR_NODES_32_GIB,
             >>::create_keypair(&circ)?;
 
             <
-                EmptySectorUpdate<F, U, V, W> as halo2::CompoundProof<F, SECTOR_SIZE_32_GIB>
+                EmptySectorUpdate<F, U, V, W> as halo2::CompoundProof<F, SECTOR_NODES_32_GIB>
             >::verify_all_partitions(
                 &vanilla_setup_params,
                 &vanilla_pub_inputs,
@@ -1803,20 +1804,20 @@ where
                 &keypair,
             )?;
         }
-        SECTOR_SIZE_64_GIB => {
+        SECTOR_NODES_64_GIB => {
             let circ_partition_proofs: Vec<
-                Halo2Proof<F::Affine, EmptySectorUpdateCircuit<F, U, V, W, SECTOR_SIZE_64_GIB>>,
+                Halo2Proof<F::Affine, EmptySectorUpdateCircuit<F, U, V, W, SECTOR_NODES_64_GIB>>,
             > = proofs_bytes.map(Into::into).collect();
 
-            let circ = EmptySectorUpdateCircuit::<F, U, V, W, SECTOR_SIZE_64_GIB>::blank_circuit();
+            let circ = EmptySectorUpdateCircuit::<F, U, V, W, SECTOR_NODES_64_GIB>::blank_circuit();
 
             let keypair = <EmptySectorUpdate<F, U, V, W> as halo2::CompoundProof<
                 F,
-                SECTOR_SIZE_64_GIB,
+                SECTOR_NODES_64_GIB,
             >>::create_keypair(&circ)?;
 
             <
-                EmptySectorUpdate<F, U, V, W> as halo2::CompoundProof<F, SECTOR_SIZE_64_GIB>
+                EmptySectorUpdate<F, U, V, W> as halo2::CompoundProof<F, SECTOR_NODES_64_GIB>
             >::verify_all_partitions(
                 &vanilla_setup_params,
                 &vanilla_pub_inputs,

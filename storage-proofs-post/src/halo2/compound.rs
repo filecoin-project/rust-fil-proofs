@@ -7,17 +7,15 @@ use storage_proofs_core::{
         Halo2Field, Halo2Keypair, Halo2Proof,
     },
     merkle::MerkleTreeTrait,
+    SECTOR_NODES_16_KIB, SECTOR_NODES_16_MIB, SECTOR_NODES_1_GIB, SECTOR_NODES_2_KIB,
+    SECTOR_NODES_32_GIB, SECTOR_NODES_32_KIB, SECTOR_NODES_4_KIB, SECTOR_NODES_512_MIB,
+    SECTOR_NODES_64_GIB, SECTOR_NODES_8_MIB,
 };
 
 use crate::{
     fallback::{self as vanilla, FallbackPoSt, SetupParams},
     halo2::{
         circuit::PostCircuit,
-        constants::{
-            SECTOR_NODES_16_KIB, SECTOR_NODES_16_MIB, SECTOR_NODES_1_GIB, SECTOR_NODES_2_KIB,
-            SECTOR_NODES_32_GIB, SECTOR_NODES_32_KIB, SECTOR_NODES_4_KIB, SECTOR_NODES_512_MIB,
-            SECTOR_NODES_64_GIB, SECTOR_NODES_8_MIB,
-        },
         window::{self, WindowPostCircuit},
         winning::{self, WinningPostCircuit},
     },
