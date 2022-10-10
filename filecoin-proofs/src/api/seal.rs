@@ -27,19 +27,13 @@ use storage_proofs_core::{
     proof::ProofScheme,
     sector::SectorId,
     util::default_rows_to_discard,
-    Data,
+    Data, SECTOR_NODES_16_KIB, SECTOR_NODES_16_MIB, SECTOR_NODES_2_KIB, SECTOR_NODES_32_GIB,
+    SECTOR_NODES_32_KIB, SECTOR_NODES_4_KIB, SECTOR_NODES_512_MIB, SECTOR_NODES_64_GIB,
+    SECTOR_NODES_8_MIB,
 };
 use storage_proofs_porep::stacked::{
-    self, generate_replica_id,
-    halo2::{
-        constants::{
-            SECTOR_NODES_16_KIB, SECTOR_NODES_16_MIB, SECTOR_NODES_2_KIB, SECTOR_NODES_32_GIB,
-            SECTOR_NODES_32_KIB, SECTOR_NODES_4_KIB, SECTOR_NODES_512_MIB, SECTOR_NODES_64_GIB,
-            SECTOR_NODES_8_MIB,
-        },
-        SdrPorepCircuit,
-    },
-    ChallengeRequirements, StackedCompound, StackedDrg, Tau, TemporaryAux, TemporaryAuxCache,
+    self, generate_replica_id, halo2::SdrPorepCircuit, ChallengeRequirements, StackedCompound,
+    StackedDrg, Tau, TemporaryAux, TemporaryAuxCache,
 };
 
 use crate::{

@@ -281,14 +281,15 @@ mod tests {
     use filecoin_hashers::{Domain, HashFunction, Hasher};
     use rand::SeedableRng;
     use rand_xorshift::XorShiftRng;
-    use storage_proofs_core::TEST_SEED;
+    use storage_proofs_core::{
+        SECTOR_NODES_16_KIB, SECTOR_NODES_1_KIB, SECTOR_NODES_2_KIB, SECTOR_NODES_32_KIB,
+        SECTOR_NODES_4_KIB, SECTOR_NODES_8_KIB, TEST_SEED,
+    };
 
     use crate::{
         challenges::Challenges,
         constants::{
             self, apex_leaf_count, challenge_count, partition_count, ALLOWED_SECTOR_SIZES,
-            SECTOR_SIZE_16_KIB, SECTOR_SIZE_1_KIB, SECTOR_SIZE_2_KIB, SECTOR_SIZE_32_KIB,
-            SECTOR_SIZE_4_KIB, SECTOR_SIZE_8_KIB,
         },
     };
 
@@ -468,7 +469,7 @@ mod tests {
     fn test_apex_por_gadget_16kib_4_8_partitions() {
         // Hardcode these values to test more than one partition without using a large sector-size.
         // Use the row from TreeD which has 64 nodes as the apex-leafs row.
-        let sector_nodes = SECTOR_SIZE_16_KIB;
+        let sector_nodes = SECTOR_NODES_16_KIB;
 
         // Total apex leafs = 4 * 16 = 64
         let partition_count = 4;
@@ -494,12 +495,12 @@ mod tests {
     #[test]
     fn test_apex_por_gadget_small_sector_sizes() {
         let small_sector_sizes = [
-            SECTOR_SIZE_1_KIB,
-            SECTOR_SIZE_2_KIB,
-            SECTOR_SIZE_4_KIB,
-            SECTOR_SIZE_8_KIB,
-            SECTOR_SIZE_16_KIB,
-            SECTOR_SIZE_32_KIB,
+            SECTOR_NODES_1_KIB,
+            SECTOR_NODES_2_KIB,
+            SECTOR_NODES_4_KIB,
+            SECTOR_NODES_8_KIB,
+            SECTOR_NODES_16_KIB,
+            SECTOR_NODES_32_KIB,
         ];
         let num_constraints_expected = [317654, 317654, 317654, 317654, 5808515, 5808515];
         for (sector_nodes, constraints_expected) in small_sector_sizes

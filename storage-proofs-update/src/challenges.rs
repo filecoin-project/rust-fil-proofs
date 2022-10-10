@@ -244,14 +244,13 @@ mod tests {
     use filecoin_hashers::Domain;
     use rand::SeedableRng;
     use rand_xorshift::XorShiftRng;
-    use storage_proofs_core::TEST_SEED;
-
-    use crate::constants::{
-        TreeRDomain, ALLOWED_SECTOR_SIZES, SECTOR_SIZE_16_KIB, SECTOR_SIZE_16_MIB,
-        SECTOR_SIZE_1_KIB, SECTOR_SIZE_2_KIB, SECTOR_SIZE_32_GIB, SECTOR_SIZE_32_KIB,
-        SECTOR_SIZE_4_KIB, SECTOR_SIZE_512_MIB, SECTOR_SIZE_64_GIB, SECTOR_SIZE_8_KIB,
-        SECTOR_SIZE_8_MIB,
+    use storage_proofs_core::{
+        SECTOR_NODES_16_KIB, SECTOR_NODES_16_MIB, SECTOR_NODES_1_KIB, SECTOR_NODES_2_KIB,
+        SECTOR_NODES_32_GIB, SECTOR_NODES_32_KIB, SECTOR_NODES_4_KIB, SECTOR_NODES_512_MIB,
+        SECTOR_NODES_64_GIB, SECTOR_NODES_8_KIB, SECTOR_NODES_8_MIB, TEST_SEED,
     };
+
+    use crate::constants::{TreeRDomain, ALLOWED_SECTOR_SIZES};
 
     #[test]
     fn test_challenges_against_hardcoded() {
@@ -263,80 +262,80 @@ mod tests {
 
         let test_vectors: HashMap<(SectorNodes, PartitionIndex), [u32; 5]> = {
             let mut hm = HashMap::new();
-            hm.insert((SECTOR_SIZE_1_KIB, 0), [21, 7, 3, 31, 0]);
-            hm.insert((SECTOR_SIZE_2_KIB, 0), [53, 51, 56, 3, 0]);
-            hm.insert((SECTOR_SIZE_4_KIB, 0), [117, 25, 62, 0, 72]);
-            hm.insert((SECTOR_SIZE_8_KIB, 0), [245, 140, 15, 128, 28]);
+            hm.insert((SECTOR_NODES_1_KIB, 0), [21, 7, 3, 31, 0]);
+            hm.insert((SECTOR_NODES_2_KIB, 0), [53, 51, 56, 3, 0]);
+            hm.insert((SECTOR_NODES_4_KIB, 0), [117, 25, 62, 0, 72]);
+            hm.insert((SECTOR_NODES_8_KIB, 0), [245, 140, 15, 128, 28]);
 
-            hm.insert((SECTOR_SIZE_16_KIB, 0), [245, 140, 15, 128, 28]);
-            hm.insert((SECTOR_SIZE_16_KIB, 1), [286, 308, 493, 510, 508]);
+            hm.insert((SECTOR_NODES_16_KIB, 0), [245, 140, 15, 128, 28]);
+            hm.insert((SECTOR_NODES_16_KIB, 1), [286, 308, 493, 510, 508]);
 
-            hm.insert((SECTOR_SIZE_32_KIB, 0), [245, 454, 3, 400, 193]);
-            hm.insert((SECTOR_SIZE_32_KIB, 1), [542, 666, 955, 927, 911]);
+            hm.insert((SECTOR_NODES_32_KIB, 0), [245, 454, 3, 400, 193]);
+            hm.insert((SECTOR_NODES_32_KIB, 1), [542, 666, 955, 927, 911]);
 
-            hm.insert((SECTOR_SIZE_8_MIB, 0), [36085, 32783, 44060, 10950, 3731]);
+            hm.insert((SECTOR_NODES_8_MIB, 0), [36085, 32783, 44060, 10950, 3731]);
             hm.insert(
-                (SECTOR_SIZE_8_MIB, 1),
+                (SECTOR_NODES_8_MIB, 1),
                 [78878, 130797, 112892, 93994, 78379],
             );
 
             hm.insert(
-                (SECTOR_SIZE_16_MIB, 0),
+                (SECTOR_NODES_16_MIB, 0),
                 [101621, 16391, 109319, 25944, 41193],
             );
             hm.insert(
-                (SECTOR_SIZE_16_MIB, 1),
+                (SECTOR_NODES_16_MIB, 1),
                 [209950, 163702, 175679, 224741, 197410],
             );
 
             hm.insert(
-                (SECTOR_SIZE_512_MIB, 0),
+                (SECTOR_NODES_512_MIB, 0),
                 [1019125, 116736, 706220, 59698, 799498],
             );
             hm.insert(
-                (SECTOR_SIZE_512_MIB, 1),
+                (SECTOR_NODES_512_MIB, 1),
                 [2092548, 1213276, 1185483, 1164598, 1095197],
             );
             hm.insert(
-                (SECTOR_SIZE_512_MIB, 14),
+                (SECTOR_NODES_512_MIB, 14),
                 [15212432, 15665918, 15015423, 15012912, 15495223],
             );
             hm.insert(
-                (SECTOR_SIZE_512_MIB, 15),
+                (SECTOR_NODES_512_MIB, 15),
                 [16388544, 15794686, 16637142, 16319148, 16328348],
             );
 
             hm.insert(
-                (SECTOR_SIZE_32_GIB, 0),
+                (SECTOR_NODES_32_GIB, 0),
                 [1019125, 27985696, 15282860, 11586600, 44651330],
             );
             hm.insert(
-                (SECTOR_SIZE_32_GIB, 1),
+                (SECTOR_NODES_32_GIB, 1),
                 [109168525, 127316247, 80331041, 97065716, 72310052],
             );
             hm.insert(
-                (SECTOR_SIZE_32_GIB, 14),
+                (SECTOR_NODES_32_GIB, 14),
                 [990420169, 955146989, 968005601, 976863263, 944650706],
             );
             hm.insert(
-                (SECTOR_SIZE_32_GIB, 15),
+                (SECTOR_NODES_32_GIB, 15),
                 [1038629497, 1053983614, 1030421316, 1027373887, 1068685433],
             );
 
             hm.insert(
-                (SECTOR_SIZE_64_GIB, 0),
+                (SECTOR_NODES_64_GIB, 0),
                 [1019125, 13992848, 3820715, 18225541, 57316660],
             );
             hm.insert(
-                (SECTOR_SIZE_64_GIB, 1),
+                (SECTOR_NODES_64_GIB, 1),
                 [243386253, 197875851, 204632136, 171516766, 247789010],
             );
             hm.insert(
-                (SECTOR_SIZE_64_GIB, 14),
+                (SECTOR_NODES_64_GIB, 14),
                 [1997053129, 1920414070, 2003609080, 1900492803, 1963254685],
             );
             hm.insert(
-                (SECTOR_SIZE_64_GIB, 15),
+                (SECTOR_NODES_64_GIB, 15),
                 [2045262457, 2036941247, 2136653521, 2091356007, 2147167623],
             );
 

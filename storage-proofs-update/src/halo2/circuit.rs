@@ -24,15 +24,13 @@ use storage_proofs_core::{
     },
     merkle::{MerkleProof, MerkleProofTrait},
     util::NODE_SIZE,
+    SECTOR_NODES_16_KIB, SECTOR_NODES_16_MIB, SECTOR_NODES_1_KIB, SECTOR_NODES_2_KIB,
+    SECTOR_NODES_32_GIB, SECTOR_NODES_32_KIB, SECTOR_NODES_4_KIB, SECTOR_NODES_512_MIB,
+    SECTOR_NODES_64_GIB, SECTOR_NODES_8_KIB, SECTOR_NODES_8_MIB,
 };
 
 use crate::{
-    constants::{
-        validate_tree_r_shape, TreeDArity, TreeDHasher, TreeRHasher, SECTOR_SIZE_16_KIB,
-        SECTOR_SIZE_16_MIB, SECTOR_SIZE_1_KIB, SECTOR_SIZE_2_KIB, SECTOR_SIZE_32_GIB,
-        SECTOR_SIZE_32_KIB, SECTOR_SIZE_4_KIB, SECTOR_SIZE_512_MIB, SECTOR_SIZE_64_GIB,
-        SECTOR_SIZE_8_KIB, SECTOR_SIZE_8_MIB,
-    },
+    constants::{validate_tree_r_shape, TreeDArity, TreeDHasher, TreeRHasher},
     gen_partition_challenges, gen_partition_rhos,
     halo2::{
         apex_leaf_count, challenge_count,
@@ -769,31 +767,31 @@ where
         // Computed using `Self::compute_k`.
         match GROTH16_PARTITIONING {
             true => match SECTOR_NODES {
-                SECTOR_SIZE_1_KIB => 17,
-                SECTOR_SIZE_2_KIB => 18,
-                SECTOR_SIZE_4_KIB => 18,
-                SECTOR_SIZE_8_KIB => 18,
-                SECTOR_SIZE_16_KIB => 20,
-                SECTOR_SIZE_32_KIB => 20,
-                SECTOR_SIZE_8_MIB => 20,
-                SECTOR_SIZE_16_MIB => 20,
-                SECTOR_SIZE_512_MIB => 23,
-                SECTOR_SIZE_32_GIB => 23,
-                SECTOR_SIZE_64_GIB => 23,
+                SECTOR_NODES_1_KIB => 17,
+                SECTOR_NODES_2_KIB => 18,
+                SECTOR_NODES_4_KIB => 18,
+                SECTOR_NODES_8_KIB => 18,
+                SECTOR_NODES_16_KIB => 20,
+                SECTOR_NODES_32_KIB => 20,
+                SECTOR_NODES_8_MIB => 20,
+                SECTOR_NODES_16_MIB => 20,
+                SECTOR_NODES_512_MIB => 23,
+                SECTOR_NODES_32_GIB => 23,
+                SECTOR_NODES_64_GIB => 23,
                 _ => unreachable!(),
             },
             false => match SECTOR_NODES {
-                SECTOR_SIZE_1_KIB => 17,
-                SECTOR_SIZE_2_KIB => 17,
-                SECTOR_SIZE_4_KIB => 17,
-                SECTOR_SIZE_8_KIB => 17,
-                SECTOR_SIZE_16_KIB => 17,
-                SECTOR_SIZE_32_KIB => 17,
-                SECTOR_SIZE_8_MIB => 17,
-                SECTOR_SIZE_16_MIB => 17,
-                SECTOR_SIZE_512_MIB => 17,
-                SECTOR_SIZE_32_GIB => 17,
-                SECTOR_SIZE_64_GIB => 18,
+                SECTOR_NODES_1_KIB => 17,
+                SECTOR_NODES_2_KIB => 17,
+                SECTOR_NODES_4_KIB => 17,
+                SECTOR_NODES_8_KIB => 17,
+                SECTOR_NODES_16_KIB => 17,
+                SECTOR_NODES_32_KIB => 17,
+                SECTOR_NODES_8_MIB => 17,
+                SECTOR_NODES_16_MIB => 17,
+                SECTOR_NODES_512_MIB => 17,
+                SECTOR_NODES_32_GIB => 17,
+                SECTOR_NODES_64_GIB => 18,
                 _ => unreachable!(),
             },
         }
@@ -1324,36 +1322,36 @@ fn get_k() {
     use generic_array::typenum::{U0, U4, U8};
     use halo2_proofs::pasta::Fp;
 
-    let mut k = EmptySectorUpdateCircuit::<Fp, U8, U4, U0, SECTOR_SIZE_1_KIB>::compute_k(None);
+    let mut k = EmptySectorUpdateCircuit::<Fp, U8, U4, U0, SECTOR_NODES_1_KIB>::compute_k(None);
     println!("Found k = {} (sector-size = 1kib)", k);
 
-    k = EmptySectorUpdateCircuit::<Fp, U8, U0, U0, SECTOR_SIZE_2_KIB>::compute_k(Some(k));
+    k = EmptySectorUpdateCircuit::<Fp, U8, U0, U0, SECTOR_NODES_2_KIB>::compute_k(Some(k));
     println!("Found k = {} (sector-size = 2kib)", k);
 
-    k = EmptySectorUpdateCircuit::<Fp, U8, U2, U0, SECTOR_SIZE_4_KIB>::compute_k(Some(k));
+    k = EmptySectorUpdateCircuit::<Fp, U8, U2, U0, SECTOR_NODES_4_KIB>::compute_k(Some(k));
     println!("Found k = {} (sector-size = 4kib)", k);
 
-    k = EmptySectorUpdateCircuit::<Fp, U8, U4, U0, SECTOR_SIZE_8_KIB>::compute_k(Some(k));
+    k = EmptySectorUpdateCircuit::<Fp, U8, U4, U0, SECTOR_NODES_8_KIB>::compute_k(Some(k));
     println!("Found k = {} (sector-size = 8kib)", k);
 
-    k = EmptySectorUpdateCircuit::<Fp, U8, U8, U0, SECTOR_SIZE_16_KIB>::compute_k(Some(k));
+    k = EmptySectorUpdateCircuit::<Fp, U8, U8, U0, SECTOR_NODES_16_KIB>::compute_k(Some(k));
     println!("Found k = {} (sector-size = 16kib)", k);
 
-    k = EmptySectorUpdateCircuit::<Fp, U8, U8, U2, SECTOR_SIZE_32_KIB>::compute_k(Some(k));
+    k = EmptySectorUpdateCircuit::<Fp, U8, U8, U2, SECTOR_NODES_32_KIB>::compute_k(Some(k));
     println!("Found k = {} (sector-size = 32kib)", k);
 
-    k = EmptySectorUpdateCircuit::<Fp, U8, U0, U0, SECTOR_SIZE_8_MIB>::compute_k(Some(k));
+    k = EmptySectorUpdateCircuit::<Fp, U8, U0, U0, SECTOR_NODES_8_MIB>::compute_k(Some(k));
     println!("Found k = {} (sector-size = 8mib)", k);
 
-    k = EmptySectorUpdateCircuit::<Fp, U8, U2, U0, SECTOR_SIZE_16_MIB>::compute_k(Some(k));
+    k = EmptySectorUpdateCircuit::<Fp, U8, U2, U0, SECTOR_NODES_16_MIB>::compute_k(Some(k));
     println!("Found k = {} (sector-size = 16mib)", k);
 
-    k = EmptySectorUpdateCircuit::<Fp, U8, U0, U0, SECTOR_SIZE_512_MIB>::compute_k(Some(k));
+    k = EmptySectorUpdateCircuit::<Fp, U8, U0, U0, SECTOR_NODES_512_MIB>::compute_k(Some(k));
     println!("Found k = {} (sector-size = 512mib)", k);
 
-    k = EmptySectorUpdateCircuit::<Fp, U8, U8, U0, SECTOR_SIZE_32_GIB>::compute_k(Some(k));
+    k = EmptySectorUpdateCircuit::<Fp, U8, U8, U0, SECTOR_NODES_32_GIB>::compute_k(Some(k));
     println!("Found k = {} (sector-size = 32gib)", k);
 
-    k = EmptySectorUpdateCircuit::<Fp, U8, U8, U2, SECTOR_SIZE_64_GIB>::compute_k(Some(k));
+    k = EmptySectorUpdateCircuit::<Fp, U8, U8, U2, SECTOR_NODES_64_GIB>::compute_k(Some(k));
     println!("Found k = {} (sector-size = 64gib)", k);
 }

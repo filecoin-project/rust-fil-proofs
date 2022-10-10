@@ -7,11 +7,11 @@ use filecoin_hashers::{Domain, HashFunction, Hasher, PoseidonArity};
 use generic_array::typenum::{U0, U4, U8};
 use rand::SeedableRng;
 use rand_xorshift::XorShiftRng;
-use storage_proofs_core::{merkle::MerkleTreeTrait, TEST_SEED};
+use storage_proofs_core::{
+    merkle::MerkleTreeTrait, SECTOR_NODES_1_KIB, SECTOR_NODES_32_GIB, SECTOR_NODES_8_KIB, TEST_SEED,
+};
 use storage_proofs_update::{
-    constants::{
-        self, hs, validate_tree_r_shape, SECTOR_SIZE_1_KIB, SECTOR_SIZE_32_GIB, SECTOR_SIZE_8_KIB,
-    },
+    constants::{self, hs, validate_tree_r_shape},
     phi,
     poseidon::{circuit, vanilla, EmptySectorUpdateCircuit},
     Challenges, PublicParams,
@@ -125,13 +125,13 @@ where
 #[test]
 #[cfg(feature = "isolated-testing")]
 fn test_empty_sector_update_poseidon_circuit_1kib() {
-    test_empty_sector_update_circuit::<U8, U4, U0>(SECTOR_SIZE_1_KIB, 32164); //old 1248389
+    test_empty_sector_update_circuit::<U8, U4, U0>(SECTOR_NODES_1_KIB, 32164); //old 1248389
 }
 
 #[test]
 #[cfg(feature = "isolated-testing")]
 fn test_empty_sector_update_poseidon_circuit_8kib() {
-    test_empty_sector_update_circuit::<U8, U4, U0>(SECTOR_SIZE_8_KIB, 47974); //old 2620359
+    test_empty_sector_update_circuit::<U8, U4, U0>(SECTOR_NODES_8_KIB, 47974); //old 2620359
 }
 
 #[test]
@@ -139,10 +139,10 @@ fn test_empty_sector_update_poseidon_circuit_8kib() {
 fn test_empty_sector_update_poseidon_constraints_32gib() {
     let pub_inputs = circuit::PublicInputs::empty();
 
-    let priv_inputs = circuit::PrivateInputs::empty(SECTOR_SIZE_32_GIB);
+    let priv_inputs = circuit::PrivateInputs::empty(SECTOR_NODES_32_GIB);
 
     let circuit = EmptySectorUpdateCircuit::<U8, U8, U0> {
-        pub_params: PublicParams::from_sector_size_poseidon(SECTOR_SIZE_32_GIB as u64 * 32),
+        pub_params: PublicParams::from_sector_size_poseidon(SECTOR_NODES_32_GIB as u64 * 32),
         pub_inputs,
         priv_inputs,
     };

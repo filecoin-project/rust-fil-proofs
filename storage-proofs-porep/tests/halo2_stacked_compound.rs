@@ -9,17 +9,15 @@ use rand::{Rng, SeedableRng};
 use rand_xorshift::XorShiftRng;
 use storage_proofs_core::{
     api_version::ApiVersion, cache_key::CacheKey, halo2::CompoundProof, merkle::DiskTree,
-    proof::ProofScheme, test_helper::setup_replica, util::default_rows_to_discard, TEST_SEED,
+    proof::ProofScheme, test_helper::setup_replica, util::default_rows_to_discard,
+    SECTOR_NODES_16_KIB, SECTOR_NODES_2_KIB, SECTOR_NODES_32_KIB, SECTOR_NODES_4_KIB,
+    SECTOR_NODES_8_KIB, TEST_SEED,
 };
 use storage_proofs_porep::{
     stacked::{
         self as vanilla,
         halo2::{
-            constants::{
-                challenge_count, num_layers, partition_count, DRG_PARENTS, EXP_PARENTS,
-                SECTOR_NODES_16_KIB, SECTOR_NODES_2_KIB, SECTOR_NODES_32_KIB, SECTOR_NODES_4_KIB,
-                SECTOR_NODES_8_KIB,
-            },
+            constants::{challenge_count, num_layers, partition_count, DRG_PARENTS, EXP_PARENTS},
             SdrPorepCircuit,
         },
         LayerChallenges, SetupParams, StackedDrg, TemporaryAux, TemporaryAuxCache, BINARY_ARITY,

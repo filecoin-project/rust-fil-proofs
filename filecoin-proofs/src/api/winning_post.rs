@@ -14,20 +14,16 @@ use storage_proofs_core::{
     multi_proof::MultiProof,
     proof::ProofScheme,
     sector::SectorId,
+    SECTOR_NODES_16_KIB, SECTOR_NODES_16_MIB, SECTOR_NODES_1_GIB, SECTOR_NODES_2_KIB,
+    SECTOR_NODES_32_GIB, SECTOR_NODES_32_KIB, SECTOR_NODES_4_KIB, SECTOR_NODES_512_MIB,
+    SECTOR_NODES_64_GIB, SECTOR_NODES_8_MIB,
 };
 use storage_proofs_post::{
     fallback::{
         self, generate_sector_challenges, FallbackPoSt, FallbackPoStCompound, PrivateSector,
         PublicSector,
     },
-    halo2::{
-        constants::{
-            SECTOR_NODES_16_KIB, SECTOR_NODES_16_MIB, SECTOR_NODES_1_GIB, SECTOR_NODES_2_KIB,
-            SECTOR_NODES_32_GIB, SECTOR_NODES_32_KIB, SECTOR_NODES_4_KIB, SECTOR_NODES_512_MIB,
-            SECTOR_NODES_64_GIB, SECTOR_NODES_8_MIB,
-        },
-        PostCircuit, WinningPostCircuit,
-    },
+    halo2::{PostCircuit, WinningPostCircuit},
 };
 
 use crate::{

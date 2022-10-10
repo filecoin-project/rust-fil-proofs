@@ -10,17 +10,15 @@ use halo2_proofs::{
     plonk::{Circuit, ConstraintSystem, Error},
 };
 use sha2::{Digest, Sha256};
-use storage_proofs_core::{halo2::CircuitRows, merkle::MerkleProofTrait, util::NODE_SIZE};
+use storage_proofs_core::{
+    halo2::CircuitRows, merkle::MerkleProofTrait, util::NODE_SIZE, SECTOR_NODES_16_KIB,
+    SECTOR_NODES_2_KIB, SECTOR_NODES_32_GIB, SECTOR_NODES_32_KIB, SECTOR_NODES_4_KIB,
+    SECTOR_NODES_512_MIB, SECTOR_NODES_64_GIB,
+};
 
 use crate::{
     fallback as vanilla,
-    halo2::{
-        circuit::{PostConfig, SectorProof},
-        constants::{
-            SECTOR_NODES_16_KIB, SECTOR_NODES_2_KIB, SECTOR_NODES_32_GIB, SECTOR_NODES_32_KIB,
-            SECTOR_NODES_4_KIB, SECTOR_NODES_512_MIB, SECTOR_NODES_64_GIB,
-        },
-    },
+    halo2::circuit::{PostConfig, SectorProof},
 };
 
 // The number of Merkle challenges per challenged sector.

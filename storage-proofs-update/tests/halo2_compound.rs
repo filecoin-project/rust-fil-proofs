@@ -14,13 +14,11 @@ use storage_proofs_core::{
     merkle::{create_lc_tree, get_base_tree_count, split_config_and_replica, MerkleTreeTrait},
     proof::ProofScheme,
     util::default_rows_to_discard,
-    TEST_SEED,
+    SECTOR_NODES_16_KIB, SECTOR_NODES_1_KIB, SECTOR_NODES_2_KIB, SECTOR_NODES_32_KIB,
+    SECTOR_NODES_4_KIB, SECTOR_NODES_8_KIB, TEST_SEED,
 };
 use storage_proofs_update::{
-    constants::{
-        self, hs, validate_tree_r_shape, TreeDArity, SECTOR_SIZE_16_KIB, SECTOR_SIZE_1_KIB,
-        SECTOR_SIZE_2_KIB, SECTOR_SIZE_32_KIB, SECTOR_SIZE_4_KIB, SECTOR_SIZE_8_KIB,
-    },
+    constants::{self, hs, validate_tree_r_shape, TreeDArity},
     halo2::{partition_count, EmptySectorUpdateCircuit},
     phi, vanilla, EmptySectorUpdate, SetupParams,
 };
@@ -246,35 +244,35 @@ where
 #[test]
 #[cfg(feature = "isolated-testing")]
 fn test_empty_sector_update_compound_1kib_halo2() {
-    test_empty_sector_update_compound::<U8, U4, U0, SECTOR_SIZE_1_KIB>();
+    test_empty_sector_update_compound::<U8, U4, U0, SECTOR_NODES_1_KIB>();
 }
 
 #[test]
 #[cfg(feature = "isolated-testing")]
 fn test_empty_sector_update_compound_2kib_halo2() {
-    test_empty_sector_update_compound::<U8, U0, U0, SECTOR_SIZE_2_KIB>();
+    test_empty_sector_update_compound::<U8, U0, U0, SECTOR_NODES_2_KIB>();
 }
 
 #[test]
 #[cfg(feature = "isolated-testing")]
 fn test_empty_sector_update_compound_4kib_halo2() {
-    test_empty_sector_update_compound::<U8, U2, U0, SECTOR_SIZE_4_KIB>();
+    test_empty_sector_update_compound::<U8, U2, U0, SECTOR_NODES_4_KIB>();
 }
 
 #[test]
 #[cfg(feature = "isolated-testing")]
 fn test_empty_sector_update_compound_8kib_halo2() {
-    test_empty_sector_update_compound::<U8, U4, U0, SECTOR_SIZE_8_KIB>();
+    test_empty_sector_update_compound::<U8, U4, U0, SECTOR_NODES_8_KIB>();
 }
 
 #[test]
 #[cfg(feature = "big-tests")]
 fn test_empty_sector_update_compound_16kib_halo2() {
-    test_empty_sector_update_compound::<U8, U8, U0, SECTOR_SIZE_16_KIB>();
+    test_empty_sector_update_compound::<U8, U8, U0, SECTOR_NODES_16_KIB>();
 }
 
 #[test]
 #[cfg(feature = "big-tests")]
 fn test_empty_sector_update_compound_32kib_halo2() {
-    test_empty_sector_update_compound::<U8, U8, U2, SECTOR_SIZE_32_KIB>();
+    test_empty_sector_update_compound::<U8, U8, U2, SECTOR_NODES_32_KIB>();
 }

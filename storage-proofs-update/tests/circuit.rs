@@ -10,14 +10,13 @@ use filecoin_hashers::{Domain, HashFunction, Hasher, PoseidonArity};
 use generic_array::typenum::{U0, U2, U4, U8};
 use rand::SeedableRng;
 use rand_xorshift::XorShiftRng;
-use storage_proofs_core::{merkle::MerkleTreeTrait, TEST_SEED};
+use storage_proofs_core::{
+    merkle::MerkleTreeTrait, SECTOR_NODES_16_KIB, SECTOR_NODES_1_KIB, SECTOR_NODES_2_KIB,
+    SECTOR_NODES_32_GIB, SECTOR_NODES_32_KIB, SECTOR_NODES_4_KIB, SECTOR_NODES_8_KIB, TEST_SEED,
+};
 use storage_proofs_update::{
     circuit,
-    constants::{
-        self, apex_leaf_count, hs, partition_count, validate_tree_r_shape, SECTOR_SIZE_16_KIB,
-        SECTOR_SIZE_1_KIB, SECTOR_SIZE_2_KIB, SECTOR_SIZE_32_GIB, SECTOR_SIZE_32_KIB,
-        SECTOR_SIZE_4_KIB, SECTOR_SIZE_8_KIB,
-    },
+    constants::{self, apex_leaf_count, hs, partition_count, validate_tree_r_shape},
     phi, vanilla, Challenges, EmptySectorUpdateCircuit, PublicParams,
 };
 use tempfile::tempdir;
@@ -133,45 +132,45 @@ where
 #[test]
 #[cfg(feature = "isolated-testing")]
 fn test_empty_sector_update_circuit_1kib() {
-    test_empty_sector_update_circuit::<U8, U4, U0>(SECTOR_SIZE_1_KIB, 1248389);
+    test_empty_sector_update_circuit::<U8, U4, U0>(SECTOR_NODES_1_KIB, 1248389);
 }
 
 #[test]
 #[cfg(feature = "isolated-testing")]
 fn test_empty_sector_update_circuit_2kib() {
-    test_empty_sector_update_circuit::<U8, U0, U0>(SECTOR_SIZE_2_KIB, 1705039);
+    test_empty_sector_update_circuit::<U8, U0, U0>(SECTOR_NODES_2_KIB, 1705039);
 }
 
 #[test]
 #[cfg(feature = "isolated-testing")]
 fn test_empty_sector_update_circuit_4kib() {
-    test_empty_sector_update_circuit::<U8, U2, U0>(SECTOR_SIZE_4_KIB, 2165109);
+    test_empty_sector_update_circuit::<U8, U2, U0>(SECTOR_NODES_4_KIB, 2165109);
 }
 
 #[test]
 #[cfg(feature = "isolated-testing")]
 fn test_empty_sector_update_circuit_8kib() {
-    test_empty_sector_update_circuit::<U8, U4, U0>(SECTOR_SIZE_8_KIB, 2620359);
+    test_empty_sector_update_circuit::<U8, U4, U0>(SECTOR_NODES_8_KIB, 2620359);
 }
 
 #[test]
 #[cfg(feature = "isolated-testing")]
 fn test_empty_sector_update_circuit_16kib() {
-    test_empty_sector_update_circuit::<U8, U8, U0>(SECTOR_SIZE_16_KIB, 6300021);
+    test_empty_sector_update_circuit::<U8, U8, U0>(SECTOR_NODES_16_KIB, 6300021);
 }
 
 #[test]
 #[cfg(feature = "isolated-testing")]
 fn test_empty_sector_update_circuit_32kib() {
-    test_empty_sector_update_circuit::<U8, U8, U2>(SECTOR_SIZE_32_KIB, 6760091);
+    test_empty_sector_update_circuit::<U8, U8, U2>(SECTOR_NODES_32_KIB, 6760091);
 }
 
 #[test]
 #[ignore]
 fn test_empty_sector_update_constraints_32gib() {
-    let pub_params = PublicParams::from_sector_size(SECTOR_SIZE_32_GIB as u64 * 32);
+    let pub_params = PublicParams::from_sector_size(SECTOR_NODES_32_GIB as u64 * 32);
     let pub_inputs = circuit::PublicInputs::empty();
-    let priv_inputs = circuit::PrivateInputs::<U8, U8, U0>::empty(SECTOR_SIZE_32_GIB);
+    let priv_inputs = circuit::PrivateInputs::<U8, U8, U0>::empty(SECTOR_NODES_32_GIB);
 
     let circuit = EmptySectorUpdateCircuit {
         pub_params,

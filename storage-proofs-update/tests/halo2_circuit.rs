@@ -10,15 +10,12 @@ use rand_xorshift::XorShiftRng;
 use storage_proofs_core::{
     halo2::{create_proof, verify_proof, CircuitRows, Halo2Field, Halo2Keypair},
     merkle::MerkleTreeTrait,
-    TEST_SEED,
+    SECTOR_NODES_16_KIB, SECTOR_NODES_1_KIB, SECTOR_NODES_2_KIB, SECTOR_NODES_32_GIB,
+    SECTOR_NODES_32_KIB, SECTOR_NODES_4_KIB, SECTOR_NODES_512_MIB, SECTOR_NODES_64_GIB,
+    SECTOR_NODES_8_KIB, TEST_SEED,
 };
 use storage_proofs_update::{
-    constants::{
-        hs, validate_tree_r_shape, TreeDDomain, TreeR, TreeRDomain, TreeRHasher,
-        SECTOR_SIZE_16_KIB, SECTOR_SIZE_1_KIB, SECTOR_SIZE_2_KIB, SECTOR_SIZE_32_GIB,
-        SECTOR_SIZE_32_KIB, SECTOR_SIZE_4_KIB, SECTOR_SIZE_512_MIB, SECTOR_SIZE_64_GIB,
-        SECTOR_SIZE_8_KIB,
-    },
+    constants::{hs, validate_tree_r_shape, TreeDDomain, TreeR, TreeRDomain, TreeRHasher},
     gen_partition_challenges,
     halo2::{apex_leaf_count, circuit, EmptySectorUpdateCircuit},
     phi, vanilla, PublicParams,
@@ -200,53 +197,53 @@ fn test_empty_sector_update_circuit_1kib_halo2() {
     // Halo2 keygen, proving, and verifying are slow and consume a lot of memory, thus we only test
     // those for a small sector size circuit (the halo2 compound proof tests will run the halo2
     // prover and verifier for larger sector sizes).
-    test_empty_sector_update_circuit::<U8, U4, U0, SECTOR_SIZE_1_KIB>(true);
+    test_empty_sector_update_circuit::<U8, U4, U0, SECTOR_NODES_1_KIB>(true);
 }
 
 #[test]
 #[cfg(feature = "isolated-testing")]
 fn test_empty_sector_update_circuit_2kib_halo2() {
-    test_empty_sector_update_circuit::<U8, U0, U0, SECTOR_SIZE_2_KIB>(false);
+    test_empty_sector_update_circuit::<U8, U0, U0, SECTOR_NODES_2_KIB>(false);
 }
 
 #[test]
 #[cfg(feature = "isolated-testing")]
 fn test_empty_sector_update_circuit_4kib_halo2() {
-    test_empty_sector_update_circuit::<U8, U2, U0, SECTOR_SIZE_4_KIB>(false);
+    test_empty_sector_update_circuit::<U8, U2, U0, SECTOR_NODES_4_KIB>(false);
 }
 
 #[test]
 #[cfg(feature = "isolated-testing")]
 fn test_empty_sector_update_circuit_8kib_halo2() {
-    test_empty_sector_update_circuit::<U8, U4, U0, SECTOR_SIZE_8_KIB>(false);
+    test_empty_sector_update_circuit::<U8, U4, U0, SECTOR_NODES_8_KIB>(false);
 }
 
 #[test]
 #[cfg(feature = "isolated-testing")]
 fn test_empty_sector_update_circuit_16kib_halo2() {
-    test_empty_sector_update_circuit::<U8, U8, U0, SECTOR_SIZE_16_KIB>(false);
+    test_empty_sector_update_circuit::<U8, U8, U0, SECTOR_NODES_16_KIB>(false);
 }
 
 #[test]
 #[cfg(feature = "isolated-testing")]
 fn test_empty_sector_update_circuit_32kib_halo2() {
-    test_empty_sector_update_circuit::<U8, U8, U2, SECTOR_SIZE_32_KIB>(false);
+    test_empty_sector_update_circuit::<U8, U8, U2, SECTOR_NODES_32_KIB>(false);
 }
 
 #[cfg(feature = "big-tests")]
 #[test]
 fn test_empty_sector_update_circuit_512mib_halo2() {
-    test_empty_sector_update_circuit::<U8, U0, U0, SECTOR_SIZE_512_MIB>(false);
+    test_empty_sector_update_circuit::<U8, U0, U0, SECTOR_NODES_512_MIB>(false);
 }
 
 #[cfg(feature = "big-tests")]
 #[test]
 fn test_empty_sector_update_circuit_32gib_halo2() {
-    test_empty_sector_update_circuit::<U8, U8, U0, SECTOR_SIZE_32_GIB>(false);
+    test_empty_sector_update_circuit::<U8, U8, U0, SECTOR_NODES_32_GIB>(false);
 }
 
 #[cfg(feature = "big-tests")]
 #[test]
 fn test_empty_sector_update_circuit_64gib_halo2() {
-    test_empty_sector_update_circuit::<U8, U8, U2, SECTOR_SIZE_64_GIB>(false);
+    test_empty_sector_update_circuit::<U8, U8, U2, SECTOR_NODES_64_GIB>(false);
 }

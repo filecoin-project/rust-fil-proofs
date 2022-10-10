@@ -9,16 +9,11 @@ use storage_proofs_core::{
     halo2::{CompoundProof, Halo2Field, Halo2Keypair},
     merkle::{generate_tree, DiskTree, MerkleTreeTrait},
     proof::ProofScheme,
-    TEST_SEED,
+    SECTOR_NODES_16_KIB, SECTOR_NODES_2_KIB, SECTOR_NODES_32_KIB, SECTOR_NODES_4_KIB, TEST_SEED,
 };
 use storage_proofs_post::{
     fallback::{self as vanilla, FallbackPoSt, SetupParams},
-    halo2::{
-        constants::{
-            SECTOR_NODES_16_KIB, SECTOR_NODES_2_KIB, SECTOR_NODES_32_KIB, SECTOR_NODES_4_KIB,
-        },
-        window, winning, PostCircuit, WindowPostCircuit, WinningPostCircuit,
-    },
+    halo2::{window, winning, PostCircuit, WindowPostCircuit, WinningPostCircuit},
 };
 use tempfile::tempdir;
 
