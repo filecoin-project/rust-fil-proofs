@@ -22,6 +22,9 @@ use crate::stacked::{
     StackedDrg,
 };
 
+// TODO vmx 2022-10-11: Check if this constant should be moced somewhere else.
+pub const BATCH_SIZE: usize = 10;
+
 macro_rules! impl_compound_proof {
     ($($sector_nodes:expr),*) => {
         $(
@@ -73,24 +76,16 @@ macro_rules! impl_compound_proof {
                     let partition_count = partition_count($sector_nodes);
                     assert_eq!(vanilla_proofs.len(), partition_count);
 
-                    let mut vanilla_pub_inputs = vanilla_pub_inputs.clone();
-
-                    vanilla_proofs
-                        .iter()
+                    vanilla_proofs.chunks(BATCH_SIZE)
                         .enumerate()
-                        .map(|(k, partition_proof)| {
-                            trace!("proving partition {}/{}", k, partition_count);
-                            // The only public input field which should change is `k`.
-                            vanilla_pub_inputs.k = Some(k);
-                            <Self as CompoundProof<
-                                F,
-                                $sector_nodes,
-                            >>::prove_partition_with_vanilla(
-                                setup_params,
-                                &vanilla_pub_inputs,
-                                partition_proof,
-                                keypair,
-                            )
+                        .map(|(batch_index, partition_proofs)| {
+                            let batch_offset = batch_index * BATCH_SIZE;
+                            trace!("proving partition {}-{}/{}", batch_offset, batch_offset + partition_proofs.len(), partition_count);
+                            // The only public input field which should change is `k`. Set it to
+                            // the current offset of the batch.
+                            let mut vanilla_pub_inputs = vanilla_pub_inputs.clone();
+                            vanilla_pub_inputs.k = Some(batch_offset);
+                            <Self as CompoundProof<F, $sector_nodes>>::batch_prove_all_partitions_with_vanilla(setup_params, &vanilla_pub_inputs, partition_proofs, keypair)
                         })
                         .collect()
                 }
@@ -102,8 +97,6 @@ macro_rules! impl_compound_proof {
                     keypair: &Halo2Keypair<F::Affine, Self::Circuit>,
                 ) -> Result<Halo2Proof<F::Affine, Self::Circuit>, Error> {
                     let partition_count = partition_count($sector_nodes);
-                    assert_eq!(vanilla_proofs.len(), partition_count);
-
                     let mut circ_pub_inputs_vecs = Vec::with_capacity(partition_count);
 
                     let circs: Vec<Self::Circuit> = vanilla_proofs
@@ -112,7 +105,9 @@ macro_rules! impl_compound_proof {
                         .map(|(k, vanilla_proof)| {
                             // The only public input field which should change is `k`.
                             let mut vanilla_pub_inputs = vanilla_pub_inputs.clone();
-                            vanilla_pub_inputs.k = Some(k);
+                            // The supplied `k` contains the number of partitions that were already
+                            // procecessed in previous batches.
+                            vanilla_pub_inputs.k = Some(vanilla_pub_inputs.k.unwrap() + k);
 
                             let pub_inputs = circuit::PublicInputs::from(
                                 setup_params.clone(),
@@ -154,20 +149,19 @@ macro_rules! impl_compound_proof {
                     circ_proofs: &[Halo2Proof<F::Affine, Self::Circuit>],
                     keypair: &Halo2Keypair<F::Affine, Self::Circuit>,
                 ) -> Result<(), Error> {
-                    let partition_count = partition_count($sector_nodes);
-                    assert_eq!(circ_proofs.len(), partition_count);
-
                     let mut vanilla_pub_inputs = vanilla_pub_inputs.clone();
 
-                    for (k, partition_proof) in circ_proofs.iter().enumerate() {
-                        // The only public input field which should change is `k`.
-                        vanilla_pub_inputs.k = Some(k);
-                        <Self as CompoundProof<F, $sector_nodes>>::verify_partition(
+                    for (batch_index, partition_proofs) in circ_proofs.iter().enumerate() {
+                        let batch_offset = batch_index * BATCH_SIZE;
+                        // The only public input field which should change is `k`. It's a batch of
+                        // proofs, hence supply the offset of the current batch.
+                        vanilla_pub_inputs.k = Some(batch_offset);
+                        <Self as CompoundProof<F, $sector_nodes>>::batch_verify_all_partitions(
                             setup_params,
                             &vanilla_pub_inputs,
-                            partition_proof,
+                            partition_proofs,
                             keypair,
-                        )?;
+                        );
                     }
                     Ok(())
                 }
@@ -178,13 +172,13 @@ macro_rules! impl_compound_proof {
                     batch_proof: &Halo2Proof<F::Affine, Self::Circuit>,
                     keypair: &Halo2Keypair<F::Affine, Self::Circuit>,
                 ) -> bool {
-                    let partition_count = partition_count($sector_nodes);
+                    let partition_count = BATCH_SIZE;
 
                     let circ_pub_inputs_vecs: Vec<Vec<Vec<F>>> = (0..partition_count)
                         .map(|k| {
                             // The only public input field which should change is `k`.
                             let mut vanilla_pub_inputs = vanilla_pub_inputs.clone();
-                            vanilla_pub_inputs.k = Some(k);
+                            vanilla_pub_inputs.k = Some(vanilla_pub_inputs.k.unwrap() + k);
                             let pub_inputs = circuit::PublicInputs::<F, $sector_nodes>::from(
                                 setup_params.clone(),
                                 vanilla_pub_inputs,
