@@ -19,7 +19,7 @@ use storage_proofs_core::{
 };
 use storage_proofs_post::fallback::{
     self, FallbackPoSt, FallbackPoStCircuit, FallbackPoStCompound, PrivateSector, PublicSector,
-    Sector,
+    Sector, PoStShape,
 };
 use tempfile::tempdir;
 
@@ -74,6 +74,7 @@ fn test_fallback_post<Tree>(
         sector_size: sector_size as u64,
         challenge_count: 5,
         sector_count,
+        shape: PoStShape::Window,
         api_version: ApiVersion::V1_1_0,
     };
 
@@ -209,6 +210,7 @@ fn test_fallback_post_circuit_poseidon_base_8_bench_cs() {
         sector_size: (1024 * 1024 * 1024) as u64 * 32_u64,
         challenge_count: 10,
         sector_count: 5,
+        shape: PoStShape::Window,
         api_version: ApiVersion::V1_1_0,
     };
 

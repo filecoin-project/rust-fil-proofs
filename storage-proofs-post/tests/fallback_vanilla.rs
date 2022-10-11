@@ -13,7 +13,7 @@ use storage_proofs_core::{
     util::NODE_SIZE,
     TEST_SEED,
 };
-use storage_proofs_post::fallback::{self, FallbackPoSt, PrivateSector, PublicSector};
+use storage_proofs_post::fallback::{self, FallbackPoSt, PrivateSector, PublicSector, PoStShape};
 use tempfile::tempdir;
 
 #[test]
@@ -145,6 +145,7 @@ fn test_fallback_post<Tree>(
         sector_size: sector_size as u64,
         challenge_count: 10,
         sector_count,
+        shape: PoStShape::Window,
         api_version,
     };
 
@@ -572,6 +573,7 @@ fn test_invalid_fallback_post<Tree>(
         sector_size: sector_size as u64,
         challenge_count: 10,
         sector_count,
+        shape: PoStShape::Window,
         api_version,
     };
 

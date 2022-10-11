@@ -17,7 +17,7 @@ use storage_proofs_core::{
 };
 use storage_proofs_post::fallback::{
     ChallengeRequirements, FallbackPoStCompound, PrivateInputs, PrivateSector, PublicInputs,
-    PublicSector, SetupParams,
+    PublicSector, SetupParams, PoStShape,
 };
 use tempfile::tempdir;
 
@@ -85,6 +85,7 @@ fn fallback_post<Tree>(
             sector_size: sector_size as u64,
             challenge_count,
             sector_count,
+            shape: PoStShape::Window,
             api_version,
         },
         partitions: Some(partitions),

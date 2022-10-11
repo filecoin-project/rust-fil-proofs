@@ -532,7 +532,7 @@ mod tests {
 
         let expect_pathological = match api_version {
             ApiVersion::V1_0_0 => true,
-            ApiVersion::V1_1_0 => false,
+            ApiVersion::V1_1_0 | ApiVersion::V1_2_0 => false,
         };
 
         let graph = StackedBucketGraph::<PoseidonHasher<Fr>>::new_stacked(

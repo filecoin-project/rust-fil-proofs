@@ -342,7 +342,7 @@ mod tests {
                             "immediate predecessor was not last DRG parent"
                         );
                     }
-                    ApiVersion::V1_1_0 => {
+                    ApiVersion::V1_1_0 | ApiVersion::V1_2_0 => {
                         assert_eq!(
                             i - 1,
                             pa1[0] as usize,
