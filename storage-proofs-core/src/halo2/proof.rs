@@ -46,10 +46,23 @@ impl Halo2Field for Fq {
 }
 
 pub trait CircuitRows {
-    fn id(&self) -> String;
     fn k(&self) -> u32;
+
+    // Used to identify this circuit in the keystore.
+    //
+    // If `id` is empty this circuit's keys will not be read from, or written to, the cache; used to
+    // test chips via one-off circuits.
+    fn id(&self) -> String {
+        String::new()
+    }
+
     // The sector size in KiB.
-    fn sector_size(&self) -> usize;
+    //
+    // A `sector_size` of zero indicates that this circuit does not represent a Filecoin proof, e.g.
+    // a circuit that tests a chip.
+    fn sector_size(&self) -> usize {
+        0
+    }
 }
 
 pub struct Halo2Keypair<C, Circ>
@@ -79,6 +92,14 @@ where
     C: CurveAffine,
     Circ: Circuit<C::Scalar> + CircuitRows,
 {
+    // An empty circuit-id indicates that this circuit's keys should not be cached.
+    if circuit.id().is_empty() {
+        info!("generating uncached halo2 params");
+        let params = Params::new(circuit.k());
+        info!("successfully generated halo2 params");
+        return Ok(params);
+    }
+
     let path_str = format!(
         "{}v{}-halo2-{}-keypair-params-{}.{}",
         parameter_cache_dir().display(),
@@ -147,6 +168,18 @@ where
     C: CurveAffine,
     Circ: Circuit<C::Scalar> + CircuitRows,
 {
+    // An empty circuit-id indicates that this circuit's keys should not be cached.
+    if circuit.id().is_empty() {
+        info!("generating uncached halo2 verifying key");
+        let res = keygen_vk(params, circuit).map(|vk| (vk, false));
+        if res.is_ok() {
+            error!("successfully generated halo2 verifying key");
+        } else {
+            error!("faild to generate halo2 verifying key");
+        }
+        return res;
+    }
+
     let path_str = format!(
         "{}v{}-halo2-{}-keypair-{}-{}-{}.{}",
         parameter_cache_dir().display(),
@@ -267,6 +300,18 @@ where
     C: CurveAffine,
     Circ: Circuit<C::Scalar> + CircuitRows,
 {
+    // An empty circuit-id indicates that this circuit's keys should not be cached.
+    if circuit.id().is_empty() {
+        info!("generating uncached halo2 proving key");
+        let res = keygen_pk(params, vk, circuit);
+        if res.is_ok() {
+            error!("successfully generated halo2 proving key");
+        } else {
+            error!("faild to generate halo2 proving key");
+        }
+        return res;
+    }
+
     let path_str = format!(
         "{}v{}-halo2-{}-keypair-{}-{}-{}.{}",
         parameter_cache_dir().display(),
@@ -672,17 +717,8 @@ mod tests {
     }
 
     impl CircuitRows for MyCircuit {
-        fn id(&self) -> String {
-            "mycircuit".to_string()
-        }
-
         fn k(&self) -> u32 {
             4
-        }
-
-        fn sector_size(&self) -> usize {
-            // This circuit is independent of the sector size, hence it returns 0.
-            0
         }
     }
 
