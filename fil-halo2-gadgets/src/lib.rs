@@ -101,11 +101,14 @@ where
     }
 }
 
-pub enum WitnessOrCopy<T, F: FieldExt> {
-    Witness(Value<T>),
-    Copy(AssignedCell<T, F>),
-    // Public input `(column, absolute row)`.
-    PiCopy(Column<Instance>, usize),
+pub enum MaybeAssigned<T, F: FieldExt> {
+    // An unassigned value that should be witnessed in a circuit.
+    Unassigned(Value<T>),
+    // An assigned value that should be copied in a circuit.
+    Assigned(AssignedCell<T, F>),
+    // A public input located in the cell `(instance_column, absolute_row)` that should be witnessed
+    // in the circuit.
+    Pi(Column<Instance>, usize),
 }
 
 pub struct AdviceIter {

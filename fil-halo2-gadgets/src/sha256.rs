@@ -16,7 +16,7 @@ use halo2_proofs::{
 use crate::{
     boolean::AssignedBits,
     uint32::{AssignedU32, StripBitsChip, StripBitsConfig},
-    AdviceIter, ColumnCount, NumCols, WitnessOrCopy,
+    AdviceIter, ColumnCount, MaybeAssigned, NumCols,
 };
 
 // Don't reformat code copied from `halo2_gadgets` repo.
@@ -1174,7 +1174,7 @@ impl<F: FieldExt> Sha256WordsChip<F> {
     fn u32_decomp(
         &self,
         layouter: &mut impl Layouter<F>,
-        field: WitnessOrCopy<F, F>,
+        field: MaybeAssigned<F, F>,
     ) -> Result<[AssignedBits<F, 32>; 8], Error> {
         layouter.assign_region(
             || "decompose field element into eight u32s",
@@ -1184,19 +1184,19 @@ impl<F: FieldExt> Sha256WordsChip<F> {
 
                 // Witness or copy the field element to be decomposed.
                 let field = match field {
-                    WitnessOrCopy::Witness(field) => region.assign_advice(
+                    MaybeAssigned::Unassigned(field) => region.assign_advice(
                         || "witness field element",
                         self.config.advice[0],
                         offset,
                         || field,
                     )?,
-                    WitnessOrCopy::Copy(ref field) => field.copy_advice(
+                    MaybeAssigned::Assigned(ref field) => field.copy_advice(
                         || "copy field element",
                         &mut region,
                         self.config.advice[0],
                         offset,
                     )?,
-                    WitnessOrCopy::PiCopy(pi_col, pi_row) => region.assign_advice_from_instance(
+                    MaybeAssigned::Pi(pi_col, pi_row) => region.assign_advice_from_instance(
                         || "copy field element public input",
                         pi_col,
                         pi_row,
@@ -1279,7 +1279,7 @@ impl<F: FieldExt> Sha256WordsChip<F> {
         layouter: impl Layouter<F>,
         field: AssignedCell<F, F>,
     ) -> Result<[AssignedU32<F>; 8], Error> {
-        self.into_words_inner(layouter, WitnessOrCopy::Copy(field))
+        self.into_words_inner(layouter, MaybeAssigned::Assigned(field))
     }
 
     pub fn witness_into_words(
@@ -1287,7 +1287,7 @@ impl<F: FieldExt> Sha256WordsChip<F> {
         layouter: impl Layouter<F>,
         field: Value<F>,
     ) -> Result<[AssignedU32<F>; 8], Error> {
-        self.into_words_inner(layouter, WitnessOrCopy::Witness(field))
+        self.into_words_inner(layouter, MaybeAssigned::Unassigned(field))
     }
 
     pub fn pi_into_words(
@@ -1297,14 +1297,14 @@ impl<F: FieldExt> Sha256WordsChip<F> {
         // Absolute row.
         pi_row: usize,
     ) -> Result<[AssignedU32<F>; 8], Error> {
-        self.into_words_inner(layouter, WitnessOrCopy::PiCopy(pi_col, pi_row))
+        self.into_words_inner(layouter, MaybeAssigned::Pi(pi_col, pi_row))
     }
 
     #[allow(clippy::wrong_self_convention)]
     fn into_words_inner(
         &self,
         mut layouter: impl Layouter<F>,
-        field: WitnessOrCopy<F, F>,
+        field: MaybeAssigned<F, F>,
     ) -> Result<[AssignedU32<F>; 8], Error> {
         let le_u32s = self.u32_decomp(&mut layouter, field)?;
 
