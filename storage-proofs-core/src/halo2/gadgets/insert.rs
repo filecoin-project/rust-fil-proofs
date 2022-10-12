@@ -3,7 +3,7 @@ use std::marker::PhantomData;
 use fil_halo2_gadgets::{
     boolean::{and, nor, AssignedBit},
     utilities::ternary,
-    ColumnCount, NumCols, WitnessOrCopy,
+    ColumnCount, MaybeAssigned, NumCols,
 };
 use filecoin_hashers::PoseidonArity;
 use halo2_proofs::{
@@ -321,7 +321,7 @@ where
         self.insert_inner(
             layouter,
             uninserted,
-            WitnessOrCopy::Copy(value.clone()),
+            MaybeAssigned::Assigned(value.clone()),
             index_bits,
         )
     }
@@ -337,7 +337,7 @@ where
         self.insert_inner(
             layouter,
             uninserted,
-            WitnessOrCopy::Witness(*value),
+            MaybeAssigned::Unassigned(*value),
             index_bits,
         )
     }
@@ -346,7 +346,7 @@ where
         &self,
         mut layouter: impl Layouter<F>,
         uninserted: &[Value<F>],
-        value: WitnessOrCopy<F, F>,
+        value: MaybeAssigned<F, F>,
         index_bits: &[AssignedBit<F>],
     ) -> Result<Vec<AssignedCell<F, F>>, Error> {
         let arity = A::to_usize();
@@ -375,10 +375,10 @@ where
 
                 // Assign or copy insertion value.
                 let value = match value {
-                    WitnessOrCopy::Witness(ref value) => {
+                    MaybeAssigned::Unassigned(ref value) => {
                         region.assign_advice(|| "value", self.config.value, offset, || *value)?
                     }
-                    WitnessOrCopy::Copy(ref value) => value.copy_advice(
+                    MaybeAssigned::Assigned(ref value) => value.copy_advice(
                         || "copy value",
                         &mut region,
                         self.config.value,

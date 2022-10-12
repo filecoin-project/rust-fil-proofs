@@ -1,4 +1,4 @@
-use fil_halo2_gadgets::{boolean::AssignedBit, WitnessOrCopy};
+use fil_halo2_gadgets::{boolean::AssignedBit, MaybeAssigned};
 use filecoin_hashers::{Halo2Hasher, HashInstructions, PoseidonArity};
 use generic_array::typenum::U0;
 use halo2_proofs::{
@@ -64,7 +64,12 @@ where
         leaf: Value<H::Field>,
         path: &[Vec<Value<H::Field>>],
     ) -> Result<AssignedCell<H::Field, H::Field>, Error> {
-        self.compute_root_inner(layouter, challenge_bits, WitnessOrCopy::Witness(leaf), path)
+        self.compute_root_inner(
+            layouter,
+            challenge_bits,
+            MaybeAssigned::Unassigned(leaf),
+            path,
+        )
     }
 
     pub fn copy_leaf_compute_root(
@@ -77,7 +82,7 @@ where
         self.compute_root_inner(
             layouter,
             challenge_bits,
-            WitnessOrCopy::Copy(leaf.clone()),
+            MaybeAssigned::Assigned(leaf.clone()),
             path,
         )
     }
@@ -88,7 +93,7 @@ where
         &self,
         mut layouter: impl Layouter<H::Field>,
         challenge_bits: &[AssignedBit<H::Field>],
-        leaf: WitnessOrCopy<H::Field, H::Field>,
+        leaf: MaybeAssigned<H::Field, H::Field>,
         path: &[Vec<Value<H::Field>>],
     ) -> Result<AssignedCell<H::Field, H::Field>, Error> {
         let base_arity = U::to_usize();
@@ -132,13 +137,13 @@ where
 
             let preimage = if height == 0 {
                 match leaf {
-                    WitnessOrCopy::Witness(ref leaf) => self.base_insert.witness_insert(
+                    MaybeAssigned::Unassigned(ref leaf) => self.base_insert.witness_insert(
                         layouter.namespace(|| format!("base insert (height {})", height)),
                         siblings,
                         leaf,
                         &index_bits,
                     )?,
-                    WitnessOrCopy::Copy(ref leaf) => self.base_insert.copy_insert(
+                    MaybeAssigned::Assigned(ref leaf) => self.base_insert.copy_insert(
                         layouter.namespace(|| format!("base insert (height {})", height)),
                         siblings,
                         leaf,
