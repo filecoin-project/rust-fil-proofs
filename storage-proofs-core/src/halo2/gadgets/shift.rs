@@ -390,10 +390,6 @@ mod test {
     }
 
     impl CircuitRows for MyCircuit {
-        fn id(&self) -> String {
-            "mycircuit".to_string()
-        }
-
         fn k(&self) -> u32 {
             if self.uninserted.len() == 1 {
                 // Arity 2.
@@ -402,11 +398,6 @@ mod test {
                 // Arities 4 and 8.
                 4
             }
-        }
-
-        fn sector_size(&self) -> usize {
-            // This circuit is independent of the sector size, hence it returns 0.
-            0
         }
     }
 
