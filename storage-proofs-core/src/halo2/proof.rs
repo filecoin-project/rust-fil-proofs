@@ -30,7 +30,7 @@ type Challenge<C> = Challenge255<C>;
 type TranscriptReader<'proof, C> = Blake2bRead<&'proof [u8], C, Challenge<C>>;
 type TranscriptWriter<C> = Blake2bWrite<Vec<u8>, C, Challenge<C>>;
 
-pub trait Halo2Field: FieldExt {
+pub trait Halo2Field: FieldExt + serde::Serialize + serde::de::DeserializeOwned {
     type Curve: CurveExt<ScalarExt = Self>;
     type Affine: CurveAffine<ScalarExt = Self>;
 }
@@ -481,6 +481,7 @@ where
     C: CurveAffine,
     Circ: Circuit<C::Scalar> + CircuitRows,
     R: RngCore,
+    C::ScalarExt: serde::Serialize + serde::de::DeserializeOwned,
 {
     let pub_inputs: Vec<&[C::Scalar]> = pub_inputs.iter().map(Vec::as_slice).collect();
     let mut transcript = TranscriptWriter::init(vec![]);
@@ -506,6 +507,7 @@ where
     C: CurveAffine,
     Circ: Circuit<C::Scalar> + CircuitRows,
     R: RngCore,
+    C::ScalarExt: serde::Serialize + serde::de::DeserializeOwned,
 {
     assert_eq!(circuits.len(), pub_inputs.len());
     let pub_inputs: Vec<Vec<&[C::Scalar]>> = pub_inputs

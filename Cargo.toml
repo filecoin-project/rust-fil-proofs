@@ -15,6 +15,6 @@ members = [
 ]
 
 [patch.crates-io]
-halo2_proofs = { git = "https://github.com/filecoin-project/halo2", branch = "halo2" }
+halo2_proofs = { git = "https://github.com/filecoin-project/halo2", branch = "gpu" }
 neptune = { git = "https://github.com/filecoin-project/neptune", branch = "halo2-gpu" }
 pasta_curves = { git = "https://github.com/filecoin-project/pasta_curves", branch = "gpu" }

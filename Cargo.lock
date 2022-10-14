@@ -1793,16 +1793,23 @@ dependencies = [
 [[package]]
 name = "halo2_proofs"
 version = "0.2.0"
-source = "git+https://github.com/filecoin-project/halo2?branch=halo2#4cf32034c01aa9968079365b98b3b9bd2913f140"
+source = "git+https://github.com/filecoin-project/halo2?branch=gpu#248e3b72a19f0d3a43758b77d420e78f59a9685a"
 dependencies = [
+ "bincode",
  "blake2b_simd",
+ "chrono",
  "ec-gpu",
  "ec-gpu-gen",
  "ff",
  "group",
+ "hex",
+ "log",
  "pasta_curves",
  "rand_core",
  "rayon",
+ "serde",
+ "serde_json",
+ "sha2 0.10.6",
  "tracing",
 ]
 
@@ -2665,8 +2672,10 @@ dependencies = [
  "ec-gpu",
  "ff",
  "group",
+ "hex",
  "lazy_static",
  "rand",
+ "serde",
  "static_assertions",
  "subtle",
 ]
