@@ -56,7 +56,7 @@ impl Hashable<PoseidonFunction> for PoseidonDomain {
     }
 }
 
-#[derive(Copy, Clone, Debug, Serialize, Deserialize)]
+#[derive(Default, Copy, Clone, Debug, Serialize, Deserialize)]
 pub struct PoseidonDomain(pub <Fr as PrimeField>::Repr);
 
 impl AsRef<PoseidonDomain> for PoseidonDomain {
@@ -78,12 +78,6 @@ impl PartialEq for PoseidonDomain {
 }
 
 impl Eq for PoseidonDomain {}
-
-impl Default for PoseidonDomain {
-    fn default() -> PoseidonDomain {
-        PoseidonDomain(<Fr as PrimeField>::Repr::default())
-    }
-}
 
 impl Ord for PoseidonDomain {
     #[inline(always)]

@@ -149,7 +149,7 @@ where
     }
 }
 
-impl<'a, Tree: 'static + MerkleTreeTrait> RationalPoStCircuit<Tree> {
+impl<Tree: 'static + MerkleTreeTrait> RationalPoStCircuit<Tree> {
     #[allow(clippy::type_complexity)]
     pub fn synthesize<CS: ConstraintSystem<Fr>>(
         cs: &mut CS,

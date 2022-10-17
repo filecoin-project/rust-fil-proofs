@@ -142,8 +142,7 @@ pub fn reverse_bit_numbering(bits: Vec<Boolean>) -> Vec<Boolean> {
 
     padded_bits
         .chunks(8)
-        .map(|chunk| chunk.iter().rev())
-        .flatten()
+        .flat_map(|chunk| chunk.iter().rev())
         .cloned()
         .collect()
 }

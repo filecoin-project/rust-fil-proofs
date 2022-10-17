@@ -276,11 +276,13 @@ where
         prover_srs: &ProverSRS<Bls12>,
         hashed_seeds_and_comm_rs: &[u8],
         proofs: &[groth16::Proof<Bls12>],
+        version: groth16::aggregate::AggregateVersion,
     ) -> Result<AggregateProof<Bls12>> {
         Ok(aggregate_proofs::<Bls12>(
             prover_srs,
             hashed_seeds_and_comm_rs,
             proofs,
+            version,
         )?)
     }
 
@@ -297,6 +299,7 @@ where
         hashed_seeds_and_comm_rs: &[u8],
         public_inputs: &[Vec<Fr>],
         aggregate_proof: &groth16::aggregate::AggregateProof<Bls12>,
+        version: groth16::aggregate::AggregateVersion,
     ) -> Result<bool> {
         let mut rng = OsRng;
 
@@ -307,6 +310,7 @@ where
             public_inputs,
             aggregate_proof,
             hashed_seeds_and_comm_rs,
+            version,
         )?)
     }
 

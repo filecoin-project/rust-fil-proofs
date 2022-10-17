@@ -224,7 +224,7 @@ fn parse_criterion_out(s: impl AsRef<str>) -> Vec<CriterionResult> {
 
 /// parses a string of the form "521.80 KiB/s".
 fn throughput_to_uom(s: &str) -> String {
-    let parts = s.trim().split_whitespace().collect::<Vec<_>>();
+    let parts = s.split_whitespace().collect::<Vec<_>>();
     assert_eq!(parts.len(), 2, "invalid val: {:?}", parts);
     let _: f64 = parts[0].parse().expect("invalid number");
     parts[1].to_string()
@@ -232,7 +232,7 @@ fn throughput_to_uom(s: &str) -> String {
 
 /// parses a string of the form "521.80 KiB/s".
 fn throughput_val(s: &str) -> f64 {
-    let parts = s.trim().split_whitespace().collect::<Vec<_>>();
+    let parts = s.split_whitespace().collect::<Vec<_>>();
     assert_eq!(parts.len(), 2, "invalid val: {:?}", parts);
     let ts: f64 = parts[0].parse().expect("invalid number");
     ts
@@ -240,7 +240,7 @@ fn throughput_val(s: &str) -> f64 {
 
 /// parses a string of the form "123.12 us".
 fn time_to_us(s: &str) -> f64 {
-    let parts = s.trim().split_whitespace().collect::<Vec<_>>();
+    let parts = s.split_whitespace().collect::<Vec<_>>();
     assert_eq!(parts.len(), 2, "invalid val: {:?}", parts);
     let ts: f64 = parts[0].parse().expect("invalid number");
     let normalized = match parts[1] {

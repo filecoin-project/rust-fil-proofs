@@ -14,6 +14,7 @@ use x86::{
 
 /// Process a block with the SHA-256 algorithm.
 /// Based on https://github.com/noloader/SHA-Intrinsics/blob/master/sha256-x86.c
+#[allow(clippy::needless_late_init)]
 #[inline(always)]
 pub unsafe fn compress256(state: &mut [u32; 8], blocks: &[&[u8]]) {
     assert_eq!(blocks.len() % 2, 0);

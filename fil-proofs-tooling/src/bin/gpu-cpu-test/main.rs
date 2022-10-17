@@ -56,6 +56,7 @@ impl FromStr for Mode {
 }
 
 #[derive(Debug)]
+#[allow(dead_code)]
 pub struct RunInfo {
     elapsed: Duration,
     iterations: u8,

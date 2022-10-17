@@ -3,7 +3,7 @@ version: 2.1
 parameters:
   nightly-toolchain:
     type: string
-    default: "nightly-2022-03-10"
+    default: "nightly-2022-05-09"
 
 executors:
   default:
@@ -27,21 +27,6 @@ setup-env: &setup-env
 
 
 jobs:
-  # This job is needed for macOS, which doesn't support restoring caches that
-  # were created on Linux. This job will run on Linux, restore the cache and
-  # then persist it to the workspace, so that the macOS job can then use the
-  # files from the workspace.
-  persist_parameters_to_workspace:
-    executor: default
-    environment: *setup-env
-    steps:
-      - checkout
-      - restore_parameter_cache
-      - persist_to_workspace:
-          root: /tmp
-          paths:
-            - filecoin-proof-parameters
-
   ensure_groth_parameters_and_keys_linux:
     executor: default
     environment: *setup-env
@@ -104,14 +89,10 @@ jobs:
             ulimit -n 20000
             ulimit -u 20000
             ulimit -n 20000
-            cargo +$(cat rust-toolchain) test --verbose --release --workspace
-            RUSTFLAGS="-D warnings" cargo +$(cat rust-toolchain) build --examples --release --workspace
-            cargo +$(cat rust-toolchain) test -p storage-proofs-update --features isolated-testing --release test_empty_sector_update_circuit_1kib
-            cargo +$(cat rust-toolchain) test -p storage-proofs-update --features isolated-testing --release test_empty_sector_update_circuit_2kib
-            cargo +$(cat rust-toolchain) test -p storage-proofs-update --features isolated-testing --release test_empty_sector_update_circuit_4kib
-            cargo +$(cat rust-toolchain) test -p storage-proofs-update --features isolated-testing --release test_empty_sector_update_circuit_8kib
-            cargo +$(cat rust-toolchain) test -p storage-proofs-update --features isolated-testing --release test_empty_sector_update_circuit_16kib
-            cargo +$(cat rust-toolchain) test -p storage-proofs-update --features isolated-testing --release test_empty_sector_update_circuit_32kib
+            cargo test --verbose --release --workspace --all-targets
+            # Some `storage-proofs-update` tests need to run sequentially due
+            # to their high memory usage.
+            cargo test -p storage-proofs-update --features isolated-testing --release -- --test-threads=1
           no_output_timeout: 30m
 
   test_ignored_release:
@@ -150,6 +131,7 @@ jobs:
           at: "."
       - restore_rustup_cache
       - restore_parameter_cache
+      - run: rustup install << pipeline.parameters.nightly-toolchain >>
       - run:
           name: Test with use_multicore_sdr
           command: |
@@ -157,11 +139,12 @@ jobs:
             ulimit -u 20000
             ulimit -n 20000
             cargo test --all --verbose --release lifecycle -- --ignored --nocapture
-            cargo test -p storage-proofs-porep --features isolated-testing --release checkout_cores -- --test-threads=1
+            cargo test -p storage-proofs-porep --features isolated-testing --release --lib stacked::vanilla::cores
             cargo test -p storage-proofs-porep --features isolated-testing --release test_parallel_generation_and_read_partial_range_v1_0
             cargo test -p storage-proofs-porep --features isolated-testing --release test_parallel_generation_and_read_partial_range_v1_1
           no_output_timeout: 30m
           environment:
+            RUST_LOG: debug
             RUST_TEST_THREADS: 1
             FIL_PROOFS_USE_MULTICORE_SDR: true
 
@@ -199,7 +182,7 @@ jobs:
             ulimit -n 20000
             ulimit -u 20000
             ulimit -n 20000
-            cargo test --all --verbose --release << parameters.cargo-args >> -- --nocapture << parameters.test-args >>
+            cargo test --verbose --release << parameters.cargo-args >> -- --nocapture << parameters.test-args >>
           no_output_timeout: 30m
           environment:
             FIL_PROOFS_USE_GPU_COLUMN_BUILDER: true
@@ -290,43 +273,61 @@ jobs:
           command: cargo +$(cat rust-toolchain) clippy --all-targets --workspace -- -D warnings
   test_darwin:
     macos:
-      xcode: "12.5.0"
+      xcode: "13.4.1"
     working_directory: ~/crate
     resource_class: large
     environment: *setup-env
     steps:
-      - checkout
-      # In case of macOS, the workspace contains the parameter files.
-      - attach_workspace:
-          at: "/tmp"
       - run:
-          name: Install hwloc 2.3.0
-          command: |
-            cd /tmp
-            curl https://download.open-mpi.org/release/hwloc/v2.3/hwloc-2.3.0.tar.gz --location --output /tmp/hwloc-2.3.0.tar.gz
-            tar xzvf hwloc-2.3.0.tar.gz
-            cd hwloc-2.3.0
-            ./configure
-            make
-            sudo make install
+          name: Delete simulators for more free disk space
+          command: sudo rm -rf /Library/Developer/CoreSimulator/Profiles/Runtimes/
+      - checkout
+      - run:
+          name: Install hwloc with Homebrew
+          command: HOMEBREW_NO_AUTO_UPDATE=1 brew install hwloc
       - run:
           name: Install Rust
           command: |
             curl https://sh.rustup.rs -sSf | sh -s -- -y
-      - run: rustup install $(cat rust-toolchain)
-      - run: rustup default $(cat rust-toolchain)
       - run: cargo update
       - run: cargo fetch
+      # On CircleCI you cannot create a cache on Linux and restore it on macOS.
+      # Hence we need a separate cache for macOS that we create and restore. It
+      # is not a separate job (like `ensure_groth_parameters_and_keys_linux`,
+      # as there is only this single job that runs on macOS.
+      - restore_parameter_cache
       - ensure_filecoin_parameters
+      - save_parameter_cache
       - run:
           name: Test Darwin
           command: |
             sudo ulimit -n 20000
             sudo ulimit -u 20000
             ulimit -n 20000
-            cargo +$(cat rust-toolchain) test --release --verbose --workspace -- --nocapture
+            cargo test --release --verbose --workspace -- --nocapture
           no_output_timeout: 2h
 
+  # Code coverage, using tarpaulin tool (https://github.com/xd009642/tarpaulin)
+  coverage-with-tarpaulin:
+    environment: *setup-env
+    machine: true
+    resource_class: 2xlarge
+    steps:
+      - checkout
+      - restore_parameter_cache
+      - run:
+          name: Pull xd009642/tarpaulin:latest
+          command: docker pull xd009642/tarpaulin:latest
+      - run:
+          name: Get coverage result
+          command: >-
+            docker run
+            --security-opt seccomp=unconfined
+            -v "${PWD}:/volume"
+            -v "${FIL_PROOFS_PARAMETER_CACHE}:/var/tmp/filecoin-proof-parameters/"
+            xd009642/tarpaulin
+            sh -c "apt update && apt install -y libssl-dev ocl-icd-opencl-dev libhwloc-dev && cargo tarpaulin --timeout 1800 --release -v"
+          no_output_timeout: 30m
 commands:
   ensure_filecoin_parameters:
     steps:
@@ -337,7 +338,7 @@ commands:
           name: Build paramcache if it doesn't already exist
           command: |
             set -x; test -f /tmp/paramcache.awesome \
-            || (cargo build --release --workspace && find . -type f -name paramcache | xargs -I {} mv {} /tmp/paramcache.awesome)
+            || (cargo build --release --bin paramcache && find . -type f -name paramcache | xargs -I {} mv {} /tmp/paramcache.awesome)
       - run:
           name: Obtain filecoin groth parameters
           command: /tmp/paramcache.awesome --sector-sizes='2048,4096,16384,32768'
@@ -373,26 +374,27 @@ commands:
       - run: cp -R /tmp/.cargo /tmp/.rustup ~/ || true
   save_parameter_cache:
     steps:
+      # Make sure we have different cache for Linux and Darwin.
+      - run: uname > os.txt
       - save_cache:
           name: "Save parameter cache"
-          key: proof-params-v28-k-{{ checksum "filecoin-proofs/parameters.json" }}
+          key: proof-params-v28-l-{{ checksum "os.txt" }}-{{ checksum "filecoin-proofs/parameters.json" }}
           paths:
             - "/tmp/paramcache.awesome"
             - "/tmp/filecoin-proof-parameters/"
   restore_parameter_cache:
     steps:
+      # Make sure we have different cache for Linux and Darwin.
+      - run: uname > os.txt
       - restore_cache:
           name: "Restore parameter cache"
-          key: proof-params-v28-k-{{ checksum "filecoin-proofs/parameters.json" }}
+          key: proof-params-v28-l-{{ checksum "os.txt" }}-{{ checksum "filecoin-proofs/parameters.json" }}
 
 workflows:
   version: 2.1
   test_all:
     jobs:
       - ensure_groth_parameters_and_keys_linux
-      - persist_parameters_to_workspace:
-          requires:
-            - ensure_groth_parameters_and_keys_linux
       - cargo_fetch
       - rustfmt:
           requires:
@@ -436,12 +438,22 @@ workflows:
 
       - test_gpu_tree_building:
           name: test_gpu_tree_building_opencl (regular)
+          cargo-args: "--workspace"
           requires:
             - cargo_fetch
             - ensure_groth_parameters_and_keys_linux
 
       - test_gpu_tree_building:
-          name: test_gpu_tree_building_opencl (ignored)
+          name: test_gpu_tree_building_opencl (ignored, filecoin-proofs, storage-proofs-update)
+          cargo-args: "--package filecoin-proofs --package storage-proofs-update"
+          test-args: "--ignored"
+          requires:
+            - cargo_fetch
+            - ensure_groth_parameters_and_keys_linux
+
+      - test_gpu_tree_building:
+          name: test_gpu_tree_building_opencl (ignored, rest)
+          cargo-args: "--workspace --exclude filecoin-proofs --exclude storage-proofs-update"
           test-args: "--ignored"
           requires:
             - cargo_fetch
@@ -449,14 +461,22 @@ workflows:
 
       - test_gpu_tree_building:
           name: test_gpu_tree_building_cuda (regular)
-          cargo-args: "--features cuda"
+          cargo-args: "--workspace --features cuda"
           requires:
             - cargo_fetch
             - ensure_groth_parameters_and_keys_linux
 
       - test_gpu_tree_building:
-          name: test_gpu_tree_building_cuda (ignored)
-          cargo-args: "--features cuda"
+          name: test_gpu_tree_building_cuda (ignored, filecoin-proofs, storage-proofs-update)
+          cargo-args: "--package filecoin-proofs --package storage-proofs-update --features cuda"
+          test-args: "--ignored"
+          requires:
+            - cargo_fetch
+            - ensure_groth_parameters_and_keys_linux
+
+      - test_gpu_tree_building:
+          name: test_gpu_tree_building_cuda (ignored, rest)
+          cargo-args: "--workspace --exclude filecoin-proofs --exclude storage-proofs-update --features cuda"
           test-args: "--ignored"
           requires:
             - cargo_fetch
@@ -540,12 +560,22 @@ workflows:
           requires:
             - cargo_fetch
             - ensure_groth_parameters_and_keys_linux
-      - test_darwin:
-          requires:
-            - persist_parameters_to_workspace
+
+      - test_darwin
 
       - test:
           name: test_fr32
           crate: "fr32"
           requires:
             - cargo_fetch
+
+      - test:
+          name: test_fil_store_proofs_update
+          crate: "storage-proofs-update"
+          requires:
+            - cargo_fetch
+            - ensure_groth_parameters_and_keys_linux
+
+      - coverage-with-tarpaulin:
+          requires:
+            - ensure_groth_parameters_and_keys_linux

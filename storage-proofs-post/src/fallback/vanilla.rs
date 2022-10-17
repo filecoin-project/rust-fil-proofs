@@ -273,9 +273,10 @@ pub fn vanilla_proof<Tree: MerkleTreeTrait>(
     let rows_to_discard = default_rows_to_discard(tree_leafs, Tree::Arity::to_usize());
 
     trace!(
-        "Generating proof for tree leafs {} and arity {}",
+        "Generating proof for tree leafs {} and arity {} for sector {}",
         tree_leafs,
         Tree::Arity::to_usize(),
+        sector_id,
     );
 
     let inclusion_proofs = (0..challenges.len())
@@ -385,9 +386,10 @@ impl<'a, Tree: 'a + MerkleTreeTrait> ProofScheme<'a> for FallbackPoSt<'a, Tree> 
                         default_rows_to_discard(tree_leafs, Tree::Arity::to_usize());
 
                     trace!(
-                        "Generating proof for tree leafs {} and arity {}",
+                        "Generating proof for tree leafs {} and arity {} for sector {}",
                         tree_leafs,
                         Tree::Arity::to_usize(),
+                        sector_id,
                     );
 
                     // avoid rehashing fixed inputs
@@ -594,6 +596,8 @@ impl<'a, Tree: 'a + MerkleTreeTrait> ProofScheme<'a> for FallbackPoSt<'a, Tree> 
                 let comm_r = &pub_sector.comm_r;
                 let comm_c = sector_proof.comm_c;
                 let inclusion_proofs = &sector_proof.inclusion_proofs;
+
+                trace!("Verifying inclusion proofs for sector {}", sector_id);
 
                 // Verify that H(Comm_c || Comm_r_last) == Comm_R
 

@@ -1,3 +1,5 @@
+#![allow(clippy::mut_from_ref)]
+
 use std::cell::UnsafeCell;
 use std::slice::{self, ChunksExactMut};
 
@@ -6,7 +8,7 @@ use std::slice::{self, ChunksExactMut};
 #[derive(Debug)]
 pub struct UnsafeSlice<'a, T> {
     // holds the data to ensure lifetime correctness
-    data: UnsafeCell<&'a mut [T]>,
+    _data: UnsafeCell<&'a mut [T]>,
     /// pointer to the data
     ptr: *mut T,
     /// Number of elements, not bytes.
@@ -20,8 +22,8 @@ impl<'a, T> UnsafeSlice<'a, T> {
     pub fn from_slice(source: &'a mut [T]) -> Self {
         let len = source.len();
         let ptr = source.as_mut_ptr();
-        let data = UnsafeCell::new(source);
-        Self { data, ptr, len }
+        let _data = UnsafeCell::new(source);
+        Self { _data, ptr, len }
     }
 
     /// Safety: The caller must ensure that there are no unsynchronized parallel access to the same regions.

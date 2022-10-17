@@ -331,7 +331,7 @@ where
     }
 }
 
-impl<'a, H, G> StackedGraph<H, G>
+impl<H, G> StackedGraph<H, G>
 where
     H: Hasher,
     G: Graph<H> + ParameterSetMetadata + Sync + Send,

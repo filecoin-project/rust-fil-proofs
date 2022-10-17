@@ -42,7 +42,7 @@ fn is_well_formed_filename(filename: &str) -> bool {
         return false;
     }
     let version_is_valid =
-        version.get(0..1).unwrap() == "v" && version[1..].chars().all(|c| c.is_digit(10));
+        version.get(0..1).unwrap() == "v" && version[1..].chars().all(|c| c.is_ascii_digit());
     if !version_is_valid {
         warn!(
             "filename does not start with version: {}, ignoring file",
@@ -102,14 +102,6 @@ fn write_param_map_to_disk(param_map: &ParameterMap, json_path: &str) -> Result<
 #[derive(Debug, StructOpt)]
 #[structopt(name = "srspublish", version = "1.0", about = CLI_ABOUT.as_str())]
 struct Cli {
-    #[structopt(
-        long = "list-all",
-        short = "a",
-        help = "The user will be prompted to select the files to publish from the set of all files \
-            found in the cache dir. Excluding the -a/--list-all flag will result in the user being \
-            prompted for a single param version number for filtering-in files in the cache dir."
-    )]
-    list_all_files: bool,
     #[structopt(
         long = "ipfs-bin",
         value_name = "PATH TO IPFS BINARY",

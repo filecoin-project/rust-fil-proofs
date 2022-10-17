@@ -29,11 +29,11 @@ pub struct ElectionPoStCircuit<Tree: MerkleTreeTrait> {
 #[derive(Clone, Default)]
 pub struct ComponentPrivateInputs {}
 
-impl<'a, Tree: MerkleTreeTrait> CircuitComponent for ElectionPoStCircuit<Tree> {
+impl<Tree: MerkleTreeTrait> CircuitComponent for ElectionPoStCircuit<Tree> {
     type ComponentPrivateInputs = ComponentPrivateInputs;
 }
 
-impl<'a, Tree: 'static + MerkleTreeTrait> Circuit<Fr> for ElectionPoStCircuit<Tree> {
+impl<Tree: 'static + MerkleTreeTrait> Circuit<Fr> for ElectionPoStCircuit<Tree> {
     fn synthesize<CS: ConstraintSystem<Fr>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
         let comm_r = self.comm_r;
         let comm_c = self.comm_c;

@@ -1,6 +1,6 @@
 [package]
 name = "storage-proofs-porep"
-version = "11.0.2"
+version = "12.0.0"
 authors = ["dignifiedquire <me@dignifiedquire.com>"]
 description = "Proofs of replication"
 license = "MIT OR Apache-2.0"
@@ -10,25 +10,23 @@ readme = "README.md"
 
 [dependencies]
 crossbeam = "0.8"
-digest = "0.10.3"
-storage-proofs-core = { path = "../storage-proofs-core", version = "^11.0.0", default-features = false}
-sha2raw = { path = "../sha2raw", version = "^6.0.0"}
-filecoin-hashers = { path = "../filecoin-hashers", version = "^6.0.0", default-features = false, features = ["poseidon", "sha256"]}
-rand = "0.8"
-merkletree = "0.21.0"
-mapr = "0.8.0"
+storage-proofs-core = { path = "../storage-proofs-core", version = "~12.0.0", default-features = false}
+sha2raw = { path = "../sha2raw", version = "~7.0.0"}
+filecoin-hashers = { path = "../filecoin-hashers", version = "~7.0.0", default-features = false, features = ["poseidon", "sha256"]}
+merkletree = "0.22.0"
+memmap2 = "0.5.6"
 num-bigint = "0.4.3"
 num-traits = "0.2"
 rayon = "1.0.0"
 serde = { version = "1.0", features = ["derive"]}
 serde_json = "1.0"
-ff = "0.11.0"
-bellperson = "0.18.0"
+ff = "0.12.0"
+bellperson = "0.22.0"
 log = "0.4.7"
 pretty_assertions = "1.2.0"
 generic-array = "0.14.4"
 anyhow = "1.0.23"
-neptune = { version = "5.1.0", features = ["arity2", "arity4", "arity8", "arity11", "arity16", "arity24", "arity36"] }
+neptune = { version = "~7.0.0", features = ["bls", "arity2", "arity4", "arity8", "arity11", "arity16", "arity24", "arity36"] }
 num_cpus = "1.10.1"
 hex = "0.4.2"
 bincode = "1.1.2"
@@ -38,11 +36,9 @@ byte-slice-cast = "1.0.0"
 hwloc = { version = "0.5.0", optional = true }
 libc = "0.2"
 fdlimit = "0.2.0"
-fr32 = { path = "../fr32", version = "^4.0.0", default-features = false }
+fr32 = { path = "../fr32", version = "~5.0.0", default-features = false }
 yastl = "0.1.2"
-pairing = "0.21"
-fil_logger = "0.1.6"
-blstrs = "0.4.0"
+blstrs = "0.5.0"
 
 [target."cfg(target_arch = \"aarch64\")".dependencies]
 sha2 = { version = "0.10.2", features = ["compress", "asm"] }
@@ -51,15 +47,17 @@ sha2 = { version = "0.10.2", features = ["compress"] }
 
 [dev-dependencies]
 tempfile = "3"
+rand = "0.8"
 rand_xorshift = "0.3.0"
 criterion = "0.3.2"
 glob = "0.3.0"
-filecoin-hashers = { path = "../filecoin-hashers", version = "^6.0.0", default-features = false, features = ["poseidon", "sha256", "blake2s"]}
+filecoin-hashers = { path = "../filecoin-hashers", version = "~7.0.0", default-features = false, features = ["poseidon", "sha256", "blake2s"]}
+fil_logger = "0.1.6"
 
 [features]
 default = ["opencl", "multicore-sdr"]
-cuda = ["storage-proofs-core/cuda", "filecoin-hashers/cuda", "neptune/cuda", "bellperson/cuda", "fr32/cuda"]
-opencl = ["storage-proofs-core/opencl", "filecoin-hashers/opencl", "neptune/opencl", "bellperson/opencl", "fr32/opencl"]
+cuda = ["storage-proofs-core/cuda", "filecoin-hashers/cuda", "neptune/cuda", "bellperson/cuda"]
+opencl = ["storage-proofs-core/opencl", "filecoin-hashers/opencl", "neptune/opencl", "bellperson/opencl"]
 isolated-testing = []
 multicore-sdr = ["hwloc"]
 
