@@ -125,8 +125,8 @@ fn main() -> Result<()> {
         .arg(
             Arg::new("api_version")
                 .long("api-version")
-                .help("The api_version to use (default: 1.1.0)")
-                .default_value("1.1.0")
+                .help("The api_version to use (default: 1.2.0)")
+                .default_value("1.2.0")
                 .takes_value(true),
         );
 

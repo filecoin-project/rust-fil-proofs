@@ -660,8 +660,16 @@ impl<'a, Tree: 'a + MerkleTreeTrait> ProofScheme<'a> for FallbackPoSt<'a, Tree> 
                     .par_iter()
                     .enumerate()
                     .map(|(n, inclusion_proof)| -> Result<bool> {
-                        let challenge_index =
-                            (j * num_sectors_per_chunk + i) * pub_params.challenge_count + n;
+                        let legacy_index = ((j * num_sectors_per_chunk + i) * pub_params.challenge_count + n) as u64;
+                        let challenge_index = match pub_params.shape {
+                            PoStShape::Window => match pub_params.api_version {
+                                ApiVersion::V1_0_0 | ApiVersion::V1_1_0 => legacy_index,
+                                _ => n as u64,
+                            },
+                            PoStShape::Winning => {
+                                legacy_index
+                            }
+                        } as u64;
                         let challenged_leaf =
                             generate_leaf_challenge_inner::<<Tree::Hasher as Hasher>::Domain>(
                                 challenge_hasher.clone(),

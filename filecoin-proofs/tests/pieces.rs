@@ -379,7 +379,7 @@ fn build_sector(
         DRG_DEGREE,
         EXP_DEGREE,
         porep_id,
-        ApiVersion::V1_1_0,
+        ApiVersion::V1_2_0,
     )?;
 
     let mut staged_sector = Vec::with_capacity(u64::from(sector_size) as usize);
