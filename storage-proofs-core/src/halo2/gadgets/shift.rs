@@ -44,8 +44,8 @@ impl<F: FieldExt> halo2_proofs::circuit::Chip<F> for ShiftChip<F> {
 impl<F: FieldExt> ColumnCount for ShiftChip<F> {
     fn num_cols() -> NumCols {
         NumCols {
-            advice_eq: 0,
-            advice_neq: 4,
+            advice_eq: 4,
+            advice_neq: 0,
             fixed_eq: 0,
             fixed_neq: 0,
         }
@@ -60,6 +60,10 @@ impl<F: FieldExt> ShiftChip<F> {
     pub fn configure(meta: &mut ConstraintSystem<F>, advice: &[Column<Advice>]) -> ShiftConfig<F> {
         // Check that we have enough advice columns.
         assert!(advice.len() >= 4);
+
+        for col in &advice[..4] {
+            meta.enable_equality(*col);
+        }
 
         let xs = [advice[0], advice[1]];
         let bit = advice[2];
@@ -121,7 +125,28 @@ impl<F: FieldExt> ShiftChip<F> {
         self.insert_inner(layouter, &val, &uninserted, &bits)
     }
 
-    pub fn insert(
+    pub fn insert_unassigned_value(
+        &self,
+        layouter: impl Layouter<F>,
+        val: &Value<F>,
+        uninserted: &[Value<F>],
+        bits: &[AssignedBit<F>],
+    ) -> Result<Vec<AssignedCell<F, F>>, Error> {
+        let val = MaybeAssigned::Unassigned(*val);
+
+        let uninserted: Vec<MaybeAssigned<F, F>> = uninserted
+            .iter()
+            .copied()
+            .map(MaybeAssigned::Unassigned)
+            .collect();
+
+        let bits: Vec<MaybeAssigned<Bit, F>> =
+            bits.iter().cloned().map(MaybeAssigned::Assigned).collect();
+
+        self.insert_inner(layouter, &val, &uninserted, &bits)
+    }
+
+    pub fn insert_assigned_value(
         &self,
         layouter: impl Layouter<F>,
         val: &AssignedCell<F, F>,
@@ -142,13 +167,34 @@ impl<F: FieldExt> ShiftChip<F> {
         self.insert_inner(layouter, &val, &uninserted, &bits)
     }
 
-    pub fn insert_with_pi_bits(
+    pub fn insert_unassigned_value_pi_bits(
+        &self,
+        layouter: impl Layouter<F>,
+        val: &Value<F>,
+        uninserted: &[Value<F>],
+        pi_col: Column<Instance>,
+        pi_rows: Range<usize>,
+    ) -> Result<Vec<AssignedCell<F, F>>, Error> {
+        let val = MaybeAssigned::Unassigned(*val);
+
+        let uninserted: Vec<MaybeAssigned<F, F>> = uninserted
+            .iter()
+            .copied()
+            .map(MaybeAssigned::Unassigned)
+            .collect();
+
+        let bits: Vec<MaybeAssigned<Bit, F>> =
+            pi_rows.map(|row| MaybeAssigned::Pi(pi_col, row)).collect();
+
+        self.insert_inner(layouter, &val, &uninserted, &bits)
+    }
+
+    pub fn insert_assigned_value_pi_bits(
         &self,
         layouter: impl Layouter<F>,
         val: &AssignedCell<F, F>,
         uninserted: &[Value<F>],
         pi_col: Column<Instance>,
-        // Public input row indices are absolute.
         pi_rows: Range<usize>,
     ) -> Result<Vec<AssignedCell<F, F>>, Error> {
         let val = MaybeAssigned::Assigned(val.clone());
@@ -170,7 +216,7 @@ impl<F: FieldExt> ShiftChip<F> {
         self.insert_inner(layouter, &val, &uninserted, &bits)
     }
 
-    fn insert_inner(
+    pub(crate) fn insert_inner(
         &self,
         mut layouter: impl Layouter<F>,
         val: &MaybeAssigned<F, F>,
@@ -317,16 +363,28 @@ impl<F: FieldExt> ShiftChip<F> {
             },
         )
     }
+
+    #[inline]
+    pub fn num_rows(arity: usize) -> usize {
+        arity
+    }
 }
 
 #[cfg(test)]
 mod test {
     use super::*;
 
+    use fil_halo2_gadgets::AdviceIter;
     use halo2_proofs::{circuit::SimpleFloorPlanner, dev::MockProver, pasta::Fp, plonk::Circuit};
     use rand::rngs::OsRng;
 
     use crate::halo2::{create_proof, verify_proof, CircuitRows, Halo2Field, Halo2Keypair};
+
+    #[derive(Clone)]
+    struct MyConfig {
+        advice: Vec<Column<Advice>>,
+        shift: ShiftConfig<Fp>,
+    }
 
     struct MyCircuit {
         value: Value<Fp>,
@@ -335,7 +393,7 @@ mod test {
     }
 
     impl Circuit<Fp> for MyCircuit {
-        type Config = ShiftConfig<Fp>;
+        type Config = MyConfig;
         type FloorPlanner = SimpleFloorPlanner;
 
         fn without_witnesses(&self) -> Self {
@@ -351,19 +409,46 @@ mod test {
 
         fn configure(meta: &mut ConstraintSystem<Fp>) -> Self::Config {
             let advice: Vec<Column<Advice>> = (0..4).map(|_| meta.advice_column()).collect();
-
-            ShiftChip::configure(meta, &advice)
+            let shift = ShiftChip::configure(meta, &advice);
+            MyConfig { advice, shift }
         }
 
         fn synthesize(
             &self,
             config: Self::Config,
-            layouter: impl Layouter<Fp>,
+            mut layouter: impl Layouter<Fp>,
         ) -> Result<(), Error> {
-            let shift_chip = ShiftChip::construct(config);
+            let MyConfig {
+                advice,
+                shift: shift_config,
+            } = config;
 
-            let inserted =
-                shift_chip.witness_insert(layouter, &self.value, &self.uninserted, &self.bits)?;
+            let bits = layouter.assign_region(
+                || "assign shift bits",
+                |mut region| {
+                    let mut advice_iter = AdviceIter::from(advice.clone());
+                    self.bits
+                        .iter()
+                        .enumerate()
+                        .map(|(i, bit)| {
+                            let (offset, col) = advice_iter.next();
+                            region.assign_advice(
+                                || format!("bit_{}", i),
+                                col,
+                                offset,
+                                || bit.map(Bit),
+                            )
+                        })
+                        .collect::<Result<Vec<AssignedBit<Fp>>, Error>>()
+                },
+            )?;
+
+            let inserted = ShiftChip::construct(shift_config).insert_unassigned_value(
+                layouter,
+                &self.value,
+                &self.uninserted,
+                &bits,
+            )?;
 
             // Calculate expected output.
             let expected = {
@@ -391,13 +476,7 @@ mod test {
 
     impl CircuitRows for MyCircuit {
         fn k(&self) -> u32 {
-            if self.uninserted.len() == 1 {
-                // Arity 2.
-                3
-            } else {
-                // Arities 4 and 8.
-                4
-            }
+            4
         }
     }
 
