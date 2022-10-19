@@ -1,7 +1,8 @@
 use std::marker::PhantomData;
+use std::ops::Range;
 
 use fil_halo2_gadgets::{
-    boolean::{and, nor, AssignedBit},
+    boolean::{and, nor, AssignedBit, Bit},
     utilities::ternary,
     ColumnCount, MaybeAssigned, NumCols,
 };
@@ -9,7 +10,7 @@ use filecoin_hashers::PoseidonArity;
 use halo2_proofs::{
     arithmetic::FieldExt,
     circuit::{AssignedCell, Layouter, Value},
-    plonk::{Advice, Column, ConstraintSystem, Constraints, Error, Expression, Selector},
+    plonk::{Advice, Column, ConstraintSystem, Constraints, Error, Expression, Instance, Selector},
     poly::Rotation,
 };
 
@@ -310,36 +311,66 @@ where
         }
     }
 
-    // Copies the insertion value and witnesses the uninserted array elements.
-    pub fn copy_insert(
-        &self,
-        layouter: impl Layouter<F>,
-        uninserted: &[Value<F>],
-        value: &AssignedCell<F, F>,
-        index_bits: &[AssignedBit<F>],
-    ) -> Result<Vec<AssignedCell<F, F>>, Error> {
-        self.insert_inner(
-            layouter,
-            uninserted,
-            MaybeAssigned::Assigned(value.clone()),
-            index_bits,
-        )
-    }
-
     // Witnesses the insertion value and the uninserted array elements.
-    pub fn witness_insert(
+    pub fn insert_unassigned_value(
         &self,
         layouter: impl Layouter<F>,
         uninserted: &[Value<F>],
         value: &Value<F>,
         index_bits: &[AssignedBit<F>],
     ) -> Result<Vec<AssignedCell<F, F>>, Error> {
-        self.insert_inner(
-            layouter,
-            uninserted,
-            MaybeAssigned::Unassigned(*value),
-            index_bits,
-        )
+        let value = MaybeAssigned::Unassigned(*value);
+        let index_bits: Vec<MaybeAssigned<Bit, F>> = index_bits
+            .iter()
+            .cloned()
+            .map(MaybeAssigned::Assigned)
+            .collect();
+        self.insert_inner(layouter, uninserted, value, &index_bits)
+    }
+
+    // Copies the insertion value and witnesses the uninserted array elements.
+    pub fn insert_assigned_value(
+        &self,
+        layouter: impl Layouter<F>,
+        uninserted: &[Value<F>],
+        value: &AssignedCell<F, F>,
+        index_bits: &[AssignedBit<F>],
+    ) -> Result<Vec<AssignedCell<F, F>>, Error> {
+        let value = MaybeAssigned::Assigned(value.clone());
+        let index_bits: Vec<MaybeAssigned<Bit, F>> = index_bits
+            .iter()
+            .cloned()
+            .map(MaybeAssigned::Assigned)
+            .collect();
+        self.insert_inner(layouter, uninserted, value, &index_bits)
+    }
+
+    pub fn insert_unassigned_value_pi_bits(
+        &self,
+        layouter: impl Layouter<F>,
+        uninserted: &[Value<F>],
+        value: &Value<F>,
+        pi_col: Column<Instance>,
+        pi_rows: Range<usize>,
+    ) -> Result<Vec<AssignedCell<F, F>>, Error> {
+        let value = MaybeAssigned::Unassigned(*value);
+        let index_bits: Vec<MaybeAssigned<Bit, F>> =
+            pi_rows.map(|row| MaybeAssigned::Pi(pi_col, row)).collect();
+        self.insert_inner(layouter, uninserted, value, &index_bits)
+    }
+
+    pub fn insert_assigned_value_pi_bits(
+        &self,
+        layouter: impl Layouter<F>,
+        uninserted: &[Value<F>],
+        value: &AssignedCell<F, F>,
+        pi_col: Column<Instance>,
+        pi_rows: Range<usize>,
+    ) -> Result<Vec<AssignedCell<F, F>>, Error> {
+        let value = MaybeAssigned::Assigned(value.clone());
+        let index_bits: Vec<MaybeAssigned<Bit, F>> =
+            pi_rows.map(|row| MaybeAssigned::Pi(pi_col, row)).collect();
+        self.insert_inner(layouter, uninserted, value, &index_bits)
     }
 
     fn insert_inner(
@@ -347,7 +378,7 @@ where
         mut layouter: impl Layouter<F>,
         uninserted: &[Value<F>],
         value: MaybeAssigned<F, F>,
-        index_bits: &[AssignedBit<F>],
+        index_bits: &[MaybeAssigned<Bit, F>],
     ) -> Result<Vec<AssignedCell<F, F>>, Error> {
         let arity = A::to_usize();
         assert_eq!(uninserted.len(), arity - 1);
@@ -355,23 +386,67 @@ where
         let index_bit_len = arity.trailing_zeros() as usize;
         assert_eq!(index_bits.len(), index_bit_len);
 
-        let mut index = 0;
-        for (i, bit) in index_bits.iter().enumerate() {
-            bit.value().map(|bit| {
-                index += (bool::from(bit) as usize) << i;
-            });
-        }
-
         layouter.assign_region(
             || format!("insert_{}", arity),
             |mut region| {
                 let offset = 0;
                 self.config.s_insert.enable(&mut region, offset)?;
 
-                // Copy the insertion index.
-                for (i, (bit, col)) in index_bits.iter().zip(&self.config.index_bits).enumerate() {
-                    bit.copy_advice(|| format!("index_bit_{}", i), &mut region, *col, offset)?;
-                }
+                let index: usize = index_bits
+                    .iter()
+                    .zip(&self.config.index_bits)
+                    .enumerate()
+                    .map(|(i, (bit, col))| {
+                        let bit: Value<bool> = match bit {
+                            MaybeAssigned::Unassigned(ref bit) => region
+                                .assign_advice(
+                                    || format!("index_bits[{}]", i),
+                                    *col,
+                                    offset,
+                                    || *bit,
+                                )
+                                .map(|bit| bit.value().map(bool::from))?,
+                            MaybeAssigned::Assigned(ref bit) => bit
+                                .copy_advice(
+                                    || format!("copy index_bits[{}]", i),
+                                    &mut region,
+                                    *col,
+                                    offset,
+                                )
+                                .map(|bit| bit.value().map(bool::from))?,
+                            MaybeAssigned::Pi(pi_col, pi_row) => region
+                                .assign_advice_from_instance(
+                                    || format!("copy index_bits[{}] public input", i),
+                                    *pi_col,
+                                    *pi_row,
+                                    *col,
+                                    offset,
+                                )
+                                .map(|bit| {
+                                    bit.value().map(|field| {
+                                        if field.is_zero_vartime() {
+                                            false
+                                        } else {
+                                            assert_eq!(
+                                            *field, F::one(),
+                                            "index_bits[{}] public input is not a bit (found={:?})",
+                                            i,
+                                            field,
+                                        );
+                                            true
+                                        }
+                                    })
+                                })?,
+                        };
+                        let mut pow_2 = 0;
+                        bit.map(|bit| {
+                            pow_2 = (bit as usize) << i;
+                        });
+                        Ok(pow_2)
+                    })
+                    .collect::<Result<Vec<usize>, Error>>()?
+                    .iter()
+                    .sum();
 
                 // Assign or copy insertion value.
                 let value = match value {
@@ -413,7 +488,6 @@ where
 mod test {
     use super::*;
 
-    use fil_halo2_gadgets::boolean::Bit;
     use generic_array::typenum::{U2, U4, U8};
     use halo2_proofs::{
         circuit::SimpleFloorPlanner,
@@ -521,7 +595,7 @@ mod test {
                 },
             )?;
 
-            let inserted = chip.copy_insert(
+            let inserted = chip.insert_assigned_value(
                 layouter.namespace(|| "insert"),
                 &self.uninserted,
                 &value,

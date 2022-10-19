@@ -135,13 +135,15 @@ where
 
             let preimage = if height == 0 {
                 match leaf {
-                    MaybeAssigned::Unassigned(ref leaf) => self.base_insert.witness_insert(
-                        layouter.namespace(|| format!("base insert (height {})", height)),
-                        siblings,
-                        leaf,
-                        &index_bits,
-                    )?,
-                    MaybeAssigned::Assigned(ref leaf) => self.base_insert.copy_insert(
+                    MaybeAssigned::Unassigned(ref leaf) => {
+                        self.base_insert.insert_unassigned_value(
+                            layouter.namespace(|| format!("base insert (height {})", height)),
+                            siblings,
+                            leaf,
+                            &index_bits,
+                        )?
+                    }
+                    MaybeAssigned::Assigned(ref leaf) => self.base_insert.insert_assigned_value(
                         layouter.namespace(|| format!("base insert (height {})", height)),
                         siblings,
                         leaf,
@@ -150,7 +152,7 @@ where
                     _ => unimplemented!(),
                 }
             } else {
-                self.base_insert.copy_insert(
+                self.base_insert.insert_assigned_value(
                     layouter.namespace(|| format!("base insert (height {})", height)),
                     siblings,
                     &cur.take().unwrap(),
@@ -187,7 +189,7 @@ where
 
             let (sub_hasher, sub_insert) = self.sub_hasher_insert.as_ref().unwrap();
 
-            let preimage = sub_insert.copy_insert(
+            let preimage = sub_insert.insert_assigned_value(
                 layouter.namespace(|| format!("insert (height {})", height)),
                 siblings,
                 &cur.take().unwrap(),
@@ -223,7 +225,7 @@ where
 
             let (top_hasher, top_insert) = self.top_hasher_insert.as_ref().unwrap();
 
-            let preimage = top_insert.copy_insert(
+            let preimage = top_insert.insert_assigned_value(
                 layouter.namespace(|| format!("insert (height {})", height)),
                 siblings,
                 &cur.take().unwrap(),
