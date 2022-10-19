@@ -102,29 +102,6 @@ impl<F: FieldExt> ShiftChip<F> {
         }
     }
 
-    pub fn witness_insert(
-        &self,
-        layouter: impl Layouter<F>,
-        val: &Value<F>,
-        uninserted: &[Value<F>],
-        bits: &[Value<bool>],
-    ) -> Result<Vec<AssignedCell<F, F>>, Error> {
-        let val = MaybeAssigned::Unassigned(*val);
-
-        let uninserted: Vec<MaybeAssigned<F, F>> = uninserted
-            .iter()
-            .copied()
-            .map(MaybeAssigned::Unassigned)
-            .collect();
-
-        let bits: Vec<MaybeAssigned<Bit, F>> = bits
-            .iter()
-            .map(|bit| MaybeAssigned::Unassigned(bit.map(Bit)))
-            .collect();
-
-        self.insert_inner(layouter, &val, &uninserted, &bits)
-    }
-
     pub fn insert_unassigned_value(
         &self,
         layouter: impl Layouter<F>,
