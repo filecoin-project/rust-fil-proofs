@@ -1,13 +1,21 @@
-use fil_halo2_gadgets::{boolean::AssignedBit, MaybeAssigned};
+use std::ops::Range;
+
+use fil_halo2_gadgets::{
+    boolean::{AssignedBit, Bit},
+    MaybeAssigned,
+};
 use filecoin_hashers::{Halo2Hasher, HashInstructions, PoseidonArity};
 use generic_array::typenum::U0;
 use halo2_proofs::{
     arithmetic::FieldExt,
     circuit::{AssignedCell, Layouter, Value},
-    plonk::Error,
+    plonk::{Column, Error, Instance},
 };
 
-use crate::halo2::gadgets::insert::{InsertChip, InsertConfig};
+use crate::halo2::gadgets::{
+    insert::{InsertChip, InsertConfig},
+    shift::ShiftChip,
+};
 
 pub struct MerkleChip<H, U, V = U0, W = U0>
 where
@@ -161,7 +169,7 @@ where
             };
 
             let digest = self.base_hasher.hash(
-                layouter.namespace(|| format!("base hash siblings (height {})", height)),
+                layouter.namespace(|| format!("base hash (height {})", height)),
                 &preimage,
             )?;
 
@@ -197,7 +205,7 @@ where
             )?;
 
             let digest = sub_hasher.hash(
-                layouter.namespace(|| format!("merkle proof hash (height {})", height)),
+                layouter.namespace(|| format!("sub hash (height {})", height)),
                 &preimage,
             )?;
 
@@ -233,7 +241,7 @@ where
             )?;
 
             let digest = top_hasher.hash(
-                layouter.namespace(|| format!("merkle proof hash (height {})", height)),
+                layouter.namespace(|| format!("top hash (height {})", height)),
                 &preimage,
             )?;
 
@@ -297,6 +305,398 @@ where
         <H as Halo2Hasher<A>>::transmute_arity::<B>(hasher_config),
         insert_config.transmute_arity::<B>(),
     )
+}
+
+// Returns `(base_path_len, has_sub_path, has_top_path)`.
+pub fn path_lens(
+    num_leafs: usize,
+    base_arity: usize,
+    sub_arity: usize,
+    top_arity: usize,
+) -> (usize, bool, bool) {
+    let has_sub_path = sub_arity != 0;
+    let has_top_path = top_arity != 0;
+
+    let mut base_bits = num_leafs.trailing_zeros() as usize;
+    if has_sub_path {
+        base_bits -= sub_arity.trailing_zeros() as usize;
+    }
+    if has_top_path {
+        base_bits -= top_arity.trailing_zeros() as usize;
+    }
+    let base_arity_bit_len = base_arity.trailing_zeros() as usize;
+    assert_eq!(base_bits % base_arity_bit_len, 0);
+    let base_path_len = base_bits / base_arity_bit_len;
+
+    (base_path_len, has_sub_path, has_top_path)
+}
+
+#[allow(clippy::unwrap_used)]
+pub fn challenge_to_shift_bits(
+    challenge: usize,
+    num_leafs: usize,
+    base_arity: usize,
+    sub_arity: usize,
+    top_arity: usize,
+) -> Vec<bool> {
+    use std::iter;
+
+    let challenge_bit_len = num_leafs.trailing_zeros() as usize;
+    let mut challenge_bits = (0..challenge_bit_len).map(|i| challenge >> i & 1 == 1);
+
+    let (base_path_len, has_sub_path, has_top_path) =
+        path_lens(num_leafs, base_arity, sub_arity, top_arity);
+
+    let base_arity_bit_len = base_arity.trailing_zeros() as usize;
+    let base_shift_bit_len = base_arity - 1;
+
+    let mut shift_bits = vec![];
+
+    for _ in 0..base_path_len {
+        let insert_index = (0..base_arity_bit_len).fold(0, |acc, i| {
+            let bit = challenge_bits.next().unwrap() as usize;
+            acc + (bit << i)
+        });
+        iter::repeat(true)
+            .take(insert_index)
+            .chain(iter::repeat(false))
+            .take(base_shift_bit_len)
+            .for_each(|bit| shift_bits.push(bit));
+    }
+
+    if has_sub_path {
+        let sub_arity_bit_len = sub_arity.trailing_zeros() as usize;
+        let sub_shift_bit_len = sub_arity - 1;
+        let insert_index = (0..sub_arity_bit_len).fold(0, |acc, i| {
+            let bit = challenge_bits.next().unwrap() as usize;
+            acc + (bit << i)
+        });
+        iter::repeat(true)
+            .take(insert_index)
+            .chain(iter::repeat(false))
+            .take(sub_shift_bit_len)
+            .for_each(|bit| shift_bits.push(bit));
+    }
+
+    if has_top_path {
+        let top_arity_bit_len = top_arity.trailing_zeros() as usize;
+        let top_shift_bit_len = top_arity - 1;
+        let insert_index = (0..top_arity_bit_len).fold(0, |acc, i| {
+            let bit = challenge_bits.next().unwrap() as usize;
+            acc + (bit << i)
+        });
+        iter::repeat(true)
+            .take(insert_index)
+            .chain(iter::repeat(false))
+            .take(top_shift_bit_len)
+            .for_each(|bit| shift_bits.push(bit));
+    }
+
+    assert!(challenge_bits.next().is_none());
+    shift_bits
+}
+
+#[allow(clippy::unwrap_used)]
+pub fn shift_bits_to_challenge(
+    challenge_shift_bits: &[bool],
+    num_leafs: usize,
+    base_arity: usize,
+    sub_arity: usize,
+    top_arity: usize,
+) -> usize {
+    let (base_path_len, has_sub_path, has_top_path) =
+        path_lens(num_leafs, base_arity, sub_arity, top_arity);
+
+    let base_arity_bit_len = base_arity.trailing_zeros() as usize;
+    let base_shift_bit_len = base_arity - 1;
+
+    let mut challenge_shift_bits = challenge_shift_bits.iter();
+    let mut challenge = 0;
+    let mut shl = 0;
+
+    for _ in 0..base_path_len {
+        let insert_index = (0..base_shift_bit_len)
+            .map(|_| challenge_shift_bits.next().unwrap())
+            .filter(|bit| **bit)
+            .count();
+        challenge |= insert_index << shl;
+        shl += base_arity_bit_len;
+    }
+
+    if has_sub_path {
+        let sub_arity_bit_len = sub_arity.trailing_zeros() as usize;
+        let sub_shift_bit_len = sub_arity - 1;
+        let insert_index = (0..sub_shift_bit_len)
+            .map(|_| challenge_shift_bits.next().unwrap())
+            .filter(|bit| **bit)
+            .count();
+        challenge |= insert_index << shl;
+        shl += sub_arity_bit_len;
+    }
+
+    if has_top_path {
+        let top_shift_bit_len = top_arity - 1;
+        let insert_index = (0..top_shift_bit_len)
+            .map(|_| challenge_shift_bits.next().unwrap())
+            .filter(|bit| **bit)
+            .count();
+        challenge |= insert_index << shl;
+    }
+
+    assert!(challenge_shift_bits.next().is_none());
+    challenge
+}
+
+pub struct MerkleShiftChip<H, U, V = U0, W = U0>
+where
+    H: Halo2Hasher<U> + Halo2Hasher<V> + Halo2Hasher<W>,
+    H::Field: FieldExt,
+    U: PoseidonArity<H::Field>,
+    V: PoseidonArity<H::Field>,
+    W: PoseidonArity<H::Field>,
+{
+    base_hasher: <H as Halo2Hasher<U>>::Chip,
+    sub_hasher: Option<<H as Halo2Hasher<V>>::Chip>,
+    top_hasher: Option<<H as Halo2Hasher<W>>::Chip>,
+    insert: ShiftChip<H::Field>,
+}
+
+impl<H, U, V, W> MerkleShiftChip<H, U, V, W>
+where
+    H: Halo2Hasher<U> + Halo2Hasher<V> + Halo2Hasher<W>,
+    H::Field: FieldExt,
+    U: PoseidonArity<H::Field>,
+    V: PoseidonArity<H::Field>,
+    W: PoseidonArity<H::Field>,
+{
+    pub fn with_subchips(
+        base_hasher: <H as Halo2Hasher<U>>::Chip,
+        sub_hasher: Option<<H as Halo2Hasher<V>>::Chip>,
+        top_hasher: Option<<H as Halo2Hasher<W>>::Chip>,
+        insert: ShiftChip<H::Field>,
+    ) -> Self {
+        assert_eq!(V::to_usize() == 0, sub_hasher.is_none());
+        assert_eq!(W::to_usize() == 0, top_hasher.is_none());
+        MerkleShiftChip {
+            base_hasher,
+            sub_hasher,
+            top_hasher,
+            insert,
+        }
+    }
+
+    pub fn compute_root_unassigned_leaf(
+        &self,
+        layouter: impl Layouter<H::Field>,
+        challenge_bits: &[AssignedBit<H::Field>],
+        leaf: Value<H::Field>,
+        path: &[Vec<Value<H::Field>>],
+    ) -> Result<AssignedCell<H::Field, H::Field>, Error> {
+        let leaf = MaybeAssigned::Unassigned(leaf);
+        let bits: Vec<MaybeAssigned<Bit, H::Field>> = challenge_bits
+            .iter()
+            .cloned()
+            .map(MaybeAssigned::Assigned)
+            .collect();
+        self.compute_root_inner(layouter, &bits, leaf, path)
+    }
+
+    pub fn compute_root_assigned_leaf(
+        &self,
+        layouter: impl Layouter<H::Field>,
+        challenge_bits: &[AssignedBit<H::Field>],
+        leaf: &AssignedCell<H::Field, H::Field>,
+        path: &[Vec<Value<H::Field>>],
+    ) -> Result<AssignedCell<H::Field, H::Field>, Error> {
+        let leaf = MaybeAssigned::Assigned(leaf.clone());
+        let bits: Vec<MaybeAssigned<Bit, H::Field>> = challenge_bits
+            .iter()
+            .cloned()
+            .map(MaybeAssigned::Assigned)
+            .collect();
+        self.compute_root_inner(layouter, &bits, leaf, path)
+    }
+
+    pub fn compute_root_unassigned_leaf_pi_bits(
+        &self,
+        layouter: impl Layouter<H::Field>,
+        leaf: Value<H::Field>,
+        path: &[Vec<Value<H::Field>>],
+        pi_col: Column<Instance>,
+        pi_rows: Range<usize>,
+    ) -> Result<AssignedCell<H::Field, H::Field>, Error> {
+        let leaf = MaybeAssigned::Unassigned(leaf);
+        let bits: Vec<MaybeAssigned<Bit, H::Field>> = pi_rows
+            .map(|pi_row| MaybeAssigned::Pi(pi_col, pi_row))
+            .collect();
+        self.compute_root_inner(layouter, &bits, leaf, path)
+    }
+
+    pub fn compute_root_assigned_leaf_pi_bits(
+        &self,
+        layouter: impl Layouter<H::Field>,
+        leaf: &AssignedCell<H::Field, H::Field>,
+        path: &[Vec<Value<H::Field>>],
+        pi_col: Column<Instance>,
+        pi_rows: Range<usize>,
+    ) -> Result<AssignedCell<H::Field, H::Field>, Error> {
+        let leaf = MaybeAssigned::Assigned(leaf.clone());
+        let bits: Vec<MaybeAssigned<Bit, H::Field>> = pi_rows
+            .map(|pi_row| MaybeAssigned::Pi(pi_col, pi_row))
+            .collect();
+        self.compute_root_inner(layouter, &bits, leaf, path)
+    }
+
+    #[allow(clippy::unwrap_used)]
+    fn compute_root_inner(
+        &self,
+        mut layouter: impl Layouter<H::Field>,
+        challenge_bits: &[MaybeAssigned<Bit, H::Field>],
+        leaf: MaybeAssigned<H::Field, H::Field>,
+        path: &[Vec<Value<H::Field>>],
+    ) -> Result<AssignedCell<H::Field, H::Field>, Error> {
+        let base_arity = U::to_usize();
+        let sub_arity = V::to_usize();
+        let top_arity = W::to_usize();
+
+        let base_siblings = base_arity - 1;
+        let sub_siblings = sub_arity - 1;
+        let top_siblings = top_arity - 1;
+
+        let base_path_len = if top_arity > 0 {
+            path.len() - 2
+        } else if sub_arity > 0 {
+            path.len() - 1
+        } else {
+            path.len()
+        };
+
+        let mut cur = leaf;
+        let mut height = 0;
+        let mut path = path.iter().cloned();
+        let mut challenge_bits = challenge_bits.iter();
+
+        for _ in 0..base_path_len {
+            let siblings: Vec<MaybeAssigned<H::Field, H::Field>> = path
+                .next()
+                .expect("no path elements remaining")
+                .into_iter()
+                .map(MaybeAssigned::Unassigned)
+                .collect();
+
+            assert_eq!(
+                siblings.len(),
+                base_siblings,
+                "path element has incorrect number of siblings"
+            );
+
+            let shift_bits: Vec<MaybeAssigned<Bit, H::Field>> = (0..base_siblings)
+                .map(|_| challenge_bits.next().expect("no challenge bits remaining"))
+                .cloned()
+                .collect();
+
+            let preimage = self.insert.insert_inner(
+                layouter.namespace(|| format!("base insert (height {})", height)),
+                &cur,
+                siblings.as_slice(),
+                &shift_bits,
+            )?;
+
+            cur = self
+                .base_hasher
+                .hash(
+                    layouter.namespace(|| format!("base hash (height {})", height)),
+                    &preimage,
+                )
+                .map(MaybeAssigned::Assigned)?;
+
+            height += 1;
+        }
+
+        if sub_arity != 0 {
+            let siblings: Vec<MaybeAssigned<H::Field, H::Field>> = path
+                .next()
+                .expect("no path elements remaining")
+                .into_iter()
+                .map(MaybeAssigned::Unassigned)
+                .collect();
+
+            assert_eq!(
+                siblings.len(),
+                sub_siblings,
+                "path element has incorrect number of siblings"
+            );
+
+            let shift_bits: Vec<MaybeAssigned<Bit, H::Field>> = (0..sub_siblings)
+                .map(|_| challenge_bits.next().expect("no challenge bits remaining"))
+                .cloned()
+                .collect();
+
+            let preimage = self.insert.insert_inner(
+                layouter.namespace(|| format!("sub insert (height {})", height)),
+                &cur,
+                siblings.as_slice(),
+                &shift_bits,
+            )?;
+
+            cur = self
+                .sub_hasher
+                .as_ref()
+                .expect("sub hasher not set")
+                .hash(
+                    layouter.namespace(|| format!("sub hash (height {})", height)),
+                    &preimage,
+                )
+                .map(MaybeAssigned::Assigned)?;
+
+            height += 1;
+        }
+
+        if top_arity != 0 {
+            let siblings: Vec<MaybeAssigned<H::Field, H::Field>> = path
+                .next()
+                .expect("no path elements remaining")
+                .into_iter()
+                .map(MaybeAssigned::Unassigned)
+                .collect();
+
+            assert_eq!(
+                siblings.len(),
+                top_siblings,
+                "path element has incorrect number of siblings"
+            );
+
+            let shift_bits: Vec<MaybeAssigned<Bit, H::Field>> = (0..top_siblings)
+                .map(|_| challenge_bits.next().expect("no challenge bits remaining"))
+                .cloned()
+                .collect();
+
+            let preimage = self.insert.insert_inner(
+                layouter.namespace(|| format!("top insert (height {})", height)),
+                &cur,
+                siblings.as_slice(),
+                &shift_bits,
+            )?;
+
+            cur = self
+                .top_hasher
+                .as_ref()
+                .expect("top hasher not set")
+                .hash(
+                    layouter.namespace(|| format!("top hash (height {})", height)),
+                    &preimage,
+                )
+                .map(MaybeAssigned::Assigned)?;
+        }
+
+        assert!(challenge_bits.next().is_none());
+        assert!(path.next().is_none());
+
+        match cur {
+            MaybeAssigned::Assigned(cur) => Ok(cur),
+            _ => unreachable!(),
+        }
+    }
 }
 
 // TODO (jake): can this circuit be used in below tests?
@@ -828,20 +1228,10 @@ mod test {
         W: PoseidonArity<H::Field>,
     {
         fn with_witness(challenge: u32, merkle_proof: &MerkleProof<H, U, V, W>) -> Self {
-            let path = merkle_proof
-                .path()
-                .iter()
-                .map(|(sibs, _)| {
-                    sibs.iter()
-                        .copied()
-                        .map(|sib| Value::known(sib.into()))
-                        .collect()
-                })
-                .collect();
             MyCircuit {
                 challenge: Value::known(challenge),
                 leaf: Value::known(merkle_proof.leaf().into()),
-                path,
+                path: merkle_proof.as_values(),
                 _u: PhantomData,
                 _v: PhantomData,
                 _w: PhantomData,
@@ -889,7 +1279,7 @@ mod test {
                 num_rows += top_hasher_rows + insert_rows;
             };
 
-            (num_rows as f32).log2().ceil() as u32
+            (num_rows as f32).log2().floor() as u32 + 1
         }
 
         #[allow(clippy::unwrap_used)]
@@ -977,7 +1367,15 @@ mod test {
             let merkle_proof = tree.gen_proof(challenge).unwrap();
             let circ = MyCircuit::<H, U, V, W>::with_witness(challenge as u32, &merkle_proof);
             let k = MyCircuit::<H, U, V, W>::k(num_leafs);
-            let prover = MockProver::run(k, &circ, vec![]).unwrap();
+            let prover = MockProver::run(k, &circ, vec![])
+                .or_else(|err| {
+                    if let Error::NotEnoughRowsAvailable { .. } = err {
+                        MockProver::run(k + 1, &circ, vec![])
+                    } else {
+                        Err(err)
+                    }
+                })
+                .unwrap();
             assert!(prover.verify().is_ok());
         }
     }
@@ -1000,13 +1398,16 @@ mod test {
     #[test]
     fn test_merkle_chip_poseidon_8_2() {
         test_merkle_chip_inner::<PoseidonHasher<Fp>, U8, U2, U0>();
-        test_merkle_chip_inner::<PoseidonHasher<Fp>, U8, U8, U2>();
     }
 
     #[test]
     fn test_merkle_chip_poseidon_8_4() {
         test_merkle_chip_inner::<PoseidonHasher<Fp>, U8, U4, U0>();
-        test_merkle_chip_inner::<PoseidonHasher<Fp>, U8, U8, U4>();
+    }
+
+    #[test]
+    fn test_merkle_chip_poseidon_8_8() {
+        test_merkle_chip_inner::<PoseidonHasher<Fp>, U8, U8, U0>();
     }
 
     #[test]
@@ -1015,7 +1416,339 @@ mod test {
     }
 
     #[test]
+    fn test_merkle_chip_poseidon_8_8_2() {
+        test_merkle_chip_inner::<PoseidonHasher<Fp>, U8, U8, U2>();
+    }
+
+    #[test]
+    fn test_merkle_chip_poseidon_8_8_4() {
+        test_merkle_chip_inner::<PoseidonHasher<Fp>, U8, U8, U4>();
+    }
+
+    #[test]
     fn test_merkle_chip_sha256_2() {
         test_merkle_chip_inner::<Sha256Hasher<Fp>, U2, U0, U0>();
+    }
+
+    fn test_merkle_shift_chip_inner<U, V, W>()
+    where
+        U: PoseidonArity<Fp>,
+        V: PoseidonArity<Fp>,
+        W: PoseidonArity<Fp>,
+    {
+        use filecoin_hashers::poseidon::PoseidonDomain;
+
+        use crate::halo2::gadgets::shift::ShiftConfig;
+
+        const BASE_HEIGHT: u32 = 2;
+
+        #[derive(Clone)]
+        struct MyConfig<U, V, W>
+        where
+            U: PoseidonArity<Fp>,
+            V: PoseidonArity<Fp>,
+            W: PoseidonArity<Fp>,
+        {
+            base_hasher: <PoseidonHasher<Fp> as Halo2Hasher<U>>::Config,
+            sub_hasher: Option<<PoseidonHasher<Fp> as Halo2Hasher<V>>::Config>,
+            top_hasher: Option<<PoseidonHasher<Fp> as Halo2Hasher<W>>::Config>,
+            insert: ShiftConfig<Fp>,
+            pi: Column<Instance>,
+        }
+
+        struct MyCircuit<U, V, W>
+        where
+            U: PoseidonArity<Fp>,
+            V: PoseidonArity<Fp>,
+            W: PoseidonArity<Fp>,
+        {
+            challenge_bits: Vec<bool>,
+            leaf: Value<Fp>,
+            path: Vec<Vec<Value<Fp>>>,
+            expected_root: Fp,
+            _arity: PhantomData<(U, V, W)>,
+        }
+
+        impl<U, V, W> Circuit<Fp> for MyCircuit<U, V, W>
+        where
+            U: PoseidonArity<Fp>,
+            V: PoseidonArity<Fp>,
+            W: PoseidonArity<Fp>,
+        {
+            type Config = MyConfig<U, V, W>;
+            type FloorPlanner = SimpleFloorPlanner;
+
+            fn without_witnesses(&self) -> Self {
+                MyCircuit {
+                    challenge_bits: vec![false; self.challenge_bits.len()],
+                    leaf: Value::unknown(),
+                    path: self
+                        .path
+                        .iter()
+                        .map(|sibs| vec![Value::unknown(); sibs.len()])
+                        .collect(),
+                    expected_root: self.expected_root,
+                    _arity: PhantomData,
+                }
+            }
+
+            #[allow(clippy::unwrap_used)]
+            fn configure(meta: &mut ConstraintSystem<Fp>) -> Self::Config {
+                let base_arity = U::to_usize();
+                let sub_arity = V::to_usize();
+                let top_arity = W::to_usize();
+
+                let (advice_eq, advice_neq, fixed_eq, fixed_neq) = ColumnBuilder::new()
+                    .with_chip::<<PoseidonHasher<Fp> as Halo2Hasher<U>>::Chip>()
+                    .with_chip::<<PoseidonHasher<Fp> as Halo2Hasher<V>>::Chip>()
+                    .with_chip::<<PoseidonHasher<Fp> as Halo2Hasher<W>>::Chip>()
+                    .with_chip::<ShiftChip<Fp>>()
+                    .create_columns(meta);
+
+                let pi = meta.instance_column();
+                meta.enable_equality(pi);
+
+                let base_hasher = <PoseidonHasher<Fp> as Halo2Hasher<U>>::configure(
+                    meta,
+                    &advice_eq,
+                    &advice_neq,
+                    &fixed_eq,
+                    &fixed_neq,
+                );
+
+                let sub_hasher = if sub_arity == 0 {
+                    None
+                } else if sub_arity == base_arity {
+                    Some(
+                        <PoseidonHasher<Fp> as Halo2Hasher<U>>::transmute_arity::<V>(
+                            base_hasher.clone(),
+                        ),
+                    )
+                } else {
+                    Some(<PoseidonHasher<Fp> as Halo2Hasher<V>>::configure(
+                        meta,
+                        &advice_eq,
+                        &advice_neq,
+                        &fixed_eq,
+                        &fixed_neq,
+                    ))
+                };
+
+                let top_hasher = if top_arity == 0 {
+                    None
+                } else if top_arity == base_arity {
+                    Some(
+                        <PoseidonHasher<Fp> as Halo2Hasher<U>>::transmute_arity::<W>(
+                            base_hasher.clone(),
+                        ),
+                    )
+                } else if top_arity == sub_arity {
+                    Some(
+                        <PoseidonHasher<Fp> as Halo2Hasher<V>>::transmute_arity::<W>(
+                            sub_hasher.clone().expect("sub hasher not set"),
+                        ),
+                    )
+                } else {
+                    Some(<PoseidonHasher<Fp> as Halo2Hasher<W>>::configure(
+                        meta,
+                        &advice_eq,
+                        &advice_neq,
+                        &fixed_eq,
+                        &fixed_neq,
+                    ))
+                };
+
+                let insert = ShiftChip::configure(meta, &advice_eq);
+
+                MyConfig {
+                    base_hasher,
+                    sub_hasher,
+                    top_hasher,
+                    insert,
+                    pi,
+                }
+            }
+
+            #[allow(clippy::unwrap_used)]
+            fn synthesize(
+                &self,
+                config: Self::Config,
+                layouter: impl Layouter<Fp>,
+            ) -> Result<(), Error> {
+                let MyConfig {
+                    base_hasher: base_hasher_config,
+                    sub_hasher: sub_hasher_config,
+                    top_hasher: top_hasher_config,
+                    insert: insert_config,
+                    pi: pi_col,
+                } = config;
+
+                let base_hasher_chip =
+                    <PoseidonHasher<Fp> as Halo2Hasher<U>>::construct(base_hasher_config);
+
+                let sub_hasher_chip = sub_hasher_config
+                    .map(|config| <PoseidonHasher<Fp> as Halo2Hasher<V>>::construct(config));
+
+                let top_hasher_chip = top_hasher_config
+                    .map(|config| <PoseidonHasher<Fp> as Halo2Hasher<W>>::construct(config));
+
+                let insert_chip = ShiftChip::construct(insert_config);
+
+                let merkle_chip = MerkleShiftChip::<PoseidonHasher<Fp>, U, V, W>::with_subchips(
+                    base_hasher_chip,
+                    sub_hasher_chip,
+                    top_hasher_chip,
+                    insert_chip,
+                );
+
+                merkle_chip
+                    .compute_root_unassigned_leaf_pi_bits(
+                        layouter,
+                        self.leaf,
+                        &self.path,
+                        pi_col,
+                        0..self.challenge_bits.len(),
+                    )?
+                    .value()
+                    .assert_if_known(|root| **root == self.expected_root);
+
+                Ok(())
+            }
+        }
+
+        impl<U, V, W> MyCircuit<U, V, W>
+        where
+            U: PoseidonArity<Fp>,
+            V: PoseidonArity<Fp>,
+            W: PoseidonArity<Fp>,
+        {
+            fn k(num_leafs: usize) -> u32 {
+                use filecoin_hashers::poseidon::PoseidonChip;
+
+                let base_arity = U::to_usize();
+                let sub_arity = V::to_usize();
+                let top_arity = W::to_usize();
+
+                let (base_path_len, has_sub_path, has_top_path) =
+                    path_lens(num_leafs, base_arity, sub_arity, top_arity);
+
+                let base_rows =
+                    PoseidonChip::<Fp, U>::num_rows() + ShiftChip::<Fp>::num_rows(base_arity);
+
+                let mut num_rows = base_path_len * base_rows;
+                if has_sub_path {
+                    num_rows +=
+                        PoseidonChip::<Fp, V>::num_rows() + ShiftChip::<Fp>::num_rows(sub_arity);
+                }
+                if has_top_path {
+                    num_rows +=
+                        PoseidonChip::<Fp, W>::num_rows() + ShiftChip::<Fp>::num_rows(top_arity);
+                };
+
+                (num_rows as f32).log2().floor() as u32 + 1
+            }
+        }
+
+        let base_arity = U::to_usize();
+        let sub_arity = V::to_usize();
+        let top_arity = W::to_usize();
+
+        let mut num_leafs = base_arity.pow(BASE_HEIGHT);
+        if sub_arity != 0 {
+            num_leafs *= sub_arity;
+        }
+        if top_arity != 0 {
+            num_leafs *= top_arity;
+        }
+
+        let mut rng = XorShiftRng::from_seed(TEST_SEED);
+        let (_, tree) = generate_tree::<
+            MerkleTreeWrapper<PoseidonHasher<Fp>, VecStore<PoseidonDomain<Fp>>, U, V, W>,
+            _,
+        >(&mut rng, num_leafs, None);
+        let root = tree.root();
+
+        let challenges: Vec<usize> = if num_leafs < 10 {
+            (0..num_leafs).collect()
+        } else {
+            (0..10).map(|_| rng.gen::<usize>() % num_leafs).collect()
+        };
+
+        for challenge in challenges {
+            let merkle_proof = tree.gen_proof(challenge).unwrap();
+
+            let circ = MyCircuit::<U, V, W> {
+                challenge_bits: challenge_to_shift_bits(
+                    challenge, num_leafs, base_arity, sub_arity, top_arity,
+                ),
+                leaf: Value::known(merkle_proof.leaf().into()),
+                path: merkle_proof.as_values(),
+                expected_root: root.into(),
+                _arity: PhantomData,
+            };
+
+            let pub_inputs: Vec<Fp> = circ
+                .challenge_bits
+                .iter()
+                .map(|bit| if *bit { Fp::one() } else { Fp::zero() })
+                .collect();
+
+            let k = MyCircuit::<U, V, W>::k(num_leafs);
+            let prover = MockProver::run(k, &circ, vec![pub_inputs.clone()])
+                .or_else(|err| {
+                    if let Error::NotEnoughRowsAvailable { .. } = err {
+                        MockProver::run(k + 1, &circ, vec![pub_inputs])
+                    } else {
+                        Err(err)
+                    }
+                })
+                .unwrap();
+            assert!(prover.verify().is_ok());
+        }
+    }
+
+    #[test]
+    fn test_merkle_shift_chip_poseidon_2() {
+        test_merkle_shift_chip_inner::<U2, U0, U0>();
+    }
+
+    #[test]
+    fn test_merkle_shift_chip_poseidon_4() {
+        test_merkle_shift_chip_inner::<U4, U0, U0>();
+    }
+
+    #[test]
+    fn test_merkle_shift_chip_poseidon_8() {
+        test_merkle_shift_chip_inner::<U4, U0, U0>();
+    }
+
+    #[test]
+    fn test_merkle_shift_chip_poseidon_8_2() {
+        test_merkle_shift_chip_inner::<U8, U2, U0>();
+    }
+
+    #[test]
+    fn test_merkle_shift_chip_poseidon_8_4() {
+        test_merkle_shift_chip_inner::<U8, U4, U0>();
+    }
+
+    #[test]
+    fn test_merkle_shift_chip_poseidon_8_8() {
+        test_merkle_shift_chip_inner::<U8, U8, U0>();
+    }
+
+    #[test]
+    fn test_merkle_shift_chip_poseidon_8_4_2() {
+        test_merkle_shift_chip_inner::<U8, U4, U2>();
+    }
+
+    #[test]
+    fn test_merkle_shift_chip_poseidon_8_8_2() {
+        test_merkle_shift_chip_inner::<U8, U8, U2>();
+    }
+
+    #[test]
+    fn test_merkle_shift_chip_poseidon_8_8_4() {
+        test_merkle_shift_chip_inner::<U8, U8, U4>();
     }
 }

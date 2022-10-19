@@ -7,6 +7,7 @@ use std::slice::Iter;
 use anyhow::{ensure, Result};
 use filecoin_hashers::{Hasher, PoseidonArity};
 use generic_array::typenum::{Unsigned, U0};
+use halo2_proofs::circuit::Value;
 use merkletree::hash::Algorithm;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
@@ -35,6 +36,13 @@ pub trait MerkleProofTrait: Clone + Serialize + DeserializeOwned + Debug + Sync 
                 )
             })
             .collect::<Vec<_>>()
+    }
+
+    fn as_values(&self) -> Vec<Vec<Value<<Self::Hasher as Hasher>::Field>>> {
+        self.path()
+            .iter()
+            .map(|(sibs, _)| sibs.iter().map(|&sib| Value::known(sib.into())).collect())
+            .collect()
     }
 
     #[allow(clippy::type_complexity)]
