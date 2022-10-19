@@ -40,6 +40,7 @@ where
         sector_size: (SECTOR_NODES << 5) as u64,
         challenge_count: winning::CHALLENGE_COUNT,
         sector_count: 1,
+        shape: vanilla::PoStShape::Winning,
         api_version: ApiVersion::V1_1_0,
     };
 
@@ -163,6 +164,7 @@ where
         sector_size: (SECTOR_NODES << 5) as u64,
         challenge_count: window::SECTOR_CHALLENGES,
         sector_count: sectors_challenged_per_partition,
+        shape: vanilla::PoStShape::Window,
         api_version: ApiVersion::V1_1_0,
     };
 
