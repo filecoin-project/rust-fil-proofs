@@ -101,6 +101,7 @@ where
     }
 }
 
+#[derive(Clone)]
 pub enum MaybeAssigned<T, F: FieldExt> {
     // An unassigned value that should be witnessed in a circuit.
     Unassigned(Value<T>),
@@ -109,6 +110,18 @@ pub enum MaybeAssigned<T, F: FieldExt> {
     // A public input located in the cell `(instance_column, absolute_row)` that should be witnessed
     // in the circuit.
     Pi(Column<Instance>, usize),
+}
+
+impl<T, F: FieldExt> From<Value<T>> for MaybeAssigned<T, F> {
+    fn from(value: Value<T>) -> Self {
+        MaybeAssigned::Unassigned(value)
+    }
+}
+
+impl<T, F: FieldExt> From<AssignedCell<T, F>> for MaybeAssigned<T, F> {
+    fn from(asn: AssignedCell<T, F>) -> Self {
+        MaybeAssigned::Assigned(asn)
+    }
 }
 
 pub struct AdviceIter {
