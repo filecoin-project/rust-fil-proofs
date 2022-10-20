@@ -23,7 +23,7 @@ type AdviceNeq = Vec<Column<Advice>>;
 type FixedEq = Vec<Column<Fixed>>;
 type FixedNeq = Vec<Column<Fixed>>;
 
-#[derive(Clone, Copy, Default)]
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
 pub struct NumCols {
     pub advice_eq: usize,
     pub advice_neq: usize,

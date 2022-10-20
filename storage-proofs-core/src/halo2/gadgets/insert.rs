@@ -1,3 +1,4 @@
+use std::iter;
 use std::marker::PhantomData;
 use std::ops::Range;
 
@@ -13,6 +14,11 @@ use halo2_proofs::{
     plonk::{Advice, Column, ConstraintSystem, Constraints, Error, Expression, Instance, Selector},
     poly::Rotation,
 };
+
+// Configures whether to use one or two rows for arity-8 `InsertChip`; if `true` the number of total
+// advice columns is reduced by 8 at a cost of one additional row be insertion (and some additional
+// advice queries).
+pub const USE_2_ROWS_FOR_INSERT_8: bool = true;
 
 // Returns `a` if `bit` is set, otherwise returns `b`.
 //
@@ -92,15 +98,26 @@ where
 {
     fn num_cols() -> NumCols {
         let arity = A::to_usize();
-        let index_bit_len = arity.trailing_zeros() as usize;
-        NumCols {
-            // The index bits, insertion value, and inserted array must be equality constrained.
-            advice_eq: index_bit_len + 1 + arity,
-            // Witness the uninserted array.
-            advice_neq: arity - 1,
-            fixed_eq: 0,
-            fixed_neq: 0,
+        let mut num_cols = NumCols::default();
+        if arity == 0 {
+            return num_cols;
         }
+        let index_bit_len = arity.trailing_zeros() as usize;
+        if arity == 8 && USE_2_ROWS_FOR_INSERT_8 {
+            // The first row is the widest and contains: index bits, insertion value, and
+            // uninserted array.
+            let widest_row = index_bit_len + 1 + (arity - 1);
+            // The second row contains the inserted array; the index bits and insertion value will
+            // use these columns in the first row.
+            num_cols.advice_eq = arity;
+            num_cols.advice_neq = widest_row - arity;
+        } else {
+            // Index bits, insertion value, and inserted array must be equality constrained.
+            num_cols.advice_eq = index_bit_len + 1 + arity;
+            // Witness the uninserted array.
+            num_cols.advice_neq = arity - 1;
+        }
+        num_cols
     }
 }
 
@@ -142,18 +159,16 @@ where
         let index_bit_len = arity.trailing_zeros() as usize;
         let index_bits: Vec<Column<Advice>> =
             (0..index_bit_len).map(|_| advice.next().unwrap()).collect();
-
         let value = advice.next().unwrap();
-
-        let inserted: Vec<Column<Advice>> = (0..arity).map(|_| advice.next().unwrap()).collect();
-
-        let uninserted: Vec<Column<Advice>> =
-            (0..arity - 1).map(|_| advice.next().unwrap()).collect();
+        let inserted: Vec<Column<Advice>>;
+        let uninserted: Vec<Column<Advice>>;
 
         let s_insert = meta.selector();
-
         match arity {
             2 => {
+                inserted = (0..arity).map(|_| advice.next().unwrap()).collect();
+                uninserted = (0..arity - 1).map(|_| advice.next().unwrap()).collect();
+
                 meta.create_gate("insert_2", |meta| {
                     let s_insert = meta.query_selector(s_insert);
 
@@ -178,6 +193,9 @@ where
                 });
             }
             4 => {
+                inserted = (0..arity).map(|_| advice.next().unwrap()).collect();
+                uninserted = (0..arity - 1).map(|_| advice.next().unwrap()).collect();
+
                 meta.create_gate("insert_4", |meta| {
                     let s_insert = meta.query_selector(s_insert);
 
@@ -226,6 +244,28 @@ where
                 });
             }
             8 => {
+                let inserted_row = if USE_2_ROWS_FOR_INSERT_8 {
+                    inserted = index_bits
+                        .iter()
+                        .copied()
+                        .chain(iter::once(value))
+                        .chain(iter::repeat_with(|| advice.next().unwrap()))
+                        .take(arity)
+                        .collect();
+                    uninserted = inserted
+                        .iter()
+                        .copied()
+                        .skip(index_bit_len + 1)
+                        .chain(iter::repeat_with(|| advice.next().unwrap()))
+                        .take(arity - 1)
+                        .collect();
+                    Rotation::next()
+                } else {
+                    inserted = (0..arity).map(|_| advice.next().unwrap()).collect();
+                    uninserted = (0..arity - 1).map(|_| advice.next().unwrap()).collect();
+                    Rotation::cur()
+                };
+
                 meta.create_gate("insert_8", |meta| {
                     let s_insert = meta.query_selector(s_insert);
 
@@ -242,14 +282,14 @@ where
                     let b1 = meta.query_advice(index_bits[1], Rotation::cur());
                     let b2 = meta.query_advice(index_bits[2], Rotation::cur());
 
-                    let out_0 = meta.query_advice(inserted[0], Rotation::cur());
-                    let out_1 = meta.query_advice(inserted[1], Rotation::cur());
-                    let out_2 = meta.query_advice(inserted[2], Rotation::cur());
-                    let out_3 = meta.query_advice(inserted[3], Rotation::cur());
-                    let out_4 = meta.query_advice(inserted[4], Rotation::cur());
-                    let out_5 = meta.query_advice(inserted[5], Rotation::cur());
-                    let out_6 = meta.query_advice(inserted[6], Rotation::cur());
-                    let out_7 = meta.query_advice(inserted[7], Rotation::cur());
+                    let out_0 = meta.query_advice(inserted[0], inserted_row);
+                    let out_1 = meta.query_advice(inserted[1], inserted_row);
+                    let out_2 = meta.query_advice(inserted[2], inserted_row);
+                    let out_3 = meta.query_advice(inserted[3], inserted_row);
+                    let out_4 = meta.query_advice(inserted[4], inserted_row);
+                    let out_5 = meta.query_advice(inserted[5], inserted_row);
+                    let out_6 = meta.query_advice(inserted[6], inserted_row);
+                    let out_7 = meta.query_advice(inserted[7], inserted_row);
 
                     let b0_and_b1 = and(b0.clone(), b1.clone());
                     let b0_nor_b1 = nor(b0.clone(), b1.clone());
@@ -389,7 +429,7 @@ where
         layouter.assign_region(
             || format!("insert_{}", arity),
             |mut region| {
-                let offset = 0;
+                let mut offset = 0;
                 self.config.s_insert.enable(&mut region, offset)?;
 
                 let index: usize = index_bits
@@ -467,10 +507,13 @@ where
                     region.assign_advice(|| format!("uninserted[{}]", i), *col, offset, || *val)?;
                 }
 
-                let mut inserted: Vec<Value<F>> = uninserted.to_vec();
-                inserted.insert(index, value.value().copied());
+                if arity == 8 && USE_2_ROWS_FOR_INSERT_8 {
+                    offset += 1;
+                }
 
                 // Allocate the inserted array.
+                let mut inserted: Vec<Value<F>> = uninserted.to_vec();
+                inserted.insert(index, value.value().copied());
                 inserted
                     .iter()
                     .zip(&self.config.inserted)
@@ -485,10 +528,13 @@ where
 
     #[inline]
     pub fn num_rows() -> usize {
-        if A::to_usize() == 0 {
-            0
-        } else {
-            1
+        let arity = A::to_usize();
+        match arity {
+            0 => 0,
+            2 | 4 => 1,
+            8 if USE_2_ROWS_FOR_INSERT_8 => 2,
+            8 => 1,
+            _ => unimplemented!(),
         }
     }
 }
@@ -497,13 +543,8 @@ where
 mod test {
     use super::*;
 
-    use generic_array::typenum::{U2, U4, U8};
-    use halo2_proofs::{
-        circuit::SimpleFloorPlanner,
-        dev::MockProver,
-        pasta::{Fp, Fq},
-        plonk::Circuit,
-    };
+    use generic_array::typenum::{U0, U2, U4, U8};
+    use halo2_proofs::{circuit::SimpleFloorPlanner, dev::MockProver, pasta::Fp, plonk::Circuit};
     use rand::rngs::OsRng;
 
     use crate::halo2::{create_proof, verify_proof, CircuitRows, Halo2Field, Halo2Keypair};
@@ -636,7 +677,11 @@ mod test {
         A: PoseidonArity<F>,
     {
         fn k(&self) -> u32 {
-            3
+            if A::to_usize() == 8 && USE_2_ROWS_FOR_INSERT_8 {
+                4
+            } else {
+                3
+            }
         }
     }
 
@@ -675,7 +720,7 @@ mod test {
         let uninserted: Vec<F> = (0..arity - 1).map(|i| F::from(i as u64)).collect();
         for i in 0..arity {
             let circ = MyCircuit::<F, A>::with_witness(&uninserted, value, i);
-            let prover = MockProver::run(3, &circ, vec![]).unwrap();
+            let prover = MockProver::run(circ.k(), &circ, vec![]).unwrap();
             assert!(prover.verify().is_ok());
         }
     }
@@ -685,10 +730,6 @@ mod test {
         test_insert_chip_inner::<Fp, U2>();
         test_insert_chip_inner::<Fp, U4>();
         test_insert_chip_inner::<Fp, U8>();
-
-        test_insert_chip_inner::<Fq, U2>();
-        test_insert_chip_inner::<Fq, U4>();
-        test_insert_chip_inner::<Fq, U8>();
     }
 
     #[ignore]
@@ -708,5 +749,40 @@ mod test {
             create_proof(&keypair, circ, &[], &mut OsRng).expect("failed to create halo2 proof");
 
         verify_proof(&keypair, &proof, &[]).expect("failed to verify halo2 proof");
+    }
+
+    #[test]
+    fn test_insert_chip_num_cols() {
+        assert_eq!(InsertChip::<Fp, U0>::num_cols(), NumCols::default());
+        assert_eq!(
+            InsertChip::<Fp, U2>::num_cols(),
+            NumCols {
+                advice_eq: 4,
+                advice_neq: 1,
+                ..Default::default()
+            },
+        );
+        assert_eq!(
+            InsertChip::<Fp, U4>::num_cols(),
+            NumCols {
+                advice_eq: 7,
+                advice_neq: 3,
+                ..Default::default()
+            },
+        );
+        let num_cols_8 = if USE_2_ROWS_FOR_INSERT_8 {
+            NumCols {
+                advice_eq: 8,
+                advice_neq: 3,
+                ..Default::default()
+            }
+        } else {
+            NumCols {
+                advice_eq: 12,
+                advice_neq: 7,
+                ..Default::default()
+            }
+        };
+        assert_eq!(InsertChip::<Fp, U8>::num_cols(), num_cols_8);
     }
 }

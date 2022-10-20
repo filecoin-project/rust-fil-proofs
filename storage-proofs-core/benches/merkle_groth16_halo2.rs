@@ -248,22 +248,20 @@ where
 
             // Four rows for decomposing the challenge into 32 bits.
             let challenge_decomp_rows = 4;
-            let base_hasher_rows = PoseidonChip::<Fp, U>::num_rows();
-            let sub_hasher_rows = PoseidonChip::<Fp, V>::num_rows();
-            let top_hasher_rows = PoseidonChip::<Fp, W>::num_rows();
-            // One row per insert.
-            let insert_rows = 1;
+            let base_rows = PoseidonChip::<Fp, U>::num_rows() + InsertChip::<Fp, U>::num_rows();
+            let sub_rows = PoseidonChip::<Fp, V>::num_rows() + InsertChip::<Fp, V>::num_rows();
+            let top_rows = PoseidonChip::<Fp, W>::num_rows() + InsertChip::<Fp, W>::num_rows();
 
             let mut rows = challenge_decomp_rows;
-            rows += base_path_len * (base_hasher_rows + insert_rows);
+            rows += base_path_len * base_rows;
             if sub_arity > 0 {
-                rows += sub_hasher_rows + insert_rows;
+                rows += sub_rows;
             }
             if top_arity > 0 {
-                rows += top_hasher_rows + insert_rows;
+                rows += top_rows;
             };
 
-            (rows as f32).log2().ceil() as u32
+            (rows as f32).log2().floor() as u32 + 1
         } else {
             unimplemented!("hasher must be poseidon or sha256");
         }
@@ -640,6 +638,6 @@ fn bench_groth16_halo2_sha256_arity_2(c: &mut Criterion) {
 criterion_group!(
     benches,
     bench_groth16_halo2_poseidon,
-    // bench_groth16_halo2_sha256_arity_2,
+    bench_groth16_halo2_sha256_arity_2,
 );
 criterion_main!(benches);

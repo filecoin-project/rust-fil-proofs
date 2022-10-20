@@ -12,9 +12,10 @@ use halo2_proofs::{
 };
 use sha2::{Digest, Sha256};
 use storage_proofs_core::{
-    halo2::CircuitRows, util::NODE_SIZE, SECTOR_NODES_16_KIB, SECTOR_NODES_2_KIB,
-    SECTOR_NODES_32_GIB, SECTOR_NODES_32_KIB, SECTOR_NODES_4_KIB, SECTOR_NODES_512_MIB,
-    SECTOR_NODES_64_GIB,
+    halo2::{gadgets::insert::USE_2_ROWS_FOR_INSERT_8, CircuitRows},
+    util::NODE_SIZE,
+    SECTOR_NODES_16_KIB, SECTOR_NODES_2_KIB, SECTOR_NODES_32_GIB, SECTOR_NODES_32_KIB,
+    SECTOR_NODES_4_KIB, SECTOR_NODES_512_MIB, SECTOR_NODES_64_GIB,
 };
 
 use crate::{
@@ -262,7 +263,7 @@ where
             false => match SECTOR_NODES {
                 SECTOR_NODES_2_KIB => 13,
                 SECTOR_NODES_4_KIB => 13,
-                SECTOR_NODES_16_KIB => 13,
+                SECTOR_NODES_16_KIB => 13 + USE_2_ROWS_FOR_INSERT_8 as u32,
                 SECTOR_NODES_32_KIB => 14,
                 SECTOR_NODES_512_MIB => 15,
                 SECTOR_NODES_32_GIB => 15,
