@@ -981,10 +981,10 @@ where
         let comm_d_new = if partition_count == 1 {
             apex_root
         } else {
-            tree_d_merkle_chip.copy_leaf_compute_root(
+            tree_d_merkle_chip.compute_root_assigned_leaf(
                 layouter.namespace(|| "calculate comm_d_new"),
                 &partition_bits,
-                &apex_root,
+                apex_root,
                 &partition_path,
             )?
         };
@@ -1027,11 +1027,11 @@ where
                 .cloned()
                 .collect();
 
-            let root_r_old_calc = tree_r_merkle_chip.copy_leaf_compute_root(
+            let root_r_old_calc = tree_r_merkle_chip.compute_root_assigned_leaf(
                 layouter
                     .namespace(|| format!("compute root_r_old from challenge {} merkle proof", i)),
                 &challenge_and_partition_bits,
-                &label_r_old,
+                label_r_old.clone(),
                 &challenge_proof.path_r_old,
             )?;
             layouter.assign_region(
@@ -1039,11 +1039,11 @@ where
                 |mut region| region.constrain_equal(root_r_old.cell(), root_r_old_calc.cell()),
             )?;
 
-            let root_r_new_calc = tree_r_merkle_chip.copy_leaf_compute_root(
+            let root_r_new_calc = tree_r_merkle_chip.compute_root_assigned_leaf(
                 layouter
                     .namespace(|| format!("compute root_r_new from challenge {} merkle proof", i)),
                 &challenge_and_partition_bits,
-                &label_r_new,
+                label_r_new.clone(),
                 &challenge_proof.path_r_new,
             )?;
             layouter.assign_region(
@@ -1062,11 +1062,11 @@ where
 
             let path_to_apex_leaf = &challenge_proof.path_d_new[..challenge_to_apex_leaf_bit_len];
 
-            let apex_leaf_calc = tree_d_merkle_chip.copy_leaf_compute_root(
+            let apex_leaf_calc = tree_d_merkle_chip.compute_root_assigned_leaf(
                 layouter
                     .namespace(|| format!("compute apex leaf from challenge {} merkle proof", i)),
                 challenge_bits_to_apex_leaf,
-                &label_d_new,
+                label_d_new.clone(),
                 path_to_apex_leaf,
             )?;
             layouter.assign_region(
@@ -1194,10 +1194,10 @@ where
         )?;
 
         // Check challenge's TreeROld merkle proof.
-        let root_r_old_calc = tree_r_merkle_chip.copy_leaf_compute_root(
+        let root_r_old_calc = tree_r_merkle_chip.compute_root_assigned_leaf(
             layouter.namespace(|| "compute root_r_old from merkle proof"),
             &challenge_bits,
-            &label_r_old,
+            label_r_old,
             &challenge_proof.path_r_old,
         )?;
         layouter.assign_region(
@@ -1206,19 +1206,19 @@ where
         )?;
 
         // Check challenge's TreeDNew merkle proof.
-        let comm_d_new_calc = tree_d_merkle_chip.copy_leaf_compute_root(
+        let comm_d_new_calc = tree_d_merkle_chip.compute_root_assigned_leaf(
             layouter.namespace(|| "compute comm_d_new from merkle proof"),
             &challenge_bits,
-            &label_d_new,
+            label_d_new,
             &challenge_proof.path_d_new,
         )?;
         layouter.constrain_instance(comm_d_new_calc.cell(), pi_col, pi_rows.comm_d_new_row)?;
 
         // Check challenge's TreeRNew merkle proof.
-        let root_r_new_calc = tree_r_merkle_chip.copy_leaf_compute_root(
+        let root_r_new_calc = tree_r_merkle_chip.compute_root_assigned_leaf(
             layouter.namespace(|| "compute root_r_new from merkle proof"),
             &challenge_bits,
-            &label_r_new,
+            label_r_new,
             &challenge_proof.path_r_new,
         )?;
         layouter.assign_region(

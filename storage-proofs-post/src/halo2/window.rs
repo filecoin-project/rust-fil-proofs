@@ -369,7 +369,7 @@ where
                 )?;
 
                 // Verify the challenge's TreeR Merkle proof.
-                let root_r_calc = tree_r_merkle_chip.compute_root(
+                let root_r_calc = tree_r_merkle_chip.compute_root_unassigned_leaf(
                     layouter.namespace(|| {
                         format!(
                             "sector {} challenge {} calculate comm_r from merkle proof",
