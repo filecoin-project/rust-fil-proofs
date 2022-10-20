@@ -373,7 +373,7 @@ where
         self.insert_inner(layouter, uninserted, value, &index_bits)
     }
 
-    fn insert_inner(
+    pub(crate) fn insert_inner(
         &self,
         mut layouter: impl Layouter<F>,
         uninserted: &[Value<F>],
@@ -481,6 +481,15 @@ where
                     .collect()
             },
         )
+    }
+
+    #[inline]
+    pub fn num_rows() -> usize {
+        if A::to_usize() == 0 {
+            0
+        } else {
+            1
+        }
     }
 }
 

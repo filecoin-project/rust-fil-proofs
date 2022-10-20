@@ -124,6 +124,15 @@ impl<T, F: FieldExt> From<AssignedCell<T, F>> for MaybeAssigned<T, F> {
     }
 }
 
+impl<T, F: FieldExt> From<MaybeAssigned<T, F>> for AssignedCell<T, F> {
+    fn from(maybe_asn: MaybeAssigned<T, F>) -> Self {
+        match maybe_asn {
+            MaybeAssigned::Assigned(asn) => asn,
+            _ => panic!("cannot convert unassigned `MaybeAssigned` into `AssignedCell`"),
+        }
+    }
+}
+
 pub struct AdviceIter {
     offset: usize,
     advice: Vec<Column<Advice>>,

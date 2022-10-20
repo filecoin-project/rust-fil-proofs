@@ -838,10 +838,10 @@ where
             layouter.constrain_instance(challenge.cell(), pi_col, challenge_row(i))?;
 
             // Verify the challenge's TreeD merkle proof.
-            let comm_d = tree_d_merkle_chip.copy_leaf_compute_root(
+            let comm_d = tree_d_merkle_chip.compute_root_assigned_leaf(
                 layouter.namespace(|| "calculate comm_d from challenge's merkle proof"),
                 &challenge_bits,
-                leaf_d,
+                leaf_d.clone(),
                 &challenge_proof.path_d,
             )?;
             layouter.constrain_instance(comm_d.cell(), pi_col, COMM_D_ROW)?;
@@ -926,7 +926,7 @@ where
                     layouter.namespace(|| format!("drg parent {} column digest", parent_index)),
                     parent_column,
                 )?;
-                let comm_c_calc = tree_r_merkle_chip.copy_leaf_compute_root(
+                let comm_c_calc = tree_r_merkle_chip.compute_root_assigned_leaf(
                     layouter.namespace(|| {
                         format!(
                             "calculate comm_c from drg parent {} merkle proof",
@@ -934,7 +934,7 @@ where
                         )
                     }),
                     &parent_bits,
-                    &leaf_c,
+                    leaf_c,
                     &parent_proof.path_c,
                 )?;
                 layouter.assign_region(
@@ -957,7 +957,7 @@ where
                     layouter.namespace(|| format!("exp parent {} column digest", parent_index)),
                     parent_column,
                 )?;
-                let comm_c_calc = tree_r_merkle_chip.copy_leaf_compute_root(
+                let comm_c_calc = tree_r_merkle_chip.compute_root_assigned_leaf(
                     layouter.namespace(|| {
                         format!(
                             "calculate comm_c from exp parent {} merkle proof",
@@ -965,7 +965,7 @@ where
                         )
                     }),
                     &parent_bits,
-                    &leaf_c,
+                    leaf_c,
                     &parent_proof.path_c,
                 )?;
                 layouter.assign_region(
@@ -1048,10 +1048,10 @@ where
             )?;
 
             // Verify the challenge's TreeC Merkle proof.
-            let comm_c_calc = tree_r_merkle_chip.copy_leaf_compute_root(
+            let comm_c_calc = tree_r_merkle_chip.compute_root_assigned_leaf(
                 layouter.namespace(|| "calculate comm_c from challenge's merkle proof"),
                 &challenge_bits,
-                &leaf_c,
+                leaf_c,
                 &challenge_proof.path_c,
             )?;
             layouter.assign_region(
@@ -1068,10 +1068,10 @@ where
             )?;
 
             // Verify the challenge's TreeR Merkle proof.
-            let root_r_calc = tree_r_merkle_chip.copy_leaf_compute_root(
+            let root_r_calc = tree_r_merkle_chip.compute_root_assigned_leaf(
                 layouter.namespace(|| "calculate comm_r from challenge's merkle proof"),
                 &challenge_bits,
-                &leaf_r,
+                leaf_r,
                 &challenge_proof.path_r,
             )?;
             layouter.assign_region(
