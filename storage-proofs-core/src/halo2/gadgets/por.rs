@@ -752,6 +752,223 @@ mod test {
 
     const BASE_HEIGHT: u32 = 5;
 
+    #[derive(Clone)]
+    struct MerkleConfig<H, U, V, W>
+    where
+        H: Hasher<Field = Fp> + Halo2Hasher<U> + Halo2Hasher<V> + Halo2Hasher<W>,
+        U: PoseidonArity<H::Field>,
+        V: PoseidonArity<H::Field>,
+        W: PoseidonArity<H::Field>,
+    {
+        base_hasher: <H as Halo2Hasher<U>>::Config,
+        base_insert: InsertConfig<Fp, U>,
+        sub: Option<(<H as Halo2Hasher<V>>::Config, InsertConfig<Fp, V>)>,
+        top: Option<(<H as Halo2Hasher<W>>::Config, InsertConfig<Fp, W>)>,
+        pi: Column<Instance>,
+    }
+
+    struct MerkleCircuit<H, U, V, W>
+    where
+        H: Hasher<Field = Fp> + Halo2Hasher<U> + Halo2Hasher<V> + Halo2Hasher<W>,
+        U: PoseidonArity<Fp>,
+        V: PoseidonArity<Fp>,
+        W: PoseidonArity<Fp>,
+    {
+        challenge_bits: Vec<bool>,
+        leaf: Value<Fp>,
+        path: Vec<Vec<Value<Fp>>>,
+        expected_root: Fp,
+        _tree: PhantomData<(H, U, V, W)>,
+    }
+
+    impl<H, U, V, W> Circuit<Fp> for MerkleCircuit<H, U, V, W>
+    where
+        H: 'static + Hasher<Field = Fp> + Halo2Hasher<U> + Halo2Hasher<V> + Halo2Hasher<W>,
+        U: PoseidonArity<Fp>,
+        V: PoseidonArity<Fp>,
+        W: PoseidonArity<Fp>,
+    {
+        type Config = MerkleConfig<H, U, V, W>;
+        type FloorPlanner = SimpleFloorPlanner;
+
+        fn without_witnesses(&self) -> Self {
+            MerkleCircuit {
+                challenge_bits: self.challenge_bits.clone(),
+                leaf: Value::unknown(),
+                path: self
+                    .path
+                    .iter()
+                    .map(|sibs| vec![Value::unknown(); sibs.len()])
+                    .collect(),
+                expected_root: self.expected_root,
+                _tree: PhantomData,
+            }
+        }
+
+        fn configure(meta: &mut ConstraintSystem<Fp>) -> Self::Config {
+            let base_arity = U::to_usize();
+            let sub_arity = V::to_usize();
+            let top_arity = W::to_usize();
+
+            let (advice_eq, advice_neq, fixed_eq, fixed_neq) = ColumnBuilder::new()
+                .with_chip::<<H as Halo2Hasher<U>>::Chip>()
+                .with_chip::<<H as Halo2Hasher<V>>::Chip>()
+                .with_chip::<<H as Halo2Hasher<W>>::Chip>()
+                // Only need the base arity here because it is guaranteed to be the largest arity,
+                // thus all other arity insert chips will use a subset of the base arity's columns.
+                .with_chip::<InsertChip<Fp, U>>()
+                .create_columns(meta);
+
+            let pi = meta.instance_column();
+            meta.enable_equality(pi);
+
+            let base_hasher = <H as Halo2Hasher<U>>::configure(
+                meta,
+                &advice_eq,
+                &advice_neq,
+                &fixed_eq,
+                &fixed_neq,
+            );
+            let base_insert = InsertChip::configure(meta, &advice_eq, &advice_neq);
+
+            let sub = if sub_arity == 0 {
+                None
+            } else if sub_arity == base_arity {
+                Some(transmute_arity::<H, U, V>(
+                    base_hasher.clone(),
+                    base_insert.clone(),
+                ))
+            } else {
+                let sub_hasher = <H as Halo2Hasher<V>>::configure(
+                    meta,
+                    &advice_eq,
+                    &advice_neq,
+                    &fixed_eq,
+                    &fixed_neq,
+                );
+                let sub_insert = InsertChip::configure(meta, &advice_eq, &advice_neq);
+                Some((sub_hasher, sub_insert))
+            };
+
+            let top = if top_arity == 0 {
+                None
+            } else if top_arity == base_arity {
+                Some(transmute_arity::<H, U, W>(
+                    base_hasher.clone(),
+                    base_insert.clone(),
+                ))
+            } else if top_arity == sub_arity {
+                let (sub_hasher, sub_insert) = sub.clone().expect("sub chips not set");
+                Some(transmute_arity::<H, V, W>(sub_hasher, sub_insert))
+            } else {
+                let top_hasher = <H as Halo2Hasher<W>>::configure(
+                    meta,
+                    &advice_eq,
+                    &advice_neq,
+                    &fixed_eq,
+                    &fixed_neq,
+                );
+                let top_insert = InsertChip::configure(meta, &advice_eq, &advice_neq);
+                Some((top_hasher, top_insert))
+            };
+
+            MerkleConfig {
+                base_hasher,
+                base_insert,
+                sub,
+                top,
+                pi,
+            }
+        }
+
+        fn synthesize(
+            &self,
+            config: Self::Config,
+            mut layouter: impl Layouter<Fp>,
+        ) -> Result<(), Error> {
+            let MerkleConfig {
+                base_hasher: base_hasher_config,
+                base_insert: base_insert_config,
+                sub: sub_config,
+                top: top_config,
+                pi: pi_col,
+            } = config;
+
+            <H as Halo2Hasher<U>>::load(&mut layouter, &base_hasher_config)?;
+            let base_hasher_chip = <H as Halo2Hasher<U>>::construct(base_hasher_config);
+            let base_insert_chip = InsertChip::construct(base_insert_config);
+
+            let sub_hasher_insert_chips = sub_config.map(|(hasher_config, insert_config)| {
+                let hasher_chip = <H as Halo2Hasher<V>>::construct(hasher_config);
+                let insert_chip = InsertChip::construct(insert_config);
+                (hasher_chip, insert_chip)
+            });
+
+            let top_hasher_insert_chips = top_config.map(|(hasher_config, insert_config)| {
+                let hasher_chip = <H as Halo2Hasher<W>>::construct(hasher_config);
+                let insert_chip = InsertChip::construct(insert_config);
+                (hasher_chip, insert_chip)
+            });
+
+            let merkle_chip = MerkleChip::<H, U, V, W>::with_subchips(
+                base_hasher_chip,
+                base_insert_chip,
+                sub_hasher_insert_chips,
+                top_hasher_insert_chips,
+            );
+
+            merkle_chip
+                .compute_root_unassigned_leaf_pi_bits(
+                    layouter,
+                    self.leaf,
+                    &self.path,
+                    pi_col,
+                    0..self.challenge_bits.len(),
+                )?
+                .value()
+                .assert_if_known(|root| **root == self.expected_root);
+
+            Ok(())
+        }
+    }
+
+    impl<H, U, V, W> MerkleCircuit<H, U, V, W>
+    where
+        H: 'static + Hasher<Field = Fp> + Halo2Hasher<U> + Halo2Hasher<V> + Halo2Hasher<W>,
+        U: PoseidonArity<Fp>,
+        V: PoseidonArity<Fp>,
+        W: PoseidonArity<Fp>,
+    {
+        fn k(num_leafs: usize) -> u32 {
+            let hasher_type = TypeId::of::<H>();
+            if hasher_type == TypeId::of::<Sha256Hasher<Fp>>() {
+                return 17;
+            }
+            assert_eq!(hasher_type, TypeId::of::<PoseidonHasher<Fp>>());
+
+            let base_arity = U::to_usize();
+            let sub_arity = V::to_usize();
+            let top_arity = W::to_usize();
+
+            let (base_path_len, has_sub_path, has_top_path) =
+                path_lens(num_leafs, base_arity, sub_arity, top_arity);
+
+            use filecoin_hashers::poseidon::PoseidonChip;
+            let base_rows = PoseidonChip::<Fp, U>::num_rows() + InsertChip::<Fp, U>::num_rows();
+            let mut num_rows = base_path_len * base_rows;
+            if has_sub_path {
+                let sub_rows = PoseidonChip::<Fp, V>::num_rows() + InsertChip::<Fp, V>::num_rows();
+                num_rows += sub_rows;
+            }
+            if has_top_path {
+                let top_rows = PoseidonChip::<Fp, W>::num_rows() + InsertChip::<Fp, W>::num_rows();
+                num_rows += top_rows;
+            };
+
+            (num_rows as f32).log2().floor() as u32 + 1
+        }
+    }
+
     fn test_merkle_chip_inner<H, U, V, W>()
     where
         H: 'static + Hasher<Field = Fp> + Halo2Hasher<U> + Halo2Hasher<V> + Halo2Hasher<W>,
@@ -759,225 +976,6 @@ mod test {
         V: PoseidonArity<Fp>,
         W: PoseidonArity<Fp>,
     {
-        #[derive(Clone)]
-        struct MyConfig<H, U, V, W>
-        where
-            H: Hasher<Field = Fp> + Halo2Hasher<U> + Halo2Hasher<V> + Halo2Hasher<W>,
-            U: PoseidonArity<H::Field>,
-            V: PoseidonArity<H::Field>,
-            W: PoseidonArity<H::Field>,
-        {
-            base_hasher: <H as Halo2Hasher<U>>::Config,
-            base_insert: InsertConfig<Fp, U>,
-            sub: Option<(<H as Halo2Hasher<V>>::Config, InsertConfig<Fp, V>)>,
-            top: Option<(<H as Halo2Hasher<W>>::Config, InsertConfig<Fp, W>)>,
-            pi: Column<Instance>,
-        }
-
-        struct MyCircuit<H, U, V, W>
-        where
-            H: Hasher<Field = Fp> + Halo2Hasher<U> + Halo2Hasher<V> + Halo2Hasher<W>,
-            U: PoseidonArity<Fp>,
-            V: PoseidonArity<Fp>,
-            W: PoseidonArity<Fp>,
-        {
-            challenge_bits: Vec<bool>,
-            leaf: Value<Fp>,
-            path: Vec<Vec<Value<Fp>>>,
-            expected_root: Fp,
-            _tree: PhantomData<(H, U, V, W)>,
-        }
-
-        impl<H, U, V, W> Circuit<Fp> for MyCircuit<H, U, V, W>
-        where
-            H: 'static + Hasher<Field = Fp> + Halo2Hasher<U> + Halo2Hasher<V> + Halo2Hasher<W>,
-            U: PoseidonArity<Fp>,
-            V: PoseidonArity<Fp>,
-            W: PoseidonArity<Fp>,
-        {
-            type Config = MyConfig<H, U, V, W>;
-            type FloorPlanner = SimpleFloorPlanner;
-
-            fn without_witnesses(&self) -> Self {
-                MyCircuit {
-                    challenge_bits: self.challenge_bits.clone(),
-                    leaf: Value::unknown(),
-                    path: self
-                        .path
-                        .iter()
-                        .map(|sibs| vec![Value::unknown(); sibs.len()])
-                        .collect(),
-                    expected_root: self.expected_root,
-                    _tree: PhantomData,
-                }
-            }
-
-            fn configure(meta: &mut ConstraintSystem<Fp>) -> Self::Config {
-                let base_arity = U::to_usize();
-                let sub_arity = V::to_usize();
-                let top_arity = W::to_usize();
-
-                let (advice_eq, advice_neq, fixed_eq, fixed_neq) = ColumnBuilder::new()
-                    .with_chip::<<H as Halo2Hasher<U>>::Chip>()
-                    .with_chip::<<H as Halo2Hasher<V>>::Chip>()
-                    .with_chip::<<H as Halo2Hasher<W>>::Chip>()
-                    // Only need the base arity here because it is guaranteed to be the largest arity,
-                    // thus all other arity insert chips will use a subset of the base arity's columns.
-                    .with_chip::<InsertChip<Fp, U>>()
-                    .create_columns(meta);
-
-                let pi = meta.instance_column();
-                meta.enable_equality(pi);
-
-                let base_hasher = <H as Halo2Hasher<U>>::configure(
-                    meta,
-                    &advice_eq,
-                    &advice_neq,
-                    &fixed_eq,
-                    &fixed_neq,
-                );
-                let base_insert = InsertChip::configure(meta, &advice_eq, &advice_neq);
-
-                let sub = if sub_arity == 0 {
-                    None
-                } else if sub_arity == base_arity {
-                    Some(transmute_arity::<H, U, V>(
-                        base_hasher.clone(),
-                        base_insert.clone(),
-                    ))
-                } else {
-                    let sub_hasher = <H as Halo2Hasher<V>>::configure(
-                        meta,
-                        &advice_eq,
-                        &advice_neq,
-                        &fixed_eq,
-                        &fixed_neq,
-                    );
-                    let sub_insert = InsertChip::configure(meta, &advice_eq, &advice_neq);
-                    Some((sub_hasher, sub_insert))
-                };
-
-                let top = if top_arity == 0 {
-                    None
-                } else if top_arity == base_arity {
-                    Some(transmute_arity::<H, U, W>(
-                        base_hasher.clone(),
-                        base_insert.clone(),
-                    ))
-                } else if top_arity == sub_arity {
-                    let (sub_hasher, sub_insert) = sub.clone().expect("sub chips not set");
-                    Some(transmute_arity::<H, V, W>(sub_hasher, sub_insert))
-                } else {
-                    let top_hasher = <H as Halo2Hasher<W>>::configure(
-                        meta,
-                        &advice_eq,
-                        &advice_neq,
-                        &fixed_eq,
-                        &fixed_neq,
-                    );
-                    let top_insert = InsertChip::configure(meta, &advice_eq, &advice_neq);
-                    Some((top_hasher, top_insert))
-                };
-
-                MyConfig {
-                    base_hasher,
-                    base_insert,
-                    sub,
-                    top,
-                    pi,
-                }
-            }
-
-            fn synthesize(
-                &self,
-                config: Self::Config,
-                mut layouter: impl Layouter<Fp>,
-            ) -> Result<(), Error> {
-                let MyConfig {
-                    base_hasher: base_hasher_config,
-                    base_insert: base_insert_config,
-                    sub: sub_config,
-                    top: top_config,
-                    pi: pi_col,
-                } = config;
-
-                <H as Halo2Hasher<U>>::load(&mut layouter, &base_hasher_config)?;
-                let base_hasher_chip = <H as Halo2Hasher<U>>::construct(base_hasher_config);
-                let base_insert_chip = InsertChip::construct(base_insert_config);
-
-                let sub_hasher_insert_chips = sub_config.map(|(hasher_config, insert_config)| {
-                    let hasher_chip = <H as Halo2Hasher<V>>::construct(hasher_config);
-                    let insert_chip = InsertChip::construct(insert_config);
-                    (hasher_chip, insert_chip)
-                });
-
-                let top_hasher_insert_chips = top_config.map(|(hasher_config, insert_config)| {
-                    let hasher_chip = <H as Halo2Hasher<W>>::construct(hasher_config);
-                    let insert_chip = InsertChip::construct(insert_config);
-                    (hasher_chip, insert_chip)
-                });
-
-                let merkle_chip = MerkleChip::<H, U, V, W>::with_subchips(
-                    base_hasher_chip,
-                    base_insert_chip,
-                    sub_hasher_insert_chips,
-                    top_hasher_insert_chips,
-                );
-
-                merkle_chip
-                    .compute_root_unassigned_leaf_pi_bits(
-                        layouter,
-                        self.leaf,
-                        &self.path,
-                        pi_col,
-                        0..self.challenge_bits.len(),
-                    )?
-                    .value()
-                    .assert_if_known(|root| **root == self.expected_root);
-
-                Ok(())
-            }
-        }
-
-        impl<H, U, V, W> MyCircuit<H, U, V, W>
-        where
-            H: 'static + Hasher<Field = Fp> + Halo2Hasher<U> + Halo2Hasher<V> + Halo2Hasher<W>,
-            U: PoseidonArity<Fp>,
-            V: PoseidonArity<Fp>,
-            W: PoseidonArity<Fp>,
-        {
-            fn k(num_leafs: usize) -> u32 {
-                let hasher_type = TypeId::of::<H>();
-                if hasher_type == TypeId::of::<Sha256Hasher<Fp>>() {
-                    return 17;
-                }
-                assert_eq!(hasher_type, TypeId::of::<PoseidonHasher<Fp>>());
-
-                let base_arity = U::to_usize();
-                let sub_arity = V::to_usize();
-                let top_arity = W::to_usize();
-
-                let (base_path_len, has_sub_path, has_top_path) =
-                    path_lens(num_leafs, base_arity, sub_arity, top_arity);
-
-                use filecoin_hashers::poseidon::PoseidonChip;
-                let base_rows = PoseidonChip::<Fp, U>::num_rows() + InsertChip::<Fp, U>::num_rows();
-                let mut num_rows = base_path_len * base_rows;
-                if has_sub_path {
-                    let sub_rows =
-                        PoseidonChip::<Fp, V>::num_rows() + InsertChip::<Fp, V>::num_rows();
-                    num_rows += sub_rows;
-                }
-                if has_top_path {
-                    let top_rows =
-                        PoseidonChip::<Fp, W>::num_rows() + InsertChip::<Fp, W>::num_rows();
-                    num_rows += top_rows;
-                };
-
-                (num_rows as f32).log2().floor() as u32 + 1
-            }
-        }
-
         let base_arity = U::to_usize();
         let sub_arity = V::to_usize();
         let top_arity = W::to_usize();
@@ -1003,14 +1001,14 @@ mod test {
             (0..10).map(|_| rng.gen::<usize>() % num_leafs).collect()
         };
 
-        let mut k = MyCircuit::<H, U, V, W>::k(num_leafs);
+        let mut k = MerkleCircuit::<H, U, V, W>::k(num_leafs);
 
         for challenge in challenges {
             let merkle_proof = tree
                 .gen_proof(challenge)
                 .expect("failed to generate merkle proof");
 
-            let circ = MyCircuit::<H, U, V, W> {
+            let circ = MerkleCircuit::<H, U, V, W> {
                 challenge_bits: (0..challenge_bit_len)
                     .map(|i| challenge >> i & 1 == 1)
                     .collect(),
@@ -1090,217 +1088,217 @@ mod test {
         test_merkle_chip_inner::<Sha256Hasher<Fp>, U2, U0, U0>();
     }
 
+    #[derive(Clone)]
+    struct MerkleShiftConfig<U, V, W>
+    where
+        U: PoseidonArity<Fp>,
+        V: PoseidonArity<Fp>,
+        W: PoseidonArity<Fp>,
+    {
+        base_hasher: <PoseidonHasher<Fp> as Halo2Hasher<U>>::Config,
+        sub_hasher: Option<<PoseidonHasher<Fp> as Halo2Hasher<V>>::Config>,
+        top_hasher: Option<<PoseidonHasher<Fp> as Halo2Hasher<W>>::Config>,
+        insert: ShiftConfig<Fp>,
+        pi: Column<Instance>,
+    }
+
+    struct MerkleShiftCircuit<U, V, W>
+    where
+        U: PoseidonArity<Fp>,
+        V: PoseidonArity<Fp>,
+        W: PoseidonArity<Fp>,
+    {
+        challenge_bits: Vec<bool>,
+        leaf: Value<Fp>,
+        path: Vec<Vec<Value<Fp>>>,
+        expected_root: Fp,
+        _arity: PhantomData<(U, V, W)>,
+    }
+
+    impl<U, V, W> Circuit<Fp> for MerkleShiftCircuit<U, V, W>
+    where
+        U: PoseidonArity<Fp>,
+        V: PoseidonArity<Fp>,
+        W: PoseidonArity<Fp>,
+    {
+        type Config = MerkleShiftConfig<U, V, W>;
+        type FloorPlanner = SimpleFloorPlanner;
+
+        fn without_witnesses(&self) -> Self {
+            MerkleShiftCircuit {
+                challenge_bits: self.challenge_bits.clone(),
+                leaf: Value::unknown(),
+                path: self
+                    .path
+                    .iter()
+                    .map(|sibs| vec![Value::unknown(); sibs.len()])
+                    .collect(),
+                expected_root: self.expected_root,
+                _arity: PhantomData,
+            }
+        }
+
+        fn configure(meta: &mut ConstraintSystem<Fp>) -> Self::Config {
+            let base_arity = U::to_usize();
+            let sub_arity = V::to_usize();
+            let top_arity = W::to_usize();
+
+            let (advice_eq, advice_neq, fixed_eq, fixed_neq) = ColumnBuilder::new()
+                .with_chip::<<PoseidonHasher<Fp> as Halo2Hasher<U>>::Chip>()
+                .with_chip::<<PoseidonHasher<Fp> as Halo2Hasher<V>>::Chip>()
+                .with_chip::<<PoseidonHasher<Fp> as Halo2Hasher<W>>::Chip>()
+                .with_chip::<ShiftChip<Fp>>()
+                .create_columns(meta);
+
+            let pi = meta.instance_column();
+            meta.enable_equality(pi);
+
+            let base_hasher = <PoseidonHasher<Fp> as Halo2Hasher<U>>::configure(
+                meta,
+                &advice_eq,
+                &advice_neq,
+                &fixed_eq,
+                &fixed_neq,
+            );
+
+            let sub_hasher = if sub_arity == 0 {
+                None
+            } else if sub_arity == base_arity {
+                Some(
+                    <PoseidonHasher<Fp> as Halo2Hasher<U>>::transmute_arity::<V>(
+                        base_hasher.clone(),
+                    ),
+                )
+            } else {
+                Some(<PoseidonHasher<Fp> as Halo2Hasher<V>>::configure(
+                    meta,
+                    &advice_eq,
+                    &advice_neq,
+                    &fixed_eq,
+                    &fixed_neq,
+                ))
+            };
+
+            let top_hasher = if top_arity == 0 {
+                None
+            } else if top_arity == base_arity {
+                Some(
+                    <PoseidonHasher<Fp> as Halo2Hasher<U>>::transmute_arity::<W>(
+                        base_hasher.clone(),
+                    ),
+                )
+            } else if top_arity == sub_arity {
+                Some(
+                    <PoseidonHasher<Fp> as Halo2Hasher<V>>::transmute_arity::<W>(
+                        sub_hasher.clone().expect("sub hasher not set"),
+                    ),
+                )
+            } else {
+                Some(<PoseidonHasher<Fp> as Halo2Hasher<W>>::configure(
+                    meta,
+                    &advice_eq,
+                    &advice_neq,
+                    &fixed_eq,
+                    &fixed_neq,
+                ))
+            };
+
+            let insert = ShiftChip::configure(meta, &advice_eq);
+
+            MerkleShiftConfig {
+                base_hasher,
+                sub_hasher,
+                top_hasher,
+                insert,
+                pi,
+            }
+        }
+
+        fn synthesize(
+            &self,
+            config: Self::Config,
+            layouter: impl Layouter<Fp>,
+        ) -> Result<(), Error> {
+            let MerkleShiftConfig {
+                base_hasher: base_hasher_config,
+                sub_hasher: sub_hasher_config,
+                top_hasher: top_hasher_config,
+                insert: insert_config,
+                pi: pi_col,
+            } = config;
+
+            let base_hasher_chip =
+                <PoseidonHasher<Fp> as Halo2Hasher<U>>::construct(base_hasher_config);
+
+            let sub_hasher_chip = sub_hasher_config
+                .map(|config| <PoseidonHasher<Fp> as Halo2Hasher<V>>::construct(config));
+
+            let top_hasher_chip = top_hasher_config
+                .map(|config| <PoseidonHasher<Fp> as Halo2Hasher<W>>::construct(config));
+
+            let insert_chip = ShiftChip::construct(insert_config);
+
+            let merkle_chip = MerkleShiftChip::<PoseidonHasher<Fp>, U, V, W>::with_subchips(
+                base_hasher_chip,
+                sub_hasher_chip,
+                top_hasher_chip,
+                insert_chip,
+            );
+
+            merkle_chip
+                .compute_root_unassigned_leaf_pi_bits(
+                    layouter,
+                    self.leaf,
+                    &self.path,
+                    pi_col,
+                    0..self.challenge_bits.len(),
+                )?
+                .value()
+                .assert_if_known(|root| **root == self.expected_root);
+
+            Ok(())
+        }
+    }
+
+    impl<U, V, W> MerkleShiftCircuit<U, V, W>
+    where
+        U: PoseidonArity<Fp>,
+        V: PoseidonArity<Fp>,
+        W: PoseidonArity<Fp>,
+    {
+        fn k(num_leafs: usize) -> u32 {
+            use filecoin_hashers::poseidon::PoseidonChip;
+
+            let base_arity = U::to_usize();
+            let sub_arity = V::to_usize();
+            let top_arity = W::to_usize();
+
+            let (base_path_len, has_sub_path, has_top_path) =
+                path_lens(num_leafs, base_arity, sub_arity, top_arity);
+
+            let base_rows =
+                PoseidonChip::<Fp, U>::num_rows() + ShiftChip::<Fp>::num_rows(base_arity);
+
+            let mut num_rows = base_path_len * base_rows;
+            if has_sub_path {
+                num_rows +=
+                    PoseidonChip::<Fp, V>::num_rows() + ShiftChip::<Fp>::num_rows(sub_arity);
+            }
+            if has_top_path {
+                num_rows +=
+                    PoseidonChip::<Fp, W>::num_rows() + ShiftChip::<Fp>::num_rows(top_arity);
+            };
+
+            (num_rows as f32).log2().floor() as u32 + 1
+        }
+    }
+
     fn test_merkle_shift_chip_inner<U, V, W>()
     where
         U: PoseidonArity<Fp>,
         V: PoseidonArity<Fp>,
         W: PoseidonArity<Fp>,
     {
-        #[derive(Clone)]
-        struct MyConfig<U, V, W>
-        where
-            U: PoseidonArity<Fp>,
-            V: PoseidonArity<Fp>,
-            W: PoseidonArity<Fp>,
-        {
-            base_hasher: <PoseidonHasher<Fp> as Halo2Hasher<U>>::Config,
-            sub_hasher: Option<<PoseidonHasher<Fp> as Halo2Hasher<V>>::Config>,
-            top_hasher: Option<<PoseidonHasher<Fp> as Halo2Hasher<W>>::Config>,
-            insert: ShiftConfig<Fp>,
-            pi: Column<Instance>,
-        }
-
-        struct MyCircuit<U, V, W>
-        where
-            U: PoseidonArity<Fp>,
-            V: PoseidonArity<Fp>,
-            W: PoseidonArity<Fp>,
-        {
-            challenge_bits: Vec<bool>,
-            leaf: Value<Fp>,
-            path: Vec<Vec<Value<Fp>>>,
-            expected_root: Fp,
-            _arity: PhantomData<(U, V, W)>,
-        }
-
-        impl<U, V, W> Circuit<Fp> for MyCircuit<U, V, W>
-        where
-            U: PoseidonArity<Fp>,
-            V: PoseidonArity<Fp>,
-            W: PoseidonArity<Fp>,
-        {
-            type Config = MyConfig<U, V, W>;
-            type FloorPlanner = SimpleFloorPlanner;
-
-            fn without_witnesses(&self) -> Self {
-                MyCircuit {
-                    challenge_bits: self.challenge_bits.clone(),
-                    leaf: Value::unknown(),
-                    path: self
-                        .path
-                        .iter()
-                        .map(|sibs| vec![Value::unknown(); sibs.len()])
-                        .collect(),
-                    expected_root: self.expected_root,
-                    _arity: PhantomData,
-                }
-            }
-
-            fn configure(meta: &mut ConstraintSystem<Fp>) -> Self::Config {
-                let base_arity = U::to_usize();
-                let sub_arity = V::to_usize();
-                let top_arity = W::to_usize();
-
-                let (advice_eq, advice_neq, fixed_eq, fixed_neq) = ColumnBuilder::new()
-                    .with_chip::<<PoseidonHasher<Fp> as Halo2Hasher<U>>::Chip>()
-                    .with_chip::<<PoseidonHasher<Fp> as Halo2Hasher<V>>::Chip>()
-                    .with_chip::<<PoseidonHasher<Fp> as Halo2Hasher<W>>::Chip>()
-                    .with_chip::<ShiftChip<Fp>>()
-                    .create_columns(meta);
-
-                let pi = meta.instance_column();
-                meta.enable_equality(pi);
-
-                let base_hasher = <PoseidonHasher<Fp> as Halo2Hasher<U>>::configure(
-                    meta,
-                    &advice_eq,
-                    &advice_neq,
-                    &fixed_eq,
-                    &fixed_neq,
-                );
-
-                let sub_hasher = if sub_arity == 0 {
-                    None
-                } else if sub_arity == base_arity {
-                    Some(
-                        <PoseidonHasher<Fp> as Halo2Hasher<U>>::transmute_arity::<V>(
-                            base_hasher.clone(),
-                        ),
-                    )
-                } else {
-                    Some(<PoseidonHasher<Fp> as Halo2Hasher<V>>::configure(
-                        meta,
-                        &advice_eq,
-                        &advice_neq,
-                        &fixed_eq,
-                        &fixed_neq,
-                    ))
-                };
-
-                let top_hasher = if top_arity == 0 {
-                    None
-                } else if top_arity == base_arity {
-                    Some(
-                        <PoseidonHasher<Fp> as Halo2Hasher<U>>::transmute_arity::<W>(
-                            base_hasher.clone(),
-                        ),
-                    )
-                } else if top_arity == sub_arity {
-                    Some(
-                        <PoseidonHasher<Fp> as Halo2Hasher<V>>::transmute_arity::<W>(
-                            sub_hasher.clone().expect("sub hasher not set"),
-                        ),
-                    )
-                } else {
-                    Some(<PoseidonHasher<Fp> as Halo2Hasher<W>>::configure(
-                        meta,
-                        &advice_eq,
-                        &advice_neq,
-                        &fixed_eq,
-                        &fixed_neq,
-                    ))
-                };
-
-                let insert = ShiftChip::configure(meta, &advice_eq);
-
-                MyConfig {
-                    base_hasher,
-                    sub_hasher,
-                    top_hasher,
-                    insert,
-                    pi,
-                }
-            }
-
-            fn synthesize(
-                &self,
-                config: Self::Config,
-                layouter: impl Layouter<Fp>,
-            ) -> Result<(), Error> {
-                let MyConfig {
-                    base_hasher: base_hasher_config,
-                    sub_hasher: sub_hasher_config,
-                    top_hasher: top_hasher_config,
-                    insert: insert_config,
-                    pi: pi_col,
-                } = config;
-
-                let base_hasher_chip =
-                    <PoseidonHasher<Fp> as Halo2Hasher<U>>::construct(base_hasher_config);
-
-                let sub_hasher_chip = sub_hasher_config
-                    .map(|config| <PoseidonHasher<Fp> as Halo2Hasher<V>>::construct(config));
-
-                let top_hasher_chip = top_hasher_config
-                    .map(|config| <PoseidonHasher<Fp> as Halo2Hasher<W>>::construct(config));
-
-                let insert_chip = ShiftChip::construct(insert_config);
-
-                let merkle_chip = MerkleShiftChip::<PoseidonHasher<Fp>, U, V, W>::with_subchips(
-                    base_hasher_chip,
-                    sub_hasher_chip,
-                    top_hasher_chip,
-                    insert_chip,
-                );
-
-                merkle_chip
-                    .compute_root_unassigned_leaf_pi_bits(
-                        layouter,
-                        self.leaf,
-                        &self.path,
-                        pi_col,
-                        0..self.challenge_bits.len(),
-                    )?
-                    .value()
-                    .assert_if_known(|root| **root == self.expected_root);
-
-                Ok(())
-            }
-        }
-
-        impl<U, V, W> MyCircuit<U, V, W>
-        where
-            U: PoseidonArity<Fp>,
-            V: PoseidonArity<Fp>,
-            W: PoseidonArity<Fp>,
-        {
-            fn k(num_leafs: usize) -> u32 {
-                use filecoin_hashers::poseidon::PoseidonChip;
-
-                let base_arity = U::to_usize();
-                let sub_arity = V::to_usize();
-                let top_arity = W::to_usize();
-
-                let (base_path_len, has_sub_path, has_top_path) =
-                    path_lens(num_leafs, base_arity, sub_arity, top_arity);
-
-                let base_rows =
-                    PoseidonChip::<Fp, U>::num_rows() + ShiftChip::<Fp>::num_rows(base_arity);
-
-                let mut num_rows = base_path_len * base_rows;
-                if has_sub_path {
-                    num_rows +=
-                        PoseidonChip::<Fp, V>::num_rows() + ShiftChip::<Fp>::num_rows(sub_arity);
-                }
-                if has_top_path {
-                    num_rows +=
-                        PoseidonChip::<Fp, W>::num_rows() + ShiftChip::<Fp>::num_rows(top_arity);
-                };
-
-                (num_rows as f32).log2().floor() as u32 + 1
-            }
-        }
-
         let base_arity = U::to_usize();
         let sub_arity = V::to_usize();
         let top_arity = W::to_usize();
@@ -1326,14 +1324,14 @@ mod test {
             (0..10).map(|_| rng.gen::<usize>() % num_leafs).collect()
         };
 
-        let mut k = MyCircuit::<U, V, W>::k(num_leafs);
+        let mut k = MerkleShiftCircuit::<U, V, W>::k(num_leafs);
 
         for challenge in challenges {
             let merkle_proof = tree
                 .gen_proof(challenge)
                 .expect("failed to generate merkle proof");
 
-            let circ = MyCircuit::<U, V, W> {
+            let circ = MerkleShiftCircuit::<U, V, W> {
                 challenge_bits: challenge_to_shift_bits(
                     challenge, num_leafs, base_arity, sub_arity, top_arity,
                 ),
