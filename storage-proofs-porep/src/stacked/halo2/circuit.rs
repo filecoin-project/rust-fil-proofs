@@ -2,10 +2,11 @@
 
 use std::convert::TryInto;
 use std::marker::PhantomData;
+use std::ops::Range;
 
 use fil_halo2_gadgets::{
     sha256::{Sha256WordsChip, Sha256WordsConfig},
-    uint32::{AssignedU32, UInt32Chip, UInt32Config},
+    uint32::AssignedU32,
     AdviceIter, ColumnBuilder,
 };
 use filecoin_hashers::{
@@ -57,20 +58,43 @@ const REPLICA_ID_ROW: usize = 0;
 const COMM_D_ROW: usize = 1;
 const COMM_R_ROW: usize = 2;
 const FIRST_CHALLENGE_ROW: usize = 3;
+const MERKLE_CHALLENGES_PER_POREP_CHALLENGE: usize = 1 + DRG_PARENTS + EXP_PARENTS;
 
 #[inline]
-const fn challenge_row(challenge_index: usize) -> usize {
-    FIRST_CHALLENGE_ROW + challenge_index * (1 + DRG_PARENTS + EXP_PARENTS)
+const fn challenge_row(challenge_index: usize, challenge_bits: usize) -> usize {
+    // Add one public input for the porep challenge as a `u32`.
+    FIRST_CHALLENGE_ROW
+        + challenge_index * (MERKLE_CHALLENGES_PER_POREP_CHALLENGE * challenge_bits + 1)
 }
 
 #[inline]
-const fn drg_parent_row(challenge_index: usize, drg_parent_index: usize) -> usize {
-    challenge_row(challenge_index) + 1 + drg_parent_index
+const fn challenge_bits_rows(challenge_index: usize, challenge_bits: usize) -> Range<usize> {
+    let start = challenge_row(challenge_index, challenge_bits) + 1;
+    start..start + challenge_bits
 }
 
 #[inline]
-const fn exp_parent_row(challenge_index: usize, exp_parent_index: usize) -> usize {
-    challenge_row(challenge_index) + 1 + DRG_PARENTS + exp_parent_index
+const fn drg_parent_bits_rows(
+    challenge_index: usize,
+    drg_parent_index: usize,
+    challenge_bits: usize,
+) -> Range<usize> {
+    let first_drg_parent_row = challenge_bits_rows(challenge_index, challenge_bits).end;
+    let start = first_drg_parent_row + drg_parent_index * challenge_bits;
+    start..start + challenge_bits
+}
+
+#[inline]
+const fn exp_parent_bits_rows(
+    challenge_index: usize,
+    exp_parent_index: usize,
+    challenge_bits: usize,
+) -> Range<usize> {
+    let last_drg_parent_index = DRG_PARENTS - 1;
+    let first_exp_parent_row =
+        drg_parent_bits_rows(challenge_index, last_drg_parent_index, challenge_bits).end;
+    let start = first_exp_parent_row + exp_parent_index * challenge_bits;
+    start..start + challenge_bits
 }
 
 #[derive(Clone)]
@@ -84,7 +108,8 @@ where
     pub comm_d: Option<F>,
     pub comm_r: Option<F>,
     pub challenges: Vec<Option<u32>>,
-    pub parents: Vec<Vec<Option<u32>>>,
+    pub challenges_bits: Vec<Vec<Option<bool>>>,
+    pub parents_bits: Vec<Vec<Vec<Option<bool>>>>,
 }
 
 impl<F, const SECTOR_NODES: usize> PublicInputs<F, SECTOR_NODES>
@@ -140,26 +165,46 @@ where
         let layer_challenges =
             LayerChallenges::new(num_layers(SECTOR_NODES), challenge_count(SECTOR_NODES));
 
-        let (challenges, parents): (Vec<Option<u32>>, Vec<Vec<Option<u32>>>) = layer_challenges
-            .derive(SECTOR_NODES, &replica_id, &challenge_seed, k as u8)
+        let challenge_bit_len = SECTOR_NODES.trailing_zeros() as usize;
+        let challenges =
+            layer_challenges.derive(SECTOR_NODES, &replica_id, &challenge_seed, k as u8);
+
+        let challenges_bits = challenges
+            .iter()
+            .map(|c| {
+                (0..challenge_bit_len)
+                    .map(|i| Some(c >> i & 1 == 1))
+                    .collect()
+            })
+            .collect();
+
+        let parents_bits = challenges
             .iter()
             .map(|c| {
                 let mut parents = vec![0u32; DRG_PARENTS + EXP_PARENTS];
                 graph
                     .parents(*c, &mut parents)
                     .expect("failed to generate parents");
-                let challenge = Some(*c as u32);
-                let parents = parents.iter().copied().map(Some).collect();
-                (challenge, parents)
+                parents
+                    .iter()
+                    .map(|p| {
+                        (0..challenge_bit_len)
+                            .map(|i| Some(p >> i & 1 == 1))
+                            .collect()
+                    })
+                    .collect()
             })
-            .unzip();
+            .collect();
+
+        let challenges = challenges.iter().map(|c| Some(*c as u32)).collect();
 
         PublicInputs {
             replica_id: Some(replica_id.into()),
             comm_d: Some(comm_d.into()),
             comm_r: Some(comm_r.into()),
             challenges,
-            parents,
+            challenges_bits,
+            parents_bits,
         }
     }
 
@@ -171,21 +216,45 @@ where
                 && self.comm_r.is_some()
                 && self.challenges.iter().all(Option::is_some)
                 && self
-                    .parents
+                    .challenges_bits
                     .iter()
-                    .all(|parents| parents.iter().all(Option::is_some)),
+                    .all(|bits| bits.iter().all(Option::is_some))
+                && self.parents_bits.iter().all(|parents_bits| {
+                    parents_bits
+                        .iter()
+                        .all(|bits| bits.iter().all(Option::is_some))
+                }),
             "all public inputs must contain a value before converting into a vector",
         );
 
-        let num_pub_inputs = 3 + self.challenges.len() * (1 + DRG_PARENTS + EXP_PARENTS);
-        let mut pub_inputs = Vec::with_capacity(num_pub_inputs);
-        pub_inputs.push(self.replica_id.unwrap());
-        pub_inputs.push(self.comm_d.unwrap());
-        pub_inputs.push(self.comm_r.unwrap());
-        for (c, parents) in self.challenges.iter().zip(self.parents.iter()) {
-            pub_inputs.push(F::from(c.unwrap() as u64));
-            for parent in parents {
-                pub_inputs.push(F::from(parent.unwrap() as u64));
+        let mut pub_inputs = vec![
+            self.replica_id.unwrap(),
+            self.comm_d.unwrap(),
+            self.comm_r.unwrap(),
+        ];
+
+        for ((challenge, challenge_bits), parents_bits) in self
+            .challenges
+            .iter()
+            .zip(self.challenges_bits.iter())
+            .zip(self.parents_bits.iter())
+        {
+            pub_inputs.push(F::from(challenge.unwrap() as u64));
+            for bit in challenge_bits {
+                if bit.unwrap() {
+                    pub_inputs.push(F::one());
+                } else {
+                    pub_inputs.push(F::zero());
+                }
+            }
+            for parent_bits in parents_bits {
+                for bit in parent_bits {
+                    if bit.unwrap() {
+                        pub_inputs.push(F::one());
+                    } else {
+                        pub_inputs.push(F::zero());
+                    }
+                }
             }
         }
 
@@ -461,8 +530,6 @@ where
     Sha256Hasher<F>: Hasher<Field = F>,
     PoseidonHasher<F>: Hasher<Field = F>,
 {
-    // Decomposes a challenge into 32 bits.
-    uint32: UInt32Config<F>,
     // Converts a field element into eight `u32` words having sha256 bit order.
     sha256_words: Sha256WordsConfig<F>,
     // Computes CommR.
@@ -525,37 +592,34 @@ where
 
     fn without_witnesses(&self) -> Self {
         let challenge_count = challenge_count(SECTOR_NODES);
+        let challenge_bit_len = SECTOR_NODES.trailing_zeros() as usize;
 
         assert_eq!(self.pub_inputs.challenges.len(), challenge_count);
-        assert_eq!(self.pub_inputs.parents.len(), challenge_count);
+        assert_eq!(self.pub_inputs.challenges_bits.len(), challenge_count);
         assert!(self
             .pub_inputs
-            .parents
+            .challenges_bits
+            .iter()
+            .all(|bits| bits.len() == challenge_bit_len));
+        assert_eq!(self.pub_inputs.parents_bits.len(), challenge_count);
+        assert!(self
+            .pub_inputs
+            .parents_bits
             .iter()
             .all(|parents| parents.len() == DRG_PARENTS + EXP_PARENTS));
+        assert!(self
+            .pub_inputs
+            .parents_bits
+            .iter()
+            .all(|parents| parents.iter().all(|bits| bits.len() == challenge_bit_len)));
         assert_eq!(self.priv_inputs.challenge_proofs.len(), challenge_count);
 
-        SdrPorepCircuit {
-            id: SDR_POREP_CIRCUIT_ID.to_string(),
-            pub_inputs: PublicInputs {
-                replica_id: None,
-                comm_d: None,
-                comm_r: None,
-                challenges: vec![None; challenge_count],
-                parents: vec![vec![None; DRG_PARENTS + EXP_PARENTS]; challenge_count],
-            },
-            priv_inputs: PrivateInputs {
-                comm_c: Value::unknown(),
-                root_r: Value::unknown(),
-                challenge_proofs: vec![ChallengeProof::empty(); challenge_count],
-            },
-        }
+        Self::blank_circuit()
     }
 
     #[allow(clippy::unwrap_used)]
     fn configure(meta: &mut ConstraintSystem<F>) -> Self::Config {
         let (advice_eq, advice_neq, fixed_eq, fixed_neq) = ColumnBuilder::new()
-            .with_chip::<UInt32Chip<F>>()
             .with_chip::<Sha256WordsChip<F>>()
             .with_chip::<<Sha256Hasher<F> as Halo2Hasher<U2>>::Chip>()
             .with_chip::<<PoseidonHasher<F> as Halo2Hasher<U2>>::Chip>()
@@ -568,7 +632,6 @@ where
             .with_chip::<ColumnHasherChip<F, SECTOR_NODES>>()
             .create_columns(meta);
 
-        let uint32 = UInt32Chip::configure(meta, advice_eq[..9].try_into().unwrap());
         let sha256_words = Sha256WordsChip::configure(meta, advice_eq[..9].try_into().unwrap());
 
         let poseidon_2 = <PoseidonHasher<F> as Halo2Hasher<U2>>::configure(
@@ -676,7 +739,6 @@ where
         meta.enable_equality(pi);
 
         SdrPorepConfig {
-            uint32,
             sha256_words,
             poseidon_2,
             column_hasher,
@@ -696,24 +758,32 @@ where
         mut layouter: impl Layouter<F>,
     ) -> Result<(), Error> {
         let SdrPorepCircuit {
-            id: _,
             pub_inputs,
             priv_inputs,
+            ..
         } = self;
 
+        let challenge_bit_len = SECTOR_NODES.trailing_zeros() as usize;
         let challenge_count = challenge_count(SECTOR_NODES);
         let num_layers = num_layers(SECTOR_NODES);
 
         assert_eq!(pub_inputs.challenges.len(), challenge_count);
-        assert_eq!(pub_inputs.parents.len(), challenge_count);
+        assert_eq!(pub_inputs.challenges_bits.len(), challenge_count);
         assert!(pub_inputs
-            .parents
+            .challenges_bits
+            .iter()
+            .all(|bits| bits.len() == challenge_bit_len));
+        assert_eq!(pub_inputs.parents_bits.len(), challenge_count);
+        assert!(pub_inputs
+            .parents_bits
             .iter()
             .all(|parents| parents.len() == DRG_PARENTS + EXP_PARENTS));
+        assert!(pub_inputs.parents_bits.iter().all(|parents| parents
+            .iter()
+            .all(|parent_bits| parent_bits.len() == challenge_bit_len)));
         assert_eq!(priv_inputs.challenge_proofs.len(), challenge_count);
 
         let SdrPorepConfig {
-            uint32: uint32_config,
             sha256_words: sha256_words_config,
             poseidon_2: poseidon_2_config,
             column_hasher: column_hasher_config,
@@ -727,7 +797,6 @@ where
 
         <Sha256Hasher<F> as Halo2Hasher<U2>>::load(&mut layouter, &sha256_config)?;
 
-        let uint32_chip = UInt32Chip::construct(uint32_config);
         let sha256_words_chip = Sha256WordsChip::construct(sha256_words_config);
         let poseidon_2_chip = <PoseidonHasher<F> as Halo2Hasher<U2>>::construct(poseidon_2_config);
         let column_hasher_chip = ColumnHasherChip::construct(column_hasher_config);
@@ -771,9 +840,9 @@ where
             REPLICA_ID_ROW,
         )?;
 
-        // Witness `comm_c`, `root_r`, and each challenge's TreeD leaf.
-        let (comm_c, root_r, leafs_d) = layouter.assign_region(
-            || "witness comm_c, root_r, and leafs_d",
+        // Witness `comm_c`, `root_r`, each challenge, and each challenge's TreeD leaf.
+        let (comm_c, root_r, challenges, leafs_d) = layouter.assign_region(
+            || "witness comm_c, root_r, challenges, and leafs_d",
             |mut region| {
                 let mut advice_iter = AdviceIter::from(advice.clone());
 
@@ -786,6 +855,26 @@ where
                     let (offset, col) = advice_iter.next();
                     region.assign_advice(|| "root_r", col, offset, || priv_inputs.root_r)?
                 };
+
+                let challenges = pub_inputs
+                    .challenges
+                    .iter()
+                    .enumerate()
+                    .map(|(i, challenge)| {
+                        let (offset, col) = advice_iter.next();
+                        let challenge = match challenge {
+                            Some(challenge) => Value::known(*challenge),
+                            None => Value::unknown(),
+                        };
+                        AssignedU32::assign(
+                            &mut region,
+                            || format!("challenge {}", i),
+                            col,
+                            offset,
+                            challenge,
+                        )
+                    })
+                    .collect::<Result<Vec<AssignedU32<F>>, Error>>()?;
 
                 let leafs_d = priv_inputs
                     .challenge_proofs
@@ -802,7 +891,7 @@ where
                     })
                     .collect::<Result<Vec<AssignedCell<F, F>>, Error>>()?;
 
-                Ok((comm_c, root_r, leafs_d))
+                Ok((comm_c, root_r, challenges, leafs_d))
             },
         )?;
 
@@ -817,32 +906,31 @@ where
         // Assign constants that can be reused across challenge labelings.
         let labeling_constants = labeling_chip.assign_constants(&mut layouter)?;
 
-        for (i, (challenge_opt, (leaf_d, challenge_proof))) in pub_inputs
-            .challenges
+        // TODO (jake): check if it reduces circuit size to assign challenge bits from instance
+        // once at start of synthesis and copy bits into merkle chip rather than reassign challenge
+        // bits from public inputs in merkle chips.
+
+        for (i, ((challenge, leaf_d), challenge_proof)) in challenges
             .iter()
-            .zip(leafs_d.iter().zip(priv_inputs.challenge_proofs.iter()))
+            .zip(leafs_d.iter())
+            .zip(priv_inputs.challenge_proofs.iter())
             .enumerate()
         {
             let mut layouter = layouter.namespace(|| format!("challenge {}", i));
 
-            let challenge = match challenge_opt {
-                Some(challenge) => Value::known(*challenge),
-                None => Value::unknown(),
-            };
+            let challenge_row = challenge_row(i, challenge_bit_len);
+            let challenge_bits_rows = challenge_bits_rows(i, challenge_bit_len);
 
-            // Assign the challenge as 32 bits and constrain with public input.
-            let (challenge, challenge_bits) = uint32_chip.witness_assign_bits(
-                layouter.namespace(|| "assign challenge as 32 bits"),
-                challenge,
-            )?;
-            layouter.constrain_instance(challenge.cell(), pi_col, challenge_row(i))?;
+            // Constrain challenge against public input.
+            layouter.constrain_instance(challenge.cell(), pi_col, challenge_row)?;
 
             // Verify the challenge's TreeD merkle proof.
-            let comm_d = tree_d_merkle_chip.compute_root_assigned_leaf(
+            let comm_d = tree_d_merkle_chip.compute_root_assigned_leaf_pi_bits(
                 layouter.namespace(|| "calculate comm_d from challenge's merkle proof"),
-                &challenge_bits,
                 leaf_d.clone(),
                 &challenge_proof.path_d,
+                pi_col,
+                challenge_bits_rows.clone(),
             )?;
             layouter.constrain_instance(comm_d.cell(), pi_col, COMM_D_ROW)?;
 
@@ -910,67 +998,61 @@ where
                 },
             )?;
 
-            // Verify each parent's TreeC Merkle proof.
+            // Verify each DRG parent's TreeC Merkle proof.
             for (parent_index, (parent_column, parent_proof)) in drg_parent_columns
                 .iter()
                 .zip(challenge_proof.drg_parent_proofs.iter())
                 .enumerate()
             {
-                let parent_bits = uint32_chip.pi_assign_bits(
-                    layouter.namespace(|| format!("assign drg parent {} as 32 bits", parent_index)),
-                    pi_col,
-                    drg_parent_row(i, parent_index),
-                )?;
                 // Compute parent's column digest.
                 let leaf_c = column_hasher_chip.hash(
                     layouter.namespace(|| format!("drg parent {} column digest", parent_index)),
                     parent_column,
                 )?;
-                let comm_c_calc = tree_r_merkle_chip.compute_root_assigned_leaf(
+                let comm_c_calc = tree_r_merkle_chip.compute_root_assigned_leaf_pi_bits(
                     layouter.namespace(|| {
                         format!(
                             "calculate comm_c from drg parent {} merkle proof",
                             parent_index,
                         )
                     }),
-                    &parent_bits,
                     leaf_c,
                     &parent_proof.path_c,
+                    pi_col,
+                    drg_parent_bits_rows(i, parent_index, challenge_bit_len),
                 )?;
                 layouter.assign_region(
                     || format!("constrain drg parent {} comm_c", parent_index),
-                    |mut region| region.constrain_equal(comm_c.cell(), comm_c_calc.cell()),
+                    |mut region| region.constrain_equal(comm_c_calc.cell(), comm_c.cell()),
                 )?;
             }
 
+            // Verify each expander parent's TreeC Merkle proof.
             for (parent_index, (parent_column, parent_proof)) in exp_parent_columns
                 .iter()
                 .zip(challenge_proof.exp_parent_proofs.iter())
                 .enumerate()
             {
-                let parent_bits = uint32_chip.pi_assign_bits(
-                    layouter.namespace(|| format!("assign exp parent {} as 32 bits", parent_index)),
-                    pi_col,
-                    exp_parent_row(i, parent_index),
-                )?;
+                // Compute parent's column digest.
                 let leaf_c = column_hasher_chip.hash(
                     layouter.namespace(|| format!("exp parent {} column digest", parent_index)),
                     parent_column,
                 )?;
-                let comm_c_calc = tree_r_merkle_chip.compute_root_assigned_leaf(
+                let comm_c_calc = tree_r_merkle_chip.compute_root_assigned_leaf_pi_bits(
                     layouter.namespace(|| {
                         format!(
                             "calculate comm_c from exp parent {} merkle proof",
                             parent_index,
                         )
                     }),
-                    &parent_bits,
                     leaf_c,
                     &parent_proof.path_c,
+                    pi_col,
+                    exp_parent_bits_rows(i, parent_index, challenge_bit_len),
                 )?;
                 layouter.assign_region(
                     || format!("constrain exp parent {} comm_c", parent_index),
-                    |mut region| region.constrain_equal(comm_c.cell(), comm_c_calc.cell()),
+                    |mut region| region.constrain_equal(comm_c_calc.cell(), comm_c.cell()),
                 )?;
             }
 
@@ -978,11 +1060,16 @@ where
 
             // Compute the challenge's label in each layer.
             for layer_index in 0..num_layers {
-                let mut parent_labels: Vec<AssignedU32<F>> = if layer_index == 0 {
-                    Vec::with_capacity(DRG_PARENTS * LABEL_WORD_LEN)
+                let is_first_layer = layer_index == 0;
+
+                let num_parents = if is_first_layer {
+                    DRG_PARENTS
                 } else {
-                    Vec::with_capacity((DRG_PARENTS + EXP_PARENTS) * LABEL_WORD_LEN)
+                    DRG_PARENTS + EXP_PARENTS
                 };
+
+                let mut parent_labels =
+                    Vec::<AssignedU32<F>>::with_capacity(num_parents * LABEL_WORD_LEN);
 
                 for (parent_index, parent_label) in drg_parent_columns
                     .iter()
@@ -1001,7 +1088,7 @@ where
                     parent_labels.extend(parent_label);
                 }
 
-                if layer_index > 0 {
+                if !is_first_layer {
                     for (parent_index, parent_label) in exp_parent_columns
                         .iter()
                         // Expander parents are in the preceding layer.
@@ -1035,7 +1122,7 @@ where
                     &labeling_constants,
                     layer_index,
                     &replica_id,
-                    &challenge,
+                    challenge,
                     &repeated_parent_labels,
                 )?;
                 challenge_column.push(challenge_label);
@@ -1048,15 +1135,16 @@ where
             )?;
 
             // Verify the challenge's TreeC Merkle proof.
-            let comm_c_calc = tree_r_merkle_chip.compute_root_assigned_leaf(
+            let comm_c_calc = tree_r_merkle_chip.compute_root_assigned_leaf_pi_bits(
                 layouter.namespace(|| "calculate comm_c from challenge's merkle proof"),
-                &challenge_bits,
                 leaf_c,
                 &challenge_proof.path_c,
+                pi_col,
+                challenge_bits_rows.clone(),
             )?;
             layouter.assign_region(
                 || "constrain challenge's comm_c",
-                |mut region| region.constrain_equal(comm_c.cell(), comm_c_calc.cell()),
+                |mut region| region.constrain_equal(comm_c_calc.cell(), comm_c.cell()),
             )?;
 
             // Compute the challenge's encoding `leaf_r = leaf_d + key`, where the encoding key is
@@ -1068,11 +1156,12 @@ where
             )?;
 
             // Verify the challenge's TreeR Merkle proof.
-            let root_r_calc = tree_r_merkle_chip.compute_root_assigned_leaf(
+            let root_r_calc = tree_r_merkle_chip.compute_root_assigned_leaf_pi_bits(
                 layouter.namespace(|| "calculate comm_r from challenge's merkle proof"),
-                &challenge_bits,
                 leaf_r,
                 &challenge_proof.path_r,
+                pi_col,
+                challenge_bits_rows,
             )?;
             layouter.assign_region(
                 || "constrain challenge's root_r",
@@ -1147,6 +1236,8 @@ where
     // Same as `Circuit::without_witnesses` except this associated function does not take `&self`.
     pub fn blank_circuit() -> Self {
         let challenge_count = challenge_count(SECTOR_NODES);
+        let challenge_bit_len = SECTOR_NODES.trailing_zeros() as usize;
+
         SdrPorepCircuit {
             id: SDR_POREP_CIRCUIT_ID.to_string(),
             pub_inputs: PublicInputs {
@@ -1154,7 +1245,11 @@ where
                 comm_d: None,
                 comm_r: None,
                 challenges: vec![None; challenge_count],
-                parents: vec![vec![None; DRG_PARENTS + EXP_PARENTS]; challenge_count],
+                challenges_bits: vec![vec![None; challenge_bit_len]; challenge_count],
+                parents_bits: vec![
+                    vec![vec![None; challenge_bit_len]; DRG_PARENTS + EXP_PARENTS];
+                    challenge_count
+                ],
             },
             priv_inputs: PrivateInputs {
                 comm_c: Value::unknown(),
@@ -1170,13 +1265,17 @@ where
         use halo2_proofs::dev::MockProver;
 
         let challenge_count = challenge_count(SECTOR_NODES);
+        let challenge_bit_len = SECTOR_NODES.trailing_zeros() as usize;
+
+        let challenge_bits = vec![Some(false); challenge_bit_len];
 
         let pub_inputs = PublicInputs {
             replica_id: Some(F::zero()),
             comm_d: Some(F::zero()),
             comm_r: Some(F::zero()),
             challenges: vec![Some(0); challenge_count],
-            parents: vec![vec![Some(0); DRG_PARENTS + EXP_PARENTS]; challenge_count],
+            challenges_bits: vec![challenge_bits.clone(); challenge_count],
+            parents_bits: vec![vec![challenge_bits; DRG_PARENTS + EXP_PARENTS]; challenge_count],
         };
         let pub_inputs_vec = pub_inputs.to_vec();
 
