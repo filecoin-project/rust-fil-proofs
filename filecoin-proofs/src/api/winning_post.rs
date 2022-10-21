@@ -86,13 +86,6 @@ where
         "expected exactly one vanilla proof"
     );
 
-    let vanilla_proof = &vanilla_proofs[0];
-    let randomness_safe: <Tree::Hasher as Hasher>::Domain =
-        as_safe_commitment(randomness, "randomness")?;
-    let prover_id_safe: <Tree::Hasher as Hasher>::Domain =
-        as_safe_commitment(&prover_id, "prover_id")?;
-
-
     ensure!(
         TypeId::of::<Tree::Hasher>() == TypeId::of::<DefaultTreeHasher<Tree::Field>>(),
         "tree hasher must be poseidon",
