@@ -18,8 +18,8 @@ use storage_proofs_core::{
     TEST_SEED,
 };
 use storage_proofs_post::fallback::{
-    self, FallbackPoSt, FallbackPoStCircuit, FallbackPoStCompound, PrivateSector, PublicSector,
-    Sector, PoStShape,
+    self, FallbackPoSt, FallbackPoStCircuit, FallbackPoStCompound, PoStShape, PrivateSector,
+    PublicSector, Sector,
 };
 use tempfile::tempdir;
 

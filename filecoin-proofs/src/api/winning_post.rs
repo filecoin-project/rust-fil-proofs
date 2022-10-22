@@ -176,13 +176,13 @@ where
     > = unsafe { std::mem::transmute(vanilla_proofs) };
 
     let mut pub_sectors = Vec::with_capacity(vanilla_proofs.len());
-        for vanilla_proof in &vanilla_proofs {
-            pub_sectors.push(PublicSector {
-                id: vanilla_proof.sector_id,
-                comm_r: vanilla_proof.comm_r,
-            });
-        }
-    
+    for vanilla_proof in &vanilla_proofs {
+        pub_sectors.push(PublicSector {
+            id: vanilla_proof.sector_id,
+            comm_r: vanilla_proof.comm_r,
+        });
+    }
+
     let pub_inputs = fallback::PublicInputs {
         randomness: randomness_safe,
         prover_id: prover_id_safe,

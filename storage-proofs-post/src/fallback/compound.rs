@@ -17,7 +17,10 @@ use storage_proofs_core::{
     util::NODE_SIZE,
 };
 
-use crate::fallback::{generate_leaf_challenge_inner, generate_leaf_challenge, FallbackPoSt, FallbackPoStCircuit, Sector, PoStShape};
+use crate::fallback::{
+    generate_leaf_challenge, generate_leaf_challenge_inner, FallbackPoSt, FallbackPoStCircuit,
+    PoStShape, Sector,
+};
 
 pub struct FallbackPoStCompound<Tree>
 where
@@ -75,7 +78,7 @@ where
                     // 2. Inputs for verifying inclusion paths
                     for n in 0..pub_params.challenge_count {
                         let challenge_index = match pub_params.api_version {
-                            ApiVersion::V1_0_0 | ApiVersion::V1_1_0  => {
+                            ApiVersion::V1_0_0 | ApiVersion::V1_1_0 => {
                                 (partition_index * pub_params.sector_count + i)
                                     * pub_params.challenge_count
                                     + n
@@ -88,11 +91,12 @@ where
                         challenge_hasher.update(AsRef::<[u8]>::as_ref(&pub_inputs.randomness));
                         challenge_hasher.update(&u64::from(sector.id).to_le_bytes()[..]);
 
-                        let challenged_leaf = generate_leaf_challenge_inner::<
-                            <Tree::Hasher as Hasher>::Domain,
-                        >(
-                            challenge_hasher.clone(), pub_params, challenge_index
-                        );
+                        let challenged_leaf =
+                            generate_leaf_challenge_inner::<<Tree::Hasher as Hasher>::Domain>(
+                                challenge_hasher.clone(),
+                                pub_params,
+                                challenge_index,
+                            );
 
                         let por_pub_inputs = por::PublicInputs {
                             commitment: None,

@@ -16,8 +16,8 @@ use storage_proofs_core::{
     TEST_SEED,
 };
 use storage_proofs_post::fallback::{
-    ChallengeRequirements, FallbackPoStCompound, PrivateInputs, PrivateSector, PublicInputs,
-    PublicSector, SetupParams, PoStShape,
+    ChallengeRequirements, FallbackPoStCompound, PoStShape, PrivateInputs, PrivateSector,
+    PublicInputs, PublicSector, SetupParams,
 };
 use tempfile::tempdir;
 

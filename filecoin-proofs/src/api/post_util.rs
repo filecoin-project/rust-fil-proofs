@@ -7,9 +7,12 @@ use bincode::deserialize;
 use filecoin_hashers::Hasher;
 use log::{debug, info};
 use storage_proofs_core::{
-    api_version::ApiVersion, cache_key::CacheKey, merkle::MerkleTreeTrait, proof::ProofScheme, sector::SectorId,
+    api_version::ApiVersion, cache_key::CacheKey, merkle::MerkleTreeTrait, proof::ProofScheme,
+    sector::SectorId,
 };
-use storage_proofs_post::fallback::{self, generate_leaf_challenge, FallbackPoSt, SectorProof, PoStShape};
+use storage_proofs_post::fallback::{
+    self, generate_leaf_challenge, FallbackPoSt, PoStShape, SectorProof,
+};
 
 use crate::{
     api::as_safe_commitment,
@@ -242,7 +245,10 @@ pub fn partition_vanilla_proofs<Tree: MerkleTreeTrait>(
             partition_proofs
         }
         PoStType::Winning => {
-            for (j, sectors_chunk) in fallback_sector_proofs.chunks(num_sectors_per_chunk).enumerate() {
+            for (j, sectors_chunk) in fallback_sector_proofs
+                .chunks(num_sectors_per_chunk)
+                .enumerate()
+            {
                 let proof = single_partition_vanilla_proofs(
                     pub_params,
                     &fallback::FallbackPoSt::<Tree>::with_partition(pub_inputs.clone(), Some(j)),

@@ -374,8 +374,10 @@ where
 
         match self.api_version {
             ApiVersion::V1_0_0 => transformed as u32 / self.expansion_degree as u32,
-            ApiVersion::V1_1_0 | ApiVersion::V1_2_0 => u32::try_from(transformed as u64 / self.expansion_degree as u64)
-                .expect("invalid transformation"),
+            ApiVersion::V1_1_0 | ApiVersion::V1_2_0 => {
+                u32::try_from(transformed as u64 / self.expansion_degree as u64)
+                    .expect("invalid transformation")
+            }
         }
 
         // Collapse the output in the matrix search space to the row of the corresponding

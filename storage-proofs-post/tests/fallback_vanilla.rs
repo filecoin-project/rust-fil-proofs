@@ -13,7 +13,7 @@ use storage_proofs_core::{
     util::NODE_SIZE,
     TEST_SEED,
 };
-use storage_proofs_post::fallback::{self, FallbackPoSt, PrivateSector, PublicSector, PoStShape};
+use storage_proofs_post::fallback::{self, FallbackPoSt, PoStShape, PrivateSector, PublicSector};
 use tempfile::tempdir;
 
 #[test]

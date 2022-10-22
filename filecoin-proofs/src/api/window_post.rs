@@ -1991,11 +1991,8 @@ where
         k: Some(partition_index),
     };
 
-    let partitioned_proofs = single_partition_vanilla_proofs(
-        &pub_params.vanilla_params,
-        &pub_inputs,
-        &vanilla_proofs,
-    )?;
+    let partitioned_proofs =
+        single_partition_vanilla_proofs(&pub_params.vanilla_params, &pub_inputs, &vanilla_proofs)?;
 
     let proof = FallbackPoStCompound::prove_with_vanilla(
         &pub_params,
