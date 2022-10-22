@@ -141,7 +141,7 @@ where
                     inputs.push(sector.comm_r.into());
                     // 2. Inputs for verifying inclusion paths
                     let challenged_leaf = generate_leaf_challenge(
-                        &pub_params,
+                        pub_params,
                         pub_inputs.randomness,
                         sector.id.into(),
                         challenge_index as u64,
