@@ -161,7 +161,7 @@ where
 
     let vanilla_setup_params = SetupParams {
         sector_size: (SECTOR_NODES << 5) as u64,
-        challenge_count: window::SECTOR_CHALLENGES,
+        challenge_count: window::CHALLENGE_COUNT_PER_SECTOR,
         sector_count: sectors_challenged_per_partition,
         api_version: ApiVersion::V1_1_0,
     };

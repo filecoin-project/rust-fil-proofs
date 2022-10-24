@@ -101,13 +101,17 @@ where
         .unwrap();
 
     trace!("Forming public inputs");
+    let challenge_bit_len = SECTOR_NODES.trailing_zeros() as usize;
     let pub_inputs = winning::PublicInputs::<Fp, SECTOR_NODES> {
         comm_r: Some(comm_r.into()),
         challenges: challenges
             .iter()
-            .copied()
-            .map(Some)
-            .collect::<Vec<Option<u32>>>()
+            .map(|&c| {
+                (0..challenge_bit_len)
+                    .map(|i| Some(c >> i & 1 == 1))
+                    .collect()
+            })
+            .collect::<Vec<Vec<Option<bool>>>>()
             .try_into()
             .unwrap(),
     };
@@ -187,6 +191,7 @@ where
 {
     init_logger();
     info!("test_window_post_circuit [SectorNodes={}]", SECTOR_NODES);
+    let challenge_bit_len = SECTOR_NODES.trailing_zeros() as usize;
     let challenged_sector_count = window::sectors_challenged_per_partition(SECTOR_NODES);
     let k = 0;
 
@@ -238,9 +243,12 @@ where
         pub_inputs.challenges.push(
             challenges
                 .iter()
-                .copied()
-                .map(Some)
-                .collect::<Vec<Option<u32>>>()
+                .map(|&c| {
+                    (0..challenge_bit_len)
+                        .map(|i| Some(c >> i & 1 == 1))
+                        .collect()
+                })
+                .collect::<Vec<Vec<Option<bool>>>>()
                 .try_into()
                 .unwrap(),
         );
