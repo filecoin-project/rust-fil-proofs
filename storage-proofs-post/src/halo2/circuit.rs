@@ -1,10 +1,7 @@
 use std::convert::TryInto;
 use std::marker::PhantomData;
 
-use fil_halo2_gadgets::{
-    uint32::{UInt32Chip, UInt32Config},
-    ColumnBuilder,
-};
+use fil_halo2_gadgets::ColumnBuilder;
 use filecoin_hashers::{poseidon::PoseidonHasher, Halo2Hasher, Hasher, PoseidonArity};
 use generic_array::typenum::U2;
 use halo2_proofs::{
@@ -132,8 +129,6 @@ where
     W: PoseidonArity<F>,
     PoseidonHasher<F>: Hasher<Field = F>,
 {
-    // Decomposes each Merkle challenge public input into 32 bits.
-    pub uint32: UInt32Config<F>,
     // Computes `comm_r`.
     pub poseidon_2: <PoseidonHasher<F> as Halo2Hasher<U2>>::Config,
     // Computes TreeR root from each challenge's Merkle proof.
@@ -166,7 +161,6 @@ where
     #[allow(clippy::unwrap_used)]
     pub fn configure(meta: &mut ConstraintSystem<F>) -> Self {
         let (advice_eq, advice_neq, fixed_eq, fixed_neq) = ColumnBuilder::new()
-            .with_chip::<UInt32Chip<F>>()
             .with_chip::<<PoseidonHasher<F> as Halo2Hasher<U2>>::Chip>()
             .with_chip::<<PoseidonHasher<F> as Halo2Hasher<U>>::Chip>()
             .with_chip::<<PoseidonHasher<F> as Halo2Hasher<V>>::Chip>()
@@ -175,8 +169,6 @@ where
             // all other arity insert chips will use a subset of the base arity's columns.
             .with_chip::<InsertChip<F, U>>()
             .create_columns(meta);
-
-        let uint32 = UInt32Chip::configure(meta, advice_eq[..9].try_into().unwrap());
 
         let poseidon_2 = <PoseidonHasher<F> as Halo2Hasher<U2>>::configure(
             meta,
@@ -260,7 +252,6 @@ where
         meta.enable_equality(pi);
 
         PostConfig {
-            uint32,
             poseidon_2,
             tree_r: (poseidon_base, insert_base, sub, top),
             advice: [advice_eq[0], advice_eq[1]],
@@ -271,18 +262,14 @@ where
     pub fn construct_chips(
         self,
     ) -> (
-        UInt32Chip<F>,
         <PoseidonHasher<F> as Halo2Hasher<U2>>::Chip,
         MerkleChip<PoseidonHasher<F>, U, V, W>,
     ) {
         let PostConfig {
-            uint32: uint32_config,
             poseidon_2: poseidon_2_config,
             tree_r: (poseidon_base_config, insert_base_config, sub_config, top_config),
             ..
         } = self;
-
-        let uint32_chip = UInt32Chip::construct(uint32_config);
 
         let poseidon_2_chip = <PoseidonHasher<F> as Halo2Hasher<U2>>::construct(poseidon_2_config);
 
@@ -310,7 +297,7 @@ where
             )
         };
 
-        (uint32_chip, poseidon_2_chip, tree_r_merkle_chip)
+        (poseidon_2_chip, tree_r_merkle_chip)
     }
 }
 

@@ -1,4 +1,5 @@
 use std::convert::TryInto;
+use std::ops::Range;
 
 use filecoin_hashers::{
     get_poseidon_constants, poseidon::PoseidonHasher, Hasher, PoseidonArity, HALO2_STRENGTH_IS_STD,
@@ -22,7 +23,7 @@ use crate::{
 };
 
 // The number of Merkle challenges per challenged sector.
-pub const SECTOR_CHALLENGES: usize = 10;
+pub const CHALLENGE_COUNT_PER_SECTOR: usize = 10;
 
 // Configures whether or not to use the same number of partitions as Groth16 (for production sector
 // sizes).
@@ -53,14 +54,20 @@ pub fn partition_count<const SECTOR_NODES: usize>(num_sectors: usize) -> usize {
 
 // Absolute row of a challenged sector's `comm_r` public input.
 #[inline]
-const fn comm_r_row(sector_index: usize) -> usize {
-    sector_index * (1 + SECTOR_CHALLENGES)
+const fn comm_r_row(sector_index: usize, challenge_bit_len: usize) -> usize {
+    sector_index * (1 + CHALLENGE_COUNT_PER_SECTOR * challenge_bit_len)
 }
 
-// Absolute row of a challenged sector's Merkle challenge public input.
+// Absolute row of a challenged sector's Merkle challenge bits public inputs.
 #[inline]
-const fn challenge_row(sector_index: usize, challenge_index: usize) -> usize {
-    comm_r_row(sector_index) + 1 + challenge_index
+const fn challenge_bits_rows(
+    sector_index: usize,
+    challenge_index: usize,
+    challenge_bit_len: usize,
+) -> Range<usize> {
+    let first_sector_challenge_row = comm_r_row(sector_index, challenge_bit_len) + 1;
+    let start = first_sector_challenge_row + challenge_index * challenge_bit_len;
+    start..start + challenge_bit_len
 }
 
 #[allow(clippy::unwrap_used)]
@@ -70,15 +77,15 @@ pub fn generate_challenges<F: FieldExt, const SECTOR_NODES: usize>(
     // Sector's index in partition `k`.
     sector_index: usize,
     sector_id: u64,
-) -> [u32; SECTOR_CHALLENGES] {
+) -> [u32; CHALLENGE_COUNT_PER_SECTOR] {
     let sector_nodes = SECTOR_NODES as u64;
     let mut hasher = Sha256::new();
     hasher.update(randomness.to_repr().as_ref());
     hasher.update(sector_id.to_le_bytes());
 
-    let mut challenges = [0u32; SECTOR_CHALLENGES];
+    let mut challenges = [0u32; CHALLENGE_COUNT_PER_SECTOR];
     let partition_sectors = sectors_challenged_per_partition(SECTOR_NODES);
-    let mut challenge_index = (k * partition_sectors + sector_index) * SECTOR_CHALLENGES;
+    let mut challenge_index = (k * partition_sectors + sector_index) * CHALLENGE_COUNT_PER_SECTOR;
 
     for challenge in challenges.iter_mut() {
         let mut hasher = hasher.clone();
@@ -100,8 +107,8 @@ where
 {
     // Each challenged sector's `comm_r`.
     pub comms_r: Vec<Option<F>>,
-    // Each challenged sector's Merkle challenges.
-    pub challenges: Vec<[Option<u32>; SECTOR_CHALLENGES]>,
+    // Each challenged sector's Merkle challenges as bits.
+    pub challenges: Vec<[Vec<Option<bool>>; CHALLENGE_COUNT_PER_SECTOR]>,
 }
 
 impl<F, const SECTOR_NODES: usize>
@@ -125,6 +132,7 @@ where
         if sector_pad_len != 0 {
             partition_count += 1;
         }
+        let challenge_bit_len = SECTOR_NODES.trailing_zeros() as usize;
 
         assert!(vanilla_pub_inputs.k.is_some());
         let k = vanilla_pub_inputs.k.unwrap();
@@ -152,13 +160,17 @@ where
             let sector_id: u64 = sector.id.into();
             let comm_r: F = sector.comm_r.into();
             let challenges =
-                generate_challenges::<F, SECTOR_NODES>(randomness, k, sector_index, sector_id)
-                    .iter()
-                    .copied()
-                    .map(Some)
-                    .collect::<Vec<Option<u32>>>()
-                    .try_into()
-                    .unwrap();
+                generate_challenges::<F, SECTOR_NODES>(randomness, k, sector_index, sector_id);
+            let challenges = challenges
+                .iter()
+                .map(|&c| {
+                    (0..challenge_bit_len)
+                        .map(|i| Some(c >> i & 1 == 1))
+                        .collect()
+                })
+                .collect::<Vec<Vec<Option<bool>>>>()
+                .try_into()
+                .unwrap();
             pub_inputs.comms_r.push(Some(comm_r));
             pub_inputs.challenges.push(challenges);
         }
@@ -168,7 +180,7 @@ where
             pub_inputs.comms_r.push(*pub_inputs.comms_r.last().unwrap());
             pub_inputs
                 .challenges
-                .push(*pub_inputs.challenges.last().unwrap());
+                .push(pub_inputs.challenges.last().unwrap().clone());
         }
 
         pub_inputs
@@ -180,30 +192,52 @@ where
     F: FieldExt,
     PoseidonHasher<F>: Hasher<Field = F>,
 {
+    #[allow(clippy::unwrap_used)]
     pub fn empty() -> Self {
+        let challenge_bit_len = SECTOR_NODES.trailing_zeros() as usize;
         let challenged_sectors = sectors_challenged_per_partition(SECTOR_NODES);
+        let sector_challenges = std::iter::repeat(vec![None; challenge_bit_len])
+            .take(CHALLENGE_COUNT_PER_SECTOR)
+            .collect::<Vec<Vec<Option<bool>>>>()
+            .try_into()
+            .unwrap();
         PublicInputs {
             comms_r: vec![None; challenged_sectors],
-            challenges: vec![[None; SECTOR_CHALLENGES]; challenged_sectors],
+            challenges: vec![sector_challenges; challenged_sectors],
         }
     }
 
     #[allow(clippy::unwrap_used)]
     pub fn to_vec(&self) -> Vec<Vec<F>> {
         let num_sectors = self.comms_r.len();
+        let challenge_bit_len = SECTOR_NODES.trailing_zeros() as usize;
         assert_eq!(self.challenges.len(), num_sectors);
+        assert!(self.challenges.iter().all(|sector_challenges| {
+            sector_challenges
+                .iter()
+                .all(|bits| bits.len() == challenge_bit_len)
+        }),);
         assert!(
             self.comms_r.iter().all(Option::is_some)
-                && self
-                    .challenges
-                    .iter()
-                    .all(|challenges| challenges.iter().all(Option::is_some))
+                && self.challenges.iter().all(|sector_challenges| {
+                    sector_challenges
+                        .iter()
+                        .all(|bits| bits.iter().all(Option::is_some))
+                }),
+            "all public inputs must be set",
         );
-        let mut pub_inputs = Vec::with_capacity(num_sectors * (1 + SECTOR_CHALLENGES));
-        for (comm_r, challenges) in self.comms_r.iter().zip(self.challenges.iter()) {
+        let mut pub_inputs =
+            Vec::with_capacity(num_sectors * (1 + CHALLENGE_COUNT_PER_SECTOR * challenge_bit_len));
+        for (comm_r, sector_challenges) in self.comms_r.iter().zip(self.challenges.iter()) {
             pub_inputs.push(comm_r.unwrap());
-            for c in challenges {
-                pub_inputs.push(F::from(c.unwrap() as u64));
+            for challenge in sector_challenges {
+                for bit in challenge {
+                    if bit.unwrap() {
+                        pub_inputs.push(F::one());
+                    } else {
+                        pub_inputs.push(F::zero());
+                    }
+                }
             }
         }
         vec![pub_inputs]
@@ -219,7 +253,7 @@ where
     W: PoseidonArity<F>,
     PoseidonHasher<F>: Hasher<Field = F>,
 {
-    pub sector_proofs: Vec<SectorProof<F, U, V, W, SECTOR_NODES, SECTOR_CHALLENGES>>,
+    pub sector_proofs: Vec<SectorProof<F, U, V, W, SECTOR_NODES, CHALLENGE_COUNT_PER_SECTOR>>,
 }
 
 impl<F, P, const SECTOR_NODES: usize> From<&[vanilla::SectorProof<P>]>
@@ -312,18 +346,20 @@ where
     ) -> Result<(), Error> {
         let WindowPostCircuit { priv_inputs, .. } = self;
 
+        let challenge_bit_len = SECTOR_NODES.trailing_zeros() as usize;
         let challenged_sectors = sectors_challenged_per_partition(SECTOR_NODES);
         assert_eq!(priv_inputs.sector_proofs.len(), challenged_sectors);
 
         let advice = config.advice;
         let pi_col = config.pi;
 
-        let (uint32_chip, poseidon_2_chip, tree_r_merkle_chip) = config.construct_chips();
+        let (poseidon_2_chip, merkle_chip) = config.construct_chips();
 
         for (sector_index, sector_proof) in priv_inputs.sector_proofs.iter().enumerate() {
+            let mut layouter = layouter.namespace(|| format!("sector {}", sector_index));
             // Witness the sector's `comm_c` and `root_r`.
             let (comm_c, root_r) = layouter.assign_region(
-                || format!("witness sector {} comm_c and root_r", sector_index),
+                || "witness comm_c and root_r",
                 |mut region| {
                     let offset = 0;
                     let comm_c = region.assign_advice(
@@ -348,7 +384,11 @@ where
                 &[comm_c, root_r.clone()],
                 get_poseidon_constants::<F, U2>(),
             )?;
-            layouter.constrain_instance(comm_r.cell(), pi_col, comm_r_row(sector_index))?;
+            layouter.constrain_instance(
+                comm_r.cell(),
+                pi_col,
+                comm_r_row(sector_index, challenge_bit_len),
+            )?;
 
             for (i, (leaf_r, path_r)) in sector_proof
                 .leafs_r
@@ -356,37 +396,18 @@ where
                 .zip(sector_proof.paths_r.iter())
                 .enumerate()
             {
-                // Assign the challenge as 32 bits and constrain with public input.
-                let challenge_bits = uint32_chip.pi_assign_bits(
-                    layouter.namespace(|| {
-                        format!(
-                            "sector {} challenge {} assign challenge public input as 32 bits",
-                            sector_index, i,
-                        )
-                    }),
-                    pi_col,
-                    challenge_row(sector_index, i),
-                )?;
-
                 // Verify the challenge's TreeR Merkle proof.
-                let root_r_calc = tree_r_merkle_chip.compute_root_unassigned_leaf(
+                let root_r_calc = merkle_chip.compute_root_unassigned_leaf_pi_bits(
                     layouter.namespace(|| {
-                        format!(
-                            "sector {} challenge {} calculate comm_r from merkle proof",
-                            sector_index, i,
-                        )
+                        format!("challenge {} calculate comm_r from merkle proof", i)
                     }),
-                    &challenge_bits,
                     *leaf_r,
                     path_r,
+                    pi_col,
+                    challenge_bits_rows(sector_index, i, challenge_bit_len),
                 )?;
                 layouter.assign_region(
-                    || {
-                        format!(
-                            "sector {} challenge {} constrain root_r_calc",
-                            sector_index, i
-                        )
-                    },
+                    || format!("challenge {} constrain root_r_calc", i),
                     |mut region| region.constrain_equal(root_r_calc.cell(), root_r.cell()),
                 )?;
             }
@@ -481,11 +502,14 @@ where
         use halo2_proofs::{circuit::Value, dev::MockProver};
         use storage_proofs_core::halo2::gadgets::por;
 
+        let challenge_bit_len = SECTOR_NODES.trailing_zeros() as usize;
         let challenged_sectors = sectors_challenged_per_partition(SECTOR_NODES);
 
+        let sector_challenges =
+            vec![vec![Some(false); challenge_bit_len]; CHALLENGE_COUNT_PER_SECTOR];
         let pub_inputs = PublicInputs {
             comms_r: vec![Some(F::zero()); challenged_sectors],
-            challenges: vec![[Some(0); SECTOR_CHALLENGES]; challenged_sectors],
+            challenges: vec![sector_challenges.try_into().unwrap(); challenged_sectors],
         };
         let pub_inputs_vec = pub_inputs.to_vec();
 
@@ -498,8 +522,8 @@ where
             let sector_proof = SectorProof {
                 comm_c: Value::known(F::zero()),
                 root_r: Value::known(F::zero()),
-                leafs_r: [Value::known(F::zero()); SECTOR_CHALLENGES],
-                paths_r: vec![path_r; SECTOR_CHALLENGES].try_into().unwrap(),
+                leafs_r: [Value::known(F::zero()); CHALLENGE_COUNT_PER_SECTOR],
+                paths_r: vec![path_r; CHALLENGE_COUNT_PER_SECTOR].try_into().unwrap(),
                 _tree_r: std::marker::PhantomData,
             };
 

@@ -1,5 +1,5 @@
 use std::convert::TryInto;
-use std::ops::RangeInclusive;
+use std::ops::Range;
 
 use filecoin_hashers::{
     get_poseidon_constants, poseidon::PoseidonHasher, Hasher, PoseidonArity, HALO2_STRENGTH_IS_STD,
@@ -32,7 +32,13 @@ pub const CHALLENGE_COUNT: usize = 66;
 
 // Absolute rows of public inputs.
 const COMM_R_ROW: usize = 0;
-const CHALLENGE_ROWS: RangeInclusive<usize> = 1..=CHALLENGE_COUNT;
+const FIRST_CHALLENGE_BIT_ROW: usize = COMM_R_ROW + 1;
+
+#[inline]
+const fn challenge_bits_rows(challenge_index: usize, challenge_bits: usize) -> Range<usize> {
+    let start = FIRST_CHALLENGE_BIT_ROW + challenge_index * challenge_bits;
+    start..start + challenge_bits
+}
 
 #[allow(clippy::unwrap_used)]
 pub fn generate_challenges<F: FieldExt, const SECTOR_NODES: usize>(
@@ -64,7 +70,7 @@ where
     PoseidonHasher<F>: Hasher<Field = F>,
 {
     pub comm_r: Option<F>,
-    pub challenges: [Option<u32>; CHALLENGE_COUNT],
+    pub challenges: [Vec<Option<bool>>; CHALLENGE_COUNT],
 }
 
 impl<F, const SECTOR_NODES: usize>
@@ -74,7 +80,6 @@ where
     F: FieldExt,
     PoseidonHasher<F>: Hasher<Field = F>,
 {
-    #[allow(clippy::unwrap_used)]
     fn from(
         vanilla_pub_inputs: vanilla::PublicInputs<<PoseidonHasher<F> as Hasher>::Domain>,
     ) -> Self {
@@ -85,13 +90,18 @@ where
         let sector_id: u64 = vanilla_pub_inputs.sectors[0].id.into();
         let comm_r: F = vanilla_pub_inputs.sectors[0].comm_r.into();
 
+        let challenge_bit_len = SECTOR_NODES.trailing_zeros() as usize;
+
         let challenges = generate_challenges::<F, SECTOR_NODES>(randomness, sector_id)
             .iter()
-            .copied()
-            .map(Some)
-            .collect::<Vec<Option<u32>>>()
+            .map(|&c| {
+                (0..challenge_bit_len)
+                    .map(|i| Some(c >> i & 1 == 1))
+                    .collect()
+            })
+            .collect::<Vec<Vec<Option<bool>>>>()
             .try_into()
-            .unwrap();
+            .expect("failed to convert collected challenges bits into array");
 
         PublicInputs {
             comm_r: Some(comm_r),
@@ -105,20 +115,41 @@ where
     F: FieldExt,
     PoseidonHasher<F>: Hasher<Field = F>,
 {
+    #[allow(clippy::unwrap_used)]
     pub fn empty() -> Self {
+        let challenge_bit_len = SECTOR_NODES.trailing_zeros() as usize;
+        let challenges = vec![vec![None; challenge_bit_len]; CHALLENGE_COUNT];
         PublicInputs {
             comm_r: None,
-            challenges: [None; CHALLENGE_COUNT],
+            challenges: challenges.try_into().unwrap(),
         }
     }
 
     #[allow(clippy::unwrap_used)]
     pub fn to_vec(&self) -> Vec<Vec<F>> {
-        assert!(self.comm_r.is_some() && self.challenges.iter().all(Option::is_some));
-        let mut pub_inputs = Vec::with_capacity(1 + CHALLENGE_COUNT);
+        let challenge_bit_len = SECTOR_NODES.trailing_zeros() as usize;
+        assert!(self
+            .challenges
+            .iter()
+            .all(|bits| bits.len() == challenge_bit_len));
+        assert!(
+            self.comm_r.is_some()
+                && self
+                    .challenges
+                    .iter()
+                    .all(|bits| bits.iter().all(Option::is_some)),
+            "all public inputs must be set",
+        );
+        let mut pub_inputs = Vec::with_capacity(1 + CHALLENGE_COUNT * challenge_bit_len);
         pub_inputs.push(self.comm_r.unwrap());
-        for c in &self.challenges {
-            pub_inputs.push(F::from(c.unwrap() as u64));
+        for challenge in &self.challenges {
+            for bit in challenge {
+                if bit.unwrap() {
+                    pub_inputs.push(F::one());
+                } else {
+                    pub_inputs.push(F::zero());
+                }
+            }
         }
         vec![pub_inputs]
     }
@@ -174,7 +205,7 @@ where
         let advice = config.advice;
         let pi_col = config.pi;
 
-        let (uint32_chip, poseidon_2_chip, tree_r_merkle_chip) = config.construct_chips();
+        let (poseidon_2_chip, merkle_chip) = config.construct_chips();
 
         // Witness `comm_c` and `root_r`.
         let (comm_c, root_r) = layouter.assign_region(
@@ -199,29 +230,22 @@ where
         )?;
         layouter.constrain_instance(comm_r.cell(), pi_col, COMM_R_ROW)?;
 
-        for (i, ((leaf_r, path_r), challenge_row)) in priv_inputs
+        let challenge_bit_len = SECTOR_NODES.trailing_zeros() as usize;
+
+        for (i, (leaf_r, path_r)) in priv_inputs
             .leafs_r
             .iter()
             .zip(priv_inputs.paths_r.iter())
-            .zip(CHALLENGE_ROWS)
             .enumerate()
         {
-            // Assign the challenge as 32 bits and constrain with public input.
-            let challenge_bits = uint32_chip.pi_assign_bits(
-                layouter.namespace(|| {
-                    format!("challenge {} assign challenge public input as 32 bits", i,)
-                }),
-                pi_col,
-                challenge_row,
-            )?;
-
             // Verify the challenge's TreeR Merkle proof.
-            let root_r_calc = tree_r_merkle_chip.compute_root_unassigned_leaf(
+            let root_r_calc = merkle_chip.compute_root_unassigned_leaf_pi_bits(
                 layouter
                     .namespace(|| format!("challenge {} calculate comm_r from merkle proof", i)),
-                &challenge_bits,
                 *leaf_r,
                 path_r,
+                pi_col,
+                challenge_bits_rows(i, challenge_bit_len),
             )?;
             layouter.assign_region(
                 || format!("challenge {} constrain root_r_calc", i),
@@ -298,9 +322,12 @@ where
         use halo2_proofs::{circuit::Value, dev::MockProver};
         use storage_proofs_core::halo2::gadgets::por;
 
+        let challenge_bit_len = SECTOR_NODES.trailing_zeros() as usize;
+
+        let challenges = vec![vec![Some(false); challenge_bit_len]; CHALLENGE_COUNT];
         let pub_inputs = PublicInputs {
             comm_r: Some(F::zero()),
-            challenges: [Some(0); CHALLENGE_COUNT],
+            challenges: challenges.try_into().unwrap(),
         };
         let pub_inputs_vec = pub_inputs.to_vec();
 

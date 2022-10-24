@@ -25,7 +25,7 @@ fn is_winning<const SECTOR_NODES: usize>(setup_params: &SetupParams) -> bool {
     assert_eq!(setup_params.sector_size >> 5, SECTOR_NODES as u64);
     match (setup_params.challenge_count, setup_params.sector_count) {
         (winning::CHALLENGE_COUNT, winning::SECTORS_CHALLENGED) => true,
-        (window::SECTOR_CHALLENGES, sectors)
+        (window::CHALLENGE_COUNT_PER_SECTOR, sectors)
             if sectors == window::sectors_challenged_per_partition(SECTOR_NODES) =>
         {
             false

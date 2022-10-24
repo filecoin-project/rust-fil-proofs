@@ -71,7 +71,7 @@ impl PoStConfig {
             PoStType::Winning => (winning::SECTORS_CHALLENGED, winning::CHALLENGE_COUNT),
             PoStType::Window => (
                 window::sectors_challenged_per_partition(sector_nodes),
-                window::SECTOR_CHALLENGES,
+                window::CHALLENGE_COUNT_PER_SECTOR,
             ),
         };
 
