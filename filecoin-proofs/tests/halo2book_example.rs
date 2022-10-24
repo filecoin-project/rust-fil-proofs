@@ -7,6 +7,7 @@ use halo2_proofs::plonk::{
     Error, Fixed, Instance, Selector, SingleVerifier,
 };
 use halo2_proofs::poly::commitment::Params;
+use halo2_proofs::poly::Rotation;
 use halo2_proofs::transcript::{Blake2bRead, Blake2bWrite, Challenge255};
 use rand::rngs::OsRng;
 use std::marker::PhantomData;
@@ -62,6 +63,7 @@ struct FieldConfig {
     advice: [Column<Advice>; 2],
     instance: Column<Instance>,
     s_mul: Selector,
+    s_add: Selector,
 }
 
 impl<F: FieldExt> FieldChip<F> {
@@ -79,13 +81,15 @@ impl<F: FieldExt> FieldChip<F> {
         constant: Column<Fixed>,
     ) -> <Self as Chip<F>>::Config {
         meta.enable_equality(instance);
+
         meta.enable_constant(constant);
+
         for column in &advice {
             meta.enable_equality(*column);
         }
-        let s_mul = meta.selector();
 
-        /* proving works even without this gate for some reasons
+        let multiplication_selector = meta.selector();
+
         meta.create_gate("mul", |meta| {
             // To implement multiplication, we need three advice cells and a selector cell. We arrange them like so:
             //
@@ -99,7 +103,7 @@ impl<F: FieldExt> FieldChip<F> {
             let lhs = meta.query_advice(advice[0], Rotation::cur());
             let rhs = meta.query_advice(advice[1], Rotation::cur());
             let out = meta.query_advice(advice[0], Rotation::next());
-            let s_mul = meta.query_selector(s_mul);
+            let s_mul = meta.query_selector(multiplication_selector);
 
             // Finally, we return the polynomial expressions that constrain this gate.
             // For our multiplication gate, we only need a single polynomial constraint
@@ -109,12 +113,21 @@ impl<F: FieldExt> FieldChip<F> {
             // - When s_mul != 0, this constrains lhs * rhs = out.
             vec![s_mul * (lhs * rhs - out)]
         });
-        */
+
+        let addition_selector = meta.selector();
+        meta.create_gate("add", |meta| {
+            let lhs = meta.query_advice(advice[0], Rotation::cur());
+            let rhs = meta.query_advice(advice[1], Rotation::cur());
+            let out = meta.query_advice(advice[0], Rotation::next());
+            let addition_selector_expression = meta.query_selector(addition_selector);
+            vec![addition_selector_expression * (lhs + rhs - out)]
+        });
 
         FieldConfig {
             advice,
             instance,
-            s_mul,
+            s_mul: multiplication_selector,
+            s_add: addition_selector,
         }
     }
 }
@@ -186,18 +199,31 @@ impl<F: FieldExt> NumericInstruction<F> for FieldChip<F> {
     fn add(
         &self,
         mut layouter: impl Layouter<F>,
-        a: Number<F>,
-        b: Number<F>,
+        a: Self::Num,
+        b: Self::Num,
     ) -> Result<Number<F>, Error> {
         let config = self.config();
 
         layouter.assign_region(
             || "add",
             |mut region: Region<'_, F>| {
-                let value = a.0.value().copied() + b.0.value();
+                let mut offset = 0;
+
+                // Enable addition to be checked in the current row
+                config.s_add.enable(&mut region, offset)?;
+
+                // Copy the addition operands into the current row
+                let lhs =
+                    a.0.copy_advice(|| "lhs", &mut region, config.advice[0], offset)?;
+                let rhs =
+                    b.0.copy_advice(|| "rhs", &mut region, config.advice[1], offset)?;
+
+                // Assign the output of addition in the next row
+                offset += 1;
+                let out = lhs.value().zip(rhs.value()).map(|(lhs, rhs)| *lhs + *rhs);
 
                 region
-                    .assign_advice(|| "lhs * rhs", config.advice[0], 0, || value)
+                    .assign_advice(|| "lhs + rhs", config.advice[0], offset, || out)
                     .map(Number)
             },
         )
