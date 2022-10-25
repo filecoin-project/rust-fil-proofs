@@ -1338,6 +1338,25 @@ where
     }
 }
 
+impl<F, U, V, W, const SECTOR_NODES: usize> SdrPorepCircuit<F, U, V, W, SECTOR_NODES>
+where
+    F: FieldExt + storage_proofs_core::halo2::Halo2Field,
+    U: PoseidonArity<F>,
+    V: PoseidonArity<F>,
+    W: PoseidonArity<F>,
+    Sha256Hasher<F>: Hasher<Field = F>,
+    PoseidonHasher<F>: Hasher<Field = F>,
+{
+    pub fn proof_size(&self, batch_size: Option<usize>) -> usize {
+        let k = self.k() as usize;
+        let cost = halo2_proofs::dev::CircuitCost::<F::Curve, Self>::measure(k, self);
+        match batch_size {
+            Some(batch_size) => cost.proof_size(batch_size).into(),
+            None => cost.marginal_proof_size().into(),
+        }
+    }
+}
+
 #[test]
 #[ignore]
 fn get_k() {
@@ -1377,4 +1396,26 @@ fn get_k() {
 
     k = SdrPorepCircuit::<Fp, U8, U8, U2, SECTOR_NODES_64_GIB>::compute_k(Some(k));
     println!("Found k = {} (sector-size = 64gib)", k);
+}
+
+#[test]
+#[ignore]
+#[allow(dead_code)]
+fn get_proof_size() {
+    use generic_array::typenum::{U0, U4, U8};
+    use halo2_proofs::pasta::Fp;
+
+    type Circuit2Kib = SdrPorepCircuit<Fp, U8, U0, U0, SECTOR_NODES_2_KIB>;
+    type Circuit4Kib = SdrPorepCircuit<Fp, U8, U2, U0, SECTOR_NODES_4_KIB>;
+    type Circuit8Kib = SdrPorepCircuit<Fp, U8, U4, U0, SECTOR_NODES_8_KIB>;
+    type Circuit16Kib = SdrPorepCircuit<Fp, U8, U8, U0, SECTOR_NODES_16_KIB>;
+    type Circuit32Kib = SdrPorepCircuit<Fp, U8, U8, U2, SECTOR_NODES_32_KIB>;
+    type Circuit512Mib = SdrPorepCircuit<Fp, U8, U0, U0, SECTOR_NODES_512_MIB>;
+    type Circuit32Gib = SdrPorepCircuit<Fp, U8, U8, U0, SECTOR_NODES_32_GIB>;
+    type Circuit64Gib = SdrPorepCircuit<Fp, U8, U8, U2, SECTOR_NODES_64_GIB>;
+
+    let circ = Circuit2Kib::blank_circuit();
+    dbg!(circ.proof_size(None));
+    dbg!(circ.proof_size(Some(1)));
+    dbg!(circ.proof_size(Some(2)));
 }
