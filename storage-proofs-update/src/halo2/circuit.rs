@@ -34,10 +34,7 @@ use crate::{
     gen_partition_challenges, gen_partition_rhos,
     halo2::{
         apex_leaf_count, challenge_count,
-        gadgets::{
-            ApexTreeChip, ChallengeBitsChip, ChallengeBitsConfig, ChallengeLabelsChip,
-            ChallengeLabelsConfig,
-        },
+        gadgets::{ApexTreeChip, ChallengeLabelsChip, ChallengeLabelsConfig},
         partition_bit_len, partition_count, GROTH16_PARTITIONING,
     },
     phi, vanilla,
@@ -45,64 +42,44 @@ use crate::{
 
 pub const EMPTY_SECTOR_UPDATE_CIRCUIT_ID: &str = "update";
 
-// Calculates the absolute row index for each public input.
-struct PiRows<const SECTOR_NODES: usize> {
-    comm_r_old_row: usize,
-    comm_d_new_row: usize,
-    comm_r_new_row: usize,
-    first_challenge_row: usize,
-    first_rho_row: usize,
-    num_pub_inputs: usize,
+const COMM_R_OLD_ROW: usize = 0;
+const COMM_D_NEW_ROW: usize = COMM_R_OLD_ROW + 1;
+const COMM_R_NEW_ROW: usize = COMM_D_NEW_ROW + 1;
+
+#[inline]
+const fn partition_bits_rows(partition_bit_len: usize) -> Range<usize> {
+    let start = COMM_R_NEW_ROW + 1;
+    start..start + partition_bit_len
 }
 
-impl<const SECTOR_NODES: usize> PiRows<SECTOR_NODES> {
-    fn new(partition_bit_len: usize, challenge_count: usize) -> Self {
-        let num_challenge_pub_inputs = if GROTH16_PARTITIONING {
-            challenge_count
-        } else {
-            SECTOR_NODES.trailing_zeros() as usize
-        };
+#[inline]
+const fn challenge_bits_rows(
+    challenge_index: usize,
+    challenge_bit_len: usize,
+    partition_bit_len: usize,
+) -> Range<usize> {
+    let first_challenge_bit_row = partition_bits_rows(partition_bit_len).end;
+    let challenge_sans_partition_bit_len = challenge_bit_len - partition_bit_len;
+    let start = first_challenge_bit_row + challenge_index * (challenge_sans_partition_bit_len + 1);
+    start..start + challenge_sans_partition_bit_len
+}
 
-        let comm_r_old_row = partition_bit_len;
-        let comm_d_new_row = comm_r_old_row + 1;
-        let comm_r_new_row = comm_d_new_row + 1;
-        let first_challenge_row = comm_r_new_row + 1;
-        let first_rho_row = first_challenge_row + num_challenge_pub_inputs;
-        let num_pub_inputs = partition_bit_len + 3 + num_challenge_pub_inputs + challenge_count;
-
-        PiRows {
-            comm_r_old_row,
-            comm_d_new_row,
-            comm_r_new_row,
-            first_challenge_row,
-            first_rho_row,
-            num_pub_inputs,
-        }
-    }
-
-    #[inline]
-    fn partition_bits_rows(&self) -> Range<usize> {
-        0..self.comm_r_old_row
-    }
-
-    #[inline]
-    fn challenge_rows(&self) -> Range<usize> {
-        self.first_challenge_row..self.first_rho_row
-    }
-
-    #[inline]
-    fn rho_rows(&self) -> Range<usize> {
-        self.first_rho_row..self.num_pub_inputs
-    }
+#[inline]
+const fn rho_row(
+    challenge_index: usize,
+    challenge_bit_len: usize,
+    partition_bit_len: usize,
+) -> usize {
+    challenge_bits_rows(challenge_index, challenge_bit_len, partition_bit_len).end
 }
 
 #[derive(Clone)]
 pub struct PublicInputs<F: FieldExt, const SECTOR_NODES: usize> {
-    partition_bits: Vec<Option<bool>>,
     comm_r_old: Option<F>,
     comm_d_new: Option<F>,
     comm_r_new: Option<F>,
-    challenges: Vec<Option<u32>>,
+    partition_bits: Vec<Option<bool>>,
+    challenges: Vec<Vec<Option<bool>>>,
     rhos: Vec<Option<F>>,
 }
 
@@ -163,10 +140,13 @@ impl<F: FieldExt, const SECTOR_NODES: usize> PublicInputs<F, SECTOR_NODES> {
         // Strip the partition index from each challenge.
         let challenge_bit_len = SECTOR_NODES.trailing_zeros() as usize;
         let challenge_sans_partition_bit_len = challenge_bit_len - partition_bit_len;
-        let strip_partition_mask = (1u32 << challenge_sans_partition_bit_len) - 1;
         let challenges = challenges
             .iter()
-            .map(|c| Some(c & strip_partition_mask))
+            .map(|c| {
+                (0..challenge_sans_partition_bit_len)
+                    .map(|i| Some(c >> i & 1 == 1))
+                    .collect()
+            })
             .collect();
 
         PublicInputs {
@@ -179,66 +159,66 @@ impl<F: FieldExt, const SECTOR_NODES: usize> PublicInputs<F, SECTOR_NODES> {
         }
     }
 
+    // Public inputs:
+    // [
+    //     comm_r_old, comm_d_new, comm_r_new,
+    //     first_partition_bit, ..., last_partition_bit,
+    //     challenge_0_first_bit, ..., challenge_0_last_bit, rho_0,
+    //     ...,
+    //     challenge_n_first_bit, ..., challenge_n_last_bit, rho_n,
+    // ]
     pub fn to_vec(&self) -> Vec<Vec<F>> {
-        assert!(
-            self.partition_bits.iter().all(Option::is_some)
-                && self.comm_r_old.is_some()
-                && self.comm_d_new.is_some()
-                && self.comm_r_new.is_some()
-                && self.challenges.iter().all(Option::is_some)
-                && self.rhos.iter().all(Option::is_some),
-            "all public inputs must contain a value before converting into a vector",
-        );
-
+        let challenge_bit_len = SECTOR_NODES.trailing_zeros() as usize;
         let partition_bit_len = partition_bit_len(SECTOR_NODES);
+        let challenge_sans_partition_bit_len = challenge_bit_len - partition_bit_len;
         let challenge_count = challenge_count(SECTOR_NODES);
 
         assert_eq!(self.partition_bits.len(), partition_bit_len);
         assert_eq!(self.challenges.len(), challenge_count);
+        assert!(self
+            .challenges
+            .iter()
+            .all(|bits| bits.len() == challenge_sans_partition_bit_len),);
         assert_eq!(self.rhos.len(), challenge_count);
+        assert!(
+            self.comm_r_old.is_some()
+                && self.comm_d_new.is_some()
+                && self.comm_r_new.is_some()
+                && self.partition_bits.iter().all(Option::is_some)
+                && self
+                    .challenges
+                    .iter()
+                    .all(|bits| bits.iter().all(Option::is_some))
+                && self.rhos.iter().all(Option::is_some),
+            "all public inputs must be set",
+        );
 
-        let pub_inputs = if GROTH16_PARTITIONING {
-            let num_pub_inputs = self.partition_bits.len() + 3 + 2 * self.challenges.len();
-            let mut pub_inputs = Vec::<F>::with_capacity(num_pub_inputs);
+        let num_pub_inputs =
+            3 + partition_bit_len + challenge_count * (challenge_sans_partition_bit_len + 1);
 
-            for bit in self.partition_bits.iter() {
+        let mut pub_inputs = Vec::<F>::with_capacity(num_pub_inputs);
+        pub_inputs.push(self.comm_r_old.unwrap());
+        pub_inputs.push(self.comm_d_new.unwrap());
+        pub_inputs.push(self.comm_r_new.unwrap());
+
+        for bit in self.partition_bits.iter() {
+            if bit.unwrap() {
+                pub_inputs.push(F::one())
+            } else {
+                pub_inputs.push(F::zero())
+            }
+        }
+
+        for (challenge_bits, rho) in self.challenges.iter().zip(&self.rhos) {
+            for bit in challenge_bits {
                 if bit.unwrap() {
                     pub_inputs.push(F::one())
                 } else {
                     pub_inputs.push(F::zero())
                 }
             }
-
-            pub_inputs.push(self.comm_r_old.unwrap());
-            pub_inputs.push(self.comm_d_new.unwrap());
-            pub_inputs.push(self.comm_r_new.unwrap());
-
-            for challenge in self.challenges.iter() {
-                pub_inputs.push(F::from(challenge.unwrap() as u64));
-            }
-
-            for rho in self.rhos.iter() {
-                pub_inputs.push(rho.unwrap());
-            }
-
-            pub_inputs
-        } else {
-            let challenge_bit_len = SECTOR_NODES.trailing_zeros() as usize;
-            let num_pub_inputs = 3 + challenge_bit_len + 1;
-            let mut pub_inputs = Vec::<F>::with_capacity(num_pub_inputs);
-
-            pub_inputs.push(self.comm_r_old.unwrap());
-            pub_inputs.push(self.comm_d_new.unwrap());
-            pub_inputs.push(self.comm_r_new.unwrap());
-
-            let challenge = self.challenges[0].unwrap() as u64;
-            for i in 0..challenge_bit_len {
-                pub_inputs.push(F::from(challenge >> i & 1))
-            }
-
-            pub_inputs.push(self.rhos[0].unwrap());
-            pub_inputs
-        };
+            pub_inputs.push(rho.unwrap());
+        }
 
         vec![pub_inputs]
     }
@@ -472,10 +452,8 @@ where
         <TreeRHasher<F> as Halo2Hasher<W>>::Config,
         InsertConfig<F, W>,
     )>,
-    // We don't use the select, apex-tree, and challenge-bits chips when using single-challenge
-    // partitions (i.e. halo2 partitioning).
+    // `SelectChip` is only used when Groth16 partitioning is enabled (i.e. when using apex trees).
     select: Option<SelectConfig<F>>,
-    challenge_bits: Option<ChallengeBitsConfig<F, SECTOR_NODES>>,
     challenge_labels: ChallengeLabelsConfig<F>,
     advice: Vec<Column<Advice>>,
     pi: Column<Instance>,
@@ -515,13 +493,11 @@ where
             <TreeRHasher<F> as Halo2Hasher<U2>>::Chip,
             Option<ApexTreeChip<F>>,
             Option<SelectChip<F>>,
-            Option<ChallengeBitsChip<F, SECTOR_NODES>>,
             ChallengeLabelsChip<F>,
         ),
         Error,
     > {
         assert_eq!(GROTH16_PARTITIONING, self.select.is_some());
-        assert_eq!(GROTH16_PARTITIONING, self.challenge_bits.is_some());
 
         <TreeDHasher<F> as Halo2Hasher<TreeDArity>>::load(layouter, &self.sha256_2)?;
 
@@ -558,22 +534,16 @@ where
         let poseidon_2_chip =
             <TreeRHasher<F> as Halo2Hasher<U2>>::construct(self.poseidon_2.clone());
 
-        // Only use apex-tree, select, and challenge-bits chips when using multiple-challenge
-        // partitions (i.e. groth16 partitioning).
-        let (apex_tree_chip, select_chip, challenge_bits_chip) = if GROTH16_PARTITIONING {
+        // Only use apex-tree and select chips when using multiple-challenge partitions (i.e.
+        // groth16 partitioning is enabled).
+        let (apex_tree_chip, select_chip) = if GROTH16_PARTITIONING {
             let sha256_2_chip =
                 <TreeDHasher<F> as Halo2Hasher<TreeDArity>>::construct(self.sha256_2.clone());
             let apex_tree_chip = ApexTreeChip::with_subchips(sha256_2_chip);
             let select_chip = SelectChip::construct(self.select.clone().unwrap());
-            let challenge_bits_chip =
-                ChallengeBitsChip::construct(self.challenge_bits.clone().unwrap());
-            (
-                Some(apex_tree_chip),
-                Some(select_chip),
-                Some(challenge_bits_chip),
-            )
+            (Some(apex_tree_chip), Some(select_chip))
         } else {
-            (None, None, None)
+            (None, None)
         };
 
         let challenge_labels_chip = ChallengeLabelsChip::construct(self.challenge_labels.clone());
@@ -584,7 +554,6 @@ where
             poseidon_2_chip,
             apex_tree_chip,
             select_chip,
-            challenge_bits_chip,
             challenge_labels_chip,
         ))
     }
@@ -709,12 +678,13 @@ where
             Some((poseidon_top, insert_top))
         };
 
-        let (select, challenge_bits) = if GROTH16_PARTITIONING {
-            let select = SelectChip::configure(meta, advice_eq[..4].try_into().unwrap());
-            let challenge_bits = ChallengeBitsChip::configure(meta, &advice_eq);
-            (Some(select), Some(challenge_bits))
+        let select = if GROTH16_PARTITIONING {
+            Some(SelectChip::configure(
+                meta,
+                advice_eq[..4].try_into().unwrap(),
+            ))
         } else {
-            (None, None)
+            None
         };
 
         let challenge_labels =
@@ -732,7 +702,6 @@ where
             sub,
             top,
             select,
-            challenge_bits,
             challenge_labels,
             advice: advice_eq,
             pi,
@@ -833,18 +802,17 @@ where
         let apex_leaf_bit_len = apex_leaf_count.trailing_zeros() as usize;
         let challenge_to_apex_leaf_bit_len = challenge_sans_partition_bit_len - apex_leaf_bit_len;
 
-        // Check that `k` is valid for the sector-size.
-        if pub_inputs.partition_bits.iter().all(Option::is_some) {
-            let k: usize = pub_inputs
-                .partition_bits
-                .iter()
-                .enumerate()
-                .map(|(i, bit)| usize::from(bit.unwrap()) << i)
-                .sum();
-            assert!(
-                k < partition_count,
-                "partition-index exceeds partition count",
-            );
+        // Check that the partition index is valid for the sector-size.
+        let k = pub_inputs
+            .partition_bits
+            .iter()
+            .copied()
+            .rev()
+            .fold(Some(0), |acc, bit| {
+                acc.zip(bit).map(|(acc, bit)| (acc << 1) + bit as usize)
+            });
+        if let Some(k) = k {
+            assert!(k < partition_count);
         }
 
         assert_eq!(priv_inputs.apex_leafs.len(), apex_leaf_count);
@@ -879,82 +847,133 @@ where
             poseidon_2_chip,
             apex_tree_chip,
             select_chip,
-            challenge_bits_chip,
             challenge_labels_chip,
         ) = config.create_chips(&mut layouter)?;
 
-        assert!(apex_tree_chip.is_some() && select_chip.is_some() && challenge_bits_chip.is_some());
+        assert!(apex_tree_chip.is_some() && select_chip.is_some());
         let apex_tree_chip = apex_tree_chip.unwrap();
         let select_chip = select_chip.unwrap();
-        let challenge_bits_chip = challenge_bits_chip.unwrap();
 
         let advice = config.advice;
         let pi_col = config.pi;
 
         // Assign initial values.
-        let (partition_bits, comm_c, root_r_old, root_r_new, apex_leafs) = layouter.assign_region(
-            || "witness partition_bits, comm_c, root_r_old, root_r_new, apex_leafs",
-            |mut region| {
-                let mut advice_iter = AdviceIter::from(advice.clone());
+        let (comm_c, root_r_old, root_r_new, partition_bits, challenges, apex_leafs) = layouter
+            .assign_region(
+                || "assign comm_c, root_r_old, root_r_new, partition_bits, challenges, apex_leafs",
+                |mut region| {
+                    let mut advice_iter = AdviceIter::from(advice.clone());
 
-                let partition_bits = pub_inputs
-                    .partition_bits
-                    .iter()
-                    .enumerate()
-                    .map(|(i, bit_opt)| {
+                    let comm_c = {
                         let (offset, col) = advice_iter.next();
-                        let bit = match bit_opt {
-                            Some(bit) => Value::known(*bit),
-                            None => Value::unknown(),
-                        };
-                        region.assign_advice(
-                            || format!("partition_bit_{}", i),
-                            col,
-                            offset,
-                            || bit.map(Bit),
-                        )
-                    })
-                    .collect::<Result<Vec<AssignedBit<F>>, Error>>()?;
+                        region.assign_advice(|| "comm_c", col, offset, || priv_inputs.comm_c)?
+                    };
 
-                let comm_c = {
-                    let (offset, col) = advice_iter.next();
-                    region.assign_advice(|| "comm_c", col, offset, || priv_inputs.comm_c)?
-                };
-
-                let root_r_old = {
-                    let (offset, col) = advice_iter.next();
-                    region.assign_advice(|| "root_r_old", col, offset, || priv_inputs.root_r_old)?
-                };
-
-                let root_r_new = {
-                    let (offset, col) = advice_iter.next();
-                    region.assign_advice(|| "root_r_new", col, offset, || priv_inputs.root_r_new)?
-                };
-
-                let apex_leafs = priv_inputs
-                    .apex_leafs
-                    .iter()
-                    .enumerate()
-                    .map(|(i, apex_leaf)| {
+                    let root_r_old = {
                         let (offset, col) = advice_iter.next();
                         region.assign_advice(
-                            || format!("apex_leaf_{}", i),
+                            || "root_r_old",
                             col,
                             offset,
-                            || *apex_leaf,
-                        )
-                    })
-                    .collect::<Result<Vec<AssignedCell<F, F>>, Error>>()?;
+                            || priv_inputs.root_r_old,
+                        )?
+                    };
 
-                Ok((partition_bits, comm_c, root_r_old, root_r_new, apex_leafs))
-            },
-        )?;
+                    let root_r_new = {
+                        let (offset, col) = advice_iter.next();
+                        region.assign_advice(
+                            || "root_r_new",
+                            col,
+                            offset,
+                            || priv_inputs.root_r_new,
+                        )?
+                    };
 
-        let pi_rows = PiRows::<SECTOR_NODES>::new(partition_bit_len, challenge_count);
+                    let partition_bits = pub_inputs
+                        .partition_bits
+                        .iter()
+                        .enumerate()
+                        .map(|(i, bit_opt)| {
+                            let (offset, col) = advice_iter.next();
+                            let bit = match bit_opt {
+                                Some(bit) => Value::known(*bit),
+                                None => Value::unknown(),
+                            };
+                            region.assign_advice(
+                                || format!("partition_bits[{}]", i),
+                                col,
+                                offset,
+                                || bit.map(Bit),
+                            )
+                        })
+                        .collect::<Result<Vec<AssignedBit<F>>, Error>>()?;
 
-        // Constrain partition bits with public inputs.
-        for (bit, partition_bit_row) in partition_bits.iter().zip(pi_rows.partition_bits_rows()) {
-            layouter.constrain_instance(bit.cell(), pi_col, partition_bit_row)?;
+                    let challenges = pub_inputs
+                        .challenges
+                        .iter()
+                        .enumerate()
+                        .map(|(i, challenge_bits)| {
+                            challenge_bits
+                                .iter()
+                                .enumerate()
+                                .map(|(bit_index, bit)| {
+                                    let (offset, col) = advice_iter.next();
+                                    let bit = match bit {
+                                        Some(bit) => Value::known(Bit(*bit)),
+                                        None => Value::unknown(),
+                                    };
+                                    region.assign_advice(
+                                        || format!("challenge_{}_bits[{}]", i, bit_index),
+                                        col,
+                                        offset,
+                                        || bit,
+                                    )
+                                })
+                                .collect::<Result<Vec<AssignedBit<F>>, Error>>()
+                        })
+                        .collect::<Result<Vec<Vec<AssignedBit<F>>>, Error>>()?;
+
+                    let apex_leafs = priv_inputs
+                        .apex_leafs
+                        .iter()
+                        .enumerate()
+                        .map(|(i, apex_leaf)| {
+                            let (offset, col) = advice_iter.next();
+                            region.assign_advice(
+                                || format!("apex_leaf_{}", i),
+                                col,
+                                offset,
+                                || *apex_leaf,
+                            )
+                        })
+                        .collect::<Result<Vec<AssignedCell<F, F>>, Error>>()?;
+
+                    Ok((
+                        comm_c,
+                        root_r_old,
+                        root_r_new,
+                        partition_bits,
+                        challenges,
+                        apex_leafs,
+                    ))
+                },
+            )?;
+
+        // Constrain partition bits and challenge bits against public inputs.
+        for (bit, pi_row) in partition_bits
+            .iter()
+            .zip(partition_bits_rows(partition_bit_len))
+        {
+            layouter.constrain_instance(bit.cell(), pi_col, pi_row)?;
+        }
+        for (i, challenge_bits) in challenges.iter().enumerate() {
+            for (bit, pi_row) in challenge_bits.iter().zip(challenge_bits_rows(
+                i,
+                challenge_bit_len,
+                partition_bit_len,
+            )) {
+                layouter.constrain_instance(bit.cell(), pi_col, pi_row)?;
+            }
         }
 
         let poseidon_2_consts = get_poseidon_constants::<F, U2>();
@@ -990,35 +1009,24 @@ where
         };
 
         // Constrain witnessed commitments with public inputs.
-        layouter.constrain_instance(comm_r_old.cell(), pi_col, pi_rows.comm_r_old_row)?;
-        layouter.constrain_instance(comm_d_new.cell(), pi_col, pi_rows.comm_d_new_row)?;
-        layouter.constrain_instance(comm_r_new.cell(), pi_col, pi_rows.comm_r_new_row)?;
+        layouter.constrain_instance(comm_r_old.cell(), pi_col, COMM_R_OLD_ROW)?;
+        layouter.constrain_instance(comm_d_new.cell(), pi_col, COMM_D_NEW_ROW)?;
+        layouter.constrain_instance(comm_r_new.cell(), pi_col, COMM_R_NEW_ROW)?;
 
-        // Decompose public challenges into bits.
-        let challenges_bits = (0..challenge_count)
-            .zip(pi_rows.challenge_rows())
-            .map(|(i, challenge_row)| {
-                challenge_bits_chip.decompose(
-                    layouter.namespace(|| format!("decompose challenge {}", i)),
-                    pi_col,
-                    challenge_row,
-                )
-            })
-            .collect::<Result<Vec<Vec<AssignedBit<F>>>, Error>>()?;
-
-        for (i, ((challenge_bits, challenge_proof), rho_row)) in challenges_bits
+        for (i, (challenge_bits, challenge_proof)) in challenges
             .iter()
             .zip(priv_inputs.challenge_proofs.iter())
-            .zip(pi_rows.rho_rows())
             .enumerate()
         {
+            let mut layouter = layouter.namespace(|| format!("challenge {}", i));
+
             let (label_r_old, label_d_new, label_r_new) = challenge_labels_chip.assign_labels(
-                layouter.namespace(|| format!("challenge {} labels", i)),
+                layouter.namespace(|| "assign labels"),
                 challenge_proof.leaf_r_old,
                 challenge_proof.leaf_d_new,
                 challenge_proof.leaf_r_new,
                 pi_col,
-                rho_row,
+                rho_row(i, challenge_bit_len, partition_bit_len),
             )?;
 
             let challenge_and_partition_bits: Vec<AssignedBit<F>> = challenge_bits
@@ -1028,34 +1036,32 @@ where
                 .collect();
 
             let root_r_old_calc = tree_r_merkle_chip.compute_root_assigned_leaf(
-                layouter
-                    .namespace(|| format!("compute root_r_old from challenge {} merkle proof", i)),
+                layouter.namespace(|| "compute root_r_old from merkle proof"),
                 &challenge_and_partition_bits,
-                label_r_old.clone(),
+                label_r_old,
                 &challenge_proof.path_r_old,
             )?;
             layouter.assign_region(
-                || format!("check challenge {} root_r_old_calc", i),
-                |mut region| region.constrain_equal(root_r_old.cell(), root_r_old_calc.cell()),
+                || "check root_r_old_calc",
+                |mut region| region.constrain_equal(root_r_old_calc.cell(), root_r_old.cell()),
             )?;
 
             let root_r_new_calc = tree_r_merkle_chip.compute_root_assigned_leaf(
-                layouter
-                    .namespace(|| format!("compute root_r_new from challenge {} merkle proof", i)),
+                layouter.namespace(|| "compute root_r_new from merkle proof"),
                 &challenge_and_partition_bits,
-                label_r_new.clone(),
+                label_r_new,
                 &challenge_proof.path_r_new,
             )?;
             layouter.assign_region(
-                || format!("check challenge {} root_r_new_calc", i),
-                |mut region| region.constrain_equal(root_r_new.cell(), root_r_new_calc.cell()),
+                || "check root_r_new_calc",
+                |mut region| region.constrain_equal(root_r_new_calc.cell(), root_r_new.cell()),
             )?;
 
             let (challenge_bits_to_apex_leaf, apex_leaf_bits) =
                 challenge_bits.split_at(challenge_to_apex_leaf_bit_len);
 
             let apex_leaf = select_chip.select(
-                layouter.namespace(|| format!("select apex leaf for challenge {}", i)),
+                layouter.namespace(|| "select apex leaf"),
                 &apex_leafs,
                 apex_leaf_bits,
             )?;
@@ -1063,15 +1069,14 @@ where
             let path_to_apex_leaf = &challenge_proof.path_d_new[..challenge_to_apex_leaf_bit_len];
 
             let apex_leaf_calc = tree_d_merkle_chip.compute_root_assigned_leaf(
-                layouter
-                    .namespace(|| format!("compute apex leaf from challenge {} merkle proof", i)),
+                layouter.namespace(|| "compute apex leaf from merkle proof"),
                 challenge_bits_to_apex_leaf,
                 label_d_new.clone(),
                 path_to_apex_leaf,
             )?;
             layouter.assign_region(
-                || format!("check challenge {} apex_leaf_calc", i),
-                |mut region| region.constrain_equal(apex_leaf.cell(), apex_leaf_calc.cell()),
+                || "check apex_leaf_calc",
+                |mut region| region.constrain_equal(apex_leaf_calc.cell(), apex_leaf.cell()),
             )?;
         }
 
@@ -1109,17 +1114,17 @@ where
             poseidon_2_chip,
             apex_tree_chip,
             select_chip,
-            challenge_bits_chip,
             challenge_labels_chip,
         ) = config.create_chips(&mut layouter)?;
 
-        assert!(apex_tree_chip.is_none() && select_chip.is_none() && challenge_bits_chip.is_none());
+        assert!(apex_tree_chip.is_none() && select_chip.is_none());
 
         let advice = config.advice;
         let pi_col = config.pi;
 
-        let (comm_c, root_r_old, root_r_new, challenge_bits) = layouter.assign_region(
-            || "assign comm_c, root_r_old, root_r_new, challenge_bits",
+        // Assign initial values.
+        let (comm_c, root_r_old, root_r_new) = layouter.assign_region(
+            || "assign comm_c, root_r_old, and root_r_new",
             |mut region| {
                 let mut advice_iter = AdviceIter::from(advice.clone());
 
@@ -1138,19 +1143,7 @@ where
                     region.assign_advice(|| "root_r_new", col, offset, || priv_inputs.root_r_new)?
                 };
 
-                let challenge = pub_inputs.challenges[0];
-                let challenge_bits = (0..challenge_bit_len)
-                    .map(|i| {
-                        let (offset, col) = advice_iter.next();
-                        let bit = match challenge {
-                            Some(c) => Value::known(Bit(c >> i & 1 == 1)),
-                            None => Value::unknown(),
-                        };
-                        region.assign_advice(|| format!("challenge_bit_{}", i), col, offset, || bit)
-                    })
-                    .collect::<Result<Vec<AssignedBit<F>>, Error>>()?;
-
-                Ok((comm_c, root_r_old, root_r_new, challenge_bits))
+                Ok((comm_c, root_r_old, root_r_new))
             },
         )?;
 
@@ -1170,16 +1163,9 @@ where
             poseidon_2_consts,
         )?;
 
-        let pi_rows = PiRows::<SECTOR_NODES>::new(partition_bit_len, challenge_count);
-
         // Constrain witnessed commitments with public inputs.
-        layouter.constrain_instance(comm_r_old.cell(), pi_col, pi_rows.comm_r_old_row)?;
-        layouter.constrain_instance(comm_r_new.cell(), pi_col, pi_rows.comm_r_new_row)?;
-
-        // Constrain witnessed challenge bits with public inputs.
-        for (challenge_bit, pi_row) in challenge_bits.iter().zip(pi_rows.challenge_rows()) {
-            layouter.constrain_instance(challenge_bit.cell(), pi_col, pi_row)?;
-        }
+        layouter.constrain_instance(comm_r_old.cell(), pi_col, COMM_R_OLD_ROW)?;
+        layouter.constrain_instance(comm_r_new.cell(), pi_col, COMM_R_NEW_ROW)?;
 
         let challenge_proof = &priv_inputs.challenge_proofs[0];
 
@@ -1190,40 +1176,43 @@ where
             challenge_proof.leaf_d_new,
             challenge_proof.leaf_r_new,
             pi_col,
-            pi_rows.first_rho_row,
+            rho_row(0, challenge_bit_len, partition_bit_len),
         )?;
 
         // Check challenge's TreeROld merkle proof.
-        let root_r_old_calc = tree_r_merkle_chip.compute_root_assigned_leaf(
+        let root_r_old_calc = tree_r_merkle_chip.compute_root_assigned_leaf_pi_bits(
             layouter.namespace(|| "compute root_r_old from merkle proof"),
-            &challenge_bits,
             label_r_old,
             &challenge_proof.path_r_old,
+            pi_col,
+            challenge_bits_rows(0, challenge_bit_len, partition_bit_len),
         )?;
         layouter.assign_region(
             || "check root_r_old_calc",
-            |mut region| region.constrain_equal(root_r_old.cell(), root_r_old_calc.cell()),
+            |mut region| region.constrain_equal(root_r_old_calc.cell(), root_r_old.cell()),
         )?;
 
         // Check challenge's TreeDNew merkle proof.
-        let comm_d_new_calc = tree_d_merkle_chip.compute_root_assigned_leaf(
+        let comm_d_new_calc = tree_d_merkle_chip.compute_root_assigned_leaf_pi_bits(
             layouter.namespace(|| "compute comm_d_new from merkle proof"),
-            &challenge_bits,
             label_d_new,
             &challenge_proof.path_d_new,
+            pi_col,
+            challenge_bits_rows(0, challenge_bit_len, partition_bit_len),
         )?;
-        layouter.constrain_instance(comm_d_new_calc.cell(), pi_col, pi_rows.comm_d_new_row)?;
+        layouter.constrain_instance(comm_d_new_calc.cell(), pi_col, COMM_D_NEW_ROW)?;
 
         // Check challenge's TreeRNew merkle proof.
-        let root_r_new_calc = tree_r_merkle_chip.compute_root_assigned_leaf(
+        let root_r_new_calc = tree_r_merkle_chip.compute_root_assigned_leaf_pi_bits(
             layouter.namespace(|| "compute root_r_new from merkle proof"),
-            &challenge_bits,
             label_r_new,
             &challenge_proof.path_r_new,
+            pi_col,
+            challenge_bits_rows(0, challenge_bit_len, partition_bit_len),
         )?;
         layouter.assign_region(
             || "check root_r_new_calc",
-            |mut region| region.constrain_equal(root_r_new.cell(), root_r_new_calc.cell()),
+            |mut region| region.constrain_equal(root_r_new_calc.cell(), root_r_new.cell()),
         )?;
 
         Ok(())
@@ -1231,17 +1220,19 @@ where
 
     // Same as `Circuit::without_witnesses` except this associated function does not take `&self`.
     pub fn blank_circuit() -> Self {
+        let challenge_bit_len = SECTOR_NODES.trailing_zeros() as usize;
         let partition_bit_len = partition_bit_len(SECTOR_NODES);
+        let challenge_sans_partition_bit_len = challenge_bit_len - partition_bit_len;
         let challenge_count = challenge_count(SECTOR_NODES);
         let apex_leaf_count = apex_leaf_count(SECTOR_NODES);
 
         EmptySectorUpdateCircuit {
             pub_inputs: PublicInputs {
-                partition_bits: vec![None; partition_bit_len],
                 comm_r_old: None,
                 comm_d_new: None,
                 comm_r_new: None,
-                challenges: vec![None; challenge_count],
+                partition_bits: vec![None; partition_bit_len],
+                challenges: vec![vec![None; challenge_sans_partition_bit_len]; challenge_count],
                 rhos: vec![None; challenge_count],
             },
             priv_inputs: PrivateInputs {
@@ -1258,16 +1249,18 @@ where
         use generic_array::typenum::U0;
         use halo2_proofs::dev::MockProver;
 
+        let challenge_bit_len = SECTOR_NODES.trailing_zeros() as usize;
         let partition_bit_len = partition_bit_len(SECTOR_NODES);
+        let challenge_sans_partition_bit_len = challenge_bit_len - partition_bit_len;
         let challenge_count = challenge_count(SECTOR_NODES);
         let apex_leaf_count = apex_leaf_count(SECTOR_NODES);
 
         let pub_inputs = PublicInputs {
-            partition_bits: vec![Some(false); partition_bit_len],
             comm_r_old: Some(F::zero()),
             comm_d_new: Some(F::zero()),
             comm_r_new: Some(F::zero()),
-            challenges: vec![Some(0); challenge_count],
+            partition_bits: vec![Some(false); partition_bit_len],
+            challenges: vec![vec![Some(false); challenge_sans_partition_bit_len]; challenge_count],
             rhos: vec![Some(F::zero()); challenge_count],
         };
         let pub_inputs_vec = pub_inputs.to_vec();
