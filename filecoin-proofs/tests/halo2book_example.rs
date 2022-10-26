@@ -182,8 +182,6 @@ impl<F: FieldExt> NumericInstruction<F> for FieldChip<F> {
             |mut region: Region<'_, F>| {
                 config.s_mul.enable(&mut region, 0)?;
 
-                // Why do we need to use copy_advice function here?
-
                 a.0.copy_advice(|| "lhs", &mut region, config.advice[0], 0)?;
                 b.0.copy_advice(|| "rhs", &mut region, config.advice[1], 0)?;
 
@@ -306,7 +304,7 @@ impl<F: FieldExt> Circuit<F> for MyCircuit<F> {
 }
 
 #[test]
-fn test_mocked_prover() {
+fn test_a_qubed_mul_b_qubed_mocked_prover() {
     let k = 5;
 
     let constant = Fp::from(7);

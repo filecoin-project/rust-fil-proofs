@@ -36,6 +36,8 @@ fr32 = { path = "../fr32", version = "~5.0.0", default-features = false }
 once_cell = "1.8.0"
 blstrs = "0.5.0"
 halo2_proofs = "0.2.0"
+halo2_gadgets = "0.2.0"
+fil-halo2-gadgets = {path = "../fil-halo2-gadgets"}
 
 [dev-dependencies]
 criterion = "0.3"
