@@ -23,13 +23,13 @@ use filecoin_proofs::{
     validate_cache_for_precommit_phase2, verify_aggregate_seal_commit_proofs,
     verify_empty_sector_update_proof, verify_partition_proofs, verify_seal,
     verify_single_partition_proof, verify_window_post, verify_winning_post, Commitment,
-    DefaultTreeDomain, MerkleTreeTrait, PaddedBytesAmount, PieceInfo, PoRepConfig,
-    PoRepProofPartitions, PoStConfig, PoStType, PrivateReplicaInfo, ProverId, PublicReplicaInfo,
-    SealCommitOutput, SealPreCommitOutput, SealPreCommitPhase1Output, SectorShape16KiB,
-    SectorShape2KiB, SectorShape32KiB, SectorShape4KiB, SectorSize, SectorUpdateConfig,
-    UnpaddedByteIndex, UnpaddedBytesAmount, POREP_PARTITIONS, SECTOR_SIZE_16_KIB,
-    SECTOR_SIZE_2_KIB, SECTOR_SIZE_32_KIB, SECTOR_SIZE_4_KIB, WINDOW_POST_CHALLENGE_COUNT,
-    WINDOW_POST_SECTOR_COUNT, WINNING_POST_CHALLENGE_COUNT, WINNING_POST_SECTOR_COUNT,
+    DefaultTreeDomain, MerkleTreeTrait, PaddedBytesAmount, PieceInfo, PoRepConfig, PoStConfig,
+    PoStType, PrivateReplicaInfo, ProverId, PublicReplicaInfo, SealCommitOutput,
+    SealPreCommitOutput, SealPreCommitPhase1Output, SectorShape16KiB, SectorShape2KiB,
+    SectorShape32KiB, SectorShape4KiB, SectorUpdateConfig, UnpaddedByteIndex, UnpaddedBytesAmount,
+    SECTOR_SIZE_16_KIB, SECTOR_SIZE_2_KIB, SECTOR_SIZE_32_KIB, SECTOR_SIZE_4_KIB,
+    WINDOW_POST_CHALLENGE_COUNT, WINDOW_POST_SECTOR_COUNT, WINNING_POST_CHALLENGE_COUNT,
+    WINNING_POST_SECTOR_COUNT,
 };
 use fr32::bytes_into_fr;
 use log::info;
@@ -1377,18 +1377,7 @@ fn generate_piece_file(sector_size: u64) -> Result<(NamedTempFile, Vec<u8>)> {
 }
 
 fn porep_config(sector_size: u64, porep_id: [u8; 32], api_version: ApiVersion) -> PoRepConfig {
-    PoRepConfig {
-        sector_size: SectorSize(sector_size),
-        partitions: PoRepProofPartitions(
-            *POREP_PARTITIONS
-                .read()
-                .expect("POREP_PARTITIONS poisoned")
-                .get(&sector_size)
-                .expect("unknown sector size"),
-        ),
-        porep_id,
-        api_version,
-    }
+    PoRepConfig::new_groth16(sector_size, porep_id, api_version)
 }
 
 fn run_seal_pre_commit_phase1<Tree: 'static + MerkleTreeTrait>(

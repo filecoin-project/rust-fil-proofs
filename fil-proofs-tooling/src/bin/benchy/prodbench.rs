@@ -168,9 +168,8 @@ fn configure_global_config(inputs: &ProdbenchInputs) {
         .expect("POREP_PARTITIONS poisoned")
         .insert(inputs.sector_size_bytes(), inputs.porep_partitions);
     POREP_MINIMUM_CHALLENGES
-        .write()
-        .expect("POREP_MINIMUM_CHALLENGES poisoned")
-        .insert(inputs.sector_size_bytes(), inputs.porep_challenges);
+        .get_mut()
+        .insert(inputs.sector_size_bytes(), inputs.porep_challenges as usize);
 }
 
 pub fn run(
@@ -314,12 +313,11 @@ fn generate_params(i: &ProdbenchInputs) {
     );
     let dummy_porep_id = [0; 32];
 
-    cache_porep_params(PoRepConfig {
-        sector_size,
-        partitions,
-        porep_id: dummy_porep_id,
-        api_version: i.api_version(),
-    });
+    cache_porep_params(PoRepConfig::new_groth16(
+        i.sector_size_bytes(),
+        dummy_porep_id,
+        i.api_version(),
+    ));
 }
 
 fn cache_porep_params(porep_config: PoRepConfig) {

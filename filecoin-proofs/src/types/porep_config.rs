@@ -15,6 +15,7 @@ use crate::{
     constants::DefaultPieceHasher,
     parameters::public_params,
     types::{PaddedBytesAmount, PoRepProofPartitions, SectorSize, UnpaddedBytesAmount},
+    POREP_PARTITIONS,
 };
 
 #[derive(Clone, Copy, Debug)]
@@ -54,6 +55,22 @@ impl From<PoRepConfig> for SectorSize {
 }
 
 impl PoRepConfig {
+    /// construct PoRepConfig by groth16
+    pub fn new_groth16(sector_size: u64, porep_id: [u8; 32], api_version: ApiVersion) -> Self {
+        Self {
+            sector_size: SectorSize(sector_size),
+            partitions: PoRepProofPartitions(
+                *POREP_PARTITIONS
+                    .read()
+                    .expect("POREP_PARTITIONS poisoned")
+                    .get(&sector_size)
+                    .expect("unknown sector size"),
+            ),
+            porep_id,
+            api_version,
+        }
+    }
+
     /// Returns the cache identifier as used by `storage-proofs::parameter_cache`.
     pub fn get_cache_identifier<Tree: 'static + MerkleTreeTrait>(&self) -> Result<String> {
         let params = public_params::<Tree>(

@@ -9,13 +9,10 @@ use bincode::{deserialize, serialize};
 use fil_proofs_tooling::measure::FuncMeasurement;
 use fil_proofs_tooling::shared::{PROVER_ID, RANDOMNESS, TICKET_BYTES};
 use fil_proofs_tooling::{measure, Metadata};
-use filecoin_proofs::constants::{
-    POREP_PARTITIONS, WINDOW_POST_CHALLENGE_COUNT, WINDOW_POST_SECTOR_COUNT,
-};
+use filecoin_proofs::constants::{WINDOW_POST_CHALLENGE_COUNT, WINDOW_POST_SECTOR_COUNT};
 use filecoin_proofs::types::{
-    PaddedBytesAmount, PieceInfo, PoRepConfig, PoRepProofPartitions, PoStConfig,
-    SealCommitPhase1Output, SealPreCommitOutput, SealPreCommitPhase1Output, SectorSize,
-    UnpaddedBytesAmount,
+    PaddedBytesAmount, PieceInfo, PoRepConfig, PoStConfig, SealCommitPhase1Output,
+    SealPreCommitOutput, SealPreCommitPhase1Output, SectorSize, UnpaddedBytesAmount,
 };
 use filecoin_proofs::{
     add_piece, generate_piece_commitment, generate_window_post, seal_commit_phase1,
@@ -82,18 +79,7 @@ fn get_porep_config(sector_size: u64, api_version: ApiVersion) -> PoRepConfig {
     let arbitrary_porep_id = [99; 32];
 
     // Replicate the staged sector, write the replica file to `sealed_path`.
-    PoRepConfig {
-        sector_size: SectorSize(sector_size),
-        partitions: PoRepProofPartitions(
-            *POREP_PARTITIONS
-                .read()
-                .expect("POREP_PARTITONS poisoned")
-                .get(&(sector_size))
-                .expect("unknown sector size"),
-        ),
-        porep_id: arbitrary_porep_id,
-        api_version,
-    }
+    PoRepConfig::new_groth16(sector_size, arbitrary_porep_id, api_version)
 }
 
 fn run_pre_commit_phases<Tree: 'static + MerkleTreeTrait>(

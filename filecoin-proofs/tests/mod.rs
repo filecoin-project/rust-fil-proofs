@@ -4,7 +4,7 @@ use blstrs::Scalar as Fr;
 use ff::Field;
 use filecoin_proofs::{
     as_safe_commitment, verify_seal, DefaultOctLCTree, DefaultTreeDomain, PoRepConfig,
-    PoRepProofPartitions, SectorSize, POREP_PARTITIONS, SECTOR_SIZE_2_KIB, TEST_SEED,
+    SECTOR_SIZE_2_KIB, TEST_SEED,
 };
 use fr32::bytes_into_fr;
 use rand::SeedableRng;
@@ -26,18 +26,7 @@ fn test_verify_seal_fr32_validation() {
     // Test failure for invalid comm_r conversion.
     {
         let result = verify_seal::<DefaultOctLCTree>(
-            PoRepConfig {
-                sector_size: SectorSize(SECTOR_SIZE_2_KIB),
-                partitions: PoRepProofPartitions(
-                    *POREP_PARTITIONS
-                        .read()
-                        .expect("POREP_PARTITIONS poisoned")
-                        .get(&SECTOR_SIZE_2_KIB)
-                        .expect("unknown sector size"),
-                ),
-                porep_id: arbitrary_porep_id,
-                api_version: ApiVersion::V1_1_0,
-            },
+            PoRepConfig::new_groth16(SECTOR_SIZE_2_KIB, arbitrary_porep_id, ApiVersion::V1_1_0),
             not_convertible_to_fr_bytes,
             convertible_to_fr_bytes,
             [0; 32],
@@ -65,18 +54,7 @@ fn test_verify_seal_fr32_validation() {
     // Test failure for invalid comm_d conversion.
     {
         let result = verify_seal::<DefaultOctLCTree>(
-            PoRepConfig {
-                sector_size: SectorSize(SECTOR_SIZE_2_KIB),
-                partitions: PoRepProofPartitions(
-                    *POREP_PARTITIONS
-                        .read()
-                        .expect("POREP_PARTITIONS poisoned")
-                        .get(&SECTOR_SIZE_2_KIB)
-                        .expect("unknown sector size"),
-                ),
-                porep_id: arbitrary_porep_id,
-                api_version: ApiVersion::V1_1_0,
-            },
+            PoRepConfig::new_groth16(SECTOR_SIZE_2_KIB, arbitrary_porep_id, ApiVersion::V1_1_0),
             convertible_to_fr_bytes,
             not_convertible_to_fr_bytes,
             [0; 32],
@@ -108,18 +86,7 @@ fn test_verify_seal_fr32_validation() {
         assert!(out.is_ok(), "tripwire");
 
         let result = verify_seal::<DefaultOctLCTree>(
-            PoRepConfig {
-                sector_size: SectorSize(SECTOR_SIZE_2_KIB),
-                partitions: PoRepProofPartitions(
-                    *POREP_PARTITIONS
-                        .read()
-                        .expect("POREP_PARTITIONS poisoned")
-                        .get(&SECTOR_SIZE_2_KIB)
-                        .expect("unknown sector size"),
-                ),
-                porep_id: arbitrary_porep_id,
-                api_version: ApiVersion::V1_1_0,
-            },
+            PoRepConfig::new_groth16(SECTOR_SIZE_2_KIB, arbitrary_porep_id, ApiVersion::V1_1_0),
             non_zero_commitment_fr_bytes,
             non_zero_commitment_fr_bytes,
             [0; 32],

@@ -143,12 +143,7 @@ fn porep_info(sector_size: u64, api_version: ApiVersion) -> (CircuitInfo, usize)
     let info = with_shape!(
         sector_size,
         get_porep_info,
-        PoRepConfig {
-            sector_size: SectorSize(sector_size),
-            partitions,
-            porep_id: [0; 32],
-            api_version,
-        }
+        PoRepConfig::new_groth16(sector_size, [0; 32], api_version)
     );
     (info, partitions.into())
 }
