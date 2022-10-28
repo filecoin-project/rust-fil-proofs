@@ -252,7 +252,7 @@ mod tests {
         plonk::Error,
     };
 
-    use crate::{boolean::AssignedBit, sha256_compress::AssignedU32};
+    use crate::{boolean::AssignedBit, sha256::compress::AssignedU32};
 
     #[test]
     #[ignore]
