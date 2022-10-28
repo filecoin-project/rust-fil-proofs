@@ -22,7 +22,7 @@ use crate::{
 // Don't reformat code copied from `halo2_gadgets` repo.
 #[rustfmt::skip]
 #[allow(dead_code)]
-mod table16;
+pub(crate) mod table16;
 
 pub use table16::{BlockWord, Table16Chip, Table16Config};
 
@@ -39,7 +39,7 @@ pub const BLOCK_SIZE: usize = 16;
 pub const DIGEST_SIZE: usize = 8;
 
 // Each field element is eight 32-bit words.
-const FIELD_WORD_LEN: usize = 8;
+pub(crate) const FIELD_WORD_LEN: usize = 8;
 
 /// The set of circuit instructions required to use the [`Sha256`] gadget.
 pub trait Sha256Instructions<F: FieldExt>: Chip<F> {

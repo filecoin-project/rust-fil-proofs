@@ -1,6 +1,7 @@
 pub mod boolean;
 pub mod select;
 pub mod sha256;
+pub mod sha256_compress;
 pub mod uint32;
 pub mod utilities;
 
