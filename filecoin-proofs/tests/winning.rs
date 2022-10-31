@@ -21,7 +21,8 @@ use storage_proofs_core::api_version::ApiVersion;
 mod api_shared;
 
 use api_shared::{
-    create_fake_seal, create_seal, ARBITRARY_POREP_ID_V1_0_0, ARBITRARY_POREP_ID_V1_1_0, ARBITRARY_POREP_ID_V1_2_0, TEST_SEED,
+    create_fake_seal, create_seal, ARBITRARY_POREP_ID_V1_0_0, ARBITRARY_POREP_ID_V1_1_0,
+    ARBITRARY_POREP_ID_V1_2_0, TEST_SEED,
 };
 
 #[cfg(not(feature = "big-tests"))]
