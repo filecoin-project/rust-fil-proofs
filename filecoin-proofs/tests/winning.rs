@@ -82,6 +82,7 @@ where
     let porep_id = match api_version {
         ApiVersion::V1_0_0 => ARBITRARY_POREP_ID_V1_0_0,
         ApiVersion::V1_1_0 => ARBITRARY_POREP_ID_V1_1_0,
+        ApiVersion::V1_2_0 => ARBITRARY_POREP_ID_V1_2_0,
     };
 
     let (sector_id, replica, comm_r, cache_dir) = if fake {

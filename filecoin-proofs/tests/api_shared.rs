@@ -25,6 +25,7 @@ use tempfile::{tempdir, NamedTempFile, TempDir};
 // same porep_ids).
 pub const ARBITRARY_POREP_ID_V1_0_0: [u8; 32] = [127; 32];
 pub const ARBITRARY_POREP_ID_V1_1_0: [u8; 32] = [128; 32];
+pub const ARBITRARY_POREP_ID_V1_2_0: [u8; 32] = [129; 32];
 
 pub const TEST_SEED: [u8; 16] = [
     0x59, 0x62, 0xbe, 0x5d, 0x76, 0x3d, 0x31, 0x8d, 0x17, 0xdb, 0x37, 0x32, 0x54, 0x06, 0xbc, 0xe5,
