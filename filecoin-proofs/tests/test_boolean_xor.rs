@@ -9,7 +9,7 @@ use halo2_proofs::dev::MockProver;
 use halo2_proofs::pasta::{EqAffine, Fp};
 use halo2_proofs::plonk::{
     create_proof, keygen_pk, keygen_vk, verify_proof, Advice, Circuit, Column, ConstraintSystem,
-    Constraints, Error, Expression, Instance, Selector, SingleVerifier, VirtualCells,
+    Constraints, Error, Instance, Selector, SingleVerifier, VirtualCells,
 };
 use halo2_proofs::poly::commitment::Params;
 use halo2_proofs::poly::Rotation;

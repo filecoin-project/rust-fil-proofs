@@ -15,7 +15,7 @@ use halo2_proofs::{
 const FIELD_BITS: usize = 255;
 
 // Decompose each field element into 3-bit windows.
-const WINDOW_BITS: usize = 3;
+pub const WINDOW_BITS: usize = 3;
 const NUM_WINDOWS: usize = FIELD_BITS / WINDOW_BITS;
 
 // Returns `1` if both `b0` and `b1` are `1`.
@@ -303,7 +303,7 @@ where
 {
     // One column to store a field element to be decomposed (as well as each of the element's
     // running sum windows `z_i`) and one column for each of the window's 3 bits.
-    advice: [Column<Advice>; 1 + WINDOW_BITS],
+    pub advice: [Column<Advice>; 1 + WINDOW_BITS],
     running_sum: RunningSumConfig<F, WINDOW_BITS>,
 }
 
