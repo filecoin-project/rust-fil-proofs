@@ -1,4 +1,4 @@
-use ff::PrimeFieldBits;
+use ff::{Field, PrimeField, PrimeFieldBits};
 use fil_halo2_gadgets::boolean::{Bit, LeBitsChip, LeBitsConfig, WINDOW_BITS};
 use halo2_gadgets::utilities::bool_check;
 use halo2_proofs::arithmetic::FieldExt;
@@ -341,11 +341,15 @@ fn test_fp_xor_end_to_end() {
     }
 
     fn negative_test(a: Fp, b: Fp, c: Fp, use_circuit_prover_for_keygen: bool) {
+        println!("negative test ...");
         assert!(!test(a, b, c, use_circuit_prover_for_keygen));
+        println!("OK");
     }
 
     fn positive_test(a: Fp, b: Fp, c: Fp, use_circuit_prover_for_keygen: bool) {
+        println!("positive test ...");
         assert!(test(a, b, c, use_circuit_prover_for_keygen));
+        println!("OK");
     }
 
     let a = Fp::from(50);
@@ -354,4 +358,22 @@ fn test_fp_xor_end_to_end() {
     positive_test(a, b, c, true);
     positive_test(a, b, c, false);
     negative_test(a, b + Fp::one(), c, true);
+
+    let a = Fp::random(OsRng);
+    let b = Fp::random(OsRng);
+    let c = fp_xor(a, b);
+
+    positive_test(a, b, c, true);
+    positive_test(a, b, c, false);
+    negative_test(a, b + Fp::one(), c, true);
+}
+
+fn fp_xor(a: Fp, b: Fp) -> Fp {
+    let xor = a
+        .to_repr()
+        .iter()
+        .zip(b.to_repr().iter())
+        .map(|(byte1, byte2)| *byte1 ^ *byte2)
+        .collect::<Vec<u8>>();
+    Fp::from_repr(xor.try_into().unwrap()).unwrap()
 }
