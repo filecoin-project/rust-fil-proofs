@@ -24,7 +24,8 @@ use storage_proofs_core::{api_version::ApiVersion, sector::SectorId};
 mod api_shared;
 
 use api_shared::{
-    create_fake_seal, create_seal, ARBITRARY_POREP_ID_V1_0_0, ARBITRARY_POREP_ID_V1_1_0, TEST_SEED,
+    create_fake_seal, create_seal, ARBITRARY_POREP_ID_V1_0_0, ARBITRARY_POREP_ID_V1_1_0,
+    ARBITRARY_POREP_ID_V1_2_0, TEST_SEED,
 };
 
 #[cfg(not(feature = "big-tests"))]
@@ -273,6 +274,7 @@ where
     let porep_id = match api_version {
         ApiVersion::V1_0_0 => ARBITRARY_POREP_ID_V1_0_0,
         ApiVersion::V1_1_0 => ARBITRARY_POREP_ID_V1_1_0,
+        ApiVersion::V1_2_0 => ARBITRARY_POREP_ID_V1_2_0,
     };
 
     for _ in 0..total_sector_count {
@@ -408,6 +410,7 @@ where
     let porep_id = match api_version {
         ApiVersion::V1_0_0 => ARBITRARY_POREP_ID_V1_0_0,
         ApiVersion::V1_1_0 => ARBITRARY_POREP_ID_V1_1_0,
+        ApiVersion::V1_2_0 => ARBITRARY_POREP_ID_V1_2_0,
     };
 
     for _ in 0..total_sector_count {
