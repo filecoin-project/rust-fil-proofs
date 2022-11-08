@@ -1,7 +1,6 @@
-use ff::{Field, PrimeField, PrimeFieldBits};
-use fil_halo2_gadgets::boolean::{Bit, LeBitsChip, LeBitsConfig, WINDOW_BITS};
+use ff::{Field, PrimeField};
+use fil_halo2_gadgets::boolean::{lebs2ip, Bit, LeBitsChip, LeBitsConfig, WINDOW_BITS};
 use halo2_gadgets::utilities::bool_check;
-use halo2_proofs::arithmetic::FieldExt;
 use halo2_proofs::circuit::{AssignedCell, Cell, Layouter, Region, SimpleFloorPlanner, Value};
 use halo2_proofs::dev::MockProver;
 use halo2_proofs::pasta::{EqAffine, Fp};
@@ -14,22 +13,17 @@ use halo2_proofs::poly::Rotation;
 use halo2_proofs::transcript::{Blake2bRead, Blake2bWrite, Challenge255};
 use rand::rngs::OsRng;
 use std::convert::TryInto;
-use std::marker::PhantomData;
 
-struct BooleanXorChip<F: FieldExt + PrimeFieldBits> {
+struct BooleanXorChip {
     config: BooleanXorConfig,
-    _p: PhantomData<F>,
 }
 
-impl<F: FieldExt + PrimeFieldBits> BooleanXorChip<F> {
+impl BooleanXorChip {
     fn construct(config: BooleanXorConfig) -> Self {
-        BooleanXorChip {
-            config,
-            _p: PhantomData,
-        }
+        BooleanXorChip { config }
     }
     fn configure(
-        meta: &mut ConstraintSystem<F>,
+        meta: &mut ConstraintSystem<Fp>,
         a: Column<Advice>,
         b: Column<Advice>,
         xor_result: Column<Advice>,
@@ -39,7 +33,7 @@ impl<F: FieldExt + PrimeFieldBits> BooleanXorChip<F> {
         meta.enable_equality(xor_result);
         meta.enable_equality(xor_result_pi);
 
-        meta.create_gate("xor", |meta: &mut VirtualCells<F>| {
+        meta.create_gate("xor", |meta: &mut VirtualCells<Fp>| {
             let selector = meta.query_selector(selector);
             let a = meta.query_advice(a, Rotation::cur());
             let b = meta.query_advice(b, Rotation::cur());
@@ -69,33 +63,33 @@ impl<F: FieldExt + PrimeFieldBits> BooleanXorChip<F> {
     }
 }
 
-trait Instructions<F: FieldExt + PrimeFieldBits> {
+trait Instructions {
     fn xor(
         &self,
-        layouter: impl Layouter<F>,
+        layouter: impl Layouter<Fp>,
         a: Value<Bit>,
         b: Value<Bit>,
         advice_offset: usize,
-    ) -> Result<AssignedCell<Bit, F>, Error>;
+    ) -> Result<AssignedCell<Bit, Fp>, Error>;
     fn expose_public(
         &self,
-        layouter: impl Layouter<F>,
+        layouter: impl Layouter<Fp>,
         cell: Cell,
         instance_offset: usize,
     ) -> Result<(), Error>;
 }
 
-impl<F: FieldExt + PrimeFieldBits> Instructions<F> for BooleanXorChip<F> {
+impl Instructions for BooleanXorChip {
     fn xor(
         &self,
-        mut layouter: impl Layouter<F>,
+        mut layouter: impl Layouter<Fp>,
         a: Value<Bit>,
         b: Value<Bit>,
         advice_offset: usize,
-    ) -> Result<AssignedCell<Bit, F>, Error> {
+    ) -> Result<AssignedCell<Bit, Fp>, Error> {
         layouter.assign_region(
             || "xor",
-            |mut region: Region<F>| {
+            |mut region: Region<Fp>| {
                 // enable selector for the XOR gate
                 self.config.selector.enable(&mut region, advice_offset)?;
 
@@ -124,7 +118,7 @@ impl<F: FieldExt + PrimeFieldBits> Instructions<F> for BooleanXorChip<F> {
 
     fn expose_public(
         &self,
-        mut layouter: impl Layouter<F>,
+        mut layouter: impl Layouter<Fp>,
         cell: Cell,
         instance_offset: usize,
     ) -> Result<(), Error> {
@@ -134,9 +128,9 @@ impl<F: FieldExt + PrimeFieldBits> Instructions<F> for BooleanXorChip<F> {
 }
 
 #[derive(Default)]
-struct FpXorCircuit<F: FieldExt + PrimeFieldBits> {
-    a: Value<F>,
-    b: Value<F>,
+struct FpXorCircuit {
+    a: Value<Fp>,
+    b: Value<Fp>,
 }
 
 #[derive(Debug, Clone)]
@@ -148,21 +142,17 @@ struct BooleanXorConfig {
     xor_result_pi: Column<Instance>,
 }
 
-impl<F: FieldExt + PrimeFieldBits> FpXorCircuit<F> {
+impl FpXorCircuit {
     fn k(&self) -> u32 {
-        15 // defined empirically
+        15 + 1 // defined empirically
     }
-    fn public_input(&self, xor_result: F) -> Vec<F> {
-        xor_result
-            .to_le_bits()
-            .into_iter()
-            .map(|one| if one { F::one() } else { F::zero() })
-            .collect::<Vec<F>>()
+    fn public_input(&self, xor_result: Fp) -> Vec<Fp> {
+        vec![xor_result]
     }
 }
 
-impl<F: FieldExt + PrimeFieldBits> Circuit<F> for FpXorCircuit<F> {
-    type Config = (LeBitsConfig<F>, BooleanXorConfig);
+impl Circuit<Fp> for FpXorCircuit {
+    type Config = (LeBitsConfig<Fp>, BooleanXorConfig);
     type FloorPlanner = SimpleFloorPlanner;
 
     fn without_witnesses(&self) -> Self {
@@ -172,7 +162,7 @@ impl<F: FieldExt + PrimeFieldBits> Circuit<F> for FpXorCircuit<F> {
         }
     }
 
-    fn configure(meta: &mut ConstraintSystem<F>) -> Self::Config {
+    fn configure(meta: &mut ConstraintSystem<Fp>) -> Self::Config {
         let advice: [Column<Advice>; 1 + WINDOW_BITS] = (0..1 + WINDOW_BITS)
             .map(|_| meta.advice_column())
             .collect::<Vec<Column<Advice>>>()
@@ -195,7 +185,7 @@ impl<F: FieldExt + PrimeFieldBits> Circuit<F> for FpXorCircuit<F> {
     fn synthesize(
         &self,
         config: Self::Config,
-        mut layouter: impl Layouter<F>,
+        mut layouter: impl Layouter<Fp>,
     ) -> Result<(), Error> {
         // Assign `self.value` in the first advice column because that column is equality
         // constrained by the running sum chip.
@@ -224,6 +214,7 @@ impl<F: FieldExt + PrimeFieldBits> Circuit<F> for FpXorCircuit<F> {
                     let mut offset = 0;
                     let value = region.assign_advice(|| "value", value_col, offset, || self.b)?;
                     offset += 1;
+
                     le_bits_chip.copy_decompose_within_region(&mut region, offset, value)
                 },
             )?
@@ -232,7 +223,7 @@ impl<F: FieldExt + PrimeFieldBits> Circuit<F> for FpXorCircuit<F> {
 
         #[allow(clippy::needless_collect)]
         // execute bitwise xoring of our values decomposed previously
-        let cells = bits1
+        let values: Vec<AssignedCell<Bit, Fp>> = bits1
             .zip(bits2)
             .enumerate()
             .map(
@@ -250,20 +241,58 @@ impl<F: FieldExt + PrimeFieldBits> Circuit<F> for FpXorCircuit<F> {
                         )
                         .expect("couldn't perform single XOR operation");
 
-                    xor_result.cell()
+                    xor_result
                 },
             )
-            .collect::<Vec<Cell>>();
+            .collect::<Vec<AssignedCell<Bit, Fp>>>();
 
-        for (index, cell) in cells.into_iter().enumerate() {
-            xor_chip
-                .expose_public(
-                    layouter.namespace(|| format!("exposing {}", index)),
-                    cell,
-                    index,
-                )
-                .expect("couldn't expose single bit of XOR result");
-        }
+        // for convenience let's compose 255 Fps (1 or 0) into single Fp
+        let chunks_iter = values.chunks(64);
+        let limbs = chunks_iter
+            .map(|limb_slice| {
+                let mut bits = limb_slice
+                    .iter()
+                    .map(|limb_value_bit| {
+                        let mut bit = false;
+                        limb_value_bit.value().map(|limb_value_bit| {
+                            if limb_value_bit.0 {
+                                bit = true;
+                            }
+                        });
+                        bit
+                    })
+                    .collect::<Vec<bool>>();
+                // final chunk contains less than 64 bits as Fp contains 255 bits total
+                if bits.len() < 64 {
+                    bits.append(&mut vec![false; 64 - bits.len()])
+                }
+                lebs2ip::<64>(&bits.try_into().unwrap())
+            })
+            .collect::<Vec<u64>>();
+
+        let fp_composed = Fp::from_raw(limbs.try_into().unwrap());
+
+        // expose single composed Fp which holds XOR result
+        let cell = layouter.assign_region(
+            || "assign xor result",
+            |mut region| {
+                let cell = region.assign_advice(
+                    || "value",
+                    xor_chip.config.xor_result,
+                    255,
+                    || Value::known(fp_composed),
+                );
+                cell
+            },
+        )?;
+
+        xor_chip
+            .expose_public(
+                layouter.namespace(|| "exposing xor result as a field element"),
+                cell.cell(),
+                0,
+            )
+            .expect("couldn't expose xor field element");
 
         Ok(())
     }
