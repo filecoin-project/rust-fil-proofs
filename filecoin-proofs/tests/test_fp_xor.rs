@@ -276,13 +276,12 @@ impl Circuit<Fp> for FpXorCircuit {
         let cell = layouter.assign_region(
             || "assign xor result",
             |mut region| {
-                let cell = region.assign_advice(
+                region.assign_advice(
                     || "value",
                     xor_chip.config.xor_result,
                     255,
                     || Value::known(fp_composed),
-                );
-                cell
+                )
             },
         )?;
 
