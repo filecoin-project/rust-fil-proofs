@@ -1,5 +1,5 @@
 use ff::{PrimeField, PrimeFieldBits};
-use fil_halo2_gadgets::boolean::{lebs2ip, Bit};
+use fil_halo2_gadgets::boolean::{AssignedBit, Bit};
 use halo2_gadgets::utilities::bool_check;
 use halo2_gadgets::utilities::decompose_running_sum::{RunningSum, RunningSumConfig};
 use halo2_proofs::circuit::{AssignedCell, Cell, Layouter, Region, SimpleFloorPlanner, Value};
@@ -17,15 +17,29 @@ use rand::Rng;
 use std::convert::TryInto;
 
 const WORD_BIT_LENGTH: usize = 32;
-const WINDOW_BIT_LENGTH: usize = 3;
-const WINDOWS_NUMBER: usize = (WORD_BIT_LENGTH + WINDOW_BIT_LENGTH - 1) / WINDOW_BIT_LENGTH;
+const WINDOW_BIT_LENGTH: usize = 2;
+const NUM_WINDOWS: usize = (WORD_BIT_LENGTH + WINDOW_BIT_LENGTH - 1) / WINDOW_BIT_LENGTH;
 
-#[derive(Clone)]
-struct RangeCheckConfig {
-    running_sum: RunningSumConfig<Fp, WINDOW_BIT_LENGTH>,
+type RangeCheckConfig = RunningSumConfig<Fp, WINDOW_BIT_LENGTH>;
+
+struct RangeCheckChip {
+    config: RangeCheckConfig,
 }
 
-impl RangeCheckConfig {
+impl RangeCheckChip {
+    fn construct(config: RangeCheckConfig) -> Self {
+        RangeCheckChip { config }
+    }
+
+    fn configure(
+        meta: &mut ConstraintSystem<Fp>,
+        z: Column<Advice>,
+        q_range_check: Selector,
+    ) -> RangeCheckConfig {
+        // TODO Figure out how RunningSum works and how to split words into windows correctly
+        RunningSumConfig::<Fp, WINDOW_BIT_LENGTH>::configure(meta, q_range_check, z)
+    }
+
     fn witness_decompose(
         &self,
         region: &mut Region<'_, Fp>,
@@ -35,14 +49,8 @@ impl RangeCheckConfig {
         word_num_bits: usize,
         num_windows: usize,
     ) -> Result<RunningSum<Fp>, Error> {
-        self.running_sum.witness_decompose(
-            region,
-            offset,
-            alpha,
-            strict,
-            word_num_bits,
-            num_windows,
-        )
+        self.config
+            .witness_decompose(region, offset, alpha, strict, word_num_bits, num_windows)
     }
 
     fn copy_decompose(
@@ -54,30 +62,8 @@ impl RangeCheckConfig {
         word_num_bits: usize,
         num_windows: usize,
     ) -> Result<RunningSum<Fp>, Error> {
-        self.running_sum
+        self.config
             .copy_decompose(region, offset, alpha, strict, word_num_bits, num_windows)
-    }
-}
-
-struct RangeCheckChip {
-    config: RangeCheckConfig,
-}
-
-impl RangeCheckChip {
-    fn construct(config: RangeCheckConfig) -> Self {
-        RangeCheckChip { config }
-    }
-
-    fn configure(meta: &mut ConstraintSystem<Fp>) -> RangeCheckConfig {
-        let z = meta.advice_column();
-        let q_range_check = meta.selector();
-        let constants = meta.fixed_column();
-        meta.enable_constant(constants);
-
-        let running_sum =
-            RunningSumConfig::<Fp, WINDOW_BIT_LENGTH>::configure(meta, q_range_check, z);
-
-        RangeCheckConfig { running_sum }
     }
 
     fn range_check(
@@ -89,26 +75,26 @@ impl RangeCheckChip {
             || "range check",
             |mut region| {
                 let offset = 0;
-                let zs = self.config.witness_decompose(
+                let zs = self.witness_decompose(
                     &mut region,
                     offset,
                     a,
                     true,
                     WORD_BIT_LENGTH,
-                    WINDOWS_NUMBER,
+                    NUM_WINDOWS,
                 )?;
 
                 let b = zs[0].clone();
 
-                let offset = offset + WINDOWS_NUMBER + 1;
+                let offset = offset + NUM_WINDOWS + 1;
 
-                let running_sum = self.config.copy_decompose(
+                let running_sum = self.copy_decompose(
                     &mut region,
                     offset,
                     b,
                     true,
                     WORD_BIT_LENGTH,
-                    WINDOWS_NUMBER,
+                    NUM_WINDOWS,
                 )?;
 
                 Ok(running_sum[0].clone())
@@ -131,31 +117,28 @@ impl AssignFp32BitsChip {
     fn construct(config: AssignFp32BitsConfig) -> Self {
         AssignFp32BitsChip { config }
     }
-    fn configure(meta: &mut ConstraintSystem<Fp>) -> AssignFp32BitsConfig {
-        let bits_column = meta.advice_column();
-        let bits_assignment_selector = meta.selector();
-        meta.enable_equality(bits_column);
-
+    fn configure(
+        meta: &mut ConstraintSystem<Fp>,
+        bits_column: Column<Advice>,
+        s_bits_assignment: Selector,
+    ) -> AssignFp32BitsConfig {
         meta.create_gate("boolean constraint", |meta: &mut VirtualCells<Fp>| {
-            let selector = meta.query_selector(bits_assignment_selector);
+            let selector = meta.query_selector(s_bits_assignment);
             let bit = meta.query_advice(bits_column, Rotation::cur());
 
-            Constraints::with_selector(
-                selector,
-                vec![("a is boolean", bool_check(bit))].into_iter(),
-            )
+            Constraints::with_selector(selector, vec![("a is boolean", bool_check(bit))])
         });
 
         AssignFp32BitsConfig {
             bits_column,
-            bits_assignment_selector,
+            bits_assignment_selector: s_bits_assignment,
         }
     }
 
     fn assign_bit(
         &self,
         region: &mut Region<Fp>,
-        bit: Bit,
+        bit: Value<Bit>,
         offset: usize,
     ) -> Result<AssignedCell<Bit, Fp>, Error> {
         self.config
@@ -165,7 +148,7 @@ impl AssignFp32BitsChip {
             || format!("bit assignment {}", offset),
             self.config.bits_column,
             offset,
-            || Value::known(bit),
+            || bit,
         )
     }
 
@@ -173,22 +156,20 @@ impl AssignFp32BitsChip {
         &self,
         mut layouter: impl Layouter<Fp>,
         fp: Value<Fp>,
-    ) -> Result<Vec<AssignedCell<Bit, Fp>>, Error> {
+    ) -> Result<Vec<AssignedBit<Fp>>, Error> {
         let assigned_bits: Vec<AssignedCell<Bit, Fp>> = layouter.assign_region(
             || "assign 32 first (little endian) bits of fp",
             |mut region| {
-                let mut bits: Vec<bool> = vec![];
+                let mut bits = vec![Value::unknown(); 32];
                 fp.map(|fp| {
-                    // collect only 32-bit word contained in Fp
-                    for (index, bit) in fp.to_le_bits().into_iter().enumerate() {
-                        if index < 32 {
-                            bits.push(bit)
-                        }
+                    for (dst, src) in bits.iter_mut().zip(fp.to_le_bits()) {
+                        *dst = Value::known(Bit(src));
                     }
                 });
+
                 bits.into_iter()
                     .enumerate()
-                    .map(|(index, bit)| self.assign_bit(&mut region, Bit::from(bit), index))
+                    .map(|(index, bit)| self.assign_bit(&mut region, bit, index))
                     .collect()
             },
         )?;
@@ -243,14 +224,12 @@ impl PackChip {
         )
     }
 
-    fn configure(meta: &mut ConstraintSystem<Fp>) -> PackChipConfig {
-        let fp = meta.advice_column();
-        let bits = meta.advice_column();
-        let selector = meta.selector();
-
-        meta.enable_equality(fp);
-        meta.enable_equality(bits);
-
+    fn configure(
+        meta: &mut ConstraintSystem<Fp>,
+        fp: Column<Advice>,
+        bits: Column<Advice>,
+        selector: Selector,
+    ) -> PackChipConfig {
         meta.create_gate("pack", |meta| {
             let selector = meta.query_selector(selector);
 
@@ -266,46 +245,16 @@ impl PackChip {
 
             let fp = meta.query_advice(fp, Rotation::cur());
 
-            Constraints::with_selector(
-                selector,
-                vec![(
-                    "pack",
-                    bits[0].clone() * constant_expressions[0].clone()
-                        + bits[1].clone() * constant_expressions[1].clone()
-                        + bits[2].clone() * constant_expressions[2].clone()
-                        + bits[3].clone() * constant_expressions[3].clone()
-                        + bits[4].clone() * constant_expressions[4].clone()
-                        + bits[5].clone() * constant_expressions[5].clone()
-                        + bits[6].clone() * constant_expressions[6].clone()
-                        + bits[7].clone() * constant_expressions[7].clone()
-                        + bits[8].clone() * constant_expressions[8].clone()
-                        + bits[9].clone() * constant_expressions[9].clone()
-                        + bits[10].clone() * constant_expressions[10].clone()
-                        + bits[11].clone() * constant_expressions[11].clone()
-                        + bits[12].clone() * constant_expressions[12].clone()
-                        + bits[13].clone() * constant_expressions[13].clone()
-                        + bits[14].clone() * constant_expressions[14].clone()
-                        + bits[15].clone() * constant_expressions[15].clone()
-                        + bits[16].clone() * constant_expressions[16].clone()
-                        + bits[17].clone() * constant_expressions[17].clone()
-                        + bits[18].clone() * constant_expressions[18].clone()
-                        + bits[19].clone() * constant_expressions[19].clone()
-                        + bits[20].clone() * constant_expressions[20].clone()
-                        + bits[21].clone() * constant_expressions[21].clone()
-                        + bits[22].clone() * constant_expressions[22].clone()
-                        + bits[23].clone() * constant_expressions[23].clone()
-                        + bits[24].clone() * constant_expressions[24].clone()
-                        + bits[25].clone() * constant_expressions[25].clone()
-                        + bits[26].clone() * constant_expressions[26].clone()
-                        + bits[27].clone() * constant_expressions[27].clone()
-                        + bits[28].clone() * constant_expressions[28].clone()
-                        + bits[29].clone() * constant_expressions[29].clone()
-                        + bits[30].clone() * constant_expressions[30].clone()
-                        + bits[31].clone() * constant_expressions[31].clone()
-                        - fp,
-                )]
-                .into_iter(),
-            )
+            // TODO reduce number of rotations (try more constraints, each with less rotations - will require more advice columns introduced)
+
+            let composed = bits
+                .iter()
+                .zip(&constant_expressions)
+                .fold(Expression::Constant(Fp::zero()), {
+                    |acc, (bit, c)| acc + bit.clone() * c.clone()
+                });
+
+            Constraints::with_selector(selector, vec![("pack", composed - fp)])
         });
 
         PackChipConfig { fp, bits, selector }
@@ -329,18 +278,14 @@ impl BooleanXorChip {
     fn construct(config: BooleanXorConfig) -> Self {
         BooleanXorChip { config }
     }
-    fn configure(meta: &mut ConstraintSystem<Fp>) -> BooleanXorConfig {
-        let a = meta.advice_column();
-        let b = meta.advice_column();
-        let xor_result = meta.advice_column();
-        let xor_result_pi = meta.instance_column();
-        let selector = meta.selector();
-
-        meta.enable_equality(a);
-        meta.enable_equality(b);
-        meta.enable_equality(xor_result);
-        meta.enable_equality(xor_result_pi);
-
+    fn configure(
+        meta: &mut ConstraintSystem<Fp>,
+        a: Column<Advice>,
+        b: Column<Advice>,
+        xor_result: Column<Advice>,
+        xor_result_pi: Column<Instance>,
+        selector: Selector,
+    ) -> BooleanXorConfig {
         meta.create_gate("xor", |meta: &mut VirtualCells<Fp>| {
             let selector = meta.query_selector(selector);
             let a = meta.query_advice(a, Rotation::cur());
@@ -352,8 +297,7 @@ impl BooleanXorChip {
                 vec![(
                     "Bitwise XOR: a - a_and_b + b - a_and_b - a_xor_b == 0",
                     (a.clone() + a.clone()) * b.clone() - a - b + out,
-                )]
-                .into_iter(),
+                )],
             )
         });
 
@@ -472,10 +416,26 @@ impl Circuit<Fp> for U32WordXorCircuit {
     }
 
     fn configure(meta: &mut ConstraintSystem<Fp>) -> Self::Config {
-        let range_check_config = RangeCheckChip::configure(meta);
-        let assign_32bits_config = AssignFp32BitsChip::configure(meta);
-        let pack_chip_config = PackChip::configure(meta);
-        let boolean_xor_config = BooleanXorChip::configure(meta);
+        let advice1 = meta.advice_column();
+        let advice2 = meta.advice_column();
+        let advice3 = meta.advice_column();
+        let instance = meta.instance_column();
+        let constants = meta.fixed_column();
+        let selector1 = meta.selector();
+        let selector2 = meta.selector();
+        let selector3 = meta.selector();
+        let selector4 = meta.selector();
+        meta.enable_constant(constants);
+        meta.enable_equality(advice1);
+        meta.enable_equality(advice2);
+        meta.enable_equality(advice3);
+        meta.enable_equality(instance);
+
+        let range_check_config = RangeCheckChip::configure(meta, advice1, selector1);
+        let assign_32bits_config = AssignFp32BitsChip::configure(meta, advice1, selector2);
+        let pack_chip_config = PackChip::configure(meta, advice1, advice2, selector3);
+        let boolean_xor_config =
+            BooleanXorChip::configure(meta, advice1, advice2, advice3, instance, selector4);
 
         (
             range_check_config,
@@ -525,35 +485,33 @@ impl Circuit<Fp> for U32WordXorCircuit {
             .zip(assigned_fp_b_bits_copied.iter())
             .enumerate()
             .map(|(index, (a_bit, b_bit))| {
-                boolean_xor_chip
-                    .xor(
-                        layouter.namespace(|| format!("xor {}", index)),
-                        a_bit,
-                        b_bit,
-                        index,
-                    )
-                    .expect("couldn't xor")
+                boolean_xor_chip.xor(
+                    layouter.namespace(|| format!("xor {}", index)),
+                    a_bit,
+                    b_bit,
+                    index,
+                )
             })
-            .collect::<Vec<AssignedCell<Bit, Fp>>>();
+            .collect::<Vec<Result<AssignedCell<Bit, Fp>, Error>>>()
+            .into_iter()
+            .collect::<Result<Vec<AssignedCell<Bit, Fp>>, Error>>()?;
 
         // for convenience let's compose 32 Fps (1 or 0) into single Fp
         let bits = xor_result
             .iter()
             .map(|xor_bit| {
-                let mut bit = false;
-                xor_bit.value().map(|assigned_bit| {
-                    if assigned_bit.0 {
-                        bit = true;
-                    }
-                });
-                bit
+                xor_bit
+                    .value()
+                    .and_then(|assigned_bit| Value::known(*assigned_bit))
             })
-            .collect::<Vec<bool>>();
+            .collect::<Vec<Value<Bit>>>();
 
-        let fp_composed = match &bits.try_into() {
-            Ok(val) => Value::known(Fp::from(lebs2ip::<32>(val))),
-            Err(_) => Value::known(Fp::from(0)),
-        };
+        let fp_composed = bits
+            .iter()
+            .enumerate()
+            .fold(Value::known(Fp::zero()), |acc, (i, bit)| {
+                acc + bit.map(|bit| Fp::from((bool::from(bit) as u64) << i))
+            });
 
         // expose single composed Fp which holds XOR result
         let cell = layouter.assign_region(
@@ -613,7 +571,9 @@ fn end_to_end_test_u32_words_xor() {
             &mut transcript,
         )
         .expect("proof generation should not fail");
+
         let proof: Vec<u8> = transcript.finalize();
+        println!("Proof size: {} bytes; k: {}", proof.len(), k);
 
         let strategy = SingleVerifier::new(&params);
         let mut transcript = Blake2bRead::<_, _, Challenge255<_>>::init(&proof[..]);
@@ -646,7 +606,7 @@ fn end_to_end_test_u32_words_xor() {
     let b = Fp::from(27);
     let c = Fp::from(50 ^ 27);
     positive_test(a, b, c, true);
-    //positive_test(a, b, c, false);
+    positive_test(a, b, c, false);
     negative_test(a, b + Fp::one(), c, true);
 
     let mut rng = OsRng;
@@ -654,7 +614,7 @@ fn end_to_end_test_u32_words_xor() {
     let b = Fp::from(rng.gen_range(0..u32::MAX) as u64);
     let c = fp_xor(a, b);
     positive_test(a, b, c, true);
-    //positive_test(a, b, c, false);
+    positive_test(a, b, c, false);
     negative_test(a, b + Fp::one(), c, true);
 
     let a = Fp::from(u64::MAX); // not a valid 32-bit word
@@ -718,9 +678,27 @@ fn test_pack_chip() {
         }
 
         fn configure(meta: &mut ConstraintSystem<Fp>) -> Self::Config {
-            let range_check_config = RangeCheckChip::configure(meta);
-            let assign_32bits_config = AssignFp32BitsChip::configure(meta);
-            let pack_chip_config = PackChip::configure(meta);
+            let z = meta.advice_column();
+            let q_range_check = meta.selector();
+            let constants = meta.fixed_column();
+            meta.enable_constant(constants);
+
+            let range_check_config = RangeCheckChip::configure(meta, z, q_range_check);
+
+            let bits_column = meta.advice_column();
+            let s_bits_assignment = meta.selector();
+            meta.enable_equality(bits_column);
+
+            let assign_32bits_config =
+                AssignFp32BitsChip::configure(meta, bits_column, s_bits_assignment);
+
+            let fp = meta.advice_column();
+            let bits = meta.advice_column();
+            let selector = meta.selector();
+            meta.enable_equality(fp);
+            meta.enable_equality(bits);
+
+            let pack_chip_config = PackChip::configure(meta, fp, bits, selector);
 
             (range_check_config, assign_32bits_config, pack_chip_config)
         }
@@ -794,7 +772,11 @@ fn test_assign32bits_chip() {
         }
 
         fn configure(meta: &mut ConstraintSystem<Fp>) -> Self::Config {
-            AssignFp32BitsChip::configure(meta)
+            let bits_column = meta.advice_column();
+            let s_bits_assignment = meta.selector();
+            meta.enable_equality(bits_column);
+
+            AssignFp32BitsChip::configure(meta, bits_column, s_bits_assignment)
         }
 
         fn synthesize(
@@ -839,7 +821,11 @@ fn test_range_check() {
         }
 
         fn configure(meta: &mut ConstraintSystem<Fp>) -> Self::Config {
-            RangeCheckChip::configure(meta)
+            let z = meta.advice_column();
+            let q_range_check = meta.selector();
+            let constants = meta.fixed_column();
+            meta.enable_constant(constants);
+            RangeCheckChip::configure(meta, z, q_range_check)
         }
 
         fn synthesize(
