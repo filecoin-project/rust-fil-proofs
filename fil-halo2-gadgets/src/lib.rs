@@ -177,3 +177,131 @@ impl Iterator for AdviceIter {
         Some(self.next())
     }
 }
+
+// Converts an assigned `F` to an assigned `V` for any `V` that implements `From<&F>`.
+//
+// This function can be used to convert an advice cell, that was assigned from an instance cell, to
+// have a desired inner value type.
+pub(crate) fn convert_assigned_f<V, F>(asn_f: AssignedCell<F, F>) -> AssignedCell<V, F>
+where
+    for<'a> V: From<&'a F> + std::fmt::Debug,
+    F: FieldExt,
+{
+    use std::{mem, ptr, slice};
+
+    use halo2_proofs::circuit::Cell;
+
+    // Get assigned cell's raw bytes.
+    let cell = asn_f.cell();
+    let cell_bytes: &[u8] = {
+        let cell_ptr = (&cell as *const Cell) as *const u8;
+        unsafe { slice::from_raw_parts(cell_ptr, mem::size_of::<Cell>()) }
+    };
+
+    // Convert assigned `Value<F>` to `Value<V>`.
+    let val = asn_f.value().map(V::from);
+
+    // Get `Value<V>`'s raw bytes.
+    let val_bytes: &[u8] = {
+        let val_ptr = (&val as *const Value<V>) as *const u8;
+        unsafe { slice::from_raw_parts(val_ptr, mem::size_of::<Value<V>>()) }
+    };
+
+    // Join `Cell`'s and `Value<V>`'s raw bytes.
+    let mut raw_bytes: Vec<u8> = cell_bytes.iter().chain(val_bytes).copied().collect();
+    raw_bytes.resize(mem::size_of::<AssignedCell<V, F>>(), 0);
+    assert_eq!(raw_bytes.len(), mem::size_of::<AssignedCell<V, F>>());
+
+    // Convert new raw bytes into `AssignedCell<Value<V>>`.
+    let asn_v = unsafe { ptr::read(raw_bytes.as_ptr() as *const AssignedCell<V, F>) };
+    assert_eq!(format!("{:?}", asn_v.cell()), format!("{:?}", asn_f.cell()));
+    assert_eq!(format!("{:?}", asn_v.value()), format!("{:?}", val));
+    asn_v
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use halo2_proofs::{
+        circuit::{Layouter, SimpleFloorPlanner},
+        dev::MockProver,
+        pasta::Fp,
+        plonk::{Circuit, Error},
+    };
+
+    use crate::{boolean::AssignedBit, sha256_compress::AssignedU32};
+
+    #[test]
+    #[ignore]
+    fn test_convert_assigned_f() {
+        struct MyCircuit;
+
+        impl Circuit<Fp> for MyCircuit {
+            type Config = Column<Advice>;
+            type FloorPlanner = SimpleFloorPlanner;
+
+            fn without_witnesses(&self) -> Self {
+                MyCircuit
+            }
+
+            fn configure(meta: &mut ConstraintSystem<Fp>) -> Self::Config {
+                meta.advice_column()
+            }
+
+            fn synthesize(
+                &self,
+                config: Self::Config,
+                mut layouter: impl Layouter<Fp>,
+            ) -> Result<(), Error> {
+                layouter.assign_region(
+                    || "region",
+                    |mut region| {
+                        let mut offset = 0;
+
+                        let zero: AssignedCell<Fp, Fp> = region.assign_advice(
+                            || "zero",
+                            config,
+                            offset,
+                            || Value::known(Fp::zero()),
+                        )?;
+                        offset += 1;
+                        let cell = zero.cell();
+                        let zero: AssignedBit<Fp> = convert_assigned_f(zero);
+                        assert_eq!(format!("{:?}", zero.cell()), format!("{:?}", cell));
+                        zero.value().assert_if_known(|bit| !bool::from(*bit));
+
+                        let one: AssignedCell<Fp, Fp> = region.assign_advice(
+                            || "one",
+                            config,
+                            offset,
+                            || Value::known(Fp::one()),
+                        )?;
+                        offset += 1;
+                        let cell = one.cell();
+                        let one: AssignedBit<Fp> = convert_assigned_f(one);
+                        assert_eq!(format!("{:?}", one.cell()), format!("{:?}", cell));
+                        one.value().assert_if_known(|bit| bool::from(*bit));
+
+                        let word: AssignedCell<Fp, Fp> = region.assign_advice(
+                            || "u32",
+                            config,
+                            offset,
+                            || Value::known(Fp::from(u32::max_value() as u64)),
+                        )?;
+                        let cell = word.cell();
+                        let word: AssignedU32<Fp> = convert_assigned_f(word);
+                        assert_eq!(format!("{:?}", word.cell()), format!("{:?}", cell));
+                        word.value()
+                            .assert_if_known(|word| u32::from(*word) == u32::max_value());
+
+                        Ok(())
+                    },
+                )
+            }
+        }
+
+        let prover = MockProver::<Fp>::run(4, &MyCircuit, vec![]).unwrap();
+        assert!(prover.verify().is_ok());
+    }
+}

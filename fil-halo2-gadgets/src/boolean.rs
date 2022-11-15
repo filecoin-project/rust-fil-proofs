@@ -120,6 +120,14 @@ impl From<&Bit> for bool {
     }
 }
 
+impl<F: FieldExt> From<&F> for Bit {
+    fn from(f: &F) -> Self {
+        let is_one = *f == F::one();
+        assert!(is_one || bool::from(f.is_zero()));
+        Bit(is_one)
+    }
+}
+
 /// Little-endian bits (up to 64 bits)
 #[derive(Clone, Debug)]
 pub struct Bits<const LEN: usize>(pub(crate) [bool; LEN]);
