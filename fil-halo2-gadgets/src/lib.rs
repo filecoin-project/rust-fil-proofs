@@ -169,3 +169,11 @@ impl AdviceIter {
         ret
     }
 }
+
+impl Iterator for AdviceIter {
+    type Item = (usize, Column<Advice>);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        Some(self.next())
+    }
+}
