@@ -9,7 +9,7 @@ use std::cmp::max;
 use halo2_proofs::{
     arithmetic::FieldExt,
     circuit::{AssignedCell, Value},
-    plonk::{Advice, Column, ConstraintSystem, Fixed, Instance},
+    plonk::{Advice, Circuit, Column, ConstraintSystem, Fixed, Instance},
 };
 use neptune::{halo2_circuit::PoseidonChip, Arity};
 
@@ -219,6 +219,17 @@ where
     asn_v
 }
 
+pub trait CircuitSize<F: FieldExt>: Circuit<F> {
+    fn num_rows(&self) -> usize;
+
+    fn k(&self) -> u32 {
+        let mut meta = ConstraintSystem::default();
+        Self::configure(&mut meta);
+        let num_rows = self.num_rows() + meta.blinding_factors() + 1;
+        (num_rows as f32).log2().floor() as u32 + 1
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -227,7 +238,7 @@ mod tests {
         circuit::{Layouter, SimpleFloorPlanner},
         dev::MockProver,
         pasta::Fp,
-        plonk::{Circuit, Error},
+        plonk::Error,
     };
 
     use crate::{boolean::AssignedBit, sha256_compress::AssignedU32};
