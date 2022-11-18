@@ -11,7 +11,7 @@ use ff::PrimeField;
 use filecoin_hashers::{Domain, Groth16Hasher, Hasher, PoseidonArity};
 use halo2_proofs::pasta::{Fp, Fq};
 use log::{info, trace};
-use memmap::MmapOptions;
+use memmap2::MmapOptions;
 use merkletree::store::{DiskStore, Store, StoreConfig};
 use rayon::prelude::*;
 use sha2::{Digest, Sha256};
