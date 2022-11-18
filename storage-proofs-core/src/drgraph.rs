@@ -259,7 +259,7 @@ mod tests {
         blake2s::Blake2sHasher, poseidon::PoseidonHasher, sha256::Sha256Hasher,
     };
     use generic_array::typenum::{U0, U2, U4, U8};
-    use memmap::{MmapMut, MmapOptions};
+    use memmap2::{MmapMut, MmapOptions};
     use merkletree::store::StoreConfig;
 
     use crate::merkle::{

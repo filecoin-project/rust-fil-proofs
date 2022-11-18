@@ -8,7 +8,7 @@ use bincode::{deserialize, serialize};
 use blstrs::{Bls12, Scalar as Fr};
 use filecoin_hashers::{Domain, Hasher};
 use log::{info, trace};
-use memmap::MmapOptions;
+use memmap2::MmapOptions;
 use merkletree::store::{DiskStore, Store, StoreConfig};
 use rayon::prelude::*;
 use sha2::{Digest, Sha256};
