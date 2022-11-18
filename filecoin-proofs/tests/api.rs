@@ -33,7 +33,7 @@ use filecoin_proofs::{
 };
 use fr32::bytes_into_fr;
 use log::info;
-use memmap::MmapOptions;
+use memmap2::MmapOptions;
 use rand::{random, Rng, SeedableRng};
 use rand_xorshift::XorShiftRng;
 use storage_proofs_core::{api_version::ApiVersion, is_legacy_porep_id, sector::SectorId};

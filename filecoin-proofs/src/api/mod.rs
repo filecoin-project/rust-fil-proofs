@@ -7,7 +7,7 @@ use bincode::deserialize;
 use filecoin_hashers::Hasher;
 use fr32::{write_unpadded, Fr32Reader};
 use log::{info, trace};
-use memmap::MmapOptions;
+use memmap2::MmapOptions;
 use merkletree::store::{DiskStore, LevelCacheStore, StoreConfig};
 use storage_proofs_core::{
     cache_key::CacheKey,

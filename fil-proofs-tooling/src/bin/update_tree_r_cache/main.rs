@@ -11,7 +11,7 @@ use filecoin_proofs::{
     SectorShapeSub8, SectorShapeTop2, OCT_ARITY,
 };
 use generic_array::typenum::Unsigned;
-use memmap::MmapOptions;
+use memmap2::MmapOptions;
 use merkletree::{
     merkle::get_merkle_tree_len,
     store::{ExternalReader, ReplicaConfig, Store, StoreConfig},

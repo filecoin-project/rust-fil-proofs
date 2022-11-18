@@ -10,7 +10,7 @@ use filecoin_hashers::{Domain, HashFunction, Hasher};
 use fr32::{bytes_into_fr, fr_into_bytes_slice};
 use generic_array::typenum::Unsigned;
 use log::{info, trace};
-use memmap::{Mmap, MmapMut, MmapOptions};
+use memmap2::{Mmap, MmapMut, MmapOptions};
 use merkletree::{
     merkle::{get_merkle_tree_leafs, get_merkle_tree_len},
     store::{DiskStore, Store, StoreConfig},
