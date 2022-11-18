@@ -42,6 +42,7 @@ fr32 = { path = "../fr32", version = "~5.0.0"}
 
 blstrs = "0.6.1"
 cbc = { version = "0.1.2", features = ["std"] }
+blstrs = "0.6.1"
 halo2_proofs = "0.2.0"
 fil-halo2-gadgets = { path = "../fil-halo2-gadgets" }
 ec-gpu = "0.2.0"
