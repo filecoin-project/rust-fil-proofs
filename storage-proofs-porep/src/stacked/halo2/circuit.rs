@@ -1348,8 +1348,7 @@ where
     PoseidonHasher<F>: Hasher<Field = F>,
 {
     pub fn proof_size(&self, batch_size: Option<usize>) -> usize {
-        let k = self.k() as usize;
-        let cost = halo2_proofs::dev::CircuitCost::<F::Curve, Self>::measure(k, self);
+        let cost = halo2_proofs::dev::CircuitCost::<F::Curve, Self>::measure(self.k(), self);
         match batch_size {
             Some(batch_size) => cost.proof_size(batch_size).into(),
             None => cost.marginal_proof_size().into(),
