@@ -133,13 +133,13 @@ dependencies = [
 
 [[package]]
 name = "async-io"
-version = "1.10.0"
+version = "1.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e8121296a9f05be7f34aa4196b1747243b3b62e048bb7906f644f3fbfc490cf7"
+checksum = "8c374dda1ed3e7d8f0d9ba58715f924862c63eae6849c92d3a18e7fbde9e2794"
 dependencies = [
  "async-lock",
  "autocfg",
- "concurrent-queue 1.2.4",
+ "concurrent-queue 2.0.0",
  "futures-lite",
  "libc",
  "log",
@@ -148,7 +148,7 @@ dependencies = [
  "slab",
  "socket2",
  "waker-fn",
- "winapi 0.3.9",
+ "windows-sys 0.42.0",
 ]
 
 [[package]]
@@ -175,20 +175,20 @@ dependencies = [
 
 [[package]]
 name = "async-process"
-version = "1.5.0"
+version = "1.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "02111fd8655a613c25069ea89fc8d9bb89331fa77486eb3bc059ee757cfa481c"
+checksum = "6381ead98388605d0d9ff86371043b5aa922a3905824244de40dc263a14fcba4"
 dependencies = [
  "async-io",
+ "async-lock",
  "autocfg",
  "blocking",
  "cfg-if 1.0.0",
  "event-listener",
  "futures-lite",
  "libc",
- "once_cell",
  "signal-hook",
- "winapi 0.3.9",
+ "windows-sys 0.42.0",
 ]
 
 [[package]]
@@ -267,7 +267,7 @@ dependencies = [
  "cc",
  "cfg-if 1.0.0",
  "libc",
- "miniz_oxide",
+ "miniz_oxide 0.5.4",
  "object",
  "rustc-demangle",
 ]
@@ -427,16 +427,16 @@ dependencies = [
 
 [[package]]
 name = "blocking"
-version = "1.2.0"
+version = "1.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c6ccb65d468978a086b69884437ded69a90faab3bbe6e67f242173ea728acccc"
+checksum = "3c67b173a56acffd6d2326fb7ab938ba0b00a71480e14902b2591c87bc5741e8"
 dependencies = [
  "async-channel",
+ "async-lock",
  "async-task",
  "atomic-waker",
  "fastrand",
  "futures-lite",
- "once_cell",
 ]
 
 [[package]]
@@ -577,7 +577,7 @@ dependencies = [
  "num-integer",
  "num-traits",
  "serde",
- "time 0.1.44",
+ "time 0.1.45",
  "wasm-bindgen",
  "winapi 0.3.9",
 ]
@@ -1461,12 +1461,12 @@ dependencies = [
 
 [[package]]
 name = "flate2"
-version = "1.0.24"
+version = "1.0.25"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f82b0f4c27ad9f8bfd1f3208d882da2b09c301bc1c828fd3a00d0216d2fbbff6"
+checksum = "a8a2db397cb1c8772f31494cb8917e48cd1e64f0fa7efac59fbd741a0a8ce841"
 dependencies = [
  "crc32fast",
- "miniz_oxide",
+ "miniz_oxide 0.6.2",
 ]
 
 [[package]]
@@ -1793,13 +1793,14 @@ dependencies = [
 [[package]]
 name = "halo2_proofs"
 version = "0.2.0"
-source = "git+https://github.com/filecoin-project/halo2?branch=halo2#4cf32034c01aa9968079365b98b3b9bd2913f140"
+source = "git+https://github.com/filecoin-project/halo2?branch=halo2#11bb390954ab8181ebfaed6e7c0186e5f52332ef"
 dependencies = [
  "blake2b_simd",
  "ec-gpu",
  "ec-gpu-gen",
  "ff",
  "group",
+ "log",
  "pasta_curves",
  "rand_core",
  "rayon",
@@ -2337,6 +2338,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "miniz_oxide"
+version = "0.6.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b275950c28b37e794e8c55d88aeb5e139d0ce23fdbbeda68f8d7174abdf9e8fa"
+dependencies = [
+ "adler",
+]
+
+[[package]]
 name = "mio"
 version = "0.8.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2573,9 +2583,9 @@ dependencies = [
 
 [[package]]
 name = "openssl"
-version = "0.10.42"
+version = "0.10.43"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "12fc0523e3bd51a692c8850d075d74dc062ccf251c0110668cbd921917118a13"
+checksum = "020433887e44c27ff16365eaa2d380547a94544ad509aff6eb5b6e3e0b27b376"
 dependencies = [
  "bitflags 1.2.1",
  "cfg-if 1.0.0",
@@ -2614,9 +2624,9 @@ dependencies = [
 
 [[package]]
 name = "openssl-sys"
-version = "0.9.77"
+version = "0.9.78"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b03b84c3b2d099b81f0953422b4d4ad58761589d0229b5506356afca05a3670a"
+checksum = "07d5c8cb6e57b3a3612064d7b18b117912b4ce70955c2504d4b741c9e244b132"
 dependencies = [
  "autocfg",
  "cc",
@@ -2685,7 +2695,7 @@ checksum = "ff5751d87f7c00ae6403eb1fcbba229b9c76c9a30de8c1cf87182177b168cea2"
 dependencies = [
  "crossbeam-channel",
  "libc",
- "time 0.1.44",
+ "time 0.1.45",
  "winapi 0.3.9",
 ]
 
@@ -2749,16 +2759,16 @@ dependencies = [
 
 [[package]]
 name = "polling"
-version = "2.4.0"
+version = "2.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ab4609a838d88b73d8238967b60dd115cc08d38e2bbaf51ee1e4b695f89122e2"
+checksum = "9f7d73f1eaed1ca1fb37b54dcc9b38e3b17d6c7b8ecb7abfffcac8d0351f17d4"
 dependencies = [
  "autocfg",
  "cfg-if 1.0.0",
  "libc",
  "log",
  "wepoll-ffi",
- "winapi 0.3.9",
+ "windows-sys 0.42.0",
 ]
 
 [[package]]
@@ -3175,9 +3185,9 @@ checksum = "e25dfac463d778e353db5be2449d1cce89bd6fd23c9f1ea21310ce6e5a1b29c4"
 
 [[package]]
 name = "serde"
-version = "1.0.147"
+version = "1.0.148"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d193d69bae983fc11a79df82342761dfbf28a99fc8d203dca4c3c1b590948965"
+checksum = "e53f64bb4ba0191d6d0676e1b141ca55047d83b74f5607e6d8eb88126c52c2dc"
 dependencies = [
  "serde_derive",
 ]
@@ -3194,9 +3204,9 @@ dependencies = [
 
 [[package]]
 name = "serde_derive"
-version = "1.0.147"
+version = "1.0.148"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4f1d362ca8fc9c3e3a7484440752472d68a6caa98f1ab81d99b5dfe517cec852"
+checksum = "a55492425aa53521babf6137309e7d34c20bbfbbfcfe2c7f3a047fd1f6b92c0c"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -3545,9 +3555,9 @@ checksum = "6bdef32e8150c2a081110b42772ffe7d7c9032b606bc226c8260fd97e0976601"
 
 [[package]]
 name = "syn"
-version = "1.0.103"
+version = "1.0.104"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a864042229133ada95abf3b54fdc62ef5ccabe9515b64717bcb9a1919e59445d"
+checksum = "4ae548ec36cf198c0ef7710d3c230987c2d6d7bd98ad6edc0274462724c585ce"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -3671,9 +3681,9 @@ dependencies = [
 
 [[package]]
 name = "time"
-version = "0.1.44"
+version = "0.1.45"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6db9e6914ab8b1ae1c260a4ae7a49b6c5611b40328a735b21862567685e73255"
+checksum = "1b797afad3f312d1c66a56d11d0316f916356d11bd158fbc6ca6389ff6bf805a"
 dependencies = [
  "libc",
  "wasi 0.10.0+wasi-snapshot-preview1",
