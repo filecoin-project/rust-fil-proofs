@@ -28,7 +28,7 @@ use filecoin_proofs::{
     SECTOR_SIZE_64_GIB,
 };
 use log::info;
-use memmap::MmapOptions;
+use memmap2::MmapOptions;
 use rand::{Rng, SeedableRng};
 use rand_xorshift::XorShiftRng;
 #[cfg(not(feature = "big-tests"))]
