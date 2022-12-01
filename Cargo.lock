@@ -1370,8 +1370,7 @@ dependencies = [
 [[package]]
 name = "fil_pasta_curves"
 version = "0.5.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "40e3097f09e5a96786fa18524930f54353c1fe373da02a94230cbd7b6f120959"
+source = "git+https://github.com/filecoin-project/pasta_curves?branch=gpu-fil-fork#016f3ce2486b1f3af330fe86b01bec42aa2d2a44"
 dependencies = [
  "blake2b_simd",
  "ec-gpu",
