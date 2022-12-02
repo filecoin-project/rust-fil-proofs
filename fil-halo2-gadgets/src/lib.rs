@@ -9,7 +9,7 @@ use std::cmp::max;
 use halo2_proofs::{
     arithmetic::FieldExt,
     circuit::{AssignedCell, Value},
-    plonk::{Advice, Circuit, Column, ConstraintSystem, Fixed, Instance},
+    plonk::{Advice, Circuit, Column, ConstraintSystem, Expression, Fixed, Instance},
 };
 use neptune::{halo2_circuit::PoseidonChip, Arity};
 
@@ -176,6 +176,17 @@ impl Iterator for AdviceIter {
     fn next(&mut self) -> Option<Self::Item> {
         Some(self.next())
     }
+}
+
+// Packs little-endian integers into an integer using the provided radix; the packed integer must be
+// less than the field modulus.
+pub fn pack_ints<F: FieldExt>(mut ints: Vec<Expression<F>>, radix: u64) -> Expression<F> {
+    let shl = F::from(radix);
+    ints.drain(..)
+        .rev()
+        .fold(Expression::Constant(F::zero()), |acc, int| {
+            acc * Expression::Constant(shl) + int
+        })
 }
 
 // Converts an assigned `F` to an assigned `V` for any `V` that implements `From<&F>`.
