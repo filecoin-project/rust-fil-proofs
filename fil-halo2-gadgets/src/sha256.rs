@@ -38,6 +38,9 @@ pub const BLOCK_SIZE: usize = 16;
 /// The size of a SHA-256 digest, in 32-bit words.
 pub const DIGEST_SIZE: usize = 8;
 
+// The minimum number of words required to pad preimage.
+pub const PAD_WORDS: usize = 3;
+
 // Each field element is eight 32-bit words.
 const FIELD_WORD_LEN: usize = 8;
 
@@ -185,25 +188,29 @@ impl<F: FieldExt, Sha256Chip: Sha256Instructions<F>> Sha256<F, Sha256Chip> {
     }
 }
 
-pub fn get_padding(preimage_words: usize) -> Vec<u32> {
-    let preimage_bits = preimage_words as u64 * 32;
-
+pub fn get_padding_len(preimage_words: usize) -> usize {
     // The padding scheme requires that there are at least 3 unutilized words in the preimage's last
     // block: one word to append a `1` bit onto the end of the preimage and two words to append the
     // unpadded preimage's bit length. If there is less than 3 unutilized words in the preimage's
     // last block, pad until the end of the next block.
     let last_block_words = preimage_words % BLOCK_SIZE;
-    let unused_words = BLOCK_SIZE - last_block_words;
-    let pad_words = if unused_words >= 3 {
-        unused_words
-    } else {
-        unused_words + BLOCK_SIZE
-    };
+    let last_block_words_rem = BLOCK_SIZE - last_block_words;
 
-    let mut padding = vec![0u32; pad_words];
+    if last_block_words_rem >= PAD_WORDS {
+        last_block_words_rem
+    } else {
+        last_block_words_rem + BLOCK_SIZE
+    }
+}
+
+pub fn get_padding(preimage_words: usize) -> Vec<u32> {
+    let padding_word_len = get_padding_len(preimage_words);
+    let preimage_bits = preimage_words as u64 * 32;
+
+    let mut padding = vec![0u32; padding_word_len];
     padding[0] = 1 << 31;
-    padding[pad_words - 2] = (preimage_bits >> 32) as u32;
-    padding[pad_words - 1] = preimage_bits as u32;
+    padding[padding_word_len - 2] = (preimage_bits >> 32) as u32;
+    padding[padding_word_len - 1] = preimage_bits as u32;
     padding
 }
 
