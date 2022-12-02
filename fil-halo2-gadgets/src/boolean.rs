@@ -34,6 +34,12 @@ pub fn nor<F: FieldExt>(bit_0: Expression<F>, bit_1: Expression<F>) -> Expressio
     (Expression::Constant(F::one()) - bit_0) * (Expression::Constant(F::one()) - bit_1)
 }
 
+// Packs little-endian bits into an integer; the packed integer must be less than the field modulus.
+#[inline]
+pub fn pack_bits<F: FieldExt>(bits: Vec<Expression<F>>) -> Expression<F> {
+    crate::pack_ints(bits, 2)
+}
+
 pub fn lebs2ip<const K: usize>(bits: &[bool; K]) -> u64 {
     assert!(K <= 64);
     bits.iter()
