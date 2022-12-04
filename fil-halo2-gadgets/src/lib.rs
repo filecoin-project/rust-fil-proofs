@@ -1,4 +1,5 @@
 pub mod boolean;
+pub mod merkle;
 pub mod select;
 pub mod sha256;
 pub mod uint32;
@@ -41,6 +42,10 @@ pub struct ColumnBuilder(NumCols);
 impl ColumnBuilder {
     pub fn new() -> Self {
         Self::default()
+    }
+
+    pub fn num_cols(&self) -> NumCols {
+        self.0
     }
 
     pub fn with_chip<C: ColumnCount>(mut self) -> Self {
@@ -101,7 +106,7 @@ where
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum MaybeAssigned<T, F: FieldExt> {
     // An unassigned value that should be witnessed in a circuit.
     Unassigned(Value<T>),
