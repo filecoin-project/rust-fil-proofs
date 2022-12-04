@@ -261,7 +261,6 @@ impl<F: FieldExt> Word<F> {
             .unwrap()
     }
 
-    #[cfg(feature = "all-chips")]
     pub(crate) fn int_unchecked(&self) -> &AssignedU32<F> {
         self.int.as_ref().unwrap()
     }
