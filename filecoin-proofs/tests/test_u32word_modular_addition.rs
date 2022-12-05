@@ -1,0 +1,287 @@
+use ff::PrimeFieldBits;
+use halo2_gadgets::utilities::decompose_running_sum::{RunningSum, RunningSumConfig};
+use halo2_proofs::circuit::{AssignedCell, Layouter, Region, SimpleFloorPlanner, Value};
+use halo2_proofs::dev::MockProver;
+use halo2_proofs::pasta::Fp;
+use halo2_proofs::plonk::{Advice, Circuit, Column, ConstraintSystem, Error, Expression, Selector};
+use halo2_proofs::poly::Rotation;
+
+const WORD_BIT_LENGTH: usize = 32;
+const WINDOW_BIT_LENGTH: usize = 2;
+const NUM_WINDOWS: usize = (WORD_BIT_LENGTH + WINDOW_BIT_LENGTH - 1) / WINDOW_BIT_LENGTH;
+
+#[derive(Clone)]
+struct U32WordModularAddConfig {
+    running_sum: RunningSumConfig<Fp, WINDOW_BIT_LENGTH>,
+    a: Column<Advice>,
+    b: Column<Advice>,
+    c_lo: Column<Advice>,
+    c_hi: Column<Advice>,
+    s_mod_add: Selector,
+}
+
+struct U32WordModularAddChip {
+    config: U32WordModularAddConfig,
+}
+
+impl U32WordModularAddChip {
+    fn configure(
+        meta: &mut ConstraintSystem<Fp>,
+        z: Column<Advice>,
+        q_range_check: Selector,
+        a: Column<Advice>,
+        b: Column<Advice>,
+        s_mod_add: Selector,
+        c_lo: Column<Advice>,
+        c_hi: Column<Advice>,
+    ) -> U32WordModularAddConfig {
+        let running_sum =
+            RunningSumConfig::<Fp, WINDOW_BIT_LENGTH>::configure(meta, q_range_check, z);
+
+        meta.create_gate("modular add", |meta| {
+            let selector = meta.query_selector(s_mod_add);
+            let a = meta.query_advice(a, Rotation::cur());
+            let b = meta.query_advice(b, Rotation::cur());
+            let c_lo = meta.query_advice(c_lo, Rotation::cur());
+            let c_hi = meta.query_advice(c_hi, Rotation::cur());
+
+            let c = c_lo + (Expression::Constant(Fp::from(1u64 << 32)) * c_hi);
+            [("modular addition", selector * (a + b - c))]
+        });
+
+        U32WordModularAddConfig {
+            running_sum,
+            a,
+            b,
+            c_lo,
+            c_hi,
+            s_mod_add,
+        }
+    }
+
+    fn construct(config: U32WordModularAddConfig) -> Self {
+        U32WordModularAddChip { config }
+    }
+
+    fn witness_decompose(
+        &self,
+        region: &mut Region<'_, Fp>,
+        offset: usize,
+        alpha: Value<Fp>,
+        strict: bool,
+        word_num_bits: usize,
+        num_windows: usize,
+    ) -> Result<RunningSum<Fp>, Error> {
+        self.config.running_sum.witness_decompose(
+            region,
+            offset,
+            alpha,
+            strict,
+            word_num_bits,
+            num_windows,
+        )
+    }
+
+    fn copy_decompose(
+        &self,
+        region: &mut Region<'_, Fp>,
+        offset: usize,
+        alpha: AssignedCell<Fp, Fp>,
+        strict: bool,
+        word_num_bits: usize,
+        num_windows: usize,
+    ) -> Result<RunningSum<Fp>, Error> {
+        self.config.running_sum.copy_decompose(
+            region,
+            offset,
+            alpha,
+            strict,
+            word_num_bits,
+            num_windows,
+        )
+    }
+
+    fn range_check(
+        &self,
+        mut layouter: impl Layouter<Fp>,
+        a: Value<Fp>,
+    ) -> Result<AssignedCell<Fp, Fp>, Error> {
+        layouter.assign_region(
+            || "range check",
+            |mut region| {
+                let offset = 0;
+                let zs = self.witness_decompose(
+                    &mut region,
+                    offset,
+                    a,
+                    true,
+                    WORD_BIT_LENGTH,
+                    NUM_WINDOWS,
+                )?;
+
+                let b = zs[0].clone();
+
+                let offset = offset + NUM_WINDOWS + 1;
+
+                let running_sum = self.copy_decompose(
+                    &mut region,
+                    offset,
+                    b,
+                    true,
+                    WORD_BIT_LENGTH,
+                    NUM_WINDOWS,
+                )?;
+
+                Ok(running_sum[0].clone())
+            },
+        )
+    }
+
+    fn modular_add(
+        &self,
+        mut layouter: impl Layouter<Fp>,
+        a: AssignedCell<Fp, Fp>,
+        b: AssignedCell<Fp, Fp>,
+    ) -> Result<AssignedCell<Fp, Fp>, Error> {
+        layouter.assign_region(
+            || "modular addition",
+            |mut region| {
+                self.config.s_mod_add.enable(&mut region, 0)?;
+
+                let a = a.copy_advice(|| "a copy", &mut region, self.config.a, 0)?;
+
+                let b = b.copy_advice(|| "b copy", &mut region, self.config.b, 0)?;
+
+                let c = a
+                    .value()
+                    .zip(b.value())
+                    .map(|(a, b)| {
+                        let lhs = a
+                            .to_le_bits()
+                            .iter()
+                            .enumerate()
+                            .fold(0u64, |acc, (i, bit)| acc + ((*bit as u64) << i));
+                        let rhs = b
+                            .to_le_bits()
+                            .iter()
+                            .enumerate()
+                            .fold(0u64, |acc, (i, bit)| acc + ((*bit as u64) << i));
+
+                        let sum = lhs + rhs;
+                        let sum_lo = sum & u32::MAX as u64;
+                        let sum_hi = sum >> 32;
+
+                        (Fp::from(sum_lo), Fp::from(sum_hi))
+                    })
+                    .unzip();
+
+                // if a + b overflows, it will be 1, otherwise - 0. Gate definition relies on this information
+                region.assign_advice(|| "sum_hi", self.config.c_hi, 0, || c.1)?;
+
+                // output low part of result
+                region.assign_advice(|| "sum_lo", self.config.c_lo, 0, || c.0)
+            },
+        )
+    }
+}
+
+#[test]
+fn test_u32word_modular_addition_mocked_prover() {
+    struct TestCircuit {
+        a: Value<Fp>,
+        b: Value<Fp>,
+        a_plus_b: Value<Fp>,
+    }
+
+    impl TestCircuit {
+        fn k(&self) -> u32 {
+            7
+        }
+    }
+
+    impl Circuit<Fp> for TestCircuit {
+        type Config = U32WordModularAddConfig;
+        type FloorPlanner = SimpleFloorPlanner;
+
+        fn without_witnesses(&self) -> Self {
+            todo!()
+        }
+
+        fn configure(meta: &mut ConstraintSystem<Fp>) -> Self::Config {
+            // running_sum requires this
+            let constants = meta.fixed_column();
+            meta.enable_constant(constants);
+
+            let selector = meta.selector();
+            let q_range_check = meta.advice_column();
+
+            let a = meta.advice_column();
+            let b = meta.advice_column();
+            let c_lo = meta.advice_column();
+            let c_hi = meta.advice_column();
+            let s_modular_add = meta.selector();
+
+            meta.enable_equality(q_range_check);
+            meta.enable_equality(a);
+            meta.enable_equality(b);
+            meta.enable_equality(c_lo);
+            meta.enable_equality(c_hi);
+
+            U32WordModularAddChip::configure(
+                meta,
+                q_range_check,
+                selector,
+                a,
+                b,
+                s_modular_add,
+                c_lo,
+                c_hi,
+            )
+        }
+
+        fn synthesize(
+            &self,
+            config: Self::Config,
+            mut layouter: impl Layouter<Fp>,
+        ) -> Result<(), Error> {
+            let chip = U32WordModularAddChip::construct(config);
+
+            // range check that both a and b are u32 words
+            let assigned_fp_a =
+                chip.range_check(layouter.namespace(|| "range check of a"), self.a)?;
+
+            let assigned_fp_b =
+                chip.range_check(layouter.namespace(|| "range check of b"), self.b)?;
+
+            let result = chip.modular_add(
+                layouter.namespace(|| "modular addition"),
+                assigned_fp_a,
+                assigned_fp_b,
+            )?;
+
+            self.a_plus_b
+                .zip(result.value())
+                .map(|(expected, actual)| assert_eq!(expected, *actual));
+
+            Ok(())
+        }
+    }
+
+    let circuit = TestCircuit {
+        a: Value::known(Fp::from(u32::MAX as u64)),
+        b: Value::known(Fp::from(u32::MAX as u64)),
+        a_plus_b: Value::known(Fp::from(4294967294)),
+    };
+
+    let prover = MockProver::run(circuit.k(), &circuit, vec![]).expect("couldn't run mock prover");
+    assert!(prover.verify().is_ok());
+
+    let circuit = TestCircuit {
+        a: Value::known(Fp::from(50)),
+        b: Value::known(Fp::from(100)),
+        a_plus_b: Value::known(Fp::from(150)),
+    };
+
+    let prover = MockProver::run(circuit.k(), &circuit, vec![]).expect("couldn't run mock prover");
+    assert!(prover.verify().is_ok());
+}
