@@ -156,6 +156,7 @@ where
             requirements,
             multi_proof.circuit_proofs.len(),
         ) {
+            info!("verify: Proof fails satisfies_requirements");
             return Ok(false);
         }
 
@@ -166,6 +167,7 @@ where
 
         let proofs: Vec<_> = multi_proof.circuit_proofs.iter().collect();
         let res = verify_proofs_batch(pvk, &mut OsRng, &proofs, &inputs)?;
+        info!("verify_proofs_batch returns {:?}", res);
         Ok(res)
     }
 

@@ -998,7 +998,7 @@ pub fn verify_seal<Tree: 'static + MerkleTreeTrait>(
         )
     };
 
-    info!("verify_seal:finish: {:?}", sector_id);
+    info!("verify_seal:finish: {:?}, result {:?}", sector_id, result);
     result
 }
 
