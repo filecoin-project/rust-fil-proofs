@@ -38,12 +38,12 @@ fn get_tree_r_info(
 
     // If the cache dir doesn't exist, create it
     if !Path::new(&cache).exists() {
-        create_dir_all(&cache)?;
+        create_dir_all(cache)?;
     }
 
     // Create a StoreConfig from the provided cache path
     let tree_r_last_config = StoreConfig::new(
-        &cache,
+        cache,
         CacheKey::CommRLastTree.to_string(),
         default_rows_to_discard(base_tree_leafs, OCT_ARITY),
     );
@@ -128,7 +128,7 @@ fn build_tree_r_last<Tree: MerkleTreeTrait>(
     let f_data = OpenOptions::new()
         .read(true)
         .write(true)
-        .open(&replica_path)
+        .open(replica_path)
         .with_context(|| format!("could not open replica_path={:?}", replica_path))?;
     let input_mmap = unsafe {
         MmapOptions::new()
@@ -253,12 +253,12 @@ fn run_verify(sector_size: usize, cache: &Path, replica_path: &Path) -> Result<(
     // with any existing ones on disk) and check if the roots match what's cached on disk
     let tmp_dir = tempdir().unwrap();
     let tmp_path = tmp_dir.path();
-    create_dir_all(&tmp_path)?;
+    create_dir_all(tmp_path)?;
 
     let (rebuilt_tree_r_last_root, rebuilt_base_tree_roots) =
         run_rebuild(sector_size, tmp_path, replica_path)?;
 
-    remove_dir_all(&tmp_path)?;
+    remove_dir_all(tmp_path)?;
 
     let status = match_str(tree_r_last_root, p_aux.comm_r_last);
     let rebuilt_status = match_str(rebuilt_tree_r_last_root, p_aux.comm_r_last);

@@ -199,7 +199,7 @@ pub fn create_replicas<Tree: 'static + MerkleTreeTrait>(
                 .map(|(cache_dir, sector_id)| {
                     let nodes = sector_size.0 as usize / NODE_SIZE;
                     let mut tmp_store_config = StoreConfig::new(
-                        &cache_dir.path(),
+                        cache_dir.path(),
                         format!("tmp-config-{}", sector_id),
                         default_rows_to_discard(nodes, Tree::Arity::to_usize()),
                     );
@@ -232,7 +232,7 @@ pub fn create_replicas<Tree: 'static + MerkleTreeTrait>(
                     let comm_r = fauxrep_aux::<_, _, _, Tree>(
                         &mut rng,
                         porep_config,
-                        &cache_dirs[i].path(),
+                        cache_dirs[i].path(),
                         &sealed_files[i],
                     )?;
                     Ok(SealPreCommitOutput {

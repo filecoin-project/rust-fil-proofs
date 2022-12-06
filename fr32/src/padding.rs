@@ -352,7 +352,7 @@ fn shift_bits(input: &[u8], amount: usize, is_left: bool) -> Vec<u8> {
 
     // Create the `output` vector from the original input values, extending
     // its size by one if shifting left.
-    let mut output = Vec::with_capacity(input.len() + if is_left { 1 } else { 0 });
+    let mut output = Vec::with_capacity(input.len() + usize::from(is_left));
     output.extend_from_slice(input);
     if is_left {
         output.push(0);

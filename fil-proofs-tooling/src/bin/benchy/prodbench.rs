@@ -213,14 +213,14 @@ pub fn run(
         {
             let measured = measure(|| {
                 validate_cache_for_commit::<_, _, DefaultOctLCTree>(
-                    &replica_info.private_replica_info.cache_dir_path(),
-                    &replica_info.private_replica_info.replica_path(),
+                    replica_info.private_replica_info.cache_dir_path(),
+                    replica_info.private_replica_info.replica_path(),
                 )?;
 
                 let phase1_output = seal_commit_phase1::<_, DefaultOctLCTree>(
                     cfg,
-                    &replica_info.private_replica_info.cache_dir_path(),
-                    &replica_info.private_replica_info.replica_path(),
+                    replica_info.private_replica_info.cache_dir_path(),
+                    replica_info.private_replica_info.replica_path(),
                     PROVER_ID,
                     *sector_id,
                     TICKET_BYTES,

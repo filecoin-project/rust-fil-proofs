@@ -521,7 +521,7 @@ fn aggregate_proofs<Tree: 'static + MerkleTreeTrait>(
 }
 
 fn get_layer_file_paths(cache_dir: &tempfile::TempDir) -> Vec<PathBuf> {
-    let mut list: Vec<_> = read_dir(&cache_dir)
+    let mut list: Vec<_> = read_dir(cache_dir)
         .unwrap_or_else(|_| panic!("failed to read directory {:?}", cache_dir))
         .filter_map(|entry| {
             let cur = entry.expect("reading directory failed");
@@ -539,7 +539,7 @@ fn get_layer_file_paths(cache_dir: &tempfile::TempDir) -> Vec<PathBuf> {
 }
 
 fn clear_cache_dir_keep_data_layer(cache_dir: &TempDir) {
-    for entry in read_dir(&cache_dir).expect("faailed to read directory") {
+    for entry in read_dir(cache_dir).expect("faailed to read directory") {
         let entry_path = entry.expect("failed get directory entry").path();
         if entry_path.is_file() {
             // delete everything except the data-layers

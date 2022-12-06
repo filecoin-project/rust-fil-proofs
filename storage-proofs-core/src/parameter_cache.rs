@@ -205,7 +205,7 @@ fn ensure_ancestor_dirs_exist(cache_entry_path: PathBuf) -> Result<PathBuf> {
     );
 
     if let Some(parent_dir) = cache_entry_path.parent() {
-        if let Err(err) = create_dir_all(&parent_dir) {
+        if let Err(err) = create_dir_all(parent_dir) {
             match err.kind() {
                 io::ErrorKind::AlreadyExists => {}
                 _ => return Err(From::from(err)),

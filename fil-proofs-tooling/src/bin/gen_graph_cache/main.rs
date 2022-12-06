@@ -226,7 +226,7 @@ fn main() -> Result<()> {
     // directory.
     if json {
         let json_output_path = Path::new(PARENT_CACHE_JSON_OUTPUT);
-        let json_file = File::create(&json_output_path)?;
+        let json_file = File::create(json_output_path)?;
         let writer = BufWriter::new(json_file);
         serde_json::to_writer_pretty(writer, &parent_cache_summary_map)?;
         println!("Wrote {:?}", json_output_path);

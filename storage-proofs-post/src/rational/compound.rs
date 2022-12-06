@@ -108,7 +108,7 @@ where
                 v.iter()
                     .map(|p| {
                         (
-                            (*p).0.iter().copied().map(Into::into).map(Some).collect(),
+                            p.0.iter().copied().map(Into::into).map(Some).collect(),
                             Some(p.1),
                         )
                     })

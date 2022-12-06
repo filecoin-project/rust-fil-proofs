@@ -41,40 +41,40 @@ impl PoseidonArity for U0 {
 
 impl PoseidonArity for U2 {
     fn PARAMETERS() -> &'static PoseidonConstants<Fr, Self> {
-        &*POSEIDON_CONSTANTS_2
+        &POSEIDON_CONSTANTS_2
     }
 }
 
 impl PoseidonArity for U4 {
     fn PARAMETERS() -> &'static PoseidonConstants<Fr, Self> {
-        &*POSEIDON_CONSTANTS_4
+        &POSEIDON_CONSTANTS_4
     }
 }
 
 impl PoseidonArity for U8 {
     fn PARAMETERS() -> &'static PoseidonConstants<Fr, Self> {
-        &*POSEIDON_CONSTANTS_8
+        &POSEIDON_CONSTANTS_8
     }
 }
 
 impl PoseidonArity for U11 {
     fn PARAMETERS() -> &'static PoseidonConstants<Fr, Self> {
-        &*POSEIDON_CONSTANTS_11
+        &POSEIDON_CONSTANTS_11
     }
 }
 
 impl PoseidonArity for U16 {
     fn PARAMETERS() -> &'static PoseidonConstants<Fr, Self> {
-        &*POSEIDON_CONSTANTS_16
+        &POSEIDON_CONSTANTS_16
     }
 }
 impl PoseidonArity for U24 {
     fn PARAMETERS() -> &'static PoseidonConstants<Fr, Self> {
-        &*POSEIDON_CONSTANTS_24
+        &POSEIDON_CONSTANTS_24
     }
 }
 impl PoseidonArity for U36 {
     fn PARAMETERS() -> &'static PoseidonConstants<Fr, Self> {
-        &*POSEIDON_CONSTANTS_36
+        &POSEIDON_CONSTANTS_36
     }
 }
