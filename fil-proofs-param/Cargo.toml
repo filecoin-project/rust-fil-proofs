@@ -2,45 +2,49 @@
 name = "fil-proofs-param"
 description = "Filecoin parameter cli tools."
 version = "7.0.0"
-authors = ["dignifiedquire <dignifiedquire@gmail.com>", "laser <l@s3r.com>", "porcuquine <porcuquine@users.noreply.github.com>"]
+authors = [
+    "dignifiedquire <dignifiedquire@gmail.com>",
+    "laser <l@s3r.com>",
+    "porcuquine <porcuquine@users.noreply.github.com>",
+]
 license = "MIT OR Apache-2.0"
 edition = "2018"
 repository = "https://github.com/filecoin-project/rust-fil-proofs"
 readme = "README.md"
 
 [dependencies]
-storage-proofs-core = { path = "../storage-proofs-core", version = "~12.0.0", default-features = false}
-storage-proofs-porep = { path = "../storage-proofs-porep", version = "~12.0.0", default-features = false }
-storage-proofs-post = { path = "../storage-proofs-post", version = "~12.0.0", default-features = false }
-storage-proofs-update = { path = "../storage-proofs-update", version = "~12.0.0", default-features = false }
-filecoin-proofs = { version = "~12.0.0", path = "../filecoin-proofs", default-features = false }
-rand = "0.8"
-lazy_static = "1.2"
-pbr = "1.0"
-itertools = "0.10.3"
-serde_json = "1.0"
-blake2b_simd = "1.0.0"
-log = "0.4.7"
-fil_logger = "0.1.6"
-env_proxy = "0.4"
-flate2 = { version = "1.0.9", features = ["rust_backend"]}
-tar = "0.4.26"
-anyhow = "1.0.23"
-gperftools = { version = "0.2", optional = true }
-structopt = "0.3.12"
-humansize = "1.1.0"
-indicatif = "0.16.2"
-dialoguer = "0.10.0"
+storage-proofs-core = { workspace = true }
+storage-proofs-porep = { workspace = true }
+storage-proofs-post = { workspace = true }
+storage-proofs-update = { workspace = true }
+filecoin-proofs = { workspace = true }
+rand = { workspace = true }
+lazy_static = { workspace = true }
+pbr = { workspace = true }
+itertools = { workspace = true }
+serde_json = { workspace = true }
+blake2b_simd = { workspace = true }
+log = { workspace = true }
+fil_logger = { workspace = true }
+env_proxy = { workspace = true }
+flate2 = { workspace = true }
+tar = { workspace = true }
+anyhow = { workspace = true }
+gperftools = { workspace = true, optional = true }
+structopt = { workspace = true }
+humansize = { workspace = true }
+indicatif = { workspace = true }
+dialoguer = { workspace = true }
 
 [dependencies.reqwest]
-version = "0.11.10"
+workspace = true
 default-features = false
 features = ["blocking", "native-tls-vendored"]
 
 [dev-dependencies]
-rexpect = "0.4.0"
-failure = "0.1.7"
-tempfile = "3"
+rexpect = { workspace = true }
+failure = { workspace = true }
+tempfile = { workspace = true }
 
 [features]
 default = ["opencl"]
@@ -48,5 +52,15 @@ cpu-profile = ["gperftools"]
 heap-profile = ["gperftools/heap"]
 simd = ["storage-proofs-core/simd"]
 asm = ["storage-proofs-core/asm"]
-cuda = ["storage-proofs-core/cuda", "storage-proofs-porep/cuda", "storage-proofs-post/cuda", "storage-proofs-update/cuda"]
-opencl = ["storage-proofs-core/opencl", "storage-proofs-porep/opencl", "storage-proofs-post/opencl", "storage-proofs-update/opencl"]
+cuda = [
+    "storage-proofs-core/cuda",
+    "storage-proofs-porep/cuda",
+    "storage-proofs-post/cuda",
+    "storage-proofs-update/cuda",
+]
+opencl = [
+    "storage-proofs-core/opencl",
+    "storage-proofs-porep/opencl",
+    "storage-proofs-post/opencl",
+    "storage-proofs-update/opencl",
+]
