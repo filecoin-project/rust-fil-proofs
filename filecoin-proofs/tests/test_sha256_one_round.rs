@@ -1,7 +1,6 @@
 use ff::PrimeFieldBits;
 use fil_halo2_gadgets::boolean::Bit;
 use halo2_gadgets::utilities::bool_check;
-use halo2_gadgets::utilities::decompose_running_sum::RunningSumConfig;
 use halo2_proofs::circuit::{AssignedCell, Layouter, SimpleFloorPlanner, Value};
 use halo2_proofs::dev::MockProver;
 use halo2_proofs::pasta::{EqAffine, Fp};
@@ -63,6 +62,13 @@ fn u32_from_bits_le(bits: &[bool]) -> u32 {
     u32_word
 }
 
+fn u32_to_bits_be(val: u32) -> Vec<bool> {
+    (0..32)
+        .into_iter()
+        .map(|index| (val >> index) & 1 == 1)
+        .collect::<Vec<bool>>()
+}
+
 fn sha256_process_single_block(block: &[bool], cur_hash: [u32; 8]) -> [u32; 8] {
     assert_eq!(block.len(), 512);
 
@@ -76,18 +82,13 @@ fn sha256_process_single_block(block: &[bool], cur_hash: [u32; 8]) -> [u32; 8] {
             .rotate_right(7)
             .bitxor(w[index - 15].rotate_right(18))
             .bitxor(w[index - 15].shr(3));
-        //println!("s0 expected: {}", s0);
 
         let s1 = w[index - 2]
             .rotate_right(17)
             .bitxor(w[index - 2].rotate_right(19))
             .bitxor(w[index - 2].shr(10));
 
-        //println!("s1 expected: {}", s1);
-
         w[index] = w[index - 16] + s0 + w[index - 7] + s1;
-
-        //println!("w[{}]: {}", index, w[index]);
     }
 
     let mut a = cur_hash[0];
@@ -204,6 +205,7 @@ struct AssignedWord {
     bits: Vec<Option<AssignedCell<Bit, Fp>>>,
 }
 
+// taken from Jake's code
 impl AssignedWord {
     fn rotr(&self, n: usize) -> Self {
         let n = n % 32;
@@ -252,6 +254,7 @@ impl AssignedWord {
     }
 }
 
+const BLOCK_BIT_LEN: usize = 512;
 const WORD_BIT_LEN: usize = 32;
 
 #[derive(Clone)]
@@ -283,60 +286,63 @@ impl Sha256Chip {
         bits: Option<[Column<Advice>; 8]>,
         s_pack: Option<Selector>,
     ) -> Sha256Config {
-        meta.create_gate("boolean constraint", |meta: &mut VirtualCells<Fp>| {
-            let s_word = meta.query_selector(s_word);
+        meta.create_gate(
+            "boolean constraint of 32-bit word bits",
+            |meta: &mut VirtualCells<Fp>| {
+                let s_word = meta.query_selector(s_word);
 
-            let mut bits_to_constraint = (0..WORD_BIT_LEN / word.len())
-                .into_iter()
-                .flat_map(|rotation_value| {
-                    (0..word.len())
-                        .into_iter()
-                        .map(|index| {
-                            meta.query_advice(word[index], Rotation(rotation_value as i32))
-                        })
-                        .collect::<Vec<Expression<Fp>>>()
-                })
-                .collect::<Vec<Expression<Fp>>>()
-                .into_iter();
+                let mut bits_to_constraint = (0..WORD_BIT_LEN / word.len())
+                    .into_iter()
+                    .flat_map(|rotation_value| {
+                        (0..word.len())
+                            .into_iter()
+                            .map(|index| {
+                                meta.query_advice(word[index], Rotation(rotation_value as i32))
+                            })
+                            .collect::<Vec<Expression<Fp>>>()
+                    })
+                    .collect::<Vec<Expression<Fp>>>()
+                    .into_iter();
 
-            Constraints::with_selector(
-                s_word,
-                [
-                    ("0", bool_check(bits_to_constraint.next().unwrap())),
-                    ("1", bool_check(bits_to_constraint.next().unwrap())),
-                    ("2", bool_check(bits_to_constraint.next().unwrap())),
-                    ("3", bool_check(bits_to_constraint.next().unwrap())),
-                    ("4", bool_check(bits_to_constraint.next().unwrap())),
-                    ("5", bool_check(bits_to_constraint.next().unwrap())),
-                    ("6", bool_check(bits_to_constraint.next().unwrap())),
-                    ("7", bool_check(bits_to_constraint.next().unwrap())),
-                    ("8", bool_check(bits_to_constraint.next().unwrap())),
-                    ("9", bool_check(bits_to_constraint.next().unwrap())),
-                    ("10", bool_check(bits_to_constraint.next().unwrap())),
-                    ("11", bool_check(bits_to_constraint.next().unwrap())),
-                    ("12", bool_check(bits_to_constraint.next().unwrap())),
-                    ("13", bool_check(bits_to_constraint.next().unwrap())),
-                    ("14", bool_check(bits_to_constraint.next().unwrap())),
-                    ("15", bool_check(bits_to_constraint.next().unwrap())),
-                    ("16", bool_check(bits_to_constraint.next().unwrap())),
-                    ("17", bool_check(bits_to_constraint.next().unwrap())),
-                    ("18", bool_check(bits_to_constraint.next().unwrap())),
-                    ("19", bool_check(bits_to_constraint.next().unwrap())),
-                    ("20", bool_check(bits_to_constraint.next().unwrap())),
-                    ("21", bool_check(bits_to_constraint.next().unwrap())),
-                    ("22", bool_check(bits_to_constraint.next().unwrap())),
-                    ("23", bool_check(bits_to_constraint.next().unwrap())),
-                    ("24", bool_check(bits_to_constraint.next().unwrap())),
-                    ("25", bool_check(bits_to_constraint.next().unwrap())),
-                    ("26", bool_check(bits_to_constraint.next().unwrap())),
-                    ("27", bool_check(bits_to_constraint.next().unwrap())),
-                    ("28", bool_check(bits_to_constraint.next().unwrap())),
-                    ("29", bool_check(bits_to_constraint.next().unwrap())),
-                    ("30", bool_check(bits_to_constraint.next().unwrap())),
-                    ("31", bool_check(bits_to_constraint.next().unwrap())),
-                ],
-            )
-        });
+                Constraints::with_selector(
+                    s_word,
+                    [
+                        ("0", bool_check(bits_to_constraint.next().unwrap())),
+                        ("1", bool_check(bits_to_constraint.next().unwrap())),
+                        ("2", bool_check(bits_to_constraint.next().unwrap())),
+                        ("3", bool_check(bits_to_constraint.next().unwrap())),
+                        ("4", bool_check(bits_to_constraint.next().unwrap())),
+                        ("5", bool_check(bits_to_constraint.next().unwrap())),
+                        ("6", bool_check(bits_to_constraint.next().unwrap())),
+                        ("7", bool_check(bits_to_constraint.next().unwrap())),
+                        ("8", bool_check(bits_to_constraint.next().unwrap())),
+                        ("9", bool_check(bits_to_constraint.next().unwrap())),
+                        ("10", bool_check(bits_to_constraint.next().unwrap())),
+                        ("11", bool_check(bits_to_constraint.next().unwrap())),
+                        ("12", bool_check(bits_to_constraint.next().unwrap())),
+                        ("13", bool_check(bits_to_constraint.next().unwrap())),
+                        ("14", bool_check(bits_to_constraint.next().unwrap())),
+                        ("15", bool_check(bits_to_constraint.next().unwrap())),
+                        ("16", bool_check(bits_to_constraint.next().unwrap())),
+                        ("17", bool_check(bits_to_constraint.next().unwrap())),
+                        ("18", bool_check(bits_to_constraint.next().unwrap())),
+                        ("19", bool_check(bits_to_constraint.next().unwrap())),
+                        ("20", bool_check(bits_to_constraint.next().unwrap())),
+                        ("21", bool_check(bits_to_constraint.next().unwrap())),
+                        ("22", bool_check(bits_to_constraint.next().unwrap())),
+                        ("23", bool_check(bits_to_constraint.next().unwrap())),
+                        ("24", bool_check(bits_to_constraint.next().unwrap())),
+                        ("25", bool_check(bits_to_constraint.next().unwrap())),
+                        ("26", bool_check(bits_to_constraint.next().unwrap())),
+                        ("27", bool_check(bits_to_constraint.next().unwrap())),
+                        ("28", bool_check(bits_to_constraint.next().unwrap())),
+                        ("29", bool_check(bits_to_constraint.next().unwrap())),
+                        ("30", bool_check(bits_to_constraint.next().unwrap())),
+                        ("31", bool_check(bits_to_constraint.next().unwrap())),
+                    ],
+                )
+            },
+        );
 
         match s_pack {
             Some(s_pack) => {
@@ -388,55 +394,38 @@ impl Sha256Chip {
     fn load_word(
         &self,
         mut layouter: impl Layouter<Fp>,
-        word: Option<[bool; WORD_BIT_LEN]>,
-    ) -> Result<Vec<AssignedCell<Bit, Fp>>, Error> {
+        word: Value<[bool; WORD_BIT_LEN]>,
+    ) -> Result<AssignedWord, Error> {
         layouter.assign_region(
             || "load word",
             |mut region| {
                 self.config.s_word.enable(&mut region, 0)?;
 
+                let word = word.transpose_array();
+
                 let word_columns = self.config.word.len();
 
-                let assigned_word = match word {
-                    Some(word) => word
-                        .chunks(word_columns)
+                let mut assigned_word = vec![];
+                for (offset, word) in word.chunks(word_columns).enumerate() {
+                    for (bit_index, bit) in word.into_iter().enumerate() {
+                        let assigned = region.assign_advice(
+                            || format!("bit {}", offset * word_columns + bit_index),
+                            self.config.word[bit_index],
+                            offset,
+                            || bit.map(|bit| Bit::from(bit)),
+                        )?;
+                        assigned_word.push(assigned);
+                    }
+                }
+
+                let assigned_word = AssignedWord {
+                    bits: assigned_word
                         .into_iter()
-                        .enumerate()
-                        .flat_map(|(offset, word)| {
-                            word.iter()
-                                .enumerate()
-                                .map(|(index, bit)| {
-                                    region
-                                        .assign_advice(
-                                            || format!("bit {}", offset * word_columns + index),
-                                            self.config.word[index],
-                                            offset,
-                                            || Value::known(Bit::from(*bit)),
-                                        )
-                                        .unwrap()
-                                })
-                                .collect::<Vec<AssignedCell<Bit, Fp>>>()
-                        })
-                        .collect::<Vec<AssignedCell<Bit, Fp>>>(),
-                    None => (0..4)
-                        .flat_map(|offset| {
-                            (0..8)
-                                .map(|index| {
-                                    region
-                                        .assign_advice(
-                                            || format!("offset: {}, bit {}", offset, index),
-                                            self.config.word[index],
-                                            offset,
-                                            || Value::unknown(),
-                                        )
-                                        .unwrap()
-                                })
-                                .collect::<Vec<AssignedCell<Bit, Fp>>>()
-                        })
-                        .collect::<Vec<AssignedCell<Bit, Fp>>>(),
+                        .map(Some)
+                        .collect::<Vec<Option<AssignedCell<Bit, Fp>>>>(),
                 };
 
-                Ok(assigned_word.try_into().unwrap())
+                Ok(assigned_word)
             },
         )
     }
@@ -979,12 +968,7 @@ impl AssignedWordLogicalOperationsChip {
         }
     }
 
-    fn not(
-        &self,
-        mut layouter: impl Layouter<Fp>,
-        a: AssignedWord,
-        expected_not_a: u32,
-    ) -> Result<AssignedWord, Error> {
+    fn not(&self, mut layouter: impl Layouter<Fp>, a: AssignedWord) -> Result<AssignedWord, Error> {
         layouter.assign_region(
             || "not",
             |mut region| {
@@ -994,7 +978,8 @@ impl AssignedWordLogicalOperationsChip {
 
                 self.config.s_not.enable(&mut region, 0)?;
 
-                let _ = a.bits
+                let _ = a
+                    .bits
                     .chunks(self.config.word_a.len())
                     .into_iter()
                     .enumerate()
@@ -1025,7 +1010,10 @@ impl AssignedWordLogicalOperationsChip {
                     })
                     .collect::<Vec<AssignedCell<Bit, Fp>>>();
 
-                let expected_bits = u32_to_bits_be(expected_not_a);
+                let mut expected_not = 0;
+                a.value_u32().map(|a| expected_not = !a);
+
+                let expected_bits = u32_to_bits_be(expected_not);
 
                 let not_assigned = expected_bits
                     .chunks(self.config.word_c.len())
@@ -1054,7 +1042,7 @@ impl AssignedWordLogicalOperationsChip {
 
                 not_assigned
                     .value_u32()
-                    .map(|computed| assert_eq!(expected_not_a, computed));
+                    .map(|computed| assert_eq!(expected_not, computed));
 
                 Ok(not_assigned)
             },
@@ -1066,7 +1054,6 @@ impl AssignedWordLogicalOperationsChip {
         mut layouter: impl Layouter<Fp>,
         a: AssignedWord,
         b: AssignedWord,
-        expected_and: u32,
     ) -> Result<AssignedWord, Error> {
         layouter.assign_region(
             || "and",
@@ -1078,7 +1065,8 @@ impl AssignedWordLogicalOperationsChip {
 
                 self.config.s_and.enable(&mut region, 0)?;
 
-                let _ = a.bits
+                let a = a
+                    .bits
                     .chunks(self.config.word_a.len())
                     .into_iter()
                     .enumerate()
@@ -1109,7 +1097,8 @@ impl AssignedWordLogicalOperationsChip {
                     })
                     .collect::<Vec<AssignedCell<Bit, Fp>>>();
 
-                let _ = b.bits
+                let b = b
+                    .bits
                     .chunks(self.config.word_b.len())
                     .into_iter()
                     .enumerate()
@@ -1139,6 +1128,18 @@ impl AssignedWordLogicalOperationsChip {
                             .collect::<Vec<AssignedCell<Bit, Fp>>>()
                     })
                     .collect::<Vec<AssignedCell<Bit, Fp>>>();
+
+                let a = AssignedWord {
+                    bits: a.into_iter().map(Some).collect(),
+                };
+                let b = AssignedWord {
+                    bits: b.into_iter().map(Some).collect(),
+                };
+
+                let mut expected_and = 0;
+                a.value_u32()
+                    .zip(b.value_u32())
+                    .map(|(a, b)| expected_and = a & b);
 
                 let expected_bits = u32_to_bits_be(expected_and);
 
@@ -1181,7 +1182,6 @@ impl AssignedWordLogicalOperationsChip {
         mut layouter: impl Layouter<Fp>,
         a: AssignedWord,
         b: AssignedWord,
-        expected_xor: u32,
     ) -> Result<AssignedWord, Error> {
         layouter.assign_region(
             || "xor",
@@ -1193,7 +1193,8 @@ impl AssignedWordLogicalOperationsChip {
 
                 self.config.s_xor.enable(&mut region, 0)?;
 
-                let _ = a.bits
+                let a = a
+                    .bits
                     .chunks(self.config.word_a.len())
                     .into_iter()
                     .enumerate()
@@ -1224,7 +1225,8 @@ impl AssignedWordLogicalOperationsChip {
                     })
                     .collect::<Vec<AssignedCell<Bit, Fp>>>();
 
-                let _ = b.bits
+                let b = b
+                    .bits
                     .chunks(self.config.word_b.len())
                     .into_iter()
                     .enumerate()
@@ -1254,6 +1256,18 @@ impl AssignedWordLogicalOperationsChip {
                             .collect::<Vec<AssignedCell<Bit, Fp>>>()
                     })
                     .collect::<Vec<AssignedCell<Bit, Fp>>>();
+
+                let a = AssignedWord {
+                    bits: a.into_iter().map(Some).collect(),
+                };
+                let b = AssignedWord {
+                    bits: b.into_iter().map(Some).collect(),
+                };
+
+                let mut expected_xor = 0;
+                a.value_u32()
+                    .zip(b.value_u32())
+                    .map(|(a, b)| expected_xor = a ^ b);
 
                 let expected_bits = u32_to_bits_be(expected_xor);
 
@@ -1293,8 +1307,8 @@ impl AssignedWordLogicalOperationsChip {
 }
 
 struct Sha256OneRoundCircuit {
-    block: [bool; 512],
-    state: [u32; 8],
+    block: Value<[bool; 512]>,
+    state: Value<[u32; 8]>,
 }
 
 impl Sha256OneRoundCircuit {
@@ -1304,23 +1318,24 @@ impl Sha256OneRoundCircuit {
 }
 
 impl Circuit<Fp> for Sha256OneRoundCircuit {
-    //type Config = Sha256Config;
     type Config = (
         Sha256Config,
-        //BooleanOperationsConfig,
         AssignedWordLogicalOperationsConfig,
         U32WordModularAddConfig,
     );
     type FloorPlanner = SimpleFloorPlanner;
 
     fn without_witnesses(&self) -> Self {
-        todo!()
+        Sha256OneRoundCircuit {
+            block: Value::unknown(),
+            state: Value::unknown(),
+        }
     }
 
     fn configure(meta: &mut ConstraintSystem<Fp>) -> Self::Config {
         meta.instance_column(); // unused
 
-        let word = (0..8)
+        let word = (0..8 * 3)
             .into_iter()
             .map(|_| {
                 let word = meta.advice_column();
@@ -1336,15 +1351,6 @@ impl Circuit<Fp> for Sha256OneRoundCircuit {
 
         meta.enable_equality(advice1);
 
-        let word_b = (0..8)
-            .into_iter()
-            .map(|_| {
-                let word = meta.advice_column();
-                meta.enable_equality(word);
-                word
-            })
-            .collect::<Vec<Column<Advice>>>();
-
         let sha256_config = Sha256Chip::configure(
             meta,
             [
@@ -1353,20 +1359,10 @@ impl Circuit<Fp> for Sha256OneRoundCircuit {
             s_word,
             Some(advice1),
             Some([
-                word_b[0], word_b[1], word_b[2], word_b[3], word_b[4], word_b[5], word_b[6],
-                word_b[7],
+                word[8], word[9], word[10], word[11], word[12], word[13], word[14], word[15],
             ]),
             Some(s_pack),
         );
-
-        let word_c = (0..8)
-            .into_iter()
-            .map(|_| {
-                let word = meta.advice_column();
-                meta.enable_equality(word);
-                word
-            })
-            .collect::<Vec<Column<Advice>>>();
 
         let s_xor_word = meta.selector();
         let s_and_word = meta.selector();
@@ -1378,12 +1374,10 @@ impl Circuit<Fp> for Sha256OneRoundCircuit {
                 word[0], word[1], word[2], word[3], word[4], word[5], word[6], word[7],
             ],
             [
-                word_b[0], word_b[1], word_b[2], word_b[3], word_b[4], word_b[5], word_b[6],
-                word_b[7],
+                word[8], word[9], word[10], word[11], word[12], word[13], word[14], word[15],
             ],
             [
-                word_c[0], word_c[1], word_c[2], word_c[3], word_c[4], word_c[5], word_c[6],
-                word_c[7],
+                word[16], word[17], word[18], word[19], word[20], word[21], word[22], word[23],
             ],
             s_xor_word,
             s_and_word,
@@ -1394,18 +1388,18 @@ impl Circuit<Fp> for Sha256OneRoundCircuit {
         let constants = meta.fixed_column();
         meta.enable_constant(constants);
 
-        let s_range_check = meta.selector();
-        let s_modular_add = meta.selector();
+        //let s_range_check = meta.selector();
+        let s_modular_add2 = meta.selector();
+        let s_modular_add4 = meta.selector();
 
         let modular_add_config = U32WordModularAddChip::configure(
             meta,
-            word[0],
-            s_range_check,
-            word[1],
-            word[2],
-            s_modular_add,
-            word[3],
-            word[4],
+            word[16],
+            word[17],
+            s_modular_add2,
+            s_modular_add4,
+            word[18],
+            word[19],
         );
 
         (sha256_config, assigned_word_config, modular_add_config)
@@ -1416,60 +1410,65 @@ impl Circuit<Fp> for Sha256OneRoundCircuit {
         config: Self::Config,
         mut layouter: impl Layouter<Fp>,
     ) -> Result<(), Error> {
-        let h_expected = sha256_process_single_block(self.block.as_slice(), self.state);
+        // compute expected hash using regular sha256
+        // synthesize circuit and get computed hash
+        // compare expected hash with computed one inside the circuit and assert if they do not match
+
+        let h_expected = self.block.zip(self.state).and_then(|(block, state)| {
+            Value::known(sha256_process_single_block(block.as_slice(), state))
+        });
 
         let sha256chip = Sha256Chip::construct(config.0);
         let assigned_word_operations = AssignedWordLogicalOperationsChip::construct(config.1);
         let u32word_modular_add_chip = U32WordModularAddChip::construct(config.2);
 
-        let mut assigned_state = vec![];
-
         // load state
+        let assigned_state = self
+            .state
+            .transpose_array()
+            .iter()
+            .enumerate()
+            .map(|(index, word)| {
+                sha256chip.load_word(
+                    layouter.namespace(|| format!("load_state_word_{}", index)),
+                    word.and_then(|word| Value::known(u32_to_bits_be(word).try_into().unwrap())),
+                )
+            })
+            .collect::<Vec<Result<AssignedWord, Error>>>()
+            .into_iter()
+            .collect::<Result<Vec<AssignedWord>, Error>>()?;
 
-        for (index, word) in self.state.iter().enumerate() {
-            let assigned_state_word = sha256chip.load_word(
-                layouter.namespace(|| format!("load_state_word_{}", index)),
-                Some(u32_to_bits_be(*word).try_into().unwrap()),
-            )?;
-
-            assigned_state.push(AssignedWord {
-                bits: assigned_state_word
-                    .into_iter()
-                    .map(Some)
-                    .collect::<Vec<Option<AssignedCell<Bit, Fp>>>>()
-                    .try_into()
-                    .unwrap(),
-            });
-        }
-
-        assert_eq!(self.block.len(), 512);
-        let mut assigned_block = vec![];
+        let block_words = self.block.and_then(|block| {
+            let mut block_words: Vec<[bool; WORD_BIT_LEN]> = vec![];
+            for block_word in block.chunks(WORD_BIT_LEN).into_iter() {
+                block_words.push(block_word.try_into().unwrap())
+            }
+            Value::known(block_words)
+        });
 
         // load block (w[0] .. w[15])
-        for (index, word) in self.block.chunks(WORD_BIT_LEN).into_iter().enumerate() {
-            let assigned_block_word = sha256chip.load_word(
-                layouter.namespace(|| format!("load_block_word_{}", index)),
-                Some(word.try_into().unwrap()),
-            )?;
-            assigned_block.push(AssignedWord {
-                bits: assigned_block_word
-                    .into_iter()
-                    .map(Some)
-                    .collect::<Vec<Option<AssignedCell<Bit, Fp>>>>()
-                    .try_into()
-                    .unwrap(),
-            });
-        }
+        let block_words = block_words.transpose_vec(BLOCK_BIT_LEN / WORD_BIT_LEN);
+
+        let mut assigned_block = block_words
+            .into_iter()
+            .enumerate()
+            .map(|(index, block_word)| {
+                sha256chip.load_word(
+                    layouter.namespace(|| format!("load_block_word_{}", index)),
+                    block_word,
+                )
+            })
+            .collect::<Vec<Result<AssignedWord, Error>>>()
+            .into_iter()
+            .collect::<Result<Vec<AssignedWord>, Error>>()?;
 
         // load block (w[16] .. w[63])
         for index in 16..64 {
             let assigned_block_word = sha256chip.load_word(
                 layouter.namespace(|| format!("load_block_word_{}", index)),
-                Some(u32_to_bits_be(0).try_into().unwrap()),
+                Value::known(u32_to_bits_be(0).try_into().unwrap()),
             )?;
-            assigned_block.push(AssignedWord {
-                bits: assigned_block_word.into_iter().map(Some).collect(),
-            });
+            assigned_block.push(assigned_block_word);
         }
 
         for index in 16..64 {
@@ -1479,58 +1478,32 @@ impl Circuit<Fp> for Sha256OneRoundCircuit {
             let rotated_7 = assigned_block[index - 15].rotr(7).clone();
             let rotated_18 = assigned_block[index - 15].rotr(18).clone();
 
-            let mut expected_xor = 0;
-            rotated_7
-                .value_u32()
-                .zip(rotated_18.value_u32())
-                .map(|(a, b)| expected_xor = a ^ b);
-
             let xor1 = assigned_word_operations.xor(
                 layouter.namespace(|| format!("s0 xor1")),
                 rotated_7,
                 rotated_18,
-                expected_xor,
             )?;
-
-            let mut expected_xor = 0;
-            xor1.value_u32()
-                .zip(shifted_3.value_u32())
-                .map(|(a, b)| expected_xor = a ^ b);
 
             let s0 = assigned_word_operations.xor(
                 layouter.namespace(|| format!("s0")),
                 xor1,
                 shifted_3,
-                expected_xor,
             )?;
 
             let shifted_10 = assigned_block[index - 2].shr(10).clone();
             let rotated_17 = assigned_block[index - 2].rotr(17).clone();
             let rotated_19 = assigned_block[index - 2].rotr(19).clone();
 
-            let mut expected_xor = 0;
-            rotated_17
-                .value_u32()
-                .zip(rotated_19.value_u32())
-                .map(|(a, b)| expected_xor = a ^ b);
-
             let xor1 = assigned_word_operations.xor(
                 layouter.namespace(|| format!("s1 xor1")),
                 rotated_17,
                 rotated_19,
-                expected_xor,
             )?;
-
-            let mut expected_xor = 0;
-            xor1.value_u32()
-                .zip(shifted_10.value_u32())
-                .map(|(a, b)| expected_xor = a ^ b);
 
             let s1 = assigned_word_operations.xor(
                 layouter.namespace(|| format!("s1")),
                 xor1,
                 shifted_10,
-                expected_xor,
             )?;
 
             let s0_packed = sha256chip.pack_word(layouter.namespace(|| "pack s0"), s0)?;
@@ -1547,44 +1520,28 @@ impl Circuit<Fp> for Sha256OneRoundCircuit {
                 assigned_block[index - 7].clone(),
             )?;
 
-            let add1 = u32word_modular_add_chip.modular_add(
-                layouter.namespace(|| "add1"),
+            let result = u32word_modular_add_chip.modular_add4(
+                layouter.namespace(|| "new_block"),
                 s0_packed,
                 s1_packed,
-            )?;
-
-            let add2 =
-                u32word_modular_add_chip.modular_add(layouter.namespace(|| "add2"), add1, w_7)?;
-
-            let result = u32word_modular_add_chip.modular_add(
-                layouter.namespace(|| "result"),
-                add2,
+                w_7,
                 w_16,
             )?;
 
-            let mut result_bits = vec![];
-            result.value().map(|x| {
-                for bit in x.to_le_bits() {
-                    result_bits.push(bit)
-                }
-            });
-
-            let new_block_word = if !result_bits.is_empty() {
-                let result_bits = &mut result_bits[0..32];
-                sha256chip.load_word(
-                    layouter.namespace(|| format!("reassign block {}", index)),
-                    Some(result_bits.try_into().unwrap()),
-                )?
-            } else {
-                sha256chip.load_word(
-                    layouter.namespace(|| format!("reassign block {}", index)),
-                    None,
-                )?
-            };
-
-            assigned_block[index] = AssignedWord {
-                bits: new_block_word.into_iter().map(Some).collect(),
-            };
+            assigned_block[index] = sha256chip.load_word(
+                layouter.namespace(|| format!("reassign block {}", index)),
+                result.value().and_then(|word| {
+                    Value::known(
+                        word.to_le_bits()
+                            .into_iter()
+                            .map(|bit| bit)
+                            .take(WORD_BIT_LEN)
+                            .collect::<Vec<bool>>()
+                            .try_into()
+                            .unwrap(),
+                    )
+                }),
+            )?;
         }
 
         let mut a = assigned_state[0].clone();
@@ -1602,155 +1559,83 @@ impl Circuit<Fp> for Sha256OneRoundCircuit {
             let e_rotated_11 = e.clone().rotr(11);
             let e_rotated_25 = e.clone().rotr(25);
 
-            let mut expected_xor = 0;
-            e_rotated_6
-                .value_u32()
-                .zip(e_rotated_11.value_u32())
-                .map(|(a, b)| expected_xor = a ^ b);
-
             let xor1 = assigned_word_operations.xor(
                 layouter.namespace(|| format!("s1 xor1")),
                 e_rotated_6,
                 e_rotated_11,
-                expected_xor,
             )?;
-
-            let mut expected_xor = 0;
-            xor1.value_u32()
-                .zip(e_rotated_25.value_u32())
-                .map(|(a, b)| expected_xor = a ^ b);
 
             let s1 = assigned_word_operations.xor(
                 layouter.namespace(|| format!("s1")),
                 xor1,
                 e_rotated_25,
-                expected_xor,
             )?;
 
-            let mut expected_and = 0;
-            e.value_u32()
-                .zip(f.value_u32())
-                .map(|(e, f)| expected_and = e & f);
             let e_and_f = assigned_word_operations.and(
                 layouter.namespace(|| format!("e and f")),
                 e.clone(),
                 f.clone(),
-                expected_and,
             )?;
 
-            let mut expected_not_e = 0;
-            e.value_u32().map(|e| expected_not_e = !e);
-            let not_e = assigned_word_operations.not(
-                layouter.namespace(|| format!("not e")),
-                e.clone(),
-                expected_not_e,
-            )?;
+            let not_e =
+                assigned_word_operations.not(layouter.namespace(|| format!("not e")), e.clone())?;
 
-            let mut expected_and = 0;
-            not_e
-                .value_u32()
-                .zip(g.value_u32())
-                .map(|(not_e, g)| expected_and = not_e & g);
             let not_e_and_g = assigned_word_operations.and(
                 layouter.namespace(|| format!("not_e and g")),
                 not_e.clone(),
                 g.clone(),
-                expected_and,
             )?;
 
-            let mut ch = 0;
-            e_and_f
-                .value_u32()
-                .zip(not_e_and_g.value_u32())
-                .map(|(left, right)| ch = left ^ right);
             let ch = assigned_word_operations.xor(
                 layouter.namespace(|| "ch"),
                 e_and_f.clone(),
                 not_e_and_g.clone(),
-                ch,
             )?;
 
             let a_rotated_2 = a.rotr(2);
             let a_rotated_13 = a.rotr(13);
             let a_rotated_22 = a.rotr(22);
 
-            let mut expected_xor = 0;
-            a_rotated_2
-                .value_u32()
-                .zip(a_rotated_13.value_u32())
-                .map(|(left, right)| expected_xor = left ^ right);
             let xor1 = assigned_word_operations.xor(
                 layouter.namespace(|| "s0 xor1"),
                 a_rotated_2.clone(),
                 a_rotated_13.clone(),
-                expected_xor,
             )?;
 
-            let mut expected_xor = 0;
-            xor1.value_u32()
-                .zip(a_rotated_22.value_u32())
-                .map(|(left, right)| expected_xor = left ^ right);
             let s0 = assigned_word_operations.xor(
                 layouter.namespace(|| "s0"),
                 xor1.clone(),
                 a_rotated_22.clone(),
-                expected_xor,
             )?;
 
-            let mut expected_and = 0;
-            a.value_u32()
-                .zip(b.value_u32())
-                .map(|(left, right)| expected_and = left & right);
             let a_and_b = assigned_word_operations.and(
                 layouter.namespace(|| "a and b"),
                 a.clone(),
                 b.clone(),
-                expected_and,
             )?;
 
-            let mut expected_and = 0;
-            a.value_u32()
-                .zip(c.value_u32())
-                .map(|(left, right)| expected_and = left & right);
             let a_and_c = assigned_word_operations.and(
                 layouter.namespace(|| "a and c"),
                 a.clone(),
                 c.clone(),
-                expected_and,
             )?;
 
-            let mut expected_and = 0;
-            b.value_u32()
-                .zip(c.value_u32())
-                .map(|(left, right)| expected_and = left & right);
             let b_and_c = assigned_word_operations.and(
                 layouter.namespace(|| "b and c"),
                 b.clone(),
                 c.clone(),
-                expected_and,
             )?;
 
-            let mut expected_xor = 0;
-            a_and_b
-                .value_u32()
-                .zip(a_and_c.value_u32())
-                .map(|(left, right)| expected_xor = left ^ right);
             let xor1 = assigned_word_operations.xor(
                 layouter.namespace(|| "maj xor1"),
                 a_and_b.clone(),
                 a_and_c.clone(),
-                expected_xor,
             )?;
 
-            let mut expected_xor = 0;
-            xor1.value_u32()
-                .zip(b_and_c.value_u32())
-                .map(|(left, right)| expected_xor = left ^ right);
             let maj = assigned_word_operations.xor(
                 layouter.namespace(|| "maj"),
                 xor1.clone(),
                 b_and_c.clone(),
-                expected_xor,
             )?;
 
             let h_packed = sha256chip.pack_word(layouter.namespace(|| "pack h"), h.clone())?;
@@ -1764,41 +1649,28 @@ impl Circuit<Fp> for Sha256OneRoundCircuit {
                 assigned_block[index].clone(),
             )?;
 
-            let add1 = u32word_modular_add_chip.modular_add(
-                layouter.namespace(|| "add1"),
+            let new_block = u32word_modular_add_chip.modular_add4(
+                layouter.namespace(|| "h + s1 + ch + w[index]"),
                 h_packed,
                 s1_packed,
-            )?;
-
-            let add2 = u32word_modular_add_chip.modular_add(
-                layouter.namespace(|| "add2"),
-                add1,
                 ch_packed,
-            )?;
-
-            let add3 = u32word_modular_add_chip.modular_add(
-                layouter.namespace(|| "add3"),
-                add2,
                 w_index,
             )?;
 
             let round_constant_index = u32_to_bits_be(ROUND_CONSTANTS[index]);
             let round_constant_index = sha256chip.load_word(
                 layouter.namespace(|| "load round constant"),
-                Some(round_constant_index.try_into().unwrap()),
+                Value::known(round_constant_index.try_into().unwrap()),
             )?;
 
-            let round_constant_index = AssignedWord {
-                bits: round_constant_index.into_iter().map(Some).collect(),
-            };
             let round_constant_index = sha256chip.pack_word(
                 layouter.namespace(|| "pack round_constant_index"),
                 round_constant_index,
             )?;
 
             let tmp1 = u32word_modular_add_chip.modular_add(
-                layouter.namespace(|| "add4"),
-                add3,
+                layouter.namespace(|| "add round constant"),
+                new_block,
                 round_constant_index,
             )?;
 
@@ -1813,26 +1685,20 @@ impl Circuit<Fp> for Sha256OneRoundCircuit {
                 tmp1.clone(),
             )?;
 
-            let mut e_bits = vec![];
-            e_computed.value().map(|x| {
-                for bit in x.to_le_bits() {
-                    e_bits.push(bit)
-                }
-            });
-
-            let e_bits = if !e_bits.is_empty() {
-                let e_bits = &mut e_bits[0..32];
-                sha256chip.load_word(
-                    layouter.namespace(|| "load computed e"),
-                    Some(e_bits.try_into().unwrap()),
-                )?
-            } else {
-                sha256chip.load_word(layouter.namespace(|| "load computed e"), None)?
-            };
-
-            e = AssignedWord {
-                bits: e_bits.into_iter().map(Some).collect(),
-            };
+            e = sha256chip.load_word(
+                layouter.namespace(|| "load computed e"),
+                e_computed.value().and_then(|word| {
+                    Value::known(
+                        word.to_le_bits()
+                            .into_iter()
+                            .map(|bit| bit)
+                            .take(WORD_BIT_LEN)
+                            .collect::<Vec<bool>>()
+                            .try_into()
+                            .unwrap(),
+                    )
+                }),
+            )?;
 
             d = c.clone();
             c = b.clone();
@@ -1850,26 +1716,20 @@ impl Circuit<Fp> for Sha256OneRoundCircuit {
                 maj_packed,
             )?;
 
-            let mut a_bits = vec![];
-            a_computed.value().map(|x| {
-                for bit in x.to_le_bits() {
-                    a_bits.push(bit)
-                }
-            });
-
-            let a_bits = if !a_bits.is_empty() {
-                let a_bits = &mut a_bits[0..32];
-                sha256chip.load_word(
-                    layouter.namespace(|| "load computed a"),
-                    Some(a_bits.try_into().unwrap()),
-                )?
-            } else {
-                sha256chip.load_word(layouter.namespace(|| "load computed a"), None)?
-            };
-
-            a = AssignedWord {
-                bits: a_bits.into_iter().map(Some).collect(),
-            };
+            a = sha256chip.load_word(
+                layouter.namespace(|| "load computed a"),
+                a_computed.value().and_then(|word| {
+                    Value::known(
+                        word.to_le_bits()
+                            .into_iter()
+                            .map(|bit| bit)
+                            .take(WORD_BIT_LEN)
+                            .collect::<Vec<bool>>()
+                            .try_into()
+                            .unwrap(),
+                    )
+                }),
+            )?;
         }
 
         let assigned_state_0 = sha256chip.pack_word(
@@ -1962,16 +1822,25 @@ impl Circuit<Fp> for Sha256OneRoundCircuit {
 
         let h_actual = vec![h0, h1, h2, h3, h4, h5, h6, h7];
 
+        let h_expected = h_expected.transpose_array();
+
         for index in 0..8 {
-            h_actual[index].value().assert_if_known(|_| {
-                let mut actual_bits = vec![];
-                h_actual[index].value().map(|x| {
-                    for bit in x.to_le_bits() {
-                        actual_bits.push(bit)
-                    }
-                });
-                h_expected[index] == u32_from_bits_le(&actual_bits[0..32])
-            });
+            h_actual[index]
+                .value()
+                .zip(h_expected[index])
+                .assert_if_known(|(actual, expected)| {
+                    let actual = u32_from_bits_le(
+                        actual
+                            .to_le_bits()
+                            .into_iter()
+                            .map(|bit| bit)
+                            .take(WORD_BIT_LEN)
+                            .collect::<Vec<bool>>()
+                            .as_slice(),
+                    );
+
+                    actual == *expected
+                })
         }
 
         Ok(())
@@ -1980,8 +1849,11 @@ impl Circuit<Fp> for Sha256OneRoundCircuit {
 
 #[test]
 fn sha256_one_round_mock_prover() {
-    let block = vec![true; 512].try_into().unwrap();
-    let circuit = Sha256OneRoundCircuit { block, state: IV };
+    let block = Value::known(vec![true; 512].try_into().unwrap());
+    let circuit = Sha256OneRoundCircuit {
+        block,
+        state: Value::known(IV),
+    };
 
     let proof = MockProver::run(circuit.k(), &circuit, vec![]).expect("couldn't run mocked prover");
     assert!(proof.verify().is_ok());
@@ -1990,7 +1862,10 @@ fn sha256_one_round_mock_prover() {
 #[test]
 fn sha256_one_round_end_to_end_test() {
     fn test(block: [bool; 512], state: [u32; 8], use_circuit_prover_for_keygen: bool) -> bool {
-        let circuit = Sha256OneRoundCircuit { block, state };
+        let circuit = Sha256OneRoundCircuit {
+            block: Value::known(block),
+            state: Value::known(state),
+        };
 
         let public_inputs = vec![];
 
@@ -2049,12 +1924,6 @@ fn sha256_one_round_end_to_end_test() {
         result
     }
 
-    //fn negative_test(block: [bool; 512], state: [u32; 8], use_circuit_prover_for_keygen: bool) {
-    //    println!("negative test ...");
-    //    assert!(!test(block, state, use_circuit_prover_for_keygen));
-    //    println!("OK");
-    //}
-
     fn positive_test(block: [bool; 512], state: [u32; 8], use_circuit_prover_for_keygen: bool) {
         println!("positive test ...");
         assert!(test(block, state, use_circuit_prover_for_keygen));
@@ -2064,21 +1933,17 @@ fn sha256_one_round_end_to_end_test() {
     let block = [true; 512];
     let state = IV;
     positive_test(block, state, true);
-    //positive_test(block, state, false);
+    positive_test(block, state, false);
 }
-
-//const WORD_BIT_LENGTH: usize = 32;
-const WINDOW_BIT_LENGTH: usize = 2;
-//const NUM_WINDOWS: usize = (WORD_BIT_LENGTH + WINDOW_BIT_LENGTH - 1) / WINDOW_BIT_LENGTH;
 
 #[derive(Clone)]
 struct U32WordModularAddConfig {
-    running_sum: RunningSumConfig<Fp, WINDOW_BIT_LENGTH>,
     a: Column<Advice>,
     b: Column<Advice>,
     c_lo: Column<Advice>,
     c_hi: Column<Advice>,
-    s_mod_add: Selector,
+    s_mod_add2: Selector,
+    s_mod_add4: Selector,
 }
 
 struct U32WordModularAddChip {
@@ -2088,19 +1953,15 @@ struct U32WordModularAddChip {
 impl U32WordModularAddChip {
     fn configure(
         meta: &mut ConstraintSystem<Fp>,
-        z: Column<Advice>,
-        q_range_check: Selector,
         a: Column<Advice>,
         b: Column<Advice>,
-        s_mod_add: Selector,
+        s_mod_add2: Selector,
+        s_mod_add4: Selector,
         c_lo: Column<Advice>,
         c_hi: Column<Advice>,
     ) -> U32WordModularAddConfig {
-        let running_sum =
-            RunningSumConfig::<Fp, WINDOW_BIT_LENGTH>::configure(meta, q_range_check, z);
-
-        meta.create_gate("modular add", |meta| {
-            let selector = meta.query_selector(s_mod_add);
+        meta.create_gate("modular add2", |meta| {
+            let selector = meta.query_selector(s_mod_add2);
             let a = meta.query_advice(a, Rotation::cur());
             let b = meta.query_advice(b, Rotation::cur());
             let c_lo = meta.query_advice(c_lo, Rotation::cur());
@@ -2110,13 +1971,30 @@ impl U32WordModularAddChip {
             [("modular addition", selector * (a + b - c))]
         });
 
+        meta.create_gate("modular add4", |meta| {
+            let selector = meta.query_selector(s_mod_add4);
+            let a_val = meta.query_advice(a, Rotation::cur());
+            let b_val = meta.query_advice(a, Rotation::next());
+            let c_val = meta.query_advice(b, Rotation::cur());
+            let d_val = meta.query_advice(b, Rotation::next());
+
+            let c_lo = meta.query_advice(c_lo, Rotation::cur());
+            let c_hi = meta.query_advice(c_hi, Rotation::cur());
+
+            let c = c_lo + (Expression::Constant(Fp::from(1u64 << 32)) * c_hi);
+            [(
+                "modular addition4",
+                selector * (a_val + b_val + c_val + d_val - c),
+            )]
+        });
+
         U32WordModularAddConfig {
-            running_sum,
             a,
             b,
             c_lo,
             c_hi,
-            s_mod_add,
+            s_mod_add2,
+            s_mod_add4,
         }
     }
 
@@ -2124,81 +2002,67 @@ impl U32WordModularAddChip {
         U32WordModularAddChip { config }
     }
 
-    /*
-    fn witness_decompose(
-        &self,
-        region: &mut Region<'_, Fp>,
-        offset: usize,
-        alpha: Value<Fp>,
-        strict: bool,
-        word_num_bits: usize,
-        num_windows: usize,
-    ) -> Result<RunningSum<Fp>, Error> {
-        self.config.running_sum.witness_decompose(
-            region,
-            offset,
-            alpha,
-            strict,
-            word_num_bits,
-            num_windows,
-        )
-    }
-
-    fn copy_decompose(
-        &self,
-        region: &mut Region<'_, Fp>,
-        offset: usize,
-        alpha: AssignedCell<Fp, Fp>,
-        strict: bool,
-        word_num_bits: usize,
-        num_windows: usize,
-    ) -> Result<RunningSum<Fp>, Error> {
-        self.config.running_sum.copy_decompose(
-            region,
-            offset,
-            alpha,
-            strict,
-            word_num_bits,
-            num_windows,
-        )
-    }
-
-    fn range_check(
+    fn modular_add4(
         &self,
         mut layouter: impl Layouter<Fp>,
-        a: Value<Fp>,
+        a: AssignedCell<Fp, Fp>,
+        b: AssignedCell<Fp, Fp>,
+        c: AssignedCell<Fp, Fp>,
+        d: AssignedCell<Fp, Fp>,
     ) -> Result<AssignedCell<Fp, Fp>, Error> {
         layouter.assign_region(
-            || "range check",
+            || "modular addition",
             |mut region| {
-                let offset = 0;
-                let zs = self.witness_decompose(
-                    &mut region,
-                    offset,
-                    a,
-                    true,
-                    WORD_BIT_LENGTH,
-                    NUM_WINDOWS,
+                self.config.s_mod_add4.enable(&mut region, 0)?;
+
+                let a = a.copy_advice(|| "a copy", &mut region, self.config.a, 0)?;
+                let b = b.copy_advice(|| "b copy", &mut region, self.config.a, 1)?;
+                let c = c.copy_advice(|| "c copy", &mut region, self.config.b, 0)?;
+                let d = d.copy_advice(|| "d copy", &mut region, self.config.b, 1)?;
+
+                fn u32_plus_u32(a: Value<Fp>, b: Value<Fp>) -> (Value<Fp>, Value<Fp>) {
+                    a.zip(b)
+                        .map(|(a, b)| {
+                            let lhs = a
+                                .to_le_bits()
+                                .iter()
+                                .enumerate()
+                                .fold(0u64, |acc, (i, bit)| acc + ((*bit as u64) << i));
+                            let rhs = b
+                                .to_le_bits()
+                                .iter()
+                                .enumerate()
+                                .fold(0u64, |acc, (i, bit)| acc + ((*bit as u64) << i));
+
+                            let sum = lhs + rhs;
+                            let sum_lo = sum & u32::MAX as u64;
+                            let sum_hi = sum >> 32;
+
+                            (Fp::from(sum_lo), Fp::from(sum_hi))
+                        })
+                        .unzip()
+                }
+
+                let (one_lo, one_hi) = u32_plus_u32(a.value().map(|a| *a), b.value().map(|b| *b));
+
+                let (two_lo, two_hi) = u32_plus_u32(c.value().map(|c| *c), d.value().map(|d| *d));
+
+                let (three_lo, three_hi) = u32_plus_u32(one_lo, two_lo);
+
+                // if a + b + c + d overflows, it will be > 0, otherwise - 0. Gate definition relies on this information
+                region.assign_advice(
+                    || "sum_hi",
+                    self.config.c_hi,
+                    0,
+                    || one_hi + two_hi + three_hi,
                 )?;
 
-                let b = zs[0].clone();
-
-                let offset = offset + NUM_WINDOWS + 1;
-
-                let running_sum = self.copy_decompose(
-                    &mut region,
-                    offset,
-                    b,
-                    true,
-                    WORD_BIT_LENGTH,
-                    NUM_WINDOWS,
-                )?;
-
-                Ok(running_sum[0].clone())
+                // output low part of result
+                region.assign_advice(|| "sum_lo", self.config.c_lo, 0, || three_lo)
             },
         )
     }
-*/
+
     fn modular_add(
         &self,
         mut layouter: impl Layouter<Fp>,
@@ -2208,7 +2072,7 @@ impl U32WordModularAddChip {
         layouter.assign_region(
             || "modular addition",
             |mut region| {
-                self.config.s_mod_add.enable(&mut region, 0)?;
+                self.config.s_mod_add2.enable(&mut region, 0)?;
 
                 let a = a.copy_advice(|| "a copy", &mut region, self.config.a, 0)?;
 
@@ -2245,325 +2109,6 @@ impl U32WordModularAddChip {
             },
         )
     }
-}
-
-#[test]
-fn load_word_test() {
-    #[derive(Clone)]
-    struct LoadWordConfig {
-        word: [Column<Advice>; 8],
-        s_word: Selector,
-    }
-
-    struct LoadWordChip {
-        config: LoadWordConfig,
-    }
-
-    impl LoadWordChip {
-        fn configure(
-            meta: &mut ConstraintSystem<Fp>,
-            word: [Column<Advice>; 8],
-            s_word: Selector,
-        ) -> LoadWordConfig {
-            meta.create_gate(
-                "boolean constraint each word's bit",
-                |meta: &mut VirtualCells<Fp>| {
-                    let s_word = meta.query_selector(s_word);
-
-                    let bits_to_constraint_1 = (0..8)
-                        .into_iter()
-                        .map(|index| meta.query_advice(word[index], Rotation::cur()))
-                        .collect::<Vec<Expression<Fp>>>();
-
-                    let bits_to_constraint_2 = (0..8)
-                        .into_iter()
-                        .map(|index| meta.query_advice(word[index], Rotation::next()))
-                        .collect::<Vec<Expression<Fp>>>();
-
-                    let bits_to_constraint_3 = (0..8)
-                        .into_iter()
-                        .map(|index| meta.query_advice(word[index], Rotation(2)))
-                        .collect::<Vec<Expression<Fp>>>();
-
-                    let bits_to_constraint_4 = (0..8)
-                        .into_iter()
-                        .map(|index| meta.query_advice(word[index], Rotation(3)))
-                        .collect::<Vec<Expression<Fp>>>();
-
-                    let mut bits_to_constraint = [
-                        bits_to_constraint_1,
-                        bits_to_constraint_2,
-                        bits_to_constraint_3,
-                        bits_to_constraint_4,
-                    ]
-                    .concat()
-                    .into_iter();
-
-                    Constraints::with_selector(
-                        s_word,
-                        [
-                            ("0", bool_check(bits_to_constraint.next().unwrap())),
-                            ("1", bool_check(bits_to_constraint.next().unwrap())),
-                            ("2", bool_check(bits_to_constraint.next().unwrap())),
-                            ("3", bool_check(bits_to_constraint.next().unwrap())),
-                            ("4", bool_check(bits_to_constraint.next().unwrap())),
-                            ("5", bool_check(bits_to_constraint.next().unwrap())),
-                            ("6", bool_check(bits_to_constraint.next().unwrap())),
-                            ("7", bool_check(bits_to_constraint.next().unwrap())),
-                            ("8", bool_check(bits_to_constraint.next().unwrap())),
-                            ("9", bool_check(bits_to_constraint.next().unwrap())),
-                            ("10", bool_check(bits_to_constraint.next().unwrap())),
-                            ("11", bool_check(bits_to_constraint.next().unwrap())),
-                            ("12", bool_check(bits_to_constraint.next().unwrap())),
-                            ("13", bool_check(bits_to_constraint.next().unwrap())),
-                            ("14", bool_check(bits_to_constraint.next().unwrap())),
-                            ("15", bool_check(bits_to_constraint.next().unwrap())),
-                            ("16", bool_check(bits_to_constraint.next().unwrap())),
-                            ("17", bool_check(bits_to_constraint.next().unwrap())),
-                            ("18", bool_check(bits_to_constraint.next().unwrap())),
-                            ("19", bool_check(bits_to_constraint.next().unwrap())),
-                            ("20", bool_check(bits_to_constraint.next().unwrap())),
-                            ("21", bool_check(bits_to_constraint.next().unwrap())),
-                            ("22", bool_check(bits_to_constraint.next().unwrap())),
-                            ("23", bool_check(bits_to_constraint.next().unwrap())),
-                            ("24", bool_check(bits_to_constraint.next().unwrap())),
-                            ("25", bool_check(bits_to_constraint.next().unwrap())),
-                            ("26", bool_check(bits_to_constraint.next().unwrap())),
-                            ("27", bool_check(bits_to_constraint.next().unwrap())),
-                            ("28", bool_check(bits_to_constraint.next().unwrap())),
-                            ("29", bool_check(bits_to_constraint.next().unwrap())),
-                            ("30", bool_check(bits_to_constraint.next().unwrap())),
-                            ("31", bool_check(bits_to_constraint.next().unwrap())),
-                        ],
-                    )
-                },
-            );
-
-            LoadWordConfig { word, s_word }
-        }
-
-        fn construct(config: LoadWordConfig) -> LoadWordChip {
-            LoadWordChip { config }
-        }
-
-        fn load_word(
-            &self,
-            mut layouter: impl Layouter<Fp>,
-            word: [bool; WORD_BIT_LEN],
-        ) -> Result<Vec<AssignedCell<Bit, Fp>>, Error> {
-            layouter.assign_region(
-                || "load word",
-                |mut region| {
-                    self.config.s_word.enable(&mut region, 0)?;
-
-                    let assigned_word_1 = word[..8]
-                        .iter()
-                        .enumerate()
-                        .map(|(index, bit)| {
-                            region
-                                .assign_advice(
-                                    || format!("bit {}", index),
-                                    self.config.word[index],
-                                    0,
-                                    || Value::known(Bit::from(*bit)),
-                                )
-                                .unwrap()
-                        })
-                        .collect::<Vec<AssignedCell<Bit, Fp>>>();
-
-                    let assigned_word_2 = word[8..16]
-                        .iter()
-                        .enumerate()
-                        .map(|(index, bit)| {
-                            region
-                                .assign_advice(
-                                    || format!("bit {}", index),
-                                    self.config.word[index],
-                                    1,
-                                    || Value::known(Bit::from(*bit)),
-                                )
-                                .unwrap()
-                        })
-                        .collect::<Vec<AssignedCell<Bit, Fp>>>();
-
-                    let assigned_word_3 = word[16..24]
-                        .iter()
-                        .enumerate()
-                        .map(|(index, bit)| {
-                            region
-                                .assign_advice(
-                                    || format!("bit {}", index),
-                                    self.config.word[index],
-                                    2,
-                                    || Value::known(Bit::from(*bit)),
-                                )
-                                .unwrap()
-                        })
-                        .collect::<Vec<AssignedCell<Bit, Fp>>>();
-
-                    let assigned_word_4 = word[24..]
-                        .iter()
-                        .enumerate()
-                        .map(|(index, bit)| {
-                            region
-                                .assign_advice(
-                                    || format!("bit {}", index),
-                                    self.config.word[index],
-                                    3,
-                                    || Value::known(Bit::from(*bit)),
-                                )
-                                .unwrap()
-                        })
-                        .collect::<Vec<AssignedCell<Bit, Fp>>>();
-
-                    let assigned_word = [
-                        assigned_word_1,
-                        assigned_word_2,
-                        assigned_word_3,
-                        assigned_word_4,
-                    ]
-                    .concat();
-
-                    Ok(assigned_word.try_into().unwrap())
-                },
-            )
-        }
-    }
-
-    struct TestCircuit {
-        word: [bool; WORD_BIT_LEN],
-    }
-
-    impl TestCircuit {
-        fn k(&self) -> u32 {
-            6
-        }
-    }
-
-    impl Circuit<Fp> for TestCircuit {
-        type Config = LoadWordConfig;
-        type FloorPlanner = SimpleFloorPlanner;
-
-        fn without_witnesses(&self) -> Self {
-            todo!()
-        }
-
-        fn configure(meta: &mut ConstraintSystem<Fp>) -> Self::Config {
-            meta.instance_column(); // unused; only for proper running end-to-end test
-
-            let word = (0..8)
-                .into_iter()
-                .map(|_| {
-                    let word = meta.advice_column();
-                    meta.enable_equality(word);
-                    word
-                })
-                .collect::<Vec<Column<Advice>>>();
-
-            let s_word = meta.selector();
-
-            LoadWordChip::configure(meta, word.try_into().unwrap(), s_word)
-        }
-
-        fn synthesize(
-            &self,
-            config: Self::Config,
-            mut layouter: impl Layouter<Fp>,
-        ) -> Result<(), Error> {
-            let chip = LoadWordChip::construct(config);
-
-            chip.load_word(layouter.namespace(|| "1"), self.word.clone())?;
-
-            Ok(())
-        }
-    }
-
-    let u32_word: u32 = 891347612;
-
-    let circuit = TestCircuit {
-        word: u32_to_bits_be(u32_word).try_into().unwrap(),
-    };
-
-    let proof =
-        MockProver::run(circuit.k(), &circuit, vec![vec![]]).expect("couldn't run mocked prover");
-    assert!(proof.verify().is_ok());
-
-    fn test_end_to_end(word: [bool; WORD_BIT_LEN], use_circuit_prover_for_keygen: bool) -> bool {
-        let circuit = TestCircuit { word };
-
-        let public_inputs = vec![];
-
-        let k = circuit.k();
-
-        let params: Params<EqAffine> = Params::new(k);
-
-        let pk = if use_circuit_prover_for_keygen {
-            let vk = keygen_vk(&params, &circuit).expect("keygen_vk should not fail");
-            keygen_pk(&params, vk, &circuit).expect("keygen_pk should not fail")
-        } else {
-            let circuit = circuit.without_witnesses();
-            let vk = keygen_vk(&params, &circuit).expect("keygen_vk should not fail");
-            keygen_pk(&params, vk, &circuit).expect("keygen_pk should not fail")
-        };
-
-        let mut transcript = Blake2bWrite::<_, EqAffine, Challenge255<_>>::init(vec![]);
-
-        let now = std::time::Instant::now();
-        // Create a proof
-        create_proof(
-            &params,
-            &pk,
-            &[circuit],
-            &[&[&public_inputs[..]]],
-            OsRng,
-            &mut transcript,
-        )
-        .expect("proof generation should not fail");
-        let proving_time = now.elapsed();
-
-        let proof: Vec<u8> = transcript.finalize();
-
-        let strategy = SingleVerifier::new(&params);
-        let mut transcript = Blake2bRead::<_, _, Challenge255<_>>::init(&proof[..]);
-
-        let now = std::time::Instant::now();
-        let result = verify_proof(
-            &params,
-            pk.get_vk(),
-            strategy,
-            &[&[&public_inputs[..]]],
-            &mut transcript,
-        )
-        .is_ok();
-        let verifying_time = now.elapsed();
-
-        println!(
-            "Proof size: {} bytes; k: {}; proving time: {:.2?}; verifying time: {:.2?}",
-            proof.len(),
-            k,
-            proving_time,
-            verifying_time
-        );
-
-        result
-    }
-
-    //fn negative_test(word: [bool; WORD_BIT_LEN], use_circuit_prover_for_keygen: bool) {
-    //    println!("negative test ...");
-    //    assert!(!test_end_to_end(word, use_circuit_prover_for_keygen));
-    //    println!("OK");
-    //}
-
-    fn positive_test(word: [bool; WORD_BIT_LEN], use_circuit_prover_for_keygen: bool) {
-        println!("positive test ...");
-        assert!(test_end_to_end(word, use_circuit_prover_for_keygen));
-        println!("OK");
-    }
-
-    let block = [false; WORD_BIT_LEN];
-
-    positive_test(block, true);
-    //positive_test(block, false);
 }
 
 #[test]
@@ -2660,27 +2205,22 @@ fn test_assigned_word_logical_operations() {
 
             let word_a_loaded = sha256chip.load_word(
                 layouter.namespace(|| "load word_a"),
-                Some(u32_to_bits_be(self.word_a).try_into().unwrap()),
+                Value::known(u32_to_bits_be(self.word_a).try_into().unwrap()),
             )?;
             let word_b_loaded = sha256chip.load_word(
                 layouter.namespace(|| "load word_b"),
-                Some(u32_to_bits_be(self.word_b).try_into().unwrap()),
+                Value::known(u32_to_bits_be(self.word_b).try_into().unwrap()),
             )?;
 
-            let word_a_loaded = AssignedWord {
-                bits: word_a_loaded.into_iter().map(Some).collect(),
-            };
-
-            let word_b_loaded = AssignedWord {
-                bits: word_b_loaded.into_iter().map(Some).collect(),
-            };
-
-            word_operations_chip.xor(
+            let xor_computed = word_operations_chip.xor(
                 layouter.namespace(|| "xor word_a and word_b"),
                 word_a_loaded,
                 word_b_loaded,
-                self.xor,
             )?;
+
+            xor_computed.value_u32().map(|computed| {
+                assert_eq!(computed, self.xor)
+            });
 
             Ok(())
         }
@@ -2772,11 +2312,4 @@ fn test_assigned_word_logical_operations() {
     }
 
     assert!(test_end_to_end(50, 75, 121, true));
-}
-
-fn u32_to_bits_be(val: u32) -> Vec<bool> {
-    (0..32)
-        .into_iter()
-        .map(|index| (val >> index) & 1 == 1)
-        .collect::<Vec<bool>>()
 }
