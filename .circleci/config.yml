@@ -1,10 +1,5 @@
 version: 2.1
 
-parameters:
-  nightly-toolchain:
-    type: string
-    default: "nightly-2022-05-09"
-
 executors:
   default:
     docker:
@@ -131,7 +126,7 @@ jobs:
           at: "."
       - restore_rustup_cache
       - restore_parameter_cache
-      - run: rustup install << pipeline.parameters.nightly-toolchain >>
+      - run: rustup install $(cat rust-toolchain)
       - run:
           name: Test with use_multicore_sdr
           command: |
@@ -220,7 +215,7 @@ jobs:
             curl https://sh.rustup.rs -sSf | sh -s -- -y
       - run: rustup install $(cat rust-toolchain)
       - run: rustup default $(cat rust-toolchain)
-      - run: rustup install << pipeline.parameters.nightly-toolchain >>
+      - run: rustup install $(cat rust-toolchain)
       - run: cargo update
       - run: cargo fetch
       - run:
