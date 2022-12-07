@@ -287,22 +287,15 @@ impl Sha256Chip {
         s_pack: Option<Selector>,
     ) -> Sha256Config {
         meta.create_gate(
-            "boolean constraint of 32-bit word bits",
+            "boolean constraint of 8 bits at once using 8 advice columns",
             |meta: &mut VirtualCells<Fp>| {
                 let s_word = meta.query_selector(s_word);
 
-                let mut bits_to_constraint = (0..WORD_BIT_LEN / word.len())
-                    .into_iter()
-                    .flat_map(|rotation_value| {
-                        (0..word.len())
-                            .into_iter()
-                            .map(|index| {
-                                meta.query_advice(word[index], Rotation(rotation_value as i32))
-                            })
-                            .collect::<Vec<Expression<Fp>>>()
-                    })
-                    .collect::<Vec<Expression<Fp>>>()
-                    .into_iter();
+                let mut bits_to_constraint = word
+                    .iter()
+                    .map(|col| {
+                        meta.query_advice(*col, Rotation::cur())
+                    }).into_iter();
 
                 Constraints::with_selector(
                     s_word,
@@ -315,30 +308,6 @@ impl Sha256Chip {
                         ("5", bool_check(bits_to_constraint.next().unwrap())),
                         ("6", bool_check(bits_to_constraint.next().unwrap())),
                         ("7", bool_check(bits_to_constraint.next().unwrap())),
-                        ("8", bool_check(bits_to_constraint.next().unwrap())),
-                        ("9", bool_check(bits_to_constraint.next().unwrap())),
-                        ("10", bool_check(bits_to_constraint.next().unwrap())),
-                        ("11", bool_check(bits_to_constraint.next().unwrap())),
-                        ("12", bool_check(bits_to_constraint.next().unwrap())),
-                        ("13", bool_check(bits_to_constraint.next().unwrap())),
-                        ("14", bool_check(bits_to_constraint.next().unwrap())),
-                        ("15", bool_check(bits_to_constraint.next().unwrap())),
-                        ("16", bool_check(bits_to_constraint.next().unwrap())),
-                        ("17", bool_check(bits_to_constraint.next().unwrap())),
-                        ("18", bool_check(bits_to_constraint.next().unwrap())),
-                        ("19", bool_check(bits_to_constraint.next().unwrap())),
-                        ("20", bool_check(bits_to_constraint.next().unwrap())),
-                        ("21", bool_check(bits_to_constraint.next().unwrap())),
-                        ("22", bool_check(bits_to_constraint.next().unwrap())),
-                        ("23", bool_check(bits_to_constraint.next().unwrap())),
-                        ("24", bool_check(bits_to_constraint.next().unwrap())),
-                        ("25", bool_check(bits_to_constraint.next().unwrap())),
-                        ("26", bool_check(bits_to_constraint.next().unwrap())),
-                        ("27", bool_check(bits_to_constraint.next().unwrap())),
-                        ("28", bool_check(bits_to_constraint.next().unwrap())),
-                        ("29", bool_check(bits_to_constraint.next().unwrap())),
-                        ("30", bool_check(bits_to_constraint.next().unwrap())),
-                        ("31", bool_check(bits_to_constraint.next().unwrap())),
                     ],
                 )
             },
@@ -394,36 +363,45 @@ impl Sha256Chip {
     fn load_word(
         &self,
         mut layouter: impl Layouter<Fp>,
-        word: Value<[bool; WORD_BIT_LEN]>,
+        word: Value<[bool; 32]>,
     ) -> Result<AssignedWord, Error> {
+        let word = word.transpose_array();
+
+        let byte1 = self.load_word_byte(layouter.namespace(|| "load 1 byte"), word[0..8].try_into().unwrap(), 0)?;
+
+        let byte2 = self.load_word_byte(layouter.namespace(|| "load 2 byte"), word[8..16].try_into().unwrap(), 1)?;
+
+        let byte3 = self.load_word_byte(layouter.namespace(|| "load 3 byte"), word[16..24].try_into().unwrap(), 2)?;
+
+        let byte4 = self.load_word_byte(layouter.namespace(|| "load 4 byte"), word[24..32].try_into().unwrap(), 3)?;
+
+
+        Ok(AssignedWord {
+            bits: [byte1, byte2, byte3, byte4].concat().into_iter().map(Some).collect()
+        })
+    }
+
+    fn load_word_byte(
+        &self,
+        mut layouter: impl Layouter<Fp>,
+        word: [Value<bool>; 8],
+        selector_offset: usize
+    ) -> Result<Vec<AssignedCell<Bit, Fp>>, Error> {
         layouter.assign_region(
             || "load word",
             |mut region| {
-                self.config.s_word.enable(&mut region, 0)?;
-
-                let word = word.transpose_array();
-
-                let word_columns = self.config.word.len();
+                self.config.s_word.enable(&mut region, selector_offset)?;
 
                 let mut assigned_word = vec![];
-                for (offset, word) in word.chunks(word_columns).enumerate() {
-                    for (bit_index, bit) in word.into_iter().enumerate() {
-                        let assigned = region.assign_advice(
-                            || format!("bit {}", offset * word_columns + bit_index),
-                            self.config.word[bit_index],
-                            offset,
-                            || bit.map(|bit| Bit::from(bit)),
-                        )?;
-                        assigned_word.push(assigned);
-                    }
+                for (bit_index, bit) in word.iter().enumerate() {
+                    let assigned = region.assign_advice(
+                        || format!("bit {}", bit_index),
+                        self.config.word[bit_index],
+                        selector_offset,
+                        || bit.map(|bit| Bit::from(bit)),
+                    )?;
+                    assigned_word.push(assigned);
                 }
-
-                let assigned_word = AssignedWord {
-                    bits: assigned_word
-                        .into_iter()
-                        .map(Some)
-                        .collect::<Vec<Option<AssignedCell<Bit, Fp>>>>(),
-                };
 
                 Ok(assigned_word)
             },
