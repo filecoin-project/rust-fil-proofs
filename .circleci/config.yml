@@ -226,7 +226,7 @@ jobs:
       - run:
           name: Test arm with no gpu
           command: |
-            cargo +$(cat rust-toolchain) -Zpackage-features test --release --all --verbose --no-default-features
+            cargo +$(cat rust-toolchain) test --release --all --verbose --no-default-features
           no_output_timeout: 90m
 
   bench:
