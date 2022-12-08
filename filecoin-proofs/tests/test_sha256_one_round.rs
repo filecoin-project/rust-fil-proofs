@@ -293,9 +293,8 @@ impl Sha256Chip {
 
                 let mut bits_to_constraint = word
                     .iter()
-                    .map(|col| {
-                        meta.query_advice(*col, Rotation::cur())
-                    }).into_iter();
+                    .map(|col| meta.query_advice(*col, Rotation::cur()))
+                    .into_iter();
 
                 Constraints::with_selector(
                     s_word,
@@ -367,17 +366,36 @@ impl Sha256Chip {
     ) -> Result<AssignedWord, Error> {
         let word = word.transpose_array();
 
-        let byte1 = self.load_word_byte(layouter.namespace(|| "load 1 byte"), word[0..8].try_into().unwrap(), 0)?;
+        let byte1 = self.load_word_byte(
+            layouter.namespace(|| "load 1 byte"),
+            word[0..8].try_into().unwrap(),
+            0,
+        )?;
 
-        let byte2 = self.load_word_byte(layouter.namespace(|| "load 2 byte"), word[8..16].try_into().unwrap(), 1)?;
+        let byte2 = self.load_word_byte(
+            layouter.namespace(|| "load 2 byte"),
+            word[8..16].try_into().unwrap(),
+            1,
+        )?;
 
-        let byte3 = self.load_word_byte(layouter.namespace(|| "load 3 byte"), word[16..24].try_into().unwrap(), 2)?;
+        let byte3 = self.load_word_byte(
+            layouter.namespace(|| "load 3 byte"),
+            word[16..24].try_into().unwrap(),
+            2,
+        )?;
 
-        let byte4 = self.load_word_byte(layouter.namespace(|| "load 4 byte"), word[24..32].try_into().unwrap(), 3)?;
-
+        let byte4 = self.load_word_byte(
+            layouter.namespace(|| "load 4 byte"),
+            word[24..32].try_into().unwrap(),
+            3,
+        )?;
 
         Ok(AssignedWord {
-            bits: [byte1, byte2, byte3, byte4].concat().into_iter().map(Some).collect()
+            bits: [byte1, byte2, byte3, byte4]
+                .concat()
+                .into_iter()
+                .map(Some)
+                .collect(),
         })
     }
 
@@ -385,7 +403,7 @@ impl Sha256Chip {
         &self,
         mut layouter: impl Layouter<Fp>,
         word: [Value<bool>; 8],
-        selector_offset: usize
+        selector_offset: usize,
     ) -> Result<Vec<AssignedCell<Bit, Fp>>, Error> {
         layouter.assign_region(
             || "load word",
@@ -458,6 +476,7 @@ struct AssignedWordLogicalOperationsConfig {
     s_and: Selector,
     s_not: Selector,
 }
+
 struct AssignedWordLogicalOperationsChip {
     config: AssignedWordLogicalOperationsConfig,
 }
@@ -476,42 +495,21 @@ impl AssignedWordLogicalOperationsChip {
         s_not: Selector,
     ) -> AssignedWordLogicalOperationsConfig {
         meta.create_gate("xor gate", |meta: &mut VirtualCells<Fp>| {
-            // query XOR selector
-            // query word_a bits
-            // query word_b bits
-            // query word_c bits (with XOR result)
-            // return constraints
-
             let s_xor = meta.query_selector(s_xor);
 
-            let a = (0..WORD_BIT_LEN / word_a.len())
+            let a = (0..word_a.len())
                 .into_iter()
-                .flat_map(|rot| {
-                    (0..word_a.len())
-                        .into_iter()
-                        .map(|col_index| meta.query_advice(word_a[col_index], Rotation(rot as i32)))
-                        .collect::<Vec<Expression<Fp>>>()
-                })
+                .map(|col_index| meta.query_advice(word_a[col_index], Rotation::cur()))
                 .collect::<Vec<Expression<Fp>>>();
 
-            let b = (0..WORD_BIT_LEN / word_b.len())
+            let b = (0..word_b.len())
                 .into_iter()
-                .flat_map(|rot| {
-                    (0..word_b.len())
-                        .into_iter()
-                        .map(|col_index| meta.query_advice(word_b[col_index], Rotation(rot as i32)))
-                        .collect::<Vec<Expression<Fp>>>()
-                })
+                .map(|col_index| meta.query_advice(word_b[col_index], Rotation::cur()))
                 .collect::<Vec<Expression<Fp>>>();
 
-            let out = (0..WORD_BIT_LEN / word_c.len())
+            let out = (0..word_c.len())
                 .into_iter()
-                .flat_map(|rot| {
-                    (0..word_c.len())
-                        .into_iter()
-                        .map(|col_index| meta.query_advice(word_c[col_index], Rotation(rot as i32)))
-                        .collect::<Vec<Expression<Fp>>>()
-                })
+                .map(|col_index| meta.query_advice(word_c[col_index], Rotation::cur()))
                 .collect::<Vec<Expression<Fp>>>();
 
             Constraints::with_selector(
@@ -557,215 +555,30 @@ impl AssignedWordLogicalOperationsChip {
                         (a[7].clone() + a[7].clone()) * b[7].clone() - a[7].clone() - b[7].clone()
                             + out[7].clone(),
                     ),
-                    (
-                        "bit 8 xor",
-                        (a[8].clone() + a[8].clone()) * b[8].clone() - a[8].clone() - b[8].clone()
-                            + out[8].clone(),
-                    ),
-                    (
-                        "bit 9 xor",
-                        (a[9].clone() + a[9].clone()) * b[9].clone() - a[9].clone() - b[9].clone()
-                            + out[9].clone(),
-                    ),
-                    (
-                        "bit 10 xor",
-                        (a[10].clone() + a[10].clone()) * b[10].clone()
-                            - a[10].clone()
-                            - b[10].clone()
-                            + out[10].clone(),
-                    ),
-                    (
-                        "bit 11 xor",
-                        (a[11].clone() + a[11].clone()) * b[11].clone()
-                            - a[11].clone()
-                            - b[11].clone()
-                            + out[11].clone(),
-                    ),
-                    (
-                        "bit 12 xor",
-                        (a[12].clone() + a[12].clone()) * b[12].clone()
-                            - a[12].clone()
-                            - b[12].clone()
-                            + out[12].clone(),
-                    ),
-                    (
-                        "bit 13 xor",
-                        (a[13].clone() + a[13].clone()) * b[13].clone()
-                            - a[13].clone()
-                            - b[13].clone()
-                            + out[13].clone(),
-                    ),
-                    (
-                        "bit 14 xor",
-                        (a[14].clone() + a[14].clone()) * b[14].clone()
-                            - a[14].clone()
-                            - b[14].clone()
-                            + out[14].clone(),
-                    ),
-                    (
-                        "bit 15 xor",
-                        (a[15].clone() + a[15].clone()) * b[15].clone()
-                            - a[15].clone()
-                            - b[15].clone()
-                            + out[15].clone(),
-                    ),
-                    (
-                        "bit 16 xor",
-                        (a[16].clone() + a[16].clone()) * b[16].clone()
-                            - a[16].clone()
-                            - b[16].clone()
-                            + out[16].clone(),
-                    ),
-                    (
-                        "bit 17 xor",
-                        (a[17].clone() + a[17].clone()) * b[17].clone()
-                            - a[17].clone()
-                            - b[17].clone()
-                            + out[17].clone(),
-                    ),
-                    (
-                        "bit 18 xor",
-                        (a[18].clone() + a[18].clone()) * b[18].clone()
-                            - a[18].clone()
-                            - b[18].clone()
-                            + out[18].clone(),
-                    ),
-                    (
-                        "bit 19 xor",
-                        (a[19].clone() + a[19].clone()) * b[19].clone()
-                            - a[19].clone()
-                            - b[19].clone()
-                            + out[19].clone(),
-                    ),
-                    (
-                        "bit 20 xor",
-                        (a[20].clone() + a[20].clone()) * b[20].clone()
-                            - a[20].clone()
-                            - b[20].clone()
-                            + out[20].clone(),
-                    ),
-                    (
-                        "bit 21 xor",
-                        (a[21].clone() + a[21].clone()) * b[21].clone()
-                            - a[21].clone()
-                            - b[21].clone()
-                            + out[21].clone(),
-                    ),
-                    (
-                        "bit 22 xor",
-                        (a[22].clone() + a[22].clone()) * b[22].clone()
-                            - a[22].clone()
-                            - b[22].clone()
-                            + out[22].clone(),
-                    ),
-                    (
-                        "bit 23 xor",
-                        (a[23].clone() + a[23].clone()) * b[23].clone()
-                            - a[23].clone()
-                            - b[23].clone()
-                            + out[23].clone(),
-                    ),
-                    (
-                        "bit 24 xor",
-                        (a[24].clone() + a[24].clone()) * b[24].clone()
-                            - a[24].clone()
-                            - b[24].clone()
-                            + out[24].clone(),
-                    ),
-                    (
-                        "bit 25 xor",
-                        (a[25].clone() + a[25].clone()) * b[25].clone()
-                            - a[25].clone()
-                            - b[25].clone()
-                            + out[25].clone(),
-                    ),
-                    (
-                        "bit 26 xor",
-                        (a[26].clone() + a[26].clone()) * b[26].clone()
-                            - a[26].clone()
-                            - b[26].clone()
-                            + out[26].clone(),
-                    ),
-                    (
-                        "bit 27 xor",
-                        (a[27].clone() + a[27].clone()) * b[27].clone()
-                            - a[27].clone()
-                            - b[27].clone()
-                            + out[27].clone(),
-                    ),
-                    (
-                        "bit 28 xor",
-                        (a[28].clone() + a[28].clone()) * b[28].clone()
-                            - a[28].clone()
-                            - b[28].clone()
-                            + out[28].clone(),
-                    ),
-                    (
-                        "bit 29 xor",
-                        (a[29].clone() + a[29].clone()) * b[29].clone()
-                            - a[29].clone()
-                            - b[29].clone()
-                            + out[29].clone(),
-                    ),
-                    (
-                        "bit 30 xor",
-                        (a[30].clone() + a[30].clone()) * b[30].clone()
-                            - a[30].clone()
-                            - b[30].clone()
-                            + out[30].clone(),
-                    ),
-                    (
-                        "bit 31 xor",
-                        (a[31].clone() + a[31].clone()) * b[31].clone()
-                            - a[31].clone()
-                            - b[31].clone()
-                            + out[31].clone(),
-                    ),
                 ],
             )
         });
 
         meta.create_gate("and gate", |meta: &mut VirtualCells<Fp>| {
-            // query AND selector
-            // query word_a bits
-            // query word_b bits
-            // query word_c bits (with AND result)
-            // return constraints
+            let s_and = meta.query_selector(s_and);
 
-            let s_xor = meta.query_selector(s_and);
-
-            let a = (0..WORD_BIT_LEN / word_a.len())
+            let a = (0..word_a.len())
                 .into_iter()
-                .flat_map(|rot| {
-                    (0..word_a.len())
-                        .into_iter()
-                        .map(|col_index| meta.query_advice(word_a[col_index], Rotation(rot as i32)))
-                        .collect::<Vec<Expression<Fp>>>()
-                })
+                .map(|col_index| meta.query_advice(word_a[col_index], Rotation::cur()))
                 .collect::<Vec<Expression<Fp>>>();
 
-            let b = (0..WORD_BIT_LEN / word_b.len())
+            let b = (0..word_b.len())
                 .into_iter()
-                .flat_map(|rot| {
-                    (0..word_b.len())
-                        .into_iter()
-                        .map(|col_index| meta.query_advice(word_b[col_index], Rotation(rot as i32)))
-                        .collect::<Vec<Expression<Fp>>>()
-                })
+                .map(|col_index| meta.query_advice(word_b[col_index], Rotation::cur()))
                 .collect::<Vec<Expression<Fp>>>();
 
-            let out = (0..WORD_BIT_LEN / word_c.len())
+            let out = (0..word_c.len())
                 .into_iter()
-                .flat_map(|rot| {
-                    (0..word_c.len())
-                        .into_iter()
-                        .map(|col_index| meta.query_advice(word_c[col_index], Rotation(rot as i32)))
-                        .collect::<Vec<Expression<Fp>>>()
-                })
+                .map(|col_index| meta.query_advice(word_c[col_index], Rotation::cur()))
                 .collect::<Vec<Expression<Fp>>>();
 
             Constraints::with_selector(
-                s_xor,
+                s_and,
                 vec![
                     ("bit 0 and", a[0].clone() * b[0].clone() - out[0].clone()),
                     ("bit 1 and", a[1].clone() * b[1].clone() - out[1].clone()),
@@ -775,126 +588,21 @@ impl AssignedWordLogicalOperationsChip {
                     ("bit 5 and", a[5].clone() * b[5].clone() - out[5].clone()),
                     ("bit 6 and", a[6].clone() * b[6].clone() - out[6].clone()),
                     ("bit 7 and", a[7].clone() * b[7].clone() - out[7].clone()),
-                    ("bit 8 and", a[8].clone() * b[8].clone() - out[8].clone()),
-                    ("bit 9 and", a[9].clone() * b[9].clone() - out[9].clone()),
-                    (
-                        "bit 10 and",
-                        a[10].clone() * b[10].clone() - out[10].clone(),
-                    ),
-                    (
-                        "bit 11 and",
-                        a[11].clone() * b[11].clone() - out[11].clone(),
-                    ),
-                    (
-                        "bit 12 and",
-                        a[12].clone() * b[12].clone() - out[12].clone(),
-                    ),
-                    (
-                        "bit 13 and",
-                        a[13].clone() * b[13].clone() - out[13].clone(),
-                    ),
-                    (
-                        "bit 14 and",
-                        a[14].clone() * b[14].clone() - out[14].clone(),
-                    ),
-                    (
-                        "bit 15 and",
-                        a[15].clone() * b[15].clone() - out[15].clone(),
-                    ),
-                    (
-                        "bit 16 and",
-                        a[16].clone() * b[16].clone() - out[16].clone(),
-                    ),
-                    (
-                        "bit 17 and",
-                        a[17].clone() * b[17].clone() - out[17].clone(),
-                    ),
-                    (
-                        "bit 18 and",
-                        a[18].clone() * b[18].clone() - out[18].clone(),
-                    ),
-                    (
-                        "bit 19 and",
-                        a[19].clone() * b[19].clone() - out[19].clone(),
-                    ),
-                    (
-                        "bit 20 and",
-                        a[20].clone() * b[20].clone() - out[20].clone(),
-                    ),
-                    (
-                        "bit 21 and",
-                        a[21].clone() * b[21].clone() - out[21].clone(),
-                    ),
-                    (
-                        "bit 22 and",
-                        a[22].clone() * b[22].clone() - out[22].clone(),
-                    ),
-                    (
-                        "bit 23 and",
-                        a[23].clone() * b[23].clone() - out[23].clone(),
-                    ),
-                    (
-                        "bit 24 and",
-                        a[24].clone() * b[24].clone() - out[24].clone(),
-                    ),
-                    (
-                        "bit 25 and",
-                        a[25].clone() * b[25].clone() - out[25].clone(),
-                    ),
-                    (
-                        "bit 26 and",
-                        a[26].clone() * b[26].clone() - out[26].clone(),
-                    ),
-                    (
-                        "bit 27 and",
-                        a[27].clone() * b[27].clone() - out[27].clone(),
-                    ),
-                    (
-                        "bit 28 and",
-                        a[28].clone() * b[28].clone() - out[28].clone(),
-                    ),
-                    (
-                        "bit 29 and",
-                        a[29].clone() * b[29].clone() - out[29].clone(),
-                    ),
-                    (
-                        "bit 30 and",
-                        a[30].clone() * b[30].clone() - out[30].clone(),
-                    ),
-                    (
-                        "bit 31 and",
-                        a[31].clone() * b[31].clone() - out[31].clone(),
-                    ),
                 ],
             )
         });
 
         meta.create_gate("not gate", |meta: &mut VirtualCells<Fp>| {
-            // query selector
-            // query word_a bits
-            // query word_c bits (with NOT result)
-            // return constraints
-
             let s_not = meta.query_selector(s_not);
 
-            let a = (0..WORD_BIT_LEN / word_a.len())
+            let a = (0..word_a.len())
                 .into_iter()
-                .flat_map(|rot| {
-                    (0..word_a.len())
-                        .into_iter()
-                        .map(|col_index| meta.query_advice(word_a[col_index], Rotation(rot as i32)))
-                        .collect::<Vec<Expression<Fp>>>()
-                })
+                .map(|col_index| meta.query_advice(word_a[col_index], Rotation::cur()))
                 .collect::<Vec<Expression<Fp>>>();
 
-            let out = (0..WORD_BIT_LEN / word_c.len())
+            let out = (0..word_c.len())
                 .into_iter()
-                .flat_map(|rot| {
-                    (0..word_c.len())
-                        .into_iter()
-                        .map(|col_index| meta.query_advice(word_c[col_index], Rotation(rot as i32)))
-                        .collect::<Vec<Expression<Fp>>>()
-                })
+                .map(|col_index| meta.query_advice(word_c[col_index], Rotation::cur()))
                 .collect::<Vec<Expression<Fp>>>();
 
             Constraints::with_selector(
@@ -908,30 +616,6 @@ impl AssignedWordLogicalOperationsChip {
                     ("bit 5 not", a[5].clone() * out[5].clone()),
                     ("bit 6 not", a[6].clone() * out[6].clone()),
                     ("bit 7 not", a[7].clone() * out[7].clone()),
-                    ("bit 8 not", a[8].clone() * out[8].clone()),
-                    ("bit 9 not", a[9].clone() * out[9].clone()),
-                    ("bit 10 not", a[10].clone() * out[10].clone()),
-                    ("bit 11 not", a[11].clone() * out[11].clone()),
-                    ("bit 12 not", a[12].clone() * out[12].clone()),
-                    ("bit 13 not", a[13].clone() * out[13].clone()),
-                    ("bit 14 not", a[14].clone() * out[14].clone()),
-                    ("bit 15 not", a[15].clone() * out[15].clone()),
-                    ("bit 16 not", a[16].clone() * out[16].clone()),
-                    ("bit 17 not", a[17].clone() * out[17].clone()),
-                    ("bit 18 not", a[18].clone() * out[18].clone()),
-                    ("bit 19 not", a[19].clone() * out[19].clone()),
-                    ("bit 20 not", a[20].clone() * out[20].clone()),
-                    ("bit 21 not", a[21].clone() * out[21].clone()),
-                    ("bit 22 not", a[22].clone() * out[22].clone()),
-                    ("bit 23 not", a[23].clone() * out[23].clone()),
-                    ("bit 24 not", a[24].clone() * out[24].clone()),
-                    ("bit 25 not", a[25].clone() * out[25].clone()),
-                    ("bit 26 not", a[26].clone() * out[26].clone()),
-                    ("bit 27 not", a[27].clone() * out[27].clone()),
-                    ("bit 28 not", a[28].clone() * out[28].clone()),
-                    ("bit 29 not", a[29].clone() * out[29].clone()),
-                    ("bit 30 not", a[30].clone() * out[30].clone()),
-                    ("bit 31 not", a[31].clone() * out[31].clone()),
                 ],
             )
         });
@@ -947,82 +631,64 @@ impl AssignedWordLogicalOperationsChip {
     }
 
     fn not(&self, mut layouter: impl Layouter<Fp>, a: AssignedWord) -> Result<AssignedWord, Error> {
+        let byte1 = self.not_inner(layouter.namespace(|| "byte 1"), &a.bits[0..8], 0)?;
+        let byte2 = self.not_inner(layouter.namespace(|| "byte 2"), &a.bits[8..16], 1)?;
+        let byte3 = self.not_inner(layouter.namespace(|| "byte 3"), &a.bits[16..24], 2)?;
+        let byte4 = self.not_inner(layouter.namespace(|| "byte 4"), &a.bits[24..32], 3)?;
+
+        let bytes = [byte1, byte2, byte3, byte4].concat();
+
+        Ok(AssignedWord {
+            bits: bytes.into_iter().map(Some).collect(),
+        })
+    }
+
+    fn not_inner(
+        &self,
+        mut layouter: impl Layouter<Fp>,
+        a: &[Option<AssignedCell<Bit, Fp>>],
+        selector_offset: usize,
+    ) -> Result<Vec<AssignedCell<Bit, Fp>>, Error> {
+        assert_eq!(a.len(), 8);
+        assert_eq!(a.len(), self.config.word_a.len());
         layouter.assign_region(
             || "not",
             |mut region| {
-                // assign/copy a bits
-                // compute its NOT at high level and pass it as input parameter
-                // assign it
+                self.config.s_not.enable(&mut region, selector_offset)?;
 
-                self.config.s_not.enable(&mut region, 0)?;
+                let mut output = vec![];
+                for (bit_index, bit) in a.into_iter().enumerate() {
+                    let bit = bit.as_ref();
 
-                let _ = a
-                    .bits
-                    .chunks(self.config.word_a.len())
-                    .into_iter()
-                    .enumerate()
-                    .flat_map(|(offset, word)| {
-                        assert_eq!(word.len(), self.config.word_a.len());
+                    // assign input
+                    let assigned_bit = match bit {
+                        Some(v) => v.copy_advice(
+                            || "assign a",
+                            &mut region,
+                            self.config.word_a[bit_index],
+                            selector_offset,
+                        ),
+                        None => region.assign_advice(
+                            || "assign a",
+                            self.config.word_a[bit_index],
+                            selector_offset,
+                            || Value::known(Bit::from(false)),
+                        ),
+                    }?;
 
-                        word.into_iter()
-                            .enumerate()
-                            .map(|(bit_index, bit)| {
-                                let bit = bit.as_ref();
-                                match bit {
-                                    Some(v) => v.copy_advice(
-                                        || "assign a",
-                                        &mut region,
-                                        self.config.word_a[bit_index],
-                                        offset,
-                                    ),
-                                    None => region.assign_advice(
-                                        || "assign a",
-                                        self.config.word_a[bit_index],
-                                        offset,
-                                        || Value::known(Bit::from(false)),
-                                    ),
-                                }
-                                .unwrap()
-                            })
-                            .collect::<Vec<AssignedCell<Bit, Fp>>>()
-                    })
-                    .collect::<Vec<AssignedCell<Bit, Fp>>>();
+                    // compute and assign result at once
+                    let expected_bit = assigned_bit.value().map(|bit| Bit::from(!bit.0));
 
-                let mut expected_not = 0;
-                a.value_u32().map(|a| expected_not = !a);
+                    let not_bit_assigned = region.assign_advice(
+                        || "assign result",
+                        self.config.word_c[bit_index],
+                        selector_offset,
+                        || expected_bit,
+                    )?;
 
-                let expected_bits = u32_to_bits_be(expected_not);
-
-                let not_assigned = expected_bits
-                    .chunks(self.config.word_c.len())
-                    .into_iter()
-                    .enumerate()
-                    .flat_map(|(index, bits)| {
-                        bits.into_iter()
-                            .enumerate()
-                            .map(|(bit_chunk_index, bit)| {
-                                region
-                                    .assign_advice(
-                                        || "assign result",
-                                        self.config.word_c[bit_chunk_index],
-                                        index,
-                                        || Value::known(Bit::from(*bit)),
-                                    )
-                                    .unwrap()
-                            })
-                            .collect::<Vec<AssignedCell<Bit, Fp>>>()
-                    })
-                    .collect::<Vec<AssignedCell<Bit, Fp>>>();
-
-                let not_assigned = AssignedWord {
-                    bits: not_assigned.into_iter().map(Some).collect(),
-                };
-
-                not_assigned
-                    .value_u32()
-                    .map(|computed| assert_eq!(expected_not, computed));
-
-                Ok(not_assigned)
+                    output.push(not_bit_assigned);
+                }
+                Ok(output)
             },
         )
     }
@@ -1033,124 +699,103 @@ impl AssignedWordLogicalOperationsChip {
         a: AssignedWord,
         b: AssignedWord,
     ) -> Result<AssignedWord, Error> {
+        let byte1 = self.and_inner(
+            layouter.namespace(|| "and byte1"),
+            &a.bits[0..8],
+            &b.bits[0..8],
+            0,
+        )?;
+        let byte2 = self.and_inner(
+            layouter.namespace(|| "and byte2"),
+            &a.bits[8..16],
+            &b.bits[8..16],
+            1,
+        )?;
+        let byte3 = self.and_inner(
+            layouter.namespace(|| "and byte3"),
+            &a.bits[16..24],
+            &b.bits[16..24],
+            2,
+        )?;
+        let byte4 = self.and_inner(
+            layouter.namespace(|| "and byte4"),
+            &a.bits[24..32],
+            &b.bits[24..32],
+            3,
+        )?;
+
+        let bytes = [byte1, byte2, byte3, byte4].concat();
+
+        Ok(AssignedWord {
+            bits: bytes.into_iter().map(Some).collect(),
+        })
+    }
+
+    fn and_inner(
+        &self,
+        mut layouter: impl Layouter<Fp>,
+        a: &[Option<AssignedCell<Bit, Fp>>],
+        b: &[Option<AssignedCell<Bit, Fp>>],
+        selector_offset: usize,
+    ) -> Result<Vec<AssignedCell<Bit, Fp>>, Error> {
+        assert_eq!(a.len(), b.len());
+        assert_eq!(a.len(), self.config.word_a.len());
+        assert_eq!(b.len(), self.config.word_b.len());
+
         layouter.assign_region(
-            || "and",
+            || "xor",
             |mut region| {
-                // assign/copy a bits
-                // assign/copy b bits
-                // compute their AND at high level and pass it as input parameter
-                // assign it
+                self.config.s_and.enable(&mut region, selector_offset)?;
 
-                self.config.s_and.enable(&mut region, 0)?;
+                let mut output = vec![];
+                for (index, (a, b)) in a.into_iter().zip(b.into_iter()).enumerate() {
+                    let bit_a = a.as_ref();
+                    let bit_b = b.as_ref();
+                    let a = match bit_a {
+                        Some(a) => a.copy_advice(
+                            || "assign a",
+                            &mut region,
+                            self.config.word_a[index],
+                            selector_offset,
+                        ),
+                        None => region.assign_advice(
+                            || "assign a",
+                            self.config.word_a[index],
+                            selector_offset,
+                            || Value::known(Bit::from(false)),
+                        ),
+                    }?;
 
-                let a = a
-                    .bits
-                    .chunks(self.config.word_a.len())
-                    .into_iter()
-                    .enumerate()
-                    .flat_map(|(offset, word)| {
-                        assert_eq!(word.len(), self.config.word_a.len());
+                    let b = match bit_b {
+                        Some(b) => b.copy_advice(
+                            || "assign b",
+                            &mut region,
+                            self.config.word_b[index],
+                            selector_offset,
+                        ),
+                        None => region.assign_advice(
+                            || "assign b",
+                            self.config.word_b[index],
+                            selector_offset,
+                            || Value::known(Bit::from(false)),
+                        ),
+                    }?;
 
-                        word.into_iter()
-                            .enumerate()
-                            .map(|(bit_index, bit)| {
-                                let bit = bit.as_ref();
-                                match bit {
-                                    Some(v) => v.copy_advice(
-                                        || "assign a",
-                                        &mut region,
-                                        self.config.word_a[bit_index],
-                                        offset,
-                                    ),
-                                    None => region.assign_advice(
-                                        || "assign a",
-                                        self.config.word_a[bit_index],
-                                        offset,
-                                        || Value::known(Bit::from(false)),
-                                    ),
-                                }
-                                .unwrap()
-                            })
-                            .collect::<Vec<AssignedCell<Bit, Fp>>>()
-                    })
-                    .collect::<Vec<AssignedCell<Bit, Fp>>>();
+                    let and = a
+                        .value()
+                        .zip(b.value())
+                        .map(|(a, b)| Bit(bool::from(a) & bool::from(b)));
 
-                let b = b
-                    .bits
-                    .chunks(self.config.word_b.len())
-                    .into_iter()
-                    .enumerate()
-                    .flat_map(|(offset, word)| {
-                        assert_eq!(word.len(), self.config.word_b.len());
+                    let and_assigned = region.assign_advice(
+                        || "assign result",
+                        self.config.word_c[index],
+                        selector_offset,
+                        || and,
+                    )?;
+                    output.push(and_assigned);
+                }
 
-                        word.into_iter()
-                            .enumerate()
-                            .map(|(bit_index, bit)| {
-                                let bit = bit.as_ref();
-                                match bit {
-                                    Some(v) => v.copy_advice(
-                                        || "assign b",
-                                        &mut region,
-                                        self.config.word_b[bit_index],
-                                        offset,
-                                    ),
-                                    None => region.assign_advice(
-                                        || "assign b",
-                                        self.config.word_b[bit_index],
-                                        offset,
-                                        || Value::known(Bit::from(false)),
-                                    ),
-                                }
-                                .unwrap()
-                            })
-                            .collect::<Vec<AssignedCell<Bit, Fp>>>()
-                    })
-                    .collect::<Vec<AssignedCell<Bit, Fp>>>();
-
-                let a = AssignedWord {
-                    bits: a.into_iter().map(Some).collect(),
-                };
-                let b = AssignedWord {
-                    bits: b.into_iter().map(Some).collect(),
-                };
-
-                let mut expected_and = 0;
-                a.value_u32()
-                    .zip(b.value_u32())
-                    .map(|(a, b)| expected_and = a & b);
-
-                let expected_bits = u32_to_bits_be(expected_and);
-
-                let and_assigned = expected_bits
-                    .chunks(self.config.word_c.len())
-                    .into_iter()
-                    .enumerate()
-                    .flat_map(|(index, bits)| {
-                        bits.into_iter()
-                            .enumerate()
-                            .map(|(bit_chunk_index, bit)| {
-                                region
-                                    .assign_advice(
-                                        || "assign result",
-                                        self.config.word_c[bit_chunk_index],
-                                        index,
-                                        || Value::known(Bit::from(*bit)),
-                                    )
-                                    .unwrap()
-                            })
-                            .collect::<Vec<AssignedCell<Bit, Fp>>>()
-                    })
-                    .collect::<Vec<AssignedCell<Bit, Fp>>>();
-
-                let and_assigned = AssignedWord {
-                    bits: and_assigned.into_iter().map(Some).collect(),
-                };
-
-                and_assigned
-                    .value_u32()
-                    .map(|computed| assert_eq!(expected_and, computed));
-
-                Ok(and_assigned)
+                Ok(output)
             },
         )
     }
@@ -1161,124 +806,103 @@ impl AssignedWordLogicalOperationsChip {
         a: AssignedWord,
         b: AssignedWord,
     ) -> Result<AssignedWord, Error> {
+        let byte1 = self.xor_inner(
+            layouter.namespace(|| "xor byte1"),
+            &a.bits[0..8],
+            &b.bits[0..8],
+            0,
+        )?;
+        let byte2 = self.xor_inner(
+            layouter.namespace(|| "xor byte2"),
+            &a.bits[8..16],
+            &b.bits[8..16],
+            1,
+        )?;
+        let byte3 = self.xor_inner(
+            layouter.namespace(|| "xor byte3"),
+            &a.bits[16..24],
+            &b.bits[16..24],
+            2,
+        )?;
+        let byte4 = self.xor_inner(
+            layouter.namespace(|| "xor byte4"),
+            &a.bits[24..32],
+            &b.bits[24..32],
+            3,
+        )?;
+
+        let bytes = [byte1, byte2, byte3, byte4].concat();
+
+        Ok(AssignedWord {
+            bits: bytes.into_iter().map(Some).collect(),
+        })
+    }
+
+    fn xor_inner(
+        &self,
+        mut layouter: impl Layouter<Fp>,
+        a: &[Option<AssignedCell<Bit, Fp>>],
+        b: &[Option<AssignedCell<Bit, Fp>>],
+        selector_offset: usize,
+    ) -> Result<Vec<AssignedCell<Bit, Fp>>, Error> {
+        assert_eq!(a.len(), b.len());
+        assert_eq!(a.len(), self.config.word_a.len());
+        assert_eq!(b.len(), self.config.word_b.len());
+
         layouter.assign_region(
             || "xor",
             |mut region| {
-                // assign/copy a bits
-                // assign/copy b bits
-                // compute their XOR at high-level and pass it as input parameter
-                // assign it
+                self.config.s_xor.enable(&mut region, selector_offset)?;
 
-                self.config.s_xor.enable(&mut region, 0)?;
+                let mut output = vec![];
+                for (index, (a, b)) in a.into_iter().zip(b.into_iter()).enumerate() {
+                    let bit_a = a.as_ref();
+                    let bit_b = b.as_ref();
+                    let a = match bit_a {
+                        Some(a) => a.copy_advice(
+                            || "assign a",
+                            &mut region,
+                            self.config.word_a[index],
+                            selector_offset,
+                        ),
+                        None => region.assign_advice(
+                            || "assign a",
+                            self.config.word_a[index],
+                            selector_offset,
+                            || Value::known(Bit::from(false)),
+                        ),
+                    }?;
 
-                let a = a
-                    .bits
-                    .chunks(self.config.word_a.len())
-                    .into_iter()
-                    .enumerate()
-                    .flat_map(|(offset, word)| {
-                        assert_eq!(word.len(), self.config.word_a.len());
+                    let b = match bit_b {
+                        Some(b) => b.copy_advice(
+                            || "assign b",
+                            &mut region,
+                            self.config.word_b[index],
+                            selector_offset,
+                        ),
+                        None => region.assign_advice(
+                            || "assign b",
+                            self.config.word_b[index],
+                            selector_offset,
+                            || Value::known(Bit::from(false)),
+                        ),
+                    }?;
 
-                        word.into_iter()
-                            .enumerate()
-                            .map(|(bit_index, bit)| {
-                                let bit = bit.as_ref();
-                                match bit {
-                                    Some(v) => v.copy_advice(
-                                        || "assign a",
-                                        &mut region,
-                                        self.config.word_a[bit_index],
-                                        offset,
-                                    ),
-                                    None => region.assign_advice(
-                                        || "assign a",
-                                        self.config.word_a[bit_index],
-                                        offset,
-                                        || Value::known(Bit::from(false)),
-                                    ),
-                                }
-                                .unwrap()
-                            })
-                            .collect::<Vec<AssignedCell<Bit, Fp>>>()
-                    })
-                    .collect::<Vec<AssignedCell<Bit, Fp>>>();
+                    let xor = a
+                        .value()
+                        .zip(b.value())
+                        .map(|(a, b)| Bit(bool::from(a) ^ bool::from(b)));
 
-                let b = b
-                    .bits
-                    .chunks(self.config.word_b.len())
-                    .into_iter()
-                    .enumerate()
-                    .flat_map(|(offset, word)| {
-                        assert_eq!(word.len(), self.config.word_b.len());
+                    let xor_assigned = region.assign_advice(
+                        || "assign result",
+                        self.config.word_c[index],
+                        selector_offset,
+                        || xor,
+                    )?;
+                    output.push(xor_assigned);
+                }
 
-                        word.into_iter()
-                            .enumerate()
-                            .map(|(bit_index, bit)| {
-                                let bit = bit.as_ref();
-                                match bit {
-                                    Some(v) => v.copy_advice(
-                                        || "assign b",
-                                        &mut region,
-                                        self.config.word_b[bit_index],
-                                        offset,
-                                    ),
-                                    None => region.assign_advice(
-                                        || "assign b",
-                                        self.config.word_b[bit_index],
-                                        offset,
-                                        || Value::known(Bit::from(false)),
-                                    ),
-                                }
-                                .unwrap()
-                            })
-                            .collect::<Vec<AssignedCell<Bit, Fp>>>()
-                    })
-                    .collect::<Vec<AssignedCell<Bit, Fp>>>();
-
-                let a = AssignedWord {
-                    bits: a.into_iter().map(Some).collect(),
-                };
-                let b = AssignedWord {
-                    bits: b.into_iter().map(Some).collect(),
-                };
-
-                let mut expected_xor = 0;
-                a.value_u32()
-                    .zip(b.value_u32())
-                    .map(|(a, b)| expected_xor = a ^ b);
-
-                let expected_bits = u32_to_bits_be(expected_xor);
-
-                let xor_assigned = expected_bits
-                    .chunks(self.config.word_c.len())
-                    .into_iter()
-                    .enumerate()
-                    .flat_map(|(index, bits)| {
-                        bits.into_iter()
-                            .enumerate()
-                            .map(|(bit_chunk_index, bit)| {
-                                region
-                                    .assign_advice(
-                                        || "assign result",
-                                        self.config.word_c[bit_chunk_index],
-                                        index,
-                                        || Value::known(Bit::from(*bit)),
-                                    )
-                                    .unwrap()
-                            })
-                            .collect::<Vec<AssignedCell<Bit, Fp>>>()
-                    })
-                    .collect::<Vec<AssignedCell<Bit, Fp>>>();
-
-                let xor_assigned = AssignedWord {
-                    bits: xor_assigned.into_iter().map(Some).collect(),
-                };
-
-                xor_assigned
-                    .value_u32()
-                    .map(|computed| assert_eq!(expected_xor, computed));
-
-                Ok(xor_assigned)
+                Ok(output)
             },
         )
     }
@@ -1291,7 +915,7 @@ struct Sha256OneRoundCircuit {
 
 impl Sha256OneRoundCircuit {
     fn k(&self) -> u32 {
-        13
+        14
     }
 }
 
@@ -2087,207 +1711,4 @@ impl U32WordModularAddChip {
             },
         )
     }
-}
-
-#[test]
-fn test_assigned_word_logical_operations() {
-    struct TestCircuit {
-        word_a: u32,
-        word_b: u32,
-        xor: u32,
-    }
-
-    impl Circuit<Fp> for TestCircuit {
-        type Config = (Sha256Config, AssignedWordLogicalOperationsConfig);
-        type FloorPlanner = SimpleFloorPlanner;
-
-        fn without_witnesses(&self) -> Self {
-            todo!()
-        }
-
-        fn configure(meta: &mut ConstraintSystem<Fp>) -> Self::Config {
-            meta.instance_column();
-
-            let word = (0..8)
-                .into_iter()
-                .map(|_| {
-                    let word = meta.advice_column();
-                    meta.enable_equality(word);
-                    word
-                })
-                .collect::<Vec<Column<Advice>>>();
-
-            let s_word = meta.selector();
-
-            let sha256config = Sha256Chip::configure(
-                meta,
-                [
-                    word[0], word[1], word[2], word[3], word[4], word[5], word[6], word[7],
-                ],
-                s_word,
-                None,
-                None,
-                None,
-            );
-
-            let word_2 = (0..8)
-                .into_iter()
-                .map(|_| {
-                    let word = meta.advice_column();
-                    meta.enable_equality(word);
-                    word
-                })
-                .collect::<Vec<Column<Advice>>>();
-
-            let word_3 = (0..8)
-                .into_iter()
-                .map(|_| {
-                    let word = meta.advice_column();
-                    meta.enable_equality(word);
-                    word
-                })
-                .collect::<Vec<Column<Advice>>>();
-
-            let s_xor = meta.selector();
-            let s_and = meta.selector();
-            let s_not = meta.selector();
-
-            let word_operations_config = AssignedWordLogicalOperationsChip::configure(
-                meta,
-                [
-                    word[0], word[1], word[2], word[3], word[4], word[5], word[6], word[7],
-                ],
-                [
-                    word_2[0], word_2[1], word_2[2], word_2[3], word_2[4], word_2[5], word_2[6],
-                    word_2[7],
-                ],
-                [
-                    word_3[0], word_3[1], word_3[2], word_3[3], word_3[4], word_3[5], word_3[6],
-                    word_3[7],
-                ],
-                s_xor,
-                s_and,
-                s_not,
-            );
-
-            (sha256config, word_operations_config)
-        }
-
-        fn synthesize(
-            &self,
-            config: Self::Config,
-            mut layouter: impl Layouter<Fp>,
-        ) -> Result<(), Error> {
-            let sha256chip = Sha256Chip::construct(config.0);
-            let word_operations_chip = AssignedWordLogicalOperationsChip::construct(config.1);
-
-            let word_a_loaded = sha256chip.load_word(
-                layouter.namespace(|| "load word_a"),
-                Value::known(u32_to_bits_be(self.word_a).try_into().unwrap()),
-            )?;
-            let word_b_loaded = sha256chip.load_word(
-                layouter.namespace(|| "load word_b"),
-                Value::known(u32_to_bits_be(self.word_b).try_into().unwrap()),
-            )?;
-
-            let xor_computed = word_operations_chip.xor(
-                layouter.namespace(|| "xor word_a and word_b"),
-                word_a_loaded,
-                word_b_loaded,
-            )?;
-
-            xor_computed.value_u32().map(|computed| {
-                assert_eq!(computed, self.xor)
-            });
-
-            Ok(())
-        }
-    }
-
-    let circuit = TestCircuit {
-        word_a: 50,
-        word_b: 75,
-        xor: 121,
-    };
-
-    let prover =
-        MockProver::run(circuit.k(), &circuit, vec![vec![]]).expect("couldn't run mock prover");
-    assert!(prover.verify().is_ok());
-
-    fn test_end_to_end(
-        word_a: u32,
-        word_b: u32,
-        word_c: u32,
-        use_circuit_prover_for_keygen: bool,
-    ) -> bool {
-        let circuit = TestCircuit {
-            word_a,
-            word_b,
-            xor: word_c,
-        };
-
-        let public_inputs = vec![];
-
-        let k = circuit.k();
-
-        let params: Params<EqAffine> = Params::new(k);
-
-        let pk = if use_circuit_prover_for_keygen {
-            let vk = keygen_vk(&params, &circuit).expect("keygen_vk should not fail");
-            keygen_pk(&params, vk, &circuit).expect("keygen_pk should not fail")
-        } else {
-            let circuit = circuit.without_witnesses();
-            let vk = keygen_vk(&params, &circuit).expect("keygen_vk should not fail");
-            keygen_pk(&params, vk, &circuit).expect("keygen_pk should not fail")
-        };
-
-        let mut transcript = Blake2bWrite::<_, EqAffine, Challenge255<_>>::init(vec![]);
-
-        let now = std::time::Instant::now();
-        // Create a proof
-        create_proof(
-            &params,
-            &pk,
-            &[circuit],
-            &[&[&public_inputs[..]]],
-            OsRng,
-            &mut transcript,
-        )
-        .expect("proof generation should not fail");
-        let proving_time = now.elapsed();
-
-        let proof: Vec<u8> = transcript.finalize();
-
-        let strategy = SingleVerifier::new(&params);
-        let mut transcript = Blake2bRead::<_, _, Challenge255<_>>::init(&proof[..]);
-
-        let now = std::time::Instant::now();
-        let result = verify_proof(
-            &params,
-            pk.get_vk(),
-            strategy,
-            &[&[&public_inputs[..]]],
-            &mut transcript,
-        )
-        .is_ok();
-        let verifying_time = now.elapsed();
-
-        println!(
-            "Proof size: {} bytes; k: {}; proving time: {:.2?}; verifying time: {:.2?}",
-            proof.len(),
-            k,
-            proving_time,
-            verifying_time
-        );
-
-        result
-    }
-
-    impl TestCircuit {
-        fn k(&self) -> u32 {
-            5
-        }
-    }
-
-    assert!(test_end_to_end(50, 75, 121, true));
 }

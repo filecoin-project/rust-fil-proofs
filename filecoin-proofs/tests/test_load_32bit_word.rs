@@ -1,14 +1,17 @@
-use std::convert::TryInto;
+use fil_halo2_gadgets::boolean::Bit;
 use halo2_gadgets::utilities::bool_check;
 use halo2_proofs::circuit::{AssignedCell, Layouter, SimpleFloorPlanner, Value};
 use halo2_proofs::dev::MockProver;
 use halo2_proofs::pasta::{EqAffine, Fp};
-use halo2_proofs::plonk::{Advice, Circuit, Column, Constraints, ConstraintSystem, create_proof, Error, keygen_pk, keygen_vk, Selector, SingleVerifier, verify_proof, VirtualCells};
+use halo2_proofs::plonk::{
+    create_proof, keygen_pk, keygen_vk, verify_proof, Advice, Circuit, Column, ConstraintSystem,
+    Constraints, Error, Selector, SingleVerifier, VirtualCells,
+};
 use halo2_proofs::poly::commitment::Params;
 use halo2_proofs::poly::Rotation;
 use halo2_proofs::transcript::{Blake2bRead, Blake2bWrite, Challenge255};
 use rand::rngs::OsRng;
-use fil_halo2_gadgets::boolean::Bit;
+use std::convert::TryInto;
 
 #[derive(Clone)]
 struct Sha256Config {
@@ -37,9 +40,8 @@ impl Sha256Chip {
 
                 let mut bits_to_constraint = word
                     .iter()
-                    .map(|col| {
-                        meta.query_advice(*col, Rotation::cur())
-                    }).into_iter();
+                    .map(|col| meta.query_advice(*col, Rotation::cur()))
+                    .into_iter();
 
                 Constraints::with_selector(
                     s_word,
@@ -56,10 +58,7 @@ impl Sha256Chip {
                 )
             },
         );
-        Sha256Config {
-            word,
-            s_word
-        }
+        Sha256Config { word, s_word }
     }
 
     fn load_word(
@@ -69,13 +68,29 @@ impl Sha256Chip {
     ) -> Result<Vec<AssignedCell<Bit, Fp>>, Error> {
         let word = word.transpose_array();
 
-        let byte1 = self.load_word_byte(layouter.namespace(|| "load 1 byte"), word[0..8].try_into().unwrap(), 0)?;
+        let byte1 = self.load_word_byte(
+            layouter.namespace(|| "load 1 byte"),
+            word[0..8].try_into().unwrap(),
+            0,
+        )?;
 
-        let byte2 = self.load_word_byte(layouter.namespace(|| "load 2 byte"), word[8..16].try_into().unwrap(), 1)?;
+        let byte2 = self.load_word_byte(
+            layouter.namespace(|| "load 2 byte"),
+            word[8..16].try_into().unwrap(),
+            1,
+        )?;
 
-        let byte3 = self.load_word_byte(layouter.namespace(|| "load 3 byte"), word[16..24].try_into().unwrap(), 2)?;
+        let byte3 = self.load_word_byte(
+            layouter.namespace(|| "load 3 byte"),
+            word[16..24].try_into().unwrap(),
+            2,
+        )?;
 
-        let byte4 = self.load_word_byte(layouter.namespace(|| "load 4 byte"), word[24..32].try_into().unwrap(), 3)?;
+        let byte4 = self.load_word_byte(
+            layouter.namespace(|| "load 4 byte"),
+            word[24..32].try_into().unwrap(),
+            3,
+        )?;
 
         Ok([byte1, byte2, byte3, byte4].concat())
     }
@@ -84,7 +99,7 @@ impl Sha256Chip {
         &self,
         mut layouter: impl Layouter<Fp>,
         word: [Value<bool>; 8],
-        selector_offset: usize
+        selector_offset: usize,
     ) -> Result<Vec<AssignedCell<Bit, Fp>>, Error> {
         layouter.assign_region(
             || "load word",
@@ -109,9 +124,9 @@ impl Sha256Chip {
 }
 
 #[test]
-fn test_debug() {
+fn test_load_32bit_word() {
     struct TestCircuit {
-        word: Value<[bool; 32]>
+        word: Value<[bool; 32]>,
     }
 
     impl TestCircuit {
@@ -126,25 +141,38 @@ fn test_debug() {
 
         fn without_witnesses(&self) -> Self {
             TestCircuit {
-                word: Value::unknown()
+                word: Value::unknown(),
             }
         }
 
         fn configure(meta: &mut ConstraintSystem<Fp>) -> Self::Config {
             meta.instance_column(); //unused
 
-            let word = (0..8).into_iter().map(|_| {
-                let col = meta.advice_column();
-                meta.enable_equality(col);
-                col
-            }).collect::<Vec<Column<Advice>>>();
+            let word = (0..8)
+                .into_iter()
+                .map(|_| {
+                    let col = meta.advice_column();
+                    meta.enable_equality(col);
+                    col
+                })
+                .collect::<Vec<Column<Advice>>>();
 
             let s_word = meta.selector();
 
-            Sha256Chip::configure(meta, [word[0], word[1], word[2], word[3], word[4], word[5], word[6], word[7]], s_word)
+            Sha256Chip::configure(
+                meta,
+                [
+                    word[0], word[1], word[2], word[3], word[4], word[5], word[6], word[7],
+                ],
+                s_word,
+            )
         }
 
-        fn synthesize(&self, config: Self::Config, mut layouter: impl Layouter<Fp>) -> Result<(), Error> {
+        fn synthesize(
+            &self,
+            config: Self::Config,
+            mut layouter: impl Layouter<Fp>,
+        ) -> Result<(), Error> {
             let chip = Sha256Chip::construct(config);
 
             chip.load_word(layouter.namespace(|| "load word"), self.word.clone())?;
@@ -154,15 +182,16 @@ fn test_debug() {
     }
 
     let circuit = TestCircuit {
-        word: Value::known([false; 32])
+        word: Value::known([false; 32]),
     };
 
-    let prover = MockProver::run(circuit.k(), &circuit, vec![vec![]]).expect("couldn't run mock prover");
+    let prover =
+        MockProver::run(circuit.k(), &circuit, vec![vec![]]).expect("couldn't run mock prover");
     assert!(prover.verify().is_ok());
 
     fn test(word: [bool; 32], use_circuit_prover_for_keygen: bool) -> bool {
         let circuit = TestCircuit {
-            word: Value::known(word)
+            word: Value::known(word),
         };
 
         let public_inputs = vec![];
@@ -192,7 +221,7 @@ fn test_debug() {
             OsRng,
             &mut transcript,
         )
-            .expect("proof generation should not fail");
+        .expect("proof generation should not fail");
         let proving_time = now.elapsed();
 
         let proof: Vec<u8> = transcript.finalize();
@@ -208,7 +237,7 @@ fn test_debug() {
             &[&[&public_inputs[..]]],
             &mut transcript,
         )
-            .is_ok();
+        .is_ok();
         let verifying_time = now.elapsed();
 
         println!(
