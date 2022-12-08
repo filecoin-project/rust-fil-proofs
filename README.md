@@ -4,13 +4,10 @@ The **Filecoin Proving Subsystem** (or FPS) provides the storage proofs required
 
 There are currently several different crates:
 
-- [**Storage Proofs (`storage-proofs`)**](./storage-proofs)
-    A library for constructing storage proofs – including non-circuit proofs, corresponding SNARK circuits, and a method of combining them.
-
-- [**Storage Proofs Core (`storage-proofs-core`)**](./storage-proofs/core)
+- [**Storage Proofs Core (`storage-proofs-core`)**](./storage-proofs-core)
     A set of common primitives used throughout the other storage-proofs sub-crates, including crypto, merkle tree, hashing and gadget interfaces.
 
-- [**Storage Proofs PoRep (`storage-proofs-porep`)**](./storage-proofs/porep)
+- [**Storage Proofs PoRep (`storage-proofs-porep`)**](./storage-proofs-porep)
     `storage-proofs-porep` is intended to serve as a reference implementation for _**Proof-of-Replication**_ (**PoRep**), while also performing the heavy lifting for `filecoin-proofs`.
 
     Primary Components:
@@ -18,7 +15,7 @@ There are currently several different crates:
      -   **DrgPoRep** (_Depth Robust Graph_ **_Proof-of-Replication_**)
      -   **StackedDrgPoRep**
 
-- [**Storage Proofs PoSt (`storage-proofs-post`)**](./storage-proofs/post)
+- [**Storage Proofs PoSt (`storage-proofs-post`)**](./storage-proofs-post)
     `storage-proofs-post` is intended to serve as a reference implementation for _**Proof-of-Space-time**_ (**PoSt**), for `filecoin-proofs`.
 
     Primary Components:
@@ -30,7 +27,7 @@ There are currently several different crates:
 
 ## Security Audits
 
-The `rust-fil-proofs` proofs code and the [Filecoin Spec](https://bafybeidxw5vxjdwsun2zc2illagf43v6w5r5w63vg455h7vjesbyqssg64.ipfs.dweb.link/algorithms/sdr/) has undergone a [proofs security audit](audits/Sigma-Prime-Protocol-Labs-Filecoin-Proofs-Security-Review-v2.1.pdf) performed by [Sigma Prime](https://sigmaprime.io/) and been deemed free of *critical* or *major* security issues.  In addition to the security review, the document provides the summary of findings, vulnerability classifications, and recommended resolutions.  All known issues have been resolved to date in both the code and the specification.
+The `rust-fil-proofs` proofs code and the [Filecoin Spec](https://spec.filecoin.io/algorithms/sdr/) has undergone a [proofs security audit](audits/Sigma-Prime-Protocol-Labs-Filecoin-Proofs-Security-Review-v2.1.pdf) performed by [Sigma Prime](https://sigmaprime.io/) and been deemed free of *critical* or *major* security issues.  In addition to the security review, the document provides the summary of findings, vulnerability classifications, and recommended resolutions.  All known issues have been resolved to date in both the code and the specification.
 
 `rust-fil-proofs` has also undergone a [SNARK proofs security audit performed by Dr. Jean-Philippe Aumasson and Antony Vennard](audits/protocolai-audit-20200728.pdf) and been deemed free of *critical* or *major* security issues.  In addition to the security analysis, the document provides the audit goals, methodology, functionality descriptions and finally observations on what could be improved.  All known issues have been resolved to date.
 
