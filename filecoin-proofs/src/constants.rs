@@ -1,5 +1,5 @@
-use std::collections::HashMap;
 use std::sync::RwLock;
+use std::{collections::HashMap, sync::RwLockWriteGuard};
 
 pub use storage_proofs_core::drgraph::BASE_DEGREE as DRG_DEGREE;
 pub use storage_proofs_porep::stacked::EXP_DEGREE;
@@ -47,24 +47,47 @@ pub const PUBLISHED_SECTOR_SIZES: [u64; 10] = [
     SECTOR_SIZE_64_GIB,
 ];
 
+pub struct PorepMinimumChallenges(RwLock<HashMap<u64, usize>>);
+impl PorepMinimumChallenges {
+    fn new() -> Self {
+        Self(RwLock::new(
+            [
+                (SECTOR_SIZE_2_KIB, 2),
+                (SECTOR_SIZE_4_KIB, 2),
+                (SECTOR_SIZE_16_KIB, 2),
+                (SECTOR_SIZE_32_KIB, 2),
+                (SECTOR_SIZE_8_MIB, 2),
+                (SECTOR_SIZE_16_MIB, 2),
+                (SECTOR_SIZE_512_MIB, 2),
+                (SECTOR_SIZE_1_GIB, 2),
+                (SECTOR_SIZE_32_GIB, 176),
+                (SECTOR_SIZE_64_GIB, 176),
+            ]
+            .iter()
+            .copied()
+            .collect(),
+        ))
+    }
+
+    pub fn get_mut(&self) -> RwLockWriteGuard<'_, HashMap<u64, usize>> {
+        self.0.write().expect("POREP_MINIMUM_CHALLENGES poisoned")
+    }
+
+    pub fn from_sector_size(&self, sector_size: u64) -> usize {
+        match self
+            .0
+            .read()
+            .expect("POREP_MINIMUM_CHALLENGES poisoned")
+            .get(&sector_size)
+        {
+            Some(c) => *c,
+            None => panic!("invalid sector size"),
+        }
+    }
+}
+
 lazy_static! {
-    pub static ref POREP_MINIMUM_CHALLENGES: RwLock<HashMap<u64, u64>> = RwLock::new(
-        [
-            (SECTOR_SIZE_2_KIB, 2),
-            (SECTOR_SIZE_4_KIB, 2),
-            (SECTOR_SIZE_16_KIB, 2),
-            (SECTOR_SIZE_32_KIB, 2),
-            (SECTOR_SIZE_8_MIB, 2),
-            (SECTOR_SIZE_16_MIB, 2),
-            (SECTOR_SIZE_512_MIB, 2),
-            (SECTOR_SIZE_1_GIB, 2),
-            (SECTOR_SIZE_32_GIB, 176),
-            (SECTOR_SIZE_64_GIB, 176),
-        ]
-        .iter()
-        .copied()
-        .collect()
-    );
+    pub static ref POREP_MINIMUM_CHALLENGES: PorepMinimumChallenges = PorepMinimumChallenges::new();
     pub static ref POREP_PARTITIONS: RwLock<HashMap<u64, u8>> = RwLock::new(
         [
             (SECTOR_SIZE_2_KIB, 1),

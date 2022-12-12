@@ -30,6 +30,7 @@ use storage_proofs_porep::stacked::{
     TemporaryAux, TemporaryAuxCache,
 };
 
+use crate::POREP_MINIMUM_CHALLENGES;
 use crate::{
     api::{as_safe_commitment, commitment_from_fr, get_base_tree_leafs, get_base_tree_size},
     caches::{
@@ -37,8 +38,7 @@ use crate::{
         get_stacked_verifying_key,
     },
     constants::{
-        DefaultBinaryTree, DefaultPieceDomain, DefaultPieceHasher, POREP_MINIMUM_CHALLENGES,
-        SINGLE_PARTITION_PROOF_LEN,
+        DefaultBinaryTree, DefaultPieceDomain, DefaultPieceHasher, SINGLE_PARTITION_PROOF_LEN,
     },
     parameters::setup_params,
     pieces::{self, verify_pieces},
@@ -989,11 +989,8 @@ pub fn verify_seal<Tree: 'static + MerkleTreeTrait>(
             &public_inputs,
             &proof,
             &ChallengeRequirements {
-                minimum_challenges: *POREP_MINIMUM_CHALLENGES
-                    .read()
-                    .expect("POREP_MINIMUM_CHALLENGES poisoned")
-                    .get(&u64::from(SectorSize::from(porep_config)))
-                    .expect("unknown sector size") as usize,
+                minimum_challenges: POREP_MINIMUM_CHALLENGES
+                    .from_sector_size(u64::from(SectorSize::from(porep_config))),
             },
         )
     };
@@ -1112,11 +1109,8 @@ pub fn verify_batch_seal<Tree: 'static + MerkleTreeTrait>(
         &public_inputs,
         &proofs,
         &ChallengeRequirements {
-            minimum_challenges: *POREP_MINIMUM_CHALLENGES
-                .read()
-                .expect("POREP_MINIMUM_CHALLENGES poisoned")
-                .get(&u64::from(SectorSize::from(porep_config)))
-                .expect("unknown sector size") as usize,
+            minimum_challenges: POREP_MINIMUM_CHALLENGES
+                .from_sector_size(u64::from(SectorSize::from(porep_config))),
         },
     )
     .map_err(Into::into);

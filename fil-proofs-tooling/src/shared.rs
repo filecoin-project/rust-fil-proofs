@@ -5,8 +5,8 @@ use std::io::{BufWriter, Seek, SeekFrom, Write};
 use filecoin_proofs::{
     add_piece, fauxrep_aux, seal_pre_commit_phase1, seal_pre_commit_phase2,
     validate_cache_for_precommit_phase2, MerkleTreeTrait, PaddedBytesAmount, PieceInfo,
-    PoRepConfig, PoRepProofPartitions, PrivateReplicaInfo, PublicReplicaInfo, SealPreCommitOutput,
-    SealPreCommitPhase1Output, SectorSize, UnpaddedBytesAmount, POREP_PARTITIONS,
+    PoRepConfig, PrivateReplicaInfo, PublicReplicaInfo, SealPreCommitOutput,
+    SealPreCommitPhase1Output, SectorSize, UnpaddedBytesAmount,
 };
 use generic_array::typenum::Unsigned;
 use log::info;
@@ -118,18 +118,7 @@ pub fn create_replicas<Tree: 'static + MerkleTreeTrait>(
     let sector_size_unpadded_bytes_ammount =
         UnpaddedBytesAmount::from(PaddedBytesAmount::from(sector_size));
 
-    let porep_config = PoRepConfig {
-        sector_size,
-        partitions: PoRepProofPartitions(
-            *POREP_PARTITIONS
-                .read()
-                .expect("poisoned read access")
-                .get(&u64::from(sector_size))
-                .expect("unknown sector size"),
-        ),
-        porep_id,
-        api_version,
-    };
+    let porep_config = PoRepConfig::new_groth16(u64::from(sector_size), porep_id, api_version);
 
     let mut out: Vec<(SectorId, PreCommitReplicaOutput<Tree>)> = Default::default();
     let mut sector_ids = Vec::new();

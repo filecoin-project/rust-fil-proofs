@@ -5,7 +5,7 @@ use std::str::FromStr;
 use dialoguer::{theme::ColorfulTheme, MultiSelect};
 use filecoin_proofs::{
     constants::{
-        DefaultPieceHasher, POREP_PARTITIONS, PUBLISHED_SECTOR_SIZES, WINDOW_POST_CHALLENGE_COUNT,
+        DefaultPieceHasher, PUBLISHED_SECTOR_SIZES, WINDOW_POST_CHALLENGE_COUNT,
         WINDOW_POST_SECTOR_COUNT, WINNING_POST_CHALLENGE_COUNT, WINNING_POST_SECTOR_COUNT,
     },
     parameters::{public_params, window_post_public_params, winning_post_public_params},
@@ -213,18 +213,7 @@ fn generate_params_porep(sector_size: u64, api_version: ApiVersion) {
     with_shape!(
         sector_size,
         cache_porep_params,
-        PoRepConfig {
-            sector_size: SectorSize(sector_size),
-            partitions: PoRepProofPartitions(
-                *POREP_PARTITIONS
-                    .read()
-                    .expect("POREP_PARTITIONS poisoned")
-                    .get(&sector_size)
-                    .expect("unknown sector size"),
-            ),
-            porep_id: [0; 32],
-            api_version,
-        }
+        PoRepConfig::new_groth16(sector_size, [0; 32], api_version)
     );
 }
 
@@ -232,18 +221,7 @@ fn generate_params_empty_sector_update(sector_size: u64, api_version: ApiVersion
     with_shape!(
         sector_size,
         cache_empty_sector_update_params,
-        PoRepConfig {
-            sector_size: SectorSize(sector_size),
-            partitions: PoRepProofPartitions(
-                *POREP_PARTITIONS
-                    .read()
-                    .expect("POREP_PARTITIONS poisoned")
-                    .get(&sector_size)
-                    .expect("unknown sector size"),
-            ),
-            porep_id: [0; 32],
-            api_version,
-        }
+        PoRepConfig::new_groth16(sector_size, [0; 32], api_version)
     );
 }
 
