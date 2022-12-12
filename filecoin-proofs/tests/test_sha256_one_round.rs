@@ -264,6 +264,7 @@ struct Sha256Config {
     s_word: Selector,
 
     // for packing
+    // it is useful from debugging perspective to use Optioned group of columns for the specific operation
     fp: Option<Column<Advice>>,
     bits: Option<[Column<Advice>; 8]>,
     s_pack: Option<Selector>,
@@ -986,11 +987,6 @@ impl Circuit<Fp> for Sha256OneRoundCircuit {
             s_not_word,
         );
 
-        // running_sum requires this
-        let constants = meta.fixed_column();
-        meta.enable_constant(constants);
-
-        //let s_range_check = meta.selector();
         let s_modular_add2 = meta.selector();
         let s_modular_add4 = meta.selector();
 

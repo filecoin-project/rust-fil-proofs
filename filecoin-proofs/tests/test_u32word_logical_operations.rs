@@ -12,44 +12,13 @@ use halo2_proofs::poly::Rotation;
 use halo2_proofs::transcript::{Blake2bRead, Blake2bWrite, Challenge255};
 use rand::rngs::OsRng;
 use std::convert::TryInto;
-use std::iter;
-use std::iter::zip;
-use std::ops::Not;
 
 #[derive(Clone, Debug)]
 struct AssignedWord {
     bits: Vec<Option<AssignedCell<Bit, Fp>>>,
 }
 
-// taken from Jake's code
 impl AssignedWord {
-    fn rotr(&self, n: usize) -> Self {
-        let n = n % 32;
-        // All `self.bits` should be `Some`.
-        let bits = self
-            .bits
-            .iter()
-            .skip(n)
-            .chain(&self.bits)
-            .take(32)
-            .cloned()
-            .collect::<Vec<Option<AssignedCell<Bit, Fp>>>>();
-        AssignedWord { bits }
-    }
-
-    fn shr(&self, n: usize) -> Self {
-        let n = n % 32;
-        let bits = self
-            .bits
-            .iter()
-            .skip(n)
-            .cloned()
-            .chain(iter::repeat(None))
-            .take(32)
-            .collect::<Vec<Option<AssignedCell<Bit, Fp>>>>();
-        AssignedWord { bits }
-    }
-
     pub fn value_u32(&self) -> Value<u32> {
         self.bits
             .iter()
@@ -62,11 +31,6 @@ impl AssignedWord {
                     .value()
                     .map(|bit| (bool::from(bit) as u32) << i)
             })
-    }
-
-    pub fn value_fp(&self) -> Value<Fp> {
-        let value_u32 = self.value_u32();
-        value_u32.map(|x| Fp::from(x as u64))
     }
 }
 
@@ -1188,11 +1152,4 @@ fn u32_from_bits_be(bits: &[bool]) -> u32 {
         }
     }
     u32_word
-}
-
-fn u32_to_bits_be(val: u32) -> Vec<bool> {
-    (0..32)
-        .into_iter()
-        .map(|index| (val >> index) & 1 == 1)
-        .collect::<Vec<bool>>()
 }
