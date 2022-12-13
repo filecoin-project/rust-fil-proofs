@@ -6,7 +6,6 @@ use halo2_proofs::plonk::{
     Advice, Circuit, Column, ConstraintSystem, Constraints, Error, Selector, VirtualCells,
 };
 use halo2_proofs::poly::Rotation;
-use std::ops::{BitAnd, BitXor, Not};
 
 #[test]
 fn test_ch_operation() {
@@ -73,12 +72,7 @@ fn test_ch_operation() {
                 |mut region| {
                     self.config.s_ch.enable(&mut region, 0)?;
 
-                    let _ = region.assign_advice(
-                        || "e",
-                        self.config.e,
-                        0,
-                        || e.map(|e| Bit::from(e)),
-                    )?;
+                    let _ = region.assign_advice(|| "e", self.config.e, 0, || e.map(Bit::from))?;
 
                     let _ = region.assign_advice(
                         || "!e",
@@ -87,28 +81,14 @@ fn test_ch_operation() {
                         || e.map(|e| Bit::from(!e)),
                     )?;
 
-                    let _ = region.assign_advice(
-                        || "f",
-                        self.config.f,
-                        0,
-                        || f.map(|f| Bit::from(f)),
-                    )?;
+                    let _ = region.assign_advice(|| "f", self.config.f, 0, || f.map(Bit::from))?;
 
-                    let _ = region.assign_advice(
-                        || "g",
-                        self.config.g,
-                        0,
-                        || g.map(|g| Bit::from(g)),
-                    )?;
+                    let _ = region.assign_advice(|| "g", self.config.g, 0, || g.map(Bit::from))?;
 
                     let ch = e.zip(f).zip(g).map(|((e, f), g)| (e & f) ^ (!e & g));
 
-                    let assigned_ch = region.assign_advice(
-                        || "ch",
-                        self.config.ch,
-                        0,
-                        || ch.map(|ch| Bit::from(ch)),
-                    )?;
+                    let assigned_ch =
+                        region.assign_advice(|| "ch", self.config.ch, 0, || ch.map(Bit::from))?;
 
                     Ok(assigned_ch)
                 },

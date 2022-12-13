@@ -40,8 +40,7 @@ impl Sha256Chip {
 
                 let mut bits_to_constraint = word
                     .iter()
-                    .map(|col| meta.query_advice(*col, Rotation::cur()))
-                    .into_iter();
+                    .map(|col| meta.query_advice(*col, Rotation::cur()));
 
                 Constraints::with_selector(
                     s_word,
@@ -112,7 +111,7 @@ impl Sha256Chip {
                         || format!("bit {}", bit_index),
                         self.config.word[bit_index],
                         selector_offset,
-                        || bit.map(|bit| Bit::from(bit)),
+                        || bit.map(Bit::from),
                     )?;
                     assigned_word.push(assigned);
                 }
@@ -175,7 +174,7 @@ fn test_load_32bit_word() {
         ) -> Result<(), Error> {
             let chip = Sha256Chip::construct(config);
 
-            chip.load_word(layouter.namespace(|| "load word"), self.word.clone())?;
+            chip.load_word(layouter.namespace(|| "load word"), self.word)?;
 
             Ok(())
         }

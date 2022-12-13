@@ -53,6 +53,8 @@ fn test_maj_word_operation() {
         fn construct(config: MajConfig) -> Self {
             MajChip { config }
         }
+
+        #[allow(clippy::too_many_arguments)]
         fn configure(
             meta: &mut ConstraintSystem<Fp>,
             a: [Column<Advice>; 8],
@@ -69,10 +71,8 @@ fn test_maj_word_operation() {
                 |meta: &mut VirtualCells<Fp>| {
                     let s_word = meta.query_selector(s_word);
 
-                    let mut bits_to_constraint = a
-                        .iter()
-                        .map(|col| meta.query_advice(*col, Rotation::cur()))
-                        .into_iter();
+                    let mut bits_to_constraint =
+                        a.iter().map(|col| meta.query_advice(*col, Rotation::cur()));
 
                     Constraints::with_selector(
                         s_word,
@@ -220,6 +220,7 @@ fn test_maj_word_operation() {
             }
         }
 
+        #[allow(clippy::too_many_arguments)]
         fn maj_inner(
             &self,
             mut layouter: impl Layouter<Fp>,
@@ -238,12 +239,12 @@ fn test_maj_word_operation() {
 
                     let mut maj_out = vec![];
                     for (index, (((((a, a_inv), b), b_inv), c), maj)) in a
-                        .into_iter()
-                        .zip(a_inv.into_iter())
-                        .zip(b.into_iter())
-                        .zip(b_inv.into_iter())
-                        .zip(c.into_iter())
-                        .zip(maj.into_iter())
+                        .iter()
+                        .zip(a_inv.iter())
+                        .zip(b.iter())
+                        .zip(b_inv.iter())
+                        .zip(c.iter())
+                        .zip(maj.iter())
                         .enumerate()
                     {
                         // assign a, a_inv, b, b_inv, c, maj
@@ -280,6 +281,7 @@ fn test_maj_word_operation() {
             )
         }
 
+        #[allow(clippy::too_many_arguments)]
         fn maj(
             &self,
             mut layouter: impl Layouter<Fp>,
@@ -402,7 +404,7 @@ fn test_maj_word_operation() {
                             || format!("bit {}", bit_index),
                             self.config.a[bit_index],
                             selector_offset,
-                            || bit.map(|bit| Bit::from(bit)),
+                            || bit.map(Bit::from),
                         )?;
                         assigned_word.push(assigned);
                     }

@@ -807,7 +807,7 @@ fn test_range_check() {
 
     impl TestCircuit {
         fn k(&self) -> u32 {
-            5
+            6
         }
     }
     impl Circuit<Fp> for TestCircuit {

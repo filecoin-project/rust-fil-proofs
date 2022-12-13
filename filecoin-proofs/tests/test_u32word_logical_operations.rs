@@ -61,8 +61,7 @@ impl Sha256Chip {
 
                 let mut bits_to_constraint = word
                     .iter()
-                    .map(|col| meta.query_advice(*col, Rotation::cur()))
-                    .into_iter();
+                    .map(|col| meta.query_advice(*col, Rotation::cur()));
 
                 Constraints::with_selector(
                     s_word,
@@ -333,7 +332,7 @@ impl AssignedWordLogicalOperationsChip {
                 self.config.s_not.enable(&mut region, selector_offset)?;
 
                 let mut output = vec![];
-                for (bit_index, bit) in a.into_iter().enumerate() {
+                for (bit_index, bit) in a.iter().enumerate() {
                     let bit = bit.as_ref();
 
                     // assign input
@@ -424,7 +423,7 @@ impl AssignedWordLogicalOperationsChip {
                 self.config.s_and.enable(&mut region, selector_offset)?;
 
                 let mut output = vec![];
-                for (index, (a, b)) in a.into_iter().zip(b.into_iter()).enumerate() {
+                for (index, (a, b)) in a.iter().zip(b.iter()).enumerate() {
                     let bit_a = a.as_ref();
                     let bit_b = b.as_ref();
                     let a = match bit_a {
@@ -531,7 +530,7 @@ impl AssignedWordLogicalOperationsChip {
                 self.config.s_xor.enable(&mut region, selector_offset)?;
 
                 let mut output = vec![];
-                for (index, (a, b)) in a.into_iter().zip(b.into_iter()).enumerate() {
+                for (index, (a, b)) in a.iter().zip(b.iter()).enumerate() {
                     let bit_a = a.as_ref();
                     let bit_b = b.as_ref();
                     let a = match bit_a {

@@ -26,6 +26,7 @@ struct U32WordModularAddChip {
 }
 
 impl U32WordModularAddChip {
+    #[allow(clippy::too_many_arguments)]
     fn configure(
         meta: &mut ConstraintSystem<Fp>,
         z: Column<Advice>,

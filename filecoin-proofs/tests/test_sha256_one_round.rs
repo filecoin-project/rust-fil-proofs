@@ -294,8 +294,7 @@ impl Sha256Chip {
 
                 let mut bits_to_constraint = word
                     .iter()
-                    .map(|col| meta.query_advice(*col, Rotation::cur()))
-                    .into_iter();
+                    .map(|col| meta.query_advice(*col, Rotation::cur()));
 
                 Constraints::with_selector(
                     s_word,
@@ -417,7 +416,7 @@ impl Sha256Chip {
                         || format!("bit {}", bit_index),
                         self.config.word[bit_index],
                         selector_offset,
-                        || bit.map(|bit| Bit::from(bit)),
+                        || bit.map(Bit::from),
                     )?;
                     assigned_word.push(assigned);
                 }
@@ -658,7 +657,7 @@ impl AssignedWordLogicalOperationsChip {
                 self.config.s_not.enable(&mut region, selector_offset)?;
 
                 let mut output = vec![];
-                for (bit_index, bit) in a.into_iter().enumerate() {
+                for (bit_index, bit) in a.iter().enumerate() {
                     let bit = bit.as_ref();
 
                     // assign input
@@ -749,7 +748,7 @@ impl AssignedWordLogicalOperationsChip {
                 self.config.s_and.enable(&mut region, selector_offset)?;
 
                 let mut output = vec![];
-                for (index, (a, b)) in a.into_iter().zip(b.into_iter()).enumerate() {
+                for (index, (a, b)) in a.iter().zip(b.iter()).enumerate() {
                     let bit_a = a.as_ref();
                     let bit_b = b.as_ref();
                     let a = match bit_a {
@@ -856,7 +855,7 @@ impl AssignedWordLogicalOperationsChip {
                 self.config.s_xor.enable(&mut region, selector_offset)?;
 
                 let mut output = vec![];
-                for (index, (a, b)) in a.into_iter().zip(b.into_iter()).enumerate() {
+                for (index, (a, b)) in a.iter().zip(b.iter()).enumerate() {
                     let bit_a = a.as_ref();
                     let bit_b = b.as_ref();
                     let a = match bit_a {
@@ -1038,7 +1037,7 @@ impl Circuit<Fp> for Sha256OneRoundCircuit {
 
         let block_words = self.block.and_then(|block| {
             let mut block_words: Vec<[bool; WORD_BIT_LEN]> = vec![];
-            for block_word in block.chunks(WORD_BIT_LEN).into_iter() {
+            for block_word in block.chunks(WORD_BIT_LEN) {
                 block_words.push(block_word.try_into().unwrap())
             }
             Value::known(block_words)
@@ -1077,32 +1076,24 @@ impl Circuit<Fp> for Sha256OneRoundCircuit {
             let rotated_18 = assigned_block[index - 15].rotr(18).clone();
 
             let xor1 = assigned_word_operations.xor(
-                layouter.namespace(|| format!("s0 xor1")),
+                layouter.namespace(|| "s0 xor1"),
                 rotated_7,
                 rotated_18,
             )?;
 
-            let s0 = assigned_word_operations.xor(
-                layouter.namespace(|| format!("s0")),
-                xor1,
-                shifted_3,
-            )?;
+            let s0 = assigned_word_operations.xor(layouter.namespace(|| "s0"), xor1, shifted_3)?;
 
             let shifted_10 = assigned_block[index - 2].shr(10).clone();
             let rotated_17 = assigned_block[index - 2].rotr(17).clone();
             let rotated_19 = assigned_block[index - 2].rotr(19).clone();
 
             let xor1 = assigned_word_operations.xor(
-                layouter.namespace(|| format!("s1 xor1")),
+                layouter.namespace(|| "s1 xor1"),
                 rotated_17,
                 rotated_19,
             )?;
 
-            let s1 = assigned_word_operations.xor(
-                layouter.namespace(|| format!("s1")),
-                xor1,
-                shifted_10,
-            )?;
+            let s1 = assigned_word_operations.xor(layouter.namespace(|| "s1"), xor1, shifted_10)?;
 
             let s0_packed = sha256chip.pack_word(layouter.namespace(|| "pack s0"), s0)?;
 
@@ -1132,7 +1123,6 @@ impl Circuit<Fp> for Sha256OneRoundCircuit {
                     Value::known(
                         word.to_le_bits()
                             .into_iter()
-                            .map(|bit| bit)
                             .take(WORD_BIT_LEN)
                             .collect::<Vec<bool>>()
                             .try_into()
@@ -1158,28 +1148,24 @@ impl Circuit<Fp> for Sha256OneRoundCircuit {
             let e_rotated_25 = e.clone().rotr(25);
 
             let xor1 = assigned_word_operations.xor(
-                layouter.namespace(|| format!("s1 xor1")),
+                layouter.namespace(|| "s1 xor1"),
                 e_rotated_6,
                 e_rotated_11,
             )?;
 
-            let s1 = assigned_word_operations.xor(
-                layouter.namespace(|| format!("s1")),
-                xor1,
-                e_rotated_25,
-            )?;
+            let s1 =
+                assigned_word_operations.xor(layouter.namespace(|| "s1"), xor1, e_rotated_25)?;
 
             let e_and_f = assigned_word_operations.and(
-                layouter.namespace(|| format!("e and f")),
+                layouter.namespace(|| "e and f"),
                 e.clone(),
                 f.clone(),
             )?;
 
-            let not_e =
-                assigned_word_operations.not(layouter.namespace(|| format!("not e")), e.clone())?;
+            let not_e = assigned_word_operations.not(layouter.namespace(|| "not e"), e.clone())?;
 
             let not_e_and_g = assigned_word_operations.and(
-                layouter.namespace(|| format!("not_e and g")),
+                layouter.namespace(|| "not_e and g"),
                 not_e.clone(),
                 g.clone(),
             )?;
@@ -1289,7 +1275,6 @@ impl Circuit<Fp> for Sha256OneRoundCircuit {
                     Value::known(
                         word.to_le_bits()
                             .into_iter()
-                            .map(|bit| bit)
                             .take(WORD_BIT_LEN)
                             .collect::<Vec<bool>>()
                             .try_into()
@@ -1320,7 +1305,6 @@ impl Circuit<Fp> for Sha256OneRoundCircuit {
                     Value::known(
                         word.to_le_bits()
                             .into_iter()
-                            .map(|bit| bit)
                             .take(WORD_BIT_LEN)
                             .collect::<Vec<bool>>()
                             .try_into()
@@ -1334,7 +1318,7 @@ impl Circuit<Fp> for Sha256OneRoundCircuit {
             layouter.namespace(|| "pack assigned_state[0]"),
             assigned_state[0].clone(),
         )?;
-        let a_packed = sha256chip.pack_word(layouter.namespace(|| "pack a"), a.clone())?;
+        let a_packed = sha256chip.pack_word(layouter.namespace(|| "pack a"), a)?;
         let h0 = u32word_modular_add_chip.modular_add(
             layouter.namespace(|| "h0"),
             assigned_state_0,
@@ -1345,7 +1329,7 @@ impl Circuit<Fp> for Sha256OneRoundCircuit {
             layouter.namespace(|| "pack assigned_state[1]"),
             assigned_state[1].clone(),
         )?;
-        let b_packed = sha256chip.pack_word(layouter.namespace(|| "pack b"), b.clone())?;
+        let b_packed = sha256chip.pack_word(layouter.namespace(|| "pack b"), b)?;
         let h1 = u32word_modular_add_chip.modular_add(
             layouter.namespace(|| "h1"),
             assigned_state_1,
@@ -1356,7 +1340,7 @@ impl Circuit<Fp> for Sha256OneRoundCircuit {
             layouter.namespace(|| "pack assigned_state[2]"),
             assigned_state[2].clone(),
         )?;
-        let c_packed = sha256chip.pack_word(layouter.namespace(|| "pack c"), c.clone())?;
+        let c_packed = sha256chip.pack_word(layouter.namespace(|| "pack c"), c)?;
         let h2 = u32word_modular_add_chip.modular_add(
             layouter.namespace(|| "h2"),
             assigned_state_2,
@@ -1367,7 +1351,7 @@ impl Circuit<Fp> for Sha256OneRoundCircuit {
             layouter.namespace(|| "pack assigned_state[3]"),
             assigned_state[3].clone(),
         )?;
-        let d_packed = sha256chip.pack_word(layouter.namespace(|| "pack d"), d.clone())?;
+        let d_packed = sha256chip.pack_word(layouter.namespace(|| "pack d"), d)?;
         let h3 = u32word_modular_add_chip.modular_add(
             layouter.namespace(|| "h3"),
             assigned_state_3,
@@ -1378,7 +1362,7 @@ impl Circuit<Fp> for Sha256OneRoundCircuit {
             layouter.namespace(|| "pack assigned_state[4]"),
             assigned_state[4].clone(),
         )?;
-        let e_packed = sha256chip.pack_word(layouter.namespace(|| "pack e"), e.clone())?;
+        let e_packed = sha256chip.pack_word(layouter.namespace(|| "pack e"), e)?;
         let h4 = u32word_modular_add_chip.modular_add(
             layouter.namespace(|| "h4"),
             assigned_state_4,
@@ -1389,7 +1373,7 @@ impl Circuit<Fp> for Sha256OneRoundCircuit {
             layouter.namespace(|| "pack assigned_state[5]"),
             assigned_state[5].clone(),
         )?;
-        let f_packed = sha256chip.pack_word(layouter.namespace(|| "pack f"), f.clone())?;
+        let f_packed = sha256chip.pack_word(layouter.namespace(|| "pack f"), f)?;
         let h5 = u32word_modular_add_chip.modular_add(
             layouter.namespace(|| "h5"),
             assigned_state_5,
@@ -1400,7 +1384,7 @@ impl Circuit<Fp> for Sha256OneRoundCircuit {
             layouter.namespace(|| "pack assigned_state[6]"),
             assigned_state[6].clone(),
         )?;
-        let g_packed = sha256chip.pack_word(layouter.namespace(|| "pack g"), g.clone())?;
+        let g_packed = sha256chip.pack_word(layouter.namespace(|| "pack g"), g)?;
         let h6 = u32word_modular_add_chip.modular_add(
             layouter.namespace(|| "h6"),
             assigned_state_6,
@@ -1411,7 +1395,7 @@ impl Circuit<Fp> for Sha256OneRoundCircuit {
             layouter.namespace(|| "pack assigned_state[7]"),
             assigned_state[7].clone(),
         )?;
-        let h_packed = sha256chip.pack_word(layouter.namespace(|| "pack h"), h.clone())?;
+        let h_packed = sha256chip.pack_word(layouter.namespace(|| "pack h"), h)?;
         let h7 = u32word_modular_add_chip.modular_add(
             layouter.namespace(|| "h7"),
             assigned_state_7,
@@ -1453,7 +1437,8 @@ fn sha256_one_round_mock_prover() {
         state: Value::known(IV),
     };
 
-    let proof = MockProver::run(circuit.k(), &circuit, vec![]).expect("couldn't run mocked prover");
+    let proof =
+        MockProver::run(circuit.k(), &circuit, vec![vec![]]).expect("couldn't run mocked prover");
     assert!(proof.verify().is_ok());
 }
 

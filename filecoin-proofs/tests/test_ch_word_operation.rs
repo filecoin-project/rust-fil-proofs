@@ -52,6 +52,8 @@ fn test_ch_word_operation() {
         fn construct(config: ChConfig) -> Self {
             ChChip { config }
         }
+
+        #[allow(clippy::too_many_arguments)]
         fn configure(
             meta: &mut ConstraintSystem<Fp>,
             e: [Column<Advice>; 8],
@@ -67,10 +69,8 @@ fn test_ch_word_operation() {
                 |meta: &mut VirtualCells<Fp>| {
                     let s_word = meta.query_selector(s_word);
 
-                    let mut bits_to_constraint = e
-                        .iter()
-                        .map(|col| meta.query_advice(*col, Rotation::cur()))
-                        .into_iter();
+                    let mut bits_to_constraint =
+                        e.iter().map(|col| meta.query_advice(*col, Rotation::cur()));
 
                     Constraints::with_selector(
                         s_word,
@@ -174,6 +174,7 @@ fn test_ch_word_operation() {
             }
         }
 
+        #[allow(clippy::too_many_arguments)]
         fn ch_inner(
             &self,
             mut layouter: impl Layouter<Fp>,
@@ -191,11 +192,11 @@ fn test_ch_word_operation() {
 
                     let mut ch_out = vec![];
                     for (index, ((((e, e_inv), f), g), ch)) in e
-                        .into_iter()
-                        .zip(e_inv.into_iter())
-                        .zip(f.into_iter())
-                        .zip(g.into_iter())
-                        .zip(ch.into_iter())
+                        .iter()
+                        .zip(e_inv.iter())
+                        .zip(f.iter())
+                        .zip(g.iter())
+                        .zip(ch.iter())
                         .enumerate()
                     {
                         // assign e, e_inv, f, g, ch
@@ -347,7 +348,7 @@ fn test_ch_word_operation() {
                             || format!("bit {}", bit_index),
                             self.config.e[bit_index],
                             selector_offset,
-                            || bit.map(|bit| Bit::from(bit)),
+                            || bit.map(Bit::from),
                         )?;
                         assigned_word.push(assigned);
                     }

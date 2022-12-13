@@ -9,31 +9,13 @@ use halo2_proofs::plonk::{
 use halo2_proofs::poly::Rotation;
 
 #[test]
-fn test_maj_debug() {
-    let a = true;
-    let b = false;
-    let c = false;
-    let maj = (a & b) ^ (a & c) ^ (b & c);
-
-    let a = if a { 1u32 } else { 0u32 };
-    let b = if b { 1u32 } else { 0u32 };
-    let c = if c { 1u32 } else { 0u32 };
-    let a_not: u32 = if a == 1 { 0 } else { 1 };
-    let b_not: u32 = if b == 1 { 0 } else { 1 };
-
-    let maj_alt = c + a * b - a_not * b_not * c - a * b * c;
-
-    println!("maj: {} {}", maj, maj_alt);
-    assert_eq!(maj, if maj_alt == 0 { false } else { true })
-}
-
-#[test]
 fn test_maj_operation() {
     struct MajChip {
         config: MajConfig,
     }
 
     impl MajChip {
+        #[allow(clippy::too_many_arguments)]
         fn configure(
             meta: &mut ConstraintSystem<Fp>,
             a: Column<Advice>,
