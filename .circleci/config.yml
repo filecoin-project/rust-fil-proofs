@@ -74,7 +74,7 @@ jobs:
       - run:
           name: Test (<< parameters.crate >>)
           command: cargo +$(cat rust-toolchain) test --verbose --package << parameters.crate >>
-          no_output_timeout: 30m
+          no_output_timeout: 45m
 
   test_release:
     executor: default
