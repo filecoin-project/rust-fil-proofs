@@ -219,47 +219,11 @@ impl<F: FieldExt, const LEN: usize> AssignedBits<F, LEN> {
     /// ***Panics*** if bits are assigned to instance column
     ///
     /// ```
-    /// # use pasta_curves::Fp;
-    /// # use halo2_proofs::plonk::{ConstraintSystem, Circuit, Error, Column, Advice};
-    /// # use halo2_proofs::circuit::{Value, SimpleFloorPlanner, Layouter};
-    /// # use fil_halo2_gadgets::boolean::AssignedBits;
-    ///
-    /// # struct TestCircuit;
-    /// # impl Circuit<Fp> for TestCircuit {
-    /// #    type Config = Column<Advice>;
-    /// #    type FloorPlanner = SimpleFloorPlanner;
-    /// #    fn without_witnesses(&self) -> Self {
-    /// #        todo!()
-    /// #    }
-    /// #    fn configure(meta: &mut ConstraintSystem<Fp>) -> Self::Config {
-    /// #        todo!()
-    /// #    }
-    /// #    fn synthesize(
-    /// #        &self,
-    /// #        config: Self::Config,
-    /// #        mut layouter: impl Layouter<Fp>,
-    /// #    ) -> Result<(), Error> {
-    /// #    let column = config;
-    ///
-    ///     const LEN: usize = 32;
-    ///     let offset = 0;
-    ///     let value = Value::known([false; 32]);
-    ///
-    ///     layouter.assign_region(
-    ///         || "test assignment",
-    ///         |mut region| {
-    ///             AssignedBits::<Fp, LEN>::assign_bits(
-    ///                 &mut region,
-    ///                 || "assign 32 zero bits",
-    ///                 column,
-    ///                 offset,
-    ///                 value,
-    ///             )
-    ///         },
-    ///     )?;
-    /// #    Ok(())
-    /// #   }
-    /// # }
+    /// // Consider `column` to be an advice/fixed column; `region` to be a particular circuit's region
+    /// const LEN: usize = 32;
+    /// let offset = 0;
+    /// let bits = Value::known([false; LEN]);
+    /// AssignedBits::<Fp, LEN>::assign_bits(&mut region, || "assign 32 zero bits", column, offset, bits);
     /// ```
     pub fn assign_bits<A, AR, T: TryInto<[bool; LEN]> + std::fmt::Debug + Clone>(
         region: &mut Region<'_, F>,
@@ -302,50 +266,14 @@ impl<F: FieldExt> AssignedBits<F, 16> {
     /// Assigns 16 bits represented as `u16` into assigned region of Halo2 circuit
     /// at a given `offset` using either advice or fixed column.
     ///
-    /// ***Panics*** if bits are assigned to the instance column
+    /// ***Panics*** if bits are assigned to instance column
     ///
     /// ```
-    /// # use pasta_curves::Fp;
-    /// # use halo2_proofs::plonk::{ConstraintSystem, Circuit, Error, Column, Advice};
-    /// # use halo2_proofs::circuit::{Value, SimpleFloorPlanner, Layouter};
-    /// # use fil_halo2_gadgets::boolean::AssignedBits;
-    ///
-    /// # struct TestCircuit;
-    /// # impl Circuit<Fp> for TestCircuit {
-    /// #    type Config = Column<Advice>;
-    /// #    type FloorPlanner = SimpleFloorPlanner;
-    /// #    fn without_witnesses(&self) -> Self {
-    /// #        todo!()
-    /// #    }
-    /// #    fn configure(meta: &mut ConstraintSystem<Fp>) -> Self::Config {
-    /// #        todo!()
-    /// #    }
-    /// #    fn synthesize(
-    /// #        &self,
-    /// #        config: Self::Config,
-    /// #        mut layouter: impl Layouter<Fp>,
-    /// #    ) -> Result<(), Error> {
-    /// #    let column = config;
-    ///
-    ///     const LEN: usize = 16;
-    ///     let offset = 0;
-    ///     let value = Value::known(0u16);
-    ///
-    ///     layouter.assign_region(
-    ///         || "test assignment",
-    ///         |mut region| {
-    ///             AssignedBits::<Fp, LEN>::assign(
-    ///                 &mut region,
-    ///                 || "assign 16-bits word",
-    ///                 column,
-    ///                 offset,
-    ///                 value,
-    ///             )
-    ///         },
-    ///     )?;
-    /// #    Ok(())
-    /// #   }
-    /// # }
+    /// // Consider `column` to be an advice/fixed column; `region` to be a particular circuit's region
+    /// const LEN: usize = 16;
+    /// let offset = 0;
+    /// let value = Value::known(0u16);
+    /// AssignedBits::<Fp, LEN>::assign(&mut region, || "assign 16-bits word", column, offset, value);
     /// ```
     pub fn assign<A, AR>(
         region: &mut Region<'_, F>,
@@ -388,47 +316,11 @@ impl<F: FieldExt> AssignedBits<F, 32> {
     /// ***Panics*** if bits are assigned to instance column
     ///
     /// ```
-    /// # use pasta_curves::Fp;
-    /// # use halo2_proofs::plonk::{ConstraintSystem, Circuit, Error, Column, Advice};
-    /// # use halo2_proofs::circuit::{Value, SimpleFloorPlanner, Layouter};
-    /// # use fil_halo2_gadgets::boolean::AssignedBits;
-    ///
-    /// # struct TestCircuit;
-    /// # impl Circuit<Fp> for TestCircuit {
-    /// #    type Config = Column<Advice>;
-    /// #    type FloorPlanner = SimpleFloorPlanner;
-    /// #    fn without_witnesses(&self) -> Self {
-    /// #        todo!()
-    /// #    }
-    /// #    fn configure(meta: &mut ConstraintSystem<Fp>) -> Self::Config {
-    /// #        todo!()
-    /// #    }
-    /// #    fn synthesize(
-    /// #        &self,
-    /// #        config: Self::Config,
-    /// #        mut layouter: impl Layouter<Fp>,
-    /// #    ) -> Result<(), Error> {
-    /// #    let column = config;
-    ///
-    ///     const LEN: usize = 32;
-    ///     let offset = 0;
-    ///     let value = Value::known(0u32);
-    ///
-    ///     layouter.assign_region(
-    ///         || "test assignment",
-    ///         |mut region| {
-    ///             AssignedBits::<Fp, LEN>::assign(
-    ///                 &mut region,
-    ///                 || "assign 32-bits word",
-    ///                 column,
-    ///                 offset,
-    ///                 value,
-    ///             )
-    ///         },
-    ///     )?;
-    /// #    Ok(())
-    /// #   }
-    /// # }
+    /// // Consider `column` to be an advice/fixed column; `region` to be a particular circuit's region
+    /// const LEN: usize = 32;
+    /// let offset = 0;
+    /// let value = Value::known(0u32);
+    /// AssignedBits::<Fp, LEN>::assign(&mut region, || "assign 32-bits word", column, offset, value);
     /// ```
     pub fn assign<A, AR>(
         region: &mut Region<'_, F>,
