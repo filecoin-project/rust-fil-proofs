@@ -175,18 +175,29 @@ impl AdviceIter {
     /// Returns next `(offset, column)` tuple, considering previous data assignment.
     ///
     /// ```
-    ///  // Consider `advice_columns` to be `[Column<Advice>; 8]`
+    ///  use pasta_curves::Fp;
+    ///  use halo2_proofs::plonk::{ ConstraintSystem, Column, Advice };
+    ///  use fil_halo2_gadgets::AdviceIter;
     ///
-    ///  let mut advice_iter = AdviceIter::from(advice_columns.to_vec());
+    ///  let mut cs = ConstraintSystem::<Fp>::default();
+    ///
+    ///  let advice_columns = (0..8).into_iter().map(|_| cs.advice_column()).collect::<Vec<Column<Advice>>>();
+    ///
+    ///  let mut advice_iter = AdviceIter::from(advice_columns);
     ///
     ///  for index in 0..8 {
-    ///      let (offset, col) = advice_iter.next();
-    ///           assert_eq!(offset, 0);
-    ///      }
-    ///      for index in 8..16 {
-    ///           let (offset, col) = advice_iter.next();
-    ///           assert_eq!(offset, 1);
-    ///      }
+    ///     let (offset, col) = advice_iter.next();
+    ///     assert_eq!(offset, 0);
+    ///  }
+    ///
+    ///  for index in 8..16 {
+    ///     let (offset, col) = advice_iter.next();
+    ///     assert_eq!(offset, 1);
+    ///  }
+    ///
+    ///  for index in 16..24 {
+    ///     let (offset, col) = advice_iter.next();
+    ///     assert_eq!(offset, 2);
     ///  }
     /// ```
     #[allow(clippy::should_implement_trait)]

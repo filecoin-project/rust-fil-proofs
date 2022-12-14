@@ -1319,6 +1319,7 @@ dependencies = [
  "halo2_gadgets",
  "halo2_proofs",
  "neptune",
+ "pasta_curves",
  "rand",
  "rand_xorshift",
  "sha2 0.9.9",
