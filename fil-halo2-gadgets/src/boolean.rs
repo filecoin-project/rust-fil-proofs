@@ -213,7 +213,6 @@ impl<F: FieldExt, const LEN: usize> std::ops::Deref for AssignedBits<F, LEN> {
 }
 
 impl<F: FieldExt, const LEN: usize> AssignedBits<F, LEN> {
-
     /// Assigns up to 64 bits represented as [bool; LEN] into assigned region of Halo2 circuit
     /// at a given `offset` using either advice or fixed column.
     ///

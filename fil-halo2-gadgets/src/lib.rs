@@ -138,6 +138,15 @@ impl<T, F: FieldExt> From<MaybeAssigned<T, F>> for AssignedCell<T, F> {
     }
 }
 
+/// Iterator for `Vec<Column<Advice>>` used for convenient manipulations over columns.
+///
+/// Assigning data into constraints system optimally in Halo2 often causes confusions which particular column
+/// to use and with what offset. `AdviceIter` "automatically" rotates supplied columns while data assignment,
+/// and when all columns have been already in use, increments `offset`, so next block of assignment can be performed
+/// from a "starting" column.
+///
+/// Note, as `offset` can increase infinitely, the cost of proving (proof size, proving / verification time) also increases.
+///
 pub struct AdviceIter {
     offset: usize,
     advice: Vec<Column<Advice>>,
@@ -163,6 +172,23 @@ impl AdviceIter {
         }
     }
 
+    /// Returns next `(offset, column)` tuple, considering previous data assignment.
+    ///
+    /// ```
+    ///  // Consider `advice_columns` to be `[Column<Advice>; 8]`
+    ///
+    ///  let mut advice_iter = AdviceIter::from(advice_columns.to_vec());
+    ///
+    ///  for index in 0..8 {
+    ///      let (offset, col) = advice_iter.next();
+    ///           assert_eq!(offset, 0);
+    ///      }
+    ///      for index in 8..16 {
+    ///           let (offset, col) = advice_iter.next();
+    ///           assert_eq!(offset, 1);
+    ///      }
+    ///  }
+    /// ```
     #[allow(clippy::should_implement_trait)]
     pub fn next(&mut self) -> (usize, Column<Advice>) {
         if self.col_index == self.num_cols {
