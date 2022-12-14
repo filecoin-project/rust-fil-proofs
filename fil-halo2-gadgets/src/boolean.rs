@@ -195,6 +195,12 @@ impl From<u32> for Bits<32> {
     }
 }
 
+/// Utility for convenient assigning bits (`Bit`) into Halo2 circuit
+///
+/// It's implementation is motivated by SHA-256 chip (and its optimizations),
+/// which operates with 32-bit words. Halo2 circuit stores information as field elements,
+/// so regardless of number of bits assigned 1 or 64, they both will occupy single field element.
+///
 #[derive(Clone, Debug)]
 pub struct AssignedBits<F: FieldExt, const LEN: usize>(pub(crate) AssignedCell<Bits<LEN>, F>);
 
@@ -207,6 +213,19 @@ impl<F: FieldExt, const LEN: usize> std::ops::Deref for AssignedBits<F, LEN> {
 }
 
 impl<F: FieldExt, const LEN: usize> AssignedBits<F, LEN> {
+
+    /// Assigns up to 64 bits represented as [bool; LEN] into assigned region of Halo2 circuit
+    /// at a given `offset` using either advice or fixed column.
+    ///
+    /// ***Panics*** if bits are assigned to instance column
+    ///
+    /// ```
+    /// // Consider `column` to be an advice/fixed column; `region` to be a particular circuit's region
+    /// const LEN: usize = 32;
+    /// let offset = 0;
+    /// let bits = Value::known([false; LEN]);
+    /// AssignedBits::<Fp, LEN>::assign_bits(&mut region, || "assign 32 zero bits", column, offset, bits);
+    /// ```
     pub fn assign_bits<A, AR, T: TryInto<[bool; LEN]> + std::fmt::Debug + Clone>(
         region: &mut Region<'_, F>,
         annotation: A,
@@ -245,6 +264,18 @@ impl<F: FieldExt> AssignedBits<F, 16> {
         self.value().map(|v| v.into())
     }
 
+    /// Assigns 16 bits represented as `u16` into assigned region of Halo2 circuit
+    /// at a given `offset` using either advice or fixed column.
+    ///
+    /// ***Panics*** if bits are assigned to instance column
+    ///
+    /// ```
+    /// // Consider `column` to be an advice/fixed column; `region` to be a particular circuit's region
+    /// const LEN: usize = 16;
+    /// let offset = 0;
+    /// let value = Value::known(0u16);
+    /// AssignedBits::<Fp, LEN>::assign(&mut region, || "assign 16-bits word", column, offset, value);
+    /// ```
     pub fn assign<A, AR>(
         region: &mut Region<'_, F>,
         annotation: A,
@@ -280,6 +311,18 @@ impl<F: FieldExt> AssignedBits<F, 32> {
         self.value().map(|v| v.into())
     }
 
+    /// Assigns 32 bits represented as `u32` into assigned region of Halo2 circuit
+    /// at a given `offset` using either advice or fixed column.
+    ///
+    /// ***Panics*** if bits are assigned to instance column
+    ///
+    /// ```
+    /// // Consider `column` to be an advice/fixed column; `region` to be a particular circuit's region
+    /// const LEN: usize = 32;
+    /// let offset = 0;
+    /// let value = Value::known(0u32);
+    /// AssignedBits::<Fp, LEN>::assign(&mut region, || "assign 32-bits word", column, offset, value);
+    /// ```
     pub fn assign<A, AR>(
         region: &mut Region<'_, F>,
         annotation: A,
