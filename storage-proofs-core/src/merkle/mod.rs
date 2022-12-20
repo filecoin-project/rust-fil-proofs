@@ -5,7 +5,7 @@ use std::fs::File;
 pub use merkletree::store::{DiskStore, ExternalReader, Store};
 
 use filecoin_hashers::Hasher;
-use generic_array::typenum::{U0, U2, U4, U8};
+use generic_array::typenum::{U0, U2};
 use merkletree::store::LevelCacheStore;
 
 mod builders;
@@ -16,28 +16,30 @@ pub use builders::*;
 pub use proof::*;
 pub use tree::*;
 
-pub type LCStore<E> = LevelCacheStore<E, File>;
-
-pub type MerkleStore<T> = DiskStore<T>;
-
+/// A tree that is fully persisted to disk.
+///
+/// It's generic over the hash function `H`, the base arity `U`, sub-tree arity `V` and top tree
+/// arity `W`.
+///
+/// The base arity is used for the leaves. If all other arities are zero, then this arity is used
+/// for all levels.
+/// The sub-tree arity is for all levels between the level above the leaves and the level below the
+/// root (which is always a single item).
+/// The top-tree arity is used for the top level that then results in the roor node.
 pub type DiskTree<H, U, V, W> = MerkleTreeWrapper<H, DiskStore<<H as Hasher>::Domain>, U, V, W>;
-pub type LCTree<H, U, V, W> = MerkleTreeWrapper<H, LCStore<<H as Hasher>::Domain>, U, V, W>;
 
-pub type MerkleTree<H, U> = DiskTree<H, U, U0, U0>;
-pub type LCMerkleTree<H, U> = LCTree<H, U, U0, U0>;
+/// A tree that is partially stored on disk, some levels are in memory.
+///
+/// It's generic over the hash function `H`, the base arity `U`, sub-tree arity `V` and top tree
+/// arity `W`.
+///
+/// The base arity is used for the leaves. If all other arities are zero, then this arity is used
+/// for all levels.
+/// The sub-tree arity is for all levels between the level above the leaves and the level below the
+/// root (which is always a single item).
+/// The top-tree arity is used for the top level that then results in the roor node.
+pub type LCTree<H, U, V, W> =
+    MerkleTreeWrapper<H, LevelCacheStore<<H as Hasher>::Domain, File>, U, V, W>;
 
-pub type BinaryMerkleTree<H> = MerkleTree<H, U2>;
-pub type BinaryLCMerkleTree<H> = LCMerkleTree<H, U2>;
-
-pub type BinarySubMerkleTree<H> = DiskTree<H, U2, U2, U0>;
-
-pub type QuadMerkleTree<H> = MerkleTree<H, U4>;
-pub type QuadLCMerkleTree<H> = LCMerkleTree<H, U4>;
-
-pub type OctMerkleTree<H> = DiskTree<H, U8, U0, U0>;
-pub type OctSubMerkleTree<H> = DiskTree<H, U8, U2, U0>;
-pub type OctTopMerkleTree<H> = DiskTree<H, U8, U8, U2>;
-
-pub type OctLCMerkleTree<H> = LCTree<H, U8, U0, U0>;
-pub type OctLCSubMerkleTree<H> = LCTree<H, U8, U2, U0>;
-pub type OctLCTopMerkleTree<H> = LCTree<H, U8, U8, U2>;
+/// A binary merkle tree, where all levels have arity 2. It's fully persisted to disk.
+pub type BinaryMerkleTree<H> = DiskTree<H, U2, U0, U0>;

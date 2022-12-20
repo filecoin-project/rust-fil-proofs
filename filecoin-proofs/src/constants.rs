@@ -7,7 +7,7 @@ pub use storage_proofs_porep::stacked::EXP_DEGREE;
 use filecoin_hashers::{poseidon::PoseidonHasher, sha256::Sha256Hasher, Hasher};
 use lazy_static::lazy_static;
 use storage_proofs_core::{
-    merkle::{BinaryMerkleTree, LCTree, OctLCMerkleTree, OctMerkleTree},
+    merkle::{BinaryMerkleTree, DiskTree, LCTree},
     util::NODE_SIZE,
     MAX_LEGACY_POREP_REGISTERED_PROOF_ID,
 };
@@ -164,9 +164,15 @@ pub type DefaultPieceDomain = <DefaultPieceHasher as Hasher>::Domain;
 pub type DefaultTreeHasher = PoseidonHasher;
 pub type DefaultTreeDomain = <DefaultTreeHasher as Hasher>::Domain;
 
+/// A binary merkle tree with Poseidon hashing, where all levels have arity 2. It's fully
+/// persisted to disk.
 pub type DefaultBinaryTree = BinaryMerkleTree<DefaultTreeHasher>;
-pub type DefaultOctTree = OctMerkleTree<DefaultTreeHasher>;
-pub type DefaultOctLCTree = OctLCMerkleTree<DefaultTreeHasher>;
+/// A merkle tree with Poseidon hashing, where all levels have arity 8. It's fully persisted to
+/// disk.
+pub type DefaultOctTree = DiskTree<DefaultTreeHasher, U8, U0, U0>;
+/// A merkle tree with Poseidon hashing, where all levels have arity 8. Some levels are not
+/// persisted to disk, but only cached in memory.
+pub type DefaultOctLCTree = LCTree<DefaultTreeHasher, U8, U0, U0>;
 
 // Generic shapes
 pub type SectorShapeBase = LCTree<DefaultTreeHasher, U8, U0, U0>;
