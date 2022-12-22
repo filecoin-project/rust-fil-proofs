@@ -37,7 +37,7 @@ pub type DiskTree<H, U, V, W> = MerkleTreeWrapper<H, DiskStore<<H as Hasher>::Do
 /// for all levels.
 /// The sub-tree arity is for all levels between the level above the leaves and the level below the
 /// root (which is always a single item).
-/// The top-tree arity is used for the top level that then results in the roor node.
+/// The top-tree arity is used for the top level that then results in the root node.
 pub type LCTree<H, U, V, W> =
     MerkleTreeWrapper<H, LevelCacheStore<<H as Hasher>::Domain, File>, U, V, W>;
 
