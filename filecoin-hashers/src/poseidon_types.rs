@@ -10,16 +10,8 @@ use lazy_static::lazy_static;
 use neptune::{poseidon::PoseidonConstants, Arity, Strength};
 use typemap::ShareMap;
 
-pub type PoseidonBinaryArity = U2;
-pub type PoseidonQuadArity = U4;
-pub type PoseidonOctArity = U8;
-
 /// Arity to use by default for `hash_md` with poseidon.
 pub type PoseidonMDArity = U36;
-
-/// Arity to use for hasher implementations (Poseidon) which are specialized at compile time.
-/// Must match PoseidonArity
-pub const MERKLE_TREE_ARITY: usize = 2;
 
 /// Groth16 Poseidon strength.
 pub const GROTH16_STRENGTH: Strength = Strength::Standard;
