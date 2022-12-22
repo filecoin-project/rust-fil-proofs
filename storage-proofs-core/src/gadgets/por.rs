@@ -35,20 +35,22 @@ use crate::{
 ///
 pub struct PoRCircuit<Tree>
 where
-    Tree: MerkleTreeTrait<Field = Fr>,
+    Tree: MerkleTreeTrait,
     Tree::Hasher: Groth16Hasher,
+    Tree::Field: ff::PrimeFieldBits,
 {
-    value: Root<Fr>,
+    value: Root<Tree::Field>,
     auth_path: AuthPath<Tree::Hasher, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>,
-    root: Root<Fr>,
+    root: Root<Tree::Field>,
     private: bool,
     _tree: PhantomData<Tree>,
 }
 
 impl<Tree> Clone for PoRCircuit<Tree>
 where
-    Tree: MerkleTreeTrait<Field = Fr>,
+    Tree: MerkleTreeTrait,
     Tree::Hasher: Groth16Hasher,
+    Tree::Field: ff::PrimeFieldBits,
 {
     fn clone(&self) -> Self {
         PoRCircuit {
@@ -65,23 +67,25 @@ where
 pub struct AuthPath<H, U, V, W>
 where
     H: Groth16Hasher,
-    U: PoseidonArity<Fr>,
-    V: PoseidonArity<Fr>,
-    W: PoseidonArity<Fr>,
+    H::Field: ff::PrimeFieldBits,
+    U: PoseidonArity<H::Field>,
+    V: PoseidonArity<H::Field>,
+    W: PoseidonArity<H::Field>,
 {
     base: SubPath<H, U>,
     sub: SubPath<H, V>,
     top: SubPath<H, W>,
 }
 
-impl<H, U, V, W> From<Vec<(Vec<Option<Fr>>, Option<usize>)>> for AuthPath<H, U, V, W>
+impl<H, U, V, W> From<Vec<(Vec<Option<H::Field>>, Option<usize>)>> for AuthPath<H, U, V, W>
 where
     H: Groth16Hasher,
-    U: PoseidonArity<Fr>,
-    V: PoseidonArity<Fr>,
-    W: PoseidonArity<Fr>,
+    H::Field: ff::PrimeFieldBits,
+    U: PoseidonArity<H::Field>,
+    V: PoseidonArity<H::Field>,
+    W: PoseidonArity<H::Field>,
 {
-    fn from(mut base_opts: Vec<(Vec<Option<Fr>>, Option<usize>)>) -> Self {
+    fn from(mut base_opts: Vec<(Vec<Option<H::Field>>, Option<usize>)>) -> Self {
         let has_top = W::to_usize() > 0;
         let has_sub = V::to_usize() > 0;
         let len = base_opts.len();
@@ -143,7 +147,8 @@ where
 struct SubPath<H, Arity>
 where
     H: Groth16Hasher,
-    Arity: PoseidonArity<Fr>,
+    H::Field: ff::PrimeFieldBits,
+    Arity: PoseidonArity<H::Field>,
 {
     path: Vec<PathElement<H, Arity>>,
 }
@@ -152,9 +157,10 @@ where
 struct PathElement<H, Arity>
 where
     H: Groth16Hasher,
-    Arity: PoseidonArity<Fr>,
+    H::Field: ff::PrimeFieldBits,
+    Arity: PoseidonArity<H::Field>,
 {
-    hashes: Vec<Option<Fr>>,
+    hashes: Vec<Option<H::Field>>,
     index: Option<usize>,
     _a: PhantomData<Arity>,
     _h: PhantomData<H>,
@@ -163,13 +169,14 @@ where
 impl<H, Arity> SubPath<H, Arity>
 where
     H: Groth16Hasher,
-    Arity: PoseidonArity<Fr>,
+    H::Field: ff::PrimeFieldBits,
+    Arity: PoseidonArity<H::Field>,
 {
-    fn synthesize<CS: ConstraintSystem<Fr>>(
+    fn synthesize<CS: ConstraintSystem<H::Field>>(
         self,
         mut cs: CS,
-        mut cur: AllocatedNum<Fr>,
-    ) -> Result<(AllocatedNum<Fr>, Vec<Boolean>), SynthesisError> {
+        mut cur: AllocatedNum<H::Field>,
+    ) -> Result<(AllocatedNum<H::Field>, Vec<Boolean>), SynthesisError> {
         let arity = Arity::to_usize();
 
         if arity == 0 {
@@ -229,9 +236,10 @@ where
 impl<H, U, V, W> AuthPath<H, U, V, W>
 where
     H: Groth16Hasher,
-    U: PoseidonArity<Fr>,
-    V: PoseidonArity<Fr>,
-    W: PoseidonArity<Fr>,
+    H::Field: ff::PrimeFieldBits,
+    U: PoseidonArity<H::Field>,
+    V: PoseidonArity<H::Field>,
+    W: PoseidonArity<H::Field>,
 {
     pub fn blank(leaves: usize) -> Self {
         let has_sub = V::to_usize() > 0;
@@ -306,7 +314,7 @@ pub fn challenge_into_auth_path_bits(challenge: usize, leaves: usize) -> Vec<boo
 
 impl<C, P, Tree> CacheableParameters<C, P> for PoRCompound<Tree>
 where
-    C: Circuit<Fr>,
+    C: Circuit<Tree::Field>,
     P: ParameterSetMetadata,
     Tree: MerkleTreeTrait<Field = Fr>,
     Tree::Hasher: Groth16Hasher,

@@ -40,14 +40,15 @@ type TreeColumnProof<T> = ColumnProof<
 #[derive(Debug)]
 pub struct Proof<Tree, G>
 where
-    Tree: MerkleTreeTrait<Field = Fr>,
+    Tree: MerkleTreeTrait,
     Tree::Hasher: Groth16Hasher,
-    G: Groth16Hasher,
+    G: Groth16Hasher<Field = Tree::Field>,
+    G::Field: ff::PrimeFieldBits,
 {
     /// Inclusion path for the challenged data node in tree D.
     pub comm_d_path: AuthPath<G, U2, U0, U0>,
     /// The value of the challenged data node.
-    pub data_leaf: Option<Fr>,
+    pub data_leaf: Option<Tree::Field>,
     /// The index of the challenged node.
     pub challenge: Option<u64>,
     /// Inclusion path of the challenged replica node in tree R.
@@ -67,9 +68,10 @@ where
 // Clone-able, therefore deriving Clone would impl Clone for less than all possible Tree types.
 impl<Tree, G> Clone for Proof<Tree, G>
 where
-    Tree: MerkleTreeTrait<Field = Fr>,
+    Tree: MerkleTreeTrait,
     Tree::Hasher: Groth16Hasher,
-    G: 'static + Groth16Hasher,
+    G: 'static + Groth16Hasher<Field = Tree::Field>,
+    G::Field: ff::PrimeFieldBits,
 {
     fn clone(&self) -> Self {
         Proof {
@@ -89,7 +91,8 @@ impl<Tree, G> Proof<Tree, G>
 where
     Tree: MerkleTreeTrait<Field = Fr>,
     Tree::Hasher: Groth16Hasher,
-    G: 'static + Groth16Hasher,
+    G: 'static + Groth16Hasher<Field = Tree::Field>,
+    G::Field: ff::PrimeFieldBits,
 {
     /// Create an empty proof, used in `blank_circuit`s.
     pub fn empty(params: &PublicParams<Tree>) -> Self {
@@ -111,13 +114,13 @@ where
     /// Circuit synthesis.
     #[allow(clippy::too_many_arguments)]
     #[allow(clippy::branches_sharing_code)]
-    pub fn synthesize<CS: ConstraintSystem<Fr>>(
+    pub fn synthesize<CS: ConstraintSystem<Tree::Field>>(
         self,
         mut cs: CS,
         layers: usize,
-        comm_d: &AllocatedNum<Fr>,
-        comm_c: &AllocatedNum<Fr>,
-        comm_r_last: &AllocatedNum<Fr>,
+        comm_d: &AllocatedNum<Tree::Field>,
+        comm_c: &AllocatedNum<Tree::Field>,
+        comm_r_last: &AllocatedNum<Tree::Field>,
         replica_id: &[Boolean],
     ) -> Result<(), SynthesisError> {
         let Proof {
@@ -295,9 +298,10 @@ where
 
 impl<Tree, G> From<VanillaProof<Tree, G>> for Proof<Tree, G>
 where
-    Tree: MerkleTreeTrait<Field = Fr>,
+    Tree: MerkleTreeTrait,
     Tree::Hasher: 'static + Groth16Hasher,
-    G: Groth16Hasher,
+    G: Groth16Hasher<Field = Tree::Field>,
+    G::Field: ff::PrimeFieldBits,
 {
     fn from(vanilla_proof: VanillaProof<Tree, G>) -> Self {
         let VanillaProof {
@@ -332,15 +336,16 @@ where
 fn enforce_inclusion<H, U, V, W, CS>(
     cs: CS,
     path: AuthPath<H, U, V, W>,
-    root: &AllocatedNum<Fr>,
-    leaf: &AllocatedNum<Fr>,
+    root: &AllocatedNum<H::Field>,
+    leaf: &AllocatedNum<H::Field>,
 ) -> Result<(), SynthesisError>
 where
-    H: 'static + Groth16Hasher,
-    U: PoseidonArity<Fr>,
-    V: PoseidonArity<Fr>,
-    W: PoseidonArity<Fr>,
-    CS: ConstraintSystem<Fr>,
+    H: 'static + Groth16Hasher<Field = Fr>,
+    H::Field: ff::PrimeFieldBits,
+    U: PoseidonArity<H::Field>,
+    V: PoseidonArity<H::Field>,
+    W: PoseidonArity<H::Field>,
+    CS: ConstraintSystem<H::Field>,
 {
     let root = Root::from_allocated::<CS>(root.clone());
     let leaf = Root::from_allocated::<CS>(leaf.clone());
