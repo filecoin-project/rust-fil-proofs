@@ -25,7 +25,7 @@ pub use tree::*;
 /// for all levels.
 /// The sub-tree arity is for all levels between the level above the leaves and the level below the
 /// root (which is always a single item).
-/// The top-tree arity is used for the top level that then results in the roor node.
+/// The top-tree arity is used for the top level that then results in the root node.
 pub type DiskTree<H, U, V, W> = MerkleTreeWrapper<H, DiskStore<<H as Hasher>::Domain>, U, V, W>;
 
 /// A tree that is partially stored on disk, some levels are in memory.
