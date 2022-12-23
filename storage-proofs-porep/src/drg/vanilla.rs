@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use anyhow::{ensure, Context};
 use filecoin_hashers::{Domain, HashFunction, Hasher, PoseidonArity};
 use fr32::bytes_into_fr_repr_safe;
-use generic_array::typenum::U2;
+use generic_array::typenum::{U0, U2};
 use merkletree::store::{ReplicaConfig, StoreConfig};
 use rayon::prelude::{IntoParallelIterator, ParallelIterator};
 use serde::{Deserialize, Serialize};
@@ -16,8 +16,8 @@ use storage_proofs_core::{
     drgraph::Graph,
     error::Result,
     merkle::{
-        create_base_lcmerkle_tree, create_base_merkle_tree, BinaryLCMerkleTree, BinaryMerkleTree,
-        LCMerkleTree, MerkleProof, MerkleProofTrait, MerkleTreeTrait,
+        create_base_lcmerkle_tree, create_base_merkle_tree, BinaryMerkleTree, LCTree, MerkleProof,
+        MerkleProofTrait, MerkleTreeTrait,
     },
     parameter_cache::ParameterSetMetadata,
     proof::{NoRequirements, ProofScheme},
@@ -26,6 +26,10 @@ use storage_proofs_core::{
 };
 
 use crate::{encode, PoRep};
+
+/// A binary merkle tree, where all levels have arity 2. Some levels are not persisted to disk, but
+/// only cached in memory.
+type BinaryLCMerkleTree<H> = LCTree<H, U2, U0, U0>;
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct Tau<T> {
@@ -576,19 +580,18 @@ pub fn decode_domain_block<H: Hasher>(
 where
     H: Hasher,
 {
-    let key = create_key_from_tree::<H, _>(replica_id, node, parents, tree)?;
+    let key = create_key_from_tree::<H>(replica_id, node, parents, tree)?;
 
     Ok(encode::decode(key, node_data))
 }
 
 /// Creates the encoding key from a `MerkleTree`.
-/// The algorithm for that is `Blake2s(id | encodedParentNode1 | encodedParentNode1 | ...)`.
-/// It is only public so that it can be used for benchmarking
-pub fn create_key_from_tree<H: Hasher, U: 'static + PoseidonArity>(
+/// The algorithm for that is `Poseidon(id | encodedParentNode1 | encodedParentNode1 | ...)`.
+fn create_key_from_tree<H: Hasher>(
     id: &H::Domain,
     node: usize,
     parents: &[u32],
-    tree: &LCMerkleTree<H, U>,
+    tree: &BinaryLCMerkleTree<H>,
 ) -> Result<H::Domain> {
     let mut hasher = Sha256::new();
     hasher.update(AsRef::<[u8]>::as_ref(&id));

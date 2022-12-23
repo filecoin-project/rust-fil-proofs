@@ -29,7 +29,7 @@ use storage_proofs_core::{
     measurements::{measure_op, Operation},
     merkle::{
         create_disk_tree, create_lc_tree, get_base_tree_count, split_config,
-        split_config_and_replica, BinaryMerkleTree, DiskTree, LCTree, MerkleProofTrait, MerkleTree,
+        split_config_and_replica, BinaryMerkleTree, DiskTree, LCTree, MerkleProofTrait,
         MerkleTreeTrait,
     },
     settings::SETTINGS,
@@ -427,7 +427,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         let leafs = tree_data.len() / NODE_SIZE;
         assert_eq!(tree_data.len() % NODE_SIZE, 0);
 
-        let tree = MerkleTree::from_par_iter_with_config(
+        let tree = BinaryMerkleTree::from_par_iter_with_config(
             (0..leafs)
                 .into_par_iter()
                 // TODO: proper error handling instead of `unwrap()`

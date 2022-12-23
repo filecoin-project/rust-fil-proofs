@@ -11,7 +11,7 @@ use neptune::{
     poseidon::PoseidonConstants,
     Strength,
 };
-use storage_proofs_core::merkle::{BinaryMerkleTree, LCStore, LCTree, MerkleTreeTrait};
+use storage_proofs_core::merkle::{BinaryMerkleTree, LCTree, MerkleTreeTrait};
 
 // Use a custom domain separation tag when generating randomness phi, rho, and challenges bits.
 pub const HASH_TYPE_GEN_RANDOMNESS: HashType<Fr, U2> = HashType::Custom(CType::Arbitrary(1));
@@ -58,7 +58,6 @@ pub type TreeDArity = U2;
 
 pub type TreeRHasher = PoseidonHasher;
 pub type TreeRDomain = PoseidonDomain;
-pub type TreeRStore = LCStore<TreeRDomain>;
 // All valid TreeR's have the same base-tree shape.
 pub type TreeRBaseTree = LCTree<TreeRHasher, U8, U0, U0>;
 
