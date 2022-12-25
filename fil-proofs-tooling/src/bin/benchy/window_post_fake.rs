@@ -96,8 +96,8 @@ pub fn run_window_post_bench<Tree: 'static + MerkleTreeTrait>(
     .expect("failed to verify window post proof");
 
     // Clean-up sealed file.
-    remove_file(&replica_output.private_replica_info.replica_path())?;
-    remove_dir_all(&replica_output.private_replica_info.cache_dir_path())?;
+    remove_file(replica_output.private_replica_info.replica_path())?;
+    remove_dir_all(replica_output.private_replica_info.cache_dir_path())?;
 
     // Create a JSON serializable report that we print to stdout (that will later be parsed using
     // the CLI JSON parser `jq`).

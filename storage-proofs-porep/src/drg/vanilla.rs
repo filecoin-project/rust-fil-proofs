@@ -601,7 +601,7 @@ fn create_key_from_tree<H: Hasher>(
         let mut scratch: [u8; NODE_SIZE] = [0; NODE_SIZE];
         for parent in parents.iter() {
             tree.read_into(*parent as usize, &mut scratch)?;
-            hasher.update(&scratch);
+            hasher.update(scratch);
         }
     }
 

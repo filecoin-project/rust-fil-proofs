@@ -98,7 +98,7 @@ impl Debug for Candidate {
         f.debug_struct("Candidate")
             .field("sector_id", &self.sector_id)
             .field("partial_ticket", &self.partial_ticket)
-            .field("ticket", &hex::encode(&self.ticket))
+            .field("ticket", &hex::encode(self.ticket))
             .field("sector_challenge_index", &self.sector_challenge_index)
             .finish()
     }

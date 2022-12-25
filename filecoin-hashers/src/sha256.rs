@@ -51,7 +51,7 @@ pub struct Sha256Domain(pub [u8; 32]);
 
 impl Debug for Sha256Domain {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "Sha256Domain({})", hex::encode(&self.0))
+        write!(f, "Sha256Domain({})", hex::encode(self.0))
     }
 }
 

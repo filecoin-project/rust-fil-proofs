@@ -97,7 +97,7 @@ pub type AggregateSnarkProof = Vec<u8>;
 pub type VanillaProof<Tree> = fallback::Proof<<Tree as MerkleTreeTrait>::Proof>;
 pub type PartitionProof<Tree> = storage_proofs_update::vanilla::PartitionProof<Tree>;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 #[repr(transparent)]
 pub struct EmptySectorUpdateProof(pub Vec<u8>);
 

@@ -112,7 +112,7 @@ where
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PublicInputs<T: Domain, S: Domain> {
     #[serde(bound = "")]
     pub replica_id: T,
@@ -765,7 +765,7 @@ pub fn generate_replica_id<H: Hasher, T: AsRef<[u8]>>(
 ) -> H::Domain {
     let hash = Sha256::new()
         .chain_update(prover_id)
-        .chain_update(&sector_id.to_be_bytes())
+        .chain_update(sector_id.to_be_bytes())
         .chain_update(ticket)
         .chain_update(&comm_d)
         .chain_update(porep_seed)

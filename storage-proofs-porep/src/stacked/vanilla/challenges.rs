@@ -53,7 +53,7 @@ impl LayerChallenges {
                 let hash = Sha256::new()
                     .chain_update(replica_id.into_bytes())
                     .chain_update(seed)
-                    .chain_update(&j.to_le_bytes())
+                    .chain_update(j.to_le_bytes())
                     .finalize();
 
                 let big_challenge = BigUint::from_bytes_le(hash.as_ref());

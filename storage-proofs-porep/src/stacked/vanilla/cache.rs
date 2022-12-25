@@ -240,7 +240,7 @@ impl ParentCache {
             // if we're only opening a portion of it.
             let mut hasher = Sha256::new();
             info!("[open] parent cache: calculating consistency digest");
-            let file = File::open(&path)?;
+            let file = File::open(path)?;
             let data = unsafe {
                 MmapOptions::new()
                     .map(&file)

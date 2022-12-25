@@ -14,7 +14,7 @@ pub struct PieceInfo {
 impl Debug for PieceInfo {
     fn fmt(&self, fmt: &mut Formatter<'_>) -> fmt::Result {
         fmt.debug_struct("PieceInfo")
-            .field("commitment", &hex::encode(&self.commitment))
+            .field("commitment", &hex::encode(self.commitment))
             .field("size", &self.size)
             .finish()
     }

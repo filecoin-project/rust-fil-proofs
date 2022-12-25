@@ -65,13 +65,7 @@ impl<
         let has_sub = V::to_usize() > 0;
         let len = base_opts.len();
 
-        let x = if has_top {
-            2
-        } else if has_sub {
-            1
-        } else {
-            0
-        };
+        let x = if has_top { 2 } else { usize::from(has_sub) };
         let mut opts = base_opts.split_off(len - x);
 
         let base = base_opts
@@ -276,7 +270,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait> CompoundProof<'a, PoR<Tree>, PoRCircui
         public_params: &'b <PoR<Tree> as ProofScheme<'a>>::PublicParams,
         _partition_k: Option<usize>,
     ) -> Result<PoRCircuit<Tree>> {
-        let (root, private) = match (*public_inputs).commitment {
+        let (root, private) = match (public_inputs).commitment {
             None => (Root::Val(Some(proof.proof.root().into())), true),
             Some(commitment) => (Root::Val(Some(commitment.into())), false),
         };

@@ -249,7 +249,7 @@ impl<T: FromByteSlice> CacheReader<T> {
         };
 
         self.cursor
-            .increment(window, &wait_fn, &|| self.advance_rear_window(window));
+            .increment(window, wait_fn, || self.advance_rear_window(window));
 
         let targeted_buf = &self.get_bufs()[window % 2];
 

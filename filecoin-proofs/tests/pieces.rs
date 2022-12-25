@@ -43,7 +43,7 @@ fn test_compute_comm_d_empty() {
 
     let comm_d = compute_comm_d(SectorSize(128), &[]).expect("failed to verify pieces");
     assert_eq!(
-        hex::encode(&comm_d),
+        hex::encode(comm_d),
         "3731bb99ac689f66eef5973e4a94da188f4ddcae580724fc6f3fd60dfd488333",
     );
 }

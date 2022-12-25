@@ -18,7 +18,7 @@ lazy_static! {
     };
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 /// `CoreIndex` is a simple wrapper type for indexes into the set of visible cores. A `CoreIndex`
 /// should only ever be created with a value known to be less than the number of visible cores.
 pub struct CoreIndex(usize);

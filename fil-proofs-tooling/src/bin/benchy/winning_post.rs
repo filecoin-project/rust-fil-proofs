@@ -104,8 +104,8 @@ pub fn run_fallback_post_bench<Tree: 'static + MerkleTreeTrait>(
     .expect("failed to verify winning post proof");
 
     // Clean-up sealed file and cache_dir.
-    remove_file(&replica_output.private_replica_info.replica_path())?;
-    remove_dir_all(&replica_output.private_replica_info.cache_dir_path())?;
+    remove_file(replica_output.private_replica_info.replica_path())?;
+    remove_dir_all(replica_output.private_replica_info.cache_dir_path())?;
 
     // Create a JSON serializable report that we print to stdout (that will later be parsed using
     // the CLI JSON parser `jq`).

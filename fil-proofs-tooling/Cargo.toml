@@ -10,44 +10,48 @@ repository = "https://github.com/filecoin-project/rust-fil-proofs"
 readme = "README.md"
 
 [dependencies]
-storage-proofs-core = { path = "../storage-proofs-core", version = "~12.0.0", default-features = false}
-storage-proofs-porep = { path = "../storage-proofs-porep", version = "~12.0.0", default-features = false }
-storage-proofs-post = { path = "../storage-proofs-post", version = "~12.0.0", default-features = false }
-filecoin-proofs = { path = "../filecoin-proofs", version = "~12.0.0", default-features = false }
-filecoin-hashers = { path = "../filecoin-hashers", version = "~7.0.0", default-features = false, features = ["poseidon", "blake2s", "sha256"] }
-clap = { version = "3.1.6", features = ["derive"] }
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
-regex = "1.3.7"
-commandspec = "0.12.2"
-chrono = { version = "0.4.7", features = ["serde"] }
-memmap2 = "0.5.6"
-bellperson = "0.24.0"
-rand = "0.8"
-tempfile = "3.0.8"
-cpu-time = "1.0.0"
-git2 = "0.14.2"
-heim = { git = "https://github.com/heim-rs/heim", rev = "b292f15", features = ["host", "memory", "cpu"] }
-async-std = "1.6"
-blake2s_simd = "1.0.0"
-fil_logger = "0.1.6"
-log = "0.4.8"
-merkletree = "0.22.0"
-bincode = "1.1.2"
-anyhow = "1.0.23"
-rand_xorshift = "0.3.0"
-bytefmt = "0.1.7"
-rayon = "1.3.0"
-flexi_logger = "0.22.3"
-typenum = "1.11.2"
-generic-array = "0.14.4"
-byte-unit = "4.0.14"
-fdlimit = "0.2.0"
-dialoguer = "0.10.0"
-structopt = "0.3.12"
-humansize = "1.1.0"
-blstrs = "0.6.0"
-time = "0.3.9"
+storage-proofs-core = { workspace = true }
+storage-proofs-porep = { workspace = true }
+storage-proofs-post = { workspace = true }
+filecoin-proofs = { workspace = true }
+filecoin-hashers = { workspace = true }
+
+clap = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+regex = { workspace = true }
+commandspec = { workspace = true }
+chrono = { workspace = true }
+memmap2 = { workspace = true }
+bellperson = { workspace = true }
+rand = { workspace = true }
+tempfile = { workspace = true }
+cpu-time = { workspace = true }
+git2 = { workspace = true }
+heim = { workspace = true }
+async-std = { workspace = true }
+blake2s_simd = { workspace = true }
+fil_logger = { workspace = true }
+log = { workspace = true }
+merkletree = { workspace = true }
+bincode = { workspace = true }
+anyhow = { workspace = true }
+rand_xorshift = { workspace = true }
+bytefmt = { workspace = true }
+rayon = { workspace = true }
+flexi_logger = { workspace = true }
+typenum = { workspace = true }
+generic-array = { workspace = true }
+byte-unit = { workspace = true }
+fdlimit = { workspace = true }
+dialoguer = { workspace = true }
+structopt = { workspace = true }
+humansize = { workspace = true }
+blstrs = { workspace = true }
+time = { workspace = true }
+
+[target.'cfg(target_arch = "x86_64")'.dependencies]
+raw-cpuid = "10.3.0"
 
 [features]
 default = ["opencl", "measurements"]
@@ -69,6 +73,3 @@ opencl = [
 ]
 measurements = ["storage-proofs-core/measurements"]
 profile = ["storage-proofs-core/profile", "measurements"]
-
-[target.'cfg(target_arch = "x86_64")'.dependencies]
-raw-cpuid = "10.3.0"

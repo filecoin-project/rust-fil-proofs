@@ -229,11 +229,11 @@ fn spawn_process(name: &str, gpu_stealing: bool) -> Child {
     Command::new("cargo")
         .arg("run")
         .arg("--release")
-        .args(&["--bin", "gpu-cpu-test"])
+        .args(["--bin", "gpu-cpu-test"])
         .arg("--")
-        .args(&["--gpu-stealing", &gpu_stealing.to_string()])
-        .args(&["--parallel", "1"])
-        .args(&["--mode", "threads"])
+        .args(["--gpu-stealing", &gpu_stealing.to_string()])
+        .args(["--parallel", "1"])
+        .args(["--mode", "threads"])
         // Print logging to the main process stderr
         .stderr(Stdio::inherit())
         // Use the stdout to return a result
@@ -268,7 +268,7 @@ fn main() {
             Arg::new("mode")
               .long("mode")
               .help("Whether to run with threads or processes.")
-              .possible_values(&["threads", "processes"])
+              .possible_values(["threads", "processes"])
               .ignore_case(true)
               .default_value("threads"),
         )
