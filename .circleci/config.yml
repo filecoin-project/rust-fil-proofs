@@ -74,7 +74,7 @@ jobs:
       - run:
           name: Test (<< parameters.crate >>)
           command: cargo +$(cat rust-toolchain) test --verbose --package << parameters.crate >>
-          no_output_timeout: 30m
+          no_output_timeout: 45m
 
   test_release:
     executor: default
@@ -401,7 +401,7 @@ jobs:
             docker run
             --security-opt seccomp=unconfined
             -v "${PWD}:/volume"
-            -v "${FIL_PROOFS_PARAMETER_CACHE}:/var/tmp/filecoin-proof-parameters/"
+            -v "${FIL_PROOFS_PARAMETER_CACHE}:/tmp/filecoin-proof-parameters/"
             xd009642/tarpaulin
             sh -c "apt update && apt install -y libssl-dev ocl-icd-opencl-dev libhwloc-dev && cargo tarpaulin --timeout 1800 --release -v"
           no_output_timeout: 30m
@@ -666,4 +666,5 @@ workflows:
 
       - coverage-with-tarpaulin:
           requires:
+            - cargo_fetch
             - ensure_parameters_and_keys_linux
