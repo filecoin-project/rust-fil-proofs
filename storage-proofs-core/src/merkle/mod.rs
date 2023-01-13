@@ -18,6 +18,8 @@ pub use tree::*;
 
 pub type LCStore<E> = LevelCacheStore<E, File>;
 
+pub type MerkleTree<H, U> = DiskTree<H, U, U0, U0>;
+
 /// A tree that is fully persisted to disk.
 ///
 /// It's generic over the hash function `H`, the base arity `U`, sub-tree arity `V` and top-tree

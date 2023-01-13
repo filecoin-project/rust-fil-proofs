@@ -76,11 +76,11 @@ pub type TreeD<F> = BinaryMerkleTree<TreeDHasher<F>>;
 pub type TreeDStore<F> = DiskStore<TreeDDomain<F>>;
 pub type TreeDArity = U2;
 
+pub type TreeRHasher<F> = PoseidonHasher<F>;
 pub type TreeRDomain<F> = <TreeRHasher<F> as Hasher>::Domain;
 pub type TreeR<F, U, V, W> = LCTree<TreeRHasher<F>, U, V, W>;
 // All valid TreeR shapes have the same base-tree shape.
 pub type TreeRBase<F> = LCTree<TreeRHasher<F>, U8, U0, U0>;
-pub type TreeRHasher<F> = PoseidonHasher<F>;
 
 // The number of groth16 partitions for the given sector size.
 pub const fn partition_count(sector_nodes: usize) -> usize {

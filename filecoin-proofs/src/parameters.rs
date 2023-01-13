@@ -106,7 +106,7 @@ pub fn setup_params<F: PrimeField>(
     let layer_challenges = if is_groth16_field::<F>() {
         select_challenges(
             partitions,
-            POREP_MINIMUM_CHALLENGES.from_sector_size(u64::from(sector_bytes)),
+            POREP_MINIMUM_CHALLENGES.from_sector_size(sector_bytes),
             num_layers,
         )
     } else {
