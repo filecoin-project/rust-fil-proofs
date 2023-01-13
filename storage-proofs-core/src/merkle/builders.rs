@@ -19,9 +19,13 @@ use rayon::prelude::{IntoParallelIterator, ParallelIterator};
 
 use crate::{
     error::{Error, Result},
-    merkle::{DiskTree, LCMerkleTree, LCStore, LCTree, MerkleTreeTrait, MerkleTreeWrapper},
+    merkle::{DiskTree, LCTree, MerkleTreeTrait, MerkleTreeWrapper},
     util::{data_at_node, default_rows_to_discard, NODE_SIZE},
 };
+
+/// A tree where the specified arity is used for all the levels. Some levels are not persisted to
+/// disk, but only cached in memory.
+type LCMerkleTree<H, U> = LCTree<H, U, U0, U0>;
 
 // Create a DiskTree from the provided config(s), each representing a 'base' layer tree with 'base_tree_len' elements.
 pub fn create_disk_tree<Tree: MerkleTreeTrait>(
@@ -76,7 +80,7 @@ pub fn create_lc_tree<Tree: MerkleTreeTrait>(
         LCTree::from_store_configs_and_replica(base_tree_leafs, configs, replica_config)
     } else {
         ensure!(configs.len() == 1, "Invalid tree-shape specified");
-        let store = LCStore::new_from_disk_with_reader(
+        let store = LevelCacheStore::new_from_disk_with_reader(
             base_tree_len,
             Tree::Arity::to_usize(),
             &configs[0],

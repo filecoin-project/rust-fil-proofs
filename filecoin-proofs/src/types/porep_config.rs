@@ -17,6 +17,7 @@ use crate::{
     constants::DefaultPieceHasher,
     parameters::public_params,
     types::{PaddedBytesAmount, PoRepProofPartitions, SectorSize, UnpaddedBytesAmount},
+    POREP_PARTITIONS,
 };
 
 #[derive(Clone, Copy, Debug)]
@@ -56,12 +57,29 @@ impl From<PoRepConfig> for SectorSize {
 }
 
 impl PoRepConfig {
+    /// construct PoRepConfig by halo2
     pub fn new_halo2(sector_size: SectorSize, porep_id: [u8; 32], api_version: ApiVersion) -> Self {
         let sector_nodes = u64::from(sector_size) as usize >> 5;
         let partitions = storage_proofs_porep::stacked::halo2::partition_count(sector_nodes);
         PoRepConfig {
             sector_size,
             partitions: PoRepProofPartitions::from(partitions),
+            porep_id,
+            api_version,
+        }
+    }
+
+    /// construct PoRepConfig by groth16
+    pub fn new_groth16(sector_size: u64, porep_id: [u8; 32], api_version: ApiVersion) -> Self {
+        Self {
+            sector_size: SectorSize(sector_size),
+            partitions: PoRepProofPartitions(
+                *POREP_PARTITIONS
+                    .read()
+                    .expect("POREP_PARTITIONS poisoned")
+                    .get(&sector_size)
+                    .expect("unknown sector size") as usize,
+            ),
             porep_id,
             api_version,
         }

@@ -39,8 +39,11 @@ gperftools = { version = "0.2", optional = true }
 num_cpus = "1.10.1"
 semver = "1.0.6"
 fr32 = { path = "../fr32", version = "~5.0.0"}
-cbc = { version = "0.1.2", features = ["std"] }
+#
+#blstrs = "0.6.0"
 blstrs = "0.6.1"
+#>>>>>>> 128f7209ec583e023f04630102ef1dd17fbe2370
+cbc = { version = "0.1.2", features = ["std"] }
 halo2_proofs = "0.2.0"
 fil-halo2-gadgets = { path = "../fil-halo2-gadgets" }
 ec-gpu = "0.2.0"

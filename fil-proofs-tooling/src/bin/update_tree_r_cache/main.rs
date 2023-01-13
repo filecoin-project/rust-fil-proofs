@@ -16,14 +16,13 @@ use generic_array::typenum::Unsigned;
 use memmap2::MmapOptions;
 use merkletree::{
     merkle::get_merkle_tree_len,
-    store::{ExternalReader, ReplicaConfig, Store, StoreConfig},
+    store::{ExternalReader, LevelCacheStore, ReplicaConfig, Store, StoreConfig},
 };
 use pasta_curves::{Fp, Fq};
 use storage_proofs_core::{
     cache_key::CacheKey,
     merkle::{
-        create_lc_tree, get_base_tree_count, split_config_and_replica, LCStore, LCTree,
-        MerkleTreeTrait,
+        create_lc_tree, get_base_tree_count, split_config_and_replica, LCTree, MerkleTreeTrait,
     },
     util::{default_rows_to_discard, NODE_SIZE},
 };
@@ -75,7 +74,7 @@ where
     let base_tree_len = get_merkle_tree_len(base_tree_leafs, OCT_ARITY)?;
     let tree_r_last_root = if is_sector_shape_base(sector_size) {
         ensure!(configs.len() == 1, "Invalid tree-shape specified");
-        let store = LCStore::<DefaultTreeDomain<F>>::new_from_disk_with_reader(
+        let store = LevelCacheStore::new_from_disk_with_reader(
             base_tree_len,
             OCT_ARITY,
             &configs[0],
@@ -255,7 +254,7 @@ where
     // First, read the roots from the cached trees on disk
     let mut cached_base_tree_roots: Vec<DefaultTreeDomain<F>> = Vec::with_capacity(tree_count);
     for (i, config) in configs.iter().enumerate().take(tree_count) {
-        let store = LCStore::new_from_disk_with_reader(
+        let store = LevelCacheStore::new_from_disk_with_reader(
             base_tree_len,
             OCT_ARITY,
             config,
