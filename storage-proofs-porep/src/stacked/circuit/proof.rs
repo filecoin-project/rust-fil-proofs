@@ -79,7 +79,7 @@ where
 
 impl<'a, Tree, G> StackedCircuit<'a, Tree, G>
 where
-    Tree: 'static + MerkleTreeTrait<Field = Fr>,
+    Tree: 'static + MerkleTreeTrait,
     Tree::Hasher: Groth16Hasher,
     <Tree::Hasher as Hasher>::Field: ff::PrimeFieldBits,
     G: 'static + Groth16Hasher<Field = Tree::Field>,
@@ -114,7 +114,7 @@ where
 
 impl<'a, Tree, G> Circuit<Tree::Field> for StackedCircuit<'a, Tree, G>
 where
-    Tree: MerkleTreeTrait<Field = Fr>,
+    Tree: MerkleTreeTrait,
     Tree::Hasher: Groth16Hasher,
     <Tree::Hasher as Hasher>::Field: ff::PrimeFieldBits,
     G: Groth16Hasher<Field = Tree::Field>,
