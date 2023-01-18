@@ -25,11 +25,11 @@ pub use storage_proofs_update::constants::TreeRHasher;
 use typenum::Unsigned;
 
 use crate::{
-    commitment_reader::CommitmentReader,
     constants::{
         DefaultBinaryTree, DefaultOctTree, DefaultPieceDomain, DefaultPieceHasher,
         MINIMUM_RESERVED_BYTES_FOR_PIECE_IN_FULLY_ALIGNED_SECTOR as MINIMUM_PIECE_SIZE,
     },
+    force_commitment_reader::CommitmentReader,
     parameters::public_params,
     pieces::{get_piece_alignment, sum_piece_bytes_with_alignment},
     types::{
@@ -381,14 +381,34 @@ where
     R: Read,
     W: Write,
 {
+    const DEFAULT_BUF_SIZE: usize = 64 * 1024 * 1024;
+    let padded_bytes_amount: usize = ensure_piece_size(piece_size)?.into();
+
+    let buf_size = if padded_bytes_amount >= DEFAULT_BUF_SIZE {
+        DEFAULT_BUF_SIZE
+    } else {
+        padded_bytes_amount
+    };
+
+    let source = BufReader::with_capacity(buf_size, source);
+    let target = BufWriter::with_capacity(buf_size, target);
+    add_piece_raw(source, target, piece_size, piece_lengths)
+}
+
+/// add_piece but without BufReader and BufWriter
+pub fn add_piece_raw<R, W>(
+    source: R,
+    mut target: W,
+    piece_size: UnpaddedBytesAmount,
+    piece_lengths: &[UnpaddedBytesAmount],
+) -> Result<(PieceInfo, UnpaddedBytesAmount)>
+where
+    R: Read,
+    W: Write,
+{
     trace!("add_piece:start");
 
     let result = measure_op(Operation::AddPiece, || {
-        ensure_piece_size(piece_size)?;
-
-        let source = BufReader::new(source);
-        let mut target = BufWriter::new(target);
-
         let written_bytes = sum_piece_bytes_with_alignment(piece_lengths);
         let piece_alignment = get_piece_alignment(written_bytes, piece_size);
         let fr32_reader = Fr32Reader::new(source);
@@ -398,7 +418,7 @@ where
             target.write_all(&[0u8][..])?;
         }
 
-        let mut commitment_reader = CommitmentReader::new(fr32_reader);
+        let mut commitment_reader = CommitmentReader::new(piece_size.into(), fr32_reader);
         let n = io::copy(&mut commitment_reader, &mut target)
             .context("failed to write and preprocess bytes")?;
 
@@ -413,7 +433,7 @@ where
             target.write_all(&[0u8][..])?;
         }
 
-        let commitment = commitment_reader.finish()?;
+        let commitment = commitment_reader.finish();
         let mut comm = [0u8; 32];
         comm.copy_from_slice(commitment.as_ref());
 
@@ -426,7 +446,7 @@ where
     result
 }
 
-fn ensure_piece_size(piece_size: UnpaddedBytesAmount) -> Result<()> {
+fn ensure_piece_size(piece_size: UnpaddedBytesAmount) -> Result<PaddedBytesAmount> {
     ensure!(
         piece_size >= UnpaddedBytesAmount(MINIMUM_PIECE_SIZE),
         "Piece must be at least {} bytes",
@@ -440,7 +460,7 @@ fn ensure_piece_size(piece_size: UnpaddedBytesAmount) -> Result<()> {
         padded_piece_size,
     );
 
-    Ok(())
+    Ok(padded_piece_size)
 }
 
 /// Writes bytes from `source` to `target`, adding bit-padding ("preprocessing")

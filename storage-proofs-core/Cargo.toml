@@ -41,6 +41,7 @@ semver = "1.0.6"
 fr32 = { path = "../fr32", version = "~7.0.0"}
 blstrs = "0.6.0"
 cbc = { version = "0.1.2", features = ["std"] }
+glob = "0.3.0"
 
 [dev-dependencies]
 proptest = "1.0.0"

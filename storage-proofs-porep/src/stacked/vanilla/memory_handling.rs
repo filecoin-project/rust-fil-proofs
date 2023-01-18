@@ -3,14 +3,20 @@ use std::fs::File;
 use std::hint::spin_loop;
 use std::marker::{PhantomData, Sync};
 use std::mem::size_of;
+use std::ops::{Deref, DerefMut};
 use std::path::Path;
 use std::slice;
-use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
+use std::sync::{
+    atomic::{AtomicU64, AtomicUsize, Ordering},
+    MutexGuard,
+};
 
 use anyhow::Result;
 use byte_slice_cast::{AsSliceOf, FromByteSlice};
-use log::{info, warn};
+use log::{info, trace, warn};
 use memmap2::{Mmap, MmapMut, MmapOptions};
+
+mod numa_mem_pool;
 
 pub struct CacheReader<T> {
     file: File,
@@ -274,7 +280,7 @@ impl<T: FromByteSlice> CacheReader<T> {
     }
 }
 
-fn allocate_layer(sector_size: usize) -> Result<MmapMut> {
+fn normal_allocate_layer(sector_size: usize) -> Result<MmapMut> {
     match MmapOptions::new()
         .len(sector_size)
         .map_anon()
@@ -292,15 +298,86 @@ fn allocate_layer(sector_size: usize) -> Result<MmapMut> {
     }
 }
 
+#[derive(Debug)]
+pub enum Memory {
+    Normal(MmapMut),
+    NumaMemory(MutexGuard<'static, MmapMut>),
+}
+
+impl Deref for Memory {
+    type Target = [u8];
+
+    #[inline]
+    fn deref(&self) -> &Self::Target {
+        match self {
+            Memory::Normal(m) => m.deref(),
+            Memory::NumaMemory(m) => m.deref(),
+        }
+    }
+}
+
+impl DerefMut for Memory {
+    #[inline]
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        match self {
+            Memory::Normal(m) => m.deref_mut(),
+            Memory::NumaMemory(m) => m.deref_mut(),
+        }
+    }
+}
+
+impl AsRef<[u8]> for Memory {
+    #[inline]
+    fn as_ref(&self) -> &[u8] {
+        self.deref()
+    }
+}
+
+impl AsMut<[u8]> for Memory {
+    #[inline]
+    fn as_mut(&mut self) -> &mut [u8] {
+        self.deref_mut()
+    }
+}
+
+fn allocate_layer(sector_size: usize) -> Result<Memory> {
+    Ok(match numa_mem_pool().acquire(sector_size) {
+        Some(numa_memory) => {
+            trace!("allocated layer memory from the numa mem pool. memory_size: {}", sector_size);
+            Memory::NumaMemory(numa_memory)
+        },
+        None => {
+            info!("unable to alloc numa memory, falling back. memory_size: {}", sector_size);
+            Memory::Normal(normal_allocate_layer(sector_size)?)
+        }
+    })
+}
+
 pub fn setup_create_label_memory(
     sector_size: usize,
     degree: usize,
     window_size: Option<usize>,
     cache_path: &Path,
-) -> Result<(CacheReader<u32>, MmapMut, MmapMut)> {
+) -> Result<(CacheReader<u32>, Memory, Memory)> {
     let parents_cache = CacheReader::new(cache_path, window_size, degree)?;
     let layer_labels = allocate_layer(sector_size)?;
     let exp_labels = allocate_layer(sector_size)?;
 
     Ok((parents_cache, layer_labels, exp_labels))
+}
+
+/// Get the static global NUMA memory pool reference
+fn numa_mem_pool() -> &'static mut numa_mem_pool::NumaMemPool {
+    static mut NUMA_MEM_POOL: numa_mem_pool::NumaMemPool = numa_mem_pool::NumaMemPool::empty();
+
+    unsafe { &mut NUMA_MEM_POOL }
+}
+
+/// Init the global NumaMemPool with the given `numa_memory_files`
+///
+/// The index of the `numa_memory_files` vec is numa_node_index,
+/// and each item of `numa_memory_files` is the memory file paths corresponding to numa_node_index
+#[allow(dead_code)]
+pub fn init_numa_mem_pool(numa_memory_files: Vec<impl IntoIterator<Item = impl AsRef<Path>>>) {
+    numa_mem_pool().init(numa_memory_files);
 }

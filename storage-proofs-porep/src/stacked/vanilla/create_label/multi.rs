@@ -16,7 +16,6 @@ use generic_array::{
     GenericArray,
 };
 use log::{debug, info};
-use memmap2::MmapMut;
 use merkletree::store::{DiskStore, Store, StoreConfig};
 use storage_proofs_core::{
     cache_key::CacheKey,
@@ -203,8 +202,8 @@ fn create_label_runner(
 fn create_layer_labels(
     parents_cache: &CacheReader<u32>,
     replica_id: &[u8],
-    layer_labels: &mut MmapMut,
-    exp_labels: Option<&mut MmapMut>,
+    layer_labels: &mut [u8],
+    exp_labels: Option<&mut [u8]>,
     num_nodes: u64,
     cur_layer: u32,
     core_group: Arc<Option<MutexGuard<'_, Vec<CoreIndex>>>>,
