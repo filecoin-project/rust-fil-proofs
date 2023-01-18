@@ -4,7 +4,6 @@ use bellperson::{
     gadgets::{boolean::Boolean, num::AllocatedNum, uint32::UInt32},
     ConstraintSystem, SynthesisError,
 };
-use blstrs::Scalar as Fr;
 use filecoin_hashers::{Groth16Hasher, PoseidonArity};
 use generic_array::typenum::{U0, U2};
 use storage_proofs_core::{
@@ -89,7 +88,7 @@ where
 
 impl<Tree, G> Proof<Tree, G>
 where
-    Tree: MerkleTreeTrait<Field = Fr>,
+    Tree: MerkleTreeTrait,
     Tree::Hasher: Groth16Hasher,
     G: 'static + Groth16Hasher<Field = Tree::Field>,
     G::Field: ff::PrimeFieldBits,
@@ -340,7 +339,7 @@ fn enforce_inclusion<H, U, V, W, CS>(
     leaf: &AllocatedNum<H::Field>,
 ) -> Result<(), SynthesisError>
 where
-    H: 'static + Groth16Hasher<Field = Fr>,
+    H: 'static + Groth16Hasher,
     H::Field: ff::PrimeFieldBits,
     U: PoseidonArity<H::Field>,
     V: PoseidonArity<H::Field>,

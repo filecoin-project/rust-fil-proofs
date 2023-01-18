@@ -11,6 +11,7 @@ use bellperson::{
     Circuit, ConstraintSystem, SynthesisError,
 };
 use blstrs::Scalar as Fr;
+use ff::PrimeField;
 use filecoin_hashers::{Groth16Hasher, PoseidonArity};
 use generic_array::typenum::Unsigned;
 
@@ -397,10 +398,12 @@ where
     }
 }
 
-impl<Tree> Circuit<Fr> for PoRCircuit<Tree>
+impl<F, Tree> Circuit<F> for PoRCircuit<Tree>
 where
-    Tree: MerkleTreeTrait<Field = Fr>,
+    F: PrimeField,
+    Tree: MerkleTreeTrait<Field = F>,
     Tree::Hasher: Groth16Hasher,
+    Tree::Field: ff::PrimeFieldBits,
 {
     /// # Public Inputs
     ///
@@ -413,7 +416,7 @@ where
     /// * value_num - packed version of `value` as bits. (might be more than one Fr)
     ///
     /// Note: All public inputs must be provided as `E::Fr`.
-    fn synthesize<CS: ConstraintSystem<Fr>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
+    fn synthesize<CS: ConstraintSystem<F>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
         let value = self.value;
         let auth_path = self.auth_path;
         let root = self.root;
@@ -485,8 +488,9 @@ where
 
 impl<Tree> PoRCircuit<Tree>
 where
-    Tree: MerkleTreeTrait<Field = Fr>,
+    Tree: MerkleTreeTrait,
     Tree::Hasher: Groth16Hasher,
+    Tree::Field: ff::PrimeFieldBits,
 {
     pub fn new(proof: Tree::Proof, private: bool) -> Self {
         PoRCircuit::<Tree> {
@@ -501,13 +505,13 @@ where
     #[allow(clippy::type_complexity)]
     pub fn synthesize<CS>(
         mut cs: CS,
-        value: Root<Fr>,
+        value: Root<Tree::Field>,
         auth_path: AuthPath<Tree::Hasher, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>,
-        root: Root<Fr>,
+        root: Root<Tree::Field>,
         private: bool,
     ) -> Result<(), SynthesisError>
     where
-        CS: ConstraintSystem<Fr>,
+        CS: ConstraintSystem<Tree::Field>,
     {
         let por = Self {
             value,
