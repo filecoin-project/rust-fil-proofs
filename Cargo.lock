@@ -2379,7 +2379,7 @@ dependencies = [
 [[package]]
 name = "neptune"
 version = "8.1.0"
-source = "git+https://github.com/filecoin-project/neptune?branch=halo2-pick-master-changes#9ac186ebbd67fb342e86511111662bd0945b4fd9"
+source = "git+https://github.com/filecoin-project/neptune?branch=halo2#6daf50d6bc88bbf9ef9a12c816ebca6d12478d0d"
 dependencies = [
  "bellperson",
  "blake2s_simd 0.5.11",
