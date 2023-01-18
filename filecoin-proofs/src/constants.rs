@@ -165,9 +165,9 @@ pub type DefaultTreeHasher<F> = PoseidonHasher<F>;
 pub type DefaultTreeDomain<F> = <DefaultTreeHasher<F> as Hasher>::Domain;
 pub type DefaultOctTreeStore<F> = storage_proofs_core::merkle::LCStore<DefaultTreeDomain<F>>;
 
-/// A binary merkle tree with Poseidon hashing, where all levels have arity 2. It's fully
+/// A binary merkle tree with SHA256 hashing, where all levels have arity 2. It's fully
 /// persisted to disk.
-pub type DefaultBinaryTree<F> = BinaryMerkleTree<DefaultTreeHasher<F>>;
+pub type DefaultBinaryTree<F> = BinaryMerkleTree<DefaultPieceHasher<F>>;
 /// A merkle tree with Poseidon hashing, where all levels have arity 8. It's fully persisted to
 /// disk.
 pub type DefaultOctTree<F> = DiskTree<DefaultTreeHasher<F>, U8, U0, U0>;
