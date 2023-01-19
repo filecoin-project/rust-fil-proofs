@@ -20,8 +20,9 @@ use halo2_proofs::{
     plonk::{self, Circuit, Column, ConstraintSystem, Instance},
 };
 use rand::thread_rng;
+use storage_proofs_core::compound_proof::CompoundProof;
+use storage_proofs_core::merkle::MerkleProofTrait;
 use storage_proofs_core::{
-    compound_proof::CompoundProof as _,
     gadgets::por::{PoRCircuit, PoRCompound},
     halo2::{
         self,
@@ -31,7 +32,7 @@ use storage_proofs_core::{
         },
         CircuitRows, Halo2Field, Halo2Keypair,
     },
-    merkle::{MerkleProofTrait, MerkleTree, MerkleTreeTrait},
+    merkle::{MerkleTree, MerkleTreeTrait},
     por as vanilla,
 };
 

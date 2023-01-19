@@ -12,7 +12,7 @@ use storage_proofs_core::{
     api_version::ApiVersion,
     compound_proof::CompoundProof,
     error::Result,
-    merkle::{generate_tree, get_base_tree_count, LCTree, MerkleTreeTrait, OctMerkleTree},
+    merkle::{generate_tree, get_base_tree_count, DiskTree, LCTree, MerkleTreeTrait},
     proof::ProofScheme,
     util::NODE_SIZE,
     TEST_SEED,
@@ -212,11 +212,11 @@ fn test_fallback_post_circuit_poseidon_base_8_bench_cs() {
         api_version: ApiVersion::V1_1_0,
     };
 
-    let pp = FallbackPoSt::<OctMerkleTree<PoseidonHasher<Fr>>>::setup(&params)
+    let pp = FallbackPoSt::<DiskTree<PoseidonHasher<Fr>, U8, U0, U0>>::setup(&params)
         .expect("fallback post setup failure");
 
     let mut cs = BenchCS::<Fr>::new();
-    FallbackPoStCompound::<OctMerkleTree<PoseidonHasher<Fr>>>::blank_circuit(&pp)
+    FallbackPoStCompound::<DiskTree<PoseidonHasher<Fr>, U8, U0, U0>>::blank_circuit(&pp)
         .synthesize(&mut cs)
         .expect("blank circuit failure");
 

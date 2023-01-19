@@ -7,10 +7,10 @@ use filecoin_hashers::Hasher;
 use filecoin_proofs::{
     add_piece, fauxrep_aux, seal_pre_commit_phase1, seal_pre_commit_phase2,
     validate_cache_for_precommit_phase2, DefaultPieceHasher, DefaultTreeHasher, MerkleTreeTrait,
-    PaddedBytesAmount, PieceInfo, PoRepConfig, PoRepProofPartitions, PoStConfig, PoStType,
-    PrivateReplicaInfo, PublicReplicaInfo, SealPreCommitOutput, SealPreCommitPhase1Output,
-    SectorSize, UnpaddedBytesAmount, POREP_PARTITIONS, WINDOW_POST_CHALLENGE_COUNT,
-    WINDOW_POST_SECTOR_COUNT, WINNING_POST_CHALLENGE_COUNT, WINNING_POST_SECTOR_COUNT,
+    PaddedBytesAmount, PieceInfo, PoRepConfig, PoStConfig, PoStType, PrivateReplicaInfo,
+    PublicReplicaInfo, SealPreCommitOutput, SealPreCommitPhase1Output, SectorSize,
+    UnpaddedBytesAmount, WINDOW_POST_CHALLENGE_COUNT, WINDOW_POST_SECTOR_COUNT,
+    WINNING_POST_CHALLENGE_COUNT, WINNING_POST_SECTOR_COUNT,
 };
 use generic_array::typenum::Unsigned;
 use log::info;
@@ -137,18 +137,7 @@ where
     let sector_size_unpadded_bytes_ammount =
         UnpaddedBytesAmount::from(PaddedBytesAmount::from(sector_size));
 
-    let porep_config = PoRepConfig {
-        sector_size,
-        partitions: PoRepProofPartitions(
-            *POREP_PARTITIONS
-                .read()
-                .expect("poisoned read access")
-                .get(&u64::from(sector_size))
-                .expect("unknown sector size") as usize,
-        ),
-        porep_id,
-        api_version,
-    };
+    let porep_config = PoRepConfig::new_groth16(u64::from(sector_size), porep_id, api_version);
 
     let mut out: Vec<(SectorId, PreCommitReplicaOutput<Tree>)> = Default::default();
     let mut sector_ids = Vec::new();
@@ -343,18 +332,7 @@ pub fn get_porep_config<F: PrimeField>(sector_size: u64, api_version: ApiVersion
     let arbitrary_porep_id = [99; 32];
 
     if util::is_groth16_field::<F>() {
-        PoRepConfig {
-            sector_size: sector_size.into(),
-            partitions: PoRepProofPartitions(
-                *POREP_PARTITIONS
-                    .read()
-                    .expect("POREP_PARTITONS poisoned")
-                    .get(&(sector_size))
-                    .expect("unknown sector size") as usize,
-            ),
-            porep_id: arbitrary_porep_id,
-            api_version,
-        }
+        PoRepConfig::new_groth16(sector_size, arbitrary_porep_id, api_version)
     } else {
         PoRepConfig::new_halo2(sector_size.into(), arbitrary_porep_id, api_version)
     }

@@ -11,7 +11,7 @@ use ff::PrimeField;
 use filecoin_hashers::{Domain, Groth16Hasher, Hasher, PoseidonArity};
 use halo2_proofs::pasta::{Fp, Fq};
 use log::{info, trace};
-use memmap::MmapOptions;
+use memmap2::MmapOptions;
 use merkletree::store::{DiskStore, Store, StoreConfig};
 use rayon::prelude::*;
 use sha2::{Digest, Sha256};
@@ -36,6 +36,7 @@ use storage_proofs_porep::stacked::{
     StackedDrg, Tau, TemporaryAux, TemporaryAuxCache,
 };
 
+use crate::POREP_MINIMUM_CHALLENGES;
 use crate::{
     api::{
         as_safe_commitment, commitment_from_fr, get_base_tree_leafs, get_base_tree_size,
@@ -47,7 +48,7 @@ use crate::{
     },
     constants::{
         DefaultBinaryTree, DefaultPieceDomain, DefaultPieceHasher, DefaultTreeDomain,
-        DefaultTreeHasher, POREP_MINIMUM_CHALLENGES, SINGLE_PARTITION_PROOF_LEN,
+        DefaultTreeHasher, SINGLE_PARTITION_PROOF_LEN,
     },
     parameters::setup_params,
     pieces::{self, verify_pieces},
@@ -1944,11 +1945,8 @@ where
         &public_inputs,
         &proof,
         &ChallengeRequirements {
-            minimum_challenges: *POREP_MINIMUM_CHALLENGES
-                .read()
-                .expect("POREP_MINIMUM_CHALLENGES poisoned")
-                .get(&u64::from(SectorSize::from(porep_config)))
-                .expect("unknown sector size") as usize,
+            minimum_challenges: POREP_MINIMUM_CHALLENGES
+                .from_sector_size(u64::from(SectorSize::from(porep_config))),
         },
     )
 }

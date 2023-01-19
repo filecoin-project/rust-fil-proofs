@@ -40,6 +40,8 @@ impl GitMetadata {
         let repo = Repository::discover(&repo_path)?;
         let head = repo.head()?;
         let commit = head.peel_to_commit()?;
+
+        // Unwrap is OK as the given seconds won't be out of range.
         let date = Utc.timestamp_opt(commit.time().seconds(), 0).unwrap();
 
         Ok(GitMetadata {

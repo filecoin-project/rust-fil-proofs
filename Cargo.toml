@@ -15,4 +15,7 @@ members = [
 ]
 
 [patch.crates-io]
-halo2_proofs = { git = "https://github.com/filecoin-project/halo2", branch = "serialize-vk-pk" }
+halo2_proofs = { git = "https://github.com/filecoin-project/halo2", branch = "halo2" }
+neptune = { git = "https://github.com/filecoin-project/neptune", branch = "halo2" }
+pasta_curves = { git = "https://github.com/filecoin-project/pasta_curves", branch = "gpu" }
+fil_pasta_curves = { git = "https://github.com/filecoin-project/pasta_curves", branch = "gpu-fil-fork" }

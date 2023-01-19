@@ -264,7 +264,7 @@ mod tests {
     };
     use generic_array::typenum::{U0, U2, U4, U8};
     use halo2_proofs::pasta::{Fp, Fq};
-    use memmap::{MmapMut, MmapOptions};
+    use memmap2::{MmapMut, MmapOptions};
     use merkletree::store::StoreConfig;
 
     use crate::merkle::{

@@ -170,9 +170,8 @@ fn configure_global_config(inputs: &ProdbenchInputs) {
         .expect("POREP_PARTITIONS poisoned")
         .insert(inputs.sector_size_bytes(), inputs.porep_partitions);
     POREP_MINIMUM_CHALLENGES
-        .write()
-        .expect("POREP_MINIMUM_CHALLENGES poisoned")
-        .insert(inputs.sector_size_bytes(), inputs.porep_challenges);
+        .get_mut()
+        .insert(inputs.sector_size_bytes(), inputs.porep_challenges as usize);
 }
 
 pub fn run<F>(
