@@ -17,17 +17,16 @@ merkletree = "0.22.0"
 rayon = "1.0.0"
 serde = { version = "1.0", features = ["derive"]}
 ff = "0.12.0"
-bellperson = "0.22.0"
-blstrs = "0.5.0"
+bellperson = "0.24.0"
+blstrs = "0.6.1"
 log = "0.4.7"
 generic-array = "0.14.4"
 anyhow = "1.0.23"
-# neptune = { version = "~7.0.0", features = ["bls", "arity2", "arity4", "arity8", "arity11", "arity16", "arity24", "arity36"] }
-neptune = { git = "https://github.com/filecoin-project/neptune", branch = "halo2", features = ["bls", "pasta", "arity2", "arity4", "arity8", "arity11", "arity16", "arity24", "arity36"] }
+neptune = { version = "~8.1.0", features = ["bls", "pasta", "arity2", "arity4", "arity8", "arity11", "arity16", "arity24", "arity36"] }
 lazy_static = "1.2"
 fr32 = { path = "../fr32", version = "~5.0.0", default-features = false }
 fil_logger = "0.1.6"
-memmap = "0.7"
+memmap2 = "0.5.6"
 halo2_proofs = "0.2.0"
 typemap = "0.3.3"
 fil-halo2-gadgets = { path = "../fil-halo2-gadgets" }

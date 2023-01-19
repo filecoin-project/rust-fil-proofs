@@ -9,7 +9,7 @@ use ff::PrimeField;
 use filecoin_hashers::{Domain, HashFunction, Hasher, PoseidonArity, PoseidonLookup};
 use generic_array::typenum::{Unsigned, U2};
 use log::{info, trace};
-use memmap::{Mmap, MmapMut, MmapOptions};
+use memmap2::{Mmap, MmapMut, MmapOptions};
 use merkletree::{
     merkle::{get_merkle_tree_leafs, get_merkle_tree_len},
     store::{DiskStore, Store, StoreConfig},

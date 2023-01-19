@@ -131,7 +131,7 @@ fn sha256_chip_compute_k() {
                 Ok(_) => {
                     // Proof size does not change with circuit size.
                     if num_blocks == PREIMAGE_BLOCK_SIZES.start {
-                        let cost = CircuitCost::<Eq, MyCircuit>::measure(k as usize, &circ);
+                        let cost = CircuitCost::<Eq, MyCircuit>::measure(k, &circ);
                         let proof_size: usize = cost.marginal_proof_size().into();
                         println!("\tproof_size = {} bytes", proof_size);
                     }
@@ -219,7 +219,7 @@ fn compress_chip_compute_k() {
                 Ok(_) => {
                     // Proof size does not change with circuit size.
                     if num_blocks == PREIMAGE_BLOCK_SIZES.start {
-                        let cost = CircuitCost::<Eq, MyCircuit>::measure(k as usize, &circ);
+                        let cost = CircuitCost::<Eq, MyCircuit>::measure(k, &circ);
                         let proof_size: usize = cost.marginal_proof_size().into();
                         println!("\tproof_size = {} bytes", proof_size);
                     }

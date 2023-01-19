@@ -10,7 +10,6 @@ use bellperson::{
     ConstraintSystem, SynthesisError,
 };
 use blstrs::Scalar as Fr;
-use ec_gpu::GpuField;
 use ff::{Field, PrimeField};
 use fil_halo2_gadgets::ColumnCount;
 use halo2_proofs::{
@@ -44,7 +43,7 @@ pub trait Domain:
     + Element
     + StdHash
 {
-    type Field: PrimeField + GpuField;
+    type Field: PrimeField;
 
     #[allow(clippy::wrong_self_convention)]
     fn into_bytes(&self) -> Vec<u8> {
@@ -99,7 +98,11 @@ pub trait HashFunction<T: Domain>: Clone + Debug + Send + Sync + LightAlgorithm<
 }
 
 pub trait Hasher: Clone + Debug + Eq + Default + Send + Sync {
-    type Field: PrimeField + GpuField;
+    #[cfg(not(any(feature = "cuda", feature = "opencl")))]
+    type Field: PrimeField;
+    #[cfg(any(feature = "cuda", feature = "opencl"))]
+    type Field: PrimeField + ec_gpu::GpuName;
+
     type Domain: Domain<Field = Self::Field> + LightHashable<Self::Function> + AsRef<Self::Domain>;
     type Function: HashFunction<Self::Domain>;
 

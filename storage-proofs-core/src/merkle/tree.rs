@@ -5,7 +5,6 @@ use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut};
 
 use anyhow::Result;
-use ec_gpu::GpuField;
 use ff::PrimeField;
 use filecoin_hashers::{Hasher, PoseidonArity};
 use generic_array::typenum::U0;
@@ -23,7 +22,10 @@ pub trait MerkleTreeTrait: Send + Sync + Debug {
     type Arity: PoseidonArity<Self::Field>;
     type SubTreeArity: PoseidonArity<Self::Field>;
     type TopTreeArity: PoseidonArity<Self::Field>;
-    type Field: PrimeField + GpuField;
+    #[cfg(not(any(feature = "cuda", feature = "opencl")))]
+    type Field: PrimeField;
+    #[cfg(any(feature = "cuda", feature = "opencl"))]
+    type Field: PrimeField + ec_gpu::GpuName;
     type Hasher: 'static + Hasher<Field = Self::Field>;
     type Store: Store<<Self::Hasher as Hasher>::Domain>;
     type Proof: MerkleProofTrait<
