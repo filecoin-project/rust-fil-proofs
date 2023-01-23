@@ -6,7 +6,7 @@ use bellperson::{
     ConstraintSystem, SynthesisError,
 };
 use blstrs::Scalar as Fr;
-use ff::{Field, PrimeField};
+use ff::PrimeField;
 use generic_array::typenum::{Unsigned, U2, U4, U8};
 use halo2_proofs::{
     arithmetic::FieldExt,
@@ -24,8 +24,8 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use typemap::ShareMap;
 
 use crate::{
-    get_poseidon_constants, Domain, Groth16Hasher, Halo2Hasher, HashFunction, HashInstructions,
-    Hasher, PoseidonArity, PoseidonLookup, PoseidonMDArity, POSEIDON_CONSTANTS_2,
+    get_poseidon_constants, Domain, Halo2Hasher, HashFunction, HashInstructions, Hasher,
+    PoseidonArity, PoseidonLookup, PoseidonMDArity, R1CSHasher,
     POSEIDON_MD_CONSTANTS as POSEIDON_MD_CONSTANTS_BLS, POSEIDON_MD_CONSTANTS_PALLAS,
     POSEIDON_MD_CONSTANTS_VESTA,
 };
@@ -396,31 +396,34 @@ impl Hasher for PoseidonHasher<Fq> {
     }
 }
 
-// Only implement `Groth16Hasher` for `PoseidonHasher<Fr>` because `Fr` is the only field which is
-// compatible with Groth16.
-impl Groth16Hasher for PoseidonHasher<Fr> {
-    fn hash_leaf_circuit<CS: ConstraintSystem<Fr>>(
+// Implement r1cs circuits for BLS12-381 and Pasta scalar fields.
+impl<F> R1CSHasher for PoseidonHasher<F>
+where
+    F: PrimeField,
+    Self: Hasher<Field = F>,
+{
+    fn hash_leaf_circuit<CS: ConstraintSystem<F>>(
         cs: CS,
-        left: &AllocatedNum<Fr>,
-        right: &AllocatedNum<Fr>,
+        left: &AllocatedNum<F>,
+        right: &AllocatedNum<F>,
         _height: usize,
-    ) -> Result<AllocatedNum<Fr>, SynthesisError> {
+    ) -> Result<AllocatedNum<F>, SynthesisError> {
         Self::hash2_circuit(cs, left, right)
     }
 
-    fn hash_multi_leaf_circuit<A: PoseidonArity<Fr>, CS: ConstraintSystem<Fr>>(
+    fn hash_multi_leaf_circuit<A: PoseidonArity<F>, CS: ConstraintSystem<F>>(
         cs: CS,
-        leaves: &[AllocatedNum<Fr>],
+        leaves: &[AllocatedNum<F>],
         _height: usize,
-    ) -> Result<AllocatedNum<Fr>, SynthesisError> {
-        let consts = get_poseidon_constants::<Fr, A>();
+    ) -> Result<AllocatedNum<F>, SynthesisError> {
+        let consts = get_poseidon_constants::<F, A>();
         poseidon_hash(cs, leaves.to_vec(), consts)
     }
 
-    fn hash_md_circuit<CS: ConstraintSystem<Fr>>(
+    fn hash_md_circuit<CS: ConstraintSystem<F>>(
         cs: &mut CS,
-        elements: &[AllocatedNum<Fr>],
-    ) -> Result<AllocatedNum<Fr>, SynthesisError> {
+        elements: &[AllocatedNum<F>],
+    ) -> Result<AllocatedNum<F>, SynthesisError> {
         let arity = PoseidonMDArity::to_usize();
 
         let mut hash = elements[0].clone();
@@ -433,33 +436,42 @@ impl Groth16Hasher for PoseidonHasher<Fr> {
             // any terminal padding
             #[allow(clippy::needless_range_loop)]
             for i in (elts.len() + 1)..arity {
-                preimage[i] =
-                    AllocatedNum::alloc(cs.namespace(|| format!("padding {}", i)), || {
-                        Ok(Fr::zero())
-                    })
-                    .expect("alloc failure");
+                preimage[i] = AllocatedNum::alloc(
+                    cs.namespace(|| format!("padding {}", i)),
+                    || Ok(F::zero()),
+                )
+                .expect("alloc failure");
             }
             let cs = cs.namespace(|| format!("hash md {}", hash_num));
-            hash = poseidon_hash(cs, preimage.clone(), &*POSEIDON_MD_CONSTANTS_BLS)?.clone();
+            let consts = POSEIDON_MD_CONSTANTS
+                .get::<PoseidonLookup<F, PoseidonMDArity>>()
+                .unwrap_or_else(|| {
+                    panic!(
+                        "arity-{} poseidon constants not found for field",
+                        PoseidonMDArity::to_usize()
+                    )
+                });
+            hash = poseidon_hash(cs, preimage.clone(), *consts)?.clone();
         }
 
         Ok(hash)
     }
 
-    fn hash_circuit<CS: ConstraintSystem<Fr>>(
+    fn hash_circuit<CS: ConstraintSystem<F>>(
         _cs: CS,
         _bits: &[Boolean],
-    ) -> Result<AllocatedNum<Fr>, SynthesisError> {
+    ) -> Result<AllocatedNum<F>, SynthesisError> {
         unimplemented!();
     }
 
-    fn hash2_circuit<CS: ConstraintSystem<Fr>>(
+    fn hash2_circuit<CS: ConstraintSystem<F>>(
         cs: CS,
-        a: &AllocatedNum<Fr>,
-        b: &AllocatedNum<Fr>,
-    ) -> Result<AllocatedNum<Fr>, SynthesisError> {
+        a: &AllocatedNum<F>,
+        b: &AllocatedNum<F>,
+    ) -> Result<AllocatedNum<F>, SynthesisError> {
         let preimage = vec![a.clone(), b.clone()];
-        poseidon_hash(cs, preimage, &*POSEIDON_CONSTANTS_2)
+        let rc = get_poseidon_constants::<F, U2>();
+        poseidon_hash(cs, preimage, &*rc)
     }
 }
 

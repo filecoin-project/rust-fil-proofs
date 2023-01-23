@@ -10,7 +10,7 @@ use bellperson::{
 };
 use blake2s_simd::{Hash as Blake2sHash, Params as Blake2sBuilder, State};
 use blstrs::Scalar as Fr;
-use ff::PrimeField;
+use ff::{PrimeField, PrimeFieldBits};
 use halo2_proofs::pasta::{Fp, Fq};
 use merkletree::{
     hash::{Algorithm, Hashable},
@@ -18,7 +18,7 @@ use merkletree::{
 };
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
-use crate::{Domain, Groth16Hasher, HashFunction, Hasher};
+use crate::{Domain, HashFunction, Hasher, R1CSHasher};
 
 #[derive(Copy, Clone, Default)]
 pub struct Blake2sDomain<F> {
@@ -322,15 +322,31 @@ impl Hasher for Blake2sHasher<Fq> {
     }
 }
 
-// Only implement `Groth16Hasher` for `Blake2sHasher<Fr>` because `Fr` is the only field which is
-// compatible with Groth16.
-impl Groth16Hasher for Blake2sHasher<Fr> {
-    fn hash_multi_leaf_circuit<Arity, CS: ConstraintSystem<Fr>>(
+// Implement r1cs circuits for BLS12-381 and Pasta scalar fields.
+impl<F> R1CSHasher for Blake2sHasher<F>
+where
+    // `PrimeFieldBits` is required because `AllocatedNum.to_bits_le()` is called below.
+    F: PrimeFieldBits,
+    Self: Hasher<Field = F>,
+{
+    fn hash_leaf_circuit<CS: ConstraintSystem<F>>(
         mut cs: CS,
-        leaves: &[AllocatedNum<Fr>],
+        left: &AllocatedNum<F>,
+        right: &AllocatedNum<F>,
+        height: usize,
+    ) -> Result<AllocatedNum<F>, SynthesisError> {
+        let left_bits = left.to_bits_le(cs.namespace(|| "left num into bits"))?;
+        let right_bits = right.to_bits_le(cs.namespace(|| "right num into bits"))?;
+
+        Self::hash_leaf_bits_circuit(cs, &left_bits, &right_bits, height)
+    }
+
+    fn hash_multi_leaf_circuit<Arity, CS: ConstraintSystem<F>>(
+        mut cs: CS,
+        leaves: &[AllocatedNum<F>],
         _height: usize,
-    ) -> Result<AllocatedNum<Fr>, SynthesisError> {
-        let mut bits = Vec::with_capacity(leaves.len() * Fr::CAPACITY as usize);
+    ) -> Result<AllocatedNum<F>, SynthesisError> {
+        let mut bits = Vec::with_capacity(leaves.len() * F::CAPACITY as usize);
         for (i, leaf) in leaves.iter().enumerate() {
             bits.extend_from_slice(
                 &leaf.to_bits_le(cs.namespace(|| format!("{}_num_into_bits", i)))?,
@@ -342,12 +358,12 @@ impl Groth16Hasher for Blake2sHasher<Fr> {
         Self::hash_circuit(cs, &bits)
     }
 
-    fn hash_leaf_bits_circuit<CS: ConstraintSystem<Fr>>(
+    fn hash_leaf_bits_circuit<CS: ConstraintSystem<F>>(
         cs: CS,
         left: &[Boolean],
         right: &[Boolean],
         _height: usize,
-    ) -> Result<AllocatedNum<Fr>, SynthesisError> {
+    ) -> Result<AllocatedNum<F>, SynthesisError> {
         let mut preimage: Vec<Boolean> = vec![];
 
         preimage.extend_from_slice(left);
@@ -363,21 +379,21 @@ impl Groth16Hasher for Blake2sHasher<Fr> {
         Self::hash_circuit(cs, &preimage[..])
     }
 
-    fn hash_circuit<CS: ConstraintSystem<Fr>>(
+    fn hash_circuit<CS: ConstraintSystem<F>>(
         mut cs: CS,
         bits: &[Boolean],
-    ) -> Result<AllocatedNum<Fr>, SynthesisError> {
+    ) -> Result<AllocatedNum<F>, SynthesisError> {
         let personalization = vec![0u8; 8];
         let alloc_bits = blake2s_circuit(cs.namespace(|| "hash"), bits, &personalization)?;
 
         multipack::pack_bits(cs.namespace(|| "pack"), &alloc_bits)
     }
 
-    fn hash2_circuit<CS: ConstraintSystem<Fr>>(
+    fn hash2_circuit<CS: ConstraintSystem<F>>(
         mut cs: CS,
-        a_num: &AllocatedNum<Fr>,
-        b_num: &AllocatedNum<Fr>,
-    ) -> Result<AllocatedNum<Fr>, SynthesisError> {
+        a_num: &AllocatedNum<F>,
+        b_num: &AllocatedNum<F>,
+    ) -> Result<AllocatedNum<F>, SynthesisError> {
         // Allocate as booleans
         let a = a_num.to_bits_le(cs.namespace(|| "a_bits"))?;
         let b = b_num.to_bits_le(cs.namespace(|| "b_bits"))?;

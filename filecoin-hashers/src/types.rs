@@ -9,7 +9,7 @@ use bellperson::{
     gadgets::{boolean::Boolean, num::AllocatedNum},
     ConstraintSystem, SynthesisError,
 };
-use ff::{Field, PrimeField, PrimeFieldBits};
+use ff::{Field, PrimeField};
 use fil_halo2_gadgets::ColumnCount;
 use halo2_proofs::{
     arithmetic::FieldExt,
@@ -108,21 +108,13 @@ pub trait Hasher: Clone + Debug + Eq + Default + Send + Sync {
     fn name() -> String;
 }
 
-pub trait Groth16Hasher: Hasher
-where
-    Self::Field: PrimeFieldBits,
-{
+pub trait R1CSHasher: Hasher {
     fn hash_leaf_circuit<CS: ConstraintSystem<Self::Field>>(
-        mut cs: CS,
+        cs: CS,
         left: &AllocatedNum<Self::Field>,
         right: &AllocatedNum<Self::Field>,
         height: usize,
-    ) -> Result<AllocatedNum<Self::Field>, SynthesisError> {
-        let left_bits = left.to_bits_le(cs.namespace(|| "left num into bits"))?;
-        let right_bits = right.to_bits_le(cs.namespace(|| "right num into bits"))?;
-
-        Self::hash_leaf_bits_circuit(cs, &left_bits, &right_bits, height)
-    }
+    ) -> Result<AllocatedNum<Self::Field>, SynthesisError>;
 
     fn hash_multi_leaf_circuit<
         Arity: PoseidonArity<Self::Field>,

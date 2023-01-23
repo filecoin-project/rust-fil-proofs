@@ -8,7 +8,7 @@ use bellperson::{
     ConstraintSystem, SynthesisError,
 };
 use blstrs::Scalar as Fr;
-use ff::PrimeField;
+use ff::{PrimeField, PrimeFieldBits};
 use fil_halo2_gadgets::{
     sha256::{Sha256FieldChip, Sha256FieldConfig},
     ColumnCount,
@@ -27,7 +27,7 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use sha2::{Digest, Sha256};
 
 use crate::{
-    Domain, Groth16Hasher, Halo2Hasher, HashFunction, HashInstructions, Hasher, PoseidonArity,
+    Domain, Halo2Hasher, HashFunction, HashInstructions, Hasher, PoseidonArity, R1CSHasher,
 };
 
 #[derive(Copy, Clone, Default)]
@@ -319,15 +319,31 @@ impl Hasher for Sha256Hasher<Fq> {
     }
 }
 
-// Only implement `Groth16Hasher` for `Sha256Hasher<Fr>` because `Fr` is the only field which is
-// compatible with Groth16.
-impl Groth16Hasher for Sha256Hasher<Fr> {
-    fn hash_multi_leaf_circuit<Arity, CS: ConstraintSystem<Fr>>(
+// Implement r1cs circuits for BLS12-381 and Pasta scalar fields.
+impl<F> R1CSHasher for Sha256Hasher<F>
+where
+    // `PrimeFieldBits` is required because `AllocatedNum.to_bits_le()` is called below.
+    F: PrimeFieldBits,
+    Self: Hasher<Field = F>,
+{
+    fn hash_leaf_circuit<CS: ConstraintSystem<F>>(
         mut cs: CS,
-        leaves: &[AllocatedNum<Fr>],
+        left: &AllocatedNum<F>,
+        right: &AllocatedNum<F>,
+        height: usize,
+    ) -> Result<AllocatedNum<F>, SynthesisError> {
+        let left_bits = left.to_bits_le(cs.namespace(|| "left num into bits"))?;
+        let right_bits = right.to_bits_le(cs.namespace(|| "right num into bits"))?;
+
+        Self::hash_leaf_bits_circuit(cs, &left_bits, &right_bits, height)
+    }
+
+    fn hash_multi_leaf_circuit<Arity, CS: ConstraintSystem<F>>(
+        mut cs: CS,
+        leaves: &[AllocatedNum<F>],
         _height: usize,
-    ) -> Result<AllocatedNum<Fr>, SynthesisError> {
-        let mut bits = Vec::with_capacity(leaves.len() * Fr::CAPACITY as usize);
+    ) -> Result<AllocatedNum<F>, SynthesisError> {
+        let mut bits = Vec::with_capacity(leaves.len() * F::CAPACITY as usize);
         for (i, leaf) in leaves.iter().enumerate() {
             let mut padded = leaf.to_bits_le(cs.namespace(|| format!("{}_num_into_bits", i)))?;
             while padded.len() % 8 != 0 {
@@ -344,12 +360,12 @@ impl Groth16Hasher for Sha256Hasher<Fr> {
         Self::hash_circuit(cs, &bits)
     }
 
-    fn hash_leaf_bits_circuit<CS: ConstraintSystem<Fr>>(
+    fn hash_leaf_bits_circuit<CS: ConstraintSystem<F>>(
         cs: CS,
         left: &[Boolean],
         right: &[Boolean],
         _height: usize,
-    ) -> Result<AllocatedNum<Fr>, SynthesisError> {
+    ) -> Result<AllocatedNum<F>, SynthesisError> {
         let mut preimage: Vec<Boolean> = vec![];
 
         let mut left_padded = left.to_vec();
@@ -379,25 +395,25 @@ impl Groth16Hasher for Sha256Hasher<Fr> {
         Self::hash_circuit(cs, &preimage[..])
     }
 
-    fn hash_circuit<CS: ConstraintSystem<Fr>>(
+    fn hash_circuit<CS: ConstraintSystem<F>>(
         mut cs: CS,
         bits: &[Boolean],
-    ) -> Result<AllocatedNum<Fr>, SynthesisError> {
+    ) -> Result<AllocatedNum<F>, SynthesisError> {
         let be_bits = sha256_circuit(cs.namespace(|| "hash"), bits)?;
         let le_bits = be_bits
             .chunks(8)
             .flat_map(|chunk| chunk.iter().rev())
-            .take(Fr::CAPACITY as usize)
+            .take(F::CAPACITY as usize)
             .cloned()
             .collect::<Vec<_>>();
         multipack::pack_bits(cs.namespace(|| "pack_le"), &le_bits)
     }
 
-    fn hash2_circuit<CS: ConstraintSystem<Fr>>(
+    fn hash2_circuit<CS: ConstraintSystem<F>>(
         mut cs: CS,
-        a_num: &AllocatedNum<Fr>,
-        b_num: &AllocatedNum<Fr>,
-    ) -> Result<AllocatedNum<Fr>, SynthesisError> {
+        a_num: &AllocatedNum<F>,
+        b_num: &AllocatedNum<F>,
+    ) -> Result<AllocatedNum<F>, SynthesisError> {
         // Allocate as booleans
         let a = a_num.to_bits_le(cs.namespace(|| "a_bits"))?;
         let b = b_num.to_bits_le(cs.namespace(|| "b_bits"))?;
@@ -492,7 +508,7 @@ mod tests {
     use blstrs::Scalar as Fr;
     use ff::{Field, PrimeField};
     use fil_halo2_gadgets::AdviceIter;
-    use generic_array::typenum::U2;
+    use generic_array::typenum::U0;
     use halo2_proofs::{
         arithmetic::FieldExt,
         circuit::{AssignedCell, Layouter, SimpleFloorPlanner, Value},
@@ -502,7 +518,7 @@ mod tests {
     };
 
     #[test]
-    fn test_sha256_bls_pasta_compat() {
+    fn test_sha256_vanilla_all_fields() {
         // Test two one-block and two two-block preimages.
         let preimages = [vec![1u8], vec![0, 55, 0, 0], vec![1; 64], vec![1; 100]];
         for preimage in &preimages {
@@ -518,11 +534,60 @@ mod tests {
     }
 
     #[test]
+    fn test_sha256_r1cs_circuit_all_fields() {
+        // Choose an arbitrary arity type because it is ignored by the sha256 circuit.
+        type A = U0;
+
+        let digest_fr: Fr = {
+            let mut cs = TestConstraintSystem::new();
+            let preimage =
+                [AllocatedNum::alloc(&mut cs, || Ok(Fr::one()))
+                    .expect("allocation should not fail")];
+            Sha256Hasher::<Fr>::hash_multi_leaf_circuit::<A, _>(&mut cs, &preimage, 0)
+                .expect("sha256 failed")
+                .get_value()
+                .expect("digest should be allocated")
+        };
+        let digest_fp: Fp = {
+            let mut cs = TestConstraintSystem::new();
+            let preimage =
+                [AllocatedNum::alloc(&mut cs, || Ok(Fp::one()))
+                    .expect("allocation should not fail")];
+            Sha256Hasher::<Fp>::hash_multi_leaf_circuit::<A, _>(&mut cs, &preimage, 0)
+                .expect("sha256 failed")
+                .get_value()
+                .expect("digest should be allocated")
+        };
+        let digest_fq: Fq = {
+            let mut cs = TestConstraintSystem::new();
+            let preimage =
+                [AllocatedNum::alloc(&mut cs, || Ok(Fq::one()))
+                    .expect("allocation should not fail")];
+            Sha256Hasher::<Fq>::hash_multi_leaf_circuit::<A, _>(&mut cs, &preimage, 0)
+                .expect("sha256 failed")
+                .get_value()
+                .expect("digest should be allocated")
+        };
+
+        for ((byte_1, byte_2), byte_3) in digest_fr
+            .to_repr()
+            .as_ref()
+            .iter()
+            .zip(digest_fp.to_repr().as_ref())
+            .zip(digest_fq.to_repr().as_ref())
+        {
+            assert_eq!(byte_1, byte_2);
+            assert_eq!(byte_1, byte_3);
+        }
+    }
+
+    #[test]
     #[allow(clippy::unwrap_used)]
     fn test_sha256_groth16_halo2_compat() {
         // Choose an arbitrary arity type because it is ignored by the sha256 circuit.
-        type A = U2;
+        type A = U0;
 
+        // Halo2 circuit.
         struct Sha256Circuit<F>
         where
             F: FieldExt,
@@ -624,7 +689,7 @@ mod tests {
             let groth_digest: Fr = {
                 let mut cs = TestConstraintSystem::new();
                 let preimage = [AllocatedNum::alloc(&mut cs, || Ok(Fr::one())).unwrap()];
-                Sha256Hasher::hash_multi_leaf_circuit::<A, _>(&mut cs, &preimage, 0)
+                Sha256Hasher::<Fr>::hash_multi_leaf_circuit::<A, _>(&mut cs, &preimage, 0)
                     .unwrap()
                     .get_value()
                     .unwrap()
@@ -657,7 +722,7 @@ mod tests {
                     AllocatedNum::alloc(cs.namespace(|| "preimage elem 2"), || Ok(Fr::from(55)))
                         .unwrap(),
                 ];
-                Sha256Hasher::hash_multi_leaf_circuit::<A, _>(&mut cs, &preimage, 0)
+                Sha256Hasher::<Fr>::hash_multi_leaf_circuit::<A, _>(&mut cs, &preimage, 0)
                     .unwrap()
                     .get_value()
                     .unwrap()
