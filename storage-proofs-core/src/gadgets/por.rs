@@ -11,8 +11,7 @@ use bellperson::{
     Circuit, ConstraintSystem, SynthesisError,
 };
 use blstrs::Scalar as Fr;
-use ff::PrimeField;
-use filecoin_hashers::{Groth16Hasher, PoseidonArity};
+use filecoin_hashers::{Hasher, PoseidonArity, R1CSHasher};
 use generic_array::typenum::Unsigned;
 
 use crate::{
@@ -21,7 +20,7 @@ use crate::{
     gadgets::{constraint, insertion::insert, variables::Root},
     merkle::{base_path_length, MerkleProofTrait, MerkleTreeTrait},
     parameter_cache::{CacheableParameters, ParameterSetMetadata},
-    por::PoR,
+    por::{self, PoR},
     proof::ProofScheme,
 };
 
@@ -37,8 +36,7 @@ use crate::{
 pub struct PoRCircuit<Tree>
 where
     Tree: MerkleTreeTrait,
-    Tree::Hasher: Groth16Hasher,
-    Tree::Field: ff::PrimeFieldBits,
+    Tree::Hasher: R1CSHasher,
 {
     value: Root<Tree::Field>,
     auth_path: AuthPath<Tree::Hasher, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>,
@@ -50,8 +48,7 @@ where
 impl<Tree> Clone for PoRCircuit<Tree>
 where
     Tree: MerkleTreeTrait,
-    Tree::Hasher: Groth16Hasher,
-    Tree::Field: ff::PrimeFieldBits,
+    Tree::Hasher: R1CSHasher,
 {
     fn clone(&self) -> Self {
         PoRCircuit {
@@ -67,8 +64,7 @@ where
 #[derive(Debug, Clone)]
 pub struct AuthPath<H, U, V, W>
 where
-    H: Groth16Hasher,
-    H::Field: ff::PrimeFieldBits,
+    H: R1CSHasher,
     U: PoseidonArity<H::Field>,
     V: PoseidonArity<H::Field>,
     W: PoseidonArity<H::Field>,
@@ -80,8 +76,7 @@ where
 
 impl<H, U, V, W> From<Vec<(Vec<Option<H::Field>>, Option<usize>)>> for AuthPath<H, U, V, W>
 where
-    H: Groth16Hasher,
-    H::Field: ff::PrimeFieldBits,
+    H: R1CSHasher,
     U: PoseidonArity<H::Field>,
     V: PoseidonArity<H::Field>,
     W: PoseidonArity<H::Field>,
@@ -147,8 +142,7 @@ where
 #[derive(Debug, Clone)]
 struct SubPath<H, Arity>
 where
-    H: Groth16Hasher,
-    H::Field: ff::PrimeFieldBits,
+    H: R1CSHasher,
     Arity: PoseidonArity<H::Field>,
 {
     path: Vec<PathElement<H, Arity>>,
@@ -157,8 +151,7 @@ where
 #[derive(Debug, Clone)]
 struct PathElement<H, Arity>
 where
-    H: Groth16Hasher,
-    H::Field: ff::PrimeFieldBits,
+    H: R1CSHasher,
     Arity: PoseidonArity<H::Field>,
 {
     hashes: Vec<Option<H::Field>>,
@@ -169,8 +162,7 @@ where
 
 impl<H, Arity> SubPath<H, Arity>
 where
-    H: Groth16Hasher,
-    H::Field: ff::PrimeFieldBits,
+    H: R1CSHasher,
     Arity: PoseidonArity<H::Field>,
 {
     fn synthesize<CS: ConstraintSystem<H::Field>>(
@@ -236,8 +228,7 @@ where
 
 impl<H, U, V, W> AuthPath<H, U, V, W>
 where
-    H: Groth16Hasher,
-    H::Field: ff::PrimeFieldBits,
+    H: R1CSHasher,
     U: PoseidonArity<H::Field>,
     V: PoseidonArity<H::Field>,
     W: PoseidonArity<H::Field>,
@@ -289,16 +280,16 @@ where
 
 impl<Tree> CircuitComponent for PoRCircuit<Tree>
 where
-    Tree: MerkleTreeTrait<Field = Fr>,
-    Tree::Hasher: Groth16Hasher,
+    Tree: MerkleTreeTrait,
+    Tree::Hasher: R1CSHasher,
 {
-    type ComponentPrivateInputs = Option<Root<Fr>>;
+    type ComponentPrivateInputs = Option<Root<Tree::Field>>;
 }
 
 pub struct PoRCompound<Tree>
 where
-    Tree: MerkleTreeTrait<Field = Fr>,
-    Tree::Hasher: Groth16Hasher,
+    Tree: MerkleTreeTrait,
+    Tree::Hasher: R1CSHasher,
 {
     _tree: PhantomData<Tree>,
 }
@@ -313,23 +304,24 @@ pub fn challenge_into_auth_path_bits(challenge: usize, leaves: usize) -> Vec<boo
     to_bits(leaves.trailing_zeros(), challenge)
 }
 
+// Only implement for `Fr` because `CacheableParameters` is Groth16 specific.
 impl<C, P, Tree> CacheableParameters<C, P> for PoRCompound<Tree>
 where
-    C: Circuit<Tree::Field>,
+    C: Circuit<Fr>,
     P: ParameterSetMetadata,
     Tree: MerkleTreeTrait<Field = Fr>,
-    Tree::Hasher: Groth16Hasher,
+    Tree::Hasher: R1CSHasher,
 {
     fn cache_prefix() -> String {
         format!("proof-of-retrievability-{}", Tree::display())
     }
 }
 
-// can only implment for Bls12 because por is not generic over the engine.
+// Only implement for `Fr` because `CompoundProof` is Groth16 specific.
 impl<'a, Tree> CompoundProof<'a, PoR<Tree>, PoRCircuit<Tree>> for PoRCompound<Tree>
 where
     Tree: 'static + MerkleTreeTrait<Field = Fr>,
-    Tree::Hasher: Groth16Hasher,
+    Tree::Hasher: R1CSHasher,
 {
     fn circuit<'b>(
         public_inputs: &<PoR<Tree> as ProofScheme<'a>>::PublicInputs,
@@ -369,41 +361,20 @@ where
         }
     }
 
+    #[inline]
     fn generate_public_inputs(
         pub_inputs: &<PoR<Tree> as ProofScheme<'a>>::PublicInputs,
         pub_params: &<PoR<Tree> as ProofScheme<'a>>::PublicParams,
         _k: Option<usize>,
-    ) -> Result<Vec<Fr>> {
-        ensure!(
-            pub_inputs.challenge < pub_params.leaves,
-            "Challenge out of range"
-        );
-        let mut inputs = Vec::new();
-
-        // Inputs are (currently, inefficiently) packed with one `Fr` per challenge.
-        // Boolean/bit auth paths trivially correspond to the challenged node's index within a sector.
-        // Defensively convert the challenge with `try_from` as a reminder that we must not truncate.
-        let input_fr =
-            Fr::from(u64::try_from(pub_inputs.challenge).expect("challenge type too wide"));
-        inputs.push(input_fr);
-
-        if let Some(commitment) = pub_inputs.commitment {
-            ensure!(!pub_params.private, "Params must be public");
-            inputs.push(commitment.into());
-        } else {
-            ensure!(pub_params.private, "Params must be private");
-        }
-
-        Ok(inputs)
+    ) -> Result<Vec<Tree::Field>> {
+        PoRCircuit::<Tree>::generate_public_inputs(pub_params, pub_inputs)
     }
 }
 
-impl<F, Tree> Circuit<F> for PoRCircuit<Tree>
+impl<Tree> Circuit<Tree::Field> for PoRCircuit<Tree>
 where
-    F: PrimeField,
-    Tree: MerkleTreeTrait<Field = F>,
-    Tree::Hasher: Groth16Hasher,
-    Tree::Field: ff::PrimeFieldBits,
+    Tree: MerkleTreeTrait,
+    Tree::Hasher: R1CSHasher,
 {
     /// # Public Inputs
     ///
@@ -413,10 +384,13 @@ where
     /// * [1] - the merkle root of the tree.
     ///
     /// This circuit derives the following private inputs from its fields:
-    /// * value_num - packed version of `value` as bits. (might be more than one Fr)
+    /// * value_num - packed version of `value` as bits. (might be more than one scalar)
     ///
-    /// Note: All public inputs must be provided as `E::Fr`.
-    fn synthesize<CS: ConstraintSystem<F>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
+    /// Note: All public inputs must be provided as `F`.
+    fn synthesize<CS>(self, cs: &mut CS) -> Result<(), SynthesisError>
+    where
+        CS: ConstraintSystem<Tree::Field>,
+    {
         let value = self.value;
         let auth_path = self.auth_path;
         let root = self.root;
@@ -489,8 +463,7 @@ where
 impl<Tree> PoRCircuit<Tree>
 where
     Tree: MerkleTreeTrait,
-    Tree::Hasher: Groth16Hasher,
-    Tree::Field: ff::PrimeFieldBits,
+    Tree::Hasher: R1CSHasher,
 {
     pub fn new(proof: Tree::Proof, private: bool) -> Self {
         PoRCircuit::<Tree> {
@@ -523,6 +496,36 @@ where
 
         por.synthesize(&mut cs)
     }
+
+    // Generate the circuit's r1cs public inputs vector for any scalar field, whereas
+    // `CompoundProof::generate_public_inputs` is tied BLS12-381's scalar field `Fr`.
+    pub fn generate_public_inputs(
+        pub_params: &por::PublicParams,
+        pub_inputs: &por::PublicInputs<<Tree::Hasher as Hasher>::Domain>,
+    ) -> Result<Vec<Tree::Field>> {
+        ensure!(
+            pub_inputs.challenge < pub_params.leaves,
+            "Challenge out of range"
+        );
+        let mut inputs = Vec::new();
+
+        // Inputs are (currently, inefficiently) packed with one scalar per challenge.
+        // Boolean/bit auth paths trivially correspond to the challenged node's index within a sector.
+        // Defensively convert the challenge with `try_from` as a reminder that we must not truncate.
+        let input_fr = Tree::Field::from(
+            u64::try_from(pub_inputs.challenge).expect("challenge type too wide"),
+        );
+        inputs.push(input_fr);
+
+        if let Some(commitment) = pub_inputs.commitment {
+            ensure!(!pub_params.private, "Params must be public");
+            inputs.push(commitment.into());
+        } else {
+            ensure!(pub_params.private, "Params must be private");
+        }
+
+        Ok(inputs)
+    }
 }
 
 /// Synthesizes a PoR proof without adding a public input for the challenge (whereas `PoRCircuit`
@@ -531,14 +534,14 @@ pub fn por_no_challenge_input<Tree, CS>(
     mut cs: CS,
     // little-endian
     challenge_bits: Vec<AllocatedBit>,
-    leaf: AllocatedNum<Fr>,
-    path_values: Vec<Vec<AllocatedNum<Fr>>>,
-    root: AllocatedNum<Fr>,
+    leaf: AllocatedNum<Tree::Field>,
+    path_values: Vec<Vec<AllocatedNum<Tree::Field>>>,
+    root: AllocatedNum<Tree::Field>,
 ) -> Result<(), SynthesisError>
 where
-    Tree: MerkleTreeTrait<Field = Fr>,
-    Tree::Hasher: Groth16Hasher,
-    CS: ConstraintSystem<Fr>,
+    Tree: MerkleTreeTrait,
+    Tree::Hasher: R1CSHasher,
+    CS: ConstraintSystem<Tree::Field>,
 {
     let base_arity = Tree::Arity::to_usize();
     let sub_arity = Tree::SubTreeArity::to_usize();

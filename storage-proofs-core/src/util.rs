@@ -196,7 +196,7 @@ mod tests {
     use ff::Field;
     use filecoin_hashers::{
         sha256::{Sha256Function, Sha256Hasher},
-        Groth16Hasher,
+        R1CSHasher,
     };
     use fr32::fr_into_bytes;
     use merkletree::hash::Algorithm;

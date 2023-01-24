@@ -6,24 +6,18 @@ use bellperson::{
     Circuit, ConstraintSystem,
 };
 use blstrs::Scalar as Fr;
-use ff::Field;
+use ff::{Field, PrimeField};
 use filecoin_hashers::{
-    blake2s::Blake2sHasher,
-    poseidon::{PoseidonDomain, PoseidonHasher},
-    sha256::Sha256Hasher,
-    Domain, Groth16Hasher, Hasher, PoseidonArity,
+    blake2s::Blake2sHasher, poseidon::PoseidonHasher, sha256::Sha256Hasher, Domain, Hasher,
+    PoseidonArity, R1CSHasher,
 };
-use fr32::{bytes_into_fr, fr_into_bytes};
 use generic_array::typenum::{Unsigned, U0, U2, U4, U8};
 use merkletree::store::{StoreConfig, VecStore};
 use pretty_assertions::assert_eq;
 use rand::{Rng, SeedableRng};
 use rand_xorshift::XorShiftRng;
 use storage_proofs_core::{
-    compound_proof::CompoundProof,
-    gadgets::por::{
-        challenge_into_auth_path_bits, por_no_challenge_input, PoRCircuit, PoRCompound,
-    },
+    gadgets::por::{challenge_into_auth_path_bits, por_no_challenge_input, PoRCircuit},
     merkle::{
         create_base_merkle_tree, generate_tree, get_base_tree_count, DiskTree, MerkleProofTrait,
         MerkleTreeTrait, MerkleTreeWrapper, ResTree,
@@ -114,8 +108,8 @@ fn test_por_circuit_poseidon_top_8_2_4() {
 
 fn test_por_circuit<Tree>(num_inputs: usize, num_constraints: usize)
 where
-    Tree: 'static + MerkleTreeTrait<Field = Fr>,
-    Tree::Hasher: Groth16Hasher,
+    Tree: 'static + MerkleTreeTrait,
+    Tree::Hasher: R1CSHasher,
 {
     let mut rng = XorShiftRng::from_seed(TEST_SEED);
 
@@ -156,7 +150,7 @@ where
 
         // -- Circuit
 
-        let mut cs = TestConstraintSystem::<Fr>::new();
+        let mut cs = TestConstraintSystem::<Tree::Field>::new();
 
         // Root is public input.
         let por = PoRCircuit::<ResTree<Tree>>::new(proof.proof, false);
@@ -170,9 +164,8 @@ where
             "wrong number of constraints"
         );
 
-        let generated_inputs =
-            PoRCompound::<ResTree<Tree>>::generate_public_inputs(&pub_inputs, &pub_params, None)
-                .expect("generate_public_inputs failure");
+        let generated_inputs = PoRCircuit::<Tree>::generate_public_inputs(&pub_params, &pub_inputs)
+            .expect("failed to generate r1cs circuit's public inputs");
 
         let expected_inputs = cs.get_inputs();
 
@@ -209,8 +202,8 @@ fn test_por_circuit_poseidon_base_8_private_root() {
 
 fn test_por_circuit_private_root<Tree>(num_constraints: usize)
 where
-    Tree: MerkleTreeTrait<Field = Fr>,
-    Tree::Hasher: Groth16Hasher,
+    Tree: MerkleTreeTrait,
+    Tree::Hasher: R1CSHasher,
 {
     let mut rng = XorShiftRng::from_seed(TEST_SEED);
 
@@ -219,7 +212,7 @@ where
         // -- Basic Setup
 
         let data: Vec<u8> = (0..leaves)
-            .flat_map(|_| fr_into_bytes(&Fr::random(&mut rng)))
+            .flat_map(|_| Tree::Field::random(&mut rng).to_repr().as_ref().to_vec())
             .collect();
 
         let tree = create_base_merkle_tree::<Tree>(None, leaves, data.as_slice())
@@ -236,14 +229,15 @@ where
             commitment: None,
         };
 
-        let priv_inputs = por::PrivateInputs::<Tree>::new(
-            bytes_into_fr(
-                data_at_node(data.as_slice(), pub_inputs.challenge).expect("data_at_node failure"),
-            )
-            .expect("bytes_into_fr failure")
-            .into(),
-            &tree,
-        );
+        let leaf = {
+            let mut repr = [0u8; 32];
+            let le_bytes =
+                data_at_node(data.as_slice(), pub_inputs.challenge).expect("data_at_node failure");
+            repr.copy_from_slice(le_bytes);
+            <Tree::Hasher as Hasher>::Domain::from(repr)
+        };
+
+        let priv_inputs = por::PrivateInputs::<Tree>::new(leaf, &tree);
 
         // create a non circuit proof
         let proof =
@@ -256,7 +250,7 @@ where
 
         // -- Circuit
 
-        let mut cs = TestConstraintSystem::<Fr>::new();
+        let mut cs = TestConstraintSystem::<Tree::Field>::new();
 
         // Root is private input.
         let por = PoRCircuit::<Tree>::new(proof.proof, true);
@@ -271,12 +265,12 @@ where
         );
 
         let auth_path_bits = challenge_into_auth_path_bits(pub_inputs.challenge, pub_params.leaves);
-        let packed_auth_path = multipack::compute_multipacking::<Fr>(&auth_path_bits);
+        let packed_auth_path = multipack::compute_multipacking::<Tree::Field>(&auth_path_bits);
 
         let mut expected_inputs = Vec::new();
         expected_inputs.extend(packed_auth_path);
 
-        assert_eq!(cs.get_input(0, "ONE"), Fr::one(), "wrong input 0");
+        assert_eq!(cs.get_input(0, "ONE"), Tree::Field::one(), "wrong input 0");
 
         assert_eq!(
             cs.get_input(1, "path/input 0"),
@@ -294,8 +288,8 @@ fn create_tree<Tree>(
     tmp_path: &Path,
 ) -> MerkleTreeWrapper<Tree::Hasher, Tree::Store, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>
 where
-    Tree: MerkleTreeTrait<Field = Fr>,
-    Tree::Hasher: Groth16Hasher,
+    Tree: MerkleTreeTrait,
+    Tree::Hasher: R1CSHasher,
 {
     let sector_nodes = labels.len();
     let tree_name = Tree::display();
@@ -383,11 +377,13 @@ where
     }
 }
 
-fn test_por_no_challenge_input<U, V, W>(sector_nodes: usize)
+fn test_por_no_challenge_input<F, U, V, W>(sector_nodes: usize)
 where
-    U: PoseidonArity<Fr>,
-    V: PoseidonArity<Fr>,
-    W: PoseidonArity<Fr>,
+    F: PrimeField,
+    PoseidonHasher<F>: Hasher<Field = F> + R1CSHasher,
+    U: PoseidonArity<F>,
+    V: PoseidonArity<F>,
+    W: PoseidonArity<F>,
 {
     let mut rng = XorShiftRng::from_seed(TEST_SEED);
 
@@ -398,13 +394,13 @@ where
     let tmp_path = tmp_dir.path();
 
     // Create random TreeROld.
-    let leafs: Vec<PoseidonDomain<Fr>> = (0..sector_nodes)
-        .map(|_| PoseidonDomain::random(&mut rng))
+    let leafs: Vec<<PoseidonHasher<F> as Hasher>::Domain> = (0..sector_nodes)
+        .map(|_| <PoseidonHasher<F> as Hasher>::Domain::random(&mut rng))
         .collect();
-    let tree = create_tree::<DiskTree<PoseidonHasher<Fr>, U, V, W>>(&leafs, tmp_path);
+    let tree = create_tree::<DiskTree<PoseidonHasher<F>, U, V, W>>(&leafs, tmp_path);
     let root = tree.root();
 
-    let mut cs = TestConstraintSystem::<Fr>::new();
+    let mut cs = TestConstraintSystem::<F>::new();
 
     let root = AllocatedNum::alloc(cs.namespace(|| "root"), || Ok(root.into())).unwrap();
 
@@ -423,9 +419,9 @@ where
                 commitment: None,
             };
             let priv_inputs =
-                por::PrivateInputs::<DiskTree<PoseidonHasher<Fr>, U, V, W>> { leaf, tree: &tree };
+                por::PrivateInputs::<DiskTree<PoseidonHasher<F>, U, V, W>> { leaf, tree: &tree };
             let proof = PoR::prove(&pub_params, &pub_inputs, &priv_inputs).expect("proving failed");
-            let is_valid = PoR::<DiskTree<PoseidonHasher<Fr>, U, V, W>>::verify(
+            let is_valid = PoR::<DiskTree<PoseidonHasher<F>, U, V, W>>::verify(
                 &pub_params,
                 &pub_inputs,
                 &proof,
@@ -453,7 +449,7 @@ where
             })
             .collect();
 
-        let path_values: Vec<Vec<AllocatedNum<Fr>>> = proof
+        let path_values: Vec<Vec<AllocatedNum<F>>> = proof
             .path()
             .into_iter()
             .enumerate()
@@ -477,7 +473,7 @@ where
             })
             .collect();
 
-        por_no_challenge_input::<DiskTree<PoseidonHasher<Fr>, U, V, W>, _>(
+        por_no_challenge_input::<DiskTree<PoseidonHasher<F>, U, V, W>, _>(
             cs.namespace(|| format!("por (c_index={})", c_index)),
             c_bits,
             leaf,
@@ -495,29 +491,29 @@ where
 // Test non-compound tree.
 #[test]
 fn test_por_no_challenge_input_2kib_8_0_0() {
-    test_por_no_challenge_input::<U8, U0, U0>(1 << 6);
+    test_por_no_challenge_input::<Fr, U8, U0, U0>(1 << 6);
 }
 
 // Test compound base-sub tree with repeated arity.
 #[test]
 fn test_por_no_challenge_input_2kib_8_8_0() {
-    test_por_no_challenge_input::<U8, U8, U0>(1 << 6);
+    test_por_no_challenge_input::<Fr, U8, U8, U0>(1 << 6);
 }
 
 // Test compound base-sub tree.
 #[test]
 fn test_por_no_challenge_input_8kib_8_4_0() {
-    test_por_no_challenge_input::<U8, U4, U0>(1 << 8);
+    test_por_no_challenge_input::<Fr, U8, U4, U0>(1 << 8);
 }
 
 // Test compound base-sub tree.
 #[test]
 fn test_por_no_challenge_input_8kib_8_4_2() {
-    test_por_no_challenge_input::<U8, U4, U2>(1 << 9);
+    test_por_no_challenge_input::<Fr, U8, U4, U2>(1 << 9);
 }
 
 // Test compound base-sub-top tree with repeated arity.
 #[test]
 fn test_por_no_challenge_input_32kib_8_8_2() {
-    test_por_no_challenge_input::<U8, U8, U2>(1 << 10);
+    test_por_no_challenge_input::<Fr, U8, U8, U2>(1 << 10);
 }
