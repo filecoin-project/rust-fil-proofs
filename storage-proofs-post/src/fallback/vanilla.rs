@@ -152,12 +152,7 @@ impl<P: MerkleProofTrait> SectorProof<P> {
     #[allow(clippy::type_complexity)]
     pub fn as_options(
         &self,
-    ) -> Vec<
-        Vec<(
-            Vec<Option<<<P::Hasher as Hasher>::Domain as Domain>::Field>>,
-            Option<usize>,
-        )>,
-    > {
+    ) -> Vec<Vec<(Vec<Option<<P::Hasher as Hasher>::Field>>, Option<usize>)>> {
         self.inclusion_proofs
             .iter()
             .map(MerkleProofTrait::as_options)

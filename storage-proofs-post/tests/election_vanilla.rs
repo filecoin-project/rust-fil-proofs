@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use blstrs::Scalar as Fr;
 use filecoin_hashers::{
-    poseidon::{PoseidonDomain, PoseidonFunction, PoseidonHasher},
+    poseidon::{PoseidonDomain, PoseidonHasher},
     Domain, HashFunction, Hasher,
 };
 use generic_array::typenum::{U0, U2, U8};
@@ -42,9 +42,8 @@ fn test_election_post_poseidon_top_8_8_2() {
 fn test_election_post<Tree>()
 where
     Tree: 'static + MerkleTreeTrait,
-    // Ensure that `PoseidonDomain` and `PoseidonFunction` are defined for `Tree`'s field.
+    // Ensure that `PoseidonDomain` is defined for `Tree`'s field (required by `PoseidonFunction`).
     PoseidonDomain<Tree::Field>: Domain<Field = Tree::Field>,
-    PoseidonFunction<Tree::Field>: HashFunction<PoseidonDomain<Tree::Field>>,
 {
     let rng = &mut XorShiftRng::from_seed(TEST_SEED);
 

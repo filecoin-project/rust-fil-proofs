@@ -1,8 +1,9 @@
+use anyhow::anyhow;
 use bellperson::{gadgets::num::AllocatedNum, Circuit, ConstraintSystem, SynthesisError};
-use blstrs::Scalar as Fr;
 use ff::Field;
-use filecoin_hashers::{Groth16Hasher, Hasher};
+use filecoin_hashers::{Hasher, R1CSHasher};
 use rayon::prelude::{ParallelIterator, ParallelSlice};
+use sha2::{Digest, Sha256};
 use storage_proofs_core::{
     compound_proof::CircuitComponent,
     error::Result,
@@ -17,15 +18,17 @@ use storage_proofs_core::{
     util::NODE_SIZE,
 };
 
-use crate::fallback::{PublicParams, PublicSector, SectorProof};
+use crate::fallback::{
+    self as vanilla, generate_leaf_challenge_inner, PublicParams, PublicSector, SectorProof,
+};
 
 /// This is the `FallbackPoSt` circuit.
 pub struct FallbackPoStCircuit<Tree>
 where
-    Tree: MerkleTreeTrait<Field = Fr>,
-    Tree::Hasher: Groth16Hasher,
+    Tree: MerkleTreeTrait,
+    Tree::Hasher: R1CSHasher,
 {
-    pub prover_id: Option<Fr>,
+    pub prover_id: Option<Tree::Field>,
     pub sectors: Vec<Sector<Tree>>,
 }
 
@@ -35,8 +38,8 @@ where
 // Clone-able, therefore deriving Clone would impl Clone for less than all possible Tree types.
 impl<Tree> Clone for FallbackPoStCircuit<Tree>
 where
-    Tree: 'static + MerkleTreeTrait<Field = Fr>,
-    Tree::Hasher: Groth16Hasher,
+    Tree: MerkleTreeTrait,
+    Tree::Hasher: R1CSHasher,
 {
     fn clone(&self) -> Self {
         FallbackPoStCircuit {
@@ -48,23 +51,23 @@ where
 
 pub struct Sector<Tree>
 where
-    Tree: MerkleTreeTrait<Field = Fr>,
-    Tree::Hasher: Groth16Hasher,
+    Tree: MerkleTreeTrait,
+    Tree::Hasher: R1CSHasher,
 {
-    pub comm_r: Option<Fr>,
-    pub comm_c: Option<Fr>,
-    pub comm_r_last: Option<Fr>,
-    pub leafs: Vec<Option<Fr>>,
+    pub comm_r: Option<Tree::Field>,
+    pub comm_c: Option<Tree::Field>,
+    pub comm_r_last: Option<Tree::Field>,
+    pub leafs: Vec<Option<Tree::Field>>,
     pub paths: Vec<AuthPath<Tree::Hasher, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>>,
-    pub id: Option<Fr>,
+    pub id: Option<Tree::Field>,
 }
 
 // We must manually implement Clone for all types generic over MerkleTreeTrait (instead of using
 // #derive(Clone)).
 impl<Tree> Clone for Sector<Tree>
 where
-    Tree: MerkleTreeTrait<Field = Fr>,
-    Tree::Hasher: Groth16Hasher,
+    Tree: MerkleTreeTrait,
+    Tree::Hasher: R1CSHasher,
 {
     fn clone(&self) -> Self {
         Sector {
@@ -80,8 +83,8 @@ where
 
 impl<Tree> Sector<Tree>
 where
-    Tree: 'static + MerkleTreeTrait<Field = Fr>,
-    Tree::Hasher: Groth16Hasher,
+    Tree: MerkleTreeTrait,
+    Tree::Hasher: R1CSHasher,
 {
     pub fn circuit(
         sector: &PublicSector<<Tree::Hasher as Hasher>::Domain>,
@@ -101,7 +104,7 @@ where
 
         Ok(Sector {
             leafs,
-            id: Some(sector.id.into()),
+            id: Some(Tree::Field::from(sector.id.into())),
             comm_r: Some(sector.comm_r.into()),
             comm_c: Some(vanilla_proof.comm_c.into()),
             comm_r_last: Some(vanilla_proof.comm_r_last.into()),
@@ -131,12 +134,15 @@ where
     }
 }
 
-impl<Tree> Circuit<Fr> for &Sector<Tree>
+impl<Tree> Circuit<Tree::Field> for &Sector<Tree>
 where
-    Tree: 'static + MerkleTreeTrait<Field = Fr>,
-    Tree::Hasher: Groth16Hasher,
+    Tree: MerkleTreeTrait,
+    Tree::Hasher: R1CSHasher,
 {
-    fn synthesize<CS: ConstraintSystem<Fr>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
+    fn synthesize<CS>(self, cs: &mut CS) -> Result<(), SynthesisError>
+    where
+        CS: ConstraintSystem<Tree::Field>,
+    {
         let Sector {
             comm_r,
             comm_c,
@@ -206,18 +212,21 @@ pub struct ComponentPrivateInputs {}
 
 impl<Tree> CircuitComponent for FallbackPoStCircuit<Tree>
 where
-    Tree: MerkleTreeTrait<Field = Fr>,
-    Tree::Hasher: Groth16Hasher,
+    Tree: MerkleTreeTrait,
+    Tree::Hasher: R1CSHasher,
 {
     type ComponentPrivateInputs = ComponentPrivateInputs;
 }
 
-impl<Tree> Circuit<Fr> for FallbackPoStCircuit<Tree>
+impl<Tree> Circuit<Tree::Field> for FallbackPoStCircuit<Tree>
 where
-    Tree: 'static + MerkleTreeTrait<Field = Fr>,
-    Tree::Hasher: Groth16Hasher,
+    Tree: MerkleTreeTrait,
+    Tree::Hasher: R1CSHasher,
 {
-    fn synthesize<CS: ConstraintSystem<Fr>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
+    fn synthesize<CS>(self, cs: &mut CS) -> Result<(), SynthesisError>
+    where
+        CS: ConstraintSystem<Tree::Field>,
+    {
         if CS::is_extensible() {
             return self.synthesize_extendable(cs);
         }
@@ -228,10 +237,10 @@ where
 
 impl<Tree> FallbackPoStCircuit<Tree>
 where
-    Tree: 'static + MerkleTreeTrait<Field = Fr>,
-    Tree::Hasher: Groth16Hasher,
+    Tree: MerkleTreeTrait,
+    Tree::Hasher: R1CSHasher,
 {
-    fn synthesize_default<CS: ConstraintSystem<Fr>>(
+    fn synthesize_default<CS: ConstraintSystem<Tree::Field>>(
         self,
         cs: &mut CS,
     ) -> Result<(), SynthesisError> {
@@ -244,7 +253,7 @@ where
         Ok(())
     }
 
-    fn synthesize_extendable<CS: ConstraintSystem<Fr>>(
+    fn synthesize_extendable<CS: ConstraintSystem<Tree::Field>>(
         self,
         cs: &mut CS,
     ) -> Result<(), SynthesisError> {
@@ -257,7 +266,7 @@ where
             .par_chunks(chunk_size)
             .map(|sector_group| {
                 let mut cs = CS::new();
-                cs.alloc_input(|| "temp ONE", || Ok(Fr::one()))?;
+                cs.alloc_input(|| "temp ONE", || Ok(Tree::Field::one()))?;
 
                 for (i, sector) in sector_group.iter().enumerate() {
                     let mut cs = cs.namespace(|| format!("sector_{}", i));
@@ -273,5 +282,69 @@ where
         }
 
         Ok(())
+    }
+
+    pub fn generate_public_inputs(
+        pub_params: &vanilla::PublicParams,
+        pub_inputs: &vanilla::PublicInputs<<Tree::Hasher as Hasher>::Domain>,
+        partition_k: Option<usize>,
+    ) -> Result<Vec<Tree::Field>> {
+        let mut inputs = Vec::new();
+
+        let por_pub_params = por::PublicParams {
+            leaves: (pub_params.sector_size as usize / NODE_SIZE),
+            private: true,
+        };
+
+        let num_sectors_per_chunk = pub_params.sector_count;
+
+        let partition_index = partition_k.unwrap_or(0);
+
+        let sectors = pub_inputs
+            .sectors
+            .chunks(num_sectors_per_chunk)
+            .nth(partition_index)
+            .ok_or_else(|| anyhow!("invalid number of sectors/partition index"))?;
+
+        for (i, sector) in sectors.iter().enumerate() {
+            // 1. Inputs for verifying comm_r = H(comm_c || comm_r_last)
+            inputs.push(sector.comm_r.into());
+
+            // avoid rehashing fixed inputs
+            let mut challenge_hasher = Sha256::new();
+            challenge_hasher.update(AsRef::<[u8]>::as_ref(&pub_inputs.randomness));
+            challenge_hasher.update(&u64::from(sector.id).to_le_bytes()[..]);
+
+            // 2. Inputs for verifying inclusion paths
+            for n in 0..pub_params.challenge_count {
+                let challenge_index = ((partition_index * pub_params.sector_count + i)
+                    * pub_params.challenge_count
+                    + n) as u64;
+                let challenged_leaf = generate_leaf_challenge_inner::<
+                    <Tree::Hasher as Hasher>::Domain,
+                >(
+                    challenge_hasher.clone(), pub_params, challenge_index
+                );
+
+                let por_pub_inputs = por::PublicInputs {
+                    commitment: None,
+                    challenge: challenged_leaf as usize,
+                };
+                let por_inputs =
+                    PoRCircuit::<Tree>::generate_public_inputs(&por_pub_params, &por_pub_inputs)?;
+
+                inputs.extend(por_inputs);
+            }
+        }
+        let num_inputs_per_sector = inputs.len() / sectors.len();
+
+        // duplicate last one if too little sectors available
+        while inputs.len() / num_inputs_per_sector < num_sectors_per_chunk {
+            let s = inputs[inputs.len() - num_inputs_per_sector..].to_vec();
+            inputs.extend_from_slice(&s);
+        }
+        assert_eq!(inputs.len(), num_inputs_per_sector * num_sectors_per_chunk);
+
+        Ok(inputs)
     }
 }

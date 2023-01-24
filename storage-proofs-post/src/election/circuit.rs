@@ -1,32 +1,35 @@
 use std::marker::PhantomData;
 
 use bellperson::{gadgets::num::AllocatedNum, Circuit, ConstraintSystem, SynthesisError};
-use blstrs::Scalar as Fr;
-use ff::Field;
-use filecoin_hashers::{poseidon::PoseidonHasher, Groth16Hasher, PoseidonMDArity};
+use ff::{Field, PrimeField};
+use filecoin_hashers::{poseidon::PoseidonHasher, Hasher, PoseidonMDArity, R1CSHasher};
 use generic_array::typenum::Unsigned;
 use storage_proofs_core::{
     compound_proof::CircuitComponent,
     gadgets::{constraint, por::PoRCircuit, variables::Root},
     merkle::MerkleTreeTrait,
+    por,
+    util::NODE_SIZE,
 };
+
+use crate::election::{self as vanilla, generate_leaf_challenge};
 
 /// This is the `ElectionPoSt` circuit.
 pub struct ElectionPoStCircuit<Tree>
 where
-    Tree: MerkleTreeTrait<Field = Fr>,
-    Tree::Hasher: Groth16Hasher,
+    Tree: MerkleTreeTrait,
+    Tree::Hasher: R1CSHasher,
 {
-    pub comm_r: Option<Fr>,
-    pub comm_c: Option<Fr>,
-    pub comm_r_last: Option<Fr>,
-    pub leafs: Vec<Option<Fr>>,
+    pub comm_r: Option<Tree::Field>,
+    pub comm_c: Option<Tree::Field>,
+    pub comm_r_last: Option<Tree::Field>,
+    pub leafs: Vec<Option<Tree::Field>>,
     #[allow(clippy::type_complexity)]
-    pub paths: Vec<Vec<(Vec<Option<Fr>>, Option<usize>)>>,
-    pub partial_ticket: Option<Fr>,
-    pub randomness: Option<Fr>,
-    pub prover_id: Option<Fr>,
-    pub sector_id: Option<Fr>,
+    pub paths: Vec<Vec<(Vec<Option<Tree::Field>>, Option<usize>)>>,
+    pub partial_ticket: Option<Tree::Field>,
+    pub randomness: Option<Tree::Field>,
+    pub prover_id: Option<Tree::Field>,
+    pub sector_id: Option<Tree::Field>,
     pub _t: PhantomData<Tree>,
 }
 
@@ -35,18 +38,22 @@ pub struct ComponentPrivateInputs {}
 
 impl<Tree> CircuitComponent for ElectionPoStCircuit<Tree>
 where
-    Tree: MerkleTreeTrait<Field = Fr>,
-    Tree::Hasher: Groth16Hasher,
+    Tree: MerkleTreeTrait,
+    Tree::Hasher: R1CSHasher,
 {
     type ComponentPrivateInputs = ComponentPrivateInputs;
 }
 
-impl<Tree> Circuit<Fr> for ElectionPoStCircuit<Tree>
+impl<Tree> Circuit<Tree::Field> for ElectionPoStCircuit<Tree>
 where
-    Tree: MerkleTreeTrait<Field = Fr>,
-    Tree::Hasher: Groth16Hasher,
+    Tree: MerkleTreeTrait,
+    Tree::Hasher: R1CSHasher,
+    PoseidonHasher<Tree::Field>: R1CSHasher<Field = Tree::Field>,
 {
-    fn synthesize<CS: ConstraintSystem<Fr>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
+    fn synthesize<CS>(self, cs: &mut CS) -> Result<(), SynthesisError>
+    where
+        CS: ConstraintSystem<Tree::Field>,
+    {
         let comm_r = self.comm_r;
         let comm_c = self.comm_c;
         let comm_r_last = self.comm_r_last;
@@ -146,12 +153,12 @@ where
         while partial_ticket_nums.len() % arity != 0 {
             partial_ticket_nums.push(AllocatedNum::alloc(
                 cs.namespace(|| format!("padding_{}", partial_ticket_nums.len())),
-                || Ok(Fr::zero()),
+                || Ok(Tree::Field::zero()),
             )?);
         }
 
         // hash it
-        let partial_ticket_num = PoseidonHasher::<Fr>::hash_md_circuit::<_>(
+        let partial_ticket_num = PoseidonHasher::<Tree::Field>::hash_md_circuit::<_>(
             &mut cs.namespace(|| "partial_ticket_hash"),
             &partial_ticket_nums,
         )?;
@@ -175,5 +182,58 @@ where
         );
 
         Ok(())
+    }
+}
+
+impl<Tree> ElectionPoStCircuit<Tree>
+where
+    Tree: MerkleTreeTrait,
+    Tree::Hasher: R1CSHasher,
+{
+    pub fn generate_public_inputs(
+        pub_params: &vanilla::PublicParams,
+        pub_inputs: &vanilla::PublicInputs<<Tree::Hasher as Hasher>::Domain>,
+    ) -> storage_proofs_core::error::Result<Vec<Tree::Field>> {
+        let mut inputs = Vec::new();
+
+        let por_pub_params = por::PublicParams {
+            leaves: (pub_params.sector_size as usize / NODE_SIZE),
+            private: true,
+        };
+
+        // 1. Inputs for verifying comm_r = H(comm_c || comm_r_last)
+
+        inputs.push(pub_inputs.comm_r.into());
+
+        // 2. Inputs for verifying inclusion paths
+
+        for n in 0..pub_params.challenge_count {
+            let challenged_leaf_start = generate_leaf_challenge(
+                pub_params,
+                pub_inputs.randomness,
+                pub_inputs.sector_challenge_index,
+                n as u64,
+            )?;
+            for i in 0..pub_params.challenged_nodes {
+                let por_pub_inputs = por::PublicInputs {
+                    commitment: None,
+                    challenge: challenged_leaf_start as usize + i,
+                };
+                let por_inputs =
+                    PoRCircuit::<Tree>::generate_public_inputs(&por_pub_params, &por_pub_inputs)?;
+
+                inputs.extend(por_inputs);
+            }
+        }
+
+        // 3. Inputs for verifying partial_ticket generation
+        let partial_ticket = {
+            let mut repr = <Tree::Field as PrimeField>::Repr::default();
+            repr.as_mut().copy_from_slice(&pub_inputs.partial_ticket);
+            Tree::Field::from_repr_vartime(repr).expect("from_repr failure")
+        };
+        inputs.push(partial_ticket);
+
+        Ok(inputs)
     }
 }

@@ -4,20 +4,17 @@ use std::marker::PhantomData;
 use bellperson::{util_cs::test_cs::TestConstraintSystem, Circuit};
 use blstrs::Scalar as Fr;
 use ff::Field;
-use filecoin_hashers::{poseidon::PoseidonHasher, Domain, Groth16Hasher, HashFunction, Hasher};
+use filecoin_hashers::{poseidon::PoseidonHasher, Domain, HashFunction, Hasher, R1CSHasher};
 use rand::{Rng, SeedableRng};
 use rand_xorshift::XorShiftRng;
 use storage_proofs_core::{
-    compound_proof::CompoundProof,
     merkle::{generate_tree, get_base_tree_count, BinaryMerkleTree, MerkleTreeTrait},
     proof::ProofScheme,
     sector::OrderedSectorSet,
     util::NODE_SIZE,
     TEST_SEED,
 };
-use storage_proofs_post::rational::{
-    self, derive_challenges, RationalPoSt, RationalPoStCircuit, RationalPoStCompound,
-};
+use storage_proofs_post::rational::{self, derive_challenges, RationalPoSt, RationalPoStCircuit};
 use tempfile::tempdir;
 
 #[test]
@@ -27,8 +24,8 @@ fn test_rational_post_circuit_poseidon() {
 
 fn test_rational_post_circuit<Tree>(expected_constraints: usize)
 where
-    Tree: 'static + MerkleTreeTrait<Field = Fr>,
-    Tree::Hasher: Groth16Hasher,
+    Tree: 'static + MerkleTreeTrait,
+    Tree::Hasher: R1CSHasher,
 {
     let rng = &mut XorShiftRng::from_seed(TEST_SEED);
 
@@ -113,7 +110,7 @@ where
         .collect();
     let leafs: Vec<_> = proof.leafs().iter().map(|l| Some((*l).into())).collect();
 
-    let mut cs = TestConstraintSystem::<Fr>::new();
+    let mut cs = TestConstraintSystem::<Tree::Field>::new();
 
     let instance = RationalPoStCircuit::<Tree> {
         leafs,
@@ -136,11 +133,10 @@ where
         expected_constraints,
         "wrong number of constraints"
     );
-    assert_eq!(cs.get_input(0, "ONE"), Fr::one());
+    assert_eq!(cs.get_input(0, "ONE"), Tree::Field::one());
 
     let generated_inputs =
-        RationalPoStCompound::<Tree>::generate_public_inputs(&pub_inputs, &pub_params, None)
-            .unwrap();
+        RationalPoStCircuit::<Tree>::generate_public_inputs(&pub_params, &pub_inputs).unwrap();
     let expected_inputs = cs.get_inputs();
 
     for ((input, label), generated_input) in

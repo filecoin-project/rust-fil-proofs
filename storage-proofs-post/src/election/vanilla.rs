@@ -168,9 +168,8 @@ pub fn generate_candidates<Tree>(
 ) -> Result<Vec<Candidate>>
 where
     Tree: MerkleTreeTrait,
-    // Ensure that `PoseidonDomain` and `PoseidonFunction` are defined for `Tree`'s field.
+    // Ensure that `PoseidonDomain` is defined over `Tree::Field` (required by `PoseidonFunction`).
     PoseidonDomain<Tree::Field>: Domain<Field = Tree::Field>,
-    PoseidonFunction<Tree::Field>: HashFunction<PoseidonDomain<Tree::Field>>,
 {
     challenged_sectors
         .par_iter()
@@ -209,9 +208,8 @@ fn generate_candidate<Tree>(
 ) -> Result<Candidate>
 where
     Tree: MerkleTreeTrait,
-    // Ensure that `PoseidonDomain` and `PoseidonFunction` are defined for `Tree`'s field.
+    // Ensure that `PoseidonDomain` is defined over `Tree::Field` (required by `PoseidonFunction`).
     PoseidonDomain<Tree::Field>: Domain<Field = Tree::Field>,
-    PoseidonFunction<Tree::Field>: HashFunction<PoseidonDomain<Tree::Field>>,
 {
     let randomness_fr: Tree::Field = randomness.into();
     let prover_id_fr: Tree::Field = prover_id.into();

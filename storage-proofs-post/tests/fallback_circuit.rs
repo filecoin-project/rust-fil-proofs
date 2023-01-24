@@ -4,7 +4,7 @@ use bellperson::{
 };
 use blstrs::Scalar as Fr;
 use ff::Field;
-use filecoin_hashers::{poseidon::PoseidonHasher, Domain, Groth16Hasher, HashFunction, Hasher};
+use filecoin_hashers::{poseidon::PoseidonHasher, Domain, HashFunction, Hasher, R1CSHasher};
 use generic_array::typenum::{U0, U2, U4, U8};
 use rand::SeedableRng;
 use rand_xorshift::XorShiftRng;
@@ -60,8 +60,8 @@ fn test_fallback_post<Tree>(
     expected_num_inputs: usize,
     expected_constraints: usize,
 ) where
-    Tree: 'static + MerkleTreeTrait<Field = Fr>,
-    Tree::Hasher: Groth16Hasher,
+    Tree: 'static + MerkleTreeTrait,
+    Tree::Hasher: R1CSHasher,
 {
     let rng = &mut XorShiftRng::from_seed(TEST_SEED);
 
@@ -153,7 +153,7 @@ fn test_fallback_post<Tree>(
             .collect::<Result<_>>()
             .expect("circuit sectors failure");
 
-        let mut cs = TestConstraintSystem::<Fr>::new();
+        let mut cs = TestConstraintSystem::<Tree::Field>::new();
 
         let instance = FallbackPoStCircuit::<Tree> {
             sectors: circuit_sectors,
@@ -176,10 +176,10 @@ fn test_fallback_post<Tree>(
             expected_constraints,
             "wrong number of constraints"
         );
-        assert_eq!(cs.get_input(0, "ONE"), Fr::one());
+        assert_eq!(cs.get_input(0, "ONE"), Tree::Field::one());
 
         let generated_inputs =
-            FallbackPoStCompound::<Tree>::generate_public_inputs(&pub_inputs, &pub_params, Some(j))
+            FallbackPoStCircuit::<Tree>::generate_public_inputs(&pub_params, &pub_inputs, Some(j))
                 .expect("generate_public_inputs failure");
         let expected_inputs = cs.get_inputs();
 

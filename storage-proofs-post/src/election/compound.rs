@@ -3,92 +3,55 @@ use std::marker::PhantomData;
 use bellperson::Circuit;
 use blstrs::Scalar as Fr;
 use ff::PrimeField;
-use filecoin_hashers::Groth16Hasher;
+use filecoin_hashers::R1CSHasher;
 use generic_array::typenum::Unsigned;
 use storage_proofs_core::{
     compound_proof::{CircuitComponent, CompoundProof},
     drgraph::graph_height,
     error::Result,
-    gadgets::por::PoRCompound,
     merkle::MerkleTreeTrait,
     parameter_cache::{CacheableParameters, ParameterSetMetadata},
-    por,
     proof::ProofScheme,
     util::NODE_SIZE,
 };
 
-use crate::election::{generate_leaf_challenge, ElectionPoSt, ElectionPoStCircuit};
+use crate::election::{ElectionPoSt, ElectionPoStCircuit};
 
 pub struct ElectionPoStCompound<Tree>
 where
-    Tree: MerkleTreeTrait<Field = Fr>,
-    Tree::Hasher: Groth16Hasher,
+    Tree: MerkleTreeTrait,
+    Tree::Hasher: R1CSHasher,
 {
     _t: PhantomData<Tree>,
 }
 
+// Only implement for `Fr` as `CacheableParameters` is Groth16 specific.
 impl<C, P, Tree> CacheableParameters<C, P> for ElectionPoStCompound<Tree>
 where
     C: Circuit<Fr>,
     P: ParameterSetMetadata,
     Tree: MerkleTreeTrait<Field = Fr>,
-    Tree::Hasher: Groth16Hasher,
+    Tree::Hasher: R1CSHasher,
 {
     fn cache_prefix() -> String {
         format!("proof-of-spacetime-election-{}", Tree::display())
     }
 }
 
+// Only implement for `Fr` as `CompoundProof` is Groth16 specific.
 impl<'a, Tree> CompoundProof<'a, ElectionPoSt<'a, Tree>, ElectionPoStCircuit<Tree>>
     for ElectionPoStCompound<Tree>
 where
     Tree: 'static + MerkleTreeTrait<Field = Fr>,
-    Tree::Hasher: Groth16Hasher,
+    Tree::Hasher: R1CSHasher,
 {
+    #[inline]
     fn generate_public_inputs(
         pub_inputs: &<ElectionPoSt<'a, Tree> as ProofScheme<'a>>::PublicInputs,
         pub_params: &<ElectionPoSt<'a, Tree> as ProofScheme<'a>>::PublicParams,
         _partition_k: Option<usize>,
     ) -> Result<Vec<Fr>> {
-        let mut inputs = Vec::new();
-
-        let por_pub_params = por::PublicParams {
-            leaves: (pub_params.sector_size as usize / NODE_SIZE),
-            private: true,
-        };
-
-        // 1. Inputs for verifying comm_r = H(comm_c || comm_r_last)
-
-        inputs.push(pub_inputs.comm_r.into());
-
-        // 2. Inputs for verifying inclusion paths
-
-        for n in 0..pub_params.challenge_count {
-            let challenged_leaf_start = generate_leaf_challenge(
-                pub_params,
-                pub_inputs.randomness,
-                pub_inputs.sector_challenge_index,
-                n as u64,
-            )?;
-            for i in 0..pub_params.challenged_nodes {
-                let por_pub_inputs = por::PublicInputs {
-                    commitment: None,
-                    challenge: challenged_leaf_start as usize + i,
-                };
-                let por_inputs = PoRCompound::<Tree>::generate_public_inputs(
-                    &por_pub_inputs,
-                    &por_pub_params,
-                    None,
-                )?;
-
-                inputs.extend(por_inputs);
-            }
-        }
-
-        // 3. Inputs for verifying partial_ticket generation
-        inputs.push(Fr::from_repr_vartime(pub_inputs.partial_ticket).expect("from_repr failure"));
-
-        Ok(inputs)
+        ElectionPoStCircuit::<Tree>::generate_public_inputs(pub_params, pub_inputs)
     }
 
     fn circuit(

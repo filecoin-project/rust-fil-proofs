@@ -1,18 +1,15 @@
 use std::marker::PhantomData;
 
-use anyhow::ensure;
 use bellperson::{Circuit, ConstraintSystem, SynthesisError};
 use blstrs::Scalar as Fr;
-use filecoin_hashers::Groth16Hasher;
+use filecoin_hashers::R1CSHasher;
 use generic_array::typenum::U2;
 use storage_proofs_core::{
     compound_proof::{CircuitComponent, CompoundProof},
     drgraph::graph_height,
     error::Result,
-    gadgets::por::PoRCompound,
     merkle::MerkleTreeTrait,
     parameter_cache::{CacheableParameters, ParameterSetMetadata},
-    por,
     proof::ProofScheme,
     util::NODE_SIZE,
 };
@@ -21,64 +18,39 @@ use crate::rational::{RationalPoSt, RationalPoStCircuit};
 
 pub struct RationalPoStCompound<Tree>
 where
-    Tree: MerkleTreeTrait<Field = Fr>,
-    Tree::Hasher: Groth16Hasher,
+    Tree: MerkleTreeTrait,
+    Tree::Hasher: R1CSHasher,
 {
     _t: PhantomData<Tree>,
 }
 
+// Only implement for `Fr` as `CacheableParameters` is Groth16 specific.
 impl<C, P, Tree> CacheableParameters<C, P> for RationalPoStCompound<Tree>
 where
     C: Circuit<Fr>,
     P: ParameterSetMetadata,
     Tree: MerkleTreeTrait<Field = Fr>,
-    Tree::Hasher: Groth16Hasher,
+    Tree::Hasher: R1CSHasher,
 {
     fn cache_prefix() -> String {
         format!("proof-of-spacetime-rational-{}", Tree::display())
     }
 }
 
+// Only implement for `Fr` as `CompoundProof` is Groth16 specific.
 impl<'a, Tree> CompoundProof<'a, RationalPoSt<'a, Tree>, RationalPoStCircuit<Tree>>
     for RationalPoStCompound<Tree>
 where
     Tree: 'static + MerkleTreeTrait<Field = Fr>,
-    Tree::Hasher: Groth16Hasher,
+    Tree::Hasher: R1CSHasher,
 {
+    #[inline]
     fn generate_public_inputs(
         pub_in: &<RationalPoSt<'a, Tree> as ProofScheme<'a>>::PublicInputs,
         pub_params: &<RationalPoSt<'a, Tree> as ProofScheme<'a>>::PublicParams,
         _partition_k: Option<usize>,
     ) -> Result<Vec<Fr>> {
-        let mut inputs = Vec::new();
-
-        let por_pub_params = por::PublicParams {
-            leaves: (pub_params.sector_size as usize / NODE_SIZE),
-            private: true,
-        };
-
-        ensure!(
-            pub_in.challenges.len() == pub_in.comm_rs.len(),
-            "Missmatch in challenges and comm_rs"
-        );
-
-        for (challenge, comm_r) in pub_in.challenges.iter().zip(pub_in.comm_rs.iter()) {
-            inputs.push((*comm_r).into());
-
-            let por_pub_inputs = por::PublicInputs {
-                commitment: None,
-                challenge: challenge.leaf as usize,
-            };
-            let por_inputs = PoRCompound::<Tree>::generate_public_inputs(
-                &por_pub_inputs,
-                &por_pub_params,
-                None,
-            )?;
-
-            inputs.extend(por_inputs);
-        }
-
-        Ok(inputs)
+        RationalPoStCircuit::<Tree>::generate_public_inputs(pub_params, pub_in)
     }
 
     fn circuit(
@@ -157,17 +129,17 @@ where
 
 impl<Tree> RationalPoStCircuit<Tree>
 where
-    Tree: 'static + MerkleTreeTrait<Field = Fr>,
-    Tree::Hasher: Groth16Hasher,
+    Tree: MerkleTreeTrait,
+    Tree::Hasher: R1CSHasher,
 {
     #[allow(clippy::type_complexity)]
-    pub fn synthesize<CS: ConstraintSystem<Fr>>(
+    pub fn synthesize<CS: ConstraintSystem<Tree::Field>>(
         cs: &mut CS,
-        leafs: Vec<Option<Fr>>,
-        comm_rs: Vec<Option<Fr>>,
-        comm_cs: Vec<Option<Fr>>,
-        comm_r_lasts: Vec<Option<Fr>>,
-        paths: Vec<Vec<(Vec<Option<Fr>>, Option<usize>)>>,
+        leafs: Vec<Option<Tree::Field>>,
+        comm_rs: Vec<Option<Tree::Field>>,
+        comm_cs: Vec<Option<Tree::Field>>,
+        comm_r_lasts: Vec<Option<Tree::Field>>,
+        paths: Vec<Vec<(Vec<Option<Tree::Field>>, Option<usize>)>>,
     ) -> Result<(), SynthesisError> {
         Self {
             leafs,

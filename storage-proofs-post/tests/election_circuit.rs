@@ -4,21 +4,21 @@ use std::marker::PhantomData;
 use bellperson::{util_cs::test_cs::TestConstraintSystem, Circuit};
 use blstrs::Scalar as Fr;
 use ff::{Field, PrimeField};
-use filecoin_hashers::{poseidon::PoseidonHasher, Domain, Groth16Hasher, HashFunction, Hasher};
+use filecoin_hashers::{
+    poseidon::{PoseidonDomain, PoseidonHasher},
+    Domain, HashFunction, Hasher, R1CSHasher,
+};
 use generic_array::typenum::{U0, U8};
 use rand::SeedableRng;
 use rand_xorshift::XorShiftRng;
 use storage_proofs_core::{
-    compound_proof::CompoundProof,
     merkle::{generate_tree, get_base_tree_count, LCTree, MerkleTreeTrait},
     proof::ProofScheme,
     sector::SectorId,
     util::NODE_SIZE,
     TEST_SEED,
 };
-use storage_proofs_post::election::{
-    self, generate_candidates, ElectionPoSt, ElectionPoStCircuit, ElectionPoStCompound,
-};
+use storage_proofs_post::election::{self, generate_candidates, ElectionPoSt, ElectionPoStCircuit};
 use tempfile::tempdir;
 
 #[test]
@@ -28,8 +28,11 @@ fn test_election_post_circuit_poseidon() {
 
 fn test_election_post_circuit<Tree>(expected_constraints: usize)
 where
-    Tree: 'static + MerkleTreeTrait<Field = Fr>,
-    Tree::Hasher: Groth16Hasher,
+    Tree: 'static + MerkleTreeTrait,
+    Tree::Hasher: R1CSHasher,
+    PoseidonHasher<Tree::Field>: R1CSHasher<Field = Tree::Field>,
+    // Ensure that `PoseidonDomain` is defined for `Tree`'s field (required by `PoseidonFunction`).
+    PoseidonDomain<Tree::Field>: Domain<Field = Tree::Field>,
 {
     let rng = &mut XorShiftRng::from_seed(TEST_SEED);
 
@@ -106,7 +109,13 @@ where
         .collect();
     let leafs: Vec<_> = proof.leafs().iter().map(|l| Some((*l).into())).collect();
 
-    let mut cs = TestConstraintSystem::<Fr>::new();
+    let partial_ticket = {
+        let mut repr = <Tree::Field as PrimeField>::Repr::default();
+        repr.as_mut().copy_from_slice(&candidate.partial_ticket);
+        Tree::Field::from_repr_vartime(repr).expect("from_repr failure")
+    };
+
+    let mut cs = TestConstraintSystem::<Tree::Field>::new();
 
     let instance = ElectionPoStCircuit::<Tree> {
         leafs,
@@ -114,12 +123,10 @@ where
         comm_r: Some(comm_r.into()),
         comm_c: Some(comm_c.into()),
         comm_r_last: Some(comm_r_last.into()),
-        partial_ticket: Some(
-            Fr::from_repr_vartime(candidate.partial_ticket).expect("from_repr failure"),
-        ),
+        partial_ticket: Some(partial_ticket),
         randomness: Some(randomness.into()),
         prover_id: Some(prover_id.into()),
-        sector_id: Some(candidate.sector_id.into()),
+        sector_id: Some(Tree::Field::from(candidate.sector_id.into())),
         _t: PhantomData,
     };
 
@@ -135,11 +142,10 @@ where
         expected_constraints,
         "wrong number of constraints"
     );
-    assert_eq!(cs.get_input(0, "ONE"), Fr::one());
+    assert_eq!(cs.get_input(0, "ONE"), Tree::Field::one());
 
     let generated_inputs =
-        ElectionPoStCompound::<Tree>::generate_public_inputs(&pub_inputs, &pub_params, None)
-            .unwrap();
+        ElectionPoStCircuit::<Tree>::generate_public_inputs(&pub_params, &pub_inputs).unwrap();
     let expected_inputs = cs.get_inputs();
 
     for ((input, label), generated_input) in
