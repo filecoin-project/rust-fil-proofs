@@ -480,6 +480,17 @@ commands:
           name: "Restore parameter cache"
           key: proof-params-v28-n-{{ checksum "os.txt" }}-{{ checksum "filecoin-proofs/parameters.json" }}
 
+  docs:
+    environment: *setup-env
+    steps:
+      - checkout
+      - attach_workspace:
+          at: "."
+      - restore_rustup_cache
+      - run:
+          name: Documentation tests
+          command: cargo test --doc
+
 workflows:
   version: 2.1
   test_all:
@@ -668,3 +679,7 @@ workflows:
           requires:
             - cargo_fetch
             - ensure_parameters_and_keys_linux
+
+      - docs:
+          requires:
+            - cargo_fetch
