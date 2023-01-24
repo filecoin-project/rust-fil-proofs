@@ -4,7 +4,8 @@ use bellperson::{
     gadgets::{boolean::Boolean, num::AllocatedNum, uint32::UInt32},
     ConstraintSystem, SynthesisError,
 };
-use filecoin_hashers::{Groth16Hasher, PoseidonArity};
+use ff::PrimeFieldBits;
+use filecoin_hashers::{PoseidonArity, R1CSHasher};
 use generic_array::typenum::{U0, U2};
 use storage_proofs_core::{
     drgraph::Graph,
@@ -40,9 +41,9 @@ type TreeColumnProof<T> = ColumnProof<
 pub struct Proof<Tree, G>
 where
     Tree: MerkleTreeTrait,
-    Tree::Hasher: Groth16Hasher,
-    G: Groth16Hasher<Field = Tree::Field>,
-    G::Field: ff::PrimeFieldBits,
+    Tree::Hasher: R1CSHasher,
+    Tree::Field: PrimeFieldBits,
+    G: R1CSHasher<Field = Tree::Field>,
 {
     /// Inclusion path for the challenged data node in tree D.
     pub comm_d_path: AuthPath<G, U2, U0, U0>,
@@ -68,9 +69,9 @@ where
 impl<Tree, G> Clone for Proof<Tree, G>
 where
     Tree: MerkleTreeTrait,
-    Tree::Hasher: Groth16Hasher,
-    G: 'static + Groth16Hasher<Field = Tree::Field>,
-    G::Field: ff::PrimeFieldBits,
+    Tree::Hasher: R1CSHasher,
+    Tree::Field: PrimeFieldBits,
+    G: 'static + R1CSHasher<Field = Tree::Field>,
 {
     fn clone(&self) -> Self {
         Proof {
@@ -89,9 +90,9 @@ where
 impl<Tree, G> Proof<Tree, G>
 where
     Tree: MerkleTreeTrait,
-    Tree::Hasher: Groth16Hasher,
-    G: 'static + Groth16Hasher<Field = Tree::Field>,
-    G::Field: ff::PrimeFieldBits,
+    Tree::Hasher: R1CSHasher,
+    Tree::Field: PrimeFieldBits,
+    G: 'static + R1CSHasher<Field = Tree::Field>,
 {
     /// Create an empty proof, used in `blank_circuit`s.
     pub fn empty(params: &PublicParams<Tree>) -> Self {
@@ -298,9 +299,9 @@ where
 impl<Tree, G> From<VanillaProof<Tree, G>> for Proof<Tree, G>
 where
     Tree: MerkleTreeTrait,
-    Tree::Hasher: 'static + Groth16Hasher,
-    G: Groth16Hasher<Field = Tree::Field>,
-    G::Field: ff::PrimeFieldBits,
+    Tree::Hasher: 'static + R1CSHasher,
+    Tree::Field: PrimeFieldBits,
+    G: R1CSHasher<Field = Tree::Field>,
 {
     fn from(vanilla_proof: VanillaProof<Tree, G>) -> Self {
         let VanillaProof {
@@ -339,8 +340,7 @@ fn enforce_inclusion<H, U, V, W, CS>(
     leaf: &AllocatedNum<H::Field>,
 ) -> Result<(), SynthesisError>
 where
-    H: 'static + Groth16Hasher,
-    H::Field: ff::PrimeFieldBits,
+    H: 'static + R1CSHasher,
     U: PoseidonArity<H::Field>,
     V: PoseidonArity<H::Field>,
     W: PoseidonArity<H::Field>,

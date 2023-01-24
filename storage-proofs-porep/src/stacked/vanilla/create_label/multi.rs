@@ -305,7 +305,7 @@ fn create_layer_labels(
         // Fix endianess
         cur_node_ptr[..8].iter_mut().for_each(|x| *x = x.to_be());
 
-        cur_node_ptr[7] &= 0x3FFF_FFFF; // Strip last two bits to ensure in Fr
+        cur_node_ptr[7] &= 0x3FFF_FFFF; // Strip last two bits to ensure in F
 
         // Keep track of which node slot in the ring_buffer to use
         let mut cur_slot = 0;
@@ -411,7 +411,7 @@ fn create_layer_labels(
                 // Fix endianess
                 cur_node_ptr[..8].iter_mut().for_each(|x| *x = x.to_be());
 
-                cur_node_ptr[7] &= 0x3FFF_FFFF; // Strip last two bits to fit in Fr
+                cur_node_ptr[7] &= 0x3FFF_FFFF; // Strip last two bits to fit in F
 
                 // Safety:
                 // It's possible that this increment will trigger moving the cache window.

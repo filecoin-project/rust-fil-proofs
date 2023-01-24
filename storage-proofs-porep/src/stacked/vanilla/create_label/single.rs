@@ -201,7 +201,7 @@ pub fn create_label<H: Hasher, T: AsRef<[u8]>>(
     let end = start + NODE_SIZE;
     layer_labels[start..end].copy_from_slice(&hash[..]);
 
-    // strip last two bits, to ensure result is in Fr.
+    // strip last two bits, to ensure result is in F.
     layer_labels[end - 1] &= 0b0011_1111;
 
     Ok(())
@@ -239,7 +239,7 @@ pub fn create_label_exp<H: Hasher, T: AsRef<[u8]>>(
     let end = start + NODE_SIZE;
     layer_labels[start..end].copy_from_slice(&hash[..]);
 
-    // strip last two bits, to ensure result is in Fr.
+    // strip last two bits, to ensure result is in F.
     layer_labels[end - 1] &= 0b0011_1111;
 
     Ok(())

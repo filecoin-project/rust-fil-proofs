@@ -33,7 +33,7 @@ mod tests {
     use bellperson::util_cs::test_cs::TestConstraintSystem;
     use blstrs::Scalar as Fr;
     use ff::Field;
-    use filecoin_hashers::{poseidon::PoseidonHasher, Groth16Hasher, HashFunction, Hasher};
+    use filecoin_hashers::{poseidon::PoseidonHasher, HashFunction, Hasher, R1CSHasher};
     use rand::SeedableRng;
     use rand_xorshift::XorShiftRng;
     use storage_proofs_core::TEST_SEED;

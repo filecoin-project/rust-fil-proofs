@@ -1,5 +1,5 @@
 use bellperson::{ConstraintSystem, SynthesisError};
-use filecoin_hashers::{Groth16Hasher, Hasher, PoseidonArity};
+use filecoin_hashers::{PoseidonArity, R1CSHasher};
 use storage_proofs_core::{
     drgraph::Graph,
     gadgets::por::AuthPath,
@@ -14,8 +14,7 @@ use crate::stacked::{
 #[derive(Debug, Clone)]
 pub struct ColumnProof<H, U, V, W>
 where
-    H: Groth16Hasher,
-    H::Field: ff::PrimeFieldBits,
+    H: R1CSHasher,
     U: PoseidonArity<H::Field>,
     V: PoseidonArity<H::Field>,
     W: PoseidonArity<H::Field>,
@@ -26,8 +25,7 @@ where
 
 impl<H, U, V, W> ColumnProof<H, U, V, W>
 where
-    H: 'static + Groth16Hasher,
-    H::Field: ff::PrimeFieldBits,
+    H: 'static + R1CSHasher,
     U: PoseidonArity<H::Field>,
     V: PoseidonArity<H::Field>,
     W: PoseidonArity<H::Field>,
@@ -65,8 +63,7 @@ impl<Proof> From<VanillaColumnProof<Proof>>
     for ColumnProof<Proof::Hasher, Proof::Arity, Proof::SubTreeArity, Proof::TopTreeArity>
 where
     Proof: MerkleProofTrait,
-    Proof::Hasher: Groth16Hasher,
-    <Proof::Hasher as Hasher>::Field: ff::PrimeFieldBits,
+    Proof::Hasher: R1CSHasher,
 {
     fn from(vanilla_proof: VanillaColumnProof<Proof>) -> Self {
         let VanillaColumnProof {

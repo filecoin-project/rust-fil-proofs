@@ -60,7 +60,7 @@ where
     // Compute Sha256
     let alloc_bits = sha256_circuit(cs.namespace(|| "hash"), &ciphertexts[..])?;
 
-    // Convert the hash result into a single Fr.
+    // Convert the hash result into a single F.
     let bits = reverse_bit_numbering(alloc_bits);
     multipack::pack_bits(
         cs.namespace(|| "result_num"),

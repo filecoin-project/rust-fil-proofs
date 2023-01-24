@@ -3,13 +3,13 @@ use std::marker::PhantomData;
 use anyhow::ensure;
 use bellperson::{gadgets::num::AllocatedNum, Circuit, ConstraintSystem, SynthesisError};
 use blstrs::Scalar as Fr;
-use filecoin_hashers::{Groth16Hasher, Hasher};
-use fr32::u64_into_fr;
+use ff::PrimeFieldBits;
+use filecoin_hashers::{Hasher, R1CSHasher};
 use storage_proofs_core::{
     compound_proof::{CircuitComponent, CompoundProof},
     drgraph::Graph,
     error::Result,
-    gadgets::{constraint, por::PoRCompound},
+    gadgets::{constraint, por::PoRCircuit},
     merkle::{BinaryMerkleTree, MerkleTreeTrait},
     parameter_cache::{CacheableParameters, ParameterSetMetadata},
     por::{self, PoR},
@@ -17,7 +17,7 @@ use storage_proofs_core::{
     util::reverse_bit_numbering,
 };
 
-use crate::stacked::{circuit::params::Proof, StackedDrg};
+use crate::stacked::{self as vanilla, circuit::params::Proof, StackedDrg};
 
 /// Stacked DRG based Proof of Replication.
 ///
@@ -28,19 +28,19 @@ use crate::stacked::{circuit::params::Proof, StackedDrg};
 pub struct StackedCircuit<'a, Tree, G>
 where
     Tree: 'static + MerkleTreeTrait,
-    Tree::Hasher: Groth16Hasher,
-    <Tree::Hasher as Hasher>::Field: ff::PrimeFieldBits,
-    G: 'static + Groth16Hasher<Field = Tree::Field>,
+    Tree::Hasher: R1CSHasher,
+    Tree::Field: PrimeFieldBits,
+    G: 'static + R1CSHasher<Field = Tree::Field>,
 {
-    public_params: <StackedDrg<'a, Tree, G> as ProofScheme<'a>>::PublicParams,
-    replica_id: Option<<Tree::Hasher as Hasher>::Domain>,
-    comm_d: Option<G::Domain>,
-    comm_r: Option<<Tree::Hasher as Hasher>::Domain>,
-    comm_r_last: Option<<Tree::Hasher as Hasher>::Domain>,
-    comm_c: Option<<Tree::Hasher as Hasher>::Domain>,
+    pub public_params: <StackedDrg<'a, Tree, G> as ProofScheme<'a>>::PublicParams,
+    pub replica_id: Option<<Tree::Hasher as Hasher>::Domain>,
+    pub comm_d: Option<G::Domain>,
+    pub comm_r: Option<<Tree::Hasher as Hasher>::Domain>,
+    pub comm_r_last: Option<<Tree::Hasher as Hasher>::Domain>,
+    pub comm_c: Option<<Tree::Hasher as Hasher>::Domain>,
 
     // one proof per challenge
-    proofs: Vec<Proof<Tree, G>>,
+    pub proofs: Vec<Proof<Tree, G>>,
 }
 
 // We must manually implement Clone for all types generic over MerkleTreeTrait (instead of using
@@ -50,9 +50,9 @@ where
 impl<'a, Tree, G> Clone for StackedCircuit<'a, Tree, G>
 where
     Tree: MerkleTreeTrait,
-    Tree::Hasher: Groth16Hasher,
-    <Tree::Hasher as Hasher>::Field: ff::PrimeFieldBits,
-    G: Groth16Hasher<Field = Tree::Field>,
+    Tree::Hasher: R1CSHasher,
+    Tree::Field: PrimeFieldBits,
+    G: R1CSHasher<Field = Tree::Field>,
 {
     fn clone(&self) -> Self {
         StackedCircuit {
@@ -70,9 +70,9 @@ where
 impl<'a, Tree, G> CircuitComponent for StackedCircuit<'a, Tree, G>
 where
     Tree: MerkleTreeTrait,
-    Tree::Hasher: Groth16Hasher,
-    <Tree::Hasher as Hasher>::Field: ff::PrimeFieldBits,
-    G: Groth16Hasher<Field = Tree::Field>,
+    Tree::Hasher: R1CSHasher,
+    Tree::Field: PrimeFieldBits,
+    G: R1CSHasher<Field = Tree::Field>,
 {
     type ComponentPrivateInputs = ();
 }
@@ -80,9 +80,9 @@ where
 impl<'a, Tree, G> StackedCircuit<'a, Tree, G>
 where
     Tree: 'static + MerkleTreeTrait,
-    Tree::Hasher: Groth16Hasher,
-    <Tree::Hasher as Hasher>::Field: ff::PrimeFieldBits,
-    G: 'static + Groth16Hasher<Field = Tree::Field>,
+    Tree::Hasher: R1CSHasher,
+    Tree::Field: PrimeFieldBits,
+    G: 'static + R1CSHasher<Field = Tree::Field>,
 {
     #[allow(clippy::too_many_arguments)]
     pub fn synthesize<CS>(
@@ -110,14 +110,85 @@ where
 
         circuit.synthesize(&mut cs)
     }
+
+    pub fn generate_public_inputs(
+        pub_params: &vanilla::PublicParams<Tree>,
+        pub_inputs: &vanilla::PublicInputs<<Tree::Hasher as Hasher>::Domain, <G as Hasher>::Domain>,
+        k: Option<usize>,
+    ) -> Result<Vec<Tree::Field>> {
+        let graph = &pub_params.graph;
+
+        let mut inputs = Vec::new();
+
+        let replica_id = pub_inputs.replica_id;
+        inputs.push(replica_id.into());
+
+        let comm_d = pub_inputs.tau.as_ref().expect("missing tau").comm_d;
+        inputs.push(comm_d.into());
+
+        let comm_r = pub_inputs.tau.as_ref().expect("missing tau").comm_r;
+        inputs.push(comm_r.into());
+
+        let por_setup_params = por::SetupParams {
+            leaves: graph.size(),
+            private: true,
+        };
+
+        let por_params = PoR::<Tree>::setup(&por_setup_params)?;
+        let por_params_d = PoR::<BinaryMerkleTree<G>>::setup(&por_setup_params)?;
+
+        let all_challenges = pub_inputs.challenges(&pub_params.layer_challenges, graph.size(), k);
+
+        for challenge in all_challenges.into_iter() {
+            // comm_d inclusion proof for the data leaf
+            inputs.extend(generate_inclusion_inputs::<BinaryMerkleTree<G>>(
+                &por_params_d,
+                challenge,
+            )?);
+
+            // drg parents
+            let mut drg_parents = vec![0; graph.base_graph().degree()];
+            graph.base_graph().parents(challenge, &mut drg_parents)?;
+
+            // Inclusion Proofs: drg parent node in comm_c
+            for parent in drg_parents.into_iter() {
+                inputs.extend(generate_inclusion_inputs::<Tree>(
+                    &por_params,
+                    parent as usize,
+                )?);
+            }
+
+            // exp parents
+            let mut exp_parents = vec![0; graph.expansion_degree()];
+            graph.expanded_parents(challenge, &mut exp_parents)?;
+
+            // Inclusion Proofs: expander parent node in comm_c
+            for parent in exp_parents.into_iter() {
+                inputs.extend(generate_inclusion_inputs::<Tree>(
+                    &por_params,
+                    parent as usize,
+                )?);
+            }
+
+            inputs.push(Tree::Field::from(challenge as u64));
+
+            // Inclusion Proof: encoded node in comm_r_last
+            inputs.extend(generate_inclusion_inputs::<Tree>(&por_params, challenge)?);
+
+            // Inclusion Proof: column hash of the challenged node in comm_c
+            inputs.extend(generate_inclusion_inputs::<Tree>(&por_params, challenge)?);
+        }
+
+        Ok(inputs)
+    }
 }
 
 impl<'a, Tree, G> Circuit<Tree::Field> for StackedCircuit<'a, Tree, G>
 where
     Tree: MerkleTreeTrait,
-    Tree::Hasher: Groth16Hasher,
-    <Tree::Hasher as Hasher>::Field: ff::PrimeFieldBits,
-    G: Groth16Hasher<Field = Tree::Field>,
+    Tree::Hasher: R1CSHasher,
+    Tree::Field: PrimeFieldBits,
+    G: R1CSHasher<Field = Tree::Field>,
 {
     fn synthesize<CS: ConstraintSystem<Tree::Field>>(
         self,
@@ -147,7 +218,7 @@ where
         let replica_id_bits =
             reverse_bit_numbering(replica_id_num.to_bits_le(cs.namespace(|| "replica_id_bits"))?);
 
-        // Allocate comm_d as Fr
+        // Allocate comm_d
         let comm_d_num = AllocatedNum::alloc(cs.namespace(|| "comm_d"), || {
             comm_d
                 .map(Into::into)
@@ -157,7 +228,7 @@ where
         // make comm_d a public input
         comm_d_num.inputize(cs.namespace(|| "comm_d_input"))?;
 
-        // Allocate comm_r as Fr
+        // Allocate comm_r
         let comm_r_num = AllocatedNum::alloc(cs.namespace(|| "comm_r"), || {
             comm_r
                 .map(Into::into)
@@ -167,14 +238,14 @@ where
         // make comm_r a public input
         comm_r_num.inputize(cs.namespace(|| "comm_r_input"))?;
 
-        // Allocate comm_r_last as Fr
+        // Allocate comm_r_last
         let comm_r_last_num = AllocatedNum::alloc(cs.namespace(|| "comm_r_last"), || {
             comm_r_last
                 .map(Into::into)
                 .ok_or(SynthesisError::AssignmentMissing)
         })?;
 
-        // Allocate comm_c as Fr
+        // Allocate comm_c
         let comm_c_num = AllocatedNum::alloc(cs.namespace(|| "comm_c"), || {
             comm_c
                 .map(Into::into)
@@ -217,9 +288,9 @@ where
 pub struct StackedCompound<Tree, G>
 where
     Tree: MerkleTreeTrait,
-    Tree::Hasher: Groth16Hasher,
-    <Tree::Hasher as Hasher>::Field: ff::PrimeFieldBits,
-    G: Groth16Hasher<Field = Tree::Field>,
+    Tree::Hasher: R1CSHasher,
+    Tree::Field: PrimeFieldBits,
+    G: R1CSHasher<Field = Tree::Field>,
 {
     partitions: Option<usize>,
     _t: PhantomData<Tree>,
@@ -228,12 +299,12 @@ where
 
 impl<C, P, Tree, G> CacheableParameters<C, P> for StackedCompound<Tree, G>
 where
+    // Only implement for `Fr` because `CacheableParameters` is Groth16 specific.
     C: Circuit<Fr>,
     P: ParameterSetMetadata,
-    Tree: MerkleTreeTrait,
-    Tree::Hasher: Groth16Hasher,
-    <Tree::Hasher as Hasher>::Field: ff::PrimeFieldBits,
-    G: Groth16Hasher<Field = Tree::Field>,
+    Tree: MerkleTreeTrait<Field = Fr>,
+    Tree::Hasher: R1CSHasher,
+    G: R1CSHasher<Field = Tree::Field>,
 {
     fn cache_prefix() -> String {
         format!(
@@ -247,91 +318,18 @@ where
 impl<'a, Tree, G> CompoundProof<'a, StackedDrg<'a, Tree, G>, StackedCircuit<'a, Tree, G>>
     for StackedCompound<Tree, G>
 where
+    // Only implement for `Fr` because `CompoundProof` is Groth16 specific.
     Tree: 'static + MerkleTreeTrait<Field = Fr>,
-    Tree::Hasher: Groth16Hasher,
-    <Tree::Hasher as Hasher>::Field: ff::PrimeFieldBits,
-    G: 'static + Groth16Hasher<Field = Tree::Field>,
+    Tree::Hasher: R1CSHasher,
+    G: 'static + R1CSHasher<Field = Tree::Field>,
 {
+    #[inline]
     fn generate_public_inputs(
         pub_in: &<StackedDrg<'_, Tree, G> as ProofScheme<'_>>::PublicInputs,
         pub_params: &<StackedDrg<'_, Tree, G> as ProofScheme<'_>>::PublicParams,
         k: Option<usize>,
     ) -> Result<Vec<Tree::Field>> {
-        let graph = &pub_params.graph;
-
-        let mut inputs = Vec::new();
-
-        let replica_id = pub_in.replica_id;
-        inputs.push(replica_id.into());
-
-        let comm_d = pub_in.tau.as_ref().expect("missing tau").comm_d;
-        inputs.push(comm_d.into());
-
-        let comm_r = pub_in.tau.as_ref().expect("missing tau").comm_r;
-        inputs.push(comm_r.into());
-
-        let por_setup_params = por::SetupParams {
-            leaves: graph.size(),
-            private: true,
-        };
-
-        let por_params = PoR::<Tree>::setup(&por_setup_params)?;
-        let por_params_d = PoR::<BinaryMerkleTree<G>>::setup(&por_setup_params)?;
-
-        let all_challenges = pub_in.challenges(&pub_params.layer_challenges, graph.size(), k);
-
-        for challenge in all_challenges.into_iter() {
-            // comm_d inclusion proof for the data leaf
-            inputs.extend(generate_inclusion_inputs::<BinaryMerkleTree<G>>(
-                &por_params_d,
-                challenge,
-                k,
-            )?);
-
-            // drg parents
-            let mut drg_parents = vec![0; graph.base_graph().degree()];
-            graph.base_graph().parents(challenge, &mut drg_parents)?;
-
-            // Inclusion Proofs: drg parent node in comm_c
-            for parent in drg_parents.into_iter() {
-                inputs.extend(generate_inclusion_inputs::<Tree>(
-                    &por_params,
-                    parent as usize,
-                    k,
-                )?);
-            }
-
-            // exp parents
-            let mut exp_parents = vec![0; graph.expansion_degree()];
-            graph.expanded_parents(challenge, &mut exp_parents)?;
-
-            // Inclusion Proofs: expander parent node in comm_c
-            for parent in exp_parents.into_iter() {
-                inputs.extend(generate_inclusion_inputs::<Tree>(
-                    &por_params,
-                    parent as usize,
-                    k,
-                )?);
-            }
-
-            inputs.push(u64_into_fr(challenge as u64));
-
-            // Inclusion Proof: encoded node in comm_r_last
-            inputs.extend(generate_inclusion_inputs::<Tree>(
-                &por_params,
-                challenge,
-                k,
-            )?);
-
-            // Inclusion Proof: column hash of the challenged node in comm_c
-            inputs.extend(generate_inclusion_inputs::<Tree>(
-                &por_params,
-                challenge,
-                k,
-            )?);
-        }
-
-        Ok(inputs)
+        StackedCircuit::<'a, Tree, G>::generate_public_inputs(pub_params, pub_in, k)
     }
 
     fn circuit<'b>(
@@ -391,17 +389,15 @@ where
 fn generate_inclusion_inputs<Tree>(
     por_params: &por::PublicParams,
     challenge: usize,
-    k: Option<usize>,
 ) -> Result<Vec<Tree::Field>>
 where
-    Tree: 'static + MerkleTreeTrait<Field = Fr>,
-    Tree::Hasher: Groth16Hasher,
-    <Tree::Hasher as Hasher>::Field: ff::PrimeFieldBits,
+    Tree: MerkleTreeTrait,
+    Tree::Hasher: R1CSHasher,
 {
     let pub_inputs = por::PublicInputs::<<Tree::Hasher as Hasher>::Domain> {
         challenge,
         commitment: None,
     };
 
-    PoRCompound::<Tree>::generate_public_inputs(&pub_inputs, por_params, k)
+    PoRCircuit::<Tree>::generate_public_inputs(por_params, &pub_inputs)
 }

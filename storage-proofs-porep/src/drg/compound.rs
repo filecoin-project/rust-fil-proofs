@@ -3,7 +3,7 @@ use std::marker::PhantomData;
 use anyhow::{ensure, Context};
 use bellperson::Circuit;
 use blstrs::Scalar as Fr;
-use filecoin_hashers::Groth16Hasher;
+use filecoin_hashers::R1CSHasher;
 use generic_array::typenum;
 use storage_proofs_core::{
     compound_proof::{CircuitComponent, CompoundProof},
@@ -44,7 +44,7 @@ use crate::drg::{DrgPoRep, DrgPoRepCircuit};
 
 pub struct DrgPoRepCompound<H, G>
 where
-    H: Groth16Hasher,
+    H: R1CSHasher,
     G: Graph<H>,
     G::Key: AsRef<H::Domain>,
 {
@@ -56,7 +56,7 @@ where
 impl<C, H, G, P> CacheableParameters<C, P> for DrgPoRepCompound<H, G>
 where
     C: Circuit<Fr>,
-    H: Groth16Hasher,
+    H: R1CSHasher,
     G: Graph<H>,
     G::Key: AsRef<H::Domain>,
     P: ParameterSetMetadata,
@@ -69,7 +69,7 @@ where
 impl<'a, H, G> CompoundProof<'a, DrgPoRep<'a, H, G>, DrgPoRepCircuit<'a, H>>
     for DrgPoRepCompound<H, G>
 where
-    H: 'static + Groth16Hasher,
+    H: 'static + R1CSHasher,
     G: 'a + Graph<H> + ParameterSetMetadata + Sync + Send,
     G::Key: AsRef<H::Domain>,
 {
