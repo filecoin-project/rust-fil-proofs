@@ -1,6 +1,7 @@
 use std::marker::PhantomData;
 
 use blstrs::Scalar as Fr;
+use ff::PrimeField;
 use filecoin_hashers::PoseidonArity;
 use storage_proofs_core::{
     compound_proof::{CircuitComponent, CompoundProof},
@@ -14,17 +15,19 @@ use crate::{
     PublicInputs, PublicParams,
 };
 
-pub struct EmptySectorUpdateCompound<U, V, W>
+pub struct EmptySectorUpdateCompound<F, U, V, W>
 where
-    U: PoseidonArity<Fr>,
-    V: PoseidonArity<Fr>,
-    W: PoseidonArity<Fr>,
+    F: PrimeField,
+    U: PoseidonArity<F>,
+    V: PoseidonArity<F>,
+    W: PoseidonArity<F>,
 {
-    pub _tree_r: PhantomData<(U, V, W)>,
+    pub _tree_r: PhantomData<(F, U, V, W)>,
 }
 
-impl<U, V, W> CacheableParameters<EmptySectorUpdateCircuit<U, V, W>, PublicParams>
-    for EmptySectorUpdateCompound<U, V, W>
+// Only implement for `Fr` because `CacheableParameters` is Groth16 specific.
+impl<U, V, W> CacheableParameters<EmptySectorUpdateCircuit<Fr, U, V, W>, PublicParams>
+    for EmptySectorUpdateCompound<Fr, U, V, W>
 where
     U: PoseidonArity<Fr>,
     V: PoseidonArity<Fr>,
@@ -35,43 +38,22 @@ where
     }
 }
 
+// Only implement for `Fr` because `CompoundProof` is Groth16 specific.
 impl<'a, U, V, W>
-    CompoundProof<'a, EmptySectorUpdate<Fr, U, V, W>, EmptySectorUpdateCircuit<U, V, W>>
-    for EmptySectorUpdateCompound<U, V, W>
+    CompoundProof<'a, EmptySectorUpdate<Fr, U, V, W>, EmptySectorUpdateCircuit<Fr, U, V, W>>
+    for EmptySectorUpdateCompound<Fr, U, V, W>
 where
     U: PoseidonArity<Fr>,
     V: PoseidonArity<Fr>,
     W: PoseidonArity<Fr>,
 {
-    // Generates a partition circuit's public-inputs. If the `k` argument is `Some` we overwrite
-    // `pub_inputs.k` with the `k` argument's value, otherwise if the `k` argument is `None` we use
-    // `pub_inputs.k` as the circuit's public-input.
+    #[inline]
     fn generate_public_inputs(
         pub_inputs: &PublicInputs<Fr>,
         pub_params: &PublicParams,
         k: Option<usize>,
     ) -> Result<Vec<Fr>> {
-        // Prioritize the partition-index provided via the `k` argument; default to `pub_inputs.k`.
-        let k = k.unwrap_or(pub_inputs.k);
-
-        let PublicInputs {
-            comm_r_old,
-            comm_d_new,
-            comm_r_new,
-            h,
-            ..
-        } = *pub_inputs;
-
-        let pub_inputs_circ = circuit::PublicInputs::new(
-            pub_params.sector_nodes,
-            k,
-            h,
-            comm_r_old,
-            comm_d_new,
-            comm_r_new,
-        );
-
-        Ok(pub_inputs_circ.to_vec())
+        EmptySectorUpdateCircuit::<Fr, U, V, W>::generate_public_inputs(pub_params, pub_inputs, k)
     }
 
     // Generates a partition's circuit. If the `k` argument is `Some` we overwrite `pub_inputs.k`
@@ -79,11 +61,11 @@ where
     // as the circuit's public-input.
     fn circuit(
         pub_inputs: &PublicInputs<Fr>,
-        _priv_inputs: <EmptySectorUpdateCircuit<U, V, W> as CircuitComponent>::ComponentPrivateInputs,
+        _priv_inputs: <EmptySectorUpdateCircuit<Fr, U, V, W> as CircuitComponent>::ComponentPrivateInputs,
         vanilla_proof: &PartitionProof<Fr, U, V, W>,
         pub_params: &PublicParams,
         k: Option<usize>,
-    ) -> Result<EmptySectorUpdateCircuit<U, V, W>> {
+    ) -> Result<EmptySectorUpdateCircuit<Fr, U, V, W>> {
         // Prioritize the partition-index provided via the `k` argument; default to `pub_inputs.k`.
         let k = k.unwrap_or(pub_inputs.k);
 
@@ -117,7 +99,7 @@ where
         })
     }
 
-    fn blank_circuit(pub_params: &PublicParams) -> EmptySectorUpdateCircuit<U, V, W> {
+    fn blank_circuit(pub_params: &PublicParams) -> EmptySectorUpdateCircuit<Fr, U, V, W> {
         EmptySectorUpdateCircuit::blank(pub_params.clone())
     }
 }

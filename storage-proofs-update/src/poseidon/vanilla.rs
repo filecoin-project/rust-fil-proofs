@@ -13,6 +13,7 @@ use crate::{
 #[derive(Clone, Serialize, Deserialize)]
 pub struct PublicInputs<F>
 where
+    F: PrimeField,
     // Ensure that `TreeRDomain<F>` implements `Domain`.
     TreeRHasher<F>: Hasher<Field = F>,
 {

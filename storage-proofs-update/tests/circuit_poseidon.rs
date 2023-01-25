@@ -108,7 +108,7 @@ where
 
         let priv_inputs = circuit::PrivateInputs::new(comm_c, &challenge_proofs);
 
-        let circuit = EmptySectorUpdateCircuit::<U, V, W> {
+        let circuit = EmptySectorUpdateCircuit::<Fr, U, V, W> {
             pub_params,
             pub_inputs,
             priv_inputs,
@@ -141,7 +141,7 @@ fn test_empty_sector_update_poseidon_constraints_32gib() {
 
     let priv_inputs = circuit::PrivateInputs::empty(SECTOR_NODES_32_GIB);
 
-    let circuit = EmptySectorUpdateCircuit::<U8, U8, U0> {
+    let circuit = EmptySectorUpdateCircuit::<Fr, U8, U8, U0> {
         pub_params: PublicParams::from_sector_size_poseidon(SECTOR_NODES_32_GIB as u64 * 32),
         pub_inputs,
         priv_inputs,

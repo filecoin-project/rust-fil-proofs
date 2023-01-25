@@ -19,9 +19,6 @@ use storage_proofs_core::{
 };
 use typemap::ShareMap;
 
-// Use a custom domain separation tag when generating randomness phi, rho, and challenges bits.
-pub const HASH_TYPE_GEN_RANDOMNESS: HashType<Fr, U2> = HashType::Custom(CType::Arbitrary(1));
-
 lazy_static! {
     // Use a custom domain separation tag `HashType` when using Poseidon to generate randomness
     // (i.e. phi, rho, and challenges bits).

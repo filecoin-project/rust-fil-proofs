@@ -1,31 +1,59 @@
 use bellperson::{
     gadgets::{
-        boolean::{field_into_allocated_bits_le, AllocatedBit, Boolean},
+        boolean::{AllocatedBit, Boolean},
         multipack::pack_bits,
         num::AllocatedNum,
     },
     ConstraintSystem, LinearCombination, SynthesisError,
 };
-use blstrs::Scalar as Fr;
-use ff::{Field, PrimeField};
-use filecoin_hashers::Groth16Hasher;
+use ff::PrimeField;
+use filecoin_hashers::{PoseidonLookup, R1CSHasher};
+use generic_array::typenum::U2;
 use neptune::circuit::poseidon_hash;
 use storage_proofs_core::gadgets::por::por_no_challenge_input;
 
-use crate::constants::{TreeD, TreeDHasher, POSEIDON_CONSTANTS_GEN_RANDOMNESS_BLS};
+use crate::constants::{TreeD, TreeDHasher, POSEIDON_CONSTANTS_GEN_RANDOMNESS};
 
-// Allocates `num` as `Fr::NUM_BITS` number of bits.
-pub fn allocated_num_to_allocated_bits<CS: ConstraintSystem<Fr>>(
+// Allocates `num` as `F::NUM_BITS` number of bits.
+//
+// This function is an alternative to `AllocatedNum::to_bits_le` that allows us to remove the bound
+// `F: PrimeFieldBits`. We can remove the bound because all R1CS fields used in Filecoin, i.e.
+// `Fr, Fp, Fq`, have a little-endian bytes repr.
+pub fn le_bits<F, CS>(
     mut cs: CS,
-    num: &AllocatedNum<Fr>,
-) -> Result<Vec<AllocatedBit>, SynthesisError> {
-    let bits = field_into_allocated_bits_le(&mut cs, num.get_value())?;
-    assert_eq!(bits.len(), Fr::NUM_BITS as usize);
+    num: &AllocatedNum<F>,
+) -> Result<Vec<AllocatedBit>, SynthesisError>
+where
+    F: PrimeField,
+    CS: ConstraintSystem<F>,
+{
+    let le_bits_vals: Vec<Option<bool>> = match num.get_value() {
+        Some(f) => {
+            let repr = f.to_repr();
+            let le_bytes = repr.as_ref();
+            le_bytes
+                .iter()
+                .flat_map(|byte| {
+                    (0..8)
+                        .map(|i| Some(byte >> i & 1 == 1))
+                        .collect::<Vec<Option<bool>>>()
+                })
+                .take(F::NUM_BITS as usize)
+                .collect::<Vec<Option<bool>>>()
+        }
+        None => vec![None; F::NUM_BITS as usize],
+    };
 
-    // Assert `(2^0 * bits[0] + ... + 2^(n - 1) * bits[n]) * 1 == num`.
-    let mut lc = LinearCombination::<Fr>::zero();
-    let mut pow2 = Fr::one();
-    for bit in bits.iter() {
+    let le_bits = le_bits_vals
+        .into_iter()
+        .enumerate()
+        .map(|(i, bit)| AllocatedBit::alloc(cs.namespace(|| format!("bit {}", i)), bit))
+        .collect::<Result<Vec<AllocatedBit>, SynthesisError>>()?;
+
+    // Verify `num`'s binary decomposition.
+    let mut lc = LinearCombination::<F>::zero();
+    let mut pow2 = F::one();
+    for bit in le_bits.iter() {
         lc = lc + (pow2, bit.get_variable());
         pow2 = pow2.double();
     }
@@ -36,21 +64,26 @@ pub fn allocated_num_to_allocated_bits<CS: ConstraintSystem<Fr>>(
         |lc| lc + num.get_variable(),
     );
 
-    Ok(bits)
+    Ok(le_bits)
 }
 
 // Computes a partition's apex-tree from `apex_leafs` and asserts that `partition_path` is a valid
 // Merkle path from the apex-tree's root to the TreeD root (`comm_d`). Each partition has a
 // unique `apex_leafs` and `parition_path`. Every challenge for a partition has a TreeD Merkle
 // path which ends with `partition_path`, thus we verify `partition_path` once per partition.
-pub fn apex_por<CS: ConstraintSystem<Fr>>(
+pub fn apex_por<F, CS>(
     mut cs: CS,
-    apex_leafs: Vec<AllocatedNum<Fr>>,
+    apex_leafs: Vec<AllocatedNum<F>>,
     // little-endian
     partition_bits: Vec<AllocatedBit>,
-    partition_path: Vec<Vec<AllocatedNum<Fr>>>,
-    comm_d: AllocatedNum<Fr>,
-) -> Result<(), SynthesisError> {
+    partition_path: Vec<Vec<AllocatedNum<F>>>,
+    comm_d: AllocatedNum<F>,
+) -> Result<(), SynthesisError>
+where
+    F: PrimeField,
+    CS: ConstraintSystem<F>,
+    TreeDHasher<F>: R1CSHasher<Field = F>,
+{
     // `apex_leafs.len()` is guaranteed to be a power of two.
     let apex_tree_height = apex_leafs.len().trailing_zeros() as usize;
     let mut apex_tree = vec![apex_leafs];
@@ -61,7 +94,7 @@ pub fn apex_por<CS: ConstraintSystem<Fr>>(
             .chunks(2)
             .enumerate()
             .map(|(i, siblings)| {
-                TreeDHasher::<Fr>::hash2_circuit(
+                TreeDHasher::<F>::hash2_circuit(
                     cs.namespace(|| {
                         format!(
                             "apex_tree generation hash (tree_row={}, siblings={})",
@@ -72,14 +105,14 @@ pub fn apex_por<CS: ConstraintSystem<Fr>>(
                     &siblings[1],
                 )
             })
-            .collect::<Result<Vec<AllocatedNum<Fr>>, SynthesisError>>()?;
+            .collect::<Result<Vec<AllocatedNum<F>>, SynthesisError>>()?;
         apex_tree.push(row);
     }
 
     // This partition's apex-tree root.
     let apex_root = apex_tree.last().unwrap()[0].clone();
 
-    por_no_challenge_input::<TreeD<Fr>, _>(
+    por_no_challenge_input::<TreeD<F>, _>(
         cs.namespace(|| "partition-tree por"),
         partition_bits,
         apex_root,
@@ -89,15 +122,19 @@ pub fn apex_por<CS: ConstraintSystem<Fr>>(
 }
 
 // Generates each challenge's random bits for a given partition.
-pub fn gen_challenge_bits<CS: ConstraintSystem<Fr>>(
+pub fn gen_challenge_bits<F, CS>(
     mut cs: CS,
-    comm_r_new: &AllocatedNum<Fr>,
-    partition: &AllocatedNum<Fr>,
+    comm_r_new: &AllocatedNum<F>,
+    partition: &AllocatedNum<F>,
     challenges: usize,
     bits_per_challenge: usize,
-) -> Result<Vec<Vec<AllocatedBit>>, SynthesisError> {
+) -> Result<Vec<Vec<AllocatedBit>>, SynthesisError>
+where
+    F: PrimeField,
+    CS: ConstraintSystem<F>,
+{
     // The number of challenges derived per digest.
-    let challenges_per_digest = Fr::CAPACITY as usize / bits_per_challenge;
+    let challenges_per_digest = F::CAPACITY as usize / bits_per_challenge;
 
     // The number of digests generated per partition.
     let digests_per_partition = (challenges as f32 / challenges_per_digest as f32).ceil() as u64;
@@ -112,7 +149,7 @@ pub fn gen_challenge_bits<CS: ConstraintSystem<Fr>>(
                 let k = partition
                     .get_value()
                     .ok_or(SynthesisError::AssignmentMissing)?;
-                let digest_index = k * Fr::from(digests_per_partition) + Fr::from(j);
+                let digest_index = k * F::from(digests_per_partition) + F::from(j);
                 Ok(digest_index)
             })?;
 
@@ -120,25 +157,26 @@ pub fn gen_challenge_bits<CS: ConstraintSystem<Fr>>(
         cs.enforce(
             || format!("digest_index_{} == k * digests_per_partition + {}", j, j),
             |lc| {
-                lc + (Fr::from(digests_per_partition), partition.get_variable())
-                    + (Fr::from(j), CS::one())
+                lc + (F::from(digests_per_partition), partition.get_variable())
+                    + (F::from(j), CS::one())
             },
             |lc| lc + CS::one(),
             |lc| lc + digest_index.get_variable(),
         );
 
+        let consts = POSEIDON_CONSTANTS_GEN_RANDOMNESS
+            .get::<PoseidonLookup<F, U2>>()
+            .expect("arity-2 Poseidon constants not found for field");
+
         // `digest = H(comm_r_new || digest_index)`
         let digest = poseidon_hash(
             cs.namespace(|| format!("digest_{}", j)),
             vec![comm_r_new.clone(), digest_index.clone()],
-            &*POSEIDON_CONSTANTS_GEN_RANDOMNESS_BLS,
+            *consts,
         )?;
 
-        // Allocate `digest` as `Fr::NUM_BITS` bits.
-        let digest_bits = allocated_num_to_allocated_bits(
-            cs.namespace(|| format!("digest_{}_bits", j)),
-            &digest,
-        )?;
+        // Allocate `digest` as `F::NUM_BITS` bits.
+        let digest_bits = le_bits(cs.namespace(|| format!("digest_{}_bits", j)), &digest)?;
 
         // We may not take all available challenge bits from the last digest.
         let challenges_to_take = if j == digests_per_partition - 1 {
@@ -161,13 +199,17 @@ pub fn gen_challenge_bits<CS: ConstraintSystem<Fr>>(
 // Returns the `h` high-bits of the given challenge's bits `c_bits`. `h` is chosen from `hs` using
 // `h_select_bits` which has exactly one bit set; if that bit has index `i` then
 // `h = hs[i] = dot(hs, h_select_bits)`.
-pub fn get_challenge_high_bits<CS: ConstraintSystem<Fr>>(
+pub fn get_challenge_high_bits<F, CS>(
     mut cs: CS,
     // little-endian
     c_bits: &[AllocatedBit],
     h_select_bits: &[AllocatedBit],
     hs: &[usize],
-) -> Result<AllocatedNum<Fr>, SynthesisError> {
+) -> Result<AllocatedNum<F>, SynthesisError>
+where
+    F: PrimeField,
+    CS: ConstraintSystem<F>,
+{
     assert_eq!(h_select_bits.len(), hs.len());
 
     let bit_len = c_bits.len();
@@ -198,7 +240,7 @@ pub fn get_challenge_high_bits<CS: ConstraintSystem<Fr>>(
                     {
                         c_high.get_value().ok_or(SynthesisError::AssignmentMissing)
                     } else {
-                        Ok(Fr::zero())
+                        Ok(F::zero())
                     }
                 },
             )?;
@@ -212,7 +254,7 @@ pub fn get_challenge_high_bits<CS: ConstraintSystem<Fr>>(
 
             Ok(c_high_or_zero)
         })
-        .collect::<Result<Vec<AllocatedNum<Fr>>, SynthesisError>>()?;
+        .collect::<Result<Vec<AllocatedNum<F>>, SynthesisError>>()?;
 
     // Summate the scaled `c_high` values. One of the values is the selected `c_high` (chosen
     // via `h_select`) and all other values are zero. Thus, the sum is the selected `c_high`.
@@ -244,12 +286,16 @@ pub fn get_challenge_high_bits<CS: ConstraintSystem<Fr>>(
 }
 
 // Computes the encoding of a sector node.
-pub fn label_r_new<CS: ConstraintSystem<Fr>>(
+pub fn label_r_new<F, CS>(
     mut cs: CS,
-    label_r_old: &AllocatedNum<Fr>,
-    label_d_new: &AllocatedNum<Fr>,
-    rho: &AllocatedNum<Fr>,
-) -> Result<AllocatedNum<Fr>, SynthesisError> {
+    label_r_old: &AllocatedNum<F>,
+    label_d_new: &AllocatedNum<F>,
+    rho: &AllocatedNum<F>,
+) -> Result<AllocatedNum<F>, SynthesisError>
+where
+    F: PrimeField,
+    CS: ConstraintSystem<F>,
+{
     let label_d_new_rho = label_d_new.mul(cs.namespace(|| "label_d_new * rho"), rho)?;
 
     // `label_r_new = label_r_old + label_d_new * rho`
@@ -278,6 +324,7 @@ mod tests {
     use super::*;
 
     use bellperson::util_cs::test_cs::TestConstraintSystem;
+    use blstrs::Scalar as Fr;
     use filecoin_hashers::{Domain, HashFunction, Hasher};
     use rand::SeedableRng;
     use rand_xorshift::XorShiftRng;
@@ -326,7 +373,7 @@ mod tests {
                 let partition =
                     AllocatedNum::alloc(cs.namespace(|| "k"), || Ok(Fr::from(k as u64))).unwrap();
                 let partition_bits: Vec<AllocatedBit> =
-                    allocated_num_to_allocated_bits(cs.namespace(|| "partition_bits"), &partition)
+                    le_bits(cs.namespace(|| "partition_bits"), &partition)
                         .unwrap()
                         .into_iter()
                         .take(partition_bit_len)

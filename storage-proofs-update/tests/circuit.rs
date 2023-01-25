@@ -170,7 +170,7 @@ fn test_empty_sector_update_circuit_32kib() {
 fn test_empty_sector_update_constraints_32gib() {
     let pub_params = PublicParams::from_sector_size(SECTOR_NODES_32_GIB as u64 * 32);
     let pub_inputs = circuit::PublicInputs::empty();
-    let priv_inputs = circuit::PrivateInputs::<U8, U8, U0>::empty(SECTOR_NODES_32_GIB);
+    let priv_inputs = circuit::PrivateInputs::<Fr, U8, U8, U0>::empty(SECTOR_NODES_32_GIB);
 
     let circuit = EmptySectorUpdateCircuit {
         pub_params,

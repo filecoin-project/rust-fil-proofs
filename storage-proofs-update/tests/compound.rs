@@ -174,7 +174,7 @@ where
         priority: true,
     };
     let pub_params_compound =
-        EmptySectorUpdateCompound::<U, V, W>::setup(&setup_params_compound).unwrap();
+        EmptySectorUpdateCompound::<Fr, U, V, W>::setup(&setup_params_compound).unwrap();
 
     // Prove generate vanilla and circuit proofs for all partitions.
     let pub_inputs = PublicInputs {
@@ -196,13 +196,13 @@ where
         replica_path: replica_new_path,
     };
 
-    let blank_groth_params = EmptySectorUpdateCompound::<U, V, W>::groth_params(
+    let blank_groth_params = EmptySectorUpdateCompound::<Fr, U, V, W>::groth_params(
         Some(&mut rng),
         &pub_params_compound.vanilla_params,
     )
     .expect("failed to generate groth params");
 
-    let multi_proof = EmptySectorUpdateCompound::<U, V, W>::prove(
+    let multi_proof = EmptySectorUpdateCompound::<Fr, U, V, W>::prove(
         &pub_params_compound,
         &pub_inputs,
         &priv_inputs,
@@ -210,7 +210,7 @@ where
     )
     .expect("failed while proving");
 
-    let is_valid = EmptySectorUpdateCompound::<U, V, W>::verify(
+    let is_valid = EmptySectorUpdateCompound::<Fr, U, V, W>::verify(
         &pub_params_compound,
         &pub_inputs,
         &multi_proof,

@@ -937,11 +937,11 @@ where
 
         let end = staged_data_path_metadata.len() as u64;
 
-        // chunk_size is the number of Fr elements to process in parallel chunks.
+        // chunk_size is the number of field elements to process in parallel chunks.
         let chunk_size: usize = std::cmp::min(base_tree_nodes_count, CHUNK_SIZE_MIN);
 
         // data_block_size is the segment length that we're processing
-        // in Fr elements (i.e. chunk_size * sizeof(Fr)).
+        // in field elements (i.e. chunk_size * sizeof(F)).
         let data_block_size: usize = chunk_size * FR_SIZE;
 
         // Right-shift each node-index by `get_high_bits_shr` to get its `h` high bits.
@@ -1084,11 +1084,11 @@ where
 
         let end = replica_path_metadata.len() as u64;
 
-        // chunk_size is the number of Fr elements to process in parallel chunks.
+        // chunk_size is the number of field elements to process in parallel chunks.
         let chunk_size: usize = std::cmp::min(base_tree_nodes_count, CHUNK_SIZE_MIN);
 
         // data_block_size is the segment length that we're processing
-        // in Fr elements (i.e. chunk_size * sizeof(Fr)).
+        // in field elements (i.e. chunk_size * sizeof(F)).
         let data_block_size: usize = chunk_size * FR_SIZE;
 
         // Right-shift each node-index by `get_high_bits_shr` to get its `h` high bits.
@@ -1221,11 +1221,11 @@ where
 
         let end = replica_path_metadata.len() as u64;
 
-        // chunk_size is the number of Fr elements to process in parallel chunks.
+        // chunk_size is the number of field elements to process in parallel chunks.
         let chunk_size: usize = std::cmp::min(base_tree_nodes_count, CHUNK_SIZE_MIN);
 
         // data_block_size is the segment length that we're processing
-        // in Fr elements (i.e. chunk_size * sizeof(Fr)).
+        // in field elements (i.e. chunk_size * sizeof(F)).
         let data_block_size: usize = chunk_size * FR_SIZE;
 
         // Right-shift each node-index by `get_high_bits_shr` to get its `h` high bits.
