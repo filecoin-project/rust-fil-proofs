@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use anyhow::Result;
 use blstrs::Scalar as Fr;
-use filecoin_hashers::Groth16Hasher;
+use filecoin_hashers::R1CSHasher;
 use storage_proofs_core::{
     api_version::ApiVersion,
     merkle::MerkleTreeTrait,
@@ -97,7 +97,7 @@ impl PoStConfig {
     pub fn get_cache_identifier<Tree>(&self) -> Result<String>
     where
         Tree: 'static + MerkleTreeTrait<Field = Fr>,
-        Tree::Hasher: Groth16Hasher,
+        Tree::Hasher: R1CSHasher,
     {
         match self.typ {
             PoStType::Winning => {
@@ -122,7 +122,7 @@ impl PoStConfig {
     pub fn get_cache_metadata_path<Tree>(&self) -> Result<PathBuf>
     where
         Tree: 'static + MerkleTreeTrait<Field = Fr>,
-        Tree::Hasher: Groth16Hasher,
+        Tree::Hasher: R1CSHasher,
     {
         let id = self.get_cache_identifier::<Tree>()?;
         Ok(parameter_cache_metadata_path(&id))
@@ -131,7 +131,7 @@ impl PoStConfig {
     pub fn get_cache_verifying_key_path<Tree>(&self) -> Result<PathBuf>
     where
         Tree: 'static + MerkleTreeTrait<Field = Fr>,
-        Tree::Hasher: Groth16Hasher,
+        Tree::Hasher: R1CSHasher,
     {
         let id = self.get_cache_identifier::<Tree>()?;
         Ok(parameter_cache_verifying_key_path(&id))
@@ -140,7 +140,7 @@ impl PoStConfig {
     pub fn get_cache_params_path<Tree>(&self) -> Result<PathBuf>
     where
         Tree: 'static + MerkleTreeTrait<Field = Fr>,
-        Tree::Hasher: Groth16Hasher,
+        Tree::Hasher: R1CSHasher,
     {
         let id = self.get_cache_identifier::<Tree>()?;
         Ok(parameter_cache_params_path(&id))

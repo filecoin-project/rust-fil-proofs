@@ -4,7 +4,7 @@ use std::sync::{Arc, Mutex};
 use anyhow::Result;
 use bellperson::groth16::{self, prepare_verifying_key};
 use blstrs::{Bls12, Scalar as Fr};
-use filecoin_hashers::Groth16Hasher;
+use filecoin_hashers::R1CSHasher;
 use lazy_static::lazy_static;
 use log::{info, trace};
 use once_cell::sync::OnceCell;
@@ -199,7 +199,7 @@ where
 pub fn get_stacked_params<Tree>(porep_config: PoRepConfig) -> Result<Arc<Bls12GrothParams>>
 where
     Tree: 'static + MerkleTreeTrait<Field = Fr>,
-    Tree::Hasher: Groth16Hasher,
+    Tree::Hasher: R1CSHasher,
 {
     let public_params = public_params::<Tree>(
         PaddedBytesAmount::from(porep_config),
@@ -228,7 +228,7 @@ where
 pub fn get_post_params<Tree>(post_config: &PoStConfig) -> Result<Arc<Bls12GrothParams>>
 where
     Tree: 'static + MerkleTreeTrait<Field = Fr>,
-    Tree::Hasher: Groth16Hasher,
+    Tree::Hasher: R1CSHasher,
 {
     match post_config.typ {
         PoStType::Winning => {
@@ -282,9 +282,9 @@ where
         PublicParams::from_sector_size(u64::from(porep_config.sector_size));
 
     let parameters_generator = || {
-        <EmptySectorUpdateCompound<Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity> as CompoundProof<
+        <EmptySectorUpdateCompound<Fr, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity> as CompoundProof<
             EmptySectorUpdate<Fr, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>,
-            EmptySectorUpdateCircuit<Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>,
+            EmptySectorUpdateCircuit<Fr, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>,
         >>::groth_params::<OsRng>(None, &public_params)
         .map_err(Into::into)
     };
@@ -303,7 +303,7 @@ pub fn get_stacked_verifying_key<Tree>(
 ) -> Result<Arc<Bls12PreparedVerifyingKey>>
 where
     Tree: 'static + MerkleTreeTrait<Field = Fr>,
-    Tree::Hasher: Groth16Hasher,
+    Tree::Hasher: R1CSHasher,
 {
     let public_params = public_params(
         PaddedBytesAmount::from(porep_config),
@@ -334,7 +334,7 @@ pub fn get_post_verifying_key<Tree>(
 ) -> Result<Arc<Bls12PreparedVerifyingKey>>
 where
     Tree: 'static + MerkleTreeTrait<Field = Fr>,
-    Tree::Hasher: Groth16Hasher,
+    Tree::Hasher: R1CSHasher,
 {
     match post_config.typ {
         PoStType::Winning => {
@@ -384,7 +384,7 @@ pub fn get_stacked_srs_key<Tree>(
 ) -> Result<Arc<Bls12ProverSRSKey>>
 where
     Tree: 'static + MerkleTreeTrait<Field = Fr>,
-    Tree::Hasher: Groth16Hasher,
+    Tree::Hasher: R1CSHasher,
 {
     let public_params = public_params(
         PaddedBytesAmount::from(porep_config),
@@ -421,7 +421,7 @@ pub fn get_stacked_srs_verifier_key<Tree>(
 ) -> Result<Arc<Bls12VerifierSRSKey>>
 where
     Tree: 'static + MerkleTreeTrait<Field = Fr>,
-    Tree::Hasher: Groth16Hasher,
+    Tree::Hasher: R1CSHasher,
 {
     let public_params = public_params(
         PaddedBytesAmount::from(porep_config),
@@ -464,9 +464,14 @@ where
         PublicParams::from_sector_size(u64::from(porep_config.sector_size));
 
     let vk_generator = || {
-        let vk = <EmptySectorUpdateCompound<Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity> as CompoundProof<
+        let vk = <EmptySectorUpdateCompound<
+            Fr,
+            Tree::Arity,
+            Tree::SubTreeArity,
+            Tree::TopTreeArity,
+        > as CompoundProof<
             EmptySectorUpdate<Fr, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>,
-            EmptySectorUpdateCircuit<Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>,
+            EmptySectorUpdateCircuit<Fr, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>,
         >>::verifying_key::<OsRng>(None, &public_params)?;
         Ok(prepare_verifying_key(&vk))
     };

@@ -8,7 +8,7 @@ use bellperson::groth16;
 use bincode::{deserialize, serialize};
 use blstrs::{Bls12, Scalar as Fr};
 use ff::PrimeField;
-use filecoin_hashers::{Domain, Groth16Hasher, Hasher, PoseidonArity};
+use filecoin_hashers::{Domain, Hasher, PoseidonArity, R1CSHasher};
 use halo2_proofs::pasta::{Fp, Fq};
 use log::{info, trace};
 use memmap2::MmapOptions;
@@ -1578,7 +1578,7 @@ pub fn aggregate_seal_commit_proofs<Tree>(
 ) -> Result<AggregateSnarkProof>
 where
     Tree: 'static + MerkleTreeTrait<Field = Fr>,
-    Tree::Hasher: Groth16Hasher,
+    Tree::Hasher: R1CSHasher,
 {
     info!("aggregate_seal_commit_proofs:start");
 
@@ -1674,7 +1674,7 @@ pub fn verify_aggregate_seal_commit_proofs<Tree>(
 ) -> Result<bool>
 where
     Tree: 'static + MerkleTreeTrait<Field = Fr>,
-    Tree::Hasher: Groth16Hasher,
+    Tree::Hasher: R1CSHasher,
 {
     info!("verify_aggregate_seal_commit_proofs:start");
 

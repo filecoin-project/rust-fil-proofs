@@ -659,7 +659,8 @@ where
         partitions: Some(partitions),
         priority: false,
     };
-    let pub_params_compound = EmptySectorUpdateCompound::<U, V, W>::setup(&setup_params_compound)?;
+    let pub_params_compound =
+        EmptySectorUpdateCompound::<Fr, U, V, W>::setup(&setup_params_compound)?;
 
     let groth_params = get_empty_sector_update_params::<
         MerkleTreeWrapper<TreeRHasher<Fr>, MockStore, U, V, W>,
@@ -1105,7 +1106,8 @@ where
         partitions: Some(partitions),
         priority: false,
     };
-    let pub_params_compound = EmptySectorUpdateCompound::<U, V, W>::setup(&setup_params_compound)?;
+    let pub_params_compound =
+        EmptySectorUpdateCompound::<Fr, U, V, W>::setup(&setup_params_compound)?;
 
     let groth_params = get_empty_sector_update_params::<
         MerkleTreeWrapper<TreeRHasher<Fr>, MockStore, U, V, W>,
@@ -1544,7 +1546,8 @@ where
         partitions: Some(partitions),
         priority: true,
     };
-    let pub_params_compound = EmptySectorUpdateCompound::<U, V, W>::setup(&setup_params_compound)?;
+    let pub_params_compound =
+        EmptySectorUpdateCompound::<Fr, U, V, W>::setup(&setup_params_compound)?;
 
     let verifying_key = get_empty_sector_update_verifying_key::<
         MerkleTreeWrapper<TreeRHasher<Fr>, MockStore, U, V, W>,

@@ -5,7 +5,7 @@ use bellperson::groth16;
 use bincode::serialize;
 use blstrs::{Bls12, Scalar as Fr};
 use ff::Field;
-use filecoin_hashers::Groth16Hasher;
+use filecoin_hashers::R1CSHasher;
 use filecoin_proofs::{
     aggregate_seal_commit_proofs, seal_pre_commit_phase2, validate_cache_for_commit,
     verify_aggregate_seal_commit_proofs, DefaultTreeDomain, MerkleTreeTrait,
@@ -154,7 +154,7 @@ fn aggregate_proofs<Tree>(
 ) -> Result<()>
 where
     Tree: 'static + MerkleTreeTrait<Field = Fr>,
-    Tree::Hasher: Groth16Hasher,
+    Tree::Hasher: R1CSHasher,
     Tree::Arity: PoseidonArityAllFields,
     Tree::SubTreeArity: PoseidonArityAllFields,
     Tree::TopTreeArity: PoseidonArityAllFields,
