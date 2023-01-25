@@ -3,7 +3,7 @@ use std::str::FromStr;
 use bellperson::{util_cs::bench_cs::BenchCS, Circuit};
 use blstrs::Scalar as Fr;
 use dialoguer::{theme::ColorfulTheme, MultiSelect};
-use filecoin_hashers::Groth16Hasher;
+use filecoin_hashers::R1CSHasher;
 use filecoin_proofs::{
     parameters::{public_params, window_post_public_params, winning_post_public_params},
     with_shape, DefaultPieceHasher, PaddedBytesAmount, PoRepConfig, PoRepProofPartitions,
@@ -40,7 +40,7 @@ fn circuit_info<C: Circuit<Fr>>(circuit: C) -> CircuitInfo {
 fn get_porep_info<Tree>(porep_config: PoRepConfig) -> CircuitInfo
 where
     Tree: 'static + MerkleTreeTrait<Field = Fr>,
-    Tree::Hasher: Groth16Hasher,
+    Tree::Hasher: R1CSHasher,
 {
     info!("PoRep info");
 
@@ -63,7 +63,7 @@ where
 fn get_winning_post_info<Tree>(post_config: &PoStConfig) -> CircuitInfo
 where
     Tree: 'static + MerkleTreeTrait<Field = Fr>,
-    Tree::Hasher: Groth16Hasher,
+    Tree::Hasher: R1CSHasher,
 {
     info!("Winning PoSt info");
 
@@ -81,7 +81,7 @@ where
 fn get_window_post_info<Tree>(post_config: &PoStConfig) -> CircuitInfo
 where
     Tree: 'static + MerkleTreeTrait<Field = Fr>,
-    Tree::Hasher: Groth16Hasher,
+    Tree::Hasher: R1CSHasher,
 {
     info!("Window PoSt info");
 
