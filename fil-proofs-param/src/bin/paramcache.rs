@@ -134,12 +134,14 @@ where
         storage_proofs_update::PublicParams::from_sector_size(u64::from(porep_config.sector_size));
 
     let circuit = EmptySectorUpdateCompound::<
+        Fr,
         Tree::Arity,
         Tree::SubTreeArity,
         Tree::TopTreeArity,
     >::blank_circuit(&public_params);
 
     let _ = EmptySectorUpdateCompound::<
+        Fr,
         Tree::Arity,
         Tree::SubTreeArity,
         Tree::TopTreeArity,
@@ -150,6 +152,7 @@ where
         .expect("failed to get metadata");
 
     let _ = EmptySectorUpdateCompound::<
+        Fr,
         Tree::Arity,
         Tree::SubTreeArity,
         Tree::TopTreeArity,
