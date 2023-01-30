@@ -191,6 +191,16 @@ impl<F: FieldExt, Sha256Chip: Sha256Instructions<F>> Sha256<F, Sha256Chip> {
     }
 }
 
+/// Given size of preimage, returns size of SHA256 padding.
+///
+/// # Example
+///
+/// ```
+/// use fil_halo2_gadgets::sha256::get_padding_len;
+///
+/// let padding_len = get_padding_len(5);
+/// assert_eq!(padding_len, 11);
+/// ```
 pub fn get_padding_len(preimage_words: usize) -> usize {
     // The padding scheme requires that there are at least 3 unutilized words in the preimage's last
     // block: one word to append a `1` bit onto the end of the preimage and two words to append the
@@ -206,6 +216,20 @@ pub fn get_padding_len(preimage_words: usize) -> usize {
     }
 }
 
+/// Returns vector of `u32` values according to SHA256 padding scheme.
+///
+/// # Example
+///
+/// ```
+/// use fil_halo2_gadgets::sha256::get_padding;
+///
+/// let padding = get_padding(5);
+/// assert_eq!(padding[0], u32::MAX / 2 + 1);
+/// for index in 1..9 {
+///     assert_eq!(padding[index], 0);
+/// }
+/// assert_eq!(padding[10], 160);
+/// ```
 pub fn get_padding(preimage_words: usize) -> Vec<u32> {
     let padding_word_len = get_padding_len(preimage_words);
     let preimage_bits = preimage_words as u64 * 32;
@@ -217,6 +241,7 @@ pub fn get_padding(preimage_words: usize) -> Vec<u32> {
     padding
 }
 
+/// Columns and selectors required for [`Sha256Chip`]
 #[derive(Clone, Debug)]
 pub struct Sha256Config<F: FieldExt> {
     lookup: SpreadTableConfig,
@@ -228,6 +253,12 @@ pub struct Sha256Config<F: FieldExt> {
     s_add_state_words: Selector,
 }
 
+/// Halo2 chip for a complete SHA-256 hashing.
+///
+/// Current implementation uses 8 advice columns while configuration and requires
+/// preloading (calling [`Sha256Chip::load`]) before constructing actual chip's instance while
+/// synthesizing the circuit. Computing actual hash inside the circuit requires
+/// preimage information to be "manually" assigned previously or using [`Sha256WordsChip`].
 #[derive(Clone, Debug)]
 pub struct Sha256Chip<F: FieldExt> {
     config: Sha256Config<F>,
@@ -258,6 +289,7 @@ impl<F: FieldExt> ColumnCount for Sha256Chip<F> {
 }
 
 impl<F: FieldExt> Sha256Chip<F> {
+    /// Constructs instance of [`Sha256Chip`] using [`Sha256Config`].
     pub fn construct(config: Sha256Config<F>) -> Self {
         Sha256Chip { config }
     }
@@ -267,6 +299,7 @@ impl<F: FieldExt> Sha256Chip<F> {
         SpreadTableChip::load(config.lookup.clone(), layouter)
     }
 
+    /// Defines gates for [`Sha256Chip`] and returns instance of [`Sha256Config`].
     pub fn configure(
         meta: &mut ConstraintSystem<F>,
         advice: [Column<Advice>; 8],
@@ -873,6 +906,115 @@ impl<F: FieldExt> Sha256Chip<F> {
 
     /// Hash without padding `preimage`; `preimage` must must be assigned in columns which are
     /// equality enabled.
+    ///
+    /// # Example
+    ///
+    /// ```
+    ///  use pasta_curves::Fp;
+    ///  use halo2_proofs::plonk::{ConstraintSystem, Circuit, Error, Column, Advice};
+    ///  use halo2_proofs::circuit::{Value, SimpleFloorPlanner, Layouter};
+    ///  use fil_halo2_gadgets::AdviceIter;
+    ///  use fil_halo2_gadgets::boolean::AssignedBits;
+    ///  use fil_halo2_gadgets::sha256::{Sha256Chip, Sha256Config};
+    ///  use halo2_proofs::dev::MockProver;
+    ///  use sha2::{Digest, Sha256};
+    ///
+    ///  struct TestCircuit;
+    ///
+    ///  impl Circuit<Fp> for TestCircuit {
+    ///     type Config = (Sha256Config<Fp>, [Column<Advice>; 8]);
+    ///     type FloorPlanner = SimpleFloorPlanner;
+    ///
+    ///     fn without_witnesses(&self) -> Self {
+    ///         todo!()
+    ///     }
+    ///
+    ///     fn configure(meta: &mut ConstraintSystem<Fp>) -> Self::Config {
+    ///         let advice = [
+    ///             meta.advice_column(),
+    ///             meta.advice_column(),
+    ///             meta.advice_column(),
+    ///             meta.advice_column(),
+    ///             meta.advice_column(),
+    ///             meta.advice_column(),
+    ///             meta.advice_column(),
+    ///             meta.advice_column(),
+    ///         ];
+    ///
+    ///         (Sha256Chip::configure(meta, advice), advice)
+    ///     }
+    ///
+    ///     fn synthesize(
+    ///         &self,
+    ///         config: Self::Config,
+    ///         mut layouter: impl Layouter<Fp>,
+    ///     ) -> Result<(), Error> {
+    ///         let sha256config = config.0;
+    ///         let advice_cols = config.1;
+    ///
+    ///         // construct chip
+    ///         Sha256Chip::load(&mut layouter, &sha256config)?;
+    ///         let chip = Sha256Chip::construct(sha256config);
+    ///
+    ///         // assign preimage into the constraint system of the circuit
+    ///         let preimage = layouter.assign_region(
+    ///             || "load preimage",
+    ///             |mut region| {
+    ///                 let mut advice = AdviceIter::from(advice_cols.to_vec());
+    ///                 let mut assigned_words = vec![];
+    ///
+    ///                 // ultimately, we assign 512 following bits: [1, 0, 0, 0, ... 0], which
+    ///                 // corresponds to a single block of empty preimage
+    ///                 for index in 0..16 {
+    ///                     let (offset, column) = advice.next();
+    ///                     let word = AssignedBits::<Fp, 32>::assign(
+    ///                         &mut region,
+    ///                         || format!("preimage word {}", index),
+    ///                         column,
+    ///                         offset,
+    ///                         if index == 0 {
+    ///                             Value::known(2147483648u32)
+    ///                         } else {
+    ///                             Value::known(0u32)
+    ///                         },
+    ///                     )?;
+    ///                     assigned_words.push(word);
+    ///                 }
+    ///                 Ok(assigned_words)
+    ///             },
+    ///         )?;
+    ///
+    ///
+    ///         // compute hash inside the circuit
+    ///         let output = chip.hash_nopad(layouter.namespace(|| "hash nopad"), preimage.as_slice())?;
+    ///         let values = output
+    ///             .iter()
+    ///             .map(|word| word.value_u32().map(|word| word.to_be_bytes().to_vec()))
+    ///             .collect::<Vec<Value<Vec<u8>>>>();
+    ///
+    ///         // compute expected hash for empty preimage using third-party Sha256 outside-of-circuit implementation
+    ///         let mut sha256 = Sha256::new();
+    ///         sha256.update(vec![]);
+    ///         let expected_hash: Vec<u8> = sha256.finalize().to_vec();
+    ///
+    ///         // compare
+    ///         for (computed, expected) in
+    ///             values.into_iter().zip(expected_hash.chunks(4).into_iter())
+    ///         {
+    ///             computed.map(|computed| {
+    ///                 assert_eq!(computed, expected);
+    ///             });
+    ///         }
+    ///
+    ///         Ok(())
+    ///     }
+    ///  }
+    ///
+    ///  // circuit with some random preimage
+    ///  let circuit = TestCircuit;
+    ///  let prover = MockProver::run(17, &circuit, vec![]).expect("couldn't run mocked prover");
+    ///  assert!(prover.verify().is_ok());
+    /// ```
     pub fn hash_nopad(
         &self,
         mut layouter: impl Layouter<F>,
@@ -923,6 +1065,115 @@ impl<F: FieldExt> Sha256Chip<F> {
     }
 
     /// Hash `preimage`; `preimage` must must be assigned in columns which are equality enabled.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    ///  use pasta_curves::Fp;
+    ///  use halo2_proofs::plonk::{ConstraintSystem, Circuit, Error, Column, Advice};
+    ///  use halo2_proofs::circuit::{Value, SimpleFloorPlanner, Layouter};
+    ///  use fil_halo2_gadgets::AdviceIter;
+    ///  use fil_halo2_gadgets::boolean::AssignedBits;
+    ///  use fil_halo2_gadgets::sha256::{Sha256Chip, Sha256Config};
+    ///  use halo2_proofs::dev::MockProver;
+    ///  use sha2::{Digest, Sha256};
+    ///
+    ///  struct TestCircuit {
+    ///     preimage: Vec<u32>,
+    ///  }
+    ///
+    ///  impl Circuit<Fp> for TestCircuit {
+    ///     type Config = (Sha256Config<Fp>, [Column<Advice>; 8]);
+    ///     type FloorPlanner = SimpleFloorPlanner;
+    ///
+    ///     fn without_witnesses(&self) -> Self {
+    ///         todo!()
+    ///     }
+    ///
+    ///     fn configure(meta: &mut ConstraintSystem<Fp>) -> Self::Config {
+    ///         let advice = [
+    ///             meta.advice_column(),
+    ///             meta.advice_column(),
+    ///             meta.advice_column(),
+    ///             meta.advice_column(),
+    ///             meta.advice_column(),
+    ///             meta.advice_column(),
+    ///             meta.advice_column(),
+    ///             meta.advice_column(),
+    ///         ];
+    ///         (Sha256Chip::configure(meta, advice), advice)
+    ///     }
+    ///
+    ///     fn synthesize(
+    ///         &self,
+    ///         config: Self::Config,
+    ///         mut layouter: impl Layouter<Fp>,
+    ///     ) -> Result<(), Error> {
+    ///         let sha256config = config.0;
+    ///         let additional_advice_columns = config.1;
+    ///
+    ///         // construct chip
+    ///         Sha256Chip::load(&mut layouter, &sha256config)?;
+    ///         let chip = Sha256Chip::construct(sha256config);
+    ///
+    ///         // assign preimage into the constraint system of the circuit
+    ///         let preimage = layouter.assign_region(
+    ///             || "load preimage",
+    ///             |mut region| {
+    ///                 let mut advice = AdviceIter::from(additional_advice_columns.to_vec());
+    ///                 let mut assigned_words = vec![];
+    ///                 for index in 0..self.preimage.len() {
+    ///                     let (offset, column) = advice.next();
+    ///                     let word = AssignedBits::<Fp, 32>::assign(
+    ///                         &mut region,
+    ///                         || format!("preimage word {}", index),
+    ///                         column,
+    ///                         offset,
+    ///                         Value::known(self.preimage[index]),
+    ///                     )?;
+    ///                     assigned_words.push(word);
+    ///                 }
+    ///                 Ok(assigned_words)
+    ///             },
+    ///         )?;
+    ///
+    ///         // compute hash inside the circuit
+    ///         let output = chip.hash(layouter.namespace(|| "hash"), preimage.as_slice())?;
+    ///
+    ///         let values = output
+    ///             .iter()
+    ///             .map(|word| word.value_u32().map(|word| word.to_be_bytes().to_vec()))
+    ///             .collect::<Vec<Value<Vec<u8>>>>();
+    ///
+    ///         // compute expected hash using third-party Sha256 outside-of-circuit implementation
+    ///         let mut sha256 = Sha256::new();
+    ///         sha256.update(
+    ///             self.preimage
+    ///                 .iter()
+    ///                 .flat_map(|word| word.to_be_bytes().to_vec())
+    ///                 .collect::<Vec<u8>>(),
+    ///         );
+    ///         let expected_hash: Vec<u8> = sha256.finalize().to_vec();
+    ///
+    ///         // compare
+    ///         for (computed, expected) in values.into_iter().zip(expected_hash.chunks(4).into_iter()) {
+    ///             computed.map(|computed| {
+    ///                 assert_eq!(computed, expected);
+    ///             });
+    ///         }
+    ///
+    ///         Ok(())
+    ///     }
+    ///  }
+    ///
+    ///  // circuit with some random preimage
+    ///  let circuit = TestCircuit {
+    ///     preimage: vec![123u32, 10],
+    ///  };
+    ///
+    ///  let prover = MockProver::run(17, &circuit, vec![]).expect("couldn't run mocked prover");
+    ///  assert!(prover.verify().is_ok());
+    /// ```
     pub fn hash(
         &self,
         mut layouter: impl Layouter<F>,
@@ -939,6 +1190,7 @@ impl<F: FieldExt> Sha256Chip<F> {
     }
 }
 
+/// Columns and selectors required for [`Sha256FieldChip`].
 #[derive(Clone, Debug)]
 pub struct Sha256FieldConfig<F: FieldExt> {
     sha256: Sha256Config<F>,
@@ -946,6 +1198,12 @@ pub struct Sha256FieldConfig<F: FieldExt> {
     sha256_words: Sha256WordsConfig<F>,
 }
 
+/// Halo2 chip for field elements SHA256 hashing.
+///
+/// It internally uses [`Sha256Chip`] for actual hashing and [`Sha256WordsChip`] for loading
+/// words into Halo2 circuit along with their packing / composition / decomposition. Similarly
+/// to [`Sha256WordsChip`] it uses 9 advice columns. And similarly to [`Sha256Chip`] it requires
+/// preloading (calling [`Sha256Chip::load`] first, while synthesizing the circuit).
 #[derive(Clone, Debug)]
 pub struct Sha256FieldChip<F: FieldExt> {
     config: Sha256FieldConfig<F>,
@@ -976,6 +1234,7 @@ impl<F: FieldExt> ColumnCount for Sha256FieldChip<F> {
 }
 
 impl<F: FieldExt> Sha256FieldChip<F> {
+    /// Constructs instance of [`Sha256FieldChip`] using [`Sha256FieldConfig`].
     pub fn construct(config: Sha256FieldConfig<F>) -> Self {
         Sha256FieldChip { config }
     }
@@ -988,9 +1247,11 @@ impl<F: FieldExt> Sha256FieldChip<F> {
         Sha256Chip::load(layouter, &config.sha256)
     }
 
-    // # Side Effects
-    //
-    // `advice` will be equality enabled.
+    /// Defines gates for [`Sha256FieldChip`] and returns instance of [`Sha256FieldConfig`].
+    ///
+    /// # Side Effects
+    ///
+    /// `advice` will be equality enabled.
     pub fn configure(
         meta: &mut ConstraintSystem<F>,
         advice: [Column<Advice>; 9],
@@ -1003,6 +1264,7 @@ impl<F: FieldExt> Sha256FieldChip<F> {
         }
     }
 
+    /// Uses [`Sha256Chip::hash_nopad`] internally
     pub fn hash_words_nopad(
         &self,
         layouter: impl Layouter<F>,
@@ -1011,6 +1273,7 @@ impl<F: FieldExt> Sha256FieldChip<F> {
         Sha256Chip::construct(self.config.sha256.clone()).hash_nopad(layouter, preimage)
     }
 
+    /// Uses [`Sha256Chip::hash`] internally
     pub fn hash_words(
         &self,
         layouter: impl Layouter<F>,
@@ -1019,6 +1282,112 @@ impl<F: FieldExt> Sha256FieldChip<F> {
         Sha256Chip::construct(self.config.sha256.clone()).hash(layouter, preimage)
     }
 
+    /// Copies already assigned preimage (represented as field elements) into the circuit,
+    /// and hashes it. Returns digest as a field elements.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    ///  use pasta_curves::Fp;
+    ///  use halo2_proofs::plonk::{ConstraintSystem, Circuit, Error, Column, Advice};
+    ///  use halo2_proofs::circuit::{Value, SimpleFloorPlanner, Layouter};
+    ///  use fil_halo2_gadgets::AdviceIter;
+    ///  use fil_halo2_gadgets::sha256::{Sha256FieldChip, Sha256FieldConfig};
+    ///  use halo2_proofs::dev::MockProver;
+    ///  use rand::rngs::OsRng;
+    ///  use ff::Field;
+    ///
+    ///  struct TestCircuit {
+    ///     field_elements: Vec<Fp>,
+    ///  }
+    ///
+    ///  impl Circuit<Fp> for TestCircuit {
+    ///     type Config = (Sha256FieldConfig<Fp>, [Column<Advice>; 9]);
+    ///     type FloorPlanner = SimpleFloorPlanner;
+    ///
+    ///     fn without_witnesses(&self) -> Self {
+    ///         todo!()
+    ///     }
+    ///
+    ///     fn configure(meta: &mut ConstraintSystem<Fp>) -> Self::Config {
+    ///         let advice = [
+    ///             meta.advice_column(),
+    ///             meta.advice_column(),
+    ///             meta.advice_column(),
+    ///             meta.advice_column(),
+    ///             meta.advice_column(),
+    ///             meta.advice_column(),
+    ///             meta.advice_column(),
+    ///             meta.advice_column(),
+    ///             meta.advice_column(),
+    ///         ];
+    ///
+    ///         (Sha256FieldChip::configure(meta, advice), advice)
+    ///     }
+    ///
+    ///     fn synthesize(
+    ///         &self,
+    ///         config: Self::Config,
+    ///         mut layouter: impl Layouter<Fp>,
+    ///     ) -> Result<(), Error> {
+    ///         Sha256FieldChip::load(&mut layouter, &config.0);
+    ///
+    ///         let chip = Sha256FieldChip::construct(config.0);
+    ///         let additional_advice_columns = config.1;
+    ///
+    ///         // assign preimage into the constraint system of the circuit
+    ///         let field_elements_assigned = layouter.assign_region(
+    ///             || "field elements loading",
+    ///             |mut region| {
+    ///                 let mut assigned_field_elements = vec![];
+    ///
+    ///                 let mut advice = AdviceIter::from(additional_advice_columns.to_vec());
+    ///
+    ///                 for index in 0..self.field_elements.len() {
+    ///                     let (offset, col) = advice.next();
+    ///                     let assigned = region.assign_advice(
+    ///                         || format!("assign field element {}", index),
+    ///                         col,
+    ///                         offset,
+    ///                         || Value::known(self.field_elements[index]),
+    ///                     )?;
+    ///                     assigned_field_elements.push(assigned);
+    ///                 }
+    ///                 Ok(assigned_field_elements)
+    ///             },
+    ///         )?;
+    ///
+    ///         chip.hash_field_elems(
+    ///             layouter.namespace(|| "hash_field_elems"),
+    ///             &field_elements_assigned,
+    ///         )?;
+    ///
+    ///         Ok(())
+    ///     }
+    ///  }
+    ///
+    ///  let mut rng = OsRng;
+    ///
+    ///  // lets hash data from 10 random field elements
+    ///  let circuit = TestCircuit {
+    ///     field_elements: vec![
+    ///         Fp::random(&mut rng),
+    ///         Fp::random(&mut rng),
+    ///         Fp::random(&mut rng),
+    ///         Fp::random(&mut rng),
+    ///         Fp::random(&mut rng),
+    ///         Fp::random(&mut rng),
+    ///         Fp::random(&mut rng),
+    ///         Fp::random(&mut rng),
+    ///         Fp::random(&mut rng),
+    ///         Fp::random(&mut rng),
+    ///     ],
+    ///  };
+    ///
+    ///  let prover = MockProver::run(17, &circuit, vec![]).expect("couldn't run mocked prover");
+    ///  assert!(prover.verify().is_ok());
+    /// ```
+    ///
     pub fn hash_field_elems(
         &self,
         mut layouter: impl Layouter<F>,
@@ -1044,6 +1413,7 @@ impl<F: FieldExt> Sha256FieldChip<F> {
         words_chip.pack_digest(layouter.namespace(|| "pack digest"), &digest_words)
     }
 
+    /// Uses [`Sha256WordsChip::pack_digest`] internally.
     pub fn pack_digest(
         &self,
         layouter: impl Layouter<F>,
@@ -1054,6 +1424,7 @@ impl<F: FieldExt> Sha256FieldChip<F> {
     }
 }
 
+/// Columns and selectors required for [`Sha256WordsChip`]
 #[derive(Clone, Debug)]
 pub struct Sha256WordsConfig<F: FieldExt> {
     // Equality enabled advice.
@@ -1066,6 +1437,9 @@ pub struct Sha256WordsConfig<F: FieldExt> {
     strip_bits: StripBitsConfig<F>,
 }
 
+/// Halo2 chip for initial loading 32-bit words for further SHA256 processing into the circuit.
+/// It uses 8 + 1 = 9 advice columns currently, since packing operation requires 1 column for
+/// assigning composed value along with 8 columns for optimal assigning 32 bits of a single word.
 #[derive(Debug)]
 pub struct Sha256WordsChip<F: FieldExt> {
     config: Sha256WordsConfig<F>,
@@ -1096,10 +1470,12 @@ impl<F: FieldExt> ColumnCount for Sha256WordsChip<F> {
 }
 
 impl<F: FieldExt> Sha256WordsChip<F> {
+    /// Constructs instance of [`SHA256WordsChip`] using [`Sha256WordsConfig`].
     pub fn construct(config: Sha256WordsConfig<F>) -> Self {
         Sha256WordsChip { config }
     }
 
+    /// Defines gates for [`SHA256WordsChip`] and returns instance of [`Sha256WordsConfig`].
     pub fn configure(
         meta: &mut ConstraintSystem<F>,
         advice: [Column<Advice>; 9],
@@ -1284,6 +1660,96 @@ impl<F: FieldExt> Sha256WordsChip<F> {
         )
     }
 
+    /// Loads already assigned field element into the circuit and
+    /// returns 8 assigned 32-bit words.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use halo2_proofs::circuit::Value;
+    /// use pasta_curves::Fp;
+    /// use pasta_curves::group::ff::PrimeFieldBits;
+    /// use halo2_proofs::circuit::{SimpleFloorPlanner, Layouter};
+    /// use halo2_proofs::plonk::{Circuit, Column, Advice, ConstraintSystem, Error};
+    /// use fil_halo2_gadgets::sha256::{Sha256WordsChip, Sha256WordsConfig};
+    /// use halo2_proofs::dev::MockProver;
+    ///
+    ///
+    ///  struct TestCircuit {
+    ///     field_element: Value<Fp>,
+    ///  }
+    ///
+    ///  impl Circuit<Fp> for TestCircuit {
+    ///     type Config = (Sha256WordsConfig<Fp>, Column<Advice>);
+    ///     type FloorPlanner = SimpleFloorPlanner;
+    ///
+    ///     fn without_witnesses(&self) -> Self {
+    ///         todo!()
+    ///     }
+    ///
+    ///     fn configure(meta: &mut ConstraintSystem<Fp>) -> Self::Config {
+    ///         let advice = [
+    ///             meta.advice_column(),
+    ///             meta.advice_column(),
+    ///             meta.advice_column(),
+    ///             meta.advice_column(),
+    ///             meta.advice_column(),
+    ///             meta.advice_column(),
+    ///             meta.advice_column(),
+    ///             meta.advice_column(),
+    ///             meta.advice_column(),
+    ///         ];
+    ///
+    ///         (Sha256WordsChip::configure(meta, advice), advice[0])
+    ///     }
+    ///
+    ///     fn synthesize(
+    ///         &self,
+    ///         config: Self::Config,
+    ///         mut layouter: impl Layouter<Fp>,
+    ///     ) -> Result<(), Error> {
+    ///         let sha256_words_config = config.0;
+    ///         let advice_col = config.1;
+    ///         let words_chip = Sha256WordsChip::construct(sha256_words_config);
+    ///
+    ///         // "manually" assign one field element
+    ///         let assigned_fe = layouter.assign_region(
+    ///             || "assign field element",
+    ///             |mut region| {
+    ///                 region.assign_advice(
+    ///                 || "assign field element",
+    ///                 advice_col,
+    ///                 0,
+    ///                 || self.field_element,
+    ///             )},
+    ///         )?;
+    ///
+    ///         let words = words_chip.into_words(
+    ///             layouter.namespace(|| "field element decomposition into 32-bit words"),
+    ///             assigned_fe,
+    ///         )?;
+    ///
+    ///         self.field_element.map(|fe| {
+    ///             for (actual, expected) in words.iter().zip(fe.to_le_bits().chunks(32)) {
+    ///                 actual.value().map(|actual| {
+    ///                     for (actual_bit, expected_bit) in actual.iter().zip(expected.iter()) {
+    ///                         assert_eq!(*actual_bit, *(expected_bit.as_ref()));
+    ///                     }
+    ///                 });
+    ///             }
+    ///         });
+    ///
+    ///         Ok(())
+    ///     }
+    ///  }
+    ///
+    ///  let circuit = TestCircuit {
+    ///     field_element: Value::known(Fp::from(u64::MAX)),
+    ///  };
+    ///
+    ///  let prover = MockProver::run(6, &circuit, vec![]).expect("couldn't run mocked prover");
+    ///  assert!(prover.verify().is_ok());
+    /// ```
     pub fn into_words(
         &self,
         layouter: impl Layouter<F>,
@@ -1292,6 +1758,81 @@ impl<F: FieldExt> Sha256WordsChip<F> {
         self.into_words_inner(layouter, MaybeAssigned::Assigned(field))
     }
 
+    /// Loads already assigned field element into the circuit and
+    /// returns 8 assigned 32-bit words.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    ///  use halo2_proofs::circuit::Value;
+    ///  use pasta_curves::Fp;
+    ///  use pasta_curves::group::ff::PrimeFieldBits;
+    ///  use halo2_proofs::circuit::{SimpleFloorPlanner, Layouter};
+    ///  use halo2_proofs::plonk::{Circuit, Column, Advice, ConstraintSystem, Error};
+    ///  use fil_halo2_gadgets::sha256::{Sha256WordsChip, Sha256WordsConfig};
+    ///  use halo2_proofs::dev::MockProver;
+    ///
+    ///  struct TestCircuit {
+    ///     field_element: Value<Fp>,
+    ///  }
+    ///
+    ///  impl Circuit<Fp> for TestCircuit {
+    ///     type Config = Sha256WordsConfig<Fp>;
+    ///     type FloorPlanner = SimpleFloorPlanner;
+    ///
+    ///     fn without_witnesses(&self) -> Self {
+    ///         todo!()
+    ///     }
+    ///
+    ///     fn configure(meta: &mut ConstraintSystem<Fp>) -> Self::Config {
+    ///         let advice = [
+    ///             meta.advice_column(),
+    ///             meta.advice_column(),
+    ///             meta.advice_column(),
+    ///             meta.advice_column(),
+    ///             meta.advice_column(),
+    ///             meta.advice_column(),
+    ///             meta.advice_column(),
+    ///             meta.advice_column(),
+    ///             meta.advice_column(),
+    ///         ];
+    ///
+    ///         Sha256WordsChip::configure(meta, advice)
+    ///     }
+    ///
+    ///     fn synthesize(
+    ///         &self,
+    ///         config: Self::Config,
+    ///         mut layouter: impl Layouter<Fp>,
+    ///     ) -> Result<(), Error> {
+    ///         let words_chip = Sha256WordsChip::construct(config);
+    ///
+    ///         let words = words_chip.witness_into_words(
+    ///             layouter.namespace(|| "field element decomposition into 32-bit words"),
+    ///             self.field_element,
+    ///         )?;
+    ///
+    ///         self.field_element.map(|fe| {
+    ///             for (actual, expected) in words.iter().zip(fe.to_le_bits().chunks(32)) {
+    ///                 actual.value().map(|actual| {
+    ///                     for (actual_bit, expected_bit) in actual.iter().zip(expected.iter()) {
+    ///                         assert_eq!(*actual_bit, *(expected_bit.as_ref()));
+    ///                     }
+    ///                 });
+    ///             }
+    ///         });
+    ///
+    ///         Ok(())
+    ///     }
+    ///  }
+    ///
+    ///  let circuit = TestCircuit {
+    ///     field_element: Value::known(Fp::from(u64::MAX)),
+    ///  };
+    ///
+    ///  let prover = MockProver::run(6, &circuit, vec![]).expect("couldn't run mocked prover");
+    ///  assert!(prover.verify().is_ok());
+    /// ```
     pub fn witness_into_words(
         &self,
         layouter: impl Layouter<F>,
@@ -1300,6 +1841,88 @@ impl<F: FieldExt> Sha256WordsChip<F> {
         self.into_words_inner(layouter, MaybeAssigned::Unassigned(field))
     }
 
+    /// Loads (decomposes) field elements from public input into the circuit
+    /// as 32-bit words for further manipulations.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    ///  use halo2_proofs::circuit::Value;
+    ///  use pasta_curves::Fp;
+    ///  use pasta_curves::group::ff::PrimeFieldBits;
+    ///  use halo2_proofs::circuit::{SimpleFloorPlanner, Layouter};
+    ///  use halo2_proofs::plonk::{Circuit, Column, Instance, ConstraintSystem, Error};
+    ///  use fil_halo2_gadgets::sha256::{Sha256WordsChip, Sha256WordsConfig};
+    ///  use halo2_proofs::dev::MockProver;
+    ///
+    ///  struct TestCircuit {
+    ///     pi: u32,
+    ///  }
+    ///
+    ///  impl Circuit<Fp> for TestCircuit {
+    ///     type Config = (Sha256WordsConfig<Fp>, Column<Instance>);
+    ///     type FloorPlanner = SimpleFloorPlanner;
+    ///
+    ///     fn without_witnesses(&self) -> Self {
+    ///         todo!()
+    ///     }
+    ///
+    ///     fn configure(meta: &mut ConstraintSystem<Fp>) -> Self::Config {
+    ///         let advice = [
+    ///             meta.advice_column(),
+    ///             meta.advice_column(),
+    ///             meta.advice_column(),
+    ///             meta.advice_column(),
+    ///             meta.advice_column(),
+    ///             meta.advice_column(),
+    ///             meta.advice_column(),
+    ///             meta.advice_column(),
+    ///             meta.advice_column(),
+    ///         ];
+    ///         let instance = meta.instance_column();
+    ///         meta.enable_equality(instance);
+    ///
+    ///         (Sha256WordsChip::configure(meta, advice), instance)
+    ///     }
+    ///
+    ///     fn synthesize(
+    ///         &self,
+    ///         config: Self::Config,
+    ///         mut layouter: impl Layouter<Fp>,
+    ///     ) -> Result<(), Error> {
+    ///         let sha256_words_config = config.0;
+    ///         let instance_col = config.1;
+    ///         let words_chip = Sha256WordsChip::construct(sha256_words_config);
+    ///
+    ///         let tuples = [(0usize, self.pi - 1), (1usize, self.pi)];
+    ///
+    ///         for (pi_row, pi_val) in tuples {
+    ///             let words = words_chip.pi_into_words(
+    ///                 layouter.namespace(|| "pi_into_words"),
+    ///                 instance_col,
+    ///                 pi_row,
+    ///             )?;
+    ///
+    ///         // After decomposition we can check that information about `pi` has been loaded and since pi can't exceed u32::MAX,
+    ///         // all information occupies only first 32-bit word among 8 assigned words
+    ///         words[0]
+    ///             .value_u32()
+    ///             .map(|word| assert_eq!(word.to_le_bytes(), pi_val.to_be_bytes()));
+    ///         }
+    ///         Ok(())
+    ///     }
+    ///  }
+    ///
+    ///  let pi = u32::MAX;
+    ///  let circuit = TestCircuit { pi };
+    ///
+    ///  // Let's put two values into instance: u32::MAX - 1 and u32::MAX.
+    ///  // Inside the circuit we will decompose them both into 32-bit words one by one
+    ///  let instances = vec![Fp::from((pi - 1) as u64), Fp::from(pi as u64)];
+    ///
+    ///  let prover = MockProver::run(5, &circuit, vec![instances]).expect("couldn't run mocked prover");
+    ///  assert!(prover.verify().is_ok());
+    /// ```
     pub fn pi_into_words(
         &self,
         layouter: impl Layouter<F>,
@@ -1332,6 +1955,77 @@ impl<F: FieldExt> Sha256WordsChip<F> {
         Ok(words.try_into().unwrap())
     }
 
+    /// Packs 8 32-bit words (digest of SHA-256) into a single field element
+    ///
+    /// # Examples
+    /// ```
+    ///  use halo2_proofs::circuit::Value;
+    ///  use pasta_curves::Fp;
+    ///  use pasta_curves::group::ff::PrimeFieldBits;
+    ///  use halo2_proofs::circuit::{SimpleFloorPlanner, Layouter};
+    ///  use halo2_proofs::plonk::{Circuit, Column, Instance, ConstraintSystem, Error};
+    ///  use fil_halo2_gadgets::sha256::{Sha256WordsChip, Sha256WordsConfig};
+    ///  use halo2_proofs::dev::MockProver;
+    ///
+    ///  struct TestCircuit {
+    ///     field_element: Value<Fp>,
+    ///  }
+    ///
+    ///  impl Circuit<Fp> for TestCircuit {
+    ///     type Config = Sha256WordsConfig<Fp>;
+    ///     type FloorPlanner = SimpleFloorPlanner;
+    ///
+    ///     fn without_witnesses(&self) -> Self {
+    ///         todo!()
+    ///     }
+    ///
+    ///     fn configure(meta: &mut ConstraintSystem<Fp>) -> Self::Config {
+    ///         let advice = [
+    ///             meta.advice_column(),
+    ///             meta.advice_column(),
+    ///             meta.advice_column(),
+    ///             meta.advice_column(),
+    ///             meta.advice_column(),
+    ///             meta.advice_column(),
+    ///             meta.advice_column(),
+    ///             meta.advice_column(),
+    ///             meta.advice_column(),
+    ///         ];
+    ///
+    ///         Sha256WordsChip::configure(meta, advice)
+    ///     }
+    ///
+    ///     fn synthesize(
+    ///         &self,
+    ///         config: Self::Config,
+    ///         mut layouter: impl Layouter<Fp>,
+    ///     ) -> Result<(), Error> {
+    ///         let words_chip = Sha256WordsChip::construct(config);
+    ///
+    ///         let words = words_chip.witness_into_words(
+    ///             layouter.namespace(|| "field element decomposition into 32-bit words"),
+    ///             self.field_element,
+    ///         )?;
+    ///
+    ///         let packed = words_chip.pack_digest(layouter.namespace(|| "pack words"), &words)?;
+    ///
+    ///         packed
+    ///             .value()
+    ///             .zip(self.field_element)
+    ///             .map(|(packed, expected)| { assert_eq!(*packed, expected); }
+    ///         );
+    ///
+    ///         Ok(())
+    ///     }
+    ///  }
+    ///
+    ///  let circuit = TestCircuit {
+    ///     field_element: Value::known(Fp::from(u64::MAX)),
+    ///  };
+    ///
+    ///  let prover = MockProver::run(5, &circuit, vec![]).expect("couldn't run mocked prover");
+    ///  assert!(prover.verify().is_ok());
+    /// ```
     pub fn pack_digest(
         &self,
         mut layouter: impl Layouter<F>,

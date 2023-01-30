@@ -405,6 +405,19 @@ jobs:
             xd009642/tarpaulin
             sh -c "apt update && apt install -y libssl-dev ocl-icd-opencl-dev libhwloc-dev && cargo tarpaulin --timeout 1800 --release -v"
           no_output_timeout: 30m
+
+  docs:
+    executor: default
+    environment: *setup-env
+    steps:
+      - checkout
+      - attach_workspace:
+          at: "."
+      - restore_rustup_cache
+      - run:
+          name: Documentation tests
+          command: cargo test --doc
+
 commands:
   ensure_filecoin_parameters:
     steps:
@@ -668,3 +681,7 @@ workflows:
           requires:
             - cargo_fetch
             - ensure_parameters_and_keys_linux
+
+      - docs:
+          requires:
+            - cargo_fetch
