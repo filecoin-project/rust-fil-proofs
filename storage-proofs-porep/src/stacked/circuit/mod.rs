@@ -6,4 +6,5 @@ mod params;
 mod proof;
 
 pub use create_label::*;
+pub use hash::hash_single_column;
 pub use proof::{StackedCircuit, StackedCompound};

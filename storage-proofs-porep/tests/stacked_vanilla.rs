@@ -7,8 +7,11 @@ use filecoin_hashers::{
 };
 use generic_array::typenum::{U0, U2, U4, U8};
 use glob::glob;
+#[cfg(feature = "halo2")]
 use halo2_proofs::pasta::{Fp, Fq};
 use merkletree::store::{Store, StoreConfig};
+#[cfg(feature = "nova")]
+use pasta_curves::{Fp, Fq};
 use rand::{Rng, SeedableRng};
 use rand_xorshift::XorShiftRng;
 use storage_proofs_core::{
@@ -36,54 +39,63 @@ const DEFAULT_STACKED_LAYERS: usize = 11;
 #[test]
 fn test_stacked_porep_extract_all_sha256_base_8() {
     test_extract_all::<DiskTree<Sha256Hasher<Fr>, U8, U0, U0>>();
+    #[cfg(any(feature = "nova", feature = "halo2"))]
     test_extract_all::<DiskTree<Sha256Hasher<Fp>, U8, U0, U0>>();
 }
 
 #[test]
 fn test_stacked_porep_extract_all_sha256_sub_8_8() {
     test_extract_all::<DiskTree<Sha256Hasher<Fr>, U8, U8, U0>>();
+    #[cfg(any(feature = "nova", feature = "halo2"))]
     test_extract_all::<DiskTree<Sha256Hasher<Fq>, U8, U8, U0>>();
 }
 
 #[test]
 fn test_stacked_porep_extract_all_sha256_top_8_8_2() {
     test_extract_all::<DiskTree<Sha256Hasher<Fr>, U8, U8, U2>>();
+    #[cfg(any(feature = "nova", feature = "halo2"))]
     test_extract_all::<DiskTree<Sha256Hasher<Fp>, U8, U8, U2>>();
 }
 
 #[test]
 fn test_stacked_porep_extract_all_blake2s_base_8() {
     test_extract_all::<DiskTree<Blake2sHasher<Fr>, U8, U0, U0>>();
+    #[cfg(any(feature = "nova", feature = "halo2"))]
     test_extract_all::<DiskTree<Blake2sHasher<Fq>, U8, U0, U0>>();
 }
 
 #[test]
 fn test_stacked_porep_extract_all_blake2s_sub_8_8() {
     test_extract_all::<DiskTree<Blake2sHasher<Fr>, U8, U8, U0>>();
+    #[cfg(any(feature = "nova", feature = "halo2"))]
     test_extract_all::<DiskTree<Blake2sHasher<Fp>, U8, U8, U0>>();
 }
 
 #[test]
 fn test_stacked_porep_extract_all_blake2s_top_8_8_2() {
     test_extract_all::<DiskTree<Blake2sHasher<Fr>, U8, U8, U2>>();
+    #[cfg(any(feature = "nova", feature = "halo2"))]
     test_extract_all::<DiskTree<Blake2sHasher<Fq>, U8, U8, U2>>();
 }
 
 #[test]
 fn test_stacked_porep_extract_all_poseidon_base_8() {
     test_extract_all::<DiskTree<PoseidonHasher<Fr>, U8, U0, U0>>();
+    #[cfg(any(feature = "nova", feature = "halo2"))]
     test_extract_all::<DiskTree<PoseidonHasher<Fp>, U8, U0, U0>>();
 }
 
 #[test]
 fn test_stacked_porep_extract_all_poseidon_sub_8_2() {
     test_extract_all::<DiskTree<PoseidonHasher<Fr>, U8, U2, U0>>();
+    #[cfg(any(feature = "nova", feature = "halo2"))]
     test_extract_all::<DiskTree<PoseidonHasher<Fq>, U8, U2, U0>>();
 }
 
 #[test]
 fn test_stacked_porep_extract_all_poseidon_top_8_8_2() {
     test_extract_all::<DiskTree<PoseidonHasher<Fr>, U8, U8, U2>>();
+    #[cfg(any(feature = "nova", feature = "halo2"))]
     test_extract_all::<DiskTree<PoseidonHasher<Fp>, U8, U8, U2>>();
 }
 
@@ -357,29 +369,32 @@ fn test_prove_verify_fixed(n: usize) {
     test_prove_verify::<DiskTree<PoseidonHasher<Fr>, U8, U8, U2>>(n, challenges.clone());
 
     // Alternate Pasta fields rather than run each test for both fields.
-    test_prove_verify::<DiskTree<Sha256Hasher<Fp>, U8, U0, U0>>(n, challenges.clone());
-    test_prove_verify::<DiskTree<Sha256Hasher<Fp>, U8, U2, U0>>(n, challenges.clone());
-    test_prove_verify::<DiskTree<Sha256Hasher<Fp>, U8, U8, U2>>(n, challenges.clone());
+    #[cfg(any(feature = "nova", feature = "halo2"))]
+    {
+        test_prove_verify::<DiskTree<Sha256Hasher<Fp>, U8, U0, U0>>(n, challenges.clone());
+        test_prove_verify::<DiskTree<Sha256Hasher<Fp>, U8, U2, U0>>(n, challenges.clone());
+        test_prove_verify::<DiskTree<Sha256Hasher<Fp>, U8, U8, U2>>(n, challenges.clone());
 
-    test_prove_verify::<DiskTree<Sha256Hasher<Fq>, U4, U0, U0>>(n, challenges.clone());
-    test_prove_verify::<DiskTree<Sha256Hasher<Fq>, U4, U2, U0>>(n, challenges.clone());
-    test_prove_verify::<DiskTree<Sha256Hasher<Fq>, U4, U8, U2>>(n, challenges.clone());
+        test_prove_verify::<DiskTree<Sha256Hasher<Fq>, U4, U0, U0>>(n, challenges.clone());
+        test_prove_verify::<DiskTree<Sha256Hasher<Fq>, U4, U2, U0>>(n, challenges.clone());
+        test_prove_verify::<DiskTree<Sha256Hasher<Fq>, U4, U8, U2>>(n, challenges.clone());
 
-    test_prove_verify::<DiskTree<Blake2sHasher<Fp>, U8, U0, U0>>(n, challenges.clone());
-    test_prove_verify::<DiskTree<Blake2sHasher<Fp>, U8, U2, U0>>(n, challenges.clone());
-    test_prove_verify::<DiskTree<Blake2sHasher<Fp>, U8, U8, U2>>(n, challenges.clone());
+        test_prove_verify::<DiskTree<Blake2sHasher<Fp>, U8, U0, U0>>(n, challenges.clone());
+        test_prove_verify::<DiskTree<Blake2sHasher<Fp>, U8, U2, U0>>(n, challenges.clone());
+        test_prove_verify::<DiskTree<Blake2sHasher<Fp>, U8, U8, U2>>(n, challenges.clone());
 
-    test_prove_verify::<DiskTree<Blake2sHasher<Fq>, U4, U0, U0>>(n, challenges.clone());
-    test_prove_verify::<DiskTree<Blake2sHasher<Fq>, U4, U2, U0>>(n, challenges.clone());
-    test_prove_verify::<DiskTree<Blake2sHasher<Fq>, U4, U8, U2>>(n, challenges.clone());
+        test_prove_verify::<DiskTree<Blake2sHasher<Fq>, U4, U0, U0>>(n, challenges.clone());
+        test_prove_verify::<DiskTree<Blake2sHasher<Fq>, U4, U2, U0>>(n, challenges.clone());
+        test_prove_verify::<DiskTree<Blake2sHasher<Fq>, U4, U8, U2>>(n, challenges.clone());
 
-    test_prove_verify::<DiskTree<PoseidonHasher<Fp>, U8, U0, U0>>(n, challenges.clone());
-    test_prove_verify::<DiskTree<PoseidonHasher<Fp>, U8, U2, U0>>(n, challenges.clone());
-    test_prove_verify::<DiskTree<PoseidonHasher<Fp>, U8, U8, U2>>(n, challenges.clone());
+        test_prove_verify::<DiskTree<PoseidonHasher<Fp>, U8, U0, U0>>(n, challenges.clone());
+        test_prove_verify::<DiskTree<PoseidonHasher<Fp>, U8, U2, U0>>(n, challenges.clone());
+        test_prove_verify::<DiskTree<PoseidonHasher<Fp>, U8, U8, U2>>(n, challenges.clone());
 
-    test_prove_verify::<DiskTree<PoseidonHasher<Fq>, U4, U0, U0>>(n, challenges.clone());
-    test_prove_verify::<DiskTree<PoseidonHasher<Fq>, U4, U2, U0>>(n, challenges.clone());
-    test_prove_verify::<DiskTree<PoseidonHasher<Fq>, U4, U8, U2>>(n, challenges);
+        test_prove_verify::<DiskTree<PoseidonHasher<Fq>, U4, U0, U0>>(n, challenges.clone());
+        test_prove_verify::<DiskTree<PoseidonHasher<Fq>, U4, U2, U0>>(n, challenges.clone());
+        test_prove_verify::<DiskTree<PoseidonHasher<Fq>, U4, U8, U2>>(n, challenges);
+    }
 }
 
 fn test_prove_verify<Tree>(n: usize, challenges: LayerChallenges)

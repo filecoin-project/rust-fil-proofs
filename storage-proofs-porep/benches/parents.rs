@@ -3,7 +3,10 @@ use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use filecoin_hashers::{blake2s::Blake2sHasher, sha256::Sha256Hasher, Hasher};
 #[cfg(feature = "cpu-profile")]
 use gperftools::profiler::PROFILER;
+#[cfg(feature = "halo2")]
 use halo2_proofs::pasta::Fp;
+#[cfg(feature = "nova")]
+use pasta_curves::Fp;
 use storage_proofs_core::{
     api_version::ApiVersion,
     drgraph::{Graph, BASE_DEGREE},
@@ -63,6 +66,7 @@ fn parents_loop_benchmark(c: &mut Criterion) {
             let mut parents = vec![0; graph.degree()];
             b.iter(|| black_box(parents_loop::<Sha256Hasher<Fr>, _>(&graph, &mut parents)))
         });
+        #[cfg(any(feature = "nova", feature = "halo2"))]
         group.bench_function(format!("Blake2s-pallas-{}", size), |b| {
             let graph = pregenerate_graph::<Blake2sHasher<Fp>>(size, ApiVersion::V1_1_0);
             let mut parents = vec![0; graph.degree()];
@@ -70,6 +74,7 @@ fn parents_loop_benchmark(c: &mut Criterion) {
             b.iter(|| black_box(parents_loop::<Blake2sHasher<Fp>, _>(&graph, &mut parents)));
             stop_profile();
         });
+        #[cfg(any(feature = "nova", feature = "halo2"))]
         group.bench_function(format!("Sha256-pallas-{}", size), |b| {
             let graph = pregenerate_graph::<Sha256Hasher<Fp>>(size, ApiVersion::V1_1_0);
             let mut parents = vec![0; graph.degree()];

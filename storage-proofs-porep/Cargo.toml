@@ -41,8 +41,10 @@ fr32 = { path = "../fr32", version = "~5.0.0", default-features = false }
 yastl = "0.1.2"
 blstrs = "0.6.1"
 typemap = "0.3.3"
-halo2_proofs = "0.2.0"
-fil-halo2-gadgets = { path = "../fil-halo2-gadgets" }
+halo2_proofs = { version = "0.2.0", optional = true }
+fil-halo2-gadgets = { path = "../fil-halo2-gadgets", optional = true }
+nova-snark = { version = "0.14.0", optional = true }
+pasta_curves = { version = "0.5.2", optional = true, features = ["repr-c", "serde"], package = "fil_pasta_curves" }
 
 [target."cfg(target_arch = \"aarch64\")".dependencies]
 sha2 = { version = "0.10.2", features = ["compress", "asm"] }
@@ -64,6 +66,8 @@ opencl = ["storage-proofs-core/opencl", "filecoin-hashers/opencl", "neptune/open
 isolated-testing = []
 multicore-sdr = ["hwloc"]
 big-tests = []
+nova = ["storage-proofs-core/nova", "filecoin-hashers/nova", "nova-snark", "pasta_curves"]
+halo2 = ["storage-proofs-core/halo2", "filecoin-hashers/halo2", "fil-halo2-gadgets", "halo2_proofs"]
 
 [[bench]]
 name = "encode"

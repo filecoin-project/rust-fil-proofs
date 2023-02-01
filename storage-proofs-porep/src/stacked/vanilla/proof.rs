@@ -11,6 +11,7 @@ use blstrs::Scalar as Fr;
 use fdlimit::raise_fd_limit;
 use filecoin_hashers::{poseidon::PoseidonHasher, Domain, HashFunction, Hasher, PoseidonArity};
 use generic_array::typenum::{Unsigned, U0, U11, U2, U8};
+#[cfg(feature = "halo2")]
 use halo2_proofs::pasta::{Fp, Fq};
 use lazy_static::lazy_static;
 use log::{error, info, trace};
@@ -18,6 +19,8 @@ use merkletree::{
     merkle::{get_merkle_tree_len, is_merkle_tree_size_valid},
     store::{DiskStore, Store, StoreConfig},
 };
+#[cfg(feature = "nova")]
+use pasta_curves::{Fp, Fq};
 use rayon::prelude::{
     IndexedParallelIterator, IntoParallelIterator, ParallelIterator, ParallelSliceMut,
 };
@@ -452,7 +455,9 @@ where
         SETTINGS.use_gpu_column_builder
             && [
                 TypeId::of::<PoseidonHasher<Fr>>(),
+                #[cfg(any(feature = "nova", feature = "halo2"))]
                 TypeId::of::<PoseidonHasher<Fp>>(),
+                #[cfg(any(feature = "nova", feature = "halo2"))]
                 TypeId::of::<PoseidonHasher<Fq>>(),
             ]
             .contains(&TypeId::of::<Tree::Hasher>())
@@ -464,7 +469,9 @@ where
         SETTINGS.use_gpu_tree_builder
             && [
                 TypeId::of::<PoseidonHasher<Fr>>(),
+                #[cfg(any(feature = "nova", feature = "halo2"))]
                 TypeId::of::<PoseidonHasher<Fp>>(),
+                #[cfg(any(feature = "nova", feature = "halo2"))]
                 TypeId::of::<PoseidonHasher<Fq>>(),
             ]
             .contains(&TypeId::of::<Tree::Hasher>())

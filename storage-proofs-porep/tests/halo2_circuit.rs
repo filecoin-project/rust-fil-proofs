@@ -1,3 +1,4 @@
+#![cfg(feature = "halo2")]
 #![allow(unused_imports, dead_code)]
 
 use ff::{Field, PrimeField};
