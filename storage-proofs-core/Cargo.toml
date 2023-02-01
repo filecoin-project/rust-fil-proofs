@@ -45,6 +45,7 @@ cbc = { version = "0.1.2", features = ["std"] }
 halo2_proofs = "0.2.0"
 fil-halo2-gadgets = { path = "../fil-halo2-gadgets" }
 ec-gpu = "0.2.0"
+nova-snark = { version = "0.10.0", default-features = false }
 
 [dev-dependencies]
 proptest = "1.0.0"

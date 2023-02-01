@@ -23,6 +23,7 @@ pub mod halo2;
 pub mod measurements;
 pub mod merkle;
 pub mod multi_proof;
+pub mod nova;
 pub mod parameter_cache;
 pub mod partitions;
 pub mod pieces;
