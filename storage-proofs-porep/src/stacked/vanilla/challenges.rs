@@ -1,8 +1,15 @@
 use filecoin_hashers::Domain;
 use num_bigint::BigUint;
-use num_traits::cast::ToPrimitive;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
+
+#[inline]
+fn bigint_to_challenge(bigint: BigUint, sector_nodes: usize) -> usize {
+    // Ensure that we don't challenge the first node.
+    let non_zero_node = (bigint % (sector_nodes - 1)) + 1usize;
+    // Assumes `sector_nodes` is less than 2^32.
+    non_zero_node.to_u32_digits()[0] as usize
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LayerChallenges {
@@ -56,15 +63,8 @@ impl LayerChallenges {
                     .chain_update(j.to_le_bytes())
                     .finalize();
 
-                let big_challenge = BigUint::from_bytes_le(hash.as_ref());
-
-                // We cannot try to prove the first node, so make sure the challenge
-                // can never be 0.
-                let big_mod_challenge = big_challenge % (leaves - 1);
-                let big_mod_challenge = big_mod_challenge
-                    .to_usize()
-                    .expect("`big_mod_challenge` exceeds size of `usize`");
-                big_mod_challenge + 1
+                let bigint = BigUint::from_bytes_le(hash.as_ref());
+                bigint_to_challenge(bigint, leaves)
             })
             .collect()
     }
@@ -74,6 +74,249 @@ impl LayerChallenges {
 pub struct ChallengeRequirements {
     pub minimum_challenges: usize,
 }
+
+pub mod synthetic {
+    use super::*;
+
+    use std::convert::TryInto;
+
+    use blstrs::Scalar as Fr;
+    use chacha20::{
+        cipher::{KeyIvInit, StreamCipher, StreamCipherSeek},
+        ChaCha20,
+    };
+    use ff::PrimeField;
+
+    // Default synthetic challenge count for production sector sizes.
+    const DEFAULT_SYNTH_CHALLENGE_COUNT: usize = 1 << 14;
+    const CHACHA20_NONCE: [u8; 12] = [0; 12];
+    const CHACHA20_BLOCK_SIZE: u32 = 64;
+
+    // The psuedo-random function used to generate synthetic challenges.
+    pub enum Prf {
+        Sha256,
+        ChaCha20 {
+            chacha20: ChaCha20,
+            // Each call to the chacha20 prf generates two synthetic challenges.
+            next_challenge: Option<usize>,
+        },
+    }
+
+    pub struct SynthChallenges {
+        sector_nodes: usize,
+        replica_id: [u8; 32],
+        prf: Prf,
+        num_synth_challenges: usize,
+        i: usize,
+    }
+
+    impl Iterator for SynthChallenges {
+        type Item = usize;
+
+        // Returns the next synthetic challenge.
+        #[allow(clippy::unwrap_used)]
+        fn next(&mut self) -> Option<Self::Item> {
+            if self.i >= self.num_synth_challenges {
+                return None;
+            }
+
+            let challenge = match self.prf {
+                Prf::Sha256 => {
+                    let rand_bytes = Sha256::new()
+                        .chain_update(self.replica_id)
+                        .chain_update(&self.i.to_le_bytes()[..4])
+                        .finalize();
+                    let bigint = BigUint::from_bytes_le(rand_bytes.as_ref());
+                    bigint_to_challenge(bigint, self.sector_nodes)
+                }
+                Prf::ChaCha20 {
+                    ref mut chacha20,
+                    ref mut next_challenge,
+                } => {
+                    // Two synthetic challenges are generated per chacha20 call.
+                    if next_challenge.is_some() {
+                        next_challenge.take().unwrap()
+                    } else {
+                        let mut rand_bytes = [0u8; 64];
+                        chacha20.apply_keystream(&mut rand_bytes);
+                        let bigint_1 = BigUint::from_bytes_le(&rand_bytes[..32]);
+                        let bigint_2 = BigUint::from_bytes_le(&rand_bytes[32..]);
+                        *next_challenge = Some(bigint_to_challenge(bigint_2, self.sector_nodes));
+                        bigint_to_challenge(bigint_1, self.sector_nodes)
+                    }
+                }
+            };
+
+            self.i += 1;
+            Some(challenge)
+        }
+    }
+
+    impl SynthChallenges {
+        pub fn new_sha256(
+            sector_nodes: usize,
+            replica_id: &Fr,
+            num_synth_challenges: usize,
+        ) -> Self {
+            assert!(
+                num_synth_challenges < 1 << 32,
+                "num_synth_challenges must not exceed u32"
+            );
+            SynthChallenges {
+                sector_nodes,
+                replica_id: replica_id.to_repr(),
+                prf: Prf::Sha256,
+                num_synth_challenges,
+                i: 0,
+            }
+        }
+
+        pub fn new_chacha20(
+            sector_nodes: usize,
+            replica_id: &Fr,
+            num_synth_challenges: usize,
+        ) -> Self {
+            assert!(
+                num_synth_challenges < 1 << 32,
+                "num_synth_challenges must not exceed u32"
+            );
+            let replica_id = replica_id.to_repr();
+            let chacha20 = {
+                let key = replica_id;
+                ChaCha20::new(&key.into(), &CHACHA20_NONCE.into())
+            };
+            SynthChallenges {
+                sector_nodes,
+                replica_id,
+                prf: Prf::ChaCha20 {
+                    chacha20,
+                    next_challenge: None,
+                },
+                num_synth_challenges,
+                i: 0,
+            }
+        }
+
+        #[inline]
+        pub fn default_sha256(sector_nodes: usize, replica_id: &Fr) -> Self {
+            // If the default synthethic challenge count exceeds the number of sector nodes, then
+            // challenge all sector nodes.
+            let num_synth_challenges = if sector_nodes < DEFAULT_SYNTH_CHALLENGE_COUNT {
+                sector_nodes
+            } else {
+                DEFAULT_SYNTH_CHALLENGE_COUNT
+            };
+            Self::new_sha256(sector_nodes, replica_id, num_synth_challenges)
+        }
+
+        #[inline]
+        pub fn default_chacha20(sector_nodes: usize, replica_id: &Fr) -> Self {
+            // If the default synthethic challenge count exceeds the number of sector nodes, then
+            // challenge all sector nodes.
+            let num_synth_challenges = if sector_nodes < DEFAULT_SYNTH_CHALLENGE_COUNT {
+                sector_nodes
+            } else {
+                DEFAULT_SYNTH_CHALLENGE_COUNT
+            };
+            Self::new_chacha20(sector_nodes, replica_id, num_synth_challenges)
+        }
+
+        // Returns the `i`-th synthetic challenge.
+        pub fn gen_synth_challenge(&mut self, i: usize) -> usize {
+            assert!(i < self.num_synth_challenges);
+            self.seek(i);
+            self.next()
+                .expect("generating `i`-th challenge should not fail")
+        }
+
+        // Seek to the `i`-th synthetic challenge; seeking to `i` results in the next call to
+        // `SynthChallenges::next` returning the `i`-th synthetic challenge.
+        pub(super) fn seek(&mut self, i: usize) {
+            match self.prf {
+                Prf::Sha256 => self.i = i,
+                Prf::ChaCha20 {
+                    ref mut chacha20,
+                    ref mut next_challenge,
+                } => {
+                    // Two 32-byte synthetic challenges are generated per 64-byte chacha20 block.
+                    let challenge_pair_index = i >> 1;
+                    let keystream_pos = challenge_pair_index as u32 * CHACHA20_BLOCK_SIZE;
+                    chacha20
+                        .try_seek(keystream_pos)
+                        .expect("seek exceeds keystream length");
+
+                    // Round the synthetic challenge index down to the nearest even number, i.e. the
+                    // synthetic challenge index that generates the pair containing challenge `i`.
+                    self.i = challenge_pair_index << 1;
+                    *next_challenge = None;
+
+                    // If we are seeking to the second challenge in a pair of challenges, we need to
+                    // generate the pair (storing challenge `i` in `self`'s `next_challenge`.)
+                    if i & 1 == 1 {
+                        self.next()
+                            .expect("generating previous challenge should not fail");
+                    }
+                }
+            };
+        }
+
+        #[allow(clippy::unwrap_used)]
+        pub fn gen_porep_challenges(
+            mut self,
+            num_porep_challenges: usize,
+            rand: &[u8; 32],
+        ) -> Vec<usize> {
+            let rand_u32s: Vec<u32> = match self.prf {
+                Prf::Sha256 => {
+                    // For each digest `i` we generate a chunk of 8 porep challenges.
+                    let num_chunks = (num_porep_challenges as f32 / 8.0).ceil() as usize;
+                    let mut rand_u32s = Vec::<u32>::with_capacity(num_chunks << 3);
+                    for i in 0..num_chunks {
+                        let rand_bytes = Sha256::new()
+                            .chain_update(self.replica_id)
+                            .chain_update(rand)
+                            .chain_update(&i.to_le_bytes()[..4])
+                            .finalize();
+                        let rand_bytes: &[u8] = rand_bytes.as_ref();
+                        for bytes in rand_bytes.chunks(4) {
+                            rand_u32s.push(u32::from_le_bytes(bytes.try_into().unwrap()));
+                        }
+                    }
+                    rand_u32s
+                }
+                Prf::ChaCha20 { .. } => {
+                    let key = Sha256::new()
+                        .chain_update(self.replica_id)
+                        .chain_update(rand)
+                        .finalize();
+                    let mut chacha20 = ChaCha20::new(&key, &CHACHA20_NONCE.into());
+                    // For each encryption `i` we generate a chunk of 16 porep challenges.
+                    let num_chunks = (num_porep_challenges as f32 / 16.0).ceil() as usize;
+                    let mut rand_u32s = Vec::<u32>::with_capacity(num_chunks << 4);
+                    for _ in 0..num_chunks {
+                        let mut rand_bytes = [0u8; 64];
+                        chacha20.apply_keystream(&mut rand_bytes);
+                        for bytes in rand_bytes.chunks(4) {
+                            rand_u32s.push(u32::from_le_bytes(bytes.try_into().unwrap()));
+                        }
+                    }
+                    rand_u32s
+                }
+            };
+
+            rand_u32s
+                .iter()
+                .take(num_porep_challenges)
+                .map(|&rand_u32| {
+                    let synth_challenge_index = rand_u32 as usize % self.num_synth_challenges;
+                    self.gen_synth_challenge(synth_challenge_index)
+                })
+                .collect()
+        }
+    }
+}
+
+pub use synthetic::SynthChallenges;
 
 #[cfg(test)]
 mod test {
@@ -159,5 +402,48 @@ mod test {
 
             assert_eq!(one_partition_challenges, many_partition_challenges);
         }
+    }
+
+    #[test]
+    fn test_synthetic_challenges() {
+        use blstrs::Scalar as Fr;
+
+        let sector_nodes = 1 << 10;
+        let replica_id = Fr::from(55);
+        let num_synth_challenges = 21;
+        let num_porep_challenges = 10;
+        let porep_challenge_randomness = [1u8; 32];
+
+        // Expected challenges for `sector_nodes = 2^10`, `replica_id = 55`, and `rand = [1; 32]`.
+        let expected_synth_challenges: [usize; 21] = [
+            590, 410, 223, 559, 110, 1005, 69, 888, 296, 421, 328, 246, 350, 526, 394, 685, 979,
+            212, 370, 354, 146,
+        ];
+        let expected_porep_challenges: [usize; 10] =
+            [328, 559, 246, 888, 559, 146, 590, 354, 1005, 370];
+
+        let synth_challenges: Vec<usize> =
+            SynthChallenges::new_chacha20(sector_nodes, &replica_id, num_synth_challenges)
+                .collect();
+        assert!(synth_challenges.iter().all(|c| c < &sector_nodes));
+        assert_eq!(
+            synth_challenges[..expected_synth_challenges.len()],
+            expected_synth_challenges
+        );
+
+        let mut synth =
+            SynthChallenges::new_chacha20(sector_nodes, &replica_id, num_synth_challenges);
+        for i in (0..num_synth_challenges).rev() {
+            assert_eq!(synth.gen_synth_challenge(i), synth_challenges[i]);
+        }
+        synth.seek(num_synth_challenges);
+        assert!(synth.next().is_none());
+
+        let porep_challenges =
+            synth.gen_porep_challenges(num_porep_challenges, &porep_challenge_randomness);
+        assert_eq!(
+            porep_challenges[..expected_porep_challenges.len()],
+            expected_porep_challenges
+        );
     }
 }

@@ -22,7 +22,7 @@ mod proof_scheme;
 #[cfg(feature = "multicore-sdr")]
 mod utils;
 
-pub use challenges::{ChallengeRequirements, LayerChallenges};
+pub use challenges::{ChallengeRequirements, LayerChallenges, SynthChallenges};
 pub use column::Column;
 pub use column_proof::ColumnProof;
 pub use encoding_proof::EncodingProof;
