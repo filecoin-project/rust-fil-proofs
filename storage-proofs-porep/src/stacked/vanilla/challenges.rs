@@ -78,8 +78,11 @@ pub struct ChallengeRequirements {
 pub mod synthetic {
     use super::*;
 
+<<<<<<< HEAD
     use std::convert::TryInto;
 
+=======
+>>>>>>> 15f1ecd9 (feat(storage-proofs-porep): synthetic porep challenge generation)
     use blstrs::Scalar as Fr;
     use chacha20::{
         cipher::{KeyIvInit, StreamCipher, StreamCipherSeek},
@@ -87,24 +90,39 @@ pub mod synthetic {
     };
     use ff::PrimeField;
 
+<<<<<<< HEAD
     // Default synthetic challenge count for production sector sizes.
     const DEFAULT_SYNTH_CHALLENGE_COUNT: usize = 1 << 14;
+=======
+>>>>>>> 15f1ecd9 (feat(storage-proofs-porep): synthetic porep challenge generation)
     const CHACHA20_NONCE: [u8; 12] = [0; 12];
     const CHACHA20_BLOCK_SIZE: u32 = 64;
 
     // The psuedo-random function used to generate synthetic challenges.
     pub enum Prf {
+<<<<<<< HEAD
         Sha256,
         ChaCha20 {
             chacha20: ChaCha20,
             // Each call to the chacha20 prf generates two synthetic challenges.
+=======
+        Sha256 {
+            replica_id: [u8; 32],
+        },
+        ChaCha20 {
+            key: [u8; 32],
+            chacha20: ChaCha20,
+>>>>>>> 15f1ecd9 (feat(storage-proofs-porep): synthetic porep challenge generation)
             next_challenge: Option<usize>,
         },
     }
 
     pub struct SynthChallenges {
         sector_nodes: usize,
+<<<<<<< HEAD
         replica_id: [u8; 32],
+=======
+>>>>>>> 15f1ecd9 (feat(storage-proofs-porep): synthetic porep challenge generation)
         prf: Prf,
         num_synth_challenges: usize,
         i: usize,
@@ -113,12 +131,16 @@ pub mod synthetic {
     impl Iterator for SynthChallenges {
         type Item = usize;
 
+<<<<<<< HEAD
         // Returns the next synthetic challenge.
         #[allow(clippy::unwrap_used)]
+=======
+>>>>>>> 15f1ecd9 (feat(storage-proofs-porep): synthetic porep challenge generation)
         fn next(&mut self) -> Option<Self::Item> {
             if self.i >= self.num_synth_challenges {
                 return None;
             }
+<<<<<<< HEAD
 
             let challenge = match self.prf {
                 Prf::Sha256 => {
@@ -128,10 +150,22 @@ pub mod synthetic {
                         .finalize();
                     let bigint = BigUint::from_bytes_le(rand_bytes.as_ref());
                     bigint_to_challenge(bigint, self.sector_nodes)
+=======
+            match self.prf {
+                Prf::Sha256 { replica_id } => {
+                    let digest = Sha256::new()
+                        .chain_update(&replica_id)
+                        .chain_update(&self.i.to_le_bytes())
+                        .finalize();
+                    let bigint = BigUint::from_bytes_le(digest.as_ref());
+                    self.i += 1;
+                    Some(bigint_to_challenge(bigint, self.sector_nodes))
+>>>>>>> 15f1ecd9 (feat(storage-proofs-porep): synthetic porep challenge generation)
                 }
                 Prf::ChaCha20 {
                     ref mut chacha20,
                     ref mut next_challenge,
+<<<<<<< HEAD
                 } => {
                     // Two synthetic challenges are generated per chacha20 call.
                     if next_challenge.is_some() {
@@ -149,6 +183,22 @@ pub mod synthetic {
 
             self.i += 1;
             Some(challenge)
+=======
+                    ..
+                } => {
+                    if next_challenge.is_some() {
+                        self.i += 2;
+                        return next_challenge.take();
+                    }
+                    let mut rand_bytes = [0u8; 64];
+                    chacha20.apply_keystream(&mut rand_bytes);
+                    let bigint_1 = BigUint::from_bytes_le(&rand_bytes[..32]);
+                    let bigint_2 = BigUint::from_bytes_le(&rand_bytes[32..]);
+                    *next_challenge = Some(bigint_to_challenge(bigint_2, self.sector_nodes));
+                    Some(bigint_to_challenge(bigint_1, self.sector_nodes))
+                }
+            }
+>>>>>>> 15f1ecd9 (feat(storage-proofs-porep): synthetic porep challenge generation)
         }
     }
 
