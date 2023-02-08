@@ -39,6 +39,7 @@ fdlimit = "0.2.0"
 fr32 = { path = "../fr32", version = "~7.0.0", default-features = false }
 yastl = "0.1.2"
 blstrs = "0.6.0"
+chacha20 = "0.9.0"
 
 [build-dependencies]
 rustversion = "1.0"
