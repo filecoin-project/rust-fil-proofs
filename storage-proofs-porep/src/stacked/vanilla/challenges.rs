@@ -78,11 +78,8 @@ pub struct ChallengeRequirements {
 pub mod synthetic {
     use super::*;
 
-<<<<<<< HEAD
     use std::convert::TryInto;
 
-=======
->>>>>>> 15f1ecd9 (feat(storage-proofs-porep): synthetic porep challenge generation)
     use blstrs::Scalar as Fr;
     use chacha20::{
         cipher::{KeyIvInit, StreamCipher, StreamCipherSeek},
@@ -90,39 +87,24 @@ pub mod synthetic {
     };
     use ff::PrimeField;
 
-<<<<<<< HEAD
     // Default synthetic challenge count for production sector sizes.
     const DEFAULT_SYNTH_CHALLENGE_COUNT: usize = 1 << 14;
-=======
->>>>>>> 15f1ecd9 (feat(storage-proofs-porep): synthetic porep challenge generation)
     const CHACHA20_NONCE: [u8; 12] = [0; 12];
     const CHACHA20_BLOCK_SIZE: u32 = 64;
 
     // The psuedo-random function used to generate synthetic challenges.
     pub enum Prf {
-<<<<<<< HEAD
         Sha256,
         ChaCha20 {
             chacha20: ChaCha20,
             // Each call to the chacha20 prf generates two synthetic challenges.
-=======
-        Sha256 {
-            replica_id: [u8; 32],
-        },
-        ChaCha20 {
-            key: [u8; 32],
-            chacha20: ChaCha20,
->>>>>>> 15f1ecd9 (feat(storage-proofs-porep): synthetic porep challenge generation)
             next_challenge: Option<usize>,
         },
     }
 
     pub struct SynthChallenges {
         sector_nodes: usize,
-<<<<<<< HEAD
         replica_id: [u8; 32],
-=======
->>>>>>> 15f1ecd9 (feat(storage-proofs-porep): synthetic porep challenge generation)
         prf: Prf,
         num_synth_challenges: usize,
         i: usize,
@@ -131,16 +113,12 @@ pub mod synthetic {
     impl Iterator for SynthChallenges {
         type Item = usize;
 
-<<<<<<< HEAD
         // Returns the next synthetic challenge.
         #[allow(clippy::unwrap_used)]
-=======
->>>>>>> 15f1ecd9 (feat(storage-proofs-porep): synthetic porep challenge generation)
         fn next(&mut self) -> Option<Self::Item> {
             if self.i >= self.num_synth_challenges {
                 return None;
             }
-<<<<<<< HEAD
 
             let challenge = match self.prf {
                 Prf::Sha256 => {
@@ -150,22 +128,10 @@ pub mod synthetic {
                         .finalize();
                     let bigint = BigUint::from_bytes_le(rand_bytes.as_ref());
                     bigint_to_challenge(bigint, self.sector_nodes)
-=======
-            match self.prf {
-                Prf::Sha256 { replica_id } => {
-                    let digest = Sha256::new()
-                        .chain_update(&replica_id)
-                        .chain_update(&self.i.to_le_bytes())
-                        .finalize();
-                    let bigint = BigUint::from_bytes_le(digest.as_ref());
-                    self.i += 1;
-                    Some(bigint_to_challenge(bigint, self.sector_nodes))
->>>>>>> 15f1ecd9 (feat(storage-proofs-porep): synthetic porep challenge generation)
                 }
                 Prf::ChaCha20 {
                     ref mut chacha20,
                     ref mut next_challenge,
-<<<<<<< HEAD
                 } => {
                     // Two synthetic challenges are generated per chacha20 call.
                     if next_challenge.is_some() {
@@ -183,22 +149,6 @@ pub mod synthetic {
 
             self.i += 1;
             Some(challenge)
-=======
-                    ..
-                } => {
-                    if next_challenge.is_some() {
-                        self.i += 2;
-                        return next_challenge.take();
-                    }
-                    let mut rand_bytes = [0u8; 64];
-                    chacha20.apply_keystream(&mut rand_bytes);
-                    let bigint_1 = BigUint::from_bytes_le(&rand_bytes[..32]);
-                    let bigint_2 = BigUint::from_bytes_le(&rand_bytes[32..]);
-                    *next_challenge = Some(bigint_to_challenge(bigint_2, self.sector_nodes));
-                    Some(bigint_to_challenge(bigint_1, self.sector_nodes))
-                }
-            }
->>>>>>> 15f1ecd9 (feat(storage-proofs-porep): synthetic porep challenge generation)
         }
     }
 
@@ -374,8 +324,9 @@ mod test {
 
     use std::collections::HashMap;
 
+    use blstrs::Scalar as Fr;
     use filecoin_hashers::sha256::Sha256Domain;
-    use rand::{thread_rng, Rng};
+    use rand::{thread_rng, Rng, RngCore};
 
     #[test]
     fn test_calculate_fixed_challenges() {
@@ -422,6 +373,42 @@ mod test {
         //
         // This test could randomly fail (anything's possible), but if it happens regularly something is wrong.
         assert!(layers_with_duplicates < 3);
+    }
+
+    #[test]
+    fn synthetic_challenge_derivation_chacha() {
+        let sector_nodes = 1 << 30;
+        let replica_id = Fr::from(thread_rng().next_u64());
+
+        let generator = SynthChallenges::default_chacha20(sector_nodes, &replica_id);
+        let challenges: Vec<usize> = generator.collect();
+        assert!(challenges
+            .iter()
+            .all(|cur_challenge| cur_challenge < &sector_nodes));
+
+        let mut generator = SynthChallenges::default_chacha20(sector_nodes, &replica_id);
+        for (i, expected) in challenges.into_iter().enumerate() {
+            let challenge = generator.gen_synth_challenge(i);
+            assert_eq!(challenge, expected);
+        }
+    }
+
+    #[test]
+    fn synthetic_challenge_derivation_sha() {
+        let sector_nodes = 1 << 30;
+        let replica_id = Fr::from(thread_rng().next_u64());
+
+        let generator = SynthChallenges::default_sha256(sector_nodes, &replica_id);
+        let challenges: Vec<usize> = generator.collect();
+        assert!(challenges
+            .iter()
+            .all(|cur_challenge| cur_challenge < &sector_nodes));
+
+        let mut generator = SynthChallenges::default_sha256(sector_nodes, &replica_id);
+        for (i, expected) in challenges.into_iter().enumerate() {
+            let challenge = generator.gen_synth_challenge(i);
+            assert_eq!(challenge, expected);
+        }
     }
 
     #[test]
@@ -495,5 +482,30 @@ mod test {
             porep_challenges[..expected_porep_challenges.len()],
             expected_porep_challenges
         );
+    }
+
+    #[test]
+    fn test_synthetic_challenges_sha_small() {
+        let sector_nodes_1kib = 1 << 5;
+        let replica_id = Fr::from(55);
+
+        let generator = SynthChallenges::default_sha256(sector_nodes_1kib, &replica_id);
+        let synth_challenges: Vec<usize> = generator.collect();
+        assert!(synth_challenges
+            .iter()
+            .all(|challenge| challenge < &sector_nodes_1kib));
+        assert_eq!(
+            synth_challenges,
+            [
+                19, 27, 21, 23, 17, 12, 6, 9, 2, 22, 14, 20, 31, 11, 7, 23, 30, 9, 11, 22, 22, 1,
+                30, 4, 29, 15, 23, 17, 7, 24, 1, 23
+            ]
+        );
+
+        let mut generator = SynthChallenges::default_sha256(sector_nodes_1kib, &replica_id);
+        for (i, expected) in synth_challenges.into_iter().enumerate() {
+            let challenge = generator.gen_synth_challenge(i);
+            assert_eq!(challenge, expected);
+        }
     }
 }
