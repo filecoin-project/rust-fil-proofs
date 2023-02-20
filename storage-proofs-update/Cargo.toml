@@ -48,6 +48,13 @@ cuda = [
     "neptune/cuda",
     "bellperson/cuda",
 ]
+sppark = [
+    "storage-proofs-core/sppark",
+    "storage-proofs-porep/sppark",
+    "filecoin-hashers/sppark",
+    "neptune/cuda",
+    "bellperson/sppark",
+]
 multicore-sdr = [
     "storage-proofs-porep/multicore-sdr",
 ]

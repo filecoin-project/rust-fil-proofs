@@ -62,6 +62,7 @@ profile = ["measurements"]
 
 cuda = ["bellperson/cuda", "filecoin-hashers/cuda"]
 opencl = ["bellperson/opencl", "filecoin-hashers/opencl"]
+sppark = ["bellperson/sppark", "filecoin-hashers/sppark"]
 
 [[bench]]
 name = "sha256"

@@ -12,3 +12,6 @@ members = [
   "filecoin-hashers",
   "storage-proofs-update",
 ]
+
+[patch.crates-io]
+bellperson = { git = "https://github.com/filecoin-project/bellperson", branch = "sppark" }

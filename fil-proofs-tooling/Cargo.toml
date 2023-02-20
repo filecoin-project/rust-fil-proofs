@@ -67,6 +67,14 @@ opencl = [
     "bellperson/opencl",
     "filecoin-hashers/opencl",
 ]
+sppark = [
+    "storage-proofs-core/sppark",
+    "storage-proofs-porep/sppark",
+    "storage-proofs-post/sppark",
+    "filecoin-proofs/sppark",
+    "bellperson/sppark",
+    "filecoin-hashers/sppark",
+]
 measurements = ["storage-proofs-core/measurements"]
 profile = ["storage-proofs-core/profile", "measurements"]
 

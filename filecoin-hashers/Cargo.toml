@@ -29,6 +29,7 @@ default = ["opencl", "blake2s", "poseidon", "sha256"]
 
 cuda = ["bellperson/cuda", "neptune/cuda"]
 opencl = ["bellperson/opencl", "neptune/opencl"]
+sppark = ["bellperson/sppark", "neptune/cuda"]
 
 # available hashers
 blake2s = ["blake2s_simd"]

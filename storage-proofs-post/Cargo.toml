@@ -36,3 +36,4 @@ rand_xorshift = "0.3.0"
 default = ["opencl"]
 cuda = ["storage-proofs-core/cuda", "filecoin-hashers/cuda"]
 opencl = ["storage-proofs-core/opencl", "filecoin-hashers/opencl"]
+sppark = ["storage-proofs-core/sppark", "filecoin-hashers/sppark"]
