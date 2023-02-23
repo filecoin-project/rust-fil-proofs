@@ -43,9 +43,9 @@ use crate::{
     parameters::setup_params,
     pieces::{self, verify_pieces},
     types::{
-        AggregateSnarkProof, Commitment, PieceInfo, PoRepConfig,
-        ProverId, SealCommitOutput, SealCommitPhase1Output,
-        SealPreCommitOutput, SealPreCommitPhase1Output, SectorSize, Ticket, BINARY_ARITY,
+        AggregateSnarkProof, Commitment, PieceInfo, PoRepConfig, ProverId, SealCommitOutput,
+        SealCommitPhase1Output, SealPreCommitOutput, SealPreCommitPhase1Output, SectorSize, Ticket,
+        BINARY_ARITY,
     },
 };
 
@@ -518,9 +518,8 @@ pub fn seal_commit_phase2<Tree: 'static + MerkleTreeTrait>(
 
     let proof = MultiProof::new(groth_proofs, &groth_params.pvk);
 
-    let mut buf = Vec::with_capacity(
-        SINGLE_PARTITION_PROOF_LEN * usize::from(porep_config.partitions),
-    );
+    let mut buf =
+        Vec::with_capacity(SINGLE_PARTITION_PROOF_LEN * usize::from(porep_config.partitions));
 
     proof.write(&mut buf)?;
 

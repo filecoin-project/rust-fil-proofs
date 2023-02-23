@@ -5,15 +5,20 @@ use std::str::FromStr;
 use anyhow::{format_err, Error, Result};
 use semver::Version;
 
-#[derive(Copy, Clone, Eq, PartialEq, Ord)]
+#[derive(Copy, Clone, Eq, PartialEq)]
 pub enum ApiVersion {
     V1_0_0,
     V1_1_0,
     V1_2_0,
 }
 
+impl Ord for ApiVersion {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.as_semver().cmp(&other.as_semver())
+    }
+}
+
 impl PartialOrd for ApiVersion {
-    #[inline]
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.as_semver().cmp(&other.as_semver()))
     }
@@ -30,15 +35,21 @@ impl ApiVersion {
 
     #[inline]
     pub fn supports_feature(&self, feat: &ApiFeature) -> bool {
-        self >= &feat.first_supported_version() &&
-            feat.last_supported_version().map(|v| self <= &v).unwrap_or(true)
+        self >= &feat.first_supported_version()
+            && feat
+                .last_supported_version()
+                .map(|v| self <= &v)
+                .unwrap_or(true)
     }
 
     #[inline]
     pub fn supports_features(&self, feats: &[ApiFeature]) -> bool {
         feats.iter().all(|feat| {
-            self >= &feat.first_supported_version() &&
-                feat.last_supported_version().map(|v_last| self <= &v_last).unwrap_or(true)
+            self >= &feat.first_supported_version()
+                && feat
+                    .last_supported_version()
+                    .map(|v_last| self <= &v_last)
+                    .unwrap_or(true)
         })
     }
 }

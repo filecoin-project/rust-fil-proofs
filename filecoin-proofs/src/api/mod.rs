@@ -33,9 +33,8 @@ use crate::{
     parameters::public_params,
     pieces::{get_piece_alignment, sum_piece_bytes_with_alignment},
     types::{
-        Commitment, MerkleTreeTrait, PaddedBytesAmount, PieceInfo, PoRepConfig,
-        ProverId, SealPreCommitPhase1Output, Ticket, UnpaddedByteIndex,
-        UnpaddedBytesAmount,
+        Commitment, MerkleTreeTrait, PaddedBytesAmount, PieceInfo, PoRepConfig, ProverId,
+        SealPreCommitPhase1Output, Ticket, UnpaddedByteIndex, UnpaddedBytesAmount,
     },
 };
 
