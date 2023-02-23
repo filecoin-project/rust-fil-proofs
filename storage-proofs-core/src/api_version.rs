@@ -1,13 +1,22 @@
+use std::cmp::Ordering;
 use std::fmt::{self, Debug, Display, Formatter};
 use std::str::FromStr;
 
 use anyhow::{format_err, Error, Result};
 use semver::Version;
 
-#[derive(Copy, Clone, Eq, PartialEq)]
+#[derive(Copy, Clone, Eq, PartialEq, Ord)]
 pub enum ApiVersion {
     V1_0_0,
     V1_1_0,
+    V1_2_0,
+}
+
+impl PartialOrd for ApiVersion {
+    #[inline]
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.as_semver().cmp(&other.as_semver()))
+    }
 }
 
 impl ApiVersion {
@@ -15,7 +24,22 @@ impl ApiVersion {
         match self {
             ApiVersion::V1_0_0 => Version::new(1, 0, 0),
             ApiVersion::V1_1_0 => Version::new(1, 1, 0),
+            ApiVersion::V1_2_0 => Version::new(1, 2, 0),
         }
+    }
+
+    #[inline]
+    pub fn supports_feature(&self, feat: &ApiFeature) -> bool {
+        self >= &feat.first_supported_version() &&
+            feat.last_supported_version().map(|v| self <= &v).unwrap_or(true)
+    }
+
+    #[inline]
+    pub fn supports_features(&self, feats: &[ApiFeature]) -> bool {
+        feats.iter().all(|feat| {
+            self >= &feat.first_supported_version() &&
+                feat.last_supported_version().map(|v_last| self <= &v_last).unwrap_or(true)
+        })
     }
 }
 
@@ -40,6 +64,7 @@ impl FromStr for ApiVersion {
         match (api_version.major, api_version.minor, api_version.patch) {
             (1, 0, 0) => Ok(ApiVersion::V1_0_0),
             (1, 1, 0) => Ok(ApiVersion::V1_1_0),
+            (1, 2, 0) => Ok(ApiVersion::V1_2_0),
             (1, 1, _) | (1, 0, _) => Err(format_err!(
                 "Could not parse API Version from string (patch)"
             )),
@@ -53,18 +78,50 @@ impl FromStr for ApiVersion {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ApiFeature {
+    SynthPorep,
+}
+
+impl ApiFeature {
+    #[inline]
+    pub fn first_supported_version(&self) -> ApiVersion {
+        match self {
+            ApiFeature::SynthPorep => ApiVersion::V1_2_0,
+        }
+    }
+
+    #[inline]
+    pub fn last_supported_version(&self) -> Option<ApiVersion> {
+        match self {
+            ApiFeature::SynthPorep => None,
+        }
+    }
+}
+
 #[test]
 fn test_fmt() {
     assert_eq!(format!("{}", ApiVersion::V1_0_0), "1.0.0");
     assert_eq!(format!("{}", ApiVersion::V1_1_0), "1.1.0");
+    assert_eq!(format!("{}", ApiVersion::V1_2_0), "1.2.0");
 }
 
 #[test]
 fn test_as_semver() {
     assert_eq!(ApiVersion::V1_0_0.as_semver().major, 1);
     assert_eq!(ApiVersion::V1_1_0.as_semver().major, 1);
+    assert_eq!(ApiVersion::V1_2_0.as_semver().major, 1);
     assert_eq!(ApiVersion::V1_0_0.as_semver().minor, 0);
     assert_eq!(ApiVersion::V1_1_0.as_semver().minor, 1);
+    assert_eq!(ApiVersion::V1_2_0.as_semver().minor, 2);
     assert_eq!(ApiVersion::V1_0_0.as_semver().patch, 0);
     assert_eq!(ApiVersion::V1_1_0.as_semver().patch, 0);
+    assert_eq!(ApiVersion::V1_2_0.as_semver().patch, 0);
+}
+
+#[test]
+fn test_api_version_features() {
+    assert!(!ApiVersion::V1_0_0.supports_feature(&ApiFeature::SynthPorep));
+    assert!(!ApiVersion::V1_1_0.supports_feature(&ApiFeature::SynthPorep));
+    assert!(ApiVersion::V1_2_0.supports_feature(&ApiFeature::SynthPorep));
 }
