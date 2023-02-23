@@ -374,7 +374,7 @@ where
 
         match self.api_version {
             ApiVersion::V1_0_0 => transformed as u32 / self.expansion_degree as u32,
-            ApiVersion::V1_1_0 => u32::try_from(transformed as u64 / self.expansion_degree as u64)
+            _ => u32::try_from(transformed as u64 / self.expansion_degree as u64)
                 .expect("invalid transformation"),
         }
 
@@ -516,6 +516,9 @@ mod tests {
 
         test_pathology_aux(porep_id(8), sector32_nodes, ApiVersion::V1_1_0);
         test_pathology_aux(porep_id(9), sector64_nodes, ApiVersion::V1_1_0);
+
+        test_pathology_aux(porep_id(10), sector32_nodes, ApiVersion::V1_2_0);
+        test_pathology_aux(porep_id(11), sector64_nodes, ApiVersion::V1_2_0);
     }
 
     fn test_pathology_aux(porep_id: PoRepID, nodes: u32, api_version: ApiVersion) {
@@ -529,10 +532,7 @@ mod tests {
         // is sound.
         let test_n = 1_000;
 
-        let expect_pathological = match api_version {
-            ApiVersion::V1_0_0 => true,
-            ApiVersion::V1_1_0 => false,
-        };
+        let expect_pathological = api_version == ApiVersion::V1_0_0;
 
         let graph = StackedBucketGraph::<PoseidonHasher>::new_stacked(
             nodes as usize,
