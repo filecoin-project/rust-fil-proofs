@@ -486,14 +486,14 @@ fn aggregate_proofs<Tree: 'static + MerkleTreeTrait>(
 
         let config = porep_config(sector_size, *porep_id, api_version);
         let aggregate_proof = aggregate_seal_commit_proofs::<Tree>(
-            config,
+            &config,
             &comm_rs,
             &seeds,
             commit_outputs.as_slice(),
             aggregate_version,
         )?;
         assert!(verify_aggregate_seal_commit_proofs::<Tree>(
-            config,
+            &config,
             aggregate_proof.clone(),
             &comm_rs,
             &seeds,
@@ -508,7 +508,7 @@ fn aggregate_proofs<Tree: 'static + MerkleTreeTrait>(
             groth16::aggregate::AggregateVersion::V2 => groth16::aggregate::AggregateVersion::V1,
         };
         assert!(!verify_aggregate_seal_commit_proofs::<Tree>(
-            config,
+            &config,
             aggregate_proof,
             &comm_rs,
             &seeds,
@@ -629,7 +629,7 @@ fn run_resumable_seal<Tree: 'static + MerkleTreeTrait>(
 
     // First create seals as expected
     run_seal_pre_commit_phase1::<Tree>(
-        config,
+        &config,
         prover_id,
         sector_id,
         ticket,
@@ -657,7 +657,7 @@ fn run_resumable_seal<Tree: 'static + MerkleTreeTrait>(
         .seek(SeekFrom::Start(0))
         .expect("failed to seek piece file to start");
     let (piece_infos, phase1_output) = run_seal_pre_commit_phase1::<Tree>(
-        config,
+        &config,
         prover_id,
         sector_id,
         ticket,
@@ -682,7 +682,7 @@ fn run_resumable_seal<Tree: 'static + MerkleTreeTrait>(
         );
     } else {
         let pre_commit_output = seal_pre_commit_phase2(
-            config,
+            &config,
             phase1_output,
             cache_dir.path(),
             sealed_sector_file.path(),
@@ -694,7 +694,7 @@ fn run_resumable_seal<Tree: 'static + MerkleTreeTrait>(
 
         let seed = rng.gen();
         proof_and_unseal::<Tree>(
-            config,
+            &config,
             cache_dir.path(),
             &sealed_sector_file,
             prover_id,
@@ -806,6 +806,7 @@ fn winning_post<Tree: 'static + MerkleTreeTrait>(
     let porep_id = match api_version {
         ApiVersion::V1_0_0 => ARBITRARY_POREP_ID_V1_0_0,
         ApiVersion::V1_1_0 => ARBITRARY_POREP_ID_V1_1_0,
+        _ => unimplemented!(),
     };
 
     let (sector_id, replica, comm_r, cache_dir) = if fake {
@@ -1132,6 +1133,7 @@ fn partition_window_post<Tree: 'static + MerkleTreeTrait>(
     let porep_id = match api_version {
         ApiVersion::V1_0_0 => ARBITRARY_POREP_ID_V1_0_0,
         ApiVersion::V1_1_0 => ARBITRARY_POREP_ID_V1_1_0,
+        _ => unimplemented!(),
     };
 
     for _ in 0..total_sector_count {
@@ -1269,6 +1271,7 @@ fn window_post<Tree: 'static + MerkleTreeTrait>(
     let porep_id = match api_version {
         ApiVersion::V1_0_0 => ARBITRARY_POREP_ID_V1_0_0,
         ApiVersion::V1_1_0 => ARBITRARY_POREP_ID_V1_1_0,
+        _ => unimplemented!(),
     };
 
     for _ in 0..total_sector_count {
@@ -1381,7 +1384,7 @@ fn porep_config(sector_size: u64, porep_id: [u8; 32], api_version: ApiVersion) -
 }
 
 fn run_seal_pre_commit_phase1<Tree: 'static + MerkleTreeTrait>(
-    config: PoRepConfig,
+    config: &PoRepConfig,
     prover_id: ProverId,
     sector_id: SectorId,
     ticket: [u8; 32],
@@ -1389,8 +1392,7 @@ fn run_seal_pre_commit_phase1<Tree: 'static + MerkleTreeTrait>(
     mut piece_file: &mut NamedTempFile,
     sealed_sector_file: &NamedTempFile,
 ) -> Result<(Vec<PieceInfo>, SealPreCommitPhase1Output<Tree>)> {
-    let number_of_bytes_in_piece =
-        UnpaddedBytesAmount::from(PaddedBytesAmount(config.sector_size.into()));
+    let number_of_bytes_in_piece = config.unpadded_bytes_amount();
 
     let piece_info = generate_piece_commitment(piece_file.as_file_mut(), number_of_bytes_in_piece)?;
     piece_file.as_file_mut().seek(SeekFrom::Start(0))?;
@@ -1427,7 +1429,7 @@ fn run_seal_pre_commit_phase1<Tree: 'static + MerkleTreeTrait>(
 
 #[allow(clippy::too_many_arguments)]
 fn generate_proof<Tree: 'static + MerkleTreeTrait>(
-    config: PoRepConfig,
+    config: &PoRepConfig,
     cache_dir_path: &Path,
     sealed_sector_file: &NamedTempFile,
     prover_id: ProverId,
@@ -1477,7 +1479,7 @@ fn generate_proof<Tree: 'static + MerkleTreeTrait>(
 
 #[allow(clippy::too_many_arguments)]
 fn unseal<Tree: 'static + MerkleTreeTrait>(
-    config: PoRepConfig,
+    config: &PoRepConfig,
     cache_dir_path: &Path,
     sealed_sector_file: &NamedTempFile,
     prover_id: ProverId,
@@ -1539,7 +1541,7 @@ fn unseal<Tree: 'static + MerkleTreeTrait>(
 
 #[allow(clippy::too_many_arguments)]
 fn proof_and_unseal<Tree: 'static + MerkleTreeTrait>(
-    config: PoRepConfig,
+    config: &PoRepConfig,
     cache_dir_path: &Path,
     sealed_sector_file: &NamedTempFile,
     prover_id: ProverId,
@@ -1597,7 +1599,7 @@ fn create_seal<R: Rng, Tree: 'static + MerkleTreeTrait>(
     let sector_id = rng.gen::<u64>().into();
 
     let (piece_infos, phase1_output) = run_seal_pre_commit_phase1::<Tree>(
-        config,
+        &config,
         prover_id,
         sector_id,
         ticket,
@@ -1607,7 +1609,7 @@ fn create_seal<R: Rng, Tree: 'static + MerkleTreeTrait>(
     )?;
 
     let pre_commit_output = seal_pre_commit_phase2(
-        config,
+        &config,
         phase1_output,
         cache_dir.path(),
         sealed_sector_file.path(),
@@ -1621,7 +1623,7 @@ fn create_seal<R: Rng, Tree: 'static + MerkleTreeTrait>(
         clear_cache::<Tree>(cache_dir.path())?;
     } else {
         proof_and_unseal::<Tree>(
-            config,
+            &config,
             cache_dir.path(),
             &sealed_sector_file,
             prover_id,
@@ -1657,7 +1659,7 @@ fn create_seal_for_aggregation<R: Rng, Tree: 'static + MerkleTreeTrait>(
     let sector_id = rng.gen::<u64>().into();
 
     let (piece_infos, phase1_output) = run_seal_pre_commit_phase1::<Tree>(
-        config,
+        &config,
         prover_id,
         sector_id,
         ticket,
@@ -1667,7 +1669,7 @@ fn create_seal_for_aggregation<R: Rng, Tree: 'static + MerkleTreeTrait>(
     )?;
 
     let pre_commit_output = seal_pre_commit_phase2(
-        config,
+        &config,
         phase1_output,
         cache_dir.path(),
         sealed_sector_file.path(),
@@ -1676,7 +1678,7 @@ fn create_seal_for_aggregation<R: Rng, Tree: 'static + MerkleTreeTrait>(
     validate_cache_for_commit::<_, _, Tree>(cache_dir.path(), sealed_sector_file.path())?;
 
     generate_proof::<Tree>(
-        config,
+        &config,
         cache_dir.path(),
         &sealed_sector_file,
         prover_id,
@@ -1740,12 +1742,12 @@ fn create_seal_for_upgrade<R: Rng, Tree: 'static + MerkleTreeTrait<Hasher = Tree
     let cache_dir = tempdir().expect("failed to create temp dir");
 
     let porep_config = porep_config(sector_size, *porep_id, api_version);
-    let config = SectorUpdateConfig::from_porep_config(porep_config);
+    let config = SectorUpdateConfig::from_porep_config(&porep_config);
     let ticket = rng.gen();
     let sector_id = rng.gen::<u64>().into();
 
     let (_piece_infos, phase1_output) = run_seal_pre_commit_phase1::<Tree>(
-        porep_config,
+        &porep_config,
         prover_id,
         sector_id,
         ticket,
@@ -1755,7 +1757,7 @@ fn create_seal_for_upgrade<R: Rng, Tree: 'static + MerkleTreeTrait<Hasher = Tree
     )?;
 
     let pre_commit_output = seal_pre_commit_phase2(
-        porep_config,
+        &porep_config,
         phase1_output,
         cache_dir.path(),
         sealed_sector_file.path(),
@@ -1770,8 +1772,7 @@ fn create_seal_for_upgrade<R: Rng, Tree: 'static + MerkleTreeTrait<Hasher = Tree
 
     // create and generate some random data in staged_data_file.
     let (mut new_piece_file, _new_piece_bytes) = generate_piece_file(sector_size)?;
-    let number_of_bytes_in_piece =
-        UnpaddedBytesAmount::from(PaddedBytesAmount(porep_config.sector_size.into()));
+    let number_of_bytes_in_piece = porep_config.unpadded_bytes_amount();
 
     let new_piece_info =
         generate_piece_commitment(new_piece_file.as_file_mut(), number_of_bytes_in_piece)?;
@@ -1801,7 +1802,7 @@ fn create_seal_for_upgrade<R: Rng, Tree: 'static + MerkleTreeTrait<Hasher = Tree
     f_sealed_sector.set_len(new_replica_target_len)?;
 
     let encoded = encode_into::<Tree>(
-        porep_config,
+        &porep_config,
         new_sealed_sector_file.path(),
         new_cache_dir.path(),
         sealed_sector_file.path(),
@@ -1857,14 +1858,14 @@ fn create_seal_for_upgrade<R: Rng, Tree: 'static + MerkleTreeTrait<Hasher = Tree
     ensure!(proofs_are_valid, "Partition proofs failed to verify");
 
     let proof = generate_empty_sector_update_proof_with_vanilla::<Tree>(
-        porep_config,
+        &porep_config,
         partition_proofs,
         comm_r,
         encoded.comm_r_new,
         encoded.comm_d_new,
     )?;
     let valid = verify_empty_sector_update_proof::<Tree>(
-        porep_config,
+        &porep_config,
         &proof.0,
         comm_r,
         encoded.comm_r_new,
@@ -1873,7 +1874,7 @@ fn create_seal_for_upgrade<R: Rng, Tree: 'static + MerkleTreeTrait<Hasher = Tree
     ensure!(valid, "Compound proof failed to verify");
 
     let proof = generate_empty_sector_update_proof::<Tree>(
-        porep_config,
+        &porep_config,
         comm_r,
         encoded.comm_r_new,
         encoded.comm_d_new,
@@ -1883,7 +1884,7 @@ fn create_seal_for_upgrade<R: Rng, Tree: 'static + MerkleTreeTrait<Hasher = Tree
         new_cache_dir.path(),
     )?;
     let valid = verify_empty_sector_update_proof::<Tree>(
-        porep_config,
+        &porep_config,
         &proof.0,
         comm_r,
         encoded.comm_r_new,
@@ -1974,7 +1975,7 @@ fn create_fake_seal<R: rand::Rng, Tree: 'static + MerkleTreeTrait>(
 
     let comm_r = fauxrep_aux::<_, _, _, Tree>(
         &mut rng,
-        config,
+        &config,
         cache_dir.path(),
         sealed_sector_file.path(),
     )?;

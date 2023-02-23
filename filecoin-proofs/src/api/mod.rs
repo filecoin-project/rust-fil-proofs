@@ -34,7 +34,7 @@ use crate::{
     pieces::{get_piece_alignment, sum_piece_bytes_with_alignment},
     types::{
         Commitment, MerkleTreeTrait, PaddedBytesAmount, PieceInfo, PoRepConfig,
-        PoRepProofPartitions, ProverId, SealPreCommitPhase1Output, Ticket, UnpaddedByteIndex,
+        ProverId, SealPreCommitPhase1Output, Ticket, UnpaddedByteIndex,
         UnpaddedBytesAmount,
     },
 };
@@ -76,7 +76,7 @@ pub use storage_proofs_update::constants::{hs, partition_count};
 /// * `num_bytes` - the number of bytes that we want to read.
 #[allow(clippy::too_many_arguments)]
 pub fn get_unsealed_range<T: Into<PathBuf> + AsRef<Path>, Tree: 'static + MerkleTreeTrait>(
-    porep_config: PoRepConfig,
+    porep_config: &PoRepConfig,
     cache_path: T,
     sealed_path: T,
     output_path: T,
@@ -130,7 +130,7 @@ pub fn get_unsealed_range<T: Into<PathBuf> + AsRef<Path>, Tree: 'static + Merkle
 /// * `num_bytes` - the number of bytes that we want to read.
 #[allow(clippy::too_many_arguments)]
 pub fn unseal_range<P, R, W, Tree>(
-    porep_config: PoRepConfig,
+    porep_config: &PoRepConfig,
     cache_path: P,
     mut sealed_sector: R,
     unsealed_output: W,
@@ -198,7 +198,7 @@ where
 /// * `num_bytes` - the number of bytes that we want to read.
 #[allow(clippy::too_many_arguments)]
 pub fn unseal_range_mapped<P, W, Tree>(
-    porep_config: PoRepConfig,
+    porep_config: &PoRepConfig,
     cache_path: P,
     sealed_path: PathBuf,
     unsealed_output: W,
@@ -267,7 +267,7 @@ where
 /// * `num_bytes` - the number of bytes that we want to read.
 #[allow(clippy::too_many_arguments)]
 fn unseal_range_inner<P, W, Tree>(
-    porep_config: PoRepConfig,
+    porep_config: &PoRepConfig,
     cache_path: P,
     data: &mut [u8],
     mut unsealed_output: W,
@@ -293,8 +293,8 @@ where
         ),
     );
     let pp = public_params(
-        PaddedBytesAmount::from(porep_config),
-        usize::from(PoRepProofPartitions::from(porep_config)),
+        porep_config.padded_bytes_amount(),
+        usize::from(porep_config.partitions),
         porep_config.porep_id,
         porep_config.api_version,
     )?;

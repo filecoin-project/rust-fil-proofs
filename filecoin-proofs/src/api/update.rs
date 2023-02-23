@@ -140,7 +140,7 @@ fn get_new_configs_from_t_aux_old<Tree: 'static + MerkleTreeTrait<Hasher = TreeR
 /// new_cache_path).
 #[allow(clippy::too_many_arguments)]
 pub fn encode_into<Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher>>(
-    porep_config: PoRepConfig,
+    porep_config: &PoRepConfig,
     new_replica_path: &Path,
     new_cache_path: &Path,
     sector_key_path: &Path,
@@ -187,7 +187,7 @@ pub fn encode_into<Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher>>(
         "Invalid all zero commitment (comm_r)"
     );
     ensure!(
-        verify_pieces(&comm_d, piece_infos, porep_config.into())?,
+        verify_pieces(&comm_d, piece_infos, porep_config.sector_size)?,
         "pieces and comm_d do not match"
     );
 
@@ -473,7 +473,7 @@ pub fn verify_partition_proofs<Tree: 'static + MerkleTreeTrait<Hasher = TreeRHas
 pub fn generate_empty_sector_update_proof_with_vanilla<
     Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher>,
 >(
-    porep_config: PoRepConfig,
+    porep_config: &PoRepConfig,
     vanilla_proofs: Vec<PartitionProof<Tree>>,
     comm_r_old: Commitment,
     comm_r_new: Commitment,
@@ -521,7 +521,7 @@ pub fn generate_empty_sector_update_proof_with_vanilla<
 
 #[allow(clippy::too_many_arguments)]
 pub fn generate_empty_sector_update_proof<Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher>>(
-    porep_config: PoRepConfig,
+    porep_config: &PoRepConfig,
     comm_r_old: Commitment,
     comm_r_new: Commitment,
     comm_d_new: Commitment,
@@ -587,7 +587,7 @@ pub fn generate_empty_sector_update_proof<Tree: 'static + MerkleTreeTrait<Hasher
 }
 
 pub fn verify_empty_sector_update_proof<Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher>>(
-    porep_config: PoRepConfig,
+    porep_config: &PoRepConfig,
     proof_bytes: &[u8],
     comm_r_old: Commitment,
     comm_r_new: Commitment,
