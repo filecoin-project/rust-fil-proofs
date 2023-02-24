@@ -8,34 +8,39 @@ use bellperson::{
 use blstrs::Scalar as Fr;
 use ff::PrimeField;
 use generic_array::typenum::{Unsigned, U2, U4, U8};
-use halo2_proofs::{
-    arithmetic::FieldExt,
-    circuit::{AssignedCell, Layouter},
-    pasta::{Fp, Fq},
-    plonk::{self, Advice, Column, Fixed},
-};
+#[cfg(feature = "halo2")]
+use halo2_proofs::pasta::{Fp, Fq};
 use lazy_static::lazy_static;
 use merkletree::{
     hash::{Algorithm, Hashable},
     merkle::Element,
 };
-use neptune::{circuit::poseidon_hash, halo2_circuit::PoseidonConfig, Poseidon, Strength};
+use neptune::{circuit::poseidon_hash, Poseidon};
+#[cfg(feature = "nova")]
+use pasta_curves::{Fp, Fq};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use typemap::ShareMap;
 
 use crate::{
-    get_poseidon_constants, Domain, Halo2Hasher, HashFunction, HashInstructions, Hasher,
+    get_poseidon_constants, Domain, HashFunction, Hasher,
     PoseidonArity, PoseidonLookup, PoseidonMDArity, R1CSHasher,
-    POSEIDON_MD_CONSTANTS as POSEIDON_MD_CONSTANTS_BLS, POSEIDON_MD_CONSTANTS_PALLAS,
-    POSEIDON_MD_CONSTANTS_VESTA,
 };
 
+#[cfg(not(any(feature = "nova", feature = "halo2")))]
 lazy_static! {
     pub static ref POSEIDON_MD_CONSTANTS: ShareMap = {
         let mut tm = ShareMap::custom();
-        tm.insert::<PoseidonLookup<Fr, PoseidonMDArity>>(&*POSEIDON_MD_CONSTANTS_BLS);
-        tm.insert::<PoseidonLookup<Fp, PoseidonMDArity>>(&*POSEIDON_MD_CONSTANTS_PALLAS);
-        tm.insert::<PoseidonLookup<Fq, PoseidonMDArity>>(&*POSEIDON_MD_CONSTANTS_VESTA);
+        tm.insert::<PoseidonLookup<Fr, PoseidonMDArity>>(&*crate::POSEIDON_MD_CONSTANTS);
+        tm
+    };
+}
+#[cfg(any(feature = "nova", feature = "halo2"))]
+lazy_static! {
+    pub static ref POSEIDON_MD_CONSTANTS: ShareMap = {
+        let mut tm = ShareMap::custom();
+        tm.insert::<PoseidonLookup<Fr, PoseidonMDArity>>(&*crate::POSEIDON_MD_CONSTANTS);
+        tm.insert::<PoseidonLookup<Fp, PoseidonMDArity>>(&*crate::POSEIDON_MD_CONSTANTS_PALLAS);
+        tm.insert::<PoseidonLookup<Fq, PoseidonMDArity>>(&*crate::POSEIDON_MD_CONSTANTS_VESTA);
         tm
     };
 }
@@ -58,6 +63,7 @@ impl From<Fr> for PoseidonDomain<Fr> {
         }
     }
 }
+#[cfg(any(feature = "nova", feature = "halo2"))]
 impl From<Fp> for PoseidonDomain<Fp> {
     fn from(f: Fp) -> Self {
         PoseidonDomain {
@@ -66,6 +72,7 @@ impl From<Fp> for PoseidonDomain<Fp> {
         }
     }
 }
+#[cfg(any(feature = "nova", feature = "halo2"))]
 impl From<Fq> for PoseidonDomain<Fq> {
     fn from(f: Fq) -> Self {
         PoseidonDomain {
@@ -81,12 +88,14 @@ impl Into<Fr> for PoseidonDomain<Fr> {
         Fr::from_repr_vartime(self.repr).expect("from_repr failure")
     }
 }
+#[cfg(any(feature = "nova", feature = "halo2"))]
 #[allow(clippy::from_over_into)]
 impl Into<Fp> for PoseidonDomain<Fp> {
     fn into(self) -> Fp {
         Fp::from_repr_vartime(self.repr).expect("from_repr failure")
     }
 }
+#[cfg(any(feature = "nova", feature = "halo2"))]
 #[allow(clippy::from_over_into)]
 impl Into<Fq> for PoseidonDomain<Fq> {
     fn into(self) -> Fq {
@@ -183,9 +192,11 @@ impl<'de, F> Deserialize<'de> for PoseidonDomain<F> {
 impl Domain for PoseidonDomain<Fr> {
     type Field = Fr;
 }
+#[cfg(any(feature = "nova", feature = "halo2"))]
 impl Domain for PoseidonDomain<Fp> {
     type Field = Fp;
 }
+#[cfg(any(feature = "nova", feature = "halo2"))]
 impl Domain for PoseidonDomain<Fq> {
     type Field = Fq;
 }
@@ -266,11 +277,13 @@ impl Hashable<PoseidonFunction<Fr>> for Fr {
         <PoseidonFunction<Fr> as std::hash::Hasher>::write(hasher, &self.to_repr())
     }
 }
+#[cfg(any(feature = "nova", feature = "halo2"))]
 impl Hashable<PoseidonFunction<Fp>> for Fp {
     fn hash(&self, hasher: &mut PoseidonFunction<Fp>) {
         <PoseidonFunction<Fp> as std::hash::Hasher>::write(hasher, &self.to_repr())
     }
 }
+#[cfg(any(feature = "nova", feature = "halo2"))]
 impl Hashable<PoseidonFunction<Fq>> for Fq {
     fn hash(&self, hasher: &mut PoseidonFunction<Fq>) {
         <PoseidonFunction<Fq> as std::hash::Hasher>::write(hasher, &self.to_repr())
@@ -377,6 +390,7 @@ impl Hasher for PoseidonHasher<Fr> {
         HASHER_NAME.into()
     }
 }
+#[cfg(any(feature = "nova", feature = "halo2"))]
 impl Hasher for PoseidonHasher<Fp> {
     type Field = Fp;
     type Domain = PoseidonDomain<Self::Field>;
@@ -386,6 +400,7 @@ impl Hasher for PoseidonHasher<Fp> {
         HASHER_NAME.into()
     }
 }
+#[cfg(any(feature = "nova", feature = "halo2"))]
 impl Hasher for PoseidonHasher<Fq> {
     type Field = Fq;
     type Domain = PoseidonDomain<Self::Field>;
@@ -475,88 +490,105 @@ where
     }
 }
 
-/// The configured Halo2 Poseidon strength represented as a `bool`.
-const HALO2_STRENGTH: bool = match crate::HALO2_STRENGTH {
-    Strength::Standard => neptune::halo2_circuit::STRENGTH_STD,
-    Strength::EvenPartial => neptune::halo2_circuit::STRENGTH_EVEN,
-    _ => panic!("halo2 strength must be `Standard` or `EvenPartial`"),
-};
+#[cfg(feature = "halo2")]
+pub use self::halo2::{PoseidonChip, HALO2_STRENGTH};
 
-/// Export the Poseidon chip configured with the chosen strength.
-pub type PoseidonChip<F, A> = neptune::halo2_circuit::PoseidonChip<F, A, HALO2_STRENGTH>;
+#[cfg(feature = "halo2")]
+mod halo2 {
+    use super::*;
 
-impl<F, A> HashInstructions<F> for PoseidonChip<F, A>
-where
-    F: FieldExt,
-    A: PoseidonArity<F>,
-{
-    fn hash(
-        &self,
-        layouter: impl Layouter<F>,
-        preimage: &[AssignedCell<F, F>],
-    ) -> Result<AssignedCell<F, F>, plonk::Error> {
-        let consts = get_poseidon_constants::<F, A>();
-        self.hash(layouter, preimage, consts)
-    }
-}
+    use halo2_proofs::{
+        arithmetic::FieldExt,
+        circuit::{AssignedCell, Layouter},
+        plonk::{self, Advice, Column, Fixed},
+    };
+    use neptune::{halo2_circuit::PoseidonConfig, Strength};
 
-impl<F, A> Halo2Hasher<A> for PoseidonHasher<F>
-where
-    F: FieldExt,
-    A: PoseidonArity<F>,
-    Self: Hasher<Field = F>,
-{
-    type Chip = PoseidonChip<F, A>;
-    type Config = PoseidonConfig<F, A>;
+    use crate::{Halo2Hasher, HashInstructions};
 
-    fn construct(config: Self::Config) -> Self::Chip {
-        Self::Chip::construct(config)
-    }
+    /// The configured Halo2 Poseidon strength represented as a `bool`.
+    pub const HALO2_STRENGTH: bool = match crate::HALO2_STRENGTH {
+        Strength::Standard => neptune::halo2_circuit::STRENGTH_STD,
+        Strength::EvenPartial => neptune::halo2_circuit::STRENGTH_EVEN,
+        _ => panic!("halo2 strength must be `Standard` or `EvenPartial`"),
+    };
 
-    fn configure(
-        meta: &mut plonk::ConstraintSystem<F>,
-        advice_eq: &[Column<Advice>],
-        advice_neq: &[Column<Advice>],
-        fixed_eq: &[Column<Fixed>],
-        fixed_neq: &[Column<Fixed>],
-    ) -> Self::Config {
-        let num_advice_eq = Self::Chip::num_advice_eq();
-        let num_advice_total = Self::Chip::num_advice_total();
-        let num_fixed_eq = Self::Chip::num_fixed_eq();
-        let num_fixed_total = Self::Chip::num_fixed_total();
+    /// Export the Poseidon chip configured with the chosen strength.
+    pub type PoseidonChip<F, A> = neptune::halo2_circuit::PoseidonChip<F, A, HALO2_STRENGTH>;
 
-        // Check that the caller provided enough equality enabled and total columns. Note that
-        // equality enabled columns can be used as non-equality-enabled columns, but not vice versa.
-        let advice_eq_len = advice_eq.len();
-        assert!(advice_eq_len >= num_advice_eq);
-        assert!(advice_eq_len + advice_neq.len() >= num_advice_total);
-
-        let fixed_eq_len = fixed_eq.len();
-        assert!(fixed_eq_len >= num_fixed_eq);
-        assert!(fixed_eq_len + fixed_neq.len() >= num_fixed_total);
-
-        let advice: Vec<Column<Advice>> = advice_eq
-            .iter()
-            .chain(advice_neq.iter())
-            .copied()
-            .take(num_advice_total)
-            .collect();
-
-        let fixed: Vec<Column<Fixed>> = fixed_eq
-            .iter()
-            .chain(fixed_neq.iter())
-            .copied()
-            .take(num_fixed_total)
-            .collect();
-
-        Self::Chip::configure(meta, &advice, &fixed)
-    }
-
-    #[inline]
-    fn transmute_arity<B>(config: Self::Config) -> <Self as Halo2Hasher<B>>::Config
+    impl<F, A> HashInstructions<F> for PoseidonChip<F, A>
     where
-        B: PoseidonArity<Self::Field>,
+        F: FieldExt,
+        A: PoseidonArity<F>,
     {
-        config.transmute_arity()
+        fn hash(
+            &self,
+            layouter: impl Layouter<F>,
+            preimage: &[AssignedCell<F, F>],
+        ) -> Result<AssignedCell<F, F>, plonk::Error> {
+            let consts = get_poseidon_constants::<F, A>();
+            self.hash(layouter, preimage, consts)
+        }
+    }
+
+    impl<F, A> Halo2Hasher<A> for PoseidonHasher<F>
+    where
+        F: FieldExt,
+        A: PoseidonArity<F>,
+        Self: Hasher<Field = F>,
+    {
+        type Chip = PoseidonChip<F, A>;
+        type Config = PoseidonConfig<F, A>;
+
+        fn construct(config: Self::Config) -> Self::Chip {
+            Self::Chip::construct(config)
+        }
+
+        fn configure(
+            meta: &mut plonk::ConstraintSystem<F>,
+            advice_eq: &[Column<Advice>],
+            advice_neq: &[Column<Advice>],
+            fixed_eq: &[Column<Fixed>],
+            fixed_neq: &[Column<Fixed>],
+        ) -> Self::Config {
+            let num_advice_eq = Self::Chip::num_advice_eq();
+            let num_advice_total = Self::Chip::num_advice_total();
+            let num_fixed_eq = Self::Chip::num_fixed_eq();
+            let num_fixed_total = Self::Chip::num_fixed_total();
+
+            // Check that the caller provided enough equality enabled and total columns. Note that
+            // equality enabled columns can be used as non-equality-enabled columns, but not vice versa.
+            let advice_eq_len = advice_eq.len();
+            assert!(advice_eq_len >= num_advice_eq);
+            assert!(advice_eq_len + advice_neq.len() >= num_advice_total);
+
+            let fixed_eq_len = fixed_eq.len();
+            assert!(fixed_eq_len >= num_fixed_eq);
+            assert!(fixed_eq_len + fixed_neq.len() >= num_fixed_total);
+
+            let advice: Vec<Column<Advice>> = advice_eq
+                .iter()
+                .chain(advice_neq.iter())
+                .copied()
+                .take(num_advice_total)
+                .collect();
+
+            let fixed: Vec<Column<Fixed>> = fixed_eq
+                .iter()
+                .chain(fixed_neq.iter())
+                .copied()
+                .take(num_fixed_total)
+                .collect();
+
+            Self::Chip::configure(meta, &advice, &fixed)
+        }
+
+        #[inline]
+        fn transmute_arity<B>(config: Self::Config) -> <Self as Halo2Hasher<B>>::Config
+        where
+            B: PoseidonArity<Self::Field>,
+        {
+            config.transmute_arity()
+        }
     }
 }

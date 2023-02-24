@@ -10,12 +10,6 @@ use bellperson::{
     ConstraintSystem, SynthesisError,
 };
 use ff::{Field, PrimeField};
-use fil_halo2_gadgets::ColumnCount;
-use halo2_proofs::{
-    arithmetic::FieldExt,
-    circuit::{AssignedCell, Layouter},
-    plonk::{self, Advice, Column, Fixed},
-};
 use merkletree::{
     hash::{Algorithm as LightAlgorithm, Hashable as LightHashable},
     merkle::Element,
@@ -116,8 +110,19 @@ pub trait R1CSHasher: Hasher {
         height: usize,
     ) -> Result<AllocatedNum<Self::Field>, SynthesisError>;
 
+    #[cfg(feature = "poseidon")]
     fn hash_multi_leaf_circuit<
         Arity: PoseidonArity<Self::Field>,
+        CS: ConstraintSystem<Self::Field>,
+    >(
+        cs: CS,
+        leaves: &[AllocatedNum<Self::Field>],
+        height: usize,
+    ) -> Result<AllocatedNum<Self::Field>, SynthesisError>;
+
+    #[cfg(not(feature = "poseidon"))]
+    fn hash_multi_leaf_circuit<
+        Arity: generic_array::typenum::Unsigned,
         CS: ConstraintSystem<Self::Field>,
     >(
         cs: CS,
@@ -153,47 +158,62 @@ pub trait R1CSHasher: Hasher {
     ) -> Result<AllocatedNum<Self::Field>, SynthesisError>;
 }
 
-pub trait HashInstructions<F: FieldExt> {
-    fn hash(
-        &self,
-        layouter: impl Layouter<F>,
-        preimage: &[AssignedCell<F, F>],
-    ) -> Result<AssignedCell<F, F>, plonk::Error>;
-}
+#[cfg(feature = "halo2")]
+pub use self::halo2::{Halo2Hasher, HashInstructions};
 
-// The `A` type parameter is necessary because we may need to specify a unique halo2 chip and
-// config for each preimage length `A`.
-pub trait Halo2Hasher<A>: Hasher
-where
-    Self::Field: FieldExt,
-    A: PoseidonArity<Self::Field>,
-{
-    type Chip: HashInstructions<Self::Field> + ColumnCount;
-    type Config: Clone;
+#[cfg(feature = "halo2")]
+mod halo2 {
+    use super::*;
 
-    fn load(
-        _layouter: &mut impl Layouter<Self::Field>,
-        _config: &Self::Config,
-    ) -> Result<(), plonk::Error> {
-        Ok(())
+    use fil_halo2_gadgets::ColumnCount;
+    use halo2_proofs::{
+        arithmetic::FieldExt,
+        circuit::{AssignedCell, Layouter},
+        plonk::{self, Advice, Column, Fixed},
+    };
+
+    pub trait HashInstructions<F: FieldExt> {
+        fn hash(
+            &self,
+            layouter: impl Layouter<F>,
+            preimage: &[AssignedCell<F, F>],
+        ) -> Result<AssignedCell<F, F>, plonk::Error>;
     }
 
-    fn construct(config: Self::Config) -> Self::Chip;
-
-    fn configure(
-        meta: &mut plonk::ConstraintSystem<Self::Field>,
-        advice_eq: &[Column<Advice>],
-        advice_neq: &[Column<Advice>],
-        fixed_eq: &[Column<Fixed>],
-        fixed_neq: &[Column<Fixed>],
-    ) -> Self::Config;
-
-    // Changes the chip config's arity from `A` to `B`. This is safe only when arities `A` and `B`
-    // are known to have the same constraint system configuration.
-    fn transmute_arity<B>(
-        config: <Self as Halo2Hasher<A>>::Config,
-    ) -> <Self as Halo2Hasher<B>>::Config
+    // The `A` type parameter is necessary because we may need to specify a unique halo2 chip and
+    // config for each preimage length `A`.
+    pub trait Halo2Hasher<A>: Hasher
     where
-        B: PoseidonArity<Self::Field>,
-        Self: Halo2Hasher<B>;
+        Self::Field: FieldExt,
+        A: PoseidonArity<Self::Field>,
+    {
+        type Chip: HashInstructions<Self::Field> + ColumnCount;
+        type Config: Clone;
+
+        fn load(
+            _layouter: &mut impl Layouter<Self::Field>,
+            _config: &Self::Config,
+        ) -> Result<(), plonk::Error> {
+            Ok(())
+        }
+
+        fn construct(config: Self::Config) -> Self::Chip;
+
+        fn configure(
+            meta: &mut plonk::ConstraintSystem<Self::Field>,
+            advice_eq: &[Column<Advice>],
+            advice_neq: &[Column<Advice>],
+            fixed_eq: &[Column<Fixed>],
+            fixed_neq: &[Column<Fixed>],
+        ) -> Self::Config;
+
+        // Changes the chip config's arity from `A` to `B`. This is safe only when arities `A` and `B`
+        // are known to have the same constraint system configuration.
+        fn transmute_arity<B>(
+            config: <Self as Halo2Hasher<A>>::Config,
+        ) -> <Self as Halo2Hasher<B>>::Config
+        where
+            B: PoseidonArity<Self::Field>,
+            Self: Halo2Hasher<B>;
+    }
 }

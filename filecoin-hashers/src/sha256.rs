@@ -1,5 +1,4 @@
 use std::cmp::Ordering;
-use std::convert::TryInto;
 use std::fmt::{self, Debug, Formatter};
 use std::marker::PhantomData;
 
@@ -9,26 +8,18 @@ use bellperson::{
 };
 use blstrs::Scalar as Fr;
 use ff::{PrimeField, PrimeFieldBits};
-use fil_halo2_gadgets::{
-    sha256::{Sha256FieldChip, Sha256FieldConfig},
-    ColumnCount,
-};
-use halo2_proofs::{
-    arithmetic::FieldExt,
-    circuit::{AssignedCell, Layouter},
-    pasta::{Fp, Fq},
-    plonk::{self, Advice, Column, Fixed},
-};
+#[cfg(feature = "halo2")]
+use halo2_proofs::pasta::{Fp, Fq};
 use merkletree::{
     hash::{Algorithm, Hashable},
     merkle::Element,
 };
+#[cfg(feature = "nova")]
+use pasta_curves::{Fp, Fq};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use sha2::{Digest, Sha256};
 
-use crate::{
-    Domain, Halo2Hasher, HashFunction, HashInstructions, Hasher, PoseidonArity, R1CSHasher,
-};
+use crate::{Domain, HashFunction, Hasher, R1CSHasher};
 
 #[derive(Copy, Clone, Default)]
 pub struct Sha256Domain<F> {
@@ -54,6 +45,7 @@ impl From<Fr> for Sha256Domain<Fr> {
         }
     }
 }
+#[cfg(any(feature = "nova", feature = "halo2"))]
 impl From<Fp> for Sha256Domain<Fp> {
     fn from(f: Fp) -> Self {
         Sha256Domain {
@@ -62,6 +54,7 @@ impl From<Fp> for Sha256Domain<Fp> {
         }
     }
 }
+#[cfg(any(feature = "nova", feature = "halo2"))]
 impl From<Fq> for Sha256Domain<Fq> {
     fn from(f: Fq) -> Self {
         Sha256Domain {
@@ -77,12 +70,14 @@ impl Into<Fr> for Sha256Domain<Fr> {
         Fr::from_repr_vartime(self.state).expect("from_repr failure")
     }
 }
+#[cfg(any(feature = "nova", feature = "halo2"))]
 #[allow(clippy::from_over_into)]
 impl Into<Fp> for Sha256Domain<Fp> {
     fn into(self) -> Fp {
         Fp::from_repr_vartime(self.state).expect("from_repr failure")
     }
 }
+#[cfg(any(feature = "nova", feature = "halo2"))]
 #[allow(clippy::from_over_into)]
 impl Into<Fq> for Sha256Domain<Fq> {
     fn into(self) -> Fq {
@@ -179,9 +174,11 @@ impl<'de, F> Deserialize<'de> for Sha256Domain<F> {
 impl Domain for Sha256Domain<Fr> {
     type Field = Fr;
 }
+#[cfg(any(feature = "nova", feature = "halo2"))]
 impl Domain for Sha256Domain<Fp> {
     type Field = Fp;
 }
+#[cfg(any(feature = "nova", feature = "halo2"))]
 impl Domain for Sha256Domain<Fq> {
     type Field = Fq;
 }
@@ -300,6 +297,7 @@ impl Hasher for Sha256Hasher<Fr> {
         HASHER_NAME.into()
     }
 }
+#[cfg(any(feature = "nova", feature = "halo2"))]
 impl Hasher for Sha256Hasher<Fp> {
     type Field = Fp;
     type Domain = Sha256Domain<Self::Field>;
@@ -309,6 +307,7 @@ impl Hasher for Sha256Hasher<Fp> {
         HASHER_NAME.into()
     }
 }
+#[cfg(any(feature = "nova", feature = "halo2"))]
 impl Hasher for Sha256Hasher<Fq> {
     type Field = Fq;
     type Domain = Sha256Domain<Self::Field>;
@@ -448,74 +447,82 @@ where
     }
 }
 
-impl<F: FieldExt> HashInstructions<F> for Sha256FieldChip<F> {
-    fn hash(
-        &self,
-        layouter: impl Layouter<F>,
-        preimage: &[AssignedCell<F, F>],
-    ) -> Result<AssignedCell<F, F>, plonk::Error> {
-        self.hash_field_elems(layouter, preimage)
-    }
-}
+#[cfg(feature = "halo2")]
+mod halo2 {
+    use super::*;
 
-impl<F, A> Halo2Hasher<A> for Sha256Hasher<F>
-where
-    F: FieldExt,
-    A: PoseidonArity<F>,
-    Self: Hasher<Field = F>,
-{
-    type Chip = Sha256FieldChip<F>;
-    type Config = Sha256FieldConfig<F>;
+    use std::convert::TryInto;
 
-    fn load(layouter: &mut impl Layouter<F>, config: &Self::Config) -> Result<(), plonk::Error> {
-        Sha256FieldChip::load(layouter, config)
-    }
+    use fil_halo2_gadgets::{
+        sha256::{Sha256FieldChip, Sha256FieldConfig},
+        ColumnCount,
+    };
+    use halo2_proofs::{
+        arithmetic::FieldExt,
+        circuit::{AssignedCell, Layouter},
+        plonk::{self, Advice, Column, Fixed},
+    };
 
-    fn construct(config: Self::Config) -> Self::Chip {
-        Sha256FieldChip::construct(config)
-    }
+    use crate::{Halo2Hasher, HashInstructions, PoseidonArity};
 
-    #[allow(clippy::unwrap_used)]
-    fn configure(
-        meta: &mut plonk::ConstraintSystem<F>,
-        advice_eq: &[Column<Advice>],
-        _advice_neq: &[Column<Advice>],
-        _fixed_eq: &[Column<Fixed>],
-        _fixed_neq: &[Column<Fixed>],
-    ) -> Self::Config {
-        let num_cols = Self::Chip::num_cols();
-        assert!(advice_eq.len() >= num_cols.advice_eq);
-        let advice = advice_eq[..num_cols.advice_eq].try_into().unwrap();
-        Sha256FieldChip::configure(meta, advice)
+    impl<F: FieldExt> HashInstructions<F> for Sha256FieldChip<F> {
+        fn hash(
+            &self,
+            layouter: impl Layouter<F>,
+            preimage: &[AssignedCell<F, F>],
+        ) -> Result<AssignedCell<F, F>, plonk::Error> {
+            self.hash_field_elems(layouter, preimage)
+        }
     }
 
-    #[inline]
-    fn transmute_arity<B>(config: Self::Config) -> <Self as Halo2Hasher<B>>::Config
+    impl<F, A> Halo2Hasher<A> for Sha256Hasher<F>
     where
-        B: PoseidonArity<Self::Field>,
+        F: FieldExt,
+        A: PoseidonArity<F>,
+        Self: Hasher<Field = F>,
     {
-        config
+        type Chip = Sha256FieldChip<F>;
+        type Config = Sha256FieldConfig<F>;
+
+        fn load(layouter: &mut impl Layouter<F>, config: &Self::Config) -> Result<(), plonk::Error> {
+            Sha256FieldChip::load(layouter, config)
+        }
+
+        fn construct(config: Self::Config) -> Self::Chip {
+            Sha256FieldChip::construct(config)
+        }
+
+        #[allow(clippy::unwrap_used)]
+        fn configure(
+            meta: &mut plonk::ConstraintSystem<F>,
+            advice_eq: &[Column<Advice>],
+            _advice_neq: &[Column<Advice>],
+            _fixed_eq: &[Column<Fixed>],
+            _fixed_neq: &[Column<Fixed>],
+        ) -> Self::Config {
+            let num_cols = Self::Chip::num_cols();
+            assert!(advice_eq.len() >= num_cols.advice_eq);
+            let advice = advice_eq[..num_cols.advice_eq].try_into().unwrap();
+            Sha256FieldChip::configure(meta, advice)
+        }
+
+        #[inline]
+        fn transmute_arity<B>(config: Self::Config) -> <Self as Halo2Hasher<B>>::Config
+        where
+            B: PoseidonArity<Self::Field>,
+        {
+            config
+        }
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, any(feature = "nova", feature = "halo2")))]
 mod tests {
     use super::*;
 
-    use bellperson::{
-        gadgets::num::AllocatedNum, util_cs::test_cs::TestConstraintSystem, ConstraintSystem as _,
-    };
-    use blstrs::Scalar as Fr;
-    use ff::{Field, PrimeField};
-    use fil_halo2_gadgets::AdviceIter;
+    use bellperson::util_cs::test_cs::TestConstraintSystem;
+    use ff::Field;
     use generic_array::typenum::U0;
-    use halo2_proofs::{
-        arithmetic::FieldExt,
-        circuit::{AssignedCell, Layouter, SimpleFloorPlanner, Value},
-        dev::MockProver,
-        pasta::{Fp, Fq},
-        plonk::{Advice, Circuit, Column, ConstraintSystem, Error},
-    };
 
     #[test]
     fn test_sha256_vanilla_all_fields() {
@@ -581,9 +588,20 @@ mod tests {
         }
     }
 
+    #[cfg(feature = "halo2")]
     #[test]
     #[allow(clippy::unwrap_used)]
     fn test_sha256_groth16_halo2_compat() {
+        use fil_halo2_gadgets::AdviceIter;
+        use halo2_proofs::{
+            arithmetic::FieldExt,
+            circuit::{AssignedCell, Layouter, SimpleFloorPlanner, Value},
+            dev::MockProver,
+            plonk::{Advice, Circuit, Column, ConstraintSystem, Error},
+        };
+
+        use crate::{Halo2Hasher, HashInstructions};
+
         // Choose an arbitrary arity type because it is ignored by the sha256 circuit.
         type A = U0;
 

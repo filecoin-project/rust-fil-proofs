@@ -11,11 +11,14 @@ use bellperson::{
 use blake2s_simd::{Hash as Blake2sHash, Params as Blake2sBuilder, State};
 use blstrs::Scalar as Fr;
 use ff::{PrimeField, PrimeFieldBits};
+#[cfg(feature = "halo2")]
 use halo2_proofs::pasta::{Fp, Fq};
 use merkletree::{
     hash::{Algorithm, Hashable},
     merkle::Element,
 };
+#[cfg(feature = "nova")]
+use pasta_curves::{Fp, Fq};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::{Domain, HashFunction, Hasher, R1CSHasher};
@@ -44,6 +47,7 @@ impl From<Fr> for Blake2sDomain<Fr> {
         }
     }
 }
+#[cfg(any(feature = "nova", feature = "halo2"))]
 impl From<Fp> for Blake2sDomain<Fp> {
     fn from(f: Fp) -> Self {
         Blake2sDomain {
@@ -52,6 +56,7 @@ impl From<Fp> for Blake2sDomain<Fp> {
         }
     }
 }
+#[cfg(any(feature = "nova", feature = "halo2"))]
 impl From<Fq> for Blake2sDomain<Fq> {
     fn from(f: Fq) -> Self {
         Blake2sDomain {
@@ -67,12 +72,14 @@ impl Into<Fr> for Blake2sDomain<Fr> {
         Fr::from_repr_vartime(self.state).expect("from_repr failure")
     }
 }
+#[cfg(any(feature = "nova", feature = "halo2"))]
 #[allow(clippy::from_over_into)]
 impl Into<Fp> for Blake2sDomain<Fp> {
     fn into(self) -> Fp {
         Fp::from_repr_vartime(self.state).expect("from_repr failure")
     }
 }
+#[cfg(any(feature = "nova", feature = "halo2"))]
 #[allow(clippy::from_over_into)]
 impl Into<Fq> for Blake2sDomain<Fq> {
     fn into(self) -> Fq {
@@ -178,9 +185,11 @@ impl<'de, F> Deserialize<'de> for Blake2sDomain<F> {
 impl Domain for Blake2sDomain<Fr> {
     type Field = Fr;
 }
+#[cfg(any(feature = "nova", feature = "halo2"))]
 impl Domain for Blake2sDomain<Fp> {
     type Field = Fp;
 }
+#[cfg(any(feature = "nova", feature = "halo2"))]
 impl Domain for Blake2sDomain<Fq> {
     type Field = Fq;
 }
@@ -303,6 +312,7 @@ impl Hasher for Blake2sHasher<Fr> {
         HASHER_NAME.into()
     }
 }
+#[cfg(any(feature = "nova", feature = "halo2"))]
 impl Hasher for Blake2sHasher<Fp> {
     type Field = Fp;
     type Domain = Blake2sDomain<Self::Field>;
@@ -312,6 +322,7 @@ impl Hasher for Blake2sHasher<Fp> {
         HASHER_NAME.into()
     }
 }
+#[cfg(any(feature = "nova", feature = "halo2"))]
 impl Hasher for Blake2sHasher<Fq> {
     type Field = Fq;
     type Domain = Blake2sDomain<Self::Field>;
