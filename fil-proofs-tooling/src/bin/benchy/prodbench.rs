@@ -11,9 +11,8 @@ use fil_proofs_tooling::{
 use filecoin_hashers::sha256::Sha256Hasher;
 use filecoin_proofs::{
     clear_cache, parameters::public_params, seal_commit_phase1, seal_commit_phase2,
-    validate_cache_for_commit, DefaultOctLCTree, DefaultOctTree, PaddedBytesAmount, PoRepConfig,
-    PoRepProofPartitions, SectorSize, DRG_DEGREE, EXP_DEGREE, LAYERS, POREP_MINIMUM_CHALLENGES,
-    POREP_PARTITIONS,
+    validate_cache_for_commit, DefaultOctLCTree, DefaultOctTree, PoRepConfig, PoRepProofPartitions,
+    SectorSize, DRG_DEGREE, EXP_DEGREE, LAYERS, POREP_MINIMUM_CHALLENGES, POREP_PARTITIONS,
 };
 use log::info;
 use rand::SeedableRng;
@@ -217,7 +216,7 @@ pub fn run(
                 )?;
 
                 let phase1_output = seal_commit_phase1::<_, DefaultOctLCTree>(
-                    cfg,
+                    &cfg,
                     &replica_info.private_replica_info.cache_dir_path(),
                     &replica_info.private_replica_info.replica_path(),
                     PROVER_ID,
@@ -232,7 +231,7 @@ pub fn run(
                     replica_info.private_replica_info.cache_dir_path(),
                 )?;
 
-                seal_commit_phase2(cfg, phase1_output, PROVER_ID, *sector_id)
+                seal_commit_phase2(&cfg, phase1_output, PROVER_ID, *sector_id)
             })
             .expect("failed to prove sector");
 
@@ -322,8 +321,8 @@ fn generate_params(i: &ProdbenchInputs) {
 
 fn cache_porep_params(porep_config: PoRepConfig) {
     let public_params = public_params(
-        PaddedBytesAmount::from(porep_config),
-        usize::from(PoRepProofPartitions::from(porep_config)),
+        porep_config.padded_bytes_amount(),
+        usize::from(porep_config.partitions),
         porep_config.porep_id,
         porep_config.api_version,
     )

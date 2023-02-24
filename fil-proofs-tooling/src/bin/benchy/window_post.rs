@@ -154,7 +154,7 @@ fn run_pre_commit_phases<Tree: 'static + MerkleTreeTrait>(
 
         let seal_pre_commit_phase1_measurement: FuncMeasurement<SealPreCommitPhase1Output<Tree>> = measure(|| {
             seal_pre_commit_phase1::<_, _, _, Tree>(
-                porep_config,
+                &porep_config,
                 cache_dir.clone(),
                 staged_file_path.clone(),
                 sealed_file_path.clone(),
@@ -257,7 +257,7 @@ fn run_pre_commit_phases<Tree: 'static + MerkleTreeTrait>(
         let seal_pre_commit_phase2_measurement: FuncMeasurement<SealPreCommitOutput> =
             measure(|| {
                 seal_pre_commit_phase2::<_, _, Tree>(
-                    porep_config,
+                    &porep_config,
                     precommit_phase1_output,
                     cache_dir.clone(),
                     sealed_file_path.clone(),
@@ -408,7 +408,7 @@ pub fn run_window_post_bench<Tree: 'static + MerkleTreeTrait>(
 
         let seal_commit_phase1_measurement = measure(|| {
             seal_commit_phase1::<_, Tree>(
-                porep_config,
+                &porep_config,
                 cache_dir.clone(),
                 sealed_file_path.clone(),
                 PROVER_ID,
@@ -469,7 +469,7 @@ pub fn run_window_post_bench<Tree: 'static + MerkleTreeTrait>(
         };
 
         let seal_commit_phase2_measurement = measure(|| {
-            seal_commit_phase2::<Tree>(porep_config, commit_phase1_output, PROVER_ID, sector_id)
+            seal_commit_phase2::<Tree>(&porep_config, commit_phase1_output, PROVER_ID, sector_id)
         })
         .expect("failed in seal_commit_phase2");
 
