@@ -165,7 +165,7 @@ impl<H: Hasher> Graph<H> for BucketGraph<H> {
 
                 let (predecessor_index, other_drg_parents) = match self.api_version {
                     ApiVersion::V1_0_0 => (m_prime, &mut parents[..]),
-                    ApiVersion::V1_1_0 => (0, &mut parents[1..]),
+                    ApiVersion::V1_1_0 | ApiVersion::V1_2_0 => (0, &mut parents[1..]),
                 };
 
                 for parent in other_drg_parents.iter_mut().take(m_prime) {
@@ -291,7 +291,7 @@ mod tests {
         let new_porep_id = porep_id(5);
 
         graph_bucket_aux::<H>(legacy_porep_id, ApiVersion::V1_0_0);
-        graph_bucket_aux::<H>(new_porep_id, ApiVersion::V1_1_0);
+        graph_bucket_aux::<H>(new_porep_id, ApiVersion::V1_2_0);
     }
 
     fn graph_bucket_aux<H: Hasher>(porep_id: PoRepID, api_version: ApiVersion) {
@@ -337,7 +337,7 @@ mod tests {
                             "immediate predecessor was not last DRG parent"
                         );
                     }
-                    ApiVersion::V1_1_0 => {
+                    ApiVersion::V1_1_0 | ApiVersion::V1_2_0 => {
                         assert_eq!(
                             i - 1,
                             pa1[0] as usize,
@@ -362,7 +362,7 @@ mod tests {
     fn gen_proof<H: 'static + Hasher, U: 'static + PoseidonArity>(config: Option<StoreConfig>) {
         let leafs = 64;
         let porep_id = [1; 32];
-        let g = BucketGraph::<H>::new(leafs, BASE_DEGREE, 0, porep_id, ApiVersion::V1_1_0)
+        let g = BucketGraph::<H>::new(leafs, BASE_DEGREE, 0, porep_id, ApiVersion::V1_2_0)
             .expect("bucket graph new failed");
         let data = vec![2u8; NODE_SIZE * leafs];
 
