@@ -1,7 +1,10 @@
 use blstrs::Scalar as Fr;
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use filecoin_hashers::{poseidon::PoseidonHasher, Hasher};
+#[cfg(feature = "halo2")]
 use halo2_proofs::pasta::{Fp, Fq};
+#[cfg(feature = "nova")]
+use pasta_curves::{Fp, Fq};
 use storage_proofs_core::{
     api_version::ApiVersion,
     drgraph::{BucketGraph, Graph, BASE_DEGREE},
@@ -38,7 +41,9 @@ fn bench_for_hasher<H: Hasher>(c: &mut Criterion, hasher_name: &str) {
 #[allow(clippy::unit_arg)]
 fn drgraph(c: &mut Criterion) {
     bench_for_hasher::<PoseidonHasher<Fr>>(c, "bls");
+    #[cfg(any(feature = "nova", feature = "halo2"))]
     bench_for_hasher::<PoseidonHasher<Fp>>(c, "pallas");
+    #[cfg(any(feature = "nova", feature = "halo2"))]
     bench_for_hasher::<PoseidonHasher<Fq>>(c, "vesta");
 }
 

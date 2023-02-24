@@ -7,6 +7,7 @@ use std::slice::Iter;
 use anyhow::{ensure, Result};
 use filecoin_hashers::{Hasher, PoseidonArity};
 use generic_array::typenum::{Unsigned, U0};
+#[cfg(feature = "halo2")]
 use halo2_proofs::circuit::Value;
 use merkletree::hash::Algorithm;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
@@ -38,6 +39,7 @@ pub trait MerkleProofTrait: Clone + Serialize + DeserializeOwned + Debug + Sync 
             .collect::<Vec<_>>()
     }
 
+    #[cfg(feature = "halo2")]
     fn as_values(&self) -> Vec<Vec<Value<<Self::Hasher as Hasher>::Field>>> {
         self.path()
             .iter()
@@ -769,7 +771,10 @@ mod tests {
         blake2s::Blake2sHasher, poseidon::PoseidonHasher, sha256::Sha256Hasher, Domain,
     };
     use generic_array::typenum::{U2, U4, U8};
+    #[cfg(feature = "halo2")]
     use halo2_proofs::pasta::{Fp, Fq};
+    #[cfg(feature = "nova")]
+    use pasta_curves::{Fp, Fq};
     use rand::thread_rng;
 
     use crate::merkle::{
@@ -811,6 +816,7 @@ mod tests {
                 U0,
             >,
         >();
+        #[cfg(any(feature = "nova", feature = "halo2"))]
         merklepath::<
             MerkleTreeWrapper<
                 PoseidonHasher<Fp>,
@@ -833,6 +839,7 @@ mod tests {
                 U0,
             >,
         >();
+        #[cfg(any(feature = "nova", feature = "halo2"))]
         merklepath::<
             MerkleTreeWrapper<
                 PoseidonHasher<Fq>,
@@ -855,6 +862,7 @@ mod tests {
                 U0,
             >,
         >();
+        #[cfg(any(feature = "nova", feature = "halo2"))]
         merklepath::<
             MerkleTreeWrapper<
                 PoseidonHasher<Fp>,
@@ -877,6 +885,7 @@ mod tests {
                 U0,
             >,
         >();
+        #[cfg(any(feature = "nova", feature = "halo2"))]
         merklepath::<
             MerkleTreeWrapper<
                 PoseidonHasher<Fq>,
@@ -899,6 +908,7 @@ mod tests {
                 U0,
             >,
         >();
+        #[cfg(any(feature = "nova", feature = "halo2"))]
         merklepath::<
             MerkleTreeWrapper<
                 PoseidonHasher<Fp>,
@@ -921,6 +931,7 @@ mod tests {
                 U2,
             >,
         >();
+        #[cfg(any(feature = "nova", feature = "halo2"))]
         merklepath::<
             MerkleTreeWrapper<
                 PoseidonHasher<Fq>,
@@ -943,6 +954,7 @@ mod tests {
                 U0,
             >,
         >();
+        #[cfg(any(feature = "nova", feature = "halo2"))]
         merklepath::<
             MerkleTreeWrapper<
                 Sha256Hasher<Fp>,
@@ -965,6 +977,7 @@ mod tests {
                 U0,
             >,
         >();
+        #[cfg(any(feature = "nova", feature = "halo2"))]
         merklepath::<
             MerkleTreeWrapper<
                 Sha256Hasher<Fq>,
@@ -987,6 +1000,7 @@ mod tests {
                 U0,
             >,
         >();
+        #[cfg(any(feature = "nova", feature = "halo2"))]
         merklepath::<
             MerkleTreeWrapper<
                 Sha256Hasher<Fp>,
@@ -1009,6 +1023,7 @@ mod tests {
                 U2,
             >,
         >();
+        #[cfg(any(feature = "nova", feature = "halo2"))]
         merklepath::<
             MerkleTreeWrapper<
                 Sha256Hasher<Fq>,
@@ -1031,6 +1046,7 @@ mod tests {
                 U0,
             >,
         >();
+        #[cfg(any(feature = "nova", feature = "halo2"))]
         merklepath::<
             MerkleTreeWrapper<
                 Blake2sHasher<Fp>,
@@ -1053,6 +1069,7 @@ mod tests {
                 U0,
             >,
         >();
+        #[cfg(any(feature = "nova", feature = "halo2"))]
         merklepath::<
             MerkleTreeWrapper<
                 Blake2sHasher<Fq>,
@@ -1075,6 +1092,7 @@ mod tests {
                 U2,
             >,
         >();
+        #[cfg(any(feature = "nova", feature = "halo2"))]
         merklepath::<
             MerkleTreeWrapper<
                 Blake2sHasher<Fp>,

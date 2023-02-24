@@ -263,9 +263,12 @@ mod tests {
         blake2s::Blake2sHasher, poseidon::PoseidonHasher, sha256::Sha256Hasher,
     };
     use generic_array::typenum::{U0, U2, U4, U8};
+    #[cfg(feature = "halo2")]
     use halo2_proofs::pasta::{Fp, Fq};
     use memmap2::{MmapMut, MmapOptions};
     use merkletree::store::StoreConfig;
+    #[cfg(feature = "nova")]
+    use pasta_curves::{Fp, Fq};
 
     use crate::merkle::{
         create_base_merkle_tree, DiskStore, MerkleProofTrait, MerkleTreeTrait, MerkleTreeWrapper,
@@ -357,14 +360,18 @@ mod tests {
     #[test]
     fn graph_bucket_sha256() {
         graph_bucket::<Sha256Hasher<Fr>>();
+        #[cfg(any(feature = "nova", feature = "halo2"))]
         graph_bucket::<Sha256Hasher<Fp>>();
+        #[cfg(any(feature = "nova", feature = "halo2"))]
         graph_bucket::<Sha256Hasher<Fq>>();
     }
 
     #[test]
     fn graph_bucket_blake2s() {
         graph_bucket::<Blake2sHasher<Fr>>();
+        #[cfg(any(feature = "nova", feature = "halo2"))]
         graph_bucket::<Blake2sHasher<Fp>>();
+        #[cfg(any(feature = "nova", feature = "halo2"))]
         graph_bucket::<Blake2sHasher<Fq>>();
     }
 
@@ -395,49 +402,63 @@ mod tests {
     #[test]
     fn gen_proof_poseidon_binary() {
         gen_proof::<PoseidonHasher<Fr>, U2>(None);
+        #[cfg(any(feature = "nova", feature = "halo2"))]
         gen_proof::<PoseidonHasher<Fp>, U2>(None);
+        #[cfg(any(feature = "nova", feature = "halo2"))]
         gen_proof::<PoseidonHasher<Fq>, U2>(None);
     }
 
     #[test]
     fn gen_proof_sha256_binary() {
         gen_proof::<Sha256Hasher<Fr>, U2>(None);
+        #[cfg(any(feature = "nova", feature = "halo2"))]
         gen_proof::<Sha256Hasher<Fp>, U2>(None);
+        #[cfg(any(feature = "nova", feature = "halo2"))]
         gen_proof::<Sha256Hasher<Fq>, U2>(None);
     }
 
     #[test]
     fn gen_proof_blake2s_binary() {
         gen_proof::<Blake2sHasher<Fr>, U2>(None);
+        #[cfg(any(feature = "nova", feature = "halo2"))]
         gen_proof::<Blake2sHasher<Fp>, U2>(None);
+        #[cfg(any(feature = "nova", feature = "halo2"))]
         gen_proof::<Blake2sHasher<Fq>, U2>(None);
     }
 
     #[test]
     fn gen_proof_poseidon_quad() {
         gen_proof::<PoseidonHasher<Fr>, U4>(None);
+        #[cfg(any(feature = "nova", feature = "halo2"))]
         gen_proof::<PoseidonHasher<Fp>, U4>(None);
+        #[cfg(any(feature = "nova", feature = "halo2"))]
         gen_proof::<PoseidonHasher<Fq>, U4>(None);
     }
 
     #[test]
     fn gen_proof_sha256_quad() {
         gen_proof::<Sha256Hasher<Fr>, U4>(None);
+        #[cfg(any(feature = "nova", feature = "halo2"))]
         gen_proof::<Sha256Hasher<Fp>, U4>(None);
+        #[cfg(any(feature = "nova", feature = "halo2"))]
         gen_proof::<Sha256Hasher<Fq>, U4>(None);
     }
 
     #[test]
     fn gen_proof_blake2s_quad() {
         gen_proof::<Blake2sHasher<Fr>, U4>(None);
+        #[cfg(any(feature = "nova", feature = "halo2"))]
         gen_proof::<Blake2sHasher<Fp>, U4>(None);
+        #[cfg(any(feature = "nova", feature = "halo2"))]
         gen_proof::<Blake2sHasher<Fq>, U4>(None);
     }
 
     #[test]
     fn gen_proof_poseidon_oct() {
         gen_proof::<PoseidonHasher<Fr>, U8>(None);
+        #[cfg(any(feature = "nova", feature = "halo2"))]
         gen_proof::<PoseidonHasher<Fp>, U8>(None);
+        #[cfg(any(feature = "nova", feature = "halo2"))]
         gen_proof::<PoseidonHasher<Fq>, U8>(None);
     }
 }

@@ -19,10 +19,12 @@ pub mod data;
 pub mod drgraph;
 pub mod error;
 pub mod gadgets;
+#[cfg(feature = "halo2")]
 pub mod halo2;
 pub mod measurements;
 pub mod merkle;
 pub mod multi_proof;
+#[cfg(feature = "nova")]
 pub mod nova;
 pub mod parameter_cache;
 pub mod partitions;

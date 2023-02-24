@@ -1,7 +1,10 @@
 use blstrs::Scalar as Fr;
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use filecoin_hashers::{poseidon::PoseidonHasher, sha256::Sha256Hasher, Domain, Hasher};
+#[cfg(feature = "halo2")]
 use halo2_proofs::pasta::{Fp, Fq};
+#[cfg(feature = "nova")]
+use pasta_curves::{Fp, Fq};
 use rand::thread_rng;
 use storage_proofs_core::merkle::{create_base_merkle_tree, BinaryMerkleTree};
 
@@ -32,11 +35,15 @@ fn bench_with_hasher<H: 'static + Hasher>(c: &mut Criterion, hasher_name: &str) 
 
 fn merkle_benchmark(c: &mut Criterion) {
     bench_with_hasher::<Sha256Hasher<Fr>>(c, "sha256-bls");
+    #[cfg(any(feature = "nova", feature = "halo2"))]
     bench_with_hasher::<Sha256Hasher<Fp>>(c, "sha256-pallas");
+    #[cfg(any(feature = "nova", feature = "halo2"))]
     bench_with_hasher::<Sha256Hasher<Fq>>(c, "sha256-vesta");
 
     bench_with_hasher::<PoseidonHasher<Fr>>(c, "poseidon-bls");
+    #[cfg(any(feature = "nova", feature = "halo2"))]
     bench_with_hasher::<PoseidonHasher<Fp>>(c, "poseidon-pallas");
+    #[cfg(any(feature = "nova", feature = "halo2"))]
     bench_with_hasher::<PoseidonHasher<Fq>>(c, "poseidon-vesta");
 }
 

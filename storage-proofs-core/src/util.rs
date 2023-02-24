@@ -182,11 +182,6 @@ pub fn is_groth16_field<F: PrimeField>() -> bool {
     std::any::TypeId::of::<F>() == std::any::TypeId::of::<blstrs::Scalar>()
 }
 
-#[inline]
-pub fn is_halo2_field<F: PrimeField>() -> bool {
-    !is_groth16_field::<F>()
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
