@@ -9,7 +9,7 @@ use filecoin_proofs::{
         WINDOW_POST_SECTOR_COUNT, WINNING_POST_CHALLENGE_COUNT, WINNING_POST_SECTOR_COUNT,
     },
     parameters::{public_params, window_post_public_params, winning_post_public_params},
-    types::{PaddedBytesAmount, PoRepConfig, PoRepProofPartitions, PoStConfig, SectorSize},
+    types::{PoRepConfig, PoStConfig, SectorSize},
     with_shape, PoStType,
 };
 use humansize::{file_size_opts, FileSize};
@@ -33,8 +33,8 @@ fn cache_porep_params<Tree: 'static + MerkleTreeTrait>(porep_config: PoRepConfig
     info!("generating PoRep groth params");
 
     let public_params = public_params(
-        PaddedBytesAmount::from(porep_config),
-        usize::from(PoRepProofPartitions::from(porep_config)),
+        porep_config.padded_bytes_amount(),
+        usize::from(porep_config.partitions),
         porep_config.porep_id,
         porep_config.api_version,
     )
