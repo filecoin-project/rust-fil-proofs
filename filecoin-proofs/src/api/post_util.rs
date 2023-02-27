@@ -103,22 +103,24 @@ pub fn generate_fallback_sector_challenges<Tree: 'static + MerkleTreeTrait>(
 
             for n in 0..post_config.challenge_count {
                 let challenge_index = match post_config.typ {
-                    PoStType::Window => get_challenge_index(
-                        post_config.api_version,
-                        partition_index,
-                        i,
-                        num_sectors_per_chunk,
-                        post_config.challenge_count,
-                        n,
-                    ),
-                    PoStType::Winning => get_challenge_index(
-                        post_config.api_version,
-                        partition_index,
-                        i,
-                        post_config.sector_count,
-                        post_config.challenge_count,
-                        n,
-                    ),
+                    PoStType::Window => {
+                        let sector_index = partition_index * num_sectors_per_chunk + i;
+                        get_challenge_index(
+                            post_config.api_version,
+                            sector_index,
+                            post_config.challenge_count,
+                            n,
+                        )
+                    }
+                    PoStType::Winning => {
+                        let sector_index = partition_index * post_config.sector_count + i;
+                        get_challenge_index(
+                            post_config.api_version,
+                            sector_index,
+                            post_config.challenge_count,
+                            n,
+                        )
+                    }
                 };
                 let challenged_leaf = generate_leaf_challenge(
                     &public_params,

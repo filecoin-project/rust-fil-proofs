@@ -404,11 +404,10 @@ impl<'a, Tree: 'a + MerkleTreeTrait> ProofScheme<'a> for FallbackPoSt<'a, Tree> 
                         .fold(
                             || (Vec::new(), BTreeSet::new()),
                             |(mut inclusion_proofs, mut faults), n| {
+                                let sector_index = j * num_sectors_per_chunk + i;
                                 let challenge_index = get_challenge_index(
                                     pub_params.api_version,
-                                    j,
-                                    i,
-                                    num_sectors_per_chunk,
+                                    sector_index,
                                     pub_params.challenge_count,
                                     n,
                                 );
@@ -636,11 +635,10 @@ impl<'a, Tree: 'a + MerkleTreeTrait> ProofScheme<'a> for FallbackPoSt<'a, Tree> 
                     .par_iter()
                     .enumerate()
                     .map(|(n, inclusion_proof)| -> Result<bool> {
+                        let sector_index = j * num_sectors_per_chunk + i;
                         let challenge_index = get_challenge_index(
                             pub_params.api_version,
-                            j,
-                            i,
-                            num_sectors_per_chunk,
+                            sector_index,
                             pub_params.challenge_count,
                             n,
                         );

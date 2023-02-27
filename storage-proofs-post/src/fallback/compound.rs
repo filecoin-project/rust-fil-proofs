@@ -72,11 +72,10 @@ impl<'a, Tree: 'static + MerkleTreeTrait>
 
             // 2. Inputs for verifying inclusion paths
             for n in 0..pub_params.challenge_count {
+                let sector_index = partition_index * pub_params.sector_count + i;
                 let challenge_index = get_challenge_index(
                     pub_params.api_version,
-                    partition_index,
-                    i,
-                    pub_params.sector_count,
+                    sector_index,
                     pub_params.challenge_count,
                     n,
                 );
