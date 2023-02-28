@@ -10,10 +10,13 @@ use merkletree::store::LevelCacheStore;
 
 mod builders;
 mod proof;
+mod sector_arity;
 mod tree;
 
 pub use builders::*;
 pub use proof::*;
+#[cfg(feature = "nova")]
+pub use sector_arity::*;
 pub use tree::*;
 
 pub type LCStore<E> = LevelCacheStore<E, File>;
