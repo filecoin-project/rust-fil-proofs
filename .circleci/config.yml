@@ -576,6 +576,7 @@ workflows:
             - cargo_fetch
             - ensure_groth_parameters_and_keys_linux
 
-      - coverage-with-tarpaulin:
-          requires:
-            - ensure_groth_parameters_and_keys_linux
+# Temporarily disable due to failing permission issue
+#      - coverage-with-tarpaulin:
+#          requires:
+#            - ensure_groth_parameters_and_keys_linux
