@@ -9,6 +9,8 @@ pub fn get_challenge_index(
 ) -> u64 {
     (match api_version {
         ApiVersion::V1_2_0 => challenge_index,
-        _ => sector_index * challenge_count_per_sector + challenge_index,
+        ApiVersion::V1_0_0 | ApiVersion::V1_1_0 => {
+            sector_index * challenge_count_per_sector + challenge_index
+        }
     } as u64)
 }

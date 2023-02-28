@@ -40,6 +40,8 @@ use storage_proofs_core::{api_version::ApiVersion, is_legacy_porep_id, sector::S
 use storage_proofs_update::constants::TreeRHasher;
 use tempfile::{tempdir, NamedTempFile, TempDir};
 
+use filecoin_proofs::constants::MAX_LEGACY_REGISTERED_SEAL_PROOF_ID;
+
 #[cfg(feature = "big-tests")]
 use filecoin_proofs::{
     SectorShape32GiB, SectorShape512MiB, SectorShape64GiB, SECTOR_SIZE_32_GIB, SECTOR_SIZE_512_MIB,
@@ -58,29 +60,31 @@ const TEST_SEED: [u8; 16] = [
     0x59, 0x62, 0xbe, 0x5d, 0x76, 0x3d, 0x31, 0x8d, 0x17, 0xdb, 0x37, 0x32, 0x54, 0x06, 0xbc, 0xe5,
 ];
 
+fn to_porep_id_verified(registered_seal_proof: u64, api_version: ApiVersion) -> [u8; 32] {
+    let mut porep_id = [0u8; 32];
+    porep_id[..8].copy_from_slice(&registered_seal_proof.to_le_bytes());
+
+    assert!(match api_version {
+        ApiVersion::V1_0_0 => is_legacy_porep_id(porep_id),
+        ApiVersion::V1_1_0 | ApiVersion::V1_2_0 => !is_legacy_porep_id(porep_id),
+    });
+
+    porep_id
+}
+
 #[test]
 #[ignore]
 fn test_seal_lifecycle_2kib_base_8() -> Result<()> {
     // The first value is RegisteredSealProof value
     // The second value is the ApiVersion to use
     let test_inputs = vec![
-        (0, ApiVersion::V1_0_0),
-        (5, ApiVersion::V1_1_0),
-        (5, ApiVersion::V1_2_0),
+        (0u64, ApiVersion::V1_0_0),
+        (MAX_LEGACY_REGISTERED_SEAL_PROOF_ID + 1, ApiVersion::V1_1_0),
+        (MAX_LEGACY_REGISTERED_SEAL_PROOF_ID + 1, ApiVersion::V1_2_0),
     ];
 
-    for input in test_inputs {
-        let porep_id_num = input.0 as u64;
-        let api_version = input.1;
-
-        let mut porep_id = [0u8; 32];
-        porep_id[..8].copy_from_slice(&porep_id_num.to_le_bytes());
-
-        assert!(match api_version {
-            ApiVersion::V1_0_0 => is_legacy_porep_id(porep_id),
-            ApiVersion::V1_1_0 | ApiVersion::V1_2_0 => !is_legacy_porep_id(porep_id),
-        });
-
+    for (porep_id_num, api_version) in test_inputs {
+        let porep_id = to_porep_id_verified(porep_id_num, api_version);
         seal_lifecycle::<SectorShape2KiB>(SECTOR_SIZE_2_KIB, &porep_id, api_version)?;
     }
 
@@ -93,23 +97,13 @@ fn test_seal_lifecycle_upgrade_2kib_base_8() -> Result<()> {
     // The first value is RegisteredSealProof value
     // The second value is the ApiVersion to use
     let test_inputs = vec![
-        (0, ApiVersion::V1_0_0),
-        (5, ApiVersion::V1_1_0),
-        (5, ApiVersion::V1_2_0),
+        (0u64, ApiVersion::V1_0_0),
+        (MAX_LEGACY_REGISTERED_SEAL_PROOF_ID + 1, ApiVersion::V1_1_0),
+        (MAX_LEGACY_REGISTERED_SEAL_PROOF_ID + 1, ApiVersion::V1_2_0),
     ];
 
-    for input in test_inputs {
-        let porep_id_num = input.0 as u64;
-        let api_version = input.1;
-
-        let mut porep_id = [0u8; 32];
-        porep_id[..8].copy_from_slice(&porep_id_num.to_le_bytes());
-
-        assert!(match api_version {
-            ApiVersion::V1_0_0 => is_legacy_porep_id(porep_id),
-            ApiVersion::V1_1_0 | ApiVersion::V1_2_0 => !is_legacy_porep_id(porep_id),
-        });
-
+    for (porep_id_num, api_version) in test_inputs {
+        let porep_id = to_porep_id_verified(porep_id_num, api_version);
         seal_lifecycle_upgrade::<SectorShape2KiB>(SECTOR_SIZE_2_KIB, &porep_id, api_version)?;
     }
 
@@ -125,8 +119,8 @@ fn test_seal_lifecycle_4kib_base_8() -> Result<()> {
         (ARBITRARY_POREP_ID_V1_2_0, ApiVersion::V1_2_0),
     ];
 
-    for input in test_inputs {
-        seal_lifecycle::<SectorShape4KiB>(SECTOR_SIZE_4_KIB, &input.0, input.1)?;
+    for (porep_id, api_version) in test_inputs {
+        seal_lifecycle::<SectorShape4KiB>(SECTOR_SIZE_4_KIB, &porep_id, api_version)?;
     }
 
     Ok(())
@@ -141,8 +135,8 @@ fn test_seal_lifecycle_upgrade_4kib_base_8() -> Result<()> {
         (ARBITRARY_POREP_ID_V1_2_0, ApiVersion::V1_2_0),
     ];
 
-    for input in test_inputs {
-        seal_lifecycle_upgrade::<SectorShape4KiB>(SECTOR_SIZE_4_KIB, &input.0, input.1)?;
+    for (porep_id, api_version) in test_inputs {
+        seal_lifecycle_upgrade::<SectorShape4KiB>(SECTOR_SIZE_4_KIB, &porep_id, api_version)?;
     }
 
     Ok(())
@@ -157,8 +151,8 @@ fn test_seal_lifecycle_16kib_base_8() -> Result<()> {
         (ARBITRARY_POREP_ID_V1_2_0, ApiVersion::V1_2_0),
     ];
 
-    for input in test_inputs {
-        seal_lifecycle::<SectorShape16KiB>(SECTOR_SIZE_16_KIB, &input.0, input.1)?;
+    for (porep_id, api_version) in test_inputs {
+        seal_lifecycle::<SectorShape16KiB>(SECTOR_SIZE_16_KIB, &porep_id, api_version)?;
     }
 
     Ok(())
@@ -173,8 +167,8 @@ fn test_seal_lifecycle_upgrade_16kib_base_8() -> Result<()> {
         (ARBITRARY_POREP_ID_V1_2_0, ApiVersion::V1_2_0),
     ];
 
-    for input in test_inputs {
-        seal_lifecycle_upgrade::<SectorShape16KiB>(SECTOR_SIZE_16_KIB, &input.0, input.1)?;
+    for (porep_id, api_version) in test_inputs {
+        seal_lifecycle_upgrade::<SectorShape16KiB>(SECTOR_SIZE_16_KIB, &porep_id, api_version)?;
     }
 
     Ok(())
@@ -189,8 +183,8 @@ fn test_seal_lifecycle_32kib_base_8() -> Result<()> {
         (ARBITRARY_POREP_ID_V1_2_0, ApiVersion::V1_2_0),
     ];
 
-    for input in test_inputs {
-        seal_lifecycle::<SectorShape32KiB>(SECTOR_SIZE_32_KIB, &input.0, input.1)?;
+    for (porep_id, api_version) in test_inputs {
+        seal_lifecycle::<SectorShape32KiB>(SECTOR_SIZE_32_KIB, &porep_id, api_version)?;
     }
 
     Ok(())
@@ -205,8 +199,8 @@ fn test_seal_lifecycle_upgrade_32kib_base_8() -> Result<()> {
         (ARBITRARY_POREP_ID_V1_2_0, ApiVersion::V1_2_0),
     ];
 
-    for input in test_inputs {
-        seal_lifecycle_upgrade::<SectorShape32KiB>(SECTOR_SIZE_32_KIB, &input.0, input.1)?;
+    for (porep_id, api_version) in test_inputs {
+        seal_lifecycle_upgrade::<SectorShape32KiB>(SECTOR_SIZE_32_KIB, &porep_id, api_version)?;
     }
 
     Ok(())
