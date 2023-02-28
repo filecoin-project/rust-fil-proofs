@@ -231,7 +231,7 @@ where
     let mapped_file = OpenOptions::new()
         .read(true)
         .write(true)
-        .open(&sealed_path)?;
+        .open(sealed_path)?;
     let mut data = unsafe { MmapOptions::new().map_copy(&mapped_file)? };
 
     let result = unseal_range_inner::<_, _, Tree>(
@@ -403,7 +403,7 @@ where
             .context("failed to write and preprocess bytes")?;
 
         ensure!(n != 0, "add_piece: read 0 bytes before EOF from source");
-        let n = PaddedBytesAmount(n as u64);
+        let n = PaddedBytesAmount(n);
         let n: UnpaddedBytesAmount = n.into();
 
         ensure!(n == piece_size, "add_piece: invalid bytes amount written");

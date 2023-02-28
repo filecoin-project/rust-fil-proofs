@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 use std::fs::{metadata, read_dir, remove_file, OpenOptions};
-use std::io::{Read, Seek, SeekFrom, Write};
+use std::io::{Read, Seek, Write};
 use std::path::{Path, PathBuf};
 
 use anyhow::{ensure, Context, Error, Result};
@@ -521,7 +521,7 @@ fn aggregate_proofs<Tree: 'static + MerkleTreeTrait>(
 }
 
 fn get_layer_file_paths(cache_dir: &tempfile::TempDir) -> Vec<PathBuf> {
-    let mut list: Vec<_> = read_dir(&cache_dir)
+    let mut list: Vec<_> = read_dir(cache_dir)
         .unwrap_or_else(|_| panic!("failed to read directory {:?}", cache_dir))
         .filter_map(|entry| {
             let cur = entry.expect("reading directory failed");
@@ -539,7 +539,7 @@ fn get_layer_file_paths(cache_dir: &tempfile::TempDir) -> Vec<PathBuf> {
 }
 
 fn clear_cache_dir_keep_data_layer(cache_dir: &TempDir) {
-    for entry in read_dir(&cache_dir).expect("faailed to read directory") {
+    for entry in read_dir(cache_dir).expect("failed to read directory") {
         let entry_path = entry.expect("failed get directory entry").path();
         if entry_path.is_file() {
             // delete everything except the data-layers
@@ -654,7 +654,7 @@ fn run_resumable_seal<Tree: 'static + MerkleTreeTrait>(
 
     // Resume the seal
     piece_file
-        .seek(SeekFrom::Start(0))
+        .rewind()
         .expect("failed to seek piece file to start");
     let (piece_infos, phase1_output) = run_seal_pre_commit_phase1::<Tree>(
         config,
@@ -1110,6 +1110,7 @@ fn test_window_post_partition_matching_2kib_base_8() -> Result<()> {
     Ok(())
 }
 
+#[allow(clippy::iter_kv_map)]
 fn partition_window_post<Tree: 'static + MerkleTreeTrait>(
     sector_size: u64,
     total_sector_count: usize,
@@ -1249,6 +1250,7 @@ fn set_readonly_flag(path: &Path, readonly: bool) {
     }
 }
 
+#[allow(clippy::iter_kv_map)]
 fn window_post<Tree: 'static + MerkleTreeTrait>(
     sector_size: u64,
     total_sector_count: usize,
@@ -1371,7 +1373,7 @@ fn generate_piece_file(sector_size: u64) -> Result<(NamedTempFile, Vec<u8>)> {
     let mut piece_file = NamedTempFile::new()?;
     piece_file.write_all(&piece_bytes)?;
     piece_file.as_file_mut().sync_all()?;
-    piece_file.as_file_mut().seek(SeekFrom::Start(0))?;
+    piece_file.as_file_mut().rewind()?;
 
     Ok((piece_file, piece_bytes))
 }
@@ -1393,7 +1395,7 @@ fn run_seal_pre_commit_phase1<Tree: 'static + MerkleTreeTrait>(
         UnpaddedBytesAmount::from(PaddedBytesAmount(config.sector_size.into()));
 
     let piece_info = generate_piece_commitment(piece_file.as_file_mut(), number_of_bytes_in_piece)?;
-    piece_file.as_file_mut().seek(SeekFrom::Start(0))?;
+    piece_file.as_file_mut().rewind()?;
 
     let mut staged_sector_file = NamedTempFile::new()?;
     add_piece(
@@ -1506,7 +1508,7 @@ fn unseal<Tree: 'static + MerkleTreeTrait>(
         UnpaddedBytesAmount(508),
     )?;
 
-    unseal_file.seek(SeekFrom::Start(0))?;
+    unseal_file.rewind()?;
 
     let mut contents = vec![];
     assert!(
@@ -1708,12 +1710,9 @@ fn compare_elements(path1: &Path, path2: &Path) -> Result<(), Error> {
             .map(&f_data2)
             .with_context(|| format!("could not mmap path={:?}", path2))
     }?;
-    let fr_size = std::mem::size_of::<Fr>() as usize;
-    let end = metadata(path1)?.len() as u64;
-    ensure!(
-        metadata(path2)?.len() as u64 == end,
-        "File sizes must match"
-    );
+    let fr_size = std::mem::size_of::<Fr>();
+    let end = metadata(path1)?.len();
+    ensure!(metadata(path2)?.len() == end, "File sizes must match");
 
     for i in (0..end).step_by(fr_size) {
         let index = i as usize;
@@ -1775,7 +1774,7 @@ fn create_seal_for_upgrade<R: Rng, Tree: 'static + MerkleTreeTrait<Hasher = Tree
 
     let new_piece_info =
         generate_piece_commitment(new_piece_file.as_file_mut(), number_of_bytes_in_piece)?;
-    new_piece_file.as_file_mut().seek(SeekFrom::Start(0))?;
+    new_piece_file.as_file_mut().rewind()?;
 
     let mut new_staged_sector_file = NamedTempFile::new()?;
     add_piece(

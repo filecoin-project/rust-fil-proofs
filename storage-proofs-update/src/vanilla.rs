@@ -43,7 +43,7 @@ use crate::{
 };
 
 const CHUNK_SIZE_MIN: usize = 4096;
-const FR_SIZE: usize = std::mem::size_of::<Fr>() as usize;
+const FR_SIZE: usize = std::mem::size_of::<Fr>();
 
 #[derive(Clone)]
 pub struct SetupParams {
@@ -872,7 +872,7 @@ where
         let comm_r_old = <TreeRHasher as Hasher>::Function::hash2(&comm_c, &comm_r_last_old);
         let phi = phi(&comm_d_new, &comm_r_old);
 
-        let end = staged_data_path_metadata.len() as u64;
+        let end = staged_data_path_metadata.len();
 
         // chunk_size is the number of Fr elements to process in parallel chunks.
         let chunk_size: usize = std::cmp::min(base_tree_nodes_count, CHUNK_SIZE_MIN);
@@ -1009,7 +1009,7 @@ where
         let comm_r_old = <TreeRHasher as Hasher>::Function::hash2(&comm_c, &comm_sector_key);
         let phi = phi(&comm_d_new, &comm_r_old);
 
-        let end = replica_path_metadata.len() as u64;
+        let end = replica_path_metadata.len();
 
         // chunk_size is the number of Fr elements to process in parallel chunks.
         let chunk_size: usize = std::cmp::min(base_tree_nodes_count, CHUNK_SIZE_MIN);
@@ -1136,7 +1136,7 @@ where
         let comm_r_old = <TreeRHasher as Hasher>::Function::hash2(&comm_c, &comm_sector_key);
         let phi = phi(&comm_d_new, &comm_r_old);
 
-        let end = replica_path_metadata.len() as u64;
+        let end = replica_path_metadata.len();
 
         // chunk_size is the number of Fr elements to process in parallel chunks.
         let chunk_size: usize = std::cmp::min(base_tree_nodes_count, CHUNK_SIZE_MIN);

@@ -98,7 +98,7 @@ impl Debug for Candidate {
         f.debug_struct("Candidate")
             .field("sector_id", &self.sector_id)
             .field("partial_ticket", &self.partial_ticket)
-            .field("ticket", &hex::encode(&self.ticket))
+            .field("ticket", &hex::encode(self.ticket))
             .field("sector_challenge_index", &self.sector_challenge_index)
             .finish()
     }
@@ -246,7 +246,7 @@ fn generate_candidate<Tree: MerkleTreeTrait>(
 
 pub fn finalize_ticket(partial_ticket: &Fr) -> [u8; 32] {
     let bytes = fr_into_bytes(partial_ticket);
-    let ticket_hash = Sha256::digest(&bytes);
+    let ticket_hash = Sha256::digest(bytes);
     let mut ticket = [0u8; 32];
     ticket.copy_from_slice(&ticket_hash[..]);
     ticket

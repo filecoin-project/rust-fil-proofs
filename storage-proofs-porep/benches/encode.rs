@@ -58,13 +58,7 @@ fn kdf_benchmark(c: &mut Criterion) {
 
         b.iter(|| {
             black_box(create_label_exp(
-                graph,
-                None,
-                &replica_id,
-                &*exp_data,
-                data,
-                1,
-                2,
+                graph, None, replica_id, &*exp_data, data, 1, 2,
             ))
         })
     });
@@ -73,7 +67,7 @@ fn kdf_benchmark(c: &mut Criterion) {
         let mut data = data.clone();
         let graph = &graph;
 
-        b.iter(|| black_box(create_label(graph, None, &replica_id, &mut data, 1, 2)))
+        b.iter(|| black_box(create_label(graph, None, replica_id, &mut data, 1, 2)))
     });
 
     group.finish();

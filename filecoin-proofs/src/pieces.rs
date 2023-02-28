@@ -292,7 +292,7 @@ pub fn get_piece_alignment(
     written_bytes: UnpaddedBytesAmount,
     piece_bytes: UnpaddedBytesAmount,
 ) -> PieceAlignment {
-    let mut piece_bytes_needed = MINIMUM_PIECE_SIZE as u64;
+    let mut piece_bytes_needed = MINIMUM_PIECE_SIZE;
 
     // Calculate the next power of two multiple that will fully contain the piece's data.
     // This is required to ensure a clean piece merkle root, without being affected by

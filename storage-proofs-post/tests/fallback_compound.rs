@@ -80,7 +80,7 @@ fn fallback_post<Tree: 'static + MerkleTreeTrait>(
 
     let setup_params = compound_proof::SetupParams {
         vanilla_params: SetupParams {
-            sector_size: sector_size as u64,
+            sector_size,
             challenge_count,
             sector_count,
             api_version,

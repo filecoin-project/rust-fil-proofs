@@ -36,9 +36,9 @@ impl<H: Hasher> EncodingProof<H> {
         buffer[..32].copy_from_slice(AsRef::<[u8]>::as_ref(replica_id));
 
         // layer index
-        buffer[32..36].copy_from_slice(&(self.layer_index as u32).to_be_bytes());
+        buffer[32..36].copy_from_slice(&(self.layer_index).to_be_bytes());
         // node id
-        buffer[36..44].copy_from_slice(&(self.node as u64).to_be_bytes());
+        buffer[36..44].copy_from_slice(&(self.node).to_be_bytes());
 
         hasher.update(&buffer[..]);
 
