@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 use std::fs::{create_dir, read, read_to_string, remove_dir_all, File, OpenOptions};
-use std::io::{stdout, Seek, SeekFrom, Write};
+use std::io::{stdout, Seek, Write};
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -132,14 +132,14 @@ fn run_pre_commit_phases<Tree: 'static + MerkleTreeTrait>(
             let mut piece_file = OpenOptions::new().read(true).write(true).create(true).open(&piece_file_path)?;
             piece_file.write_all(&piece_bytes)?;
             piece_file.sync_all()?;
-            piece_file.seek(SeekFrom::Start(0))?;
+            piece_file.rewind()?;
 
             piece_file
         };
 
         let piece_info =
             generate_piece_commitment(&mut piece_file, sector_size_unpadded_bytes_amount)?;
-        piece_file.seek(SeekFrom::Start(0))?;
+        piece_file.rewind()?;
 
         add_piece(
             &mut piece_file,

@@ -178,7 +178,7 @@ impl<'a, Tree: 'a + MerkleTreeTrait> ProofScheme<'a> for RationalPoSt<'a, Tree> 
         let challenges = &pub_inputs.challenges;
 
         ensure!(
-            challenges.len() == pub_inputs.comm_rs.len() as usize,
+            challenges.len() == pub_inputs.comm_rs.len(),
             Error::MalformedInput
         );
 

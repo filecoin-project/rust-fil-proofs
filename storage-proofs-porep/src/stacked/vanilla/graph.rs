@@ -152,7 +152,7 @@ where
         mut cache: Option<&mut ParentCache>,
     ) -> Result<[u8; 32]> {
         if let Some(ref mut cache) = cache {
-            let cache_parents = cache.read(node as u32)?;
+            let cache_parents = cache.read(node)?;
             Ok(self.copy_parents_data_inner_exp(&cache_parents, base_data, exp_data, hasher))
         } else {
             let mut cache_parents = [0u32; DEGREE];
@@ -171,7 +171,7 @@ where
         mut cache: Option<&mut ParentCache>,
     ) -> Result<[u8; 32]> {
         if let Some(ref mut cache) = cache {
-            let cache_parents = cache.read(node as u32)?;
+            let cache_parents = cache.read(node)?;
             Ok(self.copy_parents_data_inner(&cache_parents, base_data, hasher))
         } else {
             let mut cache_parents = [0u32; DEGREE];
@@ -374,7 +374,7 @@ where
 
         match self.api_version {
             ApiVersion::V1_0_0 => transformed as u32 / self.expansion_degree as u32,
-            ApiVersion::V1_1_0 => u32::try_from(transformed as u64 / self.expansion_degree as u64)
+            ApiVersion::V1_1_0 => u32::try_from(transformed / self.expansion_degree as u64)
                 .expect("invalid transformation"),
         }
 

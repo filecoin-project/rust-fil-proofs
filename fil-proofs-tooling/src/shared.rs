@@ -1,6 +1,6 @@
 use std::cmp::min;
 use std::fs::File;
-use std::io::{BufWriter, Seek, SeekFrom, Write};
+use std::io::{BufWriter, Seek, Write};
 
 use filecoin_proofs::{
     add_piece, fauxrep_aux, seal_pre_commit_phase1, seal_pre_commit_phase2,
@@ -70,7 +70,7 @@ pub fn create_piece(piece_bytes: UnpaddedBytesAmount, use_random: bool) -> Named
         .expect("failed to sync piece file");
 
     file.as_file_mut()
-        .seek(SeekFrom::Start(0))
+        .rewind()
         .expect("failed to seek to beginning of piece file");
 
     file
@@ -188,7 +188,7 @@ pub fn create_replicas<Tree: 'static + MerkleTreeTrait>(
                 .map(|(cache_dir, sector_id)| {
                     let nodes = sector_size.0 as usize / NODE_SIZE;
                     let mut tmp_store_config = StoreConfig::new(
-                        &cache_dir.path(),
+                        cache_dir.path(),
                         format!("tmp-config-{}", sector_id),
                         default_rows_to_discard(nodes, Tree::Arity::to_usize()),
                     );

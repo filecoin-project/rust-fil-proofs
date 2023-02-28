@@ -276,7 +276,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait> CompoundProof<'a, PoR<Tree>, PoRCircui
         public_params: &'b <PoR<Tree> as ProofScheme<'a>>::PublicParams,
         _partition_k: Option<usize>,
     ) -> Result<PoRCircuit<Tree>> {
-        let (root, private) = match (*public_inputs).commitment {
+        let (root, private) = match public_inputs.commitment {
             None => (Root::Val(Some(proof.proof.root().into())), true),
             Some(commitment) => (Root::Val(Some(commitment.into())), false),
         };

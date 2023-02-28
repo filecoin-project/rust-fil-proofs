@@ -249,7 +249,7 @@ impl<T: FromByteSlice> CacheReader<T> {
         };
 
         self.cursor
-            .increment(window, &wait_fn, &|| self.advance_rear_window(window));
+            .increment(window, wait_fn, || self.advance_rear_window(window));
 
         let targeted_buf = &self.get_bufs()[window % 2];
 
@@ -257,13 +257,13 @@ impl<T: FromByteSlice> CacheReader<T> {
     }
 
     fn advance_rear_window(&self, new_window: usize) {
-        assert!(new_window as usize * self.window_size < self.size);
+        assert!(new_window * self.window_size < self.size);
 
-        let replace_idx = (new_window % 2) as usize;
+        let replace_idx = new_window % 2;
 
         let new_buf = Self::map_buf(
             (new_window * self.window_size) as u64,
-            self.window_size as usize,
+            self.window_size,
             &self.file,
         )
         .expect("map_buf failed");

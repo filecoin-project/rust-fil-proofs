@@ -305,10 +305,10 @@ mod tests {
 
             let mut parents = vec![0; degree];
             g.parents(0, &mut parents).expect("parents failed");
-            assert_eq!(parents, vec![0; degree as usize]);
+            assert_eq!(parents, vec![0; degree]);
             parents = vec![0; degree];
             g.parents(1, &mut parents).expect("parents failed");
-            assert_eq!(parents, vec![0; degree as usize]);
+            assert_eq!(parents, vec![0; degree]);
 
             for i in 1..size {
                 let mut pa1 = vec![0; degree];

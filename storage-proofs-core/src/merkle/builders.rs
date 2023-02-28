@@ -184,7 +184,7 @@ pub fn create_base_merkle_tree<Tree: MerkleTreeTrait>(
     data: &[u8],
 ) -> Result<Tree> {
     ensure!(
-        data.len() == (NODE_SIZE * size) as usize,
+        data.len() == (NODE_SIZE * size),
         Error::InvalidMerkleTreeArgs(data.len(), NODE_SIZE, size)
     );
 
@@ -418,7 +418,7 @@ where
         let id: u64 = rng.gen();
         let replica_path = temp_path.join(format!("replica-path-{}", id));
         let config = StoreConfig::new(
-            &temp_path,
+            temp_path,
             format!("test-lc-tree-{}", id),
             default_rows_to_discard(nodes, Tree::Arity::to_usize()),
         );

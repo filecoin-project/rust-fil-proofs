@@ -37,7 +37,7 @@ impl GitMetadata {
         } else {
             std::env::current_dir()?
         };
-        let repo = Repository::discover(&repo_path)?;
+        let repo = Repository::discover(repo_path)?;
         let head = repo.head()?;
         let commit = head.peel_to_commit()?;
         // Unwrap is OK as the given seconds won't be out of range.

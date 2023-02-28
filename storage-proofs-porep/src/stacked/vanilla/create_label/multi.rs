@@ -68,7 +68,7 @@ fn fill_buffer(
 
     // Perform the first hash
     let cur_node_ptr =
-        unsafe { &mut layer_labels.as_mut_slice()[cur_node as usize * NODE_WORDS as usize..] };
+        unsafe { &mut layer_labels.as_mut_slice()[cur_node as usize * NODE_WORDS..] };
 
     cur_node_ptr[..8].copy_from_slice(&SHA256_INITIAL_DIGEST);
     compress256!(cur_node_ptr, buf, 1);
@@ -178,7 +178,7 @@ fn create_label_runner(
             let buf = unsafe { ring_buf.slot_mut(cur_slot as usize) };
             let bpm = unsafe { base_parent_missing.get_mut(cur_slot as usize) };
 
-            let pc = unsafe { parents_cache.slice_at(cur_node as usize * DEGREE as usize) };
+            let pc = unsafe { parents_cache.slice_at(cur_node as usize * DEGREE) };
             fill_buffer(
                 cur_node,
                 parents_cache,
@@ -467,7 +467,7 @@ pub fn create_labels_for_encoding<Tree: 'static + MerkleTreeTrait, T: AsRef<[u8]
     let (parents_cache, mut layer_labels, mut exp_labels) = setup_create_label_memory(
         sector_size,
         DEGREE,
-        Some(default_cache_size as usize),
+        Some(default_cache_size),
         &parents_cache.path,
     )?;
 
@@ -565,7 +565,7 @@ pub fn create_labels_for_decoding<Tree: 'static + MerkleTreeTrait, T: AsRef<[u8]
     let (parents_cache, mut layer_labels, mut exp_labels) = setup_create_label_memory(
         sector_size,
         DEGREE,
-        Some(default_cache_size as usize),
+        Some(default_cache_size),
         &parents_cache.path,
     )?;
 

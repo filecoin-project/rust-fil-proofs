@@ -205,7 +205,7 @@ fn ensure_ancestor_dirs_exist(cache_entry_path: PathBuf) -> Result<PathBuf> {
     );
 
     if let Some(parent_dir) = cache_entry_path.parent() {
-        if let Err(err) = create_dir_all(&parent_dir) {
+        if let Err(err) = create_dir_all(parent_dir) {
             match err.kind() {
                 io::ErrorKind::AlreadyExists => {}
                 _ => return Err(From::from(err)),
@@ -513,8 +513,8 @@ fn read_cached_verifying_key(cache_entry_path: &Path) -> Result<groth16::Verifyi
         verify_production_entry(cache_entry_path, cache_key, selector)?;
     }
 
-    with_exclusive_read_lock(cache_entry_path, |mut file| {
-        let key = groth16::VerifyingKey::read(&mut file)?;
+    with_exclusive_read_lock(cache_entry_path, |file| {
+        let key = groth16::VerifyingKey::read(file)?;
         info!("read verifying key from cache {:?} ", cache_entry_path);
 
         Ok(key)
