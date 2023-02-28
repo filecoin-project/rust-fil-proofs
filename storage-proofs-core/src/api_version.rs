@@ -38,19 +38,13 @@ impl ApiVersion {
         self >= &feat.first_supported_version()
             && feat
                 .last_supported_version()
-                .map(|v| self <= &v)
+                .map(|v_last| self <= &v_last)
                 .unwrap_or(true)
     }
 
     #[inline]
     pub fn supports_features(&self, feats: &[ApiFeature]) -> bool {
-        feats.iter().all(|feat| {
-            self >= &feat.first_supported_version()
-                && feat
-                    .last_supported_version()
-                    .map(|v_last| self <= &v_last)
-                    .unwrap_or(true)
-        })
+        feats.iter().all(|feat| self.supports_feature(feat))
     }
 }
 
@@ -76,7 +70,7 @@ impl FromStr for ApiVersion {
             (1, 0, 0) => Ok(ApiVersion::V1_0_0),
             (1, 1, 0) => Ok(ApiVersion::V1_1_0),
             (1, 2, 0) => Ok(ApiVersion::V1_2_0),
-            (1, 1, _) | (1, 0, _) => Err(format_err!(
+            (1, 0, _) | (1, 1, _) | (1, 2, _) => Err(format_err!(
                 "Could not parse API Version from string (patch)"
             )),
             (1, _, _) => Err(format_err!(
