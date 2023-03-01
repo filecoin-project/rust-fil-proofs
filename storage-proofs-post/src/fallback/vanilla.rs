@@ -646,7 +646,7 @@ impl<'a, Tree: 'a + MerkleTreeTrait> ProofScheme<'a> for FallbackPoSt<'a, Tree> 
                             generate_leaf_challenge_inner::<<Tree::Hasher as Hasher>::Domain>(
                                 challenge_hasher.clone(),
                                 pub_params,
-                                challenge_index as u64,
+                                challenge_index,
                             );
 
                         // validate all comm_r_lasts match
