@@ -23,6 +23,7 @@ impl From<SectorClass> for PoRepConfig {
             partitions,
             porep_id,
             api_version,
+            api_features: vec![],
         }
     }
 }

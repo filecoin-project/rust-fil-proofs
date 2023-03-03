@@ -131,7 +131,7 @@ fn get_seal_inputs_benchmark(c: &mut Criterion) {
                 b.iter(|| {
                     for _ in 0..iterations {
                         get_seal_inputs::<SectorShape2KiB>(
-                            config, comm_r, comm_d, prover_id, sector_id, ticket, seed,
+                            &config, comm_r, comm_d, prover_id, sector_id, ticket, seed,
                         )
                         .unwrap();
                     }
