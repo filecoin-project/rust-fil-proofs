@@ -1,3 +1,4 @@
+use std::cmp::Ordering;
 use std::fmt::{self, Debug, Display, Formatter};
 use std::str::FromStr;
 
@@ -9,6 +10,18 @@ pub enum ApiVersion {
     V1_0_0,
     V1_1_0,
     V1_2_0,
+}
+
+impl Ord for ApiVersion {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.as_semver().cmp(&other.as_semver())
+    }
+}
+
+impl PartialOrd for ApiVersion {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
 }
 
 impl ApiVersion {
@@ -43,7 +56,7 @@ impl FromStr for ApiVersion {
             (1, 0, 0) => Ok(ApiVersion::V1_0_0),
             (1, 1, 0) => Ok(ApiVersion::V1_1_0),
             (1, 2, 0) => Ok(ApiVersion::V1_2_0),
-            (1, 1, _) | (1, 0, _) => Err(format_err!(
+            (1, 0, _) | (1, 1, _) | (1, 2, _) => Err(format_err!(
                 "Could not parse API Version from string (patch)"
             )),
             (1, _, _) => Err(format_err!(
@@ -74,4 +87,9 @@ fn test_as_semver() {
     assert_eq!(ApiVersion::V1_0_0.as_semver().patch, 0);
     assert_eq!(ApiVersion::V1_1_0.as_semver().patch, 0);
     assert_eq!(ApiVersion::V1_2_0.as_semver().patch, 0);
+}
+
+#[test]
+fn test_api_version_order() {
+    assert!(ApiVersion::V1_0_0 < ApiVersion::V1_1_0 && ApiVersion::V1_1_0 < ApiVersion::V1_2_0);
 }
