@@ -32,6 +32,20 @@ impl ApiVersion {
             ApiVersion::V1_2_0 => Version::new(1, 2, 0),
         }
     }
+
+    #[inline]
+    pub fn supports_feature(&self, feat: &ApiFeature) -> bool {
+        self >= &feat.first_supported_version()
+            && feat
+                .last_supported_version()
+                .map(|v_last| self <= &v_last)
+                .unwrap_or(true)
+    }
+
+    #[inline]
+    pub fn supports_features(&self, feats: &[ApiFeature]) -> bool {
+        feats.iter().all(|feat| self.supports_feature(feat))
+    }
 }
 
 impl Debug for ApiVersion {
@@ -66,6 +80,21 @@ impl FromStr for ApiVersion {
                 "Could not parse API Version from string (major)"
             )),
         }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ApiFeature {}
+
+impl ApiFeature {
+    #[inline]
+    pub fn first_supported_version(&self) -> ApiVersion {
+        unimplemented!();
+    }
+
+    #[inline]
+    pub fn last_supported_version(&self) -> Option<ApiVersion> {
+        unimplemented!();
     }
 }
 
