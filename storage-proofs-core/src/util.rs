@@ -130,6 +130,21 @@ pub fn bits_to_bytes(bits: &[bool]) -> Vec<u8> {
         .collect()
 }
 
+// Returns a field element's little endian bits. This function does not require `F` to implement
+// `ff::PrimeFieldBits`, but assumes that `F`'s repr is little endian.
+#[cfg(feature = "nova")]
+pub fn field_le_bits<F: PrimeField>(f: &F) -> Vec<bool> {
+    let repr = f.to_repr();
+    let le_bytes = repr.as_ref();
+    let mut le_bits = Vec::<bool>::with_capacity(8 * le_bytes.len());
+    for byte in le_bytes {
+        for i in 0..8 {
+            le_bits.push(byte >> i & 1 == 1);
+        }
+    }
+    le_bits
+}
+
 /// Reverse the order of bits within each byte (bit numbering), but without altering the order of bytes
 /// within the array (endianness) — when bit array is viewed as a flattened sequence of octets.
 /// Before intra-byte bit reversal begins, zero-bit padding is added so every byte is full.
