@@ -36,7 +36,7 @@ byte-slice-cast = "1.0.0"
 hwloc = { version = "0.5.0", optional = true }
 libc = "0.2"
 fdlimit = "0.2.0"
-fr32 = { path = "../fr32", version = "~5.0.0", default-features = false }
+fr32 = { path = "../fr32", version = "~6.0.0", default-features = false }
 yastl = "0.1.2"
 blstrs = "0.6.0"
 
