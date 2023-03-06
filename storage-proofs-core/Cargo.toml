@@ -47,7 +47,7 @@ proptest = "1.0.0"
 criterion = "0.3"
 rand_xorshift = "0.3.0"
 pretty_assertions = "1.2.0"
-sha2raw = { path = "../sha2raw", version = "~7.0.0"}
+sha2raw = { path = "../sha2raw", version = "~8.0.0"}
 filecoin-hashers = { path = "../filecoin-hashers", version = "~8.0.0", default-features = false, features = ["blake2s", "sha256", "poseidon"] }
 tempfile = "3"
 blake2s_simd = "1.0.0"
