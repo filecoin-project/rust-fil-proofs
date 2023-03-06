@@ -1,3 +1,5 @@
+#![cfg(feature = "halo2")]
+
 use ff::Field;
 use filecoin_hashers::{poseidon::PoseidonHasher, HashFunction, Hasher, PoseidonArity};
 use generic_array::typenum::{U0, U2, U8};

@@ -1,3 +1,5 @@
+#![cfg(feature = "halo2")]
+
 use std::convert::TryInto;
 use std::marker::PhantomData;
 use std::sync::Once;
