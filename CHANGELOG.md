@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://book.async.rs/overview
 
 ## Unreleased
 
+## [13.0.0] - 2023-03-06
+
+- Disable broken coverage job CI coverage job [#1669](https://github.com/filecoin-project/rust-fil-proofs/pull/1669)
+- Update rust-toolchain to 1.67.1 [#1668](https://github.com/filecoin-project/rust-fil-proofs/pull/1668)
+- Clean up tree definitions [#1655](https://github.com/filecoin-project/rust-fil-proofs/pull/1655)
+- Introduce PoRepConfig::new_groth16() [#1635](https://github.com/filecoin-project/rust-fil-proofs/pull/1635)
+- Fix broken links in README.md [#1649](https://github.com/filecoin-project/rust-fil-proofs/pull/1649)
+- Update ec-gpu-gen [#1638](https://github.com/filecoin-project/rust-fil-proofs/pull/1638)
+- Use current process binding to limit thread cores [#1633](https://github.com/filecoin-project/rust-fil-proofs/pull/1633)
+- Ensure that WindowPoSt works on read-only files [#1630](https://github.com/filecoin-project/rust-fil-proofs/pull/1630)
+- Added Tarpaulin Coverage [#1628](https://github.com/filecoin-project/rust-fil-proofs/pull/1628)
+- Use memmap2 instead of mapr [#1624](https://github.com/filecoin-project/rust-fil-proofs/pull/1624)
+- Update CircleCI to xcode 13.4.1 [#1625](https://github.com/filecoin-project/rust-fil-proofs/pull/1625)
+- Update rust-toolchain to 1.62.0 [#1623](https://github.com/filecoin-project/rust-fil-proofs/pull/1623)
+
 ## [12.0.0] - 2022-08-04
 
 - Add additional sector logging [#1610](https://github.com/filecoin-project/rust-fil-proofs/pull/1610)
@@ -352,7 +367,8 @@ mainnet ready and will be replaced in a future version.  This release is intende
 
 - Initial stable release
 
-[Unreleased]: https://github.com/filecoin-project/rust-fil-proofs/compare/v12.0.0...HEAD
+[Unreleased]: https://github.com/filecoin-project/rust-fil-proofs/compare/v13.0.0...HEAD
+[13.0.0]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v13.0.0
 [12.0.0]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v12.0.0
 [11.1.1]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v11.1.1
 [11.1.0]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v11.1.0
