@@ -374,8 +374,10 @@ where
 
         match self.api_version {
             ApiVersion::V1_0_0 => transformed as u32 / self.expansion_degree as u32,
-            ApiVersion::V1_1_0 => u32::try_from(transformed / self.expansion_degree as u64)
-                .expect("invalid transformation"),
+            ApiVersion::V1_1_0 | ApiVersion::V1_2_0 => {
+                u32::try_from(transformed / self.expansion_degree as u64)
+                    .expect("invalid transformation")
+            }
         }
 
         // Collapse the output in the matrix search space to the row of the corresponding
@@ -511,11 +513,19 @@ mod tests {
             porep_id
         };
 
-        test_pathology_aux(porep_id(3), sector32_nodes, ApiVersion::V1_0_0);
-        test_pathology_aux(porep_id(4), sector64_nodes, ApiVersion::V1_0_0);
+        let test_inputs = vec![
+            (porep_id(3), sector32_nodes, ApiVersion::V1_0_0),
+            (porep_id(4), sector64_nodes, ApiVersion::V1_0_0),
+            (porep_id(8), sector32_nodes, ApiVersion::V1_1_0),
+            (porep_id(9), sector64_nodes, ApiVersion::V1_1_0),
+            // Confirms that V1_1_0 and V1_2_0 are compatible
+            (porep_id(8), sector32_nodes, ApiVersion::V1_2_0),
+            (porep_id(9), sector64_nodes, ApiVersion::V1_2_0),
+        ];
 
-        test_pathology_aux(porep_id(8), sector32_nodes, ApiVersion::V1_1_0);
-        test_pathology_aux(porep_id(9), sector64_nodes, ApiVersion::V1_1_0);
+        for inputs in test_inputs {
+            test_pathology_aux(inputs.0, inputs.1, inputs.2);
+        }
     }
 
     fn test_pathology_aux(porep_id: PoRepID, nodes: u32, api_version: ApiVersion) {
@@ -531,7 +541,7 @@ mod tests {
 
         let expect_pathological = match api_version {
             ApiVersion::V1_0_0 => true,
-            ApiVersion::V1_1_0 => false,
+            ApiVersion::V1_1_0 | ApiVersion::V1_2_0 => false,
         };
 
         let graph = StackedBucketGraph::<PoseidonHasher>::new_stacked(
@@ -606,7 +616,7 @@ mod tests {
             BASE_DEGREE,
             EXP_DEGREE,
             porep_id,
-            ApiVersion::V1_1_0,
+            ApiVersion::V1_2_0,
         )
         .expect("stacked bucket graph new_stacked");
 
@@ -656,7 +666,7 @@ mod tests {
             BASE_DEGREE,
             EXP_DEGREE,
             porep_id,
-            ApiVersion::V1_1_0,
+            ApiVersion::V1_2_0,
         )
         .expect("stacked bucket graph new_stacked failed");
 

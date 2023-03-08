@@ -9,7 +9,9 @@ use log::{debug, info};
 use storage_proofs_core::{
     cache_key::CacheKey, merkle::MerkleTreeTrait, proof::ProofScheme, sector::SectorId,
 };
-use storage_proofs_post::fallback::{self, generate_leaf_challenge, FallbackPoSt, SectorProof};
+use storage_proofs_post::fallback::{
+    self, generate_leaf_challenge, get_challenge_index, FallbackPoSt, SectorProof,
+};
 
 use crate::{
     api::as_safe_commitment,
@@ -100,9 +102,16 @@ pub fn generate_fallback_sector_challenges<Tree: 'static + MerkleTreeTrait>(
             let mut challenges = Vec::new();
 
             for n in 0..post_config.challenge_count {
-                let challenge_index = ((partition_index * post_config.sector_count + i)
-                    * post_config.challenge_count
-                    + n) as u64;
+                let sector_index = match post_config.typ {
+                    PoStType::Window => partition_index * num_sectors_per_chunk + i,
+                    PoStType::Winning => partition_index * post_config.sector_count + i,
+                };
+                let challenge_index = get_challenge_index(
+                    post_config.api_version,
+                    sector_index,
+                    post_config.challenge_count,
+                    n,
+                );
                 let challenged_leaf = generate_leaf_challenge(
                     &public_params,
                     randomness_safe,

@@ -16,7 +16,9 @@ use storage_proofs_core::{
     util::NODE_SIZE,
 };
 
-use crate::fallback::{generate_leaf_challenge_inner, FallbackPoSt, FallbackPoStCircuit, Sector};
+use crate::fallback::{
+    generate_leaf_challenge_inner, get_challenge_index, FallbackPoSt, FallbackPoStCircuit, Sector,
+};
 
 pub struct FallbackPoStCompound<Tree>
 where
@@ -70,9 +72,13 @@ impl<'a, Tree: 'static + MerkleTreeTrait>
 
             // 2. Inputs for verifying inclusion paths
             for n in 0..pub_params.challenge_count {
-                let challenge_index = ((partition_index * pub_params.sector_count + i)
-                    * pub_params.challenge_count
-                    + n) as u64;
+                let sector_index = partition_index * pub_params.sector_count + i;
+                let challenge_index = get_challenge_index(
+                    pub_params.api_version,
+                    sector_index,
+                    pub_params.challenge_count,
+                    n,
+                );
                 let challenged_leaf = generate_leaf_challenge_inner::<
                     <Tree::Hasher as Hasher>::Domain,
                 >(

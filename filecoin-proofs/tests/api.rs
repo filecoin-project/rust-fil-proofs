@@ -40,6 +40,8 @@ use storage_proofs_core::{api_version::ApiVersion, is_legacy_porep_id, sector::S
 use storage_proofs_update::constants::TreeRHasher;
 use tempfile::{tempdir, NamedTempFile, TempDir};
 
+use filecoin_proofs::constants::MAX_LEGACY_REGISTERED_SEAL_PROOF_ID;
+
 #[cfg(feature = "big-tests")]
 use filecoin_proofs::{
     SectorShape32GiB, SectorShape512MiB, SectorShape64GiB, SECTOR_SIZE_32_GIB, SECTOR_SIZE_512_MIB,
@@ -52,132 +54,156 @@ use filecoin_proofs::{
 // same porep_ids).
 const ARBITRARY_POREP_ID_V1_0_0: [u8; 32] = [127; 32];
 const ARBITRARY_POREP_ID_V1_1_0: [u8; 32] = [128; 32];
+const ARBITRARY_POREP_ID_V1_2_0: [u8; 32] = [129; 32];
 
 const TEST_SEED: [u8; 16] = [
     0x59, 0x62, 0xbe, 0x5d, 0x76, 0x3d, 0x31, 0x8d, 0x17, 0xdb, 0x37, 0x32, 0x54, 0x06, 0xbc, 0xe5,
 ];
 
-#[test]
-#[ignore]
-fn test_seal_lifecycle_2kib_porep_id_v1_base_8() -> Result<()> {
-    let porep_id_v1: u64 = 0; // This is a RegisteredSealProof value
-
+fn to_porep_id_verified(registered_seal_proof: u64, api_version: ApiVersion) -> [u8; 32] {
     let mut porep_id = [0u8; 32];
-    porep_id[..8].copy_from_slice(&porep_id_v1.to_le_bytes());
-    assert!(is_legacy_porep_id(porep_id));
-    seal_lifecycle::<SectorShape2KiB>(SECTOR_SIZE_2_KIB, &porep_id, ApiVersion::V1_0_0)
+    porep_id[..8].copy_from_slice(&registered_seal_proof.to_le_bytes());
+
+    assert!(match api_version {
+        ApiVersion::V1_0_0 => is_legacy_porep_id(porep_id),
+        ApiVersion::V1_1_0 | ApiVersion::V1_2_0 => !is_legacy_porep_id(porep_id),
+    });
+
+    porep_id
 }
 
 #[test]
 #[ignore]
-fn test_seal_lifecycle_2kib_porep_id_v1_1_base_8() -> Result<()> {
-    let porep_id_v1_1: u64 = 5; // This is a RegisteredSealProof value
+fn test_seal_lifecycle_2kib_base_8() -> Result<()> {
+    // The first value is RegisteredSealProof value
+    // The second value is the ApiVersion to use
+    let test_inputs = vec![
+        (0u64, ApiVersion::V1_0_0),
+        (MAX_LEGACY_REGISTERED_SEAL_PROOF_ID + 1, ApiVersion::V1_1_0),
+        (MAX_LEGACY_REGISTERED_SEAL_PROOF_ID + 1, ApiVersion::V1_2_0),
+    ];
 
-    let mut porep_id = [0u8; 32];
-    porep_id[..8].copy_from_slice(&porep_id_v1_1.to_le_bytes());
-    assert!(!is_legacy_porep_id(porep_id));
-    seal_lifecycle::<SectorShape2KiB>(SECTOR_SIZE_2_KIB, &porep_id, ApiVersion::V1_1_0)
+    for (porep_id_num, api_version) in test_inputs {
+        let porep_id = to_porep_id_verified(porep_id_num, api_version);
+        seal_lifecycle::<SectorShape2KiB>(SECTOR_SIZE_2_KIB, &porep_id, api_version)?;
+    }
+
+    Ok(())
 }
 
 #[test]
 #[ignore]
-fn test_seal_lifecycle_upgrade_2kib_porep_id_v1_1_base_8() -> Result<()> {
-    let porep_id_v1_1: u64 = 5; // This is a RegisteredSealProof value
+fn test_seal_lifecycle_upgrade_2kib_base_8() -> Result<()> {
+    // The first value is RegisteredSealProof value
+    // The second value is the ApiVersion to use
+    let test_inputs = vec![
+        (0u64, ApiVersion::V1_0_0),
+        (MAX_LEGACY_REGISTERED_SEAL_PROOF_ID + 1, ApiVersion::V1_1_0),
+        (MAX_LEGACY_REGISTERED_SEAL_PROOF_ID + 1, ApiVersion::V1_2_0),
+    ];
 
-    let mut porep_id = [0u8; 32];
-    porep_id[..8].copy_from_slice(&porep_id_v1_1.to_le_bytes());
-    assert!(!is_legacy_porep_id(porep_id));
-    seal_lifecycle_upgrade::<SectorShape2KiB>(SECTOR_SIZE_2_KIB, &porep_id, ApiVersion::V1_1_0)
+    for (porep_id_num, api_version) in test_inputs {
+        let porep_id = to_porep_id_verified(porep_id_num, api_version);
+        seal_lifecycle_upgrade::<SectorShape2KiB>(SECTOR_SIZE_2_KIB, &porep_id, api_version)?;
+    }
+
+    Ok(())
 }
 
 #[test]
 #[ignore]
-fn test_seal_lifecycle_4kib_sub_8_2_v1() -> Result<()> {
-    seal_lifecycle::<SectorShape4KiB>(
-        SECTOR_SIZE_4_KIB,
-        &ARBITRARY_POREP_ID_V1_0_0,
-        ApiVersion::V1_0_0,
-    )
+fn test_seal_lifecycle_4kib_base_8() -> Result<()> {
+    let test_inputs = vec![
+        (ARBITRARY_POREP_ID_V1_0_0, ApiVersion::V1_0_0),
+        (ARBITRARY_POREP_ID_V1_1_0, ApiVersion::V1_1_0),
+        (ARBITRARY_POREP_ID_V1_2_0, ApiVersion::V1_2_0),
+    ];
+
+    for (porep_id, api_version) in test_inputs {
+        seal_lifecycle::<SectorShape4KiB>(SECTOR_SIZE_4_KIB, &porep_id, api_version)?;
+    }
+
+    Ok(())
 }
 
 #[test]
 #[ignore]
-fn test_seal_lifecycle_4kib_sub_8_2_v1_1() -> Result<()> {
-    seal_lifecycle::<SectorShape4KiB>(
-        SECTOR_SIZE_4_KIB,
-        &ARBITRARY_POREP_ID_V1_1_0,
-        ApiVersion::V1_1_0,
-    )
+fn test_seal_lifecycle_upgrade_4kib_base_8() -> Result<()> {
+    let test_inputs = vec![
+        (ARBITRARY_POREP_ID_V1_0_0, ApiVersion::V1_0_0),
+        (ARBITRARY_POREP_ID_V1_1_0, ApiVersion::V1_1_0),
+        (ARBITRARY_POREP_ID_V1_2_0, ApiVersion::V1_2_0),
+    ];
+
+    for (porep_id, api_version) in test_inputs {
+        seal_lifecycle_upgrade::<SectorShape4KiB>(SECTOR_SIZE_4_KIB, &porep_id, api_version)?;
+    }
+
+    Ok(())
 }
 
 #[test]
 #[ignore]
-fn test_seal_lifecycle_upgrade_4kib_sub_8_2_v1_1() -> Result<()> {
-    seal_lifecycle_upgrade::<SectorShape4KiB>(
-        SECTOR_SIZE_4_KIB,
-        &ARBITRARY_POREP_ID_V1_1_0,
-        ApiVersion::V1_1_0,
-    )
+fn test_seal_lifecycle_16kib_base_8() -> Result<()> {
+    let test_inputs = vec![
+        (ARBITRARY_POREP_ID_V1_0_0, ApiVersion::V1_0_0),
+        (ARBITRARY_POREP_ID_V1_1_0, ApiVersion::V1_1_0),
+        (ARBITRARY_POREP_ID_V1_2_0, ApiVersion::V1_2_0),
+    ];
+
+    for (porep_id, api_version) in test_inputs {
+        seal_lifecycle::<SectorShape16KiB>(SECTOR_SIZE_16_KIB, &porep_id, api_version)?;
+    }
+
+    Ok(())
 }
 
 #[test]
 #[ignore]
-fn test_seal_lifecycle_16kib_sub_8_2_v1() -> Result<()> {
-    seal_lifecycle::<SectorShape16KiB>(
-        SECTOR_SIZE_16_KIB,
-        &ARBITRARY_POREP_ID_V1_0_0,
-        ApiVersion::V1_0_0,
-    )
+fn test_seal_lifecycle_upgrade_16kib_base_8() -> Result<()> {
+    let test_inputs = vec![
+        (ARBITRARY_POREP_ID_V1_0_0, ApiVersion::V1_0_0),
+        (ARBITRARY_POREP_ID_V1_1_0, ApiVersion::V1_1_0),
+        (ARBITRARY_POREP_ID_V1_2_0, ApiVersion::V1_2_0),
+    ];
+
+    for (porep_id, api_version) in test_inputs {
+        seal_lifecycle_upgrade::<SectorShape16KiB>(SECTOR_SIZE_16_KIB, &porep_id, api_version)?;
+    }
+
+    Ok(())
 }
 
 #[test]
 #[ignore]
-fn test_seal_lifecycle_16kib_sub_8_2_v1_1() -> Result<()> {
-    seal_lifecycle::<SectorShape16KiB>(
-        SECTOR_SIZE_16_KIB,
-        &ARBITRARY_POREP_ID_V1_1_0,
-        ApiVersion::V1_1_0,
-    )
+fn test_seal_lifecycle_32kib_base_8() -> Result<()> {
+    let test_inputs = vec![
+        (ARBITRARY_POREP_ID_V1_0_0, ApiVersion::V1_0_0),
+        (ARBITRARY_POREP_ID_V1_1_0, ApiVersion::V1_1_0),
+        (ARBITRARY_POREP_ID_V1_2_0, ApiVersion::V1_2_0),
+    ];
+
+    for (porep_id, api_version) in test_inputs {
+        seal_lifecycle::<SectorShape32KiB>(SECTOR_SIZE_32_KIB, &porep_id, api_version)?;
+    }
+
+    Ok(())
 }
 
 #[test]
 #[ignore]
-fn test_seal_lifecycle_upgrade_16kib_sub_8_2_v1_1() -> Result<()> {
-    seal_lifecycle_upgrade::<SectorShape16KiB>(
-        SECTOR_SIZE_16_KIB,
-        &ARBITRARY_POREP_ID_V1_1_0,
-        ApiVersion::V1_1_0,
-    )
-}
+fn test_seal_lifecycle_upgrade_32kib_base_8() -> Result<()> {
+    let test_inputs = vec![
+        (ARBITRARY_POREP_ID_V1_0_0, ApiVersion::V1_0_0),
+        (ARBITRARY_POREP_ID_V1_1_0, ApiVersion::V1_1_0),
+        (ARBITRARY_POREP_ID_V1_2_0, ApiVersion::V1_2_0),
+    ];
 
-#[test]
-#[ignore]
-fn test_seal_lifecycle_32kib_top_8_8_2_v1() -> Result<()> {
-    seal_lifecycle::<SectorShape32KiB>(
-        SECTOR_SIZE_32_KIB,
-        &ARBITRARY_POREP_ID_V1_0_0,
-        ApiVersion::V1_0_0,
-    )
-}
+    for (porep_id, api_version) in test_inputs {
+        seal_lifecycle_upgrade::<SectorShape32KiB>(SECTOR_SIZE_32_KIB, &porep_id, api_version)?;
+    }
 
-#[test]
-#[ignore]
-fn test_seal_lifecycle_32kib_top_8_8_2_v1_1() -> Result<()> {
-    seal_lifecycle::<SectorShape32KiB>(
-        SECTOR_SIZE_32_KIB,
-        &ARBITRARY_POREP_ID_V1_1_0,
-        ApiVersion::V1_1_0,
-    )
-}
-
-#[test]
-#[ignore]
-fn test_seal_lifecycle_upgrade_32kib_top_8_8_2_v1_1() -> Result<()> {
-    seal_lifecycle_upgrade::<SectorShape32KiB>(
-        SECTOR_SIZE_32_KIB,
-        &ARBITRARY_POREP_ID_V1_1_0,
-        ApiVersion::V1_1_0,
-    )
+    Ok(())
 }
 
 // These tests are good to run, but take a long time.
@@ -290,6 +316,10 @@ fn seal_lifecycle<Tree: 'static + MerkleTreeTrait>(
     let mut prover_id = [0u8; 32];
     prover_id.copy_from_slice(AsRef::<[u8]>::as_ref(&prover_fr));
 
+    info!(
+        "Creating seal proof with ApiVersion {} and PoRep ID {:?}",
+        api_version, porep_id
+    );
     let (_, replica, _, _) = create_seal::<_, Tree>(
         &mut rng,
         sector_size,
@@ -313,6 +343,10 @@ fn seal_lifecycle_upgrade<Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher>>
     let mut prover_id = [0u8; 32];
     prover_id.copy_from_slice(AsRef::<[u8]>::as_ref(&prover_fr));
 
+    info!(
+        "Creating seal proof for upgrade with ApiVersion {} and PoRep ID {:?}",
+        api_version, porep_id
+    );
     let (_, replica, _, _) = create_seal_for_upgrade::<_, Tree>(
         &mut rng,
         sector_size,
@@ -806,6 +840,7 @@ fn winning_post<Tree: 'static + MerkleTreeTrait>(
     let porep_id = match api_version {
         ApiVersion::V1_0_0 => ARBITRARY_POREP_ID_V1_0_0,
         ApiVersion::V1_1_0 => ARBITRARY_POREP_ID_V1_1_0,
+        ApiVersion::V1_2_0 => ARBITRARY_POREP_ID_V1_2_0,
     };
 
     let (sector_id, replica, comm_r, cache_dir) = if fake {
@@ -909,7 +944,7 @@ fn test_window_post_single_partition_smaller_2kib_base_8() -> Result<()> {
         .get(&sector_size)
         .expect("unknown sector size");
 
-    let versions = vec![ApiVersion::V1_0_0, ApiVersion::V1_1_0];
+    let versions = vec![ApiVersion::V1_0_0, ApiVersion::V1_1_0, ApiVersion::V1_2_0];
     for version in versions {
         window_post::<SectorShape2KiB>(
             sector_size,
@@ -934,7 +969,7 @@ fn test_window_post_two_partitions_matching_2kib_base_8() -> Result<()> {
         .get(&sector_size)
         .expect("unknown sector size");
 
-    let versions = vec![ApiVersion::V1_0_0, ApiVersion::V1_1_0];
+    let versions = vec![ApiVersion::V1_0_0, ApiVersion::V1_1_0, ApiVersion::V1_2_0];
     for version in versions {
         window_post::<SectorShape2KiB>(
             sector_size,
@@ -959,7 +994,7 @@ fn test_window_post_two_partitions_matching_4kib_sub_8_2() -> Result<()> {
         .get(&sector_size)
         .expect("unknown sector size");
 
-    let versions = vec![ApiVersion::V1_0_0, ApiVersion::V1_1_0];
+    let versions = vec![ApiVersion::V1_0_0, ApiVersion::V1_1_0, ApiVersion::V1_2_0];
     for version in versions {
         window_post::<SectorShape4KiB>(
             sector_size,
@@ -984,7 +1019,7 @@ fn test_window_post_two_partitions_matching_16kib_sub_8_8() -> Result<()> {
         .get(&sector_size)
         .expect("unknown sector size");
 
-    let versions = vec![ApiVersion::V1_0_0, ApiVersion::V1_1_0];
+    let versions = vec![ApiVersion::V1_0_0, ApiVersion::V1_1_0, ApiVersion::V1_2_0];
     for version in versions {
         window_post::<SectorShape16KiB>(
             sector_size,
@@ -1015,7 +1050,7 @@ fn test_window_post_two_partitions_matching_32kib_top_8_8_2() -> Result<()> {
         .get(&sector_size)
         .expect("unknown sector size");
 
-    let versions = vec![ApiVersion::V1_0_0, ApiVersion::V1_1_0];
+    let versions = vec![ApiVersion::V1_0_0, ApiVersion::V1_1_0, ApiVersion::V1_2_0];
     for version in versions {
         window_post::<SectorShape32KiB>(
             sector_size,
@@ -1046,7 +1081,7 @@ fn test_window_post_two_partitions_smaller_2kib_base_8() -> Result<()> {
         .get(&sector_size)
         .expect("unknown sector size");
 
-    let versions = vec![ApiVersion::V1_0_0, ApiVersion::V1_1_0];
+    let versions = vec![ApiVersion::V1_0_0, ApiVersion::V1_1_0, ApiVersion::V1_2_0];
     for version in versions {
         window_post::<SectorShape2KiB>(
             sector_size,
@@ -1077,7 +1112,7 @@ fn test_window_post_single_partition_matching_2kib_base_8() -> Result<()> {
         .get(&sector_size)
         .expect("unknown sector size");
 
-    let versions = vec![ApiVersion::V1_0_0, ApiVersion::V1_1_0];
+    let versions = vec![ApiVersion::V1_0_0, ApiVersion::V1_1_0, ApiVersion::V1_2_0];
     for version in versions {
         window_post::<SectorShape2KiB>(sector_size, sector_count, sector_count, false, version)?;
         window_post::<SectorShape2KiB>(sector_size, sector_count, sector_count, true, version)?;
@@ -1095,7 +1130,7 @@ fn test_window_post_partition_matching_2kib_base_8() -> Result<()> {
         .get(&sector_size)
         .expect("unknown sector size");
 
-    let versions = vec![ApiVersion::V1_0_0, ApiVersion::V1_1_0];
+    let versions = vec![ApiVersion::V1_0_0, ApiVersion::V1_1_0, ApiVersion::V1_2_0];
     for version in versions {
         partition_window_post::<SectorShape2KiB>(
             sector_size,
@@ -1133,6 +1168,7 @@ fn partition_window_post<Tree: 'static + MerkleTreeTrait>(
     let porep_id = match api_version {
         ApiVersion::V1_0_0 => ARBITRARY_POREP_ID_V1_0_0,
         ApiVersion::V1_1_0 => ARBITRARY_POREP_ID_V1_1_0,
+        ApiVersion::V1_2_0 => ARBITRARY_POREP_ID_V1_2_0,
     };
 
     for _ in 0..total_sector_count {
@@ -1271,6 +1307,7 @@ fn window_post<Tree: 'static + MerkleTreeTrait>(
     let porep_id = match api_version {
         ApiVersion::V1_0_0 => ARBITRARY_POREP_ID_V1_0_0,
         ApiVersion::V1_1_0 => ARBITRARY_POREP_ID_V1_1_0,
+        ApiVersion::V1_2_0 => ARBITRARY_POREP_ID_V1_2_0,
     };
 
     for _ in 0..total_sector_count {
