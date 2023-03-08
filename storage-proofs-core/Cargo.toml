@@ -45,7 +45,7 @@ cbc = { version = "0.1.2", features = ["std"] }
 halo2_proofs = { version = "0.2.0", optional = true }
 fil-halo2-gadgets = { path = "../fil-halo2-gadgets", optional = true }
 ec-gpu = "0.2.0"
-nova-snark = { version = "0.14.0", optional = true }
+nova-snark = { version = "0.17.0", optional = true }
 pasta_curves = { version = "0.5.2", optional = true, features = ["repr-c", "serde"], package = "fil_pasta_curves" }
 
 [dev-dependencies]
@@ -66,8 +66,8 @@ big-sector-sizes-bench = []
 measurements = ["cpu-time", "gperftools"]
 profile = ["measurements"]
 
-cuda = ["bellperson/cuda", "filecoin-hashers/cuda"]
-opencl = ["bellperson/opencl", "filecoin-hashers/opencl"]
+cuda = ["bellperson/cuda", "filecoin-hashers/cuda", "nova-snark?/cuda"]
+opencl = ["bellperson/opencl", "filecoin-hashers/opencl", "nova-snark?/opencl"]
 
 nova = ["filecoin-hashers/nova", "nova-snark", "pasta_curves"]
 halo2 = ["filecoin-hashers/halo2", "fil-halo2-gadgets", "halo2_proofs"]

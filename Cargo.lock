@@ -310,7 +310,7 @@ dependencies = [
  "memmap2",
  "pairing",
  "rand",
- "rand_core 0.6.4",
+ "rand_core",
  "rayon",
  "rustversion",
  "serde",
@@ -496,7 +496,7 @@ dependencies = [
  "ff",
  "group",
  "pairing",
- "rand_core 0.6.4",
+ "rand_core",
  "serde",
  "subtle",
 ]
@@ -1291,7 +1291,7 @@ dependencies = [
  "bitvec 1.0.1",
  "byteorder",
  "ff_derive",
- "rand_core 0.6.4",
+ "rand_core",
  "subtle",
 ]
 
@@ -1461,6 +1461,7 @@ dependencies = [
  "ec-gpu",
  "ff",
  "fil-halo2-gadgets",
+ "fil_pasta_curves",
  "generic-array 0.14.6",
  "halo2_proofs",
  "hex",
@@ -1750,17 +1751,6 @@ dependencies = [
 
 [[package]]
 name = "getrandom"
-version = "0.1.16"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8fc3cb4d91f53b50155bdcfd23f6a4c39ae1969c2ae85982b135750cccaf5fce"
-dependencies = [
- "cfg-if 1.0.0",
- "libc",
- "wasi 0.9.0+wasi-snapshot-preview1",
-]
-
-[[package]]
-name = "getrandom"
 version = "0.2.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c05aeb6a22b8f62540c194aac980f2115af067bfe15a0734d7277a768d396b31"
@@ -1828,7 +1818,7 @@ checksum = "5dfbfb3a6cfbd390d5c9564ab283a0349b9b9fcd46a706c1eb10e0db70bfbac7"
 dependencies = [
  "ff",
  "rand",
- "rand_core 0.6.4",
+ "rand_core",
  "rand_xorshift",
  "subtle",
 ]
@@ -1888,7 +1878,7 @@ dependencies = [
  "group",
  "log",
  "pasta_curves",
- "rand_core 0.6.4",
+ "rand_core",
  "rayon",
  "tracing",
 ]
@@ -2362,6 +2352,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "lurk-pasta-msm"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "12992280292a2a4ff84591308c426029245d49094c75df079b286f1bb8496e6c"
+dependencies = [
+ "cc",
+ "fil_pasta_curves",
+ "semolina",
+ "sppark",
+ "which",
+]
+
+[[package]]
 name = "mach"
 version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2422,13 +2425,13 @@ dependencies = [
 
 [[package]]
 name = "merlin"
-version = "2.0.1"
+version = "3.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4e261cf0f8b3c42ded9f7d2bb59dea03aa52bc8a1cbc7482f9fc3fd1229d3b42"
+checksum = "58c38e2799fc0978b65dfff8023ec7843e2330bb462f19198840b34b6582397d"
 dependencies = [
  "byteorder",
  "keccak",
- "rand_core 0.5.1",
+ "rand_core",
  "zeroize",
 ]
 
@@ -2565,9 +2568,9 @@ dependencies = [
 
 [[package]]
 name = "nova-snark"
-version = "0.10.0"
+version = "0.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a9e36046a4728faaed47fe7061fa6b237ed5d76c11ed97c42e50c319a1620df4"
+checksum = "f623db785c5b20f354a44aa4faac109f15ab2e3f60d392a96bd65dc962bb807a"
 dependencies = [
  "bellperson",
  "bincode",
@@ -2575,23 +2578,53 @@ dependencies = [
  "byteorder",
  "digest 0.8.1",
  "ff",
+ "fil_pasta_curves",
  "flate2",
  "generic-array 0.14.6",
  "itertools 0.9.0",
+ "lurk-pasta-msm",
  "merlin",
  "neptune",
  "num-bigint 0.4.3",
  "num-integer",
  "num-traits",
- "pasta-msm",
- "pasta_curves",
- "rand",
  "rand_chacha",
- "rand_core 0.5.1",
+ "rand_core",
  "rayon",
  "serde",
  "sha3",
  "subtle",
+ "thiserror",
+]
+
+[[package]]
+name = "nova-snark"
+version = "0.17.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b2dd0c1cfd4dacb033d2f6c366ad004f70fe1bd6c79da62e7e19d49b78d53395"
+dependencies = [
+ "bellperson",
+ "bincode",
+ "bitvec 1.0.1",
+ "byteorder",
+ "digest 0.8.1",
+ "ff",
+ "fil_pasta_curves",
+ "flate2",
+ "generic-array 0.14.6",
+ "itertools 0.9.0",
+ "lurk-pasta-msm",
+ "neptune",
+ "num-bigint 0.4.3",
+ "num-integer",
+ "num-traits",
+ "rand_chacha",
+ "rand_core",
+ "rayon",
+ "serde",
+ "sha3",
+ "subtle",
+ "thiserror",
 ]
 
 [[package]]
@@ -2833,19 +2866,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "427c3892f9e783d91cc128285287e70a59e206ca452770ece88a76f7a3eddd72"
 
 [[package]]
-name = "pasta-msm"
-version = "0.1.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a40dc8bdddb15a18fdf7c398f341a5ef2632a287419bbeeb64c61dec25091627"
-dependencies = [
- "cc",
- "pasta_curves",
- "semolina",
- "sppark",
- "which",
-]
-
-[[package]]
 name = "pasta_curves"
 version = "0.4.0"
 source = "git+https://github.com/filecoin-project/pasta_curves?branch=gpu#f976b78c799e77430ddc7047b265163381897da0"
@@ -3073,7 +3093,7 @@ checksum = "34af8d1a0e25924bc5b7c43c079c942339d8f0a8b57c39049bef581b46327404"
 dependencies = [
  "libc",
  "rand_chacha",
- "rand_core 0.6.4",
+ "rand_core",
 ]
 
 [[package]]
@@ -3083,16 +3103,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e6c10a63a0fa32252be49d21e7709d4d4baf8d231c2dbce1eaa8141b9b127d88"
 dependencies = [
  "ppv-lite86",
- "rand_core 0.6.4",
-]
-
-[[package]]
-name = "rand_core"
-version = "0.5.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "90bde5296fc891b0cef12a6d03ddccc162ce7b2aff54160af9338f8d40df6d19"
-dependencies = [
- "getrandom 0.1.16",
+ "rand_core",
 ]
 
 [[package]]
@@ -3101,7 +3112,7 @@ version = "0.6.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ec0be4795e2f6a28069bec0b5ff3e2ac9bafc99e6a9a7dc3547996c5c816922c"
 dependencies = [
- "getrandom 0.2.8",
+ "getrandom",
 ]
 
 [[package]]
@@ -3110,7 +3121,7 @@ version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d25bf25ec5ae4a3f1b92f929810509a2f53d7dca2f50b794ff57e3face536c8f"
 dependencies = [
- "rand_core 0.6.4",
+ "rand_core",
 ]
 
 [[package]]
@@ -3160,7 +3171,7 @@ version = "0.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b033d837a7cf162d7993aded9304e30a83213c648b6e389db233191f891e5c2b"
 dependencies = [
- "getrandom 0.2.8",
+ "getrandom",
  "redox_syscall",
  "thiserror",
 ]
@@ -3602,6 +3613,7 @@ dependencies = [
  "ec-gpu",
  "ff",
  "fil-halo2-gadgets",
+ "fil_pasta_curves",
  "filecoin-hashers",
  "fr32",
  "fs2",
@@ -3613,7 +3625,7 @@ dependencies = [
  "log",
  "memmap2",
  "merkletree",
- "nova-snark",
+ "nova-snark 0.17.0",
  "num_cpus",
  "pretty_assertions",
  "proptest",
@@ -3646,6 +3658,7 @@ dependencies = [
  "ff",
  "fil-halo2-gadgets",
  "fil_logger",
+ "fil_pasta_curves",
  "filecoin-hashers",
  "fr32",
  "generic-array 0.14.6",
@@ -3659,7 +3672,7 @@ dependencies = [
  "memmap2",
  "merkletree",
  "neptune",
- "nova-snark",
+ "nova-snark 0.14.0",
  "num-bigint 0.4.3",
  "num-traits",
  "num_cpus",
@@ -3689,12 +3702,14 @@ dependencies = [
  "ff",
  "fil-halo2-gadgets",
  "fil_logger",
+ "fil_pasta_curves",
  "filecoin-hashers",
  "fr32",
  "generic-array 0.14.6",
  "halo2_proofs",
  "hex",
  "log",
+ "nova-snark 0.14.0",
  "pretty_assertions",
  "rand",
  "rand_xorshift",
@@ -4239,12 +4254,6 @@ dependencies = [
  "log",
  "try-lock",
 ]
-
-[[package]]
-name = "wasi"
-version = "0.9.0+wasi-snapshot-preview1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cccddf32554fecc6acb585f82a32a72e28b48f8c4c1883ddfeeeaa96f7d8e519"
 
 [[package]]
 name = "wasi"
