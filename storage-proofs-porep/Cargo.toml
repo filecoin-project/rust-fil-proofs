@@ -43,7 +43,7 @@ blstrs = "0.6.1"
 typemap = "0.3.3"
 halo2_proofs = { version = "0.2.0", optional = true }
 fil-halo2-gadgets = { path = "../fil-halo2-gadgets", optional = true }
-nova-snark = { version = "0.14.0", optional = true }
+nova-snark = { version = "0.17.0", optional = true }
 pasta_curves = { version = "0.5.2", optional = true, features = ["repr-c", "serde"], package = "fil_pasta_curves" }
 
 [target."cfg(target_arch = \"aarch64\")".dependencies]

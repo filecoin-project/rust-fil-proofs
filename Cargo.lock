@@ -3672,7 +3672,7 @@ dependencies = [
  "memmap2",
  "merkletree",
  "neptune",
- "nova-snark 0.14.0",
+ "nova-snark 0.17.0",
  "num-bigint 0.4.3",
  "num-traits",
  "num_cpus",

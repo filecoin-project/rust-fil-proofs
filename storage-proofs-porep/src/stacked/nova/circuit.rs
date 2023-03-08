@@ -15,7 +15,10 @@ use nova_snark::{errors::NovaError, traits::circuit::StepCircuit};
 use storage_proofs_core::{
     gadgets::encode::encode,
     merkle::{Arity, MerkleProofTrait, MerkleTreeTrait},
-    nova::{self, gen_recursive_proof, CompressedProof, CycleScalar, RecursiveProof, StepExt},
+    nova::{
+        self, gen_compression_keypair, gen_recursive_proof, CompressedProof, CompressionKeypair,
+        CompressionPk, CompressionVk, CycleScalar, RecursiveProof, StepExt,
+    },
     SECTOR_NODES_32_KIB,
 };
 
@@ -539,11 +542,29 @@ where
 
     #[inline]
     pub fn load_params(&self) -> anyhow::Result<SdrPorepParams<F, A>> {
-        nova::ParamStore::entry(self.clone())
+        nova::ParamStore::params(self.clone())
+    }
+
+    #[inline]
+    pub fn gen_compression_keypair(
+        params: &SdrPorepParams<F, A>,
+    ) -> SdrPorepCompressionKeypair<F, A> {
+        gen_compression_keypair(params)
+    }
+
+    #[inline]
+    pub fn load_compression_keypair(
+        &self,
+        params: &SdrPorepParams<F, A>,
+    ) -> anyhow::Result<SdrPorepCompressionKeypair<F, A>> {
+        nova::ParamStore::compression_keypair(self, params)
     }
 }
 
 pub type SdrPorepParams<F, A> = nova::Params<<F as CycleScalar>::G1, SdrPorepCircuit<F, A>>;
+pub type SdrPorepCompressionPk<F, A> = CompressionPk<<F as CycleScalar>::G1, SdrPorepCircuit<F, A>>;
+pub type SdrPorepCompressionVk<F, A> = CompressionVk<<F as CycleScalar>::G1, SdrPorepCircuit<F, A>>;
+pub type SdrPorepCompressionKeypair<F, A> = CompressionKeypair<<F as CycleScalar>::G1, SdrPorepCircuit<F, A>>;
 pub type SdrPorepProof<F, A> = RecursiveProof<<F as CycleScalar>::G1, SdrPorepCircuit<F, A>>;
 pub type SdrPorepCompressedProof<F, A> =
     CompressedProof<<F as CycleScalar>::G1, SdrPorepCircuit<F, A>>;
@@ -703,7 +724,22 @@ where
 
     #[inline]
     pub fn load_params(sp: &SetupParams) -> anyhow::Result<SdrPorepParams<F, A>> {
-        nova::ParamStore::entry(SdrPorepCircuit::blank_keygen(sp))
+        nova::ParamStore::params(SdrPorepCircuit::blank_keygen(sp))
+    }
+
+    #[inline]
+    pub fn gen_compression_keypair(
+        params: &SdrPorepParams<F, A>,
+    ) -> SdrPorepCompressionKeypair<F, A> {
+        SdrPorepCircuit::<F, A>::gen_compression_keypair(params)
+    }
+
+    #[inline]
+    pub fn load_compression_keypair(
+        sp: &SetupParams,
+        params: &SdrPorepParams<F, A>,
+    ) -> anyhow::Result<SdrPorepCompressionKeypair<F, A>> {
+        nova::ParamStore::compression_keypair(&SdrPorepCircuit::blank_keygen(sp), params)
     }
 
     #[inline]
@@ -725,9 +761,10 @@ where
     #[inline]
     pub fn gen_compressed_proof(
         params: &SdrPorepParams<F, A>,
+        pk: &SdrPorepCompressionPk<F, A>,
         rec_proof: &SdrPorepProof<F, A>,
     ) -> Result<SdrPorepCompressedProof<F, A>, NovaError> {
-        rec_proof.gen_compressed_proof(params)
+        rec_proof.gen_compressed_proof(params, pk)
     }
 }
 
@@ -867,10 +904,16 @@ mod tests {
             .expect("failed to generate recursive proof");
         assert!(rec_proof.verify(&nova_params).expect("failed to verify recursive proof"));
 
+        let (cpk, cvk) = SdrPorepCompound::gen_compression_keypair(&nova_params);
+        /*
+        let (cpk, cvk) = SdrPorepCompound::load_compression_keypair(&sp, &nova_params)
+            .expect("failed to load nova params");
+        */
+
         // Generate and verify compressed proof.
-        let cmpr_proof = rec_proof.gen_compressed_proof(&nova_params)
+        let cmpr_proof = rec_proof.gen_compressed_proof(&nova_params, &cpk)
             .expect("failed to generate compressed proof");
-        assert!(cmpr_proof.verify(&nova_params).expect("failed to verify compressed proof"));
+        assert!(cmpr_proof.verify(&cvk).expect("failed to verify compressed proof"));
     }
 
     #[test]
