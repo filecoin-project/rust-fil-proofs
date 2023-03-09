@@ -10,7 +10,10 @@ use nova_snark::{errors::NovaError, traits::circuit::StepCircuit};
 use storage_proofs_core::{
     gadgets::por::por_no_challenge_input,
     merkle::{Arity, LCTree, MerkleProofTrait, MerkleTreeTrait},
-    nova::{self, gen_recursive_proof, CompressedProof, CycleScalar, RecursiveProof, StepExt},
+    nova::{
+        self, gen_compression_keypair, gen_recursive_proof, CompressedProof, CompressionKeypair,
+        CompressionPk, CompressionVk, CycleScalar, RecursiveProof, StepExt,
+    },
     util::field_le_bits,
     SECTOR_NODES_32_KIB,
 };
@@ -407,7 +410,7 @@ where
 {
     pub fn blank(sp: &SetupParams) -> Self {
         PostCircuit {
-            sp: sp.clone(),
+            sp: *sp,
             i: 0,
             pub_inputs: PublicInputs::blank(sp),
             priv_inputs: PrivateInputs::blank::<A>(sp),
@@ -417,7 +420,7 @@ where
 
     pub fn blank_keygen(sp: &SetupParams) -> Self {
         PostCircuit {
-            sp: sp.clone(),
+            sp: *sp,
             i: 0,
             pub_inputs: PublicInputs::blank_keygen(sp),
             priv_inputs: PrivateInputs::blank_keygen::<A>(sp),
@@ -452,11 +455,28 @@ where
 
     #[inline]
     pub fn load_params(&self) -> anyhow::Result<PostParams<F, A>> {
-        nova::ParamStore::entry(self.clone())
+        nova::ParamStore::params(self.clone())
+    }
+
+    #[inline]
+    pub fn gen_compression_keypair(params: &PostParams<F, A>) -> PostCompressionKeypair<F, A> {
+        gen_compression_keypair(params)
+    }
+
+    #[inline]
+    pub fn load_compression_keypair(
+        &self,
+        params: &PostParams<F, A>,
+    ) -> anyhow::Result<PostCompressionKeypair<F, A>> {
+        nova::ParamStore::compression_keypair(self, params)
     }
 }
 
 pub type PostParams<F, A> = nova::Params<<F as CycleScalar>::G1, PostCircuit<F, A>>;
+pub type PostCompressionPk<F, A> = CompressionPk<<F as CycleScalar>::G1, PostCircuit<F, A>>;
+pub type PostCompressionVk<F, A> = CompressionVk<<F as CycleScalar>::G1, PostCircuit<F, A>>;
+pub type PostCompressionKeypair<F, A> =
+    CompressionKeypair<<F as CycleScalar>::G1, PostCircuit<F, A>>;
 pub type PostProof<F, A> = RecursiveProof<<F as CycleScalar>::G1, PostCircuit<F, A>>;
 pub type PostCompressedProof<F, A> = CompressedProof<<F as CycleScalar>::G1, PostCircuit<F, A>>;
 
@@ -605,7 +625,20 @@ where
 
     #[inline]
     pub fn load_params(sp: &SetupParams) -> anyhow::Result<PostParams<F, A>> {
-        nova::ParamStore::entry(PostCircuit::blank_keygen(sp))
+        nova::ParamStore::params(PostCircuit::blank_keygen(sp))
+    }
+
+    #[inline]
+    pub fn gen_compression_keypair(params: &PostParams<F, A>) -> PostCompressionKeypair<F, A> {
+        PostCircuit::<F, A>::gen_compression_keypair(params)
+    }
+
+    #[inline]
+    pub fn load_compression_keypair(
+        sp: &SetupParams,
+        params: &PostParams<F, A>,
+    ) -> anyhow::Result<PostCompressionKeypair<F, A>> {
+        nova::ParamStore::compression_keypair(&PostCircuit::blank_keygen(sp), params)
     }
 
     #[inline]
@@ -627,9 +660,10 @@ where
     #[inline]
     pub fn gen_compressed_proof(
         params: &PostParams<F, A>,
+        pk: &PostCompressionPk<F, A>,
         rec_proof: &PostProof<F, A>,
     ) -> Result<PostCompressedProof<F, A>, NovaError> {
-        rec_proof.gen_compressed_proof(params)
+        rec_proof.gen_compressed_proof(params, pk)
     }
 }
 
@@ -777,12 +811,18 @@ mod tests {
             .verify(&nova_params)
             .expect("failed to verify recursive proof"));
 
+        let (cpk, cvk) = PostCompound::gen_compression_keypair(&nova_params);
+        /*
+        let (cpk, cvk) = PostCompound::load_compression_keypair(&sp, &nova_params)
+            .expect("failed to load nova params");
+        */
+
         // Generate and verify compressed proof.
         let cmpr_proof = rec_proof
-            .gen_compressed_proof(&nova_params)
+            .gen_compressed_proof(&nova_params, &cpk)
             .expect("failed to generate compressed proof");
         assert!(cmpr_proof
-            .verify(&nova_params)
+            .verify(&cvk)
             .expect("failed to verify compressed proof"));
     }
 

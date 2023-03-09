@@ -2424,18 +2424,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "merlin"
-version = "3.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "58c38e2799fc0978b65dfff8023ec7843e2330bb462f19198840b34b6582397d"
-dependencies = [
- "byteorder",
- "keccak",
- "rand_core",
- "zeroize",
-]
-
-[[package]]
 name = "mime"
 version = "0.3.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2564,37 +2552,6 @@ checksum = "a8903e5a29a317527874d0402f867152a3d21c908bb0b933e416c65e301d4c36"
 dependencies = [
  "memchr",
  "minimal-lexical",
-]
-
-[[package]]
-name = "nova-snark"
-version = "0.14.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f623db785c5b20f354a44aa4faac109f15ab2e3f60d392a96bd65dc962bb807a"
-dependencies = [
- "bellperson",
- "bincode",
- "bitvec 1.0.1",
- "byteorder",
- "digest 0.8.1",
- "ff",
- "fil_pasta_curves",
- "flate2",
- "generic-array 0.14.6",
- "itertools 0.9.0",
- "lurk-pasta-msm",
- "merlin",
- "neptune",
- "num-bigint 0.4.3",
- "num-integer",
- "num-traits",
- "rand_chacha",
- "rand_core",
- "rayon",
- "serde",
- "sha3",
- "subtle",
- "thiserror",
 ]
 
 [[package]]
@@ -3625,7 +3582,7 @@ dependencies = [
  "log",
  "memmap2",
  "merkletree",
- "nova-snark 0.17.0",
+ "nova-snark",
  "num_cpus",
  "pretty_assertions",
  "proptest",
@@ -3672,7 +3629,7 @@ dependencies = [
  "memmap2",
  "merkletree",
  "neptune",
- "nova-snark 0.17.0",
+ "nova-snark",
  "num-bigint 0.4.3",
  "num-traits",
  "num_cpus",
@@ -3709,7 +3666,7 @@ dependencies = [
  "halo2_proofs",
  "hex",
  "log",
- "nova-snark 0.14.0",
+ "nova-snark",
  "pretty_assertions",
  "rand",
  "rand_xorshift",
