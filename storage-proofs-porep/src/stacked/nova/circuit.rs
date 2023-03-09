@@ -886,34 +886,60 @@ mod tests {
         // Discard cached Merkle trees that are no longer needed.
         TemporaryAux::clear_temp(t_aux_orig).expect("t_aux delete failed");
 
+        #[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
+        dbg!("using: Pasta-MSM crate");
+        #[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
+        dbg!("using: parallel CPU Pasta-MSM");
+
         // Create Nova circuits from vanilla artifacts.
+        let start = std::time::Instant::now();
         let circ = SdrPorepCompound::<F, A>::create_recursive_circuit(
             sp,
             &vanilla_pub_inputs,
             &[vanilla_partition_proof],
         );
+        let create_circ_secs = start.elapsed().as_secs_f32();
+        dbg!(create_circ_secs);
 
+        let start = std::time::Instant::now();
         let nova_params = SdrPorepCompound::<F, A>::gen_params(&sp);
+        let param_gen_secs = start.elapsed().as_secs_f32();
+        dbg!(param_gen_secs);
         /*
         let nova_params =
             SdrPorepCompound::<F, A>::load_params(&sp).expect("failed to load nova params");
         */
 
         // Generate and verify recursive proof.
+        let start = std::time::Instant::now();
         let rec_proof = SdrPorepCompound::gen_recursive_proof(&nova_params, circ)
             .expect("failed to generate recursive proof");
+        let rec_proving_secs = start.elapsed().as_secs_f32();
+        dbg!(rec_proving_secs);
+        let start = std::time::Instant::now();
         assert!(rec_proof.verify(&nova_params).expect("failed to verify recursive proof"));
+        let rec_verifying_secs = start.elapsed().as_secs_f32();
+        dbg!(rec_verifying_secs);
 
+        let start = std::time::Instant::now();
         let (cpk, cvk) = SdrPorepCompound::gen_compression_keypair(&nova_params);
+        let cmpr_keygen_secs = start.elapsed().as_secs_f32();
+        dbg!(cmpr_keygen_secs);
         /*
         let (cpk, cvk) = SdrPorepCompound::load_compression_keypair(&sp, &nova_params)
             .expect("failed to load nova params");
         */
 
+        let start = std::time::Instant::now();
         // Generate and verify compressed proof.
         let cmpr_proof = rec_proof.gen_compressed_proof(&nova_params, &cpk)
             .expect("failed to generate compressed proof");
+        let cmpr_proving_secs = start.elapsed().as_secs_f32();
+        dbg!(cmpr_proving_secs);
+        let start = std::time::Instant::now();
         assert!(cmpr_proof.verify(&cvk).expect("failed to verify compressed proof"));
+        let cmpr_verifying_secs = start.elapsed().as_secs_f32();
+        dbg!(cmpr_verifying_secs);
     }
 
     #[test]
