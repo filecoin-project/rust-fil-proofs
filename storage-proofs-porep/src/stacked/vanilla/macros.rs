@@ -55,6 +55,9 @@ macro_rules! prefetch {
 
             x86::_mm_prefetch($val, x86::_MM_HINT_T0);
         }
+
+        // Prefetch on AArch64 is an unstable feature in Rust. Hence it can only be enabled if a
+        // nightly version of Rust is used. On stable Rust this macro is a no-op.
         #[cfg(all(nightly, target_arch = "aarch64"))]
         unsafe {
             use std::arch::aarch64::{_prefetch, _PREFETCH_LOCALITY3, _PREFETCH_READ};
