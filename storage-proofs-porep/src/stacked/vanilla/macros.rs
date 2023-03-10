@@ -55,11 +55,14 @@ macro_rules! prefetch {
 
             x86::_mm_prefetch($val, x86::_MM_HINT_T0);
         }
-        #[cfg(target_arch = "aarch64")]
+        #[cfg(all(nightly, target_arch = "aarch64"))]
         unsafe {
             use std::arch::aarch64::{_prefetch, _PREFETCH_LOCALITY3, _PREFETCH_READ};
             _prefetch($val, _PREFETCH_READ, _PREFETCH_LOCALITY3);
         }
+        // Make sure that there are not warnings about unused variables.
+        #[cfg(all(not(nightly), target_arch = "aarch64"))]
+        let _ = ($val);
     };
 }
 
