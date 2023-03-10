@@ -1,6 +1,6 @@
 #![deny(clippy::all, clippy::perf, clippy::correctness, rust_2018_idioms)]
 #![warn(clippy::unwrap_used)]
-#![cfg_attr(target_arch = "aarch64", feature(stdsimd))]
+#![cfg_attr(all(target_arch = "aarch64", nightly), feature(stdsimd))]
 #![warn(clippy::unnecessary_wraps)]
 
 use std::path::PathBuf;

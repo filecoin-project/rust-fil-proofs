@@ -40,6 +40,9 @@ fr32 = { path = "../fr32", version = "~6.0.0", default-features = false }
 yastl = "0.1.2"
 blstrs = "0.6.0"
 
+[build-dependencies]
+rustversion = "1.0"
+
 [target."cfg(target_arch = \"aarch64\")".dependencies]
 sha2 = { version = "0.10.2", features = ["compress", "asm"] }
 [target."cfg(not(target_arch = \"aarch64\"))".dependencies]
