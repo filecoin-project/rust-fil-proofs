@@ -1,10 +1,5 @@
 version: 2.1
 
-parameters:
-  nightly-toolchain:
-    type: string
-    default: "nightly-2022-05-09"
-
 executors:
   default:
     docker:
@@ -71,7 +66,7 @@ jobs:
       - restore_parameter_cache
       - run:
           name: Test (<< parameters.crate >>)
-          command: cargo +$(cat rust-toolchain) test --verbose --package << parameters.crate >>
+          command: cargo test --verbose --package << parameters.crate >>
           no_output_timeout: 30m
 
   test_release:
@@ -131,7 +126,6 @@ jobs:
           at: "."
       - restore_rustup_cache
       - restore_parameter_cache
-      - run: rustup install << pipeline.parameters.nightly-toolchain >>
       - run:
           name: Test with use_multicore_sdr
           command: |
@@ -220,7 +214,6 @@ jobs:
             curl https://sh.rustup.rs -sSf | sh -s -- -y
       - run: rustup install $(cat rust-toolchain)
       - run: rustup default $(cat rust-toolchain)
-      - run: rustup install << pipeline.parameters.nightly-toolchain >>
       - run: cargo update
       - run: cargo fetch
       - run:
@@ -231,7 +224,7 @@ jobs:
       - run:
           name: Test arm with no gpu
           command: |
-            cargo +<< pipeline.parameters.nightly-toolchain >> -Zpackage-features test --release --all --verbose --no-default-features
+            cargo test --release --all --verbose --no-default-features
           no_output_timeout: 90m
 
   bench:
@@ -245,7 +238,7 @@ jobs:
       - restore_parameter_cache
       - run:
           name: Benchmarks
-          command: cargo +$(cat rust-toolchain) build --benches --verbose --workspace
+          command: cargo build --benches --verbose --workspace
           no_output_timeout: 15m
 
   rustfmt:
@@ -270,7 +263,7 @@ jobs:
       - restore_rustup_cache
       - run:
           name: Run cargo clippy
-          command: cargo +$(cat rust-toolchain) clippy --all-targets --workspace -- -D warnings
+          command: cargo clippy --all-targets --workspace -- -D warnings
   test_darwin:
     macos:
       xcode: "13.4.1"
