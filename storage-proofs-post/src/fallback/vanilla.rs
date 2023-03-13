@@ -435,12 +435,12 @@ impl<'a, Tree: 'a + MerkleTreeTrait> ProofScheme<'a> for FallbackPoSt<'a, Tree> 
                                         {
                                             inclusion_proofs.push(proof);
                                         } else {
-                                            error!("faulty sector: {:?}", sector_id);
+                                            error!("Found faulty sector: {:?}", sector_id);
                                             faults.insert(sector_id);
                                         }
                                     }
                                     Err(err) => {
-                                        error!("faulty sector: {:?} ({:?})", sector_id, err);
+                                        error!("Found faulty sector: {:?}: {:?}", sector_id, err);
                                         faults.insert(sector_id);
                                     }
                                 }
@@ -495,6 +495,7 @@ impl<'a, Tree: 'a + MerkleTreeTrait> ProofScheme<'a> for FallbackPoSt<'a, Tree> 
         if faulty_sectors.is_empty() {
             Ok(partition_proofs)
         } else {
+            trace!("Faulty sectors being reported {:?}", faulty_sectors);
             Err(Error::FaultySectors(faulty_sectors.into_iter().collect()).into())
         }
     }
