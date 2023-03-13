@@ -1299,6 +1299,7 @@ fn window_post<Tree: 'static + MerkleTreeTrait>(
     let mut sectors = Vec::with_capacity(total_sector_count);
     let mut pub_replicas = BTreeMap::new();
     let mut priv_replicas = BTreeMap::new();
+    let mut priv_faulty_replicas = BTreeMap::new();
 
     let prover_fr: <Tree::Hasher as Hasher>::Domain = Fr::random(&mut rng).into();
     let mut prover_id = [0u8; 32];
@@ -1327,6 +1328,26 @@ fn window_post<Tree: 'static + MerkleTreeTrait>(
             sector_id,
             PrivateReplicaInfo::new(replica.path().into(), comm_r, cache_dir.path().into())?,
         );
+
+        // Create a bad replica (total failure) and add to
+        // priv_faulty_replicas for checking later.
+        //
+        // Note: the file length makes it impossible to have any valid
+        // proofs generated.  If we did something like
+        // .set_len(metadata(replica.path())?.len() - 1)?
+        // we could see a partial result (depending on sector shape).
+        let bad_replica = NamedTempFile::new()?;
+        bad_replica.as_file().set_len(1)?;
+        priv_faulty_replicas.insert(
+            sector_id,
+            PrivateReplicaInfo::<Tree>::new(
+                bad_replica.path().into(),
+                comm_r,
+                cache_dir.path().into(),
+            )?,
+        );
+        bad_replica.keep()?;
+
         pub_replicas.insert(sector_id, PublicReplicaInfo::new(comm_r)?);
         sectors.push((sector_id, replica, comm_r, cache_dir, prover_id));
     }
@@ -1386,10 +1407,59 @@ fn window_post<Tree: 'static + MerkleTreeTrait>(
 
     let proof =
         generate_window_post_with_vanilla::<Tree>(&config, &randomness, prover_id, vanilla_proofs)?;
-    /////////////////////////////////////////////
 
     let valid = verify_window_post::<Tree>(&config, &randomness, &pub_replicas, prover_id, &proof)?;
     assert!(valid, "proof did not verify");
+    /////////////////////////////////////////////
+
+    // Lastly, let's ensure we're getting the faulty sectors.
+    {
+        let mut faulty_sectors = Vec::new();
+        let proof =
+            generate_window_post::<Tree>(&config, &randomness, &priv_faulty_replicas, prover_id);
+
+        use storage_proofs_core::error::Error as FaultySectorError;
+        match proof {
+            Ok(proof) => {
+                let valid = verify_window_post::<Tree>(
+                    &config,
+                    &randomness,
+                    &pub_replicas,
+                    prover_id,
+                    &proof,
+                )?;
+                assert!(!valid, "proof made with faulty sectors verified");
+            }
+            Err(e) => match e.downcast::<FaultySectorError>() {
+                Err(_) => panic!("failed to downcast to Error"),
+                Ok(FaultySectorError::FaultySectors(sector_ids)) => {
+                    info!("faulty_sectors detected properly: {:?}", sector_ids);
+                    faulty_sectors.extend(sector_ids);
+                }
+                Ok(_) => panic!("PoSt failed to return FaultySectors error."),
+            },
+        };
+
+        // This assertion is for the case of a total failure, not a
+        // partial failure.
+        assert_eq!(
+            faulty_sectors.len(),
+            priv_faulty_replicas.len(),
+            "faulty sector detection failure"
+        );
+
+        priv_faulty_replicas
+            .iter()
+            .for_each(|(sector_id, faulty_replica)| {
+                // Ensure we have a record of the faulty sector
+                assert!(
+                    faulty_sectors.contains(sector_id),
+                    "faulty sector not reported"
+                );
+                // Delete temporary faulty_replica files.
+                remove_file(faulty_replica.replica_path()).expect("failed to remove faulty_replica")
+            });
+    }
 
     // Make files writeable again, so that the temporary directory can be removed.
     for (_, replica, _, cache_dir, _) in &sectors {
