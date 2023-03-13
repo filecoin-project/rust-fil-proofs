@@ -67,10 +67,18 @@ where
 {
     info!("seal_pre_commit_phase1:start: {:?}", sector_id);
 
+    let in_path_is_dev_zero = in_path.as_ref() == Path::new("/dev/zero");
+    if in_path_is_dev_zero {
+        trace!("using unreplicated data file /dev/zero");
+    }
+
     // Sanity check all input path types.
+    //
+    // In the special case where `in_path` is `/dev/zero`, `.is_file()` is `false` as `/dev/zero` is
+    // not a "normal" unix file.
     ensure!(
-        metadata(in_path.as_ref())?.is_file(),
-        "in_path must be a file"
+        in_path_is_dev_zero || metadata(in_path.as_ref())?.is_file(),
+        "in_path must be a file or /dev/zero",
     );
     ensure!(
         metadata(out_path.as_ref())?.is_file(),
@@ -89,13 +97,18 @@ where
         .with_context(|| format!("could not read out_path={:?}", out_path.as_ref().display()))?;
 
     // Copy unsealed data to output location, where it will be sealed in place.
-    fs::copy(&in_path, &out_path).with_context(|| {
-        format!(
-            "could not copy in_path={:?} to out_path={:?}",
-            in_path.as_ref().display(),
-            out_path.as_ref().display()
-        )
-    })?;
+    //
+    // When `in_path` is `/dev/zero`, the output file's data will be set to all zeros when the
+    // output file's length is set to the sector size.
+    if !in_path_is_dev_zero {
+        fs::copy(&in_path, &out_path).with_context(|| {
+            format!(
+                "could not copy in_path={:?} to out_path={:?}",
+                in_path.as_ref().display(),
+                out_path.as_ref().display()
+            )
+        })?;
+    }
 
     let f_data = OpenOptions::new()
         .read(true)
@@ -103,7 +116,7 @@ where
         .open(&out_path)
         .with_context(|| format!("could not open out_path={:?}", out_path.as_ref().display()))?;
 
-    // Zero-pad the data to the requested size by extending the underlying file if needed.
+    // Extend the underlying file with `0` bytes until it's length is the requested sector size.
     f_data.set_len(sector_bytes as u64)?;
 
     let data = unsafe {
