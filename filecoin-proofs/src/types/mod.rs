@@ -1,3 +1,6 @@
+use std::ops::Range;
+use std::path::PathBuf;
+
 pub use merkletree::store::StoreConfig;
 pub use storage_proofs_core::merkle::{MerkleProof, MerkleTreeTrait};
 pub use storage_proofs_porep::stacked::{Labels, PersistentAux, TemporaryAux};
@@ -86,6 +89,32 @@ pub struct SealPreCommitPhase1Output<Tree: MerkleTreeTrait> {
     pub labels: Labels<Tree>,
     pub config: StoreConfig,
     pub comm_d: Commitment,
+}
+
+impl<Tree: MerkleTreeTrait> SealPreCommitPhase1Output<Tree> {
+    // Returns path to sealing key file (i.e. last sealing layer).
+    pub fn sealing_key_path(&self) -> &PathBuf {
+        let num_layers = self.labels.labels.len();
+        &self.labels.labels[num_layers - 1].path
+    }
+
+    // Returns a range (of nodes) of the sealing key (i.e. last sealing layer).
+    pub fn read_sealing_key_range(
+        &self,
+        node_range: Range<usize>,
+    ) -> anyhow::Result<Vec<<Tree::Hasher as Hasher>::Domain>> {
+        use anyhow::Context;
+        use merkletree::store::Store;
+        self.labels
+            .labels_for_last_layer()?
+            .read_range(node_range.clone())
+            .with_context(|| {
+                format!(
+                    "failed to read sealing key (i.e. last layer) node range: {:?}",
+                    node_range
+                )
+            })
+    }
 }
 
 #[repr(transparent)]
