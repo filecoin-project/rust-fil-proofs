@@ -1,4 +1,4 @@
-use std::fs::{self, File};
+use std::fs::{self, File, OpenOptions};
 use std::io::Write;
 use std::path::Path;
 
@@ -7,6 +7,7 @@ use bincode::{deserialize, serialize};
 use filecoin_hashers::{Domain, Hasher};
 use generic_array::typenum::Unsigned;
 use log::{info, trace};
+use memmap2::MmapOptions;
 use merkletree::merkle::get_merkle_tree_len;
 use merkletree::store::StoreConfig;
 use storage_proofs_core::{
@@ -279,6 +280,28 @@ pub fn remove_encoded_data<Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher>
 
     info!("remove_data:finish");
     Ok(())
+}
+
+// Returns a range (in nodes) of the sector update key (i.e. the "old" replica).
+pub fn read_sector_key_range<Tree: MerkleTreeTrait>(
+    replica_old_path: &Path,
+    node_range: std::ops::Range<usize>,
+) -> Result<Vec<<Tree::Hasher as Hasher>::Domain>> {
+    let replica_old_file = OpenOptions::new()
+        .read(true)
+        .open(replica_old_path)
+        .with_context(|| format!("could not open path={:?}", replica_old_path))?;
+    let replica_old = unsafe {
+        MmapOptions::new()
+            .map(&replica_old_file)
+            .with_context(|| format!("could not mmap path={:?}", replica_old_path))?
+    };
+    node_range
+        .map(|node_index| {
+            let byte_offset = node_index << 5;
+            fr32::bytes_into_fr(&replica_old[byte_offset..byte_offset + 32]).map(Into::into)
+        })
+        .collect()
 }
 
 /// Generate a single vanilla partition proof for a specified partition.
