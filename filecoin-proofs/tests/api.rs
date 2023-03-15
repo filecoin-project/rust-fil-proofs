@@ -8,7 +8,7 @@ use bellperson::groth16;
 use bincode::serialize;
 use blstrs::{Bls12, Scalar as Fr};
 use ff::Field;
-use filecoin_hashers::Hasher;
+use filecoin_hashers::{Domain, Hasher};
 use filecoin_proofs::{
     add_piece, aggregate_seal_commit_proofs, clear_cache, compute_comm_d, decode_from, encode_into,
     fauxrep_aux, generate_empty_sector_update_proof,
@@ -37,7 +37,7 @@ use memmap2::MmapOptions;
 use rand::{random, Rng, SeedableRng};
 use rand_xorshift::XorShiftRng;
 use storage_proofs_core::{api_version::ApiVersion, is_legacy_porep_id, sector::SectorId};
-use storage_proofs_update::constants::TreeRHasher;
+use storage_proofs_update::{constants::TreeRHasher, phi};
 use tempfile::{tempdir, NamedTempFile, TempDir};
 
 use filecoin_proofs::constants::MAX_LEGACY_REGISTERED_SEAL_PROOF_ID;
@@ -1716,10 +1716,12 @@ fn create_seal<R: Rng, Tree: 'static + MerkleTreeTrait>(
 
     let pre_commit_output = seal_pre_commit_phase2(
         &config,
-        phase1_output,
+        phase1_output.clone(),
         cache_dir.path(),
         sealed_sector_file.path(),
     )?;
+
+    test_sealing_encode_decode_ranges(rng, sector_size, &phase1_output, sealed_sector_file.path())?;
 
     let comm_r = pre_commit_output.comm_r;
 
@@ -1912,6 +1914,15 @@ fn create_seal_for_upgrade<R: Rng, Tree: 'static + MerkleTreeTrait<Hasher = Tree
         cache_dir.path(),
         new_staged_sector_file.path(),
         &new_piece_infos,
+    )?;
+
+    let r_old_path = sealed_sector_file.path();
+    let d_new_path = new_staged_sector_file.path();
+    let r_new_path = new_sealed_sector_file.path();
+    let comm_r_old = &comm_r;
+    let comm_d_new = &encoded.comm_d_new;
+    test_update_encode_decode_ranges(
+        &config, r_old_path, d_new_path, r_new_path, comm_r_old, comm_d_new,
     )?;
 
     // Generate a single partition proof
@@ -2118,6 +2129,102 @@ fn test_aggregate_proof_encode_decode() -> Result<()> {
         bincode_serialized_proof.len(),
         expected_bincode_serialized_proof_len
     );
+
+    Ok(())
+}
+
+fn test_sealing_encode_decode_ranges<R: Rng, Tree: MerkleTreeTrait>(
+    rng: &mut R,
+    sector_size: u64,
+    pc1_output: &SealPreCommitPhase1Output<Tree>,
+    replica_path: &Path,
+) -> Result<()> {
+    let sector_nodes = (sector_size >> 5) as usize;
+    let node_range_len = 11;
+
+    for _ in 0..5 {
+        let start_node = rng.gen::<usize>() % (sector_nodes - node_range_len);
+        let node_range = start_node..start_node + node_range_len;
+
+        // Verify decoded data against unreplicated file.
+        let data_range = filecoin_proofs::seal_read_data_range(pc1_output, node_range.clone())?;
+        let decoded_range =
+            filecoin_proofs::seal_decode_range(pc1_output, replica_path, node_range.clone())?;
+        assert_eq!(data_range, decoded_range);
+
+        // Verify encoded data against replica file.
+        let replica_range =
+            filecoin_proofs::seal_read_replica_range::<Tree>(replica_path, node_range.clone())?;
+        let encoded_range = filecoin_proofs::seal_encode_range(pc1_output, node_range.clone())?;
+        assert_eq!(replica_range, encoded_range);
+
+        // Verify data read from sealing key file matches encoding/decoding key.
+        let key_path = filecoin_proofs::sealing_key_path(pc1_output)?;
+        let key_range_from_file = filecoin_proofs::read_nodes_from_file::<
+            <Tree::Hasher as Hasher>::Domain,
+        >(key_path.as_path(), node_range.clone())?;
+        let key_range = filecoin_proofs::seal_read_key_range(pc1_output, node_range)?;
+        assert_eq!(key_range_from_file, key_range);
+    }
+
+    Ok(())
+}
+
+fn test_update_encode_decode_ranges(
+    config: &SectorUpdateConfig,
+    replica_old_path: &Path,
+    data_new_path: &Path,
+    replica_new_path: &Path,
+    comm_r_old: &Commitment,
+    comm_d_new: &Commitment,
+) -> Result<()> {
+    let sector_nodes = (u64::from(config.sector_size) >> 5) as usize;
+    let node_index_bit_len = sector_nodes.trailing_zeros() as usize;
+    let h = usize::from(config.h_select);
+
+    let comm_r_old = <TreeRHasher as Hasher>::Domain::try_from_bytes(comm_r_old)
+        .with_context(|| "failed to convert CommROld bytes into TreeR domain")?;
+    let comm_d_new = filecoin_proofs::DefaultPieceDomain::try_from_bytes(comm_d_new)
+        .with_context(|| "failed to convert CommDNew bytes into TreeD domain")?;
+    let phi = phi(&comm_d_new, &comm_r_old);
+
+    // Largest node index having `high = 0`.
+    let node_index_no_high_bits = (1 << (node_index_bit_len - h)) - 1;
+    // Take a range of 11 nodes where the last node in the range has a `high` value that is one
+    // greater than the first node's `high` value.
+    let mut first_node = node_index_no_high_bits - 5;
+    let mut last_node = node_index_no_high_bits + 5;
+
+    for _ in 0..h {
+        let node_range = first_node..last_node + 1;
+
+        // Verify decoded data against data-new file.
+        let data_new_range =
+            filecoin_proofs::update_read_data_range(data_new_path, node_range.clone())?;
+        let decoded_range = filecoin_proofs::update_decode_range(
+            replica_old_path,
+            replica_new_path,
+            h,
+            &phi,
+            node_range.clone(),
+        )?;
+        assert_eq!(data_new_range, decoded_range);
+
+        // Verify encoded data against replica-new file.
+        let replica_new_range =
+            filecoin_proofs::update_read_replica_range(replica_new_path, node_range.clone())?;
+        let encoded_range = filecoin_proofs::update_encode_range(
+            replica_old_path,
+            data_new_path,
+            h,
+            &phi,
+            node_range,
+        )?;
+        assert_eq!(replica_new_range, encoded_range);
+
+        first_node = (first_node << 1) + 1;
+        last_node = (last_node << 1) + 1;
+    }
 
     Ok(())
 }

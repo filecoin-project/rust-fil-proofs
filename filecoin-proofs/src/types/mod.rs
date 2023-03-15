@@ -88,6 +88,16 @@ pub struct SealPreCommitPhase1Output<Tree: MerkleTreeTrait> {
     pub comm_d: Commitment,
 }
 
+impl<Tree: MerkleTreeTrait> Clone for SealPreCommitPhase1Output<Tree> {
+    fn clone(&self) -> Self {
+        Self {
+            labels: self.labels.clone(),
+            config: self.config.clone(),
+            comm_d: self.comm_d,
+        }
+    }
+}
+
 #[repr(transparent)]
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct PartitionSnarkProof(pub Vec<u8>);
