@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://book.async.rs/overview
 
 ## Unreleased
 
+## [14.0.0] - 2023-03-17
+
+- Allow PC1 unreplicated data to be /dev/zero [#1681](https://github.com/filecoin-project/rust-fil-proofs/pull/1681)
+- Add additional tests for faulty sector reporting [#1680](https://github.com/filecoin-project/rust-fil-proofs/pull/1680)
+- Make builds on stable and aarch64 possible [#1679](https://github.com/filecoin-project/rust-fil-proofs/pull/1679)
+- Fix the open grindability issue [#1661](https://github.com/filecoin-project/rust-fil-proofs/pull/1661)
+- Add the v13 Cargo.lock file [#1673](https://github.com/filecoin-project/rust-fil-proofs/pull/1673)
+
 ## [13.0.0] - 2023-03-06
 
 - Disable broken coverage job CI coverage job [#1669](https://github.com/filecoin-project/rust-fil-proofs/pull/1669)
@@ -367,7 +375,8 @@ mainnet ready and will be replaced in a future version.  This release is intende
 
 - Initial stable release
 
-[Unreleased]: https://github.com/filecoin-project/rust-fil-proofs/compare/v13.0.0...HEAD
+[Unreleased]: https://github.com/filecoin-project/rust-fil-proofs/compare/v14.0.0...HEAD
+[14.0.0]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v14.0.0
 [13.0.0]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v13.0.0
 [12.0.0]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v12.0.0
 [11.1.1]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v11.1.1
