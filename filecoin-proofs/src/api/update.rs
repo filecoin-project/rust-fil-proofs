@@ -287,20 +287,22 @@ pub fn read_sector_key_range<Tree: MerkleTreeTrait>(
     replica_old_path: &Path,
     node_range: std::ops::Range<usize>,
 ) -> Result<Vec<<Tree::Hasher as Hasher>::Domain>> {
+    let byte_offset = node_range.start << 5;
+    let node_range_size = (node_range.end - node_range.start) << 5;
     let replica_old_file = OpenOptions::new()
         .read(true)
         .open(replica_old_path)
         .with_context(|| format!("could not open path={:?}", replica_old_path))?;
-    let replica_old = unsafe {
+    let replica_old_bytes = unsafe {
         MmapOptions::new()
+            .offset(byte_offset as u64)
+            .len(node_range_size)
             .map(&replica_old_file)
             .with_context(|| format!("could not mmap path={:?}", replica_old_path))?
     };
-    node_range
-        .map(|node_index| {
-            let byte_offset = node_index << 5;
-            fr32::bytes_into_fr(&replica_old[byte_offset..byte_offset + 32]).map(Into::into)
-        })
+    replica_old_bytes
+        .chunks(32)
+        .map(|bytes| fr32::bytes_into_fr(bytes).map(Into::into))
         .collect()
 }
 
