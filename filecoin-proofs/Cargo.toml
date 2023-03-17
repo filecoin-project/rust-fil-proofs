@@ -13,7 +13,7 @@ storage-proofs-core = { path = "../storage-proofs-core", version = "~13.0.0", de
 storage-proofs-porep = { path = "../storage-proofs-porep", version = "~13.0.0", default-features = false }
 storage-proofs-post = { path = "../storage-proofs-post", version = "~13.0.0", default-features = false }
 storage-proofs-update = { path = "../storage-proofs-update", version = "~13.0.0", default-features = false }
-filecoin-hashers = { version = "~8.0.0", path = "../filecoin-hashers", default-features = false, features = ["poseidon", "sha256"] }
+filecoin-hashers = { version = "~9.0.0", path = "../filecoin-hashers", default-features = false, features = ["poseidon", "sha256"] }
 rand = "0.8"
 lazy_static = "1.2"
 memmap2 = "0.5.6"
