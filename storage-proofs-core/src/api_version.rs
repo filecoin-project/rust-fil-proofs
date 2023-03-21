@@ -5,6 +5,10 @@ use std::str::FromStr;
 use anyhow::{format_err, Error, Result};
 use semver::Version;
 
+/// The ApiVersion enum is used for mandatory changes that the network
+/// must use and recognize.
+///
+/// New versions always require new network behaviour.
 #[derive(Copy, Clone, Eq, PartialEq)]
 pub enum ApiVersion {
     V1_0_0,
@@ -83,18 +87,29 @@ impl FromStr for ApiVersion {
     }
 }
 
+/// The ApiFeature enum is used for optional features that the network
+/// can use and recognize, but in no way is required to be used.
+///
+/// New features always require new network behaviour (i.e. for proper
+/// validation of others, even if not actively using)
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum ApiFeature {}
+pub enum ApiFeature {
+    SyntheticPoRep,
+}
 
 impl ApiFeature {
     #[inline]
     pub fn first_supported_version(&self) -> ApiVersion {
-        unimplemented!();
+        match self {
+            ApiFeature::SyntheticPoRep => ApiVersion::V1_2_0,
+        }
     }
 
     #[inline]
     pub fn last_supported_version(&self) -> Option<ApiVersion> {
-        unimplemented!();
+        match self {
+            ApiFeature::SyntheticPoRep => None,
+        }
     }
 }
 
@@ -121,4 +136,12 @@ fn test_as_semver() {
 #[test]
 fn test_api_version_order() {
     assert!(ApiVersion::V1_0_0 < ApiVersion::V1_1_0 && ApiVersion::V1_1_0 < ApiVersion::V1_2_0);
+    assert!(ApiVersion::V1_1_0 > ApiVersion::V1_0_0 && ApiVersion::V1_2_0 > ApiVersion::V1_1_0);
+}
+
+#[test]
+fn test_api_feature_synthetic_porep() {
+    let feature = ApiFeature::SyntheticPoRep;
+    assert!(feature.first_supported_version() == ApiVersion::V1_2_0);
+    assert!(feature.last_supported_version() == None);
 }
