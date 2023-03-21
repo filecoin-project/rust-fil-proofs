@@ -1,0 +1,17 @@
+[package]
+name = "fil-proofs-bin"
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+publish = false
+repository = "https://github.com/filecoin-project/rust-fil-proofs"
+
+[dependencies]
+anyhow = "1.0.70"
+fil_logger = "0.1.7"
+filecoin-proofs = { path = "../filecoin-proofs", version = "~14.0.0", default-features = false }
+fr32 = { path = "../fr32", version = "~7.0.0", default-features = false }
+log = "0.4.17"
+merkletree = "0.22.1"
+storage-proofs-core = { path = "../storage-proofs-core", version = "~14.0.0", default-features = false}
+storage-proofs-porep = { path = "../storage-proofs-porep", version = "~14.0.0", default-features = false }
