@@ -1,3 +1,4 @@
+use std::cmp::Ordering;
 use std::fmt::{self, Debug, Display, Formatter};
 use std::str::FromStr;
 
@@ -11,6 +12,18 @@ pub enum ApiVersion {
     V1_2_0,
 }
 
+impl Ord for ApiVersion {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.as_semver().cmp(&other.as_semver())
+    }
+}
+
+impl PartialOrd for ApiVersion {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
 impl ApiVersion {
     pub fn as_semver(&self) -> Version {
         match self {
@@ -18,6 +31,20 @@ impl ApiVersion {
             ApiVersion::V1_1_0 => Version::new(1, 1, 0),
             ApiVersion::V1_2_0 => Version::new(1, 2, 0),
         }
+    }
+
+    #[inline]
+    pub fn supports_feature(&self, feat: &ApiFeature) -> bool {
+        self >= &feat.first_supported_version()
+            && feat
+                .last_supported_version()
+                .map(|v_last| self <= &v_last)
+                .unwrap_or(true)
+    }
+
+    #[inline]
+    pub fn supports_features(&self, feats: &[ApiFeature]) -> bool {
+        feats.iter().all(|feat| self.supports_feature(feat))
     }
 }
 
@@ -43,7 +70,7 @@ impl FromStr for ApiVersion {
             (1, 0, 0) => Ok(ApiVersion::V1_0_0),
             (1, 1, 0) => Ok(ApiVersion::V1_1_0),
             (1, 2, 0) => Ok(ApiVersion::V1_2_0),
-            (1, 1, _) | (1, 0, _) => Err(format_err!(
+            (1, 0, _) | (1, 1, _) | (1, 2, _) => Err(format_err!(
                 "Could not parse API Version from string (patch)"
             )),
             (1, _, _) => Err(format_err!(
@@ -53,6 +80,21 @@ impl FromStr for ApiVersion {
                 "Could not parse API Version from string (major)"
             )),
         }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ApiFeature {}
+
+impl ApiFeature {
+    #[inline]
+    pub fn first_supported_version(&self) -> ApiVersion {
+        unimplemented!();
+    }
+
+    #[inline]
+    pub fn last_supported_version(&self) -> Option<ApiVersion> {
+        unimplemented!();
     }
 }
 
@@ -74,4 +116,9 @@ fn test_as_semver() {
     assert_eq!(ApiVersion::V1_0_0.as_semver().patch, 0);
     assert_eq!(ApiVersion::V1_1_0.as_semver().patch, 0);
     assert_eq!(ApiVersion::V1_2_0.as_semver().patch, 0);
+}
+
+#[test]
+fn test_api_version_order() {
+    assert!(ApiVersion::V1_0_0 < ApiVersion::V1_1_0 && ApiVersion::V1_1_0 < ApiVersion::V1_2_0);
 }

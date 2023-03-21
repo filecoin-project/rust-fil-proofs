@@ -12,7 +12,7 @@ pub struct SectorUpdateConfig {
 }
 
 impl SectorUpdateConfig {
-    pub fn from_porep_config(porep_config: PoRepConfig) -> Self {
+    pub fn from_porep_config(porep_config: &PoRepConfig) -> Self {
         let nodes_count = u64::from(porep_config.sector_size) as usize / NODE_SIZE;
 
         SectorUpdateConfig {

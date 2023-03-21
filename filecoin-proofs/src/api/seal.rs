@@ -43,15 +43,15 @@ use crate::{
     parameters::setup_params,
     pieces::{self, verify_pieces},
     types::{
-        AggregateSnarkProof, Commitment, PaddedBytesAmount, PieceInfo, PoRepConfig,
-        PoRepProofPartitions, ProverId, SealCommitOutput, SealCommitPhase1Output,
-        SealPreCommitOutput, SealPreCommitPhase1Output, SectorSize, Ticket, BINARY_ARITY,
+        AggregateSnarkProof, Commitment, PieceInfo, PoRepConfig, ProverId, SealCommitOutput,
+        SealCommitPhase1Output, SealPreCommitOutput, SealPreCommitPhase1Output, SectorSize, Ticket,
+        BINARY_ARITY,
     },
 };
 
 #[allow(clippy::too_many_arguments)]
 pub fn seal_pre_commit_phase1<R, S, T, Tree: 'static + MerkleTreeTrait>(
-    porep_config: PoRepConfig,
+    porep_config: &PoRepConfig,
     cache_path: R,
     in_path: S,
     out_path: T,
@@ -89,7 +89,7 @@ where
         "cache_path must be a directory"
     );
 
-    let sector_bytes = usize::from(PaddedBytesAmount::from(porep_config));
+    let sector_bytes = usize::from(porep_config.padded_bytes_amount());
     fs::metadata(&in_path)
         .with_context(|| format!("could not read in_path={:?})", in_path.as_ref().display()))?;
 
@@ -127,12 +127,12 @@ where
 
     let compound_setup_params = compound_proof::SetupParams {
         vanilla_params: setup_params(
-            PaddedBytesAmount::from(porep_config),
-            usize::from(PoRepProofPartitions::from(porep_config)),
+            porep_config.padded_bytes_amount(),
+            usize::from(porep_config.partitions),
             porep_config.porep_id,
             porep_config.api_version,
         )?,
-        partitions: Some(usize::from(PoRepProofPartitions::from(porep_config))),
+        partitions: Some(usize::from(porep_config.partitions)),
         priority: false,
     };
 
@@ -182,7 +182,7 @@ where
     trace!("verifying pieces");
 
     ensure!(
-        verify_pieces(&comm_d, piece_infos, porep_config.into())?,
+        verify_pieces(&comm_d, piece_infos, porep_config.sector_size)?,
         "pieces and comm_d do not match"
     );
 
@@ -212,7 +212,7 @@ where
 
 #[allow(clippy::too_many_arguments)]
 pub fn seal_pre_commit_phase2<R, S, Tree: 'static + MerkleTreeTrait>(
-    porep_config: PoRepConfig,
+    porep_config: &PoRepConfig,
     phase1_output: SealPreCommitPhase1Output<Tree>,
     cache_path: S,
     replica_path: R,
@@ -286,12 +286,12 @@ where
 
     let compound_setup_params = compound_proof::SetupParams {
         vanilla_params: setup_params(
-            PaddedBytesAmount::from(porep_config),
-            usize::from(PoRepProofPartitions::from(porep_config)),
+            porep_config.padded_bytes_amount(),
+            usize::from(porep_config.partitions),
             porep_config.porep_id,
             porep_config.api_version,
         )?,
-        partitions: Some(usize::from(PoRepProofPartitions::from(porep_config))),
+        partitions: Some(usize::from(porep_config.partitions)),
         priority: false,
     };
 
@@ -336,7 +336,7 @@ where
 
 #[allow(clippy::too_many_arguments)]
 pub fn seal_commit_phase1<T: AsRef<Path>, Tree: 'static + MerkleTreeTrait>(
-    porep_config: PoRepConfig,
+    porep_config: &PoRepConfig,
     cache_path: T,
     replica_path: T,
     prover_id: ProverId,
@@ -363,7 +363,7 @@ pub fn seal_commit_phase1<T: AsRef<Path>, Tree: 'static + MerkleTreeTrait>(
     ensure!(comm_d != [0; 32], "Invalid all zero commitment (comm_d)");
     ensure!(comm_r != [0; 32], "Invalid all zero commitment (comm_r)");
     ensure!(
-        verify_pieces(&comm_d, piece_infos, porep_config.into())?,
+        verify_pieces(&comm_d, piece_infos, porep_config.sector_size)?,
         "pieces and comm_d do not match"
     );
 
@@ -421,12 +421,12 @@ pub fn seal_commit_phase1<T: AsRef<Path>, Tree: 'static + MerkleTreeTrait>(
 
     let compound_setup_params = compound_proof::SetupParams {
         vanilla_params: setup_params(
-            PaddedBytesAmount::from(porep_config),
-            usize::from(PoRepProofPartitions::from(porep_config)),
+            porep_config.padded_bytes_amount(),
+            usize::from(porep_config.partitions),
             porep_config.porep_id,
             porep_config.api_version,
         )?,
-        partitions: Some(usize::from(PoRepProofPartitions::from(porep_config))),
+        partitions: Some(usize::from(porep_config.partitions)),
         priority: false,
     };
 
@@ -464,7 +464,7 @@ pub fn seal_commit_phase1<T: AsRef<Path>, Tree: 'static + MerkleTreeTrait>(
 
 #[allow(clippy::too_many_arguments)]
 pub fn seal_commit_phase2<Tree: 'static + MerkleTreeTrait>(
-    porep_config: PoRepConfig,
+    porep_config: &PoRepConfig,
     phase1_output: SealCommitPhase1Output<Tree>,
     prover_id: ProverId,
     sector_id: SectorId,
@@ -500,17 +500,17 @@ pub fn seal_commit_phase2<Tree: 'static + MerkleTreeTrait>(
 
     trace!(
         "got groth params ({}) while sealing",
-        u64::from(PaddedBytesAmount::from(porep_config))
+        u64::from(porep_config.padded_bytes_amount())
     );
 
     let compound_setup_params = compound_proof::SetupParams {
         vanilla_params: setup_params(
-            PaddedBytesAmount::from(porep_config),
-            usize::from(PoRepProofPartitions::from(porep_config)),
+            porep_config.padded_bytes_amount(),
+            usize::from(porep_config.partitions),
             porep_config.porep_id,
             porep_config.api_version,
         )?,
-        partitions: Some(usize::from(PoRepProofPartitions::from(porep_config))),
+        partitions: Some(usize::from(porep_config.partitions)),
         priority: false,
     };
 
@@ -531,9 +531,8 @@ pub fn seal_commit_phase2<Tree: 'static + MerkleTreeTrait>(
 
     let proof = MultiProof::new(groth_proofs, &groth_params.pvk);
 
-    let mut buf = Vec::with_capacity(
-        SINGLE_PARTITION_PROOF_LEN * usize::from(PoRepProofPartitions::from(porep_config)),
-    );
+    let mut buf =
+        Vec::with_capacity(SINGLE_PARTITION_PROOF_LEN * usize::from(porep_config.partitions));
 
     proof.write(&mut buf)?;
 
@@ -574,7 +573,7 @@ pub fn seal_commit_phase2<Tree: 'static + MerkleTreeTrait>(
 /// * `ticket` - the ticket used to generate this sector's replica-id.
 /// * `seed` - the seed used to derive the porep challenges.
 pub fn get_seal_inputs<Tree: 'static + MerkleTreeTrait>(
-    porep_config: PoRepConfig,
+    porep_config: &PoRepConfig,
     comm_r: Commitment,
     comm_d: Commitment,
     prover_id: ProverId,
@@ -610,12 +609,12 @@ pub fn get_seal_inputs<Tree: 'static + MerkleTreeTrait>(
 
     let compound_setup_params = compound_proof::SetupParams {
         vanilla_params: setup_params(
-            PaddedBytesAmount::from(porep_config),
-            usize::from(PoRepProofPartitions::from(porep_config)),
+            porep_config.padded_bytes_amount(),
+            usize::from(porep_config.partitions),
             porep_config.porep_id,
             porep_config.api_version,
         )?,
-        partitions: Some(usize::from(PoRepProofPartitions::from(porep_config))),
+        partitions: Some(usize::from(porep_config.partitions)),
         priority: false,
     };
 
@@ -733,7 +732,7 @@ fn pad_inputs_to_target(
 /// * `seeds` - an ordered list of seeds used to derive the PoRep challenges.
 /// * `commit_outputs` - an ordered list of seal proof outputs returned from 'seal_commit_phase2'.
 pub fn aggregate_seal_commit_proofs<Tree: 'static + MerkleTreeTrait>(
-    porep_config: PoRepConfig,
+    porep_config: &PoRepConfig,
     comm_rs: &[[u8; 32]],
     seeds: &[[u8; 32]],
     commit_outputs: &[SealCommitOutput],
@@ -746,7 +745,7 @@ pub fn aggregate_seal_commit_proofs<Tree: 'static + MerkleTreeTrait>(
         "cannot aggregate with empty outputs"
     );
 
-    let partitions = usize::from(PoRepProofPartitions::from(porep_config));
+    let partitions = usize::from(porep_config.partitions);
     let verifying_key = get_stacked_verifying_key::<Tree>(porep_config)?;
     let mut proofs: Vec<_> =
         commit_outputs
@@ -819,7 +818,7 @@ pub fn aggregate_seal_commit_proofs<Tree: 'static + MerkleTreeTrait>(
 /// * `commit_inputs` - a flattened/combined and ordered list of all public inputs, which must match
 ///    the ordering of the seal proofs when aggregated.
 pub fn verify_aggregate_seal_commit_proofs<Tree: 'static + MerkleTreeTrait>(
-    porep_config: PoRepConfig,
+    porep_config: &PoRepConfig,
     aggregate_proof_bytes: AggregateSnarkProof,
     comm_rs: &[[u8; 32]],
     seeds: &[[u8; 32]],
@@ -932,7 +931,7 @@ pub fn compute_comm_d(sector_size: SectorSize, piece_infos: &[PieceInfo]) -> Res
 /// * `proof_vec` - the porep circuit proof serialized into a vector of bytes.
 #[allow(clippy::too_many_arguments)]
 pub fn verify_seal<Tree: 'static + MerkleTreeTrait>(
-    porep_config: PoRepConfig,
+    porep_config: &PoRepConfig,
     comm_r_in: Commitment,
     comm_d_in: Commitment,
     prover_id: ProverId,
@@ -960,12 +959,12 @@ pub fn verify_seal<Tree: 'static + MerkleTreeTrait>(
 
     let compound_setup_params = compound_proof::SetupParams {
         vanilla_params: setup_params(
-            PaddedBytesAmount::from(porep_config),
-            usize::from(PoRepProofPartitions::from(porep_config)),
+            porep_config.padded_bytes_amount(),
+            usize::from(porep_config.partitions),
             porep_config.porep_id,
             porep_config.api_version,
         )?,
-        partitions: Some(usize::from(PoRepProofPartitions::from(porep_config))),
+        partitions: Some(usize::from(porep_config.partitions)),
         priority: false,
     };
 
@@ -983,7 +982,7 @@ pub fn verify_seal<Tree: 'static + MerkleTreeTrait>(
         };
 
     let result = {
-        let sector_bytes = PaddedBytesAmount::from(porep_config);
+        let sector_bytes = porep_config.padded_bytes_amount();
         let verifying_key = get_stacked_verifying_key::<Tree>(porep_config)?;
 
         trace!(
@@ -992,7 +991,7 @@ pub fn verify_seal<Tree: 'static + MerkleTreeTrait>(
         );
 
         let proof = MultiProof::new_from_reader(
-            Some(usize::from(PoRepProofPartitions::from(porep_config))),
+            Some(usize::from(porep_config.partitions)),
             proof_vec,
             &verifying_key,
         )?;
@@ -1003,7 +1002,7 @@ pub fn verify_seal<Tree: 'static + MerkleTreeTrait>(
             &proof,
             &ChallengeRequirements {
                 minimum_challenges: POREP_MINIMUM_CHALLENGES
-                    .from_sector_size(u64::from(SectorSize::from(porep_config))),
+                    .from_sector_size(u64::from(porep_config.sector_size)),
             },
         )
     };
@@ -1026,7 +1025,7 @@ pub fn verify_seal<Tree: 'static + MerkleTreeTrait>(
 /// * `[proof_vecs]` - list of porep circuit proofs serialized into a vector of bytes.
 #[allow(clippy::too_many_arguments)]
 pub fn verify_batch_seal<Tree: 'static + MerkleTreeTrait>(
-    porep_config: PoRepConfig,
+    porep_config: &PoRepConfig,
     comm_r_ins: &[Commitment],
     comm_d_ins: &[Commitment],
     prover_ids: &[ProverId],
@@ -1062,7 +1061,7 @@ pub fn verify_batch_seal<Tree: 'static + MerkleTreeTrait>(
         ensure!(!proofs.is_empty(), "Invalid proof (empty bytes) found");
     }
 
-    let sector_bytes = PaddedBytesAmount::from(porep_config);
+    let sector_bytes = porep_config.padded_bytes_amount();
 
     let verifying_key = get_stacked_verifying_key::<Tree>(porep_config)?;
     trace!(
@@ -1072,12 +1071,12 @@ pub fn verify_batch_seal<Tree: 'static + MerkleTreeTrait>(
 
     let compound_setup_params = compound_proof::SetupParams {
         vanilla_params: setup_params(
-            PaddedBytesAmount::from(porep_config),
-            usize::from(PoRepProofPartitions::from(porep_config)),
+            porep_config.padded_bytes_amount(),
+            usize::from(porep_config.partitions),
             porep_config.porep_id,
             porep_config.api_version,
         )?,
-        partitions: Some(usize::from(PoRepProofPartitions::from(porep_config))),
+        partitions: Some(usize::from(porep_config.partitions)),
         priority: false,
     };
 
@@ -1111,7 +1110,7 @@ pub fn verify_batch_seal<Tree: 'static + MerkleTreeTrait>(
             k: None,
         });
         proofs.push(MultiProof::new_from_reader(
-            Some(usize::from(PoRepProofPartitions::from(porep_config))),
+            Some(usize::from(porep_config.partitions)),
             proof_vecs[i],
             &verifying_key,
         )?);
@@ -1123,7 +1122,7 @@ pub fn verify_batch_seal<Tree: 'static + MerkleTreeTrait>(
         &proofs,
         &ChallengeRequirements {
             minimum_challenges: POREP_MINIMUM_CHALLENGES
-                .from_sector_size(u64::from(SectorSize::from(porep_config))),
+                .from_sector_size(u64::from(porep_config.sector_size)),
         },
     )
     .map_err(Into::into);

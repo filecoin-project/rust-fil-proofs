@@ -5,10 +5,9 @@ use blstrs::Scalar as Fr;
 use dialoguer::{theme::ColorfulTheme, MultiSelect};
 use filecoin_proofs::{
     parameters::{public_params, window_post_public_params, winning_post_public_params},
-    with_shape, DefaultPieceHasher, PaddedBytesAmount, PoRepConfig, PoRepProofPartitions,
-    PoStConfig, PoStType, SectorSize, POREP_PARTITIONS, PUBLISHED_SECTOR_SIZES,
-    WINDOW_POST_CHALLENGE_COUNT, WINDOW_POST_SECTOR_COUNT, WINNING_POST_CHALLENGE_COUNT,
-    WINNING_POST_SECTOR_COUNT,
+    with_shape, DefaultPieceHasher, PoRepConfig, PoRepProofPartitions, PoStConfig, PoStType,
+    SectorSize, POREP_PARTITIONS, PUBLISHED_SECTOR_SIZES, WINDOW_POST_CHALLENGE_COUNT,
+    WINDOW_POST_SECTOR_COUNT, WINNING_POST_CHALLENGE_COUNT, WINNING_POST_SECTOR_COUNT,
 };
 use humansize::{file_size_opts, FileSize};
 use log::{info, warn};
@@ -40,8 +39,8 @@ fn get_porep_info<Tree: 'static + MerkleTreeTrait>(porep_config: PoRepConfig) ->
     info!("PoRep info");
 
     let public_params = public_params(
-        PaddedBytesAmount::from(porep_config),
-        usize::from(PoRepProofPartitions::from(porep_config)),
+        porep_config.padded_bytes_amount(),
+        usize::from(porep_config.partitions),
         porep_config.porep_id,
         porep_config.api_version,
     )

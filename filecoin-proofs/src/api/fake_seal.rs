@@ -11,11 +11,11 @@ use storage_proofs_porep::stacked::StackedDrg;
 
 use crate::{
     constants::DefaultPieceHasher,
-    types::{Commitment, PaddedBytesAmount, PoRepConfig},
+    types::{Commitment, PoRepConfig},
 };
 
 pub fn fauxrep<R: AsRef<Path>, S: AsRef<Path>, Tree: 'static + MerkleTreeTrait>(
-    porep_config: PoRepConfig,
+    porep_config: &PoRepConfig,
     cache_path: R,
     out_path: S,
 ) -> Result<Commitment> {
@@ -25,11 +25,11 @@ pub fn fauxrep<R: AsRef<Path>, S: AsRef<Path>, Tree: 'static + MerkleTreeTrait>(
 
 pub fn fauxrep_aux<R: Rng, S: AsRef<Path>, T: AsRef<Path>, Tree: 'static + MerkleTreeTrait>(
     mut rng: &mut R,
-    porep_config: PoRepConfig,
+    porep_config: &PoRepConfig,
     cache_path: S,
     out_path: T,
 ) -> Result<Commitment> {
-    let sector_bytes = PaddedBytesAmount::from(porep_config).0;
+    let sector_bytes = porep_config.padded_bytes_amount().0;
 
     {
         // Create a sector full of null bytes at `out_path`.

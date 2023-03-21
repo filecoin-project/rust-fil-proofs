@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use anyhow::Result;
 use storage_proofs_core::{
-    api_version::ApiVersion,
+    api_version::{ApiFeature, ApiVersion},
     merkle::MerkleTreeTrait,
     parameter_cache::{
         parameter_cache_metadata_path, parameter_cache_params_path,
@@ -18,12 +18,13 @@ use crate::{
     POREP_PARTITIONS,
 };
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 pub struct PoRepConfig {
     pub sector_size: SectorSize,
     pub partitions: PoRepProofPartitions,
     pub porep_id: [u8; 32],
     pub api_version: ApiVersion,
+    pub api_features: Vec<ApiFeature>,
 }
 
 impl From<PoRepConfig> for PaddedBytesAmount {
@@ -68,7 +69,29 @@ impl PoRepConfig {
             ),
             porep_id,
             api_version,
+            api_features: vec![],
         }
+    }
+
+    #[inline]
+    pub fn with_feature(mut self, feat: ApiFeature) -> Self {
+        self.enable_feature(feat);
+        self
+    }
+
+    #[inline]
+    pub fn enable_feature(&mut self, feat: ApiFeature) {
+        self.api_features.push(feat);
+    }
+
+    #[inline]
+    pub fn padded_bytes_amount(&self) -> PaddedBytesAmount {
+        PaddedBytesAmount::from(self.sector_size)
+    }
+
+    #[inline]
+    pub fn unpadded_bytes_amount(&self) -> UnpaddedBytesAmount {
+        self.padded_bytes_amount().into()
     }
 
     /// Returns the cache identifier as used by `storage-proofs::parameter_cache`.

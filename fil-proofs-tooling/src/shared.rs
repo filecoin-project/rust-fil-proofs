@@ -220,7 +220,7 @@ pub fn create_replicas<Tree: 'static + MerkleTreeTrait>(
                     )?;
                     let comm_r = fauxrep_aux::<_, _, _, Tree>(
                         &mut rng,
-                        porep_config,
+                        &porep_config,
                         &cache_dirs[i].path(),
                         &sealed_files[i],
                     )?;
@@ -240,7 +240,7 @@ pub fn create_replicas<Tree: 'static + MerkleTreeTrait>(
                 .map(
                     |((((cache_dir, staged_file), sealed_file), sector_id), piece_infos)| {
                         seal_pre_commit_phase1(
-                            porep_config,
+                            &porep_config,
                             cache_dir,
                             staged_file,
                             sealed_file,
@@ -262,7 +262,7 @@ pub fn create_replicas<Tree: 'static + MerkleTreeTrait>(
                         &sealed_files[i],
                         &phase1,
                     )?;
-                    seal_pre_commit_phase2(porep_config, phase1, &cache_dirs[i], &sealed_files[i])
+                    seal_pre_commit_phase2(&porep_config, phase1, &cache_dirs[i], &sealed_files[i])
                 })
                 .collect::<Result<Vec<_>, _>>()
         }
