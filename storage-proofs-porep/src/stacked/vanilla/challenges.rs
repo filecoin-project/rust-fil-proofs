@@ -324,8 +324,9 @@ mod test {
 
     use std::collections::HashMap;
 
+    use blstrs::Scalar as Fr;
     use filecoin_hashers::sha256::Sha256Domain;
-    use rand::{thread_rng, Rng};
+    use rand::{thread_rng, Rng, RngCore};
 
     #[test]
     fn test_calculate_fixed_challenges() {
@@ -372,6 +373,42 @@ mod test {
         //
         // This test could randomly fail (anything's possible), but if it happens regularly something is wrong.
         assert!(layers_with_duplicates < 3);
+    }
+
+    #[test]
+    fn synthetic_challenge_derivation_chacha() {
+        let sector_nodes = 1 << 30;
+        let replica_id = Fr::from(thread_rng().next_u64());
+
+        let generator = SynthChallenges::default_chacha20(sector_nodes, &replica_id);
+        let challenges: Vec<usize> = generator.collect();
+        assert!(challenges
+            .iter()
+            .all(|cur_challenge| cur_challenge < &sector_nodes));
+
+        let mut generator = SynthChallenges::default_chacha20(sector_nodes, &replica_id);
+        for (i, expected) in challenges.into_iter().enumerate() {
+            let challenge = generator.gen_synth_challenge(i);
+            assert_eq!(challenge, expected);
+        }
+    }
+
+    #[test]
+    fn synthetic_challenge_derivation_sha() {
+        let sector_nodes = 1 << 30;
+        let replica_id = Fr::from(thread_rng().next_u64());
+
+        let generator = SynthChallenges::default_sha256(sector_nodes, &replica_id);
+        let challenges: Vec<usize> = generator.collect();
+        assert!(challenges
+            .iter()
+            .all(|cur_challenge| cur_challenge < &sector_nodes));
+
+        let mut generator = SynthChallenges::default_sha256(sector_nodes, &replica_id);
+        for (i, expected) in challenges.into_iter().enumerate() {
+            let challenge = generator.gen_synth_challenge(i);
+            assert_eq!(challenge, expected);
+        }
     }
 
     #[test]
@@ -445,5 +482,30 @@ mod test {
             porep_challenges[..expected_porep_challenges.len()],
             expected_porep_challenges
         );
+    }
+
+    #[test]
+    fn test_synthetic_challenges_sha_small() {
+        let sector_nodes_1kib = 1 << 5;
+        let replica_id = Fr::from(55);
+
+        let generator = SynthChallenges::default_sha256(sector_nodes_1kib, &replica_id);
+        let synth_challenges: Vec<usize> = generator.collect();
+        assert!(synth_challenges
+            .iter()
+            .all(|challenge| challenge < &sector_nodes_1kib));
+        assert_eq!(
+            synth_challenges,
+            [
+                19, 27, 21, 23, 17, 12, 6, 9, 2, 22, 14, 20, 31, 11, 7, 23, 30, 9, 11, 22, 22, 1,
+                30, 4, 29, 15, 23, 17, 7, 24, 1, 23
+            ]
+        );
+
+        let mut generator = SynthChallenges::default_sha256(sector_nodes_1kib, &replica_id);
+        for (i, expected) in synth_challenges.into_iter().enumerate() {
+            let challenge = generator.gen_synth_challenge(i);
+            assert_eq!(challenge, expected);
+        }
     }
 }
