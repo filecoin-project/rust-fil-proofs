@@ -655,7 +655,7 @@ impl<Tree: MerkleTreeTrait> Labels<Tree> {
 
     /// Returns label for the last layer.
     pub fn labels_for_last_layer(&self) -> Result<DiskStore<<Tree::Hasher as Hasher>::Domain>> {
-        self.labels_for_layer(self.labels.len() - 1)
+        self.labels_for_layer(self.labels.len())
     }
 
     /// How many layers are available.
