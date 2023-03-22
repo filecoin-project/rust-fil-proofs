@@ -26,6 +26,8 @@ use storage_proofs_porep::stacked::{
 };
 use tempfile::tempdir;
 
+mod common;
+
 #[test]
 #[ignore]
 fn test_stacked_compound_poseidon_base_8() {
@@ -88,16 +90,13 @@ fn test_stacked_compound<Tree: 'static + MerkleTreeTrait>() {
     let mut mmapped_data = setup_replica(&data, &replica_path);
 
     let public_params = StackedCompound::setup(&setup_params).expect("setup failed");
-    let (tau, p_aux, t_aux) = StackedDrg::<Tree, _>::transform_and_replicate_layers(
-        &public_params.vanilla_params.graph,
-        &public_params.vanilla_params.layer_challenges,
+    let (tau, (p_aux, t_aux)) = common::transform_and_replicate_layers::<Tree, _>(
+        &public_params.vanilla_params,
         &replica_id.into(),
         (mmapped_data.as_mut()).into(),
-        None,
         config,
         replica_path.clone(),
-    )
-    .expect("replication failed");
+    );
 
     let mut copied = vec![0; data.len()];
     copied.copy_from_slice(&mmapped_data);

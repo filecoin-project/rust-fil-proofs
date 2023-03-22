@@ -27,6 +27,8 @@ use storage_proofs_porep::stacked::{
 };
 use tempfile::tempdir;
 
+mod common;
+
 #[test]
 fn test_stacked_porep_circuit_poseidon_base_2() {
     test_stacked_porep_circuit::<DiskTree<PoseidonHasher, U2, U0, U0>>(22, 1_206_212);
@@ -88,16 +90,13 @@ fn test_stacked_porep_circuit<Tree: MerkleTreeTrait + 'static>(
     };
 
     let pp = StackedDrg::<Tree, Sha256Hasher>::setup(&sp).expect("setup failed");
-    let (tau, p_aux, t_aux) = StackedDrg::<Tree, Sha256Hasher>::transform_and_replicate_layers(
-        &pp.graph,
-        &pp.layer_challenges,
+    let (tau, (p_aux, t_aux)) = common::transform_and_replicate_layers::<Tree, Sha256Hasher>(
+        &pp,
         &replica_id.into(),
         (mmapped_data.as_mut()).into(),
-        None,
         config,
         replica_path.clone(),
-    )
-    .expect("replication failed");
+    );
 
     let mut copied = vec![0; data.len()];
     copied.copy_from_slice(&mmapped_data);

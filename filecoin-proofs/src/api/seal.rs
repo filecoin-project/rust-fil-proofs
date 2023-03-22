@@ -194,7 +194,7 @@ where
         &porep_config.porep_id,
     );
 
-    let labels = StackedDrg::<Tree, DefaultPieceHasher>::replicate_phase1(
+    let (labels, _) = StackedDrg::<Tree, DefaultPieceHasher>::replicate_phase1(
         &compound_public_params.vanilla_params,
         &replica_id,
         config.clone(),
@@ -304,7 +304,7 @@ where
         &compound_public_params.vanilla_params,
         labels,
         data,
-        data_tree,
+        Some(data_tree),
         config,
         replica_path.as_ref().to_path_buf(),
     )?;
