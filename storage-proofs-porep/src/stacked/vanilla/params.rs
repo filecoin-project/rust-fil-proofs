@@ -14,7 +14,7 @@ use merkletree::{
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use storage_proofs_core::{
-    api_version::ApiVersion,
+    api_version::{ApiFeature, ApiVersion},
     drgraph::Graph,
     error::Result,
     merkle::{
@@ -47,6 +47,7 @@ pub struct SetupParams {
     pub porep_id: [u8; 32],
     pub layer_challenges: LayerChallenges,
     pub api_version: ApiVersion,
+    pub api_features: Vec<ApiFeature>,
 }
 
 #[derive(Debug)]

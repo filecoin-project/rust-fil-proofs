@@ -131,12 +131,7 @@ where
     };
 
     let compound_setup_params = compound_proof::SetupParams {
-        vanilla_params: setup_params(
-            porep_config.padded_bytes_amount(),
-            usize::from(porep_config.partitions),
-            porep_config.porep_id,
-            porep_config.api_version,
-        )?,
+        vanilla_params: setup_params(porep_config)?,
         partitions: Some(usize::from(porep_config.partitions)),
         priority: false,
     };
@@ -290,12 +285,7 @@ where
     };
 
     let compound_setup_params = compound_proof::SetupParams {
-        vanilla_params: setup_params(
-            porep_config.padded_bytes_amount(),
-            usize::from(porep_config.partitions),
-            porep_config.porep_id,
-            porep_config.api_version,
-        )?,
+        vanilla_params: setup_params(porep_config)?,
         partitions: Some(usize::from(porep_config.partitions)),
         priority: false,
     };
@@ -425,12 +415,7 @@ pub fn seal_commit_phase1<T: AsRef<Path>, Tree: 'static + MerkleTreeTrait>(
     };
 
     let compound_setup_params = compound_proof::SetupParams {
-        vanilla_params: setup_params(
-            porep_config.padded_bytes_amount(),
-            usize::from(porep_config.partitions),
-            porep_config.porep_id,
-            porep_config.api_version,
-        )?,
+        vanilla_params: setup_params(porep_config)?,
         partitions: Some(usize::from(porep_config.partitions)),
         priority: false,
     };
@@ -509,12 +494,7 @@ pub fn seal_commit_phase2<Tree: 'static + MerkleTreeTrait>(
     );
 
     let compound_setup_params = compound_proof::SetupParams {
-        vanilla_params: setup_params(
-            porep_config.padded_bytes_amount(),
-            usize::from(porep_config.partitions),
-            porep_config.porep_id,
-            porep_config.api_version,
-        )?,
+        vanilla_params: setup_params(porep_config)?,
         partitions: Some(usize::from(porep_config.partitions)),
         priority: false,
     };
@@ -613,12 +593,7 @@ pub fn get_seal_inputs<Tree: 'static + MerkleTreeTrait>(
     };
 
     let compound_setup_params = compound_proof::SetupParams {
-        vanilla_params: setup_params(
-            porep_config.padded_bytes_amount(),
-            usize::from(porep_config.partitions),
-            porep_config.porep_id,
-            porep_config.api_version,
-        )?,
+        vanilla_params: setup_params(porep_config)?,
         partitions: Some(usize::from(porep_config.partitions)),
         priority: false,
     };
@@ -963,12 +938,7 @@ pub fn verify_seal<Tree: 'static + MerkleTreeTrait>(
     );
 
     let compound_setup_params = compound_proof::SetupParams {
-        vanilla_params: setup_params(
-            porep_config.padded_bytes_amount(),
-            usize::from(porep_config.partitions),
-            porep_config.porep_id,
-            porep_config.api_version,
-        )?,
+        vanilla_params: setup_params(porep_config)?,
         partitions: Some(usize::from(porep_config.partitions)),
         priority: false,
     };
@@ -1075,12 +1045,7 @@ pub fn verify_batch_seal<Tree: 'static + MerkleTreeTrait>(
     );
 
     let compound_setup_params = compound_proof::SetupParams {
-        vanilla_params: setup_params(
-            porep_config.padded_bytes_amount(),
-            usize::from(porep_config.partitions),
-            porep_config.porep_id,
-            porep_config.api_version,
-        )?,
+        vanilla_params: setup_params(porep_config)?,
         partitions: Some(usize::from(porep_config.partitions)),
         priority: false,
     };

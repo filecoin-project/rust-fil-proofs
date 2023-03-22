@@ -1,3 +1,5 @@
+use std::fmt;
+
 use log::trace;
 use num_bigint::BigUint;
 use serde::{Deserialize, Serialize};
@@ -13,13 +15,26 @@ fn bigint_to_challenge(bigint: BigUint, sector_nodes: usize) -> usize {
     non_zero_node.to_u32_digits()[0] as usize
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct LayerChallenges {
     /// How many layers we are generating challenges for.
     layers: usize,
     /// The maximum count of challenges
     max_count: usize,
     use_synthetic: bool,
+}
+
+/// Note that since this is used in the PublicParams 'identifier'
+/// method (which affects the cacheable parameters), adding a single
+/// field would normally change the default 'format!' of it, so we now
+/// have to override it for backwards compatibility.
+impl fmt::Debug for LayerChallenges {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("LayerChallenges")
+            .field("layers", &self.layers)
+            .field("max_count", &self.max_count)
+            .finish()
+    }
 }
 
 impl LayerChallenges {

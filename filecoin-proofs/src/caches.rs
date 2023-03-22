@@ -198,12 +198,7 @@ where
 pub fn get_stacked_params<Tree: 'static + MerkleTreeTrait>(
     porep_config: &PoRepConfig,
 ) -> Result<Arc<Bls12GrothParams>> {
-    let public_params = public_params::<Tree>(
-        porep_config.padded_bytes_amount(),
-        usize::from(porep_config.partitions),
-        porep_config.porep_id,
-        porep_config.api_version,
-    )?;
+    let public_params = public_params::<Tree>(porep_config)?;
 
     let parameters_generator = || {
         <StackedCompound<Tree, DefaultPieceHasher> as CompoundProof<
@@ -293,12 +288,7 @@ pub fn get_empty_sector_update_params<Tree: 'static + MerkleTreeTrait<Hasher = T
 pub fn get_stacked_verifying_key<Tree: 'static + MerkleTreeTrait>(
     porep_config: &PoRepConfig,
 ) -> Result<Arc<Bls12PreparedVerifyingKey>> {
-    let public_params = public_params(
-        porep_config.padded_bytes_amount(),
-        usize::from(porep_config.partitions),
-        porep_config.porep_id,
-        porep_config.api_version,
-    )?;
+    let public_params = public_params(porep_config)?;
 
     let vk_generator = || {
         let vk = <StackedCompound<Tree, DefaultPieceHasher> as CompoundProof<
@@ -366,12 +356,7 @@ pub fn get_stacked_srs_key<Tree: 'static + MerkleTreeTrait>(
     porep_config: &PoRepConfig,
     num_proofs_to_aggregate: usize,
 ) -> Result<Arc<Bls12ProverSRSKey>> {
-    let public_params = public_params(
-        porep_config.padded_bytes_amount(),
-        usize::from(porep_config.partitions),
-        porep_config.porep_id,
-        porep_config.api_version,
-    )?;
+    let public_params = public_params(porep_config)?;
 
     let srs_generator = || {
         trace!(
@@ -399,12 +384,7 @@ pub fn get_stacked_srs_verifier_key<Tree: 'static + MerkleTreeTrait>(
     porep_config: &PoRepConfig,
     num_proofs_to_aggregate: usize,
 ) -> Result<Arc<Bls12VerifierSRSKey>> {
-    let public_params = public_params(
-        porep_config.padded_bytes_amount(),
-        usize::from(porep_config.partitions),
-        porep_config.porep_id,
-        porep_config.api_version,
-    )?;
+    let public_params = public_params(porep_config)?;
 
     let srs_verifier_generator = || {
         trace!(
