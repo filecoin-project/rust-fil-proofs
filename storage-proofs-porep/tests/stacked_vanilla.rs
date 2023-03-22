@@ -28,6 +28,8 @@ use storage_proofs_porep::stacked::{
 };
 use tempfile::tempdir;
 
+mod common;
+
 const DEFAULT_STACKED_LAYERS: usize = 11;
 
 #[test]
@@ -110,34 +112,27 @@ fn test_extract_all<Tree: 'static + MerkleTreeTrait>() {
         degree: BASE_DEGREE,
         expansion_degree: EXP_DEGREE,
         porep_id: [32; 32],
-        layer_challenges: layer_challenges.clone(),
+        layer_challenges,
         api_version: ApiVersion::V1_2_0,
         api_features: vec![],
     };
 
     let pp = StackedDrg::<Tree, Blake2sHasher>::setup(&sp).expect("setup failed");
 
-    StackedDrg::<Tree, Blake2sHasher>::transform_and_replicate_layers(
-        &pp.graph,
-        &pp.layer_challenges,
+    common::transform_and_replicate_layers::<Tree, Blake2sHasher>(
+        &pp,
         &replica_id,
         (mmapped_data.as_mut()).into(),
-        None,
-        config.clone(),
+        config.path.clone(),
         replica_path,
-    )
-    .expect("replication failed");
+    );
 
     // The layers are still in the cache dir, so rerunning the label generation should
     // not do any work.
 
-    let (_, label_states) = StackedDrg::<Tree, Blake2sHasher>::generate_labels_for_encoding(
-        &pp.graph,
-        &layer_challenges,
-        &replica_id,
-        &config.path,
-    )
-    .expect("label generation failed");
+    let (_, label_states) =
+        StackedDrg::<Tree, Blake2sHasher>::replicate_phase1(&pp, &replica_id, &config.path)
+            .expect("label generation failed");
     for state in &label_states {
         assert!(state.generated);
     }
@@ -149,13 +144,9 @@ fn test_extract_all<Tree: 'static + MerkleTreeTrait>() {
         remove_file(data_path).expect("failed to delete layer cache");
     }
 
-    let (_, label_states) = StackedDrg::<Tree, Blake2sHasher>::generate_labels_for_encoding(
-        &pp.graph,
-        &layer_challenges,
-        &replica_id,
-        &config.path,
-    )
-    .expect("label generation failed");
+    let (_, label_states) =
+        StackedDrg::<Tree, Blake2sHasher>::replicate_phase1(&pp, &replica_id, &config.path)
+            .expect("label generation failed");
     for state in &label_states[..off] {
         assert!(state.generated);
     }
@@ -220,7 +211,7 @@ fn test_stacked_porep_resume_seal() {
         degree: BASE_DEGREE,
         expansion_degree: EXP_DEGREE,
         porep_id: [32; 32],
-        layer_challenges: layer_challenges.clone(),
+        layer_challenges,
         api_version: ApiVersion::V1_2_0,
         api_features: vec![],
     };
@@ -240,39 +231,29 @@ fn test_stacked_porep_resume_seal() {
     };
 
     // first replicaton
-    StackedDrg::<Tree, Blake2sHasher>::transform_and_replicate_layers(
-        &pp.graph,
-        &pp.layer_challenges,
+    common::transform_and_replicate_layers::<Tree, Blake2sHasher>(
+        &pp,
         &replica_id,
         (mmapped_data1.as_mut()).into(),
-        None,
-        config.clone(),
+        config.path.clone(),
         replica_path1,
-    )
-    .expect("replication failed 1");
+    );
     clear_temp();
 
     // replicate a second time
-    StackedDrg::<Tree, Blake2sHasher>::transform_and_replicate_layers(
-        &pp.graph,
-        &pp.layer_challenges,
+    common::transform_and_replicate_layers::<Tree, Blake2sHasher>(
+        &pp,
         &replica_id,
         (mmapped_data2.as_mut()).into(),
-        None,
-        config.clone(),
+        config.path.clone(),
         replica_path2,
-    )
-    .expect("replication failed 2");
+    );
     clear_temp();
 
     // delete last 2 layers
-    let (_, label_states) = StackedDrg::<Tree, Blake2sHasher>::generate_labels_for_encoding(
-        &pp.graph,
-        &layer_challenges,
-        &replica_id,
-        &config.path,
-    )
-    .expect("label generation failed");
+    let (_, label_states) =
+        StackedDrg::<Tree, Blake2sHasher>::replicate_phase1(&pp, &replica_id, &config.path)
+            .expect("label generation failed");
     let off = label_states.len() - 3;
     for label_state in &label_states[off..] {
         let config = &label_state.config;
@@ -281,16 +262,13 @@ fn test_stacked_porep_resume_seal() {
     }
 
     // replicate a third time
-    StackedDrg::<Tree, Blake2sHasher>::transform_and_replicate_layers(
-        &pp.graph,
-        &pp.layer_challenges,
+    common::transform_and_replicate_layers::<Tree, Blake2sHasher>(
+        &pp,
         &replica_id,
         (mmapped_data3.as_mut()).into(),
-        None,
-        config.clone(),
+        config.path.clone(),
         replica_path3,
-    )
-    .expect("replication failed 3");
+    );
     clear_temp();
 
     assert_ne!(data, &mmapped_data1[..], "replication did not change data");
@@ -390,16 +368,13 @@ fn test_prove_verify<Tree: 'static + MerkleTreeTrait>(n: usize, challenges: Laye
     };
 
     let pp = StackedDrg::<Tree, Blake2sHasher>::setup(&sp).expect("setup failed");
-    let (tau, p_aux, t_aux) = StackedDrg::<Tree, Blake2sHasher>::transform_and_replicate_layers(
-        &pp.graph,
-        &pp.layer_challenges,
+    let (tau, (p_aux, t_aux)) = common::transform_and_replicate_layers::<Tree, Blake2sHasher>(
+        &pp,
         &replica_id,
         (mmapped_data.as_mut()).into(),
-        None,
-        config,
+        config.path,
         replica_path.clone(),
-    )
-    .expect("replication failed");
+    );
 
     let mut copied = vec![0; data.len()];
     copied.copy_from_slice(&mmapped_data);

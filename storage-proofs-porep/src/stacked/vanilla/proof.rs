@@ -533,7 +533,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
     }
 
     /// Generates the layers as needed for encoding.
-    pub fn generate_labels_for_encoding<P>(
+    fn generate_labels_for_encoding<P>(
         graph: &StackedBucketGraph<Tree::Hasher>,
         layer_challenges: &LayerChallenges,
         replica_id: &<Tree::Hasher as Hasher>::Domain,
@@ -1470,37 +1470,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         )
     }
 
-    // TODO vmx 2023-03-22: This one should *not* be public. It's only public for the tests. Move
-    // the tests into this file instead.
-    pub fn transform_and_replicate_layers(
-        graph: &StackedBucketGraph<Tree::Hasher>,
-        layer_challenges: &LayerChallenges,
-        replica_id: &<Tree::Hasher as Hasher>::Domain,
-        data: Data<'_>,
-        data_tree: Option<BinaryMerkleTree<G>>,
-        config: StoreConfig,
-        replica_path: PathBuf,
-    ) -> Result<TransformedLayers<Tree, G>> {
-        // Generate key layers.
-        let labels = measure_op(Operation::EncodeWindowTimeAll, || {
-            Self::generate_labels_for_encoding(graph, layer_challenges, replica_id, &config.path)
-                .context("failed to generate labels")
-        })?
-        .0;
-
-        Self::transform_and_replicate_layers_inner(
-            graph,
-            layer_challenges,
-            data,
-            data_tree,
-            config.path,
-            replica_path,
-            labels,
-        )
-        .context("failed to transform")
-    }
-
-    pub(crate) fn transform_and_replicate_layers_inner(
+    fn transform_and_replicate_layers(
         graph: &StackedBucketGraph<Tree::Hasher>,
         layer_challenges: &LayerChallenges,
         mut data: Data<'_>,
@@ -1693,23 +1663,22 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         pp: &'a PublicParams<Tree>,
         replica_id: &<Tree::Hasher as Hasher>::Domain,
         cache_path: P,
-    ) -> Result<Labels<Tree>>
+    ) -> Result<(Labels<Tree>, Vec<LayerState>)>
     where
         P: AsRef<Path>,
     {
         info!("replicate_phase1");
 
-        let labels = measure_op(Operation::EncodeWindowTimeAll, || {
+        let labels_and_layer_states = measure_op(Operation::EncodeWindowTimeAll, || {
             Self::generate_labels_for_encoding(
                 &pp.graph,
                 &pp.layer_challenges,
                 replica_id,
                 cache_path,
             )
-        })?
-        .0;
+        })?;
 
-        Ok(labels)
+        Ok(labels_and_layer_states)
     }
 
     /// Phase2 of replication.
@@ -1718,7 +1687,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         pp: &'a PublicParams<Tree>,
         label_configs: Labels<Tree>,
         data: Data<'a>,
-        data_tree: BinaryMerkleTree<G>,
+        data_tree: Option<BinaryMerkleTree<G>>,
         cache_path: PathBuf,
         replica_path: PathBuf,
     ) -> Result<(
@@ -1730,11 +1699,11 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
     )> {
         info!("replicate_phase2");
 
-        let (tau, paux, taux) = Self::transform_and_replicate_layers_inner(
+        let (tau, paux, taux) = Self::transform_and_replicate_layers(
             &pp.graph,
             &pp.layer_challenges,
             data,
-            Some(data_tree),
+            data_tree,
             cache_path,
             replica_path,
             label_configs,
